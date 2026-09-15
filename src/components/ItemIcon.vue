@@ -7,15 +7,15 @@
 
     <span v-if="setId" class="ii-badge set" title="Pièce de set">🧩</span>
 
-    <span v-if="showStars && item.roll != null" class="ii-jet" :title="`Jet ${jet}%`"
-      >{{ jet }}%</span
-    >
+    <span v-if="showStars && item.roll != null" class="ii-jet" :title="badgeTitle">{{
+      badge
+    }}</span>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { RANK_COLOR, rollJet, FAMILIAR_SLOT, type Item } from '@/lib/items';
+import { RANK_COLOR, rollJet, jetStar, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { itemIconName } from '@/data/itemIcons';
 
 // `id` non requis : on affiche aussi des objets « sans id » (butin d'un message d'expédition).
@@ -27,7 +27,16 @@ const props = withDefaults(
 const rankColor = computed(() => RANK_COLOR[props.item.rarity]);
 const isFamiliar = computed(() => props.item.slot === FAMILIAR_SLOT);
 const icon = computed(() => itemIconName(props.item));
-const jet = computed(() => rollJet(props.item.roll)); // jet 0..100 % (position dans l'intervalle du rang)
+// Un OBJET se lit en étoiles (v0.896 : le jet en % est retiré) ; un familier garde son jet %,
+// sa qualité ne suivant pas l'étoile du joueur.
+const badge = computed(() =>
+  isFamiliar.value ? `${rollJet(props.item.roll)}%` : `★${jetStar(props.item.roll)}`,
+);
+const badgeTitle = computed(() =>
+  isFamiliar.value
+    ? `Jet ${rollJet(props.item.roll)}%`
+    : `${jetStar(props.item.roll)} étoile(s) sur 5`,
+);
 const setId = computed(() => props.item.setId);
 const glyphSize = computed(() => Math.round(props.size * 0.56));
 const frameStyle = computed(() => ({
@@ -80,7 +89,7 @@ const frameStyle = computed(() => ({
 .ii-badge.set {
   left: -5px;
 }
-/* Jet (0..100 %) collé au bas de la tuile. */
+/* Étoiles (objet) ou jet % (familier) collés au bas de la tuile. */
 .ii-jet {
   position: absolute;
   bottom: -4px;

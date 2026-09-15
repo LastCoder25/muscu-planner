@@ -820,7 +820,7 @@
             </div>
             <template v-if="char.row.equipped[slot]">
               <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-              <!-- Méta : rang · niveau. Le set = badge coin ; le jet = icône (badge bas). -->
+              <!-- Méta : rang ★ · niveau. Le set = badge coin ; les étoiles = icône (badge bas). -->
               <div class="pills">
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
                   gradeLabel(char.row.equipped[slot]!)
@@ -1060,12 +1060,6 @@
                         <span class="cmp-lbl">Cet objet</span>
                         <span class="ii-rar" :class="'p-' + it.rarity">{{ gradeLabel(it) }}</span>
                         <span class="lvl-badge">Nv {{ it.level }}</span>
-                        <span
-                          v-if="itemQuality(it)"
-                          class="q-badge"
-                          :class="jetTier(itemQuality(it))"
-                          >{{ itemQuality(it) }}%</span
-                        >
                       </div>
                       <div class="cmp-stats">
                         <div
@@ -1086,12 +1080,6 @@
                             gradeLabel(equippedInSlot(it.slot)!)
                           }}</span>
                           <span class="lvl-badge">Nv {{ equippedInSlot(it.slot)!.level }}</span>
-                          <span
-                            v-if="itemQuality(equippedInSlot(it.slot))"
-                            class="q-badge"
-                            :class="jetTier(itemQuality(equippedInSlot(it.slot)))"
-                            >{{ itemQuality(equippedInSlot(it.slot)) }}%</span
-                          >
                         </template>
                         <span v-else class="cmp-free">— emplacement libre</span>
                       </div>
@@ -1953,13 +1941,6 @@
               <span class="gpill" :class="'p-' + inspectItem.rarity">{{
                 gradeLabel(inspectItem)
               }}</span>
-              <span
-                v-if="itemQuality(inspectItem)"
-                class="q-badge"
-                :class="jetTier(itemQuality(inspectItem))"
-                title="Pureté (jet de qualité, 100 % = parfait)"
-                >{{ itemQuality(inspectItem) }}% pureté</span
-              >
               <span class="insp-slot"
                 >· {{ SLOT_LABEL[inspectItem.slot] }} · niv {{ inspectItem.level }}</span
               >
@@ -2211,9 +2192,7 @@
                         gradeLabel(row.fromItem)
                       }}</span>
                     </div>
-                    <div class="plan-sub">
-                      Nv {{ row.fromItem.level }} · jet {{ itemQuality(row.fromItem) }}%
-                    </div>
+                    <div class="plan-sub">Nv {{ row.fromItem.level }}</div>
                     <div class="plan-eff">
                       <span
                         v-for="(st, li) in itemStatCmp(row.fromItem, row.toItem ?? null)"
@@ -2235,9 +2214,7 @@
                         gradeLabel(row.toItem)
                       }}</span>
                     </div>
-                    <div class="plan-sub">
-                      Nv {{ row.toItem.level }} · jet {{ itemQuality(row.toItem) }}%
-                    </div>
+                    <div class="plan-sub">Nv {{ row.toItem.level }}</div>
                     <div class="plan-eff">
                       <span
                         v-for="(st, li) in itemStatCmp(row.toItem, row.fromItem ?? null)"
@@ -2343,13 +2320,6 @@
                   <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                     gradeLabel(cand.item)
                   }}</span>
-                  <span
-                    v-if="itemQuality(cand.item)"
-                    class="q-badge"
-                    :class="jetTier(itemQuality(cand.item))"
-                    title="Qualité (5 = meilleur)"
-                    >{{ itemQuality(cand.item) }}</span
-                  >
                   <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
                   <span v-if="rewardFitsVoie(cand.item)" class="rc-pill voie">🧭 ta voie</span>
                 </div>
@@ -2664,13 +2634,6 @@
                       <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
                         gradeLabel(cand.item)
                       }}</span>
-                      <span
-                        v-if="itemQuality(cand.item)"
-                        class="q-badge"
-                        :class="jetTier(itemQuality(cand.item))"
-                        title="Qualité (5 = meilleur)"
-                        >{{ itemQuality(cand.item) }}</span
-                      >
                       <span v-if="cand.item.setId" class="rc-pill set">🧩 Set</span>
                       <span v-if="rewardFitsVoie(cand.item)" class="rc-pill voie">🧭 ta voie</span>
                     </div>
@@ -4841,14 +4804,8 @@ function itemStatCmp(
   if (leg) out.push({ text: `${leg.emoji} ${leg.name}`, cls: '' });
   return out;
 }
-// Qualité du roll en étoiles pleines/vides (« ★★★★☆ ») ; vide si objet legacy (pas de roll).
-// Qualité en CHIFFRE (1→5, 5 = meilleur) affiché à côté du rang, code couleur
-// rouge (1) → vert (5) via la classe `.q-<n>`. 0 = objet legacy sans roll (masqué).
-// JET d'un objet (0..100 %) = position de sa stat dans l'intervalle du rang. Remplace la
-// qualité ★1-5 (refonte v0.574) : « affiche ton jet ».
-function itemQuality(it: { roll?: number } | null | undefined): number {
-  return rollJet(it?.roll);
-}
+// ⚠️ v0.896 : un OBJET n'affiche plus son jet en % — sa qualité se lit en ÉTOILES dans son
+// étiquette (`gradeLabel`). Le jet % reste pour les talents (pastille ci-dessous).
 // Classe de couleur du jet (rouge → vert) pour la pastille.
 function jetTier(pct: number): string {
   return pct >= 80 ? 'jet-hi' : pct >= 45 ? 'jet-mid' : 'jet-lo';

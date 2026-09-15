@@ -442,11 +442,8 @@
         <ItemIcon :item="detailItem" :size="56" class="fl-icon" />
         <div class="fl-name">{{ detailItem.name }}</div>
         <div class="fl-meta">
-          {{ gradeLabel(detailItem)
-          }}<template v-if="detailItem.roll != null">
-            · jet {{ rollJet(detailItem.roll) }}%</template
-          >
-          · {{ SLOT_LABEL[detailItem.slot] }} · niv {{ detailItem.level }}
+          {{ gradeLabel(detailItem) }} · {{ SLOT_LABEL[detailItem.slot] }} · niv
+          {{ detailItem.level }}
         </div>
         <div class="fl-eff">✦ {{ effectLabel(detailItem.effect, detailItem.level) }}</div>
         <div v-if="detailItem.effect2" class="fl-eff">
@@ -542,7 +539,6 @@ import {
   RARITY_RANK,
   fxRarity,
   RANK_COLOR,
-  rollJet,
   legendaryOf,
   magicFindLuck,
   tierIndexOf,
