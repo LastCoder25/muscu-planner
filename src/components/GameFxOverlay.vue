@@ -1,20 +1,23 @@
 <template>
-  <!-- Bandeaux DISCRETS : en haut, sans voile, et pointer-events: none — on continue de
-       jouer (et de toucher « Réattaquer ») pendant qu'ils s'affichent. -->
+  <!-- Bandeaux DISCRETS : en haut, sans voile. Le conteneur laisse passer les touches
+       (on continue de toucher « Réattaquer ») ; un bandeau, lui, se ferme d'un toucher. -->
   <div class="fx-toasts" aria-live="polite">
     <transition-group name="fx-toast">
-      <div
+      <button
         v-for="t in toasts"
         :key="t.id"
+        type="button"
         class="fx-toast"
+        title="Toucher pour fermer"
         :style="{ '--fx-color': t.rarity ? (RARITY_COLOR[t.rarity] ?? '#ffd23f') : '#ffd23f' }"
+        @click="dismissToast(t.id)"
       >
         <span class="fx-toast-emo">{{ t.emoji }}</span>
         <span class="fx-toast-txt">
           <b>{{ t.title }}</b>
           <span v-if="t.subtitle"> · {{ t.subtitle }}</span>
         </span>
-      </div>
+      </button>
     </transition-group>
   </div>
   <transition name="fx-fade">
@@ -54,7 +57,7 @@
 import { computed, watch, onBeforeUnmount } from 'vue';
 import { useGameFx } from '@/composables/useGameFx';
 
-const { queue, toasts, dismiss } = useGameFx();
+const { queue, toasts, dismiss, dismissToast } = useGameFx();
 const cur = computed(() => queue.value[0] ?? null);
 
 const RARITY_COLOR: Record<string, string> = {
@@ -107,6 +110,11 @@ onBeforeUnmount(() => {
   pointer-events: none;
 }
 .fx-toast {
+  pointer-events: auto;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font: inherit;
   display: flex;
   align-items: center;
   gap: 8px;

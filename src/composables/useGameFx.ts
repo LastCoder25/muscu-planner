@@ -57,5 +57,9 @@ export function useGameFx() {
   function dismiss(): void {
     queue.value.shift();
   }
-  return { queue, toasts, celebrate, dismiss };
+  /** Toucher un bandeau le ferme (v0.860, demandé par l'utilisateur). */
+  function dismissToast(id: number): void {
+    toasts.value = toasts.value.filter((t) => t.id !== id);
+  }
+  return { queue, toasts, celebrate, dismiss, dismissToast };
 }

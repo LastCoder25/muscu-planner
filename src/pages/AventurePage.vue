@@ -4549,7 +4549,8 @@ async function explore(d: Dungeon) {
       famAtkXp: (2 + d.recoLevel) * Math.max(1, r.defeated),
       playerLevel: c.value.level.level,
     });
-    if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!));
+    // En bandeau, comme au boss : un donjon se refarme, un éclat plein écran bloquerait la suite.
+    if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {
       name: d.name,
       kind: 'dungeon',
@@ -5541,7 +5542,15 @@ function doSellDuplicateFamiliars() {
 function doSellTalent(id: string) {
   withUid(async (uid) => {
     const g = await char.sellTalent(uid, id);
-    if (g) $q.notify({ type: 'positive', message: `🪙 Talent vendu (+${g} or)` });
+    // En BANDEAU en haut (comme les boss, v0.820) : une notification du bas recouvrait l'écran.
+    if (g)
+      gameFx.celebrate({
+        quiet: true,
+        kind: 'generic',
+        emoji: '🪙',
+        title: 'Talent vendu',
+        subtitle: `+${g} or`,
+      });
   }, 'Vente impossible.');
 }
 // Vend TOUS les doublons (exemplaires non-meilleurs d'un code, non équipés) → on garde le
@@ -5559,9 +5568,12 @@ function doSellDuplicateTalents() {
       let total = 0;
       for (const id of ids) total += await char.sellTalent(uid, id);
       if (total)
-        $q.notify({
-          type: 'positive',
-          message: `🪙 ${ids.length} doublon(s) vendu(s) (+${total} or)`,
+        gameFx.celebrate({
+          quiet: true,
+          kind: 'generic',
+          emoji: '🪙',
+          title: `${ids.length} doublon(s) vendu(s)`,
+          subtitle: `+${total} or`,
         });
     }, 'Vente impossible.');
   });
