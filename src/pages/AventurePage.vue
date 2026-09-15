@@ -2250,6 +2250,32 @@
                 </div>
               </div>
 
+              <!-- 🧩 SET : ses pièces se proposent ENSEMBLE (demandé par l’utilisateur) — une
+                   pièce de set seule ne vaut rien sans ses sœurs (bonus, 4-pièces), donc un
+                   gain par pièce mentirait. Un seul interrupteur, un seul gain : celui du set. -->
+              <div v-else-if="row.kind === 'set'" class="plan-set">
+                <div v-for="pc in row.pieces" :key="pc.slot" class="plan-set-line">
+                  <span class="plan-set-slot">{{ SLOT_LABEL[pc.slot] }}</span>
+                  <span class="plan-set-from">{{
+                    pc.fromItem ? pc.fromItem.emoji + ' ' + pc.fromItem.name : 'vide'
+                  }}</span>
+                  <span class="plan-set-arrow">→</span>
+                  <span v-if="pc.toItem" class="plan-set-to"
+                    >{{ pc.toItem.emoji }} {{ pc.toItem.name }}
+                    <span class="ii-rar" :class="'p-' + pc.toItem.rarity">{{
+                      gradeLabel(pc.toItem)
+                    }}</span></span
+                  >
+                </div>
+                <div v-if="row.voieChange" class="plan-sub">
+                  Voie → <b>{{ VOIE_BY_ID[row.voie as VoieId]?.name ?? 'aucune voie' }}</b> — le
+                  4-pièces s’applique.
+                </div>
+                <div class="plan-sub">
+                  Gain du set entier : ses pièces ne valent pas ça une à une.
+                </div>
+              </div>
+
               <!-- TALENT : un échange 1 pour 1, donc refuser une ligne ne déséquilibre rien -->
               <div v-else-if="row.kind === 'talent'" class="plan-cmp">
                 <div class="plan-side">
@@ -5710,9 +5736,14 @@ function doEquip(itemId: string) {
 // TOUT COHÉRENT — les talents sont choisis POUR ce gear, la voie POUR son capstone — donc
 // refuser une ligne change la valeur de toutes les autres. Afficher un « +312 » calculé
 // une fois pour toutes serait un mensonge dès le premier refus.
+type PlanPiece = { slot: ItemSlot; fromItem: Item | null; toItem: Item | null };
 type PlanRow = {
   key: string;
-  kind: 'gear' | 'familiar' | 'talent' | 'voie';
+  kind: 'gear' | 'familiar' | 'talent' | 'voie' | 'set';
+  /** Les pièces d'un SET proposées ensemble (`kind: 'set'`). */
+  pieces?: PlanPiece[];
+  /** Le set emporte aussi le changement de voie (son 4-pièces en dépend). */
+  voieChange?: boolean;
   label: string;
   slot?: ItemSlot;
   fromItem?: Item | null;
@@ -5767,9 +5798,40 @@ const planRows = computed<PlanRow[]>(() => {
       toTalent: t,
     });
   }
-  if ((r.voie ?? null) !== (plan.voie ?? null))
-    rows.push({ key: 'voie', kind: 'voie', label: 'Voie', voie: plan.voie });
-  return rows;
+  const voieChanges = (r.voie ?? null) !== (plan.voie ?? null);
+  // 🧩 Les pièces proposées d'un MÊME set de voie (au moins deux) forment UNE ligne : leur
+  // valeur tient à leur réunion (bonus de set, 4-pièces), pas à chacune. Si le plan change
+  // aussi de voie pour CE set, la voie part avec lui.
+  const bySet = new Map<string, PlanRow[]>();
+  for (const row of rows) {
+    const sid = row.kind === 'gear' ? row.toItem?.setId : undefined;
+    if (!sid?.startsWith('voie:')) continue;
+    bySet.set(sid, [...(bySet.get(sid) ?? []), row]);
+  }
+  const groups: PlanRow[] = [];
+  let voieTaken = false;
+  for (const [sid, list] of bySet) {
+    if (list.length < 2) continue;
+    const withVoie = voieChanges && `voie:${plan.voie ?? ''}` === sid;
+    voieTaken ||= withVoie;
+    groups.push({
+      key: 'set:' + sid,
+      kind: 'set',
+      label: `🧩 ${SET_BY_ID[sid]?.name ?? 'Set'} · ${list.length} pièces`,
+      pieces: list.map((x) => ({
+        slot: x.slot!,
+        fromItem: x.fromItem ?? null,
+        toItem: x.toItem ?? null,
+      })),
+      voieChange: withVoie,
+      voie: plan.voie,
+    });
+  }
+  const grouped = new Set(groups.flatMap((g) => g.pieces!.map((pc) => 's:' + pc.slot)));
+  const out = [...groups, ...rows.filter((x) => !grouped.has(x.key))];
+  if (voieChanges && !voieTaken)
+    out.push({ key: 'voie', kind: 'voie', label: 'Voie', voie: plan.voie });
+  return out;
 });
 
 /** L'ÉTAT RETENU : l'équipement, les talents et la voie tels que les lignes acceptées
@@ -5786,7 +5848,10 @@ function planStateWithout(skip?: string) {
   for (const row of planRows.value) {
     if (planOff.value.has(row.key) || row.key === skip) continue;
     if (row.slot) equipped[row.slot] = row.toItem ?? undefined;
-    else if (row.kind === 'talent') {
+    else if (row.kind === 'set') {
+      for (const pc of row.pieces ?? []) equipped[pc.slot] = pc.toItem ?? undefined;
+      if (row.voieChange) voie = row.voie ?? null;
+    } else if (row.kind === 'talent') {
       talentIds = talentIds.filter((id) => id !== row.fromTalent?.id);
       if (row.toTalent) talentIds = [...talentIds, row.toTalent.id];
     } else if (row.kind === 'voie') voie = row.voie ?? null;
@@ -8141,6 +8206,31 @@ button.pt-mini:active {
 }
 .plan-voie {
   font-size: 13px;
+}
+.plan-set {
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.plan-set-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 6px;
+}
+.plan-set-slot {
+  color: var(--dim);
+  min-width: 70px;
+}
+.plan-set-from {
+  color: var(--dim);
+  text-decoration: line-through;
+}
+.plan-set-arrow {
+  color: var(--dim);
+}
+.plan-set-to {
+  font-weight: 600;
 }
 .plan-actions {
   display: grid;
