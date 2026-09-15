@@ -289,15 +289,17 @@ export interface CombatResult {
   gold: number; // 0 si défaite
 }
 
-/** Simule un combat auto tour par tour. `seed` rend le combat reproductible. */
+/** Simule un combat auto tour par tour. `seed` rend le combat reproductible.
+ *  `startPlayerPv` / `startMonsterPv` : PV de DÉPART (PV reportés d'un combat précédent) ;
+ *  les maxima restent ceux des combattants — un blessé n'a pas moins de PV max. */
 export function simulateCombat(
   player: Combatant,
   monster: Combatant,
-  opts: { seed: number; goldOnWin: number; startPlayerPv?: number },
+  opts: { seed: number; goldOnWin: number; startPlayerPv?: number; startMonsterPv?: number },
 ): CombatResult {
   const rng = mulberry32(opts.seed);
   let pPv = opts.startPlayerPv ?? player.pv;
-  let mPv = monster.pv;
+  let mPv = opts.startMonsterPv ?? monster.pv;
   const maxPPv = player.pv;
   const log: CombatEvent[] = [];
   let turn: CombatActor = player.initiative >= monster.initiative ? 'player' : 'monster';
