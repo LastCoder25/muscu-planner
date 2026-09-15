@@ -36,6 +36,11 @@ import {
   survivalOf,
   type Combatant,
 } from './combat';
+// ⚠️ `trialXpBase` : SOURCE UNIQUE de la base d'XP d'une épreuve (`6 + niveau × 1,6`),
+// partagée avec `simulateSkirmish`/`skirmishXpShares` — un convoi et un combat de groupe
+// évaluent le même « niveau du lieu » de la même façon. Aucun cycle : `skirmish.ts`
+// n'importe que `combat.ts`.
+import { trialXpBase } from './skirmish';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
@@ -847,7 +852,7 @@ export function caravanWages(escort: Adventurer[], poi: Poi): number {
  *  sans se confondre — un vétéran envoyé loin sur une carte de bas niveau reste bridé. */
 export function missionXp(adv: Adventurer, poi: Poi, fights = 0): number {
   const ratio = Math.max(0.15, Math.min(2, poi.level / Math.max(1, adv.level)));
-  const base = 6 + poi.level * 1.6;
+  const base = trialXpBase(poi.level);
   const travel = missionTravelMult(poi);
   const learned = 1 + Math.min(CARAVAN.xpFightMax, Math.max(0, fights) * CARAVAN.xpPerFight);
   return Math.max(1, Math.round(base * Math.min(1, ratio) ** 1.5 * travel * learned));

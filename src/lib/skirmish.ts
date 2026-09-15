@@ -41,7 +41,9 @@ export interface SkirmishKill {
 }
 
 export interface SkirmishResult {
-  /** Toute la troupe est tombée. */
+  /** Toute la troupe est tombée ET au moins un allié tient encore la route. ⚠️ Un DERNIER
+   *  duel où les deux camps tombent ensemble (épines) est une DÉFAITE : personne ne reste
+   *  debout pour tenir la place, même si le dernier ennemi est mort avec l'allié. */
   win: boolean;
   duels: number;
   kills: SkirmishKill[];
@@ -68,7 +70,11 @@ export interface TroopSpec {
   emoji: string;
 }
 
-/** Base d'XP d'une épreuve de ce niveau — celle de `missionXp`, source unique. */
+/** Base d'XP d'une épreuve de ce niveau. ⚠️ SOURCE UNIQUE, littéralement partagée avec
+ *  `caravan.ts` : `missionXp` l'appelle directement (`import { trialXpBase } from './skirmish'`)
+ *  plutôt que de recopier `6 + niveau × 1,6` — un convoi et un combat de groupe jugent le
+ *  niveau d'un lieu de la MÊME façon, et un futur réglage de la courbe ne peut plus se faire
+ *  d'un seul côté. */
 export function trialXpBase(level: number): number {
   return 6 + level * 1.6;
 }
@@ -82,6 +88,10 @@ export function trialXpBase(level: number): number {
  * à l'infirmerie.
  * ⚠️ Chaque duel fait tomber au moins un combattant (le perdant ; les deux si les épines
  * achèvent le vainqueur) : la boucle se termine en au plus `allies + foes` duels.
+ * ⚠️ `win` exige les deux : plus aucun ennemi debout ET au moins un allié debout — sinon
+ * un dernier duel où l'allié meurt en achevant le dernier ennemi par ses épines (les deux
+ * à 0 PV dans le MÊME coup) compterait comme une victoire alors que personne ne tient
+ * plus la route.
  */
 export function simulateSkirmish(
   allies: readonly SkirmishUnit[],
@@ -127,7 +137,7 @@ export function simulateSkirmish(
   }
 
   return {
-    win: !foes.some(up),
+    win: !foes.some(up) && allies.some(up),
     duels: duel,
     kills,
     killsBy,
@@ -144,6 +154,9 @@ export function simulateSkirmish(
  * ⚠️ `offenseOf` / `survivalOf` sont les formules de `combatPower`, l'arbitre du jeu :
  * une copie locale (celle de l'ancienne route) ignorait signatures et esquive, et la route
  * cessait de suivre l'escorte (mesuré v0.797).
+ * ⚠️ Les ids (`foe0`, `foe1`…) ne sont uniques QUE DANS UN MÊME appel : combiner les
+ * unités de deux appels (deux factions, deux vagues…) sans les préfixer produirait des
+ * doublons — à l'appelant de les distinguer s'il en assemble plusieurs.
  */
 export function troopOf(reference: readonly Combatant[], spec: TroopSpec): SkirmishUnit[] {
   const n = Math.max(1, reference.length);

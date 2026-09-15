@@ -100,6 +100,45 @@ describe('⚔️ simulateSkirmish — des duels enchaînés, PV reportés des de
     expect(simulateSkirmish([u('a')], [], 1)).toMatchObject({ win: true, duels: 0 });
     expect(simulateSkirmish([], [u('f0')], 1)).toMatchObject({ win: false, duels: 0 });
   });
+
+  it('⚠️ un DERNIER duel où les deux tombent ensemble (épines) est une DÉFAITE : personne ne tient la route', () => {
+    // Pv=1 des deux côtés + épines : le coup qui tue l'allié renvoie systématiquement
+    // (plancher « au moins 1 ») une riposte fatale au monstre — DANS le même événement.
+    const mutual = u('a', { pv: 1, damage: 1, dodge: 0, initiative: 1, thorns: 1 });
+    const foe = u('f0', { pv: 1, damage: 1, initiative: 99 });
+    const r = simulateSkirmish([mutual], [foe], 1);
+    expect(r.win).toBe(false);
+    expect(r.duels).toBe(1);
+    expect(r.kills).toEqual([
+      { duel: 0, killer: 'a', victim: 'f0' },
+      { duel: 0, killer: 'f0', victim: 'a' },
+    ]);
+    expect(r.killsBy).toEqual({ a: 1, f0: 1 });
+    expect(r.down).toEqual(['a']);
+    expect(r.foesDown).toEqual(['f0']);
+    expect(r.pvLeft['a']).toBe(0);
+  });
+
+  it('⚠️ …mais si un AUTRE allié tient encore, la victoire reste acquise', () => {
+    const mutual = u('mutual', { pv: 1, damage: 1, dodge: 0, initiative: 1, thorns: 1 });
+    const bystander = u('bystander', { pv: 1000, damage: 500, initiative: 1 });
+    const foe = u('f0', { pv: 1, damage: 1, initiative: 99 });
+    let vu = false;
+    for (let s = 1; s <= 60 && !vu; s++) {
+      const r = simulateSkirmish([mutual, bystander], [foe], s);
+      if (!(r.down.includes('mutual') && !r.down.includes('bystander'))) continue;
+      vu = true;
+      expect(r.win).toBe(true);
+      expect(r.foesDown).toEqual(['f0']);
+      expect(r.kills).toEqual([
+        { duel: 0, killer: 'mutual', victim: 'f0' },
+        { duel: 0, killer: 'f0', victim: 'mutual' },
+      ]);
+      expect(r.killsBy).toEqual({ mutual: 1, f0: 1 });
+      expect(r.pvLeft['bystander']).toBe(1000);
+    }
+    expect(vu, 'mutual n’a jamais été choisi : le test ne prouve rien').toBe(true);
+  });
 });
 
 describe('🗡️ troopOf — danger ABSOLU, dérivé d’une référence', () => {
@@ -165,5 +204,30 @@ describe('🎓 skirmishXpShares — les abattus, partagés entre les présents',
     const forts = [0, 1, 2].map((i) => u(`f${i}`, {}, 40));
     const r = skirmishXpShares([{ id: 'r', level: 5 }], forts, tous)['r'];
     expect(r).toBe(Math.round(3 * SKIRMISH.xpPerKill * trialXpBase(5 + SKIRMISH.carryMargin)));
+  });
+  it('⚠️ un VÉTÉRAN et une RECRUE PRÉSENTS ENSEMBLE : chacun sur SON niveau, jamais une moyenne', () => {
+    // Sur un lieu de niveau 10 : le vétéran (40) reste bridé par SON rendement décroissant
+    // (ratio 0,25), la recrue (10) touche sa part pleine (ratio 1) — si l'implémentation
+    // moyennait les niveaux présents (25) avant de calculer le ratio, les deux toucheraient
+    // la MÊME part, quel que soit leur propre niveau.
+    const present = [
+      { id: 'vet', level: 40 },
+      { id: 'recruit', level: 10 },
+    ];
+    const shares = skirmishXpShares(present, foes, tous);
+    const vetRatio = Math.max(0.15, Math.min(1, 10 / 40));
+    const recruitRatio = Math.max(0.15, Math.min(1, 10 / 10));
+    const vetExpected = Math.round(
+      (3 * SKIRMISH.xpPerKill * trialXpBase(10) * vetRatio ** 1.5) / 2,
+    );
+    const recruitExpected = Math.round(
+      (3 * SKIRMISH.xpPerKill * trialXpBase(10) * recruitRatio ** 1.5) / 2,
+    );
+    // Le total distribué EST la somme des calculs par membre, jamais une part moyennée :
+    // le vétéran et la recrue ne touchent PAS la même chose.
+    expect(shares['vet']).toBe(vetExpected);
+    expect(shares['recruit']).toBe(recruitExpected);
+    expect(shares['vet']).not.toBe(shares['recruit']);
+    expect(shares['vet']).toBeLessThan(shares['recruit']);
   });
 });
