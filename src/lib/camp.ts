@@ -75,7 +75,7 @@ export const CAMP = {
   /** Butin SANS le héros, en part des sources existantes.
    *  ⚠️ `groupGoldShare` MESURÉ : l'or NET (or − salaires) d'un camp de bandits doit rester
    *  sous l'or moyen d'une MINE de même niveau et distance (40 graines). À 0,6 le plus gros
-   *  repaire (taille 10) en rendait 2,1 à 2,3 fois plus aux niveaux 20/26/40 ; à 0,25 : cf.
+   *  repaire (taille 10) en rendait 2,25 / 2,12 / 1,90 fois plus aux niveaux 20/26/40 ; à 0,25 : cf.
    *  `campCalibration.test` (E2). ⚠️ `banditGoldMult` et `stoneShare` : non contraints par
    *  une bande, inchangés. */
   groupGoldShare: 0.25,

@@ -97,7 +97,8 @@ describe('ferraille : plus dure à obtenir que l’or', () => {
       const ratio = cranScrap(L) / scrapPerDay(L) / (cranGold(L) / goldDay);
       expect(ratio, `niveau ${L} : ratio ${ratio.toFixed(2)}`).toBeGreaterThan(1.1);
       expect(ratio, `niveau ${L} : ratio ${ratio.toFixed(2)}`).toBeLessThan(2.2);
-      expect(wreckPerDay(L) / scrapPerDay(L), `niveau ${L}`).toBeGreaterThan(0.45);
+      // (la part de l'épave n'est pas re-vérifiée ici : un camp ne rend aucune ferraille,
+      //  le test suivant la couvre)
     }
   });
 
