@@ -7,7 +7,7 @@
 // re-simulé, donc l'issue et tout ce qui en découle (cargaison, butin) sont identiques au
 // bit près à ceux du combat fondu.
 //
-// ⚠️ POURQUOI PAS DES DUELS ENCHAÎNÉS (essayés puis écartés, v0.860) : leur rapport
+// ⚠️ POURQUOI PAS DES DUELS ENCHAÎNÉS (essayés puis écartés, v0.864) : leur rapport
 // trio/solo est LINÉAIRE (≈ 2 à 3), là où un combat fondu suit offense × survie — les bandes
 // de route (solo ~0 %, trio 70-94 %) n'y tenaient à aucun réglage, et même une embuscade
 // gagnée faisait tomber 1 à 2 membres (voyages avec blessé ×2,6 à ×8).

@@ -1300,8 +1300,8 @@ export function advRarity(adv: Adventurer): Rarity {
 }
 
 /** XP nécessaire pour passer du niveau `level` au suivant. Mesuré avec l'ANCIEN `missionXp`
- *  (socle × bonus forfaitaire par embuscade traversée), AVANT la v0.860 : ~8 missions pour
- *  le niveau 2, 38 pour le 5, 118 pour le 8, 255 pour le 23. ⚠️ Depuis la v0.860 l'XP de
+ *  (socle × bonus forfaitaire par embuscade traversée), AVANT la v0.864 : ~8 missions pour
+ *  le niveau 2, 38 pour le 5, 118 pour le 8, 255 pour le 23. ⚠️ Depuis la v0.864 l'XP de
  *  combat est la part des bandits ABATTUS (`skirmishXpShares`) : ces comptes de missions
  *  n'ont pas été re-mesurés.
  *  ⚠️ Vit ICI et non dans `caravan.ts` : c’est la courbe de l’AVENTURIER, pas celle du

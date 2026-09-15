@@ -39,7 +39,7 @@ import {
 // ⚠️ `trialXpBase` : SOURCE UNIQUE de la base d'XP d'une épreuve (`6 + niveau × 1,6`),
 // partagée avec `skirmishXpShares` — un convoi et un combat de groupe évaluent le même
 // « niveau du lieu » de la même façon. `deriveSkirmish`/`troopOf`/`SkirmishUnit` : le
-// COMBAT DE GROUPE, lu par `roadTroop`/`roadUnits` et par les embuscades (v0.860) ;
+// COMBAT DE GROUPE, lu par `roadTroop`/`roadUnits` et par les embuscades (v0.864) ;
 // `slainByAlly` y vit aussi (mécanisme de groupe, partagé avec les camps). Aucun
 // cycle : `skirmish.ts` n'importe que `combat.ts`.
 import {
@@ -128,7 +128,7 @@ export const CARAVAN = {
   foeDmgPctPv: 0.275,
   /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
   perilousMult: 1.35,
-  /** Taille de la troupe d'une embuscade — calme / périlleuse (moteur de groupe, v0.860).
+  /** Taille de la troupe d'une embuscade — calme / périlleuse (moteur de groupe, v0.864).
    *  ⚠️ Ce n'est PAS le danger : l'issue reste le combat fondu `roadFoe` (bandes intactes).
    *  C'est le nombre de CORPS entre lesquels ses PV sont répartis — donc combien d'abattus
    *  le journal inscrit, et l'XP qu'ils rapportent (`SKIRMISH.xpPerKill`). */
@@ -194,7 +194,7 @@ interface CaravanEvent {
   kind: CaravanEventKind;
   /** `bandits` uniquement : l'escorte a-t-elle tenu ? */
   won?: boolean;
-  /** `bandits` : bandits ABATTUS sur CETTE embuscade (combat de groupe, v0.860).
+  /** `bandits` : bandits ABATTUS sur CETTE embuscade (combat de groupe, v0.864).
    *  ⚠️ Nommé `slain`, pas `kills` : la forme diffère de `CaravanOutcome.kills` (ici un
    *  NOMBRE pour CET événement, là un `Record` PAR aventurier pour tout le voyage) — deux
    *  champs homonymes qui ne disent pas la même chose auraient fini par se confondre.
