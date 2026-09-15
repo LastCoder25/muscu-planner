@@ -83,6 +83,7 @@
             v-for="a in rosterSorted"
             :key="a.id"
             :adv="a"
+            :look="lookOf(a)"
             :familiar="famOf(a)"
             :talent-icon="talIconOf(a)"
             :power="powerOf(a)"
@@ -313,6 +314,10 @@
         >
           <span class="dg-emo">{{ s.emoji }}</span>
           <span class="dg-name" :style="s.color ? { color: s.color } : {}">{{ s.name }}</span>
+          <!-- Rang (même lecture que familiers et talents) et stat principale : on voit
+               ce qu'il porte d'un coup d'œil, sans ouvrir le sélecteur (v0.865). -->
+          <span v-if="s.rank" class="dg-rk" :style="{ color: s.color }">{{ s.rank }}</span>
+          <span v-if="s.stat" class="dg-stat">{{ s.stat }}</span>
         </button>
       </div>
 
@@ -619,10 +624,12 @@ import {
   advGearOptions,
   advGearScrap,
   advGearSellValue,
+  advLooks,
   lineageOf,
   wornGear,
   type AdvGear,
   type AdvGearSlot,
+  type AdvLook,
   type Lineage,
 } from '@/lib/advGear';
 
@@ -919,6 +926,13 @@ const gearPickCtx = computed<CompanionCtx>(() => ({
  *  pour la fiche, où une pièce devenue invalide (rang dépassé, prise par un autre) doit
  *  se lire comme un emplacement VIDE, pas comme portée. */
 const gearWorn = computed(() => wornGear(char.advList, char.advGearStock));
+/** 🖼️ L'apparence de TOUT le vivier, équipement porté compris (`advLooks`, v0.865) — un
+ *  seul calcul au niveau du panneau, qui ne dépend ni de `now` ni du rendu d'un portrait. */
+const looks = computed(() => advLooks(char.advList, char.advGearStock));
+function lookOf(a: Adventurer): AdvLook {
+  // Le portrait itère sur `rosterSorted`, dérivé de `char.advList` : l'entrée existe toujours.
+  return looks.value.get(a.id) ?? { profile: 'polyvalent', gear: {}, weaponKind: 'lame' };
+}
 function wornOf(a: Adventurer): Partial<Record<AdvGearSlot, AdvGear>> {
   return Object.fromEntries((gearWorn.value.get(a.id) ?? []).map((g) => [g.slot, g]));
 }
@@ -938,6 +952,8 @@ const detailGearSlots = computed(() => {
         emoji: piece.emoji,
         name: piece.name,
         color: rarityRank(piece.rarity).color,
+        rank: rarityRank(piece.rarity).name,
+        stat: gearEffectTexts(piece)[0],
       };
     const d = defs?.[slot];
     return {
@@ -946,6 +962,8 @@ const detailGearSlots = computed(() => {
       emoji: d?.emoji ?? '＋',
       name: d?.name ?? 'Emplacement',
       color: undefined as string | undefined,
+      rank: undefined as string | undefined,
+      stat: undefined as string | undefined,
     };
   });
 });
@@ -1833,6 +1851,20 @@ async function doPromote(classId: string) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dg-rk,
+.dg-stat {
+  font-size: 9.5px;
+  line-height: 1.2;
+  max-width: 100%;
+  text-align: center;
+}
+.dg-rk {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.dg-stat {
+  color: var(--dim);
 }
 /* Emplacement vide : lisible, mais en retrait. */
 .d-gear-slot.empty .dg-emo,

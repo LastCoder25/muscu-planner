@@ -22,8 +22,15 @@ import {
   type ItemEffect,
   type ItemSlot,
   type Rarity,
+  type WeaponKind,
 } from './items';
-import { advRarity, type Adventurer } from './adventurers';
+import {
+  advAvatar,
+  advRarity,
+  type AdvAvatarProfile,
+  type ADV_AVATAR_SLOTS,
+  type Adventurer,
+} from './adventurers';
 
 // ⚠️ Pas exportée (`npm run dead`) : aucun importeur hors du module — `Lineage` (le type
 // dérivé) est ce que le reste du code consomme (ex. GuildPanel.vue).
@@ -234,6 +241,57 @@ export function wornGear(advs: Adventurer[], stock: AdvGear[]): Map<string, AdvG
       list.push(g);
     }
     if (list.length) out.set(a.id, list);
+  }
+  return out;
+}
+
+/** 🏹 LA FORME DESSINÉE de l'arme de chaque lignée (portrait du vivier, v0.865).
+ *  ⚠️ Exhaustive par construction (`Record<Lineage, …>`) : une lignée ajoutée sans dire
+ *  comment son arme se dessine ne compile pas. L'arc et le bâton ont leur dessin propre ;
+ *  le bâton de marche du caravanier se dessine comme le bâton du mage (même silhouette). */
+const LINEAGE_WEAPON_KIND: Record<Lineage, WeaponKind> = {
+  guerrier: 'lame',
+  archer: 'arc',
+  mage: 'baton',
+  homme_armes: 'masse',
+  eclaireur: 'dague',
+  caravanier: 'baton',
+};
+
+type AdvLookSlot = (typeof ADV_AVATAR_SLOTS)[number];
+export interface AdvLook {
+  profile: AdvAvatarProfile;
+  /** Chaque emplacement dessiné : sa rareté, et la pièce RÉELLEMENT portée s'il y en a une
+   *  (`null` = habillage par classe, `advAvatar`). */
+  gear: Partial<Record<AdvLookSlot, { rarity: Rarity; piece: AdvGear | null }>>;
+  /** Forme de l'arme : celle de la lignée si une arme est portée, sinon la lame d'avant. */
+  weaponKind: WeaponKind;
+}
+
+/**
+ * 🖼️ L'APPARENCE DU VIVIER, ÉQUIPEMENT PORTÉ COMPRIS (v0.865 ; demandé par l'utilisateur).
+ * Le portrait s'habillait par CLASSE seulement (`advAvatar`) : une arme portée ne se voyait
+ * pas. Une pièce réellement portée REMPLACE l'habillage de classe de son emplacement ; les
+ * emplacements sans pièce (et la relique, que l'aventurier n'a pas) gardent l'habillage.
+ * ⚠️ « Porté » = `wornGear`, la définition que lit le combat : une pièce interdite (autre
+ * lignée, trop rare pour la classe) ou déjà prise ailleurs ne s'affiche pas — le portrait
+ * ne peut pas montrer un équipement qui ne compte pas. D'où le VIVIER entier en entrée.
+ */
+export function advLooks(advs: Adventurer[], stock: AdvGear[]): Map<string, AdvLook> {
+  const worn = wornGear(advs, stock);
+  const out = new Map<string, AdvLook>();
+  for (const a of advs) {
+    const base = advAvatar(a);
+    const gear: AdvLook['gear'] = {};
+    for (const [slot, rarity] of Object.entries(base.gear) as [AdvLookSlot, Rarity][]) {
+      gear[slot] = { rarity, piece: null };
+    }
+    let weaponKind: WeaponKind = 'lame';
+    for (const g of worn.get(a.id) ?? []) {
+      gear[g.slot] = { rarity: g.rarity, piece: g };
+      if (g.slot === 'weapon') weaponKind = LINEAGE_WEAPON_KIND[g.lineage];
+    }
+    out.set(a.id, { profile: base.profile, gear, weaponKind });
   }
   return out;
 }

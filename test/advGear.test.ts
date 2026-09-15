@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import { RARITY_RANK, RANK_ORDER, itemLevelMult, prestigeRankIndex } from '@/lib/items';
-import { ADV_CLASSES, advRarity, type Adventurer } from '@/lib/adventurers';
+import { ADV_CLASSES, advAvatar, advRarity, type Adventurer } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
 import {
   adventurerGearPower,
@@ -20,6 +20,7 @@ import {
   advGearOptions,
   advGearRoles,
   advGearValue,
+  advLooks,
   canWearAdvGear,
   lineageOf,
   normalizeAdvGearState,
@@ -294,6 +295,89 @@ describe('port', () => {
     const o = advGearOptions(a, [a, b], stock, 'weapon');
     expect(o.options.map((g) => g.id)).toEqual(['ok']);
     expect(o).toMatchObject({ tooRare: 1, otherLineage: 1, taken: 1 });
+  });
+});
+
+describe('🖼️ le portrait montre l’équipement porté (v0.865)', () => {
+  /** Une lignée valide de n classes partant de `root` (chaque classe descend de la précédente). */
+  function lignee(root: string, n: number): string[] {
+    const r = ADV_CLASSES.find((c) => c.id === root)!;
+    const out = [r.id];
+    const tags = new Set(r.tags);
+    for (let st = 1; out.length < n; st++) {
+      const next = ADV_CLASSES.find(
+        (c) => c.stratum === st && (c.req ?? []).every((t) => tags.has(t)),
+      );
+      if (!next) break;
+      out.push(next.id);
+      next.tags.forEach((t) => tags.add(t));
+    }
+    return out;
+  }
+
+  it('⚠️ une pièce PORTÉE remplace l’habillage de classe de son emplacement', () => {
+    // Deux classes : habillage arme = commun, armure = inhabituel. On porte une armure COMMUNE.
+    const path = lignee('guerrier', 2);
+    expect(path.length).toBe(2);
+    const cuirasse = piece('c', { slot: 'armor', name: 'Cuirasse', emoji: '🥋' });
+    const a = adv('a', path, { armor: 'c' });
+    expect(advAvatar(a).gear.armor).toBe('inhabituel');
+    const look = advLooks([a], [cuirasse]).get('a')!;
+    expect(look.gear.armor).toEqual({ rarity: 'commun', piece: cuirasse });
+    // L'emplacement sans pièce garde l'habillage de classe.
+    expect(look.gear.weapon).toEqual({ rarity: advAvatar(a).gear.weapon, piece: null });
+  });
+
+  it('l’arme portée donne sa FORME, lignée par lignée ; sans arme, la lame d’avant', () => {
+    const attendu = {
+      guerrier: 'lame',
+      archer: 'arc',
+      mage: 'baton',
+      homme_armes: 'masse',
+      eclaireur: 'dague',
+      caravanier: 'baton',
+    } as const;
+    for (const [l, kind] of Object.entries(attendu)) {
+      const w = piece('w', { lineage: l as AdvGear['lineage'] });
+      const a = adv('a', [l], { weapon: 'w' });
+      expect(advLooks([a], [w]).get('a')!.weaponKind, l).toBe(kind);
+      expect(advLooks([adv('a', [l])], [w]).get('a')!.weaponKind, l).toBe('lame');
+    }
+  });
+
+  it('⚠️ une pièce NON portable (règles de `wornGear`) ne s’affiche pas', () => {
+    const recrue = adv('a', ['guerrier'], { weapon: 'rare', armor: 'arc' });
+    const stock = [
+      piece('rare', { rarity: 'epique' }), // trop rare pour une classe commune
+      piece('arc', { lineage: 'archer', slot: 'armor' }), // autre lignée
+    ];
+    const look = advLooks([recrue], stock).get('a')!;
+    expect(look.gear.weapon).toEqual({ rarity: 'commun', piece: null });
+    expect(look.gear.armor).toBeUndefined();
+    expect(look.weaponKind).toBe('lame');
+    // Une pièce assignée à deux porteurs n'habille que le premier (celui que le combat retient).
+    const p = piece('p', { slot: 'armor' });
+    const b1 = adv('b1', ['guerrier'], { armor: 'p' });
+    const b2 = adv('b2', ['guerrier'], { armor: 'p' });
+    const m = advLooks([b1, b2], [p]);
+    expect(m.get('b1')!.gear.armor?.piece).toBe(p);
+    expect(m.get('b2')!.gear.armor).toBeUndefined();
+  });
+
+  it('sans pièce : exactement l’habillage de classe d’avant (`advAvatar`)', () => {
+    const roots = ADV_CLASSES.filter((c) => c.stratum === 0).map((c) => c.id);
+    for (const r of roots)
+      for (const n of [1, 2, 3, 4, 6]) {
+        const a = adv('a', lignee(r, n));
+        const base = advAvatar(a);
+        const look = advLooks([a], [piece('x')]).get('a')!;
+        expect(look.profile).toBe(base.profile);
+        expect(look.weaponKind).toBe('lame');
+        expect(
+          Object.fromEntries(Object.entries(look.gear).map(([s, v]) => [s, v.rarity])),
+        ).toEqual(base.gear);
+        expect(Object.values(look.gear).every((v) => v.piece === null)).toBe(true);
+      }
   });
 });
 

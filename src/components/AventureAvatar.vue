@@ -160,6 +160,17 @@
           <circle class="head" cx="96" cy="53" r="5.2" />
           <circle class="head-hi" cx="94.4" cy="51.4" r="1.5" />
         </template>
+        <!-- 🏹 arc et bâton : armes de lignée des aventuriers (portrait du vivier, v0.865). -->
+        <template v-else-if="wKind === 'arc'">
+          <path class="bow" d="M87 58 Q104 86 87 114" />
+          <path class="string" d="M87 58 L87 114" />
+          <rect class="hilt" x="86.5" y="81" width="4.5" height="10" rx="1.5" />
+        </template>
+        <template v-else-if="wKind === 'baton'">
+          <rect class="haft" x="83.8" y="36" width="2.6" height="62" rx="1.2" />
+          <circle class="head" cx="85" cy="33" r="4.6" />
+          <circle class="head-hi" cx="83.6" cy="31.6" r="1.4" />
+        </template>
         <template v-else>
           <!-- faux : long manche, lame courbe vers l'avant -->
           <rect class="haft" x="83.8" y="30" width="2.6" height="66" rx="1.2" />
@@ -251,6 +262,7 @@ import {
   type Equipped,
   type ItemSlot,
   type Rarity,
+  type WeaponKind,
 } from '@/lib/items';
 import { familiarSpecies } from '@/data/familiars';
 
@@ -260,6 +272,9 @@ const props = defineProps<{
   talentIcon?: string; // icône du 1er talent équipé (badge cliquable bas-gauche)
   /** Voie du porteur : départage le set affiché à égalité de pièces. */
   voie?: string | null;
+  /** Forme de l'arme déjà décidée par la lib (portrait d'aventurier : `advLooks`). Sans
+   *  elle, la forme est lue sur le NOM de l'arme (`weaponKind`), comme pour le héros. */
+  weaponShape?: WeaponKind;
 }>();
 const emit = defineEmits<{ 'familiar-click': []; 'talent-click': [] }>();
 
@@ -272,7 +287,7 @@ const gear = computed(() => ({
   relic: props.equipped.relic,
 }));
 // La forme de l'arme et le set porté : la règle vit dans la lib, l'avatar ne fait que dessiner.
-const wKind = computed(() => weaponKind(props.equipped.weapon));
+const wKind = computed(() => props.weaponShape ?? weaponKind(props.equipped.weapon));
 const set = computed(() => wornSet(props.equipped, props.voie));
 // RANG le plus haut parmi l'équipement (les 4 slots gear) → pilote l'aura de puissance.
 // (Remplace l'ancien pilotage par l'enchant, retiré : l'aura suit maintenant le grade.)
@@ -445,6 +460,18 @@ const label = computed(
 }
 .weapon .spikes {
   fill: color-mix(in srgb, var(--rk) 70%, #7e8894);
+}
+/* Arc : bois teinté de la rareté, corde claire. */
+.weapon .bow {
+  fill: none;
+  stroke: color-mix(in srgb, var(--rk) 65%, #5a4330);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+.weapon .string {
+  fill: none;
+  stroke: #d9d2c3;
+  stroke-width: 0.6;
 }
 .weapon .chain circle {
   fill: none;

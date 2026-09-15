@@ -48,6 +48,7 @@
           class="ap-avatar"
           :profile="look.profile"
           :equipped="equipped"
+          :weapon-shape="look.weaponKind"
           :talent-icon="talentIcon"
           @familiar-click="emit('familiar')"
           @talent-click="emit('talent')"
@@ -126,19 +127,17 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import {
-  advAvatar,
-  advRank,
-  advRankProgress,
-  advRarity,
-  advTitle,
-  type Adventurer,
-} from '@/lib/adventurers';
+import { advRank, advRankProgress, advRarity, advTitle, type Adventurer } from '@/lib/adventurers';
+import type { AdvLook } from '@/lib/advGear';
 import { FAMILIAR_SLOT, rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
 
 const props = defineProps<{
   adv: Adventurer;
+  /** Son apparence, équipement PORTÉ compris (`advLooks`, v0.865). ⚠️ Requise et calculée
+   *  par le parent pour tout le vivier d'un coup : « porté » dépend des autres aventuriers
+   *  (une pièce ne se porte qu'une fois), un portrait seul ne peut pas le savoir. */
+  look: AdvLook;
   familiar: Item | null;
   talentIcon?: string;
   power: number;
@@ -155,13 +154,13 @@ const title = computed(() => advTitle(props.adv));
 const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
 const rarLabel = computed(() => 'classe ' + rarityRank(advRarity(props.adv)).name);
 const pct = computed(() => Math.round(advRankProgress(props.adv) * 100));
-const look = computed(() => advAvatar(props.adv));
-/** L’avatar ne lit que l’emplacement et la RARETÉ de chaque pièce : la règle d’apparence
- *  vit dans `advAvatar` (lib), ce composant ne fait que la traduire en « équipement ». */
+/** L’avatar ne lit que l’emplacement et la RARETÉ de chaque pièce (la forme de l’arme lui
+ *  est passée à part) : la règle d’apparence vit dans `advLooks` (lib), ce composant ne
+ *  fait que la traduire en « équipement ». */
 const equipped = computed<Equipped>(() => {
   const out: Equipped = {};
-  for (const [slot, rarity] of Object.entries(look.value.gear)) {
-    out[slot as keyof Equipped] = { id: `look-${slot}`, slot, rarity } as Item;
+  for (const [slot, v] of Object.entries(props.look.gear)) {
+    out[slot as keyof Equipped] = { id: `look-${slot}`, slot, rarity: v.rarity } as Item;
   }
   if (props.familiar) out[FAMILIAR_SLOT] = props.familiar;
   return out;

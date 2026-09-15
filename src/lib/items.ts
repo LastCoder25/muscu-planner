@@ -872,7 +872,9 @@ const SIGNATURE_NAMES: Partial<Record<EffectType, string[]>> = {
  *  mais ça affiche une épée »). Aucun champ ne la stockait : elle vivait seulement dans le NOM.
  *  ⚠️ La table est la SOURCE des noms d’armes (`NAMES.weapon` en dérive) : ajouter un nom sans
  *  dire sa forme est impossible, et l’avatar ne peut pas retomber en silence sur l’épée. */
-export type WeaponKind = 'lame' | 'hache' | 'masse' | 'dague' | 'fleau' | 'faux';
+/** ⚠️ `arc` et `baton` n'ont pas de nom d'objet du héros : ce sont les armes de lignée des
+ *  aventuriers (`LINEAGE_WEAPON_KIND`, advGear.ts), dessinées dans leur portrait (v0.865). */
+export type WeaponKind = 'lame' | 'hache' | 'masse' | 'dague' | 'fleau' | 'faux' | 'arc' | 'baton';
 const WEAPON_NOUN_KIND = {
   Lame: 'lame',
   Hache: 'hache',
