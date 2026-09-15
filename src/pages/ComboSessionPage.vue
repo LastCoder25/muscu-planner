@@ -74,6 +74,22 @@
         </div>
       </div>
       <div class="cfg">
+        <div class="cfg-lbl">Ordre des séries</div>
+        <div class="chips">
+          <button
+            v-for="o in COMBO_SESSION_ORDERS"
+            :key="o.id"
+            class="chip"
+            :class="{ on: order === o.id }"
+            :aria-pressed="order === o.id"
+            @click="setOrder(o.id)"
+          >
+            {{ o.label }}
+          </button>
+        </div>
+        <div class="cfg-hint">{{ orderHint }}</div>
+      </div>
+      <div class="cfg">
         <div class="cfg-lbl">Repos entre séries</div>
         <div class="chips">
           <button
@@ -115,8 +131,21 @@
         <span class="rh-sets">{{ validatedCount }}/{{ totalSets }} séries</span>
       </div>
       <div v-if="restLeft > 0" class="rest-banner">Repos · {{ restLeft }} s</div>
+      <!-- Série SUIVANTE selon l'ordre choisi : en alterné, c'est elle qui dit où aller. -->
+      <button v-if="nextStep" type="button" class="next-banner" @click="goNext">
+        <span class="nb-lbl">▶ Suivante</span>
+        <span class="nb-exo">{{ session[nextStep.exo]?.exercise_name }}</span>
+        <span class="nb-set"
+          >série {{ nextStep.set + 1 }}/{{ session[nextStep.exo]?.sets.length }}</span
+        >
+      </button>
 
-      <div v-for="(exo, i) in session" :key="exo.exercise_id" class="s-exo">
+      <div
+        v-for="(exo, i) in session"
+        :key="exo.exercise_id"
+        class="s-exo"
+        :class="{ next: nextStep?.exo === i }"
+      >
         <div class="se-head">
           <span class="se-name">{{ exo.exercise_name }}</span>
           <!-- Fourchette conseillée : c’est ICI qu’elle compte — le seul moment du 360 où
@@ -151,7 +180,7 @@
             v-for="(reps, j) in exo.sets"
             :key="j"
             class="s-set"
-            :class="{ done: isDone(i, j) }"
+            :class="{ done: isDone(i, j), next: nextStep?.exo === i && nextStep?.set === j }"
             @click="validate(i, j, reps)"
           >
             <span v-if="isDone(i, j)">✓ {{ doneReps(i, j) }}</span>
@@ -209,6 +238,9 @@ import {
   legUnitLabel,
   legMode,
   legLastReps,
+  comboSessionSteps,
+  COMBO_SESSION_ORDERS,
+  type ComboSessionOrder,
   type ComboLeg,
   type ComboSessionExo,
 } from '@/lib/combo';
@@ -227,6 +259,32 @@ const id = String(route.params.id);
 const c = computed(() => combo.list.find((x) => x.id === id) ?? null);
 
 const RESTS = [30, 60, 90];
+
+// Ordre des séries (standard / alterné / aléatoire) — mémorisé par appareil : c'est une
+// habitude d'entraînement, on ne la redemande pas à chaque séance.
+const ORDER_KEY = 'muscu:combo:session-order';
+function loadOrder(): ComboSessionOrder {
+  try {
+    const v = localStorage.getItem(ORDER_KEY);
+    return COMBO_SESSION_ORDERS.some((o) => o.id === v) ? (v as ComboSessionOrder) : 'standard';
+  } catch {
+    return 'standard';
+  }
+}
+const order = ref<ComboSessionOrder>(loadOrder());
+function setOrder(o: ComboSessionOrder) {
+  order.value = o;
+  try {
+    localStorage.setItem(ORDER_KEY, o);
+  } catch {
+    /* stockage indisponible : le choix vaut pour cette séance */
+  }
+}
+const orderHint = computed(
+  () => COMBO_SESSION_ORDERS.find((o) => o.id === order.value)?.hint ?? '',
+);
+// Graine du mélange, fixée au démarrage : l'ordre ne bouge pas en cours de séance.
+const orderSeed = ref(1);
 const restSec = ref(60);
 const phase = ref<'config' | 'run'>('config');
 
@@ -301,6 +359,22 @@ function isDone(i: number, j: number) {
 function doneReps(i: number, j: number) {
   return logged.value[`${i}-${j}`]?.reps ?? 0;
 }
+// La prochaine série à faire selon l'ordre choisi (la première non faite de la suite).
+const steps = computed(() =>
+  comboSessionSteps(
+    session.value.map((e) => e.sets.length),
+    order.value,
+    orderSeed.value,
+  ),
+);
+const nextStep = computed(() => steps.value.find((st) => !isDone(st.exo, st.set)) ?? null);
+function goNext() {
+  const st = nextStep.value;
+  const exo = st ? session.value[st.exo] : undefined;
+  if (!st || !exo) return;
+  if (exo.time) toggleExoTimer(st.exo);
+  else validate(st.exo, st.set, exo.sets[st.set] ?? 0);
+}
 function canRemoveSlot(i: number) {
   const exo = session.value[i];
   if (!exo || exo.sets.length === 0) return false;
@@ -328,6 +402,7 @@ function start() {
   // Copie profonde des sets (tableaux mutables → ajout/retrait de séries).
   session.value = previewSession.value.map((e) => ({ ...e, sets: [...e.sets] }));
   logged.value = {};
+  orderSeed.value = Math.floor(Math.random() * 2 ** 31) || 1;
   phase.value = 'run';
   tick = setInterval(() => {
     elapsed.value++;
@@ -504,6 +579,49 @@ onUnmounted(() => {
 }
 .cfg {
   margin-bottom: 14px;
+}
+.cfg-hint {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-top: 6px;
+}
+.next-banner {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.nb-lbl {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 12.5px;
+}
+.nb-exo {
+  flex: 1 1 auto;
+  font-weight: 600;
+  font-size: 14px;
+}
+.nb-set {
+  font-size: 12px;
+  color: var(--dim);
+}
+.s-exo.next {
+  border-color: var(--accent);
+}
+.s-set.next {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 2px var(--accent);
 }
 .cfg-lbl {
   font-size: 12.5px;

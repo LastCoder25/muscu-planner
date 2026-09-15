@@ -41,6 +41,7 @@ import {
   comboSessionSetBudget,
   comboSessionDurationMin,
   buildComboSessionFromCounts,
+  comboSessionSteps,
   legSets,
   legRepRange,
   type ComboChallenge,
@@ -1172,5 +1173,65 @@ describe('📅 le 360 reste ouvert après l’objectif, et paie ce qui est fait 
     expect(comboChestEligible(deux(sets(4), sets(3)))).toBe(false);
     expect(comboChestEligible(deux(sets(4), [...sets(3), ...sets(1, APRES)]))).toBe(false);
     expect(comboChestEligible(deux(sets(4), sets(4), { status: 'abandoned' }))).toBe(false);
+  });
+});
+
+describe('🔀 ordre des séries d’une séance (v0.861)', () => {
+  const seq = (steps: { exo: number; set: number }[]) => steps.map((s) => 'ABCDE'[s.exo]).join('');
+  it('standard : toutes les séries d’un exo, puis le suivant', () => {
+    expect(seq(comboSessionSteps([3, 2, 1], 'standard'))).toBe('AAABBC');
+  });
+  it('alterné : une série de chaque exo à tour de rôle, les exos épuisés sortent du tour', () => {
+    expect(seq(comboSessionSteps([3, 2, 1], 'alternate'))).toBe('ABCABA');
+  });
+  it('chaque série apparaît exactement une fois, dans l’ordre de ses numéros', () => {
+    for (const order of ['standard', 'alternate', 'shuffle'] as const) {
+      const steps = comboSessionSteps([4, 2, 3, 1], order, 7);
+      expect(steps).toHaveLength(10);
+      for (const [exo, n] of [4, 2, 3, 1].entries()) {
+        expect(steps.filter((s) => s.exo === exo).map((s) => s.set)).toEqual([...Array(n).keys()]);
+      }
+    }
+  });
+  it('aléatoire : chaque tour contient une série de chaque exo encore en jeu', () => {
+    const steps = comboSessionSteps([3, 3, 3], 'shuffle', 5);
+    for (let r = 0; r < 3; r++) {
+      expect(
+        steps
+          .slice(r * 3, r * 3 + 3)
+          .map((s) => s.exo)
+          .sort(),
+      ).toEqual([0, 1, 2]);
+      expect(steps.slice(r * 3, r * 3 + 3).every((s) => s.set === r)).toBe(true);
+    }
+  });
+  it('⚠️ aléatoire : RE-MÉLANGÉ à chaque tour (pas le même ordre répété)', () => {
+    let differs = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const s = seq(comboSessionSteps([4, 4, 4, 4], 'shuffle', seed));
+      const rounds = [s.slice(0, 4), s.slice(4, 8), s.slice(8, 12), s.slice(12, 16)];
+      if (new Set(rounds).size > 1) differs++;
+    }
+    expect(differs).toBeGreaterThan(35);
+  });
+  it('⚠️ aléatoire : jamais deux séries du même exo à la suite tant qu’on peut l’éviter', () => {
+    for (let seed = 1; seed <= 300; seed++) {
+      const steps = comboSessionSteps([3, 3, 2, 3], 'shuffle', seed);
+      for (let k = 1; k < steps.length; k++) expect(steps[k]!.exo).not.toBe(steps[k - 1]!.exo);
+    }
+  });
+  it('aléatoire : la même graine redonne le même ordre, une autre graine en donne un autre', () => {
+    const a = seq(comboSessionSteps([3, 3, 3], 'shuffle', 11));
+    expect(seq(comboSessionSteps([3, 3, 3], 'shuffle', 11))).toBe(a);
+    const others = new Set(
+      [12, 13, 14, 15, 16].map((g) => seq(comboSessionSteps([3, 3, 3], 'shuffle', g))),
+    );
+    expect([...others].some((o) => o !== a)).toBe(true);
+  });
+  it('ajouter une série en cours de séance ne bouleverse pas les tours déjà commencés', () => {
+    const before = comboSessionSteps([2, 2, 2], 'shuffle', 9);
+    const after = comboSessionSteps([3, 2, 2], 'shuffle', 9);
+    expect(after.slice(0, before.length)).toEqual(before);
+    expect(after.at(-1)).toEqual({ exo: 0, set: 2 });
   });
 });
