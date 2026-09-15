@@ -29,16 +29,32 @@
         <!-- Notifications d'amis : n'apparaît que s'il y a à traiter ou à annoncer.
              Avant, l'info était enfouie dans le menu ⋮, donc invisible. -->
         <q-btn
-          v-if="friends.notifCount > 0"
+          v-if="notifTotal > 0"
           flat
           round
           dense
           icon="notifications"
           aria-label="Notifications"
         >
-          <q-badge color="primary" text-color="dark" floating>{{ friends.notifCount }}</q-badge>
+          <q-badge color="primary" text-color="dark" floating>{{ notifTotal }}</q-badge>
           <q-menu anchor="bottom right" self="top right" @show="onNotifOpen">
             <q-list class="app-menu" style="min-width: 270px">
+              <!-- Invitation à un BOSS entre amis : 24 h pour répondre, elle passe en tête. -->
+              <q-item
+                v-for="b in bossInvites"
+                :key="'boss-' + b.id"
+                v-close-popup
+                clickable
+                @click="goBoss"
+              >
+                <q-item-section avatar><span style="font-size: 22px">🐉</span></q-item-section>
+                <q-item-section>
+                  <q-item-label><b>Un boss t’attend</b></q-item-label>
+                  <q-item-label caption
+                    >« {{ b.exerciseName }} » — 24 h pour le rejoindre</q-item-label
+                  >
+                </q-item-section>
+              </q-item>
               <q-item v-for="v in friends.incoming" :key="'in-' + v.userId">
                 <q-item-section>
                   <q-item-label
@@ -209,6 +225,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useProfileStore } from '@/stores/profile';
 import { useFeedbackStore } from '@/stores/feedback';
 import { useFriendsStore } from '@/stores/friends';
+import { useFriendBossStore } from '@/stores/friendBoss';
 import { useInstallPrompt } from '@/composables/useInstallPrompt';
 import { useGamePanel } from '@/composables/useGamePanel';
 
@@ -217,6 +234,13 @@ const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const friends = useFriendsStore();
+const friendBoss = useFriendBossStore();
+// Recalculé à chaque rechargement du store (ouverture, cloche) : une invitation a 24 h de vie.
+const bossInvites = computed(() => (friendBoss.loaded ? friendBoss.invitations(Date.now()) : []));
+const notifTotal = computed(() => friends.notifCount + bossInvites.value.length);
+function goBoss() {
+  void router.push('/boss-amis');
+}
 const profileStore = useProfileStore();
 const feedback = useFeedbackStore();
 const { isIOS, isStandalone, hasNativePrompt, promptInstall } = useInstallPrompt();
@@ -268,6 +292,7 @@ onMounted(() => {
   // être sur la page qui les affiche pour apprendre qu'on avait été invité. La boucle
   // ne pouvait pas se fermer (mesuré : zéro défi partagé créé depuis la livraison).
   friends.fetchShared(uid).catch(() => undefined);
+  friendBoss.fetchMine().catch(() => undefined);
 });
 
 // En cockpit, l'Aventure est déjà affichée à droite → si on route vers /aventure
@@ -320,6 +345,7 @@ function onNotifOpen() {
   const uid = auth.user?.id;
   if (!uid) return;
   void friends.fetchShared(uid).catch(() => undefined); // une réponse a pu tomber depuis
+  void friendBoss.fetchMine().catch(() => undefined);
   friends
     .fetchMine(uid)
     .catch(() => undefined)

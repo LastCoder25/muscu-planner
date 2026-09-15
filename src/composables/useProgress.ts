@@ -8,6 +8,8 @@ import { useChallengesStore } from '@/stores/challenges';
 import { useSessionsStore } from '@/stores/sessions';
 import { useCardioStore } from '@/stores/cardio';
 import { useComboStore } from '@/stores/combo';
+import { useFriendBossStore } from '@/stores/friendBoss';
+import { useAuthStore } from '@/stores/auth';
 import {
   sessionXp,
   drillSessionXp,
@@ -18,6 +20,7 @@ import {
 } from '@/lib/athlete';
 import { challengeXpPoints } from '@/lib/challenges';
 import { comboXpPoints } from '@/lib/combo';
+import { friendBossXp } from '@/lib/friendBoss';
 import { challengeLane } from '@/lib/tennisTraining';
 import { computeLevel } from '@/lib/levels';
 import { activeDaysSince } from '@/lib/activityDays';
@@ -52,6 +55,8 @@ export function useProgress() {
   const sessions = useSessionsStore();
   const cardio = useCardioStore();
   const combo = useComboStore();
+  const friendBoss = useFriendBossStore();
+  const auth = useAuthStore();
 
   // Vrai une fois les données de fond chargées (évite d'agir sur un niveau « stale »).
   const ready = ref(false);
@@ -63,6 +68,7 @@ export function useProgress() {
       sessions.fetchMine(),
       cardio.fetchLogs(),
       combo.fetchMine(),
+      friendBoss.fetchMine(),
     ]).finally(() => {
       ready.value = true;
     });
@@ -126,7 +132,14 @@ export function useProgress() {
       tennis.logs.reduce((a, r) => a + drillSessionXp(r.payload), 0) +
       tennisChallengeXp.value,
   );
-  const muscuTotal = computed(() => muscuXp.value + muscuChallengeXp.value + comboXp.value);
+  // Boss entre amis : ses reps (et la prime de complétion) nourrissent la muscu, ou le
+  // cardio pour un boss de conditionnement — comme les challenges du même exo.
+  const bossXp = computed(() =>
+    friendBossXp(friendBoss.bosses, friendBoss.members, auth.user?.id ?? ''),
+  );
+  const muscuTotal = computed(
+    () => muscuXp.value + muscuChallengeXp.value + comboXp.value + bossXp.value.muscu,
+  );
   // Les sorties « miroir » d'un défi (challenge_id) apparaissent dans l'historique
   // mais ne comptent PAS d'XP : l'effort est déjà compté via cardioChallengeXp
   // (sinon double compte). Les sorties manuelles, elles, comptent normalement.
@@ -134,7 +147,9 @@ export function useProgress() {
     () =>
       cardio.logs
         .filter((r) => !r.payload.challenge_id)
-        .reduce((a, r) => a + cardioSessionXp(r.payload), 0) + cardioChallengeXp.value,
+        .reduce((a, r) => a + cardioSessionXp(r.payload), 0) +
+      cardioChallengeXp.value +
+      bossXp.value.cardio,
   );
   // Piste Challenges = niveau « méta » (tous les défis) — affiché à part, PAS
   // ajouté au Global (l'effort est déjà compté dans muscu / cardio).
@@ -160,6 +175,7 @@ export function useProgress() {
     }
     // Défis cardio → signature cardio générique.
     addXp(acc, cardioChallengeXp.value, CARDIO_CHALLENGE_SIG);
+    addXp(acc, bossXp.value.cardio, CARDIO_CHALLENGE_SIG);
     // « Autre sport » → intensité-scalé, réparti selon la direction du sport.
     for (const r of logs.all) {
       if (isAutreLog(r))
@@ -466,6 +482,7 @@ export function useProgress() {
         tennis: tennis.logs,
         challenges: challenges.list,
         combos: combo.list,
+        bossHits: friendBoss.myHits,
       },
       from,
     );

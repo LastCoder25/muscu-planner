@@ -46,6 +46,17 @@
       </div>
 
       <template v-else>
+        <!-- BOSS ENTRE AMIS : une invitation a 24 h de validité, elle passe en tête. -->
+        <button class="fb-entry" :class="{ hot: bossInvites.length }" @click="openBoss">
+          <span class="fb-entry-emo">🐉</span>
+          <span class="fb-entry-main">
+            <span class="fb-entry-t font-display">Boss entre amis</span>
+            <span class="fb-entry-s">{{ bossLine }}</span>
+          </span>
+          <span v-if="bossInvites.length" class="fb-entry-badge">{{ bossInvites.length }}</span>
+          <span class="fr-go">›</span>
+        </button>
+
         <!-- Demandes reçues : la seule section où on agit. -->
         <section v-if="friends.incoming.length" class="fr-sec">
           <div class="fr-sec-t">Demandes reçues</div>
@@ -156,6 +167,8 @@ import { fmtPct } from '@/lib/combo';
 import { logicalToday, computeDailyTargets } from '@/lib/challenges';
 import { useChallengesStore } from '@/stores/challenges';
 import type { SharedChallenge } from '@/stores/friends';
+import { useFriendBossStore } from '@/stores/friendBoss';
+import { bossPhase, bossEndsAt, bossStartAt, fmtBossSpan } from '@/lib/friendBoss';
 
 defineProps<{ embedded?: boolean }>();
 
@@ -165,6 +178,24 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const friends = useFriendsStore();
 const challenges = useChallengesStore();
+const boss = useFriendBossStore();
+const bossNow = Date.now();
+const bossInvites = computed(() => boss.invitations(bossNow));
+/** Ce que la carte d'entrée dit du boss : l'invitation d'abord, puis le combat en cours. */
+const bossLine = computed(() => {
+  const inv = bossInvites.value[0];
+  if (inv)
+    return `⚔️ Invité : « ${inv.exerciseName} » — réponds dans ${fmtBossSpan(bossStartAt(inv) - bossNow)}`;
+  const cur = boss.current(bossNow);
+  if (!cur) return 'Lance un boss et abats-le avec tes amis, rep après rep.';
+  const pv = Math.max(0, cur.hpTotal - cur.damage);
+  return bossPhase(cur, bossNow) === 'recruiting'
+    ? `« ${cur.exerciseName} » — démarre dans ${fmtBossSpan(bossStartAt(cur) - bossNow)}`
+    : `« ${cur.exerciseName} » — ${pv} PV, encore ${fmtBossSpan(bossEndsAt(cur) - bossNow)}`;
+});
+async function openBoss() {
+  await router.push('/boss-amis');
+}
 
 const myPseudo = computed(() => char.row?.pseudo ?? '');
 const query = ref('');
@@ -193,6 +224,7 @@ onMounted(async () => {
     await friends.fetchMine(uid);
     await friends.fetchShared(uid);
     if (!challenges.loaded) await challenges.fetchMine();
+    await boss.fetchMine();
   } catch {
     /* silencieux : la page reste utilisable, l'action réessaiera */
   }
@@ -340,6 +372,55 @@ async function goAventure() {
 </script>
 
 <style scoped lang="scss">
+.fb-entry {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fb-entry.hot {
+  border-color: var(--accent);
+}
+.fb-entry-emo {
+  font-size: 26px;
+  line-height: 1;
+}
+.fb-entry-main {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.fb-entry-t {
+  font-size: 16px;
+  font-weight: 700;
+}
+.fb-entry-s {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.fb-entry-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
 .sh-row {
   flex-wrap: wrap;
 }

@@ -112,6 +112,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'leaderboard', component: () => import('@/pages/LeaderboardPage.vue') },
       { path: 'friends', component: () => import('@/pages/FriendsPage.vue') },
       { path: 'friends/:id', component: () => import('@/pages/FriendProgressPage.vue') },
+      { path: 'boss-amis', component: () => import('@/pages/FriendBossPage.vue') },
       { path: 'program', component: () => import('@/pages/ProgramPage.vue') },
       { path: 'history', component: () => import('@/pages/HistoryPage.vue') },
       { path: 'stats', component: () => import('@/pages/StatsPage.vue') },

@@ -14,6 +14,7 @@ const vide: ActivitySources = {
   tennis: [],
   challenges: [],
   combos: [],
+  bossHits: [],
 };
 const leg = (dates: string[], reps = 12): ComboLeg =>
   ({
@@ -92,6 +93,19 @@ describe('ce qu’on compte, et ce qu’on ne compte pas', () => {
     expect(activeDaysSince({ ...vide, combos: [combo([leg(['2026-09-10'])])] }, '2026-09-05')).toBe(
       1,
     );
+    // Boss entre amis (v0.863) : une saisie de reps est une pratique à part entière.
+    expect(
+      activeDaysSince(
+        { ...vide, bossHits: [{ createdAt: Date.UTC(2026, 8, 10, 12) }] },
+        '2026-09-05',
+      ),
+    ).toBe(1);
+    expect(
+      activeDaysSince(
+        { ...vide, bossHits: [{ createdAt: Date.UTC(2026, 8, 1, 12) }] },
+        '2026-09-05',
+      ),
+    ).toBe(0);
   });
 
   it('⚠️ une même journée sur DEUX pratiques ne compte pas double', () => {

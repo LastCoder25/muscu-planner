@@ -37,6 +37,8 @@ export interface ActivitySources {
   challenges: { progress: { date: string; done: number }[] }[];
   /** Défi 360 : chaque série porte sa date. */
   combos: ComboChallenge[];
+  /** Boss entre amis : chaque saisie de reps porte son instant (ms). */
+  bossHits: { createdAt: number }[];
 }
 
 /** Le jour d'une date ISO, ou null si elle n'en porte pas. */
@@ -68,5 +70,6 @@ export function activeDaysSince(src: ActivitySources, sinceDay: string): number 
   // refonte des séries.
   for (const c of src.combos)
     for (const leg of c.legs) for (const s of legSets(leg)) if (s.reps > 0) add(s.date);
+  for (const h of src.bossHits) if (h.createdAt > 0) add(new Date(h.createdAt).toISOString());
   return jours.size;
 }

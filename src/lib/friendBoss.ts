@@ -87,6 +87,25 @@ export function bossFamily(ex: BossExerciseInfo): BossFamily {
   return 'push';
 }
 
+/** Nom et emoji d'une famille, pour l'écran. */
+export const BOSS_FAMILY_LABEL: Record<BossFamily, { emoji: string; name: string }> = {
+  push: { emoji: '💪', name: 'Poussée' },
+  legs: { emoji: '🦵', name: 'Jambes' },
+  pull: { emoji: '🧗', name: 'Tirage' },
+  core: { emoji: '🧱', name: 'Gainage' },
+  conditioning: { emoji: '🔥', name: 'Conditionnement' },
+};
+
+/** Durée restante lisible sur une semaine : « 3 j 4 h », « 5 h 38 », « 42 min ». */
+export function fmtBossSpan(msLeft: number): string {
+  const m = Math.max(0, Math.round(msLeft / 60000));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return m % 60 ? `${h} h ${String(m % 60).padStart(2, '0')}` : `${h} h`;
+  const d = Math.floor(h / 24);
+  return h % 24 ? `${d} j ${h % 24} h` : `${d} j`;
+}
+
 /** Unité affichée d'une famille. */
 export function bossUnitLabel(family: BossFamily): 'reps' | 's' {
   return family === 'core' ? 's' : 'reps';
@@ -109,12 +128,130 @@ export interface FriendBoss {
   id: string;
   ownerId: string;
   family: BossFamily;
+  exerciseId: string;
+  exerciseName: string;
+  /** Poids de rep figé à la déclaration : il ne touche que l'XP. */
+  repWeight: number;
   createdAt: number;
   /** Posé quand tous les invités ont répondu avant la fin de la fenêtre (ou sans invité). */
   startAt: number | null;
   defeatedAt: number | null;
   hpTotal: number;
   damage: number;
+}
+
+type BossMemberStatus = 'accepted' | 'invited' | 'declined';
+
+export interface FriendBossMember {
+  bossId: string;
+  userId: string;
+  pseudo: string;
+  status: BossMemberStatus;
+  units: number;
+  claimed: boolean;
+}
+
+export interface FriendBossHit {
+  id: string;
+  bossId: string;
+  userId: string;
+  units: number;
+  createdAt: number;
+}
+
+const ms = (iso: string | null | undefined): number | null =>
+  iso ? Date.parse(iso) || null : null;
+
+/** Ligne `friend_bosses` → boss (dates en ms). Un poids de rep absent vaut 1. */
+export function bossFromRow(r: {
+  id: string;
+  owner_id: string;
+  family: string;
+  exercise_id: string;
+  exercise_name: string;
+  rep_weight: number | string | null;
+  created_at: string;
+  start_at: string | null;
+  defeated_at: string | null;
+  hp_total: number;
+  damage: number;
+}): FriendBoss {
+  return {
+    id: r.id,
+    ownerId: r.owner_id,
+    family: r.family as BossFamily,
+    exerciseId: r.exercise_id,
+    exerciseName: r.exercise_name,
+    repWeight: Number(r.rep_weight ?? 1) || 1,
+    createdAt: ms(r.created_at) ?? 0,
+    startAt: ms(r.start_at),
+    defeatedAt: ms(r.defeated_at),
+    hpTotal: r.hp_total,
+    damage: r.damage,
+  };
+}
+
+/** Ce que CE joueur a saisi sur ce boss pendant les 24 dernières heures — la même fenêtre
+ *  glissante que `fboss_hit` (`created_at > now() - 24 h`, borne exclue). */
+export function lastDayUnits(
+  hits: readonly FriendBossHit[],
+  bossId: string,
+  userId: string,
+  now: number,
+): number {
+  const from = now - DAY;
+  return hits
+    .filter((h) => h.bossId === bossId && h.userId === userId && h.createdAt > from)
+    .reduce((a, h) => a + h.units, 0);
+}
+
+/** Piste d'XP d'un boss : le conditionnement est un effort cardio (comme ses challenges),
+ *  tout le reste nourrit la muscu. */
+export function bossXpTrack(family: BossFamily): 'muscu' | 'cardio' {
+  return family === 'conditioning' ? 'cardio' : 'muscu';
+}
+
+/** XP gagnée par un joueur sur tous ses boss, par piste : ses reps (toujours) + la prime
+ *  de complétion (boss mort ET part minimale apportée). Seules les participations
+ *  ACCEPTÉES comptent : un invité qui a refusé n'a rien saisi. */
+export function friendBossXp(
+  bosses: readonly FriendBoss[],
+  members: readonly FriendBossMember[],
+  userId: string,
+): { muscu: number; cardio: number } {
+  const out = { muscu: 0, cardio: 0 };
+  const byId = new Map(bosses.map((b) => [b.id, b]));
+  for (const m of members) {
+    if (m.userId !== userId || m.status !== 'accepted' || m.units <= 0) continue;
+    const b = byId.get(m.bossId);
+    if (!b) continue;
+    out[bossXpTrack(b.family)] +=
+      bossRepsXp(b.family, m.units, b.repWeight) +
+      bossCompletionXp(b.family, m.units, b.repWeight, b.defeatedAt != null);
+  }
+  return out;
+}
+
+/** Libellé français d'un refus du serveur (codes levés par la migration 0067). */
+export function bossErrorMessage(code: string): string {
+  const table: Record<string, string> = {
+    busy: 'Tu as déjà un boss en cours — on n’en mène qu’un à la fois.',
+    cooldown: 'Tu pourras lancer un nouveau boss 7 jours après la fin du précédent.',
+    not_friend: 'Tu ne peux inviter que tes amis.',
+    too_many_invites: `Au plus ${FRIEND_BOSS.maxInvites} amis par boss.`,
+    closed: 'Les invitations sont closes : le combat a commencé.',
+    not_invited: 'Cette invitation n’existe plus.',
+    not_member: 'Tu ne participes pas à ce boss.',
+    not_active: 'Le combat n’est pas en cours.',
+    capped: 'Plafond atteint : reviens plus tard pour frapper encore.',
+    no_character: 'Crée d’abord ton aventurier dans l’Aventure.',
+    bad_exercise: 'Cet exercice ne peut pas servir de boss.',
+    not_defeated: 'Le boss n’est pas encore tombé.',
+    nothing: 'Ton coffre a déjà été ouvert.',
+    min_share: 'Il fallait apporter au moins la moitié de ta part pour le coffre.',
+  };
+  const key = Object.keys(table).find((k) => code.includes(k));
+  return key ? table[key]! : 'Action impossible pour le moment.';
 }
 
 /** Démarrage effectif : la fin de la fenêtre d'invitation, ou plus tôt si tout le monde a
@@ -124,7 +261,8 @@ export function bossStartAt(b: Pick<FriendBoss, 'createdAt' | 'startAt'>): numbe
   return b.startAt == null ? windowEnd : Math.min(b.startAt, windowEnd);
 }
 
-function bossEndsAt(b: Pick<FriendBoss, 'createdAt' | 'startAt'>): number {
+/** Fin prévue du combat (7 jours après le démarrage). */
+export function bossEndsAt(b: Pick<FriendBoss, 'createdAt' | 'startAt'>): number {
   return bossStartAt(b) + FRIEND_BOSS.durationMs;
 }
 

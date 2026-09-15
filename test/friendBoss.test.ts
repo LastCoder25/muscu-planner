@@ -16,7 +16,15 @@ import {
   bossRepsXp,
   bossCompletionXp,
   earlyKillFraction,
+  bossFromRow,
+  lastDayUnits,
+  bossXpTrack,
+  friendBossXp,
+  bossErrorMessage,
+  fmtBossSpan,
+  BOSS_FAMILY_LABEL,
   type FriendBoss,
+  type FriendBossMember,
 } from '@/lib/friendBoss';
 
 const H = 3600_000;
@@ -28,6 +36,9 @@ function boss(over: Partial<FriendBoss> = {}): FriendBoss {
     id: 'b1',
     ownerId: 'u1',
     family: 'push',
+    exerciseId: 'ex_pushup',
+    exerciseName: 'Pompes',
+    repWeight: 1,
     createdAt: T0,
     startAt: null,
     defeatedAt: null,
@@ -193,5 +204,101 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     expect(sql).toContain(`floor(v_share * ${FRIEND_BOSS.dayMaxShare})`);
     expect(sql).toContain(`public.fboss_share(b.family) * ${FRIEND_BOSS.minShare}`);
     expect(sql).toContain(`cardinality(v_invitees) > ${FRIEND_BOSS.maxInvites}`);
+  });
+});
+
+describe('🐉 BOSS ENTRE AMIS — lectures du store (v0.863)', () => {
+  it('une ligne de base devient un boss en millisecondes, poids de rep 1 par défaut', () => {
+    const b = bossFromRow({
+      id: 'b',
+      owner_id: 'u',
+      family: 'legs',
+      exercise_id: 'ex_squat_bw',
+      exercise_name: 'Squat',
+      rep_weight: '1.3',
+      created_at: '2026-09-14T10:00:00Z',
+      start_at: null,
+      defeated_at: '2026-09-16T10:00:00Z',
+      hp_total: 800,
+      damage: 800,
+    });
+    expect(b.createdAt).toBe(T0);
+    expect(b.startAt).toBeNull();
+    expect(b.defeatedAt).toBe(T0 + 2 * D);
+    expect(b.repWeight).toBe(1.3);
+    expect(
+      bossFromRow({ ...({} as never), created_at: '2026-09-14T10:00:00Z', rep_weight: null })
+        .repWeight,
+    ).toBe(1);
+  });
+
+  it('le plafond de 24 h est GLISSANT et ne compte que ce joueur sur ce boss', () => {
+    const hits = [
+      { id: '1', bossId: 'b', userId: 'u', units: 50, createdAt: T0 },
+      { id: '2', bossId: 'b', userId: 'u', units: 30, createdAt: T0 + 20 * H },
+      { id: '3', bossId: 'b', userId: 'v', units: 99, createdAt: T0 + 20 * H },
+      { id: '4', bossId: 'c', userId: 'u', units: 99, createdAt: T0 + 20 * H },
+    ];
+    expect(lastDayUnits(hits, 'b', 'u', T0 + 21 * H)).toBe(80);
+    // Pile 24 h après : la borne est EXCLUE, comme `created_at > now() - 24 h` en base.
+    expect(lastDayUnits(hits, 'b', 'u', T0 + 24 * H)).toBe(30);
+  });
+
+  it('le conditionnement nourrit le cardio, le reste la muscu', () => {
+    expect(bossXpTrack('conditioning')).toBe('cardio');
+    for (const f of ['push', 'legs', 'pull', 'core'] as const) expect(bossXpTrack(f)).toBe('muscu');
+  });
+
+  it('XP d’un joueur : ses reps partout, la prime seulement boss mort, participations acceptées seules', () => {
+    const vivant = boss({ id: 'b1', startAt: T0 });
+    const mort = boss({ id: 'b2', family: 'conditioning', startAt: T0, defeatedAt: T0 + D });
+    const m = (
+      bossId: string,
+      userId: string,
+      units: number,
+      status: FriendBossMember['status'] = 'accepted',
+    ): FriendBossMember => ({
+      bossId,
+      userId,
+      pseudo: userId,
+      status,
+      units,
+      claimed: false,
+    });
+    // ⚠️ 200 ≥ la part minimale (150) : à 100, « prime même boss vivant » passait au vert.
+    const members = [
+      m('b1', 'u', 200),
+      m('b2', 'u', 300),
+      m('b2', 'v', 300),
+      m('b1', 'w', 50, 'declined'),
+    ];
+    const xp = friendBossXp([vivant, mort], members, 'u');
+    expect(xp.muscu).toBe(bossRepsXp('push', 200, 1));
+    expect(xp.cardio).toBe(
+      bossRepsXp('conditioning', 300, 1) + bossCompletionXp('conditioning', 300, 1, true),
+    );
+    expect(friendBossXp([vivant, mort], members, 'w')).toEqual({ muscu: 0, cardio: 0 });
+  });
+
+  it('les refus du serveur sont traduits, un code inconnu reste lisible', () => {
+    expect(bossErrorMessage('busy')).toMatch(/déjà un boss/);
+    expect(bossErrorMessage('ERROR: cooldown')).toMatch(/7 jours/);
+    expect(bossErrorMessage('xyz')).toMatch(/impossible/);
+  });
+});
+
+describe('🐉 BOSS ENTRE AMIS — affichage', () => {
+  it('une durée se lit en jours sur une semaine, en heures puis en minutes ensuite', () => {
+    expect(fmtBossSpan(3 * D + 4 * H)).toBe('3 j 4 h');
+    expect(fmtBossSpan(2 * D)).toBe('2 j');
+    expect(fmtBossSpan(5 * H + 38 * 60_000)).toBe('5 h 38');
+    expect(fmtBossSpan(23 * H)).toBe('23 h');
+    expect(fmtBossSpan(42 * 60_000)).toBe('42 min');
+    expect(fmtBossSpan(-5)).toBe('0 min');
+  });
+
+  it('chaque famille a son nom et son emoji', () => {
+    for (const f of Object.keys(FRIEND_BOSS.shareUnits) as (keyof typeof FRIEND_BOSS.shareUnits)[])
+      expect(BOSS_FAMILY_LABEL[f].name.length).toBeGreaterThan(0);
   });
 });
