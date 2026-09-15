@@ -39,11 +39,13 @@ import {
 // ⚠️ `trialXpBase` : SOURCE UNIQUE de la base d'XP d'une épreuve (`6 + niveau × 1,6`),
 // partagée avec `skirmishXpShares` — un convoi et un combat de groupe évaluent le même
 // « niveau du lieu » de la même façon. `deriveSkirmish`/`troopOf`/`SkirmishUnit` : le
-// COMBAT DE GROUPE, lu par `roadTroop`/`roadUnits` et par les embuscades (v0.860). Aucun
+// COMBAT DE GROUPE, lu par `roadTroop`/`roadUnits` et par les embuscades (v0.860) ;
+// `slainByAlly` y vit aussi (mécanisme de groupe, partagé avec les camps). Aucun
 // cycle : `skirmish.ts` n'importe que `combat.ts`.
 import {
   deriveSkirmish,
   skirmishXpShares,
+  slainByAlly,
   trialXpBase,
   troopOf,
   type SkirmishResult,
@@ -358,7 +360,8 @@ export function escortCombatant(
  * n'est pas disponible (il se bat ailleurs) ; un familier apparié DEUX FOIS ne compte
  * qu'une (l'écran ne devrait pas le permettre, mais l'écran ne garantit rien) ; un id
  * qui ne désigne plus rien est ignoré plutôt que de faire tomber le combat — un familier
- * vendu laisserait sinon un appariement fantôme.
+ * vendu laisserait sinon un appariement fantôme. Et un familier trop rare pour la classe
+ * ne vient pas (`canAdvFamiliar`). Simple projection de la règle unique (`pairCompanions`).
  */
 export function companionsOf(
   advs: Adventurer[],
@@ -696,16 +699,28 @@ function refEscortOf(level: number): Adventurer[] {
  *  aventuriers au niveau du POI) : absolue, mais lisible et calibrable. */
 export function roadFoe(poi: Poi): Combatant {
   const escort = refEscortOf(poi.level);
-  const ref = escortCombatant(
-    escort,
-    'Référence',
-    // ⚠️ La référence est ACCOMPAGNÉE et ÉQUIPÉE : c'est ce que la route attend d'un vivier.
-    roadCompanionEffects(escort, {
-      familiars: refCompanions(poi.level),
-      talents: [],
-      advGear: refAdvGear(poi.level),
-    }),
+  // ⚠️ La référence est ACCOMPAGNÉE et ÉQUIPÉE : c'est ce que la route attend d'un vivier.
+  // ⚠️ SON ATTRIBUTION EST POSÉE PAR CONSTRUCTION, elle ne passe PAS par `pairCompanions` :
+  // c'est l'étalon de la route, pas un vivier de joueur. Sa lignée civile (`REF_LINEAGES`)
+  // empile deux classes de strate 2 (pisteur, maître de convoi), donc aux niveaux 31-40 son
+  // 3ᵉ membre est « magique » et porte un familier « rare » — la règle de classe
+  // (`canAdvFamiliar`) le retirerait et affaiblirait la route calibrée (mesuré : `roadFoe`
+  // change sur ces 10 niveaux). On garde l'étalon tel qu'il a été calibré.
+  const fams = new Map(refCompanions(poi.level).map((f) => [f.id, f]));
+  const stock = new Map(refAdvGear(poi.level).map((g) => [g.id, g]));
+  const pairs = new Map(
+    escort.map((a): [string, CompanionSet] => [
+      a.id,
+      {
+        familiar: a.familiarId ? fams.get(a.familiarId) : undefined,
+        gear: ADV_GEAR_SLOTS.flatMap((s) => {
+          const g = a.gear?.[s] ? stock.get(a.gear[s]) : undefined;
+          return g ? [g] : [];
+        }),
+      },
+    ]),
   );
+  const ref = escortCombatant(escort, 'Référence', pairedEscortEffects(escort, pairs));
   const m = poi.perilous ? CARAVAN.perilousMult : 1;
   return {
     name: poi.perilous ? 'Pillards de la passe' : 'Bandits de grand chemin',
@@ -962,29 +977,53 @@ export interface RoadCompanions {
   heroTalentIds?: readonly string[];
 }
 
+/** Ce que le TERRAIN ajoute à la règle d'appariement. ⚠️ REQUIS : la route déclare
+ *  explicitement qu'elle n'ajoute rien (`ROAD_PAIR_LIMITS`), le rempart y met son Chenil. */
+export interface PairLimits {
+  /** Combien de familiers peuvent venir (places du Chenil au rempart ; illimité sur la route). */
+  familiarSlots: number;
+  /** Règle de familier PROPRE au terrain (au rempart : le rang que le Chenil sait héberger). */
+  familiarOk: (f: Item) => boolean;
+}
+
+/** Sur la route, rien de plus que le cœur : ni Chenil, ni places. */
+const ROAD_PAIR_LIMITS: PairLimits = { familiarSlots: Infinity, familiarOk: () => true };
+
 /**
- * 🐾 QUI PORTE QUOI SUR LA ROUTE, par aventurier. Les exclusions de toujours : ce que le
- * HÉROS porte n'est pas disponible, un même familier ou talent confié deux fois ne compte
- * qu'une (le premier du vivier le garde), un id fantôme est ignoré, un talent trop rare
- * pour la classe ne se porte pas, une pièce ne se porte que selon `wornGear`.
- * ⚠️ Pas de Chenil ni de fatigue ici (cf. `companionPairs` au rempart) — comportement
- * inchangé de la route.
+ * 🐾 QUI PORTE QUOI, par aventurier — LA règle d'appariement, UNE seule pour la route
+ * (`roadPairs`) ET le rempart (`companionPairs`, `raid.ts`). Deux copies du même cœur
+ * avaient divergé : la route n'appliquait pas `canAdvFamiliar` (v0.831), le rempart si.
+ *
+ * Les exclusions : ce que le HÉROS porte n'est pas disponible (il se bat ailleurs) ; un même
+ * familier ou talent confié deux fois ne compte qu'une (le premier du vivier le garde) ; un id
+ * fantôme est ignoré plutôt que de faire tomber le combat ; un familier ou un talent au-dessus
+ * de la rareté de la CLASSE ne vient pas (`canAdvFamiliar` / `canAdvTalent`, et ça se soigne
+ * seul) ; une pièce ne se porte que selon `wornGear`.
+ * ⚠️ L'ORDRE EST CELUI DU VIVIER : c'est ce qui rend la coupe aux places STABLE.
+ * ⚠️ Un familier refusé (trop rare, hors d'école, plus de place) n'est PAS marqué pris : un
+ * aventurier suivant qui y a droit peut encore le mener.
  */
-export function roadPairs(escort: Adventurer[], road: RoadCompanions): Map<string, CompanionSet> {
-  const fams = new Map(road.familiars.map((f) => [f.id, f]));
-  const tals = new Map(road.talents.map((t) => [t.id, t]));
-  const heroTal = new Set(road.heroTalentIds ?? []);
-  const worn = wornGear(escort, road.advGear);
+export function pairCompanions(
+  advs: Adventurer[],
+  pool: RoadCompanions,
+  limits: PairLimits,
+): Map<string, CompanionSet> {
+  const fams = new Map(pool.familiars.map((f) => [f.id, f]));
+  const tals = new Map(pool.talents.map((t) => [t.id, t]));
+  const heroTal = new Set(pool.heroTalentIds ?? []);
+  const worn = wornGear(advs, pool.advGear);
   const prisF = new Set<string>();
   const prisT = new Set<string>();
+  let places = limits.familiarSlots;
   const out = new Map<string, CompanionSet>();
-  for (const a of escort) {
+  for (const a of advs) {
     const entry: CompanionSet = {};
     const fid = a.familiarId;
-    if (fid && fid !== road.heroFamiliarId && !prisF.has(fid)) {
+    if (fid && fid !== pool.heroFamiliarId && !prisF.has(fid) && places > 0) {
       const f = fams.get(fid);
-      if (f) {
+      if (f && canAdvFamiliar(a, f) && limits.familiarOk(f)) {
         prisF.add(fid);
+        places--;
         entry.familiar = f;
       }
     }
@@ -1003,11 +1042,17 @@ export function roadPairs(escort: Adventurer[], road: RoadCompanions): Map<strin
   return out;
 }
 
+/** 🐾 QUI PORTE QUOI SUR LA ROUTE : la règle unique (`pairCompanions`), sans Chenil ni fatigue. */
+export function roadPairs(escort: Adventurer[], road: RoadCompanions): Map<string, CompanionSet> {
+  return pairCompanions(escort, road, ROAD_PAIR_LIMITS);
+}
+
 /** ⚔️ L'escorte en UNITÉS DISTINCTES : chaque aventurier avec SA paire et SES pièces.
  *  ⚠️ Plus de division par l'effectif : elle n'existait que parce que l'escorte était FONDUE
- *  en un seul combattant. Ici chaque loup n'épaule que son homme. */
-export function roadUnits(escort: Adventurer[], road: RoadCompanions): SkirmishUnit[] {
-  const pairs = roadPairs(escort, road);
+ *  en un seul combattant. Ici chaque loup n'épaule que son homme.
+ *  `pairs` = `roadPairs(escort, road)`, calculé UNE fois par l'appelant : le combattant fondu
+ *  et les unités lisent la même attribution. */
+export function roadUnits(escort: Adventurer[], pairs: Map<string, CompanionSet>): SkirmishUnit[] {
   return escort.map((a) => ({
     id: a.id,
     name: a.name,
@@ -1022,13 +1067,14 @@ export function roadUnits(escort: Adventurer[], road: RoadCompanions): SkirmishU
  *
  * ⚠️ Ce sont les CORPS de l'embuscade (identité, niveau, part de PV), lus par
  * `deriveSkirmish` : l'issue reste le combat fondu `roadFoe`, calibré sur les bandes.
- * ⚠️ UNE SEULE FORCE : les corps SONT `roadFoe` réparti (`troopOf`) — la somme de leurs PV
- * et de leurs dégâts vaut exactement celle du combattant qui livre le combat. Le danger
- * ABSOLU vient donc de `roadFoe` (escorte de RÉFÉRENCE, jamais l'escorte envoyée).
+ * ⚠️ UNE SEULE FORCE, par construction : on reçoit LE combattant qui livre le combat
+ * (`foe`, déjà calculé par l'appelant) et on le répartit (`troopOf`) — les corps ne
+ * peuvent pas porter une autre force que lui. Le danger ABSOLU vient de `roadFoe` (escorte
+ * de RÉFÉRENCE, jamais l'escorte envoyée). `poi` ne donne que le nombre, le niveau et le nom.
  */
-export function roadTroop(poi: Poi): SkirmishUnit[] {
+export function roadTroop(foe: Combatant, poi: Poi): SkirmishUnit[] {
   const perilous = !!poi.perilous;
-  return troopOf(roadFoe(poi), {
+  return troopOf(foe, {
     count: perilous ? CARAVAN.troopPerilous : CARAVAN.troopCalm,
     level: poi.level,
     name: perilous ? 'Pillard de la passe' : 'Bandit de grand chemin',
@@ -1070,18 +1116,24 @@ export function roadCompanionEffects(
   escort: Adventurer[],
   road: RoadCompanions,
 ): AggregatedEffects {
-  if (!escort.length) return emptyEffects();
-  const fams = companionsOf(escort, road.familiars, road.heroFamiliarId);
-  const tals = advTalentsOf(escort, road.talents, road.heroTalentIds);
+  return pairedEscortEffects(escort, roadPairs(escort, road));
+}
+
+/** Le cœur de `roadCompanionEffects`, sur une attribution DÉJÀ calculée (`roadPairs`) :
+ *  `resolveCaravan` la construit une fois pour le combattant fondu ET pour les unités. */
+function pairedEscortEffects(
+  escort: Adventurer[],
+  pairs: Map<string, CompanionSet>,
+): AggregatedEffects {
+  if (!escort.length || !pairs.size) return emptyEffects();
+  const sets = [...pairs.values()];
   // 🗡️ Ce qu'ils PORTENT — même division par l'effectif que les compagnons, pour la même
   // raison : l'escorte est fondue en un seul combattant.
-  const worn = wornGear(escort, road.advGear);
-  if (!fams.length && !tals.length && !worn.size) return emptyEffects();
   return scaleEffects(
     mergeEffects(
-      companionEffects(fams),
-      advTalentEffects(tals),
-      advGearEffects([...worn.values()].flat()),
+      companionEffects(sets.flatMap((p) => (p.familiar ? [p.familiar] : []))),
+      advTalentEffects(sets.flatMap((p) => (p.talent ? [p.talent] : []))),
+      advGearEffects(sets.flatMap((p) => p.gear ?? [])),
     ),
     1 / escort.length,
   );
@@ -1120,36 +1172,6 @@ export function convoyHurt(result: Pick<SkirmishResult, 'win' | 'down'>): string
   return first ? [first] : [];
 }
 
-/**
- * 🛡️ ABATTUS PAR ALLIÉ, à partir du journal d'UNE embuscade — jamais via `d.killsBy`.
- *
- * ⚠️ POURQUOI PAS `killsBy` : cette carte mélange les DEUX sens sous la MÊME clé (tueur
- * allié ET tueur ennemi, cf. `deriveSkirmish`). Les ids de troupe sont TOUJOURS `foe0`,
- * `foe1`… (`troopOf`) — un aventurier dont l'id collisionnerait avec l'un d'eux
- * hériterait, en lisant `killsBy[a.id]`, des abattus que CE CORPS DE TROUPE a scorés
- * contre d'AUTRES alliés : un ennemi qui tue un allié ne doit JAMAIS compter comme un
- * abattu pour quiconque.
- *
- * On ne crédite donc que les entrées dont la VICTIME est un corps de la troupe
- * (`d.foesDown`, qui contient un id différent — jamais celui du tueur crédité) ET dont le
- * TUEUR est un membre de CETTE escorte : les deux conditions, chacune nécessaire. La
- * première élimine tout ce qui n'est pas un abattu de troupe ; la seconde empêche un
- * tueur étranger d'ajouter une clé inconnue au résultat.
- */
-export function slainByAlly(
-  escort: readonly { id: string }[],
-  d: Pick<SkirmishResult, 'kills' | 'foesDown'>,
-): Record<string, number> {
-  const out: Record<string, number> = Object.fromEntries(escort.map((a) => [a.id, 0]));
-  const escortIds = new Set(escort.map((a) => a.id));
-  const foeVictims = new Set(d.foesDown);
-  for (const k of d.kills) {
-    if (foeVictims.has(k.victim) && escortIds.has(k.killer))
-      out[k.killer] = (out[k.killer] ?? 0) + 1;
-  }
-  return out;
-}
-
 export function resolveCaravan(
   poi: Poi,
   escort: Adventurer[],
@@ -1180,7 +1202,9 @@ export function resolveCaravan(
   // bandes de route en dépendent. Le groupe — qui tombe, qui abat qui — n'est qu'une LECTURE
   // de son journal (`deriveSkirmish`), jamais un second combat.
   const foe = roadFoe(poi);
-  const guards = escortCombatant(escort, 'Escorte', roadCompanionEffects(escort, road));
+  // 🐾 Qui porte quoi, calculé UNE fois : le combattant fondu et les unités en sont deux lectures.
+  const pairs = roadPairs(escort, road);
+  const guards = escortCombatant(escort, 'Escorte', pairedEscortEffects(escort, pairs));
   // Unités et troupe calculées à la première embuscade seulement (inutiles sur une route
   // tranquille). La troupe EST `foe` réparti en corps (`roadTroop` → `troopOf`).
   let group: { units: SkirmishUnit[]; troop: SkirmishUnit[] } | null = null;
@@ -1199,7 +1223,7 @@ export function resolveCaravan(
     if (roll < amb) {
       const legSeed = (seed + i * 7919) >>> 0;
       const r = simulateCombat(guards, { ...foe }, { seed: legSeed, goldOnWin: 0 });
-      group ??= { units: roadUnits(escort, road), troop: roadTroop(poi) };
+      group ??= { units: roadUnits(escort, pairs), troop: roadTroop(foe, poi) };
       // ⚠️ `deriveSkirmish` tire sur SON générateur (graine de la jambe) : `rng` n'est pas lu,
       // donc les rencontres suivantes et la cargaison restent celles du combat fondu.
       const d = deriveSkirmish(
@@ -1380,7 +1404,7 @@ interface CaravanReportMember {
   emoji: string;
   xp: number;
   /** Bandits abattus par LUI sur ce voyage. 0 pour un convoi d'avant le combat de groupe
-   *  (son `outcome` n'a pas de `kills` du tout, cf. `CaravanReport.hasKills`). */
+   *  (son `outcome` n'a pas de `kills` du tout). */
   kills: number;
   hurt: boolean;
   /** Mis À TERRE dans une embuscade, gagnée OU perdue, sans partir à l'infirmerie. Sur une
@@ -1398,9 +1422,8 @@ export interface CaravanReport {
   travelMs: number;
   members: CaravanReportMember[];
   totalXp: number;
-  /** Le convoi porte-t-il un décompte des abattus ? Faux pour un convoi lancé AVANT le
-   *  combat de groupe : l'écran n'affiche alors pas une colonne de zéros qui mentirait. */
-  hasKills: boolean;
+  /** 0 pour un convoi lancé AVANT le combat de groupe (pas de `kills` dans son `outcome`) :
+   *  l'écran n'affiche alors pas de décompte qui mentirait. */
   totalKills: number;
   /** XP par aventurier et par heure de voyage — le chiffre qui compare un convoi long à
    *  un court, puisque c’est le temps que l’escorte passe immobilisée. */
@@ -1446,7 +1469,6 @@ export function caravanReport(van: Caravan, roster: readonly Adventurer[]): Cara
     travelMs,
     members,
     totalXp,
-    hasKills: !!o.kills,
     totalKills,
     xpPerHour: members.length && hours > 0 ? totalXp / members.length / hours : 0,
     pills: haulPills({

@@ -140,7 +140,7 @@ function pick<T>(rng: () => number, items: readonly T[], weight: (x: T) => numbe
 }
 
 /** Ceux qui tiennent encore (repli : tout le camp, s'il n'y a plus personne). */
-function standing(list: readonly SkirmishUnit[], fallen: Map<string, number>): SkirmishUnit[] {
+function standing(list: readonly SkirmishUnit[], fallen: Set<string>): SkirmishUnit[] {
   const up = list.filter((x) => !fallen.has(x.id));
   return up.length ? up : [...list];
 }
@@ -190,8 +190,8 @@ export function deriveSkirmish(
     fight.foePv,
     foes.map((f) => f.combatant.pv),
   );
-  const allyAt = new Map<string, number>();
-  const foeAt = new Map<string, number>();
+  const allyAt = new Set<string>();
+  const foeAt = new Set<string>();
   const kills: SkirmishKill[] = [];
   const killsBy: Record<string, number> = {};
   const down: string[] = [];
@@ -207,7 +207,7 @@ export function deriveSkirmish(
       killsBy[killer.id] = (killsBy[killer.id] ?? 0) + 1;
     }
     (ally ? down : foesDown).push(victim.id);
-    (ally ? allyAt : foeAt).set(victim.id, at);
+    (ally ? allyAt : foeAt).add(victim.id);
   };
   const offense = (a: SkirmishUnit) => offenseOf(a.combatant);
   const even = () => 1;
@@ -244,6 +244,36 @@ export function deriveSkirmish(
     allyCuts,
     foeCuts,
   };
+}
+
+/**
+ * 🛡️ ABATTUS PAR ALLIÉ, à partir du journal d'UN combat de groupe (embuscade, camp…) — jamais via `d.killsBy`.
+ *
+ * ⚠️ POURQUOI PAS `killsBy` : cette carte mélange les DEUX sens sous la MÊME clé (tueur
+ * allié ET tueur ennemi, cf. `deriveSkirmish`). Les ids de troupe sont TOUJOURS `foe0`,
+ * `foe1`… (`troopOf`) — un aventurier dont l'id collisionnerait avec l'un d'eux
+ * hériterait, en lisant `killsBy[a.id]`, des abattus que CE CORPS DE TROUPE a scorés
+ * contre d'AUTRES alliés : un ennemi qui tue un allié ne doit JAMAIS compter comme un
+ * abattu pour quiconque.
+ *
+ * On ne crédite donc que les entrées dont la VICTIME est un corps de la troupe
+ * (`d.foesDown`, qui contient un id différent — jamais celui du tueur crédité) ET dont le
+ * TUEUR est un membre de CETTE escorte : les deux conditions, chacune nécessaire. La
+ * première élimine tout ce qui n'est pas un abattu de troupe ; la seconde empêche un
+ * tueur étranger d'ajouter une clé inconnue au résultat.
+ */
+export function slainByAlly(
+  escort: readonly { id: string }[],
+  d: Pick<SkirmishResult, 'kills' | 'foesDown'>,
+): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries(escort.map((a) => [a.id, 0]));
+  const escortIds = new Set(escort.map((a) => a.id));
+  const foeVictims = new Set(d.foesDown);
+  for (const k of d.kills) {
+    if (foeVictims.has(k.victim) && escortIds.has(k.killer))
+      out[k.killer] = (out[k.killer] ?? 0) + 1;
+  }
+  return out;
 }
 
 /**

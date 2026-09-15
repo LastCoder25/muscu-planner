@@ -17,6 +17,7 @@ import {
   refCompanions,
   familiarKeepers,
   canAdvTalent,
+  canAdvFamiliar,
   ambushChance,
   advTalentsOf,
   advTalentEffects,
@@ -29,7 +30,6 @@ import {
   missionTravelMult,
   suggestEscort,
   convoyHurt,
-  slainByAlly,
   missionXp,
   refAdventurer,
   resolveCaravan,
@@ -65,7 +65,7 @@ import {
   talentRollOf,
   type TalentInstance,
 } from '@/lib/talents';
-import { simulateCombat } from '@/lib/combat';
+import { offenseOf, simulateCombat, survivalOf } from '@/lib/combat';
 import {
   famXpForLevel,
   aggregateEffects,
@@ -160,6 +160,24 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     const b = roadFoe(p);
     expect(a).toEqual(b); // il ne dépend que du POI
     expect(a.pv).toBeGreaterThan(0);
+  });
+  it('⚠️ L’ÉTALON garde TOUS ses compagnons : la règle de classe ne l’affaiblit pas (niv. 31-40)', () => {
+    // Sa lignée civile empile deux classes de strate 2 : au niveau 35 son 3ᵉ membre est
+    // « magique » et porte un familier « rare ». Passé par la règle d'appariement du vivier
+    // (`pairCompanions`, qui applique `canAdvFamiliar`), il le perdrait — et la route
+    // calibrée faiblirait sur dix niveaux. On reconstruit l'étalon avec ses TROIS familiers.
+    const L = 35;
+    const esc = [0, 1, 2].map((i) => refAdventurer(L, i));
+    const fams = refCompanions(L);
+    expect(canAdvFamiliar(esc[2]!, fams[2]!)).toBe(false); // la prémisse
+    const e = mergeEffects(companionEffects(fams), advGearEffects(refAdvGear(L)));
+    const tiers = Object.fromEntries(
+      Object.entries(e).map(([k, v]) => [k, v * (1 / esc.length)]),
+    ) as unknown as AggregatedEffects;
+    const ref = escortCombatant(esc, 'Référence', tiers);
+    const f = roadFoe(poi({ level: L }));
+    expect(f.pv).toBe(Math.max(1, Math.round(Math.max(1, offenseOf(ref)) * CARAVAN.foePvTurns)));
+    expect(f.damage).toBe(Math.max(1, Math.round(survivalOf(ref) * 100 * CARAVAN.foeDmgPctPv)));
   });
   it('envoyer PLUS d’aventuriers change réellement l’issue', () => {
     const p = poi();
@@ -580,43 +598,6 @@ describe('🤕 À TERRE N’EST PAS BLESSÉ — la politique d’infirmerie du c
   });
 });
 
-describe('🛡️ ABATTUS PAR ALLIÉ — jamais ceux de la TROUPE, même en cas de collision d’id', () => {
-  it('crédite un allié pour un corps de troupe abattu, jamais pour un allié abattu', () => {
-    const escort = [{ id: 'a0' }, { id: 'a1' }];
-    const d = {
-      foesDown: ['t0'],
-      kills: [
-        { at: 0, killer: 'a0', victim: 't0' }, // a0 abat un corps de troupe → compte
-        { at: 1, killer: 't1', victim: 'a1' }, // un corps de troupe abat un allié → jamais
-      ],
-    };
-    expect(slainByAlly(escort, d)).toEqual({ a0: 1, a1: 0 });
-  });
-
-  it('⚠️ COLLISION D’ID (`foe0`) : un aventurier ne vole aucun abattu au corps de troupe qui porte le même id', () => {
-    // `troopOf` nomme TOUJOURS ses corps `foe0`/`foe1`/`foe2` — un aventurier qui porterait
-    // le même id ne doit jamais hériter des abattus que CE corps de troupe a scorés contre
-    // un AUTRE allié : c'est la victime qui décide, jamais le nom du tueur.
-    const escort = [{ id: 'foe0' }, { id: 'a1' }];
-    const d = {
-      foesDown: ['foe1'], // seul le corps de troupe foe1 est mort
-      kills: [
-        // le corps de troupe 'foe0' abat 'a1' → jamais crédité à l'aventurier 'foe0'
-        { at: 0, killer: 'foe0', victim: 'a1' },
-        // 'a1' abat le corps 'foe1' → compte
-        { at: 1, killer: 'a1', victim: 'foe1' },
-      ],
-    };
-    expect(slainByAlly(escort, d)).toEqual({ foe0: 0, a1: 1 });
-  });
-
-  it('un tueur étranger à l’escorte n’ajoute jamais de clé au résultat', () => {
-    const escort = [{ id: 'a0' }];
-    const d = { foesDown: ['t0'], kills: [{ at: 0, killer: 't1', victim: 't0' }] };
-    expect(slainByAlly(escort, d)).toEqual({ a0: 0 });
-  });
-});
-
 describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () => {
   it('⚠️ AUCUNE RESSOURCE N’EST FRACTIONNAIRE — sinon la cargaison est PERDUE', () => {
     // ⚠️ DÉFAUT RÉEL, trouvé sur le compte du joueur : « je ne peux pas récupérer la
@@ -973,7 +954,8 @@ describe('⚠️ l’XP de combat suit les ennemis ABATTUS, pas l’étiquette',
     }
     expect(pres, 'aucun abattu : le test ne prouve rien').toBeGreaterThan(0);
     expect(loin).toBeGreaterThan(pres);
-    const rapport = missionTravelMult(poi({ distNorm: 0.9 })) / missionTravelMult(poi({ distNorm: 0.1 }));
+    const rapport =
+      missionTravelMult(poi({ distNorm: 0.9 })) / missionTravelMult(poi({ distNorm: 0.1 }));
     // Au rapport des facteurs de distance, à l'arrondi près (les parts proches sont petites).
     expect(loin / pres).toBeGreaterThan(rapport * 0.85);
     expect(loin / pres).toBeLessThan(rapport * 1.15);
@@ -1125,7 +1107,10 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
       slot: 'familiar',
       name: id,
       emoji: '🐺',
-      rarity: 'rare',
+      // ⚠️ COMMUN : les aventuriers de ce bloc n'ont que leur 1ʳᵉ classe (commune). Un
+      // familier plus rare ne les suit plus, sur la route comme au rempart (`canAdvFamiliar`,
+      // appliqué par la règle d'appariement unique `pairCompanions`).
+      rarity: 'commun',
       level: 1,
       baseLevel: 1,
       effect: { type: 'damage_pct', value: 20 },
@@ -1301,6 +1286,29 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
       // Un familier vendu laisse son id derrière lui.
       const team = [adv('a', { familiarId: 'disparu' }), adv('b')];
       expect(companionsOf(team, [fam('f1')])).toEqual([]);
+    });
+
+    it('⚠️ SUR LA ROUTE AUSSI, un familier TROP RARE pour la classe ne suit pas son homme', () => {
+      // La route n'appliquait pas `canAdvFamiliar` (v0.831) : sa copie de la règle
+      // d'appariement avait divergé de celle du rempart. Une seule règle désormais
+      // (`pairCompanions`) — ce test la vérifie côté route, `raid.test` côté rempart.
+      const epique = fam('f1', { rarity: 'epique' });
+      const bleu = adv('a', { familiarId: 'f1' });
+      const promu = { ...refAdventurer(45, 0), id: 'p', familiarId: 'f1' };
+      const r = { familiars: [epique], talents: [], advGear: [] };
+      expect(roadPairs([bleu], r).size).toBe(0);
+      expect(roadPairs([promu], r).get('p')?.familiar?.id).toBe('f1');
+      // …et ce refus atteint bien le COMBAT : le combattant fondu ET l'unité restent nus.
+      expect(roadCompanionEffects([bleu], r)).toEqual(
+        roadCompanionEffects([bleu], { ...r, familiars: [] }),
+      );
+      expect(roadUnits([bleu], roadPairs([bleu], r))[0]!.combatant).toEqual(
+        roadUnits([bleu], new Map())[0]!.combatant,
+      );
+      // Refusé à l'un, il n'est pas « pris » : un aventurier suivant qui y a droit le mène.
+      const deux = roadPairs([bleu, promu], r);
+      expect(deux.get('a')).toBeUndefined();
+      expect(deux.get('p')?.familiar?.id).toBe('f1');
     });
   });
 
@@ -1595,7 +1603,6 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
     const v = van();
     const kills = { [escort[0]!.id]: 2, [escort[1]!.id]: 0, [escort[2]!.id]: 1 };
     const r = caravanReport({ ...v, outcome: { ...v.outcome, kills } }, escort);
-    expect(r.hasKills).toBe(true);
     expect(r.members.map((m) => m.kills)).toEqual([2, 0, 1]);
     expect(r.totalKills).toBe(3);
   });
@@ -1615,8 +1622,12 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
       },
     };
     const r = caravanReport(legacy, escort);
-    expect(r.hasKills).toBe(false);
+    // Sans `hasKills` : l'écran lit `totalKills > 0`, qui vaut 0 ici — aucun décompte affiché.
     expect(r.totalKills).toBe(0);
+    for (const e of r.events) {
+      expect(e.slain).toBeUndefined();
+      expect(e.down).toBeUndefined();
+    }
     for (const m of r.members) {
       expect(m.kills).toBe(0);
       expect(m.knockedDown).toBe(false);
@@ -1984,16 +1995,18 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
   });
 
   it('⚠️ chaque loup n’épaule QUE son homme : quatre loups ne se diluent ni ne s’empilent', () => {
-    const seul = roadUnits([guerrier('a0', { familiarId: 'f0' })], road([fam('f0')]))[0]!;
-    const quatre = roadUnits(
+    const units = (esc: Adventurer[], r: ReturnType<typeof road>) =>
+      roadUnits(esc, roadPairs(esc, r));
+    const seul = units([guerrier('a0', { familiarId: 'f0' })], road([fam('f0')]))[0]!;
+    const quatre = units(
       [0, 1, 2, 3].map((i) => guerrier(`a${i}`, { familiarId: `f${i}` })),
       road([0, 1, 2, 3].map((i) => fam(`f${i}`))),
     );
     for (const x of quatre) expect(x.combatant.damage).toBe(seul.combatant.damage);
-    const nu = roadUnits([guerrier('a0')], road())[0]!;
+    const nu = units([guerrier('a0')], road())[0]!;
     expect(seul.combatant.damage).toBeGreaterThan(nu.combatant.damage);
     // Un loup sur quatre : les trois autres restent nus.
-    const un = roadUnits(
+    const un = units(
       [guerrier('a0', { familiarId: 'f0' }), guerrier('a1'), guerrier('a2'), guerrier('a3')],
       road([fam('f0')]),
     );
@@ -2005,7 +2018,7 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     const team = [guerrier('a0', { familiarId: 'f0' }), guerrier('a1')];
     const r = road([fam('f0')]);
     const pairs = roadPairs(team, r);
-    const units = roadUnits(team, r);
+    const units = roadUnits(team, pairs);
     team.forEach((a, i) => {
       expect(units[i]!.id).toBe(a.id);
       expect(units[i]!.level).toBe(a.level);
@@ -2027,7 +2040,7 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     expect(roadPairs([guerrier('a', { familiarId: 'parti' })], road([fam('f1')])).size).toBe(0);
   });
 
-  it('⚠️ roadTroop : UNE SEULE FORCE — les corps somment EXACTEMENT au combattant `roadFoe`', () => {
+  it('⚠️ roadTroop : UNE SEULE FORCE — les corps somment EXACTEMENT au combattant qu’on lui passe', () => {
     // Mesuré avant : Σ PV des corps = ×2,23 les PV réels au niveau 12, ×0,53 au niveau 70
     // (une seconde calibration). Désormais une barre de PV par corps dit ce que le combat applique.
     const somme = (t: { combatant: { pv: number; damage: number } }[]) => ({
@@ -2038,7 +2051,7 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
       for (const perilous of [false, true]) {
         const p = poi({ level, perilous });
         const f = roadFoe(p);
-        const t = roadTroop(p);
+        const t = roadTroop(f, p);
         expect(somme(t), `niveau ${level} ${perilous ? 'périlleux' : 'calme'}`).toEqual({
           pv: f.pv,
           damage: f.damage,
@@ -2046,15 +2059,16 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
         for (const x of t) expect(x.level).toBe(level);
       }
     const p = poi({ level: 30 });
-    expect(roadTroop(p)).toEqual(roadTroop(p));
-    expect(roadTroop(p)).toHaveLength(CARAVAN.troopCalm);
+    expect(roadTroop(roadFoe(p), p)).toEqual(roadTroop(roadFoe(p), p));
+    expect(roadTroop(roadFoe(p), p)).toHaveLength(CARAVAN.troopCalm);
   });
 
   it('⚠️ roadTroop : calme et périlleux diffèrent là où ils diffèrent VRAIMENT — force et nom', () => {
     // Même nombre de corps (3/3) : comparer les longueurs ne prouvait rien. Ce qui change est
     // la FORCE (`perilousMult`, portée par `roadFoe`) et l'IDENTITÉ des bandits.
-    const calme = roadTroop(poi({ level: 30 }));
-    const peril = roadTroop(poi({ level: 30, perilous: true }));
+    const troupe = (p: Poi) => roadTroop(roadFoe(p), p);
+    const calme = troupe(poi({ level: 30 }));
+    const peril = troupe(poi({ level: 30, perilous: true }));
     const pv = (t: typeof calme) => t.reduce((s, x) => s + x.combatant.pv, 0);
     const dmg = (t: typeof calme) => t.reduce((s, x) => s + x.combatant.damage, 0);
     // ⚠️ STRICT, et sur les DEUX canaux : une égalité voudrait dire que le drapeau est neutralisé.
@@ -2064,6 +2078,6 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     expect(dmg(peril) / dmg(calme)).toBeCloseTo(CARAVAN.perilousMult, 2);
     expect(calme.every((x) => x.name === 'Bandit de grand chemin')).toBe(true);
     expect(peril.every((x) => x.name === 'Pillard de la passe')).toBe(true);
-    expect(pv(roadTroop(poi({ level: 60 })))).toBeGreaterThan(pv(roadTroop(poi({ level: 20 }))));
+    expect(pv(troupe(poi({ level: 60 })))).toBeGreaterThan(pv(troupe(poi({ level: 20 }))));
   });
 });

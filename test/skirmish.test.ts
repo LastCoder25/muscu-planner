@@ -4,6 +4,7 @@ import {
   cumulativeCuts,
   deriveSkirmish,
   skirmishXpShares,
+  slainByAlly,
   trialXpBase,
   troopOf,
   type GroupFight,
@@ -375,13 +376,24 @@ describe('🗡️ troopOf — UNE seule force de troupe : le combattant fondu, r
       const foe = c({ pv, damage, crit: 0.13, dodge: 0.07, initiative: 9, lifesteal: 0.1 });
       const t = troopOf(foe, { ...spec, count });
       expect(t).toHaveLength(count);
-      expect(t.reduce((s, x) => s + x.combatant.pv, 0), `pv ${pv}/${count}`).toBe(pv);
-      expect(t.reduce((s, x) => s + x.combatant.damage, 0), `dmg ${damage}/${count}`).toBe(damage);
+      expect(
+        t.reduce((s, x) => s + x.combatant.pv, 0),
+        `pv ${pv}/${count}`,
+      ).toBe(pv);
+      expect(
+        t.reduce((s, x) => s + x.combatant.damage, 0),
+        `dmg ${damage}/${count}`,
+      ).toBe(damage);
       expect(new Set(t.map((x) => x.id)).size).toBe(count);
       for (const x of t) {
         expect(x.level).toBe(20);
         // Le reste du combattant EST celui du combat fondu, pas une valeur inventée.
-        expect(x.combatant).toMatchObject({ crit: 0.13, dodge: 0.07, initiative: 9, lifesteal: 0.1 });
+        expect(x.combatant).toMatchObject({
+          crit: 0.13,
+          dodge: 0.07,
+          initiative: 9,
+          lifesteal: 0.1,
+        });
       }
     }
   });
@@ -395,9 +407,12 @@ describe('🗡️ troopOf — UNE seule force de troupe : le combattant fondu, r
       [83761, 11],
     ] as [number, number][]) {
       const t = troopOf(c({ pv }), { ...spec, count });
-      expect(cumulativeCuts(pv, t.map((x) => x.combatant.pv))).toEqual(
-        cumulativeCuts(pv, new Array<number>(count).fill(1)),
-      );
+      expect(
+        cumulativeCuts(
+          pv,
+          t.map((x) => x.combatant.pv),
+        ),
+      ).toEqual(cumulativeCuts(pv, new Array<number>(count).fill(1)));
     }
   });
 });
@@ -469,5 +484,42 @@ describe('🎓 skirmishXpShares — les abattus, partagés entre les présents',
     expect(shares['recruit']).toBe(recruitExpected);
     expect(shares['vet']).not.toBe(shares['recruit']);
     expect(shares['vet']).toBeLessThan(shares['recruit']);
+  });
+});
+
+describe('🛡️ ABATTUS PAR ALLIÉ — jamais ceux de la TROUPE, même en cas de collision d’id', () => {
+  it('crédite un allié pour un corps de troupe abattu, jamais pour un allié abattu', () => {
+    const escort = [{ id: 'a0' }, { id: 'a1' }];
+    const d = {
+      foesDown: ['t0'],
+      kills: [
+        { at: 0, killer: 'a0', victim: 't0' }, // a0 abat un corps de troupe → compte
+        { at: 1, killer: 't1', victim: 'a1' }, // un corps de troupe abat un allié → jamais
+      ],
+    };
+    expect(slainByAlly(escort, d)).toEqual({ a0: 1, a1: 0 });
+  });
+
+  it('⚠️ COLLISION D’ID (`foe0`) : un aventurier ne vole aucun abattu au corps de troupe qui porte le même id', () => {
+    // `troopOf` nomme TOUJOURS ses corps `foe0`/`foe1`/`foe2` — un aventurier qui porterait
+    // le même id ne doit jamais hériter des abattus que CE corps de troupe a scorés contre
+    // un AUTRE allié : c'est la victime qui décide, jamais le nom du tueur.
+    const escort = [{ id: 'foe0' }, { id: 'a1' }];
+    const d = {
+      foesDown: ['foe1'], // seul le corps de troupe foe1 est mort
+      kills: [
+        // le corps de troupe 'foe0' abat 'a1' → jamais crédité à l'aventurier 'foe0'
+        { at: 0, killer: 'foe0', victim: 'a1' },
+        // 'a1' abat le corps 'foe1' → compte
+        { at: 1, killer: 'a1', victim: 'foe1' },
+      ],
+    };
+    expect(slainByAlly(escort, d)).toEqual({ foe0: 0, a1: 1 });
+  });
+
+  it('un tueur étranger à l’escorte n’ajoute jamais de clé au résultat', () => {
+    const escort = [{ id: 'a0' }];
+    const d = { foesDown: ['t0'], kills: [{ at: 0, killer: 't1', victim: 't0' }] };
+    expect(slainByAlly(escort, d)).toEqual({ a0: 0 });
   });
 });

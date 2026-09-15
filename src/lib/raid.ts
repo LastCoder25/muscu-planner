@@ -39,6 +39,7 @@ import {
   unitEffects,
   canAdvTalent,
   canAdvFamiliar,
+  pairCompanions,
   type CompanionSet,
 } from './caravan';
 import { type TalentInstance } from './talents';
@@ -2175,58 +2176,24 @@ export function siegeXp(adv: Adventurer, report: RaidReport): number {
   return Math.max(1, Math.round(base * ratio ** 1.5 * (RAID.xpFloorShare + share)));
 }
 
-/** 🐾 QUI PORTE QUOI, une fois les exclusions et les plafonds du Chenil appliqués.
+/** 🐾 QUI PORTE QUOI AU REMPART : la règle d’appariement UNIQUE (`pairCompanions`,
+ *  `caravan.ts` — héros, doublons, fantômes, rareté de classe, pièces), plus ce qui est
+ *  propre au mur : les PLACES du Chenil et le RANG qu’il sait héberger (`canCompanion`).
  *
  *  ⚠️ APPLIQUÉ AU CALCUL DU COMBAT, pas seulement à l’écriture : un appariement rangé
  *  avant que le Chenil ne redescende, ou pointant sur un familier vendu, se soigne tout
  *  seul — même politique que les POI périmés, et aucune migration.
  *
- *  ⚠️ TROIS EXCLUSIONS héritées de `companionsOf`, aucune décorative : ce que le HÉROS
- *  porte n’est pas disponible (il se bat ailleurs), un même familier apparié deux fois
- *  ne compte qu’une, et un id qui ne désigne plus rien est IGNORÉ plutôt que de faire
- *  tomber le combat.
- *
  *  ⚠️ L’ORDRE EST CELUI DU VIVIER, et c’est ce qui rend la coupe aux places STABLE : si
  *  le Chenil n’en héberge que trois, ce sont les trois premiers aventuriers qui gardent
  *  leur compagnon, pas un trio qui change à chaque rendu. */
 export function companionPairs(advs: Adventurer[], ctx?: CompanionCtx): Map<string, CompanionSet> {
-  const out = new Map<string, CompanionSet>();
-  if (!ctx) return out;
-  const fams = new Map(ctx.familiars.map((f) => [f.id, f]));
-  const tals = new Map(ctx.talents.map((t) => [t.id, t]));
-  const heroTal = new Set(ctx.heroTalentIds ?? []);
-  // 🗡️ Ce qu’ils portent, à côté de ce qu’ils confient — même moteur, même homme.
-  const worn = wornGear(advs, ctx.advGear);
-  const prisF = new Set<string>();
-  const prisT = new Set<string>();
-  let places = companionSlots(ctx.kennelLevel);
-  for (const a of advs) {
-    const entry: CompanionSet = {};
-    const g = worn.get(a.id);
-    if (g) entry.gear = g;
-    const fid = a.familiarId;
-    if (fid && fid !== ctx.heroFamiliarId && !prisF.has(fid) && places > 0) {
-      const f = fams.get(fid);
-      // Hors d’école : le Chenil ne sait pas l’héberger, il ne vient pas au rempart.
-      // …ni trop rare pour la classe de son maître (`canAdvFamiliar`, v0.831).
-      if (f && canCompanion(f, ctx.kennelLevel) && canAdvFamiliar(a, f)) {
-        prisF.add(fid);
-        places--;
-        entry.familiar = f;
-      }
-    }
-    const tid = a.talentId;
-    if (tid && !heroTal.has(tid) && !prisT.has(tid)) {
-      const t = tals.get(tid);
-      // Au-dessus de la rareté de sa classe : il ne le porte pas, et ça se soigne seul.
-      if (t && canAdvTalent(a, t)) {
-        prisT.add(tid);
-        entry.talent = t;
-      }
-    }
-    if (entry.familiar || entry.talent || entry.gear) out.set(a.id, entry);
-  }
-  return out;
+  if (!ctx) return new Map();
+  return pairCompanions(advs, ctx, {
+    familiarSlots: companionSlots(ctx.kennelLevel),
+    // Hors d’école : le Chenil ne sait pas l’héberger, il ne vient pas au rempart.
+    familiarOk: (f) => canCompanion(f, ctx.kennelLevel),
+  });
 }
 
 /** 🦅🦫 CE QUE LES COMPAGNONS APPORTENT À LA BASE, hors combat : le faucon voit venir,

@@ -42,11 +42,7 @@
         <div class="cr-exp-title">
           ⚔️ {{ r.members.length }} aventurier{{ r.members.length > 1 ? 's' : '' }}
           <span class="cr-exp-trailing">
-            <span
-              v-if="r.hasKills && r.totalKills > 0"
-              class="cr-exp-kills"
-              title="Bandits abattus au total"
-            >
+            <span v-if="r.totalKills > 0" class="cr-exp-kills" title="Bandits abattus au total">
               ⚔️ {{ r.totalKills }}
             </span>
             <span class="cr-exp-xp">+{{ r.totalXp }} XP</span>
