@@ -19,7 +19,11 @@ export interface Dungeon {
   recoLevel: number; // niveau conseillé (calibré par simulation)
   hintStat: StatKey; // stat clé pour ce donjon
   hint: string; // conseil « coach »
-  dropLevel: number; // niveau des objets lâchés (fixé par le donjon, découplé du joueur)
+  // Niveau des objets lâchés (fixé par le donjon, découplé du joueur). ⚠️ ≥ recoLevel depuis la
+  // v0.895 : il valait souvent un ou deux niveaux de moins (reco 31 → objets de niveau 30), si
+  // bien qu'au PREMIER niveau d'un rang le donjon de son niveau ne pouvait donner que l'ancien
+  // rang (mesuré : 0,1 à 1,1 objet du nouveau rang sur tout ce niveau, venus des boss seuls).
+  dropLevel: number;
   dropLuck: number; // biais de rareté du butin (0 = normal … 1 = très généreux)
   /** Correction de calibration des monstres (PV ET dégâts), 1 par défaut.
    *
@@ -64,7 +68,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 4,
     hintStat: 'puissance',
     hint: 'Le golem du fond encaisse beaucoup → pousse ta Puissance (muscu).',
-    dropLevel: 3,
+    dropLevel: 4,
     dropLuck: 0.1,
   },
   {
@@ -77,7 +81,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 5,
     hintStat: 'endurance',
     hint: 'Ça frappe très fort → il te faut des PV, donc de l’Endurance.',
-    dropLevel: 4,
+    dropLevel: 5,
     dropLuck: 0.2,
   },
   {
@@ -90,7 +94,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 7,
     hintStat: 'agilite',
     hint: 'Le spectre esquive beaucoup → Agilité pour toucher, PV pour durer.',
-    dropLevel: 5,
+    dropLevel: 7,
     dropLuck: 0.35,
   },
   {
@@ -103,7 +107,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 8,
     hintStat: 'puissance',
     hint: 'Le troll est une montagne de PV → grosse Puissance (muscu) requise.',
-    dropLevel: 6,
+    dropLevel: 8,
     dropLuck: 0.5,
   },
   {
@@ -116,7 +120,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 9,
     hintStat: 'endurance',
     hint: 'Le dragon frappe et crit fort → build complet, beaucoup de PV.',
-    dropLevel: 7,
+    dropLevel: 9,
     dropLuck: 0.7,
   },
   {
@@ -129,7 +133,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 10,
     hintStat: 'puissance',
     hint: 'Le défi ultime : le titan est un mur. Tout à fond, surtout la Puissance.',
-    dropLevel: 8,
+    dropLevel: 10,
     dropLuck: 0.9,
   },
   {
@@ -142,7 +146,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 11,
     hintStat: 'endurance',
     hint: 'End-game absolu : l’Archidémon frappe et crit très fort → build complet, PV au max.',
-    dropLevel: 9,
+    dropLevel: 11,
     dropLuck: 1,
   },
   // ── Donjons haut-niveau (reco 12→24) — monstres calibrés par simulation.
@@ -159,7 +163,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 13,
     hintStat: 'endurance',
     hint: 'Ça monte crescendo jusqu’à l’hydre → des PV (Endurance) pour tenir la fin.',
-    dropLevel: 11,
+    dropLevel: 13,
     dropLuck: 1,
     foeMult: 0.8,
   },
@@ -173,7 +177,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 15,
     hintStat: 'puissance',
     hint: 'Des murs de PV de plus en plus épais → grosse Puissance (muscu) pour percer.',
-    dropLevel: 13,
+    dropLevel: 15,
     dropLuck: 1,
     foeMult: 0.8,
   },
@@ -187,7 +191,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 17,
     hintStat: 'puissance',
     hint: 'Colosses increvables, du plus rapide au plus lourd → Puissance pour percer, PV pour durer.',
-    dropLevel: 15,
+    dropLevel: 17,
     dropLuck: 1,
     foeMult: 0.8,
   },
@@ -201,7 +205,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 19,
     hintStat: 'endurance',
     hint: 'Ils frappent et encaissent, de pire en pire → build complet, beaucoup de PV.',
-    dropLevel: 17,
+    dropLevel: 19,
     dropLuck: 1,
     foeMult: 0.8,
   },
@@ -215,7 +219,7 @@ const HAND_DUNGEONS: Dungeon[] = [
     recoLevel: 20,
     hintStat: 'endurance',
     hint: 'Tentacules puis nécromancie → PV au max obligatoires jusqu’au bout.',
-    dropLevel: 19,
+    dropLevel: 20,
     dropLuck: 1,
   },
   {

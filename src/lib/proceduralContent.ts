@@ -178,25 +178,38 @@ const ITEM_RANK_RELIEF: [number, number][] = [
   [61, 0.88],
   [71, 1],
 ];
-// ── LE RANG S'OUVRE SUR LA DURÉE DU RANG (v0.894, mesuré) ──
-// Les objets du rang du joueur sont désormais rares en début de rang (`ownRankChance`) : il
-// porte plus longtemps le rang d'en dessous. Mesuré par DEUX balayages indépendants (niveaux
-// 11 à 80, 6 joueurs par niveau, joueur RÉALISTE qui accumule son butin niveau après niveau,
-// ~100 donjons par niveau) : facteur de PV et dégâts du contenu qui redonne à ce joueur le
-// taux de réussite qu'il avait avec l'ancienne règle. Les deux balayages concordent à ±0,03
-// par rang ; la position dans le rang ne donne AUCUN effet reproductible (les objets du rang
-// d'en dessous, farmés longtemps, ont de bons jets et compensent). D'où une table PAR RANG.
-// ⚠️ Rang 5 (niveaux 51-60, rareté Légendaire) : 0,74. Les objets d'en dessous (Épique) n'ont
-// pas d'effet légendaire — c'est l'écart structurel le plus grand.
-// Index = rang de prestige (0 = Bronze, rien en dessous : 1). Au-delà des 8 raretés : 1.
-const RANK_OPENING_RELIEF = [1, 0.98, 0.95, 0.95, 0.9, 0.74, 0.93, 0.95];
+// ── TON RANG S'OUVRE SUR LA DURÉE DU RANG, EN PART ET EN ÉTOILES (v0.895, mesuré) ──
+// Les objets du rang du joueur sont rares en début de rang (`ownRankChance`) et leurs étoiles
+// suivent la sienne (`starOdds`). Mesuré par DEUX balayages indépendants (niveaux 11 à 80, 6
+// joueurs par niveau, joueur RÉALISTE qui accumule son butin niveau après niveau, ~100 donjons
+// par niveau, bisection au combat) : facteur de PV et dégâts du contenu qui redonne à ce
+// joueur le taux de réussite qu'il avait avec la règle d'avant la v0.894. Les deux balayages
+// concordent case par case (écart typique ±0,04) et gardent des structures reproductibles —
+// au rang 2 de 0,83 (★1) à 1,10 (★5) —, d'où une table RANG × ÉTOILE (moyenne des deux).
+// ⚠️ Rang 5 (niveaux 51-60, rareté Légendaire) : 0,65 à 0,80. Les objets d'en dessous (Épique)
+// n'ont pas d'effet légendaire — l'écart structurel le plus grand. ⚠️ Des cases > 1 : à ces
+// positions le joueur réaliste farme de meilleurs jets qu'avant (★5 majoritaire), le contenu
+// se durcit d'autant pour garder la difficulté ressentie.
+// Index = rang de prestige (Bronze : 1, rien en dessous), puis étoile du niveau dans le rang.
+// Au-delà des 8 raretés : 1.
+const RANK_OPENING_RELIEF: number[][] = [
+  [1, 1, 1, 1, 1],
+  [0.97, 0.93, 0.97, 0.97, 0.98],
+  [0.83, 0.87, 0.93, 1.03, 1.1],
+  [0.9, 0.91, 0.93, 0.93, 0.92],
+  [1, 0.85, 0.88, 0.87, 0.88],
+  [0.8, 0.65, 0.66, 0.76, 0.79],
+  [0.86, 0.9, 0.88, 0.91, 0.93],
+  [1.09, 0.9, 0.94, 0.93, 0.97],
+];
 
 /** Facteur (PV et dégâts) de tout contenu de niveau `level` : le palier qui le contient, et
- *  l'ouverture progressive du rang des objets. */
+ *  l'ouverture progressive du rang des objets (rang et étoile de ce niveau). */
 export function itemRankRelief(level: number): number {
   let v = 1;
   for (const [from, k] of ITEM_RANK_RELIEF) if (level >= from) v = k;
-  return v * (RANK_OPENING_RELIEF[characterRank(level).rankIndex] ?? 1);
+  const r = characterRank(level);
+  return v * (RANK_OPENING_RELIEF[r.rankIndex]?.[r.star - 1] ?? 1);
 }
 
 /** Lecture d'une table de points mesurés [niveau, valeur] : interpolée entre deux points,
@@ -402,7 +415,7 @@ export function proceduralDungeon(reco: number, index: number): Dungeon {
     recoLevel: reco,
     hintStat: PROC_STAT_CYCLE[index % PROC_STAT_CYCLE.length]!,
     hint: 'Palier profond — trio escaladant. Build complet, tout au max.',
-    dropLevel: reco - 1,
+    dropLevel: reco, // ≥ son niveau conseillé (v0.895, cf. `Dungeon.dropLevel`)
     dropLuck: 1,
     foeMult: proceduralDungeonBoost(reco),
   };

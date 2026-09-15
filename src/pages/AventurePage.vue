@@ -2108,21 +2108,16 @@
         </div>
         <div class="drops-sub">Chances de rang (selon TON niveau)</div>
         <div class="odds">
-          <div
-            v-for="o in rarityOdds(dropInfo.dropLuck, dropInfo.dropLevel, heroLevel)"
-            :key="o.label"
-            class="odd"
-            :class="o.cls"
-          >
+          <div v-for="o in dropOdds" :key="o.label" class="odd" :class="o.cls">
             <span class="odd-pct font-display">{{ o.pct }}%</span>
             <span class="odd-lbl">{{ o.label }}</span>
           </div>
         </div>
         <div class="drops-note">
-          Le <b>rang</b> (Bronze → Divin ancestral) ne dépasse <b>jamais ton rang</b> : surtout ton
-          rang, parfois un cran en dessous (moins souvent avec la chance). La <b>qualité</b> (jet)
-          varie en continu → farme le meilleur jet. Les <b>pièces de set</b> (de voie) tombent sur
-          les <b>boss de palier</b>.
+          Le <b>rang</b> (Bronze → Divin ancestral) ne dépasse <b>jamais ton rang</b>. Ton rang
+          <b>s'ouvre au fil de ses 10 niveaux</b> : rare au début, de plus en plus fréquent ; le
+          reste tombe un cran en dessous. Ses <b>étoiles</b> suivent la tienne (★1 au début, ★5 en
+          fin de rang). Les <b>pièces de set</b> (de voie) tombent sur les <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
       </q-card>
@@ -4328,21 +4323,30 @@ function openDrops(d: Dungeon) {
 }
 // Distribution des RANGS d'un drop selon la chance ET le niveau du donjon (Monte-Carlo
 // sur rollTier → toujours en phase avec le modèle). Ne montre que les rangs qui
-// apparaissent (≥1 %), du plus bas au plus haut.
-function rarityOdds(luck: number, level = 1, playerLevel?: number) {
-  const rng = mulberry32((Math.round(level * 131 + luck * 997 + (playerLevel ?? 0) * 7) >>> 0) + 1);
-  const N = 600;
-  const counts = new Array(10).fill(0) as number[];
-  for (let i = 0; i < N; i++) {
-    const idx = RARITY_RANK[rollTier(rng, level, luck, 0, playerLevel).rank];
-    counts[idx] = (counts[idx] ?? 0) + 1;
-  }
-  return RANK_ORDER.map((r, i) => ({
-    label: rarityRank(r).name,
-    pct: Math.round((counts[i]! / N) * 100),
-    cls: 'r-' + r,
-  })).filter((o) => o.pct > 0);
-}
+// apparaissent, du plus bas au plus haut. ⚠️ Un rang rare (le tien en début de rang : 0,3 à
+// 3 %) s'affiche « <1 % » : l'arrondir à 0 cacherait la possibilité même qu'il faut montrer.
+// `computed` : 4 000 tirages une fois par donjon ouvert, pas à chaque rendu.
+const dropOdds = computed(() => {
+  const d = dropInfo.value;
+  if (!d) return [];
+  const level = d.dropLevel;
+  const luck = d.dropLuck;
+  const playerLevel = heroLevel.value;
+  const rng = mulberry32((Math.round(level * 131 + luck * 997 + playerLevel * 7) >>> 0) + 1);
+  const N = 4000;
+  const counts = new Array(RANK_ORDER.length).fill(0) as number[];
+  for (let i = 0; i < N; i++)
+    counts[RARITY_RANK[rollTier(rng, level, luck, 0, playerLevel).rank]]!++;
+  return RANK_ORDER.map((r, i) => {
+    const p = (counts[i]! / N) * 100;
+    return {
+      label: rarityRank(r).name,
+      pct: p >= 1 ? String(Math.round(p)) : '<1',
+      cls: 'r-' + r,
+      n: counts[i]!,
+    };
+  }).filter((o) => o.n > 0);
+});
 
 // Liste des DONJONS (onglet Donjons), ordonnée par niveau. Les boss de palier ont
 // leur propre onglet « Boss » (cf. bossChain).
@@ -9153,41 +9157,8 @@ button.pt-mini:active {
   cursor: pointer;
 }
 
-/* ── Rangs G→SSS : une couleur unique par rang, portée par la variable --rk
-   (posée par les classes de rang r- et p-). Les consommateurs (liseré, texte,
-   pastilles) lisent var(--rk) → plus besoin d'une règle par rang et par composant. ── */
-.r-commun,
-.p-commun {
-  --rk: #9a8f7e;
-}
-.r-inhabituel,
-.p-inhabituel {
-  --rk: #c7ccd6;
-}
-.r-magique,
-.p-magique {
-  --rk: #4ea3ff;
-}
-.r-rare,
-.p-rare {
-  --rk: #ffd23f;
-}
-.r-epique,
-.p-epique {
-  --rk: #b07cff;
-}
-.r-legendaire,
-.p-legendaire {
-  --rk: #ff9a3f;
-}
-.r-mythique,
-.p-mythique {
-  --rk: #ff5b5b;
-}
-.r-primordial,
-.p-primordial {
-  --rk: #ffcf5c;
-}
+/* ── Rangs : la couleur --rk est posée par les classes r- et p- (bloc GLOBAL de app.scss,
+   couleurs lues de RANK_COLOR au démarrage). Les consommateurs lisent var(--rk). ── */
 /* Cartes à liseré gauche (r-*) : le bord suit la rareté ; le texte .rarity aussi. */
 .r-commun,
 .r-inhabituel,

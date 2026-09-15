@@ -8,6 +8,8 @@ import {
   characterRank,
   rankStarStr,
   rankStartLevel,
+  STARS_PER_RANK,
+  type CharacterRank,
   type RankTier,
 } from './characterRank';
 import { levelCost } from './levels';
@@ -46,17 +48,17 @@ export const RANK_ORDER: Rarity[] = [
   'mythique',
   'primordial',
 ];
-// Couleur par rareté (source unique JS ; le CSS miroir pose --rk par classe .r-*/.p-*).
-export const RANK_COLOR: Record<Rarity, string> = {
-  commun: '#9a8f7e',
-  inhabituel: '#c7ccd6',
-  magique: '#4ea3ff',
-  rare: '#ffd23f',
-  epique: '#b07cff',
-  legendaire: '#ff9a3f',
-  mythique: '#ff5b5b',
-  primordial: '#ffcf5c',
-};
+// Couleur par rareté = la couleur du RANG qu'elle représente (v0.895 : les objets gardaient la
+// palette des anciennes raretés alors qu'ils se lisent en rangs — Bronze, Argent, Or…).
+// DÉRIVÉE de `CHARACTER_RANKS` (source unique JS) ; le CSS miroir pose --rk par classe
+// .r-*/.p-* (AventurePage, ExpeditionPage, AventureAvatar) — un test vérifie qu'il suit.
+export const RANK_COLOR = Object.fromEntries(
+  RANK_ORDER.map((r, i) => [r, CHARACTER_RANKS[i]!.color]),
+) as Record<Rarity, string>;
+/** Variables CSS `--rank-<rareté>` lues par les classes r-* / p-* (app.scss). */
+export function rankCssVars(): Record<string, string> {
+  return Object.fromEntries(RANK_ORDER.map((r) => [`--rank-${r}`, RANK_COLOR[r]]));
+}
 // Mapping des ANCIENNES valeurs sauvegardées (10 rangs G→SSS + 5 vieilles raretés) vers les
 // 8 nouvelles raretés, par proximité de puissance. `normRank` normalise toute chaîne.
 const LEGACY_RANK: Record<string, Rarity> = {
@@ -422,8 +424,11 @@ export function rarityRank(r: Rarity): RankTier {
  *  ancestral). Source unique : aucun écran ne doit relire `RARITY_LABEL`. */
 export function gradeLabel(it: { rarity: Rarity; slot?: string; roll?: number }): string {
   const name = rarityRank(it.rarity).name;
-  // Un TROPHÉE se lit en rang ET étoiles (v0.894), comme le rang du héros.
-  return it.slot === TROPHY_SLOT ? `${name} ${rankStarStr(trophyStar(it.roll))}` : name;
+  // Un OBJET se lit en rang ET étoiles (v0.895), comme le rang du héros. Pas un familier (sa
+  // qualité ne suit pas l'étoile du joueur), ni un objet d'avant le jet (pas de `roll`).
+  return it.slot && it.slot !== FAMILIAR_SLOT && it.roll != null
+    ? `${name} ${rankStarStr(jetStar(it.roll))}`
+    : name;
 }
 
 /** Les 5 crans d’intensité de `useGameFx` — du discret à l’explosion. */
@@ -1136,13 +1141,10 @@ function gaussian(rng: () => number): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-// ── RANG DES OBJETS : LA RÈGLE DES FAMILIERS (v0.875) ──
-// ⚠️ SOURCE DE VÉRITÉ, remplace la PYRAMIDE centrée sur le plafond √ du niveau (v0.564→0.874).
-// Tout ce qui se porte tombe à SON rang de prestige (un rang tous les 10 niveaux, celui du
-// héros), en dessous parfois, JAMAIS au-dessus (`rollCompanionTier`, v0.876).
-// Mesuré avant : au niveau 30 (rang Or) les objets tombaient surtout DEUX rangs au-dessus, et un
-// joueur équipé perdait 15 à 40 % de puissance en passant à cette règle (niveaux 8 à 70) — le
-// contenu est recalé d'autant (`itemRankRelief`, proceduralContent).
+// ── RANG DES OBJETS : LA RÈGLE DES FAMILIERS (v0.875), AFFINÉE EN v0.894-0.895 ──
+// Remplace la PYRAMIDE centrée sur le plafond √ du niveau (v0.564→0.874) : jamais au-dessus
+// du rang de prestige du joueur (`rollCompanionTier`). La règle en vigueur est plus bas
+// (« TON RANG S'OUVRE SUR LA DURÉE DU RANG »).
 
 /** Un bonus de rang (Autel des boss, générosité des boss) exprimé en CHANCE : sous cette règle,
  *  il ne décale plus le pic : il resserre la traîne basse et améliore le jet. */
@@ -1165,58 +1167,132 @@ export function jetExp(luck = 0): number {
 export function rollJetValue(rng: () => number, luck = 0): number {
   return Math.pow(rng(), jetExp(luck));
 }
-// ── LE RANG DES OBJETS S'OUVRE SUR LA DURÉE DU RANG (v0.894, décision de l'utilisateur) ──
-// ⚠️ SOURCE DE VÉRITÉ, affine la v0.875. Mesuré avant : les 4 emplacements tombaient à ton
-// rang en 7 à 9 donjons nettoyés — l'équipement du rang était complet dans la journée alors
-// qu'un rang dure dix niveaux. Cible retenue : complet vers la MI-RANG.
+// ── TON RANG S'OUVRE SUR LA DURÉE DU RANG, EN PART ET EN ÉTOILES (v0.894-0.895, utilisateur) ──
+// ⚠️ SOURCE DE VÉRITÉ, affine la v0.876. Mesuré avant : les 4 emplacements tombaient à ton
+// rang en 7 à 9 donjons nettoyés, alors qu'un rang dure dix niveaux. Deux règles, voulues
+// ensemble (« on ne drop pas QUE de son rang, mais il y a une possibilité de drop du nouveau
+// rang même au début, surtout 1 étoile — il faut la motivation de changer de rang ») :
+// (1) LA PART de ton rang (`ownRankChance`) est BASSE en début de rang — jamais nulle — et
+// monte avec la position dans le rang ; le reste tombe au rang d'en dessous.
 // ⚠️ LE BON REPÈRE EST LE NIVEAU, PAS LE JOUR : l'énergie d'aventure EST l'XP de sport, donc
-// ce qu'on peut jouer pendant un niveau est fixé par le coût de ce niveau, quel que soit le
-// rythme du joueur. La chance d'un objet de TON rang se rapporte donc aux drops qu'un niveau
-// finance (`dropsPerLevel`) : la durée en NIVEAUX reste la même au niveau 15 et au niveau 70.
-// Elle monte LINÉAIREMENT avec la position dans le rang (0 au premier niveau). Le reste tombe
-// au rang d'en dessous, où l'on farme le JET. La chance (contenu, Autel) ne touche pas cette
-// part : elle resserre la traîne basse et améliore le jet, comme avant.
+// ce qu'on joue pendant un niveau est fixé par le coût de ce niveau, quel que soit le rythme.
+// La part se rapporte aux drops qu'un niveau finance (`dropsPerLevel`) : la même durée en
+// NIVEAUX au niveau 15 et au niveau 70.
+// (2) LES ÉTOILES d'un objet DE TON RANG (1 à 5, tranches de son jet) suivent TON étoile dans
+// ton rang (un rang = 10 niveaux = 5 étoiles) — jamais au-dessus, `STAR_JET.top` à ton
+// étoile, le reste réparti en dessous (la moitié à chaque cran). La chance (profondeur,
+// Autel, boss tué tôt) relève la part de ton étoile.
+// Pourquoi ça motive : les tranches de jet des rangs se suivent (`rankRollMult`), donc une ★1
+// du nouveau rang vaut au moins une ★5 de l'ancien — et elle peut porter un affixe, voire un
+// effet légendaire, de plus. Le stuff ★5 de ton rang n'arrive qu'en fin de rang.
+// Les objets d'un rang INFÉRIEUR au tien gardent le jet d'avant (biaisé bas, dopé par la
+// chance). Même règle d'étoiles pour le TROPHÉE (dont le rang est toujours le tien).
 export const OWN_RANK = {
-  /** Objets de ton rang attendus au k-ième niveau du rang, en multiple de k. Réglé par
-   *  simulation pour que les 4 emplacements soient remplis vers la mi-rang. */
-  perPos: 0.85,
-  /** Objets de ton rang attendus dès le PREMIER niveau du rang. 0 : un rang tout neuf ne
-   *  lâche encore rien de lui-même. */
-  atStart: 0,
-  /** Objets par donjon nettoyé : 3 monstres × 60 %, plus les pièces de boss que ses pierres
-   *  d'invocation financent (~0,4). */
-  dropsPerClear: 2.2,
-  /** Énergie d'un donjon (plafond `DUNGEON_ENERGY_CAP`). */
+  /** Objets de ton rang attendus au k-ième niveau du rang, en plus de `atStart`, en multiple
+   *  de k. Réglé par simulation : les 4 emplacements à ton rang vers la mi-rang. */
+  perPos: 0.5,
+  /** Objets de ton rang attendus dès le PREMIER niveau du rang : une possibilité réelle, basse. */
+  atStart: 1,
+};
+/** Chance d'un objet quand ses monstres sont tous vaincus / partiellement (`rollDrop`). */
+export const DROP_CHANCE = { cleared: 0.6, partial: 0.3 };
+/** Modèle du volume de drops d'un niveau (lu par `dropsPerLevel`). */
+const DROP_VOLUME = {
+  /** Objets par donjon nettoyé : 3 monstres × `DROP_CHANCE.cleared`, plus les pièces de boss
+   *  que ses pierres d'invocation financent (~0,4). */
+  perClear: 3 * DROP_CHANCE.cleared + 0.4,
+  /** Énergie d'un donjon — `DUNGEON_ENERGY_CAP` de data/dungeons.ts, recopiée : l'importer
+   *  ici créerait un cycle (dungeons → proceduralContent → items). */
   energyPerClear: 40,
   /** Énergie en plus de l'XP de sport (connexion, Dynamo, puits). */
   energyExtra: 1.3,
 };
-/** Drops qu'un niveau finance en moyenne (voir `OWN_RANK`). */
-function dropsPerLevel(level: number): number {
+/** Drops qu'un niveau finance en moyenne : coût du niveau (l'énergie EST l'XP de sport). */
+export function dropsPerLevel(level: number): number {
   return (
-    (levelCost(level) * OWN_RANK.energyExtra * OWN_RANK.dropsPerClear) / OWN_RANK.energyPerClear
+    (levelCost(level) * DROP_VOLUME.energyExtra * DROP_VOLUME.perClear) / DROP_VOLUME.energyPerClear
   );
 }
-/** Chance qu'un objet tombe au rang DU JOUEUR (0..1). 1 au rang Bronze (rien en dessous) et
- *  au-delà des 8 raretés (les rangs de prestige 9-10 n'en ont pas de nouvelle). */
-export function ownRankChance(playerLevel: number): number {
-  const r = characterRank(playerLevel).rankIndex;
-  if (r === 0 || r > RANK_ORDER.length - 1) return 1;
-  const pos = Math.max(1, Math.floor(playerLevel)) - rankStartLevel(r);
+/** Au-delà des 8 raretés (rangs de prestige 9-10) : plus de rang d'objet nouveau. */
+const beyondItemRanks = (c: CharacterRank) => c.rankIndex > RANK_ORDER.length - 1;
+function ownChanceOf(c: CharacterRank, playerLevel: number): number {
+  if (c.rankIndex === 0 || beyondItemRanks(c)) return 1;
+  const pos = Math.max(1, Math.floor(playerLevel)) - rankStartLevel(c.rankIndex);
   return Math.min(1, (OWN_RANK.atStart + OWN_RANK.perPos * pos) / dropsPerLevel(playerLevel));
 }
-/** Chance d'un objet de SON rang de référence pour ce contenu : gatée seulement quand ce rang
- *  est celui du JOUEUR (un contenu moins profond que son rang garde l'ancienne règle). */
-function refRankChance(level: number, playerLevel?: number): number {
+/** Chance qu'un objet tombe au rang DU JOUEUR (0..1). 1 au rang Bronze (rien en dessous) et
+ *  au-delà des 8 raretés. */
+export function ownRankChance(playerLevel: number): number {
+  return ownChanceOf(characterRank(playerLevel), playerLevel);
+}
+/** Rang de référence d'un contenu, rang du joueur, et part de son rang : gatée seulement quand
+ *  la référence EST le rang du joueur (un contenu moins profond garde l'ancienne règle).
+ *  `characterRank` n'est lu qu'une fois (appelé à chaque drop). */
+function rankGate(level: number, playerLevel?: number) {
   const player = playerLevel ?? level;
-  return companionDropRank(level, playerLevel) === prestigeRankIndex(player)
-    ? ownRankChance(player)
-    : 1;
+  const c = characterRank(player);
+  const mine = Math.min(RANK_ORDER.length - 1, c.rankIndex);
+  const ref = prestigeRankIndex(Math.min(level, player));
+  return { c, mine, ref, own: ref === mine ? ownChanceOf(c, player) : 1 };
+}
+
+export const STAR_JET = { top: 0.6, topLuck: 0.3, topMax: 0.9 };
+
+/** Étoile (1..5) d'un objet dont le jet vaut `roll`. */
+export function jetStar(roll: number | undefined): number {
+  const r = Math.min(1, Math.max(0, roll ?? 0));
+  return Math.min(STARS_PER_RANK, Math.floor(r * STARS_PER_RANK) + 1);
+}
+
+/** Étoile du joueur plafonnant ses objets : la sienne, ou ★5 au-delà des 8 raretés. */
+const starCap = (c: CharacterRank) => (beyondItemRanks(c) ? STARS_PER_RANK : c.star);
+
+/** Poids (non normalisé) de l'étoile `j` < `s` : la moitié à chaque cran sous `s`. La somme
+ *  des crans 1..s−1 vaut 1 − 0,5^(s−1). */
+const lowerStarShare = (j: number, s: number) => Math.pow(0.5, s - j) / (1 - Math.pow(0.5, s - 1));
+
+function topShare(luck: number): number {
+  return Math.min(STAR_JET.topMax, STAR_JET.top + STAR_JET.topLuck * Math.max(0, luck));
+}
+
+/** Chances de chaque étoile (index 0 = ★1) d'un objet de son rang, pour un joueur de niveau
+ *  `level`. */
+export function starOdds(level: number, luck = 0): number[] {
+  const s = starCap(characterRank(level));
+  const top = s <= 1 ? 1 : topShare(luck);
+  return Array.from({ length: STARS_PER_RANK }, (_, k) =>
+    k + 1 === s ? top : k + 1 < s ? (1 - top) * lowerStarShare(k + 1, s) : 0,
+  );
+}
+
+/** Tire le jet (0..1) d'un objet de son rang : une étoile (`starOdds`), puis uniforme dans sa
+ *  tranche. Sans allocation (appelé à chaque drop de son rang). */
+function rollStarJet(rng: () => number, c: CharacterRank, luck: number): number {
+  const s = starCap(c);
+  let u = rng();
+  let star = s;
+  if (s > 1) {
+    const top = topShare(luck);
+    if (u >= top) {
+      u = (u - top) / (1 - top);
+      star = 1;
+      for (let j = s - 1; j >= 1; j--) {
+        const w = lowerStarShare(j, s);
+        if (u < w) {
+          star = j;
+          break;
+        }
+        u -= w;
+      }
+    }
+  }
+  return (star - 1 + rng()) / STARS_PER_RANK;
 }
 
 /** Tire le { rank, roll } d'un OBJET : rang de référence = rang de prestige de min(contenu,
  *  joueur), jamais au-dessus. Quand c'est le rang du joueur, il ne tombe qu'avec
- *  `ownRankChance` ; sinon le rang d'en dessous (et sa traîne). `floorBonus` (en rangs)
+ *  `ownRankChance` (sinon le rang d'en dessous et sa traîne), et son jet se tire par étoiles
+ *  (`starOdds`) ; un objet d'un rang inférieur garde le jet d'avant. `floorBonus` (en rangs)
  *  devient de la chance. */
 export function rollTier(
   rng: () => number,
@@ -1226,11 +1302,11 @@ export function rollTier(
   playerLevel?: number,
 ): { rank: Rarity; roll: number } {
   const l = Math.min(1, Math.max(0, luck) + Math.max(0, floorBonus) * FLOOR_LUCK);
-  const ref = companionDropRank(level, playerLevel);
-  const own = refRankChance(level, playerLevel);
-  if (own >= 1) return rollCompanionTier(rng, ref, l);
-  if (rng() < own) return { rank: RANK_ORDER[ref]!, roll: rollJetValue(rng, l) };
-  return rollCompanionTier(rng, ref - 1, l);
+  const g = rankGate(level, playerLevel);
+  if (g.own < 1 && rng() < g.own)
+    return { rank: RANK_ORDER[g.ref]!, roll: rollStarJet(rng, g.c, l) };
+  const t = rollCompanionTier(rng, g.own < 1 ? g.ref - 1 : g.ref, l);
+  return RARITY_RANK[t.rank] === g.mine ? { rank: t.rank, roll: rollStarJet(rng, g.c, l) } : t;
 }
 
 // ── RANG DES COMPAGNONS : familiers et talents plafonnés au RANG DU JOUEUR (v0.857) ──
@@ -1336,8 +1412,8 @@ export function dropBandLabel(level: number, luck = 0, playerLevel?: number): st
 /** Rang le PLUS PROBABLE d'un drop : le rang de référence (min contenu, joueur), ou celui
  *  d'en dessous tant que le rang du joueur ne s'est pas assez ouvert (`ownRankChance`). */
 export function dropPeakRank(level: number, playerLevel?: number): Rarity {
-  const ref = companionDropRank(level, playerLevel);
-  return RANK_ORDER[refRankChance(level, playerLevel) < 0.5 ? ref - 1 : ref]!;
+  const g = rankGate(level, playerLevel);
+  return RANK_ORDER[g.own < 0.5 ? g.ref - 1 : g.ref]!;
 }
 /** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
 function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
@@ -1380,7 +1456,7 @@ export function rollDrop(
   },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
-  const chance = opts.cleared ? 0.6 : 0.3;
+  const chance = opts.cleared ? DROP_CHANCE.cleared : DROP_CHANCE.partial;
   if (rng() >= chance) return null;
 
   const slot = pick(rng, SLOTS);
@@ -1551,62 +1627,18 @@ export function rollSetPiece(
 export const TROPHY_K = 0.4;
 
 /**
- * Tire le TROPHÉE d'un boss entre amis. Sa rareté et son niveau d'objet suivent les drops
- * habituels (pyramide centrée sur le niveau du joueur) ; son affixe PRINCIPAL est imposé
- * par la famille de l'exo (`mains`, parfois deux), les suivants sont libres comme ceux
- * d'un drop. Jamais de proc légendaire : le trophée est une récompense de sport, pas une
- * pièce de chasse.
+ * Tire le TROPHÉE d'un boss entre amis. Son RANG est toujours celui du joueur (une
+ * récompense de sport, pas de chasse) et ses ÉTOILES suivent la sienne (`starOdds`, v0.894) ;
+ * son affixe PRINCIPAL est imposé par la famille de l'exo (`mains`, parfois deux), les
+ * suivants sont libres comme ceux d'un drop. Jamais de proc légendaire.
  */
-// ── LE TROPHÉE SE LIT EN RANG ET ÉTOILES (v0.894, demandé par l'utilisateur) ──
-// Son RANG est toujours celui du joueur (une récompense de sport, pas de chasse). Ses ÉTOILES
-// (1 à 5) sont des tranches de son JET, et suivent l'étoile du JOUEUR dans son rang : jamais
-// au-dessus, `TROPHY_STAR.top` à son étoile, le reste réparti en dessous (la moitié à chaque
-// cran). Un joueur ★1 a donc un trophée ★1 ; un joueur ★5, un ★5 six fois sur dix. La chance
-// (boss tué tôt) relève la part de son étoile.
-export const TROPHY_STAR = { count: 5, top: 0.6, topLuck: 0.3, topMax: 0.9 };
-
-/** Étoile (1..5) d'un trophée dont le jet vaut `roll`. */
-export function trophyStar(roll: number | undefined): number {
-  const r = Math.min(1, Math.max(0, roll ?? 0));
-  return Math.min(TROPHY_STAR.count, Math.floor(r * TROPHY_STAR.count) + 1);
-}
-
-/** Chances de chaque étoile (index 0 = ★1) pour un joueur de niveau `level`. */
-export function trophyStarOdds(level: number, luck = 0): number[] {
-  const s = characterRank(level).star;
-  const odds = new Array<number>(TROPHY_STAR.count).fill(0);
-  if (s <= 1) {
-    odds[0] = 1;
-    return odds;
-  }
-  const top = Math.min(
-    TROPHY_STAR.topMax,
-    TROPHY_STAR.top + TROPHY_STAR.topLuck * Math.max(0, luck),
-  );
-  odds[s - 1] = top;
-  let w = 0;
-  for (let j = 1; j < s; j++) w += Math.pow(0.5, s - j);
-  for (let j = 1; j < s; j++) odds[j - 1] = ((1 - top) * Math.pow(0.5, s - j)) / w;
-  return odds;
-}
-
 export function rollTrophy(
   rng: () => number,
   opts: { mains: readonly EffectType[]; title: string; level: number; luck?: number },
 ): Omit<Item, 'id'> {
   const luck = opts.luck ?? 0;
   const rarity = RANK_ORDER[prestigeRankIndex(opts.level)]!;
-  const odds = trophyStarOdds(opts.level, luck);
-  let u = rng();
-  let star = odds.length;
-  for (let k = 0; k < odds.length; k++) {
-    if (u < odds[k]!) {
-      star = k + 1;
-      break;
-    }
-    u -= odds[k]!;
-  }
-  const roll = (star - 1 + rng()) / TROPHY_STAR.count;
+  const roll = rollStarJet(rng, characterRank(opts.level), luck);
   const level = rollItemLevel(rng, opts.level, luck);
   // Plancher à 0,1 et non à 1 : à TROPHY_K < 1, un plancher entier écraserait rareté et jet
   // des petites stats (même leçon que l'équipement des aventuriers).

@@ -24,7 +24,7 @@ const props = withDefaults(
   { size: 44, showStars: true },
 );
 
-const rankColor = computed(() => RANK_COLOR[props.item.rarity] ?? '#9a8f7e');
+const rankColor = computed(() => RANK_COLOR[props.item.rarity]);
 const isFamiliar = computed(() => props.item.slot === FAMILIAR_SLOT);
 const icon = computed(() => itemIconName(props.item));
 const jet = computed(() => rollJet(props.item.roll)); // jet 0..100 % (position dans l'intervalle du rang)

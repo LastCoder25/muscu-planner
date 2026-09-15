@@ -27,7 +27,7 @@ export const CHARACTER_RANKS: RankTier[] = [
   { name: 'Tout-puissant', emoji: '👑', color: '#fff0a0' },
 ];
 
-const STARS_PER_RANK = 5;
+export const STARS_PER_RANK = 5;
 const LEVELS_PER_STAR = 2;
 const MAX_TIER = CHARACTER_RANKS.length * STARS_PER_RANK - 1; // 49 (dernier cran)
 

@@ -278,7 +278,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'familiar-click': []; 'talent-click': [] }>();
 
-const rankColor = (r: Rarity) => RANK_COLOR[r] ?? '#9a8f7e';
+const rankColor = (r: Rarity) => RANK_COLOR[r];
 // Pièces d'équipement par slot (pour l'affichage des couches + teinte de rareté).
 const gear = computed(() => ({
   armor: props.equipped.armor,
@@ -700,33 +700,9 @@ const label = computed(
   }
 }
 
-/* Pips (rangs G→SSS via --rk). */
+/* Pips (rang via --rk, posée par les classes r-* globales d'app.scss). */
 .pip.off {
   fill: var(--line, #3a332a);
-}
-.pip.on.r-commun {
-  --rk: #9a8f7e;
-}
-.pip.on.r-inhabituel {
-  --rk: #c7ccd6;
-}
-.pip.on.r-magique {
-  --rk: #4ea3ff;
-}
-.pip.on.r-rare {
-  --rk: #ffd23f;
-}
-.pip.on.r-epique {
-  --rk: #b07cff;
-}
-.pip.on.r-legendaire {
-  --rk: #ff9a3f;
-}
-.pip.on.r-mythique {
-  --rk: #ff5b5b;
-}
-.pip.on.r-primordial {
-  --rk: #ffcf5c;
 }
 .pip.on[class*='r-'] {
   fill: var(--rk, var(--dim));

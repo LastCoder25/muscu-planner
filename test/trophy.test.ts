@@ -12,9 +12,8 @@ import {
   rankRollMult,
   TROPHY_K,
   TROPHY_SLOT,
-  TROPHY_STAR,
-  trophyStar,
-  trophyStarOdds,
+  STAR_JET,
+  jetStar,
   gradeLabel,
   prestigeRankIndex,
   RANK_ORDER,
@@ -67,7 +66,7 @@ describe('🏆 TROPHÉE — rang et étoiles (v0.894)', () => {
     const ranks = new Set<string>();
     for (let i = 0; i < n; i++) {
       const t = rollTrophy(rng, { mains: TROPHY_MAINS.push, title: 'x', level, luck });
-      stars[trophyStar(t.roll) - 1]!++;
+      stars[jetStar(t.roll) - 1]!++;
       ranks.add(t.rarity);
     }
     return { stars: stars.map((s) => s / n), ranks };
@@ -83,24 +82,18 @@ describe('🏆 TROPHÉE — rang et étoiles (v0.894)', () => {
   it('à ★5 de son rang : ★5 six fois sur dix, jamais au-dessus de son étoile', () => {
     for (const L of [10, 30, 60]) {
       const { stars } = draw(L);
-      expect(stars[4]!).toBeCloseTo(TROPHY_STAR.top, 1);
+      expect(stars[4]!).toBeCloseTo(STAR_JET.top, 1);
       expect(stars[3]!).toBeGreaterThan(stars[2]!); // plus proche de son étoile = plus fréquent
     }
     // Joueur ★3 (niveau 25) : jamais ★4 ni ★5.
     const s3 = draw(25).stars;
     expect(s3[3]! + s3[4]!).toBe(0);
-    expect(s3[2]!).toBeCloseTo(TROPHY_STAR.top, 1);
-  });
-  it('les chances d’étoiles somment à 1 et suivent l’étoile du joueur', () => {
-    for (let L = 1; L <= 80; L++) {
-      const o = trophyStarOdds(L);
-      expect(o.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
-    }
+    expect(s3[2]!).toBeCloseTo(STAR_JET.top, 1);
   });
   it('gradeLabel l’écrit en rang et étoiles', () => {
     const t = rollTrophy(mulberry32(3), { mains: TROPHY_MAINS.push, title: 'x', level: 30 });
     expect(gradeLabel(t)).toMatch(/★/);
-    expect(gradeLabel({ ...t, slot: 'weapon' })).not.toMatch(/★/);
+    expect(gradeLabel({ ...t, slot: 'familiar' })).not.toMatch(/★/);
   });
 });
 
@@ -328,7 +321,7 @@ describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
           'u',
           40,
         ).trophy;
-        if (trophyStar(t.roll) === 5) n++;
+        if (jetStar(t.roll) === 5) n++;
       }
       return n / 400;
     };

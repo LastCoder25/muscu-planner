@@ -104,3 +104,14 @@ body {
     margin: 0;
   }
 }
+
+// ── Couleur de RANG des objets : --rk posée par les classes r-* / p-* (v0.895) ──
+// UNE seule déclaration pour toute l'app ; les couleurs viennent de `RANK_COLOR`
+// (src/lib/items.ts, dérivée des rangs du héros) et sont posées sur :root au démarrage
+// (`rankCssVars`, boot theme). Plus aucune couleur recopiée à la main dans les composants.
+@each $r in commun, inhabituel, magique, rare, epique, legendaire, mythique, primordial {
+  .r-#{$r},
+  .p-#{$r} {
+    --rk: var(--rank-#{$r});
+  }
+}

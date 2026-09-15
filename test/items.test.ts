@@ -25,10 +25,15 @@ import {
   rollTier,
   ownRankChance,
   OWN_RANK,
+  dropsPerLevel,
+  rankCssVars,
+  STAR_JET,
+  jetStar,
+  starOdds,
+  RANK_COLOR,
   dropBand,
   dropBandLabel,
   dropPeakRank,
-  rankCeilingForLevel,
   prestigeRankIndex,
   RANK_ORDER,
   RARITY_MULT,
@@ -164,11 +169,17 @@ describe('rollTier : le rang des objets s’ouvre sur la durée du rang (v0.894)
   it('au rang Bronze (rien en dessous), tout tombe au rang du joueur', () => {
     for (const lv of [1, 5, 10]) expect(modeOf(lv, 0.4)[0]).toBe(3000);
   });
-  it('⚠️ le rang du joueur est RARE et monte avec la position dans le rang (0 au premier niveau)', () => {
+  it('⚠️ le rang du joueur est RARE, jamais nul dès le premier niveau, et monte avec la position', () => {
     for (const r of [1, 3, 5, 7]) {
       const start = rankStartLevel(r);
-      expect(ownRankChance(start), `rang ${r} début`).toBe(0);
-      let prev = 0;
+      // « Il y a une possibilité de drop du nouveau rang même au début, même si c'est bas. »
+      expect(ownRankChance(start), `rang ${r} début`).toBeGreaterThan(0);
+      expect(ownRankChance(start), `rang ${r} début`).toBeLessThan(0.02);
+      expect(
+        modeOf(start, 0.4)[r],
+        `rang ${r} : du nouveau rang dès le 1er niveau`,
+      ).toBeGreaterThan(0);
+      let prev = ownRankChance(start);
       for (let pos = 1; pos < 10; pos++) {
         const p = ownRankChance(start + pos);
         expect(p, `rang ${r} pos ${pos}`).toBeGreaterThan(prev);
@@ -188,17 +199,63 @@ describe('rollTier : le rang des objets s’ouvre sur la durée du rang (v0.894)
       let s = 0;
       for (let pos = 0; pos < 5; pos++) {
         const L = rankStartLevel(r) + pos;
-        const drops =
-          (levelCost(L) * OWN_RANK.energyExtra * OWN_RANK.dropsPerClear) / OWN_RANK.energyPerClear;
-        s += ownRankChance(L) * drops;
+        s += ownRankChance(L) * dropsPerLevel(L);
       }
       return s;
     };
+    // Le volume suit le coût du niveau (l'énergie EST l'XP de sport).
+    expect(dropsPerLevel(60) / dropsPerLevel(30)).toBeCloseTo(levelCost(60) / levelCost(30), 9);
     for (const r of [2, 4, 6, 7]) expect(expected(r)).toBeCloseTo(expected(1), 6);
-    expect(expected(3)).toBeCloseTo(10 * OWN_RANK.perPos, 6);
+    expect(expected(3)).toBeCloseTo(5 * OWN_RANK.atStart + 10 * OWN_RANK.perPos, 6);
   });
   it('au-delà des 8 raretés (niveaux 81+), plus de gate', () => {
     expect(ownRankChance(85)).toBe(1);
+  });
+  it('⚠️ un objet de TON rang tire ses ÉTOILES selon la tienne ; un rang inférieur garde le jet d’avant', () => {
+    const stars = (level: number, luck: number) => {
+      const own = [0, 0, 0, 0, 0];
+      const below: number[] = [];
+      const r = prestigeRankIndex(level);
+      for (let s = 1; s <= 20000; s++) {
+        const t = rollTier(mulberry32(s * 13 + level), level, luck, 0, level);
+        if (RARITY_RANK[t.rank] === r) own[jetStar(t.roll) - 1]!++;
+        else below.push(t.roll);
+      }
+      const n = own.reduce((a, b) => a + b, 0);
+      return { own: own.map((x) => x / Math.max(1, n)), n, below };
+    };
+    // Début de rang (★1) : du nouveau rang possible, mais tout en ★1.
+    const start = stars(rankStartLevel(3), 0.4);
+    expect(start.n).toBeGreaterThan(0);
+    expect(start.own[0]).toBe(1);
+    // Rang ★5 : ★5 majoritaire (60 % + chance), jamais au-dessus (trivial), ★4 > ★3.
+    const end = stars(rankStartLevel(3) + 9, 0);
+    expect(end.own[4]!).toBeCloseTo(STAR_JET.top, 1);
+    expect(end.own[3]!).toBeGreaterThan(end.own[2]!);
+    // Rang ★3 : jamais ★4 ni ★5.
+    const mid = stars(rankStartLevel(3) + 5, 0.4);
+    expect(mid.own[3]! + mid.own[4]!).toBe(0);
+    // Le rang d'en dessous garde des jets hauts possibles (rang déjà bouclé).
+    expect(Math.max(...start.below)).toBeGreaterThan(0.9);
+    // ★1 du nouveau rang ≥ ★5 de l'ancien : les tranches se suivent (la motivation de monter).
+    expect(rankRollMult('rare', 0)).toBeCloseTo(rankRollMult('magique', 1), 6);
+  });
+  it('⚠️ un donjon lâche son butin au moins à son niveau conseillé : le nouveau rang y est possible dès le 1er niveau', async () => {
+    const { DUNGEONS } = await import('@/data/dungeons');
+    for (const d of DUNGEONS) expect(d.dropLevel, d.id).toBeGreaterThanOrEqual(d.recoLevel);
+    // Au niveau 31, le donjon de reco 31 peut donner le rang du joueur (il ne le pouvait pas).
+    const d31 = DUNGEONS.find((d) => d.recoLevel === 31)!;
+    expect(prestigeRankIndex(d31.dropLevel)).toBe(prestigeRankIndex(31));
+  });
+  it('au rang Bronze aussi, les étoiles suivent celles du joueur', () => {
+    const t = rollTier(mulberry32(5), 1, 1, 0, 1);
+    expect(jetStar(t.roll)).toBe(1);
+  });
+  it('les chances d’étoiles somment à 1, ★1 → 100 % de ★1, 81+ → pas de borne', () => {
+    for (let L = 1; L <= 100; L++)
+      expect(starOdds(L, 0.5).reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
+    expect(starOdds(21)[0]).toBe(1);
+    expect(starOdds(85)[4]!).toBeCloseTo(STAR_JET.top, 9);
   });
   it('⚠️ JAMAIS au-dessus du rang du joueur, même avec toute la chance (v0.876)', () => {
     for (const lv of [5, 15, 35, 55, 75]) {
@@ -2165,6 +2222,33 @@ describe('🏅 FAMILIERS ET TALENTS SE LISENT EN RANG (v0.833)', () => {
   it('chaque rareté a son rang, sans collision', () => {
     const names = RANK_ORDER.map((r) => rarityRank(r).name);
     expect(new Set(names).size).toBe(RANK_ORDER.length);
+  });
+  it('⚠️ un objet prend la COULEUR de son rang, pas celle de l’ancienne rareté (v0.895)', async () => {
+    for (const r of RANK_ORDER) expect(RANK_COLOR[r], r).toBe(rarityRank(r).color);
+    expect(new Set(Object.values(RANK_COLOR)).size).toBe(RANK_ORDER.length);
+    // Les classes r-*/p-* lisent --rank-<rareté>, posées au démarrage depuis RANK_COLOR : une
+    // seule source. Le bloc global d'app.scss doit couvrir TOUTES les raretés.
+    const vars = rankCssVars();
+    for (const r of RANK_ORDER) expect(vars[`--rank-${r}`], r).toBe(RANK_COLOR[r]);
+    const fs = await import('node:fs');
+    const scss = fs.readFileSync('src/css/app.scss', 'utf8');
+    const each = scss
+      .match(/@each \$r in ([a-z, ]+)\{/)?.[1]
+      ?.split(',')
+      .map((x) => x.trim());
+    expect(each).toEqual([...RANK_ORDER]);
+  });
+  it('un objet se lit en rang ET étoiles ; un familier ou un objet sans jet, en rang seul', () => {
+    expect(gradeLabel({ rarity: 'rare', slot: 'weapon', roll: 0.5 })).toBe(
+      `${rarityRank('rare').name} ★★★☆☆`,
+    );
+    expect(gradeLabel({ rarity: 'rare', slot: 'familiar', roll: 0.5 })).toBe(
+      rarityRank('rare').name,
+    );
+    expect(gradeLabel({ rarity: 'rare', slot: 'weapon' })).toBe(rarityRank('rare').name);
+    expect(jetStar(0)).toBe(1);
+    expect(jetStar(0.2)).toBe(2);
+    expect(jetStar(1)).toBe(5);
   });
   it('tout ce qui se porte se lit en rang, objets compris (v0.874)', () => {
     for (const r of RANK_ORDER) {

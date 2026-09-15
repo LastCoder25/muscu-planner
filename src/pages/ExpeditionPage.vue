@@ -2098,31 +2098,7 @@ function returnToLobby() {
 .fl-cmp-delta.down {
   color: var(--d4);
 }
-/* Raretés (8) : couleur portée par --rk. */
-.r-commun {
-  --rk: #9a8f7e;
-}
-.r-inhabituel {
-  --rk: #c7ccd6;
-}
-.r-magique {
-  --rk: #4ea3ff;
-}
-.r-rare {
-  --rk: #ffd23f;
-}
-.r-epique {
-  --rk: #b07cff;
-}
-.r-legendaire {
-  --rk: #ff9a3f;
-}
-.r-mythique {
-  --rk: #ff5b5b;
-}
-.r-primordial {
-  --rk: #ffcf5c;
-}
+/* Raretés (8) : couleur portée par --rk (classes r-* globales, app.scss). */
 .fx-loot-card[class*='r-'] {
   border-color: var(--rk, var(--line));
 }
