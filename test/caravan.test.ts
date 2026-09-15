@@ -33,6 +33,10 @@ import {
   resolveCaravan,
   roadCompanionEffects,
   roadFoe,
+  roadPairs,
+  roadUnits,
+  roadTroop,
+  unitEffects,
   startCaravan,
   caravanReport,
   claimedCaravans,
@@ -40,6 +44,7 @@ import {
   refAdvGear,
   type Caravan,
 } from '@/lib/caravan';
+import { troopOf } from '@/lib/skirmish';
 import {
   advGearEffects,
   advGearRoles,
@@ -62,6 +67,7 @@ import { simulateCombat } from '@/lib/combat';
 import {
   famXpForLevel,
   aggregateEffects,
+  mergeEffects,
   FAMILIAR_SLOT,
   RANK_ORDER,
   RARITY_RANK,
@@ -1730,5 +1736,130 @@ describe('sources d’équipement : embuscades repoussées', () => {
     expect(o.events.map((e) => e.won)).toEqual([false, true, undefined, undefined]);
     // …et une pièce a bien été tirée : le test n’est pas trivialement vrai.
     expect(o.advGear.length).toBeGreaterThan(0);
+  });
+});
+
+describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', () => {
+  const fam = (id: string, value = 20): Item =>
+    ({
+      id,
+      slot: 'familiar',
+      name: id,
+      emoji: '🐺',
+      rarity: 'commun',
+      level: 1,
+      baseLevel: 1,
+      effect: { type: 'damage_pct', value },
+    }) as Item;
+  const guerrier = (id: string, o: Partial<Adventurer> = {}): Adventurer => ({
+    ...refAdventurer(20, 0),
+    id,
+    name: id,
+    ...o,
+  });
+  const road = (
+    familiars: Item[] = [],
+    talents: TalentInstance[] = [],
+    advGear: AdvGear[] = [],
+  ) => ({
+    familiars,
+    talents,
+    advGear,
+  });
+
+  it('unitEffects = compagnon + talent + pièces, UNE seule définition', () => {
+    const f = fam('f1');
+    const t = { id: 't1', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
+    const g = refAdvGear(20, 1);
+    expect(unitEffects({ familiar: f, talent: t, gear: g })).toEqual(
+      mergeEffects(companionEffects([f]), advTalentEffects([t]), advGearEffects(g)),
+    );
+    expect(unitEffects({ familiar: f }, 0.5).damagePct).toBeCloseTo(
+      unitEffects({ familiar: f }).damagePct / 2,
+      9,
+    );
+  });
+
+  it('⚠️ chaque loup n’épaule QUE son homme : quatre loups ne se diluent ni ne s’empilent', () => {
+    const seul = roadUnits([guerrier('a0', { familiarId: 'f0' })], road([fam('f0')]))[0]!;
+    const quatre = roadUnits(
+      [0, 1, 2, 3].map((i) => guerrier(`a${i}`, { familiarId: `f${i}` })),
+      road([0, 1, 2, 3].map((i) => fam(`f${i}`))),
+    );
+    for (const x of quatre) expect(x.combatant.damage).toBe(seul.combatant.damage);
+    const nu = roadUnits([guerrier('a0')], road())[0]!;
+    expect(seul.combatant.damage).toBeGreaterThan(nu.combatant.damage);
+    // Un loup sur quatre : les trois autres restent nus.
+    const un = roadUnits(
+      [guerrier('a0', { familiarId: 'f0' }), guerrier('a1'), guerrier('a2'), guerrier('a3')],
+      road([fam('f0')]),
+    );
+    expect(un[0]!.combatant.damage).toBe(seul.combatant.damage);
+    for (const x of un.slice(1)) expect(x.combatant.damage).toBe(nu.combatant.damage);
+  });
+
+  it('l’unité EST le combattant d’un aventurier seul avec SA paire', () => {
+    const team = [guerrier('a0', { familiarId: 'f0' }), guerrier('a1')];
+    const r = road([fam('f0')]);
+    const pairs = roadPairs(team, r);
+    const units = roadUnits(team, r);
+    team.forEach((a, i) => {
+      expect(units[i]!.id).toBe(a.id);
+      expect(units[i]!.level).toBe(a.level);
+      expect(units[i]!.combatant).toEqual(
+        escortCombatant([a], a.name, unitEffects(pairs.get(a.id))),
+      );
+    });
+  });
+
+  it('⚠️ roadPairs garde les exclusions : héros, doublon, fantôme', () => {
+    const r = { ...road([fam('f1')]), heroFamiliarId: 'f1' };
+    expect(roadPairs([guerrier('a', { familiarId: 'f1' })], r).get('a')).toBeUndefined();
+    const deux = roadPairs(
+      [guerrier('a', { familiarId: 'f1' }), guerrier('b', { familiarId: 'f1' })],
+      road([fam('f1')]),
+    );
+    expect(deux.get('a')?.familiar?.id).toBe('f1');
+    expect(deux.get('b')).toBeUndefined();
+    expect(roadPairs([guerrier('a', { familiarId: 'parti' })], road([fam('f1')])).size).toBe(0);
+  });
+
+  it('⚠️ roadTroop : DANGER ABSOLU — le lieu seul, calibré sur la référence équipée', () => {
+    const p = poi({ level: 30 });
+    expect(roadTroop(p)).toEqual(roadTroop(p));
+    expect(roadTroop(p)).toHaveLength(CARAVAN.troopCalm);
+    expect(roadTroop(poi({ level: 30, perilous: true }))).toHaveLength(CARAVAN.troopPerilous);
+    const ref = roadUnits(
+      Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
+        ...refAdventurer(30, i),
+        familiarId: `refFam${i % 3}`,
+        gear: {
+          weapon: `refGear${i}weapon`,
+          armor: `refGear${i}armor`,
+          accessory: `refGear${i}accessory`,
+        },
+      })),
+      { familiars: refCompanions(30), talents: [], advGear: refAdvGear(30) },
+    );
+    expect(roadTroop(p)[0]!.combatant).toEqual(
+      troopOf(
+        ref.map((x) => x.combatant),
+        {
+          count: CARAVAN.troopCalm,
+          level: 30,
+          pvTurns: CARAVAN.foePvTurns,
+          dmgPctPv: CARAVAN.foeDmgPctPv,
+          mult: 1,
+          name: 'Bandit de grand chemin',
+          emoji: '🗡️',
+        },
+      )[0]!.combatant,
+    );
+    expect(roadTroop(poi({ level: 60 }))[0]!.combatant.pv).toBeGreaterThan(
+      roadTroop(poi({ level: 20 }))[0]!.combatant.pv,
+    );
+    const calme = roadTroop(poi({ level: 30 }))[0]!.combatant;
+    const peril = roadTroop(poi({ level: 30, perilous: true }))[0]!.combatant;
+    expect(peril.damage).toBeGreaterThanOrEqual(calme.damage);
   });
 });

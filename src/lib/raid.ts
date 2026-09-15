@@ -31,22 +31,20 @@ import {
   RANK_ORDER,
   rarityRank,
   prestigeRankIndex,
-  mergeEffects,
   type AggregatedEffects,
   type Item,
 } from './items';
 import {
   escortCombatant,
-  companionEffects,
-  advTalentEffects,
+  unitEffects,
   canAdvTalent,
   canAdvFamiliar,
+  type CompanionSet,
 } from './caravan';
 import { type TalentInstance } from './talents';
 import {
   ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
-  advGearEffects,
   canWearAdvGear,
   rollAdvGearDrop,
   wornGear,
@@ -2191,11 +2189,8 @@ export function siegeXp(adv: Adventurer, report: RaidReport): number {
  *  ⚠️ L’ORDRE EST CELUI DU VIVIER, et c’est ce qui rend la coupe aux places STABLE : si
  *  le Chenil n’en héberge que trois, ce sont les trois premiers aventuriers qui gardent
  *  leur compagnon, pas un trio qui change à chaque rendu. */
-export function companionPairs(
-  advs: Adventurer[],
-  ctx?: CompanionCtx,
-): Map<string, { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] }> {
-  const out = new Map<string, { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] }>();
+export function companionPairs(advs: Adventurer[], ctx?: CompanionCtx): Map<string, CompanionSet> {
+  const out = new Map<string, CompanionSet>();
   if (!ctx) return out;
   const fams = new Map(ctx.familiars.map((f) => [f.id, f]));
   const tals = new Map(ctx.talents.map((t) => [t.id, t]));
@@ -2206,7 +2201,7 @@ export function companionPairs(
   const prisT = new Set<string>();
   let places = companionSlots(ctx.kennelLevel);
   for (const a of advs) {
-    const entry: { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] } = {};
+    const entry: CompanionSet = {};
     const g = worn.get(a.id);
     if (g) entry.gear = g;
     const fid = a.familiarId;
@@ -2366,26 +2361,12 @@ export interface CompanionCtx {
  *  avec la garnison : elle existait pour donner un porteur au bonus du bâtiment quand
  *  le vivier était vide. Un compagnon étant maintenant attaché à un homme, un joueur
  *  sans Guilde n’a ni l’un ni l’autre — il lui reste le mur et les tourelles. */
-/** Ce que SA paire (compagnon + talent) apporte à un aventurier au rempart.
- *  ⚠️ UNE seule définition, lue par la bataille ET par la puissance affichée : deux
- *  copies finiraient par annoncer une valeur que le combat n’applique pas. */
-function pairEffects(
-  p: { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] } | undefined,
-  ctx?: CompanionCtx,
-): AggregatedEffects {
-  return mergeEffects(
-    // La formule du HÉROS (v0.805) : le Chenil ne plafonne plus le dressage — il garde
-    // le NOMBRE de compagnons (vivant jusqu’au 100) et leur RANG.
-    companionEffects(
-      p?.familiar ? [p.familiar] : [],
-      // ⚠️ FATIGUÉ = DIMINUÉ DE MOITIÉ, jamais perdu ni blessé — sinon personne
-      // n’engagerait le familier qu’il a élevé pendant des semaines (règle v0.663).
-      p?.familiar && ctx && isFatigued(p.familiar, ctx.now) ? DAMAGED_EFFICIENCY : 1,
-    ),
-    advTalentEffects(p?.talent ? [p.talent] : []),
-    // 🗡️ Ce que SES pièces d’équipement apportent — même magnitude qu’un objet du héros
-    // (valeur × niveau d’objet), aucune stat nouvelle.
-    advGearEffects(p?.gear ?? []),
+function pairEffects(p: CompanionSet | undefined, ctx?: CompanionCtx): AggregatedEffects {
+  // ⚠️ FATIGUÉ = DIMINUÉ DE MOITIÉ, jamais perdu ni blessé (règle v0.663). La formule
+  // elle-même vit dans `unitEffects`, partagée avec la route.
+  return unitEffects(
+    p,
+    p?.familiar && ctx && isFatigued(p.familiar, ctx.now) ? DAMAGED_EFFICIENCY : 1,
   );
 }
 

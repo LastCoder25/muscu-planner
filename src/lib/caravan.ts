@@ -38,9 +38,10 @@ import {
 } from './combat';
 // ⚠️ `trialXpBase` : SOURCE UNIQUE de la base d'XP d'une épreuve (`6 + niveau × 1,6`),
 // partagée avec `simulateSkirmish`/`skirmishXpShares` — un convoi et un combat de groupe
-// évaluent le même « niveau du lieu » de la même façon. Aucun cycle : `skirmish.ts`
-// n'importe que `combat.ts`.
-import { trialXpBase } from './skirmish';
+// évaluent le même « niveau du lieu » de la même façon. `troopOf`/`SkirmishUnit` : le
+// MOTEUR DE GROUPE lui-même, lu par `roadTroop`/`roadUnits` (v0.859). Aucun cycle :
+// `skirmish.ts` n'importe que `combat.ts`.
+import { trialXpBase, troopOf, type SkirmishUnit } from './skirmish';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
 // de valeur dans l'autre sens créerait un cycle. Le projet applique déjà cette règle
 // entre `data/familiars` et `items`.
@@ -118,6 +119,10 @@ export const CARAVAN = {
   foeDmgPctPv: 0.275,
   /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
   perilousMult: 1.35,
+  /** Taille de la troupe d'une embuscade — calme / périlleuse (moteur de groupe, v0.859).
+   *  ⚠️ Recalibrées en Task 4, mesures à l'appui. */
+  troopCalm: 3,
+  troopPerilous: 3,
   /** Ce qu'apporte une SIGNATURE de classe (strates ≥ 3), en %. */
   signaturePct: 12,
   /** Un rôle 🧭 raccourcit le trajet, un rôle 🐫 grossit la cargaison — par aventurier. */
@@ -342,18 +347,8 @@ export function companionsOf(
   owned: Item[],
   heroFamiliarId?: string | null,
 ): Item[] {
-  const byId = new Map(owned.map((i) => [i.id, i]));
-  const taken = new Set<string>();
-  const out: Item[] = [];
-  for (const a of advs) {
-    const id = a.familiarId;
-    if (!id || id === heroFamiliarId || taken.has(id)) continue;
-    const f = byId.get(id);
-    if (!f) continue;
-    taken.add(id);
-    out.push(f);
-  }
-  return out;
+  const pairs = roadPairs(advs, { familiars: owned, talents: [], advGear: [], heroFamiliarId });
+  return [...pairs.values()].flatMap((p) => (p.familiar ? [p.familiar] : []));
 }
 
 /**
@@ -455,20 +450,8 @@ export function advTalentsOf(
   owned: TalentInstance[],
   heroTalentIds: readonly string[] = [],
 ): TalentInstance[] {
-  const byId = new Map(owned.map((t) => [t.id, t]));
-  const hero = new Set(heroTalentIds);
-  const taken = new Set<string>();
-  const out: TalentInstance[] = [];
-  for (const a of advs) {
-    const id = a.talentId;
-    if (!id || hero.has(id) || taken.has(id)) continue;
-    const t = byId.get(id);
-    // ⚠️ Au-dessus de la rareté de SA classe : il ne le porte pas (cf. `canAdvTalent`).
-    if (!t || !canAdvTalent(a, t)) continue;
-    taken.add(id);
-    out.push(t);
-  }
-  return out;
+  const pairs = roadPairs(advs, { familiars: [], talents: owned, advGear: [], heroTalentIds });
+  return [...pairs.values()].flatMap((p) => (p.talent ? [p.talent] : []));
 }
 
 /** Ce que ces talents apportent, BRIDÉ.
@@ -478,6 +461,27 @@ export function advTalentsOf(
 export function advTalentEffects(talents: TalentInstance[], k = ADV_TALENT_K): AggregatedEffects {
   if (!talents.length) return emptyEffects();
   return scaleEffects(effectsOfTalents(talents.map((t) => ({ ...t, equipped: true }))), k);
+}
+
+/** Ce qu'UN aventurier emmène au combat — la forme partagée par la route et le rempart. */
+export interface CompanionSet {
+  familiar?: Item;
+  talent?: TalentInstance;
+  gear?: AdvGear[];
+}
+
+/**
+ * ⚔️ CE QU'UN AVENTURIER TIRE DE SA PAIRE ET DE SES PIÈCES — UNE seule définition, lue par
+ * la route (`roadUnits`) ET par le rempart (`pairEffects`, `raid.ts`). Deux copies
+ * finiraient par annoncer une valeur que le combat n'applique pas.
+ * `companionMult` : la FATIGUE au rempart (un état, pas une formule) ; 1 partout ailleurs.
+ */
+export function unitEffects(p: CompanionSet | undefined, companionMult = 1): AggregatedEffects {
+  return mergeEffects(
+    companionEffects(p?.familiar ? [p.familiar] : [], companionMult),
+    advTalentEffects(p?.talent ? [p.talent] : []),
+    advGearEffects(p?.gear ?? []),
+  );
 }
 
 /** Combien de strates un aventurier de ce niveau a pu franchir. */
@@ -936,6 +940,89 @@ export interface RoadCompanions {
   advGear: AdvGear[];
   heroFamiliarId?: string | null;
   heroTalentIds?: readonly string[];
+}
+
+/**
+ * 🐾 QUI PORTE QUOI SUR LA ROUTE, par aventurier. Les exclusions de toujours : ce que le
+ * HÉROS porte n'est pas disponible, un même familier ou talent confié deux fois ne compte
+ * qu'une (le premier du vivier le garde), un id fantôme est ignoré, un talent trop rare
+ * pour la classe ne se porte pas, une pièce ne se porte que selon `wornGear`.
+ * ⚠️ Pas de Chenil ni de fatigue ici (cf. `companionPairs` au rempart) — comportement
+ * inchangé de la route.
+ */
+export function roadPairs(escort: Adventurer[], road: RoadCompanions): Map<string, CompanionSet> {
+  const fams = new Map(road.familiars.map((f) => [f.id, f]));
+  const tals = new Map(road.talents.map((t) => [t.id, t]));
+  const heroTal = new Set(road.heroTalentIds ?? []);
+  const worn = wornGear(escort, road.advGear);
+  const prisF = new Set<string>();
+  const prisT = new Set<string>();
+  const out = new Map<string, CompanionSet>();
+  for (const a of escort) {
+    const entry: CompanionSet = {};
+    const fid = a.familiarId;
+    if (fid && fid !== road.heroFamiliarId && !prisF.has(fid)) {
+      const f = fams.get(fid);
+      if (f) {
+        prisF.add(fid);
+        entry.familiar = f;
+      }
+    }
+    const tid = a.talentId;
+    if (tid && !heroTal.has(tid) && !prisT.has(tid)) {
+      const t = tals.get(tid);
+      if (t && canAdvTalent(a, t)) {
+        prisT.add(tid);
+        entry.talent = t;
+      }
+    }
+    const g = worn.get(a.id);
+    if (g?.length) entry.gear = g;
+    if (entry.familiar || entry.talent || entry.gear) out.set(a.id, entry);
+  }
+  return out;
+}
+
+/** ⚔️ L'escorte en UNITÉS DISTINCTES : chaque aventurier avec SA paire et SES pièces.
+ *  ⚠️ Plus de division par l'effectif : elle n'existait que parce que l'escorte était FONDUE
+ *  en un seul combattant. Ici chaque loup n'épaule que son homme. */
+export function roadUnits(escort: Adventurer[], road: RoadCompanions): SkirmishUnit[] {
+  const pairs = roadPairs(escort, road);
+  return escort.map((a) => ({
+    id: a.id,
+    name: a.name,
+    emoji: advTitle(a)?.emoji ?? '⚔️',
+    level: a.level,
+    combatant: escortCombatant([a], a.name, unitEffects(pairs.get(a.id))),
+  }));
+}
+
+/**
+ * 🗡️ LES BANDITS DE LA ROUTE — une TROUPE à danger ABSOLU.
+ *
+ * ⚠️ Dimensionnée sur l'escorte de RÉFÉRENCE (`CARAVAN.refEscort` aventuriers au niveau du
+ * lieu, accompagnés et équipés), jamais sur l'escorte envoyée : sinon une escorte faible
+ * affronterait des bandits faibles et « combien j'en envoie » ne voudrait plus rien dire.
+ */
+export function roadTroop(poi: Poi): SkirmishUnit[] {
+  const ref = roadUnits(refEscortOf(poi.level), {
+    familiars: refCompanions(poi.level),
+    talents: [],
+    advGear: refAdvGear(poi.level),
+  });
+  const perilous = !!poi.perilous;
+  return troopOf(
+    ref.map((x) => x.combatant),
+    {
+      count: perilous ? CARAVAN.troopPerilous : CARAVAN.troopCalm,
+      level: poi.level,
+      pvTurns: CARAVAN.foePvTurns,
+      dmgPctPv: CARAVAN.foeDmgPctPv,
+      mult: perilous ? CARAVAN.perilousMult : 1,
+      name: perilous ? 'Pillard de la passe' : 'Bandit de grand chemin',
+      emoji: '🗡️',
+    },
+  );
 }
 
 /**
