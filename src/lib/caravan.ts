@@ -1065,8 +1065,11 @@ export function roadUnits(escort: Adventurer[], pairs: Map<string, CompanionSet>
 
 /** 🧭 Les unités de RÉFÉRENCE d'un niveau : `CARAVAN.refEscort` aventuriers, un par
  *  orientation, accompagnés (`refCompanions`) et équipés (`refAdvGear`). ⚠️ SOURCE UNIQUE
- *  du mètre-étalon : la route ET les camps s'y calibrent — deux copies finiraient par
- *  mesurer deux vivier différents. */
+ *  du mètre-étalon des CAMPS, PAS DE LA ROUTE : `roadFoe` garde SA propre référence
+ *  (`escortCombatant` + une attribution posée PAR CONSTRUCTION, cf. son commentaire),
+ *  volontairement non branchée ici — passer par `roadPairs` y appliquerait `canAdvFamiliar`,
+ *  qui retire le familier du 3ᵉ membre aux niveaux 31-40 et déplacerait la calibration
+ *  MESURÉE des bandes d'embuscade de route. */
 export function refEscortUnits(level: number): SkirmishUnit[] {
   const escort = refEscortOf(level);
   const road: RoadCompanions = {

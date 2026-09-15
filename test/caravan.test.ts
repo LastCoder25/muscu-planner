@@ -2088,6 +2088,7 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
 describe('🧭 refEscortUnits — la référence partagée par la route et les camps', () => {
   it('est l’escorte de référence accompagnée et équipée, unité par unité', () => {
     const L = 30;
+    // ⚠️ `i % 3` suit `REF_SPECIES.length` (constante privée de caravan.ts, non importable ici).
     const ref = Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
       ...refAdventurer(L, i),
       familiarId: `refFam${i % 3}`,
