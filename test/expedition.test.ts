@@ -24,6 +24,7 @@ import {
   CAMP_TYPES,
   campSpecOf,
   buildMessage,
+  depositMessages,
   keepMessages,
   type ActiveExpedition,
   type ExpeditionMessage,
@@ -213,7 +214,17 @@ describe('expedition — résolution', () => {
     expect(o.energy).toBeLessThanOrEqual(EXPE.mineEnergyMax);
   });
   it('camp/repaire : PAS d’énergie (mines uniquement)', () => {
-    expect(resolveOutcome(strong, lair, 3).energy).toBe(0);
+    // ⚠️ Un camp ne passe plus par `resolveOutcome` (cf. plus bas) : son butin héros est
+    // `campHeroOutcome`, testé DIRECTEMENT — gagné comme perdu, camp comme repaire.
+    for (const p of [lair, { ...lair, id: 'c', type: 'camp' as const }])
+      for (const win of [true, false])
+        expect(campHeroOutcome(mulberry32(3), p, win, 20).energy).toBe(0);
+  });
+  it('⚠️ un CAMP ne se résout plus par resolveOutcome : son seul chemin est resolveCamp', () => {
+    // `expeSend` refuse les camps, et une expédition d'avant porte son issue tirée au départ :
+    // l'ancienne branche (gardien `poiCombatant`) n'avait plus aucun chemin — retirée.
+    expect(() => resolveOutcome(strong, lair, 3)).toThrow();
+    expect(() => startExpedition(strong, { ...lair, type: 'camp' }, 0, 3)).toThrow();
   });
   it('haul scalé au TEMPS de trajet : un POI plus loin rend plus (même niveau)', () => {
     const near: Poi = { ...mine, distNorm: 0.1 };
@@ -222,14 +233,16 @@ describe('expedition — résolution', () => {
       resolveOutcome(strong, near, 2).gold,
     );
   });
-  it('repaire gagné (héros fort) : pièce de set du bon set', () => {
-    const o = resolveOutcome(strong, lair, 3);
+  it('repaire gagné : pièce de set du bon set, pierres, or ≥ coût (campHeroOutcome)', () => {
+    const o = campHeroOutcome(mulberry32(3), lair, true, 20);
     expect(o.win).toBe(true);
     expect(o.item?.setId).toBe('dragon');
+    expect(o.summonStones).toBeGreaterThan(0);
+    expect(o.gold).toBeGreaterThanOrEqual(goldCost('lair', lair.level));
   });
-  it('échec (héros faible vs repaire) : or rendu < coût, pas de prise, reconnaissance', () => {
+  it('échec (repaire perdu) : or rendu < coût, pas de prise, reconnaissance', () => {
     const hardLair: Poi = { ...lair, level: 25 };
-    const o = resolveOutcome(weak, hardLair, 4);
+    const o = campHeroOutcome(mulberry32(4), hardLair, false, 1);
     expect(o.win).toBe(false);
     expect(o.gold).toBeLessThan(goldCost('lair', 25)); // jamais un profit
     expect(o.item).toBeNull();
@@ -265,13 +278,13 @@ describe('expedition — résolution', () => {
     // retour — jamais l'aller, sinon le héros n'aurait pas atteint l'objectif et le
     // rapport déposé à `midAt` n'aurait aucun sens.
     for (const seed of [42, 7, 1234, 99, 5150]) {
-      const e = startExpedition(strong, lair, 1000, seed);
+      const e = startExpedition(strong, mine, 1000, seed);
       const aller = e.midAt - e.sentAt;
       const retour = e.returnAt - e.midAt;
       expect(aller).toBeGreaterThan(0);
       expect(retour).toBeLessThanOrEqual(aller + 1); // jamais RALENTI
       expect(Math.abs(retour - aller * e.outcome.returnMult)).toBeLessThanOrEqual(2);
-      expect(e.goldCost).toBe(goldCost('lair', lair.level));
+      expect(e.goldCost).toBe(goldCost('mine', mine.level));
       expect(e.outcome).toBeTruthy();
     }
   });
@@ -289,9 +302,11 @@ describe('expedition — butin par ennemi vaincu (arene / embuscade)', () => {
     spawnedAt: 0,
     expiresAt: 999 * H,
   };
+  // ⚠️ Un POI de RÉCOLTE : un camp ne passe plus par `resolveOutcome`, et les rencontres de
+  // trajet sont le même helper pour toutes les récoltes.
   const camp: Poi = {
     id: 'c2',
-    type: 'camp',
+    type: 'well',
     level: 8,
     x: 30,
     y: 30,
@@ -547,6 +562,44 @@ describe('📬 le rapport de groupe et la boîte', () => {
     expect(kept.map((m) => m.id)).toEqual(['m0', 'm1', 'm3']);
     expect(keepMessages(list, 10)).toEqual(list);
   });
+
+  describe('⚠️ depositMessages — le double encaissement (revue finale des camps)', () => {
+    it('un rapport DÉJÀ encaissé n’est jamais remplacé par sa version « à encaisser »', () => {
+      // Le défaut : `expeSettle` remplaçait le rapport par `buildMessage(...)` (claimed: false),
+      // et un butin encaissé entre le retour et ce tick redevenait encaissable.
+      const box = [base('r', true), base('x', false)];
+      const out = depositMessages(box, [base('r', false)], 20);
+      expect(out.find((m) => m.id === 'r')!.claimed).toBe(true);
+      expect(out.filter((m) => m.id === 'r')).toHaveLength(1);
+      // Rien de neuf : la MÊME référence — le store n'écrit pas à vide.
+      expect(out).toBe(box);
+    });
+    it('un encaissement PARTI (pas encore relu) reste encaissé, même si la boîte dit false', () => {
+      const box = [base('r', false), base('x', false)];
+      const out = depositMessages(box, [], 20, new Set(['r']));
+      expect(out.find((m) => m.id === 'r')).toMatchObject({ claimed: true, read: true });
+      expect(out.find((m) => m.id === 'x')!.claimed).toBe(false);
+      expect(out).not.toBe(box);
+      // Un message legacy (claimed absent = déjà crédité) n'est pas touché.
+      const legacy = [base('old')];
+      expect(depositMessages(legacy, [], 20, new Set(['old']))).toBe(legacy);
+    });
+    it('un nouveau rapport est ajouté UNE fois, devant ; doublons de `fresh` ignorés', () => {
+      const box = [base('a', true)];
+      const out = depositMessages(box, [base('n', false), base('n', false)], 20);
+      expect(out.map((m) => m.id)).toEqual(['n', 'a']);
+      const twice = depositMessages(out, [base('n', false)], 20);
+      expect(twice).toBe(out);
+      // Plusieurs nouveaux : le dernier déposé passe devant, comme `[msg, ...box]` enchaînés.
+      expect(depositMessages([], [base('p'), base('q')], 20).map((m) => m.id)).toEqual(['q', 'p']);
+    });
+    it('la boîte reste taillée par keepMessages — jamais un butin à récupérer jeté', () => {
+      const box = [base('lu1', true), base('lu2', true), base('attend', false)];
+      const out = depositMessages(box, [base('n', false)], 2);
+      expect(out.map((m) => m.id)).toEqual(['n', 'lu1', 'attend']);
+    });
+  });
+
   it('buildMessage recopie ce que le groupe a vécu', () => {
     const party = {
       hero: false,
@@ -556,7 +609,6 @@ describe('📬 le rapport de groupe et la boîte', () => {
       win: true,
       foes: 4,
       slain: 4,
-      foesDown: [],
       kills: { a: 4 },
       heroKills: 0,
       xp: { a: 30 },

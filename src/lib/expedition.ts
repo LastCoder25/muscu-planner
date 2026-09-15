@@ -100,8 +100,8 @@ export interface PartyResult {
   win: boolean;
   foes: number;
   slain: number;
-  foesDown: string[];
-  /** Abattus PAR aventurier. */
+  /** Abattus PAR aventurier. ⚠️ `foesDown` (la liste des corps) n'est plus stocké : seul
+   *  son compte (`slain`) servait. Les rapports d'avant le portent encore, sans effet. */
   kills: Record<string, number>;
   heroKills: number;
   /** XP par aventurier : socle de mission + part des abattus (× distance). */
@@ -249,6 +249,44 @@ export function isClaimable(m: ExpeditionMessage, now: number): boolean {
  *  qu'elle montrait, elle ne fait que sauver ce qu'elle aurait perdu. */
 export function keepMessages(list: ExpeditionMessage[], cap: number): ExpeditionMessage[] {
   return list.filter((m, i) => i < cap || m.claimed === false);
+}
+
+/**
+ * 📬 DÉPOSE des rapports dans la boîte COURANTE — sans jamais dégrader un encaissement ni
+ * doubler un message. SOURCE UNIQUE des écrivains de la boîte (`expeTick`, `expeSettle`,
+ * `settleParties`, encaissement, marquage « lu »).
+ *
+ * ⚠️ LE DOUBLE ENCAISSEMENT (revue finale des camps). `expeSettle` REMPLAÇAIT le rapport
+ * déjà déposé par `buildMessage(...)`, qui porte `claimed: false` : un butin encaissé entre le
+ * retour et ce tick redevenait encaissable — or, objets, XP de l'escorte, pièces d'aventurier.
+ * Trois règles ici :
+ * - un message dont l'id est DÉJÀ dans la boîte n'est JAMAIS remplacé (la boîte fait foi) ;
+ * - `claimedIds` : les encaissements PARTIS mais pas encore relus du serveur — ils restent
+ *   `claimed: true` même si une ligne relue entre-temps dit encore `false` ;
+ * - rien de neuf, rien de marqué → la MÊME référence (le store n'écrit pas à vide).
+ * Les nouveaux messages passent devant, taillés par `keepMessages` (jamais un butin jeté).
+ */
+export function depositMessages(
+  box: ExpeditionMessage[],
+  fresh: readonly ExpeditionMessage[],
+  cap: number,
+  claimedIds: ReadonlySet<string> = new Set(),
+): ExpeditionMessage[] {
+  let marked = false;
+  const base = box.map((m) => {
+    if (m.claimed !== false || !claimedIds.has(m.id)) return m;
+    marked = true;
+    return { ...m, claimed: true, read: true };
+  });
+  const seen = new Set(base.map((m) => m.id));
+  const added: ExpeditionMessage[] = [];
+  for (const m of fresh) {
+    if (seen.has(m.id)) continue;
+    seen.add(m.id);
+    added.unshift(m); // le dernier déposé passe devant, comme `[msg, ...box]`
+  }
+  if (!added.length) return marked ? base : box;
+  return keepMessages([...added, ...base], cap);
 }
 
 /** Ce qu'une expédition a rapporté, prêt à afficher. ⚠️ SOURCE UNIQUE des deux écrans
@@ -1197,15 +1235,13 @@ export function resolveOutcome(
     };
   }
 
-  // Mine = récolte (pas de combat) ; camp/repaire = combat auto seedé.
-  const win =
-    poi.type === 'mine'
-      ? true
-      : simulateCombat(hero, poiCombatant(poi.level, poi.type), { seed: seed + 7, goldOnWin: 0 })
-          .win;
-  const base =
-    poi.type === 'mine' ? mineOutcome(rng, poi) : campHeroOutcome(rng, poi, win, playerLevel);
-  if (!base.win) return base;
+  // ⚠️ Un CAMP ou un REPAIRE ne passe plus par ici : il s'attaque en GROUPE (`resolveCamp`,
+  // qui lit `campHeroOutcome`). `expeSend` le refuse, et une expédition héros d'avant les
+  // camps de faction porte son issue DÉJÀ tirée au départ (`startExpedition`) — rien ne la
+  // rejoue. L'ancienne branche (gardien `poiCombatant`) n'avait plus aucun chemin : retirée.
+  if (CAMP_TYPES.has(poi.type)) throw new Error('Un camp se résout par resolveCamp.');
+  // Mine = récolte (pas de combat) ; les rencontres de trajet lui rendent de la variance.
+  const base = mineOutcome(rng, poi);
   // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
   // maintenir deux fois la même règle.
   const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);

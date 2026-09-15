@@ -73,7 +73,7 @@ import {
 import {
   CAMP_TYPES,
   campSpecOf,
-  keepMessages,
+  depositMessages,
   isClaimable,
   createMap,
   advanceWorld,
@@ -159,7 +159,7 @@ import {
 import {
   canSendCaravan,
   caravanHurtMs,
-  caravanSlots,
+  convoySlotsFree,
   caravanFamiliarXp,
   canAdvTalent,
   canAdvFamiliar,
@@ -185,7 +185,8 @@ import {
   type AdvGearState,
 } from '@/lib/advGear';
 import {
-  canSendParty,
+  partySendBlocker,
+  PARTY_SEND_BLOCK_LABEL,
   partyHeroBlocker,
   PARTY_HERO_BLOCK_LABEL,
   normalizeParties,
@@ -264,6 +265,15 @@ export class PseudoTakenError extends Error {
 
 export const useCharacterStore = defineStore('character', () => {
   const row = ref<CharacterRow | null>(null);
+  /** 📬 Ids des rapports dont l'encaissement est PARTI (cf. `expeClaim`). ⚠️ `persist` n'est
+   *  pas optimiste : tant que la ligne n'est pas relue, `row.value` dit encore
+   *  `claimed: false`. Sans ce registre, un tick (ou un double toucher) relisait cet état et
+   *  rendait le butin encaissable une seconde fois. Tout écrivain de la boîte le passe à
+   *  `depositMessages`. Jamais vidé : un id encaissé l'est pour toujours. */
+  const claimedLocally = new Set<string>();
+  /** La boîte à écrire : la boîte COURANTE + `fresh`, sans doublon ni encaissement dégradé. */
+  const boxWith = (cur: CharacterRow, fresh: ExpeditionMessage[], cap: number) =>
+    depositMessages(cur.messages, fresh, cap, claimedLocally);
   const loaded = ref(false);
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
@@ -1411,7 +1421,7 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
-    const messages = keepMessages([msg, ...cur.messages], 20);
+    const messages = boxWith(cur, [msg], 20);
     await persist(userId, { expedition: { ...exp, reported: true }, messages });
     return msg;
   }
@@ -1428,10 +1438,15 @@ export const useCharacterStore = defineStore('character', () => {
     // Le rapport a pu être déposé à l'arrivée sur l'objectif (`expeTick`) ; sinon (app
     // fermée tout du long) on le dépose maintenant. Dans les deux cas il porte le butin.
     const msg = buildMessage({ ...exp, reported: true });
-    const messages = exp.reported
-      ? cur.messages.map((m) => (m.id === msg.id ? msg : m))
-      : keepMessages([msg, ...cur.messages], 20);
-    await persist(userId, { messages, expedition: null });
+    // ⚠️ DÉJÀ DÉPOSÉ → on NE RÉÉCRIT PAS la boîte. L'ancien code REMPLAÇAIT le rapport par
+    // `buildMessage(...)`, qui porte `claimed: false` : un butin encaissé entre le retour
+    // (`claimAt`) et ce tick redevenait encaissable (revue finale des camps — or, objets, XP
+    // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
+    const messages = exp.reported ? null : boxWith(cur, [msg], 20);
+    await persist(userId, {
+      ...(messages && messages !== cur.messages ? { messages } : {}),
+      expedition: null,
+    });
     return msg;
   }
 
@@ -1479,7 +1494,7 @@ export const useCharacterStore = defineStore('character', () => {
       claimed: false,
       read: false,
     };
-    await persist(userId, { messages: keepMessages([msg, ...cur.messages], 30) });
+    await persist(userId, { messages: boxWith(cur, [msg], 30) });
     return true;
   }
 
@@ -1523,7 +1538,7 @@ export const useCharacterStore = defineStore('character', () => {
       read: false,
     };
     await persist(userId, {
-      messages: keepMessages([msg, ...cur.messages], 30),
+      messages: boxWith(cur, [msg], 30),
       cleared_dungeons: [...cur.cleared_dungeons, id],
     });
     return id;
@@ -1535,7 +1550,9 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return null;
     const m = cur.messages.find((x) => x.id === messageId);
-    if (!m || !isClaimable(m, now)) return null;
+    // ⚠️ `claimedLocally` : un encaissement déjà PARTI (double toucher, ou ligne pas encore
+    // relue) est refusé ici — `row.value` dirait encore `claimed: false`.
+    if (!m || claimedLocally.has(m.id) || !isClaimable(m, now)) return null;
     // Objets ramenés : l'arène en rend PLUSIEURS ; `item` seul = messages d'avant `items`.
     const drops = (m.items && m.items.length ? m.items : m.item ? [m.item] : []).map((it) => ({
       ...it,
@@ -1564,7 +1581,7 @@ export const useCharacterStore = defineStore('character', () => {
         ),
       );
       if (trained.size) {
-        const gain = caravanFamiliarXp({ level: m.level } as Poi); // ne lit que `level`
+        const gain = caravanFamiliarXp(m);
         inventory = inventory.map((it) =>
           trained.has(it.id) ? grantFamiliarXp(it, gain, playerLevel) : it,
         );
@@ -1578,32 +1595,41 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ ENTIERS À L'ENCAISSEMENT : ces colonnes sont `integer`, une valeur décimale fait
     // échouer la sauvegarde ENTIÈRE sans rien afficher (bug de la cargaison, v0.796).
     const ent = (n: number | undefined) => Math.max(0, Math.round(n || 0));
-    await persist(userId, {
-      // Les salaires de l'escorte sont déduits ICI, comme pour un convoi.
-      gold: Math.max(0, cur.gold + ent(m.gold) - wages),
-      login_energy: cur.login_energy + ent(m.energy), // ⚡ mine/source → énergie de jeu
-      keys: cur.keys + ent(m.key),
-      // ⚠️ DEVISES VIVANTES UNIQUEMENT. Le commentaire qui tenait ici affirmait qu'on ne
-      // créditait plus de monnaie morte — et les deux lignes suivantes créditaient des
-      // fragments 🧩 et de l'encre 🖋️. Un commentaire ne vérifie rien ; un test si.
-      summon_stones: cur.summon_stones + ent(m.summonStones),
-      // 🔩 épaves → réparation de l’enceinte. ⚠️ JAMAIS depuis un camp (v0.856/v0.890).
-      scrap: cur.scrap + (party ? 0 : ent(m.scrap)),
-      ...partyPatch,
-      inventory,
-      messages: cur.messages.map((x) =>
-        x.id === messageId ? { ...x, claimed: true, read: true } : x,
-      ),
-      set_pieces_seen: drops.length
-        ? mergeSetSeen(cur.set_pieces_seen, drops)
-        : cur.set_pieces_seen,
-    });
+    // Marqué AVANT l'écriture : tout écrivain de la boîte qui tourne pendant la requête le
+    // garde `claimed: true` (`depositMessages`). Retiré si l'écriture échoue.
+    claimedLocally.add(m.id);
+    try {
+      await persist(userId, {
+        // Les salaires de l'escorte sont déduits ICI, comme pour un convoi.
+        gold: Math.max(0, cur.gold + ent(m.gold) - wages),
+        login_energy: cur.login_energy + ent(m.energy), // ⚡ mine/source → énergie de jeu
+        keys: cur.keys + ent(m.key),
+        // ⚠️ DEVISES VIVANTES UNIQUEMENT. Le commentaire qui tenait ici affirmait qu'on ne
+        // créditait plus de monnaie morte — et les deux lignes suivantes créditaient des
+        // fragments 🧩 et de l'encre 🖋️. Un commentaire ne vérifie rien ; un test si.
+        summon_stones: cur.summon_stones + ent(m.summonStones),
+        // 🔩 épaves → réparation de l’enceinte. ⚠️ JAMAIS depuis un camp (v0.856/v0.890).
+        scrap: cur.scrap + (party ? 0 : ent(m.scrap)),
+        ...partyPatch,
+        inventory,
+        // Ce message (et tout autre encaissement en cours) passe à `claimed: true`.
+        messages: boxWith(cur, [], 30),
+        set_pieces_seen: drops.length
+          ? mergeSetSeen(cur.set_pieces_seen, drops)
+          : cur.set_pieces_seen,
+      });
+    } catch (e) {
+      claimedLocally.delete(m.id);
+      throw e;
+    }
     return m;
   }
   async function expeMarkRead(userId: string) {
     const cur = row.value;
     if (!cur || !cur.messages.some((m) => !m.read)) return;
-    await persist(userId, { messages: cur.messages.map((m) => ({ ...m, read: true })) });
+    await persist(userId, {
+      messages: boxWith(cur, [], 30).map((m) => ({ ...m, read: true })),
+    });
   }
 
   // ── Filons de production passive (village autour de la ville) ──
@@ -2221,7 +2247,7 @@ export const useCharacterStore = defineStore('character', () => {
         // ⚠️ Déjà crédité vague par vague : ce message se LIT, il ne se réclame pas.
         read: false,
       };
-      patch.messages = keepMessages([msg, ...cur.messages], 30);
+      patch.messages = boxWith(cur, [msg], 30);
       base = { ...base, pillage: null, field: null };
     }
 
@@ -2394,8 +2420,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur) return false;
     if (comptoirLevel.value <= 0) return false;
     const now = Date.now();
-    const running = caravanList.value.filter((c) => now < c.returnAt).length;
-    if (running >= caravanSlots(comptoirLevel.value)) return false;
+    // 🐫⚔️ UN SEUL POOL : les groupes partis sans le héros prennent aussi un créneau.
+    if (convoySlotsFree(comptoirLevel.value, [...caravanList.value, ...partyList.value], now) <= 0)
+      return false;
     const escort = escortIds
       .map((id) => advList.value.find((a) => a.id === id))
       .filter((a): a is Adventurer => !!a && advAvailable(a, now));
@@ -2538,7 +2565,15 @@ export const useCharacterStore = defineStore('character', () => {
       .filter((a): a is Adventurer => !!a && advAvailable(a, now));
     if (escort.length !== opts.escortIds.length)
       return 'un aventurier du groupe n’est plus disponible';
-    if (!canSendParty(poi, escort.length, !!hero)) return 'le groupe est vide';
+    // ⚠️ Groupe vide, ou SANS le héros alors que tous les créneaux de convoi sont pris : la
+    // MÊME règle que l'écran (`partySendBlocker`), un seul pool avec les convois.
+    const sendBlock = partySendBlocker(
+      poi,
+      escort.length,
+      !!hero,
+      convoySlotsFree(comptoirLevel.value, [...caravanList.value, ...partyList.value], now),
+    );
+    if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
     // (déjà parti, infirmerie, Avant-poste, or) — `partyHeroBlocker`, une seule définition.
     const heroBlock = hero
@@ -2595,7 +2630,8 @@ export const useCharacterStore = defineStore('character', () => {
   async function partyTick(userId: string, now: number): Promise<ExpeditionMessage[]> {
     const cur = row.value;
     if (!cur || !partyList.value.length) return [];
-    const t = settleParties(partyList.value, cur.messages, now, 30);
+    const box = boxWith(cur, [], 30);
+    const t = settleParties(partyList.value, box, now, 30);
     if (!t.changed) return [];
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
@@ -2603,6 +2639,8 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       parties: t.parties,
       ...(t.messages !== cur.messages ? { messages: t.messages } : {}),
+      // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
+      //  ne fait que le confirmer.)
     });
     return t.fresh;
   }
