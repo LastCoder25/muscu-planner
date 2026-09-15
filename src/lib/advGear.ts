@@ -24,14 +24,9 @@ import {
 } from './items';
 import { advRarity, type Adventurer } from './adventurers';
 
-export const LINEAGES = [
-  'guerrier',
-  'archer',
-  'mage',
-  'homme_armes',
-  'eclaireur',
-  'caravanier',
-] as const;
+// ⚠️ Pas exportée (`npm run dead`) : aucun importeur hors du module — `Lineage` (le type
+// dérivé) est ce que le reste du code consomme (ex. GuildPanel.vue).
+const LINEAGES = ['guerrier', 'archer', 'mage', 'homme_armes', 'eclaireur', 'caravanier'] as const;
 export type Lineage = (typeof LINEAGES)[number];
 export type AdvGearSlot = 'weapon' | 'armor' | 'accessory';
 export const ADV_GEAR_SLOTS: AdvGearSlot[] = ['weapon', 'armor', 'accessory'];
@@ -110,8 +105,9 @@ export const LINEAGE_GEAR: Record<Lineage, LineageGearDef> = {
   },
 };
 
-/** Réglages. ⚠️ `k` est LE levier d'équilibrage de l'équipement (mesuré en Task 4). */
-export const ADV_GEAR = {
+/** Réglages. ⚠️ `k` est LE levier d'équilibrage de l'équipement (mesuré en Task 4).
+ *  Pas exportée (`npm run dead`) : lue uniquement dans ce fichier. */
+const ADV_GEAR = {
   /** ⚠️ MESURÉ à 0,15 — l'équipement est un BONUS, pas un péage. À 1, un trio sans pièces
    *  tombait à 22-28 % de ses embuscades calmes dès le niveau 26 face à une route calibrée
    *  sur une escorte équipée : la plupart des joueurs, équipés partiellement pendant des
