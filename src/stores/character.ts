@@ -1824,20 +1824,6 @@ export const useCharacterStore = defineStore('character', () => {
     };
   }
 
-  /** 🗡️ ÉQUIPER TOUT LE VIVIER d'un geste (v0.881, demandé) : SEULEMENT l'équipement —
-   *  compagnons et talents restent ceux de chacun. Même plan que la part « équipement » de
-   *  `autoAssignCompanions` (`autoAdvGear`), donc le même choix que le bouton de l'écran
-   *  annonce. Rend le nombre de pièces portées ensuite. */
-  async function autoEquipAdventurers(userId: string, now: number): Promise<number | null> {
-    const cur = row.value;
-    if (!cur) return null;
-    const advs = cur.adventurers ?? [];
-    const gearPlan = autoAdvGear(advs, companionCtx(cur, now));
-    const adventurers = advs.map((a) => ({ ...a, gear: gearPlan.get(a.id) }));
-    await persistOptimistic(userId, { adventurers });
-    return adventurers.reduce((s, a) => s + Object.keys(a.gear ?? {}).length, 0);
-  }
-
   /** 🧠 CONFIER (ou reprendre) un TALENT à un aventurier. Mêmes règles que le
    *  compagnon : un seul porteur, et jamais ce que le héros a équipé. */
   async function setAdvTalent(userId: string, advId: string, talentId: string | null) {
@@ -2492,7 +2478,6 @@ export const useCharacterStore = defineStore('character', () => {
     withAdvGear,
     startOutfit,
     autoAssignCompanions,
-    autoEquipAdventurers,
     healHero,
     healAdventurers,
     heroIsHome,

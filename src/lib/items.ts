@@ -909,7 +909,38 @@ export function weaponKind(it: { name?: string } | null | undefined): WeaponKind
     if (name.startsWith(sig)) return kind;
   }
   const noun = name.split(/[\s·]/)[0] ?? '';
-  return (WEAPON_NOUN_KIND as Record<string, WeaponKind>)[noun] ?? 'lame';
+  return ALL_WEAPON_NOUN_KIND[noun] ?? 'lame';
+}
+/** Le nom d’une arme signature (v0.888) : la faux n’est pas tirée comme arme ordinaire, mais
+ *  une « Faux « Faux des Âmes » » doit rester une faux pour l’avatar. */
+const ALL_WEAPON_NOUN_KIND: Record<string, WeaponKind> = { ...WEAPON_NOUN_KIND, Faux: 'faux' };
+const KIND_NOUN: Partial<Record<WeaponKind, string>> = {
+  lame: 'Lame',
+  hache: 'Hache',
+  masse: 'Masse',
+  dague: 'Dague',
+  fleau: 'Fléau',
+  faux: 'Faux',
+};
+
+/** 🏷️ LE NOM D’UN OBJET SIGNATURE DIT CE QU’EST L’OBJET (v0.888 ; signalé par l’utilisateur :
+ *  « dans le sac les icônes et les noms sont bizarres »). Le nom évocateur REMPLAÇAIT le
+ *  nom d’objet : une cuirasse s’appelait « Élan Implacable », un anneau « Déferlante », et
+ *  depuis que les drops tombent au rang du joueur (v0.875) presque tout le sac était ainsi.
+ *  Désormais « Cuirasse « Élan Implacable » » : l’objet d’abord, l’épithète ensuite.
+ *  ⚠️ AUCUN TIRAGE en plus : l’arme prend le nom de la forme de son épithète (Guillotine →
+ *  Hache), les autres emplacements le lisent sur le JET déjà tiré — les combats seedés ne
+ *  bougent pas. */
+function signatureNoun(slot: ItemSlot, sig: string, roll: number): string {
+  if (slot === 'weapon') return KIND_NOUN[SIGNATURE_WEAPON_KIND[sig] ?? 'lame'] ?? 'Lame';
+  const pool = NAMES[slot];
+  return pool[Math.min(pool.length - 1, Math.floor(Math.max(0, roll) * pool.length))]!;
+}
+const ALL_SIGNATURE_NAMES = new Set(Object.values(SIGNATURE_NAMES).flat());
+
+/** Le NOM D’OBJET (premier mot) : « Hache », « Anneau »… — c’est lui qui donne l’icône. */
+export function itemNoun(it: { name?: string; slot?: ItemSlot } | null | undefined): string {
+  return (it?.name ?? '').split(/[\s·]/)[0] ?? '';
 }
 
 // Noms d'objets par slot (saveur).
@@ -949,7 +980,12 @@ const LEGACY_RARITY_ADJ: Record<Rarity, string> = {
 /** Renomme un objet déjà possédé dont le nom finit par l’ancien adjectif de SA rareté.
  *  Idempotent (l’ancien et le nouveau complément diffèrent pour chaque rareté) ; les noms
  *  signature (« Guillotine ») et les pièces de set ne portent pas d’adjectif : intacts. */
-export function renameLegacyItem<T extends { name: string; rarity: Rarity }>(it: T): T {
+export function renameLegacyItem<
+  T extends { name: string; rarity: Rarity; slot?: ItemSlot; roll?: number },
+>(it: T): T {
+  // Nom signature SEUL (« Déferlante ») d’avant la v0.888 : on remet l’objet devant.
+  if (it.slot && it.slot in NAMES && ALL_SIGNATURE_NAMES.has(it.name))
+    return { ...it, name: `${signatureNoun(it.slot, it.name, it.roll ?? 0)} « ${it.name} »` };
   const old = ` ${LEGACY_RARITY_ADJ[it.rarity]}`;
   if (!it.name.endsWith(old)) return it;
   return { ...it, name: it.name.slice(0, -old.length) + ` ${RARITY_ADJ[it.rarity]}` };
@@ -1356,8 +1392,9 @@ export function rollDrop(
   // Objet portant un affixe SIGNATURE (n'importe quel tier) → nom évocateur (« Guillotine ») ;
   // sinon nom + adjectif de rareté.
   const sigAffix = affixes.find((e) => SIGNATURE_NAMES[e.type]);
-  const name = sigAffix
-    ? pick(rng, SIGNATURE_NAMES[sigAffix.type]!)
+  const sig = sigAffix ? pick(rng, SIGNATURE_NAMES[sigAffix.type]!) : null;
+  const name = sig
+    ? `${signatureNoun(slot, sig, roll)} « ${sig} »`
     : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
   // NIVEAU D'OBJET (v0.583) = ilvl tiré ci-dessus → 3ᵉ axe de magnitude (itemLevelMult).
   // La valeur des affixes reste level-indépendante ; le multiplicateur de niveau est appliqué

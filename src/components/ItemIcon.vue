@@ -26,7 +26,7 @@ const props = withDefaults(
 
 const rankColor = computed(() => RANK_COLOR[props.item.rarity] ?? '#9a8f7e');
 const isFamiliar = computed(() => props.item.slot === FAMILIAR_SLOT);
-const icon = computed(() => itemIconName(props.item.slot, props.item.effect?.type));
+const icon = computed(() => itemIconName(props.item));
 const jet = computed(() => rollJet(props.item.roll)); // jet 0..100 % (position dans l'intervalle du rang)
 const setId = computed(() => props.item.setId);
 const glyphSize = computed(() => Math.round(props.size * 0.56));

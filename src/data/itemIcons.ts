@@ -1,9 +1,8 @@
 // Icône VISUELLE d'un objet d'équipement (Aventure) : un nom d'icône MDI (déjà bundlé via
 // @quasar/extras mdi-v7 → 100 % offline). Le SLOT donne l'identité de base (arme/armure/
-// accessoire/relique) ; quelques couples slot+effet raffinent l'icône quand elle reste
-// cohérente avec le slot (pas de cœur sur une arme). Les familiers gardent leur emoji
+// accessoire/relique) ; le NOM d’objet la précise (Hache, Amulette, Sceau…). Les familiers gardent leur emoji
 // d'espèce (rendu à part par ItemIcon.vue). Rendu net, reconnaissable, teinté par le rang.
-import type { EffectType, ItemSlot } from '@/lib/items';
+import { itemNoun, type ItemSlot } from '@/lib/items';
 
 const SLOT_ICON: Record<ItemSlot, string> = {
   weapon: 'mdi-sword',
@@ -14,24 +13,34 @@ const SLOT_ICON: Record<ItemSlot, string> = {
   trophy: 'mdi-trophy',
 };
 
-// Raffinements slot+effet (icônes MDI VÉRIFIÉES présentes dans mdi-v7).
-const OVERRIDE: Record<string, string> = {
-  'weapon:crit_pct': 'mdi-sword-cross',
-  'weapon:execute_pct': 'mdi-axe',
-  'weapon:rage_pct': 'mdi-axe',
-  'weapon:momentum_pct': 'mdi-bow-arrow',
-  'armor:max_pv_pct': 'mdi-shield-half-full',
-  'armor:thorns_pct': 'mdi-shield-sun',
-  'accessory:crit_pct': 'mdi-diamond-stone',
-  'accessory:lifesteal_pct': 'mdi-necklace',
-  'accessory:gold_pct': 'mdi-cash',
-  'relic:execute_pct': 'mdi-skull',
-  'relic:rage_pct': 'mdi-fire',
-  'relic:lifesteal_pct': 'mdi-bottle-tonic',
-  'relic:max_pv_pct': 'mdi-heart',
+// ⚠️ L’ICÔNE SUIT L’OBJET, PAS SA STAT (v0.888 ; signalé par l’utilisateur : « les icônes
+// et les noms sont bizarres »). Elle se lisait sur le 1er affixe : une « Hache » à critique
+// montrait deux épées, une « Idole » à PV un cœur, une lame à élan un ARC. Le nom d’objet
+// (premier mot, `itemNoun`) est ce qu’on lit à côté : l’icône dit la même chose.
+// Icônes MDI VÉRIFIÉES présentes dans mdi-v7.
+const NOUN_ICON: Record<string, string> = {
+  Lame: 'mdi-sword',
+  Hache: 'mdi-axe-battle',
+  Masse: 'mdi-hammer',
+  Dague: 'mdi-knife-military',
+  Fléau: 'mdi-mace',
+  Faux: 'mdi-sickle',
+  Plastron: 'mdi-shield',
+  Cotte: 'mdi-shield-half-full',
+  Cuirasse: 'mdi-shield-cross',
+  Harnois: 'mdi-shield-crown',
+  Anneau: 'mdi-ring',
+  Amulette: 'mdi-necklace',
+  Talisman: 'mdi-eye-circle',
+  Bracelet: 'mdi-circle-double',
+  Éclat: 'mdi-diamond-stone',
+  Totem: 'mdi-chess-rook',
+  Sceau: 'mdi-seal',
+  Idole: 'mdi-octagram',
 };
 
-/** Nom d'icône MDI pour un objet d'équipement (hors familier). */
-export function itemIconName(slot: ItemSlot, effect?: EffectType): string {
-  return OVERRIDE[`${slot}:${effect ?? ''}`] ?? SLOT_ICON[slot] ?? 'mdi-help-circle';
+/** Nom d'icône MDI pour un objet d'équipement (hors familier) : celle de son nom d’objet,
+ *  sinon celle de son emplacement. */
+export function itemIconName(item: { slot: ItemSlot; name?: string }): string {
+  return NOUN_ICON[itemNoun(item)] ?? SLOT_ICON[item.slot] ?? 'mdi-help-circle';
 }

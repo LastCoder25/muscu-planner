@@ -1,3 +1,4 @@
+import { itemIconName } from '@/data/itemIcons';
 import { describe, it, expect } from 'vitest';
 import {
   aggregateLines,
@@ -5,6 +6,7 @@ import {
   gradeLabel,
   RARITY_LABEL,
   renameLegacyItem,
+  itemNoun,
   type Rarity,
   weaponKind,
   wornSet,
@@ -754,7 +756,49 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
       [d.effect, d.effect2, d.effect3].some((e) => e && SIG.includes(e.type)),
     );
     expect(sig).toBeTruthy();
-    expect(NAMED).toContain(sig!.name);
+    // ⚠️ v0.888 : l’OBJET d’abord, l’épithète ensuite — « Cuirasse « Élan Implacable » ».
+    const m = /^(\S+) « (.+) »$/.exec(sig!.name);
+    expect(m, sig!.name).toBeTruthy();
+    expect(NAMED).toContain(m![2]);
+  });
+  it('⚠️ LE CAS RÉEL : un objet signature commence par le nom d’un objet de SON emplacement', () => {
+    const NOUNS: Record<string, string[]> = {
+      weapon: ['Lame', 'Hache', 'Masse', 'Dague', 'Fléau', 'Faux'],
+      armor: ['Plastron', 'Cotte', 'Cuirasse', 'Harnois'],
+      accessory: ['Anneau', 'Amulette', 'Talisman', 'Bracelet'],
+      relic: ['Éclat', 'Totem', 'Sceau', 'Idole'],
+    };
+    let n = 0;
+    for (const d of scan(40, 1)) {
+      if (!d.name.includes('«')) continue;
+      n++;
+      expect(NOUNS[d.slot], d.name).toContain(itemNoun(d));
+      expect(itemIconName(d), d.name).not.toBe('mdi-help-circle');
+    }
+    expect(n).toBeGreaterThan(0);
+    // La forme d’arme suit l’épithète : une Guillotine reste une hache, la Faux une faux.
+    expect(weaponKind({ name: 'Hache « Guillotine »' })).toBe('hache');
+    expect(weaponKind({ name: 'Faux « Faux des Âmes »' })).toBe('faux');
+  });
+  it('un nom signature d’avant la v0.888 est renommé au chargement, sans rien toucher d’autre', () => {
+    const old = {
+      name: 'Déferlante',
+      rarity: 'magique' as const,
+      slot: 'accessory' as const,
+      roll: 0.99,
+    };
+    const r = renameLegacyItem(old);
+    expect(r.name).toBe('Bracelet « Déferlante »');
+    expect(renameLegacyItem(r)).toEqual(r); // idempotent
+    expect(renameLegacyItem({ ...old, slot: 'weapon' as const, name: 'Guillotine' }).name).toBe(
+      'Hache « Guillotine »',
+    );
+    expect(renameLegacyItem({ ...old, name: 'Anneau d’or' }).name).toBe('Anneau d’or');
+  });
+  it('l’icône suit le NOM d’objet, jamais la stat : une hache à critique reste une hache', () => {
+    expect(itemIconName({ slot: 'weapon', name: 'Hache d’or' })).toBe('mdi-axe-battle');
+    expect(itemIconName({ slot: 'relic', name: 'Sceau d’argent' })).toBe('mdi-seal');
+    expect(itemIconName({ slot: 'armor', name: 'Inconnu' })).toBe('mdi-shield');
   });
 });
 

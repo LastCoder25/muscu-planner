@@ -95,34 +95,6 @@
             <div v-if="autoPreview.changes" class="g-note dim ga-note">
               Remplace les choix faits à la main.
             </div>
-            <!-- 🗡️ ÉQUIPER TOUT LE MONDE (v0.881, demandé) : l'équipement SEUL — compagnons et
-               talents ne bougent pas. Même langage que « Confier au mieux ». -->
-            <button
-              type="button"
-              class="g-auto"
-              :class="{ idle: !gearAutoPreview.changes }"
-              :disabled="busy || !gearAutoPreview.changes"
-              @click="autoGear"
-            >
-              <span class="ga-ico" aria-hidden="true">{{
-                gearAutoPreview.changes ? '🗡️' : '✓'
-              }}</span>
-              <span class="ga-txt">
-                <span class="ga-title">{{
-                  gearAutoPreview.changes ? 'Équiper tout le monde' : 'Équipement déjà au mieux'
-                }}</span>
-                <span class="ga-sub">
-                  🗡️ équipement seul<template v-if="gearAutoPreview.changes">
-                    · {{ gearAutoPreview.changes }} aventurier{{
-                      gearAutoPreview.changes > 1 ? 's' : ''
-                    }}</template
-                  >
-                </span>
-              </span>
-              <span v-if="gearAutoPreview.changes && gearAutoPreview.gain > 0" class="ga-gain">
-                +{{ fmtPow(gearAutoPreview.gain) }}<small>⚔️</small>
-              </span>
-            </button>
           </template>
           <!-- ── Le vivier ── -->
           <div v-if="!roster.length" class="g-empty">
@@ -998,32 +970,6 @@ function autoPair() {
     $q.notify({
       type: 'positive',
       message: `✨ ${r.familiars} compagnon(s), ${r.talents} talent(s) et ${r.gear} pièce(s) confiés · puissance du vivier ${fmtPow(before)} → ${fmtPow(after)}`,
-    });
-  });
-}
-/** Ce que « Équiper tout le monde » ferait, AVANT de toucher : le MÊME plan que le store
- *  (`autoAdvGear`), compagnons et talents inchangés. */
-const gearAutoPreview = computed(() => {
-  const advs = char.advList;
-  const ctx = compCtx.value;
-  const plan = autoAdvGear(advs, ctx);
-  let changes = 0;
-  const after = advs.map((a) => {
-    const g = plan.get(a.id) ?? {};
-    if (ADV_GEAR_SLOTS.some((s) => (g[s] ?? null) !== (a.gear?.[s] ?? null))) changes++;
-    return { ...a, gear: g };
-  });
-  const sum = (m: Map<string, number>) => [...m.values()].reduce((x, v) => x + v, 0);
-  return { changes, gain: sum(adventurerPowers(after, ctx)) - sum(powers.value) };
-});
-function autoGear() {
-  void pair(async (uid) => {
-    const before = rosterPower();
-    const n = await char.autoEquipAdventurers(uid, Date.now());
-    if (n == null) return;
-    $q.notify({
-      type: 'positive',
-      message: `🗡️ ${n} pièce(s) portée(s) · puissance du vivier ${fmtPow(before)} → ${fmtPow(rosterPower())}`,
     });
   });
 }

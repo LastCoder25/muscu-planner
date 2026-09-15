@@ -2715,7 +2715,19 @@
             <span class="rm-ic">⏭️</span>
             <span class="rm-cost">{{ nextContent.cost }} {{ nextContent.icon }}</span>
           </button>
+          <!-- Un boss lâche des PIÈCES DE SET, rangées d’office dans « Mes sets » : c’est là
+               qu’on va les voir, pas au sac (demandé par l’utilisateur). -->
           <button
+            v-if="run?.kind === 'boss'"
+            class="rm-btn rm-icon"
+            title="Mes sets"
+            aria-label="Mes sets"
+            @click="goSetsFromReport"
+          >
+            🧩
+          </button>
+          <button
+            v-else
             class="rm-btn rm-icon"
             title="Inventaire"
             aria-label="Inventaire"
@@ -4253,6 +4265,11 @@ function goInventoryFromReport() {
   tab.value = 'gear';
   betterFilterSlot.value = null;
   bagOpen.value = true; // ouvre directement la modale Sac
+}
+// Depuis le rapport d’un BOSS → « Mes sets », où ses pièces viennent d’être rangées.
+function goSetsFromReport() {
+  reportOpen.value = false;
+  loadoutOpen.value = true;
 }
 // Depuis le rapport, quand un talent est tombé → ouvre la collection Talents (ticket bb384013).
 function goTalentsFromReport() {
