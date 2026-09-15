@@ -46,6 +46,7 @@ import {
   skirmishXpShares,
   trialXpBase,
   troopOf,
+  type SkirmishResult,
   type SkirmishUnit,
 } from './skirmish';
 // ⚠️ Type SEUL : `raid.ts` importera `garrisonCombatant` à l'exécution, donc un import
@@ -195,6 +196,11 @@ interface CaravanEvent {
    *  les convois lancés avant la bascule (leur `outcome` est figé au départ). */
   kills?: number;
   fallen?: number;
+  /** `bandits` : ids des membres mis À TERRE, dans l'ordre de leur chute (le premier tombé
+   *  en tête). ⚠️ À terre n'est PAS blessé : sur une embuscade gagnée ils se relèvent, et
+   *  seule `convoyHurt` décide qui part à l'infirmerie. Lu par le rapport de convoi.
+   *  ABSENT sur les convois d'avant la bascule. */
+  down?: string[];
   text: string;
 }
 
@@ -215,7 +221,8 @@ export interface CaravanOutcome {
   /** 🗡️ Bandits abattus par aventurier, toutes embuscades confondues. ⚠️ ABSENT sur les
    *  convois lancés avant le combat de groupe (leur `outcome` est figé au départ). */
   kills?: Record<string, number>;
-  /** Ids des aventuriers blessés (→ infirmerie) : ceux qui sont TOMBÉS en embuscade. */
+  /** Ids des aventuriers blessés (→ infirmerie) : selon `convoyHurt`, le premier tombé de
+   *  chaque embuscade PERDUE (jamais ceux d'une embuscade gagnée, restés à terre). */
   hurt: string[];
   events: CaravanEvent[];
   text: string;
@@ -1099,6 +1106,26 @@ export function caravanHaulMult(escort: Adventurer[], stock: AdvGear[]): number 
   );
 }
 
+/**
+ * 🤕 QUI PART À L'INFIRMERIE après une embuscade de CONVOI — la politique du convoi, pas celle
+ * de la dérivation (`deriveSkirmish` dit seulement qui est tombé).
+ *
+ * - Embuscade GAGNÉE : personne. Les membres à terre se relèvent (« à terre » au rapport).
+ * - Embuscade PERDUE : UN SEUL blessé, le PREMIER tombé du journal — déterministe, et le même
+ *   volume que l'ancienne victime tirée au hasard.
+ *
+ * ⚠️ POURQUOI PAS « tous les tombés » : mesuré, 72 à 83 % des embuscades GAGNÉES font tomber
+ * au moins un membre (une victoire calibrée entame plus d'un tiers des PV fondus). Blesser les
+ * tombés multipliait par 2,5 à 7 les voyages calmes avec un blessé — le joueur occasionnel,
+ * dont les convois sont la boucle, aurait perdu des aventuriers disponibles. Les camps (étape 3)
+ * appliquent leur propre règle sur le même résultat, sans toucher à la dérivation.
+ */
+export function convoyHurt(result: Pick<SkirmishResult, 'win' | 'down'>): string[] {
+  if (result.win) return [];
+  const first = result.down[0];
+  return first ? [first] : [];
+}
+
 export function resolveCaravan(
   poi: Poi,
   escort: Adventurer[],
@@ -1160,6 +1187,7 @@ export function resolveCaravan(
         won: r.win,
         kills: abattus,
         fallen: d.down.length,
+        down: [...d.down],
         text: r.win
           ? `Une embuscade repoussée (${abattus} bandit${pl} abattu${pl}).`
           : `Des bandits emportent une part du convoi (${abattus} abattu${pl} sur ${group.troop.length}).`,
@@ -1167,10 +1195,8 @@ export function resolveCaravan(
       for (const a of escort) kills[a.id] = (kills[a.id] ?? 0) + (d.killsBy[a.id] ?? 0);
       const parts = skirmishXpShares(escort, group.troop, d);
       for (const a of escort) xpShare[a.id] = (xpShare[a.id] ?? 0) + (parts[a.id] ?? 0);
-      // 🤕 Le JOURNAL dit qui est tombé : ceux-là partent à l'infirmerie, gagné ou perdu.
-      // ⚠️ Il remplace le tirage d'UNE victime au hasard : une embuscade PERDUE fait tomber
-      // TOUTE l'escorte (le combattant fondu est à zéro), donc toute l'escorte est blessée.
-      for (const id of d.down) if (!hurt.includes(id)) hurt.push(id);
+      // 🤕 Le journal dit qui est À TERRE ; la POLITIQUE d'infirmerie est celle du convoi.
+      for (const id of convoyHurt(d)) if (!hurt.includes(id)) hurt.push(id);
       if (r.win) {
         mult *= 1.12;
         // 🗡️ Une embuscade REPOUSSÉE peut laisser une pièce d'équipement d'aventurier —
@@ -1187,9 +1213,10 @@ export function resolveCaravan(
         if (piece) advGear.push(piece);
       } else {
         mult *= CARAVAN.lossKeep;
-        // ⚠️ TIRAGE CONSERVÉ, résultat ignoré : il désignait l'ancienne victime unique. Le
-        // retirer décalerait `rng` après chaque défaite — rencontres et cargaison des jambes
-        // suivantes changeraient, et la route ne serait plus celle qui a été calibrée.
+        // ⚠️ TIRAGE CONSERVÉ, résultat ignoré : il désignait l'ancienne victime au hasard,
+        // remplacée par le PREMIER tombé (`convoyHurt`). Les rencontres des jambes suivantes
+        // se tirent APRÈS lui sur `rng` : le retirer décalerait leur tirage et la cargaison,
+        // et la route ne serait plus celle qui a été calibrée (vérifié par mutation).
         rng();
       }
       // ⚠️ Les bandes SUIVANTES repartent de `base`, pas de `amb` : ce que l'éclaireur

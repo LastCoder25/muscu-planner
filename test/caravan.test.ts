@@ -28,6 +28,7 @@ import {
   escortShare,
   missionTravelMult,
   suggestEscort,
+  convoyHurt,
   missionXp,
   refAdventurer,
   resolveCaravan,
@@ -537,24 +538,45 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
   });
 });
 
-describe('🤕 LES BLESSÉS SONT CEUX QUI SONT TOMBÉS', () => {
-  it('⚠️ une embuscade PERDUE envoie toute l’escorte tombée à l’infirmerie', () => {
-    // L'ancien tirage d'UNE victime au hasard disparaît : le journal dit qui est tombé.
+describe('🤕 À TERRE N’EST PAS BLESSÉ — la politique d’infirmerie du convoi', () => {
+  it('convoyHurt : gagnée → personne, même avec des membres à terre', () => {
+    expect(convoyHurt({ win: true, down: ['b', 'a'] })).toEqual([]);
+    expect(convoyHurt({ win: true, down: [] })).toEqual([]);
+  });
+  it('convoyHurt : perdue → UN SEUL blessé, le PREMIER tombé (jamais le dernier ni un tirage)', () => {
+    expect(convoyHurt({ win: false, down: ['c', 'a', 'b'] })).toEqual(['c']);
+    expect(convoyHurt({ win: false, down: ['b', 'c', 'a'] })).toEqual(['b']);
+    expect(convoyHurt({ win: false, down: [] })).toEqual([]);
+  });
+
+  it('⚠️ sur la route : les blessés sont les PREMIERS tombés des seules embuscades PERDUES', () => {
+    // L'ancien tirage d'UNE victime au hasard devient le premier tombé du journal.
     const esc = team(3, 26);
     let pertes = 0;
+    let gagneesATerre = 0;
     for (let s = 1; s <= 400; s++) {
       const o = resolveCaravan(poi({ level: 26, perilous: true }), esc, s * 131 + 5, NUS, 100);
       const f = o.events.filter((e) => e.kind === 'bandits');
-      const tombes = f.reduce((n, e) => n + (e.fallen ?? 0), 0);
-      expect(o.hurt.length > 0, `graine ${s}`).toBe(tombes > 0);
-      expect(o.hurt.length).toBeLessThanOrEqual(tombes);
-      if (f.some((e) => e.won === false)) {
-        pertes++;
-        // Une embuscade n'est perdue que quand TOUTE l'escorte est tombée.
-        expect(o.hurt.length).toBe(esc.length);
+      const attendu: string[] = [];
+      for (const e of f) {
+        expect(e.down!.length, `graine ${s}`).toBe(e.fallen);
+        if (e.won) {
+          if (e.down!.length) gagneesATerre++;
+        } else {
+          pertes++;
+          // Une embuscade perdue met TOUTE l'escorte à terre…
+          expect([...e.down!].sort()).toEqual(esc.map((a) => a.id).sort());
+          // …mais n'en blesse qu'un : le premier tombé.
+          if (!attendu.includes(e.down![0]!)) attendu.push(e.down![0]!);
+        }
       }
+      expect(o.hurt, `graine ${s}`).toEqual(attendu);
     }
     expect(pertes, 'aucune embuscade perdue : le test ne prouve rien').toBeGreaterThan(0);
+    expect(
+      gagneesATerre,
+      'aucune victoire avec un membre à terre : le test ne prouve rien',
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -1761,11 +1783,13 @@ describe('sources d’équipement : embuscades repoussées', () => {
     expect(o.wages).toBe(951);
     // ⚠️ Les valeurs de CARGAISON ci-dessus sont celles d'avant le combat de groupe, au
     // chiffre près : le groupe n'est qu'une lecture du combat fondu, et `deriveSkirmish` ne
-    // lit pas `rng`. Seules l'XP (socle + part des abattus) et les blessés (les TOMBÉS, plus
-    // une victime tirée) ont changé.
+    // lit pas `rng`. Seules l'XP (socle + part des abattus) et le blessé (le PREMIER tombé
+    // de l'embuscade perdue, plus une victime tirée) ont changé.
     expect(o.xp).toEqual({ ref0: 84, ref1: 84, ref2: 84 });
     expect(o.kills).toEqual({ ref0: 0, ref1: 3, ref2: 0 });
-    expect(o.hurt).toEqual(['ref1', 'ref2', 'ref0']);
+    expect(o.hurt).toEqual(['ref1']);
+    expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);
+    expect(o.events[1]!.down).toHaveLength(2); // à terre, mais la victoire ne blesse personne
     expect(o.events.map((e) => [e.kills, e.fallen])).toEqual([
       [0, 3],
       [3, 2],
