@@ -15,6 +15,9 @@ import {
   fmtBossPv,
   strikesToReplay,
   strikeShots,
+  bossCry,
+  BOSS_CRIES,
+  BOSS_HEAVY_SHARE,
   BOSS_SHOT_MS,
   bossEmoji,
   canDeclareBoss,
@@ -158,6 +161,33 @@ describe('🐉 BOSS ENTRE AMIS — démarrage et fin', () => {
       expect(shots.length).toBeGreaterThanOrEqual(1);
       expect(shots.reduce((a, b) => a + b, 0)).toBe(d);
     }
+  });
+
+  it('un cri par frappe : petit, grand selon la part de PV arrachée, dernier souffle au coup fatal', () => {
+    const total = 100_000;
+    const light = bossCry(1_000, 80_000, total, 0.5);
+    expect(BOSS_CRIES.light).toContain(light);
+    const heavy = bossCry(total * BOSS_HEAVY_SHARE, 80_000, total, 0.5);
+    expect(BOSS_CRIES.heavy).toContain(heavy);
+    expect(BOSS_CRIES.light).toContain(bossCry(total * BOSS_HEAVY_SHARE - 1, 80_000, total, 0.5));
+    // Le coup qui abat le boss, même petit.
+    expect(BOSS_CRIES.death).toContain(bossCry(1_000, 1_000, total, 0.5));
+    expect(BOSS_CRIES.death).toContain(bossCry(5_000, 1_000, total, 0.5));
+    // Déterministe pour un tirage donné, bornes de tirage comprises.
+    expect(bossCry(1_000, 80_000, total, 0.3)).toBe(bossCry(1_000, 80_000, total, 0.3));
+    expect(BOSS_CRIES.light).toContain(bossCry(1_000, 80_000, total, 0));
+    expect(BOSS_CRIES.light).toContain(bossCry(1_000, 80_000, total, 1));
+    // Tous les cris du registre sont atteignables.
+    const seen = new Set<string>();
+    for (let k = 0; k < BOSS_CRIES.light.length; k++)
+      seen.add(bossCry(1_000, 80_000, total, (k + 0.5) / BOSS_CRIES.light.length));
+    expect(seen.size).toBe(BOSS_CRIES.light.length);
+  });
+
+  it('jamais deux fois le même cri de suite', () => {
+    for (const prev of BOSS_CRIES.light)
+      for (let r = 0; r < 1; r += 0.05)
+        expect(bossCry(1_000, 80_000, 100_000, r, prev)).not.toBe(prev);
   });
 
   it('1000 dégâts par rep, et le NOMBRE DE REPS pour abattre le boss ne change pas', () => {

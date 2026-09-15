@@ -350,6 +350,45 @@ export function strikeShots(damage: number): number[] {
   return Array.from({ length: n }, (_, i) => (i === n - 1 ? total - per * (n - 1) : per));
 }
 
+/** Les cris du boss, du plus léger au dernier souffle. Une frappe = UN cri. */
+export const BOSS_CRIES = {
+  light: ['Aïe !', 'Grrr…', 'Ouch !', 'Hmpf !', 'Ça pique…', 'Argh !', 'Hé !', 'Grmbl…'],
+  heavy: [
+    'AAARGH !',
+    'Ça fait mal !!',
+    'Non… pas ça !',
+    'Vous allez le payer !',
+    'Mes côtes !',
+    'ARRÊTEZ !',
+    'Impossible !',
+  ],
+  death: ['Nooooon…', 'Je… reviendrai…', 'Pas… comme ça…'],
+} as const;
+
+/** Part des PV du boss à partir de laquelle une frappe arrache un GRAND cri. */
+export const BOSS_HEAVY_SHARE = 0.1;
+
+/** Le cri d'une frappe : un dernier souffle si elle l'abat, un grand cri si elle retire au
+ *  moins `BOSS_HEAVY_SHARE` de ses PV, sinon un petit — tiré au hasard (`rng` ∈ [0, 1)),
+ *  jamais le même que le cri précédent quand le registre en offre un autre. */
+export function bossCry(
+  damage: number,
+  hpBefore: number,
+  hpTotal: number,
+  rng: number,
+  previous?: string | null,
+): string {
+  const pool =
+    damage >= hpBefore && hpBefore > 0
+      ? BOSS_CRIES.death
+      : damage >= hpTotal * BOSS_HEAVY_SHARE
+        ? BOSS_CRIES.heavy
+        : BOSS_CRIES.light;
+  const choices = pool.length > 1 ? pool.filter((c) => c !== previous) : pool;
+  const r = Math.min(0.999999, Math.max(0, rng));
+  return choices[Math.floor(r * choices.length)]!;
+}
+
 /** Frappes des AUTRES depuis ma dernière visite, à rejouer à l'ouverture (les plus récentes,
  *  au plus `max`, dans l'ordre chronologique), et les PV AVANT ces frappes pour que la barre
  *  parte de là où je l'avais laissée. Les frappes plus anciennes que la fenêtre sont déjà

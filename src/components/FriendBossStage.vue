@@ -23,6 +23,10 @@
         <span class="font-display">{{ fmtBossPv(shownHp) }}</span> / {{ fmtBossPv(hpTotal) }} PV
       </div>
       <span v-for="p in pops" :key="p.key" class="fbs-pop font-display">{{ p.text }}</span>
+      <!-- Le cri de la frappe : il naît au premier projectile et s'éteint un peu après le dernier. -->
+      <span v-if="cry" :key="cry.key" class="fbs-cry font-display" role="status">{{
+        cry.text
+      }}</span>
     </div>
 
     <div class="fbs-party">
@@ -66,7 +70,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import { BOSS_SHOT_MS, fmtBossPv, strikeShots, type BossStrike } from '@/lib/friendBoss';
+import { BOSS_SHOT_MS, bossCry, fmtBossPv, strikeShots, type BossStrike } from '@/lib/friendBoss';
 import { lookEquipped, type HeroLook } from '@/lib/heroLook';
 
 export interface StageAlly {
@@ -125,6 +129,15 @@ const shake = ref(false);
 const flash = ref(0);
 const projs = ref<{ key: number; x: number; y: number; dx: number; dy: number }[]>([]);
 const pops = ref<{ key: number; text: string }[]>([]);
+const cry = ref<{ key: number; text: string } | null>(null);
+/** Temps pendant lequel le cri reste affiché après l'impact du dernier projectile. */
+const CRY_LINGER_MS = 700;
+let cryTimer: ReturnType<typeof setTimeout> | null = null;
+function clearCry() {
+  if (cryTimer) clearTimeout(cryTimer);
+  cryTimer = null;
+  cry.value = null;
+}
 let seq = 0;
 let alive = true;
 /** « Passer » : la boucle s'arrête au prochain pas et la barre retombe sur le serveur. */
@@ -134,6 +147,7 @@ let run = 0;
 onUnmounted(() => {
   alive = false;
   if (ghostTimer) clearTimeout(ghostTimer);
+  if (cryTimer) clearTimeout(cryTimer);
 });
 
 const reduced = () =>
@@ -168,6 +182,13 @@ function impact(damage: number) {
  *  propres dégâts à l'impact (leur somme vaut la frappe, `strikeShots`). */
 async function strike(s: BossStrike, token: number) {
   const shots = strikeShots(s.damage);
+  // Un cri par frappe, choisi sur les PV d'AVANT la frappe (le coup fatal arrache un dernier
+  // souffle), affiché dès le premier projectile.
+  if (cryTimer) clearTimeout(cryTimer);
+  cry.value = {
+    key: ++seq,
+    text: bossCry(s.damage, shownHp.value, props.hpTotal, Math.random(), cry.value?.text),
+  };
   for (const dmg of shots) {
     if (!alive || skipped) return;
     strikerId.value = null;
@@ -187,8 +208,17 @@ async function strike(s: BossStrike, token: number) {
     }
     await wait(BOSS_SHOT_MS);
   }
-  // Laisse le dernier projectile arriver avant la frappe suivante.
-  await wait(Math.max(0, FLIGHT_MS - BOSS_SHOT_MS) + 380);
+  // Laisse le dernier projectile arriver avant la frappe suivante ; le cri tient encore un
+  // peu après l'impact.
+  const settle = Math.max(0, FLIGHT_MS - BOSS_SHOT_MS) + 380;
+  const ours = cry.value?.key;
+  cryTimer = setTimeout(
+    () => {
+      if (cry.value?.key === ours) cry.value = null;
+    },
+    Math.max(0, FLIGHT_MS - BOSS_SHOT_MS) + CRY_LINGER_MS,
+  );
+  await wait(settle);
   strikerId.value = null;
 }
 
@@ -219,6 +249,7 @@ async function play(strikes: BossStrike[], startHp?: number) {
   animating.value = false;
   projs.value = [];
   strikerId.value = null;
+  if (skipped) clearCry();
   shownHp.value = props.hpLeft;
   if (skipped) ghostHp.value = props.hpLeft;
 }
@@ -352,6 +383,24 @@ defineExpose({ play });
   pointer-events: none;
   animation: fbs-pop 1.1s ease-out forwards;
 }
+/* Bulle du cri, accrochée en haut à gauche du boss (le chiffre des dégâts est au centre). */
+.fbs-cry {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  margin-left: -150px;
+  max-width: 120px;
+  padding: 5px 10px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 15px;
+  line-height: 1.15;
+  text-align: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  animation: fbs-cry-in 0.22s ease-out;
+}
 .fbs-party {
   display: flex;
   flex-wrap: wrap;
@@ -479,6 +528,19 @@ defineExpose({ play });
   100% {
     opacity: 0;
     transform: translate(-50%, -46px) scale(1);
+  }
+}
+@keyframes fbs-cry-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-6deg);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.08) rotate(2deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
   }
 }
 @keyframes fbs-hop {
