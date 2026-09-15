@@ -527,24 +527,3 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
     expect(a.rounds).toBe(b.rounds);
   });
 });
-
-describe('startMonsterPv — les PV du MONSTRE se reportent aussi', () => {
-  const p = playerCombatant('P', { puissance: 60, endurance: 60, agilite: 60 }, 10);
-  const m = { name: 'M', pv: 500, damage: 30, crit: 0.1, dodge: 0.05, initiative: 5 };
-
-  it('absent → combat identique au bit près', () => {
-    for (let s = 1; s <= 20; s++)
-      expect(simulateCombat(p, m, { seed: s, goldOnWin: 0, startMonsterPv: m.pv })).toEqual(
-        simulateCombat(p, m, { seed: s, goldOnWin: 0 }),
-      );
-  });
-
-  it('un monstre ENTAMÉ part de ses PV restants, pas de son maximum', () => {
-    const r = simulateCombat(p, m, { seed: 3, goldOnWin: 0, startMonsterPv: 1 });
-    expect(r.log[0]!.who).toBe('player');
-    // Un premier coup (ou une esquive) sur un monstre à 1 PV : il reste au plus 1.
-    // Sans l'option, il resterait ~500 − un coup, soit des centaines.
-    expect(r.log[0]!.monsterPv).toBeLessThanOrEqual(1);
-    expect(r.win).toBe(true);
-  });
-});

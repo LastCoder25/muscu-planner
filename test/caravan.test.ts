@@ -46,7 +46,7 @@ import {
   refAdvGear,
   type Caravan,
 } from '@/lib/caravan';
-import { trialXpBase, troopOf } from '@/lib/skirmish';
+import { trialXpBase } from '@/lib/skirmish';
 import {
   advGearEffects,
   advGearRoles,
@@ -953,6 +953,31 @@ describe('⚠️ l’XP de combat suit les ennemis ABATTUS, pas l’étiquette',
     const a = refAdventurer(20);
     expect(missionXp(a, poi({ perilous: true }))).toBe(missionXp(a, poi()));
   });
+  it('🧭 la part des ABATTUS suit la distance comme le socle : loin, elle rapporte plus', () => {
+    // Même niveau, mêmes graines : les embuscades et leurs abattus sont identiques (la distance
+    // ne touche ni la rencontre ni le combat) — seule la PAYE de ces abattus doit changer.
+    const escort = team(3, 20);
+    const road = { familiars: refCompanions(20), talents: [], advGear: refAdvGear(20) };
+    let pres = 0;
+    let loin = 0;
+    for (let s = 1; s <= 120; s++) {
+      const near = poi({ distNorm: 0.1, perilous: true });
+      const far = poi({ distNorm: 0.9, perilous: true });
+      const on = resolveCaravan(near, escort, s * 131 + 5, road, 100);
+      const of = resolveCaravan(far, escort, s * 131 + 5, road, 100);
+      expect(of.kills, `graine ${s}`).toEqual(on.kills);
+      for (const a of escort) {
+        pres += (on.xp[a.id] ?? 0) - missionXp(a, near);
+        loin += (of.xp[a.id] ?? 0) - missionXp(a, far);
+      }
+    }
+    expect(pres, 'aucun abattu : le test ne prouve rien').toBeGreaterThan(0);
+    expect(loin).toBeGreaterThan(pres);
+    const rapport = missionTravelMult(poi({ distNorm: 0.9 })) / missionTravelMult(poi({ distNorm: 0.1 }));
+    // Au rapport des facteurs de distance, à l'arrondi près (les parts proches sont petites).
+    expect(loin / pres).toBeGreaterThan(rapport * 0.85);
+    expect(loin / pres).toBeLessThan(rapport * 1.15);
+  });
   it('missionXp lit la base d’épreuve partagée avec le combat de groupe', () => {
     const p = poi({ level: 33, distNorm: CARAVAN.xpRefDist });
     expect(missionXp(refAdventurer(33), p)).toBe(Math.round(trialXpBase(33)));
@@ -1624,6 +1649,25 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
     expect(r.members[2]!.knockedDown).toBe(false);
   });
 
+  it('🩹 une embuscade PERDUE : TOUS les tombés sont « à terre », seul le premier est 🤕', () => {
+    // Toute l'escorte tombe (clôture de la défaite) ; `convoyHurt` n'envoie que le premier à
+    // l'infirmerie. Les deux autres étaient à terre aussi : sans marque, le rapport le taisait.
+    const v = van();
+    const evPerdue = {
+      kind: 'bandits' as const,
+      won: false,
+      slain: 0,
+      down: [escort[1]!.id, escort[0]!.id, escort[2]!.id],
+      text: 'Des bandits emportent une part du convoi.',
+    };
+    const r = caravanReport(
+      { ...v, outcome: { ...v.outcome, events: [evPerdue], hurt: [escort[1]!.id] } },
+      escort,
+    );
+    expect(r.members.map((m) => m.hurt)).toEqual([false, true, false]);
+    expect(r.members.map((m) => m.knockedDown)).toEqual([true, false, true]);
+  });
+
   it('la cargaison est arrondie comme à l’encaissement, les salaires restent à part', () => {
     const v = van();
     const demi = { ...v, outcome: { ...v.outcome, energy: 55.5, gold: 100.4, wages: 30.6 } };
@@ -1983,47 +2027,43 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     expect(roadPairs([guerrier('a', { familiarId: 'parti' })], road([fam('f1')])).size).toBe(0);
   });
 
-  it('⚠️ roadTroop : DANGER ABSOLU — le lieu seul, calibré sur la référence équipée', () => {
+  it('⚠️ roadTroop : UNE SEULE FORCE — les corps somment EXACTEMENT au combattant `roadFoe`', () => {
+    // Mesuré avant : Σ PV des corps = ×2,23 les PV réels au niveau 12, ×0,53 au niveau 70
+    // (une seconde calibration). Désormais une barre de PV par corps dit ce que le combat applique.
+    const somme = (t: { combatant: { pv: number; damage: number } }[]) => ({
+      pv: t.reduce((s, x) => s + x.combatant.pv, 0),
+      damage: t.reduce((s, x) => s + x.combatant.damage, 0),
+    });
+    for (const level of [5, 12, 26, 45, 70, 95])
+      for (const perilous of [false, true]) {
+        const p = poi({ level, perilous });
+        const f = roadFoe(p);
+        const t = roadTroop(p);
+        expect(somme(t), `niveau ${level} ${perilous ? 'périlleux' : 'calme'}`).toEqual({
+          pv: f.pv,
+          damage: f.damage,
+        });
+        for (const x of t) expect(x.level).toBe(level);
+      }
     const p = poi({ level: 30 });
     expect(roadTroop(p)).toEqual(roadTroop(p));
     expect(roadTroop(p)).toHaveLength(CARAVAN.troopCalm);
-    expect(roadTroop(poi({ level: 30, perilous: true }))).toHaveLength(CARAVAN.troopPerilous);
-    const ref = roadUnits(
-      Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
-        ...refAdventurer(30, i),
-        familiarId: `refFam${i % 3}`,
-        gear: {
-          weapon: `refGear${i}weapon`,
-          armor: `refGear${i}armor`,
-          accessory: `refGear${i}accessory`,
-        },
-      })),
-      { familiars: refCompanions(30), talents: [], advGear: refAdvGear(30) },
-    );
-    expect(roadTroop(p)[0]!.combatant).toEqual(
-      troopOf(
-        ref.map((x) => x.combatant),
-        {
-          count: CARAVAN.troopCalm,
-          level: 30,
-          pvTurns: CARAVAN.foePvTurns,
-          dmgPctPv: CARAVAN.foeDmgPctPv,
-          mult: 1,
-          name: 'Bandit de grand chemin',
-          emoji: '🗡️',
-        },
-      )[0]!.combatant,
-    );
-    expect(roadTroop(poi({ level: 60 }))[0]!.combatant.pv).toBeGreaterThan(
-      roadTroop(poi({ level: 20 }))[0]!.combatant.pv,
-    );
-    const calme = roadTroop(poi({ level: 30 }))[0]!.combatant;
-    const peril = roadTroop(poi({ level: 30, perilous: true }))[0]!.combatant;
-    // ⚠️ STRICT, et sur les DEUX canaux : `perilousMult` multiplie PV et dégâts, donc une
-    // égalité voudrait dire que le drapeau est neutralisé. Un `>=` laissait passer
-    // exactement cette mutation.
-    expect(peril.damage).toBeGreaterThan(calme.damage);
-    expect(peril.pv).toBeGreaterThan(calme.pv);
-    expect(peril.damage / calme.damage).toBeCloseTo(CARAVAN.perilousMult, 1);
+  });
+
+  it('⚠️ roadTroop : calme et périlleux diffèrent là où ils diffèrent VRAIMENT — force et nom', () => {
+    // Même nombre de corps (3/3) : comparer les longueurs ne prouvait rien. Ce qui change est
+    // la FORCE (`perilousMult`, portée par `roadFoe`) et l'IDENTITÉ des bandits.
+    const calme = roadTroop(poi({ level: 30 }));
+    const peril = roadTroop(poi({ level: 30, perilous: true }));
+    const pv = (t: typeof calme) => t.reduce((s, x) => s + x.combatant.pv, 0);
+    const dmg = (t: typeof calme) => t.reduce((s, x) => s + x.combatant.damage, 0);
+    // ⚠️ STRICT, et sur les DEUX canaux : une égalité voudrait dire que le drapeau est neutralisé.
+    expect(pv(peril)).toBeGreaterThan(pv(calme));
+    expect(dmg(peril)).toBeGreaterThan(dmg(calme));
+    expect(pv(peril) / pv(calme)).toBeCloseTo(CARAVAN.perilousMult, 2);
+    expect(dmg(peril) / dmg(calme)).toBeCloseTo(CARAVAN.perilousMult, 2);
+    expect(calme.every((x) => x.name === 'Bandit de grand chemin')).toBe(true);
+    expect(peril.every((x) => x.name === 'Pillard de la passe')).toBe(true);
+    expect(pv(roadTroop(poi({ level: 60 })))).toBeGreaterThan(pv(roadTroop(poi({ level: 20 }))));
   });
 });

@@ -7,7 +7,7 @@
 // re-simulé, donc l'issue et tout ce qui en découle (cargaison, butin) sont identiques au
 // bit près à ceux du combat fondu.
 //
-// ⚠️ POURQUOI PAS DES DUELS ENCHAÎNÉS (essayés puis écartés, v0.859) : leur rapport
+// ⚠️ POURQUOI PAS DES DUELS ENCHAÎNÉS (essayés puis écartés, v0.860) : leur rapport
 // trio/solo est LINÉAIRE (≈ 2 à 3), là où un combat fondu suit offense × survie — les bandes
 // de route (solo ~0 %, trio 70-94 %) n'y tenaient à aucun réglage, et même une embuscade
 // gagnée faisait tomber 1 à 2 membres (voyages avec blessé ×2,6 à ×8).
@@ -20,9 +20,17 @@ import { mulberry32, offenseOf, survivalOf, type CombatEvent, type Combatant } f
 
 export const SKIRMISH = {
   /** Part de la base d'une épreuve (`trialXpBase`) que vaut UN ennemi abattu, pour le groupe
-   *  entier. ⚠️ MESURÉE sur les embuscades de convoi (trio de référence, 400 voyages aux
-   *  niveaux 12/20/26/45/70/85) : XP moyenne par membre, ancien bonus par combat → abattus
-   *  partagés, calme −1,3 % à −0,3 %, périlleux −11,6 % à −6,5 % (bande tolérée ±15 %). */
+   *  entier. ⚠️ MESURÉE sur les embuscades de convoi — XP moyenne par membre, ancien bonus
+   *  forfaitaire par embuscade → abattus partagés (× distance), escortes accompagnées et
+   *  équipées, 1 500 voyages par case, niveaux 12 / 26 / 70 :
+   *  - trio : calme −0,5 à −0,1 %, périlleux −8,4 à −7,0 % ;
+   *  - quatuor : calme −2,1 à −1,6 %, périlleux −7,2 à −5,8 % ;
+   *  - duo : calme −2,7 à +2,5 %, périlleux −8,9 à −7,7 % aux niveaux 12-26, −18,3 % au 70 ;
+   *  - solo : calme −8,8 à −1,2 %, périlleux −24,2 à −23,3 %.
+   *  ⚠️ Une escorte qui PERD (solo : 0 % d'embuscades gagnées) apprend moins qu'avant : on
+   *  paie ce qui est abattu, plus le simple fait d'avoir croisé du monde. Pas de bande
+   *  globale tenue : le trio et le quatuor restent sous 10 %, le solo sur route périlleuse
+   *  et le duo périlleux au niveau 70 non. */
   xpPerKill: 0.2,
   /** Un abattu ne vaut jamais plus qu'un ennemi de `niveau du membre + N` : un vétéran
    *  n'élève pas une recrue à sa place en l'emmenant sur un lieu hors de sa ligue. */
@@ -76,14 +84,9 @@ export interface GroupFight {
 }
 
 export interface TroopSpec {
+  /** Nombre de CORPS entre lesquels la troupe fondue est répartie. */
   count: number;
   level: number;
-  /** PV d'un ennemi ≈ N tours de l'offense MOYENNE d'une unité de référence. */
-  pvTurns: number;
-  /** Morsure ≈ part des PV EFFECTIFS moyens d'une unité de référence. */
-  dmgPctPv: number;
-  /** Multiplicateur de PV ET de dégâts (route périlleuse, taille de camp…). */
-  mult: number;
   name: string;
   emoji: string;
 }
@@ -101,22 +104,30 @@ export function trialXpBase(level: number): number {
  *  `cuts[i]`. ⚠️ Le dernier franchissement tombe EXACTEMENT au total — le dernier corps
  *  tombe quand le combattant fondu est à zéro, jamais avant ni après. À poids égaux, ce
  *  sont au chiffre près les bornes du rejeu de siège (`siegeStage.cutsFor` délègue ici).
- *  Des poids tous nuls valent des poids égaux. */
+ *  Des poids tous nuls valent des poids égaux.
+ *  ⚠️ JAMAIS DE BORNE À 0 (dès que le total vaut au moins 1) : une borne nulle serait
+ *  franchie par le PREMIER événement du journal, même une esquive (`dealt 0 >= 0`) — le
+ *  corps tomberait sans avoir été touché. Un petit total réparti entre beaucoup de corps y
+ *  menait par l'arrondi ; la borne est relevée à 1, ce qui garde l'ordre (monotone) et le
+ *  dernier franchissement au total. */
 export function cumulativeCuts(total: number, weights: readonly number[]): number[] {
   const sum = weights.reduce((s, w) => s + Math.max(0, w), 0);
   const w = sum > 0 ? weights.map((x) => Math.max(0, x)) : weights.map(() => 1);
   const denom = sum > 0 ? sum : weights.length;
+  const end = Math.round(total);
+  const floor = Math.min(1, Math.max(0, end));
   const cuts: number[] = [];
   let cum = 0;
   for (let i = 0; i < w.length; i++) {
     cum += w[i]!;
-    cuts.push(i === w.length - 1 ? Math.round(total) : Math.round((total * cum) / denom));
+    cuts.push(i === w.length - 1 ? end : Math.max(floor, Math.round((total * cum) / denom)));
   }
   return cuts;
 }
 
-/** Tirage pondéré (poids tous nuls → uniforme). */
-function pick<T>(rng: () => number, items: readonly T[], weight: (x: T) => number): T {
+/** Tirage pondéré (poids tous nuls → uniforme). `undefined` sur une liste vide. */
+function pick<T>(rng: () => number, items: readonly T[], weight: (x: T) => number): T | undefined {
+  if (!items.length) return undefined;
   const ws = items.map((x) => Math.max(0, weight(x)));
   const sum = ws.reduce((s, x) => s + x, 0);
   if (sum <= 0) return items[Math.floor(rng() * items.length)]!;
@@ -154,6 +165,9 @@ function standing(list: readonly SkirmishUnit[], fallen: Map<string, number>): S
  * DÉFAITE — c'est `simulateCombat` qui le dit, on ne fait que le recopier.
  * ⚠️ GÉNÉRATEUR SÉPARÉ, seedé ici : l'appelant ne consomme RIEN de son propre flux, sinon
  * lire le groupe décalerait tous ses tirages suivants (butin, rencontres).
+ * ⚠️ UN CAMP VIDE NE PLANTE PAS : sans personne en face pour la créditer, une chute reste
+ * inscrite (`down`/`foesDown`), simplement sans entrée dans `kills` — il n'y a pas de tueur
+ * à nommer. Inatteignable par la route (escorte ≥ 1), mais `GroupFight` est générique.
  */
 export function deriveSkirmish(
   fight: GroupFight,
@@ -182,9 +196,16 @@ export function deriveSkirmish(
   const killsBy: Record<string, number> = {};
   const down: string[] = [];
   const foesDown: string[] = [];
-  const credit = (at: number, killer: SkirmishUnit, victim: SkirmishUnit, ally: boolean) => {
-    kills.push({ at, killer: killer.id, victim: victim.id });
-    killsBy[killer.id] = (killsBy[killer.id] ?? 0) + 1;
+  const credit = (
+    at: number,
+    killer: SkirmishUnit | undefined,
+    victim: SkirmishUnit,
+    ally: boolean,
+  ) => {
+    if (killer) {
+      kills.push({ at, killer: killer.id, victim: victim.id });
+      killsBy[killer.id] = (killsBy[killer.id] ?? 0) + 1;
+    }
     (ally ? down : foesDown).push(victim.id);
     (ally ? allyAt : foeAt).set(victim.id, at);
   };
@@ -226,28 +247,41 @@ export function deriveSkirmish(
 }
 
 /**
- * Une TROUPE à danger ABSOLU, dérivée d'un groupe de RÉFÉRENCE — jamais du groupe envoyé :
- * sinon « combien j'en envoie » ne voudrait plus rien dire.
+ * Une TROUPE : le combattant FONDU (`foe`, celui qui livre le combat) réparti entre
+ * `count` CORPS. ⚠️ UNE SEULE FORCE DE TROUPE : la somme des PV des corps vaut EXACTEMENT
+ * `foe.pv`, la somme de leurs dégâts EXACTEMENT `foe.damage`. Une barre de PV par corps, un
+ * « PV de la troupe » affiché ou un camp dimensionné sur ces corps disent donc ce que le
+ * combat applique — jamais une seconde calibration.
  *
- * ⚠️ `offenseOf` / `survivalOf` sont les formules de `combatPower`, l'arbitre du jeu :
- * une copie locale (celle de l'ancienne route) ignorait signatures et esquive, et la route
- * cessait de suivre l'escorte (mesuré v0.797).
+ * ⚠️ POURQUOI : les corps portaient auparavant une force calculée à part (offense/survie
+ * MOYENNES d'une unité de référence). Mesuré, leur somme valait ×2,23 les PV réels de
+ * l'embuscade au niveau 12 et ×0,53 au niveau 70 — sans effet tant qu'ils ne servaient que
+ * de poids égaux, mais un mensonge d'affichage assuré pour l'étape 3 (camps).
+ *
+ * Répartition à parts égales par les bornes cumulées : les PV d'un corps sont l'écart entre
+ * deux bornes consécutives, donc `deriveSkirmish`, qui prend ces PV pour poids, retrouve au
+ * chiffre près les bornes à poids égaux — l'issue et le journal des morts ne bougent pas.
+ * Crit, esquive, initiative (et tout le reste) sont ceux du combattant fondu.
+ * ⚠️ Le danger ABSOLU est celui de `foe` : à l'appelant de le dériver d'une RÉFÉRENCE,
+ * jamais du groupe envoyé — sinon « combien j'en envoie » ne voudrait plus rien dire.
  * ⚠️ Les ids (`foe0`, `foe1`…) ne sont uniques QUE DANS UN MÊME appel : combiner les
  * unités de deux appels (deux factions, deux vagues…) sans les préfixer produirait des
  * doublons — à l'appelant de les distinguer s'il en assemble plusieurs.
  */
-export function troopOf(reference: readonly Combatant[], spec: TroopSpec): SkirmishUnit[] {
-  const n = Math.max(1, reference.length);
-  const off = reference.reduce((s, x) => s + offenseOf(x), 0) / n;
-  const surv = reference.reduce((s, x) => s + survivalOf(x), 0) / n;
-  const pv = Math.max(1, Math.round(Math.max(1, off) * spec.pvTurns * spec.mult));
-  const damage = Math.max(1, Math.round(surv * 100 * spec.dmgPctPv * spec.mult));
-  return Array.from({ length: Math.max(1, Math.round(spec.count)) }, (_, i) => ({
+export function troopOf(foe: Combatant, spec: TroopSpec): SkirmishUnit[] {
+  const even = new Array<number>(Math.max(1, Math.round(spec.count))).fill(1);
+  const parts = (total: number) => {
+    const cuts = cumulativeCuts(total, even);
+    return cuts.map((c, i) => c - (i ? cuts[i - 1]! : 0));
+  };
+  const pv = parts(foe.pv);
+  const damage = parts(foe.damage);
+  return pv.map((p, i) => ({
     id: `foe${i}`,
     name: spec.name,
     emoji: spec.emoji,
     level: Math.max(1, spec.level),
-    combatant: { name: spec.name, pv, damage, crit: 0.08, dodge: 0.05, initiative: 12 },
+    combatant: { ...foe, name: spec.name, pv: p, damage: damage[i]! },
   }));
 }
 

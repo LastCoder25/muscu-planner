@@ -2237,13 +2237,15 @@ export const useCharacterStore = defineStore('character', () => {
     return true;
   }
 
-  /** Encaisse la cargaison d'un convoi rentré : devises, XP par aventurier, blessés.
+  /** Encaisse la cargaison d'un convoi rentré (devises, XP par aventurier, blessés) et rend
+   *  **ce que la mission a changé pour l’escorte** (`AdvProgress[]`), ou `null` si rien n’a
+   *  été encaissé.
+   *
    *  ⚠️ `o.xp` contient DÉJÀ le socle de mission ET la part des bandits abattus, calculés au
    *  départ (moteur de groupe) ; un convoi lancé avant la bascule porte l'XP de l'ancien
-   *  moteur dans le même champ — rien à distinguer ici. `o.hurt` = ceux qui sont tombés. */
-  /** Encaisse une cargaison et rend **ce que la mission a changé pour l’escorte**
-   *  (`AdvProgress[]`), ou `null` si rien n’a été encaissé.
-   *
+   *  moteur dans le même champ — rien à distinguer ici.
+   *  ⚠️ `o.hurt` N'EST PAS « ceux qui sont tombés » : c'est la règle `convoyHurt`. Embuscade
+   *  GAGNÉE → personne (les tombés se relèvent) ; embuscade PERDUE → le PREMIER tombé seul.
    *  ⚠️ Un booléen ne suffisait plus : le niveau d’un aventurier est CACHÉ, donc une
    *  étoile gagnée en convoi ne se voyait qu’en rouvrant la Guilde. L’écran a besoin
    *  du AVANT/APRÈS pour l’annoncer — et c’est la LIB qui compare, pas lui.

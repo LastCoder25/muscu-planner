@@ -13,14 +13,12 @@
     </div>
 
     <!-- Une ligne par embuscade (et le reste de la route) : « N bandits abattus » s'affiche
-         quand le convoi porte le combat de groupe — absent sur un convoi d'avant, qui ne
-         montre alors que sa route d'origine, comme aujourd'hui. -->
+         quand l'embuscade en a abattu au moins un — jamais « 0 bandit abattu », et rien sur
+         un convoi d'avant le combat de groupe (pas de `slain`). -->
     <ul v-if="r.events.length" class="cr-road">
       <li v-for="(e, i) in r.events" :key="i" class="cr-road-line">
         {{ e.text }}
-        <span v-if="e.slain !== undefined" class="cr-road-slain">
-          ⚔️ {{ slainLabel(e.slain) }}
-        </span>
+        <span v-if="e.slain" class="cr-road-slain"> ⚔️ {{ slainLabel(e.slain) }} </span>
       </li>
     </ul>
 
@@ -44,7 +42,11 @@
         <div class="cr-exp-title">
           ⚔️ {{ r.members.length }} aventurier{{ r.members.length > 1 ? 's' : '' }}
           <span class="cr-exp-trailing">
-            <span v-if="r.hasKills" class="cr-exp-kills" title="Bandits abattus au total">
+            <span
+              v-if="r.hasKills && r.totalKills > 0"
+              class="cr-exp-kills"
+              title="Bandits abattus au total"
+            >
               ⚔️ {{ r.totalKills }}
             </span>
             <span class="cr-exp-xp">+{{ r.totalXp }} XP</span>
@@ -60,7 +62,7 @@
           <span
             v-else-if="m.knockedDown"
             class="cr-m-down"
-            title="Mis à terre pendant l'embuscade, mais relevé — pas d'infirmerie"
+            title="Mis à terre pendant une embuscade, mais pas blessé — pas d'infirmerie"
             >à terre</span
           >
           <span v-if="m.kills" class="cr-m-kills" :title="`${m.kills} bandit(s) abattu(s) par lui`">
@@ -108,8 +110,8 @@ function fmtRate(n: number): string {
 function killsLabel(n: number): string {
   return `${n} abattu${n > 1 ? 's' : ''}`;
 }
-/** « 1 bandit abattu » / « N bandits abattus » — même convention de pluriel que le reste
- *  du projet (accord dès que N > 1, y compris à 0). */
+/** « 1 bandit abattu » / « N bandits abattus » — accord dès que N > 1. Jamais appelé à 0 :
+ *  une embuscade sans abattu n'affiche pas de compte (cf. le `v-if` du template). */
 function slainLabel(n: number): string {
   const pl = n > 1 ? 's' : '';
   return `${n} bandit${pl} abattu${pl}`;

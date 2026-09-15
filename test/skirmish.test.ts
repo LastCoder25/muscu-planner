@@ -103,6 +103,19 @@ describe('✂️ cumulativeCuts — des bornes cumulées qui somment EXACTEMENT'
   it('les parts suivent les POIDS', () => {
     expect(cumulativeCuts(600, [1, 2, 3])).toEqual([100, 300, 600]);
   });
+  it('⚠️ des poids tous NULS (ou négatifs) valent des poids ÉGAUX', () => {
+    expect(cumulativeCuts(600, [0, 0, 0])).toEqual([200, 400, 600]);
+    expect(cumulativeCuts(600, [-1, 0, -5])).toEqual([200, 400, 600]);
+  });
+  it('⚠️ JAMAIS de borne à 0 : un corps ne tombe pas au premier événement sans être touché', () => {
+    // 2 PV pour 5 corps : l'arrondi donnait une première borne à 0 — franchie par une esquive.
+    const cuts = cumulativeCuts(2, [1, 1, 1, 1, 1]);
+    expect(cuts[cuts.length - 1]).toBe(2);
+    for (const x of cuts) expect(x).toBeGreaterThanOrEqual(1);
+    for (let i = 1; i < cuts.length; i++) expect(cuts[i]!).toBeGreaterThanOrEqual(cuts[i - 1]!);
+    // Un total nul reste nul (rien à répartir) : la borne ne ment pas en inventant 1 PV.
+    expect(cumulativeCuts(0, [1, 1])).toEqual([0, 0]);
+  });
   it('⚠️ à poids égaux, ce sont EXACTEMENT les bornes du rejeu de siège d’avant (source unique)', () => {
     // `cutsFor` délègue désormais ici : on compare donc à la formule qu'il portait, pour que
     // l'extraction ne décale aucun corps d'un rejeu de siège.
@@ -329,32 +342,63 @@ describe('⚔️ deriveSkirmish — le groupe LU dans le journal du combat fondu
       down: [],
     });
   });
+
+  it('⚠️ un camp VIDE ne plante pas, même quand le journal fait tomber quelqu’un en face', () => {
+    // Sans allié, les corps franchissent leur borne : il n'y a personne à créditer, mais la
+    // chute reste inscrite. Avant, `pick` rendait `undefined` et `killer.id` levait.
+    const foes = [u('f0', { pv: 50 }), u('f1', { pv: 50 })];
+    const sansAllie: GroupFight = { log: [ev(0, 40), ev(0, 0)], win: true, allyPv: 0, foePv: 100 };
+    const r = deriveSkirmish(sansAllie, [], foes, 7);
+    expect([...r.foesDown].sort()).toEqual(['f0', 'f1']);
+    expect(r.kills).toEqual([]);
+    expect(r.killsBy).toEqual({});
+    // Et symétriquement, sans ennemi : les alliés qui tombent n'ont pas de tueur.
+    const allies = [u('a', { pv: 100 }), u('b', { pv: 100 })];
+    const sansEnnemi: GroupFight = { log: [ev(0, 0)], win: false, allyPv: 200, foePv: 0 };
+    const p = deriveSkirmish(sansEnnemi, allies, [], 7);
+    expect([...p.down].sort()).toEqual(['a', 'b']);
+    expect(p.kills).toEqual([]);
+  });
 });
 
-describe('🗡️ troopOf — danger ABSOLU, dérivé d’une référence', () => {
-  it('ne dépend que de la RÉFÉRENCE et du lieu', () => {
-    const ref = [c({ pv: 400, damage: 40, strikes: 2 }), c({ pv: 600, damage: 20 })];
-    const spec = {
-      count: 3,
-      level: 20,
-      pvTurns: 2,
-      dmgPctPv: 0.25,
-      mult: 1,
-      name: 'Bandit',
-      emoji: '🗡️',
-    };
-    const t = troopOf(ref, spec);
-    expect(t).toHaveLength(3);
-    const off = (offenseOf(ref[0]!) + offenseOf(ref[1]!)) / 2;
-    const surv = (survivalOf(ref[0]!) + survivalOf(ref[1]!)) / 2;
-    expect(t[0]!.combatant.pv).toBe(Math.round(off * 2));
-    expect(t[0]!.combatant.damage).toBe(Math.round(surv * 100 * 0.25));
-    expect(new Set(t.map((x) => x.id)).size).toBe(3);
-    for (const x of t) expect(x.level).toBe(20);
-    const fort = troopOf(ref, { ...spec, mult: 1.5 });
-    expect(fort[0]!.combatant.pv).toBeGreaterThan(t[0]!.combatant.pv);
-    expect(fort[0]!.combatant.damage).toBeGreaterThan(t[0]!.combatant.damage);
-    expect(troopOf(ref, { ...spec, count: 5 })).toHaveLength(5);
+describe('🗡️ troopOf — UNE seule force de troupe : le combattant fondu, réparti en corps', () => {
+  const spec = { count: 3, level: 20, name: 'Bandit', emoji: '🗡️' };
+
+  it('⚠️ la somme des PV ET des dégâts des corps vaut EXACTEMENT ceux du combattant fondu', () => {
+    for (const [pv, damage, count] of [
+      [1000, 90, 3],
+      [12345, 777, 5],
+      [7, 2, 4],
+      [83761, 5, 11],
+      [1, 1, 3],
+    ] as [number, number, number][]) {
+      const foe = c({ pv, damage, crit: 0.13, dodge: 0.07, initiative: 9, lifesteal: 0.1 });
+      const t = troopOf(foe, { ...spec, count });
+      expect(t).toHaveLength(count);
+      expect(t.reduce((s, x) => s + x.combatant.pv, 0), `pv ${pv}/${count}`).toBe(pv);
+      expect(t.reduce((s, x) => s + x.combatant.damage, 0), `dmg ${damage}/${count}`).toBe(damage);
+      expect(new Set(t.map((x) => x.id)).size).toBe(count);
+      for (const x of t) {
+        expect(x.level).toBe(20);
+        // Le reste du combattant EST celui du combat fondu, pas une valeur inventée.
+        expect(x.combatant).toMatchObject({ crit: 0.13, dodge: 0.07, initiative: 9, lifesteal: 0.1 });
+      }
+    }
+  });
+
+  it('à parts ÉGALES : les PV des corps redonnent au chiffre près les bornes à poids égaux', () => {
+    // `deriveSkirmish` prend les PV des corps pour poids : l'issue et le journal ne bougent pas.
+    for (const [pv, count] of [
+      [1000, 3],
+      [12345, 6],
+      [9999, 7],
+      [83761, 11],
+    ] as [number, number][]) {
+      const t = troopOf(c({ pv }), { ...spec, count });
+      expect(cumulativeCuts(pv, t.map((x) => x.combatant.pv))).toEqual(
+        cumulativeCuts(pv, new Array<number>(count).fill(1)),
+      );
+    }
   });
 });
 
@@ -383,6 +427,12 @@ describe('🎓 skirmishXpShares — les abattus, partagés entre les présents',
     const un = skirmishXpShares([{ id: 'a', level: 10 }], foes, { foesDown: ['f1'] })['a'];
     expect(un).toBe(Math.round(SKIRMISH.xpPerKill * trialXpBase(10)));
     expect(skirmishXpShares([{ id: 'a', level: 10 }], foes, { foesDown: [] })['a']).toBe(0);
+  });
+  it('⚠️ le rendement décroissant a un PLANCHER (0,15) : un très haut vétéran touche encore', () => {
+    // Niveau 100 sur des ennemis de niveau 10 : ratio brut 0,1, relevé à 0,15.
+    const tresVieux = skirmishXpShares([{ id: 'v', level: 100 }], foes, tous)['v'];
+    expect(tresVieux).toBe(Math.round(3 * SKIRMISH.xpPerKill * trialXpBase(10) * 0.15 ** 1.5));
+    expect(tresVieux).toBeGreaterThan(0);
   });
   it('⚠️ un VÉTÉRAN sur un lieu faible gagne peu (rendement décroissant de missionXp)', () => {
     const vet = skirmishXpShares([{ id: 'v', level: 40 }], foes, tous)['v']!;
