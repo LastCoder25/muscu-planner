@@ -32,6 +32,7 @@ import {
   convoyHurt,
   missionXp,
   refAdventurer,
+  refEscortUnits,
   resolveCaravan,
   roadCompanionEffects,
   roadFoe,
@@ -2081,5 +2082,26 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     expect(calme.every((x) => x.name === 'Bandit de grand chemin')).toBe(true);
     expect(peril.every((x) => x.name === 'Pillard de la passe')).toBe(true);
     expect(pv(troupe(poi({ level: 60 })))).toBeGreaterThan(pv(troupe(poi({ level: 20 }))));
+  });
+});
+
+describe('🧭 refEscortUnits — la référence partagée par la route et les camps', () => {
+  it('est l’escorte de référence accompagnée et équipée, unité par unité', () => {
+    const L = 30;
+    const ref = Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
+      ...refAdventurer(L, i),
+      familiarId: `refFam${i % 3}`,
+      gear: {
+        weapon: `refGear${i}weapon`,
+        armor: `refGear${i}armor`,
+        accessory: `refGear${i}accessory`,
+      },
+    }));
+    // ⚠️ Écart au brief : `roadUnits` prend les PAIRES déjà construites
+    // (`Map<string, CompanionSet>`), pas un `RoadCompanions` brut — on passe donc par
+    // `roadPairs`, comme tout appelant réel de `roadUnits`.
+    const road = { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L) };
+    const attendu = roadUnits(ref, roadPairs(ref, road));
+    expect(refEscortUnits(L)).toEqual(attendu);
   });
 });

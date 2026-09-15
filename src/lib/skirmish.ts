@@ -16,7 +16,14 @@
 // brèche, secteurs) n'ont pas d'objet en rase campagne.
 //
 // ⚠️ PERSONNE NE MEURT : un allié « tombé » part à l'infirmerie (`down`), jamais perdu.
-import { mulberry32, offenseOf, survivalOf, type CombatEvent, type Combatant } from './combat';
+import {
+  combatPowerRaw,
+  mulberry32,
+  offenseOf,
+  survivalOf,
+  type CombatEvent,
+  type Combatant,
+} from './combat';
 
 export const SKIRMISH = {
   /** Part de la base d'une épreuve (`trialXpBase`) que vaut UN ennemi abattu, pour le groupe
@@ -313,6 +320,39 @@ export function troopOf(foe: Combatant, spec: TroopSpec): SkirmishUnit[] {
     level: Math.max(1, spec.level),
     combatant: { ...foe, name: spec.name, pv: p, damage: damage[i]! },
   }));
+}
+
+/**
+ * 🧩 Le GROUPE FONDU d'un camp — additionne ce que l'arbitre du jeu mesure.
+ *
+ * ⚠️ POURQUOI PAS `escortCombatant` (la fusion de la route) : il additionne les STATS, puis
+ * dérive frappes et dégâts de la somme. Calibré à ≤ 4 membres (`CARAVAN.escortMax`), il
+ * devient non linéaire au-delà — frappes = 1 + ΣAgilité·k, terme de niveau compté une fois —
+ * et un groupe de 10 aurait une offense sans rapport avec 10 aventuriers. Les camps n'ont
+ * AUCUNE taille maximale ; et le héros n'a pas de `advStats`.
+ * ⚠️ LA RÈGLE : Σ `offenseOf` et Σ `survivalOf` sont CONSERVÉES. Le héros entre comme une
+ * unité de plus, avec son combattant RÉEL (équipement, talents, voie, procs). Rien n'est
+ * recopié : PV et dégâts du MODÈLE sont remis à l'échelle par `survivalOf`/`offenseOf`
+ * eux-mêmes, donc toute évolution de l'arbitre suit sans retouche.
+ * ⚠️ MODÈLE = l'unité de plus forte `combatPowerRaw` (tri stable par id à égalité) : ce sont
+ * SES crit, esquive, réduction, frappes, signatures et procs que le combat applique.
+ */
+export function fuseUnits(units: readonly SkirmishUnit[], name: string): Combatant {
+  if (!units.length) throw new Error('fuseUnits : groupe vide');
+  const sorted = [...units].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const model = sorted.reduce((best, u) =>
+    combatPowerRaw(u.combatant) > combatPowerRaw(best.combatant) ? u : best,
+  ).combatant;
+  const off = units.reduce((s, u) => s + offenseOf(u.combatant), 0);
+  const surv = units.reduce((s, u) => s + survivalOf(u.combatant), 0);
+  const modelOff = Math.max(1e-9, offenseOf(model));
+  const modelSurv = Math.max(1e-9, survivalOf(model));
+  return {
+    ...model,
+    name,
+    pv: Math.max(1, Math.round((model.pv * surv) / modelSurv)),
+    damage: Math.max(1, Math.round((model.damage * off) / modelOff)),
+  };
 }
 
 /**

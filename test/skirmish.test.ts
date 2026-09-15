@@ -3,6 +3,7 @@ import {
   SKIRMISH,
   cumulativeCuts,
   deriveSkirmish,
+  fuseUnits,
   skirmishXpShares,
   slainByAlly,
   trialXpBase,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/skirmish';
 import { cutsFor } from '@/lib/siegeStage';
 import {
+  combatPowerRaw,
   offenseOf,
   simulateCombat,
   survivalOf,
@@ -521,5 +523,88 @@ describe('🛡️ ABATTUS PAR ALLIÉ — jamais ceux de la TROUPE, même en cas 
     const escort = [{ id: 'a0' }];
     const d = { foesDown: ['t0'], kills: [{ at: 0, killer: 't1', victim: 't0' }] };
     expect(slainByAlly(escort, d)).toEqual({ a0: 0 });
+  });
+});
+
+describe('🧩 fuseUnits — le groupe fondu additionne ce que l’arbitre mesure', () => {
+  const unit = (id: string, o: Partial<Combatant>, level = 20): SkirmishUnit => ({
+    id,
+    name: id,
+    emoji: '⚔️',
+    level,
+    combatant: {
+      name: id,
+      pv: 500,
+      damage: 40,
+      crit: 0.1,
+      dodge: 0.05,
+      initiative: 10,
+      strikes: 1.5,
+      dmgReduction: 0.1,
+      ...o,
+    },
+  });
+  const somme = (us: SkirmishUnit[], f: (c: Combatant) => number) =>
+    us.reduce((s, u) => s + f(u.combatant), 0);
+
+  it('une seule unité : offense et survie inchangées', () => {
+    const u = unit('a', {});
+    const f = fuseUnits([u], 'G');
+    expect(offenseOf(f)).toBeCloseTo(offenseOf(u.combatant), 0);
+    expect(survivalOf(f)).toBeCloseTo(survivalOf(u.combatant), 1);
+    expect(f.name).toBe('G');
+  });
+
+  it('⚠️ la SOMME est exacte, quelle que soit la forme des membres', () => {
+    const us = [
+      unit('a', { pv: 900, damage: 20, strikes: 1, crit: 0.05 }),
+      unit('b', { pv: 300, damage: 90, strikes: 3, crit: 0.4, dodge: 0.2 }),
+      unit('c', { pv: 1500, damage: 10, dmgReduction: 0.45 }),
+    ];
+    const f = fuseUnits(us, 'G');
+    expect(offenseOf(f) / somme(us, offenseOf)).toBeCloseTo(1, 2);
+    expect(survivalOf(f) / somme(us, survivalOf)).toBeCloseTo(1, 2);
+  });
+
+  it('le MODÈLE est l’unité la plus puissante : ses caractéristiques passent au groupe', () => {
+    const faible = unit('faible', { crit: 0.02, strikes: 1, damage: 5, pv: 100 });
+    const forte = unit('forte', {
+      crit: 0.5,
+      strikes: 4,
+      damage: 200,
+      pv: 2000,
+      procs: new Set(['aegis']),
+    });
+    const f = fuseUnits([faible, forte], 'G');
+    expect(combatPowerRaw(forte.combatant)).toBeGreaterThan(combatPowerRaw(faible.combatant));
+    expect(f.crit).toBe(0.5);
+    expect(f.strikes).toBe(4);
+    expect(f.procs?.has('aegis')).toBe(true);
+  });
+
+  it('⚠️ l’ORDRE des membres ne change rien', () => {
+    const us = [unit('a', { damage: 30 }), unit('b', { damage: 70, pv: 800 }), unit('c', {})];
+    expect(fuseUnits([...us].reverse(), 'G')).toEqual(fuseUnits(us, 'G'));
+    // ⚠️ MÊME À ÉGALITÉ DE PUISSANCE : sans le tri par id, le `reduce` garderait le PREMIER
+    // max rencontré dans l'ordre REÇU — deux unités à `combatPowerRaw` EXACTEMENT égal (mêmes
+    // damage/pv/crit/dodge/strikes/dmgReduction, seule `initiative` diffère, hors du calcul de
+    // puissance) suffisent à le révéler : le modèle élu doit rester le même quel que soit
+    // l'ordre d'entrée.
+    const twinA = unit('twinA', { initiative: 10 });
+    const twinB = unit('twinB', { initiative: 99 });
+    const tie = [twinA, twinB];
+    expect(fuseUnits([...tie].reverse(), 'G').initiative).toBe(fuseUnits(tie, 'G').initiative);
+  });
+
+  it('aucune taille maximale : douze membres valent douze fois un membre', () => {
+    const u = unit('x', {});
+    const douze = Array.from({ length: 12 }, (_, i) => ({ ...u, id: `x${i}` }));
+    const f = fuseUnits(douze, 'G');
+    expect(offenseOf(f) / offenseOf(u.combatant)).toBeCloseTo(12, 1);
+    expect(survivalOf(f) / survivalOf(u.combatant)).toBeCloseTo(12, 1);
+  });
+
+  it('une liste vide est une erreur d’appel', () => {
+    expect(() => fuseUnits([], 'G')).toThrow();
   });
 });
