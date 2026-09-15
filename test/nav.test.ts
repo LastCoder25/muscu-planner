@@ -1,6 +1,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import type { Router } from 'vue-router';
-import { pathOf, samePage, shouldGoBack, hasPreviousEntry, backOr } from '@/lib/nav';
+import {
+  pathOf,
+  samePage,
+  shouldGoBack,
+  hasPreviousEntry,
+  backOr,
+  headerBack,
+  isFlowPage,
+} from '@/lib/nav';
 
 describe('retour arrière sans page précédente (backOr)', () => {
   const g = globalThis as { window?: unknown };
@@ -34,6 +42,59 @@ describe('retour arrière sans page précédente (backOr)', () => {
     withHistoryBack(null);
     backOr(router, '/tennis');
     expect(calls).toEqual(['push:/tennis']);
+  });
+
+  it('⚠️ LE CAS RÉEL : le retour de l’en-tête ne ramène pas à la génération de séance du 360', () => {
+    const { router, calls } = fakeRouter();
+    withHistoryBack('/combo/7/session');
+    headerBack(router, '/');
+    expect(calls).toEqual(['push:/']);
+  });
+
+  it('le retour de l’en-tête revient normalement vers une vraie page', () => {
+    for (const prev of [
+      '/challenges',
+      '/combo/7',
+      '/stats',
+      '/session/3/detail',
+      '/court/bilan/2',
+    ]) {
+      const { router, calls } = fakeRouter();
+      withHistoryBack(prev);
+      headerBack(router, '/');
+      expect(calls, prev).toEqual(['back']);
+    }
+    const { router, calls } = fakeRouter();
+    withHistoryBack(null);
+    headerBack(router, '/');
+    expect(calls).toEqual(['push:/']);
+  });
+
+  it('isFlowPage : séances en cours, préparations et assistants, query comprise', () => {
+    for (const p of [
+      '/combo/7/session',
+      '/combo/7/session?x=1',
+      '/session/3',
+      '/session/3/ready',
+      '/free',
+      '/court/9',
+      '/court/new',
+      '/combo/new',
+      '/challenges/new?muscle=dos',
+      '/import',
+    ])
+      expect(isFlowPage(p), p).toBe(true);
+    for (const p of [
+      '/',
+      '/challenges',
+      '/combo/7',
+      '/session/3/detail',
+      '/court/bilan/2',
+      '/court/9/detail',
+      '/challenges/42',
+      null,
+    ])
+      expect(isFlowPage(p), String(p)).toBe(false);
   });
 
   it('avec une page précédente, on revient simplement en arrière', () => {

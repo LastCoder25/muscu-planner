@@ -214,7 +214,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { backOr } from '@/lib/nav';
+import { headerBack } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 // Chargés à la demande : le volet jeu n'existe qu'en cockpit → un téléphone ne
 // télécharge jamais ces (gros) chunks via le layout.
@@ -314,7 +314,9 @@ function goBack() {
   // Accès direct / rechargement / lancement PWA → pas d'entrée précédente dans
   // l'historique : `router.back()` ne ferait rien (ticket b459601a). On replie
   // alors vers l'accueil. Vue Router stocke la précédente dans history.state.back.
-  backOr(router, '/');
+  // Un écran de passage derrière soi (génération ou séance en cours, assistant) ne compte
+  // pas : on rejoint l'accueil au lieu d'y retomber.
+  headerBack(router, '/');
 }
 
 async function goHome() {
