@@ -42,8 +42,8 @@ function buildSchedule(): AdvUnlock[] {
     detail: 'Tu peux équiper un talent (ils se droppent en donjon/boss ; garde le meilleur).',
   });
 
-  // RANG DES OBJETS — tes drops tombent à ton rang de prestige (v0.875, règle des familiers)
-  // : un rang tous les 10 niveaux. Chaque nouveau rang est un vrai palier.
+  // RANG DES OBJETS — un rang tous les 10 niveaux (v0.875). Depuis la v0.894 il s'OUVRE sur
+  // la durée du rang (`ownRankChance`) : rare au début, de plus en plus fréquent.
   let prev = prestigeRankIndex(1);
   for (let lvl = 2; lvl <= 120; lvl++) {
     const c = prestigeRankIndex(lvl);
@@ -55,9 +55,8 @@ function buildSchedule(): AdvUnlock[] {
         emoji: '✨',
         title: `Rang des objets : ${rarityRank(rk).name}`,
         detail:
-          c >= 5
-            ? `Tes objets tombent désormais au rang ${rarityRank(rk).name} (effet légendaire possible).`
-            : `Tes objets tombent désormais au rang ${rarityRank(rk).name}.`,
+          `Le rang ${rarityRank(rk).name} s'ouvre : rare au début, de plus en plus fréquent au fil du rang` +
+          (c >= 5 ? ' (effet légendaire possible).' : '.'),
       });
       prev = c;
     }

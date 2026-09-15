@@ -12,6 +12,12 @@ import {
   rankRollMult,
   TROPHY_K,
   TROPHY_SLOT,
+  TROPHY_STAR,
+  trophyStar,
+  trophyStarOdds,
+  gradeLabel,
+  prestigeRankIndex,
+  RANK_ORDER,
   WORN_SLOTS,
   SLOTS,
   FAMILIAR_SLOT,
@@ -53,6 +59,50 @@ function boss(over: Partial<FriendBoss> = {}): FriendBoss {
     ...over,
   };
 }
+
+describe('🏆 TROPHÉE — rang et étoiles (v0.894)', () => {
+  const draw = (level: number, n = 4000, luck = 0) => {
+    const rng = mulberry32(level * 31 + 7);
+    const stars = [0, 0, 0, 0, 0];
+    const ranks = new Set<string>();
+    for (let i = 0; i < n; i++) {
+      const t = rollTrophy(rng, { mains: TROPHY_MAINS.push, title: 'x', level, luck });
+      stars[trophyStar(t.roll) - 1]!++;
+      ranks.add(t.rarity);
+    }
+    return { stars: stars.map((s) => s / n), ranks };
+  };
+  it('le rang est TOUJOURS celui du joueur', () => {
+    for (const L of [5, 12, 30, 55, 78]) {
+      expect([...draw(L, 300).ranks]).toEqual([RANK_ORDER[prestigeRankIndex(L)]]);
+    }
+  });
+  it('en bas du rang (★1), le trophée est ★1', () => {
+    for (const L of [1, 11, 21, 51]) expect(draw(L).stars[0]).toBe(1);
+  });
+  it('à ★5 de son rang : ★5 six fois sur dix, jamais au-dessus de son étoile', () => {
+    for (const L of [10, 30, 60]) {
+      const { stars } = draw(L);
+      expect(stars[4]!).toBeCloseTo(TROPHY_STAR.top, 1);
+      expect(stars[3]!).toBeGreaterThan(stars[2]!); // plus proche de son étoile = plus fréquent
+    }
+    // Joueur ★3 (niveau 25) : jamais ★4 ni ★5.
+    const s3 = draw(25).stars;
+    expect(s3[3]! + s3[4]!).toBe(0);
+    expect(s3[2]!).toBeCloseTo(TROPHY_STAR.top, 1);
+  });
+  it('les chances d’étoiles somment à 1 et suivent l’étoile du joueur', () => {
+    for (let L = 1; L <= 80; L++) {
+      const o = trophyStarOdds(L);
+      expect(o.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 9);
+    }
+  });
+  it('gradeLabel l’écrit en rang et étoiles', () => {
+    const t = rollTrophy(mulberry32(3), { mains: TROPHY_MAINS.push, title: 'x', level: 30 });
+    expect(gradeLabel(t)).toMatch(/★/);
+    expect(gradeLabel({ ...t, slot: 'weapon' })).not.toMatch(/★/);
+  });
+});
 
 describe('🏆 TROPHÉE — tirage', () => {
   it('va dans l’emplacement trophée, porte l’affixe principal de sa famille et aucun proc', () => {
@@ -268,29 +318,21 @@ describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
     expect(tot.early).toBeCloseTo(5 / 7, 6);
     expect(tot.gold).toBeGreaterThan(tard.gold);
     expect(tot.stones).toBeGreaterThan(tard.stones);
-    // La chance déplace la rareté vers le haut : sur beaucoup de joueurs, le rang moyen monte.
-    const rank = (early: number) => {
-      let sum = 0;
-      for (let i = 0; i < 300; i++) {
+    // ⚠️ v0.894 : le rang du trophée est celui du joueur ; la chance relève ses ÉTOILES. Au
+    // niveau 40 (★5 de son rang), un boss tué tôt donne plus souvent un trophée ★5.
+    const fives = (early: number) => {
+      let n = 0;
+      for (let i = 0; i < 400; i++) {
         const t = friendBossChest(
           boss({ id: 'b' + i, defeatedAt: T0 + 7 * D * (1 - early) }),
           'u',
           40,
         ).trophy;
-        sum += [
-          'commun',
-          'inhabituel',
-          'magique',
-          'rare',
-          'epique',
-          'legendaire',
-          'mythique',
-          'primordial',
-        ].indexOf(t.rarity);
+        if (trophyStar(t.roll) === 5) n++;
       }
-      return sum / 300;
+      return n / 400;
     };
-    expect(rank(1)).toBeGreaterThan(rank(0));
+    expect(fives(1)).toBeGreaterThan(fives(0) + 0.1);
   });
 
   it('se lit : rien, à ouvrir, ou à récupérer si le serveur l’a donné sans crédit', () => {

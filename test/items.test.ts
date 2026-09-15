@@ -1,4 +1,6 @@
 import { itemIconName } from '@/data/itemIcons';
+import { rankStartLevel } from '@/lib/characterRank';
+import { levelCost } from '@/lib/levels';
 import { describe, it, expect } from 'vitest';
 import {
   aggregateLines,
@@ -21,6 +23,8 @@ import {
   rollDrop,
   rollSetPiece,
   rollTier,
+  ownRankChance,
+  OWN_RANK,
   dropBand,
   dropBandLabel,
   dropPeakRank,
@@ -148,7 +152,7 @@ describe('jet biaisé bas (haut jet rare, comme la rareté)', () => {
   });
 });
 
-describe('rollTier : les objets tombent au RANG DU JOUEUR, comme les familiers (v0.875)', () => {
+describe('rollTier : le rang des objets s’ouvre sur la durée du rang (v0.894)', () => {
   const modeOf = (level: number, luck = 0, floorBonus = 0, playerLevel?: number) => {
     const c = new Array(RANK_ORDER.length).fill(0) as number[];
     for (let s = 1; s <= 3000; s++)
@@ -157,13 +161,44 @@ describe('rollTier : les objets tombent au RANG DU JOUEUR, comme les familiers (
       ]!++;
     return c;
   };
-  it('le rang le plus fréquent est le rang de PRESTIGE (un rang tous les 10 niveaux)', () => {
-    for (const lv of [5, 10, 20, 40, 60, 90]) {
-      const c = modeOf(lv, 0.4);
-      expect(c.indexOf(Math.max(...c)), `niv ${lv}`).toBe(prestigeRankIndex(lv));
+  it('au rang Bronze (rien en dessous), tout tombe au rang du joueur', () => {
+    for (const lv of [1, 5, 10]) expect(modeOf(lv, 0.4)[0]).toBe(3000);
+  });
+  it('⚠️ le rang du joueur est RARE et monte avec la position dans le rang (0 au premier niveau)', () => {
+    for (const r of [1, 3, 5, 7]) {
+      const start = rankStartLevel(r);
+      expect(ownRankChance(start), `rang ${r} début`).toBe(0);
+      let prev = 0;
+      for (let pos = 1; pos < 10; pos++) {
+        const p = ownRankChance(start + pos);
+        expect(p, `rang ${r} pos ${pos}`).toBeGreaterThan(prev);
+        prev = p;
+      }
+      expect(prev, `rang ${r} fin`).toBeLessThan(0.1);
+      // Mesuré sur le tirage : la part du rang du joueur suit `ownRankChance`.
+      const c = modeOf(start + 9, 0.4);
+      expect(c[r]! / 3000).toBeCloseTo(ownRankChance(start + 9), 1);
+      expect(c.indexOf(Math.max(...c)), `rang ${r} : le pic est le rang d’en dessous`).toBe(r - 1);
     }
-    // ⚠️ Plus le plafond √ : au niveau 30 (rang Or) il donnait deux rangs de plus.
-    expect(prestigeRankIndex(30)).toBeLessThan(rankCeilingForLevel(30));
+  });
+  it('⚠️ la part se rapporte aux DROPS D’UN NIVEAU : la même durée en niveaux à tous les rangs', () => {
+    // Objets de SON rang attendus sur les 5 premiers niveaux d'un rang : identique à tous les
+    // rangs (c'est ce qui fixe « complet vers la mi-rang » au niveau 15 comme au 75).
+    const expected = (r: number) => {
+      let s = 0;
+      for (let pos = 0; pos < 5; pos++) {
+        const L = rankStartLevel(r) + pos;
+        const drops =
+          (levelCost(L) * OWN_RANK.energyExtra * OWN_RANK.dropsPerClear) / OWN_RANK.energyPerClear;
+        s += ownRankChance(L) * drops;
+      }
+      return s;
+    };
+    for (const r of [2, 4, 6, 7]) expect(expected(r)).toBeCloseTo(expected(1), 6);
+    expect(expected(3)).toBeCloseTo(10 * OWN_RANK.perPos, 6);
+  });
+  it('au-delà des 8 raretés (niveaux 81+), plus de gate', () => {
+    expect(ownRankChance(85)).toBe(1);
   });
   it('⚠️ JAMAIS au-dessus du rang du joueur, même avec toute la chance (v0.876)', () => {
     for (const lv of [5, 15, 35, 55, 75]) {
@@ -174,28 +209,33 @@ describe('rollTier : les objets tombent au RANG DU JOUEUR, comme les familiers (
           c.slice(ref + 1).reduce((x, y) => x + y, 0),
           `niv ${lv} luck ${luck}`,
         ).toBe(0);
-        expect(c[ref]!, `niv ${lv} : son rang reste le plus fréquent`).toBe(Math.max(...c));
       }
     }
   });
-  it('la chance resserre la traîne basse (on farme surtout son rang)', () => {
-    const below = (luck: number) => {
-      const c = modeOf(45, luck);
-      return c.slice(0, prestigeRankIndex(45)).reduce((x, y) => x + y, 0);
-    };
-    expect(below(0)).toBeGreaterThan(below(1));
-    expect(below(1)).toBeGreaterThan(0); // du fourrage reste possible
+  it('la chance resserre la traîne sous le rang d’en dessous, sans toucher la part du rang', () => {
+    const lv = 45;
+    const r = prestigeRankIndex(lv);
+    const deep = (luck: number) =>
+      modeOf(lv, luck)
+        .slice(0, r - 1)
+        .reduce((x, y) => x + y, 0);
+    expect(deep(0)).toBeGreaterThan(deep(1));
+    expect(deep(1)).toBeGreaterThan(0); // du fourrage reste possible
+    expect(modeOf(lv, 1)[r]! / 3000).toBeCloseTo(ownRankChance(lv), 1);
   });
-  it('ANTI-RUNAWAY : contenu profond, joueur bas → le rang du JOUEUR, +1 au plus', () => {
+  it('un contenu MOINS profond que son rang garde l’ancienne règle (son rang surtout)', () => {
+    // Joueur 45 (Or noir) dans un contenu de niveau 25 (Or) : c'est Or qui est la référence,
+    // et Or n'est pas le rang du joueur → pas de gate.
+    const c = modeOf(25, 0.4, 0, 45);
+    expect(c.indexOf(Math.max(...c))).toBe(prestigeRankIndex(25));
+  });
+  it('ANTI-RUNAWAY : contenu profond, joueur bas → jamais au-dessus du rang du JOUEUR', () => {
     const playerLevel = 19;
     const c = modeOf(85, 1, 0, playerLevel);
-    expect(c.indexOf(Math.max(...c))).toBe(prestigeRankIndex(playerLevel));
-    expect(c.slice(prestigeRankIndex(playerLevel) + 2).reduce((x, y) => x + y, 0)).toBe(0);
+    expect(c.slice(prestigeRankIndex(playerLevel) + 1).reduce((x, y) => x + y, 0)).toBe(0);
   });
-  it('un bonus de rang (Autel, boss) améliore le jet et resserre la traîne basse, jamais au-dessus', () => {
+  it('un bonus de rang (Autel, boss) améliore le jet, jamais au-dessus', () => {
     const ref = prestigeRankIndex(50);
-    const own = (fb: number) => modeOf(50, 0, fb)[ref]!;
-    expect(own(1.2)).toBeGreaterThan(own(0));
     const jet = (fb: number) => {
       let s = 0;
       for (let i = 1; i <= 2000; i++) s += rollTier(mulberry32(i * 3 + 1), 50, 0, fb, 50).roll;
@@ -214,15 +254,16 @@ describe('rollTier : les objets tombent au RANG DU JOUEUR, comme les familiers (
     for (let s = 1; s <= 200; s++) rolls.add(rollTier(mulberry32(s * 5 + 1), 30, 0.3).roll);
     expect(rolls.size).toBeGreaterThan(150);
   });
-  it('bande de drop affichée en RANGS, pic = rang de référence', () => {
+  it('bande de drop affichée en RANGS : pic = rang d’en dessous tant que le rang n’est pas ouvert', () => {
     const ri = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK];
     for (const lv of [4, 12, 25, 60]) {
       const b = dropBand(lv, 0.4);
       expect(ri(b.lo.rank)).toBeLessThanOrEqual(ri(b.hi.rank));
       expect(ri(b.hi.rank)).toBe(prestigeRankIndex(lv));
-      expect(dropPeakRank(lv)).toBe(RANK_ORDER[prestigeRankIndex(lv)]);
     }
-    expect(dropPeakRank(85, 20)).toBe(RANK_ORDER[prestigeRankIndex(20)]);
+    expect(dropPeakRank(4)).toBe(RANK_ORDER[0]);
+    expect(dropPeakRank(25)).toBe(RANK_ORDER[prestigeRankIndex(25) - 1]);
+    expect(dropPeakRank(85, 20)).toBe(RANK_ORDER[prestigeRankIndex(20) - 1]);
     expect(dropBandLabel(35, 0)).toMatch(/Or/);
     expect(dropBandLabel(35, 0)).not.toMatch(/rare|epique|magique/);
   });
@@ -2009,7 +2050,10 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
     }
     // 6 % depuis la v0.876 (plus aucun rang au-dessus) : mesuré 15 échecs sur 288 (5,2 %),
     // tous marginaux (≤ 2 % de puissance, vérifié ci-dessus).
-    expect(fails / n).toBeLessThan(0.06);
+    // ⚠️ 8 % depuis la v0.894 (le rang du joueur s'ouvre sur la durée du rang : les pièces de
+    // set tirées ici sont surtout du rang d'en dessous, un affixe de moins) : mesuré 20 échecs
+    // sur 288 (6,9 %), toujours tous marginaux — l'écart de puissance reste vérifié ci-dessus.
+    expect(fails / n).toBeLessThan(0.08);
   });
 });
 

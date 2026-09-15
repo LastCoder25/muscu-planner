@@ -9,6 +9,7 @@
 // (MONSTERS/DUNGEONS/BOSSES/REGIONS) ; le contenu à la main reste la source de
 // vérité pour les premiers niveaux.
 import { playerCombatant, combatPower, type Combatant } from './combat';
+import { characterRank } from './characterRank';
 import type { Monster } from '@/data/monsters';
 import type { Dungeon, StatKey } from '@/data/dungeons';
 import type { Region } from '@/lib/regions';
@@ -177,11 +178,25 @@ const ITEM_RANK_RELIEF: [number, number][] = [
   [61, 0.88],
   [71, 1],
 ];
-/** Facteur (PV et dégâts) de tout contenu de niveau `level` : le palier qui le contient. */
+// ── LE RANG S'OUVRE SUR LA DURÉE DU RANG (v0.894, mesuré) ──
+// Les objets du rang du joueur sont désormais rares en début de rang (`ownRankChance`) : il
+// porte plus longtemps le rang d'en dessous. Mesuré par DEUX balayages indépendants (niveaux
+// 11 à 80, 6 joueurs par niveau, joueur RÉALISTE qui accumule son butin niveau après niveau,
+// ~100 donjons par niveau) : facteur de PV et dégâts du contenu qui redonne à ce joueur le
+// taux de réussite qu'il avait avec l'ancienne règle. Les deux balayages concordent à ±0,03
+// par rang ; la position dans le rang ne donne AUCUN effet reproductible (les objets du rang
+// d'en dessous, farmés longtemps, ont de bons jets et compensent). D'où une table PAR RANG.
+// ⚠️ Rang 5 (niveaux 51-60, rareté Légendaire) : 0,74. Les objets d'en dessous (Épique) n'ont
+// pas d'effet légendaire — c'est l'écart structurel le plus grand.
+// Index = rang de prestige (0 = Bronze, rien en dessous : 1). Au-delà des 8 raretés : 1.
+const RANK_OPENING_RELIEF = [1, 0.98, 0.95, 0.95, 0.9, 0.74, 0.93, 0.95];
+
+/** Facteur (PV et dégâts) de tout contenu de niveau `level` : le palier qui le contient, et
+ *  l'ouverture progressive du rang des objets. */
 export function itemRankRelief(level: number): number {
   let v = 1;
   for (const [from, k] of ITEM_RANK_RELIEF) if (level >= from) v = k;
-  return v;
+  return v * (RANK_OPENING_RELIEF[characterRank(level).rankIndex] ?? 1);
 }
 
 /** Lecture d'une table de points mesurés [niveau, valeur] : interpolée entre deux points,

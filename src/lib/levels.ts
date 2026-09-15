@@ -11,7 +11,7 @@ export interface LevelInfo {
 }
 
 // Coût pour passer du niveau L à L+1 : 200 + (L-1)×100 (de plus en plus long).
-function levelCost(level: number): number {
+export function levelCost(level: number): number {
   return 200 + (level - 1) * 100;
 }
 
