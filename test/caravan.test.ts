@@ -136,7 +136,7 @@ function winPct(escort: Adventurer[], p: Poi, n = 150) {
   return w / n;
 }
 const avgScrap = (p: Poi, esc: Adventurer[], n = 200) =>
-  Array.from({ length: n }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS).scrap).reduce(
+  Array.from({ length: n }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS, 100).scrap).reduce(
     (a, b) => a + b,
     0,
   ) / n;
@@ -324,7 +324,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
   it('aucun ÉQUIPEMENT : ce n’est pas une source de butin', () => {
     // « Le sport est le plafond » : la carte ne doit pas devenir un raccourci vers du
     // stuff hors de sa ligue. Une caravane paie en LOGISTIQUE, point.
-    const o = resolveCaravan(poi(), team(3), 42, NUS);
+    const o = resolveCaravan(poi(), team(3), 42, NUS, 100);
     expect(Object.keys(o)).not.toContain('item');
     expect(Object.keys(o)).not.toContain('items');
   });
@@ -353,7 +353,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     const cargo = team(4, 90, ['caravanier', 'convoyeur', 'maitre_convoi', 'intendant']);
     let vu = false;
     for (let s = 0; s < 200; s++) {
-      const o = resolveCaravan(p, cargo, s * 977 + 1, NUS);
+      const o = resolveCaravan(p, cargo, s * 977 + 1, NUS, 100);
       expect(o.energy).toBeLessThanOrEqual(Math.round(cap) + 1);
       if (o.energy >= Math.round(cap) - 1) vu = true;
     }
@@ -428,12 +428,12 @@ describe('salaires, XP et garde-fous', () => {
 
 describe('le convoi lui-même', () => {
   it('est DÉTERMINISTE : même graine, même voyage', () => {
-    const a = resolveCaravan(poi(), team(3), 1234, NUS);
-    const b = resolveCaravan(poi(), team(3), 1234, NUS);
+    const a = resolveCaravan(poi(), team(3), 1234, NUS, 100);
+    const b = resolveCaravan(poi(), team(3), 1234, NUS, 100);
     expect(a).toEqual(b);
   });
   it('l’aller et le retour sont symétriques, le rapport lisible à mi-chemin', () => {
-    const c = startCaravan('c1', poi(), team(3), 1000, 7, NUS, 0);
+    const c = startCaravan('c1', poi(), team(3), 1000, 7, NUS, 0, 100);
     expect(c.midAt).toBeGreaterThan(c.sentAt);
     expect(c.returnAt - c.midAt).toBe(c.midAt - c.sentAt);
     expect(c.escort).toHaveLength(3);
@@ -441,7 +441,7 @@ describe('le convoi lui-même', () => {
   it('⚠️ `claimed === undefined` = DÉJÀ crédité, jamais « à récupérer »', () => {
     // Même règle que les rapports d'expédition : traiter l'absence de champ comme
     // « non réclamé » offrirait une seconde fois le butin de chaque convoi passé.
-    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0);
+    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0, 100);
     const later = base.returnAt + 1;
     expect(isCaravanClaimable(base, later)).toBe(true);
     expect(isCaravanClaimable({ ...base, claimed: true }, later)).toBe(false);
@@ -450,7 +450,7 @@ describe('le convoi lui-même', () => {
     expect(isCaravanClaimable(legacy, later)).toBe(false);
   });
   it('rien ne se récupère avant le RETOUR en ville', () => {
-    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0);
+    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0, 100);
     expect(isCaravanClaimable(c, c.midAt)).toBe(false);
     expect(isCaravanClaimable(c, c.returnAt)).toBe(true);
   });
@@ -465,19 +465,20 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     // niveau 5 rien qu'en ajoutant trois recrues. Le rendement décroissant — le garde-fou
     // qui empêche de farmer le trajet le plus court — se contournait avec des passagers.
     const facile = poi({ level: 5 });
-    const seul = resolveCaravan(facile, [vet('v')], 42, NUS);
+    const seul = resolveCaravan(facile, [vet('v')], 42, NUS, 100);
     const accompagne = resolveCaravan(
       facile,
       [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')],
       42,
       NUS,
+      100,
     );
     expect(accompagne.xp['v']).toBe(seul.xp['v']);
     // …et la recrue touche bien plus que lui sur cette route-là.
     expect(accompagne.xp['r1']!).toBeGreaterThan(accompagne.xp['v']!);
   });
   it('tout le monde en reçoit, personne n’est oublié', () => {
-    const o = resolveCaravan(poi(), [vet('v'), bleu('r')], 7, NUS);
+    const o = resolveCaravan(poi(), [vet('v'), bleu('r')], 7, NUS, 100);
     expect(Object.keys(o.xp).sort()).toEqual(['r', 'v']);
     for (const v of Object.values(o.xp)) expect(v).toBeGreaterThan(0);
   });
@@ -487,7 +488,7 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     let sansCombat = 0;
     let perdu = 0;
     for (let s = 0; s < 200; s++) {
-      const o = resolveCaravan(poi(), [bleu('r')], s * 977 + 1, NUS);
+      const o = resolveCaravan(poi(), [bleu('r')], s * 977 + 1, NUS, 100);
       const fights = o.events.filter((e) => e.kind === 'bandits');
       expect(o.xp['r']!).toBeGreaterThan(0);
       if (!fights.length) sansCombat++;
@@ -503,7 +504,7 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     const a = bleu('r');
     let defaites = 0;
     for (let s = 0; s < 200; s++) {
-      const o = resolveCaravan(p, [a], s * 977 + 1, NUS);
+      const o = resolveCaravan(p, [a], s * 977 + 1, NUS, 100);
       const f = o.events.filter((e) => e.kind === 'bandits');
       expect(o.xp['r']).toBe(missionXp(a, p, f.length));
       if (f.some((x) => !x.won)) defaites++;
@@ -539,6 +540,7 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
               esc,
               level * 31 + 7,
               NUS,
+              100,
             );
             for (const [k, v] of [
               ['gold', o.gold],
@@ -565,7 +567,7 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
     const p = poi({ type: 'well', level: 70 });
     const brut = harvestYield(p.type, p.level, heroEquivalentFactor(p)).energy * CARAVAN.yieldShare;
     for (let seed = 1; seed <= 30; seed++)
-      expect(resolveCaravan(p, team(3, 70), seed, NUS).energy).toBeLessThanOrEqual(
+      expect(resolveCaravan(p, team(3, 70), seed, NUS, 100).energy).toBeLessThanOrEqual(
         Math.round(brut),
       );
   });
@@ -585,7 +587,7 @@ describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
     for (const type of HARVEST)
       for (let seed = 1; seed <= 40; seed++) {
         const p = poi({ type, level: L });
-        brut += resolveCaravan(p, esc, seed, NUS).gold;
+        brut += resolveCaravan(p, esc, seed, NUS, 100).gold;
         sal += caravanWages(esc, p);
       }
     return sal / brut;
@@ -622,7 +624,7 @@ describe('🧹 LA LISTE DE CONVOIS NE GROSSIT PAS SANS FIN', () => {
   // ⚠️ Elle n’était JAMAIS purgée : mesuré sur le compte réel, **35 convois stockés dont
   // 30 déjà encaissés**. La ligne `characters` porte déjà le sac, les talents, les
   // aventuriers et la carte — un tableau qui ne fait que croître finit par peser.
-  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS, 0);
+  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS, 0, 100);
   const lot = (n: number, claimed: boolean, from = 0) =>
     Array.from({ length: n }, (_, i) => ({
       ...base,
@@ -866,7 +868,7 @@ describe('⚠️ un convoi VOYAGE comme le héros', () => {
   // Le convoi est situé sur la carte par la MÊME fonction que le héros
   // (`travelPosition`) : deux copies de cette interpolation divergeraient à la
   // première retouche — c'est le piège des libellés de POI, déjà rencontré deux fois.
-  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS, 0);
+  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS, 0, 100);
 
   it('part de la ville, atteint son lieu, et en revient', () => {
     expect(travelPosition(van, van.sentAt)).toMatchObject({ ...EXPE.town, phase: 'outbound' });
@@ -1125,9 +1127,9 @@ describe('🐾 UN COMPAGNON PAR AVENTURIER — le familier suit son homme', () =
       let nu = 0;
       let avec = 0;
       for (let seed = 1; seed <= 120; seed++) {
-        for (const ev of resolveCaravan(poi, team, seed, road()).events)
+        for (const ev of resolveCaravan(poi, team, seed, road(), 100).events)
           if (ev.kind === 'bandits' && ev.won) nu++;
-        for (const ev of resolveCaravan(poi, team, seed, road(fams)).events)
+        for (const ev of resolveCaravan(poi, team, seed, road(fams), 100).events)
           if (ev.kind === 'bandits' && ev.won) avec++;
       }
       expect(avec).toBeGreaterThan(nu);
@@ -1387,7 +1389,7 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
       let cache = 0;
       let amb = 0;
       for (let i = 1; i <= 3000; i++) {
-        const o = resolveCaravan(poiOf(false), team, i * 7919, NUS);
+        const o = resolveCaravan(poiOf(false), team, i * 7919, NUS, 100);
         cache += o.events.filter((e) => e.kind === 'cache').length;
         amb += o.events.filter((e) => e.kind === 'bandits').length;
       }
@@ -1410,7 +1412,7 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
 describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET COMBIEN DE TEMPS', () => {
   const escort = team(3, 20);
   const van = (over: Partial<Caravan> = {}): Caravan => ({
-    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS, 0),
+    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS, 0, 100),
     ...over,
   });
 
@@ -1568,16 +1570,28 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     const p = poi({ type: 'wreck', level: 40 });
     let vus = 0;
     for (let s = 1; s <= 60; s++) {
-      const avec = resolveCaravan(p, [caravanier()], s, {
-        familiars: [],
-        talents: [],
-        advGear: [bat(0.3)],
-      });
-      const sans = resolveCaravan(p, [caravanier(false)], s, {
-        familiars: [],
-        talents: [],
-        advGear: [],
-      });
+      const avec = resolveCaravan(
+        p,
+        [caravanier()],
+        s,
+        {
+          familiars: [],
+          talents: [],
+          advGear: [bat(0.3)],
+        },
+        100,
+      );
+      const sans = resolveCaravan(
+        p,
+        [caravanier(false)],
+        s,
+        {
+          familiars: [],
+          talents: [],
+          advGear: [],
+        },
+        100,
+      );
       if (avec.events.some((e) => e.kind === 'bandits')) continue;
       vus++;
       expect(avec.scrap, `graine ${s}`).toBeGreaterThan(sans.scrap);
@@ -1604,8 +1618,17 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     });
     const e = { ...refAdventurer(20, 1), path: ['eclaireur'], id: 'e' };
     const road = (advGear: AdvGear[]) => ({ familiars: [], talents: [], advGear });
-    const avec = startCaravan('c', p, [{ ...e, gear: { accessory: 'lv' } }], 0, 7, road([lv]), 0);
-    const sans = startCaravan('c', p, [e], 0, 7, road([]), 0);
+    const avec = startCaravan(
+      'c',
+      p,
+      [{ ...e, gear: { accessory: 'lv' } }],
+      0,
+      7,
+      road([lv]),
+      0,
+      100,
+    );
+    const sans = startCaravan('c', p, [e], 0, 7, road([]), 0, 100);
     expect(avec.midAt).toBeLessThan(sans.midAt);
   });
 });
@@ -1615,15 +1638,45 @@ describe('sources d’équipement : embuscades repoussées', () => {
     const escort = [0, 1, 2].map((i) => ({ ...refAdventurer(40, i), familiarId: `refFam${i}` }));
     let pieces = 0;
     for (let s = 1; s <= 300; s++) {
-      const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, s, {
-        familiars: refCompanions(40),
-        talents: [],
-        advGear: [],
-      });
+      const o = resolveCaravan(
+        poi({ level: 40, perilous: true }),
+        escort,
+        s,
+        {
+          familiars: refCompanions(40),
+          talents: [],
+          advGear: [],
+        },
+        40,
+      );
       for (const g of o.advGear) expect(escort.map((a) => a.path[0])).toContain(g.lineage);
       pieces += o.advGear.length;
     }
     expect(pieces).toBeGreaterThan(0);
+  });
+
+  it('⚠️ le rang de la pièce se lit sur le VRAI niveau du joueur, jamais sur celui du lieu', () => {
+    // Escorte au sommet de l'arbre (le plafond de classe ne mord pas) sur un lieu de niveau
+    // 40, pour un joueur de niveau 5 : la courbe borne au rang du JOUEUR, +1 au plus.
+    const escort = [0, 1, 2].map((i) => ({ ...refAdventurer(100, i), familiarId: `refFam${i}` }));
+    let pieces = 0;
+    for (let s = 1; s <= 600; s++) {
+      const o = resolveCaravan(
+        poi({ level: 40 }),
+        escort,
+        s,
+        {
+          familiars: refCompanions(100),
+          talents: [],
+          advGear: [],
+        },
+        5,
+      );
+      for (const g of o.advGear)
+        expect(RARITY_RANK[g.rarity], g.rarity).toBeLessThanOrEqual(prestigeRankIndex(5) + 1);
+      pieces += o.advGear.length;
+    }
+    expect(pieces, 'aucune pièce : le test ne prouve rien').toBeGreaterThan(20);
   });
 
   it('⚠️ GÉNÉRATEUR SÉPARÉ pour l’équipement — la graine 8 pin le reste du butin', () => {
@@ -1633,11 +1686,17 @@ describe('sources d’équipement : embuscades repoussées', () => {
     // jambes suivantes, donc `gold`/`scrap`/`wages`/`xp`/`hurt`/`events`) serait décalé
     // et ces valeurs, prises sur le vrai code, ne matcheraient plus.
     const escort = [0, 1, 2].map((i) => refAdventurer(40, i));
-    const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, 8, {
-      familiars: refCompanions(40),
-      talents: [],
-      advGear: [],
-    });
+    const o = resolveCaravan(
+      poi({ level: 40, perilous: true }),
+      escort,
+      8,
+      {
+        familiars: refCompanions(40),
+        talents: [],
+        advGear: [],
+      },
+      40,
+    );
     expect(o.gold).toBe(2391);
     expect(o.energy).toBe(0);
     expect(o.summonStones).toBe(0);

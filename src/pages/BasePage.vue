@@ -1062,7 +1062,7 @@ const compCtx = computed(() => ({
   talents: normalizeTalents(char.row?.talents ?? []),
   kennelLevel: kennelLevel.value,
   now: coarseNow.value,
-  // 🗡️ Ce qu’ils portent (Task 5 pose la colonne : la lecture réelle marche déjà).
+  // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
   advGear: char.row?.adv_gear?.stock ?? [],
   heroFamiliarId: char.row?.equipped?.[FAMILIAR_SLOT]?.id ?? null,
   heroTalentIds: normalizeTalents(char.row?.talents ?? [])

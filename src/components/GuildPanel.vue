@@ -98,8 +98,9 @@
 
         <!-- ── 🗡️ LE STOCK D'ÉQUIPEMENT — replié par défaut, sous le vivier ──────────
              ⚠️ Ce n'est PAS le sac du héros : ces pièces sont propres à chaque classe de
-             base (`canWearAdvGear`) et fabriquées par l'Équipementier, pas par un drop
-             normal. 🔒 / 🪙 / 🔩 comme le sac, désactivés si portée. -->
+             base (`canWearAdvGear`) — fabriquées par l'Équipementier, ou tombées des
+             cadavres d'un siège et des embuscades repoussées (jamais du butin du héros).
+             🔒 / 🪙 / 🔩 comme le sac, désactivés si portée. -->
         <button
           v-if="char.advGearStock.length"
           type="button"
@@ -669,7 +670,7 @@ const compCtx = computed<CompanionCtx>(() => ({
   kennelLevel: kennelLevel.value,
   // L’horloge du panneau : la fatigue d’un compagnon compte, et elle passe.
   now: now.value,
-  // 🗡️ Ce qu’ils portent (Task 5 pose la colonne : la lecture réelle marche déjà).
+  // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
   advGear: char.row?.adv_gear?.stock ?? [],
   heroFamiliarId: heroFamId.value,
 }));

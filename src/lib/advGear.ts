@@ -9,10 +9,11 @@ import {
   emptyEffects,
   itemLevelMult,
   mergeEffects,
+  companionDropRank,
   rankRollMult,
   RARITY_RANK,
+  rollCompanionTier,
   rollItemLevel,
-  rollTier,
   scrapValueOf,
   sellValueOf,
   type AggregatedEffects,
@@ -165,7 +166,16 @@ export function rollAdvGear(
 ): Omit<AdvGear, 'id'> {
   const luck = opts.luck ?? 0;
   const slot = opts.slot ?? ADV_GEAR_SLOTS[Math.floor(rng() * ADV_GEAR_SLOTS.length)]!;
-  const { rank, roll } = rollTier(rng, opts.level, luck, 0, opts.playerLevel);
+  // ⚠️ RANG SUR LA COURBE DES COMPAGNONS (`rollCompanionTier`, v0.857), pas sur la pyramide
+  // des objets du héros (`rollTier`) : une pièce d'aventurier se lit en RANG, comme son
+  // porteur. La pyramide court ~2 rangs devant la classe → mesuré, 7 à 38 % seulement des
+  // pièces d'un champ de bataille étaient portables par un aventurier promu au mieux. Même
+  // règle que familiers et talents : son rang le plus souvent, un au-dessus très rarement.
+  const { rank, roll } = rollCompanionTier(
+    rng,
+    companionDropRank(opts.level, opts.playerLevel),
+    luck,
+  );
   const level = rollItemLevel(rng, Math.max(1, Math.min(opts.level, opts.playerLevel)), luck);
   const def = LINEAGE_GEAR[opts.lineage];
   const piece = def.pieces[slot];
@@ -261,11 +271,31 @@ export function advGearOptions(
   return res;
 }
 
-/** L'état persisté (jsonb `characters.adv_gear`, colonne à venir) : le stock et une
+/** L'état persisté (jsonb `characters.adv_gear`, migr. 0068) : le stock et une
  *  forge éventuellement en cours. ⚠️ Séparé du sac du héros (`inventory`). */
 export interface AdvGearState {
   stock: AdvGear[];
   forge?: { until: number; advId: string; piece: Omit<AdvGear, 'id'> } | null;
+}
+
+/** Relecture défensive du jsonb `adv_gear` au chargement : une entrée de stock sans `id`,
+ *  `slot` ou `effect` est écartée (elle ferait planter l'écran ou le combat), une forge
+ *  sans `piece` ou sans échéance numérique est remise à `null` (elle ne se conclurait
+ *  jamais). Jamais `null` en sortie. */
+export function normalizeAdvGearState(raw: unknown): AdvGearState {
+  const isObj = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === 'object' && !Array.isArray(v);
+  const src = isObj(raw) ? raw : {};
+  const stock = (Array.isArray(src.stock) ? src.stock : []).filter(
+    (g): g is AdvGear =>
+      isObj(g) && typeof g.id === 'string' && typeof g.slot === 'string' && isObj(g.effect),
+  );
+  const f = src.forge;
+  const forge =
+    isObj(f) && isObj(f.piece) && typeof f.until === 'number'
+      ? (f as unknown as NonNullable<AdvGearState['forge']>)
+      : null;
+  return { stock, forge };
 }
 
 // ── ÉQUIPEMENTIER (Task 7) ──
@@ -325,6 +355,48 @@ function capAdvGearToWearable(piece: Omit<AdvGear, 'id'>, cap: Rarity): Omit<Adv
     out.role = { kind: piece.role.kind, value: advGearRoleValue(piece.role.kind, cap, piece.roll) };
   }
   return out;
+}
+
+/** Meilleure rareté de CLASSE parmi les aventuriers d'une lignée (`null` si aucun). */
+function bestClassRarity(advs: Adventurer[], lineage: Lineage): Rarity | null {
+  let best: Rarity | null = null;
+  for (const a of advs) {
+    if (lineageOf(a) !== lineage) continue;
+    const r = advRarity(a);
+    if (!best || RARITY_RANK[r] > RARITY_RANK[best]) best = r;
+  }
+  return best;
+}
+
+/**
+ * Pièce d'aventurier tombée d'une source de butin (cadavre de siège, embuscade repoussée).
+ * ⚠️ SOURCE UNIQUE des deux sources : le bloc chance → lignée → tirage vivait en deux
+ * copies (raid.ts, caravan.ts).
+ * - la lignée est tirée parmi `advs` (jamais une lignée qu'on ne possède pas) ;
+ * - le rang suit la courbe des compagnons (cf. `rollAdvGear`), borné par `playerLevel` ;
+ * - puis il est PLAFONNÉ à la meilleure classe de cette lignée dans `advs`
+ *   (`capAdvGearToWearable`) : le stock ne se remplit jamais de pièces que personne ne
+ *   peut porter. Rend `null` si le tirage échoue ou si le vivier est vide.
+ * ⚠️ `rng` doit être le générateur DÉDIÉ à l'équipement (`gearRng`) : un tirage de plus sur
+ * le flux principal décalerait tout le reste du butin.
+ */
+export function rollAdvGearDrop(
+  rng: () => number,
+  advs: Adventurer[],
+  opts: { chance: number; level: number; luck: number; playerLevel: number },
+): Omit<AdvGear, 'id'> | null {
+  if (rng() >= opts.chance) return null;
+  const lineage = pickLineage(rng, advs);
+  if (!lineage) return null;
+  const cap = bestClassRarity(advs, lineage);
+  if (!cap) return null; // inatteignable : la lignée vient de `advs`
+  const piece = rollAdvGear(rng, {
+    lineage,
+    level: opts.level,
+    luck: opts.luck,
+    playerLevel: opts.playerLevel,
+  });
+  return capAdvGearToWearable(piece, cap);
 }
 
 /** Transforme un objet du héros en pièce d'aventurier, pour la CIBLE visée.

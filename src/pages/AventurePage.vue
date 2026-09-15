@@ -5114,7 +5114,12 @@ async function baseLifecycle() {
     void syncPush(!!r.detected || !!r.report);
     // Les formations arrivées à terme se concluent ici : sans ça, une promotion
     // n’aboutirait qu’à la prochaine action touchant le vivier — donc peut-être jamais.
-    void char.settleAdventurers(uid);
+    // ⚠️ ATTENDU, sous `baseBusy` : il écrit `adv_gear` (la forge qui aboutit). Lancé sans
+    // `await`, le verrou tombait avant sa persistance, et le tick suivant pouvait faire
+    // créditer par la fouille (`tickScavengers`) un `adv_gear` relu AVANT elle — la pièce
+    // forgée, ou celle ramassée, était perdue. Il passe APRÈS `baseTick`, qui relit déjà
+    // la ligne après sa propre fouille : l’ordre « fouille d’abord » reste vrai.
+    await char.settleAdventurers(uid);
   } finally {
     baseBusy = false;
   }

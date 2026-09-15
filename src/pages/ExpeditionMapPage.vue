@@ -698,7 +698,7 @@ const compCtx = computed(() => ({
   talents: normalizeTalents(char.row?.talents ?? []),
   kennelLevel: defenseLevel(base.value?.defenses ?? [], 'kennel'),
   now: coarseNow.value,
-  // 🗡️ Ce qu’ils portent (Task 5 pose la colonne : la lecture réelle marche déjà).
+  // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
   advGear: char.row?.adv_gear?.stock ?? [],
   heroFamiliarId: char.row?.equipped?.familiar?.id ?? null,
   heroTalentIds: normalizeTalents(char.row?.talents ?? [])
@@ -987,7 +987,9 @@ async function doSendCaravan() {
   if (!uid || !poi || busyCaravan.value) return;
   busyCaravan.value = true;
   try {
-    const ok = await char.sendCaravan(uid, poi, escort.value);
+    // Niveau de SPORT (`heroLevel`), pas `progressionLevel` : l'anti-runaway du butin se
+    // lit sur le joueur, comme au siège (`baseTick`).
+    const ok = await char.sendCaravan(uid, poi, escort.value, heroLevel.value);
     if (ok) {
       selected.value = null;
       escort.value = [];

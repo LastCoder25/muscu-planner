@@ -130,7 +130,7 @@
                 <select v-model="outfitItemId" class="of-select" aria-label="Objet du sac">
                   <option value="" disabled>Objet du sac…</option>
                   <option v-for="it in outfitCandidates" :key="it.id" :value="it.id">
-                    {{ it.emoji }} {{ it.name }}
+                    {{ it.emoji }} {{ it.name }} · {{ RARITY_LABEL[it.rarity] }}
                   </option>
                 </select>
               </div>
@@ -199,7 +199,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { guildRoster } from '@/lib/adventurers';
-import { ROLL_FLOOR_RANKS, FAMILIAR_SLOT, type Item } from '@/lib/items';
+import { ROLL_FLOOR_RANKS, FAMILIAR_SLOT, RARITY_LABEL, type Item } from '@/lib/items';
 import { LINEAGE_GEAR, lineageOf, outfitSlot, outfitterMsFor } from '@/lib/advGear';
 import { fmtSpan } from '@/lib/raid';
 import {
@@ -483,7 +483,21 @@ const outfitTargetLabel = computed(() => {
   const piece = LINEAGE_GEAR[lineage].pieces[slot];
   return `${piece.emoji} ${piece.name} pour ${adv.name}`;
 });
-async function doOutfit() {
+/** ⚠️ CONFIRMATION, comme la vente et le recyclage du sac : l'objet du héros est DÉTRUIT
+ *  à la fabrication, sans retour possible. On le nomme, avec sa rareté, et on dit pour
+ *  qui et quelle pièce — c'est tout ce qu'on sait avant le tirage. */
+function doOutfit() {
+  const adv = char.advList.find((a) => a.id === outfitAdvId.value);
+  const item = outfitCandidates.value.find((it) => it.id === outfitItemId.value);
+  if (outfitBusy.value || !adv || !item) return;
+  $q.dialog({
+    title: 'Fondre cet objet ?',
+    message: `${item.emoji} « ${item.name} » (${RARITY_LABEL[item.rarity]}) sera détruit définitivement pour fabriquer : ${outfitTargetLabel.value}.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: '⚒️ Fabriquer', color: 'negative' },
+  }).onOk(() => void runOutfit());
+}
+async function runOutfit() {
   const uid = auth.user?.id;
   if (!uid || outfitBusy.value || !outfitAdvId.value || !outfitItemId.value) return;
   outfitBusy.value = true;

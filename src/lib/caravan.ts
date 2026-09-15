@@ -70,8 +70,7 @@ import {
   advGearValue,
   LINEAGE_GEAR,
   lineageOf,
-  pickLineage,
-  rollAdvGear,
+  rollAdvGearDrop,
   wornGear,
   type AdvGear,
   type AdvGearSlot,
@@ -203,7 +202,7 @@ export interface CaravanOutcome {
   events: CaravanEvent[];
   text: string;
   /** 🗡️ Équipement d'aventurier laissé par une embuscade REPOUSSÉE — lignée de l'escorte,
-   *  jamais importée (cf. `pickLineage`). */
+   *  rang portable par elle (cf. `rollAdvGearDrop`). */
   advGear: Omit<AdvGear, 'id'>[];
 }
 
@@ -992,6 +991,9 @@ export function resolveCaravan(
    *  exactement ce qui a laissé ce socle inerte pendant vingt-six versions. Une escorte
    *  sans compagnon se déclare avec des listes vides. */
   road: RoadCompanions,
+  /** ⚠️ REQUIS : niveau RÉEL du joueur. Ne sert qu'au tirage d'équipement d'aventurier
+   *  (anti-runaway) — le combat de la route n'en dépend pas. */
+  playerLevel: number,
 ): CaravanOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
   // 🗡️ GÉNÉRATEUR SÉPARÉ pour l'équipement d'aventurier : `rng` est déjà seedé et lu par
@@ -1027,19 +1029,15 @@ export function resolveCaravan(
         // 🗡️ Une embuscade REPOUSSÉE peut laisser une pièce d'équipement d'aventurier —
         // jamais une embuscade subie, on ne fouille pas les bandits qui ont gagné. Tirée
         // sur `gearRng` (cf. plus haut), jamais `rng`.
-        if (gearRng() < ADV_GEAR_DROP.ambush) {
-          const lineage = pickLineage(gearRng, escort);
-          if (lineage) {
-            advGear.push(
-              rollAdvGear(gearRng, {
-                lineage,
-                level: poi.level,
-                luck: poi.perilous ? 0.3 : 0.1,
-                playerLevel: poi.level,
-              }),
-            );
-          }
-        }
+        // ⚠️ `playerLevel` = le VRAI niveau du joueur, jamais `poi.level` : un lieu peut
+        // être 10 niveaux au-dessus de lui, et l'anti-runaway se lit sur le joueur.
+        const piece = rollAdvGearDrop(gearRng, escort, {
+          chance: ADV_GEAR_DROP.ambush,
+          level: poi.level,
+          luck: poi.perilous ? 0.3 : 0.1,
+          playerLevel,
+        });
+        if (piece) advGear.push(piece);
       } else {
         mult *= CARAVAN.lossKeep;
         const victim = escort[Math.floor(rng() * escort.length)];
@@ -1143,6 +1141,8 @@ export function startCaravan(
   road: RoadCompanions,
   /** ⚠️ REQUIS : le trajet du convoi dépend du Comptoir — l'oublier le rallongerait. */
   comptoirLevel: number,
+  /** ⚠️ REQUIS : niveau RÉEL du joueur (cf. `resolveCaravan`). */
+  playerLevel: number,
 ): Caravan {
   const leg =
     caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, road.advGear).speed) * 60_000;
@@ -1153,7 +1153,7 @@ export function startCaravan(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    outcome: resolveCaravan(poi, escort, seed, road),
+    outcome: resolveCaravan(poi, escort, seed, road, playerLevel),
     claimed: false,
   };
 }

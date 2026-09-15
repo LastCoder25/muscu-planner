@@ -48,8 +48,7 @@ import {
   ADV_GEAR_SLOTS,
   advGearEffects,
   canWearAdvGear,
-  pickLineage,
-  rollAdvGear,
+  rollAdvGearDrop,
   wornGear,
   type AdvGear,
   type AdvGearSlot,
@@ -3031,7 +3030,7 @@ export interface CorpseLoot {
   /** 🗝️ clés du Labyrinthe — ce que traînent les BÊTES venues des profondeurs. */
   keys: number;
   items: Omit<Item, 'id'>[];
-  /** 🗡️ Équipement d'aventurier — lignée du vivier, jamais importée (cf. `pickLineage`). */
+  /** 🗡️ Équipement d'aventurier — lignée du vivier, rang portable (cf. `rollAdvGearDrop`). */
   advGear: Omit<AdvGear, 'id'>[];
 }
 
@@ -3039,8 +3038,9 @@ export interface CorpseLoot {
  *  du niveau du chantier — le danger paie, comme partout ailleurs dans le jeu.
  *  ⚠️ La rareté d'un objet reste centrée sur `min(niveau du corps, niveau du joueur)` :
  *  un raid à +15 donne PLUS d'objets, jamais des raretés hors de ta ligue.
- *  ⚠️ `advs` (le vivier) est REQUIS : `pickLineage` doit savoir QUELLES lignées existent,
- *  sinon le stock d'équipement se remplirait de lignées qu'on ne possède même pas. */
+ *  ⚠️ `advs` (le vivier) est REQUIS : `rollAdvGearDrop` doit savoir QUELLES lignées
+ *  existent et jusqu'à quel rang elles portent, sinon le stock d'équipement se remplirait
+ *  de pièces que personne ne peut porter. */
 export function lootCorpses(
   corpses: Corpse[],
   faction: RaidFaction,
@@ -3109,16 +3109,13 @@ export function lootCorpses(
     // de masse que le reste du champ, mais tirée sur `gearRng` (cf. plus haut). Le
     // champion, seul et jamais dilué, en laisse beaucoup plus souvent
     // (`ADV_GEAR_DROP.champion`).
-    const advChance =
-      (c.champion ? ADV_GEAR_DROP.champion : ADV_GEAR_DROP.corpse) / (c.massMult ?? 1);
-    if (gearRng() < advChance) {
-      const lineage = pickLineage(gearRng, advs);
-      if (lineage) {
-        loot.advGear.push(
-          rollAdvGear(gearRng, { lineage, level: L, luck: c.champion ? 0.45 : 0.1, playerLevel }),
-        );
-      }
-    }
+    const advPiece = rollAdvGearDrop(gearRng, advs, {
+      chance: (c.champion ? ADV_GEAR_DROP.champion : ADV_GEAR_DROP.corpse) / (c.massMult ?? 1),
+      level: L,
+      luck: c.champion ? 0.45 : 0.1,
+      playerLevel,
+    });
+    if (advPiece) loot.advGear.push(advPiece);
   }
   // Bonus de fouille de la garnison (marmotte) : il porte sur les RESSOURCES, jamais
   // sur la rareté des objets — l'anti-runaway ne se contourne pas par le chenil.

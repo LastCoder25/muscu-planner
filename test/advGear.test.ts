@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
-import { RARITY_RANK, RANK_ORDER, itemLevelMult } from '@/lib/items';
-import { advRarity, type Adventurer } from '@/lib/adventurers';
+import { RARITY_RANK, RANK_ORDER, itemLevelMult, prestigeRankIndex } from '@/lib/items';
+import { ADV_CLASSES, advRarity, type Adventurer } from '@/lib/adventurers';
+import { refAdventurer } from '@/lib/caravan';
 import {
   adventurerGearPower,
   adventurerPowers,
@@ -21,7 +22,9 @@ import {
   advGearValue,
   canWearAdvGear,
   lineageOf,
+  normalizeAdvGearState,
   outfitFromItem,
+  rollAdvGearDrop,
   outfitSlot,
   outfitterMsFor,
   pickLineage,
@@ -85,14 +88,23 @@ describe('équipement propre à chaque classe de base', () => {
     expect(lineageOf(adv('a', ['archer', 'tireur']))).toBe('archer');
     expect(lineageOf(adv('b', []))).toBeNull();
   });
+  it('⚠️ les lignées sont EXACTEMENT les classes de strate 0 de la table des classes', () => {
+    // Une classe de départ ajoutée sans lignée d'équipement ne pourrait rien porter ; une
+    // lignée qui ne serait pas une classe de départ ne serait jamais tirée.
+    const roots = ADV_CLASSES.filter((c) => c.stratum === 0).map((c) => c.id);
+    expect([...Object.keys(LINEAGE_GEAR)].sort()).toEqual([...roots].sort());
+    for (const id of roots) expect(lineageOf(adv('r', [id]))).toBe(id);
+    for (const c of ADV_CLASSES.filter((k) => k.stratum > 0))
+      expect(lineageOf(adv('x', [c.id])), c.id).toBeNull();
+  });
 });
 
 describe('tirage', () => {
-  it('suit la pyramide des drops : rareté plafonnée par le niveau, stat du pool de la pièce', () => {
+  it('rang sur la courbe des compagnons : jamais plus d’un rang au-dessus du joueur, stat du pool', () => {
     const rng = mulberry32(7);
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 400; i++) {
       const g = rollAdvGear(rng, { lineage: 'mage', level: 12, playerLevel: 12 });
-      expect(RARITY_RANK[g.rarity]).toBeLessThanOrEqual(RARITY_RANK[RANK_ORDER[5]!]);
+      expect(RARITY_RANK[g.rarity]).toBeLessThanOrEqual(prestigeRankIndex(12) + 1);
       expect(LINEAGE_GEAR.mage.pieces[g.slot].pool).toContain(g.effect.type);
       if (g.effect2) expect(g.effect2.type).not.toBe(g.effect.type);
     }
@@ -133,6 +145,109 @@ describe('tirage', () => {
     const v = [adv('a', ['mage']), adv('b', ['mage'])];
     for (let i = 0; i < 50; i++) expect(pickLineage(rng, v)).toBe('mage');
     expect(pickLineage(rng, [])).toBeNull();
+  });
+});
+
+describe('butin : pièce tombée (siège, embuscade)', () => {
+  // Un vivier réaliste : des aventuriers promus au mieux (trois lignées), plus une recrue
+  // restée commune dans une lignée où personne d'autre ne l'accompagne.
+  const vivier = (L: number) => [
+    refAdventurer(L, 0),
+    refAdventurer(L, 1),
+    refAdventurer(L, 2),
+    { ...adv('recrue', ['mage']), level: L },
+  ];
+  it('toute pièce tombée est PORTABLE par au moins un aventurier du vivier', () => {
+    let pieces = 0;
+    for (const L of [1, 3, 8, 12, 20, 26, 35, 45, 60, 70, 90]) {
+      const v = vivier(L);
+      for (let s = 1; s <= 150; s++) {
+        const g = rollAdvGearDrop(mulberry32(s * 7919 + L), v, {
+          chance: 1,
+          level: L + (s % 8),
+          luck: s % 2 ? 0.45 : 0.1,
+          playerLevel: L,
+        });
+        if (!g) continue;
+        pieces++;
+        expect(
+          v.some((a) => canWearAdvGear(a, { ...g, id: 'g' })),
+          `L${L} s${s} ${g.lineage} ${g.rarity}`,
+        ).toBe(true);
+      }
+    }
+    expect(pieces).toBeGreaterThan(1000);
+  });
+  it('⚠️ plafonnée à la meilleure classe de SA lignée — une recrue commune seule ne reçoit que du commun', () => {
+    const recrue = { ...adv('r', ['archer']), level: 60 };
+    for (let s = 1; s <= 200; s++) {
+      const g = rollAdvGearDrop(mulberry32(s), [recrue], {
+        chance: 1,
+        level: 60,
+        luck: 0.45,
+        playerLevel: 60,
+      })!;
+      expect(g.rarity).toBe('commun');
+      // Valeurs RECALCULÉES au rang plafonné, pas celles du rang tiré.
+      expect(g.effect.value).toBe(advGearValue(g.effect.type, 'commun', g.roll));
+      expect(g.effect2).toBeUndefined();
+    }
+  });
+  it('⚠️ sur la courbe des compagnons : jamais plus d’un rang au-dessus du rang du joueur', () => {
+    // Vivier au sommet de l'arbre : le plafond de classe ne mord pas, seule la courbe borne.
+    const v = [refAdventurer(100, 0), refAdventurer(100, 1), refAdventurer(100, 2)];
+    for (const L of [12, 30, 45]) {
+      for (let s = 1; s <= 300; s++) {
+        const g = rollAdvGearDrop(mulberry32(s * 31 + L), v, {
+          chance: 1,
+          level: L + 10,
+          luck: 0.45,
+          playerLevel: L,
+        })!;
+        expect(RARITY_RANK[g.rarity], `L${L} ${g.rarity}`).toBeLessThanOrEqual(
+          prestigeRankIndex(L) + 1,
+        );
+      }
+    }
+  });
+  it('rien pour un vivier vide, ni quand le tirage de chance échoue', () => {
+    for (let s = 1; s <= 100; s++) {
+      expect(
+        rollAdvGearDrop(mulberry32(s), [], { chance: 1, level: 30, luck: 0.4, playerLevel: 30 }),
+      ).toBeNull();
+      expect(
+        rollAdvGearDrop(mulberry32(s), vivier(30), {
+          chance: 0,
+          level: 30,
+          luck: 0.4,
+          playerLevel: 30,
+        }),
+      ).toBeNull();
+    }
+  });
+});
+
+describe('relecture du jsonb au chargement', () => {
+  it('écarte les entrées de stock malformées et remet une forge incomplète à null', () => {
+    const ok = piece('ok');
+    const s = normalizeAdvGearState({
+      stock: [
+        ok,
+        { slot: 'weapon', effect: {} },
+        { id: 'x', effect: {} },
+        { id: 'y', slot: 'armor' },
+        null,
+        3,
+      ],
+      forge: { advId: 'a', until: 10 },
+    });
+    expect(s.stock).toEqual([ok]);
+    expect(s.forge).toBeNull();
+    expect(normalizeAdvGearState({ stock: [], forge: { piece: {}, advId: 'a' } }).forge).toBeNull();
+    const f = { piece: {}, advId: 'a', until: 5 };
+    expect(normalizeAdvGearState({ stock: [], forge: f }).forge).toEqual(f);
+    expect(normalizeAdvGearState(null)).toEqual({ stock: [], forge: null });
+    expect(normalizeAdvGearState({ stock: {} })).toEqual({ stock: [], forge: null });
   });
 });
 

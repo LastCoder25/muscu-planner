@@ -156,6 +156,7 @@ import {
   advGearSellValue,
   canWearAdvGear,
   lineageOf,
+  normalizeAdvGearState,
   outfitFromItem,
   outfitterMsFor,
   settleOutfit,
@@ -250,18 +251,11 @@ export const useCharacterStore = defineStore('character', () => {
     // jamais (35 convois mesurés sur un compte réel, dont 30 dépensés). Un non-encaissé
     // n'est JAMAIS jeté — il porte une cargaison.
     r.caravans = pruneCaravans(arr<Caravan>(r.caravans));
-    // Équipement des aventuriers (`adv_gear`, colonne à venir) : jsonb malformé/absent →
-    // stock vide. Même politique que `adventurers`/`caravans` ci-dessus (jamais null après
-    // normalisation, malgré le type nullable qui reflète ce que la DB peut renvoyer).
-    r.adv_gear = {
-      stock: arr<AdvGear>(r.adv_gear?.stock),
-      forge:
-        r.adv_gear?.forge &&
-        typeof r.adv_gear.forge === 'object' &&
-        !Array.isArray(r.adv_gear.forge)
-          ? r.adv_gear.forge
-          : null,
-    };
+    // Équipement des aventuriers (`adv_gear`, migr. 0068) : jsonb malformé/absent → stock
+    // vide, entrées sans id/slot/effet écartées, forge incomplète remise à null. Même
+    // politique que `adventurers`/`caravans` ci-dessus (jamais null après normalisation,
+    // malgré le type nullable qui reflète ce que la DB peut renvoyer).
+    r.adv_gear = normalizeAdvGearState(r.adv_gear);
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
@@ -2210,7 +2204,9 @@ export const useCharacterStore = defineStore('character', () => {
     return true;
   }
 
-  async function sendCaravan(userId: string, poi: Poi, escortIds: string[]) {
+  /** ⚠️ `playerLevel` REQUIS : le VRAI niveau du joueur (sport), lu par le tirage
+   *  d'équipement d'une embuscade repoussée — un lieu peut être 10 niveaux au-dessus. */
+  async function sendCaravan(userId: string, poi: Poi, escortIds: string[], playerLevel: number) {
     const cur = row.value;
     if (!cur) return false;
     if (comptoirLevel.value <= 0) return false;
@@ -2241,6 +2237,7 @@ export const useCharacterStore = defineStore('character', () => {
           .map((t) => t.id),
       },
       comptoirLevel.value,
+      playerLevel,
     );
     const busy = new Set(escortIds);
     await persist(userId, {
