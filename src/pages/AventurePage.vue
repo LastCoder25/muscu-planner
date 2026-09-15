@@ -5199,6 +5199,9 @@ async function syncPush(force = false) {
       base: char.row.base ?? null,
       expedition: char.row.expedition ? { returnAt: char.row.expedition.returnAt } : null,
       caravans: char.caravanList,
+      // ⚠️ PROVISOIRE (camps, Task 6) : aucun groupe sans héros n'existe encore en base.
+      // Remplacé par la liste réelle des groupes quand le store les porte (Task 8).
+      parties: [],
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
       activeDays7: activeDays7.value,
       playerLevel: c.value.level.level,

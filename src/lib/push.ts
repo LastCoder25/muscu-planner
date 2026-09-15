@@ -14,7 +14,7 @@
 
 import { raidIntervalMs, raidsEnabled, scoutLeadMs, type BaseState } from './raid';
 
-type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'convoy_home';
+type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'convoy_home' | 'party_home';
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
  *  événement ne doit JAMAIS créer un doublon — l'app replanifie à chaque ouverture. */
@@ -33,6 +33,9 @@ export interface PushContext {
   /** Expédition du héros en cours (on ne lit que l'heure de retour). */
   expedition: { returnAt: number } | null;
   caravans: { id: string; returnAt: number; claimed?: boolean }[];
+  /** ⚔️ Groupes partis SANS le héros vers un camp (un groupe avec héros notifie par
+   *  `expedition`). ⚠️ REQUIS : un groupe oublié rentrerait sans prévenir. */
+  parties: { id: string; returnAt: number }[];
   /** Niveau de la Tour de guet : il achète le PRÉAVIS, donc l'heure du message. */
   watchtowerLevel: number;
   /** Jours d'entraînement sur 7 — un siège n'arrive qu'à un joueur actif. */
@@ -119,6 +122,20 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       // IDENTIQUE pour tous, donc une seule notification, et l'écran met la ou les
       // cargaisons prêtes sous les yeux (elles sont déjà en tête de la rangée).
       url: '/expedition-map?claim=1',
+    });
+  }
+
+  for (const g of ctx.parties) {
+    add({
+      kind: 'party_home',
+      // ⚠️ Clé liée à l'ID du groupe, jamais à l'heure : replanifier ne duplique pas.
+      dedupe: `party:${g.id}`,
+      sendAt: g.returnAt,
+      // ⚠️ AVARE comme le convoi : ni faction, ni effectif, ni issue — le rapport de la
+      // boîte le dit, la notification donne seulement envie de l'ouvrir.
+      title: '⚔️ Ton groupe est rentré',
+      body: 'Son rapport t’attend dans la boîte 📬.',
+      url: '/expedition-map',
     });
   }
 

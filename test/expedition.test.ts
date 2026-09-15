@@ -23,7 +23,10 @@ import {
   CAMP_SIZES,
   CAMP_TYPES,
   campSpecOf,
+  buildMessage,
+  keepMessages,
   type ActiveExpedition,
+  type ExpeditionMessage,
   type Poi,
 } from '@/lib/expedition';
 
@@ -516,5 +519,87 @@ describe('🎁 campHeroOutcome — le butin du héros sur un camp, extrait tel q
     expect(o.gold).toBe(Math.round(goldCost('camp', 20) * EXPE.failRefund));
     expect(o.item).toBeNull();
     expect(o.reconBonus).toBe(0.08);
+  });
+});
+
+describe('📬 le rapport de groupe et la boîte', () => {
+  const base = (id: string, claimed?: boolean): ExpeditionMessage => ({
+    id,
+    level: 1,
+    win: true,
+    text: '',
+    gold: 0,
+    energy: 0,
+    key: 0,
+    resolvedAt: 0,
+    read: false,
+    ...(claimed === undefined ? {} : { claimed }),
+  });
+  it('⚠️ keepMessages ne jette JAMAIS un butin à récupérer', () => {
+    const list = [
+      base('m0', true),
+      base('m1', false),
+      base('m2'),
+      base('m3', false),
+      base('m4', true),
+    ];
+    const kept = keepMessages(list, 2);
+    expect(kept.map((m) => m.id)).toEqual(['m0', 'm1', 'm3']);
+    expect(keepMessages(list, 10)).toEqual(list);
+  });
+  it('buildMessage recopie ce que le groupe a vécu', () => {
+    const party = {
+      hero: false,
+      faction: 'betes' as const,
+      size: 3,
+      escort: ['a'],
+      win: true,
+      foes: 4,
+      slain: 4,
+      foesDown: [],
+      kills: { a: 4 },
+      heroKills: 0,
+      xp: { a: 30 },
+      hurt: [],
+      advGear: [],
+      wages: 10,
+      journal: ['x'],
+    };
+    const exp: ActiveExpedition = {
+      poi: {
+        id: 'c',
+        type: 'camp',
+        level: 5,
+        x: 0,
+        y: 0,
+        distNorm: 0.2,
+        spawnedAt: 0,
+        expiresAt: 1,
+      },
+      sentAt: 1,
+      midAt: 2,
+      returnAt: 3,
+      goldCost: 0,
+      seed: 1,
+      outcome: {
+        win: true,
+        gold: 1,
+        energy: 0,
+        summonStones: 0,
+        scrap: 0,
+        item: null,
+        key: 0,
+        reconBonus: 0,
+        returnMult: 1,
+        text: 't',
+        party,
+      },
+    };
+    const m = buildMessage(exp);
+    expect(m.party).toEqual(party);
+    expect(m.claimed).toBe(false);
+    expect(m.claimAt).toBe(3);
+    // ⚠️ Un camp ne rend AUCUNE ferraille : le rapport n'en porte pas.
+    expect('scrap' in m).toBe(false);
   });
 });

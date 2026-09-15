@@ -49,7 +49,7 @@ import {
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
 import { rollAdvGearDrop, type AdvGear } from './advGear';
-import type { Adventurer } from './adventurers';
+import { advTitle, type Adventurer } from './adventurers';
 
 export const CAMP = {
   /** Taille de la RÉFÉRENCE : un camp de taille 3 est dimensionné sur 3 aventuriers de
@@ -417,4 +417,59 @@ export function campWinPct(
   for (let s = 0; s < n; s++)
     if (simulateCombat(group, foe, { seed: campForecastSeed(s), goldOnWin: 0 }).win) w++;
   return w / n;
+}
+
+export interface PartyReportMember {
+  id: string;
+  name: string;
+  emoji: string;
+  xp: number;
+  kills: number;
+  hurt: boolean;
+  /** Plus dans le vivier : sa ligne reste, l'XP a bien été versée. */
+  gone: boolean;
+}
+export interface PartyReport {
+  hero: boolean;
+  factionLabel: string;
+  factionEmoji: string;
+  slain: number;
+  foes: number;
+  heroKills: number;
+  members: PartyReportMember[];
+  totalXp: number;
+  wages: number;
+  journal: string[];
+}
+
+/** 📜 Le rapport d'un groupe, lisible après coup dans la boîte 📬. ⚠️ Tout vient du
+ *  résultat STOCKÉ (`PartyResult`, tiré au départ), jamais d'un recalcul — même règle que
+ *  `caravanReport`. ⚠️ Aucune ferraille : un camp n'en rend pas, le rapport n'en parle pas.
+ *  Un aventurier renvoyé depuis garde sa ligne (son XP a bien été versée). */
+export function partyReport(party: PartyResult, roster: readonly Adventurer[]): PartyReport {
+  const hurt = new Set(party.hurt);
+  const members = party.escort.map((id): PartyReportMember => {
+    const adv = roster.find((a) => a.id === id);
+    return {
+      id,
+      name: adv?.name ?? 'Aventurier parti',
+      emoji: (adv && advTitle(adv)?.emoji) || '⚔️',
+      xp: Math.max(0, Math.round(party.xp[id] ?? 0)),
+      kills: Math.max(0, Math.round(party.kills[id] ?? 0)),
+      hurt: hurt.has(id),
+      gone: !adv,
+    };
+  });
+  return {
+    hero: party.hero,
+    factionLabel: FACTION_LABEL[party.faction],
+    factionEmoji: FACTION_EMOJI[party.faction],
+    slain: party.slain,
+    foes: party.foes,
+    heroKills: party.heroKills,
+    members,
+    totalXp: members.reduce((s, m) => s + m.xp, 0),
+    wages: Math.max(0, Math.round(party.wages)),
+    journal: party.journal,
+  };
 }

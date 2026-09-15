@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { planPushes, livePushKeys, type PushContext } from '@/lib/push';
 import { __stampFrom } from '@/composables/useAppUpdate';
 import {
+  FACTION_EMOJI,
   FACTION_LABEL,
   scoutLeadMs,
   raidIntervalMs,
@@ -32,6 +33,7 @@ const ctx = (over: Partial<PushContext> = {}): PushContext => ({
   base: base(28),
   expedition: null,
   caravans: [],
+  parties: [],
   watchtowerLevel: 28,
   activeDays7: 4,
   playerLevel: 28,
@@ -60,14 +62,55 @@ describe('notifications push — ce qu’on programme', () => {
     // La Tour vend de la CLARTÉ sur la composition d'une armée (v0.724). Un message qui
     // nommerait la faction, l'effectif ou le niveau offrirait gratuitement ce qu'elle
     // fait payer — et retirerait au joueur la raison d'ouvrir l'app.
-    const p = planPushes(ctx(), NOW).find((x) => x.kind === 'siege')!;
-    const texte = `${p.title} ${p.body}`.toLowerCase();
-    for (const f of Object.values(FACTION_LABEL)) {
-      expect(texte, `le message nomme « ${f} »`).not.toContain(f.toLowerCase());
+    // ⚠️ Étendu au GROUPE rentré d'un camp (étape 3) : même doctrine, même vérification.
+    const plans = planPushes(ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }), NOW);
+    for (const kind of ['siege', 'party_home'] as const) {
+      const p = plans.find((x) => x.kind === kind)!;
+      expect(p, kind).toBeTruthy();
+      const texte = `${p.title} ${p.body}`.toLowerCase();
+      for (const f of Object.values(FACTION_LABEL)) {
+        expect(texte, `${kind} nomme « ${f} »`).not.toContain(f.toLowerCase());
+      }
+      for (const e of Object.values(FACTION_EMOJI)) {
+        expect(texte, `${kind} montre « ${e} »`).not.toContain(e);
+      }
+      for (const mot of ['champion', 'effectif', 'groupes', 'niveau', 'chef', 'abattu']) {
+        expect(texte, `${kind} révèle « ${mot} »`).not.toContain(mot);
+      }
     }
-    for (const mot of ['champion', 'effectif', 'groupes', 'niveau']) {
-      expect(texte, `le message révèle « ${mot} »`).not.toContain(mot);
-    }
+  });
+
+  it('⚔️ un GROUPE rentré notifie, avare : ni faction ni effectif', () => {
+    const plans = planPushes(ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }), NOW);
+    const p = plans.find((x) => x.kind === 'party_home');
+    expect(p?.dedupe).toBe('party:party_x');
+    expect(p?.sendAt).toBe(NOW + 2 * H);
+    expect(p?.url).toBe('/expedition-map');
+    for (const f of Object.values(FACTION_LABEL)) expect(`${p?.title} ${p?.body}`).not.toContain(f);
+    // Aucun chiffre : ni effectif, ni niveau, ni abattus.
+    expect(`${p?.title} ${p?.body}`).not.toMatch(/\d/);
+    // ⚠️ Jamais dans le PASSÉ, et clé STABLE quand on replanifie.
+    expect(
+      planPushes(ctx({ parties: [{ id: 'old', returnAt: NOW - H }] }), NOW).some(
+        (x) => x.kind === 'party_home',
+      ),
+    ).toBe(false);
+    const again = planPushes(
+      ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }),
+      NOW + 60_000,
+    );
+    expect(again.find((x) => x.kind === 'party_home')?.dedupe).toBe('party:party_x');
+    // Deux groupes = deux clés distinctes.
+    const two = planPushes(
+      ctx({
+        parties: [
+          { id: 'g1', returnAt: NOW + H },
+          { id: 'g2', returnAt: NOW + H },
+        ],
+      }),
+      NOW,
+    ).filter((x) => x.kind === 'party_home');
+    expect(new Set(two.map((x) => x.dedupe)).size).toBe(2);
   });
 
   it('⚠️ AUCUN siège annoncé si les sièges ne sont pas ACTIVÉS', () => {

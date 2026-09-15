@@ -11,6 +11,7 @@ import {
   campWinPct,
   canSendParty,
   partyLegMin,
+  partyReport,
   resolveCamp,
   startParty,
   type PartyInput,
@@ -456,5 +457,40 @@ describe('💰 butin de groupe : dérivé des sources existantes', () => {
     expect(bd.gold).toBeGreaterThan(m.gold);
     expect(bd.gold / m.gold).toBeCloseTo(CAMP.banditGoldMult, 1);
     for (const h of [b, m, bd]) expect('scrap' in h).toBe(false);
+  });
+});
+
+describe('📜 partyReport — ce qu’on lit dans la boîte', () => {
+  it('membres, abattus, XP, blessés ; un aventurier renvoyé garde sa ligne', () => {
+    const esc = team(3, 20);
+    const o = resolveCamp(input({ escort: esc, road: road(20, 3), seed: 4 }));
+    const r = partyReport(o.party!, esc.slice(0, 2));
+    expect(r.members.map((m) => m.id)).toEqual(['adv_0', 'adv_1', 'adv_2']);
+    expect(r.members[2]!.gone).toBe(true);
+    expect(r.members[0]!.gone).toBe(false);
+    expect(r.totalXp).toBe(r.members.reduce((s, m) => s + m.xp, 0));
+    expect(r.members.reduce((s, m) => s + m.kills, 0) + r.heroKills).toBe(r.slain);
+    for (const m of r.members) expect(m.hurt).toBe(o.party!.hurt.includes(m.id));
+    expect(r.factionLabel).toBe('Bandits');
+    expect(r.wages).toBe(Math.round(o.party!.wages));
+  });
+
+  it('⚠️ une DÉFAITE : les blessés sont bien marqués (le cas n’est pas vide)', () => {
+    // Sans ce cas, « hurt » n'était vérifié que sur une victoire où personne ne tombe :
+    // un rapport qui ne marquait jamais personne passait au vert.
+    const esc = team(2, 20);
+    const o = resolveCamp(
+      input({
+        escort: esc,
+        road: road(20, 2),
+        poi: poi({ type: 'lair' }),
+        spec: { faction: 'bandits', size: 10 },
+      }),
+    );
+    expect(o.party!.win).toBe(false);
+    expect(o.party!.hurt.length, 'aucun blessé : le cas n’est pas exercé').toBeGreaterThan(0);
+    const r = partyReport(o.party!, esc);
+    for (const m of r.members) expect(m.hurt).toBe(o.party!.hurt.includes(m.id));
+    expect(r.members.some((m) => m.hurt)).toBe(true);
   });
 });

@@ -218,6 +218,7 @@ export interface ExpeditionMessage {
   items?: Omit<Item, 'id'>[]; // TOUS les objets ramenés : c'est le message qui les porte
   key: number;
   waves?: number; // 'arena' : vagues tenues
+  party?: PartyResult; // ⚔️ rapport d'un groupe de camp (absent des rapports d'avant)
   resolvedAt: number; // ms epoch (midAt)
   /** À partir de quand le butin peut être récupéré = le retour en ville. Avant, le héros
    *  est encore sur la route : on lit le rapport, on ne touche pas au chargement. */
@@ -238,6 +239,16 @@ export function messageTitle(m: ExpeditionMessage): string {
 }
 export function isClaimable(m: ExpeditionMessage, now: number): boolean {
   return m.claimed === false && now >= (m.claimAt ?? m.resolvedAt);
+}
+
+/** Taille la boîte 📬 SANS jamais jeter un butin à récupérer. ⚠️ Un `slice` brut pouvait
+ *  pousser dehors un rapport non encaissé — et avec lui l'XP d'un groupe entier.
+ *  On garde les `cap` messages les plus récents (la liste est du plus récent au plus
+ *  ancien), PLUS tout message plus ancien encore `claimed === false`. Ordre conservé.
+ *  ⚠️ Un butin en attente ne chasse donc JAMAIS un message récent : la boîte garde ce
+ *  qu'elle montrait, elle ne fait que sauver ce qu'elle aurait perdu. */
+export function keepMessages(list: ExpeditionMessage[], cap: number): ExpeditionMessage[] {
+  return list.filter((m, i) => i < cap || m.claimed === false);
 }
 
 /** Ce qu'une expédition a rapporté, prêt à afficher. ⚠️ SOURCE UNIQUE des deux écrans
@@ -300,6 +311,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     ...(o.items && o.items.length ? { items: o.items } : o.item ? { items: [o.item] } : {}),
     key: o.key,
     ...(o.waves !== undefined ? { waves: o.waves } : {}),
+    ...(o.party ? { party: o.party } : {}),
     resolvedAt: exp.midAt,
     claimAt: exp.returnAt,
     claimed: false,

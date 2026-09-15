@@ -57,6 +57,7 @@ import {
 import { effectsOfTalents, talentRankOf, type TalentInstance } from './talents';
 import { FAMILIAR_SPECIES } from '../data/familiars';
 import {
+  CAMP_TYPES,
   HARVEST_TYPES,
   harvestYield,
   haulPills,
@@ -930,15 +931,23 @@ export function caravanSlowFor(comptoirLevel: number): number {
  *  PARALLÈLE : c'est sa raison d'être pour qui s'entraîne peu.
  *
  *  ⚠️ En revanche `hero` en dépend : le héros ne peut mener qu'une expédition à la
- *  fois, il est physiquement parti. */
+ *  fois, il est physiquement parti.
+ *
+ *  ⚔️ `party` (étape 3 des camps) : un camp ou un repaire s'attaque en GROUPE — le héros,
+ *  ou au moins un aventurier disponible. ⚠️ `advsAvailable` est REQUIS : un appelant qui
+ *  l'oublierait fermerait les camps en silence dès que le héros part. */
 export function poiOffers(
   poi: Poi,
-  opts: { heroAway: boolean; comptoirLevel: number },
-): { hero: boolean; caravan: boolean } {
+  opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number },
+): { hero: boolean; caravan: boolean; party: boolean } {
   return {
     hero: !opts.heroAway,
     // Les convois n'exploitent que les lieux de RÉCOLTE : le héros se bat, eux ramassent.
     caravan: opts.comptoirLevel > 0 && HARVEST_TYPES.has(poi.type),
+    // ⚔️ Un CAMP s'attaque en GROUPE : le héros, ou au moins un aventurier disponible.
+    // ⚠️ Ni Comptoir ni créneau de convoi : ce n'est pas un convoi, et le vivier disponible
+    // est la seule limite (spec étape 3).
+    party: CAMP_TYPES.has(poi.type) && (!opts.heroAway || opts.advsAvailable > 0),
   };
 }
 

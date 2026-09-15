@@ -787,8 +787,9 @@ const offers = computed(() =>
     ? poiOffers(selected.value, {
         heroAway: heroUnavailable.value,
         comptoirLevel: char.comptoirLevel,
+        advsAvailable: freeAdvs.value.length,
       })
-    : { hero: false, caravan: false },
+    : { hero: false, caravan: false, party: false },
 );
 const caravanMin = computed(() => {
   if (!selected.value) return 0;
@@ -1042,7 +1043,14 @@ watch(
  *  d'endroits disponibles, et l'utilisateur a logiquement cessé d'essayer de cliquer.
  *  Même source que la feuille (`poiOffers`) : les deux ne peuvent pas se contredire. */
 function dimmed(p: Poi): boolean {
-  const o = poiOffers(p, { heroAway: heroUnavailable.value, comptoirLevel: char.comptoirLevel });
+  const o = poiOffers(p, {
+    heroAway: heroUnavailable.value,
+    comptoirLevel: char.comptoirLevel,
+    advsAvailable: freeAdvs.value.length,
+  });
+  // ⚠️ `o.party` n'est PAS encore lu ici : tant que la feuille ne sait pas envoyer un groupe
+  // (camps, tâche UI à venir), dé-griser un camp annoncerait disponible un lieu où l'on ne
+  // peut rien lancer — exactement le défaut que ce gris a corrigé.
   return !o.hero && !o.caravan;
 }
 
