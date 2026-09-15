@@ -333,6 +333,27 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     expect(sql).toContain("public.fboss_ended(b) + interval '7 days' > now()");
   });
 
+  // ⚠️ `fboss_hit` est REDÉFINIE (0070, puis 0074) : on compare les plafonds à la DERNIÈRE.
+  const lastHitSql = () => {
+    const files = fs
+      .readdirSync('supabase/migrations')
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
+      .filter((s) => s.includes('function public.fboss_hit'));
+    return files[files.length - 1]!;
+  };
+  it('⚠️ LE CAS RÉEL : 36 pompes par jour ne bloquent plus (plafonds d’avant les parts allégées)', () => {
+    expect(Math.floor(FRIEND_BOSS.shareUnits.push * FRIEND_BOSS.hitMaxShare)).toBe(150);
+    expect(Math.floor(FRIEND_BOSS.shareUnits.push * FRIEND_BOSS.dayMaxShare)).toBe(180);
+    expect(acceptedUnits('push', 20, 36, 9999)).toBe(20);
+  });
+  it('mêmes plafonds que la DERNIÈRE définition de fboss_hit', () => {
+    const hit = lastHitSql();
+    expect(hit).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
+    expect(hit).toContain(`floor(v_share * ${FRIEND_BOSS.dayMaxShare})`);
+  });
+
   it('mêmes dégâts par rep, appliqués aux PV ET aux dégâts du serveur (migr. 0070)', () => {
     const scale = fs.readFileSync('supabase/migrations/0070_friend_boss_damage_scale.sql', 'utf8');
     expect(scale).toContain(`select ${FRIEND_BOSS.damagePerUnit};`);
@@ -342,14 +363,9 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     );
     expect(scale).toContain('damage = damage + v_acc * v_dpu');
     expect(scale).toContain('ceil((b.hp_total - b.damage)::numeric / v_dpu)::integer');
-    // Les plafonds restent en reps dans la nouvelle version de `fboss_hit`.
-    expect(scale).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
-    expect(scale).toContain(`floor(v_share * ${FRIEND_BOSS.dayMaxShare})`);
   });
 
-  it('mêmes plafonds, même part minimale, même nombre d’invités', () => {
-    expect(sql).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
-    expect(sql).toContain(`floor(v_share * ${FRIEND_BOSS.dayMaxShare})`);
+  it('même part minimale, même nombre d’invités', () => {
     expect(sql).toContain(`public.fboss_share(b.family) * ${FRIEND_BOSS.minShare}`);
     expect(sql).toContain(`cardinality(v_invitees) > ${FRIEND_BOSS.maxInvites}`);
   });

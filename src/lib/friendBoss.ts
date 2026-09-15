@@ -59,11 +59,15 @@ export const FRIEND_BOSS = {
   /** Part minimale à apporter pour toucher le coffre et la prime. Sans elle, un invité
    *  qui ne fait rien profiterait du travail des autres. */
   minShare: 0.5,
-  /** Plafond d'UNE saisie, en part de la part d'un joueur. */
-  hitMaxShare: 0.5,
-  /** Plafond sur 24 h glissantes, en part de la part d'un joueur. ⚠️ Tout est déclaratif :
+  /** Plafond d'UNE saisie, en parts d'un joueur.
+   *  ⚠️ 2,5 et 3 parts (v0.889, signalé en urgence : « ça m'a bloqué mes tirs ») : la v0.869 a
+   *  divisé les parts par 5 et les plafonds, exprimés en part, ont suivi — 36 pompes par 24 h,
+   *  deux joueurs bloqués le premier jour. Ils retrouvent leur valeur absolue d'avant (pompes
+   *  150 par saisie, 180 par 24 h). Doit rester égal à `fboss_hit` (migr. 0074). */
+  hitMaxShare: 2.5,
+  /** Plafond sur 24 h glissantes, en parts d'un joueur. ⚠️ Tout est déclaratif :
    *  ce plafond est le garde-fou, le regard des amis (saisies visibles) fait le reste. */
-  dayMaxShare: 0.6,
+  dayMaxShare: 3,
   /** Invités maximum par boss. */
   maxInvites: 9,
   /** Prime de complétion, en part de l'XP gagnée par ses propres reps.
