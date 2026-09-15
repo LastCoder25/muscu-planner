@@ -44,6 +44,7 @@ import {
   ownedInLoadouts,
   normalizeLoadouts,
   promoteSpare,
+  meltSetPiece,
   sparesLot,
   setPieceScorer,
   voieSetIndex,
@@ -988,6 +989,22 @@ export const useCharacterStore = defineStore('character', () => {
     }));
     const gain = melt.reduce((s, it) => s + scrapValue(it), 0);
     await persist(userId, { scrap: cur.scrap + gain, loadouts });
+    return gain;
+  }
+
+  /** Fond UNE pièce de set rangée (doublon ou pièce en place — le meilleur doublon de
+   *  l'emplacement la remplace). Refus au store pour une pièce 🔒 ou portée. */
+  async function recycleSetPiece(
+    userId: string,
+    itemId: string,
+    score: (it: Item) => number,
+  ): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const r = meltSetPiece(cur.loadouts, itemId, score);
+    if (!r) return 0;
+    const gain = scrapValue(r.melted);
+    await persist(userId, { scrap: cur.scrap + gain, loadouts: r.loadouts });
     return gain;
   }
 
@@ -2415,6 +2432,7 @@ export const useCharacterStore = defineStore('character', () => {
     fileBagSetPieces,
     promoteSetSpare,
     recycleSpares,
+    recycleSetPiece,
     optimizeGear,
     previewGearPlan,
     bestBuild,

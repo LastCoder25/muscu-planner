@@ -692,7 +692,8 @@ describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
     for (let L = 1; L <= 100; L += L < 20 ? 1 : 10)
       for (let n = 1; n <= Math.min(guildRoster(L), CARAVAN.escortMax); n++)
         expect(part(n, L), `niveau ${L}, ${n} aventurier(s)`).toBeLessThan(0.8);
-  });
+    // ⚠️ ~2 s seul, mais il dépasse les 5 s par défaut sous la charge de la suite complète.
+  }, 30_000);
 
   it('…mais ils restent un VRAI puits d’or à tout niveau', () => {
     // L’autre bord, et il a dérivé aussi : la doc annonce « calé à ~60 % de l’or

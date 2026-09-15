@@ -112,6 +112,46 @@ export function promoteSpare(
   return out;
 }
 
+/**
+ * Fond UNE pièce rangée — un doublon, ou la pièce en place d'un emplacement. Rend `null`
+ * si elle n'est pas dans les réserves (une pièce PORTÉE vit dans `equipped` : hors
+ * d'atteinte par construction) ou si elle est 🔒.
+ *
+ * ⚠️ Fondre la pièce EN PLACE ne laisse pas un trou quand un doublon attend : le meilleur
+ * doublon de cet emplacement (au barème du set) prend sa place. Sans ça, le set perdrait
+ * une pièce qu'on possède encore, et l'emplacement se lirait vide.
+ */
+export function meltSetPiece(
+  loadouts: readonly (Loadout | undefined)[],
+  itemId: string,
+  score: (it: Item) => number,
+): { loadouts: Loadout[]; melted: Item } | null {
+  const out = normalizeLoadouts(loadouts);
+  for (const lo of out) {
+    const spare = lo.spares?.find((s) => s.id === itemId);
+    if (spare) {
+      if (!canRecycle(spare)) return null;
+      lo.spares = lo.spares!.filter((s) => s.id !== itemId);
+      return { loadouts: out, melted: spare };
+    }
+    const slot = SLOTS.find((s) => lo.items[s]?.id === itemId);
+    if (slot) {
+      const held = lo.items[slot]!;
+      if (!canRecycle(held)) return null;
+      delete lo.items[slot];
+      const sameSlot = (lo.spares ?? []).filter((s) => s.slot === slot);
+      lo.spares = (lo.spares ?? []).filter((s) => s.slot !== slot);
+      const best = [...sameSlot].sort((a, b) => score(b) - score(a))[0];
+      if (best) {
+        lo.items[slot] = best;
+        lo.spares = [...lo.spares, ...sameSlot.filter((s) => s !== best)];
+      }
+      return { loadouts: out, melted: held };
+    }
+  }
+  return null;
+}
+
 /** Ce que « Recycler les doublons » fond : les doublons d'un set (ou de tous si `setIndex`
  *  est omis). Les 🔒 restent — le verrou protège de toutes les sorties. */
 export function sparesLot(

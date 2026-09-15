@@ -4,6 +4,7 @@ import {
   fileSetPieces,
   ownedInLoadouts,
   promoteSpare,
+  meltSetPiece,
   sparesLot,
   setPieceScorer,
   voieSetIndex,
@@ -141,6 +142,51 @@ describe('🗂️ les doublons', () => {
     expect(sparesLot(lo, 2).melt.map((i) => i.id)).toEqual(['assassin-armor-1']);
     // Les pièces EN PLACE ne sont jamais dans le lot.
     expect(all.melt.some((i) => i.effect.value === 20)).toBe(false);
+  });
+});
+
+describe('🔩 fondre UNE pièce de set', () => {
+  const lots = () => {
+    const lo = fileSetPieces(
+      [],
+      [mk('weapon', 20), mk('weapon', 10), mk('weapon', 15), mk('armor', 5)],
+      byValue,
+    ).loadouts;
+    return lo;
+  };
+  it('un doublon : lui seul part, le set et les autres doublons restent', () => {
+    const r = meltSetPiece(lots(), 'berserker-weapon-10', byValue)!;
+    expect(r.melted.id).toBe('berserker-weapon-10');
+    expect(r.loadouts[0]!.items.weapon?.effect.value).toBe(20);
+    expect(r.loadouts[0]!.items.armor?.effect.value).toBe(5);
+    expect(r.loadouts[0]!.spares!.map((s) => s.effect.value)).toEqual([15]);
+  });
+  it('la pièce EN PLACE : le MEILLEUR doublon de l’emplacement la remplace', () => {
+    const r = meltSetPiece(lots(), 'berserker-weapon-20', byValue)!;
+    expect(r.melted.effect.value).toBe(20);
+    expect(r.loadouts[0]!.items.weapon?.effect.value).toBe(15);
+    expect(r.loadouts[0]!.spares!.map((s) => s.effect.value)).toEqual([10]);
+    // Aucune autre pièce ne disparaît.
+    expect(ownedInLoadouts(r.loadouts)).toHaveLength(3);
+  });
+  it('la pièce en place sans doublon laisse l’emplacement vide', () => {
+    const r = meltSetPiece(lots(), 'berserker-armor-5', byValue)!;
+    expect(r.loadouts[0]!.items.armor).toBeUndefined();
+    expect(r.loadouts[0]!.spares!.map((s) => s.slot)).toEqual(['weapon', 'weapon']);
+  });
+  it('🔒 ou pièce absente des réserves (portée) → rien', () => {
+    const lo = normalizeLoadouts(lots());
+    lo[0]!.spares = lo[0]!.spares!.map((s) => ({ ...s, locked: true }));
+    lo[0]!.items.armor = { ...lo[0]!.items.armor!, locked: true };
+    expect(meltSetPiece(lo, 'berserker-weapon-10', byValue)).toBeNull();
+    expect(meltSetPiece(lo, 'berserker-armor-5', byValue)).toBeNull();
+    expect(meltSetPiece(lots(), 'porte-ailleurs', byValue)).toBeNull();
+  });
+  it('ne mute pas les réserves reçues', () => {
+    const lo = lots();
+    meltSetPiece(lo, 'berserker-weapon-20', byValue);
+    expect(lo[0]!.items.weapon?.effect.value).toBe(20);
+    expect(lo[0]!.spares).toHaveLength(2);
   });
 });
 

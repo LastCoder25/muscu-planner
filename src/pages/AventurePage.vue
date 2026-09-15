@@ -293,15 +293,8 @@
                 <span class="ptm-ic">⚔️</span>
               </div>
             </div>
-            <!-- Nom du rang sous le carré (clic → tous les rangs). -->
-            <button
-              class="pt-rank font-display"
-              type="button"
-              title="Voir tous les rangs de prestige"
-              @click="ranksOpen = true"
-            >
-              {{ rank.name }}
-            </button>
+            <!-- Le nom du rang n'est plus répété sous le portrait : le coin haut-droit (★) le
+                 porte déjà et ouvre la liste des rangs. -->
           </div>
 
           <!-- Tous les rangs de prestige (clic sur le nom du rang). Cosmétique, dérivé du niveau. -->
@@ -760,6 +753,16 @@
             <button class="gi-b" title="Sac — ton butin" @click="openBag()">
               🎒<span v-if="bagCount" class="gi-badge">{{ bagCount }}</span>
             </button>
+            <!-- 🏆 Sac à trophées : à part du butin (ils ne tombent que du boss entre amis,
+                 et « Tout recycler » ne doit jamais les fondre). Visible dès qu'on en a un. -->
+            <button
+              v-if="ownsTrophy"
+              class="gi-b"
+              title="Trophées — tes trophées de boss entre amis"
+              @click="openTrophyBag()"
+            >
+              🏆<span v-if="trophyBag.length" class="gi-badge">{{ trophyBag.length }}</span>
+            </button>
             <button
               class="gi-b"
               :title="
@@ -787,7 +790,7 @@
         </div>
         <div class="gear">
           <div
-            v-for="slot in gearViewSlots"
+            v-for="slot in SLOTS"
             :key="slot"
             class="slot"
             :class="[
@@ -861,6 +864,55 @@
           </div>
         </div>
 
+        <!-- 🏆 VITRINE DU TROPHÉE : pas une 5ᵉ tuile de la grille — un trophée se MONTRE.
+             Il ne tombe que du boss entre amis, donc on ne l'affiche qu'une fois possédé. -->
+        <div
+          v-if="ownsTrophy"
+          class="trophy-case"
+          :class="equippedTrophy ? 'r-' + equippedTrophy.rarity : 'empty'"
+        >
+          <div class="tc-plinth">
+            <div class="tc-glow" aria-hidden="true"></div>
+            <ItemIcon v-if="equippedTrophy" :item="equippedTrophy" :size="54" />
+            <span v-else class="tc-emo">🏆</span>
+          </div>
+          <div class="tc-body">
+            <div class="tc-kicker">{{ equippedTrophy ? 'Trophée exposé' : 'Vitrine' }}</div>
+            <template v-if="equippedTrophy">
+              <button
+                class="tc-name font-display"
+                title="Voir le détail"
+                @click="inspectItem = equippedTrophy"
+              >
+                {{ equippedTrophy.name }}
+              </button>
+              <div class="pills">
+                <span class="gpill" :class="'p-' + equippedTrophy.rarity">{{
+                  RARITY_LABEL[equippedTrophy.rarity]
+                }}</span>
+                <span class="lvl-badge">Nv {{ equippedTrophy.level }}</span>
+              </div>
+              <div class="tc-stats">
+                <div v-for="(ln, si) in itemStatLines(equippedTrophy)" :key="si" class="stat-line">
+                  {{ ln }}
+                </div>
+              </div>
+            </template>
+            <div v-else class="tc-empty">
+              Socle vide — {{ trophyBag.length }} trophée{{ trophyBag.length > 1 ? 's' : '' }}
+              dans ton sac à trophées.
+            </div>
+            <div class="tc-actions">
+              <button class="tc-b" @click="openTrophyBag()">
+                🏆 {{ equippedTrophy ? 'Changer' : 'Exposer un trophée' }}
+              </button>
+              <button v-if="equippedTrophy" class="tc-b ghost" @click="doUnequip(TROPHY_SLOT)">
+                Retirer
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Sets d'équipement (bonus 2/3/4 pièces) — rattachés à l'équipement -->
         <template v-if="activeSets.length">
           <div class="sec-title">Sets</div>
@@ -903,7 +955,12 @@
         <div v-if="bagOpen" class="shop-backdrop" @click.self="bagOpen = false">
           <div class="shop-card bag-card">
             <div class="shop-head">
-              <div class="shop-title font-display">🎒 Sac ({{ bagCount }})</div>
+              <div class="shop-title font-display">
+                <template v-if="bagMode === 'trophies'"
+                  >🏆 Trophées ({{ trophyBag.length }})</template
+                >
+                <template v-else>🎒 Sac ({{ bagCount }})</template>
+              </div>
               <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
             </div>
             <!-- ⚠️ Le classement du sac demande le MEILLEUR BUILD, soit ~3 s. Il rend la
@@ -912,14 +969,14 @@
             <div v-if="optimizing" class="bag-ranking">
               ⏳ Classement en cours — je compare ton sac à ton meilleur build possible…
             </div>
-            <template v-if="bagCount">
+            <template v-if="bagMode === 'trophies' ? trophyBag.length : bagCount">
               <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
-              <div v-if="betterFilterSlot" class="better-banner">
+              <div v-if="betterFilterSlot && bagMode === 'items'" class="better-banner">
                 🔼 Meilleurs si équipés pour <b>{{ SLOT_LABEL[betterFilterSlot] }}</b>
                 <button class="bb-clear" @click="setInvFilter('all')">Tout voir ✕</button>
               </div>
               <!-- Filtre par type d'objet -->
-              <div class="inv-filter">
+              <div v-if="bagMode === 'items'" class="inv-filter">
                 <button
                   class="if-chip"
                   :class="{ on: invFilter === 'all' && !betterFilterSlot }"
@@ -928,7 +985,7 @@
                   Tous
                 </button>
                 <button
-                  v-for="slot in gearViewSlots"
+                  v-for="slot in SLOTS"
                   :key="slot"
                   class="if-chip"
                   :class="{ on: invFilter === slot && !betterFilterSlot }"
@@ -943,7 +1000,7 @@
                quoi jeter demandait un calcul de 3 s et ralentissait l'ouverture du Sac. Le
                tri se fait au 🔒. Épargnés : familiers, porté, et les pièces que le 🪄
                retient si l'optimum est déjà connu. Respecte le filtre type. -->
-              <div v-if="belowCount > 0" class="bulk">
+              <div v-if="bagMode === 'items' && belowCount > 0" class="bulk">
                 <span class="bulk-lbl"
                   >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} à fondre
                   <span class="bulk-note"
@@ -1094,6 +1151,10 @@
                 </div>
               </div>
             </template>
+            <div v-else-if="bagMode === 'trophies'" class="empty-inv">
+              Aucun trophée en réserve — ton trophée est exposé. Abats un boss entre amis pour en
+              gagner d’autres 🐉
+            </div>
             <div v-else class="empty-inv">
               Ton sac est vide. Explore un donjon pour trouver du butin 🗡️
             </div>
@@ -1838,9 +1899,12 @@
                 class="lo-item spare"
                 :class="'r-' + sp.rarity"
                 :title="
-                  SLOT_LABEL[sp.slot] + ' · ' + sp.name + ' — doublon · toucher pour l’utiliser'
+                  SLOT_LABEL[sp.slot] +
+                  ' · ' +
+                  sp.name +
+                  ' — doublon · toucher pour ses stats, l’utiliser ou le recycler'
                 "
-                @click="doPromoteSpare(i, sp)"
+                @click="inspectItem = sp"
               >
                 {{ SLOT_EMOJI[sp.slot] }}<span v-if="sp.locked" class="lo-worn">🔒</span>
               </button>
@@ -1915,6 +1979,30 @@
           🧩 {{ SET_BY_ID[inspectItem.setId]!.emoji }} {{ SET_BY_ID[inspectItem.setId]!.name }}
         </div>
         <div class="insp-actions">
+          <!-- 🧩 Pièce RANGÉE dans un set : on peut la fondre seule (v0.867) ; un doublon peut
+               aussi prendre la place de la pièce en place. -->
+          <template v-if="inspectStored">
+            <q-btn
+              v-if="inspectStored.spare"
+              flat
+              no-caps
+              dense
+              label="⇄ Utiliser dans le set"
+              @click="doPromoteSpare(inspectStored.setIndex, inspectItem)"
+            />
+            <q-btn
+              v-if="scrapValue(inspectItem) > 0"
+              flat
+              no-caps
+              dense
+              color="negative"
+              :disable="!!inspectItem.locked || busy"
+              :label="
+                inspectItem.locked ? '🔒 Verrouillée' : `🔩 Recycler (+${scrapValue(inspectItem)})`
+              "
+              @click="doRecycleSetPiece(inspectItem)"
+            />
+          </template>
           <q-btn flat no-caps dense label="Fermer" @click="inspectItem = null" />
         </div>
       </q-card>
@@ -2967,6 +3055,7 @@ watch(
 const bagOpen = ref(false);
 const loadoutOpen = ref(false);
 function openBag() {
+  bagMode.value = 'items';
   betterFilterSlot.value = null; // ouverture directe = pas de filtre « upgrades »
   bagOpen.value = true;
 }
@@ -5167,21 +5256,34 @@ function fmtExpeMs(ms: number): string {
 
 // ── Sac : filtre par type d'objet + tri (meilleurs d'abord) ──
 const invFilter = ref<ItemSlot | 'all'>('all');
-/** Emplacements montrés dans la grille d'équipement et le filtre du sac : le TROPHÉE
- *  n'apparaît qu'une fois qu'on en possède un (il ne tombe que du boss entre amis — une
- *  case vide pour tous les autres serait une promesse sans mode d'emploi). */
-const gearViewSlots = computed<ItemSlot[]>(() => {
-  const r = char.row;
-  const owns =
-    !!r && (!!r.equipped[TROPHY_SLOT] || r.inventory.some((i) => i.slot === TROPHY_SLOT));
-  return owns ? [...SLOTS, TROPHY_SLOT] : SLOTS;
-});
+// 🏆 TROPHÉES : ni dans la grille, ni dans le sac du butin. Ils ne tombent que du boss
+// entre amis — ils ont leur VITRINE (sous la grille) et leur propre sac (bouton 🏆), et
+// « Tout recycler » ne doit jamais les fondre avec le bric-à-brac.
+const isTrophy = (i: Item) => i.slot === TROPHY_SLOT;
+const equippedTrophy = computed<Item | null>(() => char.row?.equipped[TROPHY_SLOT] ?? null);
+const trophyBag = computed<Item[]>(() =>
+  (char.row?.inventory ?? [])
+    .filter(isTrophy)
+    .sort(
+      (a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || rollJet(b.roll) - rollJet(a.roll),
+    ),
+);
+const ownsTrophy = computed(() => !!equippedTrophy.value || trophyBag.value.length > 0);
+/** Ce que la modale du sac montre : le butin, ou les trophées. Un seul rendu de carte
+ *  d'objet pour les deux — deux copies de ce bloc divergeraient. */
+const bagMode = ref<'items' | 'trophies'>('items');
+function openTrophyBag() {
+  betterFilterSlot.value = null;
+  bagMode.value = 'trophies';
+  bagOpen.value = true;
+}
 function bagCountForSlot(slot: ItemSlot): number {
   return (char.row?.inventory ?? []).filter((i) => i.slot === slot).length;
 }
 // (Filtre par SET retiré du sac — les pièces de set vivent dans « Mes sets », plus au sac.)
 const filteredInventory = computed<Item[]>(() => {
-  const inv = (char.row?.inventory ?? []).filter((i) => !isFamiliar(i));
+  if (bagMode.value === 'trophies') return trophyBag.value;
+  const inv = (char.row?.inventory ?? []).filter((i) => !isFamiliar(i) && !isTrophy(i));
   const bf = betterFilterSlot.value;
   let list: Item[];
   if (bf) {
@@ -5218,6 +5320,7 @@ function betterInBagCount(slot: ItemSlot): number {
 }
 // Clic sur le badge d'un item équipé → ouvre le Sac (modale) filtré sur ses upgrades.
 function showBetterForSlot(slot: ItemSlot) {
+  bagMode.value = 'items';
   betterFilterSlot.value = slot;
   invFilter.value = slot;
   bagOpen.value = true;
@@ -5229,7 +5332,9 @@ function setInvFilter(f: ItemSlot | 'all') {
 }
 // Nb d'objets RÉELLEMENT dans le Sac = hors familiers (rangés dans leur propre section)
 // → sinon le badge « Sac » comptait un familier fantôme (ticket e3d61676).
-const bagCount = computed(() => (char.row?.inventory ?? []).filter((i) => !isFamiliar(i)).length);
+const bagCount = computed(
+  () => (char.row?.inventory ?? []).filter((i) => !isFamiliar(i) && !isTrophy(i)).length,
+);
 
 // ── Loadouts (sets d'équipement rangés) — 1 par VOIE (8 slots) ──
 // Slot i ↔ voie i : chaque loadout est l'endroit où ranger le set de cette voie.
@@ -5845,6 +5950,43 @@ function doPromoteSpare(setIndex: number, spare: Item) {
     withUid((uid) => char.promoteSetSpare(uid, setIndex, spare.id), 'Échange impossible.'),
   );
 }
+/** Où vit la pièce ouverte dans le détail, si elle est RANGÉE dans un set (doublon ou pièce
+ *  en place). Une pièce portée ou du sac → null : elles ont leurs propres sorties. */
+const inspectStored = computed<{ setIndex: number; spare: boolean } | null>(() => {
+  const it = inspectItem.value;
+  const los = char.row?.loadouts ?? [];
+  if (!it) return null;
+  for (let k = 0; k < los.length; k++) {
+    if (los[k]?.spares?.some((s) => s.id === it.id)) return { setIndex: k, spare: true };
+    if (SLOTS.some((s) => los[k]?.items?.[s]?.id === it.id)) return { setIndex: k, spare: false };
+  }
+  return null;
+});
+function doRecycleSetPiece(it: Item) {
+  const gain = scrapValue(it);
+  const replaced =
+    inspectStored.value && !inspectStored.value.spare
+      ? (char.row?.loadouts?.[inspectStored.value.setIndex]?.spares ?? []).some(
+          (s) => s.slot === it.slot,
+        )
+      : false;
+  $q.dialog({
+    title: 'Recycler cette pièce ?',
+    message:
+      `« ${it.name} » sera fondue en ${gain} 🔩.` +
+      (replaced ? ' Ton meilleur doublon de cet emplacement prendra sa place dans le set.' : ''),
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+  }).onOk(() =>
+    withUid(async (uid) => {
+      const g = await char.recycleSetPiece(uid, it.id, setScore.value);
+      if (g) {
+        inspectItem.value = null;
+        $q.notify({ type: 'positive', message: `🔩 +${g} ferraille` });
+      }
+    }, 'Recyclage impossible.'),
+  );
+}
 // Recycler les doublons d'un set (ou de tous). Les 🔒 restent — l'écran le dit.
 function doRecycleSpares(setIndex?: number) {
   const { melt, keep } = sparesLot(char.row?.loadouts ?? [], setIndex);
@@ -5885,7 +6027,7 @@ const powerLossItems = computed<Item[]>(() => {
   if (!r) return [];
   return r.inventory.filter((it) => {
     if (it.locked) return false;
-    if (isFamiliar(it)) return false;
+    if (isFamiliar(it) || isTrophy(it)) return false;
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
     return !(optimum.value && inOptimum(it));
   });
@@ -6658,20 +6800,6 @@ onUnmounted(() => {
   paint-order: stroke; /* contour SOUS le remplissage → étoile nette qui ressort */
   filter: drop-shadow(0 0 3px color-mix(in srgb, var(--rank-c, var(--accent)) 70%, transparent));
 }
-.pt-rank {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 8px;
-  font-weight: 800;
-  font-size: 16px;
-  letter-spacing: 0.4px;
-  color: color-mix(in srgb, var(--rank-c, var(--accent)) 62%, var(--text));
-}
 /* Liste des rangs de prestige (modale) */
 .ranks-list {
   display: flex;
@@ -7273,6 +7401,140 @@ button.pt-mini:active {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-bottom: 18px;
+}
+/* 🏆 Vitrine du trophée : un socle éclairé à gauche, le trophée dans la couleur de sa
+   rareté (--rk), le cartel à droite. Or par défaut, quand le socle est vide. */
+.trophy-case {
+  --tc: var(--rk, #ffd23f);
+  display: flex;
+  gap: 14px;
+  align-items: stretch;
+  margin: -6px 0 18px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tc) 55%, var(--line));
+  background:
+    radial-gradient(
+      120% 140% at 0% 50%,
+      color-mix(in srgb, var(--tc) 22%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(160deg, color-mix(in srgb, var(--tc) 8%, var(--surface)), var(--surface));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tc) 30%, transparent);
+}
+.trophy-case.empty {
+  --tc: #ffd23f;
+  border-style: dashed;
+}
+.tc-plinth {
+  position: relative;
+  flex: 0 0 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    transparent 55%,
+    color-mix(in srgb, var(--tc) 18%, #0000) 100%
+  );
+}
+.tc-plinth::after {
+  /* le socle : une marche sous le trophée */
+  content: '';
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 6px;
+  height: 7px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--tc) 45%, #2a241c);
+}
+.tc-glow {
+  position: absolute;
+  inset: 10% 14% 22%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--tc) 55%, transparent),
+    transparent 70%
+  );
+  filter: blur(6px);
+  animation: tc-pulse 3.2s ease-in-out infinite;
+}
+.tc-plinth > :not(.tc-glow) {
+  position: relative;
+  margin-bottom: 10px;
+}
+.tc-emo {
+  font-size: 40px;
+  opacity: 0.45;
+}
+@keyframes tc-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tc-glow {
+    animation: none;
+  }
+}
+.tc-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tc-kicker {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--tc);
+  font-weight: 700;
+}
+.tc-name {
+  all: unset;
+  cursor: pointer;
+  font-size: 17px;
+  line-height: 1.15;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.tc-stats {
+  font-size: 12px;
+  color: var(--dim);
+}
+.tc-empty {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.tc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 6px;
+}
+.tc-b {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--tc) 60%, var(--line));
+  background: color-mix(in srgb, var(--tc) 16%, var(--surface));
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.tc-b.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--dim);
 }
 .sec-hint {
   font-size: 12px;
