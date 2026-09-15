@@ -907,6 +907,23 @@ export function caravanSlots(comptoirLevel: number): number {
   return Math.max(1, 1 + Math.floor(Math.max(0, comptoirLevel) / CARAVAN.slotEvery));
 }
 
+/** 🐫⚔️ Créneaux de convoi ENCORE LIBRES — UN SEUL pool pour les convois ET les groupes
+ *  partis SANS le héros (revue finale des camps, arbitrage).
+ *  ⚠️ Sans ce partage, rien ne bornait les groupes : seul le vivier les limitait, et une
+ *  sonde « tous les camps pris » mesurait ~7-8 camps/jour, soit +58 % du revenu d'or de
+ *  référence au niveau 26. Un groupe AVEC le héros n'y figure pas : le héros est à lui seul
+ *  sa limite (un voyage à la fois).
+ *  `trips` : tout ce qui porte un `returnAt` — convois et groupes sans le héros ; un voyage
+ *  est en cours tant que `now < returnAt` (même règle que l'écran et `sendCaravan`). */
+export function convoySlotsFree(
+  comptoirLevel: number,
+  trips: readonly { returnAt: number }[],
+  now: number,
+): number {
+  const busy = trips.filter((t) => now < t.returnAt).length;
+  return Math.max(0, caravanSlots(comptoirLevel) - busy);
+}
+
 /** Ce que le Comptoir apporte ENTRE deux convois gagnés : il accélère les convois.
  *
  *  ⚠️ C'est la réponse à « aucun niveau mort » pour un bâtiment dont la grandeur
@@ -934,20 +951,23 @@ export function caravanSlowFor(comptoirLevel: number): number {
  *  fois, il est physiquement parti.
  *
  *  ⚔️ `party` (étape 3 des camps) : un camp ou un repaire s'attaque en GROUPE — le héros,
- *  ou au moins un aventurier disponible. ⚠️ `advsAvailable` est REQUIS : un appelant qui
- *  l'oublierait fermerait les camps en silence dès que le héros part. */
+ *  ou au moins un aventurier disponible ET un créneau de convoi libre (`convoySlotsFree` :
+ *  un groupe sans le héros prend un créneau, comme un convoi). ⚠️ `advsAvailable` et
+ *  `slotsFree` sont REQUIS : un appelant qui les oublierait fermerait (ou ouvrirait) les
+ *  camps en silence dès que le héros part. */
 export function poiOffers(
   poi: Poi,
-  opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number },
+  opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number; slotsFree: number },
 ): { hero: boolean; caravan: boolean; party: boolean } {
   return {
     hero: !opts.heroAway,
     // Les convois n'exploitent que les lieux de RÉCOLTE : le héros se bat, eux ramassent.
     caravan: opts.comptoirLevel > 0 && HARVEST_TYPES.has(poi.type),
-    // ⚔️ Un CAMP s'attaque en GROUPE : le héros, ou au moins un aventurier disponible.
-    // ⚠️ Ni Comptoir ni créneau de convoi : ce n'est pas un convoi, et le vivier disponible
-    // est la seule limite (spec étape 3).
-    party: CAMP_TYPES.has(poi.type) && (!opts.heroAway || opts.advsAvailable > 0),
+    // ⚔️ Un CAMP s'attaque en GROUPE : le héros (sa propre limite), ou au moins un
+    // aventurier disponible avec un créneau de convoi libre.
+    party:
+      CAMP_TYPES.has(poi.type) &&
+      (!opts.heroAway || (opts.advsAvailable > 0 && opts.slotsFree > 0)),
   };
 }
 
@@ -1135,7 +1155,7 @@ export function roadTroop(foe: Combatant, poi: Poi): SkirmishUnit[] {
  *  ⚠️ Calée sur le rapport des aventuriers : un siège gagné vaut ~1,6 convoi. Un siège
  *  de niveau 28 rend ~1 000 XP, un convoi de niveau 28 en rend ~560 — et on en envoie
  *  plusieurs par jour, là où un siège tombe au plus une fois. */
-export function caravanFamiliarXp(poi: Poi): number {
+export function caravanFamiliarXp(poi: Pick<Poi, 'level'>): number {
   return Math.round(Math.max(1, poi.level) * 20);
 }
 

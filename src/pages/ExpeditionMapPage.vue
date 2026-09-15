@@ -321,9 +321,9 @@
             ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
           </p>
           <p class="sh-note">
-            Sans le héros : or, pierres ou clés selon la faction, et des pièces d’aventurier. En cas
-            de défaite, les aventuriers tombés partent à l’infirmerie ; le héros, lui, rentre sans
-            butin.
+            Sans le héros : de l’or (et des pierres chez les morts-vivants) et des pièces
+            d’aventurier — le groupe prend un créneau de convoi. En cas de défaite, les aventuriers
+            tombés partent à l’infirmerie ; le héros, lui, rentre sans butin.
           </p>
           <p
             v-if="partyRisk && partyRisk.worsens"
@@ -335,6 +335,10 @@
           </p>
           <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
             ✅ Une armée arrive, mais ils seront rentrés avant elle.
+          </p>
+          <p v-if="partySlotsFull" class="sh-risk">
+            🐫 {{ PARTY_SEND_BLOCK_LABEL.slots }} : sans le héros, un groupe en prend un. Emmène ton
+            héros, ou attends le retour d’un convoi ou d’un groupe.
           </p>
           <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
             {{ partySize ? `⚔️ Attaquer le camp (${partySize})` : 'Choisis ton groupe' }}
@@ -530,7 +534,8 @@ import {
   PARTY_HERO_BLOCK_LABEL,
   campRewardLabel,
   campWinPct,
-  canSendParty,
+  PARTY_SEND_BLOCK_LABEL,
+  partySendBlocker,
   partyAllies,
   partyHeroBlocker,
   partyLegMin,
@@ -575,7 +580,7 @@ import { rankStarStr } from '@/lib/characterRank';
 import {
   CARAVAN,
   caravanLegMin,
-  caravanSlots,
+  convoySlotsFree,
   claimedCaravans,
   escortShare,
   isCaravanClaimable,
@@ -880,10 +885,10 @@ const freeStable = computed(() => {
   const ids = new Set(freeKey.value.split('|'));
   return char.advList.filter((a) => ids.has(a.id));
 });
-const vansLeft = computed(
-  () =>
-    caravanSlots(char.comptoirLevel) -
-    char.caravanList.filter((c) => now.value < c.returnAt).length,
+/** Créneaux de convoi libres — ⚠️ UN SEUL pool avec les groupes partis SANS le héros
+ *  (`convoySlotsFree`, même règle que le store). */
+const vansLeft = computed(() =>
+  convoySlotsFree(char.comptoirLevel, [...char.caravanList, ...char.partyList], now.value),
 );
 /** Temps de convalescence restant du héros (0 = disponible). ⚠️ Il manquait ici : la carte
  *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
@@ -899,6 +904,7 @@ const offers = computed(() =>
         heroAway: heroUnavailable.value,
         comptoirLevel: char.comptoirLevel,
         advsAvailable: freeAdvs.value.length,
+        slotsFree: vansLeft.value,
       })
     : { hero: false, caravan: false, party: false },
 );
@@ -1022,11 +1028,22 @@ const partyRisk = computed(() => {
     { backAt: coarseNow.value + partyMin.value * 60_000, raidAt: raidAt.value },
   );
 });
+/** Pourquoi le groupe ne peut pas partir — la MÊME règle que le store (`partySendBlocker`) :
+ *  sans le héros, un groupe prend un créneau de convoi. */
+const partySendBlock = computed(() =>
+  selected.value
+    ? partySendBlocker(selected.value, partyAdvs.value.length, partyHeroOn.value, vansLeft.value)
+    : null,
+);
+/** Sans le héros et plus aucun créneau : on le DIT avant même qu'on choisisse quelqu'un. */
+const partySlotsFull = computed(() => !partyHeroOn.value && vansLeft.value <= 0);
 const canSendPartyNow = computed(
   () =>
     !!selected.value &&
-    canSendParty(selected.value, partyAdvs.value.length, partyHeroOn.value) &&
-    (!partyHeroOn.value || progress.ready.value) &&
+    !partySendBlock.value &&
+    // ⚠️ TOUJOURS attendre la progression : avant son chargement le niveau vaut 1, et le
+    // tirage des pièces d'aventurier (figé au départ) serait plafonné au plus bas rang.
+    progress.ready.value &&
     !busyCaravan.value,
 );
 function togglePartyAdv(id: string) {
@@ -1052,8 +1069,9 @@ async function doSendParty() {
     const refused = await char.sendParty(uid, poi, {
       hero: heroForParty.value,
       escortIds: partyAdvs.value.map((a) => a.id),
-      // Niveau de SPORT : l'anti-runaway du butin se lit sur le joueur (cf. convois).
-      playerLevel: heroLevel.value,
+      // AVEC le héros : le niveau que `expeSend` passait (progression en donjon) — son butin
+      // ne change pas. SANS lui : le niveau de SPORT, comme les convois (pièces d'aventurier).
+      playerLevel: partyHeroOn.value ? progressionLevel.value : heroLevel.value,
       now: Date.now(),
     });
     if (!refused) selected.value = null;
@@ -1337,6 +1355,7 @@ function dimmed(p: Poi): boolean {
     heroAway: heroUnavailable.value,
     comptoirLevel: char.comptoirLevel,
     advsAvailable: freeAdvs.value.length,
+    slotsFree: vansLeft.value,
   });
   // ⚔️ Un camp reste ouvert tant qu'un GROUPE peut y aller (héros OU un aventurier libre).
   // ⚠️ Un camp n'accepte plus le héros seul par `expeSend` : c'est `o.party` qui décide.
@@ -1452,7 +1471,10 @@ async function lifecycle() {
     if (partyMsgs.length)
       $q.notify({
         type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
-        message: '📬 Rapport de ton groupe — il rentre en ville.',
+        // ⚠️ App fermée pendant le voyage : dépôt et retour dans le même tick.
+        message: partyMsgs.every((m) => Date.now() >= (m.claimAt ?? m.resolvedAt))
+          ? '📬 Ton groupe est rentré — son butin t’attend.'
+          : '📬 Rapport de ton groupe — il rentre en ville.',
       });
     await char.expeSyncMap(uid, Date.now(), progressionLevel.value);
   } finally {

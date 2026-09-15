@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { simulateCombat, playerCombatant, mulberry32 } from '@/lib/combat';
+import { simulateCombat, playerCombatant } from '@/lib/combat';
 import {
   caravanWages,
   refAdvGear,
@@ -110,7 +110,7 @@ describe('💰 le butin d’un camp de groupe ne détrône pas les sources dédi
       mine /= 40;
       for (const s of [3, Math.max(...CAMP_SIZES.lair)]) {
         const net =
-          campGroupHaul(poiAt(L), { faction: 'bandits', size: s }, mulberry32(1)).gold -
+          campGroupHaul(poiAt(L), { faction: 'bandits', size: s }).gold -
           caravanWages(team(s, L), poiAt(L));
         expect(net, `niveau ${L}, taille ${s}`).toBeLessThanOrEqual(mine);
       }

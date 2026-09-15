@@ -36,13 +36,12 @@ import {
 } from './caravan';
 import {
   CAMP_TYPES,
-  HARVEST,
   buildMessage,
   campHeroOutcome,
   campSpecOf,
   goldCost,
+  depositMessages,
   harvestYield,
-  keepMessages,
   travelFactor,
   travelOneWayMin,
   type ActiveExpedition,
@@ -66,10 +65,13 @@ export const CAMP = {
    *  chacun accompagné et équipé, contre un camp de bandits — victoire aux niveaux
    *  12/26/45/70 : taille 3 → 0,85/0,90/0,81/0,79 ; taille 10 → 0,84/0,89/0,82/0,82 ; sur
    *  toutes les tailles 0,70 (niv. 70, taille 2) à 0,90 (niv. 26, taille 3). Un de moins :
-   *  taille 10 → 0,31/0,57/0,52/0,57 ; trois contre un repaire (taille ≥ 5) : ≤ 0,02.
-   *  ⚠️ L'ancien réglage (2,6 × 0,27) tombait à 0,46-0,56 sur les gros repaires au niveau 45 :
-   *  des combats de ~6 tours laissaient trop de hasard (trois contre cinq gagnaient 0,14).
-   *  À 8 × 0,09 un combat dure ~17 tours, jamais le plafond (0 sur 300). */
+   *  taille 10 → 0,31/0,57/0,52/0,57 (à 300 combats : 0,31/0,58/0,53/0,57) ; trois contre un
+   *  repaire (taille ≥ 5) : ≤ 0,02.
+   *  ⚠️ L'ancien réglage (2,6 × 0,27) tombait à ~0,5-0,65 sur les gros repaires aux niveaux
+   *  45/70 : des combats de ~6 tours laissaient trop de hasard (trois contre cinq gagnaient
+   *  0,14). À 8 × 0,09 un combat dure ~17 tours, jamais le plafond (0 sur 300).
+   *  ⚠️ CES CHIFFRES SONT LES MÊMES QUE CEUX DE CLAUDE.md (revue finale) : ils divergeaient,
+   *  et deux relevés contradictoires du même réglage finissent par en faire croire un faux. */
   pvTurns: 8,
   /** Morsure ≈ part de la SURVIE du groupe de référence. ⚠️ MESURÉ, cf. `pvTurns`. */
   dmgPctPv: 0.09,
@@ -78,14 +80,19 @@ export const CAMP = {
   chiefWeight: 2,
   championWeight: 4,
   /** Butin SANS le héros, en part des sources existantes.
-   *  ⚠️ `groupGoldShare` MESURÉ : l'or NET (or − salaires) d'un camp de bandits doit rester
-   *  sous l'or moyen d'une MINE de même niveau et distance (40 graines). À 0,6 le plus gros
-   *  repaire (taille 10) en rendait 2,25 / 2,12 / 1,90 fois plus aux niveaux 20/26/40 ; à 0,25 : cf.
-   *  `campCalibration.test` (E2). ⚠️ `banditGoldMult` et `stoneShare` : non contraints par
-   *  une bande, inchangés. */
-  groupGoldShare: 0.25,
+   *  ⚠️ `groupGoldShare` MESURÉ DEUX FOIS. (1) L'or NET (or − salaires) d'un camp de bandits
+   *  doit rester sous l'or moyen d'une MINE de même niveau et distance (40 graines,
+   *  `campCalibration.test` E2) : à 0,6 le plus gros repaire en rendait 2,25 / 2,12 / 1,90 fois
+   *  plus aux niveaux 20/26/40. (2) Surtout, le DÉBIT de camps en parallèle
+   *  (`campEconomy.test`) : à 0,25 un joueur qui optimise ajoutait +24 à +26 % du revenu d'or
+   *  de référence, hors bande ; à 0,18 il ajoute **+9 % (niv. 12), +19 % (26), +20 % (60)**.
+   *  ⚠️ `stoneShare` MESURÉ de même : à 0,5 les pierres d'un jour de camps valaient jusqu'à
+   *  +105 % d'une journée de donjons (les pierres financent les BOSS, le donjon doit rester la
+   *  source) ; à 0,11 → +6 / +16 / +32 %. `banditGoldMult` inchangé (la faction module, elle ne
+   *  décide pas du débit). */
+  groupGoldShare: 0.18,
   banditGoldMult: 1.5,
-  stoneShare: 0.5,
+  stoneShare: 0.11,
   campPieces: 1,
   lairPieces: 2,
   journalMax: 40,
@@ -107,7 +114,10 @@ export interface PartyInput {
   road: RoadCompanions;
   hero: PartyHero | null;
   seed: number;
-  /** ⚠️ REQUIS : niveau RÉEL du joueur (anti-runaway des butins). */
+  /** ⚠️ REQUIS : plafond anti-runaway du butin. AVEC le héros : le MÊME niveau que
+   *  `expeSend` passait à l'ancienne expédition (la progression en donjon, `progressionLevel`
+   *  de la carte) — c'est ce qui rend « le butin du héros ne change pas » vrai. SANS le héros :
+   *  le niveau de SPORT, comme les convois (tirage des pièces d'aventurier). */
   playerLevel: number;
 }
 
@@ -195,15 +205,15 @@ export function campHurt(
 }
 
 /** 💰 Le butin d'un camp pris SANS le héros — DÉRIVÉ des sources existantes, jamais une
- *  table à part : l'or d'un camp, les pierres une part du SANCTUAIRE, les clés des bêtes
- *  celles des ARCHIVES. La FACTION décide de la devise dominante, comme au siège
- *  (`FACTION_LOOT`). Proportionnel à la taille.
- *  ⚠️ JAMAIS DE FERRAILLE (cf. en tête de fichier). */
-export function campGroupHaul(
-  poi: Poi,
-  spec: CampSpec,
-  rng: () => number,
-): { gold: number; summonStones: number; key: number } {
+ *  table à part : l'or d'un camp, les pierres une part du SANCTUAIRE. La FACTION module :
+ *  les bandits paient plus d'or, les morts-vivants ajoutent des pierres. Or et pierres
+ *  proportionnels à la taille ; déterministe (aucun tirage).
+ *  ⚠️ JAMAIS DE FERRAILLE (cf. en tête de fichier).
+ *  ⚠️ JAMAIS DE CLÉ (revue finale, arbitrage) : les clés nourrissent le Labyrinthe, dont la
+ *  bande de 2 à 5 runs/jour est une décision récente (v0.794/v0.799). Les bêtes rendaient
+ *  1-2 clés d'archives par camp quelle que soit la taille (+4 à +5 clés/jour mesurées).
+ *  Le butin du HÉROS, lui, garde sa clé occasionnelle (`campHeroOutcome`, inchangé). */
+export function campGroupHaul(poi: Poi, spec: CampSpec): { gold: number; summonStones: number } {
   const L = Math.max(1, poi.level);
   const rthH = (2 * travelOneWayMin(L, poi.distNorm)) / 60;
   const tfH = travelFactor(rthH);
@@ -219,13 +229,7 @@ export function campGroupHaul(
     spec.faction === 'mortsvivants'
       ? Math.round(harvestYield('shrine', L, tfH).summonStones * CAMP.stoneShare * k)
       : 0;
-  const key =
-    spec.faction === 'betes'
-      ? harvestYield('archive', L, tfH).keys
-      : rng() < HARVEST.keyChance
-        ? 1
-        : 0;
-  return { gold, summonStones, key };
+  return { gold, summonStones };
 }
 
 /** Trajet ALLER d'un groupe (minutes) : héros seul → son trajet (Avant-poste compris) ;
@@ -245,9 +249,10 @@ export function partyLegMin(
 
 /** 🏷️ Ce qu'un camp rapporte, annoncé sur la carte AVANT l'envoi.
  *  ⚠️ Écrit À CÔTÉ des règles qu'il décrit (`campHeroOutcome`, `campGroupHaul`,
- *  `CAMP.campPieces`/`lairPieces`), et testé contre elles : la faction décide de la devise
- *  du butin de groupe (bandits → or, morts-vivants → pierres, bêtes → clés). ⚠️ Jamais de
- *  ferraille : un camp n'en donne pas. */
+ *  `CAMP.campPieces`/`lairPieces`), et testé contre elles : la faction module le butin de
+ *  groupe (bandits → or en quantité, morts-vivants → or + pierres, bêtes → or). ⚠️ Jamais
+ *  de ferraille ni de clé sans le héros. ⚠️ AVEC le héros, la clé occasionnelle (10-20 %)
+ *  n'est pas annoncée : c'est une prime, pas la devise du lieu. */
 export function campRewardLabel(poi: Poi): string {
   const spec = campSpecOf(poi);
   if (!spec) return '';
@@ -255,18 +260,45 @@ export function campRewardLabel(poi: Poi): string {
   const devise =
     spec.faction === 'mortsvivants'
       ? 'or 🪙 + pierres 🔮'
-      : spec.faction === 'betes'
-        ? 'or 🪙 + clés 🗝️'
-        : 'or 🪙 en quantité';
+      : spec.faction === 'bandits'
+        ? 'or 🪙 en quantité'
+        : 'or 🪙';
   const n = poi.type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;
   const pieces = `${n} pièce${n > 1 ? 's' : ''} d’aventurier 🗡️`;
   return `Avec le héros : ${avec} · sans : ${devise} + ${pieces}`;
 }
 
-/** ⚠️ AUCUNE taille maximale : le vivier disponible est la seule limite (les convois gardent
- *  `CARAVAN.escortMax`, leur calibration en dépend). */
-export function canSendParty(poi: Poi, escortCount: number, hero: boolean): boolean {
-  return CAMP_TYPES.has(poi.type) && (hero || escortCount > 0);
+/** Pourquoi un GROUPE ne peut pas partir — `null` s'il le peut.
+ *  ⚠️ AUCUNE taille maximale : le vivier disponible limite la TAILLE d'un groupe (les convois
+ *  gardent `CARAVAN.escortMax`, leur calibration en dépend).
+ *  ⚠️ En revanche un groupe SANS le héros prend un CRÉNEAU DE CONVOI (`convoySlotsFree`,
+ *  un seul pool avec les convois) : c'est ce qui borne le NOMBRE de groupes en parallèle,
+ *  donc l'or et les pierres par jour. Le héros est à lui seul sa limite.
+ *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
+export type PartySendBlock = 'notCamp' | 'empty' | 'slots';
+export function partySendBlocker(
+  poi: Poi,
+  escortCount: number,
+  hero: boolean,
+  slotsFree: number,
+): PartySendBlock | null {
+  if (!CAMP_TYPES.has(poi.type)) return 'notCamp';
+  if (!hero && escortCount <= 0) return 'empty';
+  if (!hero && slotsFree <= 0) return 'slots';
+  return null;
+}
+export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
+  notCamp: 'ce lieu n’est pas un camp',
+  empty: 'le groupe est vide',
+  slots: 'tous les créneaux de convoi sont pris',
+};
+export function canSendParty(
+  poi: Poi,
+  escortCount: number,
+  hero: boolean,
+  slotsFree: number,
+): boolean {
+  return partySendBlocker(poi, escortCount, hero, slotsFree) === null;
 }
 
 /** Les unités du groupe : aventuriers (SA paire, SES pièces, règle unique `roadPairs`) puis
@@ -343,7 +375,9 @@ function campJournal(d: SkirmishResult, allies: SkirmishUnit[], bodies: Skirmish
  *   toujours un héros de faire monter des recrues hors de leur ligue.
  * - Avec le héros : le butin ACTUEL (`campHeroOutcome`), jamais de pièce d'aventurier.
  * - Sans le héros : gagné → `campGroupHaul` + pièce(s) d'aventurier ; perdu → rien.
- * ⚠️ `gearRng` SÉPARÉ : une pièce ne décale jamais la clé du butin de groupe (`rng`).
+ * ⚠️ SANS les rencontres de trajet de l'ancienne expédition héros (arbitrage T4) : le drapeau
+ * `poi.perilous` d'un camp reste tiré au spawn, mais n'a AUCUN effet sur une attaque de camp.
+ * ⚠️ `gearRng` SÉPARÉ : une pièce ne décale jamais le butin du héros (`rng`).
  */
 export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   const { poi, spec, escort, hero, seed, playerLevel } = input;
@@ -391,7 +425,6 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     win: d.win,
     foes: bodies.length,
     slain: d.foesDown.length,
-    foesDown: [...d.foesDown],
     kills,
     heroKills: hero ? (slainBy[HERO_UNIT_ID] ?? 0) : 0,
     xp,
@@ -406,7 +439,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     const o = campHeroOutcome(rng, poi, d.win, playerLevel);
     return { ...o, text: `${o.text} ${tag}`, party };
   }
-  const haul = d.win ? campGroupHaul(poi, spec, rng) : { gold: 0, summonStones: 0, key: 0 };
+  const haul = d.win ? campGroupHaul(poi, spec) : { gold: 0, summonStones: 0 };
   return {
     win: d.win,
     gold: haul.gold,
@@ -416,7 +449,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     scrap: 0,
     item: null,
     items: [],
-    key: haul.key,
+    key: 0, // ⚠️ jamais de clé sans le héros (cf. `campGroupHaul`)
     reconBonus: 0,
     returnMult: 1,
     text: d.win ? `⚔️ Camp pris par ton groupe ! ${tag}` : `💀 Ton groupe a été repoussé. ${tag}`,
@@ -472,7 +505,8 @@ export function normalizeParties(v: unknown): ActiveParty[] {
  *   par leur `busyUntil` ; le BUTIN reste à encaisser dans la boîte (`claimed: false`).
  * ⚠️ Une app fermée pendant tout le voyage passe les deux conditions dans le même appel :
  * rapport déposé PUIS groupe retiré — voulu, le butin n'est pas perdu.
- * ⚠️ La boîte est taillée par `keepMessages` (jamais un butin à récupérer jeté).
+ * ⚠️ Le rapport passe par `depositMessages` : jamais doublé, jamais un encaissement dégradé,
+ *   boîte taillée par `keepMessages` (jamais un butin à récupérer jeté).
  * ⚠️ `changed` faux ⇒ le store n'écrit rien (le tick bat chaque seconde).
  */
 export function settleParties(
@@ -494,8 +528,10 @@ export function settleParties(
     let q = p;
     if (now >= p.midAt && !p.reported) {
       const msg = buildMessage(p);
-      if (!box.some((m) => m.id === msg.id)) {
-        box = keepMessages([msg, ...box], cap);
+      // ⚠️ `depositMessages` : jamais un doublon, jamais un encaissement dégradé.
+      const next = depositMessages(box, [msg], cap);
+      if (next !== box) {
+        box = next;
         fresh.push(msg);
       }
       q = { ...p, reported: true };

@@ -18,6 +18,8 @@ import {
   partyHeroBlocker,
   partyLegMin,
   partyReport,
+  partySendBlocker,
+  PARTY_SEND_BLOCK_LABEL,
   resolveCamp,
   settleParties,
   startParty,
@@ -25,7 +27,6 @@ import {
   type PartyInput,
 } from '@/lib/camp';
 import {
-  HARVEST,
   buildMessage,
   campSpecOf,
   goldCost,
@@ -241,7 +242,7 @@ describe('🎲 graines — le pronostic ne rejoue JAMAIS le vrai combat', () => 
         s,
       );
       expect(o.party!.win, `graine ${s}`).toBe(fight.win);
-      expect(o.party!.foesDown).toEqual(d.foesDown);
+      expect(o.party!.slain).toBe(d.foesDown.length);
       expect(o.party!.hurt).toEqual(d.win ? [] : d.down);
       if (
         simulateCombat(group, foe, { seed: s + 17, goldOnWin: 0 }).log.length !== fight.log.length
@@ -262,10 +263,10 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
   });
 
   it('⚠️ AUCUNE taille maximale : dix aventuriers partent, et pèsent', () => {
-    expect(canSendParty(poi(), 12, false)).toBe(true);
-    expect(canSendParty(poi(), 0, true)).toBe(true);
-    expect(canSendParty(poi(), 0, false)).toBe(false);
-    expect(canSendParty(poi({ type: 'wreck' }), 3, false)).toBe(false);
+    expect(canSendParty(poi(), 12, false, 1)).toBe(true);
+    expect(canSendParty(poi(), 0, true, 0)).toBe(true);
+    expect(canSendParty(poi(), 0, false, 1)).toBe(false);
+    expect(canSendParty(poi({ type: 'wreck' }), 3, false, 1)).toBe(false);
     const L = 30;
     const spec = { faction: 'bandits' as const, size: 10 };
     const p = poi({ level: L, type: 'lair' });
@@ -280,7 +281,6 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
       const r = o.party!;
       const somme = Object.values(r.kills).reduce((a, b) => a + b, 0) + r.heroKills;
       expect(somme).toBe(r.slain);
-      expect(r.slain).toBe(r.foesDown.length);
       expect(r.foes).toBe(CAMP.refGroup + 1);
     }
   });
@@ -297,9 +297,18 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
           hero: fort(20),
         });
         const o = resolveCamp(inp);
-        const parts = skirmishXpShares(esc, campBodies(inp.poi, inp.spec), {
-          foesDown: o.party!.foesDown,
-        });
+        const allies = partyAllies(esc, inp.road, inp.hero);
+        const foe = campFoe(inp.poi, inp.spec);
+        const bodies = campBodies(inp.poi, inp.spec);
+        const group = fuseUnits(allies, 'Groupe');
+        const fight = simulateCombat(group, foe, { seed: campFightSeed(s), goldOnWin: 0 });
+        const d = deriveSkirmish(
+          { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
+          allies,
+          bodies,
+          s,
+        );
+        const parts = skirmishXpShares(esc, bodies, d);
         // La part des abattus suit la DISTANCE comme le socle, exactement comme un convoi.
         const travel = missionTravelMult(inp.poi);
         for (const a of esc)
@@ -372,25 +381,30 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi));
   });
 
-  it('⚠️ GÉNÉRATEUR SÉPARÉ : les pièces ne décalent pas la clé du butin de groupe', () => {
-    // La clé d'un camp non-bêtes est le PREMIER tirage de `rng` après la résolution.
-    let cles = 0;
-    for (let s = 1; s <= 200; s++) {
-      const inp = input({
-        seed: s,
-        poi: poi({ level: 5 }),
-        escort: team(6, 60),
-        road: road(60, 6),
-        spec: { faction: 'bandits', size: 2 },
-        playerLevel: 60,
-      });
-      const o = resolveCamp(inp);
-      if (!o.party!.win) continue;
-      const attendue = mulberry32(s >>> 0 || 1)() < HARVEST.keyChance ? 1 : 0;
-      expect(o.key, `graine ${s}`).toBe(attendue);
-      cles += attendue;
-    }
-    expect(cles, 'aucune clé : le test ne prouve rien').toBeGreaterThan(0);
+  it('⚠️ SANS le héros : JAMAIS de clé, et le butin est exactement campGroupHaul (pièces à part)', () => {
+    // Les clés nourrissent le Labyrinthe (bande 2-5 runs/jour, v0.794/v0.799) : un groupe de
+    // camp n'en rend AUCUNE, quelle que soit la faction — les bêtes en rendaient 1-2 par camp.
+    let victoires = 0;
+    for (const faction of ['bandits', 'mortsvivants', 'betes'] as const)
+      for (let s = 1; s <= 40; s++) {
+        const inp = input({
+          seed: s,
+          poi: poi({ level: 5, type: 'lair' }),
+          escort: team(6, 60),
+          road: road(60, 6),
+          spec: { faction, size: 5 },
+          playerLevel: 60,
+        });
+        const o = resolveCamp(inp);
+        expect(o.key, `${faction} graine ${s}`).toBe(0);
+        if (!o.party!.win) continue;
+        victoires++;
+        const h = campGroupHaul(inp.poi, inp.spec);
+        expect(o.gold).toBe(h.gold);
+        expect(o.summonStones).toBe(h.summonStones);
+        expect(o.party!.advGear).toHaveLength(CAMP.lairPieces);
+      }
+    expect(victoires, 'aucune victoire : le test ne prouve rien').toBeGreaterThan(0);
   });
 
   it('le JOURNAL raconte, borné', () => {
@@ -456,21 +470,23 @@ describe('🧭 trajet et départ d’un groupe', () => {
 });
 
 describe('💰 butin de groupe : dérivé des sources existantes', () => {
-  it('pierres = part du sanctuaire, clés des bêtes = archives, les bandits paient en or ; jamais de ferraille', () => {
+  it('pierres = part du sanctuaire, les bandits paient en or ; jamais de ferraille ni de clé', () => {
     const p = poi({ level: 30 });
     const tfH = travelFactor((2 * travelOneWayMin(30, 0.5)) / 60);
     const k = 3 / CAMP.refGroup;
-    const b = campGroupHaul(p, { faction: 'betes', size: 3 }, mulberry32(1));
-    expect(b.key).toBe(harvestYield('archive', 30, tfH).keys);
+    const b = campGroupHaul(p, { faction: 'betes', size: 3 });
     expect(b.summonStones).toBe(0);
-    const m = campGroupHaul(p, { faction: 'mortsvivants', size: 3 }, mulberry32(1));
+    const m = campGroupHaul(p, { faction: 'mortsvivants', size: 3 });
     expect(m.summonStones).toBe(
       Math.round(harvestYield('shrine', 30, tfH).summonStones * CAMP.stoneShare * k),
     );
-    const bd = campGroupHaul(p, { faction: 'bandits', size: 3 }, mulberry32(1));
+    const bd = campGroupHaul(p, { faction: 'bandits', size: 3 });
     expect(bd.gold).toBeGreaterThan(m.gold);
     expect(bd.gold / m.gold).toBeCloseTo(CAMP.banditGoldMult, 1);
-    for (const h of [b, m, bd]) expect('scrap' in h).toBe(false);
+    for (const h of [b, m, bd]) {
+      expect('scrap' in h).toBe(false);
+      expect('key' in h).toBe(false);
+    }
   });
 });
 
@@ -527,6 +543,21 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     expect(partyAllies(inp.escort, inp.road, null)).toHaveLength(3);
   });
 
+  it('⚠️ partySendBlocker : sans le héros, un groupe prend un CRÉNEAU DE CONVOI (un seul pool)', () => {
+    // Revue finale : sans ce partage, rien ne bornait le nombre de groupes en parallèle.
+    expect(partySendBlocker(poi(), 3, false, 1)).toBeNull();
+    expect(partySendBlocker(poi(), 3, false, 0)).toBe('slots');
+    // Le héros est à lui seul sa limite : il ne prend pas de créneau, même avec une escorte.
+    expect(partySendBlocker(poi(), 3, true, 0)).toBeNull();
+    expect(partySendBlocker(poi(), 0, true, 0)).toBeNull();
+    expect(partySendBlocker(poi(), 0, false, 0)).toBe('empty');
+    expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5)).toBe('notCamp');
+    expect(canSendParty(poi(), 3, false, 0)).toBe(false);
+    for (const k of ['notCamp', 'empty', 'slots'] as const)
+      expect(PARTY_SEND_BLOCK_LABEL[k].length).toBeGreaterThan(0);
+    expect(PARTY_SEND_BLOCK_LABEL.slots).toContain('créneaux de convoi');
+  });
+
   it('partyHeroBlocker : expédition, infirmerie, Avant-poste, or — dans cet ordre, sinon libre', () => {
     const ok = { onExpedition: false, healMs: 0, outpost: true, gold: 100, cost: 100 };
     expect(partyHeroBlocker(ok)).toBeNull();
@@ -548,9 +579,10 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
         const label = campRewardLabel(p);
         const [avec, sans] = label.split(' · sans : ');
         expect(sans, label).toBeDefined();
-        const haul = campGroupHaul(p, spec, mulberry32(1));
+        const haul = campGroupHaul(p, spec);
         expect(sans!.includes('🔮'), label).toBe(haul.summonStones > 0);
-        expect(sans!.includes('🗝️'), label).toBe(spec.faction === 'betes');
+        // ⚠️ Aucune clé sans le héros : le libellé n'en promet pas.
+        expect(sans!.includes('🗝️'), label).toBe(false);
         expect(label).not.toContain('🔩');
         expect(avec!.includes('🧩')).toBe(type === 'lair');
         const n = type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;

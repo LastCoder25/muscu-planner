@@ -6,6 +6,7 @@ import {
   caravanHurtMs,
   caravanLegMin,
   caravanSlots,
+  convoySlotsFree,
   poiOffers,
   caravanSlowFor,
   stratumTrainMult,
@@ -1015,53 +1016,90 @@ describe('⚠️ un convoi part SANS le héros', () => {
   it('⚠️ l’offre de convoi NE DÉPEND PAS de la disponibilité du héros', () => {
     for (const heroAway of [true, false]) {
       expect(
-        poiOffers(recolte, { heroAway, comptoirLevel: 3, advsAvailable: 0 }).caravan,
+        poiOffers(recolte, { heroAway, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).caravan,
         `héros absent=${heroAway}`,
       ).toBe(true);
     }
   });
 
   it('le HÉROS, lui, ne peut pas être à deux endroits', () => {
-    expect(poiOffers(recolte, { heroAway: false, comptoirLevel: 3, advsAvailable: 0 }).hero).toBe(
-      true,
-    );
-    expect(poiOffers(recolte, { heroAway: true, comptoirLevel: 3, advsAvailable: 0 }).hero).toBe(
-      false,
-    );
+    expect(
+      poiOffers(recolte, { heroAway: false, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 })
+        .hero,
+    ).toBe(true);
+    expect(
+      poiOffers(recolte, { heroAway: true, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).hero,
+    ).toBe(false);
   });
 
   it('un convoi n’exploite que les lieux de RÉCOLTE, et exige un Comptoir', () => {
-    expect(poiOffers(combat, { heroAway: false, comptoirLevel: 3, advsAvailable: 0 }).caravan).toBe(
-      false,
-    );
     expect(
-      poiOffers(recolte, { heroAway: false, comptoirLevel: 0, advsAvailable: 0 }).caravan,
+      poiOffers(combat, { heroAway: false, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 })
+        .caravan,
+    ).toBe(false);
+    expect(
+      poiOffers(recolte, { heroAway: false, comptoirLevel: 0, advsAvailable: 0, slotsFree: 1 })
+        .caravan,
     ).toBe(false);
   });
 
   it('⚔️ un CAMP s’ouvre aux groupes : le héros, ou au moins un aventurier disponible', () => {
     const camp = poi({ type: 'camp' });
-    expect(poiOffers(camp, { heroAway: false, comptoirLevel: 0, advsAvailable: 0 }).party).toBe(
-      true,
-    );
-    expect(poiOffers(camp, { heroAway: true, comptoirLevel: 0, advsAvailable: 2 }).party).toBe(
-      true,
-    );
-    expect(poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 0 }).party).toBe(
-      false,
-    );
     expect(
-      poiOffers(poi({ type: 'lair' }), { heroAway: true, comptoirLevel: 0, advsAvailable: 1 })
-        .party,
+      poiOffers(camp, { heroAway: false, comptoirLevel: 0, advsAvailable: 0, slotsFree: 1 }).party,
+    ).toBe(true);
+    expect(
+      poiOffers(camp, { heroAway: true, comptoirLevel: 0, advsAvailable: 2, slotsFree: 1 }).party,
+    ).toBe(true);
+    expect(
+      poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 0, slotsFree: 1 }).party,
+    ).toBe(false);
+    expect(
+      poiOffers(poi({ type: 'lair' }), {
+        heroAway: true,
+        comptoirLevel: 0,
+        advsAvailable: 1,
+        slotsFree: 1,
+      }).party,
     ).toBe(true);
     // Les convois, eux, ne vont toujours pas au combat.
-    expect(poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 5 }).caravan).toBe(
-      false,
-    );
     expect(
-      poiOffers(poi({ type: 'well' }), { heroAway: false, comptoirLevel: 9, advsAvailable: 5 })
-        .party,
+      poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 5, slotsFree: 1 }).caravan,
     ).toBe(false);
+    expect(
+      poiOffers(poi({ type: 'well' }), {
+        heroAway: false,
+        comptoirLevel: 9,
+        advsAvailable: 5,
+        slotsFree: 1,
+      }).party,
+    ).toBe(false);
+  });
+
+  it('⚠️ UN SEUL POOL : sans le héros, un groupe exige un créneau de convoi libre', () => {
+    const camp = poi({ type: 'camp' });
+    // Sans créneau : fermé aux aventuriers seuls…
+    expect(
+      poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 5, slotsFree: 0 }).party,
+    ).toBe(false);
+    // …mais le héros, lui, n'en prend pas : il est sa propre limite.
+    expect(
+      poiOffers(camp, { heroAway: false, comptoirLevel: 9, advsAvailable: 5, slotsFree: 0 }).party,
+    ).toBe(true);
+  });
+
+  it('⚠️ convoySlotsFree : convois ET groupes sans le héros en route se partagent les créneaux', () => {
+    const now = 1000;
+    const enRoute = { returnAt: now + 1 };
+    const rentre = { returnAt: now };
+    const slots = caravanSlots(18); // 3
+    expect(convoySlotsFree(18, [], now)).toBe(slots);
+    // Un convoi en route + un groupe en route = deux créneaux pris, peu importe leur nature.
+    expect(convoySlotsFree(18, [enRoute, enRoute], now)).toBe(slots - 2);
+    // Un voyage rentré (now >= returnAt) ne tient plus de créneau.
+    expect(convoySlotsFree(18, [enRoute, rentre], now)).toBe(slots - 1);
+    // Jamais négatif.
+    expect(convoySlotsFree(0, [enRoute, enRoute, enRoute], now)).toBe(0);
   });
 });
 
@@ -1071,7 +1109,7 @@ describe('⚠️ ce qui est GRISÉ sur la carte', () => {
   // peut parfaitement aller : elle annonçait indisponibles des lieux disponibles, et
   // l'utilisateur a logiquement cessé d'essayer de cliquer.
   const gris = (p: Poi, heroAway: boolean, comptoirLevel: number) => {
-    const o = poiOffers(p, { heroAway, comptoirLevel, advsAvailable: 0 });
+    const o = poiOffers(p, { heroAway, comptoirLevel, advsAvailable: 0, slotsFree: 1 });
     return !o.hero && !o.caravan;
   };
 

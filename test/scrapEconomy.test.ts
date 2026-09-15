@@ -78,7 +78,12 @@ describe('ferraille : plus dure à obtenir que l’or', () => {
     // Un camp pris sans le héros rend de l'OR, jamais de ferraille (cf. `campGroupHaul`) :
     // ajouté au seul débit d'or, il accélère l'or — le métal doit rester plus lent, sans
     // virer au mur, et l'épave garder la tête du débit de ferraille. Bandits : la faction
-    // qui rend le plus d'or, donc le cas le plus défavorable.
+    // qui rend le plus d'or.
+    // ⚠️ CE N'EST PAS « le cas le plus défavorable », comme l'affirmait ce commentaire : un
+    // camp de taille 3 est le plus PETIT (un repaire de taille 10 rend 3,3× cet or), et un
+    // joueur en prend plusieurs par jour. Le débit RÉEL des camps en parallèle — borné par
+    // les créneaux de convoi — est mesuré dans `campEconomy.test.ts` ; ici on ne vérifie
+    // qu'une chose : un camp de plus ne renverse pas le rapport ferraille/or.
     const campGold = (L: number) => {
       const p: Poi = {
         id: 'c',
@@ -90,7 +95,7 @@ describe('ferraille : plus dure à obtenir que l’or', () => {
         spawnedAt: 0,
         expiresAt: 9e15,
       };
-      return campGroupHaul(p, { faction: 'bandits', size: 3 }, () => 0.99).gold;
+      return campGroupHaul(p, { faction: 'bandits', size: 3 }).gold;
     };
     for (const L of LEVELS) {
       const goldDay = goldPerDay(L) + campGold(L);

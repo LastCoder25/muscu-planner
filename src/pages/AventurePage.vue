@@ -5281,7 +5281,11 @@ async function expeLifecycle() {
     if (partyMsgs.length) {
       $q.notify({
         type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
-        message: '📬 Rapport de ton groupe — le butin t’attendra au retour.',
+        // ⚠️ App fermée pendant le voyage : le rapport et le retour tombent dans le même tick —
+        // le butin n'« attendra » pas, il attend déjà.
+        message: partyMsgs.every((m) => Date.now() >= (m.claimAt ?? m.resolvedAt))
+          ? '📬 Ton groupe est rentré — son butin t’attend dans 📬.'
+          : '📬 Rapport de ton groupe — le butin t’attendra au retour.',
       });
       // Un groupe en route a changé : l'échéance de son retour se réaligne.
       void syncPush(true);

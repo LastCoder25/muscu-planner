@@ -11,6 +11,8 @@ import {
   createMap,
   advanceWorld,
   resolveOutcome,
+  campHeroOutcome,
+  CAMP_TYPES,
   HARVEST_TYPES,
   HARVEST,
   EXPE,
@@ -641,7 +643,11 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
           spawnedAt: 0,
           expiresAt: 9e15,
         } as never;
-        const o = resolveOutcome(hero, poi, s * 97 + 3, 26) as unknown as Record<string, unknown>;
+        // ⚠️ Un camp ne passe plus par `resolveOutcome` : son butin héros est
+        // `campHeroOutcome` (gagné ET perdu) ; le butin de groupe est vérifié dans `camp.test`.
+        const o = (CAMP_TYPES.has(type)
+          ? campHeroOutcome(mulberry32(s), poi, s % 2 === 0, 26)
+          : resolveOutcome(hero, poi, s * 97 + 3, 26)) as unknown as Record<string, unknown>;
         // Les champs n’existent plus sur le type : on vérifie qu’aucun ne réapparaît.
         expect(o.fragments, `${type} verse des fragments`).toBeUndefined();
         expect(o.inkDust, `${type} verse de l’encre`).toBeUndefined();

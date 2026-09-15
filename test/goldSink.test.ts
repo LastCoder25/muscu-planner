@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { buildingUpgradeCost, BUILDING_TYPES, BUILD, plotsForLevel } from '@/lib/buildings';
-import { goldCost, resolveOutcome, travelOneWayMin, travelFactor } from '@/lib/expedition';
+import { buildingUpgradeCost, BUILDING_TYPES, plotsForLevel } from '@/lib/buildings';
+import { goldCost, resolveOutcome } from '@/lib/expedition';
 import { refFighter } from '@/lib/proceduralContent';
 import { computeLevel } from '@/lib/levels';
-import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 import { DEFENSE_TYPES, healCost } from '@/lib/raid';
+// ⚠️ LE MODÈLE DE REVENU VIT DANS UN HELPER PARTAGÉ (`test/helpers/goldModel`) : le débit
+// des CAMPS DE FACTION se mesure contre LE MÊME dénominateur, et deux copies auraient
+// divergé — c'est par un mauvais dénominateur que ce fichier a déjà laissé passer un puits
+// qui débordait (v0.684) puis un puits devenu mur (v0.733).
+import { LEVELS, MINE_DIST, goldPerDay, mineNet } from './helpers/goldModel';
 
 /** LE PUITS D'OR, mesuré contre le REVENU RÉEL.
  *
@@ -21,45 +25,6 @@ import { DEFENSE_TYPES, healCost } from '@/lib/raid';
  *     revenus en L^1.6, 115 expéditions pour un niveau à 100, bâtiments gelés).
  *  D'où la règle : on déplace la courbe par son COEFFICIENT, jamais par son exposant. */
 
-const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
-/** ~4 séances de sport par semaine : le jeu est annexe. */
-const SPORT_PER_DAY = 4 / 7;
-/** Énergie d'une séance → ~8 descentes (coût plafonné à 40 ⚡). */
-const RUNS_PER_SESSION = 8;
-
-const bestDungeon = (L: number) =>
-  [...DUNGEONS].filter((d) => d.recoLevel <= L).sort((a, b) => b.recoLevel - a.recoLevel)[0] ??
-  DUNGEONS[0]!;
-
-/** Net d'une expédition de mine LOINTAINE — ce que joue un joueur qui optimise.
- *  ⚠️ ÉTAIT à distance MOYENNE (0,5), et c'est ce qui a fait SOUS-ESTIMER le revenu d'un
- *  facteur ~3 : depuis la v0.683 la récompense est SUPER-LINÉAIRE en temps de trajet
- *  (`TRAVEL_EXP` 1,4), donc aller loin paie bien plus que proportionnellement. Mesuré au
- *  niveau 28 : 24 707 or par mine moyenne contre 87 361 par mine lointaine.
- *  ⚠️ Sous-estimer le revenu fait déclarer sain un puits qui déborde — c'est la
- *  régression que ce fichier a DÉJÀ connue une fois (v0.684, mauvais dénominateur). */
-const MINE_DIST = 0.9;
-function mineNet(level: number): number {
-  const rth = (2 * travelOneWayMin(level, MINE_DIST)) / 60;
-  const cost = goldCost('mine', level);
-  return Math.round(cost * (1.3 + travelFactor(rth))) - cost;
-}
-/** Production passive d'une Mine d'or au niveau du joueur, par jour. */
-function goldMinePerDay(L: number): number {
-  const t = BUILDING_TYPES.find((b) => b.id === 'gold_mine')!;
-  return (t.prodPerHrPerLvl ?? 0) * L * BUILD.storageHours;
-}
-/** Revenu d'une JOURNÉE type : la séance de donjons au prorata, 2 mines LOINTAINES, le
- *  passif. Deux expéditions = ce que lance un joueur qui ouvre l'app matin et soir ; le
- *  héros n'en menant qu'UNE à la fois (~7 h de trajet au niveau 28), c'est aussi à peu
- *  près le plafond pratique. */
-function goldPerDay(L: number): number {
-  return (
-    dungeonGold(bestDungeon(L)) * RUNS_PER_SESSION * SPORT_PER_DAY +
-    2 * mineNet(L) +
-    goldMinePerDay(L)
-  );
-}
 /** Monter d'un cran tous les bâtiments DÉBLOQUÉS à ce niveau : le rythme de croisière.
  *  (L'enceinte a sa courbe dédiée, testée dans `raid.test` et `scrapEconomy.test`.) */
 const cranTotal = (L: number) =>
