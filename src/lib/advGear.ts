@@ -473,6 +473,9 @@ export function outfitRank(item: Pick<Item, 'rarity'>, target: Adventurer): Rari
 }
 
 /** Un objet du sac qu'on peut fondre pour CET aventurier, avec la pièce qui en sortira. */
+/** Ce que la pièce fabriquée ferait face à ce que l'aventurier porte déjà sur l'emplacement. */
+export type OutfitVerdict = 'empty' | 'up' | 'same' | 'down';
+
 export interface OutfitOption {
   item: Item;
   slot: AdvGearSlot;
@@ -481,15 +484,30 @@ export interface OutfitOption {
   rank: Rarity;
   /** L'objet est plus bas que l'aventurier : la pièce sortira à SON rang, pas à celui du porteur. */
   capped: boolean;
-  /** L'aventurier n'a encore rien sur cet emplacement. */
+  /** L'aventurier ne PORTE rien sur cet emplacement (pièce retenue par `wornGear`). */
   emptySlot: boolean;
+  /** La pièce qu'il porte sur cet emplacement, à comparer AVANT de fondre l'objet. */
+  current?: AdvGear;
+  /** Rang de la pièce fabriquée face à la pièce portée. */
+  verdict: OutfitVerdict;
+  /** Pièces déjà en fabrication pour lui sur cet emplacement. */
+  queued: number;
 }
+
+const VERDICT_ORDER: Record<OutfitVerdict, number> = { empty: 0, up: 1, same: 2, down: 3 };
 
 /** Les objets qu'on peut fondre pour `target`, dans l'ordre CONSEILLÉ (v0.881, demandé :
  *  « création plus rapide ») : d'abord ceux qui donnent la pièce AU RANG de l'aventurier,
- *  sur un emplacement encore vide, en sacrifiant l'objet le moins précieux ; les objets trop
- *  bas passent à la fin. `items` = les candidats déjà filtrés (ni 🔒, ni porté, ni familier). */
-export function outfitOptions(items: readonly Item[], target: Adventurer): OutfitOption[] {
+ *  sur un emplacement vide, puis ceux qui battent la pièce portée, en sacrifiant l'objet le
+ *  moins précieux ; les objets trop bas passent à la fin. `items` = les candidats déjà filtrés
+ *  (ni 🔒, ni porté, ni familier). ⚠️ `worn` = ce que `wornGear` retient pour lui : on
+ *  compare à ce qui COMPTE au combat, jamais à un id qui ne désigne plus rien (v0.885). */
+export function outfitOptions(
+  items: readonly Item[],
+  target: Adventurer,
+  worn: readonly AdvGear[],
+  forges: readonly ForgeJob[],
+): OutfitOption[] {
   const lineage = lineageOf(target);
   if (!lineage) return [];
   const out: OutfitOption[] = [];
@@ -498,6 +516,8 @@ export function outfitOptions(items: readonly Item[], target: Adventurer): Outfi
     if (!slot || item.locked) continue;
     const def = LINEAGE_GEAR[lineage].pieces[slot];
     const rank = outfitRank(item, target);
+    const current = worn.find((g) => g.slot === slot);
+    const diff = current ? RARITY_RANK[rank] - RARITY_RANK[current.rarity] : 0;
     out.push({
       item,
       slot,
@@ -505,7 +525,10 @@ export function outfitOptions(items: readonly Item[], target: Adventurer): Outfi
       emoji: def.emoji,
       rank,
       capped: rank !== advRarity(target),
-      emptySlot: !target.gear?.[slot],
+      emptySlot: !current,
+      ...(current ? { current } : {}),
+      verdict: !current ? 'empty' : diff > 0 ? 'up' : diff < 0 ? 'down' : 'same',
+      queued: forges.filter((f) => f.advId === target.id && f.piece.slot === slot).length,
     });
   }
   // Rang décroissant : une pièce plafonnée par un objet trop bas a un rang inférieur à celui de
@@ -513,7 +536,7 @@ export function outfitOptions(items: readonly Item[], target: Adventurer): Outfi
   return out.sort(
     (a, b) =>
       RARITY_RANK[b.rank] - RARITY_RANK[a.rank] ||
-      Number(b.emptySlot) - Number(a.emptySlot) ||
+      VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict] ||
       RARITY_RANK[a.item.rarity] - RARITY_RANK[b.item.rarity] ||
       a.item.level - b.item.level,
   );

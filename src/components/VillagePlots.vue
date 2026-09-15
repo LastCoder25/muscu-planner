@@ -141,9 +141,35 @@
                 <span>{{ a.emoji }}</span>
                 <span class="of-adv-n">{{ a.name }}</span>
                 <span class="of-adv-r" :style="{ color: a.color }">{{ a.rank }}</span>
+                <span class="of-adv-g" :title="`${a.worn} pièce(s) portée(s) sur 4`"
+                  >🗡️ {{ a.worn }}/4</span
+                >
               </button>
             </div>
             <template v-if="outfitAdv">
+              <!-- Ce qu'il porte AVANT de fondre quoi que ce soit (demandé : « il me faut savoir
+                   son équipement avant de lancer la production »). Mêmes cases que la Guilde. -->
+              <div class="of-t">Équipement de {{ outfitAdv.name }}</div>
+              <div class="of-gear">
+                <div
+                  v-for="g in outfitGear"
+                  :key="g.slot"
+                  class="of-cell"
+                  :class="{ empty: !g.filled }"
+                  :style="g.color ? { '--gc': g.color } : {}"
+                  :title="g.title"
+                >
+                  <span class="of-cell-e">{{ g.emoji }}</span>
+                  <span class="of-cell-m">
+                    <span class="of-cell-n">{{ g.name }}</span>
+                    <span v-if="g.filled" class="of-cell-s">
+                      <b :style="{ color: g.color }">{{ g.rank }}</b> · {{ g.stat }}
+                    </span>
+                    <span v-else class="of-cell-s">vide</span>
+                    <span v-if="g.queued" class="of-cell-q">⚒️ {{ g.queued }} en fabrication</span>
+                  </span>
+                </div>
+              </div>
               <div class="of-t">
                 Quel objet fondre ?
                 <span class="of-sub">
@@ -170,7 +196,18 @@
                   → {{ r.emoji }} {{ r.name }}
                   <b :style="{ color: rarityRank(r.rank).color }">{{ rarityRank(r.rank).name }}</b>
                   <span v-if="r.capped" class="of-warn">↓ objet plus bas</span>
-                  <span v-else-if="r.emptySlot" class="of-ok">emplacement vide</span>
+                </span>
+                <span class="of-vs" :class="'v-' + r.verdict">
+                  <template v-if="r.verdict === 'empty'">✚ emplacement vide</template>
+                  <template v-else-if="r.current">
+                    {{ VERDICT_LABEL[r.verdict] }} {{ r.current.emoji }} {{ r.current.name }}
+                    <b :style="{ color: rarityRank(r.current.rarity).color }">{{
+                      rarityRank(r.current.rarity).name
+                    }}</b>
+                  </template>
+                  <span v-if="r.queued" class="of-q-note">
+                    · ⚒️ {{ r.queued }} déjà en fabrication</span
+                  >
                 </span>
               </button>
             </template>
@@ -238,7 +275,15 @@ import {
   rarityRank,
   type Item,
 } from '@/lib/items';
-import { lineageOf, outfitOptions, outfitterMsFor, type OutfitOption } from '@/lib/advGear';
+import {
+  advGearCells,
+  lineageOf,
+  outfitOptions,
+  outfitterMsFor,
+  wornGear,
+  type OutfitOption,
+  type OutfitVerdict,
+} from '@/lib/advGear';
 import { fmtSpan } from '@/lib/raid';
 import {
   perLevelLabel,
@@ -519,6 +564,9 @@ const outfitCandidates = computed<Item[]>(() => {
 });
 /** Les aventuriers qu'on peut équiper (une lignée connue), avec leur rang de classe — le
  *  rang des pièces qui sortiront pour eux. */
+/** Ce que chaque aventurier PORTE vraiment (règles du combat, `wornGear`). */
+const outfitWorn = computed(() => wornGear(char.advList, char.row?.adv_gear?.stock ?? []));
+const outfitForges = computed(() => char.row?.adv_gear?.forges ?? []);
 const outfitAdvs = computed(() =>
   char.advList
     .filter((a) => lineageOf(a))
@@ -530,13 +578,36 @@ const outfitAdvs = computed(() =>
         emoji: advTitle(a)?.emoji ?? '🧑',
         rank: rk.name,
         color: rk.color,
+        worn: outfitWorn.value.get(a.id)?.length ?? 0,
       };
     }),
 );
 const outfitAdv = computed(() => char.advList.find((a) => a.id === outfitAdvId.value) ?? null);
+/** Ses 4 cases (mêmes que la Guilde), avec ce qui est déjà en fabrication pour chacune. */
+const outfitGear = computed(() => {
+  const adv = outfitAdv.value;
+  if (!adv) return [];
+  return advGearCells(adv, outfitWorn.value.get(adv.id) ?? []).map((c) => ({
+    ...c,
+    queued: outfitForges.value.filter((f) => f.advId === adv.id && f.piece.slot === c.slot).length,
+  }));
+});
+const VERDICT_LABEL: Record<OutfitVerdict, string> = {
+  empty: '',
+  up: '↑ mieux que',
+  same: '= même rang que',
+  down: '↓ moins bien que',
+};
 /** Les objets à fondre pour lui, dans l'ordre conseillé (`outfitOptions`, lib). */
 const outfitRows = computed(() =>
-  outfitAdv.value ? outfitOptions(outfitCandidates.value, outfitAdv.value) : [],
+  outfitAdv.value
+    ? outfitOptions(
+        outfitCandidates.value,
+        outfitAdv.value,
+        outfitWorn.value.get(outfitAdv.value.id) ?? [],
+        outfitForges.value,
+      )
+    : [],
 );
 /** La FILE en cours, avec le temps restant de chaque pièce (piloté par `props.now`). */
 const outfitQueue = computed(() =>
@@ -559,9 +630,12 @@ function doOutfit(r: OutfitOption) {
   const adv = outfitAdv.value;
   if (outfitBusy.value || !adv) return;
   const piece = `${r.emoji} ${r.name} ${rarityRank(r.rank).name}`;
+  const replaces = r.current
+    ? ` Il porte déjà ${r.current.emoji} ${r.current.name} ${rarityRank(r.current.rarity).name} sur cet emplacement${r.verdict === 'down' ? ' — la nouvelle pièce sera d’un rang inférieur' : ''}.`
+    : '';
   $q.dialog({
     title: 'Fondre cet objet ?',
-    message: `${r.item.emoji} « ${r.item.name} » (${gradeLabel(r.item)}) sera détruit pour fabriquer ${piece} pour ${adv.name}.`,
+    message: `${r.item.emoji} « ${r.item.name} » (${gradeLabel(r.item)}) sera détruit pour fabriquer ${piece} pour ${adv.name}.${replaces}`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: '⚒️ Fabriquer', color: 'negative' },
   }).onOk(() => void runOutfit(r.item.id, adv.id));
@@ -864,9 +938,66 @@ async function runOutfit(itemId: string, advId: string) {
   color: var(--d3, #ffb23f);
   font-size: 11px;
 }
-.of-ok {
-  color: var(--d1, #7bc86c);
+.of-adv-g {
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.of-gear {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.of-cell {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--gc, var(--line)) 55%, var(--line));
+  background: color-mix(in srgb, var(--gc, transparent) 8%, #1d1913);
+}
+.of-cell.empty {
+  border-style: dashed;
+  opacity: 0.7;
+}
+.of-cell-e {
+  font-size: 18px;
+}
+.of-cell-m {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+.of-cell-n {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.of-cell-s {
   font-size: 11px;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+.of-cell-q {
+  font-size: 10.5px;
+  color: var(--accent, #ffd23f);
+}
+.of-vs {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.of-vs.v-empty,
+.of-vs.v-up {
+  color: var(--d1, #7bc86c);
+}
+.of-vs.v-down {
+  color: var(--d3, #ffb23f);
+}
+.of-q-note {
+  color: var(--accent, #ffd23f);
 }
 .pm-actions {
   display: flex;

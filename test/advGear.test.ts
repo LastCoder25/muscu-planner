@@ -614,6 +614,10 @@ describe('⚒️ Équipementier', () => {
   it('ordre conseillé : pièce au rang de l’aventurier d’abord, emplacement vide, objet le moins précieux', () => {
     const cible = { ...refAdventurer(40, 1), gear: { weapon: 'x' } };
     const cls = advRarity(cible);
+    const portee = {
+      ...piece('x', { slot: 'weapon', rarity: 'commun' }),
+      lineage: lineageOf(cible)!,
+    };
     const up = RANK_ORDER[Math.min(RANK_ORDER.length - 1, RARITY_RANK[cls] + 2)]!;
     const it = (id: string, slot: string, rarity: string) =>
       ({
@@ -636,12 +640,58 @@ describe('⚒️ Équipementier', () => {
         { ...(it('lock', 'armor', cls) as object), locked: true } as never,
       ],
       cible,
+      [portee],
+      [],
     );
     expect(rows.map((r) => r.item.id)).toEqual(['juste', 'precieux', 'occupe', 'bas']);
     expect(rows.find((r) => r.item.id === 'bas')!.capped).toBe(true);
     expect(rows.find((r) => r.item.id === 'bas')!.rank).toBe('commun');
     expect(rows.find((r) => r.item.id === 'precieux')!.rank).toBe(cls);
     expect(rows.find((r) => r.item.id === 'occupe')!.emptySlot).toBe(false);
+  });
+  it('chaque objet dit ce qu’il remplace : vide, mieux, même rang ou moins bien que la pièce portée', () => {
+    const cible = refAdventurer(40, 1);
+    const cls = advRarity(cible);
+    const lineage = lineageOf(cible)!;
+    const low = RANK_ORDER[Math.max(0, RARITY_RANK[cls] - 1)]!;
+    const high = RANK_ORDER[Math.min(RANK_ORDER.length - 1, RARITY_RANK[cls] + 1)]!;
+    const it = (id: string, slot: string) =>
+      ({
+        id,
+        slot,
+        name: id,
+        emoji: '⚔️',
+        rarity: cls,
+        level: 40,
+        baseLevel: 40,
+        effect: { type: 'damage_pct', value: 10 },
+      }) as never;
+    const worn = [
+      { ...piece('w', { slot: 'weapon', rarity: low }), lineage },
+      { ...piece('a', { slot: 'armor', rarity: cls }), lineage },
+      { ...piece('c', { slot: 'accessory', rarity: high }), lineage },
+    ];
+    const forges = [
+      { until: 1, advId: cible.id, piece: { ...worn[1]!, slot: 'relic' as const } },
+      { until: 2, advId: 'autre', piece: { ...worn[1]!, slot: 'relic' as const } },
+    ];
+    const rows = outfitOptions(
+      [it('arme', 'weapon'), it('armure', 'armor'), it('acc', 'accessory'), it('rel', 'relic')],
+      cible,
+      worn,
+      forges,
+    );
+    const by = (id: string) => rows.find((r) => r.item.id === id)!;
+    if (low !== cls) expect(by('arme').verdict).toBe('up');
+    expect(by('armure').verdict).toBe('same');
+    if (high !== cls) expect(by('acc').verdict).toBe('down');
+    expect(by('rel').verdict).toBe('empty');
+    expect(by('armure').current?.id).toBe('a');
+    expect(by('rel').current).toBeUndefined();
+    expect(by('rel').queued).toBe(1); // la file d'un AUTRE aventurier ne compte pas
+    expect(by('arme').queued).toBe(0);
+    // Ordre : vide, puis mieux, puis même rang, puis moins bien.
+    expect(rows.map((r) => r.item.id)).toEqual(['rel', 'arme', 'armure', 'acc']);
   });
   it('les fabrications se mettent en FILE : chacune après la précédente', () => {
     const d = outfitterMsFor(10);
