@@ -1107,7 +1107,8 @@ function pick<T>(rng: () => number, arr: T[]): T {
 }
 
 // ── Tirage de RARETÉ (gatée par la profondeur) ──
-// Plafond de rareté selon le NIVEAU du contenu (racine → RAPIDE tôt, LENT tard) : Commun→Rare
+// ⚠️ PLUS UTILISÉ PAR LES DROPS depuis la v0.875 (règle des familiers, `rollTier`) : ne sert
+// plus qu'au plafond de grade `maxGradeCran`. Plafond de rareté selon le NIVEAU du contenu (racine → RAPIDE tôt, LENT tard) : Commun→Rare
 // le 1er mois, puis chaque tier coûte de plus en plus (Légendaire ≈ niv.36, Primordial ≈ niv.64
 // → graal long terme). 8 tiers (index 0..7). Calibré par simulation.
 export function rankCeilingForLevel(level: number): number {
@@ -1125,46 +1126,20 @@ function gaussian(rng: () => number): number {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-// ── DISTRIBUTION de RANG : PYRAMIDE centrée sur le NIVEAU (2026‑08‑23) ──
-// Le rang d'un drop suit une CLOCHE dont le PIC = le rang de min(niveauContenu, niveauJoueur)
-// (rankCeilingForLevel). Traîne BASSE large (LO_WIDTH_RANK → fourrage/or, rangs inférieurs à
-// revendre), pointe HAUTE raide (hiWidth → jackpot rare d'un rang supérieur, façon ARPG « on
-// peut drop plus haut que sa ligue »), épaissie et poussée par la `luck` (profondeur/fiole)
-// et le `floorBonus` (Autel des boss). Plus de « frise » à cran ni de cap dur systématique :
-// l'anti-runaway vient (1) du centre calé sur ton NIVEAU (min contenu/joueur → le sport reste
-// le plafond) et (2) d'un plafond de rang à niveauJoueur+marge quand `playerLevel` est fourni.
-// Le « jet » est un roll CONTINU [0,1] (rankRollMult) qui balaie TOUT l'intervalle du rang →
-// on farme le meilleur jet à son rang. Plus de qualité ★ : un jet parfait frôle le rang
-// au-dessus (chevauchement voulu).
+// ── RANG DES OBJETS : LA RÈGLE DES FAMILIERS (v0.875) ──
+// ⚠️ SOURCE DE VÉRITÉ, remplace la PYRAMIDE centrée sur le plafond √ du niveau (v0.564→0.874).
+// Tout ce qui se porte tombe à SON rang de prestige (un rang tous les 10 niveaux, celui du
+// héros), en dessous parfois, UN rang au-dessus très rarement, jamais deux (`rollCompanionTier`).
+// Mesuré avant : au niveau 30 (rang Or) les objets tombaient surtout DEUX rangs au-dessus, et un
+// joueur équipé perdait 15 à 40 % de puissance en passant à cette règle (niveaux 8 à 70) — le
+// contenu est recalé d'autant (`itemRankRelief`, proceduralContent).
 
-const LO_WIDTH_RANK = 1.8; // écart-type BAS (rangs sous le pic) — large : fourrage
-
-/** Paramètres de la cloche de rang pour un contenu (source UNIQUE : rollTier + dropBand →
- *  l'affichage de la bande suit toujours le tirage réel).
- *  - `center` : rang-pic = rankCeilingForLevel(min(contenu, joueur)) + floorBonus (Autel) ;
- *  - `loWidth`/`hiWidth` : écarts-types bas (large, fourrage) / haut (raide, jackpot, dopé luck) ;
- *  - `cap` : clamp DOUX (+2 rangs) qui borne le jackpot sans créer d'empilement disgracieux.
- *  ANTI-RUNAWAY : c'est le `center = min(contenu, joueur)` qui garantit qu'un bas-niveau ne
- *  drope jamais du rang très supérieur (un pic sur SON rang, +1 rare, +2 exceptionnel) — pas
- *  un plafond dur (qui empilait toute la traîne haute sur un rang → 61 % + jackpot incohérent). */
-function rankBell(level: number, luck: number, floorBonus: number, playerLevel?: number) {
-  const l = Math.min(1, Math.max(0, luck));
-  const eff = playerLevel == null ? level : Math.min(level, playerLevel);
-  // Pic NATUREL = rang de ton niveau (min contenu/joueur). Le `floorBonus` (Autel/générosité
-  // boss) DÉCALE le centre vers le haut (meilleures ODDS dans ta ligue) mais NE relève PAS le
-  // plafond (cf. plus bas) → il améliore la chance d'un bon roll, il ne fait pas leapfrog.
-  const baseCeil = rankCeilingForLevel(eff);
-  const center = baseCeil + Math.max(0, floorBonus);
-  // Pointe haute RESSERRÉE (v0.579) : le « +1 rang » au-dessus de ton niveau tombe de ~22 %
-  // à ~9 % → les hauts rangs (dont Légendaire+) redeviennent un vrai score, pas la moitié des
-  // drops. La luck l'épaissit encore (jackpot façon ARPG). Baisser encore (0,16+0,4·l) = ~4 %.
-  const hiWidth = 0.22 + l * 0.5;
-  // ANTI-RUNAWAY (v0.598) : le plafond est ANCRÉ au pic NATUREL (baseCeil + 2), PAS au centre
-  // gonflé par `floorBonus`. Avant, la générosité boss (+0,6) et l'Autel poussaient le cap →
-  // un joueur niv.20 (ceiling épique) dropait du Primordial (+3 rangs). Désormais floorBonus/luck
-  // ne biaisent QUE la distribution sous ce plafond : le sport reste le vrai plafond (+2 max).
-  const cap = Math.min(RANK_ORDER.length - 1, baseCeil + 2); // borne douce : +2 rangs sur le pic naturel
-  return { center, loWidth: LO_WIDTH_RANK, hiWidth, cap };
+/** Un bonus de rang (Autel des boss, générosité des boss) exprimé en CHANCE : sous cette règle,
+ *  il ne décale plus le pic, il épaissit la très rare chance d'un rang au-dessus. */
+const FLOOR_LUCK = 0.5;
+/** Chance ajoutée par un plancher d'Autel `rollFloor` (0..1) — ce que l'écran annonce. */
+export function altarLuckBonus(rollFloor: number): number {
+  return Math.min(1, Math.max(0, rollFloor)) * ROLL_FLOOR_RANKS * FLOOR_LUCK;
 }
 
 // JET biaisé vers le BAS (comme la rareté : un HAUT jet se mérite). Transformation puissance
@@ -1180,9 +1155,8 @@ export function jetExp(luck = 0): number {
 export function rollJetValue(rng: () => number, luck = 0): number {
   return Math.pow(rng(), jetExp(luck));
 }
-/** Tire un { rank, roll } : rang via la cloche (pyramide centrée niveau), `roll` = JET CONTINU
- *  [0,1] BIAISÉ BAS (haut jet rare, cf. rollJetValue). `level` = niveau du CONTENU ; `playerLevel`
- *  (optionnel) cale le centre sur min(contenu, joueur) et plafonne le rang. `floorBonus` en RANGS. */
+/** Tire le { rank, roll } d'un OBJET : la règle des compagnons, rang de référence = rang de
+ *  prestige de min(contenu, joueur). `floorBonus` (en rangs) devient de la chance. */
 export function rollTier(
   rng: () => number,
   level: number,
@@ -1190,15 +1164,12 @@ export function rollTier(
   floorBonus = 0,
   playerLevel?: number,
 ): { rank: Rarity; roll: number } {
-  const { center, loWidth, hiWidth, cap } = rankBell(level, luck, floorBonus, playerLevel);
-  const g = gaussian(rng);
-  let idx = Math.round(center + (g >= 0 ? g * hiWidth : g * loWidth));
-  idx = Math.min(RANK_ORDER.length - 1, Math.max(0, Math.min(cap, idx)));
-  return { rank: RANK_ORDER[idx]!, roll: rollJetValue(rng, luck) }; // jet biaisé bas
+  const l = Math.min(1, Math.max(0, luck) + Math.max(0, floorBonus) * FLOOR_LUCK);
+  return rollCompanionTier(rng, companionDropRank(level, playerLevel), l);
 }
 
 // ── RANG DES COMPAGNONS : familiers et talents plafonnés au RANG DU JOUEUR (v0.857) ──
-// ⚠️ Les OBJETS gardent la pyramide de `rollTier` (plafond √ du niveau, +2 rangs). Un
+// ⚠️ Depuis la v0.875 les OBJETS suivent la même règle (`rollTier`). Un
 // familier ou un talent se lit en RANG (v0.833) — Bronze, Argent, Or… — comme le héros et ses
 // aventuriers. Mesuré avant ce changement, au niveau 30 (rang Or) au Labyrinthe du Sans-fond :
 // 12 % de familiers de son rang, 36 % deux rangs au-dessus, 23 % trois rangs au-dessus. Trois
@@ -1276,45 +1247,29 @@ export function rollItemLevel(rng: () => number, center: number, luck = 0): numb
   return Math.max(lo, Math.min(hi, Math.round(raw)));
 }
 
-/** Bande de rang TYPIQUE d'un contenu (≈ 10e→90e centile de la cloche) → affiche « D → A ».
- *  Déterministe (analytique, pas de rng). La qualité affichée est indicative (roll continu). */
+/** Bande de rang TYPIQUE d'un contenu : du rang typiquement en dessous au rang de référence
+ *  (le rang au-dessus, 1 à 3 %, n'est pas une bande). Déterministe. */
 export function dropBand(
   level: number,
   luck = 0,
-  floorBonus = 0,
   playerLevel?: number,
 ): { lo: { rank: Rarity; quality: number }; hi: { rank: Rarity; quality: number } } {
-  const { center, loWidth, hiWidth, cap } = rankBell(level, luck, floorBonus, playerLevel);
-  const clamp = (x: number) =>
-    Math.min(RANK_ORDER.length - 1, Math.max(0, Math.min(cap, Math.round(x))));
-  const loI = clamp(center - 1.3 * loWidth);
-  const hiI = clamp(center + 1.3 * hiWidth);
-  return { lo: { rank: RANK_ORDER[loI]!, quality: 3 }, hi: { rank: RANK_ORDER[hiI]!, quality: 3 } };
+  const ref = companionDropRank(level, playerLevel);
+  const l = Math.min(1, Math.max(0, luck));
+  const width = COMPANION_RANK.loWidth - COMPANION_RANK.loWidthLuck * l;
+  const loI = Math.max(0, ref - Math.round(1.3 * width));
+  return { lo: { rank: RANK_ORDER[loI]!, quality: 3 }, hi: { rank: RANK_ORDER[ref]!, quality: 3 } };
 }
 
-/** Libellé compact de la bande de drop : « D → A » (ou « C » si un seul rang). */
-export function dropBandLabel(
-  level: number,
-  luck = 0,
-  floorBonus = 0,
-  playerLevel?: number,
-): string {
-  const { lo, hi } = dropBand(level, luck, floorBonus, playerLevel);
-  return lo.rank === hi.rank ? lo.rank : `${lo.rank} → ${hi.rank}`;
+/** Libellé compact de la bande de drop, en RANGS : « Argent → Or » (ou « Or » seul). */
+export function dropBandLabel(level: number, luck = 0, playerLevel?: number): string {
+  const { lo, hi } = dropBand(level, luck, playerLevel);
+  const name = (r: Rarity) => rarityRank(r).name;
+  return lo.rank === hi.rank ? name(lo.rank) : `${name(lo.rank)} → ${name(hi.rank)}`;
 }
-/** Rang le PLUS PROBABLE d'un drop (pic de la pyramide) — pour l'affichage : TOUS les rangs
- *  restent droppables, seuls les % varient (cf. rarityOdds), donc on montre le pic, pas une
- *  fausse borne min→max. */
-export function dropPeakRank(
-  level: number,
-  luck = 0,
-  floorBonus = 0,
-  playerLevel?: number,
-): Rarity {
-  const { center, cap } = rankBell(level, luck, floorBonus, playerLevel);
-  return RANK_ORDER[
-    Math.min(RANK_ORDER.length - 1, Math.max(0, Math.min(cap, Math.round(center))))
-  ]!;
+/** Rang le PLUS PROBABLE d'un drop : le rang de référence (min contenu, joueur). */
+export function dropPeakRank(level: number, playerLevel?: number): Rarity {
+  return RANK_ORDER[companionDropRank(level, playerLevel)]!;
 }
 /** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
 function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
@@ -1342,7 +1297,7 @@ function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
  * DEUX raretés au-dessus de sa ligue. Nommée pour que les écrans puissent afficher ce que
  * le bonus fait VRAIMENT (des rangs), plutôt qu’un pourcentage de « jet » qui ment.
  */
-export const ROLL_FLOOR_RANKS = 1.6;
+const ROLL_FLOOR_RANKS = 1.6;
 
 export function rollDrop(
   rng: () => number,
@@ -1446,7 +1401,9 @@ export function rollSetPiece(
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
   const slot = opts.preferSlot ?? pick(rng, SLOTS);
-  // Le RANG d'une pièce de set = pyramide centrée sur le PALIER du boss, LÉGÈREMENT remontée
+  // ⚠️ Depuis la v0.875 le rang suit la règle des familiers (`rollTier`) : le +0,35 et l'Autel
+  // ne décalent plus le pic, ils deviennent de la chance (meilleur jet, un peu plus de +1 rang).
+  // Historique : le RANG d'une pièce de set = pyramide centrée sur le PALIER du boss, LÉGÈREMENT remontée
   // (+0,35 rang : les boss restent une source solide, un cran au-dessus des donjons) + `rollFloor`
   // (Autel). Baisse v0.604 (+0,6 → +0,35) : à +0,6, un boss de bas niveau centrait ses drops
   // à mi-chemin du rang SUPÉRIEUR → ~50 % de Légendaires (donc de PROCS légendaires) dès le

@@ -45,7 +45,7 @@ export function recommendedPower(recoLevel: number, boss = false): number {
   const ge = boss ? bossGearExpect(L) : dungeonGearExpect(L);
   // La correction du procédural multiplie PV et dégâts : elle multiplie la puissance attendue.
   const boost = boss ? bossContentBoost(L) : proceduralDungeonBoost(L);
-  return Math.round(base * Math.sqrt(ge.off * ge.pv) * boost);
+  return Math.round(base * Math.sqrt(ge.off * ge.pv) * boost * itemRankRelief(L));
 }
 
 // Coefficients de calibration (fittés par simulation, cf. proceduralContent.test) :
@@ -138,6 +138,48 @@ const PROC_DUNGEON_BOOST: [number, number][] = [
   [85, 1.6],
   [94, 1.38],
 ];
+// ── RECALAGE DE TOUT LE CONTENU : LES OBJETS TOMBENT AU RANG DU JOUEUR (v0.875, mesuré) ──
+// Les objets suivent désormais la règle des familiers (`rollTier`) : au niveau 30 (rang Or) ils
+// tombent au rang Or, là où le plafond √ les donnait deux rangs plus haut. Un joueur équipé
+// perd donc de la puissance partout où l'ancien plafond courait devant son rang de prestige.
+// Mesuré sur le VRAI contenu (joueur à 60 drops + 3 familiers + talent, 6 tirages × 30
+// combats) : pour chaque donjon et chaque boss, le facteur de PV et dégâts qui redonne le taux
+// de réussite d'avant. Les mesures se regroupent par SEGMENT DE NIVEAU — là où l'écart entre
+// le rang de prestige (un rang tous les 10 niveaux) et l'ancien plafond √ reste constant —,
+// d'où une table EN PALIERS, pas interpolée : le facteur change exactement où la règle change.
+// ⚠️ Moyenne des mesures donjons + boss du segment (écarts dans le bruit, ±0,06) ; niveau 1 =
+// tutoriel, non touché ; à partir du niveau 71 les deux échelles coïncident (≈ 1).
+// ⚠️ DÉBUT DE PARTIE (niv. 2-10) : la mesure pure (0,89 puis 0,80) faisait AUSSI gagner le
+// joueur SANS équipement (52 % à la Caverne) — or l'équipement ne vient que des donjons et
+// doit y compter. Réglé sur la chaîne des premiers donjons (butin des donjons précédents) :
+// nu < 35 %, équipé Caverne 81 % · Repaire 70 % · Cryptes 69 % · Fournaise 50 %.
+// Niveaux 47-50 : le donjon 49 restait sous sa cible à 0,63 (mesuré 0,54). ⚠️ À 0,58 il repasse
+// sous 50 % à son niveau (règle « on nettoie son niveau », testée) : on garde 0,55, et le boss
+// du niveau 50 (mesuré 0,66) en devient plus abordable (27 % → 48 %, toujours un défi).
+const ITEM_RANK_RELIEF: [number, number][] = [
+  [1, 1],
+  [2, 0.95],
+  [5, 0.88],
+  [8, 0.8],
+  [11, 0.81],
+  [12, 0.77],
+  [20, 0.61],
+  [21, 0.73],
+  [31, 0.61],
+  [41, 0.76],
+  [45, 0.65],
+  [47, 0.55],
+  [51, 0.91],
+  [61, 0.92],
+  [71, 1],
+];
+/** Facteur (PV et dégâts) de tout contenu de niveau `level` : le palier qui le contient. */
+export function itemRankRelief(level: number): number {
+  let v = 1;
+  for (const [from, k] of ITEM_RANK_RELIEF) if (level >= from) v = k;
+  return v;
+}
+
 /** Lecture d'une table de points mesurés [niveau, valeur] : interpolée entre deux points,
  *  valeur du bout le plus proche au-delà. */
 function interpolate(t: [number, number][], x: number): number {
@@ -174,17 +216,24 @@ export function bossContentBoost(level: number): number {
 // ⚠️ RÉDUITE EN v0.857 (familiers et talents plafonnés au rang du joueur) : chaque palier est
 // divisé par ce que le joueur a perdu À SON NIVEAU CONSEILLÉ — mesuré ×1,07 (Cryptes), ×1,05
 // (Abysse, Gouffre, Astral), ×1,04 (Sans-fond), ×1,07 (Chaos), ×1,02 (Néant), ×1,00 ailleurs.
+// ⚠️ RECALÉE EN v0.875 (objets au rang du joueur) : en plus de `itemRankRelief`, le Labyrinthe
+// (longue attrition, plus sensible à la puissance que les donjons) est remesuré palier par palier
+// — facteur qui redonne le taux d'avant : ×0,97 (Novice, Sentiers), ×0,76 (Cryptes), ×0,78
+// (Abysse), ×0,86 (Gouffre), ×0,95 (Sans-fond), ×1,27 (Chaos), ×0,90 (Astral), ×1,04 (Néant),
+// ×0,96 (Infini). Chaque point = ancien point × ce facteur.
+// (Novice, Sentiers, Cryptes : divisés en plus par ×1,07 / ×1,07 / ×1,10, le facteur de début de
+// partie d'`itemRankRelief` ayant été relevé pour garder les donjons gatés par l'équipement.)
 const LABY_CONTENT_BOOST: [number, number][] = [
-  [2, 0.7],
-  [3, 0.79],
-  [6, 1.07],
-  [12, 1.37],
-  [20, 1.3],
-  [28, 1.51],
-  [40, 1.61],
-  [52, 1.72],
-  [66, 1.8],
-  [85, 1.67],
+  [2, 0.64],
+  [3, 0.72],
+  [6, 0.74],
+  [12, 1.07],
+  [20, 1.12],
+  [28, 1.43],
+  [40, 2.04],
+  [52, 1.55],
+  [66, 1.86],
+  [85, 1.61],
 ];
 /** PV et dégâts de base d'une créature du Labyrinthe (avant son archétype), pour un palier de
  *  niveau conseillé `level`, à la profondeur `depth` (0 surface → 1 fond). Source UNIQUE : le
@@ -199,7 +248,7 @@ export function labyrinthFoeBase(
   // Coussin bas niveau sur les dégâts : 0,5 à L1 → 1 à L18+ (petits nombres + variance).
   const lowEase = 0.5 + 0.5 * Math.min(1, level / 18);
   const ge = dungeonGearExpect(level);
-  const k = interpolate(LABY_CONTENT_BOOST, level);
+  const k = interpolate(LABY_CONTENT_BOOST, level) * itemRankRelief(level);
   return {
     pv: refOffensePerRound(ref) * (isBoss ? 5.5 : 2.8) * d * ge.off * k,
     damage: ref.pv * (isBoss ? 0.07 : 0.05) * d * lowEase * ge.pv * k,

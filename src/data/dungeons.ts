@@ -5,7 +5,7 @@
 // rareté 0..1) → les donjons durs récompensent mieux.
 import type { DungeonFoe } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
-import { PROCEDURAL, dungeonGearExpect } from '@/lib/proceduralContent';
+import { PROCEDURAL, dungeonGearExpect, itemRankRelief } from '@/lib/proceduralContent';
 
 export type StatKey = 'puissance' | 'endurance' | 'agilite';
 
@@ -308,7 +308,8 @@ function dungeonDifficultyMult(recoLevel: number): number {
 export function dungeonFoes(d: Dungeon): DungeonFoe[] {
   const early = dungeonDifficultyMult(d.recoLevel);
   const ge = dungeonGearExpect(d.recoLevel);
-  const k = d.foeMult ?? 1;
+  // Recalage des objets au rang du joueur (v0.875) : même facteur pour tout le contenu.
+  const k = (d.foeMult ?? 1) * itemRankRelief(d.recoLevel);
   const pvMult = early * ge.off * k;
   const dmgMult = early * ge.pv * k;
   return d.monsterIds

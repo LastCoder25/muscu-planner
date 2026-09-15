@@ -26,7 +26,7 @@ import {
 import { caravanSlots, caravanSlowFor, trainMsFor } from './caravan';
 import { guildRoster } from './adventurers';
 import { outfitterMsFor } from './advGear';
-import { ROLL_FLOOR_RANKS } from './items';
+import { altarLuckBonus } from './items';
 import { characterRank } from './characterRank';
 import { repairMsFor } from './raid';
 
@@ -73,10 +73,9 @@ function textAt(typeId: string, level: number): string | null {
     case 'labyrinth_gate':
       return `+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`;
     case 'boss_altar':
-      // ⚠️ En RANGS, pas en « % de jet » : ce plancher décale la rareté (cf. ROLL_FLOOR_RANKS).
-      return `pièces de boss : rareté +${(bossAltarRollFloor(one(typeId, level)) * ROLL_FLOOR_RANKS)
-        .toFixed(2)
-        .replace('.', ',')} rang`;
+      // ⚠️ Depuis la v0.875 (objets au rang du joueur) : de la CHANCE, qui améliore le jet et un
+      // peu la probabilité d'un rang au-dessus — plus un décalage de rareté.
+      return `pièces de boss : +${pct(altarLuckBonus(bossAltarRollFloor(one(typeId, level))))} de chance`;
     case 'warehouse':
       return `stockage ×${storageMult(one(typeId, level)).toFixed(2)}`;
     case 'foundry': {

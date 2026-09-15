@@ -7,11 +7,12 @@ describe('advUnlocks — calendrier des déblocages', () => {
       expect(ADV_SCHEDULE[i]!.level).toBeGreaterThanOrEqual(ADV_SCHEDULE[i - 1]!.level);
   });
 
-  it('niveau 5 : boss (Golem) + emplacement de talent + palier de rareté', () => {
+  it('niveau 5 : boss (Golem) + emplacement de talent', () => {
     const kinds = new Set(unlocksAtLevel(5).map((u) => u.kind));
     expect(kinds.has('boss')).toBe(true);
     expect(kinds.has('talent')).toBe(true);
-    expect(kinds.has('rarity')).toBe(true);
+    // Plus de palier de rang au niveau 5 depuis la v0.875 : les objets suivent le rang du joueur.
+    expect(kinds.has('rarity')).toBe(false);
     const boss = unlocksAtLevel(5).find((u) => u.kind === 'boss');
     expect(boss?.title).toContain('Golem');
     expect(boss?.detail).toContain('set');
@@ -30,15 +31,23 @@ describe('advUnlocks — calendrier des déblocages', () => {
     expect(at9[0]!.title).toContain('Épines');
   });
 
-  it('niveau 20 : boss (Titan) + objets au rang Légendaire (la rareté Épique) — plus d’emplacement de talent', () => {
+  it('niveau 20 : boss (Titan) — plus d’emplacement de talent', () => {
     const at20 = unlocksAtLevel(20);
     expect(at20.some((u) => u.kind === 'boss' && u.title.includes('Titan'))).toBe(true);
     // Un seul talent (v0.845) : l'emplacement ne s'annonce qu'une fois, au niveau 5.
     expect(at20.some((u) => u.kind === 'talent')).toBe(false);
-    const rar = at20.find((u) => u.kind === 'rarity');
-    // Affiché en RANG depuis la v0.874 : la rareté Épique se lit « Légendaire ».
-    expect(rar?.title).toContain('Légendaire');
-    expect(rar?.title).not.toContain('Épique');
+  });
+
+  it('rang des objets : un palier tous les 10 niveaux, le rang du joueur (v0.875)', () => {
+    const rangs = ADV_SCHEDULE.filter((u) => u.kind === 'rarity');
+    expect(rangs.map((u) => u.level)).toEqual([11, 21, 31, 41, 51, 61, 71]);
+    // Au niveau 21 on devient Or : les objets tombent au rang Or, affiché en rang.
+    const at21 = rangs.find((u) => u.level === 21)!;
+    expect(at21.title).toContain('Or');
+    expect(at21.title).not.toContain('Magique');
+    // L'effet légendaire arrive avec le rang Légendaire (niveau 51).
+    expect(rangs.find((u) => u.level === 51)!.detail).toContain('effet légendaire');
+    expect(rangs.find((u) => u.level === 41)!.detail).not.toContain('effet légendaire');
   });
 
   it('UN SEUL déblocage de talent dans tout le calendrier, au niveau 5', () => {

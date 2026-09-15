@@ -12,7 +12,12 @@
 // dégâts élevés = check de SURVIE (pas un mur de PV qui tuerait le coureur).
 // Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
-import { PROCEDURAL, bossGearExpect, bossContentBoost } from '@/lib/proceduralContent';
+import {
+  PROCEDURAL,
+  bossGearExpect,
+  bossContentBoost,
+  itemRankRelief,
+} from '@/lib/proceduralContent';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 
 export interface MilestoneBoss {
@@ -163,7 +168,8 @@ export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].ma
   // le plafond). Baseline early ×1 (boss d'amorçage jouables nu), montée avec le palier.
   const ge = bossGearExpect(b.unlockLevel);
   // Renfort de contenu (v0.848) : l'attente de TOUT le reste du build (talent, familier, sets, voie).
-  const boost = bossContentBoost(b.unlockLevel);
+  // … et le recalage des objets au rang du joueur (v0.875).
+  const boost = bossContentBoost(b.unlockLevel) * itemRankRelief(b.unlockLevel);
   return {
     ...b,
     combatant: {

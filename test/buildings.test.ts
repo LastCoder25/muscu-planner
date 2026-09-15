@@ -30,7 +30,7 @@ import {
   type Building,
 } from '@/lib/buildings';
 import { bossSummonCost } from '@/data/bosses';
-import { rollSetPiece, rankCeilingForLevel, RARITY_RANK, VOIE_SETS } from '@/lib/items';
+import { rollSetPiece, prestigeRankIndex, RARITY_RANK, VOIE_SETS } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
 
 const H = 3_600_000;
@@ -261,38 +261,43 @@ describe('boss — pierres d’invocation 🔮', () => {
     const effet = buildingType('boss_altar')?.effect ?? {};
     expect(Object.keys(effet)).toEqual(['bossRollFloorPerLvl']);
   });
-  it('⚠️ L’AUTEL AIDE, MAIS NE FAIT PLUS SORTIR DE SA LIGUE', () => {
-    // ⚠️ RÉÉCRIT, pas supprimé. Mesuré avant (plancher 0,03/niveau, plafond 0,85 au niveau
-    // 28) : Autel monté au niveau du joueur, **54 à 56 %** des pièces de boss tombaient DEUX
-    // raretés au-dessus de sa ligue, contre 1 % sans Autel. Le « plancher de jet » agissait
-    // sur la RARETÉ, pas sur le jet — un bâtiment contournait « le sport est le plafond ».
+  it('⚠️ L’AUTEL AIDE, MAIS NE FAIT JAMAIS SORTIR DE SA LIGUE', () => {
+    // ⚠️ RÉÉCRIT DEUX FOIS. v0.799 : l’Autel poussait 54-56 % des pièces DEUX raretés au-dessus
+    // de la ligue. v0.875 : les objets tombent au rang du joueur (règle des familiers) ; le
+    // bonus de l’Autel devient de la CHANCE — meilleur jet, un peu plus de rang au-dessus —,
+    // jamais deux rangs au-dessus.
     const part = (L: number, altar: number) => {
       const rng = mulberry32(12345);
-      const plafond = rankCeilingForLevel(L);
+      const ref = prestigeRankIndex(L);
       const floor = bossAltarRollFloor(altar ? [mk('boss_altar', altar)] : []);
       let plus1 = 0;
       let plus2 = 0;
+      let jet = 0;
       const N = 6000;
       for (let i = 0; i < N; i++) {
         const p = rollSetPiece(rng, {
           setId: VOIE_SETS[0]!.id,
           level: L,
-          luck: 0.6,
+          luck: 0.3,
           rollFloor: floor,
           playerLevel: L,
         });
-        const d = RARITY_RANK[p.rarity] - plafond;
+        const d = RARITY_RANK[p.rarity] - ref;
         if (d === 1) plus1++;
         if (d >= 2) plus2++;
+        jet += p.roll ?? 0;
       }
-      return { plus1: plus1 / N, plus2: plus2 / N };
+      return { plus1: plus1 / N, plus2: plus2 / N, jet: jet / N };
     };
-    for (const L of [20, 30, 40]) {
+    for (const L of [40, 70, 100]) {
       const sans = part(L, 0);
       const avec = part(L, L);
-      expect(avec.plus2, `niveau ${L} : deux raretés au-dessus`).toBeLessThan(0.1);
-      // …et il sert toujours à quelque chose : plus de pièces une rareté au-dessus.
-      expect(avec.plus1, `niveau ${L}`).toBeGreaterThan(sans.plus1 + 0.05);
+      expect(avec.plus2, `niveau ${L} : deux rangs au-dessus`).toBe(0);
+      expect(avec.plus1, `niveau ${L} : un rang au-dessus reste rare`).toBeLessThan(0.05);
+      // …et il sert à quelque chose : un meilleur jet et un peu plus de rang au-dessus.
+      expect(avec.jet, `niveau ${L}`).toBeGreaterThan(sans.jet + 0.02);
+      // (Au niveau 100 le rang est déjà au sommet : aucun rang au-dessus n'existe.)
+      if (prestigeRankIndex(L) < 7) expect(avec.plus1, `niveau ${L}`).toBeGreaterThan(sans.plus1);
     }
   });
 });

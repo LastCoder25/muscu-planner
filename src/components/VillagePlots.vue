@@ -199,7 +199,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { guildRoster } from '@/lib/adventurers';
-import { ROLL_FLOOR_RANKS, FAMILIAR_SLOT, gradeLabel, type Item } from '@/lib/items';
+import { altarLuckBonus, FAMILIAR_SLOT, gradeLabel, type Item } from '@/lib/items';
 import { LINEAGE_GEAR, lineageOf, outfitSlot, outfitterMsFor } from '@/lib/advGear';
 import { fmtSpan } from '@/lib/raid';
 import {
@@ -329,7 +329,7 @@ function utilityEffectLabel(b: Building): string {
   if (b.typeId === 'labyrinth_gate')
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
-    return `boss : rareté +${(bossAltarRollFloor([b]) * ROLL_FLOOR_RANKS).toFixed(2).replace('.', ',')} rang`;
+    return `boss : +${Math.round(altarLuckBonus(bossAltarRollFloor([b])) * 100)} % de chance`;
   if (b.typeId === 'warehouse') return `+${Math.round((storageMult([b]) - 1) * 100)}% stockage`;
   return '';
 }

@@ -28,6 +28,7 @@ import {
   dungeonGearExpect,
   recommendedPower,
   bossGearExpect,
+  itemRankRelief,
 } from '@/lib/proceduralContent';
 import { computeCharacter } from '@/lib/character';
 import { gearedFighter } from './helpers/gearedFighter';
@@ -76,10 +77,10 @@ describe('le 1er donjon est gagnable par un joueur qui débute', () => {
   it('la puissance conseillée de la Clairière suit l’attente réellement appliquée', () => {
     // L'écran annonce ce que le combat applique : au niveau 1, pas de gear attendu.
     expect(recommendedPower(1)).toBe(combatPower(refFighter(1)));
-    // Au-delà de la rampe, rien ne bouge.
+    // Au-delà de la rampe : l'attente d'équipement ET le recalage des objets (v0.875).
     const ge = gearExpect(10);
     expect(recommendedPower(10)).toBe(
-      Math.round(combatPower(refFighter(10)) * Math.sqrt(ge.off * ge.pv)),
+      Math.round(combatPower(refFighter(10)) * Math.sqrt(ge.off * ge.pv) * itemRankRelief(10)),
     );
   });
 });
@@ -169,7 +170,7 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
       const foes = dungeonFoes(d);
       d.monsterIds.forEach((id, k) => {
         const m = MONSTERS.find((x) => x.id === id)!;
-        const c = d.foeMult ?? 1;
+        const c = (d.foeMult ?? 1) * itemRankRelief(d.recoLevel);
         expect(foes[k]!.combatant.pv, d.id).toBe(Math.round(m.pv * 1.5 * ge.off * c));
         expect(foes[k]!.combatant.damage, d.id).toBe(Math.round(m.damage * 1.5 * ge.pv * c));
       });
@@ -340,7 +341,10 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
       const base = combatPower(refFighter(L));
       const dg = dungeonGearExpect(L);
       const d = DUNGEONS.find((x) => x.recoLevel === L)!;
-      expect(recommendedPower(L) / (base * Math.sqrt(dg.off * dg.pv))).toBeCloseTo(d.foeMult!, 2);
+      expect(recommendedPower(L) / (base * Math.sqrt(dg.off * dg.pv))).toBeCloseTo(
+        d.foeMult! * itemRankRelief(L),
+        2,
+      );
       const bg = bossGearExpect(L);
       const b = BOSSES.find((x) => x.unlockLevel === L)!;
       const brut = proceduralBoss(L, BOSS_MILESTONES.indexOf(L)).combatant.pv * bg.off;
@@ -349,7 +353,8 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
         2,
       );
       expect(d.foeMult!).toBeGreaterThan(1.3);
-      expect(b.combatant.pv / brut).toBeGreaterThan(1.2);
+      // La correction du procédural existe toujours, une fois le recalage des objets retiré.
+      expect(b.combatant.pv / brut / itemRankRelief(L)).toBeGreaterThan(1.2);
     }
   });
   it('un joueur ÉQUIPÉ ne roule PLUS sur du contenu +15 (mur restauré)', () => {

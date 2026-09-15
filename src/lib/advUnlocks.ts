@@ -2,10 +2,10 @@
 // But : rendre VISIBLE ce que monter d'un niveau apporte. Alimente l'écran de level-up
 // (« ce que tu débloques ») et la timeline « À venir » de l'onglet Perso. Dérivé des
 // données/règles ACTUELLES : BOSSES (data), talentsEarned (un seul emplacement, au niv. 5), la rareté
-// max droppable (rankCeilingForLevel, monte avec le niveau) et EFFECT_MIN_LEVEL (effets/
+// des objets (prestigeRankIndex, un rang tous les 10 niveaux) et EFFECT_MIN_LEVEL (effets/
 // signatures gatés en profondeur). Aucune dépendance Vue/Supabase.
 import { BOSSES } from '@/data/bosses';
-import { rankCeilingForLevel, RANK_ORDER, rarityRank } from '@/lib/items';
+import { prestigeRankIndex, RANK_ORDER, rarityRank } from '@/lib/items';
 import { TALENT_SLOT_LEVEL } from '@/lib/talents';
 
 type AdvUnlockKind = 'boss' | 'talent' | 'effect' | 'rarity';
@@ -42,11 +42,11 @@ function buildSchedule(): AdvUnlock[] {
     detail: 'Tu peux équiper un talent (ils se droppent en donjon/boss ; garde le meilleur).',
   });
 
-  // RARETÉ MAX DROPPABLE — le pic de rareté de tes drops monte avec le niveau
-  // (items.ts rankCeilingForLevel). Chaque nouveau rang atteignable est un vrai palier.
-  let prev = rankCeilingForLevel(1);
+  // RANG DES OBJETS — tes drops tombent à ton rang de prestige (v0.875, règle des familiers)
+  // : un rang tous les 10 niveaux. Chaque nouveau rang est un vrai palier.
+  let prev = prestigeRankIndex(1);
   for (let lvl = 2; lvl <= 120; lvl++) {
-    const c = rankCeilingForLevel(lvl);
+    const c = prestigeRankIndex(lvl);
     if (c > prev) {
       const rk = RANK_ORDER[c]!;
       out.push({
@@ -56,8 +56,8 @@ function buildSchedule(): AdvUnlock[] {
         title: `Rang des objets : ${rarityRank(rk).name}`,
         detail:
           c >= 5
-            ? `Tes objets peuvent atteindre le rang ${rarityRank(rk).name} (effet légendaire possible).`
-            : `Tes objets peuvent désormais atteindre le rang ${rarityRank(rk).name}.`,
+            ? `Tes objets tombent désormais au rang ${rarityRank(rk).name} (effet légendaire possible).`
+            : `Tes objets tombent désormais au rang ${rarityRank(rk).name}.`,
       });
       prev = c;
     }

@@ -23,6 +23,7 @@ import {
   dropBandLabel,
   dropPeakRank,
   rankCeilingForLevel,
+  prestigeRankIndex,
   RANK_ORDER,
   RARITY_MULT,
   RARITY_RANK,
@@ -147,120 +148,78 @@ describe('jet biaisé bas (haut jet rare, comme la rareté)', () => {
   });
 });
 
-describe('rollTier : pyramide de rareté centrée sur le niveau', () => {
-  it('rankCeilingForLevel : racine (rapide tôt, lent tard), Primordial très tardif', () => {
-    expect(rankCeilingForLevel(1)).toBe(0); // Commun
-    expect(rankCeilingForLevel(20)).toBeGreaterThanOrEqual(3);
-    expect(RANK_ORDER[rankCeilingForLevel(90)]).toBe('primordial');
-    expect(rankCeilingForLevel(20)).toBeLessThan(7); // pas de Primordial avant le très long terme
+describe('rollTier : les objets tombent au RANG DU JOUEUR, comme les familiers (v0.875)', () => {
+  const modeOf = (level: number, luck = 0, floorBonus = 0, playerLevel?: number) => {
+    const c = new Array(RANK_ORDER.length).fill(0) as number[];
+    for (let s = 1; s <= 3000; s++)
+      c[
+        RARITY_RANK[rollTier(mulberry32(s * 7 + level), level, luck, floorBonus, playerLevel).rank]
+      ]!++;
+    return c;
+  };
+  it('le rang le plus fréquent est le rang de PRESTIGE (un rang tous les 10 niveaux)', () => {
+    for (const lv of [5, 10, 20, 40, 60, 90]) {
+      const c = modeOf(lv, 0.4);
+      expect(c.indexOf(Math.max(...c)), `niv ${lv}`).toBe(prestigeRankIndex(lv));
+    }
+    // ⚠️ Plus le plafond √ : au niveau 30 (rang Or) il donnait deux rangs de plus.
+    expect(prestigeRankIndex(30)).toBeLessThan(rankCeilingForLevel(30));
   });
-  it('PIC de la pyramide = rang du niveau (mode = rankCeilingForLevel)', () => {
-    for (const lv of [10, 20, 40, 60]) {
-      const c = new Array(10).fill(0) as number[];
-      for (let s = 1; s <= 3000; s++) c[RARITY_RANK[rollTier(mulberry32(s * 7 + lv), lv).rank]]!++;
-      const modal = c.indexOf(Math.max(...c));
-      expect(modal).toBe(rankCeilingForLevel(lv));
+  it('un rang au-dessus très rarement (1 à 3 %), JAMAIS deux', () => {
+    for (const luck of [0, 1]) {
+      const lv = 35;
+      const ref = prestigeRankIndex(lv);
+      const c = modeOf(lv, luck);
+      const above = c.slice(ref + 1).reduce((x, y) => x + y, 0) / 3000;
+      expect(c.slice(ref + 2).reduce((x, y) => x + y, 0)).toBe(0);
+      expect(above).toBeGreaterThan(luck ? 0.015 : 0.003);
+      expect(above).toBeLessThan(luck ? 0.045 : 0.02);
     }
   });
-  it('pyramide : traîne BASSE (fourrage) large ET pointe HAUTE (jackpot) rare autour du pic', () => {
-    const lv = 40;
-    const center = rankCeilingForLevel(lv);
-    let below = 0;
-    let above = 0;
-    const N = 4000;
-    for (let s = 1; s <= N; s++) {
-      const r = RARITY_RANK[rollTier(mulberry32(s * 3 + 1), lv, 0.3).rank];
-      if (r < center) below++;
-      if (r > center) above++;
-    }
-    expect(below / N).toBeGreaterThan(0.15); // fourrage présent (rangs inférieurs)
-    expect(above / N).toBeGreaterThan(0.02); // on PEUT drop au-dessus (façon ARPG)
-    expect(below).toBeGreaterThan(above); // traîne basse plus large que la pointe haute
-  });
-  it('CAP anti-runaway : le rang reste centré sur le JOUEUR (+2 max), pas sur le donjon', () => {
-    // Contenu très profond (85) mais joueur bas niveau (19) → le centre = min(85,19) = 19,
-    // le rang ne peut dépasser ceiling(19) + 2 (borne douce du jackpot), jamais SSS.
-    const playerLevel = 19;
-    const capCeil = Math.min(9, rankCeilingForLevel(playerLevel) + 2);
-    for (let s = 1; s <= 200; s++) {
-      const d = rollDrop(mulberry32(s * 13 + 1), {
-        cleared: true,
-        defeated: 1,
-        level: 85,
-        luck: 1,
-        playerLevel,
-      });
-      if (d) expect(RARITY_RANK[d.rarity]).toBeLessThanOrEqual(capCeil);
-    }
-    // Le centre suit le JOUEUR (min contenu/joueur) : un bas-niveau en donjon profond
-    // reste centré sur SON rang (le pic ≈ ceiling(joueur)), pas sur celui du donjon.
-    const c = new Array(10).fill(0) as number[];
-    for (let s = 1; s <= 2000; s++) {
-      const d = rollDrop(mulberry32(s * 5 + 7), {
-        cleared: true,
-        defeated: 1,
-        level: 85,
-        luck: 0.3,
-        playerLevel,
-      });
-      if (d) c[RARITY_RANK[d.rarity]]!++;
-    }
-    expect(c.indexOf(Math.max(...c))).toBe(rankCeilingForLevel(playerLevel));
-  });
-  it('contenu PROFOND → rangs plus hauts que contenu peu profond', () => {
-    const avg = (level: number) => {
-      let sum = 0;
-      const N = 200;
-      for (let s = 1; s <= N; s++) sum += RARITY_RANK[rollTier(mulberry32(s), level, 0.4).rank];
-      return sum / N;
+  it('la chance resserre la traîne basse (on farme surtout son rang)', () => {
+    const below = (luck: number) => {
+      const c = modeOf(45, luck);
+      return c.slice(0, prestigeRankIndex(45)).reduce((x, y) => x + y, 0);
     };
-    expect(avg(60)).toBeGreaterThan(avg(20));
-    expect(avg(20)).toBeGreaterThan(avg(6));
+    expect(below(0)).toBeGreaterThan(below(1));
+    expect(below(1)).toBeGreaterThan(0); // du fourrage reste possible
+  });
+  it('ANTI-RUNAWAY : contenu profond, joueur bas → le rang du JOUEUR, +1 au plus', () => {
+    const playerLevel = 19;
+    const c = modeOf(85, 1, 0, playerLevel);
+    expect(c.indexOf(Math.max(...c))).toBe(prestigeRankIndex(playerLevel));
+    expect(c.slice(prestigeRankIndex(playerLevel) + 2).reduce((x, y) => x + y, 0)).toBe(0);
+  });
+  it('un bonus de rang (Autel, boss) épaissit le +1 mais ne fait JAMAIS sauter deux rangs', () => {
+    const ref = prestigeRankIndex(50);
+    const up = (fb: number) =>
+      modeOf(50, 0, fb)
+        .slice(ref + 1)
+        .reduce((x, y) => x + y, 0);
+    expect(up(1.2)).toBeGreaterThan(up(0));
+    for (const fb of [0.35, 0.8, 2.2])
+      expect(
+        modeOf(50, 1, fb)
+          .slice(ref + 2)
+          .every((n) => n === 0),
+      ).toBe(true);
   });
   it('jet CONTINU : le roll varie continûment (chasse au meilleur jet)', () => {
     const rolls = new Set<number>();
     for (let s = 1; s <= 200; s++) rolls.add(rollTier(mulberry32(s * 5 + 1), 30, 0.3).roll);
-    expect(rolls.size).toBeGreaterThan(150); // continu (pas de crans discrets)
+    expect(rolls.size).toBeGreaterThan(150);
   });
-  it('luck : épaissit la pointe HAUTE (plus de sur-rang) sans casser le cap joueur', () => {
-    const overRate = (luck: number) => {
-      const lv = 30;
-      const center = rankCeilingForLevel(lv);
-      let over = 0;
-      const N = 4000;
-      for (let s = 1; s <= N; s++)
-        if (RARITY_RANK[rollTier(mulberry32(s * 11 + 1), lv, luck).rank] > center) over++;
-      return over / N;
-    };
-    expect(overRate(0.8)).toBeGreaterThan(overRate(0));
-    // centre joueur respecté même à luck 1 (contenu profond, joueur bas) : ≤ ceiling(20)+2
-    const cap = Math.min(9, rankCeilingForLevel(20) + 2);
-    for (let s = 1; s <= 300; s++)
-      expect(RARITY_RANK[rollTier(mulberry32(s), 40, 1, 0, 20).rank]).toBeLessThanOrEqual(cap);
-    // ANTI-RUNAWAY (v0.598) : le floorBonus (générosité boss +0,6, Autel jusqu'à ~2,2) DÉCALE la
-    // distribution mais NE relève PAS le cap — un joueur niv.20 ne drope JAMAIS au-delà de
-    // ceiling(20)+2 (mythique), même luck 1 + floorBonus 2,2 (avant : Primordial, ticket runaway).
-    for (const fb of [0.6, 1.4, 2.2])
-      for (let s = 1; s <= 400; s++)
-        expect(
-          RARITY_RANK[rollTier(mulberry32(s * 13 + 1), 55, 1, fb, 20).rank],
-        ).toBeLessThanOrEqual(cap);
-  });
-  it('dropBand : bande cohérente (lo ≤ hi) et qui monte avec le niveau', () => {
+  it('bande de drop affichée en RANGS, pic = rang de référence', () => {
     const ri = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK];
     for (const lv of [4, 12, 25, 60]) {
       const b = dropBand(lv, 0.4);
       expect(ri(b.lo.rank)).toBeLessThanOrEqual(ri(b.hi.rank));
+      expect(ri(b.hi.rank)).toBe(prestigeRankIndex(lv));
+      expect(dropPeakRank(lv)).toBe(RANK_ORDER[prestigeRankIndex(lv)]);
     }
-    expect(ri(dropBand(30, 0.4).hi.rank)).toBeGreaterThan(ri(dropBand(12, 0.4).hi.rank));
-    expect(ri(dropBand(20, 0.9).hi.rank)).toBeGreaterThanOrEqual(ri(dropBand(20, 0).hi.rank));
-    expect(typeof dropBandLabel(12, 0.5)).toBe('string');
-  });
-  it('dropPeakRank = rang le plus probable (pic = ceiling de min(contenu, joueur))', () => {
-    for (const lv of [10, 20, 40, 60])
-      expect(dropPeakRank(lv)).toBe(RANK_ORDER[rankCeilingForLevel(lv)]);
-    // capé par le joueur : contenu profond, joueur bas → pic sur le rang du JOUEUR
-    expect(dropPeakRank(85, 0, 0, 20)).toBe(RANK_ORDER[rankCeilingForLevel(20)]);
+    expect(dropPeakRank(85, 20)).toBe(RANK_ORDER[prestigeRankIndex(20)]);
+    expect(dropBandLabel(35, 0)).toMatch(/Or/);
+    expect(dropBandLabel(35, 0)).not.toMatch(/rare|epique|magique/);
   });
 });
 
@@ -471,7 +430,7 @@ describe('rollDrop', () => {
     for (let s = 1; d == null && s <= 50; s++)
       d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level: 6, playerLevel: 6 });
     expect(d).not.toBeNull();
-    expect(RARITY_RANK[d!.rarity]).toBeLessThanOrEqual(Math.min(9, rankCeilingForLevel(6) + 2));
+    expect(RARITY_RANK[d!.rarity]).toBeLessThanOrEqual(prestigeRankIndex(6) + 1);
     // ilvl = pyramide centrée sur min(6,6)=6, bornée à +9 max (luck) et floorée à 1.
     expect(d!.level).toBeGreaterThanOrEqual(1);
     expect(d!.level).toBeLessThanOrEqual(6 + 9);
@@ -650,9 +609,11 @@ describe('sets d’équipement (voie)', () => {
     // v0.803 : mesuré, à valeur pleine un set complet battait 4 bons drops de +23 à +30 %.
     const baseOf = (it: { rarity: Item['rarity']; roll?: number; effect: { value: number } }) =>
       it.effect.value / rankRollMult(it.rarity, it.roll ?? 0);
+    // Niveau 90 : les rangs y sont hauts, donc les valeurs assez grandes pour que l'arrondi au
+    // dixième ne brouille pas le rapport (au niveau 30, rang Or depuis la v0.875, elles sont petites).
     let drop: number | null = null;
     for (let s = 1; s <= 400 && drop == null; s++) {
-      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 30, playerLevel: 30 });
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 90, playerLevel: 90 });
       if (d && d.slot === 'weapon' && d.effect.type === 'damage_pct' && d.effect.value > 20)
         drop = baseOf(d);
     }
@@ -660,8 +621,8 @@ describe('sets d’équipement (voie)', () => {
     for (let s = 1; s <= 10; s++) {
       const p = rollSetPiece(mulberry32(s), {
         setId: BERS,
-        level: 30,
-        playerLevel: 30,
+        level: 90,
+        playerLevel: 90,
         preferSlot: 'weapon',
       });
       if (p.effect.value < 20) continue; // l’arrondi au dixième brouille les petites valeurs
@@ -2029,7 +1990,11 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
           n++;
           if (own < best) {
             fails++;
-            expect(known.has(V), `${V} niv ${L} graine ${seed}`).toBe(true);
+            // ⚠️ v0.875 (objets au rang du joueur) : aux niveaux 20-30 les pièces sont Bronze ou
+            // Argent (un seul affixe) et Gardien/Vampire perdent parfois de peu (mesuré ≤ 0,8 %,
+            // 13 échecs sur 288). Hors liste connue, un échec doit rester marginal.
+            if (!known.has(V))
+              expect(1 - own / best, `${V} niv ${L} graine ${seed}`).toBeLessThan(0.01);
           }
         }
       }
