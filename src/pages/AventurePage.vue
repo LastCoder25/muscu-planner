@@ -823,7 +823,7 @@
               <!-- Méta : rang · niveau. Le set = badge coin ; le jet = icône (badge bas). -->
               <div class="pills">
                 <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
-                  RARITY_LABEL[char.row.equipped[slot]!.rarity]
+                  gradeLabel(char.row.equipped[slot]!)
                 }}</span>
                 <span class="lvl-badge">Nv {{ char.row.equipped[slot]!.level }}</span>
               </div>
@@ -888,7 +888,7 @@
               </button>
               <div class="pills">
                 <span class="gpill" :class="'p-' + equippedTrophy.rarity">{{
-                  RARITY_LABEL[equippedTrophy.rarity]
+                  gradeLabel(equippedTrophy)
                 }}</span>
                 <span class="lvl-badge">Nv {{ equippedTrophy.level }}</span>
               </div>
@@ -1044,7 +1044,7 @@
                       role="button"
                       title="Qu’est-ce que le rang ?"
                       @click="helpTopic = 'rank'"
-                      >{{ RARITY_LABEL[it.rarity] }}</span
+                      >{{ gradeLabel(it) }}</span
                     >
                     <!-- Jet porté par l'icône (badge bas) + les lignes de comparaison ci-dessous ;
                          plus de badge de qualité redondant à côté du rang (ticket UI). -->
@@ -1058,9 +1058,7 @@
                     <div class="cmp-item this">
                       <div class="cmp-head">
                         <span class="cmp-lbl">Cet objet</span>
-                        <span class="ii-rar" :class="'p-' + it.rarity">{{
-                          RARITY_LABEL[it.rarity]
-                        }}</span>
+                        <span class="ii-rar" :class="'p-' + it.rarity">{{ gradeLabel(it) }}</span>
                         <span class="lvl-badge">Nv {{ it.level }}</span>
                         <span
                           v-if="itemQuality(it)"
@@ -1085,7 +1083,7 @@
                         <span class="cmp-lbl">Équipé</span>
                         <template v-if="equippedInSlot(it.slot)">
                           <span class="ii-rar" :class="'p-' + equippedInSlot(it.slot)!.rarity">{{
-                            RARITY_LABEL[equippedInSlot(it.slot)!.rarity]
+                            gradeLabel(equippedInSlot(it.slot)!)
                           }}</span>
                           <span class="lvl-badge">Nv {{ equippedInSlot(it.slot)!.level }}</span>
                           <span
@@ -1537,7 +1535,7 @@
             <div class="salv-main">
               <div class="salv-name">
                 {{ replaceTarget.name }}
-                <span class="rarity">{{ RARITY_LABEL[replaceTarget.rarity] }}</span>
+                <span class="rarity">{{ gradeLabel(replaceTarget) }}</span>
               </div>
               <div class="salv-eff">
                 {{ SLOT_LABEL[replaceTarget.slot] }} · {{ itemEffects(replaceTarget) }}
@@ -1557,9 +1555,7 @@
             <div class="salv-main">
               <div class="salv-name">
                 {{ equippedInSlot(replaceTarget.slot)!.name }}
-                <span class="rarity">{{
-                  RARITY_LABEL[equippedInSlot(replaceTarget.slot)!.rarity]
-                }}</span>
+                <span class="rarity">{{ gradeLabel(equippedInSlot(replaceTarget.slot)!) }}</span>
               </div>
               <div class="salv-eff">{{ itemEffects(equippedInSlot(replaceTarget.slot)!) }}</div>
             </div>
@@ -1683,7 +1679,7 @@
                     {{ m.item.name }}<span v-if="m.item.setId" class="im-loot-set"> 🧩</span>
                   </div>
                   <div class="im-loot-sub">
-                    <span :class="'p-' + m.item.rarity">{{ RARITY_LABEL[m.item.rarity] }}</span> ·
+                    <span :class="'p-' + m.item.rarity">{{ gradeLabel(m.item) }}</span> ·
                     {{ SLOT_LABEL[m.item.slot] }}
                   </div>
                   <div class="im-loot-eff">{{ itemEffects(m.item) }}</div>
@@ -1949,7 +1945,7 @@
             <div class="insp-name">{{ inspectItem.name }}</div>
             <div class="insp-meta">
               <span class="gpill" :class="'p-' + inspectItem.rarity">{{
-                RARITY_LABEL[inspectItem.rarity]
+                gradeLabel(inspectItem)
               }}</span>
               <span
                 v-if="itemQuality(inspectItem)"
@@ -2115,10 +2111,11 @@
           </div>
         </div>
         <div class="drops-note">
-          Le <b>rang</b> (G→SSS) est tiré en <b>pyramide centrée sur ton niveau</b> : surtout ton
-          rang, parfois <b>un cran au-dessus</b> (jackpot, ↑ avec la luck). La <b>qualité</b> (roll)
-          varie en continu → farme le meilleur « jet ». Les <b>pièces de set</b> (de voie) tombent
-          sur les <b>boss de palier</b>.
+          Le <b>rang</b> (Bronze → Divin ancestral) est tiré en
+          <b>pyramide centrée sur ton niveau</b> : surtout ton rang, parfois
+          <b>un cran au-dessus</b> (jackpot, ↑ avec la luck). La <b>qualité</b> (roll) varie en
+          continu → farme le meilleur « jet ». Les <b>pièces de set</b> (de voie) tombent sur les
+          <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
       </q-card>
@@ -2316,7 +2313,7 @@
                 <div class="rc-name">{{ cand.item.name }}</div>
                 <div class="rc-pills">
                   <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
-                    RARITY_LABEL[cand.item.rarity]
+                    gradeLabel(cand.item)
                   }}</span>
                   <span
                     v-if="itemQuality(cand.item)"
@@ -2333,7 +2330,7 @@
                 </div>
                 <div class="drop-cmp rc-cmp">
                   <span v-if="equippedInSlot(cand.item.slot)"
-                    >Équipé : {{ RARITY_LABEL[equippedInSlot(cand.item.slot)!.rarity] }} ·
+                    >Équipé : {{ gradeLabel(equippedInSlot(cand.item.slot)!) }} ·
                     {{ itemEffects(equippedInSlot(cand.item.slot)!) }}</span
                   >
                   <span v-else>Emplacement libre</span>
@@ -2488,7 +2485,7 @@
               <div class="inv-main">
                 <div class="inv-name">{{ d.name }}</div>
                 <div class="pills">
-                  <span class="gpill" :class="'p-' + d.rarity">{{ RARITY_LABEL[d.rarity] }}</span>
+                  <span class="gpill" :class="'p-' + d.rarity">{{ gradeLabel(d) }}</span>
                   <span class="lvl-badge">Nv {{ d.level }}</span>
                   <span v-if="d.setId" class="gpill set">🧩 Set</span>
                 </div>
@@ -2517,7 +2514,7 @@
                 <template v-else>
                   <div v-if="equippedInSlot(d.slot)" class="drop-cmp">
                     <span
-                      >Équipé : {{ RARITY_LABEL[equippedInSlot(d.slot)!.rarity] }} · niv
+                      >Équipé : {{ gradeLabel(equippedInSlot(d.slot)!) }} · niv
                       {{ equippedInSlot(d.slot)!.level
                       }}<span v-if="equippedInSlot(d.slot)!.setId" title="Pièce de set"> 🧩</span> ·
                       {{ itemEffects(equippedInSlot(d.slot)!) }}</span
@@ -2616,7 +2613,7 @@
                     <div class="rc-name">{{ cand.item.name }}</div>
                     <div class="rc-pills">
                       <span class="rc-pill" :class="'p-' + cand.item.rarity">{{
-                        RARITY_LABEL[cand.item.rarity]
+                        gradeLabel(cand.item)
                       }}</span>
                       <span
                         v-if="itemQuality(cand.item)"
@@ -2864,7 +2861,6 @@ import {
   SLOTS,
   SLOT_LABEL,
   SLOT_EMOJI,
-  RARITY_LABEL,
   rarityRank,
   gradeLabel,
   RARITY_RANK,
@@ -4245,7 +4241,7 @@ function rarityOdds(luck: number, level = 1, playerLevel?: number) {
     counts[idx] = (counts[idx] ?? 0) + 1;
   }
   return RANK_ORDER.map((r, i) => ({
-    label: r,
+    label: rarityRank(r).name,
     pct: Math.round((counts[i]! / N) * 100),
     cls: 'r-' + r,
   })).filter((o) => o.pct > 0);
@@ -4331,7 +4327,7 @@ function rewardCmpEquipped(item: Item): string {
   const eq = equippedInSlot(item.slot);
   if (!eq) return '';
   if (eq.effect.type === item.effect.type) return '';
-  return `${RARITY_LABEL[eq.rarity]} · ${itemEffects(eq)}`;
+  return `${gradeLabel(eq)} · ${itemEffects(eq)}`;
 }
 function rewardDupNote(item: Item): string {
   if (!item.setId) return '';
@@ -4396,9 +4392,9 @@ function rarityVerdict(d: Item): { label: string; cls: string } {
   const eq = equippedInSlot(d.slot);
   if (!eq) return { label: 'slot libre', cls: 'up' };
   const diff = RARITY_RANK[d.rarity] - RARITY_RANK[eq.rarity];
-  if (diff > 0) return { label: '↑ rareté supérieure', cls: 'up' };
-  if (diff < 0) return { label: '↓ rareté inférieure', cls: 'down' };
-  return { label: '≈ même rareté', cls: 'same' };
+  if (diff > 0) return { label: '↑ rang supérieur', cls: 'up' };
+  if (diff < 0) return { label: '↓ rang inférieur', cls: 'down' };
+  return { label: '≈ même rang', cls: 'same' };
 }
 // Verdict par PUISSANCE (si équipé) = la vraie décision « je l'équipe ? ». En tête de carte.
 function powerVerdict(it: Item): { label: string; cls: string } {

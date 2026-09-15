@@ -31,7 +31,7 @@
             @click="cycle(sl)"
           >
             <span class="ls-name">{{ SLOT_LABEL[sl] }}</span>
-            <span class="ls-r">{{ gear[sl] ? RARITY_LABEL[gear[sl]!] : 'vide' }}</span>
+            <span class="ls-r">{{ gear[sl] ? rarityRank(gear[sl]!).name : 'vide' }}</span>
           </button>
         </div>
         <div class="lab-shape">
@@ -68,7 +68,7 @@
 import { ref, computed, reactive, defineAsyncComponent } from 'vue';
 import { useCharacterStore } from '@/stores/character';
 import { planHeroParts } from '@/lib/heroModel';
-import { RANK_ORDER, RARITY_LABEL, RANK_COLOR, type Equipped, type Rarity } from '@/lib/items';
+import { RANK_ORDER, rarityRank, RANK_COLOR, type Equipped, type Rarity } from '@/lib/items';
 
 defineProps<{ embedded?: boolean }>();
 

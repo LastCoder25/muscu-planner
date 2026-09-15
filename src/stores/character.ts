@@ -20,6 +20,7 @@ import {
   enchantMult,
   round1,
   normRank,
+  renameLegacyItem,
   fillSetPieceAffixes,
   bestGearLoadout,
   playerWithGear,
@@ -264,6 +265,8 @@ export const useCharacterStore = defineStore('character', () => {
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
+      // Nom d'avant la v0.874 (« Cuirasse mythique ») : il contredirait le rang affiché.
+      it = renameLegacyItem({ ...it, rarity });
       // Pièces de set d'AVANT le correctif multi-affixe : on complète leurs affixes
       // manquants (déterministe par id) — sinon un set patiemment constitué reste à
       // 1 stat/pièce et ne vaudra jamais du stuff mixte à 3 stats.
@@ -303,7 +306,9 @@ export const useCharacterStore = defineStore('character', () => {
         const items = obj<Equipped>(l?.items);
         for (const k of Object.keys(items) as (keyof Equipped)[])
           if (items[k]) items[k] = fixItem(items[k]);
-        return { items };
+        // ⚠️ Les DOUBLONS du set (v0.839) étaient perdus ici : on ne rendait que `items`, et
+        // la prochaine sauvegarde réécrivait les loadouts sans eux.
+        return { items, spares: arr<Item>(l?.spares).map(fixItem) };
       });
     r.messages = arr<ExpeditionMessage>(r.messages);
     r.energy_log = arr<EnergyLogEntry>(r.energy_log);

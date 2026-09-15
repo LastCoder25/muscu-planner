@@ -30,13 +30,15 @@ describe('advUnlocks — calendrier des déblocages', () => {
     expect(at9[0]!.title).toContain('Épines');
   });
 
-  it('niveau 20 : boss (Titan) + rareté Épique — plus d’emplacement de talent', () => {
+  it('niveau 20 : boss (Titan) + objets au rang Légendaire (la rareté Épique) — plus d’emplacement de talent', () => {
     const at20 = unlocksAtLevel(20);
     expect(at20.some((u) => u.kind === 'boss' && u.title.includes('Titan'))).toBe(true);
     // Un seul talent (v0.845) : l'emplacement ne s'annonce qu'une fois, au niveau 5.
     expect(at20.some((u) => u.kind === 'talent')).toBe(false);
     const rar = at20.find((u) => u.kind === 'rarity');
-    expect(rar?.title.toLowerCase()).toContain('épique');
+    // Affiché en RANG depuis la v0.874 : la rareté Épique se lit « Légendaire ».
+    expect(rar?.title).toContain('Légendaire');
+    expect(rar?.title).not.toContain('Épique');
   });
 
   it('UN SEUL déblocage de talent dans tout le calendrier, au niveau 5', () => {

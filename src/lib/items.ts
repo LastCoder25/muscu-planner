@@ -441,14 +441,15 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
  *  `rankStartLevel`), et un compagnon ne dépasse pas la rareté de la classe de son maître
  *  (`canAdvFamiliar` / `canAdvTalent`). Donc un aventurier **Bronze** mène un familier
  *  **Bronze**, un **Argent** un **Argent** : la règle se lit sans table de conversion.
- *  ⚠️ Les OBJETS gardent leurs raretés (Commun → Primordial) : seuls les compagnons
- *  d’un homme parlent la langue de son rang. */
+ *  ⚠️ DEPUIS LA v0.874, LES OBJETS AUSSI (demandé par l’utilisateur) : tout ce qui se porte
+ *  se lit en rang. `RARITY_LABEL` (Commun → Primordial) ne sert plus qu’au code interne. */
 export function rarityRank(r: Rarity): RankTier {
   return CHARACTER_RANKS[Math.min(CHARACTER_RANKS.length - 1, RARITY_RANK[r] ?? 0)]!;
 }
-/** Le libellé à afficher pour une pièce : son RANG si c’est un familier, sa RARETÉ sinon. */
-export function gradeLabel(it: { slot: ItemSlot; rarity: Rarity }): string {
-  return it.slot === 'familiar' ? rarityRank(it.rarity).name : RARITY_LABEL[it.rarity];
+/** Le libellé à afficher pour une pièce, quelle qu’elle soit : son RANG (Bronze → Divin
+ *  ancestral). Source unique : aucun écran ne doit relire `RARITY_LABEL`. */
+export function gradeLabel(it: { rarity: Rarity }): string {
+  return rarityRank(it.rarity).name;
 }
 
 /** Les 5 crans d’intensité de `useGameFx` — du discret à l’explosion. */
@@ -920,7 +921,21 @@ const NAMES: Record<ItemSlot, string[]> = {
   familiar: ['Compagnon'], // nom réel = nom de la race (cf. rollFamiliar)
   trophy: ['Trophée'], // nom réel = l'exo du boss (cf. rollTrophy)
 };
+// Complément de nom selon le RANG (v0.874) : « Lame d’or », « Cuirasse des dieux ». Des
+// compléments et pas des adjectifs : les noms mêlent masculin et féminin.
 const RARITY_ADJ: Record<Rarity, string> = {
+  commun: 'de bronze',
+  inhabituel: 'd’argent',
+  magique: 'd’or',
+  rare: 'd’or noir',
+  epique: 'légendaire',
+  legendaire: 'des demi-dieux',
+  mythique: 'des dieux',
+  primordial: 'des anciens dieux',
+};
+/** Adjectifs d’AVANT la v0.874, qui nommaient la rareté (« Cuirasse mythique ») — un nom qui
+ *  contredirait le rang affiché à côté. */
+const LEGACY_RARITY_ADJ: Record<Rarity, string> = {
   commun: 'brut',
   inhabituel: 'affûté',
   magique: 'runique',
@@ -930,6 +945,15 @@ const RARITY_ADJ: Record<Rarity, string> = {
   mythique: 'mythique',
   primordial: 'primordial',
 };
+
+/** Renomme un objet déjà possédé dont le nom finit par l’ancien adjectif de SA rareté.
+ *  Idempotent (l’ancien et le nouveau complément diffèrent pour chaque rareté) ; les noms
+ *  signature (« Guillotine ») et les pièces de set ne portent pas d’adjectif : intacts. */
+export function renameLegacyItem<T extends { name: string; rarity: Rarity }>(it: T): T {
+  const old = ` ${LEGACY_RARITY_ADJ[it.rarity]}`;
+  if (!it.name.endsWith(old)) return it;
+  return { ...it, name: it.name.slice(0, -old.length) + ` ${RARITY_ADJ[it.rarity]}` };
+}
 
 /** Formate une valeur d'effet avec 1 décimale au plus (trim .0) → la qualité (+2,5 %/★)
  *  reste visible même sur les petites stats (ex. B★1 vs B★5, ticket df3feade). */

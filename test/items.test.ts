@@ -4,6 +4,8 @@ import {
   rarityRank,
   gradeLabel,
   RARITY_LABEL,
+  renameLegacyItem,
+  type Rarity,
   weaponKind,
   wornSet,
   fxRarity,
@@ -2145,9 +2147,31 @@ describe('🏅 FAMILIERS ET TALENTS SE LISENT EN RANG (v0.833)', () => {
     const names = RANK_ORDER.map((r) => rarityRank(r).name);
     expect(new Set(names).size).toBe(RANK_ORDER.length);
   });
-  it('un familier se lit en rang, un objet garde sa rareté', () => {
-    expect(gradeLabel({ slot: 'familiar', rarity: 'epique' })).toBe(rarityRank('epique').name);
-    expect(gradeLabel({ slot: 'weapon', rarity: 'epique' })).toBe(RARITY_LABEL.epique);
+  it('tout ce qui se porte se lit en rang, objets compris (v0.874)', () => {
+    for (const r of RANK_ORDER) {
+      expect(gradeLabel({ rarity: r }), r).toBe(rarityRank(r).name);
+      expect(gradeLabel({ rarity: r }), r).not.toBe(RARITY_LABEL[r]);
+    }
+  });
+  it('les noms d’objets ne nomment plus la rareté, anciens objets renommés', () => {
+    const cfg = (name: string, rarity: Rarity) => renameLegacyItem({ name, rarity });
+    expect(cfg('Cuirasse mythique', 'mythique').name).toBe('Cuirasse des dieux');
+    expect(cfg('Lame héroïque', 'epique').name).toBe('Lame légendaire');
+    expect(cfg('Anneau légendaire', 'legendaire').name).toBe('Anneau des demi-dieux');
+    // Idempotent : un nom déjà renommé ne bouge plus, même quand le nouveau complément
+    // (« légendaire » pour Épique) est l'ancien adjectif d'une AUTRE rareté.
+    const once = cfg('Lame héroïque', 'epique');
+    expect(renameLegacyItem(once)).toBe(once);
+    // Noms sans adjectif (signature, pièce de set) : intacts, même objet rendu.
+    const sig = { name: 'Guillotine', rarity: 'legendaire' as Rarity };
+    expect(renameLegacyItem(sig)).toBe(sig);
+    // Un nouveau drop ne nomme plus sa rareté.
+    const rng = mulberry32(3);
+    for (let i = 0; i < 200; i++) {
+      const d = rollDrop(rng, { cleared: true, defeated: 1, level: 60, luck: 1, playerLevel: 60 });
+      if (!d) continue;
+      expect(renameLegacyItem(d)).toBe(d);
+    }
   });
   it('le Chenil annonce son plafond dans la même langue que les familiers', async () => {
     const { companionRankLabel } = await import('@/lib/raid');

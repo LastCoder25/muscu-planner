@@ -5,7 +5,7 @@
 // max droppable (rankCeilingForLevel, monte avec le niveau) et EFFECT_MIN_LEVEL (effets/
 // signatures gatés en profondeur). Aucune dépendance Vue/Supabase.
 import { BOSSES } from '@/data/bosses';
-import { rankCeilingForLevel, RANK_ORDER, RARITY_LABEL } from '@/lib/items';
+import { rankCeilingForLevel, RANK_ORDER, rarityRank } from '@/lib/items';
 import { TALENT_SLOT_LEVEL } from '@/lib/talents';
 
 type AdvUnlockKind = 'boss' | 'talent' | 'effect' | 'rarity';
@@ -53,11 +53,11 @@ function buildSchedule(): AdvUnlock[] {
         level: lvl,
         kind: 'rarity',
         emoji: '✨',
-        title: `Rareté : ${RARITY_LABEL[rk]}`,
+        title: `Rang des objets : ${rarityRank(rk).name}`,
         detail:
           c >= 5
-            ? `Tes objets peuvent atteindre la rareté ${RARITY_LABEL[rk]} (effet légendaire possible).`
-            : `Tes objets peuvent désormais atteindre la rareté ${RARITY_LABEL[rk]}.`,
+            ? `Tes objets peuvent atteindre le rang ${rarityRank(rk).name} (effet légendaire possible).`
+            : `Tes objets peuvent désormais atteindre le rang ${rarityRank(rk).name}.`,
       });
       prev = c;
     }

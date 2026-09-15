@@ -440,7 +440,7 @@ import {
   playerWithGear,
   mergeEffects,
   fxRarity,
-  RARITY_LABEL,
+  gradeLabel,
   RARITY_RANK,
   type Item,
 } from '@/lib/items';
@@ -1169,7 +1169,7 @@ async function doClaim() {
     gameFx.celebrate({
       kind: 'drop',
       emoji: top.emoji,
-      title: `Butin ${RARITY_LABEL[top.rarity] ?? top.rarity} !`,
+      title: `Butin ${gradeLabel(top)} !`,
       subtitle:
         drops.length > 1
           ? `${top.name} (+${drops.length - 1} autre${drops.length > 2 ? 's' : ''})`

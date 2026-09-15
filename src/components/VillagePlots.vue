@@ -130,7 +130,7 @@
                 <select v-model="outfitItemId" class="of-select" aria-label="Objet du sac">
                   <option value="" disabled>Objet du sac…</option>
                   <option v-for="it in outfitCandidates" :key="it.id" :value="it.id">
-                    {{ it.emoji }} {{ it.name }} · {{ RARITY_LABEL[it.rarity] }}
+                    {{ it.emoji }} {{ it.name }} · {{ gradeLabel(it) }}
                   </option>
                 </select>
               </div>
@@ -199,7 +199,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { guildRoster } from '@/lib/adventurers';
-import { ROLL_FLOOR_RANKS, FAMILIAR_SLOT, RARITY_LABEL, type Item } from '@/lib/items';
+import { ROLL_FLOOR_RANKS, FAMILIAR_SLOT, gradeLabel, type Item } from '@/lib/items';
 import { LINEAGE_GEAR, lineageOf, outfitSlot, outfitterMsFor } from '@/lib/advGear';
 import { fmtSpan } from '@/lib/raid';
 import {
@@ -506,7 +506,7 @@ function doOutfit() {
   if (outfitBusy.value || !adv || !item) return;
   $q.dialog({
     title: 'Fondre cet objet ?',
-    message: `${item.emoji} « ${item.name} » (${RARITY_LABEL[item.rarity]}) sera détruit définitivement pour fabriquer : ${outfitTargetLabel.value}.`,
+    message: `${item.emoji} « ${item.name} » (${gradeLabel(item)}) sera détruit définitivement pour fabriquer : ${outfitTargetLabel.value}.`,
     cancel: { label: 'Annuler', flat: true },
     ok: { label: '⚒️ Fabriquer', color: 'negative' },
   }).onOk(() => void runOutfit());

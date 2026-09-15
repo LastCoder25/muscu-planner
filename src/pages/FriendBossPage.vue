@@ -234,7 +234,7 @@ import { useFriendBossStore, FriendBossError } from '@/stores/friendBoss';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
-import { fxRarity, RARITY_LABEL } from '@/lib/items';
+import { fxRarity, gradeLabel } from '@/lib/items';
 import { bossAltarBuilt } from '@/lib/buildings';
 import { computeCharacter } from '@/lib/character';
 import { heroLook, type HeroLook } from '@/lib/heroLook';
@@ -574,7 +574,7 @@ async function doOpenChest(b: FriendBoss) {
       kind: 'generic',
       emoji: '🏆',
       title: chest.trophy.name,
-      subtitle: `${RARITY_LABEL[chest.trophy.rarity]} · +${chest.gold} 🪙 · +${chest.stones} 🔮`,
+      subtitle: `${gradeLabel(chest.trophy)} · +${chest.gold} 🪙 · +${chest.stones} 🔮`,
       rarity: fxRarity(chest.trophy.rarity),
     });
   } catch (e) {
