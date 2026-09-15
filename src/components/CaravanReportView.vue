@@ -12,7 +12,17 @@
       </div>
     </div>
 
-    <p v-if="r.events.length" class="cr-road">{{ r.events.map((e) => e.text).join(' ') }}</p>
+    <!-- Une ligne par embuscade (et le reste de la route) : « N bandits abattus » s'affiche
+         quand le convoi porte le combat de groupe — absent sur un convoi d'avant, qui ne
+         montre alors que sa route d'origine, comme aujourd'hui. -->
+    <ul v-if="r.events.length" class="cr-road">
+      <li v-for="(e, i) in r.events" :key="i" class="cr-road-line">
+        {{ e.text }}
+        <span v-if="e.slain !== undefined" class="cr-road-slain">
+          ⚔️ {{ slainLabel(e.slain) }}
+        </span>
+      </li>
+    </ul>
 
     <div class="cr-pills">
       <span v-for="p in r.pills" :key="p.emoji" class="cr-pill">{{ p.emoji }} {{ p.n }}</span>
@@ -33,7 +43,12 @@
       <template #header>
         <div class="cr-exp-title">
           ⚔️ {{ r.members.length }} aventurier{{ r.members.length > 1 ? 's' : '' }}
-          <span class="cr-exp-xp">+{{ r.totalXp }} XP</span>
+          <span class="cr-exp-trailing">
+            <span v-if="r.hasKills" class="cr-exp-kills" title="Bandits abattus au total">
+              ⚔️ {{ r.totalKills }}
+            </span>
+            <span class="cr-exp-xp">+{{ r.totalXp }} XP</span>
+          </span>
         </div>
       </template>
       <ul class="cr-list">
@@ -42,6 +57,15 @@
           <span class="cr-m-name">{{ m.name }}</span>
           <span v-if="stars.includes(m.id)" class="cr-m-star" title="Une étoile de plus">⭐</span>
           <span v-if="m.hurt" class="cr-m-hurt" title="Blessé : à l'infirmerie">🤕</span>
+          <span
+            v-else-if="m.knockedDown"
+            class="cr-m-down"
+            title="Mis à terre pendant l'embuscade, mais relevé — pas d'infirmerie"
+            >à terre</span
+          >
+          <span v-if="m.kills" class="cr-m-kills" :title="`${m.kills} bandit(s) abattu(s) par lui`">
+            ⚔️ {{ killsLabel(m.kills) }}
+          </span>
           <span class="cr-m-xp">+{{ m.xp }} XP</span>
         </li>
       </ul>
@@ -80,6 +104,16 @@ function fmtDuration(ms: number): string {
 function fmtRate(n: number): string {
   return (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString('fr-FR');
 }
+/** « 1 abattu » / « N abattus » — pur formatage, comme `fmtDuration`/`fmtRate` ci-dessus. */
+function killsLabel(n: number): string {
+  return `${n} abattu${n > 1 ? 's' : ''}`;
+}
+/** « 1 bandit abattu » / « N bandits abattus » — même convention de pluriel que le reste
+ *  du projet (accord dès que N > 1, y compris à 0). */
+function slainLabel(n: number): string {
+  const pl = n > 1 ? 's' : '';
+  return `${n} bandit${pl} abattu${pl}`;
+}
 </script>
 
 <style scoped lang="scss">
@@ -106,9 +140,21 @@ function fmtRate(n: number): string {
   color: var(--dim);
 }
 .cr-road {
+  list-style: none;
   margin: 8px 0 0;
+  padding: 0;
+}
+.cr-road-line {
   font-size: 12.5px;
   color: var(--dim);
+  & + & {
+    margin-top: 2px;
+  }
+}
+.cr-road-slain {
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
 }
 .cr-pills {
   display: flex;
@@ -148,8 +194,18 @@ function fmtRate(n: number): string {
   font-size: 13.5px;
   font-weight: 600;
 }
-.cr-exp-xp {
+.cr-exp-trailing {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cr-exp-kills {
+  color: var(--dim);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cr-exp-xp {
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
@@ -176,6 +232,21 @@ function fmtRate(n: number): string {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cr-m-down {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--dim);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.cr-m-kills {
+  color: var(--dim);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .cr-m-xp {

@@ -29,6 +29,7 @@ import {
   missionTravelMult,
   suggestEscort,
   convoyHurt,
+  slainByAlly,
   missionXp,
   refAdventurer,
   resolveCaravan,
@@ -519,7 +520,7 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
     for (let s = 0; s < 300; s++) {
       const o = resolveCaravan(p, esc, s * 977 + 1, NUS, 100);
       const f = o.events.filter((e) => e.kind === 'bandits');
-      const abattus = f.reduce((n, e) => n + (e.kills ?? 0), 0);
+      const abattus = f.reduce((n, e) => n + (e.slain ?? 0), 0);
       for (const a of esc) {
         expect(o.xp[a.id]!).toBeGreaterThanOrEqual(missionXp(a, p));
         if (!f.length) expect(o.xp[a.id]).toBe(missionXp(a, p));
@@ -559,7 +560,6 @@ describe('🤕 À TERRE N’EST PAS BLESSÉ — la politique d’infirmerie du c
       const f = o.events.filter((e) => e.kind === 'bandits');
       const attendu: string[] = [];
       for (const e of f) {
-        expect(e.down!.length, `graine ${s}`).toBe(e.fallen);
         if (e.won) {
           if (e.down!.length) gagneesATerre++;
         } else {
@@ -577,6 +577,43 @@ describe('🤕 À TERRE N’EST PAS BLESSÉ — la politique d’infirmerie du c
       gagneesATerre,
       'aucune victoire avec un membre à terre : le test ne prouve rien',
     ).toBeGreaterThan(0);
+  });
+});
+
+describe('🛡️ ABATTUS PAR ALLIÉ — jamais ceux de la TROUPE, même en cas de collision d’id', () => {
+  it('crédite un allié pour un corps de troupe abattu, jamais pour un allié abattu', () => {
+    const escort = [{ id: 'a0' }, { id: 'a1' }];
+    const d = {
+      foesDown: ['t0'],
+      kills: [
+        { at: 0, killer: 'a0', victim: 't0' }, // a0 abat un corps de troupe → compte
+        { at: 1, killer: 't1', victim: 'a1' }, // un corps de troupe abat un allié → jamais
+      ],
+    };
+    expect(slainByAlly(escort, d)).toEqual({ a0: 1, a1: 0 });
+  });
+
+  it('⚠️ COLLISION D’ID (`foe0`) : un aventurier ne vole aucun abattu au corps de troupe qui porte le même id', () => {
+    // `troopOf` nomme TOUJOURS ses corps `foe0`/`foe1`/`foe2` — un aventurier qui porterait
+    // le même id ne doit jamais hériter des abattus que CE corps de troupe a scorés contre
+    // un AUTRE allié : c'est la victime qui décide, jamais le nom du tueur.
+    const escort = [{ id: 'foe0' }, { id: 'a1' }];
+    const d = {
+      foesDown: ['foe1'], // seul le corps de troupe foe1 est mort
+      kills: [
+        // le corps de troupe 'foe0' abat 'a1' → jamais crédité à l'aventurier 'foe0'
+        { at: 0, killer: 'foe0', victim: 'a1' },
+        // 'a1' abat le corps 'foe1' → compte
+        { at: 1, killer: 'a1', victim: 'foe1' },
+      ],
+    };
+    expect(slainByAlly(escort, d)).toEqual({ foe0: 0, a1: 1 });
+  });
+
+  it('un tueur étranger à l’escorte n’ajoute jamais de clé au résultat', () => {
+    const escort = [{ id: 'a0' }];
+    const d = { foesDown: ['t0'], kills: [{ at: 0, killer: 't1', victim: 't0' }] };
+    expect(slainByAlly(escort, d)).toEqual({ a0: 0 });
   });
 });
 
@@ -1529,6 +1566,64 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
     expect(r.members[2]!.xp).toBe(Math.round(v.outcome.xp[escort[2]!.id] ?? 0));
   });
 
+  it('🗡️ chaque aventurier affiche SES abattus', () => {
+    const v = van();
+    const kills = { [escort[0]!.id]: 2, [escort[1]!.id]: 0, [escort[2]!.id]: 1 };
+    const r = caravanReport({ ...v, outcome: { ...v.outcome, kills } }, escort);
+    expect(r.hasKills).toBe(true);
+    expect(r.members.map((m) => m.kills)).toEqual([2, 0, 1]);
+    expect(r.totalKills).toBe(3);
+  });
+
+  it('⚠️ un convoi LANCÉ AVANT le combat de groupe se lit et s’encaisse toujours', () => {
+    // Son `outcome` a été figé au départ par l'ancien moteur : ni `kills` (par tête), ni
+    // `slain`/`down` (par embuscade). L'XP par tête (`xp`) et les blessés (`hurt`), que
+    // `claimCaravan` crédite, y sont déjà.
+    const v = van();
+    const outcome = { ...v.outcome };
+    delete (outcome as { kills?: unknown }).kills;
+    const legacy = {
+      ...v,
+      outcome: {
+        ...outcome,
+        events: outcome.events.map(({ slain: _s, down: _d, ...e }) => e),
+      },
+    };
+    const r = caravanReport(legacy, escort);
+    expect(r.hasKills).toBe(false);
+    expect(r.totalKills).toBe(0);
+    for (const m of r.members) {
+      expect(m.kills).toBe(0);
+      expect(m.knockedDown).toBe(false);
+      expect(m.xp).toBe(Math.round(v.outcome.xp[m.id] ?? 0));
+    }
+  });
+
+  it('🩹 à terre dans une embuscade GAGNÉE (relevé) — jamais confondu avec 🤕 blessé', () => {
+    const v = van();
+    const evGagnee = {
+      kind: 'bandits' as const,
+      won: true,
+      slain: 3,
+      down: [escort[0]!.id, escort[1]!.id],
+      text: 'Une embuscade repoussée.',
+    };
+    const r = caravanReport(
+      { ...v, outcome: { ...v.outcome, events: [evGagnee], hurt: [escort[1]!.id] } },
+      escort,
+    );
+    // escort[0] : à terre pendant la victoire, jamais blessé → la marque « à terre ».
+    expect(r.members[0]!.knockedDown).toBe(true);
+    expect(r.members[0]!.hurt).toBe(false);
+    // escort[1] : aussi tombé pendant CETTE victoire, mais blessé PAR AILLEURS → 🤕 seul,
+    // jamais les deux marques sur la même ligne.
+    expect(r.members[1]!.hurt).toBe(true);
+    expect(r.members[1]!.knockedDown).toBe(false);
+    // escort[2] : ni l'un ni l'autre.
+    expect(r.members[2]!.hurt).toBe(false);
+    expect(r.members[2]!.knockedDown).toBe(false);
+  });
+
   it('la cargaison est arrondie comme à l’encaissement, les salaires restent à part', () => {
     const v = van();
     const demi = { ...v, outcome: { ...v.outcome, energy: 55.5, gold: 100.4, wages: 30.6 } };
@@ -1790,7 +1885,7 @@ describe('sources d’équipement : embuscades repoussées', () => {
     expect(o.hurt).toEqual(['ref1']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);
     expect(o.events[1]!.down).toHaveLength(2); // à terre, mais la victoire ne blesse personne
-    expect(o.events.map((e) => [e.kills, e.fallen])).toEqual([
+    expect(o.events.map((e) => [e.slain, e.down?.length])).toEqual([
       [0, 3],
       [3, 2],
       [undefined, undefined],

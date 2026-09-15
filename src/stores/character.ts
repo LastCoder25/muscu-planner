@@ -2238,8 +2238,9 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /** Encaisse la cargaison d'un convoi rentré : devises, XP par aventurier, blessés.
-   *  ⚠️ L'XP est versée QUEL QUE SOIT le résultat et même sans combat — sinon un débutant
-   *  à un seul aventurier, qui perd toutes ses embuscades, ne progresserait jamais. */
+   *  ⚠️ `o.xp` contient DÉJÀ le socle de mission ET la part des bandits abattus, calculés au
+   *  départ (moteur de groupe) ; un convoi lancé avant la bascule porte l'XP de l'ancien
+   *  moteur dans le même champ — rien à distinguer ici. `o.hurt` = ceux qui sont tombés. */
   /** Encaisse une cargaison et rend **ce que la mission a changé pour l’escorte**
    *  (`AdvProgress[]`), ou `null` si rien n’a été encaissé.
    *

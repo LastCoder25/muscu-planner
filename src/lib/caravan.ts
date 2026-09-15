@@ -192,14 +192,17 @@ interface CaravanEvent {
   kind: CaravanEventKind;
   /** `bandits` uniquement : l'escorte a-t-elle tenu ? */
   won?: boolean;
-  /** `bandits` : bandits abattus / membres tombés (combat de groupe, v0.859). ⚠️ ABSENTS sur
-   *  les convois lancés avant la bascule (leur `outcome` est figé au départ). */
-  kills?: number;
-  fallen?: number;
+  /** `bandits` : bandits ABATTUS sur CETTE embuscade (combat de groupe, v0.859).
+   *  ⚠️ Nommé `slain`, pas `kills` : la forme diffère de `CaravanOutcome.kills` (ici un
+   *  NOMBRE pour CET événement, là un `Record` PAR aventurier pour tout le voyage) — deux
+   *  champs homonymes qui ne disent pas la même chose auraient fini par se confondre.
+   *  ABSENT sur les convois lancés avant la bascule (leur `outcome` est figé au départ). */
+  slain?: number;
   /** `bandits` : ids des membres mis À TERRE, dans l'ordre de leur chute (le premier tombé
    *  en tête). ⚠️ À terre n'est PAS blessé : sur une embuscade gagnée ils se relèvent, et
-   *  seule `convoyHurt` décide qui part à l'infirmerie. Lu par le rapport de convoi.
-   *  ABSENT sur les convois d'avant la bascule. */
+   *  seule `convoyHurt` décide qui part à l'infirmerie. Lu par le rapport de convoi ; le
+   *  COMPTE des tombés se lit `down?.length` — le champ `fallen` séparé, redondant, est
+   *  retiré. ABSENT sur les convois d'avant la bascule. */
   down?: string[];
   text: string;
 }
@@ -1126,6 +1129,36 @@ export function convoyHurt(result: Pick<SkirmishResult, 'win' | 'down'>): string
   return first ? [first] : [];
 }
 
+/**
+ * 🛡️ ABATTUS PAR ALLIÉ, à partir du journal d'UNE embuscade — jamais via `d.killsBy`.
+ *
+ * ⚠️ POURQUOI PAS `killsBy` : cette carte mélange les DEUX sens sous la MÊME clé (tueur
+ * allié ET tueur ennemi, cf. `deriveSkirmish`). Les ids de troupe sont TOUJOURS `foe0`,
+ * `foe1`… (`troopOf`) — un aventurier dont l'id collisionnerait avec l'un d'eux
+ * hériterait, en lisant `killsBy[a.id]`, des abattus que CE CORPS DE TROUPE a scorés
+ * contre d'AUTRES alliés : un ennemi qui tue un allié ne doit JAMAIS compter comme un
+ * abattu pour quiconque.
+ *
+ * On ne crédite donc que les entrées dont la VICTIME est un corps de la troupe
+ * (`d.foesDown`, qui contient un id différent — jamais celui du tueur crédité) ET dont le
+ * TUEUR est un membre de CETTE escorte : les deux conditions, chacune nécessaire. La
+ * première élimine tout ce qui n'est pas un abattu de troupe ; la seconde empêche un
+ * tueur étranger d'ajouter une clé inconnue au résultat.
+ */
+export function slainByAlly(
+  escort: readonly { id: string }[],
+  d: Pick<SkirmishResult, 'kills' | 'foesDown'>,
+): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries(escort.map((a) => [a.id, 0]));
+  const escortIds = new Set(escort.map((a) => a.id));
+  const foeVictims = new Set(d.foesDown);
+  for (const k of d.kills) {
+    if (foeVictims.has(k.victim) && escortIds.has(k.killer))
+      out[k.killer] = (out[k.killer] ?? 0) + 1;
+  }
+  return out;
+}
+
 export function resolveCaravan(
   poi: Poi,
   escort: Adventurer[],
@@ -1181,18 +1214,18 @@ export function resolveCaravan(
         legSeed,
       );
       const abattus = d.foesDown.length;
-      const pl = abattus > 1 ? 's' : '';
       events.push({
         kind: 'bandits',
         won: r.win,
-        kills: abattus,
-        fallen: d.down.length,
+        slain: abattus,
         down: [...d.down],
-        text: r.win
-          ? `Une embuscade repoussée (${abattus} bandit${pl} abattu${pl}).`
-          : `Des bandits emportent une part du convoi (${abattus} abattu${pl} sur ${group.troop.length}).`,
+        text: r.win ? 'Une embuscade repoussée.' : 'Des bandits emportent une part du convoi.',
       });
-      for (const a of escort) kills[a.id] = (kills[a.id] ?? 0) + (d.killsBy[a.id] ?? 0);
+      // 🛡️ `slainByAlly` : jamais `d.killsBy`, qui mélange les deux sens sous la même clé
+      // (cf. sa doc) — un id d'aventurier qui collisionnerait avec un id de troupe (`foe0`)
+      // ne doit jamais hériter des abattus que CE corps de troupe a scorés contre un autre.
+      const parAmb = slainByAlly(escort, d);
+      for (const a of escort) kills[a.id] = (kills[a.id] ?? 0) + (parAmb[a.id] ?? 0);
       const parts = skirmishXpShares(escort, group.troop, d);
       for (const a of escort) xpShare[a.id] = (xpShare[a.id] ?? 0) + (parts[a.id] ?? 0);
       // 🤕 Le journal dit qui est À TERRE ; la POLITIQUE d'infirmerie est celle du convoi.
@@ -1350,7 +1383,15 @@ interface CaravanReportMember {
   name: string;
   emoji: string;
   xp: number;
+  /** Bandits abattus par LUI sur ce voyage. 0 pour un convoi d'avant le combat de groupe
+   *  (son `outcome` n'a pas de `kills` du tout, cf. `CaravanReport.hasKills`). */
+  kills: number;
   hurt: boolean;
+  /** À TERRE dans une embuscade GAGNÉE (relevé, jamais blessé) — distinct de `hurt`, qui
+   *  suppose une embuscade PERDUE. ⚠️ Mutuellement exclusif avec `hurt` : un membre blessé
+   *  reste 🤕, on ne lui ajoute pas ce second marqueur pour une chute antérieure sans suite.
+   *  Toujours `false` sur un convoi d'avant le combat de groupe (ses events n'ont pas `down`). */
+  knockedDown: boolean;
   /** Plus dans le vivier (renvoyé depuis) : on garde sa ligne, l’XP a bien été versée. */
   gone: boolean;
 }
@@ -1359,6 +1400,10 @@ export interface CaravanReport {
   travelMs: number;
   members: CaravanReportMember[];
   totalXp: number;
+  /** Le convoi porte-t-il un décompte des abattus ? Faux pour un convoi lancé AVANT le
+   *  combat de groupe : l'écran n'affiche alors pas une colonne de zéros qui mentirait. */
+  hasKills: boolean;
+  totalKills: number;
   /** XP par aventurier et par heure de voyage — le chiffre qui compare un convoi long à
    *  un court, puisque c’est le temps que l’escorte passe immobilisée. */
   xpPerHour: number;
@@ -1378,6 +1423,9 @@ export interface CaravanReport {
 export function caravanReport(van: Caravan, roster: readonly Adventurer[]): CaravanReport {
   const o = van.outcome;
   const hurt = new Set(o.hurt);
+  // 🩹 À TERRE dans une embuscade GAGNÉE : distinct de `hurt`, qui suppose une embuscade
+  // PERDUE. ABSENT sur un convoi d'avant le combat de groupe (ses events n'ont pas `down`).
+  const knockedDown = new Set(o.events.flatMap((e) => (e.won && e.down ? e.down : [])));
   const members = van.escort.map((id): CaravanReportMember => {
     const adv = roster.find((a) => a.id === id);
     return {
@@ -1385,11 +1433,14 @@ export function caravanReport(van: Caravan, roster: readonly Adventurer[]): Cara
       name: adv?.name ?? 'Aventurier parti',
       emoji: (adv && advTitle(adv)?.emoji) || '⚔️',
       xp: Math.max(0, Math.round(o.xp[id] ?? 0)),
+      kills: Math.max(0, Math.round(o.kills?.[id] ?? 0)),
       hurt: hurt.has(id),
+      knockedDown: knockedDown.has(id) && !hurt.has(id),
       gone: !adv,
     };
   });
   const totalXp = members.reduce((n, m) => n + m.xp, 0);
+  const totalKills = members.reduce((n, m) => n + m.kills, 0);
   const travelMs = Math.max(0, van.returnAt - van.sentAt);
   const hours = travelMs / 3_600_000;
   const ent = (n: number) => Math.max(0, Math.round(n || 0));
@@ -1397,6 +1448,8 @@ export function caravanReport(van: Caravan, roster: readonly Adventurer[]): Cara
     travelMs,
     members,
     totalXp,
+    hasKills: !!o.kills,
+    totalKills,
     xpPerHour: members.length && hours > 0 ? totalXp / members.length / hours : 0,
     pills: haulPills({
       gold: ent(o.gold),
