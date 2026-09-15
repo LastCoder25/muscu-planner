@@ -11,6 +11,7 @@ import {
   emptyEffects,
   effectAsAggregate,
   compareFamiliars,
+  groupBestFirst,
   aggregateEffects,
   playerWithGear,
   rollDrop,
@@ -2167,5 +2168,47 @@ describe('bases partagées avec l’équipement des aventuriers', () => {
     const it0 = { slot: 'armor', rarity: 'rare', level: 20 } as const;
     expect(scrapValue(it0 as never)).toBe(scrapValueOf('armor', 'rare', 20));
     expect(scrapValueOf('familiar', 'rare', 20)).toBe(0);
+  });
+});
+
+describe('📚 exemplaires identiques rangés ensemble, du meilleur au pire (v0.862)', () => {
+  type T = { id: string; k: string; v: number };
+  const cmp = (a: T, b: T) => b.v - a.v;
+  const items: T[] = [
+    { id: 'a1', k: 'a', v: 3 },
+    { id: 'b1', k: 'b', v: 9 },
+    { id: 'a2', k: 'a', v: 7 },
+    { id: 'c1', k: 'c', v: 1 },
+    { id: 'b2', k: 'b', v: 2 },
+    { id: 'a3', k: 'a', v: 5 },
+  ];
+  const out = groupBestFirst(items, (t) => t.k, cmp);
+
+  it('les identiques sont CONTIGUS, chacun du meilleur au pire', () => {
+    expect(out.map((g) => g.item.id)).toEqual(['b1', 'b2', 'a2', 'a3', 'a1', 'c1']);
+  });
+
+  it('les groupes sont ordonnés par leur MEILLEUR exemplaire, pas par leur taille', () => {
+    // « a » a trois exemplaires, « b » deux : c’est le 9 de « b » qui passe devant le 7 de « a ».
+    const heads = out.filter((g) => g.groupStart).map((g) => g.item.k);
+    expect(heads).toEqual(['b', 'a', 'c']);
+  });
+
+  it('marque le début de chaque groupe et sa taille', () => {
+    expect(out.map((g) => g.groupStart)).toEqual([true, false, true, false, false, true]);
+    expect(out.map((g) => g.groupSize)).toEqual([2, 2, 3, 3, 3, 1]);
+  });
+
+  it('ne perd ni ne duplique rien', () => {
+    expect(out.map((g) => g.item.id).sort()).toEqual(items.map((t) => t.id).sort());
+    expect(groupBestFirst([], (t: T) => t.k, cmp)).toEqual([]);
+  });
+
+  it('stable à égalité parfaite : l’ordre d’entrée est gardé', () => {
+    const eq: T[] = [
+      { id: 'x', k: 'a', v: 1 },
+      { id: 'y', k: 'a', v: 1 },
+    ];
+    expect(groupBestFirst(eq, (t) => t.k, cmp).map((g) => g.item.id)).toEqual(['x', 'y']);
   });
 });

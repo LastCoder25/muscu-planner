@@ -1599,6 +1599,35 @@ export function compareFamiliars(a: Item, b: Item): number {
   );
 }
 
+/**
+ * Range une collection en GROUPES d’exemplaires identiques (même talent, même race de
+ * familier), chaque groupe du meilleur au pire, les groupes eux-mêmes ordonnés par leur
+ * meilleur exemplaire (v0.862 ; demandé par l’utilisateur : « qu’on voie tous les talents
+ * ou familiers identiques du meilleur au pire »).
+ *
+ * ⚠️ Remplace la vente des doublons : les aventuriers emploient ce que le héros ne porte
+ * pas, donc un exemplaire moins bon n’est plus un déchet — on le range, on ne le jette pas.
+ * Stable : à égalité parfaite, l’ordre d’entrée est conservé.
+ */
+export function groupBestFirst<T>(
+  items: readonly T[],
+  keyOf: (it: T) => string,
+  compare: (a: T, b: T) => number,
+): { item: T; groupStart: boolean; groupSize: number }[] {
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const k = keyOf(it);
+    const g = groups.get(k);
+    if (g) g.push(it);
+    else groups.set(k, [it]);
+  }
+  const sorted = [...groups.values()].map((g) => [...g].sort(compare));
+  sorted.sort((a, b) => compare(a[0]!, b[0]!));
+  return sorted.flatMap((g) =>
+    g.map((item, i) => ({ item, groupStart: i === 0, groupSize: g.length })),
+  );
+}
+
 // ── Atelier de poussière (dust sinks) : forge / reroll / craft de set ──
 // (La SUBLIMATION de rareté a été retirée le 2026‑08‑10 : trop puissante — elle
 // permettait de fabriquer du divin bien avant d'y avoir droit. La rareté ne monte

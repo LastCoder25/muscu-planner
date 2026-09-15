@@ -525,99 +525,96 @@
             >
               🪄 Équiper les talents conseillés
             </button>
-            <button
-              v-if="surplusTalentIds.size"
-              class="voie-btn talent-dup-btn"
-              @click="doSellDuplicateTalents"
-            >
-              🪙 Vendre les doublons ({{ surplusTalentIds.size }})
-            </button>
+            <!-- Plus de vente des doublons (v0.862) : les aventuriers emploient ce que le
+                 héros ne porte pas. Les exemplaires identiques sont RANGÉS ensemble, du
+                 meilleur au pire, sous un titre « ×N ». -->
             <div v-if="char.row.talents.length" class="talents-grid">
-              <div
-                v-for="t in talentsView"
-                :key="t.id"
-                class="tal-card"
-                :class="['p-' + t.rarity, { eq: t.equipped, reco: recommendedTalentIds.has(t.id) }]"
-                :style="{ '--rk': rarityRank(t.rarity).color }"
-              >
-                <div class="tal-icon">
-                  <button
-                    class="tal-emo"
-                    title="Explication du talent"
-                    aria-label="Expliquer ce talent"
-                    @click="explainTalent(t)"
-                  >
-                    {{ t.def.icon }}
-                  </button>
-                  <span class="ic-jet" :class="jetTier(t.jet)" :title="'Jet ' + t.jet + '%'"
-                    >{{ t.jet }}%</span
-                  >
+              <template v-for="t in talentsView" :key="t.id">
+                <div v-if="t.groupStart && t.groupSize > 1" class="tal-group">
+                  {{ t.def.icon }} {{ t.def.name }} <span class="tg-n">×{{ t.groupSize }}</span>
+                  <span class="tg-hint">du meilleur au moins bon</span>
                 </div>
-                <div class="tal-body">
-                  <div class="tal-name font-display">
-                    <span class="tal-nm">{{ t.def.name }}</span>
-                    <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
-                    <span
-                      class="rk-badge"
-                      :style="{ '--rk': rarityRank(t.rarity).color }"
-                      :title="'Rang ' + rarityRank(t.rarity).name"
-                      >{{ rarityRank(t.rarity).name }}</span
+                <div
+                  class="tal-card"
+                  :class="[
+                    'p-' + t.rarity,
+                    { eq: t.equipped, reco: recommendedTalentIds.has(t.id) },
+                  ]"
+                  :style="{ '--rk': rarityRank(t.rarity).color }"
+                >
+                  <div class="tal-icon">
+                    <button
+                      class="tal-emo"
+                      title="Explication du talent"
+                      aria-label="Expliquer ce talent"
+                      @click="explainTalent(t)"
                     >
-                    <span class="lvl-badge">Nv {{ t.level }}</span>
-                    <span
-                      v-if="t.dup"
-                      class="dup-badge"
-                      title="Tu as un meilleur exemplaire de ce talent — vendable"
-                      >doublon</span
+                      {{ t.def.icon }}
+                    </button>
+                    <span class="ic-jet" :class="jetTier(t.jet)" :title="'Jet ' + t.jet + '%'"
+                      >{{ t.jet }}%</span
                     >
                   </div>
-                  <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
-                  <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
+                  <div class="tal-body">
+                    <div class="tal-name font-display">
+                      <span class="tal-nm">{{ t.def.name }}</span>
+                      <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
+                      <span
+                        class="rk-badge"
+                        :style="{ '--rk': rarityRank(t.rarity).color }"
+                        :title="'Rang ' + rarityRank(t.rarity).name"
+                        >{{ rarityRank(t.rarity).name }}</span
+                      >
+                      <span class="lvl-badge">Nv {{ t.level }}</span>
+                    </div>
+                    <div class="tal-eff">+{{ t.effLabel }} {{ t.def.desc }}</div>
+                    <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
                        équipé. Rien si +0 ou déjà équipé. -->
-                  <span
-                    v-if="talDeltaMap.get(t.id)"
-                    class="cmp-pill"
-                    :class="talDeltaMap.get(t.id)! > 0 ? 'up' : 'down'"
-                  >
-                    {{ talDeltaMap.get(t.id)! > 0 ? '+' : '−'
-                    }}{{ fmtPow(Math.abs(talDeltaMap.get(t.id)!)) }}
                     <span
-                      v-if="talDeltaMap.get(t.id)! > 0 && talReplaceIcon(t.id)"
-                      class="repl-ic"
-                      title="Remplacerait ce talent"
-                      >⟵ {{ talReplaceIcon(t.id) }}</span
+                      v-if="talDeltaMap.get(t.id)"
+                      class="cmp-pill"
+                      :class="talDeltaMap.get(t.id)! > 0 ? 'up' : 'down'"
                     >
-                  </span>
-                </div>
-                <div class="tal-actions">
-                  <!-- Équiper : emplacement libre (rien à remplacer). -->
-                  <button
-                    v-if="!t.equipped && !talReplaceId(t.id) && canEquipMore"
-                    class="tal-b"
-                    @click="doEquipTalent(t.id)"
-                  >
-                    Équiper
-                  </button>
-                  <!-- Remplacer : UNIQUEMENT si le swap AUGMENTE la puissance (sinon rien —
+                      {{ talDeltaMap.get(t.id)! > 0 ? '+' : '−'
+                      }}{{ fmtPow(Math.abs(talDeltaMap.get(t.id)!)) }}
+                      <span
+                        v-if="talDeltaMap.get(t.id)! > 0 && talReplaceIcon(t.id)"
+                        class="repl-ic"
+                        title="Remplacerait ce talent"
+                        >⟵ {{ talReplaceIcon(t.id) }}</span
+                      >
+                    </span>
+                  </div>
+                  <div class="tal-actions">
+                    <!-- Équiper : emplacement libre (rien à remplacer). -->
+                    <button
+                      v-if="!t.equipped && !talReplaceId(t.id) && canEquipMore"
+                      class="tal-b"
+                      @click="doEquipTalent(t.id)"
+                    >
+                      Équiper
+                    </button>
+                    <!-- Remplacer : UNIQUEMENT si le swap AUGMENTE la puissance (sinon rien —
                        inutile de proposer un remplacement qui baisse la puissance). -->
-                  <button
-                    v-else-if="
-                      !t.equipped && talReplaceId(t.id) && (talDeltaMap.get(t.id) ?? 0) > 0
-                    "
-                    class="tal-b"
-                    title="Remplacer le talent indiqué (⟵ sur la pastille)"
-                    @click="doSwapTalent(t.id)"
-                  >
-                    Remplacer
-                  </button>
-                  <button v-if="t.equipped" class="tal-b" @click="doUnequipTalent(t.id)">
-                    Retirer
-                  </button>
-                  <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
-                    🪙 Vendre
-                  </button>
+                    <button
+                      v-else-if="
+                        !t.equipped && talReplaceId(t.id) && (talDeltaMap.get(t.id) ?? 0) > 0
+                      "
+                      class="tal-b"
+                      title="Remplacer le talent indiqué (⟵ sur la pastille)"
+                      @click="doSwapTalent(t.id)"
+                    >
+                      Remplacer
+                    </button>
+                    <button v-if="t.equipped" class="tal-b" @click="doUnequipTalent(t.id)">
+                      Retirer
+                    </button>
+                    <button v-if="!t.equipped" class="tal-b ghost" @click="doSellTalent(t.id)">
+                      🪙 Vendre
+                    </button>
+                  </div>
                 </div>
-              </div>
+              </template>
             </div>
           </q-card>
         </q-dialog>
@@ -647,78 +644,76 @@
             >
               🪄 Équiper le familier conseillé
             </button>
-            <button
-              v-if="duplicateFams.length"
-              class="voie-btn talent-reco-btn ghost"
-              :title="duplicateHint"
-              @click="doSellDuplicateFamiliars"
-            >
-              🪙 Vendre {{ duplicateFams.length }} doublon{{
-                duplicateFams.length > 1 ? 's' : ''
-              }}
-              — +{{ duplicateGold }} or
-            </button>
+            <!-- Plus de vente des doublons (v0.862) : les aventuriers les emploient. Les
+                 familiers d'une même race sont RANGÉS ensemble, du meilleur au pire. -->
             <div v-if="allFamiliars.length" class="talents-grid">
-              <div
-                v-for="f in allFamiliars"
-                :key="f.id"
-                class="tal-card"
-                :class="['p-' + f.rarity, { eq: f.equipped, reco: recommendedFamiliarId === f.id }]"
-                :style="{ '--rk': rarityRank(f.rarity).color }"
-              >
-                <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
-                <div class="tal-body">
-                  <div class="tal-name font-display">
-                    <span class="tal-nm">{{ f.name }}</span>
-                    <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
-                    <span class="rk-badge" :style="{ '--rk': rarityRank(f.rarity).color }">{{
-                      rarityRank(f.rarity).name
-                    }}</span>
-                    <span class="lvl-badge">Nv {{ f.level }}</span>
-                    <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
-                    <!-- UN seul dressage (v0.805) : il monte en donjon, en convoi et en
+              <template v-for="f in allFamiliars" :key="f.id">
+                <div v-if="f.groupStart && f.groupSize > 1" class="tal-group">
+                  {{ famSpeciesLabel(f) }} <span class="tg-n">×{{ f.groupSize }}</span>
+                  <span class="tg-hint">du meilleur au moins bon</span>
+                </div>
+                <div
+                  class="tal-card"
+                  :class="[
+                    'p-' + f.rarity,
+                    { eq: f.equipped, reco: recommendedFamiliarId === f.id },
+                  ]"
+                  :style="{ '--rk': rarityRank(f.rarity).color }"
+                >
+                  <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
+                  <div class="tal-body">
+                    <div class="tal-name font-display">
+                      <span class="tal-nm">{{ f.name }}</span>
+                      <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
+                      <span class="rk-badge" :style="{ '--rk': rarityRank(f.rarity).color }">{{
+                        rarityRank(f.rarity).name
+                      }}</span>
+                      <span class="lvl-badge">Nv {{ f.level }}</span>
+                      <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
+                      <!-- UN seul dressage (v0.805) : il monte en donjon, en convoi et en
                          défense, et vaut la même chose au héros et à un aventurier. -->
+                      <span
+                        class="fam-train"
+                        title="Dressage — gagné en donjon, en convoi et en défense"
+                        >🎓 {{ famLevel(famXp(f)) }}</span
+                      >
+                    </div>
+                    <div class="tal-eff">{{ itemEffects(f) }}</div>
+                    <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
+                       équipé à la place du familier actuel. Rien si +0 ou déjà équipé. -->
                     <span
-                      class="fam-train"
-                      title="Dressage — gagné en donjon, en convoi et en défense"
-                      >🎓 {{ famLevel(famXp(f)) }}</span
+                      v-if="famDeltaMap.get(f.id)"
+                      class="cmp-pill"
+                      :class="famDeltaMap.get(f.id)! > 0 ? 'up' : 'down'"
+                    >
+                      {{ famDeltaMap.get(f.id)! > 0 ? '+' : '−'
+                      }}{{ fmtPow(Math.abs(famDeltaMap.get(f.id)!)) }}
+                    </span>
+                  </div>
+                  <div class="tal-actions">
+                    <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
+                      Retirer
+                    </button>
+                    <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
+                    <!-- ⚠️ Un familier CONFIÉ à un aventurier n'est pas cédable : il le
+                       suit partout (convoi et défense). Même règle que le store. -->
+                    <button
+                      v-if="!f.equipped && !famKeepers.has(f.id)"
+                      class="tal-b ghost"
+                      title="Céder ce familier contre de l’or"
+                      @click="doSellFamiliar(f)"
+                    >
+                      🪙{{ sellValue(f) }}
+                    </button>
+                    <span
+                      v-else-if="!f.equipped"
+                      class="tal-posted"
+                      :title="`Confié à ${famKeepers.get(f.id)!.name}`"
+                      >🧭 {{ famKeepers.get(f.id)!.name }}</span
                     >
                   </div>
-                  <div class="tal-eff">{{ itemEffects(f) }}</div>
-                  <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
-                       équipé à la place du familier actuel. Rien si +0 ou déjà équipé. -->
-                  <span
-                    v-if="famDeltaMap.get(f.id)"
-                    class="cmp-pill"
-                    :class="famDeltaMap.get(f.id)! > 0 ? 'up' : 'down'"
-                  >
-                    {{ famDeltaMap.get(f.id)! > 0 ? '+' : '−'
-                    }}{{ fmtPow(Math.abs(famDeltaMap.get(f.id)!)) }}
-                  </span>
                 </div>
-                <div class="tal-actions">
-                  <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
-                    Retirer
-                  </button>
-                  <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                  <!-- ⚠️ Un familier CONFIÉ à un aventurier n'est pas cédable : il le
-                       suit partout (convoi et défense). Même règle que le store. -->
-                  <button
-                    v-if="!f.equipped && !famKeepers.has(f.id)"
-                    class="tal-b ghost"
-                    title="Céder ce familier contre de l’or"
-                    @click="doSellFamiliar(f)"
-                  >
-                    🪙{{ sellValue(f) }}
-                  </button>
-                  <span
-                    v-else-if="!f.equipped"
-                    class="tal-posted"
-                    :title="`Confié à ${famKeepers.get(f.id)!.name}`"
-                    >🧭 {{ famKeepers.get(f.id)!.name }}</span
-                  >
-                </div>
-              </div>
+              </template>
             </div>
           </q-card>
         </q-dialog>
@@ -2713,8 +2708,6 @@ import {
   remainingCorpses,
   isWounded,
   woundRemainingMs,
-  duplicateFamiliars,
-  companionSlots,
   type RaidReport,
   defenseLevel,
 } from '@/lib/raid';
@@ -2738,6 +2731,7 @@ import CombatStage from '@/components/CombatStage.vue';
 import ArenaStage from '@/components/ArenaStage.vue';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
+import { familiarSpecies } from '@/data/familiars';
 import {
   DUNGEONS,
   dungeonFoes,
@@ -2774,6 +2768,7 @@ import {
   isFamiliar,
   FAMILIAR_SLOT,
   compareFamiliars,
+  groupBestFirst,
   rollTier,
   RANK_ORDER,
   SLOTS,
@@ -3534,66 +3529,44 @@ watch(
   },
   { immediate: true },
 );
-// Magnitude RÉELLE d'un talent (base × intervalle du rang selon le JET × enchant) → sert à
-// comparer deux exemplaires du même code (le meilleur = plus haute magnitude).
-function talentMag(t: TalentInstance): number {
-  const def = talentByCode(t.code);
-  return def ? talentValue(def, tierOf(t), t.enchant ?? 0, talentRollOf(t), t.level ?? 1) : 0;
-}
-// Meilleur exemplaire (id) par CODE → sert à repérer les DOUBLONS (exemplaires inférieurs).
-const bestTalentByCode = computed(() => {
-  const m = new Map<string, { id: string; mag: number }>();
-  for (const t of char.row?.talents ?? []) {
-    const cur = m.get(t.code);
-    const mag = talentMag(t);
-    if (!cur || mag > cur.mag) m.set(t.code, { id: t.id, mag });
-  }
-  return m;
-});
-// Ids des talents en SURPLUS (un même code, exemplaire NON meilleur, non équipé) → vendables.
-const surplusTalentIds = computed(() => {
-  const s = new Set<string>();
-  for (const t of char.row?.talents ?? [])
-    if (!t.equipped && bestTalentByCode.value.get(t.code)?.id !== t.id) s.add(t.id);
-  return s;
-});
-// Vue enrichie : équipés d'abord, puis par grade (tier) puis enchant décroissants.
+// Vue enrichie, RANGÉE PAR TALENT (v0.862) : les exemplaires d'un même talent sont
+// regroupés du meilleur au pire, les groupes ordonnés par leur meilleur exemplaire.
 const talentsView = computed(() => {
-  return (
-    (char.row?.talents ?? [])
-      .map((inst) => {
-        const def = talentByCode(inst.code);
-        if (!def) return null;
-        const tier = tierOf(inst); // rang + qualité (grade fixé au drop)
-        const enchant = inst.enchant ?? 0; // +N magnitude (gamble)
-        return {
-          id: inst.id,
-          inst,
-          def,
-          tier,
-          enchant,
-          rarity: talentRank(tier),
-          jet: talentJetOf(inst), // JET (0..100 %) au lieu de la qualité ★
-          level: inst.level ?? 1, // NIVEAU d'objet (ilvl)
-          // 1 décimale : les bonus de talent sont petits → l'arrondi entier masquait les écarts.
-          effLabel:
-            (talentValue(def, tier, enchant, talentRollOf(inst), inst.level ?? 1) * 100)
-              .toFixed(1)
-              .replace('.', ',') + ' %',
-          equipped: !!inst.equipped,
-          dup: surplusTalentIds.value.has(inst.id), // exemplaire en surplus (vendable)
-        };
-      })
-      .filter((t): t is NonNullable<typeof t> => !!t)
-      // Équipés d'abord, puis par RANG puis JET décroissant, puis par NOM → meilleurs en tête.
-      .sort(
-        (a, b) =>
-          Number(b.equipped) - Number(a.equipped) ||
-          b.tier - a.tier ||
-          b.jet - a.jet ||
-          a.def.name.localeCompare(b.def.name),
-      )
-  );
+  const entries = (char.row?.talents ?? [])
+    .map((inst) => {
+      const def = talentByCode(inst.code);
+      if (!def) return null;
+      const tier = tierOf(inst); // rang + qualité (grade fixé au drop)
+      const enchant = inst.enchant ?? 0; // +N magnitude (gamble)
+      // Magnitude RÉELLE (rang × jet × niveau d'objet) : départage deux exemplaires du même
+      // talent — le jet seul ignore le niveau d'objet.
+      const mag = talentValue(def, tier, enchant, talentRollOf(inst), inst.level ?? 1);
+      return {
+        id: inst.id,
+        inst,
+        def,
+        tier,
+        enchant,
+        mag,
+        rarity: talentRank(tier),
+        jet: talentJetOf(inst), // JET (0..100 %) au lieu de la qualité ★
+        level: inst.level ?? 1, // NIVEAU d'objet (ilvl)
+        // 1 décimale : les bonus de talent sont petits → l'arrondi entier masquait les écarts.
+        effLabel: (mag * 100).toFixed(1).replace('.', ',') + ' %',
+        equipped: !!inst.equipped,
+      };
+    })
+    .filter((t): t is NonNullable<typeof t> => !!t);
+  return groupBestFirst(
+    entries,
+    (t) => t.inst.code,
+    // RANG d'abord, puis la magnitude entre exemplaires du même talent (le jet entre deux
+    // talents différents, dont les magnitudes ne se comparent pas), puis le nom.
+    (a, b) =>
+      b.tier - a.tier ||
+      (a.inst.code === b.inst.code ? b.mag - a.mag : b.jet - a.jet) ||
+      a.def.name.localeCompare(b.def.name),
+  ).map((g) => ({ ...g.item, groupStart: g.groupStart, groupSize: g.groupSize }));
 });
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
@@ -5475,20 +5448,21 @@ function doSellLoadoutConfirmed(i: number) {
 
 // ── Familier (compagnon) ──
 const equippedFamiliar = computed<Item | null>(() => char.row?.equipped[FAMILIAR_SLOT] ?? null);
-const bagFamiliars = computed<Item[]>(() =>
-  // Rareté, puis la STAT RÉELLEMENT PORTÉE, puis la signature (cf. `compareFamiliars` :
-  // le tri par jet seul ignorait le niveau d'objet et reléguait le plus fort en bas).
-  // L'équipé est mis en tête par `allFamiliars`.
-  (char.row?.inventory ?? []).filter((i) => isFamiliar(i)).sort(compareFamiliars),
-);
-// TOUS les familiers (équipé d'abord, puis le sac) → une seule grille de cartes, comme
-// les talents. `equipped` marque celui porté (au plus 1). Affichage homogène avec Talents.
-const allFamiliars = computed<Array<Item & { equipped: boolean }>>(() => {
+// TOUS les familiers (le porté compris) → une seule grille de cartes, comme les talents,
+// RANGÉE PAR RACE (v0.862) : les familiers d'une même race sont regroupés du meilleur au
+// pire (rareté, puis la STAT RÉELLEMENT PORTÉE, puis la signature — cf. `compareFamiliars`),
+// les groupes ordonnés par leur meilleur exemplaire. `equipped` marque celui porté.
+const allFamiliars = computed(() => {
   const eq = equippedFamiliar.value;
   const list: Array<Item & { equipped: boolean }> = [];
   if (eq) list.push({ ...eq, equipped: true });
-  for (const f of bagFamiliars.value) list.push({ ...f, equipped: false });
-  return list;
+  for (const f of char.row?.inventory ?? [])
+    if (isFamiliar(f)) list.push({ ...f, equipped: false });
+  return groupBestFirst(list, (f) => f.species ?? f.effect.type, compareFamiliars).map((g) => ({
+    ...g.item,
+    groupStart: g.groupStart,
+    groupSize: g.groupSize,
+  }));
 });
 function doEquipFamiliar(itemId: string) {
   withUid((uid) => char.equip(uid, itemId), 'Impossible d’équiper le familier.');
@@ -5496,46 +5470,13 @@ function doEquipFamiliar(itemId: string) {
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
-// DOUBLONS de familiers : ceux qu'aucune configuration ne peut employer. La règle vit
-// dans `raid.ts` (dominé sur les TROIS axes ⚔️/🛡️/✦, et par effet porté) — ici on ne
-// fait que lui passer l'état réel : l'équipé et les postés au chenil sont hors-jeu, le
 /** Les familiers CONFIÉS à un aventurier (id → aventurier) : pas cédables. Source unique
  *  avec le store (`familiarKeepers`). */
 const famKeepers = computed(() => familiarKeepers(char.row?.adventurers ?? []));
-// 🔒 protège. On garde `companionSlots(niveau) + 1` exemplaires de chaque effet.
-const duplicateFams = computed<Item[]>(() =>
-  duplicateFamiliars(bagFamiliars.value, c.value.level.level, {
-    equippedId: equippedFamiliar.value?.id ?? null,
-    postedIds: [...famKeepers.value.keys()],
-  }),
-);
-const duplicateGold = computed(() => duplicateFams.value.reduce((sum, f) => sum + sellValue(f), 0));
-const duplicateHint = computed(
-  () =>
-    `On garde les ${companionSlots(c.value.level.level) + 1} meilleurs de chaque effet, sur ⚔️ attaque, 🛡️ mur et ✦ signature. L'équipé, ceux confiés à un aventurier et les 🔒 ne partent jamais.`,
-);
-function doSellDuplicateFamiliars() {
-  const list = duplicateFams.value;
-  if (!list.length) return;
-  const gold = duplicateGold.value;
-  $q.dialog({
-    title: 'Vendre les doublons',
-    message: `${list.length} familier(s) qu'aucune configuration ne peut employer — ${list
-      .map((f) => f.name)
-      .join(', ')}. Tu récupères ${gold} 🪙.`,
-    cancel: true,
-    persistent: false,
-  }).onOk(() => {
-    withUid(async (uid) => {
-      // ⚠️ Pas de notification : `sellFamiliars` déclenche déjà l'éclat d'or avec le
-      // montant (useGoldFx). Deux annonces pour un seul geste, dont une qui recouvrait
-      // le bas de l'écran — l'animation dit la même chose, mieux placée.
-      await char.sellFamiliars(
-        uid,
-        list.map((f) => f.id),
-      );
-    }, 'Vente impossible.');
-  });
+/** Titre d'un groupe de familiers identiques : la race (emoji + nom), repli sur le nom. */
+function famSpeciesLabel(f: Item): string {
+  const sp = f.species ? familiarSpecies(f.species) : undefined;
+  return sp ? `${sp.emoji} ${sp.name}` : f.name;
 }
 // Talents & familiers en trop se VENDENT contre de l'or (ticket 0ec48637 : plus de recyclage
 // ni d'infusion de grade — le grade est fixé au drop, on trouve mieux en explorant).
@@ -5552,31 +5493,6 @@ function doSellTalent(id: string) {
         subtitle: `+${g} or`,
       });
   }, 'Vente impossible.');
-}
-// Vend TOUS les doublons (exemplaires non-meilleurs d'un code, non équipés) → on garde le
-// meilleur de chaque type + les équipés.
-function doSellDuplicateTalents() {
-  const ids = [...surplusTalentIds.value];
-  if (!ids.length) return;
-  $q.dialog({
-    title: 'Vendre les doublons ?',
-    message: `${ids.length} talent(s) en surplus seront vendus (tu gardes le MEILLEUR de chaque type + les équipés).`,
-    cancel: { label: 'Annuler', flat: true },
-    ok: { label: 'Vendre', color: 'primary' },
-  }).onOk(() => {
-    withUid(async (uid) => {
-      let total = 0;
-      for (const id of ids) total += await char.sellTalent(uid, id);
-      if (total)
-        gameFx.celebrate({
-          quiet: true,
-          kind: 'generic',
-          emoji: '🪙',
-          title: `${ids.length} doublon(s) vendu(s)`,
-          subtitle: `+${total} or`,
-        });
-    }, 'Vente impossible.');
-  });
 }
 // Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.
@@ -7063,19 +6979,33 @@ button.pt-mini:active {
   white-space: nowrap;
 }
 /* Badge « doublon » : exemplaire en surplus d'un talent (vendable). */
-.dup-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--dim);
-  color: var(--dim);
-  font-size: 9.5px;
+/* Titre d'un groupe d'exemplaires identiques (talent ou race de familier), sur toute la
+   largeur de la grille : on voit d'un coup d'œil ce qui va ensemble. */
+.tal-group {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 0 2px 2px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--font-display);
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text);
+}
+.tal-group:first-child {
+  margin-top: 0;
+}
+.tal-group .tg-n {
+  color: var(--accent);
+}
+.tal-group .tg-hint {
+  margin-left: auto;
+  font-weight: 500;
+  font-size: 11px;
+  color: var(--dim);
 }
 /* Badge « effet signature » (✦) sur une carte familier, harmonisé avec les talents. */
 .fam-train {
