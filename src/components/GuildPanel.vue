@@ -95,6 +95,65 @@
             @promote="openPromo(a)"
           />
         </div>
+
+        <!-- ── 🗡️ LE STOCK D'ÉQUIPEMENT — replié par défaut, sous le vivier ──────────
+             ⚠️ Ce n'est PAS le sac du héros : ces pièces sont propres à chaque classe de
+             base (`canWearAdvGear`) et fabriquées par l'Équipementier, pas par un drop
+             normal. 🔒 / 🪙 / 🔩 comme le sac, désactivés si portée. -->
+        <button
+          v-if="char.advGearStock.length"
+          type="button"
+          class="g-fold"
+          :aria-expanded="stockOpen"
+          @click="stockOpen = !stockOpen"
+        >
+          <span>🗡️ Équipement des aventuriers ({{ char.advGearStock.length }})</span>
+          <span class="fold-ico">{{ stockOpen ? '▾' : '▸' }}</span>
+        </button>
+        <div v-if="stockOpen" class="gear-stock">
+          <div v-for="g in char.advGearStock" :key="g.id" class="gear-stock-row">
+            <div class="gear-stock-top">
+              <span class="d-pair-emo">{{ g.emoji }}</span>
+              <span class="d-pair-main">
+                <span class="d-pair-name">
+                  <b :style="{ color: rarityRank(g.rarity).color }">{{ g.name }}</b>
+                  <span class="d-train">niv {{ g.level }}</span>
+                </span>
+                <span class="d-pair-sub">{{ lineageLabel(g.lineage) }}</span>
+                <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{ t }}</span>
+                <span v-if="ownerOf(g)" class="d-pair-sub warn"
+                  >portée par {{ ownerOf(g)?.name }}</span
+                >
+              </span>
+            </div>
+            <div class="gear-actions-row">
+              <button
+                type="button"
+                class="gear-btn"
+                :class="{ active: g.locked }"
+                @click="toggleGearLock(g)"
+              >
+                {{ g.locked ? '🔒' : '🔓' }}
+              </button>
+              <button
+                type="button"
+                class="gear-btn"
+                :disabled="!!g.locked || !!ownerOf(g)"
+                @click="sellOneGear(g)"
+              >
+                🪙 {{ advGearSellValue(g) }}
+              </button>
+              <button
+                type="button"
+                class="gear-btn"
+                :disabled="!!g.locked || !!ownerOf(g)"
+                @click="recycleOneGear(g)"
+              >
+                🔩 {{ advGearScrap(g) }}
+              </button>
+            </div>
+          </div>
+        </div>
       </template>
 
       <div class="g-actions">
@@ -225,9 +284,10 @@
       <div class="d-pow">
         <span class="d-pow-val font-display">⚔️ {{ fmtPow(powerOf(detailAdv)) }}</span>
         <span v-if="pairBonusOf(detailAdv) > 0" class="d-pow-gain">
-          dont +{{ fmtPow(pairBonusOf(detailAdv)) }} grâce à son compagnon et son talent
+          dont +{{ fmtPow(pairBonusOf(detailAdv)) }} grâce à son compagnon, son talent et son
+          équipement
         </span>
-        <span v-else class="d-pow-gain">sans compagnon ni talent qui compte</span>
+        <span v-else class="d-pow-gain">sans compagnon, talent ni équipement qui compte</span>
       </div>
 
       <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
@@ -235,6 +295,24 @@
         <span class="d-stat">💪 {{ statsOf(detailAdv).puissance }}</span>
         <span class="d-stat">❤️ {{ statsOf(detailAdv).endurance }}</span>
         <span class="d-stat">⚡ {{ statsOf(detailAdv).agilite }}</span>
+      </div>
+
+      <!-- 🗡️ SES 3 EMPLACEMENTS D'ÉQUIPEMENT — une pièce par métier, jamais deux fois
+           la même stat qu'un objet du héros : le Chenil n'y est pour rien, c'est
+           l'Équipementier qui les fabrique et le sélecteur qui filtre par lignée et
+           rareté de classe (`canWearAdvGear`). -->
+      <div class="d-gear">
+        <button
+          v-for="s in detailGearSlots"
+          :key="s.slot"
+          type="button"
+          class="d-gear-slot"
+          :class="{ empty: !s.piece }"
+          @click="gearPick = { advId: detailAdv.id, slot: s.slot }"
+        >
+          <span class="dg-emo">{{ s.emoji }}</span>
+          <span class="dg-name" :style="s.color ? { color: s.color } : {}">{{ s.name }}</span>
+        </button>
       </div>
 
       <div class="adv-bar" :title="barTitle(detailAdv)">
@@ -424,6 +502,47 @@
       <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="talFor = null" /></div>
     </q-card>
   </q-dialog>
+
+  <!-- ── SÉLECTEUR DE PIÈCE D'ÉQUIPEMENT ───────────────────────────────────
+       ⚠️ Seules les pièces permises pour SON métier et SA classe sont listées
+       (`advGearOptions` : `canWearAdvGear`) — le reste est compté, par raison. -->
+  <q-dialog :model-value="!!gearPick" position="bottom" @update:model-value="gearPick = null">
+    <q-card v-if="gearRows" class="guild-card">
+      <div class="g-head">
+        <div class="g-title font-display">🗡️ Sa pièce</div>
+        <button class="iconbtn" aria-label="Fermer" @click="gearPick = null">✕</button>
+      </div>
+      <p class="g-note">Pièces permises pour son métier et sa classe.</p>
+      <p class="g-note">{{ GAIN_NOTE }}</p>
+      <button v-if="gearHereId" class="cta ghost" @click="pickGear(null)">Retirer la pièce</button>
+      <p v-if="!gearPool.length" class="g-note">
+        Aucune pièce en stock — l'Équipementier en fabrique.
+      </p>
+      <p v-else-if="!gearRows.rows.length" class="g-note">Aucune pièce disponible pour lui.</p>
+      <p v-if="gearHidden" class="g-note dim">{{ gearHidden }}</p>
+      <button
+        v-for="r in gearRows.rows"
+        :key="r.g.id"
+        type="button"
+        class="d-pick"
+        :class="{ here: gearHereId === r.g.id }"
+        @click="pickGear(r.g.id)"
+      >
+        <span class="d-pair-emo">{{ r.g.emoji }}</span>
+        <span class="d-pair-main">
+          <span class="d-pair-name">
+            <b :style="{ color: r.color }">{{ r.g.name }}</b>
+            <span class="d-train">niv {{ r.g.level }}</span>
+          </span>
+          <span v-for="(t, i) in r.texts" :key="i" class="d-gain">{{ t }}</span>
+          <span class="d-gain" :class="{ neg: r.power < gearRows.curPower }">
+            ⚔️ {{ fmtDelta(gearRows.curPower, r.power) }}
+          </span>
+        </span>
+      </button>
+      <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="gearPick = null" /></div>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup lang="ts">
@@ -466,6 +585,9 @@ import {
   famLevel,
   famXp,
   rollJet,
+  effectLabelFor,
+  itemLevelMult,
+  round1,
   type Item,
 } from '@/lib/items';
 import {
@@ -486,10 +608,21 @@ import {
   talentOptions,
   type CompanionCtx,
 } from '@/lib/raid';
-import { fmtPow } from '@/lib/combat';
+import { fmtPow, fmtDelta } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import { trainMsFor, companionEffects, advTalentEffects } from '@/lib/caravan';
-import { ADV_GEAR_SLOTS } from '@/lib/advGear';
+import {
+  ADV_GEAR_SLOTS,
+  LINEAGE_GEAR,
+  advGearOptions,
+  advGearScrap,
+  advGearSellValue,
+  lineageOf,
+  wornGear,
+  type AdvGear,
+  type AdvGearSlot,
+  type Lineage,
+} from '@/lib/advGear';
 
 const props = defineProps<{
   open: boolean;
@@ -747,6 +880,156 @@ function assignTal(id: string | null) {
   if (!a) return;
   talFor.value = null;
   void pair((uid) => char.setAdvTalent(uid, a.id, id));
+}
+
+// ── 🗡️ SON ÉQUIPEMENT : 3 emplacements (arme/armure/accessoire), propres à SON métier ──
+// ⚠️ Distinct du compagnon et du talent : ces pièces vivent dans un STOCK séparé
+// (`char.advGearStock`), pas dans le sac du héros, et sont plafonnées par la RARETÉ DE
+// SA CLASSE (`canWearAdvGear`) — même règle que les deux autres, appliquée par le store.
+const gearPick = ref<{ advId: string; slot: AdvGearSlot } | null>(null);
+const gearPickAdv = computed(() =>
+  gearPick.value ? char.advList.find((a) => a.id === gearPick.value!.advId) : undefined,
+);
+/** Qui porte quoi, RÈGLES APPLIQUÉES (`wornGear`, identique à ce que le combat lit) —
+ *  pour la fiche, où une pièce devenue invalide (rang dépassé, prise par un autre) doit
+ *  se lire comme un emplacement VIDE, pas comme portée. */
+const gearWorn = computed(() => wornGear(char.advList, char.advGearStock));
+function wornOf(a: Adventurer): Partial<Record<AdvGearSlot, AdvGear>> {
+  return Object.fromEntries((gearWorn.value.get(a.id) ?? []).map((g) => [g.slot, g]));
+}
+/** Les 3 emplacements de la fiche, pré-calculés : ni `!` non-null, ni appel répété. */
+const detailGearSlots = computed(() => {
+  const a = detailAdv.value;
+  if (!a) return [];
+  const worn = wornOf(a);
+  const l = lineageOf(a);
+  const defs = l ? LINEAGE_GEAR[l].pieces : null;
+  return ADV_GEAR_SLOTS.map((slot) => {
+    const piece = worn[slot];
+    if (piece)
+      return {
+        slot,
+        piece,
+        emoji: piece.emoji,
+        name: piece.name,
+        color: rarityRank(piece.rarity).color,
+      };
+    const d = defs?.[slot];
+    return {
+      slot,
+      piece: undefined,
+      emoji: d?.emoji ?? '＋',
+      name: d?.name ?? 'Emplacement',
+      color: undefined as string | undefined,
+    };
+  });
+});
+/** L'effet d'une pièce, EXACTEMENT comme le combat le lit — valeur × niveau d'objet,
+ *  comme un objet du héros (`advGearEffects`). Deux textes au plus (effet + effet2). */
+function gearEffectTexts(g: AdvGear): string[] {
+  const m = itemLevelMult(g.level);
+  const out = [effectLabelFor(g.effect.type, round1(g.effect.value * m))];
+  if (g.effect2) out.push(effectLabelFor(g.effect2.type, round1(g.effect2.value * m)));
+  return out;
+}
+/** Ce que l'aventurier vaudrait avec CETTE pièce à CET emplacement — calculé par
+ *  `adventurerPowers`, l'arbitre du jeu, jamais une somme de stats recopiée : c'est le
+ *  MÊME chemin que `pairBonusOf` utilise pour le compagnon et le talent. */
+function gearPowerFor(a: Adventurer, slot: AdvGearSlot, gearId: string): number {
+  const modified = char.advList.map((x) =>
+    x.id === a.id ? { ...x, gear: { ...(x.gear ?? {}), [slot]: gearId } } : x,
+  );
+  return adventurerPowers(modified, compCtx.value).get(a.id) ?? 0;
+}
+const gearPool = computed(() => char.advGearStock);
+const gearChoice = computed(() => {
+  const p = gearPick.value;
+  const a = gearPickAdv.value;
+  return p && a ? advGearOptions(a, char.advList, gearPool.value, p.slot) : null;
+});
+const gearRows = computed(() => {
+  const p = gearPick.value;
+  const c = gearChoice.value;
+  const a = gearPickAdv.value;
+  if (!p || !c || !a) return null;
+  return {
+    curPower: powerOf(a),
+    otherLineage: c.otherLineage,
+    tooRare: c.tooRare,
+    taken: c.taken,
+    rows: c.options.map((g) => ({
+      g,
+      color: rarityRank(g.rarity).color,
+      texts: gearEffectTexts(g),
+      power: gearPowerFor(a, p.slot, g.id),
+    })),
+  };
+});
+/** Ce que le sélecteur écarte, par raison — jamais en silence. */
+const gearHidden = computed(() => {
+  const c = gearChoice.value;
+  if (!c) return '';
+  const p: string[] = [];
+  if (c.otherLineage) p.push(`${c.otherLineage} pour un autre métier`);
+  if (c.tooRare) p.push(`${c.tooRare} trop rare${c.tooRare > 1 ? 's' : ''} pour sa classe`);
+  if (c.taken) p.push(`${c.taken} portée${c.taken > 1 ? 's' : ''} par un autre`);
+  return p.length ? `Masqués : ${p.join(' · ')}.` : '';
+});
+/** La pièce ACTUELLEMENT assignée à cet emplacement, brute (pas `wornGear`) : le
+ *  sélecteur ne propose déjà que ce qui est valide pour lui, donc c'est le même id. */
+const gearHereId = computed(() => {
+  const p = gearPick.value;
+  const a = gearPickAdv.value;
+  return p && a ? (a.gear?.[p.slot] ?? null) : null;
+});
+function pickGear(id: string | null) {
+  const p = gearPick.value;
+  if (!p) return;
+  gearPick.value = null;
+  void pair((uid) => char.setAdvGear(uid, p.advId, p.slot, id));
+}
+
+// ── 🗡️ LE STOCK — vendre / recycler / verrouiller une pièce d'aventurier ──
+// ⚠️ Même politique que le sac du héros : 🔒 protège des deux, une pièce PORTÉE
+// (`Adventurer.gear`, BRUT — même lecture que `dropAdvGear` côté store) ne se cède pas.
+const stockOpen = ref(false);
+const gearOwnerOf = computed(() => {
+  const m = new Map<string, Adventurer>();
+  for (const a of char.advList)
+    for (const slot of ADV_GEAR_SLOTS) {
+      const id = a.gear?.[slot];
+      if (id) m.set(id, a);
+    }
+  return m;
+});
+function ownerOf(g: AdvGear): Adventurer | undefined {
+  return gearOwnerOf.value.get(g.id);
+}
+function lineageLabel(l: Lineage): string {
+  return advClass(l)?.label ?? l;
+}
+function toggleGearLock(g: AdvGear) {
+  void pair((uid) => char.toggleAdvGearLock(uid, g.id));
+}
+/** ⚠️ CONFIRMATION, comme le sac du héros (`doSellFamiliar`/`doRecycle`) — une pièce
+ *  qui part est définitivement perdue, sell OU recycle, jamais sans le dire. */
+function sellOneGear(g: AdvGear) {
+  const gain = advGearSellValue(g);
+  $q.dialog({
+    title: 'Vendre cette pièce ?',
+    message: `« ${g.name} » partira définitivement contre ${gain} 🪙.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Vendre (+${gain} 🪙)`, color: 'negative' },
+  }).onOk(() => void pair((uid) => char.sellAdvGear(uid, [g.id])));
+}
+function recycleOneGear(g: AdvGear) {
+  const gain = advGearScrap(g);
+  $q.dialog({
+    title: 'Recycler cette pièce ?',
+    message: `« ${g.name} » sera fondue en ${gain} 🔩.`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `Recycler (+${gain} 🔩)`, color: 'negative' },
+  }).onOk(() => void pair((uid) => char.recycleAdvGear(uid, [g.id])));
 }
 
 const busy = ref(false);
@@ -1486,5 +1769,124 @@ async function doPromote(classId: string) {
   display: flex;
   justify-content: flex-end;
   margin-top: 10px;
+}
+
+/* ── 🗡️ SES 3 EMPLACEMENTS D'ÉQUIPEMENT — sur la fiche ── */
+.d-gear {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.d-gear-slot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 6px 4px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+}
+.dg-emo {
+  font-size: 20px;
+  line-height: 1.1;
+}
+.dg-name {
+  font-size: 10.5px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Emplacement vide : lisible, mais en retrait. */
+.d-gear-slot.empty .dg-emo,
+.d-gear-slot.empty .dg-name {
+  opacity: 0.5;
+}
+/* Le gain de puissance d'une pièce PEUT être négatif (le sélecteur ne filtre pas sur le
+   gain, contrairement à « Confier au mieux ») — il se lit alors dans le ton d'alerte. */
+.d-gain.neg {
+  color: var(--d4, #ff6a45);
+}
+
+/* ── 🗡️ LE STOCK D'ÉQUIPEMENT — pli + lignes ── */
+.g-fold {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 2px;
+  margin-top: 10px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--line);
+  color: var(--text);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.fold-ico {
+  color: var(--dim);
+  font-size: 14px;
+}
+.gear-stock {
+  margin-top: 6px;
+}
+.gear-stock-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.gear-stock-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.gear-actions-row {
+  display: flex;
+  gap: 6px;
+}
+.gear-btn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 44px;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-2, #1d1913);
+  color: var(--text);
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.gear-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.gear-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }
 </style>
