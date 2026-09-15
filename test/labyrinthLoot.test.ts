@@ -38,7 +38,8 @@ describe('labyrinthLoot — coffres', () => {
       return sum / N;
     };
     expect(meanGrade(60)).toBeGreaterThan(meanGrade(20));
-    expect(meanGrade(20)).toBeGreaterThan(meanGrade(4));
+    // Niveau 25 : rang Or → coffre d'argent (au niveau 20, rang Argent, encore du bronze).
+    expect(meanGrade(25)).toBeGreaterThan(meanGrade(4));
     // Bas niveau : surtout bronze.
     expect(meanGrade(3)).toBeLessThan(1);
   });

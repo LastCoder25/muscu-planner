@@ -293,11 +293,10 @@ describe('boss — pierres d’invocation 🔮', () => {
       const sans = part(L, 0);
       const avec = part(L, L);
       expect(avec.plus2, `niveau ${L} : deux rangs au-dessus`).toBe(0);
-      expect(avec.plus1, `niveau ${L} : un rang au-dessus reste rare`).toBeLessThan(0.05);
-      // …et il sert à quelque chose : un meilleur jet et un peu plus de rang au-dessus.
+      // v0.876 : plus aucun rang au-dessus, Autel ou pas.
+      expect(avec.plus1, `niveau ${L} : un rang au-dessus`).toBe(0);
+      // …et il sert à quelque chose : un meilleur jet.
       expect(avec.jet, `niveau ${L}`).toBeGreaterThan(sans.jet + 0.02);
-      // (Au niveau 100 le rang est déjà au sommet : aucun rang au-dessus n'existe.)
-      if (prestigeRankIndex(L) < 7) expect(avec.plus1, `niveau ${L}`).toBeGreaterThan(sans.plus1);
     }
   });
 });

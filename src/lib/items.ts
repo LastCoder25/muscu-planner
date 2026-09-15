@@ -1129,13 +1129,13 @@ function gaussian(rng: () => number): number {
 // ── RANG DES OBJETS : LA RÈGLE DES FAMILIERS (v0.875) ──
 // ⚠️ SOURCE DE VÉRITÉ, remplace la PYRAMIDE centrée sur le plafond √ du niveau (v0.564→0.874).
 // Tout ce qui se porte tombe à SON rang de prestige (un rang tous les 10 niveaux, celui du
-// héros), en dessous parfois, UN rang au-dessus très rarement, jamais deux (`rollCompanionTier`).
+// héros), en dessous parfois, JAMAIS au-dessus (`rollCompanionTier`, v0.876).
 // Mesuré avant : au niveau 30 (rang Or) les objets tombaient surtout DEUX rangs au-dessus, et un
 // joueur équipé perdait 15 à 40 % de puissance en passant à cette règle (niveaux 8 à 70) — le
 // contenu est recalé d'autant (`itemRankRelief`, proceduralContent).
 
 /** Un bonus de rang (Autel des boss, générosité des boss) exprimé en CHANCE : sous cette règle,
- *  il ne décale plus le pic, il épaissit la très rare chance d'un rang au-dessus. */
+ *  il ne décale plus le pic : il resserre la traîne basse et améliore le jet. */
 const FLOOR_LUCK = 0.5;
 /** Chance ajoutée par un plancher d'Autel `rollFloor` (0..1) — ce que l'écran annonce. */
 export function altarLuckBonus(rollFloor: number): number {
@@ -1176,10 +1176,12 @@ export function rollTier(
 // causes cumulées : le plafond √ court devant le rang du joueur (Épique au niveau 30, soit deux
 // rangs d’avance) ; la chance du Labyrinthe vaut toujours 1 (palier 0,9 + Porte) et élargit la
 // pointe haute ; et la borne douce laisse passer deux rangs de plus.
+// ⚠️ v0.876 (demandé par l’utilisateur : « limite les drops partout au rang du joueur max, pas
+// plus haut ») : la très rare chance d’un rang AU-DESSUS (1 à 3 %) est SUPPRIMÉE. Aucun tirage
+// — objet, pièce de set, trophée, familier, talent, pièce d’aventurier — ne dépasse le rang du
+// joueur. La chance (contenu, Autel, magic find) ne fait plus que resserrer la traîne basse et
+// améliorer le jet.
 export const COMPANION_RANK = {
-  /** Chance d’un rang AU-DESSUS : très basse, un peu relevée par la chance du contenu. */
-  upBase: 0.01,
-  upLuck: 0.02,
   /** Étalement des rangs EN DESSOUS (gaussienne repliée) : la chance le resserre → on farme
    *  surtout des familiers de SON rang. */
   loWidth: 0.66,
@@ -1212,22 +1214,20 @@ export function familiarRankRef(opts: {
   return Math.min(opts.rankCap, prestigeRankIndex(opts.playerLevel ?? opts.level));
 }
 
-/** Tire le { rank, roll } d’un familier ou d’un talent : SON rang le plus souvent, en dessous
- *  parfois, UN rang au-dessus très rarement, jamais deux. `rankCap` = rang de référence (le
- *  rang du joueur, déjà borné par le contenu). Le JET garde la chance : c’est lui qu’on farme. */
+/** Tire le { rank, roll } de tout ce qui se porte : SON rang le plus souvent, en dessous
+ *  parfois, JAMAIS au-dessus. `rankCap` = rang de référence (le rang du joueur, déjà borné par
+ *  le contenu) — c’est un PLAFOND. Le JET garde la chance : c’est lui qu’on farme. */
 export function rollCompanionTier(
   rng: () => number,
   rankCap: number,
   luck = 0,
 ): { rank: Rarity; roll: number } {
   const l = Math.min(1, Math.max(0, luck));
-  const top = RANK_ORDER.length - 1;
-  const c = Math.min(top, Math.max(0, Math.round(rankCap)));
-  const up = rng() < COMPANION_RANK.upBase + COMPANION_RANK.upLuck * l;
+  const c = Math.min(RANK_ORDER.length - 1, Math.max(0, Math.round(rankCap)));
   const width = COMPANION_RANK.loWidth - COMPANION_RANK.loWidthLuck * l;
-  const idx = up ? c + 1 : c - Math.round(Math.abs(gaussian(rng)) * width);
+  const idx = c - Math.round(Math.abs(gaussian(rng)) * width);
   return {
-    rank: RANK_ORDER[Math.min(top, Math.max(0, idx))]!,
+    rank: RANK_ORDER[Math.max(0, idx)]!,
     roll: rollJetValue(rng, luck),
   };
 }
@@ -1248,7 +1248,7 @@ export function rollItemLevel(rng: () => number, center: number, luck = 0): numb
 }
 
 /** Bande de rang TYPIQUE d'un contenu : du rang typiquement en dessous au rang de référence
- *  (le rang au-dessus, 1 à 3 %, n'est pas une bande). Déterministe. */
+ *  (jamais au-dessus). Déterministe. */
 export function dropBand(
   level: number,
   luck = 0,
@@ -1321,10 +1321,9 @@ export function rollDrop(
   const ilvlCenter =
     opts.playerLevel != null ? Math.min(opts.level ?? 1, opts.playerLevel) : (opts.level ?? 1);
   const lvl = rollItemLevel(rng, ilvlCenter, opts.luck ?? 0);
-  // RANG = PYRAMIDE centrée sur min(niveau contenu, niveau joueur) : le pic est ton rang,
-  // traîne basse (fourrage) et pointe haute rare (jackpot d'un rang au-dessus) dopée par la
-  // `luck` (profondeur/fiole) et `rollFloor` (Autel). Un bas-niveau en donjon profond reste
-  // centré sur SON rang (anti-runaway). La QUALITÉ est un roll continu → farm du meilleur jet.
+  // RANG = ton rang de prestige (min contenu, joueur) au plus, jamais au-dessus (v0.876) ;
+  // traîne basse (fourrage) resserrée par la `luck` et `rollFloor` (Autel). Le JET est un roll
+  // continu → farm du meilleur jet.
   const floorRanks = Math.min(1, Math.max(0, opts.rollFloor ?? 0)) * ROLL_FLOOR_RANKS;
   const { rank: rarity, roll } = rollTier(
     rng,

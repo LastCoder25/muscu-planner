@@ -73,8 +73,8 @@ function textAt(typeId: string, level: number): string | null {
     case 'labyrinth_gate':
       return `+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`;
     case 'boss_altar':
-      // ⚠️ Depuis la v0.875 (objets au rang du joueur) : de la CHANCE, qui améliore le jet et un
-      // peu la probabilité d'un rang au-dessus — plus un décalage de rareté.
+      // ⚠️ Depuis la v0.875 (objets au rang du joueur) : de la CHANCE, qui améliore le jet et
+      // resserre la traîne basse — jamais un rang au-dessus (v0.876).
       return `pièces de boss : +${pct(altarLuckBonus(bossAltarRollFloor(one(typeId, level))))} de chance`;
     case 'warehouse':
       return `stockage ×${storageMult(one(typeId, level)).toFixed(2)}`;

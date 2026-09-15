@@ -37,15 +37,12 @@ describe('🐾 familiers et talents plafonnés au RANG DU JOUEUR (v0.857)', () =
     expect(companionDropRank(80, 45)).toBe(prestigeRankIndex(45));
   });
 
-  it('⚠️ SON rang le plus souvent, UN rang au-dessus très rarement, JAMAIS deux', () => {
+  it('⚠️ SON rang le plus souvent, JAMAIS au-dessus (v0.876)', () => {
     for (const luck of [0, 1]) {
       const rng = mulberry32(7 + luck);
       const o = offsets(() => RARITY_RANK[rollCompanionTier(rng, 3, luck).rank], 3);
-      const up = COMPANION_RANK.upBase + COMPANION_RANK.upLuck * luck;
       expect(o.get(0)!, `luck ${luck} : part de son rang`).toBeGreaterThan(luck ? 0.65 : 0.52);
-      expect(o.get(1)!, `luck ${luck} : un rang au-dessus`).toBeCloseTo(up, 2);
-      expect(o.get(1)!).toBeLessThan(0.04);
-      for (const d of o.keys()) expect(d, `luck ${luck}`).toBeLessThanOrEqual(1);
+      for (const d of o.keys()) expect(d, `luck ${luck}`).toBeLessThanOrEqual(0);
       // La traîne basse existe (fourrage), mais reste courte.
       expect(o.get(-1) ?? 0).toBeGreaterThan(0.2);
       expect((o.get(-3) ?? 0) + (o.get(-4) ?? 0)).toBeLessThan(0.01);

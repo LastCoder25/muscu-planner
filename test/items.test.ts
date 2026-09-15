@@ -165,15 +165,17 @@ describe('rollTier : les objets tombent au RANG DU JOUEUR, comme les familiers (
     // ⚠️ Plus le plafond √ : au niveau 30 (rang Or) il donnait deux rangs de plus.
     expect(prestigeRankIndex(30)).toBeLessThan(rankCeilingForLevel(30));
   });
-  it('un rang au-dessus très rarement (1 à 3 %), JAMAIS deux', () => {
-    for (const luck of [0, 1]) {
-      const lv = 35;
-      const ref = prestigeRankIndex(lv);
-      const c = modeOf(lv, luck);
-      const above = c.slice(ref + 1).reduce((x, y) => x + y, 0) / 3000;
-      expect(c.slice(ref + 2).reduce((x, y) => x + y, 0)).toBe(0);
-      expect(above).toBeGreaterThan(luck ? 0.015 : 0.003);
-      expect(above).toBeLessThan(luck ? 0.045 : 0.02);
+  it('⚠️ JAMAIS au-dessus du rang du joueur, même avec toute la chance (v0.876)', () => {
+    for (const lv of [5, 15, 35, 55, 75]) {
+      for (const luck of [0, 1]) {
+        const ref = prestigeRankIndex(lv);
+        const c = modeOf(lv, luck, 2.2);
+        expect(
+          c.slice(ref + 1).reduce((x, y) => x + y, 0),
+          `niv ${lv} luck ${luck}`,
+        ).toBe(0);
+        expect(c[ref]!, `niv ${lv} : son rang reste le plus fréquent`).toBe(Math.max(...c));
+      }
     }
   });
   it('la chance resserre la traîne basse (on farme surtout son rang)', () => {
@@ -190,17 +192,20 @@ describe('rollTier : les objets tombent au RANG DU JOUEUR, comme les familiers (
     expect(c.indexOf(Math.max(...c))).toBe(prestigeRankIndex(playerLevel));
     expect(c.slice(prestigeRankIndex(playerLevel) + 2).reduce((x, y) => x + y, 0)).toBe(0);
   });
-  it('un bonus de rang (Autel, boss) épaissit le +1 mais ne fait JAMAIS sauter deux rangs', () => {
+  it('un bonus de rang (Autel, boss) améliore le jet et resserre la traîne basse, jamais au-dessus', () => {
     const ref = prestigeRankIndex(50);
-    const up = (fb: number) =>
-      modeOf(50, 0, fb)
-        .slice(ref + 1)
-        .reduce((x, y) => x + y, 0);
-    expect(up(1.2)).toBeGreaterThan(up(0));
+    const own = (fb: number) => modeOf(50, 0, fb)[ref]!;
+    expect(own(1.2)).toBeGreaterThan(own(0));
+    const jet = (fb: number) => {
+      let s = 0;
+      for (let i = 1; i <= 2000; i++) s += rollTier(mulberry32(i * 3 + 1), 50, 0, fb, 50).roll;
+      return s / 2000;
+    };
+    expect(jet(1.2)).toBeGreaterThan(jet(0) + 0.05);
     for (const fb of [0.35, 0.8, 2.2])
       expect(
         modeOf(50, 1, fb)
-          .slice(ref + 2)
+          .slice(ref + 1)
           .every((n) => n === 0),
       ).toBe(true);
   });
@@ -727,7 +732,8 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     const SIG = new Set(['execute_pct', 'rage_pct', 'momentum_pct']);
     const hasSig = (d: Item) => [d.effect, d.effect2, d.effect3].some((e) => e && SIG.has(e.type));
     const low = scan(3, 1).filter(hasSig);
-    const deep = scan(20, 1).filter(hasSig);
+    // Niveau 25 (rang Or → 2 affixes) : sous le rang Or un drop n'a qu'un affixe, jamais signature.
+    const deep = scan(25, 1).filter(hasSig);
     expect(low).toHaveLength(0);
     expect(deep.length).toBeGreaterThan(0);
   });
@@ -744,7 +750,7 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
       'Rage du Damné',
     ];
     const SIG = ['execute_pct', 'rage_pct', 'momentum_pct'];
-    const sig = scan(20, 1).find((d) =>
+    const sig = scan(25, 1).find((d) =>
       [d.effect, d.effect2, d.effect3].some((e) => e && SIG.includes(e.type)),
     );
     expect(sig).toBeTruthy();
@@ -1991,15 +1997,17 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
           if (own < best) {
             fails++;
             // ⚠️ v0.875 (objets au rang du joueur) : aux niveaux 20-30 les pièces sont Bronze ou
-            // Argent (un seul affixe) et Gardien/Vampire perdent parfois de peu (mesuré ≤ 0,8 %,
-            // 13 échecs sur 288). Hors liste connue, un échec doit rester marginal.
+            // Argent (un seul affixe) et Gardien/Vampire perdent parfois de peu (mesuré ≤ 1,4 %
+            // depuis la v0.876, sans rang au-dessus). Hors liste connue, un échec doit rester marginal.
             if (!known.has(V))
-              expect(1 - own / best, `${V} niv ${L} graine ${seed}`).toBeLessThan(0.01);
+              expect(1 - own / best, `${V} niv ${L} graine ${seed}`).toBeLessThan(0.02);
           }
         }
       }
     }
-    expect(fails / n).toBeLessThan(0.05);
+    // 6 % depuis la v0.876 (plus aucun rang au-dessus) : mesuré 15 échecs sur 288 (5,2 %),
+    // tous marginaux (≤ 2 % de puissance, vérifié ci-dessus).
+    expect(fails / n).toBeLessThan(0.06);
   });
 });
 

@@ -309,8 +309,8 @@ export function effectsOfTalents(list: TalentInstance[]): AggregatedEffects {
 }
 
 // ── Drop : le RANG est plafonné au RANG DU JOUEUR, borné par le contenu (v0.857, comme les
-// familiers via `rollCompanionTier`) : son rang le plus souvent, un rang au-dessus très
-// rarement. Le JET garde la `luck`. Non équipé par défaut. ──
+// familiers via `rollCompanionTier`) : son rang le plus souvent, jamais au-dessus (v0.876).
+// Le JET garde la `luck`. Non équipé par défaut. ──
 export function rollTalentDrop(
   rng: () => number,
   opts: {

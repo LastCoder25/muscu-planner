@@ -2111,11 +2111,10 @@
           </div>
         </div>
         <div class="drops-note">
-          Le <b>rang</b> (Bronze → Divin ancestral) est tiré en
-          <b>pyramide centrée sur ton niveau</b> : surtout ton rang, parfois
-          <b>un cran au-dessus</b> (jackpot, ↑ avec la luck). La <b>qualité</b> (roll) varie en
-          continu → farme le meilleur « jet ». Les <b>pièces de set</b> (de voie) tombent sur les
-          <b>boss de palier</b>.
+          Le <b>rang</b> (Bronze → Divin ancestral) ne dépasse <b>jamais ton rang</b> : surtout ton
+          rang, parfois un cran en dessous (moins souvent avec la chance). La <b>qualité</b> (jet)
+          varie en continu → farme le meilleur jet. Les <b>pièces de set</b> (de voie) tombent sur
+          les <b>boss de palier</b>.
         </div>
         <button class="drops-close" @click="dropInfo = null">Fermer</button>
       </q-card>

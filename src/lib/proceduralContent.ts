@@ -156,21 +156,25 @@ const PROC_DUNGEON_BOOST: [number, number][] = [
 // Niveaux 47-50 : le donjon 49 restait sous sa cible à 0,63 (mesuré 0,54). ⚠️ À 0,58 il repasse
 // sous 50 % à son niveau (règle « on nettoie son niveau », testée) : on garde 0,55, et le boss
 // du niveau 50 (mesuré 0,66) en devient plus abordable (27 % → 48 %, toujours un défi).
+// ⚠️ v0.876 (plus aucun rang au-dessus du joueur) : remesuré contre la même référence, chaque
+// palier à partir du niveau 11 multiplié par la moyenne de ses mesures (0,86 à 0,99 ; 47-50
+// inchangé, règle « on nettoie son niveau »). Les niveaux 2-10 ne bougent pas : ils sont tenus
+// par la règle « sans équipement on perd ».
 const ITEM_RANK_RELIEF: [number, number][] = [
   [1, 1],
   [2, 0.95],
   [5, 0.88],
   [8, 0.8],
-  [11, 0.81],
-  [12, 0.77],
+  [11, 0.8],
+  [12, 0.74],
   [20, 0.61],
-  [21, 0.73],
-  [31, 0.61],
-  [41, 0.76],
-  [45, 0.65],
+  [21, 0.71],
+  [31, 0.58],
+  [41, 0.65],
+  [45, 0.61],
   [47, 0.55],
-  [51, 0.91],
-  [61, 0.92],
+  [51, 0.9],
+  [61, 0.88],
   [71, 1],
 ];
 /** Facteur (PV et dégâts) de tout contenu de niveau `level` : le palier qui le contient. */
@@ -223,17 +227,20 @@ export function bossContentBoost(level: number): number {
 // ×0,96 (Infini). Chaque point = ancien point × ce facteur.
 // (Novice, Sentiers, Cryptes : divisés en plus par ×1,07 / ×1,07 / ×1,10, le facteur de début de
 // partie d'`itemRankRelief` ayant été relevé pour garder les donjons gatés par l'équipement.)
+// ⚠️ v0.876 (plus aucun rang au-dessus) : le Labyrinthe, où la chance est au maximum, perdait le
+// plus — remesuré palier par palier (Sans-fond ×0,71, Chaos ×0,70, Astral ×0,79 une fois le
+// nouvel `itemRankRelief` compté ; Néant ×1,08, Infini ×1,05).
 const LABY_CONTENT_BOOST: [number, number][] = [
   [2, 0.64],
   [3, 0.72],
   [6, 0.74],
   [12, 1.07],
-  [20, 1.12],
-  [28, 1.43],
-  [40, 2.04],
-  [52, 1.55],
-  [66, 1.86],
-  [85, 1.61],
+  [20, 1.1],
+  [28, 1.01],
+  [40, 1.43],
+  [52, 1.22],
+  [66, 2.0],
+  [85, 1.7],
 ];
 /** PV et dégâts de base d'une créature du Labyrinthe (avant son archétype), pour un palier de
  *  niveau conseillé `level`, à la profondeur `depth` (0 surface → 1 fond). Source UNIQUE : le
