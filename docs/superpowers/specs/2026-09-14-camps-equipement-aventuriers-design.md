@@ -30,7 +30,7 @@ Chaque étape passe les 5 portes (typecheck, lint, tests, build, smoke) et a sa 
 
 ### Modèle
 
-- Stock **séparé** du sac du héros (colonne JSONB additive sur `characters`, migration 0067) :
+- Stock **séparé** du sac du héros (colonne JSONB additive sur `characters`, migration 0068) :
   le héros ne porte pas ces objets, les aventuriers ne portent pas les siens.
 - Chaque aventurier porte au plus **3 pièces** (arme, armure, accessoire), rangées sur sa fiche.
 - **Rareté plafonnée par la classe** : même règle que `canAdvTalent` / `canAdvFamiliar` — une

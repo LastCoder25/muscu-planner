@@ -204,7 +204,7 @@ export interface CharacterRow {
   scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
-  adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0067)
+  adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -2100,7 +2100,7 @@ export const useCharacterStore = defineStore('character', () => {
   // domaine ne peut pas savoir — l'or disponible, le niveau des bâtiments, l'horloge.
   const advList = computed<Adventurer[]>(() => row.value?.adventurers ?? []);
   const caravanList = computed<Caravan[]>(() => row.value?.caravans ?? []);
-  /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0067) — séparé du sac du héros. */
+  /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
   const guildLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'guild'));
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'caravanserail'));
