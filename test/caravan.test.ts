@@ -2096,6 +2096,7 @@ describe('🧭 refEscortUnits — la référence partagée par la route et les c
         weapon: `refGear${i}weapon`,
         armor: `refGear${i}armor`,
         accessory: `refGear${i}accessory`,
+        relic: `refGear${i}relic`,
       },
     }));
     // ⚠️ Écart au brief : `roadUnits` prend les PAIRES déjà construites
