@@ -171,15 +171,7 @@ import { fmtPct } from '@/lib/combo';
 import { logicalToday, computeDailyTargets } from '@/lib/challenges';
 import { useChallengesStore } from '@/stores/challenges';
 import type { SharedChallenge } from '@/stores/friends';
-import { useFriendBossStore } from '@/stores/friendBoss';
-import {
-  bossPhase,
-  bossEndsAt,
-  bossStartAt,
-  chestState,
-  fmtBossPv,
-  fmtBossSpan,
-} from '@/lib/friendBoss';
+import { useFriendBossEntry } from '@/composables/useFriendBossEntry';
 
 defineProps<{ embedded?: boolean }>();
 
@@ -189,30 +181,13 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const friends = useFriendsStore();
 const challenges = useChallengesStore();
-const boss = useFriendBossStore();
-const bossNow = Date.now();
-const bossInvites = computed(() => boss.invitations(bossNow));
-/** Un coffre de boss attend-il d'être ouvert ? (sans personnage chargé, on ne sait pas.) */
-const chestWaiting = computed(() => {
-  const cleared = char.row?.cleared_dungeons;
-  return (
-    !!cleared && boss.bosses.some((b) => chestState(b, boss.myMembership(b.id), cleared) !== 'none')
-  );
-});
-/** Ce que la carte d'entrée dit du boss : l'invitation d'abord, puis un coffre à ouvrir,
- *  puis le combat en cours. */
-const bossLine = computed(() => {
-  const inv = bossInvites.value[0];
-  if (inv)
-    return `⚔️ Invité : « ${inv.exerciseName} » — réponds dans ${fmtBossSpan(bossStartAt(inv) - bossNow)}`;
-  if (chestWaiting.value) return '🎁 Ton coffre de boss t’attend — viens l’ouvrir.';
-  const cur = boss.current(bossNow);
-  if (!cur) return 'Lance un boss et abats-le avec tes amis, rep après rep.';
-  const pv = Math.max(0, cur.hpTotal - cur.damage);
-  return bossPhase(cur, bossNow) === 'recruiting'
-    ? `« ${cur.exerciseName} » — démarre dans ${fmtBossSpan(bossStartAt(cur) - bossNow)}`
-    : `« ${cur.exerciseName} » — ${fmtBossPv(pv)} PV, encore ${fmtBossSpan(bossEndsAt(cur) - bossNow)}`;
-});
+// Même carte d'entrée que l'accueil (`useFriendBossEntry`).
+const {
+  invites: bossInvites,
+  chestWaiting,
+  line: bossLine,
+  refresh: refreshBoss,
+} = useFriendBossEntry();
 async function openBoss() {
   await router.push('/boss-amis');
 }
@@ -244,7 +219,7 @@ onMounted(async () => {
     await friends.fetchMine(uid);
     await friends.fetchShared(uid);
     if (!challenges.loaded) await challenges.fetchMine();
-    await boss.fetchMine();
+    await refreshBoss();
   } catch {
     /* silencieux : la page reste utilisable, l'action réessaiera */
   }

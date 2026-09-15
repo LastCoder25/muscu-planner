@@ -2457,6 +2457,9 @@
               </template>
               PV restants {{ run.finalPv }}
             </div>
+            <div v-if="autoSkipped" class="result-skip">
+              ⏩ Animation passée : victoire assurée (plus de 90 % de chances).
+            </div>
           </template>
           <div v-if="stageDone" class="log">
             <div
@@ -4046,11 +4049,11 @@ const lastRunFirstVisit = ref(true); // ce run était-il la 1re fois sur ce donj
 // l'animation après coup. On mémorise « ce run avait une récompense » pour la garder
 // masquée jusqu'au prochain run.
 const stageWasReward = ref(false);
-// Réglage persistant : passer automatiquement l'animation des donjons DÉJÀ FAITS
-// et gagnés d'avance (≥ 90 %) — le 1er passage d'un donjon reste animé.
-// Passer l'animation des combats gagnés d'avance : plus de switch dans l'UI —
-// appliqué D'OFFICE pour le compte testeur (admin), qui relance des runs en boucle.
-const autoSkipEasy = computed(() => auth.isAdmin);
+// Passer automatiquement l'animation des combats DÉJÀ FAITS et gagnés d'avance (≥ 90 %) — le
+// 1er passage reste animé (découverte). ⚠️ POUR TOUT LE MONDE depuis la v0.877 (réservé à
+// l'admin avant) ; le rapport le DIT (`autoSkipped`), sinon l'absence d'animation se lit
+// comme un bug.
+const autoSkipped = ref(false);
 // Coupe le rejeu en cours : `stageSkipped` démonte CombatStage (donc son interval)
 // au lieu de le laisser tourner sous le résultat révélé.
 function skipStage() {
@@ -4110,7 +4113,8 @@ function openReport() {
   // rejeu (pas de log), on montre tout de suite.
   // Skip SEULEMENT en rejeu : réglage actif + victoire quasi acquise (≥ 90 %) + ce
   // donjon a DÉJÀ été fait (pas la 1re visite) → droit au résultat, sinon on anime.
-  const skipAll = autoSkipEasy.value && canSkipStage.value && !lastRunFirstVisit.value;
+  const skipAll = hasStage.value && canSkipStage.value && !lastRunFirstVisit.value;
+  autoSkipped.value = skipAll;
   stageSkipped.value = skipAll;
   stageWasReward.value = !!char.row?.pending_reward; // boss : latch pour ne pas rejouer
   stageDone.value = !hasStage.value || skipAll;
@@ -9996,6 +10000,11 @@ button.pt-mini:active {
   font-size: 12px;
   color: var(--dim);
   margin: 2px 0 8px;
+}
+.result-skip {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin: -4px 0 8px;
 }
 .log {
   display: flex;

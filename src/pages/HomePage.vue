@@ -401,6 +401,25 @@
         </div>
       </div>
 
+      <!-- 🐉 Boss entre amis : seulement quand il se passe quelque chose (invitation, coffre à
+           ouvrir, boss en cours) — une carte « lance un boss » permanente encombrerait l'accueil. -->
+      <button
+        v-if="bossEntry.active.value"
+        class="boss-entry"
+        :class="{ hot: bossEntry.hot.value }"
+        @click="router.push('/boss-amis')"
+      >
+        <span class="be-emo">🐉</span>
+        <span class="be-main">
+          <span class="be-t font-display">Boss entre amis</span>
+          <span class="be-s">{{ bossEntry.line.value }}</span>
+        </span>
+        <span v-if="bossEntry.invites.value.length" class="be-badge">{{
+          bossEntry.invites.value.length
+        }}</span>
+        <span class="be-go">›</span>
+      </button>
+
       <q-btn
         class="add-session full-width"
         color="primary"
@@ -622,6 +641,7 @@ import {
   type WeatherPlace,
 } from '@/lib/weather';
 import { useWeatherReliability } from '@/composables/useWeatherReliability';
+import { useFriendBossEntry } from '@/composables/useFriendBossEntry';
 import { LEADS, modelLabel, type Lead } from '@/lib/weatherReliability';
 import { useChallengesStore } from '@/stores/challenges';
 import { challengeStats, logicalToday } from '@/lib/challenges';
@@ -796,6 +816,12 @@ const challengesDueToday = computed(() => {
 const loading = ref(true);
 
 const hasFree = ref(false);
+
+// Boss entre amis : chargé en fond, silencieux (la carte n'apparaît que s'il y a du nouveau).
+const bossEntry = useFriendBossEntry();
+onMounted(() => {
+  void bossEntry.refresh().catch(() => undefined);
+});
 
 onMounted(async () => {
   hasFree.value = live.hasSaved('free');
@@ -1720,6 +1746,61 @@ async function saveAutre() {
   color: var(--text);
   font-weight: 600;
   font-size: 14px;
+}
+.boss-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.boss-entry.hot {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.be-emo {
+  font-size: 26px;
+  line-height: 1;
+}
+.be-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.be-t {
+  font-size: 15px;
+}
+.be-s {
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.be-badge {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 12px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+.be-go {
+  color: var(--dim);
+  font-size: 20px;
 }
 .fo-actions {
   display: flex;
