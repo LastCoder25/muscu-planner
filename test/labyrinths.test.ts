@@ -9,6 +9,12 @@ import {
   labyKeyCost,
   keysAfterPaying,
   replayKeysInfo,
+  normalizeLabyStats,
+  labyRunStarted,
+  labyRunCleared,
+  labySuccessPct,
+  labyIdOfClear,
+  type LabyStats,
 } from '@/data/labyrinths';
 import { buildingProdPerHour, buildingStorageCap } from '@/lib/buildings';
 import { RANK_ORDER, RARITY_RANK, rankCeilingForLevel } from '@/lib/items';
@@ -157,5 +163,51 @@ describe('🗝️ ON PAIE LE PRIX ENTIER', () => {
     expect(keysAfterPaying(1, 0)).toBe(0);
     expect(keysAfterPaying(1, 0.5)).toBe(0);
     expect(keysAfterPaying(5, 2.9)).toBe(3);
+  });
+});
+
+describe('labyrinths — % de réussite RÉEL du joueur', () => {
+  it('un run compte au lancement, un nettoyage au clear, et le % en découle', () => {
+    let s = normalizeLabyStats(null);
+    expect(labySuccessPct(s, 'novice')).toBeNull(); // jamais lancé
+    s = labyRunStarted(s, 'novice');
+    expect(labySuccessPct(s, 'novice')).toBe(0);
+    s = labyRunCleared(s, 'novice');
+    expect(labySuccessPct(s, 'novice')).toBe(100);
+    s = labyRunStarted(labyRunStarted(s, 'novice'), 'novice'); // 2 morts
+    expect(s.novice).toEqual({ runs: 3, clears: 1 });
+    expect(labySuccessPct(s, 'novice')).toBe(33);
+    expect(labySuccessPct(s, 'sentiers')).toBeNull(); // un autre palier reste vierge
+  });
+
+  it('un nettoyage sans lancement enregistré ne fait jamais dépasser 100 %', () => {
+    const s = labyRunCleared({}, 'novice');
+    expect(s.novice).toEqual({ runs: 1, clears: 1 });
+    expect(labySuccessPct({ novice: { runs: 2, clears: 5 } }, 'novice')).toBe(100);
+  });
+
+  it('les fonctions ne modifient pas les compteurs reçus', () => {
+    const s: LabyStats = { novice: { runs: 1, clears: 0 } };
+    labyRunStarted(s, 'novice');
+    labyRunCleared(s, 'novice');
+    expect(s).toEqual({ novice: { runs: 1, clears: 0 } });
+  });
+
+  it('relecture défensive du JSONB', () => {
+    expect(normalizeLabyStats([])).toEqual({});
+    expect(
+      normalizeLabyStats({
+        novice: { runs: 4.7, clears: 9 },
+        sentiers: { runs: -2, clears: 1 },
+        cryptes: 'x',
+        abysse: { runs: 3 },
+      }),
+    ).toEqual({ novice: { runs: 4, clears: 4 }, abysse: { runs: 3, clears: 0 } });
+  });
+
+  it('retrouve le palier d’un id nettoyé', () => {
+    expect(labyIdOfClear(labyClearId('gouffre'))).toBe('gouffre');
+    expect(labyIdOfClear('caverne')).toBeNull();
+    expect(labyIdOfClear(undefined)).toBeNull();
   });
 });

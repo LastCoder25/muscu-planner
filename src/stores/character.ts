@@ -63,7 +63,14 @@ import {
   type TalentInstance,
 } from '@/lib/talents';
 import { voiePassiveEffects, VOIES } from '@/lib/voies';
-import { keysAfterPaying } from '@/data/labyrinths';
+import {
+  keysAfterPaying,
+  labyIdOfClear,
+  labyRunCleared,
+  labyRunStarted,
+  normalizeLabyStats,
+  type LabyStats,
+} from '@/data/labyrinths';
 import {
   isClaimable,
   createMap,
@@ -212,6 +219,7 @@ export interface CharacterRow {
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
   adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
+  laby_stats: LabyStats; // Labyrinthe : runs lancés / nettoyés par palier (migr. 0073)
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -240,7 +248,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans, adv_gear';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans, adv_gear, laby_stats';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -262,6 +270,7 @@ export const useCharacterStore = defineStore('character', () => {
     // politique que `adventurers`/`caravans` ci-dessus (jamais null après normalisation,
     // malgré le type nullable qui reflète ce que la DB peut renvoyer).
     r.adv_gear = normalizeAdvGearState(r.adv_gear);
+    r.laby_stats = normalizeLabyStats(r.laby_stats);
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     const fixItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
@@ -640,13 +649,18 @@ export const useCharacterStore = defineStore('character', () => {
 
   // ── Expéditions (donjons à étages) ──
   // Consomme les clés d’un palier du Labyrinthe (garde-fou : refuse si le compte n’y est pas).
-  async function spendKey(userId: string, n = 1): Promise<boolean> {
+  async function spendKey(userId: string, n = 1, labyId?: string): Promise<boolean> {
     const cur = row.value;
     // ⚠️ Le prix ENTIER (règle dans `keysAfterPaying`, testée) : un palier profond coûte
     // plusieurs clés, et on n’entre pas avec une clé pour trois.
     const reste = cur ? keysAfterPaying(cur.keys, n) : null;
-    if (reste === null) return false;
-    await persist(userId, { keys: reste });
+    if (reste === null || !cur) return false;
+    // Le run d'un palier compte AU LANCEMENT, dans la même écriture que les clés : un run
+    // quitté en route reste un run tenté (le % affiché est celui du joueur, pas une estimation).
+    await persist(userId, {
+      keys: reste,
+      ...(labyId ? { laby_stats: labyRunStarted(cur.laby_stats, labyId) } : {}),
+    });
     return true;
   }
   // Crédite le butin d'une expédition/Labyrinthe (or + poussière + parchemins
@@ -671,11 +685,13 @@ export const useCharacterStore = defineStore('character', () => {
         ? [...cur.cleared_dungeons, input.clearedDungeonId]
         : cur.cleared_dungeons;
     trainRunFamiliar(dist, input);
+    const labyId = labyIdOfClear(input.clearedDungeonId);
     return persist(userId, {
       gold: cur.gold + input.gold,
       equipped: dist.equipped,
       inventory: dist.inventory,
       cleared_dungeons: cleared,
+      ...(labyId ? { laby_stats: labyRunCleared(cur.laby_stats, labyId) } : {}),
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, input.drops),
     });
   }

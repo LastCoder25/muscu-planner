@@ -2399,7 +2399,16 @@
       >
         <div class="rm-head">
           <div class="rm-title font-display">{{ run.name }}</div>
-          <button v-if="!stageDone" class="rm-skip" @click="skipStage">⏩ Passer</button>
+          <div v-if="!stageDone" class="rm-skips">
+            <button class="rm-skip" @click="skipStage">⏩ Passer</button>
+            <button
+              class="rm-skip"
+              title="Passer l’animation de tous les combats (donjons, boss, faille)"
+              @click="skipAlways"
+            >
+              ⏩ Toujours
+            </button>
+          </div>
         </div>
         <!-- Corps scrollable : la carte garde une HAUTEUR FIXE → la tête (avec le
              bouton Réattaquer) et les actions ne bougent pas selon le contenu
@@ -2457,8 +2466,17 @@
               </template>
               PV restants {{ run.finalPv }}
             </div>
-            <div v-if="autoSkipped" class="result-skip">
+            <div v-if="skipReason === 'sure'" class="result-skip">
               ⏩ Animation passée : victoire assurée (plus de 90 % de chances).
+            </div>
+            <div v-if="hasStage" class="result-skip-set">
+              <q-toggle
+                v-model="alwaysSkipFights"
+                dense
+                size="sm"
+                color="primary"
+                label="Toujours passer l’animation des combats"
+              />
             </div>
           </template>
           <div v-if="stageDone" class="log">
@@ -2782,6 +2800,7 @@ import {
   shallowRef,
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { stageSkipReason, type StageSkipReason } from '@/lib/stageSkip';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore, PseudoTakenError, WELCOME_ENERGY } from '@/stores/character';
@@ -3421,7 +3440,7 @@ const refPower = computed(() => (optimum.value ? optimumPower.value : combatPowe
 // → on peut swapper du gear et voir l'effet. Clé : 'd:<id>' / 'b:<id>'.
 const WINPCT_SEEDS = 40;
 // % de victoire (Monte-Carlo seedé) — calculé À LA DEMANDE pour le DERNIER run seulement
-// (le seul consommateur est canSkipStage). Avant on simulait les 22 contenus × 40 seeds à
+// (le seul consommateur est le passage auto de l'animation, lib/stageSkip). Avant on simulait les 22 contenus × 40 seeds à
 // chaque changement de stuff (~880 combats, ~95 % jetés depuis que l'affichage est passé à
 // la « puissance conseillée »). `combat.ts` est pur → on peut réutiliser le combattant.
 function runWinPct(): number {
@@ -4050,10 +4069,30 @@ const lastRunFirstVisit = ref(true); // ce run était-il la 1re fois sur ce donj
 // masquée jusqu'au prochain run.
 const stageWasReward = ref(false);
 // Passer automatiquement l'animation des combats DÉJÀ FAITS et gagnés d'avance (≥ 90 %) — le
-// 1er passage reste animé (découverte). ⚠️ POUR TOUT LE MONDE depuis la v0.877 (réservé à
-// l'admin avant) ; le rapport le DIT (`autoSkipped`), sinon l'absence d'animation se lit
-// comme un bug.
-const autoSkipped = ref(false);
+// 1er passage reste animé (découverte) — ou de TOUS les combats si le joueur l'a choisi
+// (réglage retenu sur l'appareil). Le rapport DIT pourquoi (`skipReason`), sinon l'absence
+// d'animation se lit comme un bug. Règle : `lib/stageSkip`.
+const skipReason = ref<StageSkipReason>(null);
+const SKIP_FIGHTS_KEY = 'muscu:adv:skip-fights';
+function readSkipFights(): boolean {
+  try {
+    return localStorage.getItem(SKIP_FIGHTS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+const alwaysSkipFights = ref(readSkipFights());
+watch(alwaysSkipFights, (v) => {
+  try {
+    localStorage.setItem(SKIP_FIGHTS_KEY, v ? '1' : '0');
+  } catch {
+    // Stockage indisponible : le réglage vaut pour la visite.
+  }
+});
+function skipAlways() {
+  alwaysSkipFights.value = true;
+  skipStage();
+}
 // Coupe le rejeu en cours : `stageSkipped` démonte CombatStage (donc son interval)
 // au lieu de le laisser tourner sous le résultat révélé.
 function skipStage() {
@@ -4113,8 +4152,15 @@ function openReport() {
   // rejeu (pas de log), on montre tout de suite.
   // Skip SEULEMENT en rejeu : réglage actif + victoire quasi acquise (≥ 90 %) + ce
   // donjon a DÉJÀ été fait (pas la 1re visite) → droit au résultat, sinon on anime.
-  const skipAll = hasStage.value && canSkipStage.value && !lastRunFirstVisit.value;
-  autoSkipped.value = skipAll;
+  const reason = hasStage.value
+    ? stageSkipReason({
+        always: alwaysSkipFights.value,
+        firstVisit: lastRunFirstVisit.value,
+        winPct: runWinPct,
+      })
+    : null;
+  const skipAll = reason !== null;
+  skipReason.value = reason;
   stageSkipped.value = skipAll;
   stageWasReward.value = !!char.row?.pending_reward; // boss : latch pour ne pas rejouer
   stageDone.value = !hasStage.value || skipAll;
@@ -4124,9 +4170,6 @@ function openReport() {
     revealDrops();
   }
 }
-// « Passer l'animation » quand la victoire était quasi acquise (≥ 90 %) — donjon
-// OU boss (mêmes règles). Le 1er passage reste animé (cf. lastRunFirstVisit).
-const canSkipStage = computed(() => runWinPct() >= 90);
 // Dernier lieu combattu → « Réattaquer » relance exactement le même run.
 const lastDungeon = ref<Dungeon | null>(null);
 const lastBoss = ref<MilestoneBoss | null>(null);
@@ -9826,6 +9869,16 @@ button.pt-mini:active {
 }
 .report-modal.lose {
   border-top-color: var(--d4);
+}
+.rm-skips {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+}
+.result-skip-set {
+  margin: -2px 0 8px;
+  font-size: 12px;
+  color: var(--dim);
 }
 .rm-skip {
   flex: 0 0 auto;

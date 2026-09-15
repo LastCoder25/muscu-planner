@@ -23,6 +23,49 @@ export interface Labyrinth {
 // Préfixe des ids de palier nettoyés dans characters.cleared_dungeons.
 const LABY_CLEAR_PREFIX = 'laby:';
 export const labyClearId = (id: string) => `${LABY_CLEAR_PREFIX}${id}`;
+/** Le palier d'un id de `cleared_dungeons`, ou null s'il n'est pas un palier de Labyrinthe. */
+export const labyIdOfClear = (clearId: string | null | undefined): string | null =>
+  clearId?.startsWith(LABY_CLEAR_PREFIX) ? clearId.slice(LABY_CLEAR_PREFIX.length) : null;
+
+/** Runs LANCÉS et runs NETTOYÉS, par palier (`characters.laby_stats`, migr. 0073). Un run
+ *  compte au lancement (clés payées) ; mort, retraite et run quitté en route ne nettoient pas. */
+export type LabyStats = Record<string, { runs: number; clears: number }>;
+
+/** Relecture défensive du JSONB : entrées malformées écartées, compteurs entiers ≥ 0, jamais
+ *  plus de runs nettoyés que de runs lancés. */
+export function normalizeLabyStats(v: unknown): LabyStats {
+  const out: LabyStats = {};
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
+  const n = (x: unknown) => (typeof x === 'number' && x > 0 ? Math.floor(x) : 0);
+  for (const [id, e] of Object.entries(v as Record<string, unknown>)) {
+    if (!e || typeof e !== 'object') continue;
+    const runs = n((e as { runs?: unknown }).runs);
+    const clears = Math.min(runs, n((e as { clears?: unknown }).clears));
+    if (runs > 0) out[id] = { runs, clears };
+  }
+  return out;
+}
+
+/** Un run LANCÉ sur le palier `id`. */
+export function labyRunStarted(stats: LabyStats, id: string): LabyStats {
+  const cur = stats[id] ?? { runs: 0, clears: 0 };
+  return { ...stats, [id]: { runs: cur.runs + 1, clears: cur.clears } };
+}
+
+/** Le palier `id` est NETTOYÉ. Un nettoyage sans lancement enregistré (run commencé avant que
+ *  les compteurs existent) compte aussi comme un run : le % ne dépasse jamais 100. */
+export function labyRunCleared(stats: LabyStats, id: string): LabyStats {
+  const cur = stats[id] ?? { runs: 0, clears: 0 };
+  const clears = cur.clears + 1;
+  return { ...stats, [id]: { runs: Math.max(cur.runs, clears), clears } };
+}
+
+/** % de runs nettoyés sur le palier, ou null si le joueur ne l'a jamais lancé. */
+export function labySuccessPct(stats: LabyStats, id: string): number | null {
+  const e = stats[id];
+  if (!e || e.runs <= 0) return null;
+  return Math.round((Math.min(e.clears, e.runs) / e.runs) * 100);
+}
 
 // 10 paliers — UN PAR RANG DE FAMILIER (G → SSS). Le `dropLevel` place le PLAFOND de rang
 // (rankCeilingForLevel) sur le rang cible, et la `luck` (haute pour F+) fait taper ce

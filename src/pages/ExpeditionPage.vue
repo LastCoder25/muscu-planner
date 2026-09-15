@@ -46,9 +46,14 @@
               <span
                 v-if="t.unlocked"
                 class="lt-pow"
-                :class="pctClass(labyClearPct[t.laby.id] ?? 0)"
-                title="Chance de nettoyer ce palier avec ton stuff actuel (attrition incluse)"
-                >🎯 {{ labyClearPct[t.laby.id] ?? 0 }}% de réussite</span
+                :class="t.success === null ? 'none' : pctClass(t.success)"
+                title="Tes runs nettoyés sur ce palier, parmi ceux que tu as lancés"
+                >🎯
+                {{
+                  t.success === null
+                    ? 'jamais tenté'
+                    : `${t.success} % réussis (${t.runs} run${t.runs > 1 ? 's' : ''})`
+                }}</span
               >
               ·
               <span class="lt-fam"
@@ -522,6 +527,7 @@ import {
   labyKeyCost,
   replayKeysInfo,
   deathKeepFraction,
+  labySuccessPct,
   type Labyrinth,
 } from '@/data/labyrinths';
 import { computeCharacter } from '@/lib/character';
@@ -565,7 +571,6 @@ import {
   labyrinthFoe,
   labyrinthTrapDamage,
   labyTierIndex as tierIndexOfLaby,
-  simulateLabyrinthRun,
 } from '@/lib/labyrinthRun';
 import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
@@ -637,6 +642,8 @@ const tiers = computed(() =>
     unlocked: labyrinthUnlockedTier(l.id, clearedSet.value),
     cleared: labyrinthCleared(l.id, clearedSet.value),
     deathKeep: Math.round(deathKeepFraction(l.id) * 100),
+    success: labySuccessPct(char.row?.laby_stats ?? {}, l.id),
+    runs: char.row?.laby_stats?.[l.id]?.runs ?? 0,
   })),
 );
 // Palier en cours d'exploration (choisi dans le lobby).
@@ -745,22 +752,9 @@ const detailPowerDelta = computed<number | null>(() => {
   return Math.round(withIt - combatPower(fighter.value));
 });
 
-// ── % DE RÉUSSITE d'un palier (Monte-Carlo du VRAI parcours avec ton stuff réel) ──
-// Le labyrinthe est un crawl d'ATTRITION → une « puissance conseillée » (single-fight) mentait.
-// On rejoue le parcours de l'auto (toutes les salles, pièges, repos, gardien) avec les mêmes
-// créatures que le combat : `simulateLabyrinthRun` est la source unique (lib/labyrinthRun).
-const LABY_ESTIMATE_RUNS = 30;
-function estimateLabyClear(laby: Labyrinth): number {
-  let wins = 0;
-  for (let s = 1; s <= LABY_ESTIMATE_RUNS; s++)
-    if (simulateLabyrinthRun(fighter.value, laby, s * 131 + laby.recoLevel * 7 + 1)) wins++;
-  return Math.round((wins / LABY_ESTIMATE_RUNS) * 100);
-}
-// Mémoïsé : recalculé seulement quand le combattant (stuff/stats) change, pas à chaque rendu.
-const labyClearPct = computed<Record<string, number>>(() => {
-  void fighter.value; // dépendance explicite
-  return Object.fromEntries(LABYRINTHS.map((l) => [l.id, estimateLabyClear(l)]));
-});
+// ── % DE RÉUSSITE d'un palier : celui du JOUEUR (runs nettoyés / runs lancés, v0.884) ──
+// Demande de l'utilisateur : plus d'estimation simulée, le vrai bilan de ses runs. Compté au
+// lancement (`spendKey`) et au nettoyage (`applyExpedition`), relu dans `laby_stats`.
 // Couleur du % de réussite : vert ≥70, orange 40-69, rouge <40.
 const pctClass = (pct: number) => (pct >= 70 ? 'ok' : pct >= 40 ? 'mid' : 'bad');
 
@@ -1288,7 +1282,7 @@ async function start(tier?: Labyrinth) {
   const laby = tier ?? selectedLaby.value ?? LABYRINTHS[0]!;
   if (!labyrinthUnlockedTier(laby.id, clearedSet.value)) return;
   const cost = labyKeyCost(laby.id);
-  const ok = await char.spendKey(uid, cost);
+  const ok = await char.spendKey(uid, cost, laby.id);
   if (!ok) {
     $q.notify({
       type: 'warning',
@@ -1652,6 +1646,9 @@ function returnToLobby() {
 }
 .lt-pow.mid {
   color: color-mix(in srgb, #ffb23f 78%, var(--dim));
+}
+.lt-pow.none {
+  color: var(--dim);
 }
 .lt-pow.bad {
   color: color-mix(in srgb, #ff6a45 70%, var(--dim));
