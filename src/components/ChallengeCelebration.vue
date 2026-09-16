@@ -66,7 +66,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { challengeStats, type Challenge } from '@/lib/challenges';
+import { challengeStats, challengeValueUnit, type Challenge } from '@/lib/challenges';
 import { achievementDef, RARITY_LABEL } from '@/data/achievements';
 
 const props = defineProps<{
@@ -76,7 +76,14 @@ const props = defineProps<{
 }>();
 defineEmits<{ close: []; 'see-success': [] }>();
 
-const unitLabel = computed(() => (props.challenge?.unit === 'time' ? ' sec' : ' reps'));
+// ⚠️ L'unité vient de la LIB : cette copie écrivait « sec » en dur ET ignorait la
+// DISTANCE — un défi en kilomètres se célébrait donc en « reps ». L'écran de fin est le
+// dernier chiffre qu'on garde d'un défi : il ne doit pas mentir sur ce qu'on a fait.
+const unitLabel = computed(() =>
+  props.challenge
+    ? ` ${challengeValueUnit(props.challenge.unit, props.challenge.exercise_id)}`
+    : ' reps',
+);
 const stats = computed(() =>
   props.challenge ? challengeStats(props.challenge) : { streak: 0, completionPct: 0, totalDone: 0 },
 );

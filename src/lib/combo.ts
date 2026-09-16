@@ -138,7 +138,13 @@ export function legReps(leg: ComboLeg): number {
 export function legMode(leg: ComboLeg): ComboCountMode {
   return leg.count_mode ?? 'sets';
 }
-/** Libellé de l'unité de l'objectif (séries / reps / sec) selon le mode. */
+/** Libellé de l'unité de l'objectif (séries / reps / sec) selon le mode.
+ *
+ *  ⚠️ NE PAS l'unifier avec `challengeValueUnit` (petits défis), malgré la ressemblance :
+ *  ici « time » veut TOUJOURS dire des SECONDES au chrono, parce qu'un exo de SORTIE
+ *  (marche/course/vélo) ne peut pas être un emplacement du 360 — les slots se mappent sur
+ *  `muscle_primary`, et « cardio » n'en est pas un. Le mode vient du LEG, pas de l'unité
+ *  de l'exercice : les deux fonctions ne répondent pas à la même question. */
 export function legUnitLabel(leg: ComboLeg): string {
   const m = legMode(leg);
   return m === 'reps' ? 'reps' : m === 'time' ? 'sec' : 'séries';

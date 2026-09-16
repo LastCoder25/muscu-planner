@@ -79,7 +79,7 @@ import { useTennisStore } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
-import { challengeDayXp } from '@/lib/challenges';
+import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
 import { legSets, legMode, type ComboSet } from '@/lib/combo';
 import {
   sessionXp,
@@ -234,7 +234,10 @@ const entries = computed<Entry[]>(() => {
   // jacks…) n'a pas de miroir → il reste affiché ici.
   for (const c of challenges.list) {
     if (isCardioOutingChallenge(c)) continue;
-    const uLabel = c.unit === 'time' ? 'sec' : c.unit === 'distance' ? 'km' : 'reps';
+    // ⚠️ Cette copie était juste, mais SEULEMENT grâce au `continue` ci-dessus (qui
+    // écarte distance et sorties) : elle ne le disait pas, et sa branche « km » était
+    // morte. La lib donne la même réponse sans dépendre d'une ligne située plus haut.
+    const uLabel = challengeValueUnit(c.unit, c.exercise_id);
     for (const p of c.progress) {
       if (!(p.done > 0)) continue;
       const [y, m, dd] = p.date.split('-').map(Number);

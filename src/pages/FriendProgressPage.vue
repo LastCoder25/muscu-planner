@@ -91,6 +91,7 @@ import {
   challengeStats,
   challengeLiveBalance,
   logicalToday,
+  challengeValueUnit,
   type Challenge,
 } from '@/lib/challenges';
 import { dateRangeLabel } from '@/lib/startDate';
@@ -127,8 +128,9 @@ const activeCombo = computed(() => combos.value.find((c) => c.status === 'active
 const st = (c: Challenge) => challengeStats(c);
 const comboLegsDone = (c: ComboChallenge) => c.legs.filter((l) => legComplete(l)).length;
 const fillOf = (pct: number) => ({ width: Math.max(0, Math.min(100, pct)) + '%' });
-const unitLabel = (c: Challenge) =>
-  c.unit === 'distance' ? 'km' : c.unit === 'time' ? 'sec' : 'reps';
+// ⚠️ L'unité vient de la LIB : cette copie écrivait « sec » en dur, donc l'avancement
+// d'un ami sur une marche s'affichait en secondes (cf. `challengeValueUnit`).
+const unitLabel = (c: Challenge) => challengeValueUnit(c.unit, c.exercise_id);
 
 /** Jour courant du défi (1-based), borné à sa durée. */
 function dayIndex(c: Challenge): number {
