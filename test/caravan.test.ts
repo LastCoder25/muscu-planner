@@ -52,8 +52,11 @@ import {
 import { trialXpBase } from '@/lib/skirmish';
 import {
   advGearEffects,
+  advGearHasSecondAffix,
   advGearRoles,
   advGearValue,
+  rollAdvGear,
+  ADV_GEAR_SLOTS,
   LINEAGE_GEAR,
   lineageOf,
   wornGear,
@@ -75,7 +78,7 @@ import {
   talentRollOf,
   type TalentInstance,
 } from '@/lib/talents';
-import { offenseOf, simulateCombat, survivalOf } from '@/lib/combat';
+import { mulberry32, offenseOf, simulateCombat, survivalOf } from '@/lib/combat';
 import {
   famXpForLevel,
   aggregateEffects,
@@ -1913,11 +1916,41 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
           expect(p.roll).toBe(0.3);
           expect(p.effect.type).toBe(pool[0]);
           expect(p.effect.value).toBe(advGearValue(pool[0]!, p.rarity, 0.3));
-          if (RARITY_RANK[p.rarity] >= RARITY_RANK.magique) {
+          // ⚠️ La règle du 2ᵉ affixe est LUE (`advGearHasSecondAffix`), jamais recopiée :
+          // ce test épinglait `>= magique` en dur, donc il verrouillait l'ANCIEN SEUIL au
+          // lieu de garantir que l'étalon et le tirage disent la même chose — ce qui était
+          // exactement le défaut (une copie de la règle vivait dans `refAdvGear`).
+          if (advGearHasSecondAffix(p.rarity)) {
             expect(p.effect2?.type).toBe(pool[1]);
             expect(p.effect2?.value).toBe(advGearValue(pool[1]!, p.rarity, 0.3));
           } else expect(p.effect2).toBeUndefined();
         }
+      }
+    }
+  });
+
+  it('⚠️ L’ÉTALON ET LE TIRAGE S’ACCORDENT sur le 2ᵉ affixe — à TOUS les rangs', () => {
+    // C'est l'invariant qui MANQUAIT, et son absence a coûté cher : `refAdvGear` portait sa
+    // propre copie de « 2 affixes à partir du rang Or », si bien que régler le seuil dans
+    // `rollAdvGear` n'avait AUCUN effet sur la route — mesuré, les bandes d'embuscade ne
+    // bougeaient pas d'un seul point. La route se serait calibrée sur un équipement que le
+    // jeu ne produit plus. On compare donc les DEUX chemins, jamais une valeur écrite.
+    for (const L of [1, 8, 12, 26, 45, 70, 100]) {
+      for (const p of refAdvGear(L)) {
+        expect(!!p.effect2, `étalon niveau ${L}, ${p.rarity} ${p.slot}`).toBe(
+          advGearHasSecondAffix(p.rarity) && LINEAGE_GEAR[p.lineage].pieces[p.slot].pool.length > 1,
+        );
+      }
+      // …et une pièce TIRÉE au même rang dit la même chose.
+      for (const slot of ADV_GEAR_SLOTS) {
+        const g = rollAdvGear(mulberry32(L * 31 + 5), {
+          lineage: 'guerrier',
+          slot,
+          level: L,
+          playerLevel: L,
+          rank: 'commun',
+        });
+        expect(!!g.effect2, `tirage ${slot}`).toBe(advGearHasSecondAffix('commun'));
       }
     }
   });

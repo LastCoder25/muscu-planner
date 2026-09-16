@@ -17,6 +17,7 @@ import {
   LINEAGE_GEAR,
   OUTFITTER,
   advGearEffects,
+  advGearHasSecondAffix,
   advGearOptions,
   advGearRoles,
   advGearValue,
@@ -761,5 +762,54 @@ describe('⚒️ Équipementier', () => {
       const g = outfitFromItem(mulberry32(seed), hero as never, cible, 95)!;
       expect(canWearAdvGear(cible, g), `seed ${seed} : ${g.rarity}`).toBe(true);
     }
+  });
+});
+
+describe('🟤 UNE PIÈCE DE BAS RANG VAUT ENFIN QUELQUE CHOSE (v0.900)', () => {
+  it('⚠️ toute pièce porte DEUX stats, quel que soit son rang', () => {
+    // Mesuré : un set COMPLET de rang 🟤 Bronze valait **+1,14 % de puissance** contre
+    // +18,7 % en 🌟 Divin ancestral — 0,04 niveau d'aventurier contre 10,2, un écart de
+    // 250×. La cause n'était pas la petite assiette de stats (un set Bronze vaut 1,55 à
+    // 2,09 % du niveau 10 au 80 : une valeur PLATE, donc indépendante de l'assiette) mais
+    // le RANG, dont le plus gros levier était le 2ᵉ affixe réservé à 🟡 Or et au-dessus.
+    for (const rank of RANK_ORDER) {
+      expect(advGearHasSecondAffix(rank), rank).toBe(true);
+      const g = rollAdvGear(mulberry32(7), {
+        lineage: 'guerrier',
+        slot: 'armor',
+        level: 20,
+        playerLevel: 20,
+        rank,
+      });
+      expect(g.effect2, `pièce de rang ${rank}`).toBeTruthy();
+      expect(g.effect2!.type).not.toBe(g.effect.type); // deux canaux distincts
+    }
+  });
+
+  it('⚠️ le RANG ne pilote plus que la TAILLE des stats, et il le fait toujours', () => {
+    // On ne remonte le bas qu'à condition que la progression reste lisible : une pièce d'un
+    // rang supérieur doit rester strictement meilleure, sinon le rang cesse de vouloir dire
+    // quelque chose — c'est précisément ce que l'app affiche depuis qu'elle parle en rangs.
+    const val = (rank: (typeof RANK_ORDER)[number]) => advGearValue('max_pv_pct', rank, 0.5);
+    for (let i = 1; i < RANK_ORDER.length; i++)
+      expect(val(RANK_ORDER[i]!), RANK_ORDER[i]).toBeGreaterThan(val(RANK_ORDER[i - 1]!));
+  });
+});
+
+describe('⭐ une pièce d’aventurier se lit en RANG ET ÉTOILES', () => {
+  it('la case porte le grade complet, comme un objet du héros', () => {
+    // ⚠️ Les étoiles ne sont pas décoratives : une pièce porte un JET qui décide d'une part
+    // de sa valeur. Sans elles, deux pièces « Bronze » de jets opposés se lisaient pareil —
+    // le défaut que la v0.895 avait corrigé côté héros et qui survivait ici.
+    const a = { ...adv('a', ['archer']), level: 10 };
+    const bas = piece('bas', { lineage: 'archer', slot: 'weapon', rarity: 'commun', roll: 0.05 });
+    const haut = piece('haut', { lineage: 'archer', slot: 'weapon', rarity: 'commun', roll: 0.95 });
+    const rBas = advGearCells(a, [bas])[0]!.rank!;
+    const rHaut = advGearCells(a, [haut])[0]!.rank!;
+    expect(rBas).toContain('★');
+    expect(rHaut).toContain('★');
+    // Même rang, jets opposés → deux étiquettes DIFFÉRENTES : c'est tout l'objet.
+    expect(rBas).not.toBe(rHaut);
+    expect(advGearCells(a, [haut])[0]!.title).toContain(rHaut);
   });
 });

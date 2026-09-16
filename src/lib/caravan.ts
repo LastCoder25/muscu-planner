@@ -82,6 +82,7 @@ import {
   ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
   advGearEffects,
+  advGearHasSecondAffix,
   advGearRoles,
   advGearRoleValue,
   advGearValue,
@@ -669,7 +670,11 @@ export function refAdvGear(level: number, n: number = CARAVAN.refEscort): AdvGea
         effect: { type: t1, value: advGearValue(t1, rarity, REF_GEAR_JET) },
       };
       const t2 = piece.pool[1];
-      if (t2 && RARITY_RANK[rarity] >= RARITY_RANK.magique)
+      // ⚠️ MÊME règle que le tirage (`advGearHasSecondAffix`), jamais une copie : cet étalon
+      // est ce sur quoi `roadFoe` se calibre, donc il doit porter l'équipement que le jeu
+      // produit RÉELLEMENT. La copie qui vivait ici rendait tout réglage du seuil inopérant
+      // sur la route — mesuré, les bandes d'embuscade ne bougeaient pas d'un seul point.
+      if (t2 && advGearHasSecondAffix(rarity))
         g.effect2 = { type: t2, value: advGearValue(t2, rarity, REF_GEAR_JET) };
       if (def.role && slot === 'accessory')
         g.role = { kind: def.role, value: advGearRoleValue(def.role, rarity, REF_GEAR_JET) };

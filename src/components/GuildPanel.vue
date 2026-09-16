@@ -147,7 +147,15 @@
                     <b :style="{ color: rarityRank(g.rarity).color }">{{ g.name }}</b>
                     <span class="d-train">niv {{ g.level }}</span>
                   </span>
-                  <span class="d-pair-sub">{{ lineageLabel(g.lineage) }}</span>
+                  <!-- Le RANG et ses ÉTOILES : la liste ne donnait que la couleur du nom,
+                       donc deux pièces du même rang mais de jets opposés s'y lisaient
+                       pareil — or le jet décide d'une part de leur valeur. -->
+                  <span class="d-pair-sub">
+                    <span class="d-rk" :style="{ '--rk': rarityRank(g.rarity).color }">{{
+                      gradeLabel(g)
+                    }}</span>
+                    · {{ lineageLabel(g.lineage) }}
+                  </span>
                   <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{ t }}</span>
                   <span v-if="ownerOf(g)" class="d-pair-sub warn"
                     >portée par {{ ownerOf(g)?.name }}</span
@@ -345,6 +353,11 @@
                ce qu'il porte d'un coup d'œil, sans ouvrir le sélecteur (v0.865). -->
           <span v-if="s.rank" class="dg-rk" :style="{ color: s.color }">{{ s.rank }}</span>
           <span v-if="s.stat" class="dg-stat">{{ s.stat }}</span>
+          <!-- Ce que la pièce APPORTE : la stat seule ne se compare pas d'une pièce à
+               l'autre (des dégâts contre de la réduction) et ne dit pas son assiette. -->
+          <span v-if="(detailGearGain.get(s.slot) ?? 0) > 0" class="dg-gain"
+            >⚔️ +{{ fmtPow(detailGearGain.get(s.slot) ?? 0) }}</span
+          >
         </button>
       </div>
 
@@ -549,7 +562,7 @@
         <button class="iconbtn" aria-label="Fermer" @click="stockEquip = null">✕</button>
       </div>
       <p class="g-note">
-        {{ lineageLabel(stockEquip.lineage) }} · rang {{ rarityRank(stockEquip.rarity).name }} ·
+        {{ lineageLabel(stockEquip.lineage) }} · {{ gradeLabel(stockEquip) }} ·
         {{ advGearEffectTexts(stockEquip).join(' · ') }}
       </p>
       <p class="g-note">{{ GAIN_NOTE }}</p>
@@ -666,6 +679,7 @@ import {
 import { rankStarStr } from '@/lib/characterRank';
 import {
   rarityRank,
+  gradeLabel,
   RARITY_RANK,
   FAMILIAR_SLOT,
   aggregateLines,
@@ -1281,6 +1295,41 @@ watch(
   { immediate: true },
 );
 const detailAdv = ref<Adventurer | null>(null);
+/** CE QUE CHAQUE PIÈCE PORTÉE APPORTE, en puissance — l'arbitre de tout le jeu.
+ *
+ *  ⚠️ La case n'affichait que la stat brute (« +1,1 % de vie »), signalée par l'utilisateur
+ *  comme illisible : un pourcentage ne dit rien tant qu'on ne connaît pas son assiette, et
+ *  il ne se compare pas d'une pièce à l'autre (des dégâts contre de la réduction). Mesuré,
+ *  une pièce de rang Bronze vaut ~0,5 % de la puissance de son porteur — le chiffre honnête
+ *  est donc l'écart, pas la stat. Même remède que pour les compagnons (v0.784).
+ *
+ *  ⚠️ Instant FIGÉ à l'ouverture, jamais `now.value` : sinon les 8 évaluations
+ *  (4 cases × avec/sans) repartiraient à chaque battement du tick de 30 s — exactement ce
+ *  que `gearPickCtx` évite déjà pour le sélecteur. */
+const detailOpenedAt = ref(0);
+watch(detailAdv, (a) => {
+  if (a) detailOpenedAt.value = Date.now();
+});
+const detailCtx = computed<CompanionCtx>(() => ({
+  familiars: famPool.value,
+  talents: talPool.value,
+  kennelLevel: kennelLevel.value,
+  now: detailOpenedAt.value,
+  advGear: char.row?.adv_gear?.stock ?? [],
+  heroFamiliarId: heroFamId.value,
+}));
+const detailGearGain = computed(() => {
+  const a = detailAdv.value;
+  const out = new Map<AdvGearSlot, number>();
+  if (!a) return out;
+  for (const c of detailGearSlots.value) {
+    if (!c.piece) continue;
+    const withIt = adventurerGearPower(char.advList, a, c.slot, c.piece.id, detailCtx.value);
+    const without = adventurerGearPower(char.advList, a, c.slot, undefined, detailCtx.value);
+    out.set(c.slot, withIt - without);
+  }
+  return out;
+});
 const statsOf = (a: Adventurer) => advStats(a);
 /** Les stats ramenées à la FORME attendue par `advShapeLabel` (p/e/a) : on nomme
  *  l'orientation à partir des stats RÉELLES, pas des poids d'une seule classe. */
@@ -1967,6 +2016,13 @@ async function doPromote(classId: string) {
 }
 .dg-stat {
   color: var(--dim);
+}
+/* Le gain de puissance : c'est le verdict, il se lit avant la stat brute. */
+.dg-gain {
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--d1);
 }
 /* Emplacement vide : lisible, mais en retrait. */
 .d-gear-slot.empty .dg-emo,

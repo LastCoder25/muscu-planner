@@ -7,6 +7,7 @@ import {
   effectAsAggregate,
   effectBase,
   effectLabelFor,
+  gradeLabel,
   rarityRank,
   round1,
   emptyEffects,
@@ -136,6 +137,43 @@ const ADV_GEAR = {
    *  calme 92/89/76/74/85/89 %, périlleux 26/27/35/25/29/34 % ; le même SANS pièces
    *  90/86/72/63/67/65 % en calme. Ne pas remonter sans re-mesurer les deux. */
   k: 0.1125,
+  /** ⚠️ RANG À PARTIR DUQUEL UNE PIÈCE PORTE UN SECOND AFFIXE — le levier qui a réparé le
+   *  bas de courbe (v0.900, MESURÉ ; signalé par l'utilisateur : « du stuff bronze qui donne
+   *  +1,1 % de vie, sachant qu'ils en ont très peu de base — très bizarre »).
+   *
+   *  Mesuré AVANT : un set COMPLET valait **+1,14 % de puissance au rang 🟤 Bronze** contre
+   *  **+18,7 % en 🌟 Divin ancestral** ; rapporté à ce qu'un NIVEAU d'aventurier apporte,
+   *  **0,04 niveau contre 10,2** — un écart de 250×. La feature n'existait pas pendant les
+   *  ~20 premiers niveaux, exactement quand on découvre l'Équipementier et qu'on paie chaque
+   *  pièce d'un objet du héros plus du temps de forge.
+   *
+   *  ⚠️ LA PISTE « ils ont trop peu de PV de base » EST ARITHMÉTIQUEMENT MORTE, mesurée :
+   *  un set Bronze vaut 1,55 / 1,66 / 1,93 / 2,09 % aux niveaux 10/20/40/80 — une valeur
+   *  PLATE. Un pourcentage suit son assiette par construction, donc relever `STRATUM_BUDGET`
+   *  gonflerait le nu autant que l'équipé. Ce qui pilote la valeur, c'est le RANG.
+   *
+   *  ⚠️ CE SEUIL EST LE LEVIER LE PLUS BRUTAL, parce que les deux canaux se MULTIPLIENT
+   *  dans `offense × survie` : à `'magique'` (🟡 Or) il créait une MARCHE entre ⚪ Argent
+   *  (+2,2 %) et Or (+5,3 %). À `'commun'`, toute pièce porte deux stats et le rang ne dit
+   *  plus que leur TAILLE — une règle qui s'explique en une phrase, et qui colle au modèle
+   *  « rang + étoiles » de l'app.
+   *
+   *  ⚠️ CHOISI PARCE QU'IL EST CHIRURGICAL : Or et au-dessus portaient DÉJÀ deux affixes,
+   *  donc leurs valeurs sont **inchangées au bit** (18,71 % en Divin ancestral avant comme
+   *  après) — seuls Bronze (1,14 → 4,26 %) et Argent (2,17 → 4,15 %) bougent, c'est-à-dire
+   *  exactement la zone cassée. Le prix du NON-équipement pour un trio passe de 5,1 à 10,5 %
+   *  au niveau 2, et reste identique dès le niveau 26.
+   *
+   *  ⚠️ UNE COMPRESSION DE MAGNITUDE A ÉTÉ MESURÉE PUIS ÉCARTÉE (balayage de 15 réglages,
+   *  exposant 1 → 0,25 pincé sur le rang maximal) : elle aplatit bien la courbe (7,5 → 18 %
+   *  à l'exposant 0,25) mais fait payer **28 % de puissance** au débutant non équipé, contre
+   *  5 % aujourd'hui — l'équipement deviendrait un PÉAGE, ce que `k` existe précisément pour
+   *  éviter. Elle touchait aussi le milieu de courbe, donc toute la calibration de la route.
+   *
+   *  ⚠️ NON RÉTROACTIF : une pièce Bronze déjà en stock garde son unique affixe (l'autre
+   *  serait tiré au hasard, on ne réécrit pas un objet possédé). Même politique que les
+   *  refontes de tirage précédentes. */
+  affix2From: 'commun' as Rarity,
   /** Bonus de rôle d'un accessoire civil commun, jet 0 (rareté et jet le font monter). */
   roleBase: { speed: 0.03, haul: 0.04 },
   /** Revente : un objet d'aventurier vaut la moitié d'un objet du héros de même grade. */
@@ -171,8 +209,23 @@ export function advGearValue(t: EffectType, rank: Rarity, roll: number): number 
   return Math.max(0.1, round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k));
 }
 
+/** Une pièce de ce rang porte-t-elle un SECOND affixe ? — la SEULE définition.
+ *
+ *  ⚠️ Elle vivait en DEUX copies : `rollAdvGear` (ici) et `refAdvGear` (`caravan.ts`), qui
+ *  réécrivait `RARITY_RANK[rarity] >= RARITY_RANK.magique` à la main. Or `refAdvGear` est
+ *  l'ÉTALON sur lequel `roadFoe` se calibre : les laisser diverger, c'est calibrer la route
+ *  sur un équipement que le jeu ne produit pas. Mesuré — changer le seuil n'avait
+ *  strictement AUCUN effet sur les bandes d'embuscade tant que l'étalon gardait sa copie. */
+export function advGearHasSecondAffix(rank: Rarity): boolean {
+  return RARITY_RANK[rank] >= RARITY_RANK[ADV_GEAR.affix2From];
+}
+
 /** Bonus de rôle d'un accessoire civil à ce grade (même source unique que `advGearValue`). */
 export function advGearRoleValue(kind: 'speed' | 'haul', rank: Rarity, roll: number): number {
+  // ⚠️ Volontairement sur la courbe D'ORIGINE, pas sur `advRankMult` : ce sont des canaux
+  // CIVILS (temps de trajet, cargaison), déjà plafonnés par la route et comptés dans
+  // l'économie (`scrapEconomy`). Les comprimer déplacerait le rendement des convois, un
+  // réglage sans rapport avec le combat que la compression corrige.
   const scale = rankRollMult(rank, roll) / rankRollMult('commun', 0);
   return Math.round(ADV_GEAR.roleBase[kind] * scale * 1000) / 1000;
 }
@@ -215,7 +268,7 @@ export function rollAdvGear(
     level,
     effect: { type: t1, value: value(t1) },
   };
-  if (RARITY_RANK[rank] >= RARITY_RANK.magique) {
+  if (advGearHasSecondAffix(rank)) {
     const others = piece.pool.filter((t) => t !== t1);
     const t2 = others[Math.floor(rng() * others.length)]!;
     out.effect2 = { type: t2, value: value(t2) };
@@ -320,7 +373,11 @@ export interface AdvGearCell {
   filled: boolean;
   /** La pièce PORTÉE (règles appliquées, `wornGear`), sinon absente. */
   piece?: AdvGear;
-  /** Couleur et nom du rang de la pièce portée. */
+  /** Couleur, et RANG + ÉTOILES de la pièce portée (`gradeLabel`, comme un objet du héros).
+   *  ⚠️ Les étoiles ne sont pas décoratives : une pièce d'aventurier porte un JET
+   *  (`rollAdvGear` en tire un) qui décide d'une part de sa valeur. Sans elles, deux pièces
+   *  « Bronze » pouvaient valoir du simple au double sans que rien ne les distingue — le
+   *  défaut que la v0.895 avait corrigé côté héros et qui survivait ici. */
   color?: string;
   rank?: string;
   /** Stat principale, telle que le combat la lit (valeur × niveau d'objet). */
@@ -348,6 +405,7 @@ export function advGearCells(adv: Adventurer, worn: readonly AdvGear[]): AdvGear
     if (piece) {
       const rk = rarityRank(piece.rarity);
       const stat = advGearEffectTexts(piece)[0];
+      const grade = gradeLabel(piece); // « Bronze ★★☆☆☆ » — rang ET jet, comme le héros
       return {
         slot,
         emoji: piece.emoji,
@@ -355,9 +413,9 @@ export function advGearCells(adv: Adventurer, worn: readonly AdvGear[]): AdvGear
         filled: true,
         piece,
         color: rk.color,
-        rank: rk.name,
+        rank: grade,
         stat,
-        title: `${piece.name} · ${rk.name}${stat ? ' · ' + stat : ''}`,
+        title: `${piece.name} · ${grade}${stat ? ' · ' + stat : ''}`,
       };
     }
     const d = defs?.[slot];
