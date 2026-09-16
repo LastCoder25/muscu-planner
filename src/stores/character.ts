@@ -74,6 +74,7 @@ import {
   CAMP_TYPES,
   campSpecOf,
   depositMessages,
+  MESSAGES_CAP,
   isClaimable,
   createMap,
   advanceWorld,
@@ -1421,7 +1422,7 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
-    const messages = boxWith(cur, [msg], 20);
+    const messages = boxWith(cur, [msg], MESSAGES_CAP);
     await persist(userId, { expedition: { ...exp, reported: true }, messages });
     return msg;
   }
@@ -1442,7 +1443,7 @@ export const useCharacterStore = defineStore('character', () => {
     // `buildMessage(...)`, qui porte `claimed: false` : un butin encaissé entre le retour
     // (`claimAt`) et ce tick redevenait encaissable (revue finale des camps — or, objets, XP
     // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
-    const messages = exp.reported ? null : boxWith(cur, [msg], 20);
+    const messages = exp.reported ? null : boxWith(cur, [msg], MESSAGES_CAP);
     await persist(userId, {
       ...(messages && messages !== cur.messages ? { messages } : {}),
       expedition: null,
@@ -1494,7 +1495,7 @@ export const useCharacterStore = defineStore('character', () => {
       claimed: false,
       read: false,
     };
-    await persist(userId, { messages: boxWith(cur, [msg], 30) });
+    await persist(userId, { messages: boxWith(cur, [msg], MESSAGES_CAP) });
     return true;
   }
 
@@ -1538,7 +1539,7 @@ export const useCharacterStore = defineStore('character', () => {
       read: false,
     };
     await persist(userId, {
-      messages: boxWith(cur, [msg], 30),
+      messages: boxWith(cur, [msg], MESSAGES_CAP),
       cleared_dungeons: [...cur.cleared_dungeons, id],
     });
     return id;
@@ -1613,7 +1614,7 @@ export const useCharacterStore = defineStore('character', () => {
         ...partyPatch,
         inventory,
         // Ce message (et tout autre encaissement en cours) passe à `claimed: true`.
-        messages: boxWith(cur, [], 30),
+        messages: boxWith(cur, [], MESSAGES_CAP),
         set_pieces_seen: drops.length
           ? mergeSetSeen(cur.set_pieces_seen, drops)
           : cur.set_pieces_seen,
@@ -1628,7 +1629,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !cur.messages.some((m) => !m.read)) return;
     await persist(userId, {
-      messages: boxWith(cur, [], 30).map((m) => ({ ...m, read: true })),
+      messages: boxWith(cur, [], MESSAGES_CAP).map((m) => ({ ...m, read: true })),
     });
   }
 
@@ -2247,7 +2248,7 @@ export const useCharacterStore = defineStore('character', () => {
         // ⚠️ Déjà crédité vague par vague : ce message se LIT, il ne se réclame pas.
         read: false,
       };
-      patch.messages = boxWith(cur, [msg], 30);
+      patch.messages = boxWith(cur, [msg], MESSAGES_CAP);
       base = { ...base, pillage: null, field: null };
     }
 
@@ -2630,8 +2631,8 @@ export const useCharacterStore = defineStore('character', () => {
   async function partyTick(userId: string, now: number): Promise<ExpeditionMessage[]> {
     const cur = row.value;
     if (!cur || !partyList.value.length) return [];
-    const box = boxWith(cur, [], 30);
-    const t = settleParties(partyList.value, box, now, 30);
+    const box = boxWith(cur, [], MESSAGES_CAP);
+    const t = settleParties(partyList.value, box, now, MESSAGES_CAP);
     if (!t.changed) return [];
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement

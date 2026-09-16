@@ -241,6 +241,12 @@ export function isClaimable(m: ExpeditionMessage, now: number): boolean {
   return m.claimed === false && now >= (m.claimAt ?? m.resolvedAt);
 }
 
+/** Taille de la boîte 📬 — UNE seule valeur pour tous ses écrivains. ⚠️ Elle valait 20 dans
+ *  deux d'entre eux (`expeTick`, `expeSettle`) et 30 dans les six autres : la même boîte se
+ *  taillait donc différemment selon l'écriture qui passait en dernier, et un rapport lu
+ *  pouvait disparaître plus tôt sans raison. */
+export const MESSAGES_CAP = 30;
+
 /** Taille la boîte 📬 SANS jamais jeter un butin à récupérer. ⚠️ Un `slice` brut pouvait
  *  pousser dehors un rapport non encaissé — et avec lui l'XP d'un groupe entier.
  *  On garde les `cap` messages les plus récents (la liste est du plus récent au plus
