@@ -132,10 +132,15 @@ const team = (
     ...(sansGear
       ? {}
       : {
+          // ⚠️ LES QUATRE EMPLACEMENTS, relique comprise : elle est devenue le 4ᵉ en v0.881
+          // et cette fixture ne l'avait jamais suivie. Les bandes d'embuscade se mesuraient
+          // donc avec 3 pièces sur 4 face à un `roadFoe` calibré sur une référence qui en
+          // porte QUATRE — l'escorte du test était structurellement sous-équipée.
           gear: {
             weapon: `refGear${i}weapon`,
             armor: `refGear${i}armor`,
             accessory: `refGear${i}accessory`,
+            relic: `refGear${i}relic`,
           },
         }),
     ...(path ? { path } : {}),

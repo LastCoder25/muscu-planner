@@ -24,12 +24,33 @@ import { DUNGEONS } from '@/data/dungeons';
  *  qui s'ouvre progressivement, un tel joueur n'existe pas. On garde par emplacement les
  *  objets qui apportent le plus au combat, SEULS.
  *  Mis en cache : le build est déterministe et coûteux. */
-const cache = new Map<string, Combatant>();
+const cache = new Map<string, GearedBuild>();
 const KEEP_PER_SLOT = 10;
 /** Donjons du plus profond au moins profond : le 1er dont le reco ≤ l est celui qu'on farme. */
 const DEEPEST_FIRST = [...DUNGEONS].sort((a, b) => b.recoLevel - a.recoLevel);
 
+/** Le build DÉTAILLÉ, pour les tests qui ont besoin des pièces et pas seulement du
+ *  combattant fondu (le trophée s'ajoute au sac, s'échange, se compare).
+ *  ⚠️ `gearedFighter` n'en est que la dernière ligne : un seul modèle de joueur, donc un
+ *  seul endroit à corriger le jour où il cesse d'être réaliste. `test/trophy.test.ts`
+ *  portait ses propres `geared`/`realistic` — 60 tirages d'un coup au niveau L, un joueur
+ *  que la règle d'ouverture du rang (v0.894) ne produit plus. */
+export interface GearedBuild {
+  stats: { puissance: number; endurance: number; agilite: number };
+  /** Le sac : objets gardés + familiers (les talents vivent à part). */
+  inv: Item[];
+  /** L'équipement retenu par l'optimiseur. */
+  eq: Record<string, Item | undefined>;
+  /** Les effets des talents ÉQUIPÉS (vide si `companions` est faux). */
+  fx: ReturnType<typeof talentEffects>;
+}
+
 export function gearedFighter(L: number, seed = 1, companions = true): Combatant {
+  const b = gearedBuild(L, seed, companions);
+  return playerWithGear('geared', b.stats, b.eq, b.fx, L);
+}
+
+export function gearedBuild(L: number, seed = 1, companions = true): GearedBuild {
   const key = `${L}:${seed}:${companions}`;
   const hit = cache.get(key);
   if (hit) return hit;
@@ -85,13 +106,12 @@ export function gearedFighter(L: number, seed = 1, companions = true): Combatant
     combatPower(playerWithGear('g', stats, draft, fx(x), L)),
   );
   const eff = fx(ids);
-  const p = playerWithGear(
-    'geared',
+  const build: GearedBuild = {
     stats,
-    bestGearLoadout('g', stats, draft, inv, L, eff),
-    eff,
-    L,
-  );
-  cache.set(key, p);
-  return p;
+    inv,
+    eq: bestGearLoadout('g', stats, draft, inv, L, eff),
+    fx: eff,
+  };
+  cache.set(key, build);
+  return build;
 }

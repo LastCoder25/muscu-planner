@@ -1266,7 +1266,16 @@ export function starOdds(level: number, luck = 0): number[] {
 }
 
 /** Tire le jet (0..1) d'un objet de son rang : une étoile (`starOdds`), puis uniforme dans sa
- *  tranche. Sans allocation (appelé à chaque drop de son rang). */
+ *  tranche. Sans allocation (appelé à chaque drop de son rang).
+ *
+ *  ⚠️ NE PAS le remplacer par un `pick` pondéré générique (celui de `skirmish.ts`, par
+ *  exemple) — proposé par une revue `/simplify`, VÉRIFIÉ puis REFUSÉ. Trois différences
+ *  portantes : (1) il n'alloue AUCUN tableau de poids, sur un chemin appelé à chaque drop ;
+ *  (2) il descend depuis l'étoile HAUTE (la part `topShare` d'abord, puis s−1 … 1) quand un
+ *  `pick` générique parcourt la liste EN AVANT — donc, pour le même `u`, il ne désigne pas
+ *  la même étoile ; (3) tous les tirages d'objets sont SEEDÉS, donc changer cette
+ *  correspondance `u → étoile` changerait le butin de chaque graine du jeu. Deux sélections
+ *  pondérées ne sont pas pour autant la même fonction. */
 function rollStarJet(rng: () => number, c: CharacterRank, luck: number): number {
   const s = starCap(c);
   let u = rng();
