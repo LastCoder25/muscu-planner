@@ -73,6 +73,7 @@ import {
   advStats,
   advTitle,
   escortRoleLevel,
+  grantAdvXp,
   PROMO_LEVELS,
   type Adventurer,
   type AdvRole,
@@ -1439,6 +1440,41 @@ export function startCaravan(
  *  ⚠️ `claimed === undefined` = déjà crédité, jamais « à récupérer ». */
 export function isCaravanClaimable(c: Caravan, now: number): boolean {
   return c.claimed === false && now >= c.returnAt;
+}
+
+/**
+ * 🎁 Ce que l'ENCAISSEMENT d'un convoi change au vivier — PUR, jumeau de `partyClaimRoster`.
+ * - XP par aventurier (`outcome.xp`, calculée au départ), plafonnée par la Guilde ;
+ * - 🤕 les blessés (`outcome.hurt`, règle `convoyHurt` : le premier tombé d'une embuscade
+ *   PERDUE) partent à l'infirmerie pour `caravanHurtMs` (🩺 de l'escorte + Infirmerie) ;
+ * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir) ;
+ * - `wages` : ENTIER (colonne `gold` entière — cf. le bug de la cargaison décimale, v0.796).
+ *
+ * ⚠️ UNE CONVALESCENCE NE SE RACCOURCIT JAMAIS : on prend le MAXIMUM de l'échéance en cours
+ * et de la nouvelle. Le store écrasait `hurtUntil`, donc encaisser un convoi pouvait REMETTRE
+ * DEBOUT plus tôt un aventurier déjà alité plus longtemps (siège perdu, v0.887) — alors que
+ * `partyClaimRoster` respectait déjà la règle. Cette divergence est la raison d'être de cette
+ * fonction : la règle vit désormais à UN seul endroit par voie, testée.
+ * ⚠️ Le HÉROS n'y figure jamais : ni XP (elle vient du sport), ni blessure de convoi.
+ */
+export function caravanClaimRoster(
+  van: Caravan,
+  roster: readonly Adventurer[],
+  ctx: { guildLevel: number; infirmaryLevel: number; now: number },
+): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
+  const o = van.outcome;
+  const escort = van.escort
+    .map((id) => roster.find((a) => a.id === id))
+    .filter((a): a is Adventurer => !!a);
+  const hurtUntil = ctx.now + caravanHurtMs(escort, ctx.infirmaryLevel);
+  const hurt = new Set(o.hurt);
+  const adventurers = roster.map((a) => {
+    const gain = o.xp[a.id];
+    if (gain === undefined) return a;
+    const up = grantAdvXp(a, gain, ctx.guildLevel);
+    return hurt.has(a.id) ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) } : up;
+  });
+  return { adventurers, escort, wages: Math.max(0, Math.round(o.wages || 0)) };
 }
 
 // ── 📜 RAPPORT DE CONVOI (v0.853 ; demandé par l’utilisateur : « les aventuriers concernés et

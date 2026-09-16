@@ -3,6 +3,7 @@ const NUS = { familiars: [], talents: [], advGear: [] };
 import {
   CARAVAN,
   canSendCaravan,
+  caravanClaimRoster,
   caravanHurtMs,
   caravanLegMin,
   caravanSlots,
@@ -58,7 +59,14 @@ import {
   wornGear,
   type AdvGear,
 } from '@/lib/advGear';
-import { advRarity, advRoles, guildRoster, PROMO_LEVELS, type Adventurer } from '@/lib/adventurers';
+import {
+  advRarity,
+  advRoles,
+  grantAdvXp,
+  guildRoster,
+  PROMO_LEVELS,
+  type Adventurer,
+} from '@/lib/adventurers';
 import {
   TALENTS,
   talentTierFloor,
@@ -482,6 +490,80 @@ describe('le convoi lui-même', () => {
     const c = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0, 100);
     expect(isCaravanClaimable(c, c.midAt)).toBe(false);
     expect(isCaravanClaimable(c, c.returnAt)).toBe(true);
+  });
+});
+
+describe('🎁 caravanClaimRoster — ce que l’encaissement change au vivier', () => {
+  const esc = team(3, 20);
+  const bystander: Adventurer = { ...refAdventurer(20, 0), id: 'a_reste' };
+  const roster = [...esc, bystander];
+  /** Un convoi rentré, dont l’XP et les blessés sont FORCÉS pour que le test porte sur la
+   *  règle d’encaissement et non sur un tirage d’embuscade. */
+  const van = (over: Partial<Caravan['outcome']> = {}): Caravan => {
+    const c = startCaravan('c1', poi(), esc, 0, 7, NUS, 0, 100);
+    return {
+      ...c,
+      outcome: {
+        ...c.outcome,
+        xp: { a0: 50, a1: 70, a2: 90 },
+        hurt: ['a1'],
+        wages: 123.6,
+        ...over,
+      },
+    };
+  };
+  const ctx = { guildLevel: 30, infirmaryLevel: 4, now: 1_000_000 };
+
+  it('XP de chacun = grantAdvXp ; celui qui n’est pas parti est intact', () => {
+    const r = caravanClaimRoster(van(), roster, ctx);
+    esc.forEach((a, i) =>
+      expect(r.adventurers[i]).toMatchObject(
+        grantAdvXp(a, [50, 70, 90][i]!, ctx.guildLevel) as object,
+      ),
+    );
+    expect(r.adventurers[3]).toBe(bystander);
+  });
+
+  it('🤕 les blessés partent à l’infirmerie (durée d’un convoi), les autres non', () => {
+    const r = caravanClaimRoster(van(), roster, ctx);
+    expect(r.adventurers[1]!.hurtUntil).toBe(ctx.now + caravanHurtMs(esc, ctx.infirmaryLevel));
+    expect(r.adventurers[0]!.hurtUntil).toBeUndefined();
+    expect(r.adventurers[2]!.hurtUntil).toBeUndefined();
+  });
+
+  it('⚠️ une convalescence plus longue (siège perdu) n’est JAMAIS raccourcie', () => {
+    // C'est le défaut que cette fonction existe pour fermer : le store écrasait `hurtUntil`,
+    // donc encaisser un convoi remettait debout trop tôt un aventurier déjà alité. La voie
+    // des groupes (`partyClaimRoster`) respectait déjà la règle — deux voies, une règle.
+    const long = ctx.now + 100 * 3600_000;
+    const alite = roster.map((a) => (a.id === 'a1' ? { ...a, hurtUntil: long } : a));
+    expect(caravanClaimRoster(van(), alite, ctx).adventurers[1]!.hurtUntil).toBe(long);
+  });
+
+  it('…mais une convalescence plus COURTE est bien prolongée', () => {
+    // Le `max` ne doit pas non plus figer une échéance : un blessé qui sortait dans 10 min
+    // repart pour la durée pleine d'un convoi.
+    const court = ctx.now + 600_000;
+    const presque = roster.map((a) => (a.id === 'a1' ? { ...a, hurtUntil: court } : a));
+    expect(caravanClaimRoster(van(), presque, ctx).adventurers[1]!.hurtUntil).toBe(
+      ctx.now + caravanHurtMs(esc, ctx.infirmaryLevel),
+    );
+  });
+
+  it('un aventurier renvoyé depuis : rien à lui verser, l’escorte ne compte que les présents', () => {
+    const r = caravanClaimRoster(van(), [esc[0]!, esc[2]!], ctx);
+    expect(r.escort.map((a) => a.id)).toEqual(['a0', 'a2']);
+    expect(r.adventurers).toHaveLength(2);
+    expect(caravanClaimRoster(van(), roster, ctx).escort.map((a) => a.id)).toEqual([
+      'a0',
+      'a1',
+      'a2',
+    ]);
+  });
+
+  it('⚠️ salaires ENTIERS (colonne gold entière), jamais négatifs', () => {
+    expect(caravanClaimRoster(van(), roster, ctx).wages).toBe(124);
+    expect(caravanClaimRoster(van({ wages: -5 }), roster, ctx).wages).toBe(0);
   });
 });
 

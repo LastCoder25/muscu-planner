@@ -159,7 +159,7 @@ import {
 } from '@/lib/adventurers';
 import {
   canSendCaravan,
-  caravanHurtMs,
+  caravanClaimRoster,
   convoySlotsFree,
   caravanFamiliarXp,
   canAdvTalent,
@@ -2494,10 +2494,20 @@ export const useCharacterStore = defineStore('character', () => {
     const van = caravanList.value.find((c) => c.id === caravanId);
     if (!cur || !van || !isCaravanClaimable(van, Date.now())) return null;
     const o = van.outcome;
-    const escortAdvs = van.escort
-      .map((id) => advList.value.find((a) => a.id === id))
-      .filter((a): a is Adventurer => !!a);
-    const hurtMs = caravanHurtMs(escortAdvs, defenseLevel(cur.base?.defenses ?? [], 'infirmary'));
+    const before = advList.value;
+    // XP, blessés et salaires : la règle vit dans `caravanClaimRoster` (lib, testée), jumelle
+    // de `partyClaimRoster`. ⚠️ C'est elle qui garantit qu'une convalescence n'est JAMAIS
+    // raccourcie — le calcul écrit ici écrasait `hurtUntil` et remettait debout trop tôt un
+    // aventurier déjà alité plus longtemps (siège perdu).
+    const {
+      adventurers: advs,
+      escort: escortAdvs,
+      wages,
+    } = caravanClaimRoster(van, before, {
+      guildLevel: guildLevel.value,
+      infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
+      now: Date.now(),
+    });
     // 🐾 Leurs COMPAGNONS ont escorté aussi : ils gagnent du dressage, comme au rempart.
     // ⚠️ Mêmes exclusions que la route (`companionsOf`) : celui que le héros porte se
     // battait ailleurs, il n’apprend rien de ce voyage.
@@ -2510,15 +2520,6 @@ export const useCharacterStore = defineStore('character', () => {
           trained.has(it.id) ? grantFamiliarXp(it, famGain, playerLevel) : it,
         )
       : cur.inventory;
-    const hurtUntil = Date.now() + hurtMs;
-    const hurt = new Set(o.hurt);
-    const before = advList.value;
-    const advs = before.map((a) => {
-      const gain = o.xp[a.id];
-      if (gain === undefined) return a;
-      const next = grantAdvXp(a, gain, guildLevel.value);
-      return hurt.has(a.id) ? { ...next, hurtUntil } : next;
-    });
     // ⚠️ ON ARRONDIT À L'ENCAISSEMENT, pas seulement à la production. Ces cinq colonnes
     // sont des ENTIERS : une valeur décimale fait échouer la sauvegarde entière avec
     // `invalid input syntax for type integer`, et l'écran ne montre RIEN. Corriger la
@@ -2529,7 +2530,8 @@ export const useCharacterStore = defineStore('character', () => {
     const ent = (n: number) => Math.max(0, Math.round(n || 0));
     await persist(userId, {
       // Les salaires sont déduits ICI, à l'encaissement : l'aventurier est payé au retour.
-      gold: Math.max(0, cur.gold + ent(o.gold) - ent(o.wages)),
+      // (`wages` vient de `caravanClaimRoster`, déjà entier — comme la voie des groupes.)
+      gold: Math.max(0, cur.gold + ent(o.gold) - wages),
       login_energy: cur.login_energy + ent(o.energy),
       summon_stones: cur.summon_stones + ent(o.summonStones),
       scrap: cur.scrap + ent(o.scrap),
