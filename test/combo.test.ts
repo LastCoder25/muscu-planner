@@ -53,6 +53,7 @@ import {
   comboChestEligible,
   comboCompleteInTime,
   comboEndDate,
+  legsByName,
 } from '@/lib/combo';
 
 const set = (reps: number, weight?: number, date = '2026-01-05'): ComboSet => ({
@@ -1233,5 +1234,43 @@ describe('🔀 ordre des séries d’une séance (v0.861)', () => {
     const after = comboSessionSteps([3, 2, 2], 'shuffle', 9);
     expect(after.slice(0, before.length)).toEqual(before);
     expect(after.at(-1)).toEqual({ exo: 0, set: 2 });
+  });
+});
+
+describe('🔤 l’ordre d’affichage des exos : ALPHABÉTIQUE', () => {
+  const leg = (exercise_name: string) => ({ exercise_name }) as never;
+  const noms = (x: readonly { exercise_name: string }[]) =>
+    legsByName(x).map((l) => l.exercise_name);
+
+  it('trie par nom, et NE TOUCHE PAS la source', () => {
+    // ⚠️ La copie est délibérée : la séance générée indexe les emplacements
+    // (`buildComboSessionFromCounts` reçoit un `counts` par exo), donc trier `legs` en place
+    // déplacerait ce que le joueur a coché.
+    const src = [leg('Tractions'), leg('Développé couché'), leg('Squat')];
+    const copie = [...src];
+    expect(noms(src)).toEqual(['Développé couché', 'Squat', 'Tractions']);
+    expect(src).toEqual(copie);
+  });
+
+  it('⚠️ L’ORDRE EST STABLE : il ne dépend PAS de l’avancement', () => {
+    // C'est tout l'intérêt du changement. Les deux écrans triaient par avancement, donc la
+    // liste se réordonnait PENDANT la saisie et on perdait sa place au milieu d'une séance.
+    const a = [
+      { exercise_name: 'Squat', target: 10, progress: [{ date: 'x', reps: 10 }] },
+      { exercise_name: 'Dips', target: 10, progress: [] },
+    ];
+    const b = [
+      { exercise_name: 'Squat', target: 10, progress: [] },
+      { exercise_name: 'Dips', target: 10, progress: [{ date: 'x', reps: 10 }] },
+    ];
+    expect(noms(a)).toEqual(noms(b));
+    expect(noms(a)).toEqual(['Dips', 'Squat']);
+  });
+
+  it('accents et nombres se rangent comme on les lit', () => {
+    // `localeCompare` en français : « Élévations » ne part pas à la fin de l'alphabet, et
+    // « Pompes 2 » passe avant « Pompes 10 ».
+    expect(noms([leg('Fentes'), leg('Élévations')])).toEqual(['Élévations', 'Fentes']);
+    expect(noms([leg('Pompes 10'), leg('Pompes 2')])).toEqual(['Pompes 2', 'Pompes 10']);
   });
 });

@@ -235,6 +235,7 @@ import {
   buildComboSessionFromCounts,
   comboSessionDurationMin,
   legRemaining,
+  legsByName,
   legUnitLabel,
   legMode,
   legLastReps,
@@ -288,8 +289,14 @@ const orderSeed = ref(1);
 const restSec = ref(60);
 const phase = ref<'config' | 'run'>('config');
 
-// Exos encore à faire cette semaine (candidats à la séance).
-const availableLegs = computed(() => (c.value?.legs ?? []).filter((l) => legRemaining(l) > 0));
+// Exos encore à faire cette semaine (candidats à la séance), par ordre ALPHABÉTIQUE — la
+// MÊME règle que la fiche du défi et l'onglet 🎯 (`legsByName`).
+// ⚠️ Cela ne touche QUE cette liste de cases à cocher : l'ordre des séries DANS la séance
+// reste celui qu'on choisit (standard / alterné / aléatoire, v0.861), et `counts` est
+// indexé par `exercise_id` — trier l'affichage ne déplace donc rien de ce qui a été coché.
+const availableLegs = computed(() =>
+  legsByName((c.value?.legs ?? []).filter((l) => legRemaining(l) > 0)),
+);
 // Coché = à faire dans la séance ; compteur = nb de séries (mode 'sets') OU de reps
 // (mode 'reps') par exo. Clé = exercise_id.
 const included = reactive<Record<string, boolean>>({});

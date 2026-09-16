@@ -251,6 +251,7 @@ import {
   type ComboChallenge,
   legDone,
   legComplete,
+  legsByName,
   legMode,
   legSets,
   legLastReps,
@@ -311,18 +312,10 @@ function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
 }
 const legsAtMax = computed(() => c.value?.legs.filter((l) => legTier(l) === 'max').length ?? 0);
-// Ordre d'affichage : les plus PROCHES de la complétude en haut, les autres par
-// avancement décroissant, les TERMINÉS relégués en bas.
-const orderedLegs = computed(() => {
-  const legs = c.value?.legs ?? [];
-  const frac = (l: ComboLeg) => (l.target > 0 ? legDone(l) / l.target : 0);
-  return [...legs].sort((a, b) => {
-    const ca = legComplete(a) ? 1 : 0;
-    const cb = legComplete(b) ? 1 : 0;
-    if (ca !== cb) return ca - cb; // non terminés d'abord, terminés en bas
-    return frac(b) - frac(a); // le plus proche de la complétude en haut
-  });
-});
+// Ordre d'affichage : ALPHABÉTIQUE (`legsByName` — la MÊME règle que l'onglet 🎯 et la
+// préparation de séance, qui triaient chacun autrement). Le tri par avancement réordonnait
+// la liste PENDANT la saisie : on perdait sa place au milieu d'une séance.
+const orderedLegs = computed(() => legsByName(c.value?.legs ?? []));
 
 function fmtDM(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);

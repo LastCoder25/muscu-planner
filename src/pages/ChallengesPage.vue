@@ -586,10 +586,10 @@ import {
   legSetsDone,
   legDone,
   legComplete,
+  legsByName,
   legTierMarks,
   legSegZone,
   legBarGeometry,
-  legRemaining,
   legMode,
   legLastReps,
   legLastWeight,
@@ -707,15 +707,10 @@ function bar(l: ComboLeg): { objPct: number; fillPct: number; overPct: number } 
 function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
 }
-const activeComboLegs = computed(() => {
-  const legs = activeCombo.value?.legs ?? [];
-  return [...legs].sort((a, b) => {
-    const ca = legComplete(a) ? 1 : 0;
-    const cb = legComplete(b) ? 1 : 0;
-    if (ca !== cb) return ca - cb; // non terminés d'abord
-    return legRemaining(a) - legRemaining(b); // moins de restant d'abord
-  });
-});
+// Ordre ALPHABÉTIQUE (`legsByName`) : cet onglet triait par RESTANT quand la fiche du défi
+// triait par fraction faite — le même défi ne listait pas ses exos dans le même ordre aux
+// deux endroits, et les deux se réordonnaient pendant la saisie.
+const activeComboLegs = computed(() => legsByName(activeCombo.value?.legs ?? []));
 const comboList = computed(() =>
   comboStore.list
     .filter((c) => c.status === comboTab.value)

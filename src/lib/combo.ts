@@ -138,6 +138,28 @@ export function legReps(leg: ComboLeg): number {
 export function legMode(leg: ComboLeg): ComboCountMode {
   return leg.count_mode ?? 'sets';
 }
+
+/** 🔤 L'ORDRE D'AFFICHAGE DES EXOS D'UN DÉFI 360 : ALPHABÉTIQUE (demandé par l'utilisateur).
+ *
+ *  ⚠️ CE QU'IL REMPLACE, ET POURQUOI C'EST MIEUX : chaque écran triait « les plus proches
+ *  de la complétude en haut, les terminés en bas » — donc **la liste se réordonnait pendant
+ *  qu'on saisissait ses séries**, et on perdait sa place au milieu d'une séance. Un ordre
+ *  alphabétique est STABLE : l'exo qu'on cherche est toujours au même endroit.
+ *
+ *  ⚠️ ET LES DEUX ÉCRANS TRIAIENT DIFFÉREMMENT (la fiche par fraction faite, l'onglet 🎯 par
+ *  restant) : le même défi ne listait pas ses exos dans le même ordre à deux endroits.
+ *
+ *  ⚠️ NE RÉORDONNE JAMAIS `legs` — la copie est délibérée. La séance générée indexe les
+ *  emplacements (`buildComboSessionFromCounts` reçoit un `counts` par exo, le runner
+ *  numérote les séries) : trier la source déplacerait ce que le joueur a coché.
+ *
+ *  `localeCompare` en français : les accents se rangent comme on les lit, et `numeric`
+ *  met « Pompes 2 » après « Pompes » plutôt qu'après « Pompes 10 ». */
+export function legsByName<T extends { exercise_name: string }>(legs: readonly T[]): T[] {
+  return [...legs].sort((a, b) =>
+    a.exercise_name.localeCompare(b.exercise_name, 'fr', { numeric: true, sensitivity: 'base' }),
+  );
+}
 /** Libellé de l'unité de l'objectif (séries / reps / sec) selon le mode.
  *
  *  ⚠️ NE PAS l'unifier avec `challengeValueUnit` (petits défis), malgré la ressemblance :
