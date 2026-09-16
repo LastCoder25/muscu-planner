@@ -1646,29 +1646,34 @@ export function referenceHold(
  *  n’en a pas besoin : elle EST déjà une position de 0 à 1, et « 7 fois sur 10 » se lit
  *  sans connaître aucun seuil. `siegeGauge` et `SIEGE_EVEN` sont donc SUPPRIMÉS, pas
  *  recalibrés — il n’y avait plus de constante à régler. */
-export type SiegeOdds = 'perdu' | 'risque' | 'serre' | 'favorable' | 'large';
-/** Les bandes, en TENUE MESURÉE. ⚠️ Elles ne se calibrent plus : ce sont des tranches
- *  d’une probabilité, pas des seuils sur un proxy. Un changement d’équilibrage déplace
- *  les joueurs d’une bande à l’autre, il ne rend jamais les bandes fausses. */
+/** ⚠️ TROIS CRANS, PLUS CINQ — parce que la TENUE EST BINAIRE (v0.902, mesuré).
+ *
+ *  Sur 96 configurations (4 niveaux × 3 états d'enceinte × héros ou non × 4 armées réelles,
+ *  vivier complet) : **46 % des sièges tiennent 0-10 %, 52 % tiennent 90-100 %, et 2 % SEULEMENT
+ *  tombent entre les deux.** Une fois l'armée connue, le siège est joué : `siegeHoldChance`
+ *  ne fait varier que la CONDUITE du combat, pas la composition — et elle ne décide presque
+ *  rien. Cinq bandes promettaient donc une nuance qui n'existe pas ; « Tu devrais tenir »
+ *  contre « Tu tiens largement » désignait un écart que le moteur ne produit jamais.
+ *
+ *  Les seuils encadrent les DEUX modes réels et laissent un cran central pour les 2 % qui
+ *  tombent vraiment entre les deux. ⚠️ Ils ne se calibrent pas : ce sont des tranches d'une
+ *  probabilité, pas des seuils sur un proxy. */
+export type SiegeOdds = 'perdu' | 'serre' | 'tenu';
 export function siegeOdds(hold: number): SiegeOdds {
-  if (hold < 0.2) return 'perdu';
-  if (hold < 0.45) return 'risque';
-  if (hold < 0.65) return 'serre';
-  if (hold < 0.85) return 'favorable';
-  return 'large';
+  if (hold < 0.35) return 'perdu';
+  if (hold < 0.7) return 'serre';
+  return 'tenu';
 }
 
 export const ODDS_LABEL: Record<SiegeOdds, string> = {
-  perdu: 'L’enceinte cède',
-  risque: 'Très risqué',
-  serre: 'Ça va se jouer',
-  favorable: 'Tu devrais tenir',
-  large: 'Tu tiens largement',
+  perdu: 'Tu ne tiens pas',
+  serre: 'Ça se joue',
+  tenu: 'Tu tiens',
 };
 
 /** Les bandes où la base ne tient PLUS. Source unique : un écran qui redresserait la
  *  liste dériverait le jour où une bande change de nom. */
-const ODDS_BAD: readonly SiegeOdds[] = ['perdu', 'risque', 'serre'];
+const ODDS_BAD: readonly SiegeOdds[] = ['perdu', 'serre'];
 export const isOddsRisky = (o: SiegeOdds): boolean => ODDS_BAD.includes(o);
 
 /**
@@ -1762,8 +1767,11 @@ export function departureRisk(
   };
 }
 
-/** Les bandes, de la pire à la meilleure — l'ordre EST la comparaison. */
-const ODDS_ORDER: readonly SiegeOdds[] = ['perdu', 'risque', 'serre', 'favorable', 'large'];
+/** Les bandes, de la pire à la meilleure — l'ordre EST la comparaison.
+ *  ⚠️ DÉRIVÉ de `ODDS_LABEL`, jamais réécrit : deux listes des mêmes crans finiraient par
+ *  diverger, et celle-ci sert à dire « ça empire ». L'ordre des clés d'un objet littéral
+ *  est celui de la déclaration, donc il suffit de déclarer `ODDS_LABEL` du pire au meilleur. */
+const ODDS_ORDER = Object.keys(ODDS_LABEL) as readonly SiegeOdds[];
 
 /** Ce que l'ESPIONNAGE laisse voir de la puissance assaillante.
  *

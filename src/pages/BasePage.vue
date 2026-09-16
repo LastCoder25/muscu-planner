@@ -384,7 +384,16 @@
                  c’est elle qui répond à « est-ce que je tiens ? ». Deux questions, deux
                  nombres, aucun risque qu’ils se contredisent. -->
             <div class="f-val font-display">{{ fmtPow(forces.power) }}</div>
-            <div class="f-sub">tient {{ holdPct(forces.hold) }} face à une armée type</div>
+            <!-- ⚠️ LE REPÈRE N'EST PLUS ICI (v0.902, mesuré ; signalé par l'utilisateur :
+                 « plusieurs infos contradictoires sur le fait de tenir ou non »). « tient
+                 X % face à une armée type » est une moyenne sur SIX armées génériques, pas
+                 sur celle qui arrive : mesuré sur 96 configurations, il s'écarte du vrai
+                 pronostic de 17 points en médiane, 71 au p90, **100 au pire** — un joueur
+                 lisait « tient 100 % » juste au-dessus de « Tu tiens 0 % ». Deux
+                 pourcentages de TENUE côte à côte ne peuvent pas ne pas se contredire.
+                 Il descend dans le détail replié, où il répond à sa vraie question
+                 (« mon enceinte tient-elle la route en général ? »), utile au calme. -->
+            <div class="f-sub">de puissance</div>
           </div>
           <div class="f-vs">vs</div>
           <div class="f-side right">
@@ -401,11 +410,15 @@
             <div v-else class="f-val font-display range">
               {{ assaultSeen.lo }}–{{ assaultSeen.hi }}
             </div>
-            <!-- ⚠️ Deux chiffres sous un « vs » promettent une comparaison : le chiffre de
-                 l’armée est donc à la MÊME ÉCHELLE que la défense (`RAID.assaultEvenK`) — à
-                 égalité, on tient environ une fois sur deux. Le dire évite de lire « 6 000
-                 contre 2 000 » comme une victoire assurée. -->
-            <div v-if="raid && assaultSeen?.known" class="f-sub">à égalité : 1 chance sur 2</div>
+            <!-- ⚠️ « à égalité : 1 chance sur 2 » EST RETIRÉ (v0.902, mesuré). Les deux
+                 chiffres restent à la même échelle (`RAID.assaultEvenK`) — c'est ce qui rend
+                 la comparaison honnête à vue d'œil — mais la phrase promettait un SEUIL
+                 précis qui a dérivé : mesuré, à rapport 0,9-1,1 la tenue médiane est de
+                 100 %, pas 50 % (le point d'équilibre est vers 0,8). Plutôt que de
+                 recalibrer un SECOND pronostic qui redérivera, on cesse d'en faire un :
+                 ces deux nombres sont des MAGNITUDES, et le verdict juste dessous est la
+                 seule réponse à « est-ce que je tiens ? ». -->
+            <div v-if="raid && assaultSeen?.known" class="f-sub">puissance d’assaut</div>
           </div>
         </div>
         <!-- ⚠️ CE QUE COÛTENT LES ABSENTS (demandé par l'utilisateur : « envoyer des
@@ -414,7 +427,6 @@
              pouvait pas savoir ce qu'on abandonnait en faisant partir quelqu'un.
              ⚠️ Affiché SEULEMENT si l'écart est réel — annoncer « −0 » à un joueur dont
              tout le monde est à la maison serait du bruit. -->
-        <p v-if="holdNote" class="f-hint">{{ holdNote }}</p>
         <p v-if="forcesGap > 0" class="f-gap">
           🚪 Des tiens sont dehors : <b>−{{ fmtPow(forcesGap) }}</b> de puissance — au complet, tu
           vaudrais <b>{{ fmtPow(forcesFull) }}</b
@@ -465,6 +477,20 @@
             <span class="dp-atk">{{ p.active && p.atk ? fmtPow(p.atk) : '—' }}</span>
           </div>
         </div>
+        <!-- ⚠️ LE REPÈRE VIT ICI, et il DIT qu'il ne parle pas du siège du jour. Il répond
+             à « mon enceinte tient-elle la route en général ? » — utile au calme, quand
+             aucune armée n'est en vue — et c'est le seul endroit où il ne peut plus être lu
+             comme un pronostic sur l'armée qui arrive. -->
+        <p v-if="partsOpen" class="f-hint">
+          📐 En moyenne, sur des armées variées de ton niveau, ton enceinte tient
+          <b>{{ holdPct(forces.hold) }}</b> du temps — un repère sur ta base, pas un pronostic sur
+          l’armée en approche.
+        </p>
+        <!-- ⚠️ Il DESCEND avec les parts qu'il explique : il dit pourquoi la colonne est à
+             zéro, et cette colonne vit désormais dans le repli. En tête de panneau il
+             annonçait « ta base tient face à une armée type » juste au-dessus d'un verdict
+             qui pouvait dire l'inverse — la contradiction qu'on vient de supprimer. -->
+        <p v-if="partsOpen && holdNote" class="f-hint">{{ holdNote }}</p>
         <p v-if="partsOpen && !heroHome && heroBack" class="f-hint">
           🧭 Ton héros est en expédition, mais il sera rentré avant l’assaut : il défendra.
         </p>

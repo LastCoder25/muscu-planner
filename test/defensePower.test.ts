@@ -141,13 +141,16 @@ describe('⚖️ LE PRONOSTIC EST MESURÉ, PAS ESTIMÉ', () => {
   });
 
   it('les bandes sont des tranches de PROBABILITÉ, monotones et exhaustives', () => {
-    // ⚠️ Elles ne se calibrent plus : « 7 fois sur 10 » se lit sans connaître aucun seuil.
+    // ⚠️ Elles ne se calibrent plus : ce sont des tranches d'une probabilité.
+    // ⚠️ TROIS crans depuis la v0.902 : mesuré sur 96 configurations, 98 % des sièges
+    // tiennent 0-10 % ou 90-100 % — cinq bandes promettaient une nuance que le moteur ne
+    // produit jamais. Le cran central existe pour les 2 % qui tombent vraiment entre deux.
     expect(siegeOdds(0.05)).toBe('perdu');
-    expect(siegeOdds(0.3)).toBe('risque');
+    expect(siegeOdds(0.3)).toBe('perdu');
     expect(siegeOdds(0.55)).toBe('serre');
-    expect(siegeOdds(0.75)).toBe('favorable');
-    expect(siegeOdds(0.95)).toBe('large');
-    const rank = ['perdu', 'risque', 'serre', 'favorable', 'large'];
+    expect(siegeOdds(0.75)).toBe('tenu');
+    expect(siegeOdds(0.95)).toBe('tenu');
+    const rank = ['perdu', 'serre', 'tenu'];
     let prev = -1;
     for (let h = 0; h <= 1; h += 0.005) {
       const i = rank.indexOf(siegeOdds(h));
@@ -590,11 +593,11 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
   });
 
   it('les bandes RISQUÉES sont celles où la base ne tient plus', () => {
+    // ⚠️ TROIS crans depuis la v0.902 (la tenue est binaire à 98 %) : seul « tu tiens »
+    // n'alarme pas. `serre` reste risqué — c'est précisément le cran où un départ bascule.
     expect(isOddsRisky('perdu')).toBe(true);
-    expect(isOddsRisky('risque')).toBe(true);
     expect(isOddsRisky('serre')).toBe(true);
-    expect(isOddsRisky('favorable')).toBe(false);
-    expect(isOddsRisky('large')).toBe(false);
+    expect(isOddsRisky('tenu')).toBe(false);
   });
 });
 
@@ -730,5 +733,63 @@ describe('⚖️ À PUISSANCE ÉGALE, UNE CHANCE SUR DEUX (v0.830)', () => {
     expect(derriere.length).toBeGreaterThan(10);
     expect(devant.filter((x) => x.hold >= 0.5).length / devant.length).toBeGreaterThan(0.85);
     expect(derriere.filter((x) => x.hold < 0.5).length / derriere.length).toBeGreaterThan(0.85);
+  });
+});
+
+describe('⚖️ UNE SEULE RÉPONSE À « EST-CE QUE JE TIENS ? » (v0.902)', () => {
+  it('⚠️ LA TENUE EST BINAIRE : les crans du milieu sont l’exception, pas la règle', () => {
+    // C'est ce qui justifie TROIS crans au lieu de cinq. `siegeHoldChance` ne fait varier
+    // que la CONDUITE du combat — la composition de l'armée est fixe — et mesuré, elle ne
+    // décide presque rien : une fois l'armée connue, le siège est joué.
+    let extremes = 0;
+    let total = 0;
+    for (const L of [12, 28, 50, 80]) {
+      const g = garde(L);
+      for (const part of [0.5, 0.75, 1]) {
+        const d = defAt(Math.round(L * part));
+        for (let s = 1; s <= 4; s++) {
+          const h = siegeHoldChance(
+            d,
+            L,
+            refFighter(L),
+            g,
+            rollRaid((s * 7919 + L * 31) >>> 0, L, NOW, 0),
+          );
+          total++;
+          if (h < 0.1 || h > 0.9) extremes++;
+        }
+      }
+    }
+    // Mesuré : 98 % des cas. On borne large — ce qui compte est que ce soit la RÈGLE.
+    expect(extremes / total, `${extremes}/${total} aux extrêmes`).toBeGreaterThan(0.85);
+  });
+
+  it('⚠️ LE REPÈRE N’EST PAS UN PRONOSTIC — et c’est mesurable', () => {
+    // Le défaut signalé par l'utilisateur : « tient 100 % face à une armée type » s'affichait
+    // au-dessus de « Tu tiens 0 % ». `referenceHold` moyenne SIX armées génériques, le
+    // pronostic joue CELLE qui arrive — deux questions, et les deux réponses s'écartent
+    // largement. Ce test ne corrige rien : il EXIGE que l'écart existe, pour que personne
+    // ne remette les deux pourcentages côte à côte en croyant qu'ils disent la même chose.
+    let big = 0;
+    let total = 0;
+    for (const L of [28, 50]) {
+      const g = garde(L);
+      for (const part of [0.75, 1]) {
+        const d = defAt(Math.round(L * part));
+        const ref = referenceHold(d, L, refFighter(L), g, NOW);
+        for (let s = 1; s <= 4; s++) {
+          const h = siegeHoldChance(
+            d,
+            L,
+            refFighter(L),
+            g,
+            rollRaid((s * 7919 + L * 31) >>> 0, L, NOW, 0),
+          );
+          total++;
+          if (Math.abs(ref - h) > 0.3) big++;
+        }
+      }
+    }
+    expect(big, `${big}/${total} cas d’écart > 30 points`).toBeGreaterThan(0);
   });
 });
