@@ -54,32 +54,14 @@ export function backOr(router: Router, fallback: string): void {
   else void router.push(fallback);
 }
 
-/** Écrans de PASSAGE : une séance en cours ou sa préparation, un assistant de création.
- *  On les traverse, on n'y revient pas en appuyant sur « retour » depuis une page du menu —
- *  signalé : le retour de l'en-tête ramenait à la génération de séance du Défi 360. */
-const FLOW_PAGES: readonly RegExp[] = [
-  /^\/combo\/[^/]+\/session$/, // génération + séance du Défi 360
-  /^\/session\/[^/]+(\/ready)?$/, // séance en cours, forme du jour
-  /^\/free$/, // séance libre
-  /^\/court\/[^/]+$/, // séance de tennis en cours, génération (/court/new)
-  /^\/(combo|challenges)\/new$/, // assistants de création
-  /^\/import$/,
-];
-
-/** L'URL désigne-t-elle un écran de passage ? */
-export function isFlowPage(url: string | null | undefined): boolean {
-  if (typeof url !== 'string') return false;
-  const path = pathOf(url);
-  return FLOW_PAGES.some((re) => re.test(path));
-}
-
-/** Le retour de l'EN-TÊTE : comme `backOr`, mais un écran de passage derrière soi ne compte
- *  pas comme une page où revenir — on rejoint le repli (l'accueil) à la place. */
-export function headerBack(router: Router, fallback: string): void {
-  const prev = previousUrl();
-  if (hasPreviousEntry(prev) && !isFlowPage(prev)) router.back();
-  else void router.push(fallback);
-}
+// ⚠️ `headerBack` et `isFlowPage` ont été RETIRÉS en v0.905. Ils existaient pour que le
+// retour de l'en-tête ne retombe pas dans un écran de passage (séance en cours, assistant) —
+// mais ce bouton n'est plus un retour : c'est un bouton ACCUEIL. Toutes les pages de
+// `MainLayout` sont des destinations PLATES du menu ou de l'accueil, et la seule qui ait un
+// parent (`/friends/:id`) porte son propre ‹ — il n'y avait donc aucune hiérarchie à
+// remonter, seulement une promenade dans le menu à rejouer. Signalé : « le bouton retour se
+// perd dans les pages qu'il a parcourues ». Les écrans qui ont un VRAI parent (détail d'un
+// défi, séance, carte) gardent `backOr`.
 
 /** Rejoint `target` en retirant l'écran courant de l'historique, SANS jamais y laisser
  *  de doublon. À utiliser partout où l'on écrivait `router.replace(<page d'où l'on vient>)`. */

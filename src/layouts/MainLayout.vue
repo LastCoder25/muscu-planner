@@ -7,10 +7,10 @@
           flat
           round
           dense
-          icon="arrow_back_ios_new"
-          aria-label="Retour"
+          icon="home"
+          aria-label="Accueil"
           class="q-mr-xs"
-          @click="goBack"
+          @click="goHome"
         />
         <q-toolbar-title class="brand font-display" @click="goHome">MUSCU</q-toolbar-title>
         <q-btn
@@ -214,7 +214,6 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { headerBack } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 // Chargés à la demande : le volet jeu n'existe qu'en cockpit → un téléphone ne
 // télécharge jamais ces (gros) chunks via le layout.
@@ -308,16 +307,18 @@ watch(
   { immediate: true },
 );
 
-// Bouton retour visible partout sauf sur l'accueil.
+// 🏠 BOUTON ACCUEIL, plus un retour arrière (v0.905 ; signalé : « le bouton retour se perd
+// dans les pages qu'il a parcourues »).
+//
+// ⚠️ TOUTES les pages de ce layout sont des DESTINATIONS PLATES du menu ou de l'accueil —
+// Stats, Agenda, Amis, Aventure, Défis… La seule qui ait un parent (`/friends/:id`) porte
+// SON PROPRE ‹ vers `/friends`. Il n'y a donc aucune hiérarchie à remonter ici : un retour
+// arrière ne faisait que rejouer la promenade dans le menu, et on s'y perdait.
+//
+// ⚠️ On ne perd rien : le geste « retour » du système (bouton Android, balayage, flèche du
+// navigateur) reste là pour l'historique. Le bouton de l'app, lui, dit enfin ce qu'il fait —
+// une flèche qui ne recule pas mentirait, d'où la MAISON.
 const showBack = computed(() => route.path !== '/');
-function goBack() {
-  // Accès direct / rechargement / lancement PWA → pas d'entrée précédente dans
-  // l'historique : `router.back()` ne ferait rien (ticket b459601a). On replie
-  // alors vers l'accueil. Vue Router stocke la précédente dans history.state.back.
-  // Un écran de passage derrière soi (génération ou séance en cours, assistant) ne compte
-  // pas : on rejoint l'accueil au lieu d'y retomber.
-  headerBack(router, '/');
-}
 
 async function goHome() {
   await router.push('/');
