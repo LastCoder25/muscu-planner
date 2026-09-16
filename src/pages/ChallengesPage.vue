@@ -260,15 +260,7 @@
             <span class="er-v font-display">{{
               e.unit === 'distance' ? e.total.toFixed(1) : Math.round(e.total)
             }}</span
-            ><span class="er-l">{{
-              e.unit === 'time'
-                ? isCardioChallengeRow({ unit: e.unit, exercise_id: e.id })
-                  ? 'min'
-                  : 'sec'
-                : e.unit === 'distance'
-                  ? 'km'
-                  : 'reps'
-            }}</span>
+            ><span class="er-l">{{ challengeValueUnit(e.unit, e.id) }}</span>
           </div>
         </div>
       </template>
@@ -574,14 +566,14 @@ import {
   challengeTotalReps,
   evaluateAchievements,
   isNoEquipmentExercise,
+  challengeValueUnit,
   type Challenge,
 } from '@/lib/challenges';
 import { computeLevel } from '@/lib/levels';
 import { formatOption } from '@/data/challengeFormats';
 import { exerciseImage } from '@/data/exerciseImages';
 import { ACHIEVEMENTS, RARITY_LABEL } from '@/data/achievements';
-import { isCardioChallengeExercise } from '@/data/cardio';
-import { useChallengesStore, isCardioChallengeRow } from '@/stores/challenges';
+import { useChallengesStore } from '@/stores/challenges';
 import { challengeLane, type ChallengeLane } from '@/lib/tennisTraining';
 import { useComboStore } from '@/stores/combo';
 import { useProfileStore } from '@/stores/profile';
@@ -987,11 +979,7 @@ function bal(c: Challenge) {
   return challengeLiveBalance(c);
 }
 function unitOf(c: Challenge) {
-  // Temps : VRAIE sortie cardio (marche/course/vélo) = minutes ; gainage ET conditionnement
-  // (corde à sauter, burpees…) = SECONDES au chrono → isCardioChallengeExercise, pas
-  // isCardioChallengeRow (qui inclut le conditionnement dans la PISTE cardio). Ticket unité.
-  if (c.unit === 'time') return isCardioChallengeExercise(c.exercise_id) ? 'min' : 'sec';
-  return c.unit === 'distance' ? 'km' : 'reps';
+  return challengeValueUnit(c.unit, c.exercise_id);
 }
 // Mode Séries : le total est en séries → on affiche AUSSI le total de reps (fa798da3).
 function isSetsMode(c: Challenge) {
@@ -1051,11 +1039,14 @@ function challengeSegs(c: Challenge): { n: number; on: number; expected: number 
   const on = Math.min(n, Math.round((st(c).completionPct / 100) * n));
   return { n, on, expected: on };
 }
-/** Unité du CUMUL des séries. ⚠️ Le champ s'appelle `reps` partout, mais il porte des
- *  SECONDES sur un défi au chrono (gainage, corde, burpees…). Afficher « 240 reps » là
- *  où le joueur a tenu 4 minutes, c'est mentir sur son effort. */
+/** Unité du CUMUL des séries. ⚠️ Le champ s'appelle `reps` partout, mais il porte une
+ *  VALEUR : des secondes sur un défi au chrono (gainage, corde, burpees…), des MINUTES
+ *  sur une vraie sortie. Afficher « 240 reps » là où le joueur a tenu 4 minutes, c'est
+ *  mentir sur son effort — et cette copie écrivait « sec » en dur, donc elle mentait
+ *  aussi sur une marche. `challengeValueUnit`, jamais `unitOf` : un cumul de séries ne
+ *  se compte JAMAIS en séries. */
 function repUnitOf(c: Challenge) {
-  return c.unit === 'time' ? 'sec' : 'reps';
+  return challengeValueUnit(c.unit, c.exercise_id);
 }
 function totalRepsOf(c: Challenge) {
   return challengeTotalReps(c);
@@ -1082,7 +1073,10 @@ function inStatsRange(dateStr: string): boolean {
 const exoAgg = computed(() => {
   const map = new Map<
     string,
-    { id: string; name: string; unit: string; count: number; total: number }
+    // ⚠️ `unit` porte le type du contrat, pas `string` : c'est lui qui garantit au
+    // compilateur que `challengeValueUnit` reçoit une unité valide — élargir à `string`
+    // rouvrirait la porte à une unité inventée.
+    { id: string; name: string; unit: Challenge['unit']; count: number; total: number }
   >();
   const ok = (d: string) => inStatsRange(d); // filtre période (Tout / Semaine / Mois)
   for (const c of store.list) {

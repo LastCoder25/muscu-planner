@@ -487,6 +487,7 @@ import {
   extendChallenge,
   addDaysIso,
   suggestSetFromHistory,
+  challengeUnitLabel,
   type Challenge,
   type DayProgress,
   type ChallengeSet,
@@ -556,14 +557,12 @@ const isCardioOuting = computed(
 // TEMPS au CHRONO (secondes) : gainage (planche…) ET conditionnement (corde, burpees…).
 // Seules les vraies sorties cardio restent en minutes/km (isCardioOuting → saisie de sortie).
 const isGainageTime = computed(() => isTime.value && !isCardioOuting.value);
+// ⚠️ L'unité vient de la LIB : cette copie écrivait « sec » en dur sur un défi en
+// `time`, donc « 25 sec » sur une marche de 25 MINUTES (cf. `challengeUnitLabel`).
 const unitLabel = computed(() =>
-  ch.value?.config.count_mode === 'sets'
-    ? 'séries' // mode Séries : objectif en SÉRIES (pas en reps)
-    : ch.value?.unit === 'time'
-      ? 'sec'
-      : ch.value?.unit === 'distance'
-        ? 'km'
-        : 'reps',
+  ch.value
+    ? challengeUnitLabel(ch.value.unit, ch.value.exercise_id, ch.value.config.count_mode)
+    : 'reps',
 );
 // Temps au chrono : affichage secondes brutes OU min:sec (config.time_display).
 const mmss = computed(() => isGainageTime.value && ch.value?.config.time_display === 'mmss');

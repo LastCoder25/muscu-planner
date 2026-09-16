@@ -554,6 +554,7 @@ import {
   repWeightFromExercise,
   isBodyweightExercise,
   isNoEquipmentExercise,
+  challengeUnitLabel,
   type ChallengeFormat,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -724,16 +725,12 @@ const showAssist = computed(
     isBodyweightExercise(exercise.value?.equipment_required, exercise.value?.name),
 );
 const assistedMode = ref(false);
+// ⚠️ L'unité vient de la LIB, et elle se lit sur l'EXERCICE, pas sur le tag `cardio` :
+// c'est `isCardioChallengeExercise` qui décide du barème d'XP (`effortUnit`), donc
+// l'étiquette doit s'adosser au même prédicat sous peine d'annoncer une unité que le
+// calcul ne pratique pas. Les deux coïncident aujourd'hui — on ne s'y fie pas.
 const unitLabel = computed(() =>
-  countMode.value === 'sets'
-    ? 'séries' // mode Séries : l'objectif se compte en SÉRIES (pas en reps)
-    : unit.value === 'distance'
-      ? 'km'
-      : unit.value === 'time'
-        ? isCardio.value
-          ? 'min' // seules les vraies sorties cardio = minutes ; gainage/conditionnement = secondes
-          : 'sec'
-        : 'reps',
+  challengeUnitLabel(unit.value, exercise.value?.id ?? '', countMode.value),
 );
 const fields = computed(() => formatOption(format.value)?.fields ?? ['start']);
 

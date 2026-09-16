@@ -913,6 +913,38 @@ export function effortPaidByOutings(ch: Challenge): boolean {
   );
 }
 
+/** 🏷️ L’UNITÉ D’UNE VALEUR MESURÉE — la SEULE définition, pour tous les écrans.
+ *
+ *  ⚠️ `unit === 'time'` est HOMONYME : une vraie SORTIE (marche/course/vélo) se compte en
+ *  MINUTES, le gainage et le conditionnement en SECONDES au chrono (v0.558) — deux unités
+ *  homonymes, deux barèmes, comme `effortUnit` le dit déjà pour l’XP.
+ *
+ *  ⚠️ LA RÈGLE VIVAIT EN CINQ COPIES dans les écrans, et DEUX avaient dérivé : la fiche
+ *  d’un défi et le cumul des séries écrivaient « sec » en dur, donc « 25 sec » là où le
+ *  joueur avait marché 25 MINUTES (signalé sur un compte réel : 1 km en 25 min, reporté
+ *  automatiquement depuis son journal Cardio). Le commentaire posé juste au-dessus du site
+ *  fautif disait pourtant « doit matcher le wizard sinon l’unité est incohérente » :
+ *  l’avertissement ne suffit pas, il faut une seule implémentation. */
+export function challengeValueUnit(unit: Challenge['unit'], exerciseId: string): string {
+  if (unit === 'distance') return 'km';
+  if (unit === 'time') return isCardioChallengeExercise(exerciseId) ? 'min' : 'sec';
+  return 'reps';
+}
+
+/** 🏷️ L’UNITÉ DE L’OBJECTIF affiché : en mode SÉRIES l’objectif se compte en séries,
+ *  sinon c’est l’unité de la valeur.
+ *
+ *  ⚠️ NE PAS l’employer pour le cumul des séries : le champ `reps` d’une série porte une
+ *  VALEUR (des reps, des secondes ou des minutes), jamais un nombre de séries — c’est
+ *  `challengeValueUnit` qu’il faut là. */
+export function challengeUnitLabel(
+  unit: Challenge['unit'],
+  exerciseId: string,
+  countMode?: 'reps' | 'sets',
+): string {
+  return countMode === 'sets' ? 'séries' : challengeValueUnit(unit, exerciseId);
+}
+
 /** ⚖️ CE QUE LA PRIME DE COMPLÉTION AJOUTE, rapporté à l’effort planifié.
  *
  *  ⚠️ SIGNALÉ PAR L’UTILISATEUR — « 24k d’XP ??? ». Corriger l’unité (v0.768) rendait aux

@@ -18,9 +18,13 @@ import {
   activeDaysOf,
   extendChallenge,
   suggestSetFromHistory,
+  challengeValueUnit,
+  challengeUnitLabel,
+  effortPaidByOutings,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
+import { CONDITIONING_CHALLENGE_IDS } from '@/data/cardio';
 
 const cfg = (over: Partial<ChallengeConfig> = {}): ChallengeConfig => ({ start: 10, ...over });
 
@@ -846,5 +850,68 @@ describe('🛑 ARRÊTER UN DÉFI SOLO', () => {
     expect(solo.message).toBe(combo.message);
     expect(solo.ok).toBe(combo.ok);
     expect(solo.title).not.toBe(combo.title); // …mais chacun se nomme
+  });
+});
+
+describe('🏷️ l’unité affichée : une seule définition', () => {
+  const ch = (unit: Challenge['unit'], exercise_id: string): Challenge =>
+    ({
+      id: 'x',
+      exercise_id,
+      exercise_name: 'E',
+      unit,
+      format: 'fixed',
+      duration_days: 30,
+      start_date: '2026-01-01',
+      config: cfg(),
+      daily_targets: [],
+      progress: [],
+      status: 'active',
+    }) as Challenge;
+
+  it('⚠️ LE DÉFAUT SIGNALÉ : une vraie sortie en `time` se compte en MINUTES', () => {
+    // Compte réel : une marche de 1 km en 25 min, reportée au défi, s’affichait « 25 sec ».
+    for (const id of ['ex_ch_marche_course', 'ex_ch_marche', 'ex_ch_course', 'ex_ch_velo'])
+      expect(challengeValueUnit('time', id), id).toBe('min');
+  });
+
+  it('⚠️ L’AUTRE SENS : gainage ET conditionnement en `time` = des SECONDES au chrono', () => {
+    // Un site lisait `isCardioTrackChallenge`, qui inclut le conditionnement dans la PISTE
+    // cardio : la corde à sauter s’affichait donc en « min » alors qu’elle est au chrono.
+    expect(challengeValueUnit('time', 'ex_plank')).toBe('sec');
+    for (const id of CONDITIONING_CHALLENGE_IDS)
+      expect(challengeValueUnit('time', id), id).toBe('sec');
+  });
+
+  it('les autres unités ne dépendent pas de l’exercice', () => {
+    expect(challengeValueUnit('distance', 'ex_ch_marche_course')).toBe('km');
+    expect(challengeValueUnit('reps', 'ex_pushup')).toBe('reps');
+  });
+
+  it('⚠️ mode SÉRIES : l’OBJECTIF se compte en séries, jamais la VALEUR d’une série', () => {
+    // `repUnitOf` cumule le champ `reps` d’une série — qui porte des reps, des secondes ou
+    // des minutes, jamais un nombre de séries. Les deux fonctions ne sont pas
+    // interchangeables, et c’est précisément pour ça qu’elles sont deux.
+    expect(challengeUnitLabel('reps', 'ex_pushup', 'sets')).toBe('séries');
+    expect(challengeUnitLabel('time', 'ex_ch_marche_course', 'sets')).toBe('séries');
+    expect(challengeValueUnit('time', 'ex_ch_marche_course')).toBe('min'); // la valeur, elle
+    expect(challengeUnitLabel('time', 'ex_ch_marche_course')).toBe('min'); // sans mode Séries
+    expect(challengeUnitLabel('reps', 'ex_pushup', 'reps')).toBe('reps');
+  });
+
+  it('⚠️ L’ÉTIQUETTE SUIT LE BARÈME D’XP, elle ne peut pas en diverger', () => {
+    // `effortUnit` décide qu’une sortie en `time` vaut des minutes et le reste des
+    // secondes ; afficher une unité que le calcul ne pratique pas, c’est mentir sur
+    // l’effort. Les deux lisent donc le MÊME prédicat, et ce test l’exige.
+    for (const id of [
+      'ex_ch_marche_course',
+      'ex_ch_velo',
+      'ex_plank',
+      'ex_jump_rope',
+      'ex_pushup',
+    ]) {
+      const paid = effortPaidByOutings(ch('time', id));
+      expect(challengeValueUnit('time', id) === 'min', id).toBe(paid);
+    }
   });
 });
