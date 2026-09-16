@@ -327,7 +327,14 @@ export const useFriendsStore = defineStore('friends', () => {
   async function fetchFriendTraining(friendId: string) {
     const [ch, co] = await Promise.all([
       supabase.from('challenges').select('*').eq('user_id', friendId),
-      supabase.from('combo_challenges').select('*').eq('user_id', friendId),
+      // ⚠️ TRI OBLIGATOIRE, comme `combo.fetchMine` : sans `order`, Postgres rend les lignes
+      // dans un ordre non garanti — et l'écran, qui prend le premier « en cours », tombait
+      // sur un ANCIEN 360 (signalé sur le compte de Cypher, qui en avait bien deux en base).
+      supabase
+        .from('combo_challenges')
+        .select('*')
+        .eq('user_id', friendId)
+        .order('created_at', { ascending: false }),
     ]);
     if (ch.error) throw ch.error;
     if (co.error) throw co.error;

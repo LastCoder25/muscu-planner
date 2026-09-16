@@ -598,6 +598,7 @@ import {
   legRepRange,
   comboStopPlan,
   comboPace,
+  activeCombo as activeComboOf,
   NO_PACE,
   type ComboChallenge,
   comboExportText,
@@ -673,7 +674,9 @@ const availableEnergy = computed(
 const mode = ref<'solo' | 'combo'>('solo');
 // Même logique d'états que les défis solo (En cours / Terminés / Abandonnés).
 const comboTab = ref<string>('active');
-const activeCombo = computed(() => comboStore.list.find((c) => c.status === 'active') ?? null);
+// ⚠️ Même règle que le store et que l'écran d'un ami (`activeCombo`, lib) : ces trois copies
+// pouvaient désigner trois 360 différents dès qu'un joueur en a plusieurs d'ouverts.
+const activeCombo = computed(() => activeComboOf(comboStore.list, logicalToday()));
 /** Ce qu’arrêter le 360 en cours fera — même source que l’écran de détail, donc les deux
  *  ne peuvent pas annoncer deux choses différentes pour le même geste. */
 const comboStop = computed(() =>

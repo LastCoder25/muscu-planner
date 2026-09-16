@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import {
   comboChestEligible,
+  activeCombo,
   comboNextStatus,
   removeSetAt,
   updateSetAt,
@@ -94,7 +95,9 @@ export const useComboStore = defineStore('combo', () => {
     return list.value;
   }
 
-  const activeOne = () => list.value.find((c) => c.status === 'active') ?? null;
+  /** ⚠️ Une seule règle pour tout le jeu (`activeCombo`, lib) : mon écran et celui d'un ami
+   *  ne peuvent plus désigner deux 360 différents. `list` est triée `created_at desc`. */
+  const activeOne = () => activeCombo(list.value, logicalToday());
 
   async function create(input: NewCombo): Promise<ComboRow> {
     // TODO(cleanup avant release) : retirer le bypass `!isAdmin` — débridage

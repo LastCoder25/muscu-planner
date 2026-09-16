@@ -96,6 +96,8 @@ import {
 } from '@/lib/challenges';
 import { dateRangeLabel } from '@/lib/startDate';
 import {
+  activeCombo as activeComboOf,
+  comboNextStatus,
   comboProgressPct,
   fmtPct,
   legDone,
@@ -122,8 +124,13 @@ const combos = ref<ComboChallenge[]>([]);
 const pseudo = computed(() => friends.pseudos[friendId] ?? '');
 const activeChallenges = computed(() => challenges.value.filter((c) => c.status === 'active'));
 const doneCount = computed(() => challenges.value.filter((c) => c.status === 'done').length);
-const doneCombos = computed(() => combos.value.filter((c) => c.status === 'done').length);
-const activeCombo = computed(() => combos.value.find((c) => c.status === 'active') ?? null);
+// ⚠️ STATUT RECALCULÉ, pas le champ stocké : le balayage de fermeture ne tourne que chez le
+// propriétaire, donc un 360 d'ami périmé reste « actif » en base tant qu'il n'a pas rouvert
+// l'app. Même règle que son propre écran (`activeCombo`), sur une liste triée par la requête.
+const doneCombos = computed(
+  () => combos.value.filter((c) => comboNextStatus(c, logicalToday()) === 'done').length,
+);
+const activeCombo = computed(() => activeComboOf(combos.value, logicalToday()));
 
 const st = (c: Challenge) => challengeStats(c);
 const comboLegsDone = (c: ComboChallenge) => c.legs.filter((l) => legComplete(l)).length;

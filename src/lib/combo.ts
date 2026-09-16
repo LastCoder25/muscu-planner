@@ -270,6 +270,22 @@ export function comboNextStatus(c: ComboChallenge, today: string): ComboChalleng
   if (c.status === 'abandoned') return 'abandoned';
   return comboClosed(c, today) ? 'done' : 'active';
 }
+/** 🎯 LE DÉFI 360 EN COURS d'un joueur — SOURCE UNIQUE (v0.905). La règle vivait en TROIS
+ *  exemplaires : le store, l'onglet 🎯 et l'écran d'avancement d'un ami.
+ *
+ *  ⚠️ `list` doit être triée du PLUS RÉCENT au plus ancien (`created_at desc`, ce que font
+ *  les requêtes) : on rend le plus récent encore en cours. C'est ce que le propriétaire voit
+ *  sur son propre écran, et un écran qui regarde son voisin doit montrer la même chose.
+ *
+ *  ⚠️ ON RECALCULE LE STATUT au lieu de lire le champ stocké. Le balayage de fermeture ne
+ *  tourne QUE chez le propriétaire (`combo.fetchMine`) : le 360 d'un ami dont la période est
+ *  passée reste « actif » en base tant qu'il n'a pas rouvert l'app, et il masque le nouveau.
+ *  Signalé : « quand je regarde l'avancement du Défi 360 de Cypher, je ne vois pas son
+ *  dernier en date mais l'ancien, déjà à 100 % » — il en avait bien DEUX en base. */
+export function activeCombo<T extends ComboChallenge>(list: readonly T[], today: string): T | null {
+  return list.find((c) => comboNextStatus(c, today) === 'active') ?? null;
+}
+
 /** Le coffre de fin ne récompense qu'un 360 BOUCLÉ dans les temps (choix de l'utilisateur :
  *  pas de coffre pour un 360 partiel) et jamais un abandon. */
 export function comboChestEligible(c: ComboChallenge): boolean {
