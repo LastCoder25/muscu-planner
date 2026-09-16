@@ -5282,8 +5282,9 @@ async function expeLifecycle() {
       $q.notify({
         type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
         // ⚠️ App fermée pendant le voyage : le rapport et le retour tombent dans le même tick —
-        // le butin n'« attendra » pas, il attend déjà.
-        message: partyMsgs.every((m) => Date.now() >= (m.claimAt ?? m.resolvedAt))
+        // le butin n'« attendra » pas, il attend déjà. UNE définition de « prêt »
+        // (`isClaimable`) : la moitié DATE de la règle était recopiée ici.
+        message: partyMsgs.every((m) => isClaimable(m, Date.now()))
           ? '📬 Ton groupe est rentré — son butin t’attend dans 📬.'
           : '📬 Rapport de ton groupe — le butin t’attendra au retour.',
       });

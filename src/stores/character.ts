@@ -171,6 +171,7 @@ import {
   pruneCaravans,
   startCaravan,
   type Caravan,
+  type RoadCompanions,
 } from '@/lib/caravan';
 import {
   advGearRoles,
@@ -1681,6 +1682,32 @@ export const useCharacterStore = defineStore('character', () => {
     return cur.base ?? emptyBase(newSeed(now), now);
   }
 
+  /** 🐾🧠 CE QUE L’ESCORTE EMMÈNE — SOURCE UNIQUE de la réserve de compagnons.
+   *
+   *  ⚠️ Cette forme était rebâtie à la main en QUATRE endroits (`sendCaravan`, `sendParty`,
+   *  `companionCtx` et le `roadCtx` de la carte) : quatre copies d’une règle qui finiraient
+   *  par diverger — `sendCaravan` normalisait même les talents deux fois.
+   *  ⚠️ Le HÉROS garde ce qu’il porte : ni son familier ni ses talents ne passent à
+   *  l’escorte, il se bat ailleurs.
+   *  ⚠️ Pas de `kennelLevel` ni d’horloge : le Chenil ne plafonne que le dressage de DÉFENSE
+   *  (cf. `RoadCompanions`) ; c’est `companionCtx` qui les ajoute par-dessus, pour le rempart. */
+  function roadPoolOf(cur: CharacterRow | null): RoadCompanions {
+    const talents = normalizeTalents(cur?.talents ?? []);
+    return {
+      familiars: (cur?.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
+      talents,
+      // 🗡️ Ce que les aventuriers portent : trajet (🧭), cargaison (🐫) et combat.
+      advGear: cur?.adv_gear?.stock ?? [],
+      heroFamiliarId: cur?.equipped?.[FAMILIAR_SLOT]?.id ?? null,
+      heroTalentIds: talents.filter((t) => t.equipped === true).map((t) => t.id),
+    };
+  }
+
+  /** La même réserve, pour l’ÉCRAN (pronostic d’un camp, panneau de forces) : un `computed`
+   *  la partage entre tous ses lecteurs au lieu que chacun la reconstruise. Vide sans
+   *  personnage — la page n’a donc aucun cas particulier à écrire. */
+  const roadCompanions = computed(() => roadPoolOf(row.value));
+
   /** 🐾 CE QUE L’ON A APPAREILLÉ, prêt pour le combat et pour les à-côtés.
    *
    *  ⚠️ REMPLACE `garrisonFor` : il n’y a plus de garnison de familiers postés au mur.
@@ -1688,15 +1715,9 @@ export const useCharacterStore = defineStore('character', () => {
    *  l’utilisateur) ; le Chenil ne fait que plafonner combien et jusqu’à quel rang. */
   function companionCtx(cur: CharacterRow, now: number): CompanionCtx {
     return {
-      familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
-      talents: normalizeTalents(cur.talents),
+      ...roadPoolOf(cur),
       kennelLevel: defenseLevel(baseOf(cur, now).defenses, 'kennel'),
       now,
-      advGear: cur.adv_gear?.stock ?? [],
-      heroFamiliarId: cur.equipped[FAMILIAR_SLOT]?.id ?? null,
-      heroTalentIds: normalizeTalents(cur.talents)
-        .filter((t) => t.equipped === true)
-        .map((t) => t.id),
     };
   }
   /** Le héros défend-il ? Il n'est là que s'il n'est pas parti en expédition. C'est le
@@ -2436,17 +2457,8 @@ export const useCharacterStore = defineStore('character', () => {
       escort,
       now,
       seed,
-      // 🐾🧠 Ce que l'escorte emmène. Le héros garde ce qu'il porte : il se bat ailleurs.
-      {
-        familiars: (cur.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
-        talents: normalizeTalents(cur.talents),
-        // 🗡️ Ce que les aventuriers portent : trajet (🧭), cargaison (🐫) et combat.
-        advGear: cur.adv_gear?.stock ?? [],
-        heroFamiliarId: cur.equipped?.[FAMILIAR_SLOT]?.id ?? null,
-        heroTalentIds: normalizeTalents(cur.talents)
-          .filter((t) => t.equipped === true)
-          .map((t) => t.id),
-      },
+      // 🐾🧠 Ce que l'escorte emmène (`roadPoolOf`, la même réserve que le rempart et l'écran).
+      roadPoolOf(cur),
       comptoirLevel.value,
       playerLevel,
     );
@@ -2587,15 +2599,8 @@ export const useCharacterStore = defineStore('character', () => {
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
-    const talents = normalizeTalents(cur.talents);
-    const road = {
-      familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
-      talents,
-      advGear: cur.adv_gear?.stock ?? [],
-      // Le héros garde ce qu'il porte : ni son familier ni ses talents ne passent à l'escorte.
-      heroFamiliarId: cur.equipped?.[FAMILIAR_SLOT]?.id ?? null,
-      heroTalentIds: talents.filter((t) => t.equipped === true).map((t) => t.id),
-    };
+    // 🐾🧠 Ce que le groupe emmène (`roadPoolOf` : le héros garde ce qu'il porte).
+    const road = roadPoolOf(cur);
     const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
     const input = { poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel };
     const leg = partyLegMin(poi, escort, {
@@ -2687,6 +2692,7 @@ export const useCharacterStore = defineStore('character', () => {
     spendKey,
     advList,
     caravanList,
+    roadCompanions,
     advGearStock,
     guildLevel,
     comptoirLevel,

@@ -518,14 +518,7 @@ import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import {
-  playerWithGear,
-  mergeEffects,
-  fxRarity,
-  gradeLabel,
-  RARITY_RANK,
-  type Item,
-} from '@/lib/items';
+import { playerWithGear, mergeEffects, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import GuildPanel from '@/components/GuildPanel.vue';
 import CaravanReportView from '@/components/CaravanReportView.vue';
 import PartyReportView from '@/components/PartyReportView.vue';
@@ -542,7 +535,7 @@ import {
   type PartyHero,
 } from '@/lib/camp';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
-import { talentEffects, normalizeTalents } from '@/lib/talents';
+import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, type Combatant } from '@/lib/combat';
 import {
@@ -796,20 +789,13 @@ const incoming = computed(() => base.value?.raid ?? null);
  *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
  *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
-/** Ce que l'escorte emmène sur la ROUTE — même forme que ce que le store passe au départ
- *  (`sendParty`, `sendCaravan`). ⚠️ Sans horloge : un groupe ne change pas de familier en
- *  une minute, et le pronostic d'un camp n'a pas à se recalculer au rythme du tick. */
-const roadCtx = computed(() => {
-  const talents = normalizeTalents(char.row?.talents ?? []);
-  return {
-    familiars: (char.row?.inventory ?? []).filter((it: Item) => it.slot === 'familiar'),
-    talents,
-    // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
-    advGear: char.row?.adv_gear?.stock ?? [],
-    heroFamiliarId: char.row?.equipped?.familiar?.id ?? null,
-    heroTalentIds: talents.filter((t) => t.equipped === true).map((t) => t.id),
-  };
-});
+/** Ce que l'escorte emmène sur la ROUTE. ⚠️ LA MÊME construction que ce que le store passe
+ *  au départ : cette forme était rebâtie ici à la main, donc l'écran pouvait annoncer un
+ *  pronostic calculé sur une autre réserve que celle qui partirait vraiment. Une seule
+ *  définition désormais (`roadPoolOf`, lue par `sendCaravan`, `sendParty` et `companionCtx`).
+ *  ⚠️ Sans horloge : un groupe ne change pas de familier en une minute, et le pronostic d'un
+ *  camp n'a pas à se recalculer au rythme du tick. */
+const roadCtx = computed(() => char.roadCompanions);
 /** 🐾 Ce que chaque aventurier emmène avec lui AU REMPART. ⚠️ Plus un bonus GLOBAL de
  *  garnison : le compagnon suit son homme, donc faire partir quelqu’un retire AUSSI son
  *  familier de la défense — c’est précisément l’arbitrage que cet écran doit montrer. */
@@ -948,7 +934,13 @@ const partyAdvs = computed(() => freeStable.value.filter((a) => partyEscort.valu
  *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
  *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
 /** ⚠️ Même principe que `freeKey` : une CHAÎNE (id + raison) calculée au tick, mais qui ne
- *  réveille la liste — donc le rendu des tuiles grisées — que si un aventurier change d'état. */
+ *  réveille la liste — donc le rendu des tuiles grisées — que si un aventurier change d'état.
+ *  ⚠️ ET LA MÊME HORLOGE QUE `freeKey`, OBLIGATOIREMENT (`now`, pas `coarseNow`) : les deux
+ *  listes PARTITIONNENT le vivier (`advAvailable` ⟺ `advUnavailableReason === null`) et sont
+ *  rendues côte à côte dans `.car-pick`, keyées sur le même id. Sur deux horloges décalées, un
+ *  aventurier dont l'échéance tombe en milieu de minute apparaîtrait DANS LES DEUX pendant
+ *  jusqu'à une minute (tuile en double + clés dupliquées). Le coût du tick est ici une
+ *  concaténation sur le vivier : c'est la chaîne, pas l'horloge, qui protège les dépendants. */
 const blockedKey = computed(() =>
   char.advList.map((a) => `${a.id}:${advUnavailableReason(a, now.value) ?? ''}`).join('|'),
 );
@@ -1471,8 +1463,10 @@ async function lifecycle() {
     if (partyMsgs.length)
       $q.notify({
         type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
-        // ⚠️ App fermée pendant le voyage : dépôt et retour dans le même tick.
-        message: partyMsgs.every((m) => Date.now() >= (m.claimAt ?? m.resolvedAt))
+        // ⚠️ App fermée pendant le voyage : dépôt et retour dans le même tick. UNE définition
+        // de « prêt » (`isClaimable`, déjà lue par `dueReport`) : la moitié DATE de la règle
+        // était recopiée ici.
+        message: partyMsgs.every((m) => isClaimable(m, Date.now()))
           ? '📬 Ton groupe est rentré — son butin t’attend.'
           : '📬 Rapport de ton groupe — il rentre en ville.',
       });
