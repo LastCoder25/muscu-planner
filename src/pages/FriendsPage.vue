@@ -93,6 +93,30 @@
           </div>
         </section>
 
+        <!-- QUI, avant CE QU'ILS ONT FAIT : la liste des amis passe au-dessus du fil
+             (demandé). Elle vivait tout en bas, après le fil et les demandes envoyées —
+             donc hors écran dès qu'il se passait quelque chose, alors que c'est elle qui
+             mène à l'avancement de chacun. Restent AU-DESSUS d'elle les seules sections
+             qui appellent une ACTION (demandes reçues, défis à relever) ; restent
+             en dessous celles qui n'attendent rien de toi (défis proposés, demandes
+             envoyées). -->
+        <section class="fr-sec">
+          <div class="fr-sec-t">Mes amis ({{ friends.accepted.length }})</div>
+          <div v-if="!friends.accepted.length" class="fr-empty">
+            Personne pour l'instant — cherche un pseudo ci-dessus.
+          </div>
+          <div v-for="v in friends.accepted" :key="v.userId" class="fr-row">
+            <button class="fr-open" @click="openFriend(v.userId)">
+              <span class="fr-av">🧑</span>
+              <span class="fr-name">{{ v.pseudo }}</span>
+              <span class="fr-go">voir l'avancement ›</span>
+            </button>
+            <button class="fr-btn compact ghost" @click="unlink(v.userId, 'Retirer cet ami')">
+              Retirer
+            </button>
+          </div>
+        </section>
+
         <!-- Fil d'activité : DÉRIVÉ des défis déjà lisibles (aucune table dédiée).
              C'est la raison d'ouvrir cet onglet — sans lui la page ne dit rien de neuf. -->
         <section v-if="feed.length" class="fr-sec">
@@ -134,23 +158,6 @@
             <span class="fr-wait">en attente</span>
             <button class="fr-btn compact ghost" @click="unlink(v.userId, 'Annuler la demande')">
               Annuler
-            </button>
-          </div>
-        </section>
-
-        <section class="fr-sec">
-          <div class="fr-sec-t">Mes amis ({{ friends.accepted.length }})</div>
-          <div v-if="!friends.accepted.length" class="fr-empty">
-            Personne pour l'instant — cherche un pseudo ci-dessus.
-          </div>
-          <div v-for="v in friends.accepted" :key="v.userId" class="fr-row">
-            <button class="fr-open" @click="openFriend(v.userId)">
-              <span class="fr-av">🧑</span>
-              <span class="fr-name">{{ v.pseudo }}</span>
-              <span class="fr-go">voir l'avancement ›</span>
-            </button>
-            <button class="fr-btn compact ghost" @click="unlink(v.userId, 'Retirer cet ami')">
-              Retirer
             </button>
           </div>
         </section>
