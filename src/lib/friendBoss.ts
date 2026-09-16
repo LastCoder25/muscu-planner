@@ -52,6 +52,23 @@ export const FRIEND_BOSS = {
     BossFamily,
     number
   >,
+  /** ⚠️ Exposant de la RÉCOMPENSE selon la difficulté (v0.904, MESURÉ ; demandé par
+   *  l'utilisateur : « une récompense de plus en plus intéressante avec la difficulté, pour
+   *  que ce soit intéressant de lancer un boss dur au lieu d'enchaîner des faciles »).
+   *
+   *  ⚠️ IL DOIT ÊTRE > 1, ET LA MESURE LE DIT. Or gagné PAR JOUR au niveau 30, en comptant
+   *  le CYCLE de chaque cran (durée pour l'abattre + 48 h de délai) : à l'exposant **0,5**
+   *  le meilleur choix reste ×1 — un boss dur ne paie pas sa peine ; à **1,0** le cran le
+   *  plus dur rapporte 14 789/jour contre 4 437 en enchaînant du facile (×3,3) mais l'or PAR
+   *  REP est constant ; à **1,2** il rapporte 20 405 contre 3 862 (**×5,3**) ET l'or par rep
+   *  monte de 38 % au cran le plus dur — c'est ce que « de plus en plus intéressante » veut
+   *  dire.
+   *
+   *  ⚠️ PAS PLUS HAUT : mesuré, le coffre du cran le plus dur vaut **0,77 à 1,02 jour de
+   *  revenu** à 1,2, mais 1,06-1,41 à 1,4 et 1,47-1,95 à 1,6 — au-delà d'une journée, un
+   *  seul boss paierait une bonne part d'un niveau de bâtiment (1 à 4 jours, `goldSink`) et
+   *  deviendrait la meilleure source d'or du jeu. */
+  rewardExp: 1.2,
   /** Dégâts d'UNE rep (ou d'une seconde de gainage), v0.872 : de plus gros chiffres, et
    *  RIEN d'autre. Les PV sont multipliés d'autant, donc le nombre de reps pour abattre un
    *  boss ne bouge pas. Les plafonds de saisie, la part minimale et l'XP restent en reps.
@@ -81,6 +98,55 @@ export const FRIEND_BOSS = {
    *  leur XP, mais ne gonflent plus la prime. */
   bonusCapShares: 2,
 } as const;
+
+/** 🎚️ LES CRANS DE DIFFICULTÉ (v0.904 ; demandés par l'utilisateur : « des crans avec des
+ *  noms un peu sympa qui fassent comprendre la difficulté — la difficulté définit le nombre
+ *  de reps par personne »).
+ *
+ *  ⚠️ LE VOCABULAIRE ÉVITE DÉLIBÉRÉMENT CELUI DES RANGS ET DES RARETÉS (Bronze… Divin
+ *  ancestral, commun… primordial) : l'app parle en rangs partout depuis la v0.874, et
+ *  réutiliser « Légendaire » pour une difficulté ferait lire un effort comme une qualité
+ *  d'objet. Ici les mots parlent d'EFFORT, et de rien d'autre.
+ *
+ *  ⚠️ `luck` NE TOUCHE PAS LE RANG DU TROPHÉE, qui reste celui du joueur (v0.894) : elle
+ *  n'agit que sur ses ÉTOILES et son niveau d'objet (`rollStarJet` / `rollItemLevel`). Le
+ *  sport reste donc le plafond. Mesuré au niveau 30 sur 4 000 tirages, part de trophées
+ *  ★5 : **60 % sans chance · 68 % à 0,25 · 75 % à 0,5 · 90 % à 1** — et ça SATURE au-delà
+ *  de 1, d'où une échelle qui s'arrête là. L'écart est réel mais modeste : le trophée était
+ *  déjà généreux, on ne le survend pas. */
+export interface BossTier {
+  id: string;
+  label: string;
+  emoji: string;
+  /** Multiplie le nombre de reps PAR PERSONNE. Doit rester égal à `fboss_tier_mult`. */
+  mult: number;
+  /** Chance ajoutée au tirage du trophée (étoiles + niveau d'objet). */
+  luck: number;
+}
+
+export const BOSS_TIERS: readonly BossTier[] = [
+  { id: 'echauffement', label: 'Échauffement', emoji: '🌱', mult: 0.5, luck: 0 },
+  { id: 'serieux', label: 'Sérieux', emoji: '💪', mult: 1, luck: 0.15 },
+  { id: 'costaud', label: 'Costaud', emoji: '🔥', mult: 2, luck: 0.4 },
+  { id: 'brutal', label: 'Brutal', emoji: '⚡', mult: 3, luck: 0.6 },
+  { id: 'inhumain', label: 'Inhumain', emoji: '💀', mult: 5, luck: 1 },
+];
+
+/** Le cran par DÉFAUT — et celui des boss d'AVANT les crans. ⚠️ Son `mult` vaut 1 : un boss
+ *  déjà lancé garde donc exactement les PV qu'il avait, sans migration de données. */
+export const BOSS_TIER_DEFAULT = 'serieux';
+
+export function bossTier(id: string | null | undefined): BossTier {
+  return BOSS_TIERS.find((t) => t.id === id) ?? BOSS_TIERS.find((t) => t.id === BOSS_TIER_DEFAULT)!;
+}
+
+/** 📏 LA PART D'UN PARTICIPANT, cran compris — la SEULE définition côté client.
+ *  ⚠️ Tout ce qui se compte en « parts » passe par elle : PV du boss, plafond d'une saisie,
+ *  part minimale du coffre, plafond de la prime d'XP. Une seule lecture, donc les crans ne
+ *  peuvent pas n'être appliqués qu'à moitié. */
+export function bossShareUnits(family: BossFamily, tier?: string | null): number {
+  return Math.round(FRIEND_BOSS.shareUnits[family] * bossTier(tier).mult);
+}
 
 /** Ce qu'un exo doit porter pour être classé. */
 export interface BossExerciseInfo {
@@ -148,6 +214,10 @@ export interface FriendBoss {
   exerciseName: string;
   /** Poids de rep figé à la déclaration : il ne touche que l'XP. */
   repWeight: number;
+  /** Cran de difficulté choisi au lancement (`BOSS_TIERS`). ⚠️ Absent sur les boss d'AVANT
+   *  les crans → `bossTier` retombe sur « Sérieux », dont le multiplicateur vaut 1 : leurs
+   *  PV et leurs plafonds ne bougent pas d'un point, sans migration de données. */
+  tier?: string | null;
   createdAt: number;
   /** Posé quand tous les invités ont répondu avant la fin de la fenêtre (ou sans invité). */
   startAt: number | null;
@@ -189,6 +259,7 @@ export function bossFromRow(r: {
   exercise_id: string;
   exercise_name: string;
   rep_weight: number | string | null;
+  tier?: string | null;
   created_at: string;
   start_at: string | null;
   defeated_at: string | null;
@@ -202,6 +273,7 @@ export function bossFromRow(r: {
     exerciseId: r.exercise_id,
     exerciseName: r.exercise_name,
     repWeight: Number(r.rep_weight ?? 1) || 1,
+    tier: r.tier ?? null,
     createdAt: ms(r.created_at) ?? 0,
     startAt: ms(r.start_at),
     defeatedAt: ms(r.defeated_at),
@@ -232,7 +304,7 @@ export function friendBossXp(
     if (!b) continue;
     out[bossXpTrack(b.family)] +=
       bossRepsXp(b.family, m.units, b.repWeight) +
-      bossCompletionXp(b.family, m.units, b.repWeight, b.defeatedAt != null);
+      bossCompletionXp(b.family, m.units, b.repWeight, b.defeatedAt != null, b.tier);
   }
   return out;
 }
@@ -252,6 +324,7 @@ export function bossErrorMessage(code: string): string {
     no_character: 'Crée d’abord ton aventurier dans l’Aventure.',
     no_altar: 'Construis l’Autel des boss dans ta base pour lancer un boss.',
     bad_exercise: 'Cet exercice ne peut pas servir de boss.',
+    bad_tier: 'Cette difficulté n’existe pas — recharge la page.',
     not_defeated: 'Le boss n’est pas encore tombé.',
     nothing: 'Ton coffre a déjà été ouvert.',
     min_share: 'Il fallait apporter au moins la moitié de ta part pour le coffre.',
@@ -299,8 +372,8 @@ function bossInProgress(
 }
 
 /** PV d'un boss : une part par participant (le lanceur compris), en points de dégât. */
-export function bossHpTotal(family: BossFamily, participants: number): number {
-  return bossDamage(FRIEND_BOSS.shareUnits[family] * Math.max(1, Math.floor(participants)));
+export function bossHpTotal(family: BossFamily, participants: number, tier?: string | null): number {
+  return bossDamage(bossShareUnits(family, tier) * Math.max(1, Math.floor(participants)));
 }
 
 /** Dégâts infligés par des reps (ou des secondes de gainage). */
@@ -431,14 +504,19 @@ export function canDeclareBoss(
 /** Ce qu'une saisie peut encore apporter, plafonds compris, en reps : le plafond d'une
  *  saisie et `unitsLeft`, les reps qui restent avant la mort du boss (`bossUnitsLeft`).
  *  ⚠️ Aucun plafond sur 24 h (v0.892). */
-export function acceptedUnits(family: BossFamily, asked: number, unitsLeft: number): number {
-  const perHit = Math.floor(FRIEND_BOSS.shareUnits[family] * FRIEND_BOSS.hitMaxShare);
+export function acceptedUnits(
+  family: BossFamily,
+  asked: number,
+  unitsLeft: number,
+  tier?: string | null,
+): number {
+  const perHit = Math.floor(bossShareUnits(family, tier) * FRIEND_BOSS.hitMaxShare);
   return Math.max(0, Math.min(Math.floor(asked), perHit, Math.max(0, unitsLeft)));
 }
 
 /** A-t-on apporté sa part minimale ? */
-export function metMinShare(family: BossFamily, units: number): boolean {
-  return units >= FRIEND_BOSS.shareUnits[family] * FRIEND_BOSS.minShare;
+export function metMinShare(family: BossFamily, units: number, tier?: string | null): boolean {
+  return units >= bossShareUnits(family, tier) * FRIEND_BOSS.minShare;
 }
 
 /** XP de ses reps sur un boss — même barème que les challenges (`challenges.effortXpRaw`) :
@@ -449,15 +527,18 @@ export function bossRepsXp(family: BossFamily, units: number, repWeight: number)
   return Math.round(raw * XP_MULT);
 }
 
-/** Prime de complétion : versée si le boss est mort et la part minimale apportée. */
+/** Prime de complétion : versée si le boss est mort et la part minimale apportée.
+ *  ⚠️ Le CRAN passe par `bossShareUnits` des deux côtés (part minimale ET plafond de la
+ *  prime) : un boss plus dur demande plus pour la toucher, et en plafonne davantage. */
 export function bossCompletionXp(
   family: BossFamily,
   units: number,
   repWeight: number,
   defeated: boolean,
+  tier?: string | null,
 ): number {
-  if (!defeated || !metMinShare(family, units)) return 0;
-  const capped = Math.min(units, FRIEND_BOSS.shareUnits[family] * FRIEND_BOSS.bonusCapShares);
+  if (!defeated || !metMinShare(family, units, tier)) return 0;
+  const capped = Math.min(units, bossShareUnits(family, tier) * FRIEND_BOSS.bonusCapShares);
   return Math.round(bossRepsXp(family, capped, repWeight) * FRIEND_BOSS.bonusPct);
 }
 
@@ -509,13 +590,24 @@ export interface FriendBossChest {
  * exactement le même coffre. Le serveur, lui, garantit qu'il est dû et pris une fois.
  */
 export function friendBossChest(
-  b: Pick<FriendBoss, 'id' | 'family' | 'exerciseName' | 'createdAt' | 'startAt' | 'defeatedAt'>,
+  b: Pick<
+    FriendBoss,
+    'id' | 'family' | 'exerciseName' | 'createdAt' | 'startAt' | 'defeatedAt' | 'tier'
+  >,
   userId: string,
   playerLevel: number,
 ): FriendBossChest {
   const level = Math.max(1, Math.floor(playerLevel));
   const early = earlyKillFraction(b);
-  const mult = FRIEND_BOSS_CHEST.bosses * (1 + early * FRIEND_BOSS_CHEST.earlyMult);
+  const tier = bossTier(b.tier);
+  // ⚠️ SUPER-LINÉAIRE en difficulté (`rewardExp` 1,2) : c'est ce qui rend un boss dur plus
+  // payant qu'une enfilade de faciles — mesuré, ×5,3 d'or par jour, et l'or PAR REP monte
+  // de 38 % au cran le plus dur. Proportionnel (exposant 1), l'or par rep serait plat et
+  // « de plus en plus intéressante » ne voudrait rien dire.
+  const mult =
+    FRIEND_BOSS_CHEST.bosses *
+    (1 + early * FRIEND_BOSS_CHEST.earlyMult) *
+    tier.mult ** FRIEND_BOSS.rewardExp;
   const rng = mulberry32(seedOf(`${b.id}:${userId}`));
   return {
     gold: Math.round((bossGoldForLevel(level) * mult) / 10) * 10,
@@ -525,7 +617,10 @@ export function friendBossChest(
       mains: TROPHY_MAINS[b.family],
       title: b.exerciseName,
       level,
-      luck: early * FRIEND_BOSS_CHEST.earlyLuck,
+      // ⚠️ La chance du CRAN s'AJOUTE à celle du « tué tôt » : les deux disent « tu as fait
+      // plus que le minimum ». Elle ne touche que les étoiles et le niveau d'objet — le rang
+      // reste celui du joueur (v0.894), donc le sport demeure le plafond.
+      luck: early * FRIEND_BOSS_CHEST.earlyLuck + tier.luck,
     }),
   };
 }
@@ -537,11 +632,11 @@ export const chestMark = (bossId: string) => `fboss:${bossId}`;
 /** État du coffre d'un joueur : rien à faire, à ouvrir (appel serveur), ou à récupérer
  *  (le serveur l'a donné mais le crédit n'a pas eu lieu — réseau coupé entre les deux). */
 export function chestState(
-  b: Pick<FriendBoss, 'id' | 'family' | 'defeatedAt'>,
+  b: Pick<FriendBoss, 'id' | 'family' | 'defeatedAt' | 'tier'>,
   m: Pick<FriendBossMember, 'status' | 'units' | 'claimed'> | null | undefined,
   credited: readonly string[],
 ): 'none' | 'open' | 'recover' {
   if (b.defeatedAt == null || !m || m.status !== 'accepted') return 'none';
-  if (!metMinShare(b.family, m.units) || credited.includes(chestMark(b.id))) return 'none';
+  if (!metMinShare(b.family, m.units, b.tier) || credited.includes(chestMark(b.id))) return 'none';
   return m.claimed ? 'recover' : 'open';
 }

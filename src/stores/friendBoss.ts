@@ -117,6 +117,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
   async function declare(
     ex: { id: string; name: string; family: BossFamily; repWeight: number },
     invitees: string[],
+    tier: string,
   ) {
     await rpc<string>('fboss_declare', {
       p_exercise_id: ex.id,
@@ -124,6 +125,10 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       p_family: ex.family,
       p_rep_weight: ex.repWeight,
       p_invitees: invitees,
+      // ⚠️ Le CRAN part au serveur, qui en dérive les PV et les plafonds : l'écran ne fait
+      // que l'annoncer. Un cran inconnu est REFUSÉ côté base (`bad_tier`), jamais replié en
+      // silence — sinon l'écran promettrait un volume que le serveur n'appliquerait pas.
+      p_tier: tier,
     });
     await fetchMine();
   }

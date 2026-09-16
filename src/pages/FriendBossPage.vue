@@ -15,7 +15,9 @@
           <b>{{ b.exerciseName }}</b>
         </div>
         <div class="fb-inv-s">
-          {{ BOSS_FAMILY_LABEL[b.family].emoji }} ta part : {{ FRIEND_BOSS.shareUnits[b.family] }}
+          {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} ·
+          {{ BOSS_FAMILY_LABEL[b.family].emoji }} ta part :
+          {{ bossShareUnits(b.family, b.tier) }}
           {{ bossUnitLabel(b.family) }} sur 7 jours · réponds dans
           {{ fmtBossSpan(bossStartAt(b) - now) }}
         </div>
@@ -43,7 +45,8 @@
           </template>
           <template v-else>⚔️ Encore {{ fmtBossSpan(bossEndsAt(current) - now) }}</template>
           <span class="fb-dim">
-            · 1 {{ unitSingular }} = {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts</span
+            · {{ bossTier(current.tier).emoji }} {{ bossTier(current.tier).label }} · 1
+            {{ unitSingular }} = {{ fmtBossPv(FRIEND_BOSS.damagePerUnit) }} dégâts</span
           >
         </div>
 
@@ -101,15 +104,15 @@
               ><span class="fb-m-fill" :style="{ width: sharePct(m.units) + '%' }" /><span
                 class="fb-m-min"
             /></span>
-            <span class="fb-m-u" :class="{ ok: metMinShare(current.family, m.units) }">{{
+            <span class="fb-m-u" :class="{ ok: metMinShare(current.family, m.units, current.tier) }">{{
               m.units
             }}</span>
           </template>
           <span v-else class="fb-m-st">{{ m.status === 'invited' ? 'invité' : 'a refusé' }}</span>
         </div>
         <p class="fb-hint">
-          La barre = ta part ({{ FRIEND_BOSS.shareUnits[current.family] }}), le trait = la moitié à
-          apporter pour le coffre.
+          La barre = ta part ({{ bossShareUnits(current.family, current.tier) }}), le trait = la
+          moitié à apporter pour le coffre.
         </p>
 
         <div v-if="recentHits.length" class="fb-sec-t">Dernières frappes</div>
@@ -161,10 +164,39 @@
             >
               <span>{{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}</span>
               <span class="fb-dim"
-                >{{ FRIEND_BOSS.shareUnits[e.family] }} {{ bossUnitLabel(e.family) }}/pers.</span
+                >{{ bossShareUnits(e.family, pickedTier) }}
+                {{ bossUnitLabel(e.family) }}/pers.</span
               >
             </button>
           </div>
+
+          <!-- Le cran fixe le VOLUME par personne, et la récompense monte plus vite que lui :
+               chaque tuile annonce donc les deux, pour que le choix se fasse en connaissance
+               de cause plutôt qu'au nom. -->
+          <div class="fb-sec-t">Difficulté</div>
+          <div class="fb-tiers">
+            <button
+              v-for="t in BOSS_TIERS"
+              :key="t.id"
+              class="fb-tier"
+              :class="{ on: pickedTier === t.id }"
+              @click="pickedTier = t.id"
+            >
+              <span class="fb-tier-e">{{ t.emoji }}</span>
+              <span class="fb-tier-n">{{ t.label }}</span>
+              <span class="fb-tier-v">{{
+                pickedExo
+                  ? `${bossShareUnits(pickedExo.family, t.id)} ${bossUnitLabel(pickedExo.family)}`
+                  : `×${t.mult}`
+              }}</span>
+              <span class="fb-tier-r">🎁 ×{{ tierRewardMult(t).toFixed(1) }}</span>
+            </button>
+          </div>
+          <p class="fb-hint">
+            La difficulté fixe le nombre de {{ pickedExo ? bossUnitLabel(pickedExo.family) : 'reps' }}
+            <b>par personne</b>. La récompense monte <b>plus vite</b> que l’effort : un boss dur
+            paie mieux que plusieurs faciles, en or, en pierres et en chances sur le trophée.
+          </p>
 
           <div class="fb-sec-t">Inviter ({{ invitees.size }}/{{ FRIEND_BOSS.maxInvites }})</div>
           <p v-if="!friends.accepted.length" class="fb-hint">
@@ -182,10 +214,10 @@
 
           <button class="fb-btn big wide" :disabled="!pickedExo || busy" @click="doDeclare">
             <template v-if="pickedExo">
-              Lancer · {{ fmtBossPv(bossHpTotal(pickedExo.family, 1)) }} PV
+              Lancer · {{ fmtBossPv(bossHpTotal(pickedExo.family, 1, pickedTier)) }} PV
               {{
                 invitees.size
-                  ? `(+${fmtBossPv(bossHpTotal(pickedExo.family, 1))} par ami qui rejoint)`
+                  ? `(+${fmtBossPv(bossHpTotal(pickedExo.family, 1, pickedTier))} par ami qui rejoint)`
                   : ''
               }}
             </template>
@@ -202,6 +234,7 @@
           <span class="fb-past-main">
             <b>{{ b.exerciseName }}</b>
             <span class="fb-dim">
+              {{ bossTier(b.tier).emoji }} {{ bossTier(b.tier).label }} ·
               {{ b.defeatedAt ? 'abattu' : 'a survécu' }} · tu as apporté
               {{ store.myMembership(b.id)?.units ?? 0 }} {{ bossUnitLabel(b.family) }}
             </span>
@@ -241,6 +274,11 @@ import { repWeightFromExercise } from '@/lib/challenges';
 import {
   FRIEND_BOSS,
   BOSS_FAMILY_LABEL,
+  BOSS_TIERS,
+  BOSS_TIER_DEFAULT,
+  bossShareUnits,
+  bossTier,
+  type BossTier,
   acceptedUnits,
   bossEndsAt,
   bossEmoji,
@@ -396,19 +434,28 @@ const pseudoOf = (userId: string) =>
   store.members.find((m) => m.userId === userId)?.pseudo ?? 'Un ami';
 const ownerPseudo = (b: FriendBoss) => pseudoOf(b.ownerId);
 const sharePct = (units: number) =>
-  current.value ? Math.min(100, (units / FRIEND_BOSS.shareUnits[current.value.family]) * 100) : 0;
+  current.value
+    ? Math.min(100, (units / bossShareUnits(current.value.family, current.value.tier)) * 100)
+    : 0;
 
 // ── Frapper ──
 const amount = ref(20);
 const perHit = computed(() =>
   current.value
-    ? Math.floor(FRIEND_BOSS.shareUnits[current.value.family] * FRIEND_BOSS.hitMaxShare)
+    ? Math.floor(
+        bossShareUnits(current.value.family, current.value.tier) * FRIEND_BOSS.hitMaxShare,
+      )
     : 0,
 );
 /** Ce que le serveur retiendra : la même règle que `fboss_hit`. */
 const accepted = computed(() =>
   current.value
-    ? acceptedUnits(current.value.family, amount.value || 0, bossUnitsLeft(current.value))
+    ? acceptedUnits(
+        current.value.family,
+        amount.value || 0,
+        bossUnitsLeft(current.value),
+        current.value.tier,
+      )
     : 0,
 );
 function step(d: number) {
@@ -493,6 +540,10 @@ const exoChoices = computed(() => {
   return list.slice(0, 40);
 });
 const pickedExo = ref<BossExo | null>(null);
+const pickedTier = ref<string>(BOSS_TIER_DEFAULT);
+/** Ce que le cran multiplie sur le COFFRE (or, pierres) — la même formule que
+ *  `friendBossChest`, jamais un second barème : c'est ce qui rend l'annonce vraie. */
+const tierRewardMult = (t: BossTier) => t.mult ** FRIEND_BOSS.rewardExp;
 const invitees = ref(new Set<string>());
 function toggleInvite(id: string) {
   const s = new Set(invitees.value);
@@ -505,7 +556,7 @@ async function doDeclare() {
   if (!ex || busy.value) return;
   busy.value = true;
   try {
-    await store.declare(ex, [...invitees.value]);
+    await store.declare(ex, [...invitees.value], pickedTier.value);
     syncLook();
     $q.notify({
       type: 'positive',
@@ -818,6 +869,47 @@ function notifyError(e: unknown) {
 .fb-exo.on {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
+}
+/* ⚠️ `minmax(0, 1fr)` et non `1fr` : sinon une piste refuse de passer sous la taille de son
+   contenu et la grille déborde à 344 px (Z Fold plié). */
+.fb-tiers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 6px;
+  margin-top: 8px;
+}
+.fb-tier {
+  display: grid;
+  gap: 1px;
+  min-height: 44px;
+  padding: 7px 4px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+}
+.fb-tier.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.fb-tier-e {
+  font-size: 18px;
+  line-height: 1.1;
+}
+.fb-tier-n {
+  font-size: 12px;
+  font-weight: 600;
+}
+.fb-tier-v {
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.fb-tier-r {
+  font-size: 11px;
+  color: var(--d1);
 }
 .fb-friend {
   display: flex;

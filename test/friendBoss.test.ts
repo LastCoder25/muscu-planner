@@ -33,6 +33,11 @@ import {
   bossErrorMessage,
   fmtBossSpan,
   BOSS_FAMILY_LABEL,
+  BOSS_TIERS,
+  BOSS_TIER_DEFAULT,
+  bossTier,
+  bossShareUnits,
+  friendBossChest,
   type FriendBoss,
   type FriendBossMember,
 } from '@/lib/friendBoss';
@@ -301,21 +306,34 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
   // divergeraient feraient annoncer une part, un plafond ou une fenêtre que le serveur
   // refuse. Ce test lit la migration elle-même.
   const sql = fs.readFileSync('supabase/migrations/0067_friend_boss.sql', 'utf8');
-  // ⚠️ `fboss_share` est REDÉFINIE par une migration plus récente (0069) : on compare à la
-  // DERNIÈRE définition, celle que le serveur exécute — pas à celle d'origine.
-  const lastShareSql = () => {
-    const files = fs
+  // ⚠️ PLUSIEURS de ces fonctions ont été REDÉFINIES depuis la 0067 (0069, 0070, 0071, 0074,
+  // 0075, 0076, 0078) : on compare toujours à la DERNIÈRE définition, celle que le serveur
+  // exécute — jamais à celle d'origine, qui n'est plus appliquée nulle part.
+  const migrations = () =>
+    fs
       .readdirSync('supabase/migrations')
       .filter((f) => f.endsWith('.sql'))
-      .sort();
-    const withShare = files
-      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
-      .filter((s) => s.includes('function public.fboss_share'));
-    return withShare[withShare.length - 1]!;
+      .sort()
+      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'));
+  /** Le corps de la DERNIÈRE définition de `fn`, borné à la fonction (et pas au fichier
+   *  entier : une migration qui en redéfinit plusieurs mélangerait leurs corps).
+   *  ⚠️ On n'accroche que sur un `create … function` : sans ça, le `grant execute on
+   *  function` de fin de fichier passait pour la définition et les tests lisaient trois
+   *  lignes de droits au lieu du code. */
+  const lastDef = (fn: string) => {
+    const re = new RegExp(`create (?:or replace )?function public\\.${fn}\\(`, 'g');
+    const bodies = migrations().flatMap((s) => {
+      const starts = [...s.matchAll(re)].map((m) => m.index!);
+      if (!starts.length) return [];
+      const i = starts[starts.length - 1]!;
+      const j = s.indexOf('\n$$;', i);
+      return [s.slice(i, j < 0 ? undefined : j)];
+    });
+    return bodies[bodies.length - 1]!;
   };
 
   it('mêmes parts de PV par famille (dernière définition du serveur)', () => {
-    const share = lastShareSql();
+    const share = lastDef('fboss_share');
     for (const [family, units] of Object.entries(FRIEND_BOSS.shareUnits))
       expect(share).toContain(`when '${family}' then ${units}`);
   });
@@ -327,56 +345,160 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     expect(sql).toContain("public.fboss_start(b) + interval '7 days'");
   });
 
-  // ⚠️ `fboss_declare` est REDÉFINIE (0070, 0071, 0076) : le délai se lit sur la DERNIÈRE.
   it('même délai de relance que la DERNIÈRE définition de fboss_declare (48 h)', () => {
-    const decl = fs
-      .readdirSync('supabase/migrations')
-      .filter((f) => f.endsWith('.sql'))
-      .sort()
-      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
-      .filter((s) => s.includes('function public.fboss_declare'))
-      .pop()!;
     expect(FRIEND_BOSS.cooldownMs).toBe(48 * H);
-    expect(decl).toContain("public.fboss_ended(b) + interval '48 hours' > now()");
+    expect(lastDef('fboss_declare')).toContain(
+      "public.fboss_ended(b) + interval '48 hours' > now()",
+    );
   });
 
-  // ⚠️ `fboss_hit` est REDÉFINIE (0070, puis 0074) : on compare les plafonds à la DERNIÈRE.
-  const lastHitSql = () => {
-    const files = fs
-      .readdirSync('supabase/migrations')
-      .filter((f) => f.endsWith('.sql'))
-      .sort()
-      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
-      .filter((s) => s.includes('function public.fboss_hit'));
-    return files[files.length - 1]!;
-  };
   it('⚠️ 150 pompes par saisie, et saisir encore et encore ne bloque jamais (v0.892)', () => {
     expect(Math.floor(FRIEND_BOSS.shareUnits.push * FRIEND_BOSS.hitMaxShare)).toBe(150);
     // Aucun historique n'entre dans la règle : la 20ᵉ saisie du jour passe comme la 1ʳᵉ.
-    expect(acceptedUnits).toHaveLength(3);
+    // ⚠️ L'arité (famille, demandé, restant, cran) est éprouvée ici : un 5ᵉ paramètre serait
+    // le retour d'un historique de 24 h, précisément ce que la v0.892 a retiré.
+    expect(acceptedUnits).toHaveLength(4);
     expect(acceptedUnits('push', 150, 9999)).toBe(150);
   });
   it('mêmes plafonds que la DERNIÈRE définition de fboss_hit — et aucun plafond sur 24 h', () => {
-    const hit = lastHitSql();
+    const hit = lastDef('fboss_hit');
     expect(hit).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
     expect(hit).not.toContain("interval '24 hours'");
     expect(hit).not.toContain('v_day');
   });
 
-  it('mêmes dégâts par rep, appliqués aux PV ET aux dégâts du serveur (migr. 0070)', () => {
-    const scale = fs.readFileSync('supabase/migrations/0070_friend_boss_damage_scale.sql', 'utf8');
-    expect(scale).toContain(`select ${FRIEND_BOSS.damagePerUnit};`);
-    expect(scale).toContain('public.fboss_share(p_family) * public.fboss_damage_per_unit()');
-    expect(scale).toContain(
-      'hp_total + public.fboss_share(family) * public.fboss_damage_per_unit()',
+  it('mêmes dégâts par rep, appliqués aux PV ET aux dégâts de la DERNIÈRE définition', () => {
+    expect(lastDef('fboss_damage_per_unit')).toContain(`select ${FRIEND_BOSS.damagePerUnit};`);
+    // Les PV posés au lancement et ceux ajoutés par un membre qui rejoint passent tous deux
+    // par la part (cran compris) × les dégâts d'une rep.
+    expect(lastDef('fboss_declare')).toContain(
+      'public.fboss_share_tier(p_family, p_tier) * public.fboss_damage_per_unit()',
     );
-    expect(scale).toContain('damage = damage + v_acc * v_dpu');
-    expect(scale).toContain('ceil((b.hp_total - b.damage)::numeric / v_dpu)::integer');
+    expect(lastDef('fboss_respond')).toContain(
+      'public.fboss_share_tier(family, tier) * public.fboss_damage_per_unit()',
+    );
+    const hit = lastDef('fboss_hit');
+    expect(hit).toContain('damage = damage + v_acc * v_dpu');
+    expect(hit).toContain('ceil((b.hp_total - b.damage)::numeric / v_dpu)::integer');
   });
 
-  it('même part minimale, même nombre d’invités', () => {
-    expect(sql).toContain(`public.fboss_share(b.family) * ${FRIEND_BOSS.minShare}`);
+  it('même part minimale (dernière définition), même nombre d’invités', () => {
+    expect(lastDef('fboss_claim')).toContain(
+      `public.fboss_share_tier(b.family, b.tier) * ${FRIEND_BOSS.minShare}`,
+    );
     expect(sql).toContain(`cardinality(v_invitees) > ${FRIEND_BOSS.maxInvites}`);
+  });
+
+  // ── Les CRANS DE DIFFICULTÉ (v0.904) ────────────────────────────────────────────
+  it('mêmes multiplicateurs de cran des deux côtés', () => {
+    const mult = lastDef('fboss_tier_mult');
+    for (const t of BOSS_TIERS) expect(mult).toContain(`when '${t.id}' then ${t.mult}`);
+    // Un cran INCONNU vaut 1 des deux côtés : un boss d'avant les crans (tier NULL) garde
+    // exactement les PV qu'il avait, sans migration de données.
+    expect(mult).toContain('else 1');
+    expect(bossTier(null).id).toBe(BOSS_TIER_DEFAULT);
+    expect(bossTier('cran-inexistant').mult).toBe(1);
+    expect(bossTier(BOSS_TIER_DEFAULT).mult).toBe(1);
+  });
+
+  it('⚠️ le cran est appliqué PARTOUT côté serveur, jamais à moitié', () => {
+    // Toute fonction qui compte en « parts » doit lire `fboss_share_tier`, jamais la part
+    // nue : une seule qui l'oublierait ferait diverger PV, plafonds ou coffre du cran choisi.
+    // ⚠️ Seule exception, et elle ne calcule rien : `fboss_share(p_family) is null` sert à
+    // VALIDER qu'une famille existe. On la retire avant de chercher les lectures restantes.
+    for (const fn of ['fboss_declare', 'fboss_respond', 'fboss_hit', 'fboss_claim']) {
+      const body = lastDef(fn);
+      expect(body, fn).toContain('fboss_share_tier(');
+      const rest = body
+        .replace(/fboss_share_tier\(/g, '')
+        .replace(/public\.fboss_share\(p_family\) is null/g, '');
+      expect(rest, fn).not.toContain('fboss_share(');
+    }
+  });
+
+  it('même arrondi de part des deux côtés (un cran à 0,5 sur une part impaire)', () => {
+    // Sans le même arrondi, l'écran annoncerait un volume et le serveur en appliquerait un
+    // autre. `pull` (30) au cran d'échauffement (×0,5) tombe sur 15, `core` (300) sur 150.
+    expect(lastDef('fboss_share_tier')).toContain(
+      'round(public.fboss_share(p_family) * public.fboss_tier_mult(p_tier))::integer',
+    );
+    for (const t of BOSS_TIERS)
+      for (const [family, units] of Object.entries(FRIEND_BOSS.shareUnits))
+        expect(bossShareUnits(family as never, t.id)).toBe(Math.round(units * t.mult));
+  });
+
+  it('un cran inconnu est REFUSÉ au lancement, jamais replié en silence', () => {
+    // Un client périmé qui enverrait un id inexistant créerait sinon un boss dont l'écran
+    // annoncerait un autre volume que celui que le serveur applique.
+    const decl = lastDef('fboss_declare');
+    expect(decl).toContain("raise exception 'bad_tier'");
+    for (const t of BOSS_TIERS) expect(decl).toContain(`'${t.id}'`);
+    expect(bossErrorMessage('bad_tier')).not.toBe('Action impossible pour le moment.');
+  });
+
+  it('⚠️ le cran traverse TOUTE la lib, pas seulement l’annonce', () => {
+    // Chaque fonction qui compte en parts doit le voir : une seule qui l'ignorerait ferait
+    // dire à l'écran autre chose que ce que le serveur applique.
+    const share = bossShareUnits('push', 'inhumain'); // 60 × 5 = 300
+    expect(share).toBe(300);
+    // PV du boss : une part par participant, au cran choisi.
+    expect(bossHpTotal('push', 2, 'inhumain')).toBe(bossHpTotal('push', 2, 'serieux') * 5);
+    // Plafond d'une saisie : 2,5 parts.
+    expect(acceptedUnits('push', 9999, 999_999, 'inhumain')).toBe(750);
+    expect(acceptedUnits('push', 9999, 999_999, 'echauffement')).toBe(75);
+    // Part minimale du coffre : la moitié de la part du CRAN.
+    expect(metMinShare('push', 150, 'inhumain')).toBe(true);
+    expect(metMinShare('push', 149, 'inhumain')).toBe(false);
+    expect(metMinShare('push', 30, 'serieux')).toBe(true);
+    // Prime de complétion : la part minimale ET le plafond suivent le cran.
+    expect(bossCompletionXp('push', 149, 1, true, 'inhumain')).toBe(0);
+    expect(bossCompletionXp('push', 149, 1, true, 'serieux')).toBeGreaterThan(0);
+    expect(bossCompletionXp('push', 9999, 1, true, 'inhumain')).toBe(
+      bossCompletionXp('push', 600, 1, true, 'inhumain'),
+    );
+  });
+
+  it('le cran d’un boss est relu de sa ligne (sinon tout retomberait sur « Sérieux »)', () => {
+    const row = {
+      id: 'b1',
+      owner_id: 'u1',
+      family: 'push',
+      exercise_id: 'e1',
+      exercise_name: 'Pompes',
+      rep_weight: 1,
+      tier: 'costaud',
+      created_at: '2026-09-16T00:00:00Z',
+      start_at: null,
+      defeated_at: null,
+      hp_total: 0,
+      damage: 0,
+    };
+    expect(bossFromRow(row).tier).toBe('costaud');
+    // Une ligne d'AVANT les crans n'en a pas : elle vaut « Sérieux », donc ×1.
+    const { tier: _t, ...legacy } = row;
+    expect(bossFromRow(legacy).tier).toBeNull();
+    expect(bossShareUnits('push', bossFromRow(legacy).tier)).toBe(FRIEND_BOSS.shareUnits.push);
+  });
+
+  it('⚠️ la récompense monte PLUS VITE que l’effort (sinon le cran dur ne sert à rien)', () => {
+    expect(FRIEND_BOSS.rewardExp).toBeGreaterThan(1);
+    const boss = (tier: string) => ({
+      id: 'b1',
+      family: 'push' as const,
+      exerciseName: 'Pompes',
+      createdAt: 0,
+      startAt: 0,
+      defeatedAt: 7 * D,
+      tier,
+    });
+    const easy = friendBossChest(boss('serieux'), 'u1', 30);
+    const hard = friendBossChest(boss('inhumain'), 'u1', 30);
+    const volume = bossShareUnits('push', 'inhumain') / bossShareUnits('push', 'serieux');
+    // L'or PAR REP monte : c'est ce que « de plus en plus intéressante » veut dire.
+    expect(hard.gold / easy.gold).toBeGreaterThan(volume);
+    expect(hard.stones / easy.stones).toBeGreaterThan(volume);
+    // Et la chance du trophée suit le cran (étoiles et niveau d'objet — pas le rang).
+    expect(bossTier('inhumain').luck).toBeGreaterThan(bossTier('serieux').luck);
   });
 });
 
