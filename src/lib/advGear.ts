@@ -507,10 +507,38 @@ export function normalizeAdvGearState(raw: unknown): AdvGearState {
  *  niveau du bâtiment raccourcit un peu, sans jamais devenir instantanée. */
 // ⚠️ 40 → 10 min à neuf (v0.881, demandé : « création plus rapide ») ; les fabrications se
 // mettent désormais en FILE (`nextForgeUntil`).
-export const OUTFITTER = { baseMs: 10 * 60_000, speedMax: 0.6, half: 30 } as const;
+export const OUTFITTER = {
+  baseMs: 10 * 60_000,
+  speedMax: 0.6,
+  half: 30,
+  /** 💰 Ce que forger coûte, en multiples de ce que la pièce se REVENDRAIT (jet nul).
+   *
+   *  ⚠️ IL DOIT RESTER NETTEMENT AU-DESSUS DE 1 / `ADV_GEAR.sellK`, et c'est la seule
+   *  contrainte non négociable : sinon forger puis revendre FABRIQUE DE L'OR, et l'économie
+   *  entière part en boucle. Marge large ici (un jet parfait ne rapporte que +70 %).
+   *
+   *  ⚠️ MESURÉ contre le revenu réel (`test/helpers/goldModel`), comme `goldSink` : équiper
+   *  un aventurier COMPLET (4 pièces) vaut **2 à 9 % d'une journée** de revenu du niveau 10
+   *  au 80, quand UN CRAN de bâtiment en coûte 160 à 260 %. La forge se sent sans jamais
+   *  rivaliser avec le vrai puits d'or. */
+  goldK: 7,
+} as const;
 export function outfitterMsFor(level: number): number {
   const L = Math.max(0, level);
   return Math.round(OUTFITTER.baseMs * (1 - (OUTFITTER.speedMax * L) / (L + OUTFITTER.half)));
+}
+
+/** 💰 Or que coûte la fabrication d'une pièce de ce RANG pour un aventurier de ce NIVEAU
+ *  (demandé : « selon le niveau de l'item qui sera fabriqué »).
+ *
+ *  ⚠️ IL NE DÉPEND QUE DE CE QUI EST DÉTERMINISTE — le rang (`outfitRank`) et le niveau de
+ *  la cible. Le JET et le niveau d'objet réels sont TIRÉS au lancement : un coût qui en
+ *  dépendrait ne pourrait pas être annoncé avant, et changerait sous les yeux du joueur.
+ *
+ *  ⚠️ DÉRIVÉ de `sellValueOf`, la table de valeur du projet — jamais une seconde échelle de
+ *  prix : le jour où la valeur d'un rang bouge, la forge suit. */
+export function outfitGoldCost(rank: Rarity, level: number): number {
+  return Math.max(1, Math.round(sellValueOf(rank, 0, level) * ADV_GEAR.sellK * OUTFITTER.goldK));
 }
 
 /** Quel emplacement d'AVENTURIER un objet du héros peut nourrir : le même (4 emplacements
@@ -720,6 +748,47 @@ export function settleOutfit(state: AdvGearState, now: number): AdvGearState {
     stock: [...state.stock, ...due.map((f) => ({ ...f.piece, id: `forge-${f.until}-${f.advId}` }))],
     forges: state.forges.filter((f) => f.until > now),
   };
+}
+
+/** Ce qu'une fabrication en lot va faire : une pièce par emplacement, et l'addition. */
+export interface OutfitBatch {
+  jobs: OutfitOption[];
+  gold: number;
+}
+
+/**
+ * ⚒️ TOUT ÉQUIPER pour UN aventurier (demandé) : remplir ses emplacements VIDES, et
+ * remplacer ce qu'il porte quand on peut faire MIEUX (« s'il porte du bronze et qu'il est
+ * passé argent, on crée de quoi remplacer »).
+ *
+ * ⚠️ AUCUNE RÈGLE NOUVELLE : on balaie `outfitOptions`, déjà trié dans l'ordre conseillé
+ * (rang le plus haut, puis emplacement vide avant amélioration, puis l'objet le MOINS
+ * précieux à sacrifier). Le premier candidat rencontré pour un emplacement est donc le bon,
+ * et une seconde heuristique ici finirait par contredire la liste que l'écran affiche.
+ *
+ * ⚠️ `same` et `down` sont ÉCARTÉS : refaire une pièce de rang égal ou inférieur détruit un
+ * objet et coûte de l'or pour rien.
+ *
+ * ⚠️ UN OBJET NE SERT QU'UNE FOIS, et un emplacement déjà EN FILE n'est pas repris — sans
+ * quoi le lot commanderait deux fois la même pièce, ou fondrait un objet déjà promis.
+ */
+export function planOutfitBatch(
+  items: readonly Item[],
+  target: Adventurer,
+  worn: readonly AdvGear[],
+  forges: readonly ForgeJob[],
+): OutfitBatch {
+  const jobs: OutfitOption[] = [];
+  const takenSlots = new Set<AdvGearSlot>();
+  const takenItems = new Set<string>();
+  for (const o of outfitOptions(items, target, worn, forges)) {
+    if (o.verdict !== 'empty' && o.verdict !== 'up') continue;
+    if (o.queued > 0 || takenSlots.has(o.slot) || takenItems.has(o.item.id)) continue;
+    takenSlots.add(o.slot);
+    takenItems.add(o.item.id);
+    jobs.push(o);
+  }
+  return { jobs, gold: jobs.reduce((s, o) => s + outfitGoldCost(o.rank, target.level), 0) };
 }
 
 export function advGearSellValue(g: AdvGear): number {

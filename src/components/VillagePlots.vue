@@ -170,6 +170,26 @@
                   </span>
                 </div>
               </div>
+              <!-- ⚒️ TOUT ÉQUIPER (demandé) : les emplacements vides ET ceux où l'on peut
+                   faire mieux, dans l'ordre conseillé. Le coût TOTAL est annoncé sur le
+                   bouton, et il se grise quand l'or manque — on ne lance jamais « ce qu'on
+                   peut payer » : une action partielle laisserait deviner ce qui a été fait. -->
+              <button
+                v-if="outfitBatch.jobs.length"
+                type="button"
+                class="of-all"
+                :class="{ poor: gold < outfitBatch.gold }"
+                :disabled="outfitBusy || gold < outfitBatch.gold"
+                @click="doOutfitBatch()"
+              >
+                ⚒️ Tout équiper · {{ outfitBatch.jobs.length }} pièce{{
+                  outfitBatch.jobs.length > 1 ? 's' : ''
+                }}
+                <span class="of-all-gold">{{ outfitBatch.gold }} 🪙</span>
+                <span v-if="gold < outfitBatch.gold" class="of-warn"
+                  >il te manque {{ outfitBatch.gold - gold }} 🪙</span
+                >
+              </button>
               <div class="of-t">
                 Quel objet fondre ?
                 <span class="of-sub">
@@ -209,6 +229,11 @@
                     · ⚒️ {{ r.queued }} déjà en fabrication</span
                   >
                 </span>
+                <!-- Le PRIX, annoncé avant : il ne dépend que du rang et du niveau, donc il
+                     ne peut pas changer entre l'affichage et la fabrication. -->
+                <span class="of-cost" :class="{ poor: gold < outfitCost(r) }"
+                  >{{ outfitCost(r) }} 🪙</span
+                >
               </button>
             </template>
           </div>
@@ -279,6 +304,8 @@ import {
   advGearCells,
   lineageOf,
   outfitOptions,
+  outfitGoldCost,
+  planOutfitBatch,
   outfitterMsFor,
   wornGear,
   type OutfitOption,
@@ -623,6 +650,52 @@ const outfitQueue = computed(() =>
     };
   }),
 );
+/** 💰 Ce que coûte CETTE fabrication (rang annoncé × niveau de la cible). */
+function outfitCost(r: OutfitOption): number {
+  return outfitAdv.value ? outfitGoldCost(r.rank, outfitAdv.value.level) : 0;
+}
+/** ⚒️ Le lot : emplacements vides et améliorations, avec l'addition. ⚠️ MÊME fonction que
+ *  le store applique — l'écran ne peut pas annoncer un plan que le store refuserait. */
+const outfitBatch = computed(() =>
+  outfitAdv.value
+    ? planOutfitBatch(
+        outfitCandidates.value,
+        outfitAdv.value,
+        outfitWorn.value.get(outfitAdv.value.id) ?? [],
+        outfitForges.value,
+      )
+    : { jobs: [], gold: 0 },
+);
+/** ⚠️ CONFIRMATION, comme à l'unité : plusieurs objets du héros sont DÉTRUITS d'un coup.
+ *  On dit combien, lesquels, et ce que ça coûte. */
+function doOutfitBatch() {
+  const adv = outfitAdv.value;
+  const b = outfitBatch.value;
+  if (outfitBusy.value || !adv || !b.jobs.length) return;
+  const lignes = b.jobs
+    .map((j) => `${j.item.emoji} ${j.item.name} → ${j.emoji} ${j.name} ${rarityRank(j.rank).name}`)
+    .join('<br>');
+  $q.dialog({
+    title: `Fondre ${b.jobs.length} objet${b.jobs.length > 1 ? 's' : ''} ?`,
+    html: true,
+    message: `Pour ${adv.name}, contre <b>${b.gold} 🪙</b> :<br>${lignes}`,
+    cancel: { label: 'Annuler', flat: true },
+    ok: { label: `⚒️ Tout fabriquer (${b.gold} 🪙)`, color: 'negative' },
+  }).onOk(() => void runOutfitBatch(adv.id));
+}
+async function runOutfitBatch(advId: string) {
+  const uid = auth.user?.id;
+  if (!uid || outfitBusy.value) return;
+  outfitBusy.value = true;
+  try {
+    const n = await char.startOutfitBatch(uid, advId, Date.now(), heroLevel.value);
+    $q.notify({ type: 'positive', message: `⚒️ ${n} pièce(s) en fabrication.` });
+  } catch (e) {
+    $q.notify({ type: 'negative', message: (e as Error).message });
+  } finally {
+    outfitBusy.value = false;
+  }
+}
 /** ⚠️ CONFIRMATION, comme la vente et le recyclage du sac : l'objet du héros est DÉTRUIT
  *  à la fabrication, sans retour possible. Le rang de la pièce est connu d'avance
  *  (`outfitRank`) : on le dit. L'aventurier reste sélectionné pour enchaîner. */
@@ -912,6 +985,40 @@ async function runOutfit(itemId: string, advId: string) {
 .of-adv-r {
   font-size: 11px;
   font-weight: 700;
+}
+/* ⚒️ « Tout équiper » : l'action qui porte, donc accentuée — et franchement rouge quand
+   l'or manque, pour qu'on ne cherche pas pourquoi elle ne répond pas. */
+.of-all {
+  min-height: 48px;
+  margin: 8px 0 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent, #ffd23f) 60%, var(--line));
+  background: color-mix(in srgb, var(--accent, #ffd23f) 12%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  cursor: pointer;
+}
+.of-all.poor {
+  border-color: color-mix(in srgb, var(--d4, #ff6a45) 50%, var(--line));
+  background: transparent;
+}
+.of-all-gold {
+  margin-left: auto;
+  font-family: var(--font-display);
+}
+/* Le prix d'une ligne : discret, mais rouge s'il dépasse la bourse. */
+.of-cost {
+  font-size: 12px;
+  color: var(--dim);
+}
+.of-cost.poor {
+  color: var(--d4, #ff6a45);
 }
 .of-item {
   min-height: 48px;

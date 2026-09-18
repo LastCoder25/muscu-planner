@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
-import { RARITY_RANK, RANK_ORDER, itemLevelMult, prestigeRankIndex } from '@/lib/items';
+import { RARITY_RANK, RANK_ORDER, itemLevelMult, prestigeRankIndex, type Item } from '@/lib/items';
 import { ADV_CLASSES, advAvatar, advRarity, type Adventurer } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
 import {
@@ -33,6 +33,9 @@ import {
   rollAdvGearDrop,
   outfitSlot,
   outfitterMsFor,
+  outfitGoldCost,
+  planOutfitBatch,
+  advGearSellValue,
   pickLineage,
   rollAdvGear,
   settleOutfit,
@@ -811,5 +814,91 @@ describe('⭐ une pièce d’aventurier se lit en RANG ET ÉTOILES', () => {
     // Même rang, jets opposés → deux étiquettes DIFFÉRENTES : c'est tout l'objet.
     expect(rBas).not.toBe(rHaut);
     expect(advGearCells(a, [haut])[0]!.title).toContain(rHaut);
+  });
+});
+
+describe('💰⚒️ L’ÉQUIPEMENTIER SE PAIE EN OR, ET ON PEUT TOUT LANCER D’UN COUP', () => {
+  const item = (id: string, over: Partial<Item> = {}): Item => ({
+    id,
+    slot: 'weapon',
+    name: 'Lame',
+    emoji: '🗡️',
+    rarity: 'commun',
+    roll: 0.5,
+    level: 20,
+    effect: { type: 'damage_pct', value: 10 },
+    ...over,
+  });
+
+  it('⚠️ FORGER PUIS REVENDRE NE FABRIQUE JAMAIS D’OR — l’invariant non négociable', () => {
+    // Sans cette marge, l'Équipementier devient une imprimante à or et toute l'économie
+    // part en boucle. On l'éprouve au JET PARFAIT (la revente la plus chère possible).
+    for (const rank of RANK_ORDER) {
+      for (const level of [1, 20, 50, 100]) {
+        const cost = outfitGoldCost(rank, level);
+        const best = advGearSellValue(piece('x', { rarity: rank, roll: 1, level }));
+        expect(cost, `${rank} niv ${level}`).toBeGreaterThan(best);
+      }
+    }
+  });
+
+  it('le coût suit le RANG et le NIVEAU, et dérive de la table de valeur du projet', () => {
+    for (let i = 1; i < RANK_ORDER.length; i++)
+      expect(outfitGoldCost(RANK_ORDER[i]!, 20)).toBeGreaterThan(
+        outfitGoldCost(RANK_ORDER[i - 1]!, 20),
+      );
+    expect(outfitGoldCost('rare', 60)).toBeGreaterThan(outfitGoldCost('rare', 10));
+    // ⚠️ DÉRIVÉ, jamais une seconde échelle de prix : si la valeur d'un rang bouge, le coût suit.
+    // Forger coute goldK fois ce que la piece se REVENDRAIT (jet nul) : les deux lisent la
+    // meme table de valeur, donc regler l'une deplace l'autre.
+    const revente = advGearSellValue(piece('ref', { rarity: 'rare', roll: 0, level: 30 }));
+    expect(outfitGoldCost('rare', 30) / revente).toBeCloseTo(OUTFITTER.goldK, 1);
+  });
+
+  it('le lot remplit les VIDES et remplace ce qui est MOINS BON, jamais l’égal', () => {
+    // Un archer argent (2 classes) qui ne porte qu'une arme commune : l'arme doit être
+    // remplacée (« il porte du bronze et il est passé argent »), les 3 autres remplies.
+    const a = { ...adv('a', ['guerrier', 'epeiste']), gear: { weapon: 'w0' } };
+    const worn = [piece('w0', { slot: 'weapon', rarity: 'commun' })];
+    const sac = ADV_GEAR_SLOTS.map((s, i) => item('i' + i, { slot: s, rarity: 'rare' }));
+    const plan = planOutfitBatch(sac, a, worn, []);
+    expect(plan.jobs.map((j) => j.slot).sort()).toEqual([...ADV_GEAR_SLOTS].sort());
+    expect(plan.jobs.every((j) => j.verdict === 'empty' || j.verdict === 'up')).toBe(true);
+    expect(plan.gold).toBe(plan.jobs.reduce((s, j) => s + outfitGoldCost(j.rank, a.level), 0));
+    // Une pièce de MÊME rang que ce qu'il porte n'est pas refaite : ça détruirait un objet
+    // et coûterait de l'or pour rien.
+    const dejaBien = ADV_GEAR_SLOTS.map((s) => piece('p' + s, { slot: s, rarity: 'inhabituel' }));
+    const a2 = {
+      ...a,
+      gear: Object.fromEntries(ADV_GEAR_SLOTS.map((s) => [s, 'p' + s])) as Adventurer['gear'],
+    };
+    expect(planOutfitBatch(sac, a2, dejaBien, []).jobs).toHaveLength(0);
+  });
+
+  it('⚠️ un objet ne sert qu’UNE fois, et un emplacement DÉJÀ EN FILE n’est pas repris', () => {
+    const a = adv('a', ['guerrier']);
+    // Deux objets pour le MÊME emplacement : un seul doit être retenu.
+    const sac = [item('i1', { slot: 'weapon' }), item('i2', { slot: 'weapon' })];
+    expect(planOutfitBatch(sac, a, [], []).jobs).toHaveLength(1);
+    // Une arme déjà commandée → on n'en recommande pas une seconde.
+    const enFile = [
+      {
+        until: 1,
+        advId: 'a',
+        piece: piece('q', { slot: 'weapon' }) as Omit<AdvGear, 'id'>,
+      },
+    ];
+    expect(planOutfitBatch(sac, a, [], enFile).jobs).toHaveLength(0);
+  });
+
+  it('le lot suit l’ORDRE CONSEILLÉ : il sacrifie l’objet le MOINS précieux', () => {
+    // ⚠️ Aucune heuristique propre au lot : il balaie `outfitOptions`. Deux objets donnent
+    // la même pièce → c'est le moins cher qui part.
+    const a = adv('a', ['guerrier', 'epeiste']); // classe inhabituel
+    const sac = [
+      item('cher', { slot: 'weapon', rarity: 'legendaire' }),
+      item('modeste', { slot: 'weapon', rarity: 'inhabituel' }),
+    ];
+    expect(planOutfitBatch(sac, a, [], []).jobs[0]!.item.id).toBe('modeste');
   });
 });

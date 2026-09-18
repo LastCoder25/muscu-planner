@@ -181,6 +181,10 @@ import {
   normalizeAdvGearState,
   outfitFromItem,
   nextForgeUntil,
+  wornGear,
+  outfitGoldCost,
+  outfitRank,
+  planOutfitBatch,
   settleOutfit,
   type AdvGear,
   type AdvGearSlot,
@@ -2073,9 +2077,14 @@ export const useCharacterStore = defineStore('character', () => {
     if (item.slot === FAMILIAR_SLOT) throw new Error('On ne fond pas un familier.');
     if (cur.equipped[item.slot]?.id === item.id)
       throw new Error('Ton héros le porte — retire-le d’abord.');
+    // 💰 L'or se paie AU LANCEMENT, sur le rang ANNONCÉ (`outfitRank`, déterministe) — pas
+    // sur la pièce tirée : le joueur doit payer ce qu'on lui a dit.
+    const cost = outfitGoldCost(outfitRank(item, adv), adv.level);
+    if (cur.gold < cost) throw new Error(`Il te faut ${cost} 🪙 pour cette fabrication.`);
     const piece = outfitFromItem(Math.random, item, adv, playerLevel);
     if (!piece) throw new Error(`Cet objet ne convient pas au métier de ${adv.name}.`);
     await persistOptimistic(userId, {
+      gold: cur.gold - cost,
       inventory: cur.inventory.filter((i) => i.id !== itemId),
       adv_gear: {
         stock: cur.adv_gear?.stock ?? [],
@@ -2085,6 +2094,48 @@ export const useCharacterStore = defineStore('character', () => {
         ],
       },
     });
+  }
+
+  /** ⚒️ TOUT ÉQUIPER pour un aventurier, en UNE écriture (demandé) : les emplacements vides
+   *  et ceux où l'on peut faire mieux, dans l'ordre conseillé (`planOutfitBatch`).
+   *
+   *  ⚠️ TOUT OU RIEN sur l'or : on refuse si la somme entière n'y est pas, plutôt que de
+   *  lancer « ce qu'on peut payer » — l'écran annonce le total avant, et une action
+   *  partielle laisserait le joueur deviner ce qui a été fait.
+   *
+   *  ⚠️ La file s'enchaîne (`nextForgeUntil` est recalculé à chaque pièce) : les pièces se
+   *  suivent au lieu de sortir toutes ensemble, comme une fabrication à l'unité. */
+  async function startOutfitBatch(userId: string, advId: string, now: number, playerLevel: number) {
+    const cur = row.value;
+    if (!cur) return 0;
+    const level = buildingLevel(cur.buildings ?? [], 'outfitter');
+    if (level <= 0) throw new Error('Construis un Équipementier.');
+    const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
+    if (!adv) throw new Error('Cet aventurier est introuvable.');
+    const forges = cur.adv_gear?.forges ?? [];
+    // ⚠️ Les MÊMES exclusions que la fabrication à l'unité : ni 🔒, ni familier, ni ce que
+    // le héros porte. L'écran les applique déjà ; le store ne s'y fie pas.
+    const candidates = cur.inventory.filter(
+      (i) => !i.locked && i.slot !== FAMILIAR_SLOT && cur.equipped[i.slot]?.id !== i.id,
+    );
+    // ⚠️ `wornGear` (et non `adv.gear` brut) : ce qui COMPTE au combat, jamais un id qui ne
+    // désigne plus rien — même règle que `outfitOptions` côté écran (v0.885).
+    const worn = wornGear(cur.adventurers ?? [], cur.adv_gear?.stock ?? []).get(advId) ?? [];
+    const plan = planOutfitBatch(candidates, adv, worn, forges);
+    if (!plan.jobs.length) throw new Error(`Rien à fabriquer pour ${adv.name}.`);
+    if (cur.gold < plan.gold) throw new Error(`Il te faut ${plan.gold} 🪙 pour tout fabriquer.`);
+    const taken = new Set(plan.jobs.map((j) => j.item.id));
+    const queue = [...forges];
+    for (const j of plan.jobs) {
+      const piece = outfitFromItem(Math.random, j.item, adv, playerLevel);
+      if (piece) queue.push({ until: nextForgeUntil(queue, now, level), advId, piece });
+    }
+    await persistOptimistic(userId, {
+      gold: cur.gold - plan.gold,
+      inventory: cur.inventory.filter((i) => !taken.has(i.id)),
+      adv_gear: { stock: cur.adv_gear?.stock ?? [], forges: queue },
+    });
+    return plan.jobs.length;
   }
 
   async function buildDefense(userId: string, typeId: DefenseId, playerLevel: number, now: number) {
@@ -2682,6 +2733,7 @@ export const useCharacterStore = defineStore('character', () => {
     toggleAdvGearLock,
     withAdvGear,
     startOutfit,
+    startOutfitBatch,
     autoAssignCompanions,
     healHero,
     healAdventurers,

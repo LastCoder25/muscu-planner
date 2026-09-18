@@ -4,6 +4,8 @@ import { goldCost, resolveOutcome } from '@/lib/expedition';
 import { refFighter } from '@/lib/proceduralContent';
 import { computeLevel } from '@/lib/levels';
 import { DEFENSE_TYPES, healCost } from '@/lib/raid';
+import { outfitGoldCost, ADV_GEAR_SLOTS } from '@/lib/advGear';
+import { RANK_ORDER, prestigeRankIndex } from '@/lib/items';
 // ⚠️ LE MODÈLE DE REVENU VIT DANS UN HELPER PARTAGÉ (`test/helpers/goldModel`) : le débit
 // des CAMPS DE FACTION se mesure contre LE MÊME dénominateur, et deux copies auraient
 // divergé — c'est par un mauvais dénominateur que ce fichier a déjà laissé passer un puits
@@ -224,6 +226,32 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       expect(part, `${nom} : ${(part * 100).toFixed(0)} % du plafond après un an`).toBeLessThan(
         0.9,
       );
+    }
+  });
+});
+
+describe('⚒️ LE COÛT DE L’ÉQUIPEMENTIER — mesuré contre le revenu, comme le reste', () => {
+  // ⚠️ Le repère du projet : UN CRAN de bâtiment coûte 160 à 260 % d'une journée de revenu.
+  // Forger doit se SENTIR sans jamais rivaliser avec ce puits-là.
+  const pieceCost = (L: number) => {
+    // La pièce sort au rang de la CLASSE de l'aventurier, qui ne dépasse jamais le rang du
+    // joueur — on mesure donc au pire cas réaliste : un aventurier promu à son maximum.
+    const rank = RANK_ORDER[Math.min(RANK_ORDER.length - 1, prestigeRankIndex(L))]!;
+    return outfitGoldCost(rank, L);
+  };
+
+  it('équiper UN aventurier (4 pièces) reste une FRACTION d’une journée, à tout niveau', () => {
+    for (const L of LEVELS) {
+      const part = (pieceCost(L) * ADV_GEAR_SLOTS.length) / goldPerDay(L);
+      expect(part, `niveau ${L}`).toBeGreaterThan(0.005); // ça doit se sentir
+      expect(part, `niveau ${L}`).toBeLessThan(0.2); // …sans jamais bloquer
+    }
+  });
+
+  it('⚠️ et il reste LOIN sous un cran de bâtiment — le vrai puits d’or', () => {
+    for (const L of LEVELS) {
+      const quatre = pieceCost(L) * ADV_GEAR_SLOTS.length;
+      expect(quatre, `niveau ${L}`).toBeLessThan(buildingUpgradeCost(L) / 3);
     }
   });
 });

@@ -64,6 +64,32 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await mountIt(GuildPanel, { open: true, mode: 'recruit' }, ROW)).toBeNull();
   }, 30_000);
 
+  it('VillagePlots se monte, Équipementier ouvert sur un aventurier', async () => {
+    // ⚠️ La feuille de l'Équipementier calcule le plan de forge (`planOutfitBatch`) et le
+    // coût de chaque ligne DÈS l'ouverture : c'est du travail fait au setup, donc
+    // exactement ce que cette porte existe pour éprouver.
+    const { default: VillagePlots } = await import('@/components/VillagePlots.vue');
+    const avecForge = {
+      ...ROW,
+      gold: 50_000,
+      buildings: [...ROW.buildings, { typeId: 'outfitter', level: 5, slot: 1, collectedAt: 0 }],
+      inventory: [
+        {
+          id: 'i1',
+          slot: 'weapon',
+          name: 'Lame',
+          emoji: '🗡️',
+          rarity: 'rare',
+          roll: 0.5,
+          level: 20,
+          effect: { type: 'damage_pct', value: 10 },
+        },
+      ],
+    };
+    const props = { heroLevel: 30, now: Date.now(), slot: 1 };
+    expect(await mountIt(VillagePlots, props, avecForge)).toBeNull();
+  }, 30_000);
+
   it('AdventurerPortrait se monte, avec et sans teinte d’état', async () => {
     const { default: P } = await import('@/components/AdventurerPortrait.vue');
     const base = {
