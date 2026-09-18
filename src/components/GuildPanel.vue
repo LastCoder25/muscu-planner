@@ -105,9 +105,31 @@
              centre selon sa classe, étoiles de rang sur l'anneau, quatre ronds aux coins.
              Toucher le portrait ouvre sa FICHE ; toucher le familier ou le talent de
              l'avatar ouvre directement leur sélecteur. -->
+          <!-- 🔎 FILTRE PAR ÉTAT (demandé). Les catégories VIDES ne sont pas proposées : une
+               puce « 0 » n'apprend rien et prend la place d'une qui compte. -->
+          <div v-if="rosterChips.length > 1" class="adv-filter">
+            <button
+              type="button"
+              class="af-chip"
+              :class="{ on: rosterFilter === null }"
+              @click="rosterFilter = null"
+            >
+              Tous <span class="g-tab-n">{{ roster.length }}</span>
+            </button>
+            <button
+              v-for="s in rosterChips"
+              :key="s"
+              type="button"
+              class="af-chip"
+              :class="['tone-' + s, { on: rosterFilter === s }]"
+              @click="rosterFilter = s"
+            >
+              {{ ADV_STATUS_LABEL[s] }} <span class="g-tab-n">{{ rosterCounts.get(s) }}</span>
+            </button>
+          </div>
           <div v-if="roster.length" class="adv-grid">
             <AdventurerPortrait
-              v-for="a in rosterSorted"
+              v-for="a in rosterShown"
               :key="a.id"
               :adv="a"
               :look="lookOf(a)"
@@ -115,6 +137,7 @@
               :talent-icon="talIconOf(a)"
               :power="powerOf(a)"
               :state="stateOf(a)"
+              :tone="statusOf(a)"
               :promotable="canPromoteOne(a)"
               :disabled="busy"
               :gear="gearCellsOf(a)"
@@ -138,28 +161,32 @@
             Aucune pièce en stock. L’<b>Équipementier</b> en fabrique à partir des objets de ton
             sac, et les sièges repoussés comme les embuscades en laissent tomber.
           </p>
-          <!-- 🗂️ DEUX SOUS-ONGLETS (demandé) : ce qui est CONFIÉ, et ce qui attend preneur.
-               Le stock les mélangeait, donc « qu'est-ce qu'il me reste à confier ? » se
-               répondait en lisant chaque ligne. « Disponibles » est l'onglet par défaut :
-               c'est le seul des deux où il y a quelque chose à faire. -->
+          <!-- 🔎 FILTRE (demandé) : ce qui attend preneur, ce qui est CONFIÉ, ou tout.
+               ⚠️ C'étaient deux SOUS-ONGLETS (v0.908) ; ils deviennent les MÊMES puces que
+               le vivier — un seul dispositif de filtre dans la Guilde, mêmes teintes
+               (vert = disponible, jaune = confié) que les cadres des tuiles. -->
           <template v-else>
-            <div class="g-tabs" role="tablist">
+            <div class="adv-filter">
               <button
                 type="button"
-                role="tab"
-                class="g-tab"
+                class="af-chip"
+                :class="{ on: stockTab === null }"
+                @click="stockTab = null"
+              >
+                Tous <span class="g-tab-n">{{ char.advGearStock.length }}</span>
+              </button>
+              <button
+                type="button"
+                class="af-chip tone-free"
                 :class="{ on: stockTab === 'free' }"
-                :aria-selected="stockTab === 'free'"
                 @click="stockTab = 'free'"
               >
                 📦 Disponibles <span class="g-tab-n">{{ stockFree.length }}</span>
               </button>
               <button
                 type="button"
-                role="tab"
-                class="g-tab"
+                class="af-chip tone-busy"
                 :class="{ on: stockTab === 'worn' }"
-                :aria-selected="stockTab === 'worn'"
                 @click="stockTab = 'worn'"
               >
                 🗡️ Portées <span class="g-tab-n">{{ stockWorn.length }}</span>
@@ -181,8 +208,16 @@
               ⚠️ {{ stockOrphans }} de ces pièces ne trouvent preneur dans ton vivier — mauvais
               métier, ou classe trop basse pour leur rang.
             </p>
+            <!-- TUILES en 2 colonnes (3 dès qu'il y a la place, `auto-fill`), boutons en
+                 ICÔNES : la liste était en pleine largeur avec des boutons libellés, donc
+                 chaque pièce coûtait une bande entière et on faisait défiler longtemps. -->
             <div class="gear-stock">
-              <div v-for="g in stockShown" :key="g.id" class="gear-stock-row">
+              <div
+                v-for="g in stockShown"
+                :key="g.id"
+                class="gear-stock-row"
+                :class="ownerOf(g) ? 'tone-busy' : 'tone-free'"
+              >
                 <div class="gear-stock-top">
                   <span class="d-pair-emo">{{ g.emoji }}</span>
                   <span class="d-pair-main">
@@ -193,11 +228,14 @@
                     <!-- Le RANG et ses ÉTOILES : la liste ne donnait que la couleur du nom,
                        donc deux pièces du même rang mais de jets opposés s'y lisaient
                        pareil — or le jet décide d'une part de leur valeur. -->
-                    <span class="d-pair-sub">
+                    <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
+                         colonne étroite la lignée passe à la ligne et le séparateur restait
+                         orphelin en bout de ligne précédente. -->
+                    <span class="d-pair-sub gear-meta">
                       <span class="d-rk" :style="{ '--rk': rarityRank(g.rarity).color }">{{
                         gradeLabel(g)
                       }}</span>
-                      · {{ lineageLabel(g.lineage) }}
+                      <span>{{ lineageLabel(g.lineage) }}</span>
                     </span>
                     <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{
                       t
@@ -207,19 +245,27 @@
                     >
                   </span>
                 </div>
+                <!-- ⚠️ ICÔNES SEULES, mais chacune garde son `title`/`aria-label` complet :
+                     le libellé disparaît de l'écran, jamais du lecteur d'écran ni de
+                     l'infobulle. Le prix de vente y passe aussi — et la confirmation le
+                     redit avant de valider, donc rien ne se vend sans l'avoir vu. -->
                 <div class="gear-actions-row">
                   <button
                     type="button"
                     class="gear-btn equip"
                     :disabled="busy"
+                    :title="ownerOf(g) ? 'Changer de porteur' : 'Confier à un aventurier'"
+                    :aria-label="ownerOf(g) ? 'Changer de porteur' : 'Confier à un aventurier'"
                     @click="stockEquip = g"
                   >
-                    🗡️ {{ ownerOf(g) ? 'Changer' : 'Équiper' }}
+                    🗡️
                   </button>
                   <button
                     type="button"
                     class="gear-btn"
                     :class="{ active: g.locked }"
+                    :title="g.locked ? 'Déverrouiller' : 'Verrouiller (protège de la vente)'"
+                    :aria-label="g.locked ? 'Déverrouiller' : 'Verrouiller'"
                     @click="toggleGearLock(g)"
                   >
                     {{ g.locked ? '🔒' : '🔓' }}
@@ -228,9 +274,11 @@
                     type="button"
                     class="gear-btn"
                     :disabled="!!g.locked || !!ownerOf(g)"
+                    :title="`Vendre (+${advGearSellValue(g)} 🪙)`"
+                    :aria-label="`Vendre pour ${advGearSellValue(g)} or`"
                     @click="sellOneGear(g)"
                   >
-                    🪙 {{ advGearSellValue(g) }}
+                    🪙
                   </button>
                 </div>
               </div>
@@ -706,6 +754,10 @@ import {
   advRarity,
   advRank,
   advRankProgress,
+  advStatus,
+  ADV_STATUSES,
+  ADV_STATUS_LABEL,
+  type AdvStatus,
   advTitle,
   advClass,
   advRoleLevels,
@@ -1160,16 +1212,20 @@ const stockSorted = computed(() =>
       b.level - a.level,
   ),
 );
-/** Ce qu'on regarde dans le stock : ce qui attend preneur, ou ce qui est confié.
- *  ⚠️ « Disponibles » par DÉFAUT — c'est le seul des deux où il y a à faire. */
-const stockTab = ref<'free' | 'worn'>('free');
+/** Ce qu'on regarde dans le stock : ce qui attend preneur, ce qui est confié, ou `null`
+ *  pour tout. ⚠️ « Disponibles » par DÉFAUT — c'est le seul où il y a à faire. */
+const stockTab = ref<'free' | 'worn' | null>('free');
 // ⚠️ LA PARTITION SUIT `ownerOf`, LE PRÉDICAT DÉJÀ EN PLACE DANS CET ÉCRAN (`Adventurer.gear`
 // brut), et pas `wornGear` (ce que le COMBAT retient). C'est lui qui décide déjà de la ligne
 // « portée par X » et du blocage de la vente : s'en écarter ferait tomber une pièce dans
 // « Disponibles » tout en l'y affichant « portée par X » avec son bouton vendre grisé.
 const stockWorn = computed(() => stockSorted.value.filter((g) => !!ownerOf(g)));
 const stockFree = computed(() => stockSorted.value.filter((g) => !ownerOf(g)));
-const stockShown = computed(() => (stockTab.value === 'worn' ? stockWorn : stockFree).value);
+const stockShown = computed(() =>
+  stockTab.value === null
+    ? stockSorted.value
+    : (stockTab.value === 'worn' ? stockWorn : stockFree).value,
+);
 /** Combien de pièces libres que PERSONNE ne peut porter (métier absent, ou classe trop
  *  basse). Rare par construction — une pièce forgée l'est pour une cible, et le butin de
  *  siège est plafonné à ce que le vivier porte — mais pas impossible. */
@@ -1272,6 +1328,29 @@ const roster = computed(() => char.advList);
 const rosterSorted = computed(() =>
   [...roster.value].sort((a, b) => compareAdventurers(a, b, powerOf)),
 );
+
+// ── 🔎 FILTRE PAR ÉTAT (demandé) : qui peut partir, qui est sur la route, qui se soigne ──
+// ⚠️ `null` = tous. Le filtre ne RANGE rien de lui-même : il lit `statusOf`, donc la même
+// règle que le cadre coloré et que la ligne d'état — les trois ne peuvent pas se contredire.
+const rosterFilter = ref<AdvStatus | null>(null);
+/** Combien dans chaque catégorie — affiché sur chaque puce, et c'est ce qui permet de ne
+ *  proposer QUE les catégories peuplées (une puce « 0 » n'apprend rien et prend la place). */
+const rosterCounts = computed(() => {
+  const m = new Map<AdvStatus, number>();
+  for (const a of rosterSorted.value) m.set(statusOf(a), (m.get(statusOf(a)) ?? 0) + 1);
+  return m;
+});
+const rosterChips = computed(() => ADV_STATUSES.filter((s) => rosterCounts.value.get(s)));
+const rosterShown = computed(() =>
+  rosterFilter.value === null
+    ? rosterSorted.value
+    : rosterSorted.value.filter((a) => statusOf(a) === rosterFilter.value),
+);
+// ⚠️ Un filtre qui ne montre plus rien (le dernier convoi est rentré) se lit comme un vivier
+// vide : on retombe sur « Tous » dès que la catégorie choisie se vide.
+watch(rosterChips, (chips) => {
+  if (rosterFilter.value && !chips.includes(rosterFilter.value)) rosterFilter.value = null;
+});
 const guildLevel = computed(() => char.guildLevel);
 const trainingLevel = computed(() => char.trainingLevel);
 const gold = computed(() => char.row?.gold ?? 0);
@@ -1302,6 +1381,8 @@ const barTitle = (a: Adventurer) => {
     : `Promotion suivante à ${stars(ADV_STARS)}`;
 };
 const stars = (s: number) => rankStarStr(s);
+/** Sa CATÉGORIE (lib) : ce qui range, ce qui colore le cadre et ce que le filtre compte. */
+const statusOf = (a: Adventurer) => advStatus(a, now.value);
 const busyOf = (a: Adventurer) => ((a.busyUntil ?? 0) > now.value ? a.busyUntil! : 0);
 const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil! : 0);
 /** Formation en cours (0 si aucune). ⚠️ Elle IMMOBILISE : c'est tout le coût d'une
@@ -1312,13 +1393,23 @@ const trainNameOf = (a: Adventurer) =>
 /** ⚠️ LA RÈGLE COMPLÈTE, une seule fois. Elle vivait ici en TROIS morceaux collés dans
  *  le template (`canPromote` + pas en formation + pas en convoi) et il en manquait un
  *  quatrième — l’existence du Centre de formation, que seul le store exigeait. */
-/** Ce qu’il fait en ce moment, en une ligne. ⚠️ La formation passe AVANT la convalescence :
- *  les deux peuvent courir ensemble, et c’est celle qu’on vient de lancer qu’on cherche. */
+/** Ce qu’il fait en ce moment, en une ligne.
+ *  ⚠️ DÉRIVÉ de `advStatus` (donc de `advUnavailableReason`, la source unique) : cette
+ *  fonction refaisait la règle avec un ordre à elle, et le filtre l’aurait contredite.
+ *  ⚠️ L’ordre change donc pour le cas « blessé ET en formation » : on annonce l’infirmerie,
+ *  et la formation qui court en même temps est dite EN PLUS — rien n’est perdu. */
 function stateOf(a: Adventurer): string {
-  if (trainOf(a)) return `🎓 en formation · ${leftOf(trainOf(a))}`;
-  if (hurtOf(a)) return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}`;
-  if (busyOf(a)) return `🐫 en route · ${leftOf(busyOf(a))}`;
-  return '✅ disponible';
+  const also = hurtOf(a) && trainOf(a) ? ' · 🎓 formation en cours' : '';
+  switch (statusOf(a)) {
+    case 'busy':
+      return `🐫 en route · ${leftOf(busyOf(a))}`;
+    case 'hurt':
+      return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}${also}`;
+    case 'training':
+      return `🎓 en formation · ${leftOf(trainOf(a))}`;
+    default:
+      return '✅ disponible';
+  }
 }
 const talIconOf = (a: Adventurer) => {
   const t = talOf(a);
@@ -2120,19 +2211,40 @@ async function doPromote(classId: string) {
   color: var(--dim);
   font-size: 14px;
 }
+/* 2 colonnes à 344/390 px, 3 dès qu'il y a la place (cockpit, tablette) — `auto-fill` le
+   décide seul, sans point de rupture à maintenir. ⚠️ `minmax(0, …)` et non `minmax(148px, …)`
+   en 2ᵉ borne : une piste qui refuse de passer sous son contenu fait déborder la grille. */
 .gear-stock {
   margin-top: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 8px;
 }
 .gear-stock-row {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: 100%;
-  padding: 10px;
-  margin-bottom: 8px;
+  min-width: 0;
+  padding: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
+}
+.gear-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+}
+/* CADRE PAR ÉTAT, mêmes teintes que les portraits : jaune = confiée, vert = disponible. */
+.gear-stock-row.tone-free {
+  --tone-c: var(--d1, #7bc86c);
+}
+.gear-stock-row.tone-busy {
+  --tone-c: var(--accent, #ffd23f);
+}
+.gear-stock-row[class*='tone-'] {
+  border-color: color-mix(in srgb, var(--tone-c) 55%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-c) 14%, transparent);
 }
 .gear-stock-top {
   display: flex;
@@ -2182,6 +2294,51 @@ async function doPromote(classId: string) {
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
   background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+/* 🔎 Puces de filtre du vivier — mêmes teintes que le cadre des portraits (une catégorie,
+   une couleur, partout). Elles DÉFILENT plutôt que de se replier : à 344 px, quatre puces
+   sur deux rangs poussaient le vivier sous le pli. */
+.adv-filter {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+  scrollbar-width: none;
+}
+.adv-filter::-webkit-scrollbar {
+  display: none;
+}
+.af-chip {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.af-chip.tone-free {
+  --tone-c: var(--d1, #7bc86c);
+}
+.af-chip.tone-busy {
+  --tone-c: var(--accent, #ffd23f);
+}
+.af-chip.tone-hurt {
+  --tone-c: var(--d4, #ff6a45);
+}
+.af-chip.tone-training {
+  --tone-c: var(--d3, #ffb23f);
+  border-style: dashed;
+}
+.af-chip.on {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--tone-c, var(--accent)) 65%, var(--line));
+  background: color-mix(in srgb, var(--tone-c, var(--accent)) 14%, transparent);
 }
 .g-tab-n {
   display: inline-block;

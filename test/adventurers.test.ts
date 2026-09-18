@@ -7,6 +7,9 @@ import {
   advAvailable,
   advUnavailableReason,
   ADV_UNAVAILABLE_LABEL,
+  advStatus,
+  ADV_STATUSES,
+  ADV_STATUS_LABEL,
   advTrainingLeftMs,
   settleTraining,
   settleAllTraining,
@@ -673,6 +676,40 @@ describe('⚠️ une promotion se PAIE en temps de formation', () => {
     expect(advUnavailableReason({ ...enForm(2000), hurtUntil: 3000 }, at)).toBe('hurt');
     for (const k of ['busy', 'hurt', 'training'] as const)
       expect(ADV_UNAVAILABLE_LABEL[k].length).toBeGreaterThan(0);
+  });
+
+  it('⚠️ advStatus DÉRIVE de advUnavailableReason — la Guilde avait un ordre à elle', () => {
+    const at = 1000;
+    // Le filtre du vivier, le cadre coloré et la ligne d'état lisent tous CETTE fonction.
+    // Elle refaisait la règle dans l'écran avec un ordre différent (formation avant
+    // infirmerie), donc un blessé EN FORMATION s'affichait autrement qu'il ne se rangeait.
+    const cas = [
+      base(),
+      { ...base(), busyUntil: 2000 },
+      { ...base(), hurtUntil: 2000 },
+      enForm(2000),
+      { ...enForm(2000), hurtUntil: 3000 },
+      { ...enForm(2000), hurtUntil: 3000, busyUntil: 4000 },
+    ];
+    for (const a of cas) expect(advStatus(a, at)).toBe(advUnavailableReason(a, at) ?? 'free');
+    // ⚠️ Le cas qui divergeait : blessé ET en formation se range à l'INFIRMERIE.
+    expect(advStatus({ ...enForm(2000), hurtUntil: 3000 }, at)).toBe('hurt');
+    // « free » ⟺ disponible : le filtre ne peut pas proposer comme partant quelqu'un que
+    // le store refusera.
+    for (const a of cas) expect(advStatus(a, at) === 'free').toBe(advAvailable(a, at));
+  });
+
+  it('⚠️ les catégories COUVRENT tous les états, et chacune a son libellé', () => {
+    // Exhaustif par construction : ajouter une raison d'indisponibilité sans l'ajouter aux
+    // catégories ferait disparaître ces aventuriers de tous les filtres.
+    const at = 1000;
+    const vus = new Set(
+      [base(), { ...base(), busyUntil: 2000 }, { ...base(), hurtUntil: 2000 }, enForm(2000)].map(
+        (a) => advStatus(a, at),
+      ),
+    );
+    expect([...vus].sort()).toEqual([...ADV_STATUSES].sort());
+    for (const s of ADV_STATUSES) expect(ADV_STATUS_LABEL[s].length).toBeGreaterThan(0);
   });
 
   it('une formation court PENDANT une convalescence — on ne fait pas attendre deux fois', () => {

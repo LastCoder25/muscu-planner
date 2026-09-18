@@ -7,7 +7,7 @@
        (« un aventurier de manga ») — le rang et l’anneau disent où il en est. -->
   <div
     class="ap"
-    :class="{ busy: !!state && !state.startsWith('✅') }"
+    :class="[tone ? 'tone-' + tone : '', { busy: tone ? tone !== 'free' : false }]"
     :style="{ '--rank-c': rank.color, '--rar-c': rarColor }"
   >
     <div class="ap-square">
@@ -164,6 +164,12 @@ const props = defineProps<{
   power: number;
   /** Ce qu’il fait en ce moment (« ✅ disponible », « 🐫 en route · 2 h »…). */
   state?: string;
+  /** Sa CATÉGORIE (`advStatus`), qui teinte le cadre : vert disponible, jaune en convoi,
+   *  rouge infirmerie, orange formation.
+   *  ⚠️ Une PROP, plus une déduction faite sur la chaîne d'état : le portrait lisait
+   *  `state.startsWith('✅')` pour savoir s'il était occupé — renommer le libellé aurait
+   *  cassé le style en silence, et la même règle vivait alors à deux endroits. */
+  tone?: 'free' | 'busy' | 'hurt' | 'training';
   promotable?: boolean;
   disabled?: boolean;
   /** Les 4 emplacements d'équipement, dans l'ordre de la grille. */
@@ -227,6 +233,31 @@ function starTf(i: number): string {
 }
 .ap.busy {
   opacity: 0.82;
+}
+/* CADRE PAR ÉTAT (demandé) : vert disponible · jaune en convoi · rouge infirmerie.
+   ⚠️ Les teintes viennent de la charte (les couleurs d'effort `--d1`/`--d4` et l'accent),
+   pas de hex écrits ici — le thème change, elles suivent.
+   ⚠️ La FORMATION prend `--d3`, voisin de l'accent, donc elle se distingue AUSSI par un
+   trait POINTILLÉ : deux différences plutôt qu'une, pour qui ne sépare pas deux jaunes. */
+.ap.tone-free {
+  --tone-c: var(--d1, #7bc86c);
+}
+.ap.tone-busy {
+  --tone-c: var(--accent, #ffd23f);
+}
+.ap.tone-hurt {
+  --tone-c: var(--d4, #ff6a45);
+}
+.ap.tone-training {
+  --tone-c: var(--d3, #ffb23f);
+  border-style: dashed;
+}
+.ap[class*='tone-'] {
+  border-color: color-mix(in srgb, var(--tone-c) 62%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-c) 18%, transparent);
+}
+.ap[class*='tone-'] .ap-state {
+  color: color-mix(in srgb, var(--tone-c) 78%, var(--text));
 }
 .ap-square {
   position: relative;

@@ -1659,6 +1659,28 @@ export function advAvailable(adv: Adventurer, now: number): boolean {
   return advUnavailableReason(adv, now) === null;
 }
 
+/** OÙ RANGER un aventurier — sa catégorie, disponible compris.
+ *
+ *  ⚠️ DÉRIVÉE de `advUnavailableReason`, jamais recalculée : l'écran de la Guilde en avait
+ *  sa propre version (`stateOf`) avec un ORDRE DIFFÉRENT (formation avant infirmerie), si
+ *  bien qu'un aventurier blessé ET en formation — cas réel, une formation court pendant
+ *  une convalescence (v0.739) — s'affichait « en formation » mais se serait rangé « à
+ *  l'infirmerie ». Deux vérités sur le même écran valent moins qu'un ordre d'étiquetage
+ *  légèrement différent ; l'information perdue (la formation qui court aussi) se dit dans
+ *  le libellé plutôt que dans la catégorie. */
+export type AdvStatus = AdvUnavailable | 'free';
+export function advStatus(adv: Adventurer, now: number): AdvStatus {
+  return advUnavailableReason(adv, now) ?? 'free';
+}
+/** Les catégories dans l'ordre où on les propose : ce qui peut partir d'abord. */
+export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt', 'training'];
+export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
+  free: '✅ disponibles',
+  busy: '🐫 en convoi',
+  hurt: '🛏️ infirmerie',
+  training: '🎓 formation',
+};
+
 /** Une promotion arrivée à terme est APPLIQUÉE ; sinon l'aventurier est rendu tel quel.
  *  ⚠️ Pur et idempotent : on peut l'appeler à chaque tick sans rien dupliquer. */
 export function settleTraining(adv: Adventurer, now: number): Adventurer {
