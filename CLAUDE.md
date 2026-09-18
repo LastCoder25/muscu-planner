@@ -672,6 +672,13 @@ Décisions prises en Phase 0, contraintes par le poste. À respecter dans les ph
   - **Revue `/simplify` appliquée** : `rollTier` lit `characterRank` UNE fois (5-6 fois avant) via `rankGate`, étoile tirée sans allocation (`rollStarJet`, parts en forme close), `dropsPerLevel` et `DROP_CHANCE` exportés (le harnais et les tests ne recopient plus la formule ni le 0,6), `STARS_PER_RANK` réutilisé ; harnais `gearedFighter` : top 10 par emplacement gardé trié (chaque objet noté une fois), donjons triés une fois. **Écartés** : fusionner le recalage dans `gearExpect` (re-mesure complète), sortir les étoiles de `gradeLabel` vers un composant (l’utilisateur veut « rang + étoiles » partout), réutiliser le `pick` pondéré privé de `skirmish.ts` (import croisé), dédupliquer les harnais de `trophy.test` (ils calibrent le gain du trophée).
   - Bornes documentées : mur 3 niveaux sous 49 < 50 % (mesuré 47 %), boss au palier < 66 % (55 → 63 %) ; mur sous 79 (54 %) retiré du test — même constat que les boss 70/85, les niveaux 61-80 étaient déjà faciles pour un joueur qui farme vraiment.
   - **12 mutations, 11 rouges** ; la survivante est le repli après la boucle de `rollStarJet`, inatteignable (les parts somment à 1). ⚠️ Non vus par une porte : couleurs et étoiles à l’écran.
+- **🚪 UNE 6ᵉ PORTE : « EST-CE QUE LE COMPOSANT SE MONTE ? » (v0.910 ; signalé par l’utilisateur — « le bouton “Voir mes aventuriers” ne fonctionne plus »)**. `test/mount.test.ts`, `npm test`.
+  - **LA CAUSE, prouvée** : le `watch` qui surveille les catégories peuplées (v0.909) **évalue sa source dès le SETUP**, or cette source appelait `statusOf`, une `const` fléchée déclarée **50 lignes plus bas** → **zone morte temporelle**, `ReferenceError`, le panneau ne se montait plus. Corrigé en `function` (**hissée**) : la forme survit à tout réordonnancement futur.
+  - ⚠️ **AUCUNE DES CINQ PORTES NE POUVAIT LE VOIR** : le typecheck ne suit pas la TDZ à travers une closure, le lint non plus, le build compile sans exécuter, et le smoke UI s’arrête à l’écran de connexion. **C’est l’utilisateur qui l’a trouvé — le 4ᵉ défaut d’écran de suite.**
+  - ⚠️ **UN PREMIER INSTRUMENT ÉTAIT AVEUGLE, et il aurait donné une fausse assurance** : monté en **SSR** (`renderToString`), le test passait au VERT avec le défaut en place — **en SSR, Vue rend les `watch` INERTES**. Il faut un **rendu CLIENT** (`happy-dom`). ⚠️ Et il faut des **DONNÉES** : avec un vivier VIDE, la boucle qui déclenche l’appel fautif ne s’exécute jamais et le défaut reste invisible. Deux fois où « le test passe » ne voulait rien dire.
+  - **Vérifié par mutation** : TDZ remise → 2 tests rouges ; code corrigé → vert. L’instrument lui-même a été éprouvé (un `throw` dans le setup fait bien rougir) **avant** d’en tirer une conclusion.
+  - **Ce qu’elle garde** : toute erreur de setup d’un composant monté (GuildPanel avec vivier peuplé, vide, en mode recrutement ; AdventurerPortrait avec et sans teinte). **Extensible** : `mountIt(composant, props, row)` monte n’importe quel écran.
+  - **Coût** : `@vitejs/plugin-vue` (déclaré explicitement — il n’était que transitif, knip l’a signalé) et `happy-dom` en devDependencies ; `vitest.config` fournit des **SUPABASE_\* factices** (le client est construit à l’import et jetterait sinon). ⚠️ Le DOM est **par fichier** (`// @vitest-environment happy-dom`) : les 1800 tests de lib restent en `node`. La suite passe de ~21 s à ~41 s. ⚠️ Délai explicite de 30 s sur ces tests : seuls, ils tournent en 1,8 s, mais sous la charge ils dépassaient les 5 s par défaut (même remède qu’en v0.867).
 - **🔎🎨 LA GUILDE SE FILTRE PAR ÉTAT, ET CHAQUE ÉTAT A SA COULEUR (v0.909 ; demandé par l’utilisateur)**. Le vivier listait tout le monde pêle-mêle : « qui puis-je envoyer ? » se répondait en lisant la ligne d’état de chaque portrait, un par un.
   - **Puces de filtre** (✅ disponibles · 🐫 en convoi · 🛏️ infirmerie · 🎓 formation + Tous, avec leur compte) et **cadre teinté** sur chaque portrait : **vert** disponible, **jaune** en convoi, **rouge** infirmerie — les couleurs demandées, prises dans la charte (`--d1`, `--accent`, `--d4`), jamais des hex écrits sur place.
   - ⚠️ **LA FORMATION EST UNE 4ᵉ CATÉGORIE, pas un oubli** : `advUnavailableReason` en compte trois, et n’en montrer que deux ferait DISPARAÎTRE ces aventuriers de tous les filtres. Elle prend `--d3`, voisin de l’accent, donc elle se distingue **aussi par un trait pointillé** — deux différences plutôt qu’une, pour qui ne sépare pas deux jaunes (même règle que l’anneau de la fosse, v0.746.1).
@@ -1855,6 +1862,12 @@ dans cet ordre — une seule ignorée invalide l'annonce :
 npm run typecheck   ·   npm run lint   ·   node node_modules/vitest/vitest.mjs run
 node node_modules/@quasar/app-vite/bin/quasar.js build   ·   npm run smoke   (5e porte, voit l’écran)
 ```
+
+⚠️ La suite inclut depuis la v0.910 une **6ᵉ porte**, `test/mount.test.ts` : elle MONTE les
+composants (rendu **client**, `happy-dom`) et attrape les erreurs de setup — TDZ, store mal
+lu, prop manquante — qu'aucune des cinq autres ne peut voir. Y ajouter un écran quand on en
+touche la logique : `mountIt(composant, props, row)`. ⚠️ **Pas de SSR** : `renderToString`
+rend les `watch` inertes, donc il passe au vert sur ce genre de défaut.
 
 Rapporter fidèlement : un test rouge se dit avec sa sortie, une étape sautée se dit.
 

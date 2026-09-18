@@ -1381,8 +1381,15 @@ const barTitle = (a: Adventurer) => {
     : `Promotion suivante à ${stars(ADV_STARS)}`;
 };
 const stars = (s: number) => rankStarStr(s);
-/** Sa CATÉGORIE (lib) : ce qui range, ce qui colore le cadre et ce que le filtre compte. */
-const statusOf = (a: Adventurer) => advStatus(a, now.value);
+/** Sa CATÉGORIE (lib) : ce qui range, ce qui colore le cadre et ce que le filtre compte.
+ *  ⚠️ DÉCLARÉE EN `function`, donc HISSÉE — et ce n'est pas cosmétique : le `watch` qui
+ *  surveille les catégories peuplées évalue sa source DÈS LE SETUP, bien avant cette
+ *  ligne. En `const`, on tombait en zone morte temporelle (`ReferenceError`), le panneau
+ *  ne se montait plus et « Voir mes aventuriers » ne faisait plus rien. Ni le typecheck,
+ *  ni le build, ni le smoke ne voient une TDZ à travers une closure. */
+function statusOf(a: Adventurer) {
+  return advStatus(a, now.value);
+}
 const busyOf = (a: Adventurer) => ((a.busyUntil ?? 0) > now.value ? a.busyUntil! : 0);
 const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil! : 0);
 /** Formation en cours (0 si aucune). ⚠️ Elle IMMOBILISE : c'est tout le coût d'une
