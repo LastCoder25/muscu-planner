@@ -138,58 +138,104 @@
             Aucune pièce en stock. L’<b>Équipementier</b> en fabrique à partir des objets de ton
             sac, et les sièges repoussés comme les embuscades en laissent tomber.
           </p>
-          <div v-else class="gear-stock">
-            <div v-for="g in stockSorted" :key="g.id" class="gear-stock-row">
-              <div class="gear-stock-top">
-                <span class="d-pair-emo">{{ g.emoji }}</span>
-                <span class="d-pair-main">
-                  <span class="d-pair-name">
-                    <b :style="{ color: rarityRank(g.rarity).color }">{{ g.name }}</b>
-                    <span class="d-train">niv {{ g.level }}</span>
-                  </span>
-                  <!-- Le RANG et ses ÉTOILES : la liste ne donnait que la couleur du nom,
+          <!-- 🗂️ DEUX SOUS-ONGLETS (demandé) : ce qui est CONFIÉ, et ce qui attend preneur.
+               Le stock les mélangeait, donc « qu'est-ce qu'il me reste à confier ? » se
+               répondait en lisant chaque ligne. « Disponibles » est l'onglet par défaut :
+               c'est le seul des deux où il y a quelque chose à faire. -->
+          <template v-else>
+            <div class="g-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                class="g-tab"
+                :class="{ on: stockTab === 'free' }"
+                :aria-selected="stockTab === 'free'"
+                @click="stockTab = 'free'"
+              >
+                📦 Disponibles <span class="g-tab-n">{{ stockFree.length }}</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                class="g-tab"
+                :class="{ on: stockTab === 'worn' }"
+                :aria-selected="stockTab === 'worn'"
+                @click="stockTab = 'worn'"
+              >
+                🗡️ Portées <span class="g-tab-n">{{ stockWorn.length }}</span>
+              </button>
+            </div>
+            <!-- Un état vide qui DIT laquelle des deux situations on regarde : « aucune
+                 pièce » sous un onglet se lit sinon comme un stock vide. -->
+            <p v-if="!stockShown.length" class="g-empty">
+              {{
+                stockTab === 'free'
+                  ? 'Tout ton stock est confié — aucune pièce n’attend preneur.'
+                  : 'Aucune pièce confiée pour l’instant : va les attribuer depuis « Disponibles ».'
+              }}
+            </p>
+            <!-- ⚠️ Ce qu'aucune ligne ne dirait : une pièce peut attendre sans que PERSONNE
+                 ne puisse la porter (métier absent du vivier, ou classe trop basse). Sans
+                 cette note, on ouvre « Équiper » et la liste est vide sans explication. -->
+            <p v-else-if="stockTab === 'free' && stockOrphans" class="g-note dim">
+              ⚠️ {{ stockOrphans }} de ces pièces ne trouvent preneur dans ton vivier — mauvais
+              métier, ou classe trop basse pour leur rang.
+            </p>
+            <div class="gear-stock">
+              <div v-for="g in stockShown" :key="g.id" class="gear-stock-row">
+                <div class="gear-stock-top">
+                  <span class="d-pair-emo">{{ g.emoji }}</span>
+                  <span class="d-pair-main">
+                    <span class="d-pair-name">
+                      <b :style="{ color: rarityRank(g.rarity).color }">{{ g.name }}</b>
+                      <span class="d-train">niv {{ g.level }}</span>
+                    </span>
+                    <!-- Le RANG et ses ÉTOILES : la liste ne donnait que la couleur du nom,
                        donc deux pièces du même rang mais de jets opposés s'y lisaient
                        pareil — or le jet décide d'une part de leur valeur. -->
-                  <span class="d-pair-sub">
-                    <span class="d-rk" :style="{ '--rk': rarityRank(g.rarity).color }">{{
-                      gradeLabel(g)
+                    <span class="d-pair-sub">
+                      <span class="d-rk" :style="{ '--rk': rarityRank(g.rarity).color }">{{
+                        gradeLabel(g)
+                      }}</span>
+                      · {{ lineageLabel(g.lineage) }}
+                    </span>
+                    <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{
+                      t
                     }}</span>
-                    · {{ lineageLabel(g.lineage) }}
+                    <span v-if="ownerOf(g)" class="d-pair-sub warn"
+                      >portée par {{ ownerOf(g)?.name }}</span
+                    >
                   </span>
-                  <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{ t }}</span>
-                  <span v-if="ownerOf(g)" class="d-pair-sub warn"
-                    >portée par {{ ownerOf(g)?.name }}</span
+                </div>
+                <div class="gear-actions-row">
+                  <button
+                    type="button"
+                    class="gear-btn equip"
+                    :disabled="busy"
+                    @click="stockEquip = g"
                   >
-                </span>
-              </div>
-              <div class="gear-actions-row">
-                <button
-                  type="button"
-                  class="gear-btn equip"
-                  :disabled="busy"
-                  @click="stockEquip = g"
-                >
-                  🗡️ {{ ownerOf(g) ? 'Changer' : 'Équiper' }}
-                </button>
-                <button
-                  type="button"
-                  class="gear-btn"
-                  :class="{ active: g.locked }"
-                  @click="toggleGearLock(g)"
-                >
-                  {{ g.locked ? '🔒' : '🔓' }}
-                </button>
-                <button
-                  type="button"
-                  class="gear-btn"
-                  :disabled="!!g.locked || !!ownerOf(g)"
-                  @click="sellOneGear(g)"
-                >
-                  🪙 {{ advGearSellValue(g) }}
-                </button>
+                    🗡️ {{ ownerOf(g) ? 'Changer' : 'Équiper' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="gear-btn"
+                    :class="{ active: g.locked }"
+                    @click="toggleGearLock(g)"
+                  >
+                    {{ g.locked ? '🔒' : '🔓' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="gear-btn"
+                    :disabled="!!g.locked || !!ownerOf(g)"
+                    @click="sellOneGear(g)"
+                  >
+                    🪙 {{ advGearSellValue(g) }}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </template>
         </template>
       </template>
 
@@ -1113,6 +1159,22 @@ const stockSorted = computed(() =>
       ADV_GEAR_SLOTS.indexOf(a.slot) - ADV_GEAR_SLOTS.indexOf(b.slot) ||
       b.level - a.level,
   ),
+);
+/** Ce qu'on regarde dans le stock : ce qui attend preneur, ou ce qui est confié.
+ *  ⚠️ « Disponibles » par DÉFAUT — c'est le seul des deux où il y a à faire. */
+const stockTab = ref<'free' | 'worn'>('free');
+// ⚠️ LA PARTITION SUIT `ownerOf`, LE PRÉDICAT DÉJÀ EN PLACE DANS CET ÉCRAN (`Adventurer.gear`
+// brut), et pas `wornGear` (ce que le COMBAT retient). C'est lui qui décide déjà de la ligne
+// « portée par X » et du blocage de la vente : s'en écarter ferait tomber une pièce dans
+// « Disponibles » tout en l'y affichant « portée par X » avec son bouton vendre grisé.
+const stockWorn = computed(() => stockSorted.value.filter((g) => !!ownerOf(g)));
+const stockFree = computed(() => stockSorted.value.filter((g) => !ownerOf(g)));
+const stockShown = computed(() => (stockTab.value === 'worn' ? stockWorn : stockFree).value);
+/** Combien de pièces libres que PERSONNE ne peut porter (métier absent, ou classe trop
+ *  basse). Rare par construction — une pièce forgée l'est pour une cible, et le butin de
+ *  siège est plafonné à ce que le vivier porte — mais pas impossible. */
+const stockOrphans = computed(
+  () => stockFree.value.filter((g) => !char.advList.some((a) => canWearAdvGear(a, g))).length,
 );
 /** La pièce du stock qu'on est en train de confier. */
 const stockEquip = ref<AdvGear | null>(null);
