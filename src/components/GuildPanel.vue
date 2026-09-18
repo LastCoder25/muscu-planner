@@ -685,13 +685,13 @@ import {
   aggregateLines,
   famLevel,
   famXp,
-  rollJet,
+  jetStar,
   type Item,
 } from '@/lib/items';
 import {
   normalizeTalents,
   talentByCode,
-  talentJetOf,
+  talentStar,
   talentRankOf,
   type TalentInstance,
 } from '@/lib/talents';
@@ -798,12 +798,13 @@ const talOf = (a: Adventurer) => (a.talentId ? (talById.value.get(a.talentId) ??
  */
 const famGain = (f: Item) => aggregateLines(companionEffects([f]));
 const talGain = (t: TalentInstance) => aggregateLines(advTalentEffects([t]));
-/** Les trois axes de magnitude du projet : rang, jet, niveau d’objet. */
+/** Les trois axes de magnitude du projet : rang, jet (lu en ÉTOILES depuis la v0.907, comme
+ *  les objets), niveau d’objet. */
 // ⚠️ La rareté n'est PAS répétée ici : elle vit dans la pastille colorée, où elle est
 // accentuée (« Épique », pas « EPIQUE » — la pastille affichait la CLÉ de l'énumération).
 const famMeta = (f: Item) =>
-  `jet ${rollJet(f.roll)}% · niv ${f.level}${f.effect2 ? ' · ✦ signature' : ''}`;
-const talMeta = (t: TalentInstance) => `jet ${talentJetOf(t)}% · niv ${t.level ?? 1}`;
+  `${rankStarStr(jetStar(f.roll))} · niv ${f.level}${f.effect2 ? ' · ✦ signature' : ''}`;
+const talMeta = (t: TalentInstance) => `${rankStarStr(talentStar(t))} · niv ${t.level ?? 1}`;
 const famColor = (f: Item) => rarityRank(f.rarity).color;
 const talColor = (t: TalentInstance) => rarityRank(talentRankOf(t)).color;
 /** Le DRESSAGE, unique depuis la v0.805 (donjon, convoi, défense).

@@ -9,7 +9,7 @@ import {
   rollItemLevel,
   RANK_ORDER,
   rankRollMult,
-  rollJet,
+  jetStar,
   rollCompanionTier,
   companionDropRank,
   type AggregatedEffects,
@@ -178,9 +178,10 @@ export function talentRankOf(inst: TalentInstance): Rarity {
 export function talentRollOf(inst: TalentInstance): number {
   return inst.roll ?? (talentQuality(tierOf(inst)) - 0.5) / 5;
 }
-/** Jet affiché (0..100 %) du talent. */
-export function talentJetOf(inst: TalentInstance): number {
-  return rollJet(talentRollOf(inst));
+/** Étoile affichée (1..5) du talent — la MÊME lecture que les objets et les familiers
+ *  (v0.907) : `jetStar`, jamais un découpage refait ici. Le jet en % n'est plus affiché. */
+export function talentStar(inst: TalentInstance): number {
+  return jetStar(talentRollOf(inst));
 }
 function enchantOf(inst: TalentInstance): number {
   return Math.max(0, inst.enchant ?? 0);

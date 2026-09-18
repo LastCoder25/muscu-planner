@@ -380,7 +380,11 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     const hit = lastDef('fboss_hit');
     expect(hit).toContain('damage = damage + v_acc * v_dpu');
     expect(hit).toContain('ceil((b.hp_total - b.damage)::numeric / v_dpu)::integer');
-  });
+    // ⚠️ Délai explicite : ce test relit les MIGRATIONS sur disque (`lastDef`). Seul il tourne
+    // en ~2 s, mais sous la charge de la suite complète il a dépassé les 5 s par défaut et
+    // rougissait sans qu'aucune assertion ne soit fausse. Même remède que le test « un convoi
+    // n'est jamais déficitaire » (v0.867) : on borne l'attente, on ne touche pas au test.
+  }, 30_000);
 
   it('même part minimale (dernière définition), même nombre d’invités', () => {
     expect(lastDef('fboss_claim')).toContain(

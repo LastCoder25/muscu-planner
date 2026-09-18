@@ -544,9 +544,7 @@
                     >
                       {{ t.def.icon }}
                     </button>
-                    <span class="ic-jet" :class="jetTier(t.jet)" :title="'Jet ' + t.jet + '%'"
-                      >{{ t.jet }}%</span
-                    >
+                    <span class="ic-jet" :title="t.star + ' étoile(s) sur 5'">★{{ t.star }}</span>
                   </div>
                   <div class="tal-body">
                     <div class="tal-name font-display">
@@ -1043,7 +1041,7 @@
                       :class="'p-' + it.rarity"
                       role="button"
                       title="Qu’est-ce que le rang ?"
-                      @click="helpTopic = 'rank'"
+                      @click="helpRank = true"
                       >{{ gradeLabel(it) }}</span
                     >
                     <!-- Jet porté par l'icône (badge bas) + les lignes de comparaison ci-dessous ;
@@ -2051,34 +2049,30 @@
     </q-dialog>
 
     <!-- Butin possible d'un donjon -->
-    <!-- Explication RANG / QUALITÉ (clic sur la pastille de rang ou le chiffre de qualité). -->
-    <q-dialog :model-value="!!helpTopic" position="bottom" @update:model-value="helpTopic = null">
+    <!-- Explication RANG + ÉTOILES (clic sur la pastille de rang). -->
+    <q-dialog :model-value="helpRank" position="bottom" @update:model-value="helpRank = false">
       <q-card class="help-card">
-        <template v-if="helpTopic === 'rank'">
-          <div class="help-title font-display">🏅 Le rang de l’objet</div>
-          <p class="help-p">
-            Le <b>rang</b> va de <b>G</b> (le plus bas) à <b>SSS</b> (le graal). Un rang supérieur
-            est <b>toujours meilleur</b> — les valeurs ne se chevauchent jamais. On débloque les
-            rangs plus hauts en farmant du contenu plus <b>profond</b> (donjons et boss de plus haut
-            niveau).
-          </p>
-          <div class="help-scale">
-            <span v-for="r in RANK_ORDER" :key="r" class="ii-rar" :class="'p-' + r">{{ r }}</span>
-          </div>
-        </template>
-        <template v-else>
-          <div class="help-title font-display">✦ La qualité de l’objet</div>
-          <p class="help-p">
-            La <b>qualité</b> (de <b>1</b> à <b>5</b>, <b>5 = meilleur</b>) est un
-            <b>sous-rang</b> dans la bande du rang : la finesse du roll. Un <b>5</b> vaut presque le
-            rang au-dessus, un <b>1</b> est le plancher du rang. Couleur du rouge (1) au vert (5).
-          </p>
-          <div class="help-scale">
-            <span v-for="q in [1, 2, 3, 4, 5]" :key="q" class="q-badge" :class="'q-' + q">{{
-              q
-            }}</span>
-          </div>
-        </template>
+        <div class="help-title font-display">🏅 Le rang et les étoiles</div>
+        <p class="help-p">
+          Le <b>rang</b> va de <b>{{ rarityRank(RANK_ORDER[0]!).name }}</b> (le plus bas) à
+          <b>{{ rarityRank(RANK_ORDER[RANK_ORDER.length - 1]!).name }}</b> (le graal). Un rang
+          supérieur est <b>toujours meilleur</b> — les valeurs ne se chevauchent jamais. On débloque
+          les rangs plus hauts en montant de <b>niveau</b> (c’est ton sport qui les ouvre).
+        </p>
+        <p class="help-p">
+          Les <b>★</b> (1 à 5) disent où l’on tombe <b>dans la bande du rang</b> : un
+          <b>★★★★★</b> frôle le rang au-dessus, un <b>★</b> en est le plancher. Même lecture pour un
+          objet, un familier ou un talent.
+        </p>
+        <div class="help-scale">
+          <span
+            v-for="r in RANK_ORDER"
+            :key="r"
+            class="rk-badge"
+            :style="{ '--rk': rarityRank(r).color }"
+            >{{ rarityRank(r).name }}</span
+          >
+        </div>
         <button v-close-popup class="help-close">Compris</button>
       </q-card>
     </q-dialog>
@@ -2604,8 +2598,8 @@
                   <span class="rk-badge" :style="{ '--rk': rarityRank(talentRankOf(t)).color }">{{
                     rarityRank(talentRankOf(t)).name
                   }}</span>
-                  <span class="q-badge" :class="jetTier(talentDropQuality(t))"
-                    >{{ talentDropQuality(t) }}%</span
+                  <span class="q-badge" :title="talentStar(t) + ' étoile(s) sur 5'"
+                    >★{{ talentStar(t) }}</span
                   >
                   <span class="gpill">→ collection Talents</span>
                 </div>
@@ -2916,7 +2910,7 @@ import {
   tierOf,
   talentRank,
   talentRankOf,
-  talentJetOf,
+  talentStar,
   talentRollOf,
   talentValue,
   rollTalentDrop,
@@ -3000,7 +2994,9 @@ const progress = useProgress();
 const gameFx = useGameFx();
 // Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le
 // chiffre de qualité d'un objet — ticket d094eac6). Les 10 rangs pour l'échelle visuelle.
-const helpTopic = ref<'rank' | 'quality' | null>(null);
+// ⚠️ C'était `'rank' | 'quality' | null`, mais RIEN ne posait jamais `'quality'` : la moitié
+// de cette modale était inatteignable, et elle décrivait la qualité 1-5 retirée en v0.576.
+const helpRank = ref(false);
 // Bonus de luck du magic find (stat mineure) apporté par l'équipement actuel.
 function mfLuck(): number {
   return char.row ? magicFindLuck(char.row.equipped, char.row.voie) : 0;
@@ -3667,7 +3663,9 @@ const talentsView = computed(() => {
         enchant,
         mag,
         rarity: talentRank(tier),
-        jet: talentJetOf(inst), // JET (0..100 %) au lieu de la qualité ★
+        // Le ROLL brut sert au TRI (plus fin qu'un affichage), l'ÉTOILE à l'affichage.
+        roll: talentRollOf(inst),
+        star: talentStar(inst),
         level: inst.level ?? 1, // NIVEAU d'objet (ilvl)
         // 1 décimale : les bonus de talent sont petits → l'arrondi entier masquait les écarts.
         effLabel: (mag * 100).toFixed(1).replace('.', ',') + ' %',
@@ -3682,7 +3680,7 @@ const talentsView = computed(() => {
     // talents différents, dont les magnitudes ne se comparent pas), puis le nom.
     (a, b) =>
       b.tier - a.tier ||
-      (a.inst.code === b.inst.code ? b.mag - a.mag : b.jet - a.jet) ||
+      (a.inst.code === b.inst.code ? b.mag - a.mag : b.roll - a.roll) ||
       a.def.name.localeCompare(b.def.name),
   ).map((g) => ({ ...g.item, groupStart: g.groupStart, groupSize: g.groupSize }));
 });
@@ -3692,10 +3690,6 @@ function talentName(inst: TalentInstance): string {
 function talentIcon(inst: TalentInstance): string {
   return talentByCode(inst.code)?.icon ?? '✨';
 }
-// JET (0..100 %) d'un talent tombé, pour le rapport de combat.
-function talentDropQuality(inst: TalentInstance): number {
-  return talentJetOf(inst);
-}
 // Explique un talent (nature de l'effet + comment il monte) au tap sur son icône.
 function explainTalent(t: (typeof talentsView.value)[number]) {
   const d = t.def;
@@ -3704,7 +3698,7 @@ function explainTalent(t: (typeof talentsView.value)[number]) {
     html: true,
     message:
       `Améliore : <b>${d.desc}</b> — actuellement <b>+${t.effLabel}</b> ` +
-      `(rang ${rarityRank(t.rarity).name} · jet ${t.jet}%).<br><br>` +
+      `(${gradeLabel({ rarity: t.rarity, roll: t.roll })}).<br><br>` +
       `Son <b>grade</b> (rang + qualité) est fixé au drop : trouve mieux en explorant plus ` +
       `profond ; vends les surplus pour de l'or.`,
   });
@@ -4807,12 +4801,6 @@ function itemStatCmp(
   const leg = legendaryOf(it);
   if (leg) out.push({ text: `${leg.emoji} ${leg.name}`, cls: '' });
   return out;
-}
-// ⚠️ v0.896 : un OBJET n'affiche plus son jet en % — sa qualité se lit en ÉTOILES dans son
-// étiquette (`gradeLabel`). Le jet % reste pour les talents (pastille ci-dessous).
-// Classe de couleur du jet (rouge → vert) pour la pastille.
-function jetTier(pct: number): string {
-  return pct >= 80 ? 'jet-hi' : pct >= 45 ? 'jet-mid' : 'jet-lo';
 }
 async function fightBoss(b: MilestoneBoss) {
   const uid = auth.user?.id;
@@ -7304,15 +7292,6 @@ button.pt-mini:active {
   background: var(--dim);
   white-space: nowrap;
 }
-.ic-jet.jet-lo {
-  background: #ff8a5b;
-}
-.ic-jet.jet-mid {
-  background: #ffd23f;
-}
-.ic-jet.jet-hi {
-  background: #7bc86c;
-}
 .tal-emo {
   flex: 0 0 auto;
   display: grid;
@@ -9058,7 +9037,7 @@ button.pt-mini:active {
 .bulk-b:active {
   border-color: var(--accent);
 }
-/* Qualité en chiffre (1→5) collé au rang : pastille ronde colorée rouge→vert. */
+/* Qualité en ÉTOILE (★1→★5) collée au rang : pastille ronde. */
 .q-badge {
   display: inline-flex;
   align-items: center;
@@ -9073,17 +9052,7 @@ button.pt-mini:active {
   font-size: 11px;
   line-height: 1;
   color: #15120e;
-  background: var(--dim); /* défaut (jet inconnu) ; surchargé par .jet-lo/mid/hi */
-}
-/* JET (0..100 %) : rouge (faible) → vert (proche du max du rang). Remplace la qualité ★. */
-.q-badge.jet-lo {
-  background: #ff8a5b;
-}
-.q-badge.jet-mid {
-  background: #ffd23f;
-}
-.q-badge.jet-hi {
-  background: #7bc86c;
+  background: var(--dim);
 }
 /* Rang en pastille ronde (comme la qualité), fond = couleur du rang --rk. */
 .rk-badge {

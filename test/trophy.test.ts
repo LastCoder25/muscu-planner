@@ -89,10 +89,12 @@ describe('🏆 TROPHÉE — rang et étoiles (v0.894)', () => {
     expect(s3[3]! + s3[4]!).toBe(0);
     expect(s3[2]!).toBeCloseTo(STAR_JET.top, 1);
   });
-  it('gradeLabel l’écrit en rang et étoiles', () => {
+  it('gradeLabel l’écrit en rang et étoiles — comme un familier depuis la v0.907', () => {
     const t = rollTrophy(mulberry32(3), { mains: TROPHY_MAINS.push, title: 'x', level: 30 });
     expect(gradeLabel(t)).toMatch(/★/);
-    expect(gradeLabel({ ...t, slot: 'familiar' })).not.toMatch(/★/);
+    // L'emplacement ne décide plus de rien : c'est le JET qui donne les étoiles.
+    expect(gradeLabel({ ...t, slot: 'familiar' })).toBe(gradeLabel(t));
+    expect(gradeLabel({ rarity: t.rarity })).not.toMatch(/★/);
   });
 });
 

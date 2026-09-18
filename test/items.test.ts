@@ -29,6 +29,7 @@ import {
   rankCssVars,
   STAR_JET,
   jetStar,
+  rollFamiliar,
   starOdds,
   RANK_COLOR,
   dropBand,
@@ -86,6 +87,7 @@ import {
   effectBase,
 } from '@/lib/items';
 import { mulberry32, combatPower } from '@/lib/combat';
+import { FAMILIAR_SPECIES } from '@/data/familiars';
 import { pickBestTalents } from '@/lib/talents';
 import { VOIES, voiePassiveEffects } from '@/lib/voies';
 import { computeCharacter } from '@/lib/character';
@@ -2238,17 +2240,41 @@ describe('🏅 FAMILIERS ET TALENTS SE LISENT EN RANG (v0.833)', () => {
       .map((x) => x.trim());
     expect(each).toEqual([...RANK_ORDER]);
   });
-  it('un objet se lit en rang ET étoiles ; un familier ou un objet sans jet, en rang seul', () => {
-    expect(gradeLabel({ rarity: 'rare', slot: 'weapon', roll: 0.5 })).toBe(
-      `${rarityRank('rare').name} ★★★☆☆`,
-    );
-    expect(gradeLabel({ rarity: 'rare', slot: 'familiar', roll: 0.5 })).toBe(
-      rarityRank('rare').name,
-    );
-    expect(gradeLabel({ rarity: 'rare', slot: 'weapon' })).toBe(rarityRank('rare').name);
+  it('tout ce qui porte un jet se lit en rang ET étoiles, FAMILIER COMPRIS (v0.907)', () => {
+    const rare = rarityRank('rare').name;
+    expect(gradeLabel({ rarity: 'rare', slot: 'weapon', roll: 0.5 })).toBe(`${rare} ★★★☆☆`);
+    // ⚠️ Le familier en était EXCLU (v0.895) : son jet n'est pas tiré par l'étoile du joueur.
+    // Mesuré, ses 5 étoiles restent discriminantes → une seule lecture dans tout le jeu.
+    expect(gradeLabel({ rarity: 'rare', slot: 'familiar', roll: 0.5 })).toBe(`${rare} ★★★☆☆`);
+    // Un objet d'avant le jet (pas de `roll`) garde son rang seul.
+    expect(gradeLabel({ rarity: 'rare', slot: 'weapon' })).toBe(rare);
     expect(jetStar(0)).toBe(1);
     expect(jetStar(0.2)).toBe(2);
     expect(jetStar(1)).toBe(5);
+  });
+  it('les étoiles d’un familier restent discriminantes — sinon les afficher n’apprendrait rien', () => {
+    // ⚠️ MESURE, pas une affirmation : le jet d'un familier vient de `rollJetValue` (biaisé
+    // bas), pas de `rollStarJet`. Si tout tombait en ★1, l'étoile ne dirait rien.
+    const draw = (luck: number) => {
+      const stars = [0, 0, 0, 0, 0];
+      const rng = mulberry32(99 + Math.round(luck * 10));
+      const N = 6000;
+      for (let i = 0; i < N; i++) {
+        const f = rollFamiliar(rng, FAMILIAR_SPECIES[i % FAMILIAR_SPECIES.length]!, {
+          level: 30,
+          luck,
+          playerLevel: 30,
+        });
+        stars[jetStar(f.roll) - 1]!++;
+      }
+      return stars.map((s) => s / N);
+    };
+    const s0 = draw(0);
+    // Sans chance : le bas domine (★1 ~48 %) mais ★5 reste atteignable (~10 %).
+    expect(s0[0]!).toBeGreaterThan(0.35);
+    expect(s0[4]!).toBeGreaterThan(0.05);
+    // La chance déplace la masse vers le haut — c'est ce qui donne du sens au farm.
+    expect(draw(1)[4]!).toBeGreaterThan(s0[4]! + 0.08);
   });
   it('tout ce qui se porte se lit en rang, objets compris (v0.874)', () => {
     for (const r of RANK_ORDER) {

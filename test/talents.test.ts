@@ -6,8 +6,12 @@ import {
   maxGradeCran,
   enchantMult,
   ENCHANT_MAX,
+  jetStar,
+  gradeLabel,
 } from '@/lib/items';
 import {
+  talentStar,
+  talentRollOf,
   talentsEarned,
   TALENT_SLOT_LEVEL,
   pickBestTalents,
@@ -244,5 +248,37 @@ describe('⚠️ UN TALENT N’EST ÉQUIPÉ QUE S’IL LE DIT', () => {
     expect(talentEffects(sac)).toEqual(talentEffects([]));
     const portes = sac.slice(0, talentsEarned(28)).map((t) => ({ ...t, equipped: true }));
     expect(talentEffects(portes)).not.toEqual(talentEffects([]));
+  });
+
+  it('⭐ un talent se lit en ÉTOILES, par la MÊME découpe que les objets (v0.907)', () => {
+    // ⚠️ `talentStar` ne refait PAS le découpage : il délègue à `jetStar`. Une seconde
+    // formule divergerait au premier réglage, et la même qualité s'afficherait ★3 ici et
+    // ★4 sur un objet.
+    //
+    // ⚠️ ET ÇA SE VÉRIFIE AUX FRONTIÈRES, pas sur des drops aléatoires : une formule
+    // plausible comme `ceil(roll × 5)` donne le MÊME résultat partout AILLEURS (elle ne
+    // diffère de `floor(roll × 5) + 1` que lorsque `roll × 5` tombe pile sur un entier),
+    // donc un test tiré au hasard la laissait passer — mesuré, il l'a laissée passer.
+    const base = drop(1);
+    for (const roll of [0, 0.2, 0.4, 0.6, 0.8, 1]) {
+      const t = { ...base, roll };
+      expect(talentStar(t), `roll ${roll}`).toBe(jetStar(roll));
+    }
+    for (let s = 1; s <= 40; s++) {
+      const t = drop(s);
+      expect(talentStar(t)).toBe(jetStar(talentRollOf(t)));
+      expect(talentStar(t)).toBeGreaterThanOrEqual(1);
+      expect(talentStar(t)).toBeLessThanOrEqual(5);
+    }
+    // Et son étiquette complète s'écrit comme celle d'un objet : rang + étoiles.
+    const t = drop(3);
+    expect(gradeLabel({ rarity: talentRankOf(t), roll: talentRollOf(t) })).toMatch(/★/);
+  });
+
+  it('⭐ les 5 étoiles d’un talent sont TOUTES atteignables', () => {
+    // Un affichage qui ne prendrait que 2 valeurs sur 5 n'apprendrait rien.
+    const vus = new Set<number>();
+    for (let s = 1; s <= 400; s++) vus.add(talentStar(drop(s)));
+    expect(vus.size).toBe(5);
   });
 });

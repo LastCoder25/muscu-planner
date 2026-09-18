@@ -422,13 +422,16 @@ export function rarityRank(r: Rarity): RankTier {
 }
 /** Le libellé à afficher pour une pièce, quelle qu’elle soit : son RANG (Bronze → Divin
  *  ancestral). Source unique : aucun écran ne doit relire `RARITY_LABEL`. */
-export function gradeLabel(it: { rarity: Rarity; slot?: string; roll?: number }): string {
+export function gradeLabel(it: { rarity: Rarity; roll?: number }): string {
   const name = rarityRank(it.rarity).name;
-  // Un OBJET se lit en rang ET étoiles (v0.895), comme le rang du héros. Pas un familier (sa
-  // qualité ne suit pas l'étoile du joueur), ni un objet d'avant le jet (pas de `roll`).
-  return it.slot && it.slot !== FAMILIAR_SLOT && it.roll != null
-    ? `${name} ${rankStarStr(jetStar(it.roll))}`
-    : name;
+  // ⚠️ TOUT CE QUI PORTE UN JET se lit en rang ET étoiles (v0.907, demandé par l'utilisateur) :
+  // objets, trophées, FAMILIERS et TALENTS. Les familiers en étaient exclus (v0.895) au motif
+  // que leur jet n'est pas tiré par l'étoile du joueur (`rollJetValue`, biaisé bas, contre
+  // `rollStarJet`) — mais mesuré, les 5 étoiles restent discriminantes pour eux : ★1 48 % →
+  // ★5 9,7 % sans chance, ★5 24 % à chance pleine, stable du niveau 10 au 90. Deux façons de
+  // lire une qualité dans le même jeu coûtaient plus que cette nuance de distribution.
+  // Un objet d'avant le jet (legacy, pas de `roll`) garde son rang seul.
+  return it.roll != null ? `${name} ${rankStarStr(jetStar(it.roll))}` : name;
 }
 
 /** Les 5 crans d’intensité de `useGameFx` — du discret à l’explosion. */
