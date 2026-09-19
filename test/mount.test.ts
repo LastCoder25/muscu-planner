@@ -18,6 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
+import { createRouter, createMemoryHistory } from 'vue-router';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
 async function mountIt(
@@ -26,6 +27,9 @@ async function mountIt(
   row?: unknown,
   /** Amorce d'AUTRES stores que `character`, une fois la pinia active. */
   seed?: () => Promise<void>,
+  /** Route initiale — ⚠️ nécessaire pour atteindre un ONGLET : un écran à onglets ne rend
+   *  que celui qui est actif, donc son code resterait invisible sur l'onglet par défaut. */
+  route = '/',
 ) {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -36,6 +40,16 @@ async function mountIt(
   if (seed) await seed();
   const app = createApp({ render: () => h(comp, props) });
   app.use(pinia);
+  // ⚠️ UN ROUTEUR, même factice : sans lui `useRoute()` rend `undefined` et tout écran qui
+  // lit `route.query` au setup échoue pour une raison qui n'existe pas en vrai. C'est le
+  // harnais qu'il faut élargir, pas l'écran qu'il faut contourner.
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/:all(.*)*', component: { render: () => null } }],
+  });
+  await router.replace(route);
+  await router.isReady();
+  app.use(router);
   // Les composants Quasar ne sont pas enregistrés ici : leurs warnings « failed to
   // resolve » sont attendus et sans rapport avec ce qu'on éprouve — l'exécution du setup.
   app.config.warnHandler = () => {};
@@ -138,6 +152,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await mountIt(P, base)).toBeNull();
     expect(await mountIt(P, { ...base, tone: 'busy', state: '🐫 en route · 2 h' })).toBeNull();
   }, 30_000);
+  // ⚠️ AventurePage N'EST PAS ICI, et c'est une décision mesurée. Monté dans ce harnais,
+  // l'écran rend son formulaire de CRÉATION DE PSEUDO : le store `character` recharge sa
+  // ligne au montage et écrase celle qu'on lui pose, donc `char.row` est null. Le test
+  // passait au VERT en n'ayant rendu ni la carte des mondes, ni les onglets, ni rien de ce
+  // qu'on voulait éprouver — vérifié en lisant le HTML produit, et confirmé par une mutation
+  // qui cassait `nextDungeonItem` sans faire rougir quoi que ce soit. Un test creux donne la
+  // confiance sans la couvrir. L'y remettre suppose de pouvoir empêcher ce rechargement.
+
   it('l’Agenda se monte, avec des frappes de boss entre amis', async () => {
     // ⚠️ CE QUE CE TEST COUVRE, ET CE QU'IL NE COUVRE PAS. Il éprouve le SETUP de l'écran
     // (les stores instanciés, les imports résolus) — pas le rendu des entrées : `loading`

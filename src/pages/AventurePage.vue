@@ -544,17 +544,20 @@
                     >
                       {{ t.def.icon }}
                     </button>
-                    <span class="ic-jet" :title="t.star + ' étoile(s) sur 5'">★{{ t.star }}</span>
                   </div>
                   <div class="tal-body">
                     <div class="tal-name font-display">
                       <span class="tal-nm">{{ t.def.name }}</span>
                       <span v-if="t.equipped" class="tal-eqbadge">✓ Équipé</span>
+                      <!-- ⚠️ RANG ET ÉTOILES ENSEMBLE (`gradeLabel`), comme les objets, les
+                           trophées et les pièces d'aventurier : le rang seul laissait deux
+                           talents du même rang mais de jets opposés se lire pareil, alors que
+                           le jet décide d'une part de leur valeur. -->
                       <span
-                        class="rk-badge"
+                        class="rk-grade"
                         :style="{ '--rk': rarityRank(t.rarity).color }"
                         :title="'Rang ' + rarityRank(t.rarity).name"
-                        >{{ rarityRank(t.rarity).name }}</span
+                        >{{ gradeLabel(t) }}</span
                       >
                       <span class="lvl-badge">Nv {{ t.level }}</span>
                     </div>
@@ -656,9 +659,12 @@
                     <div class="tal-name font-display">
                       <span class="tal-nm">{{ f.name }}</span>
                       <span v-if="f.equipped" class="tal-eqbadge">✓ Équipé</span>
-                      <span class="rk-badge" :style="{ '--rk': rarityRank(f.rarity).color }">{{
-                        rarityRank(f.rarity).name
-                      }}</span>
+                      <span
+                        class="rk-grade"
+                        :style="{ '--rk': rarityRank(f.rarity).color }"
+                        :title="'Rang ' + rarityRank(f.rarity).name"
+                        >{{ gradeLabel(f) }}</span
+                      >
                       <span class="lvl-badge">Nv {{ f.level }}</span>
                       <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
                       <!-- UN seul dressage (v0.805) : il monte en donjon, en convoi et en
@@ -1204,7 +1210,8 @@
           :style="{ '--rc': curRegion.color }"
           v-bind="foldAttrs"
           @click="foldToggle"
-          @keydown.enter.space.prevent="foldToggle"
+          @keydown.enter.prevent="foldToggle"
+          @keydown.space.prevent="foldToggle"
         >
           <div class="rb-top">
             <span class="rb-emo">{{ curRegion.emoji }}</span>
@@ -1224,13 +1231,29 @@
             >
           </div>
           <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
-          <!-- ⚠️ REPLIÉE PAR DÉFAUT (choix de l'utilisateur) : la carte occupait tout l'écran
-               Explorer et poussait le reste sous le pli, alors que le bandeau dit déjà où
-               l'on en est. L'état est mémorisé par appareil. -->
-          <div v-if="!regionView" class="rb-fold">
-            <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
-            <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
-          </div>
+        </div>
+        <!-- ⚠️ REPLIÉE PAR DÉFAUT : la carte occupait tout l'écran Explorer et poussait le
+             reste sous le pli. Mais repliée, PLUS AUCUN donjon n'était atteignable — il
+             fallait déplier, toucher une région, puis choisir : trois gestes pour jouer.
+             Le PROCHAIN donjon à faire s'affiche donc juste sous le bandeau, prêt à être
+             lancé, et la rangée de pliage passe SOUS lui (demande de l'utilisateur). -->
+        <div v-if="!regionView && !worldOpen && nextDungeonItem" class="sec-hint next-dgn-hint">
+          ▸ Ton prochain donjon
+        </div>
+        <!-- La rangée de pliage, hors du bandeau : le bandeau reste cliquable lui aussi
+             (v0.748), celle-ci n'est qu'un second repère, sous la tuile. -->
+        <div
+          v-if="!regionView"
+          class="rb-fold"
+          role="button"
+          tabindex="0"
+          :aria-expanded="worldOpen"
+          @click="toggleWorld"
+          @keydown.enter.prevent="toggleWorld"
+          @keydown.space.prevent="toggleWorld"
+        >
+          <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
+          <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
         </div>
         <template v-if="!regionView && worldOpen">
           <div class="sec-hint map-hint">
@@ -1306,9 +1329,9 @@
             >
           </div>
         </div>
-        <div v-if="regionView" class="dungeons">
+        <div v-if="shownDungeonItems.length" class="dungeons">
           <div
-            v-for="it in selectedRegionItems"
+            v-for="it in shownDungeonItems"
             :key="it.key"
             class="dgn"
             :class="{ locked: !dungeonUnlocked(it.dungeon) }"
@@ -2595,12 +2618,9 @@
               <div class="inv-main">
                 <div class="inv-name">{{ talentName(t) }}</div>
                 <div class="pills">
-                  <span class="rk-badge" :style="{ '--rk': rarityRank(talentRankOf(t)).color }">{{
-                    rarityRank(talentRankOf(t)).name
+                  <span class="rk-grade" :style="{ '--rk': rarityRank(talentRankOf(t)).color }">{{
+                    gradeLabel({ rarity: talentRankOf(t), roll: talentRollOf(t) })
                   }}</span>
-                  <span class="q-badge" :title="talentStar(t) + ' étoile(s) sur 5'"
-                    >★{{ talentStar(t) }}</span
-                  >
                   <span class="gpill">→ collection Talents</span>
                 </div>
               </div>
@@ -2774,8 +2794,8 @@
             <span class="tp-main">
               <span class="tp-name">
                 {{ t.def.name }}
-                <span class="rk-badge" :style="{ '--rk': rarityRank(t.rarity).color }">{{
-                  rarityRank(t.rarity).name
+                <span class="rk-grade" :style="{ '--rk': rarityRank(t.rarity).color }">{{
+                  gradeLabel(t)
                 }}</span>
                 <span class="lvl-badge">Nv {{ t.level }}</span>
               </span>
@@ -3826,6 +3846,21 @@ const selRegion = computed(
 const selectedRegionItems = computed(() =>
   adventureItems.value.filter((it) => selRegion.value.dungeonIds.includes(it.dungeon.id)),
 );
+/** Le PROCHAIN donjon à faire : le premier débloqué qui n'est pas encore nettoyé — la
+ *  frontière. `adventureItems` est déjà trié par niveau conseillé. Rien quand tout est
+ *  nettoyé : il n'y a alors plus de « prochain ». */
+const nextDungeonItem = computed(
+  () => adventureItems.value.find((it) => itemState(it) === 'avail') ?? null,
+);
+/** Les tuiles de donjon affichées. ⚠️ UNE SEULE LISTE pour les deux cas : la région ouverte,
+ *  ou — carte repliée — le seul prochain donjon. Deux blocs de tuiles auraient fini par
+ *  diverger (le markup fait soixante lignes et porte le butin, le verrou, le % de réussite). */
+const shownDungeonItems = computed(() => {
+  if (regionView.value) return selectedRegionItems.value;
+  if (worldOpen.value) return [];
+  const n = nextDungeonItem.value;
+  return n ? [n] : [];
+});
 const drawerEl = ref<HTMLElement | null>(null);
 // La carte des mondes ne montre que les 3 lignes de régions ; taper une région
 // « charge » l'arbre de ses donjons (regionView) ; le retour ramène à la carte.
@@ -9055,6 +9090,26 @@ button.pt-mini:active {
   background: var(--dim);
 }
 /* Rang en pastille ronde (comme la qualité), fond = couleur du rang --rk. */
+/* La pastille « rang ★★★☆☆ » des listes de talents et de familiers. CONTOUR coloré et non
+   aplat : le libellé est long (un nom de rang plus cinq étoiles) et un bloc de couleur pleine
+   de cette largeur écraserait le nom du talent juste à côté. Même langage que la pastille de
+   rang des tuiles d'équipement de la Guilde. ⚠️ « .rk-badge » (fond plein) reste pour l'ÉCHELLE
+   d'aide, où huit aplats côte à côte SONT la lecture. */
+.rk-grade {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--rk, var(--dim));
+  border: 1px solid var(--rk, var(--dim));
+}
 .rk-badge {
   display: inline-flex;
   align-items: center;
@@ -10549,16 +10604,32 @@ button.pt-mini:active {
   outline: 2px solid var(--rc);
   outline-offset: 2px;
 }
+/* ⚠️ Elle vivait DANS le bandeau (filet du haut, pas de fond) ; sortie, il lui faut sa
+   propre surface — sinon elle flottait sur le fond de page sans rien qui dise qu'on peut
+   la toucher. Cible de 44 px : c'est un bouton, pas une légende. */
 .rb-fold {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid var(--line);
-  border-top-color: color-mix(in srgb, var(--rc) 30%, var(--line));
+  min-height: 44px;
+  margin: 10px 0 14px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
   font-size: 13px;
   font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+.rb-fold:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+/* Le repère au-dessus de la tuile du prochain donjon. */
+.next-dgn-hint {
+  margin: 10px 0 6px;
 }
 .mf-chev {
   display: inline-block;
