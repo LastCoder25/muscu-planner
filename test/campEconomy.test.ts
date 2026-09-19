@@ -146,7 +146,12 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
 }
 
 const NIV = [12, 26, 60];
-const SEEDS = [12345, 777];
+// ⚠️ HUIT graines, pas deux. Avec deux, la démonstration du plafond de créneaux (ligne
+// « sans plafond, on dépasse la bande ») se jouait à 5 % de sa borne : la moindre variation
+// de PLACEMENT des POI la faisait tomber — c'est arrivé en ajoutant 2 failles à la couronne,
+// alors que le profil moyen des POI ne bougeait que de 0,6 % sur 23 200 tirages. On mesure
+// donc le joueur MÉDIAN, pas celui qui a eu de la chance (même correctif qu'en v0.730).
+const SEEDS = [12345, 777, 31337, 4242, 9001, 555, 60613, 1024];
 /** Part du revenu d'or de référence qu'un joueur peut ajouter en enchaînant des camps. */
 const GOLD_MAX = 0.25;
 /** Part de la production de pierres d'une journée de donjons. */

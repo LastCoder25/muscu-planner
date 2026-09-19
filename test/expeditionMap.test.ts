@@ -17,6 +17,8 @@ import {
   CAMP_TYPES,
   HARVEST_TYPES,
   POI_LABEL,
+  isQuotaPoi,
+  isRiftPoi,
   HARVEST,
   EXPE,
   poiCombatant,
@@ -226,8 +228,64 @@ describe('rythme de la carte', () => {
     let map = createMap(1234, 0, 26);
     for (let t = 0; t <= 7 * 24 * HOUR; t += 2 * HOUR) {
       map = advanceWorld(map, t, 26);
-      expect(map.pois.length).toBe(EXPE.poiCap);
+      // ⚠️ ON COMPTE LE QUOTA, pas `pois.length` : les failles et leurs mines résiduelles
+      // ont leur PROPRE quota et s'AJOUTENT aux 20 — les compter ici reviendrait à laisser
+      // une faille voler la place d'une mine d'or ou d'un camp, dont l'économie est mesurée.
+      expect(map.pois.filter(isQuotaPoi).length).toBe(EXPE.poiCap);
     }
+  });
+
+  it('🕳️ les FAILLES ont leur propre quota, et elles s’ajoutent aux 20', () => {
+    let map = createMap(4321, 0, 26);
+    for (let t = 0; t <= 10 * 24 * HOUR; t += 2 * HOUR) {
+      map = advanceWorld(map, t, 26);
+      const rifts = map.pois.filter(isRiftPoi).length;
+      expect(rifts, `t=${t}`).toBeGreaterThanOrEqual(EXPE.riftFloor);
+      expect(rifts, `t=${t}`).toBeLessThanOrEqual(EXPE.riftCap);
+      // Le quota général n'est jamais entamé par elles.
+      expect(map.pois.filter(isQuotaPoi).length).toBe(EXPE.poiCap);
+    }
+  });
+
+  it('🕳️→💠 une faille arrivée à maturité S’EFFONDRE en mine de mana résiduel', () => {
+    // ⚠️ Et le débordement doit passer AVANT le filtrage des POI périmés : la durée de vie
+    // d'une faille EST sa maturation, donc filtrer d'abord la ferait simplement « expirer »
+    // et la mine n'existerait jamais.
+    let map = createMap(777, 0, 26);
+    const rift = map.pois.find((p) => p.type === 'rift')!;
+    const at = rift.spawnedAt + EXPE.lifespanMs.rift;
+    map = advanceWorld(map, at, 26);
+    expect(map.pois.some((p) => p.id === rift.id)).toBe(false);
+    const mine = map.pois.find((p) => p.id === `${rift.id}_mine`);
+    expect(mine, 'la mine résiduelle').toBeTruthy();
+    expect(mine!.type).toBe('mana_mine');
+    expect(mine!.level).toBe(rift.level);
+    expect(mine!.x).toBe(rift.x);
+    expect(mine!.spawnedAt).toBe(at);
+    expect(mine!.expiresAt).toBe(at + EXPE.lifespanMs.mana_mine);
+  });
+
+  it('⚠️ après une longue absence, la mine est DATÉE de son débordement — donc déjà périmée', () => {
+    // On ne punit pas l'absence, on ne la récompense pas non plus : revenir trois semaines
+    // plus tard ne doit pas faire trouver une mine intacte pour chaque faille oubliée.
+    let map = createMap(888, 0, 26);
+    map = advanceWorld(map, 21 * 24 * HOUR, 26);
+    expect(map.pois.some((p) => p.type === 'mana_mine')).toBe(false);
+    // …et la carte est quand même repeuplée (failles comprises).
+    expect(map.pois.filter(isQuotaPoi).length).toBe(EXPE.poiCap);
+    expect(map.pois.filter(isRiftPoi).length).toBeGreaterThanOrEqual(EXPE.riftFloor);
+  });
+
+  it('⚠️ le flux aléatoire des failles est SÉPARÉ : elles ne décalent pas les autres POI', () => {
+    // Partagé avec `spawnCount`, chaque faille décalerait le tirage de tous les spawns
+    // suivants — la carte de chaque joueur changerait de composition sans raison.
+    const map = createMap(999, 0, 26);
+    const ids = map.pois.filter(isQuotaPoi).map((p) => p.id);
+    expect(ids.every((id) => id.startsWith('poi_'))).toBe(true);
+    expect(map.pois.filter(isRiftPoi).every((p) => p.id.startsWith('rift_'))).toBe(true);
+    // Les compteurs sont distincts.
+    expect(map.spawnCount).toBe(EXPE.poiFloor);
+    expect(map.riftCount).toBe(EXPE.riftFloor);
   });
 
   it('⚠️ LE NIVEAU SE LIT SUR LA CARTE : près = faible, loin = fort', () => {
@@ -261,7 +319,9 @@ describe('rythme de la carte', () => {
     // sature la couronne, le placement échoue ses 6 essais et pose les POI les uns sur
     // les autres. À 20 POI avec l'ancien écart de 20, l'occupation atteignait 53 %.
     const aire = Math.PI * (EXPE.distMax ** 2 - EXPE.distMin ** 2);
-    const occupe = EXPE.poiCap * Math.PI * (EXPE.minDistPoi / 2) ** 2;
+    // ⚠️ FAILLES COMPRISES : c'est la couronne ENTIÈRE qui sature, et c'est ce qui borne
+    // `riftCap` à 2 (mesuré : 0 chevauchement à 22 POI, 5 à 23, 105 à 26).
+    const occupe = (EXPE.poiCap + EXPE.riftCap) * Math.PI * (EXPE.minDistPoi / 2) ** 2;
     expect(occupe / aire, 'occupation de la couronne au plafond').toBeLessThan(0.35);
 
     // …et vérification sur le terrain : aucune paire ne se chevauche visuellement.

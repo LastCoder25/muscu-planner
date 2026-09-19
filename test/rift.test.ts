@@ -17,6 +17,7 @@ import {
   incursionMana,
   type RiftLike,
 } from '@/lib/rift';
+import { EXPE, harvestYield, travelFactor, TRAVEL_CAP_H } from '@/lib/expedition';
 
 const T0 = Date.UTC(2026, 8, 19, 8, 0, 0);
 const DAY = 24 * 3_600_000;
@@ -144,32 +145,37 @@ describe('⛏️ la mine de mana résiduel', () => {
     const r = rift();
     const m = residualMineOf(r, riftOverflowAt(r) + DAY)!;
     expect(m.spawnedAt).toBe(riftOverflowAt(r));
-    expect(m.expiresAt).toBe(riftOverflowAt(r) + RIFT.mineLifeMs);
+    expect(m.expiresAt).toBe(riftOverflowAt(r) + EXPE.lifespanMs.mana_mine);
     expect(m.expiresAt).toBeGreaterThan(m.spawnedAt);
   });
 
-  it('⚠️ est calculée sur la faille À MATURITÉ, pas sur l’instant où on la regarde', () => {
-    const r = rift();
-    const a = residualMineOf(r, riftOverflowAt(r))!;
-    const b = residualMineOf(r, riftOverflowAt(r) + 30 * DAY)!;
-    expect(a.mana).toBe(b.mana);
+  it('hérite du NIVEAU de la faille — c’est lui qui décide de son rendement', () => {
+    const r = rift({ level: 42 });
+    expect(residualMineOf(r, riftOverflowAt(r))!.level).toBe(42);
   });
 
   it('⚠️ FERMER PAIE NETTEMENT MIEUX QU’IGNORER — la consolation n’est pas une stratégie', () => {
     // L'invariant qui protège le robinet du gacha : si ignorer payait presque autant,
     // l'optimum deviendrait « n'entrer nulle part et farmer les mines au convoi ».
+    // ⚠️ MESURÉ AU PIRE CAS : le rendement d'une récolte est super-linéaire en trajet
+    // (`travelFactor`, plafonné à `TRAVEL_CAP_H`), donc la mine la plus généreuse est celle
+    // qu'on va chercher le plus loin. Comparer à un trajet moyen laisserait passer le cas
+    // qui compte.
+    // ⚠️ Et le rendement vient de `harvestYield`, la table de TOUTES les récoltes : c'est
+    // la SEULE échelle. Elle a d'abord existé en double (une part de `riftClearMana` ici,
+    // la table là-bas) — deux nombres pour la même chose finissent par se contredire.
+    const tfMax = travelFactor(TRAVEL_CAP_H);
     for (const level of [5, 30, 60, 100]) {
       const r = rift({ level });
-      const at = riftOverflowAt(r);
-      const closed = riftClearMana(r, at);
-      const ignored = residualMineOf(r, at)!.mana;
-      expect(closed / ignored).toBeGreaterThan(2.5);
+      const closed = riftClearMana(r, riftOverflowAt(r));
+      const ignored = harvestYield('mana_mine', level, tfMax).mana;
+      expect(ignored, `niv ${level}`).toBeGreaterThan(0);
+      expect(closed / ignored, `niv ${level}`).toBeGreaterThan(2.5);
     }
   });
 
-  it('rend quand même quelque chose (une mine à 0 ne consolerait personne)', () => {
-    const r = rift({ level: 1 });
-    expect(residualMineOf(r, riftOverflowAt(r))!.mana).toBeGreaterThanOrEqual(1);
+  it('rend quand même quelque chose au niveau 1 (une mine à 0 ne consolerait personne)', () => {
+    expect(harvestYield('mana_mine', 1, 1).mana).toBeGreaterThanOrEqual(1);
   });
 });
 

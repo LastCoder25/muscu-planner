@@ -32,6 +32,7 @@
 import { fuseUnits } from './skirmish';
 import { refEscortUnits } from './caravan';
 import { interpolate } from './proceduralContent';
+import { EXPE } from './expedition';
 import {
   mulberry32,
   offenseOf,
@@ -46,8 +47,10 @@ import { factionRoster, type RaidFaction } from './raid';
 const RIFT_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
 
 export const RIFT = {
-  /** 7 jours avant le débordement (décidé). */
-  maturityMs: 7 * 24 * 3_600_000,
+  /** ⚠️ LA MATURATION N'EST PAS DÉFINIE ICI : c'est `EXPE.lifespanMs.rift`, parce que la
+   *  CARTE possède déjà les durées de vie de ses POI et que la faille vit exactement sa
+   *  maturation (à 7 jours elle déborde, donc elle « expire »). Deux constantes pour la
+   *  même durée auraient divergé au premier réglage — `riftOverflowAt` la lit là-bas. */
 
   /** Effectif à maturité. ⚠️ UN SEUL AXE DE FORCE : c'est le `level` du POI (donc sa
    *  distance, règle v0.683) qui dit la difficulté ; le nombre dit l'ÂGE. Un second axe
@@ -79,16 +82,13 @@ export const RIFT = {
   /** Ce que le BOSS ajoute, en part du mana des monstres — la prime de fermeture. */
   bossManaShare: 0.5,
 
-  /** ⚠️ CE QUE LA MINE RÉSIDUELLE REND, en part de ce que FERMER aurait payé. C'est une
-   *  **consolation, jamais une stratégie** : si ignorer une faille payait presque autant,
-   *  l'optimum deviendrait « n'entrer nulle part, encaisser le pari du siège, et farmer
-   *  les mines au convoi » — le robinet du gacha serait alimenté par la PASSIVITÉ. Un
-   *  test verrouille le rapport, dans la langue du projet (« l'épave reste la source de
-   *  POINTE », « la ferraille plus dure que l'or »). */
-  mineManaShare: 0.25,
-
-  /** Durée de vie de la mine résiduelle (elle expire comme tout POI). */
-  mineLifeMs: 36 * 3_600_000,
+  /** ⚠️ CE QUE LA MINE RÉSIDUELLE REND N'EST PAS DÉFINI ICI NON PLUS, et c'est un défaut
+   *  que j'avais introduit : elle avait DEUX échelles — une part de ce que fermer paie
+   *  (ici) et `harvestYield('mana_mine')` (la table de TOUTES les récoltes, partagée par le
+   *  héros, les caravanes et les camps). Deux nombres pour la même chose finissent par se
+   *  contredire. **La table des récoltes est la seule source** ; ce qui reste vrai et
+   *  TESTÉ, c'est le RAPPORT : fermer une faille doit payer nettement mieux que l'ignorer
+   *  et ramasser sa mine — sinon le robinet du gacha serait alimenté par la PASSIVITÉ. */
 
   /** Renfort de menace de l'armée qui sort d'une faille non fermée — **×1,3 MESURÉ**
    *  (tenue d'un siège 85-91 % → 51-71 %, plat selon le niveau). ⚠️ Posé ici pour
@@ -122,14 +122,14 @@ export function riftSpecOf(rift: Pick<RiftLike, 'id'>): RiftSpec {
   return { faction: RIFT_FACTIONS[Math.floor(rng() * RIFT_FACTIONS.length)]! };
 }
 
-/** L'instant où la faille déborde. */
+/** L'instant où la faille déborde — sa durée de vie sur la carte, qui EST sa maturation. */
 export function riftOverflowAt(rift: Pick<RiftLike, 'spawnedAt'>): number {
-  return rift.spawnedAt + RIFT.maturityMs;
+  return rift.spawnedAt + EXPE.lifespanMs.rift;
 }
 
 /** Maturité 0..1, bornée aux deux bouts (une faille ne mûrit pas au-delà de 1). */
 export function riftMaturity(rift: Pick<RiftLike, 'spawnedAt'>, now: number): number {
-  const t = (now - rift.spawnedAt) / RIFT.maturityMs;
+  const t = (now - rift.spawnedAt) / EXPE.lifespanMs.rift;
   return Math.min(1, Math.max(0, t));
 }
 
@@ -178,11 +178,11 @@ export function riftClearMana(rift: RiftLike, now: number): number {
   return Math.round(foes * (1 + RIFT.bossManaShare));
 }
 
-/** La mine de mana résiduel laissée par une faille qui a débordé. */
+/** La mine de mana résiduel laissée par une faille qui a débordé — le DESCRIPTEUR du POI.
+ *  ⚠️ Pas de magnitude : son rendement vient de `harvestYield('mana_mine', level, tf)`,
+ *  comme toute récolte. Le NIVEAU est ce qui le décide, et il est hérité de la faille. */
 export interface ResidualMine {
-  /** Niveau hérité de la faille — il décide de son rendement, comme tout POI de récolte. */
   level: number;
-  mana: number;
   spawnedAt: number;
   expiresAt: number;
 }
@@ -205,17 +205,10 @@ export interface ResidualMine {
 export function residualMineOf(rift: RiftLike, now: number): ResidualMine | null {
   if (!riftOverflowed(rift, now)) return null;
   const at = riftOverflowAt(rift);
-  // Calculée sur la faille À MATURITÉ : c'est ce qu'elle valait au moment de déborder.
-  // ⚠️ Écrire `now` ici est une mutation **ÉQUIVALENTE, prouvée** — `riftMaturity`
-  // plafonne à 1 et la garde ci-dessus écarte tout `now < at`, donc les deux expressions
-  // rendent toujours la même valeur. On garde `at` parce qu'il DIT l'intention ; noté pour
-  // que personne ne perde de temps à la retenter comme si elle changeait quelque chose.
-  const full = riftClearMana(rift, at);
   return {
     level: rift.level,
-    mana: Math.max(1, Math.round(full * RIFT.mineManaShare)),
     spawnedAt: at,
-    expiresAt: at + RIFT.mineLifeMs,
+    expiresAt: at + EXPE.lifespanMs.mana_mine,
   };
 }
 

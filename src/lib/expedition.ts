@@ -171,7 +171,23 @@ export interface ExpeditionMap {
   spawnCount: number; // compteur de spawns → rng déterministe par spawn
   pois: Poi[];
   nextSpawnAt: number; // ms epoch du prochain spawn possible
+  /** 🕳️ Compteur de failles — SÉPARÉ de `spawnCount`, et c'est volontaire : partagé, une
+   *  faille décalerait le flux aléatoire de tous les spawns suivants, donc la carte de
+   *  chaque joueur changerait de composition sans raison. Absent des cartes sauvegardées
+   *  avant les failles → lu comme 0, aucune migration. */
+  riftCount?: number;
+  /** ms epoch de la prochaine faille possible (idem : absent = « dès maintenant »). */
+  nextRiftAt?: number;
 }
+
+/** ⚠️ CE QUI COMPTE DANS LE QUOTA GÉNÉRAL (`poiCap`/`poiFloor`, 20). Les **failles** ont
+ *  le LEUR (`riftCap`/`riftFloor`) et les **mines résiduelles** ne sont pas un spawn mais
+ *  la CONSÉQUENCE d'un débordement. Les faire entrer dans le quota volerait des places aux
+ *  mines, camps, puits et épaves — dont l'économie est MESURÉE (`campEconomy`, `goldSink`,
+ *  `scrapEconomy`) : les failles s'AJOUTENT à la carte, elles ne la remplacent pas. */
+const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine']);
+export const isQuotaPoi = (p: Pick<Poi, 'type'>): boolean => !OUT_OF_QUOTA.has(p.type);
+export const isRiftPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'rift';
 
 export interface ExpeditionOutcome {
   win: boolean;
@@ -389,8 +405,8 @@ export const HARVEST = {
    *  encore, donc aucun de ces deux nombres ne peut être calibré aujourd'hui. Ce qui est
    *  vrai et testé, c'est le RATIO « fermer une faille > l'ignorer et ramasser sa mine »
    *  (cf. `rift.ts`). */
-  manaBase: 4,
-  manaPerLevel: 0.8,
+  manaBase: 3,
+  manaPerLevel: 0.5,
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
   /** Trajet (facteur de voyage) à partir duquel une archive rend une 2ᵉ clé : aller loin
@@ -419,6 +435,38 @@ export const EXPE = {
   // du monde à toutes les distances pour qu'on voie la pente.
   poiCap: 20,
   poiFloor: 20,
+  /**
+   * 🕳️ Failles simultanées — quota PROPRE, en plus des 20 (cf. `isQuotaPoi`).
+   *
+   * ⚠️ **2, ET C'EST LA CARTE QUI L'IMPOSE — pas le rythme voulu.** La spec en demandait
+   * 3 à 6 ; mesuré (20 graines × 5 jours simulés, comptage des paires à moins de 10 unités,
+   * le même harnais que le test d'espacement de la v0.671) :
+   *
+   *   +1 faille → 21 POI → **0** chevauchement · **+2 → 22 POI → 0** ✅
+   *   +3 → 23 POI → 5 · +3 garanties → 16 · +4 garanties → 102 · +6 → 105 ❌
+   *
+   * ⚠️ **C'est le PLANCHER qui empile, pas le plafond** (cap 4/plancher 2 → 15, mais cap
+   * 4/plancher 3 → 102) : le plancher spawne SANS CONDITION, donc quand la couronne est
+   * pleine le placement pose « le moins mauvais » au lieu d'attendre.
+   * ⚠️ Et **`minDistPoi` n'est PAS le levier** : mesuré à 14/12/11/10/9, les chevauchements
+   * font 105/159/138/46/1629 — erratique, parce qu'à 26 POI la boucle n'atteint jamais sa
+   * cible et ne garde que le meilleur de 24 essais. Le seul levier est le NOMBRE.
+   *
+   * ⚠️ **CONSÉQUENCE SUR LE RYTHME, À TRANCHER** : avec 2 failles et 7 jours de maturation,
+   * une armée sort toutes les **84 h** — plus lent que l'intervalle de siège actuel (24 h
+   * très actif → 72 h inactif). Trois leviers chiffrés : maturation à **3 j** → une toutes
+   * les 36 h ✅ · maturation à **2 j** → 24 h · ou garder 6 failles en descendant `poiCap`
+   * de 20 à ~16, ce qui impose de **re-mesurer** `campEconomy`, `goldSink` et
+   * `scrapEconomy`. Sans décision, on reste au réglage qui ne casse rien.
+   */
+  riftCap: 2,
+  riftFloor: 2,
+  /** Rythme d'apparition d'une faille. ⚠️ Volontairement plus LENT que celui des POI
+   *  ordinaires (1-2 h) : une faille vit 7 jours, donc le quota se remplit de toute façon,
+   *  et un spawn rapide ne ferait que le saturer d'un coup après chaque effondrement. C'est
+   *  le PLANCHER (`riftFloor`) qui garantit qu'il y a toujours de quoi aller refermer. */
+  riftSpawnMinMs: 8 * 3600_000,
+  riftSpawnJitterMs: 8 * 3600_000,
   perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
   // ⚠️ L'écart mini doit SUIVRE la densité. À 20 POI dans la couronne (rayon 18→64), un
   // écart de 20 occuperait 53 % de la surface : le placement aléatoire échouerait ses
@@ -733,9 +781,20 @@ export function createMap(
   playerLevel: number,
   seedPois = EXPE.poiFloor,
 ): ExpeditionMap {
-  const map: ExpeditionMap = { seed: seed >>> 0 || 1, spawnCount: 0, pois: [], nextSpawnAt: now };
+  const map: ExpeditionMap = {
+    seed: seed >>> 0 || 1,
+    spawnCount: 0,
+    pois: [],
+    nextSpawnAt: now,
+    riftCount: 0,
+    nextRiftAt: now,
+  };
   for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel);
+  // 🕳️ On sème aussi le PLANCHER de failles : sans elles, une carte neuve n'aurait ni accès
+  // au mana ni siège à venir jusqu'au premier `advanceWorld`.
+  for (let i = 0; i < EXPE.riftFloor; i++) spawnRift(map, now, playerLevel);
   map.nextSpawnAt = now + EXPE.spawnMinMs;
+  map.nextRiftAt = now + EXPE.riftSpawnMinMs;
   return map;
 }
 
@@ -766,6 +825,35 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   ] as const);
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
+  placePoiOfType(map, now, playerLevel, type, rng, `poi_${map.seed}_${map.spawnCount}`);
+}
+
+/**
+ * 🕳️ Fait apparaître une FAILLE — même placement, compteur et flux aléatoire SÉPARÉS.
+ *
+ * ⚠️ POURQUOI UN FLUX À PART : partagé avec `spawnCount`, chaque faille décalerait le
+ * tirage de tous les spawns suivants — la carte de chaque joueur changerait de composition
+ * sans qu'on ait touché à une pondération. Et l'espace d'ids est distinct (`rift_…`), donc
+ * aucune collision possible avec un POI ordinaire.
+ */
+function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
+  const n = map.riftCount ?? 0;
+  const rng = mulberry32(((map.seed ^ 0x52ff3a1d) + n * 2654435761) >>> 0 || 1);
+  map.riftCount = n + 1;
+  placePoiOfType(map, now, playerLevel, 'rift', rng, `rift_${map.seed}_${n + 1}`);
+}
+
+/** Place un POI de type IMPOSÉ : espacement, niveau dérivé de la distance, durée de vie.
+ *  ⚠️ EXTRAIT de `spawnOne` sans rien réordonner — le tirage du TYPE reste en tête chez
+ *  l'appelant, donc le flux aléatoire d'un spawn ordinaire est inchangé au bit près. */
+function placePoiOfType(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+  type: PoiType,
+  rng: () => number,
+  id: string,
+): void {
   const win = spawnWindow(playerLevel);
   // L'arène spawn LOIN (trajet long, fait pour la nuit) ; les autres, n'importe où.
   const minFrac = type === 'arena' ? 0.8 : 0;
@@ -804,7 +892,7 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
-    id: `poi_${map.seed}_${map.spawnCount}`,
+    id,
     type,
     ...(perilous ? { perilous: true } : {}),
     ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
@@ -842,27 +930,64 @@ export function advanceWorld(
   playerLevel: number,
   protectedPoiId?: string,
 ): ExpeditionMap {
+  // 🕳️ DÉBORDEMENT D'ABORD, avant tout filtrage : une faille arrivée à maturité
+  // s'effondre et laisse une MINE DE MANA RÉSIDUEL. ⚠️ Si on filtrait d'abord, la faille
+  // serait simplement « expirée » (sa durée de vie EST sa maturation) et la mine n'aurait
+  // jamais existé. L'id de la mine est DÉRIVÉ de celui de la faille : rejouer ce passage
+  // ne peut pas la dupliquer, et une absence longue laisse des mines DATÉES de leur
+  // débordement — donc déjà périmées si c'était il y a plus de 36 h, et le filtre juste
+  // en dessous s'en charge. On ne punit pas l'absence, on ne la récompense pas non plus.
+  // ⚠️ L'ARMÉE QUI SORT N'EST PAS ENCORE BRANCHÉE (étape suivante) : pour l'instant la
+  // faille disparaît sans marcher sur la base.
+  const collapsed: Poi[] = [];
+  for (const p of map.pois) {
+    if (!isRiftPoi(p) || now < p.spawnedAt + EXPE.lifespanMs.rift) continue;
+    const at = p.spawnedAt + EXPE.lifespanMs.rift;
+    collapsed.push({
+      id: `${p.id}_mine`,
+      type: 'mana_mine',
+      level: p.level,
+      x: p.x,
+      y: p.y,
+      distNorm: p.distNorm,
+      spawnedAt: at,
+      expiresAt: at + EXPE.lifespanMs.mana_mine,
+    });
+  }
+  const withMines = collapsed.length
+    ? [
+        ...map.pois.filter((p) => !(isRiftPoi(p) && now >= p.spawnedAt + EXPE.lifespanMs.rift)),
+        ...collapsed,
+      ]
+    : map.pois;
   const next: ExpeditionMap = {
     seed: map.seed,
     spawnCount: map.spawnCount,
     nextSpawnAt: map.nextSpawnAt,
+    riftCount: map.riftCount ?? 0,
+    nextRiftAt: map.nextRiftAt ?? now,
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte
     // sauvegardée avant que `distMax` ne soit borné par le littoral (v0.668) porte des
     // POI dessinés en pleine mer, et ils survivraient jusqu'à 48 h. On les périme donc
     // au chargement — même politique que les bâtiments dont le type a disparu du
     // registre. La cible d'une expédition EN COURS est toujours préservée : le héros y
     // est physiquement, on ne la fait pas disparaître sous ses pieds.
-    pois: map.pois.filter(
+    pois: withMines.filter(
       (p) =>
         p.id === protectedPoiId ||
         (p.expiresAt > now && withinLand(p) && levelFitsDistance(p, playerLevel)),
     ),
   };
+  // ⚠️ LES QUOTAS SE COMPTENT SÉPARÉMENT (`isQuotaPoi`) : une faille ou une mine qui
+  // entrerait dans les 20 volerait une place à une mine d'or, un camp ou une épave — dont
+  // l'économie est MESURÉE. Les failles S'AJOUTENT à la carte.
+  const quota = () => next.pois.filter(isQuotaPoi).length;
+  const rifts = () => next.pois.filter(isRiftPoi).length;
   // Rattrapage : après une longue absence, l'heure de spawn a pu être dépassée
   // PLUSIEURS fois → on fait apparaître autant de POI que d'intervalles écoulés
   // (jusqu'au cap), sinon la carte restait à 1 spawn/ouverture et se vidait.
   let guard = 0;
-  while (now >= next.nextSpawnAt && next.pois.length < EXPE.poiCap && guard++ < EXPE.poiCap) {
+  while (now >= next.nextSpawnAt && quota() < EXPE.poiCap && guard++ < EXPE.poiCap) {
     spawnOne(next, now, playerLevel);
     const rng = mulberry32((next.seed + next.spawnCount * 40503) >>> 0);
     next.nextSpawnAt = next.nextSpawnAt + EXPE.spawnMinMs + Math.floor(rng() * EXPE.spawnJitterMs);
@@ -870,8 +995,21 @@ export function advanceWorld(
   // PLANCHER : la carte ne descend jamais sous `poiFloor` activités → on complète
   // immédiatement (les activités de base sont toujours dispo ; la rareté/churn ne
   // joue qu'entre le plancher et le cap).
-  while (next.pois.length < EXPE.poiFloor) spawnOne(next, now, playerLevel);
+  while (quota() < EXPE.poiFloor) spawnOne(next, now, playerLevel);
   if (next.nextSpawnAt <= now) next.nextSpawnAt = now + EXPE.spawnMinMs;
+
+  // 🕳️ FAILLES : même mécanique, quota et horloge PROPRES. ⚠️ Le plancher garantit qu'il y
+  // a toujours de quoi aller refermer quelque chose — une carte sans faille, et le joueur
+  // n'a plus d'accès au mana ni de siège à venir.
+  let rGuard = 0;
+  while (now >= (next.nextRiftAt ?? now) && rifts() < EXPE.riftCap && rGuard++ < EXPE.riftCap) {
+    spawnRift(next, now, playerLevel);
+    const rng = mulberry32(((next.seed ^ 0x1b873593) + (next.riftCount ?? 0) * 40503) >>> 0 || 1);
+    next.nextRiftAt =
+      (next.nextRiftAt ?? now) + EXPE.riftSpawnMinMs + Math.floor(rng() * EXPE.riftSpawnJitterMs);
+  }
+  while (rifts() < EXPE.riftFloor) spawnRift(next, now, playerLevel);
+  if ((next.nextRiftAt ?? now) <= now) next.nextRiftAt = now + EXPE.riftSpawnMinMs;
   return next;
 }
 
@@ -1186,7 +1324,14 @@ export function harvestYield(
     // seconde échelle ici finirait par contredire l'invariant « fermer paie nettement mieux
     // qu'ignorer ». Cette table ne porte donc que la part de TRAJET, comme pour les autres
     // récoltes — aller loin paie plus que proportionnellement.
-    mana = Math.max(1, Math.round((HARVEST.manaBase + L * HARVEST.manaPerLevel) * tfH));
+    // ⚠️ TRAJET **AMORTI**, l'idiome du sanctuaire (`0.8 + tfH × 0.25`) et non `× tfH` :
+    // le facteur brut monte jusqu'à ~14 au trajet plafond, et une mine cherchée très loin
+    // rapportait alors PLUS que fermer la faille au niveau 5 (ratio mesuré 0,92 quand
+    // l'invariant en exige 2,5). Aller loin paie toujours plus, mais dans une bande.
+    mana = Math.max(
+      1,
+      Math.round((HARVEST.manaBase + L * HARVEST.manaPerLevel) * (0.8 + tfH * 0.25)),
+    );
   } else if (type === 'archive') {
     // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
     // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet
