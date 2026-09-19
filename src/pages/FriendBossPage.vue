@@ -117,12 +117,31 @@
           moitié à apporter pour le coffre.
         </p>
 
-        <div v-if="recentHits.length" class="fb-sec-t">Dernières frappes</div>
-        <div v-for="h in recentHits" :key="h.id" class="fb-log">
-          <b>{{ pseudoOf(h.userId) }}</b> +{{ h.units }} {{ bossUnitLabel(current.family) }}
-          <span class="fb-dim">(−{{ fmtBossPv(bossDamage(h.units)) }} PV)</span>
-          <span class="fb-dim">· il y a {{ fmtBossSpan(now - h.createdAt) }}</span>
-        </div>
+        <div v-if="hitDays.length" class="fb-sec-t">Frappes</div>
+        <!-- ⚠️ GROUPÉES PAR JOUR (demande de l'utilisateur) : une journée de combat, c'est
+             souvent six ou sept frappes en rafale — la liste à plat noyait le total du jour
+             dans le détail. Le total mène, le détail se déplie. -->
+        <template v-for="d in hitDays" :key="d.day">
+          <button
+            type="button"
+            class="fb-day"
+            :aria-expanded="openDays.has(d.day)"
+            @click="toggleDay(d.day)"
+          >
+            <span class="mf-chev" :class="{ open: openDays.has(d.day) }">▸</span>
+            <b>{{ dayLabel(d.at) }}</b>
+            <span class="fb-day-tot">+{{ d.total }} {{ bossUnitLabel(current.family) }}</span>
+            <span class="fb-dim">−{{ fmtBossPv(bossDamage(d.total)) }} PV</span>
+            <span v-if="d.hits.length > 1" class="fb-dim">· {{ d.hits.length }} frappes</span>
+          </button>
+          <div v-if="openDays.has(d.day)" class="fb-day-detail">
+            <div v-for="h in d.hits" :key="h.id" class="fb-log">
+              <b>{{ pseudoOf(h.userId) }}</b> +{{ h.units }} {{ bossUnitLabel(current.family) }}
+              <span class="fb-dim">(−{{ fmtBossPv(bossDamage(h.units)) }} PV)</span>
+              <span class="fb-dim">· il y a {{ fmtBossSpan(now - h.createdAt) }}</span>
+            </div>
+          </div>
+        </template>
       </section>
 
       <!-- ── LANCER UN BOSS ────────────────────────────────────────────────────── -->
@@ -292,6 +311,7 @@ import {
   bossPhase,
   bossStartAt,
   bossUnitLabel,
+  bossHitsByDay,
   bossUnitsLeft,
   chestState,
   fmtBossPv,
@@ -425,14 +445,40 @@ watch(
   { immediate: true },
 );
 const unitSingular = computed(() => (current.value?.family === 'core' ? 'seconde' : 'rep'));
-const recentHits = computed(() =>
-  current.value
-    ? store.hits
-        .filter((h) => h.bossId === current.value!.id)
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 15)
-    : [],
+/** Jour LOCAL, comme partout ailleurs dans l'app. */
+const dayKey = (ms: number) => {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const hitDays = computed(() =>
+  current.value ? bossHitsByDay(store.hits, current.value.id, dayKey).slice(0, 10) : [],
 );
+/** Les jours dépliés. ⚠️ Le plus récent l'est d'office : c'est celui qu'on vient regarder. */
+const openDays = ref<Set<string>>(new Set());
+watch(
+  hitDays,
+  (days) => {
+    const first = days[0]?.day;
+    if (first && !openDays.value.size) openDays.value = new Set([first]);
+  },
+  { immediate: true },
+);
+function toggleDay(day: string) {
+  const next = new Set(openDays.value);
+  if (!next.delete(day)) next.add(day);
+  openDays.value = next;
+}
+const dayLabel = (ms: number) => {
+  const today = dayKey(Date.now());
+  const k = dayKey(ms);
+  if (k === today) return "Aujourd'hui";
+  if (k === dayKey(Date.now() - 86400000)) return 'Hier';
+  return new Date(ms).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+  });
+};
 const pseudoOf = (userId: string) =>
   store.members.find((m) => m.userId === userId)?.pseudo ?? 'Un ami';
 const ownerPseudo = (b: FriendBoss) => pseudoOf(b.ownerId);
@@ -833,6 +879,52 @@ function notifyError(e: unknown) {
 .fb-log {
   font-size: 12.5px;
   padding: 2px 0;
+}
+/* La ligne d'un JOUR : c'est un bouton (on déplie le détail), donc reset, cible de 44 px
+   et curseur. ⚠️ `.mf-chev` est redéfini ici : les styles sont SCOPED par composant, celui
+   d'AventurePage n'atteint pas cet écran. */
+.fb-day {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 2px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.fb-day:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.fb-day-tot {
+  font-weight: 800;
+  color: var(--accent);
+}
+.fb-day-detail {
+  padding: 4px 0 8px 18px;
+  border-left: 1px solid var(--line);
+  margin-left: 6px;
+}
+.mf-chev {
+  display: inline-block;
+  transition: transform 0.15s ease;
+  color: var(--dim);
+}
+.mf-chev.open {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .mf-chev {
+    transition: none;
+  }
 }
 .fb-search {
   width: 100%;

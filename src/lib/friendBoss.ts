@@ -531,6 +531,42 @@ export function bossRepsXp(family: BossFamily, units: number, repWeight: number)
   return Math.round(raw * XP_MULT);
 }
 
+/** Les frappes d'un boss, groupées PAR JOUR — du jour le plus récent au plus ancien, et
+ *  dans chaque jour de la frappe la plus récente à la plus ancienne.
+ *
+ *  ⚠️ Distincte de `bossAgendaEntries` : celle-ci garde le DÉTAIL et prend les frappes de
+ *  TOUT LE MONDE (l'écran du boss montre le groupe), là où l'agenda ne retient que les
+ *  miennes et les convertit en XP. Elles ne répondent pas à la même question.
+ *
+ *  ⚠️ `dayKey` est INJECTÉE : « quel jour est-ce ? » dépend du fuseau de l'appelant, et
+ *  cette lib reste pure. */
+export function bossHitsByDay(
+  hits: readonly FriendBossHit[],
+  bossId: string,
+  dayKey: (ms: number) => string,
+): { day: string; at: number; total: number; hits: FriendBossHit[] }[] {
+  const byDay = new Map<string, FriendBossHit[]>();
+  for (const h of hits) {
+    if (h.bossId !== bossId || h.units <= 0) continue;
+    const day = dayKey(h.createdAt);
+    const list = byDay.get(day);
+    if (list) list.push(h);
+    else byDay.set(day, [h]);
+  }
+  return [...byDay.entries()]
+    .map(([day, list]) => {
+      const sorted = [...list].sort((a, b) => b.createdAt - a.createdAt);
+      return {
+        day,
+        // Le plus récent du jour : c'est lui qui date la ligne (« il y a 2 h »).
+        at: sorted[0]!.createdAt,
+        total: sorted.reduce((n, h) => n + h.units, 0),
+        hits: sorted,
+      };
+    })
+    .sort((a, b) => b.at - a.at);
+}
+
 /** Une ligne d'agenda : ce qu'un joueur a fait sur UN boss, UN jour donné. */
 export interface BossAgendaEntry {
   bossId: string;

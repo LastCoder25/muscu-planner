@@ -26,6 +26,7 @@ import {
   metMinShare,
   bossRepsXp,
   bossAgendaEntries,
+  bossHitsByDay,
   bossCompletionXp,
   earlyKillFraction,
   bossFromRow,
@@ -760,5 +761,59 @@ describe('🐉 BOSS ENTRE AMIS — ce qui remonte dans l’Agenda', () => {
     expect(bossAgendaEntries([bossOf()], [memb()], [hit('h1', 0, J(15))], 'me', dayKey)).toEqual(
       [],
     );
+  });
+});
+
+describe('🐉 les frappes groupées par jour', () => {
+  const dayKey = (ms: number) => {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // Dates en LOCAL : un `Date.UTC` + décalage ferait basculer une frappe du soir au
+  // lendemain selon le fuseau, et le groupement — ce qu'on éprouve — dépendrait de la machine.
+  const J = (jour: number, h = 12) => new Date(2026, 8, jour, h).getTime();
+  const hit = (id: string, units: number, at: number, over: Partial<FriendBossHit> = {}) => ({
+    id,
+    bossId: 'b1',
+    userId: 'me',
+    units,
+    createdAt: at,
+    ...over,
+  });
+
+  it('un jour par ligne, le total du jour, et le détail du plus récent au plus ancien', () => {
+    const d = bossHitsByDay(
+      [hit('a', 10, J(15, 9)), hit('c', 5, J(16)), hit('b', 20, J(15, 18))],
+      'b1',
+      dayKey,
+    );
+    expect(d.map((x) => x.day)).toEqual(['2026-09-16', '2026-09-15']); // récent d'abord
+    expect(d[1]!.total).toBe(30);
+    expect(d[1]!.hits.map((h) => h.id)).toEqual(['b', 'a']);
+    // La ligne est datée par la frappe la PLUS RÉCENTE du jour.
+    expect(d[1]!.at).toBe(J(15, 18));
+  });
+
+  it('⚠️ les frappes d’un AUTRE boss ne s’y mélangent pas', () => {
+    const d = bossHitsByDay(
+      [hit('a', 10, J(15)), hit('x', 99, J(15), { bossId: 'b2' })],
+      'b1',
+      dayKey,
+    );
+    expect(d).toHaveLength(1);
+    expect(d[0]!.total).toBe(10);
+  });
+
+  it('les frappes de TOUT LE MONDE comptent (c’est l’écran du groupe)', () => {
+    const d = bossHitsByDay(
+      [hit('a', 10, J(15)), hit('b', 7, J(15), { userId: 'toi' })],
+      'b1',
+      dayKey,
+    );
+    expect(d[0]!.total).toBe(17);
+  });
+
+  it('une frappe à zéro ne crée pas de ligne', () => {
+    expect(bossHitsByDay([hit('a', 0, J(15))], 'b1', dayKey)).toEqual([]);
   });
 });
