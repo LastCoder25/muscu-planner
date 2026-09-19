@@ -71,7 +71,8 @@ import {
   type LabyStats,
 } from '@/data/labyrinths';
 import {
-  CAMP_TYPES,
+  PARTY_TARGETS,
+  isRiftPoi,
   campSpecOf,
   depositMessages,
   MESSAGES_CAP,
@@ -172,6 +173,7 @@ import {
   startCaravan,
   type Caravan,
   type RoadCompanions,
+  type PartyHero,
 } from '@/lib/caravan';
 import {
   advGearRoles,
@@ -201,8 +203,11 @@ import {
   settleParties,
   startParty,
   type ActiveParty,
-  type PartyHero,
-} from '@/lib/camp';
+} from '@/lib/party';
+// ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
+// dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
+import { resolveCamp } from '@/lib/camp';
+import { resolveIncursion } from '@/lib/rift';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -1403,10 +1408,12 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return;
     if (cur.expedition) throw new Error('Une expédition est déjà en cours.');
-    // ⚔️ Un camp s'attaque en GROUPE (`sendParty`) : même le héros seul y passe, pour que
-    // l'issue soit le combat de faction et non l'ancien gardien. ⚠️ Une expédition héros
-    // DÉJÀ en route vers un camp (ancien format) reste résolue et encaissée normalement.
-    if (CAMP_TYPES.has(poi.type)) throw new Error('Un camp s’attaque en groupe.');
+    // ⚔️🕳️ Un camp ET une faille s'attaquent en GROUPE (`sendParty`) : même le héros seul y
+    // passe, pour que l'issue soit le combat de faction ou l'incursion, et jamais l'ancien
+    // gardien — ni, pour une faille, la MINE D’OR dans laquelle `resolveOutcome` la faisait
+    // tomber (v0.926). ⚠️ Une expédition héros DÉJÀ en route vers un camp (ancien format)
+    // reste résolue et encaissée normalement.
+    if (PARTY_TARGETS.has(poi.type)) throw new Error('Ce lieu s’attaque en groupe.');
     // ⚠️ L'infirmerie n'était vérifiée que par l'écran Aventure (`expeBlocked`) : depuis la
     // carte, un héros blessé repartait. Le refus vit ici pour qu'aucun écran ne l'oublie.
     const healIn = woundRemainingMs(cur.base, now);
@@ -2616,10 +2623,13 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  /** ⚔️ Envoie un GROUPE sur un camp de faction : le héros (oui/non) et autant d'aventuriers
-   *  DISPONIBLES qu'on veut — ⚠️ aucun `escortMax` (spec étape 3 : seuls les convois le gardent).
+  /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et
+   *  autant d'aventuriers DISPONIBLES qu'on veut — ⚠️ aucun `escortMax` (seuls les convois
+   *  le gardent). ⚠️ UNIQUE chemin d’envoi d’un groupe, donc unique endroit où se décide la
+   *  RÉSOLUTION (`resolveCamp` / `resolveIncursion`).
    *
-   *  ⚠️ Refus AU STORE (l'écran ne garantit rien, même politique que `expeSend`) : POI de camp,
+   *  ⚠️ Refus AU STORE (l'écran ne garantit rien, même politique que `expeSend`) : lieu qui
+   *  accepte un groupe (`PARTY_TARGETS`),
    *  groupe non vide, chaque aventurier disponible (`advAvailable` : ni en convoi, ni à
    *  l'infirmerie, ni en formation), et — avec le héros — pas d'expédition en cours, pas
    *  d'infirmerie, Avant-poste construit, or suffisant.
@@ -2634,8 +2644,7 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Rend la RAISON d'un refus (null = parti) : un « départ impossible » générique laissait
     // deviner lequel des aventuriers, de l'or ou du héros bloquait.
     const cur = row.value;
-    const spec = campSpecOf(poi);
-    if (!cur || !spec) return 'ce lieu n’est pas un camp';
+    if (!cur) return 'ton personnage n’est pas chargé';
     const { now, hero } = opts;
     // ⚠️ Un id répété ferait partir deux fois le même aventurier.
     if (new Set(opts.escortIds).size !== opts.escortIds.length)
@@ -2669,14 +2678,25 @@ export const useCharacterStore = defineStore('character', () => {
     // 🐾🧠 Ce que le groupe emmène (`roadPoolOf` : le héros garde ce qu'il porte).
     const road = roadPoolOf(cur);
     const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
-    const input = { poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel };
     const leg = partyLegMin(poi, escort, {
       hero: !!hero,
       travelMult: travelTimeMult(cur.buildings),
       comptoirLevel: comptoirLevel.value,
       gearSpeed: advGearRoles(escort, road.advGear).speed,
     });
-    const trip = startParty(input, now, leg);
+    // ⚔️🕳️ LA DISPATCH VIT ICI, à l’UNIQUE chemin d’envoi : `startParty` ne choisit plus la
+    // résolution, il REÇOIT l’issue. Un camp se résout par son combat de faction, une faille
+    // par son incursion (attrition, gardien, mana). ⚠️ EXPLICITE, et non « camp sinon faille » :
+    // le jour où `PARTY_TARGETS` accueille un troisième type, il sera REFUSÉ ici au lieu
+    // d’être résolu en silence comme une incursion.
+    const spec = campSpecOf(poi);
+    const outcome = isRiftPoi(poi)
+      ? resolveIncursion({ poi, escort, road, hero, seed, now })
+      : spec
+        ? resolveCamp({ poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel })
+        : null;
+    if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
+    const trip = startParty({ poi, hero, seed }, now, leg, outcome);
     if (cur.gold < trip.goldCost) return `héros : ${PARTY_HERO_BLOCK_LABEL.gold}`;
     const busy = new Set(opts.escortIds);
     const map = cur.expedition_map

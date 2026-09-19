@@ -57,7 +57,7 @@ import {
 import { effectsOfTalents, talentRankOf, type TalentInstance } from './talents';
 import { FAMILIAR_SPECIES } from '../data/familiars';
 import {
-  CAMP_TYPES,
+  PARTY_TARGETS,
   HARVEST_TYPES,
   harvestYield,
   isRiftPoi,
@@ -967,18 +967,20 @@ export function poiOffers(
   opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number; slotsFree: number },
 ): { hero: boolean; caravan: boolean; party: boolean } {
   return {
-    // ⚠️ UNE FAILLE NE S'ENVOIE PAS ENCORE : elle se referme par une INCURSION, qui n'est
-    // pas branchée. Sans ce refus, l'écran proposait « envoyer le héros » et `resolveOutcome`
-    // la traitait comme une MINE D'OR — de l'or et de l'énergie pour rien. Rendre `false`
-    // ici la GRISE sur la carte, ce qui est exactement ce que le gris veut dire depuis la
-    // v0.738 : « rien ne peut y être envoyé ». À retirer quand l'incursion existe.
+    // ⚠️ `hero` = l'EXPÉDITION SOLO, et une faille n'en est pas une : on y entre EN GROUPE
+    // (`party`), même quand le héros y va seul — c'est ce qui fait résoudre l'incursion par
+    // `resolveIncursion` au lieu de `resolveOutcome`, qui la traitait comme une MINE D'OR
+    // (de l'or et de l'énergie pour rien, v0.926). Ce refus RESTE donc, et `resolveOutcome`
+    // lève toujours : deux verrous, une ceinture et des bretelles.
     hero: !opts.heroAway && !isRiftPoi(poi),
     // Les convois n'exploitent que les lieux de RÉCOLTE : le héros se bat, eux ramassent.
     caravan: opts.comptoirLevel > 0 && HARVEST_TYPES.has(poi.type),
-    // ⚔️ Un CAMP s'attaque en GROUPE : le héros (sa propre limite), ou au moins un
-    // aventurier disponible avec un créneau de convoi libre.
+    // ⚔️ Un CAMP — ET UNE FAILLE — s'attaquent en GROUPE : le héros (sa propre limite), ou
+    // au moins un aventurier disponible avec un créneau de convoi libre. `PARTY_TARGETS` est
+    // la source unique de « on y envoie un groupe » ; ce que ça résout (camp ou incursion) se
+    // décide à l'unique chemin d'envoi.
     party:
-      CAMP_TYPES.has(poi.type) &&
+      PARTY_TARGETS.has(poi.type) &&
       (!opts.heroAway || (opts.advsAvailable > 0 && opts.slotsFree > 0)),
   };
 }
@@ -1104,6 +1106,36 @@ export function roadUnits(escort: Adventurer[], pairs: Map<string, CompanionSet>
   }));
 }
 
+/** Id de l'unité du héros dans un groupe — jamais celui d'un aventurier (`adv_…`). */
+export const HERO_UNIT_ID = 'hero';
+
+export interface PartyHero {
+  name: string;
+  level: number;
+  combatant: Combatant;
+}
+
+/** Les unités du groupe : aventuriers (SA paire, SES pièces, règle unique `roadPairs`) puis
+ *  le héros, unité de plus avec son combattant RÉEL.
+ *  ⚠️ EXPORTÉE pour l'écran : le % affiché (`campWinPct`) doit fondre EXACTEMENT le groupe
+ *  que `resolveCamp` fera combattre — une seconde construction (oublier `roadPairs`, poser
+ *  le héros autrement) annoncerait un pronostic sur un autre groupe. */
+export function partyAllies(
+  escort: Adventurer[],
+  road: RoadCompanions,
+  hero: PartyHero | null,
+): SkirmishUnit[] {
+  const units = roadUnits(escort, roadPairs(escort, road));
+  if (hero)
+    units.push({
+      id: HERO_UNIT_ID,
+      name: hero.name,
+      emoji: '🧝',
+      level: hero.level,
+      combatant: hero.combatant,
+    });
+  return units;
+}
 /** 🧭 Les unités de RÉFÉRENCE d'un niveau : `CARAVAN.refEscort` aventuriers, un par
  *  orientation, accompagnés (`refCompanions`) et équipés (`refAdvGear`). ⚠️ SOURCE UNIQUE
  *  du mètre-étalon des CAMPS, PAS DE LA ROUTE : `roadFoe` garde SA propre référence

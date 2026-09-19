@@ -10,7 +10,8 @@ import {
   refCompanions,
 } from '@/lib/caravan';
 import { guildRoster, type Adventurer } from '@/lib/adventurers';
-import { campGroupHaul, campWinPct, partyAllies, resolveCamp } from '@/lib/camp';
+import { campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
+import { partyAllies } from '@/lib/caravan';
 import { goldPerDay, stonesPerDay } from './helpers/goldModel';
 
 /**

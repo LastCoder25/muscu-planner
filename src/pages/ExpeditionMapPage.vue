@@ -249,8 +249,9 @@
           </div>
           <button class="sh-x" @click="selected = null">✕</button>
         </div>
-        <!-- 🕳️ FAILLE : on ne peut pas encore y entrer, mais on doit pouvoir la JAUGER.
-             Le rang (figé à l'apparition) dit sa difficulté ; l'effectif dit son ÂGE. -->
+        <!-- 🕳️ FAILLE : le rang (figé à l’apparition) dit sa difficulté, l’effectif dit son
+             ÂGE, et le 🎯 dit si le groupe qu’on a composé la REFERMERA. Le bloc de groupe
+             juste en dessous est le MÊME que celui d’un camp — on y entre pareil. -->
         <template v-if="selectedRift">
           <div class="sh-row sh-wrap">
             <span
@@ -272,18 +273,33 @@
             <span class="sh-chip" title="À maturité, elle déborde et s'effondre en mine de mana"
               >⏳ {{ formatDuration(selectedRift.overflowIn) }}</span
             >
+            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
+            <span class="sh-chip" title="Y entrer ne coûte aucune énergie">⚡ 0</span>
+            <!-- 🎯 LA FERMETURE, pas « survivre un moment » : c’est la seule issue qui
+                 referme la faille. -->
+            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
+              >🎯 {{ partyWin }}%</span
+            >
+            <span class="sh-chip" title="Mana si tu la refermes — gardien compris"
+              >💠 ~{{ selectedRift.clearMana }}</span
+            >
           </div>
           <p class="sh-note">
-            Son armée grossit jusqu'au débordement. On n'y entre pas encore — une fois mûre, elle
-            s'effondre et laisse une 💠 mine de mana résiduel.
+            Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros. Les
+            monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille ajoute la
+            prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie. Laissée mûrir,
+            elle déborde et ne laisse qu’une petite 💠 mine résiduelle.
           </p>
         </template>
-        <!-- ⚔️ UN CAMP S'ATTAQUE EN GROUPE : le héros (oui/non) et autant d'aventuriers qu'on
-             veut — aucun maximum, c'est ce qui permet d'affronter les gros repaires. Toute la
-             règle vit dans `camp.ts` (combat, pronostic, trajet, qui peut partir) ; l'écran
-             ne fait que la montrer, et dit POURQUOI quelqu'un ne peut pas venir. -->
-        <template v-if="selectedCamp">
-          <div class="sh-row sh-wrap">
+        <!-- ⚔️🕳️ UN CAMP — ET UNE FAILLE — S'ATTAQUENT EN GROUPE : le héros (oui/non) et autant
+             d'aventuriers qu'on veut — aucun maximum, c'est ce qui permet d'affronter les gros
+             repaires et les failles mûres. ⚠️ UN SEUL bloc pour les deux : le choix du groupe,
+             la tuile du héros, le risque de départ et le bouton sont identiques — en écrire deux
+             garantirait qu’ils divergent. Seuls la rangée de chips et la note changent.
+             Les règles vivent dans `camp.ts` / `rift.ts` et `party.ts` ; l’écran les montre,
+             et dit POURQUOI quelqu’un ne peut pas venir. -->
+        <template v-if="partyTarget">
+          <div v-if="selectedCamp" class="sh-row sh-wrap">
             <span class="sh-chip"
               >{{ FACTION_EMOJI[selectedCamp.faction] }}
               {{ FACTION_LABEL[selectedCamp.faction] }}</span
@@ -349,10 +365,14 @@
           <p v-else class="sh-away">
             ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
           </p>
-          <p class="sh-note">
+          <p v-if="selectedCamp" class="sh-note">
             Sans le héros : de l’or (et des pierres chez les morts-vivants) et des pièces
             d’aventurier — le groupe prend un créneau de convoi. En cas de défaite, les aventuriers
             tombés partent à l’infirmerie ; le héros, lui, rentre sans butin.
+          </p>
+          <p v-else class="sh-note">
+            Sans le héros, le groupe prend un créneau de convoi — et une faille ne rend que du 💠,
+            jamais d’objet.
           </p>
           <p
             v-if="partyRisk && partyRisk.worsens"
@@ -370,7 +390,7 @@
             héros, ou attends le retour d’un convoi ou d’un groupe.
           </p>
           <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
-            {{ partySize ? `⚔️ Attaquer le camp (${partySize})` : 'Choisis ton groupe' }}
+            {{ partySendLabel }}
           </button>
         </template>
         <template v-else-if="offers.hero">
@@ -446,7 +466,7 @@
             🐫 Envoyer une caravane ({{ escort.length }})
           </button>
         </template>
-        <div v-if="!selectedCamp && !offers.hero && !offers.caravan" class="sh-away">
+        <div v-if="!partyTarget && !offers.hero && !offers.caravan" class="sh-away">
           🐫 Les convois ne vont que sur les lieux de récolte — puits, sanctuaire, archives, épave.
         </div>
       </div>
@@ -552,17 +572,14 @@ import GuildPanel from '@/components/GuildPanel.vue';
 import CaravanReportView from '@/components/CaravanReportView.vue';
 import PartyReportView from '@/components/PartyReportView.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import { campRewardLabel, campWinPct } from '@/lib/camp';
 import {
   PARTY_HERO_BLOCK_LABEL,
-  campRewardLabel,
-  campWinPct,
   PARTY_SEND_BLOCK_LABEL,
   partySendBlocker,
-  partyAllies,
   partyHeroBlocker,
   partyLegMin,
-  type PartyHero,
-} from '@/lib/camp';
+} from '@/lib/party';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
@@ -581,6 +598,7 @@ import {
   travelOneWayMin,
   expeditionTerrain,
   type Poi,
+  type PoiType,
   HARVEST_TYPES,
   CAMP_TYPES,
   campSpecOf,
@@ -601,7 +619,14 @@ import {
 import { ADV_UNAVAILABLE_LABEL, advAvailable, advUnavailableReason } from '@/lib/adventurers';
 import { characterRank, rankStarStr } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
-import { RIFT, riftOverflowAt, riftPopulation, riftSpecOf } from '@/lib/rift';
+import {
+  RIFT,
+  incursionWinPct,
+  riftClearMana,
+  riftOverflowAt,
+  riftPopulation,
+  riftSpecOf,
+} from '@/lib/rift';
 import {
   CARAVAN,
   caravanLegMin,
@@ -611,6 +636,8 @@ import {
   isCaravanClaimable,
   poiOffers,
   suggestEscort,
+  partyAllies,
+  type PartyHero,
 } from '@/lib/caravan';
 import { advGearRoles } from '@/lib/advGear';
 
@@ -971,8 +998,14 @@ const selectedRift = computed(() => {
     foes: riftPopulation(p, now.value),
     maxFoes: RIFT.maxFoes,
     overflowIn: riftOverflowAt(p) - now.value,
+    /** Ce que la REFERMER rapporte, gardien compris — annoncé avant d’entrer. */
+    clearMana: riftClearMana(p, now.value),
   };
 });
+/** ⚔️🕳️ Ce lieu s’attaque-t-il en GROUPE ? Un camp ou une faille. ⚠️ UNE seule définition,
+ *  lue par le bloc de groupe, la note d’état vide et le risque de départ : trois conditions
+ *  écrites séparément finiraient par ne plus désigner les mêmes lieux. */
+const partyTarget = computed(() => !!selectedCamp.value || !!selectedRift.value);
 const partyHero = ref(false);
 const partyEscort = ref<string[]>([]);
 watch(selected, () => {
@@ -1029,13 +1062,20 @@ const heroForParty = computed<PartyHero | null>(() =>
     : null,
 );
 const partySize = computed(() => partyAdvs.value.length + (partyHeroOn.value ? 1 : 0));
-/** 🎯 % de victoire — le MÊME groupe (`partyAllies`) et le MÊME combat que la résolution,
- *  échantillonnés par `campWinPct` sur des graines qui ne rejouent JAMAIS le vrai combat. */
+/** 🎯 % de victoire — le MÊME groupe (`partyAllies`) et le MÊME parcours que la résolution,
+ *  échantillonnés sur des graines qui ne rejouent JAMAIS le vrai combat (parité, v0.767).
+ *  Sur une faille, c’est la FERMETURE qu’on pronostique (gardien compris) : c’est la seule
+ *  issue qui la referme.
+ *  ⚠️ HORLOGE GROSSIÈRE pour la faille (`coarseNow`) : son effectif dépend de l’instant, et
+ *  une incursion enchaîne jusqu’à 13 combats — à 40 échantillons par seconde, ce serait ~520
+ *  combats rejoués à chaque tick pour un effectif qui bouge sur SEPT JOURS. */
 const partyWin = computed(() => {
   const p = selected.value;
-  const spec = selectedCamp.value;
-  if (!p || !spec || !partySize.value) return null;
+  if (!p || !partySize.value) return null;
   const allies = partyAllies(partyAdvs.value, roadCtx.value, heroForParty.value);
+  if (selectedRift.value) return Math.round(incursionWinPct(p, allies, coarseNow.value, 40) * 100);
+  const spec = selectedCamp.value;
+  if (!spec) return null;
   return Math.round(campWinPct(p, spec, allies, 40) * 100);
 });
 /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
@@ -1056,7 +1096,7 @@ const partyMin = computed(() =>
 const partyRisk = computed(() => {
   const b = base.value;
   const inc = incoming.value;
-  if (!b || !inc || !selectedCamp.value || !partySize.value) return null;
+  if (!b || !inc || !partyTarget.value || !partySize.value) return null;
   const heroNow = heroDefendsNow.value;
   const partants = new Set(partyAdvs.value.map((a) => a.id));
   const restants = freeStable.value.filter((a) => !partants.has(a.id));
@@ -1104,10 +1144,20 @@ const partyAllOn = computed(
 function togglePartyAll() {
   partyEscort.value = partyAllOn.value ? [] : freeStable.value.map((a) => a.id);
 }
+/** Le bouton dit OÙ l’on va : un camp se prend, une faille se referme. */
+const partySendLabel = computed(() => {
+  if (!partySize.value) return 'Choisis ton groupe';
+  return selectedRift.value
+    ? `🌀 Entrer dans la faille (${partySize.value})`
+    : `⚔️ Attaquer le camp (${partySize.value})`;
+});
 async function doSendParty() {
   const uid = auth.user?.id;
   const poi = selected.value;
   if (!uid || !poi || !canSendPartyNow.value) return;
+  // ⚠️ Retenu AVANT l’envoi : `selected` est remis à null au succès, donc le lire après
+  // coup pour choisir le message dirait toujours « camp ».
+  const isRift = !!selectedRift.value;
   busyCaravan.value = true;
   try {
     const refused = await char.sendParty(uid, poi, {
@@ -1123,7 +1173,12 @@ async function doSendParty() {
     $q.notify(
       refused
         ? { type: 'negative', message: `Départ impossible : ${refused}.` }
-        : { type: 'positive', message: '⚔️ Le groupe marche sur le camp.' },
+        : {
+            type: 'positive',
+            message: isRift
+              ? '🌀 Le groupe s’enfonce dans la faille.'
+              : '⚔️ Le groupe marche sur le camp.',
+          },
     );
   } finally {
     busyCaravan.value = false;
@@ -1452,19 +1507,29 @@ const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(p.level, p.distNorm) * 2 * travelMult.value);
 // Ce que le POI rapporte VRAIMENT (crédité par expeCollect) : or, énergie (mines),
 // objets, clés. La poussière n'existe plus (refonte drops-only) → on ne l'annonce plus.
-function poiRewardLabel(p: Poi): string {
-  if (p.type === 'mine') return 'Or 🪙 + énergie ⚡ (récolte)';
-  if (p.type === 'well') return 'Énergie ⚡ en quantité (récolte, sans combat)';
-  if (p.type === 'shrine') return "Pierres d'invocation 🔮 (récolte, sans combat)";
-  if (p.type === 'archive') return 'Clés du Labyrinthe 🗝️ (récolte, sans combat)';
-  // ⚠️ Sans cette ligne, l'épave tombait dans le cas par défaut et s'annonçait comme un
-  // REPAIRE (« pièce de set + pierres ») — l'inverse de ce qu'elle donne vraiment.
-  if (p.type === 'wreck') return 'Ferraille 🔩 en quantité (récolte, sans combat)';
+/** Ce qu’un lieu rapporte, annoncé sur la carte AVANT l’envoi.
+ *  ⚠️ `Record<PoiType, …>` et non une chaîne de `if` avec un cas par défaut : c’est ce
+ *  défaut-là qui a fait annoncer « pièce de set + pierres » pour une ÉPAVE (v0.680), puis
+ *  pour une FAILLE et une MINE DE MANA. Ajouter un POI sans dire ce qu’il donne casse
+ *  désormais la compilation, au lieu de mentir en silence. */
+const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
+  mine: () => 'Or 🪙 + énergie ⚡ (récolte)',
+  well: () => 'Énergie ⚡ en quantité (récolte, sans combat)',
+  shrine: () => "Pierres d'invocation 🔮 (récolte, sans combat)",
+  archive: () => 'Clés du Labyrinthe 🗝️ (récolte, sans combat)',
+  wreck: () => 'Ferraille 🔩 en quantité (récolte, sans combat)',
+  // 💠 Ce qu’une faille laisse en s’effondrant — une récolte, bien moins que la refermer.
+  mana_mine: () => 'Mana 💠 résiduel (récolte, sans combat)',
   // ⚔️ Camp / repaire : ce que rapporte le groupe AVEC ou SANS le héros, selon la faction
   // (règle écrite à côté de `campGroupHaul`, testée contre lui). Jamais de ferraille.
-  if (CAMP_TYPES.has(p.type)) return campRewardLabel(p);
-  if (p.type === 'arena') return 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues';
-  return 'Pièce de set 🧩 + pierres d’invocation 🔮';
+  camp: (p) => campRewardLabel(p),
+  lair: (p) => campRewardLabel(p),
+  arena: () => 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues',
+  // 🕳️ La faille ne paie QUE du mana — jamais d’objet, jamais une autre devise.
+  rift: () => 'Mana 💠 à chaque monstre abattu — prime du gardien si tu la refermes',
+};
+function poiRewardLabel(p: Poi): string {
+  return POI_REWARD[p.type](p);
 }
 
 const canSend = computed(

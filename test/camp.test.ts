@@ -1,31 +1,32 @@
 import { describe, it, expect } from 'vitest';
 import {
   CAMP,
-  HERO_UNIT_ID,
   campBodies,
-  campFightSeed,
   campFoe,
-  campForecastSeed,
   campGroupHaul,
   campHurt,
   campRewardLabel,
   campWinPct,
+  resolveCamp,
+  type PartyInput,
+} from '@/lib/camp';
+import {
   canSendParty,
   normalizeParties,
   PARTY_HERO_BLOCK_LABEL,
-  partyAllies,
   partyClaimRoster,
   partyHeroBlocker,
   partyLegMin,
   partyReport,
   partySendBlocker,
   PARTY_SEND_BLOCK_LABEL,
-  resolveCamp,
   settleParties,
   startParty,
   type ActiveParty,
-  type PartyInput,
-} from '@/lib/camp';
+  partyFightSeed,
+  partyForecastSeed,
+} from '@/lib/party';
+import { HERO_UNIT_ID, partyAllies } from '@/lib/caravan';
 import {
   buildMessage,
   campSpecOf,
@@ -214,18 +215,18 @@ describe('⚰️ campBodies — un ennemi minuscule garde des sommes EXACTES', (
 
 describe('🎲 graines — le pronostic ne rejoue JAMAIS le vrai combat', () => {
   it('⚠️ aucune graine d’échantillon n’égale celle du vrai combat, quelle que soit la graine', () => {
-    const forecast = new Set(Array.from({ length: 500 }, (_, i) => campForecastSeed(i)));
+    const forecast = new Set(Array.from({ length: 500 }, (_, i) => partyForecastSeed(i)));
     expect(forecast.size, 'échantillons répétés').toBe(500);
     const seeds = [0, 1, 11, 119, 2 ** 31, 2 ** 32 - 1, 2 ** 32 - 17, 2 ** 31 - 17];
     const r = mulberry32(99);
     for (let i = 0; i < 3000; i++) seeds.push(Math.floor(r() * 2 ** 32));
     for (let i = 0; i < 2000; i++) seeds.push(i);
-    for (const s of seeds) expect(forecast.has(campFightSeed(s)), `graine ${s}`).toBe(false);
+    for (const s of seeds) expect(forecast.has(partyFightSeed(s)), `graine ${s}`).toBe(false);
     // La PREUVE (et pas seulement l'échantillon) : combat pair, pronostic impair.
-    for (const s of seeds) expect(campFightSeed(s) % 2, `graine ${s}`).toBe(0);
+    for (const s of seeds) expect(partyFightSeed(s) % 2, `graine ${s}`).toBe(0);
     for (const f of forecast) expect(f % 2).toBe(1);
   });
-  it('resolveCamp combat sur campFightSeed ; campWinPct échantillonne campForecastSeed', () => {
+  it('resolveCamp combat sur partyFightSeed ; campWinPct échantillonne partyForecastSeed', () => {
     const inp0 = input({ spec: { faction: 'betes', size: 4 } });
     const allies = units(inp0.escort, inp0.road);
     const group = fuseUnits(allies, 'Groupe');
@@ -234,7 +235,7 @@ describe('🎲 graines — le pronostic ne rejoue JAMAIS le vrai combat', () => 
     let differ = 0;
     for (let s = 1; s <= 40; s++) {
       const o = resolveCamp({ ...inp0, seed: s });
-      const fight = simulateCombat(group, foe, { seed: campFightSeed(s), goldOnWin: 0 });
+      const fight = simulateCombat(group, foe, { seed: partyFightSeed(s), goldOnWin: 0 });
       const d = deriveSkirmish(
         { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
         allies,
@@ -252,7 +253,7 @@ describe('🎲 graines — le pronostic ne rejoue JAMAIS le vrai combat', () => 
     expect(differ, 'graines indiscernables : le test ne prouve rien').toBeGreaterThan(0);
     let w = 0;
     for (let i = 0; i < 60; i++)
-      if (simulateCombat(group, foe, { seed: campForecastSeed(i), goldOnWin: 0 }).win) w++;
+      if (simulateCombat(group, foe, { seed: partyForecastSeed(i), goldOnWin: 0 }).win) w++;
     expect(campWinPct(inp0.poi, inp0.spec, allies, 60)).toBe(w / 60);
   });
 });
@@ -301,7 +302,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         const foe = campFoe(inp.poi, inp.spec);
         const bodies = campBodies(inp.poi, inp.spec);
         const group = fuseUnits(allies, 'Groupe');
-        const fight = simulateCombat(group, foe, { seed: campFightSeed(s), goldOnWin: 0 });
+        const fight = simulateCombat(group, foe, { seed: partyFightSeed(s), goldOnWin: 0 });
         const d = deriveSkirmish(
           { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
           allies,
@@ -459,13 +460,17 @@ describe('🧭 trajet et départ d’un groupe', () => {
       partyLegMin(p, esc, { hero: false, travelMult: 0.8, comptoirLevel: 4, gearSpeed: 0 }),
     ).toBe(adv);
   });
-  it('startParty : le rapport à l’arrivée, le retour à 2 × la jambe, coût d’or seulement avec le héros', () => {
-    const a = startParty(input({ hero: fort(20) }), 1000, 30);
+  it('startParty : le voyage seul — il REÇOIT l’issue, il ne la calcule plus', () => {
+    // ⚠️ La dispatch camp/faille vit au seul chemin d’envoi (le store) : ce constructeur
+    // ne choisit plus la résolution. On lui passe donc celle d’un camp.
+    const i = input({ hero: fort(20) });
+    const a = startParty(i, 1000, 30, resolveCamp(i));
     expect(a.midAt).toBe(1000 + 30 * 60_000);
     expect(a.returnAt).toBe(1000 + 60 * 60_000);
     expect(a.goldCost).toBe(goldCost('camp', 20));
     expect(a.outcome.party).toBeDefined();
-    expect(startParty(input(), 1000, 30).goldCost).toBe(0);
+    const j = input();
+    expect(startParty(j, 1000, 30, resolveCamp(j)).goldCost).toBe(0);
   });
 });
 
@@ -537,7 +542,7 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     const group = fuseUnits(allies, 'Groupe');
     const foe = campFoe(inp.poi, inp.spec);
     for (let s = 1; s <= 20; s++) {
-      const fight = simulateCombat(group, foe, { seed: campFightSeed(s), goldOnWin: 0 });
+      const fight = simulateCombat(group, foe, { seed: partyFightSeed(s), goldOnWin: 0 });
       expect(resolveCamp({ ...inp, seed: s }).party!.win, `graine ${s}`).toBe(fight.win);
     }
     expect(partyAllies(inp.escort, inp.road, null)).toHaveLength(3);
@@ -551,9 +556,12 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     expect(partySendBlocker(poi(), 3, true, 0)).toBeNull();
     expect(partySendBlocker(poi(), 0, true, 0)).toBeNull();
     expect(partySendBlocker(poi(), 0, false, 0)).toBe('empty');
-    expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5)).toBe('notCamp');
+    expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5)).toBe('notTarget');
+    // ⚠️ UNE FAILLE EST UNE CIBLE DE GROUPE depuis que l’incursion existe : la porte
+    // lit `PARTY_TARGETS`, pas `CAMP_TYPES` (le détail de la résolution vit ailleurs).
+    expect(partySendBlocker(poi({ type: 'rift' }), 3, true, 5)).toBeNull();
     expect(canSendParty(poi(), 3, false, 0)).toBe(false);
-    for (const k of ['notCamp', 'empty', 'slots'] as const)
+    for (const k of ['notTarget', 'empty', 'slots'] as const)
       expect(PARTY_SEND_BLOCK_LABEL[k].length).toBeGreaterThan(0);
     expect(PARTY_SEND_BLOCK_LABEL.slots).toContain('créneaux de convoi');
   });
@@ -622,10 +630,10 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
 });
 
 describe('📬 settleParties — un groupe parti sans le héros : rapport à l’arrivée, retrait au retour', () => {
-  const trip = (id: string, sentAt: number, leg = 30): ActiveParty => ({
-    ...startParty(input({ poi: poi({ id: `cp_${id}` }) }), sentAt, leg),
-    id,
-  });
+  const trip = (id: string, sentAt: number, leg = 30): ActiveParty => {
+    const i = input({ poi: poi({ id: `cp_${id}` }) });
+    return { ...startParty(i, sentAt, leg, resolveCamp(i)), id };
+  };
   const msg = (id: string, claimed?: boolean): ExpeditionMessage => ({
     id,
     level: 1,
@@ -765,7 +773,8 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
 
 describe('🧾 normalizeParties — un jsonb malformé ne fait jamais planter', () => {
   it('non-tableau → [] ; entrée incomplète écartée ; entrée valide gardée', () => {
-    const ok: ActiveParty = { ...startParty(input(), 0, 10), id: 'g1' };
+    const base = input();
+    const ok: ActiveParty = { ...startParty(base, 0, 10, resolveCamp(base)), id: 'g1' };
     expect(normalizeParties(null)).toEqual([]);
     expect(normalizeParties({})).toEqual([]);
     const { outcome: _o, ...sansIssue } = ok;

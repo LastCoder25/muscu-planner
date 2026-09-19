@@ -60,7 +60,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { partyReport } from '@/lib/camp';
+import { partyReport } from '@/lib/party';
 import type { PartyResult } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 

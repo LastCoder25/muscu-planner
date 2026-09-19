@@ -1122,11 +1122,11 @@ describe('⚠️ un convoi part SANS le héros', () => {
     ).toBe(false);
   });
 
-  it('⚠️ une FAILLE n’accepte AUCUN envoi tant que l’incursion n’existe pas', () => {
-    // Sans ce refus, l'écran proposait « envoyer le héros » et `resolveOutcome` traitait la
-    // faille comme une MINE D'OR : de l'or et de l'énergie, en silence, sans combat. Rendre
-    // false GRISE le lieu sur la carte, ce qui est exactement ce que le gris veut dire depuis
-    // la v0.738. À retirer quand l'incursion sera branchée.
+  it('🕳️ une FAILLE s’attaque EN GROUPE — jamais en expédition solo, jamais au convoi', () => {
+    // ⚠️ `hero` (l'expédition SOLO) reste refusé, et ce n'est pas un reliquat : c'est le
+    // verrou qui empêche `resolveOutcome` de traiter la faille comme une MINE D'OR (de l'or
+    // et de l'énergie, en silence, sans combat — v0.926). On y entre par `party`, même quand
+    // le héros y va seul, pour que ce soit `resolveIncursion` qui tranche.
     const faille = poi({ type: 'rift' });
     const o = poiOffers(faille, {
       heroAway: false,
@@ -1136,7 +1136,16 @@ describe('⚠️ un convoi part SANS le héros', () => {
     });
     expect(o.hero).toBe(false);
     expect(o.caravan).toBe(false);
-    expect(o.party).toBe(false);
+    expect(o.party).toBe(true);
+    // Sans le héros, un groupe prend un créneau de convoi : plus de créneau, plus de groupe.
+    expect(
+      poiOffers(faille, {
+        heroAway: true,
+        comptoirLevel: 3,
+        advsAvailable: 4,
+        slotsFree: 0,
+      }).party,
+    ).toBe(false);
   });
 
   it('💠 une MINE DE MANA RÉSIDUEL, elle, s’exploite — et au convoi, donc sans énergie', () => {

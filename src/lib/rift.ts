@@ -29,10 +29,23 @@
  * FIGÉ à ce que l'âge dit ; il ne recroît qu'entre deux visites.
  */
 
-import { fuseUnits } from './skirmish';
-import { refEscortUnits } from './caravan';
+import { fuseUnits, skirmishXpShares, type SkirmishUnit } from './skirmish';
+import {
+  caravanWages,
+  missionTravelMult,
+  missionXp,
+  partyAllies,
+  refEscortUnits,
+  type PartyHero,
+  type RoadCompanions,
+} from './caravan';
 import { interpolate } from './proceduralContent';
-import { EXPE } from './expedition';
+import { EXPE, type ExpeditionOutcome, type PartyResult, type Poi } from './expedition';
+// ⚠️ `party.ts` porte la MISSION DE GROUPE (envoi, voyage, rapport) et la doctrine des
+// graines : le pronostic ne rejoue jamais la bataille qui aura lieu. Aucun cycle — ce
+// module-là n'importe pas les failles.
+import { partyFightSeed, partyForecastSeed } from './party';
+import { type Adventurer } from './adventurers';
 import {
   mulberry32,
   offenseOf,
@@ -460,4 +473,169 @@ export function simulateIncursion(
 export function incursionMana(run: RiftRun, level: number): number {
   const foes = riftMana(run.killed, level);
   return run.cleared ? Math.round(foes * (1 + RIFT.bossManaShare)) : foes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚔️ L'INCURSION JOUABLE — on y envoie un GROUPE, comme sur un camp
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Ce qu'on envoie dans une faille.
+ *
+ * ⚠️ MÊME FORME que l'entrée d'un camp, à la `spec` près : toutes deux satisfont
+ * `PartyVoyage`, donc `startParty` construit le voyage des deux sans savoir lequel.
+ * ⚠️ `now` est REQUIS : l'effectif d'une faille est une fonction pure de son ÂGE, il faut
+ * donc dire à quel instant on entre. Il est lu UNE fois, au départ (la faille ne repeuple
+ * pas pendant la session — sinon la porte du gardien serait inatteignable).
+ */
+export interface IncursionInput {
+  poi: Poi;
+  escort: Adventurer[];
+  road: RoadCompanions;
+  hero: PartyHero | null;
+  seed: number;
+  now: number;
+}
+
+/**
+ * Les corps d'une faille en UNITÉS — pour l'XP seulement (qui a abattu quoi).
+ *
+ * ⚠️ DÉRIVÉS de `riftFoe`, la fonction que le COMBAT emploie : une seconde construction
+ * paierait une XP qui ne correspond pas aux monstres réellement affrontés (le défaut que
+ * `troopOf` évite côté camps). Le GARDIEN est le dernier de la liste, et il porte son poids
+ * (`bossWeight`) comme dans le combat.
+ * ⚠️ Leur `level` est celui de la FAILLE : c'est lui qui dit ce qu'un abattu vaut
+ * (`trialXpBase`), exactement comme le niveau d'un corps de camp.
+ */
+export function incursionBodies(rift: RiftLike, now: number): SkirmishUnit[] {
+  const population = riftPopulation(rift, now);
+  const faction = riftSpecOf(rift).faction;
+  const bodies: SkirmishUnit[] = [];
+  for (let i = 0; i <= population; i++) {
+    const isBoss = i === population;
+    const f = riftFoe(rift.level, faction, i, isBoss);
+    bodies.push({
+      id: isBoss ? 'rift_boss' : `rift_${i}`,
+      name: f.name,
+      emoji: f.emoji,
+      level: rift.level,
+      combatant: f,
+    });
+  }
+  return bodies;
+}
+
+/** Les corps tombés : les `killed` premiers, plus le gardien si la faille est refermée.
+ *  ⚠️ L'ORDRE EST LE MÊME que celui du combat (`simulateIncursion` descend la rampe de
+ *  profondeur dans l'ordre) — c'est ce qui rend « les `killed` premiers » exact. */
+export function incursionFoesDown(run: RiftRun, bodies: readonly SkirmishUnit[]): string[] {
+  const down = bodies
+    .slice(0, Math.max(0, Math.min(run.killed, bodies.length - 1)))
+    .map((b) => b.id);
+  if (run.bossDown) down.push(bodies[bodies.length - 1]!.id);
+  return down;
+}
+
+/**
+ * ⚡ RÉSOUDRE UNE INCURSION — l'issue est calculée AU DÉPART, comme toute expédition.
+ *
+ * Ce qu'elle paie et ce qu'elle coûte :
+ * - 💠 **MANA**, et rien d'autre. ⚠️ Une incursion RATÉE paie quand même le mana de ce
+ *   qu'elle a abattu (`incursionMana`) : on ne repart jamais les mains vides, sinon
+ *   « entrer » deviendrait un pari tout-ou-rien sur une activité gratuite. Fermer ajoute
+ *   la prime du gardien.
+ * - ⚠️ **AUCUN OBJET, AUCUNE PIÈCE D'AVENTURIER, AUCUNE AUTRE DEVISE.** La faille EST
+ *   l'usine de mana ; y ajouter une source d'équipement non mesurée est précisément ce que
+ *   le projet s'interdit (les « 0-3 pièces d'ensemble » de la spec sont écartées pour cette
+ *   raison, et leur poids y est mesuré comme symbolique).
+ * - **XP** : socle `missionXp` + part des abattus (`skirmishXpShares`) × `missionTravelMult`,
+ *   la règle EXACTE des camps et des convois. ⚠️ Partagée entre les SEULS aventuriers : l'XP
+ *   du héros vient du sport, et le compter diluerait la part du vivier.
+ * - 🤕 **DÉFAITE → TOUT LE GROUPE À L'INFIRMERIE.** Une incursion perdue est une mort du
+ *   combattant fondu : contrairement à un camp, il n'y a pas de corps à corps distincts à
+ *   attribuer, donc pas de « certains sont tombés ». Aucune perte définitive, comme partout.
+ * - ⚠️ **LE HÉROS N'EST JAMAIS BLESSÉ**, et c'est un écart ASSUMÉ avec la lettre de la spec
+ *   (« défaite du héros → Infirmerie, comme sur un camp ») : vérifié, un camp perdu ne
+ *   blesse PAS le héros — `base.wound` n'est posé que par un SIÈGE perdu. La spec décrivait
+ *   donc une règle qui n'existe pas. On honore son INTENTION (« comme sur un camp ») plutôt
+ *   que sa lettre, ce qui évite d'inventer pour la seule faille une punition que ni les
+ *   camps ni les expéditions n'appliquent. Ce que l'on paie déjà : le temps du héros, son
+ *   exclusivité, le péage d'or et les salaires.
+ * - **Salaires** à l'encaissement (`caravanWages`), comme un camp.
+ *
+ * ⚠️ `kills` est VIDE (combat fondu : aucune attribution par aventurier n'est calculable) —
+ * `PartyReportView` masque déjà une colonne d'abattus à zéro.
+ */
+export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
+  const { poi, escort, hero, seed, now } = input;
+  const allies = partyAllies(escort, input.road, hero);
+  const group = fuseUnits(allies, 'Groupe');
+  const run = simulateIncursion(group, poi, now, partyFightSeed(seed));
+
+  const bodies = incursionBodies(poi, now);
+  const shares = skirmishXpShares(escort, bodies, { foesDown: incursionFoesDown(run, bodies) });
+  const travel = missionTravelMult(poi);
+  const xp: Record<string, number> = {};
+  for (const a of escort) xp[a.id] = missionXp(a, poi) + Math.round((shares[a.id] ?? 0) * travel);
+
+  const mana = incursionMana(run, poi.level);
+  const party: PartyResult = {
+    hero: !!hero,
+    faction: riftSpecOf(poi).faction,
+    escort: escort.map((a) => a.id),
+    win: run.cleared,
+    foes: run.population,
+    slain: run.killed,
+    kills: {},
+    heroKills: 0,
+    xp,
+    hurt: run.cleared ? [] : escort.map((a) => a.id),
+    advGear: [],
+    wages: caravanWages(escort, poi),
+    journal: run.journal,
+  };
+
+  const tag = `${run.killed}/${run.population} abattus · +${mana} 💠`;
+  return {
+    win: run.cleared,
+    gold: 0,
+    energy: 0,
+    summonStones: 0,
+    scrap: 0,
+    mana,
+    item: null,
+    items: [],
+    key: 0,
+    reconBonus: 0,
+    returnMult: 1,
+    text: run.cleared
+      ? `🌀 Faille refermée — le gardien est tombé. ${tag}`
+      : `💀 La faille a eu le dessus. ${tag}`,
+    party,
+  };
+}
+
+/**
+ * 🎯 % de fermeture annoncé AVANT l'envoi — le MÊME parcours que la résolution
+ * (`simulateIncursion`), rejoué sur des graines dérivées.
+ *
+ * ⚠️ JAMAIS la graine du vrai combat : `partyForecastSeed` est toujours IMPAIRE,
+ * `partyFightSeed` toujours PAIRE (doctrine v0.767). Le pronostic est calculé avant que la
+ * graine du départ existe, donc il ne peut pas en révéler l'issue.
+ * ⚠️ On pronostique la FERMETURE (gardien compris), pas « survivre un moment » : c'est la
+ * seule issue qui referme la faille et empêche son armée de sortir.
+ */
+export function incursionWinPct(
+  rift: RiftLike,
+  allies: readonly SkirmishUnit[],
+  now: number,
+  samples: number,
+): number {
+  if (!allies.length) return 0;
+  const group = fuseUnits(allies, 'Groupe');
+  const n = Math.max(1, samples);
+  let w = 0;
+  for (let s = 0; s < n; s++)
+    if (simulateIncursion(group, rift, now, partyForecastSeed(s)).cleared) w++;
+  return w / n;
 }

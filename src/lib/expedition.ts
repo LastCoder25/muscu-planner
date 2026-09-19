@@ -85,6 +85,12 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
 /** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
  *  repaire = troupe plus grande + champion. */
 export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair']);
+/** 🎯 Les POI qu'on attaque EN GROUPE (héros et/ou aventuriers) : les camps de faction
+ *  ET les failles. ⚠️ DISTINCT de `CAMP_TYPES` : celui-ci dit « on y envoie un groupe »,
+ *  l'autre dit « ça se résout comme un camp ». Une faille s'envoie pareil et se résout
+ *  autrement (`resolveIncursion` : attrition, gardien, mana). Dérivé de `CAMP_TYPES` pour
+ *  qu'un nouveau type de camp ouvre l'envoi de groupe tout seul. */
+export const PARTY_TARGETS: ReadonlySet<PoiType> = new Set<PoiType>([...CAMP_TYPES, 'rift']);
 export const CAMP_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
 /** Taille d'un camp = sa FORCE, en aventuriers de RÉFÉRENCE (cf. `campFoe`). Un gros
  *  repaire en demande nettement plus que trois. ⚠️ MESURÉ, gardé tel quel : les bandes de
@@ -105,7 +111,6 @@ export interface CampSpec {
 export interface PartyResult {
   hero: boolean;
   faction: RaidFaction;
-  size: number;
   /** Ids des aventuriers envoyés (le héros n'y figure pas). */
   escort: string[];
   win: boolean;
