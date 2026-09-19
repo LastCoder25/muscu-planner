@@ -240,11 +240,17 @@ avec sa série et son jour de grâce). Zéro nouveau système, et c'est la norme
 joueur** : celui qui n'a pas l'énergie d'entrer dans une faille encaisse le siège et
 touche quand même du mana. Même règle que la spec des failles.
 
-⚠️ **LE MANA EST AUSSI LE PÉAGE DES INCURSIONS** (décidé côté failles : l'entrée se paie en
-mana **seul**, jamais en énergie — on ne doit pas être à sec le jour où il faut défendre).
-Donc **deux puits se disputent la même monnaie**, et c'est un vrai arbitrage : « je tire, ou
-j'entre ? ». ⚠️ **À CALIBRER, bloquant** : le coût d'entrée doit rester nettement inférieur
-au mana qu'une faille rapporte, sinon les incursions mangent tout et on ne tire jamais.
+✅ **ENTRER DANS UNE FAILLE NE COÛTE RIEN** (décidé côté failles : ni mana, ni énergie — « la
+faille est l'usine de mana »). Donc **le gacha est le SEUL puits du mana** : une monnaie, une
+destination, aucun second barème à tenir d'accord. Ce qui se paie pour entrer, c'est le
+**temps et l'exclusivité du héros**.
+
+⚠️ **CONSÉQUENCE À NE PAS PERDRE DE VUE : le TAUX D'APPARITION d'une faille devient le
+robinet du gacha.** Sans coût d'entrée, le mana coule au **rythme du spawn** — c'est donc lui
+qui règle le rythme des tirages, et sa calibration est bloquante. ✅ En revanche c'est un
+robinet **PLAT** (3 à 6 failles quel que soit le niveau), l'inverse des deux qu'il a fallu
+diviser parce qu'ils étaient linéaires en niveau : la Dynamo (÷8, v0.822) et la Porte du
+Labyrinthe (÷4, v0.794).
 
 ⚠️ **PAS DE BÂTIMENT QUI PRODUIT DU MANA.** C'est la leçon de la **Dynamo de faille**
 (v0.822) : une production **linéaire en niveau** finit toujours par dépasser le sport —
