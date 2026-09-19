@@ -270,7 +270,7 @@
               >👾 {{ selectedRift.foes }}/{{ selectedRift.maxFoes }}</span
             >
             <span class="sh-chip" title="À maturité, elle déborde et s'effondre en mine de mana"
-              >⏳ {{ fmtMs(selectedRift.overflowIn) }}</span
+              >⏳ {{ formatDuration(selectedRift.overflowIn) }}</span
             >
           </div>
           <p class="sh-note">
@@ -291,7 +291,7 @@
             <span class="sh-chip" title="La force du camp, comptée en aventuriers de référence"
               >💪 ≈ {{ selectedCamp.size }} aventurier{{ selectedCamp.size > 1 ? 's' : '' }}</span
             >
-            <span v-if="partySize" class="sh-chip">⏱️ {{ fmtMin(partyMin) }}</span>
+            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
             <span class="sh-chip">⚡ 0</span>
             <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
               >🎯 {{ partyWin }}%</span
@@ -375,7 +375,7 @@
         </template>
         <template v-else-if="offers.hero">
           <div class="sh-row">
-            <span class="sh-chip">⏱️ {{ fmtMin(roundTripMin(selected)) }}</span>
+            <span class="sh-chip">⏱️ {{ formatDurationMin(roundTripMin(selected)) }}</span>
             <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
             <span v-if="selected.type === 'arena'" class="sh-chip"
               >🌊 ~{{ arenaWaves }} vagues</span
@@ -399,8 +399,8 @@
           </button>
         </template>
         <div v-else-if="heroHealIn > 0" class="sh-away">
-          🤕 Ton héros est à l’infirmerie — de retour dans {{ fmtMs(heroHealIn) }}. Un convoi, lui,
-          peut partir sans lui.
+          🤕 Ton héros est à l’infirmerie — de retour dans {{ formatDuration(heroHealIn) }}. Un
+          convoi, lui, peut partir sans lui.
         </div>
         <div v-else class="sh-away">
           🧭 Ton héros est en expédition — un convoi, lui, peut partir sans lui.
@@ -411,7 +411,7 @@
         <template v-if="offers.caravan">
           <div v-if="offers.hero" class="car-sep">ou bien</div>
           <div class="car-row">
-            <span class="sh-chip">🐫 {{ fmtMin(caravanMin) }}</span>
+            <span class="sh-chip">🐫 {{ formatDurationMin(caravanMin) }}</span>
             <span class="sh-chip">⚡ 0</span>
             <span class="sh-chip">{{ freeAdvs.length }} dispo · {{ vansLeft }} convoi(s)</span>
           </div>
@@ -600,6 +600,7 @@ import {
 } from '@/lib/raid';
 import { ADV_UNAVAILABLE_LABEL, advAvailable, advUnavailableReason } from '@/lib/adventurers';
 import { characterRank, rankStarStr } from '@/lib/characterRank';
+import { formatDuration, formatDurationMin } from '@/lib/duration';
 import { RIFT, riftOverflowAt, riftPopulation, riftSpecOf } from '@/lib/rift';
 import {
   CARAVAN,
@@ -1187,7 +1188,10 @@ const trips = computed(() => {
       kind: 'hero',
       who: '🧝',
       poi: a.poi,
-      time: h.phase === 'done' ? 'rentré' : fmtMs(back ? h.remainTotalMs : h.remainToObjectiveMs),
+      time:
+        h.phase === 'done'
+          ? 'rentré'
+          : formatDuration(back ? h.remainTotalMs : h.remainToObjectiveMs),
       pct: heroProg.value.overall * 100,
       back,
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} aventurier(s)` : ''}`,
@@ -1200,7 +1204,7 @@ const trips = computed(() => {
       kind: 'van',
       who: '🐫',
       poi: v.poi,
-      time: fmtMs(back ? v.at.remainTotalMs : v.at.remainToObjectiveMs),
+      time: formatDuration(back ? v.at.remainTotalMs : v.at.remainToObjectiveMs),
       pct: v.prog.overall * 100,
       back,
       title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort}`,
@@ -1213,7 +1217,7 @@ const trips = computed(() => {
       kind: 'van',
       who: '⚔️',
       poi: g.poi,
-      time: fmtMs(back ? g.at.remainTotalMs : g.at.remainToObjectiveMs),
+      time: formatDuration(back ? g.at.remainTotalMs : g.at.remainToObjectiveMs),
       pct: g.prog.overall * 100,
       back,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} aventurier${g.escort > 1 ? 's' : ''}`,
@@ -1577,15 +1581,6 @@ onUnmounted(() => {
 });
 
 // ── Formatage durées ──
-function fmtMs(ms: number): string {
-  const m = Math.max(0, Math.round(ms / 60000));
-  if (m < 60) return `${m} min`;
-  const h = Math.floor(m / 60);
-  return `${h} h ${String(m % 60).padStart(2, '0')}`;
-}
-function fmtMin(min: number): string {
-  return fmtMs(min * 60000);
-}
 </script>
 
 <style scoped lang="scss">

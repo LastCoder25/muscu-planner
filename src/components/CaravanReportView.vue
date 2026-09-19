@@ -8,7 +8,7 @@
         <div class="cr-title font-display">
           {{ POI_LABEL[van.poi.type] }} · niv {{ van.poi.level }}
         </div>
-        <div class="cr-sub">⏱ {{ fmtDuration(r.travelMs) }} de voyage (aller-retour)</div>
+        <div class="cr-sub">⏱ {{ formatDuration(r.travelMs) }} de voyage (aller-retour)</div>
       </div>
     </div>
 
@@ -78,6 +78,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { caravanReport, type Caravan } from '@/lib/caravan';
+import { formatDuration } from '@/lib/duration';
 import { POI_EMO, POI_LABEL } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 
@@ -94,11 +95,6 @@ const props = withDefaults(
 
 const r = computed(() => caravanReport(props.van, props.roster));
 
-function fmtDuration(ms: number): string {
-  const m = Math.max(0, Math.round(ms / 60000));
-  if (m < 60) return `${m} min`;
-  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`;
-}
 function fmtRate(n: number): string {
   return (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString('fr-FR');
 }

@@ -973,6 +973,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { formatDuration } from '@/lib/duration';
 import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
@@ -1733,12 +1734,14 @@ const scoutHint = computed(() => {
  *  Réservé à la clarté maximale : c'est la dernière chose que le renseignement achète. */
 
 // ── Compteurs ──
+/** ⚠️ Le FORMAT vient de la lib (`formatDuration`) : quatre copies de la même fonction
+ *  vivaient dans l'app, et aucune ne connaissait les JOURS — or le gel de production et
+ *  la péremption du champ de bataille atteignent 24 h. Ce qui reste ICI, c’est ce qui
+ *  appartient à un DÉLAI : le préfixe, et le fait qu’un délai échu se dise « maintenant »
+ *  plutôt que « 0 min ». */
 function fmtDelay(ms: number): string {
   if (ms <= 0) return 'maintenant';
-  const m = Math.round(ms / 60000);
-  if (m < 60) return `dans ${m} min`;
-  const h = Math.floor(m / 60);
-  return `dans ${h} h ${String(m % 60).padStart(2, '0')}`;
+  return `dans ${formatDuration(ms)}`;
 }
 const arriveIn = computed(() => (raid.value ? fmtDelay(raid.value.arrivesAt - now.value) : ''));
 /** Le préavis que la Tour donnera — la SEULE chose qu'on ait le droit d'annoncer avant

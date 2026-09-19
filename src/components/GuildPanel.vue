@@ -327,7 +327,7 @@
            l'aventurier est immobilisé pendant tout ce temps. La découvrir après coup,
            c'est découvrir le prix après avoir payé. -->
       <div v-else-if="promoAdv" class="g-cost">
-        🎓 Formation : <b>{{ fmtMs(promoMs) }}</b> — il sera indisponible pendant ce temps.
+        🎓 Formation : <b>{{ formatDuration(promoMs) }}</b> — il sera indisponible pendant ce temps.
       </div>
       <div v-if="promoAdv" class="g-choices">
         <button
@@ -763,6 +763,7 @@
 // aventurier de manga »), et c'est aussi ce qui rend la barre indispensable.
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
+import { formatDuration } from '@/lib/duration';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
@@ -1642,10 +1643,6 @@ const promoOffers = computed(() => (promoAdv.value ? classChoices(promoAdv.value
 const promoMs = computed(() =>
   promoAdv.value ? trainMsFor(trainingLevel.value, promoAdv.value.path.length) : 0,
 );
-const fmtMs = (ms: number) => {
-  const m = Math.round(ms / 60_000);
-  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
-};
 
 function openPromo(a: Adventurer) {
   promoAdv.value = a;
