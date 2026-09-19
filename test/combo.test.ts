@@ -54,6 +54,8 @@ import {
   comboCompleteInTime,
   comboEndDate,
   legsByName,
+  legAllDone,
+  legsDoneLast,
 } from '@/lib/combo';
 
 const set = (reps: number, weight?: number, date = '2026-01-05'): ComboSet => ({
@@ -1272,5 +1274,58 @@ describe('🔤 l’ordre d’affichage des exos : ALPHABÉTIQUE', () => {
     // « Pompes 2 » passe avant « Pompes 10 ».
     expect(noms([leg('Fentes'), leg('Élévations')])).toEqual(['Élévations', 'Fentes']);
     expect(noms([leg('Pompes 10'), leg('Pompes 2')])).toEqual(['Pompes 2', 'Pompes 10']);
+  });
+});
+
+describe('📑 les exos FINIS passent en bas de liste', () => {
+  // Cible 4 séries → objectif à 4, palier MAXIMAL à 5 (`legTierMarks`).
+  const ex = (exercise_name: string, faites: number): ComboLeg => ({
+    slot: 'push',
+    exercise_id: exercise_name,
+    exercise_name,
+    rep_weight: 1,
+    target: 4,
+    sets: Array.from({ length: faites }, () => set(10)),
+  });
+  const noms = (x: readonly ComboLeg[]) => legsDoneLast(x).map((l) => l.exercise_name);
+
+  it('⚠️ « FINI » = LE PALIER MAXIMAL, jamais l’objectif', () => {
+    // C'est LA décision de cette feature. La zone bonus jusqu'à 120 % est rendue visible
+    // exprès (v0.646/0.647) et une série en plus y vaut autant qu'une série normale :
+    // reléguer un exo dès 100 % éteindrait précisément les séries qu'on veut voir faire.
+    expect(legComplete(ex('Pompes', 4))).toBe(true); //  objectif atteint…
+    expect(legAllDone(ex('Pompes', 4))).toBe(false); // … mais il reste la zone bonus
+    expect(legAllDone(ex('Pompes', 5))).toBe(true); //   maximal franchi : plus rien à gagner
+  });
+
+  it('un exo au maximal descend, quelle que soit sa place dans l’alphabet', () => {
+    // Abdos et Dips sont finis : ils descendent, même s'ils ouvrent l'alphabet.
+    const src = [ex('Abdos', 5), ex('Squat', 0), ex('Dips', 5), ex('Fentes', 2)];
+    expect(noms(src)).toEqual(['Fentes', 'Squat', 'Abdos', 'Dips']);
+  });
+
+  it('l’ALPHABET reste la seule règle au sein de chaque groupe', () => {
+    // `legsDoneLast` APPELLE `legsByName` : en réécrire un second tri ici ferait deux ordres
+    // pour la même liste — le défaut que la v0.903 venait de fermer.
+    const src = [ex('Squat', 5), ex('Tractions', 0), ex('Abdos', 5), ex('Dips', 0)];
+    expect(noms(src)).toEqual(['Dips', 'Tractions', 'Abdos', 'Squat']);
+  });
+
+  it('un exo ne bouge QU’UNE FOIS, au franchissement du maximal', () => {
+    // C'est ce qui rend acceptable de réordonner une liste rendue stable POUR sa stabilité :
+    // saisir des séries ne déplace rien tant qu'on n'a pas franchi le palier.
+    // ⚠️ « Abdos » ouvre l'alphabet : si on le mettait avec « Squat » (déjà 2e), son passage
+    // en bas serait INVISIBLE et le test passerait quoi qu'il arrive.
+    for (const n of [0, 1, 2, 3, 4]) {
+      expect(noms([ex('Abdos', n), ex('Squat', 0)])).toEqual(['Abdos', 'Squat']);
+    }
+    expect(noms([ex('Abdos', 5), ex('Squat', 0)])).toEqual(['Squat', 'Abdos']); // il descend
+  });
+
+  it('ne touche PAS la source, et garde tous les exos', () => {
+    const src = [ex('Squat', 5), ex('Dips', 0)];
+    const copie = [...src];
+    expect(legsDoneLast(src)).toHaveLength(2);
+    expect(src).toEqual(copie);
   });
 });

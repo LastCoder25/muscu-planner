@@ -160,6 +160,24 @@ export function legsByName<T extends { exercise_name: string }>(legs: readonly T
     a.exercise_name.localeCompare(b.exercise_name, 'fr', { numeric: true, sensitivity: 'base' }),
   );
 }
+
+/** 📑 L'ORDRE D'UN 360 EN COURS : les exos FINIS passent en bas (demandé par l'utilisateur).
+ *
+ *  ⚠️ « FINI » = LE PALIER MAXIMAL, jamais l'objectif. La zone bonus jusqu'à 120 % est rendue
+ *  visible exprès (cases pointillées, marge hachurée — v0.646/0.647) et une série en plus y
+ *  vaut autant qu'une série normale : reléguer à 100 % éteindrait précisément les séries qu'on
+ *  veut encore voir faire. D'où `legAllDone`, et pas `legComplete`.
+ *
+ *  ⚠️ ELLE APPELLE `legsByName` : l'alphabet reste la SEULE règle de tri, appliquée au sein de
+ *  chaque groupe. En réécrire une seconde ici ferait deux ordres pour la même liste — le défaut
+ *  que la v0.903 venait de fermer.
+ *
+ *  ⚠️ Ça réordonne une liste rendue stable POUR sa stabilité (v0.903), et c'est acceptable
+ *  parce qu'un exo ne bouge QU'UNE FOIS, au franchissement du maximal — pas à chaque série. */
+export function legsDoneLast(legs: readonly ComboLeg[]): ComboLeg[] {
+  const byName = legsByName(legs);
+  return [...byName.filter((l) => !legAllDone(l)), ...byName.filter(legAllDone)];
+}
 /** Libellé de l'unité de l'objectif (séries / reps / sec) selon le mode.
  *
  *  ⚠️ NE PAS l'unifier avec `challengeValueUnit` (petits défis), malgré la ressemblance :
@@ -371,6 +389,16 @@ export function legTier(l: ComboLeg): ComboTier {
 /** Part CUMULÉE de la prime de l'exo débloquée par le palier atteint (0..1). */
 export function legTierShare(l: ComboLeg): number {
   return COMBO_TIER_SHARE[legTier(l)];
+}
+
+/** Tout est fait sur cet exo : il a franchi son palier MAXIMAL, il n'y a plus rien à y gagner.
+ *
+ *  Prédicat NOMMÉ pour que les écrans n'écrivent pas chacun `legTier(l) === 'max'` : c'est ce
+ *  seuil-là qui décide du grisage ET du renvoi en bas de liste (`legsDoneLast`), et les deux
+ *  doivent dire la même chose. À ne pas confondre avec `legComplete` (l'OBJECTIF, 100 %), qui
+ *  laisse la zone bonus ouverte. */
+export function legAllDone(l: ComboLeg): boolean {
+  return legTier(l) === 'max';
 }
 
 /** Repères AFFICHÉS des trois paliers d'un exo (nombre de séries/reps à atteindre).

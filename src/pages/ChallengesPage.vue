@@ -417,7 +417,12 @@
             />
           </div>
           <ComboTierLegend v-if="activeComboLegs.some((l) => legMode(l) === 'sets')" />
-          <div v-for="leg in activeComboLegs" :key="leg.exercise_id" class="combo-leg">
+          <div
+            v-for="leg in activeComboLegs"
+            :key="leg.exercise_id"
+            class="combo-leg"
+            :class="{ done: legAllDone(leg) }"
+          >
             <!-- Même en-tête que la fiche du 360 : c’est souvent ICI qu’on consulte son
                  défi en cours, pas sur /combo/:id. -->
             <ComboLegHead
@@ -586,7 +591,8 @@ import {
   legSetsDone,
   legDone,
   legComplete,
-  legsByName,
+  legAllDone,
+  legsDoneLast,
   legTierMarks,
   legSegZone,
   legBarGeometry,
@@ -710,10 +716,10 @@ function bar(l: ComboLeg): { objPct: number; fillPct: number; overPct: number } 
 function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
 }
-// Ordre ALPHABÉTIQUE (`legsByName`) : cet onglet triait par RESTANT quand la fiche du défi
-// triait par fraction faite — le même défi ne listait pas ses exos dans le même ordre aux
-// deux endroits, et les deux se réordonnaient pendant la saisie.
-const activeComboLegs = computed(() => legsByName(activeCombo.value?.legs ?? []));
+// Ordre ALPHABÉTIQUE, les exos FINIS en bas (`legsDoneLast` — la MÊME règle que la fiche du
+// défi ; avant la v0.903 cet onglet triait par RESTANT et la fiche par fraction faite, donc le
+// même défi ne listait pas ses exos dans le même ordre aux deux endroits).
+const activeComboLegs = computed(() => legsDoneLast(activeCombo.value?.legs ?? []));
 const comboList = computed(() =>
   comboStore.list
     .filter((c) => c.status === comboTab.value)
@@ -1456,6 +1462,14 @@ onMounted(async () => {
   border-radius: 12px;
   padding: 7px 10px;
   margin-bottom: 6px;
+}
+/* ✅ Exo FINI (palier maximal franchi) : renvoyé en bas de liste et grisé — plus rien à y
+   gagner. Même langage que la fiche du 360 (`.leg.done`) : le même exo doit se lire pareil
+   aux deux endroits. L'opacité ne descend pas plus bas (ça reste du travail accompli, et
+   l'historique des séries s'ouvre toujours) et rien n'est rendu inerte : on peut corriger. */
+.combo-leg.done {
+  background: var(--surface-2);
+  opacity: 0.62;
 }
 /* Barre + actions sur une ligne (compact). */
 .cl-bottom {

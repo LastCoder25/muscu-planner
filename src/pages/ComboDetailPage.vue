@@ -85,7 +85,7 @@
         v-for="leg in orderedLegs"
         :key="leg.exercise_id"
         class="leg"
-        :class="{ ok: legComplete(leg) }"
+        :class="{ ok: legComplete(leg), done: legAllDone(leg) }"
       >
         <!-- Même en-tête que l'onglet 🎯 Défi 360. La vignette d'exécution remplace l'emoji
              du groupe quand l'exo a une illustration. -->
@@ -240,7 +240,6 @@ import { useGameFx } from '@/composables/useGameFx';
 import {
   comboProgressPct,
   fmtPct,
-  legTier,
   legTierMarks,
   legSegZone,
   legBarGeometry,
@@ -251,7 +250,8 @@ import {
   type ComboChallenge,
   legDone,
   legComplete,
-  legsByName,
+  legAllDone,
+  legsDoneLast,
   legMode,
   legSets,
   legLastReps,
@@ -311,11 +311,11 @@ function bar(l: ComboLeg): { objPct: number; fillPct: number; overPct: number } 
 function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
 }
-const legsAtMax = computed(() => c.value?.legs.filter((l) => legTier(l) === 'max').length ?? 0);
-// Ordre d'affichage : ALPHABÉTIQUE (`legsByName` — la MÊME règle que l'onglet 🎯 et la
-// préparation de séance, qui triaient chacun autrement). Le tri par avancement réordonnait
-// la liste PENDANT la saisie : on perdait sa place au milieu d'une séance.
-const orderedLegs = computed(() => legsByName(c.value?.legs ?? []));
+const legsAtMax = computed(() => c.value?.legs.filter(legAllDone).length ?? 0);
+// Ordre d'affichage : ALPHABÉTIQUE, les exos FINIS en bas (`legsDoneLast` — la MÊME règle
+// que l'onglet 🎯 ; avant la v0.903 chaque écran triait autrement, et un tri par avancement
+// réordonnait la liste PENDANT la saisie). « Fini » = palier MAXIMAL, pas l'objectif.
+const orderedLegs = computed(() => legsDoneLast(c.value?.legs ?? []));
 
 function fmtDM(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -764,6 +764,17 @@ onMounted(async () => {
 }
 .leg.ok {
   border-color: var(--d1);
+}
+/* ✅ Exo FINI (palier maximal franchi) : il descend en bas de liste (`legsDoneLast`) et se
+   grise — plus rien à y gagner. Déclaré APRÈS `.ok` : un exo au maximal est aussi complet,
+   donc le vert « objectif atteint » ne doit pas continuer de l'appeler.
+   ⚠️ L'opacité ne descend pas plus bas : ça reste du travail accompli, qu'on doit pouvoir
+   relire (l'historique des séries s'ouvre toujours). Et la CARTE seule est atténuée, pas ses
+   boutons en `pointer-events` : on peut encore corriger une série saisie par erreur. */
+.leg.done {
+  border-color: var(--line-soft);
+  background: var(--surface-2);
+  opacity: 0.62;
 }
 .bar {
   height: 8px;
