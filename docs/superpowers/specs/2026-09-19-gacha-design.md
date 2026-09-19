@@ -229,7 +229,14 @@ de compétence**. Rien à inventer, et l'écran sait déjà l'afficher.
 ## 💎 D'OÙ VIENNENT LES PIERRES DE MANA
 
 **Décidé** : des **failles** (en fermer une en rend), des **monstres tués** — dans la
-faille, sur la route, **et en défense de la base** — et d'un **tirage gratuit par jour**.
+faille, sur la route, **et en défense de la base** —, des **mines de mana résiduel** que
+laisse une faille qui a débordé, et d'un **tirage gratuit par jour**.
+
+✅ **LA MINE RÉSIDUELLE OUVRE LE MANA AU JOUEUR QUI NE COMBAT PAS** : c'est un lieu de
+**récolte** (`HARVEST_TYPES`), donc récoltable **par convoi**, donc **sans énergie** — la
+boucle conçue pour le joueur peu sportif (v0.725). ⚠️ Mais elle naît d'une faille **ignorée**,
+et **fermer doit rester nettement plus payant** que laisser déborder : sinon le robinet du
+gacha serait alimenté par la passivité (invariant à encoder, cf. la spec des failles).
 
 ✅ **Le tirage quotidien a déjà son emplacement** : `claimDailyLogin` (bonus de connexion,
 avec sa série et son jour de grâce). Zéro nouveau système, et c'est la norme du genre.

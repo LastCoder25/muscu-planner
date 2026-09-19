@@ -21,6 +21,8 @@ ou encaisser. C'est aussi l'**usine de pierres de mana**, la monnaie du gacha de
 | Nombre de failles     | **3 à 6 simultanées**, de rangs variés                                              |
 | Maturation            | **7 jours** avant qu'une faille crache son armée                                    |
 | Effectif d'une faille | **croît avec son ÂGE**, plafond à 7 j — elle ENGENDRE, on ne l'épuise pas           |
+| Courbe de croissance  | **ACCÉLÉRÉE vers la fin** (plancher + exposant > 1) — le gros du butin est à la fin |
+| Après le débordement  | elle **s'effondre** et laisse une **mine de mana résiduel** (lieu de récolte)       |
 | Tuer dedans           | ⚠️ **n'affaiblit PAS l'armée à venir** (simplification demandée) — ça paie en mana  |
 | Laisser une faille    | **renfort de menace ×1,3** (mesuré) **+ harcèlement des convois** (cf. plus bas)    |
 | Coût d'entrée         | **GRATUITE** — ni mana ni énergie ; ce qu'on paie, c'est le **temps du héros**      |
@@ -113,11 +115,54 @@ une punition.
 version précédente promettait « une incursion ratée n'est jamais perdue, elle prépare la
 défense » — cette promesse disparaît, et le mana la remplace. C'est plus simple et ça suffit.
 
-⚠️ **RESTE À TRANCHER : que devient la faille APRÈS avoir craché ?** Deux lectures. (a) Elle
-**s'effondre** — la pression accumulée est relâchée, une place se libère, et le joueur qui
-l'a ignorée paie **une fois** ; c'est cohérent avec « un POI expire », le garde‑fou déjà en
-place, et avec la **règle 1 des sièges**. (b) Elle **repart à zéro** et crache tous les 7
-jours — plus de pression, mais ⚠️ elle punit l'absence **en boucle**. **(a) recommandé.**
+### 📐 La courbe : ACCÉLÉRÉE vers la fin
+
+**Décidé.** L'effectif suit une puissance — `plancher + (max − plancher) × (âge/7j)^k`, avec
+**k > 1** (≈ 2 à éprouver). ⚠️ Le projet a déjà cette langue : `travelFactor` est
+super‑linéaire (`TRAVEL_EXP` 1,4) pour que s'éloigner paie **plus que proportionnellement**.
+
+✅ **C'est ce qui concentre la tension sur l'échéance.** Une courbe **linéaire** rendrait
+chaque jour équivalent — donc aucune décision. Accélérée, **le gros du butin est dans les
+deux derniers jours** : attendre devient franchement tentant **et** franchement dangereux.
+
+⚠️ **D'OÙ LE PLANCHER, et ce n'est pas un détail** : sans lui, une faille du jour 1 est
+quasi vide et « la faille est l'usine de mana » sonne faux au début. C'est l'analogue direct
+de la règle « aucun niveau mort du 0 au 100 » (v0.731) et du `poiFloor` de la carte — un jour
+qui ne rapporte rien est un jour mort. **Plancher + exposant, les deux à mesurer ensemble.**
+
+✅ **Ça ne touche PAS la calibration du siège** : l'armée qui sort vaut ce que la faille
+contient **à maturité**, c'est‑à‑dire le **max** — donc le ×1,3 déjà mesuré tient, quelle que
+soit la forme de la courbe avant.
+
+### ⛏️ Après le débordement : elle s'effondre et laisse une MINE DE MANA RÉSIDUEL
+
+**Décidé.** Une faille qui a craché son armée **disparaît** — la pression est relâchée, une
+place se libère, le joueur qui l'a ignorée paie **une fois** (règle 1 des sièges : on ne
+punit pas l'absence en boucle) — et elle laisse sur la carte une **mine de mana résiduel**.
+
+✅ **ZÉRO MÉCANIQUE NOUVELLE : c'est un type de RÉCOLTE de plus** (`HARVEST_TYPES`, aux côtés
+de la mine d'or, du puits, du sanctuaire, des archives et de l'épave) — donc « aucun combat,
+aucun échec » (v0.658), et `harvestYield` est **déjà partagé** par le héros, les **caravanes**
+et les camps : le nouveau type se branche sur les trois d'un coup.
+
+✅ **ET ÇA OUVRE LE MANA AU JOUEUR QUI NE COMBAT PAS.** Jusqu'ici la monnaie du gacha venait
+du combat (faille, route, défense). Une mine résiduelle se récolte **par convoi**, donc sans
+énergie — et les convois sont précisément la boucle conçue pour le joueur peu sportif
+(v0.725). Élégant : **la punition et la consolation sont le même objet.**
+
+⚠️ **LE PIÈGE À NE PAS RATER — la consolation ne doit JAMAIS devenir la stratégie.** Si
+ignorer une faille produit une mine qu'un convoi récolte gratuitement, l'optimum pourrait
+devenir « n'entrer dans aucune faille, encaisser le pari du siège, et farmer les mines ». Le
+robinet du gacha serait alors alimenté par la **passivité**. **Invariant à encoder en test**,
+dans la langue du projet (« l'épave reste la source de POINTE », « la ferraille plus dure que
+l'or ») : **le mana par jour d'une faille FERMÉE doit rester nettement supérieur à celui
+d'une faille ignorée + sa mine**. La mine expire comme tout POI.
+
+⚠️ **MA LECTURE, à corriger si elle est fausse** : la mine ne naît que d'une faille
+**IGNORÉE** (elle a craché, elle est « épuisée », du mana suinte). Une faille **fermée** au
+boss ne laisse rien — on en a déjà tout tiré. C'est cette asymétrie qui garde la consolation
+à sa place ; l'autre lecture (toute faille laisse une mine) affaiblirait encore l'intérêt de
+fermer.
 
 ## Le renfort de menace : ×1,3 (mesuré)
 
@@ -261,11 +306,13 @@ en montant. C'est exactement l'inverse des deux robinets qu'il a fallu corriger 
 - **Le rayon d'irradiation** d'une faille ouverte — ⚠️ à MESURER (combien de lieux de
   récolte restent hors rayon avec 3 à 6 failles), pas à choisir : c'est lui qui décide si le
   harcèlement est un choix ou une taxe.
-- **Ce que devient la faille après avoir craché** : elle s'effondre (recommandé) ou elle
-  repart à zéro (cf. la section sur l'effectif).
-- **La COURBE de croissance de l'effectif** sur les 7 jours (linéaire ? accélérée à
-  l'approche du débordement ?) et le nombre de monstres avant la porte. ⚠️ C'est elle qui
-  règle **le débit de mana**, donc le rythme du gacha : à mesurer, pas à choisir.
+- **Le PLANCHER et l'EXPOSANT de la courbe** (≈ 2), et le nombre de monstres à maturité.
+  ⚠️ C'est ce couple qui règle **le débit de mana**, donc le rythme du gacha : à **mesurer**
+  ensemble, pas à choisir.
+- **Le rendement de la mine résiduelle**, sous la contrainte « fermer paie nettement mieux
+  qu'ignorer » (invariant à encoder en test).
+- ~~**Ce que devient la faille après avoir craché**~~ — ✅ **TRANCHÉ** : elle s'effondre et
+  laisse une mine de mana résiduel.
 - ~~**L'état persistant d'une faille**~~ — ✅ **RÉSOLU** par la croissance à l'âge : rien à
   retenir, l'effectif se dérive de `spawnAt`. La faille rentre dans le modèle des POI sans
   mémoire, et une incursion est une session (on ressort, elle s'est reformée).
