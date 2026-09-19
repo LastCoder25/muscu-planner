@@ -70,6 +70,23 @@ import {
  *  de guet révèle : on sait ce qu'on va farmer avant que ça arrive. */
 export type RaidFaction = 'bandits' | 'betes' | 'mortsvivants';
 
+/**
+ * 🕳️ UNE FAILLE A DÉBORDÉ : son armée marche sur la base.
+ *
+ * ⚠️ **LE TYPE VIT ICI, PAS DANS `rift.ts`** : `rift.ts` importe déjà `raid.ts`
+ * (`factionRoster`, `RaidFaction`), donc l'inverse ferait un cycle. La faille le
+ * CONSTRUIT (`riftOverflowOf`), la base le STOCKE, `rollRaid` le CONSOMME.
+ */
+export interface RiftOverflow {
+  /** Faction de la faille — c'est elle qui vient, donc elle décide du BUTIN du siège. */
+  faction: RaidFaction;
+  /** Niveau de la faille. ⚠️ **AFFICHÉ, jamais utilisé pour calibrer l'armée** — cf. le
+   *  garde-fou anti-exploit de `rollRaid`. */
+  level: number;
+  /** Instant du débordement (ms epoch). */
+  at: number;
+}
+
 /** Un groupe de l'armée : plusieurs individus de MÊME espèce et MÊME niveau. Une armée
  *  en aligne 3 à 5, de niveaux différents — le dernier est le champion. */
 export interface RaidGroup {
@@ -104,6 +121,11 @@ export interface Raid {
   level: number;
   detectedAt: number; // ms epoch : la Tour l'a vu (= arrivesAt − préavis)
   arrivesAt: number; // ms epoch : la bataille se résout
+  /** 🕳️ La faille dont cette armée est sortie, si elle en vient une. ⚠️ **FIGÉE AU
+   *  TIRAGE, comme `threat`** : refermer une faille n'affaiblit PAS une armée déjà en
+   *  marche — elle garde la force que la Tour de guet a annoncée. Fermer agit sur la
+   *  SUITE (« ferme-la avant la prochaine »). Absente = armée ordinaire. */
+  overflow?: RiftOverflow;
 }
 
 export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'salvage' | 'kennel' | 'infirmary';
@@ -196,6 +218,15 @@ export interface BaseState {
   pillage?: PillageTally | null;
   lastReport: RaidReport | null;
   seed: number;
+  /** 🕳️ Le débordement EN ATTENTE : une faille a craché son armée, elle n'est pas encore
+   *  arrivée. Posé par la carte, consommé au tirage du raid.
+   *
+   *  ⚠️ **UN SEUL, ET IL NE S'EMPILE PAS.** Six failles qui débordent pendant une absence
+   *  ne font pas ×1,3⁶ : on garde le plus RÉCENT, et le renfort reste plat. C'est la
+   *  règle 1 des sièges (« on ne perd jamais parce qu'on n'a pas ouvert l'app ») — on
+   *  paie UNE fois, pas une fois par faille oubliée. Champ additif (JSONB) : absent sur
+   *  toutes les bases d'avant, donc armée ordinaire. */
+  overflow?: RiftOverflow | null;
 }
 
 export interface RaidReport {
@@ -483,6 +514,29 @@ export const RAID = {
    *  ⚠️ Pourquoi l’ARMÉE et pas les aventuriers : mesuré, diviser par 2 leur bonus de siège
    *  laissait un vivier complet à 95-100 % — seule une armée plus forte le fait bouger. */
   earlyThreat: { learnUntil: 5, fullFrom: 7, holdUntil: 16, fadeUntil: 26, peak: 0.35 },
+  /** 🕳️ RENFORT D'UNE ARMÉE SORTIE D'UNE FAILLE — **×1,3, MESURÉ** (tenue d'un siège,
+   *  enceinte à niveau, héros présent, vivier complet, 150 sièges par case) :
+   *
+   *  | renfort  | niv 12 | 28 | 50 | 80 |
+   *  | -------- | ------ | -- | -- | -- |
+   *  | ×1       | 90     | 91 | 85 | 89 |
+   *  | ×1,15    | 70     | 83 | 67 | 74 |
+   *  | **×1,3** | **53** | **71** | **52** | **51** |
+   *  | ×1,5     | 32     | 52 | 29 | 27 |
+   *  | ×2       | 2      | 11 | 0  | 0  |
+   *
+   *  ⚠️ **RETENU PARCE QU'IL EST PLAT SELON LE NIVEAU** — c'est la propriété qui autorise
+   *  une valeur unique. À ×1 laisser mûrir était gagner d'office (85-91 % de tenue, donc
+   *  aucune raison d'aller refermer quoi que ce soit) ; à ×2 une faille oubliée donnerait
+   *  un siège imbattable, ce qui punirait celui qui joue mais n'a pas l'énergie d'y aller
+   *  — la limite directe de la règle 1.
+   *
+   *  ⚠️ **ET IL NE MONTE PAS AVEC LE TEMPS**, piste explicitement écartée par la mesure
+   *  ci-dessus : le renfort reste FIXE. Il s'applique au plus une fois par siège.
+   *
+   *  ⚠️ Défini ICI et non dans `rift.ts` : c'est une constante de SIÈGE, mesurée sur des
+   *  sièges, et `groupCombatant` doit pouvoir la lire sans cycle d'import. */
+  riftThreat: 1.3,
   championPvMult: 3, // le champion est une élite, pas un soldat de plus
   championDmgMult: 2.2,
   // Les dégâts d'un groupe croissent en √effectif, pas linéairement : seuls quelques
@@ -874,9 +928,13 @@ export function rollRaid(
   playerLevel: number,
   arrivesAt: number,
   leadMs: number,
+  overflow?: RiftOverflow | null,
 ): Raid {
   const rng = mulberry32(seed >>> 0 || 1);
-  const faction = pick(rng, ['bandits', 'betes', 'mortsvivants'] as const);
+  // 🕳️ Une armée sortie d'une faille porte LA FACTION DE SA FAILLE — donc le butin du
+  // siège se lit sur la carte avant même que la Tour de guet ne parle.
+  const rolled = pick(rng, ['bandits', 'betes', 'mortsvivants'] as const);
+  const faction = overflow ? overflow.faction : rolled;
   const roster = ROSTERS[faction];
   const L = Math.max(1, playerLevel);
   const nGroups = RAID.minGroups + Math.floor(rng() * (RAID.maxGroups - RAID.minGroups + 1));
@@ -885,7 +943,15 @@ export function rollRaid(
   const span = levelSpanFor(L);
   // ⚠️ Figé AU TIRAGE, sur le niveau du JOUEUR (les groupes sont plus hauts que lui) : une
   // armée en marche garde la force annoncée, et la Tour de guet l’estime telle quelle.
-  const threat = earlyThreatMult(L);
+  //
+  // 🕳️ ⚠️ **LE NIVEAU DE L'ARMÉE NE VIENT PAS DE LA FAILLE, ET C'EST UN GARDE-FOU
+  // ANTI-EXPLOIT.** Depuis la v0.929 le niveau d'une faille est tiré par RANG, donc
+  // décorrélé du joueur : une faille Bronze près d'un joueur de niveau 60 produirait une
+  // armée à son niveau à elle, très loin sous la calibration — laisser déborder
+  // deviendrait STRICTEMENT MEILLEUR que fermer, l'inverse exact de ce qu'on construit.
+  // La faille donne donc sa FACTION et son RENFORT ; l'effectif et les niveaux restent
+  // calibrés sur le joueur, comme toute armée.
+  const threat = earlyThreatMult(L) * (overflow ? RAID.riftThreat : 1);
 
   // Niveaux de troupe : biaisés bas, triés croissant.
   const levels: number[] = [];
@@ -946,6 +1012,7 @@ export function rollRaid(
     level: championLevel,
     detectedAt: arrivesAt - leadMs,
     arrivesAt,
+    ...(overflow ? { overflow } : {}),
   };
 }
 
@@ -3230,6 +3297,16 @@ export function advanceBase(
       b = { ...b, nextRaidAt: now + RAID.intervalIdleMs };
       changed = true;
     }
+    // 🕳️ ET LE DÉBORDEMENT S'EFFACE AVEC. Tant que les sièges sont éteints, aucune armée
+    // ne vient : celle qui est sortie n'a trouvé personne à assiéger et s'est dispersée.
+    // ⚠️ Sans ça, un joueur qui bâtit sa PREMIÈRE enceinte encaisserait un siège renforcé
+    // ×1,3 d'entrée, pour des failles qu'il a laissées mûrir à une époque où il ne pouvait
+    // même pas être attaqué — la punition d'une absence qui n'était pas une faute, donc la
+    // règle 1 à l'envers. C'est le même motif que le report d'échéance juste au-dessus.
+    if (b.overflow) {
+      b = { ...b, overflow: null };
+      changed = true;
+    }
     return { base: b, changed, detected: null, dueRaid: null };
   }
 
@@ -3248,14 +3325,43 @@ export function advanceBase(
   const lead = scoutLeadMs(scoutLevel(b.defenses), raidIntervalMs(ctx.activeDays7));
   if (!b.raid && now >= b.nextRaidAt - lead) {
     const seed = (b.seed + Math.floor(b.nextRaidAt / 60_000)) >>> 0 || 1;
-    const raid = rollRaid(seed, ctx.playerLevel, b.nextRaidAt, lead);
-    b = { ...b, raid };
+    // 🕳️ Le débordement en attente est CONSOMMÉ ici : l'armée qui se met en marche est
+    // celle de la faille, et le marquage s'efface. C'est ce qui garantit qu'il ne
+    // s'applique qu'UNE fois — sans ça, chaque siège suivant serait renforcé à vie.
+    const raid = rollRaid(seed, ctx.playerLevel, b.nextRaidAt, lead, b.overflow);
+    b = { ...b, raid, overflow: null };
     detected = raid;
     changed = true;
   }
 
   const dueRaid = b.raid && now >= b.raid.arrivesAt ? b.raid : null;
   return { base: b, changed, detected, dueRaid };
+}
+
+/**
+ * 🕳️ Marque la base d'un ou plusieurs DÉBORDEMENTS de faille.
+ *
+ * ⚠️ **ON GARDE LE PLUS RÉCENT, ET UN SEUL.** Deux raisons, et elles tiennent ensemble.
+ * (1) **Le renfort ne s'empile pas** : six failles oubliées pendant une absence ne font
+ * pas ×1,3⁶ — mesuré, à ×2 un siège est déjà imbattable, donc empiler reviendrait à
+ * punir l'absence en boucle, ce que la règle 1 des sièges interdit. (2) **Le plus
+ * récent** parce que c'est la menace qui est encore à la porte : celle d'il y a trois
+ * jours a déjà fait son chemin, et elle a laissé sa mine de mana en consolation.
+ *
+ * ⚠️ **AUCUN SIÈGE DE PLUS, AUCUN SIÈGE PLUS TÔT** : le rythme reste celui du sport
+ * (`raidIntervalMs`), mesuré et porteur de la règle 1. Un débordement ne CRÉE pas un
+ * siège — il QUALIFIE le prochain. Dériver le rythme des débordements donnerait des
+ * SALVES : les failles mûrissent groupées (le plancher en spawne plusieurs d'un coup), on
+ * aurait six sièges en deux jours puis cinq jours de calme, et plus rien de ce qui a été
+ * calibré ne tiendrait.
+ *
+ * Rend la MÊME référence si rien à marquer — l'appelant n'écrit pas à vide.
+ */
+export function markOverflow(base: BaseState, overflows: readonly RiftOverflow[]): BaseState {
+  if (!overflows.length) return base;
+  let best = base.overflow ?? null;
+  for (const o of overflows) if (!best || o.at > best.at) best = o;
+  return best === (base.overflow ?? null) ? base : { ...base, overflow: best };
 }
 
 /** Applique l'issue d'un siège : range le rapport, sème le champ de cadavres, planifie le

@@ -1386,6 +1386,12 @@ export const useCharacterStore = defineStore('character', () => {
   async function expeSyncMap(userId: string, now: number, level: number) {
     const cur = row.value;
     if (!cur) return;
+    // 🕳️ ⚠️ LE MARQUAGE DU DÉBORDEMENT N'EST PAS BRANCHÉ ICI, ET C'EST MESURÉ, pas un
+    // oubli. Le mécanisme est prêt et testé (`riftOverflows` → `riftOverflowOf` →
+    // `markOverflow`, à poser dans la MÊME écriture que la carte, sinon la faille
+    // disparaît d'ici et son armée avec) — mais mesuré, 53 à 79 % des sièges seraient
+    // renforcés ×1,3, et le joueur ne peut PAS ENCORE refermer une faille. Ce serait la
+    // punition sans le jeu. Cf. l'entrée v0.931 de CLAUDE.md.
     const map: ExpeditionMap = cur.expedition_map
       ? advanceWorld(cur.expedition_map, now, level, cur.expedition?.poi.id)
       : createMap(newSeed(now), now, level);

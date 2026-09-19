@@ -41,7 +41,7 @@ import {
   survivalOf,
   type Combatant,
 } from './combat';
-import { factionRoster, type RaidFaction } from './raid';
+import { factionRoster, type RaidFaction, type RiftOverflow } from './raid';
 
 /** Les trois factions du jeu — la faille et l'armée qui en sort partagent la même. */
 const RIFT_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
@@ -90,10 +90,10 @@ export const RIFT = {
    *  TESTÉ, c'est le RAPPORT : fermer une faille doit payer nettement mieux que l'ignorer
    *  et ramasser sa mine — sinon le robinet du gacha serait alimenté par la PASSIVITÉ. */
 
-  /** Renfort de menace de l'armée qui sort d'une faille non fermée — **×1,3 MESURÉ**
-   *  (tenue d'un siège 85-91 % → 51-71 %, plat selon le niveau). ⚠️ Posé ici pour
-   *  mémoire ; c'est l'étape 2 qui le passera à `rollRaid` (`threat`, figé au tirage). */
-  overflowThreat: 1.3,
+  /** ⚠️ LE RENFORT DE MENACE DE L'ARMÉE QUI SORT N'EST PAS DÉFINI ICI : c'est
+   *  `RAID.riftThreat` (×1,3), avec la table de mesure qui l'a fixé. C'est une constante
+   *  de SIÈGE, mesurée sur des sièges, et `groupCombatant` doit pouvoir la lire sans
+   *  cycle d'import — `rift.ts` importe déjà `raid.ts`, jamais l'inverse. */
 } as const;
 
 /** Ce qu'une faille EST — dérivé, jamais stocké. */
@@ -176,6 +176,26 @@ export function riftMana(foes: number, level: number): number {
 export function riftClearMana(rift: RiftLike, now: number): number {
   const foes = riftMana(riftPopulation(rift, now), rift.level);
   return Math.round(foes * (1 + RIFT.bossManaShare));
+}
+
+/**
+ * 🕳️ Ce qu'une faille qui déborde ENVOIE sur la base — le descripteur de son armée.
+ *
+ * ⚠️ **PAS DE MAGNITUDE ICI**, exactement comme `residualMineOf` : la force de l'armée
+ * vit dans `rollRaid` (faction imposée + `RAID.riftThreat`), la seule autorité sur ce
+ * qu'est une armée. Deux échelles pour la même chose finissent par se contredire — c'est
+ * le défaut que la mine résiduelle a déjà eu.
+ *
+ * ⚠️ **DATÉ DU DÉBORDEMENT, pas de `now`** : c'est ce qui rend le marquage idempotent et
+ * comparable entre plusieurs failles (`markOverflow` garde le plus récent). Rejouer le
+ * passage ne peut donc pas antidater ni dupliquer la menace.
+ */
+export function riftOverflowOf(rift: RiftLike): RiftOverflow {
+  return {
+    faction: riftSpecOf(rift).faction,
+    level: rift.level,
+    at: riftOverflowAt(rift),
+  };
 }
 
 /** La mine de mana résiduel laissée par une faille qui a débordé — le DESCRIPTEUR du POI.

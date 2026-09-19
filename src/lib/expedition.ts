@@ -983,6 +983,21 @@ function levelFitsDistance(poi: Poi, playerLevel: number): boolean {
   return poi.level <= attendu + EXPE.levelFitTolerance;
 }
 
+/**
+ * 🕳️ Les failles PRÉSENTES dont l'heure de débordement est passée.
+ *
+ * ⚠️ **UNE SEULE DÉFINITION DU PRÉDICAT**, et c'est tout l'intérêt de l'exporter :
+ * `advanceWorld` s'en sert pour les remplacer par leur mine, l'appelant pour en marquer
+ * la base. Deux copies de « a-t-elle débordé ? » finiraient par désigner deux ensembles
+ * différents — et on aurait alors des mines sans armée, ou des armées sans mine.
+ *
+ * ⚠️ **À LIRE AVANT `advanceWorld`** : lui les retire de la carte. C'est le seul instant
+ * où elles sont encore là.
+ */
+export function riftOverflows(map: ExpeditionMap, now: number): Poi[] {
+  return map.pois.filter((p) => isRiftPoi(p) && now >= p.spawnedAt + EXPE.lifespanMs.rift);
+}
+
 /** Fait avancer le monde jusqu'à `now` : expire les POI périmés (sauf la cible d'une
  *  expédition en cours) et fait apparaître au plus 1 POI si l'heure est venue. Pur. */
 export function advanceWorld(
@@ -998,13 +1013,14 @@ export function advanceWorld(
   // ne peut pas la dupliquer, et une absence longue laisse des mines DATÉES de leur
   // débordement — donc déjà périmées si c'était il y a plus de 36 h, et le filtre juste
   // en dessous s'en charge. On ne punit pas l'absence, on ne la récompense pas non plus.
-  // ⚠️ L'ARMÉE QUI SORT N'EST PAS ENCORE BRANCHÉE (étape suivante) : pour l'instant la
-  // faille disparaît sans marcher sur la base.
-  const collapsed: Poi[] = [];
-  for (const p of map.pois) {
-    if (!isRiftPoi(p) || now < p.spawnedAt + EXPE.lifespanMs.rift) continue;
+  // 🕳️ ET SON ARMÉE MARCHE SUR LA BASE : c'est `riftOverflows` (juste au-dessus) qui les
+  // désigne, et l'appelant qui en marque la base AVANT de persister cette carte — sinon
+  // la faille disparaîtrait d'ici sans que personne n'ait vu son armée sortir.
+  const over = riftOverflows(map, now);
+  const gone = new Set(over.map((p) => p.id));
+  const collapsed: Poi[] = over.map((p) => {
     const at = p.spawnedAt + EXPE.lifespanMs.rift;
-    collapsed.push({
+    return {
       id: `${p.id}_mine`,
       type: 'mana_mine',
       level: p.level,
@@ -1013,13 +1029,13 @@ export function advanceWorld(
       distNorm: p.distNorm,
       spawnedAt: at,
       expiresAt: at + EXPE.lifespanMs.mana_mine,
-    });
-  }
+    };
+  });
+  // ⚠️ On retire EXACTEMENT celles qu'on vient de remplacer (par leur id), jamais en
+  // rejouant le prédicat : deux lectures peuvent diverger d'une faille et laisser un
+  // doublon — la faille ET sa mine — sur la carte.
   const withMines = collapsed.length
-    ? [
-        ...map.pois.filter((p) => !(isRiftPoi(p) && now >= p.spawnedAt + EXPE.lifespanMs.rift)),
-        ...collapsed,
-      ]
+    ? [...map.pois.filter((p) => !gone.has(p.id)), ...collapsed]
     : map.pois;
   const next: ExpeditionMap = {
     seed: map.seed,
