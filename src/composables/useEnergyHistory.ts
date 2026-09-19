@@ -32,7 +32,7 @@ export interface EnergyDay {
 }
 
 /** Énergie GAGNÉE par jour + le DÉTAIL par source (sport ET hors-sport : bonus de
- *  connexion, montées de niveau, Dynamo de faille, expéditions), sur les `nDays`
+ *  connexion, montées de niveau, Dynamo tellurique, expéditions), sur les `nDays`
  *  derniers jours (aujourd'hui inclus), du plus récent au plus ancien. Le hors-sport
  *  vient du journal `energy_log` (migr. 0057, horodaté à chaque gain) ; les expéditions
  *  (mines) restent dérivées des messages (déjà horodatés). Lit les stores déjà chargés. */
@@ -94,7 +94,7 @@ export function useEnergyHistory(nDays = 3) {
 
     // ── HORS-SPORT ──
     const row = char.row;
-    // Journal d'énergie (bonus de connexion, montées de niveau, Dynamo de faille…).
+    // Journal d'énergie (bonus de connexion, montées de niveau, Dynamo tellurique…).
     for (const e of row?.energy_log ?? []) push(e.date, e.emoji, e.label, e.amount);
     // Expéditions (mines) : messages horodatés portant de l'énergie.
     for (const m of row?.messages ?? []) {

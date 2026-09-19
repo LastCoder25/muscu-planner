@@ -176,11 +176,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Produit de l’or 🪙 en continu (à récolter).',
   },
-  // PRODUCTEUR : Dynamo de faille → ÉNERGIE de jeu (convertit le temps en runs). Bornée
+  // PRODUCTEUR : Dynamo tellurique → ÉNERGIE de jeu (convertit le temps en runs). Bornée
   // par le stockage → complément, jamais un substitut au sport (qui seul fait le niveau).
   {
     id: 'energy_font',
-    label: 'Dynamo de faille',
+    label: 'Dynamo tellurique',
     emoji: '⚡',
     category: 'producer',
     resource: 'energy',

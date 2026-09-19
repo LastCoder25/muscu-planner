@@ -259,7 +259,7 @@ robinet **PLAT** (3 à 6 failles quel que soit le niveau), l'inverse des deux qu
 diviser parce qu'ils étaient linéaires en niveau : la Dynamo (÷8, v0.822) et la Porte du
 Labyrinthe (÷4, v0.794).
 
-⚠️ **PAS DE BÂTIMENT QUI PRODUIT DU MANA.** C'est la leçon de la **Dynamo de faille**
+⚠️ **PAS DE BÂTIMENT QUI PRODUIT DU MANA.** C'est la leçon de la **Dynamo tellurique** (alors « Dynamo de faille »)
 (v0.822) : une production **linéaire en niveau** finit toujours par dépasser le sport —
 mesuré, elle rendait **~550 ⚡/jour**, plus que le Défi 360 du joueur, et il a fallu la
 diviser par 8. Un bâtiment qui imprime la monnaie du gacha ferait **échapper le gacha au

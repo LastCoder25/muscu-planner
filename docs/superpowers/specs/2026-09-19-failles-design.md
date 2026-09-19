@@ -243,7 +243,7 @@ pas l'énergie d'entrer encaisse le siège et touche **quand même** du mana. Sa
 gacha serait réservé à ceux qui peuvent se payer des incursions.
 
 ⚠️ **Et aucun BÂTIMENT ne doit en produire** (décidé côté gacha, cf. sa spec) : la leçon de
-la Dynamo de faille (v0.822) est qu'une production linéaire en niveau finit par dépasser le
+la Dynamo tellurique (v0.822, alors « Dynamo de faille ») est qu'une production linéaire en niveau finit par dépasser le
 sport. La monnaie du gacha doit rester adossée à une **activité**.
 
 ## Les pièces de set

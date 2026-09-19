@@ -6,6 +6,8 @@ import {
   isClaimable,
   type ExpeditionMessage,
   haulPills,
+  buildMessage,
+  goldCost,
   messageLoot,
   spawnWindow,
   createMap,
@@ -14,6 +16,7 @@ import {
   campHeroOutcome,
   CAMP_TYPES,
   HARVEST_TYPES,
+  POI_LABEL,
   HARVEST,
   EXPE,
   poiCombatant,
@@ -55,7 +58,7 @@ describe('fenêtre de niveaux', () => {
 });
 
 describe('POI de récolte', () => {
-  const types: PoiType[] = ['well', 'shrine', 'archive'];
+  const types: PoiType[] = ['well', 'shrine', 'archive', 'mana_mine'];
 
   it('ne perdent jamais : il n’y a pas de combat au bout du voyage', () => {
     for (const t of types) {
@@ -95,6 +98,59 @@ describe('POI de récolte', () => {
     const arch = resolveOutcome(hero, poi('archive'), 7, 26);
     expect(arch.key).toBeGreaterThan(0);
     expect(arch.energy).toBe(0);
+
+    // 💠 La mine de mana résiduel : elle paie en MANA, et en rien d'autre.
+    const mana = resolveOutcome(hero, poi('mana_mine'), 7, 26);
+    expect(mana.mana).toBeGreaterThan(0);
+    expect(mana.energy).toBe(0);
+    expect(mana.summonStones).toBe(0);
+    expect(mana.scrap).toBe(0);
+  });
+
+  it('⚠️ le MANA ne sort QUE de la mine résiduelle — pas d’une autre récolte', () => {
+    // Le pendant du test des devises mortes, dans l'autre sens : une devise qui suinterait
+    // d'un peu partout cesserait de dire « cette faille a débordé ».
+    for (const t of types) {
+      if (t === 'mana_mine') continue;
+      expect(resolveOutcome(hero, poi(t), 5, 26).mana, t).toBe(0);
+    }
+  });
+
+  it('💠 le MESSAGE porte le mana — sinon la boîte ne peut pas l’afficher', () => {
+    // ⚠️ Deux moitiés du même défaut (v0.680) : `haulPills` sait le PEINDRE (test suivant),
+    // mais si `buildMessage` ne le recopie pas depuis l'issue, il n'y a rien à peindre. La
+    // mutation qui retire cette ligne a survécu jusqu'à ce test.
+    const p = poi('mana_mine');
+    const o = resolveOutcome(hero, p, 7, 26);
+    expect(o.mana).toBeGreaterThan(0);
+    const msg = buildMessage({
+      poi: p,
+      sentAt: 0,
+      midAt: 1,
+      returnAt: 2,
+      goldCost: 0,
+      seed: 7,
+      outcome: o,
+    });
+    expect(msg.mana).toBe(o.mana);
+    expect(haulPills(msg).some((x) => x.emoji === '💠')).toBe(true);
+  });
+
+  it('⚠️ entrer dans une faille coûte de l’OR — « gratuite » portait sur le mana et l’énergie', () => {
+    // La décision était : ni mana, ni énergie (ne jamais être à sec le jour où il faut
+    // défendre). L'or, lui, est le péage UNIVERSEL de la carte et l'un des DEUX seuls puits
+    // d'or du jeu : en exempter les failles créerait une activité gratuite qui PAIE.
+    expect(goldCost('rift', 30)).toBeGreaterThan(0);
+    expect(goldCost('rift', 30)).toBe(goldCost('camp', 30));
+    // …et une faille plus profonde coûte plus cher, comme tout POI.
+    expect(goldCost('rift', 60)).toBeGreaterThan(goldCost('rift', 30));
+  });
+
+  it('💠 le mana figure dans les pastilles de butin (sinon la boîte l’affiche vide)', () => {
+    // C'est le défaut exact de la v0.680 : la boîte listait ses devises à la main, et une
+    // épave affichait un butin VIDE. `haulPills` est la source unique des deux écrans.
+    expect(haulPills({ mana: 12 })).toEqual([{ emoji: '💠', n: 12 }]);
+    expect(haulPills({ mana: 0 })).toEqual([]);
   });
 
   it('⚠️ le TYPE lui-même ne connaît plus aucune devise morte', () => {
@@ -337,9 +393,34 @@ describe('difficulté des POI de combat', () => {
   it('HARVEST_TYPES contient bien les récoltes et pas les combats', () => {
     // `wreck` (épave) rejoint la famille en v0.661 : c'est une récolte pure — aucun
     // combat, aucun échec — et l'UNIQUE source de ferraille (réparation de l'enceinte).
-    expect([...HARVEST_TYPES].sort()).toEqual(['archive', 'mine', 'shrine', 'well', 'wreck']);
+    // 💠 `mana_mine` rejoint la famille en v0.924 : ce qu'une faille laisse en s'effondrant
+    // se RÉCOLTE (et se récolte donc au convoi, sans énergie — c'est ce qui ouvre le mana au
+    // joueur qui ne combat pas).
+    expect([...HARVEST_TYPES].sort()).toEqual([
+      'archive',
+      'mana_mine',
+      'mine',
+      'shrine',
+      'well',
+      'wreck',
+    ]);
     expect(HARVEST_TYPES.has('lair')).toBe(false);
     expect(HARVEST_TYPES.has('arena')).toBe(false);
+    // ⚠️ UNE FAILLE N'EST PAS UNE RÉCOLTE : on s'y BAT, et on peut en ressortir sans avoir
+    // refermé la brèche. La ranger ici la rendrait « sans combat, sans échec » (v0.658).
+    expect(HARVEST_TYPES.has('rift')).toBe(false);
+  });
+
+  it('⚠️ le mot « FAILLE » ne désigne plus que la faille — l’homonyme est fermé', () => {
+    // Il était pris TROIS fois pour du décor : le puits (« Source de faille »), la Dynamo
+    // (« Dynamo de faille ») et, plus gênant, la « Faille sans fin », un MODE de jeu entier
+    // (`endless.ts`) plus le donjon « Faille du chaos ». Les deux premiers sont renommés ;
+    // le mode reste à trancher. Ce test garde au moins la carte cohérente : un joueur ne doit
+    // pas voir deux POI différents dire « faille ».
+    const failles = (Object.keys(POI_LABEL) as PoiType[]).filter((k) =>
+      POI_LABEL[k].toLowerCase().includes('faille'),
+    );
+    expect(failles).toEqual(['rift']);
   });
 });
 

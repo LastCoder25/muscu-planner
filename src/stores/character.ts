@@ -2361,7 +2361,7 @@ export const useCharacterStore = defineStore('character', () => {
       energy_log: pushEnergyLog(cur.energy_log, {
         date: isoDayLocal(now),
         emoji: '⚡',
-        label: 'Dynamo de faille',
+        label: 'Dynamo tellurique',
         amount: got.energy,
       }),
     });

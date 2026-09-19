@@ -447,6 +447,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     summonStones: haul.summonStones,
     // ⚠️ Champ requis par `ExpeditionOutcome` : un camp ne donne JAMAIS de ferraille.
     scrap: 0,
+    mana: 0,
     item: null,
     items: [],
     key: 0, // ⚠️ jamais de clé sans le héros (cf. `campGroupHaul`)

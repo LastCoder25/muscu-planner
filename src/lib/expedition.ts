@@ -31,7 +31,12 @@ export type PoiType =
   // 🔩 ÉPAVE : la SEULE source de ferraille (réparation de l'enceinte, cf. raid.ts).
   // Le butin d'un siège paie dans la devise de la faction, jamais en ferraille : en
   // trouver sur un loup ou un revenant n'aurait aucun sens.
-  | 'wreck';
+  | 'wreck'
+  // 🕳️ FAILLE : le seul POI qu'on n'ATTAQUE pas pour son butin mais pour le REFERMER —
+  // elle engendre des monstres, et à 7 jours elle déborde sur la base (cf. `rift.ts`).
+  | 'rift'
+  // 💠 MINE DE MANA RÉSIDUEL : ce qu'une faille laisse en s'effondrant. Récolte pure.
+  | 'mana_mine';
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et
  *  ajouter un POI casse la compilation tant qu'on ne l'a pas nommé. La boîte à messages
@@ -43,10 +48,12 @@ export const POI_LABEL: Record<PoiType, string> = {
   camp: 'Camp',
   lair: 'Repaire',
   arena: 'Arène',
-  well: 'Source de faille',
+  well: 'Source vive',
   shrine: "Sanctuaire d'invocation",
   archive: 'Archives englouties',
   wreck: 'Épave de convoi',
+  rift: 'Faille',
+  mana_mine: 'Mine de mana résiduel',
 };
 
 /** Emoji d'un point d'intérêt — la carte et le rapport de convoi lisent la MÊME table
@@ -60,6 +67,8 @@ export const POI_EMO: Record<PoiType, string> = {
   shrine: '🔮',
   archive: '📖',
   wreck: '🔩',
+  rift: '🕳️',
+  mana_mine: '💠',
 };
 
 /** POI de récolte pure : aucun combat, on ramasse et on rentre (comme la mine). */
@@ -69,6 +78,7 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'shrine',
   'archive',
   'wreck',
+  'mana_mine',
 ]);
 
 /** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
@@ -169,6 +179,11 @@ export interface ExpeditionOutcome {
   energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
   summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
   scrap: number; // 🔩 ferraille : répare l'enceinte (épaves uniquement)
+  /** 💠 Pierres de mana — la monnaie du gacha de champions. ⚠️ Elle n'a pas encore de
+   *  PUITS (le gacha n'existe pas) : elle s'ACCUMULE, et c'est l'ordre voulu
+   *  (failles → pierres de mana → gacha). À ne pas confondre avec une devise MORTE, dont
+   *  le puits a été retiré — ici il arrive. */
+  mana: number;
   item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
@@ -212,6 +227,7 @@ export interface ExpeditionMessage {
   energy: number; // ⚡ énergie gagnée (mines)
   summonStones?: number; // 🔮
   scrap?: number; // 🔩 ferraille
+  mana?: number; // 💠 pierres de mana (mine résiduelle d'une faille)
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
   itemCount?: number; // ARÈNE : nombre total d'objets ramenés (> 1) — le reste va au sac
@@ -306,6 +322,7 @@ export function haulPills(o: {
   scrap?: number;
   summonStones?: number;
   key?: number;
+  mana?: number;
 }): { emoji: string; n: number }[] {
   return (
     [
@@ -314,6 +331,7 @@ export function haulPills(o: {
       { emoji: '🔩', n: o.scrap ?? 0 },
       { emoji: '🔮', n: o.summonStones ?? 0 },
       { emoji: '🗝️', n: o.key ?? 0 },
+      { emoji: '💠', n: o.mana ?? 0 },
     ] as const
   )
     .filter((p) => p.n > 0)
@@ -348,6 +366,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     energy: o.energy,
     ...(o.summonStones ? { summonStones: o.summonStones } : {}),
     ...(o.scrap ? { scrap: o.scrap } : {}),
+    ...(o.mana ? { mana: o.mana } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     // Les objets vivent DANS le message : c'est lui qui sera encaissé, donc c'est lui
@@ -366,6 +385,12 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
 /** Réglages des POI de RÉCOLTE (devises vivantes). Premier calage : à ajuster à l'usage. */
 export const HARVEST = {
+  /** 💠 Mine de mana résiduel. ⚠️ ÉCHELLE PROVISOIRE : les coûts du gacha n'existent pas
+   *  encore, donc aucun de ces deux nombres ne peut être calibré aujourd'hui. Ce qui est
+   *  vrai et testé, c'est le RATIO « fermer une faille > l'ignorer et ramasser sa mine »
+   *  (cf. `rift.ts`). */
+  manaBase: 4,
+  manaPerLevel: 0.8,
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
   /** Trajet (facteur de voyage) à partir duquel une archive rend une 2ᵉ clé : aller loin
@@ -425,6 +450,11 @@ export const EXPE = {
     shrine: 16 * 3600_000,
     archive: 14 * 3600_000,
     wreck: 18 * 3600_000,
+    // ⚠️ LA FAILLE VIT EXACTEMENT SA MATURATION : à 7 jours elle déborde et s'effondre.
+    // Son « expiration » n'est donc pas un oubli de la carte mais l'événement lui-même —
+    // c'est `rift.ts` qui la remplace alors par sa mine, avant tout filtrage.
+    rift: 7 * 24 * 3600_000,
+    mana_mine: 36 * 3600_000,
   },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
@@ -444,6 +474,12 @@ export const EXPE = {
     shrine: 48,
     archive: 34,
     wreck: 26,
+    // ⚠️ « ENTRER EST GRATUIT » portait sur le MANA et l'ÉNERGIE (décision de
+    // l'utilisateur : ne jamais être à sec le jour où il faut défendre). L'or, lui, est le
+    // péage UNIVERSEL de la carte et l'un des deux seuls puits d'or du jeu : en exempter
+    // les failles créerait une activité gratuite qui paie. Aligné sur un camp.
+    rift: 65,
+    mana_mine: 30,
   },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
@@ -1077,10 +1113,15 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
   ],
   arena: ['La foule gronde : ton héros est tombé dès les premières vagues.'],
   // Récolte : pas de combat, donc jamais d'échec — entrées présentes pour l'exhaustivité.
-  well: ['La faille s’est refermée avant l’extraction.'],
+  well: ['La source s’est tarie avant l’extraction.'],
   shrine: ['Le sanctuaire est resté muet.'],
   archive: ['Les galeries se sont effondrées avant la salle de lecture.'],
   wreck: ['L’épave s’est enfoncée avant qu’on ait pu la démonter.'],
+  rift: [
+    'Le gardien tient toujours la porte : la faille reste ouverte, et son armée viendra.',
+    'Repli hors de la faille. Les monstres abattus ont rendu leur mana — la brèche, elle, se refermera d’elle-même en crachant.',
+  ],
+  mana_mine: ['Le mana résiduel s’était déjà dissipé.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -1089,7 +1130,7 @@ const WIN_TEXT: Record<PoiType, string[]> = {
   ],
   camp: ['🏆 Camp dispersé ! Butin ramassé.', '🏆 Victoire nette au camp.'],
   mine: ['⛏️ Filon exploité — ressources chargées.', '⛏️ Extraction réussie.'],
-  well: ['💧 Faille canalisée — énergie siphonnée.', '💧 La source a rendu sa charge.'],
+  well: ['💧 Source canalisée — énergie siphonnée.', '💧 La source a rendu sa charge.'],
   shrine: [
     '🔮 Sanctuaire honoré — pierres d’invocation récupérées.',
     '🔮 Les runes ont cédé leurs pierres.',
@@ -1103,6 +1144,14 @@ const WIN_TEXT: Record<PoiType, string[]> = {
     '🔩 La carcasse a rendu tout son métal.',
   ],
   arena: ['🏟️ L’arène acclame ton champion !'],
+  rift: [
+    '🕳️ Faille refermée — le gardien est tombé, aucune armée n’en sortira.',
+    '🕳️ La brèche se scelle derrière ton groupe.',
+  ],
+  mana_mine: [
+    '💠 Mana résiduel récolté — ce que la faille a laissé en s’effondrant.',
+    '💠 Les derniers éclats de mana sont embarqués.',
+  ],
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */
@@ -1116,12 +1165,13 @@ export function harvestYield(
   type: PoiType,
   level: number,
   tfH: number,
-): { energy: number; summonStones: number; scrap: number; keys: number } {
+): { energy: number; summonStones: number; scrap: number; keys: number; mana: number } {
   const L = Math.max(1, level);
   let energy = 0;
   let summonStones = 0;
   let keys = 0;
   let scrap = 0;
+  let mana = 0;
   if (type === 'well') {
     // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
     energy = Math.min(HARVEST.wellEnergyMax, Math.round((8 + L * 2) * tfH));
@@ -1130,13 +1180,20 @@ export function harvestYield(
     summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
   } else if (type === 'wreck') {
     scrap = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * tfH);
+  } else if (type === 'mana_mine') {
+    // 💠 Ce qu'une faille laisse en s'effondrant. ⚠️ La MAGNITUDE vit dans `rift.ts`
+    // (`residualMineOf`), qui la calcule sur ce que la faille valait à maturité : une
+    // seconde échelle ici finirait par contredire l'invariant « fermer paie nettement mieux
+    // qu'ignorer ». Cette table ne porte donc que la part de TRAJET, comme pour les autres
+    // récoltes — aller loin paie plus que proportionnellement.
+    mana = Math.max(1, Math.round((HARVEST.manaBase + L * HARVEST.manaPerLevel) * tfH));
   } else if (type === 'archive') {
     // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
     // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet
     // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
     keys = 1 + (tfH >= HARVEST.archiveFarKeyAt ? 1 : 0);
   }
-  return { energy, summonStones, scrap, keys };
+  return { energy, summonStones, scrap, keys, mana };
 }
 
 export function resolveOutcome(
@@ -1159,7 +1216,7 @@ export function resolveOutcome(
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
     const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
     const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
-    const { energy, summonStones, scrap, keys } = harvestYield(poi.type, poi.level, tfH);
+    const { energy, summonStones, scrap, keys, mana } = harvestYield(poi.type, poi.level, tfH);
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
     const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
@@ -1173,6 +1230,7 @@ export function resolveOutcome(
       energy: Math.min(HARVEST.wellEnergyMax, Math.round(energy * k)),
       summonStones: Math.round(summonStones * k),
       scrap: Math.round(scrap * k),
+      mana: Math.round(mana * k),
       item: tr.drops[0] ?? null,
       items: tr.drops,
       key: keys + (rng() < HARVEST.keyChance ? 1 : 0) + tr.keys,
@@ -1225,6 +1283,7 @@ export function resolveOutcome(
       win: good,
       gold,
       scrap: 0,
+      mana: 0,
       energy: 0,
       // ⚠️ L'arène versait des fragments 🧩 et de l'encre 🖋️ — devises MORTES. C'était la
       // SEULE fuite réelle qui restait : produite ici, recopiée dans le message, affichée
@@ -1289,6 +1348,7 @@ function mineOutcome(rng: () => number, poi: Poi): ExpeditionOutcome {
     win: true,
     gold,
     scrap: 0,
+    mana: 0,
     energy,
     summonStones: 0,
     item: null,
@@ -1323,6 +1383,7 @@ export function campHeroOutcome(
       win: false,
       gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
       scrap: 0,
+      mana: 0,
       summonStones: 0,
       energy: 0,
       item: null,
@@ -1356,6 +1417,7 @@ export function campHeroOutcome(
     win: true,
     gold: Math.round(cost * (1.0 + rth * 0.1)),
     scrap: 0,
+    mana: 0,
     energy: 0,
     // Les devises vivantes viennent surtout des POI DÉDIÉS (well/shrine/archive) : ici
     // un simple filet, pour que ces sorties ne soient pas totalement muettes.

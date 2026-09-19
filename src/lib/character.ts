@@ -71,7 +71,7 @@ export function levelUpEnergy(level: number): number {
 
 // ── Journal d'énergie HORS-SPORT (ticket : la Dynamo n'apparaissait pas dans le
 //    détail par jour) — une entrée par gain (bonus de connexion, montée de niveau,
-//    Dynamo de faille), horodatée, pour permettre un historique jour par jour comme
+//    Dynamo tellurique), horodatée, pour permettre un historique jour par jour comme
 //    pour le sport (useEnergyHistory). Les sources SPORT restent recalculées depuis
 //    les logs/défis existants (pas besoin de les journaliser). ──
 export interface EnergyLogEntry {
