@@ -25,6 +25,7 @@ import {
   acceptedUnits,
   metMinShare,
   bossRepsXp,
+  bossAgendaEntries,
   bossCompletionXp,
   earlyKillFraction,
   bossFromRow,
@@ -40,6 +41,7 @@ import {
   friendBossChest,
   type FriendBoss,
   type FriendBossMember,
+  type FriendBossHit,
 } from '@/lib/friendBoss';
 
 const H = 3600_000;
@@ -257,6 +259,23 @@ describe('🐉 BOSS ENTRE AMIS — saisies et récompense', () => {
     expect(bossRepsXp('push', 300, 1)).toBe(120);
     expect(bossRepsXp('push', 300, 1.3)).toBe(156);
     expect(bossRepsXp('core', 1200, 1.3)).toBe(120);
+  });
+
+  it('⚠️ l’XP des reps est LINÉAIRE : l’agenda peut la découper par jour sans dériver', () => {
+    // L'Agenda affiche une ligne par (boss, JOUR) et y met `bossRepsXp` des reps de ce
+    // jour-là. Ça ne vaut que si la fonction est linéaire : un palier ou un bonus de volume
+    // ferait que la somme des lignes cesse d'égaler l'XP du total — en silence, puisque
+    // aucune porte ne regarde cet écran.
+    for (const family of ['push', 'core'] as const) {
+      const jours = [60, 60, 50];
+      const parJour = jours.reduce((a, u) => a + bossRepsXp(family, u, 1.3), 0);
+      const total = bossRepsXp(family, 170, 1.3); // = 60 + 60 + 50
+      // Égaux à l'arrondi de chaque jour près (≤ ½ point par ligne), jamais plus.
+      expect(Math.abs(parJour - total)).toBeLessThanOrEqual(jours.length / 2);
+    }
+    // Et c'est bien une droite qui passe par zéro : le double de reps vaut le double d'XP.
+    expect(bossRepsXp('push', 200, 1)).toBe(2 * bossRepsXp('push', 100, 1));
+    expect(bossRepsXp('push', 0, 1)).toBe(0);
   });
 
   it('la prime exige la mort du boss ET la part minimale, et plafonne à 2 parts', () => {
@@ -597,5 +616,110 @@ describe('🐉 BOSS ENTRE AMIS — affichage', () => {
   it('chaque famille a son nom et son emoji', () => {
     for (const f of Object.keys(FRIEND_BOSS.shareUnits) as (keyof typeof FRIEND_BOSS.shareUnits)[])
       expect(BOSS_FAMILY_LABEL[f].name.length).toBeGreaterThan(0);
+  });
+});
+
+describe('🐉 BOSS ENTRE AMIS — ce qui remonte dans l’Agenda', () => {
+  // Jour local, comme l'Agenda le calcule pour toutes ses autres sources.
+  const dayKey = (ms: number) => {
+    const d = new Date(ms);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+  // ⚠️ Dates construites en LOCAL, comme l'Agenda les lit. Un `Date.UTC` + décalage ferait
+  // basculer une frappe du soir au lendemain selon le fuseau, et le regroupement par jour
+  // — précisément ce qu'on éprouve — dépendrait de la machine.
+  const J = (jour: number, h = 12) => new Date(2026, 8, jour, h).getTime();
+  const bossOf = (over: Partial<FriendBoss> = {}): FriendBoss => boss({ id: 'b1', ...over });
+  const memb = (over: Partial<FriendBossMember> = {}): FriendBossMember => ({
+    bossId: 'b1',
+    userId: 'me',
+    pseudo: 'Last',
+    status: 'accepted',
+    units: 0,
+    claimed: false,
+    ...over,
+  });
+  const hit = (id: string, units: number, at: number, over: Partial<FriendBossHit> = {}) => ({
+    id,
+    bossId: 'b1',
+    userId: 'me',
+    units,
+    createdAt: at,
+    ...over,
+  });
+
+  it('une ligne par (boss, JOUR), avec le détail des frappes et l’XP de leurs reps', () => {
+    const e = bossAgendaEntries(
+      [bossOf()],
+      [memb({ units: 50 })],
+      [hit('h1', 20, J(15)), hit('h2', 30, J(15, 18)), hit('h3', 25, J(16))],
+      'me',
+      dayKey,
+    );
+    expect(e).toHaveLength(2);
+    const j15 = e.find((x) => x.day === '2026-09-15')!;
+    expect(j15.units).toEqual([20, 30]);
+    expect(j15.total).toBe(50);
+    // ⚠️ L'XP vient de la MÊME fonction que le total (`bossRepsXp`) : une seconde formule
+    // ici finirait par annoncer autre chose que ce que la piste Muscu compte.
+    expect(j15.xp).toBe(bossRepsXp('push', 50, 1));
+    expect(j15.title).toBe('Pompes');
+    expect(j15.unit).toBe('reps');
+    expect(e.find((x) => x.day === '2026-09-16')!.total).toBe(25);
+  });
+
+  it('⚠️ la somme des lignes vaut l’XP des reps du total (rien ne se perd au découpage)', () => {
+    // C'est CE qui autorise l'agenda à découper par jour : `bossRepsXp` est linéaire.
+    const jours = [60, 60, 50];
+    const e = bossAgendaEntries(
+      [bossOf({ repWeight: 1.3 })],
+      [memb({ units: 170 })],
+      jours.map((u, i) => hit('h' + i, u, J(15 + i))),
+      'me',
+      dayKey,
+    );
+    const somme = e.reduce((a, x) => a + x.xp, 0);
+    expect(Math.abs(somme - bossRepsXp('push', 170, 1.3))).toBeLessThanOrEqual(jours.length / 2);
+  });
+
+  it('⚠️ les frappes des AUTRES ne remontent jamais dans mon agenda', () => {
+    const e = bossAgendaEntries(
+      [bossOf()],
+      [memb({ units: 20 }), memb({ userId: 'toi', pseudo: 'Knat', units: 999 })],
+      [hit('h1', 20, J(15)), hit('h2', 999, J(15), { userId: 'toi' })],
+      'me',
+      dayKey,
+    );
+    expect(e).toHaveLength(1);
+    expect(e[0]!.total).toBe(20);
+  });
+
+  it('⚠️ un boss REFUSÉ ou non rejoint ne compte pas — la règle exacte de friendBossXp', () => {
+    // Sinon l'agenda afficherait une XP que le total ignore : `friendBossXp` ne compte que
+    // les participations acceptées. Les deux doivent dire la même chose.
+    for (const status of ['invited', 'declined'] as const) {
+      const hits = [hit('h1', 40, J(15))];
+      const members = [memb({ status, units: 40 })];
+      expect(bossAgendaEntries([bossOf()], members, hits, 'me', dayKey)).toEqual([]);
+      expect(friendBossXp([bossOf()], members, 'me').muscu).toBe(0);
+    }
+  });
+
+  it('un boss de gainage se compte en SECONDES, pas en reps', () => {
+    const e = bossAgendaEntries(
+      [bossOf({ family: 'core' })],
+      [memb({ units: 300 })],
+      [hit('h1', 300, J(15))],
+      'me',
+      dayKey,
+    );
+    expect(e[0]!.unit).toBe('s');
+    expect(e[0]!.xp).toBe(bossRepsXp('core', 300, 1));
+  });
+
+  it('une frappe à zéro ne crée pas de ligne vide', () => {
+    expect(bossAgendaEntries([bossOf()], [memb()], [hit('h1', 0, J(15))], 'me', dayKey)).toEqual(
+      [],
+    );
   });
 });

@@ -20,13 +20,20 @@ import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
-async function mountIt(comp: Component, props: Record<string, unknown>, row?: unknown) {
+async function mountIt(
+  comp: Component,
+  props: Record<string, unknown>,
+  row?: unknown,
+  /** Amorce d'AUTRES stores que `character`, une fois la pinia active. */
+  seed?: () => Promise<void>,
+) {
   const pinia = createPinia();
   setActivePinia(pinia);
   if (row !== undefined) {
     const { useCharacterStore } = await import('@/stores/character');
     (useCharacterStore() as unknown as { row: unknown }).row = row;
   }
+  if (seed) await seed();
   const app = createApp({ render: () => h(comp, props) });
   app.use(pinia);
   // Les composants Quasar ne sont pas enregistrés ici : leurs warnings « failed to
@@ -101,5 +108,60 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     };
     expect(await mountIt(P, base)).toBeNull();
     expect(await mountIt(P, { ...base, tone: 'busy', state: '🐫 en route · 2 h' })).toBeNull();
+  }, 30_000);
+  it('l’Agenda se monte, avec des frappes de boss entre amis', async () => {
+    // ⚠️ CE QUE CE TEST COUVRE, ET CE QU'IL NE COUVRE PAS. Il éprouve le SETUP de l'écran
+    // (les stores instanciés, les imports résolus) — pas le rendu des entrées : `loading`
+    // vaut `true` au montage, donc le `computed` qui les bâtit n'est jamais évalué.
+    // MESURÉ : une erreur glissée dans la boucle des boss laisse ce test au VERT. C'est
+    // pourquoi la règle vit dans `bossAgendaEntries` (lib) et y est testée pour de bon.
+    // On amorce quand même l'auth et des frappes : c'est l'état réaliste, et `myHits`
+    // filtre sur l'id de l'auth.
+    const { default: AgendaPage } = await import('@/pages/AgendaPage.vue');
+    const seed = async () => {
+      const { useAuthStore } = await import('@/stores/auth');
+      const { useFriendBossStore } = await import('@/stores/friendBoss');
+      (useAuthStore() as unknown as { user: unknown }).user = { id: 'me' };
+      const fb = useFriendBossStore() as unknown as {
+        bosses: unknown[];
+        members: unknown[];
+        hits: unknown[];
+        loaded: boolean;
+      };
+      const now = Date.now();
+      fb.bosses = [
+        {
+          id: 'b1',
+          ownerId: 'me',
+          family: 'push',
+          exerciseId: 'ex_pushup',
+          exerciseName: 'Pompes',
+          repWeight: 1,
+          tier: null,
+          createdAt: now,
+          startAt: now,
+          defeatedAt: null,
+          hpTotal: 120_000,
+          damage: 0,
+        },
+      ];
+      fb.members = [
+        {
+          bossId: 'b1',
+          userId: 'me',
+          pseudo: 'Last',
+          status: 'accepted',
+          units: 50,
+          claimed: false,
+        },
+      ];
+      // Deux frappes le MÊME jour : c'est le regroupement par jour qu'on éprouve.
+      fb.hits = [
+        { id: 'h1', bossId: 'b1', userId: 'me', units: 20, createdAt: now },
+        { id: 'h2', bossId: 'b1', userId: 'me', units: 30, createdAt: now },
+      ];
+      fb.loaded = true; // sinon le montage lance un fetch Supabase inutile
+    };
+    expect(await mountIt(AgendaPage, {}, undefined, seed)).toBeNull();
   }, 30_000);
 });

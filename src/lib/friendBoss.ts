@@ -531,6 +531,71 @@ export function bossRepsXp(family: BossFamily, units: number, repWeight: number)
   return Math.round(raw * XP_MULT);
 }
 
+/** Une ligne d'agenda : ce qu'un joueur a fait sur UN boss, UN jour donné. */
+export interface BossAgendaEntry {
+  bossId: string;
+  /** Clé de jour rendue par `dayKey` (l'agenda y range ses entrées). */
+  day: string;
+  /** Nom de l'exo du boss — le titre affiché. */
+  title: string;
+  /** Reps (ou secondes) de chaque frappe de ce jour, dans l'ordre. */
+  units: number[];
+  total: number;
+  /** XP de ces reps — `bossRepsXp`, jamais une seconde formule. */
+  xp: number;
+  /** 'reps' ou 's' selon la famille (`bossUnitLabel`). */
+  unit: 'reps' | 's';
+}
+
+/** Ce qu'un joueur a fait sur ses boss, groupé par (boss, jour) — de quoi bâtir l'agenda.
+ *
+ *  ⚠️ On ne retient que les boss où il est ACCEPTÉ, la règle exacte de `friendBossXp` :
+ *  l'agenda ne doit jamais afficher une XP que le total ignore. (Le serveur refuse déjà une
+ *  frappe sans adhésion, mais c'est lui qui le garantit, pas l'écran.)
+ *
+ *  ⚠️ La PRIME de complétion n'est PAS ici : elle tombe à la mort du boss et ne se rattache
+ *  à aucun jour d'effort — même choix que `challengeDayXp`, qui l'omet aussi. Le total
+ *  (`friendBossXp`) la compte, l'agenda montre l'effort.
+ *
+ *  ⚠️ `dayKey` est INJECTÉE : « quel jour est-ce ? » dépend du fuseau de l'appelant, et
+ *  cette lib reste pure. L'agenda passe la même fonction que pour ses autres sources. */
+export function bossAgendaEntries(
+  bosses: readonly FriendBoss[],
+  members: readonly FriendBossMember[],
+  hits: readonly FriendBossHit[],
+  userId: string,
+  dayKey: (ms: number) => string,
+): BossAgendaEntry[] {
+  const out: BossAgendaEntry[] = [];
+  const accepted = new Set(
+    members.filter((m) => m.userId === userId && m.status === 'accepted').map((m) => m.bossId),
+  );
+  for (const b of bosses) {
+    if (!accepted.has(b.id)) continue;
+    const byDay = new Map<string, number[]>();
+    for (const h of hits) {
+      if (h.bossId !== b.id || h.userId !== userId || h.units <= 0) continue;
+      const day = dayKey(h.createdAt);
+      const list = byDay.get(day);
+      if (list) list.push(h.units);
+      else byDay.set(day, [h.units]);
+    }
+    for (const [day, units] of byDay) {
+      const total = units.reduce((a, u) => a + u, 0);
+      out.push({
+        bossId: b.id,
+        day,
+        title: b.exerciseName,
+        units,
+        total,
+        xp: bossRepsXp(b.family, total, b.repWeight),
+        unit: bossUnitLabel(b.family),
+      });
+    }
+  }
+  return out;
+}
+
 /** Prime de complétion : versée si le boss est mort et la part minimale apportée.
  *  ⚠️ Le CRAN passe par `bossShareUnits` des deux côtés (part minimale ET plafond de la
  *  prime) : un boss plus dur demande plus pour la toucher, et en plafonne davantage. */

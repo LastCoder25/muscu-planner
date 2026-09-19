@@ -79,6 +79,9 @@ import { useTennisStore } from '@/stores/tennis';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
+import { useFriendBossStore } from '@/stores/friendBoss';
+import { useAuthStore } from '@/stores/auth';
+import { bossAgendaEntries } from '@/lib/friendBoss';
 import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
 import { legSets, legMode, type ComboSet } from '@/lib/combo';
 import {
@@ -102,11 +105,13 @@ const tennis = useTennisStore();
 const cardio = useCardioStore();
 const challenges = useChallengesStore();
 const combo = useComboStore();
+const friendBoss = useFriendBossStore();
+const auth = useAuthStore();
 const loading = ref(true);
 
 interface Entry {
   ts: number;
-  kind: 'muscu' | 'tennis' | 'cardio' | 'challenge' | 'combo';
+  kind: 'muscu' | 'tennis' | 'cardio' | 'challenge' | 'combo' | 'boss';
   icon: string;
   title: string;
   meta: string;
@@ -309,6 +314,31 @@ const entries = computed<Entry[]>(() => {
       }
     }
   }
+  // Boss entre amis : les reps de MES frappes, jour par jour. La règle (qui compte, quelle
+  // XP, quelle unité) vit dans la lib — ici on ne fait que la traduire en entrée d'agenda.
+  for (const e of bossAgendaEntries(
+    friendBoss.bosses,
+    friendBoss.members,
+    friendBoss.hits,
+    auth.user?.id ?? '',
+    (ms) => isoDay(new Date(ms)),
+  )) {
+    const [y, m, dd] = e.day.split('-').map(Number);
+    out.push({
+      ts: new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime(),
+      kind: 'boss',
+      icon: 'local_fire_department',
+      title: e.title,
+      meta:
+        e.units.length > 1
+          ? `${e.units.length} frappes · ${e.units.join('/')} ${e.unit}`
+          : `${e.total} ${e.unit}`,
+      xp: e.xp,
+      energy: e.xp, // muscu (ou cardio pour un boss de conditionnement) → fond → énergie
+      source: 'Boss amis',
+      link: '/boss-amis',
+    });
+  }
   return out.filter((e) => e.ts >= weekStart.value && e.ts < weekEnd.value);
 });
 
@@ -321,6 +351,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'tennis', label: '🎾 Tennis' },
   { key: 'challenge', label: '🏆 Défis' },
   { key: 'combo', label: '🎯 360' },
+  { key: 'boss', label: '🐉 Boss' },
 ];
 const filter = ref<FilterKey>('all');
 const filteredEntries = computed(() =>
@@ -351,6 +382,7 @@ onMounted(async () => {
       cardio.fetchLogs().catch(() => undefined),
       challenges.list.length ? Promise.resolve() : challenges.fetchMine().catch(() => undefined),
       combo.list.length ? Promise.resolve() : combo.fetchMine().catch(() => undefined),
+      friendBoss.loaded ? Promise.resolve() : friendBoss.fetchMine().catch(() => undefined),
     ]);
   } finally {
     loading.value = false;
@@ -504,6 +536,10 @@ onMounted(async () => {
 }
 .entry.k-combo {
   --src-c: #b98cff;
+}
+/* Rouge franc : distinct de l'orange du cardio (#ff9d4d) et du violet du 360 (#b98cff). */
+.entry.k-boss {
+  --src-c: #ff5d73;
 }
 .entry-ic {
   color: var(--src-c, var(--accent));
