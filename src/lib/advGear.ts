@@ -314,6 +314,43 @@ export function wornGear(advs: Adventurer[], stock: AdvGear[]): Map<string, AdvG
   return out;
 }
 
+/**
+ * 🗡️ CE QUI ATTEND UN PORTEUR : pour chaque aventurier, les emplacements VIDES qu'une pièce
+ * du stock pourrait remplir tout de suite.
+ *
+ * ⚠️ POURQUOI ELLE EXISTE. Un emplacement vide peut être parfaitement normal — aucune pièce
+ * de sa lignée en stock, ou toutes trop rares pour sa classe. Rien ne distinguait ce cas de
+ * celui où une pièce attend, et « Confier au mieux » ne se relance pas tout seul quand une
+ * forge se termine : constaté sur le compte réel, un archer restait sans arme alors qu'un
+ * arc portable dormait en stock, et ça se lisait comme une panne de l'auto-équipement.
+ *
+ * ⚠️ « DISPONIBLE » = non portée, par lui comme par un autre (`wornGear`, les règles du
+ * COMBAT) : compter une pièce déjà sur le dos de quelqu'un ferait promettre un remplissage
+ * qui n'aurait pas lieu.
+ *
+ * ⚠️ Elle ne dit PAS que l'auto-équipement la confiera à CET aventurier : il optimise sur
+ * tout le vivier et peut la donner à un meilleur porteur. Elle dit qu'il y a à faire.
+ */
+export function pendingAdvGear(advs: Adventurer[], stock: AdvGear[]): Map<string, AdvGearSlot[]> {
+  // ⚠️ UNE SEULE lecture de `wornGear` : elle tranche à la fois ce qui est PRIS (donc
+  // indisponible) et ce que chacun porte VRAIMENT (une pièce devenue trop rare y est
+  // ignorée, et son emplacement compte donc comme vide — ce qu'il est).
+  const byAdv = wornGear(advs, stock);
+  const worn = new Set([...byAdv.values()].flat().map((g) => g.id));
+  const free = stock.filter((g) => !worn.has(g.id));
+  const out = new Map<string, AdvGearSlot[]>();
+  for (const a of advs) {
+    const mine = byAdv.get(a.id) ?? [];
+    const slots = ADV_GEAR_SLOTS.filter(
+      (slot) =>
+        !mine.some((g) => g.slot === slot) &&
+        free.some((g) => g.slot === slot && canWearAdvGear(a, g)),
+    );
+    if (slots.length) out.set(a.id, slots);
+  }
+  return out;
+}
+
 /** 🏹 LA FORME DESSINÉE de l'arme de chaque lignée (portrait du vivier, v0.865).
  *  ⚠️ Exhaustive par construction (`Record<Lineage, …>`) : une lignée ajoutée sans dire
  *  comment son arme se dessine ne compile pas. L'arc et le bâton ont leur dessin propre ;
@@ -380,6 +417,10 @@ export interface AdvGearCell {
    *  défaut que la v0.895 avait corrigé côté héros et qui survivait ici. */
   color?: string;
   rank?: string;
+  /** ⚠️ Case VIDE qu'une pièce du stock pourrait remplir tout de suite (`pendingAdvGear`).
+   *  Un vide peut être normal (rien de sa lignée, tout trop rare) : sans ce drapeau les deux
+   *  se lisaient pareil, et « il me manque une arme » ressemblait à une panne. */
+  pending?: boolean;
   /** Stat principale, telle que le combat la lit (valeur × niveau d'objet). */
   stat?: string;
   title: string;
@@ -397,7 +438,12 @@ export function advGearEffectTexts(g: AdvGear): string[] {
  *  lit arme · armure / accessoire · relique). ⚠️ `worn` = ce que `wornGear` retient pour lui :
  *  une pièce invalide (autre métier, trop rare, prise ailleurs) se lit comme une case VIDE,
  *  jamais comme portée — le portrait ne montre pas un équipement qui ne compte pas. */
-export function advGearCells(adv: Adventurer, worn: readonly AdvGear[]): AdvGearCell[] {
+export function advGearCells(
+  adv: Adventurer,
+  worn: readonly AdvGear[],
+  /** Emplacements qu'une pièce du stock peut remplir (`pendingAdvGear`), s'ils sont connus. */
+  pending: readonly AdvGearSlot[] = [],
+): AdvGearCell[] {
   const lineage = lineageOf(adv);
   const defs = lineage ? LINEAGE_GEAR[lineage].pieces : null;
   return ADV_GEAR_SLOTS.map((slot) => {
@@ -420,7 +466,15 @@ export function advGearCells(adv: Adventurer, worn: readonly AdvGear[]): AdvGear
     }
     const d = defs?.[slot];
     const name = d?.name ?? 'Emplacement';
-    return { slot, emoji: d?.emoji ?? '＋', name, filled: false, title: `${name} — vide` };
+    const attend = pending.includes(slot);
+    return {
+      slot,
+      emoji: d?.emoji ?? '＋',
+      name,
+      filled: false,
+      ...(attend ? { pending: true } : {}),
+      title: attend ? `${name} — une pièce attend en stock` : `${name} — vide`,
+    };
   });
 }
 

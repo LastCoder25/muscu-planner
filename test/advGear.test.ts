@@ -23,6 +23,7 @@ import {
   advGearValue,
   advLooks,
   canWearAdvGear,
+  pendingAdvGear,
   lineageOf,
   normalizeAdvGearState,
   outfitFromItem,
@@ -900,5 +901,64 @@ describe('💰⚒️ L’ÉQUIPEMENTIER SE PAIE EN OR, ET ON PEUT TOUT LANCER D�
       item('modeste', { slot: 'weapon', rarity: 'inhabituel' }),
     ];
     expect(planOutfitBatch(sac, a, [], []).jobs[0]!.item.id).toBe('modeste');
+  });
+});
+
+describe('🗡️ ce qui attend un porteur (pendingAdvGear)', () => {
+  // ⚠️ Constaté sur le compte réel : un archer sans arme alors qu'un arc portable dormait
+  // en stock — « Confier au mieux » ne se relance pas quand une forge se termine, et rien
+  // ne distinguait ce cas d'un emplacement vide parfaitement normal.
+  it('signale l’emplacement vide qu’une pièce du stock peut remplir', () => {
+    const a = adv('a', ['guerrier']);
+    expect(pendingAdvGear([a], [piece('p')]).get('a')).toEqual(['weapon']);
+  });
+
+  it('⚠️ une pièce DÉJÀ PORTÉE (par lui ou par un autre) ne compte pas', () => {
+    const p1 = piece('p1');
+    // Par lui : son emplacement n'est plus vide.
+    expect(pendingAdvGear([adv('a', ['guerrier'], { weapon: 'p1' })], [p1]).size).toBe(0);
+    // Par un AUTRE : promettre un remplissage qui n'aura pas lieu serait un mensonge.
+    const porte = adv('a', ['guerrier'], { weapon: 'p1' });
+    const nu = adv('b', ['guerrier']);
+    expect(pendingAdvGear([porte, nu], [p1]).size).toBe(0);
+    // Avec DEUX pièces, le second est servi — et le PREMIER, déjà armé, n'est pas signalé.
+    // ⚠️ Ce dernier point est le seul qui éprouve la garde « emplacement déjà pourvu » :
+    // partout ailleurs la pièce portée sort de toute façon du stock disponible, ce qui la
+    // masque. Sans lui, l'écran annoncerait « une arme attend » à un aventurier armé.
+    const deux = pendingAdvGear([porte, nu], [p1, piece('p2')]);
+    expect(deux.get('b')).toEqual(['weapon']);
+    expect(deux.has('a')).toBe(false);
+  });
+
+  it('⚠️ rien à signaler quand la pièce lui est INTERDITE — un vide peut être normal', () => {
+    const guerrier = adv('a', ['guerrier']);
+    expect(pendingAdvGear([guerrier], [piece('p', { lineage: 'archer' })]).size).toBe(0);
+    expect(pendingAdvGear([guerrier], [piece('p', { rarity: 'inhabituel' })]).size).toBe(0);
+  });
+
+  it('⚠️ une pièce portée mais devenue INVALIDE laisse son emplacement vide', () => {
+    // `wornGear` ignore une pièce hors lignée : l'emplacement l'est donc en pratique, et
+    // une pièce valide du stock doit être signalée.
+    const a = adv('a', ['guerrier'], { weapon: 'faux' });
+    expect(
+      pendingAdvGear([a], [piece('faux', { lineage: 'archer' }), piece('bon')]).get('a'),
+    ).toEqual(['weapon']);
+  });
+
+  it('plusieurs emplacements à la fois, et rien quand le stock est vide', () => {
+    const a = adv('a', ['guerrier']);
+    const slots = pendingAdvGear([a], [piece('w'), piece('r', { slot: 'relic' })]).get('a');
+    expect(slots).toEqual(['weapon', 'relic']);
+    expect(pendingAdvGear([a], []).size).toBe(0);
+  });
+
+  it('⚠️ elle est d’accord avec l’auto-équipement : ce qu’elle signale, le plan le remplit', () => {
+    // Sinon l'écran annoncerait « il y a à faire » et le bouton ne ferait rien.
+    const advs = [adv('a', ['guerrier']), adv('b', ['archer'])];
+    const stock = [piece('w1'), piece('w2', { lineage: 'archer', name: 'Arc' })];
+    const ctx = { familiars: [], talents: [], kennelLevel: 1, now: 0, advGear: stock };
+    const plan = autoAdvGear(advs, ctx);
+    for (const [id, slots] of pendingAdvGear(advs, stock))
+      for (const s of slots) expect(plan.get(id)?.[s], `${id}/${s}`).toBeTruthy();
   });
 });

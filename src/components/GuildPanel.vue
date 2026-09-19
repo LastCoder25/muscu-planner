@@ -81,14 +81,23 @@
                   autoPreview.changes ? 'Confier au mieux' : 'Tout est déjà au mieux'
                 }}</span>
                 <span class="ga-sub">
-                  🐾 familiers · 🧠 talents · 🗡️ équipement<template v-if="autoPreview.changes">
+                  <template v-if="autoPreview.pending"
+                    >{{ autoPreview.pending }} emplacement{{ autoPreview.pending > 1 ? 's' : '' }} à
+                    armer</template
+                  ><template v-else>🐾 familiers · 🧠 talents · 🗡️ équipement</template
+                  ><template v-if="autoPreview.changes">
                     · {{ autoPreview.changes }} aventurier{{
                       autoPreview.changes > 1 ? 's' : ''
                     }}</template
                   >
                 </span>
               </span>
-              <span v-if="autoPreview.changes && autoPreview.gain > 0" class="ga-gain">
+              <!-- Un emplacement VIDE qu'on peut remplir passe DEVANT le gain : c'est plus
+                   parlant qu'un nombre de puissance, et c'est ce qu'on voit sur le portrait. -->
+              <span v-if="autoPreview.pending" class="ga-gain pend">
+                {{ autoPreview.pending }}<small>🗡️</small>
+              </span>
+              <span v-else-if="autoPreview.changes && autoPreview.gain > 0" class="ga-gain">
                 +{{ fmtPow(autoPreview.gain) }}<small>⚔️</small>
               </span>
             </button>
@@ -236,13 +245,22 @@
                         gradeLabel(g)
                       }}</span>
                       <span>{{ lineageLabel(g.lineage) }}</span>
+                      <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
+                           ligne de moins par tuile, sans rien perdre — le cadre jaune dit
+                           déjà « confiée », la flèche dit à QUI. Il garde sa couleur
+                           d'état : un empêchement n'est pas une métadonnée. -->
+                      <span v-if="ownerOf(g)" class="warn">→ {{ ownerOf(g)?.name }}</span>
                     </span>
-                    <span v-for="(t, i) in gearEffectTexts(g)" :key="i" class="d-gain">{{
-                      t
-                    }}</span>
-                    <span v-if="ownerOf(g)" class="d-pair-sub warn"
-                      >portée par {{ ownerOf(g)?.name }}</span
-                    >
+                    <!-- Les effets sur UNE ligne : c'est ce qui départage deux pièces, donc
+                         ça reste en pleine couleur, mais une ligne par effet faisait des
+                         tuiles de hauteurs très inégales.
+                         ⚠️ Des éléments FLEX séparés par un `gap`, jamais un « · » entre deux
+                         textes : en colonne étroite le second effet passe à la ligne et le
+                         séparateur reste orphelin en bout de ligne précédente — le défaut que
+                         la ligne de méta juste au-dessus documente déjà (constaté au banc). -->
+                    <span class="d-gain gear-fx">
+                      <span v-for="(t, i) in gearEffectTexts(g)" :key="i">{{ t }}</span>
+                    </span>
                   </span>
                 </div>
                 <!-- ⚠️ ICÔNES SEULES, mais chacune garde son `title`/`aria-label` complet :
@@ -816,6 +834,7 @@ import {
   advGearSellValue,
   advLooks,
   canWearAdvGear,
+  pendingAdvGear,
   lineageOf,
   wornGear,
   type AdvGear,
@@ -877,6 +896,12 @@ const pairedCount = computed(() => companionPairs(char.advList, compCtx.value).s
 /** ⚔️ Puissances calculées par la LIB (`combatPower`, celle du héros) — jamais ici. La
  *  version NUE sert à dire ce que la paire ajoute. */
 const powers = computed(() => adventurerPowers(char.advList, compCtx.value));
+/** Ce qui attend un porteur, pour tout le vivier — lu par les PORTRAITS et par l'aperçu du
+ *  BOUTON, donc une seule et même réponse à « y a-t-il à armer ? ». Deux calculs finiraient
+ *  par se contredire : une case en appel et un bouton muet, ou l'inverse.
+ *  ⚠️ Déclarée AVANT ses lecteurs : un `computed` lirait une source déclarée plus bas sans
+ *  broncher, mais l'ordre du fichier doit rester évident (zone morte temporelle, v0.910). */
+const gearPending = computed(() => pendingAdvGear(char.advList, compCtx.value.advGear));
 const barePowers = computed(() => adventurerPowers(char.advList));
 const powerOf = (a: Adventurer) => powers.value.get(a.id) ?? 0;
 const pairBonusOf = (a: Adventurer) => powerOf(a) - (barePowers.value.get(a.id) ?? 0);
@@ -1060,7 +1085,12 @@ const autoPreview = computed(() => {
   });
   const sum = (m: Map<string, number>) => [...m.values()].reduce((x, v) => x + v, 0);
   const gain = sum(adventurerPowers(after, ctx)) - sum(powers.value);
-  return { changes, gain };
+  // ⚠️ CE QUI MANQUAIT : « il y a du monde à ARMER ». Le gain seul ne le dit pas — une
+  // pièce peut attendre pendant que le gain reste modeste, et un emplacement vide se lisait
+  // alors comme une panne de l'auto-équipement (constaté sur le compte réel : un archer sans
+  // arme, un arc portable en stock, parce que la forge s'était terminée depuis).
+  const pending = [...gearPending.value.values()].reduce((n, slots) => n + slots.length, 0);
+  return { changes, gain, pending };
 });
 /** Puissance totale du vivier — la somme de ce que chaque portrait affiche. */
 const rosterPower = () =>
@@ -1130,7 +1160,15 @@ function lookOf(a: Adventurer): AdvLook {
  *  (`advGearCells`) sur ce que `wornGear` retient — un seul calcul pour tout le vivier,
  *  sans dépendance à l'horloge du panneau. */
 const gearCells = computed(
-  () => new Map(char.advList.map((a) => [a.id, advGearCells(a, gearWorn.value.get(a.id) ?? [])])),
+  () =>
+    new Map(
+      char.advList.map((a) => [
+        a.id,
+        // ⚠️ Un seul `pendingAdvGear` pour tout le vivier : recalculé par aventurier, il
+        // relirait le stock entier à chaque portrait.
+        advGearCells(a, gearWorn.value.get(a.id) ?? [], gearPending.value.get(a.id) ?? []),
+      ]),
+    ),
 );
 function gearCellsOf(a: Adventurer): AdvGearCell[] {
   return gearCells.value.get(a.id) ?? advGearCells(a, []);
@@ -2230,9 +2268,9 @@ async function doPromote(classId: string) {
 .gear-stock-row {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
-  padding: 8px;
+  padding: 7px 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -2256,11 +2294,31 @@ async function doPromote(classId: string) {
 .gear-stock-top {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 8px;
 }
+/* ⚠️ COLLÉS EN BAS. Les tuiles d'une même rangée sont étirées à la même hauteur par la
+   grille ; sans `margin-top: auto` la rangée de boutons suivait le texte, donc les icônes
+   flottaient à 4 ou 5 hauteurs différentes selon le nombre de lignes au-dessus. MESURÉ. */
 .gear-actions-row {
   display: flex;
   gap: 6px;
+  margin-top: auto;
+}
+/* Le gap du flex suffit : le `margin-left` de `.d-rk` (utile après un nom) décalerait la
+   pastille de 6 px et la désalignerait du nom juste au-dessus. */
+.gear-meta .d-rk {
+  margin-left: 0;
+}
+.gear-fx {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+  line-height: 1.25;
+}
+/* Le porteur vit maintenant DANS la ligne de méta : `.d-pair-sub.warn` ne l'attrapait
+   plus (il est enfant, pas la classe elle-même) et il aurait perdu sa couleur d'état. */
+.gear-meta .warn {
+  color: var(--d3, #ffb23f);
 }
 .gear-btn {
   flex: 1;

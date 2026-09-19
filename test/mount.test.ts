@@ -71,6 +71,35 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await mountIt(GuildPanel, { open: true, mode: 'recruit' }, ROW)).toBeNull();
   }, 30_000);
 
+  it('GuildPanel : une pièce en stock ATTEND un porteur (case en appel)', async () => {
+    // ⚠️ IL FAUT DES DONNÉES : avec un stock VIDE, `pendingAdvGear` rend une carte vide et
+    // le chemin « case en appel » du portrait n'est jamais exécuté — il resterait invisible.
+    // Ici une épée de guerrier libre face à Léa (guerrier, classe commune) : elle attend.
+    const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
+    const avecStock = {
+      ...ROW,
+      adv_gear: {
+        forges: [],
+        stock: [
+          {
+            id: 'w1',
+            lineage: 'guerrier',
+            slot: 'weapon',
+            name: 'Épée',
+            emoji: '🗡️',
+            rarity: 'commun',
+            roll: 0.5,
+            level: 3,
+            effect: { type: 'damage_pct', value: 10 },
+          },
+        ],
+      },
+    };
+    expect(await mountIt(GuildPanel, { open: true }, avecStock)).toBeNull();
+    // Et l'onglet Stock, qui rend les tuiles de pièces.
+    expect(await mountIt(GuildPanel, { open: true, tab: 'stock' }, avecStock)).toBeNull();
+  }, 30_000);
+
   it('VillagePlots se monte, Équipementier ouvert sur un aventurier', async () => {
     // ⚠️ La feuille de l'Équipementier calcule le plan de forge (`planOutfitBatch`) et le
     // coût de chaque ligne DÈS l'ouverture : c'est du travail fait au setup, donc

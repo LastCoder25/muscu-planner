@@ -116,7 +116,7 @@
         :key="c.slot"
         type="button"
         class="apg-cell"
-        :class="{ empty: !c.filled }"
+        :class="{ empty: !c.filled, pending: c.pending }"
         :style="c.color ? { '--gc': c.color } : {}"
         :title="c.title"
         :aria-label="c.title"
@@ -422,6 +422,17 @@ button.ap-mini {
 }
 .apg-cell.empty .apg-emo {
   opacity: 0.35;
+}
+/* ⚠️ UNE CASE VIDE N'EST PAS FORCÉMENT UN MANQUE : il n'y a peut-être rien de sa lignée en
+   stock, ou tout est trop rare pour sa classe. Celle qu'une pièce ATTEND se distingue — sans
+   ça, « il me manque une arme » se lit comme une panne de l'auto-équipement (constaté sur le
+   compte réel). Accent, pas rouge : c'est quelque chose à FAIRE, pas une alerte. */
+.apg-cell.empty.pending {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.apg-cell.empty.pending .apg-emo {
+  opacity: 0.85;
 }
 .apg-emo {
   font-size: 17px;
