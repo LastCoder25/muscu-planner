@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { playerCombatant, mulberry32 } from '@/lib/combat';
 import {
   isQuotaPoi,
+  isRiftPoi,
   EXPE,
   spawnWindow,
   goldCost,
@@ -58,10 +59,19 @@ describe('expedition — carte / monde', () => {
     const m = createMap(123, 0, 10, 3);
     expect(m.pois.length).toBeGreaterThanOrEqual(1);
     const w = spawnWindow(10);
-    for (const p of m.pois) {
+    // ⚠️ LA FENÊTRE DE SPAWN NE VAUT QUE POUR LE QUOTA GÉNÉRAL (v0.929). Le niveau d’une
+    // faille est tiré par RANG entre Bronze et le rang du joueur (`riftLevelFor`), donc il
+    // tombe SOUS `w.min` dès que le joueur n’est pas au premier rang : un joueur niveau 10
+    // (Bronze ★5) voit des failles de niveau 1 à 10, la fenêtre commence à 10. C’est cette
+    // variété de rangs qui donne son sens à « laquelle je referme » — et c’est la seule
+    // exception au dégradé, verrouillée par `expeditionMap.test`. La borne des failles
+    // (jamais au-dessus du joueur) y est testée à part.
+    for (const p of m.pois.filter(isQuotaPoi)) {
       expect(p.level).toBeGreaterThanOrEqual(w.min);
       expect(p.level).toBeLessThanOrEqual(w.max);
     }
+    // …et une faille, elle, ne dépasse jamais le niveau du joueur.
+    for (const p of m.pois.filter(isRiftPoi)) expect(p.level).toBeLessThanOrEqual(10);
     // Espacement mini entre paires.
     for (let i = 0; i < m.pois.length; i++)
       for (let j = i + 1; j < m.pois.length; j++) {

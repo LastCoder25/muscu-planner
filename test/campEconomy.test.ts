@@ -168,9 +168,13 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
     for (const L of NIV) {
       const r = moyenne(L, { days: 7, comptoir: L, slotCap: true });
       const part = r.goldNet / goldPerDay(L);
-      // Mesuré : +9 % (niv. 12), +19 % (26), +20 % (60). Au-delà, le puits d'or recalibré en
+      // Mesuré : +9 % (niv. 12), +16 % (26), +17 % (60). Au-delà, le puits d'or recalibré en
       // v0.733 (55-90 % du plafond sur un an) ne tient plus — c'est la raison du plafond de
       // créneaux et de `CAMP.groupGoldShare`.
+      // ⚠️ RE-MESURÉ en v0.929 : passer à 6 failles a été payé en retirant 4 POI ordinaires
+      // de la couronne (`poiCap` 20 → 16), donc ~20 % de camps en moins. Or des camps
+      // +19/+20 → +16/+17 %, débit 3,6/6,8/8,9 → **3,0/5,9/8,1 camps/jour**. Ne pas toucher
+      // à `poiCap` sans relancer ce fichier.
       expect(part, `niveau ${L} : +${(part * 100).toFixed(0)} % d’or`).toBeLessThanOrEqual(
         GOLD_MAX,
       );
@@ -185,7 +189,8 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
       const r = moyenne(L, { days: 7, comptoir: L, slotCap: true });
       const part = r.stones / stonesPerDay(L);
       // Les pierres financent les BOSS : le donjon doit rester la source. Mesuré : +6 / +16 /
-      // +32 % aux niveaux 12 / 26 / 60.
+      // +27 % aux niveaux 12 / 26 / 60 — mesuré +5 / +16 / +27 en v0.929, contre
+      // +6 / +16 / +32 quand la couronne portait 20 POI ordinaires.
       expect(part, `niveau ${L} : +${(part * 100).toFixed(0)} % de 🔮`).toBeLessThanOrEqual(
         STONES_MAX,
       );
@@ -208,7 +213,28 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
       `${cap.parties.toFixed(1)} vs ${sans.parties.toFixed(1)} camps/j`,
     ).toBeLessThan(sans.parties);
     expect(cap.goldNet).toBeLessThan(sans.goldNet);
-    // Sans plafond, on dépasse la bande — c'est ce qu'il empêche.
-    expect(sans.goldNet / goldPerDay(60)).toBeGreaterThan(GOLD_MAX * 0.95);
+    //
+    // ⚠️ CE TEST A CHANGÉ DE FORMULATION EN v0.929, ET LA RAISON COMPTE. Il affirmait « sans
+    // plafond, on DÉPASSE la bande » (mesuré 25 % pour une bande à 25) — ce n’est plus vrai :
+    // retirer 4 POI ordinaires de la couronne pour loger 6 failles a fait tomber le débit
+    // sans plafond à **20,9 %**, sous la bande. Le plafond n’est donc plus le SEUL garde-fou
+    // du débit d’or ; il reste le plus gros levier, et c’est CE QUE ce test épingle désormais.
+    // ⚠️ Il l’épingle en ÉCART SUBSTANTIEL, pas en « strictement inférieur » : la version
+    // d’avant se jouait à 5 % de sa borne et tombait à la moindre variation de PLACEMENT des
+    // POI — une borne qu’un bruit d’échantillonnage franchit ne verrouille rien.
+    //
+    // Mesuré (8 graines, niveau 60, Comptoir 9) : 5,8 camps/jour et +15,8 % d’or AVEC le
+    // plafond, contre 8,3 et +20,9 % sans — soit ×1,43 et ×1,32.
+    expect(sans.parties / cap.parties).toBeGreaterThan(1.25);
+    expect(
+      sans.goldNet / cap.goldNet,
+      `or ${((cap.goldNet / goldPerDay(60)) * 100).toFixed(1)} % avec, ${(
+        (sans.goldNet / goldPerDay(60)) *
+        100
+      ).toFixed(1)} % sans`,
+    ).toBeGreaterThan(1.15);
+    // …et même sans plafond on reste sous la bande, ce qui n’était pas le cas à 20 POI
+    // ordinaires : le garde-fou a désormais de la marge devant lui.
+    expect(sans.goldNet / goldPerDay(60)).toBeLessThanOrEqual(GOLD_MAX);
   });
 });

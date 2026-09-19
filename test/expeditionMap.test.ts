@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DUNGEONS } from '@/data/dungeons';
+import { characterRank, rankStartLevel } from '@/lib/characterRank';
 import { ENDLESS_NAME } from '@/data/endless';
 import {
   travelFactor,
@@ -12,6 +13,7 @@ import {
   goldCost,
   messageLoot,
   spawnWindow,
+  riftLevelFor,
   createMap,
   advanceWorld,
   resolveOutcome,
@@ -226,7 +228,7 @@ function mkPoi(type: PoiType, x: number, y: number): Poi {
 }
 
 describe('rythme de la carte', () => {
-  it('la carte reste PEUPLÉE en permanence — 20 POI, plancher = plafond', () => {
+  it('la carte reste PEUPLÉE en permanence — 16 POI, plancher = plafond', () => {
     // ⚠️ RENVERSEMENT ASSUMÉ d'une décision antérieure. On cherchait auparavant une carte
     // qui « respire » (elle se vidait un peu, ce qui créait un arbitrage de rareté). Ce
     // n'est plus le sujet depuis que le NIVEAU d'un POI découle de sa DISTANCE : c'est la
@@ -238,13 +240,13 @@ describe('rythme de la carte', () => {
     for (let t = 0; t <= 7 * 24 * HOUR; t += 2 * HOUR) {
       map = advanceWorld(map, t, 26);
       // ⚠️ ON COMPTE LE QUOTA, pas `pois.length` : les failles et leurs mines résiduelles
-      // ont leur PROPRE quota et s'AJOUTENT aux 20 — les compter ici reviendrait à laisser
+      // ont leur PROPRE quota et s'AJOUTENT aux 16 — les compter ici reviendrait à laisser
       // une faille voler la place d'une mine d'or ou d'un camp, dont l'économie est mesurée.
       expect(map.pois.filter(isQuotaPoi).length).toBe(EXPE.poiCap);
     }
   });
 
-  it('🕳️ les FAILLES ont leur propre quota, et elles s’ajoutent aux 20', () => {
+  it('🕳️ les FAILLES ont leur propre quota, et elles s’ajoutent aux 16', () => {
     let map = createMap(4321, 0, 26);
     for (let t = 0; t <= 10 * 24 * HOUR; t += 2 * HOUR) {
       map = advanceWorld(map, t, 26);
@@ -301,9 +303,19 @@ describe('rythme de la carte', () => {
     // La règle qui donne son sens au choix d'un POI. Avant, le niveau était tiré
     // indépendamment : un repaire +10 pouvait se poser à deux pas de la ville, et la
     // carte ne disait rien de ce qu'elle proposait.
+    //
+    // ⚠️ ON MESURE LE QUOTA GÉNÉRAL, PAS LES FAILLES — et c’est un coût assumé de la
+    // v0.929. Le niveau d’une faille est tiré par RANG (`riftLevelFor`), donc décorrélé de
+    // son éloignement : mesuré, 6 failles sur 22 POI font tomber la corrélation de 0,95 à
+    // **0,31**. La carte parle donc deux langages, et c’est le prix de la variété de rangs
+    // que la décision « entre Bronze et ton rang » demande (une fenêtre [niveau, +10]
+    // indexée sur la distance ne couvre qu’un rang et demi). ⚠️ CE QUI LE REND TENABLE :
+    // une faille a son propre glyphe ET sa fiche annonce son rang et ses étoiles (v0.928)
+    // — sa difficulté se LIT, elle ne se devine pas sur la distance. Si les failles
+    // devaient un jour rejoindre le dégradé, c’est ce test qu’il faudrait élargir.
     let map = createMap(4242, 0, 26);
     for (let t = 0; t <= 3 * 24 * HOUR; t += 2 * HOUR) map = advanceWorld(map, t, 26);
-    const pts = map.pois.map((p) => ({ d: p.distNorm, l: p.level }));
+    const pts = map.pois.filter(isQuotaPoi).map((p) => ({ d: p.distNorm, l: p.level }));
     expect(pts.length).toBeGreaterThan(10);
     // Corrélation de Pearson distance ↔ niveau : forte et positive.
     const md = pts.reduce((a, x) => a + x.d, 0) / pts.length;
@@ -329,7 +341,11 @@ describe('rythme de la carte', () => {
     // les autres. À 20 POI avec l'ancien écart de 20, l'occupation atteignait 53 %.
     const aire = Math.PI * (EXPE.distMax ** 2 - EXPE.distMin ** 2);
     // ⚠️ FAILLES COMPRISES : c'est la couronne ENTIÈRE qui sature, et c'est ce qui borne
-    // `riftCap` à 2 (mesuré : 0 chevauchement à 22 POI, 5 à 23, 105 à 26).
+    // le TOTAL à **22 POI placés** — mesuré : 0 chevauchement à 22, 5 à 23, 105 à 26. Passer
+    // à 6 failles s'est donc payé en retirant 4 POI ordinaires (`poiCap` 20 → 16), pas en
+    // élargissant la couronne. ⚠️ `minDistPoi` N'EST PAS LE LEVIER : mesuré à 14/12/11/10/9,
+    // les chevauchements font 105/159/138/46/1629 — erratique, parce qu’à 26 POI la boucle de
+    // placement n’atteint jamais sa cible et ne garde que le meilleur de 24 essais.
     const occupe = (EXPE.poiCap + EXPE.riftCap) * Math.PI * (EXPE.minDistPoi / 2) ** 2;
     expect(occupe / aire, 'occupation de la couronne au plafond').toBeLessThan(0.35);
 
@@ -759,6 +775,123 @@ describe('aller loin doit VRAIMENT payer', () => {
 
   it('reste borné : un trajet interminable ne multiplie pas tout', () => {
     expect(travelFactor(50)).toBe(travelFactor(TRAVEL_CAP_H));
+  });
+});
+
+describe('🕳️ le RANG d’une faille', () => {
+  /** Tous les rangs réellement tirés à ce niveau, lus par `characterRank` LUI-MÊME — jamais
+   *  par une arithmétique recopiée : l’échelle de prestige est la seule autorité. */
+  function rangsTires(L: number, n = 4000) {
+    const rng = mulberry32(L * 7919 || 1);
+    const compte = new Map<number, number>();
+    for (let i = 0; i < n; i++) {
+      const lv = riftLevelFor(rng, L);
+      const r = characterRank(lv).rankIndex;
+      compte.set(r, (compte.get(r) ?? 0) + 1);
+      // Le niveau tiré appartient VRAIMENT à la tranche de ce rang.
+      expect(lv, `niv ${L} → ${lv}`).toBeGreaterThanOrEqual(rankStartLevel(r));
+    }
+    return compte;
+  }
+
+  it('⚠️ ne dépasse JAMAIS le rang du joueur — on ne referme pas plus haut que soi', () => {
+    // Décision de l’utilisateur : « le rang varie entre bronze et le rang du joueur, il ne
+    // pourrait pas combattre une faille de plus haut rang que lui ».
+    for (const L of [1, 5, 11, 12, 30, 45, 60, 91, 100, 130]) {
+      const top = characterRank(L).rankIndex;
+      for (const r of rangsTires(L).keys()) {
+        expect(r, `niveau ${L} (rang ${top}) a tiré le rang ${r}`).toBeLessThanOrEqual(top);
+      }
+    }
+  });
+
+  it('⚠️ …et son NIVEAU non plus : sinon même rang, tout autre difficulté', () => {
+    // Un joueur niveau 21 est Or ★1 : sans cette borne, la tranche de SON rang (21–30)
+    // déborderait au-dessus de lui et il verrait des failles niveau 30.
+    for (const L of [1, 11, 21, 31, 55, 91, 130]) {
+      const rng = mulberry32(L * 104729 || 1);
+      for (let i = 0; i < 4000; i++) {
+        const lv = riftLevelFor(rng, L);
+        expect(lv, `niveau ${L} → faille ${lv}`).toBeLessThanOrEqual(L);
+        expect(lv).toBeGreaterThanOrEqual(1);
+      }
+    }
+  });
+
+  it('⚠️ BRONZE reste atteignable, et les rangs sont tirés UNIFORMÉMENT', () => {
+    // Le but est de voir du Bronze à côté de son propre rang, pas une cloche qui ramènerait
+    // tout au milieu : sinon « laquelle je referme » cesse d’être une question.
+    for (const L of [12, 30, 60, 100]) {
+      const top = characterRank(L).rankIndex;
+      const compte = rangsTires(L);
+      // Chaque rang de 0 à `top` est représenté…
+      for (let r = 0; r <= top; r++) {
+        expect(compte.get(r) ?? 0, `niveau ${L}, rang ${r} jamais tiré`).toBeGreaterThan(0);
+      }
+      // …et aucun ne rafle la mise : uniforme à ±40 % de la part attendue.
+      const attendu = 4000 / (top + 1);
+      for (let r = 0; r <= top; r++) {
+        const part = (compte.get(r) ?? 0) / attendu;
+        expect(
+          part,
+          `niveau ${L}, rang ${r} à ${(part * 100).toFixed(0)} % de sa part`,
+        ).toBeGreaterThan(0.6);
+        expect(part).toBeLessThan(1.4);
+      }
+    }
+  });
+
+  it('⚠️ une faille n’est JAMAIS élaguée par le dégradé de distance — sans garde dédié', () => {
+    // ⚠️ C’EST CE TEST QUI A FAIT RETIRER UN SET `OFF_GRID` écrit pour exempter les failles de
+    // `levelFitsDistance` : le garde NE POUVAIT JAMAIS MORDRE. `riftLevelFor` rend au plus
+    // `playerLevel`, or `spawnWindow(playerLevel).min` VAUT `playerLevel` — et l’élagage est
+    // asymétrique (on n’écarte que ce qui est trop FORT pour sa distance). Une branche
+    // qu’aucune valeur réelle n’atteint donne la confiance sans la couverture (même défaut que
+    // le plafond de réduction en v0.753 et le plancher de population en v0.923) : la propriété
+    // vit donc ici. Elle rougira le jour où `levelFitsDistance` deviendra symétrique — ce qui
+    // effacerait toutes les failles de bas rang posées loin, la variété qu’on cherche.
+    for (const L of [1, 12, 30, 60, 100, 130]) {
+      const rng = mulberry32(L * 40503 || 1);
+      for (let i = 0; i < 3000; i++) {
+        expect(riftLevelFor(rng, L), `niveau ${L}`).toBeLessThanOrEqual(spawnWindow(L).min);
+      }
+    }
+    // …et sur le terrain : sur 14 jours, le quota de failles ne descend jamais sous son
+    // plancher — donc aucune n’est écartée en dehors de sa maturation.
+    for (const L of [12, 30, 60]) {
+      let map = createMap(9137, 0, L);
+      for (let t = 0; t <= 14 * 24 * HOUR; t += 2 * HOUR) {
+        map = advanceWorld(map, t, L);
+        expect(map.pois.filter(isRiftPoi).length, `niveau ${L}, t=${t}`).toBeGreaterThanOrEqual(
+          EXPE.riftFloor,
+        );
+      }
+    }
+  });
+
+  it('⚠️ LE PLANCHER RESTE À 2 : une carte neuve se REMPLIT, elle ne pulse pas', () => {
+    // À `riftFloor` = `riftCap`, une carte neuve spawnerait ses six failles au MÊME instant —
+    // donc six armées au même instant sept jours plus tard, puis sept jours de silence. Un
+    // PULSE, pas un rythme. À 2, l’horloge (8–16 h) remplit jusqu’à 6 en ~2,5 jours et les âges
+    // se désynchronisent d’eux-mêmes, sans jamais antidater une faille.
+    expect(EXPE.riftFloor).toBeLessThan(EXPE.riftCap);
+    let map = createMap(42, 0, 30);
+    expect(map.pois.filter(isRiftPoi).length).toBe(EXPE.riftFloor);
+    const ages = new Set<number>();
+    for (let h = 0; h <= 96; h++) {
+      map = advanceWorld(map, h * HOUR, 30);
+      for (const p of map.pois.filter(isRiftPoi)) ages.add(p.spawnedAt);
+    }
+    // Pleine au bout de 4 jours…
+    expect(map.pois.filter(isRiftPoi).length).toBe(EXPE.riftCap);
+    // …et elles n’ont PAS toutes le même âge : c’est ce qui étale les débordements. La
+    // borne est DÉRIVÉE, et c’est le MAXIMUM atteignable : les `riftFloor` premières
+    // naissent ensemble (à la création de la carte), les suivantes une par une au fil de
+    // l’horloge. Six failles nées ensemble n’en feraient qu’UN seul instant, deux spawns
+    // simultanés en feraient un de moins : les deux font rougir.
+    expect(ages.size, `${ages.size} instants d’apparition distincts`).toBe(
+      EXPE.riftCap - EXPE.riftFloor + 1,
+    );
   });
 });
 

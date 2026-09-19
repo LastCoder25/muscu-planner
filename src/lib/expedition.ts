@@ -6,6 +6,7 @@
 //
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
+import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
 import { mulberry32, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
@@ -186,6 +187,28 @@ export interface ExpeditionMap {
  *  mines, camps, puits et épaves — dont l'économie est MESURÉE (`campEconomy`, `goldSink`,
  *  `scrapEconomy`) : les failles s'AJOUTENT à la carte, elles ne la remplacent pas. */
 const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine']);
+
+/** ⚠️ AUCUNE EXEMPTION AU DÉGRADÉ DE DISTANCE N’EST NÉCESSAIRE — et c’est MESURÉ.
+ *
+ *  La règle générale est « près = faible, loin = fort » (v0.683), et `levelFitsDistance`
+ *  l’applique en écartant tout POI trop FORT pour son éloignement. Le niveau d’une faille,
+ *  lui, est tiré par RANG (`riftLevelFor`) : il échappe donc au dégradé… mais toujours
+ *  VERS LE BAS, jamais vers le haut.
+ *
+ *  ⚠️ **UN SET D’EXEMPTION A ÉTÉ ÉCRIT POUR ÇA, PUIS RETIRÉ : IL NE POUVAIT JAMAIS MORDRE.**
+ *  `riftLevelFor` rend au plus `playerLevel`, or `spawnWindow(playerLevel).min` VAUT
+ *  `playerLevel` — mesuré sur 130 niveaux × 3 000 tirages, l’écart maximal entre le niveau
+ *  d’une faille et ce plancher est **0**. Une faille est donc structurellement trop FAIBLE
+ *  pour sa distance, et l’élagage est **asymétrique** (trop faible = simplement ancien, cf.
+ *  `levelFitsDistance`). Un garde qu’aucune valeur réelle ne peut atteindre donne la
+ *  confiance sans la couverture — même défaut que le plafond de réduction (v0.753) et le
+ *  plancher de population des failles (v0.923). La propriété vit donc dans un TEST, pas
+ *  dans une branche inerte.
+ *
+ *  ⚠️ **CE QUI OBLIGERAIT À ROUVRIR LA QUESTION** : rendre `levelFitsDistance` symétrique
+ *  (élaguer aussi ce qui est trop FAIBLE pour sa distance) effacerait toutes les failles de
+ *  bas rang posées loin — exactement la variété qu’on cherche. Le test le fait rougir.
+ */
 export const isQuotaPoi = (p: Pick<Poi, 'type'>): boolean => !OUT_OF_QUOTA.has(p.type);
 export const isRiftPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'rift';
 
@@ -433,33 +456,32 @@ export const EXPE = {
   // 20 POI en permanence : la carte est toujours peuplée, et comme le NIVEAU découle
   // désormais de la distance, cette densité est ce qui rend le dégradé lisible — il faut
   // du monde à toutes les distances pour qu'on voie la pente.
-  poiCap: 20,
-  poiFloor: 20,
+  // ⚠️ **16, ET C'EST LE PRIX DES 6 FAILLES** (v0.929, décision de l'utilisateur). La
+  // couronne ne porte que **22 POI** sans chevauchement (mesuré : 0 à 22, **105 à 26**), et
+  // `minDistPoi` n'est pas un levier (105/159/138/46/1629 à 14/12/11/10/9). Passer de 2 à 6
+  // failles imposait donc de rendre 4 places : **-20 % de lieux ordinaires**, donc mines,
+  // camps et épaves en moins — d'où la re-mesure de `campEconomy`, `goldSink` et
+  // `scrapEconomy`, dont les bornes étaient calibrées sur 20.
+  poiCap: 16,
+  poiFloor: 16,
   /**
-   * 🕳️ Failles simultanées — quota PROPRE, en plus des 20 (cf. `isQuotaPoi`).
+   * 🕳️ Failles simultanées — quota PROPRE, en plus des 16 (cf. `isQuotaPoi`).
    *
-   * ⚠️ **2, ET C'EST LA CARTE QUI L'IMPOSE — pas le rythme voulu.** La spec en demandait
-   * 3 à 6 ; mesuré (20 graines × 5 jours simulés, comptage des paires à moins de 10 unités,
-   * le même harnais que le test d'espacement de la v0.671) :
+   * **6 au plafond**, ce que demandait la spec d'origine (« 3 à 6 simultanées, de rangs
+   * variés »), payé par `poiCap` 20 → 16 : le total reste à **22 POI**, le seul chiffre que
+   * la couronne tienne à 0 chevauchement.
    *
-   *   +1 faille → 21 POI → **0** chevauchement · **+2 → 22 POI → 0** ✅
-   *   +3 → 23 POI → 5 · +3 garanties → 16 · +4 garanties → 102 · +6 → 105 ❌
+   * ⚠️ **LE PLANCHER RESTE À 2, ET CE N'EST PAS UN OUBLI.** `riftFloor` spawne SANS
+   * CONDITION : à 6, une carte neuve ferait naître les six **au même instant**, donc six
+   * armées au même instant sept jours plus tard, puis un silence de sept jours — une
+   * PULSATION, pas un rythme. À 2, l'horloge (8-16 h) remplit jusqu'à 6 en ~2 jours et les
+   * âges se **désynchronisent d'eux-mêmes**, sans jamais antidater une faille (ce qui
+   * offrirait une armée immédiate à un joueur qui vient d'ouvrir sa carte).
    *
-   * ⚠️ **C'est le PLANCHER qui empile, pas le plafond** (cap 4/plancher 2 → 15, mais cap
-   * 4/plancher 3 → 102) : le plancher spawne SANS CONDITION, donc quand la couronne est
-   * pleine le placement pose « le moins mauvais » au lieu d'attendre.
-   * ⚠️ Et **`minDistPoi` n'est PAS le levier** : mesuré à 14/12/11/10/9, les chevauchements
-   * font 105/159/138/46/1629 — erratique, parce qu'à 26 POI la boucle n'atteint jamais sa
-   * cible et ne garde que le meilleur de 24 essais. Le seul levier est le NOMBRE.
-   *
-   * ⚠️ **CONSÉQUENCE SUR LE RYTHME, À TRANCHER** : avec 2 failles et 7 jours de maturation,
-   * une armée sort toutes les **84 h** — plus lent que l'intervalle de siège actuel (24 h
-   * très actif → 72 h inactif). Trois leviers chiffrés : maturation à **3 j** → une toutes
-   * les 36 h ✅ · maturation à **2 j** → 24 h · ou garder 6 failles en descendant `poiCap`
-   * de 20 à ~16, ce qui impose de **re-mesurer** `campEconomy`, `goldSink` et
-   * `scrapEconomy`. Sans décision, on reste au réglage qui ne casse rien.
+   * ⚠️ **C'est le PLANCHER qui empilait**, pas le plafond — mesuré : cap 4/plancher 2 → 15
+   * chevauchements, cap 4/plancher **3** → 102.
    */
-  riftCap: 2,
+  riftCap: 6,
   riftFloor: 2,
   /** Rythme d'apparition d'une faille. ⚠️ Volontairement plus LENT que celui des POI
    *  ordinaires (1-2 h) : une faille vit 7 jours, donc le quota se remplit de toute façon,
@@ -836,11 +858,48 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
  * sans qu'on ait touché à une pondération. Et l'espace d'ids est distinct (`rift_…`), donc
  * aucune collision possible avec un POI ordinaire.
  */
+/**
+ * 🕳️ Niveau d'une faille — tiré par **RANG**, entre Bronze et le rang du joueur.
+ *
+ * ⚠️ **C'EST LA SEULE EXCEPTION AU DÉGRADÉ DE DISTANCE**, et elle est délibérée : six
+ * brèches ouvertes en même temps doivent offrir des rangs VARIÉS, sinon
+ * « laquelle je referme » n'est pas une question. Une fenêtre [niveau, +10] indexée sur la
+ * distance ne couvre qu'un rang et demi : elle ne pouvait pas produire cette variété.
+ *
+ * ⚠️ **JAMAIS AU-DESSUS DU RANG DU JOUEUR** (décision de l'utilisateur : « il ne pourrait
+ * pas combattre une faille de plus haut rang que lui ») — et le niveau est en plus borné par
+ * le sien, sinon la tranche du rang courant déborderait au-dessus de lui (un joueur niveau 21
+ * verrait des failles niveau 30, même rang mais tout autre difficulté).
+ *
+ * Le rang est tiré UNIFORMÉMENT : on veut réellement voir du Bronze à côté de son propre
+ * rang, pas une cloche qui ramènerait tout au milieu.
+ */
+export function riftLevelFor(rng: () => number, playerLevel: number): number {
+  const top = characterRank(playerLevel).rankIndex;
+  const r = Math.min(top, Math.floor(rng() * (top + 1)));
+  const lo = rankStartLevel(r);
+  // Fin de la tranche du rang `r`, bornée par le niveau du joueur. ⚠️ Dérivée de
+  // `rankStartLevel`, jamais écrite : l'échelle de prestige est la seule autorité.
+  const hi = Math.min(
+    playerLevel,
+    r + 1 < CHARACTER_RANKS.length ? rankStartLevel(r + 1) - 1 : playerLevel,
+  );
+  return Math.max(1, lo + Math.floor(rng() * Math.max(1, hi - lo + 1)));
+}
+
 function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
   const n = map.riftCount ?? 0;
   const rng = mulberry32(((map.seed ^ 0x52ff3a1d) + n * 2654435761) >>> 0 || 1);
   map.riftCount = n + 1;
-  placePoiOfType(map, now, playerLevel, 'rift', rng, `rift_${map.seed}_${n + 1}`);
+  placePoiOfType(
+    map,
+    now,
+    playerLevel,
+    'rift',
+    rng,
+    `rift_${map.seed}_${n + 1}`,
+    riftLevelFor(rng, playerLevel),
+  );
 }
 
 /** Place un POI de type IMPOSÉ : espacement, niveau dérivé de la distance, durée de vie.
@@ -853,6 +912,8 @@ function placePoiOfType(
   type: PoiType,
   rng: () => number,
   id: string,
+  /** 🕳️ Niveau IMPOSÉ (failles seulement) : tiré par RANG, il ne vient pas de la distance. */
+  forcedLevel?: number,
 ): void {
   const win = spawnWindow(playerLevel);
   // L'arène spawn LOIN (trajet long, fait pour la nuit) ; les autres, n'importe où.
@@ -888,7 +949,7 @@ function placePoiOfType(
   const span = win.max - win.min;
   const jitter = (rng() - 0.5) * 0.12;
   const frac = Math.min(1, Math.max(0, pos.distNorm + jitter));
-  const level = win.min + Math.round(frac * span);
+  const level = forcedLevel ?? win.min + Math.round(frac * span);
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
