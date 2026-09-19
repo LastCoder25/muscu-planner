@@ -113,7 +113,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
   // des coffres (+4 % de chance de rareté) → investir de l'or rend les runs plus riches.
   // HYBRIDE : débloque le Labyrinthe + améliore le butin des coffres, ET PRODUIT des clés 🗝️
-  // (source passive de clés de labyrinthe, en plus des drops de donjon/boss/faille).
+  // (source passive de clés de labyrinthe, en plus des drops de donjon/boss/portail).
   {
     id: 'labyrinth_gate',
     perLevelNote: '+4 % de butin dans les coffres du Labyrinthe',

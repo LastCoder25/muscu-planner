@@ -522,7 +522,7 @@ export const useCharacterStore = defineStore('character', () => {
   // Applique un run de donjon : dépense l'énergie, encaisse or + poussière, range
   // le butin (auto-équipe si le slot est vide, sinon au sac).
   /** Crédite l'XP d'ATTAQUE au familier ÉQUIPÉ. Appelé par TOUS les modes où le
-   *  familier booste le héros (donjon, boss, faille, Labyrinthe, arène) — c'est là qu'il
+   *  familier booste le héros (donjon, boss, portail, Labyrinthe, arène) — c'est là qu'il
    *  se bat, donc c'est là qu'il apprend. Appliqué APRÈS la distribution du butin : sinon
    *  un drop de familier auto-équipé écraserait le gain de celui qui a couru. */
   function trainRunFamiliar(
@@ -659,7 +659,7 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  // Applique une tentative de la Faille sans fin : dépense l'énergie, encaisse
+  // Applique une tentative de la Portail sans fin : dépense l'énergie, encaisse
   // or + poussière + butin ; si victoire ET palier plus profond, met à jour le record.
   async function applyEndless(
     userId: string,
@@ -685,7 +685,7 @@ export const useCharacterStore = defineStore('character', () => {
       equipped: dist.equipped,
       inventory: dist.inventory,
       endless_best: input.cleared && input.tier > cur.endless_best ? input.tier : cur.endless_best,
-      // ~10 % de clé d'expédition sur une faille nettoyée.
+      // ~10 % de clé d'expédition sur un portail nettoyé.
       keys: cur.keys + (input.cleared && Math.random() < 0.1 ? 1 : 0),
     });
   }

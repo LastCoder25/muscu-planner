@@ -156,7 +156,7 @@ interface ProductionFreeze {
 }
 
 /** Le héros sort meurtri d'un siège PERDU et PART À L'INFIRMERIE : il est indisponible
- *  jusqu'à `until` (ni donjon, ni boss, ni faille, ni Labyrinthe, ni expédition).
+ *  jusqu'à `until` (ni donjon, ni boss, ni portail, ni Labyrinthe, ni expédition).
  *
  *  ⚠️ Un simple malus de dégâts avait été essayé d'abord : sans mordant, parce qu'on farme
  *  surtout du contenu qu'on domine largement — il ne changeait rien. Une indisponibilité,
@@ -1807,7 +1807,7 @@ export function assaultEstimate(
 export function isWounded(base: BaseState | null | undefined, now: number): boolean {
   return !!base?.wound && now < base.wound.until;
 }
-/** Le héros peut-il partir en donjon / boss / faille / Labyrinthe / expédition ? */
+/** Le héros peut-il partir en donjon / boss / portail / Labyrinthe / expédition ? */
 export function heroAvailable(base: BaseState | null | undefined, now: number): boolean {
   return !isWounded(base, now);
 }

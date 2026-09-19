@@ -1407,13 +1407,13 @@
             <button v-else class="fight" disabled>Verrouillé</button>
           </div>
 
-          <!-- Faille sans fin (end-game infini) — visible sur la dernière région -->
+          <!-- Portail sans fin (end-game infini) — visible sur la dernière région -->
           <div v-if="endlessUnlocked && selRegion.id === endRegionId" class="dgn mboss endless">
             <div class="dgn-hd">
               <span class="dgn-emo">🌀</span>
               <div class="dgn-hd-main">
                 <div class="mboss-eyebrow">♾️ End-game · sans fin</div>
-                <div class="dgn-name mboss-name font-display">Faille sans fin</div>
+                <div class="dgn-name mboss-name font-display">{{ ENDLESS_NAME }}</div>
               </div>
               <span class="lvl-pill avail">Palier {{ nextEndlessTier }}</span>
             </div>
@@ -2445,7 +2445,7 @@
             <button class="rm-skip" @click="skipStage">⏩ Passer</button>
             <button
               class="rm-skip"
-              title="Passer l’animation de tous les combats (donjons, boss, faille)"
+              title="Passer l’animation de tous les combats (donjons, boss, portail)"
               @click="skipAlways"
             >
               ⏩ Toujours
@@ -2735,7 +2735,7 @@
             >
           </button>
           <!-- Combat SUIVANT (donjon/boss suivant de la chaîne, s'il est débloqué) — à droite
-               de Réattaquer, avec son coût. Absent pour la Faille (Réattaquer avance déjà). -->
+               de Réattaquer, avec son coût. Absent pour le Portail (Réattaquer avance déjà). -->
           <button
             v-if="stageDone && !char.row?.pending_reward && nextContent"
             class="rm-btn rm-btn-next"
@@ -2893,7 +2893,13 @@ import {
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
 import { recommendedPower } from '@/lib/proceduralContent';
 import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
-import { endlessFoe, endlessEnergy, endlessGold, endlessDropLevel } from '@/data/endless';
+import {
+  endlessFoe,
+  endlessEnergy,
+  endlessGold,
+  endlessDropLevel,
+  ENDLESS_NAME,
+} from '@/data/endless';
 import {
   sellValue,
   famLevel,
@@ -3923,7 +3929,7 @@ function tapRegion(r: Region) {
 }
 // Explosion des chaînes quand une région vient d'être débloquée (piloté par le reveal).
 const shatterId = ref<string | null>(null);
-// Dernière région (fin de monde) — la Faille sans fin s'y rattache.
+// Dernière région (fin de monde) — le Portail sans fin s'y rattache.
 const endRegionId = computed(() => REGIONS[REGIONS.length - 1]?.id);
 
 // ── Reveal de nouvelle zone (défini ICI, après curRegion/selectedRegionId/shatterId) ──
@@ -4249,7 +4255,7 @@ function openReport() {
 const lastDungeon = ref<Dungeon | null>(null);
 const lastBoss = ref<MilestoneBoss | null>(null);
 const lastEndless = ref(false);
-const lastArena = ref(false); // dernier run = Faille sans fin
+const lastArena = ref(false); // dernier run = Portail sans fin
 const reattackCost = computed(() => {
   if (lastArena.value) return arenaCost.value;
   if (lastEndless.value) return endlessEnergy(nextEndlessTier.value);
@@ -4258,7 +4264,7 @@ const reattackCost = computed(() => {
   return 0;
 });
 // La ressource dépend du type de run : le boss se paie en pierres d'invocation 🔮,
-// donjon/faille en énergie ⚡ → le logo du bouton Réattaquer suit.
+// donjon/portail en énergie ⚡ → le logo du bouton Réattaquer suit.
 const reattackCostIcon = computed(() => (lastBoss.value ? '🔮' : '⚡'));
 // Stock de la ressource nécessaire pour relancer (ticket c6697d9c) → affiché sur le
 // bouton « cost / stock » : on voit d'un coup d'œil combien de runs on peut encore lancer.
@@ -4280,7 +4286,7 @@ function reattackLast() {
   else if (lastDungeon.value) void explore(lastDungeon.value);
 }
 // « Combat suivant » : le contenu APRÈS le dernier combattu (donjon/boss suivant de la
-// chaîne, s'il est DÉBLOQUÉ = le courant vient d'être nettoyé/vaincu). La Faille sans fin
+// chaîne, s'il est DÉBLOQUÉ = le courant vient d'être nettoyé/vaincu). Le Portail sans fin
 // n'a pas de « suivant » (Réattaquer avance déjà de palier) → null.
 const nextContent = computed(() => {
   if (lastEndless.value) return null;
@@ -5018,10 +5024,10 @@ function doChooseReward(index: number) {
   withUid((uid) => char.chooseReward(uid, index), 'Impossible de récupérer la récompense.');
 }
 
-// ── Faille sans fin (end-game infini) ──
-// La Faille sans fin est le TOUT dernier maillon : débloquée une fois le DERNIER
+// ── Portail sans fin (end-game infini) ──
+// Le Portail sans fin est le TOUT dernier maillon : débloqué une fois le DERNIER
 // donjon de la chaîne nettoyé (le contenu procédural fini va jusqu'à reco ~94 →
-// la Faille infinie prend le relais). Repli : au moins l'Archidémon vaincu.
+// le Portail infini prend le relais). Repli : au moins l'Archidémon vaincu.
 const endlessUnlocked = computed(() => {
   const last = dungeonChain.value[dungeonChain.value.length - 1];
   return last ? clearedIds.value.includes(last.id) : defeatedBossSet.value.has('archidemon');
@@ -5079,7 +5085,7 @@ async function fightEndless() {
         drops.push(dr);
         queueFx(() => celebrateRareDrop(dr));
       }
-      // (Les familiers ne tombent PLUS à la Faille — uniquement au Labyrinthe.)
+      // (Les familiers ne tombent PLUS au Portail — uniquement au Labyrinthe.)
     }
     const finalPv = r.log.length ? r.log[r.log.length - 1]!.playerPv : player.pv;
     const prevBest = endlessBest.value;
@@ -5092,20 +5098,20 @@ async function fightEndless() {
       famAtkXp: 4 + tier * 2,
       playerLevel: c.value.level.level,
     });
-    // Nouveau palier RECORD de la Faille → célébration (progression end-game),
+    // Nouveau palier RECORD du Portail → célébration (progression end-game),
     // différée à la fin de l'animation de combat.
     if (win && tier > prevBest)
       queueFx(() =>
         gameFx.celebrate({
           kind: 'generic',
           emoji: '🌀',
-          title: `Faille · palier ${tier} !`,
+          title: `${ENDLESS_NAME} · palier ${tier} !`,
           subtitle: 'Nouveau record de profondeur',
           rarity: 'legendary',
         }),
       );
     run.value = {
-      name: `Faille sans fin · palier ${tier}`,
+      name: `${ENDLESS_NAME} · palier ${tier}`,
       kind: 'boss',
       cleared: win,
       defeated: win ? 1 : 0,
@@ -5139,7 +5145,7 @@ async function fightEndless() {
  *  ou changer ses talents sont des gestes d'intendance qui n'exigent la présence de
  *  personne. Les geler ne protégeait aucune règle — ça bloquait le joueur pendant des
  *  heures, précisément sur l'écran où il a le plus de choses à faire en attendant.
- *  Ce qui reste interdit, c'est ce qui demande le HÉROS lui-même : donjons, boss, faille,
+ *  Ce qui reste interdit, c'est ce qui demande le HÉROS lui-même : donjons, boss, portail,
  *  arène, Labyrinthe, nouvelle expédition. Un seul garde pour ça : `expeBlocked`. */
 function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
   const uid = auth.user?.id;
@@ -9942,7 +9948,7 @@ button.pt-mini:active {
   color: var(--accent);
   white-space: nowrap;
 }
-/* Faille sans fin : teinte « néant » violette pour la distinguer des boss */
+/* Portail sans fin : teinte « néant » violette pour la distinguer des boss */
 .mboss.endless {
   margin-top: 4px;
   border-color: color-mix(in srgb, #b07cff 60%, var(--line));

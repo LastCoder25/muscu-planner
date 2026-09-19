@@ -31,7 +31,7 @@ export interface Dungeon {
    *  de 20 nettoyages de chaque donjon précédent, pièces de set des boss vaincus, talents
    *  trouvés, familiers du Labyrinthe, meilleure voie — moyenné sur 3 profils × 3 tirages :
    *  au niveau recommandé, Abîme/Néant/Apocalypse 36-40 %, puis **Chimère 14 %, Hydre 16 %,
-   *  Béhémoth 16 %, Léviathan 21 %**, puis Kraken/Nécropole/Faille 33-37 %. Un mur au milieu
+   *  Béhémoth 16 %, Léviathan 21 %**, puis Kraken/Nécropole/Portail 33-37 %. Un mur au milieu
    *  de la chaîne écrite à la main — ses monstres fixes grandissaient plus vite que le joueur.
    *  ×0,8 les ramène à 29-34 % (×0,65 : 41-53 %, trop généreux). L'or n'est pas touché.
    *
@@ -237,7 +237,7 @@ const HAND_DUNGEONS: Dungeon[] = [
   },
   {
     id: 'faille_chaos',
-    name: 'Faille du Chaos',
+    name: 'Portail du Chaos',
     emoji: '👁️',
     tier: 15,
     energyCost: 96,

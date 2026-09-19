@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { DUNGEONS } from '@/data/dungeons';
+import { ENDLESS_NAME } from '@/data/endless';
 import {
   travelFactor,
   TRAVEL_REF_H,
@@ -478,16 +480,29 @@ describe('difficulté des POI de combat', () => {
     expect(HARVEST_TYPES.has('rift')).toBe(false);
   });
 
-  it('⚠️ le mot « FAILLE » ne désigne plus que la faille — l’homonyme est fermé', () => {
-    // Il était pris TROIS fois pour du décor : le puits (« Source de faille »), la Dynamo
-    // (« Dynamo de faille ») et, plus gênant, la « Faille sans fin », un MODE de jeu entier
-    // (`endless.ts`) plus le donjon « Faille du chaos ». Les deux premiers sont renommés ;
-    // le mode reste à trancher. Ce test garde au moins la carte cohérente : un joueur ne doit
-    // pas voir deux POI différents dire « faille ».
-    const failles = (Object.keys(POI_LABEL) as PoiType[]).filter((k) =>
-      POI_LABEL[k].toLowerCase().includes('faille'),
-    );
-    expect(failles).toEqual(['rift']);
+  it('⚠️ le mot « FAILLE » ne désigne plus QUE la faille de la carte', () => {
+    // Il était pris QUATRE fois pour du décor : le puits (« Source de faille »), la Dynamo
+    // (« Dynamo de faille »), le donjon « Faille du Chaos » et — le plus gênant — la
+    // « Faille sans fin », un MODE de jeu entier. Tous renommés ; « faille » est désormais
+    // réservé à la brèche de la carte. Un joueur ne doit pas voir deux choses différentes
+    // porter le même nom — c'est exactement le défaut que ce projet rencontre à répétition
+    // sous une autre forme (une règle en deux exemplaires), ici côté vocabulaire.
+    const dit = (s: string) => s.toLowerCase().includes('faille');
+
+    // Les POI de la carte : un seul a le droit.
+    const poi = (Object.keys(POI_LABEL) as PoiType[]).filter((k) => dit(POI_LABEL[k]));
+    expect(poi).toEqual(['rift']);
+
+    // ⚠️ LES DONJONS ET LE MODE END-GAME AUSSI — c'est la moitié qui manquait au garde
+    // précédent : il ne regardait que `POI_LABEL`, donc « Faille du Chaos » et la
+    // « Faille sans fin » passaient au vert pendant que l'homonyme vivait.
+    expect(DUNGEONS.filter((d) => dit(d.name)).map((d) => d.name)).toEqual([]);
+    expect(dit(ENDLESS_NAME)).toBe(false);
+
+    // ⚠️ L'ID du donjon, lui, RESTE `faille_chaos` : il est persisté dans
+    // `characters.cleared_dungeons`, donc le renommer effacerait la progression de
+    // chaque joueur qui l'a nettoyé. On renomme ce qui s'AFFICHE, jamais ce qui se stocke.
+    expect(DUNGEONS.some((d) => d.id === 'faille_chaos')).toBe(true);
   });
 });
 

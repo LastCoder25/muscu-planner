@@ -19,7 +19,7 @@
         tu <b>perds les objets trouvés</b> et une part des gains (or et ressources) qui
         <b>grandit avec la profondeur du palier</b>. La <b>retraite</b> banque tout le ramassé.
       </p>
-      <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et la faille.</p>
+      <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et le portail.</p>
       <p v-if="!labyUnlocked" class="lobby-txt dim">
         🔒 Construis la <b>🚪 Porte du Labyrinthe</b> sur la carte d'expédition pour le débloquer.
       </p>

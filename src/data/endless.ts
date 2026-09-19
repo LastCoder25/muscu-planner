@@ -1,9 +1,16 @@
-// endless.ts — « Faille sans fin » : donjon END-GAME à paliers INFINIS. Débloqué
-// après avoir nettoyé le dernier donjon (Faille du Chaos). Chaque palier scale
+// endless.ts — « Portail sans fin » : donjon END-GAME à paliers INFINIS. Débloqué
+// après avoir nettoyé le dernier donjon (Portail du Chaos). Chaque palier scale
 // (PV/dégâts × 1.15 / palier) → le joueur pousse aussi loin que son gear/niveau
 // le permet. Récompenses croissantes + objets de NIVEAU > 25 (seule source de
 // gear au-delà des sets). Donne une cible sans fin aux joueurs full-équipés.
 import type { Combatant } from '@/lib/combat';
+
+/** ⚠️ LE NOM DU MODE VIT ICI, et c'est la SEULE définition. Il était écrit **trois fois
+ *  en dur** dans `AventurePage.vue` (la tuile, le titre de célébration, le nom du run) : le
+ *  renommer demandait de retrouver les trois, et l'un des trois aurait survécu. C'est aussi
+ *  ce qui rend le garde anti-homonyme vérifiable — un test peut lire une constante, il ne
+ *  peut pas lire un template. */
+export const ENDLESS_NAME = 'Portail sans fin';
 
 const GROWTH = 1.15;
 
