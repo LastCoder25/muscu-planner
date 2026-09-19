@@ -249,6 +249,35 @@
           </div>
           <button class="sh-x" @click="selected = null">✕</button>
         </div>
+        <!-- 🕳️ FAILLE : on ne peut pas encore y entrer, mais on doit pouvoir la JAUGER.
+             Le rang (figé à l'apparition) dit sa difficulté ; l'effectif dit son ÂGE. -->
+        <template v-if="selectedRift">
+          <div class="sh-row sh-wrap">
+            <span
+              class="sh-chip rift-rank"
+              :style="{ '--rk': selectedRift.rank.color }"
+              title="Rang de la faille — fixé à son apparition, il ne monte pas avec l'âge"
+              >{{ selectedRift.rank.emoji }} {{ selectedRift.rank.name }}
+              {{ selectedRift.stars }}</span
+            >
+            <span class="sh-chip"
+              >{{ FACTION_EMOJI[selectedRift.faction] }}
+              {{ FACTION_LABEL[selectedRift.faction] }}</span
+            >
+            <span
+              class="sh-chip"
+              title="L'effectif grossit avec l'âge de la faille, jusqu'au débordement"
+              >👾 {{ selectedRift.foes }}/{{ selectedRift.maxFoes }}</span
+            >
+            <span class="sh-chip" title="À maturité, elle déborde et s'effondre en mine de mana"
+              >⏳ {{ fmtMs(selectedRift.overflowIn) }}</span
+            >
+          </div>
+          <p class="sh-note">
+            Son armée grossit jusqu'au débordement. On n'y entre pas encore — une fois mûre, elle
+            s'effondre et laisse une 💠 mine de mana résiduel.
+          </p>
+        </template>
         <!-- ⚔️ UN CAMP S'ATTAQUE EN GROUPE : le héros (oui/non) et autant d'aventuriers qu'on
              veut — aucun maximum, c'est ce qui permet d'affronter les gros repaires. Toute la
              règle vit dans `camp.ts` (combat, pronostic, trajet, qui peut partir) ; l'écran
@@ -555,6 +584,7 @@ import {
   HARVEST_TYPES,
   CAMP_TYPES,
   campSpecOf,
+  isRiftPoi,
   isClaimable,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
@@ -569,7 +599,8 @@ import {
   woundRemainingMs,
 } from '@/lib/raid';
 import { ADV_UNAVAILABLE_LABEL, advAvailable, advUnavailableReason } from '@/lib/adventurers';
-import { rankStarStr } from '@/lib/characterRank';
+import { characterRank, rankStarStr } from '@/lib/characterRank';
+import { RIFT, riftOverflowAt, riftPopulation, riftSpecOf } from '@/lib/rift';
 import {
   CARAVAN,
   caravanLegMin,
@@ -921,6 +952,26 @@ const canSendCaravanNow = computed(
 // ne fait que la montrer. ⚠️ Le héros n'attaque plus un camp par `expeSend` (le store le
 // refuse) : même seul, il y passe par `sendParty`.
 const selectedCamp = computed(() => (selected.value ? campSpecOf(selected.value) : null));
+
+// ── 🕳️ FAILLE : ce qu'on en sait AVANT d'y entrer ──
+// ⚠️ LE RANG EST FIGÉ À L'APPARITION, il ne monte PAS avec l'âge. Il dérive du niveau du
+// lieu (donc de sa distance, v0.683) par `characterRank` — la même échelle que le héros et
+// les classes d'aventurier, parce que tout le jeu parle en rangs depuis la v0.874. Ce qui
+// monte jusqu'au 7ᵉ jour, c'est l'EFFECTIF (`riftPopulation`, courbe accélérée) : deux axes
+// distincts, et les mélanger rendrait une faille mûre infranchissable (cf. v0.923).
+const selectedRift = computed(() => {
+  const p = selected.value;
+  if (!p || !isRiftPoi(p)) return null;
+  const rank = characterRank(p.level);
+  return {
+    rank,
+    stars: rankStarStr(rank.star),
+    faction: riftSpecOf(p).faction,
+    foes: riftPopulation(p, now.value),
+    maxFoes: RIFT.maxFoes,
+    overflowIn: riftOverflowAt(p) - now.value,
+  };
+});
 const partyHero = ref(false);
 const partyEscort = ref<string[]>([]);
 watch(selected, () => {
@@ -1645,6 +1696,12 @@ function fmtMin(min: number): string {
 .sh-chip.peril {
   border-color: var(--d3);
   color: var(--d3);
+}
+/* 🕳️ Rang d'une faille : la pastille prend la COULEUR DU RANG, posée en ligne
+   (`--rk`) — une classe par rang n'aurait aucun sens ici, le rang est calculé. */
+.sh-chip.rift-rank {
+  border-color: var(--rk);
+  color: var(--rk);
 }
 
 .emap {
