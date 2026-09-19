@@ -372,7 +372,11 @@ function bossInProgress(
 }
 
 /** PV d'un boss : une part par participant (le lanceur compris), en points de dégât. */
-export function bossHpTotal(family: BossFamily, participants: number, tier?: string | null): number {
+export function bossHpTotal(
+  family: BossFamily,
+  participants: number,
+  tier?: string | null,
+): number {
   return bossDamage(bossShareUnits(family, tier) * Math.max(1, Math.floor(participants)));
 }
 

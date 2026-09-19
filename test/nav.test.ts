@@ -1,12 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import type { Router } from 'vue-router';
-import {
-  pathOf,
-  samePage,
-  shouldGoBack,
-  hasPreviousEntry,
-  backOr,
-} from '@/lib/nav';
+import { pathOf, samePage, shouldGoBack, hasPreviousEntry, backOr } from '@/lib/nav';
 
 describe('retour arrière sans page précédente (backOr)', () => {
   const g = globalThis as { window?: unknown };
@@ -41,7 +35,6 @@ describe('retour arrière sans page précédente (backOr)', () => {
     backOr(router, '/tennis');
     expect(calls).toEqual(['push:/tennis']);
   });
-
 
   it('avec une page précédente, on revient simplement en arrière', () => {
     const { router, calls } = fakeRouter();

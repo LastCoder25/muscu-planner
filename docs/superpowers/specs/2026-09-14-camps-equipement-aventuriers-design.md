@@ -7,16 +7,16 @@ aventuriers » et « convois sur les lieux de combat ».
 
 ## Décisions prises avec l'utilisateur
 
-| Question | Décision |
-| --- | --- |
-| Nature d'un camp | Combat de groupe simple (pas de fortification) |
-| Place sur la carte | Remplace les camps et repaires actuels |
-| Butin sans le héros | Équipement destiné aux aventuriers |
-| Forme de l'équipement | Stock à part du sac du héros, rareté plafonnée par la classe |
-| Spécificité | Équipements différents selon la classe de base |
-| Sources | Camps sans héros, fouille après siège, embuscades de convoi repoussées, bâtiment Équipementier |
-| Déroulé d'une attaque | Comme un convoi : temps réel, zéro énergie |
-| XP | Partagée au prorata des ennemis abattus, camps ET embuscades de convoi |
+| Question              | Décision                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------- |
+| Nature d'un camp      | Combat de groupe simple (pas de fortification)                                                 |
+| Place sur la carte    | Remplace les camps et repaires actuels                                                         |
+| Butin sans le héros   | Équipement destiné aux aventuriers                                                             |
+| Forme de l'équipement | Stock à part du sac du héros, rareté plafonnée par la classe                                   |
+| Spécificité           | Équipements différents selon la classe de base                                                 |
+| Sources               | Camps sans héros, fouille après siège, embuscades de convoi repoussées, bâtiment Équipementier |
+| Déroulé d'une attaque | Comme un convoi : temps réel, zéro énergie                                                     |
+| XP                    | Partagée au prorata des ennemis abattus, camps ET embuscades de convoi                         |
 
 ## Découpage en trois étapes livrables
 
@@ -45,14 +45,14 @@ Une pièce appartient à une **lignée** (la classe de base, `path[0]`) et ne se
 aventurier de cette lignée. Chaque lignée a ses trois pièces, leur nom et leur réserve de stats,
 alignées sur la forme de la classe :
 
-| Lignée | Arme | Armure | Accessoire | Stats privilégiées |
-| --- | --- | --- | --- | --- |
-| ⚔️ Guerrier | Épée | Cuirasse | Gantelets | dégâts, PV, critique |
-| 🏹 Archer | Arc | Cuir | Carquois | critique, dégâts, élan |
-| 🔮 Mage | Bâton | Robe | Grimoire | dégâts, exécution, vol de vie |
-| 🛡️ Homme d'armes | Masse | Plates | Bouclier | réduction, PV, épines |
-| 🧭 Éclaireur | Dague | Cape | Longue-vue | critique, dégâts + trajet raccourci |
-| 🐫 Caravanier | Bâton de marche | Manteau | Bât | PV, réduction + cargaison |
+| Lignée           | Arme            | Armure   | Accessoire | Stats privilégiées                  |
+| ---------------- | --------------- | -------- | ---------- | ----------------------------------- |
+| ⚔️ Guerrier      | Épée            | Cuirasse | Gantelets  | dégâts, PV, critique                |
+| 🏹 Archer        | Arc             | Cuir     | Carquois   | critique, dégâts, élan              |
+| 🔮 Mage          | Bâton           | Robe     | Grimoire   | dégâts, exécution, vol de vie       |
+| 🛡️ Homme d'armes | Masse           | Plates   | Bouclier   | réduction, PV, épines               |
+| 🧭 Éclaireur     | Dague           | Cape     | Longue-vue | critique, dégâts + trajet raccourci |
+| 🐫 Caravanier    | Bâton de marche | Manteau  | Bât        | PV, réduction + cargaison           |
 
 Pas de nouvelle stat : toutes les pièces puisent dans les `EffectType` existants.
 
@@ -81,7 +81,7 @@ Pas de nouvelle stat : toutes les pièces puisent dans les `EffectType` existant
    pour une lignée choisie ; temps de fabrication (asymptotique en niveau, jamais instantané) ;
    rang tiré autour du niveau de l'aventurier visé (pyramide des drops). Aucun niveau mort
    jusqu'à 100 (`beyondCap`).
-   *Amendement (revue finale, étape 1)* : le rang est tiré sur la **courbe des compagnons** (v0.857, `rollCompanionTier`) puis plafonné à la rareté de classe de la cible, et non sur la pyramide des objets du héros.
+   _Amendement (revue finale, étape 1)_ : le rang est tiré sur la **courbe des compagnons** (v0.857, `rollCompanionTier`) puis plafonné à la rareté de classe de la cible, et non sur la pyramide des objets du héros.
 
 ### Écrans
 

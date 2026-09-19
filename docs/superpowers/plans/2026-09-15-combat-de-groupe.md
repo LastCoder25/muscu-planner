@@ -31,26 +31,28 @@
 
 ## File Structure
 
-| Fichier | Rôle |
-| --- | --- |
-| `src/lib/combat.ts` (modif) | option `startMonsterPv` de `simulateCombat` (PV du monstre reportés) |
-| `src/lib/skirmish.ts` (nouveau) | `SKIRMISH`, types `SkirmishUnit`/`SkirmishKill`/`SkirmishResult`/`TroopSpec`, `trialXpBase`, `simulateSkirmish`, `troopOf`, `skirmishXpShares` |
-| `src/lib/caravan.ts` (modif) | `CompanionSet`, `unitEffects`, `roadPairs`, `roadUnits`, `roadTroop`, `CARAVAN.troopCalm/troopPerilous` ; bascule de `resolveCaravan` ; `missionXp(adv, poi)` ; `CaravanOutcome.kills` ; rapport (`kills`, `hasKills`, `totalKills`) ; retrait de `roadFoe`, `roadCompanionEffects`, `effectivePv`, `offensePerRound`, `xpPerFight`, `xpFightMax` |
-| `src/lib/raid.ts` (modif) | `pairEffects` délègue à `unitEffects` ; `companionPairs` typé `CompanionSet` |
-| `src/components/CaravanReportView.vue` (modif) | abattus par aventurier et total |
-| `src/stores/character.ts` (modif) | commentaire de `claimCaravan` (l'XP stockée contient déjà la part des abattus) |
-| `test/combat.test.ts`, `test/skirmish.test.ts` (nouveau), `test/caravan.test.ts` (modif) | couverture |
-| `CLAUDE.md`, `package.json` (modif) | entrée de version, bump |
+| Fichier                                                                                  | Rôle                                                                                                                                                                                                                                                                                                                                              |
+| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/combat.ts` (modif)                                                              | option `startMonsterPv` de `simulateCombat` (PV du monstre reportés)                                                                                                                                                                                                                                                                              |
+| `src/lib/skirmish.ts` (nouveau)                                                          | `SKIRMISH`, types `SkirmishUnit`/`SkirmishKill`/`SkirmishResult`/`TroopSpec`, `trialXpBase`, `simulateSkirmish`, `troopOf`, `skirmishXpShares`                                                                                                                                                                                                    |
+| `src/lib/caravan.ts` (modif)                                                             | `CompanionSet`, `unitEffects`, `roadPairs`, `roadUnits`, `roadTroop`, `CARAVAN.troopCalm/troopPerilous` ; bascule de `resolveCaravan` ; `missionXp(adv, poi)` ; `CaravanOutcome.kills` ; rapport (`kills`, `hasKills`, `totalKills`) ; retrait de `roadFoe`, `roadCompanionEffects`, `effectivePv`, `offensePerRound`, `xpPerFight`, `xpFightMax` |
+| `src/lib/raid.ts` (modif)                                                                | `pairEffects` délègue à `unitEffects` ; `companionPairs` typé `CompanionSet`                                                                                                                                                                                                                                                                      |
+| `src/components/CaravanReportView.vue` (modif)                                           | abattus par aventurier et total                                                                                                                                                                                                                                                                                                                   |
+| `src/stores/character.ts` (modif)                                                        | commentaire de `claimCaravan` (l'XP stockée contient déjà la part des abattus)                                                                                                                                                                                                                                                                    |
+| `test/combat.test.ts`, `test/skirmish.test.ts` (nouveau), `test/caravan.test.ts` (modif) | couverture                                                                                                                                                                                                                                                                                                                                        |
+| `CLAUDE.md`, `package.json` (modif)                                                      | entrée de version, bump                                                                                                                                                                                                                                                                                                                           |
 
 ---
 
 ### Task 1: Les PV du monstre se reportent aussi dans `simulateCombat`
 
 **Files:**
+
 - Modify: `src/lib/combat.ts:293-300` (signature et initialisation de `simulateCombat`)
 - Test: `test/combat.test.ts`
 
 **Interfaces:**
+
 - Produces: `simulateCombat(player, monster, opts: { seed: number; goldOnWin: number; startPlayerPv?: number; startMonsterPv?: number })`. Absent → combat identique au bit près. `monsterMaxPv` reste `monster.pv` (seuils d'exécution, vol de vie, épines inchangés).
 
 - [ ] **Step 1: Write the failing test** (à la fin de `test/combat.test.ts`)
@@ -126,10 +128,12 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 2: Le moteur `skirmish.ts` — duels enchaînés, journal des morts, troupe, XP partagée
 
 **Files:**
+
 - Create: `src/lib/skirmish.ts`
 - Test: `test/skirmish.test.ts`
 
 **Interfaces:**
+
 - Consumes: `simulateCombat(..., { startPlayerPv, startMonsterPv })` (Task 1), `offenseOf`, `survivalOf`, `mulberry32`, `type Combatant` (`combat.ts`).
 - Produces:
   - `SKIRMISH: { xpPerKill: number; carryMargin: number }`
@@ -510,7 +514,8 @@ export function skirmishXpShares(
     for (const f of slain) {
       const fl = Math.max(1, f.level);
       const ratio = Math.max(0.15, Math.min(1, fl / lvl));
-      sum += SKIRMISH.xpPerKill * trialXpBase(Math.min(fl, lvl + SKIRMISH.carryMargin)) * ratio ** 1.5;
+      sum +=
+        SKIRMISH.xpPerKill * trialXpBase(Math.min(fl, lvl + SKIRMISH.carryMargin)) * ratio ** 1.5;
     }
     out[m.id] = Math.round(sum / present.length);
   }
@@ -550,11 +555,13 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 3: Une unité par aventurier — `unitEffects`, `roadPairs`, `roadUnits`, `roadTroop`
 
 **Files:**
+
 - Modify: `src/lib/caravan.ts` (après `advTalentEffects` ~ligne 462 : `CompanionSet`, `unitEffects` ; après `RoadCompanions` ~ligne 920 : `roadPairs`, `roadUnits`, `roadTroop` ; `companionsOf` ~335 et `advTalentsOf` ~434 deviennent des lectures de `roadPairs` ; `CARAVAN` : `troopCalm`, `troopPerilous`)
 - Modify: `src/lib/raid.ts:2197-2238` (`companionPairs` typé `CompanionSet`), `src/lib/raid.ts:2375-2393` (`pairEffects` délègue)
 - Test: `test/caravan.test.ts` (nouveau `describe` en fin de fichier)
 
 **Interfaces:**
+
 - Consumes: `SkirmishUnit`, `troopOf`, `TroopSpec` (Task 2).
 - Produces:
   - `interface CompanionSet { familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] }`
@@ -586,7 +593,11 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     name: id,
     ...o,
   });
-  const road = (familiars: Item[] = [], talents: TalentInstance[] = [], advGear: AdvGear[] = []) => ({
+  const road = (
+    familiars: Item[] = [],
+    talents: TalentInstance[] = [],
+    advGear: AdvGear[] = [],
+  ) => ({
     familiars,
     talents,
     advGear,
@@ -631,7 +642,9 @@ describe('⚔️ UNE UNITÉ PAR AVENTURIER — ce qu’il emmène au combat', ()
     team.forEach((a, i) => {
       expect(units[i]!.id).toBe(a.id);
       expect(units[i]!.level).toBe(a.level);
-      expect(units[i]!.combatant).toEqual(escortCombatant([a], a.name, unitEffects(pairs.get(a.id))));
+      expect(units[i]!.combatant).toEqual(
+        escortCombatant([a], a.name, unitEffects(pairs.get(a.id))),
+      );
     });
   });
 
@@ -896,12 +909,14 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 4: Les embuscades de convoi passent sur le moteur de groupe — XP des abattus, blessés, recalibration mesurée
 
 **Files:**
+
 - Modify: `src/lib/caravan.ts` (`CARAVAN` : retrait `xpPerFight`/`xpFightMax`, commentaires de calibration ; `CaravanEvent` ; `CaravanOutcome.kills` ; `missionXp` ; `resolveCaravan` ; retrait `roadFoe`, `roadCompanionEffects`, `effectivePv`, `offensePerRound` et des imports devenus inutiles `simulateCombat`, `offenseOf`, `survivalOf`)
 - Modify: `src/lib/skirmish.ts` (`SKIRMISH.xpPerKill` si la mesure l'exige)
 - Test: `test/caravan.test.ts` (réécritures listées ci-dessous)
 - Probe jetable: `test/_probe-road.test.ts` (créé puis SUPPRIMÉ avant commit)
 
 **Interfaces:**
+
 - Consumes: `simulateSkirmish`, `skirmishXpShares`, `trialXpBase` (Task 2) ; `roadUnits`, `roadTroop` (Task 3).
 - Produces:
   - `missionXp(adv: Adventurer, poi: Poi): number` (le 3ᵉ paramètre `fights` disparaît)
@@ -935,7 +950,11 @@ const trio = (L: number): Adventurer[] =>
     ...refAdventurer(L, i),
     id: `a${i}`,
     familiarId: `refFam${i}`,
-    gear: { weapon: `refGear${i}weapon`, armor: `refGear${i}armor`, accessory: `refGear${i}accessory` },
+    gear: {
+      weapon: `refGear${i}weapon`,
+      armor: `refGear${i}armor`,
+      accessory: `refGear${i}accessory`,
+    },
   }));
 
 it('référence XP et blessés (ancien moteur)', { timeout: 600_000 }, () => {
@@ -950,7 +969,9 @@ it('référence XP et blessés (ancien moteur)', { timeout: 600_000 }, () => {
         xp += Object.values(o.xp).reduce((a, b) => a + b, 0) / 3;
         if (o.hurt.length) blesse++;
       }
-      console.log(`${per ? 'peril' : 'calme'} L${L} xp/membre=${(xp / N).toFixed(2)} voyagesBlesses=${((100 * blesse) / N).toFixed(1)}%`);
+      console.log(
+        `${per ? 'peril' : 'calme'} L${L} xp/membre=${(xp / N).toFixed(2)} voyagesBlesses=${((100 * blesse) / N).toFixed(1)}%`,
+      );
     }
 });
 ```
@@ -982,71 +1003,71 @@ function winPct(escort: Adventurer[], p: Poi, n = 150) {
 (b) Test « les bandits ne dépendent PAS de l'escorte » (~145) — corps remplacé :
 
 ```ts
-    const p = poi();
-    expect(roadTroop(p)).toEqual(roadTroop(p)); // il ne dépend que du POI
-    expect(roadTroop(p).length).toBeGreaterThan(0);
-    for (const f of roadTroop(p)) expect(f.combatant.pv).toBeGreaterThan(0);
+const p = poi();
+expect(roadTroop(p)).toEqual(roadTroop(p)); // il ne dépend que du POI
+expect(roadTroop(p).length).toBeGreaterThan(0);
+for (const f of roadTroop(p)) expect(f.combatant.pv).toBeGreaterThan(0);
 ```
 
 (c) Test « un POI plus profond envoie des bandits plus forts » (~301) :
 
 ```ts
-    expect(roadTroop(poi({ level: 40 }))[0]!.combatant.pv).toBeGreaterThan(
-      roadTroop(poi({ level: 10 }))[0]!.combatant.pv,
-    );
+expect(roadTroop(poi({ level: 40 }))[0]!.combatant.pv).toBeGreaterThan(
+  roadTroop(poi({ level: 10 }))[0]!.combatant.pv,
+);
 ```
 
 (d) Remplacer le test « chacun reçoit SON dû » (~463) :
 
 ```ts
-  it('chacun reçoit SON dû — un vétéran ne se paie pas en emmenant des recrues', () => {
-    // Les abattus sont PARTAGÉS : emmener des recrues ne peut que diluer la part du vétéran,
-    // jamais l'augmenter ; et sur une route facile la recrue apprend bien plus que lui.
-    const facile = poi({ level: 5 });
-    for (let s = 1; s <= 40; s++) {
-      const seul = resolveCaravan(facile, [vet('v')], s, NUS, 100);
-      const accompagne = resolveCaravan(
-        facile,
-        [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')],
-        s,
-        NUS,
-        100,
-      );
-      expect(accompagne.xp['v']!, `graine ${s}`).toBeLessThanOrEqual(seul.xp['v']! + 1);
-      expect(accompagne.xp['r1']!).toBeGreaterThan(accompagne.xp['v']!);
-    }
-  });
+it('chacun reçoit SON dû — un vétéran ne se paie pas en emmenant des recrues', () => {
+  // Les abattus sont PARTAGÉS : emmener des recrues ne peut que diluer la part du vétéran,
+  // jamais l'augmenter ; et sur une route facile la recrue apprend bien plus que lui.
+  const facile = poi({ level: 5 });
+  for (let s = 1; s <= 40; s++) {
+    const seul = resolveCaravan(facile, [vet('v')], s, NUS, 100);
+    const accompagne = resolveCaravan(
+      facile,
+      [vet('v'), bleu('r1'), bleu('r2'), bleu('r3')],
+      s,
+      NUS,
+      100,
+    );
+    expect(accompagne.xp['v']!, `graine ${s}`).toBeLessThanOrEqual(seul.xp['v']! + 1);
+    expect(accompagne.xp['r1']!).toBeGreaterThan(accompagne.xp['v']!);
+  }
+});
 ```
 
 (e) Remplacer le test « elle ne dépend QUE du nombre d'épreuves » (~500) :
 
 ```ts
-  it('⚠️ le socle de mission tombe TOUJOURS ; les abattus s’y AJOUTENT', () => {
-    const p = poi();
-    const esc = team(3, 20);
-    let sansCombat = 0;
-    let avecAbattus = 0;
-    let defaites = 0;
-    for (let s = 0; s < 300; s++) {
-      const o = resolveCaravan(p, esc, s * 977 + 1, NUS, 100);
-      const f = o.events.filter((e) => e.kind === 'bandits');
-      const abattus = f.reduce((n, e) => n + (e.kills ?? 0), 0);
-      for (const a of esc) {
-        expect(o.xp[a.id]!).toBeGreaterThanOrEqual(missionXp(a, p));
-        if (!f.length) expect(o.xp[a.id]).toBe(missionXp(a, p));
-        if (abattus > 0) expect(o.xp[a.id]!).toBeGreaterThan(missionXp(a, p));
-      }
-      if (!f.length) sansCombat++;
-      if (abattus > 0) avecAbattus++;
-      if (f.some((x) => x.won === false)) defaites++;
-      // Les abattus par tête somment ceux des embuscades.
-      const parTete = Object.values(o.kills ?? {}).reduce((n, k) => n + k, 0);
-      expect(parTete).toBe(abattus);
+it('⚠️ le socle de mission tombe TOUJOURS ; les abattus s’y AJOUTENT', () => {
+  const p = poi();
+  const esc = team(3, 20);
+  let sansCombat = 0;
+  let avecAbattus = 0;
+  let defaites = 0;
+  for (let s = 0; s < 300; s++) {
+    const o = resolveCaravan(p, esc, s * 977 + 1, NUS, 100);
+    const f = o.events.filter((e) => e.kind === 'bandits');
+    const abattus = f.reduce((n, e) => n + (e.kills ?? 0), 0);
+    for (const a of esc) {
+      expect(o.xp[a.id]!).toBeGreaterThanOrEqual(missionXp(a, p));
+      if (!f.length) expect(o.xp[a.id]).toBe(missionXp(a, p));
+      if (abattus > 0) expect(o.xp[a.id]!).toBeGreaterThan(missionXp(a, p));
     }
-    expect(sansCombat, 'aucun voyage sans combat : le test ne prouve rien').toBeGreaterThan(0);
-    expect(avecAbattus, 'aucun abattu : le test ne prouve rien').toBeGreaterThan(0);
-    expect(defaites, 'aucune défaite : le test ne prouve rien').toBeGreaterThan(0);
-  });
+    if (!f.length) sansCombat++;
+    if (abattus > 0) avecAbattus++;
+    if (f.some((x) => x.won === false)) defaites++;
+    // Les abattus par tête somment ceux des embuscades.
+    const parTete = Object.values(o.kills ?? {}).reduce((n, k) => n + k, 0);
+    expect(parTete).toBe(abattus);
+  }
+  expect(sansCombat, 'aucun voyage sans combat : le test ne prouve rien').toBeGreaterThan(0);
+  expect(avecAbattus, 'aucun abattu : le test ne prouve rien').toBeGreaterThan(0);
+  expect(defaites, 'aucune défaite : le test ne prouve rien').toBeGreaterThan(0);
+});
 ```
 
 (f) Remplacer le `describe('⚠️ le bonus d’XP suit les combats RÉELS, pas l’étiquette', …)` (~844-865) :
@@ -1067,58 +1088,58 @@ describe('⚠️ l’XP de combat suit les ennemis ABATTUS, pas l’étiquette',
 (g) Dans le `describe('🐾 UN COMPAGNON PAR AVENTURIER …')`, le sous-`describe('🐾🧠 SUR LA ROUTE AUSSI — la moyenne, jamais la somme')` (~1024-1098) est renommé `'🐾🧠 SUR LA ROUTE AUSSI — chaque compagnon épaule SON homme'` et ses tests réécrits :
 
 ```ts
-    it('un compagnon apporte quelque chose à son aventurier', () => {
-      const team = [adv('a', { familiarId: 'f1' })];
-      expect(unitEffects(roadPairs(team, road()).get('a')).damagePct).toBe(0);
-      expect(unitEffects(roadPairs(team, road([fam('f1')])).get('a')).damagePct).toBeGreaterThan(0);
-    });
+it('un compagnon apporte quelque chose à son aventurier', () => {
+  const team = [adv('a', { familiarId: 'f1' })];
+  expect(unitEffects(roadPairs(team, road()).get('a')).damagePct).toBe(0);
+  expect(unitEffects(roadPairs(team, road([fam('f1')])).get('a')).damagePct).toBeGreaterThan(0);
+});
 
-    it('⚠️ QUATRE loups sur quatre têtes : chacun garde SON loup, rien ne s’empile', () => {
-      // L'escorte n'est plus FONDUE : quatre loups font quatre combattants un peu meilleurs,
-      // jamais un groupe +4x %. C'est ce qui interdit le retour du « pool global » (v0.777).
-      const seul = unitEffects(roadPairs([adv('a', { familiarId: 'f1' })], road([fam('f1')])).get('a'));
-      const pairs = roadPairs(
-        ['a', 'b', 'c', 'd'].map((id, i) => adv(id, { familiarId: `f${i}` })),
-        road([fam('f0'), fam('f1'), fam('f2'), fam('f3')]),
-      );
-      for (const id of ['a', 'b', 'c', 'd'])
-        expect(unitEffects(pairs.get(id)).damagePct).toBeCloseTo(seul.damagePct, 6);
-    });
+it('⚠️ QUATRE loups sur quatre têtes : chacun garde SON loup, rien ne s’empile', () => {
+  // L'escorte n'est plus FONDUE : quatre loups font quatre combattants un peu meilleurs,
+  // jamais un groupe +4x %. C'est ce qui interdit le retour du « pool global » (v0.777).
+  const seul = unitEffects(roadPairs([adv('a', { familiarId: 'f1' })], road([fam('f1')])).get('a'));
+  const pairs = roadPairs(
+    ['a', 'b', 'c', 'd'].map((id, i) => adv(id, { familiarId: `f${i}` })),
+    road([fam('f0'), fam('f1'), fam('f2'), fam('f3')]),
+  );
+  for (const id of ['a', 'b', 'c', 'd'])
+    expect(unitEffects(pairs.get(id)).damagePct).toBeCloseTo(seul.damagePct, 6);
+});
 
-    it('⚠️ … et UN loup sur quatre têtes n’épaule que la sienne', () => {
-      const pairs = roadPairs(
-        [adv('a', { familiarId: 'f1' }), adv('b'), adv('c'), adv('d')],
-        road([fam('f1')]),
-      );
-      expect(unitEffects(pairs.get('a')).damagePct).toBeGreaterThan(0);
-      for (const id of ['b', 'c', 'd']) expect(pairs.get(id)).toBeUndefined();
-    });
+it('⚠️ … et UN loup sur quatre têtes n’épaule que la sienne', () => {
+  const pairs = roadPairs(
+    [adv('a', { familiarId: 'f1' }), adv('b'), adv('c'), adv('d')],
+    road([fam('f1')]),
+  );
+  expect(unitEffects(pairs.get('a')).damagePct).toBeGreaterThan(0);
+  for (const id of ['b', 'c', 'd']) expect(pairs.get(id)).toBeUndefined();
+});
 
-    it('⚠️ UN SEUL DRESSAGE : ce qui a été appris au rempart compte sur la route', () => {
-      const guerrier = fam('f1', { atkXp: famXpForLevel(20), defXp: 0 });
-      const sentinelle = fam('f1', { atkXp: 0, defXp: famXpForLevel(20) / 4 });
-      const novice = fam('f1');
-      const team = [adv('a', { familiarId: 'f1' })];
-      const d = (f: Item) => unitEffects(roadPairs(team, road([f])).get('a')).damagePct;
-      expect(d(sentinelle)).toBeCloseTo(d(guerrier), 6);
-      expect(d(guerrier)).toBeGreaterThan(d(novice));
-    });
+it('⚠️ UN SEUL DRESSAGE : ce qui a été appris au rempart compte sur la route', () => {
+  const guerrier = fam('f1', { atkXp: famXpForLevel(20), defXp: 0 });
+  const sentinelle = fam('f1', { atkXp: 0, defXp: famXpForLevel(20) / 4 });
+  const novice = fam('f1');
+  const team = [adv('a', { familiarId: 'f1' })];
+  const d = (f: Item) => unitEffects(roadPairs(team, road([f])).get('a')).damagePct;
+  expect(d(sentinelle)).toBeCloseTo(d(guerrier), 6);
+  expect(d(guerrier)).toBeGreaterThan(d(novice));
+});
 
-    it('⚠️ le familier du HÉROS ne part pas en convoi', () => {
-      const team = [adv('a', { familiarId: 'f1' })];
-      expect(roadPairs(team, { ...road([fam('f1')]), heroFamiliarId: 'f1' }).get('a')).toBeUndefined();
-    });
+it('⚠️ le familier du HÉROS ne part pas en convoi', () => {
+  const team = [adv('a', { familiarId: 'f1' })];
+  expect(roadPairs(team, { ...road([fam('f1')]), heroFamiliarId: 'f1' }).get('a')).toBeUndefined();
+});
 
-    it('le TALENT confié compte lui aussi, et il est bridé', () => {
-      const t = { id: 't1', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
-      const team = [adv('a', { talentId: 't1' })];
-      const somme = (x: AggregatedEffects) =>
-        (Object.values(x) as number[]).reduce((s2, v) => s2 + v, 0);
-      expect(somme(unitEffects(roadPairs(team, road()).get('a')))).toBe(0);
-      const avec = unitEffects(roadPairs(team, road([], [t])).get('a'));
-      expect(somme(avec)).toBeGreaterThan(0);
-      expect(somme(avec)).toBeLessThan(somme(advTalentEffects([{ ...t }], 1)));
-    });
+it('le TALENT confié compte lui aussi, et il est bridé', () => {
+  const t = { id: 't1', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
+  const team = [adv('a', { talentId: 't1' })];
+  const somme = (x: AggregatedEffects) =>
+    (Object.values(x) as number[]).reduce((s2, v) => s2 + v, 0);
+  expect(somme(unitEffects(roadPairs(team, road()).get('a')))).toBe(0);
+  const avec = unitEffects(roadPairs(team, road([], [t])).get('a'));
+  expect(somme(avec)).toBeGreaterThan(0);
+  expect(somme(avec)).toBeLessThan(somme(advTalentEffects([{ ...t }], 1)));
+});
 ```
 
 (le test « CE QUI EST BRANCHÉ EST BIEN LU PAR LE COMBAT » qui suit reste tel quel : il passe par `resolveCaravan`.)
@@ -1126,21 +1147,23 @@ describe('⚠️ l’XP de combat suit les ennemis ABATTUS, pas l’étiquette',
 (h) Remplacer le test « l'équipement compte sur la route, DIVISÉ PAR L'EFFECTIF » (~1541) :
 
 ```ts
-  it('⚠️ l’équipement compte sur la route, et il n’épaule que SON porteur', () => {
-    const stock = [bat(0)];
-    const nu = unitEffects(roadPairs([caravanier()], { familiars: [], talents: [], advGear: [] }).get('car'));
-    const seul = unitEffects(
-      roadPairs([caravanier()], { familiars: [], talents: [], advGear: stock }).get('car'),
-    );
-    expect(nu.maxPvPct).toBe(0);
-    expect(seul.maxPvPct).toBeCloseTo(advGearEffects(stock).maxPvPct, 9);
-    const trio = roadPairs(
-      [caravanier(), { ...refAdventurer(40, 0), id: 'b' }, { ...refAdventurer(40, 1), id: 'c' }],
-      { familiars: [], talents: [], advGear: stock },
-    );
-    expect(unitEffects(trio.get('car')).maxPvPct).toBeCloseTo(seul.maxPvPct, 9);
-    expect(trio.get('b')).toBeUndefined();
-  });
+it('⚠️ l’équipement compte sur la route, et il n’épaule que SON porteur', () => {
+  const stock = [bat(0)];
+  const nu = unitEffects(
+    roadPairs([caravanier()], { familiars: [], talents: [], advGear: [] }).get('car'),
+  );
+  const seul = unitEffects(
+    roadPairs([caravanier()], { familiars: [], talents: [], advGear: stock }).get('car'),
+  );
+  expect(nu.maxPvPct).toBe(0);
+  expect(seul.maxPvPct).toBeCloseTo(advGearEffects(stock).maxPvPct, 9);
+  const trio = roadPairs(
+    [caravanier(), { ...refAdventurer(40, 0), id: 'b' }, { ...refAdventurer(40, 1), id: 'c' }],
+    { familiars: [], talents: [], advGear: stock },
+  );
+  expect(unitEffects(trio.get('car')).maxPvPct).toBeCloseTo(seul.maxPvPct, 9);
+  expect(trio.get('b')).toBeUndefined();
+});
 ```
 
 (i) Nouveau `describe` (après le `describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', …)`) :
@@ -1270,8 +1293,8 @@ export function missionXp(adv: Adventurer, poi: Poi): number {
 Plus bas, remplacer le calcul d'XP :
 
 ```ts
-  const xp: Record<string, number> = {};
-  for (const a of escort) xp[a.id] = missionXp(a, poi) + (xpShare[a.id] ?? 0);
+const xp: Record<string, number> = {};
+for (const a of escort) xp[a.id] = missionXp(a, poi) + (xpShare[a.id] ?? 0);
 ```
 
 et ajouter `kills,` dans l'objet retourné (après `xp,`).
@@ -1321,11 +1344,21 @@ const team = (n: number, L: number, nus = false, sansGear = false): Adventurer[]
     ...(nus ? {} : { familiarId: `refFam${i % 3}` }),
     ...(sansGear
       ? {}
-      : { gear: { weapon: `refGear${i}weapon`, armor: `refGear${i}armor`, accessory: `refGear${i}accessory` } }),
+      : {
+          gear: {
+            weapon: `refGear${i}weapon`,
+            armor: `refGear${i}armor`,
+            accessory: `refGear${i}accessory`,
+          },
+        }),
   }));
 const win = (esc: Adventurer[], p: Poi, n: number) => {
   const lvl = esc[0]!.level;
-  const units = roadUnits(esc, { familiars: refCompanions(lvl), talents: [], advGear: refAdvGear(lvl, esc.length) });
+  const units = roadUnits(esc, {
+    familiars: refCompanions(lvl),
+    talents: [],
+    advGear: refAdvGear(lvl, esc.length),
+  });
   const troop = roadTroop(p);
   let w = 0;
   for (let s = 0; s < n; s++) if (simulateSkirmish(units, troop, s * 211 + 7).win) w++;
@@ -1346,7 +1379,17 @@ it('phase 1 — grille grossière (100 graines, marge 2 points)', { timeout: 3_6
             if (calme.some((t) => t < 0.72 || t > 0.92)) continue;
             const peril = NIV.map((L) => win(team(3, L), poi(L, true), 100));
             if (peril.some((t) => t < 0.1 || t > 0.38)) continue;
-            console.log(JSON.stringify({ foePvTurns, foeDmgPctPv, perilousMult, troopCalm, troopPerilous, calme, peril }));
+            console.log(
+              JSON.stringify({
+                foePvTurns,
+                foeDmgPctPv,
+                perilousMult,
+                troopCalm,
+                troopPerilous,
+                calme,
+                peril,
+              }),
+            );
           }
 });
 ```
@@ -1409,7 +1452,9 @@ it('phase 2 — toutes les bandes (600 graines) + XP + blessés', { timeout: 3_6
             xp += Object.values(o.xp).reduce((a, b) => a + b, 0) / 3;
             if (o.hurt.length) blesse++;
           }
-          lignes.push(`${per ? 'peril' : 'calme'} L${L} xp=${(xp / 400).toFixed(2)} blesses=${((100 * blesse) / 400).toFixed(1)}%`);
+          lignes.push(
+            `${per ? 'peril' : 'calme'} L${L} xp=${(xp / 400).toFixed(2)} blesses=${((100 * blesse) / 400).toFixed(1)}%`,
+          );
         }
       console.log(`xpPerKill=${k}\n` + lignes.join('\n'));
     }
@@ -1434,7 +1479,22 @@ it('graine à épingler', () => {
     const o = resolveCaravan(poi(40, true), escort, s, road, 40);
     const iWin = o.events.findIndex((e) => e.kind === 'bandits' && e.won);
     if (o.advGear.length && iWin >= 0 && iWin < o.events.length - 1) {
-      console.log(s, JSON.stringify({ gold: o.gold, energy: o.energy, summonStones: o.summonStones, scrap: o.scrap, keys: o.keys, wages: o.wages, xp: o.xp, kills: o.kills, hurt: o.hurt, kinds: o.events.map((e) => e.kind), won: o.events.map((e) => e.won) }));
+      console.log(
+        s,
+        JSON.stringify({
+          gold: o.gold,
+          energy: o.energy,
+          summonStones: o.summonStones,
+          scrap: o.scrap,
+          keys: o.keys,
+          wages: o.wages,
+          xp: o.xp,
+          kills: o.kills,
+          hurt: o.hurt,
+          kinds: o.events.map((e) => e.kind),
+          won: o.events.map((e) => e.won),
+        }),
+      );
       break;
     }
   }
@@ -1484,45 +1544,47 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 5: Le rapport de convoi montre les abattus — et les convois d'avant se lisent toujours
 
 **Files:**
+
 - Modify: `src/lib/caravan.ts` (`CaravanReportMember`, `CaravanReport`, `caravanReport`)
 - Modify: `src/components/CaravanReportView.vue`
 - Modify: `src/stores/character.ts:2255-2266` (commentaire de `claimCaravan` seulement)
 - Test: `test/caravan.test.ts` (`describe('📜 LE RAPPORT DE CONVOI …')`)
 
 **Interfaces:**
+
 - Consumes: `CaravanOutcome.kills?` (Task 4).
 - Produces: `CaravanReportMember.kills: number` ; `CaravanReport.hasKills: boolean` ; `CaravanReport.totalKills: number`.
 
 - [ ] **Step 1: Write the failing test** (dans le `describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ …')`)
 
 ```ts
-  it('🗡️ chaque aventurier affiche SES abattus', () => {
-    const v = van();
-    const kills = { [escort[0]!.id]: 2, [escort[1]!.id]: 0, [escort[2]!.id]: 1 };
-    const r = caravanReport({ ...v, outcome: { ...v.outcome, kills } }, escort);
-    expect(r.hasKills).toBe(true);
-    expect(r.members.map((m) => m.kills)).toEqual([2, 0, 1]);
-    expect(r.totalKills).toBe(3);
-  });
+it('🗡️ chaque aventurier affiche SES abattus', () => {
+  const v = van();
+  const kills = { [escort[0]!.id]: 2, [escort[1]!.id]: 0, [escort[2]!.id]: 1 };
+  const r = caravanReport({ ...v, outcome: { ...v.outcome, kills } }, escort);
+  expect(r.hasKills).toBe(true);
+  expect(r.members.map((m) => m.kills)).toEqual([2, 0, 1]);
+  expect(r.totalKills).toBe(3);
+});
 
-  it('⚠️ un convoi LANCÉ AVANT le moteur de groupe se lit et s’encaisse toujours', () => {
-    // Son `outcome` a été figé au départ par l'ancien moteur : ni `kills`, ni `fallen`.
-    // L'XP par tête (`xp`) et les blessés (`hurt`), que `claimCaravan` crédite, y sont.
-    const v = van();
-    const outcome = { ...v.outcome };
-    delete (outcome as { kills?: unknown }).kills;
-    const legacy = {
-      ...v,
-      outcome: { ...outcome, events: outcome.events.map(({ kills: _k, fallen: _f, ...e }) => e) },
-    };
-    const r = caravanReport(legacy, escort);
-    expect(r.hasKills).toBe(false);
-    expect(r.totalKills).toBe(0);
-    for (const m of r.members) {
-      expect(m.kills).toBe(0);
-      expect(m.xp).toBe(Math.round(v.outcome.xp[m.id] ?? 0));
-    }
-  });
+it('⚠️ un convoi LANCÉ AVANT le moteur de groupe se lit et s’encaisse toujours', () => {
+  // Son `outcome` a été figé au départ par l'ancien moteur : ni `kills`, ni `fallen`.
+  // L'XP par tête (`xp`) et les blessés (`hurt`), que `claimCaravan` crédite, y sont.
+  const v = van();
+  const outcome = { ...v.outcome };
+  delete (outcome as { kills?: unknown }).kills;
+  const legacy = {
+    ...v,
+    outcome: { ...outcome, events: outcome.events.map(({ kills: _k, fallen: _f, ...e }) => e) },
+  };
+  const r = caravanReport(legacy, escort);
+  expect(r.hasKills).toBe(false);
+  expect(r.totalKills).toBe(0);
+  for (const m of r.members) {
+    expect(m.kills).toBe(0);
+    expect(m.xp).toBe(Math.round(v.outcome.xp[m.id] ?? 0));
+  }
+});
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1535,17 +1597,17 @@ Expected: FAIL — `hasKills` indéfini.
 Dans `CaravanReportMember`, après `xp: number;` :
 
 ```ts
-  /** Bandits abattus par lui sur ce voyage (0 pour un convoi d'avant le moteur de groupe). */
-  kills: number;
+/** Bandits abattus par lui sur ce voyage (0 pour un convoi d'avant le moteur de groupe). */
+kills: number;
 ```
 
 Dans `CaravanReport`, après `totalXp: number;` :
 
 ```ts
-  /** Le convoi porte-t-il un décompte des abattus ? Faux pour un convoi lancé avant v0.859 :
-   *  l'écran n'affiche alors pas une colonne de zéros qui mentirait. */
-  hasKills: boolean;
-  totalKills: number;
+/** Le convoi porte-t-il un décompte des abattus ? Faux pour un convoi lancé avant v0.859 :
+ *  l'écran n'affiche alors pas une colonne de zéros qui mentirait. */
+hasKills: boolean;
+totalKills: number;
 ```
 
 Dans `caravanReport`, dans l'objet du membre (après `xp: …,`) :
@@ -1557,7 +1619,7 @@ Dans `caravanReport`, dans l'objet du membre (après `xp: …,`) :
 puis après `const totalXp = …` :
 
 ```ts
-  const totalKills = members.reduce((n, m) => n + m.kills, 0);
+const totalKills = members.reduce((n, m) => n + m.kills, 0);
 ```
 
 et dans l'objet retourné, après `totalXp,` : `hasKills: !!o.kills, totalKills,`.
@@ -1567,15 +1629,17 @@ et dans l'objet retourné, après `totalXp,` : `hasKills: !!o.kills, totalKills,
 Dans le titre repliable, après `<span class="cr-exp-xp">+{{ r.totalXp }} XP</span>`, ajouter avant lui :
 
 ```vue
-          <span v-if="r.hasKills" class="cr-exp-kills">🗡️ {{ r.totalKills }}</span>
+<span v-if="r.hasKills" class="cr-exp-kills">🗡️ {{ r.totalKills }}</span>
 ```
 
 Dans chaque ligne, avant `<span class="cr-m-xp">` :
 
 ```vue
-          <span v-if="r.hasKills && m.kills" class="cr-m-kills" :title="`${m.kills} bandit(s) abattu(s)`"
-            >🗡️ {{ m.kills }}</span
-          >
+<span
+  v-if="r.hasKills && m.kills"
+  class="cr-m-kills"
+  :title="`${m.kills} bandit(s) abattu(s)`"
+>🗡️ {{ m.kills }}</span>
 ```
 
 Styles (dans le bloc `scoped`) :
@@ -1598,10 +1662,10 @@ Styles (dans le bloc `scoped`) :
 - [ ] **Step 5: Store** — `src/stores/character.ts`, commentaire au-dessus de `claimCaravan` : remplacer la première phrase par
 
 ```ts
-  /** Encaisse la cargaison d'un convoi rentré : devises, XP par aventurier, blessés.
-   *  ⚠️ `o.xp` contient DÉJÀ le socle de mission ET la part des bandits abattus, calculés au
-   *  départ (moteur de groupe) ; un convoi lancé avant la bascule porte l'XP de l'ancien
-   *  moteur dans le même champ — rien à distinguer ici. `o.hurt` = ceux qui sont tombés. */
+/** Encaisse la cargaison d'un convoi rentré : devises, XP par aventurier, blessés.
+ *  ⚠️ `o.xp` contient DÉJÀ le socle de mission ET la part des bandits abattus, calculés au
+ *  départ (moteur de groupe) ; un convoi lancé avant la bascule porte l'XP de l'ancien
+ *  moteur dans le même champ — rien à distinguer ici. `o.hurt` = ceux qui sont tombés. */
 ```
 
 (aucune ligne de code ne change dans le store.)
@@ -1633,6 +1697,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 6: Portes, code mort, CLAUDE.md, version
 
 **Files:**
+
 - Modify: `CLAUDE.md` (nouvelle entrée juste AU-DESSUS de la puce « 🗡️ ÉQUIPEMENT DES AVENTURIERS PAR CLASSE DE BASE (v0.858… », ~ligne 639 ; annotation de la puce « ⚠️ LE BONUS D'XP SUIT LES COMBATS RÉELS », ~ligne 301 ; mention de `missionXp`/`roadFoe` dans la puce CARAVANES)
 - Modify: `package.json` (`version`)
 - Modify: `src/lib/adventurers.ts:1302` (commentaire « Mesuré avec `missionXp` »)
@@ -1670,7 +1735,7 @@ Remplacer chaque `‹…›` par la valeur mesurée correspondante (Task 4 Step 
 
 Dans la puce « ⚠️ LE BONUS D'XP SUIT LES COMBATS RÉELS, pas l'étiquette » (~ligne 301), ajouter en tête : `⚠️ **REMPLACÉ en v0.859** par la part des abattus du combat de groupe (cf. « COMBAT DE GROUPE »).`
 
-Dans `src/lib/adventurers.ts`, commentaire de `advXpToNext` : `Mesuré avec \`missionXp\`` → `Mesuré avec \`missionXp\` (avant v0.859 ; le moteur de groupe garde l'XP moyenne à ±15 %)`.
+Dans `src/lib/adventurers.ts`, commentaire de `advXpToNext` : `Mesuré avec \`missionXp\``→`Mesuré avec \`missionXp\` (avant v0.859 ; le moteur de groupe garde l'XP moyenne à ±15 %)`.
 
 - [ ] **Step 4: Les cinq portes + code mort** (lire chaque sortie)
 

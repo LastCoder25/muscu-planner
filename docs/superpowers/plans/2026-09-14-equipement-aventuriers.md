@@ -30,30 +30,32 @@
 
 ## File Structure
 
-| Fichier | Rôle |
-| --- | --- |
-| `src/lib/items.ts` (modif) | exporte `effectBase` et `scrapValueOf` (réutilisés, pas recopiés) |
-| `src/lib/advGear.ts` (nouveau) | types `AdvGear`/`Lineage`, `LINEAGE_GEAR`, tirage, effets, port, options, Équipementier |
-| `src/lib/adventurers.ts` (modif) | champ `Adventurer.gear` |
-| `src/lib/raid.ts` (modif) | `CompanionCtx.advGear`, `companionPairs`/`pairEffects` avec l'équipement, `autoAdvGear`, butin des corps |
-| `src/lib/caravan.ts` (modif) | `RoadCompanions.advGear`, route, rôles civils, escorte de référence équipée, butin d'embuscade |
-| `src/lib/buildings.ts` + `src/lib/buildingPreview.ts` (modif) | bâtiment `outfitter` |
-| `supabase/migrations/0067_adv_gear.sql` (nouveau) | colonne `characters.adv_gear jsonb` |
-| `src/stores/character.ts` (modif) | lecture/écriture du stock, actions, crédits de butin, forge |
-| `src/components/GuildPanel.vue` (modif) | emplacements sur la fiche, sélecteur, stock |
-| `src/components/VillagePlots.vue` (modif) | panneau de l'Équipementier |
-| `src/pages/BasePage.vue`, `src/pages/ExpeditionMapPage.vue` (modif) | contextes de combat (`advGear`) |
-| `test/advGear.test.ts` (nouveau) + tests existants (modif) | couverture |
+| Fichier                                                             | Rôle                                                                                                     |
+| ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `src/lib/items.ts` (modif)                                          | exporte `effectBase` et `scrapValueOf` (réutilisés, pas recopiés)                                        |
+| `src/lib/advGear.ts` (nouveau)                                      | types `AdvGear`/`Lineage`, `LINEAGE_GEAR`, tirage, effets, port, options, Équipementier                  |
+| `src/lib/adventurers.ts` (modif)                                    | champ `Adventurer.gear`                                                                                  |
+| `src/lib/raid.ts` (modif)                                           | `CompanionCtx.advGear`, `companionPairs`/`pairEffects` avec l'équipement, `autoAdvGear`, butin des corps |
+| `src/lib/caravan.ts` (modif)                                        | `RoadCompanions.advGear`, route, rôles civils, escorte de référence équipée, butin d'embuscade           |
+| `src/lib/buildings.ts` + `src/lib/buildingPreview.ts` (modif)       | bâtiment `outfitter`                                                                                     |
+| `supabase/migrations/0067_adv_gear.sql` (nouveau)                   | colonne `characters.adv_gear jsonb`                                                                      |
+| `src/stores/character.ts` (modif)                                   | lecture/écriture du stock, actions, crédits de butin, forge                                              |
+| `src/components/GuildPanel.vue` (modif)                             | emplacements sur la fiche, sélecteur, stock                                                              |
+| `src/components/VillagePlots.vue` (modif)                           | panneau de l'Équipementier                                                                               |
+| `src/pages/BasePage.vue`, `src/pages/ExpeditionMapPage.vue` (modif) | contextes de combat (`advGear`)                                                                          |
+| `test/advGear.test.ts` (nouveau) + tests existants (modif)          | couverture                                                                                               |
 
 ---
 
 ### Task 1: Réutiliser les bases d'effet et la ferraille d'`items.ts`
 
 **Files:**
+
 - Modify: `src/lib/items.ts:330-336` (scrapValue), `src/lib/items.ts:825` (EFFECT_BASE)
 - Test: `test/items.test.ts`
 
 **Interfaces:**
+
 - Produces: `effectBase(t: EffectType): number` ; `scrapValueOf(slot: ItemSlot, rarity: Rarity, level: number): number` (et `scrapValue(it)` qui l'appelle).
 
 - [ ] **Step 1: Write the failing test** (à la fin de `test/items.test.ts`)
@@ -125,11 +127,13 @@ git commit -m "items : effectBase et scrapValueOf exportes (reutilises par l'equ
 ### Task 2: Le module `advGear.ts` — lignées, tirage, effets, règles de port
 
 **Files:**
+
 - Create: `src/lib/advGear.ts`
 - Modify: `src/lib/adventurers.ts` (interface `Adventurer`, après `talentId`)
 - Test: `test/advGear.test.ts`
 
 **Interfaces:**
+
 - Consumes: `effectBase`, `scrapValueOf` (Task 1) ; `rollTier`, `rollItemLevel`, `rankRollMult`, `itemLevelMult`, `effectAsAggregate`, `mergeEffects`, `emptyEffects`, `sellValueOf`, `RARITY_RANK`, `RARITY_LABEL` (`items.ts`) ; `advRarity`, `Adventurer` (`adventurers.ts`).
 - Produces (exact) :
   - `type Lineage = 'guerrier' | 'archer' | 'mage' | 'homme_armes' | 'eclaireur' | 'caravanier'`
@@ -178,11 +182,25 @@ import {
 } from '@/lib/advGear';
 
 const adv = (id: string, path: string[], gear?: Adventurer['gear']): Adventurer => ({
-  id, name: id, seed: 1, path, level: 20, xp: 0, ...(gear ? { gear } : {}),
+  id,
+  name: id,
+  seed: 1,
+  path,
+  level: 20,
+  xp: 0,
+  ...(gear ? { gear } : {}),
 });
 const piece = (id: string, over: Partial<AdvGear> = {}): AdvGear => ({
-  id, lineage: 'guerrier', slot: 'weapon', name: 'Épée', emoji: '🗡️',
-  rarity: 'commun', roll: 0.5, level: 20, effect: { type: 'damage_pct', value: 10 }, ...over,
+  id,
+  lineage: 'guerrier',
+  slot: 'weapon',
+  name: 'Épée',
+  emoji: '🗡️',
+  rarity: 'commun',
+  roll: 0.5,
+  level: 20,
+  effect: { type: 'damage_pct', value: 10 },
+  ...over,
 });
 
 describe('équipement propre à chaque classe de base', () => {
@@ -198,9 +216,19 @@ describe('équipement propre à chaque classe de base', () => {
     expect(LINEAGE_GEAR.caravanier.role).toBe('haul');
     expect(LINEAGE_GEAR.guerrier.role).toBeUndefined();
     const rng = mulberry32(3);
-    const acc = rollAdvGear(rng, { lineage: 'caravanier', slot: 'accessory', level: 30, playerLevel: 30 });
+    const acc = rollAdvGear(rng, {
+      lineage: 'caravanier',
+      slot: 'accessory',
+      level: 30,
+      playerLevel: 30,
+    });
     expect(acc.role?.kind).toBe('haul');
-    const arme = rollAdvGear(rng, { lineage: 'caravanier', slot: 'weapon', level: 30, playerLevel: 30 });
+    const arme = rollAdvGear(rng, {
+      lineage: 'caravanier',
+      slot: 'weapon',
+      level: 30,
+      playerLevel: 30,
+    });
     expect(arme.role).toBeUndefined();
   });
   it('la lignée est la classe de départ', () => {
@@ -243,7 +271,10 @@ describe('port', () => {
     expect(RARITY_RANK[advRarity(recrue)]).toBe(0);
   });
   it('wornGear : une pièce, un porteur ; mauvais emplacement ou interdite = ignorée', () => {
-    const stock = [piece('p1'), piece('p2', { slot: 'armor', effect: { type: 'max_pv_pct', value: 8 } })];
+    const stock = [
+      piece('p1'),
+      piece('p2', { slot: 'armor', effect: { type: 'max_pv_pct', value: 8 } }),
+    ];
     const a = adv('a', ['guerrier'], { weapon: 'p1', armor: 'p1' });
     const b = adv('b', ['guerrier'], { weapon: 'p1', armor: 'p2' });
     const w = wornGear([a, b], stock);
@@ -255,7 +286,9 @@ describe('port', () => {
     expect(e.damagePct).toBeCloseTo((10 * itemLevelMult(40)) / 100, 6);
   });
   it('rôles : seuls les accessoires civils PORTÉS comptent', () => {
-    const stock = [piece('r', { lineage: 'caravanier', slot: 'accessory', role: { kind: 'haul', value: 0.05 } })];
+    const stock = [
+      piece('r', { lineage: 'caravanier', slot: 'accessory', role: { kind: 'haul', value: 0.05 } }),
+    ];
     const porteur = adv('c', ['caravanier'], { accessory: 'r' });
     expect(advGearRoles([porteur], stock)).toEqual({ speed: 0, haul: 0.05 });
     expect(advGearRoles([adv('d', ['caravanier'])], stock)).toEqual({ speed: 0, haul: 0 });
@@ -495,7 +528,10 @@ export function wornGear(advs: Adventurer[], stock: AdvGear[]): Map<string, AdvG
 }
 
 /** Bonus de rôle PORTÉS par une escorte (fractions, non plafonnées — la route plafonne). */
-export function advGearRoles(escort: Adventurer[], stock: AdvGear[]): { speed: number; haul: number } {
+export function advGearRoles(
+  escort: Adventurer[],
+  stock: AdvGear[],
+): { speed: number; haul: number } {
   const out = { speed: 0, haul: 0 };
   for (const list of wornGear(escort, stock).values())
     for (const g of list) if (g.role) out[g.role.kind] += g.role.value;
@@ -561,11 +597,13 @@ git commit -m "advGear : equipement des aventuriers par classe de base (tirage, 
 ### Task 3: L'équipement compte au rempart et dans la puissance affichée
 
 **Files:**
+
 - Modify: `src/lib/raid.ts` (`CompanionCtx` ~2328, `companionPairs` ~2189, `pairEffects` ~2360, `autoCompanions` ~2425)
 - Modify (sites de construction du contexte, désignés par le compilateur) : `src/stores/character.ts:1487` (`companionCtx`), `src/components/GuildPanel.vue:530`, `src/pages/BasePage.vue:1062`, `src/pages/ExpeditionMapPage.vue:686`
 - Test: `test/advGear.test.ts` (nouveau `describe`), tests existants qui construisent un `CompanionCtx`
 
 **Interfaces:**
+
 - Consumes: `wornGear`, `advGearEffects`, `AdvGear` (Task 2).
 - Produces: `CompanionCtx.advGear: AdvGear[]` (REQUIS) ; entrée de `companionPairs` = `{ familiar?; talent?; gear?: AdvGear[] }` ; `pairEffects` inclut l'équipement ; `adventurerPowers` le compte.
 
@@ -576,7 +614,11 @@ import { adventurerPowers, type CompanionCtx } from '@/lib/raid';
 
 describe('au rempart et dans la puissance', () => {
   const ctx = (advGear: AdvGear[]): CompanionCtx => ({
-    familiars: [], talents: [], kennelLevel: 0, now: 0, advGear,
+    familiars: [],
+    talents: [],
+    kennelLevel: 0,
+    now: 0,
+    advGear,
   });
   it('une pièce portée augmente la puissance, une pièce interdite non', () => {
     const a = { ...adv('a', ['guerrier'], { weapon: 'p' }), level: 60 };
@@ -609,8 +651,8 @@ Dans `interface CompanionCtx`, après `talents` :
 Dans `companionPairs` : changer le type de retour et de `entry` en `{ familiar?: Item; talent?: TalentInstance; gear?: AdvGear[] }`, calculer avant la boucle `const worn = wornGear(advs, ctx.advGear);`, et avant `if (entry.familiar || entry.talent)` :
 
 ```ts
-    const g = worn.get(a.id);
-    if (g) entry.gear = g;
+const g = worn.get(a.id);
+if (g) entry.gear = g;
 ```
 
 puis la condition devient `if (entry.familiar || entry.talent || entry.gear) out.set(a.id, entry);`.
@@ -647,11 +689,13 @@ git commit -m "Equipement des aventuriers compte au rempart et dans leur puissan
 ### Task 4: La route — effets, rôles civils, escorte de référence équipée (MESURÉE)
 
 **Files:**
+
 - Modify: `src/lib/caravan.ts` (`RoadCompanions` ~800, `roadCompanionEffects` ~837, `refEscortOf` ~483, `roadFoe` ~560, `caravanLegMin` ~652, `startCaravan` ~984, calcul `haul` ~904)
 - Modify: `src/stores/character.ts` (construction de `RoadCompanions`, ~2050), `src/pages/ExpeditionMapPage.vue:767` (appel `caravanLegMin`)
 - Test: `test/caravan.test.ts`
 
 **Interfaces:**
+
 - Consumes: `wornGear`, `advGearEffects`, `advGearRoles`, `rollAdvGear`-compatible shape, `LINEAGE_GEAR`, `ADV_GEAR` (Task 2).
 - Produces: `RoadCompanions.advGear: AdvGear[]` (REQUIS) ; `refAdvGear(level: number): AdvGear[]` (exporté) ; `caravanLegMin(poi, escort, comptoirLevel: number, gearSpeed: number): number` (4ᵉ paramètre REQUIS).
 
@@ -669,21 +713,34 @@ describe('équipement des aventuriers sur la route', () => {
   });
   it('un accessoire de caravanier porté grossit la cargaison, plafonné par haulMax', () => {
     const car = { ...refAdventurer(40, 2), gear: { accessory: 'bat' } };
-    const stock = [{
-      id: 'bat', lineage: 'caravanier', slot: 'accessory', name: 'Bât', emoji: '🎒',
-      rarity: 'commun', roll: 0, level: 40, effect: { type: 'max_pv_pct', value: 5 },
-      role: { kind: 'haul', value: 5 },
-    }] as const;
+    const stock = [
+      {
+        id: 'bat',
+        lineage: 'caravanier',
+        slot: 'accessory',
+        name: 'Bât',
+        emoji: '🎒',
+        rarity: 'commun',
+        roll: 0,
+        level: 40,
+        effect: { type: 'max_pv_pct', value: 5 },
+        role: { kind: 'haul', value: 5 },
+      },
+    ] as const;
     expect(advGearRoles([car], [...stock]).haul).toBe(5);
     // résolu avec un bonus énorme : la cargaison reste bornée à 1 + haulMax
     const out = resolveCaravan(poi({ level: 40 }), [car], 7, {
-      familiars: [], talents: [], advGear: [...stock],
+      familiars: [],
+      talents: [],
+      advGear: [...stock],
     });
     const nu = resolveCaravan(poi({ level: 40 }), [{ ...car, gear: {} }], 7, {
-      familiars: [], talents: [], advGear: [],
+      familiars: [],
+      talents: [],
+      advGear: [],
     });
     expect(out.scrap + out.energy + out.gold).toBeLessThanOrEqual(
-      Math.ceil((nu.scrap + nu.energy + nu.gold) * (1 + CARAVAN.haulMax) / 1) + 3,
+      Math.ceil(((nu.scrap + nu.energy + nu.gold) * (1 + CARAVAN.haulMax)) / 1) + 3,
     );
   });
 });
@@ -733,11 +790,12 @@ export function refAdvGear(level: number): AdvGear[] {
 }
 ```
 
-`refEscortOf` : ajouter à chaque membre `gear: { weapon: \`refGear${i}weapon\`, armor: \`refGear${i}armor\`, accessory: \`refGear${i}accessory\` }`. ⚠️ `refAdvGear` appelle `refEscortOf` : définir `refEscortOf` SANS gear dans une fonction interne `refEscortBare(level)` réutilisée par les deux, pour éviter la récursion.
+`refEscortOf` : ajouter à chaque membre `gear: { weapon: \`refGear${i}weapon\`, armor: \`refGear${i}armor\`, accessory: \`refGear${i}accessory\` }`. ⚠️ `refAdvGear`appelle`refEscortOf`: définir`refEscortOf`SANS gear dans une fonction interne`refEscortBare(level)` réutilisée par les deux, pour éviter la récursion.
 
 `roadFoe` : le 2ᵉ argument de `roadCompanionEffects` devient `{ familiars: refCompanions(poi.level), talents: [], advGear: refAdvGear(poi.level) }`.
 
 Rôles civils :
+
 - `caravanLegMin(poi, escort, comptoirLevel: number, gearSpeed: number)` : `const speed = Math.min(CARAVAN.speedMax, countRole(escort, 'speed') * CARAVAN.speedPerRole + gearSpeed);`
 - `startCaravan` : `caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, road.advGear).speed)`.
 - `resolveCaravan`, calcul `haul` : `1 + Math.min(CARAVAN.haulMax, countRole(escort, 'haul') * CARAVAN.haulPerRole + advGearRoles(escort, road.advGear).haul)`.
@@ -755,17 +813,38 @@ Expected: PASS, **y compris les bandes d'embuscade existantes** (trio calme ~73-
 import { it } from 'vitest';
 import { resolveCaravan, refAdventurer, refCompanions, refAdvGear, CARAVAN } from '@/lib/caravan';
 it('bandes équipées', () => {
-  for (const L of [12, 20, 26, 45, 70, 85]) for (const perilous of [false, true]) {
-    const escort = [0, 1, 2].map((i) => ({ ...refAdventurer(L, i), familiarId: `refFam${i}`,
-      gear: { weapon: `refGear${i}weapon`, armor: `refGear${i}armor`, accessory: `refGear${i}accessory` } }));
-    let won = 0, fights = 0;
-    for (let s = 1; s <= 400; s++) {
-      const o = resolveCaravan({ id: 'p', type: 'well', level: L, distNorm: 0.5, perilous } as never, escort, s,
-        { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L) });
-      for (const e of o.events) if (e.kind === 'bandits') { fights++; if (e.won) won++; }
+  for (const L of [12, 20, 26, 45, 70, 85])
+    for (const perilous of [false, true]) {
+      const escort = [0, 1, 2].map((i) => ({
+        ...refAdventurer(L, i),
+        familiarId: `refFam${i}`,
+        gear: {
+          weapon: `refGear${i}weapon`,
+          armor: `refGear${i}armor`,
+          accessory: `refGear${i}accessory`,
+        },
+      }));
+      let won = 0,
+        fights = 0;
+      for (let s = 1; s <= 400; s++) {
+        const o = resolveCaravan(
+          { id: 'p', type: 'well', level: L, distNorm: 0.5, perilous } as never,
+          escort,
+          s,
+          { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L) },
+        );
+        for (const e of o.events)
+          if (e.kind === 'bandits') {
+            fights++;
+            if (e.won) won++;
+          }
+      }
+      console.log(
+        L,
+        perilous ? 'périlleux' : 'calme',
+        Math.round((100 * won) / Math.max(1, fights)) + ' %',
+      );
     }
-    console.log(L, perilous ? 'périlleux' : 'calme', Math.round((100 * won) / Math.max(1, fights)) + ' %');
-  }
 });
 ```
 
@@ -786,12 +865,14 @@ git commit -m "Route : equipement des aventuriers, roles civils, escorte de refe
 ### Task 5: Persistance, actions du store et « Confier au mieux »
 
 **Files:**
+
 - Create: `supabase/migrations/0067_adv_gear.sql`
 - Modify: `src/stores/character.ts` (`CharacterRow` ~192, `normalizeRow` ~227, nouvelles actions près de `setAdvTalent` ~1675, `autoAssignCompanions`, retour du store)
 - Modify: `src/lib/raid.ts` (nouvelle `autoAdvGear`)
 - Test: `test/advGear.test.ts`
 
 **Interfaces:**
+
 - Produces:
   - `CharacterRow.adv_gear: AdvGearState | null` avec `interface AdvGearState { stock: AdvGear[]; forge?: AdvForge | null }` (déclarée dans `advGear.ts`, `AdvForge` en Task 7 — déclarer ici `forge?: { until: number; advId: string; piece: Omit<AdvGear, 'id'> } | null`).
   - `autoAdvGear(advs: Adventurer[], ctx: CompanionCtx): Map<string, Partial<Record<AdvGearSlot, string>>>`
@@ -819,7 +900,13 @@ Expected: `[]`. Vérifier : même commande avec `select column_name from informa
 import { autoAdvGear } from '@/lib/raid';
 
 describe('confier au mieux : l’équipement', () => {
-  const ctx = (advGear: AdvGear[]): CompanionCtx => ({ familiars: [], talents: [], kennelLevel: 0, now: 0, advGear });
+  const ctx = (advGear: AdvGear[]): CompanionCtx => ({
+    familiars: [],
+    talents: [],
+    kennelLevel: 0,
+    now: 0,
+    advGear,
+  });
   it('donne à chacun la meilleure pièce PERMISE de sa lignée, une pièce par porteur', () => {
     const a = { ...adv('a', ['guerrier']), level: 50 };
     const b = { ...adv('b', ['archer']), level: 50 };
@@ -827,7 +914,11 @@ describe('confier au mieux : l’équipement', () => {
       piece('faible', { level: 50, effect: { type: 'damage_pct', value: 5 } }),
       piece('forte', { level: 50, effect: { type: 'damage_pct', value: 30 } }),
       piece('arc', { lineage: 'archer', level: 50, effect: { type: 'damage_pct', value: 20 } }),
-      piece('trop_rare', { level: 50, rarity: 'epique', effect: { type: 'damage_pct', value: 99 } }),
+      piece('trop_rare', {
+        level: 50,
+        rarity: 'epique',
+        effect: { type: 'damage_pct', value: 99 },
+      }),
     ];
     const plan = autoAdvGear([a, b], ctx(stock));
     expect(plan.get('a')?.weapon).toBe('forte');
@@ -884,11 +975,11 @@ Run: `node node_modules/vitest/vitest.mjs run test/advGear.test.ts` → PASS.
 
 `CharacterRow` : `adv_gear: AdvGearState | null; // équipement des aventuriers (migr. 0067)`.
 
-`normalizeRow` : 
+`normalizeRow` :
 
 ```ts
-    const ag = obj<Partial<AdvGearState>>(r.adv_gear);
-    r.adv_gear = { stock: arr<AdvGear>(ag.stock), forge: ag.forge ?? null };
+const ag = obj<Partial<AdvGearState>>(r.adv_gear);
+r.adv_gear = { stock: arr<AdvGear>(ag.stock), forge: ag.forge ?? null };
 ```
 
 Getter : `const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);`
@@ -896,66 +987,71 @@ Getter : `const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.st
 Actions (près de `setAdvTalent`) :
 
 ```ts
-  async function setAdvGear(userId: string, advId: string, slot: AdvGearSlot, gearId: string | null) {
-    const cur = row.value;
-    if (!cur) return;
-    const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
-    if (!adv) return;
-    if (gearId) {
-      const g = (cur.adv_gear?.stock ?? []).find((x) => x.id === gearId);
-      if (!g) throw new Error('Cette pièce est introuvable.');
-      if (g.slot !== slot) throw new Error('Mauvais emplacement.');
-      // ⚠️ Refus AU STORE : l'écran ne propose pas l'impossible, il ne le garantit pas.
-      if (!canWearAdvGear(adv, g))
-        throw new Error(
-          g.lineage !== lineageOf(adv)
-            ? `Cette pièce est faite pour un autre métier.`
-            : `Trop rare pour ${adv.name} : sa classe est de rang ${rarityRank(advRarity(adv)).name} — promeus-le d’abord.`,
-        );
-    }
-    const adventurers = (cur.adventurers ?? []).map((a) => {
-      const gear = { ...(a.gear ?? {}) };
-      if (a.id === advId) gear[slot] = gearId ?? undefined;
-      else if (gearId && gear[slot] === gearId) gear[slot] = undefined;
-      return { ...a, gear };
-    });
-    await persistOptimistic(userId, { adventurers });
+async function setAdvGear(userId: string, advId: string, slot: AdvGearSlot, gearId: string | null) {
+  const cur = row.value;
+  if (!cur) return;
+  const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
+  if (!adv) return;
+  if (gearId) {
+    const g = (cur.adv_gear?.stock ?? []).find((x) => x.id === gearId);
+    if (!g) throw new Error('Cette pièce est introuvable.');
+    if (g.slot !== slot) throw new Error('Mauvais emplacement.');
+    // ⚠️ Refus AU STORE : l'écran ne propose pas l'impossible, il ne le garantit pas.
+    if (!canWearAdvGear(adv, g))
+      throw new Error(
+        g.lineage !== lineageOf(adv)
+          ? `Cette pièce est faite pour un autre métier.`
+          : `Trop rare pour ${adv.name} : sa classe est de rang ${rarityRank(advRarity(adv)).name} — promeus-le d’abord.`,
+      );
   }
+  const adventurers = (cur.adventurers ?? []).map((a) => {
+    const gear = { ...(a.gear ?? {}) };
+    if (a.id === advId) gear[slot] = gearId ?? undefined;
+    else if (gearId && gear[slot] === gearId) gear[slot] = undefined;
+    return { ...a, gear };
+  });
+  await persistOptimistic(userId, { adventurers });
+}
 
-  /** Retire des pièces du stock et les désassigne (vente ou recyclage). 🔒 et portées exclues. */
-  function dropAdvGear(cur: CharacterRow, ids: string[]) {
-    const worn = new Set((cur.adventurers ?? []).flatMap((a) => Object.values(a.gear ?? {})));
-    const stock = cur.adv_gear?.stock ?? [];
-    const gone = stock.filter((g) => ids.includes(g.id) && !g.locked && !worn.has(g.id));
-    return { gone, state: { ...cur.adv_gear, stock: stock.filter((g) => !gone.includes(g)) } };
-  }
-  async function sellAdvGear(userId: string, ids: string[]) {
-    const cur = row.value;
-    if (!cur) return;
-    const { gone, state } = dropAdvGear(cur, ids);
-    if (!gone.length) return;
-    const gold = gone.reduce((s, g) => s + advGearSellValue(g), 0);
-    await persist(userId, { gold: cur.gold + gold, adv_gear: state });
-  }
-  async function recycleAdvGear(userId: string, ids: string[]) {
-    const cur = row.value;
-    if (!cur) return;
-    const { gone, state } = dropAdvGear(cur, ids);
-    if (!gone.length) return;
-    const scrap = gone.reduce((s, g) => s + advGearScrap(g), 0);
-    await persist(userId, { scrap: cur.scrap + scrap, adv_gear: state });
-  }
-  async function toggleAdvGearLock(userId: string, id: string) {
-    const cur = row.value;
-    if (!cur) return;
-    const stock = (cur.adv_gear?.stock ?? []).map((g) => (g.id === id ? { ...g, locked: !g.locked } : g));
-    await persistOptimistic(userId, { adv_gear: { ...cur.adv_gear, stock } });
-  }
-  /** Ajoute des pièces au stock (butin). */
-  function withAdvGear(cur: CharacterRow, pieces: Omit<AdvGear, 'id'>[]): AdvGearState {
-    const stock = [...(cur.adv_gear?.stock ?? []), ...pieces.map((p) => ({ ...p, id: crypto.randomUUID() }))];
-    return { ...(cur.adv_gear ?? { stock: [] }), stock };
-  }
+/** Retire des pièces du stock et les désassigne (vente ou recyclage). 🔒 et portées exclues. */
+function dropAdvGear(cur: CharacterRow, ids: string[]) {
+  const worn = new Set((cur.adventurers ?? []).flatMap((a) => Object.values(a.gear ?? {})));
+  const stock = cur.adv_gear?.stock ?? [];
+  const gone = stock.filter((g) => ids.includes(g.id) && !g.locked && !worn.has(g.id));
+  return { gone, state: { ...cur.adv_gear, stock: stock.filter((g) => !gone.includes(g)) } };
+}
+async function sellAdvGear(userId: string, ids: string[]) {
+  const cur = row.value;
+  if (!cur) return;
+  const { gone, state } = dropAdvGear(cur, ids);
+  if (!gone.length) return;
+  const gold = gone.reduce((s, g) => s + advGearSellValue(g), 0);
+  await persist(userId, { gold: cur.gold + gold, adv_gear: state });
+}
+async function recycleAdvGear(userId: string, ids: string[]) {
+  const cur = row.value;
+  if (!cur) return;
+  const { gone, state } = dropAdvGear(cur, ids);
+  if (!gone.length) return;
+  const scrap = gone.reduce((s, g) => s + advGearScrap(g), 0);
+  await persist(userId, { scrap: cur.scrap + scrap, adv_gear: state });
+}
+async function toggleAdvGearLock(userId: string, id: string) {
+  const cur = row.value;
+  if (!cur) return;
+  const stock = (cur.adv_gear?.stock ?? []).map((g) =>
+    g.id === id ? { ...g, locked: !g.locked } : g,
+  );
+  await persistOptimistic(userId, { adv_gear: { ...cur.adv_gear, stock } });
+}
+/** Ajoute des pièces au stock (butin). */
+function withAdvGear(cur: CharacterRow, pieces: Omit<AdvGear, 'id'>[]): AdvGearState {
+  const stock = [
+    ...(cur.adv_gear?.stock ?? []),
+    ...pieces.map((p) => ({ ...p, id: crypto.randomUUID() })),
+  ];
+  return { ...(cur.adv_gear ?? { stock: [] }), stock };
+}
 ```
 
 Remplacer les `advGear: []` provisoires des Tasks 3-4 par `cur.adv_gear?.stock ?? []` / `char.row?.adv_gear?.stock ?? []`.
@@ -983,12 +1079,14 @@ git commit -m "Equipement des aventuriers : stock persiste (migr. 0067), actions
 ### Task 6: Sources — corps après un siège, embuscades repoussées
 
 **Files:**
+
 - Modify: `src/lib/raid.ts` (`CorpseLoot` ~2916, `lootCorpses` ~2931)
 - Modify: `src/lib/caravan.ts` (`CaravanOutcome` ~162, boucle d'embuscades de `resolveCaravan`)
 - Modify: `src/stores/character.ts` (`tickScavengers` ~1822, `claimCaravan` ~2082)
 - Test: `test/advGear.test.ts`
 
 **Interfaces:**
+
 - Consumes: `rollAdvGear`, `pickLineage` (Task 2) ; `withAdvGear` (Task 5).
 - Produces: `CorpseLoot.advGear: Omit<AdvGear,'id'>[]` ; `lootCorpses(corpses, faction, playerLevel, seed, lootPct, advs: Adventurer[])` (6ᵉ param REQUIS) ; `CaravanOutcome.advGear: Omit<AdvGear,'id'>[]` ; `ADV_GEAR_DROP = { corpse: 0.02, champion: 0.5, ambush: 0.25 }` dans `advGear.ts`.
 
@@ -1001,7 +1099,10 @@ import { ADV_GEAR_DROP } from '@/lib/advGear';
 describe('sources d’équipement', () => {
   it('les corps d’un siège en laissent, seulement des lignées du vivier', () => {
     const corpses: Corpse[] = Array.from({ length: 400 }, (_, i) => ({
-      id: `c${i}`, emoji: '🗡️', name: 'Coupe-jarret', level: 30,
+      id: `c${i}`,
+      emoji: '🗡️',
+      name: 'Coupe-jarret',
+      level: 30,
     }));
     const v = [adv('a', ['mage'])];
     const l = lootCorpses(corpses, 'bandits', 30, 9, 0, v);
@@ -1024,8 +1125,11 @@ it('une embuscade repoussée peut laisser une pièce de la lignée d’un membre
   const escort = [0, 1, 2].map((i) => ({ ...refAdventurer(40, i), familiarId: `refFam${i}` }));
   let pieces = 0;
   for (let s = 1; s <= 300; s++) {
-    const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, s,
-      { familiars: refCompanions(40), talents: [], advGear: [] });
+    const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, s, {
+      familiars: refCompanions(40),
+      talents: [],
+      advGear: [],
+    });
     for (const g of o.advGear) expect(escort.map((a) => a.path[0])).toContain(g.lineage);
     pieces += o.advGear.length;
   }
@@ -1047,11 +1151,14 @@ export const ADV_GEAR_DROP = { corpse: 0.02, champion: 0.5, ambush: 0.25 } as co
 `raid.ts` : `CorpseLoot` += `advGear: Omit<AdvGear, 'id'>[];` ; `lootCorpses` reçoit `advs: Adventurer[]` en 6ᵉ paramètre ; initialiser `advGear: []` dans `loot` ; dans la boucle, après le `rollDrop` du corps :
 
 ```ts
-    const chance = (c.champion ? ADV_GEAR_DROP.champion : ADV_GEAR_DROP.corpse) / (c.massMult ?? 1);
-    if (rng() < chance) {
-      const lineage = pickLineage(rng, advs);
-      if (lineage) loot.advGear.push(rollAdvGear(rng, { lineage, level: L, luck: c.champion ? 0.45 : 0.1, playerLevel }));
-    }
+const chance = (c.champion ? ADV_GEAR_DROP.champion : ADV_GEAR_DROP.corpse) / (c.massMult ?? 1);
+if (rng() < chance) {
+  const lineage = pickLineage(rng, advs);
+  if (lineage)
+    loot.advGear.push(
+      rollAdvGear(rng, { lineage, level: L, luck: c.champion ? 0.45 : 0.1, playerLevel }),
+    );
+}
 ```
 
 ⚠️ Ce `rng()` supplémentaire décale les tirages suivants : les tests existants de `lootCorpses` qui figent une valeur exacte peuvent changer — les relancer ; s'ils cassent sur un nombre, réécrire l'assertion sur la PROPRIÉTÉ testée, pas relâcher la borne.
@@ -1059,10 +1166,18 @@ export const ADV_GEAR_DROP = { corpse: 0.02, champion: 0.5, ambush: 0.25 } as co
 `caravan.ts` : `CaravanOutcome` += `advGear: Omit<AdvGear, 'id'>[];` ; dans `resolveCaravan`, `const advGear: Omit<AdvGear,'id'>[] = [];` et dans la branche embuscade gagnée (`if (r.win)`) :
 
 ```ts
-        if (rng() < ADV_GEAR_DROP.ambush) {
-          const lineage = pickLineage(rng, escort);
-          if (lineage) advGear.push(rollAdvGear(rng, { lineage, level: poi.level, luck: poi.perilous ? 0.3 : 0.1, playerLevel: poi.level }));
-        }
+if (rng() < ADV_GEAR_DROP.ambush) {
+  const lineage = pickLineage(rng, escort);
+  if (lineage)
+    advGear.push(
+      rollAdvGear(rng, {
+        lineage,
+        level: poi.level,
+        luck: poi.perilous ? 0.3 : 0.1,
+        playerLevel: poi.level,
+      }),
+    );
+}
 ```
 
 et retourner `advGear` dans l'objet résultat.
@@ -1085,6 +1200,7 @@ git commit -m "Sources d'equipement d'aventurier : corps apres un siege, embusca
 ### Task 7: L'Équipementier
 
 **Files:**
+
 - Modify: `src/lib/buildings.ts` (`BUILDING_TYPES`, après `training`), `src/lib/buildingPreview.ts` (entrée `outfitter`)
 - Modify: `src/lib/advGear.ts` (forge)
 - Modify: `src/stores/character.ts` (`startOutfit`, règlement dans le tick de base)
@@ -1092,6 +1208,7 @@ git commit -m "Sources d'equipement d'aventurier : corps apres un siege, embusca
 - Test: `test/advGear.test.ts`, `test/buildings.test.ts` (enregistrement exhaustif), `test/goldSink.test.ts` (re-mesure)
 
 **Interfaces:**
+
 - Produces: `OUTFITTER = { baseMs: 40 * 60_000, speedMax: 0.6, half: 30 }` ; `outfitterMsFor(level: number): number` ; `outfitSlot(slot: ItemSlot): AdvGearSlot | null` ; `outfitFromItem(rng, item: Item, target: Adventurer, playerLevel: number): Omit<AdvGear,'id'> | null` ; `settleOutfit(state: AdvGearState, now: number): AdvGearState` (rend le MÊME objet si rien ne change) ; store `startOutfit(uid, itemId, advId, now)`.
 
 - [ ] **Step 1: Failing tests** (`test/advGear.test.ts`)
@@ -1106,7 +1223,16 @@ describe('Équipementier', () => {
   });
   it('transforme un objet du héros en pièce de la lignée visée, rang autour de SON niveau', () => {
     const cible = { ...adv('a', ['archer']), level: 12 };
-    const hero = { id: 'h', slot: 'relic', name: 'Relique', emoji: '💀', rarity: 'primordial', level: 90, baseLevel: 90, effect: { type: 'crit_pct', value: 30 } } as const;
+    const hero = {
+      id: 'h',
+      slot: 'relic',
+      name: 'Relique',
+      emoji: '💀',
+      rarity: 'primordial',
+      level: 90,
+      baseLevel: 90,
+      effect: { type: 'crit_pct', value: 30 },
+    } as const;
     const g = outfitFromItem(mulberry32(4), hero as never, cible, 90)!;
     expect(g.lineage).toBe('archer');
     expect(g.slot).toBe('accessory');
@@ -1166,7 +1292,10 @@ export function outfitFromItem(
 export function settleOutfit(state: AdvGearState, now: number): AdvGearState {
   const f = state.forge;
   if (!f || f.until > now) return state;
-  return { stock: [...state.stock, { ...f.piece, id: `forge-${f.until}-${f.advId}` }], forge: null };
+  return {
+    stock: [...state.stock, { ...f.piece, id: `forge-${f.until}-${f.advId}` }],
+    forge: null,
+  };
 }
 ```
 
@@ -1211,15 +1340,17 @@ git commit -m "Equipementier : un objet du heros devient une piece d'aventurier 
 ### Task 8: Écrans de la Guilde — emplacements, sélecteur, stock
 
 **Files:**
+
 - Modify: `src/components/GuildPanel.vue` (fiche ~205-260, `pairBonusOf`, nouvelle feuille de sélection, section stock)
 
 **Interfaces:**
+
 - Consumes: `advGearOptions`, `wornGear`, `advGearSellValue`, `advGearScrap`, `LINEAGE_GEAR`, `ADV_GEAR_SLOTS` (Task 2) ; store `advGearStock`, `setAdvGear`, `sellAdvGear`, `recycleAdvGear`, `toggleAdvGearLock` (Task 5).
 
 - [ ] **Step 1: Fiche d'aventurier** — sous le bloc `.d-stats`, ajouter :
 
 ```vue
-      <div class="d-gear">
+<div class="d-gear">
         <button
           v-for="slot in ADV_GEAR_SLOTS"
           :key="slot"
@@ -1242,7 +1373,17 @@ git commit -m "Equipementier : un objet du heros devient une piece d'aventurier 
 Script :
 
 ```ts
-import { ADV_GEAR_SLOTS, LINEAGE_GEAR, advGearOptions, advGearScrap, advGearSellValue, lineageOf, wornGear, type AdvGear, type AdvGearSlot } from '@/lib/advGear';
+import {
+  ADV_GEAR_SLOTS,
+  LINEAGE_GEAR,
+  advGearOptions,
+  advGearScrap,
+  advGearSellValue,
+  lineageOf,
+  wornGear,
+  type AdvGear,
+  type AdvGearSlot,
+} from '@/lib/advGear';
 const gearPick = ref<{ advId: string; slot: AdvGearSlot } | null>(null);
 const worn = computed(() => wornGear(char.advList, char.advGearStock));
 function wornOf(a: Adventurer): Partial<Record<AdvGearSlot, AdvGear>> {
@@ -1274,7 +1415,7 @@ async function pickGear(id: string | null) {
 - [ ] **Step 2: Feuille de sélection** — calquée sur le sélecteur de talent existant :
 
 ```vue
-  <q-dialog :model-value="!!gearPick" position="bottom" @update:model-value="gearPick = null">
+<q-dialog :model-value="!!gearPick" position="bottom" @update:model-value="gearPick = null">
     <q-card v-if="gearRows" class="guild-card">
       <div class="d-sub">Pièces permises pour son métier et sa classe</div>
       <button v-for="g in gearRows.options" :key="g.id" class="pick-row" type="button" @click="pickGear(g.id)">
@@ -1312,6 +1453,7 @@ git commit -m "Guilde : emplacements d'equipement sur la fiche, selecteur filtre
 ### Task 9: Portes, version, documentation, livraison
 
 **Files:**
+
 - Modify: `package.json` (version), `CLAUDE.md` (entrée de version), mémoire `todo-en-attente.md` (hors dépôt)
 
 - [ ] **Step 1: Portes complètes**

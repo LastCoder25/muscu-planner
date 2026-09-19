@@ -309,12 +309,18 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
   // ⚠️ PLUSIEURS de ces fonctions ont été REDÉFINIES depuis la 0067 (0069, 0070, 0071, 0074,
   // 0075, 0076, 0078) : on compare toujours à la DERNIÈRE définition, celle que le serveur
   // exécute — jamais à celle d'origine, qui n'est plus appliquée nulle part.
+  // ⚠️ Lues UNE SEULE fois. `lastDef` est appelée une douzaine de fois, et relire les 78
+  // migrations à chaque appel faisait ~940 ouvertures de fichier là où 78 suffisent : sur ce
+  // poste (analyse antivirus à chaque ouverture) ça a fait dépasser le délai par défaut sous la
+  // charge de la suite complète, alors que le test passait seul. Mesuré : 936 → 78 ouvertures,
+  // et la durée du fichier 821 ms → 85 ms. Les fichiers ne bougent pas pendant un run.
+  let cache: string[] | null = null;
   const migrations = () =>
-    fs
+    (cache ??= fs
       .readdirSync('supabase/migrations')
       .filter((f) => f.endsWith('.sql'))
       .sort()
-      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'));
+      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8')));
   /** Le corps de la DERNIÈRE définition de `fn`, borné à la fonction (et pas au fichier
    *  entier : une migration qui en redéfinit plusieurs mélangerait leurs corps).
    *  ⚠️ On n'accroche que sur un `create … function` : sans ça, le `grant execute on
@@ -384,6 +390,10 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     // en ~2 s, mais sous la charge de la suite complète il a dépassé les 5 s par défaut et
     // rougissait sans qu'aucune assertion ne soit fausse. Même remède que le test « un convoi
     // n'est jamais déficitaire » (v0.867) : on borne l'attente, on ne touche pas au test.
+    // ⚠️ Cette ceinture ne couvrait qu'UN test, et c'est son VOISIN (« le cran est appliqué
+    // PARTOUT ») qui a rougi le 2026-09-19 : le remède avait été posé sur le symptôme du jour,
+    // pas sur la cause. La cause est désormais supprimée en amont (`migrations()` mémoïsée) —
+    // n'ajoute pas un délai par test, la lecture ne se paie plus qu'une fois pour tout le bloc.
   }, 30_000);
 
   it('même part minimale (dernière définition), même nombre d’invités', () => {

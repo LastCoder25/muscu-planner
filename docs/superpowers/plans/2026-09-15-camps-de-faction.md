@@ -37,32 +37,34 @@
 
 ## File Structure
 
-| Fichier | Rôle |
-| --- | --- |
-| `src/lib/skirmish.ts` (modif) | `fuseUnits` : fusion LINÉAIRE d’unités (somme exacte offense / survie) |
-| `src/lib/caravan.ts` (modif) | `refEscortUnits` (extrait de `roadTroop`) ; `poiOffers` gagne `party` + option REQUISE `advsAvailable` |
-| `src/lib/raid.ts` (modif) | export `factionRoster(faction)` (lecture de `ROSTERS`) |
-| `src/lib/expedition.ts` (modif) | `CAMP_TYPES`, `CAMP_FACTIONS`, `CAMP_SIZES`, `CampSpec`, `campSpecOf` ; extraction `campHeroOutcome` (bit-identique) ; `PartyResult`, `ExpeditionOutcome.party`, `ExpeditionMessage.party`, copie dans `buildMessage` ; `keepMessages` ; libellés |
-| `src/lib/camp.ts` (nouveau) | `CAMP`, `HERO_UNIT_ID`, `campFoe`, `campBodies`, `campHurt`, `campGroupHaul`, `resolveCamp`, `partyLegMin`, `startParty`, `canSendParty`, `campWinPct`, `partyReport` |
-| `src/lib/push.ts` (modif) | `PushContext.parties` (REQUIS), message `party_home` |
-| `supabase/migrations/0069_parties.sql` (nouveau) | colonne `characters.parties jsonb` (numéro à vérifier, cf. Task 7) |
-| `src/stores/character.ts` (modif) | colonne `parties`, `sendParty`, `partyTick`, crédit du groupe dans `expeClaim`, refus des camps dans `expeSend`, `keepMessages` |
-| `src/components/PartyReportView.vue` (nouveau) | rapport de groupe (membres, abattus, XP, blessés, journal repliable) |
-| `src/pages/ExpeditionMapPage.vue` (modif) | panneau « Attaquer le camp », tuiles de voyage des groupes, `partyTick`, rapport dans la modale |
-| `src/pages/AventurePage.vue` (modif) | `partyTick` au cycle, rapport dans la boîte 📬, `parties` dans la synchro push |
-| `test/skirmish.test.ts`, `test/caravan.test.ts`, `test/expedition.test.ts`, `test/camp.test.ts` (nouveau), `test/campCalibration.test.ts` (nouveau), `test/scrapEconomy.test.ts`, `test/push.test.ts` | couverture |
-| `CLAUDE.md`, `package.json` (modif) | entrée de version, bump |
+| Fichier                                                                                                                                                                                               | Rôle                                                                                                                                                                                                                                              |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/lib/skirmish.ts` (modif)                                                                                                                                                                         | `fuseUnits` : fusion LINÉAIRE d’unités (somme exacte offense / survie)                                                                                                                                                                            |
+| `src/lib/caravan.ts` (modif)                                                                                                                                                                          | `refEscortUnits` (extrait de `roadTroop`) ; `poiOffers` gagne `party` + option REQUISE `advsAvailable`                                                                                                                                            |
+| `src/lib/raid.ts` (modif)                                                                                                                                                                             | export `factionRoster(faction)` (lecture de `ROSTERS`)                                                                                                                                                                                            |
+| `src/lib/expedition.ts` (modif)                                                                                                                                                                       | `CAMP_TYPES`, `CAMP_FACTIONS`, `CAMP_SIZES`, `CampSpec`, `campSpecOf` ; extraction `campHeroOutcome` (bit-identique) ; `PartyResult`, `ExpeditionOutcome.party`, `ExpeditionMessage.party`, copie dans `buildMessage` ; `keepMessages` ; libellés |
+| `src/lib/camp.ts` (nouveau)                                                                                                                                                                           | `CAMP`, `HERO_UNIT_ID`, `campFoe`, `campBodies`, `campHurt`, `campGroupHaul`, `resolveCamp`, `partyLegMin`, `startParty`, `canSendParty`, `campWinPct`, `partyReport`                                                                             |
+| `src/lib/push.ts` (modif)                                                                                                                                                                             | `PushContext.parties` (REQUIS), message `party_home`                                                                                                                                                                                              |
+| `supabase/migrations/0069_parties.sql` (nouveau)                                                                                                                                                      | colonne `characters.parties jsonb` (numéro à vérifier, cf. Task 7)                                                                                                                                                                                |
+| `src/stores/character.ts` (modif)                                                                                                                                                                     | colonne `parties`, `sendParty`, `partyTick`, crédit du groupe dans `expeClaim`, refus des camps dans `expeSend`, `keepMessages`                                                                                                                   |
+| `src/components/PartyReportView.vue` (nouveau)                                                                                                                                                        | rapport de groupe (membres, abattus, XP, blessés, journal repliable)                                                                                                                                                                              |
+| `src/pages/ExpeditionMapPage.vue` (modif)                                                                                                                                                             | panneau « Attaquer le camp », tuiles de voyage des groupes, `partyTick`, rapport dans la modale                                                                                                                                                   |
+| `src/pages/AventurePage.vue` (modif)                                                                                                                                                                  | `partyTick` au cycle, rapport dans la boîte 📬, `parties` dans la synchro push                                                                                                                                                                    |
+| `test/skirmish.test.ts`, `test/caravan.test.ts`, `test/expedition.test.ts`, `test/camp.test.ts` (nouveau), `test/campCalibration.test.ts` (nouveau), `test/scrapEconomy.test.ts`, `test/push.test.ts` | couverture                                                                                                                                                                                                                                        |
+| `CLAUDE.md`, `package.json` (modif)                                                                                                                                                                   | entrée de version, bump                                                                                                                                                                                                                           |
 
 ---
 
 ### Task 1: `fuseUnits` — le groupe fondu, linéaire, héros compris — et `refEscortUnits`
 
 **Files:**
+
 - Modify: `src/lib/skirmish.ts` (ajouter `fuseUnits` après `troopOf`)
 - Modify: `src/lib/caravan.ts` (`refEscortUnits` juste avant `roadTroop` ; `roadTroop` l’appelle)
 - Test: `test/skirmish.test.ts`, `test/caravan.test.ts`
 
 **Interfaces:**
+
 - Consumes: `offenseOf`, `survivalOf`, `combatPowerRaw`, `type Combatant` (`combat.ts`) ; `SkirmishUnit` (`skirmish.ts`) ; `roadUnits`, `refCompanions`, `refAdvGear`, `refEscortOf` (privée), `CARAVAN.refEscort` (`caravan.ts`).
 - Produces:
   - `fuseUnits(units: readonly SkirmishUnit[], name: string): Combatant` — `offenseOf(résultat) ≈ Σ offenseOf(unités)`, `survivalOf(résultat) ≈ Σ survivalOf(unités)` (arrondi entier près) ; caractéristiques (crit, esquive, réduction, frappes, signatures, procs) = celles du MODÈLE, l’unité de plus forte `combatPowerRaw` (la première en cas d’égalité après tri stable par id). Lance une `Error` sur une liste vide.
@@ -117,7 +119,13 @@ describe('🧩 fuseUnits — le groupe fondu additionne ce que l’arbitre mesur
 
   it('le MODÈLE est l’unité la plus puissante : ses caractéristiques passent au groupe', () => {
     const faible = unit('faible', { crit: 0.02, strikes: 1, damage: 5, pv: 100 });
-    const forte = unit('forte', { crit: 0.5, strikes: 4, damage: 200, pv: 2000, procs: new Set(['aegis']) });
+    const forte = unit('forte', {
+      crit: 0.5,
+      strikes: 4,
+      damage: 200,
+      pv: 2000,
+      procs: new Set(['aegis']),
+    });
     const f = fuseUnits([faible, forte], 'G');
     expect(combatPowerRaw(forte.combatant)).toBeGreaterThan(combatPowerRaw(faible.combatant));
     expect(f.crit).toBe(0.5);
@@ -153,9 +161,17 @@ describe('🧭 refEscortUnits — la référence partagée par la route et les c
     const ref = Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
       ...refAdventurer(L, i),
       familiarId: `refFam${i % 3}`,
-      gear: { weapon: `refGear${i}weapon`, armor: `refGear${i}armor`, accessory: `refGear${i}accessory` },
+      gear: {
+        weapon: `refGear${i}weapon`,
+        armor: `refGear${i}armor`,
+        accessory: `refGear${i}accessory`,
+      },
     }));
-    const attendu = roadUnits(ref, { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L) });
+    const attendu = roadUnits(ref, {
+      familiars: refCompanions(L),
+      talents: [],
+      advGear: refAdvGear(L),
+    });
     expect(refEscortUnits(L)).toEqual(attendu);
   });
 });
@@ -251,10 +267,12 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 2: La spec d’un camp — faction × taille, uniforme, dérivée de l’id du POI
 
 **Files:**
+
 - Modify: `src/lib/expedition.ts` (après `HARVEST_TYPES`)
 - Test: `test/expedition.test.ts`
 
 **Interfaces:**
+
 - Consumes: `mulberry32` (`combat.ts`, déjà importé) ; `type RaidFaction` (`raid.ts`, **import de TYPE seul**).
 - Produces:
   - `CAMP_TYPES: ReadonlySet<PoiType>` (`camp`, `lair`)
@@ -402,11 +420,13 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 3: Extraire le butin du héros sur un camp — `campHeroOutcome`, bit-identique
 
 **Files:**
+
 - Modify: `src/lib/expedition.ts` (`resolveOutcome`, bloc « Mine = récolte ; camp/repaire = combat auto seedé » jusqu’à la fin de la fonction)
 - Test: `test/expedition.test.ts`
 - Probe jetable: `test/_golden-outcome.test.ts` + `test/_golden-outcome.json` (SUPPRIMÉS avant commit)
 
 **Interfaces:**
+
 - Consumes: `rollDrop`, `rollSetPiece`, `goldCost`, `travelOneWayMin`, `pick`, `FAIL_TEXT`, `WIN_TEXT`, `EXPE.failRefund` (déjà dans le module).
 - Produces: `campHeroOutcome(rng: () => number, poi: Poi, win: boolean, playerLevel: number | undefined): ExpeditionOutcome` — le butin ACTUEL d’un camp/repaire gagné (camp → objet + 10 % de clé ; repaire → pièce de set + 20 % de clé + pierres `1 + ⌊niv/12⌋` ; or `coût × (1 + A/R h × 0,1)`), ou l’échec actuel (or `coût × failRefund`, 12 % de clé, `reconBonus` 0,08) — SANS rencontres de trajet, `returnMult` 1. Consomme `rng` dans le MÊME ordre qu’avant.
 
@@ -439,7 +459,8 @@ const pois: Poi[] = (['mine', 'camp', 'lair'] as const).flatMap((type) =>
 it('instantané resolveOutcome', () => {
   const out: unknown[] = [];
   for (const h of heroes)
-    for (const p of pois) for (let s = 1; s <= 40; s++) out.push(resolveOutcome(h, p, s * 7919 + 3, 20));
+    for (const p of pois)
+      for (let s = 1; s <= 40; s++) out.push(resolveOutcome(h, p, s * 7919 + 3, 20));
   const file = 'test/_golden-outcome.json';
   if (process.env.GOLDEN_WRITE) writeFileSync(file, JSON.stringify(out));
   else {
@@ -456,7 +477,16 @@ Expected: PASS, fichier `test/_golden-outcome.json` écrit. (Si `setId: 'voie:be
 
 ```ts
 describe('🎁 campHeroOutcome — le butin du héros sur un camp, extrait tel quel', () => {
-  const camp: Poi = { id: 'c', type: 'camp', level: 20, x: 60, y: 60, distNorm: 0.4, spawnedAt: 0, expiresAt: 9e15 };
+  const camp: Poi = {
+    id: 'c',
+    type: 'camp',
+    level: 20,
+    x: 60,
+    y: 60,
+    distNorm: 0.4,
+    spawnedAt: 0,
+    expiresAt: 9e15,
+  };
   it('victoire sur un camp : un objet, de l’or, jamais de rencontre de trajet', () => {
     let objets = 0;
     for (let s = 1; s <= 30; s++) {
@@ -631,12 +661,14 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 4: Le moteur des camps — `camp.ts` (ennemi fondu, corps, résolution, butin, trajet)
 
 **Files:**
+
 - Create: `src/lib/camp.ts`
 - Modify: `src/lib/raid.ts` (export `factionRoster`, juste après `ROSTERS`)
 - Modify: `src/lib/expedition.ts` (type `PartyResult` ; `ExpeditionOutcome.party?`)
 - Test: `test/camp.test.ts` (nouveau)
 
 **Interfaces:**
+
 - Consumes:
   - `fuseUnits` (Task 1), `refEscortUnits`, `roadUnits`, `missionXp`, `caravanWages`, `caravanLegMin`, `slainByAlly`, `type RoadCompanions` (`caravan.ts`) ;
   - `deriveSkirmish`, `skirmishXpShares`, `cumulativeCuts`, `type SkirmishUnit`, `type SkirmishResult` (`skirmish.ts` — relire la signature de `skirmishXpShares` : si la vague parallèle y a ajouté la distance, la passer comme pour les convois) ;
@@ -720,7 +752,11 @@ const team = (n: number, level: number): Adventurer[] =>
     ...refAdventurer(level, i),
     id: `adv_${i}`,
     familiarId: `refFam${i % 3}`,
-    gear: { weapon: `refGear${i}weapon`, armor: `refGear${i}armor`, accessory: `refGear${i}accessory` },
+    gear: {
+      weapon: `refGear${i}weapon`,
+      armor: `refGear${i}armor`,
+      accessory: `refGear${i}accessory`,
+    },
   }));
 const road = (level: number, n: number) => ({
   familiars: refCompanions(level),
@@ -769,10 +805,7 @@ describe('🗡️ campFoe — danger ABSOLU, linéaire en taille, identique d’
   });
   it('calibré sur la RÉFÉRENCE : PV = offense du trio de référence × pvTurns × taille/3', () => {
     const L = 30;
-    const ref = fuseUnits(
-      roadUnits(team(CARAVAN.refEscort, L), road(L, CARAVAN.refEscort)),
-      'r',
-    );
+    const ref = fuseUnits(roadUnits(team(CARAVAN.refEscort, L), road(L, CARAVAN.refEscort)), 'r');
     const f = campFoe(poi({ level: L }), { faction: 'bandits', size: 6 });
     expect(f.pv).toBe(Math.max(1, Math.round(Math.max(1, offenseOf(ref)) * CAMP.pvTurns * 2)));
     expect(f.damage).toBe(Math.max(1, Math.round(survivalOf(ref) * 100 * CAMP.dmgPctPv * 2)));
@@ -839,7 +872,8 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
       const parts = skirmishXpShares(esc, campBodies(inp.poi, inp.spec), {
         foesDown: o.party!.foesDown,
       });
-      for (const a of esc) expect(o.party!.xp[a.id]).toBe(missionXp(a, inp.poi) + (parts[a.id] ?? 0));
+      for (const a of esc)
+        expect(o.party!.xp[a.id]).toBe(missionXp(a, inp.poi) + (parts[a.id] ?? 0));
       expect(o.party!.xp[HERO_UNIT_ID]).toBeUndefined();
     }
   });
@@ -891,7 +925,12 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
   });
 
   it('SANS le héros, défaite : rien à ramener, et le socle d’XP tombe quand même', () => {
-    const inp = input({ escort: team(1, 5), road: road(5, 1), poi: poi({ level: 40 }), spec: { faction: 'bandits', size: 4 } });
+    const inp = input({
+      escort: team(1, 5),
+      road: road(5, 1),
+      poi: poi({ level: 40 }),
+      spec: { faction: 'bandits', size: 4 },
+    });
     const o = resolveCamp(inp);
     expect(o.party!.win).toBe(false);
     expect(o.gold + o.scrap + o.summonStones + o.key).toBe(0);
@@ -920,7 +959,14 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
   });
 
   it('le JOURNAL raconte, borné', () => {
-    const o = resolveCamp(input({ escort: team(8, 40), road: road(40, 8), poi: poi({ level: 40, type: 'lair' }), spec: { faction: 'betes', size: 10 } }));
+    const o = resolveCamp(
+      input({
+        escort: team(8, 40),
+        road: road(40, 8),
+        poi: poi({ level: 40, type: 'lair' }),
+        spec: { faction: 'betes', size: 10 },
+      }),
+    );
     expect(o.party!.journal.length).toBeGreaterThan(0);
     expect(o.party!.journal.length).toBeLessThanOrEqual(CAMP.journalMax + 1);
   });
@@ -931,10 +977,16 @@ describe('🧭 trajet et départ d’un groupe', () => {
   it('héros seul = trajet du héros ; avec des aventuriers = le plus lent des deux', () => {
     const p = poi();
     const hero = Math.round(travelOneWayMin(p.level, p.distNorm) * 0.8);
-    expect(partyLegMin(p, [], { hero: true, travelMult: 0.8, comptoirLevel: 0, gearSpeed: 0 })).toBe(hero);
+    expect(
+      partyLegMin(p, [], { hero: true, travelMult: 0.8, comptoirLevel: 0, gearSpeed: 0 }),
+    ).toBe(hero);
     const adv = caravanLegMin(p, esc, 4, 0);
-    expect(partyLegMin(p, esc, { hero: true, travelMult: 0.8, comptoirLevel: 4, gearSpeed: 0 })).toBe(Math.max(hero, adv));
-    expect(partyLegMin(p, esc, { hero: false, travelMult: 0.8, comptoirLevel: 4, gearSpeed: 0 })).toBe(adv);
+    expect(
+      partyLegMin(p, esc, { hero: true, travelMult: 0.8, comptoirLevel: 4, gearSpeed: 0 }),
+    ).toBe(Math.max(hero, adv));
+    expect(
+      partyLegMin(p, esc, { hero: false, travelMult: 0.8, comptoirLevel: 4, gearSpeed: 0 }),
+    ).toBe(adv);
   });
   it('startParty : le rapport à l’arrivée, le retour à 2 × la jambe, coût d’or seulement avec le héros', () => {
     const a = startParty(input({ hero: fort(20) }), 1000, 30);
@@ -955,7 +1007,9 @@ describe('💰 butin de groupe : dérivé des sources existantes', () => {
     expect(b.scrap).toBe(Math.round(harvestYield('wreck', 30, tfH).scrap * CAMP.scrapShare * k));
     expect(b.key).toBe(harvestYield('archive', 30, tfH).keys);
     const m = campGroupHaul(p, { faction: 'mortsvivants', size: 3 }, mulberry32(1));
-    expect(m.summonStones).toBe(Math.round(harvestYield('shrine', 30, tfH).summonStones * CAMP.stoneShare * k));
+    expect(m.summonStones).toBe(
+      Math.round(harvestYield('shrine', 30, tfH).summonStones * CAMP.stoneShare * k),
+    );
     const bd = campGroupHaul(p, { faction: 'bandits', size: 3 }, mulberry32(1));
     expect(bd.gold).toBeGreaterThan(m.gold);
   });
@@ -1332,7 +1386,9 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     const o = campHeroOutcome(rng, poi, d.win, playerLevel);
     return { ...o, text: `${o.text} ${tag}`, party };
   }
-  const haul = d.win ? campGroupHaul(poi, spec, rng) : { gold: 0, scrap: 0, summonStones: 0, key: 0 };
+  const haul = d.win
+    ? campGroupHaul(poi, spec, rng)
+    : { gold: 0, scrap: 0, summonStones: 0, key: 0 };
   return {
     win: d.win,
     gold: haul.gold,
@@ -1418,6 +1474,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 5: Calibration MESURÉE — taille des camps, héros, économie
 
 **Files:**
+
 - Modify: `src/lib/camp.ts` (`CAMP.pvTurns`, `CAMP.dmgPctPv`, `CAMP.groupGoldShare`, `CAMP.banditGoldMult`, `CAMP.scrapShare`, `CAMP.stoneShare` + commentaires chiffrés)
 - Modify: `src/lib/expedition.ts` (`CAMP_SIZES.lair` uniquement, si la mesure l’exige)
 - Create: `test/campCalibration.test.ts`
@@ -1425,11 +1482,13 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Probe jetable: `test/_probe-camp.test.ts` (SUPPRIMÉE avant commit)
 
 **Interfaces:**
+
 - Consumes: tout `camp.ts` (Task 4), `gearedFighter` (`test/helpers/gearedFighter.ts`).
 - Produces: les valeurs mesurées ; aucune signature nouvelle.
 - Constantes AUTORISÉES : celles listées dans Files. INTERDITES : tout `CARAVAN.*`, `SKIRMISH.*`, `ADV_GEAR.*`, `CAMP_SIZES.camp`, `RAID.*`, `HARVEST.*`.
 
 **Bandes cibles (à tenir sans jamais les relâcher)** — niveaux 12 / 26 / 45 / 70, pour CHAQUE taille de `CAMP_SIZES.camp ∪ CAMP_SIZES.lair`, groupe de N aventuriers de référence accompagnés et équipés :
+
 - **B1** N = taille : victoire ∈ **[0,65 ; 0,95]**.
 - **B2** N = taille − 1 (si ≥ 1) : victoire ≤ B1 − **0,12**.
 - **B3** taille ≥ 5 : N = 3 → victoire < **0,10** (« nettement plus que 3 »).
@@ -1446,23 +1505,56 @@ import { simulateCombat, playerCombatant } from '@/lib/combat';
 import { caravanWages, refAdvGear, refAdventurer, refCompanions, roadUnits } from '@/lib/caravan';
 import { fuseUnits, type SkirmishUnit } from '@/lib/skirmish';
 import { CAMP, HERO_UNIT_ID, campFoe, campGroupHaul } from '@/lib/camp';
-import { CAMP_SIZES, harvestYield, resolveOutcome, travelFactor, travelOneWayMin, type Poi } from '@/lib/expedition';
+import {
+  CAMP_SIZES,
+  harvestYield,
+  resolveOutcome,
+  travelFactor,
+  travelOneWayMin,
+  type Poi,
+} from '@/lib/expedition';
 import { mulberry32 } from '@/lib/combat';
 import type { Adventurer } from '@/lib/adventurers';
 import { gearedFighter } from './helpers/gearedFighter';
 
 const C = CAMP as unknown as Record<string, number>;
 const S = CAMP_SIZES as unknown as { camp: number[]; lair: number[] };
-const poiAt = (L: number, type: Poi['type'] = 'camp'): Poi => ({ id: 'p', type, level: L, x: 60, y: 60, distNorm: 0.5, spawnedAt: 0, expiresAt: 9e15 });
+const poiAt = (L: number, type: Poi['type'] = 'camp'): Poi => ({
+  id: 'p',
+  type,
+  level: L,
+  x: 60,
+  y: 60,
+  distNorm: 0.5,
+  spawnedAt: 0,
+  expiresAt: 9e15,
+});
 const team = (n: number, L: number): Adventurer[] =>
-  Array.from({ length: n }, (_, i) => ({ ...refAdventurer(L, i), id: `a${i}`, familiarId: `refFam${i % 3}`, gear: { weapon: `refGear${i}weapon`, armor: `refGear${i}armor`, accessory: `refGear${i}accessory` } }));
-const units = (n: number, L: number): SkirmishUnit[] => roadUnits(team(n, L), { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L, n) });
-const heroUnit = (L: number): SkirmishUnit => ({ id: HERO_UNIT_ID, name: 'h', emoji: '🧝', level: L, combatant: gearedFighter(L) });
+  Array.from({ length: n }, (_, i) => ({
+    ...refAdventurer(L, i),
+    id: `a${i}`,
+    familiarId: `refFam${i % 3}`,
+    gear: {
+      weapon: `refGear${i}weapon`,
+      armor: `refGear${i}armor`,
+      accessory: `refGear${i}accessory`,
+    },
+  }));
+const units = (n: number, L: number): SkirmishUnit[] =>
+  roadUnits(team(n, L), { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L, n) });
+const heroUnit = (L: number): SkirmishUnit => ({
+  id: HERO_UNIT_ID,
+  name: 'h',
+  emoji: '🧝',
+  level: L,
+  combatant: gearedFighter(L),
+});
 function win(allies: SkirmishUnit[], L: number, size: number, n = 200) {
   const g = fuseUnits(allies, 'g');
   const f = campFoe(poiAt(L), { faction: 'bandits', size });
   let w = 0;
-  for (let s = 0; s < n; s++) if (simulateCombat(g, f, { seed: s * 211 + 7, goldOnWin: 0 }).win) w++;
+  for (let s = 0; s < n; s++)
+    if (simulateCombat(g, f, { seed: s * 211 + 7, goldOnWin: 0 }).win) w++;
   return w / n;
 }
 const NIV = [12, 26, 45, 70];
@@ -1479,7 +1571,8 @@ it('phase 1 — pvTurns × dmgPctPv', { timeout: 3_600_000 }, () => {
           const b1 = win(units(s, L), L, s, 120);
           const b2 = s > 1 ? win(units(s - 1, L), L, s, 120) : 0;
           const b3 = s >= 5 ? win(units(3, L), L, s, 120) : 0;
-          if (b1 < 0.65 || b1 > 0.95 || (s > 1 && b2 > b1 - 0.12) || (s >= 5 && b3 >= 0.1)) ok = false;
+          if (b1 < 0.65 || b1 > 0.95 || (s > 1 && b2 > b1 - 0.12) || (s >= 5 && b3 >= 0.1))
+            ok = false;
           rows.push(`L${L} s${s} ${b1.toFixed(2)}/${b2.toFixed(2)}/${b3.toFixed(2)}`);
         }
         if (!ok) break;
@@ -1490,7 +1583,10 @@ it('phase 1 — pvTurns × dmgPctPv', { timeout: 3_600_000 }, () => {
 
 it('phase 2 — héros seul et héros + groupe', { timeout: 600_000 }, () => {
   for (const L of [26, 45, 70]) {
-    const line = [2, 3, 4, 5, 7, 10].map((s) => `s${s}: seul ${win([heroUnit(L)], L, s, 200).toFixed(2)} +3 ${win([...units(3, L), heroUnit(L)], L, s, 200).toFixed(2)}`);
+    const line = [2, 3, 4, 5, 7, 10].map(
+      (s) =>
+        `s${s}: seul ${win([heroUnit(L)], L, s, 200).toFixed(2)} +3 ${win([...units(3, L), heroUnit(L)], L, s, 200).toFixed(2)}`,
+    );
     console.log(`L${L}`, line.join(' · '));
   }
 });
@@ -1506,8 +1602,14 @@ it('phase 3 — économie', () => {
     let mine = 0;
     for (let s = 1; s <= 40; s++) mine += resolveOutcome(hero, { ...p, type: 'mine' }, s, L).gold;
     mine /= 40;
-    const nets = [3, big].map((s) => campGroupHaul(poiAt(L), { faction: 'bandits', size: s }, mulberry32(1)).gold - caravanWages(team(s, L), p));
-    console.log(`L${L} ferraille ${scrap}/${wreck} (${(scrap / wreck).toFixed(2)}) orNet ${nets.map(Math.round).join('/')} mine ${Math.round(mine)}`);
+    const nets = [3, big].map(
+      (s) =>
+        campGroupHaul(poiAt(L), { faction: 'bandits', size: s }, mulberry32(1)).gold -
+        caravanWages(team(s, L), p),
+    );
+    console.log(
+      `L${L} ferraille ${scrap}/${wreck} (${(scrap / wreck).toFixed(2)}) orNet ${nets.map(Math.round).join('/')} mine ${Math.round(mine)}`,
+    );
   }
 });
 ```
@@ -1532,19 +1634,46 @@ import { simulateCombat, playerCombatant, mulberry32 } from '@/lib/combat';
 import { caravanWages, refAdvGear, refAdventurer, refCompanions, roadUnits } from '@/lib/caravan';
 import { fuseUnits, type SkirmishUnit } from '@/lib/skirmish';
 import { HERO_UNIT_ID, campFoe, campGroupHaul } from '@/lib/camp';
-import { CAMP_SIZES, harvestYield, resolveOutcome, travelFactor, travelOneWayMin, type Poi } from '@/lib/expedition';
+import {
+  CAMP_SIZES,
+  harvestYield,
+  resolveOutcome,
+  travelFactor,
+  travelOneWayMin,
+  type Poi,
+} from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 import { gearedFighter } from './helpers/gearedFighter';
 
-const poiAt = (L: number, type: Poi['type'] = 'camp'): Poi => ({ id: 'p', type, level: L, x: 60, y: 60, distNorm: 0.5, spawnedAt: 0, expiresAt: 9e15 });
+const poiAt = (L: number, type: Poi['type'] = 'camp'): Poi => ({
+  id: 'p',
+  type,
+  level: L,
+  x: 60,
+  y: 60,
+  distNorm: 0.5,
+  spawnedAt: 0,
+  expiresAt: 9e15,
+});
 const team = (n: number, L: number): Adventurer[] =>
-  Array.from({ length: n }, (_, i) => ({ ...refAdventurer(L, i), id: `a${i}`, familiarId: `refFam${i % 3}`, gear: { weapon: `refGear${i}weapon`, armor: `refGear${i}armor`, accessory: `refGear${i}accessory` } }));
-const units = (n: number, L: number): SkirmishUnit[] => roadUnits(team(n, L), { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L, n) });
+  Array.from({ length: n }, (_, i) => ({
+    ...refAdventurer(L, i),
+    id: `a${i}`,
+    familiarId: `refFam${i % 3}`,
+    gear: {
+      weapon: `refGear${i}weapon`,
+      armor: `refGear${i}armor`,
+      accessory: `refGear${i}accessory`,
+    },
+  }));
+const units = (n: number, L: number): SkirmishUnit[] =>
+  roadUnits(team(n, L), { familiars: refCompanions(L), talents: [], advGear: refAdvGear(L, n) });
 function win(allies: SkirmishUnit[], L: number, size: number, n = 300) {
   const g = fuseUnits(allies, 'g');
   const f = campFoe(poiAt(L), { faction: 'bandits', size });
   let w = 0;
-  for (let s = 0; s < n; s++) if (simulateCombat(g, f, { seed: s * 211 + 7, goldOnWin: 0 }).win) w++;
+  for (let s = 0; s < n; s++)
+    if (simulateCombat(g, f, { seed: s * 211 + 7, goldOnWin: 0 }).win) w++;
   return w / n;
 }
 const NIV = [12, 26, 45, 70];
@@ -1562,15 +1691,24 @@ describe('🏕️ LA TAILLE D’UN CAMP SE LIT EN AVENTURIERS', { timeout: 120_0
   it('⚠️ B2 : un aventurier de moins se SENT', () => {
     for (const L of NIV)
       for (const s of SIZES.filter((x) => x > 1))
-        expect(win(units(s - 1, L), L, s), `niveau ${L}, taille ${s}`).toBeLessThanOrEqual(win(units(s, L), L, s) - 0.12);
+        expect(win(units(s - 1, L), L, s), `niveau ${L}, taille ${s}`).toBeLessThanOrEqual(
+          win(units(s, L), L, s) - 0.12,
+        );
   });
   it('⚠️ B3 : un gros camp demande NETTEMENT plus que trois aventuriers', () => {
     for (const L of NIV)
-      for (const s of SIZES.filter((x) => x >= 5)) expect(win(units(3, L), L, s), `niveau ${L}, taille ${s}`).toBeLessThan(0.1);
+      for (const s of SIZES.filter((x) => x >= 5))
+        expect(win(units(3, L), L, s), `niveau ${L}, taille ${s}`).toBeLessThan(0.1);
   });
   it('B4 : le héros seul, équipé, prend encore un petit camp de son niveau', () => {
     for (const L of [26, 45, 70]) {
-      const h: SkirmishUnit = { id: HERO_UNIT_ID, name: 'h', emoji: '🧝', level: L, combatant: gearedFighter(L) };
+      const h: SkirmishUnit = {
+        id: HERO_UNIT_ID,
+        name: 'h',
+        emoji: '🧝',
+        level: L,
+        combatant: gearedFighter(L),
+      };
       expect(win([h], L, 2), `niveau ${L}`).toBeGreaterThanOrEqual(0.5);
     }
   });
@@ -1581,7 +1719,11 @@ describe('💰 le butin d’un camp de groupe ne détrône pas les sources dédi
     const big = Math.max(...CAMP_SIZES.lair);
     for (const L of [20, 26, 40, 60, 100]) {
       const tfH = travelFactor((2 * travelOneWayMin(L, 0.5)) / 60);
-      const scrap = campGroupHaul(poiAt(L, 'lair'), { faction: 'bandits', size: big }, mulberry32(1)).scrap;
+      const scrap = campGroupHaul(
+        poiAt(L, 'lair'),
+        { faction: 'bandits', size: big },
+        mulberry32(1),
+      ).scrap;
       expect(scrap, `niveau ${L}`).toBeLessThanOrEqual(0.5 * harvestYield('wreck', L, tfH).scrap);
     }
   });
@@ -1589,10 +1731,13 @@ describe('💰 le butin d’un camp de groupe ne détrône pas les sources dédi
     for (const L of [20, 26, 40, 60, 100]) {
       const hero = playerCombatant('h', { puissance: 9e4, endurance: 9e4, agilite: 9e4 }, L);
       let mine = 0;
-      for (let s = 1; s <= 40; s++) mine += resolveOutcome(hero, { ...poiAt(L), type: 'mine' }, s, L).gold;
+      for (let s = 1; s <= 40; s++)
+        mine += resolveOutcome(hero, { ...poiAt(L), type: 'mine' }, s, L).gold;
       mine /= 40;
       for (const s of [3, Math.max(...CAMP_SIZES.lair)]) {
-        const net = campGroupHaul(poiAt(L), { faction: 'bandits', size: s }, mulberry32(1)).gold - caravanWages(team(s, L), poiAt(L));
+        const net =
+          campGroupHaul(poiAt(L), { faction: 'bandits', size: s }, mulberry32(1)).gold -
+          caravanWages(team(s, L), poiAt(L));
         expect(net, `niveau ${L}, taille ${s}`).toBeLessThanOrEqual(mine);
       }
     }
@@ -1603,23 +1748,32 @@ describe('💰 le butin d’un camp de groupe ne détrône pas les sources dédi
 Dans `test/scrapEconomy.test.ts`, ajouter les imports `import { campGroupHaul } from '@/lib/camp'; import { travelFactor, type Poi } from '@/lib/expedition';` (fusionner `travelFactor` dans l’import existant de `@/lib/expedition`) et, dans le `describe('ferraille : plus dure à obtenir que l’or', …)`, le test :
 
 ```ts
-  it('⚠️ E3 : la règle tient avec UN camp de groupe par jour en plus', () => {
-    // Un camp pris sans le héros rend de la ferraille ET de l'or : ajouté aux deux débits,
-    // le métal doit rester plus lent que l'or, et l'épave garder la tête.
-    const camp = (L: number) => {
-      const p: Poi = { id: 'c', type: 'camp', level: L, x: 60, y: 60, distNorm: 0.5, spawnedAt: 0, expiresAt: 9e15 };
-      return campGroupHaul(p, { faction: 'bandits', size: 3 }, () => 0.99);
+it('⚠️ E3 : la règle tient avec UN camp de groupe par jour en plus', () => {
+  // Un camp pris sans le héros rend de la ferraille ET de l'or : ajouté aux deux débits,
+  // le métal doit rester plus lent que l'or, et l'épave garder la tête.
+  const camp = (L: number) => {
+    const p: Poi = {
+      id: 'c',
+      type: 'camp',
+      level: L,
+      x: 60,
+      y: 60,
+      distNorm: 0.5,
+      spawnedAt: 0,
+      expiresAt: 9e15,
     };
-    for (const L of LEVELS) {
-      const c = camp(L);
-      const scrapDay = scrapPerDay(L) + c.scrap;
-      const goldDay = goldPerDay(L) + c.gold;
-      const ratio = cranScrap(L) / scrapDay / (cranGold(L) / goldDay);
-      expect(ratio, `niveau ${L}`).toBeGreaterThan(1.1);
-      expect(ratio, `niveau ${L}`).toBeLessThan(2.2);
-      expect(wreckYield(L) / scrapDay, `niveau ${L}`).toBeGreaterThan(0.45);
-    }
-  });
+    return campGroupHaul(p, { faction: 'bandits', size: 3 }, () => 0.99);
+  };
+  for (const L of LEVELS) {
+    const c = camp(L);
+    const scrapDay = scrapPerDay(L) + c.scrap;
+    const goldDay = goldPerDay(L) + c.gold;
+    const ratio = cranScrap(L) / scrapDay / (cranGold(L) / goldDay);
+    expect(ratio, `niveau ${L}`).toBeGreaterThan(1.1);
+    expect(ratio, `niveau ${L}`).toBeLessThan(2.2);
+    expect(wreckYield(L) / scrapDay, `niveau ${L}`).toBeGreaterThan(0.45);
+  }
+});
 ```
 
 (`travelFactor` inutilisé dans ce test : ne l’importer que s’il sert ; eslint ne lint pas `test/`, mais garder l’import propre.)
@@ -1631,6 +1785,7 @@ rm test/_probe-camp.test.ts
 node node_modules/vitest/vitest.mjs run test/campCalibration.test.ts test/camp.test.ts test/scrapEconomy.test.ts test/goldSink.test.ts test/caravan.test.ts
 npm run typecheck
 ```
+
 Expected: tout PASS (y compris E3 et `goldSink.test` inchangé).
 
 - [ ] **Step 5: Mutations** (copies, restaurer)
@@ -1658,6 +1813,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 6: La carte, la boîte et le push savent ce qu’est un groupe
 
 **Files:**
+
 - Modify: `src/lib/caravan.ts` (`poiOffers`)
 - Modify: `src/lib/expedition.ts` (`ExpeditionMessage.party?`, `buildMessage`, `keepMessages`)
 - Modify: `src/lib/push.ts` (`PushKind`, `PushContext.parties`, message)
@@ -1665,6 +1821,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 - Test: `test/caravan.test.ts`, `test/expedition.test.ts`, `test/push.test.ts`, `test/camp.test.ts`
 
 **Interfaces:**
+
 - Consumes: `CAMP_TYPES`, `PartyResult` (Tasks 2/4).
 - Produces:
   - `poiOffers(poi: Poi, opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number }): { hero: boolean; caravan: boolean; party: boolean }` — `party` = camp/repaire ET (héros disponible OU ≥ 1 aventurier disponible). ⚠️ `advsAvailable` REQUIS.
@@ -1678,16 +1835,22 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 `test/caravan.test.ts` — dans le `describe` qui contient « le HÉROS, lui, ne peut pas être à deux endroits » : ajouter `advsAvailable: 0` à CHAQUE appel existant de `poiOffers` (et à `gris`), puis :
 
 ```ts
-  it('⚔️ un CAMP s’ouvre aux groupes : le héros, ou au moins un aventurier disponible', () => {
-    const camp = poi({ type: 'camp' });
-    expect(poiOffers(camp, { heroAway: false, comptoirLevel: 0, advsAvailable: 0 }).party).toBe(true);
-    expect(poiOffers(camp, { heroAway: true, comptoirLevel: 0, advsAvailable: 2 }).party).toBe(true);
-    expect(poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 0 }).party).toBe(false);
-    expect(poiOffers(poi({ type: 'lair' }), { heroAway: true, comptoirLevel: 0, advsAvailable: 1 }).party).toBe(true);
-    // Les convois, eux, ne vont toujours pas au combat.
-    expect(poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 5 }).caravan).toBe(false);
-    expect(poiOffers(poi({ type: 'well' }), { heroAway: false, comptoirLevel: 9, advsAvailable: 5 }).party).toBe(false);
-  });
+it('⚔️ un CAMP s’ouvre aux groupes : le héros, ou au moins un aventurier disponible', () => {
+  const camp = poi({ type: 'camp' });
+  expect(poiOffers(camp, { heroAway: false, comptoirLevel: 0, advsAvailable: 0 }).party).toBe(true);
+  expect(poiOffers(camp, { heroAway: true, comptoirLevel: 0, advsAvailable: 2 }).party).toBe(true);
+  expect(poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 0 }).party).toBe(false);
+  expect(
+    poiOffers(poi({ type: 'lair' }), { heroAway: true, comptoirLevel: 0, advsAvailable: 1 }).party,
+  ).toBe(true);
+  // Les convois, eux, ne vont toujours pas au combat.
+  expect(poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 5 }).caravan).toBe(
+    false,
+  );
+  expect(
+    poiOffers(poi({ type: 'well' }), { heroAway: false, comptoirLevel: 9, advsAvailable: 5 }).party,
+  ).toBe(false);
+});
 ```
 
 `test/expedition.test.ts` (ajouter `buildMessage, keepMessages, type ExpeditionMessage` à l’import) :
@@ -1695,21 +1858,76 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ```ts
 describe('📬 le rapport de groupe et la boîte', () => {
   const base = (id: string, claimed?: boolean): ExpeditionMessage => ({
-    id, level: 1, win: true, text: '', gold: 0, energy: 0, key: 0, resolvedAt: 0, read: false,
+    id,
+    level: 1,
+    win: true,
+    text: '',
+    gold: 0,
+    energy: 0,
+    key: 0,
+    resolvedAt: 0,
+    read: false,
     ...(claimed === undefined ? {} : { claimed }),
   });
   it('⚠️ keepMessages ne jette JAMAIS un butin à récupérer', () => {
-    const list = [base('m0', true), base('m1', false), base('m2'), base('m3', false), base('m4', true)];
+    const list = [
+      base('m0', true),
+      base('m1', false),
+      base('m2'),
+      base('m3', false),
+      base('m4', true),
+    ];
     const kept = keepMessages(list, 2);
     expect(kept.map((m) => m.id)).toEqual(['m0', 'm1', 'm3']);
     expect(keepMessages(list, 10)).toEqual(list);
   });
   it('buildMessage recopie ce que le groupe a vécu', () => {
-    const party = { hero: false, faction: 'betes' as const, size: 3, escort: ['a'], win: true, foes: 4, slain: 4, foesDown: [], kills: { a: 4 }, heroKills: 0, xp: { a: 30 }, hurt: [], advGear: [], wages: 10, journal: ['x'] };
+    const party = {
+      hero: false,
+      faction: 'betes' as const,
+      size: 3,
+      escort: ['a'],
+      win: true,
+      foes: 4,
+      slain: 4,
+      foesDown: [],
+      kills: { a: 4 },
+      heroKills: 0,
+      xp: { a: 30 },
+      hurt: [],
+      advGear: [],
+      wages: 10,
+      journal: ['x'],
+    };
     const exp = {
-      poi: { id: 'c', type: 'camp' as const, level: 5, x: 0, y: 0, distNorm: 0.2, spawnedAt: 0, expiresAt: 1 },
-      sentAt: 1, midAt: 2, returnAt: 3, goldCost: 0, seed: 1,
-      outcome: { win: true, gold: 1, energy: 0, summonStones: 0, scrap: 0, item: null, key: 0, reconBonus: 0, returnMult: 1, text: 't', party },
+      poi: {
+        id: 'c',
+        type: 'camp' as const,
+        level: 5,
+        x: 0,
+        y: 0,
+        distNorm: 0.2,
+        spawnedAt: 0,
+        expiresAt: 1,
+      },
+      sentAt: 1,
+      midAt: 2,
+      returnAt: 3,
+      goldCost: 0,
+      seed: 1,
+      outcome: {
+        win: true,
+        gold: 1,
+        energy: 0,
+        summonStones: 0,
+        scrap: 0,
+        item: null,
+        key: 0,
+        reconBonus: 0,
+        returnMult: 1,
+        text: 't',
+        party,
+      },
     };
     const m = buildMessage(exp);
     expect(m.party).toEqual(party);
@@ -1722,15 +1940,19 @@ describe('📬 le rapport de groupe et la boîte', () => {
 `test/push.test.ts` : ajouter `parties: [],` au `ctx` par défaut, puis :
 
 ```ts
-  it('⚔️ un GROUPE rentré notifie, avare : ni faction ni effectif', () => {
-    const plans = planPushes(ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }), NOW);
-    const p = plans.find((x) => x.kind === 'party_home');
-    expect(p?.dedupe).toBe('party:party_x');
-    expect(p?.sendAt).toBe(NOW + 2 * H);
-    for (const f of Object.values(FACTION_LABEL)) expect(`${p?.title} ${p?.body}`).not.toContain(f);
-    expect(`${p?.title} ${p?.body}`).not.toMatch(/\d/);
-    expect(planPushes(ctx({ parties: [{ id: 'old', returnAt: NOW - H }] }), NOW).some((x) => x.kind === 'party_home')).toBe(false);
-  });
+it('⚔️ un GROUPE rentré notifie, avare : ni faction ni effectif', () => {
+  const plans = planPushes(ctx({ parties: [{ id: 'party_x', returnAt: NOW + 2 * H }] }), NOW);
+  const p = plans.find((x) => x.kind === 'party_home');
+  expect(p?.dedupe).toBe('party:party_x');
+  expect(p?.sendAt).toBe(NOW + 2 * H);
+  for (const f of Object.values(FACTION_LABEL)) expect(`${p?.title} ${p?.body}`).not.toContain(f);
+  expect(`${p?.title} ${p?.body}`).not.toMatch(/\d/);
+  expect(
+    planPushes(ctx({ parties: [{ id: 'old', returnAt: NOW - H }] }), NOW).some(
+      (x) => x.kind === 'party_home',
+    ),
+  ).toBe(false);
+});
 ```
 
 `test/camp.test.ts` (ajouter `partyReport` à l’import de `@/lib/camp`) :
@@ -1798,25 +2020,29 @@ export function keepMessages(list: ExpeditionMessage[], cap: number): Expedition
 `src/lib/push.ts` — `type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'convoy_home' | 'party_home';` ; dans `PushContext`, après `caravans` :
 
 ```ts
-  /** ⚔️ Groupes partis SANS le héros vers un camp (un groupe avec héros notifie par
-   *  `expedition`). ⚠️ REQUIS : un groupe oublié rentrerait sans prévenir. */
-  parties: { id: string; returnAt: number }[];
+/** ⚔️ Groupes partis SANS le héros vers un camp (un groupe avec héros notifie par
+ *  `expedition`). ⚠️ REQUIS : un groupe oublié rentrerait sans prévenir. */
+parties: {
+  id: string;
+  returnAt: number;
+}
+[];
 ```
 
 et à la fin de `planPushes`, avant `return out;` :
 
 ```ts
-  for (const g of ctx.parties) {
-    add({
-      kind: 'party_home',
-      dedupe: `party:${g.id}`,
-      sendAt: g.returnAt,
-      // ⚠️ AVARE comme le convoi : ni faction, ni effectif, ni issue.
-      title: '⚔️ Ton groupe est rentré',
-      body: 'Son rapport t’attend dans la boîte 📬.',
-      url: '/expedition-map',
-    });
-  }
+for (const g of ctx.parties) {
+  add({
+    kind: 'party_home',
+    dedupe: `party:${g.id}`,
+    sendAt: g.returnAt,
+    // ⚠️ AVARE comme le convoi : ni faction, ni effectif, ni issue.
+    title: '⚔️ Ton groupe est rentré',
+    body: 'Son rapport t’attend dans la boîte 📬.',
+    url: '/expedition-map',
+  });
+}
 ```
 
 `src/lib/camp.ts` — ajouter `import type { PartyResult } from './expedition';` (fusionner dans l’import de types existant) et :
@@ -1906,10 +2132,12 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 7: Le store — envoyer un groupe, le faire rentrer, encaisser son rapport (+ migration `parties`)
 
 **Files:**
+
 - Create: `supabase/migrations/0069_parties.sql`
 - Modify: `src/stores/character.ts` (`CharacterRow`, `COLS`, `normalizeRow`, `expeSend`, `expeTick`, `expeSettle`, `expeClaim`, nouvelles actions `sendParty`, `partyTick`, computed `partyList`, retour du store)
 
 **Interfaces:**
+
 - Consumes: `campSpecOf`, `CAMP_TYPES`, `keepMessages`, `isClaimable`, `buildMessage`, `type ActiveExpedition` (`expedition.ts`) ; `canSendParty`, `partyLegMin`, `startParty`, `type PartyHero` (`camp.ts`) ; `advAvailable`, `grantAdvXp` (`adventurers.ts`) ; `caravanHurtMs`, `companionsOf`, `caravanFamiliarXp` (`caravan.ts`) ; `advGearRoles` (`advGear.ts`) ; `expeditionsUnlocked`, `travelTimeMult` (`buildings.ts`) ; `woundRemainingMs`, `defenseLevel` (`raid.ts`).
 - Produces (store) :
   - `CharacterRow.parties: ActiveParty[] | null` avec `type ActiveParty = ActiveExpedition & { id: string }` (exporté par `camp.ts` : ajouter `export type ActiveParty = ActiveExpedition & { id: string };`)
@@ -1940,9 +2168,9 @@ Appliquer la migration sur le projet Supabase par la **même méthode que la mig
 Dans `expeSend`, juste après `if (cur.expedition) throw …` :
 
 ```ts
-    // ⚔️ Un camp s'attaque en GROUPE (`sendParty`) : même le héros seul y passe, pour que
-    // l'issue soit le combat de faction et non l'ancien gardien.
-    if (CAMP_TYPES.has(poi.type)) throw new Error('Un camp s’attaque en groupe.');
+// ⚔️ Un camp s'attaque en GROUPE (`sendParty`) : même le héros seul y passe, pour que
+// l'issue soit le combat de faction et non l'ancien gardien.
+if (CAMP_TYPES.has(poi.type)) throw new Error('Un camp s’attaque en groupe.');
 ```
 
 Dans `expeTick`, `expeSettle` et `grantComboChest`, remplacer `[msg, ...cur.messages].slice(0, 20)` / `.slice(0, 30)` par `keepMessages([msg, ...cur.messages], 20)` / `keepMessages([msg, ...cur.messages], 30)`.
@@ -1950,100 +2178,102 @@ Dans `expeTick`, `expeSettle` et `grantComboChest`, remplacer `[msg, ...cur.mess
 - [ ] **Step 4: `sendParty`** (après `claimCaravan`)
 
 ```ts
-  /** ⚔️ Envoie un GROUPE sur un camp de faction : le héros (oui/non) et autant
-   *  d'aventuriers disponibles qu'on veut. ⚠️ Refus AU STORE (l'écran ne garantit rien) :
-   *  POI de camp, groupe non vide, aventuriers disponibles, et — avec le héros — pas
-   *  d'expédition en cours, pas d'infirmerie, Avant-poste construit, or suffisant.
-   *  ⚠️ Le POI est RETIRÉ de la carte au départ, comme pour le héros et les convois. */
-  async function sendParty(
-    userId: string,
-    poi: Poi,
-    opts: { hero: PartyHero | null; escortIds: string[]; playerLevel: number; now: number },
-  ): Promise<boolean> {
-    const cur = row.value;
-    const spec = campSpecOf(poi);
-    if (!cur || !spec) return false;
-    const { now, hero } = opts;
-    const escort = opts.escortIds
-      .map((id) => advList.value.find((a) => a.id === id))
-      .filter((a): a is Adventurer => !!a && advAvailable(a, now));
-    if (escort.length !== opts.escortIds.length) return false;
-    if (!canSendParty(poi, escort.length, !!hero)) return false;
-    if (hero) {
-      if (cur.expedition) return false;
-      if (woundRemainingMs(cur.base, now) > 0) return false;
-      if (!expeditionsUnlocked(cur.buildings)) return false;
-    }
-    const road = {
-      familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
-      talents: normalizeTalents(cur.talents),
-      advGear: cur.adv_gear?.stock ?? [],
-      heroFamiliarId: cur.equipped?.[FAMILIAR_SLOT]?.id ?? null,
-      heroTalentIds: normalizeTalents(cur.talents)
-        .filter((t) => t.equipped === true)
-        .map((t) => t.id),
-    };
-    const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
-    const input = { poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel };
-    const leg = partyLegMin(poi, escort, {
-      hero: !!hero,
-      travelMult: travelTimeMult(cur.buildings),
-      comptoirLevel: comptoirLevel.value,
-      gearSpeed: advGearRoles(escort, road.advGear).speed,
-    });
-    const trip = startParty(input, now, leg);
-    if (cur.gold < trip.goldCost) return false;
-    const busy = new Set(opts.escortIds);
-    const map = cur.expedition_map
-      ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
-      : cur.expedition_map;
-    await persist(userId, {
-      gold: cur.gold - trip.goldCost,
-      expedition_map: map,
-      adventurers: advList.value.map((a) => (busy.has(a.id) ? { ...a, busyUntil: trip.returnAt } : a)),
-      ...(hero
-        ? { expedition: trip }
-        : { parties: [...partyList.value, { ...trip, id: `party_${now.toString(36)}` }] }),
-    });
-    return true;
+/** ⚔️ Envoie un GROUPE sur un camp de faction : le héros (oui/non) et autant
+ *  d'aventuriers disponibles qu'on veut. ⚠️ Refus AU STORE (l'écran ne garantit rien) :
+ *  POI de camp, groupe non vide, aventuriers disponibles, et — avec le héros — pas
+ *  d'expédition en cours, pas d'infirmerie, Avant-poste construit, or suffisant.
+ *  ⚠️ Le POI est RETIRÉ de la carte au départ, comme pour le héros et les convois. */
+async function sendParty(
+  userId: string,
+  poi: Poi,
+  opts: { hero: PartyHero | null; escortIds: string[]; playerLevel: number; now: number },
+): Promise<boolean> {
+  const cur = row.value;
+  const spec = campSpecOf(poi);
+  if (!cur || !spec) return false;
+  const { now, hero } = opts;
+  const escort = opts.escortIds
+    .map((id) => advList.value.find((a) => a.id === id))
+    .filter((a): a is Adventurer => !!a && advAvailable(a, now));
+  if (escort.length !== opts.escortIds.length) return false;
+  if (!canSendParty(poi, escort.length, !!hero)) return false;
+  if (hero) {
+    if (cur.expedition) return false;
+    if (woundRemainingMs(cur.base, now) > 0) return false;
+    if (!expeditionsUnlocked(cur.buildings)) return false;
   }
+  const road = {
+    familiars: cur.inventory.filter((it) => it.slot === FAMILIAR_SLOT),
+    talents: normalizeTalents(cur.talents),
+    advGear: cur.adv_gear?.stock ?? [],
+    heroFamiliarId: cur.equipped?.[FAMILIAR_SLOT]?.id ?? null,
+    heroTalentIds: normalizeTalents(cur.talents)
+      .filter((t) => t.equipped === true)
+      .map((t) => t.id),
+  };
+  const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
+  const input = { poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel };
+  const leg = partyLegMin(poi, escort, {
+    hero: !!hero,
+    travelMult: travelTimeMult(cur.buildings),
+    comptoirLevel: comptoirLevel.value,
+    gearSpeed: advGearRoles(escort, road.advGear).speed,
+  });
+  const trip = startParty(input, now, leg);
+  if (cur.gold < trip.goldCost) return false;
+  const busy = new Set(opts.escortIds);
+  const map = cur.expedition_map
+    ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
+    : cur.expedition_map;
+  await persist(userId, {
+    gold: cur.gold - trip.goldCost,
+    expedition_map: map,
+    adventurers: advList.value.map((a) =>
+      busy.has(a.id) ? { ...a, busyUntil: trip.returnAt } : a,
+    ),
+    ...(hero
+      ? { expedition: trip }
+      : { parties: [...partyList.value, { ...trip, id: `party_${now.toString(36)}` }] }),
+  });
+  return true;
+}
 ```
 
 - [ ] **Step 5: `partyTick`**
 
 ```ts
-  /** ⚔️ Cycle de vie des groupes partis SANS le héros : le rapport à l'arrivée sur le camp,
-   *  puis le groupe retiré au retour (ses aventuriers sont libérés par `busyUntil`). Le
-   *  BUTIN reste à encaisser dans la boîte 📬, comme toute expédition.
-   *  ⚠️ Une seule écriture, et seulement si quelque chose change. */
-  async function partyTick(userId: string, now: number): Promise<ExpeditionMessage[]> {
-    const cur = row.value;
-    if (!cur || !partyList.value.length) return [];
-    let messages = cur.messages;
-    const fresh: ExpeditionMessage[] = [];
-    const next: ActiveParty[] = [];
-    let changed = false;
-    for (const p of partyList.value) {
-      let q = p;
-      if (now >= p.midAt && !p.reported) {
-        const msg = buildMessage(p);
-        if (!messages.some((m) => m.id === msg.id)) {
-          messages = keepMessages([msg, ...messages], 30);
-          fresh.push(msg);
-        }
-        q = { ...p, reported: true };
-        changed = true;
+/** ⚔️ Cycle de vie des groupes partis SANS le héros : le rapport à l'arrivée sur le camp,
+ *  puis le groupe retiré au retour (ses aventuriers sont libérés par `busyUntil`). Le
+ *  BUTIN reste à encaisser dans la boîte 📬, comme toute expédition.
+ *  ⚠️ Une seule écriture, et seulement si quelque chose change. */
+async function partyTick(userId: string, now: number): Promise<ExpeditionMessage[]> {
+  const cur = row.value;
+  if (!cur || !partyList.value.length) return [];
+  let messages = cur.messages;
+  const fresh: ExpeditionMessage[] = [];
+  const next: ActiveParty[] = [];
+  let changed = false;
+  for (const p of partyList.value) {
+    let q = p;
+    if (now >= p.midAt && !p.reported) {
+      const msg = buildMessage(p);
+      if (!messages.some((m) => m.id === msg.id)) {
+        messages = keepMessages([msg, ...messages], 30);
+        fresh.push(msg);
       }
-      if (now >= q.returnAt) {
-        changed = true;
-        continue; // rentré : le rapport est déjà dans la boîte
-      }
-      next.push(q);
+      q = { ...p, reported: true };
+      changed = true;
     }
-    if (!changed) return [];
-    await persist(userId, { parties: next, messages });
-    return fresh;
+    if (now >= q.returnAt) {
+      changed = true;
+      continue; // rentré : le rapport est déjà dans la boîte
+    }
+    next.push(q);
   }
+  if (!changed) return [];
+  await persist(userId, { parties: next, messages });
+  return fresh;
+}
 ```
 
 ⚠️ Un groupe dont l’app était fermée pendant tout le voyage passe les deux conditions dans le même tick : le rapport est déposé puis le groupe retiré — voulu.
@@ -2051,38 +2281,39 @@ Dans `expeTick`, `expeSettle` et `grantComboChest`, remplacer `[msg, ...cur.mess
 - [ ] **Step 6: `expeClaim` crédite le groupe** — dans `expeClaim`, avant le `persist`, ajouter :
 
 ```ts
-    // ⚔️ UN GROUPE DE CAMP : XP par aventurier, infirmerie des camps, pièces d'aventurier,
-    // dressage des compagnons, salaires. ⚠️ `m.party` ABSENT des rapports d'avant : rien à faire.
-    const party = m.party;
-    let advPatch: Record<string, unknown> = {};
-    let partyWages = 0;
-    let inventoryAfter = inventory;
-    if (party) {
-      const escortAdvs = party.escort
-        .map((id) => advList.value.find((a) => a.id === id))
-        .filter((a): a is Adventurer => !!a);
-      const hurtUntil = now + caravanHurtMs(escortAdvs, defenseLevel(cur.base?.defenses ?? [], 'infirmary'));
-      const hurt = new Set(party.hurt);
-      const advs = advList.value.map((a) => {
-        const gain = party.xp[a.id];
-        if (gain === undefined) return a;
-        const up = grantAdvXp(a, gain, guildLevel.value);
-        return hurt.has(a.id) ? { ...up, hurtUntil } : up;
-      });
-      const trained = new Set(
-        companionsOf(escortAdvs, cur.inventory, cur.equipped?.[FAMILIAR_SLOT]?.id).map((f) => f.id),
-      );
-      const famGain = caravanFamiliarXp({ level: m.level } as Poi);
-      if (trained.size)
-        inventoryAfter = inventoryAfter.map((it) =>
-          trained.has(it.id) ? grantFamiliarXp(it, famGain, Math.max(1, m.level)) : it,
-        );
-      partyWages = Math.max(0, Math.round(party.wages));
-      advPatch = {
-        adventurers: advs,
-        ...(party.advGear.length ? { adv_gear: withAdvGear(cur, party.advGear) } : {}),
-      };
-    }
+// ⚔️ UN GROUPE DE CAMP : XP par aventurier, infirmerie des camps, pièces d'aventurier,
+// dressage des compagnons, salaires. ⚠️ `m.party` ABSENT des rapports d'avant : rien à faire.
+const party = m.party;
+let advPatch: Record<string, unknown> = {};
+let partyWages = 0;
+let inventoryAfter = inventory;
+if (party) {
+  const escortAdvs = party.escort
+    .map((id) => advList.value.find((a) => a.id === id))
+    .filter((a): a is Adventurer => !!a);
+  const hurtUntil =
+    now + caravanHurtMs(escortAdvs, defenseLevel(cur.base?.defenses ?? [], 'infirmary'));
+  const hurt = new Set(party.hurt);
+  const advs = advList.value.map((a) => {
+    const gain = party.xp[a.id];
+    if (gain === undefined) return a;
+    const up = grantAdvXp(a, gain, guildLevel.value);
+    return hurt.has(a.id) ? { ...up, hurtUntil } : up;
+  });
+  const trained = new Set(
+    companionsOf(escortAdvs, cur.inventory, cur.equipped?.[FAMILIAR_SLOT]?.id).map((f) => f.id),
+  );
+  const famGain = caravanFamiliarXp({ level: m.level } as Poi);
+  if (trained.size)
+    inventoryAfter = inventoryAfter.map((it) =>
+      trained.has(it.id) ? grantFamiliarXp(it, famGain, Math.max(1, m.level)) : it,
+    );
+  partyWages = Math.max(0, Math.round(party.wages));
+  advPatch = {
+    adventurers: advs,
+    ...(party.advGear.length ? { adv_gear: withAdvGear(cur, party.advGear) } : {}),
+  };
+}
 ```
 
 puis dans l’objet du `persist` : `gold: Math.max(0, cur.gold + m.gold - partyWages),` (au lieu de `cur.gold + m.gold`), `inventory: inventoryAfter,`, et `...advPatch,`.
@@ -2112,11 +2343,13 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 8: Les écrans — attaquer un camp, voir son groupe voyager, lire son rapport
 
 **Files:**
+
 - Create: `src/components/PartyReportView.vue`
 - Modify: `src/pages/ExpeditionMapPage.vue` (panneau camp, tuiles de voyage, cycle, modale de collecte, `poiRewardLabel`, `dimmed`)
 - Modify: `src/pages/AventurePage.vue` (`partyTick` dans `expeLifecycle`, `parties` dans `syncPush`, rapport dans la boîte, texte d’attente)
 
 **Interfaces:**
+
 - Consumes: `partyReport`, `campWinPct`, `partyLegMin`, `HERO_UNIT_ID`, `type PartyHero` (`camp.ts`) ; `campSpecOf`, `CAMP_TYPES` (`expedition.ts`) ; `roadUnits` (`caravan.ts`) ; `FACTION_LABEL`, `FACTION_EMOJI` (`raid.ts`) ; store `sendParty`, `partyTick`, `partyList`.
 - Produces: `PartyReportView.vue` props `{ party: PartyResult; roster: readonly Adventurer[] }`.
 
@@ -2133,11 +2366,21 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
       <span class="pr-emo">{{ r.factionEmoji }}</span>
       <div class="pr-main">
         <div class="pr-title font-display">{{ r.factionLabel }}</div>
-        <div class="pr-sub">⚔️ {{ r.slain }}/{{ r.foes }} abattus<template v-if="r.hero"> · 🧝 {{ r.heroKills }} par le héros</template></div>
+        <div class="pr-sub">
+          ⚔️ {{ r.slain }}/{{ r.foes }} abattus<template v-if="r.hero">
+            · 🧝 {{ r.heroKills }} par le héros</template
+          >
+        </div>
       </div>
       <span v-if="r.wages" class="pr-wage">🪙 −{{ r.wages }} salaires</span>
     </div>
-    <q-expansion-item dense dense-toggle switch-toggle-side class="pr-exp" header-class="pr-exp-head">
+    <q-expansion-item
+      dense
+      dense-toggle
+      switch-toggle-side
+      class="pr-exp"
+      header-class="pr-exp-head"
+    >
       <template #header>
         <div class="pr-exp-title">
           {{ r.members.length }} aventurier{{ r.members.length > 1 ? 's' : '' }}
@@ -2171,23 +2414,97 @@ const r = computed(() => partyReport(props.party, props.roster));
 </script>
 
 <style scoped lang="scss">
-.pr { color: var(--text); margin-top: 8px; }
-.pr-head { display: flex; align-items: center; gap: 10px; }
-.pr-emo { font-size: 24px; }
-.pr-main { min-width: 0; flex: 1; }
-.pr-title { font-size: 15px; font-weight: 600; }
-.pr-sub, .pr-wage { font-size: 12.5px; color: var(--dim); }
-.pr-exp { margin-top: 6px; border-top: 1px solid var(--line-soft); }
-:deep(.pr-exp-head) { min-height: 44px; padding: 0 4px; }
-.pr-exp-title { flex: 1; display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; }
-.pr-exp-xp { margin-left: auto; color: var(--accent); font-variant-numeric: tabular-nums; }
-.pr-list { list-style: none; margin: 0; padding: 0 4px; }
-.pr-row { display: flex; align-items: center; gap: 6px; min-height: 32px; font-size: 13px; &.gone { color: var(--dim); } }
-.pr-m-emo { width: 22px; text-align: center; }
-.pr-m-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pr-m-kills { color: var(--dim); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.pr-m-xp { margin-left: auto; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
-.pr-journal { margin: 6px 0 4px; padding-left: 22px; font-size: 12px; color: var(--dim); max-height: 180px; overflow-y: auto; }
+.pr {
+  color: var(--text);
+  margin-top: 8px;
+}
+.pr-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pr-emo {
+  font-size: 24px;
+}
+.pr-main {
+  min-width: 0;
+  flex: 1;
+}
+.pr-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.pr-sub,
+.pr-wage {
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.pr-exp {
+  margin-top: 6px;
+  border-top: 1px solid var(--line-soft);
+}
+:deep(.pr-exp-head) {
+  min-height: 44px;
+  padding: 0 4px;
+}
+.pr-exp-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.pr-exp-xp {
+  margin-left: auto;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.pr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px;
+}
+.pr-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  font-size: 13px;
+  &.gone {
+    color: var(--dim);
+  }
+}
+.pr-m-emo {
+  width: 22px;
+  text-align: center;
+}
+.pr-m-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-m-kills {
+  color: var(--dim);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pr-m-xp {
+  margin-left: auto;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.pr-journal {
+  margin: 6px 0 4px;
+  padding-left: 22px;
+  font-size: 12px;
+  color: var(--dim);
+  max-height: 180px;
+  overflow-y: auto;
+}
 </style>
 ```
 
@@ -2231,7 +2548,14 @@ const partyWin = computed(() => {
   if (!p || !spec) return 0;
   const allies = roadUnits(partyAdvs.value, partyRoad.value);
   const h = heroForParty.value;
-  if (h) allies.push({ id: HERO_UNIT_ID, name: h.name, emoji: '🧝', level: h.level, combatant: h.combatant });
+  if (h)
+    allies.push({
+      id: HERO_UNIT_ID,
+      name: h.name,
+      emoji: '🧝',
+      level: h.level,
+      combatant: h.combatant,
+    });
   return Math.round(campWinPct(p, spec, allies, 40) * 100);
 });
 const partyMin = computed(() =>
@@ -2250,7 +2574,9 @@ const canSendPartyNow = computed(
     !!selected.value &&
     (partyHero.value || partyEscort.value.length > 0) &&
     (!partyHero.value ||
-      (!heroUnavailable.value && outpostBuilt.value && (char.row?.gold ?? 0) >= costOf(selected.value))) &&
+      (!heroUnavailable.value &&
+        outpostBuilt.value &&
+        (char.row?.gold ?? 0) >= costOf(selected.value))) &&
     !busyCaravan.value,
 );
 function togglePartyAdv(id: string) {
@@ -2286,21 +2612,21 @@ async function doSendParty() {
 Dans `trips`, après la boucle des convois :
 
 ```ts
-  for (const g of char.partyList) {
-    const at = travelPosition(g, now.value);
-    if (at.phase === 'done') continue;
-    const back = at.phase === 'return';
-    out.push({
-      key: 'g' + g.id,
-      kind: 'van',
-      who: '⚔️',
-      poi: g.poi,
-      time: fmtMs(back ? at.remainTotalMs : at.remainToObjectiveMs),
-      pct: voyageProgress(g, now.value).overall * 100,
-      back,
-      title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.outcome.party?.escort.length ?? 0} aventurier(s)`,
-    });
-  }
+for (const g of char.partyList) {
+  const at = travelPosition(g, now.value);
+  if (at.phase === 'done') continue;
+  const back = at.phase === 'return';
+  out.push({
+    key: 'g' + g.id,
+    kind: 'van',
+    who: '⚔️',
+    poi: g.poi,
+    time: fmtMs(back ? at.remainTotalMs : at.remainToObjectiveMs),
+    pct: voyageProgress(g, now.value).overall * 100,
+    back,
+    title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.outcome.party?.escort.length ?? 0} aventurier(s)`,
+  });
+}
 ```
 
 Dans `lifecycle`, après `await char.expeSettle(uid, Date.now());` : `await char.partyTick(uid, Date.now());`.
@@ -2308,12 +2634,12 @@ Dans `lifecycle`, après `await char.expeSettle(uid, Date.now());` : `await char
 `poiRewardLabel` : remplacer les deux dernières lignes (camp et repaire) par :
 
 ```ts
-  if (p.type === 'camp' || p.type === 'lair')
-    return p.type === 'camp'
-      ? 'Avec le héros : or + un objet 🎁 · sans : or, ferraille, pièce d’aventurier 🗡️'
-      : 'Avec le héros : pièce de set 🧩 + pierres 🔮 · sans : or, ferraille, pièces d’aventurier 🗡️';
-  if (p.type === 'arena') return 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues';
-  return 'Pièce de set 🧩 + pierres d’invocation 🔮';
+if (p.type === 'camp' || p.type === 'lair')
+  return p.type === 'camp'
+    ? 'Avec le héros : or + un objet 🎁 · sans : or, ferraille, pièce d’aventurier 🗡️'
+    : 'Avec le héros : pièce de set 🧩 + pierres 🔮 · sans : or, ferraille, pièces d’aventurier 🗡️';
+if (p.type === 'arena') return 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues';
+return 'Pièce de set 🧩 + pierres d’invocation 🔮';
 ```
 
 (en conservant la ligne `camp` supprimée ailleurs ; l’arène reste avant.)
@@ -2323,48 +2649,54 @@ Dans `lifecycle`, après `await char.expeSettle(uid, Date.now());` : `await char
 Dans la feuille (`<div v-if="selected" ref="sheetEl" class="sheet">`), envelopper le bloc héros existant `<template v-if="offers.hero">…</template>` pour qu’il ne s’affiche pas sur un camp : `<template v-if="offers.hero && !selectedCamp">`. Juste après `</div>` de `sh-head`, insérer :
 
 ```vue
-        <!-- ⚔️ UN CAMP S'ATTAQUE EN GROUPE : le héros (oui/non) et autant d'aventuriers qu'on
+<!-- ⚔️ UN CAMP S'ATTAQUE EN GROUPE : le héros (oui/non) et autant d'aventuriers qu'on
              veut — aucun maximum, c'est ce qui permet d'affronter les gros repaires. La règle
              vit dans `camp.ts` ; l'écran ne fait que la montrer. -->
-        <template v-if="selectedCamp && offers.party">
-          <div class="sh-row">
-            <span class="sh-chip">{{ FACTION_EMOJI[selectedCamp.faction] }} {{ FACTION_LABEL[selectedCamp.faction] }}</span>
-            <span class="sh-chip">💪 force ≈ {{ selectedCamp.size }} aventurier{{ selectedCamp.size > 1 ? 's' : '' }}</span>
-            <span class="sh-chip">⏱️ {{ fmtMin(partyMin) }}</span>
-            <span class="sh-chip">⚡ 0</span>
-            <span class="sh-chip" :class="winClass(partyWin)">🎯 {{ partyWin }}%</span>
-          </div>
-          <button
-            v-if="offers.hero"
-            class="car-adv"
-            :class="{ on: partyHero }"
-            @click="partyHero = !partyHero"
-          >
-            <span class="ca-emo">🧝</span>
-            <span class="ca-name">Ton héros</span>
-            <span class="ca-none">butin du héros · 🪙 {{ costOf(selected) }}</span>
-          </button>
-          <div class="car-pick">
-            <button
-              v-for="a in freeAdvs"
-              :key="a.id"
-              class="car-adv"
-              :class="{ on: partyEscort.includes(a.id) }"
-              @click="togglePartyAdv(a.id)"
-            >
-              <span class="ca-emo">{{ advTitle(a)?.emoji ?? '🧑' }}</span>
-              <span class="ca-name">{{ a.name }}</span>
-              <span class="ca-rank" :style="{ color: advRank(a).color }">{{ rankStarStr(advRank(a).star) }}</span>
-            </button>
-          </div>
-          <p class="sh-away">
-            Sans le héros : or, ferraille, clés, pierres et pièce d’aventurier. En cas de défaite,
-            tous les aventuriers tombés partent à l’infirmerie ; le héros rentre sans butin.
-          </p>
-          <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
-            ⚔️ Attaquer le camp ({{ partyEscort.length + (partyHero ? 1 : 0) }})
-          </button>
-        </template>
+<template v-if="selectedCamp && offers.party">
+  <div class="sh-row">
+    <span class="sh-chip"
+      >{{ FACTION_EMOJI[selectedCamp.faction] }} {{ FACTION_LABEL[selectedCamp.faction] }}</span
+    >
+    <span class="sh-chip"
+      >💪 force ≈ {{ selectedCamp.size }} aventurier{{ selectedCamp.size > 1 ? 's' : '' }}</span
+    >
+    <span class="sh-chip">⏱️ {{ fmtMin(partyMin) }}</span>
+    <span class="sh-chip">⚡ 0</span>
+    <span class="sh-chip" :class="winClass(partyWin)">🎯 {{ partyWin }}%</span>
+  </div>
+  <button
+    v-if="offers.hero"
+    class="car-adv"
+    :class="{ on: partyHero }"
+    @click="partyHero = !partyHero"
+  >
+    <span class="ca-emo">🧝</span>
+    <span class="ca-name">Ton héros</span>
+    <span class="ca-none">butin du héros · 🪙 {{ costOf(selected) }}</span>
+  </button>
+  <div class="car-pick">
+    <button
+      v-for="a in freeAdvs"
+      :key="a.id"
+      class="car-adv"
+      :class="{ on: partyEscort.includes(a.id) }"
+      @click="togglePartyAdv(a.id)"
+    >
+      <span class="ca-emo">{{ advTitle(a)?.emoji ?? '🧑' }}</span>
+      <span class="ca-name">{{ a.name }}</span>
+      <span class="ca-rank" :style="{ color: advRank(a).color }">{{
+        rankStarStr(advRank(a).star)
+      }}</span>
+    </button>
+  </div>
+  <p class="sh-away">
+    Sans le héros : or, ferraille, clés, pierres et pièce d’aventurier. En cas de défaite, tous les
+    aventuriers tombés partent à l’infirmerie ; le héros rentre sans butin.
+  </p>
+  <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
+    ⚔️ Attaquer le camp ({{ partyEscort.length + (partyHero ? 1 : 0) }})
+  </button>
+</template>
 ```
 
 Adapter la dernière alerte : `<div v-if="!offers.hero && !offers.caravan && !offers.party" class="sh-away">`.
@@ -2372,7 +2704,7 @@ Adapter la dernière alerte : `<div v-if="!offers.hero && !offers.caravan && !of
 Dans la modale de collecte (`coll-card`), après `<div class="coll-haul">…</div>` :
 
 ```vue
-        <PartyReportView v-if="lastOutcome.party" :party="lastOutcome.party" :roster="char.advList" />
+<PartyReportView v-if="lastOutcome.party" :party="lastOutcome.party" :roster="char.advList" />
 ```
 
 - [ ] **Step 4: `AventurePage.vue`**
@@ -2380,9 +2712,9 @@ Dans la modale de collecte (`coll-card`), après `<div class="coll-haul">…</di
 - `expeLifecycle` : après `const settled = …` et sa notification, ajouter :
 
 ```ts
-    const partyMsgs = await char.partyTick(uid, Date.now());
-    if (partyMsgs.length)
-      $q.notify({ type: 'positive', message: '📬 Rapport de ton groupe — le butin t’attend.' });
+const partyMsgs = await char.partyTick(uid, Date.now());
+if (partyMsgs.length)
+  $q.notify({ type: 'positive', message: '📬 Rapport de ton groupe — le butin t’attend.' });
 ```
 
 - `syncPush` : remplacer `parties: []` (Task 6) par `parties: char.partyList.map((g) => ({ id: g.id, returnAt: g.returnAt })),`.
@@ -2395,6 +2727,7 @@ npm run typecheck
 node node_modules/@quasar/app-vite/bin/quasar.js build
 npm run smoke
 ```
+
 Expected: sans erreur ; smoke OK.
 
 - [ ] **Step 6: Lint ciblé + commit**
@@ -2413,6 +2746,7 @@ Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>"
 ### Task 9: Portes, code mort, CLAUDE.md, version
 
 **Files:**
+
 - Modify: `CLAUDE.md` (entrée juste AU-DESSUS de la puce « ⚔️ COMBAT DE GROUPE — ÉTAPE 2 DES CAMPS »), `package.json` (`version`)
 
 - [ ] **Step 1: Rebase et version**

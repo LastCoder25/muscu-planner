@@ -104,9 +104,11 @@
               ><span class="fb-m-fill" :style="{ width: sharePct(m.units) + '%' }" /><span
                 class="fb-m-min"
             /></span>
-            <span class="fb-m-u" :class="{ ok: metMinShare(current.family, m.units, current.tier) }">{{
-              m.units
-            }}</span>
+            <span
+              class="fb-m-u"
+              :class="{ ok: metMinShare(current.family, m.units, current.tier) }"
+              >{{ m.units }}</span
+            >
           </template>
           <span v-else class="fb-m-st">{{ m.status === 'invited' ? 'invité' : 'a refusé' }}</span>
         </div>
@@ -193,9 +195,10 @@
             </button>
           </div>
           <p class="fb-hint">
-            La difficulté fixe le nombre de {{ pickedExo ? bossUnitLabel(pickedExo.family) : 'reps' }}
-            <b>par personne</b>. La récompense monte <b>plus vite</b> que l’effort : un boss dur
-            paie mieux que plusieurs faciles, en or, en pierres et en chances sur le trophée.
+            La difficulté fixe le nombre de
+            {{ pickedExo ? bossUnitLabel(pickedExo.family) : 'reps' }} <b>par personne</b>. La
+            récompense monte <b>plus vite</b> que l’effort : un boss dur paie mieux que plusieurs
+            faciles, en or, en pierres et en chances sur le trophée.
           </p>
 
           <div class="fb-sec-t">Inviter ({{ invitees.size }}/{{ FRIEND_BOSS.maxInvites }})</div>
@@ -442,9 +445,7 @@ const sharePct = (units: number) =>
 const amount = ref(20);
 const perHit = computed(() =>
   current.value
-    ? Math.floor(
-        bossShareUnits(current.value.family, current.value.tier) * FRIEND_BOSS.hitMaxShare,
-      )
+    ? Math.floor(bossShareUnits(current.value.family, current.value.tier) * FRIEND_BOSS.hitMaxShare)
     : 0,
 );
 /** Ce que le serveur retiendra : la même règle que `fboss_hit`. */
