@@ -9,19 +9,19 @@ mana** pour monnaie. Ils s'équipent, ont des compétences, et les doublons les 
 
 ## Décisions prises
 
-| Sujet | Décision |
-| --- | --- |
-| Périmètre | **Le gacha REMPLACE le recrutement d'aventuriers** |
-| Vocabulaire | **Raretés nommées** (commun → primordial), **PAS de nouvelle échelle d'étoiles** |
-| Rang du champion | **L'échelle de prestige du héros** (Bronze ★1 → …), **plafonnée au rang du héros** |
-| Taux | **Toutes les raretés tirables**, aux taux d'un gacha (le plus haut ≈ 0,6 %) |
-| Ce qui est plafonné | **le RANG**, jamais la rareté tirée |
-| Chemin du champion | **FIXÉ au tirage** — vrai gacha, le kit est son identité |
-| Évolution de rareté | **NON** — la rareté est figée, c'est le rang qui monte |
-| Duplicatas | **Éveil** : ils renforcent le kit de l'exemplaire possédé |
-| Rôles par rareté | **une version de chaque rôle à chaque rareté**, de plus en plus puissante |
-| Monnaie | **Pierres de mana** |
-| Plafond de nombre | **aucun sur la collection** ; la Guilde plafonne le **déploiement** |
+| Sujet               | Décision                                                                           |
+| ------------------- | ---------------------------------------------------------------------------------- |
+| Périmètre           | **Le gacha REMPLACE le recrutement d'aventuriers**                                 |
+| Vocabulaire         | **Raretés nommées** (commun → primordial), **PAS de nouvelle échelle d'étoiles**   |
+| Rang du champion    | **L'échelle de prestige du héros** (Bronze ★1 → …), **plafonnée au rang du héros** |
+| Taux                | **Toutes les raretés tirables**, aux taux d'un gacha (le plus haut ≈ 0,6 %)        |
+| Ce qui est plafonné | **le RANG**, jamais la rareté tirée                                                |
+| Chemin du champion  | **FIXÉ au tirage** — vrai gacha, le kit est son identité                           |
+| Évolution de rareté | **NON** — la rareté est figée, c'est le rang qui monte                             |
+| Duplicatas          | **Éveil** : ils renforcent le kit de l'exemplaire possédé                          |
+| Rôles par rareté    | **une version de chaque rôle à chaque rareté**, de plus en plus puissante          |
+| Monnaie             | **Pierres de mana**                                                                |
+| Plafond de nombre   | **aucun sur la collection** ; la Guilde plafonne le **déploiement**                |
 
 ## ⚠️ LES DEUX ÉCHELLES NE SE CONFONDENT PAS
 
@@ -29,10 +29,10 @@ C'est ce qui a débloqué la conception. Les étoiles étaient **déjà prises d
 le projet (`rankStarStr` pour le rang, `jetStar` pour la qualité de tirage d'un objet) —
 une troisième aurait été illisible.
 
-| | Vient du | Dit quoi | Plafonné par |
-| --- | --- | --- | --- |
-| **Rareté** (nom) | le **tirage** | la puissance et la profondeur du kit | rien — tout est tirable |
-| **Rang** (★ de prestige) | le **combat** | où il en est de sa progression | **le rang du héros** |
+|                          | Vient du      | Dit quoi                             | Plafonné par            |
+| ------------------------ | ------------- | ------------------------------------ | ----------------------- |
+| **Rareté** (nom)         | le **tirage** | la puissance et la profondeur du kit | rien — tout est tirable |
+| **Rang** (★ de prestige) | le **combat** | où il en est de sa progression       | **le rang du héros**    |
 
 Un champion **primordial** peut donc naître **Bronze ★1**. « Le sport est le plafond »
 tient : ce qu'on gagne au tirage, c'est un potentiel ; ce qui le réalise, c'est le sport.
@@ -57,16 +57,16 @@ ne construit pas un personnage, on choisit **lequel**. C'est le deal, accepté.
 
 ## 🩺 « Une version du soigneur par rareté » — mesuré : 27 cases sur 32
 
-| Rareté | Classes | Rôles présents | Signatures |
-| --- | --- | --- | --- |
-| commun | 5 | 👁️ 🐫 — **manque 🩺 🧭** | **aucune** |
-| inhabituel | 15 | les 4 ✅ | **aucune** |
-| magique | 14 | les 4 ✅ | **aucune** |
-| rare | 13 | 🩺 🐫 🧭 — manque 👁️ | les 8 ✅ |
-| épique | 12 | les 4 ✅ | les 8 ✅ |
-| légendaire | 12 | 🐫 🧭 👁️ — **manque 🩺** | les 8 ✅ |
-| mythique | 11 | 🩺 🐫 🧭 — manque 👁️ | les 8 ✅ |
-| primordial | 11 | les 4 ✅ | les 8 ✅ |
+| Rareté     | Classes | Rôles présents           | Signatures |
+| ---------- | ------- | ------------------------ | ---------- |
+| commun     | 5       | 👁️ 🐫 — **manque 🩺 🧭** | **aucune** |
+| inhabituel | 15      | les 4 ✅                 | **aucune** |
+| magique    | 14      | les 4 ✅                 | **aucune** |
+| rare       | 13      | 🩺 🐫 🧭 — manque 👁️     | les 8 ✅   |
+| épique     | 12      | les 4 ✅                 | les 8 ✅   |
+| légendaire | 12      | 🐫 🧭 👁️ — **manque 🩺** | les 8 ✅   |
+| mythique   | 11      | 🩺 🐫 🧭 — manque 👁️     | les 8 ✅   |
+| primordial | 11      | les 4 ✅                 | les 8 ✅   |
 
 **À écrire : 5 classes** pour compléter la grille rôle × rareté.
 
@@ -83,10 +83,10 @@ l'écart de rareté doit rester **sous ce facteur**.
 Or `STRATUM_BUDGET` va de **6** à **106** (chaîne complète) = **×17,7** : le primordial nu
 écraserait le commun monté à fond. **Le remède est un plancher, pas un plafond** :
 
-| | Budget | Écart | Commun au rang du héros | Primordial nu |
-| --- | --- | --- | --- | --- |
-| aujourd'hui | 6 → 106 | ×17,7 | 69 | **106** ❌ |
-| proposé | **20 → 106** | **×5,3** | **230** ✅ | 106 |
+|             | Budget       | Écart    | Commun au rang du héros | Primordial nu |
+| ----------- | ------------ | -------- | ----------------------- | ------------- |
+| aujourd'hui | 6 → 106      | ×17,7    | 69                      | **106** ❌    |
+| proposé     | **20 → 106** | **×5,3** | **230** ✅              | 106           |
 
 Garder **106 en haut** est non négociable : c'est lui qui tient tout l'équilibrage de fin
 de partie (`refAdventurer`, 7 fichiers de test). Seul le plancher bouge.
@@ -145,8 +145,8 @@ implémentées. Sans elles, le gacha n'a **pas de monnaie**. Ordre :
 
 - **Taux** typiques : 5★ ≈ 0,6 %, 4★ ≈ 5 %, le reste en 3★. À taux nu, on peut tirer 200
   fois sans rien.
-- ⚠️ **Le PITY est indispensable** : *soft pity* (les taux montent vers le 75ᵉ tirage) et
-  *hard pity* (garanti au 90ᵉ). Sans lui, un joueur malchanceux n'a jamais rien — et ici
+- ⚠️ **Le PITY est indispensable** : _soft pity_ (les taux montent vers le 75ᵉ tirage) et
+  _hard pity_ (garanti au 90ᵉ). Sans lui, un joueur malchanceux n'a jamais rien — et ici
   il n'y a pas d'argent réel pour compenser.
 - **Duplicatas** : chaque doublon monte un cran. Un tirage n'est jamais perdu.
 - **Progression séparée du tirage** : c'est elle qui fait qu'un **4★ investi bat un 5★ nu**
