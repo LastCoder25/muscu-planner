@@ -727,6 +727,18 @@
           <!-- ── Menace en approche ── -->
           <div v-if="raid" class="panel threat">
             <div class="p-title">⚠️ Une armée approche — {{ arriveIn }}</div>
+            <!-- 🕳️ D'OÙ ELLE SORT — affiché SANS condition de clarté, et ce n'est pas un
+               oubli. La Tour de guet vend du renseignement sur l'ENNEMI ; or « cette armée
+               sort d'une faille » est la conséquence de MA négligence, pas un secret
+               adverse — ce n'est donc pas sa marchandise. La cacher derrière un niveau de
+               Tour priverait de la leçon exactement les joueurs qui en ont le plus besoin,
+               et un pic de difficulté ×1,3 sans raison affichée se lit comme un bug.
+               ⚠️ Le texte ne nomme NI la faction NI l'effectif : ça, ça reste ce que la
+               Tour fait payer, et les lignes ci-dessous s'en chargent selon la clarté. -->
+            <div v-if="raid.overflow" class="rift-origin">
+              🕳️ <b>Sortie d'une faille</b> — tu l'as laissée déborder. Cette armée est
+              <b>renforcée</b>.
+            </div>
             <div class="scout">
               <div class="scout-line">
                 <span class="k">Nature</span>
@@ -3044,6 +3056,19 @@ function doHarvest() {
 .p-title {
   font-weight: 600;
   font-size: 14px;
+}
+/* 🕳️ L'origine de faille : un encart, pas une ligne de plus dans la liste — il change le
+   sens de TOUT ce qui suit (effectif, composition, pronostic), donc il passe devant.
+   ⚠️ Teinte du DANGER (`--d4`), pas l'accent : l'accent dit « il y a à faire » partout
+   ailleurs sur cet écran, or ici il n'y a plus rien à faire — la faille a déjà débordé. */
+.rift-origin {
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 1px solid color-mix(in srgb, var(--d4) 55%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--d4) 12%, transparent);
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 .scout {
   margin-top: 8px;

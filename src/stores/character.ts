@@ -79,6 +79,7 @@ import {
   isClaimable,
   createMap,
   advanceWorld,
+  riftOverflows,
   startExpedition,
   buildMessage,
   goldCost as expeGoldCost,
@@ -105,6 +106,7 @@ import {
 import { combatPower, type Combatant } from '@/lib/combat';
 import {
   advanceBase,
+  markOverflow,
   applyRaidOutcome,
   resolveRaid,
   siegeHurtIds,
@@ -207,7 +209,7 @@ import {
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
-import { resolveIncursion } from '@/lib/rift';
+import { resolveIncursion, riftOverflowOf } from '@/lib/rift';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -1391,17 +1393,32 @@ export const useCharacterStore = defineStore('character', () => {
   async function expeSyncMap(userId: string, now: number, level: number) {
     const cur = row.value;
     if (!cur) return;
-    // 🕳️ ⚠️ LE MARQUAGE DU DÉBORDEMENT N'EST PAS BRANCHÉ ICI, ET C'EST MESURÉ, pas un
-    // oubli. Le mécanisme est prêt et testé (`riftOverflows` → `riftOverflowOf` →
-    // `markOverflow`, à poser dans la MÊME écriture que la carte, sinon la faille
-    // disparaît d'ici et son armée avec) — mais mesuré, 53 à 79 % des sièges seraient
-    // renforcés ×1,3, et le joueur ne peut PAS ENCORE refermer une faille. Ce serait la
-    // punition sans le jeu. Cf. l'entrée v0.931 de CLAUDE.md.
-    const map: ExpeditionMap = cur.expedition_map
-      ? advanceWorld(cur.expedition_map, now, level, cur.expedition?.poi.id)
+    const prev = cur.expedition_map;
+    // 🕳️ LES FAILLES MÛRES SE LISENT ICI, AVANT `advanceWorld` — c'est le SEUL instant où
+    // elles sont encore sur la carte : lui les remplace par leur mine de mana résiduel.
+    // Après lui, il n'y a plus rien à voir, et l'armée disparaîtrait avec la faille.
+    const over = prev ? riftOverflows(prev, now) : [];
+    const map: ExpeditionMap = prev
+      ? advanceWorld(prev, now, level, cur.expedition?.poi.id)
       : createMap(newSeed(now), now, level);
-    if (JSON.stringify(map) !== JSON.stringify(cur.expedition_map))
-      await persist(userId, { expedition_map: map });
+    // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
+    // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
+    // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
+    // graine qui n'est pas celle que le tick de base lui aurait donnée.
+    const base = over.length && cur.base ? markOverflow(cur.base, over.map(riftOverflowOf)) : null;
+    const mapChanged = JSON.stringify(map) !== JSON.stringify(prev);
+    // `markOverflow` rend la MÊME référence quand il n'y a rien de plus récent à poser.
+    const baseChanged = !!base && base !== cur.base;
+    if (!mapChanged && !baseChanged) return;
+    // ⚠️ UNE SEULE ÉCRITURE pour les deux. Persister la carte sans le marquage ferait
+    // disparaître la faille en laissant son armée nulle part ; persister le marquage sans
+    // la carte la ferait redéborder au tick suivant. Le marquage est idempotent
+    // (`riftOverflowOf` est daté du débordement, pas de `now`), donc un échec d'écriture
+    // se rattrape au tick d'après au lieu de dupliquer la menace.
+    await persist(userId, {
+      ...(mapChanged ? { expedition_map: map } : {}),
+      ...(baseChanged ? { base } : {}),
+    });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
   async function expeSend(userId: string, poi: Poi, hero: Combatant, now: number, level: number) {

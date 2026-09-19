@@ -133,6 +133,21 @@ function fmtDur(min?: number): string {
   if (h) return `${h} h`;
   return `${m} min`;
 }
+/**
+ * Une liste de valeurs qui TIENT dans la largeur (« 10 / 9 / 11 »).
+ *
+ * ⚠️ `join('/')` produisait une chaîne SANS ESPACE, donc **sans aucun point de césure** :
+ * `min-width: 0` laisse rétrécir la BOÎTE, il ne coupe pas le TEXTE — une douzaine de
+ * séries débordait donc vers la droite. Les espaces autour du séparateur rendent la
+ * coupure possible ENTRE deux valeurs.
+ *
+ * ⚠️ Et jamais `overflow-wrap: anywhere` SEUL sur ces listes : il couperait au milieu
+ * d'un nombre, et « 1 » en fin de ligne puis « 0 » au début de la suivante se lit comme
+ * deux valeurs au lieu d'une. Ici la coupure ne peut tomber qu'entre deux séries.
+ */
+function numList(v: readonly number[]): string {
+  return v.join(' / ');
+}
 function isoDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
@@ -252,7 +267,7 @@ const entries = computed<Entry[]>(() => {
       const setReps = (p.sets ?? []).map((s) => s.reps).filter((r) => r > 0);
       const meta =
         c.unit === 'reps' && setReps.length > 1
-          ? `${setReps.join('/')} ${uLabel}`
+          ? `${numList(setReps)} ${uLabel}`
           : `${p.done} ${uLabel}`;
       out.push({
         ts,
@@ -298,7 +313,7 @@ const entries = computed<Entry[]>(() => {
             : mode === 'reps'
               ? `${reps} reps`
               : `${daySets.length} série${daySets.length > 1 ? 's' : ''}${
-                  repsList.length ? ' · ' + repsList.join('/') + ' reps' : ''
+                  repsList.length ? ' · ' + numList(repsList) + ' reps' : ''
                 }`;
         out.push({
           ts,
@@ -331,7 +346,7 @@ const entries = computed<Entry[]>(() => {
       title: e.title,
       meta:
         e.units.length > 1
-          ? `${e.units.length} frappes · ${e.units.join('/')} ${e.unit}`
+          ? `${e.units.length} frappes · ${numList(e.units)} ${e.unit}`
           : `${e.total} ${e.unit}`,
       xp: e.xp,
       energy: e.xp, // muscu (ou cardio pour un boss de conditionnement) → fond → énergie
@@ -570,14 +585,20 @@ onMounted(async () => {
   flex: 1;
   min-width: 0;
 }
+/* CEINTURE : `min-width: 0` sur le parent laisse rétrécir la BOÎTE, jamais le TEXTE — un
+   mot sans espace (nom d'exercice à rallonge) déborderait encore. Les listes de séries,
+   elles, se coupent déjà entre deux valeurs (cf. `numList`) : `anywhere` ne s'y déclenche
+   donc jamais, il ne sert que de dernier recours. */
 .entry-title {
   font-weight: 600;
   color: var(--text);
+  overflow-wrap: anywhere;
 }
 .entry-meta {
   font-size: 12px;
   color: var(--dim);
   margin-top: 2px;
+  overflow-wrap: anywhere;
 }
 .entry-gain {
   display: flex;
