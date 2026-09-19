@@ -66,6 +66,7 @@ import {
   travelFactor,
   travelOneWayMin,
   type Poi,
+  routePerilous,
 } from './expedition';
 import {
   advRarity,
@@ -730,9 +731,9 @@ export function roadFoe(poi: Poi): Combatant {
     ]),
   );
   const ref = escortCombatant(escort, 'Référence', pairedEscortEffects(escort, pairs));
-  const m = poi.perilous ? CARAVAN.perilousMult : 1;
+  const m = routePerilous(poi) ? CARAVAN.perilousMult : 1;
   return {
-    name: poi.perilous ? 'Pillards de la passe' : 'Bandits de grand chemin',
+    name: routePerilous(poi) ? 'Pillards de la passe' : 'Bandits de grand chemin',
     pv: Math.max(1, Math.round(offensePerRound(ref) * CARAVAN.foePvTurns * m)),
     damage: Math.max(1, Math.round(effectivePv(ref) * CARAVAN.foeDmgPctPv * m)),
     crit: 0.08,
@@ -788,7 +789,7 @@ export function suggestEscort(
   const size = escortShare(available.length, convoysLeft);
   if (!size) return [];
   // Une route dangereuse se prépare : éviter la rencontre vaut mieux que la gagner.
-  const ordre: AdvRole[] = poi.perilous
+  const ordre: AdvRole[] = routePerilous(poi)
     ? ['scout', 'haul', 'heal', 'speed']
     : ['haul', 'speed', 'scout', 'heal'];
   const pool = [...available];
@@ -1001,7 +1002,7 @@ const AMBUSH_BASE = { calme: 0.24, perilous: 0.42 } as const;
  * brute — passer inaperçu.
  */
 export function ambushChance(poi: Poi, escort: Adventurer[]): number {
-  const base = poi.perilous ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
+  const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
   const cut = Math.min(CARAVAN.scoutMax, countRole(escort, 'scout') * CARAVAN.scoutPerRole);
   return base * (1 - cut);
 }
@@ -1164,7 +1165,7 @@ export function refEscortUnits(level: number): SkirmishUnit[] {
  * de RÉFÉRENCE, jamais l'escorte envoyée). `poi` ne donne que le nombre, le niveau et le nom.
  */
 export function roadTroop(foe: Combatant, poi: Poi): SkirmishUnit[] {
-  const perilous = !!poi.perilous;
+  const perilous = routePerilous(poi);
   return troopOf(foe, {
     count: perilous ? CARAVAN.troopPerilous : CARAVAN.troopCalm,
     level: poi.level,
@@ -1306,8 +1307,8 @@ export function resolveCaravan(
   // la ville regagnait du terrain à chaque embuscade. Cumulée en flottant, arrondie UNE fois.
   const travel = missionTravelMult(poi);
   // Une rencontre par jambe de trajet — deux fois plus sur une route dangereuse.
-  const legs = poi.perilous ? 4 : 2;
-  const base = poi.perilous ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
+  const legs = routePerilous(poi) ? 4 : 2;
+  const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
   const amb = ambushChance(poi, escort);
   for (let i = 0; i < legs; i++) {
     const roll = rng();
@@ -1350,7 +1351,7 @@ export function resolveCaravan(
         const piece = rollAdvGearDrop(gearRng, escort, {
           chance: ADV_GEAR_DROP.ambush,
           level: poi.level,
-          luck: poi.perilous ? 0.3 : 0.1,
+          luck: routePerilous(poi) ? 0.3 : 0.1,
           playerLevel,
         });
         if (piece) advGear.push(piece);

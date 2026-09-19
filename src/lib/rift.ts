@@ -40,7 +40,13 @@ import {
   type RoadCompanions,
 } from './caravan';
 import { interpolate } from './proceduralContent';
-import { EXPE, type ExpeditionOutcome, type PartyResult, type Poi } from './expedition';
+import {
+  EXPE,
+  riftMaturityAt,
+  type ExpeditionOutcome,
+  type PartyResult,
+  type Poi,
+} from './expedition';
 // ⚠️ `party.ts` porte la MISSION DE GROUPE (envoi, voyage, rapport) et la doctrine des
 // graines : le pronostic ne rejoue jamais la bataille qui aura lieu. Aucun cycle — ce
 // module-là n'importe pas les failles.
@@ -142,8 +148,10 @@ export function riftOverflowAt(rift: Pick<RiftLike, 'spawnedAt'>): number {
 
 /** Maturité 0..1, bornée aux deux bouts (une faille ne mûrit pas au-delà de 1). */
 export function riftMaturity(rift: Pick<RiftLike, 'spawnedAt'>, now: number): number {
-  const t = (now - rift.spawnedAt) / EXPE.lifespanMs.rift;
-  return Math.min(1, Math.max(0, t));
+  // ⚠️ DÉLÈGUE : la courbe vit dans `expedition.ts`, parce que le rayon d'irradiation en a
+  // besoin et que ce module-ci importe celui-là (jamais l'inverse). Deux implémentations
+  // de « quel âge a-t-elle ? » finiraient par répondre différemment.
+  return riftMaturityAt(rift.spawnedAt, now);
 }
 
 /** A-t-elle débordé ? (elle s'effondre alors, en laissant une mine — cf. `residualMineOf`) */

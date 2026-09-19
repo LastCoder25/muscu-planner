@@ -96,6 +96,21 @@
             />
           </template>
 
+          <!-- 🕳️ L'AURÉOLE D'UNE FAILLE — ce qu'elle harcèle, lisible SANS rien sélectionner.
+             C'est ce qui justifie de mesurer le harcèlement à la distance au LIEU plutôt
+             qu'à la route : le joueur voit un disque, et les destinations dedans. Il
+             grandit avec la maturité, donc on voit la menace monter.
+             ⚠️ Dessinée AVANT les POI (donc dessous) et en `pointer-events: none` : elle
+             ne doit ni recouvrir un glyphe ni voler son clic. -->
+          <circle
+            v-for="r in riftHalos"
+            :key="'halo-' + r.id"
+            :cx="r.x"
+            :cy="r.y"
+            :r="r.radius"
+            class="rift-halo"
+          />
+
           <!-- POI -->
           <g
             v-for="p in pois"
@@ -400,7 +415,17 @@
             <span v-if="selected.type === 'arena'" class="sh-chip"
               >🌊 ~{{ arenaWaves }} vagues</span
             >
-            <span v-if="selected.perilous" class="sh-chip peril"
+            <!-- 🕳️ DEUX CAUSES, DEUX MESSAGES — et c'est tout l'intérêt de les avoir gardées
+               distinctes. « Route dangereuse » est tirée au spawn : on la subit, on choisit
+               ailleurs. Le harcèlement d'une faille, lui, est ACTIONNABLE — on va la fermer,
+               et la route redevient propre. Les fondre en un seul drapeau perdrait la seule
+               moitié sur laquelle le joueur peut agir. La faille passe DEVANT : c'est elle
+               qui appelle un geste. -->
+            <span v-if="selected.riftPeril" class="sh-chip peril"
+              >🕳️ Harcelée par une faille — embuscades doublées. Referme-la pour nettoyer la
+              route.</span
+            >
+            <span v-else-if="selected.perilous" class="sh-chip peril"
               >⚠️ Route dangereuse — embuscades doublées, butin renforcé</span
             >
             <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)"
@@ -603,6 +628,7 @@ import {
   CAMP_TYPES,
   campSpecOf,
   isRiftPoi,
+  riftIrradiationRadius,
   isClaimable,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
@@ -848,6 +874,21 @@ const incoming = computed(() => base.value?.raid ?? null);
  *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
  *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
+// 🕳️ Les auréoles de harcèlement — ce que chaque faille rend dangereux autour d'elle.
+// ⚠️ DÉCLARÉ APRÈS `coarseNow`, sa dépendance : un `computed` est paresseux, donc l'ordre
+// ne casse rien aujourd'hui, mais c'est exactement le motif qui a coûté un écran blanc en
+// v0.910 (zone morte temporelle) — la forme doit survivre à un réordonnancement futur.
+// ⚠️ Horloge GROSSIÈRE : le rayon grandit sur SEPT JOURS. Le recalculer à la seconde ne
+// changerait rien de visible et re-diffuserait tous ces cercles à chaque tick, alors que la
+// carte se re-rend déjà chaque seconde pour animer les convois.
+const riftHalos = computed(() =>
+  pois.value.filter(isRiftPoi).map((p) => ({
+    id: p.id,
+    x: p.x,
+    y: p.y,
+    radius: riftIrradiationRadius(p.spawnedAt, coarseNow.value),
+  })),
+);
 /** Ce que l'escorte emmène sur la ROUTE. ⚠️ LA MÊME construction que ce que le store passe
  *  au départ : cette forme était rebâtie ici à la main, donc l'écran pouvait annoncer un
  *  pronostic calculé sur une autre réserve que celle qui partirait vraiment. Une seule
@@ -2025,6 +2066,18 @@ onUnmounted(() => {
 }
 .poi {
   cursor: pointer;
+}
+/* 🕳️ L'auréole de harcèlement d'une faille : on VOIT ce qu'elle salit, sans rien
+   sélectionner. ⚠️ `pointer-events: none` — elle couvre plusieurs POI, elle leur volerait
+   leur clic. Teinte du DANGER (--d4), comme l'encart de la Tour de guet : les deux parlent
+   de la même chose. Discrète (c'est un fond, pas un objet), mais son bord pointillé la
+   distingue des cercles pleins de la carte. */
+.rift-halo {
+  fill: color-mix(in srgb, var(--d4) 9%, transparent);
+  stroke: color-mix(in srgb, var(--d4) 42%, transparent);
+  stroke-width: 0.5;
+  stroke-dasharray: 2 2;
+  pointer-events: none;
 }
 .poi-bg {
   fill: var(--surface);
