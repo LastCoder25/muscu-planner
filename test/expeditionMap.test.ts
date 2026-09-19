@@ -118,6 +118,13 @@ describe('POI de récolte', () => {
     }
   });
 
+  it('⚠️ resolveOutcome REFUSE une faille — sinon elle était traitée comme une mine d’or', () => {
+    // Le garde manquait, et le défaut était SILENCIEUX : une faille tombait dans la branche
+    // finale (`mineOutcome`) et rendait de l'or et de l'énergie sans le moindre combat.
+    // Même patron que les camps, qui se résolvent par `resolveCamp`.
+    expect(() => resolveOutcome(hero, poi('rift'), 7, 26)).toThrow(/incursion/i);
+  });
+
   it('💠 le MESSAGE porte le mana — sinon la boîte ne peut pas l’afficher', () => {
     // ⚠️ Deux moitiés du même défaut (v0.680) : `haulPills` sait le PEINDRE (test suivant),
     // mais si `buildMessage` ne le recopie pas depuis l'issue, il n'y a rien à peindre. La

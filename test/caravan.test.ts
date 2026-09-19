@@ -1122,6 +1122,34 @@ describe('⚠️ un convoi part SANS le héros', () => {
     ).toBe(false);
   });
 
+  it('⚠️ une FAILLE n’accepte AUCUN envoi tant que l’incursion n’existe pas', () => {
+    // Sans ce refus, l'écran proposait « envoyer le héros » et `resolveOutcome` traitait la
+    // faille comme une MINE D'OR : de l'or et de l'énergie, en silence, sans combat. Rendre
+    // false GRISE le lieu sur la carte, ce qui est exactement ce que le gris veut dire depuis
+    // la v0.738. À retirer quand l'incursion sera branchée.
+    const faille = poi({ type: 'rift' });
+    const o = poiOffers(faille, {
+      heroAway: false,
+      comptoirLevel: 3,
+      advsAvailable: 4,
+      slotsFree: 4,
+    });
+    expect(o.hero).toBe(false);
+    expect(o.caravan).toBe(false);
+    expect(o.party).toBe(false);
+  });
+
+  it('💠 une MINE DE MANA RÉSIDUEL, elle, s’exploite — et au convoi, donc sans énergie', () => {
+    // C'est ce qui ouvre le mana au joueur qui ne combat pas (v0.725).
+    const mine = poi({ type: 'mana_mine' });
+    expect(
+      poiOffers(mine, { heroAway: true, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).caravan,
+    ).toBe(true);
+    expect(
+      poiOffers(mine, { heroAway: false, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).hero,
+    ).toBe(true);
+  });
+
   it('un convoi n’exploite que les lieux de RÉCOLTE, et exige un Comptoir', () => {
     expect(
       poiOffers(combat, { heroAway: false, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 })

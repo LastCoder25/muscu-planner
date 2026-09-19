@@ -241,6 +241,10 @@ export interface CharacterRow {
   voie: string | null; // spécialisation/archétype choisi (migr. 0055 ; null = aucune)
   energy_log: EnergyLogEntry[]; // journal d’énergie hors-sport horodaté (migr. 0057)
   base: BaseState | null; // défense de la base : enceinte, siège, champ de bataille (migr. 0060)
+  /** 💠 Pierres de mana (migr. 0080) — la monnaie du gacha de champions. Elle ARRIVE avant
+   *  son puits (failles → pierres de mana → gacha) : elle s'accumule, et ce n'est pas une
+   *  devise morte, dont le puits aurait été retiré. */
+  mana: number;
   scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
@@ -284,7 +288,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, adventurers, caravans, adv_gear, laby_stats, parties';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, parties';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -1616,6 +1620,10 @@ export const useCharacterStore = defineStore('character', () => {
         summon_stones: cur.summon_stones + ent(m.summonStones),
         // 🔩 épaves → réparation de l’enceinte. ⚠️ JAMAIS depuis un camp (v0.856/v0.890).
         scrap: cur.scrap + (party ? 0 : ent(m.scrap)),
+        // 💠 mines de mana résiduel → monnaie du gacha. ⚠️ Sans cette ligne, récolter une
+        // mine ne rapportait RIEN : l'issue portait le mana, le message le portait, les
+        // pastilles l'affichaient… et personne ne le créditait.
+        mana: cur.mana + ent(m.mana),
         ...partyPatch,
         inventory,
         // Ce message (et tout autre encaissement en cours) passe à `claimed: true`.

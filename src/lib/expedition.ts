@@ -1450,6 +1450,13 @@ export function resolveOutcome(
   // camps de faction porte son issue DÉJÀ tirée au départ (`startExpedition`) — rien ne la
   // rejoue. L'ancienne branche (gardien `poiCombatant`) n'avait plus aucun chemin : retirée.
   if (CAMP_TYPES.has(poi.type)) throw new Error('Un camp se résout par resolveCamp.');
+  // ⚠️ GARDE INDISPENSABLE, et il manquait : sans lui une FAILLE tombait dans la branche
+  // finale — celle de la MINE D'OR. Un joueur y envoyait son héros et récoltait de l'or et
+  // de l'énergie, en silence et sans le moindre combat. Une faille se referme par une
+  // INCURSION (`simulateIncursion`), et tant qu'elle n'est pas branchée `poiOffers` refuse
+  // l'envoi — ce qui grise le lieu sur la carte (v0.738 : « le gris veut dire rien ne peut y
+  // être envoyé »). Ce garde est la ceinture : aucun chemin ne peut la résoudre en silence.
+  if (isRiftPoi(poi)) throw new Error('Une faille se referme par une incursion (rift.ts).');
   // Mine = récolte (pas de combat) ; les rencontres de trajet lui rendent de la variance.
   const base = mineOutcome(rng, poi);
   // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas

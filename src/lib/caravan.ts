@@ -60,6 +60,7 @@ import {
   CAMP_TYPES,
   HARVEST_TYPES,
   harvestYield,
+  isRiftPoi,
   haulPills,
   goldCost,
   travelFactor,
@@ -966,7 +967,12 @@ export function poiOffers(
   opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number; slotsFree: number },
 ): { hero: boolean; caravan: boolean; party: boolean } {
   return {
-    hero: !opts.heroAway,
+    // ⚠️ UNE FAILLE NE S'ENVOIE PAS ENCORE : elle se referme par une INCURSION, qui n'est
+    // pas branchée. Sans ce refus, l'écran proposait « envoyer le héros » et `resolveOutcome`
+    // la traitait comme une MINE D'OR — de l'or et de l'énergie pour rien. Rendre `false`
+    // ici la GRISE sur la carte, ce qui est exactement ce que le gris veut dire depuis la
+    // v0.738 : « rien ne peut y être envoyé ». À retirer quand l'incursion existe.
+    hero: !opts.heroAway && !isRiftPoi(poi),
     // Les convois n'exploitent que les lieux de RÉCOLTE : le héros se bat, eux ramassent.
     caravan: opts.comptoirLevel > 0 && HARVEST_TYPES.has(poi.type),
     // ⚔️ Un CAMP s'attaque en GROUPE : le héros (sa propre limite), ou au moins un
