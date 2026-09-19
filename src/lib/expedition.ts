@@ -7,7 +7,7 @@
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
-import { mulberry32, simulateCombat, type Combatant, type CombatEvent } from './combat';
+import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import type { AdvGear } from './advGear';
@@ -37,7 +37,11 @@ export type PoiType =
   // elle engendre des monstres, et à 7 jours elle déborde sur la base (cf. `rift.ts`).
   | 'rift'
   // 💠 MINE DE MANA RÉSIDUEL : ce qu'une faille laisse en s'effondrant. Récolte pure.
-  | 'mana_mine';
+  | 'mana_mine'
+  // ⚔️ BANDE EN MARCHE : l'armée d'une faille qui a débordé, en route vers la base. Le
+  // SEUL POI qui BOUGE — sa position est recalculée à chaque tick. On l'intercepte pour
+  // désarmer le renfort du prochain siège (cf. `rift.ts`).
+  | 'warband';
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et
  *  ajouter un POI casse la compilation tant qu'on ne l'a pas nommé. La boîte à messages
@@ -55,6 +59,7 @@ export const POI_LABEL: Record<PoiType, string> = {
   wreck: 'Épave de convoi',
   rift: 'Faille',
   mana_mine: 'Mine de mana résiduel',
+  warband: 'Bande en marche',
 };
 
 /** Emoji d'un point d'intérêt — la carte et le rapport de convoi lisent la MÊME table
@@ -70,6 +75,7 @@ export const POI_EMO: Record<PoiType, string> = {
   wreck: '🔩',
   rift: '🕳️',
   mana_mine: '💠',
+  warband: '⚔️',
 };
 
 /** POI de récolte pure : aucun combat, on ramasse et on rentre (comme la mine). */
@@ -90,8 +96,30 @@ export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair'
  *  l'autre dit « ça se résout comme un camp ». Une faille s'envoie pareil et se résout
  *  autrement (`resolveIncursion` : attrition, gardien, mana). Dérivé de `CAMP_TYPES` pour
  *  qu'un nouveau type de camp ouvre l'envoi de groupe tout seul. */
-export const PARTY_TARGETS: ReadonlySet<PoiType> = new Set<PoiType>([...CAMP_TYPES, 'rift']);
+export const PARTY_TARGETS: ReadonlySet<PoiType> = new Set<PoiType>([
+  ...CAMP_TYPES,
+  'rift',
+  'warband',
+]);
+/** ⚔️ L'armée d'une faille qui a débordé, en route vers la base. */
+export const isWarbandPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'warband';
 export const CAMP_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
+
+/**
+ * 🕳️ La faction d'une faille — DÉRIVÉE de son id, jamais stockée.
+ *
+ * ⚠️ Elle vit ICI et non dans `rift.ts` pour la même raison que la maturité : ce module-là
+ * importe celui-ci (jamais l'inverse), et la CARTE en a besoin pour donner sa bannière à
+ * l'armée qui sort d'une faille. `rift.riftSpecOf` s'y adosse.
+ *
+ * ⚠️ GÉNÉRATEUR SÉPARÉ (constante XOR propre), patron exact de `campSpecOf` : le spawn ne
+ * tire rien de plus, donc la carte reste identique au bit près et une faille d'une carte
+ * déjà sauvegardée en a une sans migration.
+ */
+export function riftFactionOf(id: string): RaidFaction {
+  const rng = mulberry32((seedOf(id) ^ 0x1f83d9ab) >>> 0 || 1);
+  return CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
+}
 /** Taille d'un camp = sa FORCE, en aventuriers de RÉFÉRENCE (cf. `campFoe`). Un gros
  *  repaire en demande nettement plus que trois. ⚠️ MESURÉ, gardé tel quel : les bandes de
  *  `campCalibration.test` tiennent avec ces tailles (cf. `CAMP.pvTurns`). */
@@ -171,6 +199,12 @@ export interface Poi {
    *  `advanceWorld` : il s'éteint tout seul quand on referme la faille ou qu'elle déborde.
    *  Ne jamais l'écrire ailleurs — il serait faux dès le tick suivant. */
   riftPeril?: boolean;
+  /** ⚔️ BANDE EN MARCHE uniquement — la faction héritée de sa faille, et son point de
+   *  DÉPART. ⚠️ `from` est immuable : la marche s'interpole de là vers la ville, donc la
+   *  recalculer depuis la position courante la ferait ralentir à chaque tick sans jamais
+   *  arriver. `x`/`y`/`distNorm`, eux, sont RECALCULÉS à chaque `advanceWorld`. */
+  faction?: RaidFaction;
+  from?: { x: number; y: number };
   setId?: string; // 'lair' uniquement : set ciblé
   level: number;
   x: number; // coord carte (0..100)
@@ -199,7 +233,11 @@ export interface ExpeditionMap {
  *  la CONSÉQUENCE d'un débordement. Les faire entrer dans le quota volerait des places aux
  *  mines, camps, puits et épaves — dont l'économie est MESURÉE (`campEconomy`, `goldSink`,
  *  `scrapEconomy`) : les failles s'AJOUTENT à la carte, elles ne la remplacent pas. */
-const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine']);
+// ⚠️ Hors quota : ce sont des CONSÉQUENCES, pas des spawns. Les failles ont leur propre
+// quota ; la mine résiduelle et la bande en marche sont ce qu'une faille LAISSE en
+// débordant. Les compter volerait une place à une mine, un camp ou une épave — or le débit
+// de la carte est mesuré (`campEconomy`, `goldSink`, `scrapEconomy`).
+const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine', 'warband']);
 
 /** ⚠️ AUCUNE EXEMPTION AU DÉGRADÉ DE DISTANCE N’EST NÉCESSAIRE — et c’est MESURÉ.
  *
@@ -221,6 +259,12 @@ const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine'
  *  ⚠️ **CE QUI OBLIGERAIT À ROUVRIR LA QUESTION** : rendre `levelFitsDistance` symétrique
  *  (élaguer aussi ce qui est trop FAIBLE pour sa distance) effacerait toutes les failles de
  *  bas rang posées loin — exactement la variété qu’on cherche. Le test le fait rougir.
+ *
+ *  ⚠️ **ET LA QUESTION A ÉTÉ ROUVERTE : LA BANDE EN MARCHE, ELLE, A BESOIN DU GARDE.**
+ *  Elle FOND sur la ville, donc son `distNorm` tombe vers 0 sans qu'elle perde une once de
+ *  sa force : le filtre l'élaguerait en chemin, et l'interception disparaîtrait juste avant
+ *  d'être possible. L'exemption vit DANS `levelFitsDistance` (un `if` sur son type), là où
+ *  elle mord vraiment — et un test l'éprouve en la faisant marcher jusqu'aux portes.
  */
 export const isQuotaPoi = (p: Pick<Poi, 'type'>): boolean => !OUT_OF_QUOTA.has(p.type);
 export const isRiftPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'rift';
@@ -580,6 +624,11 @@ export const EXPE = {
     // c'est `rift.ts` qui la remplace alors par sa mine, avant tout filtrage.
     rift: 7 * 24 * 3600_000,
     mana_mine: 36 * 3600_000,
+    // ⚔️ LA FENÊTRE D'INTERCEPTION. Un jour plein : c'est ce qu'il faut pour qu'un joueur
+    // qui ouvre l'app une fois par jour ait sa chance, et un aller vers elle coûte déjà
+    // 1 h 30 à 7 h. Quand elle expire, l'armée a rejoint la sienne — le marquage reste et
+    // le prochain siège est renforcé.
+    warband: 24 * 3600_000,
   },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
@@ -605,6 +654,10 @@ export const EXPE = {
     // les failles créerait une activité gratuite qui paie. Aligné sur un camp.
     rift: 65,
     mana_mine: 30,
+    // ⚔️ Aligné sur un camp : c'est le même geste (on y envoie un groupe se battre). Le
+    // péage d'or reste universel — mais l'interception ne PAIE presque rien, elle ÉVITE
+    // une perte, donc on ne va pas au-delà.
+    warband: 65,
   },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
@@ -1033,6 +1086,12 @@ function placePoiOfType(
  *  FORT pour sa distance = incohérent, trop faible = simplement ancien.
  *  Même politique que `withinLand` : on corrige le CODE, la donnée se répare au chargement. */
 function levelFitsDistance(poi: Poi, playerLevel: number): boolean {
+  // ⚔️ LA BANDE EN MARCHE EST EXEMPTÉE, et ce n'est pas une commodité : ce filtre dit
+  // « ce lieu est-il trop fort pour son éloignement ? », une règle de SPAWN (le niveau y
+  // découle de la distance, v0.683). Une armée qui FOND sur la ville voit son `distNorm`
+  // tomber vers 0 sans rien perdre de sa force — elle serait donc élaguée en chemin,
+  // et l'interception disparaîtrait juste avant d'être possible.
+  if (poi.type === 'warband') return true;
   const win = spawnWindow(playerLevel);
   const attendu = win.min + Math.round(clamp01(poi.distNorm) * (win.max - win.min));
   return poi.level <= attendu + EXPE.levelFitTolerance;
@@ -1152,12 +1211,33 @@ export function advanceWorld(
       expiresAt: at + EXPE.lifespanMs.mana_mine,
     };
   });
+  // ⚔️ ET SON ARMÉE SE MET EN MARCHE. Elle naît à l'emplacement de la faille et fond vers
+  // la ville ; on a `lifespanMs.warband` pour l'intercepter. ⚠️ Elle porte la MÊME faction
+  // que sa faille (la carte annonce donc le butin du siège avant même la Tour de guet) et
+  // garde son point de départ dans `from` : sans lui, la marche repartirait de la position
+  // courante à chaque tick et n'avancerait jamais.
+  const warbands: Poi[] = over.map((p) => {
+    const at = p.spawnedAt + EXPE.lifespanMs.rift;
+    return {
+      id: `${p.id}_war`,
+      type: 'warband',
+      level: p.level,
+      faction: riftFactionOf(p.id),
+      from: { x: p.x, y: p.y },
+      x: p.x,
+      y: p.y,
+      distNorm: p.distNorm,
+      spawnedAt: at,
+      expiresAt: at + EXPE.lifespanMs.warband,
+    };
+  });
   // ⚠️ On retire EXACTEMENT celles qu'on vient de remplacer (par leur id), jamais en
   // rejouant le prédicat : deux lectures peuvent diverger d'une faille et laisser un
   // doublon — la faille ET sa mine — sur la carte.
-  const withMines = collapsed.length
-    ? [...map.pois.filter((p) => !gone.has(p.id)), ...collapsed]
-    : map.pois;
+  const withMines =
+    collapsed.length || warbands.length
+      ? [...map.pois.filter((p) => !gone.has(p.id)), ...collapsed, ...warbands]
+      : map.pois;
   const next: ExpeditionMap = {
     seed: map.seed,
     spawnCount: map.spawnCount,
@@ -1216,6 +1296,20 @@ export function advanceWorld(
   // précédent par l'appelant (`JSON.stringify`) pour décider s'il persiste. Poser un
   // `riftPeril: false` sur chaque POI ferait différer l'objet à chaque tick et écrirait la
   // carte en base toutes les secondes.
+  // ⚔️ LA MARCHE — recalculée à chaque tick, comme l'irradiation, et pour la même raison :
+  // c'est un ÉTAT DÉRIVÉ du temps. Elle avance en ligne droite de `from` vers la ville sur
+  // toute sa durée de vie ; `distNorm` suit, donc l'intercepter tard coûte un trajet plus
+  // court — mais il reste moins de temps pour le faire.
+  next.pois = next.pois.map((p) => {
+    if (p.type !== 'warband' || !p.from) return p;
+    const t = clamp01((now - p.spawnedAt) / Math.max(1, p.expiresAt - p.spawnedAt));
+    const x = p.from.x + (EXPE.town.x - p.from.x) * t;
+    const y = p.from.y + (EXPE.town.y - p.from.y) * t;
+    if (x === p.x && y === p.y) return p;
+    const d = Math.hypot(x - EXPE.town.x, y - EXPE.town.y);
+    const distNorm = clamp01((d - EXPE.distMin) / (EXPE.distMax - EXPE.distMin));
+    return { ...p, x, y, distNorm };
+  });
   const irr = irradiatedPoiIds(next.pois, now);
   next.pois = next.pois.map((p) => {
     const on = irr.has(p.id);
@@ -1479,6 +1573,10 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
     'Repli hors de la faille. Les monstres abattus ont rendu leur mana — la brèche, elle, se refermera d’elle-même en crachant.',
   ],
   mana_mine: ['Le mana résiduel s’était déjà dissipé.'],
+  warband: [
+    'La bande a tenu bon. Elle poursuit sa marche vers ta base — prépare l’enceinte.',
+    'Repli forcé : ils sont trop nombreux. Le siège sera rude.',
+  ],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -1508,6 +1606,10 @@ const WIN_TEXT: Record<PoiType, string[]> = {
   mana_mine: [
     '💠 Mana résiduel récolté — ce que la faille a laissé en s’effondrant.',
     '💠 Les derniers éclats de mana sont embarqués.',
+  ],
+  warband: [
+    '⚔️ Bande dispersée ! L’armée de la faille ne renforcera pas le prochain siège.',
+    '⚔️ Interceptée et mise en déroute — ta base respirera.',
   ],
 };
 

@@ -306,6 +306,40 @@
             elle déborde et ne laisse qu’une petite 💠 mine résiduelle.
           </p>
         </template>
+        <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne n'est pas du butin, c'est une PERTE ÉVITÉE.
+             ⚠️ Et on DIT quand ça n'en évite plus aucune : le renfort est figé au tirage de
+             l'armée (règle écrite sur `Raid.overflow`), donc une fois le siège détecté,
+             l'intercepter ne paie plus qu'en mana. Le taire ferait croire à un bug. -->
+        <template v-if="selectedWarband">
+          <div class="sh-row sh-wrap">
+            <span class="sh-chip"
+              >{{ FACTION_EMOJI[selectedWarband.faction] }}
+              {{ FACTION_LABEL[selectedWarband.faction] }}</span
+            >
+            <span class="sh-chip" title="Ce qu'elle aligne — et ce que ta base affrontera"
+              >👾 {{ selectedWarband.size }}</span
+            >
+            <span
+              class="sh-chip"
+              title="Passé ce délai elle a rejoint son armée : plus rien à intercepter"
+              >⏳ {{ formatDuration(selectedWarband.gone) }}</span
+            >
+            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
+            <span class="sh-chip" title="L'intercepter ne coûte aucune énergie">⚡ 0</span>
+            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
+              >🎯 {{ partyWin }}%</span
+            >
+          </div>
+          <p v-if="selectedWarband.utile" class="sh-note">
+            ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points de
+            tenue. Le 💠 n'est qu'un lot de consolation : on intercepte pour protéger la base, pas
+            pour s'enrichir. En cas de défaite, tout le groupe part à l'infirmerie.
+          </p>
+          <p v-else class="sh-note warn">
+            ⚠️ <b>Trop tard pour le renfort</b> : leur armée est déjà annoncée à tes portes et garde
+            la force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du 💠.
+          </p>
+        </template>
         <!-- ⚔️🕳️ UN CAMP — ET UNE FAILLE — S'ATTAQUENT EN GROUPE : le héros (oui/non) et autant
              d'aventuriers qu'on veut — aucun maximum, c'est ce qui permet d'affronter les gros
              repaires et les failles mûres. ⚠️ UN SEUL bloc pour les deux : le choix du groupe,
@@ -628,6 +662,7 @@ import {
   CAMP_TYPES,
   campSpecOf,
   isRiftPoi,
+  isWarbandPoi,
   riftIrradiationRadius,
   isClaimable,
 } from '@/lib/expedition';
@@ -652,6 +687,8 @@ import {
   riftOverflowAt,
   riftPopulation,
   riftSpecOf,
+  estimateInterception,
+  warbandArmy,
 } from '@/lib/rift';
 import {
   CARAVAN,
@@ -1046,7 +1083,22 @@ const selectedRift = computed(() => {
 /** ⚔️🕳️ Ce lieu s’attaque-t-il en GROUPE ? Un camp ou une faille. ⚠️ UNE seule définition,
  *  lue par le bloc de groupe, la note d’état vide et le risque de départ : trois conditions
  *  écrites séparément finiraient par ne plus désigner les mêmes lieux. */
-const partyTarget = computed(() => !!selectedCamp.value || !!selectedRift.value);
+const selectedWarband = computed(() => {
+  const p = selected.value;
+  if (!p || !isWarbandPoi(p)) return null;
+  const army = warbandArmy(p, progress.global.value.level);
+  return {
+    faction: army.faction,
+    size: army.groups.reduce((s, g) => s + g.count, 0),
+    gone: p.expiresAt - now.value,
+    // ⚠️ L'interception ne lève le renfort QUE tant que le marquage n'a pas été consommé
+    // par le tirage de l'armée : une fois détectée, elle garde la force annoncée.
+    utile: !!char.row?.base?.overflow,
+  };
+});
+const partyTarget = computed(
+  () => !!selectedCamp.value || !!selectedRift.value || !!selectedWarband.value,
+);
 const partyHero = ref(false);
 const partyEscort = ref<string[]>([]);
 watch(selected, () => {
@@ -1115,6 +1167,12 @@ const partyWin = computed(() => {
   if (!p || !partySize.value) return null;
   const allies = partyAllies(partyAdvs.value, roadCtx.value, heroForParty.value);
   if (selectedRift.value) return Math.round(incursionWinPct(p, allies, coarseNow.value, 40) * 100);
+  // ⚔️ L'interception : le MÊME combat que la résolution, rejoué sur des graines dérivées
+  // (disjointes par parité de celles du vrai choc). Jamais une seconde formule.
+  if (selectedWarband.value)
+    return Math.round(
+      estimateInterception(p, partyAdvs.value, roadCtx.value, heroForParty.value, 40) * 100,
+    );
   const spec = selectedCamp.value;
   if (!spec) return null;
   return Math.round(campWinPct(p, spec, allies, 40) * 100);
@@ -1568,6 +1626,9 @@ const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
   arena: () => 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues',
   // 🕳️ La faille ne paie QUE du mana — jamais d’objet, jamais une autre devise.
   rift: () => 'Mana 💠 à chaque monstre abattu — prime du gardien si tu la refermes',
+  // ⚔️ L'interception n'enrichit pas : elle ÉVITE une perte. Le dire franchement, sinon on
+  // la lit comme une activité de farm et on est déçu du butin.
+  warband: () => 'Mana 💠 des monstres abattus — et le prochain siège NE sera pas renforcé',
 };
 function poiRewardLabel(p: Poi): string {
   return POI_REWARD[p.type](p);

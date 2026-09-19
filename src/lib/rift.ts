@@ -42,6 +42,7 @@ import {
 import { interpolate } from './proceduralContent';
 import {
   EXPE,
+  riftFactionOf,
   riftMaturityAt,
   type ExpeditionOutcome,
   type PartyResult,
@@ -53,17 +54,21 @@ import {
 import { partyFightSeed, partyForecastSeed } from './party';
 import { type Adventurer } from './adventurers';
 import {
-  mulberry32,
   offenseOf,
   seedOf,
   simulateCombat,
+  type CombatResult,
   survivalOf,
   type Combatant,
 } from './combat';
-import { factionRoster, type RaidFaction, type RiftOverflow } from './raid';
-
-/** Les trois factions du jeu — la faille et l'armée qui en sort partagent la même. */
-const RIFT_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
+import {
+  factionRoster,
+  groupCombatant,
+  rollRaid,
+  type Raid,
+  type RaidFaction,
+  type RiftOverflow,
+} from './raid';
 
 export const RIFT = {
   /** ⚠️ LA MATURATION N'EST PAS DÉFINIE ICI : c'est `EXPE.lifespanMs.rift`, parce que la
@@ -137,8 +142,10 @@ export interface RiftLike {
  * d'une carte déjà sauvegardée en aura une **sans migration ni normalisation**.
  */
 export function riftSpecOf(rift: Pick<RiftLike, 'id'>): RiftSpec {
-  const rng = mulberry32((seedOf(rift.id) ^ 0x1f83d9ab) >>> 0 || 1);
-  return { faction: RIFT_FACTIONS[Math.floor(rng() * RIFT_FACTIONS.length)]! };
+  // ⚠️ DÉLÈGUE : la dérivation vit dans `expedition.ts`, que la CARTE peut appeler pour
+  // donner sa bannière à l'armée qui sort d'une faille — ce module-ci importe celui-là,
+  // jamais l'inverse. Deux hachages du même id finiraient par donner deux factions.
+  return { faction: riftFactionOf(rift.id) };
 }
 
 /** L'instant où la faille déborde — sa durée de vie sur la carte, qui EST sa maturation. */
@@ -273,6 +280,23 @@ export function riftDoorOpen(killed: number, population: number): boolean {
 // Un camp est UN combat fondu ; une faille en est une SUITE, et c'est l'attrition qui la
 // rend tendue. Le boss attend derrière la porte, qui s'ouvre quand tout est nettoyé.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * ⚔️ CALIBRATION DE L'INTERCEPTION — même forme que  et que les camps : une
+ * force ABSOLUE, exprimée en tours de l'offense du groupe de RÉFÉRENCE du niveau du lieu.
+ *
+ * ⚠️ Volontairement PLUS LÉGÈRE qu'un camp de même taille : on ne détruit pas l'armée, on
+ * rompt sa colonne — et c'est une action DÉFENSIVE, qu'on doit pouvoir se permettre après
+ * avoir déjà manqué la faille. Valeurs MESURÉES (cf. l'entrée de CLAUDE.md).
+ */
+const RIFT_INTERCEPT = {
+  /** MESURÉ (60 combats par case, aventuriers au niveau du lieu) — % de victoire de la
+   *  taille de groupe : 1 → 0 % partout · 2 → 0-12 % · **3 (la référence) → 58-100 %** ·
+   *  4 → 100 % · 6 → 100 %. Même gradient que les camps, un cran plus clément : c'est une
+   *  action DÉFENSIVE de rattrapage, pas une source de butin. */
+  pvTurns: 5,
+  dmgPctPv: 0.09,
+} as const;
 
 export const RIFT_RUN = {
   /** Vol de vie atténué — MÊME raison qu'au Labyrinthe (`LABY_RUN.lifesteal`) : à pleine
@@ -646,4 +670,219 @@ export function incursionWinPct(
   for (let s = 0; s < n; s++)
     if (simulateIncursion(group, rift, now, partyForecastSeed(s)).cleared) w++;
   return w / n;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚔️ L'INTERCEPTION — casser l'armée d'une faille AVANT qu'elle ne renforce le siège
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * L'armée que porte une bande en marche.
+ *
+ * ⚠️ **ELLE N'EST PAS CALIBRÉE SUR LE NIVEAU DE LA FAILLE, mais sur celui du JOUEUR** —
+ * c'est le garde-fou anti-exploit mesuré en v0.931 : une armée calibrée sur une faille
+ * Bronze donnait 100 % de tenue à un joueur de niveau 60, donc laisser déborder une petite
+ * faille serait devenu STRICTEMENT meilleur que la fermer. La faille donne sa **faction**
+ * et son **renfort** (`RAID.riftThreat`), jamais sa force.
+ *
+ * ⚠️ **SEEDÉE SUR L'ID de la bande** : la même bande présente donc toujours la même armée,
+ * quel que soit le nombre de fois qu'on ouvre l'écran — et le pronostic ne peut pas mentir
+ * sur ce qu'on va affronter.
+ *
+ * ⚠️ On rejoue `rollRaid`, **la seule autorité sur ce qu'est une armée**. Reconstruire des
+ * groupes à la main ici donnerait une seconde définition qui divergerait du siège.
+ */
+export function warbandArmy(poi: Poi, playerLevel: number): Raid {
+  const overflow: RiftOverflow = {
+    faction: poi.faction ?? riftFactionOf(poi.id),
+    level: poi.level,
+    at: poi.spawnedAt,
+  };
+  return rollRaid(seedOf(poi.id) >>> 0 || 1, playerLevel, poi.expiresAt, 0, overflow);
+}
+
+/**
+ * ⚔️ CE QU'ON AFFRONTE VRAIMENT en rase campagne — **calibré comme un camp, jamais sur
+ * l'armée de siège**.
+ *
+ * ⚠️ **MESURÉ, ET C'EST CE QUI A INVALIDÉ LA PREMIÈRE VERSION.** Faire combattre l'armée
+ * de siège elle-même (`armyCombatant`) donne 0 % de victoire à SIX aventuriers du niveau du
+ * joueur dès le niveau 8 : cette armée est dimensionnée pour assiéger une base fortifiée
+ * (mur, huit balistes, héros, garnison), pas pour être détruite par un groupe. Pire, une
+ * simple FRACTION ne marche pas non plus — mesuré, le seuil 0 %→100 % se franchit en une
+ * division par deux et GLISSE avec le niveau (0,5 au niv. 5, 0,03 au niv. 30), parce que
+ * l'armée croît en ~L⁴ quand un aventurier croît linéairement (défaut structurel déjà
+ * documenté en v0.779).
+ *
+ * D'où le même **DANGER ABSOLU** que les camps et les routes : la force se cale sur
+ * l'escorte de RÉFÉRENCE du niveau du lieu, jamais sur ce qu'on envoie — sinon « combien
+ * j'en envoie » ne voudrait plus rien dire.
+ *
+ * ⚠️ **ON N'INTERCEPTE PAS UNE ARMÉE, ON ROMPT SA COLONNE.** C'est ce que la fiction doit
+ * dire, et c'est ce que la mesure impose : un groupe ne détruit pas un host qu'une
+ * forteresse tient à peine. Ce qu'on brise, c'est son élan — d'où `RIFT.interceptSize`,
+ * exprimé comme la force d'un camp : en tours de l'offense du groupe de référence.
+ */
+function warbandFoe(poi: Poi): Combatant {
+  const ref = fuseUnits(refEscortUnits(poi.level), 'Référence');
+  return {
+    name: 'Colonne en marche',
+    pv: Math.max(1, Math.round(Math.max(1, offenseOf(ref)) * RIFT_INTERCEPT.pvTurns)),
+    damage: Math.max(1, Math.round(survivalOf(ref) * 100 * RIFT_INTERCEPT.dmgPctPv)),
+    crit: 0.08,
+    dodge: 0.05,
+    initiative: 12,
+  };
+}
+
+/** Les corps d'une armée en UNITÉS — pour l'XP seulement (qui a abattu quoi).
+ *  ⚠️ DÉRIVÉS de `groupCombatant`, ce que le combat emploie : une seconde construction
+ *  finirait par décrire une autre armée que celle qu'on a affrontée. */
+function warbandBodies(raid: Raid): SkirmishUnit[] {
+  return raid.groups.map((g, i) => ({
+    id: `war_${i}`,
+    name: g.species,
+    emoji: g.emoji,
+    level: g.level,
+    combatant: groupCombatant(g),
+  }));
+}
+
+/**
+ * ⚔️ Ce qu'une interception rapporte en mana : **ce qu'on a RÉELLEMENT brisé**.
+ *
+ * ⚠️ Pas un tout-ou-rien. La spec promet du mana pour « tout monstre de faille tué —
+ * dans la faille, **sur la route**, en défense » : un groupe repoussé qui a quand même
+ * éventré la moitié de l'armée doit repartir avec quelque chose. La part détruite se lit
+ * sur les PV restants de l'armée à la fin du combat, donc sur le combat RÉEL.
+ *
+ * ⚠️ **AUCUNE PRIME DE GARDIEN** (`bossManaShare`) : il n'y a pas de boss en rase
+ * campagne. Fermer la faille reste nettement plus payant que l'intercepter — c'est ce qui
+ * garde l'incursion première et l'interception au rang de session de rattrapage.
+ */
+export function interceptionMana(raid: Raid, army: Combatant, run: CombatResult): number {
+  const reste = run.win ? 0 : (run.log[run.log.length - 1]?.monsterPv ?? army.pv);
+  const part = Math.max(0, Math.min(1, 1 - reste / Math.max(1, army.pv)));
+  const effectif = raid.groups.reduce((s, g) => s + g.count, 0);
+  return riftMana(Math.round(effectif * part), raid.level);
+}
+
+/** Ce qu'on envoie à la rencontre d'une bande. ⚠️ MÊME FORME qu'un camp ou une faille
+ *  (toutes satisfont `PartyVoyage`), à `playerLevel` près — l'armée s'y calibre. */
+export interface InterceptionInput {
+  poi: Poi;
+  escort: Adventurer[];
+  road: RoadCompanions;
+  hero: PartyHero | null;
+  seed: number;
+  playerLevel: number;
+}
+
+/**
+ * ⚔️ Intercepter une bande en marche.
+ *
+ * **Ce qu'on y gagne n'est pas du butin, c'est une PERTE ÉVITÉE** : le prochain siège ne
+ * sera pas renforcé (×1,3, soit 30 à 40 points de tenue mesurés en v0.933). Le mana n'est
+ * qu'un lot de consolation — l'écran le dit franchement, sinon on la lit comme du farm et
+ * on est déçu.
+ *
+ * - **Un seul choc, pas d'attrition** : contrairement à l'incursion (une suite de salles),
+ *   une rencontre en rase campagne est un affrontement unique. On fond le groupe
+ *   (`fuseUnits`) contre l'armée fondue (`armyCombatant`) — les deux modèles existent
+ *   déjà, on n'en invente aucun.
+ * - **XP** : socle `missionXp` + part des abattus × `missionTravelMult`, la règle EXACTE
+ *   des camps, des convois et des incursions. Partagée entre les SEULS aventuriers.
+ * - 🤕 **DÉFAITE → TOUT LE GROUPE À L'INFIRMERIE**, comme une incursion : le combattant
+ *   fondu est tombé, il n'y a pas de corps à corps distincts à attribuer.
+ * - ⚠️ **Le héros n'est jamais blessé** (cf. `resolveIncursion` : un camp perdu ne blesse
+ *   pas le héros non plus — seul un SIÈGE perdu le fait).
+ */
+export function resolveInterception(input: InterceptionInput): ExpeditionOutcome {
+  const { poi, escort, hero, seed, playerLevel } = input;
+  const allies = partyAllies(escort, input.road, hero);
+  const group = fuseUnits(allies, 'Groupe');
+  const raid = warbandArmy(poi, playerLevel);
+  // ⚠️ L'armée tirée ne sert QU'AU ROSTER (qui on croise, combien ils sont) ; ce qu'on
+  // AFFRONTE est , calibré comme un camp. Les faire diverger serait tentant,
+  // mais c'est précisément ce qui donnait 0 % de victoire à tous les niveaux.
+  const army = warbandFoe(poi);
+  const run = simulateCombat(group, army, { seed: partyFightSeed(seed), goldOnWin: 0 });
+
+  const bodies = warbandBodies(raid);
+  // ⚠️ Combat FONDU : on ne sait pas QUEL groupe est tombé. Une victoire les abat tous,
+  // une défaite n'en crédite aucun — même convention que l'incursion, qui ne distribue
+  // rien non plus quand le combattant fondu tombe.
+  const foesDown = run.win ? bodies.map((b) => b.id) : [];
+  const shares = skirmishXpShares(escort, bodies, { foesDown });
+  const travel = missionTravelMult(poi);
+  const xp: Record<string, number> = {};
+  for (const a of escort) xp[a.id] = missionXp(a, poi) + Math.round((shares[a.id] ?? 0) * travel);
+
+  const mana = interceptionMana(raid, army, run);
+  const effectif = raid.groups.reduce((s, g) => s + g.count, 0);
+  // Un seul choc : le journal dit QUI on a croisé et comment ça a tourné, pas un coup par
+  // coup — le rapport de groupe est déjà long, et il n'y a pas de salles à raconter ici.
+  const journal: string[] = [
+    `⚔️ ${effectif} combattants en marche — ${raid.groups.length} groupes.`,
+    ...raid.groups.map(
+      (g) => `${g.emoji} ${g.species} ×${g.count} (niv ${g.level})${g.champion ? ' 👑' : ''}`,
+    ),
+    run.win
+      ? `🏆 Bande rompue en ${run.rounds} tours.`
+      : `💀 Repli après ${run.rounds} tours — ils poursuivent leur route.`,
+  ];
+  const party: PartyResult = {
+    hero: !!hero,
+    faction: raid.faction,
+    escort: escort.map((a) => a.id),
+    win: run.win,
+    foes: effectif,
+    slain: run.win ? effectif : 0,
+    kills: {},
+    heroKills: 0,
+    xp,
+    hurt: run.win ? [] : escort.map((a) => a.id),
+    advGear: [],
+    wages: caravanWages(escort, poi),
+    journal,
+  };
+
+  const tag = `+${mana} 💠`;
+  return {
+    win: run.win,
+    gold: 0,
+    energy: 0,
+    summonStones: 0,
+    scrap: 0,
+    mana,
+    item: null,
+    items: [],
+    key: 0,
+    reconBonus: 0,
+    returnMult: 1,
+    text: run.win
+      ? `⚔️ Bande dispersée — le prochain siège ne sera pas renforcé. ${tag}`
+      : `💀 La bande a tenu bon. Elle poursuit sa marche. ${tag}`,
+    party,
+  };
+}
+
+/**
+ * 🎯 % d'interception annoncé AVANT l'envoi — le MÊME combat, rejoué sur des graines
+ * dérivées. ⚠️ Graines IMPAIRES (`partyForecastSeed`) : disjointes par parité de celles du
+ * vrai combat, donc le pronostic ne peut pas rejouer la bataille qui aura lieu.
+ */
+export function estimateInterception(
+  poi: Poi,
+  escort: Adventurer[],
+  road: RoadCompanions,
+  hero: PartyHero | null,
+  samples = 24,
+): number {
+  const group = fuseUnits(partyAllies(escort, road, hero), 'Groupe');
+  const army = warbandFoe(poi);
+  let w = 0;
+  for (let s = 0; s < samples; s++)
+    if (simulateCombat(group, army, { seed: partyForecastSeed(s), goldOnWin: 0 }).win) w++;
+  return w / samples;
 }

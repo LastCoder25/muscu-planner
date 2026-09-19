@@ -73,6 +73,7 @@ import {
 import {
   PARTY_TARGETS,
   isRiftPoi,
+  isWarbandPoi,
   campSpecOf,
   depositMessages,
   MESSAGES_CAP,
@@ -209,7 +210,7 @@ import {
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
-import { resolveIncursion, riftOverflowOf } from '@/lib/rift';
+import { resolveIncursion, resolveInterception, riftOverflowOf } from '@/lib/rift';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -2709,9 +2710,11 @@ export const useCharacterStore = defineStore('character', () => {
     const spec = campSpecOf(poi);
     const outcome = isRiftPoi(poi)
       ? resolveIncursion({ poi, escort, road, hero, seed, now })
-      : spec
-        ? resolveCamp({ poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel })
-        : null;
+      : isWarbandPoi(poi)
+        ? resolveInterception({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
+        : spec
+          ? resolveCamp({ poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel })
+          : null;
     if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
     const trip = startParty({ poi, hero, seed }, now, leg, outcome);
     if (cur.gold < trip.goldCost) return `héros : ${PARTY_HERO_BLOCK_LABEL.gold}`;
@@ -2743,11 +2746,21 @@ export const useCharacterStore = defineStore('character', () => {
     const box = boxWith(cur, [], MESSAGES_CAP);
     const t = settleParties(partyList.value, box, now, MESSAGES_CAP);
     if (!t.changed) return [];
+    // ⚔️ UNE INTERCEPTION GAGNÉE LÈVE LE MARQUAGE — ici, à l'instant où la bataille a lieu
+    // (le rapport se dépose à l'arrivée sur l'objectif), et NON à l'encaissement : ce n'est
+    // pas du butin, c'est une perte évitée. L'adosser au clic ferait perdre le bénéfice
+    // d'une victoire à qui oublie d'ouvrir sa boîte — on ne punit pas l'absence.
+    // ⚠️ Le marquage SEUL : si l'armée est déjà tirée, elle garde la force que la Tour de
+    // guet a annoncée (règle écrite sur `Raid.overflow` : figée au tirage). L'interception
+    // agit sur le PROCHAIN siège, et l'écran le dit avant l'envoi.
+    const gagne = t.fresh.some((m) => m.poiType === 'warband' && m.win);
+    const base = gagne && cur.base?.overflow ? { ...cur.base, overflow: null } : null;
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
     // enregistré entre-temps et rendre le butin encaissable deux fois.
     await persist(userId, {
       parties: t.parties,
+      ...(base ? { base } : {}),
       ...(t.messages !== cur.messages ? { messages: t.messages } : {}),
       // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
       //  ne fait que le confirmer.)
