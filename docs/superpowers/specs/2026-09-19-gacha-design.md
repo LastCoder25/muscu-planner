@@ -1,101 +1,132 @@
 # Gacha de champions — étude de conception
 
 **État : ÉTUDE, rien n'est implémenté.** Décisions prises avec l'utilisateur le 2026‑09‑19,
-complétées le même jour après mesures en base et dans le code.
+et mesures qui les encadrent.
+
+⚠️ **CETTE VERSION CORRIGE UNE ERREUR DE MODÈLE.** Les deux versions précédentes faisaient
+d'un champion un **CHEMIN dans l'arbre des classes d'aventurier** (rareté = strate
+atteinte) : c'était l'ancien système déguisé, et ça rendait l'identité d'un champion
+indéfinissable — donc les **doublons**, donc l'Éveil, donc le cœur du gacha. Recadré par
+l'utilisateur : « vois ça comme **remplacer totalement les aventuriers par des champions
+uniques** dont les doublons améliorent le champion ». Tout ce document en découle.
 
 ## L'intention
 
 Tirer au sort des **champions** — bien moins forts que le héros — avec les **pierres de
-mana** pour monnaie. Ils s'équipent, ont des compétences, et les doublons les renforcent.
+mana** pour monnaie. Ils s'équipent, ont des compétences, et les **doublons** les renforcent.
 
 ## Décisions prises
 
 | Sujet               | Décision                                                                                      |
 | ------------------- | --------------------------------------------------------------------------------------------- |
 | Nom                 | **champion** (hors des mots déjà pris : héros, aventurier)                                    |
-| Périmètre           | **Le gacha REMPLACE le recrutement d'aventuriers**                                            |
+| Périmètre           | **Le gacha REMPLACE ENTIÈREMENT les aventuriers** — arbre de classes compris                  |
+| Ce qu'on tire       | **un champion UNIQUE**, écrit à la main : une identité, pas un métier ni un chemin            |
+| Roster              | **32 champions**, **4 par rareté** — un par rôle de convoi (extensible à une ligne par ajout) |
 | Vocabulaire         | **Raretés nommées** (commun → primordial), **PAS de nouvelle échelle d'étoiles**              |
 | Rang du champion    | **L'échelle de prestige du héros** (Bronze ★1 → …), **plafonnée au rang du héros**            |
 | Taux                | **Toutes les raretés tirables**, aux taux d'un gacha (le plus haut ≈ 0,6 %)                   |
 | Ce qui est plafonné | **le RANG**, jamais la rareté tirée                                                           |
-| Chemin du champion  | **FIXÉ au tirage** — vrai gacha, le kit est son identité                                      |
 | Évolution de rareté | **NON** — la rareté est figée, c'est le rang qui monte                                        |
-| Duplicatas          | **Éveil** : magnitude du kit **ET** niveau de compétence (cf. plus bas)                       |
-| Rôles par rareté    | **une version de chaque rôle à chaque rareté**, de plus en plus puissante                     |
-| Budget de stats     | **plancher relevé à 20**, sommet inchangé à 106 (cf. plus bas)                                |
-| Monnaie             | **Pierres de mana**                                                                           |
-| Plafond de nombre   | **aucun sur la collection** ; la Guilde plafonne le **déploiement**                           |
+| Duplicatas          | **Éveil** : **barème commun** de magnitude + **1 ou 2 crans écrits** par champion             |
+| Stats               | **`RARITY_BUDGET[rareté]`** lu directement, réparti sur sa forme 💪❤️⚡ — plancher **20**     |
+| Monnaie             | **Pierres de mana** (failles, monstres tués, + **un tirage gratuit par jour**)                |
+| Plafond de nombre   | **aucun sur la collection** ; le **déploiement** est plafonné                                 |
 | Équipement          | **PAS de gacha d'équipement** — les pièces se droppent (cf. plus bas)                         |
 | Bâtiments           | **11 → 9** : Guilde, Centre de formation et Équipementier remplacés par **UN** (cf. plus bas) |
 | Migration           | **wipe des aventuriers existants** (mesuré indolore, cf. plus bas)                            |
 | Pity                | **indispensable** (soft + hard), calibré après les failles                                    |
 
-## ⚠️ LES DEUX ÉCHELLES NE SE CONFONDENT PAS
+## 🏅 CE QU'EST UN CHAMPION — une ligne de données, et rien d'autre
 
-C'est ce qui a débloqué la conception. Les étoiles étaient **déjà prises deux fois** dans
-le projet (`rankStarStr` pour le rang, `jetStar` pour la qualité de tirage d'un objet) —
-une troisième aurait été illisible.
+| Champ         | Ce que c'est                                  | Ce qu'il alimente, **sans une ligne de neuf**                                        |
+| ------------- | --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `id`, `name`  | son identité, unique                          | l'identité des **doublons** (donc l'Éveil) et le **Codex**                           |
+| `rarity`      | une des 8 raretés, **figée au tirage**        | ses **stats** = `RARITY_BUDGET[rareté]`, lu **directement**                          |
+| `form` 💪❤️⚡ | sa répartition (Cogneur, Encaisseur, Rapide…) | le budget se répartit dessus — c'est son archétype de stats                          |
+| `lineage`     | une des **6 lignées**                         | **quel équipement il porte** : `canWearAdvGear` inchangé, les 105 pièces matchent    |
+| `role?`       | 0 ou 1 des **4 rôles de convoi**              | 🩺 soin · 🐫 cargaison · 🧭 vitesse · 👁️ repérage — déjà appliqués par les caravanes |
+| `skills`      | 1 à 3 **signatures de combat**                | ⚠️ **déjà appliquées par `simulateCombat`** — la pièce la plus précieuse du socle    |
+| `awaken`      | ses 1 ou 2 crans d'Éveil écrits               | +1 niveau de compétence via `AdvSkill`, que l'écran sait déjà afficher               |
 
-|                          | Vient du      | Dit quoi                             | Plafonné par            |
-| ------------------------ | ------------- | ------------------------------------ | ----------------------- |
-| **Rareté** (nom)         | le **tirage** | la puissance et la profondeur du kit | rien — tout est tirable |
-| **Rang** (★ de prestige) | le **combat** | où il en est de sa progression       | **le rang du héros**    |
+**Stats d'un champion** = `RARITY_BUDGET[rarity]` réparti sur `form`, × le niveau
+(`ADV_LEVEL_K`). ⚠️ **Plus aucune somme le long d'un chemin** — c'est la simplification
+que le recadrage apporte, et elle en entraîne une autre (cf. la section budget).
 
-Un champion **primordial** peut donc naître **Bronze ★1**. « Le sport est le plafond »
-tient : ce qu'on gagne au tirage, c'est un potentiel ; ce qui le réalise, c'est le sport.
+## ⚠️ LES 94 CLASSES SONT UNE CARRIÈRE, PAS UN ROSTER
 
-## ⚠️ LE VIVIER EXISTE DÉJÀ : 94 CLASSES, ET LA RARETÉ AUSSI
+C'est l'erreur corrigée. Une **classe** est un métier (« Maître épéiste ») ; un **champion**
+est un individu. On n'y reprend donc que **ce qui est déjà mesuré et déjà branché** :
 
-Mesuré dans le code : **94 classes**, réparties **6 · 15 · 14 · 13 · 12 · 12 · 11 · 11**
-sur les 8 strates — et `advRarity` **est déjà** la strate atteinte. Le vivier de champions
-tirables est donc écrit, équilibré et nommé depuis la v0.792 : plus de personnages
-qu'aucun gacha réel.
+| On garde                                            | Pourquoi c'est précieux                                                         |
+| --------------------------------------------------- | ------------------------------------------------------------------------------- |
+| le **barème de stats par rareté** (`RARITY_BUDGET`) | adossé au pas de rareté des objets (ratio 1,219) — « épique » dit la même chose |
+| les **4 rôles de convoi** (`AdvRole`)               | appliqués par les caravanes (trajet, cargaison, convalescences, embuscades)     |
+| les **8 signatures** (`EffectType`)                 | ⚠️ **`simulateCombat` sait déjà les jouer** — zéro moteur à écrire              |
+| les **6 lignées** (`Lineage`)                       | l'équivalent du « type d'arme » d'un gacha, et la clé des 105 pièces en stock   |
+| le **niveau par répétition** (`AdvSkill`)           | le support naturel des crans d'Éveil qualitatifs (v0.757)                       |
+| l'**échelle de prestige** (`characterRank`)         | le rang d'un champion, commun avec le héros — une seule échelle dans le jeu     |
 
-**Ce qui survit** (et c'est l'essentiel de ce que la version précédente de cette spec
-croyait devoir réinventer) : `ADV_CLASSES`, `advClass`, `advRarity`, `advStats`,
-`advRoles`, `advSignatures`, `lineageOf` — donc `canWearAdvGear`, donc tout l'équipement
-d'aventurier, sans une ligne de nouveau.
+**Ce qui meurt en entier** : l'arbre lui‑même — `ADV_CLASSES` comme roster, `classChoices`,
+les prérequis `req`, les strates, `advClass`, `canPromote`, `trainMsFor`,
+`recruitAdventurer`, et **le chemin** (`Adventurer.path`).
 
-**Ce qui meurt** : `classChoices` (le choix 1‑parmi‑3), `canPromote`, `recruitAdventurer`,
-et avec eux **trois bâtiments** (cf. « un seul bâtiment » plus bas).
+⚠️ **`lineageOf` DÉDUIT AUJOURD'HUI LA LIGNÉE DE LA CLASSE RACINE DU CHEMIN.** Sans chemin,
+elle devient un **champ explicite** du champion. C'est une ligne, mais elle est porteuse :
+c'est elle qui décide de l'équipement.
 
-⚠️ **Ce qu'on perd, et il faut le dire** : le build‑crafting individuel. Dans un gacha on
-ne construit pas un personnage, on choisit **lequel**. C'est le deal, accepté. ⚠️ Et la
-mesure ci‑dessous montre que **personne ne s'en servait encore** : aucun aventurier de la
-base n'a jamais atteint le niveau de sa première promotion.
+⚠️ **TAILLE RÉELLE DE LA BASCULE, mesurée : 16 sites lisent `adv.path`** (store, panneau de
+Guilde, portraits, équipement d'aventurier, carte). Plus **`refAdventurer` et
+`REF_LINEAGES`** — les étalons qui calibrent le **danger de la route** et les **sièges** —
+tous deux bâtis sur une lignée promue : à refaire en « champion de rareté R au niveau L »,
+donc **re‑mesure obligatoire** des embuscades et de la tenue d'un siège.
 
-## 🩺 « Une version du soigneur par rareté » — mesuré : 27 cases sur 32
+⚠️ **Un garde‑fou devient inutile** : `advRankCap` (v0.834) empêchait le rang d'un
+aventurier de dépasser le nombre de classes qu'il avait gagnées. Sans progression de
+classe, le seul plafond est le **rang du héros** — une règle en moins.
 
-| Rareté     | Classes | Rôles présents           | Signatures |
-| ---------- | ------- | ------------------------ | ---------- |
-| commun     | 5       | 👁️ 🐫 — **manque 🩺 🧭** | **aucune** |
-| inhabituel | 15      | les 4 ✅                 | **aucune** |
-| magique    | 14      | les 4 ✅                 | **aucune** |
-| rare       | 13      | 🩺 🐫 🧭 — manque 👁️     | les 8 ✅   |
-| épique     | 12      | les 4 ✅                 | les 8 ✅   |
-| légendaire | 12      | 🐫 🧭 👁️ — **manque 🩺** | les 8 ✅   |
-| mythique   | 11      | 🩺 🐫 🧭 — manque 👁️     | les 8 ✅   |
-| primordial | 11      | les 4 ✅                 | les 8 ✅   |
+## 🎯 LE ROSTER : 32 CHAMPIONS, 4 PAR RARETÉ
 
-**À écrire : 5 classes** pour compléter la grille rôle × rareté. ✅ **Décidé : on complète.**
+C'est **le plus petit roster cohérent** : il couvre exactement la règle posée par
+l'utilisateur — **une version de chaque rôle à chaque rareté**, de plus en plus puissante.
+Donc, par rareté : un 🩺, un 🐫, un 🧭, un 👁️.
 
-⚠️ **Plus gênant : aucune signature de combat avant « rare »** (c'est la règle actuelle,
-strates ≥ 3). Dans un gacha, même un 1★ a une compétence — les **trois raretés basses
-sont à doter**. ✅ **Décidé : on les dote.**
+⚠️ **LA TAILLE DU POOL PAR RARETÉ **EST** LA VITESSE DE L'ÉVEIL** — c'est pour ça qu'elle
+se décide avant d'écrire. À 4 par rareté, un champion précis tombe à **un quart du taux de
+sa rareté** :
+
+| Rareté   | Taux de la rareté (ordre de grandeur) | Un champion précis | 7 copies (cran max) |
+| -------- | ------------------------------------- | ------------------ | ------------------- |
+| basse    | ~35 %                                 | ~8,7 %             | **~80 tirages** ✅  |
+| moyenne  | ~5 %                                  | ~1,25 %            | ~560 tirages        |
+| maximale | ~0,6 %                                | ~0,15 %            | **jamais** ✅       |
+
+C'est exactement le gradient du genre : on « C6 » une basse rareté sans y penser, on ne
+« C6 » quasiment jamais la plus haute. ⚠️ Les taux ci‑dessus sont des **ordres de grandeur**
+tant que le débit de pierres de mana n'est pas connu (donc après les failles).
+
+**Kit par rareté** (une signature s'ASSIGNE, elle ne s'invente pas — les 8 existent) :
+
+| Rareté     | commun | inhab. | magique | rare | épique | légend. | mythique | primordial |
+| ---------- | ------ | ------ | ------- | ---- | ------ | ------- | -------- | ---------- |
+| signatures | 1      | 1      | 2       | 2    | 2      | 3       | 3        | 3          |
+
+Soit **68 assignations** pour les 32 champions. ⚠️ **Décidé : même la rareté la plus basse
+porte une signature de combat** — aujourd'hui les strates < 3 n'en ont aucune, et dans un
+gacha même un 1★ a une compétence.
+
+⚠️ **CONTRAINTE D'ÉCRITURE À NE PAS RATER : la couverture lignée × rareté.** 6 lignées × 8
+raretés = **48 cases pour 32 champions** : toutes ne peuvent pas être remplies. Il faut donc
+répartir les lignées **délibérément** (~5 raretés par lignée, jamais absente du haut du
+pool) — sinon une lignée n'aura aucun champion de haute rareté, et
+`capAdvGearToWearable` plafonnera ses pièces très bas pour toujours.
 
 ## ⚠️ LA CONTRAINTE CHIFFRÉE : l'écart de rareté doit rester sous ×11,5
 
-Les stats d'un champion = **somme des budgets de chaque classe de son chemin**, × le niveau.
-
-```
-STRATUM_BUDGET = round(6 × 1,219^i)  →  6 · 7 · 9 · 11 · 13 · 16 · 20 · 24
-cumul le long du chemin              →  6 · 13 · 22 · 33 · 46 · 62 · 82 · 106
-```
-
 Le rang multiplie les stats par **×11,5** (`ADV_LEVEL_K` 0,15 sur 71 niveaux). Pour qu'un
 **commun investi batte un primordial nu** — la propriété que tous les gachas défendent —
-l'écart de rareté doit rester **sous ce facteur**. Or 106 / 6 = **×17,7** : le primordial
-nu écrase le commun monté à fond.
+l'écart de rareté doit rester **sous ce facteur**. Or la table actuelle (cumul le long d'un
+chemin) va de **6 à 106**, soit **×17,7** : le primordial nu écrase le commun monté à fond.
 
 **⚠️ LE REMÈDE EST UN PLANCHER, PAS UN PLAFOND.** Garder **106 en haut** est non
 négociable : c'est lui qui tient tout l'équilibrage de fin de partie (`refAdventurer`,
@@ -108,20 +139,20 @@ négociable : c'est lui qui tient tout l'équilibrage de fin de partie (`refAdve
 
 Formule : `RARITY_BUDGET[i] = round(20 × (106/20)^(i/7))`.
 
-⚠️ **UNE SEULE SOURCE, ET `advStats` NE CHANGE PAS.** C'est `RARITY_BUDGET` (le cumul)
-qu'on écrit, et `STRATUM_BUDGET` (l'incrément de chaque strate) qui en est **DÉRIVÉ** par
-différences → **20 · 5 · 7 · 9 · 11 · 14 · 18 · 22**. `advStats` continue de sommer le
-long du chemin, sans une ligne de changement, et les deux tables ne peuvent pas diverger.
+✅ **ET LE RECADRAGE SIMPLIFIE CETTE SECTION.** La version précédente devait dériver
+`STRATUM_BUDGET` (l'incrément de chaque strate) de ce cumul, pour qu'`advStats` continue de
+sommer un chemin sans que les deux tables divergent. **Un champion n'a pas de chemin** :
+`RARITY_BUDGET` est lu **tel quel**, `STRATUM_BUDGET` disparaît, et il n'y a plus deux
+tables à tenir d'accord.
 
 ⚠️ **Référence gacha** : un 5★ de Genshin n'a que **+10 à +20 %** de stats de base sur un
 4★ — l'écart réel est dans le kit. ×5,3 sur **huit** crans reste généreux ; c'est un
 arbitrage, pas une vérité.
 
-⚠️ **CONSÉQUENCE À MESURER AVANT DE LIVRER** : un champion commun devient **3,3× plus
-fort** que la recrue strate‑0 d'aujourd'hui. Les embuscades de convoi et les sièges se
-calibrent sur `refAdventurer`, donc **les deux camps bougent ensemble** (leçon v0.795) —
-mais la **FORME** de la courbe change : un chemin court gagne relativement plus qu'un
-long. À re‑simuler, jamais à supposer.
+⚠️ **CONSÉQUENCE À MESURER AVANT DE LIVRER** : un champion commun vaut **3,3× la recrue
+strate‑0 d'aujourd'hui**, et les étalons de la route et des sièges changent de nature
+(cf. `refAdventurer` plus haut). **À re‑simuler, jamais à supposer** — les deux camps
+bougent ensemble (leçon v0.795), mais la FORME de la courbe change.
 
 ## ⚠️ POURQUOI LA RARETÉ NE DOIT PAS ÉVOLUER
 
@@ -136,11 +167,15 @@ Deux familles de gachas :
 gagné au combat. « Monter à fond » = atteindre le rang du héros. Faire évoluer la rareté
 ajouterait un **troisième axe** et permettrait de **fabriquer du primordial sans tirage** :
 la loterie perdrait son sens et le plafond de puissance sauterait. Ce que les doublons
-montent, c'est l'**Éveil** (le kit), jamais la rareté.
+montent, c'est l'**Éveil**, jamais la rareté.
 
-## ✨ L'ÉVEIL — ce que les doublons montent
+## ✨ L'ÉVEIL — barème commun, plus 1 ou 2 crans écrits
 
-**Décidé : magnitude ET niveau de compétence.** C'est bien le modèle dominant du genre.
+**Décidé.** La **magnitude** monte selon un **barème unique** (rien à écrire, rien à
+équilibrer par champion), et **1 ou 2 crans par champion sont écrits à la main** — ceux qui
+marquent : « sa signature gagne un niveau », « elle s'applique aussi à X ».
+
+C'est le modèle **dominant** du genre, et il est mesuré :
 
 | Jeu           | Ce que fait un doublon                                                                                                                                                  |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -149,56 +184,73 @@ montent, c'est l'**Éveil** (le kit), jamais la rareté.
 | Epic Seven    | **imprint** : un bonus de stat plat                                                                                                                                     |
 | AFK Arena     | paliers d'ascension : stats **et** déblocage de l'arme signature                                                                                                        |
 
-**La règle du genre : la majorité des crans sont numériques, un ou deux sont qualitatifs
-et marquants.**
+⚠️ **CE QUI A DÉCIDÉ LE DOSAGE** : tout écrire, c'est **6 crans × 32 champions = 192 effets**
+à écrire **et à équilibrer**, et chacun peut casser le combat (le moteur applique ce qu'on
+lui donne). Le barème commun + 1‑2 crans écrits borne l'écriture à **~64 lignes**.
 
-⚠️ **ET ÇA NE CRÉE AUCUN SYSTÈME NEUF ICI.** `AdvSkill` porte déjà un **niveau par
-répétition** dans le chemin (v0.757 : une compétence portée deux fois vaut niveau 2). Un
-cran d'Éveil qualitatif = **+1 niveau de compétence**, exactement comme si le chemin
-portait la compétence une fois de plus. Les autres crans montent la **magnitude du kit**.
-Rien à inventer, et l'écran sait déjà l'afficher.
+⚠️ **ET ÇA NE CRÉE AUCUN SYSTÈME NEUF** : `AdvSkill` porte déjà un **niveau par répétition**
+(v0.757 — une compétence portée deux fois vaut niveau 2). Un cran qualitatif = **+1 niveau
+de compétence**. Rien à inventer, et l'écran sait déjà l'afficher.
 
-⚠️ **LE PLAFOND D'ÉVEIL DOIT ÊTRE ATTEIGNABLE EN BAS, ASPIRATIONNEL EN HAUT** — c'est le
-cœur du modèle : on « C6 » un 4★ sans y penser, on ne « C6 » quasiment jamais un 5★. À
-0,6 % sur la rareté maximale, **personne n'éveillera jamais un primordial, et c'est voulu.**
-
-⚠️ **Un tirage n'est JAMAIS perdu** : au‑delà du plafond d'Éveil, le doublon se convertit
+⚠️ **Un tirage n'est JAMAIS perdu** : au‑delà du dernier cran, le doublon se convertit
 (pierres de mana, ou une monnaie d'éveil). Sinon un joueur chanceux reçoit du vide.
+
+## 💎 D'OÙ VIENNENT LES PIERRES DE MANA
+
+**Décidé** : des **failles** (en fermer une en rend), des **monstres tués** — dans la
+faille, sur la route, **et en défense de la base** — et d'un **tirage gratuit par jour**.
+
+✅ **Le tirage quotidien a déjà son emplacement** : `claimDailyLogin` (bonus de connexion,
+avec sa série et son jour de grâce). Zéro nouveau système, et c'est la norme du genre.
+⚠️ **À borner et à mesurer** : un tirage par jour, c'est 365 par an — donc de l'ordre de
+**4 hautes raretés offertes par le seul hard pity**.
+
+⚠️ **Compter les monstres tués EN DÉFENSE est ce qui empêche la boucle d'enfermer le
+joueur** : celui qui n'a pas l'énergie d'entrer dans une faille encaisse le siège et
+touche quand même du mana. Même règle que la spec des failles.
+
+⚠️ **PAS DE BÂTIMENT QUI PRODUIT DU MANA.** C'est la leçon de la **Dynamo de faille**
+(v0.822) : une production **linéaire en niveau** finit toujours par dépasser le sport —
+mesuré, elle rendait **~550 ⚡/jour**, plus que le Défi 360 du joueur, et il a fallu la
+diviser par 8. Un bâtiment qui imprime la monnaie du gacha ferait **échapper le gacha au
+sport**, la règle fondatrice. S'il en faut un un jour : un **convertisseur plafonné**
+(or → mana, façon `HARVEST.wellEnergyMax`), jamais une imprimante.
+
+⚠️ **PAS DE BÂTIMENT ADOSSÉ AUX REPS non plus**, et pas pour la raison qu'on croit : ce
+serait **payer deux fois le même effort** — les reps donnent déjà de l'XP, donc de
+l'énergie, donc des runs. C'est le défaut corrigé en v0.769 sur la prime des sorties. Et le
+barème est ingrat : mesuré, `sessionXp` = durée × 3 + reps × 0,2, donc **une minute de
+séance vaut 15 pompes** dans l'économie du jeu — un taux reps → mana serait soit dérisoire,
+soit une imprimante. _(Sujet « payer un coût en reps » mis de côté par l'utilisateur.)_
 
 ## 🗡️ PAS DE GACHA D'ÉQUIPEMENT — et c'est un choix, pas un oubli
 
-Les gachas en ont presque tous un (armes de Genshin, artefacts en donjon, runes de
-Summoners War, équipement d'Epic Seven) : **la question est légitime, la réponse est non.**
+Les gachas en ont presque tous un : **la question est légitime, la réponse est non.**
 
-⚠️ **PARCE QUE CE PROJET A DÉJÀ TRANCHÉ L'INVERSE, et par une refonte entière** :
-« 🎯 DROPS‑ONLY GEAR » (v0.556) a retiré l'infusion de grade des objets, la poussière,
-l'Atelier, la forge, le reroll et le craft de set — explicitement **« pour privilégier le
-plaisir de switcher son stuff via les drops »**. Y remettre une loterie d'équipement
-payante, c'est rouvrir ce qui a été fermé.
+⚠️ **Dans le genre, ce qu'on TIRE c'est le PERSONNAGE ; l'équipement vient d'un FARM** —
+artefacts en domaine (Genshin), reliques en Caverne (HSR), runes en donjon (Summoners War),
+gear en Hunt (Epic Seven). La bannière d'armes de Genshin est l'exception, et c'est la
+partie la plus critiquée du jeu.
 
-**Ce qui tient lieu de gacha d'équipement, et qui existe déjà** :
+⚠️ **ET CE PROJET A DÉJÀ TRANCHÉ L'INVERSE, par une refonte entière** : « 🎯 DROPS‑ONLY
+GEAR » (v0.556) a retiré l'infusion de grade, la poussière, l'Atelier, la forge, le reroll
+et le craft de set — explicitement **« pour privilégier le plaisir de switcher son stuff via
+les drops »**.
 
-- les **objets du héros** ont trois axes de loterie — rareté, **jet** biaisé bas, niveau
-  d'objet — plus les effets légendaires et les sets de voie ;
-- les **pièces d'aventurier** se droppent sur les corps d'un siège et les embuscades
-  repoussées, au rang de la classe du porteur, et l'**Équipementier** en fond à partir des
-  objets du héros.
+**Ce qui tient lieu de gacha d'équipement, et qui existe déjà** : les **objets du héros**
+(trois axes de loterie — rareté, **jet** biaisé bas, niveau d'objet — plus les procs
+légendaires et les sets de voie) et les **pièces de champion** (corps d'un siège,
+embuscades repoussées, et la fonte d'un objet du héros).
 
-**Ce que le gacha tire, c'est donc la PERSONNE, et seulement elle.** Deux loteries
-concurrentes diluent l'une et l'autre : c'est la règle déjà appliquée au « gacha de
-compétences », écarté parce qu'il entrait en concurrence avec les talents.
-
-⚠️ **À rouvrir sciemment si un jour la question revient** : l'angle propre serait une
-pièce **signature** par champion (le patron AFK Arena — l'arme se débloque par
-l'ascension, elle ne se tire pas), donc un cran d'Éveil, jamais une seconde bannière.
+⚠️ **À rouvrir sciemment si la question revient** : l'angle propre serait une pièce
+**signature** par champion (le patron AFK Arena — l'arme se débloque par l'ascension, elle
+ne se tire pas), donc **un cran d'Éveil**, jamais une seconde bannière.
 
 ## 🏛️ UN SEUL BÂTIMENT : LE PANTHÉON (11 → 9)
 
 **Décidé : Guilde, Centre de formation et Équipementier sont supprimés**, et un seul
 bâtiment prend leur place — le **Panthéon des champions** : on y tire, on y consulte sa
 collection, on y éveille, on y équipe. « Un bâtiment, un endroit » (règle v0.739).
-
-**Ils perdent tous les trois leur métier avec le gacha** — mais pas de la même façon :
 
 | Bâtiment            | Son levier       | Ce qu'il devient                                                            |
 | ------------------- | ---------------- | --------------------------------------------------------------------------- |
@@ -235,28 +287,13 @@ une part égale du puits, soit **2/11 = 18,2 %**.
 
 Interpolé sur les **deux points déjà mesurés** de la v0.733 (part du plafond atteinte sur
 un an, 3 profils) : `550 → 81/71/65 %` et `450 → 87/76/70 %`. Retirer 18 % du puits
-équivaut à `upBase ≈ 451` → la part remonte à **~70‑87 %** : encore dans la bande **55‑90 %**
-que le test verrouille, **mais en haut de bande**.
+équivaut à `upBase ≈ 451` → la part remonte à **~70‑87 %** : encore dans la bande
+**55‑90 %** que le test verrouille, **mais en haut de bande**.
 
 ⚠️ **À RE‑MESURER POUR DE VRAI** (`goldSink.test`), pas à interpoler : c'est mot pour mot
 le piège de la v0.733, où les trois bâtiments des caravanes avaient **approfondi** le puits
 de 43 % sans que personne le re‑simule, et où le test s'était contenté de relâcher sa
 borne. Cette fois le mouvement va dans l'autre sens — l'or devient plus facile.
-
-## 🎲 Les compétences : elles existent déjà, et ce qui manque
-
-Chaque classe porte un **rôle de convoi** (🩺 soin · 🐫 cargaison · 🧭 vitesse ·
-👁️ repérage) et/ou une **signature de combat** (exécution, rage, élan, vol de vie, épines,
-crit, dégâts, PV), avec un **niveau par répétition** (`AdvSkill`). Un champion de haute
-rareté déroule 3 à 4 compétences à niveaux variés : c'est un kit.
-
-⚠️ **Pas d'ultime actif, et ce n'est pas un oubli** : le combat est **100 % automatique et
-seedé** dans tout le projet. Tout reste **passif**. On peut avoir des procs spectaculaires,
-pas un bouton à presser.
-
-⚠️ **Le « gacha de compétences » est écarté** : il entrerait en concurrence directe avec
-les **talents**, qui existent, se droppent et s'équipent déjà sur un aventurier
-(`ADV_TALENT_K`).
 
 ## 🗂️ LE CODEX DOIT ACCUEILLIR LES CHAMPIONS
 
@@ -264,17 +301,16 @@ Une collection sans journal n'est pas une collection : un gacha se joue autant p
 compléter la liste que pour la puissance. Le **Codex** (`src/lib/codex.ts`) tient déjà le
 bestiaire et le journal des sets — il lui faut un **troisième volet : les champions**.
 
-⚠️ **ENTIÈREMENT DÉRIVÉ, comme le reste du Codex — donc aucune migration.** Le bestiaire
-se déduit des donjons nettoyés, les sets du sac et de l'équipé : la galerie des champions
-se déduit de **ce qu'on possède**, en regard des 94 classes. Un champion jamais tiré
-s'affiche **❔ « ??? » grisé** (le teasing déjà en place), un champion possédé montre sa
-rareté, son rôle, sa signature et son **cran d'Éveil**.
+✅ **Le recadrage le rend trivial** : le roster est une liste finie de 32 entrées, et
+l'identité d'un champion est son `id`. La galerie se **dérive de ce qu'on possède**, comme
+le reste du Codex (bestiaire depuis les donjons nettoyés, sets depuis le sac) → **aucune
+migration**. Un champion possédé montre sa rareté, son rôle, ses signatures et son **cran
+d'Éveil** ; un champion jamais tiré reste **❔ « ??? » grisé** (le teasing déjà en place).
 
-⚠️ **Il annonce ce qui EXISTE, pas ce qui est probable** : à 0,6 % sur le haut du pool, la
-galerie doit donner envie sans laisser croire qu'on la complétera — et **jamais** afficher
-un taux, qui court‑circuiterait l'écran de tirage.
+⚠️ **Il annonce ce qui EXISTE, pas ce qui est probable** : jamais de taux affiché, ça
+court‑circuiterait l'écran de tirage.
 
-## 🗑️ MIGRATION — mesurée en base, le wipe est indolore
+## 🗑️ MIGRATION — mesurée en base
 
 **Décidé : on supprime les aventuriers existants** et on les remplace par des champions.
 
@@ -287,19 +323,20 @@ un taux, qui court‑circuiterait l'écran de tirage.
 
 ⚠️ **AUCUN AVENTURIER N'A JAMAIS ÉTÉ PROMU.** La première promotion tombe au **niveau 11**
 (`PROMO_LEVELS` = 1 · 11 · 21 · 31 · …), le plus avancé de la base est à **9**. L'arbre de
-classes n'a donc jamais servi à personne : **le wipe ne détruit aucun investissement**.
+classes n'a donc **jamais servi à personne** : le wipe ne détruit aucun investissement, et
+c'est un argument de plus pour le remplacer plutôt que le compléter.
 
 ✅ **ET L'ÉQUIPEMENT SURVIT AU WIPE.** Les 105 pièces sont rangées **par lignée** —
 mage 24 · éclaireur 19 · guerrier 18 · homme d'armes 17 · caravanier 17 · archer 10 — et
-les 6 lignées ne bougent pas. Un champion tiré sur une lignée porte les pièces de cette
-lignée (`canWearAdvGear` inchangé). ⚠️ Elles sont **toutes communes** (vérifié : 105/105),
-ce qui est normal — `capAdvGearToWearable` les plafonne à la rareté de la classe du
-porteur, et tout le monde était commun.
+les 6 lignées ne bougent pas. Un champion de lignée X porte les pièces de X
+(`canWearAdvGear` inchangé). ⚠️ Elles sont **toutes communes** (vérifié : 105/105), ce qui
+est normal — `capAdvGearToWearable` les plafonne à la rareté du porteur, et tout le monde
+était commun.
 
 ### ⚠️ 7,42 M D'OR SONT INVESTIS DANS LES TROIS BÂTIMENTS SUPPRIMÉS — mesuré
 
-C'est le vrai coût de la simplification, et il est **bien plus lourd que le wipe des
-aventuriers**. Reconstitué depuis la base, à la courbe réelle (`buildGold` + Σ `550 × L^1,9`) :
+C'est le vrai coût de la simplification, **bien plus lourd que le wipe des aventuriers**.
+Reconstitué depuis la base, à la courbe réelle (`buildGold` + Σ `550 × L^1,9`) :
 
 | compte | Guilde | Équipementier | Centre de formation | or investi    |
 | ------ | ------ | ------------- | ------------------- | ------------- |
@@ -316,25 +353,22 @@ personne ne se réveille avec moins bon qu'hier.
 ✅ **REMÈDE : le Panthéon HÉRITE du niveau le plus haut des trois** (`max`, soit **31** sur
 le compte réel). L'investissement est conservé **en nature, pas en or** — et ça tombe juste,
 puisque ses deux leviers SONT ceux de la Guilde (déploiement) et de l'Équipementier
-(fabrication) : les deux repartent au niveau où ils étaient. Seul le **Centre de
-formation**, dont le métier disparaît complètement, n'a pas d'héritier.
+(fabrication) : les deux repartent au niveau où ils étaient. Seul le **Centre de formation**,
+dont le métier disparaît complètement, n'a pas d'héritier.
 
 ⚠️ **Le remboursement de l'or des deux bâtiments absorbés reste à trancher** (Last 3,60 M,
 Cypher 30 848) : mesuré en v0.828, le compte réel a **tout au plafond de son niveau et
-5,57 M d'or qui dorment** — rendre 3,6 M de plus n'achèterait rien. L'héritage de niveau
-suffit peut‑être ; c'est une décision, pas un oubli.
+5,57 M d'or qui dorment** — rendre 3,6 M de plus n'achèterait rien.
 
 ⚠️ `BUILD.plotCap` passant de 11 à 9, un compte qui a 11 bâtiments posés en a **deux de
 trop** : `repackBuildingSlots` les remet dans les bornes tout seul (v0.868), **aucune
 migration**.
 
-Pour mémoire, les bâtiments **conservés** du même domaine : Comptoir de caravanes niv 28.
-
 ## ⚠️ ORDRE DE CONSTRUCTION : les failles d'abord
 
 Les **pierres de mana n'existent pas encore** — elles viennent des failles, qui ne sont pas
-implémentées. Sans elles, le gacha n'a **pas de monnaie**. Ordre :
-**failles → pierres de mana → gacha**.
+implémentées. Sans elles, le gacha n'a **pas de monnaie** : ce n'est pas un gacha à moitié,
+c'est un écran mort. Ordre : **failles → pierres de mana → gacha**.
 
 ## Comment marche un gacha (référence)
 
@@ -345,33 +379,33 @@ implémentées. Sans elles, le gacha n'a **pas de monnaie**. Ordre :
   il n'y a pas d'argent réel pour compenser. ✅ **Validé.**
 - **Duplicatas** : chaque doublon monte un cran. Un tirage n'est jamais perdu.
 - **Progression séparée du tirage** : c'est elle qui fait qu'un **4★ investi bat un 5★ nu**
-  — la propriété qui garde les basses raretés utiles (cf. la contrainte ×11,5 ci‑dessus).
+  — la propriété qui garde les basses raretés utiles (cf. la contrainte ×11,5).
 - **Bannières limitées** : créent l'urgence… **sans objet ici** (pas de monétisation). Un
   pool permanent suffit.
 
 ## Ce que ça apporterait
 
-- La **rareté** à la place des classes toutes communes (mesuré : les 21 aventuriers des
-  comptes réels sont tous à une seule classe, donc tous « communs » et à moitié sans
-  compétence).
+- Des **personnages**, là où le joueur n'a aujourd'hui que des recrues toutes communes
+  (mesuré : les 21 aventuriers des comptes réels n'ont qu'une seule classe, donc tous
+  « communs » et à moitié sans compétence).
 - Les **duplicatas qui servent enfin** : aujourd'hui deux recrues identiques ne
   s'additionnent pas.
 - Un **usage clair pour les pierres de mana**, sans créer une monnaie de plus.
-- Tout le reste est conservé : équipement d'aventurier, compagnons, talents, convois,
-  défense, camps.
+- **Trois bâtiments en moins** et l'arbre de classes en moins : moins de surface, plus de
+  lisibilité.
+- Tout le reste est conservé : équipement, compagnons, talents, convois, camps, défense.
 
-## Reste à trancher
+## Reste à trancher / à faire
 
-- **La forme exacte de l'Éveil** : combien de crans, et lesquels sont qualitatifs.
-  Proposition : **s'aligner sur Genshin — 6 crans, 2 ou 3 qualitatifs** (chacun valant
-  +1 niveau de compétence), les autres en magnitude. Et ce que rend un doublon au‑delà du
-  plafond.
+- **Écrire les 32 champions** : nom, rareté, forme, lignée, rôle, 1‑3 signatures, 1‑2 crans
+  d'Éveil. ⚠️ Avec la contrainte de couverture **lignée × rareté** (48 cases, 32 places).
+- **Le barème commun d'Éveil** : combien de crans au total (6 proposé, à la Genshin), et ce
+  que rend un doublon **au‑delà** du dernier cran.
 - **Les taux et le pity**, une fois connu le débit de pierres de mana (donc après les
-  failles).
-- **La mesure** du passage du plancher 6 → 20 sur les embuscades de convoi et les sièges
-  (⚠️ bloquante : c'est un changement d'équilibrage, pas un réglage d'affichage).
-- **La mesure** du puits d'or à 9 bâtiments (`goldSink.test`, ⚠️ bloquante elle aussi : la
-  part interpolée sort en haut de bande, et c'est le piège exact de la v0.733).
+  failles). Et **la borne du tirage gratuit quotidien**.
+- **La mesure** du plancher de budget **20** et des nouveaux étalons (`refAdventurer`,
+  `REF_LINEAGES`) sur les embuscades de convoi et les sièges (⚠️ bloquante).
+- **La mesure** du puits d'or à 9 bâtiments (`goldSink.test`, ⚠️ bloquante elle aussi).
 - **Le remboursement** de l'or des bâtiments absorbés par le Panthéon (3,60 M sur le compte
   réel) — l'héritage de niveau suffit peut‑être.
 - **Le nom et l'emoji** du bâtiment : « Panthéon » est libre (vérifié — « sanctuaire » est

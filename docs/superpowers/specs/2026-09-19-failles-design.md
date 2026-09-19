@@ -12,18 +12,19 @@ une incursion ratée n'est jamais perdue, elle prépare la défense.
 
 ## Décisions prises
 
-| Sujet                 | Décision                                                                         |
-| --------------------- | -------------------------------------------------------------------------------- |
-| Rapport au Labyrinthe | **Deux modes DISTINCTS** — la faille ne le remplace pas                          |
-| Sièges                | **Les failles REMPLACENT la source des sièges** : toute armée vient d'une faille |
-| Tour de guet          | **Elle révèle l'armée sur la carte** — sans elle, une **tache floue**            |
-| Interception          | **Le combat de GROUPE des camps** (héros et/ou aventuriers)                      |
-| Nombre de failles     | **3 à 6 simultanées**, de rangs variés                                           |
-| Maturation            | **7 jours** avant qu'une faille crache son armée                                 |
-| Pierres de mana       | **Failles ET cadavres du siège** — la boucle ne peut pas enfermer le joueur      |
-| Ferraille             | **Conservée** pour l'instant (chantier d'économie séparé)                        |
-| Pièces de set         | **0 à 3, sets aléatoires**, en PLUS des sources existantes                       |
-| Défaite du héros      | **Infirmerie**, comme sur un camp                                                |
+| Sujet                 | Décision                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| Rapport au Labyrinthe | **Deux modes DISTINCTS** — la faille ne le remplace pas                             |
+| Sièges                | **Les failles REMPLACENT la source des sièges** : toute armée vient d'une faille    |
+| Tour de guet          | **Elle révèle l'armée sur la carte** — sans elle, une **tache floue**               |
+| Interception          | **Le combat de GROUPE des camps** (héros et/ou aventuriers)                         |
+| Nombre de failles     | **3 à 6 simultanées**, de rangs variés                                              |
+| Maturation            | **7 jours** avant qu'une faille crache son armée                                    |
+| Laisser une faille    | **renfort de menace ×1,3** (mesuré) **+ harcèlement des convois** (cf. plus bas)    |
+| Pierres de mana       | **Failles + tout monstre de faille tué** — dans la faille, sur la route, en défense |
+| Ferraille             | **Conservée** pour l'instant (chantier d'économie séparé)                           |
+| Pièces de set         | **0 à 3, sets aléatoires**, en PLUS des sources existantes                          |
+| Défaite du héros      | **Infirmerie**, comme sur un camp                                                   |
 
 ## ⚠️ Ce qui sépare une faille du Labyrinthe
 
@@ -104,6 +105,52 @@ existe pour ne pas écraser le débutant qui vient de bâtir son premier mur. Av
 d'un débutant, c'est une petite armée, et il peut aller la fermer. Une règle artificielle
 en moins.
 
+## 🐫 LE HARCÈLEMENT DES CONVOIS — pourquoi le renfort ne suffisait pas
+
+⚠️ **LA QUESTION POSÉE PAR L'UTILISATEUR ÉTAIT LA BONNE** : « quel intérêt d'attaquer une
+faille si on peut déjà la battre en défendant son attaque ? » Réponse mesurée : sans
+renfort, une base à niveau tient **85‑91 %** de ses sièges — donc aucun intérêt. Avec le
+renfort ×1,3, elle tombe à **51‑71 %** : laisser mûrir n'est plus gagner d'office, c'est
+jouer son siège à la pièce.
+
+**Mais ça ne suffit pas, et voici pourquoi** : perdre un siège coûte peu — le stock non
+récolté, des réparations, un gel de production. On peut donc accepter le pari indéfiniment.
+
+**Décidé : une faille ouverte IRRADIE un rayon autour d'elle.** Les routes et les lieux
+proches passent en **`perilous`** (deux fois plus de rencontres, déjà télégraphié avant le
+départ) et leur **`roadFoe` est mis à l'échelle du rang de la faille**.
+
+✅ **C'est le levier le plus honnête des trois, pour deux raisons.** (1) Il frappe **là où
+la base ne protège pas** : un rempart, des balistes, un héros et un vivier ne défendent pas
+une cargaison sur la route. (2) Il **réutilise l'existant tel quel** — `perilous`,
+`roadFoe`, `travelPosition` — donc **zéro nouveau modèle de combat**.
+
+⚠️ **LE RAYON DOIT ÊTRE LIMITÉ ET CONTOURNABLE.** Sinon c'est le joueur **peu sportif** —
+celui que les caravanes visent précisément, et qui n'a pas l'énergie de se payer une
+incursion — qui souffre le plus : il subirait une taxe au lieu d'un choix. La carte porte
+**~20 POI en permanence** (v0.683) : avec 3 à 6 failles, il doit rester des routes propres.
+**À MESURER** : combien de lieux de récolte restent hors rayon, comme on a mesuré « la
+carte tient jusqu'à 8 caravanes » (8,6 POI libres en moyenne).
+
+⚠️ **UNE PISTE ÉCARTÉE, et c'est la plus tentante** : faire **MONTER** le renfort avec le
+temps (×1,3 → ×1,5 → ×2). Mesuré, à **×2 la tenue tombe à 0‑11 %** — donc une faille
+oubliée deux semaines donnerait un siège **imbattable**. Ça punirait celui qui joue mais
+n'a pas l'énergie d'y aller, à la limite directe de la **règle 1 des sièges** (« on ne perd
+jamais parce qu'on n'a pas ouvert l'app »). Le renfort reste **fixe à ×1,3**.
+
+## 💎 Les pierres de mana : tout monstre de faille tué en rend
+
+**Décidé** : fermer une faille en rend, et **chaque monstre de faille tué** aussi — **dans**
+la faille, **sur la route** quand son armée marche, et **en défense de la base**.
+
+⚠️ **C'est la troisième voie qui empêche la boucle d'enfermer le joueur** : celui qui n'a
+pas l'énergie d'entrer encaisse le siège et touche **quand même** du mana. Sans elle, le
+gacha serait réservé à ceux qui peuvent se payer des incursions.
+
+⚠️ **Et aucun BÂTIMENT ne doit en produire** (décidé côté gacha, cf. sa spec) : la leçon de
+la Dynamo de faille (v0.822) est qu'une production linéaire en niveau finit par dépasser le
+sport. La monnaie du gacha doit rester adossée à une **activité**.
+
 ## Les pièces de set
 
 **0 à 3, sets aléatoires**, en plus des trois sources existantes (aucune calibration
@@ -134,6 +181,9 @@ or « le sport est le plafond » est la règle fondatrice du projet.
 ## Reste à trancher
 
 - **Mana ou énergie** à l'entrée (ci‑dessus).
+- **Le rayon d'irradiation** d'une faille ouverte — ⚠️ à MESURER (combien de lieux de
+  récolte restent hors rayon avec 3 à 6 failles), pas à choisir : c'est lui qui décide si le
+  harcèlement est un choix ou une taxe.
 - **Ce qu'on perd** en ressortant sans le boss — les monstres tués, eux, restent acquis.
 - **La forme de la montée en tension** dedans, et le nombre de monstres avant la porte.
 - **L'état persistant d'une faille** : les POI actuels sont **sans mémoire**, une faille doit
