@@ -1810,7 +1810,7 @@ export function groupBestFirst<T>(
   items: readonly T[],
   keyOf: (it: T) => string,
   compare: (a: T, b: T) => number,
-): { item: T; groupStart: boolean; groupSize: number }[] {
+): { item: T; groupStart: boolean; groupSize: number; groupKey: string }[] {
   const groups = new Map<string, T[]>();
   for (const it of items) {
     const k = keyOf(it);
@@ -1818,11 +1818,32 @@ export function groupBestFirst<T>(
     if (g) g.push(it);
     else groups.set(k, [it]);
   }
-  const sorted = [...groups.values()].map((g) => [...g].sort(compare));
-  sorted.sort((a, b) => compare(a[0]!, b[0]!));
-  return sorted.flatMap((g) =>
-    g.map((item, i) => ({ item, groupStart: i === 0, groupSize: g.length })),
+  // ⚠️ La CLÉ voyage avec chaque ligne : sans elle, un écran qui replie les groupes devrait
+  // la recalculer de son côté (donc deux définitions de « quel type ? » pour la même liste).
+  const sorted = [...groups.entries()].map(([key, g]) => [key, [...g].sort(compare)] as const);
+  sorted.sort((a, b) => compare(a[1][0]!, b[1][0]!));
+  return sorted.flatMap(([key, g]) =>
+    g.map((item, i) => ({ item, groupStart: i === 0, groupSize: g.length, groupKey: key })),
   );
+}
+
+/**
+ * 🗂️ Une ligne d'un groupe est-elle VISIBLE quand les types sont repliés ?
+ *
+ * ⚠️ ON NE CACHE JAMAIS CE QU'ON PORTE (`keepAnyway`) : l'exemplaire équipé n'est pas
+ * toujours le meilleur du groupe — un talent gardé pour son effet, un familier posté —, et
+ * le replier ferait disparaître de l'écran la seule ligne qui compte vraiment.
+ *
+ * ⚠️ Le MEILLEUR reste toujours là (`groupStart`) : replié, on voit donc un type par ligne
+ * avec son meilleur exemplaire, pas un titre nu — le rang, la stat et le gain restent
+ * lisibles sans rien déplier.
+ */
+export function groupRowVisible(
+  row: { groupStart: boolean; groupSize: number; groupKey: string },
+  opened: ReadonlySet<string>,
+  keepAnyway = false,
+): boolean {
+  return row.groupSize <= 1 || row.groupStart || keepAnyway || opened.has(row.groupKey);
 }
 
 // ── Atelier de poussière (dust sinks) : forge / reroll / craft de set ──

@@ -18,6 +18,7 @@ import {
   effectAsAggregate,
   compareFamiliars,
   groupBestFirst,
+  groupRowVisible,
   aggregateEffects,
   playerWithGear,
   rollDrop,
@@ -2358,5 +2359,53 @@ describe('📚 exemplaires identiques rangés ensemble, du meilleur au pire (v0.
       { id: 'y', k: 'a', v: 1 },
     ];
     expect(groupBestFirst(eq, (t) => t.k, cmp).map((g) => g.item.id)).toEqual(['x', 'y']);
+  });
+});
+
+describe('🗂️ types repliés dans les listes de talents et de familiers', () => {
+  const row = (groupKey: string, groupStart: boolean, groupSize: number) => ({
+    groupKey,
+    groupStart,
+    groupSize,
+  });
+
+  it('la clé du groupe voyage avec chaque ligne', () => {
+    // Sans elle, l'écran devrait recalculer « quel type ? » de son côté — deux définitions
+    // pour la même liste.
+    const g = groupBestFirst(
+      [
+        { k: 'loup', v: 2 },
+        { k: 'ours', v: 1 },
+        { k: 'loup', v: 9 },
+      ],
+      (x) => x.k,
+      (a, b) => b.v - a.v,
+    );
+    expect(g.map((x) => x.groupKey)).toEqual(['loup', 'loup', 'ours']);
+    expect(g.map((x) => x.item.v)).toEqual([9, 2, 1]);
+    expect(g.map((x) => x.groupStart)).toEqual([true, false, true]);
+  });
+
+  it('replié : un type par ligne — le MEILLEUR reste, les autres se cachent', () => {
+    const vide = new Set<string>();
+    expect(groupRowVisible(row('loup', true, 3), vide)).toBe(true);
+    expect(groupRowVisible(row('loup', false, 3), vide)).toBe(false);
+  });
+
+  it('déplié : tout le groupe apparaît', () => {
+    expect(groupRowVisible(row('loup', false, 3), new Set(['loup']))).toBe(true);
+    // Un AUTRE type déplié ne déplie pas celui-ci.
+    expect(groupRowVisible(row('loup', false, 3), new Set(['ours']))).toBe(false);
+  });
+
+  it('⚠️ ON NE CACHE JAMAIS CE QU’ON PORTE, même replié et même pas le meilleur', () => {
+    // L'exemplaire équipé n'est pas toujours en tête du groupe : le replier ferait
+    // disparaître la seule ligne qui compte vraiment.
+    expect(groupRowVisible(row('loup', false, 3), new Set(), true)).toBe(true);
+  });
+
+  it('un type à UN seul exemplaire n’a rien à replier', () => {
+    expect(groupRowVisible(row('ours', true, 1), new Set())).toBe(true);
+    expect(groupRowVisible(row('ours', false, 1), new Set())).toBe(true);
   });
 });

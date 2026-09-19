@@ -523,11 +523,24 @@
                  meilleur au pire, sous un titre « ×N ». -->
             <div v-if="char.row.talents.length" class="talents-grid">
               <template v-for="t in talentsView" :key="t.id">
-                <div v-if="t.groupStart && t.groupSize > 1" class="tal-group">
+                <!-- ⚠️ REPLIÉ PAR DÉFAUT (demande de l'utilisateur) : on voit un TYPE par
+                     ligne — son meilleur exemplaire, rang et stat compris — et on déplie
+                     pour les autres. Le titre est le bouton. -->
+                <button
+                  v-if="t.groupStart && t.groupSize > 1"
+                  type="button"
+                  class="tal-group"
+                  :aria-expanded="openGroups.has(t.groupKey)"
+                  @click="toggleGroup(t.groupKey)"
+                >
+                  <span class="mf-chev" :class="{ open: openGroups.has(t.groupKey) }">▸</span>
                   {{ t.def.icon }} {{ t.def.name }} <span class="tg-n">×{{ t.groupSize }}</span>
-                  <span class="tg-hint">du meilleur au moins bon</span>
-                </div>
+                  <span class="tg-hint">{{
+                    openGroups.has(t.groupKey) ? 'replier' : `+${t.groupSize - 1} autre(s)`
+                  }}</span>
+                </button>
                 <div
+                  v-if="groupRowVisible(t, openGroups, t.equipped)"
                   class="tal-card"
                   :class="[
                     'p-' + t.rarity,
@@ -642,11 +655,21 @@
                  familiers d'une même race sont RANGÉS ensemble, du meilleur au pire. -->
             <div v-if="allFamiliars.length" class="talents-grid">
               <template v-for="f in allFamiliars" :key="f.id">
-                <div v-if="f.groupStart && f.groupSize > 1" class="tal-group">
+                <button
+                  v-if="f.groupStart && f.groupSize > 1"
+                  type="button"
+                  class="tal-group"
+                  :aria-expanded="openGroups.has(f.groupKey)"
+                  @click="toggleGroup(f.groupKey)"
+                >
+                  <span class="mf-chev" :class="{ open: openGroups.has(f.groupKey) }">▸</span>
                   {{ famSpeciesLabel(f) }} <span class="tg-n">×{{ f.groupSize }}</span>
-                  <span class="tg-hint">du meilleur au moins bon</span>
-                </div>
+                  <span class="tg-hint">{{
+                    openGroups.has(f.groupKey) ? 'replier' : `+${f.groupSize - 1} autre(s)`
+                  }}</span>
+                </button>
                 <div
+                  v-if="groupRowVisible(f, openGroups, f.equipped)"
                   class="tal-card"
                   :class="[
                     'p-' + f.rarity,
@@ -2905,6 +2928,7 @@ import {
   SLOT_EMOJI,
   rarityRank,
   gradeLabel,
+  groupRowVisible,
   RARITY_RANK,
   fxRarity,
   ITEM_SETS,
@@ -3583,6 +3607,15 @@ const talentSummary = computed(() => aggregateLines(talentFx.value, { emoji: tru
 /** Talents proposés pour une case : les DISPONIBLES seulement, plus celui qui occupe déjà
  *  cette case — même règle qu'au chenil. Proposer un talent équipé ailleurs n'aurait mené
  *  qu'à un refus du store : un emplacement ne se remplit qu'avec ce qui est libre. */
+/** Les TYPES dépliés dans les listes de talents et de familiers (clé = `groupKey`).
+ *  ⚠️ REPLIÉ PAR DÉFAUT : l'ensemble part vide. Une seule liste pour les deux écrans — un
+ *  type de talent et une race de familier ne partagent jamais une clé. */
+const openGroups = ref<Set<string>>(new Set());
+function toggleGroup(key: string) {
+  const next = new Set(openGroups.value);
+  if (!next.delete(key)) next.add(key);
+  openGroups.value = next;
+}
 const talChoices = computed(() => {
   const here = talPick.value === null ? undefined : talentSlotsView.value[talPick.value]?.id;
   return talentsView.value.filter((t) => !t.equipped || t.id === here);
@@ -3702,7 +3735,12 @@ const talentsView = computed(() => {
       b.tier - a.tier ||
       (a.inst.code === b.inst.code ? b.mag - a.mag : b.roll - a.roll) ||
       a.def.name.localeCompare(b.def.name),
-  ).map((g) => ({ ...g.item, groupStart: g.groupStart, groupSize: g.groupSize }));
+  ).map((g) => ({
+    ...g.item,
+    groupStart: g.groupStart,
+    groupSize: g.groupSize,
+    groupKey: g.groupKey,
+  }));
 });
 function talentName(inst: TalentInstance): string {
   return talentByCode(inst.code)?.name ?? 'Talent';
@@ -5686,6 +5724,7 @@ const allFamiliars = computed(() => {
     if (isFamiliar(f)) list.push({ ...f, equipped: false });
   return groupBestFirst(list, (f) => f.species ?? f.effect.type, compareFamiliars).map((g) => ({
     ...g.item,
+    groupKey: g.groupKey,
     groupStart: g.groupStart,
     groupSize: g.groupSize,
   }));
@@ -7266,14 +7305,24 @@ button.pt-mini:active {
 /* Badge « doublon » : exemplaire en surplus d'un talent (vendable). */
 /* Titre d'un groupe d'exemplaires identiques (talent ou race de familier), sur toute la
    largeur de la grille : on voit d'un coup d'œil ce qui va ensemble. */
+/* ⚠️ C'est un BOUTON depuis que les types se replient : il lui faut le reset d'un bouton,
+   une cible de 44 px et un curseur — sans quoi il gardait l'allure d'un titre inerte. */
 .tal-group {
   grid-column: 1 / -1;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: 6px;
+  width: 100%;
+  min-height: 44px;
   margin-top: 6px;
   padding: 0 2px 2px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border: 0;
   border-bottom: 1px solid var(--line);
   font-family: var(--font-display);
   font-weight: 700;
@@ -7282,6 +7331,10 @@ button.pt-mini:active {
 }
 .tal-group:first-child {
   margin-top: 0;
+}
+.tal-group:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .tal-group .tg-n {
   color: var(--accent);
