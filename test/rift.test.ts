@@ -10,6 +10,11 @@ import {
   riftPopulation,
   residualMineOf,
   riftSpecOf,
+  RIFT_RUN,
+  riftDepth,
+  riftRamp,
+  riftFoe,
+  incursionMana,
   type RiftLike,
 } from '@/lib/rift';
 
@@ -173,5 +178,88 @@ describe('🚪 la porte du boss', () => {
     expect(riftDoorOpen(11, 12)).toBe(false);
     expect(riftDoorOpen(12, 12)).toBe(true);
     expect(riftDoorOpen(13, 12)).toBe(true);
+  });
+});
+
+describe('📈 la rampe de profondeur — ce qui a remplacé la falaise par une pente', () => {
+  it('la profondeur est ABSOLUE : rapportée au fond de la faille, pas à l’effectif du jour', () => {
+    // ⚠️ C'est ce qui fait qu'une faille jeune ne contient que ses PREMIERS monstres — les
+    // faibles — au lieu d'un échantillon complet de la rampe. Sans ça, l'âge ne changerait
+    // que le butin (mesuré : la mutation « profondeur relative » fait tomber la calibration).
+    expect(riftDepth(0)).toBe(0);
+    expect(riftDepth(RIFT.maxFoes - 1)).toBe(1);
+    expect(riftDepth(1)).toBeLessThan(0.2);
+    expect(riftDepth(999)).toBe(1); // bornée
+  });
+
+  it('la force monte avec la profondeur, et vaut ~1 en moyenne', () => {
+    expect(riftRamp(0)).toBe(RIFT_RUN.rampFrom);
+    expect(riftRamp(1)).toBe(RIFT_RUN.rampTo);
+    expect(riftRamp(0)).toBeLessThan(riftRamp(0.5));
+    expect(riftRamp(0.5)).toBeLessThan(riftRamp(1));
+    // Moyenne ≈ 1 : la rampe REDISTRIBUE la difficulté, elle ne l'ajoute pas.
+    expect(riftRamp(0.5)).toBeCloseTo(1, 1);
+  });
+
+  it('un monstre du fond est plus dur qu’un monstre de l’entrée', () => {
+    const entree = riftFoe(30, 'bandits', 0, false);
+    const fond = riftFoe(30, 'bandits', RIFT.maxFoes - 1, false);
+    expect(fond.pv).toBeGreaterThan(entree.pv);
+    expect(fond.damage).toBeGreaterThan(entree.damage);
+  });
+
+  it('⚠️ le GARDIEN n’est pas rampé : sa force, c’est son poids', () => {
+    // Deux multiplicateurs sur le même adversaire, c'est un de trop — mesuré, il se
+    // retrouvait à 5,8× un monstre de base et décidait de tout (faille jeune 0,97 → 0,15).
+    const fond = riftFoe(30, 'bandits', RIFT.maxFoes - 1, false);
+    const boss = riftFoe(30, 'bandits', RIFT.maxFoes, true);
+    // Le gardien vaut `bossWeight` monstres de force NOMINALE (rampe 1), donc moins que
+    // `bossWeight` × le monstre du fond (qui est rampé à 1,45).
+    expect(boss.pv).toBeLessThan(fond.pv * RIFT_RUN.bossWeight);
+    expect(boss.pv).toBeGreaterThan(fond.pv);
+    expect(boss.name).toContain('gardien');
+  });
+});
+
+describe('💎 le mana d’une incursion', () => {
+  it('⚠️ une incursion RATÉE paie quand même les monstres abattus', () => {
+    // La promesse « une incursion ratée n'est jamais perdue » : elle ne prépare plus la
+    // défense (simplification demandée), c'est le mana qui la remplace.
+    const rate = {
+      cleared: false,
+      killed: 5,
+      population: 12,
+      bossDown: false,
+      finalPv: 0,
+      journal: [],
+    };
+    expect(incursionMana(rate, 30)).toBe(riftMana(5, 30));
+    expect(incursionMana(rate, 30)).toBeGreaterThan(0);
+  });
+
+  it('fermer ajoute la prime du gardien', () => {
+    const done = {
+      cleared: true,
+      killed: 12,
+      population: 12,
+      bossDown: true,
+      finalPv: 40,
+      journal: [],
+    };
+    const partial = { ...done, cleared: false, bossDown: false };
+    expect(incursionMana(done, 30)).toBeGreaterThan(incursionMana(partial, 30));
+    expect(incursionMana(done, 30)).toBe(Math.round(riftMana(12, 30) * (1 + RIFT.bossManaShare)));
+  });
+
+  it('rien d’abattu, rien de payé', () => {
+    const none = {
+      cleared: false,
+      killed: 0,
+      population: 12,
+      bossDown: false,
+      finalPv: 0,
+      journal: [],
+    };
+    expect(incursionMana(none, 30)).toBe(0);
   });
 });

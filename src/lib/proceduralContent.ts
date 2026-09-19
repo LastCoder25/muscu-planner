@@ -214,7 +214,10 @@ export function itemRankRelief(level: number): number {
 
 /** Lecture d'une table de points mesurés [niveau, valeur] : interpolée entre deux points,
  *  valeur du bout le plus proche au-delà. */
-function interpolate(t: [number, number][], x: number): number {
+/** Interpolation linéaire d'une table (niveau → valeur), constante aux deux extrémités.
+ *  ⚠️ EXPORTÉE : `rift.ts` lit sa propre table de renfort avec la MÊME fonction — deux
+ *  interpolations écrites séparément finiraient par ne plus arrondir pareil. */
+export function interpolate(t: [number, number][], x: number): number {
   const i = t.findIndex(([l]) => x <= l);
   if (i === 0) return t[0]![1];
   if (i < 0) return t.at(-1)![1];
