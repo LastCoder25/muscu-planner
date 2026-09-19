@@ -22,7 +22,7 @@ mana** pour monnaie. Ils s'équipent, ont des compétences, et les **doublons** 
 | Nom                 | **champion** (hors des mots déjà pris : héros, aventurier)                                    |
 | Périmètre           | **Le gacha REMPLACE ENTIÈREMENT les aventuriers** — arbre de classes compris                  |
 | Ce qu'on tire       | **un champion UNIQUE**, écrit à la main : une identité, pas un métier ni un chemin            |
-| Roster              | **32 champions**, **4 par rareté** — un par rôle de convoi (extensible à une ligne par ajout) |
+| Roster              | **32 champions**, **4 par rareté** — un par rôle ; ⚠️ extension **par le HAUT uniquement**    |
 | Vocabulaire         | **Raretés nommées** (commun → primordial), **PAS de nouvelle échelle d'étoiles**              |
 | Rang du champion    | **L'échelle de prestige du héros** (Bronze ★1 → …), **plafonnée au rang du héros**            |
 | Taux                | **Toutes les raretés tirables**, aux taux d'un gacha (le plus haut ≈ 0,6 %)                   |
@@ -104,6 +104,37 @@ sa rareté** :
 C'est exactement le gradient du genre : on « C6 » une basse rareté sans y penser, on ne
 « C6 » quasiment jamais la plus haute. ⚠️ Les taux ci‑dessus sont des **ordres de grandeur**
 tant que le débit de pierres de mana n'est pas connu (donc après les failles).
+
+### ⚠️ LA PYRAMIDE DU GENRE EST À L'ENVERS — on n'ajoute JAMAIS en bas
+
+Question posée par l'utilisateur : « la répartition par rareté n'est pas un peu en pyramide
+dans les gachas ? » Elle l'est, **mais pointe en bas** : plus la rareté est haute, **plus il
+y a de personnages**. De l'ordre de 50 5★ contre 30 4★ chez Genshin, ~40 contre ~25 chez
+HSR, et Arknights à l'extrême (une centaine de 6★, une vingtaine de 3★). _(Ordres de
+grandeur, connaissance du genre — non mesurés.)_
+
+Ce n'est pas un accident, c'est la même mécanique que ci‑dessus vue de l'autre côté : la
+**haute rareté est la COLLECTION** (il en faut beaucoup pour qu'en obtenir une précise reste
+un rêve), la **basse rareté est l'ENTRÉE** (elle doit rester **petite** pour que les
+doublons tombent sans cesse et qu'on la monte à fond sans y penser).
+
+⚠️ **ET À 4 PAR RARETÉ, UNE DÉCISION DÉJÀ PRISE SE CASSE AU BOUT D'UN AN** : « personne
+n'éveillera jamais un primordial, et c'est voulu ». Avec le hard pity à 90 et un tirage
+gratuit par jour, un joueur voit de l'ordre de **10 à 20 hautes raretés par an** ; réparties
+sur **4** champions, ça fait 2 à 5 copies de chacun — un Éveil bien entamé. Sur 8, c'est
+divisé par deux.
+
+✅ **RÈGLE D'EXTENSION, et elle est aussi importante que le roster de départ : on n'ajoute
+JAMAIS un champion dans les raretés basses.** Les 32 sont la **première vague** (elle couvre
+la grille rôle × rareté et ne pose aucun problème avant des mois) ; tout ajout ultérieur va
+**en haut**, et la pyramide inversée se construit d'elle‑même — c'est littéralement la
+trajectoire des vrais gachas, dont le pool de basse rareté stagne pendant que le haut
+grossit à chaque version.
+
+⚠️ Sans cette règle **écrite**, quelqu'un ajoutera un jour des communs « pour étoffer le
+départ » et tuera l'Éveil **à l'endroit précis où il doit vivre**. _(La cible pyramidale
+immédiate — ~47‑50 champions, 4·4·5·5·6·7·8·8 — reste disponible ; elle coûte 15 à 18 kits
+de plus avant de pouvoir tirer quoi que ce soit.)_
 
 **Kit par rareté** (une signature s'ASSIGNE, elle ne s'invente pas — les 8 existent) :
 
@@ -208,6 +239,12 @@ avec sa série et son jour de grâce). Zéro nouveau système, et c'est la norme
 ⚠️ **Compter les monstres tués EN DÉFENSE est ce qui empêche la boucle d'enfermer le
 joueur** : celui qui n'a pas l'énergie d'entrer dans une faille encaisse le siège et
 touche quand même du mana. Même règle que la spec des failles.
+
+⚠️ **LE MANA EST AUSSI LE PÉAGE DES INCURSIONS** (décidé côté failles : l'entrée se paie en
+mana **seul**, jamais en énergie — on ne doit pas être à sec le jour où il faut défendre).
+Donc **deux puits se disputent la même monnaie**, et c'est un vrai arbitrage : « je tire, ou
+j'entre ? ». ⚠️ **À CALIBRER, bloquant** : le coût d'entrée doit rester nettement inférieur
+au mana qu'une faille rapporte, sinon les incursions mangent tout et on ne tire jamais.
 
 ⚠️ **PAS DE BÂTIMENT QUI PRODUIT DU MANA.** C'est la leçon de la **Dynamo de faille**
 (v0.822) : une production **linéaire en niveau** finit toujours par dépasser le sport —

@@ -12,19 +12,20 @@ une incursion ratée n'est jamais perdue, elle prépare la défense.
 
 ## Décisions prises
 
-| Sujet                 | Décision                                                                            |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| Rapport au Labyrinthe | **Deux modes DISTINCTS** — la faille ne le remplace pas                             |
-| Sièges                | **Les failles REMPLACENT la source des sièges** : toute armée vient d'une faille    |
-| Tour de guet          | **Elle révèle l'armée sur la carte** — sans elle, une **tache floue**               |
-| Interception          | **Le combat de GROUPE des camps** (héros et/ou aventuriers)                         |
-| Nombre de failles     | **3 à 6 simultanées**, de rangs variés                                              |
-| Maturation            | **7 jours** avant qu'une faille crache son armée                                    |
-| Laisser une faille    | **renfort de menace ×1,3** (mesuré) **+ harcèlement des convois** (cf. plus bas)    |
-| Pierres de mana       | **Failles + tout monstre de faille tué** — dans la faille, sur la route, en défense |
-| Ferraille             | **Conservée** pour l'instant (chantier d'économie séparé)                           |
-| Pièces de set         | **0 à 3, sets aléatoires**, en PLUS des sources existantes                          |
-| Défaite du héros      | **Infirmerie**, comme sur un camp                                                   |
+| Sujet                 | Décision                                                                                |
+| --------------------- | --------------------------------------------------------------------------------------- |
+| Rapport au Labyrinthe | **Deux modes DISTINCTS** — la faille ne le remplace pas                                 |
+| Sièges                | **Les failles REMPLACENT la source des sièges** : toute armée vient d'une faille        |
+| Tour de guet          | **Elle révèle l'armée sur la carte** — sans elle, une **tache floue**                   |
+| Interception          | **Le combat de GROUPE des camps** (héros et/ou aventuriers)                             |
+| Nombre de failles     | **3 à 6 simultanées**, de rangs variés                                                  |
+| Maturation            | **7 jours** avant qu'une faille crache son armée                                        |
+| Laisser une faille    | **renfort de menace ×1,3** (mesuré) **+ harcèlement des convois** (cf. plus bas)        |
+| Coût d'entrée         | **pierres de mana SEULES** — pas d'énergie : on ne doit jamais être à sec pour défendre |
+| Pierres de mana       | **Failles + tout monstre de faille tué** — dans la faille, sur la route, en défense     |
+| Ferraille             | **Conservée** pour l'instant (chantier d'économie séparé)                               |
+| Pièces de set         | **0 à 3, sets aléatoires**, en PLUS des sources existantes                              |
+| Défaite du héros      | **Infirmerie**, comme sur un camp                                                       |
 
 ## ⚠️ Ce qui sépare une faille du Labyrinthe
 
@@ -166,21 +167,38 @@ les failles ne changeront pas le rythme d'équipement.
 puis un emplacement parmi quatre. Un ciblage (set de la voie, ou choix parmi trois) aurait
 bien plus de valeur qu'une quantité — **proposé, écarté par l'utilisateur pour l'instant**.
 
-## ⚠️ Mana ou énergie : à trancher
+## 💠 L'ENTRÉE SE PAIE EN PIERRES DE MANA SEULES — décidé
 
-Si entrer en faille ne coûte que des **pierres de mana**, l'activité **échappe au sport** —
-or « le sport est le plafond » est la règle fondatrice du projet.
+**Motif de l'utilisateur** : « il ne faut pas qu'on soit bloqué par l'énergie si on doit se
+défendre ». Une faille n'est pas un choix comme un donjon — elle **vient** au joueur, et
+arriver à sec d'énergie le jour où il faut défendre serait une punition de trop.
 
-- **Coûter aussi de l'énergie** : cohérent avec les donjons, mais ⚠️ on pourrait être
-  incapable de défendre faute d'énergie — une punition de trop, la faille n'étant pas
-  vraiment un choix.
-- **Assumer** : le butin reste plafonné en rang par le niveau (anti‑runaway), donc le sport
-  reste le plafond de **puissance**, plus celui du **temps de jeu**. _(Préférence exprimée
-  côté conception, non tranchée.)_
+⚠️ **CE QUE ÇA CHANGE : le frein n'est plus l'ÉNERGIE, c'est le TEMPS RÉEL.** Et c'est
+cohérent avec la direction du projet plutôt qu'une exception : les **caravanes** ont été
+conçues exactement comme ça (« une boucle qui consomme du TEMPS au lieu de l'ÉNERGIE, seul
+axe où le joueur peu sportif est à égalité », v0.725). Les failles rejoignent cette famille.
+
+✅ **LE DÉBIT RESTE BORNÉ — par la CARTE, pas par l'énergie.** Le nombre de failles est
+plafonné (3 à 6) et la maturation dure 7 jours : on ne peut donc pas en faire plus que ce
+qui apparaît, quel que soit l'appétit. C'est ce qui empêche la boucle
+« fermer → gagner du mana → entrer » d'être une machine à mouvement perpétuel.
+
+✅ **ET LE SPORT RESTE LE PLAFOND DE PUISSANCE**, ce qui est la vraie règle fondatrice : la
+**rareté** d'un champion se tire librement, mais son **RANG** est plafonné par celui du
+héros, donc par le sport. Un collectionneur chanceux ne dépasse pas le plafond de puissance
+d'un joueur assidu — il a juste plus de monde. Le sport cesse d'être le plafond du **temps
+de jeu**, pas celui de la puissance.
+
+✅ **Effet de bord heureux** : le mana devient à la fois la monnaie du **gacha** et le péage
+des **incursions** — donc un vrai arbitrage (« je tire, ou j'entre ? »), et un second puits
+pour une monnaie qui n'en avait aucun.
+
+⚠️ **À CALIBRER, et c'est bloquant** : le coût d'entrée doit rester **nettement inférieur**
+au mana qu'une faille rapporte, sinon les incursions mangent tout et on ne tire jamais. À
+mesurer avec le débit, après implémentation.
 
 ## Reste à trancher
 
-- **Mana ou énergie** à l'entrée (ci‑dessus).
 - **Le rayon d'irradiation** d'une faille ouverte — ⚠️ à MESURER (combien de lieux de
   récolte restent hors rayon avec 3 à 6 failles), pas à choisir : c'est lui qui décide si le
   harcèlement est un choix ou une taxe.
