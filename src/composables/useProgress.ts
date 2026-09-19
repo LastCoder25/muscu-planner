@@ -282,12 +282,23 @@ export function useProgress() {
     Pilates: 'self_improvement',
     Équitation: 'sports',
   };
-  const DISC_TILE: Record<string, { label: string; icon: string }> = {
+  /** Tuile d'accueil / de stats par discipline de séance.
+   *
+   *  ⚠️ `key` REDIRIGE vers une tuile existante quand deux disciplines sont le MÊME
+   *  sport. C'est le cas de la **prépa physique**, qui est de la préparation au tennis
+   *  dans cette app (`prepaBuilder` = « prépa physique (tennis & co) », son hub EST
+   *  `TennisPage`) : trois tables le disent déjà — `DISC_SIG_NAME` et `DISC_SIG_WINDOW`
+   *  lui donnent la signature « Tennis », `CAT` la range en `specifique`, et la piste
+   *  `tennisXp` compte son XP. `DISC_TILE` était la seule hors de pas, d'où **DEUX barres
+   *  d'XP pour le tennis** sur l'écran Stats (et deux tuiles sur l'accueil) pour une
+   *  SEULE piste. L'accueil routait déjà les deux vers `/tennis`.
+   */
+  const DISC_TILE: Record<string, { key?: string; label: string; icon: string }> = {
     musculation: { label: 'Muscu', icon: 'fitness_center' },
     crossfit: { label: 'Crossfit', icon: 'sports_gymnastics' },
     hyrox: { label: 'Hyrox', icon: 'sports_score' },
     mobilite: { label: 'Mobilité', icon: 'self_improvement' },
-    prepa_physique: { label: 'Prépa physique', icon: 'directions_run' },
+    prepa_physique: { key: 'tennis', label: 'Tennis', icon: 'sports_tennis' },
   };
   const sportTiles = computed(() => {
     const map = new Map<
@@ -322,7 +333,7 @@ export function useProgress() {
         bump(`sport:${name}`, name, SPORT_ICON[name] ?? 'sports', sessionXp(r.payload), min, ts);
       } else {
         const t = DISC_TILE[d] ?? DISC_TILE.musculation!;
-        bump(`disc:${d}`, t.label, t.icon, sessionXp(r.payload), min, ts);
+        bump(t.key ?? `disc:${d}`, t.label, t.icon, sessionXp(r.payload), min, ts);
       }
     }
     for (const r of cardio.logs) {

@@ -995,7 +995,7 @@ async function goSport(key: string) {
   if (key.startsWith('cardio:')) {
     // Cardio : ouvre le formulaire de sortie avec l'activité pré-sélectionnée.
     await router.push(`/cardio?new=1&activity=${encodeURIComponent(key.slice('cardio:'.length))}`);
-  } else if (key === 'tennis' || key === 'disc:prepa_physique') {
+  } else if (key === 'tennis') {
     await router.push('/tennis');
   } else if (key === 'disc:musculation') {
     await router.push('/muscu');
