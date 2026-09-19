@@ -554,7 +554,8 @@
     <div v-if="pushOk" class="panel push-panel">
       <div class="p-title font-display">🔔 Me prévenir</div>
       <div class="p-sub">
-        Armée repérée, assaut résolu, héros ou convoi rentré — même app fermée.
+        Armée repérée, assaut résolu, héros, convoi ou groupe rentré, et ce qui bouge sur un boss
+        entre amis — même app fermée.
       </div>
       <button class="push-btn" :disabled="pushBusy" @click="togglePush">
         {{ pushOn ? 'Désactiver les notifications' : 'Activer les notifications' }}

@@ -363,6 +363,45 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
       expect(share).toContain(`when '${family}' then ${units}`);
   });
 
+  // ── Les NOTIFICATIONS (déclencheurs, 0079) ──────────────────────────────────────
+  // ⚠️ Vérifiées en plus sur comptes réels, en transaction annulée : un ami qui rejoint
+  // prévient le lanceur, une frappe prévient les autres et pas son auteur, trois frappes
+  // dans l'heure ne font qu'un message, et un coup fatal n'en fait aucun (« le boss est
+  // tombé » s'en charge). Ces tests-ci gardent les RÈGLES dans la migration.
+  it('⚠️ l’auteur d’une frappe n’est jamais prévenu de sa propre frappe', () => {
+    expect(lastDef('fboss_push_hit')).toContain('m.user_id <> new.user_id');
+  });
+
+  it('⚠️ au plus UNE notification par ami et par heure (les frappes arrivent en rafales)', () => {
+    // La clé porte l'AUTEUR (savoir QUI a joué est ce qui a été demandé) ET l'heure (sans
+    // quoi une séance de 4 frappes préviendrait 4 fois). `on conflict do nothing` fait le
+    // reste : les lignes envoyées ne sont pas supprimées, seulement datées (`sent_at`).
+    const hit = lastDef('fboss_push_hit');
+    expect(hit).toContain("date_trunc('hour', now())");
+    expect(hit).toContain('new.user_id');
+    expect(hit).toContain('on conflict (user_id, dedupe) do nothing');
+  });
+
+  it('⚠️ le reste de vie ajoute la frappe — sinon il annoncerait celui d’AVANT le coup', () => {
+    // `fboss_hit` INSÈRE la frappe avant de mettre à jour les PV : un trigger `after
+    // insert` lit donc `damage` d'avant. Vérifié en base : 20 reps sur 100 000 PV
+    // annoncent « il reste 80 % », pas 100 %.
+    expect(lastDef('fboss_push_hit')).toContain('new.units::bigint * v_dpu');
+  });
+
+  it('⚠️ un coup FATAL ne s’annonce pas comme une frappe (un seul message à cet instant)', () => {
+    expect(lastDef('fboss_push_hit')).toContain(
+      'if v_after >= b.hp_total then return new; end if;',
+    );
+  });
+
+  it('⚠️ « a rejoint » ne part qu’au passage à ACCEPTED, et jamais au lanceur lui-même', () => {
+    // Le même UPDATE écrit aussi « declined » : un refus ne s'annonce pas.
+    const j = lastDef('fboss_push_joined');
+    expect(j).toContain("new.status <> 'accepted' or old.status = 'accepted'");
+    expect(j).toContain('v_owner = new.user_id');
+  });
+
   it('mêmes fenêtres de temps', () => {
     expect(FRIEND_BOSS.inviteWindowMs).toBe(24 * H);
     expect(sql).toContain("interval '24 hours'");
