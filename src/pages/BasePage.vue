@@ -255,17 +255,11 @@
              C'est par là qu'on sort : elle ouvre la carte des expéditions. Placée
              au milieu du pan SUD, à l'opposé du corps de garde — l'enceinte a donc
              un point d'entrée et un point de sortie, ce qui se lit d'un coup d'œil. -->
-        <g
-          v-once
-          class="hit gate"
-          role="button"
-          tabindex="0"
-          aria-label="Partir en expédition"
-          @click="openMap"
-          @keydown.enter="openMap"
-          @keydown.space.prevent="openMap"
-        >
-          <rect x="78" :y="WALL_BOTTOM - 16" width="70" height="42" class="gate-hit" />
+        <!-- ⚠️ LA PORTE N'EST PLUS LE BOUTON (demande de l'utilisateur) : le départ en
+             expédition se prend au relais du coin bas-gauche, et deux surfaces pour le même
+             geste faisaient doublon. Elle garde son métier de DÉCOR — elle dit que l'enceinte
+             a une sortie, en face du corps de garde. -->
+        <g v-once class="gate">
           <!-- Deux piliers coiffés encadrent l'arche : une PORTE, pas un trou dans le mur. -->
           <template v-for="g in gateSides" :key="g.side">
             <rect
@@ -288,20 +282,6 @@
             <line x1="91" :y1="WALL_BOTTOM + 8.7" x2="109" :y2="WALL_BOTTOM + 8.7" />
             <line x1="91" :y1="WALL_BOTTOM + 11.3" x2="109" :y2="WALL_BOTTOM + 11.3" />
           </g>
-          <!-- Le panneau au bord du chemin : où mène cette route. -->
-          <g class="signpost">
-            <line x1="122" :y1="WALL_BOTTOM + 23" x2="122" :y2="WALL_BOTTOM + 11" />
-            <rect
-              x="111"
-              :y="WALL_BOTTOM + 9"
-              width="36"
-              height="9.5"
-              rx="1.5"
-              class="sign-board"
-            />
-            <text x="130.5" :y="WALL_BOTTOM + 15.7" class="gate-label">Expéditions ›</text>
-          </g>
-
           <!-- ── LE CAMPEMENT DE DÉPART (coin bas-gauche) ──────────────────────
                ⚠️ PAS UN SECOND ACCÈS : il vit DANS le groupe de la porte, donc il
                partage son unique `@click`. La porte reste la sortie ; le chemin s'y
@@ -309,7 +289,15 @@
                boutons pour le même geste auraient été le doublon que ce projet
                combat ailleurs (« un bâtiment, un endroit ») ; ici c'est une seule
                scène, plus large et plus parlante, qui remplit un coin resté vide. -->
-          <g class="camp">
+          <g
+            class="hit camp"
+            role="button"
+            tabindex="0"
+            aria-label="Partir en expédition"
+            @click="openMap"
+            @keydown.enter="openMap"
+            @keydown.space.prevent="openMap"
+          >
             <!-- Cible tactile élargie : les dessins se cliquent, mais un doigt vise mal. -->
             <!-- ⚠️ Bornée pour rester HORS du rempart : son coin haut-droit doit être
                  au-delà de WALL_R + la demi-épaisseur du trait (72 + 4), sinon un clic près
@@ -2331,11 +2319,11 @@ function doHarvest() {
   stroke: #4a3d2b;
   stroke-width: 0.7;
 }
-.hit.gate:focus-visible {
+.hit.camp:focus-visible {
   outline: none;
 }
-.hit.gate:focus-visible .cart-tilt,
-.hit.gate:hover .cart-tilt {
+.hit.camp:focus-visible .cart-tilt,
+.hit.camp:hover .cart-tilt {
   stroke: var(--accent, #ffd23f);
   stroke-width: 1.4;
 }
@@ -2377,25 +2365,6 @@ function doHarvest() {
 .gate-bridge line {
   stroke: #4a3620;
   stroke-width: 0.6;
-}
-.signpost line {
-  stroke: #5a4c36;
-  stroke-width: 2;
-  stroke-linecap: round;
-}
-.sign-board {
-  fill: #3a2f1f;
-  stroke: var(--accent, #ffd23f);
-  stroke-width: 1;
-}
-.gate-label {
-  font-size: 6.6px;
-  text-anchor: middle;
-  fill: var(--accent, #ffd23f);
-  font-weight: 700;
-}
-.gate:active .sign-board {
-  fill: #54432b;
 }
 .slot-empty {
   fill: #241f18;
