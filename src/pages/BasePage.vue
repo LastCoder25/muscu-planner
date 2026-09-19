@@ -309,34 +309,46 @@
                boutons pour le même geste auraient été le doublon que ce projet
                combat ailleurs (« un bâtiment, un endroit ») ; ici c'est une seule
                scène, plus large et plus parlante, qui remplit un coin resté vide. -->
-          <path :d="campRoad" class="road" />
-          <path :d="campRuts" class="road-ruts" />
           <g class="camp">
             <!-- Cible tactile élargie : les dessins se cliquent, mais un doigt vise mal. -->
             <!-- ⚠️ Bornée pour rester HORS du rempart : son coin haut-droit doit être
                  au-delà de WALL_R + la demi-épaisseur du trait (72 + 4), sinon un clic près
                  du mur bas-gauche ouvrirait les expéditions. Mesuré : 77,7 > 76. -->
             <rect x="4" y="164" width="52" height="34" class="gate-hit" />
-            <ellipse cx="32" cy="184" rx="27" ry="8.5" class="camp-ground" />
-            <!-- La tente : deux pans, celui de gauche à l'ombre. -->
-            <path d="M26 163 L40 183 L12 183 Z" class="camp-tent" />
-            <path d="M26 163 L26 183 L12 183 Z" class="camp-tent-dark" />
-            <path d="M26 183 L26 172 L32 183 Z" class="camp-tent-door" />
-            <!-- Deux caisses prêtes à charger, du côté de la tente. -->
-            <rect x="41" y="177" width="9" height="7" rx="1" class="camp-crate" />
-            <rect x="44" y="171" width="7" height="6" rx="1" class="camp-crate" />
-            <!-- Le feu : ce qui dit « on part d'ici ». Posé du côté de la ROUTE, où l'œil
-                 arrive, et pas derrière la tente. Orange CHAUD, jamais l'accent jaune des
-                 signaux « à faire » — un feu de camp n'est pas une tâche. -->
-            <path d="M50 188 L62 188 L60 183.5 L52 183.5 Z" class="camp-logs" />
-            <path
-              d="M56 184 C52.2 179.6 54.8 176.4 56 172 C57.2 176.4 60 178 60 181.6 C60 184.4 58.2 186 56 186 C53.8 186 52 184.4 52 181.6 C52.8 183 54.4 184 56 184 Z"
-              class="camp-fire"
-            />
-            <path
-              d="M56 184 C54.4 181.6 55.4 179.6 56 177.2 C56.6 179.6 58 180.6 58 182.2 C58 183.6 57.1 184.6 56 184.6 Z"
-              class="camp-fire-core"
-            />
+            <ellipse cx="36" cy="187" rx="31" ry="7.5" class="camp-ground" />
+            <!-- ⚠️ UNE CARAVANE, pas une tente : c'est d'ici que partent les convois et les
+                 expéditions, une tente ne racontait rien de ce qu'on vient y faire. -->
+            <g class="camel">
+              <path
+                d="M10 180 C10 176.5 13.5 175 17.5 175 C21.5 175 25 176.5 25 180 C25 182.8 22 183.8 17.5 183.8 C13 183.8 10 182.8 10 180 Z"
+              />
+              <path d="M12.4 176 C13.3 172.2 15.6 172.2 16.5 176 Z" />
+              <path d="M18 175.6 C19 171.6 21.8 171.6 22.8 175.6 Z" />
+              <path
+                d="M24 178.6 C26.3 177.2 27.2 173.9 26.8 171 L29 171 C29.5 174.4 28.5 178.2 25.7 180 Z"
+              />
+              <path d="M26.4 169.2 C29.2 168.3 31 169.7 30.6 172 L26.9 172.4 Z" />
+              <rect x="11.6" y="183.4" width="1.5" height="4.8" rx="0.6" />
+              <rect x="15.8" y="183.4" width="1.5" height="4.8" rx="0.6" />
+              <rect x="20" y="183.4" width="1.5" height="4.8" rx="0.6" />
+            </g>
+            <!-- Le chariot bâché qu'il tire. -->
+            <g class="cart">
+              <path
+                d="M35 182.6 L57 182.6 L57 175.6 C57 171.2 52.8 169.2 46 169.2 C39.2 169.2 35 171.2 35 175.6 Z"
+                class="cart-tilt"
+              />
+              <path
+                d="M35 175.6 C35 171.2 39.2 169.2 46 169.2 L46 182.6 L35 182.6 Z"
+                class="cart-tilt-dark"
+              />
+              <rect x="33" y="182.2" width="26" height="3.4" rx="1" class="cart-bed" />
+              <circle cx="38.5" cy="187.6" r="3.1" class="cart-wheel" />
+              <circle cx="53.5" cy="187.6" r="3.1" class="cart-wheel" />
+            </g>
+            <rect x="60" y="179.5" width="8" height="6" rx="1" class="camp-crate" />
+            <!-- Le libellé, comme au bord de la route : on sait où mène ce départ. -->
+            <text x="36" y="196.5" class="camp-label">Expéditions ›</text>
           </g>
         </g>
 
@@ -1307,34 +1319,17 @@ const roadRuts = computed(() => {
   const y = WALL_BOTTOM + 15;
   return `M96.5 ${y} C96 ${y + 8} 94 ${y + 14} 93 200 M103.5 ${y} C104 ${y + 8} 106 ${y + 14} 107 200`;
 });
-/** La BIFURCATION vers le campement : le chemin principal sort au sud, celui-ci s'en
- *  sépare au pied du pont et file vers le coin bas-gauche, resté vide. Même ruban qui
- *  s'évase que la route principale (`.road`), donc rien de neuf à styler. */
-const campRoad = computed(() => {
-  const y = WALL_BOTTOM + 6;
-  // ⚠️ Elle DESCEND nettement en s'éloignant (y de ~172 à ~190) : tracée à plat, elle se
-  // lisait comme une planche posée en travers, pas comme une route qui part au loin.
-  return `M92 ${y} C74 ${y + 4} 52 184 22 190 L26 198 C58 194 80 ${y + 12} 98 ${y + 5} Z`;
-});
-const campRuts = computed(() => {
-  const y = WALL_BOTTOM + 10;
-  return `M92 ${y} C74 ${y + 4} 54 188 26 193`;
-});
 /** Touffes d'herbe et taches de prairie, tirées UNE fois d'un générateur seedé
  *  (`mulberry32`, le PRNG du projet) : le dessin est le même à chaque ouverture — une
  *  base qui change d'herbe serait bizarre — et rien n'est posé sur la route ni sous
  *  l'enceinte. Coordonnées arrondies au dixième : sur un viewBox de 200, au-delà c'est
  *  du bruit qui alourdit chaque attribut `d`. */
 const outsideWalls = (x: number, y: number) => Math.hypot(x - 100, y - 100) > EARTH_R - 3;
-// ⚠️ La BIFURCATION compte aussi : sans elle, des touffes d'herbe pousseraient au milieu
-// de la route du campement. Bande large autour du segment (96, WALL_BOTTOM+12) → (19, 186).
-const onCampRoad = (x: number, y: number) => {
-  if (y < WALL_BOTTOM + 2 || x > 100) return false;
-  const t = Math.min(1, Math.max(0, (96 - x) / 77));
-  return Math.abs(y - (WALL_BOTTOM + 12 + t * (186 - (WALL_BOTTOM + 12)))) < 11;
-};
+// ⚠️ Le relais du coin bas-gauche compte aussi : sans lui, des touffes d'herbe pousseraient
+// au milieu de la caravane.
+const onCamp = (x: number, y: number) => x < 72 && y > 158;
 const onRoad = (x: number, y: number) =>
-  (y > WALL_BOTTOM && Math.abs(x - 100) < 18) || onCampRoad(x, y);
+  (y > WALL_BOTTOM && Math.abs(x - 100) < 18) || onCamp(x, y);
 const r1 = (n: number) => Math.round(n * 10) / 10;
 /** Sème `want` éléments par tirage-rejet dans le cadre (marge `pad`), hors enceinte et
  *  hors route. Une seule boucle pour les touffes et les taches. */
@@ -2296,45 +2291,51 @@ function doHarvest() {
   fill: #4b3c28;
   opacity: 0.55;
 }
-.camp-tent {
-  fill: #8a7856;
-  stroke: #4a3d2b;
+.camel > path,
+.camel > rect {
+  fill: #a98c5f;
+  stroke: #5a4c36;
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+.cart-tilt {
+  fill: #cbbb95;
+  stroke: #5a4c36;
   stroke-width: 0.8;
   stroke-linejoin: round;
 }
-.camp-tent-dark {
-  fill: #6b5a40;
+.cart-tilt-dark {
+  fill: #a2906c;
 }
-.camp-tent-door {
-  fill: #2a2118;
+.cart-bed {
+  fill: #6b5a40;
+  stroke: #4a3d2b;
+  stroke-width: 0.6;
+}
+.cart-wheel {
+  fill: #4a3d2b;
+  stroke: #8a7856;
+  stroke-width: 1;
+}
+/* Le libellé du relais, même rôle que celui au bord de la route : dire où mène ce départ. */
+.camp-label {
+  fill: var(--accent, #ffd23f);
+  font-family: var(--font-display, Oswald, sans-serif);
+  font-size: 7.5px;
+  font-weight: 700;
+  text-anchor: middle;
+  letter-spacing: 0.02em;
 }
 .camp-crate {
   fill: #7a6647;
   stroke: #4a3d2b;
   stroke-width: 0.7;
 }
-.camp-logs {
-  fill: #5a4a33;
-}
-/* Orange chaud, jamais l'accent jaune : l'accent dit « il y a à faire » partout ailleurs
-   sur cet écran (point de récolte, structure à monter), et un feu de camp n'est pas une
-   tâche. */
-.camp-fire {
-  fill: var(--d3, #ffb23f);
-}
-/* Le cœur plus clair : sans lui la flamme n'était qu'une tache orange plate. */
-.camp-fire-core {
-  fill: #ffe08a;
-}
-.hit.gate:hover .camp-fire,
-.hit.gate:focus-visible .camp-fire {
-  fill: var(--accent, #ffd23f);
-}
-/* La cible tactile du campement suit la tente, pas l'ancien coin. */
 .hit.gate:focus-visible {
   outline: none;
 }
-.hit.gate:focus-visible .camp-tent {
+.hit.gate:focus-visible .cart-tilt,
+.hit.gate:hover .cart-tilt {
   stroke: var(--accent, #ffd23f);
   stroke-width: 1.4;
 }
