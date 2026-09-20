@@ -171,7 +171,10 @@ export const PROMO_LEVELS: readonly number[] = RANK_ORDER.map((_, i) => rankStar
 /** Poids de la montée en NIVEAU face au chemin de classes. À 0,15, un aventurier de
  *  niveau 23 vaut ×4,3 son niveau 1 — soit plus que tout l'écart de rareté. C'est
  *  délibéré : l'aventurier qu'on a élevé doit battre celui qu'on vient de recruter. */
-const ADV_LEVEL_K = 0.15;
+/** ⚠️ EXPORTÉE pour les CHAMPIONS (`gacha.championStats`) : une seconde écriture de la
+ *  courbe de niveau divergerait au premier réglage, et c'est précisément sur ce facteur
+ *  que repose « un commun investi bat un primordial nu » (×11,5 sur 71 niveaux). */
+export const ADV_LEVEL_K = 0.15;
 
 /** Nombre de propositions à chaque promotion. */
 export const PROMO_CHOICES = 3;

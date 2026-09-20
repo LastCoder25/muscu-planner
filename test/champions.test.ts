@@ -112,7 +112,10 @@ describe('✨ l’Éveil', () => {
       expect(awakenMult(l)).toBeGreaterThanOrEqual(prev);
       prev = awakenMult(l);
     }
-    // Un Éveil complet reste un BONUS, pas un second axe de rareté (×5,3 entre raretés).
+    // ⚠️ MESURÉ : un Éveil complet (×1,48) vaut UN cran de rareté (le pas entre raretés
+    // voisines vaut ×1,25 à ×1,28), jamais deux. Le contrat du genre — un 4★ C6 vaut un
+    // 5★ C0. Les deux bornes vivent dans `gacha.test.ts`, qui les compare aux VRAIS
+    // budgets ; ici on ne garde que le garde-fou grossier.
     expect(awakenMult(AWAKEN.max)).toBeLessThan(1.6);
   });
 

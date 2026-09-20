@@ -25,6 +25,8 @@
  */
 
 import { prestigeRankIndex, RANK_ORDER, type Rarity } from './items';
+import { ADV_LEVEL_K } from './adventurers';
+import { championsOf, type Champion } from '@/data/champions';
 
 export const GACHA = {
   /**
@@ -262,7 +264,18 @@ export const AWAKEN = {
   /** Ce qu'un cran ajoute en MAGNITUDE, en part du budget. ⚠️ Barème COMMUN à tous les
    *  champions : tout écrire, ce serait 6 crans × 32 champions = **192 effets** à écrire ET
    *  à équilibrer, dont chacun peut casser le combat (le moteur applique ce qu'on lui
-   *  donne). Le barème borne l'écriture à ~64 lignes. */
+   *  donne). Le barème borne l'écriture à ~64 lignes.
+   *
+   *  ⚠️ **MESURÉ : UN ÉVEIL COMPLET (×1,48) VAUT UN CRAN DE RARETÉ, JAMAIS DEUX.** Le pas
+   *  entre deux raretés voisines vaut ×1,25 à ×1,28 (régulier sur toute l'échelle), donc un
+   *  C6 dépasse la rareté juste au-dessus et n'atteint jamais la suivante. **C'est le
+   *  contrat assumé du genre** (un 4★ C6 vaut un 5★ C0) : la collection rattrape la chance
+   *  d'UN cran, pas plus — et à Éveil ÉGAL la rareté gagne toujours, ce qui préserve le
+   *  tirage. ⚠️ Rester SOUS un cran demanderait `perStep ≤ 0,042`, soit un Éveil complet
+   *  imperceptible — donc pas d'Éveil du tout. Deux tests bornent les deux côtés.
+   *
+   *  ⚠️ La v0.939 justifiait ce barème en le comparant au **×5,3 entre les EXTRÊMES** de
+   *  l'échelle : le mauvais écart. Ce qui décide, c'est le pas entre raretés VOISINES. */
   perStep: 0.08,
 } as const;
 
@@ -302,4 +315,62 @@ export function championSkillLevel(
   if (!champ.skills.includes(skill)) return 0;
   const gagnes = champ.awaken.filter((a) => a.skill === skill && a.at <= awakenLvl).length;
   return 1 + gagnes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎰 TIRER UN CHAMPION, ET CE QU'IL VAUT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * 🎰 UN TIRAGE COMPLET : une rareté, puis un champion DANS cette rareté.
+ *
+ * ⚠️ **UNIFORME DANS LA RARETÉ**, et c'est ce qui fait la vitesse de l'Éveil : à 4
+ * champions par rareté, un champion PRÉCIS tombe à un quart du taux de sa rareté. C'est
+ * pour ça que la taille du pool se décide avant d'écrire le roster, pas après.
+ */
+export function pullChampion(
+  rng: () => number,
+  pity: PityState,
+): { champion: Champion; pity: PityState } {
+  const r = pullRarity(rng, pity);
+  const pool = championsOf(r.rarity);
+  // ⚠️ Un repli VIDE serait un trou silencieux : si une rareté n'a aucun champion, le
+  // tirage doit échouer bruyamment plutôt que rendre autre chose que ce qu'il annonce.
+  // ⚠️ INATTEIGNABLE tant que le roster est complet — `champions.test.ts` exige 4 champions
+  // à CHAQUE rareté, donc aucune mutation de cette ligne ne peut faire rougir un test. Une
+  // ceinture pour le jour où quelqu'un retire une rareté du roster, pas une règle de jeu.
+  if (!pool.length) throw new Error(`Aucun champion de rareté ${r.rarity}`);
+  return { champion: pool[Math.floor(rng() * pool.length)]!, pity: r.pity };
+}
+
+/**
+ * 🏅 Les stats d'un champion : son budget (plafonné par le rang du joueur) réparti sur sa
+ * forme, × le niveau, × l'Éveil.
+ *
+ * ⚠️ **LA COURBE DE NIVEAU EST CELLE DES AVENTURIERS** (`ADV_LEVEL_K`, importée) : c'est
+ * sur ce facteur ×11,5 que repose « un commun investi bat un primordial nu », et une
+ * seconde écriture divergerait au premier réglage.
+ *
+ * ⚠️ **LE NIVEAU DU CHAMPION EST BORNÉ PAR CELUI DU JOUEUR**, comme les aventuriers
+ * aujourd'hui (mesuré v0.905 : le niveau d'un aventurier ÉGALE celui du joueur, c'est la
+ * Guilde qui bride). Sans ça, un champion pourrait dépasser le sport.
+ */
+export function championStats(
+  champ: Champion,
+  playerLevel: number,
+  copies = 1,
+): { puissance: number; endurance: number; agilite: number } {
+  const budget = championBudget(champ.rarity, playerLevel) * awakenMult(awakenLevel(copies));
+  // ⚠️ Le niveau d'un champion EST celui du joueur — pas un second compteur à borner.
+  // Mesuré (v0.905) : le niveau d'un aventurier égale déjà exactement celui du joueur,
+  // c'est la Guilde qui bride. Un `Math.min(playerLevel, playerLevel)` aurait été un garde
+  // incapable de mordre, le motif qu'on vient de supprimer deux fois dans ce module.
+  const mult = 1 + ADV_LEVEL_K * (Math.max(1, playerLevel) - 1);
+  const { p, e, a } = champ.form;
+  const sum = Math.max(1, p + e + a);
+  return {
+    puissance: Math.round(((budget * p) / sum) * mult),
+    endurance: Math.round(((budget * e) / sum) * mult),
+    agilite: Math.round(((budget * a) / sum) * mult),
+  };
 }

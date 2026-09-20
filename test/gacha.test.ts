@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import { RANK_ORDER, type Rarity } from '@/lib/items';
+import { CHAMPIONS, CHAMPION_BY_ID, championsOf } from '@/data/champions';
+import { ADV_LEVEL_K } from '@/lib/adventurers';
 import {
   GACHA,
   GACHA_RATES,
@@ -11,6 +13,11 @@ import {
   topRate,
   RARITY_BUDGET,
   championBudget,
+  pullChampion,
+  championStats,
+  awakenLevel,
+  awakenMult,
+  AWAKEN,
 } from '@/lib/gacha';
 
 const rankOf = (r: Rarity) => RANK_ORDER.indexOf(r);
@@ -237,5 +244,192 @@ describe('🏅 le budget d’un champion', () => {
     const chanceux = championBudget('primordial', L);
     const malchanceux = championBudget('commun', L);
     expect(chanceux / malchanceux).toBeLessThan(2);
+  });
+});
+
+describe('🎰 tirer un CHAMPION', () => {
+  /** Rejoue `n` tirages complets et rend les champions obtenus. */
+  function tirages(n: number, seed = 4421) {
+    const rng = mulberry32(seed);
+    let pity = emptyPity();
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const r = pullChampion(rng, pity);
+      pity = r.pity;
+      out.push(r.champion);
+    }
+    return out;
+  }
+
+  it('⚠️ LE CHAMPION APPARTIENT À LA RARETÉ TIRÉE — pas de décalage de pool', () => {
+    // On rejoue `pullRarity` sur une graine JUMELLE : elle consomme le même premier
+    // tirage, donc elle annonce exactement la rareté que `pullChampion` a obtenue.
+    let pityA = emptyPity();
+    let pityB = emptyPity();
+    const a = mulberry32(31337);
+    const b = mulberry32(31337);
+    for (let i = 0; i < 400; i++) {
+      const attendu = pullRarity(b, pityB);
+      pityB = attendu.pity;
+      b(); // le tirage que `pullChampion` consomme pour choisir dans le pool
+      const obtenu = pullChampion(a, pityA);
+      pityA = obtenu.pity;
+      expect(obtenu.champion.rarity).toBe(attendu.rarity);
+    }
+  });
+
+  it('⚠️ UNIFORME DANS LA RARETÉ — c’est ce qui fixe la vitesse de l’Éveil', () => {
+    // À 4 champions par rareté, un champion PRÉCIS tombe à un quart du taux de sa rareté.
+    const parRarete = new Map<Rarity, Map<string, number>>();
+    for (const c of tirages(40_000)) {
+      const m = parRarete.get(c.rarity) ?? new Map<string, number>();
+      m.set(c.id, (m.get(c.id) ?? 0) + 1);
+      parRarete.set(c.rarity, m);
+    }
+    let verifiees = 0;
+    for (const [r, m] of parRarete) {
+      const total = [...m.values()].reduce((s, n) => s + n, 0);
+      if (total < 600) continue; // trop peu d'échantillons pour conclure
+      expect(m.size, `${r} : un champion n’est jamais tombé`).toBe(championsOf(r).length);
+      for (const [id, n] of m) {
+        expect(n / total, `${r}/${id}`).toBeGreaterThan(0.18);
+        expect(n / total, `${r}/${id}`).toBeLessThan(0.32);
+      }
+      verifiees++;
+    }
+    expect(verifiees, 'aucune rareté assez échantillonnée').toBeGreaterThanOrEqual(3);
+  });
+
+  it('le pity CONTINUE de courir : le tirage du champion ne le remet pas à zéro', () => {
+    const rng = mulberry32(99);
+    // Un état de pity déjà bien avancé doit ressortir intact (ou remis à zéro par une
+    // rareté décrochée), jamais reconstruit depuis rien.
+    const avant = { sinceTop: 40, sinceFloor: 3 };
+    const apres = pullChampion(rng, avant).pity;
+    expect(apres.sinceTop === 0 || apres.sinceTop === 41).toBe(true);
+    expect(apres.sinceFloor === 0 || apres.sinceFloor === 4).toBe(true);
+  });
+
+  it('⚠️ LE HARD PITY VAUT AUSSI POUR LE CHAMPION, pas seulement pour la rareté', () => {
+    const rng = mulberry32(5);
+    const { champion } = pullChampion(rng, { sinceTop: GACHA.hardPity - 1, sinceFloor: 0 });
+    expect(champion.rarity).toBe(TOP_RARITY);
+  });
+
+  it('est DÉTERMINISTE : même graine, même champion', () => {
+    const a = tirages(50, 1234).map((c) => c.id);
+    const b = tirages(50, 1234).map((c) => c.id);
+    expect(a).toEqual(b);
+  });
+
+  it('tout le roster finit par tomber — aucun champion n’est intirable', () => {
+    const vus = new Set(tirages(60_000).map((c) => c.id));
+    expect(vus.size).toBe(CHAMPIONS.length);
+  });
+});
+
+describe('🏅 les stats d’un champion', () => {
+  const total = (s: { puissance: number; endurance: number; agilite: number }) =>
+    s.puissance + s.endurance + s.agilite;
+
+  it('le TOTAL vaut le budget × la courbe de niveau', () => {
+    for (const L of [1, 12, 30, 60, 100]) {
+      for (const c of [CHAMPIONS[0]!, CHAMPIONS[20]!, CHAMPIONS[31]!]) {
+        const attendu = championBudget(c.rarity, L) * (1 + ADV_LEVEL_K * (L - 1));
+        // Trois arrondis, donc une tolérance de trois demi-points.
+        expect(Math.abs(total(championStats(c, L)) - attendu), `${c.name} niv ${L}`).toBeLessThan(
+          2,
+        );
+      }
+    }
+  });
+
+  it('⚠️ LA RÉPARTITION SUIT LA FORME — sinon la forme écrite ne servirait à rien', () => {
+    for (const c of CHAMPIONS) {
+      const s = championStats(c, 60);
+      const t = total(s);
+      const f = c.form.p + c.form.e + c.form.a;
+      expect(Math.abs(s.puissance / t - c.form.p / f), c.name).toBeLessThan(0.02);
+      expect(Math.abs(s.agilite / t - c.form.a / f), c.name).toBeLessThan(0.02);
+      // Une composante nulle de la forme reste nulle en stats.
+      if (c.form.a === 0) expect(s.agilite, c.name).toBe(0);
+    }
+  });
+
+  it('⚠️ LA COURBE DE NIVEAU EST CELLE DES AVENTURIERS (×11,5 du niveau 1 au 100)', () => {
+    // C'est sur ce facteur que repose « un commun investi bat un primordial nu ». Un
+    // champion de rareté BASSE l'éprouve sans que le plafond ne s'en mêle.
+    const c = championsOf('commun')[0]!;
+    const ratio = total(championStats(c, 100)) / total(championStats(c, 1));
+    expect(ratio).toBeCloseTo(1 + ADV_LEVEL_K * 99, 1);
+  });
+
+  it('✨ l’ÉVEIL multiplie exactement le barème, et il est plafonné', () => {
+    const c = CHAMPIONS[15]!;
+    const nu = total(championStats(c, 60, 1));
+    for (let copies = 1; copies <= AWAKEN.max + 1; copies++) {
+      const attendu = nu * awakenMult(awakenLevel(copies));
+      expect(
+        Math.abs(total(championStats(c, 60, copies)) - attendu),
+        `${copies} copies`,
+      ).toBeLessThan(2);
+    }
+    // Au-delà du dernier cran, plus rien ne monte (la copie se convertit).
+    expect(total(championStats(c, 60, 50))).toBe(total(championStats(c, 60, AWAKEN.max + 1)));
+  });
+
+  it('⚠️ À ÉVEIL ÉGAL, LA RARETÉ GAGNE TOUJOURS — sinon le tirage perdrait son sens', () => {
+    const L = 100; // plafond de rang levé, les raretés s'expriment pleinement
+    for (const copies of [1, 3, AWAKEN.max + 1]) {
+      RANK_ORDER.forEach((r, i) => {
+        if (i + 1 >= RANK_ORDER.length) return;
+        const bas = total(championStats(championsOf(r)[0]!, L, copies));
+        const haut = total(championStats(championsOf(RANK_ORDER[i + 1]!)[0]!, L, copies));
+        expect(haut, `${r} vs ${RANK_ORDER[i + 1]} à ${copies} copies`).toBeGreaterThan(bas);
+      });
+    }
+  });
+
+  it('⚠️ UN ÉVEIL COMPLET VAUT UN CRAN DE RARETÉ, JAMAIS DEUX', () => {
+    // MESURÉ : le pas entre deux raretés voisines vaut ×1,25 à ×1,28, un Éveil complet
+    // ×1,48 — donc un C6 dépasse la rareté juste au-dessus, à TOUTES les raretés, et
+    // n'atteint JAMAIS la suivante. C'est le contrat assumé du genre (un 4★ C6 vaut un
+    // 5★ C0) : la collection rattrape la chance d'UN cran, pas plus. Rester sous un cran
+    // demanderait perStep ≤ 0,042 — un Éveil complet imperceptible, donc pas d'Éveil.
+    const L = 100;
+    RANK_ORDER.forEach((r, i) => {
+      if (i + 2 >= RANK_ORDER.length) return;
+      const eveille = total(championStats(championsOf(r)[0]!, L, AWAKEN.max + 1));
+      const deuxCrans = total(championStats(championsOf(RANK_ORDER[i + 2]!)[0]!, L, 1));
+      expect(eveille, `${r} C6 atteint ${RANK_ORDER[i + 2]}`).toBeLessThan(deuxCrans);
+    });
+  });
+
+  it('⚠️ LE PLAFOND DE RANG SE VOIT DANS LES STATS, pas seulement dans le budget', () => {
+    // Au niveau 1, toutes les raretés valent la plus basse : le sport est le plafond.
+    const bas = total(championStats(championsOf('commun')[0]!, 1));
+    const haut = total(championStats(championsOf('primordial')[0]!, 1));
+    // ±1 : trois arrondis, et les deux champions n'ont pas la même forme.
+    expect(Math.abs(haut - bas)).toBeLessThanOrEqual(1);
+    // Et au niveau 100 l'écart de rareté s'exprime en entier.
+    expect(
+      total(championStats(championsOf('primordial')[0]!, 100)) /
+        total(championStats(championsOf('commun')[0]!, 100)),
+    ).toBeGreaterThan(4);
+  });
+
+  it('⚠️ UN NIVEAU ABERRANT NE RETOURNE JAMAIS LES STATS — la symétrie avec `advStats`', () => {
+    // ⚠️ Le niveau vient de `computeLevel(xp)` : il vaut toujours ≥ 1, donc ce garde ne
+    // peut pas mordre en partie réelle. Il vit ICI parce que `advStats` porte EXACTEMENT
+    // le même (`Math.max(1, adv.level)`) et que `championStats` en est le miroir : le
+    // retirer ferait diverger deux fonctions qui doivent rendre la même courbe. ⚠️ Il
+    // faut descendre sous −5,67 pour que `mult` passe négatif — un test posé à 0 ou −5
+    // passerait au vert sans rien couvrir (mutation survivante au premier jet).
+    const c = CHAMPION_BY_ID.get(CHAMPIONS[3]!.id)!;
+    for (const L of [0, -5, -10, -100]) {
+      const s = championStats(c, L);
+      for (const v of [s.puissance, s.endurance, s.agilite])
+        expect(v, `niveau ${L}`).toBeGreaterThanOrEqual(0);
+    }
   });
 });
