@@ -336,6 +336,7 @@ import {
   type BuildingType,
   type BuildingUnlock,
   RESOURCE_EMOJI,
+  type BuildingTypeId,
 } from '@/lib/buildings';
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 
@@ -522,7 +523,7 @@ const unlockOpen = computed({
   },
 });
 
-function doBuild(slot: number, typeId: string) {
+function doBuild(slot: number, typeId: BuildingTypeId) {
   const uid = auth.user?.id;
   const t = buildingType(typeId);
   if (!uid || !t) return;

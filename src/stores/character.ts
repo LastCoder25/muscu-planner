@@ -103,6 +103,7 @@ import {
   travelTimeMult,
   type Building,
   buildingLevel,
+  type BuildingTypeId,
 } from '@/lib/buildings';
 import { combatPower, type Combatant } from '@/lib/combat';
 import {
@@ -1685,7 +1686,10 @@ export const useCharacterStore = defineStore('character', () => {
   // ne diverge.
   async function buildFilon(
     userId: string,
-    typeId: string,
+    // ⚠️ TYPÉ depuis la v0.947 : il acceptait n'importe quelle chaîne, et le seul garde
+    // était `buildingType()` rendant `undefined`. Un id mal orthographié partait donc
+    // jusqu'ici sans que rien ne le dise.
+    typeId: BuildingTypeId,
     slot: number,
     now: number,
     playerLevel: number,

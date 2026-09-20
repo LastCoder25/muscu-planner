@@ -58,8 +58,34 @@ export interface BuildingUnlock {
   route?: string; // route de navigation directe (bouton « Y aller »), si applicable
 }
 
+/**
+ * ⚠️ LES IDS SONT TYPÉS, ET CE N'EST PAS DE LA COSMÉTIQUE. `typeId` était un `string`,
+ * donc **retirer un bâtiment du registre ne cassait RIEN** : les quinze sites qui le
+ * nommaient continuaient de compiler et rendaient simplement **0, en silence**. C'est le
+ * piège que ce projet documente à répétition — le rôle ÉCLAIREUR déclaré et consommé nulle
+ * part (v0.757), `ensureOptimum` jamais appelée (v0.746), la condition d'alerte de la Tour
+ * de guet posée sur une tuile qui n'existe pas (v0.750).
+ *
+ * ⚠️ **MESURÉ SUR LE CHANTIER QUI VIENT** : en préparant la fusion du Panthéon (3 bâtiments
+ * → 1), retirer les trois du registre laissait le typecheck **VERT** avec dix références
+ * mortes. Avec cette union, le compilateur les a désignées une par une. Une fusion de
+ * bâtiments passe donc d'une bascule à l'aveugle à une bascule guidée.
+ */
+export type BuildingTypeId =
+  | 'outpost'
+  | 'labyrinth_gate'
+  | 'boss_altar'
+  | 'gold_mine'
+  | 'energy_font'
+  | 'foundry'
+  | 'warehouse'
+  | 'caravanserail'
+  | 'guild'
+  | 'training'
+  | 'outfitter';
+
 export interface BuildingType {
-  id: string; // ex. 'dust_vein'
+  id: BuildingTypeId;
   label: string;
   emoji: string;
   category: BuildingCategory;
@@ -79,7 +105,9 @@ export interface BuildingType {
 
 // Un bâtiment POSÉ par le joueur sur un emplacement.
 export interface Building {
-  typeId: string; // → BUILDING_TYPES
+  /** ⚠️ Un type RETIRÉ du registre traîne encore dans les JSONB sauvegardés :
+   *  `normalizeRow` les écarte au chargement (v0.523), donc rien n'a jamais à migrer. */
+  typeId: BuildingTypeId;
   level: number; // ≤ niveau joueur
   slot: number; // index de l'emplacement (position stable sur la carte)
   collectedAt: number; // ms epoch de la dernière récolte (base de l'accumulation)
@@ -329,12 +357,15 @@ export const RESOURCE_EMOJI: Record<BuildResource, string> = {
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
 /** Niveau d'un bâtiment POSÉ, 0 s'il ne l'est pas. Les helpers dédiés (`outpostLevel`,
  *  `bossAltarLevel`…) refont ce `find` chacun de leur côté ; celui-ci est le générique. */
-export function buildingLevel(buildings: Building[], typeId: string): number {
+export function buildingLevel(buildings: Building[], typeId: BuildingTypeId): number {
   return buildings.find((x) => x.typeId === typeId)?.level ?? 0;
 }
 
 export function buildingType(id: string): BuildingType | undefined {
-  return BY_ID.get(id);
+  // ⚠️ `string` et non `BuildingTypeId`, délibérément : on l'appelle AUSSI avec ce que
+  // porte un JSONB sauvegardé, où un type retiré du registre peut encore traîner — c'est
+  // même comme ça que `normalizeRow` les écarte. Rendre `undefined` EST la réponse.
+  return BY_ID.get(id as BuildingTypeId);
 }
 
 // ── Constantes de dimensionnement (validées par simulation) ──
