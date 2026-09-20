@@ -1,37 +1,47 @@
 # 🖼️ Portraits de champions
 
-Déposer ici **un fichier par champion**, puis ajouter sa ligne dans
-`src/data/championPortraits.ts` :
+**Les 32 champions sont illustrés.** Rien à faire ici au quotidien.
 
-```ts
-const CHAMPION_PORTRAITS: Record<string, string> = {
-  ysolde: '/champions/ysolde.webp',
-};
+## D'où viennent ces images
+
+De [DiceBear](https://www.dicebear.com), style **`pixel-art`**, licence **CC0**
+(domaine public, aucun crédit dû) — comme la base d'exercices du projet.
+
+Elles sont **téléchargées et bundlées**, jamais chargées depuis l'API à l'exécution :
+une dépendance réseau au rendu ajouterait de la latence et finirait par disparaître.
+
+⚠️ **Le style a été choisi à l'œil**, quatre styles CC0 rendus côte à côte en grand ET
+en 30 px. `pixel-art` est le seul qui dise « jeu », et le pixel art reste **lisible en
+petit** — ce qui décide, puisque le Codex affiche les 32 d'un coup. (`notionists` fait
+employés de bureau, `open-peeps` fait illustration de startup.)
+
+## Ce qui est déterminé, et par quoi
+
+|               |                                                                          |
+| ------------- | ------------------------------------------------------------------------ |
+| **Le visage** | la graine est l'**id du champion** — il ne change donc jamais            |
+| **Le fond**   | la **couleur de sa rareté** (`RANK_COLOR`), la même que partout ailleurs |
+| **Le format** | SVG — **63 Ko pour les 32**, et net à toute taille                       |
+
+⚠️ **SVG et non WebP** : dix fois plus léger qu'un jeu de WebP 160 px, et le service
+worker ne cache **rien** — chaque octet est retéléchargé à chaque visite.
+
+## Régénérer
+
+```
+node scripts/fetch-champion-portraits.mjs
 ```
 
-Les ids sont ceux de `src/data/champions.ts` (32 champions, 4 par rareté).
+⚠️ Inutile après un clone : les fichiers sont versionnés. Le téléchargement est
+**déterministe**, donc relancer le script redonne exactement les mêmes images.
 
-## Format attendu
+## Ajouter un champion
 
-|            |                                                     |
-| ---------- | --------------------------------------------------- |
-| **Format** | WebP (JPEG accepté)                                 |
-| **Taille** | 160 × 160 px minimum — un carré, recadré en `cover` |
-| **Poids**  | ~16-20 Ko par portrait                              |
+Poser sa ligne dans `src/data/championPortraits.ts` **et** dans le script ci-dessus,
+puis relancer. `test/championPortraits.test.ts` exige que **les 32 champions soient
+illustrés** et que **chaque fichier nommé existe** : l'oublier fait rougir la suite.
 
-⚠️ **Le poids compte** : le service worker ne cache **rien**, tout est retéléchargé à
-chaque visite, et le Codex affiche les 32 portraits d'un coup (~500-640 Ko à ce format).
-Les illustrations d'exercices du projet pèsent 60,8 Ko en moyenne, mais elles se
-chargent **une par une** — pas ici.
+## Le repli
 
-## Ce qui se passe sans fichier
-
-Rien ne casse : un champion absent de la table garde **l'avatar habillé de sa classe et
-son emoji**, qui sont déjà uniques par champion. Le roster peut donc s'illustrer
-champion par champion.
-
-## Garde-fou
-
-`test/championPortraits.test.ts` vérifie que **chaque fichier nommé dans la table existe
-sur le disque** et que chaque id désigne un vrai champion. Une ligne ajoutée sans son
-fichier fait rougir la suite.
+Un champion sans portrait — ou dont le fichier ne charge pas — garde **l'avatar habillé
+de sa classe et son emoji**, qui sont déjà uniques. Rien ne casse, rien ne se vide.

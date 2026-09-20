@@ -49,7 +49,7 @@
           :profile="look.profile"
           :equipped="equipped"
           :weapon-shape="look.weaponKind"
-          :portrait="championPortrait(adv.championId)"
+          :champion-id="adv.championId"
           :talent-icon="talentIcon"
           @familiar-click="emit('familiar')"
           @talent-click="emit('talent')"
@@ -150,7 +150,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import { championPortrait } from '@/data/championPortraits';
 import {
   advNominalRarity,
   advRank,
