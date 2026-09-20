@@ -727,13 +727,13 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
     wages: 123.6,
     ...over,
   });
-  const ctx = { guildLevel: 30, infirmaryLevel: 4, now: 1_000_000 };
+  const ctx = { pantheonLevel: 30, infirmaryLevel: 4, now: 1_000_000 };
 
   it('XP de chacun = grantAdvXp ; celui qui n’est pas parti est intact', () => {
     const r = partyClaimRoster(party(), roster, ctx);
     esc.forEach((a, i) =>
       expect(r.adventurers[i]).toMatchObject(
-        grantAdvXp(a, [50, 70, 90][i]!, ctx.guildLevel) as object,
+        grantAdvXp(a, [50, 70, 90][i]!, ctx.pantheonLevel) as object,
       ),
     );
     expect(r.adventurers[3]).toBe(bystander);

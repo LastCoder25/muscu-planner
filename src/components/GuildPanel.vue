@@ -3,10 +3,16 @@
     <q-card class="guild-card">
       <div class="g-head">
         <span class="g-title font-display">🏅 Mes champions</span>
-        <span class="g-count">{{ roster.length }}/{{ maxRoster }}</span>
+        <!-- ⚠️ CE QUI SE COMPTE ICI, C'EST LE DÉPLOIEMENT, pas la collection : un champion
+             en collection n'occupe aucune place (`isDeployed`). Avant, le compteur opposait
+             la collection ENTIÈRE au plafond — il affichait « 5/3 ». -->
+        <span class="g-count">{{ deployed }}/{{ maxRoster }}</span>
+        <span v-if="roster.length > deployed" class="g-count g-count-sub"
+          >· {{ roster.length }} en tout</span
+        >
       </div>
 
-      <p v-if="!guildLevel" class="g-empty">
+      <p v-if="!pantheonLevel" class="g-empty">
         Construis le <b>Panthéon</b> dans ta cour pour invoquer tes champions.
       </p>
 
@@ -54,15 +60,14 @@
         </button>
         <template v-if="guildTab === 'roster' || !roster.length">
           <!-- ⚠️ Le RECRUTEMENT et la PROMOTION ont disparu avec l'arbre de classes
-             (v0.951) : on n'ELEVE plus une recrue, on INVOQUE un champion et ses
-             doublons le reveillent. Il ne reste donc qu'un etat : le deploiement est-il
-             au complet ? ⚠️ Il se DIT, au lieu de laisser le bouton d'invocation se
-             griser sans raison — un champion de plus entrerait en collection.
-             (accents : voir plus bas, ce bloc est reecrit par le patch) -->
-          <div v-if="roster.length >= maxRoster" class="g-note g-full">
-            Déploiement au complet ({{ roster.length }}/{{ maxRoster }}). Les champions invoqués
-            au-delà attendent <b>en collection</b> — <b>monte le Panthéon d’un niveau</b> pour en
-            engager un de plus.
+             (v0.951) : on n'élève plus une recrue, on INVOQUE un champion et ses doublons
+             le réveillent. Il ne reste donc qu'un état : le déploiement est-il au complet ?
+             ⚠️ Il se DIT, au lieu de laisser le bouton d'invocation se griser sans raison —
+             un champion de plus entrerait en collection. -->
+          <div v-if="deployed >= maxRoster" class="g-note g-full">
+            Déploiement au complet ({{ deployed }}/{{ maxRoster }}). Les champions invoqués au-delà
+            attendent <b>en collection</b> — <b>monte le Panthéon d’un niveau</b> pour en engager un
+            de plus.
           </div>
           <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
              selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
@@ -387,10 +392,7 @@
       </div>
 
       <div class="d-state">
-        <template v-if="trainOf(detailAdv)">
-          🎓 en formation ({{ trainNameOf(detailAdv) }}) · {{ leftOf(trainOf(detailAdv)) }}
-        </template>
-        <template v-else-if="hurtOf(detailAdv)">
+        <template v-if="hurtOf(detailAdv)">
           🛏️ à l'infirmerie · {{ leftOf(hurtOf(detailAdv)) }}
         </template>
         <template v-else-if="busyOf(detailAdv)">
@@ -665,9 +667,7 @@ import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
-  ADV_CLASSES,
   ADV_STARS,
-  advNextPromoLevel,
   advRarity,
   advRank,
   advRankProgress,
@@ -687,7 +687,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { AWAKEN, awakenLevel } from '@/lib/adventurers';
+import { AWAKEN, awakenLevel, deployCap, deployedCount } from '@/lib/adventurers';
 import { GACHA } from '@/lib/gacha';
 import { useGameFx } from '@/composables/useGameFx';
 import {
@@ -850,7 +850,7 @@ const GAIN_NOTE = 'Les gains listés sont ce que le champion en tire.';
 /**
  * LES LIGNES DU SÉLECTEUR, pré-calculées.
  *
- * ⚠️ Le composant a un tick de 30 s (fatigue, convalescences, formations), donc TOUT ce
+ * ⚠️ Le composant a un tick de 30 s (fatigue, convalescences, convois), donc TOUT ce
  * que le template appelle est ré-évalué à chaque battement — et chaque helper y était
  * appelé deux fois par ligne (une fois en `v-if`, une fois en interpolation), `famWhy`
  * et `talTaken` balayant `advList` à chacun. Mesuré sur un compte réel : ~74 talents en
@@ -1279,8 +1279,11 @@ const rosterShown = computed(() =>
 watch(rosterChips, (chips) => {
   if (rosterFilter.value && !chips.includes(rosterFilter.value)) rosterFilter.value = null;
 });
-const guildLevel = computed(() => char.pantheonLevel);
-const maxRoster = computed(() => 1 + Math.floor(guildLevel.value / 2));
+const pantheonLevel = computed(() => char.pantheonLevel);
+/** ⚠️ `deployCap`, JAMAIS une copie de sa formule : l'écran doit annoncer exactement ce
+ *  que le jeu applique (c'est `advUnavailableReason` qui met au banc au-delà). */
+const maxRoster = computed(() => deployCap(pantheonLevel.value));
+const deployed = computed(() => deployedCount(roster.value));
 const rankOf = (a: Adventurer) => advRank(a);
 // La RARETÉ de sa classe — distincte du rang, mais elle monte du même pas (une classe
 // par rang gagné), donc les deux ne peuvent plus se contredire.
@@ -1288,15 +1291,13 @@ const rarOf = (a: Adventurer) => 'classe ' + rarityRank(advRarity(a)).name;
 const rarColor = (a: Adventurer) => rarityRank(advRarity(a)).color;
 const titleOf = (a: Adventurer) => advTitle(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
-// ⚠️ La barre annonce la PROMOTION, plus « l’étoile suivante » : ce niveau-là ne
-// déclenchait rien. Au sommet elle dit pourquoi il n’y a plus d’échéance, au lieu de se
-// taire — un titre vide se lit comme un oubli.
-const barTitle = (a: Adventurer) => {
-  const n = advNextPromoLevel(a);
-  return n === null
-    ? 'Au sommet de l’arbre — les étoiles suivent son entraînement'
-    : `Promotion suivante à ${stars(ADV_STARS)}`;
-};
+// ⚠️ Elle annonçait la PROMOTION, qui n’existe plus (v0.951) : un champion ne se promeut
+// pas, ce sont ses DOUBLONS qui le réveillent. Elle dit donc ce qu’elle montre vraiment —
+// l’avancée vers l’étoile suivante, le seul retour visible puisque le niveau reste caché.
+const barTitle = (a: Adventurer) =>
+  progressOf(a) >= 1
+    ? `Au sommet de son rang — ${stars(ADV_STARS)}`
+    : 'Avancée vers l’étoile suivante';
 const stars = (s: number) => rankStarStr(s);
 /** Sa CATÉGORIE (lib) : ce qui range, ce qui colore le cadre et ce que le filtre compte.
  *  ⚠️ DÉCLARÉE EN `function`, donc HISSÉE — et ce n'est pas cosmétique : le `watch` qui
@@ -1309,28 +1310,17 @@ function statusOf(a: Adventurer) {
 }
 const busyOf = (a: Adventurer) => ((a.busyUntil ?? 0) > now.value ? a.busyUntil! : 0);
 const hurtOf = (a: Adventurer) => ((a.hurtUntil ?? 0) > now.value ? a.hurtUntil! : 0);
-/** Formation en cours (0 si aucune). ⚠️ Elle IMMOBILISE : c'est tout le coût d'une
- *  promotion, et le Centre de formation est ce qui l'abrège. */
-const trainOf = (a: Adventurer) => ((a.training?.until ?? 0) > now.value ? a.training!.until : 0);
-const trainNameOf = (a: Adventurer) =>
-  a.training ? (ADV_CLASSES.find((c) => c.id === a.training!.classId)?.label ?? '?') : '';
-/** ⚠️ LA RÈGLE COMPLÈTE, une seule fois. Elle vivait ici en TROIS morceaux collés dans
- *  le template (`canPromote` + pas en formation + pas en convoi) et il en manquait un
- *  quatrième — l’existence du Centre de formation, que seul le store exigeait. */
 /** Ce qu’il fait en ce moment, en une ligne.
  *  ⚠️ DÉRIVÉ de `advStatus` (donc de `advUnavailableReason`, la source unique) : cette
  *  fonction refaisait la règle avec un ordre à elle, et le filtre l’aurait contredite.
- *  ⚠️ L’ordre change donc pour le cas « blessé ET en formation » : on annonce l’infirmerie,
- *  et la formation qui court en même temps est dite EN PLUS — rien n’est perdu. */
+ *  ⚠️ L’ORDRE VIENT DE LA SOURCE, jamais d’ici : deux vérités sur le même écran valent
+ *  moins qu’un ordre d’étiquetage légèrement différent (v0.808). */
 function stateOf(a: Adventurer): string {
-  const also = hurtOf(a) && trainOf(a) ? ' · 🎓 formation en cours' : '';
   switch (statusOf(a)) {
     case 'busy':
       return `🐫 en route · ${leftOf(busyOf(a))}`;
     case 'hurt':
-      return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}${also}`;
-    case 'training':
-      return `🎓 en formation · ${leftOf(trainOf(a))}`;
+      return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}`;
     case 'benched':
       return '🗿 en collection — pas engagé';
     default:
@@ -2193,7 +2183,11 @@ async function doPull() {
 .af-chip.tone-hurt {
   --tone-c: var(--d4, #ff6a45);
 }
-.af-chip.tone-training {
+.g-count-sub {
+  color: var(--dim);
+  font-size: 11px;
+}
+.af-chip.tone-benched {
   --tone-c: var(--d3, #ffb23f);
   border-style: dashed;
 }

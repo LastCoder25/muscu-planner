@@ -11,8 +11,7 @@
  * compte à rebours d'une faille porte jusqu'à **7 jours** : il s'affichait
  * « ⏳ 168 h 00 » à son apparition, et descendait « 156 h », « 132 h », « 108 h »…
  * Personne ne lit 168 heures comme « une semaine » d'un coup d'œil (signalé par
- * l'utilisateur). Même chose au Centre de formation, où la strate la plus haute vaut
- * **64 h** à bas niveau.
+ * l'utilisateur).
  *
  * ⚠️ **AUCUN TRAJET N'EST TOUCHÉ, et c'est MESURÉ** : l'aller le plus long du jeu vaut
  * 7,5 h (niveau 100, bout de la carte) et le convoi le plus lent 22 h 18 d'aller-retour

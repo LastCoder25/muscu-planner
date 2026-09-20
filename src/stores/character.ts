@@ -152,7 +152,6 @@ import {
 } from '@/lib/raid';
 import {
   advAvailable,
-  settleAllTraining,
   advProgressOf,
   advRarity,
   grantAdvXp,
@@ -1737,7 +1736,7 @@ export const useCharacterStore = defineStore('character', () => {
     let wages = 0;
     if (party) {
       const claim = partyClaimRoster(party, advList.value, {
-        guildLevel: pantheonLevel.value,
+        pantheonLevel: pantheonLevel.value,
         infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
         now,
       });
@@ -2549,9 +2548,8 @@ export const useCharacterStore = defineStore('character', () => {
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
   /** 🛕 Le niveau du PANTHÉON — un seul bâtiment depuis la fusion (v0.949), donc un seul
    *  niveau : il porte le DÉPLOIEMENT (combien de champions engagés à la fois) et la
-   *  FORGE (le temps de fabrication d'une pièce). ⚠️ Pendant la bascule vers les
-   *  champions, il alimente AUSSI la promotion des aventuriers (l'ancien Centre de
-   *  formation), qui disparaît au prochain jalon. */
+   *  FORGE (le temps de fabrication d'une pièce). ⚠️ Il porte aussi le plafond d'XP d'un
+   *  champion (`grantAdvXp`) — c'est le « le sport fixe le plafond » de cette boucle. */
   const pantheonLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'pantheon'));
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'caravanserail'));
   /** ⚠️ Le Chenil est une structure de l’ENCEINTE, pas un bâtiment de la cour — d’où
@@ -2560,24 +2558,21 @@ export const useCharacterStore = defineStore('character', () => {
    *  le recalculait, et une étiquette qui refait le calcul finit par contredire le combat. */
   const kennelLevel = computed(() => defenseLevel(row.value?.base?.defenses ?? [], 'kennel'));
 
-  /** Envoie un convoi. ⚠️ Le POI est RETIRÉ de la carte au départ, exactement comme pour
-   *  le héros — c'est ce qui fait que caravanes et héros se disputent les mêmes lieux. */
-  /** Applique les formations arrivées à terme ET la forge de l'Équipementier. ⚠️ Appelé
-   *  par le tick de base (qui tourne déjà) : sans ça, une promotion — ou une pièce
-   *  attendue — ne se conclurait qu'à la prochaine action touchant le vivier, donc
-   *  peut-être jamais.
+  /** ⚒️ Conclut les fabrications de l'Équipementier arrivées à terme. ⚠️ Appelé par le tick
+   *  de base (qui tourne déjà) : sans ça, une pièce attendue ne sortirait qu'à la prochaine
+   *  action touchant le vivier, donc peut-être jamais.
+   *
+   *  ⚠️ Elle réglait AUSSI les formations jusqu'à la v0.957 — mais la promotion est partie
+   *  avec l'arbre de classes (v0.951), donc plus rien n'écrivait `training` et ce réglage
+   *  ne pouvait plus jamais mordre. Le nom le dit maintenant.
    *
    *  ⚠️ `settleOutfit` rend le MÊME objet si rien n'est dû : on n'écrit `adv_gear` que
-   *  quand il rend autre chose — même politique que `withAdvGear`/`settleAllTraining`. */
-  async function settleAdventurers(userId: string, now = Date.now()) {
+   *  quand il rend autre chose — même politique que `withAdvGear`. */
+  async function settleForge(userId: string, now = Date.now()) {
     const cur = row.value;
-    const r = settleAllTraining(advList.value, now);
     const ag = cur?.adv_gear ? settleOutfit(cur.adv_gear, now) : null;
-    const patch: Record<string, unknown> = {};
-    if (r.changed) patch.adventurers = r.list;
-    if (cur && ag && ag !== cur.adv_gear) patch.adv_gear = ag;
-    if (!Object.keys(patch).length) return false;
-    await persist(userId, patch);
+    if (!cur || !ag || ag === cur.adv_gear) return false;
+    await persist(userId, { adv_gear: ag });
     return true;
   }
 
@@ -2650,7 +2645,7 @@ export const useCharacterStore = defineStore('character', () => {
       escort: escortAdvs,
       wages,
     } = caravanClaimRoster(van, before, {
-      guildLevel: pantheonLevel.value,
+      pantheonLevel: pantheonLevel.value,
       infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
       now: Date.now(),
     });
@@ -2867,7 +2862,7 @@ export const useCharacterStore = defineStore('character', () => {
     pantheonLevel,
     comptoirLevel,
     kennelLevel,
-    settleAdventurers,
+    settleForge,
     sendCaravan,
     claimCaravan,
     partyList,

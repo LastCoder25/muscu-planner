@@ -133,15 +133,6 @@
       {{ title?.label ?? '—' }} · <b :style="{ color: rarColor }">{{ rarLabel }}</b>
     </div>
     <div v-if="state" class="ap-state">{{ state }}</div>
-    <button
-      v-if="promotable"
-      class="ap-promo"
-      type="button"
-      :disabled="disabled"
-      @click="emit('promote')"
-    >
-      ⭐ Promouvoir
-    </button>
   </div>
 </template>
 
@@ -165,12 +156,11 @@ const props = defineProps<{
   /** Ce qu’il fait en ce moment (« ✅ disponible », « 🐫 en route · 2 h »…). */
   state?: string;
   /** Sa CATÉGORIE (`advStatus`), qui teinte le cadre : vert disponible, jaune en convoi,
-   *  rouge infirmerie, orange formation.
+   *  rouge infirmerie, orange en collection.
    *  ⚠️ Une PROP, plus une déduction faite sur la chaîne d'état : le portrait lisait
    *  `state.startsWith('✅')` pour savoir s'il était occupé — renommer le libellé aurait
    *  cassé le style en silence, et la même règle vivait alors à deux endroits. */
-  tone?: 'free' | 'busy' | 'hurt' | 'training' | 'benched';
-  promotable?: boolean;
+  tone?: 'free' | 'busy' | 'hurt' | 'benched';
   disabled?: boolean;
   /** Les 4 emplacements d'équipement, dans l'ordre de la grille. */
   gear: AdvGearCell[];
@@ -179,7 +169,6 @@ const emit = defineEmits<{
   open: [];
   familiar: [];
   talent: [];
-  promote: [];
   gear: [slot: AdvGearSlot];
 }>();
 
@@ -248,7 +237,6 @@ function starTf(i: number): string {
 .ap.tone-hurt {
   --tone-c: var(--d4, #ff6a45);
 }
-.ap.tone-training,
 .ap.tone-benched {
   --tone-c: var(--d3, #ffb23f);
   border-style: dashed;
@@ -467,18 +455,6 @@ button.ap-mini {
   font-size: 11.5px;
   color: var(--dim);
   line-height: 1.3;
-}
-.ap-promo {
-  margin-top: 6px;
-  min-height: 36px;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
-  font-weight: 700;
-  font-size: 12.5px;
-  cursor: pointer;
 }
 @media (prefers-reduced-motion: reduce) {
   .ap-frame {

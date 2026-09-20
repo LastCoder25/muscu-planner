@@ -2,8 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import { EXPE, travelOneWayMin } from '@/lib/expedition';
 import { caravanSlowFor } from '@/lib/caravan';
-import { CARAVAN, stratumTrainMult, trainMsFor } from '@/lib/caravan';
-import { PROMO_LEVELS } from '@/lib/adventurers';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -76,16 +74,5 @@ describe('⏳ formatage des durées', () => {
     // motif complaisant sans que rien ne rougisse — ça vient de se produire en écrivant
     // ce test même.
     expect(formatDurationMin(rt).startsWith('1 j')).toBe(true);
-  });
-
-  it('la formation, elle, PEUT dépasser 24 h — et se lit alors en jours', () => {
-    // Centre au niveau 0, strate la plus haute : le pire cas réel. La borne est DÉRIVÉE
-    // du nombre de strates (`PROMO_LEVELS`, une par rareté), jamais écrite.
-    const pire = trainMsFor(0, PROMO_LEVELS.length);
-    expect(pire).toBeGreaterThan(DAY);
-    expect(formatDuration(pire)).toMatch(/ j/);
-    // La 1re promotion, elle, reste très courte (décision v0.740).
-    expect(formatDuration(trainMsFor(0, 1))).toBe(`${CARAVAN.trainMs / MIN} min`);
-    expect(stratumTrainMult(1)).toBe(1);
   });
 });

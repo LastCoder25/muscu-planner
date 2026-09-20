@@ -19,6 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
+import { deployCap, deployedCount } from '@/lib/adventurers';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
 async function mountIt(
@@ -30,6 +31,9 @@ async function mountIt(
   /** Route initiale — ⚠️ nécessaire pour atteindre un ONGLET : un écran à onglets ne rend
    *  que celui qui est actif, donc son code resterait invisible sur l'onglet par défaut. */
   route = '/',
+  /** Reçoit le HTML rendu — ⚠️ c'est la seule façon de voir qu'un fixture périmé fait
+   *  rendre un ÉTAT VIDE : sans ça, le montage reste vert et le test devient creux. */
+  html?: (out: string) => void,
 ) {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -55,27 +59,58 @@ async function mountIt(
   app.config.warnHandler = () => {};
   let err: unknown = null;
   app.config.errorHandler = (e) => (err = e);
-  app.mount(document.createElement('div'));
+  const host = document.createElement('div');
+  app.mount(host);
+  html?.(host.innerHTML);
   return err;
 }
 
-/** Un personnage minimal mais NON VIDE : c'est le vivier peuplé qui réveille les boucles. */
+/** Un personnage minimal mais NON VIDE : c'est le vivier peuplé qui réveille les boucles.
+ *
+ *  ⚠️ LE PANTHÉON DOIT ÊTRE BÂTI, sinon le panneau ne rend que son état vide (« construis
+ *  le Panthéon ») et le test devient CREUX — il ne monterait plus rien de ce qu'on croit
+ *  éprouver. Le fixture disait `guild`, un type retiré par la fusion (v0.949).
+ *
+ *  ⚠️ ET IL PORTE UN CHAMPION EN COLLECTION (`deployed: false`) : c'est le seul état qui
+ *  exerce le compteur de déploiement et la ligne « en tout ». */
 const ROW = {
   adventurers: [
     { id: 'a1', name: 'Léa', seed: 1, path: ['guerrier'], level: 3, xp: 0 },
     { id: 'a2', name: 'Marc', seed: 2, path: ['archer'], level: 5, xp: 10, busyUntil: 9e15 },
+    {
+      id: 'a3',
+      name: 'Orsène',
+      seed: 3,
+      path: [],
+      level: 4,
+      xp: 0,
+      championId: 'orsene',
+      copies: 1,
+      deployed: false,
+    },
   ],
   inventory: [],
   equipped: {},
   talents: [],
-  buildings: [{ typeId: 'guild', level: 3, slot: 0, collectedAt: 0 }],
+  buildings: [{ typeId: 'pantheon', level: 3, slot: 0, collectedAt: 0 }],
   adv_gear: { stock: [], forges: [] },
 };
 
 describe('🚪 montage des écrans (erreurs de setup)', () => {
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
-    expect(await mountIt(GuildPanel, { open: true }, ROW)).toBeNull();
+    let out = '';
+    expect(await mountIt(GuildPanel, { open: true }, ROW, undefined, '/', (h) => (out = h))).toBe(
+      null,
+    );
+    // ⚠️ LE COMPTEUR OPPOSE LE DÉPLOIEMENT AU PLAFOND, jamais la collection : Panthéon 3
+    // → `deployCap` 2, deux legacy engagés, un champion en collection. Il affichait
+    // « 3/2 » parce qu'il comptait `roster.length` contre une COPIE de la formule.
+    const cap = deployCap(3);
+    const engages = deployedCount(ROW.adventurers as Parameters<typeof deployedCount>[0]);
+    expect(out).toContain(`${engages}/${cap}`);
+    // …et la collection se dit À PART, sinon on perdrait le champion mis au banc.
+    expect(out).toContain(`${ROW.adventurers.length} en tout`);
   }, 30_000);
 
   it('GuildPanel s’ouvre aussi sur un vivier VIDE — et l’invocation reste offerte', async () => {

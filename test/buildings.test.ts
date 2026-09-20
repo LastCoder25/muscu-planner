@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sessionXp } from '@/lib/athlete';
-import { CARAVAN, caravanSlots, caravanSlowFor, trainMsFor } from '@/lib/caravan';
+import { CARAVAN, caravanSlots, caravanSlowFor } from '@/lib/caravan';
 import { outfitterMsFor } from '@/lib/advGear';
 import { deployCap } from '@/lib/adventurers';
 import {
@@ -448,7 +448,6 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     expect(travelTimeMult(one('outpost', 999))).toBeGreaterThan(0.1);
     expect(bossAltarRollFloor(one('boss_altar', 999))).toBeLessThan(1);
     expect(caravanSlowFor(999)).toBeGreaterThan(1); // jamais plus rapide que le héros
-    expect(trainMsFor(999)).toBeGreaterThan(0); // une formation dure toujours
   });
 
   it('⚠️ on PROLONGE sans NERFER : la valeur au plafond d’origine est inchangée', () => {

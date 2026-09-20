@@ -220,7 +220,7 @@ export function settleParties(
 export function partyClaimRoster(
   party: PartyResult,
   roster: readonly Adventurer[],
-  ctx: { guildLevel: number; infirmaryLevel: number; now: number },
+  ctx: { pantheonLevel: number; infirmaryLevel: number; now: number },
 ): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
   const escort = party.escort
     .map((id) => roster.find((a) => a.id === id))
@@ -230,7 +230,7 @@ export function partyClaimRoster(
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
     if (gain === undefined) return a;
-    const up = grantAdvXp(a, gain, ctx.guildLevel);
+    const up = grantAdvXp(a, gain, ctx.pantheonLevel);
     return hurt.has(a.id) ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) } : up;
   });
   return { adventurers, escort, wages: Math.max(0, Math.round(party.wages || 0)) };

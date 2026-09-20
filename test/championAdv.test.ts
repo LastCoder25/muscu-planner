@@ -16,11 +16,9 @@ import {
   advUnavailableReason,
   deployCap,
   advTitle,
-  canPromote,
   championRarity,
   championSkillLevel,
   championStats,
-  nextStratum,
   type Adventurer,
 } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
@@ -43,7 +41,6 @@ describe('⚠️ NON-RÉGRESSION : un aventurier SANS champion ne bouge pas d’
       // Ses stats viennent bien du CUMUL du chemin, pas d'un budget de rareté.
       expect(advStats(a).puissance).toBeGreaterThan(0);
       expect(advRarity(a)).toBe(RANK_ORDER[Math.min(RANK_ORDER.length - 1, a.path.length - 1)]);
-      expect(nextStratum(a)).toBe(a.path.length);
       expect(lineageOf(a)).toBe(a.path[0]);
     }
   });
@@ -115,11 +112,6 @@ describe('🏅 un champion à la place d’un aventurier', () => {
         expect(roles.length, c.name).toBeLessThanOrEqual(1);
         if (c.role) expect(roles).toEqual([c.role]);
       }
-  });
-
-  it('⚠️ NE SE PROMEUT JAMAIS : ses doublons le réveillent, ils ne le changent pas de classe', () => {
-    for (const L of [1, 50, 100])
-      for (const g of [1, 50, 100]) expect(canPromote(asAdv(primordial, L), g)).toBe(false);
   });
 
   it('sa LIGNÉE est écrite, et elle décide de ce qu’il porte', () => {

@@ -3,7 +3,6 @@ import { CHAMPIONS } from '@/data/champions';
 import {
   ADV_CLASSES,
   PROMO_LEVELS,
-  PROMO_CHOICES,
   STRATUM_BUDGET,
   advAvailable,
   advUnavailableReason,
@@ -11,9 +10,6 @@ import {
   advStatus,
   ADV_STATUSES,
   ADV_STATUS_LABEL,
-  advTrainingLeftMs,
-  settleTraining,
-  settleAllTraining,
   advClass,
   advRarity,
   advStats,
@@ -22,25 +18,14 @@ import {
   advRoleLevels,
   advSignatureLevels,
   escortRoleLevel,
-  reachableSkills,
-  canPromote,
-  canPromoteNow,
-  classChoices,
-  classRarity,
-  eligibleClasses,
-  nextStratum,
-  pathTags,
-  promoLevel,
   ADV_MAX_LEVEL,
   ADV_STARS,
   advRank,
   advRankProgress,
   advStar,
-  advNextPromoLevel,
   advProgressOf,
   advXpToNext,
   deployCap,
-  recruitCost,
   grantAdvXp,
   type Adventurer,
   advAvatar,
@@ -59,27 +44,14 @@ const make = (over: Partial<Adventurer> = {}): Adventurer => ({
   xp: 0,
   ...over,
 });
-const roots = ADV_CLASSES.filter((c) => c.stratum === 0);
-
-/** Tous les chemins atteignables jusqu'à `maxStratum`, en suivant les ÉLIGIBLES (pas le
- *  tirage) — c'est la forme réelle de l'arbre, indépendamment de la chance. */
-function allPaths(maxStratum: number): string[][] {
-  let paths: string[][] = roots.map((c) => [c.id]);
-  for (let s = 1; s <= maxStratum; s++) {
-    const next: string[][] = [];
-    for (const p of paths) for (const c of eligibleClasses(p, s)) next.push([...p, c.id]);
-    paths = next;
-  }
-  return paths;
-}
-
 describe('vivier de classes — cohérence de l’arbre', () => {
   it('les ids sont uniques', () => {
     const ids = ADV_CLASSES.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
   it('la rareté DÉCOULE de la strate — une seule échelle dans tout le jeu', () => {
-    for (const c of ADV_CLASSES) expect(classRarity(c)).toBe(RANK_ORDER[c.stratum]);
+    for (const c of ADV_CLASSES)
+      expect(advRarity(make({ path: [c.id] })), c.id).toBe(RANK_ORDER[c.stratum]);
   });
   it('le budget d’une strate suit le PAS DE RARETÉ des objets (ratio 1,219)', () => {
     // Sans ça, « épique » ne voudrait pas dire la même chose pour une classe et un objet.
@@ -105,141 +77,12 @@ describe('vivier de classes — cohérence de l’arbre', () => {
   });
 });
 
-describe('⚠️ FILIATION — un Guerrier ne se voit jamais proposer Clerc', () => {
-  it('aucune proposition ne sort de la lignée du chemin', () => {
-    // La condition posée pour accepter le TIRAGE : la surprise, oui, mais pas l'absurde.
-    for (const p of allPaths(2)) {
-      const have = pathTags(p);
-      for (let s = 1; s <= 3; s++) {
-        for (const c of eligibleClasses(p, s)) {
-          for (const t of c.req ?? []) {
-            expect(have.has(t), `${p.join('→')} ne devrait pas ouvrir ${c.id}`).toBe(true);
-          }
-        }
-      }
-    }
-  });
-  it('le cas nommé : un Guerrier n’accède ni à Clerc, ni à Pyromancien', () => {
-    const g = make({ path: ['guerrier'] });
-    const ids = classChoices(g, 1).map((c) => c.id);
-    expect(ids).not.toContain('clerc');
-    expect(ids).not.toContain('pyromancien');
-    // …et un Mage n'accède pas aux classes d'épée.
-    const m = make({ path: ['mage'] });
-    const mids = classChoices(m, 1).map((c) => c.id);
-    expect(mids).not.toContain('epeiste');
-    expect(mids).not.toContain('brute');
-  });
-});
-
-describe('⚠️ AUCUN CUL-DE-SAC — chaque lignée mène quelque part', () => {
-  it('toute racine offre au moins PROMO_CHOICES orientations', () => {
-    for (const r of roots) {
-      expect(eligibleClasses([r.id], 1).length, r.id).toBeGreaterThanOrEqual(PROMO_CHOICES);
-    }
-  });
-  it('tout chemin garde au moins 2 offres jusqu’à la strate 3', () => {
-    // Une lignée qui n'aurait qu'UNE suite ne serait plus un choix, juste un couloir.
-    for (let s = 2; s <= 7; s++) {
-      for (const p of allPaths(s - 1)) {
-        expect(eligibleClasses(p, s).length, `${p.join('→')} @S${s}`).toBeGreaterThanOrEqual(2);
-      }
-    }
-  });
-});
-
-describe('le tirage des propositions', () => {
-  it('est DÉTERMINISTE : on ne relance pas le dé en rechargeant l’app', () => {
-    const a = make({ seed: 777 });
-    const first = classChoices(a, 1).map((c) => c.id);
-    for (let i = 0; i < 20; i++) expect(classChoices(a, 1).map((c) => c.id)).toEqual(first);
-  });
-  it('VARIE d’un aventurier à l’autre — deux Guerriers n’ont pas le même destin', () => {
-    const vus = new Set(
-      Array.from({ length: 30 }, (_, i) =>
-        classChoices(make({ seed: i * 977 + 3 }), 1)
-          .map((c) => c.id)
-          .join(','),
-      ),
-    );
-    expect(vus.size).toBeGreaterThan(1);
-  });
-  it('ne propose jamais deux fois la même classe, ni une déjà prise', () => {
-    for (const p of allPaths(1)) {
-      const a = make({ path: p, seed: 42 });
-      const ids = classChoices(a, 2).map((c) => c.id);
-      expect(new Set(ids).size).toBe(ids.length);
-      for (const id of ids) expect(p).not.toContain(id);
-    }
-  });
-  it('ne REPROPOSE jamais une classe du chemin, même sur une strate déjà franchie', () => {
-    // ⚠️ Garde DÉFENSIF : avec un chemin bien formé les strates avancent une par une,
-    // donc le cas ne peut pas survenir — et une mutation qui retire le garde passait
-    // inaperçue. Les chemins venant d’un JSONB, on force ici la situation pour que le
-    // garde soit réellement couvert.
-    const a = make({ path: ['guerrier', 'epeiste', 'duelliste'], seed: 5 });
-    const ids = classChoices(a, 2).map((c) => c.id);
-    expect(ids).not.toContain('duelliste');
-    expect(ids.length).toBeGreaterThan(0);
-  });
-  it('rend au plus PROMO_CHOICES offres', () => {
-    for (const p of allPaths(1)) {
-      expect(classChoices(make({ path: p }), 2).length).toBeLessThanOrEqual(PROMO_CHOICES);
-    }
-  });
-});
-
-describe('promotion — deux verrous, et le sport ne doit pas être le frein habituel', () => {
-  it('exige le niveau de l’aventurier ET celui de la Guilde', () => {
-    const a = make({ path: ['guerrier'], level: 1 });
-    const need = promoLevel(nextStratum(a))!;
-    expect(need).toBe(PROMO_LEVELS[1]);
-    expect(canPromote({ ...a, level: need - 1 }, 99)).toBe(false); // pas assez travaillé
-    expect(canPromote({ ...a, level: need }, need - 1)).toBe(false); // Guilde trop basse
-    expect(canPromote({ ...a, level: need }, need)).toBe(true);
-  });
-  it('⭐ « PROMOUVOIR MAINTENANT » : la règle COMPLÈTE, en un seul endroit', () => {
-    // ⚠️ Signalé par un joueur : « j’ai encore l’étoile sur la guilde alors qu’il n’y a rien
-    // à faire ». La condition vivait en TROIS exemplaires avec trois sous-ensembles
-    // différents — la pastille ignorait le convoi ET le Centre de formation, que seul le
-    // store exigeait. L’étoile s’allumait donc pour des promotions que rien n’acceptait.
-    const NOW = 1_700_000_000_000;
-    const a = make({ path: ['guerrier'], level: 1 });
-    const need = promoLevel(nextStratum(a))!;
-    const pret = { ...a, level: need };
-    const ctx = { guildLevel: need, trainingLevel: 1, now: NOW };
-    expect(canPromoteNow(pret, ctx)).toBe(true);
-
-    // ⚠️ SANS CENTRE DE FORMATION, rien n’est promouvable — pas même annonçable.
-    expect(canPromoteNow(pret, { ...ctx, trainingLevel: 0 })).toBe(false);
-    // ⚠️ PARTI EN CONVOI : il est sur la route, pas au Centre.
-    expect(canPromoteNow({ ...pret, busyUntil: NOW + 3600_000 }, ctx)).toBe(false);
-    // Un convoi TERMINÉ ne bloque plus.
-    expect(canPromoteNow({ ...pret, busyUntil: NOW - 1 }, ctx)).toBe(true);
-    // Une formation déjà en cours : la décision est prise.
-    expect(canPromoteNow({ ...pret, training: { classId: 'x', until: NOW + 1 } }, ctx)).toBe(false);
-    // …et les deux verrous de `canPromote` restent, bien sûr.
-    expect(canPromoteNow({ ...pret, level: need - 1 }, ctx)).toBe(false);
-    expect(canPromoteNow(pret, { ...ctx, guildLevel: need - 1 })).toBe(false);
-  });
-
-  it('⚠️ UNE CONVALESCENCE NE BLOQUE PAS une formation — c’est même le bon moment', () => {
-    // Décision v0.739, à ne pas défaire par mégarde : on ne fait pas attendre un blessé
-    // deux fois. `hurtUntil` est donc volontairement absent de la règle.
-    const NOW = 1_700_000_000_000;
-    const a = make({ path: ['guerrier'], level: 1 });
-    const need = promoLevel(nextStratum(a))!;
-    const blesse = { ...a, level: need, hurtUntil: NOW + 6 * 3600_000 };
-    expect(canPromoteNow(blesse, { guildLevel: need, trainingLevel: 1, now: NOW })).toBe(true);
-  });
-
-  it('⚠️ UNE PROMOTION EST UN RANG GAGNÉ — au sens littéral', () => {
+describe('🏅 UNE CLASSE PAR RANG — l’échelle est celle du héros', () => {
+  it('⚠️ UNE CLASSE EST UN RANG GAGNÉ — au sens littéral', () => {
     // ⚠️ MODÈLE POSÉ PAR L'UTILISATEUR : « le rang, c'est comme le joueur — bronze,
-    // argent, or… L'aventurier choisit une classe au rang bronze à sa création, ensuite
-    // une au rang argent, une à l'or. » Chaque promotion tombe donc EXACTEMENT au
-    // premier niveau d'un rang, et la table est CALCULÉE depuis `rankStartLevel` —
-    // deux tables jumelles écrites séparément divergent au premier réglage, ce que le
-    // projet vient de se faire deux fois.
+    // argent, or… » Chaque strate tombe donc EXACTEMENT au premier niveau d'un rang, et
+    // la table est CALCULÉE depuis `rankStartLevel` — deux tables jumelles écrites
+    // séparément divergent au premier réglage, ce que le projet s’est déjà fait deux fois.
     for (let i = 0; i < PROMO_LEVELS.length; i++) {
       const L = PROMO_LEVELS[i]!;
       expect(L, `strate ${i}`).toBe(rankStartLevel(i));
@@ -249,21 +92,14 @@ describe('promotion — deux verrous, et le sport ne doit pas être le frein hab
     }
   });
   it('la toute première classe reste immédiate — on ne recrute pas un aventurier muet', () => {
-    // On choisit sa classe AU RECRUTEMENT, donc au rang Bronze, donc au niveau 1.
     expect(PROMO_LEVELS[0]).toBe(1);
   });
   it('⚠️ les DEUX DERNIERS RANGS ne donnent plus de classe, et c’est assumé', () => {
-    // 10 rangs de prestige, 8 raretés de classe : l'écart est structurel. L'arbre est
-    // fini, le titre continue. Écrire deux strates de plus ferait ~24 classes pour deux
-    // paliers que presque personne n'atteindra.
+    // 10 rangs de prestige, 8 raretés de classe : l'écart est structurel.
     expect(PROMO_LEVELS.length).toBeLessThan(CHARACTER_RANKS.length);
-    expect(promoLevel(PROMO_LEVELS.length)).toBeNull();
   });
   it('l’arbre s’arrête à 8 strates, comme les 8 raretés', () => {
     expect(PROMO_LEVELS.length).toBe(RANK_ORDER.length);
-    expect(promoLevel(RANK_ORDER.length)).toBeNull();
-    const fini = make({ path: allPaths(0)[0]!, level: 99 });
-    expect(canPromote({ ...fini, path: Array(8).fill('guerrier') }, 99)).toBe(false);
   });
 });
 
@@ -313,8 +149,8 @@ describe('profondeur RÉELLEMENT écrite du vivier', () => {
   });
 
   it('⚠️ … et il S’ARRÊTE là : le sommet est un sommet, pas un trou', () => {
-    // Une lignée entière, du Guerrier au Socle premier. Au-delà, `classChoices` rend une
-    // liste vide et `canPromote` refuse : l'aventurier plafonne proprement.
+    // Une lignée entière, du Guerrier au Socle premier — elle atteint bien le HAUT de
+    // l'échelle, c'est tout l'objet de ces strates.
     const complet = make({
       path: [
         'guerrier',
@@ -329,9 +165,6 @@ describe('profondeur RÉELLEMENT écrite du vivier', () => {
       level: 99,
     });
     expect(complet.path).toHaveLength(PROMO_LEVELS.length);
-    expect(classChoices(complet, PROMO_LEVELS.length)).toEqual([]);
-    expect(canPromote(complet, 99)).toBe(false);
-    // Et il a bien atteint le HAUT de l'échelle — c'est tout l'objet de ces strates.
     expect(advRarity(complet)).toBe(RANK_ORDER[RANK_ORDER.length - 1]);
   });
 
@@ -346,12 +179,6 @@ describe('profondeur RÉELLEMENT écrite du vivier', () => {
         strate.filter((c) => c.signature).length,
         `strate ${st} — signatures`,
       ).toBeGreaterThanOrEqual(3);
-    }
-  });
-  it('chaque strate écrite a de quoi alimenter toutes les lignées', () => {
-    for (let s = 0; s <= 7; s++) {
-      const n = ADV_CLASSES.filter((c) => c.stratum === s).length;
-      expect(n, `strate ${s}`).toBeGreaterThanOrEqual(PROMO_CHOICES);
     }
   });
 });
@@ -423,22 +250,6 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
     }
   });
 
-  it('⚠️ la promotion s’ouvre EXACTEMENT au passage de rang', () => {
-    for (let i = 1; i < PROMO_LEVELS.length; i++) {
-      const need = PROMO_LEVELS[i]!;
-      expect(canPromote(strate(i, need), 99), `rang ${i}`).toBe(true);
-      expect(canPromote(strate(i, need - 1), 99), `rang ${i}, juste avant`).toBe(false);
-    }
-  });
-
-  it('⚠️ AU SOMMET DE L’ARBRE, le prestige continue sans nouvelle classe', () => {
-    const fini = (level: number) => strate(LIGNEE.length, level);
-    expect(advNextPromoLevel(fini(99))).toBeNull();
-    expect(canPromote(fini(99), 99)).toBe(false);
-    // Il monte pourtant encore de deux rangs entiers — le titre n'est pas figé.
-    expect(advRank(fini(99)).rankIndex).toBeGreaterThan(advRank(fini(71)).rankIndex);
-  });
-
   it('l’étoile ne recule jamais et reste dans ses bornes', () => {
     let vu = 0;
     for (let l = 1; l <= ADV_MAX_LEVEL; l++) {
@@ -482,7 +293,6 @@ describe('🎖️ LE RANG EST CELUI DU JOUEUR, LES ÉTOILES SONT SON NIVEAU', ()
   });
 });
 describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
-  const CTX = { guildLevel: 99, trainingLevel: 5, now: 1_000_000 };
   /** Bornes DÉRIVÉES du rang, jamais écrites : un test qui pin un nombre se casse à
    *  chaque réglage sans rien protéger de plus (leçon payée deux fois). */
   const DEB = PROMO_LEVELS[4]!; // premier niveau du 5e rang
@@ -499,7 +309,7 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   it('une étoile gagnée est ANNONCÉE — le niveau, lui, reste caché', () => {
     // ⚠️ Sans ça, des semaines de convois ne se voient qu'en rouvrant la Guilde pour y
     // lire une barre : c'est le seul retour que le joueur ait sur son vivier.
-    const ev = advProgressOf([at('a', DEB)], [at('a', DEB + 2)], CTX);
+    const ev = advProgressOf([at('a', DEB)], [at('a', DEB + 2)]);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
     expect(ev[0]).toMatchObject({ id: 'a', rankUp: false });
@@ -507,7 +317,7 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   });
 
   it('rien à dire quand rien n’a bougé', () => {
-    expect(advProgressOf([at('a', DEB)], [at('a', DEB)], CTX)).toEqual([]);
+    expect(advProgressOf([at('a', DEB)], [at('a', DEB)])).toEqual([]);
   });
 
   it('⚠️ UN RANG GAGNÉ EST ANNONCÉ, alors que son ÉTOILE RETOMBE de ★5 à ★1', () => {
@@ -517,7 +327,7 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
     // ⚠️ RÉÉCRIT (v0.834) : un rang ne se gagne plus qu'avec la PROMOTION. Le cas se produit
     // quand la formation se conclut — sa classe entre dans son parcours.
     const promu = at('a', FIN, { path: [...at('a', FIN).path, 'colosse_eternel'] });
-    const ev = advProgressOf([at('a', FIN)], [promu], CTX);
+    const ev = advProgressOf([at('a', FIN)], [promu]);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.rankUp).toBe(true);
     expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
@@ -553,19 +363,18 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   });
 
   it('un aventurier recruté entre-temps n’a rien « gagné »', () => {
-    expect(advProgressOf([], [at('a', FIN)], CTX)).toEqual([]);
+    expect(advProgressOf([], [at('a', FIN)])).toEqual([]);
   });
 
   it('chaque membre de l’escorte est annoncé séparément', () => {
     const ev = advProgressOf(
       [at('a', DEB), at('b', DEB + 2), at('c', DEB)],
       [at('a', DEB + 2), at('b', DEB + 2), at('c', DEB + 4)],
-      CTX,
     );
     expect(ev.map((e) => e.id)).toEqual(['a', 'c']);
   });
 });
-describe('Guilde : effectif, coût de recrutement, XP', () => {
+describe('🗿 Panthéon : effectif déployé et XP', () => {
   it('l’effectif croît avec la Guilde — donc avec le sport, mais LINÉAIREMENT', () => {
     // C'est ce qui rend la boucle accessible : la puissance du héros croît en ~L⁴, là où
     // l'effectif d'une Guilde suit son niveau tout doucement.
@@ -573,12 +382,6 @@ describe('Guilde : effectif, coût de recrutement, XP', () => {
     expect(deployCap(2)).toBe(2);
     expect(deployCap(20)).toBe(11);
     for (let l = 0; l < 60; l++) expect(deployCap(l + 1)).toBeGreaterThanOrEqual(deployCap(l));
-  });
-  it('⚠️ recruter coûte de plus en plus cher — sinon on remplit la Guilde d’un coup', () => {
-    // Et « qui j'élève » cesse d'être une décision : c'est tout l'intérêt de la feature
-    // pour un joueur qui n'a pas beaucoup d'or.
-    expect(recruitCost(3, 10)).toBeGreaterThan(recruitCost(0, 10));
-    expect(recruitCost(0, 30)).toBeGreaterThan(recruitCost(0, 5));
   });
   it('l’XP fait monter PLUSIEURS niveaux d’un coup si le voyage était gros', () => {
     const a = make({ level: 1, xp: 0 });
@@ -604,11 +407,10 @@ describe('Guilde : effectif, coût de recrutement, XP', () => {
   });
 });
 
-describe('⚠️ une promotion se PAIE en temps de formation', () => {
-  // Le Centre de formation annonce « formations plus courtes à chaque niveau » ; la
-  // promotion était pourtant INSTANTANÉE, donc son niveau ne changeait rien et sa
-  // promesse était creuse. C'est aussi ce que l'utilisateur a constaté : deux
-  // aventuriers promus, aucun timer.
+describe('⚠️ LA DISPONIBILITÉ D’UN AVENTURIER — une seule source, trois lectures', () => {
+  // ⚠️ `advUnavailableReason` est la SOURCE : `advAvailable`, `advStatus`, le filtre du
+  // vivier, le cadre coloré et la ligne d’état en dérivent tous. La Guilde avait sa propre
+  // règle, avec un ordre à elle — donc un blessé s’affichait autrement qu’il ne se rangeait.
   const base = (): Adventurer => ({
     id: 'a',
     name: 'A',
@@ -617,79 +419,41 @@ describe('⚠️ une promotion se PAIE en temps de formation', () => {
     level: 5,
     xp: 0,
   });
-  const enForm = (until: number): Adventurer => ({
-    ...base(),
-    training: { classId: 'epeiste', until },
-  });
 
-  it('⚠️ la classe n’entre PAS dans le chemin avant l’échéance', () => {
-    // Sinon l'aventurier profiterait de ses nouvelles stats pendant sa formation.
-    const a = settleTraining(enForm(1000), 999);
-    expect(a.path).toEqual(['guerrier']);
-    expect(a.training).toBeTruthy();
-  });
-
-  it('à l’échéance, la classe est appliquée et la formation disparaît', () => {
-    const a = settleTraining(enForm(1000), 1000);
-    expect(a.path).toEqual(['guerrier', 'epeiste']);
-    expect(a.training).toBeUndefined();
-  });
-
-  it('⚠️ IDEMPOTENT : rejouer le règlement ne promeut pas deux fois', () => {
-    // Il tourne à chaque tick — s'il n'était pas idempotent, un aventurier gagnerait
-    // une classe par seconde.
-    const a = settleTraining(enForm(1000), 5000);
-    expect(settleTraining(a, 9000)).toEqual(a);
-    expect(settleTraining(a, 9000).path).toHaveLength(2);
-  });
-
-  it('⚠️ un aventurier EN FORMATION est indisponible — c’est le coût de la promotion', () => {
-    expect(advAvailable(enForm(2000), 1000)).toBe(false);
-    expect(advAvailable(enForm(2000), 2000)).toBe(true);
-    expect(advTrainingLeftMs(enForm(2000), 1500)).toBe(500);
-    expect(advTrainingLeftMs(base(), 1500)).toBe(0);
-  });
-
-  it('⚠️ advUnavailableReason est la SOURCE de advAvailable : jamais de contradiction', () => {
+  it('advUnavailableReason est la SOURCE de advAvailable : jamais de contradiction', () => {
     const at = 1000;
     const cas = [
       base(),
       { ...base(), busyUntil: 2000 },
       { ...base(), hurtUntil: 2000 },
-      enForm(2000),
       { ...base(), busyUntil: 1000 },
       { ...base(), hurtUntil: 999 },
-      { ...enForm(2000), hurtUntil: 3000, busyUntil: 4000 },
+      { ...base(), championId: 'orsene' },
+      { ...base(), hurtUntil: 3000, busyUntil: 4000 },
     ];
     for (const a of cas) expect(advAvailable(a, at)).toBe(advUnavailableReason(a, at) === null);
     expect(advUnavailableReason({ ...base(), busyUntil: 2000 }, at)).toBe('busy');
     expect(advUnavailableReason({ ...base(), hurtUntil: 2000 }, at)).toBe('hurt');
-    expect(advUnavailableReason(enForm(2000), at)).toBe('training');
-    expect(advUnavailableReason({ ...enForm(2000), hurtUntil: 3000, busyUntil: 4000 }, at)).toBe(
-      'busy',
-    );
-    expect(advUnavailableReason({ ...enForm(2000), hurtUntil: 3000 }, at)).toBe('hurt');
-    for (const k of ['busy', 'hurt', 'training'] as const)
+    expect(advUnavailableReason({ ...base(), championId: 'orsene' }, at)).toBe('benched');
+    expect(advUnavailableReason({ ...base(), hurtUntil: 3000, busyUntil: 4000 }, at)).toBe('busy');
+    for (const k of ADV_STATUSES.filter((s) => s !== 'free'))
       expect(ADV_UNAVAILABLE_LABEL[k].length).toBeGreaterThan(0);
   });
 
   it('⚠️ advStatus DÉRIVE de advUnavailableReason — la Guilde avait un ordre à elle', () => {
     const at = 1000;
-    // Le filtre du vivier, le cadre coloré et la ligne d'état lisent tous CETTE fonction.
-    // Elle refaisait la règle dans l'écran avec un ordre différent (formation avant
-    // infirmerie), donc un blessé EN FORMATION s'affichait autrement qu'il ne se rangeait.
     const cas = [
       base(),
       { ...base(), busyUntil: 2000 },
       { ...base(), hurtUntil: 2000 },
-      enForm(2000),
-      { ...enForm(2000), hurtUntil: 3000 },
-      { ...enForm(2000), hurtUntil: 3000, busyUntil: 4000 },
+      { ...base(), championId: 'orsene' },
+      { ...base(), championId: 'orsene', hurtUntil: 3000 },
+      { ...base(), championId: 'orsene', hurtUntil: 3000, busyUntil: 4000 },
     ];
     for (const a of cas) expect(advStatus(a, at)).toBe(advUnavailableReason(a, at) ?? 'free');
-    // ⚠️ Le cas qui divergeait : blessé ET en formation se range à l'INFIRMERIE.
-    expect(advStatus({ ...enForm(2000), hurtUntil: 3000 }, at)).toBe('hurt');
-    // « free » ⟺ disponible : le filtre ne peut pas proposer comme partant quelqu'un que
+    // ⚠️ Le cas qui divergeait : un blessé en collection se range à l’INFIRMERIE.
+    expect(advStatus({ ...base(), championId: 'orsene', hurtUntil: 3000 }, at)).toBe('hurt');
+    // « free » ⟺ disponible : le filtre ne peut pas proposer comme partant quelqu’un que
     // le store refusera.
     for (const a of cas) expect(advStatus(a, at) === 'free').toBe(advAvailable(a, at));
   });
@@ -703,7 +467,6 @@ describe('⚠️ une promotion se PAIE en temps de formation', () => {
         base(),
         { ...base(), busyUntil: 2000 },
         { ...base(), hurtUntil: 2000 },
-        enForm(2000),
         // 🗿 EN COLLECTION : un champion que le Panthéon ne déploie pas. ⚠️ Il lui faut un
         // `championId` — un aventurier LEGACY n'est jamais mis au banc (il n'a pas de
         // Panthéon, et le priver de mission serait le punir d'avoir existé avant).
@@ -712,17 +475,6 @@ describe('⚠️ une promotion se PAIE en temps de formation', () => {
     );
     expect([...vus].sort()).toEqual([...ADV_STATUSES].sort());
     for (const s of ADV_STATUSES) expect(ADV_STATUS_LABEL[s].length).toBeGreaterThan(0);
-  });
-
-  it('une formation court PENDANT une convalescence — on ne fait pas attendre deux fois', () => {
-    const blesse = { ...enForm(2000), hurtUntil: 9000 };
-    expect(settleTraining(blesse, 2000).path).toHaveLength(2);
-  });
-
-  it('le règlement en masse ne recopie le vivier que s’il a bougé', () => {
-    const l = [base(), enForm(5000)];
-    expect(settleAllTraining(l, 1000)).toEqual({ list: l, changed: false });
-    expect(settleAllTraining(l, 5000).changed).toBe(true);
   });
 });
 
@@ -769,52 +521,6 @@ describe('⚠️ une compétence apprise DEUX FOIS monte d’un NIVEAU', () => {
   it('une compétence absente vaut le niveau ZÉRO, jamais undefined', () => {
     expect(escortRoleLevel([make({ path: ['guerrier'] })], 'haul')).toBe(0);
     expect(advSignatureLevels(make({ path: ['guerrier'] }))).toEqual([]);
-  });
-});
-
-describe('⚠️ « où il va » — l’horizon d’une lignée', () => {
-  it('contient les compétences de la classe de départ', () => {
-    const r = reachableSkills(['caravanier']);
-    expect(r.roles).toContain(advClass('caravanier')!.role);
-  });
-
-  it('⚠️ RESPECTE LA FILIATION : un Guerrier ne peut pas atteindre le soin d’un Clerc', () => {
-    // Le même invariant que le tirage des promotions. Si l'horizon l'ignorait, il
-    // promettrait une voie que le joueur ne pourra jamais prendre — pire que rien.
-    const guerrier = reachableSkills(['guerrier']);
-    const clerc = reachableSkills(['mage', 'clerc']);
-    expect(clerc.roles).toContain('heal');
-    expect(guerrier.roles).not.toContain('heal');
-  });
-
-  it('⚠️ l’horizon RÉTRÉCIT à mesure qu’on avance — les choix se referment', () => {
-    // C'est ce qui donne son poids à une promotion : plus on descend, moins il reste.
-    const tot = (p: string[]) => {
-      const r = reachableSkills(p);
-      return r.roles.length + r.signatures.length;
-    };
-    const debut = tot(['eclaireur']);
-    const apres = tot(['eclaireur', 'coursier']);
-    expect(apres).toBeLessThanOrEqual(debut);
-    expect(debut).toBeGreaterThan(0);
-  });
-
-  it('⚠️ contient TOUJOURS ce que le chemin porte DÉJÀ — balayage exhaustif', () => {
-    // ⚠️ Test renforcé après une mutation passée au VERT : vérifier un seul cas nommé
-    // ne suffisait pas — la compétence de la classe de départ se retrouvait souvent
-    // plus bas sur la même branche, donc l oubli restait invisible. Le balayage de TOUS
-    // les chemins, lui, tombe sur ceux où elle est unique.
-    for (const p of allPaths(2)) {
-      const r = reachableSkills(p);
-      const adv = make({ path: p });
-      for (const role of advRoles(adv)) expect(r.roles).toContain(role);
-      for (const sg of advSignatures(adv)) expect(r.signatures).toContain(sg);
-    }
-  });
-
-  it('se termine, même en partant de chaque racine', () => {
-    // Garde-fou : l'énumération suit des chemins, elle ne doit pas boucler.
-    for (const r of roots) expect(() => reachableSkills([r.id])).not.toThrow();
   });
 });
 

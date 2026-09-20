@@ -158,12 +158,6 @@ export const CARAVAN = {
   scoutMax: 0.4,
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
-  /** Formation d'une promotion, et ce que le Centre peut en retirer (asymptotiquement). */
-  /** Durée de la 1re promotion (strate 1), Centre non construit. ⚠️ Ce n'est PLUS « la
-   *  durée d'une formation » : les rangs suivants DOUBLENT (cf. `stratumTrainMult`). */
-  trainMs: 30 * 60_000,
-  trainMaxGain: 0.8,
-  trainHalf: 30,
   /** Paie par aventurier : socle × strate × niveau du POI^0,7. C'est un PUITS D'OR, mais
    *  calibré pour valoir ~60 % de l'or rapporté — à 26, les salaires valaient 2,6× l'or
    *  brut et le convoi était absurdement déficitaire. La caravane paie en RESSOURCES ;
@@ -420,14 +414,6 @@ function scaleEffects(e: AggregatedEffects, k: number): AggregatedEffects {
 }
 
 /**
- * Les TALENTS des aventuriers d'une escorte — un par tête, au plus.
- *
- * ⚠️ Mêmes trois exclusions que les compagnons, et pour les mêmes raisons : un talent
- * ÉQUIPÉ PAR LE HÉROS n'est pas disponible, un talent assigné deux fois ne compte
- * qu'une, un id qui ne désigne plus rien est ignoré. Un talent recyclé laisserait sinon
- * une assignation fantôme.
- */
-/**
  * Un aventurier peut-il porter ce talent ? Sa RARETÉ ne dépasse pas celle de sa CLASSE
  * (v0.805 ; demandé par l’utilisateur, choix « rareté de sa classe »).
  *
@@ -472,6 +458,14 @@ export function familiarKeepers(advs: readonly Adventurer[]): Map<string, Advent
   return keepers;
 }
 
+/**
+ * Les TALENTS des aventuriers d'une escorte — un par tête, au plus.
+ *
+ * ⚠️ Mêmes trois exclusions que les compagnons, et pour les mêmes raisons : un talent
+ * ÉQUIPÉ PAR LE HÉROS n'est pas disponible, un talent assigné deux fois ne compte
+ * qu'une, un id qui ne désigne plus rien est ignoré. Un talent recyclé laisserait sinon
+ * une assignation fantôme.
+ */
 export function advTalentsOf(
   advs: Adventurer[],
   owned: TalentInstance[],
@@ -515,8 +509,6 @@ export function unitEffects(p: CompanionSet | undefined, companionMult = 1): Agg
 function strataFor(level: number): number {
   return Math.max(1, PROMO_LEVELS.filter((l) => l <= level).length);
 }
-/** Aventurier de RÉFÉRENCE : une lignée guerrière promue autant que son niveau l'autorise.
- *  Il ne sert qu'à donner l'échelle de la route — jamais au jeu. */
 /** Les trois orientations d’une escorte de référence. ⚠️ TROIS, et pas une : une
  *  lignée 100 % mêlée a **agilité 0** tant qu’elle a peu de classes, donc son
  *  multi-frappe reste à 1,00 — et toute la calibration de la route, qui repose sur la
@@ -1503,31 +1495,6 @@ export function resolveCaravan(
   };
 }
 
-/** Temps de formation d'une promotion, raccourci par le Centre. ⚠️ ASYMPTOTIQUE : chaque
- *  niveau retire encore un peu, de moins en moins, et une formation garde TOUJOURS une
- *  durée — un Centre de niveau 100 ne doit pas rendre les promotions instantanées.
- *  L'ancien `1 − 0,04 × niveau` plafonnait à 0,25 dès le niveau 20 : 81 niveaux morts. */
-export function trainMsFor(trainingLevel: number, stratum = 1): number {
-  const l = Math.max(0, trainingLevel);
-  const gain = CARAVAN.trainMaxGain * (l / (l + CARAVAN.trainHalf));
-  return Math.round(CARAVAN.trainMs * (1 - gain) * stratumTrainMult(stratum));
-}
-
-/** Ce que coûte en TEMPS le rang visé, relativement à la 1re promotion.
- *
- *  ⚠️ La durée ne dépendait QUE du Centre : devenir Primordial coûtait exactement le
- *  même temps que devenir Inhabituel. Un palier qui ne se paie pas n'est pas un palier.
- *
- *  ⚠️ LE TEMPS DOUBLE À CHAQUE RANG, et c'est un choix plus RAIDE que le pas de rareté
- *  du projet (1,219, qui régit les stats) : monter d'un rang doit se SENTIR, et une
- *  échelle géométrique franche se lit sans notice (« le double du précédent »). Ancré
- *  sur une 1re promotion TRÈS RAPIDE (`CARAVAN.trainMs`), pour que le début de partie
- *  reste fluide — c'est précisément là que vit le joueur peu sportif que cette boucle
- *  vise, et il ne doit pas attendre une nuit pour sa première classe. */
-export function stratumTrainMult(stratum: number): number {
-  return 2 ** (Math.max(1, Math.round(stratum)) - 1);
-}
-
 /** Durée de convalescence d'un blessé, raccourcie par les 🩺 de l'escorte ET par
  *  l'Infirmerie (le même bâtiment qui soigne le héros et les familiers). */
 export function caravanHurtMs(escort: Adventurer[], infirmaryLevel = 0): number {
@@ -1587,7 +1554,7 @@ export function isCaravanClaimable(c: Caravan, now: number): boolean {
 export function caravanClaimRoster(
   van: Caravan,
   roster: readonly Adventurer[],
-  ctx: { guildLevel: number; infirmaryLevel: number; now: number },
+  ctx: { pantheonLevel: number; infirmaryLevel: number; now: number },
 ): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
   const o = van.outcome;
   const escort = van.escort
@@ -1598,7 +1565,7 @@ export function caravanClaimRoster(
   const adventurers = roster.map((a) => {
     const gain = o.xp[a.id];
     if (gain === undefined) return a;
-    const up = grantAdvXp(a, gain, ctx.guildLevel);
+    const up = grantAdvXp(a, gain, ctx.pantheonLevel);
     return hurt.has(a.id) ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) } : up;
   });
   return { adventurers, escort, wages: Math.max(0, Math.round(o.wages || 0)) };

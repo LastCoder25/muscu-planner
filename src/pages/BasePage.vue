@@ -400,11 +400,6 @@
             <text :x="y.x + 7.5" :y="y.y - 5.9">{{ y.level }}</text>
           </g>
           <circle v-if="y.ready" :cx="y.x - 7.5" :cy="y.y - 7.5" r="2.6" class="yard-ready" />
-          <!-- ⚠️ Le signal « une promotion attend » vivait sur la carte d'entrée du
-               vivier, en bas de la base. Celle-ci a disparu (on gère les aventuriers
-               DEPUIS la Guilde) : sans ce report, on perdrait l'information au lieu de
-               la déplacer. -->
-          <text v-if="y.star" :x="y.x - 6.5" :y="y.y + 9.5" class="yard-star">⭐</text>
           <rect
             v-if="y.todo"
             :x="y.x - YARD_HALF - 2"
@@ -1399,10 +1394,6 @@ interface YardCell {
   level: number;
   ready: boolean;
   damaged: boolean;
-  /** ⭐ Quelque chose attend une décision DANS ce bâtiment (une promotion, aujourd'hui). */
-  star?: boolean;
-  /** 🔴 ALERTE : une armée a été repérée — contour rouge à clignotement LENT. Lent, parce
-   *  qu'un siège se prépare sur des heures : un clignotement nerveux crierait au feu. */
   /** Quelque chose est À FAIRE ici (des corps à fouiller, des fossoyeurs rentrés). */
   todo?: boolean;
   onClick: () => void;
@@ -1508,7 +1499,7 @@ const yard = computed<YardCell[]>(() => {
 // ── Feuilles ouvertes depuis le dessin ──
 const plotSlot = ref<number | null>(null);
 
-// ── Guilde d’aventuriers ──
+// ── 🗿 Panthéon des champions ──
 const guildOpen = ref(false);
 function openGuild() {
   guildOpen.value = true;
@@ -1637,7 +1628,7 @@ const heroBack = computed(() =>
 );
 const heroForDefense = computed(() => (heroBack.value ? (props.hero ?? null) : null));
 /** LA GARNISON PRÉSENTE : les aventuriers qui ne sont ni en convoi, ni à l’infirmerie,
- *  ni en formation, épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
+ *  ni en collection, épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
  *  la MÊME fonction que le store donne à `resolveRaid` : le panneau et la bataille ne
  *  peuvent pas se contredire. */
 /** Les aventuriers qui tiendraient la brèche MAINTENANT. Nommés une seule fois : le
@@ -2764,12 +2755,6 @@ function doHarvest() {
     animation: none;
     opacity: 0.9;
   }
-}
-/* ⭐ « il y a une décision à prendre ici » — discret mais repérable au coup d'œil. */
-.yard-star {
-  font-size: 7px;
-  text-anchor: middle;
-  pointer-events: none;
 }
 /* ⚖️ Rapport de forces */
 .forces {

@@ -1,21 +1,27 @@
-// adventurers.ts — les aventuriers de la Guilde : arbre de classes, stats, rang.
+// adventurers.ts — ceux qui partent en mission : stats, rang, disponibilité.
 // Pur/testable, aucune dépendance Vue/Supabase.
 //
-// ⚠️ LE PRINCIPE QUI COMMANDE TOUT LE RESTE : « le sport fixe le PLAFOND, le travail
-// fixe le RYTHME ». Deux freins existent — le niveau de la Guilde (donc du joueur, donc
-// du sport) et l'XP que l'aventurier gagne en travaillant. Le plafond doit rester EN
-// RETRAIT pour un joueur peu sportif : mesuré, avec les seuils de promotion retenus, un
-// joueur d'une séance de 30 min par semaine atteint la 6e strate sur 8 en un an — il a
-// donc toujours une promotion à portée. C'est l'XP gagnée en mission qui doit brider,
-// jamais le plafond, sinon on lui montre une progression inatteignable.
+// ⚠️ DEUX PEUPLES DANS UN SEUL TYPE, et c'est voulu. Un `Adventurer` est soit un
+// CHAMPION (`championId` + `copies`, invoqué au Panthéon, réveillé par ses doublons),
+// soit un LEGACY — recruté avant la bascule (v0.951), qui porte encore un `path` de
+// classes. Chaque accesseur (`advStats`, `advRarity`, `advSignatures`, `advRoles`,
+// `advTitle`, `advRank`, `advAvatar`) regarde d'abord le champion et retombe sur le
+// chemin sinon : les deux cohabitent sans qu'aucun appelant ait à choisir.
 //
-// ⚠️ ON N'ÉCRIT PAS L'ARBRE, ON ÉCRIT UN VIVIER. Un arbre plein de 8 strates × 3 choix
-// ferait 9 840 nœuds — inécrivable. Chaque classe porte donc des TAGS et des PRÉREQUIS,
-// et les 3 propositions d'une promotion sont TIRÉES parmi les classes éligibles, de
-// façon déterministe et seedée sur l'aventurier. Résultat : deux Guerriers ne reçoivent
-// pas les mêmes offres et n'ont pas le même destin, pour ~35 classes écrites au lieu de
-// 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
-// depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
+// ⚠️ `ADV_CLASSES` N'EST PLUS UN ARBRE, C'EST UNE TABLE DE CONSULTATION. L'arbre de
+// promotion est parti avec le recrutement (plus de `classChoices`, `canPromote`,
+// `eligibleClasses` : on n'élève plus une recrue, on invoque un champion). Ses 94
+// classes restent parce qu'elles nourrissent encore deux lectures : les aventuriers
+// LEGACY déjà en base, et les lignées de RÉFÉRENCE écrites à la main dans
+// `caravan.ts` (`REF_LINEAGES`), sur lesquelles la route se calibre. Les champs
+// `req`/`tags` ne pilotent donc plus rien — ils documentent la filiation d'origine.
+//
+// ⚠️ LE PRINCIPE QUI COMMANDE TOUT LE RESTE : « le sport fixe le PLAFOND, le travail
+// fixe le RYTHME ». Deux freins — le niveau du Panthéon (donc du joueur, donc du sport),
+// qui plafonne le niveau d'un champion ET combien on en DÉPLOIE (`deployCap`), et l'XP
+// gagnée en mission. Le plafond doit rester EN RETRAIT pour un joueur peu sportif :
+// mesuré, le niveau d'un aventurier ÉGALE celui du joueur à chaque relevé — l'XP n'est
+// jamais le frein, le Panthéon l'est toujours.
 import {
   LEGENDARY_PROCS,
   SET_SIGNATURES,
@@ -33,12 +39,10 @@ import {
   rankStartLevel,
   type CharacterRank,
 } from './characterRank';
-// ⚠️ LE PRNG DU PROJET, pas une n-ième copie. Les trois qui traînaient étaient
-// arithmétiquement IDENTIQUES (seul l'idiome différait) — donc aucun tirage ne bouge —
-// mais quatre exemplaires d'un générateur seedé, c'est quatre occasions qu'une retouche
-// n'en touche qu'un et fasse diverger des mondes censés être reproductibles.
-// `combat.ts` n'importe RIEN : le prendre pour source ne crée aucun cycle.
-import { mulberry32, type CombatSkill } from './combat';
+// ⚠️ IMPORT DE TYPE SEUL : `combat.ts` n'importe rien, mais le garder en `type`
+// documente qu'aucun runtime ne traverse — les signatures sont des `EffectType` et des
+// `CombatSkill` NOMMÉS là où ils vivent, jamais une seconde nomenclature.
+import { type CombatSkill } from './combat';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -265,9 +269,6 @@ export const PROMO_LEVELS: readonly number[] = RANK_ORDER.map((_, i) => rankStar
  *  courbe de niveau divergerait au premier réglage, et c'est précisément sur ce facteur
  *  que repose « un commun investi bat un primordial nu » (×11,5 sur 71 niveaux). */
 export const ADV_LEVEL_K = 0.15;
-
-/** Nombre de propositions à chaque promotion. */
-export const PROMO_CHOICES = 3;
 
 // ── LE VIVIER ────────────────────────────────────────────────────────────────────
 export const ADV_CLASSES: AdvClass[] = [
@@ -1216,11 +1217,6 @@ export function advClass(id: string): AdvClass | undefined {
   return BY_ID.get(id);
 }
 
-/** La rareté d'une classe DÉCOULE de sa strate — une seule échelle, jamais deux. */
-export function classRarity(c: AdvClass): Rarity {
-  return RANK_ORDER[Math.min(RANK_ORDER.length - 1, Math.max(0, c.stratum))]!;
-}
-
 /** Un aventurier : un CHEMIN de classes (une par strate franchie) et un niveau gagné en
  *  travaillant. ⚠️ Aucune rareté n'est stockée : elle se DÉDUIT de la longueur du chemin,
  *  donc elle ne peut pas mentir. */
@@ -1265,15 +1261,10 @@ export interface Adventurer {
   copies?: number;
   level: number;
   xp: number;
-  /** Occupé jusqu'à (escorte, formation) — ms epoch. */
+  /** Occupé jusqu'à (escorte, camp, incursion) — ms epoch. */
   busyUntil?: number;
   /** Blessé jusqu'à — ms epoch. Soigné plus vite par l'Infirmerie, comme le héros. */
   hurtUntil?: number;
-  /** Promotion EN COURS au Centre de formation. ⚠️ Une promotion n'est pas instantanée :
-   *  c'est le temps passé au Centre qui la paie, et c'est ce que son niveau raccourcit.
-   *  Le `classId` n'est PAS encore dans `path` — il n'y entre qu'à l'échéance, sinon
-   *  l'aventurier profiterait de ses nouvelles stats pendant sa formation. */
-  training?: { classId: string; until: number };
   /**
    * Son COMPAGNON — l'id d'un familier de l'inventaire.
    *
@@ -1308,90 +1299,6 @@ export interface Adventurer {
    *  ⚠️ Comme le compagnon, l'appariement vit SUR l'aventurier : la pièce suit son homme.
    *  Absent = rien de porté (tous les aventuriers d'avant). */
   gear?: Partial<Record<'weapon' | 'armor' | 'accessory' | 'relic', string>>;
-}
-
-/** Tags accumulés par le chemin — la mémoire de ce que l'aventurier est devenu. */
-export function pathTags(path: string[]): Set<string> {
-  const out = new Set<string>();
-  for (const id of path) for (const t of advClass(id)?.tags ?? []) out.add(t);
-  return out;
-}
-
-/** Strate à laquelle l'aventurier peut prétendre ensuite (= longueur du chemin). */
-export function nextStratum(adv: Adventurer): number {
-  // ⚠️ UN CHAMPION NE SE PROMEUT PAS : ses doublons le réveillent, ils ne le font pas
-  // changer de classe. On rend le bout de l'échelle, et `promoLevel` rend alors `null`,
-  // donc `canPromote` refuse — SANS cas particulier greffé dans chacune des deux.
-  if (adv.championId) return PROMO_LEVELS.length;
-  return adv.path.length;
-}
-
-/** Niveau requis pour ouvrir la prochaine promotion, ou null si l'arbre est fini. */
-export function promoLevel(stratum: number): number | null {
-  return stratum < PROMO_LEVELS.length ? PROMO_LEVELS[stratum]! : null;
-}
-
-/** Classes ÉLIGIBLES à une strate depuis un chemin donné : bonne strate, et tous les
- *  prérequis déjà portés par le chemin. Une racine (strate 0) n'a aucun prérequis. */
-export function eligibleClasses(path: string[], stratum: number): AdvClass[] {
-  const have = pathTags(path);
-  const already = new Set(path);
-  return ADV_CLASSES.filter(
-    (c) => c.stratum === stratum && !already.has(c.id) && (c.req ?? []).every((t) => have.has(t)),
-  );
-}
-
-/** Les propositions d'une promotion : `PROMO_CHOICES` classes tirées parmi les éligibles,
- *  de façon DÉTERMINISTE (graine de l'aventurier + strate). Même aventurier = mêmes
- *  offres, à jamais — on ne peut pas relancer le dé en rechargeant l'app.
- *  ⚠️ Si le vivier éligible est plus court que 3, on rend ce qu'on a plutôt que de
- *  compléter avec du hors-filiation : mieux vaut 2 offres cohérentes que 3 dont une
- *  absurde (c'est la condition posée pour accepter le tirage). */
-export function classChoices(adv: Adventurer, stratum = nextStratum(adv)): AdvClass[] {
-  const pool = eligibleClasses(adv.path, stratum);
-  const rng = mulberry32((adv.seed + stratum * 2654435761) >>> 0);
-  const out: AdvClass[] = [];
-  const rest = [...pool];
-  while (out.length < PROMO_CHOICES && rest.length) {
-    out.push(rest.splice(Math.floor(rng() * rest.length), 1)[0]!);
-  }
-  return out;
-}
-
-/** L'aventurier peut-il être promu MAINTENANT ? Deux verrous : son niveau (le travail)
- *  et celui de la Guilde (le sport). Le second ne doit jamais être le frein habituel. */
-/** ⭐ PEUT-ON LE PROMOUVOIR **MAINTENANT** ? — la règle COMPLÈTE, en un seul endroit.
- *
- *  ⚠️ Signalé par un joueur : « j’ai encore l’étoile sur la guilde alors qu’il n’y a rien à
- *  faire ». La condition vivait en TROIS exemplaires, chacun avec un sous-ensemble
- *  différent — la pastille ne testait que `canPromote` + « pas en formation », le bouton
- *  de la Guilde y ajoutait `busyUntil`, et seul le STORE exigeait en plus un Centre de
- *  formation. Résultat : l’étoile s’allumait pour des promotions que rien ne pouvait
- *  accepter. Trois copies d’une règle finissent toujours par diverger.
- *
- *  ⚠️ `hurtUntil` N’EN FAIT PAS PARTIE, volontairement : une formation peut courir
- *  PENDANT une convalescence — c’est même le bon moment, et on ne fait pas attendre un
- *  blessé deux fois (décision v0.739, à ne pas défaire par mégarde). */
-export function canPromoteNow(
-  adv: Adventurer,
-  ctx: { guildLevel: number; trainingLevel: number; now: number },
-): boolean {
-  // Sans Centre de formation, aucune promotion n’est possible — pas même de l’annoncer.
-  if (ctx.trainingLevel <= 0) return false;
-  // Une seule formation à la fois : la décision est déjà prise.
-  if (adv.training) return false;
-  // Parti en convoi : il est physiquement sur la route, pas au Centre.
-  if ((adv.busyUntil ?? 0) > ctx.now) return false;
-  return canPromote(adv, ctx.guildLevel);
-}
-
-export function canPromote(adv: Adventurer, guildLevel: number): boolean {
-  const s = nextStratum(adv);
-  const need = promoLevel(s);
-  if (need === null) return false;
-  if (adv.level < need) return false;
-  if (guildLevel < need) return false;
-  return classChoices(adv, s).length > 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1800,14 +1707,6 @@ export function advRankProgress(adv: Adventurer): number {
   return rankProgress(adv.level, Math.max(0, adv.xp) / advXpToNext(adv.level));
 }
 
-/** Niveau qui ouvrira la PROCHAINE PROMOTION, ou null quand l’arbre est fini.
- *
- *  ⚠️ Ce n’est PAS « le prochain rang » : les deux derniers rangs n’apportent plus de
- *  classe (8 strates pour 10 rangs). Rendre le niveau du rang suivant promettrait une
- *  promotion qui n’arrivera jamais. */
-export function advNextPromoLevel(adv: Adventurer): number | null {
-  return promoLevel(nextStratum(adv));
-}
 /** Nom de métier courant = la classe la plus récente. */
 export function advTitle(adv: Adventurer): { emoji: string; label: string } | undefined {
   // 🏅 Un champion EST son propre titre : il n'a pas de métier courant, il a un nom.
@@ -1923,43 +1822,6 @@ export function advRoles(adv: Adventurer): AdvRole[] {
   return adv.path.map((id) => advClass(id)?.role).filter((r): r is AdvRole => !!r);
 }
 
-/**
- * Les compétences ACCESSIBLES en partant de ce chemin — celles de la classe courante
- * comprises.
- *
- * ⚠️ POURQUOI : recruter, c'est choisir une LIGNÉE, pas une classe. Les offres
- * n'annonçaient que la forme des stats — on s'engageait sans savoir si cette voie mène
- * un jour à de la cargaison ou à du soin, alors que la filiation est stricte (un
- * Guerrier ne se verra JAMAIS proposer Clerc). On montre donc l'horizon.
- *
- * ⚠️ On énumère les CHEMINS, pas les classes : l'éligibilité dépend des tags ACCUMULÉS
- * par le parcours (`req`), donc « telle classe est-elle atteignable » n'a de sens que
- * relativement à un chemin. La profondeur écrite s'arrête à la strate 3, ce qui borne
- * l'énumération — le test qui parcourt tous les chemins s'appuie sur le même fait.
- */
-export function reachableSkills(path: string[]): {
-  roles: AdvRole[];
-  signatures: EffectType[];
-} {
-  const roles = new Set<AdvRole>();
-  const signatures = new Set<EffectType>();
-  const seen = new Set<string>();
-  const walk = (p: string[]) => {
-    const key = p.join('>');
-    if (seen.has(key)) return;
-    seen.add(key);
-    for (const id of p) {
-      const k = advClass(id);
-      if (k?.role) roles.add(k.role);
-      if (k?.signature) signatures.add(k.signature);
-    }
-    const next = eligibleClasses(p, p.length);
-    for (const k of next) walk([...p, k.id]);
-  };
-  walk(path);
-  return { roles: [...roles], signatures: [...signatures] };
-}
-
 /** Effectif que la Guilde peut entretenir : 1 de base, +1 tous les 2 niveaux.
  *  ⚠️ Le niveau de la Guilde étant lui-même plafonné par celui du joueur, l’effectif
  *  reste indexé sur le SPORT — mais linéairement, là où la puissance du héros croît en
@@ -1972,12 +1834,6 @@ export function deployCap(pantheonLevel: number): number {
   return 1 + Math.floor(Math.max(0, pantheonLevel) / 2);
 }
 
-/** Coût de recrutement : il CROÎT avec l’effectif déjà en place, sinon on remplit la
- *  Guilde d’un coup et le choix de qui l’on élève n’existe plus. */
-export function recruitCost(rosterSize: number, guildLevel: number): number {
-  return Math.round(220 * (1 + rosterSize) * Math.max(1, guildLevel) ** 0.6);
-}
-
 /** Applique l’XP gagnée : montées de niveau EN CHAÎNE (un gros voyage peut en donner
  *  plusieurs), plafonnées par la Guilde.
  *
@@ -1985,8 +1841,8 @@ export function recruitCost(rosterSize: number, guildLevel: number): number {
  *  l’aventurier récupère aussitôt ce qu’il avait accumulé. Sinon un joueur peu sportif —
  *  celui dont le plafond bouge le plus lentement, donc exactement la cible de la
  *  feature — travaillerait des semaines pour rien. Pur : rend un NOUVEL aventurier. */
-export function grantAdvXp(adv: Adventurer, xp: number, guildLevel: number): Adventurer {
-  const cap = Math.max(1, guildLevel);
+export function grantAdvXp(adv: Adventurer, xp: number, pantheonLevel: number): Adventurer {
+  const cap = Math.max(1, pantheonLevel);
   let level = adv.level;
   let pool = Math.max(0, adv.xp) + Math.max(0, Math.round(xp));
   while (level < cap && pool >= advXpToNext(level)) {
@@ -2014,15 +1870,11 @@ export function deployedCount(advs: Adventurer[]): number {
 /** Pourquoi un aventurier ne peut PAS partir — `null` s'il est disponible.
  *  ⚠️ SOURCE UNIQUE de la disponibilité : `advAvailable` en DÉRIVE. Un écran qui dit
  *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
- *  Ordre : sur la route, puis à l'infirmerie, puis en formation (le premier qui s'applique). */
-export type AdvUnavailable = 'busy' | 'hurt' | 'training' | 'benched';
+ *  Ordre : sur la route, puis à l'infirmerie, puis en collection (le premier qui s'applique). */
+export type AdvUnavailable = 'busy' | 'hurt' | 'benched';
 export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
   if ((adv.busyUntil ?? 0) > now) return 'busy';
   if ((adv.hurtUntil ?? 0) > now) return 'hurt';
-  // ⚠️ La formation IMMOBILISE, et c'est tout son coût : promouvoir maintenant, c'est
-  // renoncer à cet aventurier pour les prochains convois. Sans ça, une promotion serait
-  // gratuite et il n'y aurait aucune décision.
-  if ((adv.training?.until ?? 0) > now) return 'training';
   // 🗿 EN COLLECTION : il existe, il n'est simplement pas engagé. ⚠️ C'est le plafond du
   // Panthéon (`deployCap`), et il passe par ICI plutôt que par chaque site d'envoi —
   // sinon la défense (`guardUnits`, qui prend tout le vivier disponible) l'oublierait,
@@ -2035,11 +1887,10 @@ export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailab
 export const ADV_UNAVAILABLE_LABEL: Record<AdvUnavailable, string> = {
   busy: '🧭 en route',
   hurt: '🤕 infirmerie',
-  training: '📚 formation',
   benched: '🗿 en collection',
 };
 
-/** Disponible ? Ni en mission, ni en formation, ni à l'infirmerie. */
+/** Disponible ? Ni en mission, ni à l'infirmerie, ni laissé en collection. */
 export function advAvailable(adv: Adventurer, now: number): boolean {
   return advUnavailableReason(adv, now) === null;
 }
@@ -2058,41 +1909,10 @@ export function advStatus(adv: Adventurer, now: number): AdvStatus {
   return advUnavailableReason(adv, now) ?? 'free';
 }
 /** Les catégories dans l'ordre où on les propose : ce qui peut partir d'abord. */
-export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt', 'training', 'benched'];
+export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt', 'benched'];
 export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
   free: '✅ déployés',
   busy: '🐫 en convoi',
   hurt: '🛏️ infirmerie',
-  training: '🎓 formation',
   benched: '🗿 en collection',
 };
-
-/** Une promotion arrivée à terme est APPLIQUÉE ; sinon l'aventurier est rendu tel quel.
- *  ⚠️ Pur et idempotent : on peut l'appeler à chaque tick sans rien dupliquer. */
-export function settleTraining(adv: Adventurer, now: number): Adventurer {
-  const t = adv.training;
-  if (!t || t.until > now) return adv;
-  const reste = { ...adv, path: [...adv.path, t.classId] };
-  delete reste.training; // la formation est CONSOMMÉE : la laisser la rejouerait
-  return reste;
-}
-
-/** Idem sur un vivier entier. Rend le MÊME tableau si rien n'a bougé, pour que
- *  l'appelant sache s'il doit persister. */
-export function settleAllTraining(
-  list: Adventurer[],
-  now: number,
-): { list: Adventurer[]; changed: boolean } {
-  let changed = false;
-  const next = list.map((a) => {
-    const s = settleTraining(a, now);
-    if (s !== a) changed = true;
-    return s;
-  });
-  return changed ? { list: next, changed } : { list, changed: false };
-}
-
-/** Temps restant de formation (0 si aucune). */
-export function advTrainingLeftMs(adv: Adventurer, now: number): number {
-  return Math.max(0, (adv.training?.until ?? 0) - now);
-}
