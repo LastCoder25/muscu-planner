@@ -3,6 +3,7 @@ import { buildingUpgradeCost, BUILDING_TYPES, plotsForLevel } from '@/lib/buildi
 import { goldCost, resolveOutcome } from '@/lib/expedition';
 import { refFighter } from '@/lib/proceduralContent';
 import { computeLevel } from '@/lib/levels';
+import { PROFILS, partDuPlafond } from './helpers/buildSim';
 import { DEFENSE_TYPES, healCost } from '@/lib/raid';
 import { outfitGoldCost, ADV_GEAR_SLOTS } from '@/lib/advGear';
 import { RANK_ORDER, prestigeRankIndex } from '@/lib/items';
@@ -179,53 +180,41 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // mesuré un an plus tard : le joueur le plus actif ne tenait plus que 44 % du
     // plafond, et le compte réel portait 312 jours de revenu de retard.
     // On mesure donc désormais LA CHOSE ELLE-MÊME.
-    const PROFILS: [string, number][] = [
-      ['tranquille', 400],
-      ['régulier', 700],
-      ['très actif', 1066], // XP/jour mesurée sur un compte réel très assidu
-    ];
     for (const [nom, xpParJour] of PROFILS) {
-      const niv = BUILDING_TYPES.map(() => 0);
-      let or = 0;
-      let xp = 0;
-      for (let j = 0; j < 365; j++) {
-        xp += xpParJour;
-        const L = computeLevel(xp).level;
-        or += goldPerDay(L);
-        const plots = Math.min(plotsForLevel(L), BUILDING_TYPES.length);
-        // Le joueur achète ce qu'il peut, du moins cher au plus cher : il rattrape
-        // d'abord ce qui est le plus en retard. Jamais au-dessus de son niveau.
-        for (;;) {
-          let best = -1;
-          let bestC = Infinity;
-          for (let i = 0; i < plots; i++) {
-            if (niv[i]! >= L) continue;
-            const c =
-              niv[i] === 0 ? (BUILDING_TYPES[i]!.buildGold ?? 500) : buildingUpgradeCost(niv[i]!);
-            if (c < bestC) {
-              bestC = c;
-              best = i;
-            }
-          }
-          if (best < 0 || bestC > or) break;
-          or -= bestC;
-          niv[best]!++;
-        }
-      }
-      const L = computeLevel(xp).level;
-      const plots = Math.min(plotsForLevel(L), BUILDING_TYPES.length);
-      const part = niv.slice(0, plots).reduce((a, b) => a + b, 0) / (plots * L);
+      const part = partDuPlafond(xpParJour);
+      const dit = `${nom} : ${(part * 100).toFixed(0)} % du plafond après un an`;
       // PLANCHER : sous ~55 %, les bâtiments restent à la moitié de ton niveau pour
       // toujours — ils cessent d'être un objectif et deviennent du décor. C'est très
       // exactement l'état livré à 1320 (44-53 % mesurés).
-      expect(part, `${nom} : ${(part * 100).toFixed(0)} % du plafond après un an`).toBeGreaterThan(
-        0.55,
-      );
+      expect(part, dit).toBeGreaterThan(0.55);
       // PLAFOND : au-dessus de ~90 %, on a tout, et l'or n'a plus de destination —
       // le débordement que la v0.684 corrigeait.
-      expect(part, `${nom} : ${(part * 100).toFixed(0)} % du plafond après un an`).toBeLessThan(
-        0.9,
-      );
+      expect(part, dit).toBeLessThan(0.9);
+    }
+  });
+
+  it('⚠️ ET IL TIENDRA À 9 BÂTIMENTS — la mesure bloquante du Panthéon', () => {
+    // Le Panthéon fusionne la Guilde, le Centre de formation et l'Équipementier : le roster
+    // passera de 11 à 9, et `BUILD.plotCap` en DÉRIVE. Moins d'emplacements = moins de
+    // dépenses = l'or s'entasse. La spec du gacha listait cette mesure comme BLOQUANTE.
+    //
+    // ✅ MESURÉ : **83,9 / 73,9 / 67,6 %** (contre 78,4 / 69,0 / 63,1 aujourd'hui) — tout
+    // reste dans la bande, sans toucher à `BUILD.upBase`.
+    //
+    // ⚠️ MAIS LA MARGE SE RÉDUIT, et c'est ce que ce test garde : chaque bâtiment retiré
+    // ajoute ~2,5 points au profil tranquille, donc à 8 on frôlerait 86 % et à 7 le
+    // plafond. L'or qui DORT double déjà (152 k → 432 k pour le tranquille). Retirer un
+    // bâtiment de plus impose de re-mesurer, et ce test le dira.
+    for (const [nom, xpParJour] of PROFILS) {
+      const part = partDuPlafond(xpParJour, BUILDING_TYPES.length - 2);
+      const dit = `${nom} à 9 bâtiments : ${(part * 100).toFixed(0)} % du plafond`;
+      expect(part, dit).toBeGreaterThan(0.55);
+      expect(part, dit).toBeLessThan(0.9);
+      // ⚠️ ET ON VÉRIFIE QU'ON MESURE BIEN UN AUTRE ROSTER. Sans cette ligne, un
+      // simulateur qui IGNORERAIT `nbTypes` passerait au vert (le roster d'aujourd'hui
+      // tient aussi) — la mutation l'a montré en survivant. La propriété mesurée est
+      // qu'un roster plus court fait MONTER la part : moins de dépenses, l'or s'entasse.
+      expect(part, dit).toBeGreaterThan(partDuPlafond(xpParJour));
     }
   });
 });
