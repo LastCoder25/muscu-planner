@@ -37,6 +37,25 @@
           </button>
         </div>
 
+          <!-- 🎰 L'INVOCATION — le seul puits des pierres de mana. ⚠️ Elle est EN TÊTE, et
+             au-dessus du recrutement : c'est elle qui remplace l'arbre de classes, le
+             recrutement n'est plus là que le temps de la bascule. Le bouton DIT le prix et
+             ce qui manque plutôt que de se griser en silence (leçon du gris de la carte,
+             v0.738). -->
+          <button
+            class="voie-btn g-summon"
+            :disabled="busy || mana < pullCost"
+            @click="doPull"
+          >
+            <span class="gs-emo">🎰</span>
+            <span class="gs-main">
+              <b>Invoquer un champion</b>
+              <small v-if="mana >= pullCost">{{ pullCost }} 💠 · tu en as {{ mana }}</small>
+              <small v-else class="gs-short">
+                il te manque {{ pullCost - mana }} 💠 — referme une faille
+              </small>
+            </span>
+          </button>
         <template v-if="guildTab === 'roster' || !roster.length">
           <!-- ⚠️ LE RECRUTEMENT EN TÊTE, et dans sa propre feuille (signalé). Il vivait
              tout au FOND du panneau, sous la liste : à dix aventuriers, le choix de la
@@ -792,6 +811,9 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
+import { AWAKEN, awakenLevel } from '@/lib/adventurers';
+import { GACHA } from '@/lib/gacha';
+import { useGameFx } from '@/composables/useGameFx';
 import {
   rarityRank,
   gradeLabel,
@@ -801,6 +823,8 @@ import {
   famLevel,
   famXp,
   jetStar,
+  fxRarity,
+  RARITY_LABEL,
   type Item,
 } from '@/lib/items';
 import {
@@ -1351,6 +1375,7 @@ function sellOneGear(g: AdvGear) {
 }
 
 const busy = ref(false);
+const gameFx = useGameFx();
 const now = ref(Date.now());
 // ⚠️ NETTOYÉE au démontage. Posée au niveau du setup et jamais arrêtée, elle continuait de
 // battre après la fermeture du panneau en retenant la ref ET le composant — exactement la
@@ -1614,6 +1639,44 @@ const NAMES = [
   'Yara',
 ];
 
+const mana = computed(() => char.row?.mana ?? 0);
+const pullCost = GACHA.pullCost;
+
+/**
+ * 🎰 UN TIRAGE. ⚠️ On ANNONCE toujours quelque chose — un tirage muet, dans un genre bâti
+ * sur le moment où l'on découvre ce qu'on a eu, n'est pas un tirage. Trois issues, et
+ * chacune se dit : un champion neuf, un cran d'Éveil, ou une copie de trop qui se
+ * convertit (« jamais perdu »).
+ */
+async function doPull() {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  busy.value = true;
+  try {
+    const r = await char.pullChampion(uid);
+    if (!r) {
+      $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
+      return;
+    }
+    const cran = awakenLevel(r.copies);
+    gameFx.celebrate({
+      kind: 'familiar',
+      emoji: r.champion.emoji,
+      title: r.champion.name,
+      subtitle: r.duplicate
+        ? r.manaBack > 0
+          ? `Éveil au maximum — ${r.manaBack} 💠 rendus`
+          : `Éveil ${cran}/${AWAKEN.max}`
+        : r.deployed
+          ? `${RARITY_LABEL[r.champion.rarity]} · engagé`
+          : `${RARITY_LABEL[r.champion.rarity]} · en collection`,
+      rarity: fxRarity(r.champion.rarity),
+    });
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function doRecruit(classId: string) {
   const uid = auth.user?.id;
   if (!uid || busy.value) return;
@@ -1668,6 +1731,34 @@ async function doPromote(classId: string) {
 </script>
 
 <style scoped lang="scss">
+/* 🎰 L'INVOCATION — l'action qui remplace l'arbre de classes. Elle se distingue du
+   recrutement par une teinte propre (le violet du mana), jamais par la seule taille :
+   deux boutons pleine largeur de même couleur se lisent comme un seul geste répété. */
+.g-summon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  border-color: color-mix(in srgb, #b57bff 55%, var(--line));
+  background: color-mix(in srgb, #b57bff 12%, transparent);
+}
+.gs-emo {
+  font-size: 22px;
+  line-height: 1;
+}
+.gs-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.gs-main small {
+  font-size: 11px;
+  color: var(--dim);
+}
+.gs-short {
+  color: var(--d3);
+}
 .g-hire,
 .g-full {
   margin-bottom: 10px;

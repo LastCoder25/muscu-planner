@@ -212,6 +212,13 @@ import {
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
 import { resolveIncursion, resolveInterception, riftOverflowOf } from '@/lib/rift';
+import {
+  GACHA,
+  dailyFreeMana,
+  grantChampion,
+  type GachaState,
+  pullChampion as rollChampion,
+} from '@/lib/gacha';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGoldFx } from '@/composables/useGoldFx';
 
@@ -255,6 +262,10 @@ export interface CharacterRow {
    *  son puits (failles → pierres de mana → gacha) : elle s'accumule, et ce n'est pas une
    *  devise morte, dont le puits aurait été retiré. */
   mana: number;
+  /** 🎰 L'état du TIRAGE (migr. 0081) : le pity, rien d'autre. ⚠️ La COLLECTION n'est
+   *  pas ici — un champion EST un `Adventurer`, donc il vit dans `adventurers` (v0.942),
+   *  ce qui lui donne gratuitement convois, camps, défense, équipement et compagnons. */
+  gacha: GachaState;
   scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
@@ -298,7 +309,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, parties';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, parties, gacha';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -393,6 +404,15 @@ export const useCharacterStore = defineStore('character', () => {
     if (soin.goldRefund > 0) r.gold = (r.gold ?? 0) + soin.goldRefund;
     r.buildings = soin.buildings;
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
+    // 🎰 Le PITY doit survivre à un rechargement : remis à zéro, la garantie anti-
+    // malchance (garanti au 90e tirage) serait inatteignable, et ici il n'y a aucun
+    // argent réel pour compenser une série noire.
+    const g = obj<Partial<GachaState>>(r.gacha);
+    r.gacha = {
+      sinceTop: Math.max(0, Math.floor(Number(g.sinceTop) || 0)),
+      sinceFloor: Math.max(0, Math.floor(Number(g.sinceFloor) || 0)),
+      pulls: Math.max(0, Math.floor(Number(g.pulls) || 0)),
+    };
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
     if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
@@ -873,6 +893,10 @@ export const useCharacterStore = defineStore('character', () => {
       login_grace_used: next.graceUsed,
       last_login_date: todayIso,
       login_energy: cur.login_energy + energy,
+      // 💠 LE TIRAGE OFFERT DU JOUR. ⚠️ Il vit ICI plutôt que dans un compteur à part :
+      // le bonus de connexion porte DÉJÀ la série, le jour de grâce et l'idempotence par
+      // jour logique. Un second dispositif aurait eu sa propre notion de « aujourd'hui ».
+      mana: cur.mana + dailyFreeMana(),
       energy_log: pushEnergyLog(cur.energy_log, {
         date: todayIso,
         emoji: '🎁',
@@ -880,7 +904,41 @@ export const useCharacterStore = defineStore('character', () => {
         amount: energy,
       }),
     });
-    return { streak: next.streak, energy, usedGrace };
+    return { streak: next.streak, energy, mana: dailyFreeMana(), usedGrace };
+  }
+
+  /**
+   * 🎰 UN TIRAGE DE CHAMPION — le seul puits des pierres de mana.
+   *
+   * ⚠️ **LE PITY EST LU ET RÉÉCRIT À CHAQUE FOIS**, dans la même requête que la mana et le
+   * vivier : c'est lui qui porte la garantie anti-malchance, et il n'y a ici aucun argent
+   * réel pour compenser une série noire.
+   *
+   * ⚠️ **AUCUNE REMISE**, d'aucun bâtiment : c'est mot pour mot la remise de l'Autel des
+   * boss, retirée en v0.799 parce qu'elle coupait de moitié le lien farm → boss. Ici elle
+   * couperait failles → pierres de mana → tirage, qui est toute la boucle.
+   *
+   * Rend ce qu'il faut pour l'annoncer (le champion, l'Éveil, la mana rendue), ou `null`
+   * si la mana manque — l'écran doit déjà l'empêcher, le store le garantit.
+   */
+  async function pullChampion(userId: string) {
+    const cur = row.value;
+    if (!cur) return null;
+    if (cur.mana < GACHA.pullCost) return null;
+    const tirage = rollChampion(Math.random, cur.gacha);
+    const g = grantChampion(cur.adventurers ?? [], tirage.champion, {
+      id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      deployCap: deployCap(pantheonLevel.value),
+    });
+    await persist(userId, {
+      mana: cur.mana - GACHA.pullCost + g.manaBack,
+      adventurers: g.advs,
+      gacha: { ...tirage.pity, pulls: cur.gacha.pulls + 1 },
+    });
+    // ⚠️ Le niveau du joueur n'entre PAS ici : la rareté ne dépend que du pity, et ce que
+    // le champion peut MENER est plafonné à la LECTURE (`championRarity`, lue par
+    // `advStats`). Un paramètre qu'on ne lit pas finit par mentir.
+    return { ...g, champion: tirage.champion };
   }
 
   // Bonus de passage de niveau (global). Verse l'énergie de chaque niveau franchi
@@ -2894,6 +2952,7 @@ export const useCharacterStore = defineStore('character', () => {
     sellMany,
     toggleLock,
     claimDailyLogin,
+    pullChampion,
     claimLevelUps,
   };
 });

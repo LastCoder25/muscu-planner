@@ -6,6 +6,9 @@ import {
   ADV_LEVEL_K,
   AWAKEN,
   awakenLevel,
+  advUnavailableReason,
+  deployedCount,
+  type Adventurer,
   awakenMult,
   championBudget,
   championStats,
@@ -18,6 +21,8 @@ import {
   emptyPity,
   pullRarity,
   pullsPerDay,
+  grantChampion,
+  OVERFLOW_MANA,
   topRate,
   pullChampion,
 } from '@/lib/gacha';
@@ -433,5 +438,83 @@ describe('🏅 les stats d’un champion', () => {
       for (const v of [s.puissance, s.endurance, s.agilite])
         expect(v, `niveau ${L}`).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+describe('🏅 CE QU_UN TIRAGE AJOUTE AU VIVIER', () => {
+  const champ = CHAMPIONS[0]!;
+  const autre = CHAMPIONS.find((c) => c.id !== champ.id)!;
+  const legacy = (id: string): Adventurer => ({
+    id,
+    name: 'Recrue',
+    seed: 1,
+    path: ['guerrier'],
+    level: 5,
+    xp: 0,
+  });
+
+  it('un champion neuf entre au vivier — identité, aucun chemin', () => {
+    const g = grantChampion([], champ, { id: 'a1', deployCap: 3 });
+    expect(g.advs).toHaveLength(1);
+    expect(g.advs[0]!.championId).toBe(champ.id);
+    // ⚠️ Un champion a une IDENTITÉ, pas un chemin (v0.939) : un `path` non vide le ferait
+    // retomber dans l'arbre des classes, et les doublons redeviendraient impossibles.
+    expect(g.advs[0]!.path).toEqual([]);
+    expect(g.advs[0]!.copies).toBe(1);
+    expect(g.duplicate).toBe(false);
+  });
+
+  it('il est ENGAGÉ d_office tant qu_il reste une place, puis EN COLLECTION', () => {
+    // Sans ça, on tire son premier champion et il ne se passe rien : en collection, donc
+    // indisponible pour les convois comme pour la défense, sans que rien ne l'explique.
+    expect(grantChampion([], champ, { id: 'a1', deployCap: 1 }).deployed).toBe(true);
+    const plein = grantChampion([], champ, { id: 'a1', deployCap: 1 }).advs;
+    const second = grantChampion(plein, autre, { id: 'a2', deployCap: 1 });
+    expect(second.deployed, 'le plafond du Panthéon est atteint').toBe(false);
+    expect(advUnavailableReason(second.advs[1]!, 0)).toBe('benched');
+  });
+
+  it('⚠️ un aventurier LEGACY occupe une place — sinon on dépasse le plafond pendant la bascule', () => {
+    // Il n'est jamais mis au banc (`advUnavailableReason`), donc il est bien engagé. Une
+    // seconde définition de « qui occupe une place » laisserait engager des champions
+    // au-delà du plafond tant qu'il reste des recrues d'avant.
+    const g = grantChampion([legacy('v1'), legacy('v2')], champ, { id: 'a1', deployCap: 2 });
+    expect(g.deployed).toBe(false);
+    expect(deployedCount([legacy('v1')])).toBe(1);
+  });
+
+  it('un doublon RÉVEILLE, il ne crée pas un second aventurier', () => {
+    let advs = grantChampion([], champ, { id: 'a1', deployCap: 3 }).advs;
+    const g = grantChampion(advs, champ, { id: 'a2', deployCap: 3 });
+    expect(g.advs).toHaveLength(1);
+    expect(g.copies).toBe(2);
+    expect(g.duplicate).toBe(true);
+    expect(awakenLevel(g.copies), 'la PREMIÈRE copie est le champion').toBe(1);
+    expect(g.manaBack).toBe(0);
+    // Et on ne dégage personne en le réveillant — ni dans le vivier, ni dans ce que
+    // la fonction ANNONCE : c'est ce second point qu'un écran affiche (« engagé » ou
+    // « en collection »), et il mentait sans que rien ne le voie.
+    advs = g.advs;
+    expect(advs[0]!.deployed).toBe(true);
+    expect(g.deployed, 'le doublon garde son engagement').toBe(true);
+  });
+
+  it('⚠️ la copie DE TROP ne gonfle pas le compteur, elle se convertit', () => {
+    // Un compteur qui monte sans que l'Éveil bouge se lit comme une panne.
+    let advs = grantChampion([], champ, { id: 'a1', deployCap: 3 }).advs;
+    let last = null as ReturnType<typeof grantChampion> | null;
+    for (let i = 0; i < 10; i++) {
+      last = grantChampion(advs, champ, { id: 'x', deployCap: 3 });
+      advs = last.advs;
+    }
+    expect(advs[0]!.copies, 'plafonné au dernier cran').toBe(AWAKEN.max + 1);
+    expect(awakenLevel(advs[0]!.copies!)).toBe(AWAKEN.max);
+    expect(last!.manaBack, 'un tirage n_est jamais perdu').toBe(OVERFLOW_MANA);
+  });
+
+  it('⚠️ une conversion ne peut JAMAIS être rentable', () => {
+    // Sinon farmer le même commun deviendrait une source de mana, et le gacha
+    // s'alimenterait lui-même.
+    expect(OVERFLOW_MANA).toBeLessThan(GACHA.pullCost);
   });
 });

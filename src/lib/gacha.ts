@@ -29,6 +29,7 @@
 
 import { RANK_ORDER, type Rarity } from './items';
 import { championsOf, type Champion } from '@/data/champions';
+import { awakenOverflow, deployedCount, isDeployed, type Adventurer } from './adventurers';
 
 export const GACHA = {
   /**
@@ -107,6 +108,13 @@ export interface PityState {
 }
 
 export const emptyPity = (): PityState => ({ sinceTop: 0, sinceFloor: 0 });
+
+/** Ce que la LIGNE du joueur retient du tirage (migr. 0081) : le pity, plus un compteur
+ *  d'affichage. ⚠️ La collection n'est pas ici — un champion EST un `Adventurer`. */
+export interface GachaState extends PityState {
+  /** Total tiré, affichage seul. */
+  pulls: number;
+}
 
 /**
  * Taux de la rareté maximale à ce tirage, pity compris.
@@ -194,6 +202,14 @@ function pickAtLeast(rng: () => number, min: Rarity): Rarity {
   return pool[pool.length - 1]!;
 }
 
+/** 💠 Ce qu'un tirage OFFERT vaut en mana. ⚠️ Dérivé du prix, jamais un second nombre :
+ *  le jour où `pullCost` bouge, le filet suit. Versé par le bonus de connexion, qui a déjà
+ *  sa série et son jour de grâce — c'est le filet du joueur qui ne combat pas : sans lui,
+ *  celui qui n'a pas l'énergie d'entrer dans une faille ne tire jamais. */
+export function dailyFreeMana(): number {
+  return GACHA.freePullsPerDay * GACHA.pullCost;
+}
+
 /** Combien de tirages un débit de mana offre par jour, tirage gratuit compris. */
 export function pullsPerDay(manaPerDay: number): number {
   return Math.max(0, manaPerDay) / GACHA.pullCost + GACHA.freePullsPerDay;
@@ -223,4 +239,77 @@ export function pullChampion(
   // ceinture pour le jour où quelqu'un retire une rareté du roster, pas une règle de jeu.
   if (!pool.length) throw new Error(`Aucun champion de rareté ${r.rarity}`);
   return { champion: pool[Math.floor(rng() * pool.length)]!, pity: r.pity };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏅 CE QU'UN TIRAGE AJOUTE AU VIVIER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Ce qu'une copie DE TROP rend, quand l'Éveil est au bout. ⚠️ La moitié du prix d'un
+ *  tirage : assez pour que « un tirage n'est jamais perdu » soit vrai, jamais assez pour
+ *  qu'on y gagne — sinon farmer le même commun deviendrait une source de mana. */
+export const OVERFLOW_MANA = Math.round(GACHA.pullCost / 2);
+
+export interface Granted {
+  advs: Adventurer[];
+  /** Combien d'exemplaires on possède APRÈS ce tirage. */
+  copies: number;
+  /** Déjà possédé ? (donc un cran d'Éveil, ou une conversion) */
+  duplicate: boolean;
+  /** 💠 rendus quand la copie ne réveille plus rien. */
+  manaBack: number;
+  /** Engagé d'office ? (il restait une place au Panthéon) */
+  deployed: boolean;
+}
+
+/**
+ * 🏅 AJOUTE UN CHAMPION TIRÉ AU VIVIER — ou le RÉVEILLE s'il est déjà là.
+ *
+ * ⚠️ **UN CHAMPION EST UN `Adventurer`**, pas une entité de plus : c'est la décision de la
+ * v0.942, et c'est elle qui fait que les convois, les camps, la défense, l'équipement et
+ * les compagnons le voient **sans une ligne de câblage**.
+ *
+ * ⚠️ **LA COPIE DE TROP N'EST PAS COMPTÉE.** La retenir gonflerait `copies` sans rien
+ * donner, et l'écran annoncerait « 9 exemplaires » pour un Éveil bloqué à 6 — un compteur
+ * qui monte sans que rien ne bouge se lit comme une panne. Elle se convertit en mana.
+ *
+ * ⚠️ **ON ENGAGE D'OFFICE TANT QU'IL RESTE UNE PLACE** : sans ça, un joueur tire son
+ * premier champion et il ne se passe RIEN — il est en collection, donc indisponible pour
+ * les convois comme pour la défense, sans que rien ne l'explique. Au-delà du plafond, le
+ * joueur arbitre lui-même.
+ */
+export function grantChampion(
+  advs: Adventurer[],
+  champ: Champion,
+  opts: { id: string; deployCap: number; seed?: number },
+): Granted {
+  const i = advs.findIndex((a) => a.championId === champ.id);
+  if (i >= 0) {
+    const prev = advs[i]!;
+    const avant = Math.max(1, Math.floor(prev.copies ?? 1));
+    const trop = awakenOverflow(avant + 1);
+    const copies = trop ? avant : avant + 1;
+    return {
+      advs: advs.map((a, j) => (j === i ? { ...a, copies } : a)),
+      copies,
+      duplicate: true,
+      manaBack: trop ? OVERFLOW_MANA : 0,
+      deployed: isDeployed(prev),
+    };
+  }
+  const deployed = deployedCount(advs) < opts.deployCap;
+  const neuf: Adventurer = {
+    id: opts.id,
+    name: champ.name,
+    // ⚠️ La graine ne sert qu'aux offres de classe, qu'un champion n'a pas — mais le type
+    // l'exige, et la dériver de son id vaut mieux qu'un zéro qui ferait croire à un oubli.
+    seed: opts.seed ?? [...champ.id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7),
+    path: [], // un champion a une IDENTITÉ, pas un chemin (v0.939)
+    championId: champ.id,
+    copies: 1,
+    deployed,
+    level: 1,
+    xp: 0,
+  };
+  return { advs: [...advs, neuf], copies: 1, duplicate: false, manaBack: 0, deployed };
 }

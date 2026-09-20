@@ -2003,6 +2003,21 @@ export function grantAdvXp(adv: Adventurer, xp: number, guildLevel: number): Adv
   return { ...adv, level, xp: pool };
 }
 
+/** 🗿 Occupe-t-il une PLACE DE DÉPLOIEMENT ?
+ *
+ *  ⚠️ **MÊME RÈGLE QUE `advUnavailableReason`, et elle en dérive** : un aventurier LEGACY
+ *  (sans `championId`) n'est jamais mis au banc, donc il occupe bien une place. En écrire
+ *  une seconde version ferait qu'on pourrait engager des champions au-delà du plafond tant
+ *  qu'il reste des aventuriers d'avant — c'est-à-dire pendant toute la bascule. */
+export function isDeployed(adv: Adventurer): boolean {
+  return !adv.championId || adv.deployed === true;
+}
+
+/** Combien de places de déploiement sont prises. */
+export function deployedCount(advs: Adventurer[]): number {
+  return advs.filter(isDeployed).length;
+}
+
 /** Pourquoi un aventurier ne peut PAS partir — `null` s'il est disponible.
  *  ⚠️ SOURCE UNIQUE de la disponibilité : `advAvailable` en DÉRIVE. Un écran qui dit
  *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
@@ -2021,7 +2036,7 @@ export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailab
   // et une collection illimitée rendrait la base imprenable.
   // ⚠️ Un aventurier LEGACY (sans `championId`) n'est jamais mis au banc : il n'a pas de
   // Panthéon, et le priver de mission serait le punir d'avoir existé avant la bascule.
-  if (adv.championId && !adv.deployed) return 'benched';
+  if (!isDeployed(adv)) return 'benched';
   return null;
 }
 export const ADV_UNAVAILABLE_LABEL: Record<AdvUnavailable, string> = {
