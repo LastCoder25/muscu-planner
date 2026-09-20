@@ -32,7 +32,9 @@
             class="gx-cell"
             :style="{ '--c': RANK_COLOR[c.rarity] }"
           >
-            <span class="gx-emo">{{ c.emoji }}</span>
+            <span class="gx-emo">
+              <ChampionPortrait :champion-id="c.id" :size="48">{{ c.emoji }}</ChampionPortrait>
+            </span>
           </div>
         </div>
       </div>
@@ -43,7 +45,11 @@
           <i v-for="i in sparks" :key="i" :style="sparkStyle(i)"></i>
         </div>
         <div class="gx-portrait">
-          <span class="gx-pemo">{{ champ.emoji }}</span>
+          <span class="gx-pemo">
+            <ChampionPortrait :champion-id="champ.id" :size="76" :alt="champ.name">{{
+              champ.emoji
+            }}</ChampionPortrait>
+          </span>
         </div>
         <div class="gx-name font-display">{{ champ.name }}</div>
         <div class="gx-rar font-display">{{ RARITY_LABEL[champ.rarity] }}</div>
@@ -63,7 +69,11 @@
               :style="{ '--c': RANK_COLOR[it.champion.rarity] }"
               :title="`${it.champion.name} · ${RARITY_LABEL[it.champion.rarity]}`"
             >
-              <span class="gl-emo">{{ it.champion.emoji }}</span>
+              <span class="gl-emo">
+                <ChampionPortrait :champion-id="it.champion.id" :size="26">{{
+                  it.champion.emoji
+                }}</ChampionPortrait>
+              </span>
               <span class="gl-name">{{ it.champion.name }}</span>
               <!-- Ce qui DISTINGUE une ligne : neuf ou déjà là (donc un cran d'Éveil,
                    ou du mana rendu quand il n'y a plus rien à réveiller). -->
@@ -102,6 +112,7 @@ import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN } from '@/lib/adventurers';
 import { GACHA } from '@/lib/gacha';
 import { lotOrder, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
 import { awakenLevel } from '@/lib/adventurers';
+import ChampionPortrait from '@/components/ChampionPortrait.vue';
 
 const props = defineProps<{
   plan: RevealPlan | null;

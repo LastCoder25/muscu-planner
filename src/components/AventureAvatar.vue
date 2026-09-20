@@ -18,6 +18,11 @@
         <stop offset="0.5" stop-color="#b9c1cb" />
         <stop offset="1" stop-color="#7e8894" />
       </linearGradient>
+      <!-- 🖼️ Cadre du PORTRAIT (v0.969) : arrondi, pour qu'une illustration carrée
+           s'inscrive dans le médaillon au lieu de trancher à angle droit. -->
+      <clipPath id="av-portrait">
+        <rect x="12" y="6" width="96" height="112" rx="14" />
+      </clipPath>
     </defs>
 
     <!-- Aura de profil (respire) — prend la COULEUR DU SET porté s'il y en a un. -->
@@ -42,13 +47,17 @@
     </g>
 
     <!-- CAPE (accessoire) : derrière le corps, teintée par la rareté, ondule. -->
-    <g v-if="gear.accessory" class="cape" :style="{ '--rk': rankColor(gear.accessory.rarity) }">
+    <g
+      v-if="!portrait && gear.accessory"
+      class="cape"
+      :style="{ '--rk': rankColor(gear.accessory.rarity) }"
+    >
       <path class="cape-cloth" d="M45 50 Q26 88 32 120 Q44 114 52 116 Q49 84 55 52 Z" />
       <path class="cape-cloth right" d="M75 50 Q94 88 88 120 Q76 114 68 116 Q71 84 65 52 Z" />
     </g>
 
     <!-- CORPS (idle : respire) -->
-    <g class="body">
+    <g v-if="!portrait" class="body">
       <!-- jambes + bottes -->
       <path class="leg" d="M49 88 L48 116 Q48 122 53 122 L57 122 Q58 116 57 100 L56 88 Z" />
       <path class="leg" d="M71 88 L72 116 Q72 122 67 122 L63 122 Q62 116 63 100 L64 88 Z" />
@@ -187,6 +196,35 @@
       </g>
     </g>
 
+    <!-- 🖼️ LE PORTRAIT remplace le PERSONNAGE dessiné, jamais le reste : l'aura de rang,
+         le familier, le talent et les pips d'équipement continuent de vivre autour —
+         ce sont eux qui portent l'état et les points d'accès. -->
+    <image
+      v-if="portrait"
+      class="portrait"
+      :href="portrait"
+      x="12"
+      y="6"
+      width="96"
+      height="112"
+      preserveAspectRatio="xMidYMid slice"
+      clip-path="url(#av-portrait)"
+    />
+    <!-- ⚠️ Le liseré est indispensable : sans lui l'illustration est un rectangle posé
+         sur le fond, alors que l'avatar procédural, lui, a son aura ronde. Il prend la
+         couleur du RANG le plus haut porté — le médaillon dit donc la même chose que
+         les pips juste en dessous. -->
+    <rect
+      v-if="portrait"
+      class="portrait-frame"
+      :style="{ stroke: portraitStroke }"
+      x="12"
+      y="6"
+      width="96"
+      height="112"
+      rx="14"
+    />
+
     <!-- Familier (compagnon) : CLIQUABLE → ouvre l'inventaire des familiers (même à vide).
          Halo teinté + emoji de la race, flotte près du héros. -->
     <g
@@ -275,10 +313,19 @@ const props = defineProps<{
   /** Forme de l'arme déjà décidée par la lib (portrait d'aventurier : `advLooks`). Sans
    *  elle, la forme est lue sur le NOM de l'arme (`weaponKind`), comme pour le héros. */
   weaponShape?: WeaponKind;
+  /** 🖼️ Illustration du champion (v0.969). Présente, elle REMPLACE le personnage
+   *  dessiné ; absente, l'avatar procédural habillé de sa classe reste le repli. */
+  portrait?: string | null;
 }>();
 const emit = defineEmits<{ 'familiar-click': []; 'talent-click': [] }>();
 
 const rankColor = (r: Rarity) => RANK_COLOR[r];
+/** Liseré du médaillon : la couleur du RANG le plus haut porté, neutre à nu. ⚠️ Posé en
+ *  ligne et non via `--rk` — cette variable est portée par les classes `.r-<rareté>` des
+ *  ENFANTS, elle ne vaut rien sur la racine de l'avatar. */
+const portraitStroke = computed(() =>
+  maxRankIdx.value >= 0 ? RANK_COLOR[RANK_ORDER[maxRankIdx.value]!] : undefined,
+);
 // Pièces d'équipement par slot (pour l'affichage des couches + teinte de rareté).
 const gear = computed(() => ({
   armor: props.equipped.armor,
@@ -658,6 +705,13 @@ const label = computed(
   fill: var(--accent);
 }
 /* Zones cliquables (familier / talent) : curseur + petit anneau pointillé « gérable ». */
+/* 🖼️ Le médaillon du portrait : liseré teinté par le rang porté (ou neutre à nu). */
+.portrait-frame {
+  fill: none;
+  stroke: var(--rk, var(--line, #3a332a));
+  stroke-width: 2;
+  opacity: 0.75;
+}
 .hotspot {
   cursor: pointer;
 }
