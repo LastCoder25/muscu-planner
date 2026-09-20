@@ -19,7 +19,8 @@ import { describe, it, expect } from 'vitest';
 import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
-import { engageCap } from '@/lib/adventurers';
+import { advNominalRarity, engageCap } from '@/lib/adventurers';
+import { rarityRank } from '@/lib/items';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
 async function mountIt(
@@ -86,7 +87,6 @@ const ROW = {
       xp: 0,
       championId: 'orsene',
       copies: 1,
-      deployed: false,
     },
   ],
   inventory: [],
@@ -109,6 +109,19 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // le second nombre est DÉRIVÉ de `engageCap`, jamais une copie de sa formule.
     expect(out).toContain(String(ROW.adventurers.length));
     expect(out).toContain(`${engageCap(3)} engagés à la fois`);
+    // 🏅 …et la rareté TIRÉE de chaque champion se LIT (v0.959) : elle ne vivait qu'en
+    // teinte et en `title`, donc invisible sur un téléphone, qui n'a pas de survol.
+    // ⚠️ ON LIT LA PASTILLE ELLE-MÊME, pas « le mot est quelque part dans la page » : une
+    // première version cherchait le nom n'importe où et passait au VERT alors que la
+    // pastille était retirée — le mot apparaît aussi dans le `title` et le sous-titre.
+    const pastilles = [...out.matchAll(/class="ap-rar[^"]*"[^>]*>([^<]*)</g)].map((m) =>
+      m[1]!.trim(),
+    );
+    const champs = (ROW.adventurers as Parameters<typeof advNominalRarity>[0][]).filter(
+      (a) => a.championId,
+    );
+    expect(pastilles).toHaveLength(ROW.adventurers.length);
+    for (const a of champs) expect(pastilles).toContain(rarityRank(advNominalRarity(a)).name);
   }, 30_000);
 
   it('GuildPanel s’ouvre aussi sur un vivier VIDE — et l’invocation reste offerte', async () => {

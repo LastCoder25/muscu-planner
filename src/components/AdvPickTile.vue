@@ -17,7 +17,11 @@
   >
     <span class="ca-emo">{{ advTitle(adv)?.emoji ?? '🧑' }}</span>
     <span class="ca-name">{{ adv.name }}</span>
-    <span class="ca-rar" :style="{ color: rank.color }">{{ rank.emoji }} {{ rank.name }}</span>
+    <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable) plutôt que son rang, qui est déjà dit
+         par les étoiles juste en dessous. C'est l'identité d'un champion, et elle ne se
+         lisait nulle part hors du Codex (v0.959). Un aventurier LEGACY garde son rang :
+         il n'a pas d'autre identité. -->
+    <span class="ca-rar" :style="{ color: rar.color }">{{ rar.name }}</span>
     <span class="ca-rank" :style="{ color: rank.color }">{{ rankStarStr(rank.star) }}</span>
     <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
          store, `advUnavailableReason`). -->
@@ -38,13 +42,17 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { advBadges, advRank, advTitle, type Adventurer } from '@/lib/adventurers';
+import { advBadges, advNominalRarity, advRank, advTitle, type Adventurer } from '@/lib/adventurers';
+import { rarityRank } from '@/lib/items';
 import { rankStarStr } from '@/lib/characterRank';
 
 const props = defineProps<{ adv: Adventurer; on: boolean; reason?: string | null }>();
 const emit = defineEmits<{ toggle: [] }>();
 const rank = computed(() => advRank(props.adv));
 const badges = computed(() => advBadges(props.adv));
+/** ⚠️ La rareté NOMINALE : ce qu'on a invoqué. Pour un legacy elle vaut sa strate, donc
+ *  la tuile dit la même chose qu'avant. */
+const rar = computed(() => rarityRank(advNominalRarity(props.adv)));
 </script>
 
 <style scoped lang="scss">

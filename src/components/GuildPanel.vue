@@ -336,10 +336,17 @@
         </span>
       </div>
 
+      <!-- 🏅 CE QU'IL EST (la rareté tirée, elle ne bouge jamais) — puis, seulement s'il
+           est encore bridé, CE QU'IL PEUT MENER. Les deux étaient confondues, et seule la
+           seconde s'affichait : un primordial de niveau 1 se lisait « classe Bronze ». -->
       <div class="d-sub">
-        {{ titleOf(detailAdv)?.label ?? '—' }} ·
-        <b :style="{ color: rarColor(detailAdv) }">{{ rarOf(detailAdv) }}</b> ·
-        {{ advShapeLabel(statWeights(detailAdv)) }}
+        <b :style="{ color: nomColor(detailAdv) }">{{ nomOf(detailAdv) }}</b> ·
+        {{ titleOf(detailAdv)?.label ?? '—' }} · {{ advShapeLabel(statWeights(detailAdv)) }}
+      </div>
+      <div v-if="cappedOf(detailAdv)" class="d-cap">
+        ⛓️ Il mène du <b :style="{ color: rarColor(detailAdv) }">{{ rarOf(detailAdv) }}</b> pour
+        l’instant — équipement, familier et talent s’arrêtent là. Monte de niveau et il révélera ce
+        qu’il vaut.
       </div>
 
       <!-- ⚔️ La puissance, et ce que la PAIRE y ajoute : sans l’écart, on ne sait pas si
@@ -668,7 +675,9 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
   ADV_STARS,
+  advNominalRarity,
   advRarity,
+  advRarityCapped,
   advRank,
   advRankProgress,
   advStatus,
@@ -1286,8 +1295,12 @@ const maxRoster = computed(() => engageCap(pantheonLevel.value));
 const rankOf = (a: Adventurer) => advRank(a);
 // La RARETÉ de sa classe — distincte du rang, mais elle monte du même pas (une classe
 // par rang gagné), donc les deux ne peuvent plus se contredire.
-const rarOf = (a: Adventurer) => 'classe ' + rarityRank(advRarity(a)).name;
+const rarOf = (a: Adventurer) => rarityRank(advRarity(a)).name;
 const rarColor = (a: Adventurer) => rarityRank(advRarity(a)).color;
+/** ⚠️ La rareté NOMINALE — ce qu'on a tiré. C'est elle qu'un gacha doit montrer. */
+const nomOf = (a: Adventurer) => rarityRank(advNominalRarity(a)).name;
+const nomColor = (a: Adventurer) => rarityRank(advNominalRarity(a)).color;
+const cappedOf = (a: Adventurer) => advRarityCapped(a);
 const titleOf = (a: Adventurer) => advTitle(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
 // ⚠️ Elle annonçait la PROMOTION, qui n’existe plus (v0.951) : un champion ne se promeut
@@ -1597,6 +1610,17 @@ async function doPull() {
   font-size: 12.5px;
   color: var(--dim);
   margin: 2px 0 8px;
+}
+/* ⛓️ Le plafond du SPORT, dit une seule fois et seulement quand il mord. */
+.d-cap {
+  font-size: 12px;
+  color: var(--dim);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin: 0 0 8px;
+  line-height: 1.35;
 }
 .adv-pow {
   margin-left: auto;

@@ -1366,6 +1366,26 @@ export function advRarity(adv: Adventurer): Rarity {
   return RANK_ORDER[Math.min(RANK_ORDER.length - 1, top)]!;
 }
 
+/**
+ * 🏅 LA RARETÉ **NOMINALE** — ce qu'on a TIRÉ, et qui ne bouge jamais.
+ *
+ * ⚠️ **ELLE N'ÉTAIT AFFICHÉE NULLE PART** (v0.959), alors que la doc de `championRarity`
+ * affirme « c'est elle que la carte affiche ». Les écrans lisaient `advRarity`, donc
+ * l'EFFECTIVE : un primordial fraîchement invoqué s'affichait « Bronze » au niveau 1, et
+ * **rien ne disait ce qu'on avait tiré** — dans un gacha, c'est l'information qui compte.
+ *
+ * Un aventurier LEGACY n'a qu'une rareté (sa strate) : les deux coïncident.
+ */
+export function advNominalRarity(adv: Adventurer): Rarity {
+  return advChampion(adv)?.rarity ?? advRarity(adv);
+}
+
+/** Le plafond du SPORT mord-il ? (il mène moins haut que ce qu'il est) — l'écran ne le dit
+ *  que dans ce cas, sinon il annoncerait deux fois la même chose. */
+export function advRarityCapped(adv: Adventurer): boolean {
+  return RARITY_RANK[advNominalRarity(adv)] > RARITY_RANK[advRarity(adv)];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // 🏅 LE BUDGET DE STATS D'UN CHAMPION — et le plafond qui garde le sport au sommet
 // ─────────────────────────────────────────────────────────────────────────────

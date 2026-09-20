@@ -6,7 +6,9 @@ import {
   advAwaken,
   advChampion,
   advRank,
+  advNominalRarity,
   advRarity,
+  advRarityCapped,
   advRoles,
   advSignatureLevels,
   advSignatures,
@@ -261,5 +263,28 @@ describe('🗿 L’ENGAGEMENT — le seul plafond d’effectif du jeu', () => {
     expect(engageCap(30)).toBe(16);
     expect(engageCap(100)).toBe(51);
     for (let L = 1; L <= 100; L++) expect(engageCap(L)).toBeGreaterThanOrEqual(engageCap(L - 1));
+  });
+});
+
+describe('🏅 LES DEUX RARETÉS — ce qu’on a TIRÉ, et ce qu’il peut MENER', () => {
+  it('⚠️ LA NOMINALE NE BOUGE JAMAIS, même quand le sport la bride', () => {
+    // ⚠️ Elle n'était affichée NULLE PART (v0.959) : les écrans lisaient `advRarity`, donc
+    // l'EFFECTIVE — un primordial fraîchement invoqué se lisait « Bronze » au niveau 1, et
+    // rien ne disait ce qu'on avait tiré. Dans un gacha, c'est L'information.
+    const bas = asAdv(primordial, 1);
+    expect(advNominalRarity(bas)).toBe(primordial.rarity);
+    expect(advRarity(bas)).not.toBe(primordial.rarity);
+    expect(advRarityCapped(bas)).toBe(true);
+    // …et au sommet, les deux se rejoignent : l'écran ne dit alors plus qu'une chose.
+    const haut = asAdv(primordial, 100);
+    expect(advNominalRarity(haut)).toBe(primordial.rarity);
+    expect(advRarity(haut)).toBe(primordial.rarity);
+    expect(advRarityCapped(haut)).toBe(false);
+  });
+
+  it('un aventurier LEGACY n’a qu’une rareté — les deux coïncident', () => {
+    const a = refAdventurer(30);
+    expect(advNominalRarity(a)).toBe(advRarity(a));
+    expect(advRarityCapped(a)).toBe(false);
   });
 });

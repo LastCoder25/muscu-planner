@@ -14,7 +14,7 @@
       <button
         class="ap-mini corner tl"
         type="button"
-        :title="`${title?.label ?? 'Sans classe'} · ${rarLabel}`"
+        :title="`${title?.label ?? 'Sans classe'} · ${nomLabel}${capped ? ` · mène du ${rarLabel}` : ''}`"
         :aria-label="`Fiche de ${adv.name}`"
         @click="emit('open')"
       >
@@ -129,8 +129,18 @@
     </div>
 
     <button class="ap-name font-display" type="button" @click="emit('open')">{{ adv.name }}</button>
+    <!-- 🏅 LA RARETÉ TIRÉE, EN PASTILLE PLEINE (v0.959, demandé « de façon plus lisible »).
+         ⚠️ C'est la NOMINALE — ce qu'on a invoqué, et qui ne changera jamais. Les écrans
+         lisaient l'EFFECTIVE : un primordial de niveau 1 s'affichait « classe Bronze », et
+         rien ne disait ce qu'on avait tiré. Dans un gacha, c'est L'information.
+         ⚠️ Et elle ne vivait qu'en teinte + `title` — donc invisible sur un téléphone, qui
+         n'a pas de survol. -->
+    <div class="ap-rar font-display" :style="{ '--rar-c': nomColor }">{{ nomLabel }}</div>
     <div class="ap-sub">
-      {{ title?.label ?? '—' }} · <b :style="{ color: rarColor }">{{ rarLabel }}</b>
+      {{ title?.label ?? '—' }}
+      <template v-if="capped">
+        · <b :style="{ color: rarColor }">mène du {{ rarLabel }}</b>
+      </template>
     </div>
     <div v-if="state" class="ap-state">{{ state }}</div>
   </div>
@@ -139,7 +149,15 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import { advRank, advRankProgress, advRarity, advTitle, type Adventurer } from '@/lib/adventurers';
+import {
+  advNominalRarity,
+  advRank,
+  advRankProgress,
+  advRarity,
+  advRarityCapped,
+  advTitle,
+  type Adventurer,
+} from '@/lib/adventurers';
 import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
 import { FAMILIAR_SLOT, rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
@@ -176,7 +194,12 @@ const rank = computed(() => advRank(props.adv));
 const title = computed(() => advTitle(props.adv));
 // Le rang de la CLASSE (v0.833) : c’est lui qui borne ses compagnons, affichés en rang.
 const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
-const rarLabel = computed(() => 'classe ' + rarityRank(advRarity(props.adv)).name);
+/** ⚠️ Ce qu'il peut MENER aujourd'hui (équipement, familier, talent) — affiché SEULEMENT
+ *  quand il diffère de ce qu'il est, sinon on dirait deux fois la même chose. */
+const rarLabel = computed(() => rarityRank(advRarity(props.adv)).name);
+const capped = computed(() => advRarityCapped(props.adv));
+const nomColor = computed(() => rarityRank(advNominalRarity(props.adv)).color);
+const nomLabel = computed(() => rarityRank(advNominalRarity(props.adv)).name);
 const pct = computed(() => Math.round(advRankProgress(props.adv) * 100));
 /** L’avatar ne lit que l’emplacement et la RARETÉ de chaque pièce (la forme de l’arme lui
  *  est passée à part) : la règle d’apparence vit dans `advLooks` (lib), ce composant ne
