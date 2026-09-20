@@ -23,11 +23,10 @@ import {
   travelTimeMult,
   type Building,
 } from './buildings';
-import { caravanSlots, caravanSlowFor, trainMsFor } from './caravan';
+import { caravanSlots, caravanSlowFor } from './caravan';
 import { deployCap } from './adventurers';
 import { outfitterMsFor } from './advGear';
 import { altarLuckBonus } from './items';
-import { characterRank } from './characterRank';
 import { repairMsFor } from './raid';
 
 export interface LevelPreview {
@@ -56,18 +55,11 @@ function textAt(typeId: string, level: number): string | null {
       const lent = caravanSlowFor(level);
       return `${caravanSlots(level)} convoi${caravanSlots(level) > 1 ? 's' : ''} · ×${lent.toFixed(2)} le temps du héros`;
     }
-    case 'guild': {
-      const r = characterRank(Math.max(1, level));
-      return `${deployCap(level)} aventuriers · rang max ${r.name} ${'★'.repeat(r.star)}`;
-    }
-    case 'training':
-      // ⚠️ Les DEUX bouts : la durée double à chaque rang, donc un seul chiffre ne
-      // dirait rien — et c’est justement l’écart qui fait décider.
-      return `1re promotion ${h(trainMsFor(level, 1))} · primordiale ${h(trainMsFor(level, 7))}`;
-    case 'outfitter':
-      // ⚠️ Un seul chiffre : le temps de fabrication, la même chose qui compte pour un
-      // joueur qui investit dans ce bâtiment.
-      return `fabrication en ${h(outfitterMsFor(level))}`;
+    case 'pantheon':
+      // ⚠️ Les DEUX leviers, comme le Comptoir : l'un est un PALIER (une place de plus
+      // tous les 2 niveaux), l'autre une COURBE (la forge qui gratte à chaque cran). Un
+      // seul chiffre laisserait croire que l'autre moitié du bâtiment est figée.
+      return `${deployCap(level)} champions déployés · forge en ${h(outfitterMsFor(level))}`;
     case 'outpost':
       return `−${pct(1 - travelTimeMult(one(typeId, level)))} de temps de trajet`;
     case 'labyrinth_gate':
@@ -99,7 +91,7 @@ function textAt(typeId: string, level: number): string | null {
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
 function isMilestone(typeId: string, level: number): boolean {
   if (typeId === 'caravanserail') return caravanSlots(level) > caravanSlots(level - 1);
-  if (typeId === 'guild') return deployCap(level) > deployCap(level - 1);
+  if (typeId === 'pantheon') return deployCap(level) > deployCap(level - 1);
   return false;
 }
 

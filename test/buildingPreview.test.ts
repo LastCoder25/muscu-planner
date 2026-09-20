@@ -3,6 +3,7 @@ import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 import { BUILDING_TYPES } from '@/lib/buildings';
 import { caravanSlots, caravanSlowFor } from '@/lib/caravan';
 import { deployCap } from '@/lib/adventurers';
+import { outfitterMsFor } from '@/lib/advGear';
 
 describe('aperçu des prochains niveaux d’un bâtiment', () => {
   it('⚠️ CHAQUE type de bâtiment a un aperçu — un bâtiment muet est une régression', () => {
@@ -18,7 +19,11 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
     const ligne = buildingPreview('caravanserail', l, 0)[0]!;
     expect(ligne.text).toContain(String(caravanSlots(l)));
     expect(ligne.text).toContain(caravanSlowFor(l).toFixed(2));
-    expect(buildingPreview('guild', 8, 0)[0]!.text).toContain(String(deployCap(8)));
+    // ⚠️ Les DEUX leviers du Panthéon, pas seulement le plus visible : une moitié du
+    // bâtiment annoncée figée se lirait comme un niveau mort.
+    const pan = buildingPreview('pantheon', 8, 0)[0]!;
+    expect(pan.text).toContain(String(deployCap(8)));
+    expect(pan.text).toContain(String(Math.round(outfitterMsFor(8) / 60000)));
   });
 
   it('marque les PALIERS, et eux seuls', () => {

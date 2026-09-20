@@ -114,7 +114,7 @@
                aventurier, puis l'objet à fondre — la pièce qui en sortira est annoncée sur
                la ligne (emplacement + rang). Les fabrications se mettent en FILE. La pièce
                sort au RANG de l'aventurier, jamais au-dessus de l'objet fourni. -->
-          <div v-if="selectedPlot.building.typeId === 'outfitter'" class="of">
+          <div v-if="selectedPlot.building.typeId === 'pantheon'" class="of">
             <div v-if="outfitQueue.length" class="of-queue">
               <div class="of-t">⚒️ En fabrication · {{ outfitQueue.length }}</div>
               <div v-for="(j, i) in outfitQueue" :key="i" class="of-q">
@@ -127,7 +127,7 @@
             </div>
             <div class="of-t">Pour qui ?</div>
             <p v-if="!outfitAdvs.length" class="of-note">
-              Recrute d’abord un aventurier à la Guilde.
+              Recrute d’abord un aventurier au Panthéon.
             </p>
             <div v-else class="of-advs">
               <button
@@ -242,7 +242,7 @@
                  de la base, loin de la Guilde qu'on venait de monter : on cherchait ses
                  aventuriers là où ils n'étaient pas. Un bâtiment, un endroit. -->
             <button
-              v-if="selectedPlot.building.typeId === 'guild'"
+              v-if="selectedPlot.building.typeId === 'pantheon'"
               class="pm-btn open"
               @click="emit('open-guild')"
             >
@@ -554,15 +554,15 @@ async function doUpgrade(slot: number) {
   const uid = auth.user?.id;
   if (!uid) return;
   const b = plots.value[slot]?.building;
-  const avant = b?.typeId === 'guild' ? deployCap(b.level) : -1;
+  const avant = b?.typeId === 'pantheon' ? deployCap(b.level) : -1;
   await char.upgradeFilon(uid, slot, heroLevel.value);
   if (avant < 0) return;
-  const apres = deployCap(char.guildLevel);
+  const apres = deployCap(char.pantheonLevel);
   if (apres <= avant) return;
   gameFx.celebrate({
     kind: 'unlock',
-    emoji: '⚔️',
-    title: 'Une place de plus à la Guilde',
+    emoji: '🛕',
+    title: 'Une place de plus au Panthéon',
     subtitle: 'Un aventurier attend son affectation',
     rarity: 'epic',
   });

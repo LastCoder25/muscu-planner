@@ -2,12 +2,12 @@
   <q-dialog :model-value="open" position="bottom" @update:model-value="emit('close')">
     <q-card class="guild-card">
       <div class="g-head">
-        <span class="g-title font-display">⚔️ Guilde d’aventuriers</span>
+        <span class="g-title font-display">⚔️ Mes aventuriers</span>
         <span class="g-count">{{ roster.length }}/{{ maxRoster }}</span>
       </div>
 
       <p v-if="!guildLevel" class="g-empty">
-        Construis la <b>Guilde</b> dans ta cour pour recruter des aventuriers.
+        Construis le <b>Panthéon</b> dans ta cour pour recruter des aventuriers.
       </p>
 
       <template v-else>
@@ -55,8 +55,8 @@
             ➕ Recruter un aventurier — {{ cost }} 🪙
           </button>
           <div v-else class="g-note g-full">
-            Guilde pleine ({{ roster.length }}/{{ maxRoster }}). <b>Monte-la d’un niveau</b> pour
-            loger quelqu’un de plus.
+            Déploiement au complet ({{ roster.length }}/{{ maxRoster }}).
+            <b>Monte le Panthéon d’un niveau</b> pour loger quelqu’un de plus.
           </div>
           <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
              selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
@@ -167,8 +167,8 @@
              🔒 / 🪙 comme le sac, désactivés si portée. -->
         <template v-else>
           <p v-if="!char.advGearStock.length" class="g-empty">
-            Aucune pièce en stock. L’<b>Équipementier</b> en fabrique à partir des objets de ton
-            sac, et les sièges repoussés comme les embuscades en laissent tomber.
+            Aucune pièce en stock. Le <b>Panthéon</b> en fabrique à partir des objets de ton sac, et
+            les sièges repoussés comme les embuscades en laissent tomber.
           </p>
           <!-- 🔎 FILTRE (demandé) : ce qui attend preneur, ce qui est CONFIÉ, ou tout.
                ⚠️ C'étaient deux SOUS-ONGLETS (v0.908) ; ils deviennent les MÊMES puces que
@@ -321,7 +321,7 @@
         <b>orientation</b>, leur <b>rôle sur les convois</b> et leur <b>signature de combat</b>.
       </p>
       <div v-if="!trainingLevel" class="g-empty">
-        Il te faut un <b>Centre de formation</b> pour qu’il apprenne une nouvelle classe.
+        Il te faut un <b>Panthéon</b> pour qu’il apprenne une nouvelle classe.
       </div>
       <!-- ⚠️ La durée s'annonce AVANT le choix : elle double à chaque rang et
            l'aventurier est immobilisé pendant tout ce temps. La découvrir après coup,
@@ -726,9 +726,7 @@
       <p class="g-note">Pièces permises pour son métier et sa classe.</p>
       <p class="g-note">{{ GAIN_NOTE }}</p>
       <button v-if="gearHereId" class="cta ghost" @click="pickGear(null)">Retirer la pièce</button>
-      <p v-if="!gearPool.length" class="g-note">
-        Aucune pièce en stock — l'Équipementier en fabrique.
-      </p>
+      <p v-if="!gearPool.length" class="g-note">Aucune pièce en stock — le Panthéon en fabrique.</p>
       <p v-else-if="!gearRows.rows.length" class="g-note">Aucune pièce disponible pour lui.</p>
       <p v-if="gearHidden" class="g-note dim">{{ gearHidden }}</p>
       <button
@@ -1390,8 +1388,8 @@ const rosterShown = computed(() =>
 watch(rosterChips, (chips) => {
   if (rosterFilter.value && !chips.includes(rosterFilter.value)) rosterFilter.value = null;
 });
-const guildLevel = computed(() => char.guildLevel);
-const trainingLevel = computed(() => char.trainingLevel);
+const guildLevel = computed(() => char.pantheonLevel);
+const trainingLevel = computed(() => char.pantheonLevel);
 const gold = computed(() => char.row?.gold ?? 0);
 const maxRoster = computed(() => 1 + Math.floor(guildLevel.value / 2));
 const cost = computed(() =>
@@ -1625,7 +1623,7 @@ async function doRecruit(classId: string) {
     const ok = await char.recruitAdventurer(uid, recruitSeed.value, classId, name);
     $q.notify(
       ok
-        ? { type: 'positive', message: `${name} rejoint la Guilde.` }
+        ? { type: 'positive', message: `${name} rejoint tes rangs.` }
         : { type: 'negative', message: 'Recrutement impossible (or, place ou offre).' },
     );
     // ⚠️ On ne referme QUE sur un succès : un refus (or manquant, place prise) doit
@@ -1661,7 +1659,7 @@ async function doPromote(classId: string) {
     $q.notify(
       ok
         ? { type: 'positive', message: `${a.name} progresse.` }
-        : { type: 'negative', message: 'Promotion impossible (Centre de formation ?).' },
+        : { type: 'negative', message: 'Promotion impossible (Panthéon ?).' },
     );
   } finally {
     busy.value = false;

@@ -5,6 +5,8 @@ import { outfitterMsFor } from '@/lib/advGear';
 import { deployCap } from '@/lib/adventurers';
 import {
   perLevelLabel,
+  healBuildings,
+  buildingInvested,
   plotsForLevel,
   slotUnlockLevel,
   canBuildOnSlot,
@@ -54,11 +56,12 @@ describe('buildings — emplacements & coûts', () => {
     // cour. C'est ce que donnaient les 10 emplacements pour 7 bâtiments.
     expect(BUILDING_TYPES.every((t) => t.unique)).toBe(true);
     expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
-    // 11 types depuis l'Équipementier (Task 7) : les 7 d’origine + Comptoir, Guilde,
-    // Centre de formation, Équipementier. ⚠️ Le littéral est là pour qu’ajouter un type
-    // soit une DÉCISION (il ouvre un emplacement et approfondit le puits d’or de 1/N),
-    // pas un effet de bord.
-    expect(BUILDING_TYPES.length).toBe(11);
+    // 9 types depuis le PANTHEON (v0.949), qui absorbe la Guilde, le Centre de
+    // formation et l'Equipementier. ⚠️ Le littéral est là pour qu'ajouter OU RETIRER un
+    // type soit une DÉCISION (il ouvre ou ferme un emplacement, et déplace le puits
+    // d'or de 1/N), pas un effet de bord — ce puits a déjà dérivé une fois en silence
+    // (v0.733, +43 % quand les caravanes ont ajouté trois bâtiments).
+    expect(BUILDING_TYPES.length).toBe(9);
   });
   it('le CHOIX vit dans plotsForLevel, pas dans le mou : moins d’emplacements que de types déblocables', () => {
     // À bas niveau on a moins d'emplacements que de bâtiments déjà déblocables → on
@@ -77,6 +80,12 @@ describe('buildings — emplacements & coûts', () => {
   it('buildingUpgradeCost : steep et croissant', () => {
     expect(buildingUpgradeCost(1)).toBeLessThan(buildingUpgradeCost(5));
     expect(buildingUpgradeCost(10)).toBeGreaterThan(buildingUpgradeCost(5) * 2);
+  });
+  it('⚠️ TOUT type est AMÉLIORABLE — un bâtiment figé serait un achat sans suite', () => {
+    // Corollaire de « chaque type dit ce qu'un niveau CHANGE » : `buildingScales` en
+    // DÉRIVE désormais, au lieu d'une liste d'ids (qui ratait l'Équipementier) doublée
+    // de deux champs d'effet JAMAIS LUS dont le seul rôle était de passer ce test.
+    for (const t of BUILDING_TYPES) expect(canUpgradeBuilding(mk(t.id, 1), 10), t.id).toBe(true);
   });
   it('canUpgradeBuilding : plafonné au niveau joueur', () => {
     expect(canUpgradeBuilding(mk('boss_altar', 4), 10)).toBe(true);
@@ -143,7 +152,7 @@ describe('repackBuildingSlots : un filet legacy, jamais un repack inconditionnel
 });
 
 describe('buildings — registre (production passive)', () => {
-  it('roster complet : les 7 d’origine + comptoir, guilde, centre de formation, équipementier', () => {
+  it('roster complet : les 7 d’origine + comptoir et pantheon', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
       [
         'boss_altar',
@@ -154,9 +163,7 @@ describe('buildings — registre (production passive)', () => {
         'outpost',
         'warehouse',
         'caravanserail',
-        'guild',
-        'training',
-        'outfitter',
+        'pantheon',
       ].sort(),
     );
   });
@@ -410,10 +417,9 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     boss_altar: (l) => bossAltarRollFloor(one('boss_altar', l)),
     // Nombre de convois ET vitesse : le nombre reste borné par le vivier, la vitesse continue.
     caravanserail: (l) => caravanSlots(l) * 1000 + (2 - caravanSlowFor(l)) * 100,
-    // Effectif ET rang maximal des aventuriers (le rang suit le niveau, donc continu).
-    guild: (l) => deployCap(l) * 1000 + l,
-    training: (l) => -trainMsFor(l),
-    outfitter: (l) => -outfitterMsFor(l),
+    // Déploiement ET vitesse de forge : le déploiement saute d'un cran tous les 2
+    // niveaux, la forge gratte en continu — il suffit qu'UN des deux bouge.
+    pantheon: (l) => deployCap(l) * 1_000_000 - outfitterMsFor(l),
   };
 
   it('chaque type de bâtiment déclare ce que son niveau change', () => {
@@ -509,5 +515,87 @@ describe('🗝️ LA PORTE DU LABYRINTHE EST UN COMPLÉMENT, PAS LA SOURCE', () 
     // `buildingAccrued` arrondit à l'entier, mais le reliquat fractionnaire est REPORTÉ
     // (v0.660) : un robinet lent n'est pas affamé par des récoltes fréquentes.
     for (let L = 1; L < 100; L++) expect(runsPerDay(L + 1)).toBeGreaterThan(runsPerDay(L));
+  });
+});
+
+describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () => {
+  // ⚠️ Ces trois ids ne sont PLUS au registre : c'est exactement pour ça que la fusion
+  // doit passer avant le filtre des types inconnus, et c'est ce que ces tests gardent.
+  const legacy = (typeId: string, level: number, slot: number): Building =>
+    ({ typeId, level, slot, collectedAt: 0 }) as unknown as Building;
+
+  it('⚠️ une cour VIDE ne fait pas apparaître un Panthéon fantôme', () => {
+    // Trouvé par une mutation SURVIVANTE : sans la sortie rapide, `Math.max()` sur une
+    // liste vide vaut -Infinity — un joueur qui n'a encore rien bâti se réveillait avec
+    // un bâtiment sorti de nulle part, à un niveau impossible.
+    expect(healBuildings([])).toEqual({ buildings: [], goldRefund: 0 });
+  });
+  it('sans rien à fusionner, elle ne touche à RIEN (idempotence)', () => {
+    const b = [mk('gold_mine', 5, 0, 0), mk('pantheon', 12, 0, 1)];
+    const out = healBuildings(b);
+    expect(out.goldRefund).toBe(0);
+    expect(out.buildings).toEqual(b);
+  });
+
+  it('les trois deviennent UN Panthéon, au niveau le plus haut et à la place du premier', () => {
+    const out = healBuildings([
+      mk('gold_mine', 4, 0, 0),
+      legacy('training', 10, 3),
+      legacy('guild', 31, 1),
+      legacy('outfitter', 30, 5),
+    ]);
+    const pan = out.buildings.filter((b) => b.typeId === 'pantheon');
+    expect(pan.length, 'un seul Panthéon').toBe(1);
+    // ⚠️ Le NIVEAU le plus haut, pas la somme ni la moyenne : l'investissement est
+    // conservé en nature, et les deux leviers du Panthéon SONT ceux de la Guilde et de
+    // l'Équipementier — ils repartent là où ils en étaient.
+    expect(pan[0]!.level).toBe(31);
+    expect(pan[0]!.slot, 'la place du premier posé').toBe(1);
+    // Le reste de la cour ne bouge pas.
+    expect(out.buildings.some((b) => b.typeId === 'gold_mine')).toBe(true);
+  });
+
+  it('⚠️ LE FILTRE DES TYPES INCONNUS NE LES EFFACE PAS AVANT LA FUSION', () => {
+    // La garantie d'ORDRE, et la seule qui chiffre ce qu'elle protège : filtrer d'abord
+    // rendrait une cour vide et zéro or rendu, pour 7,42 M investis (mesuré en base).
+    const out = healBuildings([legacy('guild', 31, 0)]);
+    expect(out.buildings.map((b) => b.typeId)).toEqual(['pantheon']);
+  });
+
+  it("l'or des bâtiments absorbés est RENDU, au centime de la courbe réelle", () => {
+    // ⚠️ Jamais un nombre écrit à la main : on garde la valeur d'UN bâtiment, on rend
+    // celle des autres — et le calcul passe par les fonctions du jeu, donc il suivra tout
+    // réglage de `BUILD.upBase`.
+    const out = healBuildings([
+      legacy('guild', 31, 0),
+      legacy('outfitter', 30, 1),
+      legacy('training', 10, 2),
+    ]);
+    const paye = buildingInvested(700, 31) + buildingInvested(800, 30) + buildingInvested(650, 10);
+    const garde = buildingInvested(700, 31); // ce que le Panthéon représente désormais
+    expect(out.goldRefund).toBe(Math.round(paye - garde));
+    // Le compte réel : ~73 jours de revenu au niveau 28 auraient disparu en silence.
+    expect(out.goldRefund, 'le compte réel rend plus de 3 M').toBeGreaterThan(3_000_000);
+  });
+
+  it('un seul bâtiment absorbé, et moins cher que le Panthéon : rien à rendre, rien à devoir', () => {
+    // Le Centre de formation se pose à 650, le Panthéon à 700 : le joueur hérite d'un
+    // bâtiment qui vaut plus, il ne doit rien pour autant (plancher à 0).
+    const out = healBuildings([legacy('training', 4, 0)]);
+    expect(out.goldRefund).toBe(0);
+    expect(out.buildings[0]!.level).toBe(4);
+  });
+
+  it('⚠️ APPLIQUÉE DEUX FOIS = APPLIQUÉE UNE FOIS — sinon on rembourse à chaque chargement', () => {
+    const une = healBuildings([legacy('guild', 20, 0), legacy('outfitter', 12, 1)]);
+    const deux = healBuildings(une.buildings);
+    expect(une.goldRefund).toBeGreaterThan(0);
+    expect(deux.goldRefund, 'le second passage ne rend plus rien').toBe(0);
+    expect(deux.buildings).toEqual(une.buildings);
+  });
+
+  it('buildingInvested : la pose seule au niveau 1, puis tous les crans', () => {
+    expect(buildingInvested(700, 1)).toBe(700);
+    expect(buildingInvested(700, 3)).toBe(700 + buildingUpgradeCost(1) + buildingUpgradeCost(2));
   });
 });

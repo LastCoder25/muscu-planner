@@ -95,7 +95,7 @@ import {
   canUpgradeBuilding,
   canBuildType,
   canBuildOnSlot,
-  repackBuildingSlots,
+  healBuildings,
   collectable,
   nextCollectedAt,
   storageMult,
@@ -212,6 +212,7 @@ import {
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
 import { resolveIncursion, resolveInterception, riftOverflowOf } from '@/lib/rift';
+import { useGameFx } from '@/composables/useGameFx';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -381,9 +382,16 @@ export const useCharacterStore = defineStore('character', () => {
     // (v0.867), qui laisse le joueur choisir un emplacement vide au-delà du prochain index
     // libre. Le filet reste : un slot hors bornes ou en doublon (type retiré du registre,
     // ligne corrompue) est toujours recompacté.
-    r.buildings = repackBuildingSlots(
-      arr<Building>(r.buildings).filter((b) => !!buildingType(b.typeId)),
-    );
+    // 🛕 FUSION DU PANTHÉON (v0.949) — Guilde + Centre de formation + Équipementier.
+    // ⚠️ ELLE PASSE **AVANT** LE FILTRE, et c'est tout l'enjeu : après, les trois types
+    // ont disparu du registre, donc la ligne au-dessus les aurait déjà effacés — avec
+    // 7,42 M d'or investis (mesuré en base). Même ordre que la fouille et `advanceBase`
+    // (v0.772). ⚠️ Le remboursement vit ICI, collé à la fusion, pour que l'or et les
+    // bâtiments voyagent ENSEMBLE dans la même ligne en mémoire ; `load()` les persiste
+    // aussitôt, sans quoi une écriture qui ne porterait que l'or rembourserait deux fois.
+    const soin = healBuildings(arr<Building>(r.buildings));
+    if (soin.goldRefund > 0) r.gold = (r.gold ?? 0) + soin.goldRefund;
+    r.buildings = soin.buildings;
     r.set_pieces_seen = obj<Record<string, string[]>>(r.set_pieces_seen); // migr. 0047
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
@@ -422,8 +430,14 @@ export const useCharacterStore = defineStore('character', () => {
       .eq('user_id', uid)
       .maybeSingle();
     if (error) throw error;
+    // ⚠️ La fusion du Panthéon se mesure sur la ligne BRUTE, avant que `normalizeRow` ne
+    // la referme : c'est la présence des trois anciens bâtiments qui EST le marqueur
+    // « pas encore migré ». Une fois écrite, il n'y a plus rien à fusionner.
+    const raw = data?.buildings;
+    const legacy = healBuildings(Array.isArray(raw) ? raw : []);
     row.value = normalizeRow(data ?? null);
     loaded.value = true;
+    if (row.value && legacy.goldRefund > 0) await settlePantheon(uid, legacy.goldRefund);
     return row.value;
   }
 
@@ -458,6 +472,30 @@ export const useCharacterStore = defineStore('character', () => {
     }
     row.value = normalizeRow(data);
     return data;
+  }
+
+  /** 🛕 Écrit la fusion du Panthéon **AUSSITÔT** : les bâtiments fusionnés et l'or rendu,
+   *  dans la MÊME requête. ⚠️ Tant que la ligne en base porte encore les trois anciens
+   *  bâtiments, chaque chargement recalcule le remboursement — donc une écriture qui ne
+   *  porterait que l'or (un achat, par exemple) le rembourserait une seconde fois. La
+   *  persistance immédiate ferme cette fenêtre. Un échec laisse la base intacte : on
+   *  retentera au prochain chargement, et le pire cas est généreux, jamais punitif.
+   *  ⚠️ Et on le DIT : un bond de plusieurs millions d'or sans un mot se lit comme un bug. */
+  async function settlePantheon(userId: string, refund: number) {
+    const cur = row.value;
+    if (!cur) return;
+    try {
+      await persist(userId, { buildings: cur.buildings, gold: cur.gold });
+    } catch {
+      return; // hors ligne : la base garde les anciens bâtiments, on retentera.
+    }
+    useGameFx().celebrate({
+      kind: 'unlock',
+      emoji: '🛕',
+      title: 'Le Panthéon des champions',
+      subtitle: `Guilde, Centre de formation et Équipementier n'en font plus qu'un — ${refund.toLocaleString('fr-FR')} 🪙 rendus`,
+      rarity: 'legendary',
+    });
   }
 
   async function persist(userId: string, patch: Record<string, unknown>) {
@@ -1611,7 +1649,7 @@ export const useCharacterStore = defineStore('character', () => {
     let wages = 0;
     if (party) {
       const claim = partyClaimRoster(party, advList.value, {
-        guildLevel: guildLevel.value,
+        guildLevel: pantheonLevel.value,
         infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
         now,
       });
@@ -1835,7 +1873,7 @@ export const useCharacterStore = defineStore('character', () => {
       const ids = new Set(defenders.map((a) => a.id));
       patch.adventurers = advList.value.map((a) => {
         if (!ids.has(a.id)) return a;
-        const next = grantAdvXp(a, siegeXp(a, report), guildLevel.value);
+        const next = grantAdvXp(a, siegeXp(a, report), pantheonLevel.value);
         return hurt.has(a.id)
           ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, hurtUntil) }
           : next;
@@ -2110,8 +2148,8 @@ export const useCharacterStore = defineStore('character', () => {
   ) {
     const cur = row.value;
     if (!cur) return;
-    const level = buildingLevel(cur.buildings ?? [], 'outfitter');
-    if (level <= 0) throw new Error('Construis un Équipementier.');
+    const level = buildingLevel(cur.buildings ?? [], 'pantheon');
+    if (level <= 0) throw new Error('Construis un Panthéon.');
     const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
     if (!adv) throw new Error('Cet aventurier est introuvable.');
     const item = cur.inventory.find((i) => i.id === itemId);
@@ -2151,8 +2189,8 @@ export const useCharacterStore = defineStore('character', () => {
   async function startOutfitBatch(userId: string, advId: string, now: number, playerLevel: number) {
     const cur = row.value;
     if (!cur) return 0;
-    const level = buildingLevel(cur.buildings ?? [], 'outfitter');
-    if (level <= 0) throw new Error('Construis un Équipementier.');
+    const level = buildingLevel(cur.buildings ?? [], 'pantheon');
+    if (level <= 0) throw new Error('Construis un Panthéon.');
     const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
     if (!adv) throw new Error('Cet aventurier est introuvable.');
     const forges = cur.adv_gear?.forges ?? [];
@@ -2421,9 +2459,13 @@ export const useCharacterStore = defineStore('character', () => {
   const partyList = computed<ActiveParty[]>(() => row.value?.parties ?? []);
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
-  const guildLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'guild'));
+  /** 🛕 Le niveau du PANTHÉON — un seul bâtiment depuis la fusion (v0.949), donc un seul
+   *  niveau : il porte le DÉPLOIEMENT (combien de champions engagés à la fois) et la
+   *  FORGE (le temps de fabrication d'une pièce). ⚠️ Pendant la bascule vers les
+   *  champions, il alimente AUSSI la promotion des aventuriers (l'ancien Centre de
+   *  formation), qui disparaît au prochain jalon. */
+  const pantheonLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'pantheon'));
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'caravanserail'));
-  const trainingLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'training'));
   /** ⚠️ Le Chenil est une structure de l’ENCEINTE, pas un bâtiment de la cour — d’où
    *  `defenseLevel` et non `buildingLevel`. Exposé ici parce que DEUX écrans en ont besoin
    *  (la Guilde pour la coupe du dressage, la fiche des familiers pour l’afficher) : chacun
@@ -2436,17 +2478,17 @@ export const useCharacterStore = defineStore('character', () => {
     return classChoices({ id: '', name: '', seed, path: [], level: 1, xp: 0 }, 0);
   }
 
-  /** Recrute un aventurier dans la classe choisie. ⚠️ La Guilde plafonne l'EFFECTIF ; le
+  /** Recrute un aventurier dans la classe choisie. ⚠️ Le Panthéon plafonne l'EFFECTIF ; le
    *  coût croît avec le vivier déjà en place, sinon on le remplit d'un coup et « qui
    *  j'élève » cesse d'être une décision. */
   async function recruitAdventurer(userId: string, seed: number, classId: string, name: string) {
     const cur = row.value;
     if (!cur) return false;
-    if (guildLevel.value <= 0) return false;
+    if (pantheonLevel.value <= 0) return false;
     const roster = advList.value;
-    if (roster.length >= deployCap(guildLevel.value)) return false;
+    if (roster.length >= deployCap(pantheonLevel.value)) return false;
     if (!recruitChoices(seed).some((c) => c.id === classId)) return false; // pas dans l'offre
-    const cost = recruitCost(roster.length, guildLevel.value);
+    const cost = recruitCost(roster.length, pantheonLevel.value);
     if (cur.gold < cost) return false;
     const adv: Adventurer = {
       id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
@@ -2472,8 +2514,8 @@ export const useCharacterStore = defineStore('character', () => {
     // promotions que ce garde refusait. Un seul prédicat, un seul endroit.
     if (
       !canPromoteNow(adv, {
-        guildLevel: guildLevel.value,
-        trainingLevel: trainingLevel.value,
+        guildLevel: pantheonLevel.value,
+        trainingLevel: pantheonLevel.value,
         now: Date.now(),
       })
     )
@@ -2499,7 +2541,7 @@ export const useCharacterStore = defineStore('character', () => {
       // en vise donc la N-ième. C’est elle qui fixe la durée (×2 par rang).
       training: {
         classId,
-        until: Date.now() + trainMsFor(trainingLevel.value, adv.path.length),
+        until: Date.now() + trainMsFor(pantheonLevel.value, adv.path.length),
       },
     };
     await persist(userId, {
@@ -2598,7 +2640,7 @@ export const useCharacterStore = defineStore('character', () => {
       escort: escortAdvs,
       wages,
     } = caravanClaimRoster(van, before, {
-      guildLevel: guildLevel.value,
+      guildLevel: pantheonLevel.value,
       infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
       now: Date.now(),
     });
@@ -2639,8 +2681,8 @@ export const useCharacterStore = defineStore('character', () => {
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
     return advProgressOf(before, advs, {
-      guildLevel: guildLevel.value,
-      trainingLevel: trainingLevel.value,
+      guildLevel: pantheonLevel.value,
+      trainingLevel: pantheonLevel.value,
       now: Date.now(),
     });
   }
@@ -2816,9 +2858,8 @@ export const useCharacterStore = defineStore('character', () => {
     caravanList,
     roadCompanions,
     advGearStock,
-    guildLevel,
+    pantheonLevel,
     comptoirLevel,
-    trainingLevel,
     kennelLevel,
     recruitChoices,
     recruitAdventurer,

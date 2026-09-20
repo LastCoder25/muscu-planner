@@ -193,29 +193,31 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     }
   });
 
-  it('⚠️ ET IL TIENDRA À 9 BÂTIMENTS — la mesure bloquante du Panthéon', () => {
-    // Le Panthéon fusionne la Guilde, le Centre de formation et l'Équipementier : le roster
-    // passera de 11 à 9, et `BUILD.plotCap` en DÉRIVE. Moins d'emplacements = moins de
-    // dépenses = l'or s'entasse. La spec du gacha listait cette mesure comme BLOQUANTE.
+  it('⚠️ LA MARGE EST MINCE : un bâtiment de moins frôle le plafond, deux le franchissent', () => {
+    // Le Panthéon a fusionné la Guilde, le Centre de formation et l'Équipementier : le
+    // roster est passé de 11 à 9, et `BUILD.plotCap` en DÉRIVE. Moins d'emplacements =
+    // moins de dépenses = l'or s'entasse. C'était la mesure BLOQUANTE de la spec du gacha.
     //
-    // ✅ MESURÉ : **83,9 / 73,9 / 67,6 %** (contre 78,4 / 69,0 / 63,1 aujourd'hui) — tout
-    // reste dans la bande, sans toucher à `BUILD.upBase`.
+    // ✅ MESURÉ, roster réel à 9 : **83,9 / 73,9 / 67,6 %** (contre 78,4 / 69,0 / 63,1 à
+    // onze) — tout reste dans la bande, sans toucher à `BUILD.upBase`. C'est le test
+    // ci-dessus qui le garde, puisqu'il mesure désormais le roster d'aujourd'hui.
     //
-    // ⚠️ MAIS LA MARGE SE RÉDUIT, et c'est ce que ce test garde : chaque bâtiment retiré
-    // ajoute ~2,5 points au profil tranquille, donc à 8 on frôlerait 86 % et à 7 le
-    // plafond. L'or qui DORT double déjà (152 k → 432 k pour le tranquille). Retirer un
-    // bâtiment de plus impose de re-mesurer, et ce test le dira.
-    for (const [nom, xpParJour] of PROFILS) {
-      const part = partDuPlafond(xpParJour, BUILDING_TYPES.length - 2);
-      const dit = `${nom} à 9 bâtiments : ${(part * 100).toFixed(0)} % du plafond`;
-      expect(part, dit).toBeGreaterThan(0.55);
-      expect(part, dit).toBeLessThan(0.9);
-      // ⚠️ ET ON VÉRIFIE QU'ON MESURE BIEN UN AUTRE ROSTER. Sans cette ligne, un
-      // simulateur qui IGNORERAIT `nbTypes` passerait au vert (le roster d'aujourd'hui
-      // tient aussi) — la mutation l'a montré en survivant. La propriété mesurée est
-      // qu'un roster plus court fait MONTER la part : moins de dépenses, l'or s'entasse.
-      expect(part, dit).toBeGreaterThan(partDuPlafond(xpParJour));
-    }
+    // ⚠️ CE QUE CELUI-CI GARDE, c'est la MARGE : chaque bâtiment retiré ajoute ~3,4 points
+    // au profil tranquille. À 8 on est à 87,3 % — sous le plafond, mais à bout touchant ;
+    // à 7 on est à 91,4 %, dehors. Retirer un bâtiment de plus n'est donc pas un ménage,
+    // c'est un réglage d'économie qui impose de re-mesurer `BUILD.upBase`. Ce test le dira.
+    const [, xpTranquille] = PROFILS[0]!;
+    const aNeuf = partDuPlafond(xpTranquille, BUILDING_TYPES.length);
+    const aHuit = partDuPlafond(xpTranquille, BUILDING_TYPES.length - 1);
+    const aSept = partDuPlafond(xpTranquille, BUILDING_TYPES.length - 2);
+    // ⚠️ La propriété mesurée est qu'un roster plus COURT fait MONTER la part. Sans elle,
+    // un simulateur qui IGNORERAIT `nbTypes` passerait au vert — la mutation l'a montré
+    // en survivant, du temps où ce test ne regardait qu'une seule taille.
+    expect(aHuit, 'un roster plus court doit faire monter la part').toBeGreaterThan(aNeuf);
+    expect(aSept).toBeGreaterThan(aHuit);
+    // Et la marge, chiffrée : on est encore dedans, on ne l'est plus deux crans plus loin.
+    expect(aHuit, `à 8 bâtiments : ${(aHuit * 100).toFixed(0)} %`).toBeLessThan(0.9);
+    expect(aSept, `à 7 bâtiments : ${(aSept * 100).toFixed(0)} %`).toBeGreaterThan(0.9);
   });
 });
 

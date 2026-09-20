@@ -1471,7 +1471,7 @@ const yard = computed<YardCell[]>(() => {
       level: b?.level ?? 0,
       ready: b ? buildingAccrued(b, now.value, mult) > 0 : false,
       damaged: false,
-      star: b?.typeId === 'guild' && promoAvailable.value > 0,
+      star: b?.typeId === 'pantheon' && promoAvailable.value > 0,
       onClick: () => (plotSlot.value = i),
     });
   }
@@ -1518,7 +1518,7 @@ function openGuild(mode?: 'recruit') {
   guildMode.value = mode ?? null;
   guildOpen.value = true;
 }
-const guildLevel = computed(() => char.guildLevel);
+const guildLevel = computed(() => char.pantheonLevel);
 /** Promotions en attente : un jalon qu'on ne doit pas rater, donc une ⭐ sur la Guilde.
  *  ⚠️ Une formation EN COURS n'en est pas une : la décision est déjà prise, et proposer
  *  de promouvoir quelqu'un qui est justement en train de l'être n'aurait aucun sens. */
@@ -1527,7 +1527,7 @@ const promoAvailable = computed(
     char.advList.filter((a) =>
       canPromoteNow(a, {
         guildLevel: guildLevel.value,
-        trainingLevel: char.trainingLevel,
+        trainingLevel: char.pantheonLevel,
         now: now.value,
       }),
     ).length,

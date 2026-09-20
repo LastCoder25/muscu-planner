@@ -45,8 +45,6 @@ interface BuildingEffect {
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
   caravanSlotPer6Lvl?: boolean; // Comptoir : +1 convoi simultané tous les 6 niveaux (cf. caravanSlots)
-  guildRosterPerLvl?: number; // Guilde : +X aventuriers recrutables / niveau
-  trainSpeedPerLvl?: number; // Centre de formation : −X% de temps de formation / niveau
 }
 
 // Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
@@ -80,9 +78,7 @@ export type BuildingTypeId =
   | 'foundry'
   | 'warehouse'
   | 'caravanserail'
-  | 'guild'
-  | 'training'
-  | 'outfitter';
+  | 'pantheon';
 
 export interface BuildingType {
   id: BuildingTypeId;
@@ -278,50 +274,42 @@ export const BUILDING_TYPES: BuildingType[] = [
     unlock: { activity: 'Les caravanes', where: 'sur la carte d’expédition' },
     desc: 'Envoie des convois récolter à ta place — du temps réel, zéro énergie. Ils ne vont que sur les lieux de RÉCOLTE.',
   },
-  // UTILITAIRE : la GUILDE loge et recrute les aventuriers. Son niveau plafonne leur RANG
-  // (donc le sport reste le plafond) et le nombre qu’on peut entretenir.
+  // UTILITAIRE UNIQUE : le PANTHÉON DES CHAMPIONS remplace À LUI SEUL la Guilde, le Centre
+  // de formation et l'Équipementier — « un bâtiment, un endroit » (règle v0.739). On y
+  // invoque ses champions, on y consulte sa collection, on y forge leur équipement.
+  //
+  // ⚠️ IL NE PORTE AUCUNE FORMULE NEUVE, et c'est exactement ce qui le rend vivant du
+  // niveau 1 au 100 (règle v0.731, aucun niveau mort) : ses deux leviers sont ceux dont il
+  // HÉRITE — le DÉPLOIEMENT (`deployCap`, +1 tous les 2 niveaux, 51 au niveau 100 : la
+  // formule de la Guilde reprise telle quelle, déjà mesurée) et le TEMPS DE FABRICATION
+  // d'une pièce (`outfitterMsFor`, asymptotique, qui gratte à chaque cran sans jamais
+  // devenir instantané).
+  //
+  // ⚠️ LE DÉPLOIEMENT EST PORTEUR, ce n'est pas du confort : c'est le SEUL plafond
+  // d'effectif du jeu, et `guardUnits` fait défendre TOUT le vivier disponible. Collection
+  // illimitée + aucun plafond = base imprenable (le runaway relevé en v0.779 : le vivier
+  // croît ×7,3 du niveau 12 au 100 quand l'armée ne croît que ×1,8).
+  //
+  // ⚠️ AUCUNE REMISE sur le prix d'un tirage, aussi tentant que ce soit : c'est mot pour
+  // mot la remise de l'Autel des boss, RETIRÉE en v0.799 parce qu'elle coupait de moitié
+  // le lien farm → boss. Ici elle couperait failles → pierres de mana → tirage, qui EST la
+  // boucle entière.
+  //
+  // ⚠️ Coût de pose et niveau de déblocage REPRIS DE LA GUILDE (700 / niveau 3) : le mur
+  // d'entrée d'un débutant reste à DEUX bâtiments pour 1 200 or — mesuré en v0.727, et un
+  // test le verrouille parce que c'est le seul chiffre qui décide si la feature existe
+  // pour le joueur qu'elle vise.
   {
-    id: 'guild',
-    label: 'Guilde d’aventuriers',
-    emoji: '⚔️',
+    id: 'pantheon',
+    label: 'Panthéon des champions',
+    emoji: '🛕',
     category: 'utility',
-    effect: { guildRosterPerLvl: 0.5 },
-    perLevelNote: '+1 aventurier recrutable tous les 2 niveaux, et un rang maximal plus haut',
+    perLevelNote: '+1 champion déployé tous les 2 niveaux, et une forge plus rapide',
     buildGold: 700,
     unlockLevel: 3,
     unique: true,
-    unlock: { activity: 'Les aventuriers', where: 'sur ta base' },
-    desc: 'Recrute des aventuriers et fixe leur rang maximal. Ils escortent tes caravanes — et se font payer.',
-  },
-  // UTILITAIRE : le CENTRE DE FORMATION est où l’on VALIDE une promotion (l’aventurier y
-  // apprend sa nouvelle classe). ⚠️ Il n’est PAS nécessaire pour démarrer : la classe de
-  // DÉPART se choisit au recrutement, à la Guilde. Il ne devient utile qu’à la 2e strate
-  // → le mur d’entrée d’un débutant reste à DEUX bâtiments.
-  {
-    id: 'training',
-    label: 'Centre de formation',
-    emoji: '📚',
-    category: 'utility',
-    effect: { trainSpeedPerLvl: 0.04 },
-    perLevelNote: 'formations plus courtes à chaque niveau (de moins en moins)',
-    buildGold: 650,
-    unlockLevel: 4,
-    unique: true,
-    desc: 'Un aventurier promu y apprend sa nouvelle classe. Sans lui, il plafonne à sa classe de départ.',
-  },
-  // UTILITAIRE : l'ÉQUIPEMENTIER transforme un objet du héros en pièce d'aventurier.
-  {
-    id: 'outfitter',
-    label: 'Équipementier',
-    emoji: '⚒️',
-    category: 'utility',
-    effect: {},
-    perLevelNote: 'fabrication plus rapide à chaque niveau (de moins en moins)',
-    buildGold: 800,
-    unlockLevel: 5,
-    unique: true,
-    unlock: { activity: 'L’équipement des aventuriers', where: 'sur ta base' },
-    desc: 'Transforme un objet dont ton héros ne veut plus en pièce pour un aventurier, faite pour son métier.',
+    unlock: { activity: 'Les champions', where: 'sur ta base' },
+    desc: 'Invoque tes champions et fixe combien peuvent être engagés à la fois — convois, camps, défense. Les autres attendent en collection. On y forge aussi leur équipement.',
   },
 ];
 
@@ -469,6 +457,105 @@ export function repackBuildingSlots(buildings: Building[]): Building[] {
   return [...buildings].sort((a, b) => a.slot - b.slot).map((b, i) => ({ ...b, slot: i }));
 }
 
+/** Ce qu'un bâtiment a COÛTÉ en tout pour atteindre ce niveau : la pose, plus tous les
+ *  crans. ⚠️ La courbe d'un cran ne dépend PAS du type (`buildingUpgradeCost`), seul le
+ *  coût de pose en dépend — d'où le `buildGold` en paramètre plutôt qu'un id : on doit
+ *  pouvoir chiffrer un bâtiment qui n'est PLUS au registre. */
+export function buildingInvested(buildGold: number, level: number): number {
+  let total = buildGold;
+  for (let l = 1; l < level; l++) total += buildingUpgradeCost(l);
+  return total;
+}
+
+/** Les trois bâtiments que le Panthéon absorbe, avec leur coût de POSE.
+ *  ⚠️ Ces montants sont recopiés ICI parce que les types ne sont plus au registre : sans
+ *  eux, le remboursement ne peut plus se calculer du tout. Ils ne servent qu'à la
+ *  migration et ne doivent jamais redevenir une source de vérité. */
+const ABSORBED_BY_PANTHEON: { id: string; buildGold: number }[] = [
+  { id: 'guild', buildGold: 700 },
+  { id: 'training', buildGold: 650 },
+  { id: 'outfitter', buildGold: 800 },
+];
+
+const PANTHEON_ID = 'pantheon';
+const pantheonBuildGold = () => buildingType(PANTHEON_ID)?.buildGold ?? 0;
+
+/**
+ * 🛕 FUSION : Guilde + Centre de formation + Équipementier → **un seul Panthéon**.
+ *
+ * ⚠️ **SANS CETTE MIGRATION, 7,42 M D'OR S'ÉVAPORAIENT EN SILENCE** (mesuré en base sur le
+ * compte réel : Guilde 31, Équipementier 30, Centre 10). `normalizeRow` DROPPE les types
+ * disparus du registre au chargement — donc retirer les trois sans rien faire aurait été
+ * la violation directe de la règle v0.731 : personne ne se réveille avec moins bon qu'hier.
+ *
+ * Deux garanties, et il en faut deux :
+ * 1. **le NIVEAU le plus haut est hérité** — l'investissement est conservé EN NATURE, et
+ *    ça tombe juste puisque les deux leviers du Panthéon SONT ceux de la Guilde
+ *    (déploiement) et de l'Équipementier (fabrication) : ils repartent où ils en étaient ;
+ * 2. **l'or des autres est REMBOURSÉ** — ce qu'on a payé deux fois pour un seul bâtiment.
+ *
+ * ⚠️ **IDEMPOTENTE PAR CONSTRUCTION** : sans aucun bâtiment absorbé, elle rend la MÊME
+ * référence et zéro or. Elle tourne à chaque chargement (comme `repackBuildingSlots`) ;
+ * une fois la ligne écrite, il n'y a plus rien à fusionner, donc plus rien à rembourser.
+ *
+ * ⚠️ Elle doit passer **AVANT** le filtre des types inconnus de `normalizeRow` : après, il
+ * n'y a plus rien à lire — c'est le même ordre que la fouille et `advanceBase` (v0.772).
+ */
+function mergeIntoPantheon(buildings: Building[]): {
+  buildings: Building[];
+  goldRefund: number;
+} {
+  const goldOf = (id: string) => ABSORBED_BY_PANTHEON.find((a) => a.id === id)?.buildGold;
+  const old = buildings.filter((b) => goldOf(b.typeId) !== undefined);
+  if (!old.length) return { buildings, goldRefund: 0 };
+
+  // ⚠️ Un Panthéon DÉJÀ posé entre dans la fusion au même titre : c'est impossible
+  // aujourd'hui, mais le traiter uniformément vaut mieux qu'un cas particulier dont
+  // personne ne saurait plus, dans six mois, s'il est atteignable.
+  const merged = [...old, ...buildings.filter((b) => b.typeId === PANTHEON_ID)];
+  const level = Math.max(...merged.map((b) => b.level));
+  const pantheon: Building = {
+    typeId: 'pantheon',
+    level,
+    // L'emplacement le plus bas des trois : le bâtiment reste là où le joueur avait posé
+    // le premier, plutôt que de réapparaître ailleurs dans la cour.
+    slot: Math.min(...merged.map((b) => b.slot)),
+    collectedAt: Math.max(...merged.map((b) => b.collectedAt)),
+  };
+
+  const spent = merged.reduce(
+    (s, b) => s + buildingInvested(goldOf(b.typeId) ?? pantheonBuildGold(), b.level),
+    0,
+  );
+  // Ce que le Panthéon REPRÉSENTE désormais — on garde la valeur d'un bâtiment, on rend
+  // celle des autres. ⚠️ Plancher à 0 : un joueur qui n'avait QUE le Centre de formation
+  // (pose 650) hérite d'un bâtiment qui en vaut 700 — il ne doit rien pour autant.
+  const goldRefund = Math.max(0, Math.round(spent - buildingInvested(pantheonBuildGold(), level)));
+
+  return {
+    buildings: [...buildings.filter((b) => !merged.includes(b)), pantheon],
+    goldRefund,
+  };
+}
+
+/**
+ * 🩹 REMET UNE LIGNE SAUVEGARDÉE D'APLOMB : fusion du Panthéon, puis retrait des types
+ * disparus du registre, puis recompactage des emplacements.
+ *
+ * ⚠️ **L'ORDRE EST LA SEULE CHOSE QUI COMPTE ICI, ET C'EST POURQUOI IL VIT DANS UNE
+ * FONCTION.** Filtrer d'abord effacerait les trois bâtiments absorbés AVANT que la fusion
+ * ne les ait lus — avec 7,42 M d'or investis (mesuré en base sur le compte réel). Le même
+ * piège a déjà coûté un butin entier (la fouille écrasée par `advanceBase`, v0.772), et un
+ * commentaire au-dessus de deux lignes indépendantes ne l'empêche pas : ici, les deux ne
+ * peuvent plus être appelées séparément.
+ */
+export function healBuildings(raw: Building[]): { buildings: Building[]; goldRefund: number } {
+  const fused = mergeIntoPantheon(raw);
+  return {
+    buildings: repackBuildingSlots(fused.buildings.filter((b) => !!buildingType(b.typeId))),
+    goldRefund: fused.goldRefund,
+  };
+}
 /** Niveau requis pour pouvoir construire ce type (défaut 1). */
 export function buildingUnlockLevel(typeId: string): number {
   return buildingType(typeId)?.unlockLevel ?? 1;
@@ -587,16 +674,22 @@ export function travelTimeMult(buildings: Building[]): number {
 export function buildingUpgradeCost(level: number): number {
   return Math.round(BUILD.upBase * Math.pow(Math.max(1, level), BUILD.upExp));
 }
-
-/** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? (producteur, ou utilitaire
- *  à effet par niveau) → est-il améliorable.
- *  ⚠️ L'ÉQUIPEMENTIER n'a pas de `BuildingEffect` (son levier — `outfitterMsFor` — vit
- *  dans `advGear.ts`, pas dans ce registre) : sans ce cas explicite, `buildingScales`
- *  le déclarerait figé pour toujours, alors que chaque niveau raccourcit sa fabrication. */
+/** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? → est-il améliorable.
+ *
+ *  ⚠️ **DÉRIVÉ DE `perLevelLabel`, plus d'une liste d'ids.** La version d'avant lisait
+ *  `resource || effect non vide`, ce qui ratait l'ÉQUIPEMENTIER — dont le levier
+ *  (`outfitterMsFor`) vit dans `advGear.ts` — d'où un `if (typeId === 'outfitter')`
+ *  greffé à côté. Deux bâtiments portaient alors un champ d'effet **jamais lu**
+ *  (`guildRosterPerLvl`, `trainSpeedPerLvl`) dont le SEUL rôle était de passer ce test :
+ *  du code décoratif qui pilote du comportement, exactement le piège que ce projet
+ *  documente (le rôle ÉCLAIREUR déclaré et consommé nulle part, v0.757).
+ *
+ *  La vraie question est « ce bâtiment sait-il dire ce qu'un niveau CHANGE ? » —
+ *  c'est-à-dire `perLevelLabel`, déjà obligatoire pour chaque type (test dédié). Un
+ *  bâtiment muet n'est plus seulement illisible : il est aussi figé, et c'est cohérent. */
 export function buildingScales(typeId: string): boolean {
-  if (typeId === 'outfitter') return true;
   const t = buildingType(typeId);
-  return !!t && (!!t.resource || Object.keys(t.effect ?? {}).length > 0);
+  return !!t && perLevelLabel(t) !== '';
 }
 export function canUpgradeBuilding(b: Building, playerLevel: number): boolean {
   return buildingScales(b.typeId) && b.level < playerLevel;
