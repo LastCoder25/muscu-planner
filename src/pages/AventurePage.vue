@@ -1768,6 +1768,30 @@
               </div>
             </div>
 
+            <!-- 🏅 GALERIE DES CHAMPIONS — le troisième volet. ⚠️ Elle annonce ce qui
+                 EXISTE, jamais ce qui est PROBABLE : pas un taux, pas une chance. Les
+                 afficher ici court-circuiterait l'écran d'invocation, dont c'est le métier. -->
+            <div class="cx-sec-h cx-sec-h2">
+              🏅 Champions
+              <span class="cx-count"
+                >{{ codexSum.championsFound }}/{{ codexSum.championsTotal }}</span
+              >
+            </div>
+            <div class="bestiary-grid">
+              <div
+                v-for="c in championList"
+                :key="c.champ.id"
+                class="best-tile cx-champ"
+                :class="{ found: c.owned }"
+                :style="c.owned ? { '--rk': rarityRank(c.champ.rarity).color } : undefined"
+              >
+                <span class="best-emo">{{ c.owned ? c.champ.emoji : '❔' }}</span>
+                <span class="best-name">{{ c.owned ? c.champ.name : '???' }}</span>
+                <span class="best-tier">{{ rarityRank(c.champ.rarity).name }}</span>
+                <span v-if="c.owned && c.awaken > 0" class="cx-awk">✨ {{ c.awaken }}</span>
+              </div>
+            </div>
+
             <!-- Journal des sets -->
             <div class="cx-sec-h cx-sec-h2">
               🧩 Sets d'équipement
@@ -2985,7 +3009,7 @@ import {
   regionMapGeometry,
   type Region,
 } from '@/lib/regions';
-import { bestiary, setCollection, codexSummary } from '@/lib/codex';
+import { bestiary, championGallery, setCollection, codexSummary } from '@/lib/codex';
 import {
   messageTitle,
   isClaimable,
@@ -4010,9 +4034,13 @@ const codexSum = computed(() =>
     char.row?.equipped ?? {},
     char.row?.inventory ?? [],
     char.row?.set_pieces_seen ?? {},
+    char.advList,
   ),
 );
 const bestiaryList = computed(() => bestiary(clearedIds.value));
+/** 🏅 Le roster ENTIER, marqué possédé ou non — le teasing déjà en place pour le
+ *  bestiaire. ⚠️ Aucun taux : c'est l'écran d'invocation qui les vend. */
+const championList = computed(() => championGallery(char.advList));
 const setsList = computed(() =>
   setCollection(
     char.row?.equipped ?? {},
@@ -11028,6 +11056,25 @@ button.pt-mini:active {
   font-size: 12px;
   color: var(--accent);
   font-weight: 700;
+}
+/* 🏅 Une tuile de champion reprend celle du bestiaire — même grille, même teasing ❔ —
+   et ajoute la seule chose qu'un champion a de plus : la COULEUR de sa rareté, et son
+   cran d'Éveil. ⚠️ Pas de taux : l'écran d'invocation les vend, le Codex les nomme. */
+.cx-champ {
+  position: relative;
+}
+.cx-champ.found {
+  border-color: color-mix(in srgb, var(--rk) 55%, var(--line));
+}
+.cx-champ.found .best-tier {
+  color: var(--rk);
+}
+.cx-awk {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 9px;
+  color: var(--accent);
 }
 .bestiary-grid {
   display: grid;
