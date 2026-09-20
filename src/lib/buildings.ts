@@ -283,12 +283,17 @@ export const BUILDING_TYPES: BuildingType[] = [
     label: 'Panthéon des champions',
     emoji: '🛕',
     category: 'utility',
-    perLevelNote: '+1 champion engagé à la fois tous les 2 niveaux, et une forge plus rapide',
+    // ⚠️ LE MÊME LEVIER QUE L'APERÇU (`buildingPreview`), et un seul : le niveau maximal
+    // d'un champion, qui DOMINE sa rareté (×4,3 au niveau 23). La ligne annonçait encore
+    // l'engagement et la forge — les deux chiffres que la v0.962 avait justement retirés de
+    // l'aperçu — donc la tuile et la fiche du même bâtiment disaient deux choses
+    // différentes. Le reste de son métier vit dans `desc`, qui est là pour ça.
+    perLevelNote: 'des champions d’un niveau plus haut',
     buildGold: 700,
     unlockLevel: 3,
     unique: true,
     unlock: { activity: 'Les champions', where: 'sur ta base' },
-    desc: 'Invoque tes champions — tous utilisables. Son niveau fixe combien tu en engages à la fois : la taille d’un groupe, et les défenseurs du rempart. On y forge aussi leur équipement.',
+    desc: 'Invoque tes champions et garde ta collection — tout ce que tu tires reste utilisable. Son niveau fixe jusqu’où ils peuvent monter, et combien agissent à la fois : la taille d’un groupe, l’escorte d’un convoi, les défenseurs du rempart. On y forge aussi leur équipement.',
   },
 ];
 

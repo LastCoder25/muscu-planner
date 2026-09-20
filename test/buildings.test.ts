@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { sessionXp } from '@/lib/athlete';
+import { buildingPreview } from '@/lib/buildingPreview';
 import { CARAVAN, caravanSlots, caravanSlowFor } from '@/lib/caravan';
 import { outfitterMsFor } from '@/lib/advGear';
 import { engageCap } from '@/lib/adventurers';
@@ -310,6 +311,25 @@ describe('ce qu’un NIVEAU change, dit explicitement', () => {
       const label = perLevelLabel(t);
       expect(label, `${t.label} ne dit pas ce qu’un niveau apporte`).not.toBe('');
     }
+  });
+
+  it('⚠️ la TUILE et l’APERÇU du Panthéon parlent du MÊME levier', () => {
+    // ⚠️ LE DÉFAUT QUE CE TEST GARDE : la v0.962 a réduit l'aperçu du Panthéon à son
+    // levier le plus fort (le NIVEAU maximal d'un champion) en retirant le nombre
+    // d'engagés et le temps de forge — mais `perLevelNote`, lu par la tuile de la cour,
+    // a continué d'annoncer ces deux-là. Le même bâtiment disait donc deux choses
+    // différentes selon l'écran, et c'est l'utilisateur qui l'a vu.
+    const pantheon = BUILDING_TYPES.find((x) => x.id === 'pantheon')!;
+    const tuile = perLevelLabel(pantheon);
+    const apercu = buildingPreview('pantheon', 10)
+      .map((r) => r.text)
+      .join(' ');
+
+    // Les deux mènent avec le NIVEAU — le seul levier que l'aperçu annonce.
+    expect(tuile.toLowerCase()).toContain('niveau');
+    expect(apercu.toLowerCase()).toContain('niveau');
+    // …et la tuile ne remet pas les deux chiffres que l'aperçu a écartés.
+    expect(tuile.toLowerCase()).not.toMatch(/engag|forge/);
   });
 
   it('la part PRODUCTION est dérivée des données, jamais recopiée', () => {
