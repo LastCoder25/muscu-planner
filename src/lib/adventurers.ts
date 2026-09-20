@@ -1380,12 +1380,6 @@ export function advNominalRarity(adv: Adventurer): Rarity {
   return advChampion(adv)?.rarity ?? advRarity(adv);
 }
 
-/** Le plafond du SPORT mord-il ? (il mène moins haut que ce qu'il est) — l'écran ne le dit
- *  que dans ce cas, sinon il annoncerait deux fois la même chose. */
-export function advRarityCapped(adv: Adventurer): boolean {
-  return RARITY_RANK[advNominalRarity(adv)] > RARITY_RANK[advRarity(adv)];
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // 🏅 LE BUDGET DE STATS D'UN CHAMPION — et le plafond qui garde le sport au sommet
 // ─────────────────────────────────────────────────────────────────────────────

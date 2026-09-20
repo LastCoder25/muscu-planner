@@ -9,7 +9,6 @@ import {
   advRank,
   advNominalRarity,
   advRarity,
-  advRarityCapped,
   advRoles,
   advSignatureLevels,
   advSignatures,
@@ -275,18 +274,15 @@ describe('🏅 LES DEUX RARETÉS — ce qu’on a TIRÉ, et ce qu’il peut MENE
     const bas = asAdv(primordial, 1);
     expect(advNominalRarity(bas)).toBe(primordial.rarity);
     expect(advRarity(bas)).not.toBe(primordial.rarity);
-    expect(advRarityCapped(bas)).toBe(true);
     // …et au sommet, les deux se rejoignent : l'écran ne dit alors plus qu'une chose.
     const haut = asAdv(primordial, 100);
     expect(advNominalRarity(haut)).toBe(primordial.rarity);
     expect(advRarity(haut)).toBe(primordial.rarity);
-    expect(advRarityCapped(haut)).toBe(false);
   });
 
   it('un aventurier LEGACY n’a qu’une rareté — les deux coïncident', () => {
     const a = refAdventurer(30);
     expect(advNominalRarity(a)).toBe(advRarity(a));
-    expect(advRarityCapped(a)).toBe(false);
   });
 
   it('⚠️ L’ENCADREMENT DU PORTRAIT PEINT LA NOMINALE, jamais l’effective', () => {

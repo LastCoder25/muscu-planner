@@ -14,7 +14,7 @@
       <button
         class="ap-mini corner tl"
         type="button"
-        :title="`${title?.label ?? 'Sans classe'} · ${nomLabel}${capped ? ` · mène du ${rarLabel}` : ''}`"
+        :title="subLabel ? `${subLabel} · ${nomLabel}` : nomLabel"
         :aria-label="`Fiche de ${adv.name}`"
         @click="emit('open')"
       >
@@ -137,12 +137,10 @@
          ⚠️ Et elle ne vivait qu'en teinte + `title` — donc invisible sur un téléphone, qui
          n'a pas de survol. -->
     <div class="ap-rar font-display">{{ nomLabel }}</div>
-    <div class="ap-sub">
-      {{ title?.label ?? '—' }}
-      <template v-if="capped">
-        · <b :style="{ color: rarColor }">mène du {{ rarLabel }}</b>
-      </template>
-    </div>
+    <!-- ⚠️ MASQUÉ QUAND IL RÉPÈTE LE NOM : `advTitle` rend le NOM d'un champion (il n'a pas
+         de métier), donc cette ligne affichait « Aurore Première » sous « Aurore Première ».
+         Elle ne sert plus qu'aux aventuriers legacy, dont elle donne bien la classe. -->
+    <div v-if="subLabel" class="ap-sub">{{ subLabel }}</div>
     <div v-if="state" class="ap-state">{{ state }}</div>
   </div>
 </template>
@@ -155,7 +153,6 @@ import {
   advRank,
   advRankProgress,
   advRarity,
-  advRarityCapped,
   advTitle,
   type Adventurer,
 } from '@/lib/adventurers';
@@ -202,12 +199,18 @@ const rank = computed(() => advRank(props.adv));
 const title = computed(() => advTitle(props.adv));
 // Le rang de la CLASSE (v0.833) : c’est lui qui borne ses compagnons, affichés en rang.
 const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
-/** ⚠️ Ce qu'il peut MENER aujourd'hui (équipement, familier, talent) — affiché SEULEMENT
- *  quand il diffère de ce qu'il est.
- *  ⚠️ EN RANG, et c'est délibéré : c'est la BORNE de son équipement, et une pièce s'affiche
- *  en rang (`gradeLabel`). Le dire en rareté couperait le lien avec ce qu'il peut porter. */
-const rarLabel = computed(() => rarityRank(advRarity(props.adv)).name);
-const capped = computed(() => advRarityCapped(props.adv));
+/**
+ * Le sous-titre : sa CLASSE — et rien du tout quand elle répète son nom.
+ *
+ * ⚠️ `advTitle` rend le **nom** d'un champion (il n'a pas de métier courant, il a un nom),
+ * si bien que cette ligne écrivait « Aurore Première » juste sous « Aurore Première ».
+ * Depuis le wipe, tout le vivier est fait de champions : le doublon était donc systématique.
+ * La comparaison au nom garde la ligne utile aux aventuriers legacy, où elle dit la classe.
+ */
+const subLabel = computed(() => {
+  const l = title.value?.label;
+  return l && l !== props.adv.name ? l : '';
+});
 /**
  * ⚠️ **LA RARETÉ PARLE LA LANGUE DE LA RARETÉ** (v0.962 ; signalé par l'utilisateur : « tu
  * as confondu rareté et rang… je choppe des raretés Or, Argent, alors qu'ils sont tous rang

@@ -15,7 +15,13 @@
     :aria-pressed="on"
     @click="emit('toggle')"
   >
-    <span class="ca-emo">{{ advTitle(adv)?.emoji ?? '🧑' }}</span>
+    <!-- 🖼️ SON PORTRAIT, comme partout où un champion se montre (tirage, Guilde, Codex).
+         Le repli reste son emoji : un aventurier legacy n'en a pas. -->
+    <span class="ca-emo"
+      ><ChampionPortrait :champion-id="adv.championId">{{
+        advTitle(adv)?.emoji ?? '🧑'
+      }}</ChampionPortrait></span
+    >
     <span class="ca-name">{{ adv.name }}</span>
     <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable) plutôt que son rang, qui est déjà dit
          par les étoiles juste en dessous. C'est l'identité d'un champion, et elle ne se
@@ -42,6 +48,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advBadges, advNominalRarity, advRank, advTitle, type Adventurer } from '@/lib/adventurers';
 import { RANK_COLOR, RARITY_LABEL } from '@/lib/items';
 import { rankStarStr } from '@/lib/characterRank';
