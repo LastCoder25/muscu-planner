@@ -117,3 +117,48 @@ export function buildReveal(
     glowFrom: REVEAL.glowFrom,
   };
 }
+
+/**
+ * 🎰 CE QU'UN LOT MET EN SCÈNE (v0.968 ; le tirage ×10, demandé).
+ *
+ * ⚠️ **UNE SEULE ROULETTE, SUR LE MEILLEUR DU LOT** — et c'est ce que fait le genre. Dix
+ * roulettes d'affilée, c'est trente secondes à regarder pour un geste ; la tension doit
+ * se concentrer là où elle compte, puis la grille dit le reste d'un coup d'œil.
+ *
+ * ⚠️ **ELLE NE DÉCIDE RIEN, comme la roulette à l'unité** : les dix champions sont déjà
+ * tirés par le store (avec le pity qui s'enchaîne d'un tirage au suivant). On ne fait que
+ * choisir LEQUEL porte la mise en scène.
+ *
+ * ⚠️ **LA DURÉE DE LA ROULETTE TRAHIT DONC LE MEILLEUR**, pas le hasard du lot — et c'est
+ * assumé, exactement comme pour un tirage seul : « ça ne spoile pas, ça fait monter la
+ * tension » (v0.960).
+ */
+export interface LotItem {
+  champion: Champion;
+  duplicate: boolean;
+  copies: number;
+  manaBack: number;
+}
+
+/** Le champion du lot qui porte la roulette : le plus rare. ⚠️ À rareté égale on garde
+ *  le PREMIER tiré — un départage au hasard ferait varier la mise en scène d'un
+ *  rechargement à l'autre pour un même lot. */
+export function bestOfLot(lot: readonly LotItem[]): LotItem | null {
+  let best: LotItem | null = null;
+  for (const it of lot) {
+    if (!best || RARITY_RANK[it.champion.rarity] > RARITY_RANK[best.champion.rarity]) best = it;
+  }
+  return best;
+}
+
+/** L'ordre de la grille : du plus rare au plus commun, puis l'ordre du tirage.
+ *  ⚠️ On COPIE : le lot vient du store, et le trier en place réordonnerait ce qui a été
+ *  persisté — l'ordre du tirage est ce qui a réellement eu lieu. */
+export function lotOrder(lot: readonly LotItem[]): LotItem[] {
+  return lot
+    .map((it, i) => ({ it, i }))
+    .sort(
+      (a, b) => RARITY_RANK[b.it.champion.rarity] - RARITY_RANK[a.it.champion.rarity] || a.i - b.i,
+    )
+    .map((x) => x.it);
+}

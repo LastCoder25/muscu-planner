@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { buildReveal, revealCrans, revealSpinMs, REVEAL } from '@/lib/gachaReveal';
+import {
+  buildReveal,
+  revealCrans,
+  revealSpinMs,
+  REVEAL,
+  bestOfLot,
+  lotOrder,
+  type LotItem,
+} from '@/lib/gachaReveal';
 import { CHAMPIONS } from '@/data/champions';
 import { RANK_ORDER, RARITY_RANK, type Rarity } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
@@ -83,5 +91,55 @@ describe('🎰 LA ROULETTE — elle MET EN SCÈNE, elle ne décide rien', () => 
     const p = buildReveal(commun, mulberry32(1), { pool: [commun] });
     expect(p.strip.length).toBeGreaterThan(1);
     expect(p.strip[p.stopIndex]!.id).toBe(commun.id);
+  });
+});
+
+describe('🎰 LE LOT DE 10 — une seule roulette, sur le meilleur (v0.968)', () => {
+  const it0 = (r: Rarity, extra: Partial<LotItem> = {}): LotItem => ({
+    champion: champOf(r),
+    duplicate: false,
+    copies: 1,
+    manaBack: 0,
+    ...extra,
+  });
+
+  it('⚠️ LA ROULETTE PORTE LE PLUS RARE — c’est là que la tension doit se concentrer', () => {
+    // Dix roulettes d'affilée, c'est une demi-minute pour un seul geste : le genre
+    // met en scène le meilleur, puis récapitule.
+    const lot = [it0('commun'), it0('primordial'), it0('rare')];
+    expect(bestOfLot(lot)!.champion.rarity).toBe('primordial');
+  });
+
+  it('⚠️ À RARETÉ ÉGALE, LE PREMIER TIRÉ — sinon la mise en scène varierait pour un même lot', () => {
+    const a = it0('rare');
+    const b = it0('rare');
+    expect(bestOfLot([a, b])).toBe(a);
+    expect(bestOfLot([b, a])).toBe(b);
+  });
+
+  it('un lot vide ne fait pas tomber l’écran', () => {
+    expect(bestOfLot([])).toBeNull();
+    expect(lotOrder([])).toEqual([]);
+  });
+
+  it('la grille va du plus RARE au plus commun, puis dans l’ordre du tirage', () => {
+    const lot = [it0('commun'), it0('legendaire'), it0('magique'), it0('legendaire')];
+    const o = lotOrder(lot);
+    expect(o.map((x) => x.champion.rarity)).toEqual([
+      'legendaire',
+      'legendaire',
+      'magique',
+      'commun',
+    ]);
+    // ⚠️ À rareté égale l'ordre du TIRAGE est conservé : c'est ce qui a eu lieu.
+    expect(o[0]).toBe(lot[1]);
+    expect(o[1]).toBe(lot[3]);
+  });
+
+  it('⚠️ ON COPIE : trier la grille ne réordonne pas ce que le store a persisté', () => {
+    const lot = [it0('commun'), it0('primordial')];
+    const avant = [...lot];
+    lotOrder(lot);
+    expect(lot).toEqual(avant);
   });
 });

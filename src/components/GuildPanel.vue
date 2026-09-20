@@ -6,6 +6,7 @@
   <GachaReveal
     :plan="revealPlan"
     :verdict="revealVerdict"
+    :lot="revealLot"
     :can-again="mana >= pullCost && !busy"
     :busy="busy"
     @close="closeReveal"
@@ -71,6 +72,21 @@
           <span class="gs-stock font-display">
             <b>{{ pulls }}</b>
             <small>{{ pulls > 1 ? 'tirages' : 'tirage' }}</small>
+          </span>
+        </button>
+
+        <!-- 🎰 LE LOT DE 10 (v0.968, demandé : « un peu moins cher comme dans les
+             gacha ») : 9 payés pour 10, le chiffre est MESURÉ — à 15 % de remise on
+             sort de la bande visée (10-20 raretés maximales par an). Il DIT ce qu'il
+             économise plutôt que de laisser calculer. -->
+        <button class="g-multi" :disabled="busy || mana < multiCost" @click="doPullTen">
+          <span class="gm-emo">🎰</span>
+          <span class="gm-main">
+            <b class="font-display">Invoquer ×{{ multiCount }}</b>
+            <small v-if="mana >= multiCost">
+              {{ multiCost }} 💠 au lieu de {{ pullCost * multiCount }} — 1 offert
+            </small>
+            <small v-else class="gs-short">il te manque {{ multiCost - mana }} 💠</small>
           </span>
         </button>
 
@@ -753,8 +769,8 @@ import {
 import { rankStarStr } from '@/lib/characterRank';
 import { awakenLevel, engageCap } from '@/lib/adventurers';
 import GachaReveal from './GachaReveal.vue';
-import { buildReveal, type RevealPlan } from '@/lib/gachaReveal';
-import { GACHA, TOP_RARITY, gachaOdds } from '@/lib/gacha';
+import { buildReveal, bestOfLot, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
+import { GACHA, TOP_RARITY, gachaOdds, multiPullCost } from '@/lib/gacha';
 import {
   RANK_COLOR,
   RARITY_LABEL,
@@ -1477,6 +1493,10 @@ const odds = computed(() => gachaOdds(char.row?.gacha ?? { sinceTop: 0, sinceFlo
 const fmtOdds = (pct: number) =>
   (Math.round(pct * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 const revealPlan = ref<RevealPlan | null>(null);
+/** Le lot complet d'un ×10 — `null` pour un tirage à l'unité. */
+const revealLot = ref<LotItem[] | null>(null);
+const multiCount = GACHA.multiCount;
+const multiCost = multiPullCost();
 const revealVerdict = ref<{
   duplicate: boolean;
   copies: number;
@@ -1498,6 +1518,47 @@ function closeReveal() {
  * pity, la mana), on anime ensuite. L'inverse ferait diverger ce qu'on voit de ce qu'on
  * possède — la règle de `siegeStage` et d'`arenaStage`.
  */
+/** ⚠️ `prefers-reduced-motion` → l'état FINAL, pas une animation raccourcie : la lib
+ *  rend une bande d'un seul portrait et une durée nulle. Lu UNE fois, pour les deux
+ *  modes de tirage — deux lectures finiraient par diverger. */
+function reducedMotion(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+  );
+}
+
+/**
+ * 🎰 LE LOT DE 10 — une SEULE roulette, sur le meilleur (v0.968).
+ *
+ * ⚠️ Dix roulettes d'affilée, c'est une demi-minute à regarder pour un seul geste : le
+ * genre concentre la tension sur le meilleur, puis récapitule. La grille dit le reste.
+ */
+async function doPullTen() {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  busy.value = true;
+  try {
+    const lot = await char.pullChampions(uid);
+    if (!lot) {
+      $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
+      return;
+    }
+    const best = bestOfLot(lot);
+    if (!best) return;
+    revealVerdict.value = {
+      duplicate: best.duplicate,
+      copies: best.copies,
+      manaBack: best.manaBack,
+      awaken: awakenLevel(best.copies),
+    };
+    revealLot.value = lot;
+    revealPlan.value = buildReveal(best.champion, Math.random, { reduced: reducedMotion() });
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function doPull() {
   const uid = auth.user?.id;
   if (!uid || busy.value) return;
@@ -1508,18 +1569,14 @@ async function doPull() {
       $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
       return;
     }
-    // ⚠️ `prefers-reduced-motion` → l'état FINAL, pas une animation raccourcie : la lib
-    // rend une bande d'un seul portrait et une durée nulle.
-    const reduced =
-      typeof window !== 'undefined' &&
-      !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    revealLot.value = null;
     revealVerdict.value = {
       duplicate: r.duplicate,
       copies: r.copies,
       manaBack: r.manaBack,
       awaken: awakenLevel(r.copies),
     };
-    revealPlan.value = buildReveal(r.champion, Math.random, { reduced });
+    revealPlan.value = buildReveal(r.champion, Math.random, { reduced: reducedMotion() });
   } finally {
     busy.value = false;
   }
@@ -1530,6 +1587,43 @@ async function doPull() {
 /* 🎰 L'INVOCATION — l'action qui remplace l'arbre de classes. Elle se distingue du
    recrutement par une teinte propre (le violet du mana), jamais par la seule taille :
    deux boutons pleine largeur de même couleur se lisent comme un seul geste répété. */
+/* 🎰 LE LOT — visuellement SECOND : même famille que le bouton d'invocation (le violet
+   du mana) mais plus bas, plus sobre. Deux boutons de même poids se liraient comme un
+   choix qu'on ne sait pas trancher. */
+.g-multi {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px;
+  margin-bottom: 8px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, #b57bff 34%, var(--line));
+  background: var(--surface);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.g-multi:disabled {
+  opacity: 0.6;
+  cursor: default;
+  border-color: var(--line);
+}
+.gm-emo {
+  font-size: 20px;
+  line-height: 1;
+}
+.gm-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.gm-main small {
+  color: var(--dim);
+  font-size: 11.5px;
+}
 /* 📊 LE PANNEAU DES CHANCES — une NOTICE : discrète, repliée, jamais en concurrence
    avec le bouton d'invocation juste au-dessus. */
 .g-odds-t {

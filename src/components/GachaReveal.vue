@@ -49,6 +49,30 @@
         <div class="gx-rar font-display">{{ RARITY_LABEL[champ.rarity] }}</div>
         <div class="gx-meta">{{ meta }}</div>
         <div v-if="verdictSub" class="gx-verdict">{{ verdictSub }}</div>
+
+        <!-- 🎰 LE RESTE DU LOT (v0.968) : la roulette porte le MEILLEUR, la grille dit
+             les neuf autres d'un coup d'œil. Dix roulettes d'affilée, c'est trente
+             secondes pour un seul geste — le genre concentre la tension puis récapitule. -->
+        <div v-if="lotRows.length > 1" class="gx-lot">
+          <div class="gx-lot-t">Ton lot de {{ lotRows.length }}</div>
+          <div class="gx-lot-grid">
+            <div
+              v-for="(it, i) in lotRows"
+              :key="i"
+              class="gx-lot-c"
+              :style="{ '--c': RANK_COLOR[it.champion.rarity] }"
+              :title="`${it.champion.name} · ${RARITY_LABEL[it.champion.rarity]}`"
+            >
+              <span class="gl-emo">{{ it.champion.emoji }}</span>
+              <span class="gl-name">{{ it.champion.name }}</span>
+              <!-- Ce qui DISTINGUE une ligne : neuf ou déjà là (donc un cran d'Éveil,
+                   ou du mana rendu quand il n'y a plus rien à réveiller). -->
+              <span v-if="!it.duplicate" class="gl-tag neuf">NEUF</span>
+              <span v-else-if="it.manaBack > 0" class="gl-tag">+{{ it.manaBack }} 💠</span>
+              <span v-else class="gl-tag">✨ {{ awakenLevel(it.copies) }}</span>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="gx-acts">
@@ -76,7 +100,8 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { RANK_COLOR, RARITY_LABEL, RARITY_RANK } from '@/lib/items';
 import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN } from '@/lib/adventurers';
 import { GACHA } from '@/lib/gacha';
-import type { RevealPlan } from '@/lib/gachaReveal';
+import { lotOrder, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
+import { awakenLevel } from '@/lib/adventurers';
 
 const props = defineProps<{
   plan: RevealPlan | null;
@@ -84,10 +109,15 @@ const props = defineProps<{
   verdict: { duplicate: boolean; copies: number; manaBack: number; awaken: number } | null;
   canAgain: boolean;
   busy: boolean;
+  /** Le lot COMPLET quand le tirage était un ×10 — la roulette, elle, ne porte que
+   *  son meilleur. Absent pour un tirage à l'unité. */
+  lot?: LotItem[] | null;
 }>();
 const emit = defineEmits<{ (e: 'close'): void; (e: 'again'): void }>();
 
 const pullCost = GACHA.pullCost;
+/** Le lot, du plus rare au plus commun — la règle vit en lib. */
+const lotRows = computed(() => lotOrder(props.lot ?? []));
 const phase = ref<'spin' | 'done'>('spin');
 const rolling = ref(false);
 let timer: number | undefined;
@@ -456,6 +486,63 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   }
 }
 
+/* 🎰 LA GRILLE DU LOT — une RÉCAPITULATION : sous la révélation, plus petite qu'elle,
+   jamais en concurrence avec le champion qu'on vient de voir tomber. */
+.gx-lot {
+  /* ⚠️ LARGEUR ADOSSÉE AU VIEWPORT, pas au parent : toute la chaîne au-dessus est en
+     flex CENTRÉ (`.gx` puis `.gx-reveal`), donc un `width: 100%` mesure le CONTENU — la
+     grille se rabattait à DEUX colonnes même à 600 px, soit cinq rangées, une
+     récapitulation plus haute que la révélation qu elle accompagne. L écran est plein
+     écran (`maximized`), le viewport est donc la bonne référence. */
+  width: min(420px, calc(100vw - 32px));
+  margin: 14px auto 0;
+}
+.gx-lot-t {
+  margin-bottom: 6px;
+  color: var(--dim);
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.gx-lot-grid {
+  display: grid;
+  /* 80 px : trois colonnes tiennent dès 344 px — dix cellules sur deux colonnes font
+     cinq rangées, et la récapitulation devenait plus haute que la révélation. */
+  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+  gap: 6px;
+}
+.gx-lot-c {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 6px 4px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
+  background: color-mix(in srgb, var(--c) 10%, var(--bg));
+}
+.gl-emo {
+  font-size: 22px;
+  line-height: 1;
+}
+.gl-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  color: var(--text);
+}
+.gl-tag {
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--dim);
+}
+.gl-tag.neuf {
+  color: var(--c);
+  font-weight: 700;
+}
 .gx-acts {
   position: relative;
   display: flex;

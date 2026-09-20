@@ -215,6 +215,9 @@ import {
   wipeLegacyAdventurers,
   type GachaState,
   pullChampion as rollChampion,
+  pullMany,
+  multiPullCost,
+  type Granted,
 } from '@/lib/gacha';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGoldFx } from '@/composables/useGoldFx';
@@ -968,6 +971,41 @@ export const useCharacterStore = defineStore('character', () => {
     // le champion peut MENER est plafonné à la LECTURE (`championRarity`, lue par
     // `advStats`). Un paramètre qu'on ne lit pas finit par mentir.
     return { ...g, champion: tirage.champion };
+  }
+
+  /**
+   * 🎰 UN LOT DE TIRAGES — 9 payés pour 10 (v0.968, demandé).
+   *
+   * ⚠️ **UNE SEULE ÉCRITURE POUR TOUT LE LOT.** Dix `persist` d'affilée, c'est dix
+   * allers-retours réseau pendant lesquels une coupure laisserait le mana débité et une
+   * partie des champions perdue. On accumule en mémoire, on écrit une fois.
+   *
+   * ⚠️ **ET LE VIVIER S'ACCUMULE D'UN TIRAGE AU SUIVANT** : sans ça, deux exemplaires du
+   * même champion dans un lot créeraient deux entrées au lieu d'un cran d'Éveil.
+   */
+  async function pullChampions(userId: string) {
+    const cur = row.value;
+    if (!cur) return null;
+    const cout = multiPullCost();
+    if (cur.mana < cout) return null;
+    const lot = pullMany(Math.random, cur.gacha, GACHA.multiCount);
+    let advs = cur.adventurers ?? [];
+    let manaBack = 0;
+    const results: (Granted & { champion: (typeof lot.champions)[number] })[] = [];
+    for (const champion of lot.champions) {
+      const g = grantChampion(advs, champion, {
+        id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      });
+      advs = g.advs;
+      manaBack += g.manaBack;
+      results.push({ ...g, champion });
+    }
+    await persist(userId, {
+      mana: cur.mana - cout + manaBack,
+      adventurers: advs,
+      gacha: { ...lot.pity, pulls: cur.gacha.pulls + GACHA.multiCount },
+    });
+    return results;
   }
 
   // Bonus de passage de niveau (global). Verse l'énergie de chaque niveau franchi
@@ -2905,6 +2943,7 @@ export const useCharacterStore = defineStore('character', () => {
     toggleLock,
     claimDailyLogin,
     pullChampion,
+    pullChampions,
     claimLevelUps,
   };
 });

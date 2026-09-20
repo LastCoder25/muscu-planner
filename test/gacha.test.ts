@@ -27,6 +27,8 @@ import {
   topRate,
   pullChampion,
   gachaOdds,
+  pullMany,
+  multiPullCost,
 } from '@/lib/gacha';
 
 const rankOf = (r: Rarity) => RANK_ORDER.indexOf(r);
@@ -617,5 +619,63 @@ describe('📊 CE QUE L’ÉCRAN DIT DES CHANCES (v0.966)', () => {
       base,
     );
     expect(gachaOdds({ sinceTop: GACHA.hardPity - 1, sinceFloor: 0 }).topPct).toBeCloseTo(100, 6);
+  });
+});
+
+describe('🎰 LE LOT DE 10 (v0.968)', () => {
+  it('⚠️ 9 PAYÉS POUR 10, et le prix est DÉRIVÉ du prix unitaire', () => {
+    // ⚠️ Un second nombre écrit à la main divergerait au premier réglage du prix.
+    // ⚠️ On passe un AUTRE prix : au prix d'aujourd'hui (110 × 9 = 990), « dérivé » et
+    // « 990 en dur » rendent la même chose, et la mutation survivait.
+    expect(multiPullCost()).toBe(GACHA.pullCost * GACHA.multiPaid);
+    expect(multiPullCost(200)).toBe(200 * GACHA.multiPaid);
+    expect(multiPullCost(1)).toBe(GACHA.multiPaid);
+    expect(GACHA.multiPaid).toBeLessThan(GACHA.multiCount);
+    // ⚠️ MESURÉ : à 15 % de remise on SORT de la bande visée (10-20 raretés maximales
+    // par an sur les niveaux 12-60). La remise ne doit donc pas dépasser ~10 %.
+    const remise = 1 - GACHA.multiPaid / GACHA.multiCount;
+    expect(remise).toBeGreaterThan(0);
+    expect(remise).toBeLessThanOrEqual(0.1);
+  });
+
+  it('⚠️ LE PITY S’ENCHAÎNE D’UN TIRAGE AU SUIVANT DANS LE LOT', () => {
+    // Sans ça, dix tirages partiraient tous du même état : la garantie de plancher ne
+    // tomberait jamais au sein d'un lot, et le grand pity n'avancerait que d'un cran
+    // pour dix tirages payés.
+    const lot = pullMany(mulberry32(7), emptyPity(), 10);
+    expect(lot.champions).toHaveLength(10);
+    // Un lot de 10 depuis un pity neuf contient au moins un plancher, par construction.
+    const floorIdx = RANK_ORDER.indexOf(GACHA.floorRarity);
+    expect(
+      lot.champions.some((c) => RANK_ORDER.indexOf(c.rarity) >= floorIdx),
+      'aucun épique+ dans un lot de 10',
+    ).toBe(true);
+    // …et le pity RENDU est celui d'après les dix, pas celui d'après un seul.
+    const seul = pullMany(mulberry32(7), emptyPity(), 1);
+    expect(lot.pity).not.toEqual(seul.pity);
+  });
+
+  it('⚠️ C’EST LA MÊME LOTERIE QU’À L’UNITÉ — un lot n’a pas ses propres taux', () => {
+    // Sinon la notice des chances cesserait de dire la vérité dès qu'on groupe.
+    let p = emptyPity();
+    const rng = mulberry32(99);
+    const un: string[] = [];
+    for (let i = 0; i < 10; i++) {
+      const r = pullChampion(rng, p);
+      p = r.pity;
+      un.push(r.champion.id);
+    }
+    const lot = pullMany(mulberry32(99), emptyPity(), 10);
+    expect(lot.champions.map((c) => c.id)).toEqual(un);
+    expect(lot.pity).toEqual(p);
+  });
+
+  it('un lot de taille nulle, négative ou DÉCIMALE ne fait rien tomber', () => {
+    expect(pullMany(mulberry32(1), emptyPity(), 0).champions).toEqual([]);
+    expect(pullMany(mulberry32(1), emptyPity(), -3).champions).toEqual([]);
+    // ⚠️ LE CAS QUI DISCRIMINE : sans le `Math.floor`, `i < 2.7` fait TROIS tours —
+    // un tirage de plus que ce qu'on a payé. Les négatifs, eux, ne bouclent pas de
+    // toute façon (la mutation y était ÉQUIVALENTE).
+    expect(pullMany(mulberry32(1), emptyPity(), 2.7).champions).toHaveLength(2);
   });
 });

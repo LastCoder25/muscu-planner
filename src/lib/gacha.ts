@@ -54,6 +54,31 @@ export const GACHA = {
    */
   pullCost: 110,
 
+  /**
+   * 🎰 LE LOT DE 10 — « un peu moins cher, comme dans les gacha » (demandé).
+   *
+   * ⚠️ **9 PAYÉS POUR 10**, et le chiffre est MESURÉ, pas choisi. La spec (v0.937) vise
+   * **10 à 20 raretés maximales par an** sur la plage réaliste (niveaux 12 à 60). Or
+   * **le lot devient le mode NORMAL** dès qu'on peut se le payer : la remise s'applique
+   * donc à presque tous les tirages, et elle déplace le débit d'autant. Balayé sur un
+   * an simulé (40 graines × 4 niveaux) — raretés maximales au niveau 60 : **0 % → 17,9
+   * · 5 % → 19,0 · 10 % → 19,9 · 15 % → 20,9 · 20 % → 22,3**. **À 15 % on SORT de la
+   * bande** ; 10 % la tient, de justesse. Le déplacer sans re-mesurer romprait le lien
+   * failles → mana → tirage.
+   *
+   * ⚠️ **CE N'EST PAS LA REMISE INTERDITE.** CLAUDE.md proscrit toute **remise de
+   * BÂTIMENT** sur `pullCost` (c'est celle de l'Autel des boss, retirée en v0.799) :
+   * elle dépend d'un second système qu'on fait monter en parallèle, donc elle coupe le
+   * lien entre le farm et le tirage. Une remise de LOT est fixe, ne dépend de rien, et
+   * ne fait que translater le rythme d'un facteur connu.
+   *
+   * ✅ **ET LE LOT A DÉJÀ UNE VALEUR SANS ELLE** : le plancher tombant tous les 10, un
+   * lot de 10 contient **au moins un épique+ par construction**. La remise ajoute une
+   * raison de grouper, elle n'en crée pas la seule.
+   */
+  multiCount: 10,
+  multiPaid: 9,
+
   /** Un tirage OFFERT par jour — il a déjà son emplacement (`claimDailyLogin`, avec sa
    *  série et son jour de grâce). ⚠️ C'est le filet du joueur qui ne combat pas : sans lui,
    *  celui qui n'a pas l'énergie d'entrer dans une faille ne tire jamais. */
@@ -277,6 +302,39 @@ export function pullsPerDay(manaPerDay: number): number {
  * champions par rareté, un champion PRÉCIS tombe à un quart du taux de sa rareté. C'est
  * pour ça que la taille du pool se décide avant d'écrire le roster, pas après.
  */
+/** Prix d'un lot. ⚠️ DÉRIVÉ du prix unitaire : un second nombre écrit à la main
+ *  divergerait au premier réglage.
+ *  ⚠️ `unit` est INJECTABLE **pour que ce soit vérifiable** : au prix d'aujourd'hui
+ *  (110 × 9) « dérivé » et « 990 en dur » rendent la même chose, donc aucun test ne
+ *  peut les distinguer — la mutation SURVIVAIT. Le test passe un autre prix. */
+export const multiPullCost = (unit: number = GACHA.pullCost): number => unit * GACHA.multiPaid;
+
+/**
+ * 🎰 UN LOT DE TIRAGES — les raretés, d'affilée, avec le pity qui S'ENCHAÎNE.
+ *
+ * ⚠️ **LE PITY SE PROPAGE D'UN TIRAGE AU SUIVANT DANS LE LOT.** Sans ça, dix tirages
+ * partiraient tous du même état : la garantie de plancher ne tomberait jamais au sein
+ * d'un lot, et le grand pity n'avancerait que d'un cran pour dix tirages payés.
+ *
+ * ⚠️ **C'est la MÊME fonction que le tirage à l'unité**, appelée n fois — pas un second
+ * chemin. Un lot qui aurait sa propre loterie finirait par ne plus dire la même chose
+ * que la notice des chances.
+ */
+export function pullMany(
+  rng: () => number,
+  pity: PityState,
+  count: number,
+): { champions: Champion[]; pity: PityState } {
+  let p = pity;
+  const champions: Champion[] = [];
+  for (let i = 0; i < Math.max(0, Math.floor(count)); i++) {
+    const r = pullChampion(rng, p);
+    p = r.pity;
+    champions.push(r.champion);
+  }
+  return { champions, pity: p };
+}
+
 export function pullChampion(
   rng: () => number,
   pity: PityState,
