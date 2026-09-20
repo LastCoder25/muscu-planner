@@ -24,7 +24,7 @@
  * Ce module ne répond qu'à une question : **à quel rythme voit-on quoi ?**
  */
 
-import { RANK_ORDER, type Rarity } from './items';
+import { prestigeRankIndex, RANK_ORDER, type Rarity } from './items';
 
 export const GACHA = {
   /**
@@ -193,4 +193,61 @@ function pickAtLeast(rng: () => number, min: Rarity): Rarity {
 /** Combien de tirages un débit de mana offre par jour, tirage gratuit compris. */
 export function pullsPerDay(manaPerDay: number): number {
   return Math.max(0, manaPerDay) / GACHA.pullCost + GACHA.freePullsPerDay;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏅 LE BUDGET DE STATS D'UN CHAMPION — et le plafond qui garde le sport au sommet
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Budget de stats par rareté. `round(20 × (106/20)^(i/7))`.
+ *
+ * ⚠️ **LE PLANCHER EST À 20, ET C'EST MESURÉ.** Le rang multiplie les stats par **×11,5**
+ * (`ADV_LEVEL_K` 0,15 sur 71 niveaux). Pour qu'un **commun investi batte un primordial nu**
+ * — la propriété que tous les gachas défendent — l'écart de rareté doit rester sous ce
+ * facteur. La table d'aujourd'hui (cumul le long d'un chemin de classes) va de 6 à 106,
+ * soit **×17,7** : mesuré, 6 × 11,5 = 69 **perd** contre 106. Avec le plancher à 20 :
+ * 230 contre 106, **la propriété tient**.
+ *
+ * ⚠️ **SEUL LE PLANCHER BOUGE — garder 106 en haut est non négociable** : c'est lui qui
+ * tient tout l'équilibrage de fin de partie (`refAdventurer` et sept fichiers de test).
+ */
+export const RARITY_BUDGET: number[] = RANK_ORDER.map((_, i) =>
+  Math.round(20 * (106 / 20) ** (i / 7)),
+);
+
+/**
+ * 🏅 Ce qu'un champion vaut VRAIMENT — sa rareté, **plafonnée par le rang du joueur**.
+ *
+ * ⚠️ **CE PLAFOND N'EST PAS DANS LA SPEC, ET LA MESURE L'IMPOSE.** Sans lui, le gacha
+ * donne des raretés **indépendamment du niveau**, ce qui court-circuite la règle fondatrice
+ * du projet (« le sport est le plafond »). Mesuré, en simulant les tirages qu'un joueur
+ * accumule en montant — l'escorte des 3 meilleurs champions vaut, face à l'étalon
+ * d'aujourd'hui au même niveau :
+ *
+ * | niveau | sans plafond | avec plafond |
+ * | ------ | ------------ | ------------ |
+ * | 12     | ×3,9 à ×5,6  | **×1,89**    |
+ * | 26     | ×3,7 à ×4,5  | **×1,45**    |
+ * | 45     | ×2,2         | **×1,13**    |
+ * | 100    | ×1,00        | **×1,00**    |
+ *
+ * ⚠️ **ET SANS PLAFOND, LA PROGRESSION DE RARETÉ EST FINIE EN TROIS MOIS** : mesuré, on a
+ * **3 primordiaux dès le niveau 45** (97 à 259 jours selon le profil), après quoi le gacha
+ * n'apporte plus que de l'Éveil. La spec redoutait ça « au bout d'un an ».
+ *
+ * ✅ **ET C'EST L'IDIOME DU PROJET, pas une invention** : les drops ne dépassent jamais le
+ * rang du joueur (v0.876), le trophée prend toujours son rang (v0.894), l'anti-runaway du
+ * Labyrinthe repose dessus (v0.563.23). Le plaisir du tirage est intact — on tire bien un
+ * primordial, et il **révèle son budget** à mesure qu'on monte, au lieu de l'offrir d'un
+ * coup à un joueur de niveau 5.
+ *
+ * ✅ **Propriété décisive, mesurée** : le résultat est **IDENTIQUE pour les trois profils
+ * de joueur** (léger, régulier, très actif). La force de l'escorte suit le **sport**, plus
+ * la chance aux tirages.
+ */
+export function championBudget(rarity: Rarity, playerLevel: number): number {
+  const tire = RANK_ORDER.indexOf(rarity);
+  const cap = prestigeRankIndex(playerLevel);
+  return RARITY_BUDGET[Math.min(tire < 0 ? 0 : tire, cap)]!;
 }

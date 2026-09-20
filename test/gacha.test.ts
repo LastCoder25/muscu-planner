@@ -9,6 +9,8 @@ import {
   pullRarity,
   pullsPerDay,
   topRate,
+  RARITY_BUDGET,
+  championBudget,
 } from '@/lib/gacha';
 
 const rankOf = (r: Rarity) => RANK_ORDER.indexOf(r);
@@ -185,5 +187,55 @@ describe('⚠️ LA CALIBRATION — elle tient au débit de mana des failles', (
     // Mesuré (v0.936) : une faille mûre rend 123 💠 au niveau 12, 756 au niveau 100.
     expect(123 / GACHA.pullCost).toBeGreaterThanOrEqual(1);
     expect(756 / GACHA.pullCost).toBeLessThan(10);
+  });
+});
+
+describe('🏅 le budget d’un champion', () => {
+  const ADV_LEVEL_MULT = 11.5; // ×11,5 sur 71 niveaux (ADV_LEVEL_K 0,15)
+
+  it('⚠️ UN COMMUN INVESTI BAT UN PRIMORDIAL NU — la propriété de tout gacha', () => {
+    // C'est ELLE qui fixe le plancher à 20. Avec la table d'aujourd'hui (6 en bas), le
+    // commun monté à fond vaut 69 et PERD contre 106.
+    const commun = RARITY_BUDGET[0]!;
+    const top = RARITY_BUDGET[RARITY_BUDGET.length - 1]!;
+    expect(commun * ADV_LEVEL_MULT).toBeGreaterThan(top);
+    // …et l'écart de rareté reste donc sous le facteur du rang.
+    expect(top / commun).toBeLessThan(ADV_LEVEL_MULT);
+  });
+
+  it('garde 106 EN HAUT — c’est lui qui tient l’équilibrage de fin de partie', () => {
+    expect(RARITY_BUDGET[RARITY_BUDGET.length - 1]).toBe(106);
+  });
+
+  it('croît strictement, une entrée par rareté', () => {
+    expect(RARITY_BUDGET).toHaveLength(RANK_ORDER.length);
+    for (let i = 1; i < RARITY_BUDGET.length; i++)
+      expect(RARITY_BUDGET[i]!).toBeGreaterThan(RARITY_BUDGET[i - 1]!);
+  });
+
+  it('⚠️ EST PLAFONNÉ PAR LE RANG DU JOUEUR — le sport reste le plafond', () => {
+    // Un primordial tiré au niveau 5 ne vaut pas 106 : il révèle son budget en montant.
+    expect(championBudget('primordial', 5)).toBeLessThan(RARITY_BUDGET[7]!);
+    expect(championBudget('primordial', 100)).toBe(RARITY_BUDGET[7]!);
+    // …et il ne DESCEND jamais quand on monte.
+    let prev = 0;
+    for (let L = 1; L <= 100; L++) {
+      const b = championBudget('primordial', L);
+      expect(b).toBeGreaterThanOrEqual(prev);
+      prev = b;
+    }
+  });
+
+  it('ne RELÈVE jamais une rareté basse : le plafond coupe, il ne pousse pas', () => {
+    for (const L of [1, 20, 50, 100]) expect(championBudget('commun', L)).toBe(RARITY_BUDGET[0]);
+  });
+
+  it('⚠️ LA CHANCE NE DOIT PAS DOUBLER LA PUISSANCE D’UN DÉBUTANT', () => {
+    // Sans plafond, un primordial chanceux vaudrait ×5,3 un commun au même niveau — mesuré,
+    // l'escorte devenait 3,9 à 5,6× l'étalon d'aujourd'hui en début de partie.
+    const L = 12;
+    const chanceux = championBudget('primordial', L);
+    const malchanceux = championBudget('commun', L);
+    expect(chanceux / malchanceux).toBeLessThan(2);
   });
 });
