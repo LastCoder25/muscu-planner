@@ -22,6 +22,7 @@ import {
   pullRarity,
   pullsPerDay,
   grantChampion,
+  wipeLegacyAdventurers,
   OVERFLOW_MANA,
   topRate,
   pullChampion,
@@ -516,5 +517,52 @@ describe('🏅 CE QU_UN TIRAGE AJOUTE AU VIVIER', () => {
     // Sinon farmer le même commun deviendrait une source de mana, et le gacha
     // s'alimenterait lui-même.
     expect(OVERFLOW_MANA).toBeLessThan(GACHA.pullCost);
+  });
+});
+
+describe('🗑️ LE WIPE DES AVENTURIERS', () => {
+  const champ = CHAMPIONS[0]!;
+  const legacy = (id: string): Adventurer => ({
+    id,
+    name: 'Recrue',
+    seed: 1,
+    path: ['guerrier'],
+    level: 9,
+    xp: 0,
+  });
+  const heros = (id: string): Adventurer => ({
+    id,
+    name: champ.name,
+    seed: 1,
+    path: [],
+    championId: champ.id,
+    copies: 1,
+    level: 1,
+    xp: 0,
+  });
+
+  it('les recrues d_avant s_en vont, les champions restent', () => {
+    const w = wipeLegacyAdventurers([legacy('v1'), heros('c1'), legacy('v2')]);
+    expect(w.advs.map((a) => a.id)).toEqual(['c1']);
+  });
+
+  it('⚠️ COMPENSÉ À HAUTEUR D_UN TIRAGE CHACUN — dans la monnaie de ce qui les remplace', () => {
+    // Pas en or : on rend de quoi invoquer autant de champions qu'on perd de recrues.
+    const w = wipeLegacyAdventurers([legacy('v1'), legacy('v2'), legacy('v3')]);
+    expect(w.mana).toBe(3 * GACHA.pullCost);
+  });
+
+  it('⚠️ IDEMPOTENT — sinon on compenserait à chaque chargement', () => {
+    const apres = wipeLegacyAdventurers([legacy('v1'), heros('c1')]);
+    const encore = wipeLegacyAdventurers(apres.advs);
+    expect(encore.mana).toBe(0);
+    expect(encore.advs).toBe(apres.advs);
+  });
+
+  it('un vivier qui n_a que des champions n_est pas touché du tout', () => {
+    const advs = [heros('c1')];
+    const w = wipeLegacyAdventurers(advs);
+    expect(w.advs, 'la MÊME référence').toBe(advs);
+    expect(w.mana).toBe(0);
   });
 });

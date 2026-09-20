@@ -37,45 +37,32 @@
           </button>
         </div>
 
-          <!-- 🎰 L'INVOCATION — le seul puits des pierres de mana. ⚠️ Elle est EN TÊTE, et
+        <!-- 🎰 L'INVOCATION — le seul puits des pierres de mana. ⚠️ Elle est EN TÊTE, et
              au-dessus du recrutement : c'est elle qui remplace l'arbre de classes, le
              recrutement n'est plus là que le temps de la bascule. Le bouton DIT le prix et
              ce qui manque plutôt que de se griser en silence (leçon du gris de la carte,
              v0.738). -->
-          <button
-            class="voie-btn g-summon"
-            :disabled="busy || mana < pullCost"
-            @click="doPull"
-          >
-            <span class="gs-emo">🎰</span>
-            <span class="gs-main">
-              <b>Invoquer un champion</b>
-              <small v-if="mana >= pullCost">{{ pullCost }} 💠 · tu en as {{ mana }}</small>
-              <small v-else class="gs-short">
-                il te manque {{ pullCost - mana }} 💠 — referme une faille
-              </small>
-            </span>
-          </button>
+        <button class="voie-btn g-summon" :disabled="busy || mana < pullCost" @click="doPull">
+          <span class="gs-emo">🎰</span>
+          <span class="gs-main">
+            <b>Invoquer un champion</b>
+            <small v-if="mana >= pullCost">{{ pullCost }} 💠 · tu en as {{ mana }}</small>
+            <small v-else class="gs-short">
+              il te manque {{ pullCost - mana }} 💠 — referme une faille
+            </small>
+          </span>
+        </button>
         <template v-if="guildTab === 'roster' || !roster.length">
-          <!-- ⚠️ LE RECRUTEMENT EN TÊTE, et dans sa propre feuille (signalé). Il vivait
-             tout au FOND du panneau, sous la liste : à dix aventuriers, le choix de la
-             première classe — celui qui engage une LIGNÉE entière — se trouvait hors
-             écran et se lisait mal. Il suit désormais le patron de la promotion : un
-             bouton, puis une feuille qui ne montre QUE ce choix.
-             ⚠️ Déplacé dans le DOM, PAS par `order` : `.guild-card` n'est pas un
-             conteneur flex, donc un `order: -1` n'aurait rien fait — et la rendre flex
-             aurait déplacé la mise en page des quatre feuilles qui partagent la classe. -->
-          <button
-            v-if="roster.length < maxRoster"
-            class="voie-btn g-hire"
-            :disabled="busy || gold < cost"
-            @click="recruitOpen = true"
-          >
-            ➕ Recruter un aventurier — {{ cost }} 🪙
-          </button>
-          <div v-else class="g-note g-full">
-            Déploiement au complet ({{ roster.length }}/{{ maxRoster }}).
-            <b>Monte le Panthéon d’un niveau</b> pour loger quelqu’un de plus.
+          <!-- ⚠️ Le RECRUTEMENT et la PROMOTION ont disparu avec l'arbre de classes
+             (v0.951) : on n'ELEVE plus une recrue, on INVOQUE un champion et ses
+             doublons le reveillent. Il ne reste donc qu'un etat : le deploiement est-il
+             au complet ? ⚠️ Il se DIT, au lieu de laisser le bouton d'invocation se
+             griser sans raison — un champion de plus entrerait en collection.
+             (accents : voir plus bas, ce bloc est reecrit par le patch) -->
+          <div v-if="roster.length >= maxRoster" class="g-note g-full">
+            Déploiement au complet ({{ roster.length }}/{{ maxRoster }}). Les champions invoqués
+            au-delà attendent <b>en collection</b> — <b>monte le Panthéon d’un niveau</b> pour en
+            engager un de plus.
           </div>
           <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
              selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
@@ -166,14 +153,12 @@
               :power="powerOf(a)"
               :state="stateOf(a)"
               :tone="statusOf(a)"
-              :promotable="canPromoteOne(a)"
               :disabled="busy"
               :gear="gearCellsOf(a)"
               @gear="(slot) => (gearPick = { advId: a.id, slot })"
               @open="detailAdv = a"
               @familiar="pairFor = a"
               @talent="talFor = a"
-              @promote="openPromo(a)"
             />
           </div>
         </template>
@@ -330,101 +315,6 @@
     </q-card>
   </q-dialog>
 
-  <!-- ── Promotion : 1 parmi 3, tirées mais TOUJOURS dans la lignée ── -->
-  <q-dialog v-model="promoOpen">
-    <q-card class="guild-card">
-      <div class="g-title font-display">⭐ Promotion — {{ promoAdv?.name }}</div>
-      <p class="g-note">
-        Choisis sa voie. Le choix est <b>définitif</b>, et il décide de ce qui lui sera proposé
-        ensuite. Toutes ces classes valent le <b>même rang</b> : ce qui les sépare, c'est leur
-        <b>orientation</b>, leur <b>rôle sur les convois</b> et leur <b>signature de combat</b>.
-      </p>
-      <div v-if="!trainingLevel" class="g-empty">
-        Il te faut un <b>Panthéon</b> pour qu’il apprenne une nouvelle classe.
-      </div>
-      <!-- ⚠️ La durée s'annonce AVANT le choix : elle double à chaque rang et
-           l'aventurier est immobilisé pendant tout ce temps. La découvrir après coup,
-           c'est découvrir le prix après avoir payé. -->
-      <div v-else-if="promoAdv" class="g-cost">
-        🎓 Formation : <b>{{ formatDuration(promoMs) }}</b> — il sera indisponible pendant ce temps.
-      </div>
-      <div v-if="promoAdv" class="g-choices">
-        <button
-          v-for="c in promoOffers"
-          :key="c.id"
-          class="g-choice"
-          :disabled="busy"
-          @click="doPromote(c.id)"
-        >
-          <span class="gc-emo">{{ c.emoji }}</span>
-          <span class="gc-lbl">{{ c.label }}</span>
-          <!-- ⚠️ « 💪3 ❤️2 ⚡1 » seul ne dit RIEN à qui choisit : on nomme l'orientation,
-               puis les deux différences qui décident vraiment — ce qu'il apporte au
-               convoi, et ce qu'il fait au combat. -->
-          <span class="gc-shape">{{ advShapeLabel(c.w) }} · {{ shape(c) }}</span>
-          <span v-if="c.role" class="gc-perk">{{ ADV_ROLE_LABEL[c.role] }}</span>
-          <span v-if="c.signature && ADV_SIGNATURE_LABEL[c.signature]" class="gc-perk sig">
-            {{ ADV_SIGNATURE_LABEL[c.signature] }}
-          </span>
-          <span v-if="!c.role && !c.signature" class="gc-perk none">
-            Aucun rôle ni signature — de la stat brute
-          </span>
-          <span v-if="promoHorizon(c.id).length" class="gc-horizon">
-            mène à {{ promoHorizon(c.id).join(' · ') }}
-          </span>
-          <span class="gc-rar">rang {{ rarityRank(classRarity(c)).name }}</span>
-        </button>
-      </div>
-      <div class="g-actions">
-        <q-btn flat no-caps label="Plus tard" @click="promoOpen = false" />
-      </div>
-    </q-card>
-  </q-dialog>
-
-  <!-- ── RECRUTER : une feuille qui ne montre QUE ce choix ──────────────────
-       ⚠️ La classe de DÉPART engage toute la lignée (la filiation est stricte), donc
-       elle mérite le même traitement qu'une promotion : un écran à elle. -->
-  <q-dialog v-model="recruitOpen" position="bottom">
-    <q-card class="guild-card">
-      <div class="g-title font-display">⚔️ Une nouvelle recrue</div>
-      <p class="g-note">
-        Choisis sa <b>voie de départ</b>. Elle décide de ce qui lui sera proposé ensuite — un
-        Guerrier ne se verra <b>jamais</b> offrir la voie d’un Clerc.
-      </p>
-      <div class="g-cost">
-        💰 Recrutement : <b>{{ cost }} 🪙</b> — le prix monte avec l’effectif.
-      </div>
-      <div class="g-choices">
-        <button
-          v-for="c in offers"
-          :key="c.id"
-          class="g-choice"
-          :disabled="busy || gold < cost"
-          @click="doRecruit(c.id)"
-        >
-          <span class="gc-emo">{{ c.emoji }}</span>
-          <span class="gc-lbl">{{ c.label }}</span>
-          <!-- ⚠️ Le recrutement se faisait À L'AVEUGLE : il n'annonçait que
-                     « 💪3 ❤️2 ⚡1 », quand la promotion nomme déjà l'orientation, le rôle
-                     de convoi et la signature. On choisissait une LIGNÉE sans savoir ce
-                     qu'elle donne. Même lecture des deux côtés. -->
-          <span class="gc-shape">{{ advShapeLabel(c.w) }} · {{ shape(c) }}</span>
-          <span v-if="c.role" class="gc-perk">{{ ADV_ROLE_LABEL[c.role] }}</span>
-          <span v-if="c.signature && ADV_SIGNATURE_LABEL[c.signature]" class="gc-perk sig">
-            {{ ADV_SIGNATURE_LABEL[c.signature] }}
-          </span>
-          <!-- « Où il va » : ce que la voie peut encore débloquer plus tard. -->
-          <span v-if="horizonOf(c.id).length" class="gc-horizon">
-            mène à {{ horizonOf(c.id).join(' · ') }}
-          </span>
-        </button>
-      </div>
-      <div class="g-actions">
-        <q-btn flat no-caps label="Plus tard" @click="recruitOpen = false" />
-      </div>
-    </q-card>
-  </q-dialog>
-
   <!-- ── FICHE D'UN AVENTURIER ──────────────────────────────────────────────
          Tout ce que le vivier ne peut pas montrer sans devenir illisible.
          ⚠️ Toujours PAS de niveau : c'est la règle posée à la conception (« un aventurier
@@ -574,14 +464,6 @@
       </button>
 
       <div class="g-actions">
-        <q-btn
-          v-if="canPromoteOne(detailAdv)"
-          flat
-          no-caps
-          label="⭐ Promouvoir"
-          :disable="busy"
-          @click="openPromoFromDetail(detailAdv)"
-        />
         <q-btn flat no-caps label="Fermer" @click="detailAdv = null" />
       </div>
     </q-card>
@@ -780,7 +662,6 @@
 // aventurier de manga »), et c'est aussi ce qui rend la barre indispensable.
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
-import { formatDuration } from '@/lib/duration';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
@@ -797,17 +678,12 @@ import {
   advTitle,
   advClass,
   advRoleLevels,
-  reachableSkills,
   advSignatureLevels,
   advStats,
-  canPromoteNow,
   compareAdventurers,
-  classChoices,
-  classRarity,
   advShapeLabel,
   ADV_ROLE_LABEL,
   ADV_SIGNATURE_LABEL,
-  type AdvClass,
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
@@ -848,7 +724,7 @@ import {
 } from '@/lib/raid';
 import { fmtPow, fmtDelta } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
-import { trainMsFor, companionEffects, advTalentEffects } from '@/lib/caravan';
+import { companionEffects, advTalentEffects } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
   advGearCells,
@@ -867,18 +743,8 @@ import {
   type Lineage,
 } from '@/lib/advGear';
 
-const props = defineProps<{
+defineProps<{
   open: boolean;
-  /** Ouvrir DIRECTEMENT la feuille de promotion de CET aventurier. Posé au retour
-   *  d’un convoi dont la mission vient de rendre la promotion possible : l’information
-   *  arrive au moment où elle est actionnable, au lieu d’attendre qu’on repasse par la
-   *  Guilde. ⚠️ La feuille s’ouvre PAR-DESSUS la carte de Guilde, pas à sa place : on
-   *  promeut, puis on est déjà là où l’on gère son vivier. */
-  promoteId?: string | null;
-  /** `'recruit'` : ouvrir DIRECTEMENT sur le choix de classe. Posé quand un niveau
-   *  de Guilde vient d’ouvrir une place — le seul moment où l’on recrute, et celui où
-   *  le joueur refermait la feuille sans savoir qu’une recrue l’attendait. */
-  mode?: 'recruit' | null;
 }>();
 const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
@@ -1414,18 +1280,7 @@ watch(rosterChips, (chips) => {
   if (rosterFilter.value && !chips.includes(rosterFilter.value)) rosterFilter.value = null;
 });
 const guildLevel = computed(() => char.pantheonLevel);
-const trainingLevel = computed(() => char.pantheonLevel);
-const gold = computed(() => char.row?.gold ?? 0);
 const maxRoster = computed(() => 1 + Math.floor(guildLevel.value / 2));
-const cost = computed(() =>
-  Math.round(220 * (1 + roster.value.length) * Math.max(1, guildLevel.value) ** 0.6),
-);
-
-/** Graine du recrutement : figée tant que le vivier ne bouge pas, pour que l'offre
- *  affichée soit exactement celle qui sera recrutée. */
-const recruitSeed = computed(() => (roster.value.length + 1) * 2654435761 + guildLevel.value);
-const offers = computed(() => char.recruitChoices(recruitSeed.value));
-
 const rankOf = (a: Adventurer) => advRank(a);
 // La RARETÉ de sa classe — distincte du rang, mais elle monte du même pas (une classe
 // par rang gagné), donc les deux ne peuvent plus se contredire.
@@ -1486,39 +1341,7 @@ const talIconOf = (a: Adventurer) => {
   const t = talOf(a);
   return t ? (talentByCode(t.code)?.icon ?? '🧠') : undefined;
 };
-const canPromoteOne = (a: Adventurer) =>
-  canPromoteNow(a, {
-    guildLevel: guildLevel.value,
-    trainingLevel: trainingLevel.value,
-    now: now.value,
-  });
-
 // ── Fiche d'un aventurier ──
-const recruitOpen = ref(false);
-
-// ⚠️ Un `watch` IMMÉDIAT : le panneau peut être DÉJÀ MONTÉ quand le mode change — on
-// revient de la cour sans jamais le démonter. Un test au montage raterait ce cas, qui
-// est précisément le seul qui se produise.
-watch(
-  () => [props.open, props.mode] as const,
-  ([open, mode]) => {
-    if (open && mode === 'recruit' && roster.value.length < maxRoster.value)
-      recruitOpen.value = true;
-  },
-  { immediate: true },
-);
-// ⚠️ Même patron que `mode` ci-dessus, et pour la même raison : `immediate`, parce que le
-// panneau peut être déjà monté quand la prop change. On attend que le vivier soit
-// chargé — sinon l’id ne désigne encore personne et l’ouverture est perdue.
-watch(
-  () => [props.promoteId, roster.value] as const,
-  ([id]) => {
-    if (!id || promoOpen.value) return;
-    const a = roster.value.find((x) => x.id === id);
-    if (a) openPromo(a);
-  },
-  { immediate: true },
-);
 const detailAdv = ref<Adventurer | null>(null);
 /** CE QUE CHAQUE PIÈCE PORTÉE APPORTE, en puissance — l'arbitre de tout le jeu.
  *
@@ -1573,72 +1396,10 @@ const sigLabelsOf = (a: Adventurer) =>
   advSignatureLevels(a)
     .map((s) => ({ label: ADV_SIGNATURE_LABEL[s.what], level: s.level }))
     .filter((s): s is { label: string; level: number } => !!s.label);
-/** Depuis la fiche : on ferme celle-ci avant d'ouvrir la promotion — deux feuilles
- *  empilées sur un téléphone, on ne sait plus laquelle on referme. */
-function openPromoFromDetail(a: Adventurer) {
-  detailAdv.value = null;
-  openPromo(a);
-}
 function leftOf(at: number): string {
   const m = Math.max(0, Math.round((at - now.value) / 60_000));
   return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
 }
-/** « 💪4 ❤️2 ⚡0 » — la FORME de la classe, ce qui permet de composer une équipe. */
-const shape = (c: AdvClass) => `💪${c.w.p} ❤️${c.w.e} ⚡${c.w.a}`;
-
-/** Les compétences qu'une voie peut ENCORE débloquer — celles de la classe choisie
- *  exclues (elle les annonce déjà juste au-dessus, les répéter serait du bruit).
- *  ⚠️ Mémoïsé : la liste est rendue pour chaque offre, et l'énumération des chemins
- *  n'est pas gratuite. Le catalogue étant figé, un cache par clé suffit. */
-const horizonCache = new Map<string, string[]>();
-function horizonFor(path: string[], own: AdvClass | undefined): string[] {
-  const key = path.join('>');
-  const hit = horizonCache.get(key);
-  if (hit) return hit;
-  const reach = reachableSkills(path);
-  const out = [
-    ...reach.roles.filter((r) => r !== own?.role).map((r) => ADV_ROLE_LABEL[r].split(' ')[0] ?? ''),
-    ...reach.signatures
-      .filter((sg) => sg !== own?.signature)
-      .map((sg) => ADV_SIGNATURE_LABEL[sg]?.split(' ')[0] ?? ''),
-  ].filter(Boolean);
-  horizonCache.set(key, out);
-  return out;
-}
-/** Au RECRUTEMENT, le chemin ne contient que la classe choisie. */
-const horizonOf = (id: string) => horizonFor([id], advClass(id));
-/** À la PROMOTION, il faut le chemin DÉJÀ parcouru : l'éligibilité dépend des tags
- *  accumulés, donc partir de la seule classe visée annoncerait un horizon faux. */
-const promoHorizon = (id: string) =>
-  horizonFor([...(promoAdv.value?.path ?? []), id], advClass(id));
-
-const NAMES = [
-  'Aldric',
-  'Brenna',
-  'Caelum',
-  'Dahlia',
-  'Eryn',
-  'Faelan',
-  'Gwen',
-  'Hadrien',
-  'Ilyana',
-  'Joran',
-  'Kaela',
-  'Lorcan',
-  'Maëlys',
-  'Nils',
-  'Orianne',
-  'Perrin',
-  'Quilan',
-  'Rowena',
-  'Soren',
-  'Thalia',
-  'Ulric',
-  'Vesna',
-  'Wynn',
-  'Yara',
-];
-
 const mana = computed(() => char.row?.mana ?? 0);
 const pullCost = GACHA.pullCost;
 
@@ -1672,58 +1433,6 @@ async function doPull() {
           : `${RARITY_LABEL[r.champion.rarity]} · en collection`,
       rarity: fxRarity(r.champion.rarity),
     });
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function doRecruit(classId: string) {
-  const uid = auth.user?.id;
-  if (!uid || busy.value) return;
-  busy.value = true;
-  try {
-    const name = NAMES[Math.floor(Math.random() * NAMES.length)]!;
-    const ok = await char.recruitAdventurer(uid, recruitSeed.value, classId, name);
-    $q.notify(
-      ok
-        ? { type: 'positive', message: `${name} rejoint tes rangs.` }
-        : { type: 'negative', message: 'Recrutement impossible (or, place ou offre).' },
-    );
-    // ⚠️ On ne referme QUE sur un succès : un refus (or manquant, place prise) doit
-    // laisser la feuille ouverte, sinon le joueur ne voit pas pourquoi rien ne s'est passé.
-    if (ok) recruitOpen.value = false;
-  } finally {
-    busy.value = false;
-  }
-}
-
-const promoOpen = ref(false);
-const promoAdv = ref<Adventurer | null>(null);
-const promoOffers = computed(() => (promoAdv.value ? classChoices(promoAdv.value) : []));
-/** Ce que coûtera la promotion en cours de choix. ⚠️ Toutes les offres visent la MÊME
- *  strate, donc une seule durée — on l'affiche une fois, en tête, plutôt que sur chaque
- *  carte. */
-const promoMs = computed(() =>
-  promoAdv.value ? trainMsFor(trainingLevel.value, promoAdv.value.path.length) : 0,
-);
-
-function openPromo(a: Adventurer) {
-  promoAdv.value = a;
-  promoOpen.value = true;
-}
-async function doPromote(classId: string) {
-  const uid = auth.user?.id;
-  const a = promoAdv.value;
-  if (!uid || !a || busy.value) return;
-  busy.value = true;
-  try {
-    const ok = await char.promoteAdventurer(uid, a.id, classId);
-    if (ok) promoOpen.value = false;
-    $q.notify(
-      ok
-        ? { type: 'positive', message: `${a.name} progresse.` }
-        : { type: 'negative', message: 'Promotion impossible (Panthéon ?).' },
-    );
   } finally {
     busy.value = false;
   }

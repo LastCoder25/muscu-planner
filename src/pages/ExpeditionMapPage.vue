@@ -579,7 +579,6 @@
          proposer là où on l'apprend, sinon elle attend qu'on repasse par la Base. On
          ouvre bien la GUILDE (avec sa feuille de promotion par-dessus), pas un bout
          de Guilde détaché : après avoir promu, on est déjà là où l'on gère son monde. -->
-    <GuildPanel :open="!!guildPromote" :promote-id="guildPromote" @close="guildPromote = null" />
 
     <!-- 🐫 Rapport à l'encaissement : il remplace la simple notification « Cargaison
          récupérée », qui ne disait ni qui avait voyagé, ni ce qu'il avait appris. -->
@@ -627,7 +626,6 @@ import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, mergeEffects, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
-import GuildPanel from '@/components/GuildPanel.vue';
 import CaravanReportView from '@/components/CaravanReportView.vue';
 import PartyReportView from '@/components/PartyReportView.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
@@ -1421,18 +1419,6 @@ watch(
   { immediate: true },
 );
 
-const guildPromote = ref<string | null>(null);
-const pendingPromo = ref<string | null>(null);
-watch(
-  () => gameFx.queue.value.length,
-  (n) => {
-    if (n === 0 && pendingPromo.value) {
-      guildPromote.value = pendingPromo.value;
-      pendingPromo.value = null;
-    }
-  },
-);
-
 /** Rapport ouvert après un encaissement (id du convoi) et les aventuriers qui y ont gagné
  *  une étoile. Le convoi reste dans la liste, marqué encaissé : on le relit là. */
 const reportId = ref<string | null>(null);
@@ -1456,26 +1442,15 @@ async function doClaimCaravan(id: string) {
     // retour qu'il ait sur des semaines de voyages.
     for (const e of events) {
       if (e.to <= e.from) continue;
-      // ⚠️ UN RANG GAGNÉ N'EST PAS UNE ÉTOILE DE PLUS : c'est le seul moment qui donne
-      // droit à une nouvelle classe, il ne doit pas se lire comme un cran de routine.
+      // ⚠️ UN RANG GAGNÉ N'EST PAS UNE ÉTOILE DE PLUS : c'est un vrai palier de prestige,
+      // il ne doit pas se lire comme un cran de routine.
       gameFx.celebrate({
         kind: 'levelup',
         emoji: e.rankUp ? e.rankEmoji : '⭐',
         title: e.rankUp ? `${e.name} passe ${e.rankName} !` : `${e.name} — ${rankStarStr(e.star)}`,
-        subtitle: e.promoted
-          ? 'Une nouvelle classe l’attend'
-          : e.rankUp
-            ? `${rankStarStr(e.star)} · nouveau rang`
-            : 'une étoile de plus',
+        subtitle: e.rankUp ? `${rankStarStr(e.star)} · nouveau rang` : 'une étoile de plus',
         rarity: fxRarity(e.rarity),
       });
-    }
-    // ⚠️ UN SEUL à la fois : deux feuilles empilées, on ne sait plus laquelle on ferme.
-    // Les autres gardent le badge ⭐ de la Guilde, qui est le rappel permanent.
-    const promo = events.find((e) => e.promoted);
-    if (promo) {
-      if (gameFx.queue.value.length) pendingPromo.value = promo.id;
-      else guildPromote.value = promo.id;
     }
   } finally {
     busyCaravan.value = false;

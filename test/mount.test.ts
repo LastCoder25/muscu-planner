@@ -78,11 +78,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await mountIt(GuildPanel, { open: true }, ROW)).toBeNull();
   }, 30_000);
 
-  it('GuildPanel s’ouvre aussi sur un vivier VIDE, et en mode recrutement', async () => {
+  it('GuildPanel s’ouvre aussi sur un vivier VIDE — et l’invocation reste offerte', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     const vide = { ...ROW, adventurers: [] };
     expect(await mountIt(GuildPanel, { open: true }, vide)).toBeNull();
-    expect(await mountIt(GuildPanel, { open: true, mode: 'recruit' }, ROW)).toBeNull();
+    // ⚠️ Le mode « recrutement » a disparu avec l'arbre de classes (v0.951) : c'est
+    // l'INVOCATION qui remplit le vivier, et elle est offerte dans les deux cas.
+    const riche = { ...vide, mana: 5_000 };
+    expect(await mountIt(GuildPanel, { open: true }, riche)).toBeNull();
   }, 30_000);
 
   it('GuildPanel : une pièce en stock ATTEND un porteur (case en appel)', async () => {

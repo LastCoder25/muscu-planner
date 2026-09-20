@@ -153,13 +153,10 @@ import {
 import {
   advAvailable,
   settleAllTraining,
-  canPromoteNow,
-  classChoices,
   advProgressOf,
   advRarity,
   grantAdvXp,
   deployCap,
-  recruitCost,
   type Adventurer,
 } from '@/lib/adventurers';
 import {
@@ -171,7 +168,6 @@ import {
   canAdvFamiliar,
   familiarKeepers,
   companionsOf,
-  trainMsFor,
   isCaravanClaimable,
   pruneCaravans,
   startCaravan,
@@ -216,6 +212,7 @@ import {
   GACHA,
   dailyFreeMana,
   grantChampion,
+  wipeLegacyAdventurers,
   type GachaState,
   pullChampion as rollChampion,
 } from '@/lib/gacha';
@@ -458,6 +455,7 @@ export const useCharacterStore = defineStore('character', () => {
     row.value = normalizeRow(data ?? null);
     loaded.value = true;
     if (row.value && legacy.goldRefund > 0) await settlePantheon(uid, legacy.goldRefund);
+    if (row.value) await settleWipe(uid);
     return row.value;
   }
 
@@ -514,6 +512,38 @@ export const useCharacterStore = defineStore('character', () => {
       emoji: '🛕',
       title: 'Le Panthéon des champions',
       subtitle: `Guilde, Centre de formation et Équipementier n'en font plus qu'un — ${refund.toLocaleString('fr-FR')} 🪙 rendus`,
+      rarity: 'legendary',
+    });
+  }
+
+  /**
+   * 🗑️ LE WIPE DES AVENTURIERS, en une seule écriture.
+   *
+   * ⚠️ **IL NE PASSE PAS PAR `normalizeRow`, contrairement à la fusion du Panthéon**, et la
+   * différence est réelle : là-bas le filtre des types inconnus aurait effacé la donnée
+   * avant qu'on l'ait lue, donc la migration DEVAIT être dans la normalisation. Ici rien
+   * ne supprime un aventurier tout seul — il survit en base jusqu'à ce qu'on écrive. Le
+   * one-shot est donc **atomique par construction** : ça passe, ou rien ne bouge et on
+   * retentera au prochain chargement. Aucune fenêtre de double compensation.
+   */
+  async function settleWipe(userId: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const w = wipeLegacyAdventurers(cur.adventurers ?? []);
+    if (!w.mana) return;
+    const partants = (cur.adventurers ?? []).length - w.advs.length;
+    try {
+      await persist(userId, { adventurers: w.advs, mana: cur.mana + w.mana });
+    } catch {
+      return; // hors ligne : la base est intacte, on retentera.
+    }
+    // ⚠️ Et on le DIT. Voir son vivier disparaître sans un mot se lit comme une perte de
+    // données, pas comme une bascule — même raison que l'éclat du Panthéon.
+    useGameFx().celebrate({
+      kind: 'unlock',
+      emoji: '🛕',
+      title: 'Les champions remplacent les recrues',
+      subtitle: `${partants} aventurier${partants > 1 ? 's' : ''} rendu${partants > 1 ? 's' : ''} au Panthéon — ${w.mana} 💠 pour les invoquer`,
       rarity: 'legendary',
     });
   }
@@ -2530,84 +2560,6 @@ export const useCharacterStore = defineStore('character', () => {
    *  le recalculait, et une étiquette qui refait le calcul finit par contredire le combat. */
   const kennelLevel = computed(() => defenseLevel(row.value?.base?.defenses ?? [], 'kennel'));
 
-  /** Les 3 classes de DÉPART proposées à une nouvelle recrue. Tirées sur une graine
-   *  figée à l'avance pour que l'écran affiche exactement ce qui sera recruté. */
-  function recruitChoices(seed: number) {
-    return classChoices({ id: '', name: '', seed, path: [], level: 1, xp: 0 }, 0);
-  }
-
-  /** Recrute un aventurier dans la classe choisie. ⚠️ Le Panthéon plafonne l'EFFECTIF ; le
-   *  coût croît avec le vivier déjà en place, sinon on le remplit d'un coup et « qui
-   *  j'élève » cesse d'être une décision. */
-  async function recruitAdventurer(userId: string, seed: number, classId: string, name: string) {
-    const cur = row.value;
-    if (!cur) return false;
-    if (pantheonLevel.value <= 0) return false;
-    const roster = advList.value;
-    if (roster.length >= deployCap(pantheonLevel.value)) return false;
-    if (!recruitChoices(seed).some((c) => c.id === classId)) return false; // pas dans l'offre
-    const cost = recruitCost(roster.length, pantheonLevel.value);
-    if (cur.gold < cost) return false;
-    const adv: Adventurer = {
-      id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-      name,
-      seed,
-      path: [classId],
-      level: 1,
-      xp: 0,
-    };
-    await persist(userId, { gold: cur.gold - cost, adventurers: [...roster, adv] });
-    return true;
-  }
-
-  /** Valide une promotion au Centre de formation. ⚠️ Le Centre n'est requis QU'À PARTIR de
-   *  la 2e strate : la classe de départ se choisit au recrutement, donc un débutant n'a
-   *  besoin que de la Guilde et du Comptoir pour lancer la boucle. */
-  async function promoteAdventurer(userId: string, advId: string, classId: string) {
-    const cur = row.value;
-    const adv = advList.value.find((a) => a.id === advId);
-    if (!cur || !adv) return false;
-    // ⚠️ LA MÊME règle que l’étoile et que le bouton : elle vivait en trois exemplaires
-    // avec trois sous-ensembles différents, et l’étoile s’allumait donc pour des
-    // promotions que ce garde refusait. Un seul prédicat, un seul endroit.
-    if (
-      !canPromoteNow(adv, {
-        guildLevel: pantheonLevel.value,
-        trainingLevel: pantheonLevel.value,
-        now: Date.now(),
-      })
-    )
-      return false;
-    if (!classChoices(adv).some((c) => c.id === classId)) return false;
-    // ⚠️ PAS pendant un convoi (signalé par l'utilisateur : « j'ai pu promouvoir des
-    // aventuriers en déplacement »). Il est physiquement sur la route, il ne peut pas
-    // être au Centre de formation — et la formation l'immobiliserait une seconde fois,
-    // sur une échéance sans rapport avec celle du convoi.
-    // ⚠️ On ne teste QUE `busyUntil`, pas `advAvailable` : une formation peut courir
-    // pendant une CONVALESCENCE, c'est même le bon moment, et on ne fait pas attendre
-    // un blessé deux fois (décision v0.739, à ne pas défaire par mégarde).
-    if ((adv.busyUntil ?? 0) > Date.now()) return false;
-    // ⚠️ On n'applique PAS la classe tout de suite : on engage une FORMATION. C'est le
-    // temps passé au Centre qui la paie, et c'est ce que son niveau raccourcit — sinon
-    // son `perLevelNote` (« formations plus courtes ») promet ce que rien ne tient.
-    // ⚠️ Une formation peut courir PENDANT une convalescence : c'est même le bon moment,
-    // et on ne punit jamais un blessé en lui faisant attendre deux fois.
-    if (adv.training) return false; // une seule à la fois
-    const next: Adventurer = {
-      ...adv,
-      // ⚠️ La strate VISÉE, pas celle qu’il a : `path` porte N classes, la promotion
-      // en vise donc la N-ième. C’est elle qui fixe la durée (×2 par rang).
-      training: {
-        classId,
-        until: Date.now() + trainMsFor(pantheonLevel.value, adv.path.length),
-      },
-    };
-    await persist(userId, {
-      adventurers: advList.value.map((a) => (a.id === advId ? next : a)),
-    });
-    return true;
-  }
-
   /** Envoie un convoi. ⚠️ Le POI est RETIRÉ de la carte au départ, exactement comme pour
    *  le héros — c'est ce qui fait que caravanes et héros se disputent les mêmes lieux. */
   /** Applique les formations arrivées à terme ET la forge de l'Équipementier. ⚠️ Appelé
@@ -2738,11 +2690,7 @@ export const useCharacterStore = defineStore('character', () => {
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
-    return advProgressOf(before, advs, {
-      guildLevel: pantheonLevel.value,
-      trainingLevel: pantheonLevel.value,
-      now: Date.now(),
-    });
+    return advProgressOf(before, advs);
   }
 
   /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et
@@ -2919,9 +2867,6 @@ export const useCharacterStore = defineStore('character', () => {
     pantheonLevel,
     comptoirLevel,
     kennelLevel,
-    recruitChoices,
-    recruitAdventurer,
-    promoteAdventurer,
     settleAdventurers,
     sendCaravan,
     claimCaravan,

@@ -642,7 +642,7 @@
       </button>
     </div>
 
-    <GuildPanel :open="guildOpen" :mode="guildMode" @close="guildOpen = false" />
+    <GuildPanel :open="guildOpen" @close="guildOpen = false" />
 
     <!-- ⚠️ LA PAGE NE GARDE QUE CE QUI SE LIT D'UN COUP D'ŒIL. Espionnage, dernier
          siège et champ de bataille vivaient en panneaux empilés sous l'enceinte, loin
@@ -655,7 +655,7 @@
       v-model:slot="plotSlot"
       :hero-level="heroLevel"
       :now="now"
-      @open-guild="(m) => openGuild(m)"
+      @open-guild="openGuild"
     />
 
     <!-- Feuille d'une structure de défense, ouverte depuis le dessin. -->
@@ -994,7 +994,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
-import { canPromoteNow, advAvailable, advTitle } from '@/lib/adventurers';
+import { advAvailable, advTitle } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { normalizeTalents } from '@/lib/talents';
@@ -1471,7 +1471,6 @@ const yard = computed<YardCell[]>(() => {
       level: b?.level ?? 0,
       ready: b ? buildingAccrued(b, now.value, mult) > 0 : false,
       damaged: false,
-      star: b?.typeId === 'pantheon' && promoAvailable.value > 0,
       onClick: () => (plotSlot.value = i),
     });
   }
@@ -1511,27 +1510,9 @@ const plotSlot = ref<number | null>(null);
 
 // ── Guilde d’aventuriers ──
 const guildOpen = ref(false);
-/** Ouvrir le panneau de la Guilde, éventuellement DIRECTEMENT sur le recrutement —
- *  c'est le cas quand un niveau vient d'ouvrir une place. */
-const guildMode = ref<'recruit' | null>(null);
-function openGuild(mode?: 'recruit') {
-  guildMode.value = mode ?? null;
+function openGuild() {
   guildOpen.value = true;
 }
-const guildLevel = computed(() => char.pantheonLevel);
-/** Promotions en attente : un jalon qu'on ne doit pas rater, donc une ⭐ sur la Guilde.
- *  ⚠️ Une formation EN COURS n'en est pas une : la décision est déjà prise, et proposer
- *  de promouvoir quelqu'un qui est justement en train de l'être n'aurait aucun sens. */
-const promoAvailable = computed(
-  () =>
-    char.advList.filter((a) =>
-      canPromoteNow(a, {
-        guildLevel: guildLevel.value,
-        trainingLevel: char.pantheonLevel,
-        now: now.value,
-      }),
-    ).length,
-);
 const defOpen = ref<DefenseId | null>(null);
 const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) ?? null);
 /** Ce qu’un niveau de plus apporte à CETTE structure. ⚠️ On passe l’intervalle RÉEL

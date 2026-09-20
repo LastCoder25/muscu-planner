@@ -343,8 +343,7 @@ import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
 const emit = defineEmits<{
   'update:slot': [number | null];
-  /** `'recruit'` = ouvrir directement sur le choix de classe (une place vient de s'ouvrir). */
-  'open-guild': [mode?: 'recruit'];
+  'open-guild': [];
 }>();
 const char = useCharacterStore();
 const auth = useAuthStore();
@@ -563,10 +562,10 @@ async function doUpgrade(slot: number) {
     kind: 'unlock',
     emoji: '🛕',
     title: 'Une place de plus au Panthéon',
-    subtitle: 'Un aventurier attend son affectation',
+    subtitle: 'Un champion de plus peut être engagé',
     rarity: 'epic',
   });
-  emit('open-guild', 'recruit');
+  emit('open-guild');
 }
 function collectAll() {
   const uid = auth.user?.id;

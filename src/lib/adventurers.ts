@@ -1658,8 +1658,6 @@ export interface AdvProgress {
   rankName: string;
   /** Sa rareté de classe — la teinte de la célébration. */
   rarity: Rarity;
-  /** Une promotion s’ouvre MAINTENANT, et elle ne s’ouvrait pas avant. */
-  promoted: boolean;
 }
 
 /**
@@ -1668,17 +1666,14 @@ export interface AdvProgress {
  * ⚠️ Le niveau d’un aventurier est CACHÉ : sans annonce, une mission qui lui fait gagner
  * une étoile ne se voit qu’en rouvrant la Guilde et en regardant une barre.
  *
- * ⚠️ `promoted` EST UN FRANCHISSEMENT, pas un état — et c’est tout ce qui empêche la
- * feuille de promotion de se rouvrir à CHAQUE cargaison pour quelqu’un qu’on a déjà
- * décidé de ne pas promouvoir. Ce qui ouvre la fenêtre, c’est que CETTE mission l’a
- * rendue possible. Le badge ⭐ de la Guilde reste le rappel permanent, lui.
- *
- * Pur : `now` est toujours passé, jamais lu de l’horloge.
+ * ⚠️ ELLE N’ANNONCE PLUS DE PROMOTION (v0.951) : l’arbre de classes est parti avec les
+ * aventuriers. Un champion ne se promeut pas — ses DOUBLONS le réveillent, et c’est
+ * l’invocation qui l’annonce. Il ne reste donc que ce qui bouge vraiment : le rang et
+ * l’étoile.
  */
 export function advProgressOf(
   before: readonly Adventurer[],
   after: readonly Adventurer[],
-  ctx: { guildLevel: number; trainingLevel: number; now: number },
 ): AdvProgress[] {
   const was = new Map(before.map((a) => [a.id, a]));
   const out: AdvProgress[] = [];
@@ -1688,8 +1683,7 @@ export function advProgressOf(
     if (!b) continue;
     const av = advRank(b);
     const ap = advRank(a);
-    const promoted = canPromoteNow(a, ctx) && !canPromoteNow(b, ctx);
-    if (ap.tier <= av.tier && !promoted) continue;
+    if (ap.tier <= av.tier) continue;
     out.push({
       id: a.id,
       name: a.name,
@@ -1700,7 +1694,6 @@ export function advProgressOf(
       rankEmoji: ap.emoji,
       rankName: ap.name,
       rarity: advRarity(a),
-      promoted,
     });
   }
   return out;

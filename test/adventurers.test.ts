@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { CHAMPIONS } from '@/data/champions';
 import {
   ADV_CLASSES,
   PROMO_LEVELS,
@@ -501,7 +502,7 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
     const ev = advProgressOf([at('a', DEB)], [at('a', DEB + 2)], CTX);
     expect(ev).toHaveLength(1);
     expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
-    expect(ev[0]).toMatchObject({ id: 'a', rankUp: false, promoted: false });
+    expect(ev[0]).toMatchObject({ id: 'a', rankUp: false });
     expect(ev[0]!.star).toBe(2);
   });
 
@@ -525,35 +526,29 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
     expect(ev[0]!.rankName).toBe(characterRank(FIN).name);
   });
 
-  it('⚠️ SANS PROMOTION, franchir le rang suivant n’annonce AUCUN rang (v0.834)', () => {
-    const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX);
+  it('⚠️ AU PLAFOND DE SA CLASSE, un aventurier n’annonce plus RIEN', () => {
+    // ⚠️ RÉÉCRIT (v0.951) : ces trois tests décrivaient la PROMOTION, qui est partie avec
+    // l'arbre de classes. Ce qui reste vrai, et qui compte : le rang affiché est plafonné
+    // par la classe (v0.834), donc franchir un palier de niveau sans pouvoir progresser
+    // n'annonce rien — il ne s'est effectivement rien passé.
+    expect(advProgressOf([at('a', FIN - 1)], [at('a', FIN)])).toEqual([]);
+  });
+
+  it('⚠️ UN CHAMPION, LUI, continue de monter — son rang n’est pas borné par un chemin', () => {
+    // C'est ce qui remplace la promotion : on ne l'ÉLÈVE plus de classe en classe, son
+    // rang suit son niveau jusqu’au plafond de sa RARETÉ.
+    const champ = CHAMPIONS.find((c) => c.rarity === 'primordial')!;
+    const cha = (level: number) =>
+      make({ id: 'c', name: champ.name, path: [], championId: champ.id, level });
+    const ev = advProgressOf([cha(DEB)], [cha(DEB + 2)]);
     expect(ev).toHaveLength(1);
-    expect(ev[0]).toMatchObject({ rankUp: false, promoted: true });
-    expect(ev[0]!.rankName).toBe(characterRank(DEB).name);
+    expect(ev[0]!.to).toBeGreaterThan(ev[0]!.from);
   });
 
-  it('⚠️ `promoted` est un FRANCHISSEMENT, pas un état', () => {
-    // C'est tout ce qui empêche la feuille de promotion de se rouvrir à CHAQUE cargaison
-    // pour quelqu'un qu'on a déjà décidé de ne pas promouvoir.
-    expect(advProgressOf([at('a', FIN - 1)], [at('a', FIN)], CTX)[0]?.promoted).toBe(true);
-    expect(advProgressOf([at('a', FIN)], [at('a', FIN)], CTX)).toEqual([]);
-  });
-
-  it('une promotion se dit même sans le moindre cran gagné', () => {
-    // Cas réel : il était déjà au bon niveau mais PARTI EN CONVOI (donc pas promouvable).
-    // Il rentre, la promotion s'ouvre — sans qu'aucun cran ne bouge.
-    const ev = advProgressOf([at('a', FIN, { busyUntil: CTX.now + 60_000 })], [at('a', FIN)], CTX);
-    expect(ev).toHaveLength(1);
-    expect(ev[0]).toMatchObject({ promoted: true, rankUp: false });
-    expect(ev[0]!.to).toBe(ev[0]!.from);
-  });
-
-  it('⚠️ sans Centre de formation, on n’annonce AUCUNE promotion', () => {
-    // Le store la refuserait : promettre une fenêtre qui ne peut pas s'ouvrir est pire
-    // que se taire. La règle vit dans `canPromoteNow`, on ne la ré-écrit pas ici.
-    const ev = advProgressOf([at('a', FIN - 1)], [at('a', FIN)], { ...CTX, trainingLevel: 0 });
-    // ⚠️ RÉÉCRIT (v0.834) : sans promotion possible et sans rang gagné (il reste à ★★★★★ tant
-    // qu'il n'est pas promu), il n'y a plus rien à dire du tout.
+  it('rien à dire quand seule sa disponibilité change', () => {
+    // Un aventurier qui rentre de convoi n’a rien GAGNÉ : l’annonce ne parle que de
+    // progression, jamais d’état.
+    const ev = advProgressOf([at('a', FIN, { busyUntil: 2_000_000 })], [at('a', FIN)]);
     expect(ev).toEqual([]);
   });
 

@@ -313,3 +313,34 @@ export function grantChampion(
   };
   return { advs: [...advs, neuf], copies: 1, duplicate: false, manaBack: 0, deployed };
 }
+
+/**
+ * 🗑️ LE WIPE : les aventuriers d'AVANT les champions s'en vont, compensés en mana.
+ *
+ * ⚠️ **MESURÉ EN BASE AVANT DE DÉCIDER : le wipe ne détruit AUCUN investissement.** Les 21
+ * aventuriers des comptes réels n'ont **qu'une seule classe** — la première promotion tombe
+ * au niveau 11 (`PROMO_LEVELS`), le plus avancé est à 9. L'arbre de classes n'a donc jamais
+ * servi à personne, et c'est un argument de plus pour le remplacer plutôt que le compléter.
+ *
+ * ⚠️ **ET L'ÉQUIPEMENT SURVIT** : les pièces vivent dans `adv_gear.stock`, un aventurier
+ * n'en porte que les **ids**. Les 105 pièces des comptes réels sont rangées par LIGNÉE, et
+ * les 6 lignées ne bougent pas — un champion de lignée X porte les pièces de X
+ * (`canWearAdvGear` inchangé). Même chose pour les compagnons et les talents confiés.
+ *
+ * ⚠️ **UN CONVOI EN COURS N'EST PAS PERDU** (vérifié : deux en vol sur la base réelle).
+ * `caravanClaimRoster` filtre déjà les escortes introuvables et le rapport les affiche
+ * « Aventurier parti » (`gone`) : la cargaison s'encaisse, seule l'XP de l'escorte s'en va
+ * — et elle allait de toute façon disparaître avec eux.
+ *
+ * ⚠️ **IDEMPOTENT** : sans aucun legacy, il rend la MÊME référence et zéro mana.
+ */
+export function wipeLegacyAdventurers(advs: Adventurer[]): { advs: Adventurer[]; mana: number } {
+  const partants = advs.filter((a) => !a.championId);
+  if (!partants.length) return { advs, mana: 0 };
+  return {
+    advs: advs.filter((a) => !!a.championId),
+    // Un TIRAGE chacun : la compensation se dit dans la monnaie de ce qui les remplace,
+    // pas en or — on rend de quoi invoquer autant de champions qu'on perd de recrues.
+    mana: partants.length * GACHA.pullCost,
+  };
+}
