@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { sessionXp } from '@/lib/athlete';
 import { CARAVAN, caravanSlots, caravanSlowFor } from '@/lib/caravan';
 import { outfitterMsFor } from '@/lib/advGear';
-import { deployCap } from '@/lib/adventurers';
+import { engageCap } from '@/lib/adventurers';
 import {
   perLevelLabel,
   healBuildings,
@@ -419,7 +419,7 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     caravanserail: (l) => caravanSlots(l) * 1000 + (2 - caravanSlowFor(l)) * 100,
     // Déploiement ET vitesse de forge : le déploiement saute d'un cran tous les 2
     // niveaux, la forge gratte en continu — il suffit qu'UN des deux bouge.
-    pantheon: (l) => deployCap(l) * 1_000_000 - outfitterMsFor(l),
+    pantheon: (l) => engageCap(l) * 1_000_000 - outfitterMsFor(l),
   };
 
   it('chaque type de bâtiment déclare ce que son niveau change', () => {
@@ -467,15 +467,15 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     // l'équipe complète (CARAVAN.escortMax = 4), avec de quoi faire tourner les blessés.
     for (let l = 1; l <= 100; l++) {
       expect(
-        deployCap(l),
+        engageCap(l),
         `niveau ${l} : plus de convois que d'aventuriers`,
       ).toBeGreaterThanOrEqual(caravanSlots(l));
     }
     for (let l = 18; l <= 100; l++) {
-      expect(deployCap(l) / caravanSlots(l), `niveau ${l}`).toBeGreaterThanOrEqual(3);
+      expect(engageCap(l) / caravanSlots(l), `niveau ${l}`).toBeGreaterThanOrEqual(3);
     }
     // Et le vivier finit par couvrir une escorte PLEINE sur chaque convoi.
-    expect(deployCap(100)).toBeGreaterThanOrEqual(caravanSlots(100) * CARAVAN.escortMax);
+    expect(engageCap(100)).toBeGreaterThanOrEqual(caravanSlots(100) * CARAVAN.escortMax);
   });
 });
 

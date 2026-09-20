@@ -18,7 +18,7 @@
 //
 // ⚠️ LE PRINCIPE QUI COMMANDE TOUT LE RESTE : « le sport fixe le PLAFOND, le travail
 // fixe le RYTHME ». Deux freins — le niveau du Panthéon (donc du joueur, donc du sport),
-// qui plafonne le niveau d'un champion ET combien on en DÉPLOIE (`deployCap`), et l'XP
+// qui plafonne le niveau d'un champion ET combien on en ENGAGE à la fois (`engageCap`), et l'XP
 // gagnée en mission. Le plafond doit rester EN RETRAIT pour un joueur peu sportif :
 // mesuré, le niveau d'un aventurier ÉGALE celui du joueur à chaque relevé — l'XP n'est
 // jamais le frein, le Panthéon l'est toujours.
@@ -1242,20 +1242,6 @@ export interface Adventurer {
    * cohabitent le temps de la bascule.
    */
   championId?: string;
-  /**
-   * 🗿 ENGAGÉ, ou en collection ?
-   *
-   * ⚠️ **C'EST LE SEUL PLAFOND D'EFFECTIF DU JEU**, et il est porteur. `guardUnits` fait
-   * défendre TOUT le vivier disponible : une collection illimitée sans plafond donnerait
-   * une base **imprenable** — le runaway relevé en v0.779 (le vivier croît ×7,3 du niveau
-   * 12 à 100 quand l'armée ne croît que ×1,8). Le Panthéon borne donc combien de champions
-   * sont engagés **à la fois** (`deployCap`, la formule de la Guilde reprise telle quelle).
-   *
-   * ⚠️ **IL VIT DANS `advUnavailableReason`, la SOURCE UNIQUE de la disponibilité** : un
-   * champion en collection est indisponible, donc les convois, les camps ET la défense le
-   * voient d'un coup, sans qu'aucun des quatre sites n'ait à s'en souvenir.
-   */
-  deployed?: boolean;
   /** Combien d'exemplaires on possède de ce champion. ⚠️ C'est ce compte qui porte l'Éveil
    *  (`awakenLevel`) : la PREMIÈRE copie est le champion, les suivantes le réveillent. */
   copies?: number;
@@ -1822,15 +1808,32 @@ export function advRoles(adv: Adventurer): AdvRole[] {
   return adv.path.map((id) => advClass(id)?.role).filter((r): r is AdvRole => !!r);
 }
 
-/** Effectif que la Guilde peut entretenir : 1 de base, +1 tous les 2 niveaux.
- *  ⚠️ Le niveau de la Guilde étant lui-même plafonné par celui du joueur, l’effectif
- *  reste indexé sur le SPORT — mais linéairement, là où la puissance du héros croît en
- *  ~L⁴. C’est précisément ce qui rend la boucle accessible à un joueur peu sportif. */
-export function deployCap(pantheonLevel: number): number {
+/**
+ * 🗿 COMBIEN DE CHAMPIONS PEUVENT AGIR **EN MÊME TEMPS** — 1 de base, +1 tous les 2
+ * niveaux de Panthéon.
+ *
+ * ⚠️ C'est un plafond **PAR ENGAGEMENT**, jamais un banc : toute la collection reste
+ * utilisable, et on choisit à chaque fois QUI part et QUI monte au rempart. Un plafond
+ * GLOBAL (v0.948→0.951) rendait mort-né le champion tiré en trop — l'inverse de ce qu'un
+ * gacha promet. Ce qui est borné, c'est ce qui AGIT ; ce qu'on POSSÈDE ne l'est pas.
+ *
+ * ⚠️ **IL RESTE PORTEUR, et c'est mesuré** : `guardUnits` fait défendre tout le vivier
+ * qu'on lui passe, et un groupe envoyé sur un camp n'a AUCUN maximum (`escortMax` ne vaut
+ * que pour les convois). Sans lui — tenue d'un siège, enceinte à niveau, sans héros —
+ * **11 % à 0 champion, 65 % à 5, 95 % à 10, 100 % à 20** au niveau 12 ; 51 % → 100 % à 40
+ * au niveau 30. Une collection illimitée rendrait la base imprenable, et **les convois n'y
+ * changent rien** : ils bornent le nombre de CONVOIS, pas la défense ni les camps.
+ *
+ * ⚠️ La formule est celle de la Guilde reprise TELLE QUELLE — déjà mesurée. Le niveau du
+ * Panthéon étant plafonné par celui du joueur, l'effectif reste indexé sur le SPORT, mais
+ * LINÉAIREMENT là où la puissance du héros croît en ~L⁴ : c'est ce qui garde la boucle
+ * accessible à un joueur peu sportif.
+ */
+export function engageCap(pantheonLevel: number): number {
   // ⚠️ Le `Math.max(0, …)` est DORMANT — un niveau de bâtiment vient de `buildingLevel`,
   // qui rend 0 au minimum, donc la mutation qui le retire survit. Il reste parce que c'est
-  // la formule de la Guilde reprise TELLE QUELLE : la retirer ferait diverger le
-  // déploiement de la courbe déjà mesurée, pour rien.
+  // la formule de la Guilde reprise TELLE QUELLE : la retirer ferait diverger l'effectif
+  // de la courbe déjà mesurée, pour rien.
   return 1 + Math.floor(Math.max(0, pantheonLevel) / 2);
 }
 
@@ -1852,45 +1855,25 @@ export function grantAdvXp(adv: Adventurer, xp: number, pantheonLevel: number): 
   return { ...adv, level, xp: pool };
 }
 
-/** 🗿 Occupe-t-il une PLACE DE DÉPLOIEMENT ?
- *
- *  ⚠️ **MÊME RÈGLE QUE `advUnavailableReason`, et elle en dérive** : un aventurier LEGACY
- *  (sans `championId`) n'est jamais mis au banc, donc il occupe bien une place. En écrire
- *  une seconde version ferait qu'on pourrait engager des champions au-delà du plafond tant
- *  qu'il reste des aventuriers d'avant — c'est-à-dire pendant toute la bascule. */
-export function isDeployed(adv: Adventurer): boolean {
-  return !adv.championId || adv.deployed === true;
-}
-
-/** Combien de places de déploiement sont prises. */
-export function deployedCount(advs: Adventurer[]): number {
-  return advs.filter(isDeployed).length;
-}
-
 /** Pourquoi un aventurier ne peut PAS partir — `null` s'il est disponible.
  *  ⚠️ SOURCE UNIQUE de la disponibilité : `advAvailable` en DÉRIVE. Un écran qui dit
  *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
- *  Ordre : sur la route, puis à l'infirmerie, puis en collection (le premier qui s'applique). */
-export type AdvUnavailable = 'busy' | 'hurt' | 'benched';
+ *  Ordre : sur la route, puis à l'infirmerie (le premier qui s'applique). */
+export type AdvUnavailable = 'busy' | 'hurt';
 export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
   if ((adv.busyUntil ?? 0) > now) return 'busy';
   if ((adv.hurtUntil ?? 0) > now) return 'hurt';
-  // 🗿 EN COLLECTION : il existe, il n'est simplement pas engagé. ⚠️ C'est le plafond du
-  // Panthéon (`deployCap`), et il passe par ICI plutôt que par chaque site d'envoi —
-  // sinon la défense (`guardUnits`, qui prend tout le vivier disponible) l'oublierait,
-  // et une collection illimitée rendrait la base imprenable.
-  // ⚠️ Un aventurier LEGACY (sans `championId`) n'est jamais mis au banc : il n'a pas de
-  // Panthéon, et le priver de mission serait le punir d'avoir existé avant la bascule.
-  if (!isDeployed(adv)) return 'benched';
+  // ⚠️ PLUS DE BANC ICI. Le plafond du Panthéon (`engageCap`) ne dit plus « ce champion
+  // n'existe pas pour le jeu » mais « on n'en engage que N à la fois » : il s'applique à
+  // l'ENGAGEMENT (taille d'un groupe, nombre de défenseurs au rempart), pas à la personne.
   return null;
 }
 export const ADV_UNAVAILABLE_LABEL: Record<AdvUnavailable, string> = {
   busy: '🧭 en route',
   hurt: '🤕 infirmerie',
-  benched: '🗿 en collection',
 };
 
-/** Disponible ? Ni en mission, ni à l'infirmerie, ni laissé en collection. */
+/** Disponible ? Ni en mission, ni à l'infirmerie. */
 export function advAvailable(adv: Adventurer, now: number): boolean {
   return advUnavailableReason(adv, now) === null;
 }
@@ -1909,10 +1892,9 @@ export function advStatus(adv: Adventurer, now: number): AdvStatus {
   return advUnavailableReason(adv, now) ?? 'free';
 }
 /** Les catégories dans l'ordre où on les propose : ce qui peut partir d'abord. */
-export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt', 'benched'];
+export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt'];
 export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
   free: '✅ déployés',
   busy: '🐫 en convoi',
   hurt: '🛏️ infirmerie',
-  benched: '🗿 en collection',
 };

@@ -14,7 +14,7 @@ import {
   advAvatar,
   advStats,
   advUnavailableReason,
-  deployCap,
+  engageCap,
   advTitle,
   championRarity,
   championSkillLevel,
@@ -230,42 +230,36 @@ describe('🏅 le VISAGE d’un champion (le 8ᵉ accesseur)', () => {
   });
 });
 
-describe('🗿 LE DÉPLOIEMENT — le seul plafond d’effectif du jeu', () => {
-  it('⚠️ UN CHAMPION EN COLLECTION EST INDISPONIBLE, donc invisible des QUATRE sites', () => {
-    // La règle vit dans `advUnavailableReason`, la SOURCE UNIQUE — donc les convois, les
-    // camps, la défense et l'écran la voient d'un coup. Posée à chaque site d'envoi, elle
-    // aurait été oubliée par `guardUnits` (qui prend tout le vivier disponible), et une
-    // collection illimitée rendrait la base imprenable (runaway v0.779).
-    const enCollection = { ...asAdv(primordial, 60), deployed: false };
-    expect(advUnavailableReason(enCollection, 0)).toBe('benched');
-    expect(advAvailable(enCollection, 0)).toBe(false);
-    const deploye = { ...asAdv(primordial, 60), deployed: true };
-    expect(advUnavailableReason(deploye, 0)).toBeNull();
-    expect(advAvailable(deploye, 0)).toBe(true);
+describe('🗿 L’ENGAGEMENT — le seul plafond d’effectif du jeu', () => {
+  it('⚠️ AUCUN BANC : un champion tiré est utilisable TOUT DE SUITE', () => {
+    // ⚠️ RÉÉCRIT (v0.958). Le plafond était posé sur la PERSONNE (`advUnavailableReason`
+    // rendait 'benched'), donc un champion tiré en trop était mort-né — l'inverse de ce
+    // qu'un gacha promet. Il borne désormais ce qui AGIT, pas ce qu'on possède.
+    const c = asAdv(primordial, 60);
+    expect(advUnavailableReason(c, 0)).toBeNull();
+    expect(advAvailable(c, 0)).toBe(true);
   });
 
-  it('⚠️ UN AVENTURIER LEGACY N’EST JAMAIS MIS AU BANC', () => {
-    // Il n'a pas de Panthéon : le priver de mission serait le punir d'avoir existé avant
-    // la bascule. Les deux systèmes cohabitent le temps de celle-ci.
+  it('⚠️ UN AVENTURIER LEGACY EST DISPONIBLE LUI AUSSI', () => {
     const a = refAdventurer(30);
-    expect(a.deployed).toBeUndefined();
     expect(advAvailable(a, 0)).toBe(true);
   });
 
-  it('les raisons gardent leur ORDRE : la route, puis l’infirmerie, puis le banc', () => {
+  it('les raisons gardent leur ORDRE : la route, puis l’infirmerie', () => {
     const c = asAdv(primordial, 60);
-    expect(advUnavailableReason({ ...c, busyUntil: 10, deployed: false }, 0)).toBe('busy');
-    expect(advUnavailableReason({ ...c, hurtUntil: 10, deployed: false }, 0)).toBe('hurt');
+    expect(advUnavailableReason({ ...c, busyUntil: 10 }, 0)).toBe('busy');
+    expect(advUnavailableReason({ ...c, hurtUntil: 10 }, 0)).toBe('hurt');
+    expect(advUnavailableReason({ ...c, busyUntil: 10, hurtUntil: 10 }, 0)).toBe('busy');
   });
 
-  it('`deployCap` reprend la formule de la Guilde TELLE QUELLE', () => {
+  it('`engageCap` reprend la formule de la Guilde TELLE QUELLE', () => {
     // ⚠️ Aucune formule nouvelle : c'est ce qui la rend déjà mesurée et vivante jusqu'au
     // niveau 100 (+1 tous les 2 niveaux, 51 au niveau 100).
-    expect(deployCap(0)).toBe(1);
-    expect(deployCap(1)).toBe(1);
-    expect(deployCap(2)).toBe(2);
-    expect(deployCap(30)).toBe(16);
-    expect(deployCap(100)).toBe(51);
-    for (let L = 1; L <= 100; L++) expect(deployCap(L)).toBeGreaterThanOrEqual(deployCap(L - 1));
+    expect(engageCap(0)).toBe(1);
+    expect(engageCap(1)).toBe(1);
+    expect(engageCap(2)).toBe(2);
+    expect(engageCap(30)).toBe(16);
+    expect(engageCap(100)).toBe(51);
+    for (let L = 1; L <= 100; L++) expect(engageCap(L)).toBeGreaterThanOrEqual(engageCap(L - 1));
   });
 });

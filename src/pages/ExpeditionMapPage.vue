@@ -675,7 +675,12 @@ import {
   FACTION_LABEL,
   woundRemainingMs,
 } from '@/lib/raid';
-import { ADV_UNAVAILABLE_LABEL, advAvailable, advUnavailableReason } from '@/lib/adventurers';
+import {
+  ADV_UNAVAILABLE_LABEL,
+  advAvailable,
+  advUnavailableReason,
+  engageCap,
+} from '@/lib/adventurers';
 import { characterRank, rankStarStr } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
@@ -970,8 +975,11 @@ const risk = computed(() => {
     b.defenses,
     heroLevel.value,
     inc,
-    { hero: heroNow, guard: guardUnits(heroLevel.value, freeStable.value, compCtx.value) },
-    { hero: heroNow, guard: guardUnits(heroLevel.value, restants, compCtx.value) },
+    {
+      hero: heroNow,
+      guard: guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value),
+    },
+    { hero: heroNow, guard: guardUnits(heroLevel.value, restants, cap.value, compCtx.value) },
     { backAt: coarseNow.value + caravanMin.value * 60_000, raidAt: raidAt.value },
   );
 });
@@ -986,7 +994,7 @@ const riskHero = computed(() => {
   if (!b || !inc || !offerHero.value || selectedCamp.value) return null;
   const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
   if (!heroNow) return null;
-  const g = guardUnits(heroLevel.value, freeStable.value, compCtx.value);
+  const g = guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value);
   return departureRisk(
     b.defenses,
     heroLevel.value,
@@ -1006,6 +1014,10 @@ const freeStable = computed(() => {
   const ids = new Set(freeKey.value.split('|'));
   return char.advList.filter((a) => ids.has(a.id));
 });
+/** 🗿 COMBIEN DE CHAMPIONS ON ENGAGE À LA FOIS (`engageCap`) — la taille maximale d'un
+ *  groupe ou d'une escorte, et le nombre de défenseurs au rempart. ⚠️ Nommé une seule fois :
+ *  le bouton d'envoi, le risque de départ et le store doivent parler du même plafond. */
+const cap = computed(() => engageCap(char.pantheonLevel));
 /** Créneaux de convoi libres — ⚠️ UN SEUL pool avec les groupes partis SANS le héros
  *  (`convoySlotsFree`, même règle que le store). */
 const vansLeft = computed(() =>
@@ -1201,10 +1213,13 @@ const partyRisk = computed(() => {
     b.defenses,
     heroLevel.value,
     inc,
-    { hero: heroNow, guard: guardUnits(heroLevel.value, freeStable.value, compCtx.value) },
+    {
+      hero: heroNow,
+      guard: guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value),
+    },
     {
       hero: partyHeroOn.value ? null : heroNow,
-      guard: guardUnits(heroLevel.value, restants, compCtx.value),
+      guard: guardUnits(heroLevel.value, restants, cap.value, compCtx.value),
     },
     { backAt: coarseNow.value + partyMin.value * 60_000, raidAt: raidAt.value },
   );
@@ -1213,7 +1228,13 @@ const partyRisk = computed(() => {
  *  sans le héros, un groupe prend un créneau de convoi. */
 const partySendBlock = computed(() =>
   selected.value
-    ? partySendBlocker(selected.value, partyAdvs.value.length, partyHeroOn.value, vansLeft.value)
+    ? partySendBlocker(
+        selected.value,
+        partyAdvs.value.length,
+        partyHeroOn.value,
+        vansLeft.value,
+        cap.value,
+      )
     : null,
 );
 /** Sans le héros et plus aucun créneau : on le DIT avant même qu'on choisisse quelqu'un. */

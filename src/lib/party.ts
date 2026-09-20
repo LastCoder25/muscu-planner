@@ -52,30 +52,38 @@ export function partyLegMin(
  *  un seul pool avec les convois) : c'est ce qui borne le NOMBRE de groupes en parallèle,
  *  donc l'or et les pierres par jour. Le héros est à lui seul sa limite.
  *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
-export type PartySendBlock = 'notTarget' | 'empty' | 'slots';
+export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
   hero: boolean,
   slotsFree: number,
+  cap: number,
 ): PartySendBlock | null {
   if (!PARTY_TARGETS.has(poi.type)) return 'notTarget';
   if (!hero && escortCount <= 0) return 'empty';
   if (!hero && slotsFree <= 0) return 'slots';
+  // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
+  // ⚠️ Il vit ICI et non sur la personne (plus de banc) — mais il doit bien mordre quelque
+  // part : un groupe sans maximum est le seul endroit du jeu où l'effectif entier pourrait
+  // partir d'un coup, et c'est ce qui rendrait la collection décisive.
+  if (escortCount > cap) return 'tooMany';
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   notTarget: 'on n’envoie pas de groupe sur ce lieu',
   empty: 'le groupe est vide',
   slots: 'tous les créneaux de convoi sont pris',
+  tooMany: 'trop de champions pour ton Panthéon',
 };
 export function canSendParty(
   poi: Poi,
   escortCount: number,
   hero: boolean,
   slotsFree: number,
+  cap: number,
 ): boolean {
-  return partySendBlocker(poi, escortCount, hero, slotsFree) === null;
+  return partySendBlocker(poi, escortCount, hero, slotsFree, cap) === null;
 }
 
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.

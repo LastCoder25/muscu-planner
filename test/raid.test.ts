@@ -13,6 +13,7 @@ import {
   earlyThreatMult,
   resolveRaid,
   guardUnits,
+  rampartGuard,
   adventurerPowers,
   companionOptions,
   autoCompanions,
@@ -101,7 +102,7 @@ import {
 import { combatPower, type Combatant } from '@/lib/combat';
 import { talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
-import { PROMO_LEVELS, deployCap, type Adventurer } from '@/lib/adventurers';
+import { PROMO_LEVELS, engageCap, type Adventurer } from '@/lib/adventurers';
 import {
   companionEffects,
   refChampionAdv,
@@ -136,7 +137,7 @@ function hero(L: number): Combatant {
  *  contre 88 % avec un vivier promu — le garde-fou du plafond mesurait un joueur qui
  *  n’existe pas, et tant que la cour ne décidait rien ça ne se voyait pas. */
 function rosterOf(playerLevel: number): Adventurer[] {
-  return Array.from({ length: deployCap(playerLevel) }, (_, i) => ({
+  return Array.from({ length: engageCap(playerLevel) }, (_, i) => ({
     ...refChampionAdv(Math.max(1, playerLevel - (i % 6)), i),
     id: `a${i}`,
     name: `A${i}`,
@@ -159,7 +160,7 @@ function holdRate(
       defenses: defs(defLevel, defLevel),
       playerLevel,
       hero: heroHome ? hero(playerLevel) : null,
-      guard: guardUnits(playerLevel, advs, {
+      guard: guardUnits(playerLevel, advs, 99, {
         now: 0,
         kennelLevel: defLevel,
         familiars: [],
@@ -851,7 +852,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // compagnon ne profite de rien.
     const f = fam('loup', 'damage_pct', 40);
     const advs = [adv('a', 'loup'), adv('b')];
-    const u = guardUnits(26, advs, ctx([f], 12));
+    const u = guardUnits(26, advs, 99, ctx([f], 12));
     expect(u).toHaveLength(2);
     expect(u[0]!.damage).toBeGreaterThan(u[1]!.damage);
   });
@@ -862,8 +863,8 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // imprenable : chacun reste au niveau d’UN aventurier.
     const fams = Array.from({ length: 10 }, (_, k) => fam(`f${k}`, 'damage_pct', 40));
     const advs = fams.map((f, k) => adv(`a${k}`, f.id));
-    const u = guardUnits(26, advs, ctx(fams, 100));
-    const seul = guardUnits(26, [advs[0]!], ctx([fams[0]!], 100))[0]!;
+    const u = guardUnits(26, advs, 99, ctx(fams, 100));
+    const seul = guardUnits(26, [advs[0]!], 99, ctx([fams[0]!], 100))[0]!;
     for (const x of u) expect(x.damage).toBe(seul.damage);
   });
 
@@ -879,7 +880,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // « on recrute un aventurier tous les 2 lvl », donc on doit pouvoir en équiper un
     // tous les 2 lvl — sinon le vivier grandit plus vite que ce qu’on sait armer.
     expect(companionSlots(0)).toBe(0);
-    for (let l = 1; l <= 100; l++) expect(companionSlots(l)).toBe(deployCap(l));
+    for (let l = 1; l <= 100; l++) expect(companionSlots(l)).toBe(engageCap(l));
   });
 
   it('⚠️ LE RANG MAXIMAL SUIT CE QU’ON PEUT DROPPER, plus la table de la Guilde', () => {
@@ -1216,7 +1217,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     const brut = fam('a', 'damage_pct', 40);
     const dresse = fam('a', 'damage_pct', 40, { xp: famXpForLevel(40) });
     const advs = [adv('x', 'a')];
-    const u = (f: Item, k: number) => guardUnits(26, advs, ctx([f], k))[0]!.damage;
+    const u = (f: Item, k: number) => guardUnits(26, advs, 99, ctx([f], k))[0]!.damage;
     expect(u(dresse, 50)).toBeGreaterThan(u(brut, 50));
     expect(u(dresse, 2)).toBe(u(dresse, 50));
   });
@@ -1245,8 +1246,8 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     const frais = fam('loup', 'damage_pct', 40);
     const lasse = fam('loup', 'damage_pct', 40, { fatigueUntil: NOW + 3600_000 });
     const advs = [adv('a', 'loup')];
-    const d = (f: Item) => guardUnits(26, advs, ctx([f], 50))[0]!.damage;
-    const nu = guardUnits(26, [adv('a')], ctx([], 50))[0]!.damage;
+    const d = (f: Item) => guardUnits(26, advs, 99, ctx([f], 50))[0]!.damage;
+    const nu = guardUnits(26, [adv('a')], 99, ctx([], 50))[0]!.damage;
     expect(d(lasse)).toBeLessThan(d(frais));
     // …mais il apporte ENCORE quelque chose : on ne perd jamais ce qu'on a élevé,
     // sinon personne n'engagerait ses bons familiers (règle v0.663).
@@ -1316,7 +1317,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // La « meute du chenil » disparaît avec la garnison : elle existait pour donner un
     // porteur au bonus du bâtiment quand le vivier était vide. Un compagnon étant
     // attaché à un homme, un joueur sans Guilde n’a ni l’un ni l’autre.
-    expect(guardUnits(26, [], ctx([fam('loup', 'damage_pct', 40)], 50))).toEqual([]);
+    expect(guardUnits(26, [], 99, ctx([fam('loup', 'damage_pct', 40)], 50))).toEqual([]);
   });
 });
 describe('🎓 UN SEUL DRESSAGE PAR FAMILIER (v0.805)', () => {
@@ -2677,7 +2678,7 @@ describe('🛡️ LE RENFORT DE SIÈGE D’UN DÉFENSEUR (v0.801, recalibré v0.
   // ⚠️ Il vit au SIÈGE seul : la calibration mesurée des embuscades n’en voit rien.
   it('ses PV et ses dégâts de siège valent ceux de la route × guardSiegeK', () => {
     const adv = refChampionAdv(40, 0);
-    const [g] = guardUnits(40, [adv], {
+    const [g] = guardUnits(40, [adv], 99, {
       now: 0,
       kennelLevel: 40,
       familiars: [],
@@ -2707,7 +2708,12 @@ describe('🏥 infirmerie des aventuriers', () => {
     for (let i = 0; i < 80; i++) {
       const raid = rollRaid(i * 7919 + 13, L, 0, 0);
       const rep = resolveRaid(
-        { defenses: defs(12, 12), playerLevel: L, hero: hero(L), guard: guardUnits(L, advs, ctx0) },
+        {
+          defenses: defs(12, 12),
+          playerLevel: L,
+          hero: hero(L),
+          guard: guardUnits(L, advs, 99, ctx0),
+        },
         raid,
         0,
         true,
@@ -2753,5 +2759,76 @@ describe('🏥 infirmerie des aventuriers', () => {
       10,
     );
     expect(list.map((x) => x.id)).toEqual([b!.id, a!.id]);
+  });
+});
+
+describe('🗿 LE PLAFOND D’ENGAGEMENT — ce qui AGIT est borné, pas ce qu’on possède', () => {
+  const ctx0 = { now: 0, kennelLevel: 0, familiars: [], talents: [], advGear: [] };
+  /** Un vivier de n champions de niveaux DÉCROISSANTS : le plus fort en dernier, pour que
+   *  « garder les n premiers » et « garder les n plus forts » ne se confondent pas. */
+  const vivier = (n: number, lvl = 40) =>
+    Array.from({ length: n }, (_, i) => ({
+      ...refChampionAdv(Math.max(1, lvl - (n - 1 - i) * 3), i),
+      id: `p${i}`,
+      name: `P${i}`,
+    }));
+
+  it('ne coupe RIEN tant que le vivier tient dans le plafond', () => {
+    const v = vivier(4);
+    expect(rampartGuard(v, 4, ctx0)).toBe(v);
+    expect(rampartGuard(v, 9, ctx0)).toBe(v);
+  });
+
+  it('⚠️ GARDE LES PLUS FORTS, pas les premiers venus', () => {
+    // Un `slice` nu prendrait les premiers du vivier — donc l'ordre de recrutement
+    // déciderait de qui tient les murs, et le meilleur champion resterait à la porte.
+    const v = vivier(8);
+    const pow = adventurerPowers(v, ctx0);
+    const gardes = rampartGuard(v, 3, ctx0);
+    expect(gardes).toHaveLength(3);
+    const dehors = v.filter((a) => !gardes.includes(a));
+    const pire = Math.min(...gardes.map((a) => pow.get(a.id)!));
+    for (const a of dehors) expect(pow.get(a.id)!).toBeLessThanOrEqual(pire);
+  });
+
+  it('⚠️ TRI STABLE : recruter quelqu’un ne rebat pas la garnison en silence', () => {
+    // À puissance égale on départage par id, jamais par l'ordre du vivier.
+    const v = vivier(6, 20).map((a, i) => ({ ...a, ...refChampionAdv(20, i % 2), id: `p${i}` }));
+    const a = rampartGuard(v, 3, ctx0).map((x) => x.id);
+    const b = rampartGuard([...v].reverse(), 3, ctx0).map((x) => x.id);
+    expect(a).toEqual(b);
+  });
+
+  it('⚠️ `guardUnits` APPLIQUE la coupe — c’est LÀ que l’anti-runaway tient', () => {
+    // La collection est illimitée (un gacha), donc si le combat prenait tout le vivier,
+    // la base deviendrait imprenable : mesuré, 11 % de tenue à 0 champion contre 100 % à
+    // 20 au niveau 12. La coupe vit au point de passage unique du combat.
+    expect(guardUnits(40, vivier(80), 5, ctx0)).toHaveLength(5);
+    expect(guardUnits(40, vivier(3), 5, ctx0)).toHaveLength(3);
+  });
+
+  it('⚠️ UN VIVIER IMMENSE NE CHANGE RIEN À LA BATAILLE, au-delà du plafond', () => {
+    // La garantie de bout en bout : 80 champions et les 5 retenus livrent EXACTEMENT le
+    // même siège. C'est ce qui rend la collection sans danger pour l'équilibrage.
+    const L = 40;
+    const grand = vivier(80, L);
+    const retenus = rampartGuard(grand, 5, ctx0);
+    const raid = rollRaid(4242, L, 0, 0);
+    const run = (advs: Adventurer[]) =>
+      resolveRaid(
+        {
+          defenses: defs(L, L),
+          playerLevel: L,
+          hero: hero(L),
+          guard: guardUnits(L, advs, 5, ctx0),
+        },
+        raid,
+        0,
+        true,
+      );
+    const a = run(grand);
+    const b = run(retenus);
+    expect(a.held).toBe(b.held);
+    expect(a.wallLeft).toBe(b.wallLeft);
   });
 });

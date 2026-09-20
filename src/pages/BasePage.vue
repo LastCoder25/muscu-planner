@@ -989,7 +989,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
-import { advAvailable, advTitle } from '@/lib/adventurers';
+import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { normalizeTalents } from '@/lib/talents';
@@ -1026,6 +1026,7 @@ import {
   assaultPower,
   defenseBreakdown,
   guardUnits,
+  rampartGuard,
   heroDefends,
   siegeHoldChance,
   defensePower,
@@ -1628,17 +1629,29 @@ const heroBack = computed(() =>
 );
 const heroForDefense = computed(() => (heroBack.value ? (props.hero ?? null) : null));
 /** LA GARNISON PRÉSENTE : les aventuriers qui ne sont ni en convoi, ni à l’infirmerie,
- *  ni en collection, épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
+ *  épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
  *  la MÊME fonction que le store donne à `resolveRaid` : le panneau et la bataille ne
  *  peuvent pas se contredire. */
 /** Les aventuriers qui tiendraient la brèche MAINTENANT. Nommés une seule fois : le
- *  renseignement, le panneau et le combat doivent parler des mêmes. */
-const guardAdvs = computed(() => char.advList.filter((a) => advAvailable(a, coarseNow.value)));
-const guardNow = computed(() => guardUnits(heroLevel.value, guardAdvs.value, compCtx.value));
+ *  renseignement, le panneau et le combat doivent parler des mêmes.
+ *  ⚠️ COUPÉS au plafond du Panthéon (`rampartGuard`), comme le fait le store avant la
+ *  bataille : sans ça, l'écran listerait des défenseurs que le combat ne retient pas. */
+const guardAdvs = computed(() =>
+  rampartGuard(
+    char.advList.filter((a) => advAvailable(a, coarseNow.value)),
+    engageCap(char.pantheonLevel),
+    compCtx.value,
+  ),
+);
+const guardNow = computed(() =>
+  guardUnits(heroLevel.value, guardAdvs.value, engageCap(char.pantheonLevel), compCtx.value),
+);
 /** LA GARNISON AU COMPLET : tout le vivier, blessés compris — ils rentreront. C’est un
  *  PLAFOND, pas une prévision, et c’est précisément ce qu’on abandonne en envoyant
  *  quelqu’un ailleurs. */
-const guardFull = computed(() => guardUnits(heroLevel.value, char.advList, compCtx.value));
+const guardFull = computed(() =>
+  guardUnits(heroLevel.value, char.advList, engageCap(char.pantheonLevel), compCtx.value),
+);
 /** ⚠️ LE PANNEAU SE MESURE UNE FOIS PAR MINUTE, pas à chaque seconde. Le Monte-Carlo
  *  coûte ~66 ms (5 ablations), et `garrison` ne dépend de `now` que par la FATIGUE des
  *  familiers — une fonction en escalier qui change quelques fois par heure. Le brancher

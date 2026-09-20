@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 import { BUILDING_TYPES } from '@/lib/buildings';
 import { caravanSlots, caravanSlowFor } from '@/lib/caravan';
-import { deployCap } from '@/lib/adventurers';
+import { engageCap } from '@/lib/adventurers';
 import { outfitterMsFor } from '@/lib/advGear';
 
 describe('aperçu des prochains niveaux d’un bâtiment', () => {
@@ -22,7 +22,7 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
     // ⚠️ Les DEUX leviers du Panthéon, pas seulement le plus visible : une moitié du
     // bâtiment annoncée figée se lirait comme un niveau mort.
     const pan = buildingPreview('pantheon', 8, 0)[0]!;
-    expect(pan.text).toContain(String(deployCap(8)));
+    expect(pan.text).toContain(String(engageCap(8)));
     expect(pan.text).toContain(String(Math.round(outfitterMsFor(8) / 60000)));
   });
 

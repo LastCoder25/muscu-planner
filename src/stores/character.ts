@@ -116,6 +116,7 @@ import {
   advHealCost,
   siegeXp,
   guardUnits,
+  rampartGuard,
   emptyBase,
   defenseType,
   defenseLevel,
@@ -155,7 +156,7 @@ import {
   advProgressOf,
   advRarity,
   grantAdvXp,
-  deployCap,
+  engageCap,
   type Adventurer,
 } from '@/lib/adventurers';
 import {
@@ -957,7 +958,6 @@ export const useCharacterStore = defineStore('character', () => {
     const tirage = rollChampion(Math.random, cur.gacha);
     const g = grantChampion(cur.adventurers ?? [], tirage.champion, {
       id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-      deployCap: deployCap(pantheonLevel.value),
     });
     await persist(userId, {
       mana: cur.mana - GACHA.pullCost + g.manaBack,
@@ -1933,13 +1933,20 @@ export const useCharacterStore = defineStore('character', () => {
     // formation). Sans eux, il ne reste que le mur et les tourelles.
     // ⚠️ LES DÉFENSEURS SONT NOMMÉS UNE FOIS : le combat et l’XP doivent parler des MÊMES
     // aventuriers. Les reconstruire deux fois, c’est laisser les deux listes diverger.
-    const defenders = advList.value.filter((a) => advAvailable(a, now));
+    // ⚠️ LA COUPE EST FAITE ICI, pas seulement dans `guardUnits` : l'XP de siège est
+    // versée à `defenders` juste en dessous, et sans elle tout le vivier disponible
+    // apprendrait d'une bataille que seuls quelques-uns ont livrée.
+    const defenders = rampartGuard(
+      advList.value.filter((a) => advAvailable(a, now)),
+      engageCap(pantheonLevel.value),
+      cctx,
+    );
     const report = resolveRaid(
       {
         defenses: t.base.defenses,
         playerLevel: ctx.playerLevel,
         hero: home ? ctx.hero : null,
-        guard: guardUnits(ctx.playerLevel, defenders, cctx),
+        guard: guardUnits(ctx.playerLevel, defenders, engageCap(pantheonLevel.value), cctx),
       },
       t.dueRaid,
       now,
@@ -2589,7 +2596,11 @@ export const useCharacterStore = defineStore('character', () => {
     const escort = escortIds
       .map((id) => advList.value.find((a) => a.id === id))
       .filter((a): a is Adventurer => !!a && advAvailable(a, now));
-    if (escort.length !== escortIds.length || !canSendCaravan(poi, escort)) return false;
+    if (
+      escort.length !== escortIds.length ||
+      !canSendCaravan(poi, escort, engageCap(pantheonLevel.value))
+    )
+      return false;
 
     const seed = (now ^ (poi.id.length * 2654435761)) >>> 0 || 1;
     const van = startCaravan(
@@ -2726,6 +2737,7 @@ export const useCharacterStore = defineStore('character', () => {
       escort.length,
       !!hero,
       convoySlotsFree(comptoirLevel.value, [...caravanList.value, ...partyList.value], now),
+      engageCap(pantheonLevel.value),
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé

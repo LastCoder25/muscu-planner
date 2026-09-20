@@ -3,13 +3,11 @@
     <q-card class="guild-card">
       <div class="g-head">
         <span class="g-title font-display">🏅 Mes champions</span>
-        <!-- ⚠️ CE QUI SE COMPTE ICI, C'EST LE DÉPLOIEMENT, pas la collection : un champion
-             en collection n'occupe aucune place (`isDeployed`). Avant, le compteur opposait
-             la collection ENTIÈRE au plafond — il affichait « 5/3 ». -->
-        <span class="g-count">{{ deployed }}/{{ maxRoster }}</span>
-        <span v-if="roster.length > deployed" class="g-count g-count-sub"
-          >· {{ roster.length }} en tout</span
-        >
+        <!-- 🗿 LA COLLECTION D'ABORD, le plafond ensuite : depuis la v0.958 il n'y a plus de
+             banc — tout champion est utilisable, et le Panthéon ne borne que combien on en
+             engage À LA FOIS. Opposer les deux (« 5/3 ») laisserait croire l'inverse. -->
+        <span class="g-count">{{ roster.length }}</span>
+        <span class="g-count g-count-sub">· {{ maxRoster }} engagés à la fois</span>
       </div>
 
       <p v-if="!pantheonLevel" class="g-empty">
@@ -61,13 +59,15 @@
         <template v-if="guildTab === 'roster' || !roster.length">
           <!-- ⚠️ Le RECRUTEMENT et la PROMOTION ont disparu avec l'arbre de classes
              (v0.951) : on n'élève plus une recrue, on INVOQUE un champion et ses doublons
-             le réveillent. Il ne reste donc qu'un état : le déploiement est-il au complet ?
-             ⚠️ Il se DIT, au lieu de laisser le bouton d'invocation se griser sans raison —
-             un champion de plus entrerait en collection. -->
-          <div v-if="deployed >= maxRoster" class="g-note g-full">
-            Déploiement au complet ({{ deployed }}/{{ maxRoster }}). Les champions invoqués au-delà
-            attendent <b>en collection</b> — <b>monte le Panthéon d’un niveau</b> pour en engager un
-            de plus.
+             le réveillent.
+             ⚠️ ON DIT CE QUE LE PLAFOND FAIT, parce qu'il ne se voit nulle part ailleurs :
+             il ne met personne au banc, il borne la TAILLE d'un groupe et le nombre de
+             défenseurs au rempart. Sans cette ligne, un joueur à 20 champions ne
+             comprendrait pas pourquoi il n'en envoie que 8. -->
+          <div v-if="roster.length > maxRoster" class="g-note g-full">
+            Tes champions sont <b>tous utilisables</b> — mais tu n’en engages que
+            <b>{{ maxRoster }}</b> à la fois : c’est la taille d’un groupe, et le nombre de
+            défenseurs qui tiennent le rempart. <b>Monte le Panthéon</b> pour en engager un de plus.
           </div>
           <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
              selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
@@ -687,7 +687,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { AWAKEN, awakenLevel, deployCap, deployedCount } from '@/lib/adventurers';
+import { AWAKEN, awakenLevel, engageCap } from '@/lib/adventurers';
 import { GACHA } from '@/lib/gacha';
 import { useGameFx } from '@/composables/useGameFx';
 import {
@@ -1280,10 +1280,9 @@ watch(rosterChips, (chips) => {
   if (rosterFilter.value && !chips.includes(rosterFilter.value)) rosterFilter.value = null;
 });
 const pantheonLevel = computed(() => char.pantheonLevel);
-/** ⚠️ `deployCap`, JAMAIS une copie de sa formule : l'écran doit annoncer exactement ce
+/** ⚠️ `engageCap`, JAMAIS une copie de sa formule : l'écran doit annoncer exactement ce
  *  que le jeu applique (c'est `advUnavailableReason` qui met au banc au-delà). */
-const maxRoster = computed(() => deployCap(pantheonLevel.value));
-const deployed = computed(() => deployedCount(roster.value));
+const maxRoster = computed(() => engageCap(pantheonLevel.value));
 const rankOf = (a: Adventurer) => advRank(a);
 // La RARETÉ de sa classe — distincte du rang, mais elle monte du même pas (une classe
 // par rang gagné), donc les deux ne peuvent plus se contredire.
@@ -1321,10 +1320,8 @@ function stateOf(a: Adventurer): string {
       return `🐫 en route · ${leftOf(busyOf(a))}`;
     case 'hurt':
       return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}`;
-    case 'benched':
-      return '🗿 en collection — pas engagé';
     default:
-      return '✅ déployé';
+      return '✅ disponible';
   }
 }
 const talIconOf = (a: Adventurer) => {
@@ -1418,9 +1415,7 @@ async function doPull() {
         ? r.manaBack > 0
           ? `Éveil au maximum — ${r.manaBack} 💠 rendus`
           : `Éveil ${cran}/${AWAKEN.max}`
-        : r.deployed
-          ? `${RARITY_LABEL[r.champion.rarity]} · engagé`
-          : `${RARITY_LABEL[r.champion.rarity]} · en collection`,
+        : RARITY_LABEL[r.champion.rarity],
       rarity: fxRarity(r.champion.rarity),
     });
   } finally {

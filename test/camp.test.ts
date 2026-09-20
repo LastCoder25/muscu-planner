@@ -550,20 +550,31 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
 
   it('⚠️ partySendBlocker : sans le héros, un groupe prend un CRÉNEAU DE CONVOI (un seul pool)', () => {
     // Revue finale : sans ce partage, rien ne bornait le nombre de groupes en parallèle.
-    expect(partySendBlocker(poi(), 3, false, 1)).toBeNull();
-    expect(partySendBlocker(poi(), 3, false, 0)).toBe('slots');
+    expect(partySendBlocker(poi(), 3, false, 1, 9)).toBeNull();
+    expect(partySendBlocker(poi(), 3, false, 0, 9)).toBe('slots');
     // Le héros est à lui seul sa limite : il ne prend pas de créneau, même avec une escorte.
-    expect(partySendBlocker(poi(), 3, true, 0)).toBeNull();
-    expect(partySendBlocker(poi(), 0, true, 0)).toBeNull();
-    expect(partySendBlocker(poi(), 0, false, 0)).toBe('empty');
-    expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5)).toBe('notTarget');
+    expect(partySendBlocker(poi(), 3, true, 0, 9)).toBeNull();
+    expect(partySendBlocker(poi(), 0, true, 0, 9)).toBeNull();
+    expect(partySendBlocker(poi(), 0, false, 0, 9)).toBe('empty');
+    expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5, 9)).toBe('notTarget');
     // ⚠️ UNE FAILLE EST UNE CIBLE DE GROUPE depuis que l’incursion existe : la porte
     // lit `PARTY_TARGETS`, pas `CAMP_TYPES` (le détail de la résolution vit ailleurs).
-    expect(partySendBlocker(poi({ type: 'rift' }), 3, true, 5)).toBeNull();
-    expect(canSendParty(poi(), 3, false, 0)).toBe(false);
-    for (const k of ['notTarget', 'empty', 'slots'] as const)
+    expect(partySendBlocker(poi({ type: 'rift' }), 3, true, 5, 9)).toBeNull();
+    expect(canSendParty(poi(), 3, false, 0, 9)).toBe(false);
+    for (const k of ['notTarget', 'empty', 'slots', 'tooMany'] as const)
       expect(PARTY_SEND_BLOCK_LABEL[k].length).toBeGreaterThan(0);
     expect(PARTY_SEND_BLOCK_LABEL.slots).toContain('créneaux de convoi');
+  });
+
+  it('🗿 LE PLAFOND DU PANTHÉON BORNE LA TAILLE DU GROUPE — même avec le héros', () => {
+    // ⚠️ C'est le SEUL endroit du jeu où l'effectif entier pourrait partir d'un coup : un
+    // groupe n'a pas d'`escortMax`. Sans ce garde, la collection deviendrait décisive et
+    // le plafond du Panthéon ne voudrait plus rien dire (v0.958).
+    expect(partySendBlocker(poi(), 3, false, 5, 3)).toBeNull();
+    expect(partySendBlocker(poi(), 4, false, 5, 3)).toBe('tooMany');
+    // ⚠️ Le héros n'exempte pas : il s'ajoute au groupe, il ne le remplace pas.
+    expect(partySendBlocker(poi(), 4, true, 5, 3)).toBe('tooMany');
+    expect(canSendParty(poi(), 4, false, 5, 3)).toBe(false);
   });
 
   it('partyHeroBlocker : expédition, infirmerie, Avant-poste, or — dans cet ordre, sinon libre', () => {

@@ -65,7 +65,7 @@ import {
   advRarity,
   advRoles,
   grantAdvXp,
-  deployCap,
+  engageCap,
   PROMO_LEVELS,
   type Adventurer,
   type AdvRole,
@@ -424,15 +424,24 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
   });
   it('elle ne va que sur les POI de RÉCOLTE', () => {
     for (const t of ['camp', 'lair', 'arena'] as PoiType[]) {
-      expect(canSendCaravan(poi({ type: t }), team(3))).toBe(false);
+      expect(canSendCaravan(poi({ type: t }), team(3), 99)).toBe(false);
     }
     for (const t of ['well', 'shrine', 'archive', 'wreck', 'mine'] as PoiType[]) {
-      expect(canSendCaravan(poi({ type: t }), team(3))).toBe(true);
+      expect(canSendCaravan(poi({ type: t }), team(3), 99)).toBe(true);
     }
   });
   it('escorte vide ou pléthorique : refusée', () => {
-    expect(canSendCaravan(poi(), [])).toBe(false);
-    expect(canSendCaravan(poi(), team(CARAVAN.escortMax + 1))).toBe(false);
+    expect(canSendCaravan(poi(), [], 99)).toBe(false);
+    expect(canSendCaravan(poi(), team(CARAVAN.escortMax + 1), 99)).toBe(false);
+  });
+
+  it('🗿 le PLAFOND DU PANTHÉON borne aussi une escorte, et le plus strict gagne', () => {
+    // ⚠️ `escortMax` (4) domine dès le Panthéon 6 ; en dessous c'est le Panthéon qui
+    // décide, sinon un débutant enverrait plus de monde qu'il ne peut en engager.
+    expect(canSendCaravan(poi(), team(2), 2)).toBe(true);
+    expect(canSendCaravan(poi(), team(3), 2)).toBe(false);
+    expect(canSendCaravan(poi(), team(CARAVAN.escortMax), 99)).toBe(true);
+    expect(canSendCaravan(poi(), team(CARAVAN.escortMax + 1), 99)).toBe(false);
   });
 });
 
@@ -795,12 +804,12 @@ describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
     // des promotions s’est étalée (v0.796) : `strataFor` vaut désormais 1 jusqu’au niveau 10
     // au lieu de 3. **Personne ne l’a corrigé, donc rien ne garantissait qu’il ne revienne.**
     // ⚠️ SEULEMENT LES ESCORTES ATTEIGNABLES : la Guilde plafonne le vivier au niveau du
-    // joueur (`deployCap`). Un premier jet balayait « 2 aventuriers au niveau 1 » et
+    // joueur (`engageCap`). Un premier jet balayait « 2 aventuriers au niveau 1 » et
     // rougissait à 134 % — sur un état que personne ne peut avoir. Tester l’impossible
     // donne un rouge aussi creux qu’un vert : mesuré sur l’enveloppe réelle, le pire cas
     // vaut 73 % (niveau 2, deux aventuriers).
     for (let L = 1; L <= 100; L += L < 20 ? 1 : 10)
-      for (let n = 1; n <= Math.min(deployCap(L), CARAVAN.escortMax); n++)
+      for (let n = 1; n <= Math.min(engageCap(L), CARAVAN.escortMax); n++)
         expect(part(n, L), `niveau ${L}, ${n} aventurier(s)`).toBeLessThan(0.8);
     // ⚠️ ~2 s seul, mais il dépasse les 5 s par défaut sous la charge de la suite complète.
   }, 30_000);

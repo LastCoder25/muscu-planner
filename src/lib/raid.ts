@@ -2681,14 +2681,50 @@ export function autoAdvGear(
   return out;
 }
 
+/**
+ * 🏰 QUI MONTE AU REMPART — les `cap` plus puissants parmi ceux qu'on lui passe.
+ *
+ * ⚠️ **LE PLAFOND DU PANTHÉON S'APPLIQUE ICI, plus sur la personne** (`engageCap`). Il
+ * disait « ce champion est en collection, il n'existe pas pour le jeu » ; il dit désormais
+ * « on n'en engage que N à la fois ». Toute la collection reste donc utilisable, et c'est
+ * la composition du jour — qui est parti en convoi, qui relève de blessure — qui décide de
+ * qui tient les murs.
+ *
+ * ⚠️ **AUTOMATIQUE, et ça ne peut pas être autrement** : un siège se résout pendant que le
+ * joueur est absent. Les plus forts disponibles montent donc d'eux-mêmes, ce qui donne tout
+ * son poids à l'arbitrage que l'écran annonce déjà (« ce qui est dehors ») : envoyer ses
+ * meilleurs en mission AFFAIBLIT le rempart, au lieu de laisser des remplaçants inertes.
+ *
+ * ⚠️ Tri **stable** : à puissance égale on départage par id, sinon l'ordre du vivier
+ * déciderait de qui défend — donc recruter quelqu'un changerait la garnison en silence.
+ */
+export function rampartGuard(advs: Adventurer[], cap: number, ctx?: CompanionCtx): Adventurer[] {
+  const n = Math.max(0, Math.floor(cap));
+  if (advs.length <= n) return advs;
+  const pow = adventurerPowers(advs, ctx);
+  return [...advs]
+    .sort((x, y) => (pow.get(y.id) ?? 0) - (pow.get(x.id) ?? 0) || x.id.localeCompare(y.id))
+    .slice(0, n);
+}
+
+/**
+ * Les défenseurs, en unités de bataille.
+ *
+ * ⚠️ **LA COUPE EST FAITE ICI**, au point de passage unique du combat, et `cap` est
+ * REQUIS : un paramètre qu'on peut oublier finit par l'être — c'est exactement le défaut
+ * de la v0.751, où la moitié de la garnison ne se battait pas parce qu'un seul des deux
+ * appelants passait l'argument.
+ */
 export function guardUnits(
   playerLevel: number,
   advs: Adventurer[],
+  cap: number,
   ctx?: CompanionCtx,
 ): GuardUnit[] {
   void playerLevel;
-  const pairs = companionPairs(advs, ctx);
-  return advs.map((a) => {
+  const retenus = rampartGuard(advs, cap, ctx);
+  const pairs = companionPairs(retenus, ctx);
+  return retenus.map((a) => {
     // ⚠️ `escortCombatant` NU, et on replie ensuite : garder la réduction sur le
     // `Combatant` la perdrait au passage en unité (une unité n'a que PV et dégâts).
     const one = escortCombatant([a], a.name);

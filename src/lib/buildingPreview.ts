@@ -24,7 +24,7 @@ import {
   type Building,
 } from './buildings';
 import { caravanSlots, caravanSlowFor } from './caravan';
-import { deployCap } from './adventurers';
+import { engageCap } from './adventurers';
 import { outfitterMsFor } from './advGear';
 import { altarLuckBonus } from './items';
 import { repairMsFor } from './raid';
@@ -59,7 +59,7 @@ function textAt(typeId: string, level: number): string | null {
       // ⚠️ Les DEUX leviers, comme le Comptoir : l'un est un PALIER (une place de plus
       // tous les 2 niveaux), l'autre une COURBE (la forge qui gratte à chaque cran). Un
       // seul chiffre laisserait croire que l'autre moitié du bâtiment est figée.
-      return `${deployCap(level)} champions déployés · forge en ${h(outfitterMsFor(level))}`;
+      return `${engageCap(level)} champions engagés à la fois · forge en ${h(outfitterMsFor(level))}`;
     case 'outpost':
       return `−${pct(1 - travelTimeMult(one(typeId, level)))} de temps de trajet`;
     case 'labyrinth_gate':
@@ -91,7 +91,7 @@ function textAt(typeId: string, level: number): string | null {
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
 function isMilestone(typeId: string, level: number): boolean {
   if (typeId === 'caravanserail') return caravanSlots(level) > caravanSlots(level - 1);
-  if (typeId === 'pantheon') return deployCap(level) > deployCap(level - 1);
+  if (typeId === 'pantheon') return engageCap(level) > engageCap(level - 1);
   return false;
 }
 

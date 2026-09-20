@@ -1061,8 +1061,15 @@ export function poiOffers(
   };
 }
 
-export function canSendCaravan(poi: Poi, escort: Adventurer[]): boolean {
-  return HARVEST_TYPES.has(poi.type) && escort.length > 0 && escort.length <= CARAVAN.escortMax;
+/** ⚠️ `cap` = le plafond d'engagement du Panthéon (`engageCap`), REQUIS : il borne une
+ *  escorte comme il borne un groupe ou le rempart. `escortMax` le domine dès qu'on a un
+ *  Panthéon de niveau 6 — en dessous, c'est le Panthéon qui décide. */
+export function canSendCaravan(poi: Poi, escort: Adventurer[], cap: number): boolean {
+  return (
+    HARVEST_TYPES.has(poi.type) &&
+    escort.length > 0 &&
+    escort.length <= Math.min(CARAVAN.escortMax, Math.max(0, Math.floor(cap)))
+  );
 }
 
 /** Probabilité de base qu'une jambe de trajet tourne à l'embuscade, AVANT éclaireurs. */

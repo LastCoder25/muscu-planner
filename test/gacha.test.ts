@@ -6,8 +6,8 @@ import {
   ADV_LEVEL_K,
   AWAKEN,
   awakenLevel,
+  advAvailable,
   advUnavailableReason,
-  deployedCount,
   type Adventurer,
   awakenMult,
   championBudget,
@@ -455,7 +455,7 @@ describe('🏅 CE QU_UN TIRAGE AJOUTE AU VIVIER', () => {
   });
 
   it('un champion neuf entre au vivier — identité, aucun chemin', () => {
-    const g = grantChampion([], champ, { id: 'a1', deployCap: 3 });
+    const g = grantChampion([], champ, { id: 'a1' });
     expect(g.advs).toHaveLength(1);
     expect(g.advs[0]!.championId).toBe(champ.id);
     // ⚠️ Un champion a une IDENTITÉ, pas un chemin (v0.939) : un `path` non vide le ferait
@@ -465,47 +465,46 @@ describe('🏅 CE QU_UN TIRAGE AJOUTE AU VIVIER', () => {
     expect(g.duplicate).toBe(false);
   });
 
-  it('il est ENGAGÉ d_office tant qu_il reste une place, puis EN COLLECTION', () => {
-    // Sans ça, on tire son premier champion et il ne se passe rien : en collection, donc
-    // indisponible pour les convois comme pour la défense, sans que rien ne l'explique.
-    expect(grantChampion([], champ, { id: 'a1', deployCap: 1 }).deployed).toBe(true);
-    const plein = grantChampion([], champ, { id: 'a1', deployCap: 1 }).advs;
-    const second = grantChampion(plein, autre, { id: 'a2', deployCap: 1 });
-    expect(second.deployed, 'le plafond du Panthéon est atteint').toBe(false);
-    expect(advUnavailableReason(second.advs[1]!, 0)).toBe('benched');
+  it('⚠️ TOUT CHAMPION TIRÉ EST UTILISABLE TOUT DE SUITE — plus aucun banc', () => {
+    // ⚠️ RÉÉCRIT (v0.958). Le tirage engageait « tant qu'il reste une place » et mettait
+    // les suivants EN COLLECTION : un champion pouvait donc être mort-né, l'inverse de ce
+    // qu'un gacha promet. Le plafond du Panthéon borne désormais l'ENGAGEMENT — combien
+    // partent ensemble, combien tiennent le rempart — et se lit dans `engageCap`.
+    const plein = grantChampion([], champ, { id: 'a1' }).advs;
+    const second = grantChampion(plein, autre, { id: 'a2' });
+    expect(advUnavailableReason(second.advs[1]!, 0)).toBeNull();
+    expect(advAvailable(second.advs[1]!, 0)).toBe(true);
   });
 
-  it('⚠️ un aventurier LEGACY occupe une place — sinon on dépasse le plafond pendant la bascule', () => {
-    // Il n'est jamais mis au banc (`advUnavailableReason`), donc il est bien engagé. Une
-    // seconde définition de « qui occupe une place » laisserait engager des champions
-    // au-delà du plafond tant qu'il reste des recrues d'avant.
-    const g = grantChampion([legacy('v1'), legacy('v2')], champ, { id: 'a1', deployCap: 2 });
-    expect(g.deployed).toBe(false);
-    expect(deployedCount([legacy('v1')])).toBe(1);
+  it('⚠️ un aventurier LEGACY est disponible lui aussi', () => {
+    // Il n'a pas de Panthéon : le priver de mission serait le punir d'avoir existé avant
+    // la bascule. Les deux systèmes cohabitent le temps de celle-ci.
+    const g = grantChampion([legacy('v1'), legacy('v2')], champ, { id: 'a1' });
+    expect(g.advs).toHaveLength(3);
+    expect(advAvailable(legacy('v1'), 0)).toBe(true);
   });
 
   it('un doublon RÉVEILLE, il ne crée pas un second aventurier', () => {
-    let advs = grantChampion([], champ, { id: 'a1', deployCap: 3 }).advs;
-    const g = grantChampion(advs, champ, { id: 'a2', deployCap: 3 });
+    let advs = grantChampion([], champ, { id: 'a1' }).advs;
+    const g = grantChampion(advs, champ, { id: 'a2' });
     expect(g.advs).toHaveLength(1);
     expect(g.copies).toBe(2);
     expect(g.duplicate).toBe(true);
     expect(awakenLevel(g.copies), 'la PREMIÈRE copie est le champion').toBe(1);
     expect(g.manaBack).toBe(0);
-    // Et on ne dégage personne en le réveillant — ni dans le vivier, ni dans ce que
-    // la fonction ANNONCE : c'est ce second point qu'un écran affiche (« engagé » ou
-    // « en collection »), et il mentait sans que rien ne le voie.
+    // ⚠️ Un doublon ne change QUE le compte d'exemplaires : il ne doit toucher ni
+    // l'identité, ni le niveau, ni l'XP accumulée de celui qu'on réveille.
     advs = g.advs;
-    expect(advs[0]!.deployed).toBe(true);
-    expect(g.deployed, 'le doublon garde son engagement').toBe(true);
+    expect(advs[0]!.championId).toBe(champ.id);
+    expect(advs[0]!.copies).toBe(2);
   });
 
   it('⚠️ la copie DE TROP ne gonfle pas le compteur, elle se convertit', () => {
     // Un compteur qui monte sans que l'Éveil bouge se lit comme une panne.
-    let advs = grantChampion([], champ, { id: 'a1', deployCap: 3 }).advs;
+    let advs = grantChampion([], champ, { id: 'a1' }).advs;
     let last = null as ReturnType<typeof grantChampion> | null;
     for (let i = 0; i < 10; i++) {
-      last = grantChampion(advs, champ, { id: 'x', deployCap: 3 });
+      last = grantChampion(advs, champ, { id: 'x' });
       advs = last.advs;
     }
     expect(advs[0]!.copies, 'plafonné au dernier cran').toBe(AWAKEN.max + 1);

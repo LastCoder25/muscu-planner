@@ -29,7 +29,7 @@
 
 import { RANK_ORDER, type Rarity } from './items';
 import { championsOf, type Champion } from '@/data/champions';
-import { awakenOverflow, deployedCount, isDeployed, type Adventurer } from './adventurers';
+import { awakenOverflow, type Adventurer } from './adventurers';
 
 export const GACHA = {
   /**
@@ -258,8 +258,6 @@ export interface Granted {
   duplicate: boolean;
   /** 💠 rendus quand la copie ne réveille plus rien. */
   manaBack: number;
-  /** Engagé d'office ? (il restait une place au Panthéon) */
-  deployed: boolean;
 }
 
 /**
@@ -273,15 +271,15 @@ export interface Granted {
  * donner, et l'écran annoncerait « 9 exemplaires » pour un Éveil bloqué à 6 — un compteur
  * qui monte sans que rien ne bouge se lit comme une panne. Elle se convertit en mana.
  *
- * ⚠️ **ON ENGAGE D'OFFICE TANT QU'IL RESTE UNE PLACE** : sans ça, un joueur tire son
- * premier champion et il ne se passe RIEN — il est en collection, donc indisponible pour
- * les convois comme pour la défense, sans que rien ne l'explique. Au-delà du plafond, le
- * joueur arbitre lui-même.
+ * ⚠️ **AUCUN BANC : un champion tiré est utilisable tout de suite.** Le plafond du
+ * Panthéon (`engageCap`) borne désormais l'ENGAGEMENT — combien partent ensemble, combien
+ * tiennent le rempart — pas la personne. Un tirage ne peut donc plus être mort-né, ce qui
+ * était l'inverse de ce qu'un gacha promet.
  */
 export function grantChampion(
   advs: Adventurer[],
   champ: Champion,
-  opts: { id: string; deployCap: number; seed?: number },
+  opts: { id: string; seed?: number },
 ): Granted {
   const i = advs.findIndex((a) => a.championId === champ.id);
   if (i >= 0) {
@@ -294,10 +292,8 @@ export function grantChampion(
       copies,
       duplicate: true,
       manaBack: trop ? OVERFLOW_MANA : 0,
-      deployed: isDeployed(prev),
     };
   }
-  const deployed = deployedCount(advs) < opts.deployCap;
   const neuf: Adventurer = {
     id: opts.id,
     name: champ.name,
@@ -307,11 +303,10 @@ export function grantChampion(
     path: [], // un champion a une IDENTITÉ, pas un chemin (v0.939)
     championId: champ.id,
     copies: 1,
-    deployed,
     level: 1,
     xp: 0,
   };
-  return { advs: [...advs, neuf], copies: 1, duplicate: false, manaBack: 0, deployed };
+  return { advs: [...advs, neuf], copies: 1, duplicate: false, manaBack: 0 };
 }
 
 /**

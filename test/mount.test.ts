@@ -19,7 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
-import { deployCap, deployedCount } from '@/lib/adventurers';
+import { engageCap } from '@/lib/adventurers';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
 async function mountIt(
@@ -103,14 +103,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await mountIt(GuildPanel, { open: true }, ROW, undefined, '/', (h) => (out = h))).toBe(
       null,
     );
-    // ⚠️ LE COMPTEUR OPPOSE LE DÉPLOIEMENT AU PLAFOND, jamais la collection : Panthéon 3
-    // → `deployCap` 2, deux legacy engagés, un champion en collection. Il affichait
-    // « 3/2 » parce qu'il comptait `roster.length` contre une COPIE de la formule.
-    const cap = deployCap(3);
-    const engages = deployedCount(ROW.adventurers as Parameters<typeof deployedCount>[0]);
-    expect(out).toContain(`${engages}/${cap}`);
-    // …et la collection se dit À PART, sinon on perdrait le champion mis au banc.
-    expect(out).toContain(`${ROW.adventurers.length} en tout`);
+    // ⚠️ RÉÉCRIT (v0.958) : le compteur opposait le DÉPLOIEMENT au plafond (« 2/2 »),
+    // ce qui n'a plus de sens depuis qu'aucun champion n'est mis au banc. Il annonce
+    // désormais la COLLECTION, puis ce que le Panthéon permet d'engager à la fois — et
+    // le second nombre est DÉRIVÉ de `engageCap`, jamais une copie de sa formule.
+    expect(out).toContain(String(ROW.adventurers.length));
+    expect(out).toContain(`${engageCap(3)} engagés à la fois`);
   }, 30_000);
 
   it('GuildPanel s’ouvre aussi sur un vivier VIDE — et l’invocation reste offerte', async () => {

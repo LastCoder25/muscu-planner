@@ -26,7 +26,7 @@ import {
 } from '@/lib/raid';
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import { TRAVEL } from '@/lib/expedition';
-import { deployCap } from '@/lib/adventurers';
+import { engageCap } from '@/lib/adventurers';
 import { refChampionAdv } from '@/lib/caravan';
 
 const defAt = (lvl: number): DefenseStructure[] => [
@@ -40,10 +40,11 @@ const NOW = 1_700_000_000_000;
 const garde = (lvl: number) =>
   guardUnits(
     lvl,
-    Array.from({ length: deployCap(lvl) }, (_, i) => ({
+    Array.from({ length: engageCap(lvl) }, (_, i) => ({
       ...refChampionAdv(Math.max(1, lvl - (i % 6)), i),
       id: `g${i}`,
     })),
+    99,
     { now: NOW, kennelLevel: lvl, familiars: [], talents: [], advGear: [] },
   );
 
@@ -455,7 +456,7 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     xp: 0,
   });
   const tous = [adv('a'), adv('b'), adv('c'), adv('d')];
-  const g = (list: Adventurer[]) => guardUnits(L, list);
+  const g = (list: Adventurer[]) => guardUnits(L, list, 99);
   const h = refFighter(L);
   /** ⚠️ UNE ARMÉE QUI FAIT VRAIMENT BASCULER, CHOISIE PAR LA MESURE et jamais devinée.
    *  L’ancienne version fabriquait un « assaut » numérique à mi-chemin entre deux
@@ -483,7 +484,7 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     for (const lvl of [12, 28, 60]) {
       const defs = defAt(lvl);
       const hero = refFighter(lvl);
-      const garde = guardUnits(lvl, tous);
+      const garde = guardUnits(lvl, tous, 99);
       for (let i = 0; i < 6; i++) {
         const raid = rollRaid(2000 + i * 7919, lvl, NOW, 0);
         const r = departureRisk(defs, lvl, raid, { hero, guard: garde }, { hero: null, guard: [] });

@@ -25,7 +25,7 @@ import {
   advStar,
   advProgressOf,
   advXpToNext,
-  deployCap,
+  engageCap,
   grantAdvXp,
   type Adventurer,
   advAvatar,
@@ -378,10 +378,10 @@ describe('🗿 Panthéon : effectif déployé et XP', () => {
   it('l’effectif croît avec la Guilde — donc avec le sport, mais LINÉAIREMENT', () => {
     // C'est ce qui rend la boucle accessible : la puissance du héros croît en ~L⁴, là où
     // l'effectif d'une Guilde suit son niveau tout doucement.
-    expect(deployCap(0)).toBe(1);
-    expect(deployCap(2)).toBe(2);
-    expect(deployCap(20)).toBe(11);
-    for (let l = 0; l < 60; l++) expect(deployCap(l + 1)).toBeGreaterThanOrEqual(deployCap(l));
+    expect(engageCap(0)).toBe(1);
+    expect(engageCap(2)).toBe(2);
+    expect(engageCap(20)).toBe(11);
+    for (let l = 0; l < 60; l++) expect(engageCap(l + 1)).toBeGreaterThanOrEqual(engageCap(l));
   });
   it('l’XP fait monter PLUSIEURS niveaux d’un coup si le voyage était gros', () => {
     const a = make({ level: 1, xp: 0 });
@@ -434,7 +434,9 @@ describe('⚠️ LA DISPONIBILITÉ D’UN AVENTURIER — une seule source, trois
     for (const a of cas) expect(advAvailable(a, at)).toBe(advUnavailableReason(a, at) === null);
     expect(advUnavailableReason({ ...base(), busyUntil: 2000 }, at)).toBe('busy');
     expect(advUnavailableReason({ ...base(), hurtUntil: 2000 }, at)).toBe('hurt');
-    expect(advUnavailableReason({ ...base(), championId: 'orsene' }, at)).toBe('benched');
+    // ⚠️ UN CHAMPION N'EST PLUS JAMAIS MIS AU BANC (v0.958) : le plafond du Panthéon
+    // borne l'ENGAGEMENT (taille d'un groupe, défenseurs au rempart), pas la personne.
+    expect(advUnavailableReason({ ...base(), championId: 'orsene' }, at)).toBeNull();
     expect(advUnavailableReason({ ...base(), hurtUntil: 3000, busyUntil: 4000 }, at)).toBe('busy');
     for (const k of ADV_STATUSES.filter((s) => s !== 'free'))
       expect(ADV_UNAVAILABLE_LABEL[k].length).toBeGreaterThan(0);

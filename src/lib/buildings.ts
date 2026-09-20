@@ -279,16 +279,26 @@ export const BUILDING_TYPES: BuildingType[] = [
   // invoque ses champions, on y consulte sa collection, on y forge leur équipement.
   //
   // ⚠️ IL NE PORTE AUCUNE FORMULE NEUVE, et c'est exactement ce qui le rend vivant du
-  // niveau 1 au 100 (règle v0.731, aucun niveau mort) : ses deux leviers sont ceux dont il
-  // HÉRITE — le DÉPLOIEMENT (`deployCap`, +1 tous les 2 niveaux, 51 au niveau 100 : la
-  // formule de la Guilde reprise telle quelle, déjà mesurée) et le TEMPS DE FABRICATION
-  // d'une pièce (`outfitterMsFor`, asymptotique, qui gratte à chaque cran sans jamais
-  // devenir instantané).
+  // niveau 1 au 100 (règle v0.731, aucun niveau mort) : ses TROIS leviers sont ceux dont
+  // il HÉRITE — l'ENGAGEMENT (`engageCap`, +1 tous les 2 niveaux, 51 au niveau 100 : la
+  // formule de la Guilde reprise telle quelle, déjà mesurée), le NIVEAU MAXIMAL d'un
+  // champion (`grantAdvXp`, le plus fort des trois : le niveau DOMINE la rareté, ×4,3 au
+  // niveau 23) et le TEMPS DE FABRICATION d'une pièce (`outfitterMsFor`, asymptotique, qui
+  // gratte à chaque cran sans jamais devenir instantané).
   //
-  // ⚠️ LE DÉPLOIEMENT EST PORTEUR, ce n'est pas du confort : c'est le SEUL plafond
-  // d'effectif du jeu, et `guardUnits` fait défendre TOUT le vivier disponible. Collection
-  // illimitée + aucun plafond = base imprenable (le runaway relevé en v0.779 : le vivier
-  // croît ×7,3 du niveau 12 au 100 quand l'armée ne croît que ×1,8).
+  // ⚠️ L'ENGAGEMENT BORNE CE QUI AGIT, JAMAIS CE QU'ON POSSÈDE (v0.958). Il a d'abord été
+  // un BANC — un champion « en collection » était indisponible partout — ce qui rendait
+  // mort-né le champion tiré en trop, l'inverse de ce qu'un gacha promet. Il borne
+  // désormais la TAILLE d'un groupe ou d'une escorte et le nombre de défenseurs au
+  // rempart : toute la collection reste utilisable, et c'est la composition du jour qui
+  // décide.
+  //
+  // ⚠️ IL RESTE PORTEUR, et c'est MESURÉ : `guardUnits` fait défendre tout le vivier qu'on
+  // lui passe, et un groupe envoyé sur un camp n'a AUCUN maximum. Tenue d'un siège,
+  // enceinte à niveau, sans héros — **11 % à 0 champion, 65 % à 5, 95 % à 10, 100 % à 20**
+  // au niveau 12. ⚠️ Et **les convois n'y changent rien** : ils bornent le nombre de
+  // CONVOIS (`caravanSlots`) et la taille d'une escorte (`escortMax`), pas la défense ni
+  // les camps.
   //
   // ⚠️ AUCUNE REMISE sur le prix d'un tirage, aussi tentant que ce soit : c'est mot pour
   // mot la remise de l'Autel des boss, RETIRÉE en v0.799 parce qu'elle coupait de moitié
@@ -304,12 +314,12 @@ export const BUILDING_TYPES: BuildingType[] = [
     label: 'Panthéon des champions',
     emoji: '🛕',
     category: 'utility',
-    perLevelNote: '+1 champion déployé tous les 2 niveaux, et une forge plus rapide',
+    perLevelNote: '+1 champion engagé à la fois tous les 2 niveaux, et une forge plus rapide',
     buildGold: 700,
     unlockLevel: 3,
     unique: true,
     unlock: { activity: 'Les champions', where: 'sur ta base' },
-    desc: 'Invoque tes champions et fixe combien peuvent être engagés à la fois — convois, camps, défense. Les autres attendent en collection. On y forge aussi leur équipement.',
+    desc: 'Invoque tes champions — tous utilisables. Son niveau fixe combien tu en engages à la fois : la taille d’un groupe, et les défenseurs du rempart. On y forge aussi leur équipement.',
   },
 ];
 
