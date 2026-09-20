@@ -41,30 +41,46 @@
           <span v-if="d.iso === todayIso" class="day-today">aujourd'hui</span>
         </div>
         <div v-if="!d.entries.length" class="day-empty">—</div>
-        <div v-else class="day-entries">
-          <component
-            :is="e.link ? 'button' : 'div'"
-            v-for="(e, i) in d.entries"
-            :key="i"
-            class="entry"
-            :class="['k-' + e.kind, { clickable: !!e.link }]"
-            @click="goEntry(e)"
-          >
-            <q-icon :name="e.icon" size="20px" class="entry-ic" />
-            <div class="entry-main">
-              <div class="entry-top">
-                <span class="entry-src">{{ e.source }}</span>
-                <q-icon v-if="e.link" name="chevron_right" size="16px" class="entry-go" />
-              </div>
-              <div class="entry-title">{{ e.title }}</div>
-              <div v-if="e.meta" class="entry-meta">{{ e.meta }}</div>
-              <div v-if="e.xp > 0" class="entry-gain">
-                <span class="eg-xp">+{{ e.xp }} XP</span>
-                <span v-if="e.energy > 0" class="eg-en">+{{ e.energy }} ⚡</span>
-              </div>
+        <!-- 📅 REGROUPÉ PAR SOURCE (v0.967, demandé). Un jour de Défi 360 produit une
+             entrée par EXO : la pastille de provenance se répétait sept fois au lieu de
+             titrer le bloc une seule fois. L'en-tête porte en plus le TOTAL du groupe —
+             ce que le regroupement rend possible, et qu'aucune ligne ne disait.
+             ⚠️ Les entrées gardent leur liseré `k-*` : une même source peut porter deux
+             natures (un challenge de sortie est un `kind` cardio), et l'en-tête ne doit
+             pas trancher à leur place. -->
+        <template v-else>
+          <div v-for="g in d.groups" :key="g.source" class="src-group">
+            <div class="src-head">
+              <q-icon :name="g.icon" size="16px" />
+              <span class="src-name">{{ g.source }}</span>
+              <span v-if="g.entries.length > 1" class="src-n">{{ g.entries.length }}</span>
+              <span v-if="g.xp > 0" class="src-xp font-display">+{{ g.xp }} XP</span>
             </div>
-          </component>
-        </div>
+            <div class="day-entries">
+              <component
+                :is="e.link ? 'button' : 'div'"
+                v-for="(e, i) in g.entries"
+                :key="i"
+                class="entry"
+                :class="['k-' + e.kind, { clickable: !!e.link }]"
+                @click="goEntry(e)"
+              >
+                <q-icon :name="e.icon" size="20px" class="entry-ic" />
+                <div class="entry-main">
+                  <div class="entry-top">
+                    <span class="entry-title">{{ e.title }}</span>
+                    <q-icon v-if="e.link" name="chevron_right" size="16px" class="entry-go" />
+                  </div>
+                  <div v-if="e.meta" class="entry-meta">{{ e.meta }}</div>
+                  <div v-if="e.xp > 0" class="entry-gain">
+                    <span class="eg-xp">+{{ e.xp }} XP</span>
+                    <span v-if="e.energy > 0" class="eg-en">+{{ e.energy }} ⚡</span>
+                  </div>
+                </div>
+              </component>
+            </div>
+          </div>
+        </template>
       </div>
     </template>
   </component>
@@ -82,6 +98,7 @@ import { useComboStore } from '@/stores/combo';
 import { useFriendBossStore } from '@/stores/friendBoss';
 import { useAuthStore } from '@/stores/auth';
 import { bossAgendaEntries } from '@/lib/friendBoss';
+import { groupBySource } from '@/lib/agendaGroups';
 import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
 import { legSets, legMode, type ComboSet } from '@/lib/combo';
 import {
@@ -385,6 +402,9 @@ const days = computed(() => {
       iso,
       label: d.toLocaleDateString('fr-FR', { weekday: 'long', day: '2-digit', month: 'short' }),
       entries: dayEntries,
+      // ⚠️ La règle vit en LIB : cet écran n'est vu par aucune porte, et « rien ne se
+      // perd au regroupement » est le genre de garantie qui casse en silence.
+      groups: groupBySource(dayEntries),
     };
   });
 });
@@ -510,6 +530,41 @@ onMounted(async () => {
   color: var(--dim);
   font-size: 13px;
   padding-left: 2px;
+}
+/* 📅 L'EN-TÊTE DE SOURCE : il TITRE le bloc, il ne concurrence pas les entrées — d'où
+   une taille de note et l'accent réservé au seul chiffre qui compte (l'XP du groupe). */
+.src-group + .src-group {
+  margin-top: 10px;
+}
+.src-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 4px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.src-name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Combien d'exos dans ce bloc — affiché SEULEMENT s'il y en a plusieurs : « 1 » serait
+   du bruit. */
+.src-n {
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 10.5px;
+}
+.src-xp {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 12px;
 }
 .day-entries {
   display: grid;
