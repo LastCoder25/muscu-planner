@@ -51,6 +51,11 @@ interface AwakenStep {
 export interface Champion {
   id: string;
   name: string;
+  /** Son VISAGE. ⚠️ Un gacha sans visage pour ses personnages n'en est pas un — et une
+   *  `AdvClass` en a un depuis toujours, donc sans lui un champion s'afficherait 🧑 là
+   *  où un aventurier s'affiche ⚔️. Tous DISTINCTS (testé) : c'est lui qui identifie un
+   *  champion dans une grille de 32. */
+  emoji: string;
   rarity: Rarity;
   /** ⚠️ EXPLICITE, alors qu'elle se DÉDUISAIT de la classe racine du chemin : sans chemin,
    *  c'est elle qui décide de l'équipement. Une ligne, mais elle est porteuse. */
@@ -71,6 +76,7 @@ export interface Champion {
 const C = (
   id: string,
   name: string,
+  emoji: string,
   rarity: Rarity,
   lineage: Lineage,
   role: AdvRole | null,
@@ -80,6 +86,7 @@ const C = (
 ): Champion => ({
   id,
   name,
+  emoji,
   rarity,
   lineage,
   role,
@@ -100,6 +107,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'orsene',
     'Orsène le Baumier',
+    '🌿',
     'commun',
     'mage',
     'heal',
@@ -110,6 +118,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'boulin',
     'Boulin Grosse-Malle',
+    '🧳',
     'commun',
     'caravanier',
     'haul',
@@ -120,6 +129,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'fila',
     'Fila Pied-Leste',
+    '👣',
     'commun',
     'eclaireur',
     'speed',
@@ -130,6 +140,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'teck',
     'Teck l’Guetteur',
+    '🔭',
     'commun',
     'archer',
     'scout',
@@ -142,6 +153,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'sauge',
     'Mère Sauge',
+    '🍵',
     'inhabituel',
     'caravanier',
     'heal',
@@ -152,6 +164,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'gorm',
     'Gorm Large-Dos',
+    '🪵',
     'inhabituel',
     'homme_armes',
     'haul',
@@ -162,6 +175,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'sylve',
     'Sylve la Flèche',
+    '🏹',
     'inhabituel',
     'archer',
     'speed',
@@ -172,6 +186,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'vig',
     'Vig Deux-Lunes',
+    '🌘',
     'inhabituel',
     'eclaireur',
     'scout',
@@ -184,6 +199,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'anselme',
     'Anselme du Cloître',
+    '📿',
     'magique',
     'mage',
     'heal',
@@ -194,6 +210,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'barthe',
     'Barthe Porte-Enclume',
+    '⚒️',
     'magique',
     'guerrier',
     'haul',
@@ -204,6 +221,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'zephyrine',
     'Zéphyrine',
+    '🍃',
     'magique',
     'eclaireur',
     'speed',
@@ -214,6 +232,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'verre',
     'Œil-de-Verre',
+    '🔎',
     'magique',
     'mage',
     'scout',
@@ -226,6 +245,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'lysandre',
     'Lysandre des Sources',
+    '💧',
     'rare',
     'mage',
     'heal',
@@ -239,6 +259,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'tessa',
     'Tessa la Meneuse',
+    '🐪',
     'rare',
     'caravanier',
     'haul',
@@ -249,6 +270,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'roan',
     'Roän Taille-Route',
+    '🗡️',
     'rare',
     'guerrier',
     'speed',
@@ -259,6 +281,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'miren',
     'Miren Sans-Bruit',
+    '🤫',
     'rare',
     'archer',
     'scout',
@@ -274,6 +297,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'ferrand',
     'Doyen Ferrand',
+    '🕯️',
     'epique',
     'caravanier',
     'heal',
@@ -284,6 +308,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'ursk',
     'Ursk Casse-Mur',
+    '🔨',
     'epique',
     'homme_armes',
     'haul',
@@ -297,6 +322,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'nive',
     'Nive des Cols',
+    '🏔️',
     'epique',
     'eclaireur',
     'speed',
@@ -307,6 +333,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'kaell',
     'Kaell Œil-Froid',
+    '❄️',
     'epique',
     'guerrier',
     'scout',
@@ -319,6 +346,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'ombrelune',
     'Ombrelune',
+    '🌙',
     'legendaire',
     'mage',
     'heal',
@@ -332,6 +360,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'tarn',
     'Tarn le Rempart',
+    '🏯',
     'legendaire',
     'guerrier',
     'haul',
@@ -342,6 +371,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'ysolde',
     'Ysolde Trait-Long',
+    '🪶',
     'legendaire',
     'archer',
     'speed',
@@ -355,6 +385,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'corvin',
     'Corvin des Brumes',
+    '🐦‍⬛',
     'legendaire',
     'eclaireur',
     'scout',
@@ -367,6 +398,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'brume',
     'Vieille Brume',
+    '🌫️',
     'mythique',
     'caravanier',
     'heal',
@@ -380,6 +412,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'molosse',
     'Molosse Porte-Monde',
+    '🐗',
     'mythique',
     'homme_armes',
     'haul',
@@ -390,6 +423,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'fulgur',
     'Fulgur',
+    '🌩️',
     'mythique',
     'mage',
     'speed',
@@ -403,6 +437,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'nyx',
     'Nyx la Silencieuse',
+    '🕸️',
     'mythique',
     'archer',
     'scout',
@@ -415,6 +450,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'aurore',
     'Aurore Première',
+    '🌅',
     'primordial',
     'mage',
     'heal',
@@ -428,6 +464,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'atlas',
     'Atlas des Cimes',
+    '🗻',
     'primordial',
     'homme_armes',
     'haul',
@@ -441,6 +478,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'ventcourt',
     'Vent-Qui-Court',
+    '🌪️',
     'primordial',
     'eclaireur',
     'speed',
@@ -454,6 +492,7 @@ export const CHAMPIONS: Champion[] = [
   C(
     'oeildumonde',
     'Œil du Monde',
+    '🔱',
     'primordial',
     'guerrier',
     'scout',

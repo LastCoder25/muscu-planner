@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CHAMPION_BY_ID, championsOf, type Champion } from '@/data/champions';
+import { CHAMPIONS, CHAMPION_BY_ID, championsOf, type Champion } from '@/data/champions';
 import { RANK_ORDER, RARITY_RANK, prestigeRankIndex } from '@/lib/items';
 import {
   AWAKEN,
@@ -10,7 +10,9 @@ import {
   advRoles,
   advSignatureLevels,
   advSignatures,
+  advAvatar,
   advStats,
+  advTitle,
   canPromote,
   championRarity,
   championSkillLevel,
@@ -189,5 +191,46 @@ describe('⚠️ LES DEUX TROUS QUE LA MUTATION A RÉVÉLÉS', () => {
         expect(c.role, c.name).not.toBeNull();
         expect(advRoles(asAdv(c, 60)), c.name).toEqual([c.role]);
       }
+  });
+});
+
+describe('🏅 le VISAGE d’un champion (le 8ᵉ accesseur)', () => {
+  it('⚠️ CHAQUE CHAMPION A SON EMOJI, ET ILS SONT TOUS DISTINCTS', () => {
+    // C'est le visage qui identifie un champion dans une grille de 32 — deux identiques
+    // et la collection devient illisible. Un gacha sans visage n'en est pas un.
+    const emos = CHAMPIONS.map((c) => c.emoji);
+    for (const [i, e] of emos.entries()) expect(e.length, CHAMPIONS[i]!.name).toBeGreaterThan(0);
+    expect(new Set(emos).size).toBe(CHAMPIONS.length);
+  });
+
+  it('`advTitle` rend le champion lui-même : son emoji et son NOM', () => {
+    for (const c of [commun, primordial]) {
+      const t = advTitle(asAdv(c, 60))!;
+      expect(t.emoji).toBe(c.emoji);
+      expect(t.label).toBe(c.name);
+    }
+    // …et un aventurier garde son métier courant.
+    const a = refAdventurer(30);
+    const t = advTitle(a)!;
+    expect(t.label).not.toBe(a.name);
+    expect(t.emoji.length).toBeGreaterThan(0);
+  });
+
+  it('⚠️ SON AVATAR EST HABILLÉ DE SA RARETÉ EFFECTIVE, pas de celle qu’on a tirée', () => {
+    // Un primordial au niveau 1 ne mène que du Bronze : le portrait ne doit pas promettre
+    // ce que le combat refuse.
+    const bas = advAvatar(asAdv(primordial, 1));
+    for (const r of Object.values(bas.gear)) expect(r).toBe(RANK_ORDER[0]);
+    const haut = advAvatar(asAdv(primordial, 100));
+    for (const r of Object.values(haut.gear)) expect(r).toBe('primordial');
+    // Les QUATRE emplacements sont habillés — un champion n'a pas de chemin à dévoiler.
+    expect(Object.keys(haut.gear)).toHaveLength(4);
+  });
+
+  it('sa SILHOUETTE suit sa forme réelle, comme celle d’un aventurier', () => {
+    const cogneur = CHAMPIONS.find((c) => c.form.p > c.form.e && c.form.p > c.form.a)!;
+    expect(advAvatar(asAdv(cogneur, 60)).profile).toBe('puissant');
+    const rapide = CHAMPIONS.find((c) => c.form.a > c.form.p && c.form.a > c.form.e)!;
+    expect(advAvatar(asAdv(rapide, 60)).profile).toBe('agile');
   });
 });

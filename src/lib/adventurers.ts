@@ -185,6 +185,17 @@ export function advAvatar(adv: Adventurer): {
   const shape = advShapeLabel({ p: st.puissance, e: st.endurance, a: st.agilite });
   const profile: AdvAvatarProfile =
     shape === 'Cogneur' ? 'puissant' : shape === 'Rapide' ? 'agile' : 'polyvalent';
+  // 🏅 Un champion n'a pas de chemin à habiller : c'est sa RARETÉ EFFECTIVE qui l'habille,
+  // sur les quatre emplacements. ⚠️ L'EFFECTIVE et non celle qu'on a tirée — un primordial
+  // au niveau 1 ne doit pas porter des atours qu'il ne peut pas mener (`advRarity`), sinon
+  // le portrait promettrait ce que le combat refuse.
+  if (adv.championId) {
+    const r = advRarity(adv);
+    return {
+      profile,
+      gear: Object.fromEntries(ADV_AVATAR_SLOTS.map((s) => [s, r])),
+    };
+  }
   const classes = adv.path.map((id) => advClass(id)).filter((c): c is AdvClass => !!c);
   const gear: Partial<Record<(typeof ADV_AVATAR_SLOTS)[number], Rarity>> = {};
   const n = Math.min(ADV_AVATAR_SLOTS.length, classes.length);
@@ -1791,8 +1802,16 @@ export function advNextPromoLevel(adv: Adventurer): number | null {
   return promoLevel(nextStratum(adv));
 }
 /** Nom de métier courant = la classe la plus récente. */
-export function advTitle(adv: Adventurer): AdvClass | undefined {
-  return adv.path.length ? advClass(adv.path[adv.path.length - 1]!) : undefined;
+export function advTitle(adv: Adventurer): { emoji: string; label: string } | undefined {
+  // 🏅 Un champion EST son propre titre : il n'a pas de métier courant, il a un nom.
+  // ⚠️ Le type de retour se resserre à `{ emoji, label }` — la PART d'`AdvClass` que les
+  // six écrans lisaient réellement (vérifié un par un). Rendre un `AdvClass` synthétique
+  // aurait obligé à inventer une strate, des poids et des tags qu'un champion n'a pas,
+  // et le premier lecteur de ces champs bidons aurait menti en silence.
+  const champ = advChampion(adv);
+  if (champ) return { emoji: champ.emoji, label: champ.name };
+  const c = adv.path.length ? advClass(adv.path[adv.path.length - 1]!) : undefined;
+  return c ? { emoji: c.emoji, label: c.label } : undefined;
 }
 
 /** Signatures portées par le chemin (les strates hautes en donnent une). */
