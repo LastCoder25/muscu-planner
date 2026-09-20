@@ -284,6 +284,59 @@ export function fmtDelta(cur: number, next: number): string {
 
 type CombatActor = 'player' | 'monster';
 type CombatEventType = 'hit' | 'crit' | 'dodge';
+
+/**
+ * ⚔️ UNE COMPÉTENCE QUI A MORDU SUR UN COUP.
+ *
+ * ⚠️ **SEULEMENT LES CONDITIONNELLES.** Les passives (dégâts, PV, critique, réduction) se
+ * lisent déjà dans les chiffres du log ; les annoncer noierait ce qui se passe VRAIMENT
+ * sous ce qui est toujours vrai.
+ *
+ * ⚠️ **LECTURE SEULE, ET C'EST L'INVARIANT** : marquer un coup ne consomme aucun tirage et
+ * ne change aucune valeur. Un combat seedé rend exactement le même résultat avec ou sans
+ * ces marques — un test d'empreinte le verrouille, parce que c'est la propriété sur
+ * laquelle repose TOUTE la calibration du jeu (donjons, boss, route, sièges).
+ */
+export type CombatSkill =
+  /**
+   * ── Signatures, celles que portent les CHAMPIONS et les classes ──
+   * ⚠️ Ce sont les `EffectType` conditionnels, **sans leur suffixe `_pct`** : un seul mot
+   * pour la stat et pour son déclenchement, donc aucune table de correspondance à tenir.
+   */
+  | 'execute'
+  | 'rage'
+  | 'momentum'
+  | 'lifesteal'
+  | 'thorns'
+  /**
+   * ── Procs légendaires et signatures de set ──
+   * ⚠️ **LES IDS DE `LEGENDARY_PROCS` ET DE `SET_SIGNATURES`, à la lettre.** Inventer une
+   * seconde nomenclature (« carnage » pour `sig_berserker`) aurait garanti qu'elles
+   * divergent — et le libellé affiché est déjà écrit là-bas, avec son emoji.
+   */
+  | 'initiative'
+  | 'predator_eye'
+  | 'aegis'
+  | 'retort'
+  | 'phoenix'
+  | 'secondwind'
+  | 'executioner'
+  | 'vampiric'
+  | 'charge'
+  | 'cadence'
+  | 'quarry'
+  | 'endurance'
+  | 'whetted'
+  | 'thirst'
+  | 'sig_berserker'
+  | 'sig_gardien'
+  | 'sig_assassin'
+  | 'sig_vampire'
+  | 'sig_colosse'
+  | 'sig_duelliste'
+  | 'sig_epineux'
+  | 'sig_frenetique';
+
 export interface CombatEvent {
   round: number;
   who: CombatActor; // qui attaque
@@ -291,6 +344,10 @@ export interface CombatEvent {
   damage: number;
   playerPv: number; // PV restants après l'événement
   monsterPv: number;
+  /** Les compétences qui ont mordu sur CE coup. ⚠️ ABSENT quand il n'y en a aucune, au
+   *  lieu d'un tableau vide : un combat en produit ~150, et la plupart des coups sont
+   *  ordinaires — on n'alloue que lorsqu'il y a quelque chose à dire. */
+  skills?: CombatSkill[];
 }
 export interface CombatResult {
   win: boolean;
@@ -365,6 +422,9 @@ export function simulateCombat(
       return h;
     };
     for (let h = 0; h < hits && pPv > 0 && mPv > 0; h++) {
+      // ⚠️ `undefined` tant que rien n'a mordu — cf. `CombatEvent.skills`.
+      let skills: CombatSkill[] | undefined;
+      const mark = (s: CombatSkill) => (skills ??= []).push(s);
       if (turn === 'player') {
         // ── Attaque du JOUEUR ──
         if (!opening && rng() < def.dodge) {
@@ -372,44 +432,86 @@ export function simulateCombat(
           continue;
         }
         let crit = rng() < atk.crit;
-        if (has('predator_eye') && pTurn <= COMBAT.predatorTurns) crit = true; // Œil
+        if (has('predator_eye') && pTurn <= COMBAT.predatorTurns) {
+          crit = true; // Œil
+          mark('predator_eye');
+        }
         // Riposte affûtée : le tour qui suit la 1re attaque encaissée est entièrement critique.
-        if (whettedNow) crit = true;
+        if (whettedNow) {
+          crit = true;
+          mark('whetted');
+        }
         // Botte secrète : un coup porté sur N est un critique appuyé, sans jet.
         const thrust = has('sig_duelliste') && (pHits + 1) % COMBAT.secretThrustEvery === 0;
-        if (thrust) crit = true;
+        if (thrust) {
+          crit = true;
+          mark('sig_duelliste');
+        }
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
         const cm = thrust ? Math.max(critMult, COMBAT.secretThrustMult) : critMult;
+        // Coup de grâce : il ne se déclenche pas, il AMPLIFIE chaque critique (il est déjà
+        // dans `critMult`, calculé hors boucle) — donc on le marque sur le coup concerné.
+        if (crit && has('sig_assassin')) mark('sig_assassin');
         let dmg = Math.max(1, Math.round(atk.damage * (crit ? cm : 1) * variance));
-        if (opening) dmg = Math.round(dmg * COMBAT.initiativeMult);
+        if (opening) {
+          dmg = Math.round(dmg * COMBAT.initiativeMult);
+          mark('initiative');
+        }
         // Charge : ouverture brutale, sur le(s) premier(s) tour(s).
-        if (has('charge') && pTurn <= COMBAT.chargeTurns) dmg = Math.round(dmg * COMBAT.chargeMult);
+        if (has('charge') && pTurn <= COMBAT.chargeTurns) {
+          dmg = Math.round(dmg * COMBAT.chargeMult);
+          mark('charge');
+        }
         // Cadence : récompense au contraire la DURÉE — l'élan, pas l'ouverture.
-        if (has('cadence') && pHits >= COMBAT.cadenceFrom - 1)
+        if (has('cadence') && pHits >= COMBAT.cadenceFrom - 1) {
           dmg = Math.round(dmg * COMBAT.cadenceMult);
+          mark('cadence');
+        }
         // Effets signature (conditionnels), avant réduction.
         let mult = 1;
-        if (atk.execute && mPv / monsterMaxPv < COMBAT.executeThreshold) mult += atk.execute;
-        if (atk.rage && pPv / maxPPv < COMBAT.rageThreshold) mult += atk.rage;
-        if (atk.momentum) mult += Math.min(momentumCap, pStacks) * atk.momentum;
+        if (atk.execute && mPv / monsterMaxPv < COMBAT.executeThreshold) {
+          mult += atk.execute;
+          mark('execute');
+        }
+        if (atk.rage && pPv / maxPPv < COMBAT.rageThreshold) {
+          mult += atk.rage;
+          mark('rage');
+        }
+        if (atk.momentum && pStacks > 0) {
+          mult += Math.min(momentumCap, pStacks) * atk.momentum;
+          mark(momentumCap > COMBAT.momentumMaxStacks ? 'sig_frenetique' : 'momentum');
+        } else if (atk.momentum) mult += Math.min(momentumCap, pStacks) * atk.momentum;
         // Carnage : plus l'ennemi saigne, plus on frappe fort.
-        if (has('sig_berserker')) mult += COMBAT.carnageMax * (1 - mPv / monsterMaxPv);
+        if (has('sig_berserker')) {
+          mult += COMBAT.carnageMax * (1 - mPv / monsterMaxPv);
+          mark('sig_berserker');
+        }
         if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
         pStacks++; // Déferlante : coup porté
-        if (atk.lifesteal) pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal)));
+        if (atk.lifesteal) {
+          const before = pPv;
+          pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal)));
+          if (pPv > before) mark('lifesteal');
+        }
         // Vampirisme : les crits soignent (compte dans le plafond de soin du tour).
-        if (crit && has('vampiric'))
+        if (crit && has('vampiric')) {
+          const before = pPv;
           pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * COMBAT.vampiricHealPct)));
+          if (pPv > before) mark('vampiric');
+        }
         // Bourreau : exécute un ennemi tombé très bas.
-        if (mPv > 0 && has('executioner') && mPv / monsterMaxPv < COMBAT.executeKillThreshold)
+        if (mPv > 0 && has('executioner') && mPv / monsterMaxPv < COMBAT.executeKillThreshold) {
           mPv = 0;
+          mark('executioner');
+        }
         // Curée : la mise à mort qui approche te remet en selle (hors plafond de soin du
         // tour — c'est un proc one-shot, pas du vol de vie répété).
         if (quarryReady && mPv > 0 && mPv / monsterMaxPv < COMBAT.quarryThreshold) {
           pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.quarryHealPct));
           quarryReady = false;
+          mark('quarry');
         }
         pHits++;
         log.push({
@@ -419,6 +521,7 @@ export function simulateCombat(
           damage: dmg,
           playerPv: pPv,
           monsterPv: mPv,
+          ...(skills ? { skills } : {}),
         });
       } else {
         // ── Attaque du MONSTRE ──
@@ -432,24 +535,34 @@ export function simulateCombat(
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         // Endurance : le colosse se raidit quand il saigne. S'applique APRÈS la réduction
         // ordinaire (elle s'y ajoute au lieu de la remplacer) et reste bornée par elle.
-        if (has('endurance') && pPv / maxPPv < COMBAT.enduranceThreshold)
+        if (has('endurance') && pPv / maxPPv < COMBAT.enduranceThreshold) {
           dmg = Math.max(1, Math.round(dmg * (1 - COMBAT.enduranceReduction)));
+          mark('endurance');
+        }
         // Bastion : les premiers coups qui touchent sont amortis.
         if (bastionLeft > 0 && dmg > 0) {
           dmg = Math.max(1, Math.round(dmg * COMBAT.bastionMult));
           bastionLeft--;
+          mark('sig_gardien');
         }
         // Inébranlable : aucun coup ne retire plus d'une part fixe des PV max.
-        if (has('sig_colosse'))
+        if (has('sig_colosse')) {
+          const avant = dmg;
           dmg = Math.min(dmg, Math.max(1, Math.round(maxPPv * COMBAT.unshakenMaxHitPct)));
+          if (dmg < avant) mark('sig_colosse');
+        }
         const firstEnemy = mFirstLanded;
         // Rétorsion : les premiers coups ennemis reçus blessent l'ennemi d'une part de SES PV max.
         if (retortLeft > 0 && dmg > 0) {
           mPv = Math.max(0, mPv - Math.round(monsterMaxPv * COMBAT.retortMaxPvPct));
           retortLeft--;
+          mark('retort');
         }
         // Égide : amortit la 1re attaque ennemie.
-        if (firstEnemy && has('aegis')) dmg = Math.round(dmg * (1 - COMBAT.aegisBlock));
+        if (firstEnemy && has('aegis')) {
+          dmg = Math.round(dmg * (1 - COMBAT.aegisBlock));
+          mark('aegis');
+        }
         if (firstEnemy && has('whetted')) whettedLeft = COMBAT.whettedTurns;
         mFirstLanded = false;
         const pBefore = pPv;
@@ -460,26 +573,36 @@ export function simulateCombat(
           mPv = Math.max(0, mPv - drain);
           pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.thirstHealPct));
           thirstReady = false;
+          mark('thirst');
         }
         // Phénix : amortit le coup fatal, une fois.
         if (pPv <= 0 && phoenixReady) {
           // Le coup fatal est amorti : s'il reste mortel, on tombe quand même.
           pPv = Math.max(0, pBefore - Math.round(dmg * (1 - COMBAT.phoenixBlock)));
           phoenixReady = false;
+          mark('phoenix');
         } else if (pPv > 0 && secondWindReady && pPv / maxPPv < COMBAT.secondWindThreshold) {
           // Second souffle : sous 30 % PV pour la 1re fois → soin.
           pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.secondWindHealPct));
           secondWindReady = false;
+          mark('secondwind');
         }
-        if (atk.lifesteal)
+        if (atk.lifesteal) {
+          const avant = mPv;
           mPv = Math.min(monster.pv, mPv + gainHeal(Math.round(dmg * atk.lifesteal)));
+          if (mPv > avant) mark('lifesteal');
+        }
         // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
-        if (def.thorns && dmg > 0)
+        if (def.thorns && dmg > 0) {
           mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));
+          mark('thorns');
+        }
         // Ronces : chaque coup reçu blesse l'ennemi d'une part de SES PV max — les épines
         // ordinaires suivent les dégâts reçus, donc restent muettes face à un colosse.
-        if (has('sig_epineux') && dmg > 0)
+        if (has('sig_epineux') && dmg > 0) {
           mPv = Math.max(0, mPv - Math.max(1, Math.round(monsterMaxPv * COMBAT.bramblesMaxPvPct)));
+          mark('sig_epineux');
+        }
         log.push({
           round,
           who: turn,
@@ -487,6 +610,7 @@ export function simulateCombat(
           damage: dmg,
           playerPv: pPv,
           monsterPv: mPv,
+          ...(skills ? { skills } : {}),
         });
       }
     }

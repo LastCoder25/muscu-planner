@@ -16,7 +16,15 @@
 // pas les mêmes offres et n'ont pas le même destin, pour ~35 classes écrites au lieu de
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
-import { prestigeRankIndex, RANK_ORDER, RARITY_RANK, type EffectType, type Rarity } from './items';
+import {
+  LEGENDARY_PROCS,
+  SET_SIGNATURES,
+  prestigeRankIndex,
+  RANK_ORDER,
+  RARITY_RANK,
+  type EffectType,
+  type Rarity,
+} from './items';
 import { CHAMPION_BY_ID, type Champion } from '@/data/champions';
 import {
   CHARACTER_RANKS,
@@ -30,7 +38,7 @@ import {
 // mais quatre exemplaires d'un générateur seedé, c'est quatre occasions qu'une retouche
 // n'en touche qu'un et fasse diverger des mondes censés être reproductibles.
 // `combat.ts` n'importe RIEN : le prendre pour source ne crée aucun cycle.
-import { mulberry32 } from './combat';
+import { mulberry32, type CombatSkill } from './combat';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -60,16 +68,86 @@ export const ADV_ROLE_LABEL: Record<AdvRole, string> = Object.fromEntries(
  *  légendaires (`EffectType`), déjà appliqués par `simulateCombat` — on ne réinvente
  *  rien, on les NOMME. Sans ça, l'écran de promotion affichait la forme des stats et la
  *  rareté, mais pas ce qui sépare réellement deux classes de même strate. */
-const ADV_SIGNATURE_INFO: Partial<Record<EffectType, { emoji: string; what: string }>> = {
-  damage_pct: { emoji: '⚔️', what: 'Frappe plus fort' },
-  crit_pct: { emoji: '🎯', what: 'Coups critiques plus souvent' },
-  execute_pct: { emoji: '☠️', what: 'Achève les ennemis affaiblis' },
-  lifesteal_pct: { emoji: '🩸', what: 'Se soigne en frappant' },
-  max_pv_pct: { emoji: '❤️', what: 'Plus robuste' },
-  momentum_pct: { emoji: '🌀', what: 'Frappe de plus en plus fort' },
-  rage_pct: { emoji: '🔥', what: 'Redoutable quand il est mal en point' },
-  thorns_pct: { emoji: '🛡️', what: 'Renvoie une part des coups reçus' },
+/** ⚠️ `what` est la PHRASE (ce que la compétence fait, pour une fiche), `name` le NOM
+ *  COURT (pour un bandeau de combat, où il n'y a la place que d'un mot). Les deux vivent
+ *  ici et pas dans deux tables : c'est la même compétence, lue à deux échelles. */
+const ADV_SIGNATURE_INFO: Partial<
+  Record<EffectType, { emoji: string; what: string; name: string }>
+> = {
+  damage_pct: { emoji: '⚔️', what: 'Frappe plus fort', name: 'Frappe' },
+  crit_pct: { emoji: '🎯', what: 'Coups critiques plus souvent', name: 'Précision' },
+  execute_pct: { emoji: '☠️', what: 'Achève les ennemis affaiblis', name: 'Exécution' },
+  lifesteal_pct: { emoji: '🩸', what: 'Se soigne en frappant', name: 'Vol de vie' },
+  max_pv_pct: { emoji: '❤️', what: 'Plus robuste', name: 'Robustesse' },
+  momentum_pct: { emoji: '🌀', what: 'Frappe de plus en plus fort', name: 'Élan' },
+  rage_pct: { emoji: '🔥', what: 'Redoutable quand il est mal en point', name: 'Rage' },
+  thorns_pct: { emoji: '🛡️', what: 'Renvoie une part des coups reçus', name: 'Épines' },
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚔️ CE QUI A MORDU PENDANT UN COMBAT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Où lire le nom d'une compétence de combat. ⚠️ **ON DIT OÙ CHERCHER, ON NE RECOPIE PAS** :
+ * les libellés et les emojis existent déjà dans `ADV_SIGNATURE_INFO` (les signatures que
+ * portent les champions), `LEGENDARY_PROCS` et `SET_SIGNATURES`. Une quatrième copie
+ * aurait divergé au premier renommage — c'est le défaut que ce projet documente à
+ * répétition (les libellés de POI, le test de ferraille, le dessin des balistes).
+ *
+ * ⚠️ **EXHAUSTIF PAR CONSTRUCTION** : ajouter une `CombatSkill` sans dire où la lire ne
+ * compile plus. C'est le patron des `Record<PoiType, …>`.
+ */
+const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set'> = {
+  execute: 'sig',
+  rage: 'sig',
+  momentum: 'sig',
+  lifesteal: 'sig',
+  thorns: 'sig',
+  initiative: 'proc',
+  predator_eye: 'proc',
+  aegis: 'proc',
+  retort: 'proc',
+  phoenix: 'proc',
+  secondwind: 'proc',
+  executioner: 'proc',
+  vampiric: 'proc',
+  charge: 'proc',
+  cadence: 'proc',
+  quarry: 'proc',
+  endurance: 'proc',
+  whetted: 'proc',
+  thirst: 'proc',
+  sig_berserker: 'set',
+  sig_gardien: 'set',
+  sig_assassin: 'set',
+  sig_vampire: 'set',
+  sig_colosse: 'set',
+  sig_duelliste: 'set',
+  sig_epineux: 'set',
+  sig_frenetique: 'set',
+};
+
+const PROC_BY_ID = new Map(LEGENDARY_PROCS.map((p) => [p.id, p]));
+const SET_SIG_BY_ID = new Map(Object.values(SET_SIGNATURES).map((x) => [x.id, x]));
+
+/**
+ * ⚔️ Le nom et l'emoji d'une compétence qui a mordu — pour le rejeu et le rapport.
+ *
+ * ⚠️ Rend `undefined` plutôt que d'inventer un nom : une compétence retirée d'une table
+ * cesse simplement de s'afficher, elle ne fait pas tomber un écran de combat.
+ */
+export function combatSkillInfo(skill: CombatSkill): { emoji: string; name: string } | undefined {
+  const where = SKILL_SOURCE[skill];
+  if (where === 'sig') {
+    // ⚠️ Les ids de signature sont les `EffectType` SANS leur suffixe `_pct` — un seul mot
+    // pour la stat et pour son déclenchement, donc aucune table de correspondance à tenir.
+    const info = ADV_SIGNATURE_INFO[(skill + '_pct') as EffectType];
+    return info ? { emoji: info.emoji, name: info.name } : undefined;
+  }
+  const src = where === 'proc' ? PROC_BY_ID.get(skill) : SET_SIG_BY_ID.get(skill);
+  return src ? { emoji: src.emoji, name: src.name } : undefined;
+}
+
 export const ADV_SIGNATURE_LABEL: Partial<Record<EffectType, string>> = Object.fromEntries(
   Object.entries(ADV_SIGNATURE_INFO).map(([k, v]) => [k, `${v.emoji} ${v.what}`]),
 );

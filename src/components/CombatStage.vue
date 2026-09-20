@@ -1,6 +1,12 @@
 <template>
   <div class="stage" :class="{ qshake: stageShake }">
     <div v-if="critFlash" class="crit-flash" />
+    <!-- ⚔️ CE QUI A MORDU SUR LE COUP COURANT. ⚠️ Au CENTRE et non sur un avatar : une
+         compétence peut venir des deux camps (les épines se déclenchent sur un coup REÇU),
+         et deux piles de pops séparées deviendraient illisibles. -->
+    <div v-if="skillPop.length" class="cs-skills">
+      <span v-for="k in skillPop" :key="k.id" class="cs-skill">{{ k.emoji }} {{ k.name }}</span>
+    </div>
     <div class="cs-vs">
       <!-- Joueur (avatar SVG) -->
       <div
@@ -71,6 +77,7 @@
 // barres de PV, dégâts flottants, crit/esquive, shake. Prototype Phase 1.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { CombatEvent } from '@/lib/combat';
+import { combatSkillInfo } from '@/lib/adventurers';
 import type { Equipped } from '@/lib/items';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 
@@ -117,6 +124,9 @@ const playerPv = ref(startPv.value);
 const monsterPv = ref(props.fights[0]?.maxPv ?? 1);
 const pop = ref<{ side: 'player' | 'monster'; text: string; kind: string } | null>(null);
 const heal = ref<{ side: 'player' | 'monster'; text: string } | null>(null); // soin (vol de vie) / épines
+/** Les compétences qui ont mordu sur le coup joué. ⚠️ Vidé par `clearFx`, comme les pops :
+ *  une compétence qui resterait affichée au coup suivant mentirait. */
+const skillPop = ref<{ id: string; emoji: string; name: string }[]>([]);
 const shakeSide = ref<'player' | 'monster' | null>(null);
 const burstSide = ref<'player' | 'monster' | null>(null);
 const lungeSide = ref<'player' | 'monster' | null>(null); // l'attaquant s'élance
@@ -138,6 +148,7 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let popTimer: ReturnType<typeof setTimeout> | undefined;
 
 function clearFx() {
+  skillPop.value = [];
   shakeSide.value = null;
   burstSide.value = null;
   lungeSide.value = null;
@@ -185,6 +196,12 @@ function apply(step: { fi: number; e: CombatEvent }) {
       critFlash.value = true;
     }
   }
+  // ⚠️ On n'affiche QUE ce qu'on sait nommer : une compétence absente des tables cesse
+  // de s'afficher au lieu de montrer un identifiant brut au joueur.
+  skillPop.value = (e.skills ?? []).flatMap((id) => {
+    const i = combatSkillInfo(id);
+    return i ? [{ id, emoji: i.emoji, name: i.name }] : [];
+  });
   if (e.monsterPv <= 0) monsterDead.value = true; // le monstre tombe
   clearTimeout(popTimer);
   popTimer = setTimeout(clearFx, 160);
@@ -543,6 +560,33 @@ onBeforeUnmount(() => {
   align-self: center;
   font-size: 20px;
   opacity: 0.6;
+}
+/* ⚔️ Bandeau des compétences qui ont mordu. Au-dessus de la scène, centré : une
+   compétence peut venir des deux camps. Il enveloppe (flex-wrap) parce que jusqu'à
+   quatre peuvent tomber sur le même coup, et que l'écran fait 344 px. */
+.cs-skills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 6px;
+  min-height: 18px;
+}
+.cs-skill {
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cs-skills {
+    transition: none;
+  }
 }
 .cs-pop {
   position: absolute;
