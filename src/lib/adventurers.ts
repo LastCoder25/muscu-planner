@@ -16,7 +16,8 @@
 // pas les mêmes offres et n'ont pas le même destin, pour ~35 classes écrites au lieu de
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
-import { RANK_ORDER, type EffectType, type Rarity } from './items';
+import { prestigeRankIndex, RANK_ORDER, type EffectType, type Rarity } from './items';
+import type { Champion } from '@/data/champions';
 import {
   CHARACTER_RANKS,
   characterRank,
@@ -1300,6 +1301,159 @@ export function advStats(adv: Adventurer): {
 export function advRarity(adv: Adventurer): Rarity {
   const top = adv.path.reduce((m, id) => Math.max(m, advClass(id)?.stratum ?? 0), 0);
   return RANK_ORDER[Math.min(RANK_ORDER.length - 1, top)]!;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏅 LE BUDGET DE STATS D'UN CHAMPION — et le plafond qui garde le sport au sommet
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Budget de stats par rareté. `round(20 × (106/20)^(i/7))`.
+ *
+ * ⚠️ **LE PLANCHER EST À 20, ET C'EST MESURÉ.** Le rang multiplie les stats par **×11,5**
+ * (`ADV_LEVEL_K` 0,15 sur 71 niveaux). Pour qu'un **commun investi batte un primordial nu**
+ * — la propriété que tous les gachas défendent — l'écart de rareté doit rester sous ce
+ * facteur. La table d'aujourd'hui (cumul le long d'un chemin de classes) va de 6 à 106,
+ * soit **×17,7** : mesuré, 6 × 11,5 = 69 **perd** contre 106. Avec le plancher à 20 :
+ * 230 contre 106, **la propriété tient**.
+ *
+ * ⚠️ **SEUL LE PLANCHER BOUGE — garder 106 en haut est non négociable** : c'est lui qui
+ * tient tout l'équilibrage de fin de partie (`refAdventurer` et sept fichiers de test).
+ */
+export const RARITY_BUDGET: number[] = RANK_ORDER.map((_, i) =>
+  Math.round(20 * (106 / 20) ** (i / 7)),
+);
+
+/**
+ * 🏅 Ce qu'un champion vaut VRAIMENT — sa rareté, **plafonnée par le rang du joueur**.
+ *
+ * ⚠️ **CE PLAFOND N'EST PAS DANS LA SPEC, ET LA MESURE L'IMPOSE.** Sans lui, le gacha
+ * donne des raretés **indépendamment du niveau**, ce qui court-circuite la règle fondatrice
+ * du projet (« le sport est le plafond »). Mesuré, en simulant les tirages qu'un joueur
+ * accumule en montant — l'escorte des 3 meilleurs champions vaut, face à l'étalon
+ * d'aujourd'hui au même niveau :
+ *
+ * | niveau | sans plafond | avec plafond |
+ * | ------ | ------------ | ------------ |
+ * | 12     | ×3,9 à ×5,6  | **×1,89**    |
+ * | 26     | ×3,7 à ×4,5  | **×1,45**    |
+ * | 45     | ×2,2         | **×1,13**    |
+ * | 100    | ×1,00        | **×1,00**    |
+ *
+ * ⚠️ **ET SANS PLAFOND, LA PROGRESSION DE RARETÉ EST FINIE EN TROIS MOIS** : mesuré, on a
+ * **3 primordiaux dès le niveau 45** (97 à 259 jours selon le profil), après quoi le gacha
+ * n'apporte plus que de l'Éveil. La spec redoutait ça « au bout d'un an ».
+ *
+ * ✅ **ET C'EST L'IDIOME DU PROJET, pas une invention** : les drops ne dépassent jamais le
+ * rang du joueur (v0.876), le trophée prend toujours son rang (v0.894), l'anti-runaway du
+ * Labyrinthe repose dessus (v0.563.23). Le plaisir du tirage est intact — on tire bien un
+ * primordial, et il **révèle son budget** à mesure qu'on monte, au lieu de l'offrir d'un
+ * coup à un joueur de niveau 5.
+ *
+ * ✅ **Propriété décisive, mesurée** : le résultat est **IDENTIQUE pour les trois profils
+ * de joueur** (léger, régulier, très actif). La force de l'escorte suit le **sport**, plus
+ * la chance aux tirages.
+ */
+export function championBudget(rarity: Rarity, playerLevel: number): number {
+  const tire = RANK_ORDER.indexOf(rarity);
+  const cap = prestigeRankIndex(playerLevel);
+  return RARITY_BUDGET[Math.min(tire < 0 ? 0 : tire, cap)]!;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✨ L'ÉVEIL — ce que font les doublons
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AWAKEN = {
+  /** Nombre de crans, à la Genshin (C1-C6). */
+  max: 6,
+  /** Ce qu'un cran ajoute en MAGNITUDE, en part du budget. ⚠️ Barème COMMUN à tous les
+   *  champions : tout écrire, ce serait 6 crans × 32 champions = **192 effets** à écrire ET
+   *  à équilibrer, dont chacun peut casser le combat (le moteur applique ce qu'on lui
+   *  donne). Le barème borne l'écriture à ~64 lignes.
+   *
+   *  ⚠️ **MESURÉ : UN ÉVEIL COMPLET (×1,48) VAUT UN CRAN DE RARETÉ, JAMAIS DEUX.** Le pas
+   *  entre deux raretés voisines vaut ×1,25 à ×1,28 (régulier sur toute l'échelle), donc un
+   *  C6 dépasse la rareté juste au-dessus et n'atteint jamais la suivante. **C'est le
+   *  contrat assumé du genre** (un 4★ C6 vaut un 5★ C0) : la collection rattrape la chance
+   *  d'UN cran, pas plus — et à Éveil ÉGAL la rareté gagne toujours, ce qui préserve le
+   *  tirage. ⚠️ Rester SOUS un cran demanderait `perStep ≤ 0,042`, soit un Éveil complet
+   *  imperceptible — donc pas d'Éveil du tout. Deux tests bornent les deux côtés.
+   *
+   *  ⚠️ La v0.939 justifiait ce barème en le comparant au **×5,3 entre les EXTRÊMES** de
+   *  l'échelle : le mauvais écart. Ce qui décide, c'est le pas entre raretés VOISINES. */
+  perStep: 0.08,
+} as const;
+
+/**
+ * ✨ Rang d'Éveil pour `copies` exemplaires — **la première copie EST le champion**.
+ *
+ * ⚠️ **PLAFONNÉ, et un doublon au-delà n'est JAMAIS perdu** : il se convertit (en pierres
+ * de mana). Sinon un joueur chanceux reçoit du vide, ce qui est exactement ce qu'un gacha
+ * ne doit jamais faire.
+ */
+export function awakenLevel(copies: number): number {
+  return Math.max(0, Math.min(AWAKEN.max, Math.floor(copies) - 1));
+}
+
+/** Vrai si cette copie-là ne monte plus rien (elle se convertit). */
+export function awakenOverflow(copies: number): boolean {
+  return awakenLevel(copies) >= AWAKEN.max && Math.floor(copies) - 1 > AWAKEN.max;
+}
+
+/** Multiplicateur de magnitude au rang d'Éveil `lvl`. */
+export function awakenMult(lvl: number): number {
+  return 1 + AWAKEN.perStep * Math.max(0, Math.min(AWAKEN.max, lvl));
+}
+
+/**
+ * ✨ Niveau d'une SIGNATURE, crans écrits compris.
+ *
+ * ⚠️ **AUCUN SYSTÈME NEUF** : `AdvSkill` porte déjà un niveau par répétition (v0.757 — une
+ * compétence portée deux fois vaut niveau 2), et l'écran sait déjà l'afficher. Un cran
+ * qualitatif, c'est **+1 niveau**, rien de plus.
+ */
+export function championSkillLevel(
+  champ: { skills: readonly string[]; awaken: readonly { at: number; skill: string }[] },
+  skill: string,
+  awakenLvl: number,
+): number {
+  if (!champ.skills.includes(skill)) return 0;
+  const gagnes = champ.awaken.filter((a) => a.skill === skill && a.at <= awakenLvl).length;
+  return 1 + gagnes;
+}
+
+/**
+ * 🏅 Les stats d'un champion : son budget (plafonné par le rang du joueur) réparti sur sa
+ * forme, × le niveau, × l'Éveil.
+ *
+ * ⚠️ **LA COURBE DE NIVEAU EST CELLE DES AVENTURIERS** — la MÊME expression qu'`advStats`,
+ * cent lignes plus haut, et c'est pour ça que ce bloc vit ICI : c'est
+ * sur ce facteur ×11,5 que repose « un commun investi bat un primordial nu », et une
+ * seconde écriture divergerait au premier réglage.
+ *
+ * ⚠️ **LE NIVEAU DU CHAMPION EST BORNÉ PAR CELUI DU JOUEUR**, comme les aventuriers
+ * aujourd'hui (mesuré v0.905 : le niveau d'un aventurier ÉGALE celui du joueur, c'est la
+ * Guilde qui bride). Sans ça, un champion pourrait dépasser le sport.
+ */
+export function championStats(
+  champ: Champion,
+  playerLevel: number,
+  copies = 1,
+): { puissance: number; endurance: number; agilite: number } {
+  const budget = championBudget(champ.rarity, playerLevel) * awakenMult(awakenLevel(copies));
+  // ⚠️ Le niveau d'un champion EST celui du joueur — pas un second compteur à borner.
+  // Mesuré (v0.905) : le niveau d'un aventurier égale déjà exactement celui du joueur,
+  // c'est la Guilde qui bride. Un `Math.min(playerLevel, playerLevel)` aurait été un garde
+  // incapable de mordre, le motif qu'on vient de supprimer deux fois dans ce module.
+  const mult = 1 + ADV_LEVEL_K * (Math.max(1, playerLevel) - 1);
+  const { p, e, a } = champ.form;
+  const sum = Math.max(1, p + e + a);
+  return {
+    puissance: Math.round(((budget * p) / sum) * mult),
+    endurance: Math.round(((budget * e) / sum) * mult),
+    agilite: Math.round(((budget * a) / sum) * mult),
+  };
 }
 
 /** XP nécessaire pour passer du niveau `level` au suivant. Mesuré avec l'ANCIEN `missionXp`

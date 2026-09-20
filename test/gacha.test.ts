@@ -2,7 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import { RANK_ORDER, type Rarity } from '@/lib/items';
 import { CHAMPIONS, CHAMPION_BY_ID, championsOf } from '@/data/champions';
-import { ADV_LEVEL_K } from '@/lib/adventurers';
+import {
+  ADV_LEVEL_K,
+  AWAKEN,
+  awakenLevel,
+  awakenMult,
+  championBudget,
+  championStats,
+  RARITY_BUDGET,
+} from '@/lib/adventurers';
 import {
   GACHA,
   GACHA_RATES,
@@ -11,13 +19,7 @@ import {
   pullRarity,
   pullsPerDay,
   topRate,
-  RARITY_BUDGET,
-  championBudget,
   pullChampion,
-  championStats,
-  awakenLevel,
-  awakenMult,
-  AWAKEN,
 } from '@/lib/gacha';
 
 const rankOf = (r: Rarity) => RANK_ORDER.indexOf(r);

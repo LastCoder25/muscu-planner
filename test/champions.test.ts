@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { CHAMPIONS, CHAMPION_BY_ID, championsOf, type Champion } from '@/data/champions';
 import { RANK_ORDER, type Rarity } from '@/lib/items';
-import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, type AdvRole } from '@/lib/adventurers';
-import { AWAKEN, awakenLevel, awakenMult, awakenOverflow, championSkillLevel } from '@/lib/gacha';
+import {
+  ADV_ROLE_LABEL,
+  ADV_SIGNATURE_LABEL,
+  AWAKEN,
+  awakenLevel,
+  awakenMult,
+  awakenOverflow,
+  championSkillLevel,
+  type AdvRole,
+} from '@/lib/adventurers';
 
 /** Le nombre de signatures attendu par rareté (1·1·2·2·2·3·3·3). */
 const SIG_PAR_RARETE = [1, 1, 2, 2, 2, 3, 3, 3];
