@@ -353,8 +353,8 @@
               >{{ FACTION_EMOJI[selectedCamp.faction] }}
               {{ FACTION_LABEL[selectedCamp.faction] }}</span
             >
-            <span class="sh-chip" title="La force du camp, comptée en aventuriers de référence"
-              >💪 ≈ {{ selectedCamp.size }} aventurier{{ selectedCamp.size > 1 ? 's' : '' }}</span
+            <span class="sh-chip" title="La force du camp, comptée en champions de référence"
+              >💪 ≈ {{ selectedCamp.size }} champion{{ selectedCamp.size > 1 ? 's' : '' }}</span
             >
             <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
             <span class="sh-chip">⚡ 0</span>
@@ -391,7 +391,7 @@
           >
             {{
               partyAllOn
-                ? 'Retirer tous les aventuriers'
+                ? 'Retirer tous les champions'
                 : `✨ Tout le vivier disponible (${freeStable.length})`
             }}
           </button>
@@ -1346,7 +1346,7 @@ const trips = computed(() => {
           : formatDuration(back ? h.remainTotalMs : h.remainToObjectiveMs),
       pct: heroProg.value.overall * 100,
       back,
-      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} aventurier(s)` : ''}`,
+      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''}`,
     });
   }
   for (const v of vansOnMap.value) {
@@ -1372,7 +1372,7 @@ const trips = computed(() => {
       time: formatDuration(back ? g.at.remainTotalMs : g.at.remainToObjectiveMs),
       pct: g.prog.overall * 100,
       back,
-      title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} aventurier${g.escort > 1 ? 's' : ''}`,
+      title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''}`,
     });
   }
   for (const c of claimable.value) {

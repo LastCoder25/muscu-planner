@@ -68,7 +68,7 @@
         </li>
       </ul>
       <div class="cr-rate">
-        ≈ <b>{{ fmtRate(r.xpPerHour) }} XP/h</b> par aventurier
+        ≈ <b>{{ fmtRate(r.xpPerHour) }} XP/h</b> par champion
         <span class="cr-rate-sub">— le temps qu'ils ont passé sur la route</span>
       </div>
     </q-expansion-item>

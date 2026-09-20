@@ -1661,7 +1661,7 @@ export function caravanReport(van: Caravan, roster: readonly Adventurer[]): Cara
     const adv = roster.find((a) => a.id === id);
     return {
       id,
-      name: adv?.name ?? 'Aventurier parti',
+      name: adv?.name ?? 'Champion parti',
       emoji: (adv && advTitle(adv)?.emoji) || '⚔️',
       xp: Math.max(0, Math.round(o.xp[id] ?? 0)),
       kills: Math.max(0, Math.round(o.kills?.[id] ?? 0)),

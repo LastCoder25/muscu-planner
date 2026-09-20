@@ -2,12 +2,12 @@
   <q-dialog :model-value="open" position="bottom" @update:model-value="emit('close')">
     <q-card class="guild-card">
       <div class="g-head">
-        <span class="g-title font-display">⚔️ Mes aventuriers</span>
+        <span class="g-title font-display">🏅 Mes champions</span>
         <span class="g-count">{{ roster.length }}/{{ maxRoster }}</span>
       </div>
 
       <p v-if="!guildLevel" class="g-empty">
-        Construis le <b>Panthéon</b> dans ta cour pour recruter des aventuriers.
+        Construis le <b>Panthéon</b> dans ta cour pour invoquer tes champions.
       </p>
 
       <template v-else>
@@ -23,7 +23,7 @@
             :aria-selected="guildTab === 'roster'"
             @click="guildTab = 'roster'"
           >
-            ⚔️ Aventuriers
+            🏅 Champions
           </button>
           <button
             type="button"
@@ -276,8 +276,8 @@
                     type="button"
                     class="gear-btn equip"
                     :disabled="busy"
-                    :title="ownerOf(g) ? 'Changer de porteur' : 'Confier à un aventurier'"
-                    :aria-label="ownerOf(g) ? 'Changer de porteur' : 'Confier à un aventurier'"
+                    :title="ownerOf(g) ? 'Changer de porteur' : 'Confier à un champion'"
+                    :aria-label="ownerOf(g) ? 'Changer de porteur' : 'Confier à un champion'"
                     @click="stockEquip = g"
                   >
                     🗡️
@@ -845,7 +845,7 @@ function talNote(a: Adventurer): string {
 }
 /** L'avertissement des deux sélecteurs. ⚠️ Écrit UNE fois : deux copies mot pour mot se
  *  reformulent séparément, et l'une des deux finit par mentir. */
-const GAIN_NOTE = 'Les gains listés sont ce que l’aventurier en tire.';
+const GAIN_NOTE = 'Les gains listés sont ce que le champion en tire.';
 
 /**
  * LES LIGNES DU SÉLECTEUR, pré-calculées.

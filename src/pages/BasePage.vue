@@ -926,7 +926,7 @@
             </span>
           </div>
           <p class="sh-gnote">
-            Un familier se confie à un <b>aventurier</b> et le suit partout — au convoi comme à la
+            Un familier se confie à un <b>champion</b> et le suit partout — au convoi comme à la
             brèche. C’est donc sur sa fiche qu’on le lui donne.
           </p>
         </div>
@@ -1848,7 +1848,7 @@ const doHealAdv = (ids: string[]) =>
     if (cost)
       $q.notify({
         type: 'positive',
-        message: ids.length > 1 ? '⛑️ Tes aventuriers sont sur pied.' : '⛑️ De nouveau sur pied.',
+        message: ids.length > 1 ? '⛑️ Tes champions sont sur pied.' : '⛑️ De nouveau sur pied.',
       });
   });
 /** Le cumul de la fouille, en puces. ⚠️ Ce sont des COMPTES déjà crédités : les objets

@@ -127,7 +127,7 @@
             </div>
             <div class="of-t">Pour qui ?</div>
             <p v-if="!outfitAdvs.length" class="of-note">
-              Recrute d’abord un aventurier au Panthéon.
+              Invoque d’abord un champion au Panthéon.
             </p>
             <div v-else class="of-advs">
               <button
@@ -246,7 +246,7 @@
               class="pm-btn open"
               @click="emit('open-guild')"
             >
-              ⚔️ Voir mes aventuriers
+              🏅 Voir mes champions
             </button>
             <button
               v-if="produces(selectedPlot.building)"

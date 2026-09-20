@@ -293,7 +293,7 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
     const adv = roster.find((a) => a.id === id);
     return {
       id,
-      name: adv?.name ?? 'Aventurier parti',
+      name: adv?.name ?? 'Champion parti',
       emoji: (adv && advTitle(adv)?.emoji) || '⚔️',
       xp: Math.max(0, Math.round(party.xp[id] ?? 0)),
       kills: Math.max(0, Math.round(party.kills[id] ?? 0)),

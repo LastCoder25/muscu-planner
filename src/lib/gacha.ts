@@ -329,7 +329,7 @@ export function grantChampion(
  *
  * ⚠️ **UN CONVOI EN COURS N'EST PAS PERDU** (vérifié : deux en vol sur la base réelle).
  * `caravanClaimRoster` filtre déjà les escortes introuvables et le rapport les affiche
- * « Aventurier parti » (`gone`) : la cargaison s'encaisse, seule l'XP de l'escorte s'en va
+ * « Champion parti » (`gone`) : la cargaison s'encaisse, seule l'XP de l'escorte s'en va
  * — et elle allait de toute façon disparaître avec eux.
  *
  * ⚠️ **IDEMPOTENT** : sans aucun legacy, il rend la MÊME référence et zéro mana.
