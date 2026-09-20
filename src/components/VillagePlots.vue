@@ -291,7 +291,7 @@ import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
-import { advRarity, advTitle, guildRoster } from '@/lib/adventurers';
+import { advRarity, advTitle, deployCap } from '@/lib/adventurers';
 import {
   altarLuckBonus,
   FAMILIAR_SLOT,
@@ -554,10 +554,10 @@ async function doUpgrade(slot: number) {
   const uid = auth.user?.id;
   if (!uid) return;
   const b = plots.value[slot]?.building;
-  const avant = b?.typeId === 'guild' ? guildRoster(b.level) : -1;
+  const avant = b?.typeId === 'guild' ? deployCap(b.level) : -1;
   await char.upgradeFilon(uid, slot, heroLevel.value);
   if (avant < 0) return;
-  const apres = guildRoster(char.guildLevel);
+  const apres = deployCap(char.guildLevel);
   if (apres <= avant) return;
   gameFx.celebrate({
     kind: 'unlock',

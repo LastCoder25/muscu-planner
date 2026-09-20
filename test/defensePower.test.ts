@@ -26,7 +26,7 @@ import {
 } from '@/lib/raid';
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import { TRAVEL } from '@/lib/expedition';
-import { guildRoster } from '@/lib/adventurers';
+import { deployCap } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
 
 const defAt = (lvl: number): DefenseStructure[] => [
@@ -40,7 +40,7 @@ const NOW = 1_700_000_000_000;
 const garde = (lvl: number) =>
   guardUnits(
     lvl,
-    Array.from({ length: guildRoster(lvl) }, (_, i) => ({
+    Array.from({ length: deployCap(lvl) }, (_, i) => ({
       ...refAdventurer(Math.max(1, lvl - (i % 6)), i),
       id: `g${i}`,
     })),

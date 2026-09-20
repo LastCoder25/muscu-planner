@@ -9,7 +9,7 @@ import {
   refAdventurer,
   refCompanions,
 } from '@/lib/caravan';
-import { guildRoster, type Adventurer } from '@/lib/adventurers';
+import { deployCap, type Adventurer } from '@/lib/adventurers';
 import { campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
 import { partyAllies } from '@/lib/caravan';
 import { goldPerDay, stonesPerDay } from './helpers/goldModel';
@@ -30,7 +30,7 @@ import { goldPerDay, stonesPerDay } from './helpers/goldModel';
  * résultat pour qu'il ne dérive plus en silence.
  *
  * ⚠️ LA SIMULATION EST CELLE D'UN JOUEUR QUI OPTIMISE : carte réelle (`createMap` /
- * `advanceWorld`), vivier au complet (`guildRoster`), et pour chaque camp il RENFORCE le
+ * `advanceWorld`), vivier au complet (`deployCap`), et pour chaque camp il RENFORCE le
  * groupe jusqu'à une victoire probable puis choisit le meilleur rendement espéré par heure de
  * créneau. C'est une BORNE HAUTE : elle ignore que les camps DÉPLACENT des convois (un
  * aventurier en camp n'est pas en convoi), dont l'or n'est pas compté ici.
@@ -69,7 +69,7 @@ interface Trip {
 /** `slotCap` : la règle livrée (un pool partagé avec les convois) ou son absence — c'est ce
  *  qui permet de MESURER ce que le plafond change, au lieu de l'affirmer. */
 function sim(L: number, seed: number, opts: { days: number; comptoir: number; slotCap: boolean }) {
-  const advs = roster(L, guildRoster(L));
+  const advs = roster(L, deployCap(L));
   const rd = road(L, advs.length);
   const busy = new Map<string, number>();
   let map = createMap(seed, 0, L);
@@ -205,7 +205,7 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
   });
 
   it('⚠️ le PLAFOND DE CRÉNEAUX mord vraiment : un gros vivier sur un petit Comptoir', () => {
-    // Le vivier croît avec le niveau (`guildRoster`), les créneaux avec le COMPTOIR : c'est
+    // Le vivier croît avec le niveau (`deployCap`), les créneaux avec le COMPTOIR : c'est
     // exactement le cas où un joueur pourrait lancer des groupes par dizaines.
     const cap = moyenne(60, { days: 7, comptoir: 9, slotCap: true });
     const sans = moyenne(60, { days: 7, comptoir: 9, slotCap: false });

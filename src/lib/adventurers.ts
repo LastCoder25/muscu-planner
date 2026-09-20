@@ -1246,6 +1246,20 @@ export interface Adventurer {
    * cohabitent le temps de la bascule.
    */
   championId?: string;
+  /**
+   * 🗿 ENGAGÉ, ou en collection ?
+   *
+   * ⚠️ **C'EST LE SEUL PLAFOND D'EFFECTIF DU JEU**, et il est porteur. `guardUnits` fait
+   * défendre TOUT le vivier disponible : une collection illimitée sans plafond donnerait
+   * une base **imprenable** — le runaway relevé en v0.779 (le vivier croît ×7,3 du niveau
+   * 12 à 100 quand l'armée ne croît que ×1,8). Le Panthéon borne donc combien de champions
+   * sont engagés **à la fois** (`deployCap`, la formule de la Guilde reprise telle quelle).
+   *
+   * ⚠️ **IL VIT DANS `advUnavailableReason`, la SOURCE UNIQUE de la disponibilité** : un
+   * champion en collection est indisponible, donc les convois, les camps ET la défense le
+   * voient d'un coup, sans qu'aucun des quatre sites n'ait à s'en souvenir.
+   */
+  deployed?: boolean;
   /** Combien d'exemplaires on possède de ce champion. ⚠️ C'est ce compte qui porte l'Éveil
    *  (`awakenLevel`) : la PREMIÈRE copie est le champion, les suivantes le réveillent. */
   copies?: number;
@@ -1957,8 +1971,12 @@ export function reachableSkills(path: string[]): {
  *  ⚠️ Le niveau de la Guilde étant lui-même plafonné par celui du joueur, l’effectif
  *  reste indexé sur le SPORT — mais linéairement, là où la puissance du héros croît en
  *  ~L⁴. C’est précisément ce qui rend la boucle accessible à un joueur peu sportif. */
-export function guildRoster(guildLevel: number): number {
-  return 1 + Math.floor(Math.max(0, guildLevel) / 2);
+export function deployCap(pantheonLevel: number): number {
+  // ⚠️ Le `Math.max(0, …)` est DORMANT — un niveau de bâtiment vient de `buildingLevel`,
+  // qui rend 0 au minimum, donc la mutation qui le retire survit. Il reste parce que c'est
+  // la formule de la Guilde reprise TELLE QUELLE : la retirer ferait diverger le
+  // déploiement de la courbe déjà mesurée, pour rien.
+  return 1 + Math.floor(Math.max(0, pantheonLevel) / 2);
 }
 
 /** Coût de recrutement : il CROÎT avec l’effectif déjà en place, sinon on remplit la
@@ -1989,7 +2007,7 @@ export function grantAdvXp(adv: Adventurer, xp: number, guildLevel: number): Adv
  *  ⚠️ SOURCE UNIQUE de la disponibilité : `advAvailable` en DÉRIVE. Un écran qui dit
  *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
  *  Ordre : sur la route, puis à l'infirmerie, puis en formation (le premier qui s'applique). */
-export type AdvUnavailable = 'busy' | 'hurt' | 'training';
+export type AdvUnavailable = 'busy' | 'hurt' | 'training' | 'benched';
 export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
   if ((adv.busyUntil ?? 0) > now) return 'busy';
   if ((adv.hurtUntil ?? 0) > now) return 'hurt';
@@ -1997,12 +2015,20 @@ export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailab
   // renoncer à cet aventurier pour les prochains convois. Sans ça, une promotion serait
   // gratuite et il n'y aurait aucune décision.
   if ((adv.training?.until ?? 0) > now) return 'training';
+  // 🗿 EN COLLECTION : il existe, il n'est simplement pas engagé. ⚠️ C'est le plafond du
+  // Panthéon (`deployCap`), et il passe par ICI plutôt que par chaque site d'envoi —
+  // sinon la défense (`guardUnits`, qui prend tout le vivier disponible) l'oublierait,
+  // et une collection illimitée rendrait la base imprenable.
+  // ⚠️ Un aventurier LEGACY (sans `championId`) n'est jamais mis au banc : il n'a pas de
+  // Panthéon, et le priver de mission serait le punir d'avoir existé avant la bascule.
+  if (adv.championId && !adv.deployed) return 'benched';
   return null;
 }
 export const ADV_UNAVAILABLE_LABEL: Record<AdvUnavailable, string> = {
   busy: '🧭 en route',
   hurt: '🤕 infirmerie',
   training: '📚 formation',
+  benched: '🗿 en collection',
 };
 
 /** Disponible ? Ni en mission, ni en formation, ni à l'infirmerie. */
@@ -2024,12 +2050,13 @@ export function advStatus(adv: Adventurer, now: number): AdvStatus {
   return advUnavailableReason(adv, now) ?? 'free';
 }
 /** Les catégories dans l'ordre où on les propose : ce qui peut partir d'abord. */
-export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt', 'training'];
+export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt', 'training', 'benched'];
 export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
-  free: '✅ disponibles',
+  free: '✅ déployés',
   busy: '🐫 en convoi',
   hurt: '🛏️ infirmerie',
   training: '🎓 formation',
+  benched: '🗿 en collection',
 };
 
 /** Une promotion arrivée à terme est APPLIQUÉE ; sinon l'aventurier est rendu tel quel.

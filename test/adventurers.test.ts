@@ -38,7 +38,7 @@ import {
   advNextPromoLevel,
   advProgressOf,
   advXpToNext,
-  guildRoster,
+  deployCap,
   recruitCost,
   grantAdvXp,
   type Adventurer,
@@ -574,10 +574,10 @@ describe('Guilde : effectif, coût de recrutement, XP', () => {
   it('l’effectif croît avec la Guilde — donc avec le sport, mais LINÉAIREMENT', () => {
     // C'est ce qui rend la boucle accessible : la puissance du héros croît en ~L⁴, là où
     // l'effectif d'une Guilde suit son niveau tout doucement.
-    expect(guildRoster(0)).toBe(1);
-    expect(guildRoster(2)).toBe(2);
-    expect(guildRoster(20)).toBe(11);
-    for (let l = 0; l < 60; l++) expect(guildRoster(l + 1)).toBeGreaterThanOrEqual(guildRoster(l));
+    expect(deployCap(0)).toBe(1);
+    expect(deployCap(2)).toBe(2);
+    expect(deployCap(20)).toBe(11);
+    for (let l = 0; l < 60; l++) expect(deployCap(l + 1)).toBeGreaterThanOrEqual(deployCap(l));
   });
   it('⚠️ recruter coûte de plus en plus cher — sinon on remplit la Guilde d’un coup', () => {
     // Et « qui j'élève » cesse d'être une décision : c'est tout l'intérêt de la feature
@@ -704,9 +704,16 @@ describe('⚠️ une promotion se PAIE en temps de formation', () => {
     // catégories ferait disparaître ces aventuriers de tous les filtres.
     const at = 1000;
     const vus = new Set(
-      [base(), { ...base(), busyUntil: 2000 }, { ...base(), hurtUntil: 2000 }, enForm(2000)].map(
-        (a) => advStatus(a, at),
-      ),
+      [
+        base(),
+        { ...base(), busyUntil: 2000 },
+        { ...base(), hurtUntil: 2000 },
+        enForm(2000),
+        // 🗿 EN COLLECTION : un champion que le Panthéon ne déploie pas. ⚠️ Il lui faut un
+        // `championId` — un aventurier LEGACY n'est jamais mis au banc (il n'a pas de
+        // Panthéon, et le priver de mission serait le punir d'avoir existé avant).
+        { ...base(), championId: 'orsene' },
+      ].map((a) => advStatus(a, at)),
     );
     expect([...vus].sort()).toEqual([...ADV_STATUSES].sort());
     for (const s of ADV_STATUSES) expect(ADV_STATUS_LABEL[s].length).toBeGreaterThan(0);

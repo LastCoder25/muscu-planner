@@ -101,7 +101,7 @@ import {
 import { combatPower, type Combatant } from '@/lib/combat';
 import { talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
-import { PROMO_LEVELS, guildRoster, type Adventurer } from '@/lib/adventurers';
+import { PROMO_LEVELS, deployCap, type Adventurer } from '@/lib/adventurers';
 import {
   companionEffects,
   refAdventurer,
@@ -136,7 +136,7 @@ function hero(L: number): Combatant {
  *  contre 88 % avec un vivier promu — le garde-fou du plafond mesurait un joueur qui
  *  n’existe pas, et tant que la cour ne décidait rien ça ne se voyait pas. */
 function rosterOf(playerLevel: number): Adventurer[] {
-  return Array.from({ length: guildRoster(playerLevel) }, (_, i) => ({
+  return Array.from({ length: deployCap(playerLevel) }, (_, i) => ({
     ...refAdventurer(Math.max(1, playerLevel - (i % 6)), i),
     id: `a${i}`,
     name: `A${i}`,
@@ -879,7 +879,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     // « on recrute un aventurier tous les 2 lvl », donc on doit pouvoir en équiper un
     // tous les 2 lvl — sinon le vivier grandit plus vite que ce qu’on sait armer.
     expect(companionSlots(0)).toBe(0);
-    for (let l = 1; l <= 100; l++) expect(companionSlots(l)).toBe(guildRoster(l));
+    for (let l = 1; l <= 100; l++) expect(companionSlots(l)).toBe(deployCap(l));
   });
 
   it('⚠️ LE RANG MAXIMAL SUIT CE QU’ON PEUT DROPPER, plus la table de la Guilde', () => {

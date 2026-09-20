@@ -169,7 +169,7 @@ const props = defineProps<{
    *  ⚠️ Une PROP, plus une déduction faite sur la chaîne d'état : le portrait lisait
    *  `state.startsWith('✅')` pour savoir s'il était occupé — renommer le libellé aurait
    *  cassé le style en silence, et la même règle vivait alors à deux endroits. */
-  tone?: 'free' | 'busy' | 'hurt' | 'training';
+  tone?: 'free' | 'busy' | 'hurt' | 'training' | 'benched';
   promotable?: boolean;
   disabled?: boolean;
   /** Les 4 emplacements d'équipement, dans l'ordre de la grille. */
@@ -248,7 +248,8 @@ function starTf(i: number): string {
 .ap.tone-hurt {
   --tone-c: var(--d4, #ff6a45);
 }
-.ap.tone-training {
+.ap.tone-training,
+.ap.tone-benched {
   --tone-c: var(--d3, #ffb23f);
   border-style: dashed;
 }

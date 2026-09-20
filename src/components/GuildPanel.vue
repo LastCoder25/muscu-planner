@@ -1453,8 +1453,10 @@ function stateOf(a: Adventurer): string {
       return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}${also}`;
     case 'training':
       return `🎓 en formation · ${leftOf(trainOf(a))}`;
+    case 'benched':
+      return '🗿 en collection — pas engagé';
     default:
-      return '✅ disponible';
+      return '✅ déployé';
   }
 }
 const talIconOf = (a: Adventurer) => {

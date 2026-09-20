@@ -158,7 +158,7 @@ import {
   advProgressOf,
   advRarity,
   grantAdvXp,
-  guildRoster,
+  deployCap,
   recruitCost,
   type Adventurer,
 } from '@/lib/adventurers';
@@ -2444,7 +2444,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur) return false;
     if (guildLevel.value <= 0) return false;
     const roster = advList.value;
-    if (roster.length >= guildRoster(guildLevel.value)) return false;
+    if (roster.length >= deployCap(guildLevel.value)) return false;
     if (!recruitChoices(seed).some((c) => c.id === classId)) return false; // pas dans l'offre
     const cost = recruitCost(roster.length, guildLevel.value);
     if (cur.gold < cost) return false;

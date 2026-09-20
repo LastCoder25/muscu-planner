@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 import { BUILDING_TYPES } from '@/lib/buildings';
 import { caravanSlots, caravanSlowFor } from '@/lib/caravan';
-import { guildRoster } from '@/lib/adventurers';
+import { deployCap } from '@/lib/adventurers';
 
 describe('aperçu des prochains niveaux d’un bâtiment', () => {
   it('⚠️ CHAQUE type de bâtiment a un aperçu — un bâtiment muet est une régression', () => {
@@ -18,7 +18,7 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
     const ligne = buildingPreview('caravanserail', l, 0)[0]!;
     expect(ligne.text).toContain(String(caravanSlots(l)));
     expect(ligne.text).toContain(caravanSlowFor(l).toFixed(2));
-    expect(buildingPreview('guild', 8, 0)[0]!.text).toContain(String(guildRoster(8)));
+    expect(buildingPreview('guild', 8, 0)[0]!.text).toContain(String(deployCap(8)));
   });
 
   it('marque les PALIERS, et eux seuls', () => {

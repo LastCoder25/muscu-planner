@@ -10,8 +10,11 @@ import {
   advRoles,
   advSignatureLevels,
   advSignatures,
+  advAvailable,
   advAvatar,
   advStats,
+  advUnavailableReason,
+  deployCap,
   advTitle,
   canPromote,
   championRarity,
@@ -232,5 +235,45 @@ describe('🏅 le VISAGE d’un champion (le 8ᵉ accesseur)', () => {
     expect(advAvatar(asAdv(cogneur, 60)).profile).toBe('puissant');
     const rapide = CHAMPIONS.find((c) => c.form.a > c.form.p && c.form.a > c.form.e)!;
     expect(advAvatar(asAdv(rapide, 60)).profile).toBe('agile');
+  });
+});
+
+describe('🗿 LE DÉPLOIEMENT — le seul plafond d’effectif du jeu', () => {
+  it('⚠️ UN CHAMPION EN COLLECTION EST INDISPONIBLE, donc invisible des QUATRE sites', () => {
+    // La règle vit dans `advUnavailableReason`, la SOURCE UNIQUE — donc les convois, les
+    // camps, la défense et l'écran la voient d'un coup. Posée à chaque site d'envoi, elle
+    // aurait été oubliée par `guardUnits` (qui prend tout le vivier disponible), et une
+    // collection illimitée rendrait la base imprenable (runaway v0.779).
+    const enCollection = { ...asAdv(primordial, 60), deployed: false };
+    expect(advUnavailableReason(enCollection, 0)).toBe('benched');
+    expect(advAvailable(enCollection, 0)).toBe(false);
+    const deploye = { ...asAdv(primordial, 60), deployed: true };
+    expect(advUnavailableReason(deploye, 0)).toBeNull();
+    expect(advAvailable(deploye, 0)).toBe(true);
+  });
+
+  it('⚠️ UN AVENTURIER LEGACY N’EST JAMAIS MIS AU BANC', () => {
+    // Il n'a pas de Panthéon : le priver de mission serait le punir d'avoir existé avant
+    // la bascule. Les deux systèmes cohabitent le temps de celle-ci.
+    const a = refAdventurer(30);
+    expect(a.deployed).toBeUndefined();
+    expect(advAvailable(a, 0)).toBe(true);
+  });
+
+  it('les raisons gardent leur ORDRE : la route, puis l’infirmerie, puis le banc', () => {
+    const c = asAdv(primordial, 60);
+    expect(advUnavailableReason({ ...c, busyUntil: 10, deployed: false }, 0)).toBe('busy');
+    expect(advUnavailableReason({ ...c, hurtUntil: 10, deployed: false }, 0)).toBe('hurt');
+  });
+
+  it('`deployCap` reprend la formule de la Guilde TELLE QUELLE', () => {
+    // ⚠️ Aucune formule nouvelle : c'est ce qui la rend déjà mesurée et vivante jusqu'au
+    // niveau 100 (+1 tous les 2 niveaux, 51 au niveau 100).
+    expect(deployCap(0)).toBe(1);
+    expect(deployCap(1)).toBe(1);
+    expect(deployCap(2)).toBe(2);
+    expect(deployCap(30)).toBe(16);
+    expect(deployCap(100)).toBe(51);
+    for (let L = 1; L <= 100; L++) expect(deployCap(L)).toBeGreaterThanOrEqual(deployCap(L - 1));
   });
 });

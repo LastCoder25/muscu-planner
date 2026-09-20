@@ -24,7 +24,7 @@ import {
   type Building,
 } from './buildings';
 import { caravanSlots, caravanSlowFor, trainMsFor } from './caravan';
-import { guildRoster } from './adventurers';
+import { deployCap } from './adventurers';
 import { outfitterMsFor } from './advGear';
 import { altarLuckBonus } from './items';
 import { characterRank } from './characterRank';
@@ -58,7 +58,7 @@ function textAt(typeId: string, level: number): string | null {
     }
     case 'guild': {
       const r = characterRank(Math.max(1, level));
-      return `${guildRoster(level)} aventuriers · rang max ${r.name} ${'★'.repeat(r.star)}`;
+      return `${deployCap(level)} aventuriers · rang max ${r.name} ${'★'.repeat(r.star)}`;
     }
     case 'training':
       // ⚠️ Les DEUX bouts : la durée double à chaque rang, donc un seul chiffre ne
@@ -99,7 +99,7 @@ function textAt(typeId: string, level: number): string | null {
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
 function isMilestone(typeId: string, level: number): boolean {
   if (typeId === 'caravanserail') return caravanSlots(level) > caravanSlots(level - 1);
-  if (typeId === 'guild') return guildRoster(level) > guildRoster(level - 1);
+  if (typeId === 'guild') return deployCap(level) > deployCap(level - 1);
   return false;
 }
 
