@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { CHAMPIONS, CHAMPION_BY_ID, championsOf, type Champion } from '@/data/champions';
 import { RANK_ORDER, RARITY_RANK, prestigeRankIndex } from '@/lib/items';
@@ -286,5 +287,32 @@ describe('🏅 LES DEUX RARETÉS — ce qu’on a TIRÉ, et ce qu’il peut MENE
     const a = refAdventurer(30);
     expect(advNominalRarity(a)).toBe(advRarity(a));
     expect(advRarityCapped(a)).toBe(false);
+  });
+
+  it('⚠️ L’ENCADREMENT DU PORTRAIT PEINT LA NOMINALE, jamais l’effective', () => {
+    // ⚠️ AUCUNE PORTE NE LIT LA CSS : le smoke s'arrête à l'écran de connexion et
+    // `mount.test` rend le HTML sans les styles d'un <style scoped> compilé. Une mutation
+    // qui remettait `--rar-c` sur la bordure SURVIVAIT (v0.962) — or c'est exactement la
+    // confusion qu'on corrige : un primordial de niveau 1 se serait encadré de bronze
+    // pendant que sa pastille annonce PRIMORDIAL. On lit donc le fichier.
+    const sfc = readFileSync('src/components/AdventurerPortrait.vue', 'utf8');
+    // Le template pose les DEUX variables, chacune depuis sa source.
+    expect(sfc).toContain(`'--rar-c': rarColor`);
+    expect(sfc).toContain(`'--nom-c': nomColor`);
+    // ⚠️ On découpe du sélecteur jusqu'au suivant (une regex par déclaration raterait en
+    // silence, leçon du banc de la v0.961).
+    const regle = (sel: string) => {
+      const i = sfc.indexOf(`\n${sel} {`);
+      expect(i, sel).toBeGreaterThan(0);
+      return sfc.slice(i, sfc.indexOf('\n}', i));
+    };
+    const ap = regle('.ap');
+    const bord = ap.split('\n').find((l) => l.trim().startsWith('border:'))!;
+    expect(bord).toContain('var(--nom-c)');
+    expect(bord).not.toContain('var(--rar-c)');
+    // …et la pastille dit la même chose que l'encadrement : une seule échelle par objet.
+    const pastille = regle('.ap-rar');
+    expect(pastille).toContain('var(--nom-c)');
+    expect(pastille).not.toContain('var(--rar-c)');
   });
 });

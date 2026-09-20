@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 import { BUILDING_TYPES } from '@/lib/buildings';
 import { caravanSlots, caravanSlowFor } from '@/lib/caravan';
-import { engageCap } from '@/lib/adventurers';
 import { outfitterMsFor } from '@/lib/advGear';
 
 describe('aperçu des prochains niveaux d’un bâtiment', () => {
@@ -19,11 +18,13 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
     const ligne = buildingPreview('caravanserail', l, 0)[0]!;
     expect(ligne.text).toContain(String(caravanSlots(l)));
     expect(ligne.text).toContain(caravanSlowFor(l).toFixed(2));
-    // ⚠️ Les DEUX leviers du Panthéon, pas seulement le plus visible : une moitié du
-    // bâtiment annoncée figée se lirait comme un niveau mort.
+    // ⚠️ RÉÉCRIT (v0.962, demandé : « enlève le nombre d'engagés et le temps de forge »).
+    // Le Panthéon n'annonce plus que son levier le plus FORT — le niveau maximal d'un
+    // champion, qui vaut exactement son propre niveau (`grantAdvXp`) et qui DOMINE la
+    // rareté. Le chiffre reste DÉRIVÉ : aucune formule recopiée dans l'aperçu.
     const pan = buildingPreview('pantheon', 8, 0)[0]!;
-    expect(pan.text).toContain(String(engageCap(8)));
-    expect(pan.text).toContain(String(Math.round(outfitterMsFor(8) / 60000)));
+    expect(pan.text).toContain('8');
+    expect(buildingPreview('pantheon', 30, 0)[0]!.text).toContain('30');
   });
 
   it('marque les PALIERS, et eux seuls', () => {

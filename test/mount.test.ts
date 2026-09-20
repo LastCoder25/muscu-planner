@@ -20,7 +20,7 @@ import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { advNominalRarity, engageCap } from '@/lib/adventurers';
-import { rarityRank } from '@/lib/items';
+import { RARITY_LABEL } from '@/lib/items';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
 async function mountIt(
@@ -121,7 +121,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (a) => a.championId,
     );
     expect(pastilles).toHaveLength(ROW.adventurers.length);
-    for (const a of champs) expect(pastilles).toContain(rarityRank(advNominalRarity(a)).name);
+    // ⚠️ EN RARETÉ (Commun → Primordial), pas en rang : un champion porte les DEUX échelles,
+    // et les nommer pareil faisait lire « Or » à côté de « Bronze ★2 » (v0.962).
+    for (const a of champs) expect(pastilles).toContain(RARITY_LABEL[advNominalRarity(a)]);
   }, 30_000);
 
   it('🎰 GachaReveal se monte, et respecte prefers-reduced-motion', async () => {

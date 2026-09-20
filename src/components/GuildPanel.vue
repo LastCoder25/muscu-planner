@@ -58,14 +58,19 @@
              recrutement n'est plus là que le temps de la bascule. Le bouton DIT le prix et
              ce qui manque plutôt que de se griser en silence (leçon du gris de la carte,
              v0.738). -->
-        <button class="voie-btn g-summon" :disabled="busy || mana < pullCost" @click="doPull">
+        <button class="g-summon" :disabled="busy || mana < pullCost" @click="doPull">
+          <span class="gs-glow" aria-hidden="true"></span>
           <span class="gs-emo">🎰</span>
           <span class="gs-main">
-            <b>Invoquer un champion</b>
-            <small v-if="mana >= pullCost">{{ pullCost }} 💠 · tu en as {{ mana }}</small>
+            <b class="gs-t font-display">Invoquer un champion</b>
+            <small v-if="mana >= pullCost">{{ pullCost }} 💠 par tirage</small>
             <small v-else class="gs-short">
               il te manque {{ pullCost - mana }} 💠 — referme une faille
             </small>
+          </span>
+          <span class="gs-stock font-display">
+            <b>{{ pulls }}</b>
+            <small>{{ pulls > 1 ? 'tirages' : 'tirage' }}</small>
           </span>
         </button>
         <template v-if="guildTab === 'roster' || !roster.length">
@@ -713,6 +718,8 @@ import GachaReveal from './GachaReveal.vue';
 import { buildReveal, type RevealPlan } from '@/lib/gachaReveal';
 import { GACHA } from '@/lib/gacha';
 import {
+  RANK_COLOR,
+  RARITY_LABEL,
   rarityRank,
   gradeLabel,
   RARITY_RANK,
@@ -1307,9 +1314,11 @@ const rankOf = (a: Adventurer) => advRank(a);
 // par rang gagné), donc les deux ne peuvent plus se contredire.
 const rarOf = (a: Adventurer) => rarityRank(advRarity(a)).name;
 const rarColor = (a: Adventurer) => rarityRank(advRarity(a)).color;
-/** ⚠️ La rareté NOMINALE — ce qu'on a tiré. C'est elle qu'un gacha doit montrer. */
-const nomOf = (a: Adventurer) => rarityRank(advNominalRarity(a)).name;
-const nomColor = (a: Adventurer) => rarityRank(advNominalRarity(a)).color;
+/** ⚠️ La rareté NOMINALE — ce qu'on a tiré. C'est elle qu'un gacha doit montrer, et elle
+ *  parle la langue de la RARETÉ (Commun → Primordial), pas celle des rangs : un champion
+ *  porte les DEUX échelles et les nommer pareil les confond (v0.962). */
+const nomOf = (a: Adventurer) => RARITY_LABEL[advNominalRarity(a)];
+const nomColor = (a: Adventurer) => RANK_COLOR[advNominalRarity(a)];
 const cappedOf = (a: Adventurer) => advRarityCapped(a);
 const titleOf = (a: Adventurer) => advTitle(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
@@ -1419,6 +1428,9 @@ const pullCost = GACHA.pullCost;
  * chacune se dit : un champion neuf, un cran d'Éveil, ou une copie de trop qui se
  * convertit (« jamais perdu »).
  */
+/** Combien de tirages la réserve permet. ⚠️ Le chiffre qui décide si on appuie : « 1 831
+ *  💠 » ne se convertit pas de tête. */
+const pulls = computed(() => Math.floor(mana.value / pullCost));
 const revealPlan = ref<RevealPlan | null>(null);
 const revealVerdict = ref<{
   duplicate: boolean;
@@ -1473,22 +1485,111 @@ async function doPull() {
 /* 🎰 L'INVOCATION — l'action qui remplace l'arbre de classes. Elle se distingue du
    recrutement par une teinte propre (le violet du mana), jamais par la seule taille :
    deux boutons pleine largeur de même couleur se lisent comme un seul geste répété. */
+/* 🎰 LE BOUTON D'INVOCATION — « c'est un truc important » (demandé).
+   ⚠️ IL N'AVAIT QUASIMENT AUCUN STYLE : il portait `.voie-btn`, une classe définie dans
+   AventurePage… en `scoped`, donc qui ne l'atteint JAMAIS. Il tombait à la taille de son
+   contenu — « petit, sur 2/3 de la ligne ». C'est le piège des styles scoped déjà rencontré
+   (v0.920) : une classe qu'on croit globale ne l'est pas.
+   ⚠️ Le violet est celui du mana et de la magie, PAS l'accent : l'accent dit « il y a à
+   faire » partout ailleurs, et invoquer est un plaisir, pas une corvée. */
 .g-summon {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  width: 100%;
+  min-height: 68px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, #b57bff 60%, var(--line));
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, #b57bff 26%, transparent),
+      transparent 60%
+    ),
+    var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, #b57bff 14%, transparent);
+  color: var(--text);
   text-align: left;
-  border-color: color-mix(in srgb, #b57bff 55%, var(--line));
-  background: color-mix(in srgb, #b57bff 12%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+}
+.g-summon:disabled {
+  opacity: 0.6;
+  cursor: default;
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: none;
+}
+/* Un reflet qui passe tant qu'on PEUT tirer — il s'éteint dès que la mana manque, donc il
+   ne promet jamais ce qui n'est pas possible. `prefers-reduced-motion` le fige. */
+.gs-glow {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 35%,
+    color-mix(in srgb, #b57bff 34%, transparent) 50%,
+    transparent 65%
+  );
+  transform: translateX(-100%);
+  animation: gs-sweep 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+.g-summon:disabled .gs-glow {
+  display: none;
+}
+@keyframes gs-sweep {
+  0%,
+  62% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 .gs-emo {
-  font-size: 22px;
+  position: relative;
+  font-size: 30px;
   line-height: 1;
 }
-.gs-main {
+.gs-t {
+  font-size: 16px;
+  letter-spacing: 0.02em;
+}
+/* Ce qu'on peut se PAYER, en gros : c'est le chiffre qui décide si on appuie. */
+.gs-stock {
+  position: relative;
+  margin-left: auto;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  line-height: 1;
+  color: #b57bff;
+  b {
+    font-size: 22px;
+  }
+  small {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.8;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gs-glow {
+    animation: none;
+    transform: none;
+    opacity: 0.25;
+  }
+}
+.gs-main {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 .gs-main small {

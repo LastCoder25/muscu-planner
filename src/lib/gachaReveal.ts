@@ -14,6 +14,10 @@
  *   il n'y aurait plus rien à attendre. C'est la propriété centrale, et elle est testée.
  * - ⚠️ **JAMAIS DEUX FOIS LE MÊME D'AFFILÉE** : un doublon consécutif se lit comme un arrêt
  *   de la roulette — on croit que c'est fini, et la révélation tombe à plat.
+ * - ⚠️ **LA BANDE CONTINUE APRÈS LE TIRÉ** (demandé : « sans que le tirage soit en bout
+ *   de ligne »). Sans queue, la dernière case arrive dans le champ de vision et **on voit la
+ *   fin venir** — la roulette cesse d'en être une. Avec elle, elle s'arrête au milieu de son
+ *   élan, comme une vraie.
  * - **PLUS LA RARETÉ EST HAUTE, PLUS ÇA DURE.** C'est le teasing du genre : une roulette
  *   qui s'éternise est un bon présage. Assumé et testé — ça ne « spoile » pas, ça fait
  *   monter la tension, ce qui est précisément la demande.
@@ -41,11 +45,17 @@ export const REVEAL = {
   /** ⚠️ Plancher de crans : en dessous, la bande n'a pas la place de défiler et la
    *  « roulette » se lit comme un simple fondu. */
   cransMin: 8,
+  /** Combien de portraits continuent APRÈS celui qu'on a tiré. ⚠️ Il en faut plus que la
+   *  moitié de ce que l'écran montre, sinon le bord de la bande entre dans le champ et on
+   *  voit la fin arriver — exactement ce qu'on veut éviter. */
+  tail: 6,
 } as const;
 
 export interface RevealPlan {
-  /** Les portraits qui défilent, **le champion tiré en DERNIER**. */
+  /** Les portraits qui défilent — le tiré est à `stopIndex`, **jamais en bout de bande**. */
   strip: Champion[];
+  /** L'index sur lequel la roulette s'arrête. */
+  stopIndex: number;
   /** Durée de la roulette, en millisecondes (0 = pas d'animation). */
   spinMs: number;
   /** Fraction (0..1) à partir de laquelle l'aura révèle la couleur de la rareté. */
@@ -75,28 +85,34 @@ export function buildReveal(
   opts?: { reduced?: boolean; pool?: readonly Champion[] },
 ): RevealPlan {
   const pool = opts?.pool ?? CHAMPIONS;
-  if (opts?.reduced) return { strip: [champion], spinMs: 0, glowFrom: 0 };
+  if (opts?.reduced) return { strip: [champion], stopIndex: 0, spinMs: 0, glowFrom: 0 };
 
   const n = Math.max(REVEAL.cransMin, revealCrans(champion.rarity));
   const strip: Champion[] = [];
-  for (let i = 0; i < n - 1; i++) {
-    // ⚠️ On écarte le PRÉCÉDENT, pas le champion tiré : le voir passer dans la roulette
-    // fait partie du jeu (on l'a frôlé) — seul un doublon CONSÉCUTIF casse la lecture.
-    // ⚠️ Et on l'écarte de la case JUSTE AVANT la fin, sinon il s'y collerait à lui-même.
-    const prev = strip[i - 1];
-    const veille = i === n - 2;
+  /** Un leurre : jamais le PRÉCÉDENT — un doublon consécutif se lit comme un arrêt de la
+   *  roulette. `veille` = la case JUSTE AVANT le tiré : là seulement il faut l'écarter en
+   *  plus, puisqu'il s'y collerait à lui-même.
+   *  ⚠️ JUSTE APRÈS LE TIRÉ, RIEN À AJOUTER, et une mutation l'a prouvé : le tiré EST alors
+   *  le précédent, donc le premier garde l'écarte déjà. Un second serait DORMANT — il
+   *  donnerait la confiance sans la couverture (le motif des v0.751/0.753/0.922).
+   *  ⚠️ Repli sur le pool entier : un roster d'un seul champion ne doit pas rendre une
+   *  bande vide, même si le jeu n'en produit jamais. */
+  const leurre = (veille = false) => {
+    const prev = strip[strip.length - 1];
     const cands = pool.filter((c) => c.id !== prev?.id && !(veille && c.id === champion.id));
-    // Repli sur le pool entier : un roster d'un seul champion ne doit pas rendre une bande
-    // vide, même si le jeu n'en produit jamais.
     const src = cands.length ? cands : pool;
     strip.push(src[Math.floor(rng() * src.length) % src.length]!);
-  }
-  // Le tiré occupe la DERNIÈRE case — jamais une position tirée au sort : c'est elle que
-  // le repère de l'écran désigne, et l'animation s'arrête dessus.
+  };
+
+  for (let i = 0; i < n - 1; i++) leurre(i === n - 2);
+  const stopIndex = strip.length;
   strip.push(champion);
+  // ⚠️ LA QUEUE : c'est elle qui empêche de voir la fin arriver.
+  for (let i = 0; i < REVEAL.tail; i++) leurre();
 
   return {
     strip,
+    stopIndex,
     spinMs: revealSpinMs(champion.rarity),
     glowFrom: REVEAL.glowFrom,
   };

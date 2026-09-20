@@ -1788,11 +1788,11 @@
                 :key="c.champ.id"
                 class="best-tile cx-champ"
                 :class="{ found: c.owned }"
-                :style="c.owned ? { '--rk': rarityRank(c.champ.rarity).color } : undefined"
+                :style="c.owned ? { '--rk': RANK_COLOR[c.champ.rarity] } : undefined"
               >
                 <span class="best-emo">{{ c.owned ? c.champ.emoji : '❔' }}</span>
                 <span class="best-name">{{ c.owned ? c.champ.name : '???' }}</span>
-                <span class="best-tier">{{ rarityRank(c.champ.rarity).name }}</span>
+                <span class="best-tier">{{ RARITY_LABEL[c.champ.rarity] }}</span>
                 <span v-if="c.owned && c.awaken > 0" class="cx-awk">✨ {{ c.awaken }}</span>
               </div>
             </div>
@@ -2962,6 +2962,8 @@ import {
   SLOT_LABEL,
   SLOT_EMOJI,
   rarityRank,
+  RANK_COLOR,
+  RARITY_LABEL,
   gradeLabel,
   groupRowVisible,
   RARITY_RANK,

@@ -9,11 +9,16 @@ const commun = champOf('commun');
 const primordial = champOf('primordial');
 
 describe('🎰 LA ROULETTE — elle MET EN SCÈNE, elle ne décide rien', () => {
-  it('⚠️ LE TIRÉ EST EN DERNIER, toujours : c’est lui que le repère désigne', () => {
+  it('⚠️ LE TIRÉ EST SUR stopIndex, et LA BANDE CONTINUE APRÈS LUI', () => {
+    // ⚠️ RÉÉCRIT (v0.962, demandé : « sans que le tirage soit en bout de ligne »). Il était
+    // en DERNIER : sa case arrivait dans le champ de vision et **on voyait la fin venir**,
+    // donc la roulette cessait d'en être une. Elle s'arrête désormais en plein élan.
     for (const r of RANK_ORDER) {
       const c = champOf(r);
       const p = buildReveal(c, mulberry32(7));
-      expect(p.strip[p.strip.length - 1]!.id, r).toBe(c.id);
+      expect(p.strip[p.stopIndex]!.id, r).toBe(c.id);
+      expect(p.strip.length - 1 - p.stopIndex, `queue après le tiré (${r})`).toBe(REVEAL.tail);
+      expect(REVEAL.tail).toBeGreaterThan(2);
     }
   });
 
@@ -21,12 +26,14 @@ describe('🎰 LA ROULETTE — elle MET EN SCÈNE, elle ne décide rien', () => 
     // LA propriété centrale : une bande qui ne montrerait que des communs pour un commun
     // trahirait le tirage dès la première seconde, et il n'y aurait plus rien à attendre.
     const p = buildReveal(commun, mulberry32(3));
-    const leurres = p.strip.slice(0, -1);
+    const leurres = p.strip.filter((_, i) => i !== p.stopIndex);
     const max = Math.max(...leurres.map((c) => RARITY_RANK[c.rarity]));
     expect(max).toBeGreaterThanOrEqual(RARITY_RANK.rare);
     // …et réciproquement pour un primordial : on doit voir passer du bas de gamme.
     const q = buildReveal(primordial, mulberry32(3));
-    const min = Math.min(...q.strip.slice(0, -1).map((c) => RARITY_RANK[c.rarity]));
+    const min = Math.min(
+      ...q.strip.filter((_, i) => i !== q.stopIndex).map((c) => RARITY_RANK[c.rarity]),
+    );
     expect(min).toBeLessThanOrEqual(RARITY_RANK.magique);
   });
 
@@ -67,6 +74,7 @@ describe('🎰 LA ROULETTE — elle MET EN SCÈNE, elle ne décide rien', () => 
     const p = buildReveal(primordial, mulberry32(1), { reduced: true });
     expect(p.strip).toHaveLength(1);
     expect(p.strip[0]!.id).toBe(primordial.id);
+    expect(p.stopIndex).toBe(0);
     expect(p.spinMs).toBe(0);
   });
 
@@ -74,6 +82,6 @@ describe('🎰 LA ROULETTE — elle MET EN SCÈNE, elle ne décide rien', () => 
     // Le jeu n'en produit jamais, mais une bande vide ferait tomber l'écran.
     const p = buildReveal(commun, mulberry32(1), { pool: [commun] });
     expect(p.strip.length).toBeGreaterThan(1);
-    expect(p.strip[p.strip.length - 1]!.id).toBe(commun.id);
+    expect(p.strip[p.stopIndex]!.id).toBe(commun.id);
   });
 });

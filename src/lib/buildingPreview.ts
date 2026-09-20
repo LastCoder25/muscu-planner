@@ -24,8 +24,6 @@ import {
   type Building,
 } from './buildings';
 import { caravanSlots, caravanSlowFor } from './caravan';
-import { engageCap } from './adventurers';
-import { outfitterMsFor } from './advGear';
 import { altarLuckBonus } from './items';
 import { repairMsFor } from './raid';
 
@@ -39,10 +37,6 @@ export interface LevelPreview {
 
 const one = (typeId: string, level: number): Building[] => [{ typeId, level, slot: 0 } as Building];
 const pct = (x: number) => `${Math.round(x * 100)} %`;
-const h = (ms: number) => {
-  const m = Math.round(ms / 60_000);
-  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
-};
 
 /** Le texte d'un niveau donné, par type. `null` = ce bâtiment n'a rien à prévisualiser. */
 function textAt(typeId: string, level: number): string | null {
@@ -56,10 +50,12 @@ function textAt(typeId: string, level: number): string | null {
       return `${caravanSlots(level)} convoi${caravanSlots(level) > 1 ? 's' : ''} · ×${lent.toFixed(2)} le temps du héros`;
     }
     case 'pantheon':
-      // ⚠️ Les DEUX leviers, comme le Comptoir : l'un est un PALIER (une place de plus
-      // tous les 2 niveaux), l'autre une COURBE (la forge qui gratte à chaque cran). Un
-      // seul chiffre laisserait croire que l'autre moitié du bâtiment est figée.
-      return `${engageCap(level)} champions engagés à la fois · forge en ${h(outfitterMsFor(level))}`;
+      // ⚠️ SON VRAI LEVIER, et le plus fort des trois (demandé — « enlève le nombre
+      // d'engagés et le temps de forge ») : le NIVEAU MAXIMAL d'un champion, qui vaut
+      // exactement le niveau du Panthéon (`grantAdvXp`). Le niveau DOMINE la rareté (×4,3
+      // au niveau 23), donc c'est lui qui décide de ce que vaut un champion — les deux
+      // autres chiffres encombraient la ligne sans rien dire d'aussi décisif.
+      return `champions jusqu'au niveau ${Math.max(1, level)}`;
     case 'outpost':
       return `−${pct(1 - travelTimeMult(one(typeId, level)))} de temps de trajet`;
     case 'labyrinth_gate':
@@ -91,7 +87,6 @@ function textAt(typeId: string, level: number): string | null {
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
 function isMilestone(typeId: string, level: number): boolean {
   if (typeId === 'caravanserail') return caravanSlots(level) > caravanSlots(level - 1);
-  if (typeId === 'pantheon') return engageCap(level) > engageCap(level - 1);
   return false;
 }
 

@@ -30,7 +30,7 @@
             v-for="(c, i) in plan?.strip ?? []"
             :key="i"
             class="gx-cell"
-            :style="{ '--c': rarityRank(c.rarity).color }"
+            :style="{ '--c': RANK_COLOR[c.rarity] }"
           >
             <span class="gx-emo">{{ c.emoji }}</span>
           </div>
@@ -46,7 +46,7 @@
           <span class="gx-pemo">{{ champ.emoji }}</span>
         </div>
         <div class="gx-name font-display">{{ champ.name }}</div>
-        <div class="gx-rar font-display">{{ rarityRank(champ.rarity).name }}</div>
+        <div class="gx-rar font-display">{{ RARITY_LABEL[champ.rarity] }}</div>
         <div class="gx-meta">{{ meta }}</div>
         <div v-if="verdictSub" class="gx-verdict">{{ verdictSub }}</div>
       </div>
@@ -73,7 +73,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { RARITY_RANK, rarityRank } from '@/lib/items';
+import { RANK_COLOR, RARITY_LABEL, RARITY_RANK } from '@/lib/items';
 import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN } from '@/lib/adventurers';
 import { GACHA } from '@/lib/gacha';
 import type { RevealPlan } from '@/lib/gachaReveal';
@@ -92,10 +92,10 @@ const phase = ref<'spin' | 'done'>('spin');
 const rolling = ref(false);
 let timer: number | undefined;
 
-/** ⚠️ Le champion révélé est TOUJOURS la dernière case : c'est ce que le repère désigne,
- *  et ce que la lib garantit. On ne le reçoit pas deux fois. */
-const champ = computed(() => props.plan?.strip[props.plan.strip.length - 1] ?? null);
-const rarColor = computed(() => (champ.value ? rarityRank(champ.value.rarity).color : '#9A8F7E'));
+/** ⚠️ Le champion révélé est la case `stopIndex` — **pas la dernière** : la bande continue
+ *  après lui pour qu'on ne voie pas la fin arriver (v0.962). On ne le reçoit pas deux fois. */
+const champ = computed(() => props.plan?.strip[props.plan.stopIndex] ?? null);
+const rarColor = computed(() => (champ.value ? RANK_COLOR[champ.value.rarity] : '#9A8F7E'));
 const rarClass = computed(() => (champ.value ? `r-${champ.value.rarity}` : ''));
 /** ⚠️ Ce qui DISTINGUE un champion : son rôle de convoi et ses signatures de combat —
  *  pas sa forme brute. C'est la leçon de la feuille de promotion (v0.752). */
@@ -146,9 +146,8 @@ const verdictSub = computed(() => {
  *  valeur pilote les deux (`--cell`), sinon la bande s'arrêterait à côté du repère. */
 const CELL = 96;
 const stripStyle = computed(() => {
-  const n = props.plan?.strip.length ?? 1;
   const ms = props.plan?.spinMs ?? 0;
-  const i = rolling.value ? n - 1 : 0;
+  const i = rolling.value ? (props.plan?.stopIndex ?? 0) : 0;
   return {
     transform: `translate3d(${-(CELL / 2 + i * CELL)}px, 0, 0)`,
     transition: rolling.value ? `transform ${ms}ms cubic-bezier(0.1, 0.72, 0.16, 1)` : 'none',

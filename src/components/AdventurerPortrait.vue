@@ -8,7 +8,7 @@
   <div
     class="ap"
     :class="[tone ? 'tone-' + tone : '', { busy: tone ? tone !== 'free' : false }]"
-    :style="{ '--rank-c': rank.color, '--rar-c': rarColor }"
+    :style="{ '--rank-c': rank.color, '--rar-c': rarColor, '--nom-c': nomColor }"
   >
     <div class="ap-square">
       <button
@@ -135,7 +135,7 @@
          rien ne disait ce qu'on avait tiré. Dans un gacha, c'est L'information.
          ⚠️ Et elle ne vivait qu'en teinte + `title` — donc invisible sur un téléphone, qui
          n'a pas de survol. -->
-    <div class="ap-rar font-display" :style="{ '--rar-c': nomColor }">{{ nomLabel }}</div>
+    <div class="ap-rar font-display">{{ nomLabel }}</div>
     <div class="ap-sub">
       {{ title?.label ?? '—' }}
       <template v-if="capped">
@@ -159,7 +159,14 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
-import { FAMILIAR_SLOT, rarityRank, type Equipped, type Item } from '@/lib/items';
+import {
+  FAMILIAR_SLOT,
+  RANK_COLOR,
+  RARITY_LABEL,
+  rarityRank,
+  type Equipped,
+  type Item,
+} from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
 
 const props = defineProps<{
@@ -195,11 +202,28 @@ const title = computed(() => advTitle(props.adv));
 // Le rang de la CLASSE (v0.833) : c’est lui qui borne ses compagnons, affichés en rang.
 const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
 /** ⚠️ Ce qu'il peut MENER aujourd'hui (équipement, familier, talent) — affiché SEULEMENT
- *  quand il diffère de ce qu'il est, sinon on dirait deux fois la même chose. */
+ *  quand il diffère de ce qu'il est.
+ *  ⚠️ EN RANG, et c'est délibéré : c'est la BORNE de son équipement, et une pièce s'affiche
+ *  en rang (`gradeLabel`). Le dire en rareté couperait le lien avec ce qu'il peut porter. */
 const rarLabel = computed(() => rarityRank(advRarity(props.adv)).name);
 const capped = computed(() => advRarityCapped(props.adv));
-const nomColor = computed(() => rarityRank(advNominalRarity(props.adv)).color);
-const nomLabel = computed(() => rarityRank(advNominalRarity(props.adv)).name);
+/**
+ * ⚠️ **LA RARETÉ PARLE LA LANGUE DE LA RARETÉ** (v0.962 ; signalé par l'utilisateur : « tu
+ * as confondu rareté et rang… je choppe des raretés Or, Argent, alors qu'ils sont tous rang
+ * Bronze »). Il avait raison, et c'est un défaut de LANGAGE, pas de calcul.
+ *
+ * Le projet affiche tout en RANG depuis la v0.874 (`gradeLabel`), et le motif tenait : la
+ * rareté d'une classe montait d'un cran à chaque rang gagné (`PROMO_LEVELS` =
+ * `rankStartLevel`), donc les deux mots désignaient la même progression. ⚠️ **Ce motif est
+ * MORT avec l'arbre de classes (v0.957)** : un champion a une rareté FIGÉE au tirage et un
+ * rang qui monte avec son niveau — deux échelles décorrélées. Les nommer pareil fait lire
+ * « Or » à côté de « Bronze ★2 » sur le même portrait.
+ *
+ * ⚠️ **LA COULEUR, ELLE, RESTE PARTAGÉE** (`RANK_COLOR` est dérivée de `CHARACTER_RANKS`) :
+ * c'est la même échelle de VALEUR, seuls les mots devaient diverger.
+ */
+const nomColor = computed(() => RANK_COLOR[advNominalRarity(props.adv)]);
+const nomLabel = computed(() => RARITY_LABEL[advNominalRarity(props.adv)]);
 const pct = computed(() => Math.round(advRankProgress(props.adv) * 100));
 /** L’avatar ne lit que l’emplacement et la RARETÉ de chaque pièce (la forme de l’arme lui
  *  est passée à part) : la règle d’apparence vit dans `advLooks` (lib), ce composant ne
@@ -239,7 +263,12 @@ function starTf(i: number): string {
   padding: 8px 6px 10px;
   border-radius: 14px;
   background: var(--surface);
-  border: 1px solid var(--line);
+  /* 🏅 L'ENCADREMENT PORTE LA RARETÉ (demandé) : c'est l'identité du champion, elle ne
+     change jamais — là où l'état (convoi, infirmerie) est transitoire.
+     ⚠️ La NOMINALE (`--nom-c`), pas l'effective : un primordial de niveau 1 EST un
+     primordial. `--rar-c` est l'EFFECTIVE — ce qu'il peut MENER — et n'appartient qu'au
+     rond de sa classe. */
+  border: 1px solid color-mix(in srgb, var(--nom-c) 55%, var(--line));
   min-width: 0;
   text-align: center;
 }
@@ -249,8 +278,8 @@ function starTf(i: number): string {
 /* CADRE PAR ÉTAT (demandé) : vert disponible · jaune en convoi · rouge infirmerie.
    ⚠️ Les teintes viennent de la charte (les couleurs d'effort `--d1`/`--d4` et l'accent),
    pas de hex écrits ici — le thème change, elles suivent.
-   ⚠️ La FORMATION prend `--d3`, voisin de l'accent, donc elle se distingue AUSSI par un
-   trait POINTILLÉ : deux différences plutôt qu'une, pour qui ne sépare pas deux jaunes. */
+   ⚠️ Le banc (`tone-benched`) a disparu avec le plafond d'engagement (v0.958) : sa règle
+   est retirée plutôt que laissée inatteignable. */
 .ap.tone-free {
   --tone-c: var(--d1, #7bc86c);
 }
@@ -260,13 +289,11 @@ function starTf(i: number): string {
 .ap.tone-hurt {
   --tone-c: var(--d4, #ff6a45);
 }
-.ap.tone-benched {
-  --tone-c: var(--d3, #ffb23f);
-  border-style: dashed;
-}
+/* ⚠️ L'ÉTAT NE PREND PLUS LE CONTOUR : il est passé au liseré INTÉRIEUR depuis que la
+   bordure porte la rareté. Deux couches, deux métiers — le contour dit CE QU'IL EST
+   (permanent), le liseré son ÉTAT (transitoire, et déjà dit par l'opacité et le texte). */
 .ap[class*='tone-'] {
-  border-color: color-mix(in srgb, var(--tone-c) 62%, var(--line));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-c) 18%, transparent);
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tone-c) 42%, transparent);
 }
 .ap[class*='tone-'] .ap-state {
   color: color-mix(in srgb, var(--tone-c) 78%, var(--text));
@@ -472,6 +499,29 @@ button.ap-mini {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+/* 🏅 LA PASTILLE DE RARETÉ : fond teinté, contour net, majuscules — elle doit se lire
+   d'un coup d'œil dans une grille de portraits, pas se deviner à la nuance d'un cercle.
+   ⚠️ ELLE N'AVAIT JAMAIS ÉTÉ POSÉE (v0.959, vérifié dans le commit) : le patch avait
+   ajouté le <div class="ap-rar"> au template SANS sa règle de style — la « pastille »
+   n'était qu'une ligne de texte nue. Et le banc de l'époque réécrivait la CSS à la main,
+   donc il montrait une pilule qui n'existait pas dans le fichier. Un banc qui ne LIT pas
+   la vraie feuille de style n'est pas un témoin. */
+.ap-rar {
+  margin-top: 2px;
+  align-self: stretch;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--nom-c);
+  background: color-mix(in srgb, var(--nom-c) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--nom-c) 55%, transparent);
+  border-radius: 999px;
+  padding: 2px 6px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 .ap-sub,
 .ap-state {
