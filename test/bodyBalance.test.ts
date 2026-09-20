@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   balanceBarGeometry,
   bodyBalance,
@@ -14,10 +15,24 @@ import type { LogEntry } from '@/lib/volume';
 import type { SessionLog } from '@/lib/types';
 import type { ComboChallenge, ComboLeg } from '@/lib/combo';
 import type { Challenge } from '@/lib/challenges';
+import {
+  bossAgendaEntries,
+  type FriendBoss,
+  type FriendBossHit,
+  type FriendBossMember,
+} from '@/lib/friendBoss';
 
 // Mercredi : la semaine en cours va du lundi 14 au dimanche 20 septembre.
 const TODAY = '2026-09-16';
 const MONDAY = '2026-09-14';
+
+const PRIMARIES: Record<string, string> = {
+  bench: 'pectoraux',
+  row: 'dos',
+  ohp: 'épaules',
+  plank: 'abdominaux',
+  pushup: 'pectoraux',
+};
 
 const SECONDARIES: Record<string, string[]> = {
   bench: ['triceps', 'épaules'],
@@ -77,9 +92,11 @@ function input(p: Partial<BalanceInput>): BalanceInput {
     sessions: [],
     combos: [],
     challenges: [],
+    bossHits: [],
     targets: { pectoraux: 10, triceps: 6, épaules: 6, biceps: 6, dos: 10, abdominaux: 6 },
     objective: 'hypertrophie', // fourchette 8-12 → une série vaut 10 reps
     secondaries: (id) => SECONDARIES[id],
+    primaries: (id) => PRIMARIES[id],
     today: TODAY,
     ...p,
   };
@@ -691,5 +708,140 @@ describe('muscleBreakdown — le détail explique la barre', () => {
 
   it('un muscle que rien ne travaille n’a pas de détail', () => {
     expect(muscleBreakdown(mixed, 'abdominaux', 'week')).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🐉 LE BOSS ENTRE AMIS CREUSE SES AXES
+//
+// ⚠️ Ses reps comptaient DÉJÀ dans la piste Muscu, dans le Global, dans l'énergie et dans
+// l'Agenda — mais ni `bodyBalance` ni `weekMuscleSeries` ne lisaient cette source, donc
+// 300 pompes de boss ne creusaient AUCUN axe. Même famille que le trou de l'Agenda
+// (v0.912) et celui des jours actifs (v0.755) : une source de sport ajoutée, un lecteur
+// qui ne la connaît pas.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('le boss entre amis', () => {
+  const MOI = 'moi';
+  const jour = (iso: string) => Date.parse(`${iso}T12:00:00`);
+
+  function boss(p: Partial<FriendBoss> = {}): FriendBoss {
+    return {
+      id: 'b1',
+      ownerId: MOI,
+      family: 'push',
+      exerciseId: 'pushup',
+      exerciseName: 'Pompes',
+      repWeight: 1,
+      createdAt: jour(MONDAY),
+      startAt: jour(MONDAY),
+      defeatedAt: null,
+      hpTotal: 100_000,
+      damage: 0,
+      ...p,
+    };
+  }
+  const membre = (p: Partial<FriendBossMember> = {}): FriendBossMember => ({
+    bossId: 'b1',
+    userId: MOI,
+    pseudo: 'Moi',
+    status: 'accepted',
+    units: 60,
+    claimed: false,
+    ...p,
+  });
+  const frappe = (units: number, iso = MONDAY, p: Partial<FriendBossHit> = {}): FriendBossHit => ({
+    id: `h${units}-${iso}`,
+    bossId: 'b1',
+    userId: MOI,
+    units,
+    createdAt: jour(iso),
+    ...p,
+  });
+
+  /** La chaîne RÉELLE : le groupement de l'Agenda, puis l'entrée des calculs de volume. */
+  const hits = (b: FriendBoss, m: FriendBossMember[], h: FriendBossHit[]) =>
+    bossAgendaEntries([b], m, h, MOI, (ms) => {
+      const d = new Date(ms);
+      const mo = String(d.getMonth() + 1).padStart(2, '0');
+      return `${d.getFullYear()}-${mo}-${String(d.getDate()).padStart(2, '0')}`;
+    });
+
+  it('⚠️ LE DÉFAUT RÉPARÉ : 60 pompes de boss creusent l’axe des pectoraux', () => {
+    const i = input({ bossHits: hits(boss(), [membre()], [frappe(40), frappe(20)]) });
+    // 60 reps ÷ 10 (fourchette 8-12) = 6 séries au principal
+    expect(row(i, 'pectoraux').done).toBeCloseTo(6, 5);
+  });
+
+  it('⚠️ et le RADAR de la semaine les somme aussi — c’était la demande', () => {
+    const i = input({ bossHits: hits(boss(), [membre()], [frappe(60)]) });
+    expect(weekMuscleSeries(i).real.pectoraux ?? 0).toBeCloseTo(6, 5);
+  });
+
+  it('les SECONDAIRES comptent ½, comme pour toute autre source', () => {
+    const i = input({ bossHits: hits(boss({ exerciseId: 'bench' }), [membre()], [frappe(60)]) });
+    expect(row(i, 'pectoraux').done).toBeCloseTo(6, 5);
+    expect(row(i, 'triceps').done).toBeCloseTo(3, 5);
+  });
+
+  it('⚠️ le CONDITIONNEMENT est écarté : sa piste est le cardio, pas un muscle', () => {
+    const i = input({
+      bossHits: hits(boss({ family: 'conditioning' }), [membre()], [frappe(60)]),
+    });
+    expect(row(i, 'pectoraux').done).toBe(0);
+  });
+
+  it('⚠️ un boss au TEMPS se convertit en SECONDES, jamais en reps', () => {
+    const gainage = boss({ family: 'core', exerciseId: 'plank', exerciseName: 'Gainage' });
+    const i = input({ bossHits: hits(gainage, [membre()], [frappe(90)]) });
+    // 90 s ÷ 45 (fourchette 30-60 s) = 2 séries — et non 90 ÷ 10 = 9
+    expect(row(i, 'abdominaux').done).toBeCloseTo(2, 5);
+  });
+
+  it('un boss où je ne suis pas ACCEPTÉ ne creuse rien', () => {
+    const i = input({
+      bossHits: hits(boss(), [membre({ status: 'invited' })], [frappe(60)]),
+    });
+    expect(row(i, 'pectoraux').done).toBe(0);
+  });
+
+  it('les frappes d’un AUTRE joueur ne comptent pas pour moi', () => {
+    const i = input({
+      bossHits: hits(boss(), [membre()], [frappe(60, MONDAY, { userId: 'autre' })]),
+    });
+    expect(row(i, 'pectoraux').done).toBe(0);
+  });
+
+  it('un exo inconnu de la bibliothèque ne crédite aucun muscle plutôt que d’en inventer', () => {
+    const i = input({ bossHits: hits(boss({ exerciseId: 'inconnu' }), [membre()], [frappe(60)]) });
+    for (const r of bodyBalance(i, 'week')) expect(r.done).toBe(0);
+  });
+
+  it('le détail par muscle nomme le boss comme source', () => {
+    const i = input({ bossHits: hits(boss(), [membre()], [frappe(60)]) });
+    const d = muscleBreakdown(i, 'pectoraux', 'week');
+    expect(d.map((x) => x.source)).toContain('boss');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔌 LE CÂBLAGE DU COMPOSABLE — qu'AUCUNE porte ne voit
+//
+// ⚠️ `bossHits` est un champ REQUIS, donc le compilateur garantit qu'il est PASSÉ. Il ne
+// garantit pas qu'il est PEUPLÉ : si `ensureLoaded` oublie de charger les boss, la liste
+// est vide, le graphe affiche zéro et tout reste VERT — le levier mort qui ne rougit
+// jamais. `useBalanceInput` vit au-dessus des stores, hors du harnais : on lit sa source.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('l’entrée partagée charge ce qu’elle lit', () => {
+  const src = readFileSync('src/composables/useBalanceInput.ts', 'utf8');
+
+  it('⚠️ `ensureLoaded` charge les boss entre amis, sinon ils comptent zéro en silence', () => {
+    const bloc = src.slice(src.indexOf('function ensureLoaded'));
+    expect(bloc).toMatch(/friendBoss\.fetchMine\(\)/);
+  });
+
+  it('et les deux tables de muscles viennent de la MÊME requête (aucun aller-retour de plus)', () => {
+    expect(src).toMatch(/library\.fetchSecondaries\(\)/);
+    // Le muscle principal ne se charge pas à part : `fetchSecondaries` le ramène aussi.
+    expect(src).not.toMatch(/fetchPrimaries/);
   });
 });

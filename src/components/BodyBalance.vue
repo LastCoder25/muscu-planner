@@ -135,11 +135,13 @@ const SOURCE_EMOJI: Record<BalanceSource, string> = {
   session: '🏋️',
   combo: '🎯',
   challenge: '🔥',
+  boss: '🐉',
 };
 const SOURCE_LABEL: Record<BalanceSource, string> = {
   session: 'Séance',
   combo: 'Défi 360',
   challenge: 'Challenge',
+  boss: 'Boss amis',
 };
 const PERIOD_KEY = 'muscu:balance:period';
 

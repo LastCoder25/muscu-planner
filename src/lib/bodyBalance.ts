@@ -2,7 +2,7 @@
 // hauteur de SA cible ? (pur/testable, `today` passé par l'appelant)
 //
 // La question n'est pas « où en est mon Défi 360 » mais « mon corps est-il couvert » —
-// toutes sources confondues (séances, Défi 360, challenges) — pour COMPLÉTER le 360 par
+// toutes sources confondues (séances, Défi 360, challenges, boss entre amis) — pour COMPLÉTER le 360 par
 // des challenges sur les groupes en déficit.
 //
 // ⚠️ ON MESURE CE QUI EST ENGAGÉ, PAS SEULEMENT CE QUI EST FAIT. Sur la semaine en
@@ -18,7 +18,7 @@
 // ⚠️ LA CIBLE est celle du programme (`computeMuscleTargets` : objectif, niveau, sports,
 // priorités) — jamais un ratio neutre, qui signalerait comme défaut une emphase voulue.
 //
-// Forme : chaque source (séances, 360, challenges) se traduit en ÉLÉMENTS de volume
+// Forme : chaque source (séances, 360, challenges, boss) se traduit en ÉLÉMENTS de volume
 // {jour, exo, muscle principal, séries} ; une seule boucle les crédite par muscle.
 import type { Objective } from './types';
 import { isMuscuLog, mondayOf, volumeState, type LogEntry, type VolumeState } from './volume';
@@ -28,12 +28,19 @@ import { repRangeForExercise, type RepRange } from './repScheme';
 import { addDaysUtcIso } from './startDate';
 import { normMuscle } from './muscles';
 import { challengeLane } from './tennisTraining';
+import { bossXpTrack, type BossAgendaEntry } from './friendBoss';
 
 /** Crédit d'une série pour un muscle SECONDAIRE (le principal vaut 1). */
 const SECONDARY_CREDIT = 0.5;
 
 /** Muscles secondaires d'un exercice (bibliothèque). Un exo inconnu (import IA) → rien. */
 type SecondaryLookup = (exerciseId: string) => readonly string[] | null | undefined;
+
+/** Muscle PRINCIPAL d'un exercice (bibliothèque). ⚠️ Nécessaire pour le boss entre amis,
+ *  seule source qui ne porte pas son muscle sur sa propre ligne (une séance le loggue, un
+ *  challenge le stocke, un exo de 360 vient de son emplacement). Un exo inconnu → rien,
+ *  et l'élément ne crédite alors aucun muscle plutôt que d'en inventer un. */
+type PrimaryLookup = (exerciseId: string) => string | null | undefined;
 
 export type BalancePeriod = 'week' | 'weeks4';
 
@@ -43,10 +50,16 @@ export interface BalanceInput {
   sessions: readonly LogEntry[];
   combos: readonly ComboChallenge[];
   challenges: readonly Challenge[];
+  /** Frappes de boss entre amis, groupées par (boss, jour) — `bossAgendaEntries`.
+   *  ⚠️ REQUIS comme tous les autres champs : une source de sport qu'on peut oublier
+   *  finit par être oubliée, et le muscle travaillé disparaît du graphe sans bruit
+   *  (leçon `ActivitySources`, v0.755 — le défaut que ce champ vient réparer). */
+  bossHits: readonly BossAgendaEntry[];
   /** Séries/semaine cibles par muscle (`computeMuscleTargets`). */
   targets: Readonly<Record<string, number>>;
   objective?: Objective | null;
   secondaries: SecondaryLookup;
+  primaries: PrimaryLookup;
   /** Jour d'entraînement (YYYY-MM-DD, local). */
   today: string;
 }
@@ -90,7 +103,7 @@ export function balanceBarGeometry(
 type Tally = Record<string, number>;
 
 /** D'où vient un élément de volume. */
-export type BalanceSource = 'session' | 'combo' | 'challenge';
+export type BalanceSource = 'session' | 'combo' | 'challenge' | 'boss';
 
 /** Du volume attribué à un exo : `sets` séries (fractionnaires possibles) le jour `day`. */
 interface VolumeItem {
@@ -186,6 +199,42 @@ function challengeSets(c: Challenge, v: number, objective?: Objective | null): n
     muscle_primary: c.muscle_primary,
   });
   return v / perSet(range);
+}
+
+/**
+ * 🐉 Les frappes de BOSS ENTRE AMIS, en éléments de volume. C'est du sport réel : ses reps
+ * comptent déjà dans la piste Muscu (`friendBossXp`, v0.863), dans le Global, dans l'énergie
+ * et dans l'Agenda (v0.912) — elles ne creusaient simplement aucun axe ici.
+ *
+ * ⚠️ **ON NE REGROUPE PAS UNE SECONDE FOIS** : `bossAgendaEntries` porte déjà la règle
+ * « uniquement les boss où je suis ACCEPTÉ » et le groupement par jour. Une seconde
+ * définition finirait par compter un boss que le total d’XP ignore.
+ *
+ * ⚠️ **LE CONDITIONNEMENT EST ÉCARTÉ** : sa piste est le CARDIO (`bossXpTrack`), comme les
+ * challenges de conditionnement que `muscuChallenges` écarte déjà. Un graphe de muscles ne
+ * doit pas créditer des burpees à un groupe musculaire.
+ */
+function bossItems(
+  hits: readonly BossAgendaEntry[],
+  primaries: PrimaryLookup,
+  objective?: Objective | null,
+): VolumeItem[] {
+  const out: VolumeItem[] = [];
+  for (const h of hits) {
+    if (bossXpTrack(h.family) !== 'muscu' || h.total <= 0) continue;
+    const primary = primaries(h.exerciseId);
+    const range = repRangeForExercise(objective, { time: h.unit === 's', muscle_primary: primary });
+    out.push({
+      source: 'boss',
+      day: h.day,
+      exerciseId: h.exerciseId,
+      name: h.title,
+      primary,
+      sets: h.total / perSet(range),
+      reps: h.unit === 'reps' ? h.total : 0,
+    });
+  }
+  return out;
 }
 
 function challengeItems(
@@ -291,6 +340,7 @@ function doneItems(i: Omit<BalanceInput, 'targets' | 'today'>): VolumeItem[] {
     ...sessionItems(i.sessions),
     ...i.combos.flatMap((c) => c.legs.flatMap((leg) => legItems(leg, i.objective))),
     ...challengeItems(muscuChallenges(i.challenges), i.objective),
+    ...bossItems(i.bossHits, i.primaries, i.objective),
   ];
 }
 

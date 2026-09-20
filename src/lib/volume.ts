@@ -80,8 +80,12 @@ export function isMuscuLog(log: SessionLog): boolean {
 }
 
 /** Formate une Date en YYYY-MM-DD à partir de ses composantes LOCALES (jamais via
- *  toISOString → pas de décalage de jour selon le fuseau, cf. garde-fou challenges). */
-function fmtDay(d: Date): string {
+ *  toISOString → pas de décalage de jour selon le fuseau, cf. garde-fou challenges).
+ *
+ *  ⚠️ **EXPORTÉE parce que la règle n’a le droit d’exister qu’UNE fois** : une clé de jour
+ *  écrite à côté avec `toISOString` décale d’un jour en France, et ce projet s’est déjà fait
+ *  prendre. L’Agenda et l’entrée des calculs de volume l’appellent au lieu de la recopier. */
+export function localDayIso(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${m}-${day}`;
@@ -92,7 +96,7 @@ export function mondayOf(dateIso: string): string {
   const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
   const dow = (d.getDay() + 6) % 7; // 0 = lundi
   d.setDate(d.getDate() - dow);
-  return fmtDay(d);
+  return localDayIso(d);
 }
 
 /** Convertit les séries d'un/des Défi(s) 360 en `LogEntry` synthétiques — une « séance »
@@ -191,13 +195,13 @@ export function challengeLogEntries(challenges: Challenge[]): LogEntry[] {
 /** Premier jour (YYYY-MM-DD) du mois de `dateIso`. */
 export function firstOfMonth(dateIso: string): string {
   const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
-  return fmtDay(new Date(d.getFullYear(), d.getMonth(), 1));
+  return localDayIso(new Date(d.getFullYear(), d.getMonth(), 1));
 }
 /** Lendemain (YYYY-MM-DD) — borne haute exclusive « aujourd'hui inclus ». */
 export function dayAfter(dateIso: string): string {
   const d = new Date(dateIso.slice(0, 10) + 'T00:00:00');
   d.setDate(d.getDate() + 1);
-  return fmtDay(d);
+  return localDayIso(d);
 }
 
 export type VolumeState = 'low' | 'ok' | 'high';
@@ -232,7 +236,7 @@ export function weeklyVolumeSeries(
   for (let i = nWeeks - 1; i >= 0; i--) {
     const d = new Date(base);
     d.setDate(d.getDate() - i * 7);
-    weeks.push(fmtDay(d));
+    weeks.push(localDayIso(d));
   }
   const idx = new Map(weeks.map((w, i) => [w, i]));
   const out: WeekVolume[] = weeks.map((weekStart) => ({
@@ -264,7 +268,7 @@ export function weeklyVolumeSeries(
 export function muscuSessionsInLastDays(entries: LogEntry[], days: number, nowIso: string): number {
   const cutoff = new Date(nowIso.slice(0, 10) + 'T00:00:00');
   cutoff.setDate(cutoff.getDate() - (days - 1));
-  const cut = fmtDay(cutoff);
+  const cut = localDayIso(cutoff);
   let n = 0;
   for (const e of entries) {
     if (!isMuscuLog(e.log)) continue;
@@ -285,9 +289,9 @@ export function muscuWeekStreak(entries: LogEntry[], nowIso: string): number {
   }
   if (!active.size) return 0;
   const cursor = new Date(mondayOf(nowIso) + 'T00:00:00');
-  if (!active.has(fmtDay(cursor))) cursor.setDate(cursor.getDate() - 7);
+  if (!active.has(localDayIso(cursor))) cursor.setDate(cursor.getDate() - 7);
   let streak = 0;
-  while (active.has(fmtDay(cursor))) {
+  while (active.has(localDayIso(cursor))) {
     streak++;
     cursor.setDate(cursor.getDate() - 7);
   }

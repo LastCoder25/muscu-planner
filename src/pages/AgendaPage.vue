@@ -99,6 +99,7 @@ import { useFriendBossStore } from '@/stores/friendBoss';
 import { useAuthStore } from '@/stores/auth';
 import { bossAgendaEntries } from '@/lib/friendBoss';
 import { groupBySource } from '@/lib/agendaGroups';
+import { localDayIso } from '@/lib/volume';
 import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
 import { legSets, legMode, type ComboSet } from '@/lib/combo';
 import {
@@ -165,9 +166,9 @@ function fmtDur(min?: number): string {
 function numList(v: readonly number[]): string {
   return v.join(' / ');
 }
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+// ⚠️ `localDayIso` vit dans la lib : une seconde clé de jour écrite ici finirait par ne
+// plus dire le même jour que les calculs de volume (et `toISOString` décale en France).
+const isoDay = localDayIso;
 
 const now = new Date();
 const todayIso = isoDay(now);

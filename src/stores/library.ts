@@ -96,22 +96,36 @@ export const useLibraryStore = defineStore('library', () => {
   // défis référencent encore d'anciens exos, dont les secondaires doivent compter.
   // Chargés une fois par session ; l'état est réactif, les écrans le lisent directement.
   const secondaries = shallowRef<ReadonlyMap<string, string[]>>(new Map());
+  // ⚠️ Le muscle PRINCIPAL vient de la MÊME requête : une colonne de plus, zéro aller-retour
+  // supplémentaire. Il sert au boss entre amis, seule source de volume qui ne porte pas son
+  // muscle sur sa propre ligne.
+  const primaries = shallowRef<ReadonlyMap<string, string>>(new Map());
   let secondariesPromise: Promise<void> | null = null;
   function fetchSecondaries(): Promise<void> {
     secondariesPromise ??= (async () => {
-      const { data, error } = await supabase.from('exercises').select('id, muscle_secondary');
+      const { data, error } = await supabase
+        .from('exercises')
+        .select('id, muscle_primary, muscle_secondary');
       if (error) {
         secondariesPromise = null; // pas de cache sur un échec : on retentera
         throw error;
       }
-      const rows = (data ?? []) as { id: string; muscle_secondary: string[] | null }[];
+      const rows = (data ?? []) as {
+        id: string;
+        muscle_primary: string | null;
+        muscle_secondary: string[] | null;
+      }[];
       secondaries.value = new Map(rows.map((r) => [r.id, r.muscle_secondary ?? []]));
+      primaries.value = new Map(
+        rows.flatMap((r) => (r.muscle_primary ? [[r.id, r.muscle_primary] as const] : [])),
+      );
     })();
     return secondariesPromise;
   }
 
   return {
     secondaries,
+    primaries,
     fetchOne,
     fetchAll,
     fetchPrepa,

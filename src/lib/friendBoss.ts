@@ -570,6 +570,10 @@ export function bossHitsByDay(
 /** Une ligne d'agenda : ce qu'un joueur a fait sur UN boss, UN jour donné. */
 export interface BossAgendaEntry {
   bossId: string;
+  /** Exo du boss — la clé de ses muscles (principal et secondaires). */
+  exerciseId: string;
+  /** Famille du boss : elle décide de la piste (`bossXpTrack`) et de l’unité. */
+  family: BossFamily;
   /** Clé de jour rendue par `dayKey` (l'agenda y range ses entrées). */
   day: string;
   /** Nom de l'exo du boss — le titre affiché. */
@@ -620,6 +624,8 @@ export function bossAgendaEntries(
       const total = units.reduce((a, u) => a + u, 0);
       out.push({
         bossId: b.id,
+        exerciseId: b.exerciseId,
+        family: b.family,
         day,
         title: b.exerciseName,
         units,
