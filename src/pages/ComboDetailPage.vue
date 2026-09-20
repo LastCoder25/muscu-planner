@@ -199,6 +199,12 @@
            TOUJOURS, même un 360 vierge, pendant que le 🗑 le supprimait : deux contrôles,
            deux résultats, sur le même écran. Un 360 créé par erreur finissait donc archivé
            à vie selon le bouton qu'on avait sous les yeux. -->
+      <!-- 🏁 CLÔTURER À L'OBJECTIF (v0.964, demandé) — il n'apparaît QUE quand il a un
+           sens : objectif atteint et 360 encore ouvert. Avant l'objectif, clôturer ne
+           veut rien dire ; après le maximal, il se ferme tout seul. -->
+      <button v-if="finishPlan.can" class="finish" @click="confirmFinish">
+        🏁 Clôturer mon Défi 360
+      </button>
       <button v-if="c.status !== 'abandoned'" class="abandon" @click="confirmStop">
         {{ stopPlan.ok }}
       </button>
@@ -245,6 +251,8 @@ import {
   legBarGeometry,
   legSetsDone,
   comboStopPlan,
+  comboFinishPlan,
+  type ComboFinishPlan,
   comboPace,
   NO_PACE,
   type ComboChallenge,
@@ -565,6 +573,36 @@ onBeforeUnmount(() => {
 const stopPlan = computed(() =>
   comboStopPlan(c.value ?? ({ legs: [] } as unknown as ComboChallenge)),
 );
+/** Ce qu'une clôture manuelle ferait — la règle vit en lib, les deux écrans la lisent. */
+const finishPlan = computed(() =>
+  comboFinishPlan(
+    c.value ?? ({ legs: [], status: 'done' } as unknown as ComboChallenge),
+    logicalToday(),
+  ),
+);
+/** 🏁 La confirmation de clôture : elle DIT ce qu'on laisse (les paliers maximaux
+ *  encore atteignables, les jours restants) et ce qu'on gagne (la place pour un
+ *  nouveau 360). Sans ça, « Clôturer » ressemble à un raccourci alors que c'est un
+ *  arbitrage : une série au-delà de l'objectif vaut autant qu'une série normale. */
+function finishMessage(plan: ComboFinishPlan): string {
+  const reste = plan.bonusLeft
+    ? `${plan.bonusLeft} exo${plan.bonusLeft > 1 ? 's' : ''} ${plan.bonusLeft > 1 ? 'peuvent' : 'peut'} encore monter jusqu'au palier maximal`
+    : 'tous tes exos sont déjà au palier maximal';
+  const jours = plan.daysLeft
+    ? `, et il te reste ${plan.daysLeft} jour${plan.daysLeft > 1 ? 's' : ''}`
+    : ', et c’est ton dernier jour';
+  return `Ton objectif est atteint : ${reste}${jours}. Clôturer fige ta prime et ton coffre à ce qui est fait — mais tu pourras lancer un nouveau Défi 360 tout de suite.`;
+}
+function confirmFinish() {
+  $q.dialog({
+    title: 'Clôturer maintenant ?',
+    message: finishMessage(finishPlan.value),
+    cancel: { label: 'Continuer le défi', flat: true },
+    ok: { label: 'Clôturer', color: 'primary' },
+  }).onOk(() => {
+    void combo.finish(id);
+  });
+}
 function confirmStop() {
   const plan = stopPlan.value;
   $q.dialog({
@@ -1035,6 +1073,22 @@ onMounted(async () => {
   color: var(--dim);
   line-height: 1.5;
   margin: 14px 0;
+}
+/* 🏁 LA CLÔTURE EST UNE ACTION POSITIVE — l'accent, là où l'abandon juste en dessous
+   reste gris : deux boutons de même teinte se liraient comme le même geste, et l'un
+   des deux est destructeur. Cible tactile 44 px (règle mobile du projet). */
+.finish {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 10px;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
 }
 .abandon {
   width: 100%;

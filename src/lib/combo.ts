@@ -64,6 +64,14 @@ export interface ComboChallenge {
   legs: ComboLeg[];
   /** Contenu du coffre de fin, conservé au bouclage (migr. 0064). */
   chest?: ComboChestRecord | null;
+  /** Réglages du défi. ⚠️ La colonne `config` jsonb existe déjà en base et était VIDE
+   *  partout (mesuré) : y poser une marque ne demande aucune migration. */
+  config?: ComboConfig | null;
+}
+
+interface ComboConfig {
+  /** Le joueur a CLÔTURÉ lui-même, à l'objectif, sans attendre le palier maximal. */
+  closed_by_user?: boolean;
 }
 
 // Reps supposées par série pour l'estimation du volume planifié (prime de bouclage).
@@ -283,9 +291,24 @@ export function comboClosed(c: ComboChallenge, today: string): boolean {
   const d = comboInDeadline(c);
   return d.legs.length > 0 && d.legs.every((l) => legTier(l) === 'max');
 }
-/** Statut qu'un 360 doit porter après une saisie (ou au chargement). Un abandon est définitif. */
+/** Le joueur a-t-il clôturé lui-même ? (v0.964) — privé : seul `comboNextStatus` s'en sert. */
+function comboClosedByUser(c: ComboChallenge): boolean {
+  return c.config?.closed_by_user === true;
+}
+/** Statut qu'un 360 doit porter après une saisie (ou au chargement). Un abandon est définitif.
+ *
+ *  ⚠️ **UNE DÉCISION DU JOUEUR NE SE RECALCULE PAS** (v0.964) : sans ce garde, un 360
+ *  clôturé à l'objectif serait ROUVERT au chargement suivant par la règle de la v0.825,
+ *  qui existe pour rattraper les 360 fermés à tort par une version d'avant. Les deux
+ *  fermetures sont indistinguables par l'état seul — d'où la marque.
+ *
+ *  ⚠️ Et on NE rend PAS `done` terminal pour autant, alors que la mesure le permettrait
+ *  (zéro 360 `done` dont la période court encore, en base le 2026-09-20) : une fermeture
+ *  AUTOMATIQUE doit rester réversible, sinon corriger une série après coup — le geste
+ *  que la v0.852 a ajouté — bloquerait la saisie pour toujours. */
 export function comboNextStatus(c: ComboChallenge, today: string): ComboChallenge['status'] {
   if (c.status === 'abandoned') return 'abandoned';
+  if (comboClosedByUser(c)) return 'done';
   return comboClosed(c, today) ? 'done' : 'active';
 }
 /** 🎯 LE DÉFI 360 EN COURS d'un joueur — SOURCE UNIQUE (v0.905). La règle vivait en TROIS
@@ -308,6 +331,56 @@ export function activeCombo<T extends ComboChallenge>(list: readonly T[], today:
  *  pas de coffre pour un 360 partiel) et jamais un abandon. */
 export function comboChestEligible(c: ComboChallenge): boolean {
   return c.status !== 'abandoned' && comboCompleteInTime(c);
+}
+
+/**
+ * 🏁 CLÔTURER UN DÉFI 360 À L'OBJECTIF, SANS ATTENDRE LE PALIER MAXIMAL (v0.964 ;
+ * demandé par l'utilisateur : « avoir le choix de clôturer quand on arrive au palier
+ * 100 % ou attendre le palier 120 % — actuellement il n'y a pas de bouton pour valider »).
+ *
+ * ⚠️ IL N'Y EN AVAIT AUCUN, ET C'ÉTAIT VOULU jusqu'ici : depuis la v0.825 un 360 ne se
+ * ferme qu'à sa DATE DE FIN ou quand tous ses exos touchent le maximal. C'était la bonne
+ * correction d'un vrai défaut (il se fermait à l'objectif et interdisait les séries bonus,
+ * la zone que les paliers paient), mais elle a **retiré le choix** : objectif atteint au
+ * jour 3 d'un défi de 7, on attendait quatre jours ou on n'y touchait plus.
+ *
+ * ⚠️ C'EST UN ARBITRAGE, PAS UN RACCOURCI, et l'écran doit le dire : clôturer FIGE la
+ * prime et le coffre à ce qui est fait (une série au-delà de l'objectif vaut autant
+ * qu'une série normale et le palier maximal paie 1,2 de part, v0.647), mais ça LIBÈRE la
+ * place — on n'a qu'un seul 360 actif à la fois.
+ */
+export interface ComboFinishPlan {
+  /** Peut-on clôturer à la main, maintenant ? */
+  can: boolean;
+  /** Pourquoi pas — à DIRE, jamais à griser en silence (leçon du gris de la carte, v0.738). */
+  why: 'notComplete' | 'alreadyClosed' | null;
+  /** Ce qu'on laisse : exos qui n'ont pas encore atteint leur palier maximal. */
+  bonusLeft: number;
+  /** Jours qu'il reste à courir (0 = dernier jour). */
+  daysLeft: number;
+}
+export function comboFinishPlan(c: ComboChallenge, today: string): ComboFinishPlan {
+  const d = comboInDeadline(c);
+  const bonusLeft = d.legs.filter((l) => legTier(l) !== 'max').length;
+  const daysLeft = Math.max(0, daysBetweenIso(today, comboEndDate(c)));
+  // ⚠️ `comboCompleteInTime` et non `comboComplete` : c'est EXACTEMENT la condition du
+  // coffre (`comboChestEligible`), donc le bouton ne peut pas promettre un coffre qu'on
+  // n'aurait pas. ⚠️ Les deux sont ÉQUIVALENTS ICI — une mutation qui les intervertit
+  // survit, et c'est prouvé plutôt que caché : cette branche exige `!comboClosed`, donc
+  // `today <= comboEndDate`, donc aucune série ne peut être hors délai. On garde la
+  // forme du coffre pour que les deux ne PUISSENT pas diverger le jour où l'une bouge.
+  const why: ComboFinishPlan['why'] =
+    c.status !== 'active' || comboClosed(c, today)
+      ? 'alreadyClosed'
+      : comboCompleteInTime(c)
+        ? null
+        : 'notComplete';
+  return { can: why === null, why, bonusLeft, daysLeft };
+}
+/** Le défi, clôturé par le joueur. ⚠️ Rend une NOUVELLE valeur : le statut ET la marque
+ *  vont ensemble — les poser séparément laisserait une fenêtre où le recalcul rouvre. */
+export function comboFinished(c: ComboChallenge): ComboChallenge {
+  return { ...c, status: 'done', config: { ...(c.config ?? {}), closed_by_user: true } };
 }
 
 /** Fraction d'avance d'un Défi 360 terminé : jours gagnés / durée (0..~1).

@@ -4,6 +4,7 @@ import { ref } from 'vue';
 import { supabase } from '@/lib/supabase';
 import {
   comboChestEligible,
+  comboFinished,
   activeCombo,
   comboNextStatus,
   removeSetAt,
@@ -26,7 +27,7 @@ class ComboActiveError extends Error {
   }
 }
 
-const COLS = 'id, name, start_date, duration_days, status, legs, chest';
+const COLS = 'id, name, start_date, duration_days, status, legs, chest, config';
 
 export interface NewCombo {
   name: string;
@@ -225,6 +226,28 @@ export const useComboStore = defineStore('combo', () => {
     if (c) c.status = status;
   }
 
+  /** 🏁 CLÔTURER à l'objectif, à la demande du joueur (v0.964).
+   *
+   *  ⚠️ LE STATUT ET LA MARQUE PARTENT DANS LA MÊME ÉCRITURE : séparés, une coupure
+   *  entre les deux laisserait un `done` sans marque, que le recalcul ROUVRIRAIT.
+   *  ⚠️ Et on signale la fermeture APRÈS avoir écrit, par le même chemin que la fermeture
+   *  automatique (`closedChests`) : c'est lui qui dépose le coffre, et deux chemins de
+   *  dépôt finiraient par diverger. */
+  async function finish(id: string) {
+    const c = list.value.find((x) => x.id === id);
+    if (!c) return;
+    const fini = comboFinished(c);
+    const { error } = await supabase
+      .from('combo_challenges')
+      .update({ status: fini.status, config: fini.config })
+      .eq('id', id);
+    if (error) throw error;
+    const etait = c.status;
+    c.status = fini.status;
+    c.config = fini.config;
+    if (etait !== 'done' && comboChestEligible(c)) closedChests.value.push(c.id);
+  }
+
   /** Conserve le contenu du coffre de fin sur le défi : preuve durable du versement, et
    *  ce qui permet de le revoir une fois le message chassé de la boîte (30 messages). */
   async function setChest(id: string, chest: ComboChestRecord) {
@@ -253,6 +276,7 @@ export const useComboStore = defineStore('combo', () => {
     updateSet,
     setWeight,
     setStatus,
+    finish,
     remove,
   };
 });

@@ -396,6 +396,12 @@
               />
             </div>
           </div>
+          <!-- 🏁 CLÔTURER À L'OBJECTIF (v0.964, demandé) : ici aussi, parce que c'est
+               ici qu'on regarde son 360 — la leçon du 🗑, qui ne vivait que sur la
+               fiche. Même règle, même libellés : ils viennent de la lib. -->
+          <button v-if="comboFinish.can" class="c3-finish" @click="confirmFinishCombo">
+            🏁 Clôturer mon Défi 360
+          </button>
           <div class="c3-cta-row q-mb-sm">
             <q-btn
               class="c3-cta-grow"
@@ -603,6 +609,8 @@ import {
   legSets,
   legRepRange,
   comboStopPlan,
+  comboFinishPlan,
+  type ComboFinishPlan,
   comboPace,
   activeCombo as activeComboOf,
   NO_PACE,
@@ -704,6 +712,38 @@ const activeCombo = computed(() => activeComboOf(comboStore.list, logicalToday()
 const comboStop = computed(() =>
   comboStopPlan(activeCombo.value ?? ({ legs: [] } as unknown as ComboChallenge)),
 );
+/** Ce qu'une clôture manuelle ferait — même source que la fiche. */
+const comboFinish = computed(() =>
+  comboFinishPlan(
+    activeCombo.value ?? ({ legs: [], status: 'done' } as unknown as ComboChallenge),
+    logicalToday(),
+  ),
+);
+/** 🏁 La confirmation de clôture : elle DIT ce qu'on laisse (les paliers maximaux
+ *  encore atteignables, les jours restants) et ce qu'on gagne (la place pour un
+ *  nouveau 360). Sans ça, « Clôturer » ressemble à un raccourci alors que c'est un
+ *  arbitrage : une série au-delà de l'objectif vaut autant qu'une série normale. */
+function finishMessage(plan: ComboFinishPlan): string {
+  const reste = plan.bonusLeft
+    ? `${plan.bonusLeft} exo${plan.bonusLeft > 1 ? 's' : ''} ${plan.bonusLeft > 1 ? 'peuvent' : 'peut'} encore monter jusqu'au palier maximal`
+    : 'tous tes exos sont déjà au palier maximal';
+  const jours = plan.daysLeft
+    ? `, et il te reste ${plan.daysLeft} jour${plan.daysLeft > 1 ? 's' : ''}`
+    : ', et c’est ton dernier jour';
+  return `Ton objectif est atteint : ${reste}${jours}. Clôturer fige ta prime et ton coffre à ce qui est fait — mais tu pourras lancer un nouveau Défi 360 tout de suite.`;
+}
+function confirmFinishCombo() {
+  const cur = activeCombo.value;
+  if (!cur) return;
+  $q.dialog({
+    title: 'Clôturer maintenant ?',
+    message: finishMessage(comboFinish.value),
+    cancel: { label: 'Continuer le défi', flat: true },
+    ok: { label: 'Clôturer', color: 'primary' },
+  }).onOk(() => {
+    void comboStore.finish(cur.id);
+  });
+}
 function confirmStopCombo() {
   const cur = activeCombo.value;
   if (!cur) return;
@@ -1464,6 +1504,22 @@ onMounted(async () => {
   opacity: 1;
 }
 /* Ligne d'actions du Défi 360 : « Générer une séance » (extensible) + « Exporter ». */
+/* 🏁 LA CLÔTURE EST UNE ACTION POSITIVE — l'accent, là où l'abandon juste en dessous
+   reste gris : deux boutons de même teinte se liraient comme le même geste, et l'un
+   des deux est destructeur. Cible tactile 44 px (règle mobile du projet). */
+.c3-finish {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 10px;
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
 .c3-cta-row {
   display: flex;
   gap: 8px;

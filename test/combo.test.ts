@@ -56,6 +56,8 @@ import {
   legsByName,
   legAllDone,
   legsDoneLast,
+  comboFinishPlan,
+  comboFinished,
 } from '@/lib/combo';
 
 const set = (reps: number, weight?: number, date = '2026-01-05'): ComboSet => ({
@@ -1327,5 +1329,83 @@ describe('📑 les exos FINIS passent en bas de liste', () => {
     const copie = [...src];
     expect(legsDoneLast(src)).toHaveLength(2);
     expect(src).toEqual(copie);
+  });
+});
+
+describe('🏁 CLÔTURER À L’OBJECTIF — le choix qui manquait (v0.964)', () => {
+  /** Un 360 d'une semaine, un seul exo, dont on choisit le nombre de séries faites. */
+  const defi = (faites: number, opts: Partial<ComboChallenge> = {}): ComboChallenge => ({
+    id: 'c1',
+    name: 'Test',
+    start_date: '2026-09-14',
+    duration_days: 7,
+    status: 'active',
+    legs: [
+      {
+        slot: 'push',
+        exercise_id: 'e1',
+        rep_weight: 1,
+        target: 10,
+        progress: Array.from({ length: faites }, () => ({ date: '2026-09-15', reps: 10 })),
+      },
+    ],
+    ...opts,
+  });
+
+  it('⚠️ ON NE PEUT CLÔTURER QU’À L’OBJECTIF, et on DIT pourquoi sinon', () => {
+    const pasFini = comboFinishPlan(defi(8), '2026-09-16');
+    expect(pasFini.can).toBe(false);
+    expect(pasFini.why).toBe('notComplete');
+    const fini = comboFinishPlan(defi(10), '2026-09-16');
+    expect(fini.can).toBe(true);
+    expect(fini.why).toBeNull();
+  });
+
+  it('⚠️ RIEN À CLÔTURER quand le 360 se ferme DÉJÀ tout seul', () => {
+    // Tous les exos au palier maximal : la fermeture automatique s'en charge.
+    const auMax = defi(12);
+    expect(legTier(auMax.legs[0]!)).toBe('max');
+    expect(comboFinishPlan(auMax, '2026-09-16').why).toBe('alreadyClosed');
+    // Période passée : idem.
+    expect(comboFinishPlan(defi(10), '2026-09-30').why).toBe('alreadyClosed');
+    // Et un défi déjà terminé ou abandonné n'a plus rien à clôturer.
+    expect(comboFinishPlan(defi(10, { status: 'done' }), '2026-09-16').why).toBe('alreadyClosed');
+    expect(comboFinishPlan(defi(10, { status: 'abandoned' }), '2026-09-16').why).toBe(
+      'alreadyClosed',
+    );
+  });
+
+  it('il DIT ce qu’on laisse : les exos pas encore au maximal, et les jours restants', () => {
+    const p = comboFinishPlan(defi(10), '2026-09-16');
+    expect(p.bonusLeft).toBe(1);
+    expect(p.daysLeft).toBe(4); // 14 + 6 = 20 ; du 16 au 20
+    // Au maximal, il ne reste plus rien à gagner — c'est ce qui rend la clôture inutile.
+    expect(comboFinishPlan(defi(12), '2026-09-16').bonusLeft).toBe(0);
+    // ⚠️ `daysLeft` est rendu MÊME quand on ne peut pas clôturer : il ne doit jamais
+    // partir en négatif, sinon un futur lecteur afficherait « il te reste −3 jours ».
+    expect(comboFinishPlan(defi(10), '2026-09-30').daysLeft).toBe(0);
+  });
+
+  it('⚠️ UNE DÉCISION DU JOUEUR NE SE RECALCULE PAS — sinon elle serait rouverte', () => {
+    const c = comboFinished(defi(10));
+    expect(c.status).toBe('done');
+    expect(c.config?.closed_by_user).toBe(true);
+    // Le recalcul, alors que la période court encore, ne doit PAS le rouvrir.
+    expect(comboNextStatus(c, '2026-09-16')).toBe('done');
+    // …et sans la marque, il le rouvrirait bel et bien (la règle de la v0.825).
+    expect(comboNextStatus({ ...defi(10), status: 'done' }, '2026-09-16')).toBe('active');
+  });
+
+  it('⚠️ UNE FERMETURE AUTOMATIQUE RESTE RÉVERSIBLE — corriger une série ne doit pas bloquer', () => {
+    // Au maximal, il se ferme seul ; on retire une série, il doit rouvrir.
+    expect(comboNextStatus({ ...defi(12), status: 'active' }, '2026-09-16')).toBe('done');
+    expect(comboNextStatus({ ...defi(11), status: 'done' }, '2026-09-16')).toBe('active');
+  });
+
+  it('un 360 clôturé à l’objectif OUVRE bien son coffre', () => {
+    // ⚠️ La condition du bouton est EXACTEMENT celle du coffre : il ne peut pas promettre
+    // ce qu'on n'aurait pas.
+    expect(comboChestEligible(comboFinished(defi(10)))).toBe(true);
+    expect(comboFinishPlan(defi(10), '2026-09-16').can).toBe(true);
   });
 });
