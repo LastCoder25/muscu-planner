@@ -96,8 +96,7 @@ import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
 import { useFriendBossStore } from '@/stores/friendBoss';
-import { useAuthStore } from '@/stores/auth';
-import { bossAgendaEntries } from '@/lib/friendBoss';
+import { useMyBossDays } from '@/composables/useMyBossDays';
 import { groupBySource } from '@/lib/agendaGroups';
 import { localDayIso } from '@/lib/volume';
 import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
@@ -124,7 +123,7 @@ const cardio = useCardioStore();
 const challenges = useChallengesStore();
 const combo = useComboStore();
 const friendBoss = useFriendBossStore();
-const auth = useAuthStore();
+const bossDays = useMyBossDays();
 const loading = ref(true);
 
 interface Entry {
@@ -349,13 +348,7 @@ const entries = computed<Entry[]>(() => {
   }
   // Boss entre amis : les reps de MES frappes, jour par jour. La règle (qui compte, quelle
   // XP, quelle unité) vit dans la lib — ici on ne fait que la traduire en entrée d'agenda.
-  for (const e of bossAgendaEntries(
-    friendBoss.bosses,
-    friendBoss.members,
-    friendBoss.hits,
-    auth.user?.id ?? '',
-    (ms) => isoDay(new Date(ms)),
-  )) {
+  for (const e of bossDays.entries.value) {
     const [y, m, dd] = e.day.split('-').map(Number);
     out.push({
       ts: new Date(y!, (m ?? 1) - 1, dd ?? 1, 12).getTime(),

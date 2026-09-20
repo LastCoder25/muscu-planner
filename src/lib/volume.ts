@@ -82,9 +82,16 @@ export function isMuscuLog(log: SessionLog): boolean {
 /** Formate une Date en YYYY-MM-DD à partir de ses composantes LOCALES (jamais via
  *  toISOString → pas de décalage de jour selon le fuseau, cf. garde-fou challenges).
  *
- *  ⚠️ **EXPORTÉE parce que la règle n’a le droit d’exister qu’UNE fois** : une clé de jour
- *  écrite à côté avec `toISOString` décale d’un jour en France, et ce projet s’est déjà fait
- *  prendre. L’Agenda et l’entrée des calculs de volume l’appellent au lieu de la recopier. */
+ *  ⚠️ **EXPORTÉE pour que les lecteurs qui comptent l’appellent** : une clé de jour écrite
+ *  à côté avec `toISOString` décale d’un jour en France, et ce projet s’est déjà fait
+ *  prendre. L’Agenda, l’entrée des calculs de volume et leurs tests l’appellent.
+ *
+ *  ⚠️ **ELLE N’EST PAS ENCORE LA SEULE** : une dizaine d’écrans en gardent une copie
+ *  (`FriendBossPage`, `HomePage` ×2, `CardioPage`, `MuscuPage`, `TennisPage`,
+ *  `useEnergyHistory`, `useWeatherReliability`, `stores/character`, `data/worldBoss`).
+ *  La plus gênante est celle de `FriendBossPage` : elle date les frappes à la SAISIE,
+ *  quand le calcul de volume les date avec celle-ci — deux définitions du « jour » pour
+ *  la même source de sport. À rapatrier, mais c’est un chantier à part. */
 export function localDayIso(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');

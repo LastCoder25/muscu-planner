@@ -15,6 +15,7 @@ import type { LogEntry } from '@/lib/volume';
 import type { SessionLog } from '@/lib/types';
 import type { ComboChallenge, ComboLeg } from '@/lib/combo';
 import type { Challenge } from '@/lib/challenges';
+import { bossDayKey } from '@/composables/useMyBossDays';
 import {
   bossAgendaEntries,
   type FriendBoss,
@@ -758,13 +759,12 @@ describe('le boss entre amis', () => {
     ...p,
   });
 
-  /** La chaîne RÉELLE : le groupement de l'Agenda, puis l'entrée des calculs de volume. */
+  /** La chaîne RÉELLE : le groupement de l'Agenda, puis l'entrée des calculs de volume.
+   *  ⚠️ `bossDayKey` est CELLE DE LA PRODUCTION, pas une clé de test : une copie écrite
+   *  ici laisserait ces tests au vert le jour où la vraie clé change (fuseau, bascule à
+   *  4 h) — le garde-fou que ce bloc prétend être ne garderait alors plus rien. */
   const hits = (b: FriendBoss, m: FriendBossMember[], h: FriendBossHit[]) =>
-    bossAgendaEntries([b], m, h, MOI, (ms) => {
-      const d = new Date(ms);
-      const mo = String(d.getMonth() + 1).padStart(2, '0');
-      return `${d.getFullYear()}-${mo}-${String(d.getDate()).padStart(2, '0')}`;
-    });
+    bossAgendaEntries([b], m, h, MOI, bossDayKey);
 
   it('⚠️ LE DÉFAUT RÉPARÉ : 60 pompes de boss creusent l’axe des pectoraux', () => {
     const i = input({ bossHits: hits(boss(), [membre()], [frappe(40), frappe(20)]) });
@@ -833,10 +833,33 @@ describe('le boss entre amis', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('l’entrée partagée charge ce qu’elle lit', () => {
   const src = readFileSync('src/composables/useBalanceInput.ts', 'utf8');
+  const bossSrc = readFileSync('src/composables/useMyBossDays.ts', 'utf8');
 
   it('⚠️ `ensureLoaded` charge les boss entre amis, sinon ils comptent zéro en silence', () => {
+    // ⚠️ ON SUIT LA CHAÎNE ENTIÈRE, parce que le chargement passe par un intermédiaire
+    // (`useMyBossDays`, partagé avec l'Agenda) : vérifier un seul des deux maillons
+    // laisserait l'autre se casser en silence — et un boss non chargé compte ZÉRO sans
+    // rien dire, ce qui est exactement le défaut que ce bloc garde.
     const bloc = src.slice(src.indexOf('function ensureLoaded'));
-    expect(bloc).toMatch(/friendBoss\.fetchMine\(\)/);
+    expect(bloc, 'l’entrée ne demande pas le chargement des boss').toMatch(
+      /bossDays\.ensureLoaded\(\)/,
+    );
+    expect(bossSrc, 'le composable ne charge rien').toMatch(/friendBoss\.fetchMine\(\)/);
+  });
+
+  it('⚠️ et les DEUX écrans lisent le même câblage — sinon ils divergent', () => {
+    // L'Agenda et l'équilibre du corps montrent les mêmes frappes : le jour où
+    // `bossAgendaEntries` gagne un filtre, il ne doit pas être ajouté à un seul appel.
+    const agenda = readFileSync('src/pages/AgendaPage.vue', 'utf8');
+    for (const [nom, code] of [
+      ['l’entrée des calculs de volume', src],
+      ['l’Agenda', agenda],
+    ] as const) {
+      expect(code, `${nom} n’utilise pas le câblage partagé`).toMatch(/useMyBossDays/);
+      expect(code, `${nom} rappelle bossAgendaEntries de son côté`).not.toMatch(
+        /bossAgendaEntries\(/,
+      );
+    }
   });
 
   it('et les deux tables de muscles viennent de la MÊME requête (aucun aller-retour de plus)', () => {

@@ -192,13 +192,26 @@ function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
 }
 
 /** Une valeur d'un challenge (objectif ou réalisé, dans son unité) exprimée en SÉRIES. */
+/**
+ * Combien de SÉRIES valent `v` unités (reps, ou secondes pour un exo au temps).
+ *
+ * ⚠️ **UNE SEULE DÉFINITION**, parce que c'est LA règle qui fait que 60 pompes valent
+ * 6 séries : elle décide du même chiffre pour un challenge et pour un boss entre amis, et
+ * les deux atterrissent dans la **MÊME barre**. Deux copies afficheraient deux volumes
+ * pour le même effort le jour où la fourchette bouge (un arrondi, un plancher, la règle
+ * spéciale des accessoires que `repScheme` porte déjà).
+ */
+function setsFromUnits(
+  v: number,
+  objective: Objective | null | undefined,
+  exo: { time: boolean; muscle_primary?: string | null },
+): number {
+  return v / perSet(repRangeForExercise(objective, exo));
+}
+
 function challengeSets(c: Challenge, v: number, objective?: Objective | null): number {
   if (c.config.count_mode === 'sets') return v;
-  const range = repRangeForExercise(objective, {
-    time: c.unit === 'time',
-    muscle_primary: c.muscle_primary,
-  });
-  return v / perSet(range);
+  return setsFromUnits(v, objective, { time: c.unit === 'time', muscle_primary: c.muscle_primary });
 }
 
 /**
@@ -223,14 +236,13 @@ function bossItems(
   for (const h of hits) {
     if (bossXpTrack(h.family) !== 'muscu' || h.total <= 0) continue;
     const primary = primaries(h.exerciseId);
-    const range = repRangeForExercise(objective, { time: h.unit === 's', muscle_primary: primary });
     out.push({
       source: 'boss',
       day: h.day,
       exerciseId: h.exerciseId,
       name: h.title,
       primary,
-      sets: h.total / perSet(range),
+      sets: setsFromUnits(h.total, objective, { time: h.unit === 's', muscle_primary: primary }),
       reps: h.unit === 'reps' ? h.total : 0,
     });
   }
