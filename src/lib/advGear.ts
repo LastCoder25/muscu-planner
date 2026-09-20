@@ -29,6 +29,7 @@ import {
 } from './items';
 import {
   advAvatar,
+  advChampion,
   advRarity,
   type AdvAvatarProfile,
   type ADV_AVATAR_SLOTS,
@@ -184,6 +185,10 @@ const ADV_GEAR = {
 export const ADV_GEAR_DROP = { corpse: 0.02, champion: 0.5, ambush: 0.25 } as const;
 
 export function lineageOf(adv: Adventurer): Lineage | null {
+  // ⚠️ Pour un champion elle est ÉCRITE, alors qu'elle se DÉDUISAIT de la classe racine :
+  // sans chemin, c'est le seul endroit qui dise quel équipement il peut porter.
+  const champ = advChampion(adv);
+  if (champ) return champ.lineage;
   const root = adv.path[0];
   return root && (LINEAGES as readonly string[]).includes(root) ? (root as Lineage) : null;
 }

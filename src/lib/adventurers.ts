@@ -16,8 +16,8 @@
 // pas les mêmes offres et n'ont pas le même destin, pour ~35 classes écrites au lieu de
 // 9 840. Les branches re-convergent naturellement (« Maître épéiste » est atteignable
 // depuis Épéiste comme depuis Bretteur : on ne l'écrit qu'une fois).
-import { prestigeRankIndex, RANK_ORDER, type EffectType, type Rarity } from './items';
-import type { Champion } from '@/data/champions';
+import { prestigeRankIndex, RANK_ORDER, RARITY_RANK, type EffectType, type Rarity } from './items';
+import { CHAMPION_BY_ID, type Champion } from '@/data/champions';
 import {
   CHARACTER_RANKS,
   characterRank,
@@ -1141,8 +1141,25 @@ export interface Adventurer {
   /** Graine figée à la création : c'est elle qui décide des propositions reçues, donc
    *  deux aventuriers de la même classe n'ont pas le même destin. */
   seed: number;
-  /** Ids de classe, du plus ancien au plus récent. `path[0]` = la classe de départ. */
+  /** Ids de classe, du plus ancien au plus récent. `path[0]` = la classe de départ.
+   *  ⚠️ VIDE pour un CHAMPION : il n'a pas de chemin, il a une identité (`championId`). */
   path: string[];
+  /**
+   * 🏅 L'id du CHAMPION qu'il EST, quand il en est un — sinon absent.
+   *
+   * ⚠️ **UNE IDENTITÉ, PAS UN CHEMIN.** C'est toute la correction de la v0.939 : les deux
+   * versions précédentes de la spec faisaient d'un champion un CHEMIN dans l'arbre des
+   * classes, donc son identité était indéfinissable, donc les **doublons** impossibles,
+   * donc l'Éveil, donc le cœur du gacha. Un id, et les doublons existent.
+   *
+   * ⚠️ **ADDITIF** : un aventurier sans `championId` garde EXACTEMENT le comportement
+   * d'aujourd'hui, chemin de classes compris — aucune migration, et les deux systèmes
+   * cohabitent le temps de la bascule.
+   */
+  championId?: string;
+  /** Combien d'exemplaires on possède de ce champion. ⚠️ C'est ce compte qui porte l'Éveil
+   *  (`awakenLevel`) : la PREMIÈRE copie est le champion, les suivantes le réveillent. */
+  copies?: number;
   level: number;
   xp: number;
   /** Occupé jusqu'à (escorte, formation) — ms epoch. */
@@ -1199,6 +1216,10 @@ export function pathTags(path: string[]): Set<string> {
 
 /** Strate à laquelle l'aventurier peut prétendre ensuite (= longueur du chemin). */
 export function nextStratum(adv: Adventurer): number {
+  // ⚠️ UN CHAMPION NE SE PROMEUT PAS : ses doublons le réveillent, ils ne le font pas
+  // changer de classe. On rend le bout de l'échelle, et `promoLevel` rend alors `null`,
+  // donc `canPromote` refuse — SANS cas particulier greffé dans chacune des deux.
+  if (adv.championId) return PROMO_LEVELS.length;
   return adv.path.length;
 }
 
@@ -1270,6 +1291,44 @@ export function canPromote(adv: Adventurer, guildLevel: number): boolean {
   return classChoices(adv, s).length > 0;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏅 UN CHAMPION À LA PLACE D'UN AVENTURIER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Le champion qu'il EST, ou `undefined` s'il suit encore un chemin de classes.
+ *  ⚠️ Un id qui ne désigne plus rien rend `undefined` plutôt que de faire tomber le
+ *  combat — la règle des familiers et des talents appariés (v0.758). */
+export function advChampion(adv: Adventurer): Champion | undefined {
+  return adv.championId ? CHAMPION_BY_ID.get(adv.championId) : undefined;
+}
+
+/** Son rang d'Éveil, dérivé du nombre d'exemplaires. */
+export function advAwaken(adv: Adventurer): number {
+  return awakenLevel(adv.copies ?? 1);
+}
+
+/**
+ * 🏅 LA RARETÉ **EFFECTIVE** d'une rareté tirée — plafonnée par le rang du joueur.
+ *
+ * ⚠️ **DEUX RARETÉS, ET LES CONFONDRE CASSE QUELQUE CHOSE DANS LES DEUX SENS.** La
+ * **NOMINALE** (`champ.rarity`) est ce qu'on a TIRÉ : c'est elle que la carte affiche, et
+ * un gacha qui cacherait un primordial fraîchement sorti n'aurait aucun intérêt.
+ * L'**EFFECTIVE** est ce qu'il peut MENER aujourd'hui : elle borne son équipement
+ * (`canWearAdvGear`), son familier (`canAdvFamiliar`) et son talent (`canAdvTalent`).
+ *
+ * ⚠️ **SANS CE PLAFOND, LE GACHA COURT-CIRCUITE « LE SPORT EST LE PLAFOND »** sur l'axe
+ * ÉQUIPEMENT : un primordial tiré au niveau 5 porterait des pièces primordiales alors que
+ * ses STATS valent du commun (`championBudget` les plafonne déjà). Deux vérités sur le
+ * même champion, et c'est l'équipement qui gagnerait.
+ *
+ * ✅ Le plaisir reste entier : on tire bien un primordial, et il **révèle** ce qu'il vaut
+ * à mesure qu'on monte (v0.938).
+ */
+export function championRarity(rarity: Rarity, playerLevel: number): Rarity {
+  const tire = RARITY_RANK[rarity] ?? 0;
+  return RANK_ORDER[Math.min(tire, prestigeRankIndex(playerLevel))]!;
+}
+
 /** Stats de l'aventurier : le chemin de classes donne la FORME et le volume de base,
  *  le niveau multiplie. Chaque strate distribue son budget selon les parts de la classe. */
 export function advStats(adv: Adventurer): {
@@ -1277,6 +1336,10 @@ export function advStats(adv: Adventurer): {
   endurance: number;
   agilite: number;
 } {
+  // 🏅 Un champion n'a pas de chemin à cumuler : sa rareté DIT son budget, sa forme le
+  // répartit, et ses doublons le multiplient. Même courbe de niveau, quelques lignes plus bas.
+  const champ = advChampion(adv);
+  if (champ) return championStats(champ, adv.level, adv.copies ?? 1);
   let p = 0;
   let e = 0;
   let a = 0;
@@ -1299,6 +1362,10 @@ export function advStats(adv: Adventurer): {
 
 /** Rareté de l'aventurier = la strate la plus haute atteinte. Déduite, jamais stockée. */
 export function advRarity(adv: Adventurer): Rarity {
+  // ⚠️ Pour un champion, c'est la rareté EFFECTIVE (plafonnée par le rang du joueur), pas
+  // celle qu'on a tirée : c'est elle qui borne son équipement et ses compagnons.
+  const champ = advChampion(adv);
+  if (champ) return championRarity(champ.rarity, adv.level);
   const top = adv.path.reduce((m, id) => Math.max(m, advClass(id)?.stratum ?? 0), 0);
   return RANK_ORDER[Math.min(RANK_ORDER.length - 1, top)]!;
 }
@@ -1583,6 +1650,15 @@ export function advRank(adv: Adventurer): CharacterRank {
  *  classes) il n’y a plus de promotion à attendre : les deux derniers rangs se gagnent au
  *  niveau seul, sinon ils seraient inatteignables. */
 function advRankCap(adv: Adventurer): number {
+  // ⚠️ Le rang AFFICHÉ suit la rareté EFFECTIVE, jamais celle qu'on a tirée : afficher
+  // « Divin ancestral » à un champion qui ne peut mener que du Bronze ferait mentir la
+  // règle, exactement ce que la v0.834 a corrigé pour les classes.
+  // ⚠️ MESURÉ ÉQUIVALENT au fait de lire la rareté NOMINALE ici, et la mutation l'a montré
+  // en survivant : ce cap n'est comparé qu'à `characterRank(level).rankIndex`, toujours ≥
+  // `prestigeRankIndex(level)`, donc le `min` ne peut jamais départager les deux. On garde
+  // `advRarity` parce que c'est la SOURCE UNIQUE — le jour où `championRarity` gagne une
+  // autre règle, l'affichage suivra sans qu'on ait à s'en souvenir.
+  if (adv.championId) return RARITY_RANK[advRarity(adv)] ?? 0;
   return adv.path.length >= PROMO_LEVELS.length
     ? CHARACTER_RANKS.length - 1
     : Math.max(0, adv.path.length - 1);
@@ -1643,6 +1719,17 @@ export function advTitle(adv: Adventurer): AdvClass | undefined {
 
 /** Signatures portées par le chemin (les strates hautes en donnent une). */
 export function advSignatures(adv: Adventurer): EffectType[] {
+  const champ = advChampion(adv);
+  // ⚠️ ON RÉPÈTE CHAQUE SIGNATURE AUTANT DE FOIS QUE SON NIVEAU, et c'est ce qui fait que
+  // l'Éveil ne demande AUCUN système neuf : `levelsOf` compte déjà les occurrences (v0.757),
+  // donc `advSignatureLevels`, `advBadges` et tous les écrans en aval suivent sans une
+  // ligne de plus. Un cran d'Éveil qualitatif, c'est +1 occurrence.
+  if (champ) {
+    const lvl = advAwaken(adv);
+    return champ.skills.flatMap((s) =>
+      Array.from({ length: championSkillLevel(champ, s, lvl) }, () => s),
+    );
+  }
   return adv.path.map((id) => advClass(id)?.signature).filter((s): s is EffectType => !!s);
 }
 
@@ -1719,6 +1806,16 @@ export function escortRoleLevel(advs: Adventurer[], role: AdvRole): number {
 
 /** Rôles hors combat portés par le chemin (soin, cargaison, vitesse, éclaireur). */
 export function advRoles(adv: Adventurer): AdvRole[] {
+  // ⚠️ Un champion porte 0 ou 1 rôle — `null` est un choix du roster, pas un oubli : un
+  // champion peut n'être qu'un combattant.
+  // ⚠️ MAIS AUCUN CHAMPION N'EST DANS CE CAS AUJOURD'HUI, et deux règles se contredisent :
+  // le TYPE prévoit `null`, la GRILLE l'interdit (4 rôles distincts sur les 4 champions de
+  // chaque rareté, testé). La branche est donc inatteignable — elle n'est pas un garde
+  // dormant qu'on pourrait supprimer pour autant : sans elle, `[champ.role]` vaudrait
+  // `(AdvRole | null)[]` et ne compilerait pas. C'est une porte ouverte pour un roster
+  // élargi (la règle d'extension ajoute en HAUT, où une rareté peut dépasser 4 places).
+  const champ = advChampion(adv);
+  if (champ) return champ.role ? [champ.role] : [];
   return adv.path.map((id) => advClass(id)?.role).filter((r): r is AdvRole => !!r);
 }
 
