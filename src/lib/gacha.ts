@@ -179,6 +179,57 @@ export function pullRarity(
 
 const rankOf = (r: Rarity): number => RANK_ORDER.indexOf(r);
 
+/**
+ * 📊 CE QUE L'ÉCRAN DOIT DIRE DES CHANCES (v0.966 ; signalé par l'utilisateur : « j'ai eu
+ * du primordial, légendaire, rare, alors que je pensais avoir beaucoup de commun »).
+ *
+ * ⚠️ **MESURÉ D'ABORD : LES TAUX SONT CONFORMES, IL N'Y AVAIT RIEN À CORRIGER.** Sur
+ * 4 000 parties de 14 tirages, on obtient 28,8 % de commun · 24,2 % d'inhabituel · … ·
+ * 1,3 % de primordial — la table, au pity près. Ce que le compte réel a vécu (2 commun,
+ * 2 légendaires et 1 primordial en **14** tirages — `pulls` valait 30 parce que le pity
+ * du wipe était conservé) s'explique par le PLANCHER : deux de ces quatorze tirages
+ * étaient **garantis épique ou mieux**, et un tirage garanti re-tire dans toute la tranche
+ * ≥ épique — donc il a ~47 % de chances de DÉPASSER l'épique.
+ *
+ * ⚠️ **LE DÉFAUT N'ÉTAIT DONC PAS DANS LE TIRAGE MAIS DANS LE SILENCE** : rien n'annonçait
+ * ni les taux, ni la garantie, ni où en est son propre pity. Dans ce genre, les taux
+ * s'affichent — c'est même une obligation légale dans plusieurs pays. On les dit.
+ */
+export interface GachaOdds {
+  /** Les taux de base, du plus commun au plus rare. */
+  rates: { rarity: Rarity; pct: number }[];
+  /** Un tirage sur N est garanti `floorRarity` ou mieux. */
+  floorEvery: number;
+  floorRarity: Rarity;
+  /** ⚠️ La part des tirages GARANTIS qui dépassent le plancher — le chiffre qui explique
+   *  le ressenti, et que rien n'annonçait. Dérivé de la table, jamais écrit à la main. */
+  aboveFloorPct: number;
+  /** Tirages restants avant le prochain plancher garanti (1 = le prochain). */
+  nextFloorIn: number;
+  /** Chance actuelle de la rareté maximale, pity majeur compris. */
+  topPct: number;
+  /** Tirages restants avant la rareté maximale garantie. */
+  nextTopIn: number;
+}
+
+export function gachaOdds(pity: PityState): GachaOdds {
+  const floorIdx = rankOf(GACHA.floorRarity);
+  const audessus = RANK_ORDER.filter((r) => rankOf(r) > floorIdx);
+  const tranche = RANK_ORDER.filter((r) => rankOf(r) >= floorIdx);
+  const somme = (l: readonly Rarity[]) => l.reduce((a, r) => a + GACHA_RATES[r], 0);
+  return {
+    rates: RANK_ORDER.map((r) => ({ rarity: r, pct: GACHA_RATES[r] * 100 })),
+    floorEvery: GACHA.minorPity,
+    floorRarity: GACHA.floorRarity,
+    // ⚠️ La garantie RE-TIRE dans la tranche ≥ plancher (`pickAtLeast`) : la part qui la
+    // dépasse est donc celle des raretés au-dessus, RENORMALISÉE sur la tranche.
+    aboveFloorPct: (somme(audessus) / somme(tranche)) * 100,
+    nextFloorIn: Math.max(1, GACHA.minorPity - pity.sinceFloor),
+    topPct: topRate(pity.sinceTop) * 100,
+    nextTopIn: Math.max(1, GACHA.hardPity - pity.sinceTop),
+  };
+}
+
 /** Tirage pondéré ordinaire sur toute l'échelle. */
 function pickWeighted(rng: () => number): Rarity {
   let x = rng();

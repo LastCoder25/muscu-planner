@@ -26,6 +26,7 @@ import {
   OVERFLOW_MANA,
   topRate,
   pullChampion,
+  gachaOdds,
 } from '@/lib/gacha';
 
 const rankOf = (r: Rarity) => RANK_ORDER.indexOf(r);
@@ -563,5 +564,58 @@ describe('🗑️ LE WIPE DES AVENTURIERS', () => {
     const w = wipeLegacyAdventurers(advs);
     expect(w.advs, 'la MÊME référence').toBe(advs);
     expect(w.mana).toBe(0);
+  });
+});
+
+describe('📊 CE QUE L’ÉCRAN DIT DES CHANCES (v0.966)', () => {
+  // ⚠️ Signalé : « j'ai eu du primordial, légendaire, rare, alors que je pensais avoir
+  // beaucoup de commun ». MESURÉ : les taux sont conformes (28,8 % de commun sur 14
+  // tirages simulés, contre 30 % annoncés). Le défaut était le SILENCE — rien n'annonçait
+  // ni les taux, ni la garantie, ni l'état du pity.
+  const neuf = { sinceTop: 0, sinceFloor: 0 };
+
+  it('annonce TOUTES les raretés, et exactement la table', () => {
+    const o = gachaOdds(neuf);
+    expect(o.rates).toHaveLength(RANK_ORDER.length);
+    for (const { rarity, pct } of o.rates) {
+      // ⚠️ DÉRIVÉ de la table, jamais recopié : une notice qui aurait ses propres chiffres
+      // finirait par mentir au premier réglage.
+      expect(pct, rarity).toBeCloseTo(GACHA_RATES[rarity] * 100, 6);
+    }
+  });
+
+  it('⚠️ LE CHIFFRE QUI EXPLIQUE LE RESSENTI : un tirage garanti DÉPASSE souvent le plancher', () => {
+    // La garantie re-tire dans TOUTE la tranche ≥ plancher (`pickAtLeast`) — elle ne rend
+    // pas « épique ». C'est ce que personne ne pouvait deviner, et c'est ce qui fait qu'un
+    // joueur voit des légendaires là où il attendait des communs.
+    const o = gachaOdds(neuf);
+    const idx = RANK_ORDER.indexOf(o.floorRarity);
+    const somme = (f: (i: number) => boolean) =>
+      RANK_ORDER.filter((r) => f(RANK_ORDER.indexOf(r))).reduce((a, r) => a + GACHA_RATES[r], 0);
+    expect(o.aboveFloorPct).toBeCloseTo((somme((i) => i > idx) / somme((i) => i >= idx)) * 100, 6);
+    // …et ce n'est pas anecdotique : près d'une fois sur deux.
+    expect(o.aboveFloorPct).toBeGreaterThan(30);
+  });
+
+  it('dit où en est SON pity, jamais des compteurs nus', () => {
+    expect(gachaOdds(neuf).nextFloorIn).toBe(GACHA.minorPity);
+    expect(gachaOdds({ sinceTop: 0, sinceFloor: GACHA.minorPity - 1 }).nextFloorIn).toBe(1);
+    // ⚠️ Jamais 0 ni négatif : « garanti dans 0 tirage » ne veut rien dire, et un état relu
+    // d'un JSONB peut dépasser le seuil.
+    expect(gachaOdds({ sinceTop: 999, sinceFloor: 999 }).nextFloorIn).toBe(1);
+    expect(gachaOdds({ sinceTop: 999, sinceFloor: 999 }).nextTopIn).toBe(1);
+  });
+
+  it('la chance du sommet SUIT le pity majeur', () => {
+    const base = gachaOdds(neuf).topPct;
+    expect(base).toBeCloseTo(GACHA_RATES[TOP_RARITY] * 100, 6);
+    expect(gachaOdds({ sinceTop: GACHA.softPityStart - 2, sinceFloor: 0 }).topPct).toBeCloseTo(
+      base,
+      6,
+    );
+    expect(gachaOdds({ sinceTop: GACHA.softPityStart + 5, sinceFloor: 0 }).topPct).toBeGreaterThan(
+      base,
+    );
+    expect(gachaOdds({ sinceTop: GACHA.hardPity - 1, sinceFloor: 0 }).topPct).toBeCloseTo(100, 6);
   });
 });

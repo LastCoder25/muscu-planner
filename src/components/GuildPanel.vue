@@ -73,6 +73,44 @@
             <small>{{ pulls > 1 ? 'tirages' : 'tirage' }}</small>
           </span>
         </button>
+
+        <!-- 📊 LES CHANCES, ANNONCÉES (v0.966, demandé : « j'ai eu du primordial,
+             légendaire, rare, alors que je pensais avoir beaucoup de commun »).
+             ⚠️ Mesuré, les taux étaient CONFORMES : le défaut était le SILENCE. Rien ne
+             disait ni les taux, ni la garantie tous les 10, ni — surtout — qu'un tirage
+             garanti re-tire dans TOUTE la tranche ≥ épique, donc qu'il la dépasse une
+             fois sur deux. C'est ce chiffre-là qui explique le ressenti.
+             ⚠️ REPLIÉ par défaut : c'est une notice, pas l'action. -->
+        <button class="g-odds-t" type="button" @click="oddsOpen = !oddsOpen">
+          <span>📊 Chances d'invocation</span>
+          <span class="go-chev" :class="{ on: oddsOpen }">▸</span>
+        </button>
+        <div v-if="oddsOpen" class="g-odds">
+          <div v-for="r in odds.rates" :key="r.rarity" class="go-row">
+            <span class="go-rar" :style="{ color: RANK_COLOR[r.rarity] }">
+              {{ RARITY_LABEL[r.rarity] }}
+            </span>
+            <span class="go-bar" aria-hidden="true"
+              ><i
+                :style="{
+                  width: (r.pct / odds.rates[0]!.pct) * 100 + '%',
+                  background: RANK_COLOR[r.rarity],
+                }"
+            /></span>
+            <span class="go-pct font-display">{{ fmtOdds(r.pct) }} %</span>
+          </div>
+          <p class="go-note">
+            🎁 Un tirage sur {{ odds.floorEvery }} est garanti
+            <b>{{ RARITY_LABEL[odds.floorRarity] }}</b> ou mieux — et il le DÉPASSE
+            {{ Math.round(odds.aboveFloorPct) }} fois sur 100. Prochain dans
+            <b>{{ odds.nextFloorIn }}</b> tirage{{ odds.nextFloorIn > 1 ? 's' : '' }}.
+          </p>
+          <p class="go-note">
+            👑 {{ RARITY_LABEL[TOP_RARITY] }} : <b>{{ fmtOdds(odds.topPct) }} %</b> à ton prochain
+            tirage, garanti dans <b>{{ odds.nextTopIn }}</b
+            >.
+          </p>
+        </div>
         <template v-if="guildTab === 'roster' || !roster.length">
           <!-- ⚠️ Le RECRUTEMENT et la PROMOTION ont disparu avec l'arbre de classes
              (v0.951) : on n'élève plus une recrue, on INVOQUE un champion et ses doublons
@@ -716,7 +754,7 @@ import { rankStarStr } from '@/lib/characterRank';
 import { awakenLevel, engageCap } from '@/lib/adventurers';
 import GachaReveal from './GachaReveal.vue';
 import { buildReveal, type RevealPlan } from '@/lib/gachaReveal';
-import { GACHA } from '@/lib/gacha';
+import { GACHA, TOP_RARITY, gachaOdds } from '@/lib/gacha';
 import {
   RANK_COLOR,
   RARITY_LABEL,
@@ -1431,6 +1469,13 @@ const pullCost = GACHA.pullCost;
 /** Combien de tirages la réserve permet. ⚠️ Le chiffre qui décide si on appuie : « 1 831
  *  💠 » ne se convertit pas de tête. */
 const pulls = computed(() => Math.floor(mana.value / pullCost));
+/** 📊 Les chances, avec l'état RÉEL du pity : un panneau qui annoncerait des taux nus
+ *  mentirait par omission — c'est la garantie qui explique ce qu'on tire. */
+const oddsOpen = ref(false);
+const odds = computed(() => gachaOdds(char.row?.gacha ?? { sinceTop: 0, sinceFloor: 0 }));
+/** Un taux à la française, décimale seulement si elle dit quelque chose. */
+const fmtOdds = (pct: number) =>
+  (Math.round(pct * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 const revealPlan = ref<RevealPlan | null>(null);
 const revealVerdict = ref<{
   duplicate: boolean;
@@ -1485,6 +1530,76 @@ async function doPull() {
 /* 🎰 L'INVOCATION — l'action qui remplace l'arbre de classes. Elle se distingue du
    recrutement par une teinte propre (le violet du mana), jamais par la seule taille :
    deux boutons pleine largeur de même couleur se lisent comme un seul geste répété. */
+/* 📊 LE PANNEAU DES CHANCES — une NOTICE : discrète, repliée, jamais en concurrence
+   avec le bouton d'invocation juste au-dessus. */
+.g-odds-t {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  /* Cible tactile 44 px : c est une notice, pas l action principale, mais la regle du projet ne souffre pas d exception. */
+  min-height: 44px;
+  margin: -2px 0 8px;
+  padding: 4px 6px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.go-chev {
+  margin-left: auto;
+  transition: transform 0.15s ease;
+}
+.go-chev.on {
+  transform: rotate(90deg);
+}
+.g-odds {
+  margin: -6px 0 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.go-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+.go-rar {
+  flex: 0 0 96px;
+  font-size: 11.5px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.go-bar {
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.go-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+}
+.go-pct {
+  flex: 0 0 46px;
+  text-align: right;
+  font-size: 12px;
+}
+.go-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.35;
+}
 /* 🎰 LE BOUTON D'INVOCATION — « c'est un truc important » (demandé).
    ⚠️ IL N'AVAIT QUASIMENT AUCUN STYLE : il portait `.voie-btn`, une classe définie dans
    AventurePage… en `scoped`, donc qui ne l'atteint JAMAIS. Il tombait à la taille de son
