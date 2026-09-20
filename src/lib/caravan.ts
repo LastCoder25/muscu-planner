@@ -578,25 +578,19 @@ export function refAdventurer(level: number, slot = 0): Adventurer {
 }
 
 /**
- * 🏅 L'ÉTALON EN CHAMPIONS — ce à quoi la route se calibrera le jour de la bascule.
+ * 🏅 L'ÉTALON EN CHAMPIONS — ce à quoi la route, les camps, les failles et les sièges se
+ * calibrent **depuis la v0.952**.
  *
- * ⚠️ **ÉCRITE, MESURÉE, PAS ENCORE BRANCHÉE.** `refEscortBare` appelle toujours
- * `refAdventurer` : la basculer aujourd'hui rendrait les convois **impossibles** pour les
- * aventuriers existants (mesuré : un trio tombe de 75-88 % à 1-2 % de ses embuscades).
- * L'étalon et le vivier doivent basculer **ensemble** — c'est toute la leçon de la v0.795.
- * Le jour J, c'est **une ligne** dans `refEscortBare`.
+ * ⚠️ **ELLE A ATTENDU LE WIPE, et c'est toute la leçon de la v0.795** : la basculer avant
+ * aurait rendu les convois impossibles pour les aventuriers existants (mesuré : un trio
+ * tombait de 75-88 % à 1-2 % de ses embuscades). L'étalon et le vivier bougent ENSEMBLE.
  *
  * ## ✅ CE QUE LA MESURE A TRANCHÉ (la bloquante de la v0.938)
  *
- * **Les bandes d'embuscade TIENNENT**, à condition que les deux camps bougent ensemble —
- * trio sur route calme **75 à 92 %** du niveau 12 au 85 (aujourd'hui 73-94), sur route
- * périlleuse **23 à 41 %** (aujourd'hui 8-68) ; 1 membre 0 %, 2 membres 16-26 %, 4 membres
- * 97-100 %. La courbe est **PLATE** : le choix « combien j'en envoie » est intact.
- *
- * ⚠️ **CONTRE LA ROUTE NON RECALIBRÉE, en revanche, ce choix DISPARAÎT** : un trio de
- * champions passe à **100 %** dès le niveau 12, et 2 membres à 90-99 %. L'écart nu entre
- * les deux étalons vaut **×1,9 à ×2,3** jusqu'au niveau 40, puis converge à **×0,99** au
- * niveau 80 — donc ce n'est pas un facteur constant, et seule la mesure pouvait le dire.
+ * **Les bandes d'embuscade TIENNENT**, les deux camps ayant bougé ensemble — trio sur route
+ * calme **75 à 92 %** du niveau 12 au 85 (73-94 avant), sur route périlleuse **23 à 41 %** ;
+ * 1 membre 0 %, 2 membres 16-26 %, 4 membres 97-100 %. La courbe est **PLATE** : le choix
+ * « combien j'en envoie » est intact.
  *
  * ✅ **ET LE JOUEUR MALCHANCEUX N'EXISTE PAS** (simulé, 3 profils × 20 graines) : il a 3
  * champions à son rang cible **dès le JOUR 2**, et il est **0 % du temps en dessous**. La
@@ -604,14 +598,21 @@ export function refAdventurer(level: number, slot = 0): Adventurer {
  * les tirages arrivent par dizaines (47 en 30 jours). ⚠️ C'était le vrai risque : mesuré,
  * un trio **un cran sous** son rang tombe de 76 % à 59 %, et **deux crans** à 1 %.
  *
- * ⚠️ **LES SIÈGES, EUX, DEMANDENT UN RECALIBRAGE** : `siegeAttackers` se calibre sur le
- * HÉROS (`refFighter`), pas sur le vivier — donc l'armée ne suit pas quand la garnison
- * double, et la tenue gagne **+5 à +27 points** (enceinte pleine au niveau 12-28 : retour
- * à **100 %**, le défaut que la v0.789 avait corrigé). Balayé, **`RAID.guardSiegeK` 1,25 →
- * 0,9** reproduit la difficulté d'aujourd'hui (écarts −7 à +9, dans le bruit) ; 0,65
- * effondre les enceintes incomplètes (−31 points au niveau 12). ⚠️ **À appliquer LE MÊME
- * JOUR** : baisser ce coefficient maintenant nerferait la défense des joueurs actuels de 4
- * à 14 points pour un bénéfice qui n'arriverait pas.
+ * ## ⚠️ CE QUE LA BASCULE A COÛTÉ AILLEURS, mesuré
+ *
+ * Trois autres surfaces se calibrent sur cet étalon, et deux ont dû être retouchées :
+ * - **SIÈGES** : `siegeAttackers` se calibre sur le HÉROS, pas sur le vivier, donc l'armée
+ *   ne suit pas quand la garnison double (+5 à +27 points de tenue, enceinte pleine de
+ *   retour à 100 % aux niveaux 12-28 — le défaut de la v0.789). **`RAID.guardSiegeK` 1,25 →
+ *   0,9** le reproduit (écarts −7 à +9, dans le bruit). ⚠️ Le coefficient traverse donc 1 :
+ *   ce n'est plus « un aventurier vaut PLUS derrière ses murs », c'est un réglage.
+ * - **FAILLES** : `RIFT_RELIEF` entièrement re-bisectée, même harnais et même cible.
+ * - **CAMPS** : ⚠️ **RELEVÉ, NON CORRIGÉ** — ils n'étaient pas dans la campagne de la
+ *   v0.943 et sont devenus plus faciles (un groupe de la bonne taille passe de 0,65-0,95 à
+ *   0,73-1,00). La cause est identifiée : le combat n'y est serré que par la VARIANCE, or
+ *   la référence en champions a **crit 0,03 et 1,05 frappe au niveau 12**. Aucun couple
+ *   `pvTurns`/`dmgPctPv` balayé (5 × 4) ne resserre la bande sans rendre un camp de la
+ *   bonne taille perdant ailleurs : c'est un chantier de calibration à part.
  *
  * ## Comment elle choisit
  *
@@ -697,7 +698,7 @@ export function refCompanions(level: number): Item[] {
 /** Les membres NUS de l’escorte de référence, un par orientation. ⚠️ Extrait pour que
  *  `refAdvGear` lise les lignées sans passer par `refEscortOf`, qui l’appelle. */
 function refEscortBare(level: number, n: number = CARAVAN.refEscort): Adventurer[] {
-  return Array.from({ length: n }, (_, i) => refAdventurer(level, i));
+  return Array.from({ length: n }, (_, i) => refChampionAdv(level, i));
 }
 
 /** Les ids des pièces de référence du membre `i` (cf. `refAdvGear`). */

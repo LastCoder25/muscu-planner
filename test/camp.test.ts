@@ -46,7 +46,7 @@ import {
   missionTravelMult,
   missionXp,
   refAdvGear,
-  refAdventurer,
+  refChampionAdv,
   refCompanions,
   roadPairs,
   roadUnits,
@@ -77,7 +77,7 @@ const poi = (over: Partial<Poi> = {}): Poi => ({
 });
 const team = (n: number, level: number): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
-    ...refAdventurer(level, i),
+    ...refChampionAdv(level, i),
     id: `adv_${i}`,
     familiarId: `refFam${i % 3}`,
     // ⚠️ 4 emplacements depuis la v0.881 : sans la relique, le fixture ne correspondrait
@@ -718,7 +718,7 @@ describe('📬 settleParties — un groupe parti sans le héros : rapport à l�
 
 describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', () => {
   const esc = team(3, 20);
-  const bystander: Adventurer = { ...refAdventurer(20, 0), id: 'adv_reste' };
+  const bystander: Adventurer = { ...refChampionAdv(20, 0), id: 'adv_reste' };
   const roster = [...esc, bystander];
   const party = (over: Partial<PartyResult> = {}) => ({
     ...resolveCamp(input({ escort: esc })).party!,

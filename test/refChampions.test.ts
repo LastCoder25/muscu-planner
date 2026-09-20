@@ -117,14 +117,20 @@ describe('⚠️ LES DEUX TROUS QUE LA MUTATION A RÉVÉLÉS', () => {
     expect(vus, 'le roster n’a plus d’ex æquo : ce garde est devenu dormant').toBeGreaterThan(0);
   });
 
-  it('⚠️ LA ROUTE SE CALIBRE ENCORE SUR LES LIGNÉES D’AVENTURIER', () => {
-    // Mon premier test regardait `refAdventurer`, que la bascule ne touche PAS — il ne
-    // pouvait donc pas voir `refEscortBare` passer aux champions. On observe ici l'ÉTALON
-    // réellement employé : `refAdvGear` en dérive, et ses pièces portent sa lignée.
-    const lignees = new Set(refAdvGear(30, 3).map((g) => g.lineage));
-    expect([...lignees].sort()).toEqual(['archer', 'caravanier', 'guerrier']);
-    // …et ce ne sont PAS celles des champions de référence, sinon le test ne dirait rien.
-    const champs = new Set(refChampions(30).map((c) => c.lineage));
-    expect([...champs].sort()).not.toEqual([...lignees].sort());
+  it('⚠️ LA ROUTE SE CALIBRE DÉSORMAIS SUR LES CHAMPIONS (bascule v0.952)', () => {
+    // ⚠️ RÉÉCRIT, PAS SUPPRIMÉ : ce test gardait l'inverse — il interdisait une bascule
+    // PRÉMATURÉE, tant que le vivier des joueurs était fait d'aventuriers (basculer le seul
+    // étalon rendait les convois impossibles : un trio tombait de 75-88 % à 1-2 %). Le wipe
+    // ayant remplacé les recrues par des champions, les deux camps ont bougé ENSEMBLE — la
+    // leçon de la v0.795 — et c'est l'identité inverse qu'il faut désormais garder.
+    // ⚠️ On observe l'étalon RÉELLEMENT employé (`refAdvGear` dérive de `refEscortBare`),
+    // jamais `refAdventurer` : mon premier test regardait celui-là, que la bascule ne
+    // touche pas, et il ne pouvait donc rien voir.
+    const lignees = [...new Set(refAdvGear(30, 3).map((g) => g.lineage))].sort();
+    const champs = [...new Set(refChampions(30).map((c) => c.lineage))].sort();
+    expect(lignees).toEqual(champs);
+    // …et ce ne sont PLUS celles des lignées d'aventurier, sinon le test ne dirait rien.
+    const avant = [...new Set([0, 1, 2].map((i) => refAdventurer(30, i).path[0]))].sort();
+    expect(lignees).not.toEqual(avant);
   });
 });

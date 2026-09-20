@@ -505,7 +505,7 @@ export const RAID = {
    *  ×1,25, contre 89/84/88/75 à ×1 (le vivier ne tenait plus la cour en fin de partie)
    *  et 95/92/100/96 à ×2 (le plafond revenait). Appliqué au siège seul : la calibration
    *  MESURÉE des embuscades de convoi n’est pas touchée. */
-  guardSiegeK: 1.25,
+  guardSiegeK: 0.9,
   /** 📈 RENFORT DE L’ARMÉE ENTRE LES NIVEAUX 6 ET 26 (v0.829, mesuré ; demandé par
    *  l’utilisateur : « durcir un peu la défense avant le niveau 16, l’apprentissage jusqu’au
    *  niveau 5 max »). Multiplie PV ET dégâts de l’armée : 1 jusqu’au niveau `learnUntil`,

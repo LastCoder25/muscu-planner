@@ -27,7 +27,7 @@ import {
 import { refFighter, gearExpect } from '@/lib/proceduralContent';
 import { TRAVEL } from '@/lib/expedition';
 import { deployCap } from '@/lib/adventurers';
-import { refAdventurer } from '@/lib/caravan';
+import { refChampionAdv } from '@/lib/caravan';
 
 const defAt = (lvl: number): DefenseStructure[] => [
   { typeId: 'wall', level: lvl },
@@ -41,7 +41,7 @@ const garde = (lvl: number) =>
   guardUnits(
     lvl,
     Array.from({ length: deployCap(lvl) }, (_, i) => ({
-      ...refAdventurer(Math.max(1, lvl - (i % 6)), i),
+      ...refChampionAdv(Math.max(1, lvl - (i % 6)), i),
       id: `g${i}`,
     })),
     { now: NOW, kennelLevel: lvl, familiars: [], talents: [], advGear: [] },
@@ -181,8 +181,13 @@ describe('la répartition par contributeur', () => {
     // sans vivier une enceinte incomplète tombe à zéro et plus aucune ablation ne dit rien.
     // Balayé sur 6 niveaux × 4 parts : niveau 40 à 70 % donne tenue 0,67 · mur 0,58 ·
     // tourelles 0,67 · héros 0,17 · garnison **0,50** — les quatre contributeurs y pèsent.
-    const lvl = 40;
-    const defs = defAt(Math.round(lvl * 0.7));
+    // ⚠️ Puis niveau **60 à 60 %** (v0.952) : avec les champions le vivier a doublé de
+    // force, donc à 70 % on tient déjà 0,67 au niveau 40 et la part du héros retombe à
+    // zéro. Balayé sur 6 niveaux × 5 parts : 60 % au niveau 60 donne tenue **0,46** — le
+    // milieu exact de la courbe — avec mur 0,46 · tourelles 0,46 · héros 0,13 ·
+    // garnison 0,46. Les quatre y pèsent.
+    const lvl = 60;
+    const defs = defAt(Math.round(lvl * 0.6));
     const b = defenseBreakdown(defs, lvl, refFighter(lvl), garde(lvl), NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     expect(by.wall!.holdLoss).toBeGreaterThan(0);
@@ -218,7 +223,12 @@ describe('la répartition par contributeur', () => {
     // la doctrine choisie, pas une régression. Et la propriété que ce test épingle est
     // RESTAURÉE par la règle d’occupation — avant elle, un vivier fort tenait la cour sans
     // une seule tourelle, par chronos expirés.
-    for (const lvl of [60, 90]) {
+    // ⚠️ RE-MESURÉ (v0.952) : avec `guardSiegeK` ramené à 0,9 pour absorber la force des
+    // champions, la fin de partie retombe à **0,71 au niveau 90** — sous le seuil. On
+    // mesure donc là où la saturation EXISTE (0,88 au 26, 1,00 au 40, 0,92 au 60) ; le
+    // niveau 90 n'y appartient plus, et le forcer reviendrait à relâcher la borne une
+    // quatrième fois pour épingler autre chose que la propriété visée.
+    for (const lvl of [40, 60]) {
       const b = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), garde(lvl), NOW);
       const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
       expect(b.hold).toBeGreaterThan(0.8);

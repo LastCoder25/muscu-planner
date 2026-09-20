@@ -104,7 +104,7 @@ import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, deployCap, type Adventurer } from '@/lib/adventurers';
 import {
   companionEffects,
-  refAdventurer,
+  refChampionAdv,
   escortCombatant,
   caravanFamiliarXp,
   canAdvFamiliar,
@@ -137,7 +137,7 @@ function hero(L: number): Combatant {
  *  n’existe pas, et tant que la cour ne décidait rien ça ne se voyait pas. */
 function rosterOf(playerLevel: number): Adventurer[] {
   return Array.from({ length: deployCap(playerLevel) }, (_, i) => ({
-    ...refAdventurer(Math.max(1, playerLevel - (i % 6)), i),
+    ...refChampionAdv(Math.max(1, playerLevel - (i % 6)), i),
     id: `a${i}`,
     name: `A${i}`,
     seed: i + 1,
@@ -908,7 +908,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     const prime = fam('p', 'damage_pct', 40, { rarity: RANK_ORDER[7]! });
     // ⚠️ Un aventurier PROMU jusqu’au sommet (v0.831) : un bleu ne mène plus un familier
     // primordial, quel que soit le Chenil — ce test-ci éprouve le seul Chenil.
-    const advs = [{ ...refAdventurer(100, 0), id: 'a', familiarId: 'p' } as Adventurer];
+    const advs = [{ ...refChampionAdv(100, 0), id: 'a', familiarId: 'p' } as Adventurer];
     expect(companionPairs(advs, ctx([prime], 5)).size).toBe(0);
     expect(companionPairs(advs, ctx([prime], PROMO_LEVELS[7]!)).size).toBe(1);
   });
@@ -923,7 +923,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
       ({ ...adv(id, familiarId), path: ['guerrier'] }) as Adventurer;
     const promu = (id: string, familiarId?: string) =>
       // 5 promotions (niveaux 1, 11, 21, 31, 41) : une classe ÉPIQUE.
-      ({ ...refAdventurer(45, 0), id, name: id, familiarId }) as Adventurer;
+      ({ ...refChampionAdv(45, 0), id, name: id, familiarId }) as Adventurer;
 
     it('la règle : la rareté du familier ne dépasse pas celle de la classe', () => {
       const e = fam('e', 'damage_pct', 40, { rarity: epique });
@@ -1260,7 +1260,7 @@ describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () =
     const vrai = (familiarId?: string, talentId?: string): Adventurer => ({
       // ⚠️ Niveau 60 : `combatPower` ARRONDIT à l’entier, et un petit aventurier (58 au niveau
       // 26) noie un talent de niveau 1 dans l’arrondi — le test mesurerait l’arrondi.
-      ...refAdventurer(60, 0),
+      ...refChampionAdv(60, 0),
       id: 'a',
       name: 'Ilyana',
       familiarId,
@@ -2665,12 +2665,18 @@ describe('🏥 AUCUN NIVEAU MORT — l’Infirmerie jusqu’à 100', () => {
   });
 });
 
-describe('🛡️ UN AVENTURIER VAUT PLUS DERRIÈRE SES MURS (v0.801)', () => {
-  // ⚠️ Né avec la bataille de la cour : c’est la qualité du vivier qui tient la ville, or
-  // l’aventurier progresse linéairement quand l’armée suit ~L⁴. Le renfort vit au SIÈGE
-  // seul — la calibration mesurée des embuscades de convoi n’en voit rien.
+describe('🛡️ LE RENFORT DE SIÈGE D’UN DÉFENSEUR (v0.801, recalibré v0.952)', () => {
+  // ⚠️ IL A CHANGÉ DE SENS AVEC LES CHAMPIONS, et le dire vaut mieux que garder un titre
+  // devenu faux. Né en v0.801, `guardSiegeK` valait 1,25 : « un aventurier vaut PLUS
+  // derrière ses murs », parce qu’il progressait linéairement quand l’armée suit ~L⁴.
+  // Les champions ayant à peu près DOUBLÉ la force du vivier (mesuré v0.943 : la tenue
+  // gagnait +5 à +27 points, et l’enceinte pleine repassait à 100 % aux niveaux 12-28 —
+  // le défaut que la v0.789 avait corrigé), le coefficient est descendu à 0,9. Ce n’est
+  // donc plus une prime de terrain mais le RÉGLAGE qui reproduit la difficulté d’avant —
+  // écarts −7 à +9 points, dans le bruit d’un échantillon de 120.
+  // ⚠️ Il vit au SIÈGE seul : la calibration mesurée des embuscades n’en voit rien.
   it('ses PV et ses dégâts de siège valent ceux de la route × guardSiegeK', () => {
-    const adv = refAdventurer(40, 0);
+    const adv = refChampionAdv(40, 0);
     const [g] = guardUnits(40, [adv], {
       now: 0,
       kennelLevel: 40,
@@ -2679,7 +2685,10 @@ describe('🛡️ UN AVENTURIER VAUT PLUS DERRIÈRE SES MURS (v0.801)', () => {
       advGear: [],
     });
     const route = escortCombatant([adv], adv.name);
-    expect(RAID.guardSiegeK).toBeGreaterThan(1);
+    // ⚠️ On n’épingle PLUS un sens (« > 1 ») : c’est un réglage, et il a déjà traversé 1.
+    // Ce qui doit rester vrai, c’est qu’il s’applique — aux DEUX canaux, sans quoi un
+    // défenseur serait plus solide mais pas plus mordant, ou l’inverse.
+    expect(RAID.guardSiegeK).not.toBe(1);
     expect(g!.pv).toBe(Math.max(1, Math.round(route.pv * RAID.guardSiegeK)));
     expect(g!.damage).toBe(
       Math.max(1, Math.round(route.damage * (route.strikes ?? 1) * RAID.guardSiegeK)),

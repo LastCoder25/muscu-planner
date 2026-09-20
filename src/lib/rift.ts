@@ -385,20 +385,27 @@ export interface RiftRun {
  * puissance, deux mesures du MÊME réglage se contredisaient (0,33 et 0,71 au niveau 12) —
  * c'était la falaise, pas le bruit. Une bisection sur une falaise ne mesure rien.
  *
- * La forme (bosse vers les niveaux 20-30) reflète celle de l'escorte de référence, dont la
- * puissance ne croît pas linéairement — le même phénomène que les autres tables du projet.
+ * La forme reflète celle de l'escorte de référence, dont la puissance ne croît pas
+ * linéairement — le même phénomène que les autres tables du projet.
+ *
+ * ⚠️ **RE-BISECTÉE À LA BASCULE EN CHAMPIONS (v0.952)**, sur le même harnais et la même
+ * cible. L'étalon ayant changé de nature, la table entière se déplace : le renfort passe
+ * de 0,92-1,16 à **0,95-1,18**, et surtout sa FORME s’inverse — la bosse ne vit plus aux
+ * niveaux 20-30 mais aux DEUX BOUTS (12-20 et 60-100), parce que la référence en champions
+ * a très peu de critique en début de partie et le sature en fin. Mesuré après : mûre
+ * **0,69 à 0,78**, jeune **0,95 à 0,99**, groupe amputé **0,00 à 0,05**.
  */
 const RIFT_RELIEF: [number, number][] = [
-  [12, 0.92],
-  [20, 1.1],
-  [26, 1.16],
-  [30, 1.15],
-  [40, 0.97],
-  [50, 0.94],
-  [60, 0.96],
-  [70, 0.98],
-  [85, 1.0],
-  [100, 1.01],
+  [12, 1.13],
+  [20, 1.18],
+  [26, 0.96],
+  [30, 0.95],
+  [40, 0.95],
+  [50, 0.99],
+  [60, 1.06],
+  [70, 1.12],
+  [85, 1.12],
+  [100, 1.12],
 ];
 
 /** Force d'UN monstre de faille — absolue, calée sur le groupe de référence du niveau. */

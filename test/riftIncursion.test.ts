@@ -20,7 +20,7 @@ import {
   missionXp,
   partyAllies,
   refAdvGear,
-  refAdventurer,
+  refChampionAdv,
   refCompanions,
   type PartyHero,
   type RoadCompanions,
@@ -56,7 +56,7 @@ const rift = (over: Partial<Poi> = {}): Poi => ({
 
 const team = (n: number, level: number): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
-    ...refAdventurer(level, i),
+    ...refChampionAdv(level, i),
     id: `adv_${i}`,
     familiarId: `refFam${i % 3}`,
     gear: {

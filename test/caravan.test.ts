@@ -34,6 +34,7 @@ import {
   convoyHurt,
   missionXp,
   refAdventurer,
+  refChampionAdv,
   refEscortUnits,
   resolveCaravan,
   roadCompanionEffects,
@@ -69,7 +70,9 @@ import {
   deployCap,
   PROMO_LEVELS,
   type Adventurer,
+  type AdvRole,
 } from '@/lib/adventurers';
+import { CHAMPIONS } from '@/data/champions';
 import {
   TALENTS,
   talentTierFloor,
@@ -121,15 +124,26 @@ const poi = (over: Partial<Poi> = {}): Poi => ({
 const team = (
   n: number,
   level = 20,
-  path?: string[],
+  // ⚠️ LE RÔLE, PLUS UN CHEMIN DE CLASSES (v0.952) : un champion a une IDENTITÉ, et son
+  // rôle est écrit dessus — un `path` ne décide plus de rien. ⚠️ Et il n'existe AUCUN
+  // champion SANS rôle (le roster en pose un par rôle à chaque rareté), donc « sans le
+  // rôle X » se mesure avec un champion qui en porte un AUTRE : c'est même plus propre,
+  // ça isole ce qu'on mesure au lieu de comparer à une escorte sans aucune compétence.
+  role?: AdvRole,
   nus = false,
   sansGear = false,
-): Adventurer[] =>
-  Array.from({ length: n }, (_, i) => ({
-    ...refAdventurer(level, i),
+): Adventurer[] => {
+  // ⚠️ Forcer un rôle force un CHAMPION, donc une lignée qui n’est pas celle des pièces
+  // de référence du slot : on les retire plutôt que de les laisser être ignorées en
+  // silence par `wornGear` (ces tests-là mesurent le rôle, pas l’équipement).
+  const force = role ? CHAMPIONS.find((c) => c.role === role) : undefined;
+  const sansPieces = sansGear || !!force;
+  return Array.from({ length: n }, (_, i) => ({
+    ...refChampionAdv(level, i),
     id: `a${i}`,
+    ...(force ? { championId: force.id, name: force.name } : {}),
     ...(nus ? {} : { familiarId: `refFam${i % 3}` }),
-    ...(sansGear
+    ...(sansPieces
       ? {}
       : {
           // ⚠️ LES QUATRE EMPLACEMENTS, relique comprise : elle est devenue le 4ᵉ en v0.881
@@ -143,8 +157,8 @@ const team = (
             relic: `refGear${i}relic`,
           },
         }),
-    ...(path ? { path } : {}),
   }));
+};
 function winPct(escort: Adventurer[], p: Poi, n = 150) {
   const lvl = escort[0]?.level ?? p.level;
   const g = escortCombatant(
@@ -179,15 +193,18 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     expect(a).toEqual(b); // il ne dépend que du POI
     expect(a.pv).toBeGreaterThan(0);
   });
-  it('⚠️ L’ÉTALON garde TOUS ses compagnons : la règle de classe ne l’affaiblit pas (niv. 31-40)', () => {
-    // Sa lignée civile empile deux classes de strate 2 : au niveau 35 son 3ᵉ membre est
-    // « magique » et porte un familier « rare ». Passé par la règle d'appariement du vivier
-    // (`pairCompanions`, qui applique `canAdvFamiliar`), il le perdrait — et la route
-    // calibrée faiblirait sur dix niveaux. On reconstruit l'étalon avec ses TROIS familiers.
+  it('⚠️ L’ÉTALON porte ses TROIS compagnons, et la règle de classe ne peut plus lui en retirer', () => {
+    // ⚠️ RÉÉCRIT (v0.952) : la prémisse a changé avec les champions. Du temps des
+    // aventuriers, la lignée CIVILE de la référence empilait deux classes de strate 2,
+    // si bien qu’au niveau 35 son 3ᵉ membre était « magique » et portait un familier
+    // « rare » que `canAdvFamiliar` aurait retiré — la route calibrée faiblissait sur dix
+    // niveaux, et `refEscortOf` posait donc ses compagnons PAR CONSTRUCTION pour y
+    // échapper. Un champion, lui, porte sa rareté en propre : les trois compagnons de
+    // référence sont valides, et le contournement n’a plus rien à contourner.
     const L = 35;
-    const esc = [0, 1, 2].map((i) => refAdventurer(L, i));
+    const esc = [0, 1, 2].map((i) => refChampionAdv(L, i));
     const fams = refCompanions(L);
-    expect(canAdvFamiliar(esc[2]!, fams[2]!)).toBe(false); // la prémisse
+    for (let i = 0; i < 3; i++) expect(canAdvFamiliar(esc[i]!, fams[i]!), `membre ${i}`).toBe(true);
     const e = mergeEffects(companionEffects(fams), advGearEffects(refAdvGear(L)));
     const tiers = Object.fromEntries(
       Object.entries(e).map(([k, v]) => [k, v * (1 / esc.length)]),
@@ -330,12 +347,15 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
       const sans = winPct(team(3, L, undefined, false, true), poi({ level: L }), 200);
       expect(sans, `sans pièces, niveau ${L}`).toBeGreaterThanOrEqual(0.5);
     }
-    // …mais un bonus RÉEL : en fin de partie, les pièces se sentent.
+    // …mais un bonus RÉEL. ⚠️ RE-MESURÉ sur l’étalon en champions (3000 graines) : le gain
+    // vaut +9,3 points au niveau 12, +3,2 au 26, +5,5 au 45, +6,1 au 70 et +21,6 au 85.
+    // Le seuil de +10 points datait de l’étalon en aventuriers ; on borne donc sur ce qui
+    // est vrai — un gain qui ne peut pas être du bruit, à 600 tirages.
     for (const L of [70, 85]) {
       const p = poi({ level: L });
-      const avec = winPct(team(3, L), p, 200);
-      const sans = winPct(team(3, L, undefined, false, true), p, 200);
-      expect(avec, `niveau ${L}`).toBeGreaterThan(sans + 0.1);
+      const avec = winPct(team(3, L), p, 600);
+      const sans = winPct(team(3, L, undefined, false, true), p, 600);
+      expect(avec, `niveau ${L}`).toBeGreaterThan(sans + 0.04);
     }
   });
 
@@ -384,7 +404,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     // ⚠️ Une escorte SANS RÔLE : le sujet du test est `yieldShare`, pas la cargaison
     // qu'un 🐫 ajoute. Depuis que la référence est mixte, elle porte un rôle de haul —
     // le test mesurait donc les deux à la fois et est tombé pour la mauvaise raison.
-    const part = avgScrap(p, team(3, 20, ['guerrier'])) / heros;
+    const part = avgScrap(p, team(3, 20, 'heal')) / heros;
     expect(part).toBeGreaterThan(CARAVAN.yieldShare * 0.75);
     expect(part).toBeLessThan(CARAVAN.yieldShare * 1.25);
   });
@@ -395,7 +415,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     // une escorte 🐫 (cargaison) et des embuscades gagnées poussent `k` au-dessus de 1.
     const p = poi({ type: 'well', level: 90, distNorm: 1 });
     const cap = harvestYield('well', 90, heroEquivalentFactor(p)).energy * CARAVAN.yieldShare;
-    const cargo = team(4, 90, ['caravanier', 'convoyeur', 'maitre_convoi', 'intendant']);
+    const cargo = team(4, 90, 'haul');
     let vu = false;
     for (let s = 0; s < 200; s++) {
       const o = resolveCaravan(p, cargo, s * 977 + 1, NUS, 100);
@@ -421,19 +441,19 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
 describe('les rôles hors combat servent à quelque chose', () => {
   it('un 🧭 raccourcit le trajet', () => {
     const p = poi();
-    const sans = caravanLegMin(p, team(2, 20, ['guerrier']), 0, 0);
-    const avec = caravanLegMin(p, team(2, 20, ['eclaireur', 'passeur']), 0, 0);
+    const sans = caravanLegMin(p, team(2, 20, 'haul'), 0, 0);
+    const avec = caravanLegMin(p, team(2, 20, 'speed'), 0, 0);
     expect(avec).toBeLessThan(sans);
   });
   it('un 🐫 grossit la cargaison', () => {
     const p = poi();
-    const sans = avgScrap(p, team(2, 20, ['guerrier']));
-    const avec = avgScrap(p, team(2, 20, ['caravanier', 'convoyeur']));
+    const sans = avgScrap(p, team(2, 20, 'speed'));
+    const avec = avgScrap(p, team(2, 20, 'haul'));
     expect(avec).toBeGreaterThan(sans);
   });
   it('un 🩺 raccourcit les convalescences, et l’Infirmerie aussi', () => {
-    const soigneur = team(2, 20, ['mage', 'clerc']);
-    expect(caravanHurtMs(soigneur)).toBeLessThan(caravanHurtMs(team(2, 20, ['guerrier'])));
+    const soigneur = team(2, 20, 'heal');
+    expect(caravanHurtMs(soigneur)).toBeLessThan(caravanHurtMs(team(2, 20, 'haul')));
     expect(caravanHurtMs(soigneur, 10)).toBeLessThan(caravanHurtMs(soigneur, 0));
   });
 });
@@ -1931,7 +1951,7 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
       expect(g).toHaveLength(4 * CARAVAN.refEscort);
       for (const p of g) expect(p.level).toBe(L);
       const esc = Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
-        ...refAdventurer(L, i),
+        ...refChampionAdv(L, i),
         gear: {
           weapon: `refGear${i}weapon`,
           armor: `refGear${i}armor`,
@@ -1950,7 +1970,7 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     for (const L of [12, 45, 85]) {
       const g = refAdvGear(L);
       for (let i = 0; i < CARAVAN.refEscort; i++) {
-        const a = refAdventurer(L, i);
+        const a = refChampionAdv(L, i);
         const lineage = lineageOf(a)!;
         for (const p of g.filter((x) => x.id.startsWith(`refGear${i}`))) {
           const pool = LINEAGE_GEAR[lineage].pieces[p.slot].pool;
@@ -2144,7 +2164,7 @@ describe('sources d’équipement : embuscades repoussées', () => {
     // au lieu de son propre générateur `gearRng`, tout ce qui suit dans la boucle (les
     // jambes suivantes, donc `gold`/`scrap`/`wages`/`xp`/`hurt`/`events`) serait décalé
     // et ces valeurs, prises sur le vrai code, ne matcheraient plus.
-    const escort = [0, 1, 2].map((i) => refAdventurer(40, i));
+    const escort = [0, 1, 2].map((i) => refChampionAdv(40, i));
     const o = resolveCaravan(
       poi({ level: 40, perilous: true }),
       escort,
@@ -2156,23 +2176,23 @@ describe('sources d’équipement : embuscades repoussées', () => {
       },
       40,
     );
-    expect(o.gold).toBe(2391);
+    expect(o.gold).toBe(1758);
     expect(o.energy).toBe(0);
     expect(o.summonStones).toBe(0);
-    expect(o.scrap).toBe(106);
+    expect(o.scrap).toBe(78);
     expect(o.keys).toBe(0);
     expect(o.wages).toBe(951);
     // ⚠️ Les valeurs de CARGAISON ci-dessus sont celles d'avant le combat de groupe, au
     // chiffre près : le groupe n'est qu'une lecture du combat fondu, et `deriveSkirmish` ne
     // lit pas `rng`. Seules l'XP (socle + part des abattus) et le blessé (le PREMIER tombé
     // de l'embuscade perdue, plus une victime tirée) ont changé.
-    expect(o.xp).toEqual({ ref0: 84, ref1: 84, ref2: 84 });
-    expect(o.kills).toEqual({ ref0: 0, ref1: 3, ref2: 0 });
+    expect(o.xp).toEqual({ ref0: 93, ref1: 93, ref2: 93 });
+    expect(o.kills).toEqual({ ref0: 3, ref1: 1, ref2: 1 });
     expect(o.hurt).toEqual(['ref1']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);
     expect(o.events[1]!.down).toHaveLength(2); // à terre, mais la victoire ne blesse personne
     expect(o.events.map((e) => [e.slain, e.down?.length])).toEqual([
-      [0, 3],
+      [2, 3],
       [3, 2],
       [undefined, undefined],
       [undefined, undefined],
@@ -2318,7 +2338,7 @@ describe('🧭 refEscortUnits — la référence partagée par la route et les c
     const L = 30;
     // ⚠️ `i % 3` suit `REF_SPECIES.length` (constante privée de caravan.ts, non importable ici).
     const ref = Array.from({ length: CARAVAN.refEscort }, (_, i) => ({
-      ...refAdventurer(L, i),
+      ...refChampionAdv(L, i),
       familiarId: `refFam${i % 3}`,
       gear: {
         weapon: `refGear${i}weapon`,
