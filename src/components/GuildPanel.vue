@@ -414,6 +414,13 @@
         <b :style="{ color: nomColor(detailAdv) }">{{ nomOf(detailAdv) }}</b>
         <template v-if="subOf(detailAdv)"> · {{ subOf(detailAdv) }}</template>
         · {{ advShapeLabel(statWeights(detailAdv)) }}
+        <!-- ✨ L'ÉVEIL : jusqu'à +48 % de stats, et il pouvait monter une signature — mais
+             il ne se lisait qu'au tirage et dans le Codex, jamais sur la fiche du champion
+             qu'on envoie au combat. Sur `/max` ici : la fiche a la place de dire ce qu'il
+             reste à réveiller, la tuile non. -->
+        <template v-if="awkOf(detailAdv)">
+          · <b class="d-awk">✨ Éveil {{ awkOf(detailAdv) }}/{{ AWAKEN.max }}</b>
+        </template>
       </div>
 
       <!-- ⚔️ La puissance, et ce que la PAIRE y ajoute : sans l’écart, on ne sait pas si
@@ -762,7 +769,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { awakenLevel, engageCap } from '@/lib/adventurers';
+import { AWAKEN, advAwaken, awakenLevel, engageCap } from '@/lib/adventurers';
 import GachaReveal from './GachaReveal.vue';
 import { buildReveal, bestOfLot, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
 import { GACHA, TOP_RARITY, gachaOdds, multiPullCost } from '@/lib/gacha';
@@ -1365,6 +1372,8 @@ const rankOf = (a: Adventurer) => advRank(a);
 const nomOf = (a: Adventurer) => RARITY_LABEL[advNominalRarity(a)];
 const nomColor = (a: Adventurer) => RANK_COLOR[advNominalRarity(a)];
 const titleOf = (a: Adventurer) => advTitle(a);
+/** Son rang d'Éveil — 0 pour un legacy, qui n'a pas de doublons. */
+const awkOf = (a: Adventurer) => advAwaken(a);
 /** Sa CLASSE — et rien du tout quand elle répète son nom. ⚠️ `advTitle` rend le NOM d'un
  *  champion (il n'a pas de métier), donc la ligne le redisait sous le titre de la fiche. */
 const subOf = (a: Adventurer) => {
@@ -1943,6 +1952,10 @@ async function doPull() {
 /* ── Fiche d'un aventurier ── */
 .adv.hit {
   cursor: pointer;
+}
+/* ✨ Même teinte que la pastille du Codex : une seule couleur pour l’Éveil. */
+.d-awk {
+  color: var(--accent);
 }
 .d-sub {
   font-size: 12.5px;

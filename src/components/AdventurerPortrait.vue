@@ -139,8 +139,14 @@
     <div class="ap-rar font-display">{{ nomLabel }}</div>
     <!-- ⚠️ MASQUÉ QUAND IL RÉPÈTE LE NOM : `advTitle` rend le NOM d'un champion (il n'a pas
          de métier), donc cette ligne affichait « Aurore Première » sous « Aurore Première ».
-         Elle ne sert plus qu'aux aventuriers legacy, dont elle donne bien la classe. -->
-    <div v-if="subLabel" class="ap-sub">{{ subLabel }}</div>
+         Elle ne sert plus qu'aux aventuriers legacy, dont elle donne bien la classe.
+         ✨ L'ÉVEIL prend la place ainsi libérée : il vaut jusqu'à +48 % de stats et pouvait
+         monter une signature, mais ne se lisait qu'au tirage (fugace) et dans le Codex —
+         jamais là où l'on compare deux champions. Teinte du Codex, même notion. -->
+    <div v-if="subLabel || awaken" class="ap-sub">
+      <span v-if="subLabel">{{ subLabel }}</span>
+      <span v-if="awaken" class="ap-awk">✨ Éveil {{ awaken }}</span>
+    </div>
     <div v-if="state" class="ap-state">{{ state }}</div>
   </div>
 </template>
@@ -150,6 +156,7 @@ import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import {
   advNominalRarity,
+  advAwaken,
   advRank,
   advRankProgress,
   advRarity,
@@ -196,6 +203,7 @@ const emit = defineEmits<{
 }>();
 
 const rank = computed(() => advRank(props.adv));
+const awaken = computed(() => advAwaken(props.adv));
 const title = computed(() => advTitle(props.adv));
 // Le rang de la CLASSE (v0.833) : c’est lui qui borne ses compagnons, affichés en rang.
 const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
@@ -526,6 +534,11 @@ button.ap-mini {
   padding: 2px 6px;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+/* ✨ Dans la teinte que le Codex donne déjà à l’Éveil : même notion, même couleur. */
+.ap-awk {
+  color: var(--accent);
+  margin-left: 4px;
 }
 .ap-sub,
 .ap-state {

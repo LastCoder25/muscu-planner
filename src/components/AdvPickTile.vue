@@ -29,6 +29,10 @@
          il n'a pas d'autre identité. -->
     <span class="ca-rar" :style="{ color: rar.color }">{{ rar.label }}</span>
     <span class="ca-rank" :style="{ color: rank.color }">{{ rankStarStr(rank.star) }}</span>
+    <!-- ✨ Son Éveil : jusqu'à +48 % de stats. On compose une escorte ici, et il ne se
+         lisait qu'au tirage et dans le Codex. Compact (la tuile est étroite) : la fiche
+         de la Guilde donne le /6. -->
+    <span v-if="awaken" class="ca-awk">✨{{ awaken }}</span>
     <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
          store, `advUnavailableReason`). -->
     <span v-if="reason" class="ca-why">{{ reason }}</span>
@@ -49,7 +53,14 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
-import { advBadges, advNominalRarity, advRank, advTitle, type Adventurer } from '@/lib/adventurers';
+import {
+  advAwaken,
+  advBadges,
+  advNominalRarity,
+  advRank,
+  advTitle,
+  type Adventurer,
+} from '@/lib/adventurers';
 import { RANK_COLOR, RARITY_LABEL } from '@/lib/items';
 import { rankStarStr } from '@/lib/characterRank';
 
@@ -57,6 +68,7 @@ const props = defineProps<{ adv: Adventurer; on: boolean; reason?: string | null
 const emit = defineEmits<{ toggle: [] }>();
 const rank = computed(() => advRank(props.adv));
 const badges = computed(() => advBadges(props.adv));
+const awaken = computed(() => advAwaken(props.adv));
 /** ⚠️ La rareté NOMINALE : ce qu'on a invoqué. Pour un legacy elle vaut sa strate, donc
  *  la tuile dit la même chose qu'avant. */
 const rar = computed(() => {
@@ -112,6 +124,12 @@ const rar = computed(() => {
   white-space: nowrap;
 }
 /* Les étoiles : le travail de terrain, dans la teinte de son rang. */
+/* ✨ Même teinte que le Codex et la Guilde : une seule couleur pour l’Éveil. */
+.ca-awk {
+  font-size: 9px;
+  line-height: 1;
+  color: var(--accent);
+}
 .ca-rank {
   font-size: 9px;
   letter-spacing: -0.5px;
