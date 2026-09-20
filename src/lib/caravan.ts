@@ -56,6 +56,7 @@ import {
 // sens créerait un cycle. Le projet applique déjà cette règle entre `data/familiars` et `items`.
 import { effectsOfTalents, talentRankOf, type TalentInstance } from './talents';
 import { FAMILIAR_SPECIES } from '../data/familiars';
+import { championsOf, type Champion } from '../data/champions';
 import {
   PARTY_TARGETS,
   HARVEST_TYPES,
@@ -574,6 +575,87 @@ export function refAdventurer(level: number, slot = 0): Adventurer {
     level: Math.max(1, level),
     xp: 0,
   };
+}
+
+/**
+ * 🏅 L'ÉTALON EN CHAMPIONS — ce à quoi la route se calibrera le jour de la bascule.
+ *
+ * ⚠️ **ÉCRITE, MESURÉE, PAS ENCORE BRANCHÉE.** `refEscortBare` appelle toujours
+ * `refAdventurer` : la basculer aujourd'hui rendrait les convois **impossibles** pour les
+ * aventuriers existants (mesuré : un trio tombe de 75-88 % à 1-2 % de ses embuscades).
+ * L'étalon et le vivier doivent basculer **ensemble** — c'est toute la leçon de la v0.795.
+ * Le jour J, c'est **une ligne** dans `refEscortBare`.
+ *
+ * ## ✅ CE QUE LA MESURE A TRANCHÉ (la bloquante de la v0.938)
+ *
+ * **Les bandes d'embuscade TIENNENT**, à condition que les deux camps bougent ensemble —
+ * trio sur route calme **75 à 92 %** du niveau 12 au 85 (aujourd'hui 73-94), sur route
+ * périlleuse **23 à 41 %** (aujourd'hui 8-68) ; 1 membre 0 %, 2 membres 16-26 %, 4 membres
+ * 97-100 %. La courbe est **PLATE** : le choix « combien j'en envoie » est intact.
+ *
+ * ⚠️ **CONTRE LA ROUTE NON RECALIBRÉE, en revanche, ce choix DISPARAÎT** : un trio de
+ * champions passe à **100 %** dès le niveau 12, et 2 membres à 90-99 %. L'écart nu entre
+ * les deux étalons vaut **×1,9 à ×2,3** jusqu'au niveau 40, puis converge à **×0,99** au
+ * niveau 80 — donc ce n'est pas un facteur constant, et seule la mesure pouvait le dire.
+ *
+ * ✅ **ET LE JOUEUR MALCHANCEUX N'EXISTE PAS** (simulé, 3 profils × 20 graines) : il a 3
+ * champions à son rang cible **dès le JOUR 2**, et il est **0 % du temps en dessous**. La
+ * raison est structurelle — `prestigeRankIndex` monte d'un rang tous les 10 niveaux quand
+ * les tirages arrivent par dizaines (47 en 30 jours). ⚠️ C'était le vrai risque : mesuré,
+ * un trio **un cran sous** son rang tombe de 76 % à 59 %, et **deux crans** à 1 %.
+ *
+ * ⚠️ **LES SIÈGES, EUX, DEMANDENT UN RECALIBRAGE** : `siegeAttackers` se calibre sur le
+ * HÉROS (`refFighter`), pas sur le vivier — donc l'armée ne suit pas quand la garnison
+ * double, et la tenue gagne **+5 à +27 points** (enceinte pleine au niveau 12-28 : retour
+ * à **100 %**, le défaut que la v0.789 avait corrigé). Balayé, **`RAID.guardSiegeK` 1,25 →
+ * 0,9** reproduit la difficulté d'aujourd'hui (écarts −7 à +9, dans le bruit) ; 0,65
+ * effondre les enceintes incomplètes (−31 points au niveau 12). ⚠️ **À appliquer LE MÊME
+ * JOUR** : baisser ce coefficient maintenant nerferait la défense des joueurs actuels de 4
+ * à 14 points pour un bénéfice qui n'arriverait pas.
+ *
+ * ## Comment elle choisit
+ *
+ * ⚠️ **TROIS ORIENTATIONS, pour la raison exacte de `REF_LINEAGES`** : une escorte 100 %
+ * mêlée a agilité 0, donc multi-frappe 1,00, et toute la calibration de la route — qui
+ * repose sur la non-linéarité de l'offense — s'effondre.
+ *
+ * ⚠️ **ROBUSTE À L'ORDRE DU ROSTER** : on trie par la part de l'axe visé puis par `id`,
+ * jamais « les trois premiers ». Sinon **ajouter un champion déplacerait la référence**,
+ * donc toute la calibration avec — et rien ne le dirait.
+ */
+export function refChampionAdv(level: number, slot = 0): Adventurer {
+  const cs = refChampions(level);
+  const c = cs[Math.abs(Math.floor(slot)) % cs.length]!;
+  return {
+    id: 'ref' + slot,
+    name: c.name,
+    seed: 1,
+    path: [],
+    level: Math.max(1, level),
+    xp: 0,
+    championId: c.id,
+    // ⚠️ SANS ÉVEIL, délibérément — même raison que le dressage absent de `refCompanions` :
+    // l'Éveil se mérite, il doit rester un avantage, pas une attente.
+    copies: 1,
+  };
+}
+
+/** Les trois champions de référence d'un niveau : un par orientation dominante. */
+export function refChampions(level: number): Champion[] {
+  const pool = championsOf(RANK_ORDER[prestigeRankIndex(Math.max(1, level))]!);
+  const part = (c: Champion, axe: 'p' | 'e' | 'a') =>
+    c.form[axe] / Math.max(1, c.form.p + c.form.e + c.form.a);
+  // ⚠️ LE DÉPARTAGE PAR `id` EST DORMANT AUJOURD'HUI, ET IL RESTE — la mutation qui le
+  // retire survit, mesure à l'appui : le roster compte bien **6 paires d'ex æquo sur 24**
+  // (rareté × axe), mais dans chacune l'ordre d'ÉCRITURE coïncide avec l'ordre
+  // alphabétique, et `Array.sort` est stable. ⚠️ Ce n'est PAS le motif du garde
+  // arithmétiquement inatteignable (v0.751, v0.753, v0.922) : ce qu'il protège n'est pas
+  // une valeur d'exécution mais l'ORDRE D'UN FICHIER, qu'une main humaine peut changer
+  // (trier le roster par nom, le regrouper par lignée). Sans lui, ce geste déplacerait en
+  // SILENCE la référence de la route, donc toute sa calibration.
+  const pick = (axe: 'p' | 'e' | 'a') =>
+    [...pool].sort((x, y) => part(y, axe) - part(x, axe) || x.id.localeCompare(y.id))[0]!;
+  return [pick('p'), pick('a'), pick('e')];
 }
 
 /** Les espèces des compagnons de RÉFÉRENCE : une par grand canal de combat. */
