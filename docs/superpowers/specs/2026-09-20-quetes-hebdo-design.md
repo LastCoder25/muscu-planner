@@ -11,11 +11,11 @@ Le projet a **DÉJÀ trois boucles hebdomadaires**, et une quatrième liste d'ob
 risque de payer deux fois le même effort — ce que ce projet corrige à répétition (la prime
 des sorties comptée en double, v0.769 ; les séries comptées deux fois, v0.842).
 
-| Boucle              | Ce qu'elle récompense                          | Fenêtre           |
-| ------------------- | ---------------------------------------------- | ----------------- |
-| **Défi 360**        | le VOLUME full‑body                            | 7 jours           |
-| **Challenges solo** | la RÉGULARITÉ sur un exercice                  | budget de jetons  |
-| **Boss entre amis** | l'effort COLLECTIF sur un exercice             | 7 jours           |
+| Boucle              | Ce qu'elle récompense              | Fenêtre          |
+| ------------------- | ---------------------------------- | ---------------- |
+| **Défi 360**        | le VOLUME full‑body                | 7 jours          |
+| **Challenges solo** | la RÉGULARITÉ sur un exercice      | budget de jetons |
+| **Boss entre amis** | l'effort COLLECTIF sur un exercice | 7 jours          |
 
 Ces trois‑là couvrent l'**EFFORT**. Une quête qui récompenserait encore l'effort serait un
 doublon.
@@ -25,11 +25,11 @@ doublon.
 Relevé en base le 2026‑09‑20, sur les **quatre comptes réels** :
 
 | compte | 💠 mana | 🗝️ clés | 🔮 pierres | 🔩 ferraille | 🪙 or   | champions |
-| ------ | ------- | -------- | ---------- | ------------ | ------- | --------- |
-| Last   | **0**   | 17       | **119**    | 207          | 173 220 | 16        |
-| Cypher | **0**   | 11       | 30         | 33           | 1 484   | 5         |
-| Knat   | **0**   | **0**    | 30         | 35           | 1 999   | **0**     |
-| Mimi   | **0**   | **0**    | 2          | 0            | 840     | **0**     |
+| ------ | ------- | ------- | ---------- | ------------ | ------- | --------- |
+| Last   | **0**   | 17      | **119**    | 207          | 173 220 | 16        |
+| Cypher | **0**   | 11      | 30         | 33           | 1 484   | 5         |
+| Knat   | **0**   | **0**   | 30         | 35           | 1 999   | **0**     |
+| Mimi   | **0**   | **0**   | 2          | 0            | 840     | **0**     |
 
 ⚠️ **CE N'EST PAS UN PROBLÈME D'EFFORT, C'EST UN PROBLÈME DE DÉCOUVERTE.** Le mana est à
 **zéro partout** (personne n'a encore fermé une faille), **119 pierres d'invocation** et
@@ -42,14 +42,14 @@ ouvert ».
 
 ## ⚠️ Toutes les devises sont mesurées et bornées — il n'y a pas de robinet libre
 
-| Devise           | Son puits                       | Le test qui la borne                    |
-| ---------------- | ------------------------------- | --------------------------------------- |
-| 🪙 or            | bâtiments, enceinte, soins      | `goldSink` (55‑90 % du plafond sur 1 an) |
-| 🔩 ferraille     | réparer et monter l'enceinte    | `scrapEconomy` (plus dure que l'or)      |
-| 🔮 pierres       | boss de palier                  | `campEconomy`                            |
-| 🗝️ clés          | Labyrinthe                      | 2 à 5 runs/jour au palier de pointe      |
-| 💠 mana          | tirage de champion              | débit des failles (v0.936)               |
-| ⚡ énergie       | donjons                         | **= l'XP de sport** — intouchable        |
+| Devise       | Son puits                    | Le test qui la borne                     |
+| ------------ | ---------------------------- | ---------------------------------------- |
+| 🪙 or        | bâtiments, enceinte, soins   | `goldSink` (55‑90 % du plafond sur 1 an) |
+| 🔩 ferraille | réparer et monter l'enceinte | `scrapEconomy` (plus dure que l'or)      |
+| 🔮 pierres   | boss de palier               | `campEconomy`                            |
+| 🗝️ clés      | Labyrinthe                   | 2 à 5 runs/jour au palier de pointe      |
+| 💠 mana      | tirage de champion           | débit des failles (v0.936)               |
+| ⚡ énergie   | donjons                      | **= l'XP de sport** — intouchable        |
 
 ⚠️ **Conséquence directe : toute quête qui paie une de ces devises impose de re‑mesurer
 son test d'économie.** Ce n'est pas rédhibitoire, c'est un coût à connaître avant de
@@ -96,7 +96,7 @@ Tout ce qui suit existe déjà en base et se compte par semaine, sans colonne no
   (`defeated_bosses`), tirages (`gacha.pulls`), champions possédés (`adventurers`).
 
 ⚠️ **Une seule chose manque : l'HORODATAGE hebdomadaire.** La plupart de ces états sont
-cumulatifs, pas datés — on sait *qu'on* a nettoyé un donjon, pas *quand*. Une quête
+cumulatifs, pas datés — on sait _qu'on_ a nettoyé un donjon, pas _quand_. Une quête
 « ferme 3 failles cette semaine » demande donc soit un compteur daté (une colonne), soit
 de se limiter à ce qui porte déjà une date (les convois, les frappes de boss, les séries du
 360, les sorties).

@@ -127,8 +127,8 @@
         <div class="lc-main">
           <div class="lc-title font-display">Récompense du jour</div>
           <div class="lc-sub">
-            🔥 {{ loginPreview.streak }} j de suite · gagne
-            <b>+{{ loginPreview.energy }} ⚡</b>
+            🔥 {{ loginPreview.streak }} j de suite · gagne <b>+{{ loginPreview.energy }} ⚡</b> et
+            <b>+{{ freeMana }} 💠</b>
           </div>
         </div>
         <span class="lc-cta font-display">Récupérer</span>
@@ -1643,6 +1643,11 @@
           <span class="lb-bolt">⚡</span>
           <div class="lb-energy font-display">+{{ loginBurst.energy }}</div>
           <div class="lb-lbl">énergie de connexion</div>
+          <!-- 💠 LE TIRAGE OFFERT : il était versé en SILENCE, et 110 pierres de mana
+               qui arrivent sans un mot ne se lisent pas comme un cadeau. -->
+          <div v-if="loginBurst.mana" class="lb-mana">
+            🎰 +{{ loginBurst.mana }} 💠 — de quoi invoquer un champion
+          </div>
           <div class="lb-streak">
             🔥 {{ loginBurst.streak }} jour{{ loginBurst.streak > 1 ? 's' : '' }} d'affilée
           </div>
@@ -3010,6 +3015,7 @@ import {
   type Region,
 } from '@/lib/regions';
 import { bestiary, championGallery, setCollection, codexSummary } from '@/lib/codex';
+import { dailyFreeMana } from '@/lib/gacha';
 import {
   messageTitle,
   isClaimable,
@@ -3565,7 +3571,9 @@ const loginPreview = computed(() => {
   return { streak: next.streak, energy: dailyLoginEnergy(next.streak, c.value.level.level) };
 });
 const claimingLogin = ref(false);
-const loginBurst = ref<{ streak: number; energy: number; usedGrace: boolean } | null>(null);
+const loginBurst = ref<{ streak: number; energy: number; mana: number; usedGrace: boolean } | null>(
+  null,
+);
 const levelBurst = ref<{ from: number; to: number; energy: number } | null>(null);
 // Reveal de nouvelle région : célèbre le passage dans un biome inédit.
 // (Défini APRÈS curRegion/selectedRegionId/shatterId — cf. plus bas — pour éviter tout
@@ -3575,6 +3583,9 @@ const worldmapEl = ref<HTMLElement | null>(null);
 type RegionReveal = { id: string; emoji: string; name: string; blurb: string; color: string };
 // Reveal EN ATTENTE : quand on nettoie le dernier donjon d'une zone en combat, on
 // attend la FERMETURE du rapport pour jouer l'animation (sinon elle recouvre le combat).
+/** 💠 Ce que le bonus de connexion verse en plus de l’énergie — DÉRIVÉ du prix d’un
+ *  tirage, jamais un second nombre écrit ici. */
+const freeMana = dailyFreeMana();
 const pendingRegionReveal = ref<RegionReveal | null>(null);
 async function claimLogin() {
   const uid = auth.user?.id;
@@ -10559,6 +10570,13 @@ button.pt-mini:active {
   color: var(--dim);
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+/* 💠 Le tirage offert du jour, sous l'énergie : il était versé en silence, et 110 pierres
+   de mana qui arrivent sans un mot ne se lisent pas comme un cadeau. */
+.lb-mana {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #b57bff;
 }
 .lb-streak {
   margin-top: 8px;
