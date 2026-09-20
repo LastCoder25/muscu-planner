@@ -785,7 +785,7 @@ describe('🕳️ le RANG d’une faille', () => {
     const rng = mulberry32(L * 7919 || 1);
     const compte = new Map<number, number>();
     for (let i = 0; i < n; i++) {
-      const lv = riftLevelFor(rng, L);
+      const lv = riftLevelFor(rng, L, []);
       const r = characterRank(lv).rankIndex;
       compte.set(r, (compte.get(r) ?? 0) + 1);
       // Le niveau tiré appartient VRAIMENT à la tranche de ce rang.
@@ -811,7 +811,7 @@ describe('🕳️ le RANG d’une faille', () => {
     for (const L of [1, 11, 21, 31, 55, 91, 130]) {
       const rng = mulberry32(L * 104729 || 1);
       for (let i = 0; i < 4000; i++) {
-        const lv = riftLevelFor(rng, L);
+        const lv = riftLevelFor(rng, L, []);
         expect(lv, `niveau ${L} → faille ${lv}`).toBeLessThanOrEqual(L);
         expect(lv).toBeGreaterThanOrEqual(1);
       }
@@ -853,7 +853,7 @@ describe('🕳️ le RANG d’une faille', () => {
     for (const L of [1, 12, 30, 60, 100, 130]) {
       const rng = mulberry32(L * 40503 || 1);
       for (let i = 0; i < 3000; i++) {
-        expect(riftLevelFor(rng, L), `niveau ${L}`).toBeLessThanOrEqual(spawnWindow(L).min);
+        expect(riftLevelFor(rng, L, []), `niveau ${L}`).toBeLessThanOrEqual(spawnWindow(L).min);
       }
     }
     // …et sur le terrain : sur 14 jours, le quota de failles ne descend jamais sous son
@@ -892,6 +892,46 @@ describe('🕳️ le RANG d’une faille', () => {
     expect(ages.size, `${ages.size} instants d’apparition distincts`).toBe(
       EXPE.riftCap - EXPE.riftFloor + 1,
     );
+  });
+
+  it('⚠️ DEUX BRÈCHES OUVERTES = DEUX RANGS DIFFÉRENTS — sinon la variété ne se voit pas', () => {
+    // ⚠️ SIGNALÉ (v0.965) : « les failles apparaissent bien de rang aléatoire ? je n’ai que
+    // des Or noir comme mon rang ». Le TIRAGE était bon (39 % Bronze / 26 % Argent / 22 % Or
+    // / 13 % Or noir pour un joueur Or noir, mesuré) — mais il est SANS MÉMOIRE, et un
+    // joueur qui REFERME ses failles n’en garde que deux ou trois : une fois sur quatre,
+    // elles portaient alors le même rang.
+    // ⚠️ Ce test simule un joueur qui JOUE (il referme la plus mûre deux fois par jour),
+    // parce que c’est exactement le cas où le défaut se manifeste — une carte qu’on laisse
+    // se remplir atteint le plafond et masque le problème.
+    const HEURES = 20 * 24;
+    let rangsTotal = 0;
+    let brechesTotal = 0;
+    let mesures = 0;
+    let memeRang = 0;
+    for (const graine of [11, 22, 33, 44, 55, 66]) {
+      let map = createMap(graine, 0, 35);
+      for (let h = 1; h <= HEURES; h++) {
+        map = advanceWorld(map, h * HOUR, 35);
+        if (h % 12 === 0) {
+          const r = map.pois.filter(isRiftPoi).sort((x, y) => x.spawnedAt - y.spawnedAt);
+          if (r[0]) map = { ...map, pois: map.pois.filter((q) => q.id !== r[0]!.id) };
+        }
+        if (h > 5 * 24 && h % 6 === 0) {
+          const r = map.pois.filter(isRiftPoi);
+          const rangs = new Set(r.map((q) => characterRank(q.level).rankIndex));
+          rangsTotal += rangs.size;
+          brechesTotal += r.length;
+          mesures++;
+          // Deux brèches ouvertes du MÊME rang : c’est précisément ce qu’on supprime.
+          if (r.length >= 2 && rangs.size < 2) memeRang++;
+        }
+      }
+    }
+    // ⚠️ AUCUN doublon de rang tant qu’il reste des rangs libres : le garde est absolu,
+    // pas statistique. Sans lui on en mesure environ un quart des relevés.
+    expect(memeRang, `${memeRang}/${mesures} relevés à deux brèches du même rang`).toBe(0);
+    // …et les rangs distincts suivent le nombre de brèches, au lieu de se répéter.
+    expect(rangsTotal / mesures).toBeCloseTo(brechesTotal / mesures, 1);
   });
 });
 

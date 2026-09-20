@@ -556,6 +556,23 @@ export const EXPE = {
    *  ordinaires (1-2 h) : une faille vit 7 jours, donc le quota se remplit de toute façon,
    *  et un spawn rapide ne ferait que le saturer d'un coup après chaque effondrement. C'est
    *  le PLANCHER (`riftFloor`) qui garantit qu'il y a toujours de quoi aller refermer. */
+  /** ⚠️ **8-16 h → 4-8 h (v0.965, mesuré ; signalé : « je n'ai que des Or noir comme mon
+   *  rang »).** Le tirage du RANG était correct — c'est le NOMBRE de brèches ouvertes qui
+   *  ne l'était pas. Mesuré sur 60 jours : un joueur qui referme **2 failles par jour** —
+   *  c'est-à-dire qui JOUE — n'en voyait plus que **3,1 en moyenne, soit 2,4 rangs**
+   *  distincts, et **6 % du temps seulement** il en avait 5 ou plus. Avec deux ou trois
+   *  brèches sous les yeux, la variété promise (« six rangs variés, sinon *laquelle je
+   *  referme* n'est pas une question ») ne peut pas se manifester.
+   *
+   *  À 4-8 h : **5,5 failles et 3,2 rangs** en refermant 2/jour, **5,6 / 3,2** à 3/jour
+   *  (contre 2,1 / 1,8 avant) — la carte tient à TOUS les rythmes de jeu testés.
+   *
+   *  ⚠️ **LES DEUX INVARIANTS EN JEU ONT ÉTÉ MESURÉS AVANT, pas supposés.** Les
+   *  **débordements** (donc les sièges renforcés, v0.933) ne bougent **pas du tout** :
+   *  0,80/j si l'on ne referme rien, **0,00 dès une fermeture par jour**, à toutes les
+   *  cadences — c'est le PLAFOND de 6 qui borne, jamais l'horloge. Et l'**irradiation**
+   *  des routes (v0.934) ne monte que de **19 % à 23 %** à 2 fermetures/jour, en laissant
+   *  ~8,8 routes de récolte propres : les convois ont toujours où aller. */
   riftSpawnMinMs: 8 * 3600_000,
   riftSpawnJitterMs: 8 * 3600_000,
   perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
@@ -981,10 +998,37 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
  *
  * Le rang est tiré UNIFORMÉMENT : on veut réellement voir du Bronze à côté de son propre
  * rang, pas une cloche qui ramènerait tout au milieu.
+ *
+ * ⚠️ **ET ON ÉVITE LES RANGS DÉJÀ OUVERTS (v0.965 ; signalé : « je n'ai que des Or noir
+ * comme mon rang »).** Le tirage était bon — mesuré, 39 % Bronze / 26 % Argent / 22 % Or
+ * / 13 % Or noir pour un joueur Or noir — mais il est **SANS MÉMOIRE**, et un joueur qui
+ * REFERME ses failles (c'est-à-dire qui joue) n'en garde que 2 ou 3 ouvertes : avec deux
+ * brèches et quatre rangs possibles, **une fois sur quatre elles portent le même**. La
+ * variété promise ne pouvait donc pas se voir. On tire parmi les rangs LIBRES, repli sur
+ * tous quand ils sont pris — le patron `leurre` de la roulette d'invocation (v0.962).
+ *
+ * ⚠️ **LE LEVIER ÉVIDENT — DOUBLER LA CADENCE DE SPAWN — A ÉTÉ ESSAYÉ, MESURÉ, PUIS
+ * REJETÉ.** À 4-8 h la carte gardait bien 5,5 brèches et 3,2 rangs même en refermant
+ * 2/jour (contre 3,1 et 2,4)… mais **trois tests tombaient** : « tenir le rythme garde
+ * les routes propres » (v0.934) et « attendre paie plus que fermer vite » (v0.936) sont
+ * calibrés SUR cette cadence — c'est elle, le rythme auquel le joueur doit tenir. Ce
+ * garde-ci ne touche ni la cadence, ni le nombre, ni les niveaux possibles : aucun de
+ * ces invariants n'est en jeu.
+ *
+ * ⚠️ `pris` est REQUIS : un paramètre qu'on peut oublier finit par l'être (v0.751,
+ * v0.805), et l'oublier ici ramènerait exactement le défaut signalé.
  */
-export function riftLevelFor(rng: () => number, playerLevel: number): number {
+export function riftLevelFor(
+  rng: () => number,
+  playerLevel: number,
+  /** Rangs des failles DÉJÀ ouvertes. `[]` = aucune contrainte (tirage uniforme). */
+  pris: readonly number[],
+): number {
   const top = characterRank(playerLevel).rankIndex;
-  const r = Math.min(top, Math.floor(rng() * (top + 1)));
+  const libres: number[] = [];
+  for (let i = 0; i <= top; i++) if (!pris.includes(i)) libres.push(i);
+  const pool = libres.length ? libres : Array.from({ length: top + 1 }, (_, i) => i);
+  const r = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
   const lo = rankStartLevel(r);
   // Fin de la tranche du rang `r`, bornée par le niveau du joueur. ⚠️ Dérivée de
   // `rankStartLevel`, jamais écrite : l'échelle de prestige est la seule autorité.
@@ -1006,7 +1050,14 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
     'rift',
     rng,
     `rift_${map.seed}_${n + 1}`,
-    riftLevelFor(rng, playerLevel),
+    // ⚠️ Les rangs DÉJÀ sur la carte, pour ne pas en reposer un identique tant qu'il
+    // reste du choix : c'est ce qui rend la variété VISIBLE quand on n'a que deux ou
+    // trois brèches ouvertes.
+    riftLevelFor(
+      rng,
+      playerLevel,
+      map.pois.filter(isRiftPoi).map((p) => characterRank(p.level).rankIndex),
+    ),
   );
 }
 
