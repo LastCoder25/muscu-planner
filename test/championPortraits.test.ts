@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { CHAMPION_PORTRAITS, championPortrait } from '@/data/championPortraits';
 import { CHAMPIONS, CHAMPION_BY_ID } from '@/data/champions';
@@ -10,9 +10,10 @@ import { CHAMPIONS, CHAMPION_BY_ID } from '@/data/champions';
 // plus rien**, précisément le mode de panne que ce garde-fou existe pour éviter.
 // Importer n'est pas recopier.
 const IDS = Object.keys(CHAMPION_PORTRAITS);
-const onDisk = (url: string) => existsSync(resolve(__dirname, '../public' + url));
+const chemin = (url: string) => resolve(__dirname, '../public' + url);
+const onDisk = (url: string) => existsSync(chemin(url));
 
-describe('🖼️ LES PORTRAITS DE CHAMPIONS (v0.970)', () => {
+describe('🖼️ LES PORTRAITS DE CHAMPIONS (v0.971)', () => {
   it('⚠️ CHAQUE FICHIER NOMMÉ EXISTE SUR LE DISQUE', () => {
     // LA garantie de la table explicite : sans elle, un portrait manquant se verrait en
     // production au lieu d'ici — et l'avatar, dont le corps est éteint, se viderait.
@@ -34,6 +35,24 @@ describe('🖼️ LES PORTRAITS DE CHAMPIONS (v0.970)', () => {
     expect(sans, `champions sans portrait : ${sans.join(', ')}`).toEqual([]);
   });
 
+  it('⚠️ DEUX CHAMPIONS NE PARTAGENT JAMAIS LA MÊME IMAGE', () => {
+    // C'est la collection qui EST le jeu : deux champions au même visage, et tirer le
+    // second ne vaut plus rien. Un copier-coller dans la table passerait sinon inaperçu,
+    // puisque le fichier existe bel et bien.
+    const fichiers = IDS.map((id) => CHAMPION_PORTRAITS[id]!);
+    expect(new Set(fichiers).size).toBe(fichiers.length);
+  });
+
+  it('⚠️ LE POIDS RESTE TENABLE — le Codex affiche les 32 d’un coup', () => {
+    // Le service worker ne cache RIEN : chaque octet est retéléchargé à chaque visite, et
+    // le Codex demande les 32 ensemble. Bornes larges (on mesure ~6 Ko pièce) mais réelles :
+    // elles attrapent la vraie régression, quelqu’un qui déposerait des PNG de 500 Ko.
+    const poids = IDS.map((id) => statSync(chemin(CHAMPION_PORTRAITS[id]!)).size);
+    const lourds = IDS.filter((id, i) => poids[i]! > 40_000);
+    expect(lourds, `portraits trop lourds : ${lourds.join(', ')}`).toEqual([]);
+    expect(poids.reduce((a, b) => a + b, 0)).toBeLessThan(700_000);
+  });
+
   it('⚠️ UN ID INCONNU REND `null`, jamais une chaîne vide ni un chemin deviné', () => {
     // C'est ce qui fait que le repli s'affiche au lieu d'une image cassée.
     expect(championPortrait('nexistepas')).toBeNull();
@@ -46,8 +65,14 @@ describe('🖼️ LES PORTRAITS DE CHAMPIONS (v0.970)', () => {
     expect(championPortrait('toString')).toBeNull();
   });
 
-  it('un champion illustré rend bien son fichier', () => {
-    const c = CHAMPIONS[0]!;
-    expect(championPortrait(c.id)).toBe(`/champions/${c.id}.svg`);
+  it('un champion illustré rend le chemin de sa table, et ce fichier existe', () => {
+    // ⚠️ On ne ré-écrit PAS l'extension attendue : ce test l'épinglait (`.svg`), donc il
+    // rougissait au changement de format sans rien protéger de plus. Ce qui compte est
+    // que la fonction rende bien l'entrée de la table — et qu'elle désigne un vrai fichier.
+    for (const c of CHAMPIONS) {
+      const url = championPortrait(c.id);
+      expect(url, c.id).toBe(CHAMPION_PORTRAITS[c.id]);
+      expect(onDisk(url!), c.id).toBe(true);
+    }
   });
 });

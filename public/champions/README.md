@@ -4,44 +4,57 @@
 
 ## D'où viennent ces images
 
-De [DiceBear](https://www.dicebear.com), style **`pixel-art`**, licence **CC0**
-(domaine public, aucun crédit dû) — comme la base d'exercices du projet.
+Générées par [Pollinations.ai](https://pollinations.ai) (service public, sans clé), en art
+**cel-shadé façon key visual de RPG japonais**, puis **téléchargées et versionnées**. Le
+dépôt fait foi, jamais le service : aucune image n'est chargée en ligne à l'exécution.
 
-Elles sont **téléchargées et bundlées**, jamais chargées depuis l'API à l'exécution :
-une dépendance réseau au rendu ajouterait de la latence et finirait par disparaître.
+⚠️ **Ce ne sont donc pas des images CC0** comme la base d'exercices — ce sont des images
+générées à la demande, pour un projet personnel.
 
-⚠️ **Le style a été choisi à l'œil**, quatre styles CC0 rendus côte à côte en grand ET
-en 30 px. `pixel-art` est le seul qui dise « jeu », et le pixel art reste **lisible en
-petit** — ce qui décide, puisque le Codex affiche les 32 d'un coup. (`notionists` fait
-employés de bureau, `open-peeps` fait illustration de startup.)
+⚠️ **La régénération n'est pas reproductible dans le temps.** La graine est l'id du
+champion, mais le service peut changer de modèle : relancer dans six mois ne redonnera pas
+les mêmes visages. C'est précisément pour ça que les fichiers sont commités.
+
+## Ce qui a été refusé, et pourquoi
+
+La première version livrait des avatars **DiceBear `pixel-art`** : déterministes, CC0,
+légers — et refusés, à raison. Un avatar de profil dit « un utilisateur », pas « un
+aventurier » : ni âge, ni arme, ni histoire, et les 32 ne se distinguaient que par une
+coiffure. Dans un gacha, **c'est la collection qui est le jeu**.
 
 ## Ce qui est déterminé, et par quoi
 
-|               |                                                                          |
-| ------------- | ------------------------------------------------------------------------ |
-| **Le visage** | la graine est l'**id du champion** — il ne change donc jamais            |
-| **Le fond**   | la **couleur de sa rareté** (`RANK_COLOR`), la même que partout ailleurs |
-| **Le format** | SVG — **63 Ko pour les 32**, et net à toute taille                       |
+|                   |                                                                             |
+| ----------------- | --------------------------------------------------------------------------- |
+| **Le personnage** | une description **écrite à la main**, une par champion, dans le script      |
+| **Le style**      | commun aux 32 — anime, aplats, contours nets, fond sombre                   |
+| **Le cadrage**    | serré sur le visage : le Codex affiche **les 32 d'un coup**, à ~30 px pièce |
+| **Le format**     | WebP 256 px — **~6 Ko pièce, ~200 Ko les 32**                               |
 
-⚠️ **SVG et non WebP** : dix fois plus léger qu'un jeu de WebP 160 px, et le service
-worker ne cache **rien** — chaque octet est retéléchargé à chaque visite.
+⚠️ **Le fond est sombre et dégradé** : c'est ce qui rend ces fichiers si légers, et ça
+s'accorde au thème du jeu.
 
 ## Régénérer
 
 ```
-node scripts/fetch-champion-portraits.mjs
+node scripts/fetch-champion-portraits.mjs           # ne refait que ce qui manque
+node scripts/fetch-champion-portraits.mjs --force   # tout refaire (~20 min)
 ```
 
-⚠️ Inutile après un clone : les fichiers sont versionnés. Le téléchargement est
-**déterministe**, donc relancer le script redonne exactement les mêmes images.
+⚠️ Inutile après un clone : les fichiers sont versionnés. Le service limite son débit — le
+script attend et retente plutôt que d'abandonner en chemin.
 
 ## Ajouter un champion
 
-Poser sa ligne dans `src/data/championPortraits.ts` **et** dans le script ci-dessus,
-puis relancer. `test/championPortraits.test.ts` exige que **les 32 champions soient
-illustrés** et que **chaque fichier nommé existe** : l'oublier fait rougir la suite.
+Poser sa description dans `SUBJECTS` (script), puis sa ligne dans
+`src/data/championPortraits.ts`, puis relancer. Le roster, lui, est **lu directement**
+depuis `src/data/champions.ts` : il n'y a pas de liste à tenir à jour en double.
+
+`test/championPortraits.test.ts` exige que **les 32 soient illustrés**, que **chaque fichier
+existe**, que **deux champions ne partagent jamais la même image** et que le **poids reste
+tenable** : l'oublier fait rougir la suite.
 
 ## Le repli
 
-Un champion sans portrait — ou dont le fichier ne charge pas — garde **l'avatar habillé
-de sa classe et son emoji**, qui sont déjà uniques. Rien ne casse, rien ne se vide.
+Un champion sans portrait — ou dont le fichier ne charge pas — garde **l'avatar habillé de
+sa classe et son emoji**, qui sont déjà uniques. Rien ne casse, rien ne se vide.

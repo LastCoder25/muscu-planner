@@ -1,31 +1,39 @@
 /**
- * 🖼️ LES PORTRAITS DE CHAMPIONS (v0.970 ; demandé par l'utilisateur : « possible d'avoir un
- * portrait pour chaque champion unique ? à la place de l'avatar par exemple », puis
- * « cherche des images sur une api si besoin. je ne veux pas gérer les images »).
+ * 🖼️ LES PORTRAITS DE CHAMPIONS (v0.971 ; demandé par l'utilisateur : « possible d'avoir un
+ * portrait pour chaque champion unique ? », puis — les avatars d'abord livrés ayant été
+ * refusés — « les portraits ne vont pas, mets des trucs mieux, des portraits d'aventuriers
+ * de manga ou fantasy »).
  *
- * **SOURCE : DiceBear, style `pixel-art`, licence CC0** — domaine public, aucun crédit dû,
- * comme la base d'exercices du projet. Les fichiers sont **téléchargés et bundlés**
- * (`scripts/fetch-champion-portraits.mjs`), jamais chargés depuis l'API à l'exécution :
- * une dépendance réseau au rendu ajouterait de la latence et disparaîtrait un jour.
+ * **32 illustrations, une par champion**, en art cel-shadé façon key visual de RPG
+ * japonais. Générées par **Pollinations.ai** puis **téléchargées et versionnées**
+ * (`scripts/fetch-champion-portraits.mjs`) : jamais chargées depuis un service à
+ * l'exécution — une dépendance réseau au rendu ajouterait de la latence et finirait par
+ * disparaître.
  *
- * ⚠️ **LE STYLE A ÉTÉ CHOISI À L'ŒIL**, quatre styles CC0 rendus côte à côte en grand ET
- * en 30 px : `pixel-art` est le seul qui dise « jeu », et le pixel art reste **lisible en
- * petit** — ce qui décide, puisque le Codex affiche les 32 portraits d'un coup.
- * (`notionists` fait employés de bureau, `open-peeps` fait illustration de startup.)
+ * ⚠️ **CE NE SONT PAS DES AVATARS GÉNÉRÉS PAR GRAINE.** La v0.970 livrait du `pixel-art`
+ * DiceBear : déterministe, CC0, léger — et refusé, à raison. Un avatar de profil dit « un
+ * utilisateur », pas « un aventurier » : il n'a ni âge, ni arme, ni histoire, et les 32 ne
+ * se distinguaient que par une coiffure. Or **c'est la collection qui EST le jeu** dans un
+ * gacha : chaque champion doit se reconnaître d'un coup d'œil.
+ *
+ * ⚠️ **CHAQUE PORTRAIT EST ÉCRIT, pas dérivé des champs.** `lineage` + `role` + `rarity` ne
+ * font que 24 combinaisons pour 32 champions, et ne disent rien de ce qui les distingue
+ * vraiment : leur NOM. « Boulin Grosse-Malle » et « Tessa la Meneuse » sont tous deux
+ * caravaniers porteurs — l'un est un gros marchand jovial, l'autre une cheffe de caravane
+ * du désert. Les descriptions vivent dans le script, à raison d'une par champion.
  *
  * ⚠️ **LE PROJET A DÉJÀ ABANDONNÉ DEUX VOIES PROCÉDURALES** — un bonhomme SVG (`figure.ts`)
  * et un humanoïde 3D (`Hero3D`) : **l'anatomie est ce que le procédural fait le plus mal**.
- * Ici, rien n'est dessiné par du code : ce sont des illustrations, simplement assemblées
- * de façon déterministe.
+ * Ici, rien n'est dessiné par du code ; ce sont des illustrations, simplement rangées.
  *
  * ⚠️ **UNE TABLE EXPLICITE, PAS UNE CONVENTION DE NOM.** On pourrait deviner le chemin
  * depuis l'id et laisser le navigateur échouer en silence — mais alors rien ne pourrait
  * vérifier qu'un fichier existe, et un portrait manquant se verrait en production plutôt
  * qu'au test. C'est le patron de `exerciseImages`, et son test garde-fou.
  *
- * ⚠️ **SVG ET NON WebP** : les 32 pèsent **63 Ko au total**, dix fois moins qu'un jeu de
- * WebP 160 px — et ils restent nets à toute taille. Le service worker ne cache **rien**,
- * donc chaque octet est retéléchargé à chaque visite.
+ * ⚠️ **WebP 256 px : les 32 pèsent ~200 Ko au total**, soit ~6 Ko pièce (un fond en dégradé
+ * sombre compresse très bien). Le service worker ne cache **rien**, donc chaque octet est
+ * retéléchargé à chaque visite — et le Codex les affiche **tous les 32 d'un coup**.
  */
 
 /**
@@ -37,38 +45,38 @@
  * de panne que ce garde-fou existe pour éviter. Importer n'est pas recopier.
  */
 export const CHAMPION_PORTRAITS: Readonly<Record<string, string>> = {
-  anselme: '/champions/anselme.svg',
-  atlas: '/champions/atlas.svg',
-  aurore: '/champions/aurore.svg',
-  barthe: '/champions/barthe.svg',
-  boulin: '/champions/boulin.svg',
-  brume: '/champions/brume.svg',
-  corvin: '/champions/corvin.svg',
-  ferrand: '/champions/ferrand.svg',
-  fila: '/champions/fila.svg',
-  fulgur: '/champions/fulgur.svg',
-  gorm: '/champions/gorm.svg',
-  kaell: '/champions/kaell.svg',
-  lysandre: '/champions/lysandre.svg',
-  miren: '/champions/miren.svg',
-  molosse: '/champions/molosse.svg',
-  nive: '/champions/nive.svg',
-  nyx: '/champions/nyx.svg',
-  oeildumonde: '/champions/oeildumonde.svg',
-  ombrelune: '/champions/ombrelune.svg',
-  orsene: '/champions/orsene.svg',
-  roan: '/champions/roan.svg',
-  sauge: '/champions/sauge.svg',
-  sylve: '/champions/sylve.svg',
-  tarn: '/champions/tarn.svg',
-  teck: '/champions/teck.svg',
-  tessa: '/champions/tessa.svg',
-  ursk: '/champions/ursk.svg',
-  ventcourt: '/champions/ventcourt.svg',
-  verre: '/champions/verre.svg',
-  vig: '/champions/vig.svg',
-  ysolde: '/champions/ysolde.svg',
-  zephyrine: '/champions/zephyrine.svg',
+  anselme: '/champions/anselme.webp',
+  atlas: '/champions/atlas.webp',
+  aurore: '/champions/aurore.webp',
+  barthe: '/champions/barthe.webp',
+  boulin: '/champions/boulin.webp',
+  brume: '/champions/brume.webp',
+  corvin: '/champions/corvin.webp',
+  ferrand: '/champions/ferrand.webp',
+  fila: '/champions/fila.webp',
+  fulgur: '/champions/fulgur.webp',
+  gorm: '/champions/gorm.webp',
+  kaell: '/champions/kaell.webp',
+  lysandre: '/champions/lysandre.webp',
+  miren: '/champions/miren.webp',
+  molosse: '/champions/molosse.webp',
+  nive: '/champions/nive.webp',
+  nyx: '/champions/nyx.webp',
+  oeildumonde: '/champions/oeildumonde.webp',
+  ombrelune: '/champions/ombrelune.webp',
+  orsene: '/champions/orsene.webp',
+  roan: '/champions/roan.webp',
+  sauge: '/champions/sauge.webp',
+  sylve: '/champions/sylve.webp',
+  tarn: '/champions/tarn.webp',
+  teck: '/champions/teck.webp',
+  tessa: '/champions/tessa.webp',
+  ursk: '/champions/ursk.webp',
+  ventcourt: '/champions/ventcourt.webp',
+  verre: '/champions/verre.webp',
+  vig: '/champions/vig.webp',
+  ysolde: '/champions/ysolde.webp',
+  zephyrine: '/champions/zephyrine.webp',
 };
 
 /**
