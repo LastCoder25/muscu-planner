@@ -1,4 +1,16 @@
 <template>
+  <!-- 🎰 L'ÉCRAN D'INVOCATION, plein écran (v0.960). ⚠️ Il est monté À CÔTÉ de la feuille
+       et non dedans : une modale dans une modale hérite du voile et de la hauteur de sa
+       parente, et la roulette s'y retrouverait bridée — le défaut exact du plateau de
+       l'arène, corrigé en v0.652. -->
+  <GachaReveal
+    :plan="revealPlan"
+    :verdict="revealVerdict"
+    :can-again="mana >= pullCost && !busy"
+    :busy="busy"
+    @close="closeReveal"
+    @again="doPull"
+  />
   <q-dialog :model-value="open" position="bottom" @update:model-value="emit('close')">
     <q-card class="guild-card">
       <div class="g-head">
@@ -696,9 +708,10 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { AWAKEN, awakenLevel, engageCap } from '@/lib/adventurers';
+import { awakenLevel, engageCap } from '@/lib/adventurers';
+import GachaReveal from './GachaReveal.vue';
+import { buildReveal, type RevealPlan } from '@/lib/gachaReveal';
 import { GACHA } from '@/lib/gacha';
-import { useGameFx } from '@/composables/useGameFx';
 import {
   rarityRank,
   gradeLabel,
@@ -708,8 +721,6 @@ import {
   famLevel,
   famXp,
   jetStar,
-  fxRarity,
-  RARITY_LABEL,
   type Item,
 } from '@/lib/items';
 import {
@@ -1250,7 +1261,6 @@ function sellOneGear(g: AdvGear) {
 }
 
 const busy = ref(false);
-const gameFx = useGameFx();
 const now = ref(Date.now());
 // ⚠️ NETTOYÉE au démontage. Posée au niveau du setup et jamais arrêtée, elle continuait de
 // battre après la fermeture du panneau en retenant la ref ET le composant — exactement la
@@ -1409,6 +1419,28 @@ const pullCost = GACHA.pullCost;
  * chacune se dit : un champion neuf, un cran d'Éveil, ou une copie de trop qui se
  * convertit (« jamais perdu »).
  */
+const revealPlan = ref<RevealPlan | null>(null);
+const revealVerdict = ref<{
+  duplicate: boolean;
+  copies: number;
+  manaBack: number;
+  awaken: number;
+} | null>(null);
+function closeReveal() {
+  revealPlan.value = null;
+  revealVerdict.value = null;
+}
+
+/**
+ * 🎰 UN TIRAGE. ⚠️ On ANNONCE toujours quelque chose — un tirage muet, dans un genre bâti
+ * sur le moment où l'on découvre ce qu'on a eu, n'est pas un tirage. Trois issues, et
+ * chacune se dit : un champion neuf, un cran d'Éveil, ou une copie de trop qui se
+ * convertit (« jamais perdu »).
+ *
+ * ⚠️ **LA ROULETTE MET EN SCÈNE UN RÉSULTAT DÉJÀ TRANCHÉ** : on tire d'abord (le store, le
+ * pity, la mana), on anime ensuite. L'inverse ferait diverger ce qu'on voit de ce qu'on
+ * possède — la règle de `siegeStage` et d'`arenaStage`.
+ */
 async function doPull() {
   const uid = auth.user?.id;
   if (!uid || busy.value) return;
@@ -1419,18 +1451,18 @@ async function doPull() {
       $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
       return;
     }
-    const cran = awakenLevel(r.copies);
-    gameFx.celebrate({
-      kind: 'familiar',
-      emoji: r.champion.emoji,
-      title: r.champion.name,
-      subtitle: r.duplicate
-        ? r.manaBack > 0
-          ? `Éveil au maximum — ${r.manaBack} 💠 rendus`
-          : `Éveil ${cran}/${AWAKEN.max}`
-        : RARITY_LABEL[r.champion.rarity],
-      rarity: fxRarity(r.champion.rarity),
-    });
+    // ⚠️ `prefers-reduced-motion` → l'état FINAL, pas une animation raccourcie : la lib
+    // rend une bande d'un seul portrait et une durée nulle.
+    const reduced =
+      typeof window !== 'undefined' &&
+      !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    revealVerdict.value = {
+      duplicate: r.duplicate,
+      copies: r.copies,
+      manaBack: r.manaBack,
+      awaken: awakenLevel(r.copies),
+    };
+    revealPlan.value = buildReveal(r.champion, Math.random, { reduced });
   } finally {
     busy.value = false;
   }
