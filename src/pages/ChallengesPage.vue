@@ -553,7 +553,7 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
@@ -678,6 +678,22 @@ const availableEnergy = computed(
 );
 
 const mode = ref<'solo' | 'combo'>('solo');
+/** 🎯 `?mode=combo` ouvre directement l'onglet Défi 360 — c'est par là que la grande tuile
+ *  de l'accueil y mène (v0.961).
+ *  ⚠️ IMMÉDIAT : l'écran peut déjà être monté quand la query change (on revient d'un
+ *  détail), et un test au montage raterait ce cas — le patron du `?tab=` de l'Aventure.
+ *  ⚠️ ET ON RETIRE LE PARAMÈTRE : sans ça, un retour arrière rejouerait le saut d'onglet. */
+watch(
+  () => route.query.mode,
+  (m) => {
+    if (m !== 'combo' && m !== 'solo') return;
+    mode.value = m;
+    const q = { ...route.query };
+    delete q.mode;
+    void router.replace({ query: q });
+  },
+  { immediate: true },
+);
 // Même logique d'états que les défis solo (En cours / Terminés / Abandonnés).
 const comboTab = ref<string>('active');
 // ⚠️ Même règle que le store et que l'écran d'un ami (`activeCombo`, lib) : ces trois copies

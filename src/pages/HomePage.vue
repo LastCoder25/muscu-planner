@@ -333,11 +333,6 @@
           <span class="hsq-ic">⚔️</span>
           <span class="hsq-l">Aventure</span>
         </button>
-        <button class="hsq" aria-label="Challenges" @click="goChallenges">
-          <span class="hsq-ic">🏆</span>
-          <span class="hsq-l">Défis</span>
-          <span v-if="challengesDueToday > 0" class="ic-badge">{{ challengesDueToday }}</span>
-        </button>
         <button class="glvl" aria-label="Niveau global" @click="goStats">
           <span class="glvl-n font-display">{{ progress.global.value.level }}</span>
           <span class="glvl-l">Global</span>
@@ -419,6 +414,51 @@
         }}</span>
         <span class="be-go">›</span>
       </button>
+
+      <!-- 🔥 LE CENTRE NÉVRALGIQUE (v0.961, demandé par l'utilisateur : « une tuile design
+           relativement grande pour montrer que c'est le centre névralgique de l'app »).
+           ⚠️ Elle REMPLACE le raccourci « Défis » du header : deux chemins vers le même
+           écran, c'est un doublon — et le petit bouton disait « il y a des défis » sans
+           jamais dire LESQUELS ni ce qui appelle aujourd'hui.
+           ⚠️ DEUX CIBLES DISTINCTES : le 360 et les challenges ne mènent pas au même
+           endroit, et les fondre en un seul bouton obligerait à choisir pour le joueur. -->
+      <div class="defis-hub">
+        <div class="dh-head">
+          <span class="dh-t font-display">🔥 Mes défis</span>
+          <span class="dh-s">le cœur de l’app</span>
+        </div>
+        <div class="dh-cols">
+          <button class="dh-col" type="button" @click="goCombo">
+            <span class="dh-top"><span class="dh-emo">🎯</span><b class="dh-k">Défi 360</b></span>
+            <template v-if="defis.combo">
+              <span class="dh-v">{{ defis.combo.name }}</span>
+              <span class="dh-bar" aria-hidden="true"
+                ><i :style="{ width: defis.combo.pct + '%' }"
+              /></span>
+              <span class="dh-n">
+                {{ defis.combo.pct }} %
+                <template v-if="defis.combo.left">
+                  · {{ defis.combo.left }} exo{{ defis.combo.left > 1 ? 's' : '' }} à travailler
+                </template>
+                <template v-else> · tout est au max ✓</template>
+              </span>
+            </template>
+            <span v-else class="dh-cta">Lance ton Défi 360 ›</span>
+          </button>
+          <button class="dh-col" type="button" @click="goChallenges">
+            <span class="dh-top"><span class="dh-emo">🏆</span><b class="dh-k">Challenges</b></span>
+            <template v-if="defis.active">
+              <span class="dh-v"
+                >{{ defis.active }} en cours{{ defis.dueToday ? '' : ' · tout est fait ✓' }}</span
+              >
+              <span v-if="defis.dueToday" class="dh-due">
+                {{ defis.dueToday }} à faire aujourd’hui
+              </span>
+            </template>
+            <span v-else class="dh-cta">Lance un défi ›</span>
+          </button>
+        </div>
+      </div>
 
       <q-btn
         class="add-session full-width"
@@ -644,7 +684,9 @@ import { useWeatherReliability } from '@/composables/useWeatherReliability';
 import { useFriendBossEntry } from '@/composables/useFriendBossEntry';
 import { LEADS, modelLabel, type Lead } from '@/lib/weatherReliability';
 import { useChallengesStore } from '@/stores/challenges';
-import { challengeStats, logicalToday } from '@/lib/challenges';
+import { logicalToday } from '@/lib/challenges';
+import { defisSummary } from '@/lib/defisHome';
+import { useComboStore } from '@/stores/combo';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
 // `embedded` : rendu dans un VOLET (cockpit Z Fold déplié) → racine <div> au lieu
@@ -804,15 +846,11 @@ function pickPlace(p: WeatherPlace) {
   results.value = [];
 }
 const challenges = useChallengesStore();
-// Défis actifs dont l'objectif du jour reste à faire (badge sur l'icône Challenges).
-const challengesDueToday = computed(() => {
-  const today = logicalToday();
-  return challenges.list.filter((ch) => {
-    if (ch.status !== 'active') return false;
-    const s = challengeStats(ch, today);
-    return s.dayIndex >= 0 && s.dayIndex < ch.duration_days && s.todayTarget > 0 && !s.isDoneToday;
-  }).length;
-});
+const comboStore = useComboStore();
+/** 🔥 Ce que la grande tuile annonce. ⚠️ La règle vit en LIB (`defisSummary`) : l'accueil
+ *  connecté n'est vu par aucune porte, donc un `computed` écrit ici ne serait couvert par
+ *  rien. Le store du 360 est DÉJÀ chargé par `useProgress` — aucune requête de plus. */
+const defis = computed(() => defisSummary(challenges.list, comboStore.list, logicalToday()));
 const loading = ref(true);
 
 const hasFree = ref(false);
@@ -874,6 +912,11 @@ function discardCourt() {
 }
 async function goChallenges() {
   await router.push('/challenges');
+}
+/** 🎯 L'onglet Défi 360 — ou directement l'assistant s'il n'y en a pas en cours : le
+ *  joueur sans 360 veut le LANCER, pas regarder un onglet vide. */
+async function goCombo() {
+  await router.push(defis.value.combo ? '/challenges?mode=combo' : '/combo/new');
 }
 async function goStats() {
   await router.push('/stats');
@@ -1944,6 +1987,113 @@ async function saveAutre() {
 .mtile:active {
   transform: scale(0.97);
   border-color: var(--c);
+}
+/* 🔥 LA GRANDE TUILE DES DÉFIS — « le centre névralgique de l'app ».
+   ⚠️ Elle doit se DISTINGUER des autres cartes de l'accueil, sinon elle n'est qu'une ligne
+   de plus : d'où le liseré accent, le fond légèrement chauffé et la taille. C'est le seul
+   bloc de l'accueil à porter l'accent en bordure — l'exception fait la hiérarchie. */
+.defis-hub {
+  margin: 0 0 12px;
+  padding: 10px 10px 12px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background:
+    radial-gradient(
+      120% 90% at 50% 0%,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 70%
+    ),
+    var(--surface);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.dh-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 2px 8px;
+}
+.dh-t {
+  font-size: 17px;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+.dh-s {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-left: auto;
+}
+/* Deux colonnes dès 344 px : `minmax(0, 1fr)` et non `1fr`, sinon une piste refuse de
+   passer sous la taille de son contenu et la grille déborde. */
+.dh-cols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.dh-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-height: 92px;
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.dh-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.dh-emo {
+  font-size: 22px;
+  line-height: 1;
+}
+.dh-k {
+  font-size: 13.5px;
+  font-weight: 700;
+}
+.dh-v {
+  font-size: 12.5px;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+.dh-n {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.25;
+}
+/* ⚠️ Ce qui APPELLE est le seul élément en accent : un chiffre de plus en gris se
+   perdrait, et c'est précisément celui pour lequel on ouvre l'app. */
+.dh-due {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1.25;
+}
+.dh-bar {
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin: 1px 0;
+}
+.dh-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.dh-cta {
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: auto;
 }
 .add-session {
   margin-bottom: 14px;
