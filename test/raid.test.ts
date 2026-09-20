@@ -26,6 +26,7 @@ import {
   lootCorpses,
   advanceBase,
   applyRaidOutcome,
+  battleLootPills,
   emptyBase,
   raidsEnabled,
   defenseReadiness,
@@ -296,13 +297,18 @@ describe('silhouette de faction', () => {
     expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.1);
   });
 
-  it('l’effectif reste entièrement fouillable avant que les corps pourrissent', () => {
-    // Le joueur doit pouvoir tout ramasser en quelques vagues : « 100 cadavres pour
-    // 3 fouilleurs » serait frustrant, pas impressionnant.
+  it('⚠️ TOUT l’effectif repoussé est dépouillé, quelle que soit la silhouette', () => {
+    // ⚠️ RÉÉCRIT. Il vérifiait que la fouille par vagues rattrapait la masse avant que
+    // les corps ne pourrissent (« 100 cadavres pour 3 fouilleurs serait frustrant »).
+    // La fouille étalée a disparu : le butin est crédité À LA RÉSOLUTION (demandé). La
+    // propriété qu'il gardait, elle, survit entièrement — une horde de bêtes ne doit pas
+    // rendre MOINS qu'une bande de brigands du seul fait d'être nombreuse et diluée.
     for (const L of [15, 26, 50, 100]) {
-      const worst = raidSize(L, 'betes');
-      const waves = Math.ceil(worst / scavengerCount(L));
-      expect(waves * SCAV.dispatchMs).toBeLessThan(SCAV.fieldMs);
+      const raid = rollRaid(31337, L, 0, 0);
+      const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
+      expect(corpses, `niveau ${L}`).toHaveLength(raidSize(L, raid.faction));
+      const loot = lootCorpses(corpses, raid.faction, L, 1, 0, []);
+      expect(loot.gold, `niveau ${L}`).toBeGreaterThan(0);
     }
   });
 });
@@ -717,6 +723,58 @@ describe('cycle de vie', () => {
     expect(nb.field!.corpses.length).toBe(raid.groups.reduce((s, g) => s + g.count, 0));
   });
 
+  it('⚠️ LES CORPS SONT RENDUS À L’APPELANT — c’est lui qui crédite le butin, tout de suite', () => {
+    // ⚠️ AJOUTÉ APRÈS UNE MUTATION SURVIVANTE : remplacer `corpses` par `[]` dans le retour
+    // ne faisait rougir AUCUN test, alors que c'est tout le point 4 du chantier — le butin
+    // des corps est crédité À LA RÉSOLUTION et part avec le rapport, au lieu d'attendre
+    // qu'on vienne fouiller. Sans ce retour, le store n'a rien à dépouiller et le butin
+    // d'un siège disparaît en silence.
+    const b = base(0);
+    const raid = rollRaid(555, 26, 0, 0);
+    const rep = resolveRaid(
+      { defenses: defs(40, 40), playerLevel: 40, hero: hero(40) },
+      raid,
+      0,
+      true,
+    );
+    const { base: nb, corpses } = applyRaidOutcome(
+      b,
+      raid,
+      rep,
+      { activeDays7: 7, globalXp: 0 },
+      0,
+    );
+    // Exactement ceux du champ : une seule et même liste, pas deux lectures qui pourraient
+    // diverger — le champ n'est que le DÉCOR de ce qu'on vient de dépouiller.
+    expect(corpses).toEqual(nb.field!.corpses);
+    expect(corpses.length).toBeGreaterThan(0);
+    // …et ils valent vraiment quelque chose : c'est ce que le store crédite.
+    expect(lootCorpses(corpses, rep.faction, 40, 1, 0, []).gold).toBeGreaterThan(0);
+  });
+
+  it('🦴 le relevé du butin se lit en PUCES — une seule mise en forme pour deux écrans', () => {
+    // ⚠️ L'écran de fin du rejeu et la feuille de la Tour de guet affichent le MÊME butin :
+    // deux mises en forme divergeraient au premier ajout de devise — c'est le défaut que
+    // `haulPills` a déjà corrigé pour les expéditions (v0.680), où une épave s'affichait
+    // avec un butin VIDE parce que la boîte listait ses devises à la main.
+    expect(battleLootPills({ corpses: 12, gold: 840, keys: 1, summonStones: 3, items: 2 })).toEqual(
+      ['+840 🪙', '+3 🔮', '+1 🗝️', '+2 objets'],
+    );
+    // Le singulier se dit au singulier.
+    expect(battleLootPills({ corpses: 1, gold: 0, keys: 0, summonStones: 0, items: 1 })).toEqual([
+      '+1 objet',
+    ]);
+    // ⚠️ Une devise à ZÉRO ne fait PAS de puce : une colonne de zéros laisserait croire que
+    // la bataille n'a rien donné, alors qu'elle a donné autre chose.
+    expect(battleLootPills({ corpses: 5, gold: 100, keys: 0, summonStones: 0, items: 0 })).toEqual([
+      '+100 🪙',
+    ]);
+    // ⚠️ Et SANS relevé (les bases d'avant ce chantier), on n'affiche RIEN — on n'invente
+    // pas un butin qu'on ne connaît pas.
+    expect(battleLootPills(null)).toEqual([]);
+    expect(battleLootPills(undefined)).toEqual([]);
+  });
+
   it('le champ de bataille pourrit', () => {
     let b = base(0);
     b.field = {
@@ -725,6 +783,18 @@ describe('cycle de vie', () => {
     };
     b = advanceBase(b, { playerLevel: 26, activeDays7: 7, globalXp: 0 }, 6 * H).base;
     expect(b.field).toBeNull();
+  });
+
+  it('⚠️ les corps ne restent que QUELQUES HEURES — c’est du décor, plus une réserve', () => {
+    // Le butin étant crédité à la résolution, le champ n'a plus rien à garder : il montre
+    // la bataille, puis la ville se nettoie. ⚠️ BIEN EN DEÇÀ de l'intervalle entre deux
+    // sièges (24 h au plus serré, pour un joueur qui s'entraîne tous les jours) — sinon on
+    // aurait une base à l'air assiégé en PERMANENCE, pour rien. C'est ce RAPPORT qui est
+    // gardé, pas la valeur : le jour où le rythme des sièges change, la règle suit.
+    expect(SCAV.fieldMs).toBeLessThan(raidIntervalMs(7) / 2);
+    // …et assez longtemps pour qu'on les voie : rentrer le soir après un siège du matin
+    // doit encore montrer quelque chose.
+    expect(SCAV.fieldMs).toBeGreaterThan(3 * H);
   });
 });
 
@@ -740,18 +810,6 @@ describe('champ de bataille', () => {
       expect(c.x).toBeGreaterThan(0);
       expect(c.x).toBeLessThan(100);
     }
-  });
-
-  it('les fouilleurs visent les corps les plus riches d’abord', () => {
-    const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
-    const picked = pickScavengeTargets({ corpses, expiresAt: 0 }, 3);
-    expect(picked).toHaveLength(3);
-    expect(picked[0]!.champion || picked[0]!.level >= picked[2]!.level).toBe(true);
-    // Un corps déjà dépouillé n'est jamais re-ciblé.
-    const half = corpses.map((c, i) => (i < 5 ? { ...c, looted: true } : c));
-    expect(pickScavengeTargets({ corpses: half, expiresAt: 0 }, 99)).toHaveLength(
-      corpses.length - 5,
-    );
   });
 
   it('paie dans la devise de la faction — et JAMAIS en ferraille', () => {
@@ -1467,22 +1525,6 @@ describe('masse visible contre menace', () => {
       expect(b.stones / a.stones).toBeLessThan(1.05);
     }
   });
-
-  it('⚠️ LA FOUILLE DEMANDE DÉSORMAIS PLUSIEURS VAGUES — et c’est VOULU', () => {
-    // ⚠️ RÉÉCRIT. Ce test exigeait « le MÊME nombre de vagues qu’avant la masse ×2,5 »,
-    // au motif que « la foule ne doit pas devenir une corvée ». C’était juste tant que
-    // chaque vague se lançait et se ramassait À LA MAIN — et c’est ce qui a produit le
-    // défaut signalé : « en 1 voire 2 vagues max j’ai tout ramassé ».
-    // Depuis que les allers-retours s’enchaînent SEULS et durent 4 minutes, une vague ne
-    // coûte plus un clic : le motif du test a disparu avec le geste qu’il protégeait.
-    for (const L of [12, 26, 60, 90]) {
-      const vagues = raidSize(L, 'betes') / scavengerCount(L);
-      // Assez de vagues pour que la fouille DURE et se regarde avancer…
-      expect(vagues).toBeGreaterThan(3);
-      // …sans jamais approcher la péremption du champ (24 h pour `dispatchMs` de 4 min).
-      expect(vagues * SCAV.dispatchMs).toBeLessThan(SCAV.fieldMs / 4);
-    }
-  });
 });
 
 /** ⚠️ CHAQUE STRUCTURE DIT CE QU'UN NIVEAU CHANGE (v0.721). Les descriptions disaient ce
@@ -1529,13 +1571,15 @@ describe('ce qu’un niveau de défense apporte', () => {
     // ⚠️ 9/10 ne suffit plus : depuis que le nombre de bras monte par crans de QUATRE
     // niveaux, deux niveaux voisins donnent souvent la meme capacite — et le rendu porte
     // desormais un SECOND levier (la vitesse) precisement pour qu aucun cran ne soit mort.
-    expect(scavengerCount(7)).not.toBe(scavengerCount(8));
-    const a = defensePerLevelLabel('salvage', 7, ctx(7, 'salvage'));
-    expect(a).toContain(String(scavengerCount(7)));
-    expect(a).toContain(String(scavengerCount(8)));
-    // …et un palier SANS bras supplementaire annonce quand meme son gain de vitesse.
-    const muet = defensePerLevelLabel('salvage', 9, ctx(9, 'salvage'));
-    expect(muet).toContain(fmtSpan(scavengeMs(10)));
+    // ⚠️ SUJET CHANGÉ (le Chantier de fouille est retiré), PROPRIÉTÉ INCHANGÉE : le
+    // Chenil a la même forme — un palier (les places) sous une courbe (le dressage).
+    expect(companionSlots(7)).not.toBe(companionSlots(8));
+    const a = defensePerLevelLabel('kennel', 7, ctx(7, 'kennel'));
+    expect(a).toContain(String(companionSlots(7)));
+    expect(a).toContain(String(companionSlots(8)));
+    // …et un palier SANS place supplémentaire annonce quand même son gain de dressage.
+    const muet = defensePerLevelLabel('kennel', 8, ctx(8, 'kennel'));
+    expect(muet).toContain(String(9));
     // ⚠️ AVEC SON INTERVALLE : sans lui les deux côtés valaient `NaN`, et le test passait
     // par construction (trouvé en v0.802).
     const iv = raidIntervalMs(7);
@@ -1575,10 +1619,13 @@ describe('ce qu’un niveau de défense apporte', () => {
   });
 
   it('⚠️ un palier SANS gain dit à quel niveau ça bougera', () => {
-    // « +0 » est honnete mais inutilisable : ce quon veut savoir, cest jusquou monter.
-    expect(scavengerCount(6)).toBe(scavengerCount(7)); // ce palier ne donne rien
-    const txt = defensePerLevelLabel('salvage', 6, ctx(6, 'salvage'));
-    expect(txt).toMatch(/niveau 8/);
+    // « +0 » est honnête mais inutilisable : ce qu'on veut savoir, c'est jusqu'où monter.
+    // ⚠️ SUJET CHANGÉ (le Chantier de fouille est retiré) : le Chenil portait le même
+    // défaut — une place tous les 2 niveaux, donc un cran sur deux muet — et rien ne le
+    // couvrait. La propriété est déplacée avec son test plutôt que perdue.
+    expect(companionSlots(8)).toBe(companionSlots(9)); // ce palier ne donne rien
+    const txt = defensePerLevelLabel('kennel', 8, ctx(8, 'kennel'));
+    expect(txt).toMatch(/niveau 10/);
     expect(txt).not.toMatch(/\+0/);
   });
   it('la MURAILLE et les TOURELLES annoncent un gain réel, puis le plafond du sport', () => {
@@ -1678,7 +1725,7 @@ describe('économie de la défense', () => {
     b.freeze = { until: 24 * H, atXp: 100 };
     expect(totalRepairCost(b)).toBe(repairCost(20) + repairCost(18));
 
-    const lances = startRepair(startRepair(b, 'wall', 0, 0), 'turret', 0, 0);
+    const lances = startRepair(startRepair(b, 'wall', 0), 'turret', 0);
     // Les travaux lancés sont payés : ils sortent du total à lancer…
     expect(totalRepairCost(lances)).toBe(0);
     // …mais rien n'est encore en service, et la production reste à l'arrêt.
@@ -1686,8 +1733,8 @@ describe('économie de la défense', () => {
     expect(lances.freeze).not.toBeNull();
 
     // Le mur finit avant les tourelles : tant qu'il reste une brèche, toujours gelé.
-    const finMur = repairMsFor(20, 0);
-    const finTour = repairMsFor(18, 0);
+    const finMur = repairMsFor(20);
+    const finTour = repairMsFor(18);
     const tot = Math.max(finMur, finTour);
     const tard = Math.min(finMur, finTour);
     const moitie = settleRepairs(lances, tard);
@@ -1699,35 +1746,43 @@ describe('économie de la défense', () => {
     expect(whole.freeze).toBeNull();
   });
 
-  it('🔧 une réparation dure selon le NIVEAU, la Fonderie la raccourcit, jamais instantanée', () => {
-    expect(repairMsFor(29, 0)).toBeGreaterThan(repairMsFor(10, 0));
-    expect(repairMsFor(100, 0)).toBe(5.5 * H);
+  it('🔧 une réparation dure selon le NIVEAU de la structure, et RIEN d’autre', () => {
+    // Elle croît à chaque niveau — un mur plus haut se remet en état plus lentement.
+    for (let n = 2; n <= 100; n++)
+      expect(repairMsFor(n), `niveau ${n}`).toBeGreaterThan(repairMsFor(n - 1));
+    expect(repairMsFor(100)).toBe(5.5 * H);
     // ⚠️ Toujours bien plus courte que l'intervalle minimal entre deux sièges (24 h) :
     // une base encore en travaux au siège suivant serait une spirale.
-    expect(repairMsFor(100, 0)).toBeLessThan(raidIntervalMs(7) / 3);
-    // La Fonderie gratte à CHAQUE niveau…
-    for (let f = 1; f <= 100; f++)
-      expect(repairMsFor(50, f), `fonderie ${f}`).toBeLessThan(repairMsFor(50, f - 1));
-    // …sans jamais rendre les travaux instantanés.
-    expect(repairMsFor(50, 100_000)).toBeGreaterThan(repairMsFor(50, 0) * 0.35);
+    expect(repairMsFor(100)).toBeLessThan(raidIntervalMs(7) / 3);
+  });
+
+  it('⚠️ AUCUN BÂTIMENT ne la raccourcit — la Fonderie est partie avec son second métier', () => {
+    // ⚠️ La garantie porte sur la SIGNATURE : tant que la durée ne dépend que du niveau
+    // de la structure, aucun bâtiment ne PEUT la réduire. Un second paramètre rouvrirait
+    // la porte, et c'est ce qu'on interdit ici.
+    expect(repairMsFor.length).toBe(1);
+    expect(startRepair.length).toBe(3);
+    // La seule sortie reste PAYANTE : elle coûte de la ferraille, proportionnellement à
+    // ce qu'on saute (`rushRepairCost`), comme les soins d'urgence du héros.
+    expect(rushRepairCost(2 * H)).toBeGreaterThan(rushRepairCost(1 * H));
   });
 
   it('⚠️ relancer des travaux en cours ne repousse RIEN et ne fait rien payer', () => {
     const b = emptyBase(1, 0);
     b.defenses = [{ typeId: 'wall', level: 30, damaged: true }];
-    const une = startRepair(b, 'wall', 0, 0);
-    const deux = startRepair(une, 'wall', 2 * H, 0);
+    const une = startRepair(b, 'wall', 0);
+    const deux = startRepair(une, 'wall', 2 * H);
     expect(deux.defenses[0]!.repairUntil).toBe(une.defenses[0]!.repairUntil);
     // Une structure intacte ne se « répare » pas.
     const intacte = emptyBase(1, 0);
     intacte.defenses = [{ typeId: 'wall', level: 30 }];
-    expect(startRepair(intacte, 'wall', 0, 0).defenses[0]!.repairUntil).toBeUndefined();
+    expect(startRepair(intacte, 'wall', 0).defenses[0]!.repairUntil).toBeUndefined();
   });
 
   it('⚠️ le tick CONCLUT les travaux échus, et n’écrit rien quand il n’y a rien à conclure', () => {
     const b = emptyBase(1, 0);
     b.defenses = [{ typeId: 'wall', level: 30, damaged: true }];
-    const lance = startRepair(b, 'wall', 0, 0);
+    const lance = startRepair(b, 'wall', 0);
     const fin = lance.defenses[0]!.repairUntil!;
     expect(isRepairing(lance.defenses[0], fin - 1)).toBe(true);
     expect(settleRepairs(lance, fin - 1)).toBe(lance); // même objet : rien à écrire
@@ -1741,7 +1796,7 @@ describe('économie de la défense', () => {
     const b = emptyBase(1, 0);
     b.defenses = [{ typeId: 'wall', level: 40, damaged: true }];
     b.freeze = { until: 24 * H, atXp: 100 };
-    const lance = startRepair(b, 'wall', 0, 0);
+    const lance = startRepair(b, 'wall', 0);
     const fini = finishRepairNow(lance, 'wall');
     expect(fini.defenses[0]).toEqual({ typeId: 'wall', level: 40 });
     expect(fini.freeze).toBeNull();
@@ -2481,147 +2536,6 @@ describe('⚔️ CE QU’ON APPREND EN DÉFENDANT', () => {
   it('une armée sans personne ne donne rien', () => {
     expect(siegeXp(adv(20), rep([], 0))).toBe(0);
     expect(siegeXp(adv(20), rep([{ count: 0, level: 20 }], 0))).toBe(0);
-  });
-});
-
-describe('⛏️ LE CHANTIER TRAVAILLE SEUL', () => {
-  // ⚠️ Demandé par l’utilisateur : « que les allées venues soient automatiques et assez
-  // rapides vu que c’est quand même juste devant la base », après avoir constaté « en 1
-  // voire 2 vagues max j’ai tout ramassé ». Envoyer une vague n’était pas une DÉCISION —
-  // on envoie toujours — donc c’était un clic de péage.
-  const NOW = 1_700_000_000_000;
-  const champ = (n: number): BattleField => ({
-    corpses: Array.from({ length: n }, (_, i) => ({
-      id: `c${i}`,
-      emoji: '💀',
-      name: `corps ${i}`,
-      level: 10,
-    })),
-    expiresAt: NOW + SCAV.fieldMs,
-  });
-
-  it('⚠️ SANS CHANTIER, personne ne fouille', () => {
-    expect(advanceScavenging(champ(10), 0, NOW)).toBeNull();
-    expect(scavengerCount(0)).toBe(0);
-  });
-
-  it('une vague part TOUT DE SUITE, et rien n’est ramassé avant son retour', () => {
-    const t = advanceScavenging(champ(10), 3, NOW)!;
-    expect(t.taken).toHaveLength(0);
-    expect(t.waves).toBe(0);
-    expect(t.field.dispatchUntil).toBe(NOW + SCAV.dispatchMs);
-    expect(t.field.dispatchIds).toHaveLength(3);
-    expect(t.done).toBe(false);
-  });
-
-  it('⚠️ UNE ABSENCE RATTRAPE TOUTES LES VAGUES, pas une seule', () => {
-    // Le vrai piège : l’app reste fermée une nuit. Sans enchaîner les vagues DOS À DOS,
-    // on ne rendrait qu’un aller-retour au retour et le champ pourrirait avec le reste
-    // dedans — le joueur perdrait un butin qu’il avait gagné.
-    // ⚠️ On part d’un champ dont la 1re vague est DÉJÀ en route : c’est l’état réel, le
-    // tick de base lançant la fouille dans la foulée du siège. Un champ neuf, lui, ne
-    // peut pas rattraper un passé qu’il n’a pas vécu — il démarre à l’instant de l’appel.
-    const parti = advanceScavenging(champ(12), 3, NOW)!.field;
-    const t = advanceScavenging(parti, 3, NOW + 10 * SCAV.dispatchMs)!;
-    expect(t.taken).toHaveLength(12);
-    expect(t.waves).toBe(4);
-    expect(t.done).toBe(true);
-    expect(t.field.dispatchUntil).toBeUndefined();
-  });
-
-  it('les vagues s’enchaînent DOS À DOS, pas depuis l’instant présent', () => {
-    // Après deux allers-retours, la troisième doit être en route depuis le retour de la
-    // deuxième — pas repartir de zéro à chaque ouverture de l’app.
-    const parti = advanceScavenging(champ(12), 3, NOW)!.field;
-    const t = advanceScavenging(parti, 3, NOW + 2 * SCAV.dispatchMs)!;
-    expect(t.waves).toBe(2);
-    expect(t.taken).toHaveLength(6);
-    expect(t.field.dispatchUntil).toBe(NOW + 3 * SCAV.dispatchMs);
-  });
-
-  it('⚠️ UN CORPS N’EST JAMAIS DÉPOUILLÉ DEUX FOIS', () => {
-    let f = advanceScavenging(champ(9), 3, NOW)!.field;
-    const vus: string[] = [];
-    for (let k = 1; k <= 6; k++) {
-      const t = advanceScavenging(f, 3, NOW + k * SCAV.dispatchMs)!;
-      f = t.field;
-      vus.push(...t.taken.map((x) => x.id));
-    }
-    expect(vus).toHaveLength(9);
-    expect(new Set(vus).size).toBe(9);
-  });
-
-  it('⚠️ LE CHAMP SE VIDE EN PLUSIEURS VAGUES, et c’était tout le sujet', () => {
-    // Mesuré avant : 20 corps par vague au Chantier 14 pour une armée de ~48 — donc
-    // « 1 voire 2 vagues ». Le facteur de masse retiré, la même armée en demande ~6.
-    const cap = scavengerCount(14);
-    expect(cap).toBe(4);
-    expect(Math.ceil(48 / cap)).toBeGreaterThanOrEqual(10);
-  });
-
-  it('⚠️ LE NIVEAU DU CHANTIER RACCOURCIT LE VOYAGE — à CHAQUE cran', () => {
-    // ⚠️ SECOND LEVIER, et il est NÉCESSAIRE : le nombre de bras monte par crans de
-    // quatre niveaux (`scavengerCount`), donc trois niveaux sur quatre ne changeraient
-    // RIEN sans lui — ce que « aucun niveau mort du 0 au 100 » (v0.731) interdit.
-    for (let l = 0; l < 100; l++) {
-      expect(scavengeMs(l + 1)).toBeLessThan(scavengeMs(l));
-    }
-    // ⚠️ ASYMPTOTIQUE, jamais linéaire : un aller-retour ne devient jamais instantané
-    // — on ne dépouille pas un champ de bataille en un clin d’œil.
-    expect(scavengeMs(0)).toBe(SCAV.dispatchMs);
-    expect(scavengeMs(100_000)).toBeGreaterThan(SCAV.dispatchMs * (1 - SCAV.speedMax) - 1);
-    expect(scavengeMs(100_000)).toBeGreaterThan(0);
-  });
-
-  it('⚠️ …et `advanceScavenging` HONORE cette durée', () => {
-    // Le test précédent ne juge que la FORMULE : sans celui-ci, on pourrait la garder
-    // intacte et ignorer son résultat dans la fouille — le levier serait mort en jeu
-    // tout en restant vert. On mesure donc ce qui compte : à temps écoulé ÉGAL, un
-    // Chantier plus haut ramène davantage de corps.
-    const ecoule = 30 * 60_000;
-    const vagues = (lvl: number) => {
-      const parti = advanceScavenging(champ(200), 1, NOW, scavengeMs(lvl))!.field;
-      return advanceScavenging(parti, 1, NOW + ecoule, scavengeMs(lvl))!.waves;
-    };
-    expect(vagues(40)).toBeGreaterThan(vagues(0));
-    // Et le défaut par défaut reste le forfait : un appel sans durée ne change rien.
-    const nu = advanceScavenging(
-      advanceScavenging(champ(200), 1, NOW)!.field,
-      1,
-      NOW + ecoule,
-    )!.waves;
-    expect(nu).toBe(vagues(0));
-  });
-
-  it('⚠️ LE CUMUL PART AVEC LE CHAMP QUI POURRIT — pas d’orphelin', () => {
-    // Un relevé de fouille SANS champ n’a plus de propriétaire : il se retrouverait
-    // dans le rapport de pillage du siège SUIVANT, qui annoncerait un butin déjà
-    // encaissé. En pratique la fouille rattrape tout bien avant la péremption — ce
-    // cas ne reste ouvert que sans Chantier, où justement rien n’a été relevé.
-    const b = emptyBase(7, 0);
-    b.field = champ(5);
-    b.pillage = {
-      corpses: 3,
-      waves: 1,
-      gold: 40,
-      keys: 0,
-      summonStones: 1,
-      items: 0,
-      startedAt: NOW,
-    };
-    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0 };
-    // Champ encore frais : on ne touche à rien.
-    expect(advanceBase(b, ctx, NOW).base.pillage).not.toBeNull();
-    // Champ pourri : les deux s’en vont ENSEMBLE.
-    const apres = advanceBase(b, ctx, NOW + SCAV.fieldMs + 1).base;
-    expect(apres.field).toBeNull();
-    expect(apres.pillage).toBeNull();
-  });
-
-  it('un aller-retour est COURT — le chantier est devant la porte', () => {
-    expect(SCAV.dispatchMs).toBeLessThanOrEqual(5 * 60_000);
-    // …et le champ reste frais bien plus longtemps qu’il n’en faut pour tout ramasser.
-    expect(SCAV.fieldMs / SCAV.dispatchMs).toBeGreaterThan(50);
   });
 });
 

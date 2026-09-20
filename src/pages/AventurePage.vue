@@ -2892,13 +2892,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
-import {
-  remainingCorpses,
-  isWounded,
-  woundRemainingMs,
-  type RaidReport,
-  defenseLevel,
-} from '@/lib/raid';
+import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
 import { familiarKeepers } from '@/lib/caravan';
 import { usePush } from '@/composables/usePush';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
@@ -5240,16 +5234,16 @@ function openInbox() {
 // Le siège se résout par HORLOGE, comme les expéditions : le tick d'une seconde suffit,
 // et si l'app est restée fermée, la première ouverture rattrape tout d'un coup.
 const baseRaid = computed(() => char.row?.base?.raid ?? null);
-const baseCorpses = computed(() => remainingCorpses(char.row?.base?.field ?? null));
 const baseFrozen = computed(() => !!char.row?.base?.freeze);
-/** Ce qui doit se voir SANS ouvrir l'onglet : une armée en route, des corps à
- *  dépouiller avant qu'ils ne pourrissent, une production à l'arrêt. */
+/** Ce qui doit se voir SANS ouvrir l'onglet : une armée en route, une production à
+ *  l'arrêt, un héros à l'infirmerie.
+ *  ⚠️ PLUS LES CORPS : le butin est crédité à la résolution et figure dans le rapport
+ *  (demandé). Le champ de bataille n'appelle plus aucune action — appeler pour du
+ *  décor, c’est user la pastille pour rien. */
 /** Rapport dont l'assaut n'a pas encore été REJOUÉ. Tant qu'il est posé, le plateau
  *  s'ouvre : on découvre l'issue par l'animation, jamais par une notification. */
 const siegeReport = ref<RaidReport | null>(null);
-const baseAlert = computed(
-  () => !!baseRaid.value || baseCorpses.value > 0 || baseFrozen.value || heroWounded.value,
-);
+const baseAlert = computed(() => !!baseRaid.value || baseFrozen.value || heroWounded.value);
 
 /** SÉANCES des 7 derniers jours — c'est ce qui règle la fréquence des sièges : une
  *  séance, un siège (`raidIntervalMs`).

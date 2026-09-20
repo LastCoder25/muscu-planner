@@ -56,12 +56,17 @@ describe('buildings — emplacements & coûts', () => {
     // cour. C'est ce que donnaient les 10 emplacements pour 7 bâtiments.
     expect(BUILDING_TYPES.every((t) => t.unique)).toBe(true);
     expect(BUILD.plotCap).toBe(BUILDING_TYPES.length);
-    // 9 types depuis le PANTHEON (v0.949), qui absorbe la Guilde, le Centre de
-    // formation et l'Equipementier. ⚠️ Le littéral est là pour qu'ajouter OU RETIRER un
-    // type soit une DÉCISION (il ouvre ou ferme un emplacement, et déplace le puits
-    // d'or de 1/N), pas un effet de bord — ce puits a déjà dérivé une fois en silence
-    // (v0.733, +43 % quand les caravanes ont ajouté trois bâtiments).
-    expect(BUILDING_TYPES.length).toBe(9);
+    // 6 types depuis la SIMPLIFICATION (demandée) : la Mine d'or et la Fonderie sont
+    // retirées (plus aucun bâtiment ne produit d'or ni de ferraille — on va les CHERCHER
+    // sur la carte), et le Comptoir de caravanes est absorbé par l'Avant-poste, qui règle
+    // désormais tout le VOYAGE. S'y ajoute le PANTHEON (v0.949), qui avait déjà absorbé la
+    // Guilde, le Centre de formation et l'Equipementier.
+    // ⚠️ Le littéral est là pour qu'ajouter OU RETIRER un type soit une DÉCISION (il ouvre
+    // ou ferme un emplacement, et déplace le puits d'or de 1/N), pas un effet de bord — ce
+    // puits a déjà dérivé une fois en silence (v0.733, +43 % quand les caravanes ont ajouté
+    // trois bâtiments), et le retrait de ces trois-là a imposé de recaler `BUILD.upBase`
+    // (550 → 850, mesuré : la part du plafond serait montée à 94 %, hors bande).
+    expect(BUILDING_TYPES.length).toBe(6);
   });
   it('le CHOIX vit dans plotsForLevel, pas dans le mou : moins d’emplacements que de types déblocables', () => {
     // À bas niveau on a moins d'emplacements que de bâtiments déjà déblocables → on
@@ -102,12 +107,12 @@ describe('canBuildOnSlot : on construit LÀ OÙ ON TOUCHE, pas dans l’ordre (v
     // 2 bâtiments déjà posés sur des emplacements ÉPARS (5 et 9) : le quota (3) n’est
     // pas atteint → un 3e emplacement vide, index 2 (< 5 et 9 mais aussi < le quota),
     // reste constructible : ce n’est ni sa position ni celle des autres qui décide.
-    const deux = [mk('outpost', 1, 0, 5), mk('gold_mine', 1, 0, 9)];
+    const deux = [mk('outpost', 1, 0, 5), mk('energy_font', 1, 0, 9)];
     expect(canBuildOnSlot(2, deux, 3)).toBe(true);
   });
   it('quota atteint → aucun emplacement vide constructible', () => {
     // 3 bâtiments posés (slots 0, 1, 9) à un niveau qui n’en autorise que 3.
-    const trois = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, 1), mk('warehouse', 1, 0, 9)];
+    const trois = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, 1), mk('warehouse', 1, 0, 9)];
     expect(canBuildOnSlot(2, trois, 3)).toBe(false);
     expect(canBuildOnSlot(6, trois, 3)).toBe(false);
   });
@@ -121,7 +126,7 @@ describe('canBuildOnSlot : on construit LÀ OÙ ON TOUCHE, pas dans l’ordre (v
     expect(canBuildOnSlot(BUILD.plotCap, [], 100)).toBe(false);
   });
   it('emptySlotLocked est le miroir exact de canBuildOnSlot pour un emplacement vide', () => {
-    const deux = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, 1)];
+    const deux = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, 1)];
     for (const slot of [2, 3, 5]) {
       expect(emptySlotLocked(slot, deux, 2)).toBe(!canBuildOnSlot(slot, deux, 2));
     }
@@ -135,49 +140,43 @@ describe('repackBuildingSlots : un filet legacy, jamais un repack inconditionnel
     // Exactement ce que « construire là où on touche » exige : un bâtiment posé loin
     // dans la cour ne doit pas se faire ramener au prochain index libre au premier
     // aller-retour serveur (normalizeRow tourne à CHAQUE persist).
-    const b = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, BUILD.plotCap - 1)];
+    const b = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, BUILD.plotCap - 1)];
     expect(repackBuildingSlots(b)).toEqual(b);
   });
   it('un slot hors bornes est recompacté (legacy : plotCap réduit)', () => {
-    const b = [mk('outpost', 1, 0, 0), mk('gold_mine', 1, 0, BUILD.plotCap + 5)];
+    const b = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, BUILD.plotCap + 5)];
     const out = repackBuildingSlots(b);
     expect(out.every((x) => x.slot >= 0 && x.slot < BUILD.plotCap)).toBe(true);
     expect(new Set(out.map((x) => x.slot)).size).toBe(out.length);
   });
   it('deux bâtiments sur le même slot sont recompactés (legacy : ligne corrompue)', () => {
-    const b = [mk('outpost', 1, 0, 2), mk('gold_mine', 1, 0, 2)];
+    const b = [mk('outpost', 1, 0, 2), mk('energy_font', 1, 0, 2)];
     const out = repackBuildingSlots(b);
     expect(new Set(out.map((x) => x.slot)).size).toBe(2);
   });
 });
 
 describe('buildings — registre (production passive)', () => {
-  it('roster complet : les 7 d’origine + comptoir et pantheon', () => {
+  it('roster complet : les 6 qui restent après la simplification', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
-      [
-        'boss_altar',
-        'energy_font',
-        'foundry',
-        'gold_mine',
-        'labyrinth_gate',
-        'outpost',
-        'warehouse',
-        'caravanserail',
-        'pantheon',
-      ].sort(),
+      ['boss_altar', 'energy_font', 'labyrinth_gate', 'outpost', 'warehouse', 'pantheon'].sort(),
     );
   });
 
-  it('la Fonderie produit la FERRAILLE, sans détrôner les épaves de la carte', () => {
-    // Elle est le filet régulier ; les épaves restent la source de pointe (une visite
-    // vaut 2 à 3 récoltes) — même relation que la Mine d'or avec les expéditions.
-    expect(buildingProdPerHour(mk('foundry', 25))).toBeGreaterThan(0);
-    const parRecolte = buildingProdPerHour(mk('foundry', 25)) * BUILD.storageHours;
-    expect(parRecolte, 'une récolte doit couvrir une remise en état').toBeGreaterThan(40);
-    expect(parRecolte, 'sans rendre les épaves inutiles').toBeLessThan(120);
+  it('⚠️ AUCUN bâtiment ne produit plus d’OR ni de FERRAILLE', () => {
+    // ⚠️ RÉÉCRIT. Ce bloc vérifiait que la Fonderie battait bien la ferraille « sans
+    // détrôner les épaves ». Les deux PRODUCTEURS de devises-qu'on-va-chercher sont
+    // retirés (demandé) : l'or vient des donjons et de la carte, la ferraille des épaves.
+    // Ce qui reste à garder, c'est qu'aucune horloge ne les dépose — c'est la règle
+    // « la ferraille doit être plus dure à obtenir que l'or » (v0.682) prise à sa racine.
+    for (const r of ['gold', 'scrap'] as const) {
+      expect(
+        BUILDING_TYPES.some((t) => (t.resource as string) === r),
+        `aucun bâtiment ne doit produire ${r}`,
+      ).toBe(false);
+    }
   });
   it('producteurs & hybrides produisent une ressource ; outpost/entrepôt non', () => {
-    expect(buildingProdPerHour(mk('gold_mine', 10))).toBeGreaterThan(0); // or
     expect(buildingProdPerHour(mk('energy_font', 10))).toBeGreaterThan(0); // énergie
     expect(buildingProdPerHour(mk('boss_altar', 10))).toBeGreaterThan(0); // hybride → pierres
     expect(buildingProdPerHour(mk('labyrinth_gate', 10))).toBeGreaterThan(0); // hybride → clés
@@ -185,25 +184,19 @@ describe('buildings — registre (production passive)', () => {
     expect(buildingProdPerHour(mk('warehouse', 10))).toBe(0); // utilitaire pur
     expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0); // robustesse
   });
-  it('collectable agrège par ressource (or / énergie / pierres / clés)', () => {
+  it('collectable agrège par ressource (énergie / pierres / clés)', () => {
     const now = 100 * H;
     const c = collectable(
-      [
-        mk('gold_mine', 10, 0),
-        mk('energy_font', 10, 0),
-        mk('boss_altar', 10, 0),
-        mk('labyrinth_gate', 10, 0),
-      ],
+      [mk('energy_font', 10, 0), mk('boss_altar', 10, 0), mk('labyrinth_gate', 10, 0)],
       now,
     );
-    expect(c.gold).toBeGreaterThan(0);
     expect(c.energy).toBeGreaterThan(0);
     expect(c.summon).toBeGreaterThan(0);
     expect(c.keys).toBeGreaterThan(0);
   });
   it('Entrepôt augmente le stockage des producteurs (+15 %/niveau)', () => {
     expect(storageMult([mk('warehouse', 4)])).toBeCloseTo(1.6, 5); // +60 %
-    const mine = mk('gold_mine', 10, 0);
+    const mine = mk('energy_font', 10, 0);
     expect(buildingStorageCap(mine, storageMult([mk('warehouse', 4)]))).toBeCloseTo(
       buildingStorageCap(mine) * 1.6,
       3,
@@ -530,7 +523,7 @@ describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () 
     expect(healBuildings([])).toEqual({ buildings: [], goldRefund: 0 });
   });
   it('sans rien à fusionner, elle ne touche à RIEN (idempotence)', () => {
-    const b = [mk('gold_mine', 5, 0, 0), mk('pantheon', 12, 0, 1)];
+    const b = [mk('warehouse', 5, 0, 0), mk('pantheon', 12, 0, 1)];
     const out = healBuildings(b);
     expect(out.goldRefund).toBe(0);
     expect(out.buildings).toEqual(b);
@@ -538,7 +531,7 @@ describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () 
 
   it('les trois deviennent UN Panthéon, au niveau le plus haut et à la place du premier', () => {
     const out = healBuildings([
-      mk('gold_mine', 4, 0, 0),
+      mk('warehouse', 4, 0, 0),
       legacy('training', 10, 3),
       legacy('guild', 31, 1),
       legacy('outfitter', 30, 5),
@@ -551,7 +544,33 @@ describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () 
     expect(pan[0]!.level).toBe(31);
     expect(pan[0]!.slot, 'la place du premier posé').toBe(1);
     // Le reste de la cour ne bouge pas.
-    expect(out.buildings.some((b) => b.typeId === 'gold_mine')).toBe(true);
+    expect(out.buildings.some((b) => b.typeId === 'warehouse')).toBe(true);
+  });
+
+  it('🐫 → 🧭 le COMPTOIR rejoint l’Avant-poste : niveau le plus haut, or du reste rendu', () => {
+    // Même mécanique que le Panthéon, autre repreneur : les deux bâtiments réglaient le
+    // même VOYAGE (le trajet du héros d'un côté, la vitesse et le nombre des convois de
+    // l'autre). ⚠️ Le niveau le plus haut est HÉRITÉ : un joueur qui avait un Avant-poste
+    // 32 et un Comptoir 28 garde 32 — on ne se réveille jamais avec moins bon qu'hier.
+    const out = healBuildings([legacy('caravanserail', 28, 5), mk('outpost', 32, 0, 1)]);
+    const op = out.buildings.filter((b) => b.typeId === 'outpost');
+    expect(op.length, 'un seul Avant-poste').toBe(1);
+    expect(op[0]!.level).toBe(32);
+    expect(op[0]!.slot, 'la place du premier posé').toBe(1);
+    expect(out.buildings.some((b) => b.typeId === 'caravanserail')).toBe(false);
+    expect(out.goldRefund, 'le Comptoir est remboursé').toBeGreaterThan(0);
+  });
+
+  it('🪙 ⚙️ RETRAIT SEC : la Mine d’or et la Fonderie sont rendues EN ENTIER', () => {
+    // ⚠️ Rien ne reprend leur métier (plus aucun bâtiment ne produit d'or ni de
+    // ferraille), donc il n'y a pas de niveau à hériter : TOUT ce qu'elles ont coûté
+    // revient en or. Sans ça, `normalizeRow` les effacerait en silence — mesuré sur le
+    // compte réel, 4,56 M d'or rien que pour ces deux-là.
+    const mine = legacy('gold_mine', 32, 0);
+    const fonderie = legacy('foundry', 14, 2);
+    const out = healBuildings([mine, fonderie]);
+    expect(out.buildings, 'la cour est vidée de ces deux-là').toEqual([]);
+    expect(out.goldRefund).toBe(buildingInvested(600, 32) + buildingInvested(850, 14));
   });
 
   it('⚠️ LE FILTRE DES TYPES INCONNUS NE LES EFFACE PAS AVANT LA FUSION', () => {

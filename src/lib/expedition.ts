@@ -507,8 +507,14 @@ export const HARVEST = {
   // Ferraille d'une épave. Dimensionnée pour qu'UNE visite couvre largement la remise
   // en service d'une enceinte de son niveau (cf. repairCost, raid.ts) : réparer doit
   // être une formalité qu’on accomplit, jamais un mur qui enferme dans la défaite.
-  scrapBase: 9,
-  scrapPerLevel: 0.8,
+  // ⚠️ ×1,25 (mesuré) : la Fonderie est RETIRÉE, et elle pesait 20 à 22 % du débit de
+  // ferraille. Sans compensation le ratio jours-ferraille / jours-or montait à
+  // 1,45-2,06, donc au bord de la borne de 2,2 au-delà de laquelle l’enceinte
+  // n’attend plus que le métal (`scrapEconomy.test`). À ×1,25 il vaut 1,16-1,65,
+  // soit la courbe d’avant (1,13-1,63) : l’épave devient la source UNIQUE, elle prend
+  // exactement ce que la Fonderie déposait.
+  scrapBase: 11.25,
+  scrapPerLevel: 1,
 } as const;
 
 export const EXPE = {

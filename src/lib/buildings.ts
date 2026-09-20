@@ -2,13 +2,19 @@
 // sur des emplacements autour de la ville (carte d'expédition), financés par l'OR
 // (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
 //
-// ÉTAT ACTUEL : 7 bâtiments pour 7 emplacements — `BUILD.plotCap` est DÉRIVÉ du registre.
-//  • UTILITAIRES : Avant-poste (débloque expéditions + vitesse) · Entrepôt (stockage).
-//  • PRODUCTEURS : Mine d'or 🪙 · Dynamo ⚡ (énergie de jeu) · Fonderie ⚙️ (ferraille 🔩).
+// ÉTAT ACTUEL : 6 bâtiments pour 6 emplacements — `BUILD.plotCap` est DÉRIVÉ du registre.
+//  • UTILITAIRES : Avant-poste (expéditions + caravanes : trajet du héros, vitesse ET
+//    nombre des convois) · Entrepôt (stockage + vitesse des réparations) · Panthéon.
+//  • PRODUCTEUR : Dynamo ⚡ (énergie de jeu).
 //  • HYBRIDES (effet + production) : Porte du Labyrinthe (débloque + luck coffres, PRODUIT
-//    des clés 🗝️) · Autel des boss (rareté des pièces de boss, PRODUIT des pierres d'invocation 🔮).
+//    des clés 🗝️) · Autel des boss (rareté des pièces de boss, PRODUIT des pierres 🔮).
 // La production est passive, à RÉCOLTER (collectable/collectFilons), bornée par le stockage
 // (18 h × bonus Entrepôt) → complément à l'actif, jamais un substitut au sport.
+//
+// ⚠️ AUCUN BÂTIMENT NE PRODUIT PLUS D'OR NI DE FERRAILLE (Mine d'or et Fonderie retirées,
+// demandé) : ce sont les deux devises qu'on va CHERCHER sur la carte, et une horloge qui
+// les déposait brouillait ce message. Les deux retraits sont COMPENSÉS et MESURÉS — cf.
+// `BUILD.upBase` pour le puits d'or et `HARVEST.scrapBase` pour la ferraille.
 //
 // GARDE-FOUS : plafonné par le SPORT (niveau d'un bâtiment ≤ niveau du joueur) ; 100 %
 // déterministe (timestamps passés par l'appelant, hors-ligne).
@@ -18,7 +24,11 @@
 // NB : `Date.now()` n'est PAS utilisé ici — le `now` (ms epoch) est toujours passé
 // par l'appelant → fonctions pures et testables.
 
-// Ressource produite (union extensible : on pourra ajouter 'gold', …).
+// Ressource PRODUITE par un bâtiment (union extensible).
+//
+// ⚠️ NI `gold` NI `scrap` : ce sont des devises, mais plus aucun bâtiment ne les
+// produit depuis le retrait de la Mine d'or et de la Fonderie. Les laisser ici
+// laisserait croire qu'un filon peut encore en déposer.
 // `fragments` = poussière d'âme (rang des familiers) ; `ink_dust` = poussière d'encre
 // (rang des talents). Noms de colonnes conservés (`fragments`) ; libellés UI = « poussière ».
 export type BuildResource =
@@ -28,10 +38,8 @@ export type BuildResource =
   | 'parchemins'
   | 'fragments'
   | 'ink_dust'
-  | 'gold' // 🪙 or (Mine d'or)
   | 'summon' // 🔮 pierres d'invocation (Autel des boss)
-  | 'keys' // 🗝️ clés de labyrinthe (Porte du Labyrinthe)
-  | 'scrap'; // 🔩 ferraille (Fonderie) — répare l'enceinte
+  | 'keys'; // 🗝️ clés de labyrinthe (Porte du Labyrinthe)
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
 // à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
@@ -44,7 +52,6 @@ interface BuildingEffect {
   expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
   bossRollFloorPerLvl?: number; // Autel des boss : +X au plancher de qualité de roll / niveau
-  caravanSlotPer6Lvl?: boolean; // Comptoir : +1 convoi simultané tous les 6 niveaux (cf. caravanSlots)
 }
 
 // Ce qu'un bâtiment DÉBLOQUE (activité/fonctionnalité) → affiché au joueur à la
@@ -73,11 +80,8 @@ export type BuildingTypeId =
   | 'outpost'
   | 'labyrinth_gate'
   | 'boss_altar'
-  | 'gold_mine'
   | 'energy_font'
-  | 'foundry'
   | 'warehouse'
-  | 'caravanserail'
   | 'pantheon';
 
 export interface BuildingType {
@@ -111,12 +115,24 @@ export interface Building {
 
 // ── Registre des bâtiments (le socle extensible) ──
 export const BUILDING_TYPES: BuildingType[] = [
-  // Utilitaire UNIQUE : l'AVANT-POSTE débloque les expéditions (idle) et chaque
-  // niveau réduit les temps de trajet → on revient chercher le butin plus vite.
-  // Extensible (socle des futurs déblocages d'activités via bâtiment).
+  // Utilitaire UNIQUE : l'AVANT-POSTE débloque les DEUX façons de jouer la carte — les
+  // expéditions du héros (idle) et les caravanes — et chaque niveau raccourcit les
+  // trajets → on revient chercher le butin plus vite.
+  //
+  // ⚠️ IL A ABSORBÉ LE COMPTOIR DE CARAVANES (demandé) : c'était « un bâtiment, un
+  // endroit » (règle v0.739) pris à l'envers — deux bâtiments réglaient la même chose,
+  // le VOYAGE, l'un pour le héros et l'autre pour les convois, et on montait l'un sans
+  // comprendre pourquoi l'autre ne suivait pas.
+  //
+  // ⚠️ TROIS LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
+  // le trajet du héros (`travelTimeMult`, asymptotique), la VITESSE d'un convoi
+  // (`caravanSlowFor`, asymptotique elle aussi) et leur NOMBRE (`caravanSlots`, un PALIER
+  // tous les 9 niveaux). Deux courbes continues sous un palier : aucun cran ne peut être
+  // muet, pas même entre deux convois.
   {
     id: 'outpost',
-    perLevelNote: '−1,5 % de temps de trajet, puis un gain qui continue en s’amenuisant',
+    perLevelNote:
+      'trajets plus courts et convois plus rapides à chaque niveau, +1 convoi tous les 9 niveaux',
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',
@@ -128,10 +144,10 @@ export const BUILDING_TYPES: BuildingType[] = [
     unlockLevel: 3,
     unique: true,
     unlock: {
-      activity: 'Les Expéditions (mode idle)',
-      where: 'Ici, sur la carte : choisis un lieu et envoie ton héros l’explorer.',
+      activity: 'Les Expéditions et les Caravanes',
+      where: 'Ici, sur la carte : envoie ton héros explorer, ou un convoi récolter à ta place.',
     },
-    desc: 'Débloque les expéditions. Chaque niveau réduit les temps de trajet (−1,5 %).',
+    desc: 'Débloque les expéditions et les caravanes. Chaque niveau raccourcit les trajets du héros, accélère les convois, et en ajoute un tous les 9 niveaux.',
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
@@ -187,19 +203,6 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Boss : des pièces un peu plus rares à chaque niveau, et produit des pierres d’invocation 🔮.',
   },
-  // PRODUCTEUR : Mine d'or → OR passif (puits d'or restant : construction/expéditions).
-  {
-    id: 'gold_mine',
-    label: 'Mine d’or',
-    emoji: '🪙',
-    category: 'producer',
-    resource: 'gold',
-    prodPerHrPerLvl: 25, // niv.20 ≈ 500/h → ~9 000 or / 18 h (modeste vs coûts de bâtiments)
-    buildGold: 600,
-    unlockLevel: 2,
-    unique: true,
-    desc: 'Produit de l’or 🪙 en continu (à récolter).',
-  },
   // PRODUCTEUR : Dynamo tellurique → ÉNERGIE de jeu (convertit le temps en runs). Bornée
   // par le stockage → complément, jamais un substitut au sport (qui seul fait le niveau).
   {
@@ -222,29 +225,12 @@ export const BUILDING_TYPES: BuildingType[] = [
   },
   // UTILITAIRE : l'ENTREPÔT augmente le STOCKAGE de tous les producteurs (+15 %/niveau)
   // → tu peux t'absenter plus longtemps sans saturer.
-  // PRODUCTEUR : la FONDERIE bat la ferraille 🔩, qui répare l'enceinte. ⚠️ Elle ne
-  // remplace pas les ÉPAVES de la carte : celles-ci restent la source de POINTE (une
-  // visite ≈ 2 à 3 récoltes de fonderie), la fonderie n'étant que le filet régulier —
-  // même relation que la Mine d'or avec les expéditions. C'est ce qui garantit qu'on ne
-  // reste jamais bloqué faute de matière pour réparer, sans vider la carte de son intérêt.
-  {
-    id: 'foundry',
-    perLevelNote: 'réparations de l’enceinte plus rapides, jusqu’à −60 %',
-    label: 'Fonderie',
-    emoji: '⚙️',
-    category: 'producer',
-    resource: 'scrap',
-    prodPerHrPerLvl: 0.09, // ⚠️ 0,12 → 0,09 en v0.702 : ce n'est PAS un nerf sec mais un
-    // TROC. Les sièges suivant désormais le NOMBRE DE SÉANCES, ils rapportent de l'acier — et
-    // sans compensation la ferraille devenait aussi facile que l'or (mesuré : ratio 1,05 au
-    // niveau 20, sous le plancher de 1,1 que verrouille scrapEconomy.test). On a donc déplacé
-    // du débit de l'HORLOGE vers l'ENTRAÎNEMENT, à total ~constant pour un joueur régulier :
-    // la Fonderie tourne toute seule, elle devait céder la place à ce qui se mérite.
-    buildGold: 850,
-    unlockLevel: 10,
-    unique: true,
-    desc: 'Bat de la ferraille 🔩 en continu, et accélère les réparations de l’enceinte.',
-  },
+  //
+  // ⚠️ IL N'ACCÉLÈRE PLUS LES RÉPARATIONS. La simplification lui avait fait hériter ce
+  // second métier de la Fonderie retirée, pour ne pas allonger en silence les travaux des
+  // comptes existants ; l'utilisateur a tranché « fais disparaître la Fonderie », donc son
+  // métier s'en va avec elle. ⚠️ Un seul levier lui reste, et il suffit : le stockage est
+  // vivant du niveau 0 au 100 (règle v0.731), et rushRepairCost garde la sortie payante.
   {
     id: 'warehouse',
     perLevelNote: '+15 % de stockage sur TOUS tes producteurs',
@@ -256,23 +242,6 @@ export const BUILDING_TYPES: BuildingType[] = [
     unlockLevel: 3,
     unique: true,
     desc: 'Augmente le stockage de tous tes producteurs (+15 %/niveau).',
-  },
-  // UTILITAIRE : le COMPTOIR débloque les caravanes et fixe combien partent EN MÊME TEMPS.
-  // ⚠️ Son niveau ne fait qu'UNE chose (le nombre de convois), comme le Chantier de fouille :
-  // c'est ce qui rend un niveau lisible. Et c'est le second garde-fou de l'inflation de
-  // ressources — le rendement par convoi est bridé, mais c'est le NOMBRE qui multiplie.
-  {
-    id: 'caravanserail',
-    label: 'Comptoir de caravanes',
-    emoji: '🐫',
-    category: 'utility',
-    effect: { caravanSlotPer6Lvl: true },
-    perLevelNote: 'convois plus rapides à chaque niveau, +1 convoi tous les 9 niveaux',
-    buildGold: 500,
-    unlockLevel: 3,
-    unique: true,
-    unlock: { activity: 'Les caravanes', where: 'sur la carte d’expédition' },
-    desc: 'Envoie des convois récolter à ta place — du temps réel, zéro énergie. Ils ne vont que sur les lieux de RÉCOLTE.',
   },
   // UTILITAIRE UNIQUE : le PANTHÉON DES CHAMPIONS remplace À LUI SEUL la Guilde, le Centre
   // de formation et l'Équipementier — « un bâtiment, un endroit » (règle v0.739). On y
@@ -339,12 +308,11 @@ export function perLevelLabel(t: BuildingType): string {
 
 /** Emoji de chaque ressource produite — source unique, partagée par l'UI. */
 export const RESOURCE_EMOJI: Record<BuildResource, string> = {
-  gold: '🪙',
-  scrap: '🔩',
   energy: '⚡',
   keys: '🗝️',
   summon: '🔮',
   // Devises historiques, conservées pour les anciennes lignes (plus produites).
+  // 🪙 et 🔩 les ont rejointes : elles se gagnent sur la carte, plus jamais au bâtiment.
   dust: '✨',
   stone: '💎',
   parchemins: '📜',
@@ -397,7 +365,19 @@ export const BUILD = {
   // carte d'un facteur ~3. Revenu remis d'aplomb, part du plafond atteinte sur un an :
   //   450 → 87/76/70 %  ·  550 → 81/71/65 %  ·  660 → 76/67/61 %  ·  1320 → 65/55/49 %
   // On garde 550, le plus centré dans la bande saine 55-90 % que le test verrouille.
-  upBase: 550, // upgrade L→L+1 (or) = round(upBase × L^upExp)
+  // ⚠️ 550 → 850 (mesuré) : le roster passe de NEUF à SIX bâtiments (Mine d’or,
+  // Fonderie et Comptoir retirés). `plotCap` étant DÉRIVÉ du registre, le puits perd
+  // un tiers de ses emplacements — mesuré sur un an et trois profils, la part du
+  // plafond atteinte passait de 83,9/73,9/67,6 % à **94,3/83,3/76,4 %**, donc DEHORS
+  // de la bande saine 55-90 % que le test verrouille : le joueur avait tout au
+  // plafond et son or n’avait plus de destination.
+  //   6 bâtiments · 550 → 94,3 / 83,3 / 76,4   ·   700 → 86,8 / 76,8 / 70,5
+  //                 850 → 81,4 / 71,8 / 65,9   ·  1000 → 77,0 / 68,1 / 62,3
+  // On garde 850 : il REPRODUIT la courbe d’avant à moins de 3 points près — on
+  // change le nombre de bâtiments, pas la difficulté.
+  // ⚠️ TOUJOURS PAR LE COEFFICIENT, JAMAIS PAR L’EXPOSANT (cf. `upExp` juste en
+  // dessous) : un exposant plus raide que celui des revenus recrée le MUR de la v0.657.
+  upBase: 850, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :
@@ -477,75 +457,106 @@ export function buildingInvested(buildGold: number, level: number): number {
   return total;
 }
 
-/** Les trois bâtiments que le Panthéon absorbe, avec leur coût de POSE.
- *  ⚠️ Ces montants sont recopiés ICI parce que les types ne sont plus au registre : sans
- *  eux, le remboursement ne peut plus se calculer du tout. Ils ne servent qu'à la
- *  migration et ne doivent jamais redevenir une source de vérité. */
-const ABSORBED_BY_PANTHEON: { id: string; buildGold: number }[] = [
-  { id: 'guild', buildGold: 700 },
-  { id: 'training', buildGold: 650 },
-  { id: 'outfitter', buildGold: 800 },
+/**
+ * 🏚️ LES BÂTIMENTS RETIRÉS DU REGISTRE, avec leur coût de POSE et, s’ils ont été
+ * ABSORBÉS, le bâtiment qui reprend leur métier.
+ *
+ * ⚠️ Ces montants sont recopiés ICI parce que les types ne sont plus au registre : sans
+ * eux, le remboursement ne peut plus se calculer du tout. Ils ne servent qu’à la
+ * migration et ne doivent jamais redevenir une source de vérité.
+ *
+ * ⚠️ `into` ABSENT = retrait SEC : le bâtiment disparaît et tout ce qu’il a coûté est
+ * rendu. `into` PRÉSENT = fusion : le repreneur hérite du NIVEAU le plus haut (donc de
+ * l’investissement EN NATURE) et seul le surplus est rendu en or.
+ */
+const RETIRED: { id: string; buildGold: number; into?: BuildingTypeId }[] = [
+  { id: 'guild', buildGold: 700, into: 'pantheon' },
+  { id: 'training', buildGold: 650, into: 'pantheon' },
+  { id: 'outfitter', buildGold: 800, into: 'pantheon' },
+  // 🐫 → 🧭 Le Comptoir de caravanes rejoint l’Avant-poste : les deux réglaient le même
+  // VOYAGE, l’un pour le héros et l’autre pour les convois.
+  { id: 'caravanserail', buildGold: 500, into: 'outpost' },
+  // Retraits SECS : plus aucun bâtiment ne PRODUIT d'or ni de ferraille. L'or vient des
+  // donjons et de la carte, la ferraille des épaves — deux devises qu'on va CHERCHER, et
+  // non qu'une horloge dépose. Tout ce qu'ils ont coûté est rendu.
+  { id: 'gold_mine', buildGold: 600 },
+  { id: 'foundry', buildGold: 850 },
 ];
 
-const PANTHEON_ID = 'pantheon';
-const pantheonBuildGold = () => buildingType(PANTHEON_ID)?.buildGold ?? 0;
+const retiredOf = (id: string) => RETIRED.find((r) => r.id === id);
+const buildGoldOf = (id: string) => buildingType(id)?.buildGold ?? retiredOf(id)?.buildGold ?? 0;
 
 /**
- * 🛕 FUSION : Guilde + Centre de formation + Équipementier → **un seul Panthéon**.
+ * 🛕🧭 ABSORPTION DES BÂTIMENTS RETIRÉS — fusions et retraits secs, en une seule passe.
  *
- * ⚠️ **SANS CETTE MIGRATION, 7,42 M D'OR S'ÉVAPORAIENT EN SILENCE** (mesuré en base sur le
- * compte réel : Guilde 31, Équipementier 30, Centre 10). `normalizeRow` DROPPE les types
- * disparus du registre au chargement — donc retirer les trois sans rien faire aurait été
- * la violation directe de la règle v0.731 : personne ne se réveille avec moins bon qu'hier.
+ * ⚠️ **SANS ELLE, L’INVESTISSEMENT S’ÉVAPORE EN SILENCE** : `normalizeRow` DROPPE les
+ * types disparus du registre au chargement, donc retirer un bâtiment sans rien faire
+ * serait la violation directe de la règle v0.731 — personne ne se réveille avec moins
+ * bon qu’hier. Mesuré au moment de la fusion du Panthéon : 7,42 M d’or sur le compte
+ * réel ; et 7,39 M de plus pour la vague Mine d’or / Fonderie / Comptoir.
  *
  * Deux garanties, et il en faut deux :
- * 1. **le NIVEAU le plus haut est hérité** — l'investissement est conservé EN NATURE, et
- *    ça tombe juste puisque les deux leviers du Panthéon SONT ceux de la Guilde
- *    (déploiement) et de l'Équipementier (fabrication) : ils repartent où ils en étaient ;
- * 2. **l'or des autres est REMBOURSÉ** — ce qu'on a payé deux fois pour un seul bâtiment.
+ * 1. **le NIVEAU le plus haut est hérité** par le repreneur — l’investissement est
+ *    conservé EN NATURE, et ça tombe juste puisque le repreneur porte le métier de
+ *    l’absorbé (le Panthéon le déploiement et la forge, l’Avant-poste le voyage) ;
+ * 2. **l’or du reste est REMBOURSÉ** — ce qu’on a payé deux fois pour un seul bâtiment,
+ *    ou en entier quand plus rien ne reprend le métier.
  *
- * ⚠️ **IDEMPOTENTE PAR CONSTRUCTION** : sans aucun bâtiment absorbé, elle rend la MÊME
+ * ⚠️ **IDEMPOTENTE PAR CONSTRUCTION** : sans aucun bâtiment retiré, elle rend la MÊME
  * référence et zéro or. Elle tourne à chaque chargement (comme `repackBuildingSlots`) ;
- * une fois la ligne écrite, il n'y a plus rien à fusionner, donc plus rien à rembourser.
+ * une fois la ligne écrite, il n’y a plus rien à absorber, donc plus rien à rembourser.
  *
- * ⚠️ Elle doit passer **AVANT** le filtre des types inconnus de `normalizeRow` : après, il
- * n'y a plus rien à lire — c'est le même ordre que la fouille et `advanceBase` (v0.772).
+ * ⚠️ Elle doit passer **AVANT** le filtre des types inconnus de `normalizeRow` : après,
+ * il n’y a plus rien à lire — c’est le même ordre que la fouille et `advanceBase` (v0.772).
  */
-function mergeIntoPantheon(buildings: Building[]): {
+function absorbRetired(buildings: Building[]): {
   buildings: Building[];
   goldRefund: number;
 } {
-  const goldOf = (id: string) => ABSORBED_BY_PANTHEON.find((a) => a.id === id)?.buildGold;
-  const old = buildings.filter((b) => goldOf(b.typeId) !== undefined);
-  if (!old.length) return { buildings, goldRefund: 0 };
+  const vieux = buildings.filter((b) => retiredOf(b.typeId));
+  if (!vieux.length) return { buildings, goldRefund: 0 };
 
-  // ⚠️ Un Panthéon DÉJÀ posé entre dans la fusion au même titre : c'est impossible
-  // aujourd'hui, mais le traiter uniformément vaut mieux qu'un cas particulier dont
-  // personne ne saurait plus, dans six mois, s'il est atteignable.
-  const merged = [...old, ...buildings.filter((b) => b.typeId === PANTHEON_ID)];
-  const level = Math.max(...merged.map((b) => b.level));
-  const pantheon: Building = {
-    typeId: 'pantheon',
-    level,
-    // L'emplacement le plus bas des trois : le bâtiment reste là où le joueur avait posé
-    // le premier, plutôt que de réapparaître ailleurs dans la cour.
-    slot: Math.min(...merged.map((b) => b.slot)),
-    collectedAt: Math.max(...merged.map((b) => b.collectedAt)),
-  };
+  let goldRefund = 0;
+  let reste = buildings.filter((b) => !retiredOf(b.typeId));
 
-  const spent = merged.reduce(
-    (s, b) => s + buildingInvested(goldOf(b.typeId) ?? pantheonBuildGold(), b.level),
-    0,
-  );
-  // Ce que le Panthéon REPRÉSENTE désormais — on garde la valeur d'un bâtiment, on rend
-  // celle des autres. ⚠️ Plancher à 0 : un joueur qui n'avait QUE le Centre de formation
-  // (pose 650) hérite d'un bâtiment qui en vaut 700 — il ne doit rien pour autant.
-  const goldRefund = Math.max(0, Math.round(spent - buildingInvested(pantheonBuildGold(), level)));
+  // ⚠️ RETRAITS SECS D’ABORD : rien ne reprend le métier, tout est rendu.
+  for (const b of vieux.filter((x) => !retiredOf(x.typeId)!.into)) {
+    goldRefund += buildingInvested(buildGoldOf(b.typeId), b.level);
+  }
 
-  return {
-    buildings: [...buildings.filter((b) => !merged.includes(b)), pantheon],
-    goldRefund,
-  };
+  // Puis les FUSIONS, groupées par repreneur.
+  const parRepreneur = new Map<BuildingTypeId, Building[]>();
+  for (const b of vieux) {
+    const into = retiredOf(b.typeId)!.into;
+    if (!into) continue;
+    parRepreneur.set(into, [...(parRepreneur.get(into) ?? []), b]);
+  }
+  for (const [into, absorbes] of parRepreneur) {
+    // ⚠️ Un repreneur DÉJÀ posé entre dans la fusion au même titre : c’est le cas normal
+    // (on a les deux bâtiments), et le traiter uniformément vaut mieux qu’un cas
+    // particulier dont personne ne saurait plus, dans six mois, s’il est atteignable.
+    const groupe = [...absorbes, ...reste.filter((b) => b.typeId === into)];
+    const level = Math.max(...groupe.map((b) => b.level));
+    const repreneur: Building = {
+      typeId: into,
+      level,
+      // L’emplacement le plus bas du groupe : le bâtiment reste là où le joueur avait
+      // posé le premier, plutôt que de réapparaître ailleurs dans la cour.
+      slot: Math.min(...groupe.map((b) => b.slot)),
+      collectedAt: Math.max(...groupe.map((b) => b.collectedAt)),
+    };
+    const depense = groupe.reduce(
+      (t, b) => t + buildingInvested(buildGoldOf(b.typeId), b.level),
+      0,
+    );
+    // Ce que le repreneur REPRÉSENTE désormais — on garde la valeur d’un bâtiment, on rend
+    // celle des autres. ⚠️ Plancher à 0 : un joueur qui n’avait QUE l’absorbé hérite d’un
+    // bâtiment parfois plus cher à poser — il ne doit rien pour autant.
+    goldRefund += Math.max(0, depense - buildingInvested(buildGoldOf(into), level));
+    reste = [...reste.filter((b) => b.typeId !== into), repreneur];
+  }
+
+  return { buildings: reste, goldRefund: Math.round(goldRefund) };
 }
 
 /**
@@ -560,7 +571,7 @@ function mergeIntoPantheon(buildings: Building[]): {
  * peuvent plus être appelées séparément.
  */
 export function healBuildings(raw: Building[]): { buildings: Building[]; goldRefund: number } {
-  const fused = mergeIntoPantheon(raw);
+  const fused = absorbRetired(raw);
   return {
     buildings: repackBuildingSlots(fused.buildings.filter((b) => !!buildingType(b.typeId))),
     goldRefund: fused.goldRefund,
@@ -733,10 +744,8 @@ export function collectable(buildings: Building[], now: number): Record<BuildRes
     parchemins: 0,
     fragments: 0,
     ink_dust: 0,
-    gold: 0,
     summon: 0,
     keys: 0,
-    scrap: 0,
   };
   const mult = storageMult(buildings);
   for (const b of buildings) {
