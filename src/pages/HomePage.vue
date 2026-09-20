@@ -425,37 +425,76 @@
       <div class="defis-hub">
         <div class="dh-head">
           <span class="dh-t font-display">🔥 Mes défis</span>
-          <span class="dh-s">le cœur de l’app</span>
         </div>
         <div class="dh-cols">
-          <button class="dh-col" type="button" @click="goCombo">
-            <span class="dh-top"><span class="dh-emo">🎯</span><b class="dh-k">Défi 360</b></span>
+          <!-- ⚠️ CHAQUE COLONNE EST UNE CARTE-BOUTON, et elle le DIT : chevron, fond qui
+               répond au doigt, liseré d'accent quand il y a à faire. Sans ça les deux
+               blocs se lisaient comme des panneaux d'information — on ne savait pas qu'on
+               pouvait appuyer, sur la tuile qui est « le centre névralgique de l'app ». -->
+          <button
+            class="dh-col"
+            :class="{ done: !!defis.combo && defis.combo.left === 0, empty: !defis.combo }"
+            type="button"
+            @click="goCombo"
+          >
+            <span class="dh-top">
+              <span class="dh-emo">🎯</span><b class="dh-k">Défi 360</b>
+              <span class="dh-go" aria-hidden="true">›</span>
+            </span>
             <template v-if="defis.combo">
-              <span class="dh-v">{{ defis.combo.name }}</span>
+              <span class="dh-name">{{ defis.combo.name }}</span>
+              <!-- ⚠️ LE CHIFFRE QU'ON VIENT CHERCHER, EN GROS : il était en gris 11,5 px
+                   SOUS le nom du défi, donc plus petit que son contexte. -->
+              <span class="dh-big font-display">{{ defis.combo.pct }}<small>%</small></span>
               <span class="dh-bar" aria-hidden="true"
-                ><i :style="{ width: defis.combo.pct + '%' }"
+                ><i :style="{ width: Math.min(100, defis.combo.pct) + '%' }"
               /></span>
-              <span class="dh-n">
-                {{ defis.combo.pct }} %
+              <span class="dh-sub">
                 <template v-if="defis.combo.left">
-                  · {{ defis.combo.left }} exo{{ defis.combo.left > 1 ? 's' : '' }} à travailler
+                  {{ defis.combo.left }} exo{{ defis.combo.left > 1 ? 's' : '' }} à travailler
                 </template>
-                <template v-else> · tout est au max ✓</template>
+                <template v-else>tout est au max ✓</template>
               </span>
             </template>
-            <span v-else class="dh-cta">Lance ton Défi 360 ›</span>
+            <template v-else>
+              <span class="dh-big font-display plus">＋</span>
+              <span class="dh-sub">Lance ton Défi 360</span>
+            </template>
           </button>
-          <button class="dh-col" type="button" @click="goChallenges">
-            <span class="dh-top"><span class="dh-emo">🏆</span><b class="dh-k">Challenges</b></span>
+          <button
+            class="dh-col"
+            :class="{ call: defis.dueToday > 0, done: !defis.dueToday, empty: !defis.active }"
+            type="button"
+            @click="goChallenges"
+          >
+            <span class="dh-top">
+              <span class="dh-emo">🏆</span><b class="dh-k">Challenges</b>
+              <span class="dh-go" aria-hidden="true">›</span>
+            </span>
             <template v-if="defis.active">
-              <span class="dh-v"
-                >{{ defis.active }} en cours{{ defis.dueToday ? '' : ' · tout est fait ✓' }}</span
-              >
-              <span v-if="defis.dueToday" class="dh-due">
-                {{ defis.dueToday }} à faire aujourd’hui
+              <span class="dh-name">{{ defis.active }} en cours</span>
+              <span class="dh-big font-display">
+                {{ defis.dueToday || defis.active }}
+                <small>{{
+                  defis.dueToday ? 'à faire' : 'défi' + (defis.active > 1 ? 's' : '')
+                }}</small>
               </span>
+              <!-- La MÊME barre que le 360, pour que les deux colonnes se comparent : la
+                   part des défis déjà bouclés aujourd'hui. Simple arithmétique sur deux
+                   champs de la lib, pas une règle de plus. -->
+              <span class="dh-bar" aria-hidden="true"
+                ><i :style="{ width: doneTodayPct + '%' }"
+              /></span>
+              <!-- ⚠️ Pas « à faire » deux fois : le gros chiffre le dit déjà, la
+                   sous-ligne QUALIFIE. -->
+              <span class="dh-sub">{{
+                defis.dueToday ? 'objectif du jour' : 'tout est fait ✓'
+              }}</span>
             </template>
-            <span v-else class="dh-cta">Lance un défi ›</span>
+            <template v-else>
+              <span class="dh-big font-display plus">＋</span>
+              <span class="dh-sub">Lance un défi</span>
+            </template>
           </button>
         </div>
       </div>
@@ -851,6 +890,13 @@ const comboStore = useComboStore();
  *  connecté n'est vu par aucune porte, donc un `computed` écrit ici ne serait couvert par
  *  rien. Le store du 360 est DÉJÀ chargé par `useProgress` — aucune requête de plus. */
 const defis = computed(() => defisSummary(challenges.list, comboStore.list, logicalToday()));
+/** La part des défis solo déjà bouclés aujourd'hui — de l'arithmétique d'affichage sur
+ *  deux champs que la lib rend déjà, pas une règle de plus. Elle donne à la colonne
+ *  Challenges la MÊME barre qu'au 360, sans quoi les deux colonnes ne se comparaient pas. */
+const doneTodayPct = computed(() => {
+  const d = defis.value;
+  return d.active ? Math.round(((d.active - d.dueToday) / d.active) * 100) : 0;
+});
 const loading = ref(true);
 
 const hasFree = ref(false);
@@ -2017,11 +2063,6 @@ async function saveAutre() {
   letter-spacing: 0.03em;
   color: var(--text);
 }
-.dh-s {
-  font-size: 11.5px;
-  color: var(--dim);
-  margin-left: auto;
-}
 /* Deux colonnes dès 344 px : `minmax(0, 1fr)` et non `1fr`, sinon une piste refuse de
    passer sous la taille de son contenu et la grille déborde. */
 .dh-cols {
@@ -2033,67 +2074,147 @@ async function saveAutre() {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3px;
-  min-height: 92px;
+  gap: 2px;
+  min-height: 116px;
   min-width: 0;
-  padding: 9px 10px;
+  padding: 9px 10px 10px;
   border-radius: 12px;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--text);
   text-align: left;
   cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
+}
+/* ⚠️ L'AFFORDANCE, c'est ce qui manquait : une carte qui ne répond pas au doigt se lit
+   comme un panneau. Le `:active` est la seule preuve tactile qu'on a sur un téléphone. */
+.dh-col:active {
+  transform: scale(0.985);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+}
+/* ⚠️ L'ACCENT NE MARQUE QUE CE QUI APPELLE, et SEULS LES CHALLENGES peuvent appeler :
+   eux ont un objectif du JOUR, le Défi 360 est un volume hebdomadaire — « 4 exos à
+   travailler » n'est pas une urgence. Mis sur les deux, l'accent ne distinguait plus
+   rien (la règle des deux signaux de même couleur, v0.746.1), et le 360 l'aurait porté
+   presque toujours. Trois états lisibles : à faire (accent) · en cours (neutre) ·
+   bouclé (vert, la couleur du gain de la charte). */
+.dh-col.call {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background:
+    radial-gradient(
+      140% 100% at 100% 0%,
+      color-mix(in srgb, var(--accent) 12%, transparent),
+      transparent 62%
+    ),
+    var(--bg);
+}
+.dh-col.done {
+  border-color: color-mix(in srgb, var(--d1, #7bc86c) 45%, var(--line));
+}
+.dh-col.empty {
+  border-style: dashed;
 }
 .dh-top {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
 }
 .dh-emo {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1;
 }
 .dh-k {
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.dh-v {
-  font-size: 12.5px;
-  color: var(--text);
-  overflow-wrap: anywhere;
-  line-height: 1.25;
+/* Le chevron DIT qu'on peut appuyer, à l'endroit où l'œil finit la ligne de titre. */
+.dh-go {
+  margin-left: auto;
+  font-size: 17px;
+  line-height: 1;
+  color: var(--dim);
 }
-.dh-n {
+.dh-col.call .dh-go {
+  color: var(--accent);
+}
+/* Le CONTEXTE, pas l'information : une ligne, tronquée plutôt que de pousser le chiffre
+   hors de la carte. */
+.dh-name {
   font-size: 11.5px;
   color: var(--dim);
-  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-/* ⚠️ Ce qui APPELLE est le seul élément en accent : un chiffre de plus en gris se
-   perdrait, et c'est précisément celui pour lequel on ouvre l'app. */
-.dh-due {
-  font-size: 11.5px;
-  font-weight: 700;
+/* ⚠️ `margin-top: auto` : les deux colonnes n'ont pas le même nombre de lignes, et sans
+   ça leurs gros chiffres flottaient à deux hauteurs différentes. */
+.dh-big {
+  margin-top: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 30px;
+  line-height: 1;
+  color: var(--text);
+  small {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--dim);
+  }
+}
+.dh-col.call .dh-big {
   color: var(--accent);
-  line-height: 1.25;
+}
+.dh-col.done .dh-big,
+.dh-col.done .dh-sub {
+  color: var(--d1, #7bc86c);
+}
+.dh-col.done .dh-bar i {
+  background: var(--d1, #7bc86c);
+}
+.dh-big.plus {
+  font-size: 26px;
+  color: var(--accent);
 }
 .dh-bar {
   width: 100%;
-  height: 5px;
+  height: 6px;
   border-radius: 999px;
   background: var(--surface-2);
   overflow: hidden;
-  margin: 1px 0;
+  margin: 5px 0 3px;
 }
 .dh-bar i {
   display: block;
   height: 100%;
+  border-radius: 999px;
   background: var(--accent);
 }
-.dh-cta {
-  font-size: 12px;
+.dh-sub {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.dh-col.empty .dh-sub {
   color: var(--accent);
   font-weight: 600;
-  margin-top: auto;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dh-col {
+    transition: none;
+  }
+  .dh-col:active {
+    transform: none;
+  }
 }
 .add-session {
   margin-bottom: 14px;
