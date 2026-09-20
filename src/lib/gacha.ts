@@ -251,3 +251,55 @@ export function championBudget(rarity: Rarity, playerLevel: number): number {
   const cap = prestigeRankIndex(playerLevel);
   return RARITY_BUDGET[Math.min(tire < 0 ? 0 : tire, cap)]!;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✨ L'ÉVEIL — ce que font les doublons
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const AWAKEN = {
+  /** Nombre de crans, à la Genshin (C1-C6). */
+  max: 6,
+  /** Ce qu'un cran ajoute en MAGNITUDE, en part du budget. ⚠️ Barème COMMUN à tous les
+   *  champions : tout écrire, ce serait 6 crans × 32 champions = **192 effets** à écrire ET
+   *  à équilibrer, dont chacun peut casser le combat (le moteur applique ce qu'on lui
+   *  donne). Le barème borne l'écriture à ~64 lignes. */
+  perStep: 0.08,
+} as const;
+
+/**
+ * ✨ Rang d'Éveil pour `copies` exemplaires — **la première copie EST le champion**.
+ *
+ * ⚠️ **PLAFONNÉ, et un doublon au-delà n'est JAMAIS perdu** : il se convertit (en pierres
+ * de mana). Sinon un joueur chanceux reçoit du vide, ce qui est exactement ce qu'un gacha
+ * ne doit jamais faire.
+ */
+export function awakenLevel(copies: number): number {
+  return Math.max(0, Math.min(AWAKEN.max, Math.floor(copies) - 1));
+}
+
+/** Vrai si cette copie-là ne monte plus rien (elle se convertit). */
+export function awakenOverflow(copies: number): boolean {
+  return awakenLevel(copies) >= AWAKEN.max && Math.floor(copies) - 1 > AWAKEN.max;
+}
+
+/** Multiplicateur de magnitude au rang d'Éveil `lvl`. */
+export function awakenMult(lvl: number): number {
+  return 1 + AWAKEN.perStep * Math.max(0, Math.min(AWAKEN.max, lvl));
+}
+
+/**
+ * ✨ Niveau d'une SIGNATURE, crans écrits compris.
+ *
+ * ⚠️ **AUCUN SYSTÈME NEUF** : `AdvSkill` porte déjà un niveau par répétition (v0.757 — une
+ * compétence portée deux fois vaut niveau 2), et l'écran sait déjà l'afficher. Un cran
+ * qualitatif, c'est **+1 niveau**, rien de plus.
+ */
+export function championSkillLevel(
+  champ: { skills: readonly string[]; awaken: readonly { at: number; skill: string }[] },
+  skill: string,
+  awakenLvl: number,
+): number {
+  if (!champ.skills.includes(skill)) return 0;
+  const gagnes = champ.awaken.filter((a) => a.skill === skill && a.at <= awakenLvl).length;
+  return 1 + gagnes;
+}
