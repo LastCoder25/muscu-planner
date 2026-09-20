@@ -22,6 +22,7 @@ import {
   storageMult,
   travelTimeMult,
   type Building,
+  type BuildingTypeId,
 } from './buildings';
 import { caravanSlots, caravanSlowFor } from './caravan';
 import { altarLuckBonus } from './items';
@@ -35,44 +36,44 @@ export interface LevelPreview {
   milestone?: boolean;
 }
 
-const one = (typeId: string, level: number): Building[] => [{ typeId, level, slot: 0 } as Building];
+const one = (typeId: BuildingTypeId, level: number): Building[] => [
+  { typeId, level, slot: 0 } as Building,
+];
 const pct = (x: number) => `${Math.round(x * 100)} %`;
 
 /** Le texte d'un niveau donné, par type. `null` = ce bâtiment n'a rien à prévisualiser. */
-function textAt(typeId: string, level: number): string | null {
+function textAt(typeId: BuildingTypeId, level: number): string | null {
   const t = BUILDING_TYPES.find((b) => b.id === typeId);
   if (!t) return null;
   switch (typeId) {
-    case 'caravanserail': {
-      // Les DEUX leviers, parce que l'un est un palier et l'autre une courbe :
-      // le nombre saute d'un cran tous les 9 niveaux, la vitesse gratte en continu.
-      const lent = caravanSlowFor(level);
-      return `${caravanSlots(level)} convoi${caravanSlots(level) > 1 ? 's' : ''} · ×${lent.toFixed(2)} le temps du héros`;
-    }
     case 'pantheon':
       // ⚠️ SON VRAI LEVIER, et le plus fort des trois (demandé — « enlève le nombre
       // d'engagés et le temps de forge ») : le NIVEAU MAXIMAL d'un champion, qui vaut
       // exactement le niveau du Panthéon (`grantAdvXp`). Le niveau DOMINE la rareté (×4,3
       // au niveau 23), donc c'est lui qui décide de ce que vaut un champion — les deux
-      // autres chiffres encombraient la ligne sans rien dire d'aussi décisif.
+      // autres chiffres encombraient la ligne sans rien dire d’aussi décisif.
       return `champions jusqu'au niveau ${Math.max(1, level)}`;
-    case 'outpost':
-      return `−${pct(1 - travelTimeMult(one(typeId, level)))} de temps de trajet`;
+    case 'outpost': {
+      // ⚠️ LES TROIS LEVIERS, depuis qu'il a absorbé le Comptoir : deux COURBES (le
+      // trajet du héros et la vitesse d'un convoi, qui grattent à chaque cran) sous un
+      // PALIER (un convoi de plus tous les 9 niveaux). N’en montrer qu’un laisserait
+      // croire que les deux autres tiers du bâtiment sont figés.
+      const n = caravanSlots(level);
+      return `−${pct(1 - travelTimeMult(one(typeId, level)))} de trajet · ${n} convoi${n > 1 ? 's' : ''} · ×${caravanSlowFor(level).toFixed(2)} le temps du héros`;
+    }
     case 'labyrinth_gate':
       return `+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`;
     case 'boss_altar':
       // ⚠️ Depuis la v0.875 (objets au rang du joueur) : de la CHANCE, qui améliore le jet et
       // resserre la traîne basse — jamais un rang au-dessus (v0.876).
       return `pièces de boss : +${pct(altarLuckBonus(bossAltarRollFloor(one(typeId, level))))} de chance`;
-    case 'warehouse':
-      return `stockage ×${storageMult(one(typeId, level)).toFixed(2)}`;
-    case 'foundry': {
-      // ⚠️ Deux métiers depuis la v0.802 : elle bat la ferraille ET raccourcit les
-      // réparations. La réduction est la même à tout niveau de structure (multiplicative),
-      // on la lit donc sur n'importe lequel — par la VRAIE fonction.
-      const parH = Math.round((t.prodPerHrPerLvl ?? 0) * level * 10) / 10;
+    case 'warehouse': {
+      // ⚠️ SES DEUX LEVIERS, depuis qu'il a repris les réparations de la Fonderie. La
+      // réduction est la même à tout niveau de structure (elle est multiplicative) :
+      // on la lit donc sur n'importe lequel — par la VRAIE fonction, jamais une
+      // formule recopiée.
       const cut = 1 - repairMsFor(30, level) / repairMsFor(30, 0);
-      return `${parH}/h · réserve ${Math.round(buildingStorageCap(one(typeId, level)[0]!))} · réparations −${pct(cut)}`;
+      return `stockage ×${storageMult(one(typeId, level)).toFixed(2)} · réparations −${pct(cut)}`;
     }
     default: {
       // Producteurs : le débit horaire et ce que la réserve peut contenir.
@@ -85,8 +86,8 @@ function textAt(typeId: string, level: number): string | null {
 }
 
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
-function isMilestone(typeId: string, level: number): boolean {
-  if (typeId === 'caravanserail') return caravanSlots(level) > caravanSlots(level - 1);
+function isMilestone(typeId: BuildingTypeId, level: number): boolean {
+  if (typeId === 'outpost') return caravanSlots(level) > caravanSlots(level - 1);
   return false;
 }
 
@@ -97,7 +98,11 @@ function isMilestone(typeId: string, level: number): boolean {
  * ⚠️ On ne s'arrête PAS au niveau du joueur : voir l'horizon est précisément l'intérêt —
  * savoir qu'un convoi de plus arrive au niveau 18 aide à décider aujourd'hui.
  */
-export function buildingPreview(typeId: string, current: number, count = 6): LevelPreview[] {
+export function buildingPreview(
+  typeId: BuildingTypeId,
+  current: number,
+  count = 6,
+): LevelPreview[] {
   const out: LevelPreview[] = [];
   for (let l = current; l <= current + count; l++) {
     const text = textAt(typeId, l);
@@ -114,7 +119,11 @@ export function buildingPreview(typeId: string, current: number, count = 6): Lev
 /** Le PROCHAIN palier notable, quand il est plus loin que l'aperçu ne va.
  *  ⚠️ Sans ça, un Comptoir de niveau 10 montre six lignes de vitesse et laisse croire
  *  que le convoi suivant n'arrivera jamais. */
-export function nextMilestone(typeId: string, current: number, horizon = 40): LevelPreview | null {
+export function nextMilestone(
+  typeId: BuildingTypeId,
+  current: number,
+  horizon = 40,
+): LevelPreview | null {
   for (let l = current + 1; l <= current + horizon; l++) {
     if (!isMilestone(typeId, l)) continue;
     const text = textAt(typeId, l);

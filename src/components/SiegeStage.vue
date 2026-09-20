@@ -231,11 +231,16 @@
           {{ stage.held ? 'Assaut repoussé' : 'L’enceinte a cédé' }}
         </div>
         <div class="end-sub">
-          {{ stage.defeated }}/{{ stage.total }} groupes abattus · {{ corpseCount }} corps sur le
-          terrain
+          {{ stage.defeated }}/{{ stage.total }} groupes abattus · {{ corpseCount }} corps
+          dépouillés
           <template v-if="report.heroHome"> · héros au rempart</template>
         </div>
-        <button class="end-cta" @click="emit('done')">Voir le rapport</button>
+        <!-- 🦴 LE BUTIN EST LÀ, juste après la bataille (demandé) : il a été crédité à
+             la résolution, il n'y a plus de fouille à venir chercher. -->
+        <div v-if="loot.length" class="end-loot">
+          <span v-for="(b, i) in loot" :key="i" class="end-pill">{{ b }}</span>
+        </div>
+        <button class="end-cta" @click="emit('done')">Fermer</button>
       </div>
     </transition>
   </div>
@@ -274,9 +279,15 @@ import {
 const props = defineProps<{
   report: RaidReport;
   turretLevel: number;
+  /** Puces du butin, DÉJÀ mises en forme par `battleLootPills` (lib).
+   *  ⚠️ LE PLATEAU NE CALCULE RIEN — il montre ce que la résolution a tranché, comme
+   *  il ne fait que rejouer un log de combat. Vide pour un rapport d'avant ce
+   *  chantier, qui n'a pas de relevé : on n'invente pas un butin. */
+  loot?: string[];
 }>();
 const emit = defineEmits<{ done: [] }>();
 
+const loot = computed(() => props.loot ?? []);
 const stage = computed(() => buildSiegeStage(props.report, turretCount(props.turretLevel)));
 const hasTurrets = computed(() => props.turretLevel > 0);
 
@@ -1220,6 +1231,21 @@ onUnmounted(clearTimers);
   font-size: 13px;
   color: #9a8f7e;
   line-height: 1.5;
+}
+.end-loot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 2px 0 10px;
+}
+.end-pill {
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, #2a241c);
+  color: var(--text);
 }
 .end-cta {
   margin-top: 18px;

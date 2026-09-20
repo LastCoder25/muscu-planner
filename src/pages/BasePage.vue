@@ -98,10 +98,10 @@
             :key="c.id"
             :x="(c.x / 100) * 200"
             :y="(c.y / 100) * 200"
-            :class="['corpse', { looted: c.looted, champ: c.champion }]"
+            :class="['corpse', { champ: c.champion }]"
             text-anchor="middle"
           >
-            {{ c.looted ? '·' : c.emoji }}
+            {{ c.emoji }}
           </text>
         </g>
 
@@ -585,6 +585,7 @@
         :key="siegeKey"
         :report="siegeShown"
         :turret-level="turretLevel"
+        :loot="lastLootPills"
         @done="closeSiege"
       />
     </q-dialog>
@@ -708,7 +709,7 @@
               @click="doRepair(defSel.id)"
             >
               Réparer · {{ repairCost(lvlOf(defSel.id)) }} 🔩 ·
-              {{ fmtSpan(repairMsFor(lvlOf(defSel.id), foundryLevel)) }}
+              {{ fmtSpan(repairMsFor(lvlOf(defSel.id), stockLevel)) }}
             </button>
             <button class="btn" :disabled="!canUpgrade(defSel.id)" @click="doUpgrade(defSel.id)">
               Améliorer · {{ upCost(defSel.id).gold }} 🪙 + {{ upCost(defSel.id).scrap }} 🔩
@@ -852,50 +853,19 @@
               {{ lastReport.defeated }}/{{ lastReport.total }} groupes repoussés ·
               {{ lastReport.heroHome ? 'héros présent' : 'héros absent' }}
             </p>
+            <!-- 🦴 LE BUTIN DES CORPS EST DANS LE RAPPORT (demandé) : il est crédité à
+                 la résolution, il n’y a plus de fouille à venir chercher. Les corps ne
+                 restent quelques heures que pour montrer la bataille. -->
+            <div v-if="lastLootPills.length" class="scav-back">
+              <div class="scav-title">🎒 Ramassé sur les corps</div>
+              <div class="scav-pills">
+                <span v-for="(b, i) in lastLootPills" :key="i" class="scav-pill">{{ b }}</span>
+              </div>
+            </div>
             <button class="cta ghost" @click="replaySiege">▶ Revoir l’assaut</button>
           </div>
         </template>
 
-        <!-- 🦴 LE CHANTIER porte le champ de bataille : c’est lui qui envoie fouiller. -->
-        <template v-if="defSel.id === 'salvage'">
-          <!-- ── Champ de bataille ── -->
-          <div v-if="field" class="panel loot">
-            <div class="p-title">🦴 Champ de bataille — {{ remaining }} corps</div>
-            <p v-if="!salvageLevel">
-              Construis un <b>Fosse commune</b> pour dépouiller les corps avant qu’ils ne
-              pourrissent ({{ rotIn }}).
-            </p>
-            <template v-else>
-              <!-- ── LA FOUILLE TOURNE SEULE ─────────────────────────────────────
-                 ⚠️ Plus de bouton « envoyer » ni « ramasser » : envoyer des fossoyeurs
-                 n’était pas une DÉCISION — on envoie toujours, il n’y a rien à arbitrer —
-                 donc c’était un péage, et le chantier est juste devant la porte. Demandé
-                 par l’utilisateur, qui avait aussi constaté « en 1 voire 2 vagues max j’ai
-                 tout ramassé ».
-                 Le butin est crédité VAGUE PAR VAGUE (rien ne se perd si le champ pourrit
-                 avant la fin) et un 📜 rapport de pillage part dans la boîte quand il est
-                 vide : ce qu’il reste à montrer ici, c’est l’AVANCEMENT. -->
-              <p>
-                {{ scavCap }} corps par vague · aller-retour {{ scavTrip }} · les corps pourrissent
-                {{ rotIn }}. Les fossoyeurs font la navette tout seuls.
-              </p>
-              <div v-if="pillage" class="scav-back">
-                <div class="scav-title">
-                  🎒 {{ pillage.corpses }} corps dépouillés en {{ pillage.waves }} vague{{
-                    pillage.waves > 1 ? 's' : ''
-                  }}
-                </div>
-                <div v-if="pillagePills.length" class="scav-pills">
-                  <span v-for="(b, i) in pillagePills" :key="i" class="scav-pill">{{ b }}</span>
-                </div>
-              </div>
-              <p v-if="remaining > 0" class="dim-note">
-                ⛏️ Fouille en cours — prochaine vague {{ scavIn }}
-              </p>
-              <p v-else class="done">Le champ est entièrement dépouillé.</p>
-            </template>
-          </div>
-        </template>
         <p v-if="lvlOf(defSel.id) >= heroLevel" class="s-cap">
           Plafonné par ton niveau de personnage — le sport reste le plafond.
         </p>
@@ -1017,10 +987,9 @@ import {
   isDamaged,
   isRepairing,
   repairMsFor,
+  battleLootPills,
   rushRepairCost,
   repairCost,
-  scavengerCount,
-  scavengeMs,
   fmtSpan,
   assaultEstimate,
   assaultPower,
@@ -1038,7 +1007,6 @@ import {
   turretCount,
   defenseReadiness,
   RAID,
-  remainingCorpses,
   totalRepairCost,
   defenseUpgradeCost,
   defenseUpgradeScrap,
@@ -1142,11 +1110,9 @@ async function togglePush() {
 }
 
 const corpses = computed(() => field.value?.corpses ?? []);
-const remaining = computed(() => remainingCorpses(field.value));
 
 const wallLevel = computed(() => defenseLevel(defenses.value, 'wall'));
 const watchLevel = computed(() => defenseLevel(defenses.value, 'watchtower'));
-const salvageLevel = computed(() => defenseLevel(defenses.value, 'salvage'));
 // Les sièges ne s’allument qu’avec une enceinte PRÊTE (mur ET tourelles). On affiche le
 // niveau requis plutôt que la part : c’est ce sur quoi le joueur peut agir.
 const raidsReady = computed(
@@ -1158,7 +1124,6 @@ const wallDamaged = computed(() => isDamaged(defenses.value, 'wall'));
 const watchDamaged = computed(() => isDamaged(defenses.value, 'watchtower'));
 const turretsDamaged = computed(() => isDamaged(defenses.value, 'turret'));
 const turretsBuilt = computed(() => turretCount(defenseLevel(defenses.value, 'turret')));
-const scavCap = computed(() => scavengerCount(salvageLevel.value));
 const kennelLevel = computed(() => defenseLevel(defenses.value, 'kennel'));
 /** Créneaux : un merlon au MILIEU de chaque pan de mur, orienté comme lui — c'est ce qui
  *  fait lire « rempart » plutôt que « polygone ». */
@@ -1430,17 +1395,18 @@ const gateOffset = (n: number) => {
 };
 const PLOT_R = 43;
 const PLOT_POS = RING(BUILD.plotCap, PLOT_R, gateOffset(BUILD.plotCap));
-// Services : un vers la porte, deux vers le corps de garde — ils encadrent la place.
+/** Les services occupent la rangée du bas ; la Tour de guet, elle, reste SUR le mur
+ *  (c'est un ouvrage de rempart, pas un bâtiment de cour). */
+const YARD_SERVICES: DefenseId[] = ['kennel', 'infirmary'];
+// Services : ils encadrent la place. ⚠️ Le nombre de places est DÉRIVÉ de la liste —
+// écrit en dur, il laissait un trou dans la cour le jour où l'une d'elles disparaît
+// (le Chantier de fouille, retiré). Même règle que `PLOT_POS` avec le registre.
 const SVC_R = 16;
-const SVC_POS = RING(3, SVC_R, Math.PI);
+const SVC_POS = RING(YARD_SERVICES.length, SVC_R, Math.PI);
 const YARD_HALF = 9; // demi-côté DESSINÉ
 // Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
 // entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
 const YARD_HIT = 10;
-/** Les services occupent la rangée du bas ; la Tour de guet, elle, reste SUR le mur
- *  (c'est un ouvrage de rempart, pas un bâtiment de cour). */
-const YARD_SERVICES: DefenseId[] = ['kennel', 'infirmary', 'salvage'];
-
 const yard = computed<YardCell[]>(() => {
   const cells: YardCell[] = [];
   const bs = char.row?.buildings ?? [];
@@ -1487,10 +1453,7 @@ const yard = computed<YardCell[]>(() => {
       // (c'est le corps de garde du rempart nord), donc sa condition ne s'évaluait
       // jamais — son alerte vit désormais sur son propre dessin (`.watch-alarm`), et le
       // champ `alert` de la tuile est retiré plutôt que laissé à `false` en dur.
-      // ⚠️ La fouille ne demande plus d’action : la pastille dit qu’il se PASSE quelque
-      // chose (des corps sont encore là), pas qu’il y a un bouton à presser.
-      todo:
-        (id === 'salvage' && remaining.value > 0) || (id === 'infirmary' && patientCount.value > 0),
+      todo: id === 'infirmary' && patientCount.value > 0,
       onClick: () => openDef(id),
     });
   });
@@ -1588,7 +1551,6 @@ const STRUCTURE_LINK: Record<DefenseId, string> = {
   watchtower: 'Le préavis ne sert que si les 🔔 notifications sont actives.',
   kennel: 'Ne sert à rien sans ⚔️ Guilde : un familier se confie à un AVENTURIER, pas au mur.',
   infirmary: 'Soigne le héros ET repose les compagnons revenus du siège.',
-  salvage: 'Ne travaille qu’après un assaut repoussé — c’est l’enceinte qui lui donne du travail.',
 };
 /** Ce qu'apporte le PROCHAIN niveau de chaque structure — par `defensePerLevelLabel`,
  *  la fonction du jeu : un texte recopié finirait par mentir. */
@@ -1750,7 +1712,6 @@ const scoutLeadLabel = computed(() => {
   return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) : ''}`;
 });
 const freezeIn = computed(() => (freeze.value ? fmtDelay(freeze.value.until - now.value) : ''));
-const rotIn = computed(() => (field.value ? fmtDelay(field.value.expiresAt - now.value) : ''));
 const healIn = computed(() =>
   base.value?.wound ? fmtDelay(base.value.wound.until - now.value) : '',
 );
@@ -1771,15 +1732,10 @@ const patients = computed(() =>
 );
 const patientsCost = computed(() => patients.value.reduce((s, p) => s + p.cost, 0));
 const patientCount = computed(() => patients.value.length + (wounded.value ? 1 : 0));
-/** Ce que la fouille a déjà remonté — le rapport de pillage en cours d’écriture. */
-const pillage = computed(() => base.value?.pillage ?? null);
-/** ⚠️ DEUX leviers au Chantier, et il faut les deux : le nombre de bras monte par
- *  crans de quatre niveaux, la vitesse à chaque cran (« aucun niveau mort du 0 au
- *  100 », v0.731). Le second ne se voyait nulle part — on l’affiche. */
-const scavTrip = computed(() => fmtSpan(scavengeMs(salvageLevel.value)));
-const scavIn = computed(() =>
-  field.value?.dispatchUntil ? fmtDelay(field.value.dispatchUntil - now.value) : 'imminente',
-);
+/** 🦴 Ce que le dernier assaut a rapporté — posé à la résolution, jamais recalculé
+ *  ici, et mis en forme par la LIB : l'écran de fin du rejeu affiche exactement les
+ *  mêmes puces, et deux copies divergeraient au premier ajout de devise. */
+const lastLootPills = computed(() => battleLootPills(base.value?.lastLoot));
 
 // ── Structures ──
 function lvlOf(id: DefenseId): number {
@@ -1834,8 +1790,9 @@ const doRepairAll = () =>
       });
   });
 const doFinishRepair = (id: DefenseId) => guard(() => char.finishRepair(uid.value, id, Date.now()));
-/** La Fonderie raccourcit les travaux (cf. `repairMsFor`). */
-const foundryLevel = computed(() => buildingLevel(char.row?.buildings ?? [], 'foundry'));
+/** L'Entrepôt raccourcit les travaux (cf. `repairMsFor`) — il a repris ce levier à la
+ *  Fonderie, retirée du registre. */
+const stockLevel = computed(() => buildingLevel(char.row?.buildings ?? [], 'warehouse'));
 /** Temps de travaux restant sur une structure, 0 si aucun chantier en cours. */
 function repairLeft(id: DefenseId): number {
   const d = defenses.value.find((x) => x.typeId === id);
@@ -1855,18 +1812,6 @@ const doHealAdv = (ids: string[]) =>
         message: ids.length > 1 ? '⛑️ Tes champions sont sur pied.' : '⛑️ De nouveau sur pied.',
       });
   });
-/** Le cumul de la fouille, en puces. ⚠️ Ce sont des COMPTES déjà crédités : les objets
- *  sont partis au sac vague par vague, on n’en récapitule que le NOMBRE. */
-const pillagePills = computed(() => {
-  const p = pillage.value;
-  if (!p) return [];
-  return [
-    p.gold ? `🪙 +${p.gold}` : '',
-    p.summonStones ? `🔮 +${p.summonStones}` : '',
-    p.keys ? `🗝️ +${p.keys}` : '',
-    p.items ? `🎒 ${p.items} objet${p.items > 1 ? 's' : ''}` : '',
-  ].filter(Boolean);
-});
 /** RÉCOLTE des bâtiments — ce que la barre du haut affiche.
  *
  *  ⚠️ Tout est DÉRIVÉ de `buildings.ts` (`collectable`, `buildingProdPerHour`,
@@ -2375,11 +2320,6 @@ function doHarvest() {
 .corpse {
   font-size: 11px;
   opacity: 0.9;
-}
-.corpse.looted {
-  font-size: 14px;
-  fill: #5c5346;
-  opacity: 0.6;
 }
 .corpse.champ {
   font-size: 15px;

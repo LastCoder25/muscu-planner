@@ -128,7 +128,7 @@ export interface Raid {
   overflow?: RiftOverflow;
 }
 
-export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'salvage' | 'kennel' | 'infirmary';
+export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'kennel' | 'infirmary';
 
 /** Une structure de l'enceinte. `damaged` = niveau CONSERVÉ mais efficacité réduite de
  *  moitié jusqu'à réparation — on ne rétrograde jamais un investissement (cf.
@@ -150,7 +150,6 @@ export interface Corpse {
   name: string;
   level: number;
   champion?: boolean;
-  looted?: boolean;
   /** Dilution de masse HÉRITÉE de son groupe : ce corps est un parmi ~2,5× trop nombreux,
    *  il est donc d'autant moins riche (cf. `RAID.massMult`). Absent = 1 (le champion, et
    *  les champs sauvegardés avant la v0.720). */
@@ -160,12 +159,20 @@ export interface Corpse {
   y: number;
 }
 
-/** Le champ de bataille APRÈS un siège (gagné ou perdu : on tue toujours quelqu'un). */
+/** Le champ de bataille APRÈS un siège (gagné ou perdu : on tue toujours quelqu'un).
+ *
+ *  ⚠️ **DU DÉCOR, ET RIEN D’AUTRE** (demandé). Le butin des corps est crédité À LA
+ *  RÉSOLUTION, et il figure dans le rapport de bataille : il n’y a plus rien à venir
+ *  chercher ici. Les corps restent quelques heures parce qu’une ville qui vient d’être
+ *  assiégée ne se nettoie pas dans la seconde — pas parce qu’ils valent quelque chose.
+ *
+ *  ⚠️ C’est un RENVERSEMENT de la fouille étalée (v0.772), et son motif est tombé de
+ *  lui-même : mesuré, un champ se vidait en 6 à 30 minutes pour 24 h de péremption. La
+ *  fouille ne faisait donc que RETARDER un butin acquis, au prix d’un bâtiment, d’une
+ *  boucle de vagues, d’un relevé de pillage et d’un second rapport. */
 export interface BattleField {
   corpses: Corpse[];
-  expiresAt: number; // les corps pourrissent
-  dispatchUntil?: number; // fossoyeurs en route : fin de la vague (ms epoch)
-  dispatchIds?: string[]; // corps réservés par la vague en cours
+  expiresAt: number; // les corps sont emportés
 }
 
 /** Production gelée après une défaite. Levée par une SÉANCE DE SPORT (le raccourci) ou
@@ -192,19 +199,39 @@ interface HeroWound {
   until: number;
 }
 
-/** 📜 CE QUE LA FOUILLE A RAPPORTÉ EN TOUT — le rapport de pillage, en cours d’écriture.
+/** 🦴 CE QUE LA DERNIÈRE BATAILLE A RAPPORTÉ — affiché avec son rapport.
  *
- *  ⚠️ On cumule des COMPTES, pas des objets : le butin est crédité vague par vague (rien
- *  ne peut donc se perdre si le champ pourrit avant la fin), et le rapport ne fait que
- *  RÉCAPITULER. Stocker les objets ici les mettrait en double. */
-interface PillageTally {
+ *  ⚠️ Des COMPTES, jamais des objets : le butin est crédité à la résolution, et le
+ *  relevé ne fait que le DIRE. Stocker les objets ici les mettrait en double.
+ *
+ *  ⚠️ Optionnel : les bases d’avant n’en ont pas, et leur rapport n’affiche donc
+ *  simplement aucun butin — plutôt qu’une colonne de zéros qui mentirait. */
+export interface BattleLoot {
   corpses: number;
-  waves: number;
   gold: number;
   keys: number;
   summonStones: number;
   items: number;
-  startedAt: number;
+}
+
+/** 🦴 LE BUTIN DU DERNIER ASSAUT, EN PUCES — source UNIQUE des deux écrans qui
+ *  l'affichent (l'écran de fin du rejeu, et la feuille de la Tour de guet).
+ *
+ *  ⚠️ Une seconde mise en forme divergerait au premier ajout de devise — c'est le
+ *  défaut que `haulPills` a déjà corrigé pour les expéditions (v0.680), où la boîte
+ *  listait ses devises À LA MAIN et affichait un butin VIDE pour une épave.
+ *
+ *  ⚠️ Rend une liste VIDE quand il n'y a pas de relevé : les bases d'avant n'en ont
+ *  pas, et on n'affiche alors RIEN plutôt qu'une colonne de zéros qui mentirait.
+ */
+export function battleLootPills(loot: BattleLoot | null | undefined): string[] {
+  if (!loot) return [];
+  const p: string[] = [];
+  if (loot.gold) p.push(`+${loot.gold} 🪙`);
+  if (loot.summonStones) p.push(`+${loot.summonStones} 🔮`);
+  if (loot.keys) p.push(`+${loot.keys} 🗝️`);
+  if (loot.items) p.push(`+${loot.items} objet${loot.items > 1 ? 's' : ''}`);
+  return p;
 }
 
 export interface BaseState {
@@ -214,9 +241,9 @@ export interface BaseState {
   nextRaidAt: number;
   field: BattleField | null;
   freeze: ProductionFreeze | null;
-  /** Fouille en cours : ce qui a déjà été remonté du champ (cf. `PillageTally`). */
-  pillage?: PillageTally | null;
   lastReport: RaidReport | null;
+  /** Le butin du dernier assaut (cf. `BattleLoot`), posé en même temps que le rapport. */
+  lastLoot?: BattleLoot | null;
   seed: number;
   /** 🕳️ Le débordement EN ATTENTE : une faille a craché son armée, elle n'est pas encore
    *  arrivée. Posé par la carte, consommé au tirage du raid.
@@ -328,15 +355,6 @@ export const DEFENSE_TYPES: DefenseType[] = [
     buildScrap: 0,
     unlockLevel: 1,
     desc: 'Elle renseigne : plus elle est haute, plus tu en sais sur l’armée qui vient — et plus tôt tu l’apprends.',
-  },
-  {
-    id: 'salvage',
-    label: 'Fosse commune',
-    emoji: '🦴',
-    buildGold: 650,
-    buildScrap: 0,
-    unlockLevel: 1,
-    desc: 'Envoie des fossoyeurs dépouiller les corps après la bataille. Chaque niveau = des fossoyeurs en plus par vague.',
   },
   {
     id: 'kennel',
@@ -675,14 +693,21 @@ export const RAID = {
   // journée (mesuré ≈ 660 × niveau^1,65 du niveau 2 au 100) : une convalescence complète
   // de 6 h coûte ~½ journée de revenu À TOUS LES NIVEAUX — cher, mais jamais un mur.
   // ⚠️ Ne pas prendre l’exposant des bâtiments (1,9) : le prix dériverait vers le mur.
-  healGoldK: 55,
-  healGoldExp: 1.65,
-  // Réparations (cf. `repairMsFor`) : 30 min + 3 min par niveau, la Fonderie en retire
+  // ⚠️ RECALÉS (mesuré) après le retrait de la Mine d’or : elle pesait 19,3 % du revenu
+  // au niveau 10 mais 3,4 % au niveau 100, donc la retirer n’a pas seulement baissé le
+  // revenu — elle en a changé la PENTE (≈ L^1,65 → ≈ L^1,75). À 55/1,65 une
+  // convalescence complète coûtait une journée ENTIÈRE de revenu au niveau 2, contre
+  // la demi-journée visée. Balayé sur 4 exposants × 6 coefficients : 32/1,75 rend
+  // 0,62 / 0,58 / 0,43 / 0,41 / 0,47 journée aux niveaux 2/10/28/60/100 — la bande la
+  // plus centrée sur « ½ journée » que le test verrouille.
+  healGoldK: 32,
+  healGoldExp: 1.75,
+  // Réparations (cf. `repairMsFor`) : 30 min + 3 min par niveau, l’Entrepôt en retire
   // jusqu’à 60 % (moitié de l’effet à son niveau 30).
   repairBaseMs: 30 * 60_000,
   repairPerLevelMs: 3 * 60_000,
-  repairFoundryCutMax: 0.6,
-  repairFoundryHalf: 30,
+  repairStockCutMax: 0.6,
+  repairStockHalf: 30,
 
   // Espionnage
   /** ⏱️ PRÉAVIS SANS TOUR — un filet, pas un service : on voit la poussière à l’horizon. */
@@ -723,49 +748,15 @@ export const RAID = {
   estimateWidth: [0, 0.8, 0.45, 0.22, 0.08] as number[],
 } as const;
 
-/** Le fosse commune : capacité PAR VAGUE, renouvelable tant que les corps sont
- *  frais. On peut renvoyer les fossoyeurs autant de fois qu'on veut dans les 24 h → un
- *  petit chantier fait plusieurs allers-retours, il ne condamne pas le butin. */
+/** ⏳ COMBIEN DE TEMPS LES CORPS RESTENT — du décor, plus une réserve de butin.
+ *
+ *  ⚠️ « Quelques heures » (demandé), et non les 24 h de la fouille : le butin étant
+ *  crédité à la résolution, laisser le champ traîner une journée entière donnerait une
+ *  base qui a l’air assiégée en permanence, pour rien. Bien en deçà de l’intervalle
+ *  entre deux sièges (24 à 72 h) → on retrouve sa ville propre avant le suivant. */
 export const SCAV = {
-  fieldMs: 24 * 3600_000, // les corps pourrissent au bout de 24 h
-  /** Durée d’UN aller-retour. ⚠️ 40 min → 4 min : le chantier est **juste devant la
-   *  porte**, et depuis que les vagues s’enchaînent SEULES une longue attente ne crée
-   *  plus aucune décision — elle ne fait que retarder. Signalé par l’utilisateur. */
-  dispatchMs: 4 * 60_000,
-  /** Ce que le niveau du Chantier retire AU PLUS au temps d’un aller-retour, et le
-   *  niveau où il en a retiré la moitié. Asymptotique : chaque cran gratte, aucun ne
-   *  ramène jamais à zéro — on ne dépouille pas un champ instantanément. */
-  speedMax: 0.7,
-  speedHalf: 20,
+  fieldMs: 6 * 3600_000, // les corps sont emportés au bout de quelques heures
 } as const;
-
-/** ⏱️ DURÉE D’UN ALLER-RETOUR, raccourcie par le niveau du Chantier.
- *
- *  ⚠️ SECOND LEVIER, et il est NÉCESSAIRE : le nombre de bras monte par crans de quatre
- *  niveaux, donc trois niveaux sur quatre ne changeraient rien — ce que « aucun niveau
- *  mort du 0 au 100 » (v0.731) interdit. Même réponse qu’au Comptoir : le NOMBRE monte
- *  lentement, la VITESSE monte en continu.
- *
- *  ⚠️ ASYMPTOTIQUE, jamais linéaire : un aller-retour ne peut pas devenir instantané.
- *  Mesuré : 4 min à neuf, ~2 min 50 au niveau 14, ~1 min 45 au niveau 90. */
-export function scavengeMs(level: number): number {
-  const l = Math.max(0, level);
-  return Math.round(SCAV.dispatchMs * (1 - SCAV.speedMax * (l / (l + SCAV.speedHalf))));
-}
-
-/** Fossoyeurs envoyés PAR VAGUE — le seul effet du niveau du chantier. Il répond à une
- *  question unique et lisible : « combien j'en ramasse d'un coup ». */
-export function scavengerCount(level: number): number {
-  // ⚠️ LE FACTEUR DE MASSE EST RETIRÉ, et son motif s’est INVERSÉ. Il avait été ajouté en
-  // v0.720 pour qu’un champ 2,5× plus peuplé ne demande pas 2,5× plus d’allers-retours —
-  // « la foule ne doit pas devenir une corvée ». C’était juste tant que chaque vague se
-  // lançait et se ramassait À LA MAIN. Depuis qu’elles s’enchaînent seules et durent
-  // 4 minutes, un aller-retour ne COÛTE plus rien — et le joueur a signalé l’effet de
-  // bord : « en 1 voire 2 vagues max j’ai tout ramassé ». Mesuré, la capacité valait 20
-  // corps par vague pour une armée de ~48. Sans le facteur : ~6 vagues, soit une fouille
-  // qui DURE un peu et qu’on regarde avancer.
-  return level <= 0 ? 0 : 1 + Math.floor(level / 4);
-}
 
 // ── Rosters par faction ──
 /**
@@ -2869,10 +2860,13 @@ export function repairCost(level: number): number {
  *  encore et une réparation n’est JAMAIS instantanée.
  *  ⚠️ Toujours bien plus courte que l’intervalle entre deux sièges (24 h au minimum) : une
  *  base encore en travaux au siège suivant serait la spirale que tout ce système évite. */
-export function repairMsFor(level: number, foundryLevel: number): number {
+/** ⚠️ `stockLevel` = le niveau de l’ENTREPÔT, qui a repris ce levier à la Fonderie
+ *  (retirée) : c’est le seul bâtiment civil qui parle déjà de stock, et la ferraille
+ *  est justement ce qu’on y puise pour réparer. */
+export function repairMsFor(level: number, stockLevel: number): number {
   const base = RAID.repairBaseMs + RAID.repairPerLevelMs * Math.max(1, level);
-  const f = Math.max(0, foundryLevel);
-  const cut = RAID.repairFoundryCutMax * (f / (f + RAID.repairFoundryHalf));
+  const f = Math.max(0, stockLevel);
+  const cut = RAID.repairStockCutMax * (f / (f + RAID.repairStockHalf));
   return Math.round(base * (1 - cut));
 }
 
@@ -2895,11 +2889,11 @@ export function startRepair(
   base: BaseState,
   id: DefenseId,
   now: number,
-  foundryLevel: number,
+  stockLevel: number,
 ): BaseState {
   const defenses = base.defenses.map((d) =>
     d.typeId === id && d.damaged && d.repairUntil == null
-      ? { ...d, repairUntil: now + repairMsFor(d.level, foundryLevel) }
+      ? { ...d, repairUntil: now + repairMsFor(d.level, stockLevel) }
       : d,
   );
   return { ...base, defenses };
@@ -3032,19 +3026,6 @@ export function defensePerLevelLabel(
         ? `Niveau ${next} : ${lead}. Le cran de renseignement suivant est au niveau ${step}.`
         : `Niveau ${next} : ${lead}`;
     }
-    case 'salvage': {
-      const a = scavengerCount(l);
-      const b = scavengerCount(next);
-      // ⚠️ DEUX leviers, et il faut les DEUX : le nombre de bras monte par crans de
-      // quatre niveaux, la vitesse à chaque cran. Sans elle, trois niveaux sur quatre
-      // ne changeraient rien — « aucun niveau mort du 0 au 100 » (v0.731).
-      const vite = `aller-retour ${fmtSpan(scavengeMs(l))} → ${fmtSpan(scavengeMs(next))}`;
-      return b > a
-        ? `Niveau ${next} : ${a} → ${b} corps par vague (+${b - a}), ${vite}`
-        : `Niveau ${next} : ${vite} (${a} corps par vague — le bras suivant au niveau ${
-            nextStepLevel(scavengerCount, l) ?? next
-          })`;
-    }
     case 'kennel': {
       // ⚠️ TROIS leviers, et ils tenaient dans une phrase qui n’en annonçait qu’un.
       // Le Chenil est à ses familiers ce que la Guilde est aux aventuriers : il dit
@@ -3054,7 +3035,15 @@ export function defensePerLevelLabel(
       const ra = companionRankCap(l);
       const rb = companionRankCap(next);
       const bits = [`dressage de défense plafonné à ${next}`];
+      // ⚠️ UN PALIER MUET DIT QUAND IL BOUGERA. Une place arrive tous les 2 niveaux,
+      // donc un cran sur deux n’en donne aucune — et « rien » laisse croire que le
+      // bâtiment est fini. Capacité héritée du Chantier de fouille (retiré), qui en
+      // était jusqu’ici le seul porteur.
       if (pb > pa) bits.unshift(`${pa} → ${pb} familiers au mur`);
+      else {
+        const step = nextStepLevel(companionSlots, l);
+        if (step) bits.push(`la place suivante au niveau ${step}`);
+      }
       if (rb > ra) bits.unshift(`rang max ${companionRankLabel(next)}`);
       return `Niveau ${next} : ${bits.join(', ')}`;
     }
@@ -3316,13 +3305,9 @@ export function advanceBase(
     changed = true;
   }
 
-  // Le champ de bataille pourrit.
+  // Les corps sont emportés.
   if (b.field && now >= b.field.expiresAt) {
-    // ⚠️ Le CUMUL de la fouille part avec lui : un relevé sans champ est un orphelin,
-    // et il se retrouverait dans le rapport du siège SUIVANT. En pratique la fouille
-    // rattrape tout bien avant (mesuré : moins de 3 h pour vider un champ, contre 24 h
-    // de péremption) — ce cas ne reste ouvert que sans Chantier, où rien n’a été relevé.
-    b = { ...b, field: null, pillage: null };
+    b = { ...b, field: null };
     changed = true;
   }
 
@@ -3409,7 +3394,7 @@ export function applyRaidOutcome(
   report: RaidReport,
   ctx: { activeDays7: number; globalXp: number },
   now: number,
-): { base: BaseState; damage: RaidDamage } {
+): { base: BaseState; damage: RaidDamage; corpses: Corpse[] } {
   const dmg = raidDamage(report);
   const rng = mulberry32((base.seed ^ raid.seed) >>> 0 || 1);
   const corpses = corpsesFrom(raid, report, raid.seed);
@@ -3440,90 +3425,10 @@ export function applyRaidOutcome(
       freeze: dmg.freeze ? { until: now + RAID.freezeMs, atXp: ctx.globalXp } : null,
     },
     damage: dmg,
+    // ⚠️ RENDUS À L’APPELANT, plus laissés à fouiller : le butin des corps est crédité
+    // À LA RÉSOLUTION et figure dans le rapport de bataille (demandé). Le champ qu’on
+    // pose sur la base juste au-dessus ne sert plus qu’à MONTRER la bataille quelques
+    // heures. `lootCorpses` reste la seule autorité sur leur valeur.
+    corpses,
   };
-}
-
-/** Cibles d'une vague de fouille : les corps les plus riches d'abord. Le choix optimal
- *  étant toujours le même, en faire une décision serait un faux choix. */
-export function pickScavengeTargets(field: BattleField, capacity: number): Corpse[] {
-  return field.corpses
-    .filter((c) => !c.looted)
-    .sort((a, b) => (b.champion ? 1 : 0) - (a.champion ? 1 : 0) || b.level - a.level)
-    .slice(0, Math.max(0, capacity));
-}
-
-/** Ce qu’un tick de fouille a produit. */
-export interface ScavengeTick {
-  field: BattleField;
-  /** Corps dépouillés pendant ce tick, toutes vagues confondues. */
-  taken: Corpse[];
-  /** Allers-retours achevés — de quoi dire « 3 vagues » dans le rapport. */
-  waves: number;
-  /** Plus rien à ramasser : le chantier a fini, le rapport peut partir. */
-  done: boolean;
-}
-
-/** ⛏️ LE CHANTIER TRAVAILLE SEUL — les vagues partent et reviennent sans qu’on clique.
- *
- *  ⚠️ Demandé par l’utilisateur : « que les allées venues soient automatiques et assez
- *  rapides vu que c’est quand même juste devant la base ». Et c’est juste sur le fond :
- *  envoyer une vague n’était pas une DÉCISION — on envoie toujours, il n’y a rien à
- *  arbitrer — c’était un clic de péage. Ce qui reste un choix, c’est de monter le
- *  Chantier pour ramasser plus vite ; le reste est de la logistique.
- *
- *  ⚠️ RATTRAPE TOUT LE TEMPS ÉCOULÉ. L’app peut rester fermée une nuit : sans la boucle
- *  on ne récolterait qu’UNE vague au retour et le champ pourrirait avec le reste dedans.
- *  Les vagues s’enchaînent DOS À DOS (l’horloge suit le chantier, pas `now`), sinon une
- *  absence de six heures ne vaudrait qu’un seul aller-retour.
- *
- *  ⚠️ PURE, et elle ne connaît ni butin ni joueur : elle dit seulement QUELS CORPS ont
- *  été dépouillés. `lootCorpses` reste la seule autorité sur leur valeur — deux chemins
- *  vers le butin finiraient par diverger. */
-export function advanceScavenging(
-  field: BattleField,
-  capacity: number,
-  now: number,
-  /** Durée d’un aller-retour — `scavengeMs(niveau du Chantier)` en jeu. */
-  waveMs: number = SCAV.dispatchMs,
-): ScavengeTick | null {
-  if (capacity <= 0) return null;
-  let f: BattleField = { ...field, corpses: field.corpses.map((x) => ({ ...x })) };
-  const taken: Corpse[] = [];
-  let waves = 0;
-
-  /** Réserve les prochains corps à l’instant où le chantier se libère. */
-  const partir = (a: number): boolean => {
-    const cibles = pickScavengeTargets(f, capacity);
-    if (!cibles.length) return false;
-    f = { ...f, dispatchUntil: a + waveMs, dispatchIds: cibles.map((x) => x.id) };
-    return true;
-  };
-
-  const enRoute = !!f.dispatchUntil;
-  // Rien en route : on lance tout de suite — le chantier ne chôme pas.
-  if (!enRoute) partir(now);
-
-  // Puis on vide toutes les vagues qui ont eu le temps de rentrer, en relançant à la
-  // seconde où chacune revient. La boucle est bornée par les corps : chaque tour en
-  // consomme `capacity`.
-  while (f.dispatchUntil && now >= f.dispatchUntil) {
-    const retour = f.dispatchUntil;
-    const ids = new Set(f.dispatchIds ?? []);
-    for (const x of f.corpses) if (ids.has(x.id) && !x.looted) taken.push(x);
-    f = {
-      ...f,
-      corpses: f.corpses.map((x) => (ids.has(x.id) ? { ...x, looted: true } : x)),
-      dispatchUntil: undefined,
-      dispatchIds: undefined,
-    };
-    waves++;
-    if (!partir(retour)) break;
-  }
-
-  const done = !f.corpses.some((x) => !x.looted);
-  return { field: f, taken, waves, done };
-}
-
-export function remainingCorpses(field: BattleField | null): number {
-  return field ? field.corpses.filter((c) => !c.looted).length : 0;
 }

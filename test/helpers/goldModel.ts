@@ -5,7 +5,6 @@
 // au premier réglage, et c'est précisément par un mauvais dénominateur que ce fichier a déjà
 // laissé passer un puits qui débordait (v0.684) puis un puits devenu mur (v0.733).
 import { goldCost, travelOneWayMin, travelFactor } from '@/lib/expedition';
-import { BUILDING_TYPES, BUILD } from '@/lib/buildings';
 import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 
 export const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
@@ -30,17 +29,15 @@ export function mineNet(level: number): number {
   const cost = goldCost('mine', level);
   return Math.round(cost * (1.3 + travelFactor(rth))) - cost;
 }
-/** Production passive d'une Mine d'or au niveau du joueur, par jour. */
-function goldMinePerDay(L: number): number {
-  const t = BUILDING_TYPES.find((b) => b.id === 'gold_mine')!;
-  return (t.prodPerHrPerLvl ?? 0) * L * BUILD.storageHours;
-}
+// ⚠️ PLUS DE MINE D’OR : le bâtiment a été retiré du registre (demandé), donc plus
+// aucune production passive d’or. Mesuré avant retrait, elle pesait 19,3 % du revenu au
+// niveau 10 mais seulement 3,4 % au niveau 100 — l’or vient des donjons et de la carte.
 /** Revenu d'une JOURNÉE type : la séance de donjons au prorata, 2 mines LOINTAINES, le
  *  passif. Deux expéditions = ce que lance un joueur qui ouvre l'app matin et soir ; le
  *  héros n'en menant qu'UNE à la fois (~7 h de trajet au niveau 28), c'est aussi à peu
  *  près le plafond pratique. */
 export function goldPerDay(L: number): number {
-  return dungeonGold(bestDungeon(L)) * RUNS_PER_DAY + 2 * mineNet(L) + goldMinePerDay(L);
+  return dungeonGold(bestDungeon(L)) * RUNS_PER_DAY + 2 * mineNet(L);
 }
 /** 🔮 Pierres d'invocation d'une journée type : elles tombent au NETTOYAGE d'un donjon
  *  (`dungeonSummonStones`, source unique de la règle). C'est l'étalon auquel se comparent

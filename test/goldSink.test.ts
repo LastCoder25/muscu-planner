@@ -52,16 +52,27 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // tester) et la montée de `plotsForLevel` — exactement le défaut que le test suivant
     // avait déjà corrigé de son côté. Le total faisait apparaître le niveau 5 comme une
     // anomalie (8,7 jours) alors qu'il a simplement 5 emplacements ouverts au lieu de 10.
-    // Par bâtiment, la courbe est PLATE : 1,7 jour au niveau 5, 2,0 à 28, 2,4 à 100.
+    // ⚠️ LE PLAFOND PORTE SUR UN CRAN DE TOUTE LA BASE, plus « par bâtiment ». Le coût par
+    // bâtiment bouge MÉCANIQUEMENT avec la taille du roster : passé de 9 à 6 types (Mine
+    // d'or, Fonderie et Comptoir retirés), il monte de 2,0-2,7 à 3,1-4,2 jours — alors que
+    // le puits n'a PAS changé de profondeur, `upBase` ayant été recalé pour compenser
+    // (mesuré : 81/72/66 % du plafond sur un an, contre 84/74/68 % avant). Une borne posée
+    // là rougit donc à chaque retrait sans rien garder de ce qui compte.
+    // Ce que le joueur poursuit vraiment, c'est de monter SA BASE d'un cran, et ce total
+    // est stable de part et d'autre du retrait : ~18 à 25 jours.
     for (const L of LEVELS) {
-      const jours = buildingUpgradeCost(L) / goldPerDay(L);
-      // Sous une journée, on est en permanence au plafond de son niveau et l'or n'a
+      const parBat = buildingUpgradeCost(L) / goldPerDay(L);
+      const jours = cranTotal(L) / goldPerDay(L);
+      // Sous quelques jours, on est en permanence au plafond de son niveau et l'or n'a
       // plus de destination.
-      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(1);
-      // Au-delà de quelques jours, on ne progresse plus, on attend. ⚠️ C'est ce qui
-      // était livré : à `upBase` 1320, un seul cran coûtait 6,3 jours de revenu au
-      // niveau 28, et le compte réel portait 312 jours de retard.
-      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(4);
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(12);
+      // Au-delà, on ne progresse plus, on attend. ⚠️ C'est ce qui était livré : à `upBase`
+      // 1320, un cran sur toute la base coûtait ~57 jours de revenu au niveau 28, et le
+      // compte réel portait 312 jours de retard.
+      expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeLessThan(32);
+      // …et un cran d'un SEUL bâtiment reste au-dessus d'une journée : un bâtiment qu'on
+      // monte sans y penser n'est pas un puits.
+      expect(parBat, `niveau ${L} : ${parBat.toFixed(2)} jour(s) par bâtiment`).toBeGreaterThan(1);
     }
   });
 
@@ -86,14 +97,19 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     expect(Math.max(...pleins) / Math.min(...pleins)).toBeLessThan(2.5);
   });
 
-  it('⚠️ POSER le Comptoir et la Guilde reste à portée d’un DÉBUTANT', () => {
-    // C’est le seul chiffre qui décide si la feature caravanes existe pour le joueur
-    // qu’elle vise. Le puits d’or s’est approfondi avec le roster ; l’ENTRÉE, elle, ne
-    // doit pas bouger. Mesuré : 1 200 or, soit ~0,5 jour de revenu au niveau 3.
-    const entree = ['caravanserail', 'guild'].reduce(
-      (s, id) => s + (BUILDING_TYPES.find((t) => t.id === id)?.buildGold ?? 0),
-      0,
-    );
+  it('⚠️ POSER ses DEUX premiers bâtiments reste à portée d’un DÉBUTANT', () => {
+    // C’est le seul chiffre qui décide si la base existe pour le joueur qu’elle vise. Le
+    // puits d’or s’approfondit avec les niveaux ; l’ENTRÉE, elle, ne doit pas bouger.
+    //
+    // ⚠️ RÉÉCRIT, ET IL ÉTAIT DEVENU CREUX. Il nommait `caravanserail` et `guild` — deux
+    // ids RETIRÉS du registre (le Comptoir est absorbé par l'Avant-poste, la Guilde par le
+    // Panthéon). `find(...)?.buildGold ?? 0` rendait donc **0**, et « 0 < 1 » passait au
+    // vert sans rien mesurer. Un test qui nomme des ids finit par nommer des fantômes :
+    // on prend les DEUX MOINS CHERS du registre, ce qui reste vrai quel qu'il devienne.
+    const deux = [...BUILDING_TYPES].sort((a, b) => a.buildGold - b.buildGold).slice(0, 2);
+    expect(deux, 'il faut au moins deux bâtiments au registre').toHaveLength(2);
+    const entree = deux.reduce((s, t) => s + t.buildGold, 0);
+    expect(entree, 'un mur d’entrée doit être un vrai montant').toBeGreaterThan(0);
     for (const L of [3, 5, 8]) {
       expect(entree / goldPerDay(L), `niveau ${L}`).toBeLessThan(1);
     }
@@ -194,18 +210,19 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
   });
 
   it('⚠️ LA MARGE EST MINCE : un bâtiment de moins frôle le plafond, deux le franchissent', () => {
-    // Le Panthéon a fusionné la Guilde, le Centre de formation et l'Équipementier : le
-    // roster est passé de 11 à 9, et `BUILD.plotCap` en DÉRIVE. Moins d'emplacements =
-    // moins de dépenses = l'or s'entasse. C'était la mesure BLOQUANTE de la spec du gacha.
+    // Le puits d'or est DÉRIVÉ du roster (`BUILD.plotCap = BUILDING_TYPES.length`) : moins
+    // d'emplacements = moins de dépenses = l'or s'entasse. C'est le piège de la v0.733, où
+    // trois bâtiments AJOUTÉS avaient approfondi le puits de 43 % en silence.
     //
-    // ✅ MESURÉ, roster réel à 9 : **83,9 / 73,9 / 67,6 %** (contre 78,4 / 69,0 / 63,1 à
-    // onze) — tout reste dans la bande, sans toucher à `BUILD.upBase`. C'est le test
-    // ci-dessus qui le garde, puisqu'il mesure désormais le roster d'aujourd'hui.
+    // ✅ CE TEST A FAIT SON TRAVAIL. Il prévenait qu'« un bâtiment de plus en moins n'est
+    // pas un ménage, c'est un réglage d'économie qui impose de re-mesurer `BUILD.upBase` ».
+    // Le chantier de simplification en a retiré TROIS d'un coup (Mine d'or, Fonderie,
+    // Comptoir) : mesuré à `upBase` 550, la part du plafond montait à **94,3 / 83,3 /
+    // 76,4 %** — le profil tranquille DEHORS. `upBase` est donc passé à 850, ce qui rend
+    // **81,4 / 71,8 / 65,9 %**, la courbe d'avant à moins de 3 points près.
     //
-    // ⚠️ CE QUE CELUI-CI GARDE, c'est la MARGE : chaque bâtiment retiré ajoute ~3,4 points
-    // au profil tranquille. À 8 on est à 87,3 % — sous le plafond, mais à bout touchant ;
-    // à 7 on est à 91,4 %, dehors. Retirer un bâtiment de plus n'est donc pas un ménage,
-    // c'est un réglage d'économie qui impose de re-mesurer `BUILD.upBase`. Ce test le dira.
+    // ⚠️ CE QU'IL GARDE reste inchangé : la MARGE. À un bâtiment de moins on frôle le
+    // plafond, à deux on le franchit — la prochaine fois vaudra la même re-mesure.
     const [, xpTranquille] = PROFILS[0]!;
     const aNeuf = partDuPlafond(xpTranquille, BUILDING_TYPES.length);
     const aHuit = partDuPlafond(xpTranquille, BUILDING_TYPES.length - 1);

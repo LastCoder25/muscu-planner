@@ -124,9 +124,6 @@ import {
   repairCost,
   defenseUpgradeCost,
   defenseUpgradeScrap,
-  scavengerCount,
-  scavengeMs,
-  advanceScavenging,
   lootCorpses,
   startRepair,
   finishRepairNow,
@@ -1906,16 +1903,7 @@ export const useCharacterStore = defineStore('character', () => {
     now: number,
     ctx: { playerLevel: number; activeDays7: number; globalXp: number; hero: Combatant | null },
   ): Promise<{ detected: Raid | null; report: RaidReport | null }> {
-    // ⚠️ LA FOUILLE PASSE EN PREMIER, et l’ordre n’est pas cosmétique — DEUX raisons.
-    // (1) Elle ÉCRIT (butin crédité, champ avancé) : calculer `advanceBase` avant elle
-    //     puis persister son `base` écraserait la fouille à chaque tick, en silence.
-    // (2) `advanceBase` SUPPRIME un champ périmé. Passer après, c’est perdre le butin
-    //     d’une absence longue au lieu de le rattraper — or on ne punit jamais l’absence.
-    // Elle avance siège ou pas : elle vit sa vie pendant que le joueur fait autre chose.
     if (!row.value) return { detected: null, report: null };
-    await tickScavengers(userId, now, ctx.playerLevel);
-    // ⚠️ RELU APRÈS l’await : la fouille vient peut-être de créditer or et objets, et
-    // `cur` sert plus bas à reconstruire l’inventaire.
     const cur = row.value;
     if (!cur) return { detected: null, report: null };
     const t = advanceBase(baseOf(cur, now), ctx, now);
@@ -1952,8 +1940,43 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       home,
     );
-    const { base: nb, damage } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
+    const { base: nb, damage, corpses } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
     const patch: Record<string, unknown> = { base: nb };
+
+    // 🦴 LE BUTIN DES CORPS EST CRÉDITÉ TOUT DE SUITE (demandé), et il part avec le
+    // rapport de bataille. Il n’y a plus de fouille à venir chercher : le champ qu’on
+    // laisse quelques heures n’est que le décor de ce qui vient de se passer.
+    // ⚠️ `lootCorpses` reste la seule autorité sur la valeur d’un corps — c’est la même
+    // fonction qu’avant, appelée une fois au lieu d’une fois par vague.
+    const loot = corpses.length
+      ? lootCorpses(
+          corpses,
+          report.faction,
+          ctx.playerLevel,
+          (report.resolvedAt ^ cur.base!.seed) >>> 0 || 1,
+          companionPerks(advList.value, cctx).lootPct,
+          advList.value,
+        )
+      : null;
+    const drops = (loot?.items ?? []).map((it) => ({ ...it, id: crypto.randomUUID() }));
+    if (loot) {
+      patch.gold = cur.gold + loot.gold;
+      patch.summon_stones = cur.summon_stones + loot.summonStones;
+      patch.keys = cur.keys + loot.keys;
+      if (loot.advGear.length) patch.adv_gear = withAdvGear(cur, loot.advGear);
+      // Le relevé part avec le rapport : on le pose sur la base que `applyRaidOutcome`
+      // vient de rendre, pas dans un second `persist`.
+      patch.base = {
+        ...nb,
+        lastLoot: {
+          corpses: corpses.length,
+          gold: loot.gold,
+          keys: loot.keys,
+          summonStones: loot.summonStones,
+          items: drops.length,
+        },
+      };
+    }
     // ⚠️ CEUX QUI ONT DÉFENDU APPRENNENT (demandé par l’utilisateur). Les familiers postés
     // gagnaient de l’XP depuis la v0.663 ; les aventuriers, qui tiennent pourtant la
     // brèche, n’en gagnaient aucune — rester défendre coûtait un convoi ET la progression
@@ -1984,14 +2007,21 @@ export const useCharacterStore = defineStore('character', () => {
         .map((p) => p.familiar?.id)
         .filter((x): x is string => !!x),
     );
-    if (engages.size) {
-      const gain = siegeFamiliarXp(report);
-      const rest = now + fatigueMsFor(defenseLevel(t.base.defenses, 'infirmary'));
-      patch.inventory = cur.inventory.map((it) =>
-        engages.has(it.id)
-          ? { ...grantFamiliarXp(it, gain, ctx.playerLevel), fatigueUntil: rest }
-          : it,
-      );
+    // ⚠️ UNE SEULE ÉCRITURE DE L’INVENTAIRE : le dressage des familiers engagés ET les
+    // objets trouvés sur les corps. Deux `patch.inventory` successifs, et le second
+    // écraserait le premier — en silence.
+    const gain = siegeFamiliarXp(report);
+    const rest = now + fatigueMsFor(defenseLevel(t.base.defenses, 'infirmary'));
+    if (engages.size || drops.length) {
+      const base = engages.size
+        ? cur.inventory.map((it) =>
+            engages.has(it.id)
+              ? { ...grantFamiliarXp(it, gain, ctx.playerLevel), fatigueUntil: rest }
+              : it,
+          )
+        : cur.inventory;
+      patch.inventory = drops.length ? [...base, ...drops] : base;
+      if (drops.length) patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
     }
     // Stock VOLÉ = la production accumulée non récoltée. On remet simplement les
     // compteurs à l'heure : on ne peut donc perdre que ce qu'on n'avait pas ramassé,
@@ -2376,7 +2406,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (cur.scrap < cost) throw new Error('Pas assez de ferraille 🔩.');
     await persistOptimistic(userId, {
       scrap: cur.scrap - cost,
-      base: startRepair(cur.base, typeId, now, buildingLevel(cur.buildings ?? [], 'foundry')),
+      base: startRepair(cur.base, typeId, now, buildingLevel(cur.buildings ?? [], 'warehouse')),
     });
   }
 
@@ -2388,10 +2418,10 @@ export const useCharacterStore = defineStore('character', () => {
     const cost = totalRepairCost(cur.base);
     if (cost <= 0) return;
     if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour tout remettre en état.`);
-    const foundry = buildingLevel(cur.buildings ?? [], 'foundry');
+    const stock = buildingLevel(cur.buildings ?? [], 'warehouse');
     let base = cur.base;
     for (const d of cur.base.defenses.filter((x) => x.damaged && x.repairUntil == null))
-      base = startRepair(base, d.typeId, now, foundry);
+      base = startRepair(base, d.typeId, now, stock);
     await persistOptimistic(userId, { scrap: cur.scrap - cost, base });
     return cost;
   }
@@ -2423,86 +2453,6 @@ export const useCharacterStore = defineStore('character', () => {
    *  ⚠️ LE BUTIN EST CRÉDITÉ VAGUE PAR VAGUE, et le rapport ne fait que RÉCAPITULER.
    *  L’accumuler pour ne le verser qu’à la fin le perdrait si le champ pourrissait
    *  avant — 24 h suffisent largement, mais « largement » n’est pas « toujours ». */
-  async function tickScavengers(userId: string, now: number, playerLevel: number) {
-    const cur = row.value;
-    const field = cur?.base?.field;
-    if (!cur?.base || !field) return null;
-    const lvl = defenseLevel(cur.base.defenses, 'salvage');
-    const t = advanceScavenging(field, scavengerCount(lvl), now, scavengeMs(lvl));
-    if (!t) return null;
-    // ⚠️ Rien de neuf → on n’écrit PAS : ce tick bat chaque seconde, et persister à vide
-    // enverrait une requête par seconde pendant toute la fouille.
-    if (!t.taken.length && t.field.dispatchUntil === field.dispatchUntil) return null;
-
-    const patch: Record<string, unknown> = {};
-    let base: BaseState = { ...cur.base, field: t.field };
-
-    if (t.taken.length) {
-      const faction = cur.base.lastReport?.faction ?? 'bandits';
-      const loot = lootCorpses(
-        t.taken,
-        faction,
-        playerLevel,
-        ((t.field.dispatchUntil ?? now) ^ cur.base.seed) >>> 0 || 1,
-        companionPerks(advList.value, companionCtx(cur, now)).lootPct,
-        advList.value,
-      );
-      const drops = loot.items.map((it) => ({ ...it, id: crypto.randomUUID() }));
-      patch.gold = cur.gold + loot.gold;
-      patch.summon_stones = cur.summon_stones + loot.summonStones;
-      patch.keys = cur.keys + loot.keys;
-      if (drops.length) {
-        patch.inventory = [...cur.inventory, ...drops];
-        patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
-      }
-      // 🗡️ Équipement d'aventurier trouvé sur les corps — même `persist` que le reste du
-      // butin de la vague, pas une écriture de plus. Le relevé de pillage n'en parle pas :
-      // il compte des DEVISES, pas du stock.
-      if (loot.advGear.length) patch.adv_gear = withAdvGear(cur, loot.advGear);
-      const p = cur.base.pillage;
-      base = {
-        ...base,
-        pillage: {
-          corpses: (p?.corpses ?? 0) + t.taken.length,
-          waves: (p?.waves ?? 0) + t.waves,
-          gold: (p?.gold ?? 0) + loot.gold,
-          keys: (p?.keys ?? 0) + loot.keys,
-          summonStones: (p?.summonStones ?? 0) + loot.summonStones,
-          items: (p?.items ?? 0) + drops.length,
-          startedAt: p?.startedAt ?? now,
-        },
-      };
-    }
-
-    // ⚠️ LE RAPPORT PART QUAND LE CHAMP EST VIDE, et il emporte le cumul : sans lui, une
-    // fouille étalée sur des heures ne laisserait aucune trace de ce qu’elle a rapporté.
-    const fini = t.done && base.pillage;
-    if (fini) {
-      const p = base.pillage!;
-      const msg: ExpeditionMessage = {
-        id: crypto.randomUUID(),
-        title: '📜 Rapport de pillage',
-        level: cur.base.lastReport?.level ?? playerLevel,
-        win: true,
-        text:
-          `${p.corpses} corps dépouillés en ${p.waves} vague${p.waves > 1 ? 's' : ''}` +
-          (p.items ? ` · ${p.items} objet${p.items > 1 ? 's' : ''} au sac.` : '.'),
-        gold: p.gold,
-        energy: 0,
-        summonStones: p.summonStones,
-        key: p.keys,
-        resolvedAt: now,
-        // ⚠️ Déjà crédité vague par vague : ce message se LIT, il ne se réclame pas.
-        read: false,
-      };
-      patch.messages = boxWith(cur, [msg], MESSAGES_CAP);
-      base = { ...base, pillage: null, field: null };
-    }
-
-    patch.base = base;
-    await persistOptimistic(userId, patch);
-    return { ...t, fini: !!fini };
-  }
   async function collectFilons(userId: string, now: number) {
     const cur = row.value;
     if (!cur || !cur.buildings.length) return null;
@@ -2513,21 +2463,17 @@ export const useCharacterStore = defineStore('character', () => {
       got.parchemins +
       got.fragments +
       got.ink_dust +
-      got.gold +
       got.summon +
-      got.keys +
-      got.scrap;
+      got.keys;
     if (total <= 0) return null;
     // Report du reliquat : chaque filon n'avance son `collectedAt` que du temps des
     // unités ENTIÈRES récoltées → pas de perte de fraction, un filon lent n'est plus
     // affamé par des récoltes fréquentes (cf. nextCollectedAt).
     const mult = storageMult(cur.buildings);
     await persistOptimistic(userId, {
-      gold: cur.gold + got.gold, // 🪙 Mine d'or
       login_energy: cur.login_energy + got.energy, // ⚡ Dynamo → énergie de jeu
       summon_stones: cur.summon_stones + got.summon, // 🔮 Autel des boss
       keys: cur.keys + got.keys, // 🗝️ Porte du Labyrinthe
-      scrap: cur.scrap + got.scrap, // 🔩 Fonderie → réparation de l’enceinte
       stones: cur.stones + got.stone,
       parchemins: cur.parchemins + got.parchemins,
       fragments: cur.fragments + got.fragments,
@@ -2558,7 +2504,12 @@ export const useCharacterStore = defineStore('character', () => {
    *  FORGE (le temps de fabrication d'une pièce). ⚠️ Il porte aussi le plafond d'XP d'un
    *  champion (`grantAdvXp`) — c'est le « le sport fixe le plafond » de cette boucle. */
   const pantheonLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'pantheon'));
-  const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'caravanserail'));
+  // ⚠️ L'AVANT-POSTE, depuis qu'il a absorbé le Comptoir de caravanes : un seul bâtiment
+  // règle tout le VOYAGE — trajet du héros, vitesse ET nombre des convois.
+  // Le nom du binding reste `comptoirLevel` : c’est le paramètre que lisent
+  // `caravanSlots`, `convoySlotsFree` et `caravanLegMin`, et le renommer partout
+  // n'apprendrait rien de plus.
+  const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
   /** ⚠️ Le Chenil est une structure de l’ENCEINTE, pas un bâtiment de la cour — d’où
    *  `defenseLevel` et non `buildingLevel`. Exposé ici parce que DEUX écrans en ont besoin
    *  (la Guilde pour la coupe du dressage, la fiche des familiers pour l’afficher) : chacun

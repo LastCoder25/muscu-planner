@@ -2147,7 +2147,12 @@ describe('sources d’équipement : embuscades repoussées', () => {
     expect(o.gold).toBe(1758);
     expect(o.energy).toBe(0);
     expect(o.summonStones).toBe(0);
-    expect(o.scrap).toBe(78);
+    // ⚠️ 78 → 97, et ce n'est PAS un décalage du flux aléatoire : tout le reste est
+    // inchangé. C'est le RENDEMENT de l'épave, remonté de ×1,25 pour compenser la Fonderie
+    // retirée (`HARVEST.scrapBase`, mesuré). D'où l'intérêt d'épingler la LIGNE ENTIÈRE :
+    // une seule valeur qui bouge dit « un réglage » ; toutes qui bougent disent « le flux
+    // a fuité » — c'est cette distinction que le test existe pour rendre lisible.
+    expect(o.scrap).toBe(97);
     expect(o.keys).toBe(0);
     expect(o.wages).toBe(951);
     // ⚠️ Les valeurs de CARGAISON ci-dessus sont celles d'avant le combat de groupe, au

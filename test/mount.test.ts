@@ -210,6 +210,77 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await mountIt(VillagePlots, props, avecForge)).toBeNull();
   }, 30_000);
 
+  it('🏰 BasePage se monte — enceinte, cour et rapport du dernier assaut', async () => {
+    // ⚠️ AJOUTÉE APRÈS AVOIR FAILLI LIVRER UNE ZONE MORTE TEMPORELLE ICI : en dérivant le
+    // nombre de places de services de `YARD_SERVICES`, `SVC_POS` s'est retrouvé à lire une
+    // `const` déclarée PLUS BAS. Le typecheck, le lint et le build ne voient rien, et le
+    // smoke s'arrête au login — c'est exactement le défaut que cette porte existe pour
+    // attraper (v0.910), sur le fichier qui dessine toute la base.
+    //
+    // ⚠️ IL FAUT UNE BASE NON VIDE : un `base` null ne rend que l'état « construis ton
+    // enceinte », donc ni la cour, ni les tuiles, ni la feuille d'une structure — le test
+    // serait CREUX. On pose donc des défenses, un champ de bataille (le décor) et le
+    // rapport du dernier assaut AVEC son butin, qui est le chemin neuf du chantier.
+    const { default: BasePage } = await import('@/pages/BasePage.vue');
+    const now = Date.now();
+    const avecBase = {
+      ...ROW,
+      gold: 500_000,
+      scrap: 900,
+      buildings: [
+        ...ROW.buildings,
+        { typeId: 'outpost', level: 4, slot: 1, collectedAt: 0 },
+        { typeId: 'warehouse', level: 3, slot: 2, collectedAt: 0 },
+      ],
+      base: {
+        seed: 7,
+        defenses: [
+          { typeId: 'wall', level: 6 },
+          { typeId: 'turret', level: 5, damaged: true },
+          { typeId: 'watchtower', level: 3 },
+          { typeId: 'kennel', level: 4 },
+          { typeId: 'infirmary', level: 2 },
+        ],
+        raid: null,
+        nextRaidAt: now + 3_600_000,
+        field: {
+          corpses: [{ id: 'c1', emoji: '🗡️', name: 'Brigand', level: 6, x: 30, y: 40 }],
+          expiresAt: now + 3_600_000,
+        },
+        freeze: null,
+        lastReport: {
+          raidId: 'r1',
+          faction: 'bandits',
+          level: 6,
+          groups: [],
+          held: true,
+          defeated: 2,
+          total: 2,
+          finalPv: 100,
+          maxPv: 200,
+          heroHome: true,
+          log: [],
+          breached: false,
+          resolvedAt: now - 60_000,
+        },
+        lastLoot: { corpses: 12, gold: 840, keys: 1, summonStones: 3, items: 2 },
+      },
+    };
+    let out = '';
+    expect(
+      await mountIt(BasePage, { inTab: true }, avecBase, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    // ⚠️ ON LIT LE HTML : sans ça un fixture périmé ferait rendre l'état vide et le test
+    // deviendrait creux — le piège déjà rencontré sur GuildPanel.
+    expect(out, 'la cour doit être dessinée').toContain('yard');
+    expect(out, 'le champ de bataille est du décor, mais il se dessine').toContain('corpse');
+    // ⚠️ CE QUE CE TEST NE COUVRE PAS : l'affichage du BUTIN. Il vit dans l'écran de fin du
+    // rejeu et dans la feuille de la Tour de guet — deux chemins qui demandent une
+    // interaction (ouvrir une structure) ou un rejeu animé. Ce qui le garde, c'est
+    // `battleLootPills` (lib, testée) plus la mutation « le butin n'est plus rendu à
+    // l'appelant », qui fait rougir `raid.test`.
+  }, 30_000);
+
   it('AdventurerPortrait se monte, avec et sans teinte d’état', async () => {
     const { default: P } = await import('@/components/AdventurerPortrait.vue');
     const base = {
