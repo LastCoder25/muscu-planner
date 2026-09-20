@@ -1790,15 +1790,13 @@
                 :class="{ found: c.owned }"
                 :style="c.owned ? { '--rk': RANK_COLOR[c.champ.rarity] } : undefined"
               >
+                <!-- ⚠️ Pas de `v-if` sur `owned` : un id nul rend déjà `null`, donc le
+                     slot porte le repli des DEUX cas — l'emoji du champion découvert,
+                     le ❔ de celui qui ne l'est pas. -->
                 <span class="best-emo">
-                  <ChampionPortrait
-                    v-if="c.owned"
-                    :champion-id="c.champ.id"
-                    :size="30"
-                    :alt="c.champ.name"
-                    >{{ c.champ.emoji }}</ChampionPortrait
-                  >
-                  <template v-else>❔</template>
+                  <ChampionPortrait :champion-id="c.owned ? c.champ.id : null">{{
+                    c.owned ? c.champ.emoji : '❔'
+                  }}</ChampionPortrait>
                 </span>
                 <span class="best-name">{{ c.owned ? c.champ.name : '???' }}</span>
                 <span class="best-tier">{{ RARITY_LABEL[c.champ.rarity] }}</span>

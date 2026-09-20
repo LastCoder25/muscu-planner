@@ -18,10 +18,11 @@
         <stop offset="0.5" stop-color="#b9c1cb" />
         <stop offset="1" stop-color="#7e8894" />
       </linearGradient>
-      <!-- 🖼️ Cadre du PORTRAIT (v0.969) : arrondi, pour qu'une illustration carrée
-           s'inscrive dans le médaillon au lieu de trancher à angle droit. -->
-      <clipPath id="av-portrait">
-        <rect x="12" y="6" width="96" height="112" rx="14" />
+      <!-- 🖼️ Cadre du PORTRAIT : arrondi, pour qu'une illustration carrée s'inscrive
+           dans le médaillon au lieu de trancher à angle droit. ⚠️ Sous `v-if` : sans
+           lui, chaque avatar de la page porterait deux nœuds morts. -->
+      <clipPath v-if="portraitSrc" id="av-portrait">
+        <rect v-bind="PORTRAIT_BOX" />
       </clipPath>
     </defs>
 
@@ -46,184 +47,177 @@
       </g>
     </g>
 
-    <!-- CAPE (accessoire) : derrière le corps, teintée par la rareté, ondule. -->
-    <g
-      v-if="!portrait && gear.accessory"
-      class="cape"
-      :style="{ '--rk': rankColor(gear.accessory.rarity) }"
-    >
-      <path class="cape-cloth" d="M45 50 Q26 88 32 120 Q44 114 52 116 Q49 84 55 52 Z" />
-      <path class="cape-cloth right" d="M75 50 Q94 88 88 120 Q76 114 68 116 Q71 84 65 52 Z" />
-    </g>
-
-    <!-- CORPS (idle : respire) -->
-    <g v-if="!portrait" class="body">
-      <!-- jambes + bottes -->
-      <path class="leg" d="M49 88 L48 116 Q48 122 53 122 L57 122 Q58 116 57 100 L56 88 Z" />
-      <path class="leg" d="M71 88 L72 116 Q72 122 67 122 L63 122 Q62 116 63 100 L64 88 Z" />
-      <path class="boot" d="M46 118 Q46 126 52 126 L60 126 L60 118 Q54 120 46 118 Z" />
-      <path class="boot" d="M74 118 Q74 126 68 126 L60 126 L60 118 Q66 120 74 118 Z" />
-
-      <!-- bras arrière (gauche) + main -->
-      <path class="arm" d="M44 52 Q34 62 33 82 Q33 88 38 88 Q41 72 47 60 Z" />
-      <circle class="hand" cx="35" cy="86" r="5" />
-
-      <!-- torse (tunique de base) -->
-      <path class="tunic" d="M42 50 Q40 72 46 92 L74 92 Q80 72 78 50 Q60 44 42 50 Z" />
-
-      <!-- ARMURE (plastron + col), teintée par la rareté -->
-      <g v-if="gear.armor" class="armor" :style="{ '--rk': rankColor(gear.armor.rarity) }">
-        <path class="plate" d="M44 52 Q42 72 47 90 L73 90 Q78 72 76 52 Q60 47 44 52 Z" />
-        <path class="plate-shine" d="M52 54 Q50 72 54 88 L58 88 Q56 70 58 55 Z" />
-        <path class="collar" d="M50 49 Q60 55 70 49 L67 44 Q60 47 53 44 Z" />
+    <!-- ⚠️ LE PERSONNAGE EST UN SEUL BLOC, et c'est structurel : une illustration le
+         REMPLACE en entier. Poser la condition couche par couche, c'est oublier la
+         prochaine (la cape avait déjà dû être traitée à part) — et elle se
+         superposerait alors au portrait. Tout ce qui DESSINE le personnage vit ici ;
+         l'aura, le familier, le talent et les pips vivent DEHORS, et restent. -->
+    <g v-if="!portraitSrc" class="character">
+      <!-- CAPE (accessoire) : derrière le corps, teintée par la rareté, ondule. -->
+      <g v-if="gear.accessory" class="cape" :style="{ '--rk': rankColor(gear.accessory.rarity) }">
+        <path class="cape-cloth" d="M45 50 Q26 88 32 120 Q44 114 52 116 Q49 84 55 52 Z" />
+        <path class="cape-cloth right" d="M75 50 Q94 88 88 120 Q76 114 68 116 Q71 84 65 52 Z" />
       </g>
 
-      <!-- 🎨 ÉCHARPE DU SET PORTÉ (v0.832 ; demandé : « épines = vert ») : une bande en
+      <!-- CORPS (idle : respire) -->
+      <g class="body">
+        <!-- jambes + bottes -->
+        <path class="leg" d="M49 88 L48 116 Q48 122 53 122 L57 122 Q58 116 57 100 L56 88 Z" />
+        <path class="leg" d="M71 88 L72 116 Q72 122 67 122 L63 122 Q62 116 63 100 L64 88 Z" />
+        <path class="boot" d="M46 118 Q46 126 52 126 L60 126 L60 118 Q54 120 46 118 Z" />
+        <path class="boot" d="M74 118 Q74 126 68 126 L60 126 L60 118 Q66 120 74 118 Z" />
+
+        <!-- bras arrière (gauche) + main -->
+        <path class="arm" d="M44 52 Q34 62 33 82 Q33 88 38 88 Q41 72 47 60 Z" />
+        <circle class="hand" cx="35" cy="86" r="5" />
+
+        <!-- torse (tunique de base) -->
+        <path class="tunic" d="M42 50 Q40 72 46 92 L74 92 Q80 72 78 50 Q60 44 42 50 Z" />
+
+        <!-- ARMURE (plastron + col), teintée par la rareté -->
+        <g v-if="gear.armor" class="armor" :style="{ '--rk': rankColor(gear.armor.rarity) }">
+          <path class="plate" d="M44 52 Q42 72 47 90 L73 90 Q78 72 76 52 Q60 47 44 52 Z" />
+          <path class="plate-shine" d="M52 54 Q50 72 54 88 L58 88 Q56 70 58 55 Z" />
+          <path class="collar" d="M50 49 Q60 55 70 49 L67 44 Q60 47 53 44 Z" />
+        </g>
+
+        <!-- 🎨 ÉCHARPE DU SET PORTÉ (v0.832 ; demandé : « épines = vert ») : une bande en
            travers du torse, dans la couleur du set — elle se lit à distance, sans écraser la
            teinte de rareté des pièces. -->
-      <g v-if="set" class="set-sash" :style="{ '--sc': set.color }">
-        <path class="sash" d="M46 52 L52 50 L76 86 L70 90 Z" />
-        <circle class="sash-knot" cx="72" cy="86" r="3.2" />
-      </g>
+        <g v-if="set" class="set-sash" :style="{ '--sc': set.color }">
+          <path class="sash" d="M46 52 L52 50 L76 86 L70 90 Z" />
+          <circle class="sash-knot" cx="72" cy="86" r="3.2" />
+        </g>
 
-      <!-- ceinture -->
-      <rect class="belt" x="45" y="86" width="30" height="6" rx="2" />
-      <rect
-        class="buckle"
-        x="57"
-        y="85"
-        width="6"
-        height="8"
-        rx="1.5"
-        :style="set ? { fill: set.color } : undefined"
-      />
+        <!-- ceinture -->
+        <rect class="belt" x="45" y="86" width="30" height="6" rx="2" />
+        <rect
+          class="buckle"
+          x="57"
+          y="85"
+          width="6"
+          height="8"
+          rx="1.5"
+          :style="set ? { fill: set.color } : undefined"
+        />
 
-      <!-- bras avant (droit) + main -->
-      <path class="arm" d="M76 52 Q86 62 87 82 Q87 88 82 88 Q79 72 73 60 Z" />
-      <circle class="hand" cx="85" cy="86" r="5" />
+        <!-- bras avant (droit) + main -->
+        <path class="arm" d="M76 52 Q86 62 87 82 Q87 88 82 88 Q79 72 73 60 Z" />
+        <circle class="hand" cx="85" cy="86" r="5" />
 
-      <!-- ÉPAULIÈRES (armure) -->
-      <g v-if="gear.armor" class="pauldrons" :style="{ '--rk': rankColor(gear.armor.rarity) }">
-        <path class="pauldron" d="M39 51 Q33 49 31 56 Q30 61 36 62 Q42 60 44 54 Z" />
-        <path class="pauldron" d="M81 51 Q87 49 89 56 Q90 61 84 62 Q78 60 76 54 Z" />
-      </g>
+        <!-- ÉPAULIÈRES (armure) -->
+        <g v-if="gear.armor" class="pauldrons" :style="{ '--rk': rankColor(gear.armor.rarity) }">
+          <path class="pauldron" d="M39 51 Q33 49 31 56 Q30 61 36 62 Q42 60 44 54 Z" />
+          <path class="pauldron" d="M81 51 Q87 49 89 56 Q90 61 84 62 Q78 60 76 54 Z" />
+        </g>
 
-      <!-- tête -->
-      <path class="neck" d="M55 40 L65 40 L64 48 L56 48 Z" />
-      <circle class="head" cx="60" cy="30" r="14" />
-      <!-- cheveux / capuche teintés profil -->
-      <path class="hair" d="M46 30 Q46 14 60 14 Q74 14 74 30 Q68 22 60 22 Q52 22 46 30 Z" />
-      <!-- yeux (petits) -->
-      <circle class="eye" cx="55" cy="31" r="1.3" />
-      <circle class="eye" cx="65" cy="31" r="1.3" />
+        <!-- tête -->
+        <path class="neck" d="M55 40 L65 40 L64 48 L56 48 Z" />
+        <circle class="head" cx="60" cy="30" r="14" />
+        <!-- cheveux / capuche teintés profil -->
+        <path class="hair" d="M46 30 Q46 14 60 14 Q74 14 74 30 Q68 22 60 22 Q52 22 46 30 Z" />
+        <!-- yeux (petits) -->
+        <circle class="eye" cx="55" cy="31" r="1.3" />
+        <circle class="eye" cx="65" cy="31" r="1.3" />
 
-      <!-- ARME (si équipée) dans la main droite, teintée par la rareté. 🪓 Sa FORME suit
+        <!-- ARME (si équipée) dans la main droite, teintée par la rareté. 🪓 Sa FORME suit
            l'arme réellement portée (`weaponKind`, v0.832) : « j'ai une hache, ça affiche
            une épée ». -->
-      <g
-        v-if="gear.weapon"
-        class="weapon"
-        :class="'w-' + wKind"
-        :style="{ '--rk': rankColor(gear.weapon.rarity) }"
-      >
-        <template v-if="wKind === 'lame'">
-          <rect class="hilt" x="83" y="86" width="4" height="9" rx="1.5" />
-          <rect class="guard" x="79" y="84" width="12" height="3" rx="1.5" />
-          <path class="blade" d="M83.5 84 L83.5 44 Q85 40 86.5 44 L86.5 84 Z" />
-          <path class="blade-edge" d="M85 82 L85 46 Q85.4 45 85.8 46 L85.8 82 Z" />
-          <rect class="glint" x="84" y="46" width="2" height="12" rx="1" />
-        </template>
-        <template v-else-if="wKind === 'dague'">
-          <rect class="hilt" x="83" y="86" width="4" height="8" rx="1.5" />
-          <rect class="guard" x="80" y="84" width="10" height="2.6" rx="1.3" />
-          <path class="blade" d="M83.3 84 L83.3 66 Q85 60 86.7 66 L86.7 84 Z" />
-          <path class="blade-edge" d="M85 82 L85 67 Q85.4 65 85.8 67 L85.8 82 Z" />
-        </template>
-        <template v-else-if="wKind === 'hache'">
-          <rect class="haft" x="83.8" y="46" width="2.6" height="50" rx="1.2" />
-          <path class="head" d="M86 48 Q99 44 101 57 Q100 69 86 66 Q90 57 86 48 Z" />
-          <path class="head-edge" d="M97 49 Q101 57 97 67 Q99 57 97 49 Z" />
-          <path class="head-back" d="M84 51 L78 55 L84 60 Z" />
-        </template>
-        <template v-else-if="wKind === 'masse'">
-          <rect class="haft" x="83.8" y="54" width="2.6" height="42" rx="1.2" />
-          <path
-            class="spikes"
-            d="M85 40 L87 45 L92 43 L90 48 L95 51 L90 53 L92 58 L87 56 L85 61 L83 56 L78 58 L80 53 L75 51 L80 48 L78 43 L83 45 Z"
-          />
-          <circle class="head" cx="85" cy="51" r="6.2" />
-          <circle class="head-hi" cx="83" cy="49" r="1.8" />
-        </template>
-        <template v-else-if="wKind === 'fleau'">
-          <rect class="haft" x="83.8" y="72" width="2.6" height="24" rx="1.2" />
-          <g class="chain">
-            <circle cx="86.5" cy="69" r="1.4" />
-            <circle cx="88.5" cy="65" r="1.4" />
-            <circle cx="90.5" cy="61" r="1.4" />
-            <circle cx="92.5" cy="57" r="1.4" />
-          </g>
-          <path
-            class="spikes"
-            d="M96 44 L97.6 48.5 L102 47 L100.5 51.3 L105 53 L100.5 54.7 L102 59 L97.6 57.5 L96 62 L94.4 57.5 L90 59 L91.5 54.7 L87 53 L91.5 51.3 L90 47 L94.4 48.5 Z"
-          />
-          <circle class="head" cx="96" cy="53" r="5.2" />
-          <circle class="head-hi" cx="94.4" cy="51.4" r="1.5" />
-        </template>
-        <!-- 🏹 arc et bâton : armes de lignée des aventuriers (portrait du vivier, v0.865). -->
-        <template v-else-if="wKind === 'arc'">
-          <path class="bow" d="M87 58 Q104 86 87 114" />
-          <path class="string" d="M87 58 L87 114" />
-          <rect class="hilt" x="86.5" y="81" width="4.5" height="10" rx="1.5" />
-        </template>
-        <template v-else-if="wKind === 'baton'">
-          <rect class="haft" x="83.8" y="36" width="2.6" height="62" rx="1.2" />
-          <circle class="head" cx="85" cy="33" r="4.6" />
-          <circle class="head-hi" cx="83.6" cy="31.6" r="1.4" />
-        </template>
-        <template v-else>
-          <!-- faux : long manche, lame courbe vers l'avant -->
-          <rect class="haft" x="83.8" y="30" width="2.6" height="66" rx="1.2" />
-          <path class="head" d="M86 32 Q70 26 58 40 Q72 34 86 40 Z" />
-          <path class="head-edge" d="M62 37 Q72 30 84 33 Q72 32 62 37 Z" />
-        </template>
-      </g>
+        <g
+          v-if="gear.weapon"
+          class="weapon"
+          :class="'w-' + wKind"
+          :style="{ '--rk': rankColor(gear.weapon.rarity) }"
+        >
+          <template v-if="wKind === 'lame'">
+            <rect class="hilt" x="83" y="86" width="4" height="9" rx="1.5" />
+            <rect class="guard" x="79" y="84" width="12" height="3" rx="1.5" />
+            <path class="blade" d="M83.5 84 L83.5 44 Q85 40 86.5 44 L86.5 84 Z" />
+            <path class="blade-edge" d="M85 82 L85 46 Q85.4 45 85.8 46 L85.8 82 Z" />
+            <rect class="glint" x="84" y="46" width="2" height="12" rx="1" />
+          </template>
+          <template v-else-if="wKind === 'dague'">
+            <rect class="hilt" x="83" y="86" width="4" height="8" rx="1.5" />
+            <rect class="guard" x="80" y="84" width="10" height="2.6" rx="1.3" />
+            <path class="blade" d="M83.3 84 L83.3 66 Q85 60 86.7 66 L86.7 84 Z" />
+            <path class="blade-edge" d="M85 82 L85 67 Q85.4 65 85.8 67 L85.8 82 Z" />
+          </template>
+          <template v-else-if="wKind === 'hache'">
+            <rect class="haft" x="83.8" y="46" width="2.6" height="50" rx="1.2" />
+            <path class="head" d="M86 48 Q99 44 101 57 Q100 69 86 66 Q90 57 86 48 Z" />
+            <path class="head-edge" d="M97 49 Q101 57 97 67 Q99 57 97 49 Z" />
+            <path class="head-back" d="M84 51 L78 55 L84 60 Z" />
+          </template>
+          <template v-else-if="wKind === 'masse'">
+            <rect class="haft" x="83.8" y="54" width="2.6" height="42" rx="1.2" />
+            <path
+              class="spikes"
+              d="M85 40 L87 45 L92 43 L90 48 L95 51 L90 53 L92 58 L87 56 L85 61 L83 56 L78 58 L80 53 L75 51 L80 48 L78 43 L83 45 Z"
+            />
+            <circle class="head" cx="85" cy="51" r="6.2" />
+            <circle class="head-hi" cx="83" cy="49" r="1.8" />
+          </template>
+          <template v-else-if="wKind === 'fleau'">
+            <rect class="haft" x="83.8" y="72" width="2.6" height="24" rx="1.2" />
+            <g class="chain">
+              <circle cx="86.5" cy="69" r="1.4" />
+              <circle cx="88.5" cy="65" r="1.4" />
+              <circle cx="90.5" cy="61" r="1.4" />
+              <circle cx="92.5" cy="57" r="1.4" />
+            </g>
+            <path
+              class="spikes"
+              d="M96 44 L97.6 48.5 L102 47 L100.5 51.3 L105 53 L100.5 54.7 L102 59 L97.6 57.5 L96 62 L94.4 57.5 L90 59 L91.5 54.7 L87 53 L91.5 51.3 L90 47 L94.4 48.5 Z"
+            />
+            <circle class="head" cx="96" cy="53" r="5.2" />
+            <circle class="head-hi" cx="94.4" cy="51.4" r="1.5" />
+          </template>
+          <!-- 🏹 arc et bâton : armes de lignée des aventuriers (portrait du vivier, v0.865). -->
+          <template v-else-if="wKind === 'arc'">
+            <path class="bow" d="M87 58 Q104 86 87 114" />
+            <path class="string" d="M87 58 L87 114" />
+            <rect class="hilt" x="86.5" y="81" width="4.5" height="10" rx="1.5" />
+          </template>
+          <template v-else-if="wKind === 'baton'">
+            <rect class="haft" x="83.8" y="36" width="2.6" height="62" rx="1.2" />
+            <circle class="head" cx="85" cy="33" r="4.6" />
+            <circle class="head-hi" cx="83.6" cy="31.6" r="1.4" />
+          </template>
+          <template v-else>
+            <!-- faux : long manche, lame courbe vers l'avant -->
+            <rect class="haft" x="83.8" y="30" width="2.6" height="66" rx="1.2" />
+            <path class="head" d="M86 32 Q70 26 58 40 Q72 34 86 40 Z" />
+            <path class="head-edge" d="M62 37 Q72 30 84 33 Q72 32 62 37 Z" />
+          </template>
+        </g>
 
-      <!-- RELIQUE (orbe flottante, si équipée), teintée par la rareté -->
-      <g v-if="gear.relic" class="relic" :style="{ '--rk': rankColor(gear.relic.rarity) }">
-        <circle class="orb-glow" cx="28" cy="52" r="9" />
-        <circle class="orb" cx="28" cy="52" r="6" />
-        <circle class="orb-hi" cx="26" cy="50" r="2" />
+        <!-- RELIQUE (orbe flottante, si équipée), teintée par la rareté -->
+        <g v-if="gear.relic" class="relic" :style="{ '--rk': rankColor(gear.relic.rarity) }">
+          <circle class="orb-glow" cx="28" cy="52" r="9" />
+          <circle class="orb" cx="28" cy="52" r="6" />
+          <circle class="orb-hi" cx="26" cy="50" r="2" />
+        </g>
       </g>
     </g>
 
-    <!-- 🖼️ LE PORTRAIT remplace le PERSONNAGE dessiné, jamais le reste : l'aura de rang,
-         le familier, le talent et les pips d'équipement continuent de vivre autour —
-         ce sont eux qui portent l'état et les points d'accès. -->
-    <image
-      v-if="portrait"
-      class="portrait"
-      :href="portrait"
-      x="12"
-      y="6"
-      width="96"
-      height="112"
-      preserveAspectRatio="xMidYMid slice"
-      clip-path="url(#av-portrait)"
-    />
-    <!-- ⚠️ Le liseré est indispensable : sans lui l'illustration est un rectangle posé
-         sur le fond, alors que l'avatar procédural, lui, a son aura ronde. Il prend la
-         couleur du RANG le plus haut porté — le médaillon dit donc la même chose que
-         les pips juste en dessous. -->
-    <rect
-      v-if="portrait"
-      class="portrait-frame"
-      :style="{ stroke: portraitStroke }"
-      x="12"
-      y="6"
-      width="96"
-      height="112"
-      rx="14"
-    />
+    <!-- 🖼️ …OU SON ILLUSTRATION, à la place. ⚠️ `@error` : un fichier qui ne charge pas
+         RETOMBE sur le personnage dessiné — sans lui, le corps étant éteint, un 404
+         laisserait un médaillon VIDE, cerclé de son seul liseré. -->
+    <g v-else class="character">
+      <image
+        v-bind="PORTRAIT_BOX"
+        :href="portraitSrc"
+        preserveAspectRatio="xMidYMid slice"
+        clip-path="url(#av-portrait)"
+        @error="brokenId = championId ?? null"
+      />
+      <!-- ⚠️ Le liseré est indispensable : sans lui l'illustration est un rectangle posé
+           sur le fond, alors que l'avatar procédural, lui, a son aura ronde. Il reste
+           NEUTRE : ce médaillon est souvent déjà cerclé par son appelant
+           (`AdventurerPortrait` l'entoure du rang de l'aventurier), et un second anneau
+           tiré d'une AUTRE notion de rang donnerait deux couleurs qui se contredisent. -->
+      <rect class="portrait-frame" v-bind="PORTRAIT_BOX" />
+    </g>
 
     <!-- Familier (compagnon) : CLIQUABLE → ouvre l'inventaire des familiers (même à vide).
          Halo teinté + emoji de la race, flotte près du héros. -->
@@ -288,7 +282,8 @@
 // PAR SLOT (armure = plastron/épaulières/col, arme = épée, accessoire = cape, relique =
 // orbe), teintées par la RARETÉ. Familier + aura d'enchant. Léger, theme-aware, aucun
 // asset externe. Change visiblement selon l'équipement.
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { championPortrait } from '@/data/championPortraits';
 import {
   SLOTS,
   SLOT_LABEL,
@@ -313,18 +308,28 @@ const props = defineProps<{
   /** Forme de l'arme déjà décidée par la lib (portrait d'aventurier : `advLooks`). Sans
    *  elle, la forme est lue sur le NOM de l'arme (`weaponKind`), comme pour le héros. */
   weaponShape?: WeaponKind;
-  /** 🖼️ Illustration du champion (v0.969). Présente, elle REMPLACE le personnage
-   *  dessiné ; absente, l'avatar procédural habillé de sa classe reste le repli. */
-  portrait?: string | null;
+  /**
+   * 🖼️ Le CHAMPION dont on veut l'illustration — un **id**, jamais une URL déjà
+   * résolue. ⚠️ C'est ce qui fait que tout écran affichant un avatar s'illustre
+   * **sans recâblage** : une URL obligerait chaque appelant à connaître la table, et
+   * celui qu'on ajouterait demain afficherait l'avatar dessiné sans que rien ne le
+   * signale. Absent ou sans portrait : l'avatar habillé de sa classe reste le repli.
+   */
+  championId?: string | null;
 }>();
 const emit = defineEmits<{ 'familiar-click': []; 'talent-click': [] }>();
 
 const rankColor = (r: Rarity) => RANK_COLOR[r];
-/** Liseré du médaillon : la couleur du RANG le plus haut porté, neutre à nu. ⚠️ Posé en
- *  ligne et non via `--rk` — cette variable est portée par les classes `.r-<rareté>` des
- *  ENFANTS, elle ne vaut rien sur la racine de l'avatar. */
-const portraitStroke = computed(() =>
-  maxRankIdx.value >= 0 ? RANK_COLOR[RANK_ORDER[maxRankIdx.value]!] : undefined,
+
+/** Géométrie du médaillon — écrite UNE fois : le clip, l'image et le liseré doivent
+ *  coïncider au pixel près, et trois copies finiraient par se décaler. */
+const PORTRAIT_BOX = { x: 12, y: 6, width: 96, height: 112, rx: 14 } as const;
+
+/** ⚠️ On retient l'ID qui a échoué, pas un booléen : le réarmement au changement de
+ *  champion devient implicite (les scènes de combat recyclent leurs avatars). */
+const brokenId = ref<string | null>(null);
+const portraitSrc = computed(() =>
+  brokenId.value === props.championId ? null : championPortrait(props.championId),
 );
 // Pièces d'équipement par slot (pour l'affichage des couches + teinte de rareté).
 const gear = computed(() => ({
@@ -705,10 +710,13 @@ const label = computed(
   fill: var(--accent);
 }
 /* Zones cliquables (familier / talent) : curseur + petit anneau pointillé « gérable ». */
-/* 🖼️ Le médaillon du portrait : liseré teinté par le rang porté (ou neutre à nu). */
+/* 🖼️ Le médaillon du portrait : un liseré neutre, qui délimite l'illustration sans
+   prétendre dire un rang — l'appelant s'en charge déjà. ⚠️ Pas de `var(--rk)` ici :
+   cette variable est portée par les `<g>` ENFANTS et ne remonte jamais jusqu'à ce
+   rect, donc la lire ferait croire à un mécanisme de thème qui n'existe pas. */
 .portrait-frame {
   fill: none;
-  stroke: var(--rk, var(--line, #3a332a));
+  stroke: var(--line, #3a332a);
   stroke-width: 2;
   opacity: 0.75;
 }

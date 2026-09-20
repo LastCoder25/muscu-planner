@@ -32,9 +32,9 @@
             class="gx-cell"
             :style="{ '--c': RANK_COLOR[c.rarity] }"
           >
-            <span class="gx-emo">
-              <ChampionPortrait :champion-id="c.id" :size="48">{{ c.emoji }}</ChampionPortrait>
-            </span>
+            <span class="gx-emo"
+              ><ChampionPortrait :champion-id="c.id">{{ c.emoji }}</ChampionPortrait></span
+            >
           </div>
         </div>
       </div>
@@ -45,11 +45,9 @@
           <i v-for="i in sparks" :key="i" :style="sparkStyle(i)"></i>
         </div>
         <div class="gx-portrait">
-          <span class="gx-pemo">
-            <ChampionPortrait :champion-id="champ.id" :size="76" :alt="champ.name">{{
-              champ.emoji
-            }}</ChampionPortrait>
-          </span>
+          <span class="gx-pemo"
+            ><ChampionPortrait :champion-id="champ.id">{{ champ.emoji }}</ChampionPortrait></span
+          >
         </div>
         <div class="gx-name font-display">{{ champ.name }}</div>
         <div class="gx-rar font-display">{{ RARITY_LABEL[champ.rarity] }}</div>
@@ -69,11 +67,11 @@
               :style="{ '--c': RANK_COLOR[it.champion.rarity] }"
               :title="`${it.champion.name} · ${RARITY_LABEL[it.champion.rarity]}`"
             >
-              <span class="gl-emo">
-                <ChampionPortrait :champion-id="it.champion.id" :size="26">{{
+              <span class="gl-emo"
+                ><ChampionPortrait :champion-id="it.champion.id">{{
                   it.champion.emoji
-                }}</ChampionPortrait>
-              </span>
+                }}</ChampionPortrait></span
+              >
               <span class="gl-name">{{ it.champion.name }}</span>
               <!-- Ce qui DISTINGUE une ligne : neuf ou déjà là (donc un cran d'Éveil,
                    ou du mana rendu quand il n'y a plus rien à réveiller). -->
