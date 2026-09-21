@@ -144,6 +144,24 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(GachaReveal, { plan: court, verdict: v, canAgain: false, busy: false }),
     ).toBeNull();
+    // …et le ×10 : dix lignes qui défilent (v0.980) — une autre branche du template.
+    const { buildLotReveal } = await import('@/lib/gachaReveal');
+    const lot = CHAMPIONS.slice(0, 10).map((c) => ({
+      champion: c,
+      duplicate: false,
+      copies: 1,
+      manaBack: 0,
+    }));
+    expect(
+      await mountIt(GachaReveal, {
+        plan,
+        verdict: v,
+        canAgain: true,
+        busy: false,
+        lot,
+        lotPlans: buildLotReveal(lot, mulberry32(2)),
+      }),
+    ).toBeNull();
   }, 30_000);
   it('GuildPanel s’ouvre aussi sur un vivier VIDE — et l’invocation reste offerte', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');

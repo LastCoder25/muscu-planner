@@ -6,7 +6,11 @@
        d'`arenaStage`. Une roulette qui tirerait elle-même ferait diverger ce qu'on voit de
        ce qu'on possède. -->
   <q-dialog :model-value="!!plan" maximized persistent @update:model-value="onClose">
-    <div class="gx" :class="[phase, rarClass]" :style="{ '--rar-c': rarColor }">
+    <div
+      class="gx"
+      :class="[phase, rarClass, { lotspin: lotSpin }]"
+      :style="{ '--rar-c': rarColor }"
+    >
       <div class="gx-sky" aria-hidden="true"></div>
 
       <!-- ⚠️ « Passer » dès la première seconde : une roulette de 3,4 s se subit au
@@ -18,8 +22,36 @@
         {{ phase === 'spin' ? 'Invocation…' : verdictTitle }}
       </div>
 
+      <!-- 🎰 LE ×10 (v0.980, demandé : « 10 fois l'animation de la ligne qui défile, sur
+           toute la hauteur de l'écran ») — dix roulettes empilées qui tournent ENSEMBLE et
+           s'arrêtent en cascade. Chaque case est carrée à la hauteur d'une ligne (`--rh`, dérivée
+           de la hauteur d'écran) : la translation se calcule en CSS, sans rien mesurer. -->
+      <div v-if="lotSpin" class="gx-rows">
+        <div class="gx-rows-mark" aria-hidden="true"></div>
+        <div
+          v-for="(lp, r) in lotPlans ?? []"
+          :key="r"
+          class="gx-row"
+          :style="{
+            '--c': RANK_COLOR[lp.strip[lp.stopIndex]!.rarity],
+            '--stop': `${lp.spinMs}ms`,
+          }"
+        >
+          <div class="gx-rstrip" :style="rowStyle(lp)">
+            <div v-for="(c, i) in lp.strip" :key="i" class="gx-rcell">
+              <div class="gx-rbox" :style="{ '--c': RANK_COLOR[c.rarity] }">
+                <span class="gx-remo"
+                  ><ChampionPortrait :champion-id="c.id">{{ c.emoji }}</ChampionPortrait></span
+                >
+                <span class="gx-rrar">{{ RARITY_LABEL[c.rarity] }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- LA ROULETTE — une bande qui défile sous un repère fixe. -->
-      <div v-if="phase === 'spin'" class="gx-wheel">
+      <div v-else-if="phase === 'spin'" class="gx-wheel">
         <div class="gx-halo" :style="haloStyle" aria-hidden="true"></div>
         <div class="gx-mark" aria-hidden="true">
           <span class="gx-caret up">▼</span>
@@ -35,6 +67,7 @@
             <span class="gx-emo"
               ><ChampionPortrait :champion-id="c.id">{{ c.emoji }}</ChampionPortrait></span
             >
+            <span class="gx-crar">{{ RARITY_LABEL[c.rarity] }}</span>
           </div>
         </div>
       </div>
@@ -73,9 +106,10 @@
                 }}</ChampionPortrait></span
               >
               <span class="gl-name">{{ it.champion.name }}</span>
+              <span class="gl-rar">{{ RARITY_LABEL[it.champion.rarity] }}</span>
               <!-- Ce qui DISTINGUE une ligne : neuf ou déjà là (donc un cran d'Éveil,
                    ou du mana rendu quand il n'y a plus rien à réveiller). -->
-              <span v-if="!it.duplicate" class="gl-tag neuf">NEUF</span>
+              <span v-if="!it.duplicate" class="gl-tag neuf">NOUVEAU</span>
               <span v-else-if="it.manaBack > 0" class="gl-tag">+{{ it.manaBack }} 💠</span>
               <span v-else class="gl-tag">✨ {{ awakenLevel(it.copies) }}</span>
             </div>
@@ -121,6 +155,9 @@ const props = defineProps<{
   /** Le lot COMPLET quand le tirage était un ×10 — la roulette, elle, ne porte que
    *  son meilleur. Absent pour un tirage à l'unité. */
   lot?: LotItem[] | null;
+  /** Les dix lignes d'un ×10 (`buildLotReveal`), dans l'ordre du tirage. Absent ou
+   *  d'une seule ligne → la roulette à l'unité. */
+  lotPlans?: RevealPlan[] | null;
 }>();
 const emit = defineEmits<{ (e: 'close'): void; (e: 'again'): void }>();
 
@@ -203,6 +240,19 @@ const haloStyle = computed(() => {
   };
 });
 
+/** Tirage ×10 en cours d'animation : les dix lignes remplacent la roulette seule. */
+const lotSpin = computed(() => phase.value === 'spin' && (props.lotPlans?.length ?? 0) > 1);
+/** Une ligne du ×10 — même geste que `stripStyle`, avec des cases carrées de `--rh`. */
+function rowStyle(lp: RevealPlan) {
+  const i = rolling.value ? lp.stopIndex : 0;
+  return {
+    transform: `translate3d(calc(-1 * var(--rh) * ${i + 0.5}), 0, 0)`,
+    transition: rolling.value
+      ? `transform ${lp.spinMs}ms cubic-bezier(0.1, 0.72, 0.16, 1)`
+      : 'none',
+  };
+}
+
 function skip() {
   window.clearTimeout(timer);
   phase.value = 'done';
@@ -225,7 +275,10 @@ watch(
     }
     phase.value = 'spin';
     requestAnimationFrame(() => requestAnimationFrame(() => (rolling.value = true)));
-    timer = window.setTimeout(() => (phase.value = 'done'), p.spinMs + 120);
+    // ⚠️ En ×10 on attend la DERNIÈRE ligne, plus un temps pour voir la cascade finie.
+    const rows = props.lotPlans?.length ? props.lotPlans : null;
+    const end = rows ? Math.max(...rows.map((r) => r.spinMs)) + 700 : p.spinMs + 120;
+    timer = window.setTimeout(() => (phase.value = 'done'), end);
   },
   { immediate: true },
 );
@@ -363,8 +416,11 @@ onBeforeUnmount(() => window.clearTimeout(timer));
 .gx-cell {
   flex: 0 0 92px;
   height: 92px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   margin: 0 2px;
   border-radius: 14px;
   background: color-mix(in srgb, var(--c) 12%, var(--bg));
@@ -373,6 +429,120 @@ onBeforeUnmount(() => window.clearTimeout(timer));
 .gx-emo {
   font-size: 40px;
   line-height: 1;
+}
+
+/* La rareté se LIT sur chaque case, pas seulement à sa teinte : huit couleurs voisines
+   ne se distinguent pas au vol. Les leurres couvrant toute l'échelle, l'afficher ne
+   trahit pas le résultat. */
+.gx-crar {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--c);
+  white-space: nowrap;
+}
+
+/* ── LE ×10 : DIX LIGNES SUR TOUTE LA HAUTEUR ─────────────────────────────── */
+.gx.lotspin {
+  justify-content: flex-start;
+}
+/* ⚠️ La hauteur d'une ligne vient de l'ÉCRAN, pas d'une container query : les unités
+   `cqh` se résolvaient à 0 dans une bande en position absolue (vu au banc), et la
+   roulette s'arrêtait à côté du repère. Dix lignes, moins l'en-tête. */
+.gx-rows {
+  --rh: calc((100dvh - 94px) / 10);
+  position: relative;
+  width: calc(100% + 32px);
+  margin: 0 -16px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+/* Le repère, une seule colonne qui traverse les dix lignes. */
+.gx-rows-mark {
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  transform: translateX(-50%);
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+  opacity: 0.7;
+  z-index: 2;
+  pointer-events: none;
+}
+.gx-row {
+  position: relative;
+  height: var(--rh);
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+/* À l'arrêt, la case sous le repère s'allume à la couleur de SA rareté. */
+.gx-row::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: 50%;
+  width: var(--rh);
+  transform: translateX(-50%);
+  border-radius: 10px;
+  border: 2px solid var(--c);
+  box-shadow: 0 0 16px var(--c);
+  opacity: 0;
+  animation: gx-lock 360ms ease-out var(--stop) forwards;
+}
+@keyframes gx-lock {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(1.25);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) scale(1);
+  }
+}
+.gx-rstrip {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  display: flex;
+  height: 100%;
+  will-change: transform;
+}
+.gx-rcell {
+  flex: 0 0 var(--rh);
+  box-sizing: border-box;
+  height: 100%;
+  padding: 2px;
+}
+.gx-rbox {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c) 12%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+}
+.gx-remo {
+  font-size: calc(var(--rh) * 0.42);
+  line-height: 1;
+}
+.gx-rrar {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--c);
 }
 
 /* ── LA RÉVÉLATION ───────────────────────────────────────────────────────── */
@@ -543,6 +713,17 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   font-size: 10.5px;
   color: var(--text);
 }
+.gl-rar {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--c);
+}
 .gl-tag {
   font-size: 9.5px;
   letter-spacing: 0.05em;
@@ -585,8 +766,13 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   .gx-burst i {
     animation: none;
   }
-  .gx-strip {
+  .gx-strip,
+  .gx-rstrip {
     transition: none !important;
+  }
+  .gx-row::after {
+    animation: none;
+    opacity: 1;
   }
 }
 </style>

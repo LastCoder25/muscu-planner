@@ -7,6 +7,7 @@
     :plan="revealPlan"
     :verdict="revealVerdict"
     :lot="revealLot"
+    :lot-plans="revealLotPlans"
     :can-again="mana >= pullCost && !busy"
     :busy="busy"
     @close="closeReveal"
@@ -771,7 +772,13 @@ import {
 import { rankStarStr } from '@/lib/characterRank';
 import { AWAKEN, advAwaken, advSubtitle, awakenLevel, engageCap } from '@/lib/adventurers';
 import GachaReveal from './GachaReveal.vue';
-import { buildReveal, bestOfLot, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
+import {
+  buildReveal,
+  buildLotReveal,
+  bestOfLot,
+  type RevealPlan,
+  type LotItem,
+} from '@/lib/gachaReveal';
 import { GACHA, TOP_RARITY, gachaOdds, multiPullCost } from '@/lib/gacha';
 import {
   RANK_COLOR,
@@ -1497,6 +1504,8 @@ const fmtOdds = (pct: number) =>
 const revealPlan = ref<RevealPlan | null>(null);
 /** Le lot complet d'un ×10 — `null` pour un tirage à l'unité. */
 const revealLot = ref<LotItem[] | null>(null);
+/** Les dix lignes du ×10 — `null` pour un tirage à l'unité. */
+const revealLotPlans = ref<RevealPlan[] | null>(null);
 const multiCount = GACHA.multiCount;
 const multiCost = multiPullCost();
 const revealVerdict = ref<{
@@ -1531,10 +1540,8 @@ function reducedMotion(): boolean {
 }
 
 /**
- * 🎰 LE LOT DE 10 — une SEULE roulette, sur le meilleur (v0.968).
- *
- * ⚠️ Dix roulettes d'affilée, c'est une demi-minute à regarder pour un seul geste : le
- * genre concentre la tension sur le meilleur, puis récapitule. La grille dit le reste.
+ * 🎰 LE LOT DE 10 — dix lignes qui tournent ENSEMBLE, sur toute la hauteur (v0.980), puis
+ * la révélation du meilleur et la grille du lot.
  */
 async function doPullTen() {
   const uid = auth.user?.id;
@@ -1555,6 +1562,7 @@ async function doPullTen() {
       awaken: awakenLevel(best.copies),
     };
     revealLot.value = lot;
+    revealLotPlans.value = buildLotReveal(lot, Math.random, { reduced: reducedMotion() });
     revealPlan.value = buildReveal(best.champion, Math.random, { reduced: reducedMotion() });
   } finally {
     busy.value = false;
@@ -1572,6 +1580,7 @@ async function doPull() {
       return;
     }
     revealLot.value = null;
+    revealLotPlans.value = null;
     revealVerdict.value = {
       duplicate: r.duplicate,
       copies: r.copies,
