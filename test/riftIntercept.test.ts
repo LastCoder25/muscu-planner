@@ -57,7 +57,7 @@ const team = (lvl: number, n: number): Adventurer[] =>
     name: `A${i}`,
     seed: i + 1,
   }));
-const road = { familiars: [], talents: [], advGear: [], now: 0, kennelLevel: 0 };
+const road = { advGear: [] };
 
 describe('la bande naît du débordement', () => {
   const now = T0 + LIFE + H;

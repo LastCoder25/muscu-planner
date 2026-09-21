@@ -1,13 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { simulateCombat, playerCombatant } from '@/lib/combat';
-import {
-  caravanWages,
-  refAdvGear,
-  refChampionAdv,
-  refCompanions,
-  roadPairs,
-  roadUnits,
-} from '@/lib/caravan';
+import { caravanWages, refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
 import { fuseUnits, type SkirmishUnit } from '@/lib/skirmish';
 import { HERO_UNIT_ID, campFoe, campGroupHaul } from '@/lib/camp';
 import { CAMP_SIZES, resolveOutcome, type Poi } from '@/lib/expedition';
@@ -27,15 +20,11 @@ const poiAt = (L: number, type: Poi['type'] = 'camp'): Poi => ({
   spawnedAt: 0,
   expiresAt: 9e15,
 });
-/** N aventuriers de référence, chacun ÉQUIPÉ de ses 4 pièces et ACCOMPAGNÉ de SON familier.
- *  ⚠️ Un familier PAR aventurier (les 3 espèces de référence en boucle, ids distincts) : avec
- *  les 3 seuls `refCompanions`, les membres au-delà du 3ᵉ partiraient sans compagnon et un
- *  gros groupe serait mesuré plus faible par tête qu'il ne l'est. */
+/** N aventuriers de référence, chacun ÉQUIPÉ de ses 4 pièces (plus de compagnon, v0.996). */
 const team = (n: number, L: number): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
     ...refChampionAdv(L, i),
     id: `a${i}`,
-    familiarId: `refFam${i}`,
     gear: {
       weapon: `refGear${i}weapon`,
       armor: `refGear${i}armor`,
@@ -43,16 +32,9 @@ const team = (n: number, L: number): Adventurer[] =>
       relic: `refGear${i}relic`,
     },
   }));
-const familiars = (n: number, L: number) => {
-  const base = refCompanions(L);
-  return Array.from({ length: n }, (_, i) => ({ ...base[i % base.length]!, id: `refFam${i}` }));
-};
 const units = (n: number, L: number): SkirmishUnit[] => {
   const escort = team(n, L);
-  return roadUnits(
-    escort,
-    roadPairs(escort, { familiars: familiars(n, L), talents: [], advGear: refAdvGear(L, n) }),
-  );
+  return roadUnits(escort, escortGear(escort, { advGear: refAdvGear(L, n) }));
 };
 function win(allies: SkirmishUnit[], L: number, size: number, n = 300) {
   const g = fuseUnits(allies, 'g');

@@ -562,8 +562,7 @@
 
           <!-- ── 🏗️ CE QUE CHAQUE STRUCTURE APPORTE, ET À QUOI ELLE EST LIÉE ───────
              ⚠️ Demandé par l’utilisateur. Le lien entre bâtiments n’était écrit NULLE
-             PART : on peut monter un Chenil sans Guilde et ne rien voir arriver, puisque
-             les compagnons se confient à des aventuriers. Ce dépliant répond aux deux
+             PART. Ce dépliant répond aux deux
              questions d’un coup — « ça sert à quoi » et « il me faut quoi d’autre ».
              ⚠️ Les libellés viennent de `defensePerLevelLabel`, la fonction du JEU : un
              texte recopié finirait par annoncer autre chose que ce qui se passe. -->
@@ -928,32 +927,6 @@
           Plafonné par ton niveau de personnage — le sport reste le plafond.
         </p>
 
-        <!-- ── LE CHENIL DIT CE QU’IL PERMET, il ne range plus personne ──────
-             ⚠️ La garnison de familiers postés au mur a disparu : un familier est
-             confié à un AVENTURIER et le suit partout (demandé par l’utilisateur).
-             Le Chenil ne fait plus que plafonner COMBIEN peuvent en porter et
-             JUSQU’À QUEL RANG — comme la Guilde pour les aventuriers. L’appariement
-             se fait donc sur la fiche de chacun, dans la Guilde : un bâtiment, un
-             endroit. -->
-        <div v-if="defSel.id === 'kennel' && kennelLevel" class="sh-garrison">
-          <div class="sh-gtitle">
-            🐾 Compagnons — {{ pairedCount }}/{{ slots }} confiés
-            <span v-if="nextSlotLevel" class="sh-gnext">
-              · +1 place au niveau {{ nextSlotLevel }}
-            </span>
-          </div>
-          <div class="sh-gcap">
-            🎖️ Rang max hébergé : <b>{{ rankCapLabel }}</b>
-            <span v-if="nextRankLevel" class="sh-gnext">
-              · rang suivant au niveau {{ nextRankLevel }}
-            </span>
-          </div>
-          <p class="sh-gnote">
-            Un familier se confie à un <b>champion</b> et le suit partout — au convoi comme à la
-            brèche. C’est donc sur sa fiche qu’on le lui donne.
-          </p>
-        </div>
-
         <!-- 🏥 L’INFIRMERIE MONTRE SES BLESSÉS (demandé : « depuis l’infirmerie on voit les
              blessés et on peut payer en or pour les soigner »). Héros ET aventuriers —
              blessés en défense ou en convoi —, au même tarif que le héros. -->
@@ -1021,8 +994,6 @@ import SummonPanel from '@/components/SummonPanel.vue';
 import { GACHA } from '@/lib/gacha';
 import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
-import { FAMILIAR_SLOT, type Item } from '@/lib/items';
-import { normalizeTalents } from '@/lib/talents';
 import {
   BUILD,
   buildingAccrued,
@@ -1070,12 +1041,6 @@ import {
   defenseUpgradeScrap,
   defensePerLevelLabel,
   raidIntervalMs,
-  companionPairs,
-  companionPerks,
-  companionSlots,
-  companionRankLabel,
-  companionNextRankLevel,
-  companionNextSlotLevel,
   isWounded,
   healCost,
   woundRemainingMs,
@@ -1182,7 +1147,6 @@ const wallDamaged = computed(() => isDamaged(defenses.value, 'wall'));
 const watchDamaged = computed(() => isDamaged(defenses.value, 'watchtower'));
 const turretsDamaged = computed(() => isDamaged(defenses.value, 'turret'));
 const turretsBuilt = computed(() => turretCount(defenseLevel(defenses.value, 'turret')));
-const kennelLevel = computed(() => defenseLevel(defenses.value, 'kennel'));
 /** Créneaux : un merlon au MILIEU de chaque pan de mur, orienté comme lui — c'est ce qui
  *  fait lire « rempart » plutôt que « polygone ». */
 const merlons = computed(() =>
@@ -1197,39 +1161,11 @@ const merlons = computed(() =>
 );
 const wounded = computed(() => isWounded(base.value, now.value));
 
-/** 🐾 CE QUE LE CHENIL PERMET — et rien de plus : il ne range plus personne.
- *
- *  ⚠️ LA GARNISON DE FAMILIERS POSTÉS AU MUR N’EXISTE PLUS (demandé par l’utilisateur :
- *  « on n’a plus les 6 slots en défense pour les familiers, ils sont assignés aux
- *  aventuriers »). Un familier est confié à un HOMME et le suit partout — convoi comme
- *  rempart. Le Chenil ne fait donc que plafonner COMBIEN peuvent en porter et JUSQU’À
- *  QUEL RANG, exactement comme la Guilde pour les aventuriers, **sauf qu’il ne les crée
- *  pas** : les familiers viennent du Labyrinthe.
- *
- *  L’appariement lui-même vit sur la fiche de l’aventurier, dans la Guilde : un
- *  bâtiment, un endroit. */
-/** ⚠️ SOURCE UNIQUE de « qui porte quoi », partagée par le renseignement (le faucon),
- *  le panneau de forces et le combat : trois lectures différentes finiraient par se
- *  contredire. C’est le même objet que le store donne à `resolveRaid`. */
-const compCtx = computed(() => ({
-  familiars: (char.row?.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
-  talents: normalizeTalents(char.row?.talents ?? []),
-  kennelLevel: kennelLevel.value,
-  now: coarseNow.value,
-  // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
-  advGear: char.row?.adv_gear?.stock ?? [],
-  heroFamiliarId: char.row?.equipped?.[FAMILIAR_SLOT]?.id ?? null,
-  heroTalentIds: normalizeTalents(char.row?.talents ?? [])
-    .filter((t) => t.equipped === true)
-    .map((t) => t.id),
-}));
-const slots = computed(() => companionSlots(kennelLevel.value));
-const nextSlotLevel = computed(() => companionNextSlotLevel(kennelLevel.value));
-const rankCapLabel = computed(() => companionRankLabel(kennelLevel.value));
-const nextRankLevel = computed(() => companionNextRankLevel(kennelLevel.value));
-/** Combien d’aventuriers portent RÉELLEMENT un compagnon — ce que le combat retient,
- *  pas ce qu’on a rangé : au-delà des places du Chenil, un familier reste à la niche. */
-const pairedCount = computed(() => companionPairs(char.advList, compCtx.value).size);
+/** ⚠️ SOURCE UNIQUE de « qui porte quoi », partagée par le panneau de forces et le
+ *  combat : deux lectures différentes finiraient par se contredire. C’est le même objet
+ *  que le store donne à `resolveRaid` (`escortKit`). Plus de familier ni de talent sur un
+ *  champion (v0.996) : seulement ses pièces. */
+const compCtx = computed(() => char.escortKit);
 /** Ce que coûte le retour à la normale : remettre l'enceinte en état relance aussi la
  *  production (le gel est la conséquence de la casse, pas une punition séparée). */
 const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) : 0));
@@ -1455,7 +1391,7 @@ const PLOT_R = 43;
 const PLOT_POS = RING(BUILD.plotCap, PLOT_R, gateOffset(BUILD.plotCap));
 /** Les services occupent la rangée du bas ; la Tour de guet, elle, reste SUR le mur
  *  (c'est un ouvrage de rempart, pas un bâtiment de cour). */
-const YARD_SERVICES: DefenseId[] = ['kennel', 'infirmary'];
+const YARD_SERVICES: DefenseId[] = ['infirmary'];
 // Services : ils encadrent la place. ⚠️ Le nombre de places est DÉRIVÉ de la liste —
 // écrit en dur, il laissait un trou dans la cour le jour où l'une d'elles disparaît
 // (le Chantier de fouille, retiré). Même règle que `PLOT_POS` avec le registre.
@@ -1568,10 +1504,6 @@ const clarity = computed(() =>
         scoutLevel(defenses.value),
         raid.value.level,
         heroLevel.value,
-        // ⚠️ Un faucon CONFIÉ À UN AVENTURIER voit plus loin — il n’y a plus de familiers
-        // postés au mur. Et ils ne s’empilent pas : quinze faucons ne voient pas quinze
-        // fois plus loin (cf. `companionPerks`).
-        companionPerks(guardAdvs.value, compCtx.value).scoutBonus,
         // La graine du raid porte l’aléa du renseignement : même armée = même lecture,
         // mais on ne peut pas la prédire avant qu’elle apparaisse.
         raid.value.seed,
@@ -1641,7 +1573,7 @@ function toggleHelpOpen() {
 
 /** 🔗 CE QUI DÉPEND DE QUOI. ⚠️ Écrit ici et NULLE PART AILLEURS : c'est la seule
  *  information de l'écran qu'aucune fonction du jeu ne porte — les dépendances entre
- *  bâtiments existent dans le CODE (le Chenil ne sert à rien sans Guilde) mais ne se
+ *  bâtiments existent dans le CODE mais ne se
  *  déduisent d'aucune donnée. Un `Record` complet : ajouter une structure sans dire
  *  à quoi elle est liée ne compile plus. */
 const STRUCTURE_LINK: Record<DefenseId, string> = {
@@ -1649,8 +1581,7 @@ const STRUCTURE_LINK: Record<DefenseId, string> = {
   turret:
     'Seule structure qui ABAT quelqu’un. Abritée par la Muraille : plus elle tient, plus elles tirent.',
   watchtower: 'Le préavis ne sert que si les 🔔 notifications sont actives.',
-  kennel: 'Ne sert à rien sans ⚔️ Guilde : un familier se confie à un AVENTURIER, pas au mur.',
-  infirmary: 'Soigne le héros ET repose les compagnons revenus du siège.',
+  infirmary: 'Soigne le héros ET les champions tombés au siège ou en convoi.',
 };
 /** Ce qu'apporte le PROCHAIN niveau de chaque structure — par `defensePerLevelLabel`,
  *  la fonction du jeu : un texte recopié finirait par mentir. */
@@ -1670,7 +1601,7 @@ const structureHelp = computed(() =>
 );
 
 // ─── ⚖️ RAPPORT DE FORCES ─────────────────────────────────────────────────────
-// ⚠️ Ce que l'écran ne disait NULLE PART : ce que l'enceinte, les familiers postés et
+// ⚠️ Ce que l'écran ne disait NULLE PART : ce que l'enceinte, les champions et
 // le héros apportent, et à quoi ça se compare. On assignait donc à l'aveugle, et la
 // stratégie sûre était de tout garder à la maison — du temps de carte perdu sans savoir
 // s'il servait. Toute la logique vit dans `raid.ts` (pure, testée, vérifiée par
@@ -1691,7 +1622,7 @@ const heroBack = computed(() =>
 );
 const heroForDefense = computed(() => (heroBack.value ? (props.hero ?? null) : null));
 /** LA GARNISON PRÉSENTE : les aventuriers qui ne sont ni en convoi, ni à l’infirmerie,
- *  épaulés par les familiers postés. ⚠️ Construite par `guardUnits`,
+ *  avec leur équipement. ⚠️ Construite par `guardUnits`,
  *  la MÊME fonction que le store donne à `resolveRaid` : le panneau et la bataille ne
  *  peuvent pas se contredire. */
 /** Les aventuriers qui tiendraient la brèche MAINTENANT. Nommés une seule fois : le
@@ -1715,8 +1646,8 @@ const guardFull = computed(() =>
   guardUnits(heroLevel.value, char.advList, engageCap(char.pantheonLevel), compCtx.value),
 );
 /** ⚠️ LE PANNEAU SE MESURE UNE FOIS PAR MINUTE, pas à chaque seconde. Le Monte-Carlo
- *  coûte ~66 ms (5 ablations), et `garrison` ne dépend de `now` que par la FATIGUE des
- *  familiers — une fonction en escalier qui change quelques fois par heure. Le brancher
+ *  coûte ~66 ms (5 ablations), et la garnison ne dépend de `now` que par les disponibilités
+ *  des champions (convois, infirmerie). Le brancher
  *  sur le tick d’une seconde referait 66 ms de travail identique 60 fois par minute. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
 const forces = computed(() =>
@@ -2500,146 +2431,6 @@ function doHarvest() {
 .inf-all {
   margin-top: 10px;
   width: 100%;
-}
-/* ── Chenil : cases de garnison ─────────────────────────────────────────
-   Des CASES, pas une liste : l'état se lit d'un coup d'œil et un poste vide
-   reste visible. La couleur du liseré est la rareté (mêmes classes .p-* que
-   partout ailleurs), le fond dit occupé/libre. */
-/* Familier hors d’école : il reste LISIBLE (on doit pouvoir lire pourquoi), il n’est
-   simplement plus cliquable. */
-.fpick.barred {
-  opacity: 0.55;
-  border-style: dashed;
-}
-.sh-gcap {
-  font-size: 12.5px;
-  color: var(--dim);
-  margin: -2px 0 8px;
-}
-.gslots {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 10px 0;
-}
-.gslot {
-  position: relative;
-  width: 58px;
-  height: 58px;
-  border-radius: 12px;
-  border: 2px solid var(--rk, var(--line));
-  background: #1d1913;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  padding: 0;
-}
-.gslot.empty {
-  border-style: dashed;
-  border-color: var(--line);
-  background: transparent;
-}
-.gslot.tired {
-  opacity: 0.6;
-}
-.gs-emo {
-  font-size: 26px;
-  line-height: 1;
-}
-.gs-plus {
-  font-size: 22px;
-  color: var(--dim);
-}
-.gs-def {
-  position: absolute;
-  right: 2px;
-  bottom: 1px;
-  font-size: 9px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-.gs-tired {
-  position: absolute;
-  left: 2px;
-  top: 1px;
-  font-size: 11px;
-}
-/* Zone de bonus : le seul chiffre qui compte le jour du siège. */
-.gbonus {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #1a1611;
-  padding: 10px 12px;
-  margin-bottom: 10px;
-}
-.gb-h {
-  font-size: 11px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--dim);
-  margin-bottom: 6px;
-}
-.gb-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.gb-chip {
-  border: 1px solid #7bc86c;
-  color: #7bc86c;
-  border-radius: 999px;
-  padding: 2px 9px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.gb-empty {
-  margin: 0;
-  font-size: 12px;
-  color: var(--dim);
-}
-/* Sélecteur de familier */
-.fpick {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-  align-items: flex-start;
-  text-align: left;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  color: var(--text);
-  cursor: pointer;
-}
-.fpick.here {
-  border-color: #7bc86c;
-}
-.fp-emo {
-  font-size: 24px;
-}
-.fp-main {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.fp-name {
-  font-size: 13px;
-}
-.fp-role {
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #ffd23f;
-}
-.fp-eff {
-  font-size: 12px;
-  color: var(--dim);
-}
-.fp-capped {
-  font-size: 11px;
-  color: var(--dim);
 }
 .btn.full {
   width: 100%;

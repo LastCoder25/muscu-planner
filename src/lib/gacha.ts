@@ -257,10 +257,7 @@ export interface PullResult {
  * ⚠️ **UNIFORME DANS LA LETTRE**, et c'est ce qui fait la vitesse de l'Éveil : un champion
  * PRÉCIS tombe à 1/N du taux de sa lettre.
  */
-export function pullChampion(
-  rng: () => number,
-  pity: PityState,
-): PullResult & { pity: PityState } {
+export function pullChampion(rng: () => number, pity: PityState): PullResult & { pity: PityState } {
   const r = pullGrade(rng, pity);
   if (r.grade === 'B') return { grade: 'B', champion: null, pity: r.pity };
   const pool = championsOf(r.grade);
@@ -370,7 +367,7 @@ export function grantChampion(
  * ⚠️ **ET L'ÉQUIPEMENT SURVIT** : les pièces vivent dans `adv_gear.stock`, un aventurier
  * n'en porte que les **ids**. Les 105 pièces des comptes réels sont rangées par LIGNÉE, et
  * les 6 lignées ne bougent pas — un champion de lignée X porte les pièces de X
- * (`canWearAdvGear` inchangé). Même chose pour les compagnons et les talents confiés.
+ * (`canWearAdvGear` inchangé).
  *
  * ⚠️ **UN CONVOI EN COURS N'EST PAS PERDU** (vérifié : deux en vol sur la base réelle).
  * `caravanClaimRoster` filtre déjà les escortes introuvables et le rapport les affiche

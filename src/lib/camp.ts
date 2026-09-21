@@ -31,7 +31,7 @@ import {
   partyAllies,
   refEscortUnits,
   type PartyHero,
-  type RoadCompanions,
+  type EscortKit,
 } from './caravan';
 import {
   campSpecOf,
@@ -51,12 +51,12 @@ import { type Adventurer } from './adventurers';
 
 export const CAMP = {
   /** Taille de la RÉFÉRENCE : un camp de taille 3 est dimensionné sur 3 aventuriers de
-   *  référence (`refEscortUnits`), accompagnés et équipés. */
+   *  référence (`refEscortUnits`), équipés. */
   refGroup: CARAVAN.refEscort,
   /** PV de l'ennemi fondu ≈ N tours de l'offense du groupe de référence.
    *  ⚠️ MESURÉ avec `dmgPctPv` (grille 1,5→9 × 0,06→0,40, puis 1 000 combats par case, deux
    *  jeux de graines ; `campCalibration.test`). Groupe de N = taille aventuriers de référence,
-   *  chacun accompagné et équipé, contre un camp de bandits — victoire aux niveaux
+   *  chacun équipé, contre un camp de bandits — victoire aux niveaux
    *  12/26/45/70 : taille 3 → 0,85/0,90/0,81/0,79 ; taille 10 → 0,84/0,89/0,82/0,82 ; sur
    *  toutes les tailles 0,70 (niv. 70, taille 2) à 0,90 (niv. 26, taille 3). Un de moins :
    *  taille 10 → 0,31/0,57/0,52/0,57 (à 300 combats : 0,31/0,58/0,53/0,57) ; trois contre un
@@ -96,7 +96,7 @@ export interface PartyInput {
   poi: Poi;
   spec: CampSpec;
   escort: Adventurer[];
-  road: RoadCompanions;
+  road: EscortKit;
   hero: PartyHero | null;
   seed: number;
   /** ⚠️ REQUIS : plafond anti-runaway du butin. AVEC le héros : le MÊME niveau que

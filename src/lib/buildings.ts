@@ -177,8 +177,8 @@ export const BUILDING_TYPES: BuildingType[] = [
     // « les gros volumes de runs inondaient les clés ». On a resserré les affluents en
     // laissant le fleuve ouvert.
     // Calé à **~1 run par jour pour 7 niveaux de Porte** : 1,4/jour au niveau 10,
-    // 4,0 au 28, 14,4 au 100 — la demande monte aussi (depuis la v0.777 il faut un
-    // compagnon PAR aventurier, soit 15 au niveau 28 et 51 au 100).
+    // 4,0 au 28, 14,4 au 100. ⚠️ Calé quand chaque champion portait un familier (v0.777) :
+    // depuis la v0.996 ils sont réservés au héros, donc la DEMANDE a baissé — à re-mesurer.
     prodPerHrPerLvl: 0.006,
     buildGold: 500,
     unlockLevel: 2,

@@ -54,10 +54,9 @@ import {
   missionXp,
   refAdvGear,
   refChampionAdv,
-  refCompanions,
-  roadPairs,
+  escortGear,
   roadUnits,
-  type RoadCompanions,
+  type EscortKit,
 } from '@/lib/caravan';
 import { deriveSkirmish, fuseUnits, skirmishXpShares } from '@/lib/skirmish';
 import {
@@ -86,7 +85,6 @@ const team = (n: number, level: number): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
     ...refChampionAdv(level, i),
     id: `adv_${i}`,
-    familiarId: `refFam${i % 3}`,
     // ⚠️ 4 emplacements depuis la v0.881 : sans la relique, le fixture ne correspondrait
     // plus à `refAdvGear` / `refEscortUnits`.
     gear: {
@@ -96,13 +94,12 @@ const team = (n: number, level: number): Adventurer[] =>
       relic: `refGear${i}relic`,
     },
   }));
-const road = (level: number, n: number): RoadCompanions => ({
-  familiars: refCompanions(level),
+const road = (level: number, n: number): EscortKit => ({
   talents: [],
   advGear: refAdvGear(level, n),
 });
-/** Les unités d'une escorte — la signature RÉELLE : `roadUnits(escort, roadPairs(escort, road))`. */
-const units = (esc: Adventurer[], rd: RoadCompanions) => roadUnits(esc, roadPairs(esc, rd));
+/** Les unités d'une escorte — la signature RÉELLE : `roadUnits(escort, escortGear(escort, road))`. */
+const units = (esc: Adventurer[], rd: EscortKit) => roadUnits(esc, escortGear(esc, rd));
 const input = (over: Partial<PartyInput> = {}): PartyInput => {
   const L = over.poi?.level ?? 20;
   const n = over.escort?.length ?? 3;

@@ -1259,38 +1259,11 @@ export interface Adventurer {
   busyUntil?: number;
   /** Blessé jusqu'à — ms epoch. Soigné plus vite par l'Infirmerie, comme le héros. */
   hurtUntil?: number;
-  /**
-   * Son COMPAGNON — l'id d'un familier de l'inventaire.
-   *
-   * ⚠️ L'appariement vit SUR L'AVENTURIER, pas dans une liste à part, et c'est ce qui
-   * lui donne son sens : le familier SUIT son homme partout (convoi comme rempart).
-   * Rangé ailleurs, il aurait fallu deux règles — « qui est apparié » et « qui part en
-   * mission » — et rien pour les tenir d'accord.
-   *
-   * ⚠️ Un familier ne peut être apparié qu'à UN aventurier, et pas en même temps porté
-   * par le héros : c'est `companionsOf` qui le vérifie, jamais l'écran seul.
-   *
-   * Absent = pas de compagnon. Les aventuriers d'avant n'en ont aucun, donc le
-   * mécanisme est INERTE tant que personne n'en assigne un.
-   */
-  familiarId?: string;
-  /**
-   * Son TALENT — l'id d'un talent de la collection.
-   *
-   * ⚠️ UN aventurier = UN talent, là où le héros en équipe plusieurs. C'est ce qui en
-   * fait un « mini-héros bien moins fort » (conception de l'utilisateur) plutôt qu'un
-   * second héros : même grammaire — stats, compagnon, talent — mais une seule ligne de
-   * chaque, et bridée.
-   *
-   * ⚠️ Effet de bord VOULU : les talents en surplus, qui ne servaient que de carburant
-   * à l'infusion, trouvent enfin un emploi. Un talent porté par le HÉROS n'est pas
-   * disponible — c'est `advTalentsOf` qui l'assure, jamais l'écran seul.
-   *
-   * Absent = aucun talent. Inerte tant que personne n'en assigne un.
-   */
-  talentId?: string;
+  // ⚠️ Plus de COMPAGNON ni de TALENT (v0.996) : familiers et talents sont réservés au
+  // HÉROS. Les champs `familiarId`/`talentId` des sauvegardes d'avant ne sont plus lus
+  // (et sont retirés au chargement). Ce qu'ils apportaient est rendu par `CHAMPION_SOLO`.
   /** ÉQUIPEMENT — ids de pièces du stock d'aventurier, un par emplacement.
-   *  ⚠️ Comme le compagnon, l'appariement vit SUR l'aventurier : la pièce suit son homme.
+   *  ⚠️ L'appariement vit SUR l'aventurier : la pièce suit son homme.
    *  Absent = rien de porté (tous les aventuriers d'avant). */
   gear?: Partial<Record<'weapon' | 'armor' | 'accessory' | 'relic', string>>;
 }
@@ -1391,7 +1364,7 @@ export function advStats(adv: Adventurer): {
 /** Rareté de l'aventurier = la strate la plus haute atteinte. Déduite, jamais stockée. */
 export function advRarity(adv: Adventurer): Rarity {
   // ⚠️ Pour un champion, c'est son RANG (son niveau) — jamais sa lettre (refonte 2026-09-21).
-  // C'est lui qui borne son équipement et ses compagnons : un S tiré au niveau 1 porte du
+  // C'est lui qui borne son équipement : un S tiré au niveau 1 porte du
   // Bronze, comme un A. « Le sport est le plafond » passe par le NIVEAU, pas par l'étiquette.
   if (advChampion(adv)) return RANK_ORDER[prestigeRankIndex(Math.max(1, adv.level))]!;
   const top = adv.path.reduce((m, id) => Math.max(m, advClass(id)?.stratum ?? 0), 0);
@@ -1527,8 +1500,38 @@ export function championSkillLevel(
 }
 
 /**
+ * 🐾🧠 CE QUE LES COMPAGNONS APPORTAIENT, RENDU DANS LA BASE (v0.996, mesuré ; décision de
+ * l'utilisateur : « enlève les talents et les familiers des champions, on les garde pour
+ * le héros uniquement », avec compensation « à l'identique »).
+ *
+ * ⚠️ MESURÉ, pas choisi : pour chaque champion de RÉFÉRENCE (`refChampionAdv`, équipé de
+ * `refAdvGear`), on a cherché par bisection le multiplicateur de stats qui redonne la
+ * puissance (`combatPowerRaw`) qu'il avait avec un familier de référence (rang droppable,
+ * jet 0,3, niveau d'objet à niveau) ET un talent de référence (même rang, même jet).
+ * Moyenne des trois orientations : **×1,13 (niv 3) · 1,12 (12) · 1,12 (20) · 1,09 (30) ·
+ * 1,10 (45) · 1,15 (60) · 1,15-1,21 (80) · 1,16-1,22 (100)**. En puissance, familier +
+ * talent valaient **+3,5 à +5 %** jusqu'au niveau 20, **+6 à +12 %** aux niveaux 30-45 et
+ * **+15 à +25 %** au-delà de 60 — d'où une courbe qui monte en fin de partie.
+ *
+ * ⚠️ PLAT à `base` jusqu'au niveau `from`, puis linéaire jusqu'à `top` au niveau
+ * `to` : ce qu'un familier rapporte suit sa rareté, qui s'envole en fin de partie.
+ *
+ * ⚠️ APPLIQUÉ À L'ÉTALON AUSSI (`refChampionAdv` passe par `championStats`), et c'est ce
+ * qui garde la route, les camps et les failles calibrés : la référence perd son compagnon
+ * et gagne la même puissance en stats. Seuls les SIÈGES (calibrés sur le héros) auraient
+ * senti le retrait — la compensation les tient au même niveau.
+ */
+export const CHAMPION_SOLO = { base: 1.12, from: 40, to: 80, top: 1.18 } as const;
+
+export function championSoloMult(level: number): number {
+  const { base, from, to, top } = CHAMPION_SOLO;
+  const t = Math.min(1, Math.max(0, (level - from) / (to - from)));
+  return base + (top - base) * t;
+}
+
+/**
  * 🏅 Les stats d'un champion : son budget (plafonné par le rang du joueur) réparti sur sa
- * forme, × le niveau, × l'Éveil.
+ * forme, × le niveau, × l'Éveil, × ce que ses compagnons lui apportaient (`CHAMPION_SOLO`).
  *
  * ⚠️ **LA COURBE DE NIVEAU EST CELLE DES AVENTURIERS** — la MÊME expression qu'`advStats`,
  * cent lignes plus haut, et c'est pour ça que ce bloc vit ICI : c'est
@@ -1549,7 +1552,8 @@ export function championStats(
   // Mesuré (v0.905) : le niveau d'un aventurier égale déjà exactement celui du joueur,
   // c'est la Guilde qui bride. Un `Math.min(playerLevel, playerLevel)` aurait été un garde
   // incapable de mordre, le motif qu'on vient de supprimer deux fois dans ce module.
-  const mult = 1 + ADV_LEVEL_K * (Math.max(1, playerLevel) - 1);
+  const mult =
+    (1 + ADV_LEVEL_K * (Math.max(1, playerLevel) - 1)) * championSoloMult(Math.max(1, playerLevel));
   const { p, e, a } = champ.form;
   const sum = Math.max(1, p + e + a);
   return {
@@ -1660,9 +1664,9 @@ export function advRank(adv: Adventurer): CharacterRank {
   if (byLevel.rankIndex <= cap) return byLevel;
   // ⚠️ PAS PROMU, PAS DE NOUVEAU RANG À L’ÉCRAN (v0.834 ; demandé par l’utilisateur : « s’il
   // n’a pas été promu, ne change pas le visuel de son rang »). Son niveau a franchi le
-  // rang suivant, mais sa classe n’a pas suivi — et c’est la CLASSE qui borne ses
-  // compagnons (`canAdvFamiliar` / `canAdvTalent`). Afficher « Argent » à qui ne peut
-  // mener que du Bronze ferait mentir la règle. Il reste donc à son rang, ★★★★★ :
+  // rang suivant, mais sa classe n’a pas suivi — et c’est la CLASSE qui borne son
+  // équipement (`canWearAdvGear`). Afficher « Argent » à qui ne peut porter que du
+  // Bronze ferait mentir la règle. Il reste donc à son rang, ★★★★★ :
   // « prêt », jusqu’à ce que la promotion le fasse monter.
   const t = CHARACTER_RANKS[cap]!;
   return {
@@ -1694,8 +1698,8 @@ function advRankCap(adv: Adventurer): number {
  * ⚠️ « L’XP » se lit comme l’EXPÉRIENCE ACCUMULÉE : le niveau d’abord, puis l’XP du niveau
  * en cours. Le champ `xp` seul repart à zéro à chaque niveau — trier dessus mettrait un
  * aventurier fraîchement monté derrière un autre sur le point de le faire.
- * La puissance vient de l’APPELANT (`adventurerPowers`, compagnon et talent compris) : ce
- * module ne connaît ni les familiers ni les talents.
+ * La puissance vient de l’APPELANT (`adventurerPowers`, équipement compris) : ce module ne
+ * connaît pas le stock d’équipement.
  */
 export function compareAdventurers(
   a: Adventurer,

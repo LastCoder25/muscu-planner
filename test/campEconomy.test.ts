@@ -7,7 +7,6 @@ import {
   convoySlotsFree,
   refAdvGear,
   refAdventurer,
-  refCompanions,
 } from '@/lib/caravan';
 import { engageCap, type Adventurer } from '@/lib/adventurers';
 import { campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
@@ -42,7 +41,6 @@ function roster(L: number, n: number): Adventurer[] {
   return Array.from({ length: n }, (_, i) => ({
     ...refAdventurer(L, i),
     id: `a${i}`,
-    familiarId: `refFam${i}`,
     gear: {
       weapon: `refGear${i}weapon`,
       armor: `refGear${i}armor`,
@@ -52,15 +50,7 @@ function roster(L: number, n: number): Adventurer[] {
   }));
 }
 function road(L: number, n: number) {
-  const base = refCompanions(L);
-  return {
-    familiars: Array.from({ length: n }, (_, i) => ({
-      ...base[i % base.length]!,
-      id: `refFam${i}`,
-    })),
-    talents: [],
-    advGear: refAdvGear(L, n),
-  };
+  return { advGear: refAdvGear(L, n) };
 }
 
 interface Trip {

@@ -24,36 +24,18 @@
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
 import { combatPower, combatPowerRaw, mulberry32, type Combatant } from './combat';
 import { refFighter } from './proceduralContent';
-import {
-  rollDrop,
-  familiarMult,
-  rankIndex,
-  RANK_ORDER,
-  rarityRank,
-  prestigeRankIndex,
-  type AggregatedEffects,
-  type Item,
-} from './items';
-import {
-  escortCombatant,
-  unitEffects,
-  canAdvTalent,
-  canAdvFamiliar,
-  pairCompanions,
-  type CompanionSet,
-} from './caravan';
-import { type TalentInstance } from './talents';
+import { rollDrop, type AggregatedEffects, type Item } from './items';
+import { escortCombatant, escortGear, unitEffects, type EscortKit } from './caravan';
 import {
   ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
   canWearAdvGear,
   rollAdvGearDrop,
-  wornGear,
   type AdvGear,
   type AdvGearSlot,
 } from './advGear';
 import { beyondCap } from './buildings';
-import { advStats, advTitle, PROMO_LEVELS, type Adventurer } from './adventurers';
+import { advStats, advTitle, type Adventurer } from './adventurers';
 import {
   BATTLE,
   simulateSiege,
@@ -128,7 +110,7 @@ export interface Raid {
   overflow?: RiftOverflow;
 }
 
-export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'kennel' | 'infirmary';
+export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'infirmary';
 
 /** Une structure de l'enceinte. `damaged` = niveau CONSERVÉ mais efficacité réduite de
  *  moitié jusqu'à réparation — on ne rétrograde jamais un investissement (cf.
@@ -357,22 +339,13 @@ export const DEFENSE_TYPES: DefenseType[] = [
     desc: 'Elle renseigne : plus elle est haute, plus tu en sais sur l’armée qui vient — et plus tôt tu l’apprends.',
   },
   {
-    id: 'kennel',
-    label: 'Chenil',
-    emoji: '🐾',
-    buildGold: 750,
-    buildScrap: 0,
-    unlockLevel: 1,
-    desc: 'Poste tes familiers à la défense. Leur ESPÈCE décide de ce qu’ils apportent au mur.',
-  },
-  {
     id: 'infirmary',
     label: 'Infirmerie',
     emoji: '⛑️',
     buildGold: 700,
     buildScrap: 0,
     unlockLevel: 1,
-    desc: 'Soigne le héros blessé et remet les familiers fatigués sur pied plus vite.',
+    desc: 'Soigne plus vite le héros et les champions blessés.',
   },
 ];
 
@@ -1047,13 +1020,11 @@ export function scoutLeadMs(watchtowerLevel: number, intervalMs: number): number
 }
 
 /** Clarté du renseignement (0..5). Elle dépend de la Tour ET de la force de l'armée : une
- *  grosse armée reste opaque, et c'est en montant la Tour qu'on rachète de la lisibilité.
- *  `falconBonus` = un faucon posté au chenil (V2) voit plus loin. */
+ *  grosse armée reste opaque, et c'est en montant la Tour qu'on rachète de la lisibilité. */
 export function scoutClarity(
   watchtowerLevel: number,
   raidLevel: number,
   playerLevel: number,
-  falconBonus = 0,
   raidSeed = 0,
 ): number {
   const L = Math.max(1, playerLevel);
@@ -1065,7 +1036,7 @@ export function scoutClarity(
   const gap = Math.max(0, raidLevel - L);
   const opacity =
     RAID.clarityMax * RAID.scoutOpacity * Math.min(1, gap / Math.max(1, levelSpanFor(L)));
-  const c = Math.round(base - opacity) - scoutNoise(raidSeed) + falconBonus;
+  const c = Math.round(base - opacity) - scoutNoise(raidSeed);
   return Math.min(RAID.clarityMax, Math.max(0, c));
 }
 
@@ -1186,100 +1157,39 @@ export function groupCombatant(g: RaidGroup): Combatant {
   };
 }
 
-/** Ce que la garnison apporte au mur. Les quatre premiers champs alimentent le
- *  `Combatant` de la base ; les deux derniers sortent du combat (renseignement, fouille)
- *  — c'est ce qui donne un rôle non-combattant à des espèces qui n'en auraient pas. */
+/** 🐾 LE CHENIL EST RETIRÉ (v0.996, décision de l'utilisateur). Il ne servait plus qu'à
+ *  confier des familiers aux champions (places, rang, dressage) ; familiers et talents
+ *  étant désormais réservés au HÉROS, il n'avait plus aucun effet. L'investissement est
+ *  RENDU au chargement (`retireKennel`) — personne ne perd l'or ni la ferraille qu'il y a
+ *  mis. Le prix de pose (`buildGold`) est gardé ici : il n'est plus dans `DEFENSE_TYPES`.
+ */
+const RETIRED_KENNEL = { buildGold: 750, buildScrap: 0 } as const;
 
-/** Emplacements de garnison : **un de plus tous les 5 niveaux, à partir de 1**. Le chenil
- *  grandit donc avec le joueur au lieu de rester figé à 3 — et comme les familiers ne
- *  viennent que du Labyrinthe, la réserve suit le même rythme que les places.
- *  ⚠️ Le nombre de places multiplie l'apport de la garnison : les canaux de COMBAT sont
- *  donc plafonnés (`GARRISON_CAP`), faute de quoi une garnison de dix rendrait la base
- *  imprenable. Seuls le renseignement et la fouille, qui ne sont pas des stats de combat,
- *  s'additionnent librement. */
-/** 🐾 COMBIEN D’AVENTURIERS PEUVENT PORTER UN COMPAGNON — le Chenil est à eux ce que
- *  la Guilde est aux aventuriers, **sauf qu’il ne les crée pas** : les familiers
- *  viennent du Labyrinthe (formulation de l’utilisateur).
- *
- *  ⚠️ MÊME RYTHME QUE `guildRoster` — **+1 tous les 2 niveaux** : « on recrute un
- *  aventurier tous les 2 lvl », donc on doit pouvoir en équiper un tous les 2 lvl,
- *  sinon le vivier grandit plus vite que ce qu’on sait armer.
- *
- *  ⚠️ PLUS DE PLAFOND DE RÔLES (v0.773.1, retiré) : il venait des 6 rôles de garnison
- *  au mur, or cette garnison n’existe plus. Un compagnon n’occupe plus un « rôle »,
- *  il suit son homme — deux loups sur deux aventuriers sont deux combattants un peu
- *  meilleurs, pas un doublon inemployable. */
-export function companionSlots(kennelLevel: number): number {
-  return kennelLevel <= 0 ? 0 : 1 + Math.floor(kennelLevel / 2);
+/** Ce qu'une structure de niveau `level` a coûté : la pose, puis chaque cran. */
+function defenseInvested(
+  level: number,
+  build: { buildGold: number; buildScrap: number },
+): { gold: number; scrap: number } {
+  let gold = build.buildGold;
+  let scrap = build.buildScrap;
+  for (let l = 1; l < Math.max(1, Math.floor(level)); l++) {
+    gold += defenseUpgradeCost(l);
+    scrap += defenseUpgradeScrap(l);
+  }
+  return { gold, scrap };
 }
 
-/** 🎖️ RANG MAXIMAL qu’un familier peut avoir pour tenir le mur — le second levier du
- *  Chenil, et l’exact pendant de ce que la Guilde fait pour les aventuriers.
- *
- *  ⚠️ IL SE CALE SUR LE RANG QU’UN FAMILIER TOMBE À CE NIVEAU — le rang du joueur depuis la
- *  v0.857 (`prestigeRankIndex`, un rang tous les 10 niveaux), plus le plafond √ des objets —
- *  et non plus sur `PROMO_LEVELS`. Cette table-là appartient aux AVENTURIERS : elle dit
- *  « à quel niveau on gagne une classe », ce qui n’a aucun rapport avec « quel familier
- *  existe ». L’emprunt était commode tant que les deux échelles se ressemblaient ; dès
- *  que la cadence des promotions a bougé, le Chenil s’est mis à plafonner des familiers
- *  qu’on pouvait pourtant trouver — un verrou arbitraire sur un système voisin.
- *
- *  ⚠️ Le cap ÉGALE donc exactement ce qui est obtenable : il ne bloque jamais un
- *  familier existant, et il cesse de promettre du primordial à qui ne peut pas en
- *  dropper. « Le sport est le plafond » — pas le bâtiment.
- *
- *  ⚠️ Ça ne concerne QUE le mur. Le familier que le héros PORTE n’est pas au chenil :
- *  il part au combat avec lui, et aucun bâtiment ne le plafonne. */
-function companionRankCap(kennelLevel: number): number {
-  if (kennelLevel <= 0) return -1;
-  return Math.min(RANK_ORDER.length - 1, prestigeRankIndex(kennelLevel));
+/** Retire le Chenil d'une enceinte et rend ce qu'il a coûté. Idempotent : sans Chenil,
+ *  la base revient INCHANGÉE (même référence) et le remboursement vaut zéro. */
+export function retireKennel(base: BaseState): { base: BaseState; gold: number; scrap: number } {
+  const k = base.defenses.find((d) => (d.typeId as string) === 'kennel');
+  if (!k) return { base, gold: 0, scrap: 0 };
+  const back = defenseInvested(k.level, RETIRED_KENNEL);
+  return {
+    base: { ...base, defenses: base.defenses.filter((d) => d !== k) },
+    ...back,
+  };
 }
-
-/** Ce familier peut-il être POSTÉ ? ⚠️ Appliqué au CALCUL du combat autant qu’à
- *  l’écriture : une garnison rangée avant ce changement se soigne toute seule, sans
- *  migration — même politique que `dedupeGarrisonRoles` et que les POI périmés. */
-/** Le rang maximal du Chenil, en toutes lettres. ⚠️ Une seule lecture : le store en a
- *  besoin pour refuser, l’écran pour l’annoncer — deux conversions index→libellé
- *  finiraient par se contredire, et `RANK_ORDER` n’a rien à faire dans un store. */
-export function companionRankLabel(kennelLevel: number): string {
-  const i = companionRankCap(kennelLevel);
-  // En RANG, comme les familiers qu’il héberge (v0.833).
-  return i < 0 ? '—' : rarityRank(RANK_ORDER[i]!).name;
-}
-
-/** Le niveau de Chenil qui ouvrira la place SUIVANTE — `null` une fois toutes les
- *  places ouvertes. ⚠️ La règle du pas (`/5`) ET son plafond vivent ICI : l’écran la
- *  recalculait, et annonçait donc « +1 place au niveau 30 » alors qu’aucune ne viendra
- *  plus jamais. Une règle recopiée finit toujours par mentir. */
-export function companionNextSlotLevel(kennelLevel: number): number | null {
-  const l = Math.max(0, kennelLevel);
-  const next = (Math.floor(l / 5) + 1) * 5;
-  return companionSlots(next) > companionSlots(l) ? next : null;
-}
-
-/** Le niveau de Chenil qui ouvrira le rang SUIVANT — `null` une fois au sommet.
- *  ⚠️ La page ne doit pas importer `PROMO_LEVELS` : cette table appartient aux
- *  AVENTURIERS, et un écran qui la lit directement ne saurait pas qu’elle a bougé. */
-export function companionNextRankLevel(kennelLevel: number): number | null {
-  const next = companionRankCap(kennelLevel) + 1;
-  return next < Math.min(PROMO_LEVELS.length, RANK_ORDER.length) ? PROMO_LEVELS[next]! : null;
-}
-
-export function canCompanion(fam: Item, kennelLevel: number): boolean {
-  return kennelLevel > 0 && rankIndex(fam.rarity) <= companionRankCap(kennelLevel);
-}
-/** ⚠️ IL N'Y A PLUS DE REPLI, ET C'EST VOULU. `garrisonBonus` et `autoGarrison`
- *  prenaient `slots = GARRISON_SLOTS` (3) par défaut : le STORE omettait l'argument —
- *  donc le combat ne comptait que 3 familiers — pendant que l'ÉCRAN passait
- *  `companionSlots(niveau)` et annonçait le bonus de tous. Au niveau 28 : 6 postés
- *  affichés, 3 qui se battent. L'étiquette mentait, et c'est précisément ce que la
- *  v0.683 prétendait avoir corrigé (« le total réellement appliqué »).
- *  Le paramètre est désormais REQUIS : l'oublier ne compile plus. */
-
-/** Une structure ENDOMMAGÉE ne rend que la moitié de son effet ; un familier FATIGUÉ
- *  aussi. Il n'est jamais perdu ni blessé : sinon personne ne posterait ses bons
- *  familiers, et la mécanique mourrait le jour où elle se déclenche. */
-const FATIGUE_MS = 6 * 3600_000;
 
 /** Plafond DUR de la convalescence. Il doit rester très en deçà de l'intervalle entre
  *  deux sièges (24 h au plus serré) : un héros encore alité au siège suivant ne pourrait
@@ -1287,22 +1197,6 @@ const FATIGUE_MS = 6 * 3600_000;
 export const WOUND_MAX_MS = 8 * 3600_000;
 /** Part maximale de l'intervalle entre deux sièges que la convalescence peut occuper. */
 const WOUND_INTERVAL_SHARE = 0.4;
-
-/** Le repos qu'il reste à un familier sorti d'un siège. L'Infirmerie l'abrège. */
-export function fatigueMsFor(infirmaryLevel: number): number {
-  return Math.round(
-    FATIGUE_MS *
-      infirmaryMult(
-        infirmaryLevel,
-        INFIRMARY.fatiguePerLvl,
-        INFIRMARY.fatigueFloor,
-        INFIRMARY.fatigueTail,
-      ),
-  );
-}
-function isFatigued(fam: { fatigueUntil?: number }, now: number): boolean {
-  return !!fam.fatigueUntil && now < fam.fatigueUntil;
-}
 
 /** La BASE en défenseur : la muraille encaisse, les tourelles tirent, le héros présent
  *  prête une part de sa force. Une structure ENDOMMAGÉE ne compte pas (defenseLevel). */
@@ -1879,7 +1773,7 @@ export function woundRemainingMs(base: BaseState | null | undefined, now: number
  *  « l’infirmerie est déjà au max »). Mesuré : ses DEUX leviers touchaient leur
  *  plancher dur aux niveaux 14 et 15 — soit 85 niveaux sur 100 qu’on paie au prix
  *  quadratique pour rien. Les autres structures gardent au moins un levier vivant
- *  (le Chenil par le dressage, la Tour de guet par la clarté).
+ *  (la Tour de guet par la clarté).
  *
  *  ⚠️ ON PROLONGE, ON NE REDISTRIBUE PAS (règle v0.731) : `beyondCap` ne rend 0
  *  qu’en deçà du plafond, donc **toute valeur jusqu’à celui-ci est strictement
@@ -1893,9 +1787,6 @@ const INFIRMARY = {
   woundFloor: 0.2,
   /** Ce que la queue retire AU PLUS, au-delà du plancher. **Strictement < au plancher.** */
   woundTail: 0.1,
-  fatiguePerLvl: 0.05,
-  fatigueFloor: 0.25,
-  fatigueTail: 0.12,
   /** Niveaux au-delà du plafond où la queue a rendu la moitié de son effet. */
   tailHalf: 40,
 } as const;
@@ -2204,35 +2095,21 @@ export interface GuardUnit {
 }
 
 /**
- * LA GARNISON, en unités : les aventuriers PRÉSENTS, épaulés par les familiers postés.
+ * LA GARNISON, en unités : les champions PRÉSENTS, avec leur équipement.
  *
- * ⚠️ C'EST LA CHAÎNE FAMILIERS → GARNISON → DÉFENSES. Le bonus du chenil ne multiplie
- * plus la muraille (un loup ne rend pas la pierre plus solide) : il épaule des HOMMES,
- * comme celui du héros épaule le héros.
- *
- * ⚠️ SANS AUCUN AVENTURIER, IL RESTE LES BÊTES. C'était la condition pour basculer sans
- * régression : le chenil fonctionnait seul jusqu'ici, et s'il ne servait plus qu'à
- * multiplier une troupe absente, un joueur sans Guilde perdrait tout son bonus d'un
- * coup. Les familiers postés forment donc une MEUTE, calée sur le niveau du joueur —
- * comme toute structure de l'enceinte. Plus faible qu'une garnison d'hommes, jamais nulle.
- *
- * ⚠️ Un aventurier est un TIREUR quand l'agilité domine sa forme, un homme d'armes
+ * ⚠️ Un champion est un TIREUR quand l'agilité domine sa forme, un homme d'armes
  * sinon : la même lecture que sa fiche affiche déjà (`advShapeLabel`).
  */
 /**
  * ⚠️ UNE UNITÉ DE SIÈGE N'A QUE DES PV ET DES DÉGÂTS — ni réduction, ni régénération.
- * Les canaux du chenil qui ne sont pas de la frappe doivent donc être REPLIÉS dessus,
- * sinon l'ours et la salamandre ne serviraient plus à rien : mesuré, la garnison
- * n'apportait plus que **+2 points** de tenue contre **+9 à +13** avant la bascule.
+ * Les canaux de l'équipement qui ne sont pas de la frappe doivent donc être REPLIÉS dessus.
  *
  * ⚠️ La RÉDUCTION se replie en PV EFFECTIFS (`pv / (1 − r)`) — la conversion que le
  * projet emploie déjà pour calibrer la morsure des routes. Encaisser 20 % de moins,
  * c'est durer 25 % de plus : les deux se valent tant qu'on ne regarde que la durée.
  *
  * ⚠️ La RÉGÉNÉRATION, elle, n'a PAS d'équivalent : elle rendait des PV entre deux
- * GROUPES, or le nouveau moteur ne les affronte plus l'un après l'autre. Le canal de la
- * salamandre perd donc son sens au mur — c'est une conséquence assumée du changement de
- * moteur, pas un oubli, et elle garde tout son effet sur les convois.
+ * GROUPES, or le moteur ne les affronte plus l'un après l'autre.
  */
 function foldBonus(pv: number, dmg: number, fx: AggregatedEffects) {
   // ⚠️ `AggregatedEffects` est en FRACTIONS de bout en bout, là où l’ancien
@@ -2278,165 +2155,9 @@ export function siegeXp(adv: Adventurer, report: RaidReport): number {
   return Math.max(1, Math.round(base * ratio ** 1.5 * (RAID.xpFloorShare + share)));
 }
 
-/** 🐾 QUI PORTE QUOI AU REMPART : la règle d’appariement UNIQUE (`pairCompanions`,
- *  `caravan.ts` — héros, doublons, fantômes, rareté de classe, pièces), plus ce qui est
- *  propre au mur : les PLACES du Chenil et le RANG qu’il sait héberger (`canCompanion`).
- *
- *  ⚠️ APPLIQUÉ AU CALCUL DU COMBAT, pas seulement à l’écriture : un appariement rangé
- *  avant que le Chenil ne redescende, ou pointant sur un familier vendu, se soigne tout
- *  seul — même politique que les POI périmés, et aucune migration.
- *
- *  ⚠️ L’ORDRE EST CELUI DU VIVIER, et c’est ce qui rend la coupe aux places STABLE : si
- *  le Chenil n’en héberge que trois, ce sont les trois premiers aventuriers qui gardent
- *  leur compagnon, pas un trio qui change à chaque rendu. */
-export function companionPairs(advs: Adventurer[], ctx?: CompanionCtx): Map<string, CompanionSet> {
-  if (!ctx) return new Map();
-  return pairCompanions(advs, ctx, {
-    familiarSlots: companionSlots(ctx.kennelLevel),
-    // Hors d’école : le Chenil ne sait pas l’héberger, il ne vient pas au rempart.
-    familiarOk: (f) => canCompanion(f, ctx.kennelLevel),
-  });
-}
-
-/** 🦅🦫 CE QUE LES COMPAGNONS APPORTENT À LA BASE, hors combat : le faucon voit venir,
- *  la marmotte fouille mieux les corps.
- *
- *  ⚠️ ILS NE S’EMPILENT PAS, et c’est la seule différence avec les canaux de combat :
- *  ceux-là sont PORTÉS par un homme (quinze loups = quinze combattants un peu meilleurs),
- *  ceux-ci valent pour la VILLE ENTIÈRE. Quinze faucons ne voient pas quinze fois plus
- *  loin — on garde le meilleur, un point c’est tout. */
-/** XP de DRESSAGE d’un familier qui a défendu : ∝ ce qui a été repoussé.
- *  ⚠️ Même rythme qu’avant la v0.805 (≈ 8 sièges pour le niveau 5) : l’ancienne XP de
- *  défense se comptait 4 fois moins cher, le barème est simplement converti. */
-export function siegeFamiliarXp(report: RaidReport): number {
-  return report.groups.slice(0, report.defeated).reduce((a, g) => a + g.level * 8, 0);
-}
-
-/**
- * CE QU’ON PEUT CONFIER À CET AVENTURIER — les choix VRAIMENT disponibles (v0.808 ;
- * demandé par l’utilisateur : « n’affiche que ceux disponibles et équipables, selon le
- * rang max notamment »).
- *
- * ⚠️ Renverse la règle d’avant (« on montre TOUT en disant pourquoi »), qui noyait les
- * vrais choix. On garde en revanche le COMPTE de ce qui est écarté, par raison : un
- * familier qui disparaît sans explication se lit comme un familier perdu.
- * Écartés : celui que le HÉROS porte, ceux au-dessus du RANG MAX du Chenil, ceux déjà
- * confiés à un AUTRE aventurier — et tout, si le Chenil n’a plus de PLACE pour lui.
- * Le compagnon qu’il porte déjà reste toujours proposé.
- */
-export function companionOptions(
-  adv: Adventurer,
-  advs: Adventurer[],
-  familiars: Item[],
-  kennelLevel: number,
-  heroFamiliarId?: string | null,
-): {
-  options: Item[];
-  tooRare: number;
-  /** Hébergeables par le Chenil, mais trop rares pour la classe de CET aventurier. */
-  tooRareClass: number;
-  taken: number;
-  hero: number;
-  full: boolean;
-} {
-  const owners = new Map(
-    advs.filter((o) => o.id !== adv.id && o.familiarId).map((o) => [o.familiarId!, o]),
-  );
-  const own = new Set(familiars.map((f) => f.id));
-  const occupied = [...owners.keys()].filter((id) => own.has(id)).length;
-  const full = !adv.familiarId && occupied >= companionSlots(kennelLevel);
-  let tooRare = 0;
-  let tooRareClass = 0;
-  let taken = 0;
-  let hero = 0;
-  const options: Item[] = [];
-  for (const f of familiars) {
-    if (f.id === adv.familiarId) options.push(f);
-    else if (f.id === heroFamiliarId) hero++;
-    else if (!canCompanion(f, kennelLevel)) tooRare++;
-    else if (!canAdvFamiliar(adv, f)) tooRareClass++;
-    else if (owners.has(f.id)) taken++;
-    else if (!full) options.push(f);
-  }
-  return { options, tooRare, tooRareClass, taken, hero, full };
-}
-
-/** Le pendant pour les TALENTS : `talents` = ceux que le héros n’a pas équipés. Écartés :
- *  les trop rares pour SA classe (`canAdvTalent`) et ceux confiés à un autre. */
-export function talentOptions(
-  adv: Adventurer,
-  advs: Adventurer[],
-  talents: TalentInstance[],
-): { options: TalentInstance[]; tooRare: number; taken: number } {
-  const taken = new Set(advs.filter((o) => o.id !== adv.id && o.talentId).map((o) => o.talentId!));
-  let rare = 0;
-  let pris = 0;
-  const options: TalentInstance[] = [];
-  for (const t of talents) {
-    if (t.id === adv.talentId) options.push(t);
-    else if (!canAdvTalent(adv, t)) rare++;
-    else if (taken.has(t.id)) pris++;
-    else options.push(t);
-  }
-  return { options, tooRare: rare, taken: pris };
-}
-
-export function companionPerks(
-  advs: Adventurer[],
-  ctx?: CompanionCtx,
-): { scoutBonus: number; lootPct: number } {
-  let scout = 0;
-  let loot = 0;
-  for (const p of companionPairs(advs, ctx).values()) {
-    const f = p.familiar;
-    if (!f) continue;
-    if (f.effect.type === 'crit_pct') scout = Math.max(scout, 1);
-    else if (f.effect.type === 'gold_pct') loot = Math.max(loot, f.effect.value * familiarMult(f));
-  }
-  return { scoutBonus: scout, lootPct: loot };
-}
-
-/** Ce qu’il faut savoir pour appareiller les défenseurs : la réserve, ce que le HÉROS
- *  porte (il se bat ailleurs), et le Chenil qui plafonne le nombre et le rang. */
-export interface CompanionCtx {
-  familiars: Item[];
-  talents: TalentInstance[];
-  kennelLevel: number;
-  /** ⚠️ REQUIS pour la FATIGUE : un compagnon sorti du siège précédent souffle, et son
-   *  apport est réduit de moitié. Sans cette date rien ne la lirait — et le second
-   *  levier de l’Infirmerie (`fatigueMsFor`) deviendrait décoratif. */
-  now: number;
-  /** 🗡️ Le STOCK d’équipement des aventuriers. ⚠️ REQUIS : sans lui l’équipement porté
-   *  ne compterait nulle part, et l’écran annoncerait une puissance que le combat ignore. */
-  advGear: AdvGear[];
-  heroFamiliarId?: string | null;
-  heroTalentIds?: readonly string[];
-}
-
-/** ⚔️🐾 LES DÉFENSEURS DE LA BRÈCHE, chacun avec SON compagnon et SON talent.
- *
- *  ⚠️ REMPLACE LA GARNISON DE FAMILIERS (demandé par l’utilisateur : « on n’a plus les 6
- *  slots en défense pour les familiers, ils sont assignés aux aventuriers »). Le bonus
- *  était GLOBAL et s’appliquait identiquement à tout le monde ; il est désormais PORTÉ
- *  par un homme — ce qui était l’intention depuis la v0.758 (« le compagnon suit son
- *  homme partout », convoi comme rempart) et ce que le moteur en deux phases permet.
- *
- *  ⚠️ PLUS AUCUN PLAFOND DE CANAL n’est nécessaire, et c’est structurel : `GARRISON_CAP`
- *  existait parce que N familiers empilaient leurs bonus sur UN pool commun. Ici chaque
- *  familier n’épaule QUE son aventurier — quinze loups font quinze combattants un peu
- *  meilleurs, jamais un mur imprenable. Le modèle se borne lui-même.
- *
- *  ⚠️ SANS AVENTURIER, PERSONNE NE TIENT LA BRÈCHE. La « meute du chenil » disparaît
- *  avec la garnison : elle existait pour donner un porteur au bonus du bâtiment quand
- *  le vivier était vide. Un compagnon étant maintenant attaché à un homme, un joueur
- *  sans Guilde n’a ni l’un ni l’autre — il lui reste le mur et les tourelles. */
-function pairEffects(p: CompanionSet | undefined, ctx?: CompanionCtx): AggregatedEffects {
-  // ⚠️ FATIGUÉ = DIMINUÉ DE MOITIÉ, jamais perdu ni blessé (règle v0.663). La formule
-  // elle-même vit dans `unitEffects`, partagée avec la route.
-  return unitEffects(
-    p,
-    p?.familiar && ctx && isFatigued(p.familiar, ctx.now) ? DAMAGED_EFFICIENCY : 1,
-  );
+/** Ce qu'un champion tire de ses pièces au rempart — la définition de la route. */
+function pairEffects(gear: readonly AdvGear[] | undefined): AggregatedEffects {
+  return unitEffects(gear);
 }
 
 /**
@@ -2446,21 +2167,20 @@ function pairEffects(p: CompanionSet | undefined, ctx?: CompanionCtx): Aggregate
  * combattant `playerWithGear` que `escortCombatant` construit déjà — jamais une somme de
  * stats recopiée : une étiquette qui refait le calcul à sa façon finit par diverger.
  *
- * ⚠️ LA PAIRE COMPTÉE EST CELLE QUE LA BATAILLE RETIENT (`companionPairs`) : un familier
- * que le héros porte, hors d’école ou au-delà des places du Chenil ne gonfle pas le
- * chiffre. Et ses effets sont ceux du rempart (`pairEffects`, dressage plafonné, fatigue
- * comprise), exactement ce que `guardUnits` applique.
+ * ⚠️ L'ÉQUIPEMENT COMPTÉ EST CELUI QUE LA BATAILLE RETIENT (`escortGear`) : une pièce
+ * trop rare ou hors lignée ne gonfle pas le chiffre — exactement ce que `guardUnits`
+ * applique.
  *
  * ⚠️ SANS le multiplicateur de siège (`RAID.guardSiegeK`) : c’est un avantage de
  * TERRAIN, comme la part du héros derrière ses murs, pas une propriété de l’homme. Le
  * chiffre se compare donc à celui du héros, sur la même échelle.
  */
-export function adventurerPowers(advs: Adventurer[], ctx?: CompanionCtx): Map<string, number> {
-  const pairs = companionPairs(advs, ctx);
+export function adventurerPowers(advs: Adventurer[], ctx?: EscortKit): Map<string, number> {
+  const pairs = ctx ? escortGear(advs, ctx) : new Map<string, AdvGear[]>();
   return new Map(
     advs.map((a) => [
       a.id,
-      combatPower(escortCombatant([a], a.name, pairEffects(pairs.get(a.id), ctx))),
+      combatPower(escortCombatant([a], a.name, pairEffects(pairs.get(a.id)))),
     ]),
   );
 }
@@ -2475,13 +2195,12 @@ export function adventurerPowers(advs: Adventurer[], ctx?: CompanionCtx): Map<st
  * de chaque AUTRE aventurier autant de fois qu'il y a de lignes — du travail refait pour
  * un nombre qu'on jette aussitôt. Ici, seul LE PORTEUR passe par `combatPower`.
  *
- * ⚠️ LES PAIRES RESTENT CALCULÉES SUR LE VIVIER COMPLET (`companionPairs(modified,
- * ctx)`) : c'est elles qui savent si un familier est déjà confié ailleurs ou hors des
- * places du Chenil — cette exclusivité ne se recopie pas sur un seul homme sans risquer
- * de compter une place déjà prise. Seul le calcul de COMBAT final se limite à `target`.
+ * ⚠️ L'ÉQUIPEMENT RESTE ATTRIBUÉ SUR LE VIVIER COMPLET (`escortGear(modified, ctx)`) :
+ * c'est lui qui sait si une pièce est déjà portée ailleurs. Seul le calcul de COMBAT
+ * final se limite à `target`.
  *
  * ⚠️ UNE PIÈCE QUE `target` NE PEUT PAS PORTER rend la MÊME puissance qu'avant : `wornGear`
- * (appelé par `companionPairs`) filtre toute assignation qui échoue `canWearAdvGear`, donc
+ * (appelé par `escortGear`) filtre toute assignation qui échoue `canWearAdvGear`, donc
  * l'affectation candidate n'atteint jamais le combat — pas besoin de revalider ici.
  */
 export function adventurerGearPower(
@@ -2489,151 +2208,24 @@ export function adventurerGearPower(
   target: Adventurer,
   slot: AdvGearSlot,
   gearId: string | undefined,
-  ctx: CompanionCtx,
+  ctx: EscortKit,
 ): number {
   const modified = advs.map((a) =>
     a.id === target.id ? { ...a, gear: { ...(a.gear ?? {}), [slot]: gearId } } : a,
   );
-  const pairs = companionPairs(modified, ctx);
-  return combatPower(
-    escortCombatant([target], target.name, pairEffects(pairs.get(target.id), ctx)),
-  );
+  const pairs = escortGear(modified, ctx);
+  return combatPower(escortCombatant([target], target.name, pairEffects(pairs.get(target.id))));
 }
 
 /**
- * ✨ CONFIER AU MIEUX : un compagnon et un talent par aventurier, selon SON profil.
- *
- * ⚠️ AUCUNE RÈGLE NOUVELLE — les exclusions sont celles des sélecteurs (`companionOptions` /
- * `talentOptions`) et du combat (`companionPairs`) : ni ce que le HÉROS porte, ni un familier
- * au-dessus du rang du Chenil (`canCompanion`), ni au-delà de ses places (`companionSlots`),
- * ni un talent ou un familier trop rare pour la classe (`canAdvTalent` / `canAdvFamiliar`),
- * et chaque pièce à UN porteur.
- *
- * ⚠️ LE « PROFIL » EST LU PAR L'ARBITRE DU JEU, jamais par une table : pour chaque paire on
- * mesure le gain de `combatPower` que `adventurerPowers` affiche. Un Cogneur tire donc
- * davantage d'un bonus de dégâts, un Encaisseur d'un bonus de PV, sans qu'on l'écrive.
- * Le gain d'une paire ne dépend que de son porteur : on calcule la matrice UNE fois, puis on
- * attribue par gain décroissant (et non aventurier par aventurier dans l'ordre du vivier,
- * qui donnerait le meilleur familier au premier recruté plutôt qu'à celui qui en tire le plus).
- * Les talents sont choisis ENSUITE, avec le compagnon retenu : les deux se multiplient.
- *
- * ⚠️ FAUCON ET MARMOTTE : le renseignement et le butin qu'ils apportent valent pour la VILLE
- * et ne pèsent rien dans la puissance. Sans règle, la marmotte ne serait jamais confiée. On en
- * place un de chaque (le meilleur), s'il reste une place et un aventurier sans compagnon — un
- * seul, parce que ces bonus ne s'empilent pas (`companionPerks`).
- */
-export function autoCompanions(
-  advs: Adventurer[],
-  ctx: CompanionCtx,
-): Map<string, { familiarId?: string; talentId?: string }> {
-  const out = new Map<string, { familiarId?: string; talentId?: string }>(
-    advs.map((a) => [a.id, {}]),
-  );
-  const heroTal = new Set(ctx.heroTalentIds ?? []);
-  const fams = ctx.familiars.filter(
-    (f) => f.id !== ctx.heroFamiliarId && canCompanion(f, ctx.kennelLevel),
-  );
-  const tals = ctx.talents.filter((t) => t.equipped !== true && !heroTal.has(t.id));
-  // 🗡️ L’équipement PORTÉ ne se confie pas ici (il vit sur `Adventurer.gear`) : on le
-  // garde tel quel dans chaque puissance comparée, sinon un aventurier bien équipé
-  // paraîtrait sans compagnon ni talent alors qu’il en a déjà un besoin moindre.
-  const worn = wornGear(advs, ctx.advGear);
-  const power = (a: Adventurer, familiar?: Item, talent?: TalentInstance) =>
-    // ⚠️ NON arrondie : sur un aventurier de bas niveau, l'arrondi efface le gain.
-    combatPowerRaw(
-      escortCombatant([a], a.name, pairEffects({ familiar, talent, gear: worn.get(a.id) }, ctx)),
-    );
-  const bare = new Map(advs.map((a) => [a.id, power(a)]));
-
-  // Attribution par gain décroissant ; départage stable (ordre du vivier, puis de la réserve).
-  function assign<T extends { id: string }>(
-    pool: T[],
-    gainOf: (a: Adventurer, x: T) => number,
-    places: number,
-    set: (a: Adventurer, x: T) => void,
-  ): void {
-    const cand: { ai: number; xi: number; gain: number }[] = [];
-    advs.forEach((a, ai) =>
-      pool.forEach((x, xi) => {
-        const gain = gainOf(a, x);
-        if (gain > 0) cand.push({ ai, xi, gain });
-      }),
-    );
-    cand.sort((p, q) => q.gain - p.gain || p.ai - q.ai || p.xi - q.xi);
-    const doneA = new Set<number>();
-    const doneX = new Set<number>();
-    for (const c of cand) {
-      if (places <= 0) break;
-      if (doneA.has(c.ai) || doneX.has(c.xi)) continue;
-      doneA.add(c.ai);
-      doneX.add(c.xi);
-      set(advs[c.ai]!, pool[c.xi]!);
-      places--;
-    }
-  }
-
-  let places = companionSlots(ctx.kennelLevel);
-  const famOf = new Map<string, Item>();
-  assign(
-    fams,
-    (a, f) => (canAdvFamiliar(a, f) ? power(a, f) - bare.get(a.id)! : 0),
-    places,
-    (a, f) => {
-      famOf.set(a.id, f);
-      out.get(a.id)!.familiarId = f.id;
-    },
-  );
-  places -= famOf.size;
-
-  // Les bonus de VILLE : un de chaque, s'il reste de quoi le confier.
-  for (const type of ['crit_pct', 'gold_pct'] as const) {
-    if ([...famOf.values()].some((f) => f.effect.type === type)) continue;
-    const given = new Set([...famOf.values()].map((f) => f.id));
-    // Le meilleur de ce type qu’un aventurier encore libre sait MENER (rareté de sa classe).
-    let libre: Adventurer | undefined;
-    let best: Item | undefined;
-    for (const f of fams
-      .filter((x) => x.effect.type === type && !given.has(x.id))
-      .sort((p, q) => q.effect.value * familiarMult(q) - p.effect.value * familiarMult(p))) {
-      libre = advs.find((a) => !famOf.has(a.id) && canAdvFamiliar(a, f));
-      if (libre) {
-        best = f;
-        break;
-      }
-    }
-    if (!libre || !best || places <= 0) continue;
-    famOf.set(libre.id, best);
-    out.get(libre.id)!.familiarId = best.id;
-    places--;
-  }
-
-  const withFam = new Map(advs.map((a) => [a.id, power(a, famOf.get(a.id))]));
-  assign(
-    tals.filter((t) => advs.some((a) => canAdvTalent(a, t))),
-    (a, t) => (canAdvTalent(a, t) ? power(a, famOf.get(a.id), t) - withFam.get(a.id)! : 0),
-    Infinity,
-    (a, t) => {
-      out.get(a.id)!.talentId = t.id;
-    },
-  );
-  return out;
-}
-
-/**
- * 🗡️ CONFIER AU MIEUX — l'ÉQUIPEMENT. Mêmes principes que `autoCompanions` : le gain est
+ * 🗡️ CONFIER AU MIEUX — l'ÉQUIPEMENT : le gain est
  * lu par l'arbitre du jeu (`combatPowerRaw`), attribution par GAIN DÉCROISSANT sur tout le
  * vivier (le meilleur porteur pour chaque pièce, pas la première pièce venue pour le
  * premier aventurier), une pièce par porteur, et rien d'interdit (lignée, rareté de la
  * classe — `canWearAdvGear`).
  *
- * ⚠️ LE COMPAGNON ET LE TALENT DE CHACUN RESTENT CEUX QU'IL A DÉJÀ (`companionPairs`,
- * appelé avec `advGear: []` pour ne pas mélanger l'équipement en cours de calcul dans son
- * propre résultat) : ce plan ne rejoue pas `autoCompanions`, il varie SEULEMENT
- * l'équipement — même politique que `autoCompanions`, qui de son côté garde l'équipement
- * PORTÉ constant pour varier compagnon et talent.
- *
  * ⚠️ ON REPART DE ZÉRO, PAS DE CE QUI EST DÉJÀ PORTÉ : ce plan REMPLACE les choix faits à
- * la main plutôt que les compléter — comme `autoCompanions`, l'écran le dit avant le
+ * la main plutôt que les compléter — l'écran le dit avant le
  * geste. Un emplacement à la fois (`ADV_GEAR_SLOTS`) : pour chaque paire (aventurier
  * libre, pièce permise de CET emplacement) on mesure le gain marginal par-dessus ce qui
  * est déjà retenu pour les emplacements PRÉCÉDENTS, puis on prend les paires par gain
@@ -2641,12 +2233,11 @@ export function autoCompanions(
  */
 export function autoAdvGear(
   advs: Adventurer[],
-  ctx: CompanionCtx,
+  ctx: EscortKit,
 ): Map<string, Partial<Record<AdvGearSlot, string>>> {
   const out = new Map<string, Partial<Record<AdvGearSlot, string>>>(advs.map((a) => [a.id, {}]));
-  const pairs = companionPairs(advs, { ...ctx, advGear: [] });
   const base = (a: Adventurer, gear: AdvGear[]) =>
-    combatPowerRaw(escortCombatant([a], a.name, pairEffects({ ...pairs.get(a.id), gear }, ctx)));
+    combatPowerRaw(escortCombatant([a], a.name, pairEffects(gear)));
   const taken = new Set<string>();
   const chosen = new Map<string, AdvGear[]>(advs.map((a) => [a.id, []]));
   for (const slot of ADV_GEAR_SLOTS) {
@@ -2687,7 +2278,7 @@ export function autoAdvGear(
  * ⚠️ Tri **stable** : à puissance égale on départage par id, sinon l'ordre du vivier
  * déciderait de qui défend — donc recruter quelqu'un changerait la garnison en silence.
  */
-export function rampartGuard(advs: Adventurer[], cap: number, ctx?: CompanionCtx): Adventurer[] {
+export function rampartGuard(advs: Adventurer[], cap: number, ctx?: EscortKit): Adventurer[] {
   const n = Math.max(0, Math.floor(cap));
   if (advs.length <= n) return advs;
   const pow = adventurerPowers(advs, ctx);
@@ -2708,17 +2299,17 @@ export function guardUnits(
   playerLevel: number,
   advs: Adventurer[],
   cap: number,
-  ctx?: CompanionCtx,
+  ctx?: EscortKit,
 ): GuardUnit[] {
   void playerLevel;
   const retenus = rampartGuard(advs, cap, ctx);
-  const pairs = companionPairs(retenus, ctx);
+  const pairs = ctx ? escortGear(retenus, ctx) : new Map<string, AdvGear[]>();
   return retenus.map((a) => {
     // ⚠️ `escortCombatant` NU, et on replie ensuite : garder la réduction sur le
     // `Combatant` la perdrait au passage en unité (une unité n'a que PV et dégâts).
     const one = escortCombatant([a], a.name);
     const st = advStats(a);
-    const fx = pairEffects(pairs.get(a.id), ctx);
+    const fx = pairEffects(pairs.get(a.id));
     const f = foldBonus(
       one.pv * RAID.guardSiegeK,
       one.damage * (one.strikes ?? 1) * RAID.guardSiegeK,
@@ -3017,35 +2608,11 @@ export function defensePerLevelLabel(
         ? `Niveau ${next} : ${lead}. Le cran de renseignement suivant est au niveau ${step}.`
         : `Niveau ${next} : ${lead}`;
     }
-    case 'kennel': {
-      // ⚠️ TROIS leviers, et ils tenaient dans une phrase qui n’en annonçait qu’un.
-      // Le Chenil est à ses familiers ce que la Guilde est aux aventuriers : il dit
-      // COMBIEN on en poste et JUSQU’À QUEL RANG, plus le dressage qu’il sait donner.
-      const pa = companionSlots(l);
-      const pb = companionSlots(next);
-      const ra = companionRankCap(l);
-      const rb = companionRankCap(next);
-      const bits = [`dressage de défense plafonné à ${next}`];
-      // ⚠️ UN PALIER MUET DIT QUAND IL BOUGERA. Une place arrive tous les 2 niveaux,
-      // donc un cran sur deux n’en donne aucune — et « rien » laisse croire que le
-      // bâtiment est fini. Capacité héritée du Chantier de fouille (retiré), qui en
-      // était jusqu’ici le seul porteur.
-      if (pb > pa) bits.unshift(`${pa} → ${pb} familiers au mur`);
-      else {
-        const step = nextStepLevel(companionSlots, l);
-        if (step) bits.push(`la place suivante au niveau ${step}`);
-      }
-      if (rb > ra) bits.unshift(`rang max ${companionRankLabel(next)}`);
-      return `Niveau ${next} : ${bits.join(', ')}`;
-    }
     case 'infirmary': {
       const wa = woundMsFor(l, ctx.intervalMs);
       const wb = woundMsFor(next, ctx.intervalMs);
-      const fa = fatigueMsFor(l);
-      const fb = fatigueMsFor(next);
-      const fam = `familiers fatigués ${fmtSpan(fa)} → ${fmtSpan(fb)}`;
       if (wb < wa)
-        return `Niveau ${next} : convalescence du héros ${fmtSpan(wa)} → ${fmtSpan(wb)}, ${fam}`;
+        return `Niveau ${next} : convalescence du héros et des champions ${fmtSpan(wa)} → ${fmtSpan(wb)}`;
       // ⚠️ IL NE RESTE QU’UN SEUL MOTIF possible, et c’est un progrès : la structure
       // n’a PLUS de plancher (queue asymptotique, « aucun niveau mort »), donc la
       // convalescence raccourcit à CHAQUE niveau. Si elle ne bouge pas, c’est
@@ -3054,7 +2621,7 @@ export function defensePerLevelLabel(
       // pour un gain imaginaire. La branche « déjà à son plancher » est retirée
       // plutôt que laissée morte : un chemin inatteignable finit par mentir.
       const tete = `La convalescence du héros (${fmtSpan(wa)}) est bornée par ton rythme de sièges (elle ne dépasse jamais ${Math.round(WOUND_INTERVAL_SHARE * 100)} % de l’intervalle) — la monter n’y changera rien.`;
-      return `Niveau ${next} : ${fam}. ${tete}`;
+      return `Niveau ${next} : ${tete}`;
     }
     default: {
       const jamais: never = id;
@@ -3123,7 +2690,6 @@ export function lootCorpses(
   faction: RaidFaction,
   playerLevel: number,
   seed: number,
-  lootPct = 0,
   advs: Adventurer[],
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
@@ -3194,14 +2760,11 @@ export function lootCorpses(
     });
     if (advPiece) loot.advGear.push(advPiece);
   }
-  // Bonus de fouille de la garnison (marmotte) : il porte sur les RESSOURCES, jamais
-  // sur la rareté des objets — l'anti-runaway ne se contourne pas par le chenil.
-  const k = 1 + Math.max(0, lootPct) / 100;
-  loot.gold = Math.round(gold * k);
-  loot.summonStones = Math.round(stones * k);
+  loot.gold = Math.round(gold);
+  loot.summonStones = Math.round(stones);
   // Les clés se tirent sur le CUMUL des chances : une vague de bêtes en rend une de
   // temps en temps, jamais une par corps.
-  loot.keys = Math.floor(keyOdds * k) + (rng() < (keyOdds * k) % 1 ? 1 : 0);
+  loot.keys = Math.floor(keyOdds) + (rng() < keyOdds % 1 ? 1 : 0);
   return loot;
 }
 

@@ -50,9 +50,7 @@
           :equipped="equipped"
           :weapon-shape="look.weaponKind"
           :champion-id="adv.championId"
-          :talent-icon="talentIcon"
-          @familiar-click="emit('familiar')"
-          @talent-click="emit('talent')"
+          no-companions
         />
         <svg class="ap-stars" viewBox="0 0 100 100" aria-hidden="true">
           <path
@@ -174,12 +172,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
-import {
-  FAMILIAR_SLOT,
-  rarityRank,
-  type Equipped,
-  type Item,
-} from '@/lib/items';
+import { rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
 
 const props = defineProps<{
@@ -188,8 +181,6 @@ const props = defineProps<{
    *  par le parent pour tout le vivier d'un coup : « porté » dépend des autres aventuriers
    *  (une pièce ne se porte qu'une fois), un portrait seul ne peut pas le savoir. */
   look: AdvLook;
-  familiar: Item | null;
-  talentIcon?: string;
   power: number;
   /** Ce qu’il fait en ce moment (« ✅ disponible », « 🐫 en route · 2 h »…). */
   state?: string;
@@ -205,15 +196,13 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   open: [];
-  familiar: [];
-  talent: [];
   gear: [slot: AdvGearSlot];
 }>();
 
 const rank = computed(() => advRank(props.adv));
 const awaken = computed(() => advAwaken(props.adv));
 const title = computed(() => advTitle(props.adv));
-// Le rang de la CLASSE (v0.833) : c’est lui qui borne ses compagnons, affichés en rang.
+// Le rang de la CLASSE (v0.833) : c’est lui qui borne son équipement, affiché en rang.
 const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
 /** Sa classe, ou rien quand elle répète son nom — la règle vit en lib (`advSubtitle`),
  *  parce que la fiche de la Guilde pose exactement la même question. */
@@ -244,13 +233,10 @@ const equipped = computed<Equipped>(() => {
   for (const [slot, v] of Object.entries(props.look.gear)) {
     out[slot as keyof Equipped] = { id: `look-${slot}`, slot, rarity: v.rarity } as Item;
   }
-  if (props.familiar) out[FAMILIAR_SLOT] = props.familiar;
   return out;
 });
-/** Le cadre ouvre la fiche — sauf quand on touche le familier ou le talent de l’avatar,
- *  qui ouvrent leur propre sélecteur. */
-function onFrame(e: MouseEvent) {
-  if ((e.target as Element | null)?.closest?.('.hotspot')) return;
+/** Le cadre ouvre la fiche. */
+function onFrame() {
   emit('open');
 }
 

@@ -732,22 +732,14 @@
                       Retirer
                     </button>
                     <button v-else class="tal-b" @click="doEquipFamiliar(f.id)">Équiper</button>
-                    <!-- ⚠️ Un familier CONFIÉ à un aventurier n'est pas cédable : il le
-                       suit partout (convoi et défense). Même règle que le store. -->
                     <button
-                      v-if="!f.equipped && !famKeepers.has(f.id)"
+                      v-if="!f.equipped"
                       class="tal-b ghost"
                       title="Céder ce familier contre de l’or"
                       @click="doSellFamiliar(f)"
                     >
                       🪙{{ sellValue(f) }}
                     </button>
-                    <span
-                      v-else-if="!f.equipped"
-                      class="tal-posted"
-                      :title="`Confié à ${famKeepers.get(f.id)!.name}`"
-                      >🧭 {{ famKeepers.get(f.id)!.name }}</span
-                    >
                   </div>
                 </div>
               </template>
@@ -2894,7 +2886,6 @@ import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
-import { familiarKeepers } from '@/lib/caravan';
 import { usePush } from '@/composables/usePush';
 const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
@@ -5387,7 +5378,7 @@ async function expeLifecycle() {
 async function doClaimMsg(m: ExpeditionMessage) {
   const uid = auth.user?.id;
   if (!uid) return;
-  const done = await char.expeClaim(uid, m.id, Date.now(), heroLevel.value);
+  const done = await char.expeClaim(uid, m.id, Date.now());
   if (!done) return;
   const haul = haulPills(done)
     .map((h) => `${h.emoji} +${h.n}`)
@@ -5759,9 +5750,6 @@ function doEquipFamiliar(itemId: string) {
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
-/** Les familiers CONFIÉS à un aventurier (id → aventurier) : pas cédables. Source unique
- *  avec le store (`familiarKeepers`). */
-const famKeepers = computed(() => familiarKeepers(char.row?.adventurers ?? []));
 /** Titre d'un groupe de familiers identiques : la race (emoji + nom), repli sur le nom. */
 function famSpeciesLabel(f: Item): string {
   const sp = f.species ? familiarSpecies(f.species) : undefined;

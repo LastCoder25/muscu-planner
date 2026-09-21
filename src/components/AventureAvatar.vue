@@ -222,6 +222,7 @@
     <!-- Familier (compagnon) : CLIQUABLE → ouvre l'inventaire des familiers (même à vide).
          Halo teinté + emoji de la race, flotte près du héros. -->
     <g
+      v-if="!noCompanions"
       class="familiar hotspot"
       role="button"
       tabindex="0"
@@ -247,6 +248,7 @@
     <!-- Talent (bas-gauche) : CLIQUABLE → ouvre l'inventaire des talents. Icône du 1er
          talent équipé (ou ✨ si aucun). Miroir du familier. -->
     <g
+      v-if="!noCompanions"
       class="familiar talent-badge hotspot"
       role="button"
       tabindex="0"
@@ -303,6 +305,9 @@ const props = defineProps<{
   profile: 'puissant' | 'agile' | 'polyvalent';
   equipped: Equipped;
   talentIcon?: string; // icône du 1er talent équipé (badge cliquable bas-gauche)
+  /** Sans familier ni talent (un CHAMPION, v0.996 : ils sont réservés au héros) — les deux
+   *  médaillons cliquables ne sont pas dessinés, plutôt que d'inviter à un geste impossible. */
+  noCompanions?: boolean;
   /** Voie du porteur : départage le set affiché à égalité de pièces. */
   voie?: string | null;
   /** Forme de l'arme déjà décidée par la lib (portrait d'aventurier : `advLooks`). Sans
