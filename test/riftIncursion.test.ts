@@ -460,16 +460,19 @@ describe('🕳️ le plafond de champions d’une faille', () => {
   it('⚠️ une FAILLE n’en laisse passer que RIFT_MAX_PARTY, quel que soit le Panthéon', () => {
     // Le Panthéon d'un joueur avancé en autorise 51 : ici il ne sert à rien.
     for (const engage of [3, 16, 51]) {
-      expect(partyCapFor(rift(), engage)).toBe(RIFT_MAX_PARTY);
+      expect(partyCapFor(rift(), engage, false)).toBe(RIFT_MAX_PARTY);
     }
     // …mais il mord quand il est PLUS strict : un débutant n'en a pas trois.
-    expect(partyCapFor(rift(), 2)).toBe(2);
+    expect(partyCapFor(rift(), 2, false)).toBe(2);
   });
 
   it('⚠️ un CAMP garde le plafond du Panthéon — sa TAILLE fait déjà le gradateur', () => {
     // Mesuré : un camp de 10 se gagne à 20-61 % avec 8 champions, 57-99 % avec 10. Un
     // plafond bas y rendrait les gros repaires impossibles sans le héros.
-    for (const engage of [3, 16, 51]) expect(partyCapFor(camp(), engage)).toBe(engage);
+    for (const engage of [3, 16, 51]) {
+      expect(partyCapFor(camp(), engage, false)).toBe(engage);
+      expect(partyCapFor(camp(), engage, true)).toBe(engage);
+    }
   });
 
   it('le refus DISTINGUE les deux plafonds — ils ne se corrigent pas pareil', () => {
@@ -481,6 +484,15 @@ describe('🕳️ le plafond de champions d’une faille', () => {
     expect(partySendBlocker(rift(), RIFT_MAX_PARTY, false, 5, 51)).toBeNull();
     // Et un camp, lui, en accepte dix.
     expect(partySendBlocker(camp(), 10, false, 5, 51)).toBeNull();
+  });
+
+it('⚠️ le HÉROS compte dans les 3 d’une faille (décision 2026-09-21)', () => {
+    // Mesuré (v0.979) : héros seul → 100 % de fermeture. Sans ça il décidait seul.
+    expect(partyCapFor(rift(), 51, true)).toBe(RIFT_MAX_PARTY - 1);
+    expect(partySendBlocker(rift(), RIFT_MAX_PARTY, true, 5, 51)).toBe('riftCrowd');
+    expect(partySendBlocker(rift(), RIFT_MAX_PARTY - 1, true, 5, 51)).toBeNull();
+    // Un Panthéon plus strict mord toujours, héros ou non.
+    expect(partyCapFor(rift(), 1, true)).toBe(1);
   });
 
   it('⚠️ le plafond est SOUS le point où la faille cesse de se jouer', () => {

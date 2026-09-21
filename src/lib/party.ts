@@ -70,10 +70,18 @@ export const RIFT_MAX_PARTY = 3;
 
 /** Le plafond de champions RÉELLEMENT applicable à ce lieu : le plus strict entre celui du
  *  Panthéon et celui du lieu. ⚠️ Source unique — l'écran et le store l'appellent tous deux
- *  à travers `partySendBlocker`, qui la porte. */
-export function partyCapFor(poi: Pick<Poi, 'type'>, engage: number): number {
+ *  à travers `partySendBlocker`, qui la porte.
+ *
+ *  ⚠️ **LE HÉROS COMPTE DANS LES 3 d'une faille** (décision 2026-09-21). Deux règles qui se
+ *  complètent : la v0.982 borne ce qu'il VAUT (au plus deux champions de référence,
+ *  `heroPartyCombatant`), celle-ci borne la PLACE qu'il prend. Sans elle, héros + 3
+ *  champions valait jusqu'à 5 champions — au-delà du point où une faille cesse de se jouer
+ *  (4 → 99-100 %). `hero` est REQUIS : un paramètre qu'on peut
+ *  oublier finit par l'être, et l'oubli rendrait une place de trop. Un camp n'est pas
+ *  concerné — sa TAILLE est déjà le gradateur. */
+export function partyCapFor(poi: Pick<Poi, 'type'>, engage: number, hero: boolean): number {
   const c = Math.max(0, Math.floor(engage));
-  return isRiftPoi(poi) ? Math.min(c, RIFT_MAX_PARTY) : c;
+  return isRiftPoi(poi) ? Math.max(0, Math.min(c, RIFT_MAX_PARTY - (hero ? 1 : 0))) : c;
 }
 
 /** Pourquoi un GROUPE ne peut pas partir — `null` s'il le peut.
@@ -102,7 +110,7 @@ export function partySendBlocker(
   if (escortCount > Math.max(0, Math.floor(cap))) return 'tooMany';
   // 🕳️ …ET LE PLAFOND DE LA FAILLE, plus strict : on distingue les deux refus parce qu'ils
   // ne se corrigent pas pareil — l'un se lève en montant le Panthéon, l'autre jamais.
-  if (escortCount > partyCapFor(poi, cap)) return 'riftCrowd';
+  if (escortCount > partyCapFor(poi, cap, hero)) return 'riftCrowd';
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
@@ -110,7 +118,7 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   empty: 'le groupe est vide',
   slots: 'tous les créneaux de convoi sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
-  riftCrowd: `une faille ne laisse passer que ${RIFT_MAX_PARTY} champions`,
+  riftCrowd: `une faille ne laisse passer que ${RIFT_MAX_PARTY} membres, héros compris`,
 };
 export function canSendParty(
   poi: Poi,

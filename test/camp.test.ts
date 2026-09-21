@@ -615,7 +615,7 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5, 9)).toBe('notTarget');
     // ⚠️ UNE FAILLE EST UNE CIBLE DE GROUPE depuis que l’incursion existe : la porte
     // lit `PARTY_TARGETS`, pas `CAMP_TYPES` (le détail de la résolution vit ailleurs).
-    expect(partySendBlocker(poi({ type: 'rift' }), 3, true, 5, 9)).toBeNull();
+    expect(partySendBlocker(poi({ type: 'rift' }), 2, true, 5, 9)).toBeNull();
     expect(canSendParty(poi(), 3, false, 0, 9)).toBe(false);
     for (const k of ['notTarget', 'empty', 'slots', 'tooMany'] as const)
       expect(PARTY_SEND_BLOCK_LABEL[k].length).toBeGreaterThan(0);

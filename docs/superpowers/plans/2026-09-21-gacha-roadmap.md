@@ -199,3 +199,77 @@ Proposition qui va avec :
 ⚠️ Trois échelles cohabiteraient : **rang** (Bronze → Tout-puissant, la progression), **rareté
 d'objet** du héros (Commun → Primordial, le butin du sport) et **S/A/B** (le gacha). Elles
 parlent de trois domaines différents, mais il faudra que chaque écran n'en montre qu'une à la fois.
+
+---
+
+## ✅ P0 — Chiffres verrouillés (2026-09-21)
+
+### Comptes réels (relevé en base)
+
+| Compte | Mana | Tirages faits | Champions |
+|---|---|---|---|
+| Last | 892 | 11 | 11, tous niveau 1, aucun Éveil |
+| Cypher | 33 | 6 | 6, tous niveau 1 |
+| Mimi | 110 | 0 | 0 |
+| Knat | 0 | 0 | 0 |
+
+**Compensation du reset** = tirages faits × 110 💠 : **Last +1 210 · Cypher +660** (le mana en
+réserve est conservé). Compteurs de garantie remis à zéro. Aucun niveau ni Éveil perdu (tous au
+niveau 1) : le reset ne coûte rien d'autre.
+
+### Tirage (simulé, 200 joueurs × 1 an)
+
+| Réglage | Valeur |
+|---|---|
+| S | **0,6 %** de base ; taux qui monte de **+6 pts par tirage dès le 74ᵉ**, garanti au **90ᵉ** |
+| A | **5,1 %** ; garanti tous les **10** (le 10ᵉ peut quand même être un S, au taux du moment) |
+| B | le reste (~94 %) : pièce d'équipement de lignée ou matériau d'Éveil |
+| Vedette | **50/50**, le S suivant garanti vedette si perdu ; compteurs partagés entre toutes les vedettes, séparés de la standard |
+| Étincelle | **200 points** (1 par tirage) → un S choisi |
+
+Mesuré : **taux S effectif 1,56 %** (Genshin ≈ 1,6 %), pire attente moyenne entre deux S ≈ 80
+tirages. Selon le rythme de tirage :
+
+| Tirages/jour | 90 tirages en | S/an (dont vedette) | + S à l'étincelle | A/an |
+|---|---|---|---|---|
+| 0,95 | 95 j | 5,2 (3,3) | +1 | 41 |
+| 1,4 | 65 j | 7,9 (5,1) | +2 | 60 |
+| **1,9** | **48 j** | **10,8 (7,1)** | **+3** | **82** |
+| 2,4 | 38 j | 13,7 (9,0) | +4 | 103 |
+
+Repère genre : un joueur gratuit de Genshin, ~1,8 tirage/jour, ~11 ★5/an.
+
+### Revenu cible : ~1,85 tirage/jour pour un joueur régulier, à TOUT niveau
+
+Prix du tirage inchangé (110 💠). Joueur type : 4 jours d'entraînement sur 7, une faille fermée
+par jour.
+
+| Source | 💠/jour | Tirages/jour |
+|---|---|---|
+| Tirage offert (entier les jours d'entraînement, demi sinon) | 86 | 0,78 |
+| Failles — **mana plat**, calé sur **~85 💠 pour une faille/jour** (≈ le niveau 20 actuel) | 85 | 0,77 |
+| Événement hebdo de la vedette : **2 tirages/semaine** | 31 | 0,29 |
+| **Total** | **~202** | **~1,85** |
+
+- **Joueur qui ne combat pas** (aucune faille) : tirage offert + mines résiduelles (~15 💠/j) +
+  événement ≈ **1,2 tirage/jour** — il tire, moins vite.
+- **Deux failles/jour** : un peu moins qu'une (failles plus jeunes) — voulu (v0.936).
+- **Première réussite** (donjons, boss, paliers du Labyrinthe) : **en plus**, une fois pour
+  toutes — le coup de pouce des premières semaines. Montants à régler en P3 pour qu'ils pèsent
+  ~40-60 tirages sur les deux premiers mois, comme l'exploration du genre.
+- ⚠️ La mine résiduelle suit le même aplatissement (sinon elle redevient la source qui monte avec
+  le niveau).
+
+### Puissance S / A (cible pour P1)
+
+- **Un A à Éveil complet ≈ un S nu** — le contrat du genre (4★ C6 ≈ 5★ C0), et c'est exactement
+  ce que l'Éveil actuel mesure (×1,48 ≈ un cran). Donc **budget S ≈ 1,45 × budget A**.
+- **À Éveil égal, le S gagne toujours.** Niveau max identique (celui du héros) : le niveau domine
+  la rareté, donc **un A investi bat un S nu** reste vrai.
+- ⚠️ La valeur absolue des budgets se cale sur l'étalon des combats (`refChampions`) en P1 —
+  convois, sièges, camps et failles bougent ensemble.
+
+### Déjà fait en marge de P0
+
+- **Le héros compte dans la limite de 3 d'une faille** (v0.983, `partyCapFor(poi, engage, hero)`,
+  paramètre requis) ; l'écran retire le dernier champion coché s'il n'y a plus de place.

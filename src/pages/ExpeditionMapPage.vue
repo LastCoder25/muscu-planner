@@ -407,8 +407,8 @@
           <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
                ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
           <p v-if="selectedRift" class="car-cap">
-            🕳️ Une faille ne laisse passer que <b>{{ partyAdvs.length }}/{{ partyMax }}</b>
-            champions — au-delà, elle se referme toute seule.
+            🕳️ Une faille ne laisse passer que <b>{{ RIFT_MAX_PARTY }}</b> membres, héros
+            compris : <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions.
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
@@ -661,6 +661,7 @@ import {
   PARTY_HERO_BLOCK_LABEL,
   PARTY_SEND_BLOCK_LABEL,
   partyCapFor,
+  RIFT_MAX_PARTY,
   partySendBlocker,
   partyHeroBlocker,
   partyHeroToll,
@@ -1285,10 +1286,15 @@ const canSendPartyNow = computed(
  *  plafond du Panthéon (sa TAILLE fait déjà le gradateur) ; une faille est bien plus
  *  stricte, parce qu'elle n'a qu'un seul axe de force. */
 const partyMax = computed(() =>
-  selected.value ? partyCapFor(selected.value, cap.value) : cap.value,
+  selected.value ? partyCapFor(selected.value, cap.value, partyHeroOn.value) : cap.value,
 );
 /** Vrai quand on ne peut plus en cocher — pour le dire AVANT qu'on essaie. */
 const partyFull = computed(() => partyAdvs.value.length >= partyMax.value);
+/** 🕳️ Emmener le héros dans une faille lui prend une place : si le groupe déborde, on
+ *  retire les derniers cochés plutôt que de laisser un envoi impossible à l'écran. */
+watch(partyMax, (max) => {
+  if (partyEscort.value.length > max) partyEscort.value = partyEscort.value.slice(0, max);
+});
 
 function togglePartyAdv(id: string) {
   if (partyEscort.value.includes(id)) {
