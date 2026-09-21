@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { GRADE_COLOR, PULL_GRADES } from '@/data/champions';
 import { mulberry32 } from '@/lib/combat';
-import { RARITY_RANK, RANK_ORDER, itemLevelMult, prestigeRankIndex } from '@/lib/items';
+import { RARITY_RANK, RANK_ORDER, itemLevelMult } from '@/lib/items';
 import { ADV_CLASSES, advAvatar, advRarity, type Adventurer } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
 import {
@@ -32,6 +32,7 @@ import {
   rollGachaPiece,
   wornGear,
   type AdvGear,
+  advGearRankStar,
 } from '@/lib/advGear';
 
 const adv = (id: string, path: string[], gear?: Adventurer['gear']): Adventurer => ({
@@ -165,15 +166,18 @@ describe('🎰 la pièce d’un tirage B — la SEULE source d’équipement de 
     refAdventurer(L, 2),
     { ...adv('recrue', ['mage']), level: L },
   ];
-  it('au rang du JOUEUR, lettre imposée, lignée du vivier, et PORTABLE', () => {
+  it('TOUJOURS Bronze ★1, lettre imposée, lignée du vivier, et PORTABLE — à tout niveau', () => {
     for (const L of [1, 3, 8, 12, 20, 26, 35, 45, 60, 70, 90]) {
       const v = vivier(L);
       const lignees = new Set(v.map(lineageOf));
       for (let s = 1; s <= 80; s++) {
-        const g = rollGachaPiece(mulberry32(s * 7919 + L), v, { playerLevel: L, grade: 'B' });
+        const g = rollGachaPiece(mulberry32(s * 7919 + L), v, { grade: 'B' });
         expect(g.grade).toBe('B');
         expect(lignees.has(g.lineage)).toBe(true);
-        expect(RARITY_RANK[g.rarity]).toBeLessThanOrEqual(prestigeRankIndex(L));
+        // ⚠️ Décision de l'utilisateur : une pièce naît au PREMIER rang, ★1 — le rang se
+        // gagne ensuite (niveau avec son porteur, puis ascension).
+        expect(g.rarity).toBe(RANK_ORDER[0]);
+        expect(advGearRankStar(g).star).toBe(1);
         expect(
           v.some((a) => canWearAdvGear(a, { ...g, id: 'g' })),
           `L${L} s${s} ${g.lineage} ${g.rarity}`,
@@ -181,10 +185,10 @@ describe('🎰 la pièce d’un tirage B — la SEULE source d’équipement de 
       }
     }
   });
-  it('⚠️ plafonnée à la meilleure classe de SA lignée — une recrue commune seule ne reçoit que du commun', () => {
+  it('une pièce tirée est exactement le modèle Bronze ★1 de sa lignée et de son emplacement', () => {
     const recrue = { ...adv('r', ['archer']), level: 60 };
     for (let s = 1; s <= 100; s++) {
-      const g = rollGachaPiece(mulberry32(s), [recrue], { playerLevel: 60, grade: 'B' });
+      const g = rollGachaPiece(mulberry32(s), [recrue], { grade: 'B' });
       expect(g.rarity).toBe('commun');
       expect(g).toEqual(
         makeAdvGear({ lineage: 'archer', slot: g.slot, rank: 'commun', grade: 'B' }),
@@ -193,9 +197,9 @@ describe('🎰 la pièce d’un tirage B — la SEULE source d’équipement de 
   });
   it('un compte SANS champion reçoit quand même une pièce (le premier tirage ne rend pas du vide)', () => {
     for (let s = 1; s <= 50; s++) {
-      const g = rollGachaPiece(mulberry32(s), [], { playerLevel: 30, grade: 'B' });
+      const g = rollGachaPiece(mulberry32(s), [], { grade: 'B' });
       expect(Object.keys(LINEAGE_GEAR)).toContain(g.lineage);
-      expect(g.rarity).toBe(RANK_ORDER[prestigeRankIndex(30)]);
+      expect(g.rarity).toBe(RANK_ORDER[0]);
     }
   });
 });

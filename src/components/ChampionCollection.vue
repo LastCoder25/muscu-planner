@@ -122,9 +122,17 @@ const groups = computed(() => championGroups(props.advs));
   border-color: color-mix(in srgb, var(--rk) 70%, var(--line));
   background: color-mix(in srgb, var(--rk) 14%, var(--bg));
 }
+/* ⚠️ TOUTES LES TUILES À LA MÊME TAILLE, d'un groupe de rareté à l'autre : la vignette vit
+   dans une boîte FIXE (un portrait est plus haut qu'un emoji) et le nom occupe toujours
+   DEUX lignes, coupé au-delà (nom complet dans l'info-bulle de la tuile). Une hauteur
+   fixe plutôt que `grid-auto-rows: 1fr`, qui n'égaliserait qu'à l'intérieur d'UNE grille. */
 .cc-emo {
   font-size: 26px;
   line-height: 1;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .cc-name {
   font-size: 10.5px;
@@ -133,6 +141,13 @@ const groups = computed(() => championGroups(props.advs));
   text-align: center;
   line-height: 1.15;
   overflow-wrap: anywhere;
+  width: 100%;
+  height: 2.3em;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
 .cc-awk {
   position: absolute;

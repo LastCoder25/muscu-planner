@@ -72,7 +72,7 @@ describe('🗡️ le roster de l’équipement des champions', () => {
   it('une pièce tirée porte le NOM du modèle de sa lettre', () => {
     const v = [{ id: 'm', name: 'm', seed: 1, path: ['mage'], level: 30, xp: 0 }];
     for (let s = 1; s <= 200; s++) {
-      const g = rollGachaPiece(mulberry32(s), v, { playerLevel: 30, grade: 'B' });
+      const g = rollGachaPiece(mulberry32(s), v, { grade: 'B' });
       expect(g.name).toBe(advGearModelName('mage', g.slot, g.grade));
       expect(g.name).toBe(advGearModel('mage', g.slot, g.grade).name);
     }
@@ -99,7 +99,7 @@ describe('🎰 la lettre d’une pièce', () => {
 
   it('une lettre IMPOSÉE est respectée (un tirage B du gacha rend une pièce B)', () => {
     for (let s = 1; s <= 50; s++)
-      expect(rollGachaPiece(mulberry32(s), [], { playerLevel: 20, grade: 'B' }).grade).toBe('B');
+      expect(rollGachaPiece(mulberry32(s), [], { grade: 'B' }).grade).toBe('B');
     for (const g of PULL_GRADES)
       expect(makeAdvGear({ lineage: 'archer', slot: 'weapon', rank: 'rare', grade: g }).grade).toBe(
         g,

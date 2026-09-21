@@ -11,7 +11,6 @@ import {
   emptyEffects,
   itemLevelMult,
   mergeEffects,
-  companionDropRank,
   rankRollMult,
   RANK_ORDER,
   RARITY_RANK,
@@ -361,21 +360,21 @@ export function makeAdvGear(opts: {
  * - Lignée tirée parmi celles du vivier (jamais une lignée qu'on ne possède pas) ; vivier
  *   vide → parmi toutes, sinon le tout premier tirage d'un compte ne rendrait rien.
  * - Emplacement tiré.
- * - Rang = celui du JOUEUR (`companionDropRank`), plafonné à la meilleure classe de la
- *   lignée dans le vivier : le stock ne se remplit jamais de pièces que personne ne porte.
+ * - ⚠️ TOUJOURS BRONZE ★1 (décision de l'utilisateur, 2026-09-21 ; override la spec
+ *   « rang = celui du joueur ») : une pièce ne naît jamais au-dessus du premier rang. Le
+ *   rang se GAGNE ensuite — niveau en combattant avec son porteur, puis ascension. Tirée
+ *   au rang du joueur, une pièce sortait « Or » dès le premier tirage et l'ascension
+ *   n'avait plus rien à faire. Bronze est porté par tout champion, donc la pièce est
+ *   toujours portable.
  */
 export function rollGachaPiece(
   rng: () => number,
   advs: Adventurer[],
-  opts: { playerLevel: number; grade: PullGrade },
+  opts: { grade: PullGrade },
 ): Omit<AdvGear, 'id'> {
   const lineage = pickLineage(rng, advs) ?? LINEAGES[Math.floor(rng() * LINEAGES.length)]!;
   const slot = ADV_GEAR_SLOTS[Math.floor(rng() * ADV_GEAR_SLOTS.length)]!;
-  const lvl = Math.max(1, opts.playerLevel);
-  let rank = RANK_ORDER[companionDropRank(lvl, lvl)] ?? 'commun';
-  const cap = bestClassRarity(advs, lineage);
-  if (cap && RARITY_RANK[cap] < RARITY_RANK[rank]) rank = cap;
-  return makeAdvGear({ lineage, slot, rank, grade: opts.grade });
+  return makeAdvGear({ lineage, slot, rank: RANK_ORDER[0]!, grade: opts.grade });
 }
 
 /** ✨ Éveil des objets : 5 crans (spec § 4), au MÊME pas que celui des champions

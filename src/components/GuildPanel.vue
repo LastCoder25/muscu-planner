@@ -251,32 +251,34 @@
                            combattant avec son porteur. Le niveau reste caché. -->
                       <span v-if="g.awaken" class="d-train awk">✨{{ g.awaken }}</span>
                     </span>
-                    <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
+                  </span>
+                </div>
+                <!-- ⚠️ MÉTA ET EFFETS SOUS L'EN-TÊTE, EN PLEINE LARGEUR. Ils vivaient dans la
+                     colonne du nom, coincée entre l'illustration et le badge rang + étoiles :
+                     à 148 px de tuile il leur restait ~60 px, et tout passait à la ligne mot
+                     par mot — illisible. -->
+                <div class="gear-stock-body">
+                  <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
                          étoiles du héros (demandé). -->
-                    <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
+                  <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
                          colonne étroite la lignée passe à la ligne et le séparateur restait
                          orphelin en bout de ligne précédente. -->
-                    <span class="d-pair-sub gear-meta">
-                      <span class="d-rk" :style="{ '--rk': advGearBadge(g).color }">{{
-                        advGearBadge(g).label
-                      }}</span>
-                      <span>{{ lineageLabel(g.lineage) }}</span>
-                      <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
+                  <span class="d-pair-sub gear-meta">
+                    <span class="d-rk" :style="{ '--rk': advGearBadge(g).color }">{{
+                      advGearBadge(g).label
+                    }}</span>
+                    <span>{{ lineageLabel(g.lineage) }}</span>
+                    <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
                            ligne de moins par tuile, sans rien perdre — le cadre jaune dit
                            déjà « confiée », la flèche dit à QUI. Il garde sa couleur
                            d'état : un empêchement n'est pas une métadonnée. -->
-                      <span v-if="ownerOf(g)" class="warn">→ {{ ownerOf(g)?.name }}</span>
-                    </span>
-                    <!-- Les effets sur UNE ligne : c'est ce qui départage deux pièces, donc
-                         ça reste en pleine couleur, mais une ligne par effet faisait des
-                         tuiles de hauteurs très inégales.
-                         ⚠️ Des éléments FLEX séparés par un `gap`, jamais un « · » entre deux
-                         textes : en colonne étroite le second effet passe à la ligne et le
-                         séparateur reste orphelin en bout de ligne précédente — le défaut que
-                         la ligne de méta juste au-dessus documente déjà (constaté au banc). -->
-                    <span class="d-gain gear-fx">
-                      <span v-for="(t, i) in gearEffectTexts(g)" :key="i">{{ t }}</span>
-                    </span>
+                    <span v-if="ownerOf(g)" class="warn">→ {{ ownerOf(g)?.name }}</span>
+                  </span>
+                  <!-- Les effets en pleine couleur, un par ligne : c'est ce qui départage
+                         deux pièces. Jamais un « · » entre deux textes, qui resterait orphelin
+                         en bout de ligne. -->
+                  <span class="d-gain gear-fx">
+                    <span v-for="(t, i) in gearEffectTexts(g)" :key="i">{{ t }}</span>
                   </span>
                 </div>
                 <!-- ⚠️ ICÔNES SEULES, mais chacune garde son `title`/`aria-label` complet :
@@ -1924,8 +1926,29 @@ function leftOf(at: number): string {
 }
 .gear-stock-top {
   display: flex;
-  align-items: flex-start;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
+}
+/* Le nom prend toute la place entre l'illustration et le badge, et ne se coupe jamais en
+   plein mot : il passe sur deux lignes au plus. */
+.gear-stock-top .d-pair-main {
+  flex: 1;
+}
+.gear-stock-top .d-pair-name {
+  font-size: 12.5px;
+  line-height: 1.2;
+}
+.gear-stock-top .d-pair-name b {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.gear-stock-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 /* 🏅 Le badge rang + étoiles, rangé en haut À DROITE comme sur un portrait de champion. */
 .gear-rsb {
@@ -1950,11 +1973,14 @@ function leftOf(at: number): string {
 .gear-meta .d-rk {
   margin-left: 0;
 }
+/* Un effet par ligne : en pleine largeur chacun tient sur la sienne, et deux effets
+   collés sur une même ligne se lisaient comme un seul. */
 .gear-fx {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0 8px;
+  flex-direction: column;
+  gap: 1px;
   line-height: 1.25;
+  font-weight: 600;
 }
 /* Le porteur vit maintenant DANS la ligne de méta : `.d-pair-sub.warn` ne l'attrapait
    plus (il est enfant, pas la classe elle-même) et il aurait perdu sa couleur d'état. */

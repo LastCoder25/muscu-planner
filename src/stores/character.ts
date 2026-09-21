@@ -1082,14 +1082,14 @@ export const useCharacterStore = defineStore('character', () => {
    * dans un lot font un cran d'Éveil, pas deux entrées.
    *
    * ⚠️ **UN B N'EST PAS UN CHAMPION** : c'est une pièce d'équipement de lignée, tirée au
-   * rang du JOUEUR (`playerLevel`, requis). Lignée prise dans le vivier s'il y en a un
-   * (`rollAdvGearDrop`, plafonnée à ce qu'il peut porter) ; sinon au hasard parmi celles
+   * rang BRONZE ★1, toujours (le rang se gagne ensuite). Lignée prise dans le vivier s'il y en a un
+   * (`rollGachaPiece`) ; sinon au hasard parmi celles
    * des champions — le tout premier tirage d'un compte vide ne doit pas rendre du vide.
    *
    * ⚠️ **AUCUNE REMISE** de bâtiment (cf. l'Autel des boss, v0.799). Rend `null` si la mana
    * manque — l'écran doit déjà l'empêcher, le store le garantit.
    */
-  async function pullGacha(userId: string, count: number, playerLevel: number) {
+  async function pullGacha(userId: string, count: number) {
     const cur = row.value;
     if (!cur) return null;
     // 🎟️ Les tickets d'abord s'ils couvrent le prix, sinon la mana — jamais un mélange.
@@ -1109,7 +1109,7 @@ export const useCharacterStore = defineStore('character', () => {
         manaBack += g.manaBack;
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
-        const piece = gachaPiece(advs, playerLevel);
+        const piece = gachaPiece(advs);
         pieces.push(piece);
         results.push({
           grade: piece.grade,
@@ -1134,19 +1134,19 @@ export const useCharacterStore = defineStore('character', () => {
   /** La pièce d'un tirage B — sa LETTRE est tirée à part (`rollGearGrade`) : les pièces A
    *  et S sortent des tirages B (décision de l'utilisateur). `rollGachaPiece` est la seule
    *  source d'équipement de champion. */
-  function gachaPiece(advs: Adventurer[], playerLevel: number): Omit<AdvGear, 'id'> {
-    return rollGachaPiece(Math.random, advs, { playerLevel, grade: rollGearGrade(Math.random) });
+  function gachaPiece(advs: Adventurer[]): Omit<AdvGear, 'id'> {
+    return rollGachaPiece(Math.random, advs, { grade: rollGearGrade(Math.random) });
   }
 
   /** Un tirage à l'unité. */
-  async function pullChampion(userId: string, playerLevel: number) {
-    const r = await pullGacha(userId, 1, playerLevel);
+  async function pullChampion(userId: string) {
+    const r = await pullGacha(userId, 1);
     return r?.[0] ?? null;
   }
 
   /** 🎰 Un lot de 10 — 9 payés pour 10 (v0.968). */
-  async function pullChampions(userId: string, playerLevel: number) {
-    return pullGacha(userId, GACHA.multiCount, playerLevel);
+  async function pullChampions(userId: string) {
+    return pullGacha(userId, GACHA.multiCount);
   }
 
   // Bonus de passage de niveau (global). Verse l'énergie de chaque niveau franchi

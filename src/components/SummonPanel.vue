@@ -121,7 +121,6 @@ import {
 import { GACHA, gachaOdds, multiPullCost } from '@/lib/gacha';
 import { pullPayment } from '@/lib/sportTickets';
 import { GRADE_COLOR } from '@/data/champions';
-import { useProgress } from '@/composables/useProgress';
 
 defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -130,7 +129,6 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
 /** Le niveau du JOUEUR : c'est lui qui fixe le rang d'une pièce B tirée. */
-const progress = useProgress();
 const busy = ref(false);
 
 const mana = computed(() => char.row?.mana ?? 0);
@@ -236,7 +234,7 @@ async function doPullTen() {
   if (!uid || busy.value) return;
   busy.value = true;
   try {
-    const lot = await char.pullChampions(uid, progress.global.value.level);
+    const lot = await char.pullChampions(uid);
     if (!lot) {
       $q.notify({ type: 'negative', message: 'Pas assez de tickets ni de pierres de mana.' });
       return;
@@ -256,7 +254,7 @@ async function doPull() {
   if (!uid || busy.value) return;
   busy.value = true;
   try {
-    const r = await char.pullChampion(uid, progress.global.value.level);
+    const r = await char.pullChampion(uid);
     if (!r) {
       $q.notify({ type: 'negative', message: 'Pas assez de tickets ni de pierres de mana.' });
       return;
