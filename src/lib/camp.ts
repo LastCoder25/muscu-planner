@@ -25,8 +25,7 @@ import {
 import {
   CARAVAN,
   caravanWages,
-  missionTravelMult,
-  missionXp,
+  missionXpFor,
   HERO_UNIT_ID,
   partyAllies,
   refEscortUnits,
@@ -249,7 +248,7 @@ function campJournal(d: SkirmishResult, allies: SkirmishUnit[], bodies: Skirmish
  *
  * - Combat : `simulateCombat(groupe fondu, campFoe)` ; le groupe est lu par `deriveSkirmish`.
  * - XP : socle `missionXp` + part des abattus (`skirmishXpShares`) PARTAGÉE ENTRE LES SEULS
- *   AVENTURIERS, × `missionTravelMult` comme pour un convoi (la distance paie toute l'XP).
+ *   AVENTURIERS, le socle selon l'issue (défaite = `CARAVAN.xpLossShare`), sans distance (v0.1014).
  *   ⚠️ Le héros n'en prend pas : son XP vient du sport, et le compter parmi les présents
  *   diluerait la part du vivier à chaque fois qu'on l'emmène — précisément ce qui rend les
  *   gros camps jouables. Ses abattus restent au total partagé ; la MARGE DE PORTAGE empêche
@@ -279,9 +278,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     escort.map((a) => [a.id, slainBy[a.id] ?? 0]),
   );
   const shares = skirmishXpShares(escort, bodies, d);
-  const travel = missionTravelMult(poi);
-  const xp: Record<string, number> = {};
-  for (const a of escort) xp[a.id] = missionXp(a, poi) + Math.round((shares[a.id] ?? 0) * travel);
+  const xp = missionXpFor(escort, poi, d.win, shares);
 
   const party: PartyResult = {
     hero: !!hero,

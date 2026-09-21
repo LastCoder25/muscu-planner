@@ -688,6 +688,7 @@ import {
   poiCombatant,
   simulateArena,
   goldCost,
+  poiTravelLevel,
   travelOneWayMin,
   expeditionTerrain,
   type Poi,
@@ -1645,7 +1646,7 @@ const costOf = (p: Poi) => goldCost(p.type, p.level);
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
 const roundTripMin = (p: Poi) =>
-  Math.round(travelOneWayMin(p.level, p.distNorm) * 2 * travelMult.value);
+  Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
 // Ce que le POI rapporte VRAIMENT (crédité par expeCollect) : or, énergie (mines),
 // objets, clés. La poussière n'existe plus (refonte drops-only) → on ne l'annonce plus.
 /** Ce qu’un lieu rapporte, annoncé sur la carte AVANT l’envoi.
@@ -2478,6 +2479,8 @@ onUnmounted(() => {
 }
 .sh-send {
   width: 100%;
+  /* ⚠️ Cible tactile 44 px minimum (règle mobile) : le padding seul donnait 43 px. */
+  min-height: 44px;
   padding: 12px;
   border-radius: 12px;
   border: none;

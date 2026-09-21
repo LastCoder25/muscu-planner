@@ -16,8 +16,7 @@ import {
 import { EXPE, harvestYield, type Poi } from '@/lib/expedition';
 import {
   caravanWages,
-  missionTravelMult,
-  missionXp,
+  missionXpFor,
   partyAllies,
   refAdvGear,
   refChampionAdv,
@@ -179,9 +178,7 @@ describe('💠 ce qu’une incursion paie — du mana, et RIEN d’autre', () =>
 });
 
 describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => {
-  it('socle de mission + part des abattus × distance — la règle EXACTE des camps', () => {
-    // ⚠️ LOIN, pas à mi-carte : `missionTravelMult` vaut EXACTEMENT 1 à `CARAVAN.xpRefDist`
-    // (0,5), donc un test posé là ne peut pas voir un « × travel » disparaître.
+  it('socle de mission selon l’issue + part des abattus — la règle EXACTE des camps', () => {
     const p = rift({ distNorm: 0.9 });
     const esc = team(3, p.level);
     const o = run({ poi: p, escort: esc, hero: heroFort(p.level) });
@@ -199,11 +196,7 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
         bodies,
       ),
     });
-    const travel = missionTravelMult(p);
-    for (const a of esc)
-      expect(o.party!.xp[a.id], a.id).toBe(
-        missionXp(a, p) + Math.round((shares[a.id] ?? 0) * travel),
-      );
+    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares));
   });
 
   it('⚠️ le HÉROS ne prend AUCUNE part : les aventuriers partagent entre eux', () => {
@@ -215,12 +208,11 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
     expect(avec.party!.heroKills).toBe(0);
   });
 
-  it('⚠️ aller LOIN paie plus : l’XP suit `missionTravelMult`, comme un convoi', () => {
+  it('⚠️ la distance ne change rien : seul le NIVEAU de la faille compte (v0.1014)', () => {
     const esc = team(3, 26);
     const pres = run({ poi: rift({ distNorm: 0.1 }), escort: esc, hero: heroFort(26) });
     const loin = run({ poi: rift({ distNorm: 0.9 }), escort: esc, hero: heroFort(26) });
-    const somme = (o: typeof pres) => Object.values(o.party!.xp).reduce((a, b) => a + b, 0);
-    expect(somme(loin)).toBeGreaterThan(somme(pres));
+    expect(loin.party!.xp).toEqual(pres.party!.xp);
   });
 
   it('un groupe VIDE (héros seul) ne verse aucune XP', () => {

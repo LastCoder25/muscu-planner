@@ -50,8 +50,8 @@ import {
   CARAVAN,
   caravanHurtMs,
   caravanLegMin,
-  missionTravelMult,
   missionXp,
+  missionXpFor,
   refAdvGear,
   refChampionAdv,
   escortGear,
@@ -314,12 +314,8 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
           s,
         );
         const parts = skirmishXpShares(esc, bodies, d);
-        // La part des abattus suit la DISTANCE comme le socle, exactement comme un convoi.
-        const travel = missionTravelMult(inp.poi);
-        for (const a of esc)
-          expect(o.party!.xp[a.id]).toBe(
-            missionXp(a, inp.poi) + Math.round((parts[a.id] ?? 0) * travel),
-          );
+        // Socle selon l'ISSUE + part des abattus : la règle EXACTE d'un convoi (v0.1014).
+        expect(o.party!.xp).toEqual(missionXpFor(esc, inp.poi, d.win, parts));
         expect(o.party!.xp[HERO_UNIT_ID]).toBeUndefined();
       }
   });
@@ -387,7 +383,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party!.win).toBe(false);
     expect(o.gold + o.summonStones + o.key).toBe(0);
     expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1012)
-    expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi));
+    expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi, o.win));
   });
 
   it('⚠️ SANS le héros : JAMAIS de clé, et le butin est exactement campGroupHaul ', () => {

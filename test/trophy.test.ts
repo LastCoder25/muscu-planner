@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32, combatPower } from '@/lib/combat';
+import { makeBoss } from './helpers/friendBoss';
 import {
   rollDrop,
   rollTrophy,
@@ -41,22 +42,14 @@ const D = 24 * H;
 const T0 = Date.UTC(2026, 8, 14, 10);
 const FAMILIES = Object.keys(TROPHY_MAINS) as BossFamily[];
 
-function boss(over: Partial<FriendBoss> = {}): FriendBoss {
-  return {
-    id: 'b1',
-    ownerId: 'u1',
-    family: 'push',
-    exerciseId: 'ex_pushup',
-    exerciseName: 'Pompes',
-    repWeight: 1,
+const boss = (over: Partial<FriendBoss> = {}): FriendBoss =>
+  makeBoss({
     createdAt: T0,
     startAt: T0,
     defeatedAt: T0 + 7 * D, // abattu à la toute fin : aucun bonus « tué tôt »
-    hpTotal: 300,
     damage: 300,
     ...over,
-  };
-}
+  });
 
 describe('🏆 TROPHÉE — rang et étoiles (v0.894)', () => {
   const draw = (level: number, n = 4000, luck = 0) => {

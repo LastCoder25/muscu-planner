@@ -16,6 +16,7 @@
 // ⚠️ ET IL FAUT DES DONNÉES : avec un vivier VIDE, la boucle qui déclenche l'appel fautif
 // ne s'exécute jamais et le défaut reste invisible. Un seul aventurier suffit.
 import { describe, it, expect } from 'vitest';
+import { makeBoss } from './helpers/friendBoss';
 import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
@@ -564,20 +565,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       };
       const now = Date.now();
       fb.bosses = [
-        {
-          id: 'b1',
-          ownerId: 'me',
-          family: 'push',
-          exerciseId: 'ex_pushup',
-          exerciseName: 'Pompes',
-          repWeight: 1,
-          tier: null,
-          createdAt: now,
-          startAt: now,
-          defeatedAt: null,
-          hpTotal: 120_000,
-          damage: 0,
-        },
+        makeBoss({ ownerId: 'me', tier: null, createdAt: now, startAt: now, hpTotal: 120_000 }),
       ];
       fb.members = [
         {

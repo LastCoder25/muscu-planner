@@ -1112,7 +1112,7 @@ export const useCharacterStore = defineStore('character', () => {
         const piece = gachaPiece(advs, playerLevel, r.grade);
         pieces.push(piece);
         results.push({
-          grade: r.grade,
+          grade: piece.grade,
           champion: null,
           gear: { name: piece.name, emoji: piece.emoji, model: advGearModelOf(piece) },
           duplicate: false,
@@ -2143,9 +2143,12 @@ export const useCharacterStore = defineStore('character', () => {
       now + woundMsFor(defenseLevel(t.base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7));
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
+      const gains: Record<string, number> = {};
       patch.adventurers = advList.value.map((a) => {
         if (!ids.has(a.id)) return a;
-        const next = grantAdvXp(a, siegeXp(a, report), pantheonLevel.value);
+        const gain = siegeXp(a, report);
+        gains[a.id] = gain;
+        const next = grantAdvXp(a, gain, pantheonLevel.value);
         return hurt.has(a.id)
           ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, hurtUntil) }
           : next;
