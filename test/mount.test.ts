@@ -496,6 +496,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // deviendrait creux — le piège déjà rencontré sur GuildPanel.
     expect(out, 'la cour doit être dessinée').toContain('yard');
     expect(out, 'le champ de bataille est du décor, mais il se dessine').toContain('corpse');
+    // 🛕 v0.1006 : le Panthéon bâti trône au CENTRE (cible tactile à 100 ± 10), et
+    // l'Infirmerie a quitté sa place sous le centre (100, 116) pour son emplacement.
+    expect(out, 'une tuile au centre de la cour').toMatch(/x="90" y="90"/);
+    expect(out, 'plus rien sous le centre').not.toMatch(/x="90" y="106"/);
     // ⚠️ CE QUE CE TEST NE COUVRE PAS : l'affichage du BUTIN. Il vit dans l'écran de fin du
     // rejeu et dans la feuille de la Tour de guet — deux chemins qui demandent une
     // interaction (ouvrir une structure) ou un rejeu animé. Ce qui le garde, c'est

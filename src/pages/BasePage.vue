@@ -1394,6 +1394,8 @@ const YARD_SERVICES: DefenseId[] = ['infirmary'];
 // (le Chantier de fouille, retiré). Même règle que `PLOT_POS` avec le registre.
 const SVC_R = 16;
 const SVC_POS = RING(YARD_SERVICES.length, SVC_R, Math.PI);
+/** Le cœur de la place, où trône le Panthéon une fois bâti. */
+const YARD_CENTER = { x: 100, y: 100 };
 const YARD_HALF = 9; // demi-côté DESSINÉ
 // Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
 // entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
@@ -1401,6 +1403,12 @@ const YARD_HIT = 10;
 const yard = computed<YardCell[]>(() => {
   const cells: YardCell[] = [];
   const bs = char.row?.buildings ?? [];
+  // 🛕 LE PANTHÉON TRÔNE AU CENTRE (v0.1006, demandé : « centre le panthéon dans la base
+  // et mets l'infirmerie où le panthéon était »). ⚠️ Permutation de DESSIN seulement : le
+  // Panthéon garde son emplacement (`slot`) dans les données — le quota, le coût et
+  // `canBuildOnSlot` n'en savent rien — et l'Infirmerie prend sa place sur la couronne.
+  // Tant qu'il n'est pas bâti, rien ne bouge (le centre reste la place).
+  const pantheonSlot = bs.find((b) => b.typeId === 'pantheon')?.slot ?? null;
   // Rangées 1-2 : les emplacements du village.
   // ⚠️ ON CONSTRUIT LÀ OÙ ON TOUCHE, PAS DANS L'ORDRE : un emplacement vide n'est plus
   // « verrouillé » par sa POSITION mais par le QUOTA (combien de bâtiments sont déjà
@@ -1408,7 +1416,7 @@ const yard = computed<YardCell[]>(() => {
   // `VillagePlots.vue` et le store, pour qu'aucune copie ne diverge.
   for (let i = 0; i < BUILD.plotCap; i++) {
     const b = bs.find((x) => x.slot === i) ?? null;
-    const pos = PLOT_POS[i] ?? PLOT_POS[PLOT_POS.length - 1]!;
+    const pos = i === pantheonSlot ? YARD_CENTER : (PLOT_POS[i] ?? PLOT_POS[PLOT_POS.length - 1]!);
     cells.push({
       key: 'plot' + i,
       x: pos.x,
@@ -1425,11 +1433,15 @@ const yard = computed<YardCell[]>(() => {
   // Rangée 3 : les services de l'enceinte.
   YARD_SERVICES.forEach((id, i) => {
     const t = DEFENSE_TYPES.find((d) => d.id === id)!;
+    const home =
+      id === 'infirmary' && pantheonSlot !== null && PLOT_POS[pantheonSlot]
+        ? PLOT_POS[pantheonSlot]
+        : SVC_POS[i]!;
     cells.push({
       key: id,
       service: true,
-      x: SVC_POS[i]!.x,
-      y: SVC_POS[i]!.y,
+      x: home.x,
+      y: home.y,
       emoji: t.emoji,
       built: lvlOf(id) > 0,
       locked: heroLevel.value < t.unlockLevel,
