@@ -44,6 +44,7 @@ import {
 // cycle : `skirmish.ts` n'importe que `combat.ts`.
 import {
   deriveSkirmish,
+  fuseUnits,
   skirmishXpShares,
   slainByAlly,
   trialXpBase,
@@ -1198,8 +1199,46 @@ export interface PartyHero {
   combatant: Combatant;
 }
 
+/**
+ * 🧝 CE QUE VAUT LE HÉROS DANS UN GROUPE — au plus `HERO_PARTY_WORTH` champions de
+ * référence de SON niveau (v0.980, mesuré ; décision de l'utilisateur).
+ *
+ * ⚠️ **SANS CETTE BORNE, LE HÉROS ÉCRASAIT TOUT LE CONTENU DES CHAMPIONS.** Sa puissance suit
+ * l'XP de sport et son équipement ; celle d'un champion suit une courbe linéaire et un
+ * équipement bridé. Mesuré, à rang et niveau égaux, équipés tous les deux : **×2 au niveau 5,
+ * ×8 au 12, ×34 au 30, ×87 au 60, ×216 au 100**. Il refermait donc seul, à 100 %, des
+ * failles de 40 à 60 niveaux au-dessus de lui, et le plafond de 3 champions ne bornait rien.
+ *
+ * ⚠️ **ON BORNE ICI, PAS LE HÉROS** : sa courbe est « le sport est le plafond », et tout son
+ * contenu (donjons, boss, Labyrinthe, sièges) est calé dessus. On ne touche qu'à ce qu'il
+ * apporte quand il rejoint un groupe calibré sur des champions (failles, camps, bandes).
+ *
+ * ⚠️ **SUR LES CARACTÉRISTIQUES DES CHAMPIONS, PAS SUR LES SIENNES.** Un premier essai
+ * plafonnait sa puissance en gardant son critique et son multi-frappe : mesuré, il valait
+ * alors 1 champion aux niveaux 12-45 mais 2 au niveau 70 (son multi-frappe rend le combat
+ * plus régulier que ce que `offenseOf` prévoit). Ici il vaut EXACTEMENT K champions, par
+ * construction, à tous les niveaux.
+ *
+ * ⚠️ **UNE BORNE, JAMAIS UN PLANCHER** : un héros plus faible que K champions (tout début
+ * de partie) garde sa propre force, canal par canal.
+ */
+export const HERO_PARTY_WORTH = 2;
+
+export function heroPartyCombatant(hero: PartyHero): Combatant {
+  const ref = refEscortUnits(hero.level);
+  const f = fuseUnits(ref, hero.name);
+  const k = HERO_PARTY_WORTH / ref.length;
+  const off = Math.min(1, offenseOf(hero.combatant) / Math.max(1e-9, offenseOf(f) * k));
+  const surv = Math.min(1, survivalOf(hero.combatant) / Math.max(1e-9, survivalOf(f) * k));
+  return {
+    ...f,
+    pv: Math.max(1, Math.round(f.pv * k * surv)),
+    damage: Math.max(1, f.damage * k * off),
+  };
+}
+
 /** Les unités du groupe : aventuriers (SA paire, SES pièces, règle unique `roadPairs`) puis
- *  le héros, unité de plus avec son combattant RÉEL.
+ *  le héros, BORNÉ à `HERO_PARTY_WORTH` champions (`heroPartyCombatant`).
  *  ⚠️ EXPORTÉE pour l'écran : le % affiché (`campWinPct`) doit fondre EXACTEMENT le groupe
  *  que `resolveCamp` fera combattre — une seconde construction (oublier `roadPairs`, poser
  *  le héros autrement) annoncerait un pronostic sur un autre groupe. */
@@ -1215,7 +1254,7 @@ export function partyAllies(
       name: hero.name,
       emoji: '🧝',
       level: hero.level,
-      combatant: hero.combatant,
+      combatant: heroPartyCombatant(hero),
     });
   return units;
 }

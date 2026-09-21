@@ -14,10 +14,11 @@ import {
   messageLoot,
   spawnWindow,
   riftLevelFor,
+  riftAboveSpan,
+  riftSlotOf,
   createMap,
   advanceWorld,
   resolveOutcome,
-  campHeroOutcome,
   CAMP_TYPES,
   HARVEST_TYPES,
   POI_LABEL,
@@ -36,6 +37,8 @@ import {
   type PoiType,
 } from '@/lib/expedition';
 import { playerCombatant, mulberry32 } from '@/lib/combat';
+import { resolveCamp } from '@/lib/camp';
+import { campSpecOf } from '@/lib/expedition';
 
 const HOUR = 3_600_000;
 const hero = playerCombatant('Héros', { puissance: 600, endurance: 500, agilite: 400 }, 26);
@@ -779,82 +782,101 @@ describe('aller loin doit VRAIMENT payer', () => {
 });
 
 describe('🕳️ le RANG d’une faille', () => {
-  /** Tous les rangs réellement tirés à ce niveau, lus par `characterRank` LUI-MÊME — jamais
-   *  par une arithmétique recopiée : l’échelle de prestige est la seule autorité. */
-  function rangsTires(L: number, n = 4000) {
+  /** Les EMPLACEMENTS réellement tirés à ce niveau (`riftSlotOf` : le rang, ou `top + 1`
+   *  pour « au-dessus du joueur »). */
+  function slotsTires(L: number, n = 4000) {
     const rng = mulberry32(L * 7919 || 1);
     const compte = new Map<number, number>();
     for (let i = 0; i < n; i++) {
       const lv = riftLevelFor(rng, L, []);
-      const r = characterRank(lv).rankIndex;
-      compte.set(r, (compte.get(r) ?? 0) + 1);
-      // Le niveau tiré appartient VRAIMENT à la tranche de ce rang.
-      expect(lv, `niv ${L} → ${lv}`).toBeGreaterThanOrEqual(rankStartLevel(r));
+      const s = riftSlotOf(lv, L);
+      compte.set(s, (compte.get(s) ?? 0) + 1);
+      // Un rang ORDINAIRE : le niveau tiré appartient VRAIMENT à la tranche de ce rang.
+      if (lv <= L) expect(lv, `niv ${L} → ${lv}`).toBeGreaterThanOrEqual(rankStartLevel(s));
     }
     return compte;
   }
 
-  it('⚠️ ne dépasse JAMAIS le rang du joueur — on ne referme pas plus haut que soi', () => {
-    // Décision de l’utilisateur : « le rang varie entre bronze et le rang du joueur, il ne
-    // pourrait pas combattre une faille de plus haut rang que lui ».
+  it('⚠️ UN CRAN « AU-DESSUS », borné par un écart PROPORTIONNEL au niveau (v0.980)', () => {
+    // ⚠️ RENVERSE la décision de la v0.929 (« jamais au-dessus du rang du joueur »), prise
+    // parce que le héros, seul et équipé, refermait tout. Depuis qu'il ne vaut plus que
+    // deux champions dans un groupe, une faille au-dessus de soi est un vrai pari. L'écart
+    // est PROPORTIONNEL (`EXPE.riftAboveShare`) : un rang fixe (+10 niveaux) était mesuré
+    // infranchissable au niveau 12 et trivial au niveau 70.
     for (const L of [1, 5, 11, 12, 30, 45, 60, 91, 100, 130]) {
-      const top = characterRank(L).rankIndex;
-      for (const r of rangsTires(L).keys()) {
-        expect(r, `niveau ${L} (rang ${top}) a tiré le rang ${r}`).toBeLessThanOrEqual(top);
-      }
-    }
-  });
-
-  it('⚠️ …et son NIVEAU non plus : sinon même rang, tout autre difficulté', () => {
-    // Un joueur niveau 21 est Or ★1 : sans cette borne, la tranche de SON rang (21–30)
-    // déborderait au-dessus de lui et il verrait des failles niveau 30.
-    for (const L of [1, 11, 21, 31, 55, 91, 130]) {
       const rng = mulberry32(L * 104729 || 1);
+      let au = 0;
       for (let i = 0; i < 4000; i++) {
         const lv = riftLevelFor(rng, L, []);
-        expect(lv, `niveau ${L} → faille ${lv}`).toBeLessThanOrEqual(L);
+        expect(lv, `niveau ${L} → faille ${lv}`).toBeLessThanOrEqual(L + riftAboveSpan(L));
         expect(lv).toBeGreaterThanOrEqual(1);
+        if (lv > L) au++;
       }
+      // …et ce cran EXISTE vraiment : sinon la feature serait morte en silence.
+      expect(au, `niveau ${L} : aucune faille au-dessus`).toBeGreaterThan(0);
     }
   });
 
-  it('⚠️ BRONZE reste atteignable, et les rangs sont tirés UNIFORMÉMENT', () => {
-    // Le but est de voir du Bronze à côté de son propre rang, pas une cloche qui ramènerait
-    // tout au milieu : sinon « laquelle je referme » cesse d’être une question.
+  it('⚠️ l’écart suit le NIVEAU, pas un rang : +25 % du niveau, au moins 1', () => {
+    expect(riftAboveSpan(1)).toBe(1);
+    expect(riftAboveSpan(12)).toBe(Math.round(12 * EXPE.riftAboveShare));
+    expect(riftAboveSpan(70)).toBe(Math.round(70 * EXPE.riftAboveShare));
+    // ⚠️ Plus serré en début de partie qu'un rang (10 niveaux) : c'est là qu'un rang
+    // entier était infranchissable.
+    expect(riftAboveSpan(12)).toBeLessThan(10);
+  });
+
+  it('⚠️ BRONZE reste atteignable, et les emplacements sont tirés UNIFORMÉMENT', () => {
+    // Le but est de voir du Bronze à côté de son propre rang — et désormais une faille
+    // au-dessus —, pas une cloche qui ramènerait tout au milieu.
     for (const L of [12, 30, 60, 100]) {
-      const top = characterRank(L).rankIndex;
-      const compte = rangsTires(L);
-      // Chaque rang de 0 à `top` est représenté…
-      for (let r = 0; r <= top; r++) {
-        expect(compte.get(r) ?? 0, `niveau ${L}, rang ${r} jamais tiré`).toBeGreaterThan(0);
+      const n = characterRank(L).rankIndex + 2; // rangs 0..top + « au-dessus »
+      const compte = slotsTires(L);
+      for (let s = 0; s < n; s++) {
+        expect(compte.get(s) ?? 0, `niveau ${L}, emplacement ${s} jamais tiré`).toBeGreaterThan(0);
       }
-      // …et aucun ne rafle la mise : uniforme à ±40 % de la part attendue.
-      const attendu = 4000 / (top + 1);
-      for (let r = 0; r <= top; r++) {
-        const part = (compte.get(r) ?? 0) / attendu;
+      const attendu = 4000 / n;
+      for (let s = 0; s < n; s++) {
+        const part = (compte.get(s) ?? 0) / attendu;
         expect(
           part,
-          `niveau ${L}, rang ${r} à ${(part * 100).toFixed(0)} % de sa part`,
+          `niveau ${L}, emplacement ${s} à ${(part * 100).toFixed(0)} % de sa part`,
         ).toBeGreaterThan(0.6);
         expect(part).toBeLessThan(1.4);
       }
     }
   });
 
-  it('⚠️ une faille n’est JAMAIS élaguée par le dégradé de distance — sans garde dédié', () => {
-    // ⚠️ C’EST CE TEST QUI A FAIT RETIRER UN SET `OFF_GRID` écrit pour exempter les failles de
-    // `levelFitsDistance` : le garde NE POUVAIT JAMAIS MORDRE. `riftLevelFor` rend au plus
-    // `playerLevel`, or `spawnWindow(playerLevel).min` VAUT `playerLevel` — et l’élagage est
-    // asymétrique (on n’écarte que ce qui est trop FORT pour sa distance). Une branche
-    // qu’aucune valeur réelle n’atteint donne la confiance sans la couverture (même défaut que
-    // le plafond de réduction en v0.753 et le plancher de population en v0.923) : la propriété
-    // vit donc ici. Elle rougira le jour où `levelFitsDistance` deviendra symétrique — ce qui
-    // effacerait toutes les failles de bas rang posées loin, la variété qu’on cherche.
-    for (const L of [1, 12, 30, 60, 100, 130]) {
-      const rng = mulberry32(L * 40503 || 1);
-      for (let i = 0; i < 3000; i++) {
-        expect(riftLevelFor(rng, L, []), `niveau ${L}`).toBeLessThanOrEqual(spawnWindow(L).min);
-      }
+  it('⚠️ une faille AU-DESSUS n’est JAMAIS élaguée par le dégradé de distance', () => {
+    // Le niveau d'une faille est tiré par RANG, jamais par la distance : posée près de la
+    // ville au-dessus du joueur, elle est « trop forte pour son éloignement » — sans
+    // l'exemption de `levelFitsDistance`, le tick suivant l'effacerait (sa mine aussi).
+    for (const L of [12, 30, 60]) {
+      const base = createMap(9137, 0, L);
+      const lv = L + riftAboveSpan(L);
+      const proche = (type: PoiType, id: string): Poi => ({
+        id,
+        type,
+        level: lv,
+        x: 100,
+        y: 88,
+        distNorm: 0.05,
+        spawnedAt: 0,
+        expiresAt: 9e15,
+      });
+      const map: ExpeditionMap = {
+        ...base,
+        pois: [...base.pois, proche('rift', 'rift_proche'), proche('mana_mine', 'mine_proche')],
+      };
+      const apres = advanceWorld(map, HOUR, L);
+      expect(
+        apres.pois.some((p) => p.id === 'rift_proche'),
+        `niveau ${L}`,
+      ).toBe(true);
+      expect(
+        apres.pois.some((p) => p.id === 'mine_proche'),
+        `niveau ${L}`,
+      ).toBe(true);
     }
     // …et sur le terrain : sur 14 jours, le quota de failles ne descend jamais sous son
     // plancher — donc aucune n’est écartée en dehors de sa maturation.
@@ -867,6 +889,29 @@ describe('🕳️ le RANG d’une faille', () => {
         );
       }
     }
+  });
+
+  it('⚠️ …mais un POI ORDINAIRE trop fort pour sa distance l’est toujours', () => {
+    // L'exemption ne vaut que pour la faille et sa mine : sinon le dégradé « près = faible,
+    // loin = fort » (v0.683) cesserait de tenir pour tout le reste de la carte.
+    const base = createMap(9137, 0, 30);
+    const map: ExpeditionMap = {
+      ...base,
+      pois: [
+        ...base.pois,
+        {
+          id: 'puits_proche',
+          type: 'well',
+          level: 60,
+          x: 100,
+          y: 88,
+          distNorm: 0.05,
+          spawnedAt: 0,
+          expiresAt: 9e15,
+        },
+      ],
+    };
+    expect(advanceWorld(map, HOUR, 30).pois.some((p) => p.id === 'puits_proche')).toBe(false);
   });
 
   it('⚠️ LE PLANCHER RESTE À 2 : une carte neuve se REMPLIT, elle ne pulse pas', () => {
@@ -894,7 +939,7 @@ describe('🕳️ le RANG d’une faille', () => {
     );
   });
 
-  it('⚠️ DEUX BRÈCHES OUVERTES = DEUX RANGS DIFFÉRENTS — sinon la variété ne se voit pas', () => {
+  it('⚠️ DEUX BRÈCHES OUVERTES = DEUX EMPLACEMENTS DIFFÉRENTS — sinon la variété ne se voit pas', () => {
     // ⚠️ SIGNALÉ (v0.965) : « les failles apparaissent bien de rang aléatoire ? je n’ai que
     // des Or noir comme mon rang ». Le TIRAGE était bon (39 % Bronze / 26 % Argent / 22 % Or
     // / 13 % Or noir pour un joueur Or noir, mesuré) — mais il est SANS MÉMOIRE, et un
@@ -918,7 +963,9 @@ describe('🕳️ le RANG d’une faille', () => {
         }
         if (h > 5 * 24 && h % 6 === 0) {
           const r = map.pois.filter(isRiftPoi);
-          const rangs = new Set(r.map((q) => characterRank(q.level).rankIndex));
+          // ⚠️ Des EMPLACEMENTS (v0.980) : une faille « au-dessus » peut porter le rang du
+          // joueur en début de partie, mais elle se distingue (la fiche dit « +N niv. »).
+          const rangs = new Set(r.map((q) => riftSlotOf(q.level, 35)));
           rangsTotal += rangs.size;
           brechesTotal += r.length;
           mesures++;
@@ -979,10 +1026,18 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
           spawnedAt: 0,
           expiresAt: 9e15,
         } as never;
-        // ⚠️ Un camp ne passe plus par `resolveOutcome` : son butin héros est
-        // `campHeroOutcome` (gagné ET perdu) ; le butin de groupe est vérifié dans `camp.test`.
+        // ⚠️ Un camp ne passe plus par `resolveOutcome` : il se résout en groupe
+        // (`resolveCamp`), héros compris — c'est son butin qu'on regarde.
         const o = (CAMP_TYPES.has(type)
-          ? campHeroOutcome(mulberry32(s), poi, s % 2 === 0, 26)
+          ? resolveCamp({
+              poi,
+              spec: campSpecOf(poi)!,
+              escort: [],
+              road: { familiars: [], talents: [], advGear: [] },
+              hero: { name: 'h', level: 26, combatant: hero },
+              seed: s,
+              playerLevel: 26,
+            })
           : resolveOutcome(hero, poi, s * 97 + 3, 26)) as unknown as Record<string, unknown>;
         // Les champs n’existent plus sur le type : on vérifie qu’aucun ne réapparaît.
         expect(o.fragments, `${type} verse des fragments`).toBeUndefined();

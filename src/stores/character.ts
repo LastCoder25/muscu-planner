@@ -193,6 +193,7 @@ import {
   partySendBlocker,
   PARTY_SEND_BLOCK_LABEL,
   partyHeroBlocker,
+  partyHeroToll,
   PARTY_HERO_BLOCK_LABEL,
   normalizeParties,
   partyClaimRoster,
@@ -2736,7 +2737,7 @@ export const useCharacterStore = defineStore('character', () => {
           healMs: woundRemainingMs(cur.base, now),
           outpost: expeditionsUnlocked(cur.buildings),
           gold: cur.gold,
-          cost: expeGoldCost(poi.type, poi.level),
+          cost: partyHeroToll(poi),
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;

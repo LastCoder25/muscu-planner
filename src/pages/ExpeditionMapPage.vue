@@ -276,6 +276,14 @@
               >{{ selectedRift.rank.emoji }} {{ selectedRift.rank.name }}
               {{ selectedRift.stars }}</span
             >
+            <!-- ⬆️ Une faille AU-DESSUS du joueur (v0.980) : son rang peut être le même que
+                 le sien en début de partie, donc on DIT l'écart à part. -->
+            <span
+              v-if="selected.level > heroLevel"
+              class="sh-chip rift-above"
+              title="Faille au-dessus de ton niveau : plus dure, et plus de mana"
+              >⬆️ +{{ selected.level - heroLevel }} niv.</span
+            >
             <span class="sh-chip"
               >{{ FACTION_EMOJI[selectedRift.faction] }}
               {{ FACTION_LABEL[selectedRift.faction] }}</span
@@ -362,8 +370,9 @@
               >🎯 {{ partyWin }}%</span
             >
           </div>
-          <!-- Le héros : une tuile comme les autres, mais qui décide du BUTIN. Grisée avec la
-               raison (expédition, infirmerie, Avant-poste, or) plutôt que cachée. -->
+          <!-- Le héros : une tuile comme les autres. ⚠️ Il n'y compte que pour
+               HERO_PARTY_WORTH champions (v0.980) — l'écran le DIT, sinon on croirait
+               emmener la puissance de sa fiche. Grisée avec la raison plutôt que cachée. -->
           <button
             type="button"
             class="party-hero"
@@ -378,7 +387,7 @@
               <span class="ph-sub">{{
                 partyHeroBlock
                   ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                  : `butin du héros · 🪙 ${costOf(selected)}`
+                  : `compte pour ${HERO_PARTY_WORTH} champions${partyHeroToll(selected) ? ` · 🪙 ${partyHeroToll(selected)}` : ''}`
               }}</span>
             </span>
             <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
@@ -654,6 +663,7 @@ import {
   partyCapFor,
   partySendBlocker,
   partyHeroBlocker,
+  partyHeroToll,
   partyLegMin,
 } from '@/lib/party';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
@@ -724,6 +734,7 @@ import {
   poiOffers,
   suggestEscort,
   partyAllies,
+  HERO_PARTY_WORTH,
   type PartyHero,
 } from '@/lib/caravan';
 import { advGearRoles } from '@/lib/advGear';
@@ -1173,7 +1184,7 @@ const partyHeroBlock = computed(() =>
         healMs: heroHealIn.value,
         outpost: outpostBuilt.value,
         gold: char.row?.gold ?? 0,
-        cost: costOf(selected.value),
+        cost: partyHeroToll(selected.value),
       })
     : null,
 );
@@ -1907,6 +1918,10 @@ onUnmounted(() => {
 }
 /* 🕳️ Rang d'une faille : la pastille prend la COULEUR DU RANG, posée en ligne
    (`--rk`) — une classe par rang n'aurait aucun sens ici, le rang est calculé. */
+.sh-chip.rift-above {
+  color: var(--d3);
+  border-color: color-mix(in srgb, var(--d3) 55%, transparent);
+}
 .sh-chip.rift-rank {
   border-color: var(--rk);
   color: var(--rk);
