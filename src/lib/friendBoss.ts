@@ -122,14 +122,19 @@ export interface BossTier {
   mult: number;
   /** Chance ajoutée au tirage du trophée (étoiles + niveau d'objet). */
   luck: number;
+  /** 🎟️ Tickets d'invocation versés dans le coffre (v0.992, « le sport alimente le
+   *  gacha »). ⚠️ **L'Échauffement ne paie RIEN** : c'est le cran qu'on enchaînerait pour
+   *  farmer (30 pompes, relançable 48 h après). Au-dessus, un ticket par cran — et le plus
+   *  dur (4) reste sous un Défi 360 intense (5), qui est une SEMAINE entière. */
+  tickets: number;
 }
 
 export const BOSS_TIERS: readonly BossTier[] = [
-  { id: 'echauffement', label: 'Échauffement', emoji: '🌱', mult: 0.5, luck: 0 },
-  { id: 'serieux', label: 'Sérieux', emoji: '💪', mult: 1, luck: 0.15 },
-  { id: 'costaud', label: 'Costaud', emoji: '🔥', mult: 2, luck: 0.4 },
-  { id: 'brutal', label: 'Brutal', emoji: '⚡', mult: 3, luck: 0.6 },
-  { id: 'inhumain', label: 'Inhumain', emoji: '💀', mult: 5, luck: 1 },
+  { id: 'echauffement', label: 'Échauffement', emoji: '🌱', mult: 0.5, luck: 0, tickets: 0 },
+  { id: 'serieux', label: 'Sérieux', emoji: '💪', mult: 1, luck: 0.15, tickets: 1 },
+  { id: 'costaud', label: 'Costaud', emoji: '🔥', mult: 2, luck: 0.4, tickets: 2 },
+  { id: 'brutal', label: 'Brutal', emoji: '⚡', mult: 3, luck: 0.6, tickets: 3 },
+  { id: 'inhumain', label: 'Inhumain', emoji: '💀', mult: 5, luck: 1, tickets: 4 },
 ];
 
 /** Le cran par DÉFAUT — et celui des boss d'AVANT les crans. ⚠️ Son `mult` vaut 1 : un boss
@@ -692,6 +697,9 @@ export interface FriendBossChest {
   stones: number;
   /** Part du combat restante à la mort (0..1) : ce qu'a rapporté le fait de le tuer tôt. */
   early: number;
+  /** 🎟️ Tickets d'invocation — ceux du cran (`BossTier.tickets`). ⚠️ Le « tué tôt » n'en
+   *  ajoute pas : il paie déjà en or, en pierres et en chance du trophée. */
+  tickets: number;
   trophy: Omit<Item, 'id'>;
 }
 
@@ -724,6 +732,7 @@ export function friendBossChest(
     gold: Math.round((bossGoldForLevel(level) * mult) / 10) * 10,
     stones: Math.round(bossSummonCost(level) * mult),
     early,
+    tickets: tier.tickets,
     trophy: rollTrophy(rng, {
       mains: TROPHY_MAINS[b.family],
       title: b.exerciseName,

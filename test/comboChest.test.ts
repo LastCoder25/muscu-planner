@@ -151,7 +151,16 @@ describe('🎁 LE COFFRE SE CONSERVE SUR LE DÉFI (revoir son contenu)', () => {
     const plan = comboChestPlan({ id: 'c1' }, [msg('autre'), msg('c1')], 80, 30, 999);
     expect(plan).toEqual({
       grant: false,
-      record: { gold: 1234, energy: 56, scrap: 78, summonStones: 9, keys: 1, level: 27, at: 111 },
+      record: {
+        gold: 1234,
+        energy: 56,
+        scrap: 78,
+        summonStones: 9,
+        keys: 1,
+        tickets: 0,
+        level: 27,
+        at: 111,
+      },
     });
   });
 
@@ -182,6 +191,7 @@ describe('🎁 LE COFFRE SE CONSERVE SUR LE DÉFI (revoir son contenu)', () => {
       scrap: 0,
       summonStones: 0,
       keys: 0,
+      tickets: 0,
       level: 3,
       at: 1,
     });

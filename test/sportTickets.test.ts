@@ -1,0 +1,157 @@
+import { describe, it, expect } from 'vitest';
+import { mulberry32 } from '@/lib/combat';
+import { GACHA, emptyPity, pullMany } from '@/lib/gacha';
+import {
+  SPORT_TICKETS,
+  comboTickets,
+  levelUpTickets,
+  pullPayment,
+  ticketCost,
+} from '@/lib/sportTickets';
+import {
+  CHEST_MAX_MULT,
+  CHEST_MIN_MULT,
+  CHEST_REF_SETS,
+  chestEffortMult,
+  comboChestMessageId,
+  comboChestPlan,
+  comboChestReward,
+} from '@/lib/comboChest';
+import { BOSS_TIERS, friendBossChest } from '@/lib/friendBoss';
+import { haulPills } from '@/lib/expedition';
+
+describe('🎟️ tickets du Défi 360 — une semaine de sport', () => {
+  it('2 pour un 360 posé, 3 pour un 360 moyen, 5 pour un intense', () => {
+    expect(comboTickets(CHEST_MIN_MULT)).toBe(2);
+    expect(comboTickets(1)).toBe(SPORT_TICKETS.comboRef);
+    expect(comboTickets(CHEST_MAX_MULT)).toBe(5);
+  });
+
+  it('le coffre porte les tickets de SON facteur d’effort (le même que l’or et les pierres)', () => {
+    for (const sets of [10, 50, CHEST_REF_SETS, 110, 200]) {
+      expect(comboChestReward(sets, 30).tickets).toBe(comboTickets(chestEffortMult(sets)));
+    }
+    // Plus de séries → jamais moins de tickets.
+    expect(comboChestReward(135, 30).tickets).toBeGreaterThan(comboChestReward(29, 30).tickets);
+  });
+
+  it('un coffre relu depuis la boîte garde ses tickets', () => {
+    const plan = comboChestPlan(
+      { id: 'c1' },
+      [{ id: comboChestMessageId('c1'), gold: 1, tickets: 4, level: 3, resolvedAt: 1 }],
+      80,
+      30,
+      9,
+    );
+    expect(plan?.record.tickets).toBe(4);
+  });
+});
+
+describe('🎟️ tickets du boss entre amis — selon le cran', () => {
+  it('l’Échauffement ne paie rien (le cran qu’on enchaînerait pour farmer)', () => {
+    expect(BOSS_TIERS[0]!.id).toBe('echauffement');
+    expect(BOSS_TIERS[0]!.tickets).toBe(0);
+  });
+
+  it('plus le cran est dur, plus il paie — et jamais plus qu’un 360 intense', () => {
+    for (let i = 1; i < BOSS_TIERS.length; i++) {
+      expect(BOSS_TIERS[i]!.tickets).toBeGreaterThan(BOSS_TIERS[i - 1]!.tickets);
+    }
+    const max = Math.max(...BOSS_TIERS.map((t) => t.tickets));
+    expect(max).toBeLessThan(comboTickets(CHEST_MAX_MULT));
+  });
+
+  it('le coffre verse exactement les tickets de son cran', () => {
+    for (const t of BOSS_TIERS) {
+      const chest = friendBossChest(
+        {
+          id: 'b1',
+          family: 'push',
+          exerciseName: 'Pompes',
+          createdAt: 0,
+          startAt: 0,
+          defeatedAt: 1000,
+          tier: t.id,
+        },
+        'me',
+        30,
+      );
+      expect(chest.tickets).toBe(t.tickets);
+    }
+  });
+});
+
+describe('🎟️ tickets de niveau', () => {
+  it('un par niveau franchi, jamais négatif', () => {
+    expect(levelUpTickets(12, 13)).toBe(1);
+    expect(levelUpTickets(12, 15)).toBe(3);
+    expect(levelUpTickets(15, 15)).toBe(0);
+    expect(levelUpTickets(15, 12)).toBe(0);
+  });
+});
+
+describe('🎟️ payer un tirage', () => {
+  it('les tickets d’abord quand ils couvrent le prix', () => {
+    expect(pullPayment(1, { tickets: 1, mana: 9999 })).toEqual({ kind: 'tickets', cost: 1 });
+  });
+
+  it('le lot garde sa remise en tickets (9 pour 10)', () => {
+    expect(ticketCost(GACHA.multiCount)).toBe(GACHA.multiPaid);
+    expect(pullPayment(GACHA.multiCount, { tickets: GACHA.multiPaid, mana: 0 })).toEqual({
+      kind: 'tickets',
+      cost: GACHA.multiPaid,
+    });
+  });
+
+  it('jamais de mélange : pas assez de tickets pour le lot → mana, sinon rien', () => {
+    const t = GACHA.multiPaid - 1;
+    expect(pullPayment(GACHA.multiCount, { tickets: t, mana: 99_999 })).toEqual({
+      kind: 'mana',
+      cost: GACHA.multiPaid * GACHA.pullCost,
+    });
+    expect(pullPayment(GACHA.multiCount, { tickets: t, mana: 0 })).toBeNull();
+    expect(pullPayment(1, { tickets: 0, mana: GACHA.pullCost - 1 })).toBeNull();
+    expect(pullPayment(1, { tickets: 0, mana: GACHA.pullCost })).toEqual({
+      kind: 'mana',
+      cost: GACHA.pullCost,
+    });
+  });
+
+  it('les tickets s’affichent dans le butin d’un coffre', () => {
+    expect(haulPills({ gold: 5, tickets: 3 })).toContainEqual({ emoji: '🎟️', n: 3 });
+    expect(haulPills({ gold: 5 }).some((p) => p.emoji === '🎟️')).toBe(false);
+  });
+});
+
+/**
+ * 📏 CE QUE LES TICKETS COÛTENT AU RYTHME DU GACHA — mesuré sur le VRAI tirage.
+ *
+ * Débit de mana mesuré (v0.936, une faille fermée par jour) + le tirage offert du jour, plus
+ * les tickets d'un joueur RÉGULIER : un 360 moyen (3), un boss Sérieux (1), ~1,5 niveau par
+ * semaine → 5,5 tickets/semaine. La spec du gacha vise **10 à 20 S par an** sur la plage
+ * réaliste (niveaux 12 à 60) : le test verrouille que les tickets n'en sortent pas.
+ */
+describe('📏 rythme du gacha avec les tickets', () => {
+  const MANA_PER_DAY: Record<number, number> = { 12: 63, 30: 91, 60: 157 };
+  const REGULAR_TICKETS_PER_WEEK = comboTickets(1) + BOSS_TIERS[1]!.tickets + 1.5;
+
+  function topsPerYear(pulls: number): number {
+    let total = 0;
+    const seeds = 40;
+    for (let s = 1; s <= seeds; s++) {
+      const { results } = pullMany(mulberry32(s), emptyPity(), pulls);
+      total += results.filter((r) => r.grade === 'S').length;
+    }
+    return total / seeds;
+  }
+
+  for (const lvl of [12, 30, 60]) {
+    it(`niveau ${lvl} : un joueur régulier reste dans la bande 10-20 S par an`, () => {
+      const base = (MANA_PER_DAY[lvl]! / GACHA.pullCost + GACHA.freePullsPerDay) * 365;
+      const withTickets = Math.round(base + REGULAR_TICKETS_PER_WEEK * 52);
+      const tops = topsPerYear(withTickets);
+      expect(tops).toBeGreaterThanOrEqual(10);
+      expect(tops).toBeLessThanOrEqual(20);
+    });
+  }
+});

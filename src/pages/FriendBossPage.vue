@@ -211,13 +211,15 @@
                   : `×${t.mult}`
               }}</span>
               <span class="fb-tier-r">🎁 ×{{ tierRewardMult(t).toFixed(1) }}</span>
+              <span class="fb-tier-r">{{ t.tickets ? `🎟️ ${t.tickets}` : '🎟️ —' }}</span>
             </button>
           </div>
           <p class="fb-hint">
             La difficulté fixe le nombre de
             {{ pickedExo ? bossUnitLabel(pickedExo.family) : 'reps' }} <b>par personne</b>. La
             récompense monte <b>plus vite</b> que l’effort : un boss dur paie mieux que plusieurs
-            faciles, en or, en pierres et en chances sur le trophée.
+            faciles, en or, en pierres et en chances sur le trophée. Chaque cran au-dessus de
+            l’Échauffement donne aussi des <b>🎟️ tickets d’invocation</b>.
           </p>
 
           <div class="fb-sec-t">Inviter ({{ invitees.size }}/{{ FRIEND_BOSS.maxInvites }})</div>
@@ -651,7 +653,7 @@ async function doOpenChest(b: FriendBoss) {
       kind: 'generic',
       emoji: '🏆',
       title: `Trophée : ${chest.trophy.name}`,
-      subtitle: `${gradeLabel(chest.trophy)} · +${chest.gold} 🪙 · +${chest.stones} 🔮 · rangé dans ton sac à trophées 🏆`,
+      subtitle: `${gradeLabel(chest.trophy)} · +${chest.gold} 🪙 · +${chest.stones} 🔮${chest.tickets ? ` · +${chest.tickets} 🎟️` : ''} · rangé dans ton sac à trophées 🏆`,
       rarity: fxRarity(chest.trophy.rarity),
     });
   } catch (e) {

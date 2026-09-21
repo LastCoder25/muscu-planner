@@ -23,6 +23,7 @@
 // d'eux-mêmes tout rééquilibrage futur de ces sources.
 import { HARVEST, travelOneWayMin, travelFactor } from './expedition';
 import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
+import { comboTickets } from './sportTickets';
 
 /** Séries hebdomadaires d'un 360 « moyen » — le point où le facteur d'effort vaut 1.
  *  Médiane de l'éventail que le générateur produit (29 → 135). */
@@ -56,6 +57,9 @@ export interface ComboChest {
   summonStones: number;
   keys: number;
   energy: number;
+  /** 🎟️ Tickets d'invocation (v0.992) : une semaine de sport alimente le gacha. ⚠️ Absent
+   *  des coffres conservés AVANT les tickets — lus comme 0. */
+  tickets: number;
 }
 
 /** Rendement d'UNE épave, à la formule exacte de la carte. */
@@ -101,6 +105,8 @@ export function comboChestReward(sets: number, playerLevel: number): ComboChest 
     keys: m >= 1 ? 1 : 0,
     energy: Math.round(Math.min(CHEST.energyCap, 20 + L * 1.6) * m),
     gold: Math.round(sessionGold(L) * CHEST.sessionShare * m),
+    // 🎟️ Même facteur d'effort que le reste du coffre : 2 (posé) → 3 (moyen) → 5 (intense).
+    tickets: comboTickets(m),
   };
 }
 
@@ -120,6 +126,7 @@ interface ChestMessage {
   scrap?: number;
   summonStones?: number;
   key?: number;
+  tickets?: number;
   level: number;
   resolvedAt: number;
 }
@@ -151,6 +158,7 @@ export function comboChestPlan(
         scrap: m.scrap ?? 0,
         summonStones: m.summonStones ?? 0,
         keys: m.key ?? 0,
+        tickets: m.tickets ?? 0,
         level: m.level,
         at: m.resolvedAt,
       },

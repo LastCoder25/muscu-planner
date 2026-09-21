@@ -7,7 +7,7 @@
     :verdict="revealVerdict"
     :lot="revealLot"
     :lot-plans="revealLotPlans"
-    :can-again="mana >= pullCost && !busy"
+    :can-again="!!payOne && !busy"
     :busy="busy"
     @close="closeReveal"
     @again="doPull"
@@ -19,7 +19,10 @@
     <q-card class="sm-card">
       <div class="sm-head">
         <span class="sm-title font-display">🎰 Tirage</span>
-        <span class="sm-mana font-display">💠 {{ mana.toLocaleString('fr-FR') }}</span>
+        <span class="sm-wallet">
+          <span v-if="tickets" class="sm-tickets font-display">🎟️ {{ tickets }}</span>
+          <span class="sm-mana font-display">💠 {{ mana.toLocaleString('fr-FR') }}</span>
+        </span>
       </div>
 
       <p v-if="!char.pantheonLevel" class="sm-empty">
@@ -30,22 +33,29 @@
         <!-- Deux GRANDES tuiles côte à côte : un geste, un choix. Chacune DIT son prix et
              ce qui manque plutôt que de se griser en silence (leçon du gris de la carte). -->
         <div class="sm-tiles">
-          <button class="sm-tile" :disabled="busy || mana < pullCost" @click="doPull">
+          <button class="sm-tile" :disabled="busy || !payOne" @click="doPull">
             <span class="st-glow" aria-hidden="true"></span>
             <span class="st-x font-display">×1</span>
             <span class="st-lab">Invoquer un champion</span>
-            <span class="st-cost font-display">{{ pullCost }} 💠</span>
-            <small v-if="mana >= pullCost" class="st-sub">
+            <span class="st-cost font-display">{{ costLabel(payOne, pullCost) }}</span>
+            <small v-if="payOne?.kind === 'tickets'" class="st-sub">
+              {{ tickets }} ticket{{ tickets > 1 ? 's' : '' }} gagné{{ tickets > 1 ? 's' : '' }} au
+              sport
+            </small>
+            <small v-else-if="mana >= pullCost" class="st-sub">
               {{ pulls }} {{ pulls > 1 ? 'tirages possibles' : 'tirage possible' }}
             </small>
             <small v-else class="st-sub short">il manque {{ pullCost - mana }} 💠</small>
           </button>
-          <button class="sm-tile ten" :disabled="busy || mana < multiCost" @click="doPullTen">
+          <button class="sm-tile ten" :disabled="busy || !payTen" @click="doPullTen">
             <span class="st-glow" aria-hidden="true"></span>
             <span class="st-x font-display">×{{ multiCount }}</span>
             <span class="st-lab">Invoquer {{ multiCount }} champions</span>
-            <span class="st-cost font-display">{{ multiCost }} 💠</span>
-            <small v-if="mana >= multiCost" class="st-sub"
+            <span class="st-cost font-display">{{ costLabel(payTen, multiCost) }}</span>
+            <small v-if="payTen?.kind === 'tickets'" class="st-sub"
+              >1 offert · payé en tickets</small
+            >
+            <small v-else-if="mana >= multiCost" class="st-sub"
               >1 offert · au lieu de {{ pullCost * multiCount }}</small
             >
             <small v-else class="st-sub short">il manque {{ multiCost - mana }} 💠</small>
@@ -108,6 +118,7 @@ import {
   type LotItem,
 } from '@/lib/gachaReveal';
 import { GACHA, gachaOdds, multiPullCost } from '@/lib/gacha';
+import { pullPayment } from '@/lib/sportTickets';
 import { GRADE_COLOR } from '@/data/champions';
 import { useProgress } from '@/composables/useProgress';
 
@@ -122,7 +133,18 @@ const progress = useProgress();
 const busy = ref(false);
 
 const mana = computed(() => char.row?.mana ?? 0);
+/** 🎟️ Tickets d'invocation, gagnés au sport (v0.992). */
+const tickets = computed(() => char.row?.gacha_tickets ?? 0);
 const pullCost = GACHA.pullCost;
+/** Comment chaque tuile paierait — la MÊME règle que le store (`pullPayment`) : la tuile ne
+ *  peut pas annoncer un prix que le tirage n'appliquerait pas. */
+const payOne = computed(() => pullPayment(1, { tickets: tickets.value, mana: mana.value }));
+const payTen = computed(() =>
+  pullPayment(GACHA.multiCount, { tickets: tickets.value, mana: mana.value }),
+);
+function costLabel(pay: ReturnType<typeof pullPayment>, manaCost: number): string {
+  return pay?.kind === 'tickets' ? `${pay.cost} 🎟️` : `${manaCost} 💠`;
+}
 
 /** Combien de tirages la réserve permet. ⚠️ Le chiffre qui décide si on appuie : « 1 831
  *  💠 » ne se convertit pas de tête. */
@@ -184,7 +206,7 @@ async function doPullTen() {
   try {
     const lot = await char.pullChampions(uid, progress.global.value.level);
     if (!lot) {
-      $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
+      $q.notify({ type: 'negative', message: 'Pas assez de tickets ni de pierres de mana.' });
       return;
     }
     const best = bestOfLot(lot);
@@ -211,7 +233,7 @@ async function doPull() {
   try {
     const r = await char.pullChampion(uid, progress.global.value.level);
     if (!r) {
-      $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
+      $q.notify({ type: 'negative', message: 'Pas assez de tickets ni de pierres de mana.' });
       return;
     }
     revealLot.value = null;
@@ -249,9 +271,18 @@ async function doPull() {
   font-size: 18px;
   font-weight: 700;
 }
+.sm-wallet {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
 .sm-mana {
   font-size: 16px;
   color: #b57bff;
+}
+.sm-tickets {
+  font-size: 16px;
+  color: var(--accent);
 }
 .sm-empty {
   font-size: 12.5px;

@@ -99,6 +99,14 @@
               title="Pierres de mana — invoquer un champion (failles refermées, mines de mana)"
               >💠 {{ char.row.mana }}</span
             >
+            <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés seulement quand il
+                 y en a : la puce dit « tu as des tirages qui t'attendent ». -->
+            <span
+              v-if="char.row.gacha_tickets"
+              class="tb-r tickets"
+              title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
+              >🎟️ {{ char.row.gacha_tickets }}</span
+            >
           </div>
         </div>
       </div>
@@ -1630,7 +1638,14 @@
           <span class="lb-bolt">🎉</span>
           <div class="lb-energy font-display">Niveau {{ levelBurst.to }} !</div>
           <div class="lb-lbl">bravo, tu montes en puissance</div>
-          <div class="lb-streak">+{{ levelBurst.energy }} ⚡ de bonus</div>
+          <div class="lb-streak">
+            +{{ levelBurst.energy }} ⚡ de bonus<template v-if="levelBurst.tickets">
+              · +{{ levelBurst.tickets }} 🎟️ ticket{{
+                levelBurst.tickets > 1 ? 's' : ''
+              }}
+              d'invocation</template
+            >
+          </div>
           <div v-if="levelBurstUnlocks.length" class="lb-unlocks">
             <div class="lb-unlocks-h">🎁 Tu débloques</div>
             <div v-for="(u, i) in levelBurstUnlocks" :key="i" class="lb-unlock">
@@ -3582,7 +3597,7 @@ const claimingLogin = ref(false);
 const loginBurst = ref<{ streak: number; energy: number; mana: number; usedGrace: boolean } | null>(
   null,
 );
-const levelBurst = ref<{ from: number; to: number; energy: number } | null>(null);
+const levelBurst = ref<{ from: number; to: number; energy: number; tickets: number } | null>(null);
 // Reveal de nouvelle région : célèbre le passage dans un biome inédit.
 // (Défini APRÈS curRegion/selectedRegionId/shatterId — cf. plus bas — pour éviter tout
 // accès en TDZ dans la callback d'armement `immediate`.)
@@ -6547,6 +6562,9 @@ onUnmounted(() => {
 /* 💠 Le violet du mana, celui des tracés de convoi et de l’invocation. */
 .tb-r.mana {
   color: #b57bff;
+}
+.tb-r.tickets {
+  color: var(--accent);
 }
 .tb-r.scrap {
   color: #b9a68c;

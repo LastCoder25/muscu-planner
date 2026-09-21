@@ -570,4 +570,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     };
     expect(await mountIt(AgendaPage, {}, undefined, seed)).toBeNull();
   }, 30_000);
+
+  // 🎟️ v0.992 : les tuiles de tirage lisent `pullPayment` (la règle du store). ⚠️ Avec des
+  // TICKETS en poche, sinon la branche « payé en tickets » n'est jamais rendue.
+  it('SummonPanel annonce le prix en tickets quand on en a', async () => {
+    const { default: SummonPanel } = await import('@/components/SummonPanel.vue');
+    const row = {
+      ...ROW,
+      mana: 50,
+      gacha_tickets: 3,
+      gacha: { sinceTop: 0, sinceFloor: 0, pulls: 0, v: 2 },
+    };
+    let out = '';
+    expect(
+      await mountIt(SummonPanel, { open: true }, row, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain('1 🎟️');
+    expect(out).toContain('🎟️ 3');
+  }, 30_000);
 });

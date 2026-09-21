@@ -358,6 +358,7 @@ export interface ExpeditionMessage {
   summonStones?: number; // 🔮
   scrap?: number; // 🔩 ferraille
   mana?: number; // 💠 pierres de mana (mine résiduelle d'une faille)
+  tickets?: number; // 🎟️ tickets d'invocation (coffres gagnés par le sport, v0.992)
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
   itemCount?: number; // ARÈNE : nombre total d'objets ramenés (> 1) — le reste va au sac
@@ -453,6 +454,7 @@ export function haulPills(o: {
   summonStones?: number;
   key?: number;
   mana?: number;
+  tickets?: number;
 }): { emoji: string; n: number }[] {
   return (
     [
@@ -462,6 +464,7 @@ export function haulPills(o: {
       { emoji: '🔮', n: o.summonStones ?? 0 },
       { emoji: '🗝️', n: o.key ?? 0 },
       { emoji: '💠', n: o.mana ?? 0 },
+      { emoji: '🎟️', n: o.tickets ?? 0 },
     ] as const
   )
     .filter((p) => p.n > 0)

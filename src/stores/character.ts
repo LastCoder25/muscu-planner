@@ -216,8 +216,8 @@ import {
   type GachaState,
   GACHA_VERSION,
   pullMany,
-  multiPullCost,
 } from '@/lib/gacha';
+import { levelUpTickets, pullPayment } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
 import { CHAMPIONS } from '@/data/champions';
 import { useGameFx } from '@/composables/useGameFx';
@@ -267,6 +267,10 @@ export interface CharacterRow {
    *  pas ici — un champion EST un `Adventurer`, donc il vit dans `adventurers` (v0.942),
    *  ce qui lui donne gratuitement convois, camps, défense, équipement et compagnons. */
   gacha: GachaState;
+  /** 🎟️ Tickets d'invocation (migr. 0082) — gagnés UNIQUEMENT par le sport (360 bouclé,
+   *  boss entre amis abattu, niveau global gagné) ; un ticket = un tirage. ⚠️ Colonne À PART
+   *  et non dans `gacha` : chaque tirage réécrit `gacha`, un oubli y effacerait les tickets. */
+  gacha_tickets: number;
   scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
@@ -310,7 +314,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, parties, gacha';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, parties, gacha, gacha_tickets';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -419,6 +423,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
     if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
     if (typeof r.summon_stones !== 'number') r.summon_stones = 0; // colonne récente (migr. 0050)
+    if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.ink_dust !== 'number') r.ink_dust = 0; // poussière d'encre (migr. 0053)
     if (typeof r.enchant_scrolls !== 'number') r.enchant_scrolls = 0; // migr. 0054
     if (typeof r.protections !== 'number') r.protections = 0; // migr. 0054
@@ -1002,8 +1007,9 @@ export const useCharacterStore = defineStore('character', () => {
   async function pullGacha(userId: string, count: number, playerLevel: number) {
     const cur = row.value;
     if (!cur) return null;
-    const cout = count > 1 ? multiPullCost() : GACHA.pullCost;
-    if (cur.mana < cout) return null;
+    // 🎟️ Les tickets d'abord s'ils couvrent le prix, sinon la mana — jamais un mélange.
+    const pay = pullPayment(count, { tickets: cur.gacha_tickets, mana: cur.mana });
+    if (!pay) return null;
     const lot = pullMany(Math.random, cur.gacha, count);
     let advs = cur.adventurers ?? [];
     let manaBack = 0;
@@ -1031,7 +1037,8 @@ export const useCharacterStore = defineStore('character', () => {
       }
     }
     await persist(userId, {
-      mana: cur.mana - cout + manaBack,
+      mana: cur.mana - (pay.kind === 'mana' ? pay.cost : 0) + manaBack,
+      ...(pay.kind === 'tickets' ? { gacha_tickets: cur.gacha_tickets - pay.cost } : {}),
       adventurers: advs,
       gacha: { ...lot.pity, pulls: cur.gacha.pulls + count, v: GACHA_VERSION },
       ...(pieces.length ? { adv_gear: withAdvGear(cur, pieces) } : {}),
@@ -1080,9 +1087,13 @@ export const useCharacterStore = defineStore('character', () => {
     if (currentLevel <= prev) return null;
     let energy = 0;
     for (let l = prev + 1; l <= currentLevel; l++) energy += levelUpEnergy(l);
+    // 🎟️ Le niveau global EST le sport : un ticket par niveau franchi (v0.992). ⚠️ Dans la
+    // MÊME écriture que `reward_level`, qui le rend idempotent — jamais deux fois le même.
+    const tickets = levelUpTickets(prev, currentLevel);
     await persist(userId, {
       reward_level: currentLevel,
       login_energy: cur.login_energy + energy,
+      gacha_tickets: cur.gacha_tickets + tickets,
       energy_log: pushEnergyLog(cur.energy_log, {
         date: isoDayLocal(Date.now()),
         emoji: '⭐',
@@ -1093,7 +1104,7 @@ export const useCharacterStore = defineStore('character', () => {
         amount: energy,
       }),
     });
-    return { from: prev, to: currentLevel, energy };
+    return { from: prev, to: currentLevel, energy, tickets };
   }
 
   // ── Talents (refonte B : drop + infusion + loadout à emplacements) ──
@@ -1750,6 +1761,7 @@ export const useCharacterStore = defineStore('character', () => {
       summonStones: chest.summonStones,
       scrap: chest.scrap,
       key: chest.keys,
+      tickets: chest.tickets ?? 0,
       resolvedAt: chest.at,
       claimAt: chest.at, // pas de route à faire : le coffre est déjà là
       claimed: false,
@@ -1793,6 +1805,7 @@ export const useCharacterStore = defineStore('character', () => {
       itemName: chest.trophy.name,
       items: [chest.trophy],
       key: 0,
+      tickets: chest.tickets,
       resolvedAt: now,
       claimAt: now,
       claimed: false,
@@ -1875,6 +1888,8 @@ export const useCharacterStore = defineStore('character', () => {
         // mine ne rapportait RIEN : l'issue portait le mana, le message le portait, les
         // pastilles l'affichaient… et personne ne le créditait.
         mana: cur.mana + ent(m.mana),
+        // 🎟️ coffres gagnés par le sport (360, boss entre amis) → tickets d'invocation.
+        gacha_tickets: cur.gacha_tickets + ent(m.tickets),
         ...partyPatch,
         inventory,
         // Ce message (et tout autre encaissement en cours) passe à `claimed: true`.
