@@ -1,82 +1,88 @@
 /**
- * 🎰 LA MISE EN SCÈNE D'UN TIRAGE — la roulette de portraits qui précède la révélation.
+ * 🎰 LA MISE EN SCÈNE D'UN TIRAGE — l'invocation (v1.002, maquette validée le 2026-09-21).
  *
  * ⚠️ **RÈGLE FONDATRICE, la même que `siegeStage` et `arenaStage` : CE MODULE NE DÉCIDE
  * RIEN.** Le champion est déjà tiré (`pullChampion`, côté store, avec son pity persisté) ;
- * on ne fait que **placer dans le temps** un résultat tranché. Une roulette qui tirerait
+ * on ne fait que **placer dans le temps** un résultat tranché. Une mise en scène qui tirerait
  * elle-même ferait diverger ce qu'on voit de ce qu'on possède, et le pity ne voudrait plus
  * rien dire.
  *
- * ## Ce qui fait le frisson, et ce qui le tuerait
+ * ## La séquence (remplace la roulette de portraits, retirée à la demande)
  *
- * - ⚠️ **LES LEURRES COUVRENT TOUTE L'ÉCHELLE, même pour un commun.** Si la bande ne
- *   montrait que des portraits de la rareté tirée, on lirait le résultat AVANT l'arrêt et
- *   il n'y aurait plus rien à attendre. C'est la propriété centrale, et elle est testée.
- * - ⚠️ **JAMAIS DEUX FOIS LE MÊME D'AFFILÉE** : un doublon consécutif se lit comme un arrêt
- *   de la roulette — on croit que c'est fini, et la révélation tombe à plat.
- * - ⚠️ **LA BANDE CONTINUE APRÈS LE TIRÉ** (demandé : « sans que le tirage soit en bout
- *   de ligne »). Sans queue, la dernière case arrive dans le champ de vision et **on voit la
- *   fin venir** — la roulette cesse d'en être une. Avec elle, elle s'arrête au milieu de son
- *   élan, comme une vraie.
- * - **PLUS LA RARETÉ EST HAUTE, PLUS ÇA DURE.** C'est le teasing du genre : une roulette
- *   qui s'éternise est un bon présage. Assumé et testé — ça ne « spoile » pas, ça fait
- *   monter la tension, ce qui est précisément la demande.
- * - **L'AURA NE SE COLORE QUE DANS LE DERNIER TIERS** (`glowFrom`) : trop tôt, on saurait
- *   dès la première seconde ; jamais, et l'arrivée n'a pas de crescendo.
+ * 1. **On maintient le cercle** pour invoquer (`INVOKE.holdMs`, plus long pour un ×10).
+ * 2. **Un orbe est lancé** : il ralentit comme sous la gravité, s'arrête, puis retombe
+ *    lourdement. ⚠️ **Il ne se déforme jamais** (demandé), et **aucune traînée à la descente**.
+ * 3. **Sa couleur est le PRÉSAGE** : la lettre elle-même (bleu B, violet A, or S).
+ * 4. **La surprise vers le haut** : à l'apogée, l'orbe se fissure et monte d'une lettre.
+ * 5. **L'impact** : colonne de lumière, silhouette teintée, la LETTRE s'abat (pas d'étoiles :
+ *    elles sont déjà prises dans l'app), puis le portrait et le nom.
+ *
+ * Au ×10 : dix orbes partent **toutes bleues**, les A puis les S s'allument une à une à
+ * l'apogée, elles retombent en **cartes face cachée** ; les B se retournent seuls, et
+ * toucher un A ou un S l'ouvre au centre du cercle comme un ×1.
+ *
+ * ## ⚠️ Le présage ne ment JAMAIS — c'est la propriété centrale, et elle est testée
+ *
+ * Il peut SOUS-annoncer (partir bleu et monter) mais jamais sur-annoncer : un chemin de
+ * présage finit TOUJOURS sur la vraie lettre, ne descend jamais, et **un B ne connaît
+ * aucune surprise** — une fausse montée sur le fond du tirage serait une promesse trahie.
  *
  * ## `prefers-reduced-motion`
  *
- * Le plan « réduit » n'est pas un cas particulier de l'écran : c'est une bande d'UN seul
- * portrait et une durée nulle. L'état final est donc le même code, sans animation.
+ * Le plan « réduit » n'est pas un cas particulier de l'écran : un présage sans surprise et
+ * `reduced: true`, que l'écran lit pour afficher l'état FINAL directement.
  */
 
-import { CHAMPIONS, type Champion, type PullGrade } from '@/data/champions';
-
-export const REVEAL = {
-  /** Crans de roulette pour un B, et ce que chaque lettre au-dessus ajoute.
-   *  ⚠️ Même amplitude que la v0.988 (72 → 142 crans, 4 s → 6,45 s du bas au sommet),
-   *  répartie sur 3 lettres au lieu de 8 raretés. */
-  crans: 72,
-  cransParRang: 35,
-  /** Durée pour un B (ms), et ce que chaque lettre au-dessus ajoute.
-   *  ⚠️ Longue depuis la v0.988 : le RALENTI final a besoin de temps pour se voir. */
-  spinMs: 4000,
-  spinMsParRang: 1225,
-  /** Fraction de la roulette à partir de laquelle l'aura prend la couleur de la lettre. */
-  glowFrom: 0.66,
-  /** ⚠️ Plancher de crans : en dessous, la bande n'a pas la place de défiler et la
-   *  « roulette » se lit comme un simple fondu. */
-  cransMin: 8,
-  /** Combien de cases continuent APRÈS celle qu'on a tirée. ⚠️ Il en faut plus que la
-   *  moitié de ce que l'écran montre, sinon le bord de la bande entre dans le champ et on
-   *  voit la fin arriver — exactement ce qu'on veut éviter. */
-  tail: 6,
-  /** Tirage ×10 : décalage d'arrêt entre deux lignes (ms). Les dix lignes tournent
-   *  ENSEMBLE et s'arrêtent en cascade, de haut en bas. */
-  lotStagger: 160,
-  /** Part des leurres qui sont des B (refonte S/A/B). ⚠️ Sans B dans la bande, une roulette
-   *  qui s'arrête sur un B trahirait son issue en montrant une case qu'on n'a jamais vue
-   *  défiler — et le fond du tirage n'aurait pas de visage. */
-  bDecoyShare: 0.5,
-} as const;
-
-/**
- * 🎢 LA COURBE DE LA ROULETTE (v0.988, demandé : « très vite au début puis ralentir avant
- * la sélection finale »). Mesurée au banc sur 48 cases / 2,6 s (puis rallongée à 72 / 4 s, demandé : « plus longtemps avant la sélection », même vitesse de départ) : départ ~120 cases/s (75
- * avant), puis les CINQ dernières cases égrenées sur la dernière seconde et demie.
- * ⚠️ Une courbe plus raide (0.03, 0.85, 0.07, 1) filait plus vite encore mais atteignait la
- * dernière case à mi-course puis rampait 1,2 s sans rien montrer — ça se lisait comme un
- * blocage. Une seule définition pour le ×1 et les dix lignes.
- */
-export const REVEAL_EASE = 'cubic-bezier(0.05, 0.75, 0.25, 1)';
+import type { Champion, PullGrade } from '@/data/champions';
 
 /** Rang d'une lettre dans la mise en scène : B 0, A 1, S 2. */
 export const GRADE_RANK: Record<PullGrade, number> = { B: 0, A: 1, S: 2 };
+/** L'inverse : la lettre d'un rang de présage. */
+export const RANK_GRADE: readonly PullGrade[] = ['B', 'A', 'S'];
 
 /**
- * 🎰 UNE CASE DE LA ROULETTE — un champion (S/A) ou une pièce (B).
+ * 🎚️ LE RYTHME — repris de la maquette validée. ⚠️ Tout est en millisecondes et vit ICI :
+ * le composant lit ces valeurs, il n'en écrit aucune.
+ */
+export const INVOKE = {
+  /** Maintien du doigt pour lancer un ×1, et un ×10 (demandé : « plus long » pour le ×10). */
+  holdMs: 1000,
+  holdMsLot: 2500,
+  /** Montée de l'orbe (décélération), arrêt à l'apogée, prise d'élan, chute (accélération). */
+  riseMs: 820,
+  apexMs: 260,
+  /** Ce que chaque rang de lettre ajoute à l'arrêt : plus c'est rare, plus on attend. */
+  apexMsParRang: 180,
+  windupMs: 170,
+  fallMs: 560,
+  /** Une fissure (surprise vers le haut) : craquelure, flash, repos. */
+  crackMs: 1150,
+  /** Silhouette avant que la lettre s'abatte, et ce que chaque rang ajoute. */
+  silhouetteMs: 450,
+  silhouetteMsParRang: 250,
+  /** Nom écrit lettre par lettre (par caractère). */
+  typeMsParLettre: 34,
+  /** ×10 : décalage de lancer entre deux orbes, arrêt commun, fissure d'une orbe,
+   *  apparition des cartes, retournement d'un B. */
+  lotLaunchStagger: 45,
+  lotApexMs: 450,
+  lotCrackMs: 560,
+  lotLandMs: 520,
+  lotFlipStagger: 85,
+} as const;
+
+/**
+ * 🎲 LA SURPRISE VERS LE HAUT — sa fréquence. ⚠️ Rare sur un A (sinon elle ne surprend
+ * plus), fréquente sur un S (c'est LE moment du genre), JAMAIS sur un B. Au ×10 elle est
+ * systématique : les dix orbes partent bleues, c'est l'allumage qui fait le suspense ;
+ * `lotDoubleS` règle seulement si un S passe par le violet.
+ */
+export const SURPRISE = { A: 0.3, S: 0.55, doubleS: 0.4, lotDoubleS: 0.6 } as const;
+
+/**
+ * 🎰 UNE CASE — un champion (S/A) ou une pièce (B).
  * ⚠️ Le B n'est pas un champion (refonte 2026-09-21) : c'est une pièce d'équipement de
- * lignée. La case le dit par son emoji et son nom, sans portrait.
+ * lignée. La case le dit par son emoji, son nom et son illustration.
  */
 export interface RevealCell {
   grade: PullGrade;
@@ -94,76 +100,6 @@ export const cellOfChampion = (c: Champion): RevealCell => ({
   name: c.name,
   championId: c.id,
 });
-
-/** Les visages du fond du tirage — un par emplacement d'équipement. */
-const B_DECOYS: RevealCell[] = [
-  { grade: 'B', emoji: '🗡️', name: 'Arme', championId: null },
-  { grade: 'B', emoji: '🛡️', name: 'Armure', championId: null },
-  { grade: 'B', emoji: '💍', name: 'Accessoire', championId: null },
-  { grade: 'B', emoji: '🔮', name: 'Relique', championId: null },
-];
-
-export interface RevealPlan {
-  /** Les cases qui défilent — la tirée est à `stopIndex`, **jamais en bout de bande**. */
-  strip: RevealCell[];
-  /** L'index sur lequel la roulette s'arrête. */
-  stopIndex: number;
-  /** Durée de la roulette, en millisecondes (0 = pas d'animation). */
-  spinMs: number;
-  /** Fraction (0..1) à partir de laquelle l'aura révèle la couleur de la lettre. */
-  glowFrom: number;
-}
-
-/** Combien de temps la roulette tourne pour cette lettre. */
-export function revealSpinMs(grade: PullGrade): number {
-  return REVEAL.spinMs + GRADE_RANK[grade] * REVEAL.spinMsParRang;
-}
-
-/** Combien de cases défilent avant celle qu'on a tirée. */
-export function revealCrans(grade: PullGrade): number {
-  return REVEAL.crans + GRADE_RANK[grade] * REVEAL.cransParRang;
-}
-
-/**
- * 🎰 Le plan d'une révélation.
- *
- * ⚠️ `rng` sert UNIQUEMENT aux leurres : le résultat, lui, est déjà connu. Deux appels avec
- * la même graine donnent la même bande — c'est ce qui rend la mise en scène testable, et
- * ça n'a aucune conséquence sur le jeu.
- */
-export function buildReveal(
-  target: RevealCell,
-  rng: () => number,
-  opts?: { reduced?: boolean; pool?: readonly Champion[] },
-): RevealPlan {
-  const champs = (opts?.pool ?? CHAMPIONS).map(cellOfChampion);
-  if (opts?.reduced) return { strip: [target], stopIndex: 0, spinMs: 0, glowFrom: 0 };
-
-  const same = (a: RevealCell | undefined, b: RevealCell) =>
-    !!a && a.grade === b.grade && a.championId === b.championId && a.emoji === b.emoji;
-  const n = Math.max(REVEAL.cransMin, revealCrans(target.grade));
-  const strip: RevealCell[] = [];
-  /** Un leurre : jamais le PRÉCÉDENT — un doublon consécutif se lit comme un arrêt de la
-   *  roulette. `veille` = la case JUSTE AVANT la tirée : là seulement il faut l'écarter en
-   *  plus, puisqu'elle s'y collerait à elle-même.
-   *  ⚠️ JUSTE APRÈS LA TIRÉE, RIEN À AJOUTER : la tirée EST alors le précédent, donc le
-   *  premier garde l'écarte déjà (mutation v0.962). */
-  const leurre = (veille = false) => {
-    const prev = strip[strip.length - 1];
-    const src0 = rng() < REVEAL.bDecoyShare ? B_DECOYS : champs;
-    const cands = src0.filter((c) => !same(prev, c) && !(veille && same(target, c)));
-    const src = cands.length ? cands : src0;
-    strip.push(src[Math.floor(rng() * src.length) % src.length]!);
-  };
-
-  for (let i = 0; i < n - 1; i++) leurre(i === n - 2);
-  const stopIndex = strip.length;
-  strip.push(target);
-  // ⚠️ LA QUEUE : c'est elle qui empêche de voir la fin arriver.
-  for (let i = 0; i < REVEAL.tail; i++) leurre();
-
-  return { strip, stopIndex, spinMs: revealSpinMs(target.grade), glowFrom: REVEAL.glowFrom };
-}
 
 /**
  * 🎰 CE QU'UN TIRAGE A DONNÉ — la matière de la mise en scène (champion ou pièce).
@@ -192,21 +128,133 @@ export function cellOf(it: LotItem): RevealCell {
   };
 }
 
+/** Une orbe et ce qu'elle cache. */
+export interface RevealItem {
+  cell: RevealCell;
+  /**
+   * Le PRÉSAGE : les rangs de lettre que l'orbe affiche successivement. ⚠️ Toujours
+   * croissant, et le dernier est TOUJOURS la vraie lettre (testé) — il sous-annonce, il ne
+   * ment jamais.
+   */
+  path: number[];
+}
+
+export interface RevealPlan {
+  /** Les orbes, dans l'ORDRE DU TIRAGE : une pour un ×1, dix pour un ×10. */
+  items: RevealItem[];
+  /** `prefers-reduced-motion` : l'écran montre l'état FINAL, sans rien animer. */
+  reduced: boolean;
+}
+
+/** La vraie lettre d'une orbe (le bout de son présage). */
+export const finalRank = (it: RevealItem): number => it.path[it.path.length - 1]!;
+
+/** Le présage d'un tirage à l'unité : sa vraie couleur, ou une surprise vers le haut. */
+function singlePath(rank: number, rng: () => number): number[] {
+  if (rank === 0) return [0];
+  if (rank === 1) return rng() < SURPRISE.A ? [0, 1] : [1];
+  if (rng() >= SURPRISE.S) return [2];
+  return rng() < SURPRISE.doubleS ? [0, 1, 2] : [rng() < 0.5 ? 0 : 1, 2];
+}
+
 /**
- * 🎰 Les dix lignes d'un tirage ×10, dans l'ORDRE DU TIRAGE (haut → bas) : chaque ligne
- * est une roulette complète, sa durée décalée de `lotStagger` par rang pour que les
- * arrêts tombent en cascade. ⚠️ La durée garde sa part de lettre : une ligne qui traîne
- * reste un bon présage, comme à l'unité.
+ * 🎰 Le plan d'un tirage à l'unité.
+ * ⚠️ `rng` ne sert QU'AU présage : le résultat est déjà connu. Même graine → même mise en
+ * scène, ce qui la rend testable, sans aucune conséquence sur le jeu.
+ */
+export function buildReveal(
+  target: RevealCell,
+  rng: () => number,
+  opts?: { reduced?: boolean },
+): RevealPlan {
+  const rank = GRADE_RANK[target.grade];
+  const reduced = !!opts?.reduced;
+  return { items: [{ cell: target, path: reduced ? [rank] : singlePath(rank, rng) }], reduced };
+}
+
+/**
+ * 🎰 Le plan d'un ×10. Les dix orbes partent BLEUES : un A s'allume en violet, un S monte à
+ * l'or (parfois en passant par le violet). ⚠️ L'ordre du tirage est conservé — c'est ce qui
+ * a réellement eu lieu, et le store l'a persisté ainsi.
  */
 export function buildLotReveal(
   lot: readonly LotItem[],
   rng: () => number,
-  opts?: { reduced?: boolean; pool?: readonly Champion[] },
-): RevealPlan[] {
-  return lot.map((it, i) => {
-    const plan = buildReveal(cellOf(it), rng, opts);
-    return plan.spinMs ? { ...plan, spinMs: plan.spinMs + i * REVEAL.lotStagger } : plan;
+  opts?: { reduced?: boolean },
+): RevealPlan {
+  const reduced = !!opts?.reduced;
+  const items = lot.map((it) => {
+    const rank = GRADE_RANK[it.grade];
+    let path: number[];
+    if (reduced || rank === 0) path = [rank];
+    else if (rank === 1) path = [0, 1];
+    else path = rng() < SURPRISE.lotDoubleS ? [0, 1, 2] : [0, 2];
+    return { cell: cellOf(it), path };
   });
+  return { items, reduced };
+}
+
+/**
+ * L'ordre dans lequel les orbes d'un ×10 s'allument : les A d'abord, les S en dernier, puis
+ * l'ordre du tirage. ⚠️ Le meilleur ferme la marche — c'est lui que l'on attend.
+ */
+export function igniteOrder(plan: RevealPlan): number[] {
+  return plan.items
+    .map((it, i) => ({ i, r: finalRank(it), up: it.path.length > 1 }))
+    .filter((x) => x.up)
+    .sort((a, b) => a.r - b.r || a.i - b.i)
+    .map((x) => x.i);
+}
+
+/** Le rang le plus haut du plan — il donne la couleur de l'impact et son intensité. */
+export function bestRank(plan: RevealPlan): number {
+  return Math.max(0, ...plan.items.map(finalRank));
+}
+
+/** Durée de l'arrêt à l'apogée pour ce rang. */
+export const apexMs = (rank: number) => INVOKE.apexMs + rank * INVOKE.apexMsParRang;
+/** Durée de la silhouette pour ce rang. */
+export const silhouetteMs = (rank: number) =>
+  INVOKE.silhouetteMs + rank * INVOKE.silhouetteMsParRang;
+
+/**
+ * ⏱️ Durée de la séquence d'un ×1, du lâcher du doigt au nom écrit — hors maintien, hors
+ * lecture du résultat. ⚠️ Bornée par un test : une révélation qui traîne se subit au
+ * dixième tirage, même avec « Passer ».
+ */
+export function singleSequenceMs(plan: RevealPlan): number {
+  const it = plan.items[0];
+  if (!it || plan.reduced) return 0;
+  const rank = finalRank(it);
+  return (
+    INVOKE.riseMs +
+    apexMs(rank) +
+    (it.path.length - 1) * INVOKE.crackMs +
+    INVOKE.windupMs +
+    INVOKE.fallMs +
+    silhouetteMs(rank) +
+    it.cell.name.length * INVOKE.typeMsParLettre
+  );
+}
+
+/**
+ * ⏱️ Durée d'un ×10 jusqu'aux cartes retournées (hors révélations au toucher, qui vont au
+ * rythme du joueur).
+ */
+export function lotSequenceMs(plan: RevealPlan): number {
+  if (plan.reduced) return 0;
+  const cracks = plan.items.reduce((s, it) => s + (it.path.length - 1), 0);
+  const bees = plan.items.filter((it) => finalRank(it) === 0).length;
+  return (
+    INVOKE.riseMs +
+    (plan.items.length - 1) * INVOKE.lotLaunchStagger +
+    INVOKE.lotApexMs +
+    cracks * INVOKE.lotCrackMs +
+    INVOKE.windupMs +
+    INVOKE.fallMs +
+    INVOKE.lotLandMs +
+    bees * INVOKE.lotFlipStagger
+  );
 }
 
 /** Le résultat du lot qui porte la révélation : la meilleure lettre. ⚠️ À lettre égale on

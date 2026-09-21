@@ -1,175 +1,189 @@
 <template>
-  <!-- 🎰 L'INVOCATION, EN PLEIN ÉCRAN (v0.960, demandé : « un écran plus flashy, plus
-       centré dessus… le frisson du tirage au sort »).
-       ⚠️ ELLE NE DÉCIDE RIEN : le champion est déjà tiré par le store (avec son pity
-       persisté), la roulette ne fait que le mettre en scène — la règle de `siegeStage` et
-       d'`arenaStage`. Une roulette qui tirerait elle-même ferait diverger ce qu'on voit de
-       ce qu'on possède. -->
+  <!-- 🎰 L'INVOCATION, EN PLEIN ÉCRAN (v1.002 — maquette validée le 2026-09-21, remplace la
+       roulette de portraits). On MAINTIENT le cercle, un orbe est lancé, sa couleur est le
+       présage, il retombe, et la lettre s'abat avant le portrait.
+       ⚠️ ELLE NE DÉCIDE RIEN : tout est déjà tiré par le store (avec le pity persisté) ;
+       l'écran ne fait que jouer le plan de `gachaReveal.ts`, où vivent le présage et le
+       rythme — la règle de `siegeStage` et d'`arenaStage`. -->
   <q-dialog :model-value="!!plan" maximized persistent @update:model-value="onClose">
-    <div
-      class="gx"
-      :class="[phase, rarClass, { lotspin: lotSpin, lotdone: lotDone }]"
-      :style="{ '--rar-c': rarColor }"
-    >
-      <div class="gx-sky" aria-hidden="true"></div>
-
-      <!-- ⚠️ « Passer » dès la première seconde : une roulette de 3,4 s se subit au
-           dixième tirage. On coupe l'animation, jamais l'écran de résultat — c'est LUI le
-           moment du jeu (même règle que le plateau de l'arène). -->
-      <button v-if="phase === 'spin'" type="button" class="gx-skip" @click="skip">⏩ Passer</button>
-
-      <div class="gx-title font-display">
-        {{ phase === 'spin' ? 'Invocation…' : verdictTitle }}
+    <div class="ivk" :style="{ '--c': color }">
+      <div class="ivk-top">
+        <span class="ivk-title font-display">{{ title }}</span>
+        <button
+          type="button"
+          class="ivk-ibtn"
+          :aria-label="sfx.enabled.value ? 'Couper le son' : 'Activer le son'"
+          @click="sfx.setEnabled(!sfx.enabled.value)"
+        >
+          {{ sfx.enabled.value ? '🔊' : '🔇' }}
+        </button>
+        <!-- ⚠️ « Passer » dès le maintien : on coupe l'animation, jamais l'écran de résultat. -->
+        <button
+          v-if="phase === 'hold' || phase === 'play'"
+          type="button"
+          class="ivk-skip"
+          @click="skip"
+        >
+          ⏩ Passer
+        </button>
       </div>
 
-      <!-- 🎰 LE ×10 (v0.980, demandé : « 10 fois l'animation de la ligne qui défile, sur
-           toute la hauteur de l'écran ») — dix roulettes empilées qui tournent ENSEMBLE et
-           s'arrêtent en cascade. Chaque case est carrée à la hauteur d'une ligne (`--rh`, dérivée
-           de la hauteur d'écran) : la translation se calcule en CSS, sans rien mesurer. -->
-      <div v-if="lotSpin" class="gx-rows">
-        <div class="gx-rows-mark" aria-hidden="true"></div>
-        <div
-          v-for="(lp, r) in lotPlans ?? []"
-          :key="r"
-          class="gx-row"
-          :class="{ rev: r % 2 === 1 }"
-          :style="{
-            '--c': GRADE_COLOR[lp.strip[lp.stopIndex]!.grade],
-            '--stop': `${lp.spinMs}ms`,
-          }"
-        >
-          <div class="gx-rstrip" :style="rowStyle(lp)">
-            <div v-for="(c, i) in lp.strip" :key="i" class="gx-rcell">
-              <div class="gx-rbox" :style="{ '--c': GRADE_COLOR[c.grade] }">
-                <span class="gx-remo"
-                  ><ChampionPortrait :champion-id="c.championId"
-                    ><AdvGearArt :model="c.gearModel">{{ c.emoji }}</AdvGearArt></ChampionPortrait
-                  ></span
-                >
-                <!-- ⚠️ La LETTRE ne s'écrit que sur la case RETENUE, une fois sa ligne
-                     arrêtée (demandé) : au défilement, c'est le CADRE coloré qui la porte. -->
-                <span v-if="i === lp.stopIndex" class="gx-rrar">{{ c.grade }}</span>
+      <div ref="stage" class="ivk-stage">
+        <InvocationBackdrop />
+        <!-- ⚠️ `--c` posé AUSSI ici, en ligne : pendant une animation (la secousse joue sur
+             cet élément), Chrome fige la valeur HÉRITÉE — la couleur de la lettre restait
+             celle du tirage précédent (trouvé sur la maquette). -->
+        <div ref="shaker" class="ivk-shaker" :style="{ '--c': color }">
+          <div v-if="phase === 'hold'" class="ivk-cost">
+            <div class="ivk-cost-t font-display">Tirage ×{{ items.length }}</div>
+            <div class="ivk-cost-s">
+              {{ isLot ? 'Dix orbes, dix trésors' : 'B, A ou S : le cercle te le dira' }}
+            </div>
+          </div>
+
+          <InvocationSigil
+            :key="isLot ? 'big' : 'small'"
+            ref="sigilCmp"
+            :variant="isLot ? 'big' : 'small'"
+            :charge="charge"
+            :speed="sigilSpeed"
+            :holding="holding"
+            :dim="sigilDim"
+            :revealing="sigilRevealing"
+            label="Maintiens pour invoquer (ou maintiens Espace)"
+            @hold="startHold"
+            @release="endHold"
+          />
+
+          <!-- 🃏 LE ×10 : dix cartes face cachée, les B se retournent seuls, les A et S
+               attendent qu'on les touche. -->
+          <div v-if="cards.length" ref="lotEl" class="ivk-lot" :class="{ faded: !!rv.item }">
+            <div
+              v-for="(c, i) in cards"
+              :key="i"
+              class="ivk-card"
+              :class="[
+                'g-' + c.grade,
+                { flipped: c.flipped, hot: c.hot && phase === 'await' && !c.flipped, away: c.away },
+              ]"
+              :style="{ '--c': GRADE_COLOR[c.grade], opacity: c.shown ? 1 : 0 }"
+              @click="onCard(i)"
+            >
+              <div class="ivk-card-in">
+                <div class="ivk-face ivk-back"></div>
+                <div class="ivk-face ivk-front">
+                  <span class="ivk-front-art"
+                    ><ChampionPortrait :champion-id="c.cell.championId"
+                      ><AdvGearArt :model="c.cell.gearModel"
+                        ><span class="ivk-emo">{{ c.cell.emoji }}</span></AdvGearArt
+                      ></ChampionPortrait
+                    ></span
+                  >
+                  <span class="ivk-front-l font-display">{{ c.grade }}</span>
+                  <span class="ivk-front-n">{{ c.cell.name }}</span>
+                  <span class="ivk-front-t" :class="tagOf(c.lot).cls">{{
+                    tagOf(c.lot).label
+                  }}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- LA ROULETTE ×1 — VERTICALE, en grands portraits (v0.987, demandé : « la largeur
-           du portrait presque la largeur de l'écran »). Même moteur que l'horizontale d'avant
-           (`buildReveal`, arrêt sur `stopIndex`, queue après le tiré) : seul l'axe change. -->
-      <div v-else-if="phase === 'spin'" class="gx-wheel">
-        <div class="gx-halo" :style="haloStyle" aria-hidden="true"></div>
-        <div class="gx-mark" aria-hidden="true">
-          <span class="gx-caret up">▶</span>
-          <span class="gx-caret dn">◀</span>
-        </div>
-        <div class="gx-strip" :style="stripStyle">
-          <div
-            v-for="(c, i) in plan?.strip ?? []"
-            :key="i"
-            class="gx-cell"
-            :style="{ '--c': GRADE_COLOR[c.grade] }"
-          >
-            <span class="gx-emo"
-              ><ChampionPortrait :champion-id="c.championId" large
-                ><AdvGearArt :model="c.gearModel">{{ c.emoji }}</AdvGearArt></ChampionPortrait
-              ></span
-            >
-          </div>
-        </div>
-      </div>
-
-      <!-- LA RÉVÉLATION -->
-      <div v-else-if="champ" class="gx-reveal">
-        <div class="gx-burst" aria-hidden="true">
-          <i v-for="i in sparks" :key="i" :style="sparkStyle(i)"></i>
-        </div>
-        <div class="gx-portrait">
-          <span class="gx-pemo"
-            ><ChampionPortrait :champion-id="champ.championId" large
-              ><AdvGearArt :model="champ.gearModel">{{ champ.emoji }}</AdvGearArt></ChampionPortrait
-            ></span
-          >
-        </div>
-        <div class="gx-name font-display">{{ champ.name }}</div>
-        <div class="gx-rar font-display">{{ champ.grade }}</div>
-        <div class="gx-meta">{{ meta }}</div>
-        <div v-if="verdictSub" class="gx-verdict">{{ verdictSub }}</div>
-
-        <!-- 🎰 LE RESTE DU LOT (v0.968) : la roulette porte le MEILLEUR, la grille dit
-             les neuf autres d'un coup d'œil. Dix roulettes d'affilée, c'est trente
-             secondes pour un seul geste — le genre concentre la tension puis récapitule. -->
-        <div v-if="lotRows.length > 1" class="gx-lot">
-          <div class="gx-lot-t">Ton lot de {{ lotRows.length }}</div>
-          <div class="gx-lot-grid">
-            <div
-              v-for="(it, i) in lotRows"
-              :key="i"
-              class="gx-lot-c"
-              :style="{ '--c': GRADE_COLOR[it.grade] }"
-              :title="`${cellOf(it).name} · ${it.grade}`"
-            >
-              <span class="gl-emo"
-                ><ChampionPortrait :champion-id="cellOf(it).championId"
-                  ><AdvGearArt :model="cellOf(it).gearModel">{{
-                    cellOf(it).emoji
-                  }}</AdvGearArt></ChampionPortrait
-                ></span
-              >
-              <span class="gl-name">{{ cellOf(it).name }}</span>
-              <span class="gl-rar">{{ it.grade }}</span>
-              <!-- Ce qui DISTINGUE une ligne : neuf ou déjà là (donc un cran d'Éveil,
-                   ou du mana rendu quand il n'y a plus rien à réveiller). -->
-              <span v-if="!it.champion" class="gl-tag">🗡️ stock</span>
-              <span v-else-if="!it.duplicate" class="gl-tag neuf">NOUVEAU</span>
-              <span v-else-if="it.manaBack > 0" class="gl-tag">+{{ it.manaBack }} 💠</span>
-              <span v-else class="gl-tag">✨ {{ awakenLevel(it.copies) }}</span>
+          <!-- ✨ LA RÉVÉLATION au centre du cercle (le ×1, et chaque carte touchée du ×10) -->
+          <div v-if="rv.item" class="ivk-reveal" :class="{ interactive: rv.acts, final: rv.final }">
+            <div ref="pwrap" class="ivk-pwrap">
+              <div class="ivk-rays" :class="{ on: rv.col }"></div>
+              <div ref="rim" class="ivk-rim"></div>
+              <div ref="gradeEl" class="ivk-grade font-display" :class="'g-' + rv.item.cell.grade">
+                {{ rv.item.cell.grade }}
+              </div>
+              <div class="ivk-portrait">
+                <span class="ivk-sil"
+                  ><ChampionPortrait :champion-id="rv.item.cell.championId" large
+                    ><AdvGearArt :model="rv.item.cell.gearModel"
+                      ><span class="ivk-emo">{{ rv.item.cell.emoji }}</span></AdvGearArt
+                    ></ChampionPortrait
+                  ></span
+                >
+                <span class="ivk-tint"></span>
+                <span class="ivk-col" :class="{ on: rv.col }"
+                  ><ChampionPortrait :champion-id="rv.item.cell.championId" large
+                    ><AdvGearArt :model="rv.item.cell.gearModel"
+                      ><span class="ivk-emo">{{ rv.item.cell.emoji }}</span></AdvGearArt
+                    ></ChampionPortrait
+                  ></span
+                >
+              </div>
+            </div>
+            <div class="ivk-name font-display">{{ rv.typed }}</div>
+            <div ref="rarEl" class="ivk-rar font-display">
+              {{ rv.item.cell.championId ? 'Champion' : 'Équipement' }}
+            </div>
+            <div class="ivk-meta" :class="{ on: rv.meta }">
+              {{ metaOf(rv.item.cell) }}
+              <span v-if="rv.tag" class="ivk-tag" :class="rv.tag.cls">{{ rv.tag.label }}</span>
+            </div>
+            <div v-if="rv.focus" class="ivk-acts" :class="{ on: rv.acts }">
+              <button type="button" class="ivk-btn pri" @click="closeFocus">Continuer</button>
             </div>
           </div>
         </div>
+        <div ref="flash" class="ivk-flash"></div>
       </div>
 
-      <div class="gx-acts">
-        <q-btn
-          v-if="phase === 'done'"
-          flat
-          no-caps
-          class="gx-again"
-          :disable="!canAgain || busy"
-          @click="emit('again')"
-        >
-          🎰 Invoquer encore
-          <small>{{ pullCost }} 💠</small>
-        </q-btn>
-        <q-btn v-if="phase === 'done'" flat no-caps class="gx-close" @click="onClose(false)">
-          Fermer
-        </q-btn>
+      <div class="ivk-bar">
+        <template v-if="phase === 'hold'">
+          <div class="ivk-msg"><b>Maintiens</b> le cercle pour invoquer</div>
+        </template>
+        <template v-else-if="phase === 'await'">
+          <div class="ivk-msg">Touche les cartes qui brillent ({{ hotLeft }})</div>
+          <button type="button" class="ivk-btn" @click="revealAll">Tout révéler</button>
+        </template>
+        <template v-else-if="phase === 'done'">
+          <div class="ivk-msg">{{ isLot ? lotSummary : verdictSub }}</div>
+          <div class="ivk-row">
+            <button
+              type="button"
+              class="ivk-btn pri"
+              :disabled="!canAgain || busy"
+              @click="emit('again')"
+            >
+              🎰 Invoquer encore ×{{ items.length }}
+            </button>
+            <button type="button" class="ivk-btn" @click="onClose(false)">Fermer</button>
+          </div>
+        </template>
       </div>
     </div>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { CHAMPION_BY_ID, GRADE_COLOR } from '@/data/champions';
-import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN } from '@/lib/adventurers';
-import { GACHA } from '@/lib/gacha';
+import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN, awakenLevel } from '@/lib/adventurers';
 import {
-  GRADE_RANK,
-  cellOf,
-  lotOrder,
-  REVEAL_EASE,
-  type RevealPlan,
+  INVOKE,
+  RANK_GRADE,
+  apexMs,
+  bestRank,
+  finalRank,
+  igniteOrder,
+  silhouetteMs,
   type LotItem,
+  type RevealCell,
+  type RevealItem,
+  type RevealPlan,
 } from '@/lib/gachaReveal';
-import { awakenLevel } from '@/lib/adventurers';
+import { useInvokeSfx } from '@/composables/useInvokeSfx';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
+import InvocationBackdrop from '@/components/InvocationBackdrop.vue';
+import InvocationSigil from '@/components/InvocationSigil.vue';
 
 const props = defineProps<{
   plan: RevealPlan | null;
-  /** Ce que le tirage a donné — pour le dire APRÈS la roulette, jamais pendant. */
+  /** Ce que le tirage à l'unité a donné — pour le DIRE après la révélation, jamais avant. */
   verdict: {
     duplicate: boolean;
     copies: number;
@@ -180,58 +194,64 @@ const props = defineProps<{
   } | null;
   canAgain: boolean;
   busy: boolean;
-  /** Le lot COMPLET quand le tirage était un ×10 — la roulette, elle, ne porte que
-   *  son meilleur. Absent pour un tirage à l'unité. */
+  /** Le lot d'un ×10, dans l'ordre du tirage (les étiquettes NOUVEAU / Éveil des cartes). */
   lot?: LotItem[] | null;
-  /** Les dix lignes d'un ×10 (`buildLotReveal`), dans l'ordre du tirage. Absent ou
-   *  d'une seule ligne → la roulette à l'unité. */
-  lotPlans?: RevealPlan[] | null;
 }>();
 const emit = defineEmits<{ (e: 'close'): void; (e: 'again'): void }>();
 
-const pullCost = GACHA.pullCost;
-/** Le lot, du plus rare au plus commun — la règle vit en lib. */
-const lotRows = computed(() => lotOrder(props.lot ?? []));
-const phase = ref<'spin' | 'done'>('spin');
-const rolling = ref(false);
-let timer: number | undefined;
+const sfx = useInvokeSfx();
+const items = computed<RevealItem[]>(() => props.plan?.items ?? []);
+const isLot = computed(() => items.value.length > 1);
 
-/** ⚠️ Le champion révélé est la case `stopIndex` — **pas la dernière** : la bande continue
- *  après lui pour qu'on ne voie pas la fin arriver (v0.962). On ne le reçoit pas deux fois. */
-const champ = computed(() => props.plan?.strip[props.plan.stopIndex] ?? null);
-const rarColor = computed(() => (champ.value ? GRADE_COLOR[champ.value.grade] : '#9A8F7E'));
-const rarClass = computed(() => (champ.value ? `g-${champ.value.grade}` : ''));
-/** ⚠️ Ce qui DISTINGUE un champion : son rôle de convoi et ses signatures de combat —
- *  pas sa forme brute. C'est la leçon de la feuille de promotion (v0.752). */
-const meta = computed(() => {
-  const cell = champ.value;
-  if (!cell) return '';
-  // ⚠️ Un B n'est pas un champion : il n'a ni rôle ni signature.
-  const c = cell.championId ? CHAMPION_BY_ID.get(cell.championId) : null;
-  if (!c) return 'Pièce d’équipement de champion — rangée dans ton stock';
-  const l = [
-    ...(c.role ? [ADV_ROLE_LABEL[c.role]] : []),
-    ...c.skills.map((s) => ADV_SIGNATURE_LABEL[s]).filter(Boolean),
-  ];
-  return l.length ? l.join(' · ') : 'combattant pur';
-});
+type Phase = 'hold' | 'play' | 'await' | 'focus' | 'done';
+const phase = ref<Phase>('hold');
+const charge = ref(0);
+const holding = ref(false);
+const sigilSpeed = ref(12);
+const sigilDim = ref(false);
+const sigilRevealing = ref(false);
+const color = ref<string>(GRADE_COLOR.B);
 
-/** Des étincelles, d'autant plus nombreuses que la rareté est haute — le langage de
- *  `GameFxOverlay`, repris ici pour que la révélation ressemble au reste du jeu. */
-const sparks = computed(() => {
-  const i = champ.value ? GRADE_RANK[champ.value.grade] : 0;
-  return 6 + i * 10;
-});
-function sparkStyle(i: number) {
-  const a = (i / sparks.value) * Math.PI * 2;
-  return {
-    '--dx': `${Math.cos(a) * 46}%`,
-    '--dy': `${Math.sin(a) * 46}%`,
-    '--d': `${(i % 5) * 60}ms`,
-  };
+const stage = ref<HTMLElement | null>(null);
+const shaker = ref<HTMLElement | null>(null);
+const flash = ref<HTMLElement | null>(null);
+const pwrap = ref<HTMLElement | null>(null);
+const rim = ref<HTMLElement | null>(null);
+const gradeEl = ref<HTMLElement | null>(null);
+const rarEl = ref<HTMLElement | null>(null);
+const lotEl = ref<HTMLElement | null>(null);
+const sigilCmp = ref<{ el: HTMLElement | null } | null>(null);
+
+interface Tag {
+  label: string;
+  cls: string;
 }
+const rv = reactive({
+  item: null as RevealItem | null,
+  typed: '',
+  col: false,
+  meta: false,
+  acts: false,
+  final: false,
+  focus: false,
+  tag: null as Tag | null,
+});
+interface Card {
+  cell: RevealCell;
+  grade: RevealCell['grade'];
+  lot: LotItem | null;
+  item: RevealItem;
+  flipped: boolean;
+  hot: boolean;
+  shown: boolean;
+  away: boolean;
+}
+const cards = ref<Card[]>([]);
+const hotLeft = computed(() => cards.value.filter((c) => c.hot && !c.flipped).length);
 
-const verdictTitle = computed(() => {
+/* ─────────── ce que l'écran DIT ─────────── */
+const title = computed(() => {
+  if (phase.value !== 'done' || isLot.value) return 'Invocation';
   const v = props.verdict;
   if (!v) return 'Invocation';
   if (v.piece) return '🎁 Pièce d’équipement';
@@ -247,642 +267,1524 @@ const verdictSub = computed(() => {
     ? `Il n’a plus rien à révéler : ${v.manaBack} 💠 te sont rendus.`
     : `Éveil ${v.awaken}/${AWAKEN.max} — il gagne en puissance.`;
 });
-
-/** La bande glisse jusqu'à amener sa DERNIÈRE case sous le repère. ⚠️ La translation est
- *  posée UNE image après le montage, sinon la transition n'a pas d'état de départ et la
- *  roulette saute directement à la fin. */
-/** ⚠️ La taille d'une case vit en CSS (`--vs`, dérivée de l'écran) et la translation la
- *  lit : une seule valeur pilote les deux, sinon la bande s'arrêterait à côté du repère. */
-const stripStyle = computed(() => {
-  const ms = props.plan?.spinMs ?? 0;
-  const i = rolling.value ? (props.plan?.stopIndex ?? 0) : 0;
-  return {
-    transform: `translate3d(0, calc(-1 * var(--vs) * ${i + 0.5}), 0)`,
-    transition: rolling.value ? `transform ${ms}ms ${REVEAL_EASE}` : 'none',
-  };
+const lotSummary = computed(() => {
+  const n = (g: string) => items.value.filter((it) => it.cell.grade === g).length;
+  const neufs = (props.lot ?? []).filter((it) => it.champion && !it.duplicate).length;
+  return `${n('S')} S · ${n('A')} A · ${n('B')} pièce${n('B') > 1 ? 's' : ''}${neufs ? ` · ${neufs} NOUVEAU` : ''}`;
 });
-/** ⚠️ L'aura est pilotée par `glowFrom`, pas par un stop de keyframe écrit en dur : c'est
- *  la lib qui décide QUAND la rareté se devine, et l'écran ne fait que l'appliquer. */
-const haloStyle = computed(() => {
-  const ms = props.plan?.spinMs ?? 0;
-  const from = props.plan?.glowFrom ?? 0.66;
-  return {
-    animationDelay: `${Math.round(ms * from)}ms`,
-    animationDuration: `${Math.round(ms * (1 - from))}ms`,
-  };
-});
-
-/** Écran de résultat d'un ×10 : révélation + grille de dix — plus haut que l'écran sur
- *  un téléphone, d'où une mise en page compacte (`.lotdone`). */
-const lotDone = computed(() => phase.value === 'done' && lotRows.value.length > 1);
-/** Tirage ×10 en cours d'animation : les dix lignes remplacent la roulette seule. */
-const lotSpin = computed(() => phase.value === 'spin' && (props.lotPlans?.length ?? 0) > 1);
-/** Une ligne du ×10 — même geste que `stripStyle`, avec des cases carrées de `--rh`. */
-function rowStyle(lp: RevealPlan) {
-  const i = rolling.value ? lp.stopIndex : 0;
-  return {
-    transform: `translate3d(calc(-1 * var(--rh) * ${i + 0.5}), 0, 0)`,
-    transition: rolling.value ? `transform ${lp.spinMs}ms ${REVEAL_EASE}` : 'none',
-  };
+/** ⚠️ Ce qui DISTINGUE un champion : son rôle de convoi et ses signatures (leçon v0.752). */
+function metaOf(cell: RevealCell): string {
+  const c = cell.championId ? CHAMPION_BY_ID.get(cell.championId) : null;
+  if (!c) return 'Pièce d’équipement de champion — rangée dans ton stock';
+  const l = [
+    ...(c.role ? [ADV_ROLE_LABEL[c.role]] : []),
+    ...c.skills.map((s) => ADV_SIGNATURE_LABEL[s]).filter(Boolean),
+  ];
+  return l.length ? l.join(' · ') : 'combattant pur';
+}
+function tagOf(it: LotItem | null): Tag {
+  if (!it || !it.champion) return { label: 'pièce', cls: 'piece' };
+  if (!it.duplicate) return { label: 'NOUVEAU', cls: 'neuf' };
+  if (it.manaBack > 0) return { label: `+${it.manaBack} 💠`, cls: 'eveil' };
+  return { label: `✨ Éveil ${awakenLevel(it.copies)}`, cls: 'eveil' };
+}
+function singleTag(): Tag | null {
+  const v = props.verdict;
+  if (!v) return null;
+  if (v.piece) return { label: 'pièce', cls: 'piece' };
+  if (!v.duplicate) return { label: 'NOUVEAU', cls: 'neuf' };
+  return v.manaBack > 0
+    ? { label: `+${v.manaBack} 💠`, cls: 'eveil' }
+    : { label: `✨ Éveil ${v.awaken}`, cls: 'eveil' };
 }
 
-function skip() {
-  window.clearTimeout(timer);
+/* ─────────── moteur de séquence annulable ─────────── */
+let run = 0;
+class Skip extends Error {}
+const alive = (tok: number) => {
+  if (tok !== run) throw new Skip();
+};
+const wait = (ms: number, tok: number) =>
+  new Promise<void>((res, rej) =>
+    window.setTimeout(() => (tok === run ? res() : rej(new Skip())), ms),
+  );
+async function anim(
+  el: Element | null,
+  frames: Keyframe[],
+  o: KeyframeAnimationOptions,
+  tok: number,
+) {
+  if (!el) return;
+  const a = el.animate(frames, { fill: 'forwards', easing: 'ease-out', ...o });
+  await a.finished.catch(() => undefined);
+  alive(tok);
+}
+function tween(ms: number, fn: (k: number) => void, tok: number) {
+  return new Promise<void>((res, rej) => {
+    const t0 = performance.now();
+    const f = (now: number) => {
+      if (tok !== run) return rej(new Skip());
+      const k = Math.min(1, (now - t0) / ms);
+      fn(k);
+      if (k < 1) requestAnimationFrame(f);
+      else res();
+    };
+    requestAnimationFrame(f);
+  });
+}
+const rankColor = (r: number) => GRADE_COLOR[RANK_GRADE[r] ?? 'B'];
+const intensity = (r: number) => [0, 2, 3][r] ?? 0;
+function vib(p: number | number[]) {
+  try {
+    navigator.vibrate?.(p);
+  } catch {
+    /* pas de vibreur */
+  }
+}
+function flashOnce(peak: number, ms: number, tok: number) {
+  return anim(
+    flash.value,
+    [{ opacity: 0 }, { opacity: peak }, { opacity: 0 }],
+    { duration: ms },
+    tok,
+  );
+}
+function shake(px: number, ms: number) {
+  const f: Keyframe[] = [];
+  for (let i = 0; i < 8; i++) {
+    const k = 1 - i / 8;
+    f.push({
+      transform: `translate(${(Math.random() - 0.5) * 2 * px * k}px,${(Math.random() - 0.5) * 2 * px * k}px)`,
+    });
+  }
+  f.push({ transform: 'none' });
+  shaker.value?.animate(f, { duration: ms, easing: 'linear' });
+}
+
+/* ─────────── effets posés à la main dans la scène ─────────── */
+function sigilCenter() {
+  const r = shaker.value!.getBoundingClientRect();
+  const s = sigilCmp.value?.el?.getBoundingClientRect();
+  if (!s) return { x: r.width / 2, y: r.height * 0.6 };
+  return { x: s.left - r.left + s.width / 2, y: s.top - r.top + s.height / 2 };
+}
+function makeOrb(c: string) {
+  const o = document.createElement('div');
+  o.className = 'ivk-orb';
+  o.style.setProperty('--c', c);
+  const at = sigilCenter();
+  o.style.left = `${at.x}px`;
+  o.style.top = `${at.y}px`;
+  o.innerHTML =
+    '<div class="ivk-o-halo"></div><div class="ivk-o-tail"></div><div class="ivk-o-tail core"></div><div class="ivk-o-ring"></div><div class="ivk-o-body"><div class="ivk-o-swirl"></div><div class="ivk-o-swirl s2"></div><div class="ivk-o-shine"></div></div><div class="ivk-o-ring r2"></div>';
+  shaker.value!.appendChild(o);
+  return o;
+}
+/** ⚠️ Échelle UNIFORME, jamais d'étirement (demandé : « ne déforme pas la boule »). */
+function placeOrb(o: HTMLElement, x: number, y: number, s: number, op?: number) {
+  o.style.transform = `translate(${x}px,${y}px) scale(${s})`;
+  if (op != null) o.style.opacity = String(op);
+}
+function setTail(o: HTMLElement, len: number) {
+  o.style.setProperty('--tail', String(len));
+}
+let emitting: { orb: HTMLElement; last: number; px: number | null; py: number | null } | null =
+  null;
+function stopEmbers() {
+  emitting = null;
+}
+/** Braises semées sur le chemin parcouru, à la MONTÉE seulement (aucune traînée en chute). */
+function startEmbers(orb: HTMLElement) {
+  const st = { orb, last: 0, px: null as number | null, py: null as number | null };
+  emitting = st;
+  const step = (now: number) => {
+    if (emitting !== st || !orb.isConnected || !shaker.value) return;
+    const r = shaker.value.getBoundingClientRect();
+    const b = orb.querySelector('.ivk-o-body')!.getBoundingClientRect();
+    const x = b.left - r.left + b.width / 2;
+    const y = b.top - r.top + b.height / 2;
+    if (now - st.last >= 16) {
+      st.last = now;
+      const d = st.px == null ? 0 : Math.hypot(x - st.px, y - (st.py ?? y));
+      const n = Math.min(5, 1 + Math.floor(d / 7));
+      for (let i = 0; i < n; i++) {
+        const k = n === 1 ? 1 : i / (n - 1);
+        spawnEmber(
+          st.px == null ? x : st.px + (x - st.px) * k,
+          st.py == null ? y : st.py + (y - st.py) * k,
+          b.width,
+        );
+      }
+      st.px = x;
+      st.py = y;
+    }
+    requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+function spawnEmber(x: number, y: number, w: number) {
+  const e = document.createElement('span');
+  e.className = 'ivk-ember';
+  const size = 4 + Math.random() * 8;
+  e.style.width = e.style.height = `${size}px`;
+  const x0 = x + (Math.random() - 0.5) * w * 0.5 - size / 2;
+  const y0 = y + (Math.random() - 0.5) * w * 0.3 - size / 2;
+  shaker.value!.appendChild(e);
+  e.animate(
+    [
+      { transform: `translate(${x0}px,${y0}px) scale(1)`, opacity: 0.95 },
+      {
+        transform: `translate(${x0 + (Math.random() - 0.5) * 26}px,${y0 + 8 + Math.random() * 18}px) scale(0)`,
+        opacity: 0,
+      },
+    ],
+    { duration: 520 + Math.random() * 380, easing: 'cubic-bezier(.2,.6,.4,1)', fill: 'forwards' },
+  ).finished.then(
+    () => e.remove(),
+    () => e.remove(),
+  );
+}
+function spawnGem() {
+  if (!shaker.value) return;
+  const r = shaker.value.getBoundingClientRect();
+  const c = sigilCenter();
+  const a = Math.random() * Math.PI * 2;
+  const d = Math.max(r.width, r.height) * 0.6;
+  const g = document.createElement('span');
+  g.className = 'ivk-gem';
+  g.textContent = '💠';
+  shaker.value.appendChild(g);
+  g.animate(
+    [
+      {
+        transform: `translate(${c.x + Math.cos(a) * d}px,${c.y + Math.sin(a) * d}px) scale(1)`,
+        opacity: 0,
+      },
+      { opacity: 1, offset: 0.2 },
+      { transform: `translate(${c.x - 9}px,${c.y - 12}px) scale(.3)`, opacity: 0.9 },
+    ],
+    { duration: 520, easing: 'cubic-bezier(.5,0,.9,.6)' },
+  ).finished.then(
+    () => g.remove(),
+    () => g.remove(),
+  );
+}
+function crackOrb(orb: HTMLElement, ms: number, tok: number) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const cr = document.createElementNS(NS, 'svg');
+  cr.setAttribute('viewBox', '0 0 64 64');
+  cr.setAttribute('class', 'ivk-crack');
+  [
+    'M32 4 L28 20 L35 30 L27 44 L31 60',
+    'M28 20 L14 16',
+    'M35 30 L52 26 L58 34',
+    'M27 44 L12 50',
+  ].forEach((d, i) => {
+    const pa = document.createElementNS(NS, 'path');
+    pa.setAttribute('d', d);
+    pa.setAttribute('pathLength', '1');
+    pa.style.strokeDasharray = '1';
+    pa.style.strokeDashoffset = '1';
+    cr.appendChild(pa);
+    pa.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], {
+      duration: ms * 0.5,
+      delay: i * 60,
+      fill: 'forwards',
+    });
+  });
+  const body = orb.querySelector('.ivk-o-body');
+  body?.appendChild(cr);
+  return anim(
+    body,
+    [
+      { translate: '0 0' },
+      { translate: '-5px 2px' },
+      { translate: '5px -2px' },
+      { translate: '-4px -1px' },
+      { translate: '0 0' },
+    ],
+    { duration: ms, easing: 'linear' },
+    tok,
+  ).then(() => cr.remove());
+}
+function burstWave(x: number, y: number, n: number) {
+  for (let i = 0; i < n; i++) {
+    const w = document.createElement('div');
+    w.className = 'ivk-wave';
+    w.style.left = `${x}px`;
+    w.style.top = `${y}px`;
+    shaker.value!.appendChild(w);
+    w.animate(
+      [
+        { transform: 'scale(.3)', opacity: 1 },
+        { transform: 'scale(3.2)', opacity: 0 },
+      ],
+      {
+        duration: 650,
+        delay: i * 110,
+        easing: 'ease-out',
+        fill: 'forwards',
+      },
+    ).finished.then(
+      () => w.remove(),
+      () => w.remove(),
+    );
+  }
+}
+function waveAt(el: Element | null) {
+  if (!el || !shaker.value) return;
+  const r = shaker.value.getBoundingClientRect();
+  const b = el.getBoundingClientRect();
+  burstWave(b.left - r.left + b.width / 2, b.top - r.top + b.height / 2, 1);
+}
+function impact(rank: number) {
+  const t = intensity(rank);
+  sfx.impact(t);
+  vib(t >= 3 ? [80, 40, 120, 40, 200] : t >= 2 ? [70, 40, 110] : 45);
+  flash.value?.animate([{ opacity: 0 }, { opacity: 0.7 + t * 0.08 }, { opacity: 0 }], {
+    duration: 300,
+  });
+  const c = sigilCenter();
+  burstWave(c.x, c.y, 1 + t);
+  shake(4 + t * 4, 300 + t * 80);
+}
+function lightPillar(rank: number) {
+  const c = sigilCenter();
+  const pl = document.createElement('div');
+  pl.className = 'ivk-pillar';
+  pl.style.left = `${c.x}px`;
+  pl.style.top = `${c.y}px`;
+  shaker.value!.appendChild(pl);
+  pl.animate(
+    [
+      { transform: 'translate(-50%,-100%) scaleY(0) scaleX(.4)', opacity: 1 },
+      { transform: 'translate(-50%,-100%) scaleY(1) scaleX(1)', opacity: 1, offset: 0.25 },
+      { transform: 'translate(-50%,-100%) scaleY(1) scaleX(1.1)', opacity: 0.8, offset: 0.7 },
+      { transform: 'translate(-50%,-100%) scaleY(1) scaleX(1.4)', opacity: 0 },
+    ],
+    { duration: 1300 + intensity(rank) * 300, easing: 'ease-out', fill: 'forwards' },
+  ).finished.then(
+    () => pl.remove(),
+    () => pl.remove(),
+  );
+}
+function sparks(rank: number) {
+  if (!pwrap.value || !shaker.value) return;
+  const r = shaker.value.getBoundingClientRect();
+  const b = pwrap.value.getBoundingClientRect();
+  const cx = b.left - r.left + b.width / 2;
+  const cy = b.top - r.top + b.height / 2;
+  const t = intensity(rank);
+  for (let i = 0; i < 8 + t * 12; i++) {
+    const s = document.createElement('div');
+    s.className = 'ivk-spark';
+    s.style.left = `${cx}px`;
+    s.style.top = `${cy}px`;
+    shaker.value.appendChild(s);
+    const a = Math.random() * Math.PI * 2;
+    const d = 90 + Math.random() * (110 + t * 40);
+    const sz = 0.6 + Math.random() * (1 + t * 0.3);
+    s.animate(
+      [
+        { transform: `translate(0,0) scale(${sz})`, opacity: 1 },
+        {
+          transform: `translate(${Math.cos(a) * d}px,${Math.sin(a) * d + 30}px) scale(0)`,
+          opacity: 0,
+        },
+      ],
+      { duration: 600 + Math.random() * 600, easing: 'cubic-bezier(.1,.7,.3,1)', fill: 'forwards' },
+    ).finished.then(
+      () => s.remove(),
+      () => s.remove(),
+    );
+  }
+}
+/** Retire tout ce qui a été posé à la main, et coupe les animations JS (jamais les CSS :
+ *  le cercle et le décor en vivent). */
+function clearFx() {
+  stopEmbers();
+  const sh = shaker.value;
+  if (!sh) return;
+  sh.querySelectorAll(
+    '.ivk-orb,.ivk-ember,.ivk-gem,.ivk-wave,.ivk-pillar,.ivk-spark,.ivk-fly',
+  ).forEach((n) => n.remove());
+  for (const a of sh.getAnimations({ subtree: true })) {
+    if (!(a instanceof CSSAnimation) && !(a instanceof CSSTransition)) a.cancel();
+  }
+  flash.value?.getAnimations().forEach((a) => a.cancel());
+}
+
+/* ─────────── le maintien ─────────── */
+let holdRaf = 0;
+let holdLast = 0;
+let gemAcc = 0;
+let tickAcc = 0;
+const holdMs = () => (isLot.value ? INVOKE.holdMsLot : INVOKE.holdMs);
+function startHold() {
+  if (phase.value !== 'hold') return;
+  holding.value = true;
+  sfx.humStart();
+}
+function endHold() {
+  if (!holding.value) return;
+  holding.value = false;
+  sfx.humStop();
+}
+function holdLoop(t: number) {
+  const dt = Math.min(0.05, (t - (holdLast || t)) / 1000);
+  holdLast = t;
+  if (phase.value !== 'hold') return;
+  const H = holdMs();
+  charge.value = holding.value
+    ? Math.min(1, charge.value + (dt * 1000) / H)
+    : Math.max(0, charge.value - (dt * 2000) / H);
+  sigilSpeed.value = holding.value ? 40 + charge.value * 520 : 12;
+  sfx.humSet(charge.value);
+  if (holding.value) {
+    gemAcc += dt;
+    if (gemAcc > 0.06 - charge.value * 0.035) {
+      gemAcc = 0;
+      spawnGem();
+    }
+    tickAcc += dt;
+    if (tickAcc > 0.18 - charge.value * 0.1) {
+      tickAcc = 0;
+      vib(6);
+    }
+    if (charge.value >= 1) {
+      holding.value = false;
+      sfx.humStop();
+      void (isLot.value ? playLot() : playSingle());
+      return;
+    }
+  }
+  holdRaf = requestAnimationFrame(holdLoop);
+}
+
+/* ─────────── la révélation au centre ─────────── */
+async function revealCenter(item: RevealItem, tag: Tag | null, tok: number, focus: boolean) {
+  const rank = finalRank(item);
+  rv.item = item;
+  rv.typed = '';
+  rv.col = false;
+  rv.meta = false;
+  rv.acts = false;
+  rv.final = false;
+  rv.focus = focus;
+  rv.tag = tag;
+  await nextTick();
+  await anim(
+    pwrap.value,
+    [
+      { transform: 'scale(.4)', opacity: 0 },
+      { transform: 'scale(1.08)', opacity: 1, offset: 0.7 },
+      { transform: 'scale(1)', opacity: 1 },
+    ],
+    { duration: 420, easing: 'cubic-bezier(.2,.9,.3,1.2)' },
+    tok,
+  );
+  rim.value?.animate([{ opacity: 0 }, { opacity: 0.9 }, { opacity: 0.4 }], {
+    duration: 700,
+    iterations: Infinity,
+    direction: 'alternate',
+  });
+  // ⚠️ La LETTRE s'abat sur la silhouette : on sait ce qu'on a eu juste avant le visage.
+  const sil = silhouetteMs(rank);
+  await wait(sil * 0.4, tok);
+  sfx.stamp();
+  vib(rank === 2 ? [40, 30, 80] : 25);
+  await anim(
+    gradeEl.value,
+    [
+      { transform: 'scale(3) rotate(-18deg)', opacity: 0 },
+      { transform: 'scale(.9) rotate(-8deg)', opacity: 1, offset: 0.7 },
+      { transform: 'scale(1) rotate(-8deg)', opacity: 1 },
+    ],
+    { duration: 300, easing: 'cubic-bezier(.3,1.4,.6,1)' },
+    tok,
+  );
+  shake(2 + intensity(rank) * 2, 200);
+  await wait(sil * 0.6, tok);
+  await flashOnce(0.9, 320, tok);
+  rv.col = true;
+  sparks(rank);
+  sfx.chime(intensity(rank));
+  vib(rank >= 1 ? [60, 30, 120] : 40);
+  for (const ch of item.cell.name) {
+    rv.typed += ch;
+    if (ch !== ' ') sfx.tick();
+    await wait(INVOKE.typeMsParLettre, tok);
+  }
+  sfx.stamp();
+  await anim(
+    rarEl.value,
+    [
+      { transform: 'scale(2.4) rotate(-8deg)', opacity: 0 },
+      { transform: 'scale(1) rotate(-2deg)', opacity: 1 },
+    ],
+    { duration: 320, easing: 'cubic-bezier(.3,1.4,.6,1)' },
+    tok,
+  );
+  rv.meta = true;
+  await wait(240, tok);
+  rv.acts = true;
+}
+/** L'état FINAL d'une révélation, sans animation (« Passer », mouvement réduit). */
+function revealFinal(item: RevealItem, tag: Tag | null, focus: boolean) {
+  rv.item = item;
+  rv.typed = item.cell.name;
+  rv.col = true;
+  rv.meta = true;
+  rv.acts = true;
+  rv.final = true;
+  rv.focus = focus;
+  rv.tag = tag;
+}
+
+/* ─────────── ×1 ─────────── */
+async function playSingle() {
+  const tok = ++run;
+  const item = items.value[0];
+  if (!item) return;
+  phase.value = 'play';
+  const rank = finalRank(item);
+  try {
+    color.value = rankColor(item.path[0]!);
+    vib(25);
+    sfx.whoosh(0.9);
+    await flashOnce(0.55, 260, tok);
+    sigilDim.value = true;
+    sigilSpeed.value = 6;
+    const orb = makeOrb(color.value);
+    const H = stage.value!.clientHeight * 0.34;
+    startEmbers(orb);
+    // Lancé vers le haut : la vitesse décroît comme sous la gravité.
+    await tween(
+      INVOKE.riseMs,
+      (k) => {
+        const v = 1 - k;
+        const s = 0.25 + 0.75 * Math.min(1, k / 0.25);
+        placeOrb(orb, 0, -H * (1 - v * v), s, Math.min(1, k / 0.1));
+        setTail(orb, 1.1 * v);
+        if (v < 0.3) stopEmbers();
+      },
+      tok,
+    );
+    setTail(orb, 0);
+    await wait(apexMs(rank), tok);
+    // La surprise vers le haut : l'orbe se fissure et change de couleur.
+    for (let s = 1; s < item.path.length; s++) {
+      await wait(150, tok);
+      sfx.crack();
+      vib([30, 40, 60]);
+      await crackOrb(orb, 420, tok);
+      await flashOnce(0.85, 240, tok);
+      color.value = rankColor(item.path[s]!);
+      orb.style.setProperty('--c', color.value);
+      waveAt(orb.querySelector('.ivk-o-body'));
+      vib(80);
+      await wait(340, tok);
+    }
+    // Elle retombe lourdement : petite prise d'élan, puis chute qui accélère, sans traînée.
+    await tween(
+      INVOKE.windupMs,
+      (k) => placeOrb(orb, 0, -H - 12 * (1 - (1 - k) * (1 - k)), 1),
+      tok,
+    );
+    await tween(
+      INVOKE.fallMs,
+      (k) => {
+        const e = Math.pow(k, 2.3);
+        placeOrb(orb, 0, -H - 12 + (H + 12) * e, 1 + 0.4 * e);
+      },
+      tok,
+    );
+    orb.remove();
+    color.value = rankColor(rank);
+    impact(rank);
+    lightPillar(rank);
+    sigilDim.value = false;
+    sigilRevealing.value = true;
+    charge.value = 1;
+    sigilSpeed.value = 146;
+    await revealCenter(item, singleTag(), tok, false);
+    phase.value = 'done';
+  } catch (e) {
+    if (!(e instanceof Skip)) throw e;
+  }
+}
+
+/* ─────────── ×10 ─────────── */
+function buildCards() {
+  cards.value = items.value.map((it, i) => ({
+    cell: it.cell,
+    grade: it.cell.grade,
+    lot: props.lot?.[i] ?? null,
+    item: it,
+    flipped: false,
+    hot: finalRank(it) > 0,
+    shown: false,
+    away: false,
+  }));
+}
+async function playLot() {
+  const tok = ++run;
+  phase.value = 'play';
+  const plan = props.plan!;
+  const best = bestRank(plan);
+  try {
+    color.value = rankColor(0);
+    vib(30);
+    sfx.whoosh(1.1);
+    await flashOnce(0.6, 280, tok);
+    sigilDim.value = true;
+    sigilSpeed.value = 6;
+    const H = stage.value!.clientHeight * 0.42;
+    const W = stage.value!.clientWidth;
+    const spread = Math.min(W * 0.088, 36);
+    const half = (plan.items.length - 1) / 2 || 1;
+    const orbs = plan.items.map((it, i) => {
+      const o = makeOrb(rankColor(it.path[0]!));
+      const u = (i - (plan.items.length - 1) / 2) / half;
+      placeOrb(o, 0, 0, 0.1, 0);
+      return { o, ax: u * spread * 4.5, ay: -H - (1 - u * u) * 28 };
+    });
+    // Lancés en éventail, avec la même gravité que le ×1.
+    await Promise.all(
+      orbs.map(({ o, ax, ay }, i) =>
+        wait(i * INVOKE.lotLaunchStagger, tok).then(() =>
+          tween(
+            INVOKE.riseMs,
+            (k) => {
+              const v = 1 - k;
+              const e = 1 - v * v;
+              const s = 0.55 * (0.3 + 0.7 * Math.min(1, k / 0.25));
+              placeOrb(o, ax * e, ay * e, s, Math.min(1, k / 0.1));
+              setTail(o, 0.9 * v);
+            },
+            tok,
+          ),
+        ),
+      ),
+    );
+    orbs.forEach(({ o }) => setTail(o, 0));
+    await wait(INVOKE.lotApexMs, tok);
+    // Les A puis les S s'allument un à un.
+    for (const i of igniteOrder(plan)) {
+      const it = plan.items[i]!;
+      const o = orbs[i]!.o;
+      for (let s = 1; s < it.path.length; s++) {
+        sfx.crack();
+        vib(25);
+        await crackOrb(o, 280, tok);
+        const g = it.path[s]!;
+        o.style.setProperty('--c', rankColor(g));
+        if (g === 2) {
+          sfx.chime(3);
+          vib([40, 30, 90]);
+          await flashOnce(0.75, 240, tok);
+          shake(6, 260);
+          color.value = rankColor(2);
+        } else {
+          await flashOnce(0.3, 180, tok);
+          if (best < 2) color.value = rankColor(1);
+        }
+        waveAt(o.querySelector('.ivk-o-body'));
+        await wait(g === 2 ? 180 : 100, tok);
+      }
+    }
+    // Chute lourde : chaque orbe tombe sur l'emplacement de sa carte.
+    buildCards();
+    await nextTick();
+    const r = shaker.value!.getBoundingClientRect();
+    const c0 = sigilCenter();
+    const pos = [...(lotEl.value?.children ?? [])].map((el) => {
+      const b = el.getBoundingClientRect();
+      return { x: b.left - r.left + b.width / 2 - c0.x, y: b.top - r.top + b.height / 2 - c0.y };
+    });
+    await tween(
+      INVOKE.windupMs,
+      (k) =>
+        orbs.forEach(({ o, ax, ay }) => placeOrb(o, ax, ay - 10 * (1 - (1 - k) * (1 - k)), 0.55)),
+      tok,
+    );
+    await tween(
+      INVOKE.fallMs,
+      (k) => {
+        const e = Math.pow(k, 2.3);
+        orbs.forEach(({ o, ax, ay }, i) => {
+          const p = pos[i] ?? { x: ax, y: ay };
+          placeOrb(o, ax + (p.x - ax) * e, ay - 10 + (p.y - ay + 10) * e, 0.55 + 0.25 * e);
+        });
+      },
+      tok,
+    );
+    orbs.forEach(({ o }) => o.remove());
+    color.value = rankColor(best);
+    impact(best);
+    cards.value.forEach((c) => (c.shown = true));
+    [...(lotEl.value?.children ?? [])].forEach((el, i) =>
+      el.animate(
+        [
+          { transform: 'scale(.3)' },
+          { transform: 'scale(1.1)', offset: 0.7 },
+          { transform: 'scale(1)' },
+        ],
+        { duration: 320, delay: i * 25, easing: 'ease-out' },
+      ),
+    );
+    await wait(INVOKE.lotLandMs, tok);
+    // Les B se retournent seuls, en cascade.
+    for (const c of cards.value) {
+      if (c.hot) continue;
+      c.flipped = true;
+      sfx.tick();
+      vib(5);
+      await wait(INVOKE.lotFlipStagger, tok);
+    }
+    phase.value = hotLeft.value ? 'await' : 'done';
+  } catch (e) {
+    if (!(e instanceof Skip)) throw e;
+  }
+}
+
+/** Une carte cachée qu'on touche : elle vole au centre, le cercle se rallume autour, et
+ *  elle se révèle comme un ×1 (demandé : « qu'elle s'affiche au centre, avec le cercle »). */
+async function onCard(i: number) {
+  const c = cards.value[i];
+  if (!c || phase.value !== 'await' || c.flipped || !c.hot) return;
+  const tok = ++run;
+  phase.value = 'focus';
+  const el = lotEl.value?.children[i] as HTMLElement | undefined;
+  const rank = finalRank(c.item);
+  try {
+    color.value = rankColor(rank);
+    sigilDim.value = false;
+    sigilRevealing.value = true;
+    charge.value = 1;
+    sigilSpeed.value = 146;
+    sfx.whoosh(0.6);
+    vib(20);
+    if (el && shaker.value) {
+      const r = shaker.value.getBoundingClientRect();
+      const cb = el.getBoundingClientRect();
+      const fly = el.cloneNode(true) as HTMLElement;
+      fly.classList.remove('hot');
+      fly.classList.add('ivk-fly');
+      fly.style.cssText = `position:absolute;left:${cb.left - r.left}px;top:${cb.top - r.top}px;width:${cb.width}px;height:${cb.height}px;z-index:6;opacity:1;--c:${color.value}`;
+      shaker.value.appendChild(fly);
+      c.away = true;
+      const dx = r.width / 2 - (cb.left - r.left + cb.width / 2);
+      const dy = r.height * 0.36 - (cb.top - r.top + cb.height / 2);
+      const sc = Math.min(3, (r.width * 0.55) / cb.width);
+      await anim(
+        fly,
+        [
+          { transform: 'translate(0,0) scale(1)' },
+          { transform: `translate(${dx}px,${dy}px) scale(${sc})` },
+        ],
+        { duration: 560, easing: 'cubic-bezier(.3,.7,.3,1)' },
+        tok,
+      );
+      lightPillar(rank);
+      impact(rank);
+      await flashOnce(0.7, 260, tok);
+      fly.remove();
+    }
+    c.away = false;
+    await revealCenter(c.item, tagOf(c.lot), tok, true);
+  } catch (e) {
+    c.away = false;
+    if (!(e instanceof Skip)) throw e;
+  }
+}
+function closeFocus() {
+  const c = cards.value.find((x) => x.item === rv.item);
+  run++;
+  clearFx();
+  rv.item = null;
+  if (c) c.flipped = true;
+  sigilRevealing.value = false;
+  sigilDim.value = true;
+  charge.value = 0;
+  sigilSpeed.value = 6;
+  color.value = rankColor(props.plan ? bestRank(props.plan) : 0);
+  phase.value = hotLeft.value ? 'await' : 'done';
+}
+function revealAll() {
+  cards.value.forEach((c) => (c.flipped = true));
   phase.value = 'done';
+}
+
+/* ─────────── Passer, ouverture, fermeture ─────────── */
+/** L'état FINAL, sans animation. ⚠️ C'est aussi ce que voit un `prefers-reduced-motion`. */
+function showFinal() {
+  run++;
+  cancelAnimationFrame(holdRaf);
+  holding.value = false;
+  sfx.humStop();
+  clearFx();
+  const plan = props.plan;
+  if (!plan) return;
+  sigilDim.value = true;
+  sigilRevealing.value = false;
+  charge.value = 0;
+  color.value = rankColor(bestRank(plan));
+  if (isLot.value) {
+    rv.item = null;
+    buildCards();
+    cards.value.forEach((c) => {
+      c.shown = true;
+      c.flipped = true;
+    });
+  } else if (plan.items[0]) {
+    sigilDim.value = false;
+    sigilRevealing.value = true;
+    revealFinal(plan.items[0], singleTag(), false);
+  }
+  phase.value = 'done';
+}
+function skip() {
+  showFinal();
 }
 function onClose(v?: boolean) {
   if (v === true) return;
+  run++;
+  cancelAnimationFrame(holdRaf);
+  sfx.humStop();
+  clearFx();
   emit('close');
 }
 
 watch(
   () => props.plan,
   (p) => {
-    window.clearTimeout(timer);
-    rolling.value = false;
+    run++;
+    cancelAnimationFrame(holdRaf);
+    holding.value = false;
+    clearFx();
+    rv.item = null;
+    cards.value = [];
+    charge.value = 0;
+    sigilDim.value = false;
+    sigilRevealing.value = false;
+    sigilSpeed.value = 12;
+    color.value = GRADE_COLOR.B;
     if (!p) return;
     // ⚠️ `prefers-reduced-motion` → l'état FINAL directement, pas une animation courte.
-    if (!p.spinMs) {
-      phase.value = 'done';
+    if (p.reduced) {
+      void nextTick(showFinal);
       return;
     }
-    phase.value = 'spin';
-    requestAnimationFrame(() => requestAnimationFrame(() => (rolling.value = true)));
-    // ⚠️ En ×10 on attend la DERNIÈRE ligne, plus un temps pour voir la cascade finie.
-    const rows = props.lotPlans?.length ? props.lotPlans : null;
-    const end = rows ? Math.max(...rows.map((r) => r.spinMs)) + 700 : p.spinMs + 120;
-    timer = window.setTimeout(() => (phase.value = 'done'), end);
+    phase.value = 'hold';
+    holdLast = 0;
+    holdRaf = requestAnimationFrame(holdLoop);
   },
   { immediate: true },
 );
-onBeforeUnmount(() => window.clearTimeout(timer));
+onBeforeUnmount(() => {
+  run++;
+  cancelAnimationFrame(holdRaf);
+  sfx.humStop();
+  stopEmbers();
+});
 </script>
 
-<style scoped lang="scss">
-.gx {
+<style lang="scss">
+/* ⚠️ Styles NON scopés, tous préfixés `ivk-` : orbes, braises, ondes et colonne sont créées
+   à la main dans la scène, et un style scopé ne les atteindrait pas. */
+.ivk {
   position: relative;
-  /* HAUTEUR fixe (pas min-height) : sinon le contenu agrandit l'écran au lieu de le
-     faire défiler, et les boutons collants n'ont rien à quoi coller. */
   height: 100dvh;
-  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  background: #15120e;
+  color: #f3eee6;
+  overflow: hidden;
+  overflow: clip;
+}
+.ivk-top {
+  display: flex;
   align-items: center;
-  /* ⚠️ `safe` + défilement : le résultat d'un ×10 (révélation + grille + boutons) peut
-     dépasser la hauteur d'un téléphone. Centré sans `safe` et en `overflow: hidden`, il
-     était ROGNÉ en haut ET en bas — les boutons sortaient de l'écran (signalé). */
-  justify-content: safe center;
-  gap: 10px;
-  padding: 16px;
-  background: radial-gradient(120% 80% at 50% 38%, #241d15 0%, var(--bg) 62%);
-  overflow-x: hidden;
-  overflow-y: auto;
-  text-align: center;
+  gap: 8px;
+  padding: 10px 16px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  z-index: 5;
 }
-/* Un ciel qui respire — assez discret pour ne pas concurrencer la roulette. */
-.gx-sky {
-  /* fixe : en absolu, son débord (-20 %) rendrait l'écran défilable pour rien. */
-  position: fixed;
-  pointer-events: none;
-  inset: -20%;
-  background: radial-gradient(
-    40% 30% at 50% 40%,
-    color-mix(in srgb, var(--rar-c) 22%, transparent),
-    transparent 70%
-  );
-  opacity: 0;
-  animation: gx-breathe 2.4s ease-in-out infinite;
-}
-.gx.done .gx-sky {
-  opacity: 1;
-}
-@keyframes gx-breathe {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.85;
-    transform: scale(1.06);
-  }
-}
-.gx-skip {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-  min-height: 36px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--dim);
-  font-size: 12px;
-  cursor: pointer;
-  z-index: 3;
-}
-.gx-title {
-  position: relative;
-  font-size: 20px;
-  letter-spacing: 0.04em;
-  color: var(--text);
-}
-.gx.done .gx-title {
-  color: var(--rar-c);
-  text-shadow: 0 0 18px color-mix(in srgb, var(--rar-c) 45%, transparent);
-}
-
-/* ── LA ROULETTE ─────────────────────────────────────────────────────────── */
-.gx-wheel {
-  /* La case est CARRÉE et prend presque toute la largeur — bornée par la hauteur pour
-     qu'un écran bas garde une case entière visible, avec un peu des voisines. */
-  --vs: min(86vw, 440px, calc(100dvh - 230px));
-  position: relative;
-  width: var(--vs);
-  height: min(calc(var(--vs) * 1.7), calc(100dvh - 120px));
-  overflow: hidden;
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--surface) 70%, transparent);
-  mask-image: linear-gradient(180deg, transparent, #000 16%, #000 84%, transparent);
-}
-/* L'aura ne se colore QUE sur la fin (`glowFrom`) : trop tôt, on saurait dès le début. */
-.gx-halo {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(
-    100% 34% at 50% 50%,
-    color-mix(in srgb, var(--rar-c) 55%, transparent),
-    transparent 70%
-  );
-  opacity: 0;
-  animation-name: gx-glow;
-  animation-timing-function: ease-in;
-  animation-fill-mode: forwards;
-  z-index: 1;
-  pointer-events: none;
-}
-@keyframes gx-glow {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-.gx-mark {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2;
-}
-.gx-caret {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--accent);
-  font-size: 16px;
-  line-height: 1;
-  text-shadow: 0 0 6px #000;
-}
-.gx-caret.up {
-  left: 2px;
-}
-.gx-caret.dn {
-  right: 2px;
-}
-.gx-strip {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  will-change: transform;
-}
-.gx-cell {
-  position: relative;
-  flex: 0 0 var(--vs);
-  height: var(--vs);
-  padding: 5px;
-  box-sizing: border-box;
-}
-.gx-emo {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 14px;
-  overflow: hidden;
-  font-size: calc(var(--vs) * 0.45);
-  line-height: 1;
-  background: color-mix(in srgb, var(--c) 18%, var(--bg));
-  border: 4px solid var(--c);
-  box-shadow:
-    0 0 14px color-mix(in srgb, var(--c) 60%, transparent),
-    inset 0 0 16px color-mix(in srgb, var(--c) 35%, transparent);
-}
-/* Le grand portrait remplit sa case (le composant le dimensionne sinon à l'emoji). */
-.gx-emo :deep(.cp) {
-  width: 100%;
-  height: 100%;
-  border-radius: 0;
-}
-
-/* ⚠️ La LETTRE ne s'écrit plus au défilement (demandé) : le CADRE, épais et teinté de sa
-   lettre, la porte seul — elle tombe à la révélation. */
-
-/* ── LE ×10 : DIX LIGNES SUR TOUTE LA HAUTEUR ─────────────────────────────── */
-.gx.lotspin {
-  justify-content: flex-start;
-}
-/* ⚠️ La hauteur d'une ligne vient de l'ÉCRAN, pas d'une container query : les unités
-   `cqh` se résolvaient à 0 dans une bande en position absolue (vu au banc), et la
-   roulette s'arrêtait à côté du repère. Dix lignes, moins l'en-tête. */
-.gx-rows {
-  --rh: calc((100dvh - 94px) / 10);
-  position: relative;
-  width: calc(100% + 32px);
-  margin: 0 -16px;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-/* Le repère, une seule colonne qui traverse les dix lignes. */
-.gx-rows-mark {
-  position: absolute;
-  left: 50%;
-  top: -4px;
-  bottom: -4px;
-  width: 2px;
-  transform: translateX(-50%);
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent);
-  opacity: 0.7;
-  z-index: 2;
-  pointer-events: none;
-}
-.gx-row {
-  position: relative;
-  height: var(--rh);
-  overflow: hidden;
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-}
-/* ↔️ UNE LIGNE SUR DEUX DÉFILE DANS L'AUTRE SENS (demandé). Plutôt que de tenir deux
-   géométries de translation, on RETOURNE la ligne en miroir — elle reste symétrique
-   autour du repère, donc elle s'arrête au même endroit — et on retourne chaque case
-   pour que portrait et texte se lisent à l'endroit. */
-.gx-row.rev {
-  transform: scaleX(-1);
-}
-.gx-row.rev .gx-rbox {
-  transform: scaleX(-1);
-}
-/* À l'arrêt, la case sous le repère s'allume à la couleur de SA rareté. */
-.gx-row::after {
-  content: '';
-  position: absolute;
-  top: 1px;
-  bottom: 1px;
-  left: 50%;
-  width: var(--rh);
-  transform: translateX(-50%);
-  border-radius: 10px;
-  border: 2px solid var(--c);
-  box-shadow: 0 0 16px var(--c);
-  opacity: 0;
-  animation: gx-lock 360ms ease-out var(--stop) forwards;
-}
-@keyframes gx-lock {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) scale(1.25);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) scale(1);
-  }
-}
-.gx-rstrip {
-  position: absolute;
-  left: 50%;
-  top: 0;
-  display: flex;
-  height: 100%;
-  will-change: transform;
-}
-.gx-rcell {
-  flex: 0 0 var(--rh);
-  box-sizing: border-box;
-  height: 100%;
-  padding: 2px;
-}
-.gx-rbox {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  box-sizing: border-box;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--c) 18%, var(--bg));
-  border: 2.5px solid var(--c);
-  box-shadow:
-    0 0 8px color-mix(in srgb, var(--c) 50%, transparent),
-    inset 0 0 10px color-mix(in srgb, var(--c) 30%, transparent);
-}
-.gx-remo {
-  font-size: calc(var(--rh) * 0.42);
-  line-height: 1;
-}
-.gx-rrar {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 8.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
+.ivk-title {
+  flex: 1;
+  font-size: 18px;
   text-transform: uppercase;
-  color: var(--c);
-  /* Apparaît quand SA ligne s'arrête (même délai que le cadre de verrouillage). */
-  opacity: 0;
-  animation: gx-rarin 300ms ease-out var(--stop) forwards;
+  letter-spacing: 0.04em;
 }
-@keyframes gx-rarin {
-  to {
-    opacity: 1;
-  }
+.ivk-ibtn,
+.ivk-skip {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid #3a332a;
+  background: #211c16;
+  color: #f3eee6;
+  font-size: 16px;
+  cursor: pointer;
 }
-
-/* ── LE RÉSULTAT D'UN ×10, COMPACT ─────────────────────────────────────── */
-.gx.lotdone {
-  gap: 6px;
-  padding-top: 12px;
+.ivk-skip {
+  padding: 0 12px;
+  font-size: 13px;
 }
-.gx.lotdone .gx-portrait {
-  width: 92px;
-  height: 92px;
-}
-.gx.lotdone .gx-pemo {
-  font-size: 44px;
-}
-.gx.lotdone .gx-name {
-  margin-top: 0;
-  font-size: 21px;
-}
-.gx.lotdone .gx-lot {
-  margin-top: 6px;
-}
-
-/* ── LA RÉVÉLATION ───────────────────────────────────────────────────────── */
-.gx-reveal {
+.ivk-stage {
   position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  overflow: clip;
+  container-type: size;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ivk-shaker {
+  position: absolute;
+  inset: 0;
+}
+.ivk-cost {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 8%;
+  text-align: center;
+  z-index: 3;
+  pointer-events: none;
+}
+.ivk-cost-t {
+  font-size: 26px;
+  text-transform: uppercase;
+}
+.ivk-cost-s {
+  color: #9a8f7e;
+  margin-top: 4px;
+}
+.ivk-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 8;
+}
+.ivk-bar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  animation: gx-pop 420ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  gap: 8px;
+  min-height: 64px;
+  padding: 8px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  text-align: center;
+  z-index: 5;
 }
-@keyframes gx-pop {
-  from {
-    transform: scale(0.72);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
+.ivk-msg {
+  color: #d8cfc0;
+  b {
+    color: #f3eee6;
   }
 }
-/* ⚠️ `flex: none` — sans lui la colonne le RÉTRÉCIT (mesuré au banc : 95 px au lieu de
-   132), et la révélation perd exactement ce qui doit frapper. */
-.gx-portrait {
-  position: relative;
-  flex: none;
-  /* En grand (demandé) — borné par la hauteur, pour laisser la place au nom, à la
-     rareté et aux boutons. */
-  width: min(62vw, 260px, calc(100dvh - 380px));
-  height: min(62vw, 260px, calc(100dvh - 380px));
-  display: grid;
-  place-items: center;
+.ivk-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.ivk-btn {
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid #3a332a;
+  background: #211c16;
+  color: #f3eee6;
+  font:
+    600 15px Inter,
+    system-ui,
+    sans-serif;
+  cursor: pointer;
+  &.pri {
+    background: #b57bff;
+    border-color: #b57bff;
+    color: #16101f;
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+}
+
+/* ── l'orbe ── */
+.ivk-orb {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  pointer-events: none;
+  --tail: 0;
+  z-index: 4;
+}
+.ivk-o-halo {
+  position: absolute;
+  inset: -46px;
   border-radius: 50%;
   background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--rar-c) 26%, var(--surface)),
-    var(--surface)
+    closest-side,
+    color-mix(in srgb, var(--c) 55%, transparent),
+    color-mix(in srgb, var(--c) 18%, transparent) 55%,
+    transparent
   );
-  border: 2px solid var(--rar-c);
-  box-shadow: 0 0 34px color-mix(in srgb, var(--rar-c) 45%, transparent);
+  animation: ivk-halo 1.1s ease-in-out infinite alternate;
 }
-/* Des rayons qui tournent derrière le portrait — c'est eux qui font le « flashy »
-   demandé, et ils ne coûtent qu'un dégradé conique. */
-.gx-portrait::before {
-  content: '';
+@keyframes ivk-halo {
+  to {
+    transform: scale(1.12);
+    opacity: 0.75;
+  }
+}
+.ivk-o-tail {
   position: absolute;
-  inset: -26px;
+  left: 50%;
+  top: 50%;
+  width: 58px;
+  height: 280px;
+  margin-left: -29px;
+  transform-origin: 50% 0;
+  transform: scaleY(var(--tail));
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--c) 85%, #fff) 0%,
+    var(--c) 18%,
+    color-mix(in srgb, var(--c) 40%, transparent) 55%,
+    transparent 100%
+  );
+  clip-path: polygon(0 0, 100% 0, 64% 100%, 36% 100%);
+  -webkit-mask: linear-gradient(to bottom, #000 30%, transparent);
+  mask: linear-gradient(to bottom, #000 30%, transparent);
+  filter: blur(7px);
+  opacity: 0.9;
+  &.core {
+    width: 18px;
+    margin-left: -9px;
+    height: 190px;
+    background: linear-gradient(
+      to bottom,
+      #fff 0%,
+      color-mix(in srgb, var(--c) 50%, #fff) 35%,
+      transparent
+    );
+    clip-path: polygon(0 0, 100% 0, 58% 100%, 42% 100%);
+    filter: blur(2.5px);
+    opacity: 0.95;
+  }
+}
+.ivk-o-body {
+  position: absolute;
+  inset: 0;
   border-radius: 50%;
+  overflow: hidden;
+  background: radial-gradient(
+    circle at 36% 32%,
+    #fff 0 10%,
+    color-mix(in srgb, var(--c) 45%, #fff) 26%,
+    var(--c) 52%,
+    color-mix(in srgb, var(--c) 45%, #000) 88%
+  );
+  box-shadow:
+    0 0 22px 4px var(--c),
+    inset -6px -8px 16px color-mix(in srgb, var(--c) 40%, #000),
+    inset 4px 4px 12px #fff6;
+}
+.ivk-o-swirl {
+  position: absolute;
+  inset: -20%;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  opacity: 0.55;
   background: conic-gradient(
     from 0deg,
-    color-mix(in srgb, var(--rar-c) 55%, transparent) 0deg 8deg,
-    transparent 12deg 36deg
+    transparent 0 18%,
+    #ffffffaa 24%,
+    transparent 32% 52%,
+    #ffffff88 58%,
+    transparent 66% 84%,
+    #ffffffaa 90%,
+    transparent 96%
   );
-  opacity: 0.75;
-  animation: gx-rays 9s linear infinite;
-  z-index: -1;
+  filter: blur(2px);
+  animation: ivk-spin 1.6s linear infinite;
+  &.s2 {
+    inset: 8%;
+    opacity: 0.4;
+    animation-duration: 1.1s;
+    animation-direction: reverse;
+  }
 }
-@keyframes gx-rays {
+.ivk-o-shine {
+  position: absolute;
+  left: 18%;
+  top: 14%;
+  width: 30%;
+  height: 20%;
+  border-radius: 50%;
+  background: #fff;
+  filter: blur(3px);
+  opacity: 0.85;
+}
+.ivk-o-ring {
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  border: 1.6px solid color-mix(in srgb, var(--c) 60%, #fff);
+  box-shadow: 0 0 8px var(--c);
+  animation: ivk-orbit 2.4s linear infinite;
+  &.r2 {
+    inset: -26px;
+    opacity: 0.55;
+    animation-duration: 3.6s;
+    animation-direction: reverse;
+    border-style: dashed;
+  }
+}
+@keyframes ivk-spin {
   to {
     transform: rotate(360deg);
   }
 }
-.gx-pemo {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  overflow: hidden;
-  font-size: 64px;
-  line-height: 1;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
-}
-/* Le portrait remplit le médaillon (le composant le dimensionne sinon à l'emoji). */
-.gx-pemo :deep(.cp) {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-}
-.gx-name {
-  margin-top: 4px;
-  font-size: 26px;
-  letter-spacing: 0.02em;
-  color: var(--text);
-  text-shadow: 0 0 22px color-mix(in srgb, var(--rar-c) 40%, transparent);
-}
-.gx-rar {
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--rar-c);
-  border: 1px solid color-mix(in srgb, var(--rar-c) 55%, transparent);
-  background: color-mix(in srgb, var(--rar-c) 16%, transparent);
-  border-radius: 999px;
-  padding: 3px 12px;
-}
-.gx-meta {
-  font-size: 12.5px;
-  color: var(--dim);
-  max-width: 300px;
-}
-.gx-verdict {
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--text);
-  max-width: 320px;
-  line-height: 1.35;
-}
-/* Les étincelles : leur NOMBRE suit la rareté — le langage de `GameFxOverlay`. */
-.gx-burst {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-.gx-burst i {
-  position: absolute;
-  top: 46px;
-  left: 50%;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--rar-c);
-  animation: gx-spark 900ms ease-out var(--d) both;
-}
-@keyframes gx-spark {
+@keyframes ivk-orbit {
   from {
-    transform: translate(0, 0) scale(1);
-    opacity: 1;
+    transform: rotate(0deg) scaleY(0.3);
   }
   to {
-    transform: translate(var(--dx), var(--dy)) scale(0.2);
-    opacity: 0;
+    transform: rotate(360deg) scaleY(0.3);
   }
 }
+.ivk-crack {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  path {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 2.4;
+    stroke-linecap: round;
+    filter: drop-shadow(0 0 3px #fff);
+  }
+}
+.ivk-ember {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, #fff 0 30%, var(--c) 60%, transparent 72%);
+  box-shadow: 0 0 6px var(--c);
+}
+.ivk-gem {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: 18px;
+  pointer-events: none;
+  filter: drop-shadow(0 0 6px #b57bff);
+}
+.ivk-wave {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  border: 3px solid var(--c);
+  box-shadow: 0 0 20px var(--c);
+  pointer-events: none;
+}
+.ivk-pillar {
+  position: absolute;
+  width: 130px;
+  height: 78%;
+  transform-origin: 50% 100%;
+  pointer-events: none;
+  background: linear-gradient(
+    to top,
+    #fff 0%,
+    var(--c) 12%,
+    color-mix(in srgb, var(--c) 45%, transparent) 55%,
+    transparent 100%
+  );
+  -webkit-mask: linear-gradient(to right, transparent, #000 30%, #000 70%, transparent);
+  mask: linear-gradient(to right, transparent, #000 30%, #000 70%, transparent);
+  filter: blur(4px);
+}
+.ivk-spark {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  margin: -3px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+  pointer-events: none;
+}
 
-/* 🎰 LA GRILLE DU LOT — une RÉCAPITULATION : sous la révélation, plus petite qu'elle,
-   jamais en concurrence avec le champion qu'on vient de voir tomber. */
-.gx-lot {
-  /* ⚠️ LARGEUR ADOSSÉE AU VIEWPORT, pas au parent : toute la chaîne au-dessus est en
-     flex CENTRÉ (`.gx` puis `.gx-reveal`), donc un `width: 100%` mesure le CONTENU — la
-     grille se rabattait à DEUX colonnes même à 600 px, soit cinq rangées, une
-     récapitulation plus haute que la révélation qu elle accompagne. L écran est plein
-     écran (`maximized`), le viewport est donc la bonne référence. */
-  width: min(420px, calc(100vw - 32px));
-  margin: 14px auto 0;
-}
-.gx-lot-t {
-  margin-bottom: 6px;
-  color: var(--dim);
-  font-size: 11.5px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.gx-lot-grid {
-  display: grid;
-  /* 80 px : trois colonnes tiennent dès 344 px — dix cellules sur deux colonnes font
-     cinq rangées, et la récapitulation devenait plus haute que la révélation. */
-  grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-  gap: 6px;
-}
-.gx-lot-c {
+/* ── la révélation ── */
+.ivk-reveal {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  min-width: 0;
-  padding: 6px 4px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--c) 45%, transparent);
-  background: color-mix(in srgb, var(--c) 10%, var(--bg));
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px 24px;
+  pointer-events: none;
+  z-index: 6;
+  &.interactive {
+    pointer-events: auto;
+  }
 }
-.gl-emo {
-  font-size: 22px;
+.ivk-pwrap {
+  position: relative;
+  width: min(58vw, 220px, 34cqh);
+  aspect-ratio: 1;
+}
+.ivk-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 260%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  opacity: 0;
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--c) 55%, transparent) 0 7deg,
+    transparent 7deg 20deg
+  );
+  -webkit-mask: radial-gradient(circle, #000 18%, transparent 62%);
+  mask: radial-gradient(circle, #000 18%, transparent 62%);
+  transition: opacity 300ms;
+  &.on {
+    opacity: 1;
+    animation: ivk-rays 14s linear infinite;
+  }
+}
+@keyframes ivk-rays {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+.ivk-rim {
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  box-shadow: 0 0 30px 8px var(--c);
+  opacity: 0;
+}
+.ivk-grade {
+  position: absolute;
+  right: -14%;
+  top: -10%;
+  z-index: 2;
+  font-size: 64px;
+  line-height: 1;
+  font-weight: 700;
+  color: var(--c);
+  opacity: 0;
+  -webkit-text-stroke: 2px #fff8;
+  text-shadow:
+    0 0 18px var(--c),
+    0 0 40px color-mix(in srgb, var(--c) 60%, transparent),
+    0 4px 0 #0008;
+  &.g-B {
+    font-size: 46px;
+  }
+}
+.ivk-portrait {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--c);
+  background: #0e0b08;
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--c) 18%, transparent),
+    0 0 40px color-mix(in srgb, var(--c) 60%, transparent);
+  img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 0;
+  }
+}
+.ivk-sil,
+.ivk-col {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.ivk-emo {
+  font-size: min(96px, 18cqh);
   line-height: 1;
 }
-.gl-name {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 10.5px;
-  color: var(--text);
+/* La silhouette : un « fantôme » flou, teinté de la couleur de la lettre. */
+.ivk-sil img {
+  filter: grayscale(1) contrast(2.2) brightness(0.7) blur(6px);
 }
-.gl-rar {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--c);
+.ivk-sil .ivk-emo {
+  filter: brightness(0);
 }
-.gl-tag {
-  font-size: 9.5px;
-  letter-spacing: 0.05em;
-  color: var(--dim);
-}
-.gl-tag.neuf {
-  color: var(--c);
-  font-weight: 700;
-}
-.gx-acts {
-  /* Les boutons restent à portée même si le lot fait défiler l'écran. */
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  padding-top: 8px;
-  background: linear-gradient(transparent, var(--bg) 30%);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  max-width: 320px;
-  margin-top: 6px;
-}
-.gx-again {
-  min-height: 48px;
-  border-radius: 12px;
-  background: var(--accent);
-  color: #15120e;
-  font-weight: 700;
-  small {
-    margin-left: 8px;
-    opacity: 0.75;
+.ivk-tint {
+  position: absolute;
+  inset: 0;
+  background: var(--c);
+  mix-blend-mode: color;
+  opacity: 0.9;
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 50% 35%, transparent 30%, #000c 85%);
   }
 }
-.gx-close {
-  min-height: 44px;
-  color: var(--dim);
+.ivk-col {
+  opacity: 0;
+  transition: opacity 120ms;
+  &.on {
+    opacity: 1;
+  }
+}
+.ivk-name {
+  font-size: 26px;
+  font-weight: 600;
+  text-align: center;
+  min-height: 1.3em;
+  text-wrap: balance;
+}
+.ivk-rar {
+  font-size: 20px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--c);
+  padding: 4px 16px;
+  border: 2px solid var(--c);
+  border-radius: 6px;
+  opacity: 0;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--c) 70%, transparent);
+  background: color-mix(in srgb, var(--c) 12%, transparent);
+}
+.ivk-meta {
+  color: #9a8f7e;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 260ms;
+  &.on {
+    opacity: 1;
+  }
+}
+.ivk-reveal.final {
+  .ivk-grade {
+    opacity: 1;
+    transform: rotate(-8deg);
+  }
+  .ivk-rar {
+    opacity: 1;
+    transform: rotate(-2deg);
+  }
+}
+.ivk-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  &.neuf {
+    background: #ffd23f;
+    color: #1a1408;
+  }
+  &.eveil {
+    color: #ffd23f;
+    border: 1px solid #ffd23f;
+  }
+  &.piece {
+    color: #9a8f7e;
+  }
+}
+.ivk-acts {
+  opacity: 0;
+  transition: opacity 200ms;
+  &.on {
+    opacity: 1;
+  }
 }
 
+/* ── le ×10 : cartes ── */
+.ivk-lot {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  width: min(100% - 24px, 420px);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  perspective: 900px;
+  transition: opacity 300ms;
+  z-index: 4;
+  &.faded {
+    opacity: 0.1;
+  }
+}
+.ivk-card {
+  position: relative;
+  aspect-ratio: 5 / 8;
+  &.hot {
+    cursor: pointer;
+  }
+  &.away {
+    visibility: hidden;
+  }
+}
+.ivk-card-in {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 420ms cubic-bezier(0.3, 1.3, 0.5, 1);
+}
+.ivk-card.flipped .ivk-card-in {
+  transform: rotateY(180deg);
+}
+.ivk-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  overflow: hidden;
+}
+.ivk-back {
+  border: 2px solid color-mix(in srgb, var(--c) 70%, #fff);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--c) 45%, transparent);
+  background: radial-gradient(
+    circle at 50% 45%,
+    color-mix(in srgb, var(--c) 45%, #000) 0,
+    #120f1a 75%
+  );
+  display: grid;
+  place-items: center;
+  &::before {
+    content: '';
+    width: 56%;
+    aspect-ratio: 1;
+    border-radius: 50%;
+    border: 1.5px solid color-mix(in srgb, var(--c) 80%, #fff);
+    box-shadow:
+      0 0 10px var(--c),
+      inset 0 0 10px var(--c);
+    opacity: 0.8;
+  }
+  &::after {
+    content: '✦';
+    position: absolute;
+    color: color-mix(in srgb, var(--c) 60%, #fff);
+    font-size: 16px;
+  }
+}
+.ivk-card.hot .ivk-back {
+  animation: ivk-hot 1s ease-in-out infinite alternate;
+}
+.ivk-card.hot.g-S .ivk-back {
+  animation-duration: 0.6s;
+}
+@keyframes ivk-hot {
+  to {
+    box-shadow: 0 0 22px 4px var(--c);
+  }
+}
+.ivk-front {
+  transform: rotateY(180deg);
+  background: #120f0b;
+  border: 2px solid var(--c);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.ivk-front-art {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  background: #0c0a07;
+  overflow: hidden;
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 0;
+  }
+  .ivk-emo {
+    font-size: 30px;
+  }
+}
+.ivk-front-l {
+  position: absolute;
+  left: 3px;
+  top: 1px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--c);
+  text-shadow:
+    0 0 6px var(--c),
+    0 2px 0 #000;
+}
+.ivk-front-n {
+  font-size: 9.5px;
+  line-height: 1.15;
+  text-align: center;
+  padding: 3px 3px 0;
+  font-weight: 600;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ivk-front-t {
+  margin-top: auto;
+  margin-bottom: 3px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 999px;
+  &.neuf {
+    background: #ffd23f;
+    color: #1a1408;
+  }
+  &.eveil {
+    color: #ffd23f;
+    border: 1px solid #ffd23f;
+  }
+  &.piece {
+    color: #9a8f7e;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .gx-sky,
-  .gx-halo,
-  .gx-portrait::before,
-  .gx-reveal,
-  .gx-burst i {
+  .ivk-o-halo,
+  .ivk-o-swirl,
+  .ivk-o-ring,
+  .ivk-rays.on,
+  .ivk-card.hot .ivk-back {
     animation: none;
-  }
-  .gx-strip,
-  .gx-rstrip {
-    transition: none !important;
-  }
-  .gx-row::after,
-  .gx-rrar {
-    animation: none;
-    opacity: 1;
   }
 }
 </style>

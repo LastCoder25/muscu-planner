@@ -132,8 +132,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const { mulberry32 } = await import('@/lib/combat');
     const champ = CHAMPIONS[0]!;
     const v = { duplicate: false, copies: 1, manaBack: 0, awaken: 0 };
-    // ⚠️ La ROULETTE : c'est le `watch` immédiat qui pose la transition, donc le chemin
-    // qui a déjà cassé une fois (zone morte temporelle, v0.910).
+    // ⚠️ L'INVOCATION (v1.002) : c'est le `watch` immédiat qui ouvre le maintien du cercle,
+    // donc le chemin qui a déjà cassé une fois (zone morte temporelle, v0.910).
     const plan = buildReveal(cellOfChampion(champ), mulberry32(1));
     expect(
       await mountIt(GachaReveal, { plan, verdict: v, canAgain: true, busy: false }),
@@ -143,7 +143,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(
       await mountIt(GachaReveal, { plan: court, verdict: v, canAgain: false, busy: false }),
     ).toBeNull();
-    // …et le ×10 : dix lignes qui défilent (v0.980) — une autre branche du template.
+    // …et le ×10 : le grand cercle et les cartes — une autre branche du template.
     const { buildLotReveal } = await import('@/lib/gachaReveal');
     // ⚠️ Un lot MÉLANGÉ : des champions ET des B (pièces), les deux branches du template.
     const lot = CHAMPIONS.slice(0, 10).map((c, i) =>
@@ -160,12 +160,21 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     );
     expect(
       await mountIt(GachaReveal, {
-        plan,
-        verdict: v,
+        plan: buildLotReveal(lot, mulberry32(2)),
+        verdict: null,
         canAgain: true,
         busy: false,
         lot,
-        lotPlans: buildLotReveal(lot, mulberry32(2)),
+      }),
+    ).toBeNull();
+    // …et le ×10 en mouvement réduit : les cartes directement, toutes retournées.
+    expect(
+      await mountIt(GachaReveal, {
+        plan: buildLotReveal(lot, mulberry32(2), { reduced: true }),
+        verdict: null,
+        canAgain: true,
+        busy: false,
+        lot,
       }),
     ).toBeNull();
   }, 30_000);

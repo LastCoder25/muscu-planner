@@ -1,17 +1,25 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildReveal,
+  buildLotReveal,
   cellOf,
   cellOfChampion,
-  revealCrans,
-  revealSpinMs,
-  REVEAL,
+  igniteOrder,
+  bestRank,
+  finalRank,
+  singleSequenceMs,
+  lotSequenceMs,
+  apexMs,
+  silhouetteMs,
+  INVOKE,
+  SURPRISE,
   GRADE_RANK,
+  RANK_GRADE,
   bestOfLot,
   lotOrder,
-  buildLotReveal,
   type LotItem,
   type RevealCell,
+  type RevealPlan,
 } from '@/lib/gachaReveal';
 import { CHAMPIONS, PULL_GRADES, type PullGrade } from '@/data/champions';
 import { mulberry32 } from '@/lib/combat';
@@ -21,77 +29,7 @@ const champA = CHAMPIONS.find((c) => c.grade === 'A')!;
 const S = cellOfChampion(champS);
 const A = cellOfChampion(champA);
 const B: RevealCell = { grade: 'B', emoji: '🗡️', name: 'Épée', championId: null };
-const cle = (c: RevealCell) => `${c.grade}|${c.championId}|${c.emoji}`;
-
-describe('🎰 LA ROULETTE — elle MET EN SCÈNE, elle ne décide rien', () => {
-  it('⚠️ LE TIRÉ EST SUR stopIndex, et LA BANDE CONTINUE APRÈS LUI', () => {
-    for (const t of [S, A, B]) {
-      const p = buildReveal(t, mulberry32(7));
-      expect(p.strip[p.stopIndex], t.grade).toBe(t);
-      expect(p.strip.length - 1 - p.stopIndex, `queue après le tiré (${t.grade})`).toBe(
-        REVEAL.tail,
-      );
-      expect(REVEAL.tail).toBeGreaterThan(2);
-    }
-  });
-
-  it('⚠️ LES LEURRES COUVRENT TOUTES LES LETTRES — sinon on lit le résultat avant l’arrêt', () => {
-    // Une bande qui ne montrerait que des B pour un B trahirait le tirage dès la première
-    // seconde. Et réciproquement : un S doit voir passer du fond de tirage.
-    for (const t of [B, S]) {
-      const p = buildReveal(t, mulberry32(3));
-      const lettres = new Set(p.strip.filter((_, i) => i !== p.stopIndex).map((c) => c.grade));
-      expect(lettres.has('B'), t.grade).toBe(true);
-      expect(lettres.has('A') || lettres.has('S'), t.grade).toBe(true);
-    }
-  });
-
-  it('⚠️ JAMAIS DEUX FOIS LA MÊME CASE D’AFFILÉE — un doublon se lit comme un arrêt', () => {
-    for (const s of [1, 2, 3, 11, 42])
-      for (const t of [S, B]) {
-        const p = buildReveal(t, mulberry32(s));
-        for (let i = 1; i < p.strip.length; i++)
-          expect(cle(p.strip[i]!), `graine ${s}, cran ${i}`).not.toBe(cle(p.strip[i - 1]!));
-      }
-  });
-
-  it('plus la lettre est haute, plus ça dure — le teasing du genre', () => {
-    for (let i = 1; i < PULL_GRADES.length; i++) {
-      const bas = PULL_GRADES[i - 1]!;
-      const haut = PULL_GRADES[i]!;
-      expect(revealSpinMs(haut)).toBeGreaterThan(revealSpinMs(bas));
-      expect(revealCrans(haut)).toBeGreaterThan(revealCrans(bas));
-    }
-  });
-
-  it('la bande a de quoi défiler, et l’aura ne se colore que sur la fin', () => {
-    const p = buildReveal(B, mulberry32(5));
-    expect(p.strip.length).toBeGreaterThanOrEqual(REVEAL.cransMin);
-    expect(p.glowFrom).toBeGreaterThan(0.4);
-    expect(p.glowFrom).toBeLessThan(1);
-  });
-
-  it('déterministe à graine égale — la mise en scène est rejouable', () => {
-    const a = buildReveal(S, mulberry32(9)).strip.map(cle);
-    const b = buildReveal(S, mulberry32(9)).strip.map(cle);
-    expect(a).toEqual(b);
-    const c = buildReveal(S, mulberry32(10)).strip.map(cle);
-    expect(c).not.toEqual(a);
-  });
-
-  it('⚠️ `prefers-reduced-motion` : l’état FINAL, pas une animation raccourcie', () => {
-    const p = buildReveal(S, mulberry32(1), { reduced: true });
-    expect(p.strip).toEqual([S]);
-    expect(p.stopIndex).toBe(0);
-    expect(p.spinMs).toBe(0);
-  });
-
-  it('un pool d’un seul champion ne rend pas une bande vide', () => {
-    const p = buildReveal(A, mulberry32(1), { pool: [champA] });
-    expect(p.strip.length).toBeGreaterThan(1);
-    expect(p.strip[p.stopIndex]).toBe(A);
-  });
-});
+const CELL: Record<PullGrade, RevealCell> = { B, A, S };
 
 const it0 = (g: PullGrade, extra: Partial<LotItem> = {}): LotItem => ({
   grade: g,
@@ -103,8 +41,146 @@ const it0 = (g: PullGrade, extra: Partial<LotItem> = {}): LotItem => ({
   ...extra,
 });
 
-describe('🎰 LE LOT DE 10 — la révélation porte le meilleur (v0.968)', () => {
-  it('⚠️ LA RÉVÉLATION PORTE LA MEILLEURE LETTRE', () => {
+/** Le présage d'une orbe est honnête : croissant, et il finit sur la vraie lettre. */
+function honest(plan: RevealPlan, grades: PullGrade[]) {
+  plan.items.forEach((it, i) => {
+    expect(finalRank(it), `orbe ${i}`).toBe(GRADE_RANK[grades[i]!]);
+    for (let k = 1; k < it.path.length; k++)
+      expect(it.path[k]!, `orbe ${i}, cran ${k}`).toBeGreaterThan(it.path[k - 1]!);
+  });
+}
+
+describe('🎰 L’INVOCATION ×1 — elle MET EN SCÈNE, elle ne décide rien', () => {
+  it('⚠️ LE PRÉSAGE NE MENT JAMAIS : il finit sur la vraie lettre et ne descend jamais', () => {
+    for (let s = 1; s <= 400; s++)
+      for (const g of PULL_GRADES) {
+        const p = buildReveal(CELL[g], mulberry32(s));
+        expect(p.items).toHaveLength(1);
+        expect(p.items[0]!.cell).toBe(CELL[g]);
+        honest(p, [g]);
+      }
+  });
+
+  it('⚠️ UN B NE CONNAÎT AUCUNE SURPRISE — une fausse montée serait une promesse trahie', () => {
+    for (let s = 1; s <= 400; s++)
+      expect(buildReveal(B, mulberry32(s)).items[0]!.path).toEqual([0]);
+  });
+
+  it('la surprise est rare sur un A, fréquente sur un S — mesurée sur 4 000 graines', () => {
+    const part = (c: RevealCell) => {
+      let n = 0;
+      for (let s = 1; s <= 4000; s++)
+        if (buildReveal(c, mulberry32(s)).items[0]!.path.length > 1) n++;
+      return n / 4000;
+    };
+    expect(Math.abs(part(A) - SURPRISE.A)).toBeLessThan(0.03);
+    expect(Math.abs(part(S) - SURPRISE.S)).toBeLessThan(0.03);
+    expect(SURPRISE.S).toBeGreaterThan(SURPRISE.A);
+  });
+
+  it('un S surpris peut monter en deux fois (bleu → violet → or)', () => {
+    const vus = new Set<string>();
+    for (let s = 1; s <= 2000; s++) vus.add(buildReveal(S, mulberry32(s)).items[0]!.path.join('>'));
+    expect(vus).toContain('0>1>2');
+    expect(vus).toContain('2');
+  });
+
+  it('déterministe à graine égale — la mise en scène est rejouable', () => {
+    const a = Array.from({ length: 50 }, (_, s) =>
+      buildReveal(S, mulberry32(s)).items[0]!.path.join(),
+    );
+    const b = Array.from({ length: 50 }, (_, s) =>
+      buildReveal(S, mulberry32(s)).items[0]!.path.join(),
+    );
+    expect(a).toEqual(b);
+  });
+
+  it('⚠️ `prefers-reduced-motion` : l’état FINAL, sans surprise ni durée', () => {
+    for (const g of PULL_GRADES) {
+      const p = buildReveal(CELL[g], () => 0, { reduced: true });
+      expect(p.reduced).toBe(true);
+      expect(p.items[0]!.path).toEqual([GRADE_RANK[g]]);
+      expect(singleSequenceMs(p)).toBe(0);
+    }
+  });
+
+  it('plus la lettre est haute, plus on attend — à l’apogée ET sur la silhouette', () => {
+    for (let r = 1; r < RANK_GRADE.length; r++) {
+      expect(apexMs(r)).toBeGreaterThan(apexMs(r - 1));
+      expect(silhouetteMs(r)).toBeGreaterThan(silhouetteMs(r - 1));
+    }
+  });
+
+  it('⚠️ LA SÉQUENCE EST BORNÉE : même un S à double surprise tient sous 10 s', () => {
+    const p: RevealPlan = { items: [{ cell: S, path: [0, 1, 2] }], reduced: false };
+    expect(singleSequenceMs(p)).toBeLessThan(10_000);
+    expect(singleSequenceMs(buildReveal(B, () => 0.9))).toBeLessThan(4_000);
+  });
+
+  it('le maintien du ×10 est plus long que celui du ×1 (demandé)', () => {
+    expect(INVOKE.holdMsLot).toBeGreaterThan(INVOKE.holdMs);
+  });
+});
+
+describe('🎰 LE ×10 — dix orbes bleues qui s’allument', () => {
+  const grades: PullGrade[] = ['B', 'A', 'B', 'S', 'B', 'B', 'A', 'B', 'B', 'B'];
+  const lot = grades.map((g) => it0(g));
+
+  it('UNE orbe par tirage, dans l’ORDRE DU TIRAGE, chacune portant SA case', () => {
+    const p = buildLotReveal(lot, mulberry32(3));
+    expect(p.items).toHaveLength(lot.length);
+    p.items.forEach((it, i) => expect(it.cell).toEqual(cellOf(lot[i]!)));
+  });
+
+  it('⚠️ TOUTES PARTENT BLEUES, et le présage finit sur la vraie lettre', () => {
+    for (let s = 1; s <= 200; s++) {
+      const p = buildLotReveal(lot, mulberry32(s));
+      honest(p, grades);
+      for (const it of p.items) expect(it.path[0]).toBe(0);
+    }
+  });
+
+  it('⚠️ UN B NE S’ALLUME JAMAIS ; un A s’allume en violet ; un S monte à l’or', () => {
+    const p = buildLotReveal(lot, mulberry32(7));
+    p.items.forEach((it, i) => {
+      if (grades[i] === 'B') expect(it.path).toEqual([0]);
+      if (grades[i] === 'A') expect(it.path).toEqual([0, 1]);
+      if (grades[i] === 'S')
+        expect([
+          [0, 2],
+          [0, 1, 2],
+        ]).toContainEqual(it.path);
+    });
+  });
+
+  it('⚠️ LES A S’ALLUMENT D’ABORD, LES S EN DERNIER — le meilleur ferme la marche', () => {
+    const p = buildLotReveal(lot, mulberry32(4));
+    expect(igniteOrder(p)).toEqual([1, 6, 3]);
+    expect(bestRank(p)).toBe(2);
+    expect(igniteOrder(buildLotReveal([it0('B'), it0('B')], mulberry32(1)))).toEqual([]);
+  });
+
+  it('⚠️ prefers-reduced-motion : rien ne s’allume, rien n’anime', () => {
+    const p = buildLotReveal(lot, mulberry32(2), { reduced: true });
+    p.items.forEach((it, i) => expect(it.path).toEqual([GRADE_RANK[grades[i]!]]));
+    expect(igniteOrder(p)).toEqual([]);
+    expect(lotSequenceMs(p)).toBe(0);
+  });
+
+  it('⚠️ JUSQU’AUX CARTES, UN ×10 TIENT SOUS 9 S — même avec deux S à double allumage', () => {
+    const pire: RevealPlan = {
+      items: ['S', 'S', 'A', 'A', 'A', 'B', 'B', 'B', 'B', 'B'].map((g) => ({
+        cell: CELL[g as PullGrade],
+        path: g === 'S' ? [0, 1, 2] : g === 'A' ? [0, 1] : [0],
+      })),
+      reduced: false,
+    };
+    expect(lotSequenceMs(pire)).toBeLessThan(9_000);
+  });
+});
+
+describe('🎰 LE LOT — la grille et le meilleur', () => {
+  it('⚠️ LE MEILLEUR EST LA MEILLEURE LETTRE', () => {
     expect(bestOfLot([it0('B'), it0('S'), it0('A')])!.grade).toBe('S');
   });
 
@@ -118,6 +194,7 @@ describe('🎰 LE LOT DE 10 — la révélation porte le meilleur (v0.968)', () 
   it('un lot vide ne fait pas tomber l’écran', () => {
     expect(bestOfLot([])).toBeNull();
     expect(lotOrder([])).toEqual([]);
+    expect(bestRank({ items: [], reduced: false })).toBe(0);
   });
 
   it('la grille va de la meilleure lettre à la plus basse, puis dans l’ordre du tirage', () => {
@@ -140,36 +217,5 @@ describe('🎰 LE LOT DE 10 — la révélation porte le meilleur (v0.968)', () 
     expect(c.championId).toBeNull();
     expect(c.name).toBe('Épée');
     expect(cellOf(it0('S')).championId).toBe(champS.id);
-  });
-});
-
-describe('🎰 LE LOT DE 10 — dix lignes qui défilent ensemble (v0.980)', () => {
-  it('UNE ligne par tirage, dans l’ORDRE DU TIRAGE, chacune arrêtée sur SA case', () => {
-    const lot = [it0('A'), it0('B'), it0('S'), it0('B')];
-    const plans = buildLotReveal(lot, mulberry32(3));
-    expect(plans).toHaveLength(lot.length);
-    plans.forEach((p, i) => expect(cle(p.strip[p.stopIndex]!)).toBe(cle(cellOf(lot[i]!))));
-  });
-
-  it('⚠️ LES ARRÊTS TOMBENT EN CASCADE : même lettre, chaque ligne s’arrête après celle du dessus', () => {
-    const plans = buildLotReveal(
-      Array.from({ length: 10 }, () => it0('B')),
-      mulberry32(5),
-    );
-    for (let i = 1; i < plans.length; i++)
-      expect(plans[i]!.spinMs - plans[i - 1]!.spinMs).toBe(REVEAL.lotStagger);
-  });
-
-  it('la durée garde sa part de lettre — une ligne qui traîne reste un bon présage', () => {
-    const [p] = buildLotReveal([it0('S')], mulberry32(1));
-    expect(p!.spinMs).toBe(revealSpinMs('S'));
-    expect(GRADE_RANK.S).toBeGreaterThan(GRADE_RANK.A);
-  });
-
-  it('⚠️ prefers-reduced-motion : aucune ligne n’anime, cascade comprise', () => {
-    const plans = buildLotReveal([it0('A'), it0('B'), it0('S')], mulberry32(2), {
-      reduced: true,
-    });
-    expect(plans.every((p) => p.spinMs === 0)).toBe(true);
   });
 });

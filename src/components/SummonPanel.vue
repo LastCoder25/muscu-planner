@@ -1,16 +1,15 @@
 <template>
   <!-- 🎰 L'ÉCRAN D'INVOCATION, plein écran (v0.960). ⚠️ Monté À CÔTÉ de la feuille et non
        dedans : une modale dans une modale hérite du voile et de la hauteur de sa parente,
-       et la roulette s'y retrouverait bridée. -->
+       et l'invocation s'y retrouverait bridée. -->
   <GachaReveal
     :plan="revealPlan"
     :verdict="revealVerdict"
     :lot="revealLot"
-    :lot-plans="revealLotPlans"
-    :can-again="!!payOne && !busy"
+    :can-again="!!(lastWasLot ? payTen : payOne) && !busy"
     :busy="busy"
     @close="closeReveal"
-    @again="doPull"
+    @again="lastWasLot ? doPullTen() : doPull()"
   />
   <!-- 🎰 LA FEUILLE DE TIRAGE (v0.989, demandé : « une tuile pour le tirage plutôt que dans
        les champions, on sépare les deux ; dans la tuile de tirage, deux grandes tuiles pour
@@ -112,7 +111,6 @@ import GachaReveal from './GachaReveal.vue';
 import {
   buildReveal,
   buildLotReveal,
-  bestOfLot,
   cellOf,
   type RevealPlan,
   type LotItem,
@@ -159,8 +157,8 @@ const fmtOdds = (pct: number) =>
 const revealPlan = ref<RevealPlan | null>(null);
 /** Le lot complet d'un ×10 — `null` pour un tirage à l'unité. */
 const revealLot = ref<LotItem[] | null>(null);
-/** Les dix lignes du ×10 — `null` pour un tirage à l'unité. */
-const revealLotPlans = ref<RevealPlan[] | null>(null);
+/** Le dernier tirage était un ×10 : « Invoquer encore » refait le même geste. */
+const lastWasLot = ref(false);
 const multiCount = GACHA.multiCount;
 const multiCost = multiPullCost();
 const revealVerdict = ref<{
@@ -181,12 +179,12 @@ function closeReveal() {
  * chacune se dit : un champion neuf, un cran d'Éveil, ou une copie de trop qui se
  * convertit (« jamais perdu »).
  *
- * ⚠️ **LA ROULETTE MET EN SCÈNE UN RÉSULTAT DÉJÀ TRANCHÉ** : on tire d'abord (le store, le
+ * ⚠️ **L'INVOCATION MET EN SCÈNE UN RÉSULTAT DÉJÀ TRANCHÉ** : on tire d'abord (le store, le
  * pity, la mana), on anime ensuite. L'inverse ferait diverger ce qu'on voit de ce qu'on
  * possède — la règle de `siegeStage` et d'`arenaStage`.
  */
 /** ⚠️ `prefers-reduced-motion` → l'état FINAL, pas une animation raccourcie : la lib
- *  rend une bande d'un seul portrait et une durée nulle. Lu UNE fois, pour les deux
+ *  rend un plan « réduit » que l'écran affiche directement. Lu UNE fois, pour les deux
  *  modes de tirage — deux lectures finiraient par diverger. */
 function reducedMotion(): boolean {
   return (
@@ -196,8 +194,8 @@ function reducedMotion(): boolean {
 }
 
 /**
- * 🎰 LE LOT DE 10 — dix lignes qui tournent ENSEMBLE, sur toute la hauteur (v0.980), puis
- * la révélation du meilleur et la grille du lot.
+ * 🎰 LE LOT DE 10 — dix orbes lancées ensemble qui retombent en cartes (v1.002) ; les A et
+ * les S se révèlent au toucher, au centre du cercle.
  */
 async function doPullTen() {
   const uid = auth.user?.id;
@@ -209,18 +207,11 @@ async function doPullTen() {
       $q.notify({ type: 'negative', message: 'Pas assez de tickets ni de pierres de mana.' });
       return;
     }
-    const best = bestOfLot(lot);
-    if (!best) return;
-    revealVerdict.value = {
-      duplicate: best.duplicate,
-      copies: best.copies,
-      manaBack: best.manaBack,
-      awaken: awakenLevel(best.copies),
-      piece: !best.champion,
-    };
+    // ⚠️ Au ×10, chaque carte dit SA propre issue (NOUVEAU, Éveil, pièce) : pas de verdict unique.
+    revealVerdict.value = null;
     revealLot.value = lot;
-    revealLotPlans.value = buildLotReveal(lot, Math.random, { reduced: reducedMotion() });
-    revealPlan.value = buildReveal(cellOf(best), Math.random, { reduced: reducedMotion() });
+    lastWasLot.value = true;
+    revealPlan.value = buildLotReveal(lot, Math.random, { reduced: reducedMotion() });
   } finally {
     busy.value = false;
   }
@@ -237,7 +228,7 @@ async function doPull() {
       return;
     }
     revealLot.value = null;
-    revealLotPlans.value = null;
+    lastWasLot.value = false;
     revealVerdict.value = {
       duplicate: r.duplicate,
       copies: r.copies,
