@@ -144,6 +144,7 @@ import {
 import {
   advAvailable,
   advProgressOf,
+  type AdvProgress,
   advRarity,
   grantAdvXp,
   advNextAscension,
@@ -1919,6 +1920,9 @@ export const useCharacterStore = defineStore('character', () => {
     const party = m.party;
     let partyPatch: Record<string, unknown> = {};
     let wages = 0;
+    // ⭐ Ce que la mission a changé pour le GROUPE — étoiles, rang, « prêt pour l'ascension ».
+    // Les convois l'annonçaient depuis la v0.794 ; les camps et les failles, jamais.
+    let advProgress: AdvProgress[] = [];
     if (party) {
       const claim = partyClaimRoster(party, advList.value, {
         pantheonLevel: pantheonLevel.value,
@@ -1926,6 +1930,7 @@ export const useCharacterStore = defineStore('character', () => {
         now,
       });
       wages = claim.wages;
+      advProgress = advProgressOf(advList.value, claim.adventurers);
       partyPatch = {
         adventurers: claim.adventurers,
         ...gearTrainedPatch(cur, advList.value, claim.adventurers),
@@ -1973,7 +1978,7 @@ export const useCharacterStore = defineStore('character', () => {
       claimedLocally.delete(m.id);
       throw e;
     }
-    return m;
+    return { ...m, advProgress };
   }
   async function expeMarkRead(userId: string) {
     const cur = row.value;

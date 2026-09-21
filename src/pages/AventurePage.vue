@@ -2954,6 +2954,7 @@ import { depositComboChest } from '@/composables/useComboChest';
 import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
+import { useAdvProgressFx } from '@/composables/useAdvProgressFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
 import { usePush } from '@/composables/usePush';
@@ -3144,6 +3145,7 @@ const char = useCharacterStore();
 const combo = useComboStore();
 const progress = useProgress();
 const gameFx = useGameFx();
+const advFx = useAdvProgressFx();
 // Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le
 // chiffre de qualité d'un objet — ticket d094eac6). Les 10 rangs pour l'échelle visuelle.
 // ⚠️ C'était `'rank' | 'quality' | null`, mais RIEN ne posait jamais `'quality'` : la moitié
@@ -5458,6 +5460,7 @@ async function doClaimMsg(m: ExpeditionMessage) {
   if (!uid) return;
   const done = await char.expeClaim(uid, m.id, Date.now());
   if (!done) return;
+  advFx.announce(done.advProgress);
   const haul = haulPills(done)
     .map((h) => `${h.emoji} +${h.n}`)
     .join(' · ');
