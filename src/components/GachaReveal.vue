@@ -984,11 +984,25 @@ async function playLot() {
  *  elle se révèle comme un ×1 (demandé : « qu'elle s'affiche au centre, avec le cercle »). */
 async function onCard(i: number) {
   const c = cards.value[i];
-  if (!c || phase.value !== 'await' || c.flipped || !c.hot) return;
+  if (!c) return;
+  // 🔎 Une carte DÉJÀ retournée s'ouvre en grand au centre (demandé : « cliquer sur un
+  // objet devrait pouvoir l'afficher en grand »). Sans animation : on la connaît déjà,
+  // on vient la regarder — « Continuer » la repose.
+  if (c.flipped && (phase.value === 'await' || phase.value === 'done')) {
+    run++;
+    phase.value = 'focus';
+    color.value = rankColor(finalRank(c.item));
+    sigilDim.value = false;
+    sigilRevealing.value = true;
+    revealFinal(c.item, tagOf(c.lot), true);
+    return;
+  }
+  if (phase.value !== 'await' || c.flipped || !c.hot) return;
   const tok = ++run;
   phase.value = 'focus';
   const el = lotEl.value?.children[i] as HTMLElement | undefined;
   const rank = finalRank(c.item);
+  let fly: HTMLElement | null = null;
   try {
     color.value = rankColor(rank);
     sigilDim.value = false;
@@ -1000,10 +1014,10 @@ async function onCard(i: number) {
     if (el && shaker.value) {
       const r = shaker.value.getBoundingClientRect();
       const cb = el.getBoundingClientRect();
-      const fly = el.cloneNode(true) as HTMLElement;
+      fly = el.cloneNode(true) as HTMLElement;
       fly.classList.remove('hot');
       fly.classList.add('ivk-fly');
-      fly.style.cssText = `position:absolute;left:${cb.left - r.left}px;top:${cb.top - r.top}px;width:${cb.width}px;height:${cb.height}px;z-index:6;opacity:1;--c:${color.value}`;
+      fly.style.cssText = `position:absolute;left:${cb.left - r.left}px;top:${cb.top - r.top}px;width:${cb.width}px;height:${cb.height}px;z-index:6;opacity:1;--c:${color.value};--cw:${cb.width}px`;
       shaker.value.appendChild(fly);
       c.away = true;
       const dx = r.width / 2 - (cb.left - r.left + cb.width / 2);
@@ -1027,6 +1041,9 @@ async function onCard(i: number) {
     await revealCenter(c.item, tagOf(c.lot), tok, true);
   } catch (e) {
     c.away = false;
+    // ⚠️ Un tirage interrompu en plein vol laissait le clone au-dessus de la révélation
+    // (même z-index, plus tard dans le DOM) : il avalait les clics sur « Continuer ».
+    fly?.remove();
     if (!(e instanceof Skip)) throw e;
   }
 }
@@ -1090,7 +1107,12 @@ function onClose(v?: boolean) {
 
 watch(
   () => [props.plan, props.pending] as const,
-  ([p, pend]) => {
+  ([p, pend], prev) => {
+    // ⚠️ SEULE LA DEMANDE SE CLÔT : le parent pose le plan PUIS remet `pending` à null
+    // (dans son `finally`), et ce second changement arrive APRÈS que le premier a lancé
+    // l'animation. Le traiter comme une nouvelle ouverture remettait tout à zéro en pleine
+    // révélation : l'écran repartait sur le cercle et « le maintien ne faisait rien ».
+    if (prev && p && p === prev[0] && !pend) return;
     const wasAwaiting = awaiting.value;
     awaiting.value = false;
     // Le plan demandé au bout du maintien arrive : on enchaîne SANS remettre le cercle à
@@ -1561,7 +1583,12 @@ onBeforeUnmount(() => {
   box-shadow:
     0 0 0 6px color-mix(in srgb, var(--c) 18%, transparent),
     0 0 40px color-mix(in srgb, var(--c) 60%, transparent);
-  img {
+  /* ⚠️ `img[src]` et non `img` : cette feuille n'est PAS scopée, alors que celle du
+     portrait l'est (`.cp[data-v-…]`, deux « classes »). `img` seul perdait la cascade
+     et le portrait restait à sa taille d'emoji (1,15em ≈ 16 px), collé dans un coin —
+     d'où « les portraits ne s'affichent pas au tirage ». L'attribut remonte la
+     spécificité au-dessus de celle du composant. */
+  img[src] {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -1679,13 +1706,37 @@ onBeforeUnmount(() => {
 .ivk-lot {
   position: absolute;
   left: 50%;
-  top: 45%;
+  top: 50%;
   transform: translate(-50%, -50%);
-  width: min(100% - 24px, 420px);
+  /* 🃏 3 · 4 · 3 EN LOSANGE, et la carte la plus grande que l'écran permet (demandé :
+     « les 10 tirages en plus gros, répartis différemment »). Cinq de front ne laissaient
+     que ~70 px par carte sur un téléphone ; quatre de front en rendent ~85, et la hauteur
+     — jusqu'ici inutilisée — fixe l'autre borne. `--cw` = largeur d'une carte. */
+  --gap: 8px;
+  --cw: min(
+    150px,
+    calc((100cqw - 24px - 3 * var(--gap)) / 4),
+    calc((92cqh - 2 * var(--gap)) / 4.8)
+  );
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(8, calc(var(--cw) / 2 + var(--gap) / 2));
+  row-gap: var(--gap);
   perspective: 900px;
+  /* Chaque carte couvre deux demi-colonnes : décalées d'une demi-carte, les rangées de
+     trois s'emboîtent entre celles de quatre. */
+  > .ivk-card {
+    grid-column: span 2;
+    margin: 0 calc(var(--gap) / 2);
+  }
+  > .ivk-card:nth-child(1) {
+    grid-column: 2 / span 2;
+  }
+  > .ivk-card:nth-child(4) {
+    grid-column: 1 / span 2;
+  }
+  > .ivk-card:nth-child(8) {
+    grid-column: 2 / span 2;
+  }
   transition: opacity 300ms;
   z-index: 4;
   &.faded {
@@ -1695,7 +1746,8 @@ onBeforeUnmount(() => {
 .ivk-card {
   position: relative;
   aspect-ratio: 5 / 8;
-  &.hot {
+  &.hot,
+  &.flipped {
     cursor: pointer;
   }
   &.away {
@@ -1773,21 +1825,21 @@ onBeforeUnmount(() => {
   place-items: center;
   background: #0c0a07;
   overflow: hidden;
-  img {
+  img[src] {
     width: 100%;
     height: 100%;
     object-fit: cover;
     border-radius: 0;
   }
   .ivk-emo {
-    font-size: 30px;
+    font-size: calc(var(--cw, 70px) * 0.42);
   }
 }
 .ivk-front-l {
   position: absolute;
   left: 3px;
   top: 1px;
-  font-size: 20px;
+  font-size: max(20px, calc(var(--cw, 70px) * 0.26));
   font-weight: 700;
   color: var(--c);
   text-shadow:
@@ -1795,7 +1847,7 @@ onBeforeUnmount(() => {
     0 2px 0 #000;
 }
 .ivk-front-n {
-  font-size: 9.5px;
+  font-size: max(9.5px, calc(var(--cw, 70px) * 0.12));
   line-height: 1.15;
   text-align: center;
   padding: 3px 3px 0;
@@ -1808,7 +1860,7 @@ onBeforeUnmount(() => {
 .ivk-front-t {
   margin-top: auto;
   margin-bottom: 3px;
-  font-size: 8px;
+  font-size: max(8px, calc(var(--cw, 70px) * 0.095));
   font-weight: 700;
   letter-spacing: 0.04em;
   padding: 1px 5px;
