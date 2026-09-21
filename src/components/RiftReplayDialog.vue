@@ -11,7 +11,7 @@
         :stage="stage"
         :level="input.level"
         :hero="hero"
-        :members="members"
+        :cast="cast"
         @done="close"
       />
     </div>
@@ -29,8 +29,7 @@ import { computed, ref, watch } from 'vue';
 import type { Equipped } from '@/lib/items';
 import type { PartyResult } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
-import { buildRiftStage, riftStageInputOf } from '@/lib/riftStage';
-import { partyReport } from '@/lib/party';
+import { buildRiftStage, riftCast, riftStageInputOf } from '@/lib/riftStage';
 import RiftStage from '@/components/RiftStage.vue';
 
 const props = defineProps<{
@@ -68,10 +67,9 @@ const hero = computed(() =>
   props.replay?.hero ? { profile: props.heroProfile, equipped: props.heroEquipped } : null,
 );
 
-/** Les mêmes membres que le rapport affiche — une seule lecture de l'escorte. */
-const members = computed(() =>
-  props.replay ? partyReport(props.replay, props.roster).members : [],
-);
+/** Le groupe dans l’ordre de la formation — héros devant, puis les champions (`riftCast`,
+ *  qui lit l’escorte comme le rapport). */
+const cast = computed(() => (props.replay ? riftCast(props.replay, props.roster) : []));
 
 function close(): void {
   emit('update:replay', null);

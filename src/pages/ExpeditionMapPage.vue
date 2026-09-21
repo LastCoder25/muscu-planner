@@ -407,8 +407,8 @@
           <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
                ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
           <p v-if="selectedRift" class="car-cap">
-            🕳️ Une faille ne laisse passer que <b>{{ RIFT_MAX_PARTY }}</b> membres, héros
-            compris : <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions.
+            🕳️ Une faille ne laisse passer que <b>{{ RIFT_MAX_PARTY }}</b> membres, héros compris :
+            <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions.
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
@@ -697,6 +697,7 @@ import {
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
+import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import {
   departureRisk,
   heroDefends,
@@ -1575,6 +1576,8 @@ const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
 /** 🕳️ Rapport d'incursion à rejouer (cf. `RiftReplayDialog`). */
 const riftReplay = ref<PartyResult | null>(null);
+// ▶️ Il se lance aussi tout seul : à l'arrivée sur la faille, ou à la prochaine ouverture.
+useRiftAutoReplay(riftReplay);
 // Objets ramenés (l'arène en rend PLUSIEURS via `items`, les autres un seul via `item`).
 const lastOutcomeItems = computed(() => {
   const o = lastOutcome.value;

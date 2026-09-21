@@ -185,7 +185,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       7,
     );
     let out = '';
-    const props = { stage, level: 26, hero: null, members: [{ emoji: '⚔️', name: 'Léa' }] };
+    const props = {
+      stage,
+      level: 26,
+      hero: null,
+      cast: [{ kind: 'champion' as const, name: 'Léa', emoji: '⚔️', championId: null }],
+    };
     expect(await mountIt(RiftStage, props, undefined, undefined, '/', (h) => (out = h))).toBeNull();
     // ⚠️ SANS CETTE LECTURE LE TEST SERAIT CREUX : un plateau qui ne rendrait RIEN se
     // monterait tout aussi bien. On compte les corps, gardien compris.

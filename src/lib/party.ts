@@ -331,6 +331,9 @@ interface PartyReportMember {
   hurt: boolean;
   /** Plus dans le vivier : sa ligne reste, l'XP a bien été versée. */
   gone: boolean;
+  /** Son identité de champion (portrait), `null` pour un aventurier d'avant les champions
+   *  ou parti du vivier — l'écran retombe alors sur l'emoji. */
+  championId: string | null;
 }
 export interface PartyReport {
   hero: boolean;
@@ -369,6 +372,7 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
       kills: Math.max(0, Math.round(party.kills[id] ?? 0)),
       hurt: hurt.has(id),
       gone: !adv,
+      championId: adv?.championId ?? null,
     };
   });
   return {

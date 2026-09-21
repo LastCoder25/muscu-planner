@@ -26,7 +26,9 @@
 // nombres) suffit à dire l'attrition sans rien inventer.
 
 import { mulberry32 } from './combat';
-import type { PartyResult } from './expedition';
+import type { ExpeditionMessage, PartyResult } from './expedition';
+import { RIFT_MAX_PARTY, partyReport } from './party';
+import type { Adventurer } from './adventurers';
 import type { RaidFaction } from './raid';
 import { RIFT_RUN, riftDepth, riftFoeIdentity, riftRamp } from './rift';
 
@@ -50,6 +52,21 @@ export const RIFT_STAGE = {
    */
   lane: 0.1,
   laneJitter: 0.06,
+  /**
+   * 🧭 LA FORMATION DU GROUPE — où se tient chaque membre par rapport au point de marche
+   * (fractions du terrain en x, de la hauteur en y). Une place par membre possible : une
+   * faille n'en laisse passer que `RIFT_MAX_PARTY`, héros compris (un test tient les deux
+   * nombres d'accord).
+   *
+   * ⚠️ En ÉVENTAIL et non en file : les monstres alternent de part et d'autre de l'axe
+   * (`lane`), donc un membre en haut et un en bas couvrent les deux rangées — c'est ce qui
+   * se LIT comme « ils ratissent » plutôt que « un héros suivi de figurants ».
+   */
+  formation: [
+    { dx: 0, dy: 0 },
+    { dx: -0.03, dy: -0.13 },
+    { dx: -0.03, dy: 0.13 },
+  ],
 } as const;
 
 /** Un corps sur le terrain. Coordonnées en fraction ([0,1]²) : le rendu reste responsive
@@ -80,6 +97,16 @@ interface RiftStageBeat {
   down: boolean;
   /** C'est ici que le groupe s'arrête — il n'ira pas plus loin. */
   fatal: boolean;
+  /**
+   * Le membre qui va frapper (index dans le groupe), ou −1 : TOUS ensemble (le gardien)
+   * ou personne (la porte).
+   *
+   * ⚠️ **COSMÉTIQUE, ET ÇA SE DIT** : le combat d'une incursion est FONDU (`fuseUnits`) —
+   * le moteur ne sait pas QUI a abattu quoi, et le rapport n'affiche aucun abattu par
+   * champion pour cette raison. On répartit donc les rencontres à tour de rôle, sans en
+   * tirer le moindre chiffre : c'est une mise en scène, pas une attribution.
+   */
+  striker: number;
 }
 
 /** Ce qu'une incursion a laissé, et qui suffit à la rejouer. */
@@ -95,6 +122,8 @@ export interface RiftStageInput {
   maxPv: number;
   /** PV après chaque rencontre. Vide pour un rapport d'avant la v0.977. */
   pvTrail: readonly number[];
+  /** Membres entrés dans la faille, héros compris. Absent → un seul (le rejeu d'avant). */
+  partySize?: number;
 }
 
 export interface RiftStage {
@@ -108,6 +137,8 @@ export interface RiftStage {
   /** ⚠️ Faux quand le sillage manque (rapport d'avant) : le rendu ne peint alors AUCUNE
    *  barre de vie, plutôt qu'une courbe qu'il aurait fallu inventer. */
   hasPv: boolean;
+  /** Membres sur le plateau (`riftPartySize`) — la formation en place autant. */
+  partySize: number;
 }
 
 /**
@@ -131,7 +162,16 @@ export function riftStageInputOf(party: PartyResult): RiftStageInput | null {
     cleared: party.win,
     maxPv: party.rift.maxPv,
     pvTrail: party.rift.pvTrail,
+    // ⚠️ Lu dans le rapport, qui dit QUI est entré — jamais dans le vivier d'aujourd'hui.
+    partySize: party.escort.length + (party.hero ? 1 : 0),
   };
+}
+
+/** La taille du groupe sur le plateau : au moins un, au plus les places d'une faille
+ *  (le plancher couvre un rapport bancal ; le plafond, une formation qui n'aurait pas de
+ *  place pour un quatrième). */
+export function riftPartySize(input: Pick<RiftStageInput, 'partySize'>): number {
+  return Math.max(1, Math.min(RIFT_MAX_PARTY, Math.round(input.partySize ?? 1)));
 }
 
 /** Où se tient le k-ième monstre sur l'axe de marche. */
@@ -206,15 +246,33 @@ export function buildRiftStage(input: RiftStageInput, seed: number): RiftStage {
   // Les monstres RÉELLEMENT affrontés : ceux qui sont tombés, plus celui qui a arrêté le
   // groupe quand il y en a un.
   const faced = doorOpens ? pop : killed + 1;
+  const size = riftPartySize(input);
   for (let k = 0; k < faced; k++) {
     const down = k < killed;
     const before = pv;
     pv = step();
-    beats.push({ kind: 'foe', foe: k, pvBefore: before, pvAfter: pv, down, fatal: !down });
+    beats.push({
+      kind: 'foe',
+      foe: k,
+      pvBefore: before,
+      pvAfter: pv,
+      down,
+      fatal: !down,
+      // À tour de rôle : chacun prend le monstre suivant (cf. la note sur `striker`).
+      striker: k % size,
+    });
   }
 
   if (doorOpens) {
-    beats.push({ kind: 'door', foe: -1, pvBefore: pv, pvAfter: pv, down: false, fatal: false });
+    beats.push({
+      kind: 'door',
+      foe: -1,
+      pvBefore: pv,
+      pvAfter: pv,
+      down: false,
+      fatal: false,
+      striker: -1,
+    });
     const before = pv;
     pv = step();
     beats.push({
@@ -224,6 +282,8 @@ export function buildRiftStage(input: RiftStageInput, seed: number): RiftStage {
       pvAfter: pv,
       down: cleared,
       fatal: !cleared,
+      // Le gardien, on l'affronte tous ensemble.
+      striker: -1,
     });
   }
 
@@ -235,5 +295,74 @@ export function buildRiftStage(input: RiftStageInput, seed: number): RiftStage {
     doorOpens,
     doorX: RIFT_STAGE.doorX,
     hasPv,
+    partySize: size,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▶️ LE REJEU SE LANCE TOUT SEUL — à l'arrivée, ou à la prochaine ouverture
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Au-delà, un rapport ne se rejoue plus de lui-même : il reste dans la boîte 📬, avec son
+ * bouton. ⚠️ Sans cette borne, la PREMIÈRE ouverture après la mise à jour jouerait une
+ * incursion vieille de trois semaines — ce n'est plus un événement, c'est une archive.
+ */
+export const RIFT_AUTOPLAY_MAX_AGE_MS = 3 * 24 * 3600_000;
+
+/**
+ * Quel rapport d'incursion jouer maintenant, et quels ids retenir comme « déjà joués ».
+ *
+ * - **Le plus RÉCENT seulement** : trois incursions rentrées pendant la nuit ne doivent pas
+ *   enchaîner trois plateaux plein écran à l'ouverture — les autres attendent dans 📬.
+ * - ⚠️ **Tous les rapports présents sont retenus comme vus**, joués ou non : sinon le
+ *   second plus récent partirait à l'ouverture suivante, puis le troisième… une file
+ *   qu'on n'a pas demandée.
+ * - `seen` n'est jamais qu'une liste d'ids ENCORE dans la boîte : celle-ci en garde 30,
+ *   donc la mémoire ne grossit pas avec le temps.
+ * - Le rapport existe dès que le groupe est ARRIVÉ sur la faille (`settleParties` le dépose
+ *   à ce moment-là) — c'est cet instant, pas le retour en ville, qui déclenche le rejeu.
+ */
+export function riftAutoReplay(
+  messages: readonly ExpeditionMessage[],
+  seen: ReadonlySet<string>,
+  now: number,
+): { play: ExpeditionMessage | null; seen: string[] } {
+  const rifts = messages.filter((m) => !!m.party?.rift);
+  let play: ExpeditionMessage | null = null;
+  for (const m of rifts) {
+    if (seen.has(m.id) || now - m.resolvedAt > RIFT_AUTOPLAY_MAX_AGE_MS) continue;
+    if (!play || m.resolvedAt > play.resolvedAt) play = m;
+  }
+  return { play, seen: rifts.map((m) => m.id) };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🧑‍🤝‍🧑 LA DISTRIBUTION — qui entre en scène
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Un membre du groupe sur le plateau : le héros (son avatar) ou un champion (son
+ *  portrait, sinon l'emoji de sa classe). */
+export interface RiftCastMember {
+  kind: 'hero' | 'champion';
+  name: string;
+  emoji: string;
+  championId: string | null;
+}
+
+/**
+ * Le groupe à mettre en scène, dans l'ordre de la formation : le héros DEVANT (au centre
+ * de l'éventail) s'il était de l'incursion, puis les champions.
+ *
+ * ⚠️ Les champions viennent de `partyReport`, la lecture qu'en fait déjà le rapport :
+ * deux lectures de l'escorte finiraient par ne pas montrer les mêmes personnes.
+ * ⚠️ Borné par `riftPartySize` — la formation n'a pas plus de places (un rapport d'avant
+ * la v0.983, où le héros ne comptait pas dans les 3, peut porter un quatrième membre).
+ */
+export function riftCast(party: PartyResult, roster: readonly Adventurer[]): RiftCastMember[] {
+  const cast: RiftCastMember[] = [];
+  if (party.hero) cast.push({ kind: 'hero', name: 'Héros', emoji: '🧙', championId: null });
+  for (const m of partyReport(party, roster).members)
+    cast.push({ kind: 'champion', name: m.name, emoji: m.emoji, championId: m.championId });
+  return cast.slice(0, riftPartySize({ partySize: cast.length }));
 }

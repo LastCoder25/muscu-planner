@@ -52,20 +52,34 @@
           <span class="emo">{{ f.emoji }}</span>
         </div>
 
-        <!-- Le groupe : le héros devant, l'escorte dans son dos. -->
+        <!-- Le groupe : chaque membre à sa place dans l'éventail. Celui dont c'est le
+             tour fonce sur SON monstre pendant que les autres avancent — ils ratissent.
+             Le héros garde son avatar, un champion son portrait (l'emoji de sa classe
+             à défaut). -->
         <div
-          class="party"
-          :class="{ lunge: lunging, hurt: partyHurt }"
-          :style="{ left: heroX * 100 + '%', top: AXIS_Y * 100 + '%' }"
+          v-for="(m, k) in cast"
+          :key="'m' + k"
+          class="member"
+          :class="{
+            striking: dashes.has(k),
+            lunge: lunges.has(k),
+            hurt: partyHurt,
+            fallen: wiped,
+            hero: m.kind === 'hero',
+          }"
+          :style="{
+            left: memberPos(k).x * 100 + '%',
+            top: memberPos(k).y * 100 + '%',
+            zIndex: 40 + Math.round(memberPos(k).y * 20),
+          }"
         >
           <span class="shadow big" />
-          <span v-for="(m, k) in backline" :key="k" class="ally" :style="allyStyle(k)">{{
-            m.emoji
-          }}</span>
-          <div v-if="hero" class="hero-av">
+          <div v-if="m.kind === 'hero' && hero" class="hero-av">
             <AventureAvatar :profile="hero.profile" :equipped="hero.equipped" />
           </div>
-          <span v-else class="hero-emo">⚔️</span>
+          <div v-else class="champ">
+            <ChampionPortrait :champion-id="m.championId">{{ m.emoji }}</ChampionPortrait>
+          </div>
         </div>
 
         <!-- Arc de lame, éclats de mort, nombres flottants. -->
@@ -160,14 +174,16 @@
 // c'est pourquoi les monstres n'ont AUCUNE barre de vie individuelle : debout, ou à terre.
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { Equipped } from '@/lib/items';
-import { RIFT_STAGE, type RiftStage } from '@/lib/riftStage';
+import { RIFT_STAGE, type RiftCastMember, type RiftStage } from '@/lib/riftStage';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import ChampionPortrait from '@/components/ChampionPortrait.vue';
 
 const props = defineProps<{
   stage: RiftStage;
   level: number;
   hero: { profile: 'puissant' | 'agile' | 'polyvalent'; equipped: Equipped } | null;
-  members: { emoji: string; name: string }[];
+  /** Le groupe, dans l'ordre de la formation (`riftCast`). */
+  cast: RiftCastMember[];
 }>();
 const emit = defineEmits<{ done: [] }>();
 
@@ -181,7 +197,10 @@ const MOTES = 12;
 const SLOW_DOOR = 760; // on laisse la porte s'ouvrir
 const SLOW_BOSS = 900; // le gardien mérite son temps
 const SLOW_FATAL = 1100; // et la chute aussi
-const BACKLINE = 3; // au plus trois silhouettes derrière le héros
+/** Durée de l'élan d'un membre vers sa cible, puis du retour à sa place. */
+const DASH_MS = 520;
+/** Un membre en attaque se poste juste devant sa cible, pas dessus. */
+const DASH_GAP = 0.03;
 
 const reduce =
   typeof window !== 'undefined' &&
@@ -192,18 +211,61 @@ const beats = computed(() => props.stage.beats);
 const beatMs = computed(() => (beats.value.length > 10 ? 560 : 680));
 
 const monsterCount = computed(() => props.stage.foes.filter((f) => !f.boss).length);
-const backline = computed(() => props.members.slice(0, BACKLINE));
 
 const cursor = ref(0);
 const downs = ref(new Set<number>());
 const targetIdx = ref(0);
+/** Le point de marche du GROUPE — chaque membre s'en écarte selon sa place. */
 const heroX = ref(0.03);
+/** Membres partis frapper, et où. ⚠️ Une place à part : pendant ce temps le reste du
+ *  groupe continue d'avancer, c'est ce qui fait ratisser plutôt que défiler en file. */
+const dashes = ref(new Map<number, { x: number; y: number }>());
+const lunges = ref(new Set<number>());
+/** Le groupe est tombé : il n'ira pas plus loin. */
+const wiped = ref(false);
+
+/** Où se tient le k-ième membre : à sa cible s'il frappe, à sa place sinon. */
+function memberPos(k: number): { x: number; y: number } {
+  const d = dashes.value.get(k);
+  if (d) return d;
+  const f = RIFT_STAGE.formation[k] ?? RIFT_STAGE.formation[0];
+  return { x: Math.max(0.01, heroX.value + f.dx), y: AXIS_Y + f.dy };
+}
+
+/** Où le GROUPE se poste face à une cible : un peu en retrait, plus loin du gardien (il
+ *  est plus gros, et l'éventail doit pouvoir se refermer sur lui). */
+function standOff(foe: { x: number; boss: boolean }): number {
+  return Math.max(0.02, foe.x - (foe.boss ? 0.16 : 0.09));
+}
+
+/**
+ * Envoie ces membres sur la cible, puis les ramène.
+ *
+ * `surround` : ils ENCERCLENT (le gardien) en gardant chacun leur rang de l'éventail —
+ * ⚠️ le banc l'a montré, répartis dans l'ordre de la liste ils s'empilaient et le héros
+ * cachait un champion. Sinon, le membre se poste droit devant sa cible.
+ */
+function dashTo(members: number[], foe: { x: number; y: number }, surround: boolean, gap: number) {
+  const next = new Map(dashes.value);
+  for (const k of members) {
+    const dy = surround ? (RIFT_STAGE.formation[k] ?? RIFT_STAGE.formation[0]).dy : 0;
+    next.set(k, { x: Math.max(0.01, foe.x - gap), y: foe.y + dy });
+  }
+  dashes.value = next;
+  later(
+    () => {
+      const back = new Map(dashes.value);
+      for (const k of members) back.delete(k);
+      dashes.value = back;
+    },
+    reduce ? 0 : DASH_MS,
+  );
+}
 /** Point de mire. ⚠️ Distinct de `heroX` : à l'ouverture de la porte on recule pour
  *  montrer la salle, sinon le gardien reste hors champ au moment précis où il se révèle. */
 const camX = ref(0.03);
 const pv = ref(props.stage.maxPv);
 const ghostPct = ref(100);
-const lunging = ref(false);
 const partyHurt = ref(false);
 const hurtIdx = ref<number | null>(null);
 const shake = ref('');
@@ -256,10 +318,6 @@ function moteStyle(m: number) {
   };
 }
 
-function allyStyle(k: number) {
-  return { left: -18 - k * 15 + 'px', bottom: 2 + (k % 2) * 9 + 'px', opacity: 0.75 - k * 0.14 };
-}
-
 function say(kind: string, main: string, sub = '') {
   banner.value = { id: ++uid, kind, main, sub };
   later(() => {
@@ -301,15 +359,20 @@ function play(): void {
   if (!foe) return stop();
 
   targetIdx.value = b.foe;
-  heroX.value = Math.max(0.02, foe.x - (foe.boss ? 0.1 : 0.05));
-  camX.value = foe.boss ? (heroX.value + foe.x) / 2 : heroX.value;
+  // Le groupe avance derrière sa cible ; celui dont c'est le tour fonce dessus. Le
+  // gardien, on y va TOUS — l'éventail se referme sur lui.
+  const strikers =
+    b.striker < 0 ? props.cast.map((_, k) => k) : [Math.min(b.striker, props.cast.length - 1)];
+  heroX.value = standOff(foe);
+  camX.value = foe.boss ? (heroX.value + foe.x) / 2 : heroX.value + 0.03;
+  dashTo(strikers, foe, foe.boss, foe.boss ? 0.08 : DASH_GAP);
   if (b.kind === 'boss') say('boss', `${foe.emoji} ${foe.name}`, 'Le gardien de la faille');
 
   // Le coup : élan, arc de lame, puis l'issue de la rencontre.
   later(
     () => {
-      lunging.value = true;
-      later(() => (lunging.value = false), 240);
+      lunges.value = new Set(strikers);
+      later(() => (lunges.value = new Set()), 240);
       const sid = ++uid;
       slashes.value.push({ id: sid, x: foe.x, y: foe.y });
       later(() => (slashes.value = slashes.value.filter((s) => s.id !== sid)), 320);
@@ -326,6 +389,8 @@ function play(): void {
         partyHurt.value = true;
         shake.value = 'sh-l';
         later(() => (shake.value = ''), 380);
+        // …et le groupe tombe avec lui : personne ne va plus loin.
+        later(() => (wiped.value = true), reduce ? 0 : 420);
       }
 
       // La barre glisse VERS la valeur lue — l'arrivée est exacte, le chemin est du rendu.
@@ -342,7 +407,7 @@ function play(): void {
         later(() => (ghostPct.value = pvPct.value), 380);
       }
     },
-    reduce ? 0 : 200,
+    reduce ? 0 : 260,
   );
 
   cursor.value++;
@@ -371,9 +436,13 @@ function skip(): void {
   killCount.value = k;
   doorOpen.value = props.stage.doorOpens;
   const last = beats.value.at(-1);
+  dashes.value = new Map();
+  lunges.value = new Set();
+  wiped.value = beats.value.some((b) => b.fatal);
   if (last) {
     pv.value = last.pvAfter;
-    heroX.value = props.stage.foes[Math.max(0, last.foe)]?.x ?? heroX.value;
+    const lastFoe = props.stage.foes[Math.max(0, last.foe)];
+    if (lastFoe) heroX.value = standOff(lastFoe);
     camX.value = heroX.value;
   }
   ghostPct.value = pvPct.value;
@@ -740,16 +809,21 @@ onBeforeUnmount(() => {
   transform: translate(-50%, -34%) scale(calc(var(--sc) * 0.8)) rotate(78deg);
 }
 
-.party {
+/* Chaque membre du groupe a sa place : il marche (transition longue) et, quand c'est son
+   tour, fonce sur sa cible (même transition — c'est l'élan qu'on voit). */
+.member {
   position: absolute;
   transform: translate(-50%, -50%);
-  z-index: 40;
-  transition: left 0.55s cubic-bezier(0.3, 0.7, 0.3, 1);
+  transition:
+    left 0.34s cubic-bezier(0.3, 0.7, 0.3, 1),
+    top 0.34s cubic-bezier(0.3, 0.7, 0.3, 1),
+    opacity 0.5s,
+    filter 0.5s;
 }
-.reduce .party {
+.reduce .member {
   transition: none;
 }
-.party.lunge {
+.member.lunge {
   animation: lunge 0.24s ease-out;
 }
 @keyframes lunge {
@@ -757,17 +831,37 @@ onBeforeUnmount(() => {
     transform: translate(-30%, -50%);
   }
 }
-.party.hurt .hero-av,
-.party.hurt .hero-emo {
+.member.hurt .hero-av,
+.member.hurt .champ {
   filter: drop-shadow(0 0 8px var(--d4));
+}
+/* Le groupe tombé : il reste où il est, à terre — comme un monstre abattu. */
+.member.fallen {
+  opacity: 0.35;
+  filter: grayscale(1);
+  transform: translate(-50%, -30%) rotate(-70deg);
 }
 .hero-av {
   width: 62px;
 }
-.hero-emo {
-  font-size: 34px;
+/* Un champion : son portrait dans un médaillon à la couleur de la faille. La taille vient
+   du `font-size` (le portrait fait 1.15em, et l'emoji de repli la même taille). */
+.champ {
+  font-size: 40px;
+  line-height: 1;
+  padding: 3px;
+  border-radius: 26%;
+  background: rgba(20, 15, 30, 0.7);
+  box-shadow:
+    0 0 0 2px var(--rift),
+    0 4px 10px rgba(0, 0, 0, 0.6);
 }
-.party .shadow.big {
+.member.striking .champ {
+  box-shadow:
+    0 0 0 2px var(--accent),
+    0 0 14px var(--accent);
+}
+.member .shadow.big {
   position: absolute;
   left: 50%;
   top: 100%;
@@ -777,11 +871,6 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.55);
   filter: blur(3px);
-}
-.ally {
-  position: absolute;
-  font-size: 19px;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
 }
 
 .slash {

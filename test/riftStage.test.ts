@@ -1,6 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { RIFT_STAGE, buildRiftStage, riftStageInputOf, type RiftStageInput } from '@/lib/riftStage';
-import { partyReport } from '@/lib/party';
+import {
+  RIFT_AUTOPLAY_MAX_AGE_MS,
+  RIFT_STAGE,
+  buildRiftStage,
+  riftAutoReplay,
+  riftCast,
+  riftPartySize,
+  riftStageInputOf,
+  type RiftStageInput,
+} from '@/lib/riftStage';
+import { RIFT_MAX_PARTY, partyReport } from '@/lib/party';
+import type { Adventurer } from '@/lib/adventurers';
 import {
   RIFT,
   RIFT_RUN,
@@ -11,7 +21,7 @@ import {
   riftSpecOf,
   simulateIncursion,
 } from '@/lib/rift';
-import { EXPE, type Poi } from '@/lib/expedition';
+import { EXPE, type ExpeditionMessage, type PartyResult, type Poi } from '@/lib/expedition';
 import { fuseUnits } from '@/lib/skirmish';
 import { refEscortUnits } from '@/lib/caravan';
 
@@ -257,6 +267,8 @@ describe('ce qui distingue une incursion d’un camp', () => {
       cleared: true,
       maxPv: 900,
       pvTrail: [800, 700, 600, 500, 400, 300],
+      // Le héros seul (escorte vide) : une place dans la formation.
+      partySize: 1,
     });
   });
 
@@ -308,3 +320,151 @@ describe('bout en bout avec le moteur', () => {
     expect(s.cleared).toBe(run.cleared);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🧑‍🤝‍🧑 LE GROUPE QUI RATISSE — chaque membre prend son monstre, tous vont au gardien
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('le groupe ratisse la faille', () => {
+  it('la formation a une place par membre qu’une faille laisse entrer', () => {
+    // Sinon un membre se poserait sur la place d'un autre (ou n'en aurait aucune).
+    expect(RIFT_STAGE.formation).toHaveLength(RIFT_MAX_PARTY);
+  });
+
+  it('les monstres se répartissent À TOUR DE RÔLE entre les membres', () => {
+    const s = buildRiftStage(input({ population: 7, killed: 7, partySize: 3 }), 1);
+    const foes = s.beats.filter((b) => b.kind === 'foe');
+    expect(foes.map((b) => b.striker)).toEqual([0, 1, 2, 0, 1, 2, 0]);
+  });
+
+  it('le gardien, on y va TOUS — et la porte ne désigne personne', () => {
+    const s = buildRiftStage(input({ population: 4, killed: 4, partySize: 3 }), 1);
+    expect(s.beats.find((b) => b.kind === 'boss')!.striker).toBe(-1);
+    expect(s.beats.find((b) => b.kind === 'door')!.striker).toBe(-1);
+  });
+
+  it('un groupe seul (ou un rapport d’avant) : un seul frappe tout', () => {
+    for (const partySize of [1, undefined]) {
+      const s = buildRiftStage(input({ population: 5, killed: 5, partySize }), 1);
+      expect(s.partySize).toBe(1);
+      expect(s.beats.filter((b) => b.kind === 'foe').every((b) => b.striker === 0)).toBe(true);
+    }
+  });
+
+  it('la taille est bornée : au moins un, au plus les places d’une faille', () => {
+    expect(riftPartySize({ partySize: 0 })).toBe(1);
+    expect(riftPartySize({ partySize: 5 })).toBe(RIFT_MAX_PARTY);
+    expect(riftPartySize({ partySize: 2 })).toBe(2);
+  });
+
+  it('la taille vient du RAPPORT : héros compris', () => {
+    const base = partyResult();
+    expect(riftStageInputOf({ ...base, hero: true, escort: ['a', 'b'] })!.partySize).toBe(3);
+    expect(riftStageInputOf({ ...base, hero: false, escort: ['a', 'b'] })!.partySize).toBe(2);
+  });
+
+  it('le partage est COSMÉTIQUE : il ne touche ni aux morts ni aux PV', () => {
+    const a = buildRiftStage(input({ partySize: 1 }), 5);
+    const b = buildRiftStage(input({ partySize: 3 }), 5);
+    const strip = (s: typeof a) => s.beats.map(({ striker: _s, ...rest }) => rest);
+    expect(strip(b)).toEqual(strip(a));
+    expect(b.foes).toEqual(a.foes);
+  });
+});
+
+describe('la distribution : qui entre en scène', () => {
+  const roster = [
+    { id: 'a1', name: 'Orsène', path: [], championId: 'orsene', level: 5, xp: 0, seed: 1 },
+    { id: 'a2', name: 'Léa', path: ['guerrier'], level: 5, xp: 0, seed: 2 },
+  ] as unknown as Adventurer[];
+
+  it('le héros DEVANT, puis les champions avec leur identité', () => {
+    const cast = riftCast({ ...partyResult(), hero: true, escort: ['a1', 'a2'] }, roster);
+    expect(cast.map((m) => m.kind)).toEqual(['hero', 'champion', 'champion']);
+    expect(cast[1]!.championId).toBe('orsene');
+    // Un aventurier sans identité de champion retombe sur l'emoji : pas de portrait inventé.
+    expect(cast[2]!.championId).toBeNull();
+  });
+
+  it('sans le héros, les champions seuls', () => {
+    const cast = riftCast({ ...partyResult(), hero: false, escort: ['a1'] }, roster);
+    expect(cast.map((m) => m.kind)).toEqual(['champion']);
+  });
+
+  it('jamais plus de membres que de places (un rapport d’avant la v0.983 en portait 4)', () => {
+    const cast = riftCast({ ...partyResult(), hero: true, escort: ['a1', 'a2', 'a3'] }, roster);
+    expect(cast).toHaveLength(RIFT_MAX_PARTY);
+    expect(cast[0]!.kind).toBe('hero');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ▶️ LE REJEU AUTOMATIQUE — à l'arrivée, ou à la prochaine ouverture
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('le rejeu se lance tout seul', () => {
+  const NOW = 10 * 24 * 3600_000;
+  const msg = (id: string, resolvedAt: number, rift = true): ExpeditionMessage => ({
+    id,
+    level: 26,
+    win: true,
+    text: '',
+    gold: 0,
+    energy: 0,
+    key: 0,
+    resolvedAt,
+    read: false,
+    party: rift ? partyResult() : { ...partyResult(), rift: undefined },
+  });
+
+  it('joue le rapport d’incursion le PLUS RÉCENT pas encore vu', () => {
+    const t = riftAutoReplay([msg('a', NOW - 5000), msg('b', NOW - 1000)], new Set(), NOW);
+    expect(t.play?.id).toBe('b');
+  });
+
+  it('retient TOUS les rapports présents comme vus — pas de file à l’ouverture suivante', () => {
+    const t = riftAutoReplay([msg('a', NOW - 5000), msg('b', NOW - 1000)], new Set(), NOW);
+    expect(t.seen.sort()).toEqual(['a', 'b']);
+    expect(
+      riftAutoReplay([msg('a', NOW - 5000), msg('b', NOW - 1000)], new Set(t.seen), NOW).play,
+    ).toBeNull();
+  });
+
+  it('ne rejoue jamais un rapport déjà vu', () => {
+    expect(riftAutoReplay([msg('a', NOW - 1000)], new Set(['a']), NOW).play).toBeNull();
+  });
+
+  it('ignore les camps : seule une incursion a une scène', () => {
+    const t = riftAutoReplay([msg('c', NOW - 1000, false)], new Set(), NOW);
+    expect(t.play).toBeNull();
+    expect(t.seen).toEqual([]);
+  });
+
+  it('un rapport trop ancien ne se relance pas — il reste dans 📬', () => {
+    const vieux = NOW - RIFT_AUTOPLAY_MAX_AGE_MS - 1;
+    const t = riftAutoReplay([msg('v', vieux)], new Set(), NOW);
+    expect(t.play).toBeNull();
+    // …mais il est marqué vu : il ne partira pas plus tard non plus.
+    expect(t.seen).toEqual(['v']);
+  });
+});
+
+/** Un rapport d'incursion minimal — pour les blocs du groupe et du rejeu automatique. */
+function partyResult(): PartyResult {
+  return {
+    hero: true,
+    faction: 'bandits',
+    escort: [],
+    win: true,
+    foes: 5,
+    slain: 5,
+    kills: {},
+    heroKills: 0,
+    xp: {},
+    hurt: [],
+    advGear: [],
+    wages: 0,
+    journal: [],
+    rift: { level: 26, maxPv: 900, pvTrail: [800, 700, 600, 500, 400, 300] },
+  };
+}

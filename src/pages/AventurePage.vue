@@ -2914,6 +2914,7 @@ import {
 import CombatStage from '@/components/CombatStage.vue';
 import ArenaStage from '@/components/ArenaStage.vue';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
+import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { familiarSpecies } from '@/data/familiars';
@@ -4221,6 +4222,8 @@ const arenaWaves = ref<StageWave[] | null>(null);
 // Plein écran de l'arène : le combat s'y joue, le rapport ne vient qu'après.
 const arenaOpen = ref(false);
 const riftReplay = ref<PartyResult | null>(null);
+// ▶️ Il se lance aussi tout seul : à l'arrivée sur la faille, ou à la prochaine ouverture.
+useRiftAutoReplay(riftReplay);
 function onArenaDone() {
   arenaOpen.value = false;
   openReport();
