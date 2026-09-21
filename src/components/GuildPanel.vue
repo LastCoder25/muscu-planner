@@ -248,6 +248,7 @@
                       <!-- ⭐ Les ÉTOILES de son rang, comme un champion (v0.1015) : elles montent en
                            combattant avec son porteur. Le niveau reste caché. -->
                       <span class="d-train">{{ rankStarStr(characterRank(g.level).star) }}</span>
+                      <span v-if="g.awaken" class="d-train awk">✨{{ g.awaken }}</span>
                     </span>
                     <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
                          étoiles du héros (demandé). -->
@@ -284,6 +285,19 @@
                 <div class="gear-actions-row">
                   <!-- ⬆️ Ascension : proposée seulement quand la pièce BUTE sur son ★5 ; la
                        raison d'un refus est dans le titre, et redite avant de payer. -->
+                  <!-- ✨ Éveil : sur la pièce GARDÉE seulement (la plus avancée du modèle) ;
+                       le nombre dit combien de doublons libres attendent. -->
+                  <button
+                    v-if="awakenOf(g)"
+                    type="button"
+                    class="gear-btn ascend"
+                    :disabled="busy"
+                    :title="`Éveiller en fondant un doublon (${awakenOf(g)!.spare} libre${awakenOf(g)!.spare > 1 ? 's' : ''})`"
+                    :aria-label="`Éveiller (${awakenOf(g)!.spare})`"
+                    @click="doAwaken(g)"
+                  >
+                    ✨{{ awakenOf(g)!.spare }}
+                  </button>
                   <button
                     v-if="gearAscent(g)"
                     type="button"
@@ -678,6 +692,7 @@ import {
   pendingAdvGear,
   lineageOf,
   wornGear,
+  advGearAwakenPlan,
   advGearLevelBand,
   advGearNextRank,
   advGearRankCap,
@@ -1131,6 +1146,27 @@ function gearAscent(g: AdvGear) {
       ? `Ascension vers ${rank.name} — ${GEAR_ASCENSION_BLOCK_LABEL[block]} (${price})`
       : `Ascension vers ${rank.name} (${price})`,
   };
+}
+/** ✨ Le plan d'éveil — affiché seulement sur la pièce GARDÉE, sinon chaque exemplaire du
+ *  modèle porterait le même bouton et on ne saurait pas lequel monte. */
+function awakenOf(g: AdvGear) {
+  const plan = advGearAwakenPlan(g, char.advGearStock, char.advList);
+  return plan && plan.keep.id === g.id ? plan : null;
+}
+function doAwaken(g: AdvGear) {
+  const plan = awakenOf(g);
+  if (!plan) return;
+  const aw = Math.max(g.awaken ?? 0, plan.consume.awaken ?? 0) + 1;
+  $q.dialog({
+    title: `✨ Éveiller ${g.name}`,
+    message: `Un doublon (${rankStarStr(characterRank(plan.consume.level).star)}) est fondu. ${g.name} passe à l’éveil ${aw} : +${Math.round(AWAKEN.perStep * 100)} % sur ses stats.`,
+    cancel: true,
+  }).onOk(() => {
+    void pair(async (uid) => {
+      const err = await char.awakenGear(uid, g.id);
+      if (err) throw new Error(err);
+    });
+  });
 }
 function doAscendGear(g: AdvGear) {
   const s = gearAscent(g);

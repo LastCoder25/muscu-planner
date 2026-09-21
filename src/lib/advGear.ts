@@ -30,6 +30,7 @@ import {
   advChampion,
   advRarity,
   advXpToNext,
+  AWAKEN,
   type AdvAvatarProfile,
   type ADV_AVATAR_SLOTS,
   type Adventurer,
@@ -68,6 +69,9 @@ export interface AdvGear {
    *  (`advXpToNext`). ⚠️ Bloquée au ★5 de son rang (`advGearLevelBand`) ET au niveau de son
    *  porteur — l'excédent est CONSERVÉ, puis reversé à l'ascension. */
   xp?: number;
+  /** ✨ Crans d'ÉVEIL (0..`ADV_GEAR_AWAKEN.max`), gagnés en fusionnant un doublon du même
+   *  modèle (v0.1016). Gardé par l'ascension : un cran gagné ne se perd jamais. */
+  awaken?: number;
   effect: ItemEffect;
   effect2?: ItemEffect;
   /** Lignées civiles uniquement, sur l'accessoire : trajet raccourci / cargaison (fraction). */
@@ -374,10 +378,23 @@ export function rollGachaPiece(
   return makeAdvGear({ lineage, slot, rank, grade: opts.grade });
 }
 
-/** Ce que des pièces apportent au combat — valeur × niveau d'objet, comme un objet du héros. */
+/** ✨ Éveil des objets : 5 crans (spec § 4), au MÊME pas que celui des champions
+ *  (`AWAKEN.perStep`) — un seul barème d'éveil dans le jeu. */
+export const ADV_GEAR_AWAKEN = { max: 5 } as const;
+
+/** Le multiplicateur de valeur d'une pièce : niveau d'objet × éveil. ⚠️ SOURCE UNIQUE du
+ *  combat ET des textes affichés — deux copies ont déjà dit deux choses différentes ici. */
+function advGearMult(g: Pick<AdvGear, 'level' | 'awaken'>): number {
+  // Le plafond (5) est posé à la RELECTURE (`onModel`) et à la fusion (`awakenAdvGear`) :
+  // le reposer ici serait un garde qu'aucune donnée réelle n'atteint.
+  const aw = Math.max(0, Math.floor(g.awaken ?? 0));
+  return itemLevelMult(g.level) * (1 + AWAKEN.perStep * aw);
+}
+
+/** Ce que des pièces apportent au combat — valeur × niveau d'objet × éveil. */
 export function advGearEffects(gear: AdvGear[]): AggregatedEffects {
   const parts = gear.flatMap((g) => {
-    const m = itemLevelMult(g.level);
+    const m = advGearMult(g);
     const out = [effectAsAggregate(g.effect.type, g.effect.value * m)];
     if (g.effect2) out.push(effectAsAggregate(g.effect2.type, g.effect2.value * m));
     return out;
@@ -523,7 +540,7 @@ export interface AdvGearCell {
 
 /** Les textes d'effet d'une pièce, EXACTEMENT comme le combat les lit (`advGearEffects`). */
 export function advGearEffectTexts(g: AdvGear): string[] {
-  const m = itemLevelMult(g.level);
+  const m = advGearMult(g);
   const out = [effectLabelFor(g.effect.type, round1(g.effect.value * m))];
   if (g.effect2) out.push(effectLabelFor(g.effect2.type, round1(g.effect2.value * m)));
   return out;
@@ -638,6 +655,9 @@ function onModel<T extends Omit<AdvGear, 'id'>>(g: T): T {
     ...(own.id !== undefined ? { id: own.id } : {}),
     ...(g.locked ? { locked: true } : {}),
     ...(typeof g.xp === 'number' && g.xp > 0 ? { xp: Math.floor(g.xp) } : {}),
+    ...(typeof g.awaken === 'number' && g.awaken > 0
+      ? { awaken: Math.min(ADV_GEAR_AWAKEN.max, Math.floor(g.awaken)) }
+      : {}),
   } as unknown as T;
 }
 
@@ -779,4 +799,58 @@ export function advGearSellValue(g: AdvGear): number {
     1,
     Math.round(sellValueOf(g.rarity, 0, g.level) * ADV_GEAR.sellK * GEAR_GRADE_SHARE[g.grade]),
   );
+}
+
+// ── ✨ ÉVEIL DES OBJETS (v0.1016, étape D de la spec d'ascension) ─────────────────────────
+
+/** L'ordre d'avancement : rang, puis niveau, puis éveil — l'exemplaire qu'on GARDE est le
+ *  plus avancé, celui qu'on FOND le moins avancé (spec § 4 : « désigné d'office »). */
+function gearAhead(a: AdvGear, b: AdvGear): number {
+  return (
+    RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
+    b.level - a.level ||
+    (b.awaken ?? 0) - (a.awaken ?? 0) ||
+    a.id.localeCompare(b.id)
+  );
+}
+
+/**
+ * ✨ Ce qu'un éveil ferait dans ce MODÈLE (lignée × emplacement × lettre) : quelle pièce on
+ * GARDE, laquelle on FOND, et combien de doublons restent disponibles. `null` s'il n'y a rien
+ * à fusionner, ou que la pièce gardée est déjà au maximum.
+ *
+ * ⚠️ On ne fond JAMAIS une pièce PORTÉE (`wornGear`, la règle du combat) ni 🔒 — la pièce
+ * GARDÉE, elle, peut très bien être portée : c'est même le cas courant.
+ */
+export function advGearAwakenPlan(
+  g: AdvGear,
+  stock: AdvGear[],
+  advs: Adventurer[],
+): { keep: AdvGear; consume: AdvGear; spare: number } | null {
+  const model = advGearModelOf(g);
+  if (!model) return null;
+  const copies = stock.filter((x) => advGearModelOf(x) === model).sort(gearAhead);
+  const keep = copies[0];
+  if (!keep || (keep.awaken ?? 0) >= ADV_GEAR_AWAKEN.max) return null;
+  const worn = new Set([...wornGear(advs, stock).values()].flat().map((x) => x.id));
+  const free = copies.slice(1).filter((x) => !worn.has(x.id) && !x.locked);
+  const consume = free[free.length - 1];
+  return consume ? { keep, consume, spare: free.length } : null;
+}
+
+/** Applique un éveil : la pièce gardée prend `max(éveils) + 1` (on ne perd jamais un cran
+ *  déjà gagné sur l'autre), la pièce fondue quitte le stock. Rend le MÊME stock si rien
+ *  n'est possible. Pur. */
+export function awakenAdvGear(
+  stock: AdvGear[],
+  plan: { keep: AdvGear; consume: AdvGear },
+): AdvGear[] {
+  const aw = Math.min(
+    ADV_GEAR_AWAKEN.max,
+    Math.max(plan.keep.awaken ?? 0, plan.consume.awaken ?? 0) + 1,
+  );
+  if (!stock.some((x) => x.id === plan.consume.id)) return stock;
+  return stock
+    .filter((x) => x.id !== plan.consume.id)
+    .map((x) => (x.id === plan.keep.id ? { ...x, awaken: aw } : x));
 }

@@ -170,6 +170,8 @@ import {
   advGearModelOf,
   lineageOf,
   normalizeAdvGearState,
+  advGearAwakenPlan,
+  awakenAdvGear,
   advGearNextRank,
   advGearRankCap,
   ascendAdvGear,
@@ -2252,6 +2254,23 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  /** ✨ ÉVEILLER une pièce en fondant un doublon du même modèle. ⚠️ Le plan est recalculé
+   *  ICI (`advGearAwakenPlan`) : l'écran ne propose pas l'impossible, il ne le garantit pas —
+   *  jamais une pièce portée ni 🔒 fondue. `null` si c'est fait. */
+  async function awakenGear(userId: string, gearId: string): Promise<string | null> {
+    const cur = row.value;
+    if (!cur) return 'Personnage introuvable.';
+    const stock = cur.adv_gear?.stock ?? [];
+    const g = stock.find((x) => x.id === gearId);
+    if (!g) return 'Pièce introuvable.';
+    const plan = advGearAwakenPlan(g, stock, cur.adventurers ?? []);
+    if (!plan || plan.keep.id !== gearId) return 'Aucun doublon libre à fusionner.';
+    await persist(userId, {
+      adv_gear: { ...(cur.adv_gear ?? {}), stock: awakenAdvGear(stock, plan) },
+    });
+    return null;
+  }
+
   async function ascendChampion(userId: string, advId: string): Promise<string | null> {
     const cur = row.value;
     if (!cur) return 'Personnage introuvable.';
@@ -2758,6 +2777,7 @@ export const useCharacterStore = defineStore('character', () => {
     setAdvGear,
     ascendChampion,
     ascendGear,
+    awakenGear,
     sellAdvGear,
     toggleAdvGearLock,
     withAdvGear,
