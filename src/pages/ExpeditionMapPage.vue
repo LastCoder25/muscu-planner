@@ -566,7 +566,11 @@
           >
         </div>
         <div v-if="lastOutcome.party" class="coll-party">
-          <PartyReportView :party="lastOutcome.party" :roster="char.advList" />
+          <PartyReportView
+            :party="lastOutcome.party"
+            :roster="char.advList"
+            @replay="riftReplay = lastOutcome.party ?? null"
+          />
         </div>
         <q-btn
           color="primary"
@@ -578,6 +582,14 @@
         />
       </q-card>
     </q-dialog>
+
+    <!-- 🕳️ Rejeu d'une incursion : la traversée, la porte, la salle du gardien. -->
+    <RiftReplayDialog
+      v-model:replay="riftReplay"
+      :roster="char.advList"
+      :hero-profile="character.profile"
+      :hero-equipped="char.row?.equipped ?? {}"
+    />
 
     <!-- ⚠️ LA GUILDE S'OUVRE ICI, au retour d'un convoi dont la mission vient de rendre
          une promotion possible. Le vivier se gère depuis son bâtiment (règle « un
@@ -670,8 +682,10 @@ import {
   isWarbandPoi,
   riftIrradiationRadius,
   isClaimable,
+  type PartyResult,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
+import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
 import {
   departureRisk,
   heroDefends,
@@ -1542,6 +1556,8 @@ async function doSendCaravan() {
 }
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
+/** 🕳️ Rapport d'incursion à rejouer (cf. `RiftReplayDialog`). */
+const riftReplay = ref<PartyResult | null>(null);
 // Objets ramenés (l'arène en rend PLUSIEURS via `items`, les autres un seul via `item`).
 const lastOutcomeItems = computed(() => {
   const o = lastOutcome.value;

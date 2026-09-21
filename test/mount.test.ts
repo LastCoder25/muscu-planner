@@ -145,6 +145,133 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       await mountIt(GachaReveal, { plan: court, verdict: v, canAgain: false, busy: false }),
     ).toBeNull();
   }, 30_000);
+  it('🕳️ RiftStage peint les corps, le gardien et la barre du groupe', async () => {
+    const { default: RiftStage } = await import('@/components/RiftStage.vue');
+    const { buildRiftStage } = await import('@/lib/riftStage');
+    const stage = buildRiftStage(
+      {
+        level: 26,
+        faction: 'bandits',
+        population: 6,
+        killed: 6,
+        cleared: true,
+        maxPv: 900,
+        pvTrail: [800, 700, 640, 560, 480, 400, 320],
+      },
+      7,
+    );
+    let out = '';
+    const props = { stage, level: 26, hero: null, members: [{ emoji: '⚔️', name: 'Léa' }] };
+    expect(await mountIt(RiftStage, props, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    // ⚠️ SANS CETTE LECTURE LE TEST SERAIT CREUX : un plateau qui ne rendrait RIEN se
+    // monterait tout aussi bien. On compte les corps, gardien compris.
+    expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(stage.foes.length);
+    expect(out).toContain('Faille niv 26');
+    expect(out).toContain('pvbar');
+
+    // …et un rapport d'AVANT (sans sillage) : la scène tient, sans barre inventée.
+    const vieux = buildRiftStage(
+      {
+        level: 12,
+        faction: 'betes',
+        population: 3,
+        killed: 1,
+        cleared: false,
+        maxPv: 0,
+        pvTrail: [],
+      },
+      3,
+    );
+    let out2 = '';
+    expect(
+      await mountIt(
+        RiftStage,
+        { ...props, stage: vieux, level: 12 },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out2 = h),
+      ),
+    ).toBeNull();
+    expect(out2).not.toContain('pvbar');
+  }, 30_000);
+
+  it('🕳️ le rapport n’offre le rejeu QUE sur une incursion', async () => {
+    const { default: PartyReportView } = await import('@/components/PartyReportView.vue');
+    const base = {
+      hero: true,
+      faction: 'bandits' as const,
+      escort: ['a1'],
+      win: true,
+      foes: 4,
+      slain: 4,
+      kills: {},
+      heroKills: 0,
+      xp: { a1: 9 },
+      hurt: [],
+      advGear: [],
+      wages: 8,
+      journal: [],
+    };
+    // Un CAMP : pas de bouton, et le verbe d'un camp.
+    let camp = '';
+    expect(
+      await mountIt(
+        PartyReportView,
+        { party: base, roster: ROW.adventurers },
+        undefined,
+        undefined,
+        '/',
+        (h) => (camp = h),
+      ),
+    ).toBeNull();
+    expect(camp).not.toContain('pr-replay');
+    expect(camp).toContain('camp pris');
+
+    // Une INCURSION : le bouton, et le verbe de la faille.
+    let faille = '';
+    const rift = { ...base, rift: { level: 26, maxPv: 800, pvTrail: [700, 600, 500, 420, 300] } };
+    expect(
+      await mountIt(
+        PartyReportView,
+        { party: rift, roster: ROW.adventurers },
+        undefined,
+        undefined,
+        '/',
+        (h) => (faille = h),
+      ),
+    ).toBeNull();
+    expect(faille).toContain('pr-replay');
+    expect(faille).toContain('faille refermée');
+  }, 30_000);
+
+  it('🕳️ RiftReplayDialog construit sa scène au setup', async () => {
+    const { default: RiftReplayDialog } = await import('@/components/RiftReplayDialog.vue');
+    const party = {
+      hero: true,
+      faction: 'mortsvivants' as const,
+      escort: ['a1'],
+      win: true,
+      foes: 4,
+      slain: 4,
+      kills: {},
+      heroKills: 0,
+      xp: { a1: 12 },
+      hurt: [],
+      advGear: [],
+      wages: 10,
+      journal: [],
+      rift: { level: 30, maxPv: 700, pvTrail: [640, 580, 520, 470, 400] },
+    };
+    expect(
+      await mountIt(
+        RiftReplayDialog,
+        { replay: party, roster: ROW.adventurers, heroProfile: 'polyvalent', heroEquipped: {} },
+        ROW,
+      ),
+    ).toBeNull();
+  }, 30_000);
+
   it('GuildPanel s’ouvre aussi sur un vivier VIDE — et l’invocation reste offerte', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     const vide = { ...ROW, adventurers: [] };

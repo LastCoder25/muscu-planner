@@ -1706,8 +1706,14 @@
               <div class="im-haul">
                 <span v-for="p in haulPills(m)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
               </div>
-              <!-- ⚔️ Rapport d'un groupe de camp : faction, abattus, XP de chacun, journal. -->
-              <PartyReportView v-if="m.party" :party="m.party" :roster="char.advList" />
+              <!-- ⚔️ Rapport d'un groupe : faction, abattus, XP de chacun, journal. Une
+                   INCURSION de faille y propose en plus son rejeu. -->
+              <PartyReportView
+                v-if="m.party"
+                :party="m.party"
+                :roster="char.advList"
+                @replay="riftReplay = m.party"
+              />
               <!-- Butin à ENCAISSER. Tant qu'on n'a pas cliqué, rien n'est crédité : c'est
                    le geste qui donne au retour d'expédition un moment à lui. Un rapport
                    d'avant la récupération manuelle n'a pas de `claimed` → déjà crédité. -->
@@ -2473,6 +2479,14 @@
       </div>
     </q-dialog>
 
+    <!-- 🕳️ Rejeu d'une incursion : la traversée, la porte, la salle du gardien. -->
+    <RiftReplayDialog
+      v-model:replay="riftReplay"
+      :roster="char.advList"
+      :hero-profile="c.profile"
+      :hero-equipped="char.row?.equipped ?? {}"
+    />
+
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
     <q-dialog v-model="reportOpen" :persistent="!stageDone">
@@ -2919,6 +2933,7 @@ import {
 } from '@/lib/combat';
 import CombatStage from '@/components/CombatStage.vue';
 import ArenaStage from '@/components/ArenaStage.vue';
+import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { familiarSpecies } from '@/data/familiars';
@@ -3040,6 +3055,7 @@ import {
   arenaEnergyCost,
   arenaRewards,
   ARENA_PLAY,
+  type PartyResult,
 } from '@/lib/expedition';
 import { logicalToday } from '@/lib/challenges';
 
@@ -4256,6 +4272,7 @@ const arenaWaves = ref<StageWave[] | null>(null);
 // Y a-t-il quelque chose à rejouer ? (plateau d'arène OU duel de donjon/boss)
 // Plein écran de l'arène : le combat s'y joue, le rapport ne vient qu'après.
 const arenaOpen = ref(false);
+const riftReplay = ref<PartyResult | null>(null);
 function onArenaDone() {
   arenaOpen.value = false;
   openReport();

@@ -7,9 +7,7 @@
     <div class="pr-head">
       <span class="pr-emo">{{ r.factionEmoji }}</span>
       <div class="pr-main">
-        <div class="pr-title font-display">
-          {{ r.factionLabel }} · {{ r.win ? 'camp pris' : 'repoussé' }}
-        </div>
+        <div class="pr-title font-display">{{ r.factionLabel }} · {{ r.verdict }}</div>
         <div class="pr-sub">
           ⚔️ {{ r.slain }}/{{ r.foes }} abattus<template v-if="r.hero">
             · 🧝 {{ r.heroKills }} par le héros</template
@@ -17,6 +15,17 @@
         </div>
       </div>
     </div>
+
+    <q-btn
+      v-if="canReplay"
+      flat
+      dense
+      no-caps
+      class="pr-replay"
+      icon="play_arrow"
+      label="Revoir l’incursion"
+      @click="emit('replay')"
+    />
 
     <div v-if="r.pieces || r.wages" class="pr-pills">
       <span v-if="r.pieces" class="pr-pill">
@@ -61,11 +70,16 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { partyReport } from '@/lib/party';
+import { riftStageInputOf } from '@/lib/riftStage';
 import type { PartyResult } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 
 const props = defineProps<{ party: PartyResult; roster: readonly Adventurer[] }>();
+const emit = defineEmits<{ replay: [] }>();
 const r = computed(() => partyReport(props.party, props.roster));
+// ⚠️ MÊME SOURCE que le verdict (`party.rift`) : le bouton ne peut donc pas apparaître sur
+// un camp, ni manquer sur une faille que l'en-tête vient d'annoncer refermée.
+const canReplay = computed(() => !!riftStageInputOf(props.party));
 </script>
 
 <style scoped lang="scss">
@@ -94,6 +108,12 @@ const r = computed(() => partyReport(props.party, props.roster));
 .pr-sub {
   font-size: 12.5px;
   color: var(--dim);
+}
+.pr-replay {
+  margin-top: 6px;
+  min-height: 44px;
+  color: var(--accent);
+  font-size: 12.5px;
 }
 .pr-pills {
   display: flex;

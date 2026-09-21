@@ -156,6 +156,23 @@ export interface PartyResult {
   /** Salaires de l'escorte, déduits à l'encaissement. */
   wages: number;
   journal: string[];
+  /**
+   * 🕳️ Ce qu'il faut pour REJOUER une incursion de faille (`riftStage.ts`) — et rien de
+   * plus : le niveau dit qui l'on a croisé, le sillage de PV dit l'attrition.
+   *
+   * ⚠️ **SA PRÉSENCE EST CE QUI DIT « INCURSION »**, et c'est délibérément la SEULE source :
+   * un camp n'en a pas. Deux façons de reconnaître une faille (ce champ et le `poiType` du
+   * message) finiraient par se contredire, et l'écran dirait « camp pris » d'un côté et
+   * « faille refermée » de l'autre.
+   *
+   * ⚠️ **ABSENT DES RAPPORTS D'AVANT LA v0.977** : ils se liront comme des camps et n'auront
+   * pas de rejeu. On ne l'invente pas — la boîte ne garde que 30 messages, ça se résorbe.
+   */
+  rift?: {
+    level: number;
+    maxPv: number;
+    pvTrail: number[];
+  };
 }
 
 /** FNV-1a 32 bits : un id de POI → une graine. */

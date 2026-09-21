@@ -1,9 +1,10 @@
 /**
  * ⚡ FAILLES — étape 1 : ce QU'EST une faille, et ce qu'elle rapporte.
  *
- * ⚠️ **PAS ENCORE BRANCHÉ** : aucun POI de type « faille » n'est produit, aucun écran ne
- * lit ce module, et rien n'a changé pour le joueur. Même découpage que `siegeBattle.ts`
- * (v0.754) et que les camps (étapes 1 → 3) : la lib d'abord, pure et mesurée, le câblage
+ * ⚠️ **BRANCHÉ DEPUIS LA v0.932** — l'en-tête a longtemps annoncé le contraire, ce qui avait
+ * cessé d'être vrai : les failles apparaissent sur la carte, l'incursion se joue, le
+ * débordement marque la base, le harcèlement et l'interception existent. Même découpage que
+ * `siegeBattle.ts` (v0.754) et que les camps : la lib d'abord, pure et mesurée, le câblage
  * ensuite. Cf. `docs/superpowers/specs/2026-09-19-failles-design.md`.
  *
  * ## Le modèle, en une phrase
@@ -368,6 +369,19 @@ export interface RiftRun {
   bossDown: boolean;
   finalPv: number;
   journal: string[];
+  /** PV du groupe à l'entrée — le dénominateur de `pvTrail`. */
+  maxPv: number;
+  /**
+   * PV du groupe APRÈS chaque combat livré (régénération comprise), dans l'ordre :
+   * les monstres, puis le gardien si la porte s'est ouverte. Un combat perdu y inscrit 0.
+   *
+   * ⚠️ **IL EXISTE POUR LE REJEU, et il ne décide RIEN** (`riftStage.ts`) : sans lui, la
+   * mise en scène devrait inventer une courbe d'attrition — c'est-à-dire mentir sur la
+   * seule tension que la faille produise. 13 nombres contre les centaines d'événements
+   * d'un log complet : c'est ce qui permet de le persister dans la boîte 📬, qui garde
+   * 30 messages.
+   */
+  pvTrail: number[];
 }
 
 /**
@@ -418,11 +432,28 @@ function riftFoeBase(level: number): { pv: number; damage: number } {
   };
 }
 
+/**
+ * Qui l'on croise à cette place — nom et emoji, sans la moindre statistique.
+ *
+ * ⚠️ **SOURCE UNIQUE, et c'est tout son intérêt** : `riftFoe` (le COMBAT) l'appelle, et la
+ * mise en scène (`riftStage.ts`) aussi. Une seconde règle de sélection ferait afficher au
+ * rejeu un monstre que le combat n'a pas livré — le défaut exact que `troopOf` évite côté
+ * camps, et celui qu'un `POI_EMO` recopié avait déjà produit (v0.853).
+ */
+export function riftFoeIdentity(
+  faction: RaidFaction,
+  index: number,
+  isBoss: boolean,
+): { name: string; emoji: string } {
+  const roster = factionRoster(faction);
+  const pick = roster[index % roster.length]!;
+  return { name: isBoss ? `${pick.name} (gardien)` : pick.name, emoji: pick.emoji };
+}
+
 /** Un monstre de la faille (ou son boss), nommé dans le roster de sa faction. */
 export function riftFoe(level: number, faction: RaidFaction, index: number, isBoss: boolean) {
   const base = riftFoeBase(level);
-  const roster = factionRoster(faction);
-  const pick = roster[index % roster.length]!;
+  const id = riftFoeIdentity(faction, index, isBoss);
   // ⚠️ LA RAMPE NE S'APPLIQUE PAS AU GARDIEN : sa force, c'est son POIDS. Mesuré en la lui
   // appliquant aussi (il se retrouvait à 5,8× un monstre de base) : il décidait de TOUT, et
   // une faille jeune tombait de 0,97 à 0,15 de nettoyage — le nombre de monstres redevenait
@@ -431,8 +462,8 @@ export function riftFoe(level: number, faction: RaidFaction, index: number, isBo
   const ramp = isBoss ? 1 : riftRamp(riftDepth(index));
   const w = isBoss ? RIFT_RUN.bossWeight : 1;
   return {
-    name: isBoss ? `${pick.name} (gardien)` : pick.name,
-    emoji: pick.emoji,
+    name: id.name,
+    emoji: id.emoji,
     pv: Math.max(1, Math.round(base.pv * w * ramp)),
     damage: Math.max(1, Math.round(base.damage * ramp * (isBoss ? 1 + (w - 1) * 0.3 : 1))),
     crit: 0.08,
@@ -468,6 +499,9 @@ export function simulateIncursion(
   let pv = maxPv;
   let killed = 0;
   const journal: string[] = [];
+  // ⚠️ AUCUN CALCUL N'EN DÉPEND : on ne fait qu'inscrire ce que le combat a déjà décidé
+  // (un test de non-régression l'exige — même issue, mêmes abattus, mêmes PV finaux).
+  const pvTrail: number[] = [];
 
   for (let i = 0; i < population; i++) {
     const foe = riftFoe(rift.level, faction, i, false);
@@ -480,11 +514,22 @@ export function simulateIncursion(
     if (res.log.length) pv = res.log.at(-1)!.playerPv;
     if (!res.win) {
       journal.push(`💀 ${foe.emoji} ${foe.name} a eu le dernier mot.`);
-      return { cleared: false, killed, population, bossDown: false, finalPv: 0, journal };
+      pvTrail.push(0);
+      return {
+        cleared: false,
+        killed,
+        population,
+        bossDown: false,
+        finalPv: 0,
+        journal,
+        maxPv,
+        pvTrail,
+      };
     }
     killed++;
     journal.push(`⚔️ ${foe.emoji} ${foe.name} abattu.`);
     pv = Math.min(maxPv, pv + Math.round(maxPv * RIFT_RUN.regen));
+    pvTrail.push(pv);
   }
 
   journal.push('🚪 La porte du gardien s’ouvre.');
@@ -498,6 +543,7 @@ export function simulateIncursion(
   journal.push(
     res.win ? `🏆 ${boss.name} tombe — la faille se referme.` : `💀 ${boss.name} tient.`,
   );
+  pvTrail.push(res.win ? Math.max(0, pv) : 0);
   return {
     cleared: res.win,
     killed,
@@ -505,6 +551,8 @@ export function simulateIncursion(
     bossDown: res.win,
     finalPv: res.win ? Math.max(0, pv) : 0,
     journal,
+    maxPv,
+    pvTrail,
   };
 }
 
@@ -632,6 +680,9 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
     advGear: [],
     wages: caravanWages(escort, poi),
     journal: run.journal,
+    // ⚠️ De quoi REJOUER, jamais de quoi recalculer : la mise en scène lit ces nombres,
+    // elle n'en produit aucun (règle fondatrice de `arenaStage` et `siegeStage`).
+    rift: { level: poi.level, maxPv: run.maxPv, pvTrail: run.pvTrail },
   };
 
   const tag = `${run.killed}/${run.population} abattus · +${mana} 💠`;

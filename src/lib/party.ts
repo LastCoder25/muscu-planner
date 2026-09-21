@@ -317,6 +317,11 @@ export interface PartyReport {
   pieces: number;
   factionLabel: string;
   factionEmoji: string;
+  /** ⚠️ Une INCURSION de faille, pas un camp. Dérivé de la seule source possible
+   *  (`party.rift`) : le rapport disait « camp pris » quand on refermait une faille. */
+  isRift: boolean;
+  /** Ce qui s'est passé, dans les mots du lieu. */
+  verdict: string;
   slain: number;
   foes: number;
   heroKills: number;
@@ -350,6 +355,14 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
     pieces: party.advGear.length,
     factionLabel: FACTION_LABEL[party.faction],
     factionEmoji: FACTION_EMOJI[party.faction],
+    isRift: !!party.rift,
+    verdict: party.rift
+      ? party.win
+        ? 'faille refermée'
+        : 'la faille tient'
+      : party.win
+        ? 'camp pris'
+        : 'repoussé',
     slain: party.slain,
     foes: party.foes,
     heroKills: party.heroKills,
