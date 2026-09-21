@@ -43,6 +43,7 @@ import {
   settleOutfit,
   wornGear,
   grantGearXp,
+  gachaGearPiece,
   type AdvGear,
 } from '@/lib/advGear';
 
@@ -1000,5 +1001,23 @@ describe('🎓 l’équipement apprend avec son porteur (v0.1014)', () => {
     const stock = [piece('p', { level: 10 })];
     expect(grantGearXp(stock, [a], {})).toBe(stock);
     expect(grantGearXp(stock, [a], { a: 0 })).toBe(stock);
+  });
+});
+
+describe('🎰 une pièce de gacha tire SA lettre (v0.1015)', () => {
+  it('⚠️ des pièces A et S sortent du gacha, aux taux des pièces', () => {
+    // Le gacha est la seule vraie source de pièces : forcé à B, aucune A ni S n'existait.
+    const advs = [adv('a', ['guerrier'])];
+    const c: Record<string, number> = { B: 0, A: 0, S: 0 };
+    const rng = mulberry32(11);
+    for (let i = 0; i < 20000; i++) c[gachaGearPiece(rng, advs, 30).grade]!++;
+    expect(c.A! / 20000).toBeGreaterThan(0.04);
+    expect(c.A! / 20000).toBeLessThan(0.065);
+    expect(c.S! / 20000).toBeGreaterThan(0.003);
+    expect(c.S! / 20000).toBeLessThan(0.01);
+    expect(c.B! / 20000).toBeGreaterThan(0.92);
+  });
+  it('un vivier vide rend quand même une pièce (lignée du roster)', () => {
+    expect(gachaGearPiece(mulberry32(3), [], 10).lineage).toBeTypeOf('string');
   });
 });

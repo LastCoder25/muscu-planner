@@ -164,10 +164,9 @@ import {
   advGearRoles,
   advGearSellValue,
   canWearAdvGear,
-  rollAdvGear,
-  rollAdvGearDrop,
   advGearModelOf,
   grantGearXp,
+  gachaGearPiece,
   lineageOf,
   normalizeAdvGearState,
   outfitFromItem,
@@ -209,7 +208,6 @@ import {
 } from '@/lib/gacha';
 import { levelUpTickets, pullPayment } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
-import { CHAMPIONS } from '@/data/champions';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGoldFx } from '@/composables/useGoldFx';
 
@@ -1082,10 +1080,11 @@ export const useCharacterStore = defineStore('character', () => {
         manaBack += g.manaBack;
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
-        const piece = gachaPiece(advs, playerLevel);
+        // 🎰 La pièce tire SA lettre (`gachaGearPiece`) : l'écran montre celle de la pièce.
+        const piece = gachaGearPiece(Math.random, advs, playerLevel);
         pieces.push(piece);
         results.push({
-          grade: r.grade,
+          grade: piece.grade,
           champion: null,
           gear: { name: piece.name, emoji: piece.emoji, model: advGearModelOf(piece) },
           duplicate: false,
@@ -1102,22 +1101,6 @@ export const useCharacterStore = defineStore('character', () => {
       ...(pieces.length ? { adv_gear: withAdvGear(cur, pieces) } : {}),
     });
     return results;
-  }
-
-  /** La pièce d'un B. ⚠️ Chance 1 : le tirage a DÉJÀ décidé qu'il y a une pièce. */
-  function gachaPiece(advs: Adventurer[], playerLevel: number): Omit<AdvGear, 'id'> {
-    const lvl = Math.max(1, playerLevel);
-    const drop = rollAdvGearDrop(Math.random, advs, {
-      chance: 1,
-      level: lvl,
-      luck: 0,
-      playerLevel: lvl,
-      // Un tirage B rend une pièce B : la lettre du tirage EST celle de la pièce.
-      grade: 'B',
-    });
-    if (drop) return drop;
-    const lineage = CHAMPIONS[Math.floor(Math.random() * CHAMPIONS.length)]!.lineage;
-    return rollAdvGear(Math.random, { lineage, level: lvl, playerLevel: lvl, grade: 'B' });
   }
 
   /** Un tirage à l'unité. */

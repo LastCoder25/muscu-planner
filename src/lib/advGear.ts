@@ -26,7 +26,7 @@ import {
   type WeaponKind,
 } from './items';
 import { GACHA_RATES } from './gacha';
-import { GRADE_COLOR, PULL_GRADES, type PullGrade } from '../data/champions';
+import { CHAMPIONS, GRADE_COLOR, PULL_GRADES, type PullGrade } from '../data/champions';
 import { advGearModelId, advGearModelName } from '../data/advGearModels';
 import {
   advAvatar,
@@ -911,6 +911,29 @@ export function rollAdvGearDrop(
     ...(opts.grade ? { grade: opts.grade } : {}),
   });
   return capAdvGearToWearable(piece, cap);
+}
+
+/**
+ * 🎰 LA PIÈCE QU'UN TIRAGE B DU GACHA DONNE.
+ *
+ * ⚠️ SA LETTRE EST TIRÉE, PAS FORCÉE À B (v0.1015, demandé par l'utilisateur : le gacha est
+ * la SEULE source réelle de pièces, et aucune pièce A ou S ne pouvait en sortir). Elle suit
+ * la table des pièces hors gacha (`rollGearGrade` = `GACHA_RATES` : ~94 % B, ~5 % A,
+ * ~0,6 % S), sans pity. ⚠️ **PRISE SUR LES B, les chances de CHAMPION ne bougent pas** :
+ * un tirage A ou S donne toujours un champion, seul le fond B peut désormais briller.
+ * Chance 1 : le tirage a DÉJÀ décidé qu'il y a une pièce. Un vivier sans lignée (aucun
+ * champion) retombe sur une lignée du roster, pour ne jamais rendre du vide.
+ */
+export function gachaGearPiece(
+  rng: () => number,
+  advs: Adventurer[],
+  playerLevel: number,
+): Omit<AdvGear, 'id'> {
+  const lvl = Math.max(1, playerLevel);
+  const drop = rollAdvGearDrop(rng, advs, { chance: 1, level: lvl, luck: 0, playerLevel: lvl });
+  if (drop) return drop;
+  const lineage = CHAMPIONS[Math.floor(rng() * CHAMPIONS.length)]!.lineage;
+  return rollAdvGear(rng, { lineage, level: lvl, playerLevel: lvl });
 }
 
 /** Transforme un objet du héros en pièce d'aventurier, pour la CIBLE visée.
