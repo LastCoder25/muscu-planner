@@ -4,7 +4,12 @@ import { resolve } from 'node:path';
 import { mulberry32 } from '@/lib/combat';
 import { PULL_GRADES } from '@/data/champions';
 import { GACHA_RATES } from '@/lib/gacha';
-import { ADV_GEAR_MODELS, advGearArt, advGearModelName } from '@/data/advGearModels';
+import {
+  ADV_GEAR_MODELS,
+  ADV_GEAR_NO_ART,
+  advGearArt,
+  advGearModelName,
+} from '@/data/advGearModels';
 import {
   ADV_GEAR_SLOTS,
   GEAR_GRADE_SHARE,
@@ -35,8 +40,17 @@ describe('🗡️ le roster de l’équipement des champions', () => {
           ).toBe(true);
   });
 
-  it('chaque modèle a son illustration sur le disque (un nom sans image rougit ici)', () => {
-    for (const m of ADV_GEAR_MODELS) {
+  it('un modèle sans illustration n’en a AUCUNE — pas un fichier oublié qui s’afficherait', () => {
+    expect(ADV_GEAR_NO_ART.size).toBeLessThan(ADV_GEAR_MODELS.length / 5);
+    for (const id of ADV_GEAR_NO_ART) {
+      expect(ADV_GEAR_MODELS.some((m) => m.id === id), id).toBe(true);
+      expect(advGearArt(id), id).toBeNull();
+      expect(existsSync(resolve(__dirname, '../public/advgear', `${id}.webp`)), id).toBe(false);
+    }
+  });
+
+  it('chaque autre modèle a son illustration sur le disque (un nom sans image rougit ici)', () => {
+    for (const m of ADV_GEAR_MODELS.filter((x) => !ADV_GEAR_NO_ART.has(x.id))) {
       const src = advGearArt(m.id);
       expect(src, m.id).toBe(`/advgear/${m.id}.webp`);
       const file = resolve(__dirname, '../public', src!.slice(1));

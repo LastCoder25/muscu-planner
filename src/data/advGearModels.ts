@@ -99,6 +99,27 @@ export const ADV_GEAR_MODELS: readonly AdvGearModelDef[] = (
  *  ⚠️ Un test exige que CHAQUE modèle ait son fichier : un nom ajouté sans image rougit au
  *  test au lieu de s'afficher cassé en production. */
 const MODEL_IDS = new Set(ADV_GEAR_MODELS.map((m) => m.id));
+
+/**
+ * Modèles SANS illustration : ils gardent l'emoji de leur emplacement (🏹, 🦯).
+ * ⚠️ PAS D'ILLUSTRATION VAUT MIEUX QU'UNE ILLUSTRATION FAUSSE (même règle que les
+ * exercices sans animation fidèle) : le générateur dessine systématiquement une PERSONNE qui
+ * tient un arc ou un bâton — mesuré sur une dizaine de formulations (posé, debout, fiche de
+ * concept, vue à plat). Un arc qui s'affiche en portrait d'archère se lirait comme un bug.
+ * Exporté pour que le test exige qu'AUCUN fichier ne traîne pour eux.
+ */
+export const ADV_GEAR_NO_ART: ReadonlySet<string> = new Set([
+  'archer-weapon-b',
+  'archer-weapon-a',
+  'archer-weapon-s',
+  'archer-accessory-a',
+  'caravanier-weapon-b',
+  'caravanier-weapon-a',
+  'caravanier-weapon-s'
+]);
+
 export function advGearArt(modelId: string | null | undefined): string | null {
-  return modelId && MODEL_IDS.has(modelId) ? `/advgear/${modelId}.webp` : null;
+  return modelId && MODEL_IDS.has(modelId) && !ADV_GEAR_NO_ART.has(modelId)
+    ? `/advgear/${modelId}.webp`
+    : null;
 }
