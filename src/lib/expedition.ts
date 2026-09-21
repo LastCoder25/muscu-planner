@@ -6,6 +6,7 @@
 //
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
+import type { RiftBossReplay } from './rift';
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, ITEM_SETS, type Item } from './items';
@@ -173,6 +174,9 @@ export interface PartyResult {
     level: number;
     maxPv: number;
     pvTrail: number[];
+    /** Le duel contre le gardien (`bossReplaySteps`). Absent si la porte ne s'est pas
+     *  ouverte, ou d'un rapport d'avant la v0.998 : la scène retombe alors sur un seul coup. */
+    boss?: RiftBossReplay;
   };
 }
 

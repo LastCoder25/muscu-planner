@@ -30,7 +30,7 @@ import type { ExpeditionMessage, PartyResult } from './expedition';
 import { RIFT_MAX_PARTY, partyReport } from './party';
 import type { Adventurer } from './adventurers';
 import type { RaidFaction } from './raid';
-import { RIFT_RUN, riftDepth, riftFoeIdentity, riftRamp } from './rift';
+import { RIFT_RUN, riftDepth, riftFoeIdentity, riftRamp, type RiftBossReplay } from './rift';
 
 export const RIFT_STAGE = {
   /** Le premier et le dernier monstre, en fraction de la largeur du terrain. */
@@ -124,6 +124,8 @@ export interface RiftStageInput {
   pvTrail: readonly number[];
   /** Membres entrés dans la faille, héros compris. Absent → un seul (le rejeu d'avant). */
   partySize?: number;
+  /** Le duel contre le gardien, tour par tour. Absent → le gardien se joue en un coup. */
+  boss?: RiftBossReplay;
 }
 
 export interface RiftStage {
@@ -139,6 +141,12 @@ export interface RiftStage {
   hasPv: boolean;
   /** Membres sur le plateau (`riftPartySize`) — la formation en place autant. */
   partySize: number;
+  /**
+   * Le duel contre le gardien, temps par temps, ou `null` (porte fermée, ou rapport d'avant
+   * la v0.998). ⚠️ Les PV sont ceux du LOG, bornés à zéro pour l'affichage — la scène
+   * accélère le combat en regroupant des tours, elle ne réécrit jamais son issue.
+   */
+  boss: RiftBossReplay | null;
 }
 
 /**
@@ -164,6 +172,7 @@ export function riftStageInputOf(party: PartyResult): RiftStageInput | null {
     pvTrail: party.rift.pvTrail,
     // ⚠️ Lu dans le rapport, qui dit QUI est entré — jamais dans le vivier d'aujourd'hui.
     partySize: party.escort.length + (party.hero ? 1 : 0),
+    ...(party.rift.boss ? { boss: party.rift.boss } : {}),
   };
 }
 
@@ -296,6 +305,17 @@ export function buildRiftStage(input: RiftStageInput, seed: number): RiftStage {
     doorX: RIFT_STAGE.doorX,
     hasPv,
     partySize: size,
+    boss:
+      doorOpens && input.boss?.steps.length
+        ? {
+            maxPv: input.boss.maxPv,
+            steps: input.boss.steps.map((st) => ({
+              ...st,
+              pv: Math.max(0, st.pv),
+              bossPv: Math.max(0, st.bossPv),
+            })),
+          }
+        : null,
   };
 }
 

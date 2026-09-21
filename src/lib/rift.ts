@@ -58,6 +58,7 @@ import {
   offenseOf,
   seedOf,
   simulateCombat,
+  type CombatEvent,
   type CombatResult,
   survivalOf,
   type Combatant,
@@ -382,6 +383,87 @@ export interface RiftRun {
    * 30 messages.
    */
   pvTrail: number[];
+  /** Le duel contre le gardien, résumé pour le rejeu — absent si la porte ne s'est pas
+   *  ouverte. Même statut que `pvTrail` : il INSCRIT le combat, il ne décide rien. */
+  boss?: RiftBossReplay;
+}
+
+/** Un temps du duel contre le gardien : ce que le groupe a infligé, ce qu'il a encaissé,
+ *  et les PV des deux camps à la fin de ce temps (LUS dans le log, jamais recalculés). */
+export interface RiftBossStep {
+  dealt: number;
+  taken: number;
+  /** Un coup critique du groupe dans ce temps. */
+  crit: boolean;
+  /** Tours joués par chaque camp dans ce temps. ⚠️ Un tour = UN camp qui agit : sans ces
+   *  comptes, la scène ferait frapper les deux à chaque temps, et une attaque esquivée
+   *  (0 dégât) serait indiscernable d'un camp qui n'a pas joué. */
+  groupTurns: number;
+  bossTurns: number;
+  pv: number;
+  bossPv: number;
+}
+export interface RiftBossReplay {
+  maxPv: number;
+  steps: RiftBossStep[];
+}
+
+/** Au plus autant de temps dans le duel rejoué : ~10 tours d'un gardien se regardent,
+ *  40 se subissent. On REGROUPE des tours consécutifs, on n'en jette aucun. */
+export const RIFT_BOSS_STEPS = 8;
+
+/**
+ * Résume le log d'un combat en au plus `max` temps.
+ *
+ * ⚠️ **AUCUN DÉGÂT N'EST PERDU** : les tours sont regroupés par paquets consécutifs, la
+ * somme des dégâts d'un paquet est la somme de ses tours, et ses PV de fin sont ceux du
+ * dernier événement du paquet. La fin du duel rejoué est donc EXACTEMENT celle du combat
+ * (un test le vérifie) — la mise en scène peut accélérer, jamais arrondir l'issue.
+ */
+export function bossReplaySteps(log: readonly CombatEvent[], max: number): RiftBossStep[] {
+  // Un tour = les événements d'un même `round` (une frappe multiple en fait plusieurs).
+  const turns: RiftBossStep[] = [];
+  let cur = -1;
+  for (const e of log) {
+    if (e.round !== cur) {
+      cur = e.round;
+      turns.push({
+        dealt: 0,
+        taken: 0,
+        crit: false,
+        groupTurns: e.who === 'player' ? 1 : 0,
+        bossTurns: e.who === 'player' ? 0 : 1,
+        pv: e.playerPv,
+        bossPv: e.monsterPv,
+      });
+    }
+    const t = turns[turns.length - 1]!;
+    if (e.who === 'player') t.dealt += e.damage;
+    else t.taken += e.damage;
+    if (e.who === 'player' && e.type === 'crit') t.crit = true;
+    t.pv = e.playerPv;
+    t.bossPv = e.monsterPv;
+  }
+  const n = Math.max(1, Math.floor(max));
+  if (turns.length <= n) return turns;
+  const out: RiftBossStep[] = [];
+  for (let i = 0; i < n; i++) {
+    const chunk = turns.slice(
+      Math.floor((i * turns.length) / n),
+      Math.floor(((i + 1) * turns.length) / n),
+    );
+    const last = chunk[chunk.length - 1]!;
+    out.push({
+      dealt: chunk.reduce((s, t) => s + t.dealt, 0),
+      taken: chunk.reduce((s, t) => s + t.taken, 0),
+      crit: chunk.some((t) => t.crit),
+      groupTurns: chunk.reduce((s, t) => s + t.groupTurns, 0),
+      bossTurns: chunk.reduce((s, t) => s + t.bossTurns, 0),
+      pv: last.pv,
+      bossPv: last.bossPv,
+    });
+  }
+  return out;
 }
 
 /**
@@ -544,7 +626,12 @@ export function simulateIncursion(
     res.win ? `🏆 ${boss.name} tombe — la faille se referme.` : `💀 ${boss.name} tient.`,
   );
   pvTrail.push(res.win ? Math.max(0, pv) : 0);
+  const bossReplay: RiftBossReplay = {
+    maxPv: boss.pv,
+    steps: bossReplaySteps(res.log, RIFT_BOSS_STEPS),
+  };
   return {
+    boss: bossReplay,
     cleared: res.win,
     killed,
     population,
@@ -682,7 +769,12 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
     journal: run.journal,
     // ⚠️ De quoi REJOUER, jamais de quoi recalculer : la mise en scène lit ces nombres,
     // elle n'en produit aucun (règle fondatrice de `arenaStage` et `siegeStage`).
-    rift: { level: poi.level, maxPv: run.maxPv, pvTrail: run.pvTrail },
+    rift: {
+      level: poi.level,
+      maxPv: run.maxPv,
+      pvTrail: run.pvTrail,
+      ...(run.boss ? { boss: run.boss } : {}),
+    },
   };
 
   const tag = `${run.killed}/${run.population} abattus · +${mana} 💠`;

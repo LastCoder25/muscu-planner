@@ -22,6 +22,8 @@ import {
   simulateIncursion,
 } from '@/lib/rift';
 import { EXPE, type ExpeditionMessage, type PartyResult, type Poi } from '@/lib/expedition';
+import { RIFT_BOSS_STEPS, bossReplaySteps } from '@/lib/rift';
+import type { CombatEvent } from '@/lib/combat';
 import { fuseUnits } from '@/lib/skirmish';
 import { refEscortUnits } from '@/lib/caravan';
 
@@ -468,3 +470,135 @@ function partyResult(): PartyResult {
     rift: { level: 26, maxPv: 900, pvTrail: [800, 700, 600, 500, 400, 300] },
   };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🐉 LE DUEL CONTRE LE GARDIEN — enregistré pour être rejoué tel qu'il a eu lieu
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('le duel contre le gardien', () => {
+  const ev = (
+    round: number,
+    who: 'player' | 'monster',
+    damage: number,
+    p: number,
+    b: number,
+    crit = false,
+  ): CombatEvent => ({
+    round,
+    who,
+    type: crit ? 'crit' : 'hit',
+    damage,
+    playerPv: p,
+    monsterPv: b,
+  });
+  // 12 tours alternés, avec une frappe multiple au tour 3.
+  const log: CombatEvent[] = [];
+  let p = 1000;
+  let b = 2400;
+  for (let r = 1; r <= 12; r++) {
+    if (r % 2) {
+      b -= 150;
+      log.push(ev(r, 'player', 150, p, b, r === 5));
+      if (r === 3) {
+        b -= 90;
+        log.push(ev(r, 'player', 90, p, b));
+      }
+    } else {
+      p -= 70;
+      log.push(ev(r, 'monster', 70, p, b));
+    }
+  }
+  const dealt = log.filter((e) => e.who === 'player').reduce((s, e) => s + e.damage, 0);
+  const taken = log.filter((e) => e.who === 'monster').reduce((s, e) => s + e.damage, 0);
+
+  it('un tour par temps quand il y en a peu — une frappe multiple reste UN tour', () => {
+    const steps = bossReplaySteps(log, 20);
+    expect(steps).toHaveLength(12);
+    expect(steps[2]!.dealt).toBe(240);
+  });
+
+  it('regroupe au-delà du plafond SANS perdre un seul dégât', () => {
+    const steps = bossReplaySteps(log, 5);
+    expect(steps).toHaveLength(5);
+    expect(steps.reduce((s, x) => s + x.dealt, 0)).toBe(dealt);
+    expect(steps.reduce((s, x) => s + x.taken, 0)).toBe(taken);
+  });
+
+  it('la fin du duel rejoué est EXACTEMENT celle du combat', () => {
+    for (const max of [3, 5, 8, 20]) {
+      const last = bossReplaySteps(log, max).at(-1)!;
+      expect(last.pv).toBe(log.at(-1)!.playerPv);
+      expect(last.bossPv).toBe(log.at(-1)!.monsterPv);
+    }
+  });
+
+  it('les PV ne remontent jamais d’un temps à l’autre côté gardien', () => {
+    const steps = bossReplaySteps(log, 5);
+    for (let i = 1; i < steps.length; i++)
+      expect(steps[i]!.bossPv).toBeLessThanOrEqual(steps[i - 1]!.bossPv);
+  });
+
+  it('chaque temps dit QUI a joué — un tour est celui d’un seul camp', () => {
+    const steps = bossReplaySteps(log, 20);
+    expect(steps[0]).toMatchObject({ groupTurns: 1, bossTurns: 0 });
+    expect(steps[1]).toMatchObject({ groupTurns: 0, bossTurns: 1 });
+    // Regroupés, les comptes s'additionnent : 6 tours de chaque camp en tout.
+    const five = bossReplaySteps(log, 5);
+    expect(five.reduce((s, x) => s + x.groupTurns, 0)).toBe(6);
+    expect(five.reduce((s, x) => s + x.bossTurns, 0)).toBe(6);
+  });
+
+  it('un critique du groupe reste visible dans le temps qui le contient', () => {
+    expect(bossReplaySteps(log, 20)[4]!.crit).toBe(true);
+    expect(bossReplaySteps(log, 5).some((s) => s.crit)).toBe(true);
+    expect(bossReplaySteps(log, 20)[0]!.crit).toBe(false);
+  });
+
+  it('une vraie incursion enregistre son duel SEULEMENT si la porte s’est ouverte', () => {
+    const party = () => fuseUnits(refEscortUnits(26), 'Groupe');
+    let withBoss = 0;
+    let without = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const run = simulateIncursion(party(), rift(), at(6), seed);
+      const doorOpened = run.killed === run.population;
+      expect(!!run.boss).toBe(doorOpened);
+      if (!run.boss) {
+        without++;
+        continue;
+      }
+      withBoss++;
+      expect(run.boss.steps.length).toBeLessThanOrEqual(RIFT_BOSS_STEPS);
+      // Le duel finit là où le sillage finit : gagné → PV restants, perdu → 0.
+      expect(Math.max(0, run.boss.steps.at(-1)!.pv)).toBe(run.pvTrail.at(-1));
+      expect(run.boss.steps.at(-1)!.bossPv <= 0).toBe(run.cleared);
+    }
+    expect(withBoss).toBeGreaterThan(0);
+    expect(without + withBoss).toBe(40);
+  });
+
+  it('la scène reçoit le duel, borné à zéro — et rien si la porte est restée close', () => {
+    const boss = {
+      maxPv: 500,
+      steps: [
+        { dealt: 520, taken: 0, crit: true, groupTurns: 1, bossTurns: 0, pv: 300, bossPv: -20 },
+      ],
+    };
+    const open = buildRiftStage(input({ population: 3, killed: 3, boss }), 1);
+    expect(open.boss?.steps[0]!.bossPv).toBe(0);
+    expect(open.boss?.maxPv).toBe(500);
+    const closed = buildRiftStage(input({ population: 3, killed: 1, cleared: false, boss }), 1);
+    expect(closed.boss).toBeNull();
+    expect(buildRiftStage(input(), 1).boss).toBeNull();
+  });
+
+  it('le rapport transporte le duel jusqu’à la scène', () => {
+    const boss = {
+      maxPv: 500,
+      steps: [
+        { dealt: 500, taken: 0, crit: false, groupTurns: 1, bossTurns: 0, pv: 300, bossPv: 0 },
+      ],
+    };
+    const r = partyResult();
+    expect(riftStageInputOf({ ...r, rift: { ...r.rift!, boss } })!.boss).toEqual(boss);
+  });
+});

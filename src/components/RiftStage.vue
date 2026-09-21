@@ -13,7 +13,7 @@
       <div class="field" :style="{ width: CAM_W * 100 + '%', transform: `translateX(${camPct}%)` }">
         <div class="ground" />
         <div class="ceil" />
-        <div class="breach" />
+        <div class="breach" :class="{ sealing: sealed }" />
 
         <!-- La porte du gardien : fermée tant qu'un monstre tient debout. -->
         <div class="door" :class="{ open: doorOpen }" :style="{ left: stage.doorX * 100 + '%' }">
@@ -39,6 +39,9 @@
             boss: f.boss,
             target: i === targetIdx,
             hurt: hurtIdx === i,
+            [bossFx]: f.boss && !!bossFx,
+            dormant: f.boss && bossDormant,
+            enraged: f.boss && enraged,
           }"
           :style="{
             left: f.x * 100 + '%',
@@ -82,6 +85,15 @@
           </div>
         </div>
 
+        <!-- Ondes de choc : le rugissement du gardien, et ses coups qui balaient le groupe. -->
+        <span
+          v-for="w in waves"
+          :key="w.id"
+          class="wave"
+          :class="'wave-' + w.kind"
+          :style="{ left: w.x * 100 + '%', top: w.y * 100 + '%' }"
+        />
+
         <!-- Arc de lame, éclats de mort, nombres flottants. -->
         <span
           v-for="s in slashes"
@@ -112,6 +124,11 @@
     </div>
 
     <div class="vig" :style="{ opacity: hitVig }" aria-hidden="true" />
+    <div class="flash" :class="flash" aria-hidden="true" />
+    <!-- Bandes de cinéma : le duel contre le gardien est un moment à part. -->
+    <div class="bars" :class="{ on: cinema }" aria-hidden="true">
+      <span class="bar top" /><span class="bar bot" />
+    </div>
 
     <!-- HUD : ce qu'on a abattu, et ce qu'il reste au groupe. -->
     <div class="hud">
@@ -121,6 +138,17 @@
       </div>
       <q-btn flat dense no-caps class="skip" label="⏩ Passer" @click="skip" />
     </div>
+
+    <!-- La vie du gardien : les VRAIES valeurs du duel (stage.boss), temps par temps. -->
+    <transition name="bb">
+      <div v-if="bossBar" class="bossbar" :class="{ enraged }">
+        <div class="bb-name font-display">{{ bossBar.emoji }} {{ bossBar.name }}</div>
+        <div class="bb-track">
+          <i class="ghost" :style="{ width: bossGhost + '%' }" />
+          <i class="fill" :style="{ width: bossPct + '%' }" />
+        </div>
+      </div>
+    </transition>
 
     <div v-if="stage.hasPv" class="pvbar">
       <i class="ghost" :style="{ width: ghostPct + '%' }" />
@@ -172,9 +200,10 @@
 // PV du moteur : chaque rencontre ARRIVE exactement sur le PV lu dans le sillage. On ne
 // connaît pas le détail coup par coup (granularité de rencontre), et on ne l'invente pas —
 // c'est pourquoi les monstres n'ont AUCUNE barre de vie individuelle : debout, ou à terre.
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, type Ref } from 'vue';
 import type { Equipped } from '@/lib/items';
 import { RIFT_STAGE, type RiftCastMember, type RiftStage } from '@/lib/riftStage';
+import type { RiftBossStep } from '@/lib/rift';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 
@@ -235,7 +264,7 @@ function memberPos(k: number): { x: number; y: number } {
 /** Où le GROUPE se poste face à une cible : un peu en retrait, plus loin du gardien (il
  *  est plus gros, et l'éventail doit pouvoir se refermer sur lui). */
 function standOff(foe: { x: number; boss: boolean }): number {
-  return Math.max(0.02, foe.x - (foe.boss ? 0.16 : 0.09));
+  return Math.max(0.02, foe.x - (foe.boss ? 0.12 : 0.09));
 }
 
 /**
@@ -273,6 +302,42 @@ const hitVig = ref(0);
 const doorOpen = ref(false);
 const ended = ref(false);
 const killCount = ref(0);
+
+// ── Le duel contre le gardien ──
+// ⚠️ Tout ce qui suit PEINT `stage.boss` (les vrais PV des deux camps, temps par temps) ;
+// rien n'y est tiré au sort. Sans duel enregistré (rapport d'avant la v0.998), le gardien
+// se joue en un seul coup, comme avant.
+/** Le gardien sommeille au fond de la salle tant que le duel n'a pas commencé. */
+const bossDormant = ref(!!props.stage.boss);
+/** Animation ponctuelle du gardien : entrée, rugissement, frappe, coup reçu, éclatement. */
+const bossFx = ref('');
+/** Sous le tiers de sa vie, le gardien enrage — aura rouge, respiration plus rapide. */
+const enraged = ref(false);
+/** La faille se referme : la déchirure du fond s'éteint. */
+const sealed = ref(false);
+/** Bandes de cinéma pendant le duel. */
+const cinema = ref(false);
+/** Éclair plein écran : blanc sur un critique ou le coup fatal, rouge sur un gros coup reçu. */
+const flash = ref('');
+const bossBar = ref<{ emoji: string; name: string } | null>(null);
+const bossPvShown = ref(props.stage.boss?.maxPv ?? 0);
+const bossGhost = ref(100);
+const waves = ref<{ id: number; x: number; y: number; kind: string }[]>([]);
+const bossPct = computed(() => {
+  const max = props.stage.boss?.maxPv ?? 0;
+  return max > 0 ? Math.max(0, Math.min(100, (bossPvShown.value / max) * 100)) : 0;
+});
+/** Sous cette part de sa vie, le gardien enrage. */
+const ENRAGE_AT = 0.35;
+// Rythme du duel (ms). Un temps = le groupe frappe, puis le gardien riposte.
+const BOSS_INTRO = 1700;
+/** Le groupe frappe (élans échelonnés + impact). */
+const BOSS_GROUP_MS = 760;
+/** Le gardien riposte (bond + onde + impact). */
+const BOSS_RIPOSTE_MS = 720;
+/** Un souffle entre deux temps. */
+const BOSS_BREATH_MS = 180;
+const BOSS_FINALE = 2300;
 
 const pops = ref<{ id: number; x: number; y: number; text: string; kind: string }[]>([]);
 const slashes = ref<{ id: number; x: number; y: number }[]>([]);
@@ -357,6 +422,7 @@ function play(): void {
 
   const foe = props.stage.foes[b.foe];
   if (!foe) return stop();
+  if (b.kind === 'boss' && props.stage.boss) return playBoss(b, foe);
 
   targetIdx.value = b.foe;
   // Le groupe avance derrière sa cible ; celui dont c'est le tour fonce dessus. Le
@@ -415,6 +481,183 @@ function play(): void {
   timer = setTimeout(play, reduce ? 0 : beatMs.value + extra);
 }
 
+/** Un effet ponctuel qui s'éteint seul. */
+function pulse(target: Ref<string>, value: string, ms: number) {
+  target.value = value;
+  later(() => {
+    if (target.value === value) target.value = '';
+  }, ms);
+}
+
+function wave(x: number, y: number, kind: 'roar' | 'hit') {
+  const id = ++uid;
+  waves.value.push({ id, x, y, kind });
+  later(() => (waves.value = waves.value.filter((w) => w.id !== id)), 900);
+}
+
+/** Tous les membres, encore debout, sur le gardien. */
+function allMembers(): number[] {
+  return props.cast.map((_, k) => k);
+}
+
+/** Le groupe encercle le gardien et frappe, un membre après l'autre. */
+function groupStrike(
+  step: RiftBossStep,
+  foe: { x: number; y: number },
+  members: number[],
+  maxPv: number,
+) {
+  dashTo(members, foe, true, 0.08);
+  members.forEach((k, j) => {
+    later(() => {
+      lunges.value = new Set([k]);
+      const sid = ++uid;
+      slashes.value.push({ id: sid, x: foe.x, y: foe.y + (j - 1) * 0.05 });
+      later(() => (slashes.value = slashes.value.filter((s) => s.id !== sid)), 320);
+    }, j * 130);
+  });
+  later(
+    () => {
+      lunges.value = new Set();
+      if (step.dealt <= 0) {
+        pop(foe.x, foe.y - 0.14, 'Esquivé', 'miss');
+        return;
+      }
+      pulse(bossFx, 'hit', 280);
+      pop(foe.x, foe.y - 0.14, `−${step.dealt}`, step.crit ? 'crit' : 'dmg');
+      if (step.crit) {
+        pop(foe.x, foe.y - 0.22, 'CRITIQUE', 'crit');
+        pulse(flash, 'white', 160);
+      }
+      bossPvShown.value = step.bossPv;
+      later(() => (bossGhost.value = bossPct.value), 420);
+      if (!enraged.value && step.bossPv > 0 && step.bossPv < maxPv * ENRAGE_AT) {
+        enraged.value = true;
+        say('rage', '🔥 Le gardien enrage', '');
+      }
+    },
+    members.length * 130 + 60,
+  );
+}
+
+/** Le gardien riposte : il bondit, son onde balaie le groupe. */
+function bossRiposte(step: RiftBossStep, pvBefore: number, foe: { x: number; y: number }) {
+  pulse(bossFx, 'strike', 420);
+  wave(foe.x, foe.y, 'hit');
+  later(() => {
+    const lost = Math.max(0, pvBefore - step.pv);
+    if (step.taken <= 0) {
+      pop(heroX.value, AXIS_Y - 0.16, 'Esquivé', 'miss');
+    } else {
+      partyHurt.value = true;
+      later(() => (partyHurt.value = false), 260);
+      shake.value = 'sh-m';
+      later(() => (shake.value = ''), 300);
+      if (props.stage.hasPv && lost > 0) {
+        pop(heroX.value, AXIS_Y - 0.16, `−${lost}`, 'dmg');
+        hitVig.value = Math.min(0.55, (lost / Math.max(1, props.stage.maxPv)) * 1.6);
+        later(() => (hitVig.value = 0), 360);
+        if (lost > props.stage.maxPv * 0.12) pulse(flash, 'red', 180);
+      }
+    }
+    if (props.stage.hasPv) {
+      pv.value = step.pv;
+      later(() => (ghostPct.value = pvPct.value), 380);
+    }
+  }, 200);
+}
+
+/**
+ * 🐉 LE DUEL — une séquence à part, pilotée par `stage.boss`.
+ *
+ * 1. **L'entrée** : bandes de cinéma, la caméra se pose sur la salle, le gardien se dresse
+ *    de l'autel et rugit (onde de choc, secousse), sa barre de vie apparaît.
+ * 2. **Les échanges** : à chaque temps, les membres frappent l'un après l'autre (la barre
+ *    du gardien descend du VRAI montant), puis il riposte (onde qui balaie le groupe, la
+ *    barre du groupe descend du vrai montant). Il enrage sous le tiers de sa vie.
+ * 3. **Le dénouement** : coup fatal au ralenti puis éclatement et fermeture de la faille —
+ *    ou le groupe qui tombe sous le dernier coup.
+ */
+function playBoss(b: (typeof beats.value)[number], foe: (typeof props.stage.foes)[number]) {
+  const duel = props.stage.boss!;
+  const members = allMembers();
+  targetIdx.value = b.foe;
+  heroX.value = standOff(foe);
+  camX.value = (heroX.value + foe.x) / 2;
+  cinema.value = true;
+
+  // 1. L'entrée.
+  later(() => {
+    bossDormant.value = false;
+    pulse(bossFx, 'rise', 900);
+  }, 250);
+  later(() => {
+    pulse(bossFx, 'roar', 700);
+    wave(foe.x, foe.y, 'roar');
+    shake.value = 'sh-l';
+    later(() => (shake.value = ''), 420);
+    bossBar.value = { emoji: foe.emoji, name: foe.name };
+    say('boss', `${foe.emoji} ${foe.name}`, 'Le gardien de la faille');
+  }, 1000);
+
+  // 2. Les échanges. ⚠️ Un temps n'est pas forcément « chacun son tour » : il porte les
+  // tours RÉELLEMENT joués par chaque camp (`groupTurns`, `bossTurns`). Le camp qui n'a pas
+  // joué ne bouge pas, et une attaque à 0 dégât s'affiche « Esquivé ».
+  let t = BOSS_INTRO;
+  let before = b.pvBefore;
+  for (const [i, step] of duel.steps.entries()) {
+    const pvBefore = before;
+    const groupMs = step.groupTurns > 0 ? BOSS_GROUP_MS : 0;
+    if (step.groupTurns > 0) later(() => groupStrike(step, foe, members, duel.maxPv), t);
+    // La riposte — seulement s'il est encore debout.
+    if (step.bossTurns > 0 && step.bossPv > 0)
+      later(() => bossRiposte(step, pvBefore, foe), t + groupMs);
+    else if (props.stage.hasPv) later(() => (pv.value = step.pv), t + groupMs);
+    before = step.pv;
+    const bossMs = step.bossTurns > 0 && step.bossPv > 0 ? BOSS_RIPOSTE_MS : 0;
+    t += groupMs + bossMs + (i === duel.steps.length - 1 ? 0 : BOSS_BREATH_MS);
+  }
+
+  // 3. Le dénouement.
+  if (b.down) {
+    // Le coup fatal : tous ensemble sur lui, un temps suspendu, puis l'éclatement.
+    later(() => {
+      dashTo(members, foe, true, 0.08);
+      lunges.value = new Set(members);
+      later(() => (lunges.value = new Set()), 240);
+    }, t + 80);
+    later(() => {
+      pulse(flash, 'white', 200);
+      // Pas de `pulse` : dissous, il le RESTE — sinon il reviendrait grisé au sol.
+      bossFx.value = 'shatter';
+      downs.value = new Set(downs.value).add(b.foe);
+      for (let k = 0; k < 3; k++) later(() => burst(foe.x, foe.y), k * 140);
+      shake.value = 'sh-l';
+      later(() => (shake.value = ''), 500);
+      bossPvShown.value = 0;
+    }, t + 460);
+    later(() => {
+      sealed.value = true;
+      bossBar.value = null;
+      say('seal', '🌀 La faille se referme', '');
+    }, t + 1250);
+  } else {
+    later(() => {
+      pulse(bossFx, 'roar', 700);
+      wave(foe.x, foe.y, 'roar');
+      hurtIdx.value = b.foe;
+      wiped.value = true;
+      shake.value = 'sh-l';
+      later(() => (shake.value = ''), 420);
+      say('fall', `${foe.emoji} Le gardien tient`, 'Le groupe est tombé');
+    }, t + 300);
+  }
+  later(() => (cinema.value = false), t + BOSS_FINALE - 300);
+
+  cursor.value++;
+  timer = setTimeout(play, t + BOSS_FINALE);
+}
+
 /** Saute à l'état final — aussi le chemin de `prefers-reduced-motion`. */
 function skip(): void {
   if (timer) clearTimeout(timer);
@@ -446,6 +689,21 @@ function skip(): void {
     camX.value = heroX.value;
   }
   ghostPct.value = pvPct.value;
+  // Le duel, à son état final : barre au dernier PV, faille scellée si elle l'est.
+  const duel = props.stage.boss;
+  waves.value = [];
+  // Un gardien vaincu dans le duel reste dissous (cf. le dénouement).
+  bossFx.value = duel && props.stage.cleared ? 'gone' : '';
+  flash.value = '';
+  cinema.value = false;
+  bossDormant.value = false;
+  if (duel) {
+    bossPvShown.value = duel.steps.at(-1)?.bossPv ?? duel.maxPv;
+    bossGhost.value = bossPct.value;
+    enraged.value = bossPvShown.value > 0 && bossPvShown.value < duel.maxPv * ENRAGE_AT;
+  }
+  sealed.value = props.stage.cleared;
+  bossBar.value = null;
   cursor.value = beats.value.length;
   stop();
 }
@@ -1079,5 +1337,265 @@ onBeforeUnmount(() => {
 .end-cta {
   min-height: 44px;
   padding: 0 18px;
+}
+
+/* ── 🐉 LE DUEL CONTRE LE GARDIEN ─────────────────────────────────────────── */
+/* ⚠️ `.foe` porte déjà `transform: translate(-50%, -50%) scale(var(--sc))` : chaque
+   animation du gardien le REPREND, sinon il sauterait hors de sa place. */
+.foe.boss.dormant {
+  filter: brightness(0.35) saturate(0.4);
+  transform: translate(-50%, -40%) scale(calc(var(--sc) * 0.72));
+}
+.foe.boss.dormant .aura {
+  opacity: 0.25;
+}
+.foe.boss.rise {
+  animation: bossRise 0.9s cubic-bezier(0.2, 0.9, 0.2, 1.2);
+}
+@keyframes bossRise {
+  0% {
+    transform: translate(-50%, -30%) scale(calc(var(--sc) * 0.4));
+    filter: brightness(3) saturate(0);
+  }
+  60% {
+    transform: translate(-50%, -58%) scale(calc(var(--sc) * 1.18));
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(var(--sc));
+    filter: none;
+  }
+}
+.foe.boss.roar {
+  animation: bossRoar 0.7s ease-out;
+}
+@keyframes bossRoar {
+  25% {
+    transform: translate(-50%, -54%) scale(calc(var(--sc) * 1.22));
+    filter: drop-shadow(0 0 18px var(--d4)) brightness(1.3);
+  }
+}
+/* Il frappe VERS le groupe (à gauche), puis revient. */
+.foe.boss.strike {
+  animation: bossStrike 0.42s cubic-bezier(0.5, 0, 0.2, 1);
+}
+@keyframes bossStrike {
+  45% {
+    transform: translate(-95%, -46%) scale(calc(var(--sc) * 1.1));
+  }
+}
+.foe.boss.hit {
+  animation: bossHit 0.28s ease-out;
+}
+@keyframes bossHit {
+  40% {
+    transform: translate(-42%, -50%) scale(calc(var(--sc) * 0.94));
+    filter: brightness(2.4) saturate(0.2);
+  }
+}
+.foe.boss.enraged .aura {
+  width: 128px;
+  height: 128px;
+  margin: -64px 0 0 -64px;
+  background: radial-gradient(circle, rgba(255, 70, 40, 0.75), transparent 66%);
+  animation-duration: 0.9s;
+}
+.foe.boss.enraged .emo {
+  filter: drop-shadow(0 0 10px var(--d4));
+}
+/* L'éclatement : il gonfle, blanchit et se dissout — la faille se referme derrière. */
+.foe.boss.gone {
+  opacity: 0;
+}
+.foe.boss.shatter {
+  animation: bossShatter 1.4s ease-in forwards;
+}
+@keyframes bossShatter {
+  0% {
+    transform: translate(-50%, -50%) scale(var(--sc));
+    filter: brightness(1);
+    opacity: 1;
+  }
+  30% {
+    transform: translate(-50%, -52%) scale(calc(var(--sc) * 1.35));
+    filter: brightness(4) saturate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(calc(var(--sc) * 2.2));
+    filter: brightness(4) blur(6px);
+    opacity: 0;
+  }
+}
+
+/* Ondes de choc : le rugissement rayonne, la frappe balaie le groupe. */
+.wave {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  margin: -20px 0 0 -20px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 55;
+}
+.wave-roar {
+  border: 3px solid rgba(255, 106, 69, 0.85);
+  animation: waveOut 0.9s ease-out forwards;
+}
+.wave-hit {
+  border: 2px solid rgba(255, 106, 69, 0.9);
+  border-right-color: transparent;
+  animation: waveSweep 0.6s ease-out forwards;
+}
+@keyframes waveOut {
+  from {
+    transform: scale(0.4);
+    opacity: 1;
+  }
+  to {
+    transform: scale(9);
+    opacity: 0;
+  }
+}
+@keyframes waveSweep {
+  from {
+    transform: translateX(0) scale(0.6);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-140px) scale(3.2);
+    opacity: 0;
+  }
+}
+
+.pop.pop-miss {
+  color: var(--mana);
+  font-size: 15px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+.pop.pop-crit {
+  color: var(--accent);
+  font-size: 23px;
+  letter-spacing: 0.05em;
+}
+
+/* La déchirure du fond s'éteint quand la faille se referme. */
+.breach {
+  transition:
+    opacity 1.4s ease,
+    width 1.4s ease;
+}
+.breach.sealing {
+  opacity: 0;
+  width: 0;
+}
+
+.flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 75;
+  transition: opacity 0.18s ease;
+}
+.flash.white {
+  background: rgba(255, 250, 235, 0.2);
+  opacity: 1;
+  transition: none;
+}
+.flash.red {
+  background: rgba(255, 70, 40, 0.3);
+  opacity: 1;
+  transition: none;
+}
+
+/* Bandes de cinéma : sous le HUD (80), au-dessus du terrain. */
+.bars .bar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 7%;
+  background: #000;
+  z-index: 72;
+  transition: transform 0.6s cubic-bezier(0.3, 0.7, 0.3, 1);
+}
+.bars .top {
+  top: 0;
+  transform: translateY(-100%);
+}
+.bars .bot {
+  bottom: 0;
+  transform: translateY(100%);
+}
+.bars.on .bar {
+  transform: none;
+}
+
+/* La vie du gardien : en haut, sous le HUD, à sa couleur. */
+.bossbar {
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  top: 54px;
+  z-index: 82;
+  display: grid;
+  gap: 4px;
+  text-align: center;
+}
+.bb-name {
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  color: var(--d4);
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+}
+.bb-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 106, 69, 0.55);
+  overflow: hidden;
+}
+.bb-track i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: block;
+}
+.bb-track .ghost {
+  background: rgba(255, 235, 200, 0.55);
+  transition: width 0.6s ease 0.2s;
+}
+.bb-track .fill {
+  background: linear-gradient(90deg, #c2261a, var(--d4));
+  transition: width 0.35s ease;
+}
+.bossbar.enraged .bb-track {
+  box-shadow: 0 0 12px rgba(255, 70, 40, 0.7);
+}
+.bb-enter-active,
+.bb-leave-active {
+  transition: all 0.4s ease;
+}
+.bb-enter-from,
+.bb-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+.banner.ban-rage .ban-main,
+.banner.ban-fall .ban-main {
+  color: var(--d4);
+}
+.banner.ban-seal .ban-main {
+  color: var(--mana);
+}
+
+.reduce .foe.boss,
+.reduce .wave,
+.reduce .bars .bar,
+.reduce .breach {
+  animation: none;
+  transition: none;
 }
 </style>
