@@ -392,9 +392,15 @@
             {{
               partyAllOn
                 ? 'Retirer tous les champions'
-                : `✨ Tout le vivier disponible (${freeStable.length})`
+                : `✨ Tout le vivier disponible (${partyAllIds.length})`
             }}
           </button>
+          <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
+               ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
+          <p v-if="selectedRift" class="car-cap">
+            🕳️ Une faille ne laisse passer que <b>{{ partyAdvs.length }}/{{ partyMax }}</b>
+            champions — au-delà, elle se referme toute seule.
+          </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
               v-for="a in freeStable"
@@ -633,6 +639,7 @@ import { campRewardLabel, campWinPct } from '@/lib/camp';
 import {
   PARTY_HERO_BLOCK_LABEL,
   PARTY_SEND_BLOCK_LABEL,
+  partyCapFor,
   partySendBlocker,
   partyHeroBlocker,
   partyLegMin,
@@ -1248,19 +1255,36 @@ const canSendPartyNow = computed(
     progress.ready.value &&
     !busyCaravan.value,
 );
+/** 🗿🕳️ Combien de champions CE lieu accepte — `partyCapFor`, jamais une copie de la
+ *  règle : l'écran doit empêcher exactement ce que le store refuse. Un camp garde le
+ *  plafond du Panthéon (sa TAILLE fait déjà le gradateur) ; une faille est bien plus
+ *  stricte, parce qu'elle n'a qu'un seul axe de force. */
+const partyMax = computed(() =>
+  selected.value ? partyCapFor(selected.value, cap.value) : cap.value,
+);
+/** Vrai quand on ne peut plus en cocher — pour le dire AVANT qu'on essaie. */
+const partyFull = computed(() => partyAdvs.value.length >= partyMax.value);
+
 function togglePartyAdv(id: string) {
-  // ⚠️ AUCUN maximum : c'est ce qui permet d'affronter les gros repaires.
-  partyEscort.value = partyEscort.value.includes(id)
-    ? partyEscort.value.filter((x) => x !== id)
-    : [...partyEscort.value, id];
+  if (partyEscort.value.includes(id)) {
+    partyEscort.value = partyEscort.value.filter((x) => x !== id);
+    return;
+  }
+  // ⚠️ On REFUSE d'en ajouter un de trop plutôt que de laisser l'envoi échouer : un bouton
+  // qui se grise après coup ne dit pas lequel est en trop.
+  if (partyFull.value) return;
+  partyEscort.value = [...partyEscort.value, id];
 }
 /** ✨ Tout le vivier disponible d'un geste (et de nouveau pour tout retirer) : un repaire
  *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
+/** Ce que « tout le vivier » peut réellement prendre ici. */
+const partyAllIds = computed(() => freeStable.value.slice(0, partyMax.value).map((a) => a.id));
 const partyAllOn = computed(
-  () => freeStable.value.length > 0 && partyAdvs.value.length === freeStable.value.length,
+  () => partyAllIds.value.length > 0 && partyAdvs.value.length === partyAllIds.value.length,
 );
 function togglePartyAll() {
-  partyEscort.value = partyAllOn.value ? [] : freeStable.value.map((a) => a.id);
+  // ⚠️ Bornée par le lieu : sur une faille, « tout le vivier » ne peut pas en envoyer dix.
+  partyEscort.value = partyAllOn.value ? [] : [...partyAllIds.value];
 }
 /** Le bouton dit OÙ l’on va : un camp se prend, une faille se referme. */
 const partySendLabel = computed(() => {
@@ -1772,6 +1796,16 @@ onUnmounted(() => {
 /* Grille fluide : l’escorte peut compter jusqu’à quatre noms sur un écran plié. */
 /* Suggestion d'escorte : pleine largeur et 44 px (règle mobile), mais en secondaire —
    elle propose, elle ne décide pas. */
+/* 🕳️ La limite d’une faille, dite AVANT qu’on butte dessus. */
+.car-cap {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--dim);
+}
+.car-cap b {
+  color: var(--text);
+}
 .car-auto {
   width: 100%;
   min-height: 44px;

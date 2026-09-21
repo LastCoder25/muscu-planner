@@ -90,6 +90,15 @@
               title="Clés — entrer dans le Labyrinthe (archives de la carte, coffres, boss)"
               >🗝️ {{ char.row.keys }}</span
             >
+            <!-- ⚠️ MÊME RAISON QUE LES CLÉS : les pierres de mana sont la monnaie du
+                 GACHA, elles se gagnent en refermant des failles et en récoltant leurs
+                 mines — on ne pouvait voir sa réserve nulle part, alors qu’elle décide
+                 si l’on peut invoquer. -->
+            <span
+              class="tb-r mana"
+              title="Pierres de mana — invoquer un champion (failles refermées, mines de mana)"
+              >💠 {{ char.row.mana }}</span
+            >
           </div>
         </div>
       </div>
@@ -6539,6 +6548,10 @@ onUnmounted(() => {
 }
 .tb-r.keys {
   color: #d9c48a;
+}
+/* 💠 Le violet du mana, celui des tracés de convoi et de l’invocation. */
+.tb-r.mana {
+  color: #b57bff;
 }
 .tb-r.scrap {
   color: #b9a68c;

@@ -25,7 +25,13 @@ import {
   type PartyHero,
   type RoadCompanions,
 } from '@/lib/caravan';
-import { partyFightSeed, partyForecastSeed } from '@/lib/party';
+import {
+  RIFT_MAX_PARTY,
+  partyCapFor,
+  partyFightSeed,
+  partyForecastSeed,
+  partySendBlocker,
+} from '@/lib/party';
 import { fuseUnits, skirmishXpShares } from '@/lib/skirmish';
 import { gearedFighter } from './helpers/gearedFighter';
 import { type Adventurer } from '@/lib/adventurers';
@@ -414,5 +420,51 @@ describe('🔗 la résolution emprunte bien la graine DU COMBAT', () => {
     expect(o.win).toBe(attendu.cleared);
     expect(o.party!.slain).toBe(attendu.killed);
     expect(o.party!.journal).toEqual(attendu.journal);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🕳️ COMBIEN DE CHAMPIONS UNE FAILLE LAISSE ENTRER
+//
+// ⚠️ MESURÉ : au-delà de 3, une faille ne se joue plus. Part nettoyée d'une faille MÛRE,
+// sans héros : 1 → 0 % · 2 → 0-2 % · 3 → 62-83 % · 4 → 99-100 % · 5+ → 100 %, identique
+// aux niveaux 12, 26, 45 et 70. La cause est structurelle : une faille n'a qu'UN axe de
+// force (son niveau), donc rien ne la fait grandir avec le groupe envoyé.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('🕳️ le plafond de champions d’une faille', () => {
+  const camp = (): Poi => ({ ...rift(), id: 'camp_x', type: 'camp' });
+
+  it('⚠️ une FAILLE n’en laisse passer que RIFT_MAX_PARTY, quel que soit le Panthéon', () => {
+    // Le Panthéon d'un joueur avancé en autorise 51 : ici il ne sert à rien.
+    for (const engage of [3, 16, 51]) {
+      expect(partyCapFor(rift(), engage)).toBe(RIFT_MAX_PARTY);
+    }
+    // …mais il mord quand il est PLUS strict : un débutant n'en a pas trois.
+    expect(partyCapFor(rift(), 2)).toBe(2);
+  });
+
+  it('⚠️ un CAMP garde le plafond du Panthéon — sa TAILLE fait déjà le gradateur', () => {
+    // Mesuré : un camp de 10 se gagne à 20-61 % avec 8 champions, 57-99 % avec 10. Un
+    // plafond bas y rendrait les gros repaires impossibles sans le héros.
+    for (const engage of [3, 16, 51]) expect(partyCapFor(camp(), engage)).toBe(engage);
+  });
+
+  it('le refus DISTINGUE les deux plafonds — ils ne se corrigent pas pareil', () => {
+    // Trop pour le Panthéon : ça se lève en le montant.
+    expect(partySendBlocker(rift(), 4, false, 5, 2)).toBe('tooMany');
+    // Trop pour la faille : ça ne se lèvera jamais.
+    expect(partySendBlocker(rift(), 4, false, 5, 51)).toBe('riftCrowd');
+    // Trois passent.
+    expect(partySendBlocker(rift(), RIFT_MAX_PARTY, false, 5, 51)).toBeNull();
+    // Et un camp, lui, en accepte dix.
+    expect(partySendBlocker(camp(), 10, false, 5, 51)).toBeNull();
+  });
+
+  it('⚠️ le plafond est SOUS le point où la faille cesse de se jouer', () => {
+    // C'est tout l'objet du nombre : à 4 la part nettoyée est de 99-100 % à tout niveau
+    // et à tout âge, donc « combien j'en envoie » n'aurait plus qu'une réponse.
+    expect(RIFT_MAX_PARTY).toBeLessThan(4);
+    // …et au-dessus de 2, où elle est quasi imprenable (0-2 % sur une faille mûre).
+    expect(RIFT_MAX_PARTY).toBeGreaterThan(2);
   });
 });

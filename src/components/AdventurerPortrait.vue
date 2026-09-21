@@ -160,6 +160,7 @@ import {
   advRank,
   advRankProgress,
   advRarity,
+  advSubtitle,
   advTitle,
   type Adventurer,
 } from '@/lib/adventurers';
@@ -207,18 +208,9 @@ const awaken = computed(() => advAwaken(props.adv));
 const title = computed(() => advTitle(props.adv));
 // Le rang de la CLASSE (v0.833) : c’est lui qui borne ses compagnons, affichés en rang.
 const rarColor = computed(() => rarityRank(advRarity(props.adv)).color);
-/**
- * Le sous-titre : sa CLASSE — et rien du tout quand elle répète son nom.
- *
- * ⚠️ `advTitle` rend le **nom** d'un champion (il n'a pas de métier courant, il a un nom),
- * si bien que cette ligne écrivait « Aurore Première » juste sous « Aurore Première ».
- * Depuis le wipe, tout le vivier est fait de champions : le doublon était donc systématique.
- * La comparaison au nom garde la ligne utile aux aventuriers legacy, où elle dit la classe.
- */
-const subLabel = computed(() => {
-  const l = title.value?.label;
-  return l && l !== props.adv.name ? l : '';
-});
+/** Sa classe, ou rien quand elle répète son nom — la règle vit en lib (`advSubtitle`),
+ *  parce que la fiche de la Guilde pose exactement la même question. */
+const subLabel = computed(() => advSubtitle(props.adv));
 /**
  * ⚠️ **LA RARETÉ PARLE LA LANGUE DE LA RARETÉ** (v0.962 ; signalé par l'utilisateur : « tu
  * as confondu rareté et rang… je choppe des raretés Or, Argent, alors qu'ils sont tous rang

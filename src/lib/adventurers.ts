@@ -1720,6 +1720,24 @@ export function advTitle(adv: Adventurer): { emoji: string; label: string } | un
   return c ? { emoji: c.emoji, label: c.label } : undefined;
 }
 
+/**
+ * Son SOUS-TITRE : sa classe — et rien du tout quand elle répète son nom.
+ *
+ * ⚠️ `advTitle` rend le **nom** d'un champion (il n'a pas de métier courant, il a un nom),
+ * si bien qu'un écran qui affiche les deux écrit « Aurore Première » sous « Aurore
+ * Première ». Depuis le wipe, tout le vivier est fait de champions : le doublon est donc
+ * systématique. La comparaison au nom garde la ligne utile aux aventuriers **legacy**, où
+ * elle dit bien la classe — leur seule identité.
+ *
+ * ⚠️ **EN LIB, parce que DEUX écrans posaient la même question** (le portrait du vivier et
+ * la fiche) : recopiée, cette règle aurait divergé au premier ajustement, et le même
+ * aventurier se serait lu différemment d'un écran à l'autre.
+ */
+export function advSubtitle(adv: Adventurer): string {
+  const l = advTitle(adv)?.label;
+  return l && l !== adv.name ? l : '';
+}
+
 /** Signatures portées par le chemin (les strates hautes en donnent une). */
 export function advSignatures(adv: Adventurer): EffectType[] {
   const champ = advChampion(adv);

@@ -769,7 +769,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
-import { AWAKEN, advAwaken, awakenLevel, engageCap } from '@/lib/adventurers';
+import { AWAKEN, advAwaken, advSubtitle, awakenLevel, engageCap } from '@/lib/adventurers';
 import GachaReveal from './GachaReveal.vue';
 import { buildReveal, bestOfLot, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
 import { GACHA, TOP_RARITY, gachaOdds, multiPullCost } from '@/lib/gacha';
@@ -1374,12 +1374,9 @@ const nomColor = (a: Adventurer) => RANK_COLOR[advNominalRarity(a)];
 const titleOf = (a: Adventurer) => advTitle(a);
 /** Son rang d'Éveil — 0 pour un legacy, qui n'a pas de doublons. */
 const awkOf = (a: Adventurer) => advAwaken(a);
-/** Sa CLASSE — et rien du tout quand elle répète son nom. ⚠️ `advTitle` rend le NOM d'un
- *  champion (il n'a pas de métier), donc la ligne le redisait sous le titre de la fiche. */
-const subOf = (a: Adventurer) => {
-  const l = advTitle(a)?.label;
-  return l && l !== a.name ? l : '';
-};
+/** Sa classe, ou rien quand elle répète son nom — la règle vit en lib, parce que le
+ *  portrait du vivier pose exactement la même question. */
+const subOf = (a: Adventurer) => advSubtitle(a);
 const progressOf = (a: Adventurer) => advRankProgress(a);
 // ⚠️ Elle annonçait la PROMOTION, qui n’existe plus (v0.951) : un champion ne se promeut
 // pas, ce sont ses DOUBLONS qui le réveillent. Elle dit donc ce qu’elle montre vraiment —

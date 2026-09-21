@@ -19,6 +19,7 @@ import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
 import {
   PARTY_TARGETS,
   buildMessage,
+  isRiftPoi,
   depositMessages,
   goldCost,
   travelOneWayMin,
@@ -45,14 +46,44 @@ export function partyLegMin(
   return Math.max(1, hero, advs);
 }
 
+/**
+ * 🕳️ COMBIEN DE CHAMPIONS UNE FAILLE LAISSE ENTRER — et pourquoi c'est un nombre à part.
+ *
+ * ⚠️ **MESURÉ : au-delà de 3, une faille ne se joue plus.** Part nettoyée d'une faille
+ * MÛRE, sans le héros : **1 → 0 % · 2 → 0-2 % · 3 → 62-83 % · 4 → 99-100 % · 5+ → 100 %**,
+ * identique aux niveaux 12, 26, 45 et 70. Sur une faille JEUNE : 2 → 32-40 %, 3 → 94-96 %,
+ * 4 → 100 %. Le plafond du Panthéon (16 champions au niveau 30, **51** au niveau 100) est
+ * donc décoratif ici.
+ *
+ * ⚠️ **LA CAUSE EST STRUCTURELLE, pas un réglage** : une faille n'a **qu'un seul axe de
+ * force** — son niveau. Elle n'a pas d'équivalent de `CAMP_SIZES`, donc rien ne la fait
+ * grandir avec le groupe envoyé. Sans ce plafond, « combien j'en envoie » n'a qu'une
+ * réponse dès qu'on possède quatre champions.
+ *
+ * ⚠️ **LES CAMPS N'EN VEULENT PAS**, et c'est mesuré aussi : leur taille (2 à 10) EST
+ * déjà le gradateur — un camp de 10 se gagne à 20-61 % avec huit champions et 57-99 %
+ * avec dix. Un plafond bas y rendrait les gros repaires impossibles sans le héros, donc
+ * retirerait du contenu.
+ */
+export const RIFT_MAX_PARTY = 3;
+
+/** Le plafond de champions RÉELLEMENT applicable à ce lieu : le plus strict entre celui du
+ *  Panthéon et celui du lieu. ⚠️ Source unique — l'écran et le store l'appellent tous deux
+ *  à travers `partySendBlocker`, qui la porte. */
+export function partyCapFor(poi: Pick<Poi, 'type'>, engage: number): number {
+  const c = Math.max(0, Math.floor(engage));
+  return isRiftPoi(poi) ? Math.min(c, RIFT_MAX_PARTY) : c;
+}
+
 /** Pourquoi un GROUPE ne peut pas partir — `null` s'il le peut.
- *  ⚠️ AUCUNE taille maximale : le vivier disponible limite la TAILLE d'un groupe (les convois
- *  gardent `CARAVAN.escortMax`, leur calibration en dépend).
+ *  ⚠️ La taille d'un groupe est bornée par le Panthéon, et **plus strictement encore par
+ *  une FAILLE** (`RIFT_MAX_PARTY`) ; les convois gardent `CARAVAN.escortMax`, leur
+ *  calibration en dépend.
  *  ⚠️ En revanche un groupe SANS le héros prend un CRÉNEAU DE CONVOI (`convoySlotsFree`,
  *  un seul pool avec les convois) : c'est ce qui borne le NOMBRE de groupes en parallèle,
  *  donc l'or et les pierres par jour. Le héros est à lui seul sa limite.
  *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
-export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany';
+export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'riftCrowd';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
@@ -67,7 +98,10 @@ export function partySendBlocker(
   // ⚠️ Il vit ICI et non sur la personne (plus de banc) — mais il doit bien mordre quelque
   // part : un groupe sans maximum est le seul endroit du jeu où l'effectif entier pourrait
   // partir d'un coup, et c'est ce qui rendrait la collection décisive.
-  if (escortCount > cap) return 'tooMany';
+  if (escortCount > Math.max(0, Math.floor(cap))) return 'tooMany';
+  // 🕳️ …ET LE PLAFOND DE LA FAILLE, plus strict : on distingue les deux refus parce qu'ils
+  // ne se corrigent pas pareil — l'un se lève en montant le Panthéon, l'autre jamais.
+  if (escortCount > partyCapFor(poi, cap)) return 'riftCrowd';
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
@@ -75,6 +109,7 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   empty: 'le groupe est vide',
   slots: 'tous les créneaux de convoi sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
+  riftCrowd: `une faille ne laisse passer que ${RIFT_MAX_PARTY} champions`,
 };
 export function canSendParty(
   poi: Poi,

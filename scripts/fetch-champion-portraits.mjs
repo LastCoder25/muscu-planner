@@ -39,6 +39,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { CHAMPIONS } from '../src/data/champions.ts';
+import { seedOf } from '../src/lib/combat.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = resolve(ROOT, 'public/champions');
@@ -166,17 +167,15 @@ const SUBJECTS = {
 };
 
 /**
- * ⚠️ **LA GRAINE EST DÉRIVÉE DE L'ID** (FNV-1a) : elle ne change pas quand on retouche un
- * sujet, donc corriger la description d'un champion ne rebat pas les cartes des 31 autres.
+ * ⚠️ **LA GRAINE EST DÉRIVÉE DE L'ID** : elle ne change pas quand on retouche un sujet, donc
+ * corriger la description d'un champion ne rebat pas les cartes des 31 autres.
+ *
+ * ⚠️ **LE HASH VIENT DE LA LIB** (`seedOf`, FNV-1a) au lieu d'être recopié ici : le script
+ * lit déjà du TypeScript (`champions.ts`), et `combat.ts` n'a aucun import — rien
+ * n'obligeait à en tenir une seconde copie. Valeurs inchangées : mêmes constantes, et le
+ * `|| 1` de la lib ne peut mordre que sur un hash nul, que le modulo ramène au même point.
  */
-const seedOf = (id) => {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h % 100000;
-};
+const seedFor = (id) => seedOf(id) % 100000;
 
 /** Le logo du service est incrusté **en bas à droite** — `nologo=true` ne le retire plus.
  *  On génère donc carré et on **coupe la bande basse**, ce qui supprime le logo et resserre
@@ -230,7 +229,7 @@ for (const c of CHAMPIONS) {
     continue;
   }
   const prompt = `${STYLE_AVANT} ${SUBJECTS[c.id]}, ${STYLE_APRES}, ${FRAMING}, dark gradient background`;
-  const brut = await fetchPortrait(prompt, seedOf(c.id));
+  const brut = await fetchPortrait(prompt, seedFor(c.id));
   if (!brut) {
     console.error(`✖ ${c.id} — échec après 8 tentatives`);
     continue;
