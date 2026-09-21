@@ -1280,11 +1280,6 @@
             <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
           </div>
         </div>
-        <!-- ⚠️ REPLIÉE PAR DÉFAUT : repliée, le PROCHAIN donjon à faire s'affiche juste sous
-             le bandeau, prêt à être lancé — un geste pour jouer au lieu de trois. -->
-        <div v-if="!regionView && !worldOpen && nextDungeonItem" class="sec-hint next-dgn-hint">
-          ▸ Ton prochain donjon
-        </div>
         <template v-if="!regionView && worldOpen">
           <div class="sec-hint map-hint">
             Touche une région pour ouvrir ses donjons.
@@ -1359,9 +1354,9 @@
             >
           </div>
         </div>
-        <div v-if="shownDungeonItems.length" class="dungeons">
+        <div v-if="regionView && selectedRegionItems.length" class="dungeons">
           <div
-            v-for="it in shownDungeonItems"
+            v-for="it in selectedRegionItems"
             :key="it.key"
             class="dgn"
             :class="{ locked: !dungeonUnlocked(it.dungeon) }"
@@ -3923,21 +3918,6 @@ const selRegion = computed(
 const selectedRegionItems = computed(() =>
   adventureItems.value.filter((it) => selRegion.value.dungeonIds.includes(it.dungeon.id)),
 );
-/** Le PROCHAIN donjon à faire : le premier débloqué qui n'est pas encore nettoyé — la
- *  frontière. `adventureItems` est déjà trié par niveau conseillé. Rien quand tout est
- *  nettoyé : il n'y a alors plus de « prochain ». */
-const nextDungeonItem = computed(
-  () => adventureItems.value.find((it) => itemState(it) === 'avail') ?? null,
-);
-/** Les tuiles de donjon affichées. ⚠️ UNE SEULE LISTE pour les deux cas : la région ouverte,
- *  ou — carte repliée — le seul prochain donjon. Deux blocs de tuiles auraient fini par
- *  diverger (le markup fait soixante lignes et porte le butin, le verrou, le % de réussite). */
-const shownDungeonItems = computed(() => {
-  if (regionView.value) return selectedRegionItems.value;
-  if (worldOpen.value) return [];
-  const n = nextDungeonItem.value;
-  return n ? [n] : [];
-});
 const drawerEl = ref<HTMLElement | null>(null);
 // La carte des mondes ne montre que les 3 lignes de régions ; taper une région
 // « charge » l'arbre de ses donjons (regionView) ; le retour ramène à la carte.
@@ -10727,10 +10707,6 @@ button.pt-mini:active {
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
-}
-/* Le repère au-dessus de la tuile du prochain donjon. */
-.next-dgn-hint {
-  margin: 10px 0 6px;
 }
 .mf-chev {
   display: inline-block;
