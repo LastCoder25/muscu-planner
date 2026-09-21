@@ -290,14 +290,35 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
   }, 30_000);
 
-  it('GuildPanel s’ouvre aussi sur un vivier VIDE — et l’invocation reste offerte', async () => {
+  it('GuildPanel s’ouvre aussi sur un vivier VIDE', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     const vide = { ...ROW, adventurers: [] };
     expect(await mountIt(GuildPanel, { open: true }, vide)).toBeNull();
-    // ⚠️ Le mode « recrutement » a disparu avec l'arbre de classes (v0.951) : c'est
-    // l'INVOCATION qui remplit le vivier, et elle est offerte dans les deux cas.
-    const riche = { ...vide, mana: 5_000 };
-    expect(await mountIt(GuildPanel, { open: true }, riche)).toBeNull();
+  }, 30_000);
+
+  it('🎰 SummonPanel : l’invocation vit dans SA feuille (v0.989), avec ses deux tuiles', async () => {
+    // Séparée de « Mes champions » (demandé) : le vivier d'un côté, le tirage de l'autre.
+    const { default: SummonPanel } = await import('@/components/SummonPanel.vue');
+    const riche = { ...ROW, adventurers: [], mana: 5_000 };
+    let out = '';
+    expect(
+      await mountIt(SummonPanel, { open: true }, riche, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain('×1');
+    expect(out).toContain('×10');
+    // Sans mana : la feuille se monte, et chaque tuile DIT ce qui manque.
+    let pauvre = '';
+    expect(
+      await mountIt(
+        SummonPanel,
+        { open: true },
+        { ...riche, mana: 0 },
+        undefined,
+        '/',
+        (h) => (pauvre = h),
+      ),
+    ).toBeNull();
+    expect(pauvre).toContain('il manque');
   }, 30_000);
 
   it('GuildPanel : une pièce en stock ATTEND un porteur (case en appel)', async () => {

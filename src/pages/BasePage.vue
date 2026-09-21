@@ -594,6 +594,17 @@
           <span class="tile-t font-display">Champions</span>
           <span class="tile-s">{{ champSummary }}</span>
         </span>
+        <span class="tile-chev">›</span>
+      </button>
+
+      <!-- 🎰 LA TUILE TIRAGE (v0.989, demandé : « une tuile pour le tirage plutôt que de le
+           mettre dans les champions, on sépare les deux »). -->
+      <button type="button" class="panel tile tile-btn tile-summon" @click="summonOpen = true">
+        <span class="tile-emo">🎰</span>
+        <span class="tile-main">
+          <span class="tile-t font-display">Tirage</span>
+          <span class="tile-s">{{ summonSummary }}</span>
+        </span>
         <span class="tile-sum mana">💠 {{ (char.row?.mana ?? 0).toLocaleString('fr-FR') }}</span>
         <span class="tile-chev">›</span>
       </button>
@@ -674,6 +685,7 @@
     </div>
 
     <GuildPanel :open="guildOpen" @close="guildOpen = false" />
+    <SummonPanel :open="summonOpen" @close="summonOpen = false" />
 
     <!-- ⚠️ LA PAGE NE GARDE QUE CE QUI SE LIT D'UN COUP D'ŒIL. Espionnage, dernier
          siège et champ de bataille vivaient en panneaux empilés sous l'enceinte, loin
@@ -994,6 +1006,8 @@ import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
+import SummonPanel from '@/components/SummonPanel.vue';
+import { GACHA } from '@/lib/gacha';
 import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import { FAMILIAR_SLOT, type Item } from '@/lib/items';
@@ -1574,9 +1588,19 @@ const defSummary = computed(() => {
 });
 /** 🏅 Ce que la tuile Champions résume : la collection, sinon comment la commencer. */
 const champSummary = computed(() => {
-  if (!char.pantheonLevel) return 'Construis le Panthéon pour invoquer';
+  if (!char.pantheonLevel) return 'Construis le Panthéon';
   const n = char.advList.length;
-  return n ? `${n} champion${n > 1 ? 's' : ''} · invoquer` : 'Invoque ton premier champion';
+  return n ? `${n} champion${n > 1 ? 's' : ''}` : 'Aucun champion — passe au tirage';
+});
+// ── 🎰 Tirage ──
+const summonOpen = ref(false);
+/** Ce que la tuile Tirage résume : combien de tirages la réserve permet. */
+const summonSummary = computed(() => {
+  if (!char.pantheonLevel) return 'Construis le Panthéon pour invoquer';
+  const n = Math.floor((char.row?.mana ?? 0) / GACHA.pullCost);
+  return n
+    ? `×1 · ×10 — ${n} tirage${n > 1 ? 's' : ''} possible${n > 1 ? 's' : ''}`
+    : 'Referme une faille pour gagner des 💠';
 });
 const partsOpen = ref(localStorage.getItem('muscu:base:parts') === '1');
 const helpOpen = ref(localStorage.getItem('muscu:base:help') === '1');
