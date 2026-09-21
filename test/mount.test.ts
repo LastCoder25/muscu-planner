@@ -296,6 +296,32 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
   }, 30_000);
 
+  it('🗡️ GuildPanel se SÉPARE en deux feuilles : champions / équipements (v0.991)', async () => {
+    const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
+    let champ = '';
+    let gear = '';
+    expect(
+      await mountIt(GuildPanel, { open: true }, ROW, undefined, '/', (h) => (champ = h)),
+    ).toBeNull();
+    expect(
+      await mountIt(
+        GuildPanel,
+        { open: true, section: 'gear' },
+        ROW,
+        undefined,
+        '/',
+        (h) => (gear = h),
+      ),
+    ).toBeNull();
+    // Le stock a sa tuile : il n'est plus un onglet des champions…
+    expect(champ).toContain('Mes champions');
+    expect(champ).not.toContain('🗡️ Stock');
+    // …et la feuille d'équipement ne montre que lui, sans les onglets du vivier.
+    expect(gear).toContain('Équipements');
+    expect(gear).not.toContain('Collection');
+    expect(gear).not.toContain('Mes champions');
+  }, 30_000);
+
   it('GuildPanel s’ouvre aussi sur un vivier VIDE', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     const vide = { ...ROW, adventurers: [] };

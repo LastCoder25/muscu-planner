@@ -2,12 +2,21 @@
   <q-dialog :model-value="open" position="bottom" @update:model-value="emit('close')">
     <q-card class="guild-card">
       <div class="g-head">
-        <span class="g-title font-display">🏅 Mes champions</span>
-        <!-- 🗿 LA COLLECTION D'ABORD, le plafond ensuite : depuis la v0.958 il n'y a plus de
-             banc — tout champion est utilisable, et le Panthéon ne borne que combien on en
-             engage À LA FOIS. Opposer les deux (« 5/3 ») laisserait croire l'inverse. -->
-        <span class="g-count">{{ roster.length }}</span>
-        <span class="g-count g-count-sub">· {{ maxRoster }} engagés à la fois</span>
+        <!-- 🗂️ DEUX FEUILLES, UN COMPOSANT (v0.991, demandé : une tuile Équipements à part).
+             Le stock d'équipement et le vivier partagent leurs sous-feuilles (fiche d'un
+             champion, sélecteurs) : on sépare l'ENTRÉE, pas le code. -->
+        <template v-if="section === 'gear'">
+          <span class="g-title font-display">🗡️ Équipements</span>
+          <span class="g-count">{{ char.advGearStock.length }}</span>
+        </template>
+        <template v-else>
+          <span class="g-title font-display">🏅 Mes champions</span>
+          <!-- 🗿 LA COLLECTION D'ABORD, le plafond ensuite : depuis la v0.958 il n'y a plus
+               de banc — tout champion est utilisable, et le Panthéon ne borne que combien on
+               en engage À LA FOIS. Opposer les deux (« 5/3 ») laisserait croire l'inverse. -->
+          <span class="g-count">{{ roster.length }}</span>
+          <span class="g-count g-count-sub">· {{ maxRoster }} engagés à la fois</span>
+        </template>
       </div>
 
       <p v-if="!pantheonLevel" class="g-empty">
@@ -18,7 +27,7 @@
         <!-- 🗂️ DEUX ONGLETS (v0.881, demandé) : le vivier, et le STOCK d'équipement où l'on
              voit ses pièces et les confie. Le stock vivait replié sous le vivier, hors écran
              dès quelques aventuriers. -->
-        <div class="g-tabs" role="tablist">
+        <div v-if="section !== 'gear'" class="g-tabs" role="tablist">
           <button
             type="button"
             role="tab"
@@ -28,16 +37,6 @@
             @click="guildTab = 'roster'"
           >
             🏅 Champions
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="g-tab"
-            :class="{ on: guildTab === 'stock' }"
-            :aria-selected="guildTab === 'stock'"
-            @click="guildTab = 'stock'"
-          >
-            🗡️ Stock <span class="g-tab-n">{{ char.advGearStock.length }}</span>
           </button>
           <button
             type="button"
@@ -769,8 +768,10 @@ import {
   type Lineage,
 } from '@/lib/advGear';
 
-defineProps<{
+const props = defineProps<{
   open: boolean;
+  /** Quelle feuille : le vivier (+ collection) ou le stock d'équipement. Défaut : vivier. */
+  section?: 'champions' | 'gear';
 }>();
 const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
@@ -1151,7 +1152,18 @@ function pickGear(id: string | null) {
 }
 
 // ── 🗂️ ONGLETS ──
-const guildTab = ref<'roster' | 'stock' | 'collection'>('roster');
+const guildTab = ref<'roster' | 'stock' | 'collection'>(
+  props.section === 'gear' ? 'stock' : 'roster',
+);
+// ⚠️ La feuille d'équipement ne montre QUE le stock ; celle des champions ne le montre
+// plus (il a sa tuile). Suivi à chaque ouverture : le composant reste monté.
+watch(
+  () => [props.section, props.open] as const,
+  ([sec]) => {
+    if (sec === 'gear') guildTab.value = 'stock';
+    else if (guildTab.value === 'stock') guildTab.value = 'roster';
+  },
+);
 /** Champions DISTINCTS possédés — même définition que la galerie (`championId` unique). */
 const collectionOwned = computed(
   () => new Set(roster.value.map((a) => a.championId).filter(Boolean)).size,

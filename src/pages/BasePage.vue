@@ -588,11 +588,22 @@
       <!-- 🏅 LA TUILE CHAMPIONS (demandé) : l'accès au vivier ET à l'invocation, qui vivent
            dans la même feuille (`GuildPanel`). Avant, on n'y arrivait qu'en touchant le
            Panthéon sur le dessin — un chemin qu'il fallait connaître. -->
-      <button type="button" class="panel tile tile-btn" @click="openGuild">
+      <button type="button" class="panel tile tile-btn" @click="openGuild()">
         <span class="tile-emo">🏅</span>
         <span class="tile-main">
           <span class="tile-t font-display">Champions</span>
           <span class="tile-s">{{ champSummary }}</span>
+        </span>
+        <span class="tile-chev">›</span>
+      </button>
+
+      <!-- 🗡️ LA TUILE ÉQUIPEMENTS (v0.991, demandé) : le stock des pièces de champions,
+           séparé du vivier. -->
+      <button type="button" class="panel tile tile-btn" @click="openGuild('gear')">
+        <span class="tile-emo">🗡️</span>
+        <span class="tile-main">
+          <span class="tile-t font-display">Équipements</span>
+          <span class="tile-s">{{ gearSummary }}</span>
         </span>
         <span class="tile-chev">›</span>
       </button>
@@ -684,7 +695,7 @@
       </button>
     </div>
 
-    <GuildPanel :open="guildOpen" @close="guildOpen = false" />
+    <GuildPanel :open="guildOpen" :section="guildSection" @close="guildOpen = false" />
     <SummonPanel :open="summonOpen" @close="summonOpen = false" />
 
     <!-- ⚠️ LA PAGE NE GARDE QUE CE QUI SE LIT D'UN COUP D'ŒIL. Espionnage, dernier
@@ -1513,7 +1524,10 @@ const plotSlot = ref<number | null>(null);
 
 // ── 🗿 Panthéon des champions ──
 const guildOpen = ref(false);
-function openGuild() {
+/** Une seule feuille pour deux tuiles : on choisit la SECTION à l'ouverture. */
+const guildSection = ref<'champions' | 'gear'>('champions');
+function openGuild(section: 'champions' | 'gear' = 'champions') {
+  guildSection.value = section;
   guildOpen.value = true;
 }
 const defOpen = ref<DefenseId | null>(null);
@@ -1591,6 +1605,12 @@ const champSummary = computed(() => {
   if (!char.pantheonLevel) return 'Construis le Panthéon';
   const n = char.advList.length;
   return n ? `${n} champion${n > 1 ? 's' : ''}` : 'Aucun champion — passe au tirage';
+});
+/** 🗡️ Ce que la tuile Équipements résume : le stock de pièces. */
+const gearSummary = computed(() => {
+  if (!char.pantheonLevel) return 'Construis le Panthéon';
+  const n = char.advGearStock.length;
+  return n ? `${n} pièce${n > 1 ? 's' : ''} en stock` : 'Aucune pièce — forge ou tirage B';
 });
 // ── 🎰 Tirage ──
 const summonOpen = ref(false);
