@@ -177,6 +177,7 @@
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, nextTick } from 'vue';
+import { localDayIso } from '@/lib/localDay';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -214,8 +215,7 @@ const tab = ref<'act' | 'hist'>(route.query.tab === 'hist' ? 'hist' : 'act');
 const action = ref<'log' | null>(route.query.new ? 'log' : null);
 
 function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return localDayIso(new Date());
 }
 // performed_at = date choisie + heure courante (ordre correct dans la journée).
 function performedAtIso(dateIso: string): string {

@@ -2,6 +2,7 @@
 // Calcul des objectifs par jour selon le format, suggestion de difficulté,
 // statistiques (streak/complétion) et évaluation des succès.
 import type { Level } from './types';
+import { localDayIso } from './localDay';
 import { REP_XP, assistMult, ASSIST_MULT, XP_MULT, cardioSessionXp } from './athlete';
 import {
   defaultActivityForChallenge,
@@ -124,10 +125,7 @@ export interface DayProgress {
 export function logicalToday(cutoffHour = 4): string {
   const now = new Date();
   now.setHours(now.getHours() - cutoffHour);
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return localDayIso(now);
 }
 
 export interface Challenge {

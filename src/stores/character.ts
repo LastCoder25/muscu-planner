@@ -1,5 +1,6 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
+import { localDayIso } from '@/lib/localDay';
 import { chestMark, type FriendBossChest } from '@/lib/friendBoss';
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { computed, ref } from 'vue';
@@ -274,10 +275,7 @@ export const WELCOME_ENERGY = 400;
 // Jour calendaire LOCAL (YYYY-MM-DD) à l'instant `ms` — utilisé pour horodater les
 // entrées du journal d'énergie hors-sport (energy_log).
 function isoDayLocal(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
+  return localDayIso(new Date(ms));
 }
 
 export class PseudoTakenError extends Error {

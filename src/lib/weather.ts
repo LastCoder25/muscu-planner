@@ -1,3 +1,5 @@
+import { localDayIso } from './localDay';
+
 // Météo — logique PURE (testable) : mapping WMO → emoji/libellé, parsing d'une
 // réponse Open-Meteo en prévision structurée (actuel / heure par heure / 10 jours),
 // libellés de jour, lieux. Réf. codes : https://open-meteo.com/en/docs.
@@ -218,9 +220,7 @@ export function dayLabel(date: string, todayIso: string): string {
   if (date === todayIso) return "Aujourd'hui";
   const t = new Date(`${todayIso}T12:00:00`);
   t.setDate(t.getDate() + 1);
-  const tomorrow = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(
-    t.getDate(),
-  ).padStart(2, '0')}`;
+  const tomorrow = localDayIso(t);
   if (date === tomorrow) return 'Demain';
   return new Date(`${date}T12:00:00`).toLocaleDateString('fr-FR', {
     weekday: 'short',

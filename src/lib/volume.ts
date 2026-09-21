@@ -4,6 +4,7 @@ import type { Session, SessionLog, LoggedExercise } from './types';
 import { legSets, type ComboChallenge } from './combo';
 import type { Challenge } from './challenges';
 import { isCardioChallengeExercise } from '@/data/cardio';
+import { localDayIso } from './localDay';
 
 export interface MuscleSets {
   muscle: string;
@@ -86,17 +87,9 @@ export function isMuscuLog(log: SessionLog): boolean {
  *  à côté avec `toISOString` décale d’un jour en France, et ce projet s’est déjà fait
  *  prendre. L’Agenda, l’entrée des calculs de volume et leurs tests l’appellent.
  *
- *  ⚠️ **ELLE N’EST PAS ENCORE LA SEULE** : une dizaine d’écrans en gardent une copie
- *  (`FriendBossPage`, `HomePage` ×2, `CardioPage`, `MuscuPage`, `TennisPage`,
- *  `useEnergyHistory`, `useWeatherReliability`, `stores/character`, `data/worldBoss`).
- *  La plus gênante est celle de `FriendBossPage` : elle date les frappes à la SAISIE,
- *  quand le calcul de volume les date avec celle-ci — deux définitions du « jour » pour
- *  la même source de sport. À rapatrier, mais c’est un chantier à part. */
-export function localDayIso(d: Date): string {
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
+ *  ⚠️ Elle vit désormais dans `localDay.ts` (sans dépendance) : les douze copies qui
+ *  existaient dans les écrans ont été remplacées (v0.1010). */
+export { localDayIso };
 
 /** Lundi (YYYY-MM-DD) de la semaine ISO contenant `dateIso` (lundi → dimanche). */
 export function mondayOf(dateIso: string): string {

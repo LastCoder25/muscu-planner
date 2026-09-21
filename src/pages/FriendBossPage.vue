@@ -279,6 +279,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { localDayIso } from '@/lib/localDay';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { backOr } from '@/lib/nav';
@@ -448,10 +449,7 @@ watch(
 );
 const unitSingular = computed(() => (current.value?.family === 'core' ? 'seconde' : 'rep'));
 /** Jour LOCAL, comme partout ailleurs dans l'app. */
-const dayKey = (ms: number) => {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
+const dayKey = (ms: number) => localDayIso(new Date(ms));
 const hitDays = computed(() =>
   current.value ? bossHitsByDay(store.hits, current.value.id, dayKey).slice(0, 10) : [],
 );

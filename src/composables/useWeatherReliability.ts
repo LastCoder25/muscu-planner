@@ -5,6 +5,7 @@
 //   • archive (ERA5, réanalyse) : le réalisé = « vérité », disponible jusqu'à ~J-5.
 // Le scoring est dans lib/weatherReliability (pur, testé).
 import { ref } from 'vue';
+import { localDayIso } from '@/lib/localDay';
 import {
   dailyFromHourly,
   scoreReliability,
@@ -33,11 +34,7 @@ interface RelCache {
   data: ReliabilityResult;
 }
 
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
-}
+const isoDay = localDayIso;
 function readCache(id: string): RelCache | null {
   try {
     const raw = localStorage.getItem(cacheKey(id));

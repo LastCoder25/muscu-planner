@@ -198,6 +198,7 @@
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, nextTick } from 'vue';
+import { localDayIso } from '@/lib/localDay';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
 import { useRouter, useRoute } from 'vue-router';
@@ -278,8 +279,7 @@ const rows = ref<LogRow[]>([]);
 let fetched = false;
 
 function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return localDayIso(new Date());
 }
 function performedAtIso(dateIso: string): string {
   const [y, m, dd] = dateIso.split('-').map((n) => Number(n) || 0);

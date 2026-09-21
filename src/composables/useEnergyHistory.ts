@@ -1,4 +1,5 @@
 import { computed } from 'vue';
+import { localDayIso } from '@/lib/localDay';
 import { useLogsStore } from '@/stores/logs';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
@@ -13,11 +14,7 @@ import { ACTIVITY_LABELS, isCardioOutingChallenge } from '@/data/cardio';
 // tennis/prépa/crossfit… comptent leur XP mais PAS l'énergie (mêmes règles que l'Agenda).
 const SPECIFIQUE_DISC = new Set(['crossfit', 'hyrox', 'mobilite', 'prepa_physique']);
 
-function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
-}
+const isoDay = localDayIso;
 
 export interface EnergyItem {
   emoji: string;

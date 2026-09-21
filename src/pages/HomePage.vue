@@ -696,6 +696,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, nextTick, watch } from 'vue';
+import { localDayIso } from '@/lib/localDay';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useProfileStore } from '@/stores/profile';
@@ -785,12 +786,7 @@ function fmtBias(b: number): string {
 function fmtDM(iso: string): string {
   return `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 }
-const todayIso = (() => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-    d.getDate(),
-  ).padStart(2, '0')}`;
-})();
+const todayIso = localDayIso(new Date());
 // Jour sélectionné pour l'heure par heure (défaut : aujourd'hui / 1er jour prévu).
 const selDay = ref(todayIso);
 watch(
@@ -970,8 +966,7 @@ async function goStats() {
 
 // ── Autre sport (durée) → XP globale + énergie ──
 function todayIsoLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return localDayIso(new Date());
 }
 const SPORT_OPTIONS = [
   'Tennis',

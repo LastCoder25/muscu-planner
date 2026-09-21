@@ -1,3 +1,5 @@
+import { localDayIso } from '@/lib/localDay';
+
 // worldBoss.ts — boss communautaire hebdomadaire. Spec DÉTERMINISTE (même boss
 // pour tout le monde la même semaine) → le premier joueur qui ouvre le crée.
 export interface BossSpec {
@@ -22,9 +24,7 @@ function mondayOf(now: Date): Date {
   m.setDate(m.getDate() - ((now.getDay() + 6) % 7));
   return m;
 }
-function isoDate(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+const isoDate = localDayIso;
 
 /** Boss de la semaine contenant `now` (déterministe). */
 export function currentBoss(now: Date = new Date()): BossSpec {

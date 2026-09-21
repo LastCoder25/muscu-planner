@@ -366,6 +366,7 @@
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted } from 'vue';
+import { localDayIso } from '@/lib/localDay';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -403,8 +404,7 @@ const analyzing = ref(false);
 
 // Log manuel d'une séance jouée (à la durée : heures + minutes)
 function todayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return localDayIso(new Date());
 }
 function performedAtIso(dateIso: string): string {
   const [y, m, d] = dateIso.split('-').map((n) => Number(n) || 0);
