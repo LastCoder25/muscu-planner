@@ -98,7 +98,6 @@ import {
   healBuildings,
   collectable,
   nextCollectedAt,
-  storageMult,
   expeditionsUnlocked,
   travelTimeMult,
   type Building,
@@ -520,9 +519,11 @@ export const useCharacterStore = defineStore('character', () => {
     }
     useGameFx().celebrate({
       kind: 'unlock',
-      emoji: '🛕',
-      title: 'Le Panthéon des champions',
-      subtitle: `Guilde, Centre de formation et Équipementier n'en font plus qu'un — ${refund.toLocaleString('fr-FR')} 🪙 rendus`,
+      // ⚠️ Générique : cette annonce sert à TOUS les retraits (Panthéon, Mine d'or,
+      // Fonderie, Entrepôt…) — nommer un seul bâtiment mentirait aux autres.
+      emoji: '🏗️',
+      title: 'Ta base est réorganisée',
+      subtitle: `Des bâtiments ont été fusionnés ou retirés — ${refund.toLocaleString('fr-FR')} 🪙 rendus`,
       rarity: 'legendary',
     });
   }
@@ -2580,7 +2581,6 @@ export const useCharacterStore = defineStore('character', () => {
     // Report du reliquat : chaque filon n'avance son `collectedAt` que du temps des
     // unités ENTIÈRES récoltées → pas de perte de fraction, un filon lent n'est plus
     // affamé par des récoltes fréquentes (cf. nextCollectedAt).
-    const mult = storageMult(cur.buildings);
     await persistOptimistic(userId, {
       login_energy: cur.login_energy + got.energy, // ⚡ Dynamo → énergie de jeu
       summon_stones: cur.summon_stones + got.summon, // 🔮 Autel des boss
@@ -2589,7 +2589,7 @@ export const useCharacterStore = defineStore('character', () => {
       parchemins: cur.parchemins + got.parchemins,
       fragments: cur.fragments + got.fragments,
       ink_dust: cur.ink_dust + got.ink_dust,
-      buildings: cur.buildings.map((b) => ({ ...b, collectedAt: nextCollectedAt(b, now, mult) })),
+      buildings: cur.buildings.map((b) => ({ ...b, collectedAt: nextCollectedAt(b, now) })),
       energy_log: pushEnergyLog(cur.energy_log, {
         date: isoDayLocal(now),
         emoji: '⚡',

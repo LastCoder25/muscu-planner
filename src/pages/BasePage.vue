@@ -1031,7 +1031,6 @@ import {
   buildingType,
   collectable,
   emptySlotLocked,
-  storageMult,
   RESOURCE_EMOJI,
   type BuildResource,
 } from '@/lib/buildings';
@@ -1469,7 +1468,6 @@ const YARD_HIT = 10;
 const yard = computed<YardCell[]>(() => {
   const cells: YardCell[] = [];
   const bs = char.row?.buildings ?? [];
-  const mult = storageMult(bs);
   // Rangées 1-2 : les emplacements du village.
   // ⚠️ ON CONSTRUIT LÀ OÙ ON TOUCHE, PAS DANS L'ORDRE : un emplacement vide n'est plus
   // « verrouillé » par sa POSITION mais par le QUOTA (combien de bâtiments sont déjà
@@ -1486,7 +1484,7 @@ const yard = computed<YardCell[]>(() => {
       built: !!b,
       locked: emptySlotLocked(i, bs, heroLevel.value),
       level: b?.level ?? 0,
-      ready: b ? buildingAccrued(b, now.value, mult) > 0 : false,
+      ready: b ? buildingAccrued(b, now.value) > 0 : false,
       damaged: false,
       onClick: () => (plotSlot.value = i),
     });
@@ -1925,7 +1923,6 @@ const prodPills = computed(() => {
   // ⚠️ `now` (horloge réactive de la page) et non `Date.now()` : dans un computed, ce
   // dernier ne serait lu qu’une fois et le stock en attente resterait figé à l’écran.
   const ready = collectable(bs, now.value);
-  const mult = storageMult(bs);
   const rate = new Map<string, number>();
   const cap = new Map<string, number>();
   for (const b of bs) {
@@ -1935,7 +1932,7 @@ const prodPills = computed(() => {
     // ⚠️ La capacité vient de `buildingStorageCap`, jamais recalculée ici : c'est elle
     // qui plafonne réellement `buildingAccrued`. Une capacité affichée « à peu près »
     // mentirait exactement au moment où elle compte — quand on sature.
-    cap.set(t.resource, (cap.get(t.resource) ?? 0) + buildingStorageCap(b, mult));
+    cap.set(t.resource, (cap.get(t.resource) ?? 0) + buildingStorageCap(b));
   }
   return [...rate.entries()].map(([res, r]) => {
     const n = ready[res as BuildResource] ?? 0;

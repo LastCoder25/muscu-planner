@@ -48,9 +48,19 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
     const m = nextMilestone('outpost', 10)!;
     expect(m.level).toBe(18);
     expect(m.text).toContain(String(caravanSlots(18)));
-    // …et rien à signaler quand le bâtiment n'a pas de palier : l'Entrepôt n'a que des
-    // courbes continues (stockage, vitesse des réparations).
-    expect(nextMilestone('warehouse', 10)).toBeNull();
+    // …et rien à signaler quand le bâtiment n'a pas de palier : la Dynamo n'a que des
+    // courbes continues (débit, réserve).
+    expect(nextMilestone('energy_font', 10)).toBeNull();
+  });
+
+  it('⚠️ chaque PRODUCTEUR annonce son débit ET sa réserve — hybrides compris', () => {
+    // Plus d'Entrepôt : c'est le niveau du bâtiment qui règle SA limite max, donc l'aperçu
+    // doit la dire aussi pour la Porte (🗝️) et l'Autel (🔮), pas seulement la Dynamo.
+    for (const id of ['energy_font', 'labyrinth_gate', 'boss_altar'] as const) {
+      const rows = buildingPreview(id, 10, 3);
+      expect(rows[0]!.text, id).toContain('réserve');
+      expect(rows[1]!.text, id).not.toBe(rows[0]!.text);
+    }
   });
 
   it('ne répète jamais deux fois la même ligne', () => {

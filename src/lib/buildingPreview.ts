@@ -19,7 +19,6 @@ import {
   buildingStorageCap,
   bossAltarRollFloor,
   labyrinthLuckBonus,
-  storageMult,
   travelTimeMult,
   type Building,
   type BuildingTypeId,
@@ -44,6 +43,15 @@ const pct = (x: number) => `${Math.round(x * 100)} %`;
 function textAt(typeId: BuildingTypeId, level: number): string | null {
   const t = BUILDING_TYPES.find((b) => b.id === typeId);
   if (!t) return null;
+  // ⚠️ CHAQUE BÂTIMENT GÈRE SA PRODUCTION ET SA RÉSERVE (plus d'Entrepôt) : un producteur
+  // — Dynamo, mais aussi la Porte (🗝️) et l'Autel (🔮) — annonce son débit ET le maximum
+  // qu'il peut stocker, les deux montant avec SON niveau. Calculés par les fonctions du
+  // jeu, jamais recopiés.
+  const parH = (t.prodPerHrPerLvl ?? 0) * level;
+  const prod = parH
+    ? `${Math.round(parH * 10) / 10}/h · réserve ${Math.round(buildingStorageCap(one(typeId, level)[0]!))}`
+    : '';
+  const withProd = (s: string) => (prod ? `${s} · ${prod}` : s);
   switch (typeId) {
     case 'pantheon':
       // ⚠️ SON VRAI LEVIER, et le plus fort des trois (demandé — « enlève le nombre
@@ -61,23 +69,16 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       return `−${pct(1 - travelTimeMult(one(typeId, level)))} de trajet · ${n} convoi${n > 1 ? 's' : ''} · ×${caravanSlowFor(level).toFixed(2)} le temps du héros`;
     }
     case 'labyrinth_gate':
-      return `+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`;
+      return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);
     case 'boss_altar':
       // ⚠️ Depuis la v0.875 (objets au rang du joueur) : de la CHANCE, qui améliore le jet et
       // resserre la traîne basse — jamais un rang au-dessus (v0.876).
-      return `pièces de boss : +${pct(altarLuckBonus(bossAltarRollFloor(one(typeId, level))))} de chance`;
-    // ⚠️ UN SEUL levier depuis que la Fonderie a emporté les réparations avec elle
-    // (demandé) : l'Entrepôt ne parle plus que de STOCKAGE, et il reste vivant du
-    // niveau 0 au 100 (règle v0.731).
-    case 'warehouse':
-      return `stockage ×${storageMult(one(typeId, level)).toFixed(2)}`;
-    default: {
-      // Producteurs : le débit horaire et ce que la réserve peut contenir.
-      const parH = (t.prodPerHrPerLvl ?? 0) * level;
-      if (!parH) return null;
-      const arr = Math.round(parH * 10) / 10;
-      return `${arr}/h · réserve ${Math.round(buildingStorageCap(one(typeId, level)[0]!))}`;
-    }
+      return withProd(
+        `pièces de boss : +${pct(altarLuckBonus(bossAltarRollFloor(one(typeId, level))))} de chance`,
+      );
+    default:
+      // Producteurs purs : le débit horaire et ce que la réserve peut contenir.
+      return prod || null;
   }
 }
 

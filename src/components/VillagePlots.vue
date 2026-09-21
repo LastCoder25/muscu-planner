@@ -180,7 +180,6 @@ import {
   canBuildOnSlot,
   canUpgradeBuilding,
   slotUnlockLevel,
-  storageMult,
   travelTimeMult,
   labyrinthLuckBonus,
   bossAltarRollFloor,
@@ -225,7 +224,7 @@ const plots = computed<PlotView[]>(() => {
       slot: i,
       unlocked: !!b || canBuildOnSlot(i, buildings.value, heroLevel.value),
       building: b,
-      ready: b ? buildingAccrued(b, props.now, storageMult(buildings.value)) > 0 : false,
+      ready: b ? buildingAccrued(b, props.now) > 0 : false,
     };
   });
 });
@@ -292,7 +291,6 @@ function utilityEffectLabel(b: Building): string {
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')
     return `boss : +${Math.round(altarLuckBonus(bossAltarRollFloor([b])) * 100)} % de chance`;
-  if (b.typeId === 'warehouse') return `+${Math.round((storageMult([b]) - 1) * 100)}% stockage`;
   return '';
 }
 /** Producteur pur → prod/h. Utilitaire → effet. Hybride → les deux. */
@@ -301,7 +299,7 @@ function effectAt(b: Building, level: number): string {
   if (!t) return '';
   const at: Building = { ...b, level };
   const prod = t.resource
-    ? `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource] ?? '✨'}/h`
+    ? `${buildingProdPerHour(at).toFixed(1)} ${RES_EMOJI[t.resource] ?? '✨'}/h · max ${Math.floor(buildingStorageCap(at))}`
     : '';
   if (t.category === 'producer') return prod;
   const eff = utilityEffectLabel(at);
@@ -320,19 +318,16 @@ function effectNext(b: Building): string {
   return next && next !== effectNow(b) ? next : '';
 }
 function accrued(b: Building): number {
-  return buildingAccrued(b, props.now, storageMult(buildings.value));
+  return buildingAccrued(b, props.now);
 }
 /** Accumulation EXACTE (non arrondie) : un filon lent afficherait « 0 » pendant des
  *  heures avec un `floor` — on voit qu'il tourne. */
 function accruedExact(b: Building): number {
   const hours = Math.max(0, (props.now - b.collectedAt) / 3_600_000);
-  return Math.min(
-    buildingProdPerHour(b) * hours,
-    buildingStorageCap(b, storageMult(buildings.value)),
-  );
+  return Math.min(buildingProdPerHour(b) * hours, buildingStorageCap(b));
 }
 function storageOf(b: Building): number {
-  return buildingStorageCap(b, storageMult(buildings.value));
+  return buildingStorageCap(b);
 }
 function canUp(b: Building): boolean {
   return canUpgradeBuilding(b, heroLevel.value);
