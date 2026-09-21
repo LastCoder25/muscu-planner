@@ -59,14 +59,14 @@ const SUBJECTS = {
   'guerrier-relic-s': 'ancient ember heart relic, a glowing crystal heart wrapped in golden filigree, fiery aura',
 
   // ── ARCHER ──
-  'archer-weapon-b': 'simple wooden hunting bow lying horizontally on a wooden table',
-  'archer-weapon-a': 'elegant carved yew longbow lying horizontally on a wooden table',
-  'archer-weapon-s': 'ornate silver longbow with glowing crescent moon tips lying horizontally on a stone table',
-  'archer-armor-b': 'plain brown leather chest armor vest lying flat on a wooden table',
+  'archer-weapon-b': 'a simple wooden longbow standing upright, full length, bow string clearly visible',
+  'archer-weapon-a': 'an elegant carved yew longbow with leaf patterns standing upright, full length, bow string clearly visible',
+  'archer-weapon-s': 'an ornate silver longbow with glowing crescent moon tips standing upright, full length, bow string clearly visible',
+  'archer-armor-b': 'a plain brown leather chest armor standing upright on its own, empty',
   'archer-armor-a': 'green studded leather armor vest, empty, laid flat',
   'archer-armor-s': 'chest armor vest made of shimmering silver leaves lying flat on a table, green glow',
-  'archer-accessory-b': 'simple canvas quiver full of arrows lying on a wooden table',
-  'archer-accessory-a': 'carved leather quiver with brass fittings and fletched arrows lying on a wooden table',
+  'archer-accessory-b': 'a simple canvas quiver full of arrows standing upright',
+  'archer-accessory-a': 'a carved leather quiver with brass fittings full of fletched arrows standing upright',
   'archer-accessory-s': 'legendary endless quiver overflowing with glowing magical arrows',
   'archer-relic-b': 'single grey lucky feather tied with a string',
   'archer-relic-a': 'royal falcon feather with a golden clasp',
@@ -89,7 +89,7 @@ const SUBJECTS = {
   // ── HOMME D'ARMES ──
   'homme_armes-weapon-b': 'wooden club reinforced with iron bands',
   'homme_armes-weapon-a': 'steel flanged mace with a leather grip',
-  'homme_armes-weapon-s': 'huge steel warhammer with glowing orange runes lying on a stone table',
+  'homme_armes-weapon-s': 'a huge steel warhammer standing upright, hammer head at the top, glowing orange runes',
   'homme_armes-armor-b': 'patched iron plate armor with mismatched pieces, empty, on a wooden armor stand',
   'homme_armes-armor-a': 'sturdy steel plate armor, empty, on a wooden armor stand',
   'homme_armes-armor-s': 'massive steel breastplate chestpiece with glowing blue runes lying on a stone table',
@@ -115,9 +115,9 @@ const SUBJECTS = {
   'eclaireur-relic-s': 'legendary compass of lost winds, floating needle, swirling glowing wind',
 
   // ── CARAVANIER ──
-  'caravanier-weapon-b': 'plain wooden walking staff lying horizontally on a wooden table',
+  'caravanier-weapon-b': 'a plain wooden walking staff standing upright, full length',
   'caravanier-weapon-a': 'iron-shod guide staff with a brass knob',
-  'caravanier-weapon-s': 'carved wooden travel staff with glowing golden map lines lying horizontally on a table',
+  'caravanier-weapon-s': 'a carved wooden travel staff with glowing golden map lines standing upright, full length',
   'caravanier-armor-b': 'plain brown travel coat neatly folded',
   'caravanier-armor-a': 'merchant coat with brass buttons and a fur collar, neatly folded',
   'caravanier-armor-s': 'travel coat patterned with glowing golden maps folded into a neat square on a table',
