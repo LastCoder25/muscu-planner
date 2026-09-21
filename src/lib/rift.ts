@@ -769,7 +769,6 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
     heroKills: 0,
     xp,
     hurt: run.cleared ? [] : escort.map((a) => a.id),
-    advGear: [],
     wages: caravanWages(escort, poi),
     journal: run.journal,
     // ⚠️ De quoi REJOUER, jamais de quoi recalculer : la mise en scène lit ces nombres,
@@ -996,7 +995,6 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
     heroKills: 0,
     xp,
     hurt: run.win ? [] : escort.map((a) => a.id),
-    advGear: [],
     wages: caravanWages(escort, poi),
     journal,
   };

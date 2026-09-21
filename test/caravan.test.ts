@@ -45,7 +45,7 @@ import {
   advGearHasSecondAffix,
   advGearRoles,
   advGearValue,
-  rollAdvGear,
+  makeAdvGear,
   ADV_GEAR_SLOTS,
   LINEAGE_GEAR,
   lineageOf,
@@ -1504,9 +1504,9 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     }
   });
 
-  it('⚠️ la référence a la FORME d’un tirage : rareté de la classe, jet 0,3, même formule de valeur', () => {
-    // Même formule que `rollAdvGear` (`advGearValue`) : sinon la référence et les vrais
-    // drops divergeraient au premier réglage de `ADV_GEAR.k`.
+  it('⚠️ la référence a la FORME d’une vraie pièce : rareté de la classe, SANS jet, même formule de valeur', () => {
+    // Même formule que les vraies pièces (`makeAdvGear` → `advGearValue`) : sinon la référence
+    // et les pièces tirées divergeraient au premier réglage de `ADV_GEAR.k`.
     for (const L of [12, 45, 85]) {
       const g = refAdvGear(L);
       for (let i = 0; i < CARAVAN.refEscort; i++) {
@@ -1515,16 +1515,16 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
         for (const p of g.filter((x) => x.id.startsWith(`refGear${i}`))) {
           const pool = LINEAGE_GEAR[lineage].pieces[p.slot].pool;
           expect(p.rarity).toBe(advRarity(a));
-          expect(p.roll).toBe(0.3);
+          expect(p).not.toHaveProperty('roll');
           expect(p.effect.type).toBe(pool[0]);
-          expect(p.effect.value).toBe(advGearValue(pool[0]!, p.rarity, 0.3));
+          expect(p.effect.value).toBe(advGearValue(pool[0]!, p.rarity));
           // ⚠️ La règle du 2ᵉ affixe est LUE (`advGearHasSecondAffix`), jamais recopiée :
           // ce test épinglait `>= magique` en dur, donc il verrouillait l'ANCIEN SEUIL au
           // lieu de garantir que l'étalon et le tirage disent la même chose — ce qui était
           // exactement le défaut (une copie de la règle vivait dans `refAdvGear`).
           if (advGearHasSecondAffix(p.rarity)) {
             expect(p.effect2?.type).toBe(pool[1]);
-            expect(p.effect2?.value).toBe(advGearValue(pool[1]!, p.rarity, 0.3));
+            expect(p.effect2?.value).toBe(advGearValue(pool[1]!, p.rarity));
           } else expect(p.effect2).toBeUndefined();
         }
       }
@@ -1543,15 +1543,9 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
           advGearHasSecondAffix(p.rarity) && LINEAGE_GEAR[p.lineage].pieces[p.slot].pool.length > 1,
         );
       }
-      // …et une pièce TIRÉE au même rang dit la même chose.
+      // …et une VRAIE pièce au même rang dit la même chose.
       for (const slot of ADV_GEAR_SLOTS) {
-        const g = rollAdvGear(mulberry32(L * 31 + 5), {
-          lineage: 'guerrier',
-          slot,
-          level: L,
-          playerLevel: L,
-          rank: 'commun',
-        });
+        const g = makeAdvGear({ lineage: 'guerrier', slot, rank: 'commun', grade: 'B' });
         expect(!!g.effect2, `tirage ${slot}`).toBe(advGearHasSecondAffix('commun'));
       }
     }
@@ -1652,40 +1646,24 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
   });
 });
 
-describe('sources d’équipement : embuscades repoussées', () => {
-  it('une embuscade repoussée peut laisser une pièce de la lignée d’un membre', () => {
+describe('🚫 plus aucun équipement de champion sur la route (v0.1010)', () => {
+  it('une embuscade repoussée ne laisse plus de pièce : elles ne viennent que du tirage', () => {
     const escort = [0, 1, 2].map((i) => refChampionAdv(40, i));
-    let pieces = 0;
+    let gagnees = 0;
     for (let s = 1; s <= 300; s++) {
-      const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, s, { advGear: [] }, 40);
-      for (const g of o.advGear) expect(escort.map((a) => lineageOf(a))).toContain(g.lineage);
-      pieces += o.advGear.length;
+      const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, s, { advGear: [] });
+      expect(o).not.toHaveProperty('advGear');
+      gagnees += o.events.filter((e) => e.kind === 'bandits' && e.won).length;
     }
-    expect(pieces).toBeGreaterThan(0);
+    expect(gagnees, 'aucune embuscade gagnée : le test ne prouve rien').toBeGreaterThan(0);
   });
 
-  it('⚠️ le rang de la pièce se lit sur le VRAI niveau du joueur, jamais sur celui du lieu', () => {
-    // Escorte au sommet de l'arbre (le plafond de classe ne mord pas) sur un lieu de niveau
-    // 40, pour un joueur de niveau 5 : la courbe borne au rang du JOUEUR, +1 au plus.
-    const escort = [0, 1, 2].map((i) => refAdventurer(100, i));
-    let pieces = 0;
-    for (let s = 1; s <= 600; s++) {
-      const o = resolveCaravan(poi({ level: 40 }), escort, s, { advGear: [] }, 5);
-      for (const g of o.advGear)
-        expect(RARITY_RANK[g.rarity], g.rarity).toBeLessThanOrEqual(prestigeRankIndex(5) + 1);
-      pieces += o.advGear.length;
-    }
-    expect(pieces, 'aucune pièce : le test ne prouve rien').toBeGreaterThan(20);
-  });
-
-  it('⚠️ GÉNÉRATEUR SÉPARÉ pour l’équipement — la graine 8 pin le reste du butin', () => {
-    // Cette graine déclenche le tirage de gear (une embuscade REPOUSSÉE en 2ᵉ jambe, cf.
-    // `advGear` ci-dessous) : si son tirage venait à retomber sur le flux principal `rng`
-    // au lieu de son propre générateur `gearRng`, tout ce qui suit dans la boucle (les
-    // jambes suivantes, donc `gold`/`scrap`/`wages`/`xp`/`hurt`/`events`) serait décalé
-    // et ces valeurs, prises sur le vrai code, ne matcheraient plus.
+  it('⚠️ la graine 8 pin le butin : retirer le tirage d’équipement ne décale rien', () => {
+    // Le tirage d'équipement vivait sur son PROPRE générateur (`gearRng`) : le retirer ne
+    // doit rien changer au flux principal. Ces valeurs sont celles d'AVANT le retrait, au
+    // chiffre près — une seule qui bouge dirait que le flux aléatoire a fui.
     const escort = [0, 1, 2].map((i) => refChampionAdv(40, i));
-    const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, 8, { advGear: [] }, 40);
+    const o = resolveCaravan(poi({ level: 40, perilous: true }), escort, 8, { advGear: [] });
     expect(o.gold).toBe(2028); // une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
     expect(o.energy).toBe(62);
     expect(o.summonStones).toBe(0);
@@ -1716,8 +1694,6 @@ describe('sources d’équipement : embuscades repoussées', () => {
     ]);
     expect(o.events.map((e) => e.kind)).toEqual(['bandits', 'bandits', 'calme', 'calme']);
     expect(o.events.map((e) => e.won)).toEqual([false, true, undefined, undefined]);
-    // …et une pièce a bien été tirée : le test n’est pas trivialement vrai.
-    expect(o.advGear.length).toBeGreaterThan(0);
   });
 });
 

@@ -163,18 +163,10 @@ import {
   advGearRoles,
   advGearSellValue,
   canWearAdvGear,
-  rollAdvGear,
-  rollAdvGearDrop,
+  rollGachaPiece,
   advGearModelOf,
   lineageOf,
   normalizeAdvGearState,
-  outfitFromItem,
-  nextForgeUntil,
-  wornGear,
-  outfitGoldCost,
-  outfitRank,
-  planOutfitBatch,
-  settleOutfit,
   type AdvGear,
   type AdvGearSlot,
   type AdvGearState,
@@ -207,7 +199,6 @@ import {
 } from '@/lib/gacha';
 import { levelUpTickets, pullPayment } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
-import { CHAMPIONS } from '@/data/champions';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGoldFx } from '@/composables/useGoldFx';
 
@@ -1105,20 +1096,10 @@ export const useCharacterStore = defineStore('character', () => {
     return results;
   }
 
-  /** La pièce d'un B. ⚠️ Chance 1 : le tirage a DÉJÀ décidé qu'il y a une pièce. */
+  /** La pièce d'un B — la lettre du tirage EST celle de la pièce (`rollGachaPiece`, la
+   *  seule source d'équipement de champion). */
   function gachaPiece(advs: Adventurer[], playerLevel: number): Omit<AdvGear, 'id'> {
-    const lvl = Math.max(1, playerLevel);
-    const drop = rollAdvGearDrop(Math.random, advs, {
-      chance: 1,
-      level: lvl,
-      luck: 0,
-      playerLevel: lvl,
-      // Un tirage B rend une pièce B : la lettre du tirage EST celle de la pièce.
-      grade: 'B',
-    });
-    if (drop) return drop;
-    const lineage = CHAMPIONS[Math.floor(Math.random() * CHAMPIONS.length)]!.lineage;
-    return rollAdvGear(Math.random, { lineage, level: lvl, playerLevel: lvl, grade: 'B' });
+    return rollGachaPiece(Math.random, advs, { playerLevel, grade: 'B' });
   }
 
   /** Un tirage à l'unité. */
@@ -1908,7 +1889,6 @@ export const useCharacterStore = defineStore('character', () => {
       wages = claim.wages;
       partyPatch = {
         adventurers: claim.adventurers,
-        ...(party.advGear.length ? { adv_gear: withAdvGear(cur, party.advGear) } : {}),
       };
     }
     // ⚠️ ENTIERS À L'ENCAISSEMENT : ces colonnes sont `integer`, une valeur décimale fait
@@ -2083,7 +2063,6 @@ export const useCharacterStore = defineStore('character', () => {
           report.faction,
           ctx.playerLevel,
           (report.resolvedAt ^ cur.base!.seed) >>> 0 || 1,
-          advList.value,
         )
       : null;
     const drops = (loot?.items ?? []).map((it) => ({ ...it, id: crypto.randomUUID() }));
@@ -2091,7 +2070,6 @@ export const useCharacterStore = defineStore('character', () => {
       patch.gold = cur.gold + loot.gold;
       patch.summon_stones = cur.summon_stones + loot.summonStones;
       patch.keys = cur.keys + loot.keys;
-      if (loot.advGear.length) patch.adv_gear = withAdvGear(cur, loot.advGear);
       // Le relevé part avec le rapport : on le pose sur la base que `applyRaidOutcome`
       // vient de rendre, pas dans un second `persist`.
       patch.base = {
@@ -2237,7 +2215,7 @@ export const useCharacterStore = defineStore('character', () => {
     const gone = stock.filter((g) => ids.includes(g.id) && !g.locked && !worn.has(g.id));
     return {
       gone,
-      state: { forges: [], ...cur.adv_gear, stock: stock.filter((g) => !gone.includes(g)) },
+      state: { stock: stock.filter((g) => !gone.includes(g)) },
     };
   }
   /** 🪙 VEND des pièces du stock — la moitié d'un objet du héros de même grade. */
@@ -2257,110 +2235,17 @@ export const useCharacterStore = defineStore('character', () => {
     const stock = (cur.adv_gear?.stock ?? []).map((g) =>
       g.id === id ? { ...g, locked: !g.locked } : g,
     );
-    await persistOptimistic(userId, { adv_gear: { forges: [], ...cur.adv_gear, stock } });
+    await persistOptimistic(userId, { adv_gear: { stock } });
   }
-  /** Ajoute des pièces au STOCK (butin d'un siège, d'une fouille…) — PUR, ne persiste
-   *  rien : les sources de drop (Task 6, `tickScavengers`/`claimCaravan`) l'appellent
-   *  pour construire le `patch.adv_gear` qu'elles persistent dans le MÊME `persist` que
-   *  le reste du butin (or, familiers…), plutôt que d'écrire deux fois. */
+  /** Ajoute des pièces au STOCK — PUR, ne persiste rien. ⚠️ Seul le TIRAGE en ajoute
+   *  (v0.1010) : il l'appelle pour les persister dans le MÊME `persist` que la mana et le
+   *  pity, plutôt que d'écrire deux fois. */
   function withAdvGear(cur: CharacterRow, pieces: Omit<AdvGear, 'id'>[]): AdvGearState {
     const stock = [
       ...(cur.adv_gear?.stock ?? []),
       ...pieces.map((p) => ({ ...p, id: crypto.randomUUID() })),
     ];
-    return { ...(cur.adv_gear ?? { stock: [], forges: [] }), stock };
-  }
-
-  /** ⚒️ Envoie un objet du SAC à l'Équipementier : il en revient une pièce pour
-   *  l'aventurier visé, faite pour son métier et AU RANG DE SA CLASSE, sans dépasser celui
-   *  de l'objet fourni (`outfitRank`). Les fabrications se mettent en FILE (v0.881) : chacune
-   *  prend `outfitterMsFor` après la précédente (réglé par le tick de base, `settleOutfit`).
-   *
-   *  ⚠️ Refus AU STORE, même politique que le compagnon/talent/équipement : l'écran ne
-   *  propose pas l'impossible, il ne le garantit pas.
-   *
-   *  ⚠️ `playerLevel` est REQUIS bien que le brief d'origine l'omette de la signature :
-   *  c'est le patron de TOUT le reste de ce store (`buildFilon`, `upgradeFilon`,
-   *  `claimCaravan`, `tickScavengers`…) — jamais recalculé ici, toujours reçu de
-   *  l'appelant, qui seul connaît le niveau RÉEL du joueur. */
-  async function startOutfit(
-    userId: string,
-    itemId: string,
-    advId: string,
-    now: number,
-    playerLevel: number,
-  ) {
-    const cur = row.value;
-    if (!cur) return;
-    const level = buildingLevel(cur.buildings ?? [], 'pantheon');
-    if (level <= 0) throw new Error('Construis un Panthéon.');
-    const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
-    if (!adv) throw new Error('Cet aventurier est introuvable.');
-    const item = cur.inventory.find((i) => i.id === itemId);
-    if (!item) throw new Error('Cet objet est introuvable.');
-    if (item.locked) throw new Error('🔒 Déverrouille-le d’abord.');
-    if (item.slot === FAMILIAR_SLOT) throw new Error('On ne fond pas un familier.');
-    if (cur.equipped[item.slot]?.id === item.id)
-      throw new Error('Ton héros le porte — retire-le d’abord.');
-    // 💰 L'or se paie AU LANCEMENT, sur le rang ANNONCÉ (`outfitRank`, déterministe) — pas
-    // sur la pièce tirée : le joueur doit payer ce qu'on lui a dit.
-    const cost = outfitGoldCost(outfitRank(item, adv), adv.level);
-    if (cur.gold < cost) throw new Error(`Il te faut ${cost} 🪙 pour cette fabrication.`);
-    const piece = outfitFromItem(Math.random, item, adv, playerLevel);
-    if (!piece) throw new Error(`Cet objet ne convient pas au métier de ${adv.name}.`);
-    await persistOptimistic(userId, {
-      gold: cur.gold - cost,
-      inventory: cur.inventory.filter((i) => i.id !== itemId),
-      adv_gear: {
-        stock: cur.adv_gear?.stock ?? [],
-        forges: [
-          ...(cur.adv_gear?.forges ?? []),
-          { until: nextForgeUntil(cur.adv_gear?.forges ?? [], now, level), advId, piece },
-        ],
-      },
-    });
-  }
-
-  /** ⚒️ TOUT ÉQUIPER pour un aventurier, en UNE écriture (demandé) : les emplacements vides
-   *  et ceux où l'on peut faire mieux, dans l'ordre conseillé (`planOutfitBatch`).
-   *
-   *  ⚠️ TOUT OU RIEN sur l'or : on refuse si la somme entière n'y est pas, plutôt que de
-   *  lancer « ce qu'on peut payer » — l'écran annonce le total avant, et une action
-   *  partielle laisserait le joueur deviner ce qui a été fait.
-   *
-   *  ⚠️ La file s'enchaîne (`nextForgeUntil` est recalculé à chaque pièce) : les pièces se
-   *  suivent au lieu de sortir toutes ensemble, comme une fabrication à l'unité. */
-  async function startOutfitBatch(userId: string, advId: string, now: number, playerLevel: number) {
-    const cur = row.value;
-    if (!cur) return 0;
-    const level = buildingLevel(cur.buildings ?? [], 'pantheon');
-    if (level <= 0) throw new Error('Construis un Panthéon.');
-    const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
-    if (!adv) throw new Error('Cet aventurier est introuvable.');
-    const forges = cur.adv_gear?.forges ?? [];
-    // ⚠️ Les MÊMES exclusions que la fabrication à l'unité : ni 🔒, ni familier, ni ce que
-    // le héros porte. L'écran les applique déjà ; le store ne s'y fie pas.
-    const candidates = cur.inventory.filter(
-      (i) => !i.locked && i.slot !== FAMILIAR_SLOT && cur.equipped[i.slot]?.id !== i.id,
-    );
-    // ⚠️ `wornGear` (et non `adv.gear` brut) : ce qui COMPTE au combat, jamais un id qui ne
-    // désigne plus rien — même règle que `outfitOptions` côté écran (v0.885).
-    const worn = wornGear(cur.adventurers ?? [], cur.adv_gear?.stock ?? []).get(advId) ?? [];
-    const plan = planOutfitBatch(candidates, adv, worn, forges);
-    if (!plan.jobs.length) throw new Error(`Rien à fabriquer pour ${adv.name}.`);
-    if (cur.gold < plan.gold) throw new Error(`Il te faut ${plan.gold} 🪙 pour tout fabriquer.`);
-    const taken = new Set(plan.jobs.map((j) => j.item.id));
-    const queue = [...forges];
-    for (const j of plan.jobs) {
-      const piece = outfitFromItem(Math.random, j.item, adv, playerLevel);
-      if (piece) queue.push({ until: nextForgeUntil(queue, now, level), advId, piece });
-    }
-    await persistOptimistic(userId, {
-      gold: cur.gold - plan.gold,
-      inventory: cur.inventory.filter((i) => !taken.has(i.id)),
-      adv_gear: { stock: cur.adv_gear?.stock ?? [], forges: queue },
-    });
-    return plan.jobs.length;
+    return { stock };
   }
 
   async function buildDefense(userId: string, typeId: DefenseId, playerLevel: number, now: number) {
@@ -2522,27 +2407,7 @@ export const useCharacterStore = defineStore('character', () => {
   // `caravanSlots`, `convoySlotsFree` et `caravanLegMin`, et le renommer partout
   // n'apprendrait rien de plus.
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
-  /** ⚒️ Conclut les fabrications de l'Équipementier arrivées à terme. ⚠️ Appelé par le tick
-   *  de base (qui tourne déjà) : sans ça, une pièce attendue ne sortirait qu'à la prochaine
-   *  action touchant le vivier, donc peut-être jamais.
-   *
-   *  ⚠️ Elle réglait AUSSI les formations jusqu'à la v0.957 — mais la promotion est partie
-   *  avec l'arbre de classes (v0.951), donc plus rien n'écrivait `training` et ce réglage
-   *  ne pouvait plus jamais mordre. Le nom le dit maintenant.
-   *
-   *  ⚠️ `settleOutfit` rend le MÊME objet si rien n'est dû : on n'écrit `adv_gear` que
-   *  quand il rend autre chose — même politique que `withAdvGear`. */
-  async function settleForge(userId: string, now = Date.now()) {
-    const cur = row.value;
-    const ag = cur?.adv_gear ? settleOutfit(cur.adv_gear, now) : null;
-    if (!cur || !ag || ag === cur.adv_gear) return false;
-    await persist(userId, { adv_gear: ag });
-    return true;
-  }
-
-  /** ⚠️ `playerLevel` REQUIS : le VRAI niveau du joueur (sport), lu par le tirage
-   *  d'équipement d'une embuscade repoussée — un lieu peut être 10 niveaux au-dessus. */
-  async function sendCaravan(userId: string, poi: Poi, escortIds: string[], playerLevel: number) {
+  async function sendCaravan(userId: string, poi: Poi, escortIds: string[]) {
     const cur = row.value;
     if (!cur) return false;
     if (comptoirLevel.value <= 0) return false;
@@ -2569,7 +2434,6 @@ export const useCharacterStore = defineStore('character', () => {
       // 🗡️ Ce que l'escorte emmène (`escortKitOf`, la même réserve que le rempart et l'écran).
       escortKitOf(cur),
       comptoirLevel.value,
-      playerLevel,
     );
     const busy = new Set(escortIds);
     await persist(userId, {
@@ -2630,9 +2494,6 @@ export const useCharacterStore = defineStore('character', () => {
       summon_stones: cur.summon_stones + ent(o.summonStones),
       keys: cur.keys + ent(o.keys),
       adventurers: advs,
-      // 🗡️ Une embuscade repoussée peut avoir laissé une pièce. ⚠️ `o.advGear` ABSENT sur
-      // les convois lancés avant cette version : l'optional chaining est voulu.
-      ...(o.advGear?.length ? { adv_gear: withAdvGear(cur, o.advGear) } : {}),
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
@@ -2712,7 +2573,7 @@ export const useCharacterStore = defineStore('character', () => {
       : isWarbandPoi(poi)
         ? resolveInterception({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
         : spec
-          ? resolveCamp({ poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel })
+          ? resolveCamp({ poi, spec, escort, road, hero, seed })
           : null;
     if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
     const trip = startParty({ poi, hero, seed }, now, leg, outcome);
@@ -2793,8 +2654,6 @@ export const useCharacterStore = defineStore('character', () => {
     sellAdvGear,
     toggleAdvGearLock,
     withAdvGear,
-    startOutfit,
-    startOutfitBatch,
     autoAssignGear,
     healHero,
     healAdventurers,
@@ -2811,7 +2670,6 @@ export const useCharacterStore = defineStore('character', () => {
     advGearStock,
     pantheonLevel,
     comptoirLevel,
-    settleForge,
     sendCaravan,
     claimCaravan,
     partyList,

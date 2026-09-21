@@ -13,19 +13,16 @@ import {
   mergeEffects,
   companionDropRank,
   rankRollMult,
+  RANK_ORDER,
   RARITY_RANK,
-  rollCompanionTier,
-  rollItemLevel,
   sellValueOf,
   type AggregatedEffects,
   type EffectType,
-  type Item,
   type ItemEffect,
-  type ItemSlot,
   type Rarity,
   type WeaponKind,
 } from './items';
-import { GACHA_RATES } from './gacha';
+import { rankStartLevel } from './characterRank';
 import { GRADE_COLOR, PULL_GRADES, type PullGrade } from '../data/champions';
 import { advGearModelId, advGearModelName } from '../data/advGearModels';
 import {
@@ -62,7 +59,9 @@ export interface AdvGear {
   /** 🎰 La LETTRE (B / A / S), comme les champions — tirée, fixe à vie, et c'est ELLE que
    *  l'écran montre. Elle multiplie les stats de combat (`GEAR_GRADE_SHARE`). */
   grade: PullGrade;
-  roll: number;
+  /** ⚠️ PAS DE JET (v0.1010, décision de l'utilisateur) : seuls les objets du HÉROS en ont un.
+   *  Deux exemplaires du même modèle sont IDENTIQUES — c'est ce qui donne un sens au doublon.
+   *  Le niveau démarre à ★1 de son rang (`rankStartLevel`). */
   level: number;
   effect: ItemEffect;
   effect2?: ItemEffect;
@@ -74,7 +73,9 @@ export interface AdvGear {
 interface PieceDef {
   name: string;
   emoji: string;
-  /** Stats possibles ; la 1ʳᵉ tirée est l'affixe principal, une AUTRE le 2ᵉ (Magique+). */
+  /** ⚠️ Les stats ÉCRITES du modèle, plus un pool tiré : la 1ʳᵉ est l'affixe principal, la
+   *  2ᵉ le second. Deux exemplaires du même modèle portent donc les mêmes stats — sans quoi
+   *  un doublon ne serait pas un doublon. */
   pool: EffectType[];
 }
 export interface LineageGearDef {
@@ -150,17 +151,6 @@ export const LINEAGE_GEAR: Record<Lineage, LineageGearDef> = {
  */
 export const GEAR_GRADE_SHARE: Record<PullGrade, number> = { B: 1, A: 1.45, S: 1.45 ** 2 };
 
-/** La lettre d'une pièce tirée hors du gacha : les taux du tirage (`GACHA_RATES`), sans
- *  pity — une seule table pour « combien de S dans le jeu ». */
-export function rollGearGrade(rng: () => number): PullGrade {
-  let r = rng();
-  for (const g of PULL_GRADES) {
-    r -= GACHA_RATES[g];
-    if (r < 0) return g;
-  }
-  return 'B';
-}
-
 /** 🎰 Ce que l'écran montre d'une pièce : sa LETTRE, dans sa couleur. Source unique. */
 export function advGearBadge(g: Pick<AdvGear, 'grade'>): { label: PullGrade; color: string } {
   return { label: g.grade, color: GRADE_COLOR[g.grade] };
@@ -185,14 +175,6 @@ export function advGearModelOf(g: Pick<AdvGear, 'lineage' | 'slot' | 'grade'>): 
   if (!(LINEAGES as readonly string[]).includes(g.lineage)) return null;
   if (!ADV_GEAR_SLOTS.includes(g.slot)) return null;
   return advGearModelId(g.lineage, g.slot, g.grade);
-}
-
-/** Remet NOM et EMOJI d'une pièce sur son modèle. Idempotente : sert à la relecture (les
- *  pièces d'avant le roster s'appelaient toutes « Épée », « Arc »…). */
-function withModel<T extends Omit<AdvGear, 'id'>>(g: T): T {
-  if (!advGearModelOf(g)) return g;
-  const m = advGearModel(g.lineage, g.slot, g.grade);
-  return g.name === m.name && g.emoji === m.emoji ? g : { ...g, name: m.name, emoji: m.emoji };
 }
 
 /** Réglages. ⚠️ `k` est LE levier d'équilibrage de l'équipement (mesuré en Task 4).
@@ -243,14 +225,11 @@ const ADV_GEAR = {
    *  serait tiré au hasard, on ne réécrit pas un objet possédé). Même politique que les
    *  refontes de tirage précédentes. */
   affix2From: 'commun' as Rarity,
-  /** Bonus de rôle d'un accessoire civil commun, jet 0 (rareté et jet le font monter). */
+  /** Bonus de rôle d'un accessoire civil commun (le rang le fait monter). */
   roleBase: { speed: 0.03, haul: 0.04 },
   /** Revente : un objet d'aventurier vaut la moitié d'un objet du héros de même grade. */
   sellK: 0.5,
 } as const;
-
-/** Chances de pièce d'aventurier par source. ⚠️ À re-mesurer si l'économie de siège bouge. */
-export const ADV_GEAR_DROP = { corpse: 0.02, champion: 0.5, ambush: 0.25 } as const;
 
 export function lineageOf(adv: Adventurer): Lineage | null {
   // ⚠️ Pour un champion elle est ÉCRITE, alors qu'elle se DÉDUISAIT de la classe racine :
@@ -276,19 +255,18 @@ export function pickLineage(rng: () => number, advs: Adventurer[]): Lineage | nu
 /** Valeur d'une stat d'équipement à ce grade. ⚠️ SOURCE UNIQUE : le tirage ET l'escorte de
  *  référence de la route (`refAdvGear`) la lisent — deux copies divergeraient au premier
  *  réglage de `ADV_GEAR.k`, et la route se calibrerait sur un équipement qui n'existe pas.
- *  ⚠️ PLANCHER à 0,1, pas à 1 : à k 0,15 un plancher à 1 écrasait rareté ET jet sur les
- *  petites bases (crit base 4 → 0,6 → 1 en commun comme au jet parfait). */
+ *  ⚠️ PLANCHER à 0,1, pas à 1 : à k 0,15 un plancher à 1 écrasait le rang sur les petites
+ *  bases (crit base 4 → 0,6 → 1 quel que soit le rang).
+ *  ⚠️ SANS JET : la valeur est le PLANCHER du rang (`rankRollMult(rang, 0)`). */
 export function advGearValue(
   t: EffectType,
   rank: Rarity,
-  roll: number,
-  /** ⚠️ Défaut B = 1 : la lettre de l'étalon (`refAdvGear`), donc aucune valeur d'avant ne
-   *  bouge. Le tirage, lui, la passe TOUJOURS. */
+  /** ⚠️ Défaut B = 1 : la lettre de l'étalon (`refAdvGear`). Le tirage la passe TOUJOURS. */
   grade: PullGrade = 'B',
 ): number {
   return Math.max(
     0.1,
-    round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k * GEAR_GRADE_SHARE[grade]),
+    round1(effectBase(t) * rankRollMult(rank, 0) * ADV_GEAR.k * GEAR_GRADE_SHARE[grade]),
   );
 }
 
@@ -304,70 +282,91 @@ export function advGearHasSecondAffix(rank: Rarity): boolean {
 }
 
 /** Bonus de rôle d'un accessoire civil à ce grade (même source unique que `advGearValue`). */
-export function advGearRoleValue(kind: 'speed' | 'haul', rank: Rarity, roll: number): number {
+function advGearRoleValue(kind: 'speed' | 'haul', rank: Rarity): number {
   // ⚠️ Volontairement sur la courbe D'ORIGINE, pas sur `advRankMult` : ce sont des canaux
   // CIVILS (temps de trajet, cargaison), déjà plafonnés par la route et comptés dans
-  // l'économie (`scrapEconomy`). Les comprimer déplacerait le rendement des convois, un
-  // réglage sans rapport avec le combat que la compression corrige.
-  const scale = rankRollMult(rank, roll) / rankRollMult('commun', 0);
+  // l'économie. Les comprimer déplacerait le rendement des convois.
+  const scale = rankRollMult(rank, 0) / rankRollMult('commun', 0);
   return Math.round(ADV_GEAR.roleBase[kind] * scale * 1000) / 1000;
 }
 
-export function rollAdvGear(
-  rng: () => number,
-  opts: {
-    lineage: Lineage;
-    slot?: AdvGearSlot;
-    level: number;
-    luck?: number;
-    playerLevel: number;
-    /** Rang IMPOSÉ (Équipementier) : seul le jet reste tiré. */
-    rank?: Rarity;
-    /** Lettre IMPOSÉE (un tirage B du gacha rend une pièce B). Sinon tirée EN DERNIER
-     *  (`rollGearGrade`) : les tirages d'avant gardent leur ordre, donc leurs valeurs. */
-    grade?: PullGrade;
-  },
-): Omit<AdvGear, 'id'> {
-  const luck = opts.luck ?? 0;
-  const slot = opts.slot ?? ADV_GEAR_SLOTS[Math.floor(rng() * ADV_GEAR_SLOTS.length)]!;
-  // ⚠️ RANG SUR LA COURBE DES COMPAGNONS (`rollCompanionTier`, v0.857), pas sur la pyramide
-  // des objets du héros (`rollTier`) : une pièce d'aventurier se lit en RANG, comme son
-  // porteur. La pyramide court ~2 rangs devant la classe → mesuré, 7 à 38 % seulement des
-  // pièces d'un champ de bataille étaient portables par un aventurier promu au mieux. Même
-  // règle que familiers et talents : son rang le plus souvent, un au-dessus très rarement.
-  const drawn = rollCompanionTier(rng, companionDropRank(opts.level, opts.playerLevel), luck);
-  const rank = opts.rank ?? drawn.rank;
-  const roll = drawn.roll;
-  const level = rollItemLevel(rng, Math.max(1, Math.min(opts.level, opts.playerLevel)), luck);
-  const def = LINEAGE_GEAR[opts.lineage];
+/** Plafond de niveau du jeu (celui du héros). */
+const ADV_GEAR_MAX_LEVEL = 100;
+
+/** La tranche de niveaux d'un rang : [★1, ★5]. Une pièce vit toujours dans celle de son
+ *  rang — l'ascension la fera passer dans la suivante. */
+export function advGearLevelBand(rank: Rarity): { min: number; max: number } {
+  const i = Math.max(0, RANK_ORDER.indexOf(rank));
+  // ⚠️ La DERNIÈRE rareté court jusqu'au plafond du jeu : au-delà d'elle, les rangs de
+  // prestige (Divin céleste, Tout-puissant) n'ont plus de rareté d'objet à ouvrir.
+  const last = i >= RANK_ORDER.length - 1;
+  return { min: rankStartLevel(i), max: last ? ADV_GEAR_MAX_LEVEL : rankStartLevel(i + 1) - 1 };
+}
+
+/**
+ * 🗡️ UNE PIÈCE D'UN MODÈLE, À CE RANG — entièrement DÉTERMINISTE (v0.1010).
+ *
+ * ⚠️ Plus aucun tirage ici : ni jet, ni niveau d'objet, ni stat tirée dans un pool. Le
+ * modèle (lignée × emplacement × lettre) écrit ses stats, le rang en fixe la taille, et la
+ * pièce démarre à ★1 de son rang. Deux pièces du même modèle au même rang sont donc
+ * IDENTIQUES : c'est la condition pour qu'un doublon ait un sens (l'éveil le fusionnera).
+ * ⚠️ SOURCE UNIQUE : le tirage du gacha, la relecture du stock et l'étalon de la route
+ * (`refAdvGear`) la lisent tous — deux constructions divergeraient.
+ */
+export function makeAdvGear(opts: {
+  lineage: Lineage;
+  slot: AdvGearSlot;
+  rank: Rarity;
+  grade: PullGrade;
+  /** Niveau de la pièce, borné à la tranche de son rang. Défaut : ★1. */
+  level?: number;
+}): Omit<AdvGear, 'id'> {
+  const { lineage, slot, rank, grade } = opts;
+  const def = LINEAGE_GEAR[lineage];
   const piece = def.pieces[slot];
-  const i1 = Math.floor(rng() * piece.pool.length);
-  const t1 = piece.pool[i1]!;
-  const t2 = advGearHasSecondAffix(rank)
-    ? (() => {
-        const others = piece.pool.filter((t) => t !== t1);
-        return others[Math.floor(rng() * others.length)]!;
-      })()
-    : null;
-  const grade = opts.grade ?? rollGearGrade(rng);
-  const value = (t: EffectType) => advGearValue(t, rank, roll, grade);
-  const model = advGearModel(opts.lineage, slot, grade);
+  const band = advGearLevelBand(rank);
+  const level = Math.min(band.max, Math.max(band.min, Math.round(opts.level ?? band.min)));
+  const [t1, t2] = piece.pool;
+  const model = advGearModel(lineage, slot, grade);
   const out: Omit<AdvGear, 'id'> = {
-    lineage: opts.lineage,
+    lineage,
     slot,
     name: model.name,
     emoji: model.emoji,
     rarity: rank,
     grade,
-    roll,
     level,
-    effect: { type: t1, value: value(t1) },
+    effect: { type: t1!, value: advGearValue(t1!, rank, grade) },
   };
-  if (t2) out.effect2 = { type: t2, value: value(t2) };
-  if (def.role && slot === 'accessory') {
-    out.role = { kind: def.role, value: advGearRoleValue(def.role, rank, roll) };
-  }
+  if (t2 && advGearHasSecondAffix(rank))
+    out.effect2 = { type: t2, value: advGearValue(t2, rank, grade) };
+  if (def.role && slot === 'accessory')
+    out.role = { kind: def.role, value: advGearRoleValue(def.role, rank) };
   return out;
+}
+
+/**
+ * 🎰 LA PIÈCE D'UN TIRAGE B — la SEULE source d'équipement de champion (v0.1010, décision de
+ * l'utilisateur : « les items de champions ne peuvent venir QUE du tirage gacha »).
+ *
+ * - Lignée tirée parmi celles du vivier (jamais une lignée qu'on ne possède pas) ; vivier
+ *   vide → parmi toutes, sinon le tout premier tirage d'un compte ne rendrait rien.
+ * - Emplacement tiré.
+ * - Rang = celui du JOUEUR (`companionDropRank`), plafonné à la meilleure classe de la
+ *   lignée dans le vivier : le stock ne se remplit jamais de pièces que personne ne porte.
+ */
+export function rollGachaPiece(
+  rng: () => number,
+  advs: Adventurer[],
+  opts: { playerLevel: number; grade: PullGrade },
+): Omit<AdvGear, 'id'> {
+  const lineage = pickLineage(rng, advs) ?? LINEAGES[Math.floor(rng() * LINEAGES.length)]!;
+  const slot = ADV_GEAR_SLOTS[Math.floor(rng() * ADV_GEAR_SLOTS.length)]!;
+  const lvl = Math.max(1, opts.playerLevel);
+  let rank = RANK_ORDER[companionDropRank(lvl, lvl)] ?? 'commun';
+  const cap = bestClassRarity(advs, lineage);
+  if (cap && RARITY_RANK[cap] < RARITY_RANK[rank]) rank = cap;
+  return makeAdvGear({ lineage, slot, rank, grade: opts.grade });
 }
 
 /** Ce que des pièces apportent au combat — valeur × niveau d'objet, comme un objet du héros. */
@@ -501,11 +500,8 @@ export interface AdvGearCell {
   filled: boolean;
   /** La pièce PORTÉE (règles appliquées, `wornGear`), sinon absente. */
   piece?: AdvGear;
-  /** Couleur, et RANG + ÉTOILES de la pièce portée (`gradeLabel`, comme un objet du héros).
-   *  ⚠️ Les étoiles ne sont pas décoratives : une pièce d'aventurier porte un JET
-   *  (`rollAdvGear` en tire un) qui décide d'une part de sa valeur. Sans elles, deux pièces
-   *  « Bronze » pouvaient valoir du simple au double sans que rien ne les distingue — le
-   *  défaut que la v0.895 avait corrigé côté héros et qui survivait ici. */
+  /** Couleur de la LETTRE de la pièce portée. (Plus de jet depuis la v0.1010 : deux pièces
+   *  du même modèle au même rang sont identiques.) */
   color?: string;
   /** La LETTRE de la pièce portée (B / A / S). */
   rank?: string;
@@ -607,224 +603,66 @@ export function advGearOptions(
   return res;
 }
 
-/** Une fabrication de l'Équipementier : la pièce est tirée au LANCEMENT, elle rejoint le
- *  stock à `until`. */
-export interface ForgeJob {
-  until: number;
-  advId: string;
-  piece: Omit<AdvGear, 'id'>;
-}
-
-/** L'état persisté (jsonb `characters.adv_gear`, migr. 0068) : le stock et la FILE de
- *  l'Équipementier (v0.881 ; une seule fabrication avant, dans `forge`, relue au
- *  chargement). ⚠️ Séparé du sac du héros (`inventory`). */
+/** L'état persisté (jsonb `characters.adv_gear`, migr. 0068) : le stock.
+ *  ⚠️ Séparé du sac du héros (`inventory`). La file de l'Équipementier (`forges`) a disparu
+ *  avec la forge (v0.1010) : les pièces qui y attendaient rejoignent le stock à la relecture. */
 export interface AdvGearState {
   stock: AdvGear[];
-  forges: ForgeJob[];
+}
+
+/** Remet une pièce sur son MODÈLE (v0.1010) : stats écrites, valeur au plancher de son rang,
+ *  niveau borné à la tranche de ce rang, plus aucun jet. ⚠️ Idempotente — relire deux fois
+ *  rend la même pièce. Une pièce illisible (lignée ou emplacement inconnus) est rendue telle
+ *  quelle : on ne jette pas un objet possédé. */
+function onModel<T extends Omit<AdvGear, 'id'>>(g: T): T {
+  // ⚠️ Une pièce d'avant les lettres est un B (valeurs B = 1).
+  const grade: PullGrade = PULL_GRADES.includes(g.grade) ? g.grade : 'B';
+  if (!advGearModelOf({ ...g, grade })) return g;
+  const rank: Rarity = RANK_ORDER.includes(g.rarity) ? g.rarity : 'commun';
+  const fresh = makeAdvGear({
+    lineage: g.lineage,
+    slot: g.slot,
+    rank,
+    grade,
+    level: typeof g.level === 'number' ? g.level : undefined,
+  });
+  // Les champs PROPRES à l'exemplaire (id, verrou) survivent ; tout le reste vient du modèle.
+  const own = g as T & { id?: string };
+  return {
+    ...fresh,
+    ...(own.id !== undefined ? { id: own.id } : {}),
+    ...(g.locked ? { locked: true } : {}),
+  } as unknown as T;
 }
 
 /** Relecture défensive du jsonb `adv_gear` au chargement : une entrée de stock sans `id`,
- *  `slot` ou `effect` est écartée (elle ferait planter l'écran ou le combat), une forge
- *  sans `piece` ou sans échéance numérique est remise à `null` (elle ne se conclurait
- *  jamais). Jamais `null` en sortie. */
+ *  `slot` ou `effect` est écartée (elle ferait planter l'écran ou le combat). Chaque pièce
+ *  est remise sur son modèle (`onModel`). Jamais `null` en sortie. */
 export function normalizeAdvGearState(raw: unknown): AdvGearState {
   const isObj = (v: unknown): v is Record<string, unknown> =>
     !!v && typeof v === 'object' && !Array.isArray(v);
   const src = isObj(raw) ? raw : {};
-  // ⚠️ Une pièce d'avant les lettres est un B (valeurs inchangées, B = 1) et reprend le nom
-  // de son MODÈLE (roster) : relire suffit, aucune migration.
-  const withGrade = <T extends Omit<AdvGear, 'id'>>(g: T): T =>
-    withModel(PULL_GRADES.includes(g.grade) ? g : { ...g, grade: 'B' });
   const stock = (Array.isArray(src.stock) ? src.stock : [])
     .filter(
       (g): g is AdvGear =>
         isObj(g) && typeof g.id === 'string' && typeof g.slot === 'string' && isObj(g.effect),
     )
-    .map(withGrade);
-  const isJob = (f: unknown): f is ForgeJob =>
-    isObj(f) && isObj(f.piece) && typeof f.until === 'number' && typeof f.advId === 'string';
-  // L'ancienne forge unique (`forge`) rejoint la file : une fabrication en cours avant la
-  // mise à jour ne se perd pas.
-  const forges = [...(Array.isArray(src.forges) ? src.forges : []), src.forge]
-    .filter(isJob)
-    .map((f) => (typeof f.piece.lineage === 'string' ? { ...f, piece: withGrade(f.piece) } : f))
-    .sort((a, b) => a.until - b.until);
-  return { stock, forges };
-}
-
-// ── ÉQUIPEMENTIER (Task 7) ──
-// Un bâtiment qui transforme un objet dont le héros ne veut plus en pièce d'AVENTURIER,
-// faite pour le MÉTIER de la cible. ⚠️ L'objet sacrifié ne fixe que le SLOT (arme/armure/
-// accessoire, relique fusionnée dans l'accessoire) — jamais le rang de la pièce produite,
-// et jamais sa lignée : c'est la CIBLE qui décide de tout, sinon un objet primordial du
-// héros fabriquerait une pièce primordiale pour une recrue de niveau 3, ce qui casserait
-// « chaque pièce est faite pour SON porteur » (canWearAdvGear).
-
-/** Durée de fabrication, asymptotique (règle « aucun niveau mort du 0 au 100 ») : chaque
- *  niveau du bâtiment raccourcit un peu, sans jamais devenir instantanée. */
-// ⚠️ 40 → 10 min à neuf (v0.881, demandé : « création plus rapide ») ; les fabrications se
-// mettent désormais en FILE (`nextForgeUntil`).
-export const OUTFITTER = {
-  baseMs: 10 * 60_000,
-  speedMax: 0.6,
-  half: 30,
-  /** 💰 Ce que forger coûte, en multiples de ce que la pièce se REVENDRAIT (jet nul).
-   *
-   *  ⚠️ IL DOIT RESTER NETTEMENT AU-DESSUS DE 1 / `ADV_GEAR.sellK`, et c'est la seule
-   *  contrainte non négociable : sinon forger puis revendre FABRIQUE DE L'OR, et l'économie
-   *  entière part en boucle. Marge large ici (un jet parfait ne rapporte que +70 %).
-   *
-   *  ⚠️ MESURÉ contre le revenu réel (`test/helpers/goldModel`), comme `goldSink` : équiper
-   *  un aventurier COMPLET (4 pièces) vaut **2 à 9 % d'une journée** de revenu du niveau 10
-   *  au 80, quand UN CRAN de bâtiment en coûte 160 à 260 %. La forge se sent sans jamais
-   *  rivaliser avec le vrai puits d'or. */
-  goldK: 7,
-} as const;
-export function outfitterMsFor(level: number): number {
-  const L = Math.max(0, level);
-  return Math.round(OUTFITTER.baseMs * (1 - (OUTFITTER.speedMax * L) / (L + OUTFITTER.half)));
-}
-
-/** 💰 Or que coûte la fabrication d'une pièce de ce RANG pour un aventurier de ce NIVEAU
- *  (demandé : « selon le niveau de l'item qui sera fabriqué »).
- *
- *  ⚠️ IL NE DÉPEND QUE DE CE QUI EST DÉTERMINISTE — le rang (`outfitRank`) et le niveau de
- *  la cible. Le JET et le niveau d'objet réels sont TIRÉS au lancement : un coût qui en
- *  dépendrait ne pourrait pas être annoncé avant, et changerait sous les yeux du joueur.
- *
- *  ⚠️ DÉRIVÉ de `sellValueOf`, la table de valeur du projet — jamais une seconde échelle de
- *  prix : le jour où la valeur d'un rang bouge, la forge suit. */
-export function outfitGoldCost(rank: Rarity, level: number): number {
-  return Math.max(1, Math.round(sellValueOf(rank, 0, level) * ADV_GEAR.sellK * OUTFITTER.goldK));
-}
-
-/** Quel emplacement d'AVENTURIER un objet du héros peut nourrir : le même (4 emplacements
- *  depuis la v0.881). Le familier et le trophée n'en font aucun — on ne fond pas un animal. */
-export function outfitSlot(slot: ItemSlot): AdvGearSlot | null {
-  return slot === 'weapon' || slot === 'armor' || slot === 'accessory' || slot === 'relic'
-    ? slot
-    : null;
-}
-
-/** Rang de la pièce que l'Équipementier fabriquera (v0.881, demandé par l'utilisateur) :
- *  le rang de l'AVENTURIER (celui de sa classe), sauf si l'objet fourni est plus bas — la
- *  pièce ne dépasse alors jamais le rang de l'objet. Déterministe : l'écran l'annonce avant. */
-export function outfitRank(item: Pick<Item, 'rarity'>, target: Adventurer): Rarity {
-  const cls = advRarity(target);
-  return RARITY_RANK[item.rarity] < RARITY_RANK[cls] ? item.rarity : cls;
-}
-
-/** Un objet du sac qu'on peut fondre pour CET aventurier, avec la pièce qui en sortira. */
-/** Ce que la pièce fabriquée ferait face à ce que l'aventurier porte déjà sur l'emplacement. */
-type OutfitVerdict = 'empty' | 'up' | 'same' | 'down';
-
-export interface OutfitOption {
-  item: Item;
-  slot: AdvGearSlot;
-  name: string;
-  emoji: string;
-  rank: Rarity;
-  /** L'objet est plus bas que l'aventurier : la pièce sortira à SON rang, pas à celui du porteur. */
-  capped: boolean;
-  /** L'aventurier ne PORTE rien sur cet emplacement (pièce retenue par `wornGear`). */
-  emptySlot: boolean;
-  /** La pièce qu'il porte sur cet emplacement, à comparer AVANT de fondre l'objet. */
-  current?: AdvGear;
-  /** Rang de la pièce fabriquée face à la pièce portée. */
-  verdict: OutfitVerdict;
-  /** Pièces déjà en fabrication pour lui sur cet emplacement. */
-  queued: number;
-}
-
-const VERDICT_ORDER: Record<OutfitVerdict, number> = { empty: 0, up: 1, same: 2, down: 3 };
-
-/** Les objets qu'on peut fondre pour `target`, dans l'ordre CONSEILLÉ (v0.881, demandé :
- *  « création plus rapide ») : d'abord ceux qui donnent la pièce AU RANG de l'aventurier,
- *  sur un emplacement vide, puis ceux qui battent la pièce portée, en sacrifiant l'objet le
- *  moins précieux ; les objets trop bas passent à la fin. `items` = les candidats déjà filtrés
- *  (ni 🔒, ni porté, ni familier). ⚠️ `worn` = ce que `wornGear` retient pour lui : on
- *  compare à ce qui COMPTE au combat, jamais à un id qui ne désigne plus rien (v0.885). */
-export function outfitOptions(
-  items: readonly Item[],
-  target: Adventurer,
-  worn: readonly AdvGear[],
-  forges: readonly ForgeJob[],
-): OutfitOption[] {
-  const lineage = lineageOf(target);
-  if (!lineage) return [];
-  const out: OutfitOption[] = [];
-  for (const item of items) {
-    const slot = outfitSlot(item.slot);
-    if (!slot || item.locked) continue;
-    const def = LINEAGE_GEAR[lineage].pieces[slot];
-    const rank = outfitRank(item, target);
-    const current = worn.find((g) => g.slot === slot);
-    const diff = current ? RARITY_RANK[rank] - RARITY_RANK[current.rarity] : 0;
-    out.push({
-      item,
-      slot,
-      name: def.name,
-      emoji: def.emoji,
-      rank,
-      capped: rank !== advRarity(target),
-      emptySlot: !current,
-      ...(current ? { current } : {}),
-      verdict: !current ? 'empty' : diff > 0 ? 'up' : diff < 0 ? 'down' : 'same',
-      queued: forges.filter((f) => f.advId === target.id && f.piece.slot === slot).length,
-    });
-  }
-  // Rang décroissant : une pièce plafonnée par un objet trop bas a un rang inférieur à celui de
-  // la classe, donc elle passe d'elle-même après les autres.
-  return out.sort(
-    (a, b) =>
-      RARITY_RANK[b.rank] - RARITY_RANK[a.rank] ||
-      VERDICT_ORDER[a.verdict] - VERDICT_ORDER[b.verdict] ||
-      RARITY_RANK[a.item.rarity] - RARITY_RANK[b.item.rarity] ||
-      a.item.level - b.item.level,
+    .map(onModel);
+  // ⚠️ La forge a disparu : une fabrication PAYÉE qui attendait dans la file ne se perd pas,
+  // elle rejoint le stock tout de suite. Id dérivé de son échéance → relire deux fois ne la
+  // duplique pas (la file n'est plus réécrite, elle disparaît à la sauvegarde suivante).
+  const jobs = [...(Array.isArray(src.forges) ? src.forges : []), src.forge].filter(
+    (f): f is { until: number; advId: string; piece: Omit<AdvGear, 'id'> } =>
+      isObj(f) && isObj(f.piece) && typeof f.until === 'number' && typeof f.advId === 'string',
   );
-}
-
-/** Quand une nouvelle fabrication se terminerait : les pièces se font l'une APRÈS l'autre. */
-export function nextForgeUntil(forges: readonly ForgeJob[], now: number, level: number): number {
-  const start = forges.reduce((m, f) => Math.max(m, f.until), now);
-  return start + outfitterMsFor(level);
-}
-
-/** Plafonne le RANG d'une pièce fraîchement tirée à ce que sa cible peut PORTER — même
- *  seuil que `canWearAdvGear`, appliqué avant que la pièce ne quitte la forge. Le tirage
- *  se cale sur le NIVEAU de l'aventurier, pas sur sa CLASSE (`advRarity`) : un archer
- *  resté à sa classe de départ mais monté haut en niveau roulerait sinon une pièce que
- *  lui-même ne pourra jamais équiper — la forge vise un aventurier NOMMÉ, la pièce doit
- *  lui aller.
- *  ⚠️ Le ROLL et le NIVEAU D'OBJET sont conservés (c'est le rang qui cède, pas le farm de
- *  jet) ; les VALEURS sont RECALCULÉES avec le MÊME helper que le tirage
- *  (`advGearValue`/`advGearRoleValue`) — sans ça la pièce garderait des valeurs d'un rang
- *  qu'elle n'a plus. Le 2ᵉ affixe (réservé à Magique+) disparaît si le nouveau rang ne le
- *  porte plus, exactement comme un tirage direct à ce rang. */
-function capAdvGearToWearable(piece: Omit<AdvGear, 'id'>, cap: Rarity): Omit<AdvGear, 'id'> {
-  if (RARITY_RANK[piece.rarity] <= RARITY_RANK[cap]) return piece;
-  const out: Omit<AdvGear, 'id'> = {
-    ...piece,
-    rarity: cap,
-    effect: {
-      type: piece.effect.type,
-      value: advGearValue(piece.effect.type, cap, piece.roll, piece.grade),
-    },
-  };
-  if (piece.effect2) {
-    if (RARITY_RANK[cap] >= RARITY_RANK.magique) {
-      out.effect2 = {
-        type: piece.effect2.type,
-        value: advGearValue(piece.effect2.type, cap, piece.roll, piece.grade),
-      };
-    } else {
-      delete out.effect2;
-    }
+  const ids = new Set(stock.map((g) => g.id));
+  for (const f of jobs) {
+    const id = `forge-${f.until}-${f.advId}`;
+    if (ids.has(id) || typeof f.piece.slot !== 'string') continue;
+    ids.add(id);
+    stock.push(onModel({ ...f.piece, id }));
   }
-  if (piece.role) {
-    out.role = { kind: piece.role.kind, value: advGearRoleValue(piece.role.kind, cap, piece.roll) };
-  }
-  return out;
+  return { stock };
 }
 
 /** Meilleure rareté de CLASSE parmi les aventuriers d'une lignée (`null` si aucun). */
@@ -838,123 +676,9 @@ function bestClassRarity(advs: Adventurer[], lineage: Lineage): Rarity | null {
   return best;
 }
 
-/**
- * Pièce d'aventurier tombée d'une source de butin (cadavre de siège, embuscade repoussée).
- * ⚠️ SOURCE UNIQUE des deux sources : le bloc chance → lignée → tirage vivait en deux
- * copies (raid.ts, caravan.ts).
- * - la lignée est tirée parmi `advs` (jamais une lignée qu'on ne possède pas) ;
- * - le rang suit la courbe des compagnons (cf. `rollAdvGear`), borné par `playerLevel` ;
- * - puis il est PLAFONNÉ à la meilleure classe de cette lignée dans `advs`
- *   (`capAdvGearToWearable`) : le stock ne se remplit jamais de pièces que personne ne
- *   peut porter. Rend `null` si le tirage échoue ou si le vivier est vide.
- * ⚠️ `rng` doit être le générateur DÉDIÉ à l'équipement (`gearRng`) : un tirage de plus sur
- * le flux principal décalerait tout le reste du butin.
- */
-export function rollAdvGearDrop(
-  rng: () => number,
-  advs: Adventurer[],
-  opts: { chance: number; level: number; luck: number; playerLevel: number; grade?: PullGrade },
-): Omit<AdvGear, 'id'> | null {
-  if (rng() >= opts.chance) return null;
-  const lineage = pickLineage(rng, advs);
-  if (!lineage) return null;
-  const cap = bestClassRarity(advs, lineage);
-  if (!cap) return null; // inatteignable : la lignée vient de `advs`
-  const piece = rollAdvGear(rng, {
-    lineage,
-    level: opts.level,
-    luck: opts.luck,
-    playerLevel: opts.playerLevel,
-    ...(opts.grade ? { grade: opts.grade } : {}),
-  });
-  return capAdvGearToWearable(piece, cap);
-}
-
-/** Transforme un objet du héros en pièce d'aventurier, pour la CIBLE visée.
- *  ⚠️ Le RANG est tiré autour du niveau de L'AVENTURIER, jamais de celui de l'objet
- *  sacrifié ni du héros : un objet primordial ne fabrique pas une pièce primordiale pour
- *  une recrue — seuls le SLOT et la LIGNÉE viennent de l'objet/de la cible. La rareté de
- *  l'objet ne joue qu'en LUCK (un meilleur objet aide un peu, sans jamais dicter le rang).
- *  ⚠️ Le rang tiré est ensuite PLAFONNÉ à ce que la cible peut porter (`capAdvGearToWearable`) :
- *  sans ça, une pièce trop rare pour la classe de son propre destinataire pourrait sortir
- *  de la forge. */
-export function outfitFromItem(
-  rng: () => number,
-  item: Item,
-  target: Adventurer,
-  playerLevel: number,
-): Omit<AdvGear, 'id'> | null {
-  const slot = outfitSlot(item.slot);
-  const lineage = lineageOf(target);
-  if (!slot || !lineage || item.locked) return null;
-  const luck = Math.min(0.5, 0.1 + RARITY_RANK[item.rarity] * 0.05);
-  return rollAdvGear(rng, {
-    lineage,
-    slot,
-    level: target.level,
-    luck,
-    playerLevel,
-    rank: outfitRank(item, target),
-  });
-}
-
-/** Règlement de la forge : rien avant l'échéance, la pièce rejoint le STOCK une fois
- *  prête. ⚠️ Pur et idempotent (même patron que `settleTraining`) : appelable à chaque
- *  tick sans rien dupliquer, et rend le MÊME objet si rien ne change — c'est ce qui dit à
- *  l'appelant s'il doit persister. */
-export function settleOutfit(state: AdvGearState, now: number): AdvGearState {
-  const due = state.forges.filter((f) => f.until <= now);
-  if (!due.length) return state;
-  return {
-    stock: [...state.stock, ...due.map((f) => ({ ...f.piece, id: `forge-${f.until}-${f.advId}` }))],
-    forges: state.forges.filter((f) => f.until > now),
-  };
-}
-
-/** Ce qu'une fabrication en lot va faire : une pièce par emplacement, et l'addition. */
-export interface OutfitBatch {
-  jobs: OutfitOption[];
-  gold: number;
-}
-
-/**
- * ⚒️ TOUT ÉQUIPER pour UN aventurier (demandé) : remplir ses emplacements VIDES, et
- * remplacer ce qu'il porte quand on peut faire MIEUX (« s'il porte du bronze et qu'il est
- * passé argent, on crée de quoi remplacer »).
- *
- * ⚠️ AUCUNE RÈGLE NOUVELLE : on balaie `outfitOptions`, déjà trié dans l'ordre conseillé
- * (rang le plus haut, puis emplacement vide avant amélioration, puis l'objet le MOINS
- * précieux à sacrifier). Le premier candidat rencontré pour un emplacement est donc le bon,
- * et une seconde heuristique ici finirait par contredire la liste que l'écran affiche.
- *
- * ⚠️ `same` et `down` sont ÉCARTÉS : refaire une pièce de rang égal ou inférieur détruit un
- * objet et coûte de l'or pour rien.
- *
- * ⚠️ UN OBJET NE SERT QU'UNE FOIS, et un emplacement déjà EN FILE n'est pas repris — sans
- * quoi le lot commanderait deux fois la même pièce, ou fondrait un objet déjà promis.
- */
-export function planOutfitBatch(
-  items: readonly Item[],
-  target: Adventurer,
-  worn: readonly AdvGear[],
-  forges: readonly ForgeJob[],
-): OutfitBatch {
-  const jobs: OutfitOption[] = [];
-  const takenSlots = new Set<AdvGearSlot>();
-  const takenItems = new Set<string>();
-  for (const o of outfitOptions(items, target, worn, forges)) {
-    if (o.verdict !== 'empty' && o.verdict !== 'up') continue;
-    if (o.queued > 0 || takenSlots.has(o.slot) || takenItems.has(o.item.id)) continue;
-    takenSlots.add(o.slot);
-    takenItems.add(o.item.id);
-    jobs.push(o);
-  }
-  return { jobs, gold: jobs.reduce((s, o) => s + outfitGoldCost(o.rank, target.level), 0) };
-}
-
 export function advGearSellValue(g: AdvGear): number {
   return Math.max(
     1,
-    Math.round(sellValueOf(g.rarity, g.roll, g.level) * ADV_GEAR.sellK * GEAR_GRADE_SHARE[g.grade]),
+    Math.round(sellValueOf(g.rarity, 0, g.level) * ADV_GEAR.sellK * GEAR_GRADE_SHARE[g.grade]),
   );
 }

@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { sessionXp } from '@/lib/athlete';
 import { buildingPreview } from '@/lib/buildingPreview';
 import { CARAVAN, caravanSlots, caravanSlowFor } from '@/lib/caravan';
-import { outfitterMsFor } from '@/lib/advGear';
 import { engageCap } from '@/lib/adventurers';
 import {
   perLevelLabel,
@@ -451,9 +450,10 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     boss_altar: (l) => bossAltarRollFloor(one('boss_altar', l)),
     // Nombre de convois ET vitesse : le nombre reste borné par le vivier, la vitesse continue.
     caravanserail: (l) => caravanSlots(l) * 1000 + (2 - caravanSlowFor(l)) * 100,
-    // Déploiement ET vitesse de forge : le déploiement saute d'un cran tous les 2
-    // niveaux, la forge gratte en continu — il suffit qu'UN des deux bouge.
-    pantheon: (l) => engageCap(l) * 1_000_000 - outfitterMsFor(l),
+    // Déploiement ET niveau maximal d'un champion : le déploiement saute d'un cran tous les
+    // 2 niveaux, le niveau maximal (`grantAdvXp`, plafonné au niveau du Panthéon) monte à
+    // CHAQUE cran — il suffit qu'UN des deux bouge. (La forge est partie en v0.1010.)
+    pantheon: (l) => engageCap(l) * 1_000_000 + l,
   };
 
   it('chaque type de bâtiment déclare ce que son niveau change', () => {

@@ -1553,9 +1553,7 @@ async function doSendCaravan() {
   if (!uid || !poi || busyCaravan.value) return;
   busyCaravan.value = true;
   try {
-    // Niveau de SPORT (`heroLevel`), pas `progressionLevel` : l'anti-runaway du butin se
-    // lit sur le joueur, comme au siège (`baseTick`).
-    const ok = await char.sendCaravan(uid, poi, escort.value, heroLevel.value);
+    const ok = await char.sendCaravan(uid, poi, escort.value);
     if (ok) {
       selected.value = null;
       escort.value = [];

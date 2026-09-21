@@ -12,7 +12,7 @@
 // demande nettement plus que trois aventuriers, et rien ne borne la taille du groupe.
 // ⚠️ AUCUNE FERRAILLE : elle ne vient plus que de l'épave et de la Fonderie (v0.856 : retirée
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
-import { mulberry32, offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
+import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
 import {
   deriveSkirmish,
   fuseUnits,
@@ -46,7 +46,6 @@ import {
 } from './expedition';
 import { partyFightSeed, partyForecastSeed } from './party';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
-import { rollAdvGearDrop, type AdvGear } from './advGear';
 import { type Adventurer } from './adventurers';
 
 export const CAMP = {
@@ -87,8 +86,6 @@ export const CAMP = {
   groupGoldShare: 0.18,
   banditGoldMult: 1.5,
   stoneShare: 0.11,
-  campPieces: 1,
-  lairPieces: 2,
   journalMax: 40,
 } as const;
 
@@ -99,11 +96,6 @@ export interface PartyInput {
   road: EscortKit;
   hero: PartyHero | null;
   seed: number;
-  /** ⚠️ REQUIS : plafond anti-runaway du butin. AVEC le héros : le MÊME niveau que
-   *  `expeSend` passait à l'ancienne expédition (la progression en donjon, `progressionLevel`
-   *  de la carte) — c'est ce qui rend « le butin du héros ne change pas » vrai. SANS le héros :
-   *  le niveau de SPORT, comme les convois (tirage des pièces d'aventurier). */
-  playerLevel: number;
 }
 
 /**
@@ -220,9 +212,10 @@ export function campGroupHaul(poi: Poi, spec: CampSpec): { gold: number; summonS
 }
 
 /** 🏷️ Ce qu'un camp rapporte, annoncé sur la carte AVANT l'envoi.
- *  ⚠️ Écrit À CÔTÉ des règles qu'il décrit (`campGroupHaul`, `CAMP.campPieces`/
- *  `lairPieces`), et testé contre elles : la faction module le butin (bandits → or en
- *  quantité, morts-vivants → or + pierres, bêtes → or). ⚠️ Jamais de ferraille ni de clé.
+ *  ⚠️ Écrit À CÔTÉ de la règle qu'il décrit (`campGroupHaul`), et testé contre elle : la
+ *  faction module le butin (bandits → or en quantité, morts-vivants → or + pierres, bêtes
+ *  → or). ⚠️ Jamais de ferraille, de clé, ni d'équipement de champion (il ne vient QUE du
+ *  tirage, v0.1010).
  *  ⚠️ UNE SEULE ligne depuis la v0.980 : le héros ne change plus le butin. */
 export function campRewardLabel(poi: Poi): string {
   const spec = campSpecOf(poi);
@@ -233,9 +226,7 @@ export function campRewardLabel(poi: Poi): string {
       : spec.faction === 'bandits'
         ? 'or 🪙 en quantité'
         : 'or 🪙';
-  const n = poi.type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;
-  const pieces = `${n} pièce${n > 1 ? 's' : ''} d’aventurier 🗡️`;
-  return `${devise} + ${pieces}`;
+  return devise;
 }
 
 /** Le récit : qui abat qui, borné. */
@@ -263,16 +254,15 @@ function campJournal(d: SkirmishResult, allies: SkirmishUnit[], bodies: Skirmish
  *   diluerait la part du vivier à chaque fois qu'on l'emmène — précisément ce qui rend les
  *   gros camps jouables. Ses abattus restent au total partagé ; la MARGE DE PORTAGE empêche
  *   toujours un héros de faire monter des recrues hors de leur ligue.
- * - Butin, AVEC ou SANS le héros (v0.980) : gagné → `campGroupHaul` + pièce(s)
- *   d'aventurier ; perdu → rien. ⚠️ Le héros n'y compte plus que pour deux champions
+ * - Butin, AVEC ou SANS le héros (v0.980) : gagné → `campGroupHaul` (plus aucune pièce de
+ *   champion depuis la v0.1010 : elles ne viennent QUE du tirage) ; perdu → rien. ⚠️ Le héros n'y compte plus que pour deux champions
  *   (`heroPartyCombatant`) : lui faire tomber le butin d'une expédition solo (or à l'équilibre
  *   du péage, pièce de set) n'avait plus de sens — et il ne paie plus de péage ici
  *   (`partyHeroToll`).
  * ⚠️ `poi.perilous` d'un camp reste tiré au spawn, mais n'a AUCUN effet sur une attaque.
  */
 export function resolveCamp(input: PartyInput): ExpeditionOutcome {
-  const { poi, spec, escort, hero, seed, playerLevel } = input;
-  const gearRng = mulberry32((seed ^ 0x27d4eb2f) >>> 0 || 1);
+  const { poi, spec, escort, hero, seed } = input;
   const allies = partyAllies(escort, input.road, hero);
   const foe = campFoe(poi, spec);
   const bodies = campBodies(poi, spec, foe);
@@ -293,20 +283,6 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   const xp: Record<string, number> = {};
   for (const a of escort) xp[a.id] = missionXp(a, poi) + Math.round((shares[a.id] ?? 0) * travel);
 
-  const advGear: Omit<AdvGear, 'id'>[] = [];
-  if (d.win) {
-    const n = poi.type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;
-    for (let i = 0; i < n; i++) {
-      const piece = rollAdvGearDrop(gearRng, escort, {
-        chance: 1,
-        level: poi.level,
-        luck: Math.min(0.6, spec.size / 20),
-        playerLevel,
-      });
-      if (piece) advGear.push(piece);
-    }
-  }
-
   const party: PartyResult = {
     hero: !!hero,
     faction: spec.faction,
@@ -318,7 +294,6 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     heroKills: hero ? (slainBy[HERO_UNIT_ID] ?? 0) : 0,
     xp,
     hurt: campHurt(d, escort),
-    advGear,
     wages: caravanWages(escort, poi),
     journal: campJournal(d, allies, bodies),
   };

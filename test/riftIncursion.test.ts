@@ -162,7 +162,7 @@ describe('💠 ce qu’une incursion paie — du mana, et RIEN d’autre', () =>
       expect(o.key).toBe(0);
       expect(o.item).toBeNull();
       expect(o.items).toEqual([]);
-      expect(o.party!.advGear).toEqual([]);
+      expect(o.party).not.toHaveProperty('advGear');
       expect(o.mana).toBeGreaterThan(0);
     }
   });

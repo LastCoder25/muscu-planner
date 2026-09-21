@@ -3,7 +3,6 @@ import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mulberry32 } from '@/lib/combat';
 import { PULL_GRADES } from '@/data/champions';
-import { GACHA_RATES } from '@/lib/gacha';
 import {
   ADV_GEAR_MODELS,
   ADV_GEAR_NO_ART,
@@ -17,9 +16,9 @@ import {
   advGearModel,
   advGearSellValue,
   advGearValue,
+  makeAdvGear,
   normalizeAdvGearState,
-  rollAdvGear,
-  rollGearGrade,
+  rollGachaPiece,
   type AdvGear,
   type Lineage,
 } from '@/lib/advGear';
@@ -71,8 +70,9 @@ describe('🗡️ le roster de l’équipement des champions', () => {
   });
 
   it('une pièce tirée porte le NOM du modèle de sa lettre', () => {
+    const v = [{ id: 'm', name: 'm', seed: 1, path: ['mage'], level: 30, xp: 0 }];
     for (let s = 1; s <= 200; s++) {
-      const g = rollAdvGear(mulberry32(s), { lineage: 'mage', level: 30, playerLevel: 30 });
+      const g = rollGachaPiece(mulberry32(s), v, { playerLevel: 30, grade: 'B' });
       expect(g.name).toBe(advGearModelName('mage', g.slot, g.grade));
       expect(g.name).toBe(advGearModel('mage', g.slot, g.grade).name);
     }
@@ -83,13 +83,15 @@ describe('🎰 la lettre d’une pièce', () => {
   it('B = 1 : l’étalon des routes porte des B, donc la calibration ne bouge pas', () => {
     expect(GEAR_GRADE_SHARE.B).toBe(1);
     for (const g of refAdvGear(40)) expect(g.grade).toBe('B');
-    expect(advGearValue('damage_pct', 'rare', 0.4)).toBe(
-      advGearValue('damage_pct', 'rare', 0.4, 'B'),
-    );
+    // ⚠️ La lettre par défaut est B : une valeur NUMÉRIQUE, pas un NaN qui se comparerait
+    // égal à lui-même (le test d'avant passait ainsi au vert sans rien vérifier).
+    const b = advGearValue('damage_pct', 'rare');
+    expect(Number.isFinite(b)).toBe(true);
+    expect(b).toBe(advGearValue('damage_pct', 'rare', 'B'));
   });
 
   it('S > A > B, du même pas que chez les champions', () => {
-    const v = (g: 'B' | 'A' | 'S') => advGearValue('damage_pct', 'epique', 0.5, g);
+    const v = (g: 'B' | 'A' | 'S') => advGearValue('damage_pct', 'epique', g);
     expect(v('A')).toBeGreaterThan(v('B'));
     expect(v('S')).toBeGreaterThan(v('A'));
     expect(GEAR_GRADE_SHARE.S / GEAR_GRADE_SHARE.A).toBeCloseTo(GEAR_GRADE_SHARE.A, 5);
@@ -97,54 +99,30 @@ describe('🎰 la lettre d’une pièce', () => {
 
   it('une lettre IMPOSÉE est respectée (un tirage B du gacha rend une pièce B)', () => {
     for (let s = 1; s <= 50; s++)
-      expect(
-        rollAdvGear(mulberry32(s), { lineage: 'archer', level: 20, playerLevel: 20, grade: 'B' })
-          .grade,
-      ).toBe('B');
-  });
-
-  it('hors gacha, la lettre suit les taux du tirage (une seule table pour « combien de S »)', () => {
-    const rng = mulberry32(99);
-    const n = 200_000;
-    const c = { B: 0, A: 0, S: 0 };
-    for (let i = 0; i < n; i++) c[rollGearGrade(rng)]++;
-    for (const g of PULL_GRADES) expect(c[g] / n).toBeCloseTo(GACHA_RATES[g], 2);
+      expect(rollGachaPiece(mulberry32(s), [], { playerLevel: 20, grade: 'B' }).grade).toBe('B');
+    for (const g of PULL_GRADES)
+      expect(makeAdvGear({ lineage: 'archer', slot: 'weapon', rank: 'rare', grade: g }).grade).toBe(
+        g,
+      );
   });
 
   it('la lettre ne dope PAS les rôles civils (trajet, cargaison)', () => {
-    const B = rollAdvGear(mulberry32(5), {
-      lineage: 'caravanier',
-      slot: 'accessory',
-      level: 20,
-      playerLevel: 20,
-      grade: 'B',
-    });
-    const S = rollAdvGear(mulberry32(5), {
-      lineage: 'caravanier',
-      slot: 'accessory',
-      level: 20,
-      playerLevel: 20,
-      grade: 'S',
-    });
-    expect(S.role!.value).toBe(B.role!.value);
-    expect(S.effect.value).toBeGreaterThan(B.effect.value);
+    const at = (grade: 'B' | 'S') =>
+      makeAdvGear({ lineage: 'caravanier', slot: 'accessory', rank: 'rare', grade });
+    expect(at('S').role!.value).toBe(at('B').role!.value);
+    expect(at('S').effect.value).toBeGreaterThan(at('B').effect.value);
   });
 
   it('une pièce S se revend plus cher qu’une B identique', () => {
-    const base = rollAdvGear(mulberry32(3), {
-      lineage: 'guerrier',
-      level: 30,
-      playerLevel: 30,
-      grade: 'B',
-    });
+    const base = makeAdvGear({ lineage: 'guerrier', slot: 'weapon', rank: 'rare', grade: 'B' });
     const b = { ...base, id: 'b' } as AdvGear;
     const s = { ...base, id: 's', grade: 'S' } as AdvGear;
     expect(advGearSellValue(s)).toBeGreaterThan(advGearSellValue(b));
   });
 });
 
-describe('♻️ les pièces d’avant les lettres', () => {
-  it('sont relues en B, renommées sur leur modèle, valeurs INCHANGÉES', () => {
+describe('♻️ les pièces d’avant', () => {
+  it('sont relues en B, renommées sur leur modèle, avec les stats du modèle (plus de jet)', () => {
     const legacy = {
       id: 'old',
       lineage: 'archer',
@@ -153,13 +131,14 @@ describe('♻️ les pièces d’avant les lettres', () => {
       emoji: '🏹',
       rarity: 'rare',
       roll: 0.6,
-      level: 25,
+      level: 35,
       effect: { type: 'damage_pct', value: 12.3 },
     };
     const [g] = normalizeAdvGearState({ stock: [legacy] }).stock;
     expect(g!.grade).toBe('B');
     expect(g!.name).toBe(advGearModelName('archer', 'weapon', 'B'));
-    expect(g!.effect.value).toBe(12.3);
+    expect(g!.effect.value).toBe(advGearValue('damage_pct', 'rare', 'B'));
+    expect(g!.level).toBe(35);
     // Idempotente : relire une pièce déjà à jour ne change rien.
     expect(normalizeAdvGearState({ stock: [g] }).stock[0]).toEqual(g);
   });

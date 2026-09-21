@@ -75,16 +75,11 @@ import {
   type AdvRole,
 } from './adventurers';
 import {
-  ADV_GEAR_DROP,
   ADV_GEAR_SLOTS,
   advGearEffects,
-  advGearHasSecondAffix,
   advGearRoles,
-  advGearRoleValue,
-  advGearValue,
-  LINEAGE_GEAR,
   lineageOf,
-  rollAdvGearDrop,
+  makeAdvGear,
   wornGear,
   type AdvGear,
   type AdvGearSlot,
@@ -225,9 +220,6 @@ export interface CaravanOutcome {
   hurt: string[];
   events: CaravanEvent[];
   text: string;
-  /** 🗡️ Équipement d'aventurier laissé par une embuscade REPOUSSÉE — lignée de l'escorte,
-   *  rang portable par elle (cf. `rollAdvGearDrop`). */
-  advGear: Omit<AdvGear, 'id'>[];
 }
 
 /** Convois ENCAISSÉS qu’on garde en mémoire. Zéro serait tentant — rien ne les lit —
@@ -520,21 +512,18 @@ function refGearIds(i: number): Record<AdvGearSlot, string> {
   };
 }
 
-/** Jet de référence d’une pièce : le jet MOYEN d’un tirage biaisé bas. */
-const REF_GEAR_JET = 0.3;
-
 /**
- * L’ÉQUIPEMENT de l’escorte de référence : chaque membre porte ses 4 pièces, niveau d’objet
- * à niveau, de la rareté de SA classe, jet moyen — la règle de `gearExpect` : l’attendu, pas
- * l’exceptionnel.
+ * L’ÉQUIPEMENT de l’escorte de référence : chaque membre porte ses 4 pièces B, niveau d’objet
+ * à niveau, de la rareté de SA classe — la règle de `gearExpect` : l’attendu, pas
+ * l’exceptionnel. Sans jet (v0.1010) : une pièce vaut le plancher de son rang.
  *
- * ⚠️ POURQUOI. Une escorte équipée additionne 3 pièces par tête, soit plus qu’un compagnon :
+ * ⚠️ POURQUOI. Une escorte équipée additionne 4 pièces par tête, soit plus qu’un compagnon :
  * sans cette référence, un vivier équipé roulerait sur une route calibrée pour des escortes
  * nues, et « combien j’en envoie » cesserait d’être une décision (même raison que
  * `refCompanions`).
- * ⚠️ LA FORME D’UN TIRAGE : affixe principal = la 1ʳᵉ stat du pool, 2ᵉ affixe (Magique+) =
- * la suivante, valeur et rôle civil par `advGearValue`/`advGearRoleValue` — les formules
- * du tirage lui-même, jamais une copie.
+ * ⚠️ `makeAdvGear`, LA fonction qui fabrique toute pièce du jeu (tirage compris) : cet
+ * étalon est ce sur quoi `roadFoe` se calibre, il doit porter l’équipement que le jeu
+ * produit RÉELLEMENT. Seul le niveau est forcé à celui du membre.
  *
  * `n` : combien de membres équiper (la référence en compte `CARAVAN.refEscort`).
  */
@@ -545,37 +534,15 @@ export function refAdvGear(level: number, n: number = CARAVAN.refEscort): AdvGea
   return refEscortBare(L, n).flatMap((a, i) => {
     const lineage = lineageOf(a);
     if (!lineage) return [];
-    const def = LINEAGE_GEAR[lineage];
-    const rarity = advRarity(a);
+    const rank = advRarity(a);
     const ids = refGearIds(i);
-    return ADV_GEAR_SLOTS.map((slot): AdvGear => {
-      const piece = def.pieces[slot];
-      const t1 = piece.pool[0]!;
-      const g: AdvGear = {
+    return ADV_GEAR_SLOTS.map(
+      (slot): AdvGear => ({
+        ...makeAdvGear({ lineage, slot, rank, grade: 'B' }),
         id: ids[slot],
-        lineage,
-        slot,
-        name: piece.name,
-        emoji: piece.emoji,
-        rarity,
-        // ⚠️ L'étalon porte des B (`GEAR_GRADE_SHARE` B = 1) : la route reste calibrée sur
-        // l'équipement d'avant les lettres, que la grande majorité des pièces reproduit.
-        grade: 'B',
-        roll: REF_GEAR_JET,
         level: L,
-        effect: { type: t1, value: advGearValue(t1, rarity, REF_GEAR_JET) },
-      };
-      const t2 = piece.pool[1];
-      // ⚠️ MÊME règle que le tirage (`advGearHasSecondAffix`), jamais une copie : cet étalon
-      // est ce sur quoi `roadFoe` se calibre, donc il doit porter l'équipement que le jeu
-      // produit RÉELLEMENT. La copie qui vivait ici rendait tout réglage du seuil inopérant
-      // sur la route — mesuré, les bandes d'embuscade ne bougeaient pas d'un seul point.
-      if (t2 && advGearHasSecondAffix(rarity))
-        g.effect2 = { type: t2, value: advGearValue(t2, rarity, REF_GEAR_JET) };
-      if (def.role && slot === 'accessory')
-        g.role = { kind: def.role, value: advGearRoleValue(def.role, rarity, REF_GEAR_JET) };
-      return g;
-    });
+      }),
+    );
   });
 }
 
@@ -1083,21 +1050,13 @@ export function resolveCaravan(
   /** ⚠️ REQUIS, pas optionnel : un paramètre qu’on peut oublier finit par l’être. Une
    *  escorte nue se déclare avec `{ advGear: [] }`. */
   kit: EscortKit,
-  /** ⚠️ REQUIS : niveau RÉEL du joueur. Ne sert qu'au tirage d'équipement d'aventurier
-   *  (anti-runaway) — le combat de la route n'en dépend pas. */
-  playerLevel: number,
 ): CaravanOutcome {
+  // ⚠️ Plus aucun équipement de champion sur la route (v0.1010) : il ne vient QUE du tirage.
+  // Le générateur dédié qui le tirait a disparu avec lui — il ne lisait rien du flux `rng`,
+  // donc les bandes d'embuscade et la cargaison seedées ne bougent pas.
   const rng = mulberry32(seed >>> 0 || 1);
-  // 🗡️ GÉNÉRATEUR SÉPARÉ pour l'équipement d'aventurier : `rng` est déjà seedé et lu par
-  // des tests qui figent une valeur exacte (bandes d'embuscade, cargaison, temps de
-  // trajet…) — un tirage de plus sur CE flux décalerait tous les tirages suivants. Même
-  // idiome que le reste du projet (`(seed ^ constante) >>> 0 || 1`), même constante que
-  // `lootCorpses` (deux flux distincts, l'un du seed d'un cadavre, l'autre du seed d'un
-  // voyage : aucun risque de collision entre les deux).
-  const gearRng = mulberry32((seed ^ 0x27d4eb2f) >>> 0 || 1);
   const events: CaravanEvent[] = [];
   const hurt: string[] = [];
-  const advGear: Omit<AdvGear, 'id'>[] = [];
   let mult = 1;
   let keysBonus = 0;
 
@@ -1154,18 +1113,6 @@ export function resolveCaravan(
       for (const id of convoyHurt(d)) if (!hurt.includes(id)) hurt.push(id);
       if (r.win) {
         mult *= 1.12;
-        // 🗡️ Une embuscade REPOUSSÉE peut laisser une pièce d'équipement d'aventurier —
-        // jamais une embuscade subie, on ne fouille pas les bandits qui ont gagné. Tirée
-        // sur `gearRng` (cf. plus haut), jamais `rng`.
-        // ⚠️ `playerLevel` = le VRAI niveau du joueur, jamais `poi.level` : un lieu peut
-        // être 10 niveaux au-dessus de lui, et l'anti-runaway se lit sur le joueur.
-        const piece = rollAdvGearDrop(gearRng, escort, {
-          chance: ADV_GEAR_DROP.ambush,
-          level: poi.level,
-          luck: routePerilous(poi) ? 0.3 : 0.1,
-          playerLevel,
-        });
-        if (piece) advGear.push(piece);
       } else {
         mult *= CARAVAN.lossKeep;
         // ⚠️ TIRAGE CONSERVÉ, résultat ignoré : il désignait l'ancienne victime au hasard,
@@ -1225,7 +1172,6 @@ export function resolveCaravan(
     hurt,
     events,
     text: events.map((e) => e.text).join(' '),
-    advGear,
   };
 }
 
@@ -1247,8 +1193,6 @@ export function startCaravan(
   kit: EscortKit,
   /** ⚠️ REQUIS : le trajet du convoi dépend du Comptoir — l'oublier le rallongerait. */
   comptoirLevel: number,
-  /** ⚠️ REQUIS : niveau RÉEL du joueur (cf. `resolveCaravan`). */
-  playerLevel: number,
 ): Caravan {
   const leg =
     caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, kit.advGear).speed) * 60_000;
@@ -1259,7 +1203,7 @@ export function startCaravan(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    outcome: resolveCaravan(poi, escort, seed, kit, playerLevel),
+    outcome: resolveCaravan(poi, escort, seed, kit),
     claimed: false,
   };
 }

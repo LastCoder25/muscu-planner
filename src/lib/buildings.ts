@@ -230,15 +230,15 @@ export const BUILDING_TYPES: BuildingType[] = [
   },
   // UTILITAIRE UNIQUE : le PANTHÉON DES CHAMPIONS remplace À LUI SEUL la Guilde, le Centre
   // de formation et l'Équipementier — « un bâtiment, un endroit » (règle v0.739). On y
-  // invoque ses champions, on y consulte sa collection, on y forge leur équipement.
+  // invoque ses champions, on y consulte sa collection.
   //
   // ⚠️ IL NE PORTE AUCUNE FORMULE NEUVE, et c'est exactement ce qui le rend vivant du
-  // niveau 1 au 100 (règle v0.731, aucun niveau mort) : ses TROIS leviers sont ceux dont
+  // niveau 1 au 100 (règle v0.731, aucun niveau mort) : ses DEUX leviers sont ceux dont
   // il HÉRITE — l'ENGAGEMENT (`engageCap`, +1 tous les 2 niveaux, 51 au niveau 100 : la
-  // formule de la Guilde reprise telle quelle, déjà mesurée), le NIVEAU MAXIMAL d'un
-  // champion (`grantAdvXp`, le plus fort des trois : le niveau DOMINE la rareté, ×4,3 au
-  // niveau 23) et le TEMPS DE FABRICATION d'une pièce (`outfitterMsFor`, asymptotique, qui
-  // gratte à chaque cran sans jamais devenir instantané).
+  // formule de la Guilde reprise telle quelle, déjà mesurée) et le NIVEAU MAXIMAL d'un
+  // champion (`grantAdvXp`, le plus fort : le niveau DOMINE la rareté, ×4,3 au niveau 23),
+  // qui monte à CHAQUE niveau. (Le troisième, le temps de forge, est parti avec la forge
+  // en v0.1010 : l'équipement de champion ne vient plus que du tirage.)
   //
   // ⚠️ L'ENGAGEMENT BORNE CE QUI AGIT, JAMAIS CE QU'ON POSSÈDE (v0.958). Il a d'abord été
   // un BANC — un champion « en collection » était indisponible partout — ce qui rendait
@@ -714,9 +714,8 @@ export function buildingUpgradeCost(level: number): number {
 /** Un bâtiment a-t-il un effet qui SCALE avec le niveau ? → est-il améliorable.
  *
  *  ⚠️ **DÉRIVÉ DE `perLevelLabel`, plus d'une liste d'ids.** La version d'avant lisait
- *  `resource || effect non vide`, ce qui ratait l'ÉQUIPEMENTIER — dont le levier
- *  (`outfitterMsFor`) vit dans `advGear.ts` — d'où un `if (typeId === 'outfitter')`
- *  greffé à côté. Deux bâtiments portaient alors un champ d'effet **jamais lu**
+ *  `resource || effect non vide`, ce qui ratait l'ÉQUIPEMENTIER (retiré depuis) — d'où un
+ *  `if (typeId === 'outfitter')` greffé à côté. Deux bâtiments portaient alors un champ d'effet **jamais lu**
  *  (`guildRosterPerLvl`, `trainSpeedPerLvl`) dont le SEUL rôle était de passer ce test :
  *  du code décoratif qui pilote du comportement, exactement le piège que ce projet
  *  documente (le rôle ÉCLAIREUR déclaré et consommé nulle part, v0.757).
