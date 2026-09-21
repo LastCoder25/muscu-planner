@@ -383,9 +383,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // le chemin « case en appel » du portrait n'est jamais exécuté — il resterait invisible.
     // Ici une épée de guerrier libre face à Léa (guerrier, classe commune) : elle attend.
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
+    // ⚠️ PASSÉ PAR LA NORMALISATION DU CHARGEMENT, comme en jeu : la pièce d'avant la lettre
+    // y devient un B nommé sur son modèle. Sans ça la tuile rendait un état que le jeu ne
+    // produit jamais (et plantait sur la lettre absente).
+    const { normalizeAdvGearState } = await import('@/lib/advGear');
     const avecStock = {
       ...ROW,
-      adv_gear: {
+      adv_gear: normalizeAdvGearState({
         forges: [],
         stock: [
           {
@@ -400,11 +404,24 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
             effect: { type: 'damage_pct', value: 10 },
           },
         ],
-      },
+      }),
     };
     expect(await mountIt(GuildPanel, { open: true }, avecStock)).toBeNull();
-    // Et l'onglet Stock, qui rend les tuiles de pièces.
-    expect(await mountIt(GuildPanel, { open: true, tab: 'stock' }, avecStock)).toBeNull();
+    // Et la feuille d'équipement, qui rend les tuiles de pièces, rangées par lettre avec
+    // les séparateurs du vivier (une pièce d'avant la lettre se relit en B).
+    let stockHtml = '';
+    expect(
+      await mountIt(
+        GuildPanel,
+        { open: true, section: 'gear' },
+        avecStock,
+        undefined,
+        '/',
+        (h) => (stockHtml = h),
+      ),
+    ).toBeNull();
+    expect(stockHtml).toContain(avecStock.adv_gear.stock[0]!.name);
+    expect(stockHtml).toMatch(/class="adv-rname[^"]*">B</);
   }, 30_000);
 
   it('VillagePlots se monte, Équipementier ouvert sur un aventurier', async () => {

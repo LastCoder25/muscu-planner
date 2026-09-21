@@ -887,3 +887,18 @@ export function compareAdvGear(a: AdvGear, b: AdvGear): number {
     a.name.localeCompare(b.name)
   );
 }
+
+/** Le stock rangé par LETTRE (S, puis A, puis B), chaque groupe dans l'ordre du stock
+ *  (`compareAdvGear`) — le patron du vivier (`groupByGrade`). Un groupe vide n'apparaît pas. */
+export function groupGearByGrade(
+  gear: readonly AdvGear[],
+): { grade: PullGrade; gear: AdvGear[] }[] {
+  const out: { grade: PullGrade; gear: AdvGear[] }[] = [];
+  for (const grade of ['S', 'A', 'B'] as const) {
+    // ⚠️ Une pièce SANS lettre (enregistrée avant la v0.1001) se lit en B, comme partout :
+    // sans ce repli elle DISPARAÎTRAIT du stock, qui l'annonce pourtant dans son compte.
+    const list = gear.filter((g) => (g.grade ?? 'B') === grade);
+    if (list.length) out.push({ grade, gear: list.sort(compareAdvGear) });
+  }
+  return out;
+}

@@ -231,120 +231,132 @@
             <!-- TUILES en 2 colonnes (3 dès qu'il y a la place, `auto-fill`), boutons en
                  ICÔNES : la liste était en pleine largeur avec des boutons libellés, donc
                  chaque pièce coûtait une bande entière et on faisait défiler longtemps. -->
-            <div class="gear-stock">
-              <div
-                v-for="g in stockShown"
-                :key="g.id"
-                class="gear-stock-row"
-                :class="ownerOf(g) ? 'tone-busy' : 'tone-free'"
-              >
-                <div class="gear-stock-top">
-                  <span class="d-pair-emo"
-                    ><AdvGearArt :model="advGearModelOf(g)">{{ g.emoji }}</AdvGearArt></span
-                  >
-                  <!-- 🏅 Rang + étoiles, le badge du coin des portraits de champion. -->
-                  <RankStarBadge class="gear-rsb" v-bind="advGearRankStar(g)" />
-                  <span class="d-pair-main">
-                    <span class="d-pair-name">
-                      <b :style="{ color: advGearBadge(g).color }">{{ g.name }}</b>
-                      <!-- ⭐ Les ÉTOILES de son rang, comme un champion (v0.1015) : elles montent en
+            <!-- 🗂️ RANGÉ PAR LETTRE (S, A, B), avec les séparateurs du vivier (demandé). -->
+            <section
+              v-for="gg in stockGroups"
+              :key="gg.grade"
+              class="adv-rgroup"
+              :style="{ '--c': GRADE_COLOR[gg.grade] }"
+            >
+              <div class="adv-rhead">
+                <span class="adv-rname font-display">{{ gg.grade }}</span>
+                <span class="adv-rn">{{ gg.gear.length }}</span>
+              </div>
+              <div class="gear-stock">
+                <div
+                  v-for="g in gg.gear"
+                  :key="g.id"
+                  class="gear-stock-row"
+                  :class="ownerOf(g) ? 'tone-busy' : 'tone-free'"
+                >
+                  <div class="gear-stock-top">
+                    <span class="d-pair-emo"
+                      ><AdvGearArt :model="advGearModelOf(g)">{{ g.emoji }}</AdvGearArt></span
+                    >
+                    <!-- 🏅 Rang + étoiles, le badge du coin des portraits de champion. -->
+                    <RankStarBadge class="gear-rsb" v-bind="advGearRankStar(g)" />
+                    <span class="d-pair-main">
+                      <span class="d-pair-name">
+                        <b :style="{ color: advGearBadge(g).color }">{{ g.name }}</b>
+                        <!-- ⭐ Les ÉTOILES de son rang, comme un champion (v0.1015) : elles montent en
                            combattant avec son porteur. Le niveau reste caché. -->
-                      <span v-if="g.awaken" class="d-train awk">✨{{ g.awaken }}</span>
+                        <span v-if="g.awaken" class="d-train awk">✨{{ g.awaken }}</span>
+                      </span>
                     </span>
-                  </span>
-                </div>
-                <!-- ⚠️ MÉTA ET EFFETS SOUS L'EN-TÊTE, EN PLEINE LARGEUR. Ils vivaient dans la
+                  </div>
+                  <!-- ⚠️ MÉTA ET EFFETS SOUS L'EN-TÊTE, EN PLEINE LARGEUR. Ils vivaient dans la
                      colonne du nom, coincée entre l'illustration et le badge rang + étoiles :
                      à 148 px de tuile il leur restait ~60 px, et tout passait à la ligne mot
                      par mot — illisible. -->
-                <div class="gear-stock-body">
-                  <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
+                  <div class="gear-stock-body">
+                    <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
                          étoiles du héros (demandé). -->
-                  <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
+                    <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
                          colonne étroite la lignée passe à la ligne et le séparateur restait
                          orphelin en bout de ligne précédente. -->
-                  <span class="d-pair-sub gear-meta">
-                    <span class="d-rk" :style="{ '--rk': advGearBadge(g).color }">{{
-                      advGearBadge(g).label
-                    }}</span>
-                    <span>{{ lineageLabel(g.lineage) }}</span>
-                    <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
+                    <span class="d-pair-sub gear-meta">
+                      <span class="d-rk" :style="{ '--rk': advGearBadge(g).color }">{{
+                        advGearBadge(g).label
+                      }}</span>
+                      <span>{{ lineageLabel(g.lineage) }}</span>
+                      <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
                            ligne de moins par tuile, sans rien perdre — le cadre jaune dit
                            déjà « confiée », la flèche dit à QUI. Il garde sa couleur
                            d'état : un empêchement n'est pas une métadonnée. -->
-                    <span v-if="ownerOf(g)" class="warn">→ {{ ownerOf(g)?.name }}</span>
-                  </span>
-                  <!-- Les effets en pleine couleur, un par ligne : c'est ce qui départage
+                      <span v-if="ownerOf(g)" class="warn">→ {{ ownerOf(g)?.name }}</span>
+                    </span>
+                    <!-- Les effets en pleine couleur, un par ligne : c'est ce qui départage
                          deux pièces. Jamais un « · » entre deux textes, qui resterait orphelin
                          en bout de ligne. -->
-                  <span class="d-gain gear-fx">
-                    <span v-for="(t, i) in gearEffectTexts(g)" :key="i">{{ t }}</span>
-                  </span>
-                </div>
-                <!-- ⚠️ ICÔNES SEULES, mais chacune garde son `title`/`aria-label` complet :
+                    <span class="d-gain gear-fx">
+                      <span v-for="(t, i) in gearEffectTexts(g)" :key="i">{{ t }}</span>
+                    </span>
+                  </div>
+                  <!-- ⚠️ ICÔNES SEULES, mais chacune garde son `title`/`aria-label` complet :
                      le libellé disparaît de l'écran, jamais du lecteur d'écran ni de
                      l'infobulle. Le prix de vente y passe aussi — et la confirmation le
                      redit avant de valider, donc rien ne se vend sans l'avoir vu. -->
-                <div class="gear-actions-row">
-                  <!-- ⬆️ Ascension : proposée seulement quand la pièce BUTE sur son ★5 ; la
+                  <div class="gear-actions-row">
+                    <!-- ⬆️ Ascension : proposée seulement quand la pièce BUTE sur son ★5 ; la
                        raison d'un refus est dans le titre, et redite avant de payer. -->
-                  <!-- ✨ Éveil : sur la pièce GARDÉE seulement (la plus avancée du modèle) ;
+                    <!-- ✨ Éveil : sur la pièce GARDÉE seulement (la plus avancée du modèle) ;
                        le nombre dit combien de doublons libres attendent. -->
-                  <button
-                    v-if="awakenOf(g)"
-                    type="button"
-                    class="gear-btn ascend"
-                    :disabled="busy"
-                    :title="`Éveiller en fondant un doublon (${awakenOf(g)!.spare} libre${awakenOf(g)!.spare > 1 ? 's' : ''})`"
-                    :aria-label="`Éveiller (${awakenOf(g)!.spare})`"
-                    @click="doAwaken(g)"
-                  >
-                    ✨{{ awakenOf(g)!.spare }}
-                  </button>
-                  <button
-                    v-if="gearAscent(g)"
-                    type="button"
-                    class="gear-btn ascend"
-                    :disabled="busy || !!gearAscent(g)!.block"
-                    :title="gearAscent(g)!.title"
-                    :aria-label="gearAscent(g)!.title"
-                    @click="doAscendGear(g)"
-                  >
-                    ⬆️
-                  </button>
-                  <button
-                    type="button"
-                    class="gear-btn equip"
-                    :disabled="busy"
-                    :title="ownerOf(g) ? 'Changer de porteur' : 'Confier à un champion'"
-                    :aria-label="ownerOf(g) ? 'Changer de porteur' : 'Confier à un champion'"
-                    @click="stockEquip = g"
-                  >
-                    🗡️
-                  </button>
-                  <button
-                    type="button"
-                    class="gear-btn"
-                    :class="{ active: g.locked }"
-                    :title="g.locked ? 'Déverrouiller' : 'Verrouiller (protège de la vente)'"
-                    :aria-label="g.locked ? 'Déverrouiller' : 'Verrouiller'"
-                    @click="toggleGearLock(g)"
-                  >
-                    {{ g.locked ? '🔒' : '🔓' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="gear-btn"
-                    :disabled="!!g.locked || !!ownerOf(g)"
-                    :title="`Vendre (+${advGearSellValue(g)} 🪙)`"
-                    :aria-label="`Vendre pour ${advGearSellValue(g)} or`"
-                    @click="sellOneGear(g)"
-                  >
-                    🪙
-                  </button>
+                    <button
+                      v-if="awakenOf(g)"
+                      type="button"
+                      class="gear-btn ascend"
+                      :disabled="busy"
+                      :title="`Éveiller en fondant un doublon (${awakenOf(g)!.spare} libre${awakenOf(g)!.spare > 1 ? 's' : ''})`"
+                      :aria-label="`Éveiller (${awakenOf(g)!.spare})`"
+                      @click="doAwaken(g)"
+                    >
+                      ✨{{ awakenOf(g)!.spare }}
+                    </button>
+                    <button
+                      v-if="gearAscent(g)"
+                      type="button"
+                      class="gear-btn ascend"
+                      :disabled="busy || !!gearAscent(g)!.block"
+                      :title="gearAscent(g)!.title"
+                      :aria-label="gearAscent(g)!.title"
+                      @click="doAscendGear(g)"
+                    >
+                      ⬆️
+                    </button>
+                    <button
+                      type="button"
+                      class="gear-btn equip"
+                      :disabled="busy"
+                      :title="ownerOf(g) ? 'Changer de porteur' : 'Confier à un champion'"
+                      :aria-label="ownerOf(g) ? 'Changer de porteur' : 'Confier à un champion'"
+                      @click="stockEquip = g"
+                    >
+                      🗡️
+                    </button>
+                    <button
+                      type="button"
+                      class="gear-btn"
+                      :class="{ active: g.locked }"
+                      :title="g.locked ? 'Déverrouiller' : 'Verrouiller (protège de la vente)'"
+                      :aria-label="g.locked ? 'Déverrouiller' : 'Verrouiller'"
+                      @click="toggleGearLock(g)"
+                    >
+                      {{ g.locked ? '🔒' : '🔓' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="gear-btn"
+                      :disabled="!!g.locked || !!ownerOf(g)"
+                      :title="`Vendre (+${advGearSellValue(g)} 🪙)`"
+                      :aria-label="`Vendre pour ${advGearSellValue(g)} or`"
+                      @click="sellOneGear(g)"
+                    >
+                      🪙
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </section>
           </template>
         </template>
         <!-- 📖 LA COLLECTION (demandé : « voir ce qu'on a ou pas et leur rareté »). La même
@@ -688,6 +700,7 @@ import {
   advGearBadge,
   advGearRankStar,
   compareAdvGear,
+  groupGearByGrade,
   advGearCells,
   advGearModelOf,
   advGearEffectTexts,
@@ -932,6 +945,8 @@ const stockShown = computed(() =>
     ? stockSorted.value
     : (stockTab.value === 'worn' ? stockWorn : stockFree).value,
 );
+/** Ce qu'on affiche, rangé par lettre (S, A, B) — les mêmes séparateurs que le vivier. */
+const stockGroups = computed(() => groupGearByGrade(stockShown.value));
 /** Combien de pièces libres que PERSONNE ne peut porter (métier absent, ou classe trop
  *  basse). Rare par construction — une pièce forgée l'est pour une cible, et le butin de
  *  siège est plafonné à ce que le vivier porte — mais pas impossible. */
