@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
-import { RARITY_RANK, RANK_ORDER, itemLevelMult, prestigeRankIndex, type Item } from '@/lib/items';
+import {
+  RARITY_LABEL,
+  RARITY_RANK,
+  RANK_ORDER,
+  itemLevelMult,
+  prestigeRankIndex,
+  type Item,
+} from '@/lib/items';
 import { ADV_CLASSES, advAvatar, advRarity, type Adventurer } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
 import {
@@ -559,7 +566,9 @@ describe('🗡️ grille 2×2 du portrait', () => {
     expect(cells.map((c) => c.slot)).toEqual(['weapon', 'armor', 'accessory', 'relic']);
     expect(cells[0]!.filled).toBe(true);
     expect(cells[0]!.piece?.id).toBe('arc');
-    expect(cells[0]!.rank).toBeTruthy();
+    // ⚠️ En RARETÉ (la langue du gacha), jamais en rang + étoiles (v0.982).
+    expect(cells[0]!.rank).toBe(RARITY_LABEL.commun);
+    expect(cells[0]!.rank).not.toMatch(/★/);
     expect(cells[1]!.filled).toBe(false);
     expect(cells[3]!.name).toBe(LINEAGE_GEAR.archer.pieces.relic.name);
   });
@@ -800,21 +809,18 @@ describe('🟤 UNE PIÈCE DE BAS RANG VAUT ENFIN QUELQUE CHOSE (v0.900)', () => 
   });
 });
 
-describe('⭐ une pièce d’aventurier se lit en RANG ET ÉTOILES', () => {
-  it('la case porte le grade complet, comme un objet du héros', () => {
-    // ⚠️ Les étoiles ne sont pas décoratives : une pièce porte un JET qui décide d'une part
-    // de sa valeur. Sans elles, deux pièces « Bronze » de jets opposés se lisaient pareil —
-    // le défaut que la v0.895 avait corrigé côté héros et qui survivait ici.
+describe('🏅 une pièce de champion se lit en RARETÉ, comme le champion (v0.982)', () => {
+  it('la case porte la rareté, pas le rang ni les étoiles du héros', () => {
+    // ⚠️ Depuis le gacha, un champion se lit en rareté (Commun → Primordial) : son équipement
+    // parle la même langue. Avant, la case disait « Bronze ★★☆☆☆ », l'échelle du HÉROS.
     const a = { ...adv('a', ['archer']), level: 10 };
-    const bas = piece('bas', { lineage: 'archer', slot: 'weapon', rarity: 'commun', roll: 0.05 });
-    const haut = piece('haut', { lineage: 'archer', slot: 'weapon', rarity: 'commun', roll: 0.95 });
-    const rBas = advGearCells(a, [bas])[0]!.rank!;
-    const rHaut = advGearCells(a, [haut])[0]!.rank!;
-    expect(rBas).toContain('★');
-    expect(rHaut).toContain('★');
-    // Même rang, jets opposés → deux étiquettes DIFFÉRENTES : c'est tout l'objet.
-    expect(rBas).not.toBe(rHaut);
-    expect(advGearCells(a, [haut])[0]!.title).toContain(rHaut);
+    for (const r of ['commun', 'magique'] as const) {
+      const p = piece(r, { lineage: 'archer', slot: 'weapon', rarity: r, roll: 0.95 });
+      const c = advGearCells(a, [p])[0]!;
+      expect(c.rank).toBe(RARITY_LABEL[r]);
+      expect(c.rank).not.toContain('★');
+      expect(c.title).toContain(RARITY_LABEL[r]);
+    }
   });
 });
 

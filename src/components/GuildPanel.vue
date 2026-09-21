@@ -336,7 +336,7 @@
                          orphelin en bout de ligne précédente. -->
                     <span class="d-pair-sub gear-meta">
                       <span class="d-rk" :style="{ '--rk': rarityRank(g.rarity).color }">{{
-                        gradeLabel(g)
+                        RARITY_LABEL[g.rarity]
                       }}</span>
                       <span>{{ lineageLabel(g.lineage) }}</span>
                       <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
@@ -672,7 +672,7 @@
         <button class="iconbtn" aria-label="Fermer" @click="stockEquip = null">✕</button>
       </div>
       <p class="g-note">
-        {{ lineageLabel(stockEquip.lineage) }} · {{ gradeLabel(stockEquip) }} ·
+        {{ lineageLabel(stockEquip.lineage) }} · {{ RARITY_LABEL[stockEquip.rarity] }} ·
         {{ advGearEffectTexts(stockEquip).join(' · ') }}
       </p>
       <p class="g-note">{{ GAIN_NOTE }}</p>
@@ -797,7 +797,6 @@ import {
   RANK_COLOR,
   RARITY_LABEL,
   rarityRank,
-  gradeLabel,
   RARITY_RANK,
   FAMILIAR_SLOT,
   aggregateLines,

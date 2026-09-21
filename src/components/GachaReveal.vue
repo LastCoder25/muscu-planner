@@ -43,7 +43,9 @@
                 <span class="gx-remo"
                   ><ChampionPortrait :champion-id="c.id">{{ c.emoji }}</ChampionPortrait></span
                 >
-                <span class="gx-rrar">{{ RARITY_LABEL[c.rarity] }}</span>
+                <!-- ⚠️ La RARETÉ ne s'écrit que sur la case RETENUE, une fois arrêtée (v0.982,
+                     demandé) : au défilement, c'est le CADRE coloré qui la porte. -->
+                <span v-if="i === lp.stopIndex" class="gx-rrar">{{ RARITY_LABEL[c.rarity] }}</span>
               </div>
             </div>
           </div>
@@ -67,7 +69,6 @@
             <span class="gx-emo"
               ><ChampionPortrait :champion-id="c.id">{{ c.emoji }}</ChampionPortrait></span
             >
-            <span class="gx-crar">{{ RARITY_LABEL[c.rarity] }}</span>
           </div>
         </div>
       </div>
@@ -423,25 +424,19 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   gap: 4px;
   margin: 0 2px;
   border-radius: 14px;
-  background: color-mix(in srgb, var(--c) 12%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+  background: color-mix(in srgb, var(--c) 18%, var(--bg));
+  border: 3px solid var(--c);
+  box-shadow:
+    0 0 10px color-mix(in srgb, var(--c) 55%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--c) 35%, transparent);
 }
 .gx-emo {
   font-size: 40px;
   line-height: 1;
 }
 
-/* La rareté se LIT sur chaque case, pas seulement à sa teinte : huit couleurs voisines
-   ne se distinguent pas au vol. Les leurres couvrant toute l'échelle, l'afficher ne
-   trahit pas le résultat. */
-.gx-crar {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--c);
-  white-space: nowrap;
-}
+/* ⚠️ La rareté ne s'ÉCRIT plus au défilement (v0.982, demandé) : le CADRE, épais et
+   teinté de sa rareté, la porte seul — le nom tombe à la sélection. */
 
 /* ── LE ×10 : DIX LIGNES SUR TOUTE LA HAUTEUR ─────────────────────────────── */
 .gx.lotspin {
@@ -525,9 +520,13 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   align-items: center;
   justify-content: center;
   gap: 1px;
+  box-sizing: border-box;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--c) 12%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+  background: color-mix(in srgb, var(--c) 18%, var(--bg));
+  border: 2.5px solid var(--c);
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--c) 50%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--c) 30%, transparent);
 }
 .gx-remo {
   font-size: calc(var(--rh) * 0.42);
@@ -543,6 +542,14 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--c);
+  /* Apparaît quand SA ligne s'arrête (même délai que le cadre de verrouillage). */
+  opacity: 0;
+  animation: gx-rarin 300ms ease-out var(--stop) forwards;
+}
+@keyframes gx-rarin {
+  to {
+    opacity: 1;
+  }
 }
 
 /* ── LA RÉVÉLATION ───────────────────────────────────────────────────────── */
@@ -770,7 +777,8 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   .gx-rstrip {
     transition: none !important;
   }
-  .gx-row::after {
+  .gx-row::after,
+  .gx-rrar {
     animation: none;
     opacity: 1;
   }

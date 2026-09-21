@@ -193,7 +193,7 @@
               <div class="of-t">
                 Quel objet fondre ?
                 <span class="of-sub">
-                  pièce au rang de {{ outfitAdv.name }}, jamais au-dessus de l’objet ·
+                  pièce à la rareté de {{ outfitAdv.name }}, jamais au-dessus de l’objet ·
                   {{ fmtSpan(outfitterMsFor(selectedPlot.building.level)) }} chacune
                 </span>
               </div>
@@ -214,7 +214,7 @@
                 </span>
                 <span class="of-to">
                   → {{ r.emoji }} {{ r.name }}
-                  <b :style="{ color: rarityRank(r.rank).color }">{{ rarityRank(r.rank).name }}</b>
+                  <b :style="{ color: rarityRank(r.rank).color }">{{ RARITY_LABEL[r.rank] }}</b>
                   <span v-if="r.capped" class="of-warn">↓ objet plus bas</span>
                 </span>
                 <span class="of-vs" :class="'v-' + r.verdict">
@@ -222,7 +222,7 @@
                   <template v-else-if="r.current">
                     {{ VERDICT_LABEL[r.verdict] }} {{ r.current.emoji }} {{ r.current.name }}
                     <b :style="{ color: rarityRank(r.current.rarity).color }">{{
-                      rarityRank(r.current.rarity).name
+                      RARITY_LABEL[r.current.rarity]
                     }}</b>
                   </template>
                   <span v-if="r.queued" class="of-q-note">
@@ -297,6 +297,7 @@ import {
   FAMILIAR_SLOT,
   TROPHY_SLOT,
   gradeLabel,
+  RARITY_LABEL,
   rarityRank,
   type Item,
 } from '@/lib/items';
@@ -598,12 +599,13 @@ const outfitAdvs = computed(() =>
   char.advList
     .filter((a) => lineageOf(a))
     .map((a) => {
-      const rk = rarityRank(advRarity(a));
+      const rar = advRarity(a);
+      const rk = rarityRank(rar);
       return {
         id: a.id,
         name: a.name,
         emoji: advTitle(a)?.emoji ?? '🧑',
-        rank: rk.name,
+        rank: RARITY_LABEL[rar],
         color: rk.color,
         worn: outfitWorn.value.get(a.id)?.length ?? 0,
       };
@@ -622,7 +624,7 @@ const outfitGear = computed(() => {
 const VERDICT_LABEL: Record<OutfitVerdict, string> = {
   empty: '',
   up: '↑ mieux que',
-  same: '= même rang que',
+  same: '= même rareté que',
   down: '↓ moins bien que',
 };
 /** Les objets à fondre pour lui, dans l'ordre conseillé (`outfitOptions`, lib). */
@@ -643,7 +645,7 @@ const outfitQueue = computed(() =>
     return {
       emoji: f.piece.emoji,
       name: f.piece.name,
-      rank: rk.name,
+      rank: RARITY_LABEL[f.piece.rarity],
       color: rk.color,
       advName: char.advList.find((a) => a.id === f.advId)?.name ?? '?',
       leftMs: Math.max(0, f.until - props.now),
@@ -673,7 +675,7 @@ function doOutfitBatch() {
   const b = outfitBatch.value;
   if (outfitBusy.value || !adv || !b.jobs.length) return;
   const lignes = b.jobs
-    .map((j) => `${j.item.emoji} ${j.item.name} → ${j.emoji} ${j.name} ${rarityRank(j.rank).name}`)
+    .map((j) => `${j.item.emoji} ${j.item.name} → ${j.emoji} ${j.name} ${RARITY_LABEL[j.rank]}`)
     .join('<br>');
   $q.dialog({
     title: `Fondre ${b.jobs.length} objet${b.jobs.length > 1 ? 's' : ''} ?`,
@@ -702,9 +704,9 @@ async function runOutfitBatch(advId: string) {
 function doOutfit(r: OutfitOption) {
   const adv = outfitAdv.value;
   if (outfitBusy.value || !adv) return;
-  const piece = `${r.emoji} ${r.name} ${rarityRank(r.rank).name}`;
+  const piece = `${r.emoji} ${r.name} ${RARITY_LABEL[r.rank]}`;
   const replaces = r.current
-    ? ` Il porte déjà ${r.current.emoji} ${r.current.name} ${rarityRank(r.current.rarity).name} sur cet emplacement${r.verdict === 'down' ? ' — la nouvelle pièce sera d’un rang inférieur' : ''}.`
+    ? ` Il porte déjà ${r.current.emoji} ${r.current.name} ${RARITY_LABEL[r.current.rarity]} sur cet emplacement${r.verdict === 'down' ? ' — la nouvelle pièce sera d’une rareté inférieure' : ''}.`
     : '';
   $q.dialog({
     title: 'Fondre cet objet ?',

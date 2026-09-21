@@ -7,7 +7,7 @@ import {
   effectAsAggregate,
   effectBase,
   effectLabelFor,
-  gradeLabel,
+  RARITY_LABEL,
   rarityRank,
   round1,
   emptyEffects,
@@ -415,11 +415,8 @@ export interface AdvGearCell {
   filled: boolean;
   /** La pièce PORTÉE (règles appliquées, `wornGear`), sinon absente. */
   piece?: AdvGear;
-  /** Couleur, et RANG + ÉTOILES de la pièce portée (`gradeLabel`, comme un objet du héros).
-   *  ⚠️ Les étoiles ne sont pas décoratives : une pièce d'aventurier porte un JET
-   *  (`rollAdvGear` en tire un) qui décide d'une part de sa valeur. Sans elles, deux pièces
-   *  « Bronze » pouvaient valoir du simple au double sans que rien ne les distingue — le
-   *  défaut que la v0.895 avait corrigé côté héros et qui survivait ici. */
+  /** Couleur, et RARETÉ de la pièce portée (`RARITY_LABEL`) — la langue du gacha, comme
+   *  le champion qui la porte (v0.982 ; avant : rang + étoiles, comme un objet du héros). */
   color?: string;
   rank?: string;
   /** ⚠️ Case VIDE qu'une pièce du stock pourrait remplir tout de suite (`pendingAdvGear`).
@@ -456,7 +453,9 @@ export function advGearCells(
     if (piece) {
       const rk = rarityRank(piece.rarity);
       const stat = advGearEffectTexts(piece)[0];
-      const grade = gradeLabel(piece); // « Bronze ★★☆☆☆ » — rang ET jet, comme le héros
+      // ⚠️ En RARETÉ (Commun → Primordial), pas en rang + étoiles : l'équipement d'un
+      // champion parle la langue du gacha, comme le champion lui-même (v0.982).
+      const grade = RARITY_LABEL[piece.rarity];
       return {
         slot,
         emoji: piece.emoji,
