@@ -222,6 +222,12 @@ export interface Poi {
    *  tout seul quand l'embuscade expire. Ne jamais l'écrire ailleurs — il serait faux dès
    *  le tick suivant. Le NOM est gardé : il est sérialisé dans les cartes existantes. */
   riftPeril?: boolean;
+  /** 🕳️ Niveau sur lequel se calcule le TRAJET (v0.1012). ⚠️ Posé seulement quand le niveau
+   *  du lieu NE DÉCOULE PAS de sa distance — une faille (niveau tiré par rang) et ce qu'elle
+   *  laisse (mine, bande). Sans lui, une faille Bronze posée au bout de la carte prenait
+   *  30 % de temps en moins qu'un autre lieu au même endroit : le trajet ne se lisait plus
+   *  sur la carte. Absent → le niveau du lieu (tous les autres POI, et les failles d'avant). */
+  travelLevel?: number;
   /** ⚔️ BANDE EN MARCHE uniquement — la faction héritée de sa faille, et son point de
    *  DÉPART. ⚠️ `from` est immuable : la marche s'interpole de là vers la ville, donc la
    *  recalculer depuis la position courante la ferait ralentir à chaque tick sans jamais
@@ -795,6 +801,13 @@ export function travelFactor(roundTripH: number): number {
   return ref * Math.pow((0.5 + h) / ref, TRAVEL_EXP);
 }
 
+/** Le niveau sur lequel se calcule le trajet d'un POI — ⚠️ SOURCE UNIQUE : tout calcul de
+ *  trajet (héros, convoi, groupe, cargaison, XP) passe par elle, sinon une moitié de l'écran
+ *  annoncerait une durée que l'autre ne pratique pas. */
+export function poiTravelLevel(p: Pick<Poi, 'level' | 'travelLevel'>): number {
+  return p.travelLevel ?? p.level;
+}
+
 /** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
 export function travelOneWayMin(level: number, distNorm: number): number {
   const base =
@@ -1187,7 +1200,8 @@ function placePoiOfType(
   const span = win.max - win.min;
   const jitter = (rng() - 0.5) * 0.12;
   const frac = Math.min(1, Math.max(0, pos.distNorm + jitter));
-  const level = forcedLevel ?? win.min + Math.round(frac * span);
+  const distLevel = win.min + Math.round(frac * span);
+  const level = forcedLevel ?? distLevel;
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
@@ -1199,6 +1213,8 @@ function placePoiOfType(
     // aléatoire de tous les spawns suivants, donc la carte de chaque joueur.
     ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
     level,
+    // Niveau IMPOSÉ (faille) → le trajet se calcule sur celui que la distance justifie.
+    ...(forcedLevel !== undefined ? { travelLevel: distLevel } : {}),
     x: pos.x,
     y: pos.y,
     distNorm: pos.distNorm,
@@ -1319,6 +1335,7 @@ export function advanceWorld(
       id: `${p.id}_mine`,
       type: 'mana_mine',
       level: p.level,
+      ...(p.travelLevel !== undefined ? { travelLevel: p.travelLevel } : {}),
       x: p.x,
       y: p.y,
       distNorm: p.distNorm,
@@ -1337,6 +1354,7 @@ export function advanceWorld(
       id: `${p.id}_war`,
       type: 'warband',
       level: p.level,
+      ...(p.travelLevel !== undefined ? { travelLevel: p.travelLevel } : {}),
       faction: riftFactionOf(p.id),
       from: { x: p.x, y: p.y },
       x: p.x,
@@ -1814,7 +1832,7 @@ export function resolveOutcome(
   // qui versait de la monnaie de singe, ce que la v0.658 prétendait avoir corrigé. Elles
   // rendent désormais des CLÉS, qui n'avaient aucune source dédiée. Un test l'interdit.
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
-    const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
+    const rthH = (2 * travelOneWayMin(poiTravelLevel(poi), poi.distNorm)) / 60;
     const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
     const { energy, summonStones, keys, mana } = harvestYield(poi.type, poi.level, tfH);
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
@@ -1842,7 +1860,7 @@ export function resolveOutcome(
   // ── ARÈNE : gauntlet de survie par vagues (nuit) → RÉCOMPENSE GRASSE ∝ vagues. ──
   // Chère en or (puits) + trajet long, mais paie beaucoup en poussière/pierres/gear.
   if (poi.type === 'arena') {
-    const rthA = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
+    const rthA = (2 * travelOneWayMin(poiTravelLevel(poi), poi.distNorm)) / 60;
     const tfA = travelFactor(rthA);
     const waves = simulateArena(hero, poi.level, seed + 17);
     const good = waves >= 6; // « belle performance » (pour le ton du rapport / notif)
@@ -1929,7 +1947,7 @@ export function resolveOutcome(
 
 /** Durée aller-retour en heures, et le facteur de temps historique `0,5 + h`. */
 function tripHours(poi: Poi): { rth: number; tf: number } {
-  const rth = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
+  const rth = (2 * travelOneWayMin(poiTravelLevel(poi), poi.distNorm)) / 60;
   return { rth, tf: 0.5 + rth };
 }
 
@@ -2178,7 +2196,9 @@ export function startExpedition(
   travelMult = 1,
   playerLevel?: number, // cap anti-runaway sur le rang des drops
 ): ActiveExpedition {
-  const oneWayMs = Math.round(travelOneWayMin(poi.level, poi.distNorm) * 60_000 * travelMult);
+  const oneWayMs = Math.round(
+    travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * 60_000 * travelMult,
+  );
   const outcome = resolveOutcome(hero, poi, seed, playerLevel);
   // Seule la jambe RETOUR bouge : l'aller et le dépôt du rapport (midAt) restent intacts,
   // le héros a bien atteint l'objectif avant que la route ne décide de sa vitesse.

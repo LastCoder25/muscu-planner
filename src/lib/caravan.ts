@@ -58,6 +58,7 @@ import {
   haulPills,
   goldCost,
   travelFactor,
+  poiTravelLevel,
   travelOneWayMin,
   type Poi,
   routePerilous,
@@ -708,7 +709,7 @@ export function caravanLegMin(
   comptoirLevel: number,
   gearSpeed: number,
 ): number {
-  const hero = travelOneWayMin(poi.level, poi.distNorm);
+  const hero = travelOneWayMin(poiTravelLevel(poi), poi.distNorm);
   const speed = Math.min(
     CARAVAN.speedMax,
     countRole(escort, 'speed') * CARAVAN.speedPerRole + Math.max(0, gearSpeed),
@@ -722,7 +723,7 @@ export function caravanLegMin(
  *  elle écraserait l'expédition du héros. Le marché doit rester lisible : la caravane
  *  coûte plus de TEMPS (abondant) et zéro ÉNERGIE (rare) ; elle ne rapporte pas plus. */
 export function heroEquivalentFactor(poi: Poi): number {
-  return tripFactor(poi.level, poi.distNorm);
+  return tripFactor(poiTravelLevel(poi), poi.distNorm);
 }
 
 /** Le facteur de trajet d'un POI, à niveau et distance donnés. Extrait pour que l'XP et
@@ -757,7 +758,8 @@ function tripFactor(level: number, distNorm: number): number {
  * `heroEquivalentFactor`), et un Comptoir bas niveau rapporterait plus d'XP qu'un haut.
  */
 export function missionTravelMult(poi: Poi): number {
-  return tripFactor(poi.level, poi.distNorm) / tripFactor(poi.level, CARAVAN.xpRefDist);
+  const L = poiTravelLevel(poi);
+  return tripFactor(L, poi.distNorm) / tripFactor(L, CARAVAN.xpRefDist);
 }
 
 /** Salaires d'une mission — un PUITS D'OR, et la contrepartie de la prestation. */
