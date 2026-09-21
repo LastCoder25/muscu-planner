@@ -11,7 +11,6 @@ import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank'
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
-import type { AdvGear } from './advGear';
 
 // ── Types ──
 // 'arena' = survie par VAGUES : le héros tient le plus longtemps possible contre des
@@ -154,7 +153,6 @@ export interface PartyResult {
   xp: Record<string, number>;
   /** Aventuriers envoyés à l'infirmerie (défaite : tous ceux qui sont tombés). */
   hurt: string[];
-  advGear: Omit<AdvGear, 'id'>[];
   /** Salaires de l'escorte, déduits à l'encaissement. */
   wages: number;
   journal: string[];

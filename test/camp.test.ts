@@ -351,11 +351,11 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party!.win).toBe(true);
     expect(o.gold).toBe(campGroupHaul(poi(), spec).gold);
     expect(o.item).toBeNull();
-    expect(o.party!.advGear.length).toBe(CAMP.campPieces);
+    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
     expect(o.party!.hurt).not.toContain(HERO_UNIT_ID);
   });
 
-  it('SANS le héros, victoire : or, pierres, pièces d’aventurier ; jamais d’objet du héros ni de ferraille', () => {
+  it('SANS le héros, victoire : or et pierres ; jamais d’objet du héros, de ferraille ni de pièce de champion', () => {
     const L = 60;
     const inp = input({
       poi: poi({ level: 5, type: 'lair' }),
@@ -372,7 +372,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     // ⚠️ Les camps ne donnent JAMAIS de ferraille (v0.856 / v0.890 : épave et Fonderie seules).
     expect('scrap' in o).toBe(false);
     expect(o.summonStones).toBeGreaterThan(0);
-    expect(o.party!.advGear).toHaveLength(CAMP.lairPieces);
+    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
     expect(o.party!.wages).toBeGreaterThan(0);
   });
 
@@ -386,11 +386,11 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     const o = resolveCamp(inp);
     expect(o.party!.win).toBe(false);
     expect(o.gold + o.summonStones + o.key).toBe(0);
-    expect(o.party!.advGear).toEqual([]);
+    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
     expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi));
   });
 
-  it('⚠️ SANS le héros : JAMAIS de clé, et le butin est exactement campGroupHaul (pièces à part)', () => {
+  it('⚠️ SANS le héros : JAMAIS de clé, et le butin est exactement campGroupHaul ', () => {
     // Les clés nourrissent le Labyrinthe (bande 2-5 runs/jour, v0.794/v0.799) : un groupe de
     // camp n'en rend AUCUNE, quelle que soit la faction — les bêtes en rendaient 1-2 par camp.
     let victoires = 0;
@@ -411,7 +411,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         const h = campGroupHaul(inp.poi, inp.spec);
         expect(o.gold).toBe(h.gold);
         expect(o.summonStones).toBe(h.summonStones);
-        expect(o.party!.advGear).toHaveLength(CAMP.lairPieces);
+        expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
       }
     expect(victoires, 'aucune victoire : le test ne prouve rien').toBeGreaterThan(0);
   });
@@ -656,14 +656,13 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
         expect(label.includes('🗝️'), label).toBe(false);
         expect(label).not.toContain('🔩');
         expect(label).not.toContain('🧩');
-        const n = type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;
-        expect(label).toContain(`${n} pièce`);
+        expect(label).not.toContain('pièce');
       }
     expect(vus.size, 'toutes les factions × types ne sont pas exercées').toBe(6);
     expect(campRewardLabel(poi({ type: 'wreck' }))).toBe('');
   });
 
-  it('partyReport dit l’issue et les pièces d’aventurier ramenées', () => {
+  it('partyReport dit l’issue — et n’annonce plus de pièce de champion (v0.1010)', () => {
     const L = 60;
     const esc = team(10, L);
     const o = resolveCamp(
@@ -677,7 +676,7 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     );
     const r = partyReport(o.party!, esc);
     expect(r.win).toBe(true);
-    expect(r.pieces).toBe(CAMP.lairPieces);
+    expect(r).not.toHaveProperty('pieces');
     const perdu = resolveCamp(
       input({
         escort: team(1, 5),
@@ -688,7 +687,7 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     );
     const rp = partyReport(perdu.party!, []);
     expect(rp.win).toBe(false);
-    expect(rp.pieces).toBe(0);
+    expect(rp).not.toHaveProperty('pieces');
   });
 });
 

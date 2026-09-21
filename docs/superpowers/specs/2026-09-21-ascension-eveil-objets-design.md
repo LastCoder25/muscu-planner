@@ -4,24 +4,24 @@
 
 ## Décisions (prises avec l'utilisateur le 2026-09-21)
 
-| #   | Sujet                           | Décision                                                                                                                                                        |
-| --- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Ascension des champions         | L'XP d'un champion s'arrête au **★5 d'un rang**. Passer au ★1 du rang suivant demande une **ascension** payée en **or + sceaux de rang**.                         |
-| 2   | Ascension des objets            | Même principe, avec des **sceaux d'objet**, distincts de ceux des champions.                                                                                    |
-| 3   | Niveau des objets               | Gagné **en combattant** avec le champion qui les porte (patron du dressage des familiers), jamais avec une ressource.                                            |
-| 4   | Éveil des objets                | Par **fusion manuelle** de doublons. Automatique **seulement** pour un objet destiné à un seul champion (arme signature des S, roadmap P4).                       |
-| 5   | Re-mesure                       | Convois, sièges, camps et failles re-mesurés après les quatre points ci-dessus.                                                                                  |
-| 6   | Pas de jet                      | Les objets de champion n'ont **plus de jet**. Seuls les objets du héros en gardent un. Les deux gestions sont séparées.                                          |
-| 7   | Source unique                   | Les objets de champion ne viennent **que du tirage gacha**. Sièges, embuscades et camps ne donnent plus que des objets du héros.                                  |
+| #   | Sujet                   | Décision                                                                                                                                    |
+| --- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Ascension des champions | L'XP d'un champion s'arrête au **★5 d'un rang**. Passer au ★1 du rang suivant demande une **ascension** payée en **or + sceaux de rang**.   |
+| 2   | Ascension des objets    | Même principe, avec des **sceaux d'objet**, distincts de ceux des champions.                                                                |
+| 3   | Niveau des objets       | Gagné **en combattant** avec le champion qui les porte (patron du dressage des familiers), jamais avec une ressource.                       |
+| 4   | Éveil des objets        | Par **fusion manuelle** de doublons. Automatique **seulement** pour un objet destiné à un seul champion (arme signature des S, roadmap P4). |
+| 5   | Re-mesure               | Convois, sièges, camps et failles re-mesurés après les quatre points ci-dessus.                                                             |
+| 6   | Pas de jet              | Les objets de champion n'ont **plus de jet**. Seuls les objets du héros en gardent un. Les deux gestions sont séparées.                     |
+| 7   | Source unique           | Les objets de champion ne viennent **que du tirage gacha**. Sièges, embuscades et camps ne donnent plus que des objets du héros.            |
 
 ## Le modèle d'un objet de champion
 
-| Attribut           | À l'obtention            | Évolution                                                               |
-| ------------------ | ------------------------ | ----------------------------------------------------------------------- |
-| **Rareté** B/A/S   | tirée au gacha           | ne change jamais                                                        |
-| **Rang**           | celui du joueur          | ascension (sceaux d'objet + or)                                         |
-| **Étoiles**        | ★1                       | XP gagnée avec le champion ; bloquée à ★5 jusqu'à l'ascension           |
-| **Éveil**          | 0                        | fusion manuelle d'un doublon (auto pour l'arme signature)               |
+| Attribut         | À l'obtention   | Évolution                                                     |
+| ---------------- | --------------- | ------------------------------------------------------------- |
+| **Rareté** B/A/S | tirée au gacha  | ne change jamais                                              |
+| **Rang**         | celui du joueur | ascension (sceaux d'objet + or)                               |
+| **Étoiles**      | ★1              | XP gagnée avec le champion ; bloquée à ★5 jusqu'à l'ascension |
+| **Éveil**        | 0               | fusion manuelle d'un doublon (auto pour l'arme signature)     |
 
 Même échelle de rang et d'étoiles que le héros et les champions (`characterRank`, un rang = 10 niveaux,
 une étoile = 2 niveaux) : un seul langage de progression dans tout le jeu.
@@ -46,6 +46,7 @@ valeur = effectBase(type) × RARITY_MULT[rang] × itemLevelMult(niveau) × GEAR_
 ### Migration des pièces existantes (sans migration SQL)
 
 `normalizeAdvGearState` (idempotente) relit chaque pièce du stock :
+
 - `roll` ignoré puis retiré ;
 - affixes remplacés par ceux de son modèle (la pièce garde lignée, emplacement, lettre, rang) ;
 - `level` repart au **plancher du rang** (★1) — le niveau d'objet actuel est tiré, pas gagné ;
@@ -149,13 +150,13 @@ Mesures sur les vraies libs (sondes jetables, chiffres dans les commits) :
 
 ## Découpage
 
-| Étape | Contenu                                                                              | Estimation |
-| ----- | ------------------------------------------------------------------------------------ | ---------- |
-| A     | Retraits (jet, drops, forge) + stats fixes par modèle + migration du stock            | ~½ j       |
-| B     | Ascension des champions + sceaux de champion (failles) + colonne `seals`              | ~½ j       |
-| C     | XP et étoiles des objets + ascension des objets + sceaux d'objet (boss)               | ~½ j       |
-| D     | Éveil manuel des objets (Guilde)                                                     | ~¼ j       |
-| E     | Re-mesures et recalibrage                                                            | ~½ j       |
+| Étape | Contenu                                                                    | Estimation |
+| ----- | -------------------------------------------------------------------------- | ---------- |
+| A     | Retraits (jet, drops, forge) + stats fixes par modèle + migration du stock | ~½ j       |
+| B     | Ascension des champions + sceaux de champion (failles) + colonne `seals`   | ~½ j       |
+| C     | XP et étoiles des objets + ascension des objets + sceaux d'objet (boss)    | ~½ j       |
+| D     | Éveil manuel des objets (Guilde)                                           | ~¼ j       |
+| E     | Re-mesures et recalibrage                                                  | ~½ j       |
 
 Chaque étape passe les 5 portes (typecheck, lint, tests, build, smoke) et se pousse seule.
 

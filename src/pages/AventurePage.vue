@@ -5377,15 +5377,6 @@ async function baseLifecycle() {
     }
     // Un tick a pu déplacer l’échéance du prochain siège → on réaligne.
     void syncPush(!!r.detected || !!r.report);
-    // Les fabrications de l’Équipementier arrivées à terme se concluent ici : sans ça,
-    // une pièce n’aboutirait qu’à la prochaine action touchant le vivier — donc peut-être
-    // jamais.
-    // ⚠️ ATTENDU, sous `baseBusy` : il écrit `adv_gear` (la forge qui aboutit). Lancé sans
-    // `await`, le verrou tombait avant sa persistance, et le tick suivant pouvait faire
-    // créditer par la fouille (`tickScavengers`) un `adv_gear` relu AVANT elle — la pièce
-    // forgée, ou celle ramassée, était perdue. Il passe APRÈS `baseTick`, qui relit déjà
-    // la ligne après sa propre fouille : l’ordre « fouille d’abord » reste vrai.
-    await char.settleForge(uid);
   } finally {
     baseBusy = false;
   }

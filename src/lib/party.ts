@@ -338,8 +338,6 @@ interface PartyReportMember {
 export interface PartyReport {
   hero: boolean;
   win: boolean;
-  /** Pièces d'aventurier ramenées (groupe sans le héros, victoire) — rangées au stock. */
-  pieces: number;
   factionLabel: string;
   factionEmoji: string;
   /** ⚠️ Une INCURSION de faille, pas un camp. Dérivé de la seule source possible
@@ -378,7 +376,6 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
   return {
     hero: party.hero,
     win: party.win,
-    pieces: party.advGear.length,
     factionLabel: FACTION_LABEL[party.faction],
     factionEmoji: FACTION_EMOJI[party.faction],
     isRift: !!party.rift,

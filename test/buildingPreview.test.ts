@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 import { BUILDING_TYPES } from '@/lib/buildings';
 import { caravanSlots, caravanSlowFor } from '@/lib/caravan';
-import { outfitterMsFor } from '@/lib/advGear';
 
 describe('aperçu des prochains niveaux d’un bâtiment', () => {
   it('⚠️ CHAQUE type de bâtiment a un aperçu — un bâtiment muet est une régression', () => {

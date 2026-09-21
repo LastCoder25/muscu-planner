@@ -27,10 +27,7 @@
       @click="emit('replay')"
     />
 
-    <div v-if="r.pieces || r.wages" class="pr-pills">
-      <span v-if="r.pieces" class="pr-pill">
-        🗡️ {{ r.pieces }} pièce{{ r.pieces > 1 ? 's' : '' }} de champion
-      </span>
+    <div v-if="r.wages" class="pr-pills">
       <span v-if="r.wages" class="pr-pill pr-wage">🪙 −{{ r.wages }} salaires</span>
     </div>
 

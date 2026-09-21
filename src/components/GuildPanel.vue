@@ -172,8 +172,8 @@
 
         <!-- ── 🗡️ LE STOCK D'ÉQUIPEMENT (onglet) ─────────────────────────────────────
              ⚠️ Ce n'est PAS le sac du héros : ces pièces sont propres à chaque classe de
-             base (`canWearAdvGear`) — fabriquées par l'Équipementier, ou tombées des
-             cadavres d'un siège et des embuscades repoussées (jamais du butin du héros).
+             base (`canWearAdvGear`) — elles ne viennent QUE du tirage gacha (v0.1010),
+             jamais du butin du héros ni d'un drop.
              « Équiper » ouvre la liste des aventuriers qui peuvent la porter.
              🔒 / 🪙 comme le sac, désactivés si portée. -->
         <template v-else-if="guildTab === 'stock'">
@@ -380,7 +380,7 @@
       </div>
 
       <!-- 🗡️ SES 4 EMPLACEMENTS D'ÉQUIPEMENT — une pièce par métier, jamais deux fois
-           la même stat qu'un objet du héros : c'est l'Équipementier qui les fabrique et le sélecteur qui filtre par lignée et
+           la même stat qu'un objet du héros : elles viennent du tirage, et le sélecteur filtre par lignée et
            rareté de classe (`canWearAdvGear`). -->
       <div class="d-gear">
         <button
