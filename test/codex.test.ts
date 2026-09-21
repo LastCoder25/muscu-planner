@@ -5,6 +5,7 @@ import {
   setCollection,
   codexSummary,
   championGallery,
+  championGroups,
 } from '@/lib/codex';
 import { CHAMPIONS } from '@/data/champions';
 import { awakenLevel, type Adventurer } from '@/lib/adventurers';
@@ -141,5 +142,41 @@ describe('🏅 la GALERIE DES CHAMPIONS', () => {
     const s = codexSummary([], {}, [], {}, [owned(c.id, 1)]);
     expect(s.championsTotal).toBe(CHAMPIONS.length);
     expect(s.championsFound).toBe(1);
+  });
+});
+
+describe('🗂️ la collection rangée par rareté', () => {
+  const owned = (id: string): Adventurer => ({
+    id: 'a-' + id,
+    name: id,
+    seed: 1,
+    path: [],
+    championId: id,
+    copies: 1,
+    level: 1,
+    xp: 0,
+  });
+
+  it('un groupe par rareté du roster, dans l_ordre de la galerie, et rien ne se perd', () => {
+    const g = championGroups([]);
+    const rarities = [...new Set(championGallery([]).map((e) => e.champ.rarity))];
+    expect(g.map((x) => x.rarity)).toEqual(rarities);
+    expect(g.reduce((n, x) => n + x.total, 0)).toBe(CHAMPIONS.length);
+    for (const x of g) {
+      expect(x.entries.length).toBe(x.total);
+      expect(x.entries.every((e) => e.champ.rarity === x.rarity)).toBe(true);
+    }
+  });
+
+  it('le compteur d_un groupe ne compte QUE ses possédés', () => {
+    const c = CHAMPIONS[CHAMPIONS.length - 1]!;
+    const g = championGroups([owned(c.id)]);
+    for (const x of g) expect(x.owned).toBe(x.rarity === c.rarity ? 1 : 0);
+  });
+
+  it('⚠️ un doublon compte UNE fois (on collectionne des identités)', () => {
+    const c = CHAMPIONS[0]!;
+    const g = championGroups([owned(c.id), { ...owned(c.id), id: 'bis' }]);
+    expect(g.find((x) => x.rarity === c.rarity)!.owned).toBe(1);
   });
 });

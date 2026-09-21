@@ -754,7 +754,8 @@
             <span class="cx-main">
               <span class="cx-title">Codex</span>
               <span class="cx-sub">
-                👾 {{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }} monstres · 🧩
+                🏅 {{ codexSum.championsFound }}/{{ codexSum.championsTotal }} champions · 👾
+                {{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }} monstres · 🧩
                 {{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} sets
               </span>
             </span>
@@ -1768,8 +1769,19 @@
             <button class="shop-x" aria-label="Fermer" @click="codexOpen = false">✕</button>
           </div>
           <div class="codex-body">
-            <!-- Bestiaire -->
+            <!-- 🏅 GALERIE DES CHAMPIONS — en tête, c'est la collection qu'on vient voir. ⚠️ Elle annonce ce qui
+                 EXISTE, jamais ce qui est PROBABLE : pas un taux, pas une chance. Les
+                 afficher ici court-circuiterait l'écran d'invocation, dont c'est le métier. -->
             <div class="cx-sec-h">
+              🏅 Champions
+              <span class="cx-count"
+                >{{ codexSum.championsFound }}/{{ codexSum.championsTotal }}</span
+              >
+            </div>
+            <ChampionCollection :advs="char.advList" />
+
+            <!-- Bestiaire -->
+            <div class="cx-sec-h cx-sec-h2">
               👾 Bestiaire
               <span class="cx-count"
                 >{{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }}</span
@@ -1785,37 +1797,6 @@
                 <span class="best-emo">{{ m.discovered ? m.emoji : '❔' }}</span>
                 <span class="best-name">{{ m.discovered ? m.name : '???' }}</span>
                 <span class="best-tier">Palier {{ m.tier }}</span>
-              </div>
-            </div>
-
-            <!-- 🏅 GALERIE DES CHAMPIONS — le troisième volet. ⚠️ Elle annonce ce qui
-                 EXISTE, jamais ce qui est PROBABLE : pas un taux, pas une chance. Les
-                 afficher ici court-circuiterait l'écran d'invocation, dont c'est le métier. -->
-            <div class="cx-sec-h cx-sec-h2">
-              🏅 Champions
-              <span class="cx-count"
-                >{{ codexSum.championsFound }}/{{ codexSum.championsTotal }}</span
-              >
-            </div>
-            <div class="bestiary-grid">
-              <div
-                v-for="c in championList"
-                :key="c.champ.id"
-                class="best-tile cx-champ"
-                :class="{ found: c.owned }"
-                :style="c.owned ? { '--rk': RANK_COLOR[c.champ.rarity] } : undefined"
-              >
-                <!-- ⚠️ Pas de `v-if` sur `owned` : un id nul rend déjà `null`, donc le
-                     slot porte le repli des DEUX cas — l'emoji du champion découvert,
-                     le ❔ de celui qui ne l'est pas. -->
-                <span class="best-emo">
-                  <ChampionPortrait :champion-id="c.owned ? c.champ.id : null">{{
-                    c.owned ? c.champ.emoji : '❔'
-                  }}</ChampionPortrait>
-                </span>
-                <span class="best-name">{{ c.owned ? c.champ.name : '???' }}</span>
-                <span class="best-tier">{{ RARITY_LABEL[c.champ.rarity] }}</span>
-                <span v-if="c.owned && c.awaken > 0" class="cx-awk">✨ {{ c.awaken }}</span>
               </div>
             </div>
 
@@ -2987,8 +2968,6 @@ import {
   SLOT_LABEL,
   SLOT_EMOJI,
   rarityRank,
-  RANK_COLOR,
-  RARITY_LABEL,
   gradeLabel,
   groupRowVisible,
   RARITY_RANK,
@@ -3041,8 +3020,8 @@ import {
   regionMapGeometry,
   type Region,
 } from '@/lib/regions';
-import { bestiary, championGallery, setCollection, codexSummary } from '@/lib/codex';
-import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import { bestiary, setCollection, codexSummary } from '@/lib/codex';
+import ChampionCollection from '@/components/ChampionCollection.vue';
 import { dailyFreeMana } from '@/lib/gacha';
 import {
   messageTitle,
@@ -4080,7 +4059,6 @@ const codexSum = computed(() =>
 const bestiaryList = computed(() => bestiary(clearedIds.value));
 /** 🏅 Le roster ENTIER, marqué possédé ou non — le teasing déjà en place pour le
  *  bestiaire. ⚠️ Aucun taux : c'est l'écran d'invocation qui les vend. */
-const championList = computed(() => championGallery(char.advList));
 const setsList = computed(() =>
   setCollection(
     char.row?.equipped ?? {},
@@ -11109,25 +11087,6 @@ button.pt-mini:active {
   font-size: 12px;
   color: var(--accent);
   font-weight: 700;
-}
-/* 🏅 Une tuile de champion reprend celle du bestiaire — même grille, même teasing ❔ —
-   et ajoute la seule chose qu'un champion a de plus : la COULEUR de sa rareté, et son
-   cran d'Éveil. ⚠️ Pas de taux : l'écran d'invocation les vend, le Codex les nomme. */
-.cx-champ {
-  position: relative;
-}
-.cx-champ.found {
-  border-color: color-mix(in srgb, var(--rk) 55%, var(--line));
-}
-.cx-champ.found .best-tier {
-  color: var(--rk);
-}
-.cx-awk {
-  position: absolute;
-  top: 3px;
-  right: 4px;
-  font-size: 9px;
-  color: var(--accent);
 }
 .bestiary-grid {
   display: grid;

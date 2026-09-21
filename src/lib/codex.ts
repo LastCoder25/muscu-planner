@@ -4,7 +4,15 @@
 // vaincus / équipement) → aucune colonne DB en plus. N'affecte ni combat ni drops.
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS } from '@/data/dungeons';
-import { ITEM_SETS, RARITY_RANK, SLOTS, type Equipped, type Item, type ItemSet } from './items';
+import {
+  ITEM_SETS,
+  RARITY_RANK,
+  SLOTS,
+  type Equipped,
+  type Item,
+  type ItemSet,
+  type Rarity,
+} from './items';
 import { CHAMPIONS, type Champion } from '@/data/champions';
 import { awakenLevel, type Adventurer } from './adventurers';
 
@@ -110,6 +118,37 @@ export function championGallery(advs: Adventurer[]): ChampionEntry[] {
       const copies = a ? Math.max(1, Math.floor(a.copies ?? 1)) : 0;
       return { champ, owned: !!a, copies, awaken: a ? awakenLevel(copies) : 0 };
     });
+}
+
+export interface ChampionGroup {
+  rarity: Rarity;
+  entries: ChampionEntry[];
+  /** Combien de champions de cette rareté on possède. */
+  owned: number;
+  total: number;
+}
+
+/**
+ * 🗂️ LA GALERIE RANGÉE PAR RARETÉ (demandé : « voir ce qu'on a ou pas et leur rareté »).
+ * Un compteur PAR rareté dit d'un coup d'œil où la collection a des trous — un total seul
+ * (« 9/32 ») ne dit pas s'il manque des communs ou tout le haut de la pyramide.
+ * ⚠️ DÉRIVÉE de `championGallery`, jamais une seconde lecture du vivier : les deux vues
+ * (Codex et Panthéon) doivent compter pareil. Les raretés sans aucun champion au roster
+ * ne sont pas rendues (un groupe « 0/0 » n'apprend rien).
+ */
+export function championGroups(advs: Adventurer[]): ChampionGroup[] {
+  const groups: ChampionGroup[] = [];
+  for (const e of championGallery(advs)) {
+    let g = groups.find((x) => x.rarity === e.champ.rarity);
+    if (!g) {
+      g = { rarity: e.champ.rarity, entries: [], owned: 0, total: 0 };
+      groups.push(g);
+    }
+    g.entries.push(e);
+    g.total++;
+    if (e.owned) g.owned++;
+  }
+  return groups;
 }
 
 export interface CodexSummary {

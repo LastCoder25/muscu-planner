@@ -408,6 +408,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // l'appelant », qui fait rougir `raid.test`.
   }, 30_000);
 
+  it('📖 ChampionCollection se monte et compte par rareté', async () => {
+    const { default: C } = await import('@/components/ChampionCollection.vue');
+    const { CHAMPIONS } = await import('@/data/champions');
+    const { championGroups } = await import('@/lib/codex');
+    const advs = ROW.adventurers;
+    let out = '';
+    expect(await mountIt(C, { advs }, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    // Un en-tête par rareté, et le compteur de chacun rendu à l'écran.
+    expect(championGroups(advs).some((g) => g.owned > 0)).toBe(true);
+    for (const g of championGroups(advs)) {
+      expect(out).toContain(RARITY_LABEL[g.rarity]);
+      expect(out).toContain(g.owned + '/' + g.total);
+    }
+    expect(out.match(/class="cc-tile/g)?.length).toBe(CHAMPIONS.length);
+  }, 30_000);
+
   it('AdventurerPortrait se monte, avec et sans teinte d’état', async () => {
     const { default: P } = await import('@/components/AdventurerPortrait.vue');
     const base = {
