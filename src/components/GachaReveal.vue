@@ -32,6 +32,7 @@
           v-for="(lp, r) in lotPlans ?? []"
           :key="r"
           class="gx-row"
+          :class="{ rev: r % 2 === 1 }"
           :style="{
             '--c': RANK_COLOR[lp.strip[lp.stopIndex]!.rarity],
             '--stop': `${lp.spinMs}ms`,
@@ -490,6 +491,16 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   height: var(--rh);
   overflow: hidden;
   mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+/* ↔️ UNE LIGNE SUR DEUX DÉFILE DANS L'AUTRE SENS (demandé). Plutôt que de tenir deux
+   géométries de translation, on RETOURNE la ligne en miroir — elle reste symétrique
+   autour du repère, donc elle s'arrête au même endroit — et on retourne chaque case
+   pour que portrait et texte se lisent à l'endroit. */
+.gx-row.rev {
+  transform: scaleX(-1);
+}
+.gx-row.rev .gx-rbox {
+  transform: scaleX(-1);
 }
 /* À l'arrêt, la case sous le repère s'allume à la couleur de SA rareté. */
 .gx-row::after {

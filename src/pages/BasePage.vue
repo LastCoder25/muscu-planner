@@ -412,20 +412,36 @@
         </g>
       </svg>
 
-      <!-- ⚖️ LE RAPPORT DE FORCES — la question qu'on vient se poser sur cet écran. -->
-      <div class="panel forces">
-        <div class="f-head">
-          <div class="f-side">
-            <div class="f-lab">🛡️ Ma défense</div>
-            <!-- ⚠️ LA PUISSANCE EN TÊTE (demandé par l’utilisateur) : le pronostic SATURE —
+      <!-- 🛡️ LA TUILE DÉFENSE (demandé : « une tuile de défense avec les infos repliées
+           dedans »). Repliée, elle garde ce qui ALERTE — une armée en approche et le
+           verdict, dans la couleur de la bande — pour qu'on n'ait pas à l'ouvrir pour
+           savoir s'il faut s'inquiéter. Dépliée, le rapport de forces complet. État
+           mémorisé par appareil, comme les autres pliages de cet écran. -->
+      <div class="panel forces tile" :class="{ open: defTileOpen }">
+        <button type="button" class="tile-h" :aria-expanded="defTileOpen" @click="toggleDefTile">
+          <span class="tile-emo">🛡️</span>
+          <span class="tile-main">
+            <span class="tile-t font-display">Défense</span>
+            <span class="tile-s">{{ fmtPow(forces.power) }} de puissance</span>
+          </span>
+          <span class="tile-sum" :class="odds ?? (raid ? 'unknown' : 'calm')">{{
+            defSummary
+          }}</span>
+          <span class="tile-chev">{{ defTileOpen ? '▾' : '▸' }}</span>
+        </button>
+        <template v-if="defTileOpen">
+          <div class="f-head">
+            <div class="f-side">
+              <div class="f-lab">🛡️ Ma défense</div>
+              <!-- ⚠️ LA PUISSANCE EN TÊTE (demandé par l’utilisateur) : le pronostic SATURE —
                  à enceinte pleine il affiche 100 % et ne bouge plus, donc il ne montre rien
                  du progrès quand on améliore une structure, alors que c’est exactement la
                  question qu’on se pose devant « Améliorer ». La puissance, elle, est
                  MONOTONE. ⚠️ Elle ne PRÉDIT rien — la tenue mesurée reste juste dessous, et
                  c’est elle qui répond à « est-ce que je tiens ? ». Deux questions, deux
                  nombres, aucun risque qu’ils se contredisent. -->
-            <div class="f-val font-display">{{ fmtPow(forces.power) }}</div>
-            <!-- ⚠️ LE REPÈRE N'EST PLUS ICI (v0.902, mesuré ; signalé par l'utilisateur :
+              <div class="f-val font-display">{{ fmtPow(forces.power) }}</div>
+              <!-- ⚠️ LE REPÈRE N'EST PLUS ICI (v0.902, mesuré ; signalé par l'utilisateur :
                  « plusieurs infos contradictoires sur le fait de tenir ou non »). « tient
                  X % face à une armée type » est une moyenne sur SIX armées génériques, pas
                  sur celle qui arrive : mesuré sur 96 configurations, il s'écarte du vrai
@@ -434,24 +450,24 @@
                  pourcentages de TENUE côte à côte ne peuvent pas ne pas se contredire.
                  Il descend dans le détail replié, où il répond à sa vraie question
                  (« mon enceinte tient-elle la route en général ? »), utile au calme. -->
-            <div class="f-sub">de puissance</div>
-          </div>
-          <div class="f-vs">vs</div>
-          <div class="f-side right">
-            <div class="f-lab">⚔️ L’armée</div>
-            <div v-if="!raid" class="f-val calm">—</div>
-            <div
-              v-else-if="!assaultSeen?.known"
-              class="f-val unknown"
-              title="Monte la Tour de guet"
-            >
-              ???
+              <div class="f-sub">de puissance</div>
             </div>
-            <div v-else-if="assaultSeen.exact" class="f-val font-display">{{ assault }}</div>
-            <div v-else class="f-val font-display range">
-              {{ assaultSeen.lo }}–{{ assaultSeen.hi }}
-            </div>
-            <!-- ⚠️ « à égalité : 1 chance sur 2 » EST RETIRÉ (v0.902, mesuré). Les deux
+            <div class="f-vs">vs</div>
+            <div class="f-side right">
+              <div class="f-lab">⚔️ L’armée</div>
+              <div v-if="!raid" class="f-val calm">—</div>
+              <div
+                v-else-if="!assaultSeen?.known"
+                class="f-val unknown"
+                title="Monte la Tour de guet"
+              >
+                ???
+              </div>
+              <div v-else-if="assaultSeen.exact" class="f-val font-display">{{ assault }}</div>
+              <div v-else class="f-val font-display range">
+                {{ assaultSeen.lo }}–{{ assaultSeen.hi }}
+              </div>
+              <!-- ⚠️ « à égalité : 1 chance sur 2 » EST RETIRÉ (v0.902, mesuré). Les deux
                  chiffres restent à la même échelle (`RAID.assaultEvenK`) — c'est ce qui rend
                  la comparaison honnête à vue d'œil — mais la phrase promettait un SEUIL
                  précis qui a dérivé : mesuré, à rapport 0,9-1,1 la tenue médiane est de
@@ -459,109 +475,128 @@
                  recalibrer un SECOND pronostic qui redérivera, on cesse d'en faire un :
                  ces deux nombres sont des MAGNITUDES, et le verdict juste dessous est la
                  seule réponse à « est-ce que je tiens ? ». -->
-            <div v-if="raid && assaultSeen?.known" class="f-sub">puissance d’assaut</div>
+              <div v-if="raid && assaultSeen?.known" class="f-sub">puissance d’assaut</div>
+            </div>
           </div>
-        </div>
-        <!-- ⚠️ CE QUE COÛTENT LES ABSENTS (demandé par l'utilisateur : « envoyer des
+          <!-- ⚠️ CE QUE COÛTENT LES ABSENTS (demandé par l'utilisateur : « envoyer des
              convois ou le héros sans se mettre dans le rouge »). Le panneau donnait la
              défense du MOMENT sans jamais dire ce qu'elle vaudrait au complet : on ne
              pouvait pas savoir ce qu'on abandonnait en faisant partir quelqu'un.
              ⚠️ Affiché SEULEMENT si l'écart est réel — annoncer « −0 » à un joueur dont
              tout le monde est à la maison serait du bruit. -->
-        <p v-if="forcesGap > 0" class="f-gap">
-          🚪 Des tiens sont dehors : <b>−{{ fmtPow(forcesGap) }}</b> de puissance — au complet, tu
-          vaudrais <b>{{ fmtPow(forcesFull) }}</b
-          >.
-        </p>
-        <!-- ⚠️ LA JAUGE EST LA TENUE ELLE-MÊME, et c’est tout le changement : plus de
+          <p v-if="forcesGap > 0" class="f-gap">
+            🚪 Des tiens sont dehors : <b>−{{ fmtPow(forcesGap) }}</b> de puissance — au complet, tu
+            vaudrais <b>{{ fmtPow(forcesFull) }}</b
+            >.
+          </p>
+          <!-- ⚠️ LA JAUGE EST LA TENUE ELLE-MÊME, et c’est tout le changement : plus de
              rapport de puissances, plus de seuil d’équilibre à connaître. « Tu tiens 7
              fois sur 10 » se lit sans notice, et ne peut pas diverger de la bataille
              puisque c’est le moteur qui l’a jouée. -->
-        <template v-if="odds">
-          <div class="f-gauge" :class="odds">
-            <i class="fg-cursor" :style="{ left: (raidHold ?? 0) * 100 + '%' }" />
-          </div>
-          <div class="f-odds" :class="odds">
-            {{ ODDS_LABEL[odds] }}
-            <b class="fo-pct">{{ holdPct(raidHold ?? 0) }}</b>
-          </div>
-        </template>
-        <p v-else-if="raid" class="f-hint">
-          Sans renseignement, tu ne peux pas jauger cette armée — c’est ce que la
-          <b>Tour de guet</b> achète.
-        </p>
-        <p v-else class="f-hint">Aucune armée en vue : c’est le moment de partir sur la carte.</p>
-        <!-- ⚠️ Chaque part est mesurée PAR ABLATION (« ce qu'on perdrait sans lui »),
+          <template v-if="odds">
+            <div class="f-gauge" :class="odds">
+              <i class="fg-cursor" :style="{ left: (raidHold ?? 0) * 100 + '%' }" />
+            </div>
+            <div class="f-odds" :class="odds">
+              {{ ODDS_LABEL[odds] }}
+              <b class="fo-pct">{{ holdPct(raidHold ?? 0) }}</b>
+            </div>
+          </template>
+          <p v-else-if="raid" class="f-hint">
+            Sans renseignement, tu ne peux pas jauger cette armée — c’est ce que la
+            <b>Tour de guet</b> achète.
+          </p>
+          <p v-else class="f-hint">Aucune armée en vue : c’est le moment de partir sur la carte.</p>
+          <!-- ⚠️ Chaque part est mesurée PAR ABLATION (« ce qu'on perdrait sans lui »),
              jamais par une formule recopiée : l'étiquette ne peut pas diverger du combat.
              Elles ne s'additionnent donc pas au total — les canaux se multiplient. -->
-        <!-- ⚠️ ATTAQUE ET DÉFENSE SÉPARÉES (demandé par l'utilisateur). Un seul nombre
+          <!-- ⚠️ ATTAQUE ET DÉFENSE SÉPARÉES (demandé par l'utilisateur). Un seul nombre
              mélangeait « ce qui tient » et « ce qui tue », et laissait croire qu'un mur
              pouvait gagner une bataille. Le mur ENCAISSE (🛡️), les tourelles TUENT (⚔️) :
              c'est visible d'un coup d'œil, et c'est ce que le moteur fait vraiment. -->
-        <!-- ⚠️ REPLIÉ PAR DÉFAUT (demandé par l’utilisateur : « replie le détail de la
+          <!-- ⚠️ REPLIÉ PAR DÉFAUT (demandé par l’utilisateur : « replie le détail de la
              défense et garde la puissance par défaut »). Le chiffre du haut répond à la
              question qu’on vient se poser ; la décomposition sert quand on cherche QUOI
              améliorer, ce qui est un second geste. État mémorisé par appareil — même
              traitement que la carte des mondes (v0.745). -->
-        <button type="button" class="f-parts-h" :aria-expanded="partsOpen" @click="togglePartsOpen">
-          <span>{{ partsOpen ? '▾' : '▸' }} Ce que je perdrais sans…</span>
-          <span v-if="partsOpen" class="fh-cols"><i>🛡️ tenir</i><i>⚔️ tuer</i></span>
-        </button>
-        <div v-if="partsOpen" class="f-parts">
-          <div v-for="p in forces.parts" :key="p.id" class="f-part" :class="{ off: !p.active }">
-            <span class="dp-emo">{{ p.emoji }}</span>
-            <span class="dp-lab">{{ p.label }}</span>
-            <!-- ⚠️ Ces valeurs ne s'ADDITIONNENT pas au total : les canaux se multiplient
+          <button
+            type="button"
+            class="f-parts-h"
+            :aria-expanded="partsOpen"
+            @click="togglePartsOpen"
+          >
+            <span>{{ partsOpen ? '▾' : '▸' }} Ce que je perdrais sans…</span>
+            <span v-if="partsOpen" class="fh-cols"><i>🛡️ tenir</i><i>⚔️ tuer</i></span>
+          </button>
+          <div v-if="partsOpen" class="f-parts">
+            <div v-for="p in forces.parts" :key="p.id" class="f-part" :class="{ off: !p.active }">
+              <span class="dp-emo">{{ p.emoji }}</span>
+              <span class="dp-lab">{{ p.label }}</span>
+              <!-- ⚠️ Ces valeurs ne s'ADDITIONNENT pas au total : les canaux se multiplient
                  (la garnison amplifie des PV que le mur fournit). C'est « ce qu'on
                  perdrait sans lui », rien de plus. -->
-            <span class="dp-def">{{ p.active && p.def ? fmtPow(p.def) : '—' }}</span>
-            <span class="dp-atk">{{ p.active && p.atk ? fmtPow(p.atk) : '—' }}</span>
+              <span class="dp-def">{{ p.active && p.def ? fmtPow(p.def) : '—' }}</span>
+              <span class="dp-atk">{{ p.active && p.atk ? fmtPow(p.atk) : '—' }}</span>
+            </div>
           </div>
-        </div>
-        <!-- ⚠️ LE REPÈRE VIT ICI, et il DIT qu'il ne parle pas du siège du jour. Il répond
+          <!-- ⚠️ LE REPÈRE VIT ICI, et il DIT qu'il ne parle pas du siège du jour. Il répond
              à « mon enceinte tient-elle la route en général ? » — utile au calme, quand
              aucune armée n'est en vue — et c'est le seul endroit où il ne peut plus être lu
              comme un pronostic sur l'armée qui arrive. -->
-        <p v-if="partsOpen" class="f-hint">
-          📐 En moyenne, sur des armées variées de ton niveau, ton enceinte tient
-          <b>{{ holdPct(forces.hold) }}</b> du temps — un repère sur ta base, pas un pronostic sur
-          l’armée en approche.
-        </p>
-        <!-- ⚠️ Il DESCEND avec les parts qu'il explique : il dit pourquoi la colonne est à
+          <p v-if="partsOpen" class="f-hint">
+            📐 En moyenne, sur des armées variées de ton niveau, ton enceinte tient
+            <b>{{ holdPct(forces.hold) }}</b> du temps — un repère sur ta base, pas un pronostic sur
+            l’armée en approche.
+          </p>
+          <!-- ⚠️ Il DESCEND avec les parts qu'il explique : il dit pourquoi la colonne est à
              zéro, et cette colonne vit désormais dans le repli. En tête de panneau il
              annonçait « ta base tient face à une armée type » juste au-dessus d'un verdict
              qui pouvait dire l'inverse — la contradiction qu'on vient de supprimer. -->
-        <p v-if="partsOpen && holdNote" class="f-hint">{{ holdNote }}</p>
-        <p v-if="partsOpen && !heroHome && heroBack" class="f-hint">
-          🧭 Ton héros est en expédition, mais il sera rentré avant l’assaut : il défendra.
-        </p>
-        <p v-else-if="partsOpen && !heroHome" class="f-hint warn">
-          🧭 Ton héros est en expédition : il ne défendra pas.
-        </p>
+          <p v-if="partsOpen && holdNote" class="f-hint">{{ holdNote }}</p>
+          <p v-if="partsOpen && !heroHome && heroBack" class="f-hint">
+            🧭 Ton héros est en expédition, mais il sera rentré avant l’assaut : il défendra.
+          </p>
+          <p v-else-if="partsOpen && !heroHome" class="f-hint warn">
+            🧭 Ton héros est en expédition : il ne défendra pas.
+          </p>
 
-        <!-- ── 🏗️ CE QUE CHAQUE STRUCTURE APPORTE, ET À QUOI ELLE EST LIÉE ───────
+          <!-- ── 🏗️ CE QUE CHAQUE STRUCTURE APPORTE, ET À QUOI ELLE EST LIÉE ───────
              ⚠️ Demandé par l’utilisateur. Le lien entre bâtiments n’était écrit NULLE
              PART : on peut monter un Chenil sans Guilde et ne rien voir arriver, puisque
              les compagnons se confient à des aventuriers. Ce dépliant répond aux deux
              questions d’un coup — « ça sert à quoi » et « il me faut quoi d’autre ».
              ⚠️ Les libellés viennent de `defensePerLevelLabel`, la fonction du JEU : un
              texte recopié finirait par annoncer autre chose que ce qui se passe. -->
-        <button type="button" class="f-parts-h" :aria-expanded="helpOpen" @click="toggleHelpOpen">
-          <span>{{ helpOpen ? '▾' : '▸' }} À quoi sert chaque structure</span>
-        </button>
-        <div v-if="helpOpen" class="f-help">
-          <div v-for="h in structureHelp" :key="h.id" class="fh-row">
-            <span class="dp-emo">{{ h.emoji }}</span>
-            <span class="fh-main">
-              <span class="fh-name"
-                >{{ h.label }}<b v-if="h.level"> · niv {{ h.level }}</b></span
-              >
-              <span class="fh-what">{{ h.next }}</span>
-              <span v-if="h.link" class="fh-link">🔗 {{ h.link }}</span>
-            </span>
+          <button type="button" class="f-parts-h" :aria-expanded="helpOpen" @click="toggleHelpOpen">
+            <span>{{ helpOpen ? '▾' : '▸' }} À quoi sert chaque structure</span>
+          </button>
+          <div v-if="helpOpen" class="f-help">
+            <div v-for="h in structureHelp" :key="h.id" class="fh-row">
+              <span class="dp-emo">{{ h.emoji }}</span>
+              <span class="fh-main">
+                <span class="fh-name"
+                  >{{ h.label }}<b v-if="h.level"> · niv {{ h.level }}</b></span
+                >
+                <span class="fh-what">{{ h.next }}</span>
+                <span v-if="h.link" class="fh-link">🔗 {{ h.link }}</span>
+              </span>
+            </div>
           </div>
-        </div>
+        </template>
       </div>
+
+      <!-- 🏅 LA TUILE CHAMPIONS (demandé) : l'accès au vivier ET à l'invocation, qui vivent
+           dans la même feuille (`GuildPanel`). Avant, on n'y arrivait qu'en touchant le
+           Panthéon sur le dessin — un chemin qu'il fallait connaître. -->
+      <button type="button" class="panel tile tile-btn" @click="openGuild">
+        <span class="tile-emo">🏅</span>
+        <span class="tile-main">
+          <span class="tile-t font-display">Champions</span>
+          <span class="tile-s">{{ champSummary }}</span>
+        </span>
+        <span class="tile-sum mana">💠 {{ (char.row?.mana ?? 0).toLocaleString('fr-FR') }}</span>
+        <span class="tile-chev">›</span>
+      </button>
 
       <div class="keep-legend">
         <span
@@ -1519,6 +1554,30 @@ const clarity = computed(() =>
 );
 /** Deux replis, mémorisés PAR APPAREIL — un réglage d’affichage n’a rien à faire en
  *  base. Même traitement que la carte des mondes (v0.745). */
+/** 🛡️ Tuile Défense — REPLIÉE par défaut (demandé), état mémorisé par appareil. */
+const defTileOpen = ref(localStorage.getItem('muscu:base:def-tile') === '1');
+function toggleDefTile() {
+  defTileOpen.value = !defTileOpen.value;
+  try {
+    localStorage.setItem('muscu:base:def-tile', defTileOpen.value ? '1' : '0');
+  } catch {
+    /* privé */
+  }
+}
+/** Ce que la tuile repliée doit DIRE : le verdict s'il y a une armée qu'on sait jauger,
+ *  sinon qu'elle arrive sans qu'on sache la jauger, sinon le calme. */
+const defSummary = computed(() => {
+  if (raid.value && odds.value)
+    return `${ODDS_LABEL[odds.value]} · ${holdPct(raidHold.value ?? 0)}`;
+  if (raid.value) return '⚔️ Armée en vue';
+  return '🕊️ Calme';
+});
+/** 🏅 Ce que la tuile Champions résume : la collection, sinon comment la commencer. */
+const champSummary = computed(() => {
+  if (!char.pantheonLevel) return 'Construis le Panthéon pour invoquer';
+  const n = char.advList.length;
+  return n ? `${n} champion${n > 1 ? 's' : ''} · invoquer` : 'Invoque ton premier champion';
+});
 const partsOpen = ref(localStorage.getItem('muscu:base:parts') === '1');
 const helpOpen = ref(localStorage.getItem('muscu:base:help') === '1');
 function togglePartsOpen() {
@@ -2709,6 +2768,85 @@ function doHarvest() {
 .forces {
   margin-bottom: 10px;
 }
+/* ── 🛡️🏅 LES TUILES (Défense repliable, Champions) ── */
+.tile-h,
+.tile-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.tile-btn {
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.forces.tile.open .tile-h {
+  margin-bottom: 8px;
+}
+.tile-emo {
+  flex: none;
+  font-size: 24px;
+  line-height: 1;
+}
+.tile-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tile-t {
+  font-size: 16px;
+  letter-spacing: 0.03em;
+}
+.tile-s {
+  font-size: 12px;
+  color: var(--dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tile-sum {
+  flex: none;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: right;
+  color: var(--dim);
+  background: color-mix(in srgb, var(--dim) 12%, transparent);
+}
+.tile-sum.tenu {
+  color: var(--d1);
+  background: color-mix(in srgb, var(--d1) 16%, transparent);
+}
+.tile-sum.serre {
+  color: var(--d3);
+  background: color-mix(in srgb, var(--d3) 16%, transparent);
+}
+.tile-sum.perdu,
+.tile-sum.unknown {
+  color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 16%, transparent);
+}
+.tile-sum.mana {
+  color: #b57bff;
+  background: color-mix(in srgb, #b57bff 16%, transparent);
+}
+.tile-chev {
+  flex: none;
+  color: var(--dim);
+  font-size: 14px;
+}
 .f-head {
   display: flex;
   align-items: center;
@@ -2781,6 +2919,7 @@ function doHarvest() {
   box-shadow: 0 0 0 2px var(--surface);
   transition: left 0.4s ease;
 }
+.f-gauge.tenu .fg-cursor,
 .f-gauge.large .fg-cursor,
 .f-gauge.favorable .fg-cursor {
   background: var(--d1);
@@ -2868,6 +3007,7 @@ function doHarvest() {
   font-weight: 700;
   text-align: center;
 }
+.f-odds.tenu,
 .f-odds.large {
   background: color-mix(in srgb, var(--d1) 16%, transparent);
   color: var(--d1);
