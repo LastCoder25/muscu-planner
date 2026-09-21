@@ -23,7 +23,7 @@ const GRADES_ASC: readonly PullGrade[] = ['B', 'A', 'S'];
  * AdvGearSlot, …>>`) : une lignée ou un emplacement ajouté sans ses trois noms ne compile
  * pas — et le test d'illustrations exige un fichier par modèle.
  */
-export const ADV_GEAR_MODEL_NAMES: Record<
+const ADV_GEAR_MODEL_NAMES: Record<
   Lineage,
   Record<AdvGearSlot, readonly [string, string, string]>
 > = {
@@ -115,7 +115,7 @@ export const ADV_GEAR_NO_ART: ReadonlySet<string> = new Set([
   'archer-accessory-a',
   'caravanier-weapon-b',
   'caravanier-weapon-a',
-  'caravanier-weapon-s'
+  'caravanier-weapon-s',
 ]);
 
 export function advGearArt(modelId: string | null | undefined): string | null {

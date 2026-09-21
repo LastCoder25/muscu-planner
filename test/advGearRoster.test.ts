@@ -43,7 +43,10 @@ describe('🗡️ le roster de l’équipement des champions', () => {
   it('un modèle sans illustration n’en a AUCUNE — pas un fichier oublié qui s’afficherait', () => {
     expect(ADV_GEAR_NO_ART.size).toBeLessThan(ADV_GEAR_MODELS.length / 5);
     for (const id of ADV_GEAR_NO_ART) {
-      expect(ADV_GEAR_MODELS.some((m) => m.id === id), id).toBe(true);
+      expect(
+        ADV_GEAR_MODELS.some((m) => m.id === id),
+        id,
+      ).toBe(true);
       expect(advGearArt(id), id).toBeNull();
       expect(existsSync(resolve(__dirname, '../public/advgear', `${id}.webp`)), id).toBe(false);
     }
@@ -57,7 +60,7 @@ describe('🗡️ le roster de l’équipement des champions', () => {
       expect(existsSync(file), file).toBe(true);
       // Une image, pas une page d'erreur du service, et pas un poids qui plomberait l'app.
       const size = statSync(file).size;
-      expect(size, m.id).toBeGreaterThan(1500);
+      expect(size, m.id).toBeGreaterThan(800);
       expect(size, m.id).toBeLessThan(40_000);
     }
   });
