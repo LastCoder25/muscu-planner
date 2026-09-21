@@ -512,18 +512,34 @@ export function bossReplaySteps(log: readonly CombatEvent[], max: number): RiftB
  * stats (`CHAMPION_SOLO`). La compensation est exacte en puissance, pas dans l'attrition
  * d'une faille au niveau 12 (mûre 0,90 avec 1,13) : 1,13 → **1,19** rend 0,72. Les autres
  * niveaux n'ont pas bougé (mesuré : mûre 0,68-0,77 de 20 à 100).
+ *
+ * ⚠️ **TABLE COMPLÈTE, NIVEAU 1 À 100 (v0.1029)** : la table n'avait qu'un point tous les 8 à
+ * 15 niveaux, à partir du niveau 12 — l'interpolation laissait des TROUS que le test (5
+ * niveaux seulement) ne voyait pas. Mesuré avant, 3 champions de même niveau contre une
+ * faille mûre : **0 % en Bronze ★1-★3, 36 % au niveau 11, 20 % au niveau 21**. La cause :
+ * l'étalon change par PALIERS aux bords de rang (9, 12, 21, 41, 51, 61, 71), donc le renfort
+ * saute aussi — il faut un point de CHAQUE côté d'un bord, sinon l'interpolation traverse
+ * la marche. Re-bisecté sur 46 niveaux (cible 0,70) : mûre **0,63 à 0,77** partout.
  */
 const RIFT_RELIEF: [number, number][] = [
+  [1, 0.96],
+  [2, 0.94],
+  [8, 0.93],
+  [9, 1.11],
+  [11, 1.1],
   [12, 1.19],
-  [20, 1.18],
-  [26, 0.96],
-  [30, 0.95],
-  [40, 0.95],
-  [50, 0.99],
-  [60, 1.06],
-  [70, 1.12],
-  [85, 1.12],
-  [100, 1.12],
+  [20, 1.2],
+  [21, 0.96],
+  [40, 0.96],
+  [41, 0.99],
+  [50, 1.0],
+  [51, 1.05],
+  [60, 1.07],
+  [61, 1.11],
+  [70, 1.11],
+  [71, 1.13],
+  [90, 1.15],
+  [100, 1.14],
 ];
 
 /** Force d'UN monstre de faille — absolue, calée sur le groupe de référence du niveau. */

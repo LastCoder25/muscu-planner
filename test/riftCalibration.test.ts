@@ -11,7 +11,9 @@ import { riftPopulation, simulateIncursion, type RiftLike } from '@/lib/rift';
 
 const T0 = Date.UTC(2026, 8, 19);
 const DAY = 24 * 3_600_000;
-const LEVELS = [12, 26, 45, 70, 100];
+// ⚠️ UN NIVEAU DE CHAQUE CÔTÉ DES BORDS DE RANG (v0.1029) : avec 5 niveaux seulement, les trous
+// d'interpolation de `RIFT_RELIEF` passaient inaperçus (0 % en Bronze, 20 % au niveau 21).
+const LEVELS = [1, 5, 8, 9, 11, 12, 20, 21, 26, 40, 41, 50, 51, 61, 70, 71, 90, 100];
 const N = 120;
 
 function clearRate(level: number, units: number, at: number): number {
