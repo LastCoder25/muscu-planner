@@ -115,12 +115,16 @@
             v-for="p in pois"
             :key="p.id"
             class="poi"
-            :class="[diffClass(p), { sel: selected?.id === p.id, dim: dimmed(p) }]"
+            :class="{ sel: selected?.id === p.id, dim: dimmed(p) }"
+            :style="{ '--rk': poiRank(p).color }"
             @click="selectPoi(p)"
           >
             <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
             <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
-            <text :x="p.x" :y="p.y - 5.5" class="poi-lvl">{{ p.level }}</text>
+            <!-- 🏅 Le RANG du lieu, pas son niveau (demandé) : la boule du rang au-dessus et le
+                 contour dans sa couleur — on repère d'un coup d'œil les lieux du rang de ses
+                 champions, pour les y envoyer prendre de l'XP. -->
+            <text :x="p.x" :y="p.y - 5.4" class="poi-rank">{{ poiRank(p).emoji }}</text>
           </g>
 
           <!-- Objectif actif -->
@@ -203,8 +207,7 @@
         v-for="e in edgeIndicators"
         :key="'edge' + e.id"
         class="edge-ind"
-        :class="e.diff"
-        :style="{ left: e.x + 'px', top: e.y + 'px' }"
+        :style="{ left: e.x + 'px', top: e.y + 'px', '--rk': poiRank(e.poi).color }"
         @click="panToPoi(e.poi)"
       >
         <span class="ei-arrow" :style="{ transform: `rotate(${e.deg}deg)` }">➤</span>
@@ -870,13 +873,12 @@ function zoom(dir: number) {
 }
 // Activités hors écran → flèche au bord pointant vers elles (clic = slide dessus).
 const edgeIndicators = computed(() => {
-  if (!scrollEl.value)
-    return [] as { id: string; poi: Poi; x: number; y: number; deg: number; diff: string }[];
+  if (!scrollEl.value) return [] as { id: string; poi: Poi; x: number; y: number; deg: number }[];
   const cw = contW.value;
   const ch = contH.value;
   const m = 22;
   const src = [...pois.value, ...(active.value ? [active.value.poi] : [])];
-  const out: { id: string; poi: Poi; x: number; y: number; deg: number; diff: string }[] = [];
+  const out: { id: string; poi: Poi; x: number; y: number; deg: number }[] = [];
   for (const p of src) {
     const px = (p.x / MAP) * mapPx.value - scrollX.value;
     const py = (p.y / MAP) * mapPx.value - scrollY.value;
@@ -893,7 +895,6 @@ const edgeIndicators = computed(() => {
       x: cw / 2 + dx * scale,
       y: ch / 2 + dy * scale,
       deg: (Math.atan2(dy, dx) * 180) / Math.PI,
-      diff: diffClass(p),
     });
   }
   return out;
@@ -1524,9 +1525,9 @@ const arenaWaves = computed(() => {
 function winClass(pct: number): string {
   return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
 }
-function diffClass(p: Poi): string {
-  const d = p.level - progressionLevel.value;
-  return d <= 0 ? 'easy' : d <= 2 ? 'mid' : 'hard';
+/** 🏅 Le rang d'un lieu : celui de son niveau, sur l'échelle de tout le jeu (`characterRank`). */
+function poiRank(p: Poi) {
+  return characterRank(p.level);
 }
 
 const costOf = (p: Poi) => goldCost(p.type, p.level);
@@ -1899,19 +1900,10 @@ onUnmounted(() => {
   padding: 3px 6px;
   border-radius: 999px;
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--rk, var(--line));
   cursor: pointer;
   z-index: 3;
   font-size: 12px;
-}
-.edge-ind.easy {
-  border-color: #7bc86c;
-}
-.edge-ind.mid {
-  border-color: #ffb23f;
-}
-.edge-ind.hard {
-  border-color: #ff6a45;
 }
 .ei-arrow {
   color: var(--accent);
@@ -2086,19 +2078,11 @@ onUnmounted(() => {
   stroke-dasharray: 2 2;
   pointer-events: none;
 }
+/* Contour dans la couleur du RANG du lieu (`--rk`, posé par lieu). */
 .poi-bg {
   fill: var(--surface);
-  stroke: var(--line);
-  stroke-width: 0.8;
-}
-.poi.easy .poi-bg {
-  stroke: #7bc86c;
-}
-.poi.mid .poi-bg {
-  stroke: #ffb23f;
-}
-.poi.hard .poi-bg {
-  stroke: #ff6a45;
+  stroke: var(--rk, var(--line));
+  stroke-width: 1;
 }
 .poi.sel .poi-bg {
   stroke: var(--accent);
@@ -2115,11 +2099,9 @@ onUnmounted(() => {
   font-size: 4px;
   text-anchor: middle;
 }
-.poi-lvl {
-  font-size: 3px;
+.poi-rank {
+  font-size: 3.2px;
   text-anchor: middle;
-  fill: var(--dim);
-  font-weight: 700;
 }
 .hero {
   fill: var(--accent);
