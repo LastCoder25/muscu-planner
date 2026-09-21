@@ -31,6 +31,7 @@ import {
   itemRankRelief,
 } from '@/lib/proceduralContent';
 import { computeCharacter } from '@/lib/character';
+import { rankStartLevel } from '@/lib/characterRank';
 import { gearedFighter } from './helpers/gearedFighter';
 
 describe('le 1er donjon est gagnable par un joueur qui débute', () => {
@@ -257,6 +258,22 @@ describe('procedural — génération', () => {
     const expected = proceduralRecos().map((reco) => `proc_dungeon_${reco}`);
     expect(new Set(ids)).toEqual(new Set(expected));
     expect(ids.length).toBe(expected.length); // pas de doublon
+  });
+  it('chaque donjon a son NOM, sans doublon avec le contenu écrit à la main', () => {
+    // Avant : 8 noms tournaient sur 24 donjons, chacun revenait trois fois.
+    const names = DUNGEONS.map((d) => d.name);
+    expect(new Set(names).size).toBe(names.length);
+    const proc = buildProceduralContent().dungeons.map((d) => d.name);
+    expect(new Set(proc).size).toBe(PROC_REGION_COUNT * 3);
+  });
+  it('à chaque début de rang, un donjon de ton niveau lâche du butin à ton niveau', () => {
+    // Avant : dropLevel = reco, et aux niveaux 41/51/71 aucun donjon (40 → 43, 49 → 52,
+    // 70 → 73) ne donnait un butin au niveau du joueur — le nouveau rang était introuvable.
+    for (let i = 1; i < 8; i++) {
+      const L = rankStartLevel(i);
+      const ok = DUNGEONS.some((d) => d.recoLevel <= L && d.dropLevel >= L);
+      expect(ok, `début de rang niv ${L}`).toBe(true);
+    }
   });
   it('buildProceduralContent : ids de monstres uniques et référencés par les donjons', () => {
     const { monsters, dungeons } = buildProceduralContent();

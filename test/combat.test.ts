@@ -11,13 +11,16 @@ import {
   fmtPow,
   fmtDelta,
 } from '@/lib/combat';
+// Import STATIQUE : @/data/monsters construit tout le contenu procédural au chargement.
+// En import dynamique dans le test, ce coût tombait DANS son délai de 5 s et le faisait
+// expirer sous la charge de la suite complète.
+import { monsterArchetype } from '@/data/monsters';
 
 const strong = playerCombatant('Fort', { puissance: 80, endurance: 60, agilite: 40 }, 10);
 const weak = playerCombatant('Faible', { puissance: 3, endurance: 1, agilite: 1 }, 1);
 
 describe('archétypes de monstres (variété visuelle)', () => {
-  it('classe selon les stats (esquive/crit/ratio)', async () => {
-    const { monsterArchetype } = await import('@/data/monsters');
+  it('classe selon les stats (esquive/crit/ratio)', () => {
     expect(monsterArchetype({ pv: 100, damage: 30, crit: 0.02, dodge: 0.16 })).toBe('evasive');
     expect(monsterArchetype({ pv: 100, damage: 30, crit: 0.14, dodge: 0.05 })).toBe('striker');
     expect(monsterArchetype({ pv: 100, damage: 70, crit: 0.05, dodge: 0.05 })).toBe('brute');

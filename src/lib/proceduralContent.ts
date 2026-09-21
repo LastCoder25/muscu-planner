@@ -388,14 +388,42 @@ export function proceduralRecos(): number[] {
 }
 
 const PROC_STAT_CYCLE: StatKey[] = ['endurance', 'puissance', 'agilite'];
+// UN nom par donjon, rangés PAR RÉGION (3 par ligne, dans l'ordre de `PROC_REGION_SKINS`) :
+// chaque donjon porte le thème de la région qui le contient. ⚠️ Avant, 8 noms tournaient
+// sur 24 donjons (`index % 8`) — chacun revenait trois fois, et sans rapport avec sa région
+// (qui, elle, se calcule par `index / 3`). Un test exige 24 noms distincts.
 const PROC_DUNGEON_SKINS: { emoji: string; name: string }[] = [
+  // Sanctuaires Perdus
   { emoji: '🕯️', name: 'Sanctuaire oublié' },
+  { emoji: '🏛️', name: 'Nef effondrée' },
+  { emoji: '📿', name: 'Reliquaire scellé' },
+  // Terres Calcinées
   { emoji: '🌋', name: 'Caldeira maudite' },
+  { emoji: '🔥', name: 'Forge des cendres' },
+  { emoji: '♨️', name: 'Plaine de braise' },
+  // Toile du Vide
   { emoji: '🕸️', name: 'Nid du vide' },
+  { emoji: '🕷️', name: 'Tanière tisseuse' },
+  { emoji: '🧵', name: 'Trame effilochée' },
+  // Spirales Hurlantes
   { emoji: '🌀', name: 'Vortex hurlant' },
+  { emoji: '🌪️', name: 'Œil du cyclone' },
+  { emoji: '💨', name: 'Couloir des vents' },
+  // Confins Astraux
   { emoji: '🪐', name: 'Ruine astrale' },
+  { emoji: '☄️', name: 'Cratère stellaire' },
+  { emoji: '🌠', name: 'Observatoire mort' },
+  // Ossuaires Titanesques
   { emoji: '🦴', name: 'Ossuaire titanesque' },
+  { emoji: '💀', name: 'Charnier des géants' },
+  { emoji: '⚰️', name: 'Crypte colossale' },
+  // Brèches Cosmiques
   { emoji: '🌌', name: 'Brèche cosmique' },
+  { emoji: '🕳️', name: 'Gouffre du réel' },
+  { emoji: '✴️', name: 'Déchirure primordiale' },
+  // Cœur de l'Enfer
+  { emoji: '👹', name: 'Antichambre infernale' },
+  { emoji: '⛓️', name: 'Geôle des damnés' },
   { emoji: '🔥', name: 'Cœur de l’enfer' },
 ];
 
@@ -406,7 +434,7 @@ export function proceduralDungeonMonsters(reco: number): Monster[] {
 
 /** Donjon procédural pour une reco donnée (index global pour le skin/stat). */
 export function proceduralDungeon(reco: number, index: number): Dungeon {
-  const skin = PROC_DUNGEON_SKINS[index % PROC_DUNGEON_SKINS.length]!;
+  const skin = PROC_DUNGEON_SKINS[index] ?? PROC_DUNGEON_SKINS[index % PROC_DUNGEON_SKINS.length]!;
   const mons = proceduralDungeonMonsters(reco);
   return {
     id: `proc_dungeon_${reco}`,
@@ -418,7 +446,12 @@ export function proceduralDungeon(reco: number, index: number): Dungeon {
     recoLevel: reco,
     hintStat: PROC_STAT_CYCLE[index % PROC_STAT_CYCLE.length]!,
     hint: 'Palier profond — trio escaladant. Build complet, tout au max.',
-    dropLevel: reco, // ≥ son niveau conseillé (v0.895, cf. `Dungeon.dropLevel`)
+    // Couvre les PROC_STEP − 1 niveaux jusqu'au donjon suivant. ⚠️ Avec `dropLevel = reco`,
+    // aux niveaux 41, 51 et 71 (débuts de rang) aucun donjon n'avait un butin à son
+    // niveau (40 → 43, 49 → 52, 70 → 73) : le nouveau rang y était introuvable en donjon.
+    // Sans risque : la référence du tirage est min(dropLevel, niveau joueur), donc un
+    // joueur AU niveau conseillé voit exactement le même butin qu'avant.
+    dropLevel: reco + PROC_STEP - 1,
     dropLuck: 1,
     foeMult: proceduralDungeonBoost(reco),
   };
