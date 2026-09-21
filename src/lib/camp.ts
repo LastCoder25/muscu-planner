@@ -330,8 +330,6 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     gold: haul.gold,
     energy: 0,
     summonStones: haul.summonStones,
-    // ⚠️ Champ requis par `ExpeditionOutcome` : un camp ne donne JAMAIS de ferraille.
-    scrap: 0,
     mana: 0,
     item: null,
     items: [],

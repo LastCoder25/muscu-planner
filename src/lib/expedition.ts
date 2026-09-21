@@ -29,9 +29,9 @@ export type PoiType =
   | 'well'
   | 'shrine'
   | 'archive'
-  // 🔩 ÉPAVE : la SEULE source de ferraille (réparation de l'enceinte, cf. raid.ts).
-  // Le butin d'un siège paie dans la devise de la faction, jamais en ferraille : en
-  // trouver sur un loup ou un revenant n'aurait aucun sens.
+  // ⚓ ÉPAVE : récolte d'OR, sans combat — on démonte la carcasse et on revend le métal.
+  // ⚠️ Elle était l'unique source de FERRAILLE, devise RETIRÉE (v0.998) : l'enceinte se
+  // paie désormais en or, sur la même courbe que les bâtiments de la cour.
   | 'wreck'
   // 🕳️ FAILLE : le seul POI qu'on n'ATTAQUE pas pour son butin mais pour le REFERMER —
   // elle engendre des monstres, et à 7 jours elle déborde sur la base (cf. `rift.ts`).
@@ -72,7 +72,7 @@ export const POI_EMO: Record<PoiType, string> = {
   well: '💧',
   shrine: '🔮',
   archive: '📖',
-  wreck: '🔩',
+  wreck: '⚓',
   rift: '🕳️',
   mana_mine: '💠',
   warband: '⚔️',
@@ -253,7 +253,7 @@ export interface ExpeditionMap {
 // ⚠️ Hors quota : ce sont des CONSÉQUENCES, pas des spawns. Les failles ont leur propre
 // quota ; la mine résiduelle et la bande en marche sont ce qu'une faille LAISSE en
 // débordant. Les compter volerait une place à une mine, un camp ou une épave — or le débit
-// de la carte est mesuré (`campEconomy`, `goldSink`, `scrapEconomy`).
+// de la carte est mesuré (`campEconomy`, `goldSink`).
 const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine', 'warband']);
 
 /** ⚠️ CE BLOC DÉCRIT L'ÉTAT D'AVANT LA v0.980 : depuis que `riftLevelFor` tire un cran
@@ -308,7 +308,6 @@ export interface ExpeditionOutcome {
   gold: number; // crédité au RETOUR
   energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
   summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
-  scrap: number; // 🔩 ferraille : répare l'enceinte (épaves uniquement)
   /** 💠 Pierres de mana — la monnaie du gacha de champions. ⚠️ Elle n'a pas encore de
    *  PUITS (le gacha n'existe pas) : elle s'ACCUMULE, et c'est l'ordre voulu
    *  (failles → pierres de mana → gacha). À ne pas confondre avec une devise MORTE, dont
@@ -356,7 +355,9 @@ export interface ExpeditionMessage {
   gold: number;
   energy: number; // ⚡ énergie gagnée (mines)
   summonStones?: number; // 🔮
-  scrap?: number; // 🔩 ferraille
+  /** 🔩 LEGACY : ferraille d'un rapport déposé avant son retrait (v0.998). Plus jamais
+   *  écrite ; convertie en or à l'encaissement (`SCRAP_TO_GOLD`). */
+  scrap?: number;
   mana?: number; // 💠 pierres de mana (mine résiduelle d'une faille)
   tickets?: number; // 🎟️ tickets d'invocation (coffres gagnés par le sport, v0.992)
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
@@ -445,12 +446,11 @@ export function depositMessages(
 /** Ce qu'une expédition a rapporté, prêt à afficher. ⚠️ SOURCE UNIQUE des deux écrans
  *  (modale de collecte ET boîte à messages 📬) : chacun listait ses devises à la main, et
  *  les deux avaient été oubliées lors de l'ajout des POI de RÉCOLTE (v0.658) — une épave
- *  affichait donc un butin VIDE, alors qu'elle est la seule source de ferraille du jeu.
+ *  affichait donc un butin VIDE.
  *  Ajouter une devise ici la fait apparaître partout. */
 export function haulPills(o: {
   gold?: number;
   energy?: number;
-  scrap?: number;
   summonStones?: number;
   key?: number;
   mana?: number;
@@ -460,7 +460,6 @@ export function haulPills(o: {
     [
       { emoji: '🪙', n: o.gold ?? 0 },
       { emoji: '⚡', n: o.energy ?? 0 },
-      { emoji: '🔩', n: o.scrap ?? 0 },
       { emoji: '🔮', n: o.summonStones ?? 0 },
       { emoji: '🗝️', n: o.key ?? 0 },
       { emoji: '💠', n: o.mana ?? 0 },
@@ -498,7 +497,6 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     gold: o.gold,
     energy: o.energy,
     ...(o.summonStones ? { summonStones: o.summonStones } : {}),
-    ...(o.scrap ? { scrap: o.scrap } : {}),
     ...(o.mana ? { mana: o.mana } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
@@ -529,17 +527,12 @@ export const HARVEST = {
   /** Trajet (facteur de voyage) à partir duquel une archive rend une 2ᵉ clé : aller loin
    *  paie plus, ici aussi. */
   archiveFarKeyAt: 6,
-  // Ferraille d'une épave. Dimensionnée pour qu'UNE visite couvre largement la remise
-  // en service d'une enceinte de son niveau (cf. repairCost, raid.ts) : réparer doit
-  // être une formalité qu’on accomplit, jamais un mur qui enferme dans la défaite.
-  // ⚠️ ×1,25 (mesuré) : la Fonderie est RETIRÉE, et elle pesait 20 à 22 % du débit de
-  // ferraille. Sans compensation le ratio jours-ferraille / jours-or montait à
-  // 1,45-2,06, donc au bord de la borne de 2,2 au-delà de laquelle l’enceinte
-  // n’attend plus que le métal (`scrapEconomy.test`). À ×1,25 il vaut 1,16-1,65,
-  // soit la courbe d’avant (1,13-1,63) : l’épave devient la source UNIQUE, elle prend
-  // exactement ce que la Fonderie déposait.
-  scrapBase: 11.25,
-  scrapPerLevel: 1,
+  // ⚓ Or d'une épave, au-delà de la part symbolique de toute récolte (35 % du coût) :
+  // coût × K × facteur de voyage. ⚠️ Calée SOUS la mine (coût × (1,3 + facteur), plus
+  // de l'énergie) : l'épave remplace la ferraille retirée (v0.998), elle ne détrône pas la
+  // reine de l'or. Même pente de trajet → aller loin paie plus, comme partout sur la carte.
+  // Mesuré : ~0,67× l'or d'une mine au niveau 10 comme au 30, à même distance.
+  wreckGoldK: 0.65,
 } as const;
 
 export const EXPE = {
@@ -1002,8 +995,7 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
     'shrine',
     'archive',
     'archive',
-    // 🔩 ÉPAVE : bien représentée, car c'est l'UNIQUE source de ferraille et qu'une
-    // enceinte endommagée ne doit jamais rester bloquée faute de matière.
+    // ⚓ ÉPAVE : or sans combat (v0.998 : elle rendait la ferraille, devise retirée).
     'wreck',
     'wreck',
   ] as const);
@@ -1721,8 +1713,8 @@ const WIN_TEXT: Record<PoiType, string[]> = {
     '📖 Les rayonnages ont livré leurs secrets… et leurs clés.',
   ],
   wreck: [
-    '🔩 Épave démontée — ferraille chargée sur la carriole.',
-    '🔩 La carcasse a rendu tout son métal.',
+    '⚓ Épave démontée — le métal s’est bien revendu.',
+    '⚓ La carcasse a rendu tout son métal, et un bon prix.',
   ],
   arena: ['🏟️ L’arène acclame ton champion !'],
   rift: [
@@ -1750,12 +1742,12 @@ export function harvestYield(
   type: PoiType,
   level: number,
   tfH: number,
-): { energy: number; summonStones: number; scrap: number; keys: number; mana: number } {
+): { energy: number; summonStones: number; gold: number; keys: number; mana: number } {
   const L = Math.max(1, level);
   let energy = 0;
   let summonStones = 0;
   let keys = 0;
-  let scrap = 0;
+  let gold = 0;
   let mana = 0;
   if (type === 'well') {
     // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
@@ -1764,7 +1756,7 @@ export function harvestYield(
     // Calé sur le coût d'un boss (`1 + ⌊niv/5⌋`) → une visite ≈ une tentative et demie.
     summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
   } else if (type === 'wreck') {
-    scrap = Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * tfH);
+    gold = Math.round(goldCost('wreck', L) * HARVEST.wreckGoldK * tfH);
   } else if (type === 'mana_mine') {
     // 💠 Ce qu'une faille laisse en s'effondrant. ⚠️ La MAGNITUDE vit dans `rift.ts`
     // (`residualMineOf`), qui la calcule sur ce que la faille valait à maturité : une
@@ -1785,7 +1777,7 @@ export function harvestYield(
     // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
     keys = 1 + (tfH >= HARVEST.archiveFarKeyAt ? 1 : 0);
   }
-  return { energy, summonStones, scrap, keys, mana };
+  return { energy, summonStones, gold, keys, mana };
 }
 
 export function resolveOutcome(
@@ -1800,7 +1792,7 @@ export function resolveOutcome(
   // ── RÉCOLTE DE RESSOURCES (well / shrine / archive / wreck) : aucun combat, jamais
   // d'échec. Ces POI paient en devises VIVANTES — celles qui se DÉPENSENT encore quelque
   // part — et JAMAIS en butin, que la carte ne peut structurellement plus produire.
-  // ⚠️ VIVANTES = ⚡ énergie, 🔮 pierres d'invocation, 🗝️ clés, 🔩 ferraille, 🪙 or.
+  // ⚠️ VIVANTES = ⚡ énergie, 🔮 pierres d'invocation, 🗝️ clés, 🪙 or, 💠 mana.
   // MORTES = ✨ poussière, 📜 parchemins, 💎 pierres, 🧩 fragments, 🖋️ encre : plus aucune
   // fonction ne les dépense. Les ARCHIVES payaient justement en 🧩 + 🖋️ — un POI entier
   // qui versait de la monnaie de singe, ce que la v0.658 prétendait avoir corrigé. Elles
@@ -1808,20 +1800,20 @@ export function resolveOutcome(
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
     const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
     const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
-    const { energy, summonStones, scrap, keys, mana } = harvestYield(poi.type, poi.level, tfH);
+    const { energy, summonStones, gold, keys, mana } = harvestYield(poi.type, poi.level, tfH);
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
     const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
     const k = tr.resMult;
     return {
       win: true,
-      gold: Math.round(cost * 0.35 * tr.goldMult), // symbolique : la paie est en ressources
+      // Part symbolique (35 % du coût) + l'or de l'épave ; le marchand errant module tout.
+      gold: Math.round((cost * 0.35 + gold) * tr.goldMult),
       // Le plafond s'applique APRÈS le bonus de trajet : « complément, jamais
       // substitut au sport » est un invariant, pas une valeur de base qu'un bon
       // voyage pourrait dépasser.
       energy: Math.min(HARVEST.wellEnergyMax, Math.round(energy * k)),
       summonStones: Math.round(summonStones * k),
-      scrap: Math.round(scrap * k),
       mana: Math.round(mana * k),
       item: tr.drops[0] ?? null,
       items: tr.drops,
@@ -1874,7 +1866,6 @@ export function resolveOutcome(
     return {
       win: good,
       gold,
-      scrap: 0,
       mana: 0,
       energy: 0,
       // ⚠️ L'arène versait des fragments 🧩 et de l'encre 🖋️ — devises MORTES. C'était la
@@ -1946,7 +1937,6 @@ function mineOutcome(rng: () => number, poi: Poi): ExpeditionOutcome {
   return {
     win: true,
     gold,
-    scrap: 0,
     mana: 0,
     energy,
     summonStones: 0,

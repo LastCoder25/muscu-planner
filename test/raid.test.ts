@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { HARVEST } from '@/lib/expedition';
+import { buildingUpgradeCost } from '@/lib/buildings';
 import {
   rollRaid,
   raidSize,
@@ -37,7 +37,7 @@ import {
   turretCount,
   repairCost,
   defenseUpgradeCost,
-  defenseUpgradeScrap,
+  SCRAP_TO_GOLD,
   TURRET_SLOTS,
   RAID,
   startRepair,
@@ -440,26 +440,33 @@ describe('calibration du siège', () => {
     }
   });
 
-  it('💰 l’enceinte est PAYABLE : elle n’a pas la courbe des bâtiments de production', () => {
-    // Réutiliser `buildingUpgradeCost` (calée sur des bâtiments financés par toute
-    // l'économie) demandait 1,82 M d'or pour monter mur + tourelles au niveau 26 : le
-    // système était injouable. Cible : ~10 récoltes de mine.
-    let or = 0;
-    let fer = 0;
-    for (let l = 1; l < 26; l++) {
-      or += defenseUpgradeCost(l);
-      fer += defenseUpgradeScrap(l);
-    }
-    expect(2 * or, 'or pour mur + tourelles jusqu’au niveau 26').toBeLessThan(400_000);
-    expect(2 * or).toBeGreaterThan(80_000); // …mais ça reste un vrai investissement
-    // ⚠️ FOURCHETTE LARGE, ET C'EST VOULU. Ce test dit seulement que la ferraille est un
-    // coût RÉEL sans être un mur ; l'équilibre fin — « plus dure à obtenir que l'or » —
-    // appartient à `scrapEconomy.test.ts`, qui le mesure en jours réels avec les vraies
-    // sources. Une borne serrée ici ne verrouillerait rien d'utile : elle se contenterait
-    // de casser à chaque réglage (elle était à 1 200 quand la ferraille ne freinait rien).
-    expect(2 * fer, 'ferraille pour la même montée').toBeLessThan(4000);
-    expect(2 * fer, 'ferraille pour la même montée').toBeGreaterThan(1500);
+  it('💰 l’enceinte suit la MÊME courbe d’or que les bâtiments de la cour (v0.998)', () => {
+    // RÉÉCRIT. Il garantissait l'inverse — une courbe DÉDIÉE (coefficient ÷50) plus un
+    // second verrou en ferraille. La ferraille retirée, l'utilisateur a tranché : « que les
+    // bâtiments aient le même coût d'or ». Une seule courbe, donc un seul endroit à régler ;
+    // la profondeur du puits commun (11 structures) est mesurée par `goldSink.test`.
+    for (const l of [1, 5, 12, 26, 50, 100])
+      expect(defenseUpgradeCost(l), `niveau ${l}`).toBe(buildingUpgradeCost(l));
     expect(defenseUpgradeCost(20)).toBeGreaterThan(defenseUpgradeCost(5)); // strictement croissant
+  });
+
+  it('🔧 RÉPARER reste bon marché : une part d’un cran, jamais une punition', () => {
+    // Remettre en état après un siège perdu ne doit pas rouvrir la spirale que tout le
+    // système de siège évite. Mesuré : ~⅙ de journée de revenu (donjons + mines) pour le
+    // mur, à tout niveau — le pire cas (mur + tourelles + tour) reste sous la journée.
+    for (const l of [5, 26, 60, 100]) {
+      expect(repairCost(l)).toBe(Math.round(buildingUpgradeCost(l) * RAID.repairShare));
+      expect(repairCost(l) * 3).toBeLessThan(buildingUpgradeCost(l) * 0.2);
+    }
+    expect(repairCost(40)).toBeGreaterThan(repairCost(10));
+  });
+
+  it('🔩 LA FERRAILLE est retirée : la réserve est rachetée en or, au taux de l’épave', () => {
+    // Un compte qui en avait ne doit rien perdre : `SCRAP_TO_GOLD` la convertit une fois.
+    // Taux calé sur l'épave au niveau 30 (mesuré 36 / 104 / 177 aux niveaux 10 / 30 / 60).
+    expect(SCRAP_TO_GOLD).toBeGreaterThan(30);
+    expect(SCRAP_TO_GOLD).toBeLessThan(180);
+    for (const t of DEFENSE_TYPES) expect('buildScrap' in t).toBe(false);
   });
 
   it('⚠️ UNE BASE PLEINEMENT INVESTIE N’EST JAMAIS CERTAINE', () => {
@@ -1762,9 +1769,9 @@ describe('économie de la défense', () => {
     // la porte, et c'est ce qu'on interdit ici.
     expect(repairMsFor.length).toBe(1);
     expect(startRepair.length).toBe(3);
-    // La seule sortie reste PAYANTE : elle coûte de la ferraille, proportionnellement à
-    // ce qu'on saute (`rushRepairCost`), comme les soins d'urgence du héros.
-    expect(rushRepairCost(2 * H)).toBeGreaterThan(rushRepairCost(1 * H));
+    // La seule sortie reste PAYANTE : elle coûte de l'or, proportionnellement à ce qu'on
+    // saute (`rushRepairCost`), comme les soins d'urgence du héros.
+    expect(rushRepairCost(2 * H, 30)).toBeGreaterThan(rushRepairCost(1 * H, 30));
   });
 
   it('⚠️ relancer des travaux en cours ne repousse RIEN et ne fait rien payer', () => {
@@ -1792,7 +1799,7 @@ describe('économie de la défense', () => {
     expect(tick.base.defenses[0]!.damaged).toBeFalsy();
   });
 
-  it('on peut TERMINER tout de suite, en ferraille, au prorata du temps restant', () => {
+  it('on peut TERMINER tout de suite, en or, au prorata du temps restant', () => {
     const b = emptyBase(1, 0);
     b.defenses = [{ typeId: 'wall', level: 40, damaged: true }];
     b.freeze = { until: 24 * H, atXp: 100 };
@@ -1801,9 +1808,10 @@ describe('économie de la défense', () => {
     expect(fini.defenses[0]).toEqual({ typeId: 'wall', level: 40 });
     expect(fini.freeze).toBeNull();
     // ∝ au temps restant : écourter la fin est une bricole, sauter tout le chantier se paie.
-    // Une réparation reste une affaire de métal : 12 🔩 par heure restante.
-    expect(rushRepairCost(3 * H)).toBe(36);
-    expect(rushRepairCost(3 * H)).toBeGreaterThan(rushRepairCost(10 * 60_000));
+    // ⚠️ AU TARIF DES SOINS D'URGENCE DU HÉROS (v0.998, la ferraille retirée) : deux portes
+    // de sortie qui coûtent pareil se comprennent sans notice.
+    expect(rushRepairCost(3 * H, 40)).toBe(healCost(3 * H, 40));
+    expect(rushRepairCost(3 * H, 40)).toBeGreaterThan(rushRepairCost(10 * 60_000, 40));
   });
 
   it('un groupe nombreux est une éponge à PV, pas un pic de dégâts', () => {

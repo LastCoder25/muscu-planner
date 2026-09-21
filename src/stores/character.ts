@@ -122,7 +122,7 @@ import {
   ownedLevel,
   repairCost,
   defenseUpgradeCost,
-  defenseUpgradeScrap,
+  SCRAP_TO_GOLD,
   lootCorpses,
   startRepair,
   finishRepairNow,
@@ -270,7 +270,7 @@ export interface CharacterRow {
    *  boss entre amis abattu, niveau global gagné) ; un ticket = un tirage. ⚠️ Colonne À PART
    *  et non dans `gacha` : chaque tirage réécrit `gacha`, un oubli y effacerait les tickets. */
   gacha_tickets: number;
-  scrap: number; // 🔩 ferraille : répare l’enceinte (migr. 0060) // journal d'énergie hors-sport horodaté (migr. 0057)
+  scrap: number; // 🔩 LEGACY (migr. 0060) : devise retirée (v0.998), convertie en or au chargement // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
   adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
@@ -427,7 +427,14 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.enchant_scrolls !== 'number') r.enchant_scrolls = 0; // migr. 0054
     if (typeof r.protections !== 'number') r.protections = 0; // migr. 0054
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
-    if (typeof r.scrap !== 'number') r.scrap = 0; // colonne récente (migr. 0060)
+    // 🔩 → 🪙 LA FERRAILLE EST RETIRÉE (v0.998). La réserve d'un compte est convertie en
+    // or, une fois, au taux de l'épave (`SCRAP_TO_GOLD`). ⚠️ Même politique que le
+    // Panthéon : la conversion vit ICI, pour que l'or et la ferraille à zéro voyagent dans
+    // la MÊME ligne en mémoire ; `fetchMine` les persiste aussitôt, sans quoi une écriture
+    // qui ne porterait que l'or convertirait deux fois.
+    const scrapLeft = typeof r.scrap === 'number' ? Math.max(0, r.scrap) : 0;
+    if (scrapLeft > 0) r.gold = (r.gold ?? 0) + scrapLeft * SCRAP_TO_GOLD;
+    r.scrap = 0;
     if (!r.base || typeof r.base !== 'object' || Array.isArray(r.base)) r.base = null;
     // Une structure dont le type a disparu du registre est DROPPÉE (même politique que
     // les bâtiments) → pas d'enceinte fantôme après un renommage de type.
@@ -461,9 +468,11 @@ export const useCharacterStore = defineStore('character', () => {
     // « pas encore migré ». Une fois écrite, il n'y a plus rien à fusionner.
     const raw = data?.buildings;
     const legacy = healBuildings(Array.isArray(raw) ? raw : []);
+    const legacyScrap = typeof data?.scrap === 'number' ? Math.max(0, data.scrap) : 0;
     row.value = normalizeRow(data ?? null);
     loaded.value = true;
     if (row.value && legacy.goldRefund > 0) await settlePantheon(uid, legacy.goldRefund);
+    if (row.value && legacyScrap > 0) await settleScrap(uid, legacyScrap);
     if (row.value) await settleWipe(uid);
     if (row.value) await settleGachaReset(uid);
     return row.value;
@@ -509,6 +518,27 @@ export const useCharacterStore = defineStore('character', () => {
    *  persistance immédiate ferme cette fenêtre. Un échec laisse la base intacte : on
    *  retentera au prochain chargement, et le pire cas est généreux, jamais punitif.
    *  ⚠️ Et on le DIT : un bond de plusieurs millions d'or sans un mot se lit comme un bug. */
+  /** 🔩 → 🪙 Persiste la conversion de la ferraille faite par `normalizeRow` (or ET
+   *  ferraille à zéro dans la même écriture) et l'annonce. Hors ligne : la base garde la
+   *  ferraille, on reconvertira au prochain chargement — jamais deux fois, puisqu'on n'a
+   *  rien écrit. */
+  async function settleScrap(userId: string, scrap: number) {
+    const cur = row.value;
+    if (!cur) return;
+    try {
+      await persist(userId, { gold: cur.gold, scrap: 0 });
+    } catch {
+      return;
+    }
+    useGameFx().celebrate({
+      kind: 'unlock',
+      emoji: '🪙',
+      title: 'La ferraille devient de l’or',
+      subtitle: `Tes ${scrap} 🔩 ont été revendus : +${scrap * SCRAP_TO_GOLD} 🪙. L’enceinte se paie désormais en or.`,
+      rarity: 'epic',
+    });
+  }
+
   async function settlePantheon(userId: string, refund: number) {
     const cur = row.value;
     if (!cur) return;
@@ -1760,7 +1790,6 @@ export const useCharacterStore = defineStore('character', () => {
       gold: chest.gold,
       energy: chest.energy,
       summonStones: chest.summonStones,
-      scrap: chest.scrap,
       key: chest.keys,
       tickets: chest.tickets ?? 0,
       resolvedAt: chest.at,
@@ -1876,15 +1905,17 @@ export const useCharacterStore = defineStore('character', () => {
     try {
       await persist(userId, {
         // Les salaires de l'escorte sont déduits ICI, comme pour un convoi.
-        gold: Math.max(0, cur.gold + ent(m.gold) - wages),
+        // 🔩 LEGACY : un rapport déposé avant le retrait de la ferraille la rend en or.
+        gold: Math.max(
+          0,
+          cur.gold + ent(m.gold) + (party ? 0 : ent(m.scrap)) * SCRAP_TO_GOLD - wages,
+        ),
         login_energy: cur.login_energy + ent(m.energy), // ⚡ mine/source → énergie de jeu
         keys: cur.keys + ent(m.key),
         // ⚠️ DEVISES VIVANTES UNIQUEMENT. Le commentaire qui tenait ici affirmait qu'on ne
         // créditait plus de monnaie morte — et les deux lignes suivantes créditaient des
         // fragments 🧩 et de l'encre 🖋️. Un commentaire ne vérifie rien ; un test si.
         summon_stones: cur.summon_stones + ent(m.summonStones),
-        // 🔩 épaves → réparation de l’enceinte. ⚠️ JAMAIS depuis un camp (v0.856/v0.890).
-        scrap: cur.scrap + (party ? 0 : ent(m.scrap)),
         // 💠 mines de mana résiduel → monnaie du gacha. ⚠️ Sans cette ligne, récolter une
         // mine ne rapportait RIEN : l'issue portait le mana, le message le portait, les
         // pastilles l'affichaient… et personne ne le créditait.
@@ -2466,10 +2497,8 @@ export const useCharacterStore = defineStore('character', () => {
       throw new Error('Cette structure existe déjà.');
     if (playerLevel < t.unlockLevel) throw new Error(`Débloqué au niveau ${t.unlockLevel}.`);
     if (cur.gold < t.buildGold) throw new Error('Pas assez d’or.');
-    if (cur.scrap < t.buildScrap) throw new Error('Pas assez de ferraille 🔩.');
     await persistOptimistic(userId, {
       gold: cur.gold - t.buildGold,
-      scrap: cur.scrap - t.buildScrap,
       base: { ...base, defenses: [...base.defenses, { typeId, level: 1 }] },
     });
   }
@@ -2489,13 +2518,10 @@ export const useCharacterStore = defineStore('character', () => {
     if (!d || !t) return;
     if (d.level >= playerLevel) throw new Error('Niveau plafonné par ton niveau de personnage.');
     const gold = defenseUpgradeCost(d.level);
-    const scrap = defenseUpgradeScrap(d.level);
     if (cur.gold < gold) throw new Error('Pas assez d’or.');
-    if (cur.scrap < scrap) throw new Error('Pas assez de ferraille 🔩.');
     void now;
     await persistOptimistic(userId, {
       gold: cur.gold - gold,
-      scrap: cur.scrap - scrap,
       base: {
         ...cur.base,
         defenses: cur.base.defenses.map((x) =>
@@ -2505,9 +2531,8 @@ export const useCharacterStore = defineStore('character', () => {
     });
   }
 
-  /** Remet une structure en service. En FERRAILLE uniquement : l'or est déjà tendu par
-   *  les bâtiments de production, une réparation ne doit pas leur faire concurrence. */
-  //  ⚠️ Depuis la v0.802 elle PREND DU TEMPS (`repairMsFor`) : la ferraille est payée au
+  /** Remet une structure en service, en OR (v0.998 : la ferraille est retirée). */
+  //  ⚠️ Depuis la v0.802 elle PREND DU TEMPS (`repairMsFor`) : l'or est payé au
   //  lancement, la structure reste endommagée jusqu’à la fin des travaux, et c’est leur fin
   //  (`settleRepairs`, au tick) qui relance la production.
   async function repairDefense(userId: string, typeId: DefenseId, now: number) {
@@ -2516,9 +2541,9 @@ export const useCharacterStore = defineStore('character', () => {
     const d = cur.base.defenses.find((x) => x.typeId === typeId);
     if (!d?.damaged || d.repairUntil != null) return;
     const cost = repairCost(d.level);
-    if (cur.scrap < cost) throw new Error('Pas assez de ferraille 🔩.');
+    if (cur.gold < cost) throw new Error('Pas assez d’or.');
     await persistOptimistic(userId, {
-      scrap: cur.scrap - cost,
+      gold: cur.gold - cost,
       base: startRepair(cur.base, typeId, now),
     });
   }
@@ -2530,25 +2555,25 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur?.base) return;
     const cost = totalRepairCost(cur.base);
     if (cost <= 0) return;
-    if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour tout remettre en état.`);
+    if (cur.gold < cost) throw new Error(`Il te faut ${cost} 🪙 pour tout remettre en état.`);
     let base = cur.base;
     for (const d of cur.base.defenses.filter((x) => x.damaged && x.repairUntil == null))
       base = startRepair(base, d.typeId, now);
-    await persistOptimistic(userId, { scrap: cur.scrap - cost, base });
+    await persistOptimistic(userId, { gold: cur.gold - cost, base });
     return cost;
   }
 
-  /** Termine des travaux TOUT DE SUITE, contre de la ferraille ∝ au temps restant — au même
+  /** Termine des travaux TOUT DE SUITE, contre de l'or ∝ au temps restant — au même
    *  tarif que les soins d’urgence du héros. Attendre reste gratuit. */
-  async function finishRepair(userId: string, typeId: DefenseId, now: number) {
+  async function finishRepair(userId: string, typeId: DefenseId, now: number, playerLevel: number) {
     const cur = row.value;
     if (!cur?.base) return;
     const d = cur.base.defenses.find((x) => x.typeId === typeId);
     if (d?.repairUntil == null || now >= d.repairUntil) return;
-    const cost = rushRepairCost(d.repairUntil - now);
-    if (cur.scrap < cost) throw new Error(`Il te faut ${cost} 🔩 pour finir les travaux.`);
+    const cost = rushRepairCost(d.repairUntil - now, playerLevel);
+    if (cur.gold < cost) throw new Error(`Il te faut ${cost} 🪙 pour finir les travaux.`);
     await persistOptimistic(userId, {
-      scrap: cur.scrap - cost,
+      gold: cur.gold - cost,
       base: finishRepairNow(cur.base, typeId),
     });
     return cost;
@@ -2745,10 +2770,10 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       // Les salaires sont déduits ICI, à l'encaissement : l'aventurier est payé au retour.
       // (`wages` vient de `caravanClaimRoster`, déjà entier — comme la voie des groupes.)
-      gold: Math.max(0, cur.gold + ent(o.gold) - wages),
+      // 🔩 LEGACY : un convoi lancé avant le retrait de la ferraille la rend en or.
+      gold: Math.max(0, cur.gold + ent(o.gold) + ent(o.scrap ?? 0) * SCRAP_TO_GOLD - wages),
       login_energy: cur.login_energy + ent(o.energy),
       summon_stones: cur.summon_stones + ent(o.summonStones),
-      scrap: cur.scrap + ent(o.scrap),
       keys: cur.keys + ent(o.keys),
       adventurers: advs,
       ...(trained.size ? { inventory } : {}),

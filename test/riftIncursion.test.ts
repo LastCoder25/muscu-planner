@@ -161,7 +161,7 @@ describe('💠 ce qu’une incursion paie — du mana, et RIEN d’autre', () =>
       expect(o.gold).toBe(0);
       expect(o.energy).toBe(0);
       expect(o.summonStones).toBe(0);
-      expect(o.scrap).toBe(0);
+      expect('scrap' in o).toBe(false);
       expect(o.key).toBe(0);
       expect(o.item).toBeNull();
       expect(o.items).toEqual([]);
@@ -486,7 +486,7 @@ describe('🕳️ le plafond de champions d’une faille', () => {
     expect(partySendBlocker(camp(), 10, false, 5, 51)).toBeNull();
   });
 
-it('⚠️ le HÉROS compte dans les 3 d’une faille (décision 2026-09-21)', () => {
+  it('⚠️ le HÉROS compte dans les 3 d’une faille (décision 2026-09-21)', () => {
     // Mesuré (v0.979) : héros seul → 100 % de fermeture. Sans ça il décidait seul.
     expect(partyCapFor(rift(), 51, true)).toBe(RIFT_MAX_PARTY - 1);
     expect(partySendBlocker(rift(), RIFT_MAX_PARTY, true, 5, 51)).toBe('riftCrowd');

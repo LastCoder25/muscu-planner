@@ -113,7 +113,15 @@ describe('POI de récolte', () => {
     expect(mana.mana).toBeGreaterThan(0);
     expect(mana.energy).toBe(0);
     expect(mana.summonStones).toBe(0);
-    expect(mana.scrap).toBe(0);
+    expect('scrap' in mana).toBe(false);
+
+    // ⚓ L'épave paie en OR depuis le retrait de la ferraille (v0.998) — sous la mine.
+    const wreck = resolveOutcome(hero, poi('wreck'), 7, 26);
+    expect(wreck.gold).toBeGreaterThan(goldCost('wreck', 26));
+    expect(wreck.energy).toBe(0);
+    // …et SOUS la mine (la reine de l'or), à même lieu et même graine.
+    expect(wreck.gold).toBeLessThan(resolveOutcome(hero, poi('mine'), 7, 26).gold);
+    expect('scrap' in wreck).toBe(false);
   });
 
   it('⚠️ le MANA ne sort QUE de la mine résiduelle — pas d’une autre récolte', () => {
@@ -673,8 +681,10 @@ describe('butin affiché — source unique des deux écrans', () => {
   it('⚠️ une ÉPAVE ne doit plus afficher un butin VIDE', () => {
     // Le défaut réel : la modale de collecte et la boîte 📬 listaient leurs devises à la
     // main (or / énergie / clé) et n'ont pas suivi l'ajout des POI de RÉCOLTE (v0.658).
-    // Une épave — seule source de ferraille du jeu — ne montrait donc RIEN.
-    expect(haulPills({ scrap: 87 })).toEqual([{ emoji: '🔩', n: 87 }]);
+    // Une épave ne montrait donc RIEN. ⚠️ Elle paie en OR depuis la v0.998, et la
+    // ferraille n'a plus de pastille : une devise retirée ne s'affiche plus.
+    expect(haulPills({ gold: 87 })).toEqual([{ emoji: '🪙', n: 87 }]);
+    expect(haulPills({ scrap: 87 } as never)).toEqual([]);
     expect(haulPills({ summonStones: 6 })).toEqual([{ emoji: '🔮', n: 6 }]);
     // ⚠️ RÉÉCRIT : ce test exigeait que les pastilles AFFICHENT fragments et encre — il
     // verrouillait donc la promesse faite au joueur d'une monnaie qu'il ne peut pas

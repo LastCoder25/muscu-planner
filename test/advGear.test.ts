@@ -541,7 +541,6 @@ describe('sources d’équipement', () => {
       adv('b', ['archer']),
     ]);
     expect(avec.gold).toBe(sans.gold);
-    expect(avec.scrap).toBe(sans.scrap);
     expect(avec.summonStones).toBe(sans.summonStones);
     expect(avec.keys).toBe(sans.keys);
     expect(avec.items).toEqual(sans.items);

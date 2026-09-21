@@ -28,10 +28,12 @@ import { LEVELS, MINE_DIST, goldPerDay, fullGoldPerDay, mineNet } from './helper
  *     revenus en L^1.6, 115 expéditions pour un niveau à 100, bâtiments gelés).
  *  D'où la règle : on déplace la courbe par son COEFFICIENT, jamais par son exposant. */
 
-/** Monter d'un cran tous les bâtiments DÉBLOQUÉS à ce niveau : le rythme de croisière.
- *  (L'enceinte a sa courbe dédiée, testée dans `raid.test` et `scrapEconomy.test`.) */
+/** Monter d'un cran tous les bâtiments DÉBLOQUÉS à ce niveau ET toute l'enceinte : le
+ *  rythme de croisière. ⚠️ L'enceinte est sur la MÊME courbe depuis la v0.998 (la ferraille
+ *  retirée, elle ne coûte plus que de l'or) : l'oublier ici, c'est mesurer la moitié du puits. */
 const cranTotal = (L: number) =>
-  buildingUpgradeCost(L) * Math.min(plotsForLevel(L), BUILDING_TYPES.length);
+  buildingUpgradeCost(L) *
+  (Math.min(plotsForLevel(L), BUILDING_TYPES.length) + DEFENSE_TYPES.length);
 
 describe('⛑️ les soins d’urgence du héros coûtent cher, sans devenir un mur', () => {
   // Mesuré contre le MÊME revenu journalier que les bâtiments : une convalescence complète
@@ -235,7 +237,7 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     }
   });
 
-  it('⚠️ LA MARGE EST MINCE : un bâtiment de moins frôle le plafond, deux le franchissent', () => {
+  it('⚠️ LA MARGE : retirer des bâtiments fait monter la part — l’enceinte l’amortit désormais', () => {
     // Le puits d'or est DÉRIVÉ du roster (`BUILD.plotCap = BUILDING_TYPES.length`) : moins
     // d'emplacements = moins de dépenses = l'or s'entasse. C'est le piège de la v0.733, où
     // trois bâtiments AJOUTÉS avaient approfondi le puits de 43 % en silence.
@@ -253,9 +255,12 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // ✅ ET UNE TROISIÈME (v0.996) : la simulation passe au revenu COMPLET, `upBase` à 1400
     // — 81,9 / 72,1 / 66,0 %, et la marge tient (88 % à un bâtiment de moins, 97 % à deux).
     //
-    // ⚠️ CE QU'IL GARDE reste inchangé : la MARGE. À un bâtiment de moins on frôle le
-    // plafond (88 %), à deux on le franchit (97 %) — la prochaine fois vaudra la même
-    // re-mesure.
+    // ✅ ET UNE QUATRIÈME (v0.998) : la ferraille retirée, l'ENCEINTE rejoint la courbe
+    // commune — 11 structures sur le puits au lieu de 5, `upBase` à 1000 (76,8 / 68,5 / 63,4 %).
+    // ⚠️ LA MARGE S'EST ÉLARGIE, et c'est mécanique : un bâtiment retiré pèse désormais 1/11
+    // du puits au lieu de 1/5. Mesuré : 80 % à un bâtiment de moins, 83 % à deux — encore
+    // dans la bande. Ce qui reste gardé : un roster plus court fait MONTER la part, et deux
+    // retraits ne sortent pas de la bande. Au-delà, re-mesurer comme les quatre fois d'avant.
     const [, xpTranquille] = PROFILS[0]!;
     const aNeuf = partDuPlafond(xpTranquille, BUILDING_TYPES.length);
     const aHuit = partDuPlafond(xpTranquille, BUILDING_TYPES.length - 1);
@@ -265,9 +270,10 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // en survivant, du temps où ce test ne regardait qu'une seule taille.
     expect(aHuit, 'un roster plus court doit faire monter la part').toBeGreaterThan(aNeuf);
     expect(aSept).toBeGreaterThan(aHuit);
-    // Et la marge, chiffrée : on est encore dedans, on ne l'est plus deux crans plus loin.
-    expect(aHuit, `à 8 bâtiments : ${(aHuit * 100).toFixed(0)} %`).toBeLessThan(0.9);
-    expect(aSept, `à 7 bâtiments : ${(aSept * 100).toFixed(0)} %`).toBeGreaterThan(0.9);
+    // Et la marge, chiffrée : deux retraits restent dans la bande, et ils se SENTENT.
+    expect(aHuit, `un bâtiment de moins : ${(aHuit * 100).toFixed(0)} %`).toBeLessThan(0.9);
+    expect(aSept, `deux bâtiments de moins : ${(aSept * 100).toFixed(0)} %`).toBeLessThan(0.9);
+    expect(aSept - aNeuf, 'deux retraits doivent se sentir').toBeGreaterThan(0.03);
   });
 });
 

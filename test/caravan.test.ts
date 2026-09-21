@@ -174,8 +174,8 @@ function winPct(escort: Adventurer[], p: Poi, n = 150) {
     if (simulateCombat(g, { ...f }, { seed: s * 211 + 7, goldOnWin: 0 }).win) w++;
   return w / n;
 }
-const avgScrap = (p: Poi, esc: Adventurer[], n = 200) =>
-  Array.from({ length: n }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS, 100).scrap).reduce(
+const avgOf = (p: Poi, esc: Adventurer[], key: 'gold' | 'energy', n = 200) =>
+  Array.from({ length: n }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS, 100)[key]).reduce(
     (a, b) => a + b,
     0,
   ) / n;
@@ -394,15 +394,15 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
   it('elle rend une PART mesurée d’une visite du héros — elle complète, elle ne remplace pas', () => {
     // ⚠️ Borne SERRÉE autour de `yieldShare` : un « simplement moins que le héros » laissait
     // passer la suppression de la part (les multiplicateurs de rencontre suffisaient à
-    // rester sous la barre). Or c’est ce garde-fou qui tient la règle « la ferraille doit
-    // être plus dure à obtenir que l’or » : à part pleine, un convoi rendait 608 🔩/jour
-    // au niveau 26 contre 19 pour la Fonderie.
-    const p = poi();
-    const heros = harvestYield(p.type, p.level, heroEquivalentFactor(p)).scrap;
+    // rester sous la barre). ⚠️ Mesuré sur l'ÉNERGIE d'une source (la ferraille, qui
+    // servait de mesure, est retirée v0.998) : c'est une récolte pure, sans filet d'or qui
+    // brouillerait la part.
+    const p = poi({ type: 'well' });
+    const heros = harvestYield(p.type, p.level, heroEquivalentFactor(p)).energy;
     // ⚠️ Une escorte SANS RÔLE : le sujet du test est `yieldShare`, pas la cargaison
     // qu'un 🐫 ajoute. Depuis que la référence est mixte, elle porte un rôle de haul —
     // le test mesurait donc les deux à la fois et est tombé pour la mauvaise raison.
-    const part = avgScrap(p, team(3, 20, 'heal')) / heros;
+    const part = avgOf(p, team(3, 20, 'heal'), 'energy') / heros;
     expect(part).toBeGreaterThan(CARAVAN.yieldShare * 0.75);
     expect(part).toBeLessThan(CARAVAN.yieldShare * 1.25);
   });
@@ -454,8 +454,10 @@ describe('les rôles hors combat servent à quelque chose', () => {
   });
   it('un 🐫 grossit la cargaison', () => {
     const p = poi();
-    const sans = avgScrap(p, team(2, 20, 'speed'));
-    const avec = avgScrap(p, team(2, 20, 'haul'));
+    // Sur l'OR d'une épave (v0.998) : l'énergie est plafonnée à la part de base, donc un
+    // 🐫 ne pourrait pas la faire grossir — l'or, si.
+    const sans = avgOf(p, team(2, 20, 'speed'), 'gold');
+    const avec = avgOf(p, team(2, 20, 'haul'), 'gold');
     expect(avec).toBeGreaterThan(sans);
   });
   it('un 🩺 raccourcit les convalescences, et l’Infirmerie aussi', () => {
@@ -750,7 +752,6 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
               ['gold', o.gold],
               ['energy', o.energy],
               ['summonStones', o.summonStones],
-              ['scrap', o.scrap],
               ['keys', o.keys],
               ['wages', o.wages],
             ] as [string, number][]) {
@@ -784,11 +785,15 @@ describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
   // PUIS en v0.796. Un salaire indexé sur une table qu’on déplace pour une AUTRE raison
   // se met à dire autre chose, en silence.
   const HARVEST: PoiType[] = ['well', 'shrine', 'archive', 'wreck'];
-  const part = (n: number, L: number) => {
+  // ⚠️ L'ÉPAVE paie en OR depuis le retrait de la ferraille (v0.998) : c'est son métier, et
+  // la carte n'en fait naître que ~2 par jour. Le « puits » se mesure donc sur les récoltes
+  // qui ne paient qu'un filet d'or — l'épave y ferait passer les salaires pour dérisoires.
+  const FILET: PoiType[] = ['well', 'shrine', 'archive'];
+  const part = (n: number, L: number, types: PoiType[] = HARVEST) => {
     const esc = team(n, L);
     let brut = 0;
     let sal = 0;
-    for (const type of HARVEST)
+    for (const type of types)
       for (let seed = 1; seed <= 40; seed++) {
         const p = poi({ type, level: L });
         brut += resolveCaravan(p, esc, seed, NUS, 100).gold;
@@ -821,7 +826,7 @@ describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
     // 3× sans qu’aucune porte ne rougisse est exactement ce que ce test ferme.
     // La borne basse n’entérine PAS la dérive — elle interdit qu’elle continue.
     for (const L of [10, 20, 26, 40, 60, 100])
-      expect(part(3, L), `niveau ${L}`).toBeGreaterThan(0.1);
+      expect(part(3, L, FILET), `niveau ${L}`).toBeGreaterThan(0.1);
   });
 });
 
@@ -2041,7 +2046,7 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
       );
       if (avec.events.some((e) => e.kind === 'bandits')) continue;
       vus++;
-      expect(avec.scrap, `graine ${s}`).toBeGreaterThan(sans.scrap);
+      expect(avec.gold, `graine ${s}`).toBeGreaterThan(sans.gold);
     }
     expect(vus, 'aucun voyage sans embuscade : le test ne prouve rien').toBeGreaterThan(5);
   });
@@ -2144,15 +2149,14 @@ describe('sources d’équipement : embuscades repoussées', () => {
       },
       40,
     );
-    expect(o.gold).toBe(1758);
+    expect(o.gold).toBe(13464); // 1758 avant la v0.998 : l’or de l’épave (part de convoi) s’ajoute au filet
     expect(o.energy).toBe(0);
     expect(o.summonStones).toBe(0);
-    // ⚠️ 78 → 97, et ce n'est PAS un décalage du flux aléatoire : tout le reste est
-    // inchangé. C'est le RENDEMENT de l'épave, remonté de ×1,25 pour compenser la Fonderie
-    // retirée (`HARVEST.scrapBase`, mesuré). D'où l'intérêt d'épingler la LIGNE ENTIÈRE :
-    // une seule valeur qui bouge dit « un réglage » ; toutes qui bougent disent « le flux
-    // a fuité » — c'est cette distinction que le test existe pour rendre lisible.
-    expect(o.scrap).toBe(97);
+    // ⚠️ La ferraille a disparu (v0.998) et l'or est monté d'autant : l'épave rend de l'or.
+    // Tout le reste est inchangé au chiffre près — c'est ce qui prouve que le flux n'a pas
+    // fuité. Une seule valeur qui bouge dit « un réglage » ; toutes qui bougent disent
+    // « le flux a fuité » — c'est cette distinction que le test existe pour rendre lisible.
+    expect('scrap' in o).toBe(false);
     expect(o.keys).toBe(0);
     expect(o.wages).toBe(951);
     // ⚠️ Les valeurs de CARGAISON ci-dessus sont celles d'avant le combat de groupe, au

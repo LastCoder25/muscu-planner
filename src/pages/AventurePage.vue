@@ -73,14 +73,6 @@
               title="Pierres d’invocation — tenter un boss de palier (gagnées en nettoyant des donjons)"
               >🔮 {{ char.row.summon_stones }}</span
             >
-            <!-- La ferraille se dépense (réparer, bâtir) et se gagne (épaves, Fonderie,
-                 recyclage du sac) DEPUIS PLUSIEURS ÉCRANS : sa place est ici, avec les
-                 autres devises, et non sur le seul écran de la base. -->
-            <span
-              class="tb-r scrap"
-              title="Ferraille — réparer et bâtir l’enceinte (épaves, Fonderie, recyclage du sac)"
-              >🔩 {{ char.row.scrap }}</span
-            >
             <!-- ⚠️ Les CLÉS 🗝️ manquaient au plateau alors qu'elles gardent le
                  Labyrinthe — seule source de familiers — et qu'elles se gagnent sur
                  plusieurs écrans (archives, coffres, boss). Une devise qu'on dépense
@@ -6523,9 +6515,6 @@ onUnmounted(() => {
 }
 .tb-r.tickets {
   color: var(--accent);
-}
-.tb-r.scrap {
-  color: #b9a68c;
 }
 .tb-r.energy.deficit {
   color: var(--d4, #ff6a45);

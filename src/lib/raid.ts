@@ -52,7 +52,7 @@ import {
   type AdvGear,
   type AdvGearSlot,
 } from './advGear';
-import { beyondCap } from './buildings';
+import { beyondCap, buildingUpgradeCost } from './buildings';
 import { advStats, advTitle, PROMO_LEVELS, type Adventurer } from './adventurers';
 import {
   BATTLE,
@@ -138,7 +138,7 @@ export interface DefenseStructure {
   level: number;
   damaged?: boolean;
   /** Fin des travaux (ms epoch). Tant qu’elle n’est pas atteinte, la structure reste
-   *  ENDOMMAGÉE — la ferraille est payée au lancement, le service reprend à la fin. */
+   *  ENDOMMAGÉE — l'or est payé au lancement, le service reprend à la fin. */
   repairUntil?: number;
 }
 
@@ -315,13 +315,6 @@ export interface DefenseType {
   label: string;
   emoji: string;
   buildGold: number;
-  // ⚠️ Ferraille exigée à la CONSTRUCTION — 0 partout, à dessein. La ferraille ne vient
-  // que des épaves de la carte et de la Fonderie ; en exiger pour BÂTIR enfermait le
-  // joueur dans un œuf et la poule : la 1re tourelle coûtait 20 🔩 qu'il n'avait pas, et
-  // la Fonderie niv.1 met 166 h à les produire. Le 1er niveau se paie donc en OR seul ;
-  // la ferraille sert aux AMÉLIORATIONS et aux RÉPARATIONS. Le champ reste pour qu'une
-  // future structure puisse en demander en connaissance de cause.
-  buildScrap: number;
   unlockLevel: number;
   desc: string;
 }
@@ -332,7 +325,6 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Muraille',
     emoji: '🧱',
     buildGold: 500,
-    buildScrap: 0, // le 1er niveau ne coûte pas de ferraille : c'est le déblocage
     // Niveau 1 (v0.823) : on BÂTIT dès le début ; ce sont les SIÈGES qui attendent
     // `RAID.minRaidLevel`. Construire n'expose à rien tant qu'aucune armée ne vient.
     unlockLevel: 1,
@@ -343,7 +335,6 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Tourelles',
     emoji: '🏹',
     buildGold: 700,
-    buildScrap: 0,
     unlockLevel: 1,
     desc: 'Elles tirent. Chaque niveau ajoute de la puissance de feu, et une tourelle de plus sur le mur (jusqu’à 8).',
   },
@@ -352,7 +343,6 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Tour de guet',
     emoji: '🗼',
     buildGold: 600,
-    buildScrap: 0,
     unlockLevel: 1,
     desc: 'Elle renseigne : plus elle est haute, plus tu en sais sur l’armée qui vient — et plus tôt tu l’apprends.',
   },
@@ -361,7 +351,6 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Chenil',
     emoji: '🐾',
     buildGold: 750,
-    buildScrap: 0,
     unlockLevel: 1,
     desc: 'Poste tes familiers à la défense. Leur ESPÈCE décide de ce qu’ils apportent au mur.',
   },
@@ -370,7 +359,6 @@ export const DEFENSE_TYPES: DefenseType[] = [
     label: 'Infirmerie',
     emoji: '⛑️',
     buildGold: 700,
-    buildScrap: 0,
     unlockLevel: 1,
     desc: 'Soigne le héros blessé et remet les familiers fatigués sur pied plus vite.',
   },
@@ -597,23 +585,14 @@ export const RAID = {
    *  temps, et les tourelles convertissent ce temps en morts. */
   wallArmorK: 0.65,
 
-  // Coûts propres à la défense (cf. defenseUpgradeCost).
-  upBase: 28,
-  upExp: 1.9,
-  // Ferraille d'une amélioration : socle + puissance. ⚠️ MESURÉ (v0.681). L'ancien
-  // `4 + niveau` était linéaire quand tout le reste croît en puissance : monter les 6
-  // structures d'un cran coûtait **0,6 à 0,7 épave** à TOUS les niveaux, et la Fonderie
-  // seule couvrait ce cran en 2,2 à 2,8 jours — autrement dit la ferraille tombait toute
-  // seule et n'était un frein nulle part. À 1,35 il faut **1,5 à 2,8 épaves** par cran
-  // (à tout niveau), et la Fonderie seule met 6 à 10 jours : elle complète, elle ne
-  // remplace plus. Ne pas monter plus haut : à 1,45 la fin de partie demandait 4,5 épaves
-  // et 16 jours de production passive par cran — de la corvée, pas un arbitrage.
+  // 🔧 Réparation d'une structure, en PART d'un cran de ce niveau (cf. `repairCost`).
+  // ⚠️ Bon marché à dessein : remettre en état après un siège perdu ne doit jamais devenir
+  // une punition — sinon l'échec rouvre la spirale que tout le système de siège évite.
+  repairShare: 0.04, // mesuré : ~⅙ de journée de revenu (réf. donjons + mines) pour le mur, à tout niveau
   // Chance qu'un corps ORDINAIRE laisse une pièce d'équipement (un champion en laisse
   // toujours une). Les bandits sont équipés, les bêtes et les morts-vivants beaucoup moins.
   gearDropBandits: 0.5,
   gearDropOther: 0.12,
-  scrapBase: 6,
-  scrapExp: 1.45,
   turretDmgK: 0.175,
   /** PV d'UNE tourelle, en part des PV de la référence.
    *  ⚠️ Le modèle à UN SEUL combattant n'en avait pas besoin — tout était fondu. Le
@@ -659,10 +638,6 @@ export const RAID = {
   // 7 → un par jour, 21 → un toutes les 8 h. Le siège étant un ROBINET (butin, cadavres,
   // ferraille), « plus actif = plus attaqué » se lit comme plus de jeu, jamais comme une
   // punition de l'entraînement.
-  // 🔩 Acier laissé par un corps ARMÉ. ⚠️ Calibré sur le BESOIN mesuré (combler ce que
-  // les sources bornées par l'horloge ne peuvent pas suivre quand les sièges se
-  // multiplient), et non au jugé : au premier réglage, un siège rendait 585 🔩 contre 62
-  // pour une épave — il aurait détrôné la source de pointe, que le test verrouille.
   /** ⚠️ MASSE VISIBLE ≠ MENACE. Mesuré : une armée comptait `10 + ⌊niveau/10⌋` corps,
    *  soit **8 brigands au niveau 26 et 20 au niveau 100** — une bande, pas un siège.
    *  Pire, l'effectif ne DOUBLAIT qu'entre le niveau 12 et 100, quand la puissance du
@@ -2821,33 +2796,32 @@ export function raidDamage(report: RaidReport): RaidDamage {
   return { stockStolen: true, damaged, freeze: true };
 }
 
-/** Coût de remise en service, en FERRAILLE (jamais en or : l'or est déjà tendu par les
- *  bâtiments de production — mesuré, un niveau de mine coûte ~100 k au niveau 25 — et
- *  une réparation ne doit pas entrer en concurrence avec eux). */
-/** Coût en OR pour monter une structure d'un niveau.
- *  ⚠️ NE PAS réutiliser `buildingUpgradeCost` : cette courbe est calée sur les bâtiments
- *  de PRODUCTION, financés par toute l'économie. Appliquée à la défense, elle demandait
- *  **1,82 M d'or** pour monter mur + tourelles jusqu'au niveau 26 — hors d'atteinte, donc
- *  un système injouable. Ici la cible est ~10 récoltes de mine pour l'enceinte complète.
- *  Même forme (L^1.9) pour que la pente reste familière, coefficient divisé par 8. */
+/** Coût en OR pour monter une structure de l'enceinte d'un niveau.
+ *
+ *  ⚠️ **LA MÊME COURBE QUE LES BÂTIMENTS DE LA COUR** (v0.998, décision de l'utilisateur :
+ *  « que les bâtiments aient le même coût d'or »). L'enceinte avait sa courbe dédiée
+ *  (coefficient ÷50) PLUS un second verrou en ferraille ; la ferraille est retirée, et
+ *  plutôt qu'une seconde courbe à tenir d'accord avec la première, l'enceinte rejoint le
+ *  puits d'or commun. `BUILD.upBase` a été re-mesuré avec les 11 structures (cf. là-bas).
+ *  ⚠️ Toute retouche de coût se fait donc à UN seul endroit : `buildingUpgradeCost`. */
 export function defenseUpgradeCost(level: number): number {
-  return Math.round(RAID.upBase * Math.pow(Math.max(1, level), RAID.upExp));
+  return buildingUpgradeCost(level);
 }
 
-/** Ferraille pour monter une structure d'un niveau. **C'est le SECOND verrou de
- *  l'enceinte**, à côté de l'or : l'or mesure le volume de jeu (donjons, expéditions), la
- *  ferraille mesure qu'on est allé la CHERCHER — épaves de la carte, recyclage du sac,
- *  Fonderie. Les deux doivent mordre ; l'un sans l'autre n'est pas un choix.
- *  ⚠️ La RÉPARATION, elle, reste bon marché et linéaire (`repairCost`) : remettre en
- *  état après un siège perdu ne doit jamais devenir une punition — un jour de Fonderie y
- *  suffit encore. Ce sont deux dépenses de natures différentes. */
-export function defenseUpgradeScrap(level: number): number {
-  return Math.round(RAID.scrapBase + Math.pow(Math.max(1, level), RAID.scrapExp));
-}
-
+/** 🔧 Coût de remise en service, en OR : une PART d'un cran de ce niveau
+ *  (`RAID.repairShare`). ⚠️ Dérivé de la courbe commune, jamais une seconde échelle :
+ *  réparer suit ce que la structure a coûté, sans jamais s'en approcher. */
 export function repairCost(level: number): number {
-  return 10 + Math.round(Math.max(1, level) * 2.5);
+  return Math.max(1, Math.round(buildingUpgradeCost(level) * RAID.repairShare));
 }
+
+/** 🔩 → 🪙 : taux de conversion de la ferraille, devise RETIRÉE (v0.998). Sert UNE fois :
+ *  la réserve d'un compte, et les rapports ou convois déposés avant le retrait.
+ *  ⚠️ Calé sur l'ÉPAVE, sa seule source : ce qu'une épave rend aujourd'hui en or pour
+ *  chaque unité de ferraille qu'elle rendait (mesuré au niveau 30, distance moyenne) —
+ *  on rembourse ce que la ferraille AURAIT rapporté, ni plus ni moins. Mesuré : 36 🪙 par
+ *  🔩 au niveau 10, 104 au 30, 177 au 60 ; on retient la valeur du milieu de partie. */
+export const SCRAP_TO_GOLD = 100;
 
 /** 🔧 DURÉE D’UNE RÉPARATION (v0.802, demandée par l’utilisateur : « mettre des délais aux
  *  réparations »).
@@ -2859,7 +2833,7 @@ export function repairCost(level: number): number {
  *  Elle avait ce second métier, et la simplification le lui avait fait léguer à
  *  l’Entrepôt ; le faire disparaître AVEC elle est la seule lecture où la Fonderie s’en
  *  va vraiment. La sortie de secours reste ouverte, et elle est PAYANTE :
- *  `rushRepairCost` termine les travaux à la ferraille, au tarif des soins d’urgence.
+ *  `rushRepairCost` termine les travaux en or, au tarif des soins d’urgence.
  *  ⚠️ Toujours bien plus courte que l’intervalle entre deux sièges (24 h au minimum) : une
  *  base encore en travaux au siège suivant serait la spirale que tout ce système évite. */
 export function repairMsFor(level: number): number {
@@ -2878,7 +2852,7 @@ function withRepaired(base: BaseState, defenses: DefenseStructure[]): BaseState 
   return { ...base, defenses, freeze: defenses.some((d) => d.damaged) ? base.freeze : null };
 }
 
-/** LANCE les travaux : la ferraille est payée maintenant (côté store), la structure reste
+/** LANCE les travaux : l'or est payé maintenant (côté store), la structure reste
  *  endommagée jusqu’à `repairUntil`. Sans effet sur une structure intacte ou déjà en
  *  travaux — relancer ne doit ni repousser l’échéance ni faire payer deux fois. */
 export function startRepair(base: BaseState, id: DefenseId, now: number): BaseState {
@@ -2908,14 +2882,14 @@ export function finishRepairNow(base: BaseState, id: DefenseId): BaseState {
   return withRepaired(base, defenses);
 }
 
-/** Ferraille pour finir des travaux maintenant, ∝ au temps restant : écourter la fin est
- *  une bricole, sauter tout le chantier se paie. ⚠️ Elle ne suit PLUS les soins du héros
- *  (passés en or, v0.824) : une réparation reste une affaire de métal. */
-export function rushRepairCost(remainingMs: number): number {
-  return Math.max(1, Math.ceil((remainingMs / 3600_000) * 12));
+/** Or pour finir des travaux maintenant, ∝ au temps restant — AU TARIF DES SOINS
+ *  D'URGENCE DU HÉROS (`healCost`) : deux portes de sortie qui coûtent pareil se
+ *  comprennent sans notice. Écourter la fin est une bricole, sauter le chantier se paie. */
+export function rushRepairCost(remainingMs: number, playerLevel: number): number {
+  return healCost(remainingMs, playerLevel);
 }
 
-/** Ferraille nécessaire pour LANCER toutes les réparations en attente — c'est le chiffre à
+/** Or nécessaire pour LANCER toutes les réparations en attente — c'est le chiffre à
  *  afficher au joueur quand sa production est gelée. Les travaux déjà lancés sont payés. */
 export function totalRepairCost(base: BaseState): number {
   return base.defenses

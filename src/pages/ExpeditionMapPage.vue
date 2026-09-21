@@ -1672,7 +1672,7 @@ const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
   well: () => 'Énergie ⚡ en quantité (récolte, sans combat)',
   shrine: () => "Pierres d'invocation 🔮 (récolte, sans combat)",
   archive: () => 'Clés du Labyrinthe 🗝️ (récolte, sans combat)',
-  wreck: () => 'Ferraille 🔩 en quantité (récolte, sans combat)',
+  wreck: () => 'Or 🪙 — le métal revendu (récolte, sans combat)',
   // 💠 Ce qu’une faille laisse en s’effondrant — une récolte, bien moins que la refermer.
   mana_mine: () => 'Mana 💠 résiduel (récolte, sans combat)',
   // ⚔️ Camp / repaire : ce que rapporte le groupe AVEC ou SANS le héros, selon la faction

@@ -383,7 +383,17 @@ export const BUILD = {
   //   1400 → 81,9 / 72,1 / 66,0                      ·  1500 → 80,0 / 70,4 / 64,4
   // 1400 reproduit la courbe de référence (81,9 / 72,4 / 66,2) ; ~99 % de l’or est dépensé
   // et moins de 1,5 jour de revenu dort en banque en fin d’année.
-  upBase: 1400, // upgrade L→L+1 (or) = round(upBase × L^upExp)
+  // ⚠️ 1400 → 1000 (v0.998, mesuré) : LA FERRAILLE EST RETIRÉE et l’ENCEINTE rejoint cette
+  // courbe (`defenseUpgradeCost` = `buildingUpgradeCost`) : 11 structures au lieu de 5 sur
+  // le puits commun. L’épave rend désormais de l’OR (convois compris, plafonnés à ~2 épaves
+  // par jour : la carte n’en fait pas naître davantage). Part du plafond sur un an, cour +
+  // enceinte (tranquille / régulier / très actif) :
+  //   1000 → 76,8 / 68,5 / 63,4  ·  1200 → 72,1 / 64,2 / 59,5  ·  1400 → 68,3 / 60,8 / 56,4
+  // 1000 : 3 à 5 points PLUS serré qu’avant (81,9 / 72,1 / 66,0) — demandé : « que l’or ne
+  // soit pas en excès et qu’il faille aller le chercher » —, ~100 % de l’or dépensé, moins
+  // d’un jour de revenu en banque, et un cran de bâtiment qui vaut 2,2 à 2,8 jours de revenu
+  // du niveau 5 au 100 (courbe PLATE, pas de mur).
+  upBase: 1000, // upgrade L→L+1 (or) = round(upBase × L^upExp), cour ET enceinte
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :

@@ -5,7 +5,7 @@
 // joueur qui s'entraîne peu en manque par définition. Mais il a du TEMPS. Une caravane
 // consomme donc du temps réel et ZÉRO énergie — c'est le seul axe où il est à égalité.
 // Corollaire non négociable : **une caravane ne rapporte JAMAIS d'équipement**. Elle paie
-// en LOGISTIQUE (⚡ énergie plafonnée, 🔮 pierres, 🔩 ferraille, 🗝️ clés, un filet d'or),
+// en LOGISTIQUE (⚡ énergie plafonnée, 🔮 pierres, 🗝️ clés, 🪙 or des épaves, un filet d'or),
 // c'est-à-dire des devises qui débloquent les AUTRES systèmes au lieu de les remplacer.
 // « Le sport est le plafond » reste intact : ce n'est pas le butin qui monte, c'est
 // l'accès au jeu qui s'élargit.
@@ -166,11 +166,10 @@ export const CARAVAN = {
   wageBase: 6,
   /** ⚠️ PART DU RENDEMENT D'UNE VISITE DU HÉROS. Des marchands exploitent moins bien
    *  qu'un aventurier — mais ce n'est pas du réalisme, c'est un garde-fou mesuré : à part
-   *  pleine, UNE caravane rendait 608 🔩/jour au niveau 26 contre 19 pour la Fonderie
-   *  (×32), soit plusieurs crans d'enceinte par jour. La règle « la ferraille doit être
-   *  plus dure à obtenir que l'or » (v0.682) serait morte. Avec 0,5 et un nombre de
-   *  convois plafonné, les caravanes COMPLÈTENT l'épave du héros au lieu de la remplacer.
-   *  ⚠️ Ne pas monter sans re-mesurer `scrapEconomy`. */
+   *  pleine, UNE caravane rendait plusieurs crans d'enceinte par jour (mesuré à l'époque de
+   *  la ferraille). Avec 0,5 et un nombre de convois plafonné, les caravanes COMPLÈTENT la
+   *  visite du héros au lieu de la remplacer.
+   *  ⚠️ Ne pas monter sans re-mesurer `goldSink` (l'or des épaves passe par cette part). */
   yieldShare: 0.5,
   /** Un convoi de plus tous les N niveaux de Comptoir. ⚠️ Calé sur le vivier : la Guilde
    *  donne 1 aventurier tous les 2 niveaux, donc ~L/6 escortes de 3 au niveau L — le
@@ -214,7 +213,9 @@ export interface CaravanOutcome {
   gold: number;
   energy: number;
   summonStones: number;
-  scrap: number;
+  /** 🔩 LEGACY : ferraille d'un convoi lancé avant son retrait (v0.998). Plus jamais
+   *  écrite ; convertie en or à l'encaissement (`SCRAP_TO_GOLD`). */
+  scrap?: number;
   keys: number;
   /** Salaires versés à l'escorte — déduits à part, c'est une DÉPENSE assumée. */
   wages: number;
@@ -1496,7 +1497,6 @@ export function resolveCaravan(
   const y = {
     energy: raw.energy * CARAVAN.yieldShare,
     summonStones: raw.summonStones * CARAVAN.yieldShare,
-    scrap: raw.scrap * CARAVAN.yieldShare,
     keys: raw.keys,
   };
   const wages = caravanWages(escort, poi);
@@ -1508,7 +1508,9 @@ export function resolveCaravan(
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
     // substitut au sport » est un invariant, pas une base qu'un bon voyage dépasserait.
-    gold: Math.round(goldCost(poi.type, poi.level) * 0.3 * k),
+    // Filet d'or de toute récolte (30 % du coût) + la part de l'OR d'épave : c'est une
+    // récolte comme une autre, donc à la même part que l'énergie ou les pierres.
+    gold: Math.round((goldCost(poi.type, poi.level) * 0.3 + raw.gold * CARAVAN.yieldShare) * k),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
     // brute × `yieldShare` (0,5), donc il tombe sur un DEMI. Avec l'arrondi à
     // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur
@@ -1518,7 +1520,6 @@ export function resolveCaravan(
     // « Récupérer » sans qu'il ne se passe RIEN. Une cargaison était irrécupérable à vie.
     energy: Math.round(Math.min(y.energy, y.energy * k)),
     summonStones: Math.round(y.summonStones * k),
-    scrap: Math.round(y.scrap * k),
     keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus,
     wages,
     xp,
@@ -1686,7 +1687,6 @@ export function caravanReport(van: Caravan, roster: readonly Adventurer[]): Cara
     pills: haulPills({
       gold: ent(o.gold),
       energy: ent(o.energy),
-      scrap: ent(o.scrap),
       summonStones: ent(o.summonStones),
       key: ent(o.keys),
     }),

@@ -373,7 +373,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.item).toBeNull();
     expect(o.gold).toBeGreaterThan(0);
     // ⚠️ Les camps ne donnent JAMAIS de ferraille (v0.856 / v0.890 : épave et Fonderie seules).
-    expect(o.scrap).toBe(0);
+    expect('scrap' in o).toBe(false);
     expect(o.summonStones).toBeGreaterThan(0);
     expect(o.party!.advGear).toHaveLength(CAMP.lairPieces);
     expect(o.party!.wages).toBeGreaterThan(0);
@@ -388,7 +388,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     });
     const o = resolveCamp(inp);
     expect(o.party!.win).toBe(false);
-    expect(o.gold + o.scrap + o.summonStones + o.key).toBe(0);
+    expect(o.gold + o.summonStones + o.key).toBe(0);
     expect(o.party!.advGear).toEqual([]);
     expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi));
   });

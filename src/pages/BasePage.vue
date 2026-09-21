@@ -688,10 +688,10 @@
       <button
         v-if="repairAllCost > 0"
         class="cta"
-        :disabled="(char.row?.scrap ?? 0) < repairAllCost"
+        :disabled="(char.row?.gold ?? 0) < repairAllCost"
         @click="doRepairAll"
       >
-        🔩 Tout réparer · {{ repairAllCost }} ferraille
+        🔧 Tout réparer · {{ fmtPow(repairAllCost) }} 🪙
       </button>
     </div>
 
@@ -741,9 +741,7 @@
             :disabled="!canBuild(defSel.id)"
             @click="doBuild(defSel.id)"
           >
-            Construire · {{ defSel.buildGold }} 🪙<span v-if="defSel.buildScrap">
-              + {{ defSel.buildScrap }} 🔩</span
-            >
+            Construire · {{ defSel.buildGold }} 🪙
           </button>
           <template v-else>
             <!-- ⚠️ Une réparation PREND DU TEMPS (v0.802) : la durée s'annonce AVANT de payer —
@@ -754,10 +752,10 @@
               </div>
               <button
                 class="btn fix"
-                :disabled="(char.row?.scrap ?? 0) < rushRepairCost(repairLeft(defSel.id))"
+                :disabled="(char.row?.gold ?? 0) < rushCost(defSel.id)"
                 @click="doFinishRepair(defSel.id)"
               >
-                Terminer maintenant · {{ rushRepairCost(repairLeft(defSel.id)) }} 🔩
+                Terminer maintenant · {{ fmtPow(rushCost(defSel.id)) }} 🪙
               </button>
             </template>
             <button
@@ -766,11 +764,11 @@
               :disabled="!canRepair(defSel.id)"
               @click="doRepair(defSel.id)"
             >
-              Réparer · {{ repairCost(lvlOf(defSel.id)) }} 🔩 ·
+              Réparer · {{ fmtPow(repairCost(lvlOf(defSel.id))) }} 🪙 ·
               {{ fmtSpan(repairMsFor(lvlOf(defSel.id))) }}
             </button>
             <button class="btn" :disabled="!canUpgrade(defSel.id)" @click="doUpgrade(defSel.id)">
-              Améliorer · {{ upCost(defSel.id).gold }} 🪙 + {{ upCost(defSel.id).scrap }} 🔩
+              Améliorer · {{ fmtPow(upCost(defSel.id)) }} 🪙
             </button>
           </template>
         </div>
@@ -1067,7 +1065,6 @@ import {
   RAID,
   totalRepairCost,
   defenseUpgradeCost,
-  defenseUpgradeScrap,
   defensePerLevelLabel,
   raidIntervalMs,
   companionPairs,
@@ -1844,24 +1841,25 @@ function lvlOf(id: DefenseId): number {
 function damagedOf(id: DefenseId): boolean {
   return isDamaged(defenses.value, id);
 }
-function upCost(id: DefenseId): { gold: number; scrap: number } {
-  const l = Math.max(1, lvlOf(id));
-  return { gold: defenseUpgradeCost(l), scrap: defenseUpgradeScrap(l) };
+function upCost(id: DefenseId): number {
+  return defenseUpgradeCost(Math.max(1, lvlOf(id)));
+}
+function rushCost(id: DefenseId): number {
+  return rushRepairCost(repairLeft(id), heroLevel.value);
 }
 function canBuild(id: DefenseId): boolean {
   const t = DEFENSE_TYPES.find((x) => x.id === id);
   const c = char.row;
   if (!t || !c) return false;
-  return heroLevel.value >= t.unlockLevel && c.gold >= t.buildGold && c.scrap >= t.buildScrap;
+  return heroLevel.value >= t.unlockLevel && c.gold >= t.buildGold;
 }
 function canUpgrade(id: DefenseId): boolean {
   const c = char.row;
   if (!c || lvlOf(id) >= heroLevel.value) return false;
-  const k = upCost(id);
-  return c.gold >= k.gold && c.scrap >= k.scrap;
+  return c.gold >= upCost(id);
 }
 function canRepair(id: DefenseId): boolean {
-  return repairLeft(id) <= 0 && (char.row?.scrap ?? 0) >= repairCost(lvlOf(id));
+  return repairLeft(id) <= 0 && (char.row?.gold ?? 0) >= repairCost(lvlOf(id));
 }
 
 async function guard(fn: () => Promise<unknown>) {
@@ -1889,7 +1887,8 @@ const doRepairAll = () =>
         message: '🔧 Travaux lancés — la production repart à la fin.',
       });
   });
-const doFinishRepair = (id: DefenseId) => guard(() => char.finishRepair(uid.value, id, Date.now()));
+const doFinishRepair = (id: DefenseId) =>
+  guard(() => char.finishRepair(uid.value, id, Date.now(), heroLevel.value));
 /** Temps de travaux restant sur une structure, 0 si aucun chantier en cours. */
 function repairLeft(id: DefenseId): number {
   const d = defenses.value.find((x) => x.typeId === id);

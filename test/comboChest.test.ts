@@ -11,14 +11,8 @@ import {
   comboChestMessageId,
   type ComboChestRecord,
 } from '@/lib/comboChest';
-import { HARVEST, travelOneWayMin, travelFactor } from '@/lib/expedition';
 
 const LEVELS = [5, 12, 26, 40, 60, 100];
-/** Une épave, mesurée avec la vraie formule — le repère de la ferraille. */
-const wreck = (L: number) => {
-  const rtH = (2 * travelOneWayMin(L, 0.5)) / 60;
-  return Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * travelFactor(rtH));
-};
 
 describe('coffre de fin de Défi 360', () => {
   it('⚠️ LE NOMBRE D’EXERCICES N’ENTRE PAS DANS LE CALCUL — seules les séries comptent', () => {
@@ -35,7 +29,7 @@ describe('coffre de fin de Défi 360', () => {
     for (const L of LEVELS) {
       const petit = comboChestReward(29, L);
       const gros = comboChestReward(135, L);
-      const ratio = gros.scrap / petit.scrap;
+      const ratio = gros.gold / petit.gold;
       expect(ratio, `niveau ${L} : ×${ratio.toFixed(2)}`).toBeLessThanOrEqual(
         CHEST_MAX_MULT / CHEST_MIN_MULT + 0.01,
       );
@@ -56,12 +50,10 @@ describe('coffre de fin de Défi 360', () => {
     }
   });
 
-  it('⚠️ la FERRAILLE vaut ~2 épaves : sensible, sans détrôner la source de pointe', () => {
-    for (const L of LEVELS) {
-      const r = comboChestReward(CHEST_REF_SETS, L).scrap / wreck(L);
-      expect(r, `niveau ${L} : ${r.toFixed(2)} épave(s)`).toBeGreaterThan(1);
-      expect(r, `niveau ${L} : ${r.toFixed(2)} épave(s)`).toBeLessThan(3.5);
-    }
+  it('🔩 plus de FERRAILLE dans le coffre (devise retirée v0.998) — et pas convertie en or', () => {
+    // Réécrit : il vérifiait que la ferraille valait ~2 épaves. La devise disparue, ce qui
+    // compte est qu'elle ne revienne pas, et que sa part ne gonfle pas l'or (garde voisin).
+    for (const L of LEVELS) expect('scrap' in comboChestReward(CHEST_REF_SETS, L)).toBe(false);
   });
 
   it('⚠️ les PIERRES et l’OR valent ~UNE SÉANCE — réécrit après mesure', () => {
@@ -116,7 +108,7 @@ describe('coffre de fin de Défi 360', () => {
   });
 
   it('tout croît avec le niveau, et rien n’est jamais négatif', () => {
-    for (const k of ['gold', 'scrap', 'summonStones', 'energy'] as const) {
+    for (const k of ['gold', 'summonStones', 'energy'] as const) {
       let prev = -1;
       for (const L of LEVELS) {
         const v = comboChestReward(CHEST_REF_SETS, L)[k];
@@ -154,7 +146,6 @@ describe('🎁 LE COFFRE SE CONSERVE SUR LE DÉFI (revoir son contenu)', () => {
       record: {
         gold: 1234,
         energy: 56,
-        scrap: 78,
         summonStones: 9,
         keys: 1,
         tickets: 0,
@@ -188,7 +179,6 @@ describe('🎁 LE COFFRE SE CONSERVE SUR LE DÉFI (revoir son contenu)', () => {
     expect(plan?.record).toEqual({
       gold: 10,
       energy: 0,
-      scrap: 0,
       summonStones: 0,
       keys: 0,
       tickets: 0,

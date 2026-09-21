@@ -21,7 +21,6 @@
 // Le coffre lit donc les VRAIES formules : une épave, un coût d'invocation, une séance de
 // donjons. Les rapports tiennent alors à tous les niveaux par construction, et suivront
 // d'eux-mêmes tout rééquilibrage futur de ces sources.
-import { HARVEST, travelOneWayMin, travelFactor } from './expedition';
 import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 import { comboTickets } from './sportTickets';
 
@@ -40,12 +39,12 @@ export const CHEST_MAX_MULT = 1.5;
  *
  *  ⚠️ Toutes les monnaies ne se valent pas, et il ne faut PAS les traiter pareil :
  *   • or et pierres se FARMENT (10 donjons par séance) → on s'ancre sur la séance ;
- *   • la ferraille ne se farme pas (65 par séance en recyclage, contre 148 pour UNE
- *     épave) → on garde l'ancre « épaves », déjà généreuse ;
+ *   • la part qui était en FERRAILLE (≈ 2 épaves) est RETIRÉE avec la devise (v0.998),
+ *     et PAS convertie en or : l'or du coffre vaut déjà ~une séance, et y ajouter 2 épaves
+ *     le portait à 1,5 séance au niveau 5 — le coffre aurait remplacé le farm ;
  *   • la clé est la plus rare de toutes : 0,2 par séance, soit 0,8 par SEMAINE. Une clé
  *     par coffre est déjà, à elle seule, plus qu'une semaine de donjons. */
 const CHEST = {
-  wrecks: 2, // ferraille ≈ 2 épaves (la ferraille ne se farme pas)
   sessionShare: 0.9, // or et pierres ≈ 1 séance de donjons
   energyCap: 120, // ⚡ complément borné, jamais un substitut au sport
   runsPerSession: 10, // ~400 ⚡ / coût plafonné à 40 par descente
@@ -53,7 +52,6 @@ const CHEST = {
 
 export interface ComboChest {
   gold: number;
-  scrap: number;
   summonStones: number;
   keys: number;
   energy: number;
@@ -62,12 +60,6 @@ export interface ComboChest {
   tickets: number;
 }
 
-/** Rendement d'UNE épave, à la formule exacte de la carte. */
-function wreckYield(level: number): number {
-  const L = Math.max(1, level);
-  const rtH = (2 * travelOneWayMin(L, 0.5)) / 60;
-  return Math.round((HARVEST.scrapBase + L * HARVEST.scrapPerLevel) * travelFactor(rtH));
-}
 /** Le meilleur donjon accessible à ce niveau — la référence de ce qu'on farme. */
 function bestDungeon(level: number) {
   return (
@@ -98,7 +90,6 @@ export function comboChestReward(sets: number, playerLevel: number): ComboChest 
   const L = Math.max(1, playerLevel);
   const m = chestEffortMult(sets);
   return {
-    scrap: Math.round(wreckYield(L) * CHEST.wrecks * m),
     summonStones: Math.max(1, Math.round(sessionStones(L) * CHEST.sessionShare * m)),
     // Une clé n'a presque aucune source dédiée, et c'est la seule porte du Labyrinthe :
     // une par semaine BIEN remplie, jamais plus.
@@ -123,7 +114,6 @@ interface ChestMessage {
   id: string;
   gold: number;
   energy?: number;
-  scrap?: number;
   summonStones?: number;
   key?: number;
   tickets?: number;
@@ -155,7 +145,6 @@ export function comboChestPlan(
       record: {
         gold: m.gold,
         energy: m.energy ?? 0,
-        scrap: m.scrap ?? 0,
         summonStones: m.summonStones ?? 0,
         keys: m.key ?? 0,
         tickets: m.tickets ?? 0,

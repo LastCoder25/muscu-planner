@@ -208,7 +208,7 @@ describe('ce que l’interception rapporte', () => {
     });
     expect(o.gold).toBe(0);
     expect(o.energy).toBe(0);
-    expect(o.scrap).toBe(0);
+    expect('scrap' in o).toBe(false);
     expect(o.summonStones).toBe(0);
     expect(o.key).toBe(0);
     expect(o.item).toBeNull();

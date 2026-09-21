@@ -79,8 +79,12 @@ export function yearOfPlay(xpParJour: number, nbTypes = BUILDING_TYPES.length): 
   }
   const L = computeLevel(xp).level;
   const plots = Math.min(plotsForLevel(L), types.length);
+  // ⚠️ L'ENCEINTE COMPTE (v0.998) : elle est sur la même courbe d'or que la cour, donc la
+  // part du plafond se mesure sur les DEUX — sinon un joueur qui néglige ses murs aurait
+  // l'air « au plafond » alors que la moitié du puits dort.
+  const bati = niv.slice(0, plots).reduce((a, b) => a + b, 0) + def.reduce((a, b) => a + b, 0);
   return {
-    part: niv.slice(0, plots).reduce((a, b) => a + b, 0) / (plots * L),
+    part: bati / ((plots + def.length) * L),
     bankDays: or / last,
     spentShare: spent / earned,
   };
