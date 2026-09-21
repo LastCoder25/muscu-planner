@@ -1200,10 +1200,12 @@ export const OWN_RANK = {
 /** Chance d'un objet quand ses monstres sont tous vaincus / partiellement (`rollDrop`). */
 export const DROP_CHANCE = { cleared: 0.6, partial: 0.3 };
 /** Modèle du volume de drops d'un niveau (lu par `dropsPerLevel`). */
+const SET_PIECES_PER_CLEAR = 0.4;
 const DROP_VOLUME = {
-  /** Objets par donjon nettoyé : 3 monstres × `DROP_CHANCE.cleared`, plus les pièces de boss
-   *  que ses pierres d'invocation financent (~0,4). */
-  perClear: 3 * DROP_CHANCE.cleared + 0.4,
+  /** Pièces de boss (de set) que les pierres d'invocation d'un donjon nettoyé financent. */
+  setPiecesPerClear: SET_PIECES_PER_CLEAR,
+  /** Objets par donjon nettoyé : 3 monstres × `DROP_CHANCE.cleared`, plus les pièces de boss. */
+  perClear: 3 * DROP_CHANCE.cleared + SET_PIECES_PER_CLEAR,
   /** Énergie d'un donjon — `DUNGEON_ENERGY_CAP` de data/dungeons.ts, recopiée : l'importer
    *  ici créerait un cycle (dungeons → proceduralContent → items). */
   energyPerClear: 40,
@@ -1216,12 +1218,30 @@ export function dropsPerLevel(level: number): number {
     (levelCost(level) * DROP_VOLUME.energyExtra * DROP_VOLUME.perClear) / DROP_VOLUME.energyPerClear
   );
 }
+/** Pièces d'UN set de voie qu'un niveau finance : les pièces de boss du niveau, réparties sur
+ *  les sets de voie (un boss tire son set au hasard, `randomVoieSetId`). C'est le VOLUME
+ *  auquel se rapporte la part de ton rang d'une pièce de set (cf. `ownChanceOf`). */
+export function setPiecesPerLevel(level: number): number {
+  return (
+    (dropsPerLevel(level) * DROP_VOLUME.setPiecesPerClear) / DROP_VOLUME.perClear / VOIE_SETS.length
+  );
+}
 /** Au-delà des 8 raretés (rangs de prestige 9-10) : plus de rang d'objet nouveau. */
 const beyondItemRanks = (c: CharacterRank) => c.rankIndex > RANK_ORDER.length - 1;
-function ownChanceOf(c: CharacterRank, playerLevel: number): number {
+/** Part de ton rang, rapportée au VOLUME de la source (objets qu'un niveau en fournit).
+ *  ⚠️ « AUTANT D'OBJETS DE TON RANG PAR NIVEAU, QUELLE QUE SOIT LA SOURCE » (v0.1023, mesuré).
+ *  Rapportée au volume des DROPS, elle s'appliquait telle quelle aux pièces de set, dont un
+ *  niveau ne fournit que ~5 par set (contre ~220 drops au niveau 30) : une pièce de set
+ *  tombait à son rang ~40 fois moins souvent qu'un drop — 0 à 2 % des pièces du niveau 25 au
+ *  75 — et un set complet ne valait presque rien (×1,00 à ×1,07) avant le niveau 81. */
+function ownChanceOf(
+  c: CharacterRank,
+  playerLevel: number,
+  volume: (level: number) => number = dropsPerLevel,
+): number {
   if (c.rankIndex === 0 || beyondItemRanks(c)) return 1;
   const pos = Math.max(1, Math.floor(playerLevel)) - rankStartLevel(c.rankIndex);
-  return Math.min(1, (OWN_RANK.atStart + OWN_RANK.perPos * pos) / dropsPerLevel(playerLevel));
+  return Math.min(1, (OWN_RANK.atStart + OWN_RANK.perPos * pos) / volume(playerLevel));
 }
 /** Chance qu'un objet tombe au rang DU JOUEUR (0..1). 1 au rang Bronze (rien en dessous) et
  *  au-delà des 8 raretés. */
@@ -1231,12 +1251,12 @@ export function ownRankChance(playerLevel: number): number {
 /** Rang de référence d'un contenu, rang du joueur, et part de son rang : gatée seulement quand
  *  la référence EST le rang du joueur (un contenu moins profond garde l'ancienne règle).
  *  `characterRank` n'est lu qu'une fois (appelé à chaque drop). */
-function rankGate(level: number, playerLevel?: number) {
+function rankGate(level: number, playerLevel?: number, volume?: (level: number) => number) {
   const player = playerLevel ?? level;
   const c = characterRank(player);
   const mine = Math.min(RANK_ORDER.length - 1, c.rankIndex);
   const ref = prestigeRankIndex(Math.min(level, player));
-  return { c, mine, ref, own: ref === mine ? ownChanceOf(c, player) : 1 };
+  return { c, mine, ref, own: ref === mine ? ownChanceOf(c, player, volume) : 1 };
 }
 
 export const STAR_JET = { top: 0.6, topLuck: 0.3, topMax: 0.9 };
@@ -1312,9 +1332,11 @@ export function rollTier(
   luck = 0,
   floorBonus = 0,
   playerLevel?: number,
+  /** Objets que cette SOURCE fournit par niveau (défaut : les drops, `dropsPerLevel`). */
+  volume?: (level: number) => number,
 ): { rank: Rarity; roll: number } {
   const l = Math.min(1, Math.max(0, luck) + Math.max(0, floorBonus) * FLOOR_LUCK);
-  const g = rankGate(level, playerLevel);
+  const g = rankGate(level, playerLevel, volume);
   if (g.own < 1 && rng() < g.own)
     return { rank: RANK_ORDER[g.ref]!, roll: rollStarJet(rng, g.c, l) };
   const t = rollCompanionTier(rng, g.own < 1 ? g.ref - 1 : g.ref, l);
@@ -1572,6 +1594,7 @@ export function rollSetPiece(
     opts.luck ?? 0,
     floorRanks,
     opts.playerLevel,
+    setPiecesPerLevel,
   );
   // ⚠️ L’AFFIXE #1 EST LA STAT MAJEURE NATURELLE DE L’EMPLACEMENT, comme un drop (v0.803,
   // mesuré). Il était tiré dans le THÈME du set selon l’emplacement : les voies défensives
