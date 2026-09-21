@@ -5,9 +5,19 @@
        ⚠️ ELLE NE DÉCIDE RIEN : tout est déjà tiré par le store (avec le pity persisté) ;
        l'écran ne fait que jouer le plan de `gachaReveal.ts`, où vivent le présage et le
        rythme — la règle de `siegeStage` et d'`arenaStage`. -->
-  <q-dialog :model-value="!!plan" maximized persistent @update:model-value="onClose">
+  <q-dialog :model-value="!!plan || !!pending" maximized persistent @update:model-value="onClose">
     <div class="ivk" :style="{ '--c': color }">
       <div class="ivk-top">
+        <!-- 🔙 Retour au choix du tirage : seulement tant que RIEN n'est payé (le tirage ne
+             part qu'au bout du maintien). Après, revenir laisserait croire qu'on annule. -->
+        <button
+          v-if="phase === 'hold' && !plan && !awaiting"
+          type="button"
+          class="ivk-skip"
+          @click="onClose(false)"
+        >
+          ‹ Retour
+        </button>
         <span class="ivk-title font-display">{{ title }}</span>
         <button
           type="button"
@@ -19,7 +29,7 @@
         </button>
         <!-- ⚠️ « Passer » dès le maintien : on coupe l'animation, jamais l'écran de résultat. -->
         <button
-          v-if="phase === 'hold' || phase === 'play'"
+          v-if="plan && (phase === 'hold' || phase === 'play')"
           type="button"
           class="ivk-skip"
           @click="skip"
@@ -35,7 +45,7 @@
              celle du tirage précédent (trouvé sur la maquette). -->
         <div ref="shaker" class="ivk-shaker" :style="{ '--c': color }">
           <div v-if="phase === 'hold'" class="ivk-cost">
-            <div class="ivk-cost-t font-display">Tirage ×{{ items.length }}</div>
+            <div class="ivk-cost-t font-display">Tirage ×{{ count }}</div>
             <div class="ivk-cost-s">
               {{ isLot ? 'Dix orbes, dix trésors' : 'B, A ou S : le cercle te le dira' }}
             </div>
@@ -148,7 +158,7 @@
               :disabled="!canAgain || busy"
               @click="emit('again')"
             >
-              🎰 Invoquer encore ×{{ items.length }}
+              🎰 Invoquer encore ×{{ count }}
             </button>
             <button type="button" class="ivk-btn" @click="onClose(false)">Fermer</button>
           </div>
@@ -196,12 +206,27 @@ const props = defineProps<{
   busy: boolean;
   /** Le lot d'un ×10, dans l'ordre du tirage (les étiquettes NOUVEAU / Éveil des cartes). */
   lot?: LotItem[] | null;
+  /**
+   * 🔙 Un tirage DEMANDÉ mais pas encore payé (1 ou 10). L'écran s'ouvre sur le cercle
+   * sans plan : on peut encore revenir au choix du tirage sans rien perdre. Le tirage
+   * n'est fait (`charged`) qu'une fois le cercle chargé à fond.
+   */
+  pending?: number | null;
 }>();
-const emit = defineEmits<{ (e: 'close'): void; (e: 'again'): void }>();
+const emit = defineEmits<{
+  (e: 'close'): void;
+  (e: 'again'): void;
+  /** Le cercle est chargé : le parent tire et paie MAINTENANT, puis fournit le plan. */
+  (e: 'charged'): void;
+}>();
 
 const sfx = useInvokeSfx();
 const items = computed<RevealItem[]>(() => props.plan?.items ?? []);
-const isLot = computed(() => items.value.length > 1);
+/** Combien de tirages : ceux du plan, sinon ceux demandés (avant paiement). */
+const count = computed(() => (props.plan ? items.value.length : (props.pending ?? 0)));
+const isLot = computed(() => count.value > 1);
+/** Cercle chargé, tirage demandé au parent, plan pas encore arrivé. */
+const awaiting = ref(false);
 
 type Phase = 'hold' | 'play' | 'await' | 'focus' | 'done';
 const phase = ref<Phase>('hold');
@@ -621,7 +646,7 @@ let gemAcc = 0;
 let tickAcc = 0;
 const holdMs = () => (isLot.value ? INVOKE.holdMsLot : INVOKE.holdMs);
 function startHold() {
-  if (phase.value !== 'hold') return;
+  if (phase.value !== 'hold' || awaiting.value) return;
   holding.value = true;
   sfx.humStart();
 }
@@ -654,6 +679,13 @@ function holdLoop(t: number) {
     if (charge.value >= 1) {
       holding.value = false;
       sfx.humStop();
+      // ⚠️ Pas encore payé : on demande le tirage MAINTENANT ; le cercle reste chargé
+      // (le rAF s'arrête, la vitesse reste au max) jusqu'à ce que le plan arrive.
+      if (!props.plan) {
+        awaiting.value = true;
+        emit('charged');
+        return;
+      }
       void (isLot.value ? playLot() : playSingle());
       return;
     }
@@ -1057,8 +1089,17 @@ function onClose(v?: boolean) {
 }
 
 watch(
-  () => props.plan,
-  (p) => {
+  () => [props.plan, props.pending] as const,
+  ([p, pend]) => {
+    const wasAwaiting = awaiting.value;
+    awaiting.value = false;
+    // Le plan demandé au bout du maintien arrive : on enchaîne SANS remettre le cercle à
+    // zéro (le joueur vient de le charger).
+    if (p && wasAwaiting) {
+      if (p.reduced) void nextTick(showFinal);
+      else void (isLot.value ? playLot() : playSingle());
+      return;
+    }
     run++;
     cancelAnimationFrame(holdRaf);
     holding.value = false;
@@ -1070,9 +1111,9 @@ watch(
     sigilRevealing.value = false;
     sigilSpeed.value = 12;
     color.value = GRADE_COLOR.B;
-    if (!p) return;
+    if (!p && !pend) return;
     // ⚠️ `prefers-reduced-motion` → l'état FINAL directement, pas une animation courte.
-    if (p.reduced) {
+    if (p?.reduced) {
       void nextTick(showFinal);
       return;
     }
@@ -1448,7 +1489,10 @@ onBeforeUnmount(() => {
 }
 .ivk-pwrap {
   position: relative;
-  width: min(58vw, 220px, 34cqh);
+  /* ⚠️ GRAND : c'est LE moment du tirage, le portrait doit presque remplir l'écran (un
+     médaillon de 220 px l'avait fait disparaître). Le 52cqh garde de la place dessous
+     pour le nom, la rareté et le bouton. */
+  width: min(80vw, 360px, 52cqh);
   aspect-ratio: 1;
 }
 .ivk-rays {
@@ -1481,14 +1525,16 @@ onBeforeUnmount(() => {
 .ivk-rim {
   position: absolute;
   inset: -10px;
-  border-radius: 50%;
+  border-radius: 28px;
   box-shadow: 0 0 30px 8px var(--c);
   opacity: 0;
 }
 .ivk-grade {
   position: absolute;
-  right: -14%;
-  top: -10%;
+  /* Collée au coin, pas au-delà : la carte fait presque la largeur de l'écran, une lettre
+     qui déborde de 14 % sortirait du cadre. */
+  right: -4%;
+  top: -6%;
   z-index: 2;
   font-size: 64px;
   line-height: 1;
@@ -1507,7 +1553,8 @@ onBeforeUnmount(() => {
 .ivk-portrait {
   position: absolute;
   inset: 0;
-  border-radius: 50%;
+  /* Carte arrondie et non disque : un cercle rognait les coins de l'illustration. */
+  border-radius: 18px;
   overflow: hidden;
   border: 3px solid var(--c);
   background: #0e0b08;

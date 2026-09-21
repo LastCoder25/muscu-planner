@@ -9,7 +9,9 @@
     :can-again="!!(lastWasLot ? payTen : payOne) && !busy"
     :busy="busy"
     @close="closeReveal"
-    @again="lastWasLot ? doPullTen() : doPull()"
+    :pending="pending"
+    @again="askPull(lastWasLot ? multiCount : 1)"
+    @charged="onCharged"
   />
   <!-- 🎰 LA FEUILLE DE TIRAGE (v0.989, demandé : « une tuile pour le tirage plutôt que dans
        les champions, on sépare les deux ; dans la tuile de tirage, deux grandes tuiles pour
@@ -32,7 +34,7 @@
         <!-- Deux GRANDES tuiles côte à côte : un geste, un choix. Chacune DIT son prix et
              ce qui manque plutôt que de se griser en silence (leçon du gris de la carte). -->
         <div class="sm-tiles">
-          <button class="sm-tile" :disabled="busy || !payOne" @click="doPull">
+          <button class="sm-tile" :disabled="busy || !payOne" @click="askPull(1)">
             <span class="st-glow" aria-hidden="true"></span>
             <span class="st-x font-display">×1</span>
             <span class="st-lab">Invoquer un champion</span>
@@ -46,7 +48,7 @@
             </small>
             <small v-else class="st-sub short">il manque {{ pullCost - mana }} 💠</small>
           </button>
-          <button class="sm-tile ten" :disabled="busy || !payTen" @click="doPullTen">
+          <button class="sm-tile ten" :disabled="busy || !payTen" @click="askPull(multiCount)">
             <span class="st-glow" aria-hidden="true"></span>
             <span class="st-x font-display">×{{ multiCount }}</span>
             <span class="st-lab">Invoquer {{ multiCount }} champions</span>
@@ -171,6 +173,37 @@ const revealVerdict = ref<{
 function closeReveal() {
   revealPlan.value = null;
   revealVerdict.value = null;
+  pending.value = null;
+}
+
+/**
+ * 🔙 Un tirage DEMANDÉ (1 ou 10), pas encore payé (v1.003, demandé : « un bouton pour
+ * revenir en arrière à la sélection du type de tirage »). L'écran du cercle s'ouvre tout
+ * de suite ; on ne tire et ne paie qu'au bout du maintien (`onCharged`). Revenir avant ne
+ * coûte donc rien — et le « retour » ne peut jamais laisser croire qu'il annule un tirage
+ * déjà crédité.
+ */
+const pending = ref<number | null>(null);
+function askPull(n: number) {
+  if (busy.value) return;
+  if (!(n > 1 ? payTen.value : payOne.value)) {
+    $q.notify({ type: 'negative', message: 'Pas assez de tickets ni de pierres de mana.' });
+    return;
+  }
+  revealPlan.value = null;
+  revealVerdict.value = null;
+  lastWasLot.value = n > 1;
+  pending.value = n;
+}
+async function onCharged() {
+  const n = pending.value;
+  if (!n) return;
+  try {
+    await (n > 1 ? doPullTen() : doPull());
+  } finally {
+    // Tiré (le plan prend le relais) ou refusé (l'écran se ferme) : la demande est close.
+    pending.value = null;
+  }
 }
 
 /**

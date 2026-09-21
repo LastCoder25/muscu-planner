@@ -177,6 +177,16 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         lot,
       }),
     ).toBeNull();
+    // …et le tirage DEMANDÉ mais pas payé (v1.003) : cercle ouvert SANS plan, bouton Retour.
+    expect(
+      await mountIt(GachaReveal, {
+        plan: null,
+        pending: 10,
+        verdict: null,
+        canAgain: false,
+        busy: false,
+      }),
+    ).toBeNull();
   }, 30_000);
   it('🕳️ RiftStage peint les corps, le gardien et la barre du groupe', async () => {
     const { default: RiftStage } = await import('@/components/RiftStage.vue');
