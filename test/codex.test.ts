@@ -10,7 +10,7 @@ import {
 import { CHAMPIONS } from '@/data/champions';
 import { awakenLevel, type Adventurer } from '@/lib/adventurers';
 import { MONSTERS } from '@/data/monsters';
-import { ITEM_SETS, RARITY_RANK, type Item, type ItemSlot } from '@/lib/items';
+import { ITEM_SETS, type Item, type ItemSlot } from '@/lib/items';
 
 const setItem = (slot: ItemSlot, setId: string): Item => ({
   id: `${setId}_${slot}`,
@@ -116,13 +116,10 @@ describe('🏅 la GALERIE DES CHAMPIONS', () => {
     expect(e.awaken).toBe(2);
   });
 
-  it('⚠️ la pyramide du genre : de la rareté la plus BASSE à la plus haute', () => {
-    // L_entrée en bas, la collection en haut — c_est aussi l_ordre dans lequel on les tire.
+  it('⚠️ la galerie va des A aux S — l_entrée, puis la collection', () => {
     const g = championGallery([]);
-    for (let i = 1; i < g.length; i++)
-      expect(RARITY_RANK[g[i]!.champ.rarity]).toBeGreaterThanOrEqual(
-        RARITY_RANK[g[i - 1]!.champ.rarity],
-      );
+    const lettres = g.map((e) => e.champ.grade);
+    expect(lettres.indexOf('S')).toBeGreaterThan(lettres.lastIndexOf('A'));
   });
 
   it('⚠️ un aventurier SANS champion ne compte pas — la galerie ne lit que les identités', () => {
@@ -145,7 +142,7 @@ describe('🏅 la GALERIE DES CHAMPIONS', () => {
   });
 });
 
-describe('🗂️ la collection rangée par rareté', () => {
+describe('🗂️ la collection rangée par lettre', () => {
   const owned = (id: string): Adventurer => ({
     id: 'a-' + id,
     name: id,
@@ -157,26 +154,25 @@ describe('🗂️ la collection rangée par rareté', () => {
     xp: 0,
   });
 
-  it('un groupe par rareté du roster, dans l_ordre de la galerie, et rien ne se perd', () => {
+  it('un groupe par lettre, S en tête, et rien ne se perd', () => {
     const g = championGroups([]);
-    const rarities = [...new Set(championGallery([]).map((e) => e.champ.rarity))];
-    expect(g.map((x) => x.rarity)).toEqual(rarities);
+    expect(g.map((x) => x.grade)).toEqual(['S', 'A']);
     expect(g.reduce((n, x) => n + x.total, 0)).toBe(CHAMPIONS.length);
     for (const x of g) {
       expect(x.entries.length).toBe(x.total);
-      expect(x.entries.every((e) => e.champ.rarity === x.rarity)).toBe(true);
+      expect(x.entries.every((e) => e.champ.grade === x.grade)).toBe(true);
     }
   });
 
   it('le compteur d_un groupe ne compte QUE ses possédés', () => {
     const c = CHAMPIONS[CHAMPIONS.length - 1]!;
     const g = championGroups([owned(c.id)]);
-    for (const x of g) expect(x.owned).toBe(x.rarity === c.rarity ? 1 : 0);
+    for (const x of g) expect(x.owned).toBe(x.grade === c.grade ? 1 : 0);
   });
 
   it('⚠️ un doublon compte UNE fois (on collectionne des identités)', () => {
     const c = CHAMPIONS[0]!;
     const g = championGroups([owned(c.id), { ...owned(c.id), id: 'bis' }]);
-    expect(g.find((x) => x.rarity === c.rarity)!.owned).toBe(1);
+    expect(g.find((x) => x.grade === c.grade)!.owned).toBe(1);
   });
 });

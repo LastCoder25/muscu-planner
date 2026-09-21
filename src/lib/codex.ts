@@ -6,14 +6,15 @@ import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS } from '@/data/dungeons';
 import {
   ITEM_SETS,
-  RARITY_RANK,
   SLOTS,
   type Equipped,
   type Item,
   type ItemSet,
-  type Rarity,
 } from './items';
-import { CHAMPIONS, type Champion } from '@/data/champions';
+import { CHAMPIONS, type Champion, type ChampionGrade } from '@/data/champions';
+
+/** Ordre des lettres de champion, du plus bas au plus haut (l'entrée, puis la collection). */
+const GRADE_ORDER: Record<ChampionGrade, number> = { A: 0, S: 1 };
 import { awakenLevel, type Adventurer } from './adventurers';
 
 /** Monstres « vaincus » = tous ceux des donjons NETTOYÉS (clear = tous tués). */
@@ -111,7 +112,7 @@ export function championGallery(advs: Adventurer[]): ChampionEntry[] {
   for (const a of advs) if (a.championId) mien.set(a.championId, a);
   return [...CHAMPIONS]
     .sort(
-      (a, b) => RARITY_RANK[a.rarity] - RARITY_RANK[b.rarity] || a.name.localeCompare(b.name, 'fr'),
+      (a, b) => GRADE_ORDER[a.grade] - GRADE_ORDER[b.grade] || a.name.localeCompare(b.name, 'fr'),
     )
     .map((champ) => {
       const a = mien.get(champ.id);
@@ -121,34 +122,34 @@ export function championGallery(advs: Adventurer[]): ChampionEntry[] {
 }
 
 export interface ChampionGroup {
-  rarity: Rarity;
+  grade: ChampionGrade;
   entries: ChampionEntry[];
-  /** Combien de champions de cette rareté on possède. */
+  /** Combien de champions de cette lettre on possède. */
   owned: number;
   total: number;
 }
 
 /**
- * 🗂️ LA GALERIE RANGÉE PAR RARETÉ (demandé : « voir ce qu'on a ou pas et leur rareté »).
- * Un compteur PAR rareté dit d'un coup d'œil où la collection a des trous — un total seul
- * (« 9/32 ») ne dit pas s'il manque des communs ou tout le haut de la pyramide.
+ * 🗂️ LA GALERIE RANGÉE PAR LETTRE (S puis A — refonte 2026-09-21). Un compteur PAR lettre
+ * dit d'un coup d'œil où la collection a des trous — un total seul (« 9/32 ») ne dit pas
+ * s'il manque des A ou des S.
  * ⚠️ DÉRIVÉE de `championGallery`, jamais une seconde lecture du vivier : les deux vues
- * (Codex et Panthéon) doivent compter pareil. Les raretés sans aucun champion au roster
- * ne sont pas rendues (un groupe « 0/0 » n'apprend rien).
+ * (Codex et Panthéon) doivent compter pareil. Une lettre sans aucun champion au roster
+ * n'est pas rendue (un groupe « 0/0 » n'apprend rien). Le S en tête : c'est la collection.
  */
 export function championGroups(advs: Adventurer[]): ChampionGroup[] {
   const groups: ChampionGroup[] = [];
   for (const e of championGallery(advs)) {
-    let g = groups.find((x) => x.rarity === e.champ.rarity);
+    let g = groups.find((x) => x.grade === e.champ.grade);
     if (!g) {
-      g = { rarity: e.champ.rarity, entries: [], owned: 0, total: 0 };
+      g = { grade: e.champ.grade, entries: [], owned: 0, total: 0 };
       groups.push(g);
     }
     g.entries.push(e);
     g.total++;
     if (e.owned) g.owned++;
   }
-  return groups;
+  return groups.sort((x, y) => GRADE_ORDER[y.grade] - GRADE_ORDER[x.grade]);
 }
 
 export interface CodexSummary {

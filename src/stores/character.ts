@@ -176,6 +176,8 @@ import {
   advGearRoles,
   advGearSellValue,
   canWearAdvGear,
+  rollAdvGear,
+  rollAdvGearDrop,
   lineageOf,
   normalizeAdvGearState,
   outfitFromItem,
@@ -212,11 +214,12 @@ import {
   grantChampion,
   wipeLegacyAdventurers,
   type GachaState,
-  pullChampion as rollChampion,
+  GACHA_VERSION,
   pullMany,
   multiPullCost,
-  type Granted,
 } from '@/lib/gacha';
+import type { LotItem } from '@/lib/gachaReveal';
+import { CHAMPIONS } from '@/data/champions';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGoldFx } from '@/composables/useGoldFx';
 
@@ -410,6 +413,7 @@ export const useCharacterStore = defineStore('character', () => {
       sinceTop: Math.max(0, Math.floor(Number(g.sinceTop) || 0)),
       sinceFloor: Math.max(0, Math.floor(Number(g.sinceFloor) || 0)),
       pulls: Math.max(0, Math.floor(Number(g.pulls) || 0)),
+      ...(g.v ? { v: Math.floor(Number(g.v)) } : {}),
     };
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
@@ -457,6 +461,7 @@ export const useCharacterStore = defineStore('character', () => {
     loaded.value = true;
     if (row.value && legacy.goldRefund > 0) await settlePantheon(uid, legacy.goldRefund);
     if (row.value) await settleWipe(uid);
+    if (row.value) await settleGachaReset(uid);
     return row.value;
   }
 
@@ -545,6 +550,44 @@ export const useCharacterStore = defineStore('character', () => {
       emoji: '🛕',
       title: 'Les champions remplacent les recrues',
       subtitle: `${partants} aventurier${partants > 1 ? 's' : ''} rendu${partants > 1 ? 's' : ''} au Panthéon — ${w.mana} 💠 pour les invoquer`,
+      rarity: 'legendary',
+    });
+  }
+
+  /**
+   * 🎰 LE RESET DE LA REFONTE S/A/B (2026-09-21, décidé par l'utilisateur) : les champions
+   * de l'ancien gacha partent, et chaque tirage déjà fait est rendu (110 💠 l'un).
+   *
+   * ⚠️ **MESURÉ EN BASE AVANT DE LE FAIRE** : tous les champions des comptes réels sont au
+   * niveau 1, sans Éveil — le reset ne coûte rien d'autre que les tirages, qu'on rend.
+   * ⚠️ Le compteur de garantie REPART À ZÉRO (décision de l'utilisateur).
+   * ⚠️ **ONE-SHOT, gardé par la version** (`gacha.v`) : écrit dans la MÊME requête que la
+   * compensation, donc impossible de compenser deux fois. Un échec réseau laisse la base
+   * intacte, on retentera au prochain chargement.
+   * ⚠️ L'équipement et les compagnons confiés ne sont que des ids sur le champion : les
+   * pièces restent au stock, les familiers et talents au sac.
+   */
+  async function settleGachaReset(userId: string) {
+    const cur = row.value;
+    if (!cur || cur.gacha.v === GACHA_VERSION) return;
+    const advs = cur.adventurers ?? [];
+    const partants = advs.filter((a) => !!a.championId).length;
+    const mana = cur.gacha.pulls * GACHA.pullCost;
+    try {
+      await persist(userId, {
+        adventurers: advs.filter((a) => !a.championId),
+        mana: cur.mana + mana,
+        gacha: { sinceTop: 0, sinceFloor: 0, pulls: 0, v: GACHA_VERSION },
+      });
+    } catch {
+      return;
+    }
+    if (!partants && !mana) return;
+    useGameFx().celebrate({
+      kind: 'unlock',
+      emoji: '🎰',
+      title: 'Le Panthéon change de visage',
+      subtitle: `Nouvelle invocation S / A / B — ${partants} champion${partants > 1 ? 's' : ''} rendu${partants > 1 ? 's' : ''}, +${mana} 💠 pour réinvoquer`,
       rarity: 'legendary',
     });
   }
@@ -939,71 +982,86 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /**
-   * 🎰 UN TIRAGE DE CHAMPION — le seul puits des pierres de mana.
+   * 🎰 TIRER — le seul puits des pierres de mana (refonte S/A/B, 2026-09-21).
    *
-   * ⚠️ **LE PITY EST LU ET RÉÉCRIT À CHAQUE FOIS**, dans la même requête que la mana et le
-   * vivier : c'est lui qui porte la garantie anti-malchance, et il n'y a ici aucun argent
-   * réel pour compenser une série noire.
+   * ⚠️ **UNE SEULE ÉCRITURE PAR GESTE**, lot compris : dix `persist` d'affilée, c'est dix
+   * allers-retours pendant lesquels une coupure laisserait le mana débité et une partie du
+   * lot perdue. Le pity, la mana, le vivier et le stock d'équipement partent ensemble.
    *
-   * ⚠️ **AUCUNE REMISE**, d'aucun bâtiment : c'est mot pour mot la remise de l'Autel des
-   * boss, retirée en v0.799 parce qu'elle coupait de moitié le lien farm → boss. Ici elle
-   * couperait failles → pierres de mana → tirage, qui est toute la boucle.
+   * ⚠️ **LE VIVIER S'ACCUMULE D'UN TIRAGE AU SUIVANT** : deux exemplaires du même champion
+   * dans un lot font un cran d'Éveil, pas deux entrées.
    *
-   * Rend ce qu'il faut pour l'annoncer (le champion, l'Éveil, la mana rendue), ou `null`
-   * si la mana manque — l'écran doit déjà l'empêcher, le store le garantit.
+   * ⚠️ **UN B N'EST PAS UN CHAMPION** : c'est une pièce d'équipement de lignée, tirée au
+   * rang du JOUEUR (`playerLevel`, requis). Lignée prise dans le vivier s'il y en a un
+   * (`rollAdvGearDrop`, plafonnée à ce qu'il peut porter) ; sinon au hasard parmi celles
+   * des champions — le tout premier tirage d'un compte vide ne doit pas rendre du vide.
+   *
+   * ⚠️ **AUCUNE REMISE** de bâtiment (cf. l'Autel des boss, v0.799). Rend `null` si la mana
+   * manque — l'écran doit déjà l'empêcher, le store le garantit.
    */
-  async function pullChampion(userId: string) {
+  async function pullGacha(userId: string, count: number, playerLevel: number) {
     const cur = row.value;
     if (!cur) return null;
-    if (cur.mana < GACHA.pullCost) return null;
-    const tirage = rollChampion(Math.random, cur.gacha);
-    const g = grantChampion(cur.adventurers ?? [], tirage.champion, {
-      id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-    });
-    await persist(userId, {
-      mana: cur.mana - GACHA.pullCost + g.manaBack,
-      adventurers: g.advs,
-      gacha: { ...tirage.pity, pulls: cur.gacha.pulls + 1 },
-    });
-    // ⚠️ Le niveau du joueur n'entre PAS ici : la rareté ne dépend que du pity, et ce que
-    // le champion peut MENER est plafonné à la LECTURE (`championRarity`, lue par
-    // `advStats`). Un paramètre qu'on ne lit pas finit par mentir.
-    return { ...g, champion: tirage.champion };
-  }
-
-  /**
-   * 🎰 UN LOT DE TIRAGES — 9 payés pour 10 (v0.968, demandé).
-   *
-   * ⚠️ **UNE SEULE ÉCRITURE POUR TOUT LE LOT.** Dix `persist` d'affilée, c'est dix
-   * allers-retours réseau pendant lesquels une coupure laisserait le mana débité et une
-   * partie des champions perdue. On accumule en mémoire, on écrit une fois.
-   *
-   * ⚠️ **ET LE VIVIER S'ACCUMULE D'UN TIRAGE AU SUIVANT** : sans ça, deux exemplaires du
-   * même champion dans un lot créeraient deux entrées au lieu d'un cran d'Éveil.
-   */
-  async function pullChampions(userId: string) {
-    const cur = row.value;
-    if (!cur) return null;
-    const cout = multiPullCost();
+    const cout = count > 1 ? multiPullCost() : GACHA.pullCost;
     if (cur.mana < cout) return null;
-    const lot = pullMany(Math.random, cur.gacha, GACHA.multiCount);
+    const lot = pullMany(Math.random, cur.gacha, count);
     let advs = cur.adventurers ?? [];
     let manaBack = 0;
-    const results: (Granted & { champion: (typeof lot.champions)[number] })[] = [];
-    for (const champion of lot.champions) {
-      const g = grantChampion(advs, champion, {
-        id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
-      });
-      advs = g.advs;
-      manaBack += g.manaBack;
-      results.push({ ...g, champion });
+    const pieces: Omit<AdvGear, 'id'>[] = [];
+    const results: LotItem[] = [];
+    for (const r of lot.results) {
+      if (r.champion) {
+        const g = grantChampion(advs, r.champion, {
+          id: `adv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+        });
+        advs = g.advs;
+        manaBack += g.manaBack;
+        results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
+      } else {
+        const piece = gachaPiece(advs, playerLevel);
+        pieces.push(piece);
+        results.push({
+          grade: r.grade,
+          champion: null,
+          gear: { name: piece.name, emoji: piece.emoji },
+          duplicate: false,
+          copies: 0,
+          manaBack: 0,
+        });
+      }
     }
     await persist(userId, {
       mana: cur.mana - cout + manaBack,
       adventurers: advs,
-      gacha: { ...lot.pity, pulls: cur.gacha.pulls + GACHA.multiCount },
+      gacha: { ...lot.pity, pulls: cur.gacha.pulls + count, v: GACHA_VERSION },
+      ...(pieces.length ? { adv_gear: withAdvGear(cur, pieces) } : {}),
     });
     return results;
+  }
+
+  /** La pièce d'un B. ⚠️ Chance 1 : le tirage a DÉJÀ décidé qu'il y a une pièce. */
+  function gachaPiece(advs: Adventurer[], playerLevel: number): Omit<AdvGear, 'id'> {
+    const lvl = Math.max(1, playerLevel);
+    const drop = rollAdvGearDrop(Math.random, advs, {
+      chance: 1,
+      level: lvl,
+      luck: 0,
+      playerLevel: lvl,
+    });
+    if (drop) return drop;
+    const lineage = CHAMPIONS[Math.floor(Math.random() * CHAMPIONS.length)]!.lineage;
+    return rollAdvGear(Math.random, { lineage, level: lvl, playerLevel: lvl });
+  }
+
+  /** Un tirage à l'unité. */
+  async function pullChampion(userId: string, playerLevel: number) {
+    const r = await pullGacha(userId, 1, playerLevel);
+    return r?.[0] ?? null;
+  }
+
+  /** 🎰 Un lot de 10 — 9 payés pour 10 (v0.968). */
+  async function pullChampions(userId: string, playerLevel: number) {
+    return pullGacha(userId, GACHA.multiCount, playerLevel);
   }
 
   // Bonus de passage de niveau (global). Verse l'énergie de chaque niveau franchi

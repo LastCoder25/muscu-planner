@@ -56,12 +56,11 @@ import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import {
   advAwaken,
   advBadges,
-  advNominalRarity,
+  advGradeBadge,
   advRank,
   advTitle,
   type Adventurer,
 } from '@/lib/adventurers';
-import { RANK_COLOR, RARITY_LABEL } from '@/lib/items';
 import { rankStarStr } from '@/lib/characterRank';
 
 const props = defineProps<{ adv: Adventurer; on: boolean; reason?: string | null }>();
@@ -69,12 +68,8 @@ const emit = defineEmits<{ toggle: [] }>();
 const rank = computed(() => advRank(props.adv));
 const badges = computed(() => advBadges(props.adv));
 const awaken = computed(() => advAwaken(props.adv));
-/** ⚠️ La rareté NOMINALE : ce qu'on a invoqué. Pour un legacy elle vaut sa strate, donc
- *  la tuile dit la même chose qu'avant. */
-const rar = computed(() => {
-  const r = advNominalRarity(props.adv);
-  return { label: RARITY_LABEL[r], color: RANK_COLOR[r] };
-});
+/** 🎰 Sa lettre (S / A) — ce qu'on a invoqué. Source unique : `advGradeBadge`. */
+const rar = computed(() => advGradeBadge(props.adv));
 </script>
 
 <style scoped lang="scss">

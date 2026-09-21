@@ -164,7 +164,7 @@ import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import {
-  advNominalRarity,
+  advGradeBadge,
   advAwaken,
   advRank,
   advRankProgress,
@@ -176,8 +176,6 @@ import {
 import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
 import {
   FAMILIAR_SLOT,
-  RANK_COLOR,
-  RARITY_LABEL,
   rarityRank,
   type Equipped,
   type Item,
@@ -235,8 +233,8 @@ const subLabel = computed(() => advSubtitle(props.adv));
  * ⚠️ **LA COULEUR, ELLE, RESTE PARTAGÉE** (`RANK_COLOR` est dérivée de `CHARACTER_RANKS`) :
  * c'est la même échelle de VALEUR, seuls les mots devaient diverger.
  */
-const nomColor = computed(() => RANK_COLOR[advNominalRarity(props.adv)]);
-const nomLabel = computed(() => RARITY_LABEL[advNominalRarity(props.adv)]);
+const nomColor = computed(() => advGradeBadge(props.adv).color);
+const nomLabel = computed(() => advGradeBadge(props.adv).label);
 const pct = computed(() => Math.round(advRankProgress(props.adv) * 100));
 /** L’avatar ne lit que l’emplacement et la RARETÉ de chaque pièce (la forme de l’arme lui
  *  est passée à part) : la règle d’apparence vit dans `advLooks` (lib), ce composant ne

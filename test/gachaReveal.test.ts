@@ -1,119 +1,116 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildReveal,
+  cellOf,
+  cellOfChampion,
   revealCrans,
   revealSpinMs,
   REVEAL,
+  GRADE_RANK,
   bestOfLot,
   lotOrder,
   buildLotReveal,
   type LotItem,
+  type RevealCell,
 } from '@/lib/gachaReveal';
-import { CHAMPIONS } from '@/data/champions';
-import { RANK_ORDER, RARITY_RANK, type Rarity } from '@/lib/items';
+import { CHAMPIONS, PULL_GRADES, type PullGrade } from '@/data/champions';
 import { mulberry32 } from '@/lib/combat';
 
-const champOf = (r: Rarity) => CHAMPIONS.find((c) => c.rarity === r)!;
-const commun = champOf('commun');
-const primordial = champOf('primordial');
+const champS = CHAMPIONS.find((c) => c.grade === 'S')!;
+const champA = CHAMPIONS.find((c) => c.grade === 'A')!;
+const S = cellOfChampion(champS);
+const A = cellOfChampion(champA);
+const B: RevealCell = { grade: 'B', emoji: '🗡️', name: 'Épée', championId: null };
+const cle = (c: RevealCell) => `${c.grade}|${c.championId}|${c.emoji}`;
 
 describe('🎰 LA ROULETTE — elle MET EN SCÈNE, elle ne décide rien', () => {
   it('⚠️ LE TIRÉ EST SUR stopIndex, et LA BANDE CONTINUE APRÈS LUI', () => {
-    // ⚠️ RÉÉCRIT (v0.962, demandé : « sans que le tirage soit en bout de ligne »). Il était
-    // en DERNIER : sa case arrivait dans le champ de vision et **on voyait la fin venir**,
-    // donc la roulette cessait d'en être une. Elle s'arrête désormais en plein élan.
-    for (const r of RANK_ORDER) {
-      const c = champOf(r);
-      const p = buildReveal(c, mulberry32(7));
-      expect(p.strip[p.stopIndex]!.id, r).toBe(c.id);
-      expect(p.strip.length - 1 - p.stopIndex, `queue après le tiré (${r})`).toBe(REVEAL.tail);
+    for (const t of [S, A, B]) {
+      const p = buildReveal(t, mulberry32(7));
+      expect(p.strip[p.stopIndex], t.grade).toBe(t);
+      expect(p.strip.length - 1 - p.stopIndex, `queue après le tiré (${t.grade})`).toBe(
+        REVEAL.tail,
+      );
       expect(REVEAL.tail).toBeGreaterThan(2);
     }
   });
 
-  it('⚠️ LES LEURRES COUVRENT TOUTE L’ÉCHELLE — sinon on lit le résultat avant l’arrêt', () => {
-    // LA propriété centrale : une bande qui ne montrerait que des communs pour un commun
-    // trahirait le tirage dès la première seconde, et il n'y aurait plus rien à attendre.
-    const p = buildReveal(commun, mulberry32(3));
-    const leurres = p.strip.filter((_, i) => i !== p.stopIndex);
-    const max = Math.max(...leurres.map((c) => RARITY_RANK[c.rarity]));
-    expect(max).toBeGreaterThanOrEqual(RARITY_RANK.rare);
-    // …et réciproquement pour un primordial : on doit voir passer du bas de gamme.
-    const q = buildReveal(primordial, mulberry32(3));
-    const min = Math.min(
-      ...q.strip.filter((_, i) => i !== q.stopIndex).map((c) => RARITY_RANK[c.rarity]),
-    );
-    expect(min).toBeLessThanOrEqual(RARITY_RANK.magique);
-  });
-
-  it('⚠️ JAMAIS DEUX FOIS LE MÊME D’AFFILÉE — un doublon se lit comme un arrêt', () => {
-    for (const s of [1, 2, 3, 11, 42]) {
-      const p = buildReveal(primordial, mulberry32(s));
-      for (let i = 1; i < p.strip.length; i++)
-        expect(p.strip[i]!.id, `graine ${s}, cran ${i}`).not.toBe(p.strip[i - 1]!.id);
+  it('⚠️ LES LEURRES COUVRENT TOUTES LES LETTRES — sinon on lit le résultat avant l’arrêt', () => {
+    // Une bande qui ne montrerait que des B pour un B trahirait le tirage dès la première
+    // seconde. Et réciproquement : un S doit voir passer du fond de tirage.
+    for (const t of [B, S]) {
+      const p = buildReveal(t, mulberry32(3));
+      const lettres = new Set(p.strip.filter((_, i) => i !== p.stopIndex).map((c) => c.grade));
+      expect(lettres.has('B'), t.grade).toBe(true);
+      expect(lettres.has('A') || lettres.has('S'), t.grade).toBe(true);
     }
   });
 
-  it('plus la rareté est haute, plus ça dure — le teasing du genre', () => {
-    for (let i = 1; i < RANK_ORDER.length; i++) {
-      const bas = RANK_ORDER[i - 1]!;
-      const haut = RANK_ORDER[i]!;
+  it('⚠️ JAMAIS DEUX FOIS LA MÊME CASE D’AFFILÉE — un doublon se lit comme un arrêt', () => {
+    for (const s of [1, 2, 3, 11, 42])
+      for (const t of [S, B]) {
+        const p = buildReveal(t, mulberry32(s));
+        for (let i = 1; i < p.strip.length; i++)
+          expect(cle(p.strip[i]!), `graine ${s}, cran ${i}`).not.toBe(cle(p.strip[i - 1]!));
+      }
+  });
+
+  it('plus la lettre est haute, plus ça dure — le teasing du genre', () => {
+    for (let i = 1; i < PULL_GRADES.length; i++) {
+      const bas = PULL_GRADES[i - 1]!;
+      const haut = PULL_GRADES[i]!;
       expect(revealSpinMs(haut)).toBeGreaterThan(revealSpinMs(bas));
       expect(revealCrans(haut)).toBeGreaterThan(revealCrans(bas));
     }
   });
 
   it('la bande a de quoi défiler, et l’aura ne se colore que sur la fin', () => {
-    const p = buildReveal(commun, mulberry32(5));
+    const p = buildReveal(B, mulberry32(5));
     expect(p.strip.length).toBeGreaterThanOrEqual(REVEAL.cransMin);
-    // ⚠️ Trop tôt, on saurait dès le début ; à 1, il n'y a pas de crescendo.
     expect(p.glowFrom).toBeGreaterThan(0.4);
     expect(p.glowFrom).toBeLessThan(1);
   });
 
   it('déterministe à graine égale — la mise en scène est rejouable', () => {
-    const a = buildReveal(primordial, mulberry32(9)).strip.map((c) => c.id);
-    const b = buildReveal(primordial, mulberry32(9)).strip.map((c) => c.id);
+    const a = buildReveal(S, mulberry32(9)).strip.map(cle);
+    const b = buildReveal(S, mulberry32(9)).strip.map(cle);
     expect(a).toEqual(b);
-    const c = buildReveal(primordial, mulberry32(10)).strip.map((x) => x.id);
+    const c = buildReveal(S, mulberry32(10)).strip.map(cle);
     expect(c).not.toEqual(a);
   });
 
   it('⚠️ `prefers-reduced-motion` : l’état FINAL, pas une animation raccourcie', () => {
-    const p = buildReveal(primordial, mulberry32(1), { reduced: true });
-    expect(p.strip).toHaveLength(1);
-    expect(p.strip[0]!.id).toBe(primordial.id);
+    const p = buildReveal(S, mulberry32(1), { reduced: true });
+    expect(p.strip).toEqual([S]);
     expect(p.stopIndex).toBe(0);
     expect(p.spinMs).toBe(0);
   });
 
   it('un pool d’un seul champion ne rend pas une bande vide', () => {
-    // Le jeu n'en produit jamais, mais une bande vide ferait tomber l'écran.
-    const p = buildReveal(commun, mulberry32(1), { pool: [commun] });
+    const p = buildReveal(A, mulberry32(1), { pool: [champA] });
     expect(p.strip.length).toBeGreaterThan(1);
-    expect(p.strip[p.stopIndex]!.id).toBe(commun.id);
+    expect(p.strip[p.stopIndex]).toBe(A);
   });
 });
 
-describe('🎰 LE LOT DE 10 — une seule roulette, sur le meilleur (v0.968)', () => {
-  const it0 = (r: Rarity, extra: Partial<LotItem> = {}): LotItem => ({
-    champion: champOf(r),
-    duplicate: false,
-    copies: 1,
-    manaBack: 0,
-    ...extra,
+const it0 = (g: PullGrade, extra: Partial<LotItem> = {}): LotItem => ({
+  grade: g,
+  champion: g === 'S' ? champS : g === 'A' ? champA : null,
+  gear: g === 'B' ? { name: 'Épée', emoji: '🗡️' } : null,
+  duplicate: false,
+  copies: g === 'B' ? 0 : 1,
+  manaBack: 0,
+  ...extra,
+});
+
+describe('🎰 LE LOT DE 10 — la révélation porte le meilleur (v0.968)', () => {
+  it('⚠️ LA RÉVÉLATION PORTE LA MEILLEURE LETTRE', () => {
+    expect(bestOfLot([it0('B'), it0('S'), it0('A')])!.grade).toBe('S');
   });
 
-  it('⚠️ LA ROULETTE PORTE LE PLUS RARE — c’est là que la tension doit se concentrer', () => {
-    // Dix roulettes d'affilée, c'est une demi-minute pour un seul geste : le genre
-    // met en scène le meilleur, puis récapitule.
-    const lot = [it0('commun'), it0('primordial'), it0('rare')];
-    expect(bestOfLot(lot)!.champion.rarity).toBe('primordial');
-  });
-
-  it('⚠️ À RARETÉ ÉGALE, LE PREMIER TIRÉ — sinon la mise en scène varierait pour un même lot', () => {
-    const a = it0('rare');
-    const b = it0('rare');
+  it('⚠️ À LETTRE ÉGALE, LE PREMIER TIRÉ — sinon la mise en scène varierait pour un même lot', () => {
+    const a = it0('A');
+    const b = it0('A');
     expect(bestOfLot([a, b])).toBe(a);
     expect(bestOfLot([b, a])).toBe(b);
   });
@@ -123,53 +120,54 @@ describe('🎰 LE LOT DE 10 — une seule roulette, sur le meilleur (v0.968)', (
     expect(lotOrder([])).toEqual([]);
   });
 
-  it('la grille va du plus RARE au plus commun, puis dans l’ordre du tirage', () => {
-    const lot = [it0('commun'), it0('legendaire'), it0('magique'), it0('legendaire')];
+  it('la grille va de la meilleure lettre à la plus basse, puis dans l’ordre du tirage', () => {
+    const lot = [it0('B'), it0('A'), it0('B'), it0('S'), it0('A')];
     const o = lotOrder(lot);
-    expect(o.map((x) => x.champion.rarity)).toEqual([
-      'legendaire',
-      'legendaire',
-      'magique',
-      'commun',
-    ]);
-    // ⚠️ À rareté égale l'ordre du TIRAGE est conservé : c'est ce qui a eu lieu.
-    expect(o[0]).toBe(lot[1]);
-    expect(o[1]).toBe(lot[3]);
+    expect(o.map((x) => x.grade)).toEqual(['S', 'A', 'A', 'B', 'B']);
+    expect(o[1]).toBe(lot[1]);
+    expect(o[2]).toBe(lot[4]);
   });
 
   it('⚠️ ON COPIE : trier la grille ne réordonne pas ce que le store a persisté', () => {
-    const lot = [it0('commun'), it0('primordial')];
+    const lot = [it0('B'), it0('S')];
     const avant = [...lot];
     lotOrder(lot);
     expect(lot).toEqual(avant);
   });
+
+  it('⚠️ UN B N’A PAS DE PORTRAIT : sa case dit la pièce, jamais un champion', () => {
+    const c = cellOf(it0('B'));
+    expect(c.championId).toBeNull();
+    expect(c.name).toBe('Épée');
+    expect(cellOf(it0('S')).championId).toBe(champS.id);
+  });
 });
 
 describe('🎰 LE LOT DE 10 — dix lignes qui défilent ensemble (v0.980)', () => {
-  const lotOf = (rs: Rarity[]): LotItem[] =>
-    rs.map((r) => ({ champion: champOf(r), duplicate: false, copies: 1, manaBack: 0 }));
-
-  it('UNE ligne par tirage, dans l’ORDRE DU TIRAGE, chacune arrêtée sur SON champion', () => {
-    const lot = lotOf(['rare', 'commun', 'primordial', 'magique']);
+  it('UNE ligne par tirage, dans l’ORDRE DU TIRAGE, chacune arrêtée sur SA case', () => {
+    const lot = [it0('A'), it0('B'), it0('S'), it0('B')];
     const plans = buildLotReveal(lot, mulberry32(3));
     expect(plans).toHaveLength(lot.length);
-    plans.forEach((p, i) => expect(p.strip[p.stopIndex]).toBe(lot[i]!.champion));
+    plans.forEach((p, i) => expect(cle(p.strip[p.stopIndex]!)).toBe(cle(cellOf(lot[i]!))));
   });
 
-  it('⚠️ LES ARRÊTS TOMBENT EN CASCADE : même rareté, chaque ligne s’arrête après celle du dessus', () => {
-    const plans = buildLotReveal(lotOf(Array(10).fill('commun')), mulberry32(5));
-    for (let i = 1; i < plans.length; i++) {
+  it('⚠️ LES ARRÊTS TOMBENT EN CASCADE : même lettre, chaque ligne s’arrête après celle du dessus', () => {
+    const plans = buildLotReveal(
+      Array.from({ length: 10 }, () => it0('B')),
+      mulberry32(5),
+    );
+    for (let i = 1; i < plans.length; i++)
       expect(plans[i]!.spinMs - plans[i - 1]!.spinMs).toBe(REVEAL.lotStagger);
-    }
   });
 
-  it('la durée garde sa part de rareté — une ligne qui traîne reste un bon présage', () => {
-    const [p] = buildLotReveal(lotOf(['primordial']), mulberry32(1));
-    expect(p!.spinMs).toBe(revealSpinMs('primordial'));
+  it('la durée garde sa part de lettre — une ligne qui traîne reste un bon présage', () => {
+    const [p] = buildLotReveal([it0('S')], mulberry32(1));
+    expect(p!.spinMs).toBe(revealSpinMs('S'));
+    expect(GRADE_RANK.S).toBeGreaterThan(GRADE_RANK.A);
   });
 
   it('⚠️ prefers-reduced-motion : aucune ligne n’anime, cascade comprise', () => {
-    const plans = buildLotReveal(lotOf(['rare', 'commun', 'epique']), mulberry32(2), {
+    const plans = buildLotReveal([it0('A'), it0('B'), it0('S')], mulberry32(2), {
       reduced: true,
     });
     expect(plans.every((p) => p.spinMs === 0)).toBe(true);

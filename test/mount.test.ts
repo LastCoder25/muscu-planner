@@ -19,8 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { createApp, h, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
-import { advNominalRarity, engageCap } from '@/lib/adventurers';
-import { RARITY_LABEL } from '@/lib/items';
+import { advGradeBadge, engageCap } from '@/lib/adventurers';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
 async function mountIt(
@@ -117,41 +116,48 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const pastilles = [...out.matchAll(/class="ap-rar[^"]*"[^>]*>([^<]*)</g)].map((m) =>
       m[1]!.trim(),
     );
-    const champs = (ROW.adventurers as Parameters<typeof advNominalRarity>[0][]).filter(
+    const champs = (ROW.adventurers as Parameters<typeof advGradeBadge>[0][]).filter(
       (a) => a.championId,
     );
     expect(pastilles).toHaveLength(ROW.adventurers.length);
-    // ⚠️ EN RARETÉ (Commun → Primordial), pas en rang : un champion porte les DEUX échelles,
-    // et les nommer pareil faisait lire « Or » à côté de « Bronze ★2 » (v0.962).
-    for (const a of champs) expect(pastilles).toContain(RARITY_LABEL[advNominalRarity(a)]);
+    // ⚠️ EN LETTRE (S / A, refonte 2026-09-21), jamais en rang : un champion porte les
+    // DEUX échelles, et les nommer pareil faisait lire « Or » à côté de « Bronze ★2 ».
+    for (const a of champs) expect(pastilles).toContain(advGradeBadge(a).label);
   }, 30_000);
 
   it('🎰 GachaReveal se monte, et respecte prefers-reduced-motion', async () => {
     const { default: GachaReveal } = await import('@/components/GachaReveal.vue');
-    const { buildReveal } = await import('@/lib/gachaReveal');
+    const { buildReveal, cellOfChampion } = await import('@/lib/gachaReveal');
     const { CHAMPIONS } = await import('@/data/champions');
     const { mulberry32 } = await import('@/lib/combat');
     const champ = CHAMPIONS[0]!;
     const v = { duplicate: false, copies: 1, manaBack: 0, awaken: 0 };
     // ⚠️ La ROULETTE : c'est le `watch` immédiat qui pose la transition, donc le chemin
     // qui a déjà cassé une fois (zone morte temporelle, v0.910).
-    const plan = buildReveal(champ, mulberry32(1));
+    const plan = buildReveal(cellOfChampion(champ), mulberry32(1));
     expect(
       await mountIt(GachaReveal, { plan, verdict: v, canAgain: true, busy: false }),
     ).toBeNull();
     // …et l'état FINAL direct, qui emprunte l'autre branche du même `watch`.
-    const court = buildReveal(champ, mulberry32(1), { reduced: true });
+    const court = buildReveal(cellOfChampion(champ), mulberry32(1), { reduced: true });
     expect(
       await mountIt(GachaReveal, { plan: court, verdict: v, canAgain: false, busy: false }),
     ).toBeNull();
     // …et le ×10 : dix lignes qui défilent (v0.980) — une autre branche du template.
     const { buildLotReveal } = await import('@/lib/gachaReveal');
-    const lot = CHAMPIONS.slice(0, 10).map((c) => ({
-      champion: c,
-      duplicate: false,
-      copies: 1,
-      manaBack: 0,
-    }));
+    // ⚠️ Un lot MÉLANGÉ : des champions ET des B (pièces), les deux branches du template.
+    const lot = CHAMPIONS.slice(0, 10).map((c, i) =>
+      i % 2
+        ? {
+            grade: 'B' as const,
+            champion: null,
+            gear: { name: 'Épée', emoji: '🗡️' },
+            duplicate: false,
+            copies: 0,
+            manaBack: 0,
+          }
+        : { grade: c.grade, champion: c, gear: null, duplicate: false, copies: 1, manaBack: 0 },
+    );
     expect(
       await mountIt(GachaReveal, {
         plan,
@@ -426,17 +432,17 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // l'appelant », qui fait rougir `raid.test`.
   }, 30_000);
 
-  it('📖 ChampionCollection se monte et compte par rareté', async () => {
+  it('📖 ChampionCollection se monte et compte par lettre', async () => {
     const { default: C } = await import('@/components/ChampionCollection.vue');
     const { CHAMPIONS } = await import('@/data/champions');
     const { championGroups } = await import('@/lib/codex');
     const advs = ROW.adventurers;
     let out = '';
     expect(await mountIt(C, { advs }, undefined, undefined, '/', (h) => (out = h))).toBeNull();
-    // Un en-tête par rareté, et le compteur de chacun rendu à l'écran.
+    // Un en-tête par lettre, et le compteur de chacun rendu à l'écran.
     expect(championGroups(advs).some((g) => g.owned > 0)).toBe(true);
     for (const g of championGroups(advs)) {
-      expect(out).toContain(RARITY_LABEL[g.rarity]);
+      expect(out).toContain(`>${g.grade}<`);
       expect(out).toContain(g.owned + '/' + g.total);
     }
     expect(out.match(/class="cc-tile/g)?.length).toBe(CHAMPIONS.length);

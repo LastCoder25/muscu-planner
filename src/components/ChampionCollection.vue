@@ -7,12 +7,12 @@
   <div class="cc">
     <section
       v-for="g in groups"
-      :key="g.rarity"
+      :key="g.grade"
       class="cc-grp"
-      :style="{ '--rk': RANK_COLOR[g.rarity] }"
+      :style="{ '--rk': GRADE_COLOR[g.grade] }"
     >
       <header class="cc-h">
-        <span class="cc-rar font-display">{{ RARITY_LABEL[g.rarity] }}</span>
+        <span class="cc-rar font-display">{{ g.grade }}</span>
         <span class="cc-bar" aria-hidden="true"
           ><i :style="{ width: (g.owned / g.total) * 100 + '%' }"
         /></span>
@@ -46,7 +46,7 @@
 import { computed } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { championGroups } from '@/lib/codex';
-import { RANK_COLOR, RARITY_LABEL } from '@/lib/items';
+import { GRADE_COLOR } from '@/data/champions';
 import type { Adventurer } from '@/lib/adventurers';
 
 const props = defineProps<{ advs: Adventurer[] }>();

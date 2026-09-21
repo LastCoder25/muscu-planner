@@ -34,17 +34,17 @@
           class="gx-row"
           :class="{ rev: r % 2 === 1 }"
           :style="{
-            '--c': RANK_COLOR[lp.strip[lp.stopIndex]!.rarity],
+            '--c': GRADE_COLOR[lp.strip[lp.stopIndex]!.grade],
             '--stop': `${lp.spinMs}ms`,
           }"
         >
           <div class="gx-rstrip" :style="rowStyle(lp)">
             <div v-for="(c, i) in lp.strip" :key="i" class="gx-rcell">
-              <div class="gx-rbox" :style="{ '--c': RANK_COLOR[c.rarity] }">
+              <div class="gx-rbox" :style="{ '--c': GRADE_COLOR[c.grade] }">
                 <span class="gx-remo"
-                  ><ChampionPortrait :champion-id="c.id">{{ c.emoji }}</ChampionPortrait></span
+                  ><ChampionPortrait :champion-id="c.championId">{{ c.emoji }}</ChampionPortrait></span
                 >
-                <span class="gx-rrar">{{ RARITY_LABEL[c.rarity] }}</span>
+                <span class="gx-rrar">{{ c.grade }}</span>
               </div>
             </div>
           </div>
@@ -65,12 +65,12 @@
             v-for="(c, i) in plan?.strip ?? []"
             :key="i"
             class="gx-cell"
-            :style="{ '--c': RANK_COLOR[c.rarity] }"
+            :style="{ '--c': GRADE_COLOR[c.grade] }"
           >
             <span class="gx-emo"
-              ><ChampionPortrait :champion-id="c.id" large>{{ c.emoji }}</ChampionPortrait></span
+              ><ChampionPortrait :champion-id="c.championId" large>{{ c.emoji }}</ChampionPortrait></span
             >
-            <span class="gx-crar">{{ RARITY_LABEL[c.rarity] }}</span>
+            <span class="gx-crar">{{ c.grade }}</span>
           </div>
         </div>
       </div>
@@ -82,13 +82,13 @@
         </div>
         <div class="gx-portrait">
           <span class="gx-pemo"
-            ><ChampionPortrait :champion-id="champ.id" large>{{
+            ><ChampionPortrait :champion-id="champ.championId" large>{{
               champ.emoji
             }}</ChampionPortrait></span
           >
         </div>
         <div class="gx-name font-display">{{ champ.name }}</div>
-        <div class="gx-rar font-display">{{ RARITY_LABEL[champ.rarity] }}</div>
+        <div class="gx-rar font-display">{{ champ.grade }}</div>
         <div class="gx-meta">{{ meta }}</div>
         <div v-if="verdictSub" class="gx-verdict">{{ verdictSub }}</div>
 
@@ -102,19 +102,20 @@
               v-for="(it, i) in lotRows"
               :key="i"
               class="gx-lot-c"
-              :style="{ '--c': RANK_COLOR[it.champion.rarity] }"
-              :title="`${it.champion.name} · ${RARITY_LABEL[it.champion.rarity]}`"
+              :style="{ '--c': GRADE_COLOR[it.grade] }"
+              :title="`${cellOf(it).name} · ${it.grade}`"
             >
               <span class="gl-emo"
-                ><ChampionPortrait :champion-id="it.champion.id">{{
-                  it.champion.emoji
+                ><ChampionPortrait :champion-id="cellOf(it).championId">{{
+                  cellOf(it).emoji
                 }}</ChampionPortrait></span
               >
-              <span class="gl-name">{{ it.champion.name }}</span>
-              <span class="gl-rar">{{ RARITY_LABEL[it.champion.rarity] }}</span>
+              <span class="gl-name">{{ cellOf(it).name }}</span>
+              <span class="gl-rar">{{ it.grade }}</span>
               <!-- Ce qui DISTINGUE une ligne : neuf ou déjà là (donc un cran d'Éveil,
                    ou du mana rendu quand il n'y a plus rien à réveiller). -->
-              <span v-if="!it.duplicate" class="gl-tag neuf">NOUVEAU</span>
+              <span v-if="!it.champion" class="gl-tag">🗡️ stock</span>
+              <span v-else-if="!it.duplicate" class="gl-tag neuf">NOUVEAU</span>
               <span v-else-if="it.manaBack > 0" class="gl-tag">+{{ it.manaBack }} 💠</span>
               <span v-else class="gl-tag">✨ {{ awakenLevel(it.copies) }}</span>
             </div>
@@ -144,17 +145,31 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
-import { RANK_COLOR, RARITY_LABEL, RARITY_RANK } from '@/lib/items';
+import { CHAMPION_BY_ID, GRADE_COLOR } from '@/data/champions';
 import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN } from '@/lib/adventurers';
 import { GACHA } from '@/lib/gacha';
-import { lotOrder, REVEAL_EASE, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
+import {
+  GRADE_RANK,
+  cellOf,
+  lotOrder,
+  REVEAL_EASE,
+  type RevealPlan,
+  type LotItem,
+} from '@/lib/gachaReveal';
 import { awakenLevel } from '@/lib/adventurers';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 
 const props = defineProps<{
   plan: RevealPlan | null;
   /** Ce que le tirage a donné — pour le dire APRÈS la roulette, jamais pendant. */
-  verdict: { duplicate: boolean; copies: number; manaBack: number; awaken: number } | null;
+  verdict: {
+    duplicate: boolean;
+    copies: number;
+    manaBack: number;
+    awaken: number;
+    /** Un B : une pièce d'équipement, pas un champion. */
+    piece?: boolean;
+  } | null;
   canAgain: boolean;
   busy: boolean;
   /** Le lot COMPLET quand le tirage était un ×10 — la roulette, elle, ne porte que
@@ -176,13 +191,16 @@ let timer: number | undefined;
 /** ⚠️ Le champion révélé est la case `stopIndex` — **pas la dernière** : la bande continue
  *  après lui pour qu'on ne voie pas la fin arriver (v0.962). On ne le reçoit pas deux fois. */
 const champ = computed(() => props.plan?.strip[props.plan.stopIndex] ?? null);
-const rarColor = computed(() => (champ.value ? RANK_COLOR[champ.value.rarity] : '#9A8F7E'));
-const rarClass = computed(() => (champ.value ? `r-${champ.value.rarity}` : ''));
+const rarColor = computed(() => (champ.value ? GRADE_COLOR[champ.value.grade] : '#9A8F7E'));
+const rarClass = computed(() => (champ.value ? `g-${champ.value.grade}` : ''));
 /** ⚠️ Ce qui DISTINGUE un champion : son rôle de convoi et ses signatures de combat —
  *  pas sa forme brute. C'est la leçon de la feuille de promotion (v0.752). */
 const meta = computed(() => {
-  const c = champ.value;
-  if (!c) return '';
+  const cell = champ.value;
+  if (!cell) return '';
+  // ⚠️ Un B n'est pas un champion : il n'a ni rôle ni signature.
+  const c = cell.championId ? CHAMPION_BY_ID.get(cell.championId) : null;
+  if (!c) return 'Pièce d’équipement de champion — rangée dans ton stock';
   const l = [
     ...(c.role ? [ADV_ROLE_LABEL[c.role]] : []),
     ...c.skills.map((s) => ADV_SIGNATURE_LABEL[s]).filter(Boolean),
@@ -193,8 +211,8 @@ const meta = computed(() => {
 /** Des étincelles, d'autant plus nombreuses que la rareté est haute — le langage de
  *  `GameFxOverlay`, repris ici pour que la révélation ressemble au reste du jeu. */
 const sparks = computed(() => {
-  const i = champ.value ? (RARITY_RANK[champ.value.rarity] ?? 0) : 0;
-  return 6 + i * 4;
+  const i = champ.value ? GRADE_RANK[champ.value.grade] : 0;
+  return 6 + i * 10;
 });
 function sparkStyle(i: number) {
   const a = (i / sparks.value) * Math.PI * 2;
@@ -208,12 +226,14 @@ function sparkStyle(i: number) {
 const verdictTitle = computed(() => {
   const v = props.verdict;
   if (!v) return 'Invocation';
+  if (v.piece) return '🎁 Pièce d’équipement';
   if (!v.duplicate) return '✨ Nouveau champion !';
   return v.manaBack > 0 ? '💠 Éveil au maximum' : '✨ Éveil !';
 });
 const verdictSub = computed(() => {
   const v = props.verdict;
   if (!v) return '';
+  if (v.piece) return 'Rangée dans ton stock — confie-la depuis l’onglet Stock.';
   if (!v.duplicate) return 'Il rejoint ton Panthéon — utilisable tout de suite.';
   return v.manaBack > 0
     ? `Il n’a plus rien à révéler : ${v.manaBack} 💠 te sont rendus.`

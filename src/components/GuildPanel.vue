@@ -113,27 +113,25 @@
           <span class="go-chev" :class="{ on: oddsOpen }">▸</span>
         </button>
         <div v-if="oddsOpen" class="g-odds">
-          <div v-for="r in odds.rates" :key="r.rarity" class="go-row">
-            <span class="go-rar" :style="{ color: RANK_COLOR[r.rarity] }">
-              {{ RARITY_LABEL[r.rarity] }}
+          <div v-for="r in odds.rates" :key="r.grade" class="go-row">
+            <span class="go-rar" :style="{ color: GRADE_COLOR[r.grade] }">
+              {{ r.grade }}{{ r.grade === 'B' ? ' · équipement' : '' }}
             </span>
             <span class="go-bar" aria-hidden="true"
               ><i
                 :style="{
                   width: (r.pct / odds.rates[0]!.pct) * 100 + '%',
-                  background: RANK_COLOR[r.rarity],
+                  background: GRADE_COLOR[r.grade],
                 }"
             /></span>
             <span class="go-pct font-display">{{ fmtOdds(r.pct) }} %</span>
           </div>
           <p class="go-note">
-            🎁 Un tirage sur {{ odds.floorEvery }} est garanti
-            <b>{{ RARITY_LABEL[odds.floorRarity] }}</b> ou mieux — et il le DÉPASSE
-            {{ Math.round(odds.aboveFloorPct) }} fois sur 100. Prochain dans
+            🎁 Un tirage sur {{ odds.floorEvery }} est garanti <b>A</b> ou mieux. Prochain dans
             <b>{{ odds.nextFloorIn }}</b> tirage{{ odds.nextFloorIn > 1 ? 's' : '' }}.
           </p>
           <p class="go-note">
-            👑 {{ RARITY_LABEL[TOP_RARITY] }} : <b>{{ fmtOdds(odds.topPct) }} %</b> à ton prochain
+            👑 S : <b>{{ fmtOdds(odds.topPct) }} %</b> à ton prochain
             tirage, garanti dans <b>{{ odds.nextTopIn }}</b
             >.
           </p>
@@ -229,16 +227,16 @@
               {{ ADV_STATUS_LABEL[s] }} <span class="g-tab-n">{{ rosterCounts.get(s) }}</span>
             </button>
           </div>
-          <!-- 🗂️ RANGÉ PAR RARETÉ (demandé) : une section par rareté, la plus haute en
-               tête ; dans chacune, rang puis étoiles décroissants (`groupByRarity`). -->
+          <!-- 🗂️ RANGÉ PAR LETTRE (S puis A) ; dans chacune, rang puis étoiles
+               décroissants (`groupByGrade`). -->
           <section
             v-for="g in rosterGroups"
-            :key="g.rarity"
+            :key="g.grade"
             class="adv-rgroup"
-            :style="{ '--c': RANK_COLOR[g.rarity] }"
+            :style="{ '--c': GRADE_COLOR[g.grade] }"
           >
             <div class="adv-rhead">
-              <span class="adv-rname font-display">{{ RARITY_LABEL[g.rarity] }}</span>
+              <span class="adv-rname font-display">{{ g.grade }}</span>
               <span class="adv-rn">{{ g.advs.length }}</span>
             </div>
             <div class="adv-grid">
@@ -781,7 +779,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
   ADV_STARS,
-  advNominalRarity,
+  advGradeBadge,
   advRarity,
   advRank,
   advRankProgress,
@@ -794,7 +792,7 @@ import {
   advRoleLevels,
   advSignatureLevels,
   advStats,
-  groupByRarity,
+  groupByGrade,
   advShapeLabel,
   ADV_ROLE_LABEL,
   ADV_SIGNATURE_LABEL,
@@ -810,10 +808,11 @@ import {
   type RevealPlan,
   type LotItem,
 } from '@/lib/gachaReveal';
-import { GACHA, TOP_RARITY, gachaOdds, multiPullCost } from '@/lib/gacha';
+import { GACHA, gachaOdds, multiPullCost } from '@/lib/gacha';
+import { GRADE_COLOR } from '@/data/champions';
+import { useProgress } from '@/composables/useProgress';
+import { cellOf } from '@/lib/gachaReveal';
 import {
-  RANK_COLOR,
-  RARITY_LABEL,
   rarityRank,
   gradeLabel,
   RARITY_RANK,
@@ -872,6 +871,8 @@ defineProps<{
 const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
 const auth = useAuthStore();
+/** Le niveau du JOUEUR : c'est lui qui fixe le rang d'une pièce B tirée. */
+const progress = useProgress();
 const char = useCharacterStore();
 
 // ── 🐾🧠 LA PAIRE : un compagnon et un talent, confiés à un HOMME ───────────────
@@ -1394,10 +1395,10 @@ const rosterShown = computed(() =>
     ? roster.value
     : roster.value.filter((a) => statusOf(a) === rosterFilter.value),
 );
-/** Ce qu'on affiche, rangé par rareté puis rang/étoiles (`groupByRarity`) — le filtre
+/** Ce qu'on affiche, rangé par lettre puis rang/étoiles (`groupByGrade`) — le filtre
  *  d'état s'applique AVANT le rangement. La lib COPIE : `advList` garde l'ordre du
  *  vivier, dont dépendent d'autres règles. */
-const rosterGroups = computed(() => groupByRarity(rosterShown.value, powerOf));
+const rosterGroups = computed(() => groupByGrade(rosterShown.value, powerOf));
 // ⚠️ Un filtre qui ne montre plus rien (le dernier convoi est rentré) se lit comme un vivier
 // vide : on retombe sur « Tous » dès que la catégorie choisie se vide.
 watch(rosterChips, (chips) => {
@@ -1411,8 +1412,8 @@ const rankOf = (a: Adventurer) => advRank(a);
 /** ⚠️ La rareté NOMINALE — ce qu'on a tiré. C'est elle qu'un gacha doit montrer, et elle
  *  parle la langue de la RARETÉ (Commun → Primordial), pas celle des rangs : un champion
  *  porte les DEUX échelles et les nommer pareil les confond (v0.962). */
-const nomOf = (a: Adventurer) => RARITY_LABEL[advNominalRarity(a)];
-const nomColor = (a: Adventurer) => RANK_COLOR[advNominalRarity(a)];
+const nomOf = (a: Adventurer) => advGradeBadge(a).label;
+const nomColor = (a: Adventurer) => advGradeBadge(a).color;
 const titleOf = (a: Adventurer) => advTitle(a);
 /** Son rang d'Éveil — 0 pour un legacy, qui n'a pas de doublons. */
 const awkOf = (a: Adventurer) => advAwaken(a);
@@ -1548,6 +1549,7 @@ const revealVerdict = ref<{
   copies: number;
   manaBack: number;
   awaken: number;
+  piece?: boolean;
 } | null>(null);
 function closeReveal() {
   revealPlan.value = null;
@@ -1583,7 +1585,7 @@ async function doPullTen() {
   if (!uid || busy.value) return;
   busy.value = true;
   try {
-    const lot = await char.pullChampions(uid);
+    const lot = await char.pullChampions(uid, progress.global.value.level);
     if (!lot) {
       $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
       return;
@@ -1595,10 +1597,11 @@ async function doPullTen() {
       copies: best.copies,
       manaBack: best.manaBack,
       awaken: awakenLevel(best.copies),
+      piece: !best.champion,
     };
     revealLot.value = lot;
     revealLotPlans.value = buildLotReveal(lot, Math.random, { reduced: reducedMotion() });
-    revealPlan.value = buildReveal(best.champion, Math.random, { reduced: reducedMotion() });
+    revealPlan.value = buildReveal(cellOf(best), Math.random, { reduced: reducedMotion() });
   } finally {
     busy.value = false;
   }
@@ -1609,7 +1612,7 @@ async function doPull() {
   if (!uid || busy.value) return;
   busy.value = true;
   try {
-    const r = await char.pullChampion(uid);
+    const r = await char.pullChampion(uid, progress.global.value.level);
     if (!r) {
       $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
       return;
@@ -1621,8 +1624,9 @@ async function doPull() {
       copies: r.copies,
       manaBack: r.manaBack,
       awaken: awakenLevel(r.copies),
+      piece: !r.champion,
     };
-    revealPlan.value = buildReveal(r.champion, Math.random, { reduced: reducedMotion() });
+    revealPlan.value = buildReveal(cellOf(r), Math.random, { reduced: reducedMotion() });
   } finally {
     busy.value = false;
   }
