@@ -5,24 +5,24 @@
 
 ## Décisions prises (2026-09-21)
 
-| # | Sujet | Décision |
-|---|---|---|
-| 1 | Ampleur | **Refonte complète** (tout le scénario B) |
-| 2 | Échelle du gacha | **Lettres S / A / B**, pas d'étoiles (déjà prises dans l'app). Champions **S et A** ; **B** = le fond du tirage (pièce d'équipement de lignée ou matériau d'Éveil), jamais un champion |
-| 3 | Armes / équipement des champions | **Aussi en S / A / B** : arme signature S, équipement de lignée en S/A/B (✅ v0.997, roster de 72 modèles, 65 illustrés). L'équipement **du héros** garde ses 8 raretés (il suit le sport, pas le gacha) |
-| 4 | Vedette | **Rotation chaque semaine** ; compteurs **comme dans le genre** (voir plus bas) ; un champion **nouveau** n'est tirable **qu'en vedette** pendant sa semaine de sortie, puis rejoint la standard |
-| 5 | Filet contre la malchance longue | **Points d'étincelle** : 1 point par tirage (standard comme vedette), échangé contre **un S choisi** à ~200 points (seuil à mesurer). Les points **ne s'effacent jamais** et n'ont aucun autre usage. Pas d'objectif de rythme imposé |
-| 6 | Arme signature des S | **Oui** |
-| 7 | Roster | **Ajouter des champions** au fil du temps |
-| 8 | Comptes existants | **Reset des champions + compensation** |
-| 9 | Écran | l'invocation a **son propre onglet** dans l'Aventure |
-| 10 | Niveau max | **le même pour tous** : celui du héros (S comme A) |
-| 11 | Le héros dans les failles | **il compte dans la limite de 3** |
-| 12 | Notification | **le lundi**, quand la vedette change (nom seulement) |
-| 13 | Revenu de mana | **Plat comme dans le genre** : le mana d'une faille ne suit plus son niveau ; cible **~1,5-2 tirages/jour** à tout niveau, 90 tirages en ~45-60 j pour un joueur qui ferme une faille par jour (valeur de référence : le niveau 30 actuel) |
-| 14 | Tirage offert | **entier** un jour d'entraînement, **demi** les autres jours |
-| 15 | Nouvelles sources | **Oui** : mana de première réussite (donjon, boss, palier du Labyrinthe) + petit événement hebdo lié à la vedette |
-| 16 | Compensation du reset | en pierres de mana, **selon les tirages déjà faits** ; le compteur de garantie **repart à zéro** |
+| #   | Sujet                            | Décision                                                                                                                                                                                                                                   |
+| --- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Ampleur                          | **Refonte complète** (tout le scénario B)                                                                                                                                                                                                  |
+| 2   | Échelle du gacha                 | **Lettres S / A / B**, pas d'étoiles (déjà prises dans l'app). Champions **S et A** ; **B** = le fond du tirage (pièce d'équipement de lignée ou matériau d'Éveil), jamais un champion                                                     |
+| 3   | Armes / équipement des champions | **Aussi en S / A / B** : arme signature S, équipement de lignée en S/A/B (✅ v0.1001, roster de 72 modèles, 65 illustrés). L'équipement **du héros** garde ses 8 raretés (il suit le sport, pas le gacha)                                  |
+| 4   | Vedette                          | **Rotation chaque semaine** ; compteurs **comme dans le genre** (voir plus bas) ; un champion **nouveau** n'est tirable **qu'en vedette** pendant sa semaine de sortie, puis rejoint la standard                                           |
+| 5   | Filet contre la malchance longue | **Points d'étincelle** : 1 point par tirage (standard comme vedette), échangé contre **un S choisi** à ~200 points (seuil à mesurer). Les points **ne s'effacent jamais** et n'ont aucun autre usage. Pas d'objectif de rythme imposé      |
+| 6   | Arme signature des S             | **Oui**                                                                                                                                                                                                                                    |
+| 7   | Roster                           | **Ajouter des champions** au fil du temps                                                                                                                                                                                                  |
+| 8   | Comptes existants                | **Reset des champions + compensation**                                                                                                                                                                                                     |
+| 9   | Écran                            | l'invocation a **son propre onglet** dans l'Aventure                                                                                                                                                                                       |
+| 10  | Niveau max                       | **le même pour tous** : celui du héros (S comme A)                                                                                                                                                                                         |
+| 11  | Le héros dans les failles        | **il compte dans la limite de 3**                                                                                                                                                                                                          |
+| 12  | Notification                     | **le lundi**, quand la vedette change (nom seulement)                                                                                                                                                                                      |
+| 13  | Revenu de mana                   | **Plat comme dans le genre** : le mana d'une faille ne suit plus son niveau ; cible **~1,5-2 tirages/jour** à tout niveau, 90 tirages en ~45-60 j pour un joueur qui ferme une faille par jour (valeur de référence : le niveau 30 actuel) |
+| 14  | Tirage offert                    | **entier** un jour d'entraînement, **demi** les autres jours                                                                                                                                                                               |
+| 15  | Nouvelles sources                | **Oui** : mana de première réussite (donjon, boss, palier du Labyrinthe) + petit événement hebdo lié à la vedette                                                                                                                          |
+| 16  | Compensation du reset            | en pierres de mana, **selon les tirages déjà faits** ; le compteur de garantie **repart à zéro**                                                                                                                                           |
 
 ### « Comme dans le genre » pour le compteur (Q3), concrètement
 
@@ -47,12 +47,14 @@ Voir la décision 5 : **points d'étincelle**, 1 par tirage, échangés contre u
 Chaque phase se livre, se teste et se pousse seule. Durées = estimation de travail, portes comprises.
 
 ### P0 — Verrouiller les chiffres (~½ j)
+
 - Répondre aux questions ouvertes (bas de page).
 - Mesures de départ, sur les vraies libs : débit S/an avec 3 raretés et plancher corrigé (cible
   10-20), seuil d'étincelle, écart de puissance B/A/S.
 - Relevé des 4 comptes réels : champions, copies, compteurs de pity, mana en réserve.
 
-### P1 — Trois raretés, rareté fixe (~1 j) · *le cœur* — ✅ LIVRÉ v0.989
+### P1 — Trois raretés, rareté fixe (~1 j) · _le cœur_ — ✅ LIVRÉ v0.989
+
 - `Champion.rarity` passe à **S / A** ; roster redistribué **~16 S · 16 A** (rôles répartis dans
   chaque rareté). **B** = pièces d'équipement de lignée et matériaux d'Éveil, jamais un champion.
 - Budget de stats sur 3 crans ; « un A investi bat un S nu » et « à Éveil égal la rareté gagne »
@@ -66,6 +68,7 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 - Écrans : Codex, collection du Panthéon, roulette, tuiles d'escorte en S/A/B.
 
 ### P2 — Bannières et compteurs (~1 j)
+
 - Bannière **standard** + bannière **vedette** hebdomadaire (1 S + 2 A), calendrier
   **déterministe** tiré de la semaine (aucun serveur, patron du boss mondial).
 - Compteurs séparés par famille, **50/50 + garantie** conservée, plancher « A ou mieux » au taux
@@ -74,27 +77,32 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 - **Historique** des 100 derniers tirages (jsonb, migration additive).
 
 ### P3 — Doublons, éclats, étincelle (~1 j)
+
 - Au-delà de C6 : des **éclats** au lieu du mana (**suppression de la boucle mana**).
 - **Points d'étincelle** (1 par tirage, jamais effacés) et échange contre un S choisi.
 - **Boutique d'éclats** : A choisi, cran d'Éveil d'un champion possédé, pièces d'équipement.
 - Mesures : débit S/an, saturation à 1/3/6/12 mois.
 
 ### P4 — Armes signature des S (~1 j)
+
 - Une arme par S, débloquée à **C1** ou achetable en boutique d'éclats.
 - Emplacement arme du champion ; effet propre à chaque arme (écrit, mesuré).
 - Pas de bannière d'armes (décision v0.556 maintenue).
 
 ### P5 — Écran d'invocation (~1 j)
+
 - **Onglet dédié** dans l'Aventure ; notification push le **lundi** quand la vedette change.
 - Deux onglets de bannière (vedette / standard), calendrier des prochaines vedettes.
 - **Lueur graduée** avant la révélation (bleu B, violet A, or S).
 - Compteurs de pity, 50/50 et points d'étincelle toujours visibles ; historique ; taux par bannière.
 
 ### P6 — Équipement des champions (~½-1 j)
+
 - Pièces de lignée sur les **camps** et les **failles**, et en boutique d'éclats.
 - ⚠️ Touche `ADV_GEAR.k` et la calibration des embuscades et sièges : à mesurer.
 
 ### P7 — Nouveaux champions (~½ j pour la chaîne, puis ~30 min par champion)
+
 - Chaîne d'ajout : données, portrait (script existant), tests de roster, place dans le calendrier.
 - Un nouveau champion n'est tirable **qu'en vedette** pendant sa semaine de sortie.
 - Rythme cible ~2 S (ou A) par mois, chacun vedette de sa semaine de sortie.
@@ -126,12 +134,12 @@ Joueur qui ferme 0, 1 ou 2 failles par jour et récolte les mines résiduelles p
 
 Sans la conversion des doublons (ce que la refonte prévoit) :
 
-| Niveau | 0 faille/j | 1 faille/j | 2 failles/j |
-|---|---|---|---|
-| 12 | 1,1/j · 90 tirages en **82 j** | 1,7/j · **56 j** | 1,5/j · 64 j |
-| 30 | 1,2/j · 79 j | 2,0/j · **48 j** | 1,7/j · 55 j |
-| 60 | 1,3/j · 69 j | 2,7/j · **36 j** | 2,2/j · 43 j |
-| 100 | 1,6/j · 59 j | 3,7/j · **29 j** | 2,9/j · 35 j |
+| Niveau | 0 faille/j                     | 1 faille/j       | 2 failles/j  |
+| ------ | ------------------------------ | ---------------- | ------------ |
+| 12     | 1,1/j · 90 tirages en **82 j** | 1,7/j · **56 j** | 1,5/j · 64 j |
+| 30     | 1,2/j · 79 j                   | 2,0/j · **48 j** | 1,7/j · 55 j |
+| 60     | 1,3/j · 69 j                   | 2,7/j · **36 j** | 2,2/j · 43 j |
+| 100    | 1,6/j · 59 j                   | 3,7/j · **29 j** | 2,9/j · 35 j |
 
 Avec la conversion actuelle (55 💠 par doublon de trop), l'année monte à **1,6 à 6,8 tirages/j**
 et la conversion devient la **première source** du jeu (60 à 340 💠/j, plus que les failles) :
@@ -155,13 +163,13 @@ jour** en moyenne, soit **90 tirages en ~45-60 jours**, et un ★5 vedette garan
 
 ### Sources, comparées
 
-| Genre (Genshin) | Part | Équivalent ici |
-|---|---|---|
-| Corvée quotidienne (missions du jour) | ~30 % | tirage offert à la connexion — **3× plus généreux**, et sans effort |
-| Endgame récurrent (Abysses, ~mensuel) | ~15-20 % | **failles** (quotidiennes) |
-| Événements de version | ~30-40 % | **rien** |
-| Première complétion (exploration, quêtes, succès) | gros au début, s'épuise | **rien** |
-| Boutique de poussière (doublons) | ~5 tirages/mois | conversion en mana (à remplacer par les éclats) |
+| Genre (Genshin)                                   | Part                    | Équivalent ici                                                      |
+| ------------------------------------------------- | ----------------------- | ------------------------------------------------------------------- |
+| Corvée quotidienne (missions du jour)             | ~30 %                   | tirage offert à la connexion — **3× plus généreux**, et sans effort |
+| Endgame récurrent (Abysses, ~mensuel)             | ~15-20 %                | **failles** (quotidiennes)                                          |
+| Événements de version                             | ~30-40 %                | **rien**                                                            |
+| Première complétion (exploration, quêtes, succès) | gros au début, s'épuise | **rien**                                                            |
+| Boutique de poussière (doublons)                  | ~5 tirages/mois         | conversion en mana (à remplacer par les éclats)                     |
 
 ### Propositions pour P0
 
@@ -206,12 +214,12 @@ parlent de trois domaines différents, mais il faudra que chaque écran n'en mon
 
 ### Comptes réels (relevé en base)
 
-| Compte | Mana | Tirages faits | Champions |
-|---|---|---|---|
-| Last | 892 | 11 | 11, tous niveau 1, aucun Éveil |
-| Cypher | 33 | 6 | 6, tous niveau 1 |
-| Mimi | 110 | 0 | 0 |
-| Knat | 0 | 0 | 0 |
+| Compte | Mana | Tirages faits | Champions                      |
+| ------ | ---- | ------------- | ------------------------------ |
+| Last   | 892  | 11            | 11, tous niveau 1, aucun Éveil |
+| Cypher | 33   | 6             | 6, tous niveau 1               |
+| Mimi   | 110  | 0             | 0                              |
+| Knat   | 0    | 0             | 0                              |
 
 **Compensation du reset** = tirages faits × 110 💠 : **Last +1 210 · Cypher +660** (le mana en
 réserve est conservé). Compteurs de garantie remis à zéro. Aucun niveau ni Éveil perdu (tous au
@@ -219,23 +227,23 @@ niveau 1) : le reset ne coûte rien d'autre.
 
 ### Tirage (simulé, 200 joueurs × 1 an)
 
-| Réglage | Valeur |
-|---|---|
-| S | **0,6 %** de base ; taux qui monte de **+6 pts par tirage dès le 74ᵉ**, garanti au **90ᵉ** |
-| A | **5,1 %** ; garanti tous les **10** (le 10ᵉ peut quand même être un S, au taux du moment) |
-| B | le reste (~94 %) : pièce d'équipement de lignée ou matériau d'Éveil |
-| Vedette | **50/50**, le S suivant garanti vedette si perdu ; compteurs partagés entre toutes les vedettes, séparés de la standard |
-| Étincelle | **200 points** (1 par tirage) → un S choisi |
+| Réglage   | Valeur                                                                                                                  |
+| --------- | ----------------------------------------------------------------------------------------------------------------------- |
+| S         | **0,6 %** de base ; taux qui monte de **+6 pts par tirage dès le 74ᵉ**, garanti au **90ᵉ**                              |
+| A         | **5,1 %** ; garanti tous les **10** (le 10ᵉ peut quand même être un S, au taux du moment)                               |
+| B         | le reste (~94 %) : pièce d'équipement de lignée ou matériau d'Éveil                                                     |
+| Vedette   | **50/50**, le S suivant garanti vedette si perdu ; compteurs partagés entre toutes les vedettes, séparés de la standard |
+| Étincelle | **200 points** (1 par tirage) → un S choisi                                                                             |
 
 Mesuré : **taux S effectif 1,56 %** (Genshin ≈ 1,6 %), pire attente moyenne entre deux S ≈ 80
 tirages. Selon le rythme de tirage :
 
-| Tirages/jour | 90 tirages en | S/an (dont vedette) | + S à l'étincelle | A/an |
-|---|---|---|---|---|
-| 0,95 | 95 j | 5,2 (3,3) | +1 | 41 |
-| 1,4 | 65 j | 7,9 (5,1) | +2 | 60 |
-| **1,9** | **48 j** | **10,8 (7,1)** | **+3** | **82** |
-| 2,4 | 38 j | 13,7 (9,0) | +4 | 103 |
+| Tirages/jour | 90 tirages en | S/an (dont vedette) | + S à l'étincelle | A/an   |
+| ------------ | ------------- | ------------------- | ----------------- | ------ |
+| 0,95         | 95 j          | 5,2 (3,3)           | +1                | 41     |
+| 1,4          | 65 j          | 7,9 (5,1)           | +2                | 60     |
+| **1,9**      | **48 j**      | **10,8 (7,1)**      | **+3**            | **82** |
+| 2,4          | 38 j          | 13,7 (9,0)          | +4                | 103    |
 
 Repère genre : un joueur gratuit de Genshin, ~1,8 tirage/jour, ~11 ★5/an.
 
@@ -244,12 +252,12 @@ Repère genre : un joueur gratuit de Genshin, ~1,8 tirage/jour, ~11 ★5/an.
 Prix du tirage inchangé (110 💠). Joueur type : 4 jours d'entraînement sur 7, une faille fermée
 par jour.
 
-| Source | 💠/jour | Tirages/jour |
-|---|---|---|
-| Tirage offert (entier les jours d'entraînement, demi sinon) | 86 | 0,78 |
-| Failles — **mana plat**, calé sur **~85 💠 pour une faille/jour** (≈ le niveau 20 actuel) | 85 | 0,77 |
-| Événement hebdo de la vedette : **2 tirages/semaine** | 31 | 0,29 |
-| **Total** | **~202** | **~1,85** |
+| Source                                                                                    | 💠/jour  | Tirages/jour |
+| ----------------------------------------------------------------------------------------- | -------- | ------------ |
+| Tirage offert (entier les jours d'entraînement, demi sinon)                               | 86       | 0,78         |
+| Failles — **mana plat**, calé sur **~85 💠 pour une faille/jour** (≈ le niveau 20 actuel) | 85       | 0,77         |
+| Événement hebdo de la vedette : **2 tirages/semaine**                                     | 31       | 0,29         |
+| **Total**                                                                                 | **~202** | **~1,85**    |
 
 - **Joueur qui ne combat pas** (aucune faille) : tirage offert + mines résiduelles (~15 💠/j) +
   événement ≈ **1,2 tirage/jour** — il tire, moins vite.
