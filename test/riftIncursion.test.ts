@@ -21,9 +21,8 @@ import {
   partyAllies,
   refAdvGear,
   refChampionAdv,
-  refCompanions,
   type PartyHero,
-  type RoadCompanions,
+  type EscortKit,
 } from '@/lib/caravan';
 import {
   RIFT_MAX_PARTY,
@@ -64,7 +63,6 @@ const team = (n: number, level: number): Adventurer[] =>
   Array.from({ length: n }, (_, i) => ({
     ...refChampionAdv(level, i),
     id: `adv_${i}`,
-    familiarId: `refFam${i % 3}`,
     gear: {
       weapon: `refGear${i}weapon`,
       armor: `refGear${i}armor`,
@@ -72,8 +70,7 @@ const team = (n: number, level: number): Adventurer[] =>
       relic: `refGear${i}relic`,
     },
   }));
-const road = (level: number, n: number): RoadCompanions => ({
-  familiars: refCompanions(level),
+const road = (level: number, n: number): EscortKit => ({
   talents: [],
   advGear: refAdvGear(level, n),
 });

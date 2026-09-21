@@ -702,7 +702,6 @@ import {
   departureRisk,
   heroDefends,
   guardUnits,
-  defenseLevel,
   ODDS_LABEL,
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -963,21 +962,13 @@ const riftHalos = computed(() =>
     radius: riftIrradiationRadius(p.spawnedAt, coarseNow.value),
   })),
 );
-/** Ce que l'escorte emmène sur la ROUTE. ⚠️ LA MÊME construction que ce que le store passe
- *  au départ : cette forme était rebâtie ici à la main, donc l'écran pouvait annoncer un
- *  pronostic calculé sur une autre réserve que celle qui partirait vraiment. Une seule
- *  définition désormais (`roadPoolOf`, lue par `sendCaravan`, `sendParty` et `companionCtx`).
- *  ⚠️ Sans horloge : un groupe ne change pas de familier en une minute, et le pronostic d'un
- *  camp n'a pas à se recalculer au rythme du tick. */
-const roadCtx = computed(() => char.roadCompanions);
-/** 🐾 Ce que chaque aventurier emmène avec lui AU REMPART. ⚠️ Plus un bonus GLOBAL de
- *  garnison : le compagnon suit son homme, donc faire partir quelqu’un retire AUSSI son
- *  familier de la défense — c’est précisément l’arbitrage que cet écran doit montrer. */
-const compCtx = computed(() => ({
-  ...roadCtx.value,
-  kennelLevel: defenseLevel(base.value?.defenses ?? [], 'kennel'),
-  now: coarseNow.value,
-}));
+/** Ce que l'escorte emmène — sur la ROUTE comme au REMPART : ses pièces d'équipement.
+ *  ⚠️ LA MÊME construction que ce que le store passe au départ (`escortKitOf`) : une
+ *  forme rebâtie ici pourrait annoncer un pronostic calculé sur une autre réserve que
+ *  celle qui partirait vraiment. Faire partir quelqu’un retire AUSSI ses pièces de la
+ *  défense — c’est précisément l’arbitrage que cet écran doit montrer. */
+const roadCtx = computed(() => char.escortKit);
+const compCtx = roadCtx;
 /** QUAND l’armée frappe. ⚠️ Un voyage qui se termine AVANT n’enlève personne à la
  *  bataille : sans cette date, l’alerte se déclenchait aussi pour un convoi de deux
  *  heures face à un siège dans huit (signalé par l’utilisateur). La règle elle-même vit
@@ -1510,7 +1501,7 @@ async function doClaimCaravan(id: string) {
   busyCaravan.value = true;
   try {
     // ⚠️ Une liste VIDE vaut « encaissé » (elle est truthy) ; c'est `null` qui dit l'échec.
-    const events = await char.claimCaravan(uid, id, heroLevel.value);
+    const events = await char.claimCaravan(uid, id);
     if (!events) return;
     reportStars.value = events.filter((e) => e.to > e.from).map((e) => e.id);
     reportId.value = id;
@@ -1760,7 +1751,7 @@ async function doClaim() {
   const uid = auth.user?.id;
   const m = lastOutcome.value;
   if (!uid || !m) return;
-  const done = await char.expeClaim(uid, m.id, Date.now(), heroLevel.value);
+  const done = await char.expeClaim(uid, m.id, Date.now());
   collectOpen.value = false;
   if (!done) return;
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];

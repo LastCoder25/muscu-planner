@@ -9,6 +9,8 @@ import {
 } from '@/data/champions';
 import {
   ADV_LEVEL_K,
+  CHAMPION_SOLO,
+  championSoloMult,
   AWAKEN,
   awakenLevel,
   advAvailable,
@@ -271,12 +273,40 @@ describe('🏅 les stats d’un champion', () => {
   it('le TOTAL vaut le budget × la courbe de niveau', () => {
     for (const L of [1, 12, 30, 60, 100]) {
       for (const c of [CHAMPIONS[0]!, CHAMPIONS[20]!, CHAMPIONS[31]!]) {
-        const attendu = championBudget(c.grade, L) * (1 + ADV_LEVEL_K * (L - 1));
+        const attendu =
+          championBudget(c.grade, L) * (1 + ADV_LEVEL_K * (L - 1)) * championSoloMult(L);
         expect(Math.abs(total(championStats(c, L)) - attendu), `${c.name} niv ${L}`).toBeLessThan(
           2,
         );
       }
     }
+  });
+
+  describe('🐾🧠 CE QUE LES COMPAGNONS APPORTAIENT, RENDU DANS LA BASE (v0.996)', () => {
+    // Familiers et talents sont réservés au héros ; la compensation a été MESURÉE (puissance
+    // d'un champion de référence avec familier + talent de référence → multiplicateur de
+    // stats équivalent) : ×1,09-1,13 jusqu'au niveau 45, ×1,15-1,22 au-delà de 60.
+    it('plat jusqu’au niveau 40, puis monte jusqu’au niveau 80, et plafonne', () => {
+      for (const L of [1, 12, 30, 40]) expect(championSoloMult(L)).toBe(CHAMPION_SOLO.base);
+      for (const L of [80, 100, 200]) expect(championSoloMult(L)).toBeCloseTo(CHAMPION_SOLO.top, 9);
+      let prev = 0;
+      for (let L = 1; L <= 100; L++) {
+        expect(championSoloMult(L)).toBeGreaterThanOrEqual(prev);
+        prev = championSoloMult(L);
+      }
+    });
+    it('dans la bande MESURÉE : jamais sous ×1,09 ni au-dessus de ×1,22', () => {
+      for (let L = 1; L <= 100; L++) {
+        expect(championSoloMult(L)).toBeGreaterThanOrEqual(1.09);
+        expect(championSoloMult(L)).toBeLessThanOrEqual(1.22);
+      }
+    });
+    it('⚠️ appliqué aux STATS du champion — c’est ce qui garde la puissance', () => {
+      // Sans lui (mutation), le total retomberait au budget × la courbe de niveau.
+      const c = CHAMPIONS[0]!;
+      const nu = championBudget(c.grade, 60) * (1 + ADV_LEVEL_K * 59);
+      expect(total(championStats(c, 60))).toBeGreaterThan(nu * 1.1);
+    });
   });
 
   it('⚠️ LA RÉPARTITION SUIT LA FORME — sinon la forme écrite ne servirait à rien', () => {

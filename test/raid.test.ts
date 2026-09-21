@@ -15,11 +15,6 @@ import {
   guardUnits,
   rampartGuard,
   adventurerPowers,
-  companionOptions,
-  autoCompanions,
-  type CompanionCtx,
-  talentOptions,
-  siegeFamiliarXp,
   siegeXp,
   raidDamage,
   corpsesFrom,
@@ -28,6 +23,7 @@ import {
   applyRaidOutcome,
   battleLootPills,
   emptyBase,
+  retireKennel,
   raidsEnabled,
   defenseReadiness,
   scavengerCount,
@@ -47,11 +43,6 @@ import {
   repairMsFor,
   isRepairing,
   totalRepairCost,
-  companionPairs,
-  companionPerks,
-  companionRankLabel,
-  companionSlots,
-  canCompanion,
   raidThreatSize,
   type RaidReport,
   type BattleField,
@@ -59,7 +50,6 @@ import {
   fmtSpan,
   DEFENSE_TYPES,
   type DefenseId,
-  fatigueMsFor,
   woundMsFor,
   woundRemainingMs,
   heroAvailable,
@@ -104,13 +94,7 @@ import { combatPower, type Combatant } from '@/lib/combat';
 import { talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, engageCap, type Adventurer } from '@/lib/adventurers';
-import {
-  companionEffects,
-  refChampionAdv,
-  escortCombatant,
-  caravanFamiliarXp,
-  canAdvFamiliar,
-} from '@/lib/caravan';
+import { refChampionAdv, escortCombatant } from '@/lib/caravan';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
 
 const H = 3600_000;
@@ -307,7 +291,7 @@ describe('silhouette de faction', () => {
       const raid = rollRaid(31337, L, 0, 0);
       const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
       expect(corpses, `niveau ${L}`).toHaveLength(raidSize(L, raid.faction));
-      const loot = lootCorpses(corpses, raid.faction, L, 1, 0, []);
+      const loot = lootCorpses(corpses, raid.faction, L, 1, []);
       expect(loot.gold, `niveau ${L}`).toBeGreaterThan(0);
     }
   });
@@ -438,6 +422,47 @@ describe('calibration du siège', () => {
       const sans = holdRate(lvl, lvl, true, 260);
       expect(avec, `niveau ${lvl}`).toBeGreaterThan(sans + 3);
     }
+  });
+
+  describe('🐾 LE CHENIL EST RETIRÉ, SON INVESTISSEMENT RENDU EN OR (v0.996 → v0.1005)', () => {
+    // Familiers et talents sont réservés au héros : le Chenil n'avait plus aucun effet.
+    // ⚠️ On rend ce qui a été PAYÉ : l'ancienne courbe de l'enceinte (28 × L^1,9 en or,
+    // 6 + L^1,45 en ferraille) — pas la courbe des bâtiments qu'elle a rejointe en v0.998,
+    // ×32 plus chère. La ferraille, retirée, est convertie au taux du retrait.
+    const avec = (lvl: number) => ({
+      ...emptyBase(1, 0),
+      defenses: [
+        { typeId: 'wall' as const, level: 12 },
+        { typeId: 'kennel' as unknown as 'wall', level: lvl },
+      ],
+    });
+    const paye = (lvl: number) => {
+      let or = 750;
+      for (let l = 1; l < lvl; l++) {
+        or += Math.round(28 * Math.pow(l, 1.9));
+        or += Math.round(6 + Math.pow(l, 1.45)) * SCRAP_TO_GOLD;
+      }
+      return or;
+    };
+    it('rend la pose et chaque cran, au prix PAYÉ, ferraille convertie', () => {
+      for (const lvl of [1, 2, 17, 32])
+        expect(retireKennel(avec(lvl)).gold, `niveau ${lvl}`).toBe(paye(lvl));
+    });
+    it('⚠️ bien SOUS le prix actuel : on ne rembourse pas au tarif d’aujourd’hui', () => {
+      let actuel = 750;
+      for (let l = 1; l < 32; l++) actuel += defenseUpgradeCost(l);
+      expect(retireKennel(avec(32)).gold).toBeLessThan(actuel / 5);
+    });
+    it('retire le Chenil et garde le reste de l’enceinte', () => {
+      expect(retireKennel(avec(9)).base.defenses).toEqual([{ typeId: 'wall', level: 12 }]);
+    });
+    it('⚠️ IDEMPOTENT : sans Chenil, rien n’est rendu et la base est la MÊME référence', () => {
+      const b = { ...emptyBase(1, 0), defenses: [{ typeId: 'wall' as const, level: 12 }] };
+      const r = retireKennel(b);
+      expect(r.base).toBe(b);
+      expect(r.gold).toBe(0);
+      expect(retireKennel(retireKennel(avec(5)).base).gold).toBe(0);
+    });
   });
 
   it('💰 l’enceinte suit la MÊME courbe d’or que les bâtiments de la cour (v0.998)', () => {
@@ -756,7 +781,7 @@ describe('cycle de vie', () => {
     expect(corpses).toEqual(nb.field!.corpses);
     expect(corpses.length).toBeGreaterThan(0);
     // …et ils valent vraiment quelque chose : c'est ce que le store crédite.
-    expect(lootCorpses(corpses, rep.faction, 40, 1, 0, []).gold).toBeGreaterThan(0);
+    expect(lootCorpses(corpses, rep.faction, 40, 1, []).gold).toBeGreaterThan(0);
   });
 
   it('🦴 le relevé du butin se lit en PUCES — une seule mise en forme pour deux écrans', () => {
@@ -823,9 +848,9 @@ describe('champ de bataille', () => {
     // La ferraille vient des épaves de la carte : en trouver sur un loup n'aurait aucun
     // sens. Le butin d'un siège, lui, dépend de qui attaquait.
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
-    const bandits = lootCorpses(corpses, 'bandits', 26, 1, 0, []);
-    const betes = lootCorpses(corpses, 'betes', 26, 1, 0, []);
-    const morts = lootCorpses(corpses, 'mortsvivants', 26, 1, 0, []);
+    const bandits = lootCorpses(corpses, 'bandits', 26, 1, []);
+    const betes = lootCorpses(corpses, 'betes', 26, 1, []);
+    const morts = lootCorpses(corpses, 'mortsvivants', 26, 1, []);
     expect(bandits.gold).toBeGreaterThan(betes.gold);
     // ⚠️ RÉÉCRIT : ce test exigeait des fragments 🧩 et de la poussière d'encre 🖋️ — il
     // verrouillait donc le défaut. Ces deux devises sont MORTES (plus aucune fonction ne
@@ -849,7 +874,7 @@ describe('champ de bataille', () => {
     // doit être élargi — pas contourné.
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
     for (const f of ['bandits', 'betes', 'mortsvivants'] as const) {
-      const l = lootCorpses(corpses, f, 26, 1, 0, []) as unknown as Record<string, number>;
+      const l = lootCorpses(corpses, f, 26, 1, []) as unknown as Record<string, number>;
       expect(l.fragments, f + ' : fragments').toBeUndefined();
       expect(l.inkDust, f + ' : encre').toBeUndefined();
     }
@@ -858,7 +883,7 @@ describe('champ de bataille', () => {
   it('les BÊTES rapportent des clés — rarement, et sur le cumul de la vague', () => {
     // Une clé par corps ferait du Labyrinthe un farm ; on cumule les chances sur la vague.
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
-    const betes = lootCorpses(corpses, 'betes', 26, 1, 0, []);
+    const betes = lootCorpses(corpses, 'betes', 26, 1, []);
     expect(betes.keys).toBeLessThanOrEqual(corpses.length);
     expect(betes.gold, 'même une bête traîne ce qu’elle a pris au village').toBeGreaterThan(0);
   });
@@ -871,7 +896,7 @@ describe('champ de bataille', () => {
     const deep = rollRaid(4242, playerLevel, 0, 0);
     const corpses = corpsesFrom(deep, { defeated: deep.groups.length } as never, 9);
     for (let s = 1; s < 40; s++) {
-      for (const it of lootCorpses(corpses, 'bandits', playerLevel, s, 0, []).items) {
+      for (const it of lootCorpses(corpses, 'bandits', playerLevel, s, []).items) {
         // Même tolérance que le reste du jeu : la cloche déborde d'au plus 2 rangs.
         expect(RANK_ORDER.indexOf(it.rarity)).toBeLessThanOrEqual(ceil + 2);
       }
@@ -879,510 +904,29 @@ describe('champ de bataille', () => {
   });
 });
 
-describe('🐾 LE CHENIL : combien de compagnons, et jusqu’à quel rang', () => {
-  // ⚠️ BLOC RÉÉCRIT. Il éprouvait une GARNISON de familiers postés au mur, qui n’existe
-  // plus : un familier est confié à un AVENTURIER et le suit partout — convoi comme
-  // rempart (demandé par l’utilisateur : « on n’a plus les 6 slots en défense pour les
-  // familiers, ils sont assignés aux aventuriers »). Le Chenil fait désormais comme la
-  // Guilde, **sauf qu’il ne crée pas les familiers** : il plafonne le NOMBRE et le RANG.
-  function fam(id: string, effect: string, value: number, extra: Partial<Item> = {}): Item {
-    return {
-      id,
-      slot: 'familiar',
-      name: id,
-      emoji: '🐺',
-      rarity: 'commun',
-      level: 10,
-      baseLevel: 10,
-      effect: { type: effect as never, value },
-      defXp: 0,
-      ...extra,
-    } as Item;
-  }
-  const adv = (id: string, familiarId?: string): Adventurer =>
-    ({ id, name: id, level: 10, path: [], xp: 0, familiarId }) as Adventurer;
-  const NOW = 1_700_000_000_000;
-  const ctx = (familiars: Item[], kennelLevel: number, heroFamiliarId?: string) => ({
-    familiars,
-    talents: [],
-    kennelLevel,
-    now: NOW,
-    advGear: [],
-    heroFamiliarId: heroFamiliarId ?? null,
+describe('🗡️ LE REMPART : chaque champion avec SES pièces (v0.996)', () => {
+  // ⚠️ BLOC RÉÉCRIT. Il éprouvait le Chenil et les compagnons confiés aux champions, retirés
+  // (décision de l’utilisateur : familiers et talents restent au HÉROS). Ce qui reste vrai :
+  // le même arbitre que le héros, et personne sans champion à la brèche.
+  const vrai = (): Adventurer => ({ ...refChampionAdv(60, 0), id: 'a', name: 'Ilyana' });
+  const nus = { advGear: [] };
+
+  it('⚠️ LE MÊME ARBITRE QUE LE HÉROS, sans bonus de terrain', () => {
+    const a = vrai();
+    const p = adventurerPowers([a]).get('a')!;
+    expect(p).toBe(combatPower(escortCombatant([a], a.name)));
+    expect(p).toBeGreaterThan(0);
   });
 
-  it('⚠️ UN COMPAGNON N’ÉPAULE QUE SON HOMME', () => {
-    // C’est tout l’objet de la refonte : le bonus était GLOBAL et s’appliquait
-    // identiquement à tout le monde. Il est désormais PORTÉ — donc l’aventurier sans
-    // compagnon ne profite de rien.
-    const f = fam('loup', 'damage_pct', 40);
-    const advs = [adv('a', 'loup'), adv('b')];
-    const u = guardUnits(26, advs, 99, ctx([f], 12));
-    expect(u).toHaveLength(2);
-    expect(u[0]!.damage).toBeGreaterThan(u[1]!.damage);
-  });
-
-  it('⚠️ PLUS AUCUN PLAFOND DE CANAL n’est nécessaire — le modèle se borne seul', () => {
-    // `GARRISON_CAP` existait parce que N familiers empilaient leurs bonus sur UN pool
-    // commun. Ici dix loups font dix combattants un peu meilleurs, jamais un mur
-    // imprenable : chacun reste au niveau d’UN aventurier.
-    const fams = Array.from({ length: 10 }, (_, k) => fam(`f${k}`, 'damage_pct', 40));
-    const advs = fams.map((f, k) => adv(`a${k}`, f.id));
-    const u = guardUnits(26, advs, 99, ctx(fams, 100));
-    const seul = guardUnits(26, [advs[0]!], 99, ctx([fams[0]!], 100))[0]!;
-    for (const x of u) expect(x.damage).toBe(seul.damage);
-  });
-
-  it('⚠️ LES PLACES DU CHENIL BORNENT — au-delà, il reste à la niche', () => {
-    const fams = Array.from({ length: 4 }, (_, k) => fam(`f${k}`, 'damage_pct', 40));
-    const advs = fams.map((f, k) => adv(`a${k}`, f.id));
-    // Chenil 2 → 2 places (1 + 2/2), donc deux compagnons engagés sur quatre confiés.
-    expect(companionSlots(2)).toBe(2);
-    expect(companionPairs(advs, ctx(fams, 2)).size).toBe(2);
-  });
-
-  it('⚠️ MÊME RYTHME QUE LA GUILDE : +1 tous les 2 niveaux', () => {
-    // « on recrute un aventurier tous les 2 lvl », donc on doit pouvoir en équiper un
-    // tous les 2 lvl — sinon le vivier grandit plus vite que ce qu’on sait armer.
-    expect(companionSlots(0)).toBe(0);
-    for (let l = 1; l <= 100; l++) expect(companionSlots(l)).toBe(engageCap(l));
-  });
-
-  it('⚠️ LE RANG MAXIMAL SUIT CE QU’ON PEUT DROPPER, plus la table de la Guilde', () => {
-    // ⚠️ IL EMPRUNTAIT `PROMO_LEVELS` — la table qui dit « à quel niveau on gagne une
-    // CLASSE », ce qui n'a aucun rapport avec « quel familier existe ». L'emprunt était
-    // commode tant que les deux échelles se ressemblaient ; dès que la cadence des
-    // promotions a bougé, le Chenil s'est mis à plafonner des familiers qu'on pouvait
-    // pourtant trouver — un verrou arbitraire sur un système voisin.
-    //
-    // Le cap ÉGALE désormais le rang qu’un familier tombe : il ne bloque jamais un familier
-    // de son rang, et il cesse de promettre du primordial à qui ne peut pas en dropper.
-    // ⚠️ Depuis la v0.857 ce rang est celui du JOUEUR (un rang tous les 10 niveaux), plus le
-    // plafond √ des objets — et `companionNextRankLevel` (PROMO_LEVELS = débuts de rang) dit
-    // enfin la même chose que le plafond.
-    for (const L of [1, 5, 12, 20, 28, 45, 61, 100]) {
-      // En RANG depuis la v0.833 : la même langue que les familiers qu’il héberge.
-      const attendu = rarityRank(RANK_ORDER[prestigeRankIndex(L)]!).name;
-      expect(companionRankLabel(L), `chenil ${L}`).toBe(attendu);
-    }
-    // Sans Chenil, on n'héberge personne.
-    expect(companionRankLabel(0)).toBe('—');
-  });
-  it('⚠️ HORS D’ÉCOLE = ÉCARTÉ AU COMBAT, pas seulement à l’écriture', () => {
-    // Un appariement rangé avant que le Chenil ne redescende se soigne tout seul, sans
-    // migration — même politique que les POI périmés.
-    const prime = fam('p', 'damage_pct', 40, { rarity: RANK_ORDER[7]! });
-    // ⚠️ Un aventurier PROMU jusqu’au sommet (v0.831) : un bleu ne mène plus un familier
-    // primordial, quel que soit le Chenil — ce test-ci éprouve le seul Chenil.
-    const advs = [{ ...refChampionAdv(100, 0), id: 'a', familiarId: 'p' } as Adventurer];
-    expect(companionPairs(advs, ctx([prime], 5)).size).toBe(0);
-    expect(companionPairs(advs, ctx([prime], PROMO_LEVELS[7]!)).size).toBe(1);
-  });
-
-  describe('🐾 UN FAMILIER TROP RARE POUR SA CLASSE (v0.831 ; « des familiers épiques sur des aventuriers bronze »)', () => {
-    // ⚠️ Le Chenil seul décidait : au Chenil 30 il héberge jusqu’à l’épique, donc un
-    // aventurier qui n’a que sa première classe (rang Bronze, classe commune) repartait avec
-    // une bête épique — pendant que la règle des talents lui refusait tout ce qui dépasse
-    // le commun. Même règle pour les deux compagnons désormais.
-    const epique = RANK_ORDER[4]!;
-    const bleu = (id: string, familiarId?: string) =>
-      ({ ...adv(id, familiarId), path: ['guerrier'] }) as Adventurer;
-    const promu = (id: string, familiarId?: string) =>
-      // 5 promotions (niveaux 1, 11, 21, 31, 41) : une classe ÉPIQUE.
-      ({ ...refChampionAdv(45, 0), id, name: id, familiarId }) as Adventurer;
-
-    it('la règle : la rareté du familier ne dépasse pas celle de la classe', () => {
-      const e = fam('e', 'damage_pct', 40, { rarity: epique });
-      expect(canAdvFamiliar(bleu('a'), e)).toBe(false);
-      expect(canAdvFamiliar(bleu('a'), fam('c', 'damage_pct', 40))).toBe(true);
-      // Une classe épique (5 promotions) le mène ; la limite est inclusive.
-      expect(canAdvFamiliar(promu('p'), e)).toBe(true);
-      expect(
-        canAdvFamiliar(promu('p'), fam('m', 'damage_pct', 40, { rarity: RANK_ORDER[5]! })),
-      ).toBe(false);
-    });
-
-    it('⚠️ écarté AU COMBAT : un appariement d’avant la règle se soigne seul', () => {
-      const e = fam('e', 'damage_pct', 40, { rarity: epique });
-      // Chenil 50 : il sait l’héberger, c’est bien la CLASSE qui refuse.
-      expect(canCompanion(e, 50)).toBe(true);
-      expect(companionPairs([bleu('a', 'e')], ctx([e], 50)).size).toBe(0);
-      expect(companionPairs([promu('a', 'e')], ctx([e], 50)).size).toBe(1);
-    });
-
-    it('le sélecteur ne le propose pas, et DIT pourquoi (compté à part du Chenil)', () => {
-      const e = fam('e', 'damage_pct', 40, { rarity: epique });
-      const c = fam('c', 'damage_pct', 40);
-      const a = bleu('a');
-      const r = companionOptions(a, [a], [e, c], 50, null);
-      expect(r.options.map((x) => x.id)).toEqual(['c']);
-      expect([r.tooRare, r.tooRareClass]).toEqual([0, 1]);
-    });
-
-    it('✨ Confier au mieux ne met jamais une bête épique à un bleu — ni pour la ville', () => {
-      const loupE = fam('loupE', 'damage_pct', 60, { rarity: epique });
-      const loupC = fam('loupC', 'damage_pct', 10);
-      // Des MARMOTTES : leur butin ne pèse rien dans la puissance, c’est donc le bloc « ville »
-      // qui les confie (un faucon, lui, passe par le gain de crit et ne l’éprouverait pas).
-      const marmE = fam('marmE', 'gold_pct', 60, { rarity: epique });
-      const marmC = fam('marmC', 'gold_pct', 10);
-      const advs = [bleu('a'), bleu('b'), bleu('c')];
-      const plan = autoCompanions(advs, ctx([loupE, loupC, marmE, marmC], 50));
-      const given = [...plan.values()].map((p) => p.familiarId).filter(Boolean);
-      expect(given).not.toContain('loupE');
-      expect(given).not.toContain('marmE');
-      expect(given).toContain('loupC');
-      expect(given).toContain('marmC');
-      // …et un aventurier qui sait le mener, lui, le reçoit.
-      const plan2 = autoCompanions([promu('p'), bleu('b')], ctx([loupE, loupC], 50));
-      expect(plan2.get('p')?.familiarId).toBe('loupE');
-    });
-  });
-
-  it('⚠️ UN TALENT TROP RARE POUR SA CLASSE ne vient pas au rempart (v0.805)', () => {
-    // La règle vit dans `canAdvTalent` ; ce test vérifie qu’elle est bien lue ICI, par
-    // l’appariement du siège, et pas seulement sur la route.
-    const commun = { id: 'tc', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
-    const rare = { ...commun, id: 'tr', xp: talentTierFloor(15) } as TalentInstance;
-    const c = (t: TalentInstance) => ({ ...ctx([], 50), talents: [t] });
-    const bleu = (tid: string) =>
-      ({ ...adv('a'), talentId: tid, path: ['guerrier'] }) as Adventurer;
-    expect(companionPairs([bleu('tc')], c(commun)).get('a')?.talent?.id).toBe('tc');
-    expect(companionPairs([bleu('tr')], c(rare)).size).toBe(0);
-  });
-
-  describe('🎯 LES SÉLECTEURS NE PROPOSENT QUE L’ÉQUIPABLE (v0.808)', () => {
-    const tal = (id: string, xp = 0) =>
-      ({ id, code: 't_dmg', xp, level: 1, equipped: false }) as TalentInstance;
-    const bleu = (id: string, o: Partial<Adventurer> = {}) =>
-      ({ ...adv(id), path: ['guerrier'], ...o }) as Adventurer;
-
-    it('⚠️ familiers : héros, rang, déjà confié — écartés ET comptés', () => {
-      const libre = fam('libre', 'damage_pct', 10);
-      const heros = fam('heros', 'damage_pct', 10);
-      const rare = fam('rare', 'damage_pct', 10, { rarity: RANK_ORDER[7]! });
-      const pris = fam('pris', 'damage_pct', 10);
-      const advs = [bleu('a'), bleu('b', { familiarId: 'pris' })];
-      const r = companionOptions(advs[0]!, advs, [libre, heros, rare, pris], 20, 'heros');
-      expect(r.options.map((f) => f.id)).toEqual(['libre']);
-      expect([r.hero, r.tooRare, r.taken, r.full]).toEqual([1, 1, 1, false]);
-    });
-
-    it('⚠️ son compagnon ACTUEL reste proposé, même si le Chenil est plein', () => {
-      const f = [fam('f0', 'damage_pct', 10), fam('f1', 'damage_pct', 10)];
-      // Chenil 1 = 1 place, déjà prise par b.
-      const advs = [bleu('a'), bleu('b', { familiarId: 'f1' })];
-      const plein = companionOptions(advs[0]!, advs, f, 1);
-      expect(plein.full).toBe(true);
-      expect(plein.options).toEqual([]);
-      const lui = companionOptions(advs[1]!, advs, f, 1);
-      expect(lui.options.map((x) => x.id)).toEqual(['f0', 'f1']);
-      // …y compris s’il est devenu trop rare pour le Chenil : on voit ce qu’il porte.
-      const prime = fam('p', 'damage_pct', 10, { rarity: RANK_ORDER[7]! });
-      const porteur = bleu('c', { familiarId: 'p' });
-      expect(companionOptions(porteur, [porteur], [prime], 1).options.map((x) => x.id)).toEqual([
-        'p',
-      ]);
-    });
-
-    it('⚠️ talents : trop rares pour SA classe et déjà confiés — écartés ET comptés', () => {
-      const advs = [bleu('a', { talentId: 'mien' }), bleu('b', { talentId: 'pris' })];
-      const r = talentOptions(advs[0]!, advs, [
-        tal('mien'),
-        tal('libre'),
-        tal('pris'),
-        tal('rare', talentTierFloor(15)),
-      ]);
-      expect(r.options.map((t) => t.id)).toEqual(['mien', 'libre']);
-      expect([r.tooRare, r.taken]).toEqual([1, 1]);
-    });
-  });
-
-  describe('✨ CONFIER AU MIEUX : un compagnon et un talent selon le profil', () => {
-    // ⚠️ Niveau 60 : au niveau 30 un talent rapporte 0 point de puissance (arrondi), aucun
-    // n'était attribué — et toutes les vérifications sur les talents étaient vides.
-    const tal = (id: string, code = 't_dmg', xp = 0) =>
-      ({ id, code, xp, level: 60, equipped: false }) as TalentInstance;
-    const classe = (id: string, cls: string, level = 60) =>
-      ({ ...adv(id), level, path: [cls] }) as Adventurer;
-    const apply = (advs: Adventurer[], m: ReturnType<typeof autoCompanions>) =>
-      advs.map((a) => ({
-        ...a,
-        familiarId: m.get(a.id)?.familiarId,
-        talentId: m.get(a.id)?.talentId,
-      }));
-    const total = (advs: Adventurer[], c: CompanionCtx) =>
-      [...adventurerPowers(advs, c).values()].reduce((s, p) => s + p, 0);
-
-    it('⚠️ les exclusions des sélecteurs : héros, rang du Chenil, places, talent trop rare, talent du héros', () => {
-      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
-      const c: CompanionCtx = {
-        ...ctx(
-          [
-            fam('heros', 'damage_pct', 90),
-            fam('prime', 'damage_pct', 90, { rarity: RANK_ORDER[7]! }),
-            fam('f1', 'damage_pct', 20),
-            fam('f2', 'max_pv_pct', 20),
-            fam('f3', 'damage_pct', 10),
-          ],
-          2,
-          'heros',
-        ),
-        talents: [
-          tal('mien', 't_dmg'),
-          tal('rare', 't_dmg', talentTierFloor(15)),
-          tal('t1'),
-          tal('t2', 't_pv'),
-        ],
-        heroTalentIds: ['mien'],
-      };
-      const m = autoCompanions(advs, c);
-      const f = [...m.values()].map((x) => x.familiarId).filter(Boolean);
-      const t = [...m.values()].map((x) => x.talentId).filter(Boolean);
-      expect(f).not.toContain('heros');
-      expect(f).not.toContain('prime');
-      expect(f.length).toBeLessThanOrEqual(companionSlots(2));
-      expect(new Set(f).size).toBe(f.length);
-      expect(t).not.toContain('mien');
-      expect(t).not.toContain('rare');
-      expect(new Set(t).size).toBe(t.length);
-    });
-
-    it('⚠️ chacun reçoit ce qui augmente le plus SA puissance — le profil décide', () => {
-      // Un seul aventurier et plusieurs familiers : le choix est l'optimum mesuré par l'arbitre.
-      const fams = [
-        fam('dmg', 'damage_pct', 25),
-        fam('pv', 'max_pv_pct', 25),
-        fam('red', 'dmg_reduction_pct', 12),
-      ];
-      for (const cls of ['guerrier', 'homme_armes', 'archer', 'mage']) {
-        const a = [classe('a', cls)];
-        const c = ctx(fams, 50);
-        const got = autoCompanions(a, c).get('a')!.familiarId;
-        const powerWith = (id?: string) => total([{ ...a[0]!, familiarId: id }], c);
-        const best = Math.max(...fams.map((f) => powerWith(f.id)));
-        // La puissance AFFICHÉE est arrondie : deux familiers peuvent y être à égalité. On exige
-        // que le choix atteigne la meilleure, égalités comprises — et qu'il existe.
-        expect(got, cls).toBeDefined();
-        expect(powerWith(got), cls).toBe(best);
-      }
-    });
-
-    it('⚠️ un familier unique va à celui qui en tire LE PLUS, pas au premier du vivier', () => {
-      const f = [fam('loup', 'damage_pct', 30)];
-      const c = ctx(f, 50);
-      const advs = [classe('faible', 'homme_armes', 10), classe('fort', 'guerrier', 60)];
-      const m = autoCompanions(advs, c);
-      const gainOf = (id: string) =>
-        total(
-          advs.map((a) => (a.id === id ? { ...a, familiarId: 'loup' } : a)),
-          c,
-        ) - total(advs, c);
-      const attendu = gainOf('faible') > gainOf('fort') ? 'faible' : 'fort';
-      expect(m.get(attendu)!.familiarId).toBe('loup');
-    });
-
-    it('⚠️ le résultat ne fait jamais PERDRE de puissance, et bat l’absence de compagnons', () => {
-      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
-      const c: CompanionCtx = {
-        ...ctx([fam('f1', 'damage_pct', 20), fam('f2', 'max_pv_pct', 20)], 50),
-        talents: [tal('t1'), tal('t2', 't_pv')],
-      };
-      const after = apply(advs, autoCompanions(advs, c));
-      const p0 = adventurerPowers(advs, c);
-      const p1 = adventurerPowers(after, c);
-      for (const a of advs) expect(p1.get(a.id)!).toBeGreaterThanOrEqual(p0.get(a.id)!);
-      expect(total(after, c)).toBeGreaterThan(total(advs, c));
-    });
-
-    it('⚠️ la marmotte est confiée s’il reste une place — son butin vaut pour la ville', () => {
-      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes')];
-      const avecPlace = autoCompanions(
-        advs,
-        ctx([fam('loup', 'damage_pct', 20), fam('marmotte', 'gold_pct', 30)], 50),
-      );
-      expect([...avecPlace.values()].map((x) => x.familiarId)).toContain('marmotte');
-      // Chenil 1 = 1 place : elle revient au familier qui renforce vraiment.
-      const unePlace = autoCompanions(
-        advs,
-        ctx([fam('loup', 'damage_pct', 20), fam('marmotte', 'gold_pct', 30)], 1),
-      );
-      expect([...unePlace.values()].map((x) => x.familiarId).filter(Boolean)).toEqual(['loup']);
-    });
-
-    it('⚠️ les places du Chenil bornent, même quand tout le monde gagnerait', () => {
-      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
-      const fams = [
-        fam('f1', 'damage_pct', 30),
-        fam('f2', 'damage_pct', 30),
-        fam('f3', 'damage_pct', 30),
-      ];
-      const f = (k: number) =>
-        [...autoCompanions(advs, ctx(fams, k)).values()].map((x) => x.familiarId).filter(Boolean);
-      expect(f(1)).toHaveLength(companionSlots(1));
-      expect(f(50)).toHaveLength(3);
-    });
-
-    it('⚠️ un talent trop rare va au promu qui peut le porter, jamais au commun', () => {
-      // Un commun À CÔTÉ d'un promu : le talent rare entre dans la réserve, mais seul le
-      // promu peut le recevoir, même si le commun en tirerait davantage.
-      const commun = classe('commun', 'guerrier', 90);
-      const promu = {
-        ...classe('promu', 'guerrier', 20),
-        path: ['guerrier', 'epeiste', 'duelliste', 'maitre_epeiste'],
-      };
-      const rare = tal('rare', 't_dmg', talentTierFloor(10));
-      const m = autoCompanions([commun, promu], { ...ctx([], 50), talents: [rare] });
-      expect(m.get('commun')!.talentId).toBeUndefined();
-      expect(m.get('promu')!.talentId).toBe('rare');
-    });
-
-    it('⚠️ une seconde marmotte n’est pas confiée : ces bonus ne s’empilent pas', () => {
-      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes'), classe('c', 'archer')];
-      const m = autoCompanions(
-        advs,
-        ctx([fam('m1', 'gold_pct', 30), fam('m2', 'gold_pct', 25)], 50),
-      );
-      expect([...m.values()].map((x) => x.familiarId).filter(Boolean)).toEqual(['m1']);
-    });
-
-    it('⚠️ les vérifications sur les talents ne sont pas vides : des talents SONT confiés', () => {
-      const advs = [classe('a', 'guerrier'), classe('b', 'homme_armes')];
-      const m = autoCompanions(advs, { ...ctx([], 50), talents: [tal('t1'), tal('t2', 't_pv')] });
-      expect(
-        [...m.values()]
-          .map((x) => x.talentId)
-          .filter(Boolean)
-          .sort(),
-      ).toEqual(['t1', 't2']);
-    });
-
-    it('⚠️ déterministe : deux appels donnent la même attribution', () => {
-      const advs = [classe('a', 'guerrier'), classe('b', 'guerrier')];
-      const c = ctx([fam('x', 'damage_pct', 20), fam('y', 'damage_pct', 20)], 50);
-      expect([...autoCompanions(advs, c)]).toEqual([...autoCompanions(advs, c)]);
-    });
-  });
-
-  it('⚠️ TROIS EXCLUSIONS, aucune décorative', () => {
-    const f = fam('loup', 'damage_pct', 40);
-    // (1) Ce que le HÉROS porte se bat ailleurs.
-    expect(companionPairs([adv('a', 'loup')], ctx([f], 50, 'loup')).size).toBe(0);
-    // (2) Un même familier apparié deux fois ne compte qu’une.
-    const deux = [adv('a', 'loup'), adv('b', 'loup')];
-    expect(companionPairs(deux, ctx([f], 50)).size).toBe(1);
-    // (3) Un id qui ne désigne plus rien est IGNORÉ, il ne fait pas tomber le combat.
-    expect(companionPairs([adv('a', 'vendu')], ctx([f], 50)).size).toBe(0);
-  });
-
-  it('⚠️ LE DRESSAGE compte au mur — et le Chenil ne le plafonne PLUS (v0.805)', () => {
-    // ⚠️ RÉÉCRIT. Il verrouillait « l’école plafonne l’élève ». L’utilisateur a demandé
-    // que le familier booste l’aventurier COMME LE HÉROS, dont le dressage n’est plafonné
-    // par aucun bâtiment. Le Chenil garde le NOMBRE de compagnons et leur RANG.
-    const brut = fam('a', 'damage_pct', 40);
-    const dresse = fam('a', 'damage_pct', 40, { xp: famXpForLevel(40) });
-    const advs = [adv('x', 'a')];
-    const u = (f: Item, k: number) => guardUnits(26, advs, 99, ctx([f], k))[0]!.damage;
-    expect(u(dresse, 50)).toBeGreaterThan(u(brut, 50));
-    expect(u(dresse, 2)).toBe(u(dresse, 50));
-  });
-
-  it('🦅🦫 LE RENSEIGNEMENT ET LE BUTIN NE S’EMPILENT PAS', () => {
-    // Les canaux de COMBAT sont portés par un homme (dix loups = dix combattants un peu
-    // meilleurs) ; ceux-ci valent pour la VILLE ENTIÈRE. Quinze faucons ne voient pas
-    // quinze fois plus loin — on garde le meilleur, un point c’est tout.
-    const faucons = [fam('f1', 'crit_pct', 20), fam('f2', 'crit_pct', 20)];
-    const advs = [adv('a', 'f1'), adv('b', 'f2')];
-    expect(companionPerks(advs, ctx(faucons, 50)).scoutBonus).toBe(1);
-    const marmottes = [fam('m1', 'gold_pct', 10), fam('m2', 'gold_pct', 30)];
-    const ma = [adv('a', 'm1'), adv('b', 'm2')];
-    // On garde LE MEILLEUR, pas la somme — avec la formule du héros (niveau d’objet, v0.805).
-    expect(companionPerks(ma, ctx(marmottes, 50)).lootPct).toBeCloseTo(
-      30 * familiarMult(marmottes[1]!),
-      5,
-    );
-  });
-
-  it('⚠️ UN COMPAGNON FATIGUÉ EST DIMINUÉ, jamais perdu ni blessé', () => {
-    // ⚠️ Ce test manquait, et son absence a failli coûter la mécanique : en passant la
-    // garnison aux compagnons, plus rien ne LISAIT `fatigueUntil` — `isFatigued` est
-    // devenu un export mort, que seule la porte `npm run dead` a signalé. Or c'est le
-    // SECOND levier de l'Infirmerie (`fatigueMsFor`) : sans lecteur, il était décoratif.
-    const frais = fam('loup', 'damage_pct', 40);
-    const lasse = fam('loup', 'damage_pct', 40, { fatigueUntil: NOW + 3600_000 });
-    const advs = [adv('a', 'loup')];
-    const d = (f: Item) => guardUnits(26, advs, 99, ctx([f], 50))[0]!.damage;
-    const nu = guardUnits(26, [adv('a')], 99, ctx([], 50))[0]!.damage;
-    expect(d(lasse)).toBeLessThan(d(frais));
-    // …mais il apporte ENCORE quelque chose : on ne perd jamais ce qu'on a élevé,
-    // sinon personne n'engagerait ses bons familiers (règle v0.663).
-    expect(d(lasse)).toBeGreaterThan(nu);
-    // Et la fatigue passe : une fois reposé, il revaut son plein.
-    const repose = fam('loup', 'damage_pct', 40, { fatigueUntil: NOW - 1 });
-    expect(d(repose)).toBe(d(frais));
-  });
-
-  describe('⚔️ LA PUISSANCE D’UN AVENTURIER, calculée comme celle du héros', () => {
-    const vrai = (familiarId?: string, talentId?: string): Adventurer => ({
-      // ⚠️ Niveau 60 : `combatPower` ARRONDIT à l’entier, et un petit aventurier (58 au niveau
-      // 26) noie un talent de niveau 1 dans l’arrondi — le test mesurerait l’arrondi.
-      ...refChampionAdv(60, 0),
-      id: 'a',
-      name: 'Ilyana',
-      familiarId,
-      talentId,
-    });
-    const tal = { id: 't1', code: 't_dmg', xp: 0, level: 1, equipped: false } as TalentInstance;
-    const pw = (a: Adventurer, c?: Parameters<typeof adventurerPowers>[1]) =>
-      adventurerPowers([a], c).get('a')!;
-
-    it('⚠️ LE MÊME ARBITRE QUE LE HÉROS, sans bonus de terrain', () => {
-      // `combatPower` du combattant que `escortCombatant` construit — ni une somme de
-      // stats, ni le multiplicateur de siège (un avantage de murs, pas de l’homme).
-      const a = vrai();
-      expect(pw(a)).toBe(combatPower(escortCombatant([a], a.name)));
-      expect(pw(a)).toBeGreaterThan(0);
-    });
-
-    it('⚠️ LE COMPAGNON ET LE TALENT CONFIÉS COMPTENT', () => {
-      const f = fam('loup', 'damage_pct', 40);
-      const nu = pw(vrai());
-      expect(pw(vrai('loup'), ctx([f], 50))).toBeGreaterThan(nu);
-      const avecTal = { ...ctx([], 50), talents: [tal] };
-      expect(pw(vrai(undefined, 't1'), avecTal)).toBeGreaterThan(nu);
-      // Les deux ensemble valent plus que chacun seul.
-      // Talent de PV, pas de dégâts : les deux axes se MULTIPLIENT dans la puissance, là où
-      // deux bonus de dégâts s’additionnent et se perdent dans l’arrondi d’un petit chiffre.
-      const lesDeux = { ...ctx([f], 50), talents: [{ ...tal, code: 't_pv' }] };
-      expect(pw(vrai('loup', 't1'), lesDeux)).toBeGreaterThan(pw(vrai('loup'), ctx([f], 50)));
-    });
-
-    it('⚠️ SEULE LA PAIRE QUE LA BATAILLE RETIENT gonfle le chiffre', () => {
-      const f = fam('loup', 'damage_pct', 40);
-      const nu = pw(vrai());
-      // Porté par le héros : il se bat ailleurs.
-      expect(pw(vrai('loup'), ctx([f], 50, 'loup'))).toBe(nu);
-      // Hors d’école : le Chenil ne l’héberge pas.
-      const prime = fam('loup', 'damage_pct', 40, { rarity: RANK_ORDER[7]! });
-      expect(pw(vrai('loup'), ctx([prime], 1))).toBe(nu);
-    });
-
-    it('⚠️ LE DRESSAGE compte, la FATIGUE aussi', () => {
-      const dresse = fam('loup', 'damage_pct', 40, { xp: famXpForLevel(40) });
-      expect(pw(vrai('loup'), ctx([dresse], 50))).toBeGreaterThan(
-        pw(vrai('loup'), ctx([fam('loup', 'damage_pct', 40)], 50)),
-      );
-      const lasse = fam('loup', 'damage_pct', 40, { fatigueUntil: NOW + 3600_000 });
-      const frais = fam('loup', 'damage_pct', 40);
-      expect(pw(vrai('loup'), ctx([lasse], 50))).toBeLessThan(pw(vrai('loup'), ctx([frais], 50)));
-    });
+  it('⚠️ un familier ou un talent confié par une SAUVEGARDE D’AVANT ne compte plus', () => {
+    const a = vrai();
+    const legacy = { ...a, familiarId: 'loup', talentId: 't1' } as Adventurer;
+    expect(adventurerPowers([legacy], nus).get('a')).toBe(adventurerPowers([a], nus).get('a'));
+    expect(guardUnits(60, [legacy], 99, nus)).toEqual(guardUnits(60, [a], 99, nus));
   });
 
   it('⚠️ SANS AVENTURIER, PERSONNE NE TIENT LA BRÈCHE', () => {
-    // La « meute du chenil » disparaît avec la garnison : elle existait pour donner un
-    // porteur au bonus du bâtiment quand le vivier était vide. Un compagnon étant
-    // attaché à un homme, un joueur sans Guilde n’a ni l’un ni l’autre.
-    expect(guardUnits(26, [], 99, ctx([fam('loup', 'damage_pct', 40)], 50))).toEqual([]);
+    expect(guardUnits(26, [], 99, nus)).toEqual([]);
   });
 });
 describe('🎓 UN SEUL DRESSAGE PAR FAMILIER (v0.805)', () => {
@@ -1425,19 +969,6 @@ describe('🎓 UN SEUL DRESSAGE PAR FAMILIER (v0.805)', () => {
     const haut = f({ xp: famXpForLevel(30) });
     expect(grantFamiliarXp(haut, 10, 5).xp).toBe(famXpForLevel(30));
     expect(grantFamiliarXp(haut, 10, 5)).toBe(haut);
-  });
-
-  it('⚠️ les DEUX sources de l’aventurier paient : le siège ET le convoi', () => {
-    const raid = rollRaid(7, 28, 0, 0);
-    const tout = siegeFamiliarXp({ groups: raid.groups, defeated: raid.groups.length } as never);
-    const rien = siegeFamiliarXp({ groups: raid.groups, defeated: 0 } as never);
-    expect(rien).toBe(0);
-    expect(tout).toBeGreaterThan(0);
-    const convoi = caravanFamiliarXp({ level: 28 } as never);
-    expect(convoi).toBeGreaterThan(0);
-    // Un siège gagné vaut plus qu’un convoi — il tombe au plus une fois par jour.
-    expect(tout).toBeGreaterThan(convoi);
-    expect(caravanFamiliarXp({ level: 60 } as never)).toBeGreaterThan(convoi);
   });
 });
 
@@ -1510,7 +1041,7 @@ describe('masse visible contre menace', () => {
         const raid = rollRaid(s * 7919 + 5, L, 0, 0);
         const rep = { defeated: raid.groups.length } as RaidReport;
         const c = corpsesFrom(raid, rep, s);
-        const loot = lootCorpses(c, raid.faction, L, s, 0, []);
+        const loot = lootCorpses(c, raid.faction, L, s, []);
         corps += c.length;
         gold += loot.gold;
         stones += loot.summonStones;
@@ -1552,12 +1083,10 @@ describe('ce qu’un niveau de défense apporte', () => {
     }
   });
 
-  it('l’INFIRMERIE chiffre la convalescence ET la fatigue', () => {
+  it('l’INFIRMERIE chiffre la convalescence', () => {
     const txt = defensePerLevelLabel('infirmary', 3, ctx(3, 'infirmary'));
     expect(txt).toContain(fmtSpan(woundMsFor(3)));
     expect(txt).toContain(fmtSpan(woundMsFor(4)));
-    expect(txt).toContain(fmtSpan(fatigueMsFor(3)));
-    expect(txt).toContain(fmtSpan(fatigueMsFor(4)));
   });
 
   it('⚠️ elle AVOUE quand le rythme des sièges annule déjà le gain', () => {
@@ -1578,15 +1107,6 @@ describe('ce qu’un niveau de défense apporte', () => {
     // ⚠️ 9/10 ne suffit plus : depuis que le nombre de bras monte par crans de QUATRE
     // niveaux, deux niveaux voisins donnent souvent la meme capacite — et le rendu porte
     // desormais un SECOND levier (la vitesse) precisement pour qu aucun cran ne soit mort.
-    // ⚠️ SUJET CHANGÉ (le Chantier de fouille est retiré), PROPRIÉTÉ INCHANGÉE : le
-    // Chenil a la même forme — un palier (les places) sous une courbe (le dressage).
-    expect(companionSlots(7)).not.toBe(companionSlots(8));
-    const a = defensePerLevelLabel('kennel', 7, ctx(7, 'kennel'));
-    expect(a).toContain(String(companionSlots(7)));
-    expect(a).toContain(String(companionSlots(8)));
-    // …et un palier SANS place supplémentaire annonce quand même son gain de dressage.
-    const muet = defensePerLevelLabel('kennel', 8, ctx(8, 'kennel'));
-    expect(muet).toContain(String(9));
     // ⚠️ AVEC SON INTERVALLE : sans lui les deux côtés valaient `NaN`, et le test passait
     // par construction (trouvé en v0.802).
     const iv = raidIntervalMs(7);
@@ -1627,12 +1147,15 @@ describe('ce qu’un niveau de défense apporte', () => {
 
   it('⚠️ un palier SANS gain dit à quel niveau ça bougera', () => {
     // « +0 » est honnête mais inutilisable : ce qu'on veut savoir, c'est jusqu'où monter.
-    // ⚠️ SUJET CHANGÉ (le Chantier de fouille est retiré) : le Chenil portait le même
-    // défaut — une place tous les 2 niveaux, donc un cran sur deux muet — et rien ne le
-    // couvrait. La propriété est déplacée avec son test plutôt que perdue.
-    expect(companionSlots(8)).toBe(companionSlots(9)); // ce palier ne donne rien
-    const txt = defensePerLevelLabel('kennel', 8, ctx(8, 'kennel'));
-    expect(txt).toMatch(/niveau 10/);
+    // ⚠️ SUJET CHANGÉ (le Chenil est retiré, v0.996) : la Tour de guet a la même forme —
+    // la clarté monte par crans, donc un niveau sur plusieurs n'en ajoute aucun.
+    const clarte = (n: number) => scoutClarity(n, 40, 40);
+    expect(clarte(1)).toBe(clarte(2)); // ce palier ne donne rien
+    const txt = defensePerLevelLabel('watchtower', 1, {
+      ...ctx(1, 'watchtower'),
+      intervalMs: 24 * H,
+    });
+    expect(txt).toMatch(/cran de renseignement suivant est au niveau \d+/);
     expect(txt).not.toMatch(/\+0/);
   });
   it('la MURAILLE et les TOURELLES annoncent un gain réel, puis le plafond du sport', () => {
@@ -1835,8 +1358,8 @@ describe('ce qu’on trouve sur un corps dépend de QUI attaquait', () => {
     let bandits = 0;
     let betes = 0;
     for (let s = 1; s <= 40; s++) {
-      bandits += lootCorpses(corpses, 'bandits', 26, s * 13 + 1, 0, []).items.length;
-      betes += lootCorpses(corpses, 'betes', 26, s * 13 + 1, 0, []).items.length;
+      bandits += lootCorpses(corpses, 'bandits', 26, s * 13 + 1, []).items.length;
+      betes += lootCorpses(corpses, 'betes', 26, s * 13 + 1, []).items.length;
     }
     expect(bandits, `bandits ${bandits} vs bêtes ${betes}`).toBeGreaterThan(betes * 2);
     expect(betes, 'une bête traîne quand même parfois une pièce prise au village').toBeGreaterThan(
@@ -1847,8 +1370,8 @@ describe('ce qu’on trouve sur un corps dépend de QUI attaquait', () => {
   it('l’or reste la marque des bandits, l’équipement ne le remplace pas', () => {
     const raid = rollRaid(31, 26, 0, 0);
     const corpses = corpsesFrom(raid, { defeated: raid.groups.length } as never, 7);
-    expect(lootCorpses(corpses, 'bandits', 26, 5, 0, []).gold).toBeGreaterThan(
-      lootCorpses(corpses, 'betes', 26, 5, 0, []).gold,
+    expect(lootCorpses(corpses, 'bandits', 26, 5, []).gold).toBeGreaterThan(
+      lootCorpses(corpses, 'betes', 26, 5, []).gold,
     );
   });
 });
@@ -1869,7 +1392,6 @@ describe('🔩 AUCUNE FERRAILLE SUR LES ASSAILLANTS (v0.856 ; RÉÉCRIT, il verr
       faction,
       L,
       7,
-      0,
       [],
     );
 
@@ -2013,7 +1535,7 @@ describe('renseignement — du mystère, à tous les niveaux', () => {
     for (let i = 0; i < n; i++) {
       const seed = i * 7919 + 11;
       const r = rollRaid(seed, L, 0, 0);
-      out.push(scoutClarity(Math.round(L * towerShare), r.level, L, 0, seed));
+      out.push(scoutClarity(Math.round(L * towerShare), r.level, L, seed));
     }
     return out;
   }
@@ -2051,12 +1573,12 @@ describe('renseignement — du mystère, à tous les niveaux', () => {
   it('l’aléa est déterministe par graine — même armée, même lecture', () => {
     // ⚠️ Deux appels ne suffisent PAS : l’aléa ne vaut que 0 ou 1 cran, donc un tirage
     // vraiment aléatoire collisionnerait une fois sur deux. On répète largement.
-    const ref = scoutClarity(40, 44, 40, 0, 12345);
-    for (let i = 0; i < 50; i++) expect(scoutClarity(40, 44, 40, 0, 12345)).toBe(ref);
+    const ref = scoutClarity(40, 44, 40, 12345);
+    for (let i = 0; i < 50; i++) expect(scoutClarity(40, 44, 40, 12345)).toBe(ref);
   });
   it('…mais il VARIE d’un raid à l’autre (sinon ce n’est pas de l’aléa)', () => {
     const vals = new Set(
-      Array.from({ length: 40 }, (_, i) => scoutClarity(40, 44, 40, 0, i * 977 + 3)),
+      Array.from({ length: 40 }, (_, i) => scoutClarity(40, 44, 40, i * 977 + 3)),
     );
     expect(vals.size).toBeGreaterThan(1);
   });
@@ -2069,54 +1591,10 @@ describe('renseignement — du mystère, à tous les niveaux', () => {
     }
   });
   it('sans graine, aucun bruit : les comparaisons de la fiche restent stables', () => {
-    expect(scoutClarity(40, 40, 40)).toBe(scoutClarity(40, 40, 40, 0, 0));
+    expect(scoutClarity(40, 40, 40)).toBe(scoutClarity(40, 40, 40, 0));
   });
   it('sans Tour de guet on ne voit rien, à tout niveau', () => {
     for (const L of [3, 20, 100]) expect(clarities(L, 0).every((c) => c === 0)).toBe(true);
-  });
-  it('le faucon posté rachète un cran', () => {
-    const sans = scoutClarity(20, 24, 20, 0);
-    const avec = scoutClarity(20, 24, 20, 1);
-    expect(avec).toBeGreaterThanOrEqual(sans);
-  });
-});
-
-describe('⚠️ la RARETÉ d’un familier compte AUSSI au mur', () => {
-  // Vérifié à la demande de l'utilisateur : ça marchait déjà, mais RIEN ne le
-  // garantissait. La rareté n'est appliquée nulle part dans le code du siège — elle
-  // transite par `effect.value`, bakée au DROP (refonte drops-only v0.556). C'est
-  // élégant, et c'est exactement pour ça que c'est fragile : une refonte qui
-  // recalculerait la valeur autrement casserait la défense sans toucher à `raid.ts`.
-  // ⚠️ MESURÉ SUR `companionEffects`, le point où la rareté entre dans le siège depuis
-  // que le compagnon est porté par un aventurier (la garnison n'existe plus).
-  // ⚠️ PAS sur `guardUnits` : il ARRONDIT à l'entier (`foldBonus`), et deux raretés
-  // voisines — écartées de 1,219 — tombent alors sur le même nombre. On mesurerait
-  // l'arrondi, pas la rareté. L'ancien test mesurait déjà une valeur non arrondie.
-  const porte = (f: Item) => companionEffects([f]).damagePct ?? 0;
-  const loup = FAMILIAR_SPECIES.find((s) => s.id === 'wolf')!;
-  const fam = (rarity: Rarity): Item =>
-    ({ ...rollFamiliar(() => 0.5, loup, { level: 28, rarity }), id: 'f' }) as Item;
-
-  it('un familier plus rare renforce PLUS le mur, rang après rang', () => {
-    let prev = 0;
-    for (const r of RANK_ORDER) {
-      const d = porte(fam(r));
-      expect(d, `rareté ${r}`).toBeGreaterThan(prev);
-      prev = d;
-    }
-  });
-
-  it('⚠️ l’écart suit l’échelle de rareté DU PROJET, pas une autre', () => {
-    // ⚠️ On compare à `RARITY_MULT`, la CONSTANTE du projet — pas à un nombre écrit ici :
-    // si l’échelle de rareté bouge un jour, ce test suit au lieu de mentir.
-    const bas = porte(fam(RANK_ORDER[0]!));
-    const dernier = RANK_ORDER[RANK_ORDER.length - 1]!;
-    const haut = porte(fam(dernier));
-    const attendu = RARITY_MULT[dernier] / RARITY_MULT[RANK_ORDER[0]!];
-    // ⚠️ Tolérance RELATIVE : `effect.value` est stocké à UNE décimale (`round1`), donc
-    // le rapport mesuré (3,93) frôle l’échelle théorique (4,00) sans l’égaler. Ce qui
-    // compte est qu’il la SUIVE — s’il tombait à 1, la rareté ne compterait plus.
-    expect(Math.abs(haut / bas - attendu) / attendu).toBeLessThan(0.05);
   });
 });
 
@@ -2551,11 +2029,10 @@ describe('🏥 AUCUN NIVEAU MORT — l’Infirmerie jusqu’à 100', () => {
   // ⚠️ Signalé par l’utilisateur (« l’infirmerie est déjà au max ; il faut que chaque
   // bâtiment apporte quelque chose à chaque niveau jusqu’au 100 »). Mesuré : ses DEUX
   // leviers touchaient un plancher DUR aux niveaux 14 et 15 — 85 niveaux sur 100 payés
-  // au prix quadratique pour rien. C’était la seule structure d’enceinte ENTIÈREMENT
-  // morte : le Chenil garde le dressage, la Tour de guet garde la clarté.
+  // au prix quadratique pour rien. (La fatigue des familiers, son second levier, est
+  // partie avec les compagnons des champions, v0.996.)
   const leviers: [string, (l: number) => number][] = [
     ['convalescence du héros', (l) => woundMsFor(l)],
-    ['fatigue des familiers', (l) => fatigueMsFor(l)],
   ];
 
   it('⚠️ CHAQUE niveau raccourcit encore, de 1 à 100', () => {
@@ -2572,9 +2049,6 @@ describe('🏥 AUCUN NIVEAU MORT — l’Infirmerie jusqu’à 100', () => {
     // infirmerie MOINS bonne qu'hier. On épingle l'ancienne formule sous le plafond.
     const avantW = (l: number) => Math.round(RAID.woundMs * Math.max(0.2, 1 - l * 0.06));
     for (let l = 0; l <= 13; l++) expect(woundMsFor(l)).toBe(avantW(l));
-    const f0 = fatigueMsFor(0);
-    for (let l = 0; l <= 15; l++)
-      expect(fatigueMsFor(l)).toBe(Math.round(f0 * Math.max(0.25, 1 - l * 0.05)));
   });
 
   it('⚠️ UNE ASYMPTOTE, PAS UNE PENTE : se soigner n’est jamais gratuit', () => {
@@ -2620,7 +2094,7 @@ describe('🛡️ LE RENFORT DE SIÈGE D’UN DÉFENSEUR (v0.801, recalibré v0.
 });
 
 describe('🏥 infirmerie des aventuriers', () => {
-  const ctx0 = { now: 0, kennelLevel: 0, familiars: [], talents: [], advGear: [] };
+  const ctx0 = { advGear: [] };
   it('un siège PERDU envoie à l’infirmerie les AVENTURIERS tombés — jamais une baliste ni le héros', () => {
     const L = 28;
     const advs = rosterOf(L);
@@ -2685,7 +2159,7 @@ describe('🏥 infirmerie des aventuriers', () => {
 });
 
 describe('🗿 LE PLAFOND D’ENGAGEMENT — ce qui AGIT est borné, pas ce qu’on possède', () => {
-  const ctx0 = { now: 0, kennelLevel: 0, familiars: [], talents: [], advGear: [] };
+  const ctx0 = { advGear: [] };
   /** Un vivier de n champions de niveaux DÉCROISSANTS : le plus fort en dernier, pour que
    *  « garder les n premiers » et « garder les n plus forts » ne se confondent pas. */
   const vivier = (n: number, lvl = 40) =>

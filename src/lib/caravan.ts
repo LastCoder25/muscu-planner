@@ -19,14 +19,8 @@ import {
   effectAsAggregate,
   playerWithGear,
   emptyEffects,
-  effectAsAggregate as asAggregate,
-  familiarMult,
-  RARITY_RANK,
-  RANK_ORDER,
   prestigeRankIndex,
-  rankRollMult,
   type AggregatedEffects,
-  type Item,
 } from './items';
 import {
   simulateCombat,
@@ -55,8 +49,6 @@ import {
 // ⚠️ `caravan.ts` n'importe RIEN de `raid.ts` : c'est `raid.ts` qui importe ce module à
 // l'exécution (`escortCombatant`, `unitEffects`…), donc un import de valeur dans l'autre
 // sens créerait un cycle. Le projet applique déjà cette règle entre `data/familiars` et `items`.
-import { effectsOfTalents, talentRankOf, type TalentInstance } from './talents';
-import { FAMILIAR_SPECIES } from '../data/familiars';
 import { REF_CHAMPIONS_BY_RANK, type Champion } from '../data/champions';
 import {
   PARTY_TARGETS,
@@ -329,9 +321,8 @@ function escortEffects(advs: Adventurer[]): AggregatedEffects {
 export function escortCombatant(
   advs: Adventurer[],
   name = 'Escorte',
-  /** Renfort d'effets EXTÉRIEUR aux aventuriers — le compagnon et le talent qu'on leur
-   *  a confiés. Il s'ajoute aux signatures de l'escorte au lieu de les remplacer : un
-   *  convoi garde ses propres talents. */
+  /** Renfort d'effets EXTÉRIEUR aux aventuriers — l'équipement qu'ils portent. Il
+   *  s'ajoute aux signatures de l'escorte au lieu de les remplacer. */
   extra: Partial<AggregatedEffects> = {},
 ): Combatant {
   const stats = advs.reduce(
@@ -355,59 +346,8 @@ export function escortCombatant(
   );
 }
 
-/**
- * Les COMPAGNONS d'une escorte : un familier par aventurier, au plus.
- *
- * ⚠️ TROIS EXCLUSIONS, et aucune n'est décorative. Un familier déjà PORTÉ par le héros
- * n'est pas disponible (il se bat ailleurs) ; un familier apparié DEUX FOIS ne compte
- * qu'une (l'écran ne devrait pas le permettre, mais l'écran ne garantit rien) ; un id
- * qui ne désigne plus rien est ignoré plutôt que de faire tomber le combat — un familier
- * vendu laisserait sinon un appariement fantôme. Et un familier trop rare pour la classe
- * ne vient pas (`canAdvFamiliar`). Simple projection de la règle unique (`pairCompanions`).
- */
-export function companionsOf(
-  advs: Adventurer[],
-  owned: Item[],
-  heroFamiliarId?: string | null,
-): Item[] {
-  const pairs = roadPairs(advs, { familiars: owned, talents: [], advGear: [], heroFamiliarId });
-  return [...pairs.values()].flatMap((p) => (p.familiar ? [p.familiar] : []));
-}
-
-/**
- * Ce que les compagnons apportent, en effets — EXACTEMENT comme au héros (v0.805).
- *
- * ⚠️ PLUS DE BRIDAGE NI DE TERRAIN (demandé par l’utilisateur : « le familier booste
- * l’aventurier comme le héros, que ce soit en défense ou en attaque »). Il valait 40 %
- * de sa stat, sans son niveau d’objet, avec un dressage d’attaque sur la route et de
- * défense au mur plafonné par le Chenil : le même animal annonçait trois valeurs.
- * `familiarMult` est la formule du héros, lue telle quelle.
- *
- * `mult` ne sert qu’à la FATIGUE au rempart (un état, pas une formule).
- */
-export function companionEffects(companions: Item[], mult = 1): AggregatedEffects {
-  const list = companions.flatMap((f) => {
-    const m = familiarMult(f) * mult;
-    const parts = [asAggregate(f.effect.type, f.effect.value * m)];
-    // La SIGNATURE ✦ d'un familier compte aussi : c'est ce qui fait sa valeur au drop.
-    if (f.effect2) parts.push(asAggregate(f.effect2.type, f.effect2.value * m));
-    return parts;
-  });
-  return list.length ? mergeEffects(...list) : emptyEffects();
-}
-
-/** Part de l'effet d'un talent qui profite à son aventurier.
- *  ⚠️ Constante SÉPARÉE de `COMPANION_K` bien qu'elles vaillent pareil aujourd'hui : ce
- *  sont deux leviers d'équilibrage distincts, et les fusionner interdirait de corriger
- *  l'un sans déplacer l'autre.
- *  ⚠️ 0,4 × 0,5/0,9 (v0.848) : l'échelle des talents est passée de 0,5 à 0,9 pour que le
- *  talent du HÉROS pèse autant que son familier. Les embuscades de convoi et les sièges ont
- *  été calibrés avec l'ancienne échelle : on compense ici, pour que le talent confié à un
- *  aventurier vaille exactement ce qu'il valait. */
-export const ADV_TALENT_K = 0.4 * (0.5 / 0.9);
-
 /** Multiplie tous les canaux d'un agrégat. ⚠️ Balayage des CLÉS de `emptyEffects()`, pas
- *  une liste écrite à la main : ajouter un canal à `AggregatedEffects` sans le brider
+ *  une liste écrite à la main : ajouter un canal à `AggregatedEffects` sans le diluer
  *  ici passerait sinon inaperçu. */
 function scaleEffects(e: AggregatedEffects, k: number): AggregatedEffects {
   const out = emptyEffects();
@@ -416,95 +356,17 @@ function scaleEffects(e: AggregatedEffects, k: number): AggregatedEffects {
 }
 
 /**
- * Un aventurier peut-il porter ce talent ? Sa RARETÉ ne dépasse pas celle de sa CLASSE
- * (v0.805 ; demandé par l’utilisateur, choix « rareté de sa classe »).
+ * ⚔️ CE QU'UN AVENTURIER TIRE DE SES PIÈCES — UNE seule définition, lue par la route
+ * (`roadUnits`) ET par le rempart (`raid.ts`). Deux copies finiraient par annoncer une
+ * valeur que le combat n'applique pas.
  *
- * ⚠️ Le pendant du Chenil pour les familiers, mais porté par l’HOMME : chaque promotion
- * débloque la rareté suivante, donc élever un aventurier ouvre ce qu’on peut lui confier.
- * ⚠️ Appliqué AU COMBAT autant qu’au store : un talent confié avant cette règle se soigne
- * tout seul, sans migration — même politique que les compagnons hors d’école.
+ * ⚠️ PLUS DE FAMILIER NI DE TALENT (v0.996, décision de l'utilisateur : « on les garde
+ * pour le héros uniquement »). Un champion ne porte plus que son ÉQUIPEMENT ; ce que
+ * ses compagnons lui apportaient est rendu dans sa base de stats (`CHAMPION_SOLO`,
+ * `adventurers.ts`), mesuré pour que la puissance ne bouge pas.
  */
-export function canAdvTalent(adv: Adventurer, t: TalentInstance): boolean {
-  return RARITY_RANK[talentRankOf(t)] <= RARITY_RANK[advRarity(adv)];
-}
-
-/**
- * Un aventurier peut-il être accompagné de ce familier ? MÊME RÈGLE QUE LES TALENTS (v0.831 ;
- * signalé par l’utilisateur : « des familiers épiques équipés sur des aventuriers bronze »).
- *
- * ⚠️ Le Chenil seul décidait (`canCompanion`) : au Chenil 30 il héberge jusqu’à l’épique,
- * donc un aventurier qui n’a encore que sa première classe — rang Bronze, classe commune —
- * repartait avec un loup épique, pendant que la règle des talents lui interdisait tout ce qui
- * dépasse le commun. Deux compagnons, deux règles : le même homme ne pouvait pas porter un
- * talent inhabituel mais pouvait mener une bête épique.
- * ⚠️ Les DEUX s’appliquent désormais : le Chenil dit ce qu’il sait HÉBERGER, la classe dit ce
- * que l’homme sait MENER. Chaque promotion ouvre la rareté suivante — pour ses deux compagnons.
- * ⚠️ Appliqué au combat autant qu’au store : un familier confié avant cette règle se soigne
- * tout seul (il ne vient plus au rempart), sans migration.
- */
-export function canAdvFamiliar(adv: Adventurer, fam: Item): boolean {
-  return RARITY_RANK[fam.rarity] <= RARITY_RANK[advRarity(adv)];
-}
-
-/** Qui garde quel familier : id du familier → l’aventurier à qui il est confié.
- *
- * ⚠️ SOURCE UNIQUE de « ce familier est pris » pour la vente (store) ET pour l’écran. La
- * fiche lisait encore `base.garrison`, la garnison retirée en v0.777 : un familier resté
- * dans cette vieille liste s’affichait « 🛡️ au mur » et n’était plus vendable, pendant qu’un
- * familier réellement confié proposait « Vendre » — un bouton que le store refusait sans
- * rien dire. Le premier aventurier listé l’emporte si deux prétendent au même. */
-export function familiarKeepers(advs: readonly Adventurer[]): Map<string, Adventurer> {
-  const keepers = new Map<string, Adventurer>();
-  for (const a of advs)
-    if (a.familiarId && !keepers.has(a.familiarId)) keepers.set(a.familiarId, a);
-  return keepers;
-}
-
-/**
- * Les TALENTS des aventuriers d'une escorte — un par tête, au plus.
- *
- * ⚠️ Mêmes trois exclusions que les compagnons, et pour les mêmes raisons : un talent
- * ÉQUIPÉ PAR LE HÉROS n'est pas disponible, un talent assigné deux fois ne compte
- * qu'une, un id qui ne désigne plus rien est ignoré. Un talent recyclé laisserait sinon
- * une assignation fantôme.
- */
-export function advTalentsOf(
-  advs: Adventurer[],
-  owned: TalentInstance[],
-  heroTalentIds: readonly string[] = [],
-): TalentInstance[] {
-  const pairs = roadPairs(advs, { familiars: [], talents: owned, advGear: [], heroTalentIds });
-  return [...pairs.values()].flatMap((p) => (p.talent ? [p.talent] : []));
-}
-
-/** Ce que ces talents apportent, BRIDÉ.
- *  ⚠️ On force `equipped: true` : le cumul ignore ce qui ne l'est pas, et un talent
- *  confié à un aventurier n'est justement PAS équipé sur le héros — sans ça, la fonction
- *  rendrait zéro en silence. */
-export function advTalentEffects(talents: TalentInstance[], k = ADV_TALENT_K): AggregatedEffects {
-  if (!talents.length) return emptyEffects();
-  return scaleEffects(effectsOfTalents(talents.map((t) => ({ ...t, equipped: true }))), k);
-}
-
-/** Ce qu'UN aventurier emmène au combat — la forme partagée par la route et le rempart. */
-export interface CompanionSet {
-  familiar?: Item;
-  talent?: TalentInstance;
-  gear?: AdvGear[];
-}
-
-/**
- * ⚔️ CE QU'UN AVENTURIER TIRE DE SA PAIRE ET DE SES PIÈCES — UNE seule définition, lue par
- * la route (`roadUnits`) ET par le rempart (`pairEffects`, `raid.ts`). Deux copies
- * finiraient par annoncer une valeur que le combat n'applique pas.
- * `companionMult` : la FATIGUE au rempart (un état, pas une formule) ; 1 partout ailleurs.
- */
-export function unitEffects(p: CompanionSet | undefined, companionMult = 1): AggregatedEffects {
-  return mergeEffects(
-    companionEffects(p?.familiar ? [p.familiar] : [], companionMult),
-    advTalentEffects(p?.talent ? [p.talent] : []),
-    advGearEffects(p?.gear ?? []),
-  );
+export function unitEffects(gear: readonly AdvGear[] | undefined): AggregatedEffects {
+  return advGearEffects([...(gear ?? [])]);
 }
 
 /** Combien de strates un aventurier de ce niveau a pu franchir. */
@@ -629,8 +491,8 @@ export function refChampionAdv(level: number, slot = 0): Adventurer {
     level: Math.max(1, level),
     xp: 0,
     championId: c.id,
-    // ⚠️ SANS ÉVEIL, délibérément — même raison que le dressage absent de `refCompanions` :
-    // l'Éveil se mérite, il doit rester un avantage, pas une attente.
+    // ⚠️ SANS ÉVEIL, délibérément : l'Éveil se mérite, il doit rester un avantage,
+    // pas une attente.
     copies: 1,
   };
 }
@@ -640,42 +502,6 @@ export function refChampionAdv(level: number, slot = 0): Adventurer {
 export function refChampions(level: number): Champion[] {
   const rangs = REF_CHAMPIONS_BY_RANK;
   return rangs[Math.min(rangs.length - 1, prestigeRankIndex(Math.max(1, level)))]!;
-}
-
-/** Les espèces des compagnons de RÉFÉRENCE : une par grand canal de combat. */
-const REF_SPECIES = ['wolf', 'deer', 'bear'] as const;
-/** Jet de référence d’un familier : le jet MOYEN d’un tirage biaisé bas (cf. `rollJetValue`). */
-const REF_FAMILIAR_JET = 0.3;
-
-/**
- * Les COMPAGNONS de l’escorte de référence : un familier par aventurier, du rang qu’on
- * peut dropper à ce niveau, jet moyen, niveau d’objet à niveau, sans dressage.
- *
- * ⚠️ POURQUOI (v0.805). Depuis que le familier booste l’aventurier comme le héros, il
- * pèse lourd sur la route : mesuré, un trio accompagné gagnait 92 % de ses embuscades
- * PÉRILLEUSES au niveau 90, contre 39 % sans. Une référence NUE aurait fait du convoi
- * une formalité pour quiconque confie ses familiers — et supprimé la seule décision de
- * la feature (« combien j’en envoie »). C’est la règle des donjons (`gearExpect`) : le
- * contenu se dimensionne sur un joueur ÉQUIPÉ.
- * ⚠️ Sans dressage, délibérément : le dressage se mérite, il doit rester un avantage.
- */
-export function refCompanions(level: number): Item[] {
-  const rarity = RANK_ORDER[prestigeRankIndex(Math.max(1, level))]!;
-  return REF_SPECIES.map((id, i) => {
-    const sp = FAMILIAR_SPECIES.find((s) => s.id === id)!;
-    return {
-      id: `refFam${i}`,
-      slot: 'familiar',
-      name: sp.name,
-      emoji: sp.emoji,
-      rarity,
-      level: Math.max(1, level),
-      baseLevel: Math.max(1, level),
-      effect: { type: sp.effect, value: sp.base * rankRollMult(rarity, REF_FAMILIAR_JET) },
-      species: sp.id,
-      roll: REF_FAMILIAR_JET,
-    } satisfies Item;
-  });
 }
 
 /** Les membres NUS de l’escorte de référence, un par orientation. ⚠️ Extrait pour que
@@ -694,8 +520,7 @@ function refGearIds(i: number): Record<AdvGearSlot, string> {
   };
 }
 
-/** Jet de référence d’une pièce : le jet MOYEN d’un tirage biaisé bas (même valeur que
- *  les familiers de référence). */
+/** Jet de référence d’une pièce : le jet MOYEN d’un tirage biaisé bas. */
 const REF_GEAR_JET = 0.3;
 
 /**
@@ -755,13 +580,9 @@ export function refAdvGear(level: number, n: number = CARAVAN.refEscort): AdvGea
 }
 
 /** L’ESCORTE de référence : `CARAVAN.refEscort` aventuriers, un par orientation, chacun
- *  avec le compagnon de référence de son rang ET ses pièces de référence. */
+ *  avec ses pièces de référence. */
 function refEscortOf(level: number): Adventurer[] {
-  return refEscortBare(level).map((a, i) => ({
-    ...a,
-    familiarId: `refFam${i % REF_SPECIES.length}`,
-    gear: refGearIds(i),
-  }));
+  return refEscortBare(level).map((a, i) => ({ ...a, gear: refGearIds(i) }));
 }
 
 /** LES BANDITS DE LA ROUTE.
@@ -778,25 +599,18 @@ function refEscortOf(level: number): Adventurer[] {
  *  aventuriers au niveau du POI) : absolue, mais lisible et calibrable. */
 export function roadFoe(poi: Poi): Combatant {
   const escort = refEscortOf(poi.level);
-  // ⚠️ La référence est ACCOMPAGNÉE et ÉQUIPÉE : c'est ce que la route attend d'un vivier.
-  // ⚠️ SON ATTRIBUTION EST POSÉE PAR CONSTRUCTION, elle ne passe PAS par `pairCompanions` :
-  // c'est l'étalon de la route, pas un vivier de joueur. Sa lignée civile (`REF_LINEAGES`)
-  // empile deux classes de strate 2 (pisteur, maître de convoi), donc aux niveaux 31-40 son
-  // 3ᵉ membre est « magique » et porte un familier « rare » — la règle de classe
-  // (`canAdvFamiliar`) le retirerait et affaiblirait la route calibrée (mesuré : `roadFoe`
-  // change sur ces 10 niveaux). On garde l'étalon tel qu'il a été calibré.
-  const fams = new Map(refCompanions(poi.level).map((f) => [f.id, f]));
+  // ⚠️ La référence est ÉQUIPÉE : c'est ce que la route attend d'un vivier. Son
+  // attribution est posée PAR CONSTRUCTION (l'étalon de la route, pas un vivier de joueur).
+  // ⚠️ Plus de compagnon (v0.996) : ce qu'il apportait est désormais dans la base de stats
+  // du champion (`CHAMPION_SOLO`), donc la route reste calibrée au même niveau.
   const stock = new Map(refAdvGear(poi.level).map((g) => [g.id, g]));
   const pairs = new Map(
-    escort.map((a): [string, CompanionSet] => [
+    escort.map((a): [string, AdvGear[]] => [
       a.id,
-      {
-        familiar: a.familiarId ? fams.get(a.familiarId) : undefined,
-        gear: ADV_GEAR_SLOTS.flatMap((s) => {
-          const g = a.gear?.[s] ? stock.get(a.gear[s]) : undefined;
-          return g ? [g] : [];
-        }),
-      },
+      ADV_GEAR_SLOTS.flatMap((s) => {
+        const g = a.gear?.[s] ? stock.get(a.gear[s]) : undefined;
+        return g ? [g] : [];
+      }),
     ]),
   );
   const ref = escortCombatant(escort, 'Référence', pairedEscortEffects(escort, pairs));
@@ -1084,103 +898,31 @@ export function ambushChance(poi: Poi, escort: Adventurer[]): number {
   return base * (1 - cut);
 }
 
-/** Résout le voyage : les rencontres, la cargaison, la paie, les blessés.
- *  Seedé au DÉPART comme tout le reste — déterministe et hors-ligne. */
-/** Ce que le convoi emmène : la réserve du joueur, moins ce que le HÉROS porte.
- *  ⚠️ Pas de `kennelLevel` : le Chenil plafonne le dressage de DÉFENSE, et sur la route
- *  personne ne plafonne ce qu’un familier a appris au combat (cf. `companionEffects`). */
-export interface RoadCompanions {
-  familiars: Item[];
-  talents: TalentInstance[];
-  /** 🗡️ Le stock d'équipement des aventuriers. ⚠️ REQUIS, comme `CompanionCtx.advGear` :
-   *  un paramètre qu'on peut oublier finit par l'être. Une escorte nue passe `[]`. */
+/** 🗡️ Ce que l'escorte emmène : le STOCK d'équipement des aventuriers.
+ *  ⚠️ REQUIS partout (route, camps, failles, rempart) : un paramètre qu'on peut oublier
+ *  finit par l'être. Une escorte nue passe `{ advGear: [] }`. */
+export interface EscortKit {
   advGear: AdvGear[];
-  heroFamiliarId?: string | null;
-  heroTalentIds?: readonly string[];
 }
-
-/** Ce que le TERRAIN ajoute à la règle d'appariement. ⚠️ REQUIS : la route déclare
- *  explicitement qu'elle n'ajoute rien (`ROAD_PAIR_LIMITS`), le rempart y met son Chenil. */
-export interface PairLimits {
-  /** Combien de familiers peuvent venir (places du Chenil au rempart ; illimité sur la route). */
-  familiarSlots: number;
-  /** Règle de familier PROPRE au terrain (au rempart : le rang que le Chenil sait héberger). */
-  familiarOk: (f: Item) => boolean;
-}
-
-/** Sur la route, rien de plus que le cœur : ni Chenil, ni places. */
-const ROAD_PAIR_LIMITS: PairLimits = { familiarSlots: Infinity, familiarOk: () => true };
 
 /**
- * 🐾 QUI PORTE QUOI, par aventurier — LA règle d'appariement, UNE seule pour la route
- * (`roadPairs`) ET le rempart (`companionPairs`, `raid.ts`). Deux copies du même cœur
- * avaient divergé : la route n'appliquait pas `canAdvFamiliar` (v0.831), le rempart si.
- *
- * Les exclusions : ce que le HÉROS porte n'est pas disponible (il se bat ailleurs) ; un même
- * familier ou talent confié deux fois ne compte qu'une (le premier du vivier le garde) ; un id
- * fantôme est ignoré plutôt que de faire tomber le combat ; un familier ou un talent au-dessus
- * de la rareté de la CLASSE ne vient pas (`canAdvFamiliar` / `canAdvTalent`, et ça se soigne
- * seul) ; une pièce ne se porte que selon `wornGear`.
- * ⚠️ L'ORDRE EST CELUI DU VIVIER : c'est ce qui rend la coupe aux places STABLE.
- * ⚠️ Un familier refusé (trop rare, hors d'école, plus de place) n'est PAS marqué pris : un
- * aventurier suivant qui y a droit peut encore le mener.
+ * 🗡️ QUI PORTE QUOI : les pièces que chacun porte RÉELLEMENT (`wornGear` — lignée, rareté
+ * de la classe, une pièce un porteur). UNE règle pour la route ET le rempart.
  */
-export function pairCompanions(
-  advs: Adventurer[],
-  pool: RoadCompanions,
-  limits: PairLimits,
-): Map<string, CompanionSet> {
-  const fams = new Map(pool.familiars.map((f) => [f.id, f]));
-  const tals = new Map(pool.talents.map((t) => [t.id, t]));
-  const heroTal = new Set(pool.heroTalentIds ?? []);
-  const worn = wornGear(advs, pool.advGear);
-  const prisF = new Set<string>();
-  const prisT = new Set<string>();
-  let places = limits.familiarSlots;
-  const out = new Map<string, CompanionSet>();
-  for (const a of advs) {
-    const entry: CompanionSet = {};
-    const fid = a.familiarId;
-    if (fid && fid !== pool.heroFamiliarId && !prisF.has(fid) && places > 0) {
-      const f = fams.get(fid);
-      if (f && canAdvFamiliar(a, f) && limits.familiarOk(f)) {
-        prisF.add(fid);
-        places--;
-        entry.familiar = f;
-      }
-    }
-    const tid = a.talentId;
-    if (tid && !heroTal.has(tid) && !prisT.has(tid)) {
-      const t = tals.get(tid);
-      if (t && canAdvTalent(a, t)) {
-        prisT.add(tid);
-        entry.talent = t;
-      }
-    }
-    const g = worn.get(a.id);
-    if (g?.length) entry.gear = g;
-    if (entry.familiar || entry.talent || entry.gear) out.set(a.id, entry);
-  }
-  return out;
+export function escortGear(advs: Adventurer[], kit: EscortKit): Map<string, AdvGear[]> {
+  return wornGear(advs, kit.advGear);
 }
 
-/** 🐾 QUI PORTE QUOI SUR LA ROUTE : la règle unique (`pairCompanions`), sans Chenil ni fatigue. */
-export function roadPairs(escort: Adventurer[], road: RoadCompanions): Map<string, CompanionSet> {
-  return pairCompanions(escort, road, ROAD_PAIR_LIMITS);
-}
-
-/** ⚔️ L'escorte en UNITÉS DISTINCTES : chaque aventurier avec SA paire et SES pièces.
- *  ⚠️ Plus de division par l'effectif : elle n'existait que parce que l'escorte était FONDUE
- *  en un seul combattant. Ici chaque loup n'épaule que son homme.
- *  `pairs` = `roadPairs(escort, road)`, calculé UNE fois par l'appelant : le combattant fondu
- *  et les unités lisent la même attribution. */
-export function roadUnits(escort: Adventurer[], pairs: Map<string, CompanionSet>): SkirmishUnit[] {
+/** ⚔️ L'escorte en UNITÉS DISTINCTES : chaque aventurier avec SES pièces.
+ *  `gear` = `escortGear(escort, kit)`, calculé UNE fois par l'appelant : le combattant
+ *  fondu et les unités lisent la même attribution. */
+export function roadUnits(escort: Adventurer[], gear: Map<string, AdvGear[]>): SkirmishUnit[] {
   return escort.map((a) => ({
     id: a.id,
     name: a.name,
     emoji: advTitle(a)?.emoji ?? '⚔️',
     level: a.level,
-    combatant: escortCombatant([a], a.name, unitEffects(pairs.get(a.id))),
+    combatant: escortCombatant([a], a.name, unitEffects(gear.get(a.id))),
   }));
 }
 
@@ -1231,17 +973,17 @@ export function heroPartyCombatant(hero: PartyHero): Combatant {
   };
 }
 
-/** Les unités du groupe : aventuriers (SA paire, SES pièces, règle unique `roadPairs`) puis
+/** Les unités du groupe : aventuriers (SES pièces, règle unique `escortGear`) puis
  *  le héros, BORNÉ à `HERO_PARTY_WORTH` champions (`heroPartyCombatant`).
  *  ⚠️ EXPORTÉE pour l'écran : le % affiché (`campWinPct`) doit fondre EXACTEMENT le groupe
- *  que `resolveCamp` fera combattre — une seconde construction (oublier `roadPairs`, poser
+ *  que `resolveCamp` fera combattre — une seconde construction (oublier `escortGear`, poser
  *  le héros autrement) annoncerait un pronostic sur un autre groupe. */
 export function partyAllies(
   escort: Adventurer[],
-  road: RoadCompanions,
+  kit: EscortKit,
   hero: PartyHero | null,
 ): SkirmishUnit[] {
-  const units = roadUnits(escort, roadPairs(escort, road));
+  const units = roadUnits(escort, escortGear(escort, kit));
   if (hero)
     units.push({
       id: HERO_UNIT_ID,
@@ -1253,20 +995,12 @@ export function partyAllies(
   return units;
 }
 /** 🧭 Les unités de RÉFÉRENCE d'un niveau : `CARAVAN.refEscort` aventuriers, un par
- *  orientation, accompagnés (`refCompanions`) et équipés (`refAdvGear`). ⚠️ SOURCE UNIQUE
- *  du mètre-étalon des CAMPS, PAS DE LA ROUTE : `roadFoe` garde SA propre référence
- *  (`escortCombatant` + une attribution posée PAR CONSTRUCTION, cf. son commentaire),
- *  volontairement non branchée ici — passer par `roadPairs` y appliquerait `canAdvFamiliar`,
- *  qui retire le familier du 3ᵉ membre aux niveaux 31-40 et déplacerait la calibration
- *  MESURÉE des bandes d'embuscade de route. */
+ *  orientation, équipés (`refAdvGear`). ⚠️ SOURCE UNIQUE du mètre-étalon des CAMPS et des
+ *  FAILLES. `roadFoe` garde SA propre référence (`escortCombatant` + une attribution posée
+ *  PAR CONSTRUCTION), dont la calibration des bandes d'embuscade a été mesurée à part. */
 export function refEscortUnits(level: number): SkirmishUnit[] {
   const escort = refEscortOf(level);
-  const road: RoadCompanions = {
-    familiars: refCompanions(level),
-    talents: [],
-    advGear: refAdvGear(level),
-  };
-  return roadUnits(escort, roadPairs(escort, road));
+  return roadUnits(escort, escortGear(escort, { advGear: refAdvGear(level) }));
 }
 
 /**
@@ -1289,61 +1023,24 @@ export function roadTroop(foe: Combatant, poi: Poi): SkirmishUnit[] {
   });
 }
 
-/**
- * 🐾🧠 CE QUE LES COMPAGNONS APPORTENT SUR LA ROUTE — enfin branché.
+/** Ce que les PIÈCES de l'escorte apportent sur la route, en effets.
  *
- * ⚠️ LE SOCLE EXISTAIT DEPUIS LA v0.758 ET N’ÉTAIT APPELÉ NULLE PART : `companionEffects('atk')`
- * n’avait aucun appelant, `escortCombatant` portait déjà un paramètre `extra` laissé vide, et
- * `companionsOf`/`advTalentsOf` n’étaient lus que par leurs tests. « Le compagnon suit son
- * homme PARTOUT, convoi comme rempart » n’était donc vrai qu’à moitié — il ne comptait qu’au mur.
- *
- * ⚠️ ON DIVISE PAR L’EFFECTIF, et c’est ce qui rend la route ÉQUIVALENTE au rempart. Là-bas
- * chaque aventurier est une unité distincte : son loup ne booste que LUI, donc quatre loups
- * font quatre combattants +x %, pas un groupe +4x %. Ici l’escorte est FONDUE en un seul
- * combattant dont les stats s’additionnent — cumuler les pourcentages y appliquerait quatre
- * fois le bonus à la totalité des dégâts. La moyenne redonne exactement le bon compte : une
- * escorte entièrement accompagnée vaut UN compagnon de bonus, et un seul loup sur quatre en
- * vaut le quart. C’est aussi ce qui interdit structurellement le retour du « pool global »
- * que la v0.777 avait supprimé.
- *
- * ⚠️ LA FATIGUE N’EST PAS LUE ICI, délibérément : le sort du convoi est tiré au DÉPART
- * (`startCaravan`) alors qu’il se joue des heures plus tard — « fatigué au moment du tirage »
- * ne voudrait rien dire. Elle reste au rempart, où l’instant du combat est celui du calcul.
- */
-/** XP de DRESSAGE d’un familier qui a escorté un convoi (v0.805 ; « une expérience
- *  globale, montée par les convois et les défenses »).
- *  ⚠️ Calée sur le rapport des aventuriers : un siège gagné vaut ~1,6 convoi. Un siège
- *  de niveau 28 rend ~1 000 XP, un convoi de niveau 28 en rend ~560 — et on en envoie
- *  plusieurs par jour, là où un siège tombe au plus une fois. */
-export function caravanFamiliarXp(poi: Pick<Poi, 'level'>): number {
-  return Math.round(Math.max(1, poi.level) * 20);
+ * ⚠️ ON DIVISE PAR L’EFFECTIF : sur la route l’escorte est FONDUE en un seul combattant
+ * dont les stats s’additionnent — cumuler les pourcentages y appliquerait quatre fois le
+ * bonus à la totalité des dégâts. La moyenne redonne le bon compte, exactement comme au
+ * rempart où chaque pièce n’épaule que son homme. */
+export function roadGearEffects(escort: Adventurer[], kit: EscortKit): AggregatedEffects {
+  return pairedEscortEffects(escort, escortGear(escort, kit));
 }
 
-export function roadCompanionEffects(
-  escort: Adventurer[],
-  road: RoadCompanions,
-): AggregatedEffects {
-  return pairedEscortEffects(escort, roadPairs(escort, road));
-}
-
-/** Le cœur de `roadCompanionEffects`, sur une attribution DÉJÀ calculée (`roadPairs`) :
+/** Le cœur de `roadGearEffects`, sur une attribution DÉJÀ calculée (`escortGear`) :
  *  `resolveCaravan` la construit une fois pour le combattant fondu ET pour les unités. */
 function pairedEscortEffects(
   escort: Adventurer[],
-  pairs: Map<string, CompanionSet>,
+  gear: Map<string, AdvGear[]>,
 ): AggregatedEffects {
-  if (!escort.length || !pairs.size) return emptyEffects();
-  const sets = [...pairs.values()];
-  // 🗡️ Ce qu'ils PORTENT — même division par l'effectif que les compagnons, pour la même
-  // raison : l'escorte est fondue en un seul combattant.
-  return scaleEffects(
-    mergeEffects(
-      companionEffects(sets.flatMap((p) => (p.familiar ? [p.familiar] : []))),
-      advTalentEffects(sets.flatMap((p) => (p.talent ? [p.talent] : []))),
-      advGearEffects(sets.flatMap((p) => p.gear ?? [])),
-    ),
-    1 / escort.length,
-  );
+  if (!escort.length || !gear.size) return emptyEffects();
+  return scaleEffects(advGearEffects([...gear.values()].flat()), 1 / escort.length);
 }
 
 /** Multiplicateur de CARGAISON d'une escorte : rôles 🐫 + pièces qui portent ce rôle,
@@ -1383,10 +1080,9 @@ export function resolveCaravan(
   poi: Poi,
   escort: Adventurer[],
   seed: number,
-  /** ⚠️ REQUIS, pas optionnel : un paramètre qu’on peut oublier finit par l’être, et c’est
-   *  exactement ce qui a laissé ce socle inerte pendant vingt-six versions. Une escorte
-   *  sans compagnon se déclare avec des listes vides. */
-  road: RoadCompanions,
+  /** ⚠️ REQUIS, pas optionnel : un paramètre qu’on peut oublier finit par l’être. Une
+   *  escorte nue se déclare avec `{ advGear: [] }`. */
+  kit: EscortKit,
   /** ⚠️ REQUIS : niveau RÉEL du joueur. Ne sert qu'au tirage d'équipement d'aventurier
    *  (anti-runaway) — le combat de la route n'en dépend pas. */
   playerLevel: number,
@@ -1409,8 +1105,8 @@ export function resolveCaravan(
   // bandes de route en dépendent. Le groupe — qui tombe, qui abat qui — n'est qu'une LECTURE
   // de son journal (`deriveSkirmish`), jamais un second combat.
   const foe = roadFoe(poi);
-  // 🐾 Qui porte quoi, calculé UNE fois : le combattant fondu et les unités en sont deux lectures.
-  const pairs = roadPairs(escort, road);
+  // 🗡️ Qui porte quoi, calculé UNE fois : le combattant fondu et les unités en sont deux lectures.
+  const pairs = escortGear(escort, kit);
   const guards = escortCombatant(escort, 'Escorte', pairedEscortEffects(escort, pairs));
   // Unités et troupe calculées à la première embuscade seulement (inutiles sur une route
   // tranquille). La troupe EST `foe` réparti en corps (`roadTroop` → `troopOf`).
@@ -1495,7 +1191,7 @@ export function resolveCaravan(
   }
 
   const tfH = heroEquivalentFactor(poi);
-  const haul = caravanHaulMult(escort, road.advGear);
+  const haul = caravanHaulMult(escort, kit.advGear);
   const k = mult * haul;
   const raw = harvestYield(poi.type, poi.level, tfH);
   const y = {
@@ -1548,14 +1244,14 @@ export function startCaravan(
   escort: Adventurer[],
   now: number,
   seed: number,
-  road: RoadCompanions,
+  kit: EscortKit,
   /** ⚠️ REQUIS : le trajet du convoi dépend du Comptoir — l'oublier le rallongerait. */
   comptoirLevel: number,
   /** ⚠️ REQUIS : niveau RÉEL du joueur (cf. `resolveCaravan`). */
   playerLevel: number,
 ): Caravan {
   const leg =
-    caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, road.advGear).speed) * 60_000;
+    caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, kit.advGear).speed) * 60_000;
   return {
     id,
     poi,
@@ -1563,7 +1259,7 @@ export function startCaravan(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    outcome: resolveCaravan(poi, escort, seed, road, playerLevel),
+    outcome: resolveCaravan(poi, escort, seed, kit, playerLevel),
     claimed: false,
   };
 }

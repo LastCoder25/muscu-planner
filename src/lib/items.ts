@@ -244,7 +244,7 @@ export function effectiveValue(effect: ItemEffect, level: number): number {
 
 // ── Économie d'objets : Poussière (évolution) & or (vente) ──
 // Index 0..9 du rang → sert aux barèmes croissants (poussière / or / coûts).
-export function rankIndex(r: Rarity): number {
+function rankIndex(r: Rarity): number {
   return Math.max(0, RANK_ORDER.indexOf(r));
 }
 /** Arrondit une magnitude d'effet à 1 décimale (au lieu d'un entier) → la qualité
@@ -412,9 +412,9 @@ export const RARITY_RANK: Record<Rarity, number> = Object.fromEntries(
  *
  *  ⚠️ LE CRAN i DE RARETÉ EST LE RANG i DE L’ÉCHELLE DE PRESTIGE — et ce n’est pas un
  *  choix esthétique : une classe d’aventurier se gagne à chaque rang (`PROMO_LEVELS` =
- *  `rankStartLevel`), et un compagnon ne dépasse pas la rareté de la classe de son maître
- *  (`canAdvFamiliar` / `canAdvTalent`). Donc un aventurier **Bronze** mène un familier
- *  **Bronze**, un **Argent** un **Argent** : la règle se lit sans table de conversion.
+ *  `rankStartLevel`), et une pièce ne dépasse pas la rareté de la classe de son porteur
+ *  (`canWearAdvGear`). Donc un aventurier **Bronze** porte du **Bronze**, un **Argent** de
+ *  l’**Argent** : la règle se lit sans table de conversion.
  *  ⚠️ DEPUIS LA v0.874, LES OBJETS AUSSI (demandé par l’utilisateur) : tout ce qui se porte
  *  se lit en rang. `RARITY_LABEL` (Commun → Primordial) ne sert plus qu’au code interne. */
 export function rarityRank(r: Rarity): RankTier {

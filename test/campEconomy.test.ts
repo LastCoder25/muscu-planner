@@ -7,7 +7,6 @@ import {
   convoySlotsFree,
   refAdvGear,
   refAdventurer,
-  refCompanions,
 } from '@/lib/caravan';
 import { engageCap, type Adventurer } from '@/lib/adventurers';
 import { campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
@@ -42,7 +41,6 @@ function roster(L: number, n: number): Adventurer[] {
   return Array.from({ length: n }, (_, i) => ({
     ...refAdventurer(L, i),
     id: `a${i}`,
-    familiarId: `refFam${i}`,
     gear: {
       weapon: `refGear${i}weapon`,
       armor: `refGear${i}armor`,
@@ -52,15 +50,7 @@ function roster(L: number, n: number): Adventurer[] {
   }));
 }
 function road(L: number, n: number) {
-  const base = refCompanions(L);
-  return {
-    familiars: Array.from({ length: n }, (_, i) => ({
-      ...base[i % base.length]!,
-      id: `refFam${i}`,
-    })),
-    talents: [],
-    advGear: refAdvGear(L, n),
-  };
+  return { advGear: refAdvGear(L, n) };
 }
 
 interface Trip {
@@ -226,6 +216,13 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
     //
     // Mesuré (8 graines, niveau 60, Comptoir 9) : 5,8 camps/jour et +15,8 % d’or AVEC le
     // plafond, contre 8,3 et +20,9 % sans — soit ×1,43 et ×1,32.
+    //
+    // ⚠️ RE-MESURÉ EN v0.1005 (champions sans compagnons, fusionné sur la base sans épave) :
+    // 6,2 camps/jour et +12,3 % d’or AVEC le plafond, 8,0 et +13,9 % SANS — soit ×1,30 et
+    // ×1,13. Le plafond reste le levier du NOMBRE de groupes ; sur l’OR il pèse moins parce
+    // que, sans familier ni talent, les camps en plus au-delà du plafond demandent des groupes
+    // plus gros et leurs salaires mangent presque tout le butin. Borne ramenée de 1,15 à 1,08
+    // pour cette raison mesurée — elle attrape toujours un plafond qui ne mordrait plus du tout.
     expect(sans.parties / cap.parties).toBeGreaterThan(1.25);
     expect(
       sans.goldNet / cap.goldNet,
@@ -233,7 +230,7 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
         (sans.goldNet / goldPerDay(60)) *
         100
       ).toFixed(1)} % sans`,
-    ).toBeGreaterThan(1.15);
+    ).toBeGreaterThan(1.08);
     // …et même sans plafond on reste sous la bande, ce qui n’était pas le cas à 20 POI
     // ordinaires : le garde-fou a désormais de la marge devant lui.
     expect(sans.goldNet / goldPerDay(60)).toBeLessThanOrEqual(GOLD_MAX);

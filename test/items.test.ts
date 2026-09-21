@@ -2303,14 +2303,6 @@ describe('🏅 FAMILIERS ET TALENTS SE LISENT EN RANG (v0.833)', () => {
       expect(renameLegacyItem(d)).toBe(d);
     }
   });
-  it('le Chenil annonce son plafond dans la même langue que les familiers', async () => {
-    const { companionRankLabel } = await import('@/lib/raid');
-    expect(companionRankLabel(1)).toBe(rarityRank('commun').name);
-    expect(companionRankLabel(71)).toBe(rarityRank('primordial').name);
-    // Le Magique (Or) et non « Magique » : même langue que les familiers qu'il héberge.
-    // (Chenil 21 = début du rang Or, le rang du joueur depuis la v0.857.)
-    expect(companionRankLabel(21)).toBe(rarityRank('magique').name);
-  });
 });
 
 describe('bases partagées avec l’équipement des aventuriers', () => {

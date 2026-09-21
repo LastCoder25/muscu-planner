@@ -520,10 +520,10 @@ describe('sources d’équipement', () => {
   it('les corps d’un siège en laissent, seulement des lignées du vivier', () => {
     const corpses = Array.from({ length: 400 }, (_, i) => corpse(i));
     const v = [adv('a', ['mage'])];
-    const l = lootCorpses(corpses, 'bandits', 30, 9, 0, v);
+    const l = lootCorpses(corpses, 'bandits', 30, 9, v);
     expect(l.advGear.length).toBeGreaterThan(0);
     for (const g of l.advGear) expect(g.lineage).toBe('mage');
-    expect(lootCorpses(corpses, 'bandits', 30, 9, 0, []).advGear).toHaveLength(0);
+    expect(lootCorpses(corpses, 'bandits', 30, 9, []).advGear).toHaveLength(0);
   });
   it('taux par corps et par champion', () => {
     expect(ADV_GEAR_DROP.champion).toBeGreaterThan(ADV_GEAR_DROP.corpse);
@@ -537,11 +537,8 @@ describe('sources d’équipement', () => {
     // du reste du butin — ce qui n’a aucun sens (un vivier ne change rien à ce qu’un corps
     // a sur lui) et casserait la même graine que ci-dessus.
     const corpses = Array.from({ length: 200 }, (_, i) => corpse(i));
-    const sans = lootCorpses(corpses, 'bandits', 30, 9, 0, []);
-    const avec = lootCorpses(corpses, 'bandits', 30, 9, 0, [
-      adv('a', ['mage']),
-      adv('b', ['archer']),
-    ]);
+    const sans = lootCorpses(corpses, 'bandits', 30, 9, []);
+    const avec = lootCorpses(corpses, 'bandits', 30, 9, [adv('a', ['mage']), adv('b', ['archer'])]);
     expect(avec.gold).toBe(sans.gold);
     expect(avec.summonStones).toBe(sans.summonStones);
     expect(avec.keys).toBe(sans.keys);
@@ -955,7 +952,7 @@ describe('🗡️ ce qui attend un porteur (pendingAdvGear)', () => {
     // Sinon l'écran annoncerait « il y a à faire » et le bouton ne ferait rien.
     const advs = [adv('a', ['guerrier']), adv('b', ['archer'])];
     const stock = [piece('w1'), piece('w2', { lineage: 'archer', name: 'Arc' })];
-    const ctx = { familiars: [], talents: [], kennelLevel: 1, now: 0, advGear: stock };
+    const ctx = { kennelLevel: 1, now: 0, advGear: stock };
     const plan = autoAdvGear(advs, ctx);
     for (const [id, slots] of pendingAdvGear(advs, stock))
       for (const s of slots) expect(plan.get(id)?.[s], `${id}/${s}`).toBeTruthy();

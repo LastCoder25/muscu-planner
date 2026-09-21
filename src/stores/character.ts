@@ -128,15 +128,8 @@ import {
   finishRepairNow,
   rushRepairCost,
   totalRepairCost,
-  companionPairs,
-  companionPerks,
-  autoCompanions,
   autoAdvGear,
-  siegeFamiliarXp,
-  type CompanionCtx,
-  companionRankLabel,
-  canCompanion,
-  fatigueMsFor,
+  retireKennel,
   healCost,
   woundRemainingMs,
   woundMsFor,
@@ -159,16 +152,11 @@ import {
   canSendCaravan,
   caravanClaimRoster,
   convoySlotsFree,
-  caravanFamiliarXp,
-  canAdvTalent,
-  canAdvFamiliar,
-  familiarKeepers,
-  companionsOf,
   isCaravanClaimable,
   pruneCaravans,
   startCaravan,
   type Caravan,
-  type RoadCompanions,
+  type EscortKit,
   type PartyHero,
 } from '@/lib/caravan';
 import {
@@ -326,7 +314,14 @@ export const useCharacterStore = defineStore('character', () => {
       v && typeof v === 'object' && !Array.isArray(v) ? (v as T) : ({} as T);
     r.talents = normalizeTalents(r.talents); // legacy string[] → instances (rétro-compat)
     // Aventuriers/convois : un jsonb malformé ne doit jamais faire planter la page.
-    r.adventurers = arr<Adventurer>(r.adventurers);
+    // ⚠️ Plus de compagnon ni de talent sur un champion (v0.996) : les champs des
+    // sauvegardes d'avant sont retirés ici, la prochaine écriture les efface en base.
+    r.adventurers = arr<Adventurer>(r.adventurers).map((a) => {
+      const rest: Record<string, unknown> = { ...a };
+      delete rest.familiarId;
+      delete rest.talentId;
+      return rest as unknown as Adventurer;
+    });
     // ⚠️ Les convois ENCAISSÉS sont taillés au chargement : la liste ne se purgeait
     // jamais (35 convois mesurés sur un compte réel, dont 30 dépensés). Un non-encaissé
     // n'est JAMAIS jeté — il porte une cargaison.
@@ -437,6 +432,16 @@ export const useCharacterStore = defineStore('character', () => {
     if (scrapLeft > 0) r.gold = (r.gold ?? 0) + scrapLeft * SCRAP_TO_GOLD;
     r.scrap = 0;
     if (!r.base || typeof r.base !== 'object' || Array.isArray(r.base)) r.base = null;
+    // 🐾 LE CHENIL EST RETIRÉ (v0.996) — son investissement est RENDU. ⚠️ AVANT le filtre
+    // des types inconnus ci-dessous, sinon il disparaîtrait sans rien rendre (même ordre
+    // que la fusion du Panthéon). `fetchMine` persiste aussitôt (`settleLegacy`).
+    if (r.base) {
+      const k = retireKennel({ ...r.base, defenses: arr<DefenseStructure>(r.base.defenses) });
+      if (k.gold) {
+        r.gold = (r.gold ?? 0) + k.gold;
+        r.base = k.base;
+      }
+    }
     // Une structure dont le type a disparu du registre est DROPPÉE (même politique que
     // les bâtiments) → pas d'enceinte fantôme après un renommage de type.
     if (r.base)
@@ -470,10 +475,17 @@ export const useCharacterStore = defineStore('character', () => {
     const raw = data?.buildings;
     const legacy = healBuildings(Array.isArray(raw) ? raw : []);
     const legacyScrap = typeof data?.scrap === 'number' ? Math.max(0, data.scrap) : 0;
+    // 🐾 Même principe pour le Chenil retiré : sa présence sur la ligne BRUTE est le marqueur.
+    const rawBase = data?.base as BaseState | null | undefined;
+    const kennelGold = rawBase && Array.isArray(rawBase.defenses) ? retireKennel(rawBase).gold : 0;
     row.value = normalizeRow(data ?? null);
     loaded.value = true;
-    if (row.value && legacy.goldRefund > 0) await settlePantheon(uid, legacy.goldRefund);
-    if (row.value && legacyScrap > 0) await settleScrap(uid, legacyScrap);
+    if (row.value && (legacy.goldRefund > 0 || legacyScrap > 0 || kennelGold > 0))
+      await settleLegacy(uid, {
+        pantheon: legacy.goldRefund,
+        scrap: legacyScrap,
+        kennel: kennelGold,
+      });
     if (row.value) await settleWipe(uid);
     if (row.value) await settleGachaReset(uid);
     return row.value;
@@ -519,44 +531,60 @@ export const useCharacterStore = defineStore('character', () => {
    *  persistance immédiate ferme cette fenêtre. Un échec laisse la base intacte : on
    *  retentera au prochain chargement, et le pire cas est généreux, jamais punitif.
    *  ⚠️ Et on le DIT : un bond de plusieurs millions d'or sans un mot se lit comme un bug. */
-  /** 🔩 → 🪙 Persiste la conversion de la ferraille faite par `normalizeRow` (or ET
-   *  ferraille à zéro dans la même écriture) et l'annonce. Hors ligne : la base garde la
-   *  ferraille, on reconvertira au prochain chargement — jamais deux fois, puisqu'on n'a
-   *  rien écrit. */
-  async function settleScrap(userId: string, scrap: number) {
+  /**
+   * 🏗️ Écrit **EN UNE SEULE REQUÊTE** tout ce que `normalizeRow` a rendu au chargement :
+   * fusion du Panthéon (bâtiments), ferraille convertie (or, ferraille à zéro), Chenil retiré
+   * (enceinte sans lui, vivier sans compagnons).
+   * ⚠️ UNE écriture et non trois : tant que la ligne en base porte encore l'ancien état,
+   * chaque chargement recalcule le remboursement. Si l'or partait dans une requête et
+   * l'enceinte dans une autre, une coupure entre les deux rembourserait DEUX fois. Hors
+   * ligne : rien n'est écrit, on retentera au prochain chargement — jamais deux fois.
+   * ⚠️ Et on le DIT : un bond d'or sans un mot se lit comme un bug.
+   */
+  async function settleLegacy(
+    userId: string,
+    back: { pantheon: number; scrap: number; kennel: number },
+  ) {
     const cur = row.value;
     if (!cur) return;
     try {
-      await persist(userId, { gold: cur.gold, scrap: 0 });
+      await persist(userId, {
+        buildings: cur.buildings,
+        gold: cur.gold,
+        scrap: 0,
+        base: cur.base,
+        adventurers: cur.adventurers,
+      });
     } catch {
       return;
     }
-    useGameFx().celebrate({
-      kind: 'unlock',
-      emoji: '🪙',
-      title: 'La ferraille devient de l’or',
-      subtitle: `Tes ${scrap} 🔩 ont été revendus : +${scrap * SCRAP_TO_GOLD} 🪙. L’enceinte se paie désormais en or.`,
-      rarity: 'epic',
-    });
-  }
-
-  async function settlePantheon(userId: string, refund: number) {
-    const cur = row.value;
-    if (!cur) return;
-    try {
-      await persist(userId, { buildings: cur.buildings, gold: cur.gold });
-    } catch {
-      return; // hors ligne : la base garde les anciens bâtiments, on retentera.
-    }
-    useGameFx().celebrate({
-      kind: 'unlock',
-      // ⚠️ Générique : cette annonce sert à TOUS les retraits (Panthéon, Mine d'or,
-      // Fonderie, Entrepôt…) — nommer un seul bâtiment mentirait aux autres.
-      emoji: '🏗️',
-      title: 'Ta base est réorganisée',
-      subtitle: `Des bâtiments ont été fusionnés ou retirés — ${refund.toLocaleString('fr-FR')} 🪙 rendus`,
-      rarity: 'legendary',
-    });
+    const fx = useGameFx();
+    if (back.pantheon > 0)
+      fx.celebrate({
+        kind: 'unlock',
+        // ⚠️ Générique : cette annonce sert à TOUS les retraits (Panthéon, Mine d'or,
+        // Fonderie, Entrepôt…) — nommer un seul bâtiment mentirait aux autres.
+        emoji: '🏗️',
+        title: 'Ta base est réorganisée',
+        subtitle: `Des bâtiments ont été fusionnés ou retirés — ${back.pantheon.toLocaleString('fr-FR')} 🪙 rendus`,
+        rarity: 'legendary',
+      });
+    if (back.scrap > 0)
+      fx.celebrate({
+        kind: 'unlock',
+        emoji: '🪙',
+        title: 'La ferraille devient de l’or',
+        subtitle: `Tes ${back.scrap} 🔩 ont été revendus : +${back.scrap * SCRAP_TO_GOLD} 🪙. L’enceinte se paie désormais en or.`,
+        rarity: 'epic',
+      });
+    if (back.kennel > 0)
+      fx.celebrate({
+        kind: 'unlock',
+        emoji: '🐾',
+        title: 'Le Chenil ferme ses portes',
+        subtitle: `Familiers et talents restent au héros — ${back.kennel.toLocaleString('fr-FR')} 🪙 rendus`,
+        rarity: 'epic',
+      });
   }
 
   /**
@@ -967,9 +995,8 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !itemIds.length) return 0;
     const wanted = new Set(itemIds);
-    const posted = familiarKeepers(cur.adventurers ?? []);
     const sold = cur.inventory.filter(
-      (i) => wanted.has(i.id) && i.slot === FAMILIAR_SLOT && !i.locked && !posted.has(i.id),
+      (i) => wanted.has(i.id) && i.slot === FAMILIAR_SLOT && !i.locked,
     );
     if (!sold.length) return 0;
     const gain = sold.reduce((s, i) => s + sellValue(i), 0);
@@ -1851,9 +1878,7 @@ export const useCharacterStore = defineStore('character', () => {
     return id;
   }
 
-  /** ⚠️ `playerLevel` REQUIS : le VRAI niveau du joueur, plafond du dressage des compagnons
-   *  d'un groupe de camp (`grantFamiliarXp`) — même règle que `claimCaravan`. */
-  async function expeClaim(userId: string, messageId: string, now: number, playerLevel: number) {
+  async function expeClaim(userId: string, messageId: string, now: number) {
     const cur = row.value;
     if (!cur) return null;
     const m = cur.messages.find((x) => x.id === messageId);
@@ -1865,7 +1890,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...it,
       id: crypto.randomUUID(),
     }));
-    let inventory = drops.length ? [...cur.inventory, ...drops] : cur.inventory;
+    const inventory = drops.length ? [...cur.inventory, ...drops] : cur.inventory;
     // ⚔️ UN GROUPE DE CAMP : XP par aventurier, infirmerie des camps, pièces d'aventurier,
     // dressage des compagnons, salaires. ⚠️ `m.party` ABSENT des rapports d'avant : rien à
     // faire. ⚠️ Crédité UNE fois : `isClaimable` en tête + `claimed: true` dans la MÊME
@@ -1880,19 +1905,6 @@ export const useCharacterStore = defineStore('character', () => {
         infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
         now,
       });
-      // 🐾 Les compagnons de l'escorte ont combattu : dressage, comme en convoi. ⚠️ Mêmes
-      // exclusions que la route (`companionsOf`) : celui du héros se battait à ses côtés.
-      const trained = new Set(
-        companionsOf(claim.escort, cur.inventory, cur.equipped?.[FAMILIAR_SLOT]?.id).map(
-          (f) => f.id,
-        ),
-      );
-      if (trained.size) {
-        const gain = caravanFamiliarXp(m);
-        inventory = inventory.map((it) =>
-          trained.has(it.id) ? grantFamiliarXp(it, gain, playerLevel) : it,
-        );
-      }
       wages = claim.wages;
       partyPatch = {
         adventurers: claim.adventurers,
@@ -1998,44 +2010,16 @@ export const useCharacterStore = defineStore('character', () => {
     return cur.base ?? emptyBase(newSeed(now), now);
   }
 
-  /** 🐾🧠 CE QUE L’ESCORTE EMMÈNE — SOURCE UNIQUE de la réserve de compagnons.
-   *
-   *  ⚠️ Cette forme était rebâtie à la main en QUATRE endroits (`sendCaravan`, `sendParty`,
-   *  `companionCtx` et le `roadCtx` de la carte) : quatre copies d’une règle qui finiraient
-   *  par diverger — `sendCaravan` normalisait même les talents deux fois.
-   *  ⚠️ Le HÉROS garde ce qu’il porte : ni son familier ni ses talents ne passent à
-   *  l’escorte, il se bat ailleurs.
-   *  ⚠️ Pas de `kennelLevel` ni d’horloge : le Chenil ne plafonne que le dressage de DÉFENSE
-   *  (cf. `RoadCompanions`) ; c’est `companionCtx` qui les ajoute par-dessus, pour le rempart. */
-  function roadPoolOf(cur: CharacterRow | null): RoadCompanions {
-    const talents = normalizeTalents(cur?.talents ?? []);
-    return {
-      familiars: (cur?.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
-      talents,
-      // 🗡️ Ce que les aventuriers portent : trajet (🧭), cargaison (🐫) et combat.
-      advGear: cur?.adv_gear?.stock ?? [],
-      heroFamiliarId: cur?.equipped?.[FAMILIAR_SLOT]?.id ?? null,
-      heroTalentIds: talents.filter((t) => t.equipped === true).map((t) => t.id),
-    };
+  /** 🗡️ CE QUE L’ESCORTE EMMÈNE — SOURCE UNIQUE : le stock d'équipement des champions.
+   *  ⚠️ Plus de familiers ni de talents (v0.996) : ils sont réservés au HÉROS. */
+  function escortKitOf(cur: CharacterRow | null): EscortKit {
+    return { advGear: cur?.adv_gear?.stock ?? [] };
   }
 
   /** La même réserve, pour l’ÉCRAN (pronostic d’un camp, panneau de forces) : un `computed`
-   *  la partage entre tous ses lecteurs au lieu que chacun la reconstruise. Vide sans
-   *  personnage — la page n’a donc aucun cas particulier à écrire. */
-  const roadCompanions = computed(() => roadPoolOf(row.value));
+   *  la partage entre tous ses lecteurs au lieu que chacun la reconstruise. */
+  const escortKit = computed(() => escortKitOf(row.value));
 
-  /** 🐾 CE QUE L’ON A APPAREILLÉ, prêt pour le combat et pour les à-côtés.
-   *
-   *  ⚠️ REMPLACE `garrisonFor` : il n’y a plus de garnison de familiers postés au mur.
-   *  Un familier est confié à un AVENTURIER et le suit partout (demandé par
-   *  l’utilisateur) ; le Chenil ne fait que plafonner combien et jusqu’à quel rang. */
-  function companionCtx(cur: CharacterRow, now: number): CompanionCtx {
-    return {
-      ...roadPoolOf(cur),
-      kennelLevel: defenseLevel(baseOf(cur, now).defenses, 'kennel'),
-      now,
-    };
-  }
   /** Le héros défend-il ? Il n'est là que s'il n'est pas parti en expédition. C'est le
    *  seul coût de sa présence : rester, c'est renoncer au revenu d'une expédition. */
   function heroIsHome(cur: CharacterRow): boolean {
@@ -2060,10 +2044,8 @@ export const useCharacterStore = defineStore('character', () => {
     }
 
     const home = heroIsHome(cur);
-    // ⚠️ CHAQUE AVENTURIER SE BAT AVEC SON COMPAGNON ET SON TALENT — il n’y a plus de
-    // bonus GLOBAL appliqué identiquement à tout le monde. Le Chenil ne fait que
-    // plafonner combien peuvent en porter, et jusqu’à quel rang.
-    const cctx = companionCtx(cur, now);
+    // Chaque champion se bat avec SES pièces (plus de compagnon ni de talent, v0.996).
+    const cctx = escortKitOf(cur);
     // Les aventuriers DISPONIBLES défendent (ni en convoi, ni à l’infirmerie, ni en
     // formation). Sans eux, il ne reste que le mur et les tourelles.
     // ⚠️ LES DÉFENSEURS SONT NOMMÉS UNE FOIS : le combat et l’XP doivent parler des MÊMES
@@ -2101,7 +2083,6 @@ export const useCharacterStore = defineStore('character', () => {
           report.faction,
           ctx.playerLevel,
           (report.resolvedAt ^ cur.base!.seed) >>> 0 || 1,
-          companionPerks(advList.value, cctx).lootPct,
           advList.value,
         )
       : null;
@@ -2143,32 +2124,9 @@ export const useCharacterStore = defineStore('character', () => {
           : next;
       });
     }
-    // Les familiers postés SORTENT du siège : ils gagnent de l'XP de DÉFENSE (∝ ce
-    // qu'ils ont repoussé) et soufflent un moment. Jamais blessés, jamais perdus —
-    // sinon personne ne posterait ses bons familiers et le chenil resterait vide.
-    // ⚠️ CE SONT LES COMPAGNONS ENGAGÉS qui sortent du siège — ceux que
-    // `companionPairs` a réellement retenus, pas tous ceux qu’on a appareillés : au-delà
-    // des places du Chenil, un compagnon reste à la niche et ne se fatigue pas.
-    const engages = new Set(
-      [...companionPairs(defenders, cctx).values()]
-        .map((p) => p.familiar?.id)
-        .filter((x): x is string => !!x),
-    );
-    // ⚠️ UNE SEULE ÉCRITURE DE L’INVENTAIRE : le dressage des familiers engagés ET les
-    // objets trouvés sur les corps. Deux `patch.inventory` successifs, et le second
-    // écraserait le premier — en silence.
-    const gain = siegeFamiliarXp(report);
-    const rest = now + fatigueMsFor(defenseLevel(t.base.defenses, 'infirmary'));
-    if (engages.size || drops.length) {
-      const base = engages.size
-        ? cur.inventory.map((it) =>
-            engages.has(it.id)
-              ? { ...grantFamiliarXp(it, gain, ctx.playerLevel), fatigueUntil: rest }
-              : it,
-          )
-        : cur.inventory;
-      patch.inventory = drops.length ? [...base, ...drops] : base;
-      if (drops.length) patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
+    if (drops.length) {
+      patch.inventory = [...cur.inventory, ...drops];
+      patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
     }
     // Stock VOLÉ = la production accumulée non récoltée. On remet simplement les
     // compteurs à l'heure : on ne peut donc perdre que ce qu'on n'avait pas ramassé,
@@ -2220,108 +2178,23 @@ export const useCharacterStore = defineStore('character', () => {
     return cost;
   }
 
-  /** 🐾 CONFIER (ou reprendre) un COMPAGNON à un aventurier.
-   *
-   *  ⚠️ REMPLACE `toggleGarrison` / `setGarrison` / `autoAssignGarrison` : il n’y a
-   *  plus de garnison ni d’emplacements au mur. Un familier appartient à un HOMME et le
-   *  suit partout — convoi comme rempart (demandé par l’utilisateur).
-   *
-   *  ⚠️ LE REFUS VIT ICI, pas seulement à l’écran : une interface peut ne pas proposer
-   *  l’impossible, elle ne peut pas le garantir.
-   *
-   *  ⚠️ UN FAMILIER NE SERT QU’UN MAÎTRE : le confier à un second le retire au premier,
-   *  au lieu de laisser deux hommes croire qu’ils l’ont. C’est ce que le combat ferait
-   *  de toute façon (`companionPairs` n’en compte qu’un) — autant que l’écran le dise. */
-  async function setCompanion(userId: string, advId: string, famId: string | null) {
-    const cur = row.value;
-    if (!cur) return;
-    const kennel = defenseLevel(cur.base?.defenses ?? [], 'kennel');
-    if (famId) {
-      if (kennel <= 0) throw new Error(`Construis un Chenil pour confier un familier.`);
-      const fam = cur.inventory.find((it) => it.id === famId);
-      if (!fam || fam.slot !== FAMILIAR_SLOT) throw new Error(`Ce familier est introuvable.`);
-      if (famId === cur.equipped[FAMILIAR_SLOT]?.id)
-        throw new Error(`Ton héros le porte déjà — il se bat ailleurs.`);
-      if (!canCompanion(fam, kennel))
-        throw new Error(
-          `Ton Chenil ne sait héberger que jusqu’au rang ${companionRankLabel(kennel)}.`,
-        );
-      const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
-      // ⚠️ Refus AU STORE, comme pour les talents : même règle, même message.
-      if (adv && !canAdvFamiliar(adv, fam))
-        throw new Error(
-          `Trop rare pour ${adv.name} : sa classe est de rang ${rarityRank(advRarity(adv)).name} — promeus-le d’abord.`,
-        );
-    }
-    const adventurers = (cur.adventurers ?? []).map((a) => {
-      if (a.id === advId) return { ...a, familiarId: famId ?? undefined };
-      return famId && a.familiarId === famId ? { ...a, familiarId: undefined } : a;
-    });
-    await persistOptimistic(userId, { adventurers });
-  }
-
-  /** ✨ CONFIER AU MIEUX tous les compagnons, talents ET pièces d'équipement du vivier
-   *  (`autoCompanions` + `autoAdvGear`).
-   *  ⚠️ Les règles sont celles de la lib, qui reprend les exclusions de `setCompanion`,
-   *  `setAdvTalent` et `setAdvGear` : héros, Chenil (rang et places), rareté de classe
-   *  (talent ET équipement), lignée (équipement), un seul porteur.
+  /** ✨ CONFIER AU MIEUX les pièces d'équipement du vivier (`autoAdvGear`).
+   *  ⚠️ Les règles sont celles de la lib, qui reprend les exclusions de `setAdvGear` :
+   *  rareté de classe, lignée, un seul porteur.
    *  Il REMPLACE les choix faits à la main — l'écran le dit avant le geste.
-   *  ⚠️ LES DEUX PLANS SONT CALCULÉS SUR LE MÊME ÉTAT DE DÉPART (`advs`/`ctx` non
-   *  modifiés entre les deux appels) : `autoAdvGear` optimise l'équipement à familiers
-   *  et talents CONSTANTS (les siens actuels), exactement comme `autoCompanions`
-   *  optimise familiers et talents à équipement PORTÉ constant — deux calculs qui ne
-   *  se marchent pas dessus, écrits dans le MÊME `persist`.
-   *  Rend le nombre de compagnons, talents et pièces confiés, ou `null` sans ligne. */
-  async function autoAssignCompanions(
-    userId: string,
-    now: number,
-  ): Promise<{ familiars: number; talents: number; gear: number } | null> {
+   *  Rend le nombre de pièces confiées, ou `null` sans ligne. */
+  async function autoAssignGear(userId: string): Promise<{ gear: number } | null> {
     const cur = row.value;
     if (!cur) return null;
     const advs = cur.adventurers ?? [];
-    const ctx = companionCtx(cur, now);
-    const plan = autoCompanions(advs, ctx);
-    const gearPlan = autoAdvGear(advs, ctx);
-    const adventurers = advs.map((a) => ({
-      ...a,
-      familiarId: plan.get(a.id)?.familiarId,
-      talentId: plan.get(a.id)?.talentId,
-      gear: gearPlan.get(a.id),
-    }));
+    const gearPlan = autoAdvGear(advs, escortKitOf(cur));
+    const adventurers = advs.map((a) => ({ ...a, gear: gearPlan.get(a.id) }));
     await persistOptimistic(userId, { adventurers });
-    return {
-      familiars: adventurers.filter((a) => a.familiarId).length,
-      talents: adventurers.filter((a) => a.talentId).length,
-      gear: adventurers.reduce((s, a) => s + Object.keys(a.gear ?? {}).length, 0),
-    };
-  }
-
-  /** 🧠 CONFIER (ou reprendre) un TALENT à un aventurier. Mêmes règles que le
-   *  compagnon : un seul porteur, et jamais ce que le héros a équipé. */
-  async function setAdvTalent(userId: string, advId: string, talentId: string | null) {
-    const cur = row.value;
-    if (!cur) return;
-    if (talentId) {
-      const t = normalizeTalents(cur.talents).find((x) => x.id === talentId);
-      if (!t) throw new Error(`Ce talent est introuvable.`);
-      if (t.equipped === true)
-        throw new Error(`Ton héros l’a équipé — retire-le d’abord de ta fiche.`);
-      const adv = (cur.adventurers ?? []).find((a) => a.id === advId);
-      // ⚠️ Refus AU STORE : l’écran ne propose pas l’impossible, mais il ne le garantit pas.
-      if (adv && !canAdvTalent(adv, t))
-        throw new Error(
-          `Trop rare pour ${adv.name} : sa classe est de rang ${rarityRank(advRarity(adv)).name} — promeus-le d’abord.`,
-        );
-    }
-    const adventurers = (cur.adventurers ?? []).map((a) => {
-      if (a.id === advId) return { ...a, talentId: talentId ?? undefined };
-      return talentId && a.talentId === talentId ? { ...a, talentId: undefined } : a;
-    });
-    await persistOptimistic(userId, { adventurers });
+    return { gear: adventurers.reduce((s, a) => s + Object.keys(a.gear ?? {}).length, 0) };
   }
 
   /** 🗡️ CONFIER (ou retirer) une PIÈCE D'ÉQUIPEMENT à un aventurier, sur UN emplacement.
-   *  Mêmes règles que le compagnon et le talent : un seul porteur, et l'écran ne
+   *  Un seul porteur, et l'écran ne
    *  propose pas l'impossible mais ne le garantit pas — le refus vit ICI. */
   async function setAdvGear(
     userId: string,
@@ -2649,12 +2522,6 @@ export const useCharacterStore = defineStore('character', () => {
   // `caravanSlots`, `convoySlotsFree` et `caravanLegMin`, et le renommer partout
   // n'apprendrait rien de plus.
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
-  /** ⚠️ Le Chenil est une structure de l’ENCEINTE, pas un bâtiment de la cour — d’où
-   *  `defenseLevel` et non `buildingLevel`. Exposé ici parce que DEUX écrans en ont besoin
-   *  (la Guilde pour la coupe du dressage, la fiche des familiers pour l’afficher) : chacun
-   *  le recalculait, et une étiquette qui refait le calcul finit par contredire le combat. */
-  const kennelLevel = computed(() => defenseLevel(row.value?.base?.defenses ?? [], 'kennel'));
-
   /** ⚒️ Conclut les fabrications de l'Équipementier arrivées à terme. ⚠️ Appelé par le tick
    *  de base (qui tourne déjà) : sans ça, une pièce attendue ne sortirait qu'à la prochaine
    *  action touchant le vivier, donc peut-être jamais.
@@ -2699,8 +2566,8 @@ export const useCharacterStore = defineStore('character', () => {
       escort,
       now,
       seed,
-      // 🐾🧠 Ce que l'escorte emmène (`roadPoolOf`, la même réserve que le rempart et l'écran).
-      roadPoolOf(cur),
+      // 🗡️ Ce que l'escorte emmène (`escortKitOf`, la même réserve que le rempart et l'écran).
+      escortKitOf(cur),
       comptoirLevel.value,
       playerLevel,
     );
@@ -2731,7 +2598,7 @@ export const useCharacterStore = defineStore('character', () => {
    *  du AVANT/APRÈS pour l’annoncer — et c’est la LIB qui compare, pas lui.
    *  ⚠️ Une liste VIDE reste « encaissé avec succès » (elle est truthy) : c’est `null`
    *  qui dit l’échec. */
-  async function claimCaravan(userId: string, caravanId: string, playerLevel: number) {
+  async function claimCaravan(userId: string, caravanId: string) {
     const cur = row.value;
     const van = caravanList.value.find((c) => c.id === caravanId);
     if (!cur || !van || !isCaravanClaimable(van, Date.now())) return null;
@@ -2741,27 +2608,11 @@ export const useCharacterStore = defineStore('character', () => {
     // de `partyClaimRoster`. ⚠️ C'est elle qui garantit qu'une convalescence n'est JAMAIS
     // raccourcie — le calcul écrit ici écrasait `hurtUntil` et remettait debout trop tôt un
     // aventurier déjà alité plus longtemps (siège perdu).
-    const {
-      adventurers: advs,
-      escort: escortAdvs,
-      wages,
-    } = caravanClaimRoster(van, before, {
+    const { adventurers: advs, wages } = caravanClaimRoster(van, before, {
       pantheonLevel: pantheonLevel.value,
       infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
       now: Date.now(),
     });
-    // 🐾 Leurs COMPAGNONS ont escorté aussi : ils gagnent du dressage, comme au rempart.
-    // ⚠️ Mêmes exclusions que la route (`companionsOf`) : celui que le héros porte se
-    // battait ailleurs, il n’apprend rien de ce voyage.
-    const trained = new Set(
-      companionsOf(escortAdvs, cur.inventory, cur.equipped?.[FAMILIAR_SLOT]?.id).map((f) => f.id),
-    );
-    const famGain = caravanFamiliarXp(van.poi);
-    const inventory = trained.size
-      ? cur.inventory.map((it) =>
-          trained.has(it.id) ? grantFamiliarXp(it, famGain, playerLevel) : it,
-        )
-      : cur.inventory;
     // ⚠️ ON ARRONDIT À L'ENCAISSEMENT, pas seulement à la production. Ces cinq colonnes
     // sont des ENTIERS : une valeur décimale fait échouer la sauvegarde entière avec
     // `invalid input syntax for type integer`, et l'écran ne montre RIEN. Corriger la
@@ -2779,7 +2630,6 @@ export const useCharacterStore = defineStore('character', () => {
       summon_stones: cur.summon_stones + ent(o.summonStones),
       keys: cur.keys + ent(o.keys),
       adventurers: advs,
-      ...(trained.size ? { inventory } : {}),
       // 🗡️ Une embuscade repoussée peut avoir laissé une pièce. ⚠️ `o.advGear` ABSENT sur
       // les convois lancés avant cette version : l'optional chaining est voulu.
       ...(o.advGear?.length ? { adv_gear: withAdvGear(cur, o.advGear) } : {}),
@@ -2842,8 +2692,8 @@ export const useCharacterStore = defineStore('character', () => {
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
-    // 🐾🧠 Ce que le groupe emmène (`roadPoolOf` : le héros garde ce qu'il porte).
-    const road = roadPoolOf(cur);
+    // 🗡️ Ce que le groupe emmène (`escortKitOf`).
+    const road = escortKitOf(cur);
     const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
     const leg = partyLegMin(poi, escort, {
       hero: !!hero,
@@ -2939,15 +2789,13 @@ export const useCharacterStore = defineStore('character', () => {
     repairDefense,
     repairAll,
     finishRepair,
-    setCompanion,
-    setAdvTalent,
     setAdvGear,
     sellAdvGear,
     toggleAdvGearLock,
     withAdvGear,
     startOutfit,
     startOutfitBatch,
-    autoAssignCompanions,
+    autoAssignGear,
     healHero,
     healAdventurers,
     heroIsHome,
@@ -2959,11 +2807,10 @@ export const useCharacterStore = defineStore('character', () => {
     spendKey,
     advList,
     caravanList,
-    roadCompanions,
+    escortKit,
     advGearStock,
     pantheonLevel,
     comptoirLevel,
-    kennelLevel,
     settleForge,
     sendCaravan,
     claimCaravan,

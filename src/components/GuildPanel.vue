@@ -63,7 +63,7 @@
             <b>{{ maxRoster }}</b> à la fois : c’est la taille d’un groupe, et le nombre de
             défenseurs qui tiennent le rempart. <b>Monte le Panthéon</b> pour en engager un de plus.
           </div>
-          <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : un compagnon et un talent à chacun,
+          <!-- ✨ CONFIER AU MIEUX, EN TÊTE (demandé) : les pièces d'équipement de chacun,
              selon son profil, dans les règles des sélecteurs. ⚠️ Il ANNONCE ce qu'il va
              faire avant qu'on touche (gain de puissance, nombre de changements) et se tait
              quand il n'y a rien à gagner : il remplace les choix faits à la main, on ne
@@ -89,7 +89,7 @@
                   <template v-if="autoPreview.pending"
                     >{{ autoPreview.pending }} emplacement{{ autoPreview.pending > 1 ? 's' : '' }} à
                     armer</template
-                  ><template v-else>🐾 familiers · 🧠 talents · 🗡️ équipement</template
+                  ><template v-else>🗡️ équipement du vivier</template
                   ><template v-if="autoPreview.changes">
                     · {{ autoPreview.changes }} aventurier{{
                       autoPreview.changes > 1 ? 's' : ''
@@ -117,8 +117,7 @@
           <!-- 🖼️ LE VIVIER EN PORTRAITS (v0.807 ; demandé par l'utilisateur) : chaque
              aventurier est présenté comme le héros à l'entrée de l'Aventure — avatar au
              centre selon sa classe, étoiles de rang sur l'anneau, quatre ronds aux coins.
-             Toucher le portrait ouvre sa FICHE ; toucher le familier ou le talent de
-             l'avatar ouvre directement leur sélecteur. -->
+             Toucher le portrait ouvre sa FICHE. -->
           <!-- 🔎 FILTRE PAR ÉTAT (demandé). Les catégories VIDES ne sont pas proposées : une
                puce « 0 » n'apprend rien et prend la place d'une qui compte. -->
           <div v-if="rosterChips.length > 1" class="adv-filter">
@@ -159,8 +158,6 @@
                 :key="a.id"
                 :adv="a"
                 :look="lookOf(a)"
-                :familiar="famOf(a)"
-                :talent-icon="talIconOf(a)"
                 :power="powerOf(a)"
                 :state="stateOf(a)"
                 :tone="statusOf(a)"
@@ -168,8 +165,6 @@
                 :gear="gearCellsOf(a)"
                 @gear="(slot) => (gearPick = { advId: a.id, slot })"
                 @open="detailAdv = a"
-                @familiar="pairFor = a"
-                @talent="talFor = a"
               />
             </div>
           </section>
@@ -367,15 +362,14 @@
         </template>
       </div>
 
-      <!-- ⚔️ La puissance, et ce que la PAIRE y ajoute : sans l’écart, on ne sait pas si
-           le compagnon et le talent confiés servent à quelque chose. -->
+      <!-- ⚔️ La puissance, et ce que l'ÉQUIPEMENT y ajoute : sans l’écart, on ne sait pas si
+           les pièces confiées servent à quelque chose. -->
       <div class="d-pow">
         <span class="d-pow-val font-display">⚔️ {{ fmtPow(powerOf(detailAdv)) }}</span>
         <span v-if="pairBonusOf(detailAdv) > 0" class="d-pow-gain">
-          dont +{{ fmtPow(pairBonusOf(detailAdv)) }} grâce à son compagnon, son talent et son
-          équipement
+          dont +{{ fmtPow(pairBonusOf(detailAdv)) }} grâce à son équipement
         </span>
-        <span v-else class="d-pow-gain">sans compagnon, talent ni équipement qui compte</span>
+        <span v-else class="d-pow-gain">sans équipement qui compte</span>
       </div>
 
       <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
@@ -386,8 +380,7 @@
       </div>
 
       <!-- 🗡️ SES 4 EMPLACEMENTS D'ÉQUIPEMENT — une pièce par métier, jamais deux fois
-           la même stat qu'un objet du héros : le Chenil n'y est pour rien, c'est
-           l'Équipementier qui les fabrique et le sélecteur qui filtre par lignée et
+           la même stat qu'un objet du héros : c'est l'Équipementier qui les fabrique et le sélecteur qui filtre par lignée et
            rareté de classe (`canWearAdvGear`). -->
       <div class="d-gear">
         <button
@@ -460,134 +453,9 @@
         Ni rôle de convoi ni signature — de la stat brute.
       </p>
 
-      <!-- ── 🐾🧠 SA PAIRE ────────────────────────────────────────────────────
-           ⚠️ C’est ICI que l’on confie un familier et un talent, pas au Chenil :
-           ils appartiennent à un HOMME et le suivent partout — convoi comme
-           rempart. Le Chenil ne fait que plafonner combien et jusqu’à quel rang. -->
-      <div class="d-sec">🐾 Sa paire</div>
-      <button type="button" class="d-pair" @click="pairFor = detailAdv">
-        <span class="d-pair-emo">{{ detailFam?.emoji ?? '＋' }}</span>
-        <span class="d-pair-main">
-          <span class="d-pair-name">
-            {{ detailFam?.name ?? 'Aucun compagnon' }}
-            <span v-if="detailFam" class="d-rk" :style="{ '--rk': famColor(detailFam) }">{{
-              rarityRank(detailFam.rarity).name
-            }}</span>
-          </span>
-          <span v-for="(g, i) in detailFamGain" :key="i" class="d-gain">{{ g }}</span>
-          <span class="d-pair-sub">{{ famNote(detailAdv) }}</span>
-        </span>
-      </button>
-      <button type="button" class="d-pair" @click="talFor = detailAdv">
-        <span class="d-pair-emo">{{ detailTal ? '🧠' : '＋' }}</span>
-        <span class="d-pair-main">
-          <span class="d-pair-name">
-            {{ talLabel(detailAdv) }}
-            <span v-if="detailTal" class="d-rk" :style="{ '--rk': talColor(detailTal) }">{{
-              rarityRank(talentRankOf(detailTal)).name
-            }}</span>
-          </span>
-          <span v-for="(g, i) in detailTalGain" :key="i" class="d-gain">{{ g }}</span>
-          <span class="d-pair-sub">{{ talNote(detailAdv) }}</span>
-        </span>
-      </button>
-
       <div class="g-actions">
         <q-btn flat no-caps label="Fermer" @click="detailAdv = null" />
       </div>
-    </q-card>
-  </q-dialog>
-
-  <!-- ── SÉLECTEUR DE COMPAGNON ───────────────────────────────────────────
-       ⚠️ Seuls les familiers VRAIMENT disponibles et équipables sont listés (v0.808,
-       demandé par l’utilisateur) — la règle vit dans `companionOptions` (lib). Ce qui est
-       écarté est COMPTÉ, par raison, en une ligne : masquer sans rien dire donnerait
-       l’impression d’avoir perdu un familier. -->
-  <q-dialog :model-value="!!pairFor" position="bottom" @update:model-value="pairFor = null">
-    <q-card class="sheet">
-      <div class="g-head">
-        <div class="g-title font-display">🐾 Son compagnon</div>
-        <button class="iconbtn" aria-label="Fermer" @click="pairFor = null">✕</button>
-      </div>
-      <p class="g-note">
-        Chenil niveau {{ kennelLevel }} — rang max <b>{{ rankCapLabel }}</b> · {{ pairedCount }}/{{
-          slots
-        }}
-        compagnons confiés
-      </p>
-      <!-- ⚠️ On le dit UNE fois, en tête : le chiffre listé n’est pas celui de la fiche du
-           familier. Sans ça, lire « +4,2% » ici et « +10,5% » sur le même loup dans
-           l’inventaire se lit comme un bug. -->
-      <p class="g-note">{{ GAIN_NOTE }}</p>
-      <button v-if="pairFor && famOf(pairFor)" class="cta ghost" @click="assignFam(null)">
-        Reprendre son compagnon
-      </button>
-      <p v-if="!famPool.length" class="g-note">
-        Aucun familier en réserve — le Labyrinthe en donne un à chaque palier nettoyé.
-      </p>
-      <p v-else-if="!famRows.length" class="g-note">Aucun familier disponible pour lui.</p>
-      <p v-if="famHidden" class="g-note dim">{{ famHidden }}</p>
-      <button
-        v-for="r in famRows"
-        :key="r.f.id"
-        type="button"
-        class="d-pick"
-        :class="{ here: pairFor && famOf(pairFor)?.id === r.f.id }"
-        @click="assignFam(r.f.id)"
-      >
-        <span class="d-pair-emo">{{ r.f.emoji }}</span>
-        <span class="d-pair-main">
-          <span class="d-pair-name">
-            {{ r.f.name }}
-            <span class="d-rk" :style="{ '--rk': r.color }">{{ rarityRank(r.f.rarity).name }}</span>
-            <span
-              v-if="r.train"
-              class="d-train"
-              title="Dressage de défense, et ce que ton Chenil en retient"
-              >{{ r.train }}</span
-            >
-          </span>
-          <span v-for="(g, i) in r.gains" :key="i" class="d-gain">{{ g }}</span>
-          <span class="d-pair-sub">{{ r.meta }}</span>
-        </span>
-      </button>
-      <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="pairFor = null" /></div>
-    </q-card>
-  </q-dialog>
-
-  <!-- ── SÉLECTEUR DE TALENT ─────────────────────────────────────────────── -->
-  <q-dialog :model-value="!!talFor" position="bottom" @update:model-value="talFor = null">
-    <q-card class="sheet">
-      <div class="g-head">
-        <div class="g-title font-display">🧠 Son talent</div>
-        <button class="iconbtn" aria-label="Fermer" @click="talFor = null">✕</button>
-      </div>
-      <button v-if="talFor && talOf(talFor)" class="cta ghost" @click="assignTal(null)">
-        Reprendre son talent
-      </button>
-      <p class="g-note">{{ GAIN_NOTE }}</p>
-      <p v-if="!talPool.length" class="g-note">Aucun talent libre — les tiens sont équipés.</p>
-      <p v-else-if="!talRows.length" class="g-note">Aucun talent disponible pour lui.</p>
-      <p v-if="talHidden" class="g-note dim">{{ talHidden }}</p>
-      <button
-        v-for="r in talRows"
-        :key="r.t.id"
-        type="button"
-        class="d-pick"
-        :class="{ here: talFor && talOf(talFor)?.id === r.t.id }"
-        @click="assignTal(r.t.id)"
-      >
-        <span class="d-pair-emo">{{ r.icon }}</span>
-        <span class="d-pair-main">
-          <span class="d-pair-name">
-            {{ r.name }}
-            <span class="d-rk" :style="{ '--rk': r.color }">{{ rarityRank(r.rank).name }}</span>
-          </span>
-          <span v-for="(g, i) in r.gains" :key="i" class="d-gain">{{ g }}</span>
-          <span class="d-pair-sub">{{ r.meta }}</span>
-        </span>
-      </button>
-      <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="talFor = null" /></div>
     </q-card>
   </q-dialog>
 
@@ -699,7 +567,6 @@ import { useCharacterStore } from '@/stores/character';
 import {
   ADV_STARS,
   advGradeBadge,
-  advRarity,
   advRank,
   advRankProgress,
   advStatus,
@@ -720,41 +587,14 @@ import {
 import { rankStarStr } from '@/lib/characterRank';
 import { AWAKEN, advAwaken, advSubtitle, engageCap } from '@/lib/adventurers';
 import { GRADE_COLOR } from '@/data/champions';
-import {
-  rarityRank,
-  RARITY_RANK,
-  FAMILIAR_SLOT,
-  aggregateLines,
-  famLevel,
-  famXp,
-  jetStar,
-  type Item,
-} from '@/lib/items';
-import {
-  normalizeTalents,
-  talentByCode,
-  talentStar,
-  talentRankOf,
-  type TalentInstance,
-} from '@/lib/talents';
-import {
-  companionSlots,
-  companionRankLabel,
-  companionPairs,
-  adventurerPowers,
-  adventurerGearPower,
-  autoCompanions,
-  autoAdvGear,
-  companionOptions,
-  talentOptions,
-  type CompanionCtx,
-} from '@/lib/raid';
+import { RARITY_RANK } from '@/lib/items';
+import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
 import { fmtPow, fmtDelta } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
 import ChampionCollection from '@/components/ChampionCollection.vue';
 import { CHAMPIONS } from '@/data/champions';
-import { companionEffects, advTalentEffects } from '@/lib/caravan';
+import { type EscortKit } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
   advGearBadge,
@@ -786,39 +626,14 @@ const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
 
-// ── 🐾🧠 LA PAIRE : un compagnon et un talent, confiés à un HOMME ───────────────
-// ⚠️ Ils le suivent PARTOUT (convoi comme rempart) : c’est pour ça que l’appariement
-// vit sur SA fiche et pas au Chenil. Le Chenil ne fait que plafonner combien et
-// jusqu’à quel rang — comme la Guilde pour les aventuriers, sauf qu’il ne les crée pas.
-const pairFor = ref<Adventurer | null>(null);
-const talFor = ref<Adventurer | null>(null);
-const kennelLevel = computed(() => char.kennelLevel);
-const slots = computed(() => companionSlots(kennelLevel.value));
-const rankCapLabel = computed(() => companionRankLabel(kennelLevel.value));
-const heroFamId = computed(() => char.row?.equipped?.[FAMILIAR_SLOT]?.id ?? null);
-const famPool = computed(() =>
-  (char.row?.inventory ?? []).filter((it: Item) => it.slot === FAMILIAR_SLOT),
-);
-/** Les talents LIBRES : ceux que le héros n’a pas équipés. Un talent ne peut pas être
- *  à deux endroits — c’est la même règle que le compagnon. */
-const talPool = computed(() =>
-  normalizeTalents(char.row?.talents ?? []).filter((t) => t.equipped !== true),
-);
-/** Le contexte d’appariement. ⚠️ UN seul objet pour le compteur ET la puissance : deux
- *  copies finiraient par ne pas retenir les mêmes paires. */
-const compCtx = computed<CompanionCtx>(() => ({
-  familiars: famPool.value,
-  talents: talPool.value,
-  kennelLevel: kennelLevel.value,
-  // L’horloge du panneau : la fatigue d’un compagnon compte, et elle passe.
-  now: now.value,
-  // 🗡️ Ce qu’ils portent (stock `adv_gear`, migr. 0068).
-  advGear: char.row?.adv_gear?.stock ?? [],
-  heroFamiliarId: heroFamId.value,
-}));
-const pairedCount = computed(() => companionPairs(char.advList, compCtx.value).size);
+// ── 🗡️ CE QU'UN CHAMPION PORTE : son équipement, et rien d'autre ─────────────────
+// ⚠️ Plus de compagnon ni de talent (v0.996, décision de l'utilisateur : « on les garde
+// pour le héros uniquement »). Ce qu'ils apportaient est rendu dans sa base de stats.
+/** Le contexte d'équipement. ⚠️ UN seul objet pour la puissance ET l'aperçu : deux
+ *  copies finiraient par ne pas retenir les mêmes pièces. */
+const compCtx = computed<EscortKit>(() => ({ advGear: char.row?.adv_gear?.stock ?? [] }));
 /** ⚔️ Puissances calculées par la LIB (`combatPower`, celle du héros) — jamais ici. La
- *  version NUE sert à dire ce que la paire ajoute. */
+ *  version NUE sert à dire ce que l'équipement ajoute. */
 const powers = computed(() => adventurerPowers(char.advList, compCtx.value));
 /** Ce qui attend un porteur, pour tout le vivier — lu par les PORTRAITS et par l'aperçu du
  *  BOUTON, donc une seule et même réponse à « y a-t-il à armer ? ». Deux calculs finiraient
@@ -829,142 +644,11 @@ const gearPending = computed(() => pendingAdvGear(char.advList, compCtx.value.ad
 const barePowers = computed(() => adventurerPowers(char.advList));
 const powerOf = (a: Adventurer) => powers.value.get(a.id) ?? 0;
 const pairBonusOf = (a: Adventurer) => powerOf(a) - (barePowers.value.get(a.id) ?? 0);
-const famById = computed(() => new Map(famPool.value.map((f) => [f.id, f])));
-const talById = computed(() => new Map(talPool.value.map((t) => [t.id, t])));
-const famOf = (a: Adventurer) => (a.familiarId ? (famById.value.get(a.familiarId) ?? null) : null);
-const talOf = (a: Adventurer) => (a.talentId ? (talById.value.get(a.talentId) ?? null) : null);
-/**
- * CE QUE L’AVENTURIER EN TIRE — calculé par la fonction du COMBAT, jamais réécrite.
- *
- * ⚠️ Depuis la v0.805 c’est la formule du HÉROS (niveau d’objet × dressage), sans bridage
- * ni terrain. On appelle quand même `companionEffects` sur CE seul familier plutôt que
- * de relire la fiche : une étiquette qui refait le calcul à sa façon finit par diverger.
- *
- * ⚠️ Valeur au REPOS : un familier fatigué compte de moitié au rempart, mais la
- * fatigue passe en quelques heures et l’appariement, lui, dure.
- */
-const famGain = (f: Item) => aggregateLines(companionEffects([f]));
-const talGain = (t: TalentInstance) => aggregateLines(advTalentEffects([t]));
-/** Les trois axes de magnitude du projet : rang, jet (lu en ÉTOILES depuis la v0.907, comme
- *  les objets), niveau d’objet. */
-// ⚠️ La rareté n'est PAS répétée ici : elle vit dans la pastille colorée, où elle est
-// accentuée (« Épique », pas « EPIQUE » — la pastille affichait la CLÉ de l'énumération).
-const famMeta = (f: Item) =>
-  `${rankStarStr(jetStar(f.roll))} · niv ${f.level}${f.effect2 ? ' · ✦ signature' : ''}`;
-const talMeta = (t: TalentInstance) => `${rankStarStr(talentStar(t))} · niv ${t.level ?? 1}`;
-const famColor = (f: Item) => rarityRank(f.rarity).color;
-const talColor = (t: TalentInstance) => rarityRank(talentRankOf(t)).color;
-/** Le DRESSAGE, unique depuis la v0.805 (donjon, convoi, défense).
- *  ⚠️ Un familier NEUF est à zéro, et c'est le cas le plus courant : « 🎓 0 » se lirait
- *  comme une erreur plutôt que comme « pas encore dressé ». On ne dit rien tant qu'il
- *  n'y a rien à dire. */
-function famTrain(f: Item): string {
-  const n = famLevel(famXp(f));
-  return n ? `🎓 ${n}` : '';
-}
-function famNote(a: Adventurer): string {
-  const f = famOf(a);
-  if (!f) return 'Aucun familier confié.';
-  return famMeta(f);
-}
-const talName = (t: TalentInstance) => talentByCode(t.code)?.name ?? t.code;
-function talLabel(a: Adventurer): string {
-  const t = talOf(a);
-  return t ? talName(t) : 'Aucun talent confié';
-}
-function talNote(a: Adventurer): string {
-  const t = talOf(a);
-  return t
-    ? talMeta(t)
-    : `Un talent, bridé et jusqu’au rang de sa classe (${rarityRank(advRarity(a)).name}).`;
-}
-/** L'avertissement des deux sélecteurs. ⚠️ Écrit UNE fois : deux copies mot pour mot se
+/** L'avertissement des sélecteurs. ⚠️ Écrit UNE fois : deux copies mot pour mot se
  *  reformulent séparément, et l'une des deux finit par mentir. */
 const GAIN_NOTE = 'Les gains listés sont ce que le champion en tire.';
-
-/**
- * LES LIGNES DU SÉLECTEUR, pré-calculées.
- *
- * ⚠️ Le composant a un tick de 30 s (fatigue, convalescences, convois), donc TOUT ce
- * que le template appelle est ré-évalué à chaque battement — et chaque helper y était
- * appelé deux fois par ligne (une fois en `v-if`, une fois en interpolation), `famWhy`
- * et `talTaken` balayant `advList` à chacun. Mesuré sur un compte réel : ~74 talents en
- * réserve, soit ~150 balayages et ~2 800 allocations par battement, pour reproduire des
- * chaînes strictement identiques.
- *
- * ⚠️ Aucune dépendance de ces `computed` n'inclut `now` : le tick ne les recalcule donc
- * plus du tout.
- */
-const famChoice = computed(() =>
-  pairFor.value
-    ? companionOptions(
-        pairFor.value,
-        char.advList,
-        famPool.value,
-        kennelLevel.value,
-        heroFamId.value,
-      )
-    : null,
-);
-const talChoice = computed(() =>
-  talFor.value ? talentOptions(talFor.value, char.advList, talPool.value) : null,
-);
-const famRows = computed(() =>
-  (famChoice.value?.options ?? []).map((f) => ({
-    f,
-    gains: famGain(f),
-    meta: famMeta(f),
-    train: famTrain(f),
-    color: famColor(f),
-  })),
-);
-const talRows = computed(() =>
-  (talChoice.value?.options ?? []).map((t) => ({
-    t,
-    name: talName(t),
-    icon: talentByCode(t.code)?.icon ?? '🧠',
-    rank: talentRankOf(t),
-    gains: talGain(t),
-    meta: talMeta(t),
-    color: talColor(t),
-  })),
-);
-/** Ce qui est ÉCARTÉ, par raison, en une ligne — ou rien. */
-const famHidden = computed(() => {
-  const c = famChoice.value;
-  if (!c) return '';
-  if (c.full)
-    return `Toutes les places du Chenil sont prises (${slots.value}) — améliore-le ou reprends un compagnon à un autre.`;
-  const p: string[] = [];
-  if (c.tooRare) p.push(`${c.tooRare} au-dessus du rang max du Chenil (${rankCapLabel.value})`);
-  if (c.tooRareClass && pairFor.value)
-    p.push(
-      `${c.tooRareClass} au-dessus du rang de sa classe (${rarityRank(advRarity(pairFor.value)).name})`,
-    );
-  if (c.taken) p.push(`${c.taken} confié${c.taken > 1 ? 's' : ''} à d’autres`);
-  if (c.hero) p.push('1 porté par ton héros');
-  return p.length ? `Masqués : ${p.join(' · ')}.` : '';
-});
-const talHidden = computed(() => {
-  const c = talChoice.value;
-  const a = talFor.value;
-  if (!c || !a) return '';
-  const p: string[] = [];
-  if (c.tooRare)
-    p.push(`${c.tooRare} au-dessus du rang de sa classe (${rarityRank(advRarity(a)).name})`);
-  if (c.taken) p.push(`${c.taken} confié${c.taken > 1 ? 's' : ''} à d’autres`);
-  return p.length ? `Masqués : ${p.join(' · ')}.` : '';
-});
-/** Le compagnon et le talent de l'aventurier ouvert. ⚠️ Un `computed` plutôt que huit
- *  appels et cinq `!` non-null dans le template : chaque `!` est une assertion que le
- *  lecteur doit re-vérifier contre le `v-if` du parent, et le lien casse en silence dès
- *  qu'on déplace une ligne. */
-const detailFam = computed(() => (detailAdv.value ? famOf(detailAdv.value) : null));
-const detailTal = computed(() => (detailAdv.value ? talOf(detailAdv.value) : null));
-const detailFamGain = computed(() => (detailFam.value ? famGain(detailFam.value) : []));
-const detailTalGain = computed(() => (detailTal.value ? talGain(detailTal.value) : []));
-/** ⚠️ Le store REFUSE ce qui est impossible (héros porteur, rang hors d’école) : on
- *  affiche son message plutôt que d’en réécrire un second qui pourrait diverger. */
+/** ⚠️ Le store REFUSE ce qui est impossible : on affiche son message plutôt que d’en
+ *  réécrire un second qui pourrait diverger. */
 async function pair(fn: (uid: string) => Promise<unknown>) {
   const uid = auth.user?.id;
   if (!uid || busy.value) return;
@@ -977,42 +661,25 @@ async function pair(fn: (uid: string) => Promise<unknown>) {
     busy.value = false;
   }
 }
-function assignFam(id: string | null) {
-  const a = pairFor.value;
-  if (!a) return;
-  pairFor.value = null;
-  void pair((uid) => char.setCompanion(uid, a.id, id));
-}
-/** Ce que « Confier au mieux » ferait, AVANT de toucher : le MÊME plan que le store —
- *  `autoCompanions` (compagnon+talent) ET `autoAdvGear` (équipement) sur le même
- *  contexte — et le gain de puissance du vivier. ⚠️ Deux plans, jamais deux calculs : si
- *  l'aperçu recalculait à sa façon, il pourrait finir par annoncer autre chose que ce
- *  que le bouton fait. Mesuré à ~3 ms pour 15 aventuriers : peut suivre l'horloge du
- *  panneau sans coût. */
+/** Ce que « Confier au mieux » ferait, AVANT de toucher : le MÊME plan que le store
+ *  (`autoAdvGear`) sur le même contexte, et le gain de puissance du vivier. ⚠️ Un plan,
+ *  jamais deux calculs : si l'aperçu recalculait à sa façon, il pourrait finir par
+ *  annoncer autre chose que ce que le bouton fait. */
 const autoPreview = computed(() => {
   const advs = char.advList;
   const ctx = compCtx.value;
-  const plan = autoCompanions(advs, ctx);
   const gearPlan = autoAdvGear(advs, ctx);
   let changes = 0;
   const after = advs.map((a) => {
-    const p = plan.get(a.id) ?? {};
     const g = gearPlan.get(a.id) ?? {};
-    const gearChanged = ADV_GEAR_SLOTS.some((s) => (g[s] ?? null) !== (a.gear?.[s] ?? null));
-    if (
-      (p.familiarId ?? null) !== (a.familiarId ?? null) ||
-      (p.talentId ?? null) !== (a.talentId ?? null) ||
-      gearChanged
-    )
-      changes++;
-    return { ...a, familiarId: p.familiarId, talentId: p.talentId, gear: g };
+    if (ADV_GEAR_SLOTS.some((s) => (g[s] ?? null) !== (a.gear?.[s] ?? null))) changes++;
+    return { ...a, gear: g };
   });
   const sum = (m: Map<string, number>) => [...m.values()].reduce((x, v) => x + v, 0);
   const gain = sum(adventurerPowers(after, ctx)) - sum(powers.value);
   // ⚠️ CE QUI MANQUAIT : « il y a du monde à ARMER ». Le gain seul ne le dit pas — une
   // pièce peut attendre pendant que le gain reste modeste, et un emplacement vide se lisait
-  // alors comme une panne de l'auto-équipement (constaté sur le compte réel : un archer sans
-  // arme, un arc portable en stock, parce que la forge s'était terminée depuis).
+  // alors comme une panne de l'auto-équipement.
   const pending = [...gearPending.value.values()].reduce((n, slots) => n + slots.length, 0);
   return { changes, gain, pending };
 });
@@ -1022,20 +689,14 @@ const rosterPower = () =>
 function autoPair() {
   void pair(async (uid) => {
     const before = rosterPower();
-    const r = await char.autoAssignCompanions(uid, Date.now());
+    const r = await char.autoAssignGear(uid);
     if (!r) return;
     const after = rosterPower();
     $q.notify({
       type: 'positive',
-      message: `✨ ${r.familiars} compagnon(s), ${r.talents} talent(s) et ${r.gear} pièce(s) confiés · puissance du vivier ${fmtPow(before)} → ${fmtPow(after)}`,
+      message: `✨ ${r.gear} pièce(s) confiée(s) · puissance du vivier ${fmtPow(before)} → ${fmtPow(after)}`,
     });
   });
-}
-function assignTal(id: string | null) {
-  const a = talFor.value;
-  if (!a) return;
-  talFor.value = null;
-  void pair((uid) => char.setAdvTalent(uid, a.id, id));
 }
 
 // ── 🗡️ SON ÉQUIPEMENT : 4 emplacements (arme/armure/accessoire/relique), propres à SON métier ──
@@ -1046,29 +707,9 @@ const gearPick = ref<{ advId: string; slot: AdvGearSlot } | null>(null);
 const gearPickAdv = computed(() =>
   gearPick.value ? char.advList.find((a) => a.id === gearPick.value!.advId) : undefined,
 );
-/** L'instant du calcul du sélecteur, FIGÉ à l'ouverture — jamais `now.value`, le tick de
- *  30 s du panneau. ⚠️ Le sélecteur compare la puissance de CHAQUE candidate (`gearRows`,
- *  jusqu'à des dizaines de lignes) : sans ce découplage, `gearPickCtx` — et donc toutes
- *  les lignes — se recalculaient à chaque battement du tick pendant que la feuille reste
- *  ouverte, exactement ce que le fichier évite déjà pour `famRows`/`talRows` (« aucune
- *  dépendance de ces computed n'inclut `now` »). La fatigue d'un compagnon n'a pas besoin
- *  d'une précision à la seconde dans un comparatif de pièces. */
-const gearOpenedAt = ref(0);
-watch(gearPick, (p) => {
-  if (p) gearOpenedAt.value = Date.now();
-});
-/** Le contexte du sélecteur — MÊMES sources que `compCtx`, sauf `now` (figé ci-dessus).
- *  ⚠️ Reconstruit à part plutôt que `{ ...compCtx.value, now: gearOpenedAt.value }` : lire
- *  `compCtx.value` établirait quand même une dépendance transitive sur `now.value` (`compCtx`
- *  rend un nouvel objet à chaque tick), ce qui recollerait `gearRows` au tick d'origine. */
-const gearPickCtx = computed<CompanionCtx>(() => ({
-  familiars: famPool.value,
-  talents: talPool.value,
-  kennelLevel: kennelLevel.value,
-  now: gearOpenedAt.value,
-  advGear: char.row?.adv_gear?.stock ?? [],
-  heroFamiliarId: heroFamId.value,
-}));
+/** Le contexte du sélecteur : celui du panneau. Il ne dépend plus de l'horloge (plus de
+ *  fatigue de compagnon), donc le tick ne recalcule pas les lignes. */
+const gearPickCtx = compCtx;
 /** Qui porte quoi, RÈGLES APPLIQUÉES (`wornGear`, identique à ce que le combat lit) —
  *  pour la fiche, où une pièce devenue invalide (rang dépassé, prise par un autre) doit
  *  se lire comme un emplacement VIDE, pas comme portée. */
@@ -1213,11 +854,8 @@ const stockOrphans = computed(
 );
 /** La pièce du stock qu'on est en train de confier. */
 const stockEquip = ref<AdvGear | null>(null);
-watch(stockEquip, (g) => {
-  if (g) gearOpenedAt.value = Date.now();
-});
 /** Qui peut la porter, avec ce qu'il y gagnerait (même arbitre que le sélecteur par case,
- *  même contexte figé à l'ouverture). */
+ *  même contexte). */
 const stockEquipRows = computed(() => {
   const g = stockEquip.value;
   if (!g) return null;
@@ -1379,10 +1017,6 @@ function stateOf(a: Adventurer): string {
       return '✅ disponible';
   }
 }
-const talIconOf = (a: Adventurer) => {
-  const t = talOf(a);
-  return t ? (talentByCode(t.code)?.icon ?? '🧠') : undefined;
-};
 // ── Fiche d'un aventurier ──
 const detailAdv = ref<Adventurer | null>(null);
 /** CE QUE CHAQUE PIÈCE PORTÉE APPORTE, en puissance — l'arbitre de tout le jeu.
@@ -1391,23 +1025,10 @@ const detailAdv = ref<Adventurer | null>(null);
  *  comme illisible : un pourcentage ne dit rien tant qu'on ne connaît pas son assiette, et
  *  il ne se compare pas d'une pièce à l'autre (des dégâts contre de la réduction). Mesuré,
  *  une pièce de rang Bronze vaut ~0,5 % de la puissance de son porteur — le chiffre honnête
- *  est donc l'écart, pas la stat. Même remède que pour les compagnons (v0.784).
+ *  est donc l'écart, pas la stat.
  *
- *  ⚠️ Instant FIGÉ à l'ouverture, jamais `now.value` : sinon les 8 évaluations
- *  (4 cases × avec/sans) repartiraient à chaque battement du tick de 30 s — exactement ce
- *  que `gearPickCtx` évite déjà pour le sélecteur. */
-const detailOpenedAt = ref(0);
-watch(detailAdv, (a) => {
-  if (a) detailOpenedAt.value = Date.now();
-});
-const detailCtx = computed<CompanionCtx>(() => ({
-  familiars: famPool.value,
-  talents: talPool.value,
-  kennelLevel: kennelLevel.value,
-  now: detailOpenedAt.value,
-  advGear: char.row?.adv_gear?.stock ?? [],
-  heroFamiliarId: heroFamId.value,
-}));
+ *  ⚠️ Même contexte que le panneau (`compCtx`), qui ne dépend pas de l'horloge. */
+const detailCtx = compCtx;
 const detailGearGain = computed(() => {
   const a = detailAdv.value;
   const out = new Map<AdvGearSlot, number>();

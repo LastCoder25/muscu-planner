@@ -38,7 +38,7 @@ import {
   partyAllies,
   refEscortUnits,
   type PartyHero,
-  type RoadCompanions,
+  type EscortKit,
 } from './caravan';
 import { interpolate } from './proceduralContent';
 import {
@@ -490,9 +490,14 @@ export function bossReplaySteps(log: readonly CombatEvent[], max: number): RiftB
  * niveaux 20-30 mais aux DEUX BOUTS (12-20 et 60-100), parce que la référence en champions
  * a très peu de critique en début de partie et le sature en fin. Mesuré après : mûre
  * **0,69 à 0,78**, jeune **0,95 à 0,99**, groupe amputé **0,00 à 0,05**.
+ *
+ * ⚠️ **NIVEAU 12 RE-BISECTÉ (v0.996)** : les champions n'ont plus de familier, compensé en
+ * stats (`CHAMPION_SOLO`). La compensation est exacte en puissance, pas dans l'attrition
+ * d'une faille au niveau 12 (mûre 0,90 avec 1,13) : 1,13 → **1,19** rend 0,72. Les autres
+ * niveaux n'ont pas bougé (mesuré : mûre 0,68-0,77 de 20 à 100).
  */
 const RIFT_RELIEF: [number, number][] = [
-  [12, 1.13],
+  [12, 1.19],
   [20, 1.18],
   [26, 0.96],
   [30, 0.95],
@@ -665,7 +670,7 @@ export function incursionMana(run: RiftRun, level: number): number {
 export interface IncursionInput {
   poi: Poi;
   escort: Adventurer[];
-  road: RoadCompanions;
+  road: EscortKit;
   hero: PartyHero | null;
   seed: number;
   now: number;
@@ -921,7 +926,7 @@ export function interceptionMana(raid: Raid, army: Combatant, run: CombatResult)
 export interface InterceptionInput {
   poi: Poi;
   escort: Adventurer[];
-  road: RoadCompanions;
+  road: EscortKit;
   hero: PartyHero | null;
   seed: number;
   playerLevel: number;
@@ -1023,7 +1028,7 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
 export function estimateInterception(
   poi: Poi,
   escort: Adventurer[],
-  road: RoadCompanions,
+  road: EscortKit,
   hero: PartyHero | null,
   samples = 24,
 ): number {

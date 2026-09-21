@@ -45,7 +45,7 @@ const garde = (lvl: number) =>
       id: `g${i}`,
     })),
     99,
-    { now: NOW, kennelLevel: lvl, familiars: [], talents: [], advGear: [] },
+    { now: NOW, kennelLevel: lvl, advGear: [] },
   );
 
 describe('la puissance de l’ASSAUT (ce que l’espionnage vend)', () => {
