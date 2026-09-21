@@ -1255,6 +1255,10 @@ export interface Adventurer {
   copies?: number;
   level: number;
   xp: number;
+  /** ⬆️ Rang (index de `CHARACTER_RANKS`) ouvert par ASCENSION — son XP s'arrête au ★5 de ce
+   *  rang (`advAscensionCap`). ⚠️ ABSENT = le rang de son niveau actuel : un champion d'avant
+   *  la règle n'a donc rien à rattraper, il bute simplement sur la fin de son rang. */
+  ascended?: number;
   /** Occupé jusqu'à (escorte, camp, incursion) — ms epoch. */
   busyUntil?: number;
   /** Blessé jusqu'à — ms epoch. Soigné plus vite par l'Infirmerie, comme le héros. */
@@ -1914,6 +1918,45 @@ export function engageCap(pantheonLevel: number): number {
   return 1 + Math.floor(Math.max(0, pantheonLevel) / 2);
 }
 
+/**
+ * ⬆️ LE RANG OUVERT PAR ASCENSION (v0.1014, étape B de la spec ascension/éveil ; décision de
+ * l'utilisateur : « une fois monté rang Bronze ★5, il faudrait des ressources (et l'XP) pour
+ * passer Argent ★1 »).
+ *
+ * ⚠️ ABSENT = le rang de son niveau ACTUEL : aucun champion d'avant la règle n'a de retard à
+ * rattraper — il bute simplement sur la fin du rang où il se trouve.
+ */
+export function advAscendedRank(adv: Adventurer): number {
+  const last = CHARACTER_RANKS.length - 1;
+  const r = adv.ascended ?? characterRank(Math.max(1, adv.level)).rankIndex;
+  return Math.max(0, Math.min(last, Math.floor(r)));
+}
+
+/** Le niveau le plus haut que son ascension lui permet : le ★5 du rang ouvert (niveau 10,
+ *  20, …). ⚠️ Le DERNIER rang court jusqu'au plafond du jeu : il n'y a plus rien à ouvrir. */
+export function advAscensionCap(adv: Adventurer): number {
+  const r = advAscendedRank(adv);
+  return r >= CHARACTER_RANKS.length - 1 ? ADV_MAX_LEVEL : rankStartLevel(r + 1) - 1;
+}
+
+/** Le rang que la PROCHAINE ascension ouvrirait, ou `null` s'il n'y en a plus. */
+export function advNextAscension(adv: Adventurer): number | null {
+  const r = advAscendedRank(adv);
+  return r >= CHARACTER_RANKS.length - 1 ? null : r + 1;
+}
+
+/**
+ * Applique une ascension : le rang suivant s'ouvre, puis l'XP mise de côté au plafond est
+ * REVERSÉE (`grantAdvXp` à 0) — un champion qui a continué de travailler bloqué à ★5
+ * récupère aussitôt ses niveaux. ⚠️ Ne vérifie NI le coût NI le Panthéon : c'est
+ * `ascensionBlocker` (`ascension.ts`) qui décide si c'est permis. Pur.
+ */
+export function ascendAdventurer(adv: Adventurer, pantheonLevel: number): Adventurer {
+  const next = advNextAscension(adv);
+  if (next == null) return adv;
+  return grantAdvXp({ ...adv, ascended: next }, 0, pantheonLevel);
+}
+
 /** Applique l’XP gagnée : montées de niveau EN CHAÎNE (un gros voyage peut en donner
  *  plusieurs), plafonnées par la Guilde.
  *
@@ -1922,7 +1965,9 @@ export function engageCap(pantheonLevel: number): number {
  *  celui dont le plafond bouge le plus lentement, donc exactement la cible de la
  *  feature — travaillerait des semaines pour rien. Pur : rend un NOUVEL aventurier. */
 export function grantAdvXp(adv: Adventurer, xp: number, pantheonLevel: number): Adventurer {
-  const cap = Math.max(1, pantheonLevel);
+  // ⚠️ DEUX plafonds, le plus bas gagne : le Panthéon (le sport, via son niveau) et
+  // l'ASCENSION (la fin du rang ouvert). L'XP au-delà reste dans le pool dans les deux cas.
+  const cap = Math.min(Math.max(1, pantheonLevel), advAscensionCap(adv));
   let level = adv.level;
   let pool = Math.max(0, adv.xp) + Math.max(0, Math.round(xp));
   while (level < cap && pool >= advXpToNext(level)) {

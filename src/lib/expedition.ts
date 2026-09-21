@@ -12,6 +12,15 @@ import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } 
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 
+/** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
+ *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
+ *  parce que l'issue d'une expédition le porte ; `ascension.ts` le relit. */
+export interface SealDrop {
+  kind: 'champion' | 'gear';
+  rank: number;
+  n: number;
+}
+
 // ── Types ──
 // 'arena' = survie par VAGUES : le héros tient le plus longtemps possible contre des
 // vagues de plus en plus fortes (PV reportés) → récompense ∝ vagues tenues.
@@ -330,6 +339,9 @@ export interface ExpeditionOutcome {
    *  (failles → pierres de mana → gacha). À ne pas confondre avec une devise MORTE, dont
    *  le puits a été retiré — ici il arrive. */
   mana: number;
+  /** 🔱 Sceaux d'ascension — le gardien d'une faille refermée (`riftSeals`). Absent partout
+   *  ailleurs. */
+  seals?: SealDrop;
   item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
@@ -376,6 +388,7 @@ export interface ExpeditionMessage {
    *  écrite ; convertie en or à l'encaissement (`SCRAP_TO_GOLD`). */
   scrap?: number;
   mana?: number; // 💠 pierres de mana (mine résiduelle d'une faille)
+  seals?: SealDrop; // 🔱 sceaux d'ascension (gardien d'une faille refermée)
   tickets?: number; // 🎟️ tickets d'invocation (coffres gagnés par le sport, v0.992)
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
@@ -472,6 +485,7 @@ export function haulPills(o: {
   key?: number;
   mana?: number;
   tickets?: number;
+  seals?: SealDrop;
 }): { emoji: string; n: number }[] {
   return (
     [
@@ -481,6 +495,7 @@ export function haulPills(o: {
       { emoji: '🗝️', n: o.key ?? 0 },
       { emoji: '💠', n: o.mana ?? 0 },
       { emoji: '🎟️', n: o.tickets ?? 0 },
+      { emoji: '🔱', n: o.seals?.n ?? 0 },
     ] as const
   )
     .filter((p) => p.n > 0)
@@ -515,6 +530,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     energy: o.energy,
     ...(o.summonStones ? { summonStones: o.summonStones } : {}),
     ...(o.mana ? { mana: o.mana } : {}),
+    ...(o.seals ? { seals: o.seals } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     // Les objets vivent DANS le message : c'est lui qui sera encaissé, donc c'est lui

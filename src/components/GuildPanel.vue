@@ -421,6 +421,43 @@
         <template v-else>✅ disponible</template>
       </div>
 
+      <!-- ⬆️ L'ASCENSION (v0.1014) : à ★★★★★ la fin de son rang bloque son XP ; ouvrir le
+           suivant coûte de l'or et des sceaux DE CE RANG (gardiens de faille). ⚠️ La raison
+           d'un refus vient de `ascensionBlocker`, la règle du store — jamais un bouton
+           grisé en silence. -->
+      <div v-if="ascentOf(detailAdv)" class="d-ascent">
+        <div class="d-ascent-t">
+          ⬆️ Ascension vers {{ ascentOf(detailAdv)!.rank.emoji }}
+          <b :style="{ color: ascentOf(detailAdv)!.rank.color }">{{
+            ascentOf(detailAdv)!.rank.name
+          }}</b>
+        </div>
+        <div class="d-ascent-cost">
+          <span :class="{ short: ascentOf(detailAdv)!.have < ascentOf(detailAdv)!.cost.seals }"
+            >🔱 {{ ascentOf(detailAdv)!.have }}/{{ ascentOf(detailAdv)!.cost.seals }} sceau{{
+              ascentOf(detailAdv)!.cost.seals > 1 ? 'x' : ''
+            }}
+            {{ ascentOf(detailAdv)!.rank.name }}</span
+          >
+          <span :class="{ short: char.row!.gold < ascentOf(detailAdv)!.cost.gold }"
+            >🪙 {{ ascentOf(detailAdv)!.cost.gold.toLocaleString('fr-FR') }}</span
+          >
+        </div>
+        <p v-if="ascentOf(detailAdv)!.block" class="d-ascent-why">
+          {{ ASCENSION_BLOCK_LABEL[ascentOf(detailAdv)!.block!] }}
+        </p>
+        <q-btn
+          unelevated
+          no-caps
+          class="d-ascent-btn"
+          color="primary"
+          text-color="dark"
+          label="Faire l’ascension"
+          :disable="!!ascentOf(detailAdv)!.block || busy"
+          @click="doAscend(detailAdv)"
+        />
+      </div>
+
       <!-- ⚠️ LE PARCOURS est la vraie raison d'être de cette fiche : chaque promotion est
              un choix DÉFINITIF, et il n'existait aucun endroit pour relire la suite de
              choix qui a fait cet aventurier. -->
@@ -584,8 +621,22 @@ import {
   ADV_SIGNATURE_LABEL,
   type Adventurer,
 } from '@/lib/adventurers';
-import { rankStarStr } from '@/lib/characterRank';
-import { AWAKEN, advAwaken, advSubtitle, engageCap } from '@/lib/adventurers';
+import { CHARACTER_RANKS, rankStarStr } from '@/lib/characterRank';
+import {
+  ASCENSION_BLOCK_LABEL,
+  ascensionBlocker,
+  ascensionCost,
+  emptySeals,
+  sealCount,
+} from '@/lib/ascension';
+import {
+  AWAKEN,
+  advAscensionCap,
+  advAwaken,
+  advNextAscension,
+  advSubtitle,
+  engageCap,
+} from '@/lib/adventurers';
 import { GRADE_COLOR } from '@/data/champions';
 import { RARITY_RANK } from '@/lib/items';
 import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
@@ -1019,6 +1070,33 @@ function stateOf(a: Adventurer): string {
 }
 // ── Fiche d'un aventurier ──
 const detailAdv = ref<Adventurer | null>(null);
+/** ⬆️ L'ascension à proposer — seulement quand son XP BUTE sur la fin de son rang (★★★★★),
+ *  sinon le bloc serait une promesse lointaine qui encombre la fiche. */
+function ascentOf(a: Adventurer) {
+  const next = advNextAscension(a);
+  if (next == null || a.level < advAscensionCap(a)) return null;
+  const cost = ascensionCost(next);
+  const seals = char.row?.seals ?? emptySeals();
+  return {
+    rank: CHARACTER_RANKS[next]!,
+    cost,
+    have: sealCount(seals, 'champion', next),
+    block: ascensionBlocker(a, {
+      pantheonLevel: pantheonLevel.value,
+      seals,
+      gold: char.row?.gold ?? 0,
+    }),
+  };
+}
+function doAscend(a: Adventurer) {
+  void pair(async (uid) => {
+    const err = await char.ascendChampion(uid, a.id);
+    if (err) throw new Error(err);
+    // La fiche montre l'aventurier À JOUR (nouveau rang, XP reversée).
+    detailAdv.value = char.advList.find((x) => x.id === a.id) ?? null;
+    $q.notify({ type: 'positive', message: `⬆️ ${a.name} passe au rang supérieur.` });
+  });
+}
 /** CE QUE CHAQUE PIÈCE PORTÉE APPORTE, en puissance — l'arbitre de tout le jeu.
  *
  *  ⚠️ La case n'affichait que la stat brute (« +1,1 % de vie »), signalée par l'utilisateur
@@ -1259,6 +1337,36 @@ function leftOf(at: number): string {
   border-radius: 8px;
   font-family: Oswald, sans-serif;
   font-size: 15px;
+}
+.d-ascent {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.d-ascent-t {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+.d-ascent-cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  font-size: 13px;
+}
+.d-ascent-cost .short {
+  color: var(--d4);
+}
+.d-ascent-why {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+.d-ascent-btn {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
 }
 .d-state {
   font-size: 12px;
