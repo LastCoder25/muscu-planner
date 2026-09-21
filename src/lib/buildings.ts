@@ -374,7 +374,16 @@ export const BUILD = {
   //   5 bâtiments · 850 → 86,4 / 76,3 / 70,1  ·  950 → 83,4 / 73,5 / 67,6
   //                1000 → 81,9 / 72,4 / 66,2  ·  1100 → 79,2 / 70,1 / 64,1
   // 1000 reproduit la courbe à six bâtiments (81,4 / 71,8 / 65,9) à 0,5 point près.
-  upBase: 1000, // upgrade L→L+1 (or) = round(upBase × L^upExp)
+  // ⚠️ 1000 → 1400 (v0.996, mesuré) : LE REVENU DU TEST ÉTAIT PARTIEL. La simulation
+  // d’un an ne comptait que donjons + 2 mines ; or la revente du butin (revenue en v0.890),
+  // les convois, les camps, les boss, les sièges et le coffre du 360 ajoutent +41 % (niv. 10)
+  // à +53 % (niv. 70). Revenu complet (`fullGoldPerDay`), enceinte comprise, part du
+  // plafond sur un an (tranquille / régulier / très actif) :
+  //   1000 → 92,1 / 81,1 / 74,3 (tranquille DEHORS)  ·  1200 → 86,4 / 76,1 / 69,7
+  //   1400 → 81,9 / 72,1 / 66,0                      ·  1500 → 80,0 / 70,4 / 64,4
+  // 1400 reproduit la courbe de référence (81,9 / 72,4 / 66,2) ; ~99 % de l’or est dépensé
+  // et moins de 1,5 jour de revenu dort en banque en fin d’année.
+  upBase: 1400, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :

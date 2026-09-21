@@ -3,7 +3,7 @@ import { buildingUpgradeCost, BUILDING_TYPES, plotsForLevel } from '@/lib/buildi
 import { goldCost, resolveOutcome } from '@/lib/expedition';
 import { refFighter } from '@/lib/proceduralContent';
 import { computeLevel } from '@/lib/levels';
-import { PROFILS, partDuPlafond } from './helpers/buildSim';
+import { PROFILS, partDuPlafond, yearOfPlay } from './helpers/buildSim';
 import { DEFENSE_TYPES, healCost } from '@/lib/raid';
 import { outfitGoldCost, ADV_GEAR_SLOTS } from '@/lib/advGear';
 import { RANK_ORDER, prestigeRankIndex } from '@/lib/items';
@@ -11,7 +11,7 @@ import { RANK_ORDER, prestigeRankIndex } from '@/lib/items';
 // des CAMPS DE FACTION se mesure contre LE MÊME dénominateur, et deux copies auraient
 // divergé — c'est par un mauvais dénominateur que ce fichier a déjà laissé passer un puits
 // qui débordait (v0.684) puis un puits devenu mur (v0.733).
-import { LEVELS, MINE_DIST, goldPerDay, mineNet } from './helpers/goldModel';
+import { LEVELS, MINE_DIST, goldPerDay, fullGoldPerDay, mineNet } from './helpers/goldModel';
 
 /** LE PUITS D'OR, mesuré contre le REVENU RÉEL.
  *
@@ -61,8 +61,11 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // Ce que le joueur poursuit vraiment, c'est de monter SA BASE d'un cran, et ce total
     // est stable de part et d'autre du retrait : ~18 à 25 jours.
     for (const L of LEVELS) {
-      const parBat = buildingUpgradeCost(L) / goldPerDay(L);
-      const jours = cranTotal(L) / goldPerDay(L);
+      const parBat = buildingUpgradeCost(L) / fullGoldPerDay(L);
+      // ⚠️ CONTRE LE REVENU COMPLET (v0.996) : mesuré contre les seuls donjons + mines, le
+      // cran paraissait plus cher qu’il ne l’est (la revente, les convois, les camps, les
+      // boss et les sièges ajoutent ~+50 % au niveau 30).
+      const jours = cranTotal(L) / fullGoldPerDay(L);
       // Sous quelques jours, on est en permanence au plafond de son niveau et l'or n'a
       // plus de destination.
       expect(jours, `niveau ${L} : ${jours.toFixed(2)} jour(s) de revenu`).toBeGreaterThan(12);
@@ -85,14 +88,14 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // et la montée de `plotsForLevel` (1 emplacement par niveau, jusqu’au roster). Passer
     // le roster de 7 à 10 a fait bondir l’écart de 1,96 à 2,80 — sans que l’exposant ait
     // bougé d’un iota. Le test accusait donc la courbe d’un défaut qui n’était pas le sien.
-    const ratios = LEVELS.map((L) => buildingUpgradeCost(L) / goldPerDay(L));
+    const ratios = LEVELS.map((L) => buildingUpgradeCost(L) / fullGoldPerDay(L));
     const min = Math.min(...ratios);
     const max = Math.max(...ratios);
     expect(max / min, `écart ${min.toFixed(2)} → ${max.toFixed(2)}`).toBeLessThan(2.5);
 
     // …et une fois TOUS les emplacements ouverts, le total ne dérive pas non plus.
     const pleins = LEVELS.filter((L) => plotsForLevel(L) >= BUILDING_TYPES.length).map(
-      (L) => cranTotal(L) / goldPerDay(L),
+      (L) => cranTotal(L) / fullGoldPerDay(L),
     );
     expect(Math.max(...pleins) / Math.min(...pleins)).toBeLessThan(2.5);
   });
@@ -209,6 +212,29 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     }
   });
 
+  it('⚠️ L’OR NE DORT PAS : sur un an, il est dépensé au fil de l’eau (v0.996)', () => {
+    // « Pas en excès » se mesure là : ce qui reste en banque en fin d’année, et la part du
+    // gain effectivement dépensée. Mesuré à `upBase` 1400 : 0,8 / 0,8 / 1,4 jour de
+    // revenu en banque, 99 % dépensé. Un puits qui déborde laisserait l’or s’entasser.
+    for (const [nom, xpParJour] of PROFILS) {
+      const y = yearOfPlay(xpParJour);
+      const bank = `${nom} : ${y.bankDays.toFixed(1)} j de revenu en banque`;
+      expect(y.bankDays, bank).toBeLessThan(3);
+      const spent = `${nom} : ${(y.spentShare * 100).toFixed(0)} % dépensé`;
+      expect(y.spentShare, spent).toBeGreaterThan(0.95);
+    }
+  });
+
+  it('⚠️ LE REVENU COMPLET COMPTE VRAIMENT LES AUTRES SOURCES', () => {
+    // Revente du butin, boss, convois, camps, sièges, coffre du 360 : sans elles le puits
+    // se calibrait sur ~2/3 du revenu réel, et le joueur tranquille atteignait 92 % du
+    // plafond. Si `fullGoldPerDay` retombait sur le modèle partiel, la simulation d’un an
+    // redeviendrait optimiste en silence. Mesuré : +41 % (niv. 10) à +53 % (niv. 70).
+    for (const L of [10, 30, 70]) {
+      expect(fullGoldPerDay(L) / goldPerDay(L), `niveau ${L}`).toBeGreaterThan(1.25);
+    }
+  });
+
   it('⚠️ LA MARGE EST MINCE : un bâtiment de moins frôle le plafond, deux le franchissent', () => {
     // Le puits d'or est DÉRIVÉ du roster (`BUILD.plotCap = BUILDING_TYPES.length`) : moins
     // d'emplacements = moins de dépenses = l'or s'entasse. C'est le piège de la v0.733, où
@@ -223,6 +249,9 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     //
     // ✅ ET UNE SECONDE FOIS : l'Entrepôt retiré (6 → 5), `upBase` est passé à 1000 —
     // 81,9 / 72,4 / 66,2 %, la courbe d'avant à 0,5 point près.
+    //
+    // ✅ ET UNE TROISIÈME (v0.996) : la simulation passe au revenu COMPLET, `upBase` à 1400
+    // — 81,9 / 72,1 / 66,0 %, et la marge tient (88 % à un bâtiment de moins, 97 % à deux).
     //
     // ⚠️ CE QU'IL GARDE reste inchangé : la MARGE. À un bâtiment de moins on frôle le
     // plafond (88 %), à deux on le franchit (97 %) — la prochaine fois vaudra la même

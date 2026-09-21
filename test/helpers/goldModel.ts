@@ -4,8 +4,14 @@
 // FACTION se mesure contre LE MÊME dénominateur. Une seconde copie du modèle aurait divergé
 // au premier réglage, et c'est précisément par un mauvais dénominateur que ce fichier a déjà
 // laissé passer un puits qui débordait (v0.684) puis un puits devenu mur (v0.733).
-import { goldCost, travelOneWayMin, travelFactor } from '@/lib/expedition';
+import { goldCost, travelOneWayMin, travelFactor, type Poi } from '@/lib/expedition';
 import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
+import { BOSSES, bossSummonCost } from '@/data/bosses';
+import { rollDrop, sellValue } from '@/lib/items';
+import { mulberry32 } from '@/lib/combat';
+import { caravanSlots, caravanWages, caravanLegMin, refChampionAdv } from '@/lib/caravan';
+import { rollRaid } from '@/lib/raid';
+import { comboChestReward } from '@/lib/comboChest';
 
 export const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
 /** ~4 séances de sport par semaine : le jeu est annexe. */
@@ -44,4 +50,94 @@ export function goldPerDay(L: number): number {
  *  les autres robinets de pierres. */
 export function stonesPerDay(L: number): number {
   return dungeonSummonStones(bestDungeon(L)) * RUNS_PER_DAY;
+}
+
+// ── 💰 LE REVENU COMPLET d'une journée (v0.996) ─────────────────────────────────────────
+// ⚠️ `goldPerDay` ne compte QUE les donjons et deux mines. C'est l'étalon des RATIOS
+// (soins, ferraille, Équipementier…), et il le reste. Mais le puits d'or doit se mesurer
+// contre TOUT ce qui rentre, sinon il déborde en silence : depuis sa calibration, la
+// REVENTE du butin est revenue (v0.890), les convois et les camps rapportent de l'or, les
+// boss aussi, les sièges de bandits et le coffre du Défi 360. Mesuré au niveau 30, ces
+// sources ajoutent ~+50 % au modèle de référence — et le joueur tranquille atteignait
+// 92 % du plafond en un an, HORS de la bande 55-90 %.
+
+const memo = <T>(f: (L: number) => T) => {
+  const c = new Map<number, T>();
+  return (L: number) => {
+    if (!c.has(L)) c.set(L, f(L));
+    return c.get(L)!;
+  };
+};
+/** Revente de TOUT le butin d'une descente (la vente est la seule sortie d'un objet). */
+const salePerRun = memo((L) => {
+  const d = bestDungeon(L);
+  const rng = mulberry32(1234 + L);
+  const N = 300;
+  let s = 0;
+  for (let r = 0; r < N; r++)
+    for (let m = 0; m < d.monsterIds.length; m++) {
+      const it = rollDrop(rng, {
+        cleared: true,
+        defeated: 1,
+        level: d.dropLevel,
+        luck: d.dropLuck,
+        playerLevel: L,
+      });
+      if (it) s += sellValue({ ...it, id: '' });
+    }
+  return s / N;
+});
+/** Boss du palier, payés en pierres de donjon ; ~60 % de victoires. */
+function bossGoldPerDay(L: number): number {
+  const b = [...BOSSES]
+    .filter((x) => x.unlockLevel <= L)
+    .sort((a, c) => c.unlockLevel - a.unlockLevel)[0];
+  if (!b) return 0;
+  return (stonesPerDay(L) / bossSummonCost(b.unlockLevel)) * 0.6 * b.gold;
+}
+/** Convois : chaque créneau fait un aller-retour de récolte au plus 3 fois par jour (on
+ *  ouvre l'app matin et soir), salaires déduits. */
+function convoyGoldPerDay(L: number, comptoir: number): number {
+  const poi = { level: L, distNorm: 0.6, type: 'well' } as Poi;
+  const esc = [0, 1, 2].map((i) => refChampionAdv(L, i));
+  const legH = caravanLegMin(poi, esc, comptoir, 0) / 60;
+  const trips = Math.min(3, 24 / (2 * legH));
+  const net = Math.round(goldCost('well', L) * 0.3) - caravanWages(esc, poi);
+  return Math.max(0, caravanSlots(comptoir) * trips * net);
+}
+/** Camps de faction, en PART du revenu de référence — la valeur MESURÉE par
+ *  `campEconomy.test` (+9 % au niveau 12, +16 à +19 % au 26, ~+17 % au-delà). Borne haute :
+ *  un camp occupe un créneau qu'un convoi n'occupe donc pas. */
+function campShare(L: number): number {
+  return L <= 12 ? 0.09 : L <= 26 ? 0.09 + ((L - 12) / 14) * 0.07 : 0.17;
+}
+/** Or laissé par une armée repoussée (même barème que `lootCorpses`). */
+const siegeGold = memo((L) => {
+  let g = 0;
+  const N = 40;
+  for (let s = 0; s < N; s++) {
+    const r = rollRaid(s + 1, L, 0, 0);
+    for (const grp of r.groups) {
+      const n = grp.champion ? 4 : grp.count / (grp.massMult ?? 1);
+      g += n * (r.faction === 'bandits' ? 14 + grp.level * 5.5 : 5 + grp.level * 1.8);
+    }
+  }
+  return g / N;
+});
+
+/** Le revenu d'or COMPLET d'une journée type. `comptoir` = niveau de l'Avant-poste (il
+ *  règle le nombre et la vitesse des convois) ; `siegesPerDay` suit le rythme sportif. */
+export function fullGoldPerDay(L: number, comptoir = L, siegesPerDay = 0.5): number {
+  const runs = dungeonGold(bestDungeon(L)) * RUNS_PER_DAY;
+  const mines = 2 * mineNet(L);
+  return (
+    runs +
+    mines +
+    salePerRun(L) * RUNS_PER_DAY +
+    bossGoldPerDay(L) +
+    convoyGoldPerDay(L, comptoir) +
+    campShare(L) * (runs + mines) +
+    siegeGold(L) * siegesPerDay +
+    comboChestReward(40, L).gold / 7
+  );
 }
