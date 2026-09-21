@@ -515,7 +515,7 @@ function refGearIds(i: number): Record<AdvGearSlot, string> {
 /**
  * L’ÉQUIPEMENT de l’escorte de référence : chaque membre porte ses 4 pièces B, niveau d’objet
  * à niveau, de la rareté de SA classe — la règle de `gearExpect` : l’attendu, pas
- * l’exceptionnel. Sans jet (v0.1010) : une pièce vaut le plancher de son rang.
+ * l’exceptionnel. Sans jet (v0.1011) : une pièce vaut le plancher de son rang.
  *
  * ⚠️ POURQUOI. Une escorte équipée additionne 4 pièces par tête, soit plus qu’un compagnon :
  * sans cette référence, un vivier équipé roulerait sur une route calibrée pour des escortes
@@ -1051,7 +1051,7 @@ export function resolveCaravan(
    *  escorte nue se déclare avec `{ advGear: [] }`. */
   kit: EscortKit,
 ): CaravanOutcome {
-  // ⚠️ Plus aucun équipement de champion sur la route (v0.1010) : il ne vient QUE du tirage.
+  // ⚠️ Plus aucun équipement de champion sur la route (v0.1011) : il ne vient QUE du tirage.
   // Le générateur dédié qui le tirait a disparu avec lui — il ne lisait rien du flux `rng`,
   // donc les bandes d'embuscade et la cargaison seedées ne bougent pas.
   const rng = mulberry32(seed >>> 0 || 1);

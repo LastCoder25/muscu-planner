@@ -80,7 +80,7 @@ describe('équipement propre à chaque classe de base', () => {
   });
 });
 
-describe('🗡️ une pièce = un MODÈLE, sans jet (v0.1010)', () => {
+describe('🗡️ une pièce = un MODÈLE, sans jet (v0.1011)', () => {
   it('deux pièces du même modèle au même rang sont IDENTIQUES — la condition d’un doublon', () => {
     for (const lineage of Object.keys(LINEAGE_GEAR) as AdvGear['lineage'][])
       for (const slot of ADV_GEAR_SLOTS)
@@ -492,7 +492,7 @@ describe('confier au mieux : l’équipement', () => {
   });
 });
 
-describe('🚫 plus aucun drop d’équipement de champion (v0.1010)', () => {
+describe('🚫 plus aucun drop d’équipement de champion (v0.1011)', () => {
   it('les corps d’un siège ne laissent que des objets du HÉROS', () => {
     const corpses: Corpse[] = Array.from({ length: 400 }, (_, i) => ({
       id: `c${i}`,

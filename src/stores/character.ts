@@ -2242,7 +2242,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, { adv_gear: { stock } });
   }
   /** Ajoute des pièces au STOCK — PUR, ne persiste rien. ⚠️ Seul le TIRAGE en ajoute
-   *  (v0.1010) : il l'appelle pour les persister dans le MÊME `persist` que la mana et le
+   *  (v0.1011) : il l'appelle pour les persister dans le MÊME `persist` que la mana et le
    *  pity, plutôt que d'écrire deux fois. */
   function withAdvGear(cur: CharacterRow, pieces: Omit<AdvGear, 'id'>[]): AdvGearState {
     const stock = [

@@ -215,7 +215,7 @@ export function campGroupHaul(poi: Poi, spec: CampSpec): { gold: number; summonS
  *  ⚠️ Écrit À CÔTÉ de la règle qu'il décrit (`campGroupHaul`), et testé contre elle : la
  *  faction module le butin (bandits → or en quantité, morts-vivants → or + pierres, bêtes
  *  → or). ⚠️ Jamais de ferraille, de clé, ni d'équipement de champion (il ne vient QUE du
- *  tirage, v0.1010).
+ *  tirage, v0.1011).
  *  ⚠️ UNE SEULE ligne depuis la v0.980 : le héros ne change plus le butin. */
 export function campRewardLabel(poi: Poi): string {
   const spec = campSpecOf(poi);
@@ -255,7 +255,7 @@ function campJournal(d: SkirmishResult, allies: SkirmishUnit[], bodies: Skirmish
  *   gros camps jouables. Ses abattus restent au total partagé ; la MARGE DE PORTAGE empêche
  *   toujours un héros de faire monter des recrues hors de leur ligue.
  * - Butin, AVEC ou SANS le héros (v0.980) : gagné → `campGroupHaul` (plus aucune pièce de
- *   champion depuis la v0.1010 : elles ne viennent QUE du tirage) ; perdu → rien. ⚠️ Le héros n'y compte plus que pour deux champions
+ *   champion depuis la v0.1011 : elles ne viennent QUE du tirage) ; perdu → rien. ⚠️ Le héros n'y compte plus que pour deux champions
  *   (`heroPartyCombatant`) : lui faire tomber le butin d'une expédition solo (or à l'équilibre
  *   du péage, pièce de set) n'avait plus de sens — et il ne paie plus de péage ici
  *   (`partyHeroToll`).

@@ -452,7 +452,7 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     caravanserail: (l) => caravanSlots(l) * 1000 + (2 - caravanSlowFor(l)) * 100,
     // Déploiement ET niveau maximal d'un champion : le déploiement saute d'un cran tous les
     // 2 niveaux, le niveau maximal (`grantAdvXp`, plafonné au niveau du Panthéon) monte à
-    // CHAQUE cran — il suffit qu'UN des deux bouge. (La forge est partie en v0.1010.)
+    // CHAQUE cran — il suffit qu'UN des deux bouge. (La forge est partie en v0.1011.)
     pantheon: (l) => engageCap(l) * 1_000_000 + l,
   };
 

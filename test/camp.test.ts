@@ -351,7 +351,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party!.win).toBe(true);
     expect(o.gold).toBe(campGroupHaul(poi(), spec).gold);
     expect(o.item).toBeNull();
-    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
+    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1011)
     expect(o.party!.hurt).not.toContain(HERO_UNIT_ID);
   });
 
@@ -372,7 +372,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     // ⚠️ Les camps ne donnent JAMAIS de ferraille (v0.856 / v0.890 : épave et Fonderie seules).
     expect('scrap' in o).toBe(false);
     expect(o.summonStones).toBeGreaterThan(0);
-    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
+    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1011)
     expect(o.party!.wages).toBeGreaterThan(0);
   });
 
@@ -386,7 +386,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     const o = resolveCamp(inp);
     expect(o.party!.win).toBe(false);
     expect(o.gold + o.summonStones + o.key).toBe(0);
-    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
+    expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1011)
     expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi));
   });
 
@@ -411,7 +411,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         const h = campGroupHaul(inp.poi, inp.spec);
         expect(o.gold).toBe(h.gold);
         expect(o.summonStones).toBe(h.summonStones);
-        expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1010)
+        expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1011)
       }
     expect(victoires, 'aucune victoire : le test ne prouve rien').toBeGreaterThan(0);
   });
@@ -662,7 +662,7 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     expect(campRewardLabel(poi({ type: 'wreck' }))).toBe('');
   });
 
-  it('partyReport dit l’issue — et n’annonce plus de pièce de champion (v0.1010)', () => {
+  it('partyReport dit l’issue — et n’annonce plus de pièce de champion (v0.1011)', () => {
     const L = 60;
     const esc = team(10, L);
     const o = resolveCamp(

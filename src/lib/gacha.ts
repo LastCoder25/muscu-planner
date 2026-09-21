@@ -106,7 +106,7 @@ export const GACHA = {
    *
    * ⚠️ **CE RÉGLAGE DIVISE LE RYTHME DES CHAMPIONS** : à 0,5, un champion S tombe deux fois
    * moins souvent qu'avant. C'est le prix, assumé, de rendre les pièces A et S obtenables
-   * (les drops, qui étaient leur seule source, sont retirés depuis la v0.1010).
+   * (les drops, qui étaient leur seule source, sont retirés depuis la v0.1011).
    */
   championShare: 0.5,
 } as const;
