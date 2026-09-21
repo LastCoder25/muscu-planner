@@ -428,7 +428,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       buildings: [
         ...ROW.buildings,
         { typeId: 'outpost', level: 4, slot: 1, collectedAt: 0 },
-        { typeId: 'warehouse', level: 3, slot: 2, collectedAt: 0 },
+        { typeId: 'energy_font', level: 3, slot: 2, collectedAt: 0 },
       ],
       base: {
         seed: 7,

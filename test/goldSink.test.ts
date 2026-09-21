@@ -221,8 +221,12 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // 76,4 %** — le profil tranquille DEHORS. `upBase` est donc passé à 850, ce qui rend
     // **81,4 / 71,8 / 65,9 %**, la courbe d'avant à moins de 3 points près.
     //
+    // ✅ ET UNE SECONDE FOIS : l'Entrepôt retiré (6 → 5), `upBase` est passé à 1000 —
+    // 81,9 / 72,4 / 66,2 %, la courbe d'avant à 0,5 point près.
+    //
     // ⚠️ CE QU'IL GARDE reste inchangé : la MARGE. À un bâtiment de moins on frôle le
-    // plafond, à deux on le franchit — la prochaine fois vaudra la même re-mesure.
+    // plafond (88 %), à deux on le franchit (97 %) — la prochaine fois vaudra la même
+    // re-mesure.
     const [, xpTranquille] = PROFILS[0]!;
     const aNeuf = partDuPlafond(xpTranquille, BUILDING_TYPES.length);
     const aHuit = partDuPlafond(xpTranquille, BUILDING_TYPES.length - 1);

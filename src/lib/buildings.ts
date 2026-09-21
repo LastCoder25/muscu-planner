@@ -2,14 +2,21 @@
 // sur des emplacements autour de la ville (carte d'expédition), financés par l'OR
 // (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
 //
-// ÉTAT ACTUEL : 6 bâtiments pour 6 emplacements — `BUILD.plotCap` est DÉRIVÉ du registre.
+// ÉTAT ACTUEL : 5 bâtiments pour 5 emplacements — `BUILD.plotCap` est DÉRIVÉ du registre.
 //  • UTILITAIRES : Avant-poste (expéditions + caravanes : trajet du héros, vitesse ET
-//    nombre des convois) · Entrepôt (stockage + vitesse des réparations) · Panthéon.
+//    nombre des convois) · Panthéon.
 //  • PRODUCTEUR : Dynamo ⚡ (énergie de jeu).
 //  • HYBRIDES (effet + production) : Porte du Labyrinthe (débloque + luck coffres, PRODUIT
 //    des clés 🗝️) · Autel des boss (rareté des pièces de boss, PRODUIT des pierres 🔮).
 // La production est passive, à RÉCOLTER (collectable/collectFilons), bornée par le stockage
-// (18 h × bonus Entrepôt) → complément à l'actif, jamais un substitut au sport.
+// PROPRE à chaque bâtiment (`storageHoursFor` : sa réserve grandit avec SON niveau) →
+// complément à l'actif, jamais un substitut au sport.
+//
+// ⚠️ PLUS D'ENTREPÔT (demandé) : « chaque bâtiment gère sa production et sa limite max ».
+// Un bâtiment qui ne faisait que gonfler la réserve des AUTRES obligeait à en monter deux
+// pour en améliorer un. Sa courbe est reprise TELLE QUELLE par chaque producteur
+// (18 h × (1 + 0,15 × niveau)) : un producteur au niveau N a la réserve qu'il avait avec
+// un Entrepôt au même niveau — personne ne perd de stockage s'il avait suivi.
 //
 // ⚠️ AUCUN BÂTIMENT NE PRODUIT PLUS D'OR NI DE FERRAILLE (Mine d'or et Fonderie retirées,
 // demandé) : ce sont les deux devises qu'on va CHERCHER sur la carte, et une horloge qui
@@ -42,12 +49,11 @@ export type BuildResource =
   | 'keys'; // 🗝️ clés de labyrinthe (Porte du Labyrinthe)
 
 // Catégorie d'un bâtiment. `producer` = filon de ressource ; `utility` = bâtiment
-// à EFFET global (entrepôt, tour de reconnaissance…). Extensible.
+// à EFFET global (avant-poste, autel…). Extensible.
 export type BuildingCategory = 'producer' | 'utility';
 
 // Effet global d'un bâtiment `utility` (par niveau). Extensible (tour, forge…).
 interface BuildingEffect {
-  storageMultPerLvl?: number; // Entrepôt : +X au multiplicateur de stockage / niveau
   expeSpeedPerLvl?: number; // Tour : −X% temps de trajet / niveau (plus tard)
   expeWinPerLvl?: number; // Tour : +X% chance / niveau (plus tard)
   labyLuckPerLvl?: number; // Porte du Labyrinthe : +X à la chance de butin des coffres / niveau
@@ -81,7 +87,6 @@ export type BuildingTypeId =
   | 'labyrinth_gate'
   | 'boss_altar'
   | 'energy_font'
-  | 'warehouse'
   | 'pantheon';
 
 export interface BuildingType {
@@ -223,26 +228,6 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     desc: 'Produit de l’énergie ⚡ de jeu (pour lancer plus de donjons).',
   },
-  // UTILITAIRE : l'ENTREPÔT augmente le STOCKAGE de tous les producteurs (+15 %/niveau)
-  // → tu peux t'absenter plus longtemps sans saturer.
-  //
-  // ⚠️ IL N'ACCÉLÈRE PLUS LES RÉPARATIONS. La simplification lui avait fait hériter ce
-  // second métier de la Fonderie retirée, pour ne pas allonger en silence les travaux des
-  // comptes existants ; l'utilisateur a tranché « fais disparaître la Fonderie », donc son
-  // métier s'en va avec elle. ⚠️ Un seul levier lui reste, et il suffit : le stockage est
-  // vivant du niveau 0 au 100 (règle v0.731), et rushRepairCost garde la sortie payante.
-  {
-    id: 'warehouse',
-    perLevelNote: '+15 % de stockage sur TOUS tes producteurs',
-    label: 'Entrepôt',
-    emoji: '🏬',
-    category: 'utility',
-    effect: { storageMultPerLvl: 0.15 },
-    buildGold: 900,
-    unlockLevel: 3,
-    unique: true,
-    desc: 'Augmente le stockage de tous tes producteurs (+15 %/niveau).',
-  },
   // UTILITAIRE UNIQUE : le PANTHÉON DES CHAMPIONS remplace À LUI SEUL la Guilde, le Centre
   // de formation et l'Équipementier — « un bâtiment, un endroit » (règle v0.739). On y
   // invoque ses champions, on y consulte sa collection, on y forge leur équipement.
@@ -307,7 +292,9 @@ export function perLevelLabel(t: BuildingType): string {
   const parts: string[] = [];
   if (t.perLevelNote) parts.push(t.perLevelNote);
   if (t.resource && t.prodPerHrPerLvl)
-    parts.push(`+${t.prodPerHrPerLvl} ${RESOURCE_EMOJI[t.resource]}/h`);
+    parts.push(
+      `+${t.prodPerHrPerLvl} ${RESOURCE_EMOJI[t.resource]}/h et +${Math.round(BUILD.storageHours * BUILD.storagePerLvl * 10) / 10} h de réserve`,
+    );
   return parts.join(' · ');
 }
 
@@ -382,7 +369,12 @@ export const BUILD = {
   // change le nombre de bâtiments, pas la difficulté.
   // ⚠️ TOUJOURS PAR LE COEFFICIENT, JAMAIS PAR L’EXPOSANT (cf. `upExp` juste en
   // dessous) : un exposant plus raide que celui des revenus recrée le MUR de la v0.657.
-  upBase: 850, // upgrade L→L+1 (or) = round(upBase × L^upExp)
+  // ⚠️ 850 → 1000 (mesuré) : l’Entrepôt est retiré, le roster passe de SIX à CINQ.
+  // Part du plafond atteinte sur un an (tranquille / régulier / très actif) :
+  //   5 bâtiments · 850 → 86,4 / 76,3 / 70,1  ·  950 → 83,4 / 73,5 / 67,6
+  //                1000 → 81,9 / 72,4 / 66,2  ·  1100 → 79,2 / 70,1 / 64,1
+  // 1000 reproduit la courbe à six bâtiments (81,4 / 71,8 / 65,9) à 0,5 point près.
+  upBase: 1000, // upgrade L→L+1 (or) = round(upBase × L^upExp)
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :
@@ -392,7 +384,10 @@ export const BUILD = {
   // rien. À 1,9 le ratio reste PLAT (4,6 → 5,5 expéditions) sur toute la courbe 1→100.
   // Ne pas remonter cet exposant sans re-simuler le ratio coût/revenu (test dédié).
   upExp: 1.9,
-  storageHours: 18, // heures de production stockables (puis saturation)
+  storageHours: 18, // heures stockables au niveau 0 (puis saturation)
+  // Chaque niveau du bâtiment allonge SA réserve de 15 % de la base (2,7 h) : la courbe
+  // de l'ancien Entrepôt, reprise par chaque producteur pour lui-même.
+  storagePerLvl: 0.15,
   hourMs: 3_600_000,
 } as const;
 
@@ -486,6 +481,9 @@ const RETIRED: { id: string; buildGold: number; into?: BuildingTypeId }[] = [
   // non qu'une horloge dépose. Tout ce qu'ils ont coûté est rendu.
   { id: 'gold_mine', buildGold: 600 },
   { id: 'foundry', buildGold: 850 },
+  // Retrait SEC : l'Entrepôt ne gonflait que la réserve des AUTRES. Chaque producteur
+  // porte désormais sa propre réserve, qui grandit avec son niveau (`storageHoursFor`).
+  { id: 'warehouse', buildGold: 900 },
 ];
 
 const retiredOf = (id: string) => RETIRED.find((r) => r.id === id);
@@ -593,16 +591,6 @@ export function canBuildType(typeId: string, playerLevel: number, existing: Buil
   if (!t || playerLevel < (t.unlockLevel ?? 1)) return false;
   if (t.unique && existing.some((b) => b.typeId === typeId)) return false;
   return true;
-}
-
-/** Multiplicateur de stockage global apporté par les entrepôts posés (≥ 1). */
-export function storageMult(buildings: Building[]): number {
-  let m = 1;
-  for (const b of buildings) {
-    const per = buildingType(b.typeId)?.effect?.storageMultPerLvl;
-    if (per) m += per * b.level;
-  }
-  return m;
 }
 
 // ── Avant-poste d'expédition (gate + vitesse de trajet) ──
@@ -727,20 +715,25 @@ export function buildingProdPerHour(b: Building): number {
   return t?.prodPerHrPerLvl ? b.level * t.prodPerHrPerLvl : 0;
 }
 
-/** Capacité de stockage (au-delà, la production sature → pas de perte punitive).
- *  `mult` = bonus global des entrepôts (cf. storageMult). */
-export function buildingStorageCap(b: Building, mult = 1): number {
-  return buildingProdPerHour(b) * BUILD.storageHours * mult;
+/** Heures de production qu'un bâtiment de ce niveau peut stocker. ⚠️ PROPRE au
+ *  bâtiment : c'est SON niveau qui la règle, plus un Entrepôt tiers. */
+export function storageHoursFor(level: number): number {
+  return BUILD.storageHours * (1 + BUILD.storagePerLvl * Math.max(0, level));
+}
+
+/** Capacité de stockage (au-delà, la production sature → pas de perte punitive). */
+export function buildingStorageCap(b: Building): number {
+  return buildingProdPerHour(b) * storageHoursFor(b.level);
 }
 
 /** Ressource ACCUMULÉE depuis la dernière récolte, plafonnée au stockage (entier). */
-export function buildingAccrued(b: Building, now: number, mult = 1): number {
+export function buildingAccrued(b: Building, now: number): number {
   const perHr = buildingProdPerHour(b);
   const hours = Math.max(0, (now - b.collectedAt) / BUILD.hourMs);
-  return Math.floor(Math.min(perHr * hours, buildingStorageCap(b, mult)));
+  return Math.floor(Math.min(perHr * hours, buildingStorageCap(b)));
 }
 
-/** Somme des ressources prêtes à récolter, par ressource (entrepôts appliqués). */
+/** Somme des ressources prêtes à récolter, par ressource. */
 export function collectable(buildings: Building[], now: number): Record<BuildResource, number> {
   const acc: Record<BuildResource, number> = {
     dust: 0,
@@ -752,11 +745,10 @@ export function collectable(buildings: Building[], now: number): Record<BuildRes
     summon: 0,
     keys: 0,
   };
-  const mult = storageMult(buildings);
   for (const b of buildings) {
     const t = buildingType(b.typeId);
     if (!t?.resource) continue; // utilitaires : ne produisent rien
-    acc[t.resource] += buildingAccrued(b, now, mult);
+    acc[t.resource] += buildingAccrued(b, now);
   }
   return acc;
 }
@@ -767,10 +759,10 @@ export function collectable(buildings: Building[], now: number): Record<BuildRes
  *  récolte ; (2) un filon LENT (0,16/h) n'est plus « affamé » quand on récolte souvent
  *  pour un filon rapide (sa fraction < 1 est conservée, il finit par cumuler son unité).
  *  Filon sans unité entière prête (ou utilitaire) → `collectedAt` inchangé (rien jeté). */
-export function nextCollectedAt(b: Building, now: number, mult = 1): number {
+export function nextCollectedAt(b: Building, now: number): number {
   const perHr = buildingProdPerHour(b);
   if (perHr <= 0) return b.collectedAt; // utilitaire : rien à récolter
-  const cap = buildingStorageCap(b, mult); // en unités
+  const cap = buildingStorageCap(b); // en unités
   const stored = Math.min((perHr * (now - b.collectedAt)) / BUILD.hourMs, cap);
   const collected = Math.floor(stored);
   if (collected <= 0) return b.collectedAt; // rien récolté → on garde l'accumulation en cours

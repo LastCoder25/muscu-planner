@@ -18,7 +18,7 @@ import {
   buildingProdPerHour,
   buildingStorageCap,
   collectable,
-  storageMult,
+  storageHoursFor,
   nextCollectedAt,
   buildingType,
   buildingUnlockLevel,
@@ -67,7 +67,9 @@ describe('buildings — emplacements & coûts', () => {
     // puits a déjà dérivé une fois en silence (v0.733, +43 % quand les caravanes ont ajouté
     // trois bâtiments), et le retrait de ces trois-là a imposé de recaler `BUILD.upBase`
     // (550 → 850, mesuré : la part du plafond serait montée à 94 %, hors bande).
-    expect(BUILDING_TYPES.length).toBe(6);
+    // Puis l'Entrepôt, retiré à son tour (chaque producteur porte sa réserve) : `upBase`
+    // 850 → 1000, mesuré.
+    expect(BUILDING_TYPES.length).toBe(5);
   });
   it('le CHOIX vit dans plotsForLevel, pas dans le mou : moins d’emplacements que de types déblocables', () => {
     // À bas niveau on a moins d'emplacements que de bâtiments déjà déblocables → on
@@ -113,7 +115,7 @@ describe('canBuildOnSlot : on construit LÀ OÙ ON TOUCHE, pas dans l’ordre (v
   });
   it('quota atteint → aucun emplacement vide constructible', () => {
     // 3 bâtiments posés (slots 0, 1, 9) à un niveau qui n’en autorise que 3.
-    const trois = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, 1), mk('warehouse', 1, 0, 9)];
+    const trois = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, 1), mk('boss_altar', 1, 0, 9)];
     expect(canBuildOnSlot(2, trois, 3)).toBe(false);
     expect(canBuildOnSlot(6, trois, 3)).toBe(false);
   });
@@ -158,9 +160,9 @@ describe('repackBuildingSlots : un filet legacy, jamais un repack inconditionnel
 });
 
 describe('buildings — registre (production passive)', () => {
-  it('roster complet : les 6 qui restent après la simplification', () => {
+  it('roster complet : les 5 qui restent (Entrepôt retiré)', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
-      ['boss_altar', 'energy_font', 'labyrinth_gate', 'outpost', 'warehouse', 'pantheon'].sort(),
+      ['boss_altar', 'energy_font', 'labyrinth_gate', 'outpost', 'pantheon'].sort(),
     );
   });
 
@@ -182,7 +184,7 @@ describe('buildings — registre (production passive)', () => {
     expect(buildingProdPerHour(mk('boss_altar', 10))).toBeGreaterThan(0); // hybride → pierres
     expect(buildingProdPerHour(mk('labyrinth_gate', 10))).toBeGreaterThan(0); // hybride → clés
     expect(buildingProdPerHour(mk('outpost', 10))).toBe(0); // utilitaire pur
-    expect(buildingProdPerHour(mk('warehouse', 10))).toBe(0); // utilitaire pur
+    expect(buildingProdPerHour(mk('pantheon', 10))).toBe(0); // utilitaire pur
     expect(buildingProdPerHour(mk('inexistant', 5))).toBe(0); // robustesse
   });
   it('collectable agrège par ressource (énergie / pierres / clés)', () => {
@@ -195,13 +197,33 @@ describe('buildings — registre (production passive)', () => {
     expect(c.summon).toBeGreaterThan(0);
     expect(c.keys).toBeGreaterThan(0);
   });
-  it('Entrepôt augmente le stockage des producteurs (+15 %/niveau)', () => {
-    expect(storageMult([mk('warehouse', 4)])).toBeCloseTo(1.6, 5); // +60 %
-    const mine = mk('energy_font', 10, 0);
-    expect(buildingStorageCap(mine, storageMult([mk('warehouse', 4)]))).toBeCloseTo(
-      buildingStorageCap(mine) * 1.6,
-      3,
-    );
+  it('⚠️ CHAQUE BÂTIMENT GÈRE SA RÉSERVE : elle grandit avec SON niveau', () => {
+    // L'Entrepôt est retiré (demandé) : sa courbe est reprise par chaque producteur pour
+    // lui-même. ⚠️ Non-régression : un producteur au niveau N stocke EXACTEMENT ce qu'il
+    // stockait avec un Entrepôt au même niveau (18 h × (1 + 0,15 × N)) — personne qui
+    // avait suivi ne perd de stockage.
+    for (const id of ['energy_font', 'labyrinth_gate', 'boss_altar'] as const) {
+      for (const L of [1, 4, 10, 30, 100]) {
+        const b = mk(id, L, 0);
+        expect(buildingStorageCap(b), `${id} niv ${L}`).toBeCloseTo(
+          buildingProdPerHour(b) * 18 * (1 + 0.15 * L),
+          6,
+        );
+      }
+    }
+    // La réserve en HEURES monte à chaque niveau (aucun niveau mort).
+    for (let L = 1; L <= 100; L++)
+      expect(storageHoursFor(L)).toBeGreaterThan(storageHoursFor(L - 1));
+  });
+  it('⚠️ la réserve d’un bâtiment ne dépend d’AUCUN autre bâtiment', () => {
+    const dyn = mk('energy_font', 10, 0, 0);
+    const seul = collectable([dyn], 1e12).energy;
+    const entoure = collectable(
+      [dyn, mk('outpost', 30, 0, 1), mk('pantheon', 30, 0, 2), mk('boss_altar', 30, 0, 3)],
+      1e12,
+    ).energy;
+    expect(entoure).toBe(seul);
+    expect(seul).toBe(Math.floor(buildingStorageCap(dyn)));
   });
 });
 
@@ -424,7 +446,6 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     gold_mine: (l) => 25 * l,
     energy_font: (l) => buildingProdPerHour(one('energy_font', l)[0]!),
     foundry: (l) => 0.12 * l,
-    warehouse: (l) => storageMult(one('warehouse', l)),
     outpost: (l) => -travelTimeMult(one('outpost', l)),
     labyrinth_gate: (l) => labyrinthLuckBonus(one('labyrinth_gate', l)),
     boss_altar: (l) => bossAltarRollFloor(one('boss_altar', l)),
@@ -543,7 +564,7 @@ describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () 
     expect(healBuildings([])).toEqual({ buildings: [], goldRefund: 0 });
   });
   it('sans rien à fusionner, elle ne touche à RIEN (idempotence)', () => {
-    const b = [mk('warehouse', 5, 0, 0), mk('pantheon', 12, 0, 1)];
+    const b = [mk('energy_font', 5, 0, 0), mk('pantheon', 12, 0, 1)];
     const out = healBuildings(b);
     expect(out.goldRefund).toBe(0);
     expect(out.buildings).toEqual(b);
@@ -551,7 +572,7 @@ describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () 
 
   it('les trois deviennent UN Panthéon, au niveau le plus haut et à la place du premier', () => {
     const out = healBuildings([
-      mk('warehouse', 4, 0, 0),
+      mk('energy_font', 4, 0, 0),
       legacy('training', 10, 3),
       legacy('guild', 31, 1),
       legacy('outfitter', 30, 5),
@@ -564,7 +585,7 @@ describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () 
     expect(pan[0]!.level).toBe(31);
     expect(pan[0]!.slot, 'la place du premier posé').toBe(1);
     // Le reste de la cour ne bouge pas.
-    expect(out.buildings.some((b) => b.typeId === 'warehouse')).toBe(true);
+    expect(out.buildings.some((b) => b.typeId === 'energy_font')).toBe(true);
   });
 
   it('🐫 → 🧭 le COMPTOIR rejoint l’Avant-poste : niveau le plus haut, or du reste rendu', () => {
@@ -591,6 +612,16 @@ describe('🛕 FUSION DU PANTHÉON — 3 bâtiments en 1, sans rien perdre', () 
     const out = healBuildings([mine, fonderie]);
     expect(out.buildings, 'la cour est vidée de ces deux-là').toEqual([]);
     expect(out.goldRefund).toBe(buildingInvested(600, 32) + buildingInvested(850, 14));
+  });
+
+  it('🏬 RETRAIT SEC : l’Entrepôt est rendu EN ENTIER, les producteurs restent', () => {
+    // Chaque producteur porte désormais sa propre réserve : rien ne reprend le métier de
+    // l'Entrepôt, donc tout ce qu'il a coûté revient en or — sans quoi normalizeRow
+    // l'effacerait en silence.
+    const dyn = mk('energy_font', 12, 0, 1);
+    const out = healBuildings([legacy('warehouse', 20, 0), dyn]);
+    expect(out.buildings.map((b) => b.typeId)).toEqual(['energy_font']);
+    expect(out.goldRefund).toBe(buildingInvested(900, 20));
   });
 
   it('⚠️ LE FILTRE DES TYPES INCONNUS NE LES EFFACE PAS AVANT LA FUSION', () => {
