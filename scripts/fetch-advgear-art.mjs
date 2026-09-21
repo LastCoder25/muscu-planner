@@ -33,11 +33,14 @@ const FORCE = process.argv.includes('--force');
 /**
  * ⚠️ « NATURE MORTE », PAS « ANIME » : mesuré au banc, tout prompt qui ouvre sur « anime »
  * fait dessiner un PERSONNAGE qui tient l'objet (la première épée est sortie en portrait de
- * guerrière). « Still life … lying alone, object only » donne l'objet seul.
+ * guerrière). « Still life … lying alone, object only » donne l'objet seul. Les vêtements
+ * sont « pliés » et les armures « vides » : sinon le modèle les montre PORTÉS (constaté
+ * sur les capes et les brigandines du premier jet).
  */
 const style = (sujet) =>
   `still life illustration of ${sujet} lying alone, object only, rpg game item art, cel shaded, ` +
-  'clean bold outlines, dark gradient background, no person, no hands, no face, no text';
+  'clean bold outlines, dark gradient background, square composition, the object alone, ' +
+  'no person, no character, no mannequin, no hands, no face, no circle frame, no text';
 
 /** Modèle → ce qu'on voit (B simple et usé · A soigné et gravé · S de légende). */
 const SUBJECTS = {
@@ -45,9 +48,9 @@ const SUBJECTS = {
   'guerrier-weapon-b': 'plain short iron sword with a leather wrapped grip, slightly nicked blade',
   'guerrier-weapon-a': 'finely crafted bastard sword, engraved steel blade, brass crossguard',
   'guerrier-weapon-s': 'legendary holy longsword glowing with golden light, ornate winged hilt, radiant runes',
-  'guerrier-armor-b': 'dented iron breastplate with worn leather straps',
-  'guerrier-armor-a': 'polished blued steel cuirass with engraved trim',
-  'guerrier-armor-s': 'legendary golden plate armor with a roaring lion emblem, glowing aura',
+  'guerrier-armor-b': 'dented iron breastplate with worn leather straps, empty, displayed on its own',
+  'guerrier-armor-a': 'polished blued steel cuirass with engraved trim, empty, displayed on its own',
+  'guerrier-armor-s': 'golden plate chestpiece with a roaring lion emblem, empty, displayed on its own, glowing aura',
   'guerrier-accessory-b': 'pair of simple brown leather gauntlets',
   'guerrier-accessory-a': 'pair of steel gauntlets with spiked knuckles',
   'guerrier-accessory-s': 'pair of massive titan gauntlets crackling with red energy, glowing runes',
@@ -58,10 +61,10 @@ const SUBJECTS = {
   // ── ARCHER ──
   'archer-weapon-b': 'simple wooden hunting bow with a plain string',
   'archer-weapon-a': 'elegant yew longbow with carved leaf patterns',
-  'archer-weapon-s': 'legendary moonlit elven bow of silver wood, glowing crescent tips, sparkling light',
-  'archer-armor-b': 'plain brown leather vest with laces',
-  'archer-armor-a': 'green studded leather brigandine with a hood',
-  'archer-armor-s': 'legendary cloak of silver leaves, shimmering, glowing green aura',
+  'archer-weapon-s': 'silver longbow with glowing crescent moon tips, sparkling light',
+  'archer-armor-b': 'plain brown leather vest with laces, empty, laid flat',
+  'archer-armor-a': 'green studded leather armor vest, empty, laid flat',
+  'archer-armor-s': 'shimmering armor vest made of silver leaves, empty, laid flat, glowing green aura',
   'archer-accessory-b': 'simple canvas quiver with a few arrows',
   'archer-accessory-a': 'carved leather quiver with fletched arrows and brass fittings',
   'archer-accessory-s': 'legendary endless quiver overflowing with glowing magical arrows',
@@ -72,10 +75,10 @@ const SUBJECTS = {
   // ── MAGE ──
   'mage-weapon-b': 'gnarled wooden staff with a simple knot at the top',
   'mage-weapon-a': 'wizard staff topped with a glowing blue crystal',
-  'mage-weapon-s': 'legendary scepter of the stars, golden with a floating starry orb, cosmic glow',
-  'mage-armor-b': 'plain grey novice robe folded',
-  'mage-armor-a': 'purple mage robe embroidered with glowing runes',
-  'mage-armor-s': 'legendary ethereal mantle made of flowing starlight, translucent, glowing aura',
+  'mage-weapon-s': 'golden scepter topped with a floating starry orb, cosmic glow',
+  'mage-armor-b': 'plain grey cloth robe neatly folded',
+  'mage-armor-a': 'purple cloth robe with glowing rune embroidery, neatly folded',
+  'mage-armor-s': 'mantle of flowing starlight fabric, neatly folded, glowing',
   'mage-accessory-b': 'worn old spellbook with dog-eared pages',
   'mage-accessory-a': 'grimoire bound with iron chains and a padlock',
   'mage-accessory-s': 'legendary primordial codex floating open, pages glowing with golden symbols',
@@ -87,9 +90,9 @@ const SUBJECTS = {
   'homme_armes-weapon-b': 'wooden club reinforced with iron bands',
   'homme_armes-weapon-a': 'steel flanged mace with a leather grip',
   'homme_armes-weapon-s': 'legendary huge wall-breaker warhammer, glowing orange runes, crackling energy',
-  'homme_armes-armor-b': 'patched iron plate armor with mismatched pieces',
-  'homme_armes-armor-a': 'sturdy guard plate armor with a tabard',
-  'homme_armes-armor-s': 'legendary eternal bastion full plate armor, massive, glowing blue aura',
+  'homme_armes-armor-b': 'patched iron plate armor with mismatched pieces, empty, on a wooden armor stand',
+  'homme_armes-armor-a': 'sturdy steel plate armor, empty, on a wooden armor stand',
+  'homme_armes-armor-s': 'massive glowing blue full plate armor, empty, on a stone armor stand',
   'homme_armes-accessory-b': 'simple round wooden shield with an iron rim',
   'homme_armes-accessory-a': 'tall heraldic pavise shield with a painted crest',
   'homme_armes-accessory-s': 'legendary titan aegis shield, golden, glowing with a protective light',
@@ -100,10 +103,10 @@ const SUBJECTS = {
   // ── ÉCLAIREUR ──
   'eclaireur-weapon-b': 'plain tracker dagger with a wooden handle',
   'eclaireur-weapon-a': 'pair of crossed twin daggers with curved steel blades',
-  'eclaireur-weapon-s': 'legendary shadow fang dagger, black blade trailing dark mist, glowing purple edge',
-  'eclaireur-armor-b': 'plain brown travel cloak folded',
-  'eclaireur-armor-a': 'dark blue night cloak with a silver clasp',
-  'eclaireur-armor-s': 'legendary veil of mist, a translucent cloak dissolving into fog, glowing aura',
+  'eclaireur-weapon-s': 'black dagger trailing dark mist, glowing purple edge',
+  'eclaireur-armor-b': 'plain brown travel cloak neatly folded',
+  'eclaireur-armor-a': 'dark blue cloak with a silver clasp, neatly folded',
+  'eclaireur-armor-s': 'translucent misty cloak neatly folded, dissolving into fog, glowing',
   'eclaireur-accessory-b': 'simple brass spyglass',
   'eclaireur-accessory-a': 'engraved brass spyglass with leather wrapping',
   'eclaireur-accessory-s': 'legendary eye of the horizon spyglass, golden, lens glowing with light',
@@ -115,9 +118,9 @@ const SUBJECTS = {
   'caravanier-weapon-b': 'plain wooden walking stick',
   'caravanier-weapon-a': 'iron-shod guide staff with a brass knob',
   'caravanier-weapon-s': 'legendary pathfinder staff of the first road, carved with glowing map lines',
-  'caravanier-armor-b': 'plain brown travel coat',
-  'caravanier-armor-a': 'lined merchant coat with brass buttons and a fur collar',
-  'caravanier-armor-s': 'legendary coat of a thousand roads, patterned with glowing maps, golden trim',
+  'caravanier-armor-b': 'plain brown travel coat neatly folded',
+  'caravanier-armor-a': 'merchant coat with brass buttons and a fur collar, neatly folded',
+  'caravanier-armor-s': 'coat patterned with glowing golden maps, neatly folded',
   'caravanier-accessory-b': 'simple canvas pack saddle bag',
   'caravanier-accessory-a': 'reinforced leather pack with metal buckles',
   'caravanier-accessory-s': 'legendary bottomless magic bag glowing from inside, stars spilling out',
