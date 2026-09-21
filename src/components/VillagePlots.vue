@@ -12,8 +12,14 @@
 <template>
   <div class="vp">
     <!-- Feuille de gestion d'un emplacement -->
-    <q-dialog v-model="sheetOpen" position="bottom">
-      <q-card v-if="selectedPlot" class="vp-sheet">
+    <!-- 🛕 Le PANTHÉON s'ouvre en PLEIN ÉCRAN (demandé) : ses trois portes — champions,
+         équipements, tirage — y sont de grandes tuiles qui se partagent la hauteur. -->
+    <q-dialog
+      v-model="sheetOpen"
+      :position="isPantheon ? 'standard' : 'bottom'"
+      :maximized="isPantheon"
+    >
+      <q-card v-if="selectedPlot" class="vp-sheet" :class="{ pan: isPantheon }">
         <div class="sh-head">
           <span class="sh-emo">{{
             selectedPlot.building ? emojiOf(selectedPlot.building) : '🏗️'
@@ -110,17 +116,30 @@
               <span class="pp-tx">{{ milestone.text }}</span>
             </div>
           </div>
+          <!-- 🛕 LES TROIS PORTES DU PANTHÉON, en grand (demandé : elles vivaient en petites
+               tuiles sur la page Base, loin du bâtiment). Un bâtiment, un endroit. -->
+          <div v-if="isPantheon" class="pan-tiles">
+            <button type="button" class="pan-tile" @click="emit('open-guild', 'champions')">
+              <span class="pan-emo">🏅</span>
+              <span class="pan-t font-display">Champions</span>
+              <span class="pan-s">{{ champSummary }}</span>
+            </button>
+            <button type="button" class="pan-tile" @click="emit('open-guild', 'gear')">
+              <span class="pan-emo">🗡️</span>
+              <span class="pan-t font-display">Équipements</span>
+              <span class="pan-s">{{ gearSummary }}</span>
+            </button>
+            <button type="button" class="pan-tile summon" @click="emit('open-summon')">
+              <span class="pan-emo">🎰</span>
+              <span class="pan-t font-display">Tirage</span>
+              <span class="pan-s">{{ summonSummary }}</span>
+              <span class="pan-mana">💠 {{ mana.toLocaleString('fr-FR') }}</span>
+            </button>
+          </div>
           <div class="pm-actions">
             <!-- ⚠️ Le vivier se gère DEPUIS SON BÂTIMENT. Il vivait dans une carte en bas
                  de la base, loin de la Guilde qu'on venait de monter : on cherchait ses
                  aventuriers là où ils n'étaient pas. Un bâtiment, un endroit. -->
-            <button
-              v-if="selectedPlot.building.typeId === 'pantheon'"
-              class="pm-btn open"
-              @click="emit('open-guild')"
-            >
-              🏅 Voir mes champions
-            </button>
             <button
               v-if="produces(selectedPlot.building)"
               class="pm-btn"
@@ -165,6 +184,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { engageCap } from '@/lib/adventurers';
 import { altarLuckBonus } from '@/lib/items';
+import { GACHA } from '@/lib/gacha';
 import {
   perLevelLabel,
   BUILD,
@@ -195,7 +215,8 @@ import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
 const emit = defineEmits<{
   'update:slot': [number | null];
-  'open-guild': [];
+  'open-guild': [section?: 'champions' | 'gear'];
+  'open-summon': [];
 }>();
 const char = useCharacterStore();
 const auth = useAuthStore();
@@ -244,6 +265,26 @@ const selectedPlot = computed(() =>
     ? null
     : (plots.value.find((p) => p.slot === selectedSlot.value) ?? null),
 );
+/** 🛕 Le Panthéon a sa propre feuille : plein écran, trois grandes tuiles. */
+const isPantheon = computed(() => selectedPlot.value?.building?.typeId === 'pantheon');
+const mana = computed(() => char.row?.mana ?? 0);
+/** 🏅 Ce que la tuile Champions résume : la collection, sinon comment la commencer. */
+const champSummary = computed(() => {
+  const n = char.advList.length;
+  return n ? `${n} champion${n > 1 ? 's' : ''}` : 'Aucun champion — passe au tirage';
+});
+/** 🗡️ Ce que la tuile Équipements résume : le stock de pièces. */
+const gearSummary = computed(() => {
+  const n = char.advGearStock.length;
+  return n ? `${n} pièce${n > 1 ? 's' : ''} en stock` : 'Aucune pièce — elles sortent du tirage';
+});
+/** 🎰 Ce que la tuile Tirage résume : combien de tirages la réserve permet. */
+const summonSummary = computed(() => {
+  const n = Math.floor(mana.value / GACHA.pullCost);
+  return n
+    ? `×1 · ×10 — ${n} tirage${n > 1 ? 's' : ''} possible${n > 1 ? 's' : ''}`
+    : 'Referme une faille pour gagner des 💠';
+});
 /** Les prochains niveaux, chiffrés. Voir l'horizon est l'intérêt : savoir qu'un convoi
  *  de plus arrive au niveau 18 aide à décider AUJOURD'HUI. */
 const preview = computed(() =>
@@ -479,11 +520,6 @@ function collectAll() {
   font-size: 10px;
   color: var(--accent);
 }
-.pm-btn.open {
-  background: var(--surface);
-  border-color: var(--accent);
-  color: var(--accent);
-}
 .vp-sheet {
   width: 100%;
   max-width: 560px;
@@ -662,5 +698,82 @@ function collectAll() {
   background: none;
   color: var(--accent, #ffd23f);
   cursor: pointer;
+}
+/* 🛕 PANTHÉON EN PLEIN ÉCRAN : la feuille prend toute la hauteur et les trois tuiles se la
+   partagent (`flex: 1`), avec un plancher pour les petits écrans (on fait alors défiler). */
+.vp-sheet.pan {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  border-radius: 0;
+  overflow-y: auto;
+}
+.vp-sheet.pan .pm {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pan-tiles {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+.pan-tile {
+  position: relative;
+  flex: 1;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: radial-gradient(
+    circle at 50% 30%,
+    color-mix(in srgb, var(--accent) 14%, var(--surface)),
+    var(--bg)
+  );
+  color: var(--text);
+  cursor: pointer;
+  text-align: center;
+}
+.pan-tile:active {
+  transform: scale(0.99);
+}
+.pan-tile.summon {
+  border-color: color-mix(in srgb, #b57bff 55%, var(--line));
+  background: radial-gradient(
+    circle at 50% 30%,
+    color-mix(in srgb, #b57bff 18%, var(--surface)),
+    var(--bg)
+  );
+}
+.pan-emo {
+  font-size: 48px;
+  line-height: 1;
+}
+.pan-t {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.pan-s {
+  font-size: 13px;
+  color: var(--dim);
+}
+.pan-mana {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b57bff;
 }
 </style>

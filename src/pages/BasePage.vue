@@ -584,41 +584,6 @@
         </template>
       </div>
 
-      <!-- 🏅 LA TUILE CHAMPIONS (demandé) : l'accès au vivier ET à l'invocation, qui vivent
-           dans la même feuille (`GuildPanel`). Avant, on n'y arrivait qu'en touchant le
-           Panthéon sur le dessin — un chemin qu'il fallait connaître. -->
-      <button type="button" class="panel tile tile-btn" @click="openGuild()">
-        <span class="tile-emo">🏅</span>
-        <span class="tile-main">
-          <span class="tile-t font-display">Champions</span>
-          <span class="tile-s">{{ champSummary }}</span>
-        </span>
-        <span class="tile-chev">›</span>
-      </button>
-
-      <!-- 🗡️ LA TUILE ÉQUIPEMENTS (v0.991, demandé) : le stock des pièces de champions,
-           séparé du vivier. -->
-      <button type="button" class="panel tile tile-btn" @click="openGuild('gear')">
-        <span class="tile-emo">🗡️</span>
-        <span class="tile-main">
-          <span class="tile-t font-display">Équipements</span>
-          <span class="tile-s">{{ gearSummary }}</span>
-        </span>
-        <span class="tile-chev">›</span>
-      </button>
-
-      <!-- 🎰 LA TUILE TIRAGE (v0.989, demandé : « une tuile pour le tirage plutôt que de le
-           mettre dans les champions, on sépare les deux »). -->
-      <button type="button" class="panel tile tile-btn tile-summon" @click="summonOpen = true">
-        <span class="tile-emo">🎰</span>
-        <span class="tile-main">
-          <span class="tile-t font-display">Tirage</span>
-          <span class="tile-s">{{ summonSummary }}</span>
-        </span>
-        <span class="tile-sum mana">💠 {{ (char.row?.mana ?? 0).toLocaleString('fr-FR') }}</span>
-        <span class="tile-chev">›</span>
-      </button>
-
       <div class="keep-legend">
         <span
           >🧱 Muraille {{ wallLevel || '—'
@@ -711,6 +676,7 @@
       :hero-level="heroLevel"
       :now="now"
       @open-guild="openGuild"
+      @open-summon="summonOpen = true"
     />
 
     <!-- Feuille d'une structure de défense, ouverte depuis le dessin. -->
@@ -991,7 +957,6 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
 import SummonPanel from '@/components/SummonPanel.vue';
-import { GACHA } from '@/lib/gacha';
 import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import {
@@ -1560,28 +1525,8 @@ const defSummary = computed(() => {
   if (raid.value) return '⚔️ Armée en vue';
   return '🕊️ Calme';
 });
-/** 🏅 Ce que la tuile Champions résume : la collection, sinon comment la commencer. */
-const champSummary = computed(() => {
-  if (!char.pantheonLevel) return 'Construis le Panthéon';
-  const n = char.advList.length;
-  return n ? `${n} champion${n > 1 ? 's' : ''}` : 'Aucun champion — passe au tirage';
-});
-/** 🗡️ Ce que la tuile Équipements résume : le stock de pièces. */
-const gearSummary = computed(() => {
-  if (!char.pantheonLevel) return 'Construis le Panthéon';
-  const n = char.advGearStock.length;
-  return n ? `${n} pièce${n > 1 ? 's' : ''} en stock` : 'Aucune pièce — forge ou tirage B';
-});
 // ── 🎰 Tirage ──
 const summonOpen = ref(false);
-/** Ce que la tuile Tirage résume : combien de tirages la réserve permet. */
-const summonSummary = computed(() => {
-  if (!char.pantheonLevel) return 'Construis le Panthéon pour invoquer';
-  const n = Math.floor((char.row?.mana ?? 0) / GACHA.pullCost);
-  return n
-    ? `×1 · ×10 — ${n} tirage${n > 1 ? 's' : ''} possible${n > 1 ? 's' : ''}`
-    : 'Referme une faille pour gagner des 💠';
-});
 const partsOpen = ref(localStorage.getItem('muscu:base:parts') === '1');
 const helpOpen = ref(localStorage.getItem('muscu:base:help') === '1');
 function togglePartsOpen() {
@@ -2639,9 +2584,8 @@ function doHarvest() {
 .forces {
   margin-bottom: 10px;
 }
-/* ── 🛡️🏅 LES TUILES (Défense repliable, Champions) ── */
-.tile-h,
-.tile-btn {
+/* ── 🛡️ LA TUILE DÉFENSE (repliable) — les tuiles du Panthéon vivent dans sa feuille ── */
+.tile-h {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2654,11 +2598,6 @@ function doHarvest() {
   text-align: left;
   cursor: pointer;
   font: inherit;
-}
-.tile-btn {
-  padding: 12px;
-  background: var(--surface);
-  border: 1px solid var(--line);
 }
 .forces.tile.open .tile-h {
   margin-bottom: 8px;
@@ -2708,10 +2647,6 @@ function doHarvest() {
 .tile-sum.unknown {
   color: var(--d4);
   background: color-mix(in srgb, var(--d4) 16%, transparent);
-}
-.tile-sum.mana {
-  color: #b57bff;
-  background: color-mix(in srgb, #b57bff 16%, transparent);
 }
 .tile-chev {
   flex: none;
