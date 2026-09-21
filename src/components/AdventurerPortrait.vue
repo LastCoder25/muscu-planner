@@ -145,7 +145,15 @@
          jamais là où l'on compare deux champions. Teinte du Codex, même notion. -->
     <div v-if="subLabel || awaken" class="ap-sub">
       <span v-if="subLabel">{{ subLabel }}</span>
-      <span v-if="awaken" class="ap-awk">✨ Éveil {{ awaken }}</span>
+      <button
+        v-if="awaken"
+        type="button"
+        class="ap-awk"
+        title="Qu’est-ce que l’Éveil ?"
+        @click.stop="showAwakenInfo(adv)"
+      >
+        ✨ Éveil {{ awaken }}
+      </button>
     </div>
     <div v-if="state" class="ap-state">{{ state }}</div>
   </div>
@@ -154,6 +162,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import {
   advNominalRarity,
   advAwaken,
@@ -531,6 +540,17 @@ button.ap-mini {
 .ap-awk {
   color: var(--accent);
   margin-left: 4px;
+  font-weight: 700;
+  /* Un bouton : on le touche pour savoir ce que veut dire « Éveil ». Cible élargie par
+     le padding, compensée par la marge — la ligne ne bouge pas. */
+  background: none;
+  border: 0;
+  font: inherit;
+  padding: 6px 4px;
+  margin: -6px 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 .ap-sub,
 .ap-state {

@@ -419,7 +419,10 @@
              qu'on envoie au combat. Sur `/max` ici : la fiche a la place de dire ce qu'il
              reste à réveiller, la tuile non. -->
         <template v-if="awkOf(detailAdv)">
-          · <b class="d-awk">✨ Éveil {{ awkOf(detailAdv) }}/{{ AWAKEN.max }}</b>
+          ·
+          <button type="button" class="d-awk" @click="showAwakenInfo(detailAdv)">
+            ✨ Éveil {{ awkOf(detailAdv) }}/{{ AWAKEN.max }} ⓘ
+          </button>
         </template>
       </div>
 
@@ -745,6 +748,7 @@
 // aventurier de manga »), et c'est aussi ce qui rend la barre indispensable.
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useQuasar } from 'quasar';
+import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
@@ -1953,6 +1957,17 @@ async function doPull() {
 /* ✨ Même teinte que la pastille du Codex : une seule couleur pour l’Éveil. */
 .d-awk {
   color: var(--accent);
+  font-weight: 700;
+  /* Un bouton : on le touche pour savoir ce que veut dire « Éveil ». Cible élargie par
+     le padding, compensée par la marge — la ligne ne bouge pas. */
+  background: none;
+  border: 0;
+  font: inherit;
+  padding: 6px 4px;
+  margin: -6px 0;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
 }
 .d-sub {
   font-size: 12.5px;

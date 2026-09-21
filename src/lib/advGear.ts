@@ -618,7 +618,7 @@ export function outfitRank(item: Pick<Item, 'rarity'>, target: Adventurer): Rari
 
 /** Un objet du sac qu'on peut fondre pour CET aventurier, avec la pièce qui en sortira. */
 /** Ce que la pièce fabriquée ferait face à ce que l'aventurier porte déjà sur l'emplacement. */
-export type OutfitVerdict = 'empty' | 'up' | 'same' | 'down';
+type OutfitVerdict = 'empty' | 'up' | 'same' | 'down';
 
 export interface OutfitOption {
   item: Item;

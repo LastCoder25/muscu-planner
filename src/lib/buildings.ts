@@ -293,7 +293,7 @@ export const BUILDING_TYPES: BuildingType[] = [
     unlockLevel: 3,
     unique: true,
     unlock: { activity: 'Les champions', where: 'sur ta base' },
-    desc: 'Invoque tes champions et garde ta collection — tout ce que tu tires reste utilisable. Son niveau fixe jusqu’où ils peuvent monter, et combien agissent à la fois : la taille d’un groupe, l’escorte d’un convoi, les défenseurs du rempart. On y forge aussi leur équipement.',
+    desc: 'Invoque tes champions et garde ta collection — tout ce que tu tires reste utilisable. Son niveau fixe jusqu’où ils peuvent monter, et combien agissent à la fois : la taille d’un groupe, l’escorte d’un convoi, les défenseurs du rempart.',
   },
 ];
 

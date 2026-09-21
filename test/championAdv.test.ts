@@ -5,6 +5,7 @@ import { RANK_ORDER, RARITY_RANK, prestigeRankIndex } from '@/lib/items';
 import {
   AWAKEN,
   advAwaken,
+  awakenExplain,
   advChampion,
   advRank,
   advNominalRarity,
@@ -310,5 +311,37 @@ describe('🏅 LES DEUX RARETÉS — ce qu’on a TIRÉ, et ce qu’il peut MENE
     const pastille = regle('.ap-rar');
     expect(pastille).toContain('var(--nom-c)');
     expect(pastille).not.toContain('var(--rar-c)');
+  });
+});
+
+describe('✨ ce que veut dire « Éveil » (awakenExplain)', () => {
+  const avecCrans = CHAMPIONS.find((c) => c.awaken.length > 0)!;
+
+  it('annonce le bonus ACTUEL et celui du prochain doublon, calculés par le barème', () => {
+    const e = awakenExplain(asAdv(avecCrans, 10, 3));
+    expect(e.lines[0]).toBe(`Actuellement : Éveil 2/${AWAKEN.max} — +16 % de stats.`);
+    expect(e.lines.at(-1)).toBe('Prochain doublon : Éveil 3 → +24 % de stats.');
+    expect(e.intro).toContain('doublons');
+  });
+
+  it('marque les crans écrits comme acquis ou à venir', () => {
+    const premier = Math.min(...avecCrans.awaken.map((s) => s.at));
+    const avant = awakenExplain(asAdv(avecCrans, 10, premier)); // Éveil premier−1
+    const apres = awakenExplain(asAdv(avecCrans, 10, premier + 1)); // Éveil premier
+    const ligne = (l: string[]) => l.find((x) => x.includes(`Éveil ${premier} :`))!;
+    expect(ligne(avant.lines).startsWith('🔒')).toBe(true);
+    expect(ligne(apres.lines).startsWith('✅')).toBe(true);
+    expect(avant.lines).toHaveLength(avecCrans.awaken.length + 2);
+  });
+
+  it('au maximum, dit que les doublons se convertissent', () => {
+    const e = awakenExplain(asAdv(avecCrans, 10, AWAKEN.max + 1));
+    expect(e.lines.at(-1)).toContain('pierres de mana');
+  });
+
+  it('un aventurier legacy n’a pas d’Éveil, et on le dit', () => {
+    const e = awakenExplain(refAdventurer(20));
+    expect(e.lines).toEqual([]);
+    expect(e.intro).toContain('n’en a pas');
   });
 });

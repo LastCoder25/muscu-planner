@@ -1303,6 +1303,49 @@ export function advAwaken(adv: Adventurer): number {
   return awakenLevel(adv.copies ?? 1);
 }
 
+/** Ce qu'un cran d'Éveil vaut, en % de stats (arrondi) — le barème COMMUN `AWAKEN.perStep`. */
+function awakenPct(lvl: number): number {
+  return Math.round((awakenMult(lvl) - 1) * 100);
+}
+
+/**
+ * ✨ **CE QUE VEUT DIRE « ÉVEIL »**, pour CE champion (demandé : « quand je clique sur
+ * Éveil, me dire ce que ça signifie »). Une pastille « ✨ Éveil 3 » ne dit rien à qui ne
+ * connaît pas le genre : d'où il vient (les doublons), ce qu'il rapporte (en %, calculé
+ * par `awakenMult`, jamais recopié), ses crans ÉCRITS (une signature qui monte) et ce que
+ * rapportera le suivant. ⚠️ Pur : l'écran ne fait que l'afficher.
+ */
+export function awakenExplain(adv: Adventurer): { title: string; intro: string; lines: string[] } {
+  const champ = advChampion(adv);
+  const title = `✨ Éveil de ${adv.name}`;
+  if (!champ) {
+    return {
+      title,
+      intro:
+        'L’Éveil appartient aux champions invoqués : chaque doublon tiré réveille le champion d’un cran. Cet aventurier vient d’avant les champions, il n’en a pas.',
+      lines: [],
+    };
+  }
+  const lvl = advAwaken(adv);
+  const lines = [`Actuellement : Éveil ${lvl}/${AWAKEN.max} — +${awakenPct(lvl)} % de stats.`];
+  for (const s of [...champ.awaken].sort((a, b) => a.at - b.at)) {
+    const sig = ADV_SIGNATURE_INFO[s.skill];
+    lines.push(
+      `${lvl >= s.at ? '✅' : '🔒'} Éveil ${s.at} : ${sig ? `${sig.emoji} ${sig.name}` : 'sa signature'} gagne un niveau.`,
+    );
+  }
+  lines.push(
+    lvl < AWAKEN.max
+      ? `Prochain doublon : Éveil ${lvl + 1} → +${awakenPct(lvl + 1)} % de stats.`
+      : 'Éveil au maximum : les prochains doublons se convertissent en pierres de mana 💠.',
+  );
+  return {
+    title,
+    intro: `L’Éveil, ce sont les doublons : chaque fois que tu retires ${adv.name}, il se réveille d’un cran (${AWAKEN.max} au maximum) et devient plus fort.`,
+    lines,
+  };
+}
+
 /**
  * 🏅 LA RARETÉ **EFFECTIVE** d'une rareté tirée — plafonnée par le rang du joueur.
  *
