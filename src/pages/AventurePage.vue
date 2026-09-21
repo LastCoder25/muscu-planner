@@ -1460,7 +1460,21 @@
             :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
           >
             <div class="dgn-hd">
-              <span class="dgn-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
+              <!-- 🐉 L'illustration du boss (v0.1011) ; verrouillé → sa SILHOUETTE et un
+                   cadenas (on voit ce qui attend, pas qui c'est). Emoji en secours. -->
+              <span v-if="bestArt(b.name)" class="mboss-art-wrap">
+                <img
+                  :src="bestArt(b.name)!"
+                  :alt="bossUnlocked(b) ? b.name : ''"
+                  class="mboss-art"
+                  :class="{ shadow: !bossUnlocked(b) }"
+                  loading="lazy"
+                  draggable="false"
+                  @error="bestArtFailed.add(bestArt(b.name)!)"
+                />
+                <span v-if="!bossUnlocked(b)" class="mboss-lock">🔒</span>
+              </span>
+              <span v-else class="dgn-emo">{{ bossUnlocked(b) ? b.emoji : '🔒' }}</span>
               <div class="dgn-hd-main">
                 <div class="dgn-name mboss-name font-display">
                   {{ b.name }}
@@ -1792,6 +1806,37 @@
                 <span v-else class="best-emo">{{ m.discovered ? m.emoji : '❔' }}</span>
                 <span class="best-name">{{ m.discovered ? m.name : '???' }}</span>
                 <span class="best-tier">Palier {{ m.tier }}</span>
+              </div>
+            </div>
+
+            <!-- 👑 Boss de palier (v0.1011) — ceux qui donnent les pièces de set. Découvert =
+                 VAINCU au moins une fois ; sinon sa silhouette, comme le bestiaire. -->
+            <div class="cx-sec-h cx-sec-h2">
+              👑 Boss de palier
+              <span class="cx-count"
+                >{{ bossChain.filter(isBossBeaten).length }}/{{ bossChain.length }}</span
+              >
+            </div>
+            <div class="bestiary-grid">
+              <div
+                v-for="b in bossChain"
+                :key="b.id"
+                class="best-tile"
+                :class="{ found: isBossBeaten(b) }"
+              >
+                <img
+                  v-if="bestArt(b.name)"
+                  :src="bestArt(b.name)!"
+                  :alt="isBossBeaten(b) ? b.name : ''"
+                  class="best-art"
+                  :class="{ shadow: !isBossBeaten(b) }"
+                  loading="lazy"
+                  draggable="false"
+                  @error="bestArtFailed.add(bestArt(b.name)!)"
+                />
+                <span v-else class="best-emo">{{ isBossBeaten(b) ? b.emoji : '❔' }}</span>
+                <span class="best-name">{{ isBossBeaten(b) ? b.name : '???' }}</span>
+                <span class="best-tier">Niv {{ b.unlockLevel }}</span>
               </div>
             </div>
 
@@ -9889,6 +9934,31 @@ button.pt-mini:active {
 .mboss .dgn-emo {
   font-size: 38px;
   filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.5));
+}
+/* 🐉 Illustration du boss dans la liste (v0.1011) : même taille visuelle que la tuile
+   la permet, halo clair pour les boss presque noirs (Titan du Néant, Éclipse). */
+.mboss-art-wrap {
+  position: relative;
+  flex-shrink: 0;
+  width: 60px;
+  height: 60px;
+}
+.mboss-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom;
+  filter: drop-shadow(0 0 2px rgba(255, 236, 200, 0.35));
+}
+.mboss-art.shadow {
+  filter: brightness(0);
+  opacity: 0.45;
+}
+.mboss-lock {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  font-size: 16px;
 }
 .mboss-eyebrow {
   font-size: 10px;
