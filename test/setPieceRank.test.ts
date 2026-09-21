@@ -13,7 +13,7 @@ import {
 } from '@/lib/items';
 
 /**
- * 🧩 UNE PIÈCE DE SET S'OUVRE À SON RANG AU MÊME RYTHME QU'UN DROP (v0.1023, mesuré).
+ * 🧩 UNE PIÈCE DE SET S'OUVRE À SON RANG AU MÊME RYTHME QU'UN DROP (v0.1024, mesuré).
  *
  * La part de ton rang (« ton rang s'ouvre sur la durée du rang », v0.894) était rapportée au
  * volume des DROPS — ~220 par niveau au niveau 30 — et s'appliquait telle quelle aux pièces

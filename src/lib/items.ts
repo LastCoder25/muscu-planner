@@ -1229,7 +1229,7 @@ export function setPiecesPerLevel(level: number): number {
 /** Au-delà des 8 raretés (rangs de prestige 9-10) : plus de rang d'objet nouveau. */
 const beyondItemRanks = (c: CharacterRank) => c.rankIndex > RANK_ORDER.length - 1;
 /** Part de ton rang, rapportée au VOLUME de la source (objets qu'un niveau en fournit).
- *  ⚠️ « AUTANT D'OBJETS DE TON RANG PAR NIVEAU, QUELLE QUE SOIT LA SOURCE » (v0.1023, mesuré).
+ *  ⚠️ « AUTANT D'OBJETS DE TON RANG PAR NIVEAU, QUELLE QUE SOIT LA SOURCE » (v0.1024, mesuré).
  *  Rapportée au volume des DROPS, elle s'appliquait telle quelle aux pièces de set, dont un
  *  niveau ne fournit que ~5 par set (contre ~220 drops au niveau 30) : une pièce de set
  *  tombait à son rang ~40 fois moins souvent qu'un drop — 0 à 2 % des pièces du niveau 25 au
