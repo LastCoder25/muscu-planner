@@ -44,27 +44,13 @@ import {
   type FriendBossMember,
   type FriendBossHit,
 } from '@/lib/friendBoss';
+import { makeBoss } from './helpers/friendBoss';
 
 const H = 3600_000;
 const D = 24 * H;
 const T0 = Date.UTC(2026, 8, 14, 10);
 
-function boss(over: Partial<FriendBoss> = {}): FriendBoss {
-  return {
-    id: 'b1',
-    ownerId: 'u1',
-    family: 'push',
-    exerciseId: 'ex_pushup',
-    exerciseName: 'Pompes',
-    repWeight: 1,
-    createdAt: T0,
-    startAt: null,
-    defeatedAt: null,
-    hpTotal: 300,
-    damage: 0,
-    ...over,
-  };
-}
+const boss = (over: Partial<FriendBoss> = {}): FriendBoss => makeBoss({ createdAt: T0, ...over });
 
 describe('🐉 BOSS ENTRE AMIS — famille d’un exo', () => {
   it('le conditionnement passe avant le muscle, le temps donne le gainage', () => {

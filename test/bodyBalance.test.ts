@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { makeBoss } from './helpers/friendBoss';
 import {
   balanceBarGeometry,
   bodyBalance,
@@ -725,22 +726,15 @@ describe('le boss entre amis', () => {
   const MOI = 'moi';
   const jour = (iso: string) => Date.parse(`${iso}T12:00:00`);
 
-  function boss(p: Partial<FriendBoss> = {}): FriendBoss {
-    return {
-      id: 'b1',
+  const boss = (p: Partial<FriendBoss> = {}): FriendBoss =>
+    makeBoss({
       ownerId: MOI,
-      family: 'push',
       exerciseId: 'pushup',
-      exerciseName: 'Pompes',
-      repWeight: 1,
       createdAt: jour(MONDAY),
       startAt: jour(MONDAY),
-      defeatedAt: null,
       hpTotal: 100_000,
-      damage: 0,
       ...p,
-    };
-  }
+    });
   const membre = (p: Partial<FriendBossMember> = {}): FriendBossMember => ({
     bossId: 'b1',
     userId: MOI,
