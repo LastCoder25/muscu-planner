@@ -106,7 +106,9 @@ describe('le coût', () => {
   });
 
   it('les sceaux montent doucement avec le rang', () => {
-    expect([1, 2, 3, 4, 5, 9].map((r) => ascensionCost(r).seals)).toEqual([1, 2, 2, 3, 3, 5]);
+    expect([1, 2, 3, 4, 5, 7, 8, 9].map((r) => ascensionCost(r).seals)).toEqual([
+      1, 1, 1, 2, 2, 2, 3, 3,
+    ]);
   });
 });
 

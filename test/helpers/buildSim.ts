@@ -12,6 +12,8 @@
 import { BUILDING_TYPES, buildingUpgradeCost, plotsForLevel } from '@/lib/buildings';
 import { DEFENSE_TYPES, defenseUpgradeCost } from '@/lib/raid';
 import { computeLevel } from '@/lib/levels';
+import { characterRank } from '@/lib/characterRank';
+import { advGearAscensionCost, ascensionCost } from '@/lib/ascension';
 import { fullGoldPerDay } from './goldModel';
 
 /** Les trois profils de joueur, en XP par jour (mesurés sur des comptes réels). */
@@ -36,8 +38,15 @@ export interface YearOfPlay {
  * niveau.
  *
  * @param nbTypes nombre de bâtiments du roster — par défaut celui d'aujourd'hui.
+ * @param ascendK ⬆️ nombre de champions qu'on fait monter de rang (v0.1017) : à chaque rang
+ *   gagné par le joueur, `ascendK` ascensions de champion + leurs 4 pièces sont payées AVANT
+ *   les bâtiments — elles bloquent l'XP, c'est la dépense prioritaire.
  */
-export function yearOfPlay(xpParJour: number, nbTypes = BUILDING_TYPES.length): YearOfPlay {
+export function yearOfPlay(
+  xpParJour: number,
+  nbTypes = BUILDING_TYPES.length,
+  ascendK = 0,
+): YearOfPlay {
   const types = BUILDING_TYPES.slice(0, nbTypes);
   const niv = types.map(() => 0);
   const def = DEFENSE_TYPES.map(() => 0);
@@ -49,12 +58,20 @@ export function yearOfPlay(xpParJour: number, nbTypes = BUILDING_TYPES.length): 
   let earned = 0;
   let spent = 0;
   let last = 0;
+  let rang = 0;
+  let dette = 0;
   for (let j = 0; j < 365; j++) {
     xp += xpParJour;
     const L = computeLevel(xp).level;
     last = fullGoldPerDay(L, outpost < 0 ? 0 : niv[outpost]!, siegesPerDay);
     or += last;
     earned += last;
+    for (; rang < characterRank(L).rankIndex; rang++)
+      dette += ascendK * (ascensionCost(rang + 1).gold + 4 * advGearAscensionCost(rang + 1).gold);
+    const payé = Math.min(or, dette);
+    or -= payé;
+    dette -= payé;
+    spent += payé;
     const plots = Math.min(plotsForLevel(L), types.length);
     for (;;) {
       let best = -1;

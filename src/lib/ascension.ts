@@ -30,10 +30,14 @@ const ASCENSION = {
    *  divisé par ce facteur. ⚠️ Adossé au puits d'or du projet (`buildingUpgradeCost`) plutôt
    *  qu'à un nombre écrit : si l'économie des bâtiments bouge, l'ascension suit. */
   goldDiv: 4,
-  /** Sceaux de champion par ascension, selon le rang VISÉ : 1 + ⌊rang/2⌋ (1, 2, 2, 3…).
-   *  ⚠️ Bas à dessein : un vivier compte jusqu'à des dizaines de champions, tous à monter. */
+  /** Sceaux de champion par ascension, selon le rang VISÉ : 1 + ⌊rang/4⌋ (1, 1, 1, 2…).
+   *  ⚠️ MESURÉ (v0.1017, 20 simulations × 2 ans) : à 1 + ⌊rang/2⌋, un joueur qui referme une
+   *  faille par jour avait son trio 5 niveaux ou plus en retard **26 à 37 %** des jours — et
+   *  un trio bloqué au ★5 du rang précédent ne gagne que **0 à 26 %** de ses embuscades
+   *  (contre 75-91 % à niveau) : ses convois s'effondraient. À ⌊rang/4⌋ : **6 à 14 %** à une
+   *  faille/jour, **0 à 2 %** à deux. Un coût de 1 fixe rendait l'ascension formelle (≤ 1 %). */
   sealBase: 1,
-  sealPerTwoRanks: 1,
+  sealRankDiv: 4,
 } as const;
 
 /** Relecture défensive du jsonb `seals` : tout ce qui n'est pas un compte entier positif
@@ -73,7 +77,7 @@ export function ascensionCost(targetRank: number): { gold: number; seals: number
   const lvl = rankStartLevel(targetRank);
   return {
     gold: Math.round(buildingUpgradeCost(lvl) / ASCENSION.goldDiv),
-    seals: ASCENSION.sealBase + Math.floor(targetRank / 2) * ASCENSION.sealPerTwoRanks,
+    seals: ASCENSION.sealBase + Math.floor(targetRank / ASCENSION.sealRankDiv),
   };
 }
 
