@@ -52,7 +52,7 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
   10-20), seuil d'étincelle, écart de puissance B/A/S.
 - Relevé des 4 comptes réels : champions, copies, compteurs de pity, mana en réserve.
 
-### P1 — Trois raretés, rareté fixe (~1 j) · *le cœur*
+### P1 — Trois raretés, rareté fixe (~1 j) · *le cœur* — ✅ LIVRÉ v0.989
 - `Champion.rarity` passe à **S / A** ; roster redistribué **~16 S · 16 A** (rôles répartis dans
   chaque rareté). **B** = pièces d'équipement de lignée et matériaux d'Éveil, jamais un champion.
 - Budget de stats sur 3 crans ; « un A investi bat un S nu » et « à Éveil égal la rareté gagne »

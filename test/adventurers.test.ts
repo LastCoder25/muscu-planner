@@ -30,7 +30,7 @@ import {
   type Adventurer,
   advAvatar,
   compareAdventurers,
-  groupByRarity,
+  groupByGrade,
   advShapeLabel,
 } from '@/lib/adventurers';
 import { RANK_ORDER } from '@/lib/items';
@@ -348,7 +348,7 @@ describe('⭐ CE QU’UNE MISSION ANNONCE', () => {
   it('⚠️ UN CHAMPION, LUI, continue de monter — son rang n’est pas borné par un chemin', () => {
     // C'est ce qui remplace la promotion : on ne l'ÉLÈVE plus de classe en classe, son
     // rang suit son niveau jusqu’au plafond de sa RARETÉ.
-    const champ = CHAMPIONS.find((c) => c.rarity === 'primordial')!;
+    const champ = CHAMPIONS.find((c) => c.grade === 'S')!;
     const cha = (level: number) =>
       make({ id: 'c', name: champ.name, path: [], championId: champ.id, level });
     const ev = advProgressOf([cha(DEB)], [cha(DEB + 2)]);
@@ -610,38 +610,33 @@ describe('🗂️ L’ORDRE DU VIVIER : rang, puis expérience, puis puissance (
   });
 });
 
-describe('🗂️ LE VIVIER RANGÉ PAR RARETÉ — puis rang et étoiles décroissants', () => {
-  const champ = (r: string) => CHAMPIONS.find((c) => c.rarity === r)!;
-  const c = (id: string, r: string, level: number) =>
-    make({ id, name: id, path: [], championId: champ(r).id, level });
+describe('🗂️ LE VIVIER RANGÉ PAR LETTRE — puis rang et étoiles décroissants', () => {
+  const champ = (g: 'S' | 'A') => CHAMPIONS.find((c) => c.grade === g)!;
+  const c = (id: string, g: 'S' | 'A', level: number) =>
+    make({ id, name: id, path: [], championId: champ(g).id, level });
   const none = () => 0;
 
-  it('une section par rareté PRÉSENTE, de la plus haute à la plus basse', () => {
-    const g = groupByRarity(
-      [c('a', 'commun', 5), c('b', 'epique', 1), c('d', 'rare', 3), c('e', 'commun', 2)],
-      none,
-    );
-    expect(g.map((x) => x.rarity)).toEqual(['epique', 'rare', 'commun']);
+  it('une section par lettre PRÉSENTE, S en tête', () => {
+    const g = groupByGrade([c('a', 'A', 5), c('b', 'S', 1), c('e', 'A', 2)], none);
+    expect(g.map((x) => x.grade)).toEqual(['S', 'A']);
+    expect(groupByGrade([c('a', 'A', 5)], none).map((x) => x.grade)).toEqual(['A']);
   });
 
   it('dans une section, rang puis étoiles DÉCROISSANTS', () => {
     // niveau 2 = Bronze ★1, 5 = Bronze ★3, 12 = Argent ★1
-    const g = groupByRarity(
-      [c('b2', 'commun', 2), c('a12', 'commun', 12), c('m5', 'commun', 5)],
-      none,
-    );
+    const g = groupByGrade([c('b2', 'A', 2), c('a12', 'A', 12), c('m5', 'A', 5)], none);
     expect(g[0]!.advs.map((a) => a.id)).toEqual(['a12', 'm5', 'b2']);
   });
 
-  it('⚠️ la rareté NOMINALE : un primordial de niveau 1 reste chez les primordiaux', () => {
-    const g = groupByRarity([c('p', 'primordial', 1), c('x', 'commun', 30)], none);
-    expect(g[0]).toMatchObject({ rarity: 'primordial' });
+  it('⚠️ LA LETTRE EST FIXE : un S de niveau 1 reste chez les S', () => {
+    const g = groupByGrade([c('p', 'S', 1), c('x', 'A', 30)], none);
+    expect(g[0]).toMatchObject({ grade: 'S' });
     expect(g[0]!.advs.map((a) => a.id)).toEqual(['p']);
   });
 
   it('⚠️ on COPIE : le vivier garde son ordre', () => {
-    const l = [c('b', 'commun', 1), c('a', 'commun', 9)];
-    groupByRarity(l, none);
+    const l = [c('b', 'A', 1), c('a', 'A', 9)];
+    groupByGrade(l, none);
     expect(l.map((a) => a.id)).toEqual(['b', 'a']);
   });
 });

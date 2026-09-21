@@ -28,10 +28,18 @@ import {
   prestigeRankIndex,
   RANK_ORDER,
   RARITY_RANK,
+  RANK_COLOR,
+  RARITY_LABEL,
   type EffectType,
   type Rarity,
 } from './items';
-import { CHAMPION_BY_ID, type Champion } from '@/data/champions';
+import {
+  CHAMPION_BY_ID,
+  GRADE_COLOR,
+  REF_CHAMPION_BY_ID,
+  type Champion,
+  type ChampionGrade,
+} from '@/data/champions';
 import {
   CHARACTER_RANKS,
   characterRank,
@@ -1295,7 +1303,10 @@ export interface Adventurer {
  *  ⚠️ Un id qui ne désigne plus rien rend `undefined` plutôt que de faire tomber le
  *  combat — la règle des familiers et des talents appariés (v0.758). */
 export function advChampion(adv: Adventurer): Champion | undefined {
-  return adv.championId ? CHAMPION_BY_ID.get(adv.championId) : undefined;
+  if (!adv.championId) return undefined;
+  // 📏 Les champions de l'ÉTALON (`ref:…`) ne sont pas au roster : ils n'existent que pour
+  // mesurer (cf. `REF_CHAMPIONS_BY_RANK`).
+  return CHAMPION_BY_ID.get(adv.championId) ?? REF_CHAMPION_BY_ID.get(adv.championId);
 }
 
 /** Son rang d'Éveil, dérivé du nombre d'exemplaires. */
@@ -1346,28 +1357,6 @@ export function awakenExplain(adv: Adventurer): { title: string; intro: string; 
   };
 }
 
-/**
- * 🏅 LA RARETÉ **EFFECTIVE** d'une rareté tirée — plafonnée par le rang du joueur.
- *
- * ⚠️ **DEUX RARETÉS, ET LES CONFONDRE CASSE QUELQUE CHOSE DANS LES DEUX SENS.** La
- * **NOMINALE** (`champ.rarity`) est ce qu'on a TIRÉ : c'est elle que la carte affiche, et
- * un gacha qui cacherait un primordial fraîchement sorti n'aurait aucun intérêt.
- * L'**EFFECTIVE** est ce qu'il peut MENER aujourd'hui : elle borne son équipement
- * (`canWearAdvGear`), son familier (`canAdvFamiliar`) et son talent (`canAdvTalent`).
- *
- * ⚠️ **SANS CE PLAFOND, LE GACHA COURT-CIRCUITE « LE SPORT EST LE PLAFOND »** sur l'axe
- * ÉQUIPEMENT : un primordial tiré au niveau 5 porterait des pièces primordiales alors que
- * ses STATS valent du commun (`championBudget` les plafonne déjà). Deux vérités sur le
- * même champion, et c'est l'équipement qui gagnerait.
- *
- * ✅ Le plaisir reste entier : on tire bien un primordial, et il **révèle** ce qu'il vaut
- * à mesure qu'on monte (v0.938).
- */
-export function championRarity(rarity: Rarity, playerLevel: number): Rarity {
-  const tire = RARITY_RANK[rarity] ?? 0;
-  return RANK_ORDER[Math.min(tire, prestigeRankIndex(playerLevel))]!;
-}
-
 /** Stats de l'aventurier : le chemin de classes donne la FORME et le volume de base,
  *  le niveau multiplie. Chaque strate distribue son budget selon les parts de la classe. */
 export function advStats(adv: Adventurer): {
@@ -1401,26 +1390,30 @@ export function advStats(adv: Adventurer): {
 
 /** Rareté de l'aventurier = la strate la plus haute atteinte. Déduite, jamais stockée. */
 export function advRarity(adv: Adventurer): Rarity {
-  // ⚠️ Pour un champion, c'est la rareté EFFECTIVE (plafonnée par le rang du joueur), pas
-  // celle qu'on a tirée : c'est elle qui borne son équipement et ses compagnons.
-  const champ = advChampion(adv);
-  if (champ) return championRarity(champ.rarity, adv.level);
+  // ⚠️ Pour un champion, c'est son RANG (son niveau) — jamais sa lettre (refonte 2026-09-21).
+  // C'est lui qui borne son équipement et ses compagnons : un S tiré au niveau 1 porte du
+  // Bronze, comme un A. « Le sport est le plafond » passe par le NIVEAU, pas par l'étiquette.
+  if (advChampion(adv)) return RANK_ORDER[prestigeRankIndex(Math.max(1, adv.level))]!;
   const top = adv.path.reduce((m, id) => Math.max(m, advClass(id)?.stratum ?? 0), 0);
   return RANK_ORDER[Math.min(RANK_ORDER.length - 1, top)]!;
 }
 
 /**
- * 🏅 LA RARETÉ **NOMINALE** — ce qu'on a TIRÉ, et qui ne bouge jamais.
- *
- * ⚠️ **ELLE N'ÉTAIT AFFICHÉE NULLE PART** (v0.959), alors que la doc de `championRarity`
- * affirme « c'est elle que la carte affiche ». Les écrans lisaient `advRarity`, donc
- * l'EFFECTIVE : un primordial fraîchement invoqué s'affichait « Bronze » au niveau 1, et
- * **rien ne disait ce qu'on avait tiré** — dans un gacha, c'est l'information qui compte.
- *
- * Un aventurier LEGACY n'a qu'une rareté (sa strate) : les deux coïncident.
+ * 🎰 LA LETTRE d'un champion (S ou A) — ce qu'on a TIRÉ, fixe à vie (refonte 2026-09-21).
+ * `null` pour un aventurier legacy (sans identité de champion).
  */
-export function advNominalRarity(adv: Adventurer): Rarity {
-  return advChampion(adv)?.rarity ?? advRarity(adv);
+export function advGrade(adv: Adventurer): ChampionGrade | null {
+  return advChampion(adv)?.grade ?? null;
+}
+
+/** 🎰 Ce que la tuile d'un champion affiche comme « rareté » : sa LETTRE (S / A) dans sa
+ *  couleur. ⚠️ Source unique des trois écrans (portrait, tuile d'escorte, fiche) — un
+ *  legacy sans lettre garde sa rareté de classe. */
+export function advGradeBadge(adv: Adventurer): { label: string; color: string } {
+  const g = advGrade(adv);
+  if (g) return { label: g, color: GRADE_COLOR[g] };
+  const r = advRarity(adv);
+  return { label: RARITY_LABEL[r], color: RANK_COLOR[r] };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1445,39 +1438,29 @@ export const RARITY_BUDGET: number[] = RANK_ORDER.map((_, i) =>
 );
 
 /**
- * 🏅 Ce qu'un champion vaut VRAIMENT — sa rareté, **plafonnée par le rang du joueur**.
+ * 🎰 Ce que vaut une lettre, en part du budget de son RANG (refonte 2026-09-21).
  *
- * ⚠️ **CE PLAFOND N'EST PAS DANS LA SPEC, ET LA MESURE L'IMPOSE.** Sans lui, le gacha
- * donne des raretés **indépendamment du niveau**, ce qui court-circuite la règle fondatrice
- * du projet (« le sport est le plafond »). Mesuré, en simulant les tirages qu'un joueur
- * accumule en montant — l'escorte des 3 meilleurs champions vaut, face à l'étalon
- * d'aujourd'hui au même niveau :
+ * ⚠️ **S = 1, et c'est ce qui garde toute la calibration des combats intacte** : l'étalon
+ * (`refChampions`) prend des S au niveau du joueur, donc son budget est EXACTEMENT celui
+ * d'avant (`RARITY_BUDGET` au rang du joueur). Convois, sièges, camps et failles ne bougent
+ * pas.
  *
- * | niveau | sans plafond | avec plafond |
- * | ------ | ------------ | ------------ |
- * | 12     | ×3,9 à ×5,6  | **×1,89**    |
- * | 26     | ×3,7 à ×4,5  | **×1,45**    |
- * | 45     | ×2,2         | **×1,13**    |
- * | 100    | ×1,00        | **×1,00**    |
- *
- * ⚠️ **ET SANS PLAFOND, LA PROGRESSION DE RARETÉ EST FINIE EN TROIS MOIS** : mesuré, on a
- * **3 primordiaux dès le niveau 45** (97 à 259 jours selon le profil), après quoi le gacha
- * n'apporte plus que de l'Éveil. La spec redoutait ça « au bout d'un an ».
- *
- * ✅ **ET C'EST L'IDIOME DU PROJET, pas une invention** : les drops ne dépassent jamais le
- * rang du joueur (v0.876), le trophée prend toujours son rang (v0.894), l'anti-runaway du
- * Labyrinthe repose dessus (v0.563.23). Le plaisir du tirage est intact — on tire bien un
- * primordial, et il **révèle son budget** à mesure qu'on monte, au lieu de l'offrir d'un
- * coup à un joueur de niveau 5.
- *
- * ✅ **Propriété décisive, mesurée** : le résultat est **IDENTIQUE pour les trois profils
- * de joueur** (léger, régulier, très actif). La force de l'escorte suit le **sport**, plus
- * la chance aux tirages.
+ * ⚠️ **A = 1 / 1,45** : un A à Éveil complet (×1,48) vaut un S nu — le contrat du genre
+ * (4★ C6 ≈ 5★ C0), mesuré en P0. À Éveil égal, le S gagne toujours ; et le niveau domine
+ * la lettre (×11,5 sur la plage), donc un A investi bat un S nu.
  */
-export function championBudget(rarity: Rarity, playerLevel: number): number {
-  const tire = RANK_ORDER.indexOf(rarity);
-  const cap = prestigeRankIndex(playerLevel);
-  return RARITY_BUDGET[Math.min(tire < 0 ? 0 : tire, cap)]!;
+export const GRADE_BUDGET: Record<ChampionGrade, number> = { S: 1, A: 1 / 1.45 };
+
+/**
+ * 🏅 Le budget de stats d'un champion : celui de son **RANG** (son niveau), × sa lettre.
+ *
+ * ⚠️ **« LE SPORT EST LE PLAFOND » PASSE DÉSORMAIS PAR LE NIVEAU**, plus par l'étiquette :
+ * le niveau d'un champion est borné par le Panthéon, lui-même borné par le niveau du
+ * joueur. Un S tiré au niveau 5 n'a que le budget du rang Bronze — mais il RESTE un S
+ * (l'ancien plafonnement de la rareté affichée, v0.938, rendait le jackpot invisible).
+ */
+export function championBudget(grade: ChampionGrade, level: number): number {
+  return RARITY_BUDGET[prestigeRankIndex(Math.max(1, level))]! * GRADE_BUDGET[grade];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1561,7 +1544,7 @@ export function championStats(
   playerLevel: number,
   copies = 1,
 ): { puissance: number; endurance: number; agilite: number } {
-  const budget = championBudget(champ.rarity, playerLevel) * awakenMult(awakenLevel(copies));
+  const budget = championBudget(champ.grade, playerLevel) * awakenMult(awakenLevel(copies));
   // ⚠️ Le niveau d'un champion EST celui du joueur — pas un second compteur à borner.
   // Mesuré (v0.905) : le niveau d'un aventurier égale déjà exactement celui du joueur,
   // c'est la Guilde qui bride. Un `Math.min(playerLevel, playerLevel)` aurait été un garde
@@ -1696,14 +1679,8 @@ export function advRank(adv: Adventurer): CharacterRank {
  *  classes) il n’y a plus de promotion à attendre : les deux derniers rangs se gagnent au
  *  niveau seul, sinon ils seraient inatteignables. */
 function advRankCap(adv: Adventurer): number {
-  // ⚠️ Le rang AFFICHÉ suit la rareté EFFECTIVE, jamais celle qu'on a tirée : afficher
-  // « Divin ancestral » à un champion qui ne peut mener que du Bronze ferait mentir la
-  // règle, exactement ce que la v0.834 a corrigé pour les classes.
-  // ⚠️ MESURÉ ÉQUIVALENT au fait de lire la rareté NOMINALE ici, et la mutation l'a montré
-  // en survivant : ce cap n'est comparé qu'à `characterRank(level).rankIndex`, toujours ≥
-  // `prestigeRankIndex(level)`, donc le `min` ne peut jamais départager les deux. On garde
-  // `advRarity` parce que c'est la SOURCE UNIQUE — le jour où `championRarity` gagne une
-  // autre règle, l'affichage suivra sans qu'on ait à s'en souvenir.
+  // ⚠️ Pour un champion, le rang affiché est celui de son NIVEAU (`advRarity`, source
+  // unique depuis la refonte S/A) : sa lettre ne borne rien, son niveau borne tout.
   if (adv.championId) return RARITY_RANK[advRarity(adv)] ?? 0;
   return adv.path.length >= PROMO_LEVELS.length
     ? CHARACTER_RANKS.length - 1
@@ -1737,29 +1714,24 @@ export function compareAdventurers(
 }
 
 /**
- * 🗂️ Le vivier RANGÉ PAR RARETÉ (demandé) : une section par rareté, de la plus haute à la
- * plus basse, et dans chacune l'ordre de `compareAdventurers` (rang, étoile, expérience,
- * puissance). Les raretés absentes du vivier n'ont pas de section.
+ * 🗂️ Le vivier RANGÉ PAR LETTRE (S puis A), et dans chacune l'ordre de
+ * `compareAdventurers` (rang, étoile, expérience, puissance). Une lettre absente du vivier
+ * n'a pas de section.
  *
- * ⚠️ La rareté NOMINALE (`advNominalRarity`) : c'est celle qu'on a tirée et que le
- * portrait affiche — la plafonnée rangerait un primordial de niveau 1 chez les communs.
+ * ⚠️ Un aventurier LEGACY (sans champion) n'a pas de lettre : il se range avec les A.
  * ⚠️ On COPIE : `advList` garde l'ordre du vivier, dont dépendent d'autres règles.
  */
-export function groupByRarity(
+export function groupByGrade(
   advs: readonly Adventurer[],
   powerOf: (x: Adventurer) => number,
-): { rarity: Rarity; advs: Adventurer[] }[] {
-  const by = new Map<Rarity, Adventurer[]>();
-  for (const a of advs) {
-    const r = advNominalRarity(a);
-    by.set(r, [...(by.get(r) ?? []), a]);
+): { grade: ChampionGrade; advs: Adventurer[] }[] {
+  const out: { grade: ChampionGrade; advs: Adventurer[] }[] = [];
+  for (const grade of ['S', 'A'] as const) {
+    const list = advs.filter((a) => (advGrade(a) ?? 'A') === grade);
+    if (list.length)
+      out.push({ grade, advs: list.sort((x, y) => compareAdventurers(x, y, powerOf)) });
   }
-  return [...by.entries()]
-    .sort(([x], [y]) => RARITY_RANK[y] - RARITY_RANK[x])
-    .map(([rarity, list]) => ({
-      rarity,
-      advs: list.sort((x, y) => compareAdventurers(x, y, powerOf)),
-    }));
+  return out;
 }
 
 /** Étoile courante, 1..5 — la progression du niveau DANS le rang. */

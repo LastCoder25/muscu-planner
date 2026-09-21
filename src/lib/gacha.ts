@@ -27,8 +27,7 @@
  * Ce module ne répond qu'à une question : **à quel rythme voit-on quoi ?**
  */
 
-import { RANK_ORDER, type Rarity } from './items';
-import { championsOf, type Champion } from '@/data/champions';
+import { championsOf, PULL_GRADES, type Champion, type PullGrade } from '@/data/champions';
 import { awakenOverflow, type Adventurer } from './adventurers';
 
 export const GACHA = {
@@ -92,43 +91,38 @@ export const GACHA = {
    *  n'existerait plus — on compterait juste jusqu'à 90. */
   softPityStart: 75,
 
-  /** Un plancher tous les N tirages : au moins `floorRarity`. ⚠️ Ce n'est pas du confort —
-   *  sans lui, une série de 30 communs d'affilée est banale, et c'est ce qui fait décrocher
-   *  un joueur qui n'a pas d'argent réel pour compenser. */
+  /** Un A (ou mieux) garanti tous les N tirages. ⚠️ Ce n'est pas du confort — sans lui,
+   *  une série de 30 B d'affilée est banale, et c'est ce qui fait décrocher un joueur qui
+   *  n'a pas d'argent réel pour compenser. */
   minorPity: 10,
-  floorRarity: 'epique' as Rarity,
 } as const;
 
 /**
- * Taux de BASE, avant tout pity. ⚠️ **Ils somment à 1** (testé) : une table qui ne somme
- * pas laisse un reliquat que le tirage attribuerait silencieusement à la dernière entrée.
+ * Taux de BASE par lettre, avant tout pity (refonte 2026-09-21 : ceux du genre).
+ * ⚠️ **Ils somment à 1** (testé) : une table qui ne somme pas laisse un reliquat que le
+ * tirage attribuerait silencieusement à la dernière entrée.
  *
- * La forme est celle du genre — une descente géométrique, la rareté maximale à ~0,6 % :
- * « à taux nu, on peut tirer 200 fois sans rien », ce que le pity vient corriger.
+ * Mesuré en P0 (200 joueurs × 1 an) avec le pity et le plancher : **taux S effectif 1,56 %**,
+ * celui de Genshin (~1,6 %).
  */
-export const GACHA_RATES: Record<Rarity, number> = {
-  commun: 0.3,
-  inhabituel: 0.25,
-  magique: 0.18,
-  rare: 0.12,
-  epique: 0.08,
-  legendaire: 0.04,
-  mythique: 0.024,
-  primordial: 0.006,
+export const GACHA_RATES: Record<PullGrade, number> = {
+  S: 0.006,
+  A: 0.051,
+  B: 0.943,
 };
 
-/** La rareté maximale — DÉRIVÉE de l'échelle, jamais écrite : ajouter une rareté un jour
- *  déplacerait le sommet, et une constante en dur pointerait alors sur l'avant-dernière. */
-export const TOP_RARITY: Rarity = RANK_ORDER[RANK_ORDER.length - 1]!;
+/** La lettre du sommet — celle que le grand pity garantit. */
+export const TOP_GRADE: PullGrade = 'S';
+/** La lettre garantie tous les `minorPity` tirages (ou mieux). */
+export const FLOOR_GRADE: PullGrade = 'A';
 
 /** Ce que le tirage doit retenir entre deux pulls. ⚠️ DEUX compteurs, pas un : le pity
- *  majeur (rareté maximale) et le mineur (plancher) se remplissent et se vident
- *  indépendamment — un seul compteur ferait remettre le grand pity à zéro chaque fois
- *  qu'on décroche un épique. */
+ *  majeur (S) et le mineur (A) se remplissent et se vident indépendamment — un seul
+ *  compteur ferait remettre le grand pity à zéro chaque fois qu'on décroche un A. */
 export interface PityState {
-  /** Tirages depuis la dernière rareté maximale. */
+  /** Tirages depuis le dernier S. */
   sinceTop: number;
-  /** Tirages depuis le dernier `floorRarity` ou mieux. */
+  /** Tirages depuis le dernier A ou mieux. */
   sinceFloor: number;
 }
 
@@ -139,10 +133,16 @@ export const emptyPity = (): PityState => ({ sinceTop: 0, sinceFloor: 0 });
 export interface GachaState extends PityState {
   /** Total tiré, affichage seul. */
   pulls: number;
+  /** Version du gacha. `2` = refonte S/A/B (2026-09-21). Absent = ancien système, que le
+   *  store remplace UNE fois (reset des champions + compensation). */
+  v?: number;
 }
 
+/** 🎰 Version courante du gacha — celle que `settleGachaReset` pose après le reset. */
+export const GACHA_VERSION = 2;
+
 /**
- * Taux de la rareté maximale à ce tirage, pity compris.
+ * Taux du S à ce tirage, pity compris.
  *
  * ⚠️ La rampe est **linéaire de `softPityStart` à `hardPity`**, et elle atteint 1 pile au
  * hard pity : le garanti n'est donc pas un cas particulier greffé à côté de la courbe, il
@@ -150,132 +150,73 @@ export interface GachaState extends PityState {
  */
 export function topRate(sinceTop: number): number {
   const n = Math.max(0, sinceTop) + 1; // le tirage qu'on est en train de faire
-  const base = GACHA_RATES[TOP_RARITY];
+  const base = GACHA_RATES[TOP_GRADE];
   if (n <= GACHA.softPityStart) return base;
   // ⚠️ IL N'Y A PAS DE BRANCHE « HARD PITY » À CÔTÉ DE LA RAMPE, et c'est délibéré : la
   // rampe vaut EXACTEMENT 1 au tirage `hardPity`, donc un `if (n >= hardPity) return 1`
-  // ne pourrait JAMAIS mordre — il donnerait la confiance sans la couverture. C'est le
-  // motif des v0.751, v0.753 et v0.922, révélé ici encore par une mutation SURVIVANTE :
-  // le supprimer ne faisait rougir aucun test. Le `Math.min` ci-dessous est un CLAMP
-  // d'arrondi, pas une règle de jeu ; la garantie, elle, vit dans un test.
+  // ne pourrait JAMAIS mordre. Le `Math.min` ci-dessous est un CLAMP d'arrondi.
   const t = (n - GACHA.softPityStart) / (GACHA.hardPity - GACHA.softPityStart);
   return Math.min(1, base + (1 - base) * t);
 }
 
 /**
- * 🎰 UN TIRAGE. Rend la rareté obtenue et l'état de pity qui en découle.
+ * 🎰 UN TIRAGE : la lettre obtenue et l'état de pity qui en découle.
  *
- * ⚠️ **PUR ET SANS EFFET DE BORD** : il ne mute pas l'état reçu, il en rend un neuf —
- * c'est ce qui permet de rejouer un tirage pour l'afficher sans le consommer.
+ * ⚠️ **PUR ET SANS EFFET DE BORD** : il ne mute pas l'état reçu, il en rend un neuf.
  *
  * Ordre des règles, et il compte :
- * 1. le **hard/soft pity** de la rareté maximale, qui prime sur tout ;
- * 2. le **plancher** (`minorPity`), qui ne s'applique qu'à ce qui n'est pas déjà maximal ;
- * 3. le tirage ordinaire.
+ * 1. le S, au taux du moment (pity compris) — il prime sur tout, **y compris le 10ᵉ
+ *    tirage** : la garantie dit « A OU MIEUX », et le « mieux » ne vaut que le taux du S
+ *    à cet instant (comme dans le genre). ⚠️ L'ancien plancher re-tirait dans toute la
+ *    tranche haute et la dépassait 45 fois sur 100 : c'est ce qui épuisait la collection.
+ * 2. le plancher (`minorPity`) : A garanti ;
+ * 3. le tirage ordinaire : A au taux de base, B sinon.
  */
-export function pullRarity(
+export function pullGrade(
   rng: () => number,
   pity: PityState,
-): { rarity: Rarity; pity: PityState } {
+): { grade: PullGrade; pity: PityState } {
   const r = rng();
-  let rarity: Rarity;
-
-  if (r < topRate(pity.sinceTop)) {
-    rarity = TOP_RARITY;
-  } else if (pity.sinceFloor + 1 >= GACHA.minorPity) {
-    // ⚠️ On re-tire DANS la tranche ≥ plancher plutôt que de rendre le plancher lui-même :
-    // sinon le 10ᵉ tirage serait toujours exactement `floorRarity`, jamais mieux, et la
-    // garantie se lirait comme un plafond.
-    rarity = pickAtLeast(rng, GACHA.floorRarity);
-  } else {
-    rarity = pickWeighted(rng);
-  }
-
-  const top = rarity === TOP_RARITY;
-  const atFloor = rankOf(rarity) >= rankOf(GACHA.floorRarity);
+  const top = topRate(pity.sinceTop);
+  let grade: PullGrade;
+  if (r < top) grade = 'S';
+  else if (pity.sinceFloor + 1 >= GACHA.minorPity) grade = 'A';
+  else if (r < top + GACHA_RATES.A) grade = 'A';
+  else grade = 'B';
   return {
-    rarity,
+    grade,
     pity: {
-      sinceTop: top ? 0 : pity.sinceTop + 1,
-      sinceFloor: atFloor ? 0 : pity.sinceFloor + 1,
+      sinceTop: grade === 'S' ? 0 : pity.sinceTop + 1,
+      sinceFloor: grade === 'B' ? pity.sinceFloor + 1 : 0,
     },
   };
 }
 
-const rankOf = (r: Rarity): number => RANK_ORDER.indexOf(r);
-
 /**
- * 📊 CE QUE L'ÉCRAN DOIT DIRE DES CHANCES (v0.966 ; signalé par l'utilisateur : « j'ai eu
- * du primordial, légendaire, rare, alors que je pensais avoir beaucoup de commun »).
- *
- * ⚠️ **MESURÉ D'ABORD : LES TAUX SONT CONFORMES, IL N'Y AVAIT RIEN À CORRIGER.** Sur
- * 4 000 parties de 14 tirages, on obtient 28,8 % de commun · 24,2 % d'inhabituel · … ·
- * 1,3 % de primordial — la table, au pity près. Ce que le compte réel a vécu (2 commun,
- * 2 légendaires et 1 primordial en **14** tirages — `pulls` valait 30 parce que le pity
- * du wipe était conservé) s'explique par le PLANCHER : deux de ces quatorze tirages
- * étaient **garantis épique ou mieux**, et un tirage garanti re-tire dans toute la tranche
- * ≥ épique — donc il a ~47 % de chances de DÉPASSER l'épique.
- *
- * ⚠️ **LE DÉFAUT N'ÉTAIT DONC PAS DANS LE TIRAGE MAIS DANS LE SILENCE** : rien n'annonçait
- * ni les taux, ni la garantie, ni où en est son propre pity. Dans ce genre, les taux
- * s'affichent — c'est même une obligation légale dans plusieurs pays. On les dit.
+ * 📊 CE QUE L'ÉCRAN DOIT DIRE DES CHANCES (v0.966) — les taux s'affichent, c'est l'usage
+ * du genre et une obligation légale dans plusieurs pays.
  */
 export interface GachaOdds {
-  /** Les taux de base, du plus commun au plus rare. */
-  rates: { rarity: Rarity; pct: number }[];
-  /** Un tirage sur N est garanti `floorRarity` ou mieux. */
+  /** Les taux de base, du plus bas au plus haut. */
+  rates: { grade: PullGrade; pct: number }[];
+  /** Un tirage sur N est garanti A ou mieux. */
   floorEvery: number;
-  floorRarity: Rarity;
-  /** ⚠️ La part des tirages GARANTIS qui dépassent le plancher — le chiffre qui explique
-   *  le ressenti, et que rien n'annonçait. Dérivé de la table, jamais écrit à la main. */
-  aboveFloorPct: number;
-  /** Tirages restants avant le prochain plancher garanti (1 = le prochain). */
+  /** Tirages restants avant le prochain A garanti (1 = le prochain). */
   nextFloorIn: number;
-  /** Chance actuelle de la rareté maximale, pity majeur compris. */
+  /** Chance actuelle du S, pity compris. */
   topPct: number;
-  /** Tirages restants avant la rareté maximale garantie. */
+  /** Tirages restants avant le S garanti. */
   nextTopIn: number;
 }
 
 export function gachaOdds(pity: PityState): GachaOdds {
-  const floorIdx = rankOf(GACHA.floorRarity);
-  const audessus = RANK_ORDER.filter((r) => rankOf(r) > floorIdx);
-  const tranche = RANK_ORDER.filter((r) => rankOf(r) >= floorIdx);
-  const somme = (l: readonly Rarity[]) => l.reduce((a, r) => a + GACHA_RATES[r], 0);
   return {
-    rates: RANK_ORDER.map((r) => ({ rarity: r, pct: GACHA_RATES[r] * 100 })),
+    rates: PULL_GRADES.map((g) => ({ grade: g, pct: GACHA_RATES[g] * 100 })),
     floorEvery: GACHA.minorPity,
-    floorRarity: GACHA.floorRarity,
-    // ⚠️ La garantie RE-TIRE dans la tranche ≥ plancher (`pickAtLeast`) : la part qui la
-    // dépasse est donc celle des raretés au-dessus, RENORMALISÉE sur la tranche.
-    aboveFloorPct: (somme(audessus) / somme(tranche)) * 100,
     nextFloorIn: Math.max(1, GACHA.minorPity - pity.sinceFloor),
     topPct: topRate(pity.sinceTop) * 100,
     nextTopIn: Math.max(1, GACHA.hardPity - pity.sinceTop),
   };
-}
-
-/** Tirage pondéré ordinaire sur toute l'échelle. */
-function pickWeighted(rng: () => number): Rarity {
-  let x = rng();
-  for (const r of RANK_ORDER) {
-    x -= GACHA_RATES[r];
-    if (x < 0) return r;
-  }
-  // Repli d'arrondi flottant : la dernière rareté non nulle.
-  return RANK_ORDER[RANK_ORDER.length - 1]!;
-}
-
-/** Tirage pondéré RESTREINT aux raretés ≥ `min`, poids d'origine conservés. */
-function pickAtLeast(rng: () => number, min: Rarity): Rarity {
-  const pool = RANK_ORDER.filter((r) => rankOf(r) >= rankOf(min));
-  const total = pool.reduce((s, r) => s + GACHA_RATES[r], 0);
-  let x = rng() * total;
-  for (const r of pool) {
-    x -= GACHA_RATES[r];
-    if (x < 0) return r;
-  }
-  return pool[pool.length - 1]!;
 }
 
 /** 💠 Ce qu'un tirage OFFERT vaut en mana. ⚠️ Dérivé du prix, jamais un second nombre :
@@ -292,16 +233,9 @@ export function pullsPerDay(manaPerDay: number): number {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🎰 TIRER UN CHAMPION
+// 🎰 TIRER
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * 🎰 UN TIRAGE COMPLET : une rareté, puis un champion DANS cette rareté.
- *
- * ⚠️ **UNIFORME DANS LA RARETÉ**, et c'est ce qui fait la vitesse de l'Éveil : à 4
- * champions par rareté, un champion PRÉCIS tombe à un quart du taux de sa rareté. C'est
- * pour ça que la taille du pool se décide avant d'écrire le roster, pas après.
- */
 /** Prix d'un lot. ⚠️ DÉRIVÉ du prix unitaire : un second nombre écrit à la main
  *  divergerait au premier réglage.
  *  ⚠️ `unit` est INJECTABLE **pour que ce soit vérifiable** : au prix d'aujourd'hui
@@ -309,45 +243,52 @@ export function pullsPerDay(manaPerDay: number): number {
  *  peut les distinguer — la mutation SURVIVAIT. Le test passe un autre prix. */
 export const multiPullCost = (unit: number = GACHA.pullCost): number => unit * GACHA.multiPaid;
 
+/** Un tirage : sa lettre, et le champion s'il y en a un (jamais pour un B). */
+export interface PullResult {
+  grade: PullGrade;
+  /** `null` pour un B : le fond du tirage n'est pas un champion (une pièce d'équipement,
+   *  tirée par le store qui connaît le vivier). */
+  champion: Champion | null;
+}
+
 /**
- * 🎰 UN LOT DE TIRAGES — les raretés, d'affilée, avec le pity qui S'ENCHAÎNE.
+ * 🎰 UN TIRAGE COMPLET : une lettre, puis un champion DANS cette lettre.
  *
- * ⚠️ **LE PITY SE PROPAGE D'UN TIRAGE AU SUIVANT DANS LE LOT.** Sans ça, dix tirages
- * partiraient tous du même état : la garantie de plancher ne tomberait jamais au sein
- * d'un lot, et le grand pity n'avancerait que d'un cran pour dix tirages payés.
+ * ⚠️ **UNIFORME DANS LA LETTRE**, et c'est ce qui fait la vitesse de l'Éveil : un champion
+ * PRÉCIS tombe à 1/N du taux de sa lettre.
+ */
+export function pullChampion(
+  rng: () => number,
+  pity: PityState,
+): PullResult & { pity: PityState } {
+  const r = pullGrade(rng, pity);
+  if (r.grade === 'B') return { grade: 'B', champion: null, pity: r.pity };
+  const pool = championsOf(r.grade);
+  // ⚠️ INATTEIGNABLE tant que le roster a des S et des A (`champions.test.ts`) : une ceinture
+  // pour le jour où quelqu'un vide une lettre, pas une règle de jeu.
+  if (!pool.length) throw new Error(`Aucun champion de lettre ${r.grade}`);
+  return { grade: r.grade, champion: pool[Math.floor(rng() * pool.length)]!, pity: r.pity };
+}
+
+/**
+ * 🎰 UN LOT DE TIRAGES, avec le pity qui S'ENCHAÎNE d'un tirage au suivant.
  *
  * ⚠️ **C'est la MÊME fonction que le tirage à l'unité**, appelée n fois — pas un second
- * chemin. Un lot qui aurait sa propre loterie finirait par ne plus dire la même chose
- * que la notice des chances.
+ * chemin : un lot qui aurait sa propre loterie finirait par mentir à la notice des chances.
  */
 export function pullMany(
   rng: () => number,
   pity: PityState,
   count: number,
-): { champions: Champion[]; pity: PityState } {
+): { results: PullResult[]; pity: PityState } {
   let p = pity;
-  const champions: Champion[] = [];
+  const results: PullResult[] = [];
   for (let i = 0; i < Math.max(0, Math.floor(count)); i++) {
     const r = pullChampion(rng, p);
     p = r.pity;
-    champions.push(r.champion);
+    results.push({ grade: r.grade, champion: r.champion });
   }
-  return { champions, pity: p };
-}
-
-export function pullChampion(
-  rng: () => number,
-  pity: PityState,
-): { champion: Champion; pity: PityState } {
-  const r = pullRarity(rng, pity);
-  const pool = championsOf(r.rarity);
-  // ⚠️ Un repli VIDE serait un trou silencieux : si une rareté n'a aucun champion, le
-  // tirage doit échouer bruyamment plutôt que rendre autre chose que ce qu'il annonce.
-  // ⚠️ INATTEIGNABLE tant que le roster est complet — `champions.test.ts` exige 4 champions
-  // à CHAQUE rareté, donc aucune mutation de cette ligne ne peut faire rougir un test. Une
-  // ceinture pour le jour où quelqu'un retire une rareté du roster, pas une règle de jeu.
-  if (!pool.length) throw new Error(`Aucun champion de rareté ${r.rarity}`);
-  return { champion: pool[Math.floor(rng() * pool.length)]!, pity: r.pity };
+  return { results, pity: p };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

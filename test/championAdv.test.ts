@@ -8,7 +8,8 @@ import {
   awakenExplain,
   advChampion,
   advRank,
-  advNominalRarity,
+  advGrade,
+  advGradeBadge,
   advRarity,
   advRoles,
   advSignatureLevels,
@@ -19,7 +20,6 @@ import {
   advUnavailableReason,
   engageCap,
   advTitle,
-  championRarity,
   championSkillLevel,
   championStats,
   type Adventurer,
@@ -32,8 +32,9 @@ function asAdv(c: Champion, level: number, copies = 1): Adventurer {
   return { id: 'a', name: c.name, seed: 1, path: [], level, xp: 0, championId: c.id, copies };
 }
 
-const primordial = championsOf('primordial')[0]!;
-const commun = championsOf('commun')[0]!;
+/** Un S et un A du roster (les noms restent ceux d'avant la refonte : le haut et le bas). */
+const primordial = championsOf('S')[0]!;
+const commun = championsOf('A')[0]!;
 
 describe('⚠️ NON-RÉGRESSION : un aventurier SANS champion ne bouge pas d’un iota', () => {
   it('les accesseurs lisent toujours son chemin de classes', () => {
@@ -67,22 +68,12 @@ describe('🏅 un champion à la place d’un aventurier', () => {
     }
   });
 
-  it('⚠️ SA RARETÉ EST L’EFFECTIVE, PAS CELLE QU’ON A TIRÉE', () => {
-    // Au niveau 1, un primordial fraîchement tiré ne mène que du Bronze : ses stats valent
-    // déjà du commun (`championBudget`), son équipement doit suivre — sinon le gacha
-    // court-circuite « le sport est le plafond » sur l'axe équipement.
-    expect(advRarity(asAdv(primordial, 1))).toBe(RANK_ORDER[0]);
-    expect(advRarity(asAdv(primordial, 100))).toBe('primordial');
-    // …et le plafond COUPE, il ne pousse jamais : un commun reste commun à tout niveau.
-    for (const L of [1, 50, 100]) expect(advRarity(asAdv(commun, L))).toBe('commun');
-  });
-
-  it('`championRarity` est la MÊME règle que le plafond du budget', () => {
-    for (const r of RANK_ORDER)
-      for (const L of [1, 15, 45, 100])
-        expect(RARITY_RANK[championRarity(r, L)]).toBe(
-          Math.min(RARITY_RANK[r], prestigeRankIndex(L)),
-        );
+  it('⚠️ SON RANG D’ÉQUIPEMENT EST CELUI DE SON NIVEAU — jamais sa lettre (refonte S/A)', () => {
+    // Un S tiré au niveau 1 porte du Bronze, comme un A : « le sport est le plafond » passe
+    // par le NIVEAU. Et un A monté au niveau 100 porte ce qu'un S du même niveau porte.
+    for (const L of [1, 15, 45, 100])
+      for (const c of [primordial, commun])
+        expect(advRarity(asAdv(c, L))).toBe(RANK_ORDER[prestigeRankIndex(L)]);
   });
 
   it('⚠️ LE RANG AFFICHÉ SUIT LA RARETÉ EFFECTIVE — il ne promet rien qu’il ne peut mener', () => {
@@ -109,17 +100,15 @@ describe('🏅 un champion à la place d’un aventurier', () => {
   });
 
   it('porte 0 ou 1 RÔLE de convoi — jamais une pile de rôles cumulés', () => {
-    for (const r of RANK_ORDER)
-      for (const c of championsOf(r)) {
-        const roles = advRoles(asAdv(c, 60));
-        expect(roles.length, c.name).toBeLessThanOrEqual(1);
-        if (c.role) expect(roles).toEqual([c.role]);
-      }
+    for (const c of CHAMPIONS) {
+      const roles = advRoles(asAdv(c, 60));
+      expect(roles.length, c.name).toBeLessThanOrEqual(1);
+      if (c.role) expect(roles).toEqual([c.role]);
+    }
   });
 
   it('sa LIGNÉE est écrite, et elle décide de ce qu’il porte', () => {
-    for (const r of RANK_ORDER)
-      for (const c of championsOf(r)) expect(lineageOf(asAdv(c, 60))).toBe(c.lineage);
+    for (const c of CHAMPIONS) expect(lineageOf(asAdv(c, 60))).toBe(c.lineage);
     // Une pièce de sa lignée et de sa rareté effective lui va ; une autre lignée, non.
     const a = asAdv(primordial, 100);
     const piece = {
@@ -184,11 +173,10 @@ describe('⚠️ LES DEUX TROUS QUE LA MUTATION A RÉVÉLÉS', () => {
     // la branche. On épingle donc ce qui est VRAI et vérifiable : tout champion du roster
     // porte exactement un rôle. La branche `null` reste une porte ouverte pour un roster
     // élargi (la règle d'extension ajoute en HAUT, où une rareté peut dépasser 4 places).
-    for (const r of RANK_ORDER)
-      for (const c of championsOf(r)) {
-        expect(c.role, c.name).not.toBeNull();
-        expect(advRoles(asAdv(c, 60)), c.name).toEqual([c.role]);
-      }
+    for (const c of CHAMPIONS) {
+      expect(c.role, c.name).not.toBeNull();
+      expect(advRoles(asAdv(c, 60)), c.name).toEqual([c.role]);
+    }
   });
 });
 
@@ -267,23 +255,21 @@ describe('🗿 L’ENGAGEMENT — le seul plafond d’effectif du jeu', () => {
   });
 });
 
-describe('🏅 LES DEUX RARETÉS — ce qu’on a TIRÉ, et ce qu’il peut MENER', () => {
-  it('⚠️ LA NOMINALE NE BOUGE JAMAIS, même quand le sport la bride', () => {
-    // ⚠️ Elle n'était affichée NULLE PART (v0.959) : les écrans lisaient `advRarity`, donc
-    // l'EFFECTIVE — un primordial fraîchement invoqué se lisait « Bronze » au niveau 1, et
-    // rien ne disait ce qu'on avait tiré. Dans un gacha, c'est L'information.
+describe('🏅 LA LETTRE ET LE RANG — ce qu’on a TIRÉ, et ce qu’il peut PORTER', () => {
+  it('⚠️ LA LETTRE NE BOUGE JAMAIS, même au niveau 1', () => {
+    // C'est ce que le tirage a donné, et dans un gacha c'est L'information : un S de
+    // niveau 1 reste un S (l'ancien plafonnement de l'étiquette rendait le jackpot invisible).
     const bas = asAdv(primordial, 1);
-    expect(advNominalRarity(bas)).toBe(primordial.rarity);
-    expect(advRarity(bas)).not.toBe(primordial.rarity);
-    // …et au sommet, les deux se rejoignent : l'écran ne dit alors plus qu'une chose.
-    const haut = asAdv(primordial, 100);
-    expect(advNominalRarity(haut)).toBe(primordial.rarity);
-    expect(advRarity(haut)).toBe(primordial.rarity);
+    expect(advGrade(bas)).toBe('S');
+    expect(advGradeBadge(bas).label).toBe('S');
+    expect(advRarity(bas)).toBe(RANK_ORDER[0]);
+    expect(advGrade(asAdv(commun, 100))).toBe('A');
   });
 
-  it('un aventurier LEGACY n’a qu’une rareté — les deux coïncident', () => {
+  it('un aventurier LEGACY n’a pas de lettre — la tuile garde sa rareté de classe', () => {
     const a = refAdventurer(30);
-    expect(advNominalRarity(a)).toBe(advRarity(a));
+    expect(advGrade(a)).toBeNull();
+    expect(advGradeBadge(a).label).not.toMatch(/^[SA]$/);
   });
 
   it('⚠️ L’ENCADREMENT DU PORTRAIT PEINT LA NOMINALE, jamais l’effective', () => {

@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { CHAMPIONS, CHAMPION_BY_ID, championsOf, type Champion } from '@/data/champions';
-import { RANK_ORDER, type Rarity } from '@/lib/items';
 import {
   ADV_ROLE_LABEL,
   ADV_SIGNATURE_LABEL,
@@ -12,21 +11,17 @@ import {
   type AdvRole,
 } from '@/lib/adventurers';
 
-/** Le nombre de signatures attendu par rareté (1·1·2·2·2·3·3·3). */
-const SIG_PAR_RARETE = [1, 1, 2, 2, 2, 3, 3, 3];
-/** Les 3 raretés les plus hautes — celles qui décident du plafond d'équipement. */
-const HAUTES: Rarity[] = RANK_ORDER.slice(-3);
+/** Signatures attendues par lettre (refonte S/A) : A 1-2, S 2-3. */
+const SIG_PAR_LETTRE = { A: [1, 2], S: [2, 3] } as const;
 
 describe('la grille du roster', () => {
-  it('32 champions, 4 par rareté — une version de chaque rôle à chaque rareté', () => {
-    expect(CHAMPIONS).toHaveLength(RANK_ORDER.length * 4);
-    for (const r of RANK_ORDER) {
-      const pool = championsOf(r);
-      expect(pool, r).toHaveLength(4);
-      const roles = pool.map((c) => c.role);
-      expect(new Set(roles).size, r).toBe(4);
+  it('32 champions, 16 S et 16 A — chaque rôle quatre fois dans chaque lettre', () => {
+    expect(CHAMPIONS).toHaveLength(32);
+    for (const g of ['S', 'A'] as const) {
+      const pool = championsOf(g);
+      expect(pool, g).toHaveLength(16);
       for (const role of ['heal', 'haul', 'speed', 'scout'] as AdvRole[])
-        expect(roles, `${r} manque ${role}`).toContain(role);
+        expect(pool.filter((c) => c.role === role), `${g} · ${role}`).toHaveLength(4);
     }
   });
 
@@ -36,14 +31,20 @@ describe('la grille du roster', () => {
     expect(CHAMPION_BY_ID.size).toBe(CHAMPIONS.length);
   });
 
-  it('le nombre de SIGNATURES suit la rareté (1·1·2·2·2·3·3·3)', () => {
-    RANK_ORDER.forEach((r, i) => {
-      for (const c of championsOf(r)) expect(c.skills.length, c.name).toBe(SIG_PAR_RARETE[i]);
-    });
+  it('le nombre de SIGNATURES suit la lettre (A 1-2, S 2-3)', () => {
+    for (const g of ['S', 'A'] as const) {
+      const [min, max] = SIG_PAR_LETTRE[g];
+      expect(championsOf(g).length, g).toBeGreaterThan(0);
+      for (const c of championsOf(g)) {
+        expect(c.skills.length, c.name).toBeGreaterThanOrEqual(min);
+        expect(c.skills.length, c.name).toBeLessThanOrEqual(max);
+      }
+    }
   });
 
   it('⚠️ MÊME LA PLUS BASSE RARETÉ PORTE UNE SIGNATURE — dans un gacha, même un 1★ a un kit', () => {
-    for (const c of championsOf('commun')) expect(c.skills.length).toBeGreaterThan(0);
+    expect(championsOf('A').length).toBeGreaterThan(0);
+    for (const c of championsOf('A')) expect(c.skills.length).toBeGreaterThan(0);
   });
 
   it('aucune signature en double chez un même champion', () => {
@@ -73,10 +74,10 @@ describe('⚠️ LA COUVERTURE LIGNÉE × RARETÉ — la contrainte d’écritur
     for (const [l, n] of m) expect(n, l).toBeGreaterThanOrEqual(4);
   });
 
-  it('⚠️ AUCUNE LIGNÉE N’EST ABSENTE DES 3 PLUS HAUTES RARETÉS', () => {
+  it('⚠️ AUCUNE LIGNÉE N’EST ABSENTE DES S', () => {
     // Sinon `capAdvGearToWearable` plafonnerait ses pièces très bas POUR TOUJOURS, et une
     // part du stock d'équipement (105 pièces, rangées par lignée) deviendrait morte.
-    const hautes = CHAMPIONS.filter((c) => HAUTES.includes(c.rarity));
+    const hautes = championsOf('S');
     expect(parLignee(hautes).size).toBe(6);
   });
 

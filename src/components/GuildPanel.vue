@@ -142,16 +142,16 @@
               {{ ADV_STATUS_LABEL[s] }} <span class="g-tab-n">{{ rosterCounts.get(s) }}</span>
             </button>
           </div>
-          <!-- 🗂️ RANGÉ PAR RARETÉ (demandé) : une section par rareté, la plus haute en
-               tête ; dans chacune, rang puis étoiles décroissants (`groupByRarity`). -->
+          <!-- 🗂️ RANGÉ PAR LETTRE (S puis A) ; dans chacune, rang puis étoiles
+               décroissants (`groupByGrade`). -->
           <section
             v-for="g in rosterGroups"
-            :key="g.rarity"
+            :key="g.grade"
             class="adv-rgroup"
-            :style="{ '--c': RANK_COLOR[g.rarity] }"
+            :style="{ '--c': GRADE_COLOR[g.grade] }"
           >
             <div class="adv-rhead">
-              <span class="adv-rname font-display">{{ RARITY_LABEL[g.rarity] }}</span>
+              <span class="adv-rname font-display">{{ g.grade }}</span>
               <span class="adv-rn">{{ g.advs.length }}</span>
             </div>
             <div class="adv-grid">
@@ -694,7 +694,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import {
   ADV_STARS,
-  advNominalRarity,
+  advGradeBadge,
   advRarity,
   advRank,
   advRankProgress,
@@ -707,7 +707,7 @@ import {
   advRoleLevels,
   advSignatureLevels,
   advStats,
-  groupByRarity,
+  groupByGrade,
   advShapeLabel,
   ADV_ROLE_LABEL,
   ADV_SIGNATURE_LABEL,
@@ -715,9 +715,8 @@ import {
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
 import { AWAKEN, advAwaken, advSubtitle, engageCap } from '@/lib/adventurers';
+import { GRADE_COLOR } from '@/data/champions';
 import {
-  RANK_COLOR,
-  RARITY_LABEL,
   rarityRank,
   gradeLabel,
   RARITY_RANK,
@@ -1298,10 +1297,10 @@ const rosterShown = computed(() =>
     ? roster.value
     : roster.value.filter((a) => statusOf(a) === rosterFilter.value),
 );
-/** Ce qu'on affiche, rangé par rareté puis rang/étoiles (`groupByRarity`) — le filtre
+/** Ce qu'on affiche, rangé par lettre puis rang/étoiles (`groupByGrade`) — le filtre
  *  d'état s'applique AVANT le rangement. La lib COPIE : `advList` garde l'ordre du
  *  vivier, dont dépendent d'autres règles. */
-const rosterGroups = computed(() => groupByRarity(rosterShown.value, powerOf));
+const rosterGroups = computed(() => groupByGrade(rosterShown.value, powerOf));
 // ⚠️ Un filtre qui ne montre plus rien (le dernier convoi est rentré) se lit comme un vivier
 // vide : on retombe sur « Tous » dès que la catégorie choisie se vide.
 watch(rosterChips, (chips) => {
@@ -1315,8 +1314,8 @@ const rankOf = (a: Adventurer) => advRank(a);
 /** ⚠️ La rareté NOMINALE — ce qu'on a tiré. C'est elle qu'un gacha doit montrer, et elle
  *  parle la langue de la RARETÉ (Commun → Primordial), pas celle des rangs : un champion
  *  porte les DEUX échelles et les nommer pareil les confond (v0.962). */
-const nomOf = (a: Adventurer) => RARITY_LABEL[advNominalRarity(a)];
-const nomColor = (a: Adventurer) => RANK_COLOR[advNominalRarity(a)];
+const nomOf = (a: Adventurer) => advGradeBadge(a).label;
+const nomColor = (a: Adventurer) => advGradeBadge(a).color;
 const titleOf = (a: Adventurer) => advTitle(a);
 /** Son rang d'Éveil — 0 pour un legacy, qui n'a pas de doublons. */
 const awkOf = (a: Adventurer) => advAwaken(a);

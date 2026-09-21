@@ -64,28 +64,26 @@
           <span class="go-chev" :class="{ on: oddsOpen }">▸</span>
         </button>
         <div v-if="oddsOpen" class="g-odds">
-          <div v-for="r in odds.rates" :key="r.rarity" class="go-row">
-            <span class="go-rar" :style="{ color: RANK_COLOR[r.rarity] }">
-              {{ RARITY_LABEL[r.rarity] }}
+          <div v-for="r in odds.rates" :key="r.grade" class="go-row">
+            <span class="go-rar" :style="{ color: GRADE_COLOR[r.grade] }">
+              {{ r.grade }}{{ r.grade === 'B' ? ' · équipement' : '' }}
             </span>
             <span class="go-bar" aria-hidden="true"
               ><i
                 :style="{
                   width: (r.pct / odds.rates[0]!.pct) * 100 + '%',
-                  background: RANK_COLOR[r.rarity],
+                  background: GRADE_COLOR[r.grade],
                 }"
             /></span>
             <span class="go-pct font-display">{{ fmtOdds(r.pct) }} %</span>
           </div>
           <p class="go-note">
-            🎁 Un tirage sur {{ odds.floorEvery }} est garanti
-            <b>{{ RARITY_LABEL[odds.floorRarity] }}</b> ou mieux — et il le DÉPASSE
-            {{ Math.round(odds.aboveFloorPct) }} fois sur 100. Prochain dans
+            🎁 Un tirage sur {{ odds.floorEvery }} est garanti <b>A</b> ou mieux. Prochain dans
             <b>{{ odds.nextFloorIn }}</b> tirage{{ odds.nextFloorIn > 1 ? 's' : '' }}.
           </p>
           <p class="go-note">
-            👑 {{ RARITY_LABEL[TOP_RARITY] }} : <b>{{ fmtOdds(odds.topPct) }} %</b> à ton prochain
-            tirage, garanti dans <b>{{ odds.nextTopIn }}</b
+            👑 S : <b>{{ fmtOdds(odds.topPct) }} %</b> à ton prochain tirage, garanti dans
+            <b>{{ odds.nextTopIn }}</b
             >.
           </p>
         </div>
@@ -105,11 +103,13 @@ import {
   buildReveal,
   buildLotReveal,
   bestOfLot,
+  cellOf,
   type RevealPlan,
   type LotItem,
 } from '@/lib/gachaReveal';
-import { GACHA, TOP_RARITY, gachaOdds, multiPullCost } from '@/lib/gacha';
-import { RANK_COLOR, RARITY_LABEL } from '@/lib/items';
+import { GACHA, gachaOdds, multiPullCost } from '@/lib/gacha';
+import { GRADE_COLOR } from '@/data/champions';
+import { useProgress } from '@/composables/useProgress';
 
 defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();
@@ -117,6 +117,8 @@ const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
+/** Le niveau du JOUEUR : c'est lui qui fixe le rang d'une pièce B tirée. */
+const progress = useProgress();
 const busy = ref(false);
 
 const mana = computed(() => char.row?.mana ?? 0);
@@ -144,6 +146,7 @@ const revealVerdict = ref<{
   copies: number;
   manaBack: number;
   awaken: number;
+  piece?: boolean;
 } | null>(null);
 function closeReveal() {
   revealPlan.value = null;
@@ -179,7 +182,7 @@ async function doPullTen() {
   if (!uid || busy.value) return;
   busy.value = true;
   try {
-    const lot = await char.pullChampions(uid);
+    const lot = await char.pullChampions(uid, progress.global.value.level);
     if (!lot) {
       $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
       return;
@@ -191,10 +194,11 @@ async function doPullTen() {
       copies: best.copies,
       manaBack: best.manaBack,
       awaken: awakenLevel(best.copies),
+      piece: !best.champion,
     };
     revealLot.value = lot;
     revealLotPlans.value = buildLotReveal(lot, Math.random, { reduced: reducedMotion() });
-    revealPlan.value = buildReveal(best.champion, Math.random, { reduced: reducedMotion() });
+    revealPlan.value = buildReveal(cellOf(best), Math.random, { reduced: reducedMotion() });
   } finally {
     busy.value = false;
   }
@@ -205,7 +209,7 @@ async function doPull() {
   if (!uid || busy.value) return;
   busy.value = true;
   try {
-    const r = await char.pullChampion(uid);
+    const r = await char.pullChampion(uid, progress.global.value.level);
     if (!r) {
       $q.notify({ type: 'negative', message: 'Pas assez de pierres de mana.' });
       return;
@@ -217,8 +221,9 @@ async function doPull() {
       copies: r.copies,
       manaBack: r.manaBack,
       awaken: awakenLevel(r.copies),
+      piece: !r.champion,
     };
-    revealPlan.value = buildReveal(r.champion, Math.random, { reduced: reducedMotion() });
+    revealPlan.value = buildReveal(cellOf(r), Math.random, { reduced: reducedMotion() });
   } finally {
     busy.value = false;
   }

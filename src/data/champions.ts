@@ -1,8 +1,9 @@
 /**
  * 🏅 LE ROSTER DES CHAMPIONS — 32 identités écrites à la main.
  *
- * ⚠️ **PAS ENCORE BRANCHÉ** : aucun écran ne lit ce fichier, on ne tire encore rien.
- * Cf. `docs/superpowers/specs/2026-09-19-gacha-design.md` et `src/lib/gacha.ts`.
+ * 🎰 Refonte S/A/B (2026-09-21) : 16 champions **A** (les 4 premières vagues d'écriture) et
+ * 16 **S** (les 4 dernières). Le B est le fond du tirage — une pièce d'équipement, jamais un
+ * champion. Cf. `docs/superpowers/plans/2026-09-21-gacha-roadmap.md` et `src/lib/gacha.ts`.
  *
  * ## Ce qu'est un champion, et ce qu'il N'EST PAS
  *
@@ -33,13 +34,22 @@
 import type { EffectType } from '@/lib/items';
 import type { AdvRole } from '@/lib/adventurers';
 import type { Lineage } from '@/lib/advGear';
-import type { Rarity } from '@/lib/items';
 
 /** Un cran d'Éveil ÉCRIT : à la `n`-ième copie, telle signature gagne un niveau.
  *  ⚠️ AUCUN SYSTÈME NEUF — `AdvSkill` porte déjà un niveau par répétition (v0.757), et
  *  l'écran sait déjà l'afficher. Un cran qualitatif = +1 niveau de compétence. */
 /** ⚠️ Pas exporté (`npm run dead`) : aucun importeur hors de ce module — `Champion` le
  *  porte, et c'est lui que le reste du code consomme. */
+/** 🎰 Les lettres du gacha (refonte 2026-09-21, décidée par l'utilisateur : « les étoiles
+ *  sont déjà prises dans l'app »). **S** = le sommet, **A** = le petit gain garanti tous les
+ *  10, **B** = le fond du tirage — jamais un champion (une pièce d'équipement de lignée). */
+export type ChampionGrade = 'S' | 'A';
+export type PullGrade = ChampionGrade | 'B';
+/** Du plus bas au plus haut. */
+export const PULL_GRADES: readonly PullGrade[] = ['B', 'A', 'S'];
+/** Couleurs du genre : bleu B, violet A, or S — la lueur qui précède la révélation. */
+export const GRADE_COLOR: Record<PullGrade, string> = { S: '#ffc94a', A: '#b57bff', B: '#6fa8ff' };
+
 interface AwakenStep {
   /** Rang d'Éveil où ce cran tombe (1 = première copie en trop). */
   at: number;
@@ -56,7 +66,10 @@ export interface Champion {
    *  où un aventurier s'affiche ⚔️. Tous DISTINCTS (testé) : c'est lui qui identifie un
    *  champion dans une grille de 32. */
   emoji: string;
-  rarity: Rarity;
+  /** 🎰 Sa lettre de tirage, FIXE (refonte 2026-09-21) : **S** ou **A**. Il n'existe pas de
+   *  champion B — le B est le fond du tirage (une pièce d'équipement). Ce que le champion
+   *  peut PORTER suit son RANG (son niveau), jamais sa lettre. */
+  grade: ChampionGrade;
   /** ⚠️ EXPLICITE, alors qu'elle se DÉDUISAIT de la classe racine du chemin : sans chemin,
    *  c'est elle qui décide de l'équipement. Une ligne, mais elle est porteuse. */
   lineage: Lineage;
@@ -77,7 +90,7 @@ const C = (
   id: string,
   name: string,
   emoji: string,
-  rarity: Rarity,
+  grade: ChampionGrade,
   lineage: Lineage,
   role: AdvRole | null,
   form: [number, number, number],
@@ -87,7 +100,7 @@ const C = (
   id,
   name,
   emoji,
-  rarity,
+  grade,
   lineage,
   role,
   form: { p: form[0], e: form[1], a: form[2] },
@@ -103,12 +116,12 @@ const C = (
  * et un tiers du stock d'équipement deviendrait mort. Un test le vérifie.
  */
 export const CHAMPIONS: Champion[] = [
-  // ── COMMUN — l'ENTRÉE. Petite par conception : c'est ici que les doublons pleuvent. ──
+  // ── A (vague 1) — l'ENTRÉE. Petite par conception : c'est ici que les doublons pleuvent. ──
   C(
     'orsene',
     'Orsène le Baumier',
     '🌿',
-    'commun',
+    'A',
     'mage',
     'heal',
     [1, 2, 1],
@@ -119,7 +132,7 @@ export const CHAMPIONS: Champion[] = [
     'boulin',
     'Boulin Grosse-Malle',
     '🧳',
-    'commun',
+    'A',
     'caravanier',
     'haul',
     [1, 3, 1],
@@ -130,7 +143,7 @@ export const CHAMPIONS: Champion[] = [
     'fila',
     'Fila Pied-Leste',
     '👣',
-    'commun',
+    'A',
     'eclaireur',
     'speed',
     [1, 1, 3],
@@ -141,7 +154,7 @@ export const CHAMPIONS: Champion[] = [
     'teck',
     'Teck l’Guetteur',
     '🔭',
-    'commun',
+    'A',
     'archer',
     'scout',
     [2, 1, 2],
@@ -149,12 +162,12 @@ export const CHAMPIONS: Champion[] = [
     [{ at: 2, skill: 'damage_pct' }],
   ),
 
-  // ── INHABITUEL ──
+  // ── A (vague 2) ──
   C(
     'sauge',
     'Mère Sauge',
     '🍵',
-    'inhabituel',
+    'A',
     'caravanier',
     'heal',
     [1, 3, 1],
@@ -165,7 +178,7 @@ export const CHAMPIONS: Champion[] = [
     'gorm',
     'Gorm Large-Dos',
     '🪵',
-    'inhabituel',
+    'A',
     'homme_armes',
     'haul',
     [2, 3, 1],
@@ -176,7 +189,7 @@ export const CHAMPIONS: Champion[] = [
     'sylve',
     'Sylve la Flèche',
     '🏹',
-    'inhabituel',
+    'A',
     'archer',
     'speed',
     [2, 1, 3],
@@ -187,7 +200,7 @@ export const CHAMPIONS: Champion[] = [
     'vig',
     'Vig Deux-Lunes',
     '🌘',
-    'inhabituel',
+    'A',
     'eclaireur',
     'scout',
     [1, 2, 3],
@@ -195,12 +208,12 @@ export const CHAMPIONS: Champion[] = [
     [{ at: 3, skill: 'crit_pct' }],
   ),
 
-  // ── MAGIQUE — deux signatures à partir d'ici. ──
+  // ── A (vague 3) — deux signatures à partir d'ici. ──
   C(
     'anselme',
     'Anselme du Cloître',
     '📿',
-    'magique',
+    'A',
     'mage',
     'heal',
     [1, 3, 2],
@@ -211,7 +224,7 @@ export const CHAMPIONS: Champion[] = [
     'barthe',
     'Barthe Porte-Enclume',
     '⚒️',
-    'magique',
+    'A',
     'guerrier',
     'haul',
     [3, 2, 1],
@@ -222,7 +235,7 @@ export const CHAMPIONS: Champion[] = [
     'zephyrine',
     'Zéphyrine',
     '🍃',
-    'magique',
+    'A',
     'eclaireur',
     'speed',
     [1, 1, 4],
@@ -233,7 +246,7 @@ export const CHAMPIONS: Champion[] = [
     'verre',
     'Œil-de-Verre',
     '🔎',
-    'magique',
+    'A',
     'mage',
     'scout',
     [2, 2, 2],
@@ -241,12 +254,12 @@ export const CHAMPIONS: Champion[] = [
     [{ at: 3, skill: 'crit_pct' }],
   ),
 
-  // ── RARE ──
+  // ── A (vague 4) ──
   C(
     'lysandre',
     'Lysandre des Sources',
     '💧',
-    'rare',
+    'A',
     'mage',
     'heal',
     [1, 4, 2],
@@ -260,7 +273,7 @@ export const CHAMPIONS: Champion[] = [
     'tessa',
     'Tessa la Meneuse',
     '🐪',
-    'rare',
+    'A',
     'caravanier',
     'haul',
     [2, 3, 2],
@@ -271,7 +284,7 @@ export const CHAMPIONS: Champion[] = [
     'roan',
     'Roän Taille-Route',
     '🗡️',
-    'rare',
+    'A',
     'guerrier',
     'speed',
     [3, 2, 2],
@@ -282,7 +295,7 @@ export const CHAMPIONS: Champion[] = [
     'miren',
     'Miren Sans-Bruit',
     '🤫',
-    'rare',
+    'A',
     'archer',
     'scout',
     [2, 1, 4],
@@ -293,12 +306,12 @@ export const CHAMPIONS: Champion[] = [
     ],
   ),
 
-  // ── ÉPIQUE ──
+  // ── S (vague 1) ──
   C(
     'ferrand',
     'Doyen Ferrand',
     '🕯️',
-    'epique',
+    'S',
     'caravanier',
     'heal',
     [1, 4, 2],
@@ -309,7 +322,7 @@ export const CHAMPIONS: Champion[] = [
     'ursk',
     'Ursk Casse-Mur',
     '🔨',
-    'epique',
+    'S',
     'homme_armes',
     'haul',
     [3, 4, 1],
@@ -323,7 +336,7 @@ export const CHAMPIONS: Champion[] = [
     'nive',
     'Nive des Cols',
     '🏔️',
-    'epique',
+    'S',
     'eclaireur',
     'speed',
     [2, 2, 4],
@@ -334,7 +347,7 @@ export const CHAMPIONS: Champion[] = [
     'kaell',
     'Kaell Œil-Froid',
     '❄️',
-    'epique',
+    'S',
     'guerrier',
     'scout',
     [4, 2, 2],
@@ -342,12 +355,12 @@ export const CHAMPIONS: Champion[] = [
     [{ at: 3, skill: 'execute_pct' }],
   ),
 
-  // ── LÉGENDAIRE — trois signatures à partir d'ici. ──
+  // ── S (vague 2) — trois signatures à partir d'ici. ──
   C(
     'ombrelune',
     'Ombrelune',
     '🌙',
-    'legendaire',
+    'S',
     'mage',
     'heal',
     [2, 4, 2],
@@ -361,7 +374,7 @@ export const CHAMPIONS: Champion[] = [
     'tarn',
     'Tarn le Rempart',
     '🏯',
-    'legendaire',
+    'S',
     'guerrier',
     'haul',
     [3, 4, 1],
@@ -372,7 +385,7 @@ export const CHAMPIONS: Champion[] = [
     'ysolde',
     'Ysolde Trait-Long',
     '🪶',
-    'legendaire',
+    'S',
     'archer',
     'speed',
     [3, 1, 4],
@@ -386,7 +399,7 @@ export const CHAMPIONS: Champion[] = [
     'corvin',
     'Corvin des Brumes',
     '🐦‍⬛',
-    'legendaire',
+    'S',
     'eclaireur',
     'scout',
     [2, 2, 5],
@@ -394,12 +407,12 @@ export const CHAMPIONS: Champion[] = [
     [{ at: 2, skill: 'execute_pct' }],
   ),
 
-  // ── MYTHIQUE ──
+  // ── S (vague 3) ──
   C(
     'brume',
     'Vieille Brume',
     '🌫️',
-    'mythique',
+    'S',
     'caravanier',
     'heal',
     [2, 5, 2],
@@ -413,7 +426,7 @@ export const CHAMPIONS: Champion[] = [
     'molosse',
     'Molosse Porte-Monde',
     '🐗',
-    'mythique',
+    'S',
     'homme_armes',
     'haul',
     [3, 5, 1],
@@ -424,7 +437,7 @@ export const CHAMPIONS: Champion[] = [
     'fulgur',
     'Fulgur',
     '🌩️',
-    'mythique',
+    'S',
     'mage',
     'speed',
     [3, 2, 5],
@@ -438,7 +451,7 @@ export const CHAMPIONS: Champion[] = [
     'nyx',
     'Nyx la Silencieuse',
     '🕸️',
-    'mythique',
+    'S',
     'archer',
     'scout',
     [3, 2, 5],
@@ -446,12 +459,12 @@ export const CHAMPIONS: Champion[] = [
     [{ at: 2, skill: 'execute_pct' }],
   ),
 
-  // ── PRIMORDIAL — le sommet. ⚠️ On n'en ajoute qu'ICI, jamais en bas. ──
+  // ── S (vague 4) — le sommet. ⚠️ On n'ajoute qu'en S, jamais en A. ──
   C(
     'aurore',
     'Aurore Première',
     '🌅',
-    'primordial',
+    'S',
     'mage',
     'heal',
     [3, 5, 3],
@@ -465,7 +478,7 @@ export const CHAMPIONS: Champion[] = [
     'atlas',
     'Atlas des Cimes',
     '🗻',
-    'primordial',
+    'S',
     'homme_armes',
     'haul',
     [4, 6, 1],
@@ -479,7 +492,7 @@ export const CHAMPIONS: Champion[] = [
     'ventcourt',
     'Vent-Qui-Court',
     '🌪️',
-    'primordial',
+    'S',
     'eclaireur',
     'speed',
     [3, 2, 6],
@@ -493,7 +506,7 @@ export const CHAMPIONS: Champion[] = [
     'oeildumonde',
     'Œil du Monde',
     '🔱',
-    'primordial',
+    'S',
     'guerrier',
     'scout',
     [5, 3, 3],
@@ -508,9 +521,37 @@ export const CHAMPIONS: Champion[] = [
 /** Index par id — une seule construction, lue par le tirage et par le Codex. */
 export const CHAMPION_BY_ID = new Map(CHAMPIONS.map((c) => [c.id, c]));
 
-/** Les champions d'une rareté. ⚠️ **LA TAILLE DE CE POOL EST LA VITESSE DE L'ÉVEIL** :
- *  à 4 par rareté, un champion précis tombe à un quart du taux de sa rareté. C'est pour ça
- *  qu'elle se décide avant d'écrire, et pas après. */
-export function championsOf(rarity: Rarity): Champion[] {
-  return CHAMPIONS.filter((c) => c.rarity === rarity);
+/** Les champions d'une lettre. ⚠️ **LA TAILLE DE CE POOL EST LA VITESSE DE L'ÉVEIL** : un
+ *  champion précis tombe à 1/N du taux de sa lettre. */
+export function championsOf(grade: ChampionGrade): Champion[] {
+  return CHAMPIONS.filter((c) => c.grade === grade);
 }
+
+/**
+ * 📏 L'ÉTALON DES COMBATS, FIGÉ (refonte S/A, 2026-09-21).
+ *
+ * ⚠️ Toute la calibration des combats (route, camps, failles, sièges) se mesure contre trois
+ * champions de référence « du rang du joueur ». Avant la refonte, c'étaient les trois
+ * champions de la rareté du rang (un par axe dominant) ; les choisir désormais parmi les 16 S
+ * change leurs FORMES (plus extrêmes), et mesuré, la route et les failles dérivaient de
+ * 5 à 40 points au niveau 12. On fige donc les MÊMES trois par rang, avec le budget d'un S
+ * (`GRADE_BUDGET.S` = 1 = le budget d'avant) : la calibration ne bouge pas d'un iota.
+ *
+ * ⚠️ Ce sont des champions SYNTHÉTIQUES (id `ref:…`, lettre S), jamais dans le roster ni
+ * tirables : ils n'existent que pour mesurer. Calculés une fois depuis le roster d'avant.
+ */
+const REF_PICKS: readonly (readonly [string, string, string])[] = [
+  ['teck', 'fila', 'boulin'],
+  ['gorm', 'sylve', 'sauge'],
+  ['barthe', 'zephyrine', 'anselme'],
+  ['roan', 'miren', 'lysandre'],
+  ['kaell', 'nive', 'ferrand'],
+  ['tarn', 'corvin', 'ombrelune'],
+  ['molosse', 'fulgur', 'brume'],
+  ['oeildumonde', 'ventcourt', 'atlas'],
+];
+/** Les trois champions de référence de chaque RANG (index = `prestigeRankIndex`). */
+export const REF_CHAMPIONS_BY_RANK: readonly Champion[][] = REF_PICKS.map((ids) =>
+  ids.map((id) => ({ ...CHAMPION_BY_ID.get(id)!, id: `ref:${id}`, grade: 'S' as const })),
+);
+export const REF_CHAMPION_BY_ID = new Map(REF_CHAMPIONS_BY_RANK.flat().map((c) => [c.id, c]));

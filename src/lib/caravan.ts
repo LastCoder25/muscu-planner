@@ -57,7 +57,7 @@ import {
 // sens créerait un cycle. Le projet applique déjà cette règle entre `data/familiars` et `items`.
 import { effectsOfTalents, talentRankOf, type TalentInstance } from './talents';
 import { FAMILIAR_SPECIES } from '../data/familiars';
-import { championsOf, type Champion } from '../data/champions';
+import { REF_CHAMPIONS_BY_RANK, type Champion } from '../data/champions';
 import {
   PARTY_TARGETS,
   HARVEST_TYPES,
@@ -634,22 +634,11 @@ export function refChampionAdv(level: number, slot = 0): Adventurer {
   };
 }
 
-/** Les trois champions de référence d'un niveau : un par orientation dominante. */
+/** Les trois champions de référence d'un niveau : ceux de son RANG, FIGÉS
+ *  (`REF_CHAMPIONS_BY_RANK`) — la calibration des combats ne bouge pas avec la refonte S/A. */
 export function refChampions(level: number): Champion[] {
-  const pool = championsOf(RANK_ORDER[prestigeRankIndex(Math.max(1, level))]!);
-  const part = (c: Champion, axe: 'p' | 'e' | 'a') =>
-    c.form[axe] / Math.max(1, c.form.p + c.form.e + c.form.a);
-  // ⚠️ LE DÉPARTAGE PAR `id` EST DORMANT AUJOURD'HUI, ET IL RESTE — la mutation qui le
-  // retire survit, mesure à l'appui : le roster compte bien **6 paires d'ex æquo sur 24**
-  // (rareté × axe), mais dans chacune l'ordre d'ÉCRITURE coïncide avec l'ordre
-  // alphabétique, et `Array.sort` est stable. ⚠️ Ce n'est PAS le motif du garde
-  // arithmétiquement inatteignable (v0.751, v0.753, v0.922) : ce qu'il protège n'est pas
-  // une valeur d'exécution mais l'ORDRE D'UN FICHIER, qu'une main humaine peut changer
-  // (trier le roster par nom, le regrouper par lignée). Sans lui, ce geste déplacerait en
-  // SILENCE la référence de la route, donc toute sa calibration.
-  const pick = (axe: 'p' | 'e' | 'a') =>
-    [...pool].sort((x, y) => part(y, axe) - part(x, axe) || x.id.localeCompare(y.id))[0]!;
-  return [pick('p'), pick('a'), pick('e')];
+  const rangs = REF_CHAMPIONS_BY_RANK;
+  return rangs[Math.min(rangs.length - 1, prestigeRankIndex(Math.max(1, level)))]!;
 }
 
 /** Les espèces des compagnons de RÉFÉRENCE : une par grand canal de combat. */
