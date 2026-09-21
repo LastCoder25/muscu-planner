@@ -30,6 +30,7 @@ import {
   type Adventurer,
   advAvatar,
   compareAdventurers,
+  groupByRarity,
   advShapeLabel,
 } from '@/lib/adventurers';
 import { RANK_ORDER } from '@/lib/items';
@@ -606,5 +607,41 @@ describe('🗂️ L’ORDRE DU VIVIER : rang, puis expérience, puis puissance (
     pw.faible = 10;
     pw.fort = 80;
     expect(trie([mk('faible', 6, 20), mk('fort', 6, 20)])).toEqual(['fort', 'faible']);
+  });
+});
+
+describe('🗂️ LE VIVIER RANGÉ PAR RARETÉ — puis rang et étoiles décroissants', () => {
+  const champ = (r: string) => CHAMPIONS.find((c) => c.rarity === r)!;
+  const c = (id: string, r: string, level: number) =>
+    make({ id, name: id, path: [], championId: champ(r).id, level });
+  const none = () => 0;
+
+  it('une section par rareté PRÉSENTE, de la plus haute à la plus basse', () => {
+    const g = groupByRarity(
+      [c('a', 'commun', 5), c('b', 'epique', 1), c('d', 'rare', 3), c('e', 'commun', 2)],
+      none,
+    );
+    expect(g.map((x) => x.rarity)).toEqual(['epique', 'rare', 'commun']);
+  });
+
+  it('dans une section, rang puis étoiles DÉCROISSANTS', () => {
+    // niveau 2 = Bronze ★1, 5 = Bronze ★3, 12 = Argent ★1
+    const g = groupByRarity(
+      [c('b2', 'commun', 2), c('a12', 'commun', 12), c('m5', 'commun', 5)],
+      none,
+    );
+    expect(g[0]!.advs.map((a) => a.id)).toEqual(['a12', 'm5', 'b2']);
+  });
+
+  it('⚠️ la rareté NOMINALE : un primordial de niveau 1 reste chez les primordiaux', () => {
+    const g = groupByRarity([c('p', 'primordial', 1), c('x', 'commun', 30)], none);
+    expect(g[0]).toMatchObject({ rarity: 'primordial' });
+    expect(g[0]!.advs.map((a) => a.id)).toEqual(['p']);
+  });
+
+  it('⚠️ on COPIE : le vivier garde son ordre', () => {
+    const l = [c('b', 'commun', 1), c('a', 'commun', 9)];
+    groupByRarity(l, none);
+    expect(l.map((a) => a.id)).toEqual(['b', 'a']);
   });
 });

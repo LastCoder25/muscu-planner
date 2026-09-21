@@ -49,6 +49,9 @@ export const REVEAL = {
    *  moitié de ce que l'écran montre, sinon le bord de la bande entre dans le champ et on
    *  voit la fin arriver — exactement ce qu'on veut éviter. */
   tail: 6,
+  /** Tirage ×10 : décalage d'arrêt entre deux lignes (ms). Les dix lignes tournent
+   *  ENSEMBLE et s'arrêtent en cascade, de haut en bas. */
+  lotStagger: 160,
 } as const;
 
 export interface RevealPlan {
@@ -119,11 +122,13 @@ export function buildReveal(
 }
 
 /**
- * 🎰 CE QU'UN LOT MET EN SCÈNE (v0.968 ; le tirage ×10, demandé).
+ * 🎰 CE QU'UN LOT MET EN SCÈNE (v0.968, refait en v0.980 ; demandé : « 10 fois
+ * l'animation de la ligne qui défile, sur toute la hauteur de l'écran »).
  *
- * ⚠️ **UNE SEULE ROULETTE, SUR LE MEILLEUR DU LOT** — et c'est ce que fait le genre. Dix
- * roulettes d'affilée, c'est trente secondes à regarder pour un geste ; la tension doit
- * se concentrer là où elle compte, puis la grille dit le reste d'un coup d'œil.
+ * ⚠️ **DIX ROULETTES EN MÊME TEMPS, PAS L'UNE APRÈS L'AUTRE** : dix d'affilée, c'est
+ * trente secondes pour un geste. Empilées sur la hauteur de l'écran, elles tournent
+ * ensemble et s'arrêtent en CASCADE (`buildLotReveal`) — cinq secondes au plus. Le
+ * meilleur du lot (`bestOfLot`) porte ensuite l'écran de révélation, la grille dit le reste.
  *
  * ⚠️ **ELLE NE DÉCIDE RIEN, comme la roulette à l'unité** : les dix champions sont déjà
  * tirés par le store (avec le pity qui s'enchaîne d'un tirage au suivant). On ne fait que
@@ -138,6 +143,25 @@ export interface LotItem {
   duplicate: boolean;
   copies: number;
   manaBack: number;
+}
+
+/**
+ * 🎰 Les dix lignes d'un tirage ×10, dans l'ORDRE DU TIRAGE (haut → bas).
+ *
+ * Chaque ligne est une roulette complète (`buildReveal` : leurres sur toute l'échelle,
+ * queue après le tiré) ; seule sa durée est décalée de `lotStagger` par rang, pour que
+ * les arrêts tombent en cascade au lieu d'un seul coup. ⚠️ La durée garde sa part de
+ * rareté : une ligne qui traîne reste un bon présage, comme à l'unité.
+ */
+export function buildLotReveal(
+  lot: readonly LotItem[],
+  rng: () => number,
+  opts?: { reduced?: boolean; pool?: readonly Champion[] },
+): RevealPlan[] {
+  return lot.map((it, i) => {
+    const plan = buildReveal(it.champion, rng, opts);
+    return plan.spinMs ? { ...plan, spinMs: plan.spinMs + i * REVEAL.lotStagger } : plan;
+  });
 }
 
 /** Le champion du lot qui porte la roulette : le plus rare. ⚠️ À rareté égale on garde

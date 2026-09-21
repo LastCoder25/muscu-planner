@@ -6,6 +6,7 @@ import {
   REVEAL,
   bestOfLot,
   lotOrder,
+  buildLotReveal,
   type LotItem,
 } from '@/lib/gachaReveal';
 import { CHAMPIONS } from '@/data/champions';
@@ -141,5 +142,36 @@ describe('🎰 LE LOT DE 10 — une seule roulette, sur le meilleur (v0.968)', (
     const avant = [...lot];
     lotOrder(lot);
     expect(lot).toEqual(avant);
+  });
+});
+
+describe('🎰 LE LOT DE 10 — dix lignes qui défilent ensemble (v0.980)', () => {
+  const lotOf = (rs: Rarity[]): LotItem[] =>
+    rs.map((r) => ({ champion: champOf(r), duplicate: false, copies: 1, manaBack: 0 }));
+
+  it('UNE ligne par tirage, dans l’ORDRE DU TIRAGE, chacune arrêtée sur SON champion', () => {
+    const lot = lotOf(['rare', 'commun', 'primordial', 'magique']);
+    const plans = buildLotReveal(lot, mulberry32(3));
+    expect(plans).toHaveLength(lot.length);
+    plans.forEach((p, i) => expect(p.strip[p.stopIndex]).toBe(lot[i]!.champion));
+  });
+
+  it('⚠️ LES ARRÊTS TOMBENT EN CASCADE : même rareté, chaque ligne s’arrête après celle du dessus', () => {
+    const plans = buildLotReveal(lotOf(Array(10).fill('commun')), mulberry32(5));
+    for (let i = 1; i < plans.length; i++) {
+      expect(plans[i]!.spinMs - plans[i - 1]!.spinMs).toBe(REVEAL.lotStagger);
+    }
+  });
+
+  it('la durée garde sa part de rareté — une ligne qui traîne reste un bon présage', () => {
+    const [p] = buildLotReveal(lotOf(['primordial']), mulberry32(1));
+    expect(p!.spinMs).toBe(revealSpinMs('primordial'));
+  });
+
+  it('⚠️ prefers-reduced-motion : aucune ligne n’anime, cascade comprise', () => {
+    const plans = buildLotReveal(lotOf(['rare', 'commun', 'epique']), mulberry32(2), {
+      reduced: true,
+    });
+    expect(plans.every((p) => p.spinMs === 0)).toBe(true);
   });
 });

@@ -1736,6 +1736,32 @@ export function compareAdventurers(
   );
 }
 
+/**
+ * 🗂️ Le vivier RANGÉ PAR RARETÉ (demandé) : une section par rareté, de la plus haute à la
+ * plus basse, et dans chacune l'ordre de `compareAdventurers` (rang, étoile, expérience,
+ * puissance). Les raretés absentes du vivier n'ont pas de section.
+ *
+ * ⚠️ La rareté NOMINALE (`advNominalRarity`) : c'est celle qu'on a tirée et que le
+ * portrait affiche — la plafonnée rangerait un primordial de niveau 1 chez les communs.
+ * ⚠️ On COPIE : `advList` garde l'ordre du vivier, dont dépendent d'autres règles.
+ */
+export function groupByRarity(
+  advs: readonly Adventurer[],
+  powerOf: (x: Adventurer) => number,
+): { rarity: Rarity; advs: Adventurer[] }[] {
+  const by = new Map<Rarity, Adventurer[]>();
+  for (const a of advs) {
+    const r = advNominalRarity(a);
+    by.set(r, [...(by.get(r) ?? []), a]);
+  }
+  return [...by.entries()]
+    .sort(([x], [y]) => RARITY_RANK[y] - RARITY_RANK[x])
+    .map(([rarity, list]) => ({
+      rarity,
+      advs: list.sort((x, y) => compareAdventurers(x, y, powerOf)),
+    }));
+}
+
 /** Étoile courante, 1..5 — la progression du niveau DANS le rang. */
 export function advStar(adv: Adventurer): number {
   return advRank(adv).star;
