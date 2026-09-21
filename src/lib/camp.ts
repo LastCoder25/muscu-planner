@@ -42,6 +42,7 @@ import {
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
+  poiRewardLevel,
 } from './expedition';
 import { partyFightSeed, partyForecastSeed } from './party';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
@@ -192,7 +193,8 @@ export function campHurt(
  *  que pour deux champions (`heroPartyCombatant`), rien ne justifie qu'il fasse tomber le
  *  butin d'une expédition solo. */
 export function campGroupHaul(poi: Poi, spec: CampSpec): { gold: number; summonStones: number } {
-  const L = Math.max(1, poi.level);
+  // 🪙 Récompense sur le niveau de RÉCOMPENSE (`poiRewardLevel`), pas le niveau de rang.
+  const L = Math.max(1, poiRewardLevel(poi));
   const rthH = (2 * travelOneWayMin(L, poi.distNorm)) / 60;
   const tfH = travelFactor(rthH);
   const k = Math.max(0, spec.size) / CAMP.refGroup;

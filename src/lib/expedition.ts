@@ -239,6 +239,13 @@ export interface Poi {
    *  30 % de temps en moins qu'un autre lieu au même endroit : le trajet ne se lisait plus
    *  sur la carte. Absent → le niveau du lieu (tous les autres POI, et les failles d'avant). */
   travelLevel?: number;
+  /** 🪙 Niveau sur lequel se calculent les RÉCOMPENSES et le COÛT (v0.1028). ⚠️ Posé depuis que
+   *  le niveau d'un lieu est tiré par RANG, comme une faille (entre Bronze et le rang du
+   *  joueur) : il dit la difficulté, le rang affiché et l'XP des champions. L'or, les
+   *  ressources, le butin et le coût, eux, gardent la fenêtre [joueur, +10] d'avant
+   *  (décision de l'utilisateur) — sans ça l'or de la carte chutait de 58 à 75 % (mesuré).
+   *  Absent → le niveau du lieu (failles, et les lieux d'avant). */
+  rewardLevel?: number;
   /** ⚔️ BANDE EN MARCHE uniquement — la faction héritée de sa faille, et son point de
    *  DÉPART. ⚠️ `from` est immuable : la marche s'interpole de là vers la ville, donc la
    *  recalculer depuis la position courante la ferait ralentir à chaque tick sans jamais
@@ -798,6 +805,12 @@ export function poiTravelLevel(p: Pick<Poi, 'level' | 'travelLevel'>): number {
   return p.travelLevel ?? p.level;
 }
 
+/** Le niveau sur lequel se calculent récompenses et coût d'un POI — ⚠️ SOURCE UNIQUE (cf.
+ *  `Poi.rewardLevel`). La difficulté et l'XP des champions, elles, lisent `level`. */
+export function poiRewardLevel(p: Pick<Poi, 'level' | 'rewardLevel'>): number {
+  return p.rewardLevel ?? p.level;
+}
+
 /** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
 export function travelOneWayMin(level: number, distNorm: number): number {
   const base =
@@ -1190,8 +1203,21 @@ function placePoiOfType(
   // ⚠️ Le tirage REMPLACE celui de la gigue (un seul `rng()`, comme avant) : le flux aléatoire
   // des spawns suivants n'est pas décalé.
   const span = win.max - win.min;
-  const roll = rng();
-  const level = forcedLevel ?? win.min + Math.min(span, Math.floor(roll * (span + 1)));
+  // 🏅 TOUS LES LIEUX TIRENT UN RANG, COMME LES FAILLES (v0.1028, demandé par l'utilisateur :
+  // « applique à tous les events un rang aléatoire comme les failles »). La fenêtre
+  // [joueur, +10] ne proposait jamais un lieu Bronze à un joueur de niveau 30 : ses
+  // champions Bronze n'avaient nulle part où prendre de l'XP. `riftLevelFor` tire un rang
+  // entre Bronze et celui du joueur (plus une place « au-dessus »), puis un niveau dedans.
+  // ⚠️ LA RÉCOMPENSE, ELLE, GARDE L'ANCIEN TIRAGE (décision de l'utilisateur) : uniforme dans
+  // la fenêtre, au MÊME `rng()` qu'avant — or, ressources, butin et coût ont donc exactement la
+  // distribution d'avant. Tirée en rang, la récompense faisait chuter l'or de la carte de 58 à
+  // 75 % (mesuré aux niveaux 5 à 90).
+  const rewardRoll = win.min + Math.min(span, Math.floor(rng() * (span + 1)));
+  // ⚠️ SAUF L'ARÈNE : réservée au héros (aucun champion n'y va), et son or croît avec les vagues
+  // tenues — une arène Bronze pour un héros de niveau 30 se tiendrait sans fin et rapporterait
+  // d'autant plus. Elle garde donc la fenêtre, niveau et récompense confondus.
+  const level = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  const rewardLevel = forcedLevel === undefined && level !== rewardRoll ? rewardRoll : undefined;
   // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement
   // justifie (`travelLevel`, v0.1012), sinon un lieu fort près de la ville mettrait autant
   // de temps qu'un lieu lointain — le trajet ne se lirait plus sur la carte.
@@ -1208,6 +1234,7 @@ function placePoiOfType(
     ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
     level,
     travelLevel,
+    ...(rewardLevel !== undefined ? { rewardLevel } : {}),
     x: pos.x,
     y: pos.y,
     distNorm: pos.distNorm,
@@ -1615,7 +1642,7 @@ export function rollTravelEncounters(
         const spoil = rollDrop(rng, {
           cleared: true,
           defeated: 1,
-          level: Math.max(1, poi.level - 1),
+          level: Math.max(1, poiRewardLevel(poi) - 1),
           luck: 0.35,
           spread: 1,
           playerLevel,
@@ -1782,7 +1809,7 @@ export function resolveOutcome(
   playerLevel?: number, // cap anti-runaway : rang des drops plafonné à min(contenu, joueur)
 ): ExpeditionOutcome {
   const rng = mulberry32(seed >>> 0 || 1);
-  const cost = goldCost(poi.type, poi.level);
+  const cost = goldCost(poi.type, poiRewardLevel(poi));
 
   // ── RÉCOLTE DE RESSOURCES (well / shrine / archive / mana_mine) : aucun combat, jamais
   // d'échec. Ces POI paient en devises VIVANTES — celles qui se DÉPENSENT encore quelque
@@ -1795,7 +1822,7 @@ export function resolveOutcome(
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
     const rthH = (2 * travelOneWayMin(poiTravelLevel(poi), poi.distNorm)) / 60;
     const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
-    const { energy, summonStones, keys, mana } = harvestYield(poi.type, poi.level, tfH);
+    const { energy, summonStones, keys, mana } = harvestYield(poi.type, poiRewardLevel(poi), tfH);
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
     const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
@@ -1827,8 +1854,9 @@ export function resolveOutcome(
     const good = waves >= 6; // « belle performance » (pour le ton du rapport / notif)
     // Or : on rend une part du coût (sink net) mais la vraie paie est en ressources.
     const gold =
-      Math.round((poi.level * 12 + waves * poi.level * 7) * (1 + (tfA - 0.5) * 0.4)) +
-      Math.round(cost * 0.25);
+      Math.round(
+        (poiRewardLevel(poi) * 12 + waves * poiRewardLevel(poi) * 7) * (1 + (tfA - 0.5) * 0.4),
+      ) + Math.round(cost * 0.25);
     // Récompense par vague RELEVÉE (2026‑08‑18, ticket arène) : l'arène était strictement
     // dominée par un camp (moins de poussière pour un coût d'or 4× plus élevé). Tenir
     // longtemps devient une VRAIE grosse paie de ressources → justifie la dépense d'or.
@@ -1920,13 +1948,13 @@ function tripHours(poi: Poi): { rth: number; tf: number } {
  *  Rendement = coût × (1,3 + `travelFactor(rth)`) : reine de l'or, et d'autant plus loin. */
 function mineOutcome(rng: () => number, poi: Poi): ExpeditionOutcome {
   const { rth, tf } = tripHours(poi);
-  const cost = goldCost(poi.type, poi.level);
+  const cost = goldCost(poi.type, poiRewardLevel(poi));
   // MINE = reine de l'or, et d'autant plus loin (coût × 1,3 + facteur de voyage).
   const gold = Math.round(cost * (1.3 + travelFactor(rth)));
   // ÉNERGIE : un complément borné du sport, jamais un substitut (ticket a0d16472).
   const energy = Math.min(
     EXPE.mineEnergyMax,
-    Math.round((4 + poi.level * 1.5) * Math.min(tf, EXPE.mineEnergyTfCap)),
+    Math.round((4 + poiRewardLevel(poi) * 1.5) * Math.min(tf, EXPE.mineEnergyTfCap)),
   );
   return {
     win: true,
@@ -2169,7 +2197,7 @@ export function startExpedition(
     sentAt: now,
     midAt: now + oneWayMs,
     returnAt: now + oneWayMs + backMs,
-    goldCost: goldCost(poi.type, poi.level),
+    goldCost: goldCost(poi.type, poiRewardLevel(poi)),
     seed: seed >>> 0 || 1,
     outcome,
   };

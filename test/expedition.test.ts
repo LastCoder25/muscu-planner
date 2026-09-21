@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { playerCombatant, mulberry32 } from '@/lib/combat';
 import {
   isQuotaPoi,
+  poiRewardLevel,
   isRiftPoi,
   EXPE,
   spawnWindow,
@@ -55,20 +56,18 @@ describe('expedition — éco & géométrie', () => {
 });
 
 describe('expedition — carte / monde', () => {
-  it('createMap : POI d’entrée, niveaux dans la fenêtre, espacés', () => {
+  it('createMap : POI d’entrée, rang tiré, récompense dans la fenêtre, espacés', () => {
     const m = createMap(123, 0, 10, 3);
     expect(m.pois.length).toBeGreaterThanOrEqual(1);
     const w = spawnWindow(10);
-    // ⚠️ LA FENÊTRE DE SPAWN NE VAUT QUE POUR LE QUOTA GÉNÉRAL (v0.929). Le niveau d’une
-    // faille est tiré par RANG entre Bronze et le rang du joueur (`riftLevelFor`), donc il
-    // tombe SOUS `w.min` dès que le joueur n’est pas au premier rang : un joueur niveau 10
-    // (Bronze ★5) voit des failles de niveau 1 à 10, la fenêtre commence à 10. C’est cette
-    // variété de rangs qui donne son sens à « laquelle je referme » — et c’est la seule
-    // exception au dégradé, verrouillée par `expeditionMap.test`. La borne des failles
-    // (jamais au-dessus du joueur) y est testée à part.
+    // 🏅 Depuis la v0.1028 TOUS les lieux tirent leur niveau par RANG, comme les failles
+    // (`riftLevelFor`) : entre le niveau 1 et le joueur, plus la place « au-dessus ». La
+    // RÉCOMPENSE, elle, garde la fenêtre (`poiRewardLevel`) — l'économie ne bouge pas.
     for (const p of m.pois.filter(isQuotaPoi)) {
-      expect(p.level).toBeGreaterThanOrEqual(w.min);
-      expect(p.level).toBeLessThanOrEqual(w.max);
+      expect(p.level).toBeGreaterThanOrEqual(1);
+      expect(p.level).toBeLessThanOrEqual(10 + riftAboveSpan(10));
+      expect(poiRewardLevel(p)).toBeGreaterThanOrEqual(w.min);
+      expect(poiRewardLevel(p)).toBeLessThanOrEqual(w.max);
     }
     // …et une faille, elle, ne dépasse jamais l'écart « au-dessus » (v0.980).
     for (const p of m.pois.filter(isRiftPoi))

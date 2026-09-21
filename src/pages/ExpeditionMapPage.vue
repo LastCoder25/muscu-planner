@@ -123,8 +123,13 @@
             <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
             <!-- 🏅 Le RANG du lieu, pas son niveau (demandé) : la boule du rang au-dessus et le
                  contour dans sa couleur — on repère d'un coup d'œil les lieux du rang de ses
-                 champions, pour les y envoyer prendre de l'XP. -->
-            <text :x="p.x" :y="p.y - 5.4" class="poi-rank">{{ poiRank(p).emoji }}</text>
+                 champions, pour les y envoyer prendre de l'XP. ⚠️ Plus ses ÉTOILES : un rang
+                 couvre dix niveaux, et un lieu Bronze ★5 écrase des champions Bronze ★1
+                 (mesuré : 0 % de victoire). -->
+            <text :x="p.x" :y="p.y - 5.4" class="poi-rank">
+              {{ poiRank(p).emoji }}
+              <tspan class="poi-star">{{ poiRank(p).star }}★</tspan>
+            </text>
           </g>
 
           <!-- Objectif actif -->
@@ -664,6 +669,7 @@ import {
   simulateArena,
   goldCost,
   poiTravelLevel,
+  poiRewardLevel,
   travelOneWayMin,
   expeditionTerrain,
   type Poi,
@@ -1530,7 +1536,7 @@ function poiRank(p: Poi) {
   return characterRank(p.level);
 }
 
-const costOf = (p: Poi) => goldCost(p.type, p.level);
+const costOf = (p: Poi) => goldCost(p.type, poiRewardLevel(p));
 // Avant-poste : débloque les expéditions + réduit les trajets.
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
@@ -2102,6 +2108,14 @@ onUnmounted(() => {
 .poi-rank {
   font-size: 3.2px;
   text-anchor: middle;
+}
+.poi-star {
+  font-size: 2.6px;
+  font-weight: 800;
+  fill: var(--rk, var(--text));
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 0.5px;
 }
 .hero {
   fill: var(--accent);

@@ -29,6 +29,7 @@ import {
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
+  poiRewardLevel,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
@@ -163,7 +164,7 @@ export interface PartyVoyage {
  * ⚠️ SOURCE UNIQUE : `startParty`, le refus du store et la tuile de l'écran le lisent.
  */
 export function partyHeroToll(poi: Pick<Poi, 'type' | 'level'>): number {
-  return CAMP_TYPES.has(poi.type) ? 0 : goldCost(poi.type, poi.level);
+  return CAMP_TYPES.has(poi.type) ? 0 : goldCost(poi.type, poiRewardLevel(poi));
 }
 
 /** Construit le voyage d'un groupe. ⚠️ Le coût d'or ne se paie qu'avec le HÉROS

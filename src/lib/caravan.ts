@@ -62,6 +62,7 @@ import {
   travelOneWayMin,
   type Poi,
   routePerilous,
+  poiRewardLevel,
 } from './expedition';
 import {
   advRarity,
@@ -704,7 +705,8 @@ function tripFactor(level: number, distNorm: number): number {
 export function caravanWages(escort: Adventurer[], poi: Poi): number {
   return escort.reduce(
     (sum, a) =>
-      sum + Math.round(CARAVAN.wageBase * strataFor(a.level) * Math.max(1, poi.level) ** 0.7),
+      sum +
+      Math.round(CARAVAN.wageBase * strataFor(a.level) * Math.max(1, poiRewardLevel(poi)) ** 0.7),
     0,
   );
 }
@@ -1126,7 +1128,7 @@ export function resolveCaravan(
   const tfH = heroEquivalentFactor(poi);
   const haul = caravanHaulMult(escort, kit.advGear);
   const k = mult * haul;
-  const raw = harvestYield(poi.type, poi.level, tfH);
+  const raw = harvestYield(poi.type, poiRewardLevel(poi), tfH);
   const y = {
     energy: raw.energy * CARAVAN.yieldShare,
     summonStones: raw.summonStones * CARAVAN.yieldShare,
@@ -1140,7 +1142,7 @@ export function resolveCaravan(
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
     // substitut au sport » est un invariant, pas une base qu'un bon voyage dépasserait.
-    gold: Math.round(goldCost(poi.type, poi.level) * 0.3 * k),
+    gold: Math.round(goldCost(poi.type, poiRewardLevel(poi)) * 0.3 * k),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
     // brute × `yieldShare` (0,5), donc il tombe sur un DEMI. Avec l'arrondi à
     // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur
