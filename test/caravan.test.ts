@@ -104,7 +104,7 @@ import {
 
 const poi = (over: Partial<Poi> = {}): Poi => ({
   id: 'p',
-  type: 'wreck',
+  type: 'well',
   level: 20,
   x: 50,
   y: 50,
@@ -426,7 +426,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     for (const t of ['camp', 'lair', 'arena'] as PoiType[]) {
       expect(canSendCaravan(poi({ type: t }), team(3), 99)).toBe(false);
     }
-    for (const t of ['well', 'shrine', 'archive', 'wreck', 'mine'] as PoiType[]) {
+    for (const t of ['well', 'shrine', 'archive', 'mana_mine', 'mine'] as PoiType[]) {
       expect(canSendCaravan(poi({ type: t }), team(3), 99)).toBe(true);
     }
   });
@@ -737,7 +737,7 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
     // n’y tombe JAMAIS sur un impair, donc le cas fautif n’était jamais atteint et la
     // mutation qui remet le bug passait au VERT. Mesuré : 68 combinaisons (niveau,
     // distance) donnent une énergie fractionnaire — il faut les traverser pour voir.
-    for (const type of ['well', 'shrine', 'archive', 'wreck', 'mine'] as PoiType[])
+    for (const type of ['well', 'shrine', 'archive', 'mana_mine', 'mine'] as PoiType[])
       for (let level = 3; level <= 40; level++)
         for (const distNorm of [0, 0.25, 0.5, 0.75, 1])
           for (const per of [false, true]) {
@@ -784,11 +784,7 @@ describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
   // poi.level^0,7`, or `strataFor` lit `PROMO_LEVELS`, dont la cadence a changé en v0.795
   // PUIS en v0.796. Un salaire indexé sur une table qu’on déplace pour une AUTRE raison
   // se met à dire autre chose, en silence.
-  const HARVEST: PoiType[] = ['well', 'shrine', 'archive', 'wreck'];
-  // ⚠️ L'ÉPAVE paie en OR depuis le retrait de la ferraille (v0.998) : c'est son métier, et
-  // la carte n'en fait naître que ~2 par jour. Le « puits » se mesure donc sur les récoltes
-  // qui ne paient qu'un filet d'or — l'épave y ferait passer les salaires pour dérisoires.
-  const FILET: PoiType[] = ['well', 'shrine', 'archive'];
+  const HARVEST: PoiType[] = ['well', 'shrine', 'archive'];
   const part = (n: number, L: number, types: PoiType[] = HARVEST) => {
     const esc = team(n, L);
     let brut = 0;
@@ -826,7 +822,7 @@ describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
     // 3× sans qu’aucune porte ne rougisse est exactement ce que ce test ferme.
     // La borne basse n’entérine PAS la dérive — elle interdit qu’elle continue.
     for (const L of [10, 20, 26, 40, 60, 100])
-      expect(part(3, L, FILET), `niveau ${L}`).toBeGreaterThan(0.1);
+      expect(part(3, L), `niveau ${L}`).toBeGreaterThan(0.1);
   });
 });
 
@@ -2019,7 +2015,7 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
   it('⚠️ c’est bien CE calcul que le convoi lit : la cargaison grossit', () => {
     // Sur les graines SANS embuscade, rien d'autre ne bouge entre les deux voyages (les
     // tirages de route ne dépendent pas de l'équipement) : seule la cargaison diffère.
-    const p = poi({ type: 'wreck', level: 40 });
+    const p = poi({ type: 'shrine', level: 40 });
     let vus = 0;
     for (let s = 1; s <= 60; s++) {
       const avec = resolveCaravan(
@@ -2149,12 +2145,12 @@ describe('sources d’équipement : embuscades repoussées', () => {
       },
       40,
     );
-    expect(o.gold).toBe(13464); // 1758 avant la v0.998 : l’or de l’épave (part de convoi) s’ajoute au filet
-    expect(o.energy).toBe(0);
+    expect(o.gold).toBe(2028); // une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
+    expect(o.energy).toBe(62);
     expect(o.summonStones).toBe(0);
-    // ⚠️ La ferraille a disparu (v0.998) et l'or est monté d'autant : l'épave rend de l'or.
-    // Tout le reste est inchangé au chiffre près — c'est ce qui prouve que le flux n'a pas
-    // fuité. Une seule valeur qui bouge dit « un réglage » ; toutes qui bougent disent
+    // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et
+    // l'énergie apparaît. Tout le reste (clés, salaires, XP, blessé, journal) est inchangé au
+    // chiffre près — c'est ce qui prouve que le flux aléatoire n'a pas fuité. Une seule valeur qui bouge dit « un réglage » ; toutes qui bougent disent
     // « le flux a fuité » — c'est cette distinction que le test existe pour rendre lisible.
     expect('scrap' in o).toBe(false);
     expect(o.keys).toBe(0);

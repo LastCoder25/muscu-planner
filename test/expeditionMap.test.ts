@@ -39,6 +39,7 @@ import {
 import { playerCombatant, mulberry32 } from '@/lib/combat';
 import { resolveCamp } from '@/lib/camp';
 import { campSpecOf } from '@/lib/expedition';
+import { poiOffers } from '@/lib/caravan';
 
 const HOUR = 3_600_000;
 const hero = playerCombatant('Héros', { puissance: 600, endurance: 500, agilite: 400 }, 26);
@@ -114,14 +115,30 @@ describe('POI de récolte', () => {
     expect(mana.energy).toBe(0);
     expect(mana.summonStones).toBe(0);
     expect('scrap' in mana).toBe(false);
+  });
 
-    // ⚓ L'épave paie en OR depuis le retrait de la ferraille (v0.998) — sous la mine.
-    const wreck = resolveOutcome(hero, poi('wreck'), 7, 26);
-    expect(wreck.gold).toBeGreaterThan(goldCost('wreck', 26));
-    expect(wreck.energy).toBe(0);
-    // …et SOUS la mine (la reine de l'or), à même lieu et même graine.
-    expect(wreck.gold).toBeLessThan(resolveOutcome(hero, poi('mine'), 7, 26).gold);
-    expect('scrap' in wreck).toBe(false);
+  it('⚓ plus d’ÉPAVE : jamais générée, retirée des vieilles cartes, rien n’y part (v0.999)', () => {
+    // Sans la ferraille, elle n'était plus qu'une mine en moins bien — on ne la choisissait
+    // jamais. Le type reste LEGACY (rapports, convois d'avant, cible en cours).
+    expect(HARVEST_TYPES.has('wreck')).toBe(false);
+    let m = createMap(11, 0, 30);
+    for (let h = 0; h < 24 * 30; h += 6) m = advanceWorld(m, h * 3600_000, 30);
+    expect(m.pois.some((p) => p.type === 'wreck')).toBe(false);
+    // Une carte sauvegardée avant en porte encore une : elle est retirée…
+    const vieille = { ...m, pois: [...m.pois, { ...m.pois[0]!, id: 'w', type: 'wreck' as const }] };
+    const t = 24 * 30 * 3600_000;
+    expect(advanceWorld(vieille, t, 30).pois.some((p) => p.id === 'w')).toBe(false);
+    // …sauf si le héros y est, physiquement : on ne la fait pas disparaître sous ses pieds.
+    expect(advanceWorld(vieille, t, 30, 'w').pois.some((p) => p.id === 'w')).toBe(true);
+    // Et rien ne peut plus y être envoyé : ni le héros, ni un convoi, ni un groupe.
+    const w = { ...m.pois[0]!, type: 'wreck' as const };
+    expect(
+      poiOffers(w, { heroAway: false, comptoirLevel: 9, advsAvailable: 3, slotsFree: 2 }),
+    ).toEqual({
+      hero: false,
+      caravan: false,
+      party: false,
+    });
   });
 
   it('⚠️ le MANA ne sort QUE de la mine résiduelle — pas d’une autre récolte', () => {
@@ -492,14 +509,7 @@ describe('difficulté des POI de combat', () => {
     // 💠 `mana_mine` rejoint la famille en v0.924 : ce qu'une faille laisse en s'effondrant
     // se RÉCOLTE (et se récolte donc au convoi, sans énergie — c'est ce qui ouvre le mana au
     // joueur qui ne combat pas).
-    expect([...HARVEST_TYPES].sort()).toEqual([
-      'archive',
-      'mana_mine',
-      'mine',
-      'shrine',
-      'well',
-      'wreck',
-    ]);
+    expect([...HARVEST_TYPES].sort()).toEqual(['archive', 'mana_mine', 'mine', 'shrine', 'well']);
     expect(HARVEST_TYPES.has('lair')).toBe(false);
     expect(HARVEST_TYPES.has('arena')).toBe(false);
     // ⚠️ UNE FAILLE N'EST PAS UNE RÉCOLTE : on s'y BAT, et on peut en ressortir sans avoir
@@ -1014,16 +1024,7 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
     // ⚠️ 'arena' EST DANS LA LISTE, et il n'y était pas : c'est très exactement par là que
     // la fuite passait (l'arène versait fragments + encre, seule production non nulle qui
     // restait). Un filet troué est pire qu'aucun filet — il rassure.
-    const types: PoiType[] = [
-      'mine',
-      'well',
-      'shrine',
-      'archive',
-      'wreck',
-      'camp',
-      'lair',
-      'arena',
-    ];
+    const types: PoiType[] = ['mine', 'well', 'shrine', 'archive', 'camp', 'lair', 'arena'];
     for (const type of types) {
       for (let s = 1; s <= 30; s++) {
         const poi = {

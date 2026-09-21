@@ -5,7 +5,7 @@
 // joueur qui s'entraîne peu en manque par définition. Mais il a du TEMPS. Une caravane
 // consomme donc du temps réel et ZÉRO énergie — c'est le seul axe où il est à égalité.
 // Corollaire non négociable : **une caravane ne rapporte JAMAIS d'équipement**. Elle paie
-// en LOGISTIQUE (⚡ énergie plafonnée, 🔮 pierres, 🗝️ clés, 🪙 or des épaves, un filet d'or),
+// en LOGISTIQUE (⚡ énergie plafonnée, 🔮 pierres, 🗝️ clés, un filet d'or),
 // c'est-à-dire des devises qui débloquent les AUTRES systèmes au lieu de les remplacer.
 // « Le sport est le plafond » reste intact : ce n'est pas le butin qui monte, c'est
 // l'accès au jeu qui s'élargit.
@@ -169,7 +169,7 @@ export const CARAVAN = {
    *  pleine, UNE caravane rendait plusieurs crans d'enceinte par jour (mesuré à l'époque de
    *  la ferraille). Avec 0,5 et un nombre de convois plafonné, les caravanes COMPLÈTENT la
    *  visite du héros au lieu de la remplacer.
-   *  ⚠️ Ne pas monter sans re-mesurer `goldSink` (l'or des épaves passe par cette part). */
+   *  ⚠️ Ne pas monter sans re-mesurer les débits d'énergie et de pierres. */
   yieldShare: 0.5,
   /** Un convoi de plus tous les N niveaux de Comptoir. ⚠️ Calé sur le vivier : la Guilde
    *  donne 1 aventurier tous les 2 niveaux, donc ~L/6 escortes de 3 au niveau L — le
@@ -1039,7 +1039,8 @@ export function poiOffers(
     // `resolveIncursion` au lieu de `resolveOutcome`, qui la traitait comme une MINE D'OR
     // (de l'or et de l'énergie pour rien, v0.926). Ce refus RESTE donc, et `resolveOutcome`
     // lève toujours : deux verrous, une ceinture et des bretelles.
-    hero: !opts.heroAway && !isRiftPoi(poi),
+    // ⚓ Une ÉPAVE est un type retiré (v0.999) : rien ne peut plus y être envoyé.
+    hero: !opts.heroAway && !isRiftPoi(poi) && poi.type !== 'wreck',
     // Les convois n'exploitent que les lieux de RÉCOLTE : le héros se bat, eux ramassent.
     caravan: opts.comptoirLevel > 0 && HARVEST_TYPES.has(poi.type),
     // ⚔️ Un CAMP — ET UNE FAILLE — s'attaquent en GROUPE : le héros (sa propre limite), ou
@@ -1508,9 +1509,7 @@ export function resolveCaravan(
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
     // substitut au sport » est un invariant, pas une base qu'un bon voyage dépasserait.
-    // Filet d'or de toute récolte (30 % du coût) + la part de l'OR d'épave : c'est une
-    // récolte comme une autre, donc à la même part que l'énergie ou les pierres.
-    gold: Math.round((goldCost(poi.type, poi.level) * 0.3 + raw.gold * CARAVAN.yieldShare) * k),
+    gold: Math.round(goldCost(poi.type, poi.level) * 0.3 * k),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
     // brute × `yieldShare` (0,5), donc il tombe sur un DEMI. Avec l'arrondi à
     // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur

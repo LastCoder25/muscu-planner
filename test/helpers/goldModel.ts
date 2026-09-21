@@ -4,12 +4,12 @@
 // FACTION se mesure contre LE MÊME dénominateur. Une seconde copie du modèle aurait divergé
 // au premier réglage, et c'est précisément par un mauvais dénominateur que ce fichier a déjà
 // laissé passer un puits qui débordait (v0.684) puis un puits devenu mur (v0.733).
-import { goldCost, harvestYield, travelOneWayMin, travelFactor, type Poi } from '@/lib/expedition';
+import { goldCost, travelOneWayMin, travelFactor, type Poi } from '@/lib/expedition';
 import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 import { BOSSES, bossSummonCost } from '@/data/bosses';
 import { rollDrop, sellValue } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
-import { CARAVAN, caravanSlots, caravanWages, caravanLegMin, refChampionAdv } from '@/lib/caravan';
+import { caravanSlots, caravanWages, caravanLegMin, refChampionAdv } from '@/lib/caravan';
 import { rollRaid } from '@/lib/raid';
 import { comboChestReward } from '@/lib/comboChest';
 
@@ -96,26 +96,15 @@ function bossGoldPerDay(L: number): number {
   return (stonesPerDay(L) / bossSummonCost(b.unlockLevel)) * 0.6 * b.gold;
 }
 /** Convois : chaque créneau fait un aller-retour de récolte au plus 3 fois par jour (on
- *  ouvre l'app matin et soir), salaires déduits.
- *  ⚓ Les ÉPAVES paient en or depuis le retrait de la ferraille (v0.998) — mais elles sont
- *  CONSOMMÉES au départ et la carte n'en fait naître que ~2 par jour (1 spawn toutes les
- *  1-2 h, 2 épaves sur 14 tirages). Les autres voyages vont vers une récolte ordinaire,
- *  qui ne rend que son filet d'or (30 % du coût). ⚠️ Sans ce plafond, le modèle donnait à
- *  12 convois 3 épaves par jour chacun, et le revenu de fin de partie décollait.
- */
-const WRECKS_PER_DAY = (24 / 1.5) * (2 / 14);
+ *  ouvre l'app matin et soir), salaires déduits. Une récolte ne paie qu'un FILET d'or
+ *  (30 % du coût) : l'épave, qui payait en or, est retirée (v0.999). */
 function convoyGoldPerDay(L: number, comptoir: number): number {
-  const poi = { level: L, distNorm: 0.6, type: 'wreck' } as Poi;
+  const poi = { level: L, distNorm: 0.6, type: 'well' } as Poi;
   const esc = [0, 1, 2].map((i) => refChampionAdv(L, i));
   const legH = caravanLegMin(poi, esc, comptoir, 0) / 60;
-  const trips = caravanSlots(comptoir) * Math.min(3, 24 / (2 * legH));
-  const wreckTrips = Math.min(trips, WRECKS_PER_DAY);
-  const rth = (2 * travelOneWayMin(L, 0.6)) / 60;
-  const wreck = harvestYield('wreck', L, travelFactor(rth)).gold;
-  const wages = caravanWages(esc, poi);
-  const onWreck = Math.round(goldCost('wreck', L) * 0.3 + wreck * CARAVAN.yieldShare) - wages;
-  const onOther = Math.round(goldCost('well', L) * 0.3) - wages;
-  return Math.max(0, wreckTrips * onWreck + (trips - wreckTrips) * Math.max(0, onOther));
+  const trips = Math.min(3, 24 / (2 * legH));
+  const net = Math.round(goldCost('well', L) * 0.3) - caravanWages(esc, poi);
+  return Math.max(0, caravanSlots(comptoir) * trips * net);
 }
 /** Camps de faction, en PART du revenu de référence — la valeur MESURÉE par
  *  `campEconomy.test` (+9 % au niveau 12, +16 à +19 % au 26, ~+17 % au-delà). Borne haute :

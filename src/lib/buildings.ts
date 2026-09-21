@@ -393,7 +393,11 @@ export const BUILD = {
   // soit pas en excès et qu’il faille aller le chercher » —, ~100 % de l’or dépensé, moins
   // d’un jour de revenu en banque, et un cran de bâtiment qui vaut 2,2 à 2,8 jours de revenu
   // du niveau 5 au 100 (courbe PLATE, pas de mur).
-  upBase: 1000, // upgrade L→L+1 (or) = round(upBase × L^upExp), cour ET enceinte
+  // ⚠️ 1000 → 900 (v0.999, mesuré) : l’ÉPAVE est retirée, et avec elle l’or que les convois
+  // en rapportaient. Le revenu baisse, le coefficient suit : 900 → 76,0 / 67,3 / 62,0 %,
+  // la courbe de la v0.998 (76,8 / 68,5 / 63,4) à moins de 1,5 point, ~100 % de l’or
+  // dépensé. (800 → 79,2 / 70,1 / 64,5 · 1000 → 73,2 / 64,8 / 59,7.)
+  upBase: 900, // upgrade L→L+1 (or) = round(upBase × L^upExp), cour ET enceinte
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :

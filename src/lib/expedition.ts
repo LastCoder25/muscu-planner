@@ -29,9 +29,11 @@ export type PoiType =
   | 'well'
   | 'shrine'
   | 'archive'
-  // ⚓ ÉPAVE : récolte d'OR, sans combat — on démonte la carcasse et on revend le métal.
-  // ⚠️ Elle était l'unique source de FERRAILLE, devise RETIRÉE (v0.998) : l'enceinte se
-  // paie désormais en or, sur la même courbe que les bâtiments de la cour.
+  // ⚓ ÉPAVE — **LEGACY, plus jamais générée (v0.999).** Elle était l'unique source de
+  // ferraille ; la ferraille retirée (v0.998), elle n'était plus qu'une mine en moins bien
+  // (moins d'or, pas d'énergie) et on la choisissait jamais. Le type RESTE pour relire ce
+  // qui en porte déjà la trace : rapports de la boîte 📬, convois partis avant, et la cible
+  // d'une expédition en cours. `advanceWorld` retire celles qui traînent sur la carte.
   | 'wreck'
   // 🕳️ FAILLE : le seul POI qu'on n'ATTAQUE pas pour son butin mais pour le REFERMER —
   // elle engendre des monstres, et à 7 jours elle déborde sur la base (cf. `rift.ts`).
@@ -84,7 +86,6 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'well',
   'shrine',
   'archive',
-  'wreck',
   'mana_mine',
 ]);
 
@@ -527,12 +528,6 @@ export const HARVEST = {
   /** Trajet (facteur de voyage) à partir duquel une archive rend une 2ᵉ clé : aller loin
    *  paie plus, ici aussi. */
   archiveFarKeyAt: 6,
-  // ⚓ Or d'une épave, au-delà de la part symbolique de toute récolte (35 % du coût) :
-  // coût × K × facteur de voyage. ⚠️ Calée SOUS la mine (coût × (1,3 + facteur), plus
-  // de l'énergie) : l'épave remplace la ferraille retirée (v0.998), elle ne détrône pas la
-  // reine de l'or. Même pente de trajet → aller loin paie plus, comme partout sur la carte.
-  // Mesuré : ~0,67× l'or d'une mine au niveau 10 comme au 30, à même distance.
-  wreckGoldK: 0.65,
 } as const;
 
 export const EXPE = {
@@ -995,9 +990,7 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
     'shrine',
     'archive',
     'archive',
-    // ⚓ ÉPAVE : or sans combat (v0.998 : elle rendait la ferraille, devise retirée).
-    'wreck',
-    'wreck',
+    // ⚓ Plus d'ÉPAVE (v0.999) : sans la ferraille, elle doublait la mine en moins bien.
   ] as const);
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
@@ -1368,14 +1361,18 @@ export function advanceWorld(
     // au chargement — même politique que les bâtiments dont le type a disparu du
     // registre. La cible d'une expédition EN COURS est toujours préservée : le héros y
     // est physiquement, on ne la fait pas disparaître sous ses pieds.
+    // ⚓ Et les ÉPAVES, type retiré (v0.999) : une carte sauvegardée avant en porte encore.
     pois: withMines.filter(
       (p) =>
         p.id === protectedPoiId ||
-        (p.expiresAt > now && withinLand(p) && levelFitsDistance(p, playerLevel)),
+        (p.type !== 'wreck' &&
+          p.expiresAt > now &&
+          withinLand(p) &&
+          levelFitsDistance(p, playerLevel)),
     ),
   };
   // ⚠️ LES QUOTAS SE COMPTENT SÉPARÉMENT (`isQuotaPoi`) : une faille ou une mine qui
-  // entrerait dans les 20 volerait une place à une mine d'or, un camp ou une épave — dont
+  // entrerait dans les 20 volerait une place à une mine d'or, un camp ou une récolte — dont
   // l'économie est MESURÉE. Les failles S'AJOUTENT à la carte.
   const quota = () => next.pois.filter(isQuotaPoi).length;
   const rifts = () => next.pois.filter(isRiftPoi).length;
@@ -1742,12 +1739,11 @@ export function harvestYield(
   type: PoiType,
   level: number,
   tfH: number,
-): { energy: number; summonStones: number; gold: number; keys: number; mana: number } {
+): { energy: number; summonStones: number; keys: number; mana: number } {
   const L = Math.max(1, level);
   let energy = 0;
   let summonStones = 0;
   let keys = 0;
-  let gold = 0;
   let mana = 0;
   if (type === 'well') {
     // Complément d'énergie, jamais un substitut au sport : borné à ~5 runs de donjon.
@@ -1755,8 +1751,6 @@ export function harvestYield(
   } else if (type === 'shrine') {
     // Calé sur le coût d'un boss (`1 + ⌊niv/5⌋`) → une visite ≈ une tentative et demie.
     summonStones = Math.max(2, Math.round((1 + L / 5) * (0.8 + tfH * 0.25)));
-  } else if (type === 'wreck') {
-    gold = Math.round(goldCost('wreck', L) * HARVEST.wreckGoldK * tfH);
   } else if (type === 'mana_mine') {
     // 💠 Ce qu'une faille laisse en s'effondrant. ⚠️ La MAGNITUDE vit dans `rift.ts`
     // (`residualMineOf`), qui la calcule sur ce que la faille valait à maturité : une
@@ -1777,7 +1771,7 @@ export function harvestYield(
     // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
     keys = 1 + (tfH >= HARVEST.archiveFarKeyAt ? 1 : 0);
   }
-  return { energy, summonStones, gold, keys, mana };
+  return { energy, summonStones, keys, mana };
 }
 
 export function resolveOutcome(
@@ -1789,7 +1783,7 @@ export function resolveOutcome(
   const rng = mulberry32(seed >>> 0 || 1);
   const cost = goldCost(poi.type, poi.level);
 
-  // ── RÉCOLTE DE RESSOURCES (well / shrine / archive / wreck) : aucun combat, jamais
+  // ── RÉCOLTE DE RESSOURCES (well / shrine / archive / mana_mine) : aucun combat, jamais
   // d'échec. Ces POI paient en devises VIVANTES — celles qui se DÉPENSENT encore quelque
   // part — et JAMAIS en butin, que la carte ne peut structurellement plus produire.
   // ⚠️ VIVANTES = ⚡ énergie, 🔮 pierres d'invocation, 🗝️ clés, 🪙 or, 💠 mana.
@@ -1800,15 +1794,14 @@ export function resolveOutcome(
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
     const rthH = (2 * travelOneWayMin(poi.level, poi.distNorm)) / 60;
     const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
-    const { energy, summonStones, gold, keys, mana } = harvestYield(poi.type, poi.level, tfH);
+    const { energy, summonStones, keys, mana } = harvestYield(poi.type, poi.level, tfH);
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
     const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
     const k = tr.resMult;
     return {
       win: true,
-      // Part symbolique (35 % du coût) + l'or de l'épave ; le marchand errant module tout.
-      gold: Math.round((cost * 0.35 + gold) * tr.goldMult),
+      gold: Math.round(cost * 0.35 * tr.goldMult), // symbolique : la paie est en ressources
       // Le plafond s'applique APRÈS le bonus de trajet : « complément, jamais
       // substitut au sport » est un invariant, pas une valeur de base qu'un bon
       // voyage pourrait dépasser.
