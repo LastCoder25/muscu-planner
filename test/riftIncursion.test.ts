@@ -226,12 +226,11 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
     expect(somme(loin)).toBeGreaterThan(somme(pres));
   });
 
-  it('un groupe VIDE (héros seul) ne verse aucune XP, et ferme quand même', () => {
+  it('un groupe VIDE (héros seul) ne verse aucune XP', () => {
+    // ⚠️ Il ne « ferme quand même » plus (v0.980) : seul, il ne vaut que deux champions.
     const o = run({ escort: [], hero: heroFort(26) });
     expect(o.party!.xp).toEqual({});
     expect(o.party!.escort).toEqual([]);
-    expect(o.win).toBe(true);
-    expect(o.mana).toBeGreaterThan(0);
   });
 });
 
@@ -373,16 +372,40 @@ describe('📐 la calibration MESURÉE tient sur le vrai chemin d’envoi', () =
     }
   });
 
-  it('⚠️ un HÉROS ÉQUIPÉ ferme tout — mesuré, et cohérent avec les camps (v0.897)', () => {
-    // ⚠️ Écart ASSUMÉ, pas un défaut : `riftFoe` est calibré sur le groupe de référence,
-    // et la puissance d'un héros équipé croît avec son gear sans plafond. Le précédent est
-    // explicite (v0.897 : « un héros seul équipé écrase les gros camps — ACCEPTÉ »). Ce que
-    // ça coûte reste réel : son temps, son exclusivité, le péage d'or.
+  it('⚠️ le HÉROS ÉQUIPÉ ne vaut que DEUX champions (v0.980) — il ne ferme plus tout seul', () => {
+    // ⚠️ RENVERSE la v0.932 (« un héros équipé ferme tout — assumé ») : mesuré, il refermait
+    // à 100 % des failles de 40 à 60 niveaux au-dessus de lui, et le plafond de 3 champions
+    // ne bornait rien. Borné (`heroPartyCombatant`), il vaut 2 champions : seul, il ne
+    // referme presque jamais une faille mûre ; avec un champion, il vaut à peu près un
+    // groupe de 2 à 4.
+    const seul = (level: number) => {
+      let w = 0;
+      for (let s = 1; s <= 30; s++)
+        if (
+          run({ poi: rift({ level }), escort: [], hero: heroFort(level), seed: s * 7919 + 1 }).win
+        )
+          w++;
+      return w / 30;
+    };
+    const plusUn = (level: number) => {
+      let w = 0;
+      for (let s = 1; s <= 30; s++)
+        if (
+          run({
+            poi: rift({ level }),
+            escort: team(1, level),
+            hero: heroFort(level),
+            seed: s * 7919 + 1,
+          }).win
+        )
+          w++;
+      return w / 30;
+    };
     for (const level of [12, 26, 70]) {
-      expect(
-        run({ poi: rift({ level }), escort: [], hero: heroFort(level), now: at(7) }).win,
-        `niv ${level}`,
-      ).toBe(true);
+      expect(seul(level), `niv ${level} seul`).toBeLessThan(0.4);
+      const p = plusUn(level);
+      expect(p, `niv ${level} +1`).toBeGreaterThanOrEqual(part(level, 7, 2, 30));
+      expect(p, `niv ${level} +1`).toBeLessThanOrEqual(part(level, 7, 4, 30));
     }
   });
 });

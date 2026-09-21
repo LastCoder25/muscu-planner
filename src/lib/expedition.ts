@@ -8,7 +8,7 @@
 // l'appelant → fonctions pures, testables.
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
-import { rollDrop, rollSetPiece, ITEM_SETS, type Item } from './items';
+import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import type { AdvGear } from './advGear';
 
@@ -256,7 +256,12 @@ export interface ExpeditionMap {
 // de la carte est mesuré (`campEconomy`, `goldSink`, `scrapEconomy`).
 const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine', 'warband']);
 
-/** ⚠️ AUCUNE EXEMPTION AU DÉGRADÉ DE DISTANCE N’EST NÉCESSAIRE — et c’est MESURÉ.
+/** ⚠️ CE BLOC DÉCRIT L'ÉTAT D'AVANT LA v0.980 : depuis que `riftLevelFor` tire un cran
+ *  « au-dessus » du joueur, une faille PEUT être trop forte pour sa distance, et
+ *  `levelFitsDistance` l'exempte explicitement (elle et sa mine). La propriété ci-dessous
+ *  (« toujours vers le BAS ») ne vaut plus que pour les rangs ordinaires.
+ *
+ *  ⚠️ AUCUNE EXEMPTION AU DÉGRADÉ DE DISTANCE N’EST NÉCESSAIRE — et c’est MESURÉ.
  *
  *  La règle générale est « près = faible, loin = fort » (v0.683), et `levelFitsDistance`
  *  l’applique en écartant tout POI trop FORT pour son éloignement. Le niveau d’une faille,
@@ -640,6 +645,12 @@ export const EXPE = {
   /** Écart de niveau toléré au-dessus de ce que la distance justifie, avant de considérer
    *  un POI comme incohérent (la gigue du tirage vaut ±6 % de la fenêtre). */
   levelFitTolerance: 3,
+  /** 🕳️ Écart MAXIMAL d'une faille « au-dessus » du joueur, en part de SON niveau (v0.980).
+   *  ⚠️ MESURÉ avec le groupe complet (héros borné à deux champions + 3 champions, faille
+   *  mûre / jeune) : à l'écart maximal, niveau 12 (+3) ~100/100 %, 26 (+7) ~75/97 %,
+   *  45 (+11) ~50/95 %, 70 (+18) ~70/98 %. Le niveau étant tiré uniformément dans l'écart,
+   *  la plupart des failles « au-dessus » sont plus douces que ce maximum. */
+  riftAboveShare: 0.25,
   // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
   // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
   distMin: 18, // distance mini ville↔POI (coord ; la ville est au centre)
@@ -1014,10 +1025,22 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
  * « laquelle je referme » n'est pas une question. Une fenêtre [niveau, +10] indexée sur la
  * distance ne couvre qu'un rang et demi : elle ne pouvait pas produire cette variété.
  *
- * ⚠️ **JAMAIS AU-DESSUS DU RANG DU JOUEUR** (décision de l'utilisateur : « il ne pourrait
- * pas combattre une faille de plus haut rang que lui ») — et le niveau est en plus borné par
- * le sien, sinon la tranche du rang courant déborderait au-dessus de lui (un joueur niveau 21
- * verrait des failles niveau 30, même rang mais tout autre difficulté).
+ * ⚠️ **UN CRAN « AU-DESSUS » DEPUIS LA v0.980** (décision de l'utilisateur, qui renverse
+ * celle de la v0.929). Elle ne tenait que parce que le HÉROS aurait tout écrasé : mesuré, seul
+ * et équipé, il refermait à 100 % des failles de 40 à 60 niveaux au-dessus de lui. Depuis
+ * qu'il ne vaut plus que deux champions dans un groupe (`heroPartyCombatant`), une faille
+ * au-dessus de soi redevient un vrai pari. Le pool de rangs compte donc un emplacement de
+ * plus, « au-dessus » (`top + 1`), tiré comme les autres.
+ *
+ * ⚠️ **L'ÉCART EST PROPORTIONNEL AU NIVEAU, pas d'un rang** (`EXPE.riftAboveShare`) : un
+ * rang couvre 10 niveaux, soit +83 % au niveau 12 et +14 % au niveau 70 — mesuré avec le
+ * groupe complet (héros borné + 3 champions), la même faille « +1 rang » était
+ * infranchissable au niveau 12 (0 %) et une formalité au niveau 70 (98 %). Le niveau est
+ * tiré dans [joueur + 1, joueur × (1 + part)] ; son RANG affiché est ce qu'il est, souvent
+ * le même que le joueur en début de partie — la fiche dit « +N niveaux » à part.
+ *
+ * ⚠️ Pour les rangs ordinaires, le niveau reste borné par celui du joueur, sinon la tranche
+ * du rang courant déborderait au-dessus de lui sans le dire.
  *
  * Le rang est tiré UNIFORMÉMENT : on veut réellement voir du Bronze à côté de son propre
  * rang, pas une cloche qui ramènerait tout au milieu.
@@ -1039,19 +1062,24 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
  * ces invariants n'est en jeu.
  *
  * ⚠️ `pris` est REQUIS : un paramètre qu'on peut oublier finit par l'être (v0.751,
- * v0.805), et l'oublier ici ramènerait exactement le défaut signalé.
+ * v0.805), et l'oublier ici ramènerait exactement le défaut signalé. ⚠️ Ce sont des
+ * NIVEAUX (v0.980), plus des rangs : « au-dessus » n'est pas un rang, c'est un écart au
+ * joueur — seul `riftSlotOf` sait les ranger.
  */
 export function riftLevelFor(
   rng: () => number,
   playerLevel: number,
-  /** Rangs des failles DÉJÀ ouvertes. `[]` = aucune contrainte (tirage uniforme). */
+  /** NIVEAUX des failles DÉJÀ ouvertes. `[]` = aucune contrainte (tirage uniforme). */
   pris: readonly number[],
 ): number {
   const top = characterRank(playerLevel).rankIndex;
+  const above = top + 1;
+  const taken = new Set(pris.map((lv) => riftSlotOf(lv, playerLevel)));
   const libres: number[] = [];
-  for (let i = 0; i <= top; i++) if (!pris.includes(i)) libres.push(i);
-  const pool = libres.length ? libres : Array.from({ length: top + 1 }, (_, i) => i);
+  for (let i = 0; i <= above; i++) if (!taken.has(i)) libres.push(i);
+  const pool = libres.length ? libres : Array.from({ length: above + 1 }, (_, i) => i);
   const r = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
+  if (r === above) return playerLevel + 1 + Math.floor(rng() * riftAboveSpan(playerLevel));
   const lo = rankStartLevel(r);
   // Fin de la tranche du rang `r`, bornée par le niveau du joueur. ⚠️ Dérivée de
   // `rankStartLevel`, jamais écrite : l'échelle de prestige est la seule autorité.
@@ -1060,6 +1088,19 @@ export function riftLevelFor(
     r + 1 < CHARACTER_RANKS.length ? rankStartLevel(r + 1) - 1 : playerLevel,
   );
   return Math.max(1, lo + Math.floor(rng() * Math.max(1, hi - lo + 1)));
+}
+
+/** Nombre de niveaux « au-dessus » possibles : [joueur + 1, joueur + span]. */
+export function riftAboveSpan(playerLevel: number): number {
+  return Math.max(1, Math.round(Math.max(1, playerLevel) * EXPE.riftAboveShare));
+}
+
+/** L'emplacement d'une faille dans le tirage : son rang, ou `top + 1` si elle est au-dessus
+ *  du joueur — c'est ce qui permet d'éviter d'en reposer deux « au-dessus » d'affilée. */
+export function riftSlotOf(level: number, playerLevel: number): number {
+  return level > playerLevel
+    ? characterRank(playerLevel).rankIndex + 1
+    : characterRank(level).rankIndex;
 }
 
 function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
@@ -1079,7 +1120,7 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
     riftLevelFor(
       rng,
       playerLevel,
-      map.pois.filter(isRiftPoi).map((p) => characterRank(p.level).rankIndex),
+      map.pois.filter(isRiftPoi).map((p) => p.level),
     ),
   );
 }
@@ -1138,6 +1179,9 @@ function placePoiOfType(
     id,
     type,
     ...(perilous ? { perilous: true } : {}),
+    // ⚠️ `setId` ne rapporte plus rien depuis la v0.980 (un repaire paie le butin d'un groupe,
+    // plus une pièce de set du héros) — mais le TIRAGE reste : le retirer décalerait le flux
+    // aléatoire de tous les spawns suivants, donc la carte de chaque joueur.
     ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
     level,
     x: pos.x,
@@ -1166,6 +1210,11 @@ function levelFitsDistance(poi: Poi, playerLevel: number): boolean {
   // tomber vers 0 sans rien perdre de sa force — elle serait donc élaguée en chemin,
   // et l'interception disparaîtrait juste avant d'être possible.
   if (poi.type === 'warband') return true;
+  // 🕳️ LA FAILLE ET SA MINE AUSSI (v0.980) : leur niveau est tiré par RANG, jamais par la
+  // distance, et il peut désormais DÉPASSER le joueur (`riftLevelFor`, cran « au-dessus »).
+  // Sans exemption, une faille au-dessus posée près de la ville serait élaguée au tick
+  // suivant — la mine qu'elle laisse en héritant du niveau, pareil.
+  if (poi.type === 'rift' || poi.type === 'mana_mine') return true;
   const win = spawnWindow(playerLevel);
   const attendu = win.min + Math.round(clamp01(poi.distNorm) * (win.max - win.min));
   return poi.level <= attendu + EXPE.levelFitTolerance;
@@ -1840,8 +1889,8 @@ export function resolveOutcome(
     };
   }
 
-  // ⚠️ Un CAMP ou un REPAIRE ne passe plus par ici : il s'attaque en GROUPE (`resolveCamp`,
-  // qui lit `campHeroOutcome`). `expeSend` le refuse, et une expédition héros d'avant les
+  // ⚠️ Un CAMP ou un REPAIRE ne passe plus par ici : il s'attaque en GROUPE (`resolveCamp`).
+  // `expeSend` le refuse, et une expédition héros d'avant les
   // camps de faction porte son issue DÉJÀ tirée au départ (`startExpedition`) — rien ne la
   // rejoue. L'ancienne branche (gardien `poiCombatant`) n'avait plus aucun chemin : retirée.
   if (CAMP_TYPES.has(poi.type)) throw new Error('Un camp se résout par resolveCamp.');
@@ -1901,77 +1950,6 @@ function mineOutcome(rng: () => number, poi: Poi): ExpeditionOutcome {
     item: null,
     items: [],
     key: 0,
-    reconBonus: 0,
-    returnMult: 1,
-    text: pick(rng, WIN_TEXT[poi.type]),
-  };
-}
-
-/**
- * 🎁 Le butin du HÉROS sur un camp ou un repaire — extrait tel quel de `resolveOutcome`.
- *
- * ⚠️ SOURCE UNIQUE : l'expédition héros d'avant ET le groupe de faction avec héros
- * (`resolveCamp`) le lisent. Il consomme `rng` dans le MÊME ordre qu'avant l'extraction
- * (vérifié par instantané) ; les rencontres de trajet restent à l'appelant.
- * - gagné : camp → un objet (+10 % de clé), repaire → pièce de set (+20 % de clé) + pierres
- *   d'invocation ; or ≥ équilibre du coût (`coût × (1 + A/R h × 0,1)`).
- * - perdu : l'échec d'expédition actuel (or remboursé en partie, 12 % de clé, reconnaissance).
- */
-export function campHeroOutcome(
-  rng: () => number,
-  poi: Poi,
-  win: boolean,
-  playerLevel: number | undefined,
-): ExpeditionOutcome {
-  const cost = goldCost(poi.type, poi.level);
-  if (!win) {
-    const key = rng() < 0.12 ? 1 : 0;
-    return {
-      win: false,
-      gold: Math.round(cost * EXPE.failRefund), // < coût → jamais un profit
-      scrap: 0,
-      mana: 0,
-      summonStones: 0,
-      energy: 0,
-      item: null,
-      key,
-      reconBonus: 0.08,
-      returnMult: 1, // un échec ne raccourcit rien : le héros rentre au pas
-      text: pick(rng, FAIL_TEXT[poi.type]),
-    };
-  }
-  const { rth } = tripHours(poi);
-  // Réussite : HAUL (or) + PRISE éventuelle. Camp/repaire : l'or doit au moins ÉQUILIBRER
-  // le coût (l'item = profit pur) au lieu d'être net négatif sur un trajet court → on ne
-  // se sent plus « volé ». Reste sous la mine en or/coût.
-  let item: Omit<Item, 'id'> | null = null;
-  let key = 0;
-  if (poi.type === 'lair' && poi.setId) {
-    item = rollSetPiece(rng, { setId: poi.setId, level: poi.level, luck: 0.6, playerLevel });
-    key = rng() < 0.2 ? 1 : 0;
-  } else if (poi.type === 'camp') {
-    item = rollDrop(rng, {
-      cleared: true,
-      defeated: 1,
-      level: poi.level,
-      luck: 0.4,
-      spread: 1,
-      playerLevel,
-    });
-    key = rng() < 0.1 ? 1 : 0;
-  }
-  return {
-    win: true,
-    gold: Math.round(cost * (1.0 + rth * 0.1)),
-    scrap: 0,
-    mana: 0,
-    energy: 0,
-    // Les devises vivantes viennent surtout des POI DÉDIÉS (well/shrine/archive) : ici
-    // un simple filet, pour que ces sorties ne soient pas totalement muettes.
-    summonStones: poi.type === 'lair' ? 1 + Math.floor(poi.level / 12) : 0,
-    item,
-    items: item ? [item] : [],
-    key,
     reconBonus: 0,
     returnMult: 1,
     text: pick(rng, WIN_TEXT[poi.type]),

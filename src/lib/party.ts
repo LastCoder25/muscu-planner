@@ -17,6 +17,7 @@
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
 import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
 import {
+  CAMP_TYPES,
   PARTY_TARGETS,
   buildMessage,
   isRiftPoi,
@@ -154,8 +155,21 @@ export interface PartyVoyage {
   seed: number;
 }
 
-/** Construit le voyage d'un groupe. ⚠️ Le coût d'or ne se paie qu'avec le HÉROS (c'est le
- *  prix d'une expédition héros, inchangé) ; l'escorte est payée en salaires à l'encaissement.
+/**
+ * 🪙 LE PÉAGE D'OR DU HÉROS dans un groupe.
+ *
+ * ⚠️ **PLUS SUR UN CAMP (v0.980).** Le péage était le prix du butin d'une expédition solo, que
+ * le héros faisait tomber ; depuis qu'il n'y compte plus que pour deux champions et que le
+ * butin est celui d'un groupe (`resolveCamp`), le lui faire payer rendrait sa présence
+ * net-négative. Failles et bandes le gardent (mesuré en v0.932 : c'est le coût de sa présence).
+ * ⚠️ SOURCE UNIQUE : `startParty`, le refus du store et la tuile de l'écran le lisent.
+ */
+export function partyHeroToll(poi: Pick<Poi, 'type' | 'level'>): number {
+  return CAMP_TYPES.has(poi.type) ? 0 : goldCost(poi.type, poi.level);
+}
+
+/** Construit le voyage d'un groupe. ⚠️ Le coût d'or ne se paie qu'avec le HÉROS
+ *  (`partyHeroToll`) ; l'escorte est payée en salaires à l'encaissement.
  *  ⚠️ L'ISSUE EST PASSÉE, jamais calculée ici : c'est le seul chemin d'envoi (le store) qui
  *  choisit la résolution, au lieu que ce constructeur décide pour lui. */
 export function startParty(
@@ -170,7 +184,7 @@ export function startParty(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    goldCost: input.hero ? goldCost(input.poi.type, input.poi.level) : 0,
+    goldCost: input.hero ? partyHeroToll(input.poi) : 0,
     seed: input.seed >>> 0 || 1,
     outcome,
   };

@@ -16,6 +16,7 @@ import {
   PARTY_HERO_BLOCK_LABEL,
   partyClaimRoster,
   partyHeroBlocker,
+  partyHeroToll,
   partyLegMin,
   partyReport,
   partySendBlocker,
@@ -26,7 +27,13 @@ import {
   partyFightSeed,
   partyForecastSeed,
 } from '@/lib/party';
-import { HERO_UNIT_ID, partyAllies } from '@/lib/caravan';
+import {
+  HERO_UNIT_ID,
+  HERO_PARTY_WORTH,
+  heroPartyCombatant,
+  partyAllies,
+  refEscortUnits,
+} from '@/lib/caravan';
 import {
   buildMessage,
   campSpecOf,
@@ -338,13 +345,17 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(campHurt({ win: false, down: ['hero', 'adv_0'] }, [{ id: 'adv_0' }])).toEqual(['adv_0']);
   });
 
-  it('AVEC le héros : le butin actuel du camp, aucune pièce d’aventurier, le héros jamais blessé', () => {
-    const o = resolveCamp(input({ hero: fort(20), spec: { faction: 'bandits', size: 2 } }));
+  it('AVEC le héros : le MÊME butin qu’un groupe (v0.980), et le héros jamais blessé', () => {
+    // ⚠️ Il ne compte plus que pour deux champions : lui faire tomber le butin d'une
+    // expédition solo (or à l'équilibre du péage, pièce de set) n'avait plus de sens.
+    const spec = { faction: 'bandits' as const, size: 2 };
+    const o = resolveCamp(input({ hero: fort(20), spec }));
     expect(o.party!.hero).toBe(true);
     expect(o.party!.win).toBe(true);
-    expect(o.party!.advGear).toEqual([]);
+    expect(o.gold).toBe(campGroupHaul(poi(), spec).gold);
+    expect(o.item).toBeNull();
+    expect(o.party!.advGear.length).toBe(CAMP.campPieces);
     expect(o.party!.hurt).not.toContain(HERO_UNIT_ID);
-    expect(o.gold).toBeGreaterThanOrEqual(goldCost('camp', 20));
   });
 
   it('SANS le héros, victoire : or, pierres, pièces d’aventurier ; jamais d’objet du héros ni de ferraille', () => {
@@ -467,7 +478,13 @@ describe('🧭 trajet et départ d’un groupe', () => {
     const a = startParty(i, 1000, 30, resolveCamp(i));
     expect(a.midAt).toBe(1000 + 30 * 60_000);
     expect(a.returnAt).toBe(1000 + 60 * 60_000);
-    expect(a.goldCost).toBe(goldCost('camp', 20));
+    // ⚠️ PLUS DE PÉAGE SUR UN CAMP (v0.980) : le héros n'y décide plus du butin.
+    expect(a.goldCost).toBe(0);
+    expect(partyHeroToll(i.poi)).toBe(0);
+    // …mais une FAILLE le garde : c'est le coût de sa présence (v0.932).
+    const r = { ...i, poi: poi({ type: 'rift' }) };
+    expect(startParty(r, 1000, 30, resolveCamp(i)).goldCost).toBe(goldCost('rift', 20));
+    expect(partyHeroToll(r.poi)).toBe(goldCost('rift', 20));
     expect(a.outcome.party).toBeDefined();
     const j = input();
     expect(startParty(j, 1000, 30, resolveCamp(j)).goldCost).toBe(0);
@@ -530,13 +547,52 @@ describe('📜 partyReport — ce qu’on lit dans la boîte', () => {
   });
 });
 
+describe('🧝 le héros dans un groupe vaut au plus HERO_PARTY_WORTH champions (v0.980)', () => {
+  const refOf = (L: number) => fuseUnits(refEscortUnits(L), 'r');
+  const k = (L: number) => HERO_PARTY_WORTH / refEscortUnits(L).length;
+
+  it('⚠️ un héros FORT vaut EXACTEMENT K champions de référence, à tous les niveaux', () => {
+    // Mesuré avant la borne : ×8 un champion au niveau 12, ×216 au niveau 100 — il refermait
+    // seul des failles de 40 à 60 niveaux au-dessus de lui.
+    for (const L of [5, 12, 26, 45, 70, 100]) {
+      const h = heroPartyCombatant(fort(L));
+      expect(offenseOf(h) / offenseOf(refOf(L)), `offense niv ${L}`).toBeCloseTo(k(L), 2);
+      expect(survivalOf(h) / survivalOf(refOf(L)), `survie niv ${L}`).toBeCloseTo(k(L), 2);
+    }
+  });
+
+  it('⚠️ sur les caractéristiques des CHAMPIONS : deux héros forts se valent au mur', () => {
+    // Garder son critique / multi-frappe le faisait valoir 1 champion au niveau 12 et 2 au
+    // niveau 70 (mesuré) : la borne ne tenait pas. Au-delà de la borne, le héros ne compte plus.
+    const a = heroPartyCombatant(fort(40));
+    const b = heroPartyCombatant({
+      ...fort(40),
+      combatant: { ...fort(40).combatant, damage: 99999 },
+    });
+    expect(b).toEqual(a);
+    expect(a.crit).toBe(refOf(40).crit);
+  });
+
+  it('⚠️ UNE BORNE, JAMAIS UN PLANCHER : un héros faible garde sa propre force', () => {
+    const L = 12;
+    const faible = {
+      name: 'Héros',
+      level: L,
+      combatant: { ...refOf(L), damage: 1, pv: 10 },
+    };
+    const h = heroPartyCombatant(faible);
+    expect(offenseOf(h)).toBeCloseTo(offenseOf(faible.combatant), 3);
+    expect(survivalOf(h)).toBeCloseTo(survivalOf(faible.combatant), 1);
+  });
+});
+
 describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution et le store', () => {
   it('⚠️ partyAllies fond EXACTEMENT le groupe de resolveCamp (pronostic sur le bon groupe)', () => {
     const inp = input({ hero: fort(20), spec: { faction: 'betes', size: 4 } });
     const allies = partyAllies(inp.escort, inp.road, inp.hero);
     expect(allies.map((u) => u.id)).toEqual(['adv_0', 'adv_1', 'adv_2', HERO_UNIT_ID]);
-    // Le héros se bat avec SON combattant réel, les aventuriers avec leur paire.
-    expect(allies[3]!.combatant).toBe(inp.hero!.combatant);
+    // Le héros se bat BORNÉ à deux champions (v0.980), les aventuriers avec leur paire.
+    expect(allies[3]!.combatant).toEqual(heroPartyCombatant(inp.hero!));
     expect(allies.slice(0, 3)).toEqual(units(inp.escort, inp.road));
     // Le combat de résolution rejoué sur ce groupe donne la même issue.
     const group = fuseUnits(allies, 'Groupe');
@@ -596,16 +652,15 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
         const spec = campSpecOf(p)!;
         vus.add(`${type}:${spec.faction}`);
         const label = campRewardLabel(p);
-        const [avec, sans] = label.split(' · sans : ');
-        expect(sans, label).toBeDefined();
+        // ⚠️ UNE SEULE ligne depuis la v0.980 : le héros ne change plus le butin.
+        expect(label, label).not.toContain('héros');
         const haul = campGroupHaul(p, spec);
-        expect(sans!.includes('🔮'), label).toBe(haul.summonStones > 0);
-        // ⚠️ Aucune clé sans le héros : le libellé n'en promet pas.
-        expect(sans!.includes('🗝️'), label).toBe(false);
+        expect(label.includes('🔮'), label).toBe(haul.summonStones > 0);
+        expect(label.includes('🗝️'), label).toBe(false);
         expect(label).not.toContain('🔩');
-        expect(avec!.includes('🧩')).toBe(type === 'lair');
+        expect(label).not.toContain('🧩');
         const n = type === 'lair' ? CAMP.lairPieces : CAMP.campPieces;
-        expect(sans).toContain(`${n} pièce`);
+        expect(label).toContain(`${n} pièce`);
       }
     expect(vus.size, 'toutes les factions × types ne sont pas exercées').toBe(6);
     expect(campRewardLabel(poi({ type: 'wreck' }))).toBe('');

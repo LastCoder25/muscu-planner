@@ -5,6 +5,7 @@ import {
   isRiftPoi,
   EXPE,
   spawnWindow,
+  riftAboveSpan,
   goldCost,
   travelOneWayMin,
   createMap,
@@ -12,7 +13,6 @@ import {
   travelPosition,
   voyageProgress,
   resolveOutcome,
-  campHeroOutcome,
   startExpedition,
   expeditionTerrain,
   simulateArena,
@@ -70,8 +70,9 @@ describe('expedition — carte / monde', () => {
       expect(p.level).toBeGreaterThanOrEqual(w.min);
       expect(p.level).toBeLessThanOrEqual(w.max);
     }
-    // …et une faille, elle, ne dépasse jamais le niveau du joueur.
-    for (const p of m.pois.filter(isRiftPoi)) expect(p.level).toBeLessThanOrEqual(10);
+    // …et une faille, elle, ne dépasse jamais l'écart « au-dessus » (v0.980).
+    for (const p of m.pois.filter(isRiftPoi))
+      expect(p.level).toBeLessThanOrEqual(10 + riftAboveSpan(10));
     // Espacement mini entre paires.
     for (let i = 0; i < m.pois.length; i++)
       for (let j = i + 1; j < m.pois.length; j++) {
@@ -224,13 +225,6 @@ describe('expedition — résolution', () => {
     const o = resolveOutcome(strong, deepFar, 7);
     expect(o.energy).toBeLessThanOrEqual(EXPE.mineEnergyMax);
   });
-  it('camp/repaire : PAS d’énergie (mines uniquement)', () => {
-    // ⚠️ Un camp ne passe plus par `resolveOutcome` (cf. plus bas) : son butin héros est
-    // `campHeroOutcome`, testé DIRECTEMENT — gagné comme perdu, camp comme repaire.
-    for (const p of [lair, { ...lair, id: 'c', type: 'camp' as const }])
-      for (const win of [true, false])
-        expect(campHeroOutcome(mulberry32(3), p, win, 20).energy).toBe(0);
-  });
   it('⚠️ un CAMP ne se résout plus par resolveOutcome : son seul chemin est resolveCamp', () => {
     // `expeSend` refuse les camps, et une expédition d'avant porte son issue tirée au départ :
     // l'ancienne branche (gardien `poiCombatant`) n'avait plus aucun chemin — retirée.
@@ -243,22 +237,6 @@ describe('expedition — résolution', () => {
     expect(resolveOutcome(strong, far, 2).gold).toBeGreaterThan(
       resolveOutcome(strong, near, 2).gold,
     );
-  });
-  it('repaire gagné : pièce de set du bon set, pierres, or ≥ coût (campHeroOutcome)', () => {
-    const o = campHeroOutcome(mulberry32(3), lair, true, 20);
-    expect(o.win).toBe(true);
-    expect(o.item?.setId).toBe('dragon');
-    expect(o.summonStones).toBeGreaterThan(0);
-    expect(o.gold).toBeGreaterThanOrEqual(goldCost('lair', lair.level));
-  });
-  it('échec (repaire perdu) : or rendu < coût, pas de prise, reconnaissance', () => {
-    const hardLair: Poi = { ...lair, level: 25 };
-    const o = campHeroOutcome(mulberry32(4), hardLair, false, 1);
-    expect(o.win).toBe(false);
-    expect(o.gold).toBeLessThan(goldCost('lair', 25)); // jamais un profit
-    expect(o.item).toBeNull();
-    expect(o.reconBonus).toBeGreaterThan(0);
-    expect(o.text.length).toBeGreaterThan(0);
   });
   it('arène : renvoie un nombre de vagues, butin croissant avec les vagues tenues', () => {
     const arenaP: Poi = {
@@ -514,37 +492,6 @@ describe('🏕️ campSpecOf — faction et taille d’un camp', () => {
     const m = createMap(42, 0, 20);
     for (const q of m.pois) expect(Object.keys(q)).not.toContain('camp');
     expect(createMap(42, 0, 20)).toEqual(m);
-  });
-});
-
-describe('🎁 campHeroOutcome — le butin du héros sur un camp, extrait tel quel', () => {
-  const camp: Poi = {
-    id: 'c',
-    type: 'camp',
-    level: 20,
-    x: 60,
-    y: 60,
-    distNorm: 0.4,
-    spawnedAt: 0,
-    expiresAt: 9e15,
-  };
-  it('victoire sur un camp : un objet, de l’or, jamais de rencontre de trajet', () => {
-    let objets = 0;
-    for (let s = 1; s <= 30; s++) {
-      const o = campHeroOutcome(mulberry32(s), camp, true, 20);
-      expect(o.win).toBe(true);
-      expect(o.returnMult).toBe(1);
-      expect(o.gold).toBeGreaterThanOrEqual(goldCost('camp', 20));
-      if (o.item) objets++;
-    }
-    expect(objets).toBeGreaterThan(0);
-  });
-  it('échec : l’échec d’expédition actuel (or remboursé en partie, rien d’autre)', () => {
-    const o = campHeroOutcome(mulberry32(5), camp, false, 20);
-    expect(o.win).toBe(false);
-    expect(o.gold).toBe(Math.round(goldCost('camp', 20) * EXPE.failRefund));
-    expect(o.item).toBeNull();
-    expect(o.reconBonus).toBe(0.08);
   });
 });
 
