@@ -29,6 +29,7 @@ import {
   advAvatar,
   advChampion,
   advRarity,
+  advXpToNext,
   type AdvAvatarProfile,
   type ADV_AVATAR_SLOTS,
   type Adventurer,
@@ -63,6 +64,10 @@ export interface AdvGear {
    *  Deux exemplaires du même modèle sont IDENTIQUES — c'est ce qui donne un sens au doublon.
    *  Le niveau démarre à ★1 de son rang (`rankStartLevel`). */
   level: number;
+  /** ⬆️ XP en attente (v0.1015) : gagnée avec le champion qui la PORTE, sur la même courbe
+   *  (`advXpToNext`). ⚠️ Bloquée au ★5 de son rang (`advGearLevelBand`) ET au niveau de son
+   *  porteur — l'excédent est CONSERVÉ, puis reversé à l'ascension. */
+  xp?: number;
   effect: ItemEffect;
   effect2?: ItemEffect;
   /** Lignées civiles uniquement, sur l'accessoire : trajet raccourci / cargaison (fraction). */
@@ -632,7 +637,100 @@ function onModel<T extends Omit<AdvGear, 'id'>>(g: T): T {
     ...fresh,
     ...(own.id !== undefined ? { id: own.id } : {}),
     ...(g.locked ? { locked: true } : {}),
+    ...(typeof g.xp === 'number' && g.xp > 0 ? { xp: Math.floor(g.xp) } : {}),
   } as unknown as T;
+}
+
+// ── ⬆️ PROGRESSION DES OBJETS (v0.1015, étape C de la spec d'ascension) ──────────────────
+
+/** Le niveau le plus haut qu'une pièce peut atteindre ICI : le ★5 de son rang, et jamais
+ *  au-dessus de son porteur (« l'objet suit son champion sans le dépasser »). Une pièce ne
+ *  recule pas pour autant : la boucle de `grantAdvGearXp` ne fait que monter. */
+function gearLevelCap(g: AdvGear, wearerLevel: number): number {
+  return Math.min(advGearLevelBand(g.rarity).max, wearerLevel);
+}
+
+/** Verse de l'XP à une pièce : montées en chaîne, excédent conservé. Pur. */
+export function grantAdvGearXp(g: AdvGear, xp: number, wearerLevel: number): AdvGear {
+  const cap = gearLevelCap(g, wearerLevel);
+  let level = g.level;
+  let pool = Math.max(0, g.xp ?? 0) + Math.max(0, Math.round(xp));
+  while (level < cap && pool >= advXpToNext(level)) {
+    pool -= advXpToNext(level);
+    level++;
+  }
+  return level === g.level && pool === (g.xp ?? 0) ? g : { ...g, level, xp: pool };
+}
+
+/** L'XP TOTALE accumulée par un aventurier (niveaux gagnés + réserve). ⚠️ C'est ce qui rend
+ *  l'entraînement des objets indépendant de la SOURCE : on compare le vivier avant/après,
+ *  et tout gain (convoi, groupe, siège) passe par le même chemin sans qu'aucun site n'ait
+ *  à s'en souvenir. Une ascension, une promotion ou un soin ne changent pas ce total. */
+function advTotalXp(a: Adventurer): number {
+  let t = Math.max(0, a.xp);
+  for (let l = 1; l < a.level; l++) t += advXpToNext(l);
+  return t;
+}
+
+/**
+ * 🗡️ LES OBJETS PORTÉS APPRENNENT AVEC LEUR CHAMPION (décision 3 : « gagné en combattant »).
+ * Chaque pièce RÉELLEMENT portée (`wornGear`, la règle du combat) reçoit 100 % de ce que son
+ * porteur a gagné entre `before` et `after`. Rend le MÊME tableau si rien n'a bougé — le
+ * store n'écrit alors pas `adv_gear`.
+ */
+export function trainWornGear(
+  before: Adventurer[],
+  after: Adventurer[],
+  stock: AdvGear[],
+): AdvGear[] {
+  const prev = new Map(before.map((a) => [a.id, a]));
+  const worn = wornGear(after, stock);
+  const next = new Map<string, AdvGear>();
+  for (const a of after) {
+    const p = prev.get(a.id);
+    if (!p) continue;
+    const gain = advTotalXp(a) - advTotalXp(p);
+    if (gain <= 0) continue;
+    for (const g of worn.get(a.id) ?? []) {
+      const up = grantAdvGearXp(g, gain, a.level);
+      if (up !== g) next.set(g.id, up);
+    }
+  }
+  return next.size ? stock.map((g) => next.get(g.id) ?? g) : stock;
+}
+
+/** Le rang le plus haut qu'une pièce peut OUVRIR : celui de son porteur si elle est portée,
+ *  sinon celui du champion le plus avancé de sa lignée (spec § 2). `null` = personne. */
+export function advGearRankCap(g: AdvGear, advs: Adventurer[], stock: AdvGear[]): Rarity | null {
+  for (const [id, list] of wornGear(advs, stock))
+    if (list.some((x) => x.id === g.id)) {
+      const w = advs.find((a) => a.id === id);
+      return w ? advRarity(w) : null;
+    }
+  return bestClassRarity(advs, g.lineage);
+}
+
+/** Le rang que la prochaine ascension ouvrirait (index), ou `null` au sommet. */
+export function advGearNextRank(g: AdvGear): number | null {
+  const i = RANK_ORDER.indexOf(g.rarity);
+  return i < 0 || i >= RANK_ORDER.length - 1 ? null : i + 1;
+}
+
+/** Applique l'ascension : rang suivant, ★1 de ce rang, stats reconstruites par le MODÈLE,
+ *  éveil et verrou gardés, XP en attente reversée. ⚠️ Ne vérifie rien (coût, plafond) :
+ *  c'est `advGearAscensionBlocker` qui décide. Pur. */
+export function ascendAdvGear(g: AdvGear, wearerLevel: number): AdvGear {
+  const next = advGearNextRank(g);
+  if (next == null) return g;
+  const rank = RANK_ORDER[next]!;
+  const fresh = makeAdvGear({ lineage: g.lineage, slot: g.slot, rank, grade: g.grade });
+  const up: AdvGear = {
+    ...g,
+    ...fresh,
+    id: g.id,
+    xp: g.xp ?? 0,
+  };
+  return grantAdvGearXp(up, 0, wearerLevel);
 }
 
 /** Relecture défensive du jsonb `adv_gear` au chargement : une entrée de stock sans `id`,

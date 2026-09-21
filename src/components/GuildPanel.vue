@@ -245,7 +245,9 @@
                   <span class="d-pair-main">
                     <span class="d-pair-name">
                       <b :style="{ color: advGearBadge(g).color }">{{ g.name }}</b>
-                      <span class="d-train">niv {{ g.level }}</span>
+                      <!-- ⭐ Les ÉTOILES de son rang, comme un champion (v0.1015) : elles montent en
+                           combattant avec son porteur. Le niveau reste caché. -->
+                      <span class="d-train">{{ rankStarStr(characterRank(g.level).star) }}</span>
                     </span>
                     <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
                          étoiles du héros (demandé). -->
@@ -280,6 +282,19 @@
                      l'infobulle. Le prix de vente y passe aussi — et la confirmation le
                      redit avant de valider, donc rien ne se vend sans l'avoir vu. -->
                 <div class="gear-actions-row">
+                  <!-- ⬆️ Ascension : proposée seulement quand la pièce BUTE sur son ★5 ; la
+                       raison d'un refus est dans le titre, et redite avant de payer. -->
+                  <button
+                    v-if="gearAscent(g)"
+                    type="button"
+                    class="gear-btn ascend"
+                    :disabled="busy || !!gearAscent(g)!.block"
+                    :title="gearAscent(g)!.title"
+                    :aria-label="gearAscent(g)!.title"
+                    @click="doAscendGear(g)"
+                  >
+                    ⬆️
+                  </button>
                   <button
                     type="button"
                     class="gear-btn equip"
@@ -621,8 +636,11 @@ import {
   ADV_SIGNATURE_LABEL,
   type Adventurer,
 } from '@/lib/adventurers';
-import { CHARACTER_RANKS, rankStarStr } from '@/lib/characterRank';
+import { CHARACTER_RANKS, characterRank, rankStarStr } from '@/lib/characterRank';
 import {
+  advGearAscensionBlocker,
+  advGearAscensionCost,
+  GEAR_ASCENSION_BLOCK_LABEL,
   ASCENSION_BLOCK_LABEL,
   ascensionBlocker,
   ascensionCost,
@@ -660,6 +678,9 @@ import {
   pendingAdvGear,
   lineageOf,
   wornGear,
+  advGearLevelBand,
+  advGearNextRank,
+  advGearRankCap,
   type AdvGear,
   type AdvGearCell,
   type AdvGearSlot,
@@ -1087,6 +1108,44 @@ function ascentOf(a: Adventurer) {
       gold: char.row?.gold ?? 0,
     }),
   };
+}
+/** ⬆️ L'ascension d'une PIÈCE — même patron que celle d'un champion. `null` tant qu'elle
+ *  n'est pas à ★5 : un bouton qui promettrait une échéance lointaine encombrerait la tuile. */
+function gearAscent(g: AdvGear) {
+  const next = advGearNextRank(g);
+  if (next == null || g.level < advGearLevelBand(g.rarity).max) return null;
+  const cost = advGearAscensionCost(next);
+  const seals = char.row?.seals ?? emptySeals();
+  const block = advGearAscensionBlocker(g, {
+    rankCap: advGearRankCap(g, char.advList, char.advGearStock),
+    seals,
+    gold: char.row?.gold ?? 0,
+  });
+  const rank = CHARACTER_RANKS[next]!;
+  const price = `🔱 ${sealCount(seals, 'gear', next)}/${cost.seals} · 🪙 ${cost.gold.toLocaleString('fr-FR')}`;
+  return {
+    rank,
+    cost,
+    block,
+    title: block
+      ? `Ascension vers ${rank.name} — ${GEAR_ASCENSION_BLOCK_LABEL[block]} (${price})`
+      : `Ascension vers ${rank.name} (${price})`,
+  };
+}
+function doAscendGear(g: AdvGear) {
+  const s = gearAscent(g);
+  if (!s || s.block) return;
+  $q.dialog({
+    title: `⬆️ ${g.name} → ${s.rank.emoji} ${s.rank.name}`,
+    message: `Coût : ${s.cost.seals} sceau(x) d’objet ${s.rank.name} et ${s.cost.gold.toLocaleString('fr-FR')} 🪙. Son éveil est conservé.`,
+    cancel: true,
+  }).onOk(() => {
+    void pair(async (uid) => {
+      const err = await char.ascendGear(uid, g.id);
+      if (err) throw new Error(err);
+      $q.notify({ type: 'positive', message: `⬆️ ${g.name} passe au rang ${s.rank.name}.` });
+    });
+  });
 }
 function doAscend(a: Adventurer) {
   void pair(async (uid) => {
@@ -1958,6 +2017,10 @@ function leftOf(at: number): string {
   background: var(--line);
   color: var(--text);
   font-size: 12px;
+}
+.gear-btn.ascend:not(:disabled) {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .gear-btn.equip {
   flex: 1.4;

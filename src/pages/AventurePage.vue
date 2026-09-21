@@ -5037,6 +5037,7 @@ async function fightBoss(b: MilestoneBoss) {
       // Dressage d'ATTAQUE : le familier se bat aussi contre les boss.
       famAtkXp: (4 + b.unlockLevel) * (win ? 2 : 1),
       playerLevel: c.value.level.level,
+      bossLevel: b.unlockLevel,
     });
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {

@@ -170,6 +170,11 @@ import {
   advGearModelOf,
   lineageOf,
   normalizeAdvGearState,
+  advGearNextRank,
+  advGearRankCap,
+  ascendAdvGear,
+  trainWornGear,
+  wornGear,
   type AdvGear,
   type AdvGearSlot,
   type AdvGearState,
@@ -203,6 +208,10 @@ import {
 import type { PullGrade } from '@/data/champions';
 import {
   addSeals,
+  advGearAscensionBlocker,
+  advGearAscensionCost,
+  bossGearSeals,
+  GEAR_ASCENSION_BLOCK_LABEL,
   ascensionBlocker,
   ascensionCost,
   ASCENSION_BLOCK_LABEL,
@@ -809,6 +818,8 @@ export const useCharacterStore = defineStore('character', () => {
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
       famAtkXp?: number; // dressage d'attaque du familier équipé
       playerLevel?: number;
+      /** 🗡️ Niveau du boss : fixe le RANG des sceaux d'objet gagnés (`bossGearSeals`). */
+      bossLevel?: number;
     },
   ) {
     const cur = row.value;
@@ -838,6 +849,13 @@ export const useCharacterStore = defineStore('character', () => {
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, drops),
       keys: cur.keys + keyGain,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
+      // 🗡️ SCEAUX D'OBJET (v0.1015) : la SEULE source des ascensions d'équipement.
+      ...(input.defeated && input.bossLevel != null
+        ? (() => {
+            const s = bossGearSeals(input.bossLevel, input.playerLevel ?? 1, firstDefeat);
+            return { seals: addSeals(cur.seals, s.kind, s.rank, s.n) };
+          })()
+        : {}),
     });
   }
 
@@ -1905,6 +1923,7 @@ export const useCharacterStore = defineStore('character', () => {
       wages = claim.wages;
       partyPatch = {
         adventurers: claim.adventurers,
+        ...gearTrainedPatch(cur, advList.value, claim.adventurers),
       };
     }
     // ⚠️ ENTIERS À L'ENCAISSEMENT : ces colonnes sont `integer`, une valeur décimale fait
@@ -2121,6 +2140,7 @@ export const useCharacterStore = defineStore('character', () => {
           ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, hurtUntil) }
           : next;
       });
+      Object.assign(patch, gearTrainedPatch(cur, advList.value, patch.adventurers as Adventurer[]));
     }
     if (drops.length) {
       patch.inventory = [...cur.inventory, ...drops];
@@ -2195,6 +2215,43 @@ export const useCharacterStore = defineStore('character', () => {
    *  l'XP mise de côté à ★5 est reversée (`ascendAdventurer`). ⚠️ Le refus vit ICI, avec la
    *  MÊME règle que le bouton (`ascensionBlocker`) : l'écran ne propose pas l'impossible, il
    *  ne le garantit pas. Rend `null` si c'est fait, sinon la raison du refus. */
+  /** 🗡️ Les pièces portées apprennent avec leur champion (`trainWornGear`, lib) : le patch
+   *  `adv_gear` à joindre à TOUTE écriture qui change le vivier par de l'XP. Vide si rien
+   *  n'a bougé — on n'écrit pas `adv_gear` à vide. */
+  function gearTrainedPatch(cur: CharacterRow, before: Adventurer[], after: Adventurer[]) {
+    const stock = cur.adv_gear?.stock ?? [];
+    const next = trainWornGear(before, after, stock);
+    return next === stock ? {} : { adv_gear: { ...(cur.adv_gear ?? {}), stock: next } };
+  }
+
+  /** ⬆️ ASCENSION D'UNE PIÈCE : rang suivant contre de l'or et des sceaux d'objet de ce rang.
+   *  Même règle que le bouton (`advGearAscensionBlocker`). `null` si c'est fait. */
+  async function ascendGear(userId: string, gearId: string): Promise<string | null> {
+    const cur = row.value;
+    if (!cur) return 'Personnage introuvable.';
+    const advs = cur.adventurers ?? [];
+    const stock = cur.adv_gear?.stock ?? [];
+    const g = stock.find((x) => x.id === gearId);
+    if (!g) return 'Pièce introuvable.';
+    const block = advGearAscensionBlocker(g, {
+      rankCap: advGearRankCap(g, advs, stock),
+      seals: cur.seals,
+      gold: cur.gold,
+    });
+    if (block) return GEAR_ASCENSION_BLOCK_LABEL[block];
+    const next = advGearNextRank(g)!;
+    const cost = advGearAscensionCost(next);
+    const wearer = [...wornGear(advs, stock)].find(([, l]) => l.some((x) => x.id === gearId));
+    const wl = wearer ? (advs.find((a) => a.id === wearer[0])?.level ?? 1) : 1;
+    const up = ascendAdvGear(g, wl);
+    await persist(userId, {
+      gold: cur.gold - cost.gold,
+      seals: addSeals(cur.seals, 'gear', next, -cost.seals),
+      adv_gear: { ...(cur.adv_gear ?? {}), stock: stock.map((x) => (x.id === gearId ? up : x)) },
+    });
+    return null;
+  }
+
   async function ascendChampion(userId: string, advId: string): Promise<string | null> {
     const cur = row.value;
     if (!cur) return 'Personnage introuvable.';
@@ -2541,6 +2598,7 @@ export const useCharacterStore = defineStore('character', () => {
       summon_stones: cur.summon_stones + ent(o.summonStones),
       keys: cur.keys + ent(o.keys),
       adventurers: advs,
+      ...gearTrainedPatch(cur, before, advs),
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
@@ -2699,6 +2757,7 @@ export const useCharacterStore = defineStore('character', () => {
     finishRepair,
     setAdvGear,
     ascendChampion,
+    ascendGear,
     sellAdvGear,
     toggleAdvGearLock,
     withAdvGear,

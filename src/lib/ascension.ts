@@ -12,7 +12,9 @@
  * CHAMPIONS (ici) et ceux des OBJETS (étape C). Distincts par décision de l'utilisateur.
  */
 import { buildingUpgradeCost } from './buildings';
-import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
+import { CHARACTER_RANKS, characterRank, rankStartLevel } from './characterRank';
+import { advGearLevelBand, advGearNextRank, type AdvGear } from './advGear';
+import { RARITY_RANK, type Rarity } from './items';
 import { advAscensionCap, advNextAscension, type Adventurer } from './adventurers';
 import type { SealDrop } from './expedition';
 
@@ -103,4 +105,58 @@ export function ascensionBlocker(
   if (sealCount(ctx.seals, 'champion', next) < cost.seals) return 'seals';
   if (ctx.gold < cost.gold) return 'gold';
   return null;
+}
+
+// ── 🗡️ ASCENSION DES OBJETS (v0.1015, étape C) ───────────────────────────────────────────
+
+/** Ce que coûte l'ascension d'une PIÈCE vers ce rang. ⚠️ DÉRIVÉ de celui d'un champion :
+ *  un champion porte QUATRE pièces, donc l'or d'une pièce en vaut le quart (équiper tout un
+ *  champion coûte l'ascension du champion lui-même), et les sceaux la moitié arrondie au-dessus
+ *  (spec § 2 : « N plus bas que pour un champion »). */
+export function advGearAscensionCost(targetRank: number): { gold: number; seals: number } {
+  const c = ascensionCost(targetRank);
+  return { gold: Math.round(c.gold / 4), seals: Math.ceil(c.seals / 2) };
+}
+
+export type GearAscensionBlock = 'top' | 'notReady' | 'wearer' | 'seals' | 'gold';
+
+export const GEAR_ASCENSION_BLOCK_LABEL: Record<GearAscensionBlock, string> = {
+  top: 'Elle est au sommet : plus aucun rang à ouvrir.',
+  notReady: 'Elle doit d’abord atteindre ★★★★★ dans son rang, en combattant.',
+  wearer: 'Aucun champion de sa lignée ne peut porter le rang suivant — fais monter le champion.',
+  seals: 'Il manque des sceaux d’objet de ce rang — bats des boss de palier.',
+  gold: 'Il manque de l’or.',
+};
+
+/** Pourquoi l'ascension d'une pièce est REFUSÉE, ou `null`. ⚠️ SOURCE UNIQUE écran + store.
+ *  `rankCap` = `advGearRankCap` (le rang que son porteur, ou sa lignée, sait porter). */
+export function advGearAscensionBlocker(
+  g: AdvGear,
+  ctx: { rankCap: Rarity | null; seals: Seals; gold: number },
+): GearAscensionBlock | null {
+  const next = advGearNextRank(g);
+  if (next == null) return 'top';
+  if (g.level < advGearLevelBand(g.rarity).max) return 'notReady';
+  // ⚠️ Ouvrir un rang que personne ne peut porter rendrait la pièce INUTILISABLE : elle
+  // tomberait de son porteur (`canWearAdvGear`), et les sceaux seraient dépensés pour rien.
+  if (!ctx.rankCap || RARITY_RANK[ctx.rankCap] < next) return 'wearer';
+  const cost = advGearAscensionCost(next);
+  if (sealCount(ctx.seals, 'gear', next) < cost.seals) return 'seals';
+  if (ctx.gold < cost.gold) return 'gold';
+  return null;
+}
+
+/** 🗡️ Les sceaux d'OBJET d'une victoire sur un boss de palier (spec § 2) : 2 à la première
+ *  victoire, 1 ensuite, au rang du boss PLAFONNÉ à celui du joueur — le sport reste le
+ *  plafond, et chaque système a sa source (champions : failles, objets : boss). */
+export function bossGearSeals(
+  bossLevel: number,
+  playerLevel: number,
+  firstDefeat: boolean,
+): SealDrop {
+  const rank = Math.min(
+    characterRank(Math.max(1, bossLevel)).rankIndex,
+    characterRank(Math.max(1, playerLevel)).rankIndex,
+  );
+  return { kind: 'gear', rank, n: firstDefeat ? 2 : 1 };
 }
