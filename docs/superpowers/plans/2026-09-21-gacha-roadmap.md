@@ -9,7 +9,7 @@
 |---|---|---|
 | 1 | Ampleur | **Refonte complète** (tout le scénario B) |
 | 2 | Échelle du gacha | **Lettres S / A / B**, pas d'étoiles (déjà prises dans l'app). Champions **S et A** ; **B** = le fond du tirage (pièce d'équipement de lignée ou matériau d'Éveil), jamais un champion |
-| 3 | Armes / équipement des champions | **Aussi en S / A / B** : arme signature S, équipement de lignée en S/A/B (✅ v0.993, roster de 72 modèles illustrés). L'équipement **du héros** garde ses 8 raretés (il suit le sport, pas le gacha) |
+| 3 | Armes / équipement des champions | **Aussi en S / A / B** : arme signature S, équipement de lignée en S/A/B (✅ v0.997, roster de 72 modèles, 65 illustrés). L'équipement **du héros** garde ses 8 raretés (il suit le sport, pas le gacha) |
 | 4 | Vedette | **Rotation chaque semaine** ; compteurs **comme dans le genre** (voir plus bas) ; un champion **nouveau** n'est tirable **qu'en vedette** pendant sa semaine de sortie, puis rejoint la standard |
 | 5 | Filet contre la malchance longue | **Points d'étincelle** : 1 point par tirage (standard comme vedette), échangé contre **un S choisi** à ~200 points (seuil à mesurer). Les points **ne s'effacent jamais** et n'ont aucun autre usage. Pas d'objectif de rythme imposé |
 | 6 | Arme signature des S | **Oui** |
