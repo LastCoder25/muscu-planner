@@ -120,3 +120,88 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 - **Notification push** quand la vedette change (le lundi), avec le nom seulement.
 - **Le héros dans les failles** (arbitrage ouvert v0.979) : à régler avant P1 : c'est le moment de
   décider si le héros compte dans la limite de 3.
+
+---
+
+## Économie du mana, mesurée (2026-09-21)
+
+Sonde sur les vraies libs (carte simulée un an, 4 graines, tirages réels avec pity et Éveil).
+Joueur qui ferme 0, 1 ou 2 failles par jour et récolte les mines résiduelles par convoi.
+
+### Tirages par jour et délai pour 90 tirages
+
+Sans la conversion des doublons (ce que la refonte prévoit) :
+
+| Niveau | 0 faille/j | 1 faille/j | 2 failles/j |
+|---|---|---|---|
+| 12 | 1,1/j · 90 tirages en **82 j** | 1,7/j · **56 j** | 1,5/j · 64 j |
+| 30 | 1,2/j · 79 j | 2,0/j · **48 j** | 1,7/j · 55 j |
+| 60 | 1,3/j · 69 j | 2,7/j · **36 j** | 2,2/j · 43 j |
+| 100 | 1,6/j · 59 j | 3,7/j · **29 j** | 2,9/j · 35 j |
+
+Avec la conversion actuelle (55 💠 par doublon de trop), l'année monte à **1,6 à 6,8 tirages/j**
+et la conversion devient la **première source** du jeu (60 à 340 💠/j, plus que les failles) :
+c'est la boucle déjà relevée en v0.969, elle est confirmée.
+
+### Comparaison avec un gacha classique
+
+Ordre de grandeur public pour un joueur gratuit de Genshin / Star Rail : **~1,5 à 2 tirages par
+jour** en moyenne, soit **90 tirages en ~45-60 jours**, et un ★5 vedette garanti (180) en
+~3-4 mois. Ce revenu est **à peu près plat** : il ne monte presque pas avec le niveau du compte.
+
+- **Niveaux 12-30 : cohérent** (1,5 à 2 tirages/j, 90 tirages en 48-64 j).
+- **Niveaux 60-100 : trop rapide** (jusqu'à 3,7/j, 90 tirages en 29 j) — le mana d'une faille est
+  indexé sur son niveau (×4 du niveau 12 au 100), alors que le genre garde un revenu plat.
+- **Le tirage offert quotidien pèse lourd** : 1 tirage/j à lui seul, soit **50 à 90 %** du revenu
+  selon le profil. Dans le genre, la corvée quotidienne ne rapporte qu'**~⅓ de tirage** ; le reste
+  vient de l'endgame récurrent (Abysses) et surtout des **événements et contenus à première
+  complétion**.
+- **Fermer 2 failles par jour rapporte moins qu'une** (failles plus jeunes, donc plus pauvres) :
+  voulu (v0.936), à garder.
+
+### Sources, comparées
+
+| Genre (Genshin) | Part | Équivalent ici |
+|---|---|---|
+| Corvée quotidienne (missions du jour) | ~30 % | tirage offert à la connexion — **3× plus généreux**, et sans effort |
+| Endgame récurrent (Abysses, ~mensuel) | ~15-20 % | **failles** (quotidiennes) |
+| Événements de version | ~30-40 % | **rien** |
+| Première complétion (exploration, quêtes, succès) | gros au début, s'épuise | **rien** |
+| Boutique de poussière (doublons) | ~5 tirages/mois | conversion en mana (à remplacer par les éclats) |
+
+### Propositions pour P0
+
+1. **Revenu plat** : le mana d'une faille ne suit plus le niveau (ou très peu), pour tenir **~1,5-2
+   tirages/j** à tout niveau. Cible : 90 tirages en ~45-60 jours pour un joueur qui ferme une faille
+   par jour.
+2. **Tirage offert réduit à ~½ tirage/jour** (55 💠), ou gardé plein mais conditionné à un **jour
+   actif** de sport — la corvée du genre, version app. ⚠️ À trancher : adosser au sport rouvre la
+   règle « rien adossé aux reps » (v0.769) ; un **jour actif** n'est pas une rep, mais c'est une
+   décision.
+3. **Mana de première complétion** : premier nettoyage d'un donjon, première victoire sur un boss,
+   premier palier du Labyrinthe, succès. C'est l'« exploration » du genre : un gros départ pour le
+   nouveau joueur (aujourd'hui 1,1 tirage/j le premier mois), qui s'épuise ensuite.
+4. **Événement hebdomadaire lié à la vedette** : une faille « vedette » ou un défi de la semaine qui
+   rapporte un bonus, pour la part « événements ».
+5. **Conversion des doublons en mana supprimée** (déjà dans P3).
+
+---
+
+## Q-G — Lettres S / A / B au lieu des étoiles (demandé le 2026-09-21)
+
+Précédent direct : **Zenless Zone Zero** classe ses personnages **S / A** et ses armes **S / A / B**.
+Avantages : se lit d'un coup d'œil, et ne se confond pas avec les **étoiles** déjà utilisées pour la
+**qualité** d'un objet (★1-★5 dans son rang) et pour les **étoiles de rang** des champions.
+
+Proposition qui va avec :
+
+- **Champions : S et A seulement** (comme ZZZ). Plus de champions « de fond ».
+- **B = le fond du tirage**, mais ce n'est **pas un champion** : c'est une **pièce d'équipement de
+  lignée** ou un **matériau d'Éveil**. Ça donne le « fond » du genre sans diluer le roster, et ça
+  **règle le stock d'équipement vide** au passage.
+- **Armes signature : S** (ou A pour les champions A), sans bannière dédiée.
+- Répartition du roster : les 32 deviennent ~**16 S · 16 A** (à écrire).
+
+⚠️ Trois échelles cohabiteraient : **rang** (Bronze → Tout-puissant, la progression), **rareté
+d'objet** du héros (Commun → Primordial, le butin du sport) et **S/A/B** (le gacha). Elles
+parlent de trois domaines différents, mais il faudra que chaque écran n'en montre qu'une à la fois.
