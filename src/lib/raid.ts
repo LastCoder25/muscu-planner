@@ -22,7 +22,14 @@
 //
 // NB `Date.now()` n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures et testables, résolution déterministe hors-ligne.
-import { combatPower, combatPowerRaw, mulberry32, type Combatant } from './combat';
+import {
+  combatPower,
+  combatPowerRaw,
+  mulberry32,
+  offenseOf,
+  survivalOf,
+  type Combatant,
+} from './combat';
 import { refFighter } from './proceduralContent';
 import { rollDrop, type AggregatedEffects, type Item } from './items';
 import { escortCombatant, escortGear, unitEffects, type EscortKit } from './caravan';
@@ -477,8 +484,13 @@ export const RAID = {
    *  Mesuré, niveaux 28/50/80/100, base pleine avec héros et vivier : **90/87/93/88 %** à
    *  ×1,25, contre 89/84/88/75 à ×1 (le vivier ne tenait plus la cour en fin de partie)
    *  et 95/92/100/96 à ×2 (le plafond revenait). Appliqué au siège seul : la calibration
-   *  MESURÉE des embuscades de convoi n’est pas touchée. */
-  guardSiegeK: 0.9,
+   *  MESURÉE des embuscades de convoi n’est pas touchée.
+   *  ⚠️ 0,9 → **0,8** quand les COMPÉTENCES des champions ont enfin compté au siège
+   *  (`skillMults`) : sans recalage, le vivier de référence gagnait jusqu’à +15 points de
+   *  tenue. À 0,8 l’écart moyen vaut **+0,4 point** sur 48 configurations (niveaux 12 à
+   *  100, enceinte 50/75/100 %, héros ou non ; de −6 à +7) — les compétences DIFFÉRENCIENT
+   *  les champions, elles ne rendent pas les sièges plus faciles en moyenne. */
+  guardSiegeK: 0.8,
   /** 📈 RENFORT DE L’ARMÉE ENTRE LES NIVEAUX 6 ET 26 (v0.829, mesuré ; demandé par
    *  l’utilisateur : « durcir un peu la défense avant le niveau 16, l’apprentissage jusqu’au
    *  niveau 5 max »). Multiplie PV ET dégâts de l’armée : 1 jusqu’au niveau `learnUntil`,
@@ -2259,6 +2271,31 @@ export function rampartGuard(advs: Adventurer[], cap: number, ctx?: EscortKit): 
 }
 
 /**
+ * ⚔️ CE QUE LES COMPÉTENCES D'UN CHAMPION VALENT AU SIÈGE (multiplicateurs de dégâts et
+ * de PV à appliquer à son unité).
+ *
+ * ⚠️ LE DÉFAUT CORRIGÉ : l'unité de siège ne gardait que PV × dégâts × frappes, donc le
+ * critique, l'exécution, la rage, l'élan, les épines et le vol de vie d'un champion n'y
+ * valaient RIEN — seuls « dégâts » et « PV » passaient. Un champion Critique ou Épines
+ * défendait exactement comme s'il n'en avait aucune.
+ *
+ * ⚠️ ON NE REPLIE QUE LES COMPÉTENCES, pas tout le combattant. Replier aussi l'esquive et
+ * le critique de BASE (qui montent avec l'agilité) multipliait les PV par 3 et les dégâts
+ * par 2 au niveau 80, contre ×1,05 au niveau 12 : une refonte de toute la courbe de siège
+ * qu'aucune constante ne rattrape. La base reste celle d'avant ; on la multiplie par ce
+ * que les compétences ajoutent SELON L'ARBITRE DU JEU (`offenseOf` / `survivalOf`, ceux de
+ * `combatPower` et de la fusion des camps) — jamais une valeur recopiée.
+ */
+export function skillMults(a: Adventurer): { damage: number; pv: number } {
+  const avec = escortCombatant([a], a.name);
+  const sans = escortCombatant([a], a.name, {}, false);
+  return {
+    damage: offenseOf(avec) / Math.max(1e-9, offenseOf(sans)),
+    pv: survivalOf(avec) / Math.max(1e-9, survivalOf(sans)),
+  };
+}
+
+/**
  * Les défenseurs, en unités de bataille.
  *
  * ⚠️ **LA COUPE EST FAITE ICI**, au point de passage unique du combat, et `cap` est
@@ -2276,14 +2313,15 @@ export function guardUnits(
   const retenus = rampartGuard(advs, cap, ctx);
   const pairs = ctx ? escortGear(retenus, ctx) : new Map<string, AdvGear[]>();
   return retenus.map((a) => {
-    // ⚠️ `escortCombatant` NU, et on replie ensuite : garder la réduction sur le
-    // `Combatant` la perdrait au passage en unité (une unité n'a que PV et dégâts).
-    const one = escortCombatant([a], a.name);
+    // ⚠️ `escortCombatant` NU (sans compétences ni équipement), et on replie ensuite :
+    // une unité de siège n'a que PV et dégâts, tout le reste doit être PORTÉ par eux.
+    const one = escortCombatant([a], a.name, {}, false);
+    const k = skillMults(a);
     const st = advStats(a);
     const fx = pairEffects(pairs.get(a.id));
     const f = foldBonus(
-      one.pv * RAID.guardSiegeK,
-      one.damage * (one.strikes ?? 1) * RAID.guardSiegeK,
+      one.pv * RAID.guardSiegeK * k.pv,
+      one.damage * (one.strikes ?? 1) * RAID.guardSiegeK * k.damage,
       fx,
     );
     return {

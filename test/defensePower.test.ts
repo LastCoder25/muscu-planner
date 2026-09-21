@@ -187,8 +187,11 @@ describe('la répartition par contributeur', () => {
     // zéro. Balayé sur 6 niveaux × 5 parts : 60 % au niveau 60 donne tenue **0,46** — le
     // milieu exact de la courbe — avec mur 0,46 · tourelles 0,46 · héros 0,13 ·
     // garnison 0,46. Les quatre y pèsent.
-    const lvl = 60;
-    const defs = defAt(Math.round(lvl * 0.6));
+    // ⚠️ Puis niveau **50 à 55 %** (compétences des champions au siège, `guardSiegeK` 0,8) :
+    // au niveau 60 à 60 % la part du héros retombait à zéro. Balayé sur 6 niveaux × 5 parts :
+    // tenue **0,50** · mur 0,50 · tourelles 0,50 · héros **0,25** · garnison 0,50.
+    const lvl = 50;
+    const defs = defAt(Math.round(lvl * 0.55));
     const b = defenseBreakdown(defs, lvl, refFighter(lvl), garde(lvl), NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     expect(by.wall!.holdLoss).toBeGreaterThan(0);
@@ -429,12 +432,16 @@ describe('📐 LE REPÈRE PERMANENT : ma base face à une armée type', () => {
     // sièges (0 contre 0) et le test ne distinguait plus rien. Mesuré avec : 0,00 contre 1,00.
     const g = garde(lvl);
     const ref = referenceHold(defs, lvl, null, g, NOW);
-    // Deux armées très différentes ne changent pas le repère : il ne les regarde pas.
-    const dur = rollRaid(1, lvl, NOW, 0);
-    const autre = rollRaid(999_983, lvl, NOW, 0);
-    expect(siegeHoldChance(defs, lvl, null, g, dur, 60)).not.toBe(
-      siegeHoldChance(defs, lvl, null, g, autre, 60),
-    );
+    // Deux armées aux pronostics DIFFÉRENTS ne changent pas le repère : il ne les regarde pas.
+    // ⚠️ CHERCHÉES, plus figées : la paire écrite en dur (graines 1 et 999 983) tenait
+    // toutes les deux dès que les compétences des champions ont compté au siège — le test
+    // ne distinguait plus rien. On balaie, et on ÉCHOUE si aucune armée ne diverge.
+    const first = siegeHoldChance(defs, lvl, null, g, rollRaid(1, lvl, NOW, 0), 60);
+    let diverge = false;
+    for (let i = 1; i < 40 && !diverge; i++)
+      diverge =
+        siegeHoldChance(defs, lvl, null, g, rollRaid(i * 7919 + 1, lvl, NOW, 0), 60) !== first;
+    expect(diverge).toBe(true);
     expect(referenceHold(defs, lvl, null, g, NOW)).toBe(ref);
   });
 });

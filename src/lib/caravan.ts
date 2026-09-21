@@ -320,6 +320,10 @@ export function escortCombatant(
   /** Renfort d'effets EXTÉRIEUR aux aventuriers — l'équipement qu'ils portent. Il
    *  s'ajoute aux signatures de l'escorte au lieu de les remplacer. */
   extra: Partial<AggregatedEffects> = {},
+  /** `false` = le MÊME combattant privé de ses compétences (signatures de classe ou de
+   *  champion). Sert au siège à mesurer ce que les compétences ajoutent (`skillMults`,
+   *  `raid.ts`) — un second constructeur finirait par diverger de celui-ci. */
+  skills = true,
 ): Combatant {
   const stats = advs.reduce(
     (a, x) => {
@@ -337,7 +341,7 @@ export function escortCombatant(
     name,
     stats,
     {},
-    mergeEffects(escortEffects(advs), { ...emptyEffects(), ...extra }),
+    mergeEffects(skills ? escortEffects(advs) : emptyEffects(), { ...emptyEffects(), ...extra }),
     level,
   );
 }

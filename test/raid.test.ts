@@ -64,6 +64,7 @@ import {
   groupKind,
   siegeWallOf,
   siegeDefenders,
+  skillMults,
   siegeAttackers,
   siegeHurtIds,
   advHurtMs,
@@ -90,7 +91,8 @@ import {
   grantFamiliarXp,
   type Item,
 } from '@/lib/items';
-import { combatPower, type Combatant } from '@/lib/combat';
+import { combatPower, offenseOf, survivalOf, type Combatant } from '@/lib/combat';
+import { CHAMPIONS } from '@/data/champions';
 import { talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, engageCap, type Adventurer } from '@/lib/adventurers';
@@ -2081,15 +2083,98 @@ describe('🛡️ LE RENFORT DE SIÈGE D’UN DÉFENSEUR (v0.801, recalibré v0.
       talents: [],
       advGear: [],
     });
-    const route = escortCombatant([adv], adv.name);
+    // ⚠️ RÉÉCRIT (compétences au siège) : la base est désormais le combattant SANS ses
+    // compétences, multiplié par ce qu’elles ajoutent (`skillMults`). Ce qui reste vrai :
+    // le renfort s’applique aux DEUX canaux, sans quoi un défenseur serait plus solide
+    // mais pas plus mordant, ou l’inverse.
+    const nu = escortCombatant([adv], adv.name, {}, false);
+    const k = skillMults(adv);
     // ⚠️ On n’épingle PLUS un sens (« > 1 ») : c’est un réglage, et il a déjà traversé 1.
-    // Ce qui doit rester vrai, c’est qu’il s’applique — aux DEUX canaux, sans quoi un
-    // défenseur serait plus solide mais pas plus mordant, ou l’inverse.
     expect(RAID.guardSiegeK).not.toBe(1);
-    expect(g!.pv).toBe(Math.max(1, Math.round(route.pv * RAID.guardSiegeK)));
+    expect(g!.pv).toBe(Math.max(1, Math.round(nu.pv * RAID.guardSiegeK * k.pv)));
     expect(g!.damage).toBe(
-      Math.max(1, Math.round(route.damage * (route.strikes ?? 1) * RAID.guardSiegeK)),
+      Math.max(1, Math.round(nu.damage * (nu.strikes ?? 1) * RAID.guardSiegeK * k.damage)),
     );
+  });
+});
+
+describe('⚔️ LES COMPÉTENCES D’UN CHAMPION COMPTENT AU SIÈGE', () => {
+  const nus = { now: 0, kennelLevel: 40, familiars: [], talents: [], advGear: [] };
+  const champ = (id: string, level = 40, copies = 1): Adventurer =>
+    ({
+      id: `c-${id}`,
+      name: id,
+      seed: 1,
+      path: [],
+      level,
+      xp: 0,
+      championId: id,
+      copies,
+    }) as Adventurer;
+  /** Le même champion privé de ses compétences, par la même règle que le jeu. */
+  const sansComp = (a: Adventurer) => {
+    const c = escortCombatant([a], a.name, {}, false);
+    return {
+      pv: Math.round(c.pv * RAID.guardSiegeK),
+      damage: Math.round(c.damage * (c.strikes ?? 1) * RAID.guardSiegeK),
+    };
+  };
+  const CONDITIONNELLES = [
+    'crit_pct',
+    'execute_pct',
+    'rage_pct',
+    'momentum_pct',
+    'lifesteal_pct',
+    'thorns_pct',
+  ];
+
+  // ⚠️ LE DÉFAUT D'ORIGINE : critique, exécution, rage, élan, épines et vol de vie ne
+  // valaient RIEN au siège. Chaque champion qui en porte une doit défendre mieux avec.
+  it.each(
+    CHAMPIONS.filter((c) => c.skills.some((s) => CONDITIONNELLES.includes(s))).map((c) => c.id),
+  )('%s défend mieux avec ses compétences', (id) => {
+    const a = champ(id);
+    const [g] = guardUnits(40, [a], 99, nus);
+    const s = sansComp(a);
+    expect(g!.damage * g!.pv).toBeGreaterThan(s.damage * s.pv);
+  });
+
+  it('une compétence de SURVIE renforce les PV de l’unité, pas seulement ses dégâts', () => {
+    const tank = CHAMPIONS.filter((c) => c.skills.includes('max_pv_pct'));
+    expect(tank.length).toBeGreaterThan(0);
+    for (const c of tank) {
+      const a = champ(c.id);
+      const [g] = guardUnits(40, [a], 99, nus);
+      expect(g!.pv).toBeGreaterThan(sansComp(a).pv);
+    }
+  });
+
+  it('les multiplicateurs sont ceux de l’arbitre du jeu (offenseOf / survivalOf)', () => {
+    for (const c of CHAMPIONS) {
+      const a = champ(c.id);
+      const avec = escortCombatant([a], a.name);
+      const sans = escortCombatant([a], a.name, {}, false);
+      const k = skillMults(a);
+      expect(k.damage).toBeCloseTo(offenseOf(avec) / offenseOf(sans), 9);
+      expect(k.pv).toBeCloseTo(survivalOf(avec) / survivalOf(sans), 9);
+      expect(k.damage).toBeGreaterThanOrEqual(1);
+      expect(k.pv).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('l’Éveil d’une compétence se sent au siège', () => {
+    const c = CHAMPIONS.find((x) => x.awaken.length > 0)!;
+    const eveil = c.awaken.reduce((m, x) => Math.max(m, x.at), 0);
+    // On compare les MULTIPLICATEURS : les stats montent aussi avec l'Éveil, et c'est la
+    // compétence montée qu'on veut isoler.
+    const k0 = skillMults(champ(c.id, 40, 1));
+    const k1 = skillMults(champ(c.id, 40, 1 + eveil));
+    expect(k1.damage * k1.pv).toBeGreaterThan(k0.damage * k0.pv);
+  });
+
+  it('un aventurier SANS compétence n’a aucun multiplicateur', () => {
+    const recrue = { id: 'r', name: 'r', seed: 1, path: [], level: 30, xp: 0 } as Adventurer;
+    expect(skillMults(recrue)).toEqual({ damage: 1, pv: 1 });
   });
 });
 

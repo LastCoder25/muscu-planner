@@ -58,8 +58,11 @@ export interface SiegeUnit {
   emoji: string;
   pv: number;
   maxPv: number;
-  /** Dégâts par tour, crit déjà fondu dedans (on ne rejoue pas les dés du crit ici : la
-   *  bataille compte déjà assez d'aléa par le ciblage et l'ordre d'entrée). */
+  /** Dégâts par tour. On ne rejoue ici ni les dés du crit ni les effets conditionnels :
+   *  ce qui doit compter est REPLIÉ dans ce nombre par le constructeur de l'unité.
+   *  ⚠️ Ce n'est vrai que là où il le fait : un CHAMPION porte ses compétences (critique,
+   *  exécution, élan… via `skillMults`, `raid.ts`) mais PAS son critique de BASE ; le
+   *  HÉROS n'y porte ni l'un ni l'autre (`damage × frappes × heroDmgShare`). */
   damage: number;
   origin: UnitOrigin;
   /** Assaillant ayant FRANCHI la brèche. Change ce qu'il peut atteindre, et ce qui peut
