@@ -232,19 +232,37 @@ describe('🎰 tirer un CHAMPION', () => {
     return out;
   }
 
-  it('⚠️ UN B N’EST PAS UN CHAMPION — le fond du tirage est une pièce', () => {
-    const out = tirages(300);
+  it('⚠️ UN B EST TOUJOURS UNE PIÈCE ; un S ou un A est un champion OU une pièce de sa lettre', () => {
+    const out = tirages(40000, 3);
+    const haut = { champ: 0, piece: 0 };
     for (const r of out) {
       if (r.grade === 'B') expect(r.champion).toBeNull();
-      else expect(r.champion!.grade).toBe(r.grade);
+      else if (r.champion) {
+        expect(r.champion.grade).toBe(r.grade);
+        haut.champ++;
+      } else haut.piece++;
     }
     expect(out.some((r) => r.grade === 'B')).toBe(true);
+    // Les deux sortent, dans la proportion annoncée par la notice (`championShare`).
+    const part = haut.champ / (haut.champ + haut.piece);
+    expect(part).toBeGreaterThan(GACHA.championShare - 0.05);
+    expect(part).toBeLessThan(GACHA.championShare + 0.05);
+  });
+
+  it('⚠️ le pity reste porté par la LETTRE : un S qui sort en pièce remet quand même le compteur à zéro', () => {
+    // Sinon un S garanti pourrait « rater » en pièce et le garanti suivant arriverait plus
+    // tôt que 90 — la notice mentirait sur le compteur.
+    for (let s = 1; s <= 400; s++) {
+      const r = pullChampion(mulberry32(s), { sinceTop: GACHA.hardPity - 1, sinceFloor: 0 });
+      expect(r.grade).toBe('S');
+      expect(r.pity.sinceTop).toBe(0);
+    }
   });
 
   it('⚠️ UNIFORME DANS LA LETTRE — c’est ce qui fixe la vitesse de l’Éveil', () => {
     const cpt = new Map<string, number>();
     for (const r of tirages(40000, 11))
-      if (r.grade === 'A') cpt.set(r.champion!.id, (cpt.get(r.champion!.id) ?? 0) + 1);
+      if (r.grade === 'A' && r.champion) cpt.set(r.champion.id, (cpt.get(r.champion.id) ?? 0) + 1);
     const vals = championsOf('A').map((c) => cpt.get(c.id) ?? 0);
     const moy = vals.reduce((a, b) => a + b, 0) / vals.length;
     for (const v of vals) expect(Math.abs(v - moy) / moy).toBeLessThan(0.3);

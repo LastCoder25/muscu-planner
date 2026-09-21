@@ -95,6 +95,20 @@ export const GACHA = {
    *  une série de 30 B d'affilée est banale, et c'est ce qui fait décrocher un joueur qui
    *  n'a pas d'argent réel pour compenser. */
   minorPity: 10,
+
+  /**
+   * 🎰 PART DES S ET DES A QUI SONT DES CHAMPIONS — le reste est une PIÈCE de la même lettre
+   * (v0.1012, décision de l'utilisateur : « deux tables dans le même tirage »).
+   *
+   * ⚠️ C'est le modèle de la bannière standard du genre : une lettre haute peut sortir en
+   * personnage OU en arme. Le pity reste porté par la LETTRE — un S garanti peut donc être
+   * une pièce S. Les B restent toujours des pièces.
+   *
+   * ⚠️ **CE RÉGLAGE DIVISE LE RYTHME DES CHAMPIONS** : à 0,5, un champion S tombe deux fois
+   * moins souvent qu'avant. C'est le prix, assumé, de rendre les pièces A et S obtenables
+   * (les drops, qui étaient leur seule source, sont retirés depuis la v0.1010).
+   */
+  championShare: 0.5,
 } as const;
 
 /**
@@ -243,23 +257,25 @@ export function pullsPerDay(manaPerDay: number): number {
  *  peut les distinguer — la mutation SURVIVAIT. Le test passe un autre prix. */
 export const multiPullCost = (unit: number = GACHA.pullCost): number => unit * GACHA.multiPaid;
 
-/** Un tirage : sa lettre, et le champion s'il y en a un (jamais pour un B). */
+/** Un tirage : sa lettre, et le champion s'il y en a un. */
 export interface PullResult {
   grade: PullGrade;
-  /** `null` pour un B : le fond du tirage n'est pas un champion (une pièce d'équipement,
-   *  tirée par le store qui connaît le vivier). */
+  /** `null` = une PIÈCE d'équipement DE CETTE LETTRE (tirée par le store, qui connaît le
+   *  vivier). Toujours pour un B ; la moitié du temps pour un S ou un A (`championShare`). */
   champion: Champion | null;
 }
 
 /**
- * 🎰 UN TIRAGE COMPLET : une lettre, puis un champion DANS cette lettre.
+ * 🎰 UN TIRAGE COMPLET : une lettre, puis champion OU pièce, puis le champion DANS la lettre.
  *
  * ⚠️ **UNIFORME DANS LA LETTRE**, et c'est ce qui fait la vitesse de l'Éveil : un champion
- * PRÉCIS tombe à 1/N du taux de sa lettre.
+ * PRÉCIS tombe à 1/N du taux « champion » de sa lettre.
  */
 export function pullChampion(rng: () => number, pity: PityState): PullResult & { pity: PityState } {
   const r = pullGrade(rng, pity);
   if (r.grade === 'B') return { grade: 'B', champion: null, pity: r.pity };
+  // ⚠️ Tiré APRÈS la lettre : le pity ne dépend que de la lettre, jamais de ce qu'elle donne.
+  if (rng() >= GACHA.championShare) return { grade: r.grade, champion: null, pity: r.pity };
   const pool = championsOf(r.grade);
   // ⚠️ INATTEIGNABLE tant que le roster a des S et des A (`champions.test.ts`) : une ceinture
   // pour le jour où quelqu'un vide une lettre, pas une règle de jeu.

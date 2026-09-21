@@ -198,6 +198,7 @@ import {
   GACHA_VERSION,
   pullMany,
 } from '@/lib/gacha';
+import type { PullGrade } from '@/data/champions';
 import { levelUpTickets, pullPayment } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
 import { useGameFx } from '@/composables/useGameFx';
@@ -1072,7 +1073,7 @@ export const useCharacterStore = defineStore('character', () => {
         manaBack += g.manaBack;
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
-        const piece = gachaPiece(advs, playerLevel);
+        const piece = gachaPiece(advs, playerLevel, r.grade);
         pieces.push(piece);
         results.push({
           grade: r.grade,
@@ -1094,10 +1095,15 @@ export const useCharacterStore = defineStore('character', () => {
     return results;
   }
 
-  /** La pièce d'un B — la lettre du tirage EST celle de la pièce (`rollGachaPiece`, la
-   *  seule source d'équipement de champion). */
-  function gachaPiece(advs: Adventurer[], playerLevel: number): Omit<AdvGear, 'id'> {
-    return rollGachaPiece(Math.random, advs, { playerLevel, grade: 'B' });
+  /** La pièce d'un tirage — la lettre du tirage EST celle de la pièce (B toujours, S et A
+   *  quand la lettre sort en pièce : `GACHA.championShare`). `rollGachaPiece` est la seule
+   *  source d'équipement de champion. */
+  function gachaPiece(
+    advs: Adventurer[],
+    playerLevel: number,
+    grade: PullGrade,
+  ): Omit<AdvGear, 'id'> {
+    return rollGachaPiece(Math.random, advs, { playerLevel, grade });
   }
 
   /** Un tirage à l'unité. */

@@ -107,9 +107,9 @@ export const cellOfChampion = (c: Champion): RevealCell => ({
  */
 export interface LotItem {
   grade: PullGrade;
-  /** `null` pour un B. */
+  /** `null` = une pièce (toujours pour un B, parfois pour un S ou un A). */
   champion: Champion | null;
-  /** La pièce d'un B (son nom et son visage), `null` pour un champion. */
+  /** La pièce tirée (son nom et son visage), `null` pour un champion. */
   gear: { name: string; emoji: string; model?: string | null } | null;
   duplicate: boolean;
   copies: number;
