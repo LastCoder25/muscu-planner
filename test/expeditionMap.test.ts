@@ -327,42 +327,72 @@ describe('rythme de la carte', () => {
     expect(map.riftCount).toBe(EXPE.riftFloor);
   });
 
-  it('⚠️ LE NIVEAU SE LIT SUR LA CARTE : près = faible, loin = fort', () => {
-    // La règle qui donne son sens au choix d'un POI. Avant, le niveau était tiré
-    // indépendamment : un repaire +10 pouvait se poser à deux pas de la ville, et la
-    // carte ne disait rien de ce qu'elle proposait.
-    //
-    // ⚠️ ON MESURE LE QUOTA GÉNÉRAL, PAS LES FAILLES — et c’est un coût assumé de la
-    // v0.929. Le niveau d’une faille est tiré par RANG (`riftLevelFor`), donc décorrélé de
-    // son éloignement : mesuré, 6 failles sur 22 POI font tomber la corrélation de 0,95 à
-    // **0,31**. La carte parle donc deux langages, et c’est le prix de la variété de rangs
-    // que la décision « entre Bronze et ton rang » demande (une fenêtre [niveau, +10]
-    // indexée sur la distance ne couvre qu’un rang et demi). ⚠️ CE QUI LE REND TENABLE :
-    // une faille a son propre glyphe ET sa fiche annonce son rang et ses étoiles (v0.928)
-    // — sa difficulté se LIT, elle ne se devine pas sur la distance. Si les failles
-    // devaient un jour rejoindre le dégradé, c’est ce test qu’il faudrait élargir.
-    let map = createMap(4242, 0, 26);
-    for (let t = 0; t <= 3 * 24 * HOUR; t += 2 * HOUR) map = advanceWorld(map, t, 26);
-    const pts = map.pois.filter(isQuotaPoi).map((p) => ({ d: p.distNorm, l: p.level }));
-    expect(pts.length).toBeGreaterThan(10);
-    // Corrélation de Pearson distance ↔ niveau : forte et positive.
-    const md = pts.reduce((a, x) => a + x.d, 0) / pts.length;
-    const ml = pts.reduce((a, x) => a + x.l, 0) / pts.length;
-    const cov = pts.reduce((a, x) => a + (x.d - md) * (x.l - ml), 0);
-    const sd = Math.sqrt(pts.reduce((a, x) => a + (x.d - md) ** 2, 0));
-    const sl = Math.sqrt(pts.reduce((a, x) => a + (x.l - ml) ** 2, 0));
-    const r = cov / (sd * sl || 1);
-    expect(r, `corrélation distance/niveau = ${r.toFixed(2)}`).toBeGreaterThan(0.9);
-    // Concrètement : le tiers le plus proche est strictement plus faible que le plus loin.
-    const tri = [...pts].sort((a, b) => a.d - b.d);
-    const n = Math.floor(tri.length / 3);
-    const proche = tri.slice(0, n).reduce((a, x) => a + x.l, 0) / n;
-    const loin = tri.slice(-n).reduce((a, x) => a + x.l, 0) / n;
-    expect(loin, `proches ${proche.toFixed(1)} vs lointains ${loin.toFixed(1)}`).toBeGreaterThan(
-      proche + 3,
+  it('🎲 LE NIVEAU NE DÉPEND PLUS DE LA DISTANCE — mais le TRAJET, oui (v0.1013)', () => {
+    // Demandé par l'utilisateur : « distance aléatoire sans rapport entre la distance et la
+    // difficulté ». Il découlait de la distance depuis la v0.683 (corrélation mesurée 0,95).
+    // ⚠️ On l'éprouve sur BEAUCOUP de POI (plusieurs graines × 14 jours) : sur une seule
+    // carte de 16 lieux, une corrélation aléatoire peut valoir ±0,5 par pur hasard.
+    const pts: { d: number; l: number; t: number }[] = [];
+    for (const seed of [4242, 7, 91, 1234]) {
+      let map = createMap(seed, 0, 26);
+      const seen = new Map<string, Poi>();
+      for (let t = 0; t <= 14 * 24 * HOUR; t += 2 * HOUR) {
+        map = advanceWorld(map, t, 26);
+        for (const p of map.pois.filter(isQuotaPoi)) seen.set(p.id, p);
+      }
+      for (const p of seen.values())
+        pts.push({ d: p.distNorm, l: p.level, t: p.travelLevel ?? p.level });
+    }
+    expect(pts.length).toBeGreaterThan(200);
+    const pearson = (xs: number[], ys: number[]) => {
+      const mx = xs.reduce((a, x) => a + x, 0) / xs.length;
+      const my = ys.reduce((a, y) => a + y, 0) / ys.length;
+      let c = 0,
+        sx = 0,
+        sy = 0;
+      for (let i = 0; i < xs.length; i++) {
+        c += (xs[i]! - mx) * (ys[i]! - my);
+        sx += (xs[i]! - mx) ** 2;
+        sy += (ys[i]! - my) ** 2;
+      }
+      return c / (Math.sqrt(sx * sy) || 1);
+    };
+    const d = pts.map((p) => p.d);
+    const rNiveau = pearson(
+      d,
+      pts.map((p) => p.l),
     );
+    expect(Math.abs(rNiveau), `corrélation distance/niveau = ${rNiveau.toFixed(2)}`).toBeLessThan(
+      0.15,
+    );
+    // ⚠️ …et le TRAJET, lui, reste lisible : il se calcule sur le niveau que la distance
+    // justifie. Sans ça un lieu fort posé près de la ville prendrait autant de temps qu'un
+    // lieu lointain, et la carte ne dirait plus rien de la durée d'un voyage.
+    const rTrajet = pearson(
+      d,
+      pts.map((p) => p.t),
+    );
+    expect(
+      rTrajet,
+      `corrélation distance/niveau de trajet = ${rTrajet.toFixed(2)}`,
+    ).toBeGreaterThan(0.95);
+    // ⚠️ UNIFORME sur toute la fenêtre : la moyenne reste au milieu (l'économie, calibrée sur
+    // l'ancien dégradé qui couvrait déjà la fenêtre uniformément, ne bouge pas), et les deux
+    // bouts sont atteints — un repaire +10 près de la ville est désormais possible.
+    const w = spawnWindow(26);
+    const moy = pts.reduce((a, p) => a + p.l, 0) / pts.length;
+    expect(moy).toBeGreaterThan(w.min + 3.5);
+    expect(moy).toBeLessThan(w.min + 6.5);
+    const proches = pts.filter((p) => p.d < 0.25);
+    expect(
+      proches.some((p) => p.l >= w.max - 1),
+      'un lieu fort près de la ville',
+    ).toBe(true);
+    expect(
+      pts.some((p) => p.d > 0.75 && p.l <= w.min + 1),
+      'un lieu faible au bout',
+    ).toBe(true);
   });
-
   it('⚠️ l’ESPACEMENT suit la DENSITÉ : les POI ne s’empilent jamais', () => {
     // Couplage facile à casser en silence : monter `poiCap` sans toucher `minDistPoi`
     // sature la couronne, le placement échoue ses 6 essais et pose les POI les uns sur
@@ -911,9 +941,10 @@ describe('🕳️ le RANG d’une faille', () => {
     }
   });
 
-  it('⚠️ …mais un POI ORDINAIRE trop fort pour sa distance l’est toujours', () => {
-    // L'exemption ne vaut que pour la faille et sa mine : sinon le dégradé « près = faible,
-    // loin = fort » (v0.683) cesserait de tenir pour tout le reste de la carte.
+  it('⚠️ un POI ORDINAIRE fort posé près de la ville n’est PLUS élagué (v0.1013)', () => {
+    // Le filtre « trop fort pour ta distance » (v0.688) existait pour faire respecter le
+    // dégradé près = faible. Le dégradé n'existe plus : le garder effacerait au tick suivant
+    // tout lieu fort tiré près de la ville — exactement la variété qu'on vient d'ouvrir.
     const base = createMap(9137, 0, 30);
     const map: ExpeditionMap = {
       ...base,
@@ -922,7 +953,7 @@ describe('🕳️ le RANG d’une faille', () => {
         {
           id: 'puits_proche',
           type: 'well',
-          level: 60,
+          level: 40,
           x: 100,
           y: 88,
           distNorm: 0.05,
@@ -931,9 +962,8 @@ describe('🕳️ le RANG d’une faille', () => {
         },
       ],
     };
-    expect(advanceWorld(map, HOUR, 30).pois.some((p) => p.id === 'puits_proche')).toBe(false);
+    expect(advanceWorld(map, HOUR, 30).pois.some((p) => p.id === 'puits_proche')).toBe(true);
   });
-
   it('⚠️ LE PLANCHER RESTE À 2 : une carte neuve se REMPLIT, elle ne pulse pas', () => {
     // À `riftFloor` = `riftCap`, une carte neuve spawnerait ses six failles au MÊME instant —
     // donc six armées au même instant sept jours plus tard, puis sept jours de silence. Un

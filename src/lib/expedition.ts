@@ -281,38 +281,13 @@ export interface RiftAmbush {
 // de la carte est mesuré (`campEconomy`, `goldSink`).
 const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine', 'warband']);
 
-/** ⚠️ CE BLOC DÉCRIT L'ÉTAT D'AVANT LA v0.980 : depuis que `riftLevelFor` tire un cran
- *  « au-dessus » du joueur, une faille PEUT être trop forte pour sa distance, et
- *  `levelFitsDistance` l'exempte explicitement (elle et sa mine). La propriété ci-dessous
- *  (« toujours vers le BAS ») ne vaut plus que pour les rangs ordinaires.
- *
- *  ⚠️ AUCUNE EXEMPTION AU DÉGRADÉ DE DISTANCE N’EST NÉCESSAIRE — et c’est MESURÉ.
- *
- *  La règle générale est « près = faible, loin = fort » (v0.683), et `levelFitsDistance`
- *  l’applique en écartant tout POI trop FORT pour son éloignement. Le niveau d’une faille,
- *  lui, est tiré par RANG (`riftLevelFor`) : il échappe donc au dégradé… mais toujours
- *  VERS LE BAS, jamais vers le haut.
- *
- *  ⚠️ **UN SET D’EXEMPTION A ÉTÉ ÉCRIT POUR ÇA, PUIS RETIRÉ : IL NE POUVAIT JAMAIS MORDRE.**
- *  `riftLevelFor` rend au plus `playerLevel`, or `spawnWindow(playerLevel).min` VAUT
- *  `playerLevel` — mesuré sur 130 niveaux × 3 000 tirages, l’écart maximal entre le niveau
- *  d’une faille et ce plancher est **0**. Une faille est donc structurellement trop FAIBLE
- *  pour sa distance, et l’élagage est **asymétrique** (trop faible = simplement ancien, cf.
- *  `levelFitsDistance`). Un garde qu’aucune valeur réelle ne peut atteindre donne la
- *  confiance sans la couverture — même défaut que le plafond de réduction (v0.753) et le
- *  plancher de population des failles (v0.923). La propriété vit donc dans un TEST, pas
- *  dans une branche inerte.
- *
- *  ⚠️ **CE QUI OBLIGERAIT À ROUVRIR LA QUESTION** : rendre `levelFitsDistance` symétrique
- *  (élaguer aussi ce qui est trop FAIBLE pour sa distance) effacerait toutes les failles de
- *  bas rang posées loin — exactement la variété qu’on cherche. Le test le fait rougir.
- *
- *  ⚠️ **ET LA QUESTION A ÉTÉ ROUVERTE : LA BANDE EN MARCHE, ELLE, A BESOIN DU GARDE.**
- *  Elle FOND sur la ville, donc son `distNorm` tombe vers 0 sans qu'elle perde une once de
- *  sa force : le filtre l'élaguerait en chemin, et l'interception disparaîtrait juste avant
- *  d'être possible. L'exemption vit DANS `levelFitsDistance` (un `if` sur son type), là où
- *  elle mord vraiment — et un test l'éprouve en la faisant marcher jusqu'aux portes.
- */
+/** 🎲 PLUS AUCUN DÉGRADÉ DE DISTANCE (v0.1013). Le niveau d'un lieu est tiré au hasard dans
+ *  la fenêtre (`placePoiOfType`), celui d'une faille par rang (`riftLevelFor`) : aucun des
+ *  deux ne découle de l'éloignement, donc le filtre `levelFitsDistance` (qui élaguait ce qui
+ *  était « trop fort pour sa distance », v0.688) est RETIRÉ — il aurait effacé au tick suivant
+ *  tout lieu fort tiré près de la ville, et avec lui les exemptions qu'il fallait lui
+ *  arracher pour la faille, sa mine et la bande en marche. Seul le TRAJET reste lié à la
+ *  distance (`travelLevel`). */
 export const isQuotaPoi = (p: Pick<Poi, 'type'>): boolean => !OUT_OF_QUOTA.has(p.type);
 export const isRiftPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'rift';
 
@@ -662,13 +637,10 @@ export const EXPE = {
   irradMax: 25,
   /** Durée d'une embuscade après le débordement (demandé : « pendant 2 jours »). */
   ambushMs: 2 * 24 * 3600_000,
-  // Bandes de distance : on en cycle 5 au lieu de 3. Le niveau suivant la distance, la
+  // Bandes de distance : on en cycle 5 au lieu de 3 (répartition proche/moyen/lointain ; depuis la v0.1013 le niveau ne suit plus la distance, seul le trajet). Avant, la
   // granularité des bandes EST la granularité de la difficulté proposée — 3 bandes ne
   // donnaient que trois marches sur toute la fenêtre de niveaux.
   distBands: 5, // bandes de distance parcourues à tour de rôle (cf. placePoi)
-  /** Écart de niveau toléré au-dessus de ce que la distance justifie, avant de considérer
-   *  un POI comme incohérent (la gigue du tirage vaut ±6 % de la fenêtre). */
-  levelFitTolerance: 3,
   /** 🕳️ Écart MAXIMAL d'une faille « au-dessus » du joueur, en part de SON niveau (v0.980).
    *  ⚠️ MESURÉ avec le groupe complet (héros borné à deux champions + 3 champions, faille
    *  mûre / jeune) : à l'écart maximal, niveau 12 (+3) ~100/100 %, 26 (+7) ~75/97 %,
@@ -1153,7 +1125,7 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
   );
 }
 
-/** Place un POI de type IMPOSÉ : espacement, niveau dérivé de la distance, durée de vie.
+/** Place un POI de type IMPOSÉ : espacement, niveau tiré au hasard (trajet dérivé de la distance), durée de vie.
  *  ⚠️ EXTRAIT de `spawnOne` sans rien réordonner — le tirage du TYPE reste en tête chez
  *  l'appelant, donc le flux aléatoire d'un spawn ordinaire est inchangé au bit près. */
 function placePoiOfType(
@@ -1189,19 +1161,23 @@ function placePoiOfType(
       pos = cand;
     }
   }
-  // ⚠️ LE NIVEAU SE LIT SUR LA CARTE : il DÉCOULE de la distance à la ville, il n'est
-  // plus tiré à part. Le plus proche est le plus faible, le plus lointain le plus fort —
-  // si bien que choisir un POI, c'est arbitrer un trajet contre une difficulté, en le
-  // VOYANT. Avant, un tirage indépendant (rng², biaisé bas) pouvait poser un repaire
-  // +10 à deux pas de la ville : la carte ne disait rien de ce qu'elle proposait.
-  // Une gigue d'un demi-cran casse l'alignement parfait sans brouiller la lecture, et
-  // le biais vers le bas de la fenêtre survit — il vient maintenant du fait que les
-  // bandes de distance proches sont aussi fréquentes que les lointaines.
+  // 🎲 LE NIVEAU EST TIRÉ AU HASARD dans la fenêtre, SANS RAPPORT avec la distance (v0.1013,
+  // demandé par l'utilisateur). Il découlait de la distance depuis la v0.683 (« près = faible,
+  // loin = fort ») : choisir un lieu revenait à lire une seule échelle. Désormais un repaire
+  // +10 peut se poser à deux pas de la ville, et un puits facile au bout de la carte — la
+  // difficulté se LIT sur la pastille de niveau, plus sur l'éloignement.
+  // ⚠️ UNIFORME, et c'est ce qui préserve l'économie : les bandes de distance étant parcourues
+  // à tour de rôle, l'ancien niveau couvrait déjà la fenêtre uniformément. La MOYENNE des
+  // niveaux (donc de l'or, des pierres, du coût) ne bouge pas, seule sa corrélation disparaît.
+  // ⚠️ Le tirage REMPLACE celui de la gigue (un seul `rng()`, comme avant) : le flux aléatoire
+  // des spawns suivants n'est pas décalé.
   const span = win.max - win.min;
-  const jitter = (rng() - 0.5) * 0.12;
-  const frac = Math.min(1, Math.max(0, pos.distNorm + jitter));
-  const distLevel = win.min + Math.round(frac * span);
-  const level = forcedLevel ?? distLevel;
+  const roll = rng();
+  const level = forcedLevel ?? win.min + Math.min(span, Math.floor(roll * (span + 1)));
+  // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement
+  // justifie (`travelLevel`, v0.1012), sinon un lieu fort près de la ville mettrait autant
+  // de temps qu'un lieu lointain — le trajet ne se lirait plus sur la carte.
+  const travelLevel = win.min + Math.round(pos.distNorm * span);
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
@@ -1213,8 +1189,7 @@ function placePoiOfType(
     // aléatoire de tous les spawns suivants, donc la carte de chaque joueur.
     ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
     level,
-    // Niveau IMPOSÉ (faille) → le trajet se calcule sur celui que la distance justifie.
-    ...(forcedLevel !== undefined ? { travelLevel: distLevel } : {}),
+    travelLevel,
     x: pos.x,
     y: pos.y,
     distNorm: pos.distNorm,
@@ -1222,33 +1197,6 @@ function placePoiOfType(
     expiresAt: now + EXPE.lifespanMs[type],
   };
   map.pois.push(poi);
-}
-
-/** Un POI garde-t-il un niveau COHÉRENT avec sa distance ? (auto-guérison, v0.688)
- *
- *  ⚠️ On ne prune que vers le HAUT, et c'est essentiel. Une carte sauvegardée avant que le
- *  niveau ne découle de la distance (v0.683) porte des POI tirés indépendamment : un
- *  repaire +10 pouvait se poser à deux pas de la ville, et il survivrait jusqu'à 26 h en
- *  contredisant la règle que la carte est censée rendre lisible. Mais un POI apparu quand
- *  le joueur était PLUS BAS a légitimement un niveau inférieur à ce que sa distance
- *  justifierait aujourd'hui — le pruner serait une régression. D'où l'asymétrie : trop
- *  FORT pour sa distance = incohérent, trop faible = simplement ancien.
- *  Même politique que `withinLand` : on corrige le CODE, la donnée se répare au chargement. */
-function levelFitsDistance(poi: Poi, playerLevel: number): boolean {
-  // ⚔️ LA BANDE EN MARCHE EST EXEMPTÉE, et ce n'est pas une commodité : ce filtre dit
-  // « ce lieu est-il trop fort pour son éloignement ? », une règle de SPAWN (le niveau y
-  // découle de la distance, v0.683). Une armée qui FOND sur la ville voit son `distNorm`
-  // tomber vers 0 sans rien perdre de sa force — elle serait donc élaguée en chemin,
-  // et l'interception disparaîtrait juste avant d'être possible.
-  if (poi.type === 'warband') return true;
-  // 🕳️ LA FAILLE ET SA MINE AUSSI (v0.980) : leur niveau est tiré par RANG, jamais par la
-  // distance, et il peut désormais DÉPASSER le joueur (`riftLevelFor`, cran « au-dessus »).
-  // Sans exemption, une faille au-dessus posée près de la ville serait élaguée au tick
-  // suivant — la mine qu'elle laisse en héritant du niveau, pareil.
-  if (poi.type === 'rift' || poi.type === 'mana_mine') return true;
-  const win = spawnWindow(playerLevel);
-  const attendu = win.min + Math.round(clamp01(poi.distNorm) * (win.max - win.min));
-  return poi.level <= attendu + EXPE.levelFitTolerance;
 }
 
 /**
@@ -1404,12 +1352,7 @@ export function advanceWorld(
     // est physiquement, on ne la fait pas disparaître sous ses pieds.
     // ⚓ Et les ÉPAVES, type retiré (v0.999) : une carte sauvegardée avant en porte encore.
     pois: withMines.filter(
-      (p) =>
-        p.id === protectedPoiId ||
-        (p.type !== 'wreck' &&
-          p.expiresAt > now &&
-          withinLand(p) &&
-          levelFitsDistance(p, playerLevel)),
+      (p) => p.id === protectedPoiId || (p.type !== 'wreck' && p.expiresAt > now && withinLand(p)),
     ),
   };
   // ⚠️ LES QUOTAS SE COMPTENT SÉPARÉMENT (`isQuotaPoi`) : une faille ou une mine qui

@@ -31,14 +31,15 @@ function collect(seed: number, level: number) {
 }
 
 describe('🕳️ le trajet d’une faille se lit sur la carte', () => {
-  it('une faille porte un niveau de trajet, et le lieu ordinaire n’en a pas besoin', () => {
+  it('tout lieu porte un niveau de trajet — depuis que le niveau ne suit plus la distance', () => {
+    // v0.1013 : le niveau d'un lieu ordinaire est tiré au hasard, donc lui AUSSI a besoin
+    // d'un niveau de trajet dérivé de sa distance (avant, seule la faille en portait un).
     const pois = collect(7, 60);
     const rifts = pois.filter(isRiftPoi);
     expect(rifts.length).toBeGreaterThan(3);
-    for (const r of rifts) expect(r.travelLevel, r.id).toBeTypeOf('number');
-    for (const p of pois.filter(isQuotaPoi)) expect(p.travelLevel, p.id).toBeUndefined();
+    for (const p of pois) expect(p.travelLevel, p.id).toBeTypeOf('number');
+    for (const p of pois.filter(isQuotaPoi)) expect(p.travelLevel, p.id).toBeGreaterThanOrEqual(60);
   });
-
   it('sans niveau de trajet, on retombe sur le niveau du lieu (cartes d’avant)', () => {
     expect(poiTravelLevel({ level: 12 })).toBe(12);
     expect(poiTravelLevel({ level: 12, travelLevel: 30 })).toBe(30);
