@@ -1272,29 +1272,18 @@
             >
           </div>
           <div v-else class="rb-next">⭐ Dernière région — tu touches au bout du monde.</div>
+          <!-- Le repère du pli vit DANS le bandeau de la région courante (demande de
+               l'utilisateur) : il n'a pas de geste propre — c'est le bandeau entier qui
+               plie/déplie, un second gestionnaire basculerait deux fois. -->
+          <div v-if="!regionView" class="rb-fold">
+            <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
+            <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
+          </div>
         </div>
-        <!-- ⚠️ REPLIÉE PAR DÉFAUT : la carte occupait tout l'écran Explorer et poussait le
-             reste sous le pli. Mais repliée, PLUS AUCUN donjon n'était atteignable — il
-             fallait déplier, toucher une région, puis choisir : trois gestes pour jouer.
-             Le PROCHAIN donjon à faire s'affiche donc juste sous le bandeau, prêt à être
-             lancé, et la rangée de pliage passe SOUS lui (demande de l'utilisateur). -->
+        <!-- ⚠️ REPLIÉE PAR DÉFAUT : repliée, le PROCHAIN donjon à faire s'affiche juste sous
+             le bandeau, prêt à être lancé — un geste pour jouer au lieu de trois. -->
         <div v-if="!regionView && !worldOpen && nextDungeonItem" class="sec-hint next-dgn-hint">
           ▸ Ton prochain donjon
-        </div>
-        <!-- La rangée de pliage, hors du bandeau : le bandeau reste cliquable lui aussi
-             (v0.748), celle-ci n'est qu'un second repère, sous la tuile. -->
-        <div
-          v-if="!regionView"
-          class="rb-fold"
-          role="button"
-          tabindex="0"
-          :aria-expanded="worldOpen"
-          @click="toggleWorld"
-          @keydown.enter.prevent="toggleWorld"
-          @keydown.space.prevent="toggleWorld"
-        >
-          <span class="mf-chev" :class="{ open: worldOpen }">▸</span> 🗺️ Carte des mondes
-          <span class="mf-hint">{{ worldOpen ? 'replier' : `${REGIONS.length} régions` }}</span>
         </div>
         <template v-if="!regionView && worldOpen">
           <div class="sec-hint map-hint">
@@ -3880,31 +3869,17 @@ const currentRegionIndex = computed(() => REGIONS.findIndex((r) => r.id === curR
 // (faite), la courante, et la suivante (verrouillée). `showAllRegions` (ticket 4a4f1c74)
 // déplie TOUTES les zones débloquées + la suivante → on peut retourner farmer une zone
 // précédente (avant, seule la zone cur-1 restait accessible).
-/** Carte des mondes dépliée ? FERMÉE par défaut, et le choix est mémorisé par appareil. */
-const worldOpen = ref<boolean>(
-  (() => {
-    try {
-      return localStorage.getItem('muscu:worldmap:open') === '1';
-    } catch {
-      return false;
-    }
-  })(),
-);
+/** Carte des mondes dépliée ? ⚠️ TOUJOURS repliée à l'ouverture, plus mémorisée : dépliée
+ *  une fois, elle se rouvrait à chaque lancement de l'app (signalé par l'utilisateur).
+ *  Repliée, le prochain donjon s'affiche sous le bandeau — c'est l'état qu'on veut revoir. */
+const worldOpen = ref(false);
 /** Le bandeau n'est un bouton que hors tiroir de région : ses attributs et son geste
  *  suivent ce seul invariant, écrit une fois. */
 const foldAttrs = computed(() =>
   regionView.value ? {} : { role: 'button', tabindex: 0, 'aria-expanded': worldOpen.value },
 );
 function foldToggle() {
-  if (!regionView.value) toggleWorld();
-}
-function toggleWorld() {
-  worldOpen.value = !worldOpen.value;
-  try {
-    localStorage.setItem('muscu:worldmap:open', worldOpen.value ? '1' : '0');
-  } catch {
-    /* stockage indispo : l'état reste en mémoire */
-  }
+  if (!regionView.value) worldOpen.value = !worldOpen.value;
 }
 const showAllRegions = ref(false);
 const visibleRegions = computed(() => {
@@ -10740,28 +10715,18 @@ button.pt-mini:active {
   outline: 2px solid var(--rc);
   outline-offset: 2px;
 }
-/* ⚠️ Elle vivait DANS le bandeau (filet du haut, pas de fond) ; sortie, il lui faut sa
-   propre surface — sinon elle flottait sur le fond de page sans rien qui dise qu'on peut
-   la toucher. Cible de 44 px : c'est un bouton, pas une légende. */
+/* Le repère du pli, DANS le bandeau : un filet le sépare du reste du bloc. Pas de focus
+   propre — c'est le bandeau entier qui est le bouton (et qui fait la cible tactile). */
 .rb-fold {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 44px;
-  margin: 10px 0 14px;
-  padding: 0 14px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--rc) 30%, var(--line));
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
-  cursor: pointer;
-  user-select: none;
-}
-.rb-fold:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 /* Le repère au-dessus de la tuile du prochain donjon. */
 .next-dgn-hint {
