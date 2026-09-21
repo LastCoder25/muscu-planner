@@ -1516,6 +1516,10 @@ onBeforeUnmount(() => {
      pour le nom, la rareté et le bouton. */
   width: min(80vw, 360px, 52cqh);
   aspect-ratio: 1;
+  /* ⚠️ Le portrait ne se clique pas, et ses rayons (260 % de large) débordent jusque sur
+     « Continuer » : sans ça ils AVALAIENT le clic — mesuré au navigateur, le point au
+     centre du bouton tombait sur `.ivk-rays`. */
+  pointer-events: none;
 }
 .ivk-rays {
   position: absolute;
