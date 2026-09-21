@@ -351,116 +351,9 @@
             la force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du 💠.
           </p>
         </template>
-        <!-- ⚔️🕳️ UN CAMP — ET UNE FAILLE — S'ATTAQUENT EN GROUPE : le héros (oui/non) et autant
-             d'aventuriers qu'on veut — aucun maximum, c'est ce qui permet d'affronter les gros
-             repaires et les failles mûres. ⚠️ UN SEUL bloc pour les deux : le choix du groupe,
-             la tuile du héros, le risque de départ et le bouton sont identiques — en écrire deux
-             garantirait qu’ils divergent. Seuls la rangée de chips et la note changent.
-             Les règles vivent dans `camp.ts` / `rift.ts` et `party.ts` ; l’écran les montre,
-             et dit POURQUOI quelqu’un ne peut pas venir. -->
-        <template v-if="partyTarget">
-          <div v-if="selectedCamp" class="sh-row sh-wrap">
-            <span class="sh-chip"
-              >{{ FACTION_EMOJI[selectedCamp.faction] }}
-              {{ FACTION_LABEL[selectedCamp.faction] }}</span
-            >
-            <span class="sh-chip" title="La force du camp, comptée en champions de référence"
-              >💪 ≈ {{ selectedCamp.size }} champion{{ selectedCamp.size > 1 ? 's' : '' }}</span
-            >
-            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
-            <span class="sh-chip">⚡ 0</span>
-            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
-              >🎯 {{ partyWin }}%</span
-            >
-          </div>
-          <!-- Le héros : une tuile comme les autres. ⚠️ Il n'y compte que pour
-               HERO_PARTY_WORTH champions (v0.980) — l'écran le DIT, sinon on croirait
-               emmener la puissance de sa fiche. Grisée avec la raison plutôt que cachée. -->
-          <button
-            type="button"
-            class="party-hero"
-            :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
-            :disabled="!!partyHeroBlock"
-            :aria-pressed="partyHeroOn"
-            @click="partyHero = !partyHero"
-          >
-            <span class="ph-emo">🧝</span>
-            <span class="ph-main">
-              <span class="ph-name">Ton héros</span>
-              <span class="ph-sub">{{
-                partyHeroBlock
-                  ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                  : `compte pour ${HERO_PARTY_WORTH} champions${partyHeroToll(selected) ? ` · 🪙 ${partyHeroToll(selected)}` : ''}`
-              }}</span>
-            </span>
-            <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
-          </button>
-          <button
-            v-if="char.advList.length"
-            class="car-auto"
-            :disabled="!freeStable.length"
-            @click="togglePartyAll"
-          >
-            {{
-              partyAllOn
-                ? 'Retirer tous les champions'
-                : `✨ Tout le vivier disponible (${partyAllIds.length})`
-            }}
-          </button>
-          <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
-               ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
-          <p v-if="selectedRift" class="car-cap">
-            🕳️ Une faille ne laisse passer que <b>{{ RIFT_MAX_PARTY }}</b> membres, héros compris :
-            <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions.
-          </p>
-          <div v-if="char.advList.length" class="car-pick">
-            <AdvPickTile
-              v-for="a in freeStable"
-              :key="a.id"
-              :adv="a"
-              :on="partyEscort.includes(a.id)"
-              @toggle="togglePartyAdv(a.id)"
-            />
-            <AdvPickTile
-              v-for="b in partyBlocked"
-              :key="b.adv.id"
-              :adv="b.adv"
-              :on="false"
-              :reason="ADV_UNAVAILABLE_LABEL[b.why]"
-            />
-          </div>
-          <p v-else class="sh-away">
-            ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
-          </p>
-          <p v-if="selectedCamp" class="sh-note">
-            Sans le héros : de l’or (et des pierres chez les morts-vivants) et des pièces
-            d’aventurier — le groupe prend un créneau de convoi. En cas de défaite, les aventuriers
-            tombés partent à l’infirmerie ; le héros, lui, rentre sans butin.
-          </p>
-          <p v-else class="sh-note">
-            Sans le héros, le groupe prend un créneau de convoi — et une faille ne rend que du 💠,
-            jamais d’objet.
-          </p>
-          <p
-            v-if="partyRisk && partyRisk.worsens"
-            class="sh-risk"
-            :class="{ bad: partyRisk.risky }"
-          >
-            ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[partyRisk.after] }} » au lieu de «
-            {{ ODDS_LABEL[partyRisk.before] }} ».
-          </p>
-          <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
-            ✅ Une armée arrive, mais ils seront rentrés avant elle.
-          </p>
-          <p v-if="partySlotsFull" class="sh-risk">
-            🐫 {{ PARTY_SEND_BLOCK_LABEL.slots }} : sans le héros, un groupe en prend un. Emmène ton
-            héros, ou attends le retour d’un convoi ou d’un groupe.
-          </p>
-          <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
-            {{ partySendLabel }}
-          </button>
-        </template>
-        <template v-else-if="offers.hero">
+        <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
+             se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
+        <template v-if="offers.hero && !teamOnly">
           <div class="sh-row">
             <span class="sh-chip">⏱️ {{ formatDurationMin(roundTripMin(selected)) }}</span>
             <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
@@ -497,56 +390,134 @@
             {{ sendLabel }}
           </button>
         </template>
-        <div v-else-if="heroHealIn > 0" class="sh-away">
-          🤕 Ton héros est à l’infirmerie — de retour dans {{ formatDuration(heroHealIn) }}. Un
-          convoi, lui, peut partir sans lui.
-        </div>
-        <div v-else class="sh-away">
-          🧭 Ton héros est en expédition — un convoi, lui, peut partir sans lui.
-        </div>
-        <!-- ⚠️ La caravane ne s’affiche que sur les lieux de RÉCOLTE : le héros se bat,
-             les convois exploitent. Elle ne coûte AUCUNE énergie — c’est tout son intérêt
-             pour un joueur qui s’entraîne peu — mais elle immobilise ses aventuriers. -->
-        <template v-if="offers.caravan">
-          <div v-if="offers.hero" class="car-sep">ou bien</div>
-          <div class="car-row">
-            <span class="sh-chip">🐫 {{ formatDurationMin(caravanMin) }}</span>
+        <!-- 👥 UNE ÉQUIPE — 3 places, le héros en prend 2 (2026-09-21 : les équipes remplacent les
+             convois). Elle part sur un camp, une faille, une armée ou un lieu de RÉCOLTE. ⚠️ UN SEUL bloc pour les deux : le choix du groupe,
+             la tuile du héros, le risque de départ et le bouton sont identiques — en écrire deux
+             garantirait qu’ils divergent. Seuls la rangée de chips et la note changent.
+             Les règles vivent dans `camp.ts` / `rift.ts` et `party.ts` ; l’écran les montre,
+             et dit POURQUOI quelqu’un ne peut pas venir. -->
+        <template v-if="partyTarget">
+          <div v-if="offers.hero && !teamOnly" class="car-sep">ou bien — une équipe</div>
+          <!-- 🧺 Une récolte en équipe : pas de combat au lieu, des bandits possibles sur la
+               route (le moteur des convois d’avant, `resolveHarvestParty`). -->
+          <div v-if="!teamOnly" class="sh-row sh-wrap">
+            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
             <span class="sh-chip">⚡ 0</span>
-            <span class="sh-chip">{{ freeAdvs.length }} dispo · {{ vansLeft }} convoi(s)</span>
+            <span v-if="selected.riftPeril || selected.perilous" class="sh-chip peril"
+              >⚠️ Route dangereuse — embuscades doublées</span
+            >
           </div>
-          <!-- ⚠️ ON COMPOSE POUR LE VOYAGE, ET POUR LES CONVOIS QUI RESTENT. Le choix se
-               faisait tuile par tuile, sans rien pour dire ce qui allait ensemble — et
-               rien n'empêchait de vider le vivier sur le premier convoi, laissant les
-               créneaux suivants (payés en niveaux de Comptoir) inutilisables. La règle
-               vit dans `caravan.ts`, l'écran ne fait que l'appliquer. -->
-          <button class="car-auto" :disabled="!freeAdvs.length" @click="autoEscort">
-            ✨ Composer une escorte ({{ suggestedSize }})
+          <div v-if="selectedCamp" class="sh-row sh-wrap">
+            <span class="sh-chip"
+              >{{ FACTION_EMOJI[selectedCamp.faction] }}
+              {{ FACTION_LABEL[selectedCamp.faction] }}</span
+            >
+            <span class="sh-chip" title="La force du camp, comptée en champions de référence"
+              >💪 ≈ {{ selectedCamp.size }} champion{{ selectedCamp.size > 1 ? 's' : '' }}</span
+            >
+            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
+            <span class="sh-chip">⚡ 0</span>
+            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
+              >🎯 {{ partyWin }}%</span
+            >
+          </div>
+          <!-- Le héros : une tuile comme les autres. ⚠️ Il n'y compte que pour
+               HERO_PARTY_WORTH champions (v0.980) — l'écran le DIT, sinon on croirait
+               emmener la puissance de sa fiche. Grisée avec la raison plutôt que cachée. -->
+          <button
+            type="button"
+            class="party-hero"
+            :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
+            :disabled="!!partyHeroBlock"
+            :aria-pressed="partyHeroOn"
+            @click="partyHero = !partyHero"
+          >
+            <span class="ph-emo">🧝</span>
+            <span class="ph-main">
+              <span class="ph-name">Ton héros</span>
+              <span class="ph-sub">{{
+                partyHeroBlock
+                  ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
+                  : `prend ${HERO_TEAM_SLOTS} places${partyHeroToll(selected) ? ` · 🪙 ${partyHeroToll(selected)}` : ''}`
+              }}</span>
+            </span>
+            <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
           </button>
-          <div class="car-pick">
+          <button
+            v-if="char.advList.length"
+            class="car-auto"
+            :disabled="!freeStable.length"
+            @click="togglePartyAll"
+          >
+            {{
+              partyAllOn
+                ? 'Retirer tous les champions'
+                : `✨ Tout le vivier disponible (${partyAllIds.length})`
+            }}
+          </button>
+          <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
+               ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
+          <p class="car-cap">
+            👥 Une équipe compte <b>{{ TEAM_SLOTS }}</b> places, et le héros en prend
+            <b>{{ HERO_TEAM_SLOTS }}</b> : <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions.
+          </p>
+          <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
-              v-for="a in freeAdvs"
+              v-for="a in freeStable"
               :key="a.id"
               :adv="a"
-              :on="escort.includes(a.id)"
-              @toggle="toggleEscort(a.id)"
+              :on="partyEscort.includes(a.id)"
+              @toggle="togglePartyAdv(a.id)"
+            />
+            <AdvPickTile
+              v-for="b in partyBlocked"
+              :key="b.adv.id"
+              :adv="b.adv"
+              :on="false"
+              :reason="ADV_UNAVAILABLE_LABEL[b.why]"
             />
           </div>
-          <!-- ⚠️ L'AVERTISSEMENT EST AU-DESSUS DU BOUTON, pas après : on doit le lire
-               AVANT de partir, pas en revenant. Il ne BLOQUE rien — c'est un arbitrage
-               (une cargaison contre un risque), pas une faute. -->
-          <p v-if="risk && risk.worsens" class="sh-risk" :class="{ bad: risk.risky }">
-            ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[risk.after] }} » au lieu de «
-            {{ ODDS_LABEL[risk.before] }} ».
+          <p v-else class="sh-away">
+            ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
           </p>
-          <p v-else-if="risk && risk.covered" class="sh-ok">
+          <p v-if="selectedCamp" class="sh-note">
+            Sans le héros : de l’or (et des pierres chez les morts-vivants) — l’équipe prend un
+            créneau de l’Avant-poste. En cas de défaite, les champions tombés partent à l’infirmerie
+            ; le héros, lui, rentre sans butin.
+          </p>
+          <p v-else-if="!teamOnly" class="sh-note">
+            L’équipe récolte le lieu ; sur la route, des bandits peuvent tendre une embuscade — plus
+            l’équipe est complète, mieux elle tient. Sans le héros, elle prend un créneau de
+            l’Avant-poste.
+          </p>
+          <p v-else class="sh-note">
+            Sans le héros, l’équipe prend un créneau de l’Avant-poste — et une faille ne rend que du
+            💠, jamais d’objet.
+          </p>
+          <p
+            v-if="partyRisk && partyRisk.worsens"
+            class="sh-risk"
+            :class="{ bad: partyRisk.risky }"
+          >
+            ⚠️ Une armée arrive : sans eux, « {{ ODDS_LABEL[partyRisk.after] }} » au lieu de «
+            {{ ODDS_LABEL[partyRisk.before] }} ».
+          </p>
+          <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
             ✅ Une armée arrive, mais ils seront rentrés avant elle.
           </p>
-          <button class="sh-send car-send" :disabled="!canSendCaravanNow" @click="doSendCaravan">
-            🐫 Envoyer une caravane ({{ escort.length }})
+          <p v-if="partySlotsFull" class="sh-risk">
+            🐫 {{ PARTY_SEND_BLOCK_LABEL.slots }} : sans le héros, une équipe en prend un. Emmène
+            ton héros, ou attends le retour d’une équipe.
+          </p>
+          <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
+            {{ partySendLabel }}
           </button>
         </template>
-        <div v-if="!partyTarget && !offers.hero && !offers.caravan" class="sh-away">
-          🐫 Les convois ne vont que sur les lieux de récolte — puits, sanctuaire, archives, épave.
+        <div v-if="!offers.hero && !partyTarget && heroHealIn > 0" class="sh-away">
+          🤕 Ton héros est à l’infirmerie — de retour dans {{ formatDuration(heroHealIn) }}.
+        </div>
+        <div v-else-if="!offers.hero && !partyTarget" class="sh-away">
+          🧭 Ton héros est en expédition. Une équipe de champions, elle, peut partir sans lui.
         </div>
       </div>
     </transition>
@@ -667,7 +638,8 @@ import {
   PARTY_HERO_BLOCK_LABEL,
   PARTY_SEND_BLOCK_LABEL,
   partyCapFor,
-  RIFT_MAX_PARTY,
+  TEAM_SLOTS,
+  HERO_TEAM_SLOTS,
   partySendBlocker,
   partyHeroBlocker,
   partyHeroToll,
@@ -694,7 +666,6 @@ import {
   type Poi,
   type PoiType,
   HARVEST_TYPES,
-  CAMP_TYPES,
   campSpecOf,
   isRiftPoi,
   isWarbandPoi,
@@ -732,16 +703,11 @@ import {
   warbandArmy,
 } from '@/lib/rift';
 import {
-  CARAVAN,
-  caravanLegMin,
   convoySlotsFree,
   claimedCaravans,
-  escortShare,
   isCaravanClaimable,
   poiOffers,
-  suggestEscort,
   partyAllies,
-  HERO_PARTY_WORTH,
   type PartyHero,
 } from '@/lib/caravan';
 import { advGearRoles } from '@/lib/advGear';
@@ -936,11 +902,6 @@ const edgeIndicators = computed(() => {
 const selected = ref<Poi | null>(null);
 const sheetEl = ref<HTMLElement | null>(null);
 
-// ── CARAVANES ──────────────────────────────────────────────────────────────
-// Un convoi part vers un lieu de RÉCOLTE, ne coûte aucune énergie, et immobilise son
-// escorte. Il CONSOMME le lieu comme le ferait le héros : les deux se disputent la carte.
-const escort = ref<string[]>([]);
-
 /** ⚠️ CE QUE LE DÉPART COÛTE, face à l'armée qui arrive (demandé par l'utilisateur :
  *  « envoyer des convois ou le héros sans se mettre dans le rouge »). Cet écran ne
  *  savait RIEN du siège en approche : on partait, et on découvrait en rentrant que la
@@ -994,30 +955,6 @@ const heroDefendsNow = computed(() =>
     ? fighter.value
     : null,
 );
-/** Qui resterait si l'on partait : l'escorte choisie quitte la base, et le héros aussi
- *  quand c'est LUI qu'on envoie. */
-const risk = computed(() => {
-  const b = base.value;
-  const inc = incoming.value;
-  // ⚠️ C’est l’ARMÉE qu’on passe, plus sa « puissance » : le pronostic est désormais
-  // SIMULÉ sur le vrai moteur, donc il lui faut la composition, pas un résumé.
-  // ⚠️ Le pronostic coûte ~13 ms par tenue : on ne le calcule que si la feuille le montre.
-  if (!b || !inc || !offerCaravan.value) return null;
-  const restants = freeStable.value.filter((a) => !escort.value.includes(a.id));
-  const heroNow = heroDefendsNow.value;
-  return departureRisk(
-    b.defenses,
-    heroLevel.value,
-    inc,
-    {
-      hero: heroNow,
-      guard: guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value),
-    },
-    { hero: heroNow, guard: guardUnits(heroLevel.value, restants, cap.value, compCtx.value) },
-    { backAt: coarseNow.value + caravanMin.value * 60_000, raidAt: raidAt.value },
-  );
-});
-
 /** Le MÊME calcul, pour le départ du HÉROS. ⚠️ Deux boutons, deux risques : envoyer un
  *  convoi et envoyer le héros ne retirent pas les mêmes défenseurs, et une seule
  *  alerte pour les deux dirait faux à l'un des deux coups. */
@@ -1078,25 +1015,6 @@ const offers = computed(() =>
 /** Les mêmes offres, en BOOLÉENS : `offers` rend un nouvel objet à chaque tick, un booléen
  *  ne réveille ses dépendants (les pronostics coûteux) que s'il change vraiment. */
 const offerHero = computed(() => offers.value.hero);
-const offerCaravan = computed(() => offers.value.caravan);
-const caravanMin = computed(() => {
-  if (!selected.value) return 0;
-  const esc = freeAdvs.value.filter((a) => escort.value.includes(a.id));
-  // ⚠️ Le Comptoir ET les pièces 🧭 portées, comme le convoi réel (`startCaravan`) : l'écran
-  // omettait le Comptoir et annonçait un trajet plus long que celui qu'on fait.
-  return (
-    2 *
-    caravanLegMin(
-      selected.value,
-      esc,
-      char.comptoirLevel,
-      advGearRoles(esc, char.row?.adv_gear?.stock ?? []).speed,
-    )
-  );
-});
-const canSendCaravanNow = computed(
-  () => escort.value.length > 0 && vansLeft.value > 0 && !busyCaravan.value,
-);
 // ── ⚔️ CAMPS DE FACTION : un GROUPE (héros oui/non + autant d'aventuriers qu'on veut) ──
 // Toute la règle vit dans `camp.ts` (combat, pronostic, trajet, qui peut partir) ; l'écran
 // ne fait que la montrer. ⚠️ Le héros n'attaque plus un camp par `expeSend` (le store le
@@ -1140,8 +1058,13 @@ const selectedWarband = computed(() => {
     utile: !!char.row?.base?.overflow,
   };
 });
-const partyTarget = computed(
+/** Les lieux qui ne se prennent QU'EN équipe (camp, faille, armée). */
+const teamOnly = computed(
   () => !!selectedCamp.value || !!selectedRift.value || !!selectedWarband.value,
+);
+/** 👥 Une équipe peut partir ici : les lieux « d'équipe » ET les lieux de récolte. */
+const partyTarget = computed(
+  () => teamOnly.value || (!!selected.value && HARVEST_TYPES.has(selected.value.type)),
 );
 const partyHero = ref(false);
 const partyEscort = ref<string[]>([]);
@@ -1286,9 +1209,7 @@ const canSendPartyNow = computed(
  *  règle : l'écran doit empêcher exactement ce que le store refuse. Un camp garde le
  *  plafond du Panthéon (sa TAILLE fait déjà le gradateur) ; une faille est bien plus
  *  stricte, parce qu'elle n'a qu'un seul axe de force. */
-const partyMax = computed(() =>
-  selected.value ? partyCapFor(selected.value, cap.value, partyHeroOn.value) : cap.value,
-);
+const partyMax = computed(() => partyCapFor(cap.value, partyHeroOn.value));
 /** Vrai quand on ne peut plus en cocher — pour le dire AVANT qu'on essaie. */
 const partyFull = computed(() => partyAdvs.value.length >= partyMax.value);
 /** 🕳️ Emmener le héros dans une faille lui prend une place : si le groupe déborde, on
@@ -1321,6 +1242,7 @@ function togglePartyAll() {
 /** Le bouton dit OÙ l’on va : un camp se prend, une faille se referme. */
 const partySendLabel = computed(() => {
   if (!partySize.value) return 'Choisis ton groupe';
+  if (!teamOnly.value) return `🧺 Envoyer l’équipe (${partySize.value})`;
   return selectedRift.value
     ? `🌀 Entrer dans la faille (${partySize.value})`
     : `⚔️ Attaquer le camp (${partySize.value})`;
@@ -1332,6 +1254,7 @@ async function doSendParty() {
   // ⚠️ Retenu AVANT l’envoi : `selected` est remis à null au succès, donc le lire après
   // coup pour choisir le message dirait toujours « camp ».
   const isRift = !!selectedRift.value;
+  const isHarvest = !teamOnly.value;
   busyCaravan.value = true;
   try {
     const refused = await char.sendParty(uid, poi, {
@@ -1349,9 +1272,11 @@ async function doSendParty() {
         ? { type: 'negative', message: `Départ impossible : ${refused}.` }
         : {
             type: 'positive',
-            message: isRift
-              ? '🌀 Le groupe s’enfonce dans la faille.'
-              : '⚔️ Le groupe marche sur le camp.',
+            message: isHarvest
+              ? '🧺 L’équipe part en récolte.'
+              : isRift
+                ? '🌀 L’équipe s’enfonce dans la faille.'
+                : '⚔️ L’équipe marche sur le camp.',
           },
     );
   } finally {
@@ -1522,43 +1447,6 @@ async function doClaimCaravan(id: string) {
     busyCaravan.value = false;
   }
 }
-/** Ce que la suggestion RETIENDRAIT — annoncé sur le bouton, pour qu'on sache combien
- *  d'aventuriers on s'apprête à engager avant d'appuyer. */
-const suggestedSize = computed(() =>
-  escortShare(freeAdvs.value.length, Math.max(1, vansLeft.value)),
-);
-function autoEscort() {
-  const poi = selected.value;
-  if (!poi) return;
-  escort.value = suggestEscort(freeAdvs.value, poi, Math.max(1, vansLeft.value)).map((a) => a.id);
-}
-function toggleEscort(id: string) {
-  escort.value = escort.value.includes(id)
-    ? escort.value.filter((x) => x !== id)
-    : escort.value.length < CARAVAN.escortMax
-      ? [...escort.value, id]
-      : escort.value;
-}
-async function doSendCaravan() {
-  const uid = auth.user?.id;
-  const poi = selected.value;
-  if (!uid || !poi || busyCaravan.value) return;
-  busyCaravan.value = true;
-  try {
-    const ok = await char.sendCaravan(uid, poi, escort.value);
-    if (ok) {
-      selected.value = null;
-      escort.value = [];
-    }
-    $q.notify(
-      ok
-        ? { type: 'positive', message: 'Le convoi est parti.' }
-        : { type: 'negative', message: 'Envoi impossible (place, escorte ou Comptoir).' },
-    );
-  } finally {
-    busyCaravan.value = false;
-  }
-}
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
 /** 🕳️ Rapport d'incursion à rejouer (cf. `RiftReplayDialog`). */
@@ -1601,9 +1489,9 @@ function dimmed(p: Poi): boolean {
     advsAvailable: freeAdvs.value.length,
     slotsFree: vansLeft.value,
   });
-  // ⚔️ Un camp reste ouvert tant qu'un GROUPE peut y aller (héros OU un aventurier libre).
-  // ⚠️ Un camp n'accepte plus le héros seul par `expeSend` : c'est `o.party` qui décide.
-  return CAMP_TYPES.has(p.type) ? !o.party : !o.hero && !o.caravan;
+  // 👥 Un lieu reste ouvert tant que le HÉROS SEUL ou une ÉQUIPE peut y aller (2026-09-21 :
+  // les équipes remplacent les convois). Même règle que le test « ce qui est GRISÉ ».
+  return !o.hero && !o.party;
 }
 
 function selectPoi(p: Poi) {

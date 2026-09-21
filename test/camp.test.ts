@@ -12,6 +12,7 @@ import {
 } from '@/lib/camp';
 import {
   canSendParty,
+  TEAM_SLOTS,
   normalizeParties,
   PARTY_HERO_BLOCK_LABEL,
   partyClaimRoster,
@@ -37,6 +38,7 @@ import {
 import {
   buildMessage,
   campSpecOf,
+  CAMP_SIZES,
   goldCost,
   harvestYield,
   travelFactor,
@@ -597,22 +599,22 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     expect(partyAllies(inp.escort, inp.road, null)).toHaveLength(3);
   });
 
-  it('⚠️ partySendBlocker : sans le héros, un groupe prend un CRÉNEAU DE CONVOI (un seul pool)', () => {
+  it('⚠️ partySendBlocker : sans le héros, une équipe prend un CRÉNEAU de l’Avant-poste', () => {
     // Revue finale : sans ce partage, rien ne bornait le nombre de groupes en parallèle.
     expect(partySendBlocker(poi(), 3, false, 1, 9)).toBeNull();
     expect(partySendBlocker(poi(), 3, false, 0, 9)).toBe('slots');
-    // Le héros est à lui seul sa limite : il ne prend pas de créneau, même avec une escorte.
-    expect(partySendBlocker(poi(), 3, true, 0, 9)).toBeNull();
+    // Le héros est à lui seul sa limite : il ne prend pas de créneau, même avec un champion.
+    expect(partySendBlocker(poi(), 1, true, 0, 9)).toBeNull();
     expect(partySendBlocker(poi(), 0, true, 0, 9)).toBeNull();
     expect(partySendBlocker(poi(), 0, false, 0, 9)).toBe('empty');
     expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5, 9)).toBe('notTarget');
     // ⚠️ UNE FAILLE EST UNE CIBLE DE GROUPE depuis que l’incursion existe : la porte
     // lit `PARTY_TARGETS`, pas `CAMP_TYPES` (le détail de la résolution vit ailleurs).
-    expect(partySendBlocker(poi({ type: 'rift' }), 2, true, 5, 9)).toBeNull();
+    expect(partySendBlocker(poi({ type: 'rift' }), 1, true, 5, 9)).toBeNull();
     expect(canSendParty(poi(), 3, false, 0, 9)).toBe(false);
     for (const k of ['notTarget', 'empty', 'slots', 'tooMany'] as const)
       expect(PARTY_SEND_BLOCK_LABEL[k].length).toBeGreaterThan(0);
-    expect(PARTY_SEND_BLOCK_LABEL.slots).toContain('créneaux de convoi');
+    expect(PARTY_SEND_BLOCK_LABEL.slots).toContain('créneaux d’équipe');
   });
 
   it('🗿 LE PLAFOND DU PANTHÉON BORNE LA TAILLE DU GROUPE — même avec le héros', () => {
@@ -840,5 +842,16 @@ describe('🧾 normalizeParties — un jsonb malformé ne fait jamais planter', 
     expect(
       normalizeParties([ok, null, 3, { ...ok, id: 7 }, sansIssue, { ...ok, returnAt: 'x' }]),
     ).toEqual([ok]);
+  });
+});
+
+describe('👥 un camp se prend avec UNE équipe (2026-09-21)', () => {
+  it('aucune taille de camp ne dépasse une équipe pleine — sinon il serait imprenable', () => {
+    for (const s of [...CAMP_SIZES.camp, ...CAMP_SIZES.lair]) {
+      expect(s).toBeGreaterThanOrEqual(1);
+      expect(s).toBeLessThanOrEqual(TEAM_SLOTS);
+    }
+    // …et un repaire en demande au moins deux.
+    expect(Math.min(...CAMP_SIZES.lair)).toBeGreaterThanOrEqual(2);
   });
 });

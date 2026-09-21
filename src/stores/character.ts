@@ -73,6 +73,7 @@ import {
 } from '@/data/labyrinths';
 import {
   PARTY_TARGETS,
+  HARVEST_TYPES,
   isRiftPoi,
   isWarbandPoi,
   campSpecOf,
@@ -153,12 +154,10 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import {
-  canSendCaravan,
   caravanClaimRoster,
   convoySlotsFree,
   isCaravanClaimable,
   pruneCaravans,
-  startCaravan,
   type Caravan,
   type EscortKit,
   type PartyHero,
@@ -198,6 +197,7 @@ import {
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
+import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveIncursion, resolveInterception, riftOverflowOf } from '@/lib/rift';
 import {
   GACHA,
@@ -1744,7 +1744,10 @@ export const useCharacterStore = defineStore('character', () => {
     // gardien — ni, pour une faille, la MINE D’OR dans laquelle `resolveOutcome` la faisait
     // tomber (v0.926). ⚠️ Une expédition héros DÉJÀ en route vers un camp (ancien format)
     // reste résolue et encaissée normalement.
-    if (PARTY_TARGETS.has(poi.type)) throw new Error('Ce lieu s’attaque en groupe.');
+    // ⚠️ Les lieux de RÉCOLTE sont aussi des cibles d'équipe (2026-09-21), mais le héros SEUL
+    // y garde son expédition solo (décision de l'utilisateur : « oui, seul aussi »).
+    if (PARTY_TARGETS.has(poi.type) && !HARVEST_TYPES.has(poi.type))
+      throw new Error('Ce lieu s’attaque en groupe.');
     // ⚠️ L'infirmerie n'était vérifiée que par l'écran Aventure (`expeBlocked`) : depuis la
     // carte, un héros blessé repartait. Le refus vit ici pour qu'aucun écran ne l'oublie.
     const healIn = woundRemainingMs(cur.base, now);
@@ -2541,46 +2544,6 @@ export const useCharacterStore = defineStore('character', () => {
   // `caravanSlots`, `convoySlotsFree` et `caravanLegMin`, et le renommer partout
   // n'apprendrait rien de plus.
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
-  async function sendCaravan(userId: string, poi: Poi, escortIds: string[]) {
-    const cur = row.value;
-    if (!cur) return false;
-    if (comptoirLevel.value <= 0) return false;
-    const now = Date.now();
-    // 🐫⚔️ UN SEUL POOL : les groupes partis sans le héros prennent aussi un créneau.
-    if (convoySlotsFree(comptoirLevel.value, [...caravanList.value, ...partyList.value], now) <= 0)
-      return false;
-    const escort = escortIds
-      .map((id) => advList.value.find((a) => a.id === id))
-      .filter((a): a is Adventurer => !!a && advAvailable(a, now));
-    if (
-      escort.length !== escortIds.length ||
-      !canSendCaravan(poi, escort, engageCap(pantheonLevel.value))
-    )
-      return false;
-
-    const seed = (now ^ (poi.id.length * 2654435761)) >>> 0 || 1;
-    const van = startCaravan(
-      `car_${now.toString(36)}`,
-      poi,
-      escort,
-      now,
-      seed,
-      // 🗡️ Ce que l'escorte emmène (`escortKitOf`, la même réserve que le rempart et l'écran).
-      escortKitOf(cur),
-      comptoirLevel.value,
-    );
-    const busy = new Set(escortIds);
-    await persist(userId, {
-      caravans: [...caravanList.value, van],
-      adventurers: advList.value.map((a) =>
-        busy.has(a.id) ? { ...a, busyUntil: van.returnAt } : a,
-      ),
-      expedition_map: cur.expedition_map
-        ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
-        : cur.expedition_map,
-    });
-    return true;
-  }
 
   /** Encaisse la cargaison d'un convoi rentré (devises, XP par aventurier, blessés) et rend
    *  **ce que la mission a changé pour l’escorte** (`AdvProgress[]`), ou `null` si rien n’a
@@ -2709,7 +2672,9 @@ export const useCharacterStore = defineStore('character', () => {
         ? resolveInterception({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
         : spec
           ? resolveCamp({ poi, spec, escort, road, hero, seed })
-          : null;
+          : HARVEST_TYPES.has(poi.type)
+            ? resolveHarvestParty({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
+            : null;
     if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
     const trip = startParty({ poi, hero, seed }, now, leg, outcome);
     if (cur.gold < trip.goldCost) return `héros : ${PARTY_HERO_BLOCK_LABEL.gold}`;
@@ -2808,7 +2773,6 @@ export const useCharacterStore = defineStore('character', () => {
     advGearStock,
     pantheonLevel,
     comptoirLevel,
-    sendCaravan,
     claimCaravan,
     partyList,
     sendParty,

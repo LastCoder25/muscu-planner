@@ -20,7 +20,6 @@ import {
   CAMP_TYPES,
   PARTY_TARGETS,
   buildMessage,
-  isRiftPoi,
   depositMessages,
   goldCost,
   poiTravelLevel,
@@ -49,51 +48,41 @@ export function partyLegMin(
 }
 
 /**
- * 🕳️ COMBIEN DE CHAMPIONS UNE FAILLE LAISSE ENTRER — et pourquoi c'est un nombre à part.
+ * 👥 UNE ÉQUIPE = 3 PLACES, PARTOUT (2026-09-21, décision de l'utilisateur : « on remplace les
+ * convois par les expéditions ; les équipes de 3 champions, ou 1 héros et 1 champion, partent
+ * sur tous les events »). SOURCE DE VÉRITÉ, override le plafond propre aux failles et
+ * l'absence de plafond des camps.
  *
- * ⚠️ **MESURÉ : au-delà de 3, une faille ne se joue plus.** Part nettoyée d'une faille
- * MÛRE, sans le héros : **1 → 0 % · 2 → 0-2 % · 3 → 62-83 % · 4 → 99-100 % · 5+ → 100 %**,
- * identique aux niveaux 12, 26, 45 et 70. Sur une faille JEUNE : 2 → 32-40 %, 3 → 94-96 %,
- * 4 → 100 %. Le plafond du Panthéon (16 champions au niveau 30, **51** au niveau 100) est
- * donc décoratif ici.
+ * ⚠️ **LE HÉROS PREND 2 PLACES**, et c'est cohérent avec ce qu'il VAUT : `heroPartyCombatant`
+ * le borne à deux champions de référence de son niveau (v0.980). Héros + 1 champion vaut donc
+ * au plus trois champions — exactement la force d'une équipe pleine. Le héros SEUL reste
+ * permis (son expédition solo, ou une équipe à lui seul).
  *
- * ⚠️ **LA CAUSE EST STRUCTURELLE, pas un réglage** : une faille n'a **qu'un seul axe de
- * force** — son niveau. Elle n'a pas d'équivalent de `CAMP_SIZES`, donc rien ne la fait
- * grandir avec le groupe envoyé. Sans ce plafond, « combien j'en envoie » n'a qu'une
- * réponse dès qu'on possède quatre champions.
- *
- * ⚠️ **LES CAMPS N'EN VEULENT PAS**, et c'est mesuré aussi : leur taille (2 à 10) EST
- * déjà le gradateur — un camp de 10 se gagne à 20-61 % avec huit champions et 57-99 %
- * avec dix. Un plafond bas y rendrait les gros repaires impossibles sans le héros, donc
- * retirerait du contenu.
+ * ⚠️ **MESURÉ, et c'est pourquoi 3** : une faille mûre, sans le héros — 1 → 0 % · 2 → 0-2 % ·
+ * 3 → 62-83 % · 4 → 99-100 %. Au-delà de 3 elle ne se joue plus. Les camps, eux, étaient
+ * dimensionnés de 2 à 10 : ils passent à 1-3 (`CAMP_SIZES`), leur taille reste le gradateur.
  */
-export const RIFT_MAX_PARTY = 3;
+export const TEAM_SLOTS = 3;
+/** Places que prend le héros dans une équipe (cf. `TEAM_SLOTS`). */
+export const HERO_TEAM_SLOTS = 2;
 
-/** Le plafond de champions RÉELLEMENT applicable à ce lieu : le plus strict entre celui du
- *  Panthéon et celui du lieu. ⚠️ Source unique — l'écran et le store l'appellent tous deux
- *  à travers `partySendBlocker`, qui la porte.
- *
- *  ⚠️ **LE HÉROS COMPTE DANS LES 3 d'une faille** (décision 2026-09-21). Deux règles qui se
- *  complètent : la v0.982 borne ce qu'il VAUT (au plus deux champions de référence,
- *  `heroPartyCombatant`), celle-ci borne la PLACE qu'il prend. Sans elle, héros + 3
- *  champions valait jusqu'à 5 champions — au-delà du point où une faille cesse de se jouer
- *  (4 → 99-100 %). `hero` est REQUIS : un paramètre qu'on peut
- *  oublier finit par l'être, et l'oubli rendrait une place de trop. Un camp n'est pas
- *  concerné — sa TAILLE est déjà le gradateur. */
-export function partyCapFor(poi: Pick<Poi, 'type'>, engage: number, hero: boolean): number {
+/** Le plafond de champions RÉELLEMENT applicable : le plus strict entre celui du Panthéon et
+ *  les places d'une équipe, héros déduit. ⚠️ Source unique — l'écran et le store l'appellent
+ *  tous deux à travers `partySendBlocker`. `hero` est REQUIS : l'oublier rendrait deux
+ *  places de trop. */
+export function partyCapFor(engage: number, hero: boolean): number {
   const c = Math.max(0, Math.floor(engage));
-  return isRiftPoi(poi) ? Math.max(0, Math.min(c, RIFT_MAX_PARTY - (hero ? 1 : 0))) : c;
+  return Math.max(0, Math.min(c, TEAM_SLOTS - (hero ? HERO_TEAM_SLOTS : 0)));
 }
 
-/** Pourquoi un GROUPE ne peut pas partir — `null` s'il le peut.
- *  ⚠️ La taille d'un groupe est bornée par le Panthéon, et **plus strictement encore par
- *  une FAILLE** (`RIFT_MAX_PARTY`) ; les convois gardent `CARAVAN.escortMax`, leur
- *  calibration en dépend.
- *  ⚠️ En revanche un groupe SANS le héros prend un CRÉNEAU DE CONVOI (`convoySlotsFree`,
- *  un seul pool avec les convois) : c'est ce qui borne le NOMBRE de groupes en parallèle,
- *  donc l'or et les pierres par jour. Le héros est à lui seul sa limite.
+/** Pourquoi une ÉQUIPE ne peut pas partir — `null` s'il le peut.
+ *  ⚠️ Sa taille est bornée par le Panthéon, et plus strictement encore par ses 3 places
+ *  (`TEAM_SLOTS`, héros = 2).
+ *  ⚠️ Une équipe SANS le héros prend un CRÉNEAU de l'Avant-poste (`convoySlotsFree`, le même
+ *  pool que les convois d'avant) : c'est ce qui borne le NOMBRE d'équipes en parallèle, donc
+ *  l'or et les pierres par jour. L'équipe du héros n'en prend pas : il est sa propre limite.
  *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
-export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'riftCrowd';
+export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'teamFull';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
@@ -109,17 +98,17 @@ export function partySendBlocker(
   // part : un groupe sans maximum est le seul endroit du jeu où l'effectif entier pourrait
   // partir d'un coup, et c'est ce qui rendrait la collection décisive.
   if (escortCount > Math.max(0, Math.floor(cap))) return 'tooMany';
-  // 🕳️ …ET LE PLAFOND DE LA FAILLE, plus strict : on distingue les deux refus parce qu'ils
+  // 👥 …ET LES 3 PLACES D'UNE ÉQUIPE, plus strictes : on distingue les deux refus parce qu'ils
   // ne se corrigent pas pareil — l'un se lève en montant le Panthéon, l'autre jamais.
-  if (escortCount > partyCapFor(poi, cap, hero)) return 'riftCrowd';
+  if (escortCount > partyCapFor(cap, hero)) return 'teamFull';
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
-  notTarget: 'on n’envoie pas de groupe sur ce lieu',
-  empty: 'le groupe est vide',
-  slots: 'tous les créneaux de convoi sont pris',
+  notTarget: 'on n’envoie pas d’équipe sur ce lieu',
+  empty: 'l’équipe est vide',
+  slots: 'tous les créneaux d’équipe de l’Avant-poste sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
-  riftCrowd: `une faille ne laisse passer que ${RIFT_MAX_PARTY} membres, héros compris`,
+  teamFull: `une équipe compte ${TEAM_SLOTS} places, et le héros en prend ${HERO_TEAM_SLOTS}`,
 };
 export function canSendParty(
   poi: Poi,

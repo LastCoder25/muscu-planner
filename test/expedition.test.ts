@@ -484,8 +484,10 @@ describe('🏕️ campSpecOf — faction et taille d’un camp', () => {
     }
     for (const f of CAMP_FACTIONS) expect((fac.get(f) ?? 0) / N).toBeGreaterThan(0.29);
     for (const f of CAMP_FACTIONS) expect((fac.get(f) ?? 0) / N).toBeLessThan(0.38);
-    for (const s of CAMP_SIZES.camp) expect((size.get(s) ?? 0) / N).toBeGreaterThan(0.29);
-    for (const s of CAMP_SIZES.camp) expect((size.get(s) ?? 0) / N).toBeLessThan(0.38);
+    // Parts égales, quel que soit le nombre de tailles (1-2 depuis les équipes de 3).
+    const part = 1 / CAMP_SIZES.camp.length;
+    for (const s of CAMP_SIZES.camp) expect((size.get(s) ?? 0) / N).toBeGreaterThan(part - 0.05);
+    for (const s of CAMP_SIZES.camp) expect((size.get(s) ?? 0) / N).toBeLessThan(part + 0.05);
   });
 
   it('⚠️ la carte ne change pas : createMap ne porte aucun champ de camp', () => {

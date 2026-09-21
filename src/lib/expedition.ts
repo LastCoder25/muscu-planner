@@ -101,8 +101,10 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
 /** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
  *  repaire = troupe plus grande + champion. */
 export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair']);
-/** 🎯 Les POI qu'on attaque EN GROUPE (héros et/ou aventuriers) : les camps de faction
- *  ET les failles. ⚠️ DISTINCT de `CAMP_TYPES` : celui-ci dit « on y envoie un groupe »,
+/** 🎯 Les POI où part une ÉQUIPE (héros et/ou champions) — **tous les lieux sauf l'arène**
+ *  depuis que les équipes remplacent les convois (2026-09-21) : camps, failles, armées en
+ *  marche ET lieux de RÉCOLTE (`resolveHarvestParty`). L'arène reste au héros seul (sa
+ *  résolution, `simulateArena`, est une survie par vagues construite autour de lui). ⚠️ DISTINCT de `CAMP_TYPES` : celui-ci dit « on y envoie un groupe »,
  *  l'autre dit « ça se résout comme un camp ». Une faille s'envoie pareil et se résout
  *  autrement (`resolveIncursion` : attrition, gardien, mana). Dérivé de `CAMP_TYPES` pour
  *  qu'un nouveau type de camp ouvre l'envoi de groupe tout seul. */
@@ -110,6 +112,7 @@ export const PARTY_TARGETS: ReadonlySet<PoiType> = new Set<PoiType>([
   ...CAMP_TYPES,
   'rift',
   'warband',
+  ...HARVEST_TYPES,
 ]);
 /** ⚔️ L'armée d'une faille qui a débordé, en route vers la base. */
 export const isWarbandPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'warband';
@@ -130,12 +133,13 @@ export function riftFactionOf(id: string): RaidFaction {
   const rng = mulberry32((seedOf(id) ^ 0x1f83d9ab) >>> 0 || 1);
   return CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
 }
-/** Taille d'un camp = sa FORCE, en aventuriers de RÉFÉRENCE (cf. `campFoe`). Un gros
- *  repaire en demande nettement plus que trois. ⚠️ MESURÉ, gardé tel quel : les bandes de
- *  `campCalibration.test` tiennent avec ces tailles (cf. `CAMP.pvTurns`). */
+/** Taille d'un camp = sa FORCE, en champions de RÉFÉRENCE (cf. `campFoe`). ⚠️ **1 À 3**
+ *  depuis que l'équipe compte 3 places (2026-09-21, décision de l'utilisateur ; c'était 2-4
+ *  et 5-10) : un camp de 3 demande une équipe pleine, un repaire n'est jamais sous 2. La
+ *  taille reste le gradateur, et l'or suit la taille (`campGroupHaul`). */
 export const CAMP_SIZES: { camp: readonly number[]; lair: readonly number[] } = {
-  camp: [2, 3, 4],
-  lair: [5, 7, 10],
+  camp: [1, 2],
+  lair: [2, 3],
 };
 
 export interface CampSpec {

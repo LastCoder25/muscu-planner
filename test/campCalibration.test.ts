@@ -59,11 +59,23 @@ describe('🏕️ LA TAILLE D’UN CAMP SE LIT EN AVENTURIERS', { timeout: 120_0
     // v0.943 (elle couvrait les embuscades et les sièges). Aucun couple `pvTurns`/
     // `dmgPctPv` balayé (5 × 4 valeurs) ne resserre la bande sans rendre un camp de la
     // bonne taille perdant ailleurs : c'est un chantier de calibration à part.
+    // 👥 TAILLES 1 À 3 (2026-09-21, équipes de 3 places) — re-mesuré (200 tirages) : 2 contre
+    // 2 et 3 contre 3 → 0,78 à 1,00. ⚠️ Un camp de taille 1 dépend du CHAMPION qu'on envoie :
+    // un mêlée seul 0,05-0,98, un agile ou un civil 0,56-0,99 (la référence est un trio aux
+    // trois orientations). On borne donc la MOYENNE des trois orientations (0,62-0,84).
     for (const L of NIV)
-      for (const s of SIZES) {
+      for (const s of SIZES.filter((x) => x > 1)) {
         const t = win(units(s, L), L, s);
         expect(t, `niveau ${L}, taille ${s}`).toBeGreaterThanOrEqual(0.7);
       }
+    for (const L of NIV) {
+      const seul = [0, 1, 2].map((i) => {
+        const esc = [{ ...team(3, L)[i]!, id: 'a' + i }];
+        return win(roadUnits(esc, escortGear(esc, { advGear: refAdvGear(L, 3) })), L, 1);
+      });
+      const moy = seul.reduce((a, b) => a + b, 0) / 3;
+      expect(moy, `niveau ${L}, taille 1`).toBeGreaterThanOrEqual(0.55);
+    }
   });
   it('⚠️ B2 : un aventurier de moins se SENT', () => {
     // ⚠️ L'ÉCART S'EST RESSERRÉ AUX EXTRÊMES, et ce test le dit plutôt que de le taire :
@@ -77,11 +89,10 @@ describe('🏕️ LA TAILLE D’UN CAMP SE LIT EN AVENTURIERS', { timeout: 120_0
           win(units(s, L), L, s) - 0.05,
         );
   });
-  it('⚠️ B3 : un gros camp demande NETTEMENT plus que trois aventuriers', () => {
-    // ✅ Celle-là n'a pas bougé : un trio ne prend jamais un repaire (mesuré ≤ 0,12).
-    for (const L of NIV)
-      for (const s of SIZES.filter((x) => x >= 5))
-        expect(win(units(3, L), L, s), `niveau ${L}, taille ${s}`).toBeLessThan(0.15);
+  it('⚠️ B3 : un repaire de 3 demande une ÉQUIPE PLEINE', () => {
+    // Mesuré : deux champions contre un camp de 3 → 0 à 0,25. Sans cette marche, l'équipe
+    // pleine ne servirait à rien.
+    for (const L of NIV) expect(win(units(2, L), L, 3), `niveau ${L}`).toBeLessThan(0.35);
   });
   it('B4 : le héros seul, équipé, prend encore un petit camp de son niveau', () => {
     for (const L of [26, 45, 70]) {

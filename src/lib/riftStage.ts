@@ -27,7 +27,7 @@
 
 import { mulberry32 } from './combat';
 import type { ExpeditionMessage, PartyResult } from './expedition';
-import { RIFT_MAX_PARTY, partyReport } from './party';
+import { TEAM_SLOTS, partyReport } from './party';
 import type { Adventurer } from './adventurers';
 import type { RaidFaction } from './raid';
 import { RIFT_RUN, riftDepth, riftFoeIdentity, riftRamp, type RiftBossReplay } from './rift';
@@ -55,7 +55,7 @@ export const RIFT_STAGE = {
   /**
    * 🧭 LA FORMATION DU GROUPE — où se tient chaque membre par rapport au point de marche
    * (fractions du terrain en x, de la hauteur en y). Une place par membre possible : une
-   * faille n'en laisse passer que `RIFT_MAX_PARTY`, héros compris (un test tient les deux
+   * équipe ne compte que `TEAM_SLOTS` places, héros compris (un test tient les deux
    * nombres d'accord).
    *
    * ⚠️ En ÉVENTAIL et non en file : les monstres alternent de part et d'autre de l'axe
@@ -180,7 +180,7 @@ export function riftStageInputOf(party: PartyResult): RiftStageInput | null {
  *  (le plancher couvre un rapport bancal ; le plafond, une formation qui n'aurait pas de
  *  place pour un quatrième). */
 export function riftPartySize(input: Pick<RiftStageInput, 'partySize'>): number {
-  return Math.max(1, Math.min(RIFT_MAX_PARTY, Math.round(input.partySize ?? 1)));
+  return Math.max(1, Math.min(TEAM_SLOTS, Math.round(input.partySize ?? 1)));
 }
 
 /** Où se tient le k-ième monstre sur l'axe de marche. */

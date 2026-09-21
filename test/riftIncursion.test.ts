@@ -24,7 +24,8 @@ import {
   type EscortKit,
 } from '@/lib/caravan';
 import {
-  RIFT_MAX_PARTY,
+  TEAM_SLOTS,
+  HERO_TEAM_SLOTS,
   partyCapFor,
   partyFightSeed,
   partyForecastSeed,
@@ -443,52 +444,48 @@ describe('🔗 la résolution emprunte bien la graine DU COMBAT', () => {
 // aux niveaux 12, 26, 45 et 70. La cause est structurelle : une faille n'a qu'UN axe de
 // force (son niveau), donc rien ne la fait grandir avec le groupe envoyé.
 // ─────────────────────────────────────────────────────────────────────────────
-describe('🕳️ le plafond de champions d’une faille', () => {
+describe('👥 une ÉQUIPE compte 3 places, partout — le héros en prend 2 (2026-09-21)', () => {
   const camp = (): Poi => ({ ...rift(), id: 'camp_x', type: 'camp' });
+  const mine = (): Poi => ({ ...rift(), id: 'mine_x', type: 'mine' });
 
-  it('⚠️ une FAILLE n’en laisse passer que RIFT_MAX_PARTY, quel que soit le Panthéon', () => {
+  it('⚠️ 3 champions au plus, quel que soit le Panthéon', () => {
     // Le Panthéon d'un joueur avancé en autorise 51 : ici il ne sert à rien.
-    for (const engage of [3, 16, 51]) {
-      expect(partyCapFor(rift(), engage, false)).toBe(RIFT_MAX_PARTY);
-    }
+    for (const engage of [3, 16, 51]) expect(partyCapFor(engage, false)).toBe(TEAM_SLOTS);
     // …mais il mord quand il est PLUS strict : un débutant n'en a pas trois.
-    expect(partyCapFor(rift(), 2, false)).toBe(2);
+    expect(partyCapFor(2, false)).toBe(2);
   });
 
-  it('⚠️ un CAMP garde le plafond du Panthéon — sa TAILLE fait déjà le gradateur', () => {
-    // Mesuré : un camp de 10 se gagne à 20-61 % avec 8 champions, 57-99 % avec 10. Un
-    // plafond bas y rendrait les gros repaires impossibles sans le héros.
-    for (const engage of [3, 16, 51]) {
-      expect(partyCapFor(camp(), engage, false)).toBe(engage);
-      expect(partyCapFor(camp(), engage, true)).toBe(engage);
+  it('⚠️ la MÊME règle sur un camp, une faille et un lieu de récolte', () => {
+    for (const p of [camp(), rift(), mine()]) {
+      expect(partySendBlocker(p, TEAM_SLOTS, false, 5, 51), p.type).toBeNull();
+      expect(partySendBlocker(p, TEAM_SLOTS + 1, false, 5, 51), p.type).toBe('teamFull');
     }
   });
 
   it('le refus DISTINGUE les deux plafonds — ils ne se corrigent pas pareil', () => {
     // Trop pour le Panthéon : ça se lève en le montant.
-    expect(partySendBlocker(rift(), 4, false, 5, 2)).toBe('tooMany');
-    // Trop pour la faille : ça ne se lèvera jamais.
-    expect(partySendBlocker(rift(), 4, false, 5, 51)).toBe('riftCrowd');
-    // Trois passent.
-    expect(partySendBlocker(rift(), RIFT_MAX_PARTY, false, 5, 51)).toBeNull();
-    // Et un camp, lui, en accepte dix.
-    expect(partySendBlocker(camp(), 10, false, 5, 51)).toBeNull();
+    expect(partySendBlocker(rift(), 3, false, 5, 2)).toBe('tooMany');
+    // Trop pour une équipe : ça ne se lèvera jamais.
+    expect(partySendBlocker(rift(), 4, false, 5, 51)).toBe('teamFull');
   });
 
-  it('⚠️ le HÉROS compte dans les 3 d’une faille (décision 2026-09-21)', () => {
-    // Mesuré (v0.979) : héros seul → 100 % de fermeture. Sans ça il décidait seul.
-    expect(partyCapFor(rift(), 51, true)).toBe(RIFT_MAX_PARTY - 1);
-    expect(partySendBlocker(rift(), RIFT_MAX_PARTY, true, 5, 51)).toBe('riftCrowd');
-    expect(partySendBlocker(rift(), RIFT_MAX_PARTY - 1, true, 5, 51)).toBeNull();
-    // Un Panthéon plus strict mord toujours, héros ou non.
-    expect(partyCapFor(rift(), 1, true)).toBe(1);
+  it('⚠️ le HÉROS PREND 2 PLACES : héros seul, ou héros + 1 champion', () => {
+    // Cohérent avec ce qu'il VAUT (au plus 2 champions de référence, `heroPartyCombatant`) :
+    // héros + 1 champion vaut une équipe pleine, jamais plus.
+    expect(HERO_TEAM_SLOTS).toBe(2);
+    expect(partyCapFor(51, true)).toBe(TEAM_SLOTS - HERO_TEAM_SLOTS);
+    expect(partySendBlocker(rift(), 0, true, 5, 51)).toBeNull();
+    expect(partySendBlocker(rift(), 1, true, 5, 51)).toBeNull();
+    expect(partySendBlocker(rift(), 2, true, 5, 51)).toBe('teamFull');
+    // L'équipe du héros ne prend pas de créneau de l'Avant-poste.
+    expect(partySendBlocker(mine(), 1, true, 0, 51)).toBeNull();
+    expect(partySendBlocker(mine(), 1, false, 0, 51)).toBe('slots');
   });
 
-  it('⚠️ le plafond est SOUS le point où la faille cesse de se jouer', () => {
-    // C'est tout l'objet du nombre : à 4 la part nettoyée est de 99-100 % à tout niveau
-    // et à tout âge, donc « combien j'en envoie » n'aurait plus qu'une réponse.
-    expect(RIFT_MAX_PARTY).toBeLessThan(4);
-    // …et au-dessus de 2, où elle est quasi imprenable (0-2 % sur une faille mûre).
-    expect(RIFT_MAX_PARTY).toBeGreaterThan(2);
+  it('⚠️ 3 est SOUS le point où une faille cesse de se jouer', () => {
+    // Mesuré : une faille mûre, sans héros — 4 → 99-100 % à tout niveau (plus de décision),
+    // 2 → 0-2 % (imprenable). 3 est le seul nombre où « combien j'en envoie » compte.
+    expect(TEAM_SLOTS).toBeLessThan(4);
+    expect(TEAM_SLOTS).toBeGreaterThan(2);
   });
 });

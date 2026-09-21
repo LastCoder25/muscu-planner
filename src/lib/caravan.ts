@@ -204,6 +204,9 @@ export interface CaravanOutcome {
    *  écrite ; convertie en or à l'encaissement (`SCRAP_TO_GOLD`). */
   scrap?: number;
   keys: number;
+  /** 💠 Mana d'une mine de mana résiduel. ⚠️ ABSENT des convois d'avant (2026-09-21) : le
+   *  convoi ne le rapportait PAS, alors qu'une mine de mana est le seul lieu qui en donne. */
+  mana?: number;
   /** Salaires versés à l'escorte — déduits à part, c'est une DÉPENSE assumée. */
   wages: number;
   /** XP gagnée, PAR AVENTURIER (id → XP).
@@ -808,8 +811,9 @@ export function poiOffers(
     // lève toujours : deux verrous, une ceinture et des bretelles.
     // ⚓ Une ÉPAVE est un type retiré (v0.999) : rien ne peut plus y être envoyé.
     hero: !opts.heroAway && !isRiftPoi(poi) && poi.type !== 'wreck',
-    // Les convois n'exploitent que les lieux de RÉCOLTE : le héros se bat, eux ramassent.
-    caravan: opts.comptoirLevel > 0 && HARVEST_TYPES.has(poi.type),
+    // 🚫 Plus de convoi (2026-09-21) : une ÉQUIPE part sur les lieux de récolte à sa place.
+    // Le champ reste (ceux déjà en route s'encaissent), mais on n'en lance plus.
+    caravan: false,
     // ⚔️ Un CAMP — ET UNE FAILLE — s'attaquent en GROUPE : le héros (sa propre limite), ou
     // au moins un aventurier disponible avec un créneau de convoi libre. `PARTY_TARGETS` est
     // la source unique de « on y envoie un groupe » ; ce que ça résout (camp ou incursion) se
@@ -1127,6 +1131,7 @@ export function resolveCaravan(
     energy: raw.energy * CARAVAN.yieldShare,
     summonStones: raw.summonStones * CARAVAN.yieldShare,
     keys: raw.keys,
+    mana: raw.mana * CARAVAN.yieldShare,
   };
   const wages = caravanWages(escort, poi);
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
@@ -1146,6 +1151,7 @@ export function resolveCaravan(
     energy: Math.round(Math.min(y.energy, y.energy * k)),
     summonStones: Math.round(y.summonStones * k),
     keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus,
+    mana: Math.round(y.mana * k),
     wages,
     xp,
     kills,

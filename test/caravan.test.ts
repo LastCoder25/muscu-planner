@@ -1011,161 +1011,87 @@ describe('⚠️ un convoi VOYAGE comme le héros', () => {
   });
 });
 
-describe('⚠️ un convoi part SANS le héros', () => {
-  // Le panneau d'envoi de la carte était entièrement gardé par « le héros est
-  // disponible » : dès qu'il partait en expédition, on ne pouvait plus ni sélectionner
-  // un lieu, ni lancer un convoi. C'est l'exact inverse de l'intention — un convoi est
-  // une voie PARALLÈLE, sa raison d'être est de jouer quand le héros ne peut pas.
+describe('👥 une ÉQUIPE part SANS le héros — elle remplace le convoi (2026-09-21)', () => {
+  // Le panneau d'envoi était entièrement gardé par « le héros est disponible » : dès qu'il
+  // partait, plus rien ne pouvait partir. Une équipe de champions est la voie PARALLÈLE —
+  // sa raison d'être est de jouer quand le héros ne peut pas.
   const recolte = poi({ type: 'well' });
-  const combat = poi({ type: 'camp' });
+  const offre = (p: Poi, heroAway: boolean, advsAvailable: number, slotsFree = 1) =>
+    poiOffers(p, { heroAway, comptoirLevel: 3, advsAvailable, slotsFree });
 
-  it('⚠️ l’offre de convoi NE DÉPEND PAS de la disponibilité du héros', () => {
-    for (const heroAway of [true, false]) {
-      expect(
-        poiOffers(recolte, { heroAway, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).caravan,
-        `héros absent=${heroAway}`,
-      ).toBe(true);
+  it('🚫 on ne lance plus de convoi, nulle part', () => {
+    for (const t of ['well', 'mine', 'shrine', 'archive', 'mana_mine', 'camp', 'rift'] as const)
+      for (const heroAway of [true, false])
+        expect(offre(poi({ type: t }), heroAway, 5).caravan, t).toBe(false);
+  });
+
+  it('⚠️ un lieu de RÉCOLTE accepte une équipe, que le héros soit là ou non', () => {
+    for (const t of ['well', 'mine', 'shrine', 'archive', 'mana_mine'] as const) {
+      expect(offre(poi({ type: t }), true, 2).party, t).toBe(true);
+      expect(offre(poi({ type: t }), false, 0).party, t).toBe(true);
     }
   });
 
-  it('le HÉROS, lui, ne peut pas être à deux endroits', () => {
-    expect(
-      poiOffers(recolte, { heroAway: false, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 })
-        .hero,
-    ).toBe(true);
-    expect(
-      poiOffers(recolte, { heroAway: true, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).hero,
-    ).toBe(false);
+  it('le HÉROS SEUL garde son expédition solo sur un lieu de récolte', () => {
+    expect(offre(recolte, false, 0).hero).toBe(true);
+    expect(offre(recolte, true, 0).hero).toBe(false); // il ne peut pas être à deux endroits
   });
 
-  it('🕳️ une FAILLE s’attaque EN GROUPE — jamais en expédition solo, jamais au convoi', () => {
-    // ⚠️ `hero` (l'expédition SOLO) reste refusé, et ce n'est pas un reliquat : c'est le
-    // verrou qui empêche `resolveOutcome` de traiter la faille comme une MINE D'OR (de l'or
-    // et de l'énergie, en silence, sans combat — v0.926). On y entre par `party`, même quand
-    // le héros y va seul, pour que ce soit `resolveIncursion` qui tranche.
-    const faille = poi({ type: 'rift' });
-    const o = poiOffers(faille, {
-      heroAway: false,
-      comptoirLevel: 3,
-      advsAvailable: 4,
-      slotsFree: 4,
-    });
+  it('🕳️ une FAILLE s’attaque en équipe — jamais en expédition solo', () => {
+    // ⚠️ `hero` (l'expédition SOLO) reste refusé : c'est le verrou qui empêche
+    // `resolveOutcome` de traiter la faille comme une MINE D'OR (v0.926).
+    const o = offre(poi({ type: 'rift' }), false, 4, 4);
     expect(o.hero).toBe(false);
-    expect(o.caravan).toBe(false);
     expect(o.party).toBe(true);
-    // Sans le héros, un groupe prend un créneau de convoi : plus de créneau, plus de groupe.
-    expect(
-      poiOffers(faille, {
-        heroAway: true,
-        comptoirLevel: 3,
-        advsAvailable: 4,
-        slotsFree: 0,
-      }).party,
-    ).toBe(false);
   });
 
-  it('💠 une MINE DE MANA RÉSIDUEL, elle, s’exploite — et au convoi, donc sans énergie', () => {
+  it('💠 une MINE DE MANA RÉSIDUEL se récolte en équipe, donc sans énergie', () => {
     // C'est ce qui ouvre le mana au joueur qui ne combat pas (v0.725).
-    const mine = poi({ type: 'mana_mine' });
-    expect(
-      poiOffers(mine, { heroAway: true, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).caravan,
-    ).toBe(true);
-    expect(
-      poiOffers(mine, { heroAway: false, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 }).hero,
-    ).toBe(true);
+    expect(offre(poi({ type: 'mana_mine' }), true, 1).party).toBe(true);
   });
 
-  it('un convoi n’exploite que les lieux de RÉCOLTE, et exige un Comptoir', () => {
-    expect(
-      poiOffers(combat, { heroAway: false, comptoirLevel: 3, advsAvailable: 0, slotsFree: 1 })
-        .caravan,
-    ).toBe(false);
-    expect(
-      poiOffers(recolte, { heroAway: false, comptoirLevel: 0, advsAvailable: 0, slotsFree: 1 })
-        .caravan,
-    ).toBe(false);
-  });
-
-  it('⚔️ un CAMP s’ouvre aux groupes : le héros, ou au moins un aventurier disponible', () => {
+  it('⚔️ un CAMP s’ouvre aux équipes : le héros, ou au moins un champion disponible', () => {
     const camp = poi({ type: 'camp' });
-    expect(
-      poiOffers(camp, { heroAway: false, comptoirLevel: 0, advsAvailable: 0, slotsFree: 1 }).party,
-    ).toBe(true);
-    expect(
-      poiOffers(camp, { heroAway: true, comptoirLevel: 0, advsAvailable: 2, slotsFree: 1 }).party,
-    ).toBe(true);
-    expect(
-      poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 0, slotsFree: 1 }).party,
-    ).toBe(false);
-    expect(
-      poiOffers(poi({ type: 'lair' }), {
-        heroAway: true,
-        comptoirLevel: 0,
-        advsAvailable: 1,
-        slotsFree: 1,
-      }).party,
-    ).toBe(true);
-    // Les convois, eux, ne vont toujours pas au combat.
-    expect(
-      poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 5, slotsFree: 1 }).caravan,
-    ).toBe(false);
-    expect(
-      poiOffers(poi({ type: 'well' }), {
-        heroAway: false,
-        comptoirLevel: 9,
-        advsAvailable: 5,
-        slotsFree: 1,
-      }).party,
-    ).toBe(false);
+    expect(offre(camp, false, 0).party).toBe(true);
+    expect(offre(camp, true, 2).party).toBe(true);
+    expect(offre(camp, true, 0).party).toBe(false);
+    expect(offre(poi({ type: 'lair' }), true, 1).party).toBe(true);
   });
 
-  it('⚠️ UN SEUL POOL : sans le héros, un groupe exige un créneau de convoi libre', () => {
+  it('⚠️ UN SEUL POOL : sans le héros, une équipe exige un créneau libre de l’Avant-poste', () => {
     const camp = poi({ type: 'camp' });
-    // Sans créneau : fermé aux aventuriers seuls…
-    expect(
-      poiOffers(camp, { heroAway: true, comptoirLevel: 9, advsAvailable: 5, slotsFree: 0 }).party,
-    ).toBe(false);
+    expect(offre(camp, true, 5, 0).party).toBe(false);
+    expect(offre(recolte, true, 5, 0).party).toBe(false);
     // …mais le héros, lui, n'en prend pas : il est sa propre limite.
-    expect(
-      poiOffers(camp, { heroAway: false, comptoirLevel: 9, advsAvailable: 5, slotsFree: 0 }).party,
-    ).toBe(true);
+    expect(offre(camp, false, 5, 0).party).toBe(true);
   });
 
-  it('⚠️ convoySlotsFree : convois ET groupes sans le héros en route se partagent les créneaux', () => {
+  it('⚠️ convoySlotsFree : convois d’avant ET équipes sans le héros se partagent les créneaux', () => {
     const now = 1000;
     const enRoute = { returnAt: now + 1 };
     const rentre = { returnAt: now };
     const slots = caravanSlots(18); // 3
     expect(convoySlotsFree(18, [], now)).toBe(slots);
-    // Un convoi en route + un groupe en route = deux créneaux pris, peu importe leur nature.
     expect(convoySlotsFree(18, [enRoute, enRoute], now)).toBe(slots - 2);
-    // Un voyage rentré (now >= returnAt) ne tient plus de créneau.
     expect(convoySlotsFree(18, [enRoute, rentre], now)).toBe(slots - 1);
-    // Jamais négatif.
     expect(convoySlotsFree(0, [enRoute, enRoute, enRoute], now)).toBe(0);
   });
 });
 
 describe('⚠️ ce qui est GRISÉ sur la carte', () => {
   // Le gris doit dire « rien ne peut y aller », jamais « le héros est occupé ».
-  // La carte grisait TOUT dès son départ, y compris les lieux de récolte où un convoi
-  // peut parfaitement aller : elle annonçait indisponibles des lieux disponibles, et
-  // l'utilisateur a logiquement cessé d'essayer de cliquer.
-  const gris = (p: Poi, heroAway: boolean, comptoirLevel: number) => {
-    const o = poiOffers(p, { heroAway, comptoirLevel, advsAvailable: 0, slotsFree: 1 });
-    return !o.hero && !o.caravan;
+  const gris = (p: Poi, heroAway: boolean, advsAvailable: number) => {
+    const o = poiOffers(p, { heroAway, comptoirLevel: 3, advsAvailable, slotsFree: 1 });
+    return !o.hero && !o.party;
   };
 
-  it('⚠️ un lieu de RÉCOLTE reste vif quand le héros est parti', () => {
-    expect(gris(poi({ type: 'well' }), true, 3)).toBe(false);
+  it('⚠️ un lieu de RÉCOLTE reste vif quand le héros est parti, s’il reste un champion', () => {
+    expect(gris(poi({ type: 'well' }), true, 1)).toBe(false);
   });
 
-  it('un lieu de COMBAT se grise quand le héros est parti — là, rien ne peut y aller', () => {
-    expect(gris(poi({ type: 'camp' }), true, 3)).toBe(true);
-  });
-
-  it('sans Comptoir, tout se grise pendant l’absence du héros', () => {
-    expect(gris(poi({ type: 'well' }), true, 0)).toBe(true);
+  it('sans champion disponible, tout se grise pendant l’absence du héros', () => {
+    for (const t of ['well', 'camp'] as const)
+      expect(gris(poi({ type: t }), true, 0), t).toBe(true);
   });
 
   it('héros disponible : rien n’est grisé', () => {
