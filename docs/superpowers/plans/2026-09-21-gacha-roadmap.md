@@ -19,6 +19,10 @@
 | 10 | Niveau max | **le même pour tous** : celui du héros (S comme A) |
 | 11 | Le héros dans les failles | **il compte dans la limite de 3** |
 | 12 | Notification | **le lundi**, quand la vedette change (nom seulement) |
+| 13 | Revenu de mana | **Plat comme dans le genre** : le mana d'une faille ne suit plus son niveau ; cible **~1,5-2 tirages/jour** à tout niveau, 90 tirages en ~45-60 j pour un joueur qui ferme une faille par jour (valeur de référence : le niveau 30 actuel) |
+| 14 | Tirage offert | **entier** un jour d'entraînement, **demi** les autres jours |
+| 15 | Nouvelles sources | **Oui** : mana de première réussite (donjon, boss, palier du Labyrinthe) + petit événement hebdo lié à la vedette |
+| 16 | Compensation du reset | en pierres de mana, **selon les tirages déjà faits** ; le compteur de garantie **repart à zéro** |
 
 ### « Comme dans le genre » pour le compteur (Q3), concrètement
 
@@ -104,15 +108,8 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 
 - **Q-B — Le filet contre la malchance, en pierres de mana** : lecture retenue — pas de points
   d'étincelle ; on peut **acheter un S choisi** avec des pierres de mana, à un prix élevé fixe (à
-  mesurer). ⚠️ À confirmer : c'est bien ça, ou tu voulais dire **aucun filet** au-delà du pity de 90 ?
-- **Q-H — Revenu plat** : le mana d'une faille cesse de suivre son niveau, pour tenir ~1,5-2
-  tirages/jour à tout niveau (aujourd'hui jusqu'à 3,7 au niveau 100). D'accord ?
-- **Q-I — Tirage offert quotidien** : le réduire à ½ tirage/jour, ou le garder entier mais lié à un
-  **jour d'entraînement** ?
-- **Q-J — Mana de première réussite** (premier nettoyage d'un donjon, premier boss, premier palier du
-  Labyrinthe) et **petit événement hebdo** lié à la vedette : oui/non ?
-- **Q-K — Compensation du reset** : en pierres de mana, calculée sur ce que chaque compte a investi
-  (tirages faits, copies) ? Et le compteur de garantie est-il conservé ou remis à zéro ?
+  mesurer). ⚠️ Réexpliqué le 2026-09-21 : points d’étincelle (1 par tirage, échangés contre un S
+  choisi) contre achat direct en mana, ou aucun filet. En attente.
 
 ## Améliorations proposées en plus (hors refonte, à prendre ou laisser)
 
