@@ -215,11 +215,12 @@ export interface Poi {
    *  ⚠️ TIRÉ AU SPAWN et jamais retouché : c'est ce qui le rend annonçable. Le harcèlement
    *  des failles, lui, vit dans `riftPeril` — deux CAUSES distinctes, un seul effet
    *  (`routePerilous`), parce que l'écran doit pouvoir dire LAQUELLE et que l'une des deux
-   *  est actionnable (« referme la faille »). */
+   *  est actionnable (refermer ses failles AVANT 7 j empêche toute embuscade). */
   perilous?: boolean;
-  /** 🕳️ Harcelé par une faille ouverte à portée. ⚠️ DÉRIVÉ, recalculé à chaque
-   *  `advanceWorld` : il s'éteint tout seul quand on referme la faille ou qu'elle déborde.
-   *  Ne jamais l'écrire ailleurs — il serait faux dès le tick suivant. */
+  /** 🕳️ Harcelé par les monstres EMBUSQUÉS d'une faille qui a débordé (v0.1009 ; avant :
+   *  par toute faille ouverte). ⚠️ DÉRIVÉ, recalculé à chaque `advanceWorld` : il s'éteint
+   *  tout seul quand l'embuscade expire. Ne jamais l'écrire ailleurs — il serait faux dès
+   *  le tick suivant. Le NOM est gardé : il est sérialisé dans les cartes existantes. */
   riftPeril?: boolean;
   /** ⚔️ BANDE EN MARCHE uniquement — la faction héritée de sa faille, et son point de
    *  DÉPART. ⚠️ `from` est immuable : la marche s'interpole de là vers la ville, donc la
@@ -248,6 +249,19 @@ export interface ExpeditionMap {
   riftCount?: number;
   /** ms epoch de la prochaine faille possible (idem : absent = « dès maintenant »). */
   nextRiftAt?: number;
+  /** 🐫 Les monstres EMBUSQUÉS autour d'une faille qui a débordé (v0.1009). Absent des
+   *  cartes d'avant → aucune embuscade, aucune migration. */
+  ambushes?: RiftAmbush[];
+}
+
+/** 🐫 Une embuscade laissée par une faille qui a débordé : là où elle était, jusqu'à
+ *  `until`. ⚠️ Elle SURVIT à la faille (qui devient une mine de mana) et à la bande qui
+ *  marche sur la base : ce sont les monstres qui sont RESTÉS. */
+export interface RiftAmbush {
+  id: string;
+  x: number;
+  y: number;
+  until: number;
 }
 
 /** ⚠️ CE QUI COMPTE DANS LE QUOTA GÉNÉRAL (`poiCap`/`poiFloor`, 20). Les **failles** ont
@@ -604,10 +618,16 @@ export const EXPE = {
   // 6 essais et les POI se poseraient les uns sur les autres. À 14, on retombe à 26 %.
   minDistPoi: 14, // écart mini entre POI (placement espacé)
 
-  /** 🐫 **HARCÈLEMENT DES CONVOIS — le rayon qu'une faille MÛRE irradie.**
+  /** 🐫 **HARCÈLEMENT DES CONVOIS — les monstres embusqués d'une faille qui a DÉBORDÉ.**
    *
-   *  Une faille ouverte rend dangereuses les routes qui passent près d'elle : les lieux
-   *  dans son rayon deviennent périlleux. ⚠️ **AUCUN NOUVEAU MODÈLE DE COMBAT** — on
+   *  ⚠️ **RÈGLE v0.1009 (demandée par l'utilisateur ; override la v0.934)** : une faille
+   *  qui MÛRIT ne harcèle PLUS rien. Le harcèlement ne commence qu'au DÉBORDEMENT (7 j),
+   *  quand les monstres sortent — et l'armée se SCINDE : une partie s'EMBUSQUE autour de
+   *  la faille pendant `ambushMs` (2 jours), l'autre marche sur la base (la bande qu'on
+   *  intercepte, puis le siège renforcé, inchangés). Refermer ses failles avant 7 jours
+   *  empêche donc TOUTE embuscade ; une fois sorties, on attend ou on escorte plus fort.
+   *
+   *  Les lieux dans le rayon deviennent périlleux. ⚠️ **AUCUN NOUVEAU MODÈLE DE COMBAT** — on
    *  réutilise un drapeau déjà calibré et verrouillé par des tests (trio sur route calme
    *  73-94 % d'embuscades repoussées, sur route périlleuse 8-35 %, un quatuor y remontant
    *  à 98 %). La parade est donc d'envoyer un aventurier de plus, pas de renoncer.
@@ -626,13 +646,16 @@ export const EXPE = {
    *  `minDistPoi` (juste au-dessus) — c'est de la géométrie de carte. Les mettre dans
    *  `rift.ts` créerait en prime un cycle d'import (`rift.ts` importe déjà ce module).
    *
-   *  **MESURÉ** (30 j × 6 graines, part des lieux de RÉCOLTE irradiés) : on ne ferme rien
-   *  → 21 % · 1 fermeture/jour → 14 % · **2 par jour → 1 %**. La falaise tombe au rythme
-   *  de spawn (~2/jour) : tenir la cadence garde les routes propres, décrocher les salit.
-   *  Il reste 9,8 lieux propres en moyenne (creux 3,2), donc un choix, jamais une taxe.
+   *  _(Mesure de l'ancienne règle, v0.934 — harcèlement DÈS l'ouverture, rayon croissant :
+   *  on ne ferme rien → 21 % des lieux de récolte · 1 fermeture/jour → 14 % · 2/jour → 1 %.
+   *  La nouvelle mesure est dans `riftHarass.test`.)_
+   *
+   *  Le rayon est celui d'une faille MÛRE sous l'ancienne règle (`irradMax`) : les
+   *  monstres sortent à pleine maturité, il n'y a plus rien à faire grandir.
    */
   irradMax: 25,
-  irradExp: 2,
+  /** Durée d'une embuscade après le débordement (demandé : « pendant 2 jours »). */
+  ambushMs: 2 * 24 * 3600_000,
   // Bandes de distance : on en cycle 5 au lieu de 3. Le niveau suivant la distance, la
   // granularité des bandes EST la granularité de la difficulté proposée — 3 bandes ne
   // donnaient que trois marches sur toute la fenêtre de niveaux.
@@ -1228,7 +1251,7 @@ function levelFitsDistance(poi: Poi, playerLevel: number): boolean {
  * Maturité 0..1 d'une faille — **LA SEULE définition de la courbe du temps d'une faille**.
  *
  * ⚠️ Elle vit ICI et non dans `rift.ts` parce que ce module-là importe celui-ci (jamais
- * l'inverse), et que le rayon d'irradiation en a besoin. `rift.riftMaturity` s'y adosse :
+ * l'inverse), et que la population de `rift.ts` en dépend. `rift.riftMaturity` s'y adosse :
  * deux implémentations de « quel âge a-t-elle ? » finiraient par répondre différemment.
  */
 export function riftMaturityAt(spawnedAt: number, now: number): number {
@@ -1236,55 +1259,32 @@ export function riftMaturityAt(spawnedAt: number, now: number): number {
 }
 
 /**
- * 🐫 Le rayon qu'une faille irradie À CET INSTANT — il GRANDIT avec sa maturité.
+ * 🐫 Les lieux HARCELÉS par une embuscade en cours — les ids, jamais les objets.
  *
- * ⚠️ **LE PLANCHER EST L'ESPACEMENT DE LA CARTE, et il est DÉRIVÉ, pas choisi.** Mesuré :
- * sous `minDistPoi` l'irradiation ne touche **littéralement rien**, puisque le placement
- * garantit déjà cet écart entre deux POI. Le rayon n'est donc pas un paramètre libre — il
- * doit dépasser la règle d'espacement de la carte pour exister. L'écrire en dur laisserait
- * les deux dériver au premier réglage du placement.
+ * ⚠️ **RÈGLE v0.1009** : seules les **embuscades** (monstres sortis d'une faille qui a
+ * DÉBORDÉ, pendant `EXPE.ambushMs`) harcèlent. Une faille qui mûrit ne touche plus rien —
+ * c'est ce qui rend « refermer avant 7 jours » décisif.
  *
- * Conséquence heureuse : une faille qui vient d'apparaître ne menace que ce qui est collé
- * contre elle — en pratique son voisin immédiat. La pression monte avec l'âge.
+ * ⚠️ **DÉRIVÉ, JAMAIS FIGÉ.** L'ensemble change dès qu'une embuscade commence ou expire :
+ * un drapeau posé une fois pour toutes resterait allumé sur une route redevenue sûre.
  *
- * ⚠️ **COURBE ACCÉLÉRÉE** (`irradExp` 2), comme la population : à mi-vie le rayon ne vaut
- * que 16,8 sur 25, donc le harcèlement ne mord vraiment que dans le dernier tiers. On
- * laisse le temps d'aller la fermer avant d'en payer le prix.
+ * ⚠️ **NI UNE FAILLE NI UNE BANDE EN MARCHE NE SONT « HARCELÉES »** : on va s'y battre de
+ * toute façon, « route dangereuse » n'y voudrait rien dire (même règle que les camps).
+ *
+ * ⚠️ **LA DISTANCE EST CELLE AU LIEU, pas à la route** : le joueur doit pouvoir LIRE sur
+ * la carte pourquoi sa route est dangereuse — l'auréole de l'embuscade autour du lieu.
  */
-export function riftIrradiationRadius(spawnedAt: number, now: number): number {
-  const floor = EXPE.minDistPoi;
-  return floor + (EXPE.irradMax - floor) * Math.pow(riftMaturityAt(spawnedAt, now), EXPE.irradExp);
-}
-
-/**
- * 🐫 Les lieux HARCELÉS par au moins une faille ouverte — les ids, jamais les objets.
- *
- * ⚠️ **DÉRIVÉ, JAMAIS FIGÉ.** L'ensemble change dès qu'une faille apparaît, mûrit, est
- * refermée ou déborde : un drapeau posé une fois pour toutes resterait allumé sur une
- * route qu'on vient de nettoyer, et le joueur ne verrait jamais le fruit de son incursion.
- *
- * ⚠️ **UNE FAILLE N'IRRADIE NI ELLE-MÊME NI SES SŒURS** : « route dangereuse » ne veut
- * rien dire sur un lieu où l'on va se battre de toute façon (c'est déjà le cas des camps,
- * cf. `camp.ts`), et une faille qui rendrait sa voisine plus coûteuse à atteindre
- * découragerait exactement le geste qu'on cherche à provoquer.
- *
- * ⚠️ **LA DISTANCE EST CELLE AU LIEU, pas à la route.** Un rayon mesuré au segment
- * ville→destination serait plus fidèle au mot « convoi », mais **invisible** : le joueur
- * doit pouvoir LIRE sur la carte pourquoi sa route est dangereuse, et ce qu'il voit, c'est
- * un glyphe de faille à côté d'un glyphe de destination.
- */
-export function irradiatedPoiIds(pois: readonly Poi[], now: number): Set<string> {
+export function irradiatedPoiIds(
+  pois: readonly Poi[],
+  ambushes: readonly RiftAmbush[] | undefined,
+  now: number,
+): Set<string> {
   const out = new Set<string>();
-  const rifts = pois.filter(isRiftPoi);
-  if (!rifts.length) return out;
+  const live = (ambushes ?? []).filter((a) => a.until > now);
+  if (!live.length) return out;
   for (const p of pois) {
-    if (isRiftPoi(p)) continue;
-    for (const r of rifts) {
-      if (Math.hypot(p.x - r.x, p.y - r.y) <= riftIrradiationRadius(r.spawnedAt, now)) {
-        out.add(p.id);
-        break;
-      }
-    }
+    if (isRiftPoi(p) || p.type === 'warband') continue;
+    if (live.some((a) => Math.hypot(p.x - a.x, p.y - a.y) <= EXPE.irradMax)) out.add(p.id);
   }
   return out;
 }
@@ -1353,12 +1353,31 @@ export function advanceWorld(
     collapsed.length || warbands.length
       ? [...map.pois.filter((p) => !gone.has(p.id)), ...collapsed, ...warbands]
       : map.pois;
+  // 🐫 ET UNE PARTIE RESTE EMBUSQUÉE autour de la faille pendant `ambushMs` (v0.1009). Datée
+  // du DÉBORDEMENT, pas de l'instant du calcul : une absence longue ne la prolonge pas, et
+  // une embuscade déjà finie pendant l'absence est aussitôt retirée ci-dessous. Rejouer ce
+  // passage ne peut pas la dupliquer : la faille est retirée de la carte DANS CE MÊME
+  // passage, elle ne déborde donc jamais deux fois (un dédoublonnage écrit ici était
+  // inatteignable — une mutation l'a montré, il est retiré).
+  const ambushes = [
+    ...(map.ambushes ?? []),
+    ...over.map((p) => ({
+      id: `${p.id}_ambush`,
+      x: p.x,
+      y: p.y,
+      until: p.spawnedAt + EXPE.lifespanMs.rift + EXPE.ambushMs,
+    })),
+  ].filter((a) => a.until > now);
   const next: ExpeditionMap = {
     seed: map.seed,
     spawnCount: map.spawnCount,
     nextSpawnAt: map.nextSpawnAt,
     riftCount: map.riftCount ?? 0,
     nextRiftAt: map.nextRiftAt ?? now,
+    // ⚠️ Clé ABSENTE quand il n'y a rien : sinon chaque carte gagnerait un `ambushes: []`
+    // et différerait de la précédente (l'appelant compare par `JSON.stringify` pour décider
+    // s'il persiste).
+    ...(ambushes.length ? { ambushes } : {}),
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte
     // sauvegardée avant que `distMax` ne soit borné par le littoral (v0.668) porte des
     // POI dessinés en pleine mer, et ils survivraient jusqu'à 48 h. On les périme donc
@@ -1407,10 +1426,9 @@ export function advanceWorld(
   }
   while (rifts() < EXPE.riftFloor) spawnRift(next, now, playerLevel);
   if ((next.nextRiftAt ?? now) <= now) next.nextRiftAt = now + EXPE.riftSpawnMinMs;
-  // 🐫 HARCÈLEMENT DES CONVOIS — dérivé EN DERNIER, une fois la liste des failles stable
-  // (débordements retirés, spawns et plancher posés). Le calculer plus haut l'adosserait à
-  // une carte qui n'existe pas encore : une faille qui vient de déborder irradierait
-  // encore, et celle qui vient d'apparaître pas du tout.
+  // 🐫 HARCÈLEMENT DES CONVOIS — dérivé EN DERNIER, une fois la carte stable (débordements
+  // retirés, embuscades posées ou expirées, spawns et plancher posés). Seules les
+  // EMBUSCADES comptent depuis la v0.1009 : une faille ouverte ne harcèle plus rien.
   // ⚠️ On n'écrit le drapeau QUE s'il change quelque chose : `advanceWorld` est comparé au
   // précédent par l'appelant (`JSON.stringify`) pour décider s'il persiste. Poser un
   // `riftPeril: false` sur chaque POI ferait différer l'objet à chaque tick et écrirait la
@@ -1429,7 +1447,7 @@ export function advanceWorld(
     const distNorm = clamp01((d - EXPE.distMin) / (EXPE.distMax - EXPE.distMin));
     return { ...p, x, y, distNorm };
   });
-  const irr = irradiatedPoiIds(next.pois, now);
+  const irr = irradiatedPoiIds(next.pois, next.ambushes, now);
   next.pois = next.pois.map((p) => {
     const on = irr.has(p.id);
     if (on === !!p.riftPeril) return p;

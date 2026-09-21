@@ -5,12 +5,17 @@ import {
   advanceWorld,
   isRiftPoi,
   irradiatedPoiIds,
-  riftIrradiationRadius,
   routePerilous,
   HARVEST_TYPES,
   type Poi,
+  type RiftAmbush,
 } from '@/lib/expedition';
 import { ambushChance } from '@/lib/caravan';
+
+// 🐫 RÈGLE v0.1009 (demandée par l'utilisateur) : une faille qui MÛRIT ne harcèle rien. Au
+// DÉBORDEMENT (7 j), une partie de ses monstres s'EMBUSQUE autour d'elle pendant 2 jours,
+// l'autre marche sur la base. Ces tests réécrivent ceux de la v0.934 (harcèlement dès
+// l'ouverture, rayon croissant) — ils décrivaient l'ancienne règle.
 
 const H = 3600_000;
 const DAY = 24 * H;
@@ -32,64 +37,40 @@ const poi = (id: string, dx: number, dy: number, extra: Partial<Poi> = {}): Poi 
 });
 const rift = (id: string, x: number, y: number, spawnedAt: number): Poi =>
   poi(id, x, y, { type: 'rift', spawnedAt });
-
-describe('rayon d’irradiation', () => {
-  it('part de l’ESPACEMENT DE LA CARTE et grandit jusqu’à irradMax', () => {
-    expect(riftIrradiationRadius(0, 0)).toBeCloseTo(EXPE.minDistPoi, 6);
-    expect(riftIrradiationRadius(0, LIFE)).toBeCloseTo(EXPE.irradMax, 6);
-    // Plafonné : une faille ne mûrit pas au-delà de son débordement.
-    expect(riftIrradiationRadius(0, LIFE * 3)).toBeCloseTo(EXPE.irradMax, 6);
-  });
-
-  it('a un plancher DÉRIVÉ de minDistPoi — en dessous, il ne toucherait rien', () => {
-    // La propriété structurelle : le plancher N'EST PAS un nombre écrit à la main. Une
-    // faille neuve ne peut atteindre que ce qui est au strict minimum d'écart.
-    expect(riftIrradiationRadius(0, 0)).toBe(EXPE.minDistPoi);
-    expect(riftIrradiationRadius(0, 0)).toBeLessThan(EXPE.irradMax);
-  });
-
-  it('CROÎT de façon accélérée : à mi-vie, loin d’être à mi-rayon', () => {
-    const mid = riftIrradiationRadius(0, LIFE / 2);
-    const plat = EXPE.minDistPoi + (EXPE.irradMax - EXPE.minDistPoi) / 2;
-    expect(mid).toBeLessThan(plat);
-    let prev = -1;
-    for (let k = 0; k <= 10; k++) {
-      const r = riftIrradiationRadius(0, (LIFE * k) / 10);
-      expect(r).toBeGreaterThanOrEqual(prev);
-      prev = r;
-    }
-  });
+const ambush = (dx: number, dy: number, until: number): RiftAmbush => ({
+  id: 'a',
+  x: EXPE.town.x + dx,
+  y: EXPE.town.y + dy,
+  until,
 });
 
 describe('qui est harcelé', () => {
-  it('irradie ce qui est DANS le rayon, pas au-delà', () => {
+  it('⚠️ UNE FAILLE OUVERTE NE HARCÈLE RIEN, même à la veille de déborder', () => {
     const r = rift('r', 0, 0, 0);
+    const colle = poi('a', 5, 0);
+    expect(irradiatedPoiIds([r, colle], undefined, LIFE - 1).size).toBe(0);
+    expect(irradiatedPoiIds([r, colle], [], LIFE - 1).size).toBe(0);
+  });
+
+  it('une embuscade EN COURS harcèle ce qui est dans son rayon, pas au-delà', () => {
     const dedans = poi('a', EXPE.irradMax - 1, 0);
     const dehors = poi('b', EXPE.irradMax + 1, 0);
-    const set = irradiatedPoiIds([r, dedans, dehors], LIFE);
+    const set = irradiatedPoiIds([dedans, dehors], [ambush(0, 0, 100)], 50);
     expect(set.has('a')).toBe(true);
     expect(set.has('b')).toBe(false);
   });
 
-  it('une faille N’IRRADIE NI ELLE-MÊME NI SES SŒURS', () => {
-    const a = rift('r1', 0, 0, 0);
-    const b = rift('r2', 2, 0, 0);
-    expect(irradiatedPoiIds([a, b], LIFE).size).toBe(0);
+  it('une embuscade TERMINÉE ne harcèle plus rien', () => {
+    expect(irradiatedPoiIds([poi('a', 1, 0)], [ambush(0, 0, 100)], 100).size).toBe(0);
   });
 
-  it('une faille JEUNE ne harcèle quasiment rien, une MÛRE beaucoup', () => {
-    const cible = poi('a', 20, 0);
-    const at = (age: number) => irradiatedPoiIds([rift('r', 0, 0, 0), cible], age);
-    expect(at(0).has('a')).toBe(false); // rayon 14 < 20
-    expect(at(LIFE).has('a')).toBe(true); // rayon 25 > 20
-  });
-
-  it('sans aucune faille, personne n’est harcelé', () => {
-    expect(irradiatedPoiIds([poi('a', 1, 1), poi('b', 2, 2)], LIFE).size).toBe(0);
+  it('ni une faille ni une bande en marche ne sont « harcelées » — on va s’y battre', () => {
+    const pois = [rift('r', 1, 0, 0), poi('w', 2, 0, { type: 'warband' })];
+    expect(irradiatedPoiIds(pois, [ambush(0, 0, 100)], 50).size).toBe(0);
   });
 });
 
-describe('le drapeau vit et s’éteint', () => {
+describe('le débordement pose une embuscade de deux jours', () => {
   const carte = (pois: Poi[]) => ({
     seed: 1,
     spawnCount: 99,
@@ -98,31 +79,52 @@ describe('le drapeau vit et s’éteint', () => {
     nextRiftAt: 9e15,
     pois,
   });
-
-  // La faille est à 30 de la ville ; la cible à 50, donc à 20 de la faille (dans le rayon
-  // d'une faille mûre, 25). Le témoin est à 60 de la ville, donc à 30 de la faille : dehors.
+  // La faille est à 30 de la ville ; la cible à 50, donc à 20 de la faille (dans le rayon).
   const faille = () => rift('r', 0, 30, 0);
   const cible = () => poi('a', 0, 50);
-  const loin = () => poi('b', 0, 60);
 
-  it('advanceWorld POSE le drapeau sur ce qui est à portée', () => {
-    const m = advanceWorld(carte([faille(), cible(), loin()]), LIFE - H, 20);
-    expect(m.pois.find((p) => p.id === 'a')?.riftPeril).toBe(true);
-    expect(m.pois.find((p) => p.id === 'b')?.riftPeril).toBeUndefined();
+  it('avant le débordement : aucune embuscade, aucun drapeau', () => {
+    const m = advanceWorld(carte([faille(), cible()]), LIFE - H, 20);
+    expect(m.ambushes).toBeUndefined();
+    expect(m.pois.find((p) => p.id === 'a')?.riftPeril).toBeUndefined();
   });
 
-  it('…et l’ÉTEINT quand la faille disparaît — sinon refermer ne se verrait jamais', () => {
-    const avec = advanceWorld(carte([faille(), cible()]), LIFE - H, 20);
-    const marque = avec.pois.find((p) => p.id === 'a')!;
-    expect(marque.riftPeril).toBe(true);
-    const apres = advanceWorld(carte([marque]), LIFE - H, 20);
+  it('au débordement : l’embuscade est posée À LA PLACE DE LA FAILLE, pour 2 jours', () => {
+    const m = advanceWorld(carte([faille(), cible()]), LIFE + H, 20);
+    expect(m.ambushes).toHaveLength(1);
+    const a = m.ambushes![0]!;
+    expect(a.x).toBe(EXPE.town.x);
+    expect(a.y).toBe(EXPE.town.y + 30);
+    // Datée du DÉBORDEMENT, pas de l'instant du calcul.
+    expect(a.until).toBe(LIFE + EXPE.ambushMs);
+    expect(m.pois.find((p) => p.id === 'a')?.riftPeril).toBe(true);
+  });
+
+  it('elle survit à la faille (devenue mine) puis s’ÉTEINT après ses deux jours', () => {
+    const pendant = advanceWorld(carte([faille(), cible()]), LIFE + H, 20);
+    const encore = advanceWorld(pendant, LIFE + EXPE.ambushMs - H, 20);
+    expect(encore.pois.find((p) => p.id === 'a')?.riftPeril).toBe(true);
+    const apres = advanceWorld(encore, LIFE + EXPE.ambushMs + H, 20);
+    expect(apres.ambushes).toBeUndefined();
     expect(apres.pois.find((p) => p.id === 'a')?.riftPeril).toBeUndefined();
   });
 
-  it('N’ÉCRIT PAS À VIDE : un POI dont le drapeau ne change pas garde sa RÉFÉRENCE', () => {
-    // Sans ça, la carte différerait à chaque tick et serait persistée toutes les secondes.
-    const p = loin();
+  it('rejouer le passage ne DUPLIQUE pas l’embuscade', () => {
+    const m1 = advanceWorld(carte([faille(), cible()]), LIFE + H, 20);
+    const m2 = advanceWorld(m1, LIFE + 2 * H, 20);
+    expect(m2.ambushes).toHaveLength(1);
+  });
+
+  it('une absence plus longue que l’embuscade ne la prolonge pas', () => {
+    const m = advanceWorld(carte([faille(), cible()]), LIFE + EXPE.ambushMs + DAY, 20);
+    expect(m.ambushes).toBeUndefined();
+    expect(m.pois.find((p) => p.id === 'a')?.riftPeril).toBeUndefined();
+  });
+
+  it('N’ÉCRIT PAS À VIDE : sans embuscade, pas de clé `ambushes` et le POI garde sa référence', () => {
+    const p = poi('b', 0, 60);
     const m = advanceWorld(carte([faille(), p]), LIFE - H, 20);
+    expect('ambushes' in m).toBe(false);
     expect(m.pois.find((x) => x.id === 'b')).toBe(p);
   });
 });
@@ -134,7 +136,7 @@ describe('ce que ça COÛTE', () => {
     expect(routePerilous(poi('a', 0, 0, { riftPeril: true }))).toBe(true);
   });
 
-  it('une route irradiée coûte AUTANT qu’une route dangereuse tirée au spawn', () => {
+  it('une route embusquée coûte AUTANT qu’une route dangereuse tirée au spawn', () => {
     const irr = poi('a', 0, 0, { riftPeril: true });
     const tire = poi('a', 0, 0, { perilous: true });
     const calme = poi('a', 0, 0);
@@ -143,7 +145,7 @@ describe('ce que ça COÛTE', () => {
   });
 });
 
-describe('le levier : tenir le rythme garde les routes propres', () => {
+describe('le levier : refermer ses failles avant 7 jours empêche toute embuscade', () => {
   /** Part des lieux de RÉCOLTE harcelés sur 30 jours, selon ce qu'on ferme par jour. */
   function partIrradiee(perDay: number, seed: number): number {
     const t0 = 1_700_000_000_000;
@@ -167,17 +169,28 @@ describe('le levier : tenir le rythme garde les routes propres', () => {
   const moy = (perDay: number) =>
     [1, 2, 3, 4].reduce((a, s) => a + partIrradiee(perDay, s * 7919), 0) / 4;
 
-  it('on ne ferme rien → une part NETTE des routes de récolte est harcelée', () => {
+  // MESURÉ (v0.1009, 30 j × 4 graines) : 0 fermeture/jour → 19,3 % des lieux de récolte
+  // harcelés · 0,5/jour → 9,9 % · 1/jour → 0 % · 2/jour → 0 %. (Ancienne règle v0.934 :
+  // 21 % · — · 14 % · 1 %.) Ignorer ses failles coûte à peu près autant qu'avant ; les tenir
+  // ne coûte plus RIEN.
+  it('on ne ferme rien → une part NETTE des routes de récolte est harcelée, jamais tout', () => {
     const p = moy(0);
     expect(p).toBeGreaterThan(0.1);
-    // …mais jamais au point de tout couvrir : il reste toujours des routes propres.
     expect(p).toBeLessThan(0.4);
   });
 
-  it('⚠️ LA FALAISE EST AU RYTHME DE SPAWN : fermer 2/jour ramène le harcèlement à ~rien', () => {
-    expect(moy(2)).toBeLessThan(0.05);
-    // Et c'est bien un ÉCART, pas un plancher : ignorer coûte nettement plus cher.
-    expect(moy(0)).toBeGreaterThan(moy(2) * 3);
+  it('⚠️ fermer 1 faille par jour suffit à n’avoir AUCUNE embuscade', () => {
+    // Plus aucun débordement dès une fermeture par jour (v0.933), donc plus aucune embuscade :
+    // le harcèlement n'est plus une taxe de fond, c'est la sanction d'une faille laissée
+    // aller au bout.
+    expect(moy(1)).toBe(0);
+  });
+
+  it('c’est bien un DÉGRADÉ : en fermer une sur deux jours coupe le harcèlement de moitié', () => {
+    const rien = moy(0);
+    const demi = moy(0.5);
+    expect(demi).toBeGreaterThan(0);
+    expect(demi).toBeLessThan(rien * 0.75);
   });
 
   it('il reste des lieux de récolte PROPRES même quand on ignore tout', () => {

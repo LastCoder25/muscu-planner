@@ -96,14 +96,13 @@
             />
           </template>
 
-          <!-- 🕳️ L'AURÉOLE D'UNE FAILLE — ce qu'elle harcèle, lisible SANS rien sélectionner.
-             C'est ce qui justifie de mesurer le harcèlement à la distance au LIEU plutôt
-             qu'à la route : le joueur voit un disque, et les destinations dedans. Il
-             grandit avec la maturité, donc on voit la menace monter.
+          <!-- 🕳️ L'AURÉOLE D'UNE EMBUSCADE — les monstres restés autour d'une faille qui a
+             DÉBORDÉ (v0.1009 ; une faille ouverte ne harcèle plus rien). Lisible SANS rien
+             sélectionner : le joueur voit un disque, et les destinations dedans.
              ⚠️ Dessinée AVANT les POI (donc dessous) et en `pointer-events: none` : elle
              ne doit ni recouvrir un glyphe ni voler son clic. -->
           <circle
-            v-for="r in riftHalos"
+            v-for="r in ambushHalos"
             :key="'halo-' + r.id"
             :cx="r.x"
             :cy="r.y"
@@ -293,7 +292,9 @@
               title="L'effectif grossit avec l'âge de la faille, jusqu'au débordement"
               >👾 {{ selectedRift.foes }}/{{ selectedRift.maxFoes }}</span
             >
-            <span class="sh-chip" title="À maturité, elle déborde et s'effondre en mine de mana"
+            <span
+              class="sh-chip"
+              title="À maturité, elle déborde : embuscade autour d'elle deux jours, armée vers ta base, mine de mana"
               >⏳ {{ formatDuration(selectedRift.overflowIn) }}</span
             >
             <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
@@ -311,7 +312,9 @@
             Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros. Les
             monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille ajoute la
             prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie. Laissée mûrir,
-            elle déborde et ne laisse qu’une petite 💠 mine résiduelle.
+            elle déborde : une partie de ses monstres s’embusque deux jours autour d’elle (les
+            routes du coin deviennent dangereuses), le reste marche sur ta base, et il ne reste
+            qu’une petite 💠 mine résiduelle.
           </p>
         </template>
         <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne n'est pas du butin, c'est une PERTE ÉVITÉE.
@@ -466,13 +469,15 @@
             >
             <!-- 🕳️ DEUX CAUSES, DEUX MESSAGES — et c'est tout l'intérêt de les avoir gardées
                distinctes. « Route dangereuse » est tirée au spawn : on la subit, on choisit
-               ailleurs. Le harcèlement d'une faille, lui, est ACTIONNABLE — on va la fermer,
-               et la route redevient propre. Les fondre en un seul drapeau perdrait la seule
-               moitié sur laquelle le joueur peut agir. La faille passe DEVANT : c'est elle
-               qui appelle un geste. -->
+               ailleurs. L'embuscade d'une faille (v0.1009) se PRÉVIENT — refermer ses failles
+               avant 7 jours — puis s'attend : elle dure deux jours et on affiche combien il
+               en reste. Les fondre en un seul drapeau perdrait cette information. -->
             <span v-if="selected.riftPeril" class="sh-chip peril"
-              >🕳️ Harcelée par une faille — embuscades doublées. Referme-la pour nettoyer la
-              route.</span
+              >🕳️ Monstres embusqués, sortis d'une faille — embuscades doublées<template
+                v-if="selectedAmbushLeft"
+              >
+                encore {{ formatDuration(selectedAmbushLeft) }}</template
+              ></span
             >
             <span v-else-if="selected.perilous" class="sh-chip peril"
               >⚠️ Route dangereuse — embuscades doublées, butin renforcé</span
@@ -691,7 +696,6 @@ import {
   campSpecOf,
   isRiftPoi,
   isWarbandPoi,
-  riftIrradiationRadius,
   isClaimable,
   type PartyResult,
 } from '@/lib/expedition';
@@ -947,21 +951,23 @@ const incoming = computed(() => base.value?.raid ?? null);
  *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
  *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
-// 🕳️ Les auréoles de harcèlement — ce que chaque faille rend dangereux autour d'elle.
-// ⚠️ DÉCLARÉ APRÈS `coarseNow`, sa dépendance : un `computed` est paresseux, donc l'ordre
-// ne casse rien aujourd'hui, mais c'est exactement le motif qui a coûté un écran blanc en
-// v0.910 (zone morte temporelle) — la forme doit survivre à un réordonnancement futur.
-// ⚠️ Horloge GROSSIÈRE : le rayon grandit sur SEPT JOURS. Le recalculer à la seconde ne
-// changerait rien de visible et re-diffuserait tous ces cercles à chaque tick, alors que la
-// carte se re-rend déjà chaque seconde pour animer les convois.
-const riftHalos = computed(() =>
-  pois.value.filter(isRiftPoi).map((p) => ({
-    id: p.id,
-    x: p.x,
-    y: p.y,
-    radius: riftIrradiationRadius(p.spawnedAt, coarseNow.value),
-  })),
+// 🕳️ Les auréoles d'EMBUSCADE — les monstres restés autour d'une faille qui a débordé
+// (v0.1009). ⚠️ Horloge GROSSIÈRE : une embuscade dure deux jours, la recalculer à la
+// seconde re-diffuserait ces cercles à chaque tick pour rien.
+const ambushHalos = computed(() =>
+  (char.row?.expedition_map?.ambushes ?? [])
+    .filter((a) => a.until > coarseNow.value)
+    .map((a) => ({ id: a.id, x: a.x, y: a.y, radius: EXPE.irradMax })),
 );
+/** Temps restant de l'embuscade qui harcèle le lieu sélectionné (la plus longue). */
+const selectedAmbushLeft = computed(() => {
+  const p = selected.value;
+  if (!p?.riftPeril) return 0;
+  const left = (char.row?.expedition_map?.ambushes ?? [])
+    .filter((a) => Math.hypot(p.x - a.x, p.y - a.y) <= EXPE.irradMax)
+    .map((a) => a.until - coarseNow.value);
+  return Math.max(0, ...left);
+});
 /** Ce que l'escorte emmène — sur la ROUTE comme au REMPART : ses pièces d'équipement.
  *  ⚠️ LA MÊME construction que ce que le store passe au départ (`escortKitOf`) : une
  *  forme rebâtie ici pourrait annoncer un pronostic calculé sur une autre réserve que
@@ -2189,7 +2195,7 @@ onUnmounted(() => {
 .poi {
   cursor: pointer;
 }
-/* 🕳️ L'auréole de harcèlement d'une faille : on VOIT ce qu'elle salit, sans rien
+/* 🕳️ L'auréole d'une EMBUSCADE (faille débordée, v0.1009) : on VOIT ce qu'elle salit, sans rien
    sélectionner. ⚠️ `pointer-events: none` — elle couvre plusieurs POI, elle leur volerait
    leur clic. Teinte du DANGER (--d4), comme l'encart de la Tour de guet : les deux parlent
    de la même chose. Discrète (c'est un fond, pas un objet), mais son bord pointillé la
