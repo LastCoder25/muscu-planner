@@ -147,7 +147,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { RANK_COLOR, RARITY_LABEL, RARITY_RANK } from '@/lib/items';
 import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN } from '@/lib/adventurers';
 import { GACHA } from '@/lib/gacha';
-import { lotOrder, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
+import { lotOrder, REVEAL_EASE, type RevealPlan, type LotItem } from '@/lib/gachaReveal';
 import { awakenLevel } from '@/lib/adventurers';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 
@@ -230,7 +230,7 @@ const stripStyle = computed(() => {
   const i = rolling.value ? (props.plan?.stopIndex ?? 0) : 0;
   return {
     transform: `translate3d(0, calc(-1 * var(--vs) * ${i + 0.5}), 0)`,
-    transition: rolling.value ? `transform ${ms}ms cubic-bezier(0.1, 0.72, 0.16, 1)` : 'none',
+    transition: rolling.value ? `transform ${ms}ms ${REVEAL_EASE}` : 'none',
   };
 });
 /** ⚠️ L'aura est pilotée par `glowFrom`, pas par un stop de keyframe écrit en dur : c'est
@@ -254,9 +254,7 @@ function rowStyle(lp: RevealPlan) {
   const i = rolling.value ? lp.stopIndex : 0;
   return {
     transform: `translate3d(calc(-1 * var(--rh) * ${i + 0.5}), 0, 0)`,
-    transition: rolling.value
-      ? `transform ${lp.spinMs}ms cubic-bezier(0.1, 0.72, 0.16, 1)`
-      : 'none',
+    transition: rolling.value ? `transform ${lp.spinMs}ms ${REVEAL_EASE}` : 'none',
   };
 }
 

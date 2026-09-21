@@ -35,11 +35,13 @@ import { RARITY_RANK, type Rarity } from './items';
 
 export const REVEAL = {
   /** Crans de roulette pour un commun, et ce que chaque rang de rareté ajoute. */
-  crans: 22,
-  cransParRang: 6,
-  /** Durée pour un commun (ms), et ce que chaque rang ajoute. */
-  spinMs: 1500,
-  spinMsParRang: 260,
+  crans: 72,
+  cransParRang: 10,
+  /** Durée pour un commun (ms), et ce que chaque rang ajoute.
+   *  ⚠️ Plus longue depuis la v0.988 : le RALENTI final (demandé : « très vite au début
+   *  puis ralentisse avant la sélection finale ») a besoin de temps pour se voir. */
+  spinMs: 4000,
+  spinMsParRang: 350,
   /** Fraction de la roulette à partir de laquelle l'aura prend la couleur de la rareté. */
   glowFrom: 0.66,
   /** ⚠️ Plancher de crans : en dessous, la bande n'a pas la place de défiler et la
@@ -53,6 +55,16 @@ export const REVEAL = {
    *  ENSEMBLE et s'arrêtent en cascade, de haut en bas. */
   lotStagger: 160,
 } as const;
+
+/**
+ * 🎢 LA COURBE DE LA ROULETTE (v0.988, demandé : « très vite au début puis ralentir avant
+ * la sélection finale »). Mesurée au banc sur 48 cases / 2,6 s (puis rallongée à 72 / 4 s, demandé : « plus longtemps avant la sélection », même vitesse de départ) : départ ~120 cases/s (75
+ * avant), puis les CINQ dernières cases égrenées sur la dernière seconde et demie.
+ * ⚠️ Une courbe plus raide (0.03, 0.85, 0.07, 1) filait plus vite encore mais atteignait la
+ * dernière case à mi-course puis rampait 1,2 s sans rien montrer — ça se lisait comme un
+ * blocage. Une seule définition pour le ×1 et les dix lignes.
+ */
+export const REVEAL_EASE = 'cubic-bezier(0.05, 0.75, 0.25, 1)';
 
 export interface RevealPlan {
   /** Les portraits qui défilent — le tiré est à `stopIndex`, **jamais en bout de bande**. */
