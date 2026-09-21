@@ -95,20 +95,6 @@ export const GACHA = {
    *  une série de 30 B d'affilée est banale, et c'est ce qui fait décrocher un joueur qui
    *  n'a pas d'argent réel pour compenser. */
   minorPity: 10,
-
-  /**
-   * 🎰 PART DES S ET DES A QUI SONT DES CHAMPIONS — le reste est une PIÈCE de la même lettre
-   * (v0.1013, décision de l'utilisateur : « deux tables dans le même tirage »).
-   *
-   * ⚠️ C'est le modèle de la bannière standard du genre : une lettre haute peut sortir en
-   * personnage OU en arme. Le pity reste porté par la LETTRE — un S garanti peut donc être
-   * une pièce S. Les B restent toujours des pièces.
-   *
-   * ⚠️ **CE RÉGLAGE DIVISE LE RYTHME DES CHAMPIONS** : à 0,5, un champion S tombe deux fois
-   * moins souvent qu'avant. C'est le prix, assumé, de rendre les pièces A et S obtenables
-   * (les drops, qui étaient leur seule source, sont retirés depuis la v0.1012).
-   */
-  championShare: 0.5,
 } as const;
 
 /**
@@ -260,13 +246,14 @@ export const multiPullCost = (unit: number = GACHA.pullCost): number => unit * G
 /** Un tirage : sa lettre, et le champion s'il y en a un. */
 export interface PullResult {
   grade: PullGrade;
-  /** `null` = une PIÈCE d'équipement DE CETTE LETTRE (tirée par le store, qui connaît le
-   *  vivier). Toujours pour un B ; la moitié du temps pour un S ou un A (`championShare`). */
+  /** `null` = une PIÈCE d'équipement (tirée par le store, qui connaît le vivier) : c'est
+   *  TOUJOURS un B. Un S ou un A est TOUJOURS un champion. La LETTRE de la pièce, elle, se
+   *  tire à part (`rollGearGrade`) : les pièces A et S sortent des tirages B. */
   champion: Champion | null;
 }
 
 /**
- * 🎰 UN TIRAGE COMPLET : une lettre, puis champion OU pièce, puis le champion DANS la lettre.
+ * 🎰 UN TIRAGE COMPLET : une lettre, puis le champion DANS la lettre (un B = une pièce).
  *
  * ⚠️ **UNIFORME DANS LA LETTRE**, et c'est ce qui fait la vitesse de l'Éveil : un champion
  * PRÉCIS tombe à 1/N du taux « champion » de sa lettre.
@@ -274,13 +261,25 @@ export interface PullResult {
 export function pullChampion(rng: () => number, pity: PityState): PullResult & { pity: PityState } {
   const r = pullGrade(rng, pity);
   if (r.grade === 'B') return { grade: 'B', champion: null, pity: r.pity };
-  // ⚠️ Tiré APRÈS la lettre : le pity ne dépend que de la lettre, jamais de ce qu'elle donne.
-  if (rng() >= GACHA.championShare) return { grade: r.grade, champion: null, pity: r.pity };
   const pool = championsOf(r.grade);
   // ⚠️ INATTEIGNABLE tant que le roster a des S et des A (`champions.test.ts`) : une ceinture
   // pour le jour où quelqu'un vide une lettre, pas une règle de jeu.
   if (!pool.length) throw new Error(`Aucun champion de lettre ${r.grade}`);
   return { grade: r.grade, champion: pool[Math.floor(rng() * pool.length)]!, pity: r.pity };
+}
+
+/**
+ * 🗡️ LA LETTRE D'UNE PIÈCE tirée par un B — décision de l'utilisateur (2026-09-21 : « les
+ * pièces A et S d'item sont sur les pièces B d'items »). Un tirage A ou S reste TOUJOURS un
+ * champion ; c'est la pièce d'un B qui peut briller.
+ * ⚠️ Aux taux de BASE (`GACHA_RATES` : ~94 % B, ~5 % A, ~0,6 % S), SANS pity : le pity est
+ * celui des CHAMPIONS, il ne doit pas être entamé ni avancé par l'équipement.
+ */
+export function rollGearGrade(rng: () => number): PullGrade {
+  const r = rng();
+  if (r < GACHA_RATES.S) return 'S';
+  if (r < GACHA_RATES.S + GACHA_RATES.A) return 'A';
+  return 'B';
 }
 
 /**

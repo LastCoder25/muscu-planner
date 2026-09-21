@@ -207,8 +207,8 @@ import {
   type GachaState,
   GACHA_VERSION,
   pullMany,
+  rollGearGrade,
 } from '@/lib/gacha';
-import type { PullGrade } from '@/data/champions';
 import {
   addSeals,
   advGearAscensionBlocker,
@@ -1109,7 +1109,7 @@ export const useCharacterStore = defineStore('character', () => {
         manaBack += g.manaBack;
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
-        const piece = gachaPiece(advs, playerLevel, r.grade);
+        const piece = gachaPiece(advs, playerLevel);
         pieces.push(piece);
         results.push({
           grade: piece.grade,
@@ -1131,15 +1131,11 @@ export const useCharacterStore = defineStore('character', () => {
     return results;
   }
 
-  /** La pièce d'un tirage — la lettre du tirage EST celle de la pièce (B toujours, S et A
-   *  quand la lettre sort en pièce : `GACHA.championShare`). `rollGachaPiece` est la seule
+  /** La pièce d'un tirage B — sa LETTRE est tirée à part (`rollGearGrade`) : les pièces A
+   *  et S sortent des tirages B (décision de l'utilisateur). `rollGachaPiece` est la seule
    *  source d'équipement de champion. */
-  function gachaPiece(
-    advs: Adventurer[],
-    playerLevel: number,
-    grade: PullGrade,
-  ): Omit<AdvGear, 'id'> {
-    return rollGachaPiece(Math.random, advs, { playerLevel, grade });
+  function gachaPiece(advs: Adventurer[], playerLevel: number): Omit<AdvGear, 'id'> {
+    return rollGachaPiece(Math.random, advs, { playerLevel, grade: rollGearGrade(Math.random) });
   }
 
   /** Un tirage à l'unité. */

@@ -36,6 +36,7 @@ import {
   OVERFLOW_MANA,
   topRate,
   pullChampion,
+  rollGearGrade,
   gachaOdds,
   pullMany,
   multiPullCost,
@@ -232,31 +233,23 @@ describe('🎰 tirer un CHAMPION', () => {
     return out;
   }
 
-  it('⚠️ UN B EST TOUJOURS UNE PIÈCE ; un S ou un A est un champion OU une pièce de sa lettre', () => {
-    const out = tirages(40000, 3);
-    const haut = { champ: 0, piece: 0 };
-    for (const r of out) {
+  it('⚠️ UN B EST TOUJOURS UNE PIÈCE ; un S ou un A est TOUJOURS un champion', () => {
+    for (const r of tirages(40000, 3)) {
       if (r.grade === 'B') expect(r.champion).toBeNull();
-      else if (r.champion) {
-        expect(r.champion.grade).toBe(r.grade);
-        haut.champ++;
-      } else haut.piece++;
+      else expect(r.champion?.grade).toBe(r.grade);
     }
-    expect(out.some((r) => r.grade === 'B')).toBe(true);
-    // Les deux sortent, dans la proportion annoncée par la notice (`championShare`).
-    const part = haut.champ / (haut.champ + haut.piece);
-    expect(part).toBeGreaterThan(GACHA.championShare - 0.05);
-    expect(part).toBeLessThan(GACHA.championShare + 0.05);
   });
 
-  it('⚠️ le pity reste porté par la LETTRE : un S qui sort en pièce remet quand même le compteur à zéro', () => {
-    // Sinon un S garanti pourrait « rater » en pièce et le garanti suivant arriverait plus
-    // tôt que 90 — la notice mentirait sur le compteur.
-    for (let s = 1; s <= 400; s++) {
-      const r = pullChampion(mulberry32(s), { sinceTop: GACHA.hardPity - 1, sinceFloor: 0 });
-      expect(r.grade).toBe('S');
-      expect(r.pity.sinceTop).toBe(0);
-    }
+  it('🗡️ la LETTRE d’une pièce B se tire aux taux de base, sans pity', () => {
+    const rng = mulberry32(5);
+    const c: Record<string, number> = { B: 0, A: 0, S: 0 };
+    const N = 60000;
+    for (let i = 0; i < N; i++) c[rollGearGrade(rng)]!++;
+    expect(c.S! / N).toBeGreaterThan(GACHA_RATES.S * 0.7);
+    expect(c.S! / N).toBeLessThan(GACHA_RATES.S * 1.3);
+    expect(c.A! / N).toBeGreaterThan(GACHA_RATES.A * 0.85);
+    expect(c.A! / N).toBeLessThan(GACHA_RATES.A * 1.15);
+    expect(c.B! / N).toBeGreaterThan(0.9);
   });
 
   it('⚠️ UNIFORME DANS LA LETTRE — c’est ce qui fixe la vitesse de l’Éveil', () => {

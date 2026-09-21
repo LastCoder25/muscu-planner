@@ -78,11 +78,7 @@
           <div v-for="r in odds.rates" :key="r.grade" class="go-row">
             <span class="go-rar" :style="{ color: GRADE_COLOR[r.grade] }">
               {{ r.grade
-              }}{{
-                r.grade === 'B'
-                  ? ' · équipement'
-                  : ` · champion ${championPct} % · équipement ${100 - championPct} %`
-              }}
+              }}{{ r.grade === 'B' ? ' · équipement (lettre B, A ou S)' : ' · champion' }}
             </span>
             <span class="go-bar" aria-hidden="true"
               ><i
@@ -159,8 +155,6 @@ const pulls = computed(() => Math.floor(mana.value / pullCost));
 const oddsOpen = ref(false);
 const odds = computed(() => gachaOdds(char.row?.gacha ?? { sinceTop: 0, sinceFloor: 0 }));
 /** Un taux à la française, décimale seulement si elle dit quelque chose. */
-/** Part des S et des A qui sortent en champion (le reste en pièce de la même lettre). */
-const championPct = Math.round(GACHA.championShare * 100);
 const fmtOdds = (pct: number) =>
   (Math.round(pct * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 const revealPlan = ref<RevealPlan | null>(null);
