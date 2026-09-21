@@ -238,7 +238,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // formule de la Guilde reprise telle quelle, déjà mesurée) et le NIVEAU MAXIMAL d'un
   // champion (`grantAdvXp`, le plus fort : le niveau DOMINE la rareté, ×4,3 au niveau 23),
   // qui monte à CHAQUE niveau. (Le troisième, le temps de forge, est parti avec la forge
-  // en v0.1011 : l'équipement de champion ne vient plus que du tirage.)
+  // en v0.1012 : l'équipement de champion ne vient plus que du tirage.)
   //
   // ⚠️ L'ENGAGEMENT BORNE CE QUI AGIT, JAMAIS CE QU'ON POSSÈDE (v0.958). Il a d'abord été
   // un BANC — un champion « en collection » était indisponible partout — ce qui rendait

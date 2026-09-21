@@ -2650,7 +2650,7 @@ export interface CorpseLoot {
  *  du niveau du chantier — le danger paie, comme partout ailleurs dans le jeu.
  *  ⚠️ La rareté d'un objet reste centrée sur `min(niveau du corps, niveau du joueur)` :
  *  un raid à +15 donne PLUS d'objets, jamais des raretés hors de ta ligue.
- *  ⚠️ Aucun équipement de CHAMPION ici (v0.1011) : il ne vient QUE du tirage. Les corps ne
+ *  ⚠️ Aucun équipement de CHAMPION ici (v0.1012) : il ne vient QUE du tirage. Les corps ne
  *  laissent que des objets du héros. */
 export function lootCorpses(
   corpses: Corpse[],

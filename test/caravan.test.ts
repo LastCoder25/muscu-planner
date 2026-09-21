@@ -1646,7 +1646,7 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
   });
 });
 
-describe('🚫 plus aucun équipement de champion sur la route (v0.1011)', () => {
+describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () => {
   it('une embuscade repoussée ne laisse plus de pièce : elles ne viennent que du tirage', () => {
     const escort = [0, 1, 2].map((i) => refChampionAdv(40, i));
     let gagnees = 0;

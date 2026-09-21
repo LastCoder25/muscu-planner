@@ -172,7 +172,7 @@
 
         <!-- ── 🗡️ LE STOCK D'ÉQUIPEMENT (onglet) ─────────────────────────────────────
              ⚠️ Ce n'est PAS le sac du héros : ces pièces sont propres à chaque classe de
-             base (`canWearAdvGear`) — elles ne viennent QUE du tirage gacha (v0.1011),
+             base (`canWearAdvGear`) — elles ne viennent QUE du tirage gacha (v0.1012),
              jamais du butin du héros ni d'un drop.
              « Équiper » ouvre la liste des aventuriers qui peuvent la porter.
              🔒 / 🪙 comme le sac, désactivés si portée. -->

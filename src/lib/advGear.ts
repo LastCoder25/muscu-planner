@@ -59,7 +59,7 @@ export interface AdvGear {
   /** 🎰 La LETTRE (B / A / S), comme les champions — tirée, fixe à vie, et c'est ELLE que
    *  l'écran montre. Elle multiplie les stats de combat (`GEAR_GRADE_SHARE`). */
   grade: PullGrade;
-  /** ⚠️ PAS DE JET (v0.1011, décision de l'utilisateur) : seuls les objets du HÉROS en ont un.
+  /** ⚠️ PAS DE JET (v0.1012, décision de l'utilisateur) : seuls les objets du HÉROS en ont un.
    *  Deux exemplaires du même modèle sont IDENTIQUES — c'est ce qui donne un sens au doublon.
    *  Le niveau démarre à ★1 de son rang (`rankStartLevel`). */
   level: number;
@@ -304,7 +304,7 @@ export function advGearLevelBand(rank: Rarity): { min: number; max: number } {
 }
 
 /**
- * 🗡️ UNE PIÈCE D'UN MODÈLE, À CE RANG — entièrement DÉTERMINISTE (v0.1011).
+ * 🗡️ UNE PIÈCE D'UN MODÈLE, À CE RANG — entièrement DÉTERMINISTE (v0.1012).
  *
  * ⚠️ Plus aucun tirage ici : ni jet, ni niveau d'objet, ni stat tirée dans un pool. Le
  * modèle (lignée × emplacement × lettre) écrit ses stats, le rang en fixe la taille, et la
@@ -346,7 +346,7 @@ export function makeAdvGear(opts: {
 }
 
 /**
- * 🎰 LA PIÈCE D'UN TIRAGE B — la SEULE source d'équipement de champion (v0.1011, décision de
+ * 🎰 LA PIÈCE D'UN TIRAGE B — la SEULE source d'équipement de champion (v0.1012, décision de
  * l'utilisateur : « les items de champions ne peuvent venir QUE du tirage gacha »).
  *
  * - Lignée tirée parmi celles du vivier (jamais une lignée qu'on ne possède pas) ; vivier
@@ -500,7 +500,7 @@ export interface AdvGearCell {
   filled: boolean;
   /** La pièce PORTÉE (règles appliquées, `wornGear`), sinon absente. */
   piece?: AdvGear;
-  /** Couleur de la LETTRE de la pièce portée. (Plus de jet depuis la v0.1011 : deux pièces
+  /** Couleur de la LETTRE de la pièce portée. (Plus de jet depuis la v0.1012 : deux pièces
    *  du même modèle au même rang sont identiques.) */
   color?: string;
   /** La LETTRE de la pièce portée (B / A / S). */
@@ -605,12 +605,12 @@ export function advGearOptions(
 
 /** L'état persisté (jsonb `characters.adv_gear`, migr. 0068) : le stock.
  *  ⚠️ Séparé du sac du héros (`inventory`). La file de l'Équipementier (`forges`) a disparu
- *  avec la forge (v0.1011) : les pièces qui y attendaient rejoignent le stock à la relecture. */
+ *  avec la forge (v0.1012) : les pièces qui y attendaient rejoignent le stock à la relecture. */
 export interface AdvGearState {
   stock: AdvGear[];
 }
 
-/** Remet une pièce sur son MODÈLE (v0.1011) : stats écrites, valeur au plancher de son rang,
+/** Remet une pièce sur son MODÈLE (v0.1012) : stats écrites, valeur au plancher de son rang,
  *  niveau borné à la tranche de ce rang, plus aucun jet. ⚠️ Idempotente — relire deux fois
  *  rend la même pièce. Une pièce illisible (lignée ou emplacement inconnus) est rendue telle
  *  quelle : on ne jette pas un objet possédé. */

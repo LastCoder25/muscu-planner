@@ -98,7 +98,7 @@ export const GACHA = {
 
   /**
    * 🎰 PART DES S ET DES A QUI SONT DES CHAMPIONS — le reste est une PIÈCE de la même lettre
-   * (v0.1012, décision de l'utilisateur : « deux tables dans le même tirage »).
+   * (v0.1013, décision de l'utilisateur : « deux tables dans le même tirage »).
    *
    * ⚠️ C'est le modèle de la bannière standard du genre : une lettre haute peut sortir en
    * personnage OU en arme. Le pity reste porté par la LETTRE — un S garanti peut donc être
@@ -106,7 +106,7 @@ export const GACHA = {
    *
    * ⚠️ **CE RÉGLAGE DIVISE LE RYTHME DES CHAMPIONS** : à 0,5, un champion S tombe deux fois
    * moins souvent qu'avant. C'est le prix, assumé, de rendre les pièces A et S obtenables
-   * (les drops, qui étaient leur seule source, sont retirés depuis la v0.1011).
+   * (les drops, qui étaient leur seule source, sont retirés depuis la v0.1012).
    */
   championShare: 0.5,
 } as const;
