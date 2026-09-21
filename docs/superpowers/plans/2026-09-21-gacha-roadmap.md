@@ -271,5 +271,5 @@ par jour.
 
 ### Déjà fait en marge de P0
 
-- **Le héros compte dans la limite de 3 d'une faille** (v0.983, `partyCapFor(poi, engage, hero)`,
+- **Le héros compte dans la limite de 3 d'une faille** (v0.984, `partyCapFor(poi, engage, hero)`,
   paramètre requis) ; l'écran retire le dernier champion coché s'il n'y a plus de place.
