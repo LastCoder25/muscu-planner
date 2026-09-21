@@ -22,7 +22,7 @@ import {
   type Rarity,
   type WeaponKind,
 } from './items';
-import { rankStartLevel } from './characterRank';
+import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
 import { GRADE_COLOR, PULL_GRADES, type PullGrade } from '../data/champions';
 import { advGearModelId, advGearModelName } from '../data/advGearModels';
 import {
@@ -853,4 +853,38 @@ export function awakenAdvGear(
   return stock
     .filter((x) => x.id !== plan.consume.id)
     .map((x) => (x.id === plan.keep.id ? { ...x, awaken: aw } : x));
+}
+
+// ── 🏅 RANG, ÉTOILES ET TRI D'UNE PIÈCE (demandé : « comme les héros, par rareté ») ──────────
+
+/** Le RANG et les ÉTOILES d'une pièce, lus comme ceux d'un champion : le rang vient de sa
+ *  rareté (l'échelle `CHARACTER_RANKS`, la même pour tout le jeu), les étoiles de sa place
+ *  dans la tranche de niveaux de ce rang (`advGearLevelBand`), en 5 parts. ⚠️ Le niveau
+ *  reste CACHÉ, comme celui d'un champion : on n'affiche que ceci. */
+export function advGearRankStar(g: Pick<AdvGear, 'rarity' | 'level'>): {
+  emoji: string;
+  name: string;
+  color: string;
+  star: number;
+} {
+  const i = Math.max(0, Math.min(CHARACTER_RANKS.length - 1, RARITY_RANK[g.rarity] ?? 0));
+  const r = CHARACTER_RANKS[i]!;
+  const band = advGearLevelBand(g.rarity);
+  const span = Math.max(1, band.max - band.min + 1);
+  const star = Math.max(1, Math.min(5, Math.floor(((g.level - band.min) * 5) / span) + 1));
+  return { emoji: r.emoji, name: r.name, color: r.color, star };
+}
+
+/** 🗂️ L'ORDRE D'UNE LISTE DE PIÈCES — celui du sac du héros (rareté, puis qualité) :
+ *  la LETTRE (S, A, B) d'abord, puis le RANG, puis les ÉTOILES (le niveau), puis l'ÉVEIL.
+ *  ⚠️ SOURCE UNIQUE : le stock et le sélecteur d'un emplacement lisent la même règle. */
+export function compareAdvGear(a: AdvGear, b: AdvGear): number {
+  return (
+    GEAR_GRADE_SHARE[b.grade] - GEAR_GRADE_SHARE[a.grade] ||
+    RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
+    b.level - a.level ||
+    (b.awaken ?? 0) - (a.awaken ?? 0) ||
+    ADV_GEAR_SLOTS.indexOf(a.slot) - ADV_GEAR_SLOTS.indexOf(b.slot) ||
+    a.name.localeCompare(b.name)
+  );
 }

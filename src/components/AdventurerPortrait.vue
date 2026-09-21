@@ -26,15 +26,13 @@
         </svg>
       </button>
 
-      <div class="ap-mini corner tr" :title="`${rank.name} · ${rank.star}/5 ★`">
-        <svg viewBox="0 0 44 44" aria-hidden="true">
-          <circle class="apm-track full" cx="22" cy="22" r="18" />
-          <text class="apm-emo" x="22" y="23" text-anchor="middle" dominant-baseline="central">
-            {{ rank.emoji }}
-          </text>
-        </svg>
-        <span class="apm-ic txt font-display">{{ rank.star }}★</span>
-      </div>
+      <RankStarBadge
+        class="ap-mini corner tr"
+        :emoji="rank.emoji"
+        :name="rank.name"
+        :color="rank.color"
+        :star="rank.star"
+      />
 
       <div
         class="ap-frame"
@@ -163,6 +161,7 @@
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
+import RankStarBadge from '@/components/RankStarBadge.vue';
 import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import {
   advGradeBadge,

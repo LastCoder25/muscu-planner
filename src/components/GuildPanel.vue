@@ -242,12 +242,13 @@
                   <span class="d-pair-emo"
                     ><AdvGearArt :model="advGearModelOf(g)">{{ g.emoji }}</AdvGearArt></span
                   >
+                  <!-- 🏅 Rang + étoiles, le badge du coin des portraits de champion. -->
+                  <RankStarBadge class="gear-rsb" v-bind="advGearRankStar(g)" />
                   <span class="d-pair-main">
                     <span class="d-pair-name">
                       <b :style="{ color: advGearBadge(g).color }">{{ g.name }}</b>
                       <!-- ⭐ Les ÉTOILES de son rang, comme un champion (v0.1015) : elles montent en
                            combattant avec son porteur. Le niveau reste caché. -->
-                      <span class="d-train">{{ rankStarStr(characterRank(g.level).star) }}</span>
                       <span v-if="g.awaken" class="d-train awk">✨{{ g.awaken }}</span>
                     </span>
                     <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
@@ -427,6 +428,7 @@
           <!-- Rang (même lecture que familiers et talents) et stat principale : on voit
                ce qu'il porte d'un coup d'œil, sans ouvrir le sélecteur (v0.865). -->
           <span v-if="s.rank" class="dg-rk" :style="{ color: s.color }">{{ s.rank }}</span>
+          <RankStarBadge v-if="s.piece" class="dg-rsb" v-bind="advGearRankStar(s.piece)" />
           <span v-if="s.stat" class="dg-stat">{{ s.stat }}</span>
           <!-- Ce que la pièce APPORTE : la stat seule ne se compare pas d'une pièce à
                l'autre (des dégâts contre de la réduction) et ne dit pas son assiette. -->
@@ -604,10 +606,11 @@
         <span class="d-pair-emo"
           ><AdvGearArt :model="advGearModelOf(r.g)">{{ r.g.emoji }}</AdvGearArt></span
         >
+        <RankStarBadge class="gear-rsb" v-bind="advGearRankStar(r.g)" />
         <span class="d-pair-main">
           <span class="d-pair-name">
             <b :style="{ color: r.color }">{{ r.g.name }}</b>
-            <span class="d-train">niv {{ r.g.level }}</span>
+            <span v-if="r.g.awaken" class="d-train awk">✨{{ r.g.awaken }}</span>
           </span>
           <span v-for="(t, i) in r.texts" :key="i" class="d-gain">{{ t }}</span>
           <span class="d-gain" :class="{ neg: r.power < gearRows.curPower }">
@@ -670,23 +673,24 @@ import {
   engageCap,
 } from '@/lib/adventurers';
 import { GRADE_COLOR } from '@/data/champions';
-import { RARITY_RANK } from '@/lib/items';
 import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
 import { fmtPow, fmtDelta } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
+import RankStarBadge from '@/components/RankStarBadge.vue';
 import ChampionCollection from '@/components/ChampionCollection.vue';
 import { CHAMPIONS } from '@/data/champions';
 import { type EscortKit } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
   advGearBadge,
+  advGearRankStar,
+  compareAdvGear,
   advGearCells,
   advGearModelOf,
   advGearEffectTexts,
   advGearOptions,
   advGearSellValue,
-  GEAR_GRADE_SHARE,
   advLooks,
   canWearAdvGear,
   pendingAdvGear,
@@ -855,7 +859,8 @@ const gearRows = computed(() => {
     otherLineage: c.otherLineage,
     tooRare: c.tooRare,
     taken: c.taken,
-    rows: c.options.map((g) => ({
+    // Même ordre que le stock (`compareAdvGear`) : rareté, rang, étoiles, éveil.
+    rows: [...c.options].sort(compareAdvGear).map((g) => ({
       g,
       color: advGearBadge(g).color,
       texts: gearEffectTexts(g),
@@ -910,15 +915,7 @@ const collectionOwned = computed(
 // (`Adventurer.gear`, BRUT — même lecture que `dropAdvGear` côté store) ne se cède pas.
 /** Le stock, par LETTRE (S, A, B), puis du rang le plus haut au plus bas, puis par
  *  emplacement. */
-const stockSorted = computed(() =>
-  [...char.advGearStock].sort(
-    (a, b) =>
-      GEAR_GRADE_SHARE[b.grade] - GEAR_GRADE_SHARE[a.grade] ||
-      RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
-      ADV_GEAR_SLOTS.indexOf(a.slot) - ADV_GEAR_SLOTS.indexOf(b.slot) ||
-      b.level - a.level,
-  ),
-);
+const stockSorted = computed(() => [...char.advGearStock].sort(compareAdvGear));
 /** Ce qu'on regarde dans le stock : ce qui attend preneur, ce qui est confié, ou `null`
  *  pour tout. ⚠️ « Disponibles » par DÉFAUT — c'est le seul où il y a à faire. */
 const stockTab = ref<'free' | 'worn' | null>('free');
@@ -1929,6 +1926,16 @@ function leftOf(at: number): string {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+}
+/* 🏅 Le badge rang + étoiles, rangé en haut À DROITE comme sur un portrait de champion. */
+.gear-rsb {
+  order: 3;
+  flex: none;
+  width: 34px;
+  margin-left: auto;
+}
+.dg-rsb {
+  width: 28px;
 }
 /* ⚠️ COLLÉS EN BAS. Les tuiles d'une même rangée sont étirées à la même hauteur par la
    grille ; sans `margin-top: auto` la rangée de boutons suivait le texte, donc les icônes
