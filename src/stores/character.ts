@@ -167,6 +167,7 @@ import {
   rollAdvGear,
   rollAdvGearDrop,
   advGearModelOf,
+  grantGearXp,
   lineageOf,
   normalizeAdvGearState,
   outfitFromItem,
@@ -1904,9 +1905,10 @@ export const useCharacterStore = defineStore('character', () => {
         now,
       });
       wages = claim.wages;
+      const gear = advGearAfter(cur, party.advGear, claim.adventurers, party.xp);
       partyPatch = {
         adventurers: claim.adventurers,
-        ...(party.advGear.length ? { adv_gear: withAdvGear(cur, party.advGear) } : {}),
+        ...(gear ? { adv_gear: gear } : {}),
       };
     }
     // ⚠️ ENTIERS À L'ENCAISSEMENT : ces colonnes sont `integer`, une valeur décimale fait
@@ -2114,13 +2116,19 @@ export const useCharacterStore = defineStore('character', () => {
       now + woundMsFor(defenseLevel(t.base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7));
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
+      const gains: Record<string, number> = {};
       patch.adventurers = advList.value.map((a) => {
         if (!ids.has(a.id)) return a;
-        const next = grantAdvXp(a, siegeXp(a, report), pantheonLevel.value);
+        const gain = siegeXp(a, report);
+        gains[a.id] = gain;
+        const next = grantAdvXp(a, gain, pantheonLevel.value);
         return hurt.has(a.id)
           ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, hurtUntil) }
           : next;
       });
+      // 🎓 L'équipement des défenseurs apprend autant qu'eux (butin de siège compris).
+      const gear = advGearAfter(cur, loot?.advGear ?? [], patch.adventurers as Adventurer[], gains);
+      if (gear) patch.adv_gear = gear;
     }
     if (drops.length) {
       patch.inventory = [...cur.inventory, ...drops];
@@ -2267,6 +2275,24 @@ export const useCharacterStore = defineStore('character', () => {
       ...pieces.map((p) => ({ ...p, id: crypto.randomUUID() })),
     ];
     return { ...(cur.adv_gear ?? { stock: [], forges: [] }), stock };
+  }
+
+  /** 🎓 Le stock APRÈS une mission : les pièces portées apprennent avec leur porteur
+   *  (`grantGearXp`, lib testée), puis le butin s'ajoute. `undefined` quand rien ne change —
+   *  on n'écrit pas `adv_gear` à vide. ⚠️ `advs` = le vivier APRÈS le gain d'XP. */
+  function advGearAfter(
+    cur: CharacterRow,
+    pieces: Omit<AdvGear, 'id'>[],
+    advs: Adventurer[],
+    gains: Record<string, number>,
+  ): AdvGearState | undefined {
+    const base = cur.adv_gear ?? { stock: [], forges: [] };
+    const stock = grantGearXp(base.stock, advs, gains);
+    if (stock === base.stock && !pieces.length) return undefined;
+    return {
+      ...base,
+      stock: [...stock, ...pieces.map((p) => ({ ...p, id: crypto.randomUUID() }))],
+    };
   }
 
   /** ⚒️ Envoie un objet du SAC à l'Équipementier : il en revient une pièce pour
@@ -2630,7 +2656,10 @@ export const useCharacterStore = defineStore('character', () => {
       adventurers: advs,
       // 🗡️ Une embuscade repoussée peut avoir laissé une pièce. ⚠️ `o.advGear` ABSENT sur
       // les convois lancés avant cette version : l'optional chaining est voulu.
-      ...(o.advGear?.length ? { adv_gear: withAdvGear(cur, o.advGear) } : {}),
+      ...(() => {
+        const gear = advGearAfter(cur, o.advGear ?? [], advs, o.xp);
+        return gear ? { adv_gear: gear } : {};
+      })(),
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);

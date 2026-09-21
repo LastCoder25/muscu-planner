@@ -18,7 +18,6 @@ import {
   pruneCaravans,
   CARAVAN_KEEP_CLAIMED,
   escortShare,
-  missionTravelMult,
   suggestEscort,
   convoyHurt,
   missionXp,
@@ -437,9 +436,13 @@ describe('salaires, XP et garde-fous', () => {
     // deux POI de niveaux différents ne testait que le socle `base`, pas la décroissance —
     // la mutation qui retire le ratio passait donc au vert.
     const facile = poi({ level: 5 });
-    expect(missionXp(refAdventurer(30), facile)).toBeLessThan(missionXp(refAdventurer(5), facile));
+    expect(missionXp(refAdventurer(30), facile, true)).toBeLessThan(
+      missionXp(refAdventurer(5), facile, true),
+    );
     // …et une route à son niveau reste pleine.
-    expect(missionXp(refAdventurer(5), facile)).toBe(missionXp(refAdventurer(3), facile));
+    expect(missionXp(refAdventurer(5), facile, true)).toBe(
+      missionXp(refAdventurer(3), facile, true),
+    );
   });
   it('⚠️ le nombre de convois monte SANS FIN mais reste bridé par le vivier', () => {
     // Le plafond dur (4) a sauté avec la règle « aucun niveau mort » : un Comptoir de
@@ -617,10 +620,13 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
       const o = resolveCaravan(p, esc, s * 977 + 1, NUS, 100);
       const f = o.events.filter((e) => e.kind === 'bandits');
       const abattus = f.reduce((n, e) => n + (e.slain ?? 0), 0);
+      // 🎓 Victoire = aucune embuscade perdue (sans combat compris) : socle plein ; sinon
+      // le socle de défaite (v0.1014).
+      const won = !f.some((x) => x.won === false);
       for (const a of esc) {
-        expect(o.xp[a.id]!).toBeGreaterThanOrEqual(missionXp(a, p));
-        if (!f.length) expect(o.xp[a.id]).toBe(missionXp(a, p));
-        if (abattus > 0) expect(o.xp[a.id]!).toBeGreaterThan(missionXp(a, p));
+        expect(o.xp[a.id]!).toBeGreaterThanOrEqual(missionXp(a, p, won));
+        if (!f.length) expect(o.xp[a.id]).toBe(missionXp(a, p, true));
+        if (abattus > 0) expect(o.xp[a.id]!).toBeGreaterThan(missionXp(a, p, won));
       }
       if (!f.length) sansCombat++;
       if (abattus > 0) avecAbattus++;
@@ -911,96 +917,47 @@ describe('✨ COMPOSER UNE ESCORTE', () => {
   });
 });
 
-describe('⚠️ ALLER LOIN FORME DAVANTAGE — l’XP paie la DISTANCE', () => {
-  /** Un POI TEL QUE LA CARTE LE POSE : son niveau DÉCOULE de sa distance (v0.683).
-   *  ⚠️ Le fabriquer à niveau constant ne testerait pas la décision du joueur — sur la
-   *  carte, choisir « plus loin » c'est choisir « plus fort » du même geste. */
-  const mapPoi = (playerLevel: number, distNorm: number): Poi => {
-    const w = spawnWindow(playerLevel);
-    return poi({ level: w.min + Math.round(distNorm * (w.max - w.min)), distNorm });
-  };
-  /** Le rendement qui décide vraiment : un convoi occupe un créneau pendant tout son
-   *  voyage, on compare donc ce qu'il rapporte À L'HEURE, pas par voyage. */
-  const xpParHeure = (playerLevel: number, distNorm: number) => {
-    const p = mapPoi(playerLevel, distNorm);
-    return missionXp(refAdventurer(playerLevel), p) / ((2 * caravanLegMin(p, [], 0, 0)) / 60);
-  };
-  const DIST = [0, 0.25, 0.5, 0.75, 0.9, 1];
-
-  it('⚠️ LA NAVETTE AU PIED DE LA VILLE N’EST PLUS LA MEILLEURE ÉCOLE', () => {
-    // ⚠️ CE QUE AUCUN TEST N'EXISTAIT POUR VOIR — et c'est pour ça que le défaut a vécu :
-    // `poi()` vaut 0,5 partout ailleurs dans ce fichier, donc la distance n'était mesurée
-    // nulle part. Le niveau d'un POI découle bien de son éloignement, donc l'XP montait
-    // un peu en s'éloignant — mais le TRAJET montait vingt fois plus vite. Mesuré au
-    // niveau 28 : 85 XP/h au plus proche contre 5 au plus lointain, un rapport de 17.
-    // Élever son vivier revenait à faire l'aller-retour au pied de la ville.
-    for (const L of [10, 28, 60, 90]) {
-      const proche = xpParHeure(L, 0);
-      const ailleurs = Math.max(...DIST.map((d) => xpParHeure(L, d)));
-      // Marge FRANCHE : sans borne basse, un écart de 1 % passerait sans jamais peser
-      // dans une décision. Mesuré après correctif : +37 à +39 %.
-      expect(ailleurs / proche, `niveau ${L}`).toBeGreaterThan(1.25);
+describe('🎓 L’XP SUIT LE NIVEAU DE L’ÉVENT, PAS LA DISTANCE (v0.1014)', () => {
+  it('⚠️ à niveau égal, la distance ne change RIEN à l’XP', () => {
+    // Demandé par l'utilisateur : « on ne relie plus l'xp à la distance mais au niveau de
+    // l'évent ». Mêmes graines, même escorte : les embuscades sont identiques (la distance
+    // ne touche ni la rencontre ni le combat), donc l'XP aussi.
+    const escort = team(3, 20);
+    const road = { advGear: refAdvGear(20) };
+    for (let s = 1; s <= 60; s++) {
+      const near = resolveCaravan(poi({ distNorm: 0.05 }), escort, s * 131 + 5, road, 100);
+      const far = resolveCaravan(poi({ distNorm: 0.95 }), escort, s * 131 + 5, road, 100);
+      expect(far.xp, `graine ${s}`).toEqual(near.xp);
     }
   });
 
-  it('⚠️ …et ce n’est jamais le POI le plus proche qui gagne', () => {
-    // Formulé sur l'ARGMAX et pas sur le seul bout de la carte : mesuré, l'optimum se
-    // déplace vers le milieu à haut niveau (d≈1 aux niveaux 10-28, 0,75 au 60, 0,5 au 90)
-    // parce que le plafond de `travelFactor` (9 h aller-retour) est atteint d'autant plus
-    // tôt que le trajet s'allonge avec le niveau. C'est la MÊME limite que pour la
-    // cargaison, donc un arbitrage cohérent — « il y a une bonne distance » — et non un
-    // retour au défaut, qui était « la bonne distance est toujours zéro ».
-    for (const L of [10, 28, 60, 90]) {
-      const rendements = DIST.map((d) => xpParHeure(L, d));
-      const meilleur = DIST[rendements.indexOf(Math.max(...rendements))]!;
-      expect(meilleur, `niveau ${L}`).toBeGreaterThanOrEqual(0.5);
+  it('un lieu plus FORT forme davantage', () => {
+    const a = refAdventurer(40);
+    let prev = 0;
+    for (const level of [5, 15, 30, 45]) {
+      const x = missionXp(a, poi({ level }), true);
+      expect(x, `niveau ${level}`).toBeGreaterThan(prev);
+      prev = x;
     }
   });
 
-  it('⚠️ la DISTANCE MÉDIANE est le point fixe — on redistribue, on ne dope pas', () => {
-    // C'est ce qui préserve la courbe de montée mesurée (~8 missions pour le niveau 2,
-    // 255 pour le 23) : le joueur qui prend ce que la carte lui donne ne voit rien
-    // changer. Le proche paie moins, le lointain davantage.
-    expect(missionTravelMult(poi({ distNorm: CARAVAN.xpRefDist }))).toBeCloseTo(1, 6);
-    expect(missionTravelMult(poi({ distNorm: 0 }))).toBeLessThan(1);
-    expect(missionTravelMult(poi({ distNorm: 1 }))).toBeGreaterThan(1);
-  });
-
-  it('⚠️ elle se paie sur le temps du HÉROS, jamais sur celui de la caravane', () => {
-    // Sinon la lenteur deviendrait une prime : un Comptoir bas niveau — donc des convois
-    // plus lents — rapporterait PLUS d'XP qu'un Comptoir monté à fond, et améliorer son
-    // bâtiment se paierait d'une régression. Même raison que `heroEquivalentFactor`.
-    // ⚠️ VÉRIFIÉ SUR LA VALEUR, pas sur l'intention : un premier jet comparait
-    // `missionTravelMult(p)` à lui-même — vrai, et qu'aucune mutation ne peut faire
-    // tomber. On épingle donc le fait qu'il vaut EXACTEMENT le facteur du héros, celui
-    // que la cargaison utilise : le calculer sur la durée réelle du convoi le change.
-    for (const d of [0, 0.5, 1]) {
-      const p = poi({ distNorm: d });
-      const attendu = heroEquivalentFactor(p) / heroEquivalentFactor(poi({ distNorm: 0.5 }));
-      expect(missionTravelMult(p), `distance ${d}`).toBeCloseTo(attendu, 9);
+  it('⚠️ une DÉFAITE forme, mais moins qu’une victoire — au ratio annoncé', () => {
+    for (const L of [5, 20, 60]) {
+      const a = refAdventurer(L);
+      const p = poi({ level: L });
+      const gagne = missionXp(a, p, true);
+      const perdu = missionXp(a, p, false);
+      expect(perdu, `niveau ${L}`).toBeGreaterThan(0);
+      expect(perdu / gagne).toBeCloseTo(CARAVAN.xpLossShare, 1);
     }
-    // …et un convoi ralenti met bien PLUS de temps : c'est ce que la règle refuse de payer.
-    const loin = poi({ distNorm: 1 });
-    expect(caravanLegMin(loin, [], 80, 0)).toBeLessThan(caravanLegMin(loin, [], 0, 0));
   });
 
-  it('⚠️ la distance ne contourne pas le rendement décroissant', () => {
-    // Les deux termes ne font pas double emploi : l'un regarde le NIVEAU de la route,
-    // l'autre son ÉLOIGNEMENT. Un vétéran envoyé au bout d'une carte de bas niveau doit
-    // rester bridé, sinon le farm de route facile revient par la porte de derrière.
-    const loin = poi({ level: 5, distNorm: 1 });
-    expect(missionXp(refAdventurer(40), loin)).toBeLessThan(missionXp(refAdventurer(5), loin));
-  });
-
-  it('l’XP suit la MÊME courbe que la cargaison', () => {
-    // Une seconde règle de distance aurait divergé au premier réglage de `TRAVEL_EXP`,
-    // et l'une des deux aurait cessé de payer l'éloignement.
-    for (const d of [0, 0.25, 0.5, 0.75, 1]) {
-      const p = poi({ distNorm: d });
-      expect(
-        missionTravelMult(p) * heroEquivalentFactor(poi({ distNorm: CARAVAN.xpRefDist })),
-      ).toBeCloseTo(heroEquivalentFactor(p), 6);
-    }
+  it('⚠️ le rendement décroissant tient toujours', () => {
+    // Un vétéran sur un lieu faible reste bridé : sinon le farm de route facile revient.
+    const faible = poi({ level: 5 });
+    expect(missionXp(refAdventurer(40), faible, true)).toBeLessThan(
+      missionXp(refAdventurer(5), faible, true),
+    );
   });
 });
 
@@ -1010,37 +967,11 @@ describe('⚠️ l’XP de combat suit les ennemis ABATTUS, pas l’étiquette',
     // l'étiquette. Elle reste plus formatrice, mais parce qu'il s'y passe quelque chose :
     // les abattus s'ajoutent au socle (`skirmishXpShares`, dans `resolveCaravan`).
     const a = refAdventurer(20);
-    expect(missionXp(a, poi({ perilous: true }))).toBe(missionXp(a, poi()));
-  });
-  it('🧭 la part des ABATTUS suit la distance comme le socle : loin, elle rapporte plus', () => {
-    // Même niveau, mêmes graines : les embuscades et leurs abattus sont identiques (la distance
-    // ne touche ni la rencontre ni le combat) — seule la PAYE de ces abattus doit changer.
-    const escort = team(3, 20);
-    const road = { advGear: refAdvGear(20) };
-    let pres = 0;
-    let loin = 0;
-    for (let s = 1; s <= 120; s++) {
-      const near = poi({ distNorm: 0.1, perilous: true });
-      const far = poi({ distNorm: 0.9, perilous: true });
-      const on = resolveCaravan(near, escort, s * 131 + 5, road, 100);
-      const of = resolveCaravan(far, escort, s * 131 + 5, road, 100);
-      expect(of.kills, `graine ${s}`).toEqual(on.kills);
-      for (const a of escort) {
-        pres += (on.xp[a.id] ?? 0) - missionXp(a, near);
-        loin += (of.xp[a.id] ?? 0) - missionXp(a, far);
-      }
-    }
-    expect(pres, 'aucun abattu : le test ne prouve rien').toBeGreaterThan(0);
-    expect(loin).toBeGreaterThan(pres);
-    const rapport =
-      missionTravelMult(poi({ distNorm: 0.9 })) / missionTravelMult(poi({ distNorm: 0.1 }));
-    // Au rapport des facteurs de distance, à l'arrondi près (les parts proches sont petites).
-    expect(loin / pres).toBeGreaterThan(rapport * 0.85);
-    expect(loin / pres).toBeLessThan(rapport * 1.15);
+    expect(missionXp(a, poi({ perilous: true }), true)).toBe(missionXp(a, poi(), true));
   });
   it('missionXp lit la base d’épreuve partagée avec le combat de groupe', () => {
-    const p = poi({ level: 33, distNorm: CARAVAN.xpRefDist });
-    expect(missionXp(refAdventurer(33), p)).toBe(Math.round(trialXpBase(33)));
+    const p = poi({ level: 33 });
+    expect(missionXp(refAdventurer(33), p, true)).toBe(Math.round(trialXpBase(33)));
   });
 });
 
@@ -1703,7 +1634,8 @@ describe('sources d’équipement : embuscades repoussées', () => {
     // ⚠️ v0.996 : les champions n'ont plus de compagnon, compensé en stats (`CHAMPION_SOLO`).
     // Seule la RÉPARTITION des abattus bouge (3/1/1 → 2/2/1, un tombé de moins en 2ᵉ jambe) :
     // la cargaison, l'XP et le blessé sont identiques — le flux aléatoire n'a pas fui.
-    expect(o.xp).toEqual({ ref0: 93, ref1: 93, ref2: 93 });
+    // v0.1014 : une embuscade perdue → socle de DÉFAITE (70 → 35) + la même part des abattus (23).
+    expect(o.xp).toEqual({ ref0: 58, ref1: 58, ref2: 58 });
     expect(o.kills).toEqual({ ref0: 2, ref1: 2, ref2: 1 });
     expect(o.hurt).toEqual(['ref1']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);

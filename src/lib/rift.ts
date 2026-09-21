@@ -33,8 +33,7 @@
 import { fuseUnits, skirmishXpShares, type SkirmishUnit } from './skirmish';
 import {
   caravanWages,
-  missionTravelMult,
-  missionXp,
+  missionXpFor,
   partyAllies,
   refEscortUnits,
   type PartyHero,
@@ -727,7 +726,7 @@ export function incursionFoesDown(run: RiftRun, bodies: readonly SkirmishUnit[])
  *   l'usine de mana ; y ajouter une source d'équipement non mesurée est précisément ce que
  *   le projet s'interdit (les « 0-3 pièces d'ensemble » de la spec sont écartées pour cette
  *   raison, et leur poids y est mesuré comme symbolique).
- * - **XP** : socle `missionXp` + part des abattus (`skirmishXpShares`) × `missionTravelMult`,
+ * - **XP** : socle `missionXp` + part des abattus (`skirmishXpShares`), socle selon l'issue,
  *   la règle EXACTE des camps et des convois. ⚠️ Partagée entre les SEULS aventuriers : l'XP
  *   du héros vient du sport, et le compter diluerait la part du vivier.
  * - 🤕 **DÉFAITE → TOUT LE GROUPE À L'INFIRMERIE.** Une incursion perdue est une mort du
@@ -753,9 +752,7 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
 
   const bodies = incursionBodies(poi, now);
   const shares = skirmishXpShares(escort, bodies, { foesDown: incursionFoesDown(run, bodies) });
-  const travel = missionTravelMult(poi);
-  const xp: Record<string, number> = {};
-  for (const a of escort) xp[a.id] = missionXp(a, poi) + Math.round((shares[a.id] ?? 0) * travel);
+  const xp = missionXpFor(escort, poi, run.cleared, shares);
 
   const mana = incursionMana(run, poi.level);
   const party: PartyResult = {
@@ -944,7 +941,7 @@ export interface InterceptionInput {
  *   une rencontre en rase campagne est un affrontement unique. On fond le groupe
  *   (`fuseUnits`) contre l'armée fondue (`armyCombatant`) — les deux modèles existent
  *   déjà, on n'en invente aucun.
- * - **XP** : socle `missionXp` + part des abattus × `missionTravelMult`, la règle EXACTE
+ * - **XP** : socle `missionXp` + part des abattus (`missionXpFor`), la règle EXACTE
  *   des camps, des convois et des incursions. Partagée entre les SEULS aventuriers.
  * - 🤕 **DÉFAITE → TOUT LE GROUPE À L'INFIRMERIE**, comme une incursion : le combattant
  *   fondu est tombé, il n'y a pas de corps à corps distincts à attribuer.
@@ -968,9 +965,7 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
   // rien non plus quand le combattant fondu tombe.
   const foesDown = run.win ? bodies.map((b) => b.id) : [];
   const shares = skirmishXpShares(escort, bodies, { foesDown });
-  const travel = missionTravelMult(poi);
-  const xp: Record<string, number> = {};
-  for (const a of escort) xp[a.id] = missionXp(a, poi) + Math.round((shares[a.id] ?? 0) * travel);
+  const xp = missionXpFor(escort, poi, run.win, shares);
 
   const mana = interceptionMana(raid, army, run);
   const effectif = raid.groups.reduce((s, g) => s + g.count, 0);

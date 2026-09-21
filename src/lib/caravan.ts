@@ -172,11 +172,10 @@ export const CARAVAN = {
   slotEvery: 9,
   /** Niveaux de Comptoir pour gagner la MOITIÉ de l’accélération possible. */
   speedHalf: 35,
-  /** Distance de RÉFÉRENCE de l'XP de mission (0..1) : celle dont le rendement ne bouge
-   *  pas. En deçà on apprend moins, au-delà davantage — voir `missionTravelMult`. La
-   *  médiane, pour que la courbe de montée mesurée (~8 missions pour le niveau 2, 255
-   *  pour le 23) reste vraie du joueur qui prend ce que la carte lui donne. */
-  xpRefDist: 0.5,
+  /** 🎓 Part du SOCLE d'XP versée sur une DÉFAITE (v0.1014, demandé par l'utilisateur :
+   *  « xp de défaite différente de celle de victoire »). On apprend en perdant — une défaite
+   *  coûte déjà la cargaison ou le butin, et l'infirmerie —, mais moins qu'en gagnant. */
+  xpLossShare: 0.5,
   /** Part de la valeur d'un convoi qu'une embuscade perdue emporte. */
   lossKeep: 0.55,
 } as const;
@@ -726,40 +725,9 @@ export function heroEquivalentFactor(poi: Poi): number {
   return tripFactor(poiTravelLevel(poi), poi.distNorm);
 }
 
-/** Le facteur de trajet d'un POI, à niveau et distance donnés. Extrait pour que l'XP et
- *  la cargaison lisent LA MÊME courbe : deux copies auraient divergé au premier réglage
- *  de `TRAVEL_EXP`, et l'une des deux aurait cessé de payer la distance. */
+/** Le facteur de trajet d'un POI, à niveau et distance donnés (la cargaison). */
 function tripFactor(level: number, distNorm: number): number {
   return travelFactor((2 * travelOneWayMin(level, distNorm)) / 60);
-}
-
-/**
- * Ce que la DISTANCE vaut à l'XP d'une mission.
- *
- * ⚠️ SANS LUI, ALLER LOIN ÉTAIT UNE PERTE SÈCHE POUR LE VIVIER. Le niveau d'un POI
- * découle bien de sa distance (v0.683), donc l'XP montait un peu en s'éloignant — mais
- * le TRAJET, lui, montait vingt fois plus vite. Mesuré au niveau 28 : le POI le plus
- * proche rendait 85 XP/h, le plus lointain 5 — un rapport de 17. Le convoi n'ayant qu'un
- * nombre borné de créneaux, c'est bien le rendement HORAIRE qui décide : la stratégie
- * optimale était de faire la navette au pied de la ville, et les trois quarts de la
- * carte ne servaient plus à rien pour élever ses aventuriers.
- *
- * ⚠️ ON RÉUTILISE LA COURBE DE LA CARGAISON (`travelFactor`, super-linéaire), pas une
- * seconde règle : c'est déjà elle qui fait qu'un long voyage paie plus que
- * proportionnellement. L'XP suit donc la même pente, et « loin » redevient un arbitrage
- * cohérent d'un bout à l'autre de l'économie.
- *
- * ⚠️ RAPPORTÉ À LA DISTANCE MÉDIANE, et c'est ce qui préserve la calibration : une
- * mission de mi-carte vaut exactement ce qu'elle valait. On ne dope pas la montée en
- * niveau, on la REDISTRIBUE — le proche paie moins, le lointain davantage.
- *
- * ⚠️ Il se calcule sur la durée qu'un HÉROS aurait mise, jamais sur celle de la
- * caravane : payer le temps réel ferait de la lenteur une prime (même raison que
- * `heroEquivalentFactor`), et un Comptoir bas niveau rapporterait plus d'XP qu'un haut.
- */
-export function missionTravelMult(poi: Poi): number {
-  const L = poiTravelLevel(poi);
-  return tripFactor(L, poi.distNorm) / tripFactor(L, CARAVAN.xpRefDist);
 }
 
 /** Salaires d'une mission — un PUITS D'OR, et la contrepartie de la prestation. */
@@ -771,25 +739,38 @@ export function caravanWages(escort: Adventurer[], poi: Poi): number {
   );
 }
 
-/** XP de MISSION d'un membre — le socle, versé quel que soit le résultat, même sans combat.
+/** 🎓 XP de MISSION d'un aventurier (v0.1014, refonte demandée par l'utilisateur : « on ne
+ *  relie plus l'xp à la distance mais au niveau de l'évent ; une xp fixe selon le niveau de
+ *  l'évent, de l'xp par ennemi abattu, et une xp de défaite différente de la victoire »).
  *
- *  `ratio` : RENDEMENT DÉCROISSANT quand la route est très en dessous du niveau de
- *  l'aventurier — sans lui, un vétéran engrange sur des routes qui ne lui apprennent rien.
- *  `travel` : la DISTANCE (cf. `missionTravelMult`) — sans lui, la navette au pied de la
- *  ville rendait 17 fois plus d'XP à l'heure que le bout de la carte.
+ *  `socle × issue + part des abattus` :
+ *  - le SOCLE ne dépend que du NIVEAU du lieu (`trialXpBase`), versé même sans combat ;
+ *  - l'ISSUE : plein sur une victoire, `CARAVAN.xpLossShare` sur une défaite ;
+ *  - la PART DES ABATTUS (`skirmishXpShares`, calculée par l'appelant) : chaque ennemi
+ *    tombé vaut une part de la base de SON niveau, partagée entre les présents.
  *
- *  ⚠️ Les deux ne font PAS double emploi : le premier regarde le niveau de la route, le
- *  second son éloignement. Ils se corrèlent (le niveau découle de la distance) sans se
- *  confondre — un vétéran envoyé loin sur une carte de bas niveau reste bridé.
- *  ⚠️ L'ancien bonus forfaitaire par combat traversé (`xpPerFight`, +20 % par embuscade)
- *  est REMPLACÉ par la part des bandits ABATTUS (`skirmishXpShares`), ajoutée dans
- *  `resolveCaravan` : on paie ce qui a été fait, et non plus le simple fait d'avoir croisé du monde.
- *  Cette part est multipliée par la MÊME `missionTravelMult` que le socle : la distance
- *  paie toute l'XP d'un convoi, pas seulement sa moitié. */
-export function missionXp(adv: Adventurer, poi: Poi): number {
+ *  ⚠️ PLUS AUCUNE DISTANCE (l'ancien `missionTravelMult` est retiré) : depuis la v0.1013 le
+ *  niveau d'un lieu ne suit plus son éloignement, et la difficulté se lit sur le niveau.
+ *  ⚠️ Le RENDEMENT DÉCROISSANT reste (`ratio`) : sans lui, un vétéran engrangerait sur des
+ *  lieux qui ne lui apprennent rien.
+ *  ⚠️ SOURCE UNIQUE des quatre missions (convoi, camp, incursion, interception) : une
+ *  copie par lieu aurait divergé au premier réglage. */
+export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
   const ratio = Math.max(0.15, Math.min(2, poi.level / Math.max(1, adv.level)));
-  const travel = missionTravelMult(poi);
-  return Math.max(1, Math.round(trialXpBase(poi.level) * Math.min(1, ratio) ** 1.5 * travel));
+  const issue = won ? 1 : CARAVAN.xpLossShare;
+  return Math.max(1, Math.round(trialXpBase(poi.level) * Math.min(1, ratio) ** 1.5 * issue));
+}
+
+/** L'XP de chaque membre d'une mission : socle (selon l'issue) + sa part des abattus. */
+export function missionXpFor(
+  escort: readonly Adventurer[],
+  poi: Poi,
+  won: boolean,
+  shares: Record<string, number>,
+): Record<string, number> {
+  const xp: Record<string, number> = {};
+  for (const a of escort) xp[a.id] = missionXp(a, poi, won) + Math.round(shares[a.id] ?? 0);
+  return xp;
 }
 
 /** Convois simultanés qu'autorise le Comptoir. ⚠️ SECOND garde-fou de l'inflation :
@@ -1115,10 +1096,8 @@ export function resolveCaravan(
   let group: { units: SkirmishUnit[]; troop: SkirmishUnit[] } | null = null;
   const kills: Record<string, number> = Object.fromEntries(escort.map((a) => [a.id, 0]));
   const xpShare: Record<string, number> = Object.fromEntries(escort.map((a) => [a.id, 0]));
-  // 🧭 La part des abattus suit la DISTANCE comme le socle (`missionXp`) : sinon l'incitation
-  // à aller loin (v0.793) ne portait plus que sur une partie de l'XP, et la navette au pied de
-  // la ville regagnait du terrain à chaque embuscade. Cumulée en flottant, arrondie UNE fois.
-  const travel = missionTravelMult(poi);
+  // 🎓 Un convoi est une VICTOIRE s'il n'a perdu aucune embuscade (sans combat compris).
+  let lost = false;
   // Une rencontre par jambe de trajet — deux fois plus sur une route dangereuse.
   const legs = routePerilous(poi) ? 4 : 2;
   const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
@@ -1151,7 +1130,7 @@ export function resolveCaravan(
       const parAmb = slainByAlly(escort, d);
       for (const a of escort) kills[a.id] = (kills[a.id] ?? 0) + (parAmb[a.id] ?? 0);
       const parts = skirmishXpShares(escort, group.troop, d);
-      for (const a of escort) xpShare[a.id] = (xpShare[a.id] ?? 0) + (parts[a.id] ?? 0) * travel;
+      for (const a of escort) xpShare[a.id] = (xpShare[a.id] ?? 0) + (parts[a.id] ?? 0);
       // 🤕 Le journal dit qui est À TERRE ; la POLITIQUE d'infirmerie est celle du convoi.
       for (const id of convoyHurt(d)) if (!hurt.includes(id)) hurt.push(id);
       if (r.win) {
@@ -1169,6 +1148,7 @@ export function resolveCaravan(
         });
         if (piece) advGear.push(piece);
       } else {
+        lost = true;
         mult *= CARAVAN.lossKeep;
         // ⚠️ TIRAGE CONSERVÉ, résultat ignoré : il désignait l'ancienne victime au hasard,
         // remplacée par le PREMIER tombé (`convoyHurt`). Les rencontres des jambes suivantes
@@ -1202,10 +1182,8 @@ export function resolveCaravan(
     keys: raw.keys,
   };
   const wages = caravanWages(escort, poi);
-  // XP = le socle de mission (toujours versé) + la part des bandits abattus (partagée), les
-  // deux multipliées par la distance (`missionTravelMult`).
-  const xp: Record<string, number> = {};
-  for (const a of escort) xp[a.id] = missionXp(a, poi) + Math.round(xpShare[a.id] ?? 0);
+  // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
+  const xp = missionXpFor(escort, poi, !lost, xpShare);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais

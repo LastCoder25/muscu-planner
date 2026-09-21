@@ -32,6 +32,7 @@ import {
   advAvatar,
   advChampion,
   advRarity,
+  advXpToNext,
   type AdvAvatarProfile,
   type ADV_AVATAR_SLOTS,
   type Adventurer,
@@ -64,6 +65,9 @@ export interface AdvGear {
   grade: PullGrade;
   roll: number;
   level: number;
+  /** 🎓 XP accumulée vers le niveau suivant (v0.1014) : la pièce apprend avec son porteur
+   *  (`grantGearXp`). Absente sur les pièces d'avant → 0. */
+  xp?: number;
   effect: ItemEffect;
   effect2?: ItemEffect;
   /** Lignées civiles uniquement, sur l'accessoire : trajet raccourci / cargaison (fraction). */
@@ -368,6 +372,45 @@ export function rollAdvGear(
     out.role = { kind: def.role, value: advGearRoleValue(def.role, rank, roll) };
   }
   return out;
+}
+
+/**
+ * 🎓 L'ÉQUIPEMENT APPREND AVEC SON PORTEUR (v0.1014, demandé par l'utilisateur : « l'xp que
+ * gagne le champion, son équipement gagne autant »).
+ *
+ * Chaque pièce PORTÉE (`wornGear`, les règles du combat — une pièce qui ne compte pas au
+ * combat n'apprend pas non plus) reçoit exactement l'XP de son porteur, sur la MÊME courbe
+ * (`advXpToNext`). Son niveau d'objet monte donc, et avec lui sa valeur (`itemLevelMult`).
+ *
+ * ⚠️ PLAFONNÉE AU NIVEAU DU PORTEUR, jamais en recul : une pièce ne dépasse pas celui qui la
+ * porte (sinon on élèverait des pièces de haut niveau sur des recrues), et une pièce tombée
+ * plus haut que lui GARDE son niveau. Au plafond l'XP excédentaire est CONSERVÉE, comme pour
+ * un champion (`grantAdvXp`) : quand le porteur monte, la pièce rattrape aussitôt.
+ * ⚠️ `advs` = le vivier APRÈS le gain d'XP (le plafond est le niveau atteint).
+ * Pur ; rend le MÊME tableau si rien ne change (le store n'écrit pas à vide).
+ */
+export function grantGearXp(
+  stock: AdvGear[],
+  advs: Adventurer[],
+  gains: Record<string, number>,
+): AdvGear[] {
+  const worn = wornGear(advs, stock);
+  const next = new Map<string, AdvGear>();
+  for (const a of advs) {
+    const gain = Math.max(0, Math.round(gains[a.id] ?? 0));
+    if (!gain) continue;
+    for (const g of worn.get(a.id) ?? []) {
+      const cap = Math.max(g.level, a.level);
+      let level = g.level;
+      let pool = Math.max(0, g.xp ?? 0) + gain;
+      while (level < cap && pool >= advXpToNext(level)) {
+        pool -= advXpToNext(level);
+        level++;
+      }
+      next.set(g.id, { ...g, level, xp: pool });
+    }
+  }
+  return next.size ? stock.map((g) => next.get(g.id) ?? g) : stock;
 }
 
 /** Ce que des pièces apportent au combat — valeur × niveau d'objet, comme un objet du héros. */

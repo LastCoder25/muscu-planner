@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { GRADE_COLOR, PULL_GRADES } from '@/data/champions';
 import { mulberry32 } from '@/lib/combat';
 import { RARITY_RANK, RANK_ORDER, itemLevelMult, prestigeRankIndex, type Item } from '@/lib/items';
-import { ADV_CLASSES, advAvatar, advRarity, type Adventurer } from '@/lib/adventurers';
+import { ADV_CLASSES, advAvatar, advRarity, advXpToNext, type Adventurer } from '@/lib/adventurers';
 import { refAdventurer } from '@/lib/caravan';
 import {
   adventurerGearPower,
@@ -42,6 +42,7 @@ import {
   rollAdvGear,
   settleOutfit,
   wornGear,
+  grantGearXp,
   type AdvGear,
 } from '@/lib/advGear';
 
@@ -956,5 +957,48 @@ describe('🗡️ ce qui attend un porteur (pendingAdvGear)', () => {
     const plan = autoAdvGear(advs, ctx);
     for (const [id, slots] of pendingAdvGear(advs, stock))
       for (const s of slots) expect(plan.get(id)?.[s], `${id}/${s}`).toBeTruthy();
+  });
+});
+
+describe('🎓 l’équipement apprend avec son porteur (v0.1014)', () => {
+  it('une pièce PORTÉE reçoit exactement l’XP de son porteur, sur la même courbe', () => {
+    const a = { ...adv('a', ['guerrier'], { weapon: 'p' }), level: 30 };
+    const stock = [piece('p', { level: 10 })];
+    const out = grantGearXp(stock, [a], { a: advXpToNext(10) + 5 });
+    expect(out[0]).toMatchObject({ level: 11, xp: 5 });
+    // L'XP déjà accumulée par la pièce compte : 5 déjà là + ce qui manque = un niveau.
+    const deja = [piece('p', { level: 10, xp: 5 })];
+    expect(grantGearXp(deja, [a], { a: advXpToNext(10) - 5 })[0]).toMatchObject({
+      level: 11,
+      xp: 0,
+    });
+  });
+
+  it('⚠️ une pièce NON portée (au stock, ou refusée par le combat) n’apprend rien', () => {
+    const a = { ...adv('a', ['guerrier'], { weapon: 'p' }), level: 30 };
+    const stock = [piece('p', { level: 10 }), piece('libre', { level: 10 })];
+    const out = grantGearXp(stock, [a], { a: 10_000 });
+    expect(out[1]).toBe(stock[1]);
+    // Hors lignée : `wornGear` l'ignore, donc elle n'apprend pas non plus.
+    const autre = [piece('x', { lineage: 'archer', level: 10 })];
+    const b = { ...adv('b', ['guerrier'], { weapon: 'x' }), level: 30 };
+    expect(grantGearXp(autre, [b], { b: 10_000 })).toBe(autre);
+  });
+
+  it('⚠️ plafonnée au niveau du PORTEUR — l’excédent est gardé, jamais de recul', () => {
+    const a = { ...adv('a', ['guerrier'], { weapon: 'p' }), level: 12 };
+    const out = grantGearXp([piece('p', { level: 10 })], [a], { a: 1_000_000 });
+    expect(out[0]!.level).toBe(12);
+    expect(out[0]!.xp).toBeGreaterThan(0);
+    // Une pièce tombée PLUS HAUT que son porteur garde son niveau.
+    const haute = grantGearXp([piece('p', { level: 40 })], [a], { a: 1_000_000 });
+    expect(haute[0]!.level).toBe(40);
+  });
+
+  it('rien à gagner → le MÊME tableau (le store n’écrit pas à vide)', () => {
+    const a = { ...adv('a', ['guerrier'], { weapon: 'p' }), level: 30 };
+    const stock = [piece('p', { level: 10 })];
+    expect(grantGearXp(stock, [a], {})).toBe(stock);
+    expect(grantGearXp(stock, [a], { a: 0 })).toBe(stock);
   });
 });
