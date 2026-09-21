@@ -42,9 +42,13 @@
             <div v-for="(c, i) in lp.strip" :key="i" class="gx-rcell">
               <div class="gx-rbox" :style="{ '--c': GRADE_COLOR[c.grade] }">
                 <span class="gx-remo"
-                  ><ChampionPortrait :champion-id="c.championId">{{ c.emoji }}</ChampionPortrait></span
+                  ><ChampionPortrait :champion-id="c.championId"
+                    ><AdvGearArt :model="c.gearModel">{{ c.emoji }}</AdvGearArt></ChampionPortrait
+                  ></span
                 >
-                <span class="gx-rrar">{{ c.grade }}</span>
+                <!-- ⚠️ La LETTRE ne s'écrit que sur la case RETENUE, une fois sa ligne
+                     arrêtée (demandé) : au défilement, c'est le CADRE coloré qui la porte. -->
+                <span v-if="i === lp.stopIndex" class="gx-rrar">{{ c.grade }}</span>
               </div>
             </div>
           </div>
@@ -68,9 +72,10 @@
             :style="{ '--c': GRADE_COLOR[c.grade] }"
           >
             <span class="gx-emo"
-              ><ChampionPortrait :champion-id="c.championId" large>{{ c.emoji }}</ChampionPortrait></span
+              ><ChampionPortrait :champion-id="c.championId" large
+                ><AdvGearArt :model="c.gearModel">{{ c.emoji }}</AdvGearArt></ChampionPortrait
+              ></span
             >
-            <span class="gx-crar">{{ c.grade }}</span>
           </div>
         </div>
       </div>
@@ -82,9 +87,9 @@
         </div>
         <div class="gx-portrait">
           <span class="gx-pemo"
-            ><ChampionPortrait :champion-id="champ.championId" large>{{
-              champ.emoji
-            }}</ChampionPortrait></span
+            ><ChampionPortrait :champion-id="champ.championId" large
+              ><AdvGearArt :model="champ.gearModel">{{ champ.emoji }}</AdvGearArt></ChampionPortrait
+            ></span
           >
         </div>
         <div class="gx-name font-display">{{ champ.name }}</div>
@@ -106,9 +111,11 @@
               :title="`${cellOf(it).name} · ${it.grade}`"
             >
               <span class="gl-emo"
-                ><ChampionPortrait :champion-id="cellOf(it).championId">{{
-                  cellOf(it).emoji
-                }}</ChampionPortrait></span
+                ><ChampionPortrait :champion-id="cellOf(it).championId"
+                  ><AdvGearArt :model="cellOf(it).gearModel">{{
+                    cellOf(it).emoji
+                  }}</AdvGearArt></ChampionPortrait
+                ></span
               >
               <span class="gl-name">{{ cellOf(it).name }}</span>
               <span class="gl-rar">{{ it.grade }}</span>
@@ -158,6 +165,7 @@ import {
 } from '@/lib/gachaReveal';
 import { awakenLevel } from '@/lib/adventurers';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import AdvGearArt from '@/components/AdvGearArt.vue';
 
 const props = defineProps<{
   plan: RevealPlan | null;
@@ -467,8 +475,11 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   overflow: hidden;
   font-size: calc(var(--vs) * 0.45);
   line-height: 1;
-  background: color-mix(in srgb, var(--c) 12%, var(--bg));
-  border: 2px solid color-mix(in srgb, var(--c) 60%, transparent);
+  background: color-mix(in srgb, var(--c) 18%, var(--bg));
+  border: 4px solid var(--c);
+  box-shadow:
+    0 0 14px color-mix(in srgb, var(--c) 60%, transparent),
+    inset 0 0 16px color-mix(in srgb, var(--c) 35%, transparent);
 }
 /* Le grand portrait remplit sa case (le composant le dimensionne sinon à l'emoji). */
 .gx-emo :deep(.cp) {
@@ -477,24 +488,8 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   border-radius: 0;
 }
 
-/* La rareté se LIT sur chaque case, pas seulement à sa teinte : huit couleurs voisines
-   ne se distinguent pas au vol. Les leurres couvrant toute l'échelle, l'afficher ne
-   trahit pas le résultat. */
-.gx-crar {
-  position: absolute;
-  left: 50%;
-  bottom: 12px;
-  transform: translateX(-50%);
-  padding: 3px 10px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg) 78%, transparent);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--c);
-  white-space: nowrap;
-}
+/* ⚠️ La LETTRE ne s'écrit plus au défilement (demandé) : le CADRE, épais et teinté de sa
+   lettre, la porte seul — elle tombe à la révélation. */
 
 /* ── LE ×10 : DIX LIGNES SUR TOUTE LA HAUTEUR ─────────────────────────────── */
 .gx.lotspin {
@@ -588,9 +583,13 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   align-items: center;
   justify-content: center;
   gap: 1px;
+  box-sizing: border-box;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--c) 12%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+  background: color-mix(in srgb, var(--c) 18%, var(--bg));
+  border: 2.5px solid var(--c);
+  box-shadow:
+    0 0 8px color-mix(in srgb, var(--c) 50%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--c) 30%, transparent);
 }
 .gx-remo {
   font-size: calc(var(--rh) * 0.42);
@@ -606,6 +605,14 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--c);
+  /* Apparaît quand SA ligne s'arrête (même délai que le cadre de verrouillage). */
+  opacity: 0;
+  animation: gx-rarin 300ms ease-out var(--stop) forwards;
+}
+@keyframes gx-rarin {
+  to {
+    opacity: 1;
+  }
 }
 
 /* ── LE RÉSULTAT D'UN ×10, COMPACT ─────────────────────────────────────── */
@@ -872,7 +879,8 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   .gx-rstrip {
     transition: none !important;
   }
-  .gx-row::after {
+  .gx-row::after,
+  .gx-rrar {
     animation: none;
     opacity: 1;
   }

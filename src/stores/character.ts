@@ -177,6 +177,7 @@ import {
   canWearAdvGear,
   rollAdvGear,
   rollAdvGearDrop,
+  advGearModelOf,
   lineageOf,
   normalizeAdvGearState,
   outfitFromItem,
@@ -1060,7 +1061,7 @@ export const useCharacterStore = defineStore('character', () => {
         results.push({
           grade: r.grade,
           champion: null,
-          gear: { name: piece.name, emoji: piece.emoji },
+          gear: { name: piece.name, emoji: piece.emoji, model: advGearModelOf(piece) },
           duplicate: false,
           copies: 0,
           manaBack: 0,
@@ -1085,10 +1086,12 @@ export const useCharacterStore = defineStore('character', () => {
       level: lvl,
       luck: 0,
       playerLevel: lvl,
+      // Un tirage B rend une pièce B : la lettre du tirage EST celle de la pièce.
+      grade: 'B',
     });
     if (drop) return drop;
     const lineage = CHAMPIONS[Math.floor(Math.random() * CHAMPIONS.length)]!.lineage;
-    return rollAdvGear(Math.random, { lineage, level: lvl, playerLevel: lvl });
+    return rollAdvGear(Math.random, { lineage, level: lvl, playerLevel: lvl, grade: 'B' });
   }
 
   /** Un tirage à l'unité. */

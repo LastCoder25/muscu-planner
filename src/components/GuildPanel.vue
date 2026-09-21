@@ -244,21 +244,22 @@
                 :class="ownerOf(g) ? 'tone-busy' : 'tone-free'"
               >
                 <div class="gear-stock-top">
-                  <span class="d-pair-emo">{{ g.emoji }}</span>
+                  <span class="d-pair-emo"
+                    ><AdvGearArt :model="advGearModelOf(g)">{{ g.emoji }}</AdvGearArt></span
+                  >
                   <span class="d-pair-main">
                     <span class="d-pair-name">
-                      <b :style="{ color: rarityRank(g.rarity).color }">{{ g.name }}</b>
+                      <b :style="{ color: advGearBadge(g).color }">{{ g.name }}</b>
                       <span class="d-train">niv {{ g.level }}</span>
                     </span>
-                    <!-- Le RANG et ses ÉTOILES : la liste ne donnait que la couleur du nom,
-                       donc deux pièces du même rang mais de jets opposés s'y lisaient
-                       pareil — or le jet décide d'une part de leur valeur. -->
+                    <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
+                         étoiles du héros (demandé). -->
                     <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
                          colonne étroite la lignée passe à la ligne et le séparateur restait
                          orphelin en bout de ligne précédente. -->
                     <span class="d-pair-sub gear-meta">
-                      <span class="d-rk" :style="{ '--rk': rarityRank(g.rarity).color }">{{
-                        gradeLabel(g)
+                      <span class="d-rk" :style="{ '--rk': advGearBadge(g).color }">{{
+                        advGearBadge(g).label
                       }}</span>
                       <span>{{ lineageLabel(g.lineage) }}</span>
                       <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
@@ -397,7 +398,9 @@
           :class="{ empty: !s.piece }"
           @click="gearPick = { advId: detailAdv.id, slot: s.slot }"
         >
-          <span class="dg-emo">{{ s.emoji }}</span>
+          <span class="dg-emo"
+            ><AdvGearArt :model="s.model">{{ s.emoji }}</AdvGearArt></span
+          >
           <span class="dg-name" :style="s.color ? { color: s.color } : {}">{{ s.name }}</span>
           <!-- Rang (même lecture que familiers et talents) et stat principale : on voit
                ce qu'il porte d'un coup d'œil, sans ouvrir le sélecteur (v0.865). -->
@@ -595,13 +598,13 @@
     <q-card v-if="stockEquip && stockEquipRows" class="guild-card">
       <div class="g-head">
         <div class="g-title font-display">
-          {{ stockEquip.emoji }}
-          <span :style="{ color: rarityRank(stockEquip.rarity).color }">{{ stockEquip.name }}</span>
+          <AdvGearArt :model="advGearModelOf(stockEquip)">{{ stockEquip.emoji }}</AdvGearArt>
+          <span :style="{ color: advGearBadge(stockEquip).color }">{{ stockEquip.name }}</span>
         </div>
         <button class="iconbtn" aria-label="Fermer" @click="stockEquip = null">✕</button>
       </div>
       <p class="g-note">
-        {{ lineageLabel(stockEquip.lineage) }} · {{ gradeLabel(stockEquip) }} ·
+        {{ lineageLabel(stockEquip.lineage) }} · {{ advGearBadge(stockEquip).label }} ·
         {{ advGearEffectTexts(stockEquip).join(' · ') }}
       </p>
       <p class="g-note">{{ GAIN_NOTE }}</p>
@@ -664,7 +667,9 @@
         :class="{ here: gearHereId === r.g.id }"
         @click="pickGear(r.g.id)"
       >
-        <span class="d-pair-emo">{{ r.g.emoji }}</span>
+        <span class="d-pair-emo"
+          ><AdvGearArt :model="advGearModelOf(r.g)">{{ r.g.emoji }}</AdvGearArt></span
+        >
         <span class="d-pair-main">
           <span class="d-pair-name">
             <b :style="{ color: r.color }">{{ r.g.name }}</b>
@@ -717,7 +722,6 @@ import { AWAKEN, advAwaken, advSubtitle, engageCap } from '@/lib/adventurers';
 import { GRADE_COLOR } from '@/data/champions';
 import {
   rarityRank,
-  gradeLabel,
   RARITY_RANK,
   FAMILIAR_SLOT,
   aggregateLines,
@@ -747,15 +751,19 @@ import {
 } from '@/lib/raid';
 import { fmtPow, fmtDelta } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
+import AdvGearArt from '@/components/AdvGearArt.vue';
 import ChampionCollection from '@/components/ChampionCollection.vue';
 import { CHAMPIONS } from '@/data/champions';
 import { companionEffects, advTalentEffects } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
+  advGearBadge,
   advGearCells,
+  advGearModelOf,
   advGearEffectTexts,
   advGearOptions,
   advGearSellValue,
+  GEAR_GRADE_SHARE,
   advLooks,
   canWearAdvGear,
   pendingAdvGear,
@@ -1121,7 +1129,7 @@ const gearRows = computed(() => {
     taken: c.taken,
     rows: c.options.map((g) => ({
       g,
-      color: rarityRank(g.rarity).color,
+      color: advGearBadge(g).color,
       texts: gearEffectTexts(g),
       power: gearPowerFor(a, p.slot, g.id),
     })),
@@ -1172,10 +1180,12 @@ const collectionOwned = computed(
 // ── 🗡️ LE STOCK — équiper / vendre / verrouiller une pièce d'aventurier ──
 // ⚠️ Même politique que le sac du héros : 🔒 protège des deux, une pièce PORTÉE
 // (`Adventurer.gear`, BRUT — même lecture que `dropAdvGear` côté store) ne se cède pas.
-/** Le stock, du rang le plus haut au plus bas, puis par emplacement. */
+/** Le stock, par LETTRE (S, A, B), puis du rang le plus haut au plus bas, puis par
+ *  emplacement. */
 const stockSorted = computed(() =>
   [...char.advGearStock].sort(
     (a, b) =>
+      GEAR_GRADE_SHARE[b.grade] - GEAR_GRADE_SHARE[a.grade] ||
       RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] ||
       ADV_GEAR_SLOTS.indexOf(a.slot) - ADV_GEAR_SLOTS.indexOf(b.slot) ||
       b.level - a.level,

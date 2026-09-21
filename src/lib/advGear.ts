@@ -7,8 +7,6 @@ import {
   effectAsAggregate,
   effectBase,
   effectLabelFor,
-  gradeLabel,
-  rarityRank,
   round1,
   emptyEffects,
   itemLevelMult,
@@ -27,6 +25,9 @@ import {
   type Rarity,
   type WeaponKind,
 } from './items';
+import { GACHA_RATES } from './gacha';
+import { GRADE_COLOR, PULL_GRADES, type PullGrade } from '../data/champions';
+import { advGearModelId, advGearModelName } from '../data/advGearModels';
 import {
   advAvatar,
   advChampion,
@@ -53,7 +54,14 @@ export interface AdvGear {
   slot: AdvGearSlot;
   name: string;
   emoji: string;
+  /** ⚠️ Le RANG de la pièce (échelle interne, comme le rang d'un champion) : il borne qui
+   *  peut la porter et fixe sa magnitude de base. Il ne s'AFFICHE plus — l'écran montre la
+   *  LETTRE (`grade`). Le nom de champ reste `rarity` : le renommer imposerait une
+   *  migration de tout le stock sauvegardé pour rien. */
   rarity: Rarity;
+  /** 🎰 La LETTRE (B / A / S), comme les champions — tirée, fixe à vie, et c'est ELLE que
+   *  l'écran montre. Elle multiplie les stats de combat (`GEAR_GRADE_SHARE`). */
+  grade: PullGrade;
   roll: number;
   level: number;
   effect: ItemEffect;
@@ -126,6 +134,66 @@ export const LINEAGE_GEAR: Record<Lineage, LineageGearDef> = {
     },
   },
 };
+
+/**
+ * 🎰 CE QUE VAUT UNE LETTRE d'équipement (demandé : « les items de champions, comme les
+ * champions, ont 3 raretés S/A/B »).
+ *
+ * ⚠️ **B = 1, et c'est ce qui garde la calibration intacte** : l'escorte de référence des
+ * routes (`refAdvGear`) porte des B, donc la route se calibre sur EXACTEMENT l'équipement
+ * d'avant, et l'immense majorité des pièces (tirages B, drops) reste à sa valeur. A et S
+ * sont des TROUVAILLES qui montent au-dessus, d'un pas de 1,45 — le même écart qu'entre un
+ * A et un S chez les champions (`GRADE_BUDGET`).
+ *
+ * ⚠️ Elle ne multiplie QUE les stats de COMBAT : les rôles civils (trajet, cargaison) sont
+ * des canaux d'économie déjà mesurés (`scrapEconomy`), une lettre ne doit pas les doper.
+ */
+export const GEAR_GRADE_SHARE: Record<PullGrade, number> = { B: 1, A: 1.45, S: 1.45 ** 2 };
+
+/** La lettre d'une pièce tirée hors du gacha : les taux du tirage (`GACHA_RATES`), sans
+ *  pity — une seule table pour « combien de S dans le jeu ». */
+export function rollGearGrade(rng: () => number): PullGrade {
+  let r = rng();
+  for (const g of PULL_GRADES) {
+    r -= GACHA_RATES[g];
+    if (r < 0) return g;
+  }
+  return 'B';
+}
+
+/** 🎰 Ce que l'écran montre d'une pièce : sa LETTRE, dans sa couleur. Source unique. */
+export function advGearBadge(g: Pick<AdvGear, 'grade'>): { label: PullGrade; color: string } {
+  return { label: g.grade, color: GRADE_COLOR[g.grade] };
+}
+
+/** Le MODÈLE nommé d'une pièce (roster, `src/data/advGearModels.ts`) : son nom, son emoji
+ *  de repli et l'id de son illustration. ⚠️ DÉRIVÉ de (lignée, emplacement, lettre). */
+export function advGearModel(
+  lineage: Lineage,
+  slot: AdvGearSlot,
+  grade: PullGrade,
+): { id: string; name: string; emoji: string } {
+  return {
+    id: advGearModelId(lineage, slot, grade),
+    name: advGearModelName(lineage, slot, grade),
+    emoji: LINEAGE_GEAR[lineage].pieces[slot].emoji,
+  };
+}
+
+/** L'id du modèle d'une pièce (pour son illustration), ou `null` si elle est illisible. */
+export function advGearModelOf(g: Pick<AdvGear, 'lineage' | 'slot' | 'grade'>): string | null {
+  if (!(LINEAGES as readonly string[]).includes(g.lineage)) return null;
+  if (!ADV_GEAR_SLOTS.includes(g.slot)) return null;
+  return advGearModelId(g.lineage, g.slot, g.grade);
+}
+
+/** Remet NOM et EMOJI d'une pièce sur son modèle. Idempotente : sert à la relecture (les
+ *  pièces d'avant le roster s'appelaient toutes « Épée », « Arc »…). */
+function withModel<T extends Omit<AdvGear, 'id'>>(g: T): T {
+  if (!advGearModelOf(g)) return g;
+  const m = advGearModel(g.lineage, g.slot, g.grade);
+  return g.name === m.name && g.emoji === m.emoji ? g : { ...g, name: m.name, emoji: m.emoji };
+}
 
 /** Réglages. ⚠️ `k` est LE levier d'équilibrage de l'équipement (mesuré en Task 4).
  *  Pas exportée (`npm run dead`) : lue uniquement dans ce fichier. */
@@ -210,8 +278,18 @@ export function pickLineage(rng: () => number, advs: Adventurer[]): Lineage | nu
  *  réglage de `ADV_GEAR.k`, et la route se calibrerait sur un équipement qui n'existe pas.
  *  ⚠️ PLANCHER à 0,1, pas à 1 : à k 0,15 un plancher à 1 écrasait rareté ET jet sur les
  *  petites bases (crit base 4 → 0,6 → 1 en commun comme au jet parfait). */
-export function advGearValue(t: EffectType, rank: Rarity, roll: number): number {
-  return Math.max(0.1, round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k));
+export function advGearValue(
+  t: EffectType,
+  rank: Rarity,
+  roll: number,
+  /** ⚠️ Défaut B = 1 : la lettre de l'étalon (`refAdvGear`), donc aucune valeur d'avant ne
+   *  bouge. Le tirage, lui, la passe TOUJOURS. */
+  grade: PullGrade = 'B',
+): number {
+  return Math.max(
+    0.1,
+    round1(effectBase(t) * rankRollMult(rank, roll) * ADV_GEAR.k * GEAR_GRADE_SHARE[grade]),
+  );
 }
 
 /** Une pièce de ce rang porte-t-elle un SECOND affixe ? — la SEULE définition.
@@ -245,6 +323,9 @@ export function rollAdvGear(
     playerLevel: number;
     /** Rang IMPOSÉ (Équipementier) : seul le jet reste tiré. */
     rank?: Rarity;
+    /** Lettre IMPOSÉE (un tirage B du gacha rend une pièce B). Sinon tirée EN DERNIER
+     *  (`rollGearGrade`) : les tirages d'avant gardent leur ordre, donc leurs valeurs. */
+    grade?: PullGrade;
   },
 ): Omit<AdvGear, 'id'> {
   const luck = opts.luck ?? 0;
@@ -262,22 +343,27 @@ export function rollAdvGear(
   const piece = def.pieces[slot];
   const i1 = Math.floor(rng() * piece.pool.length);
   const t1 = piece.pool[i1]!;
-  const value = (t: EffectType) => advGearValue(t, rank, roll);
+  const t2 = advGearHasSecondAffix(rank)
+    ? (() => {
+        const others = piece.pool.filter((t) => t !== t1);
+        return others[Math.floor(rng() * others.length)]!;
+      })()
+    : null;
+  const grade = opts.grade ?? rollGearGrade(rng);
+  const value = (t: EffectType) => advGearValue(t, rank, roll, grade);
+  const model = advGearModel(opts.lineage, slot, grade);
   const out: Omit<AdvGear, 'id'> = {
     lineage: opts.lineage,
     slot,
-    name: piece.name,
-    emoji: piece.emoji,
+    name: model.name,
+    emoji: model.emoji,
     rarity: rank,
+    grade,
     roll,
     level,
     effect: { type: t1, value: value(t1) },
   };
-  if (advGearHasSecondAffix(rank)) {
-    const others = piece.pool.filter((t) => t !== t1);
-    const t2 = others[Math.floor(rng() * others.length)]!;
-    out.effect2 = { type: t2, value: value(t2) };
-  }
+  if (t2) out.effect2 = { type: t2, value: value(t2) };
   if (def.role && slot === 'accessory') {
     out.role = { kind: def.role, value: advGearRoleValue(def.role, rank, roll) };
   }
@@ -421,7 +507,10 @@ export interface AdvGearCell {
    *  « Bronze » pouvaient valoir du simple au double sans que rien ne les distingue — le
    *  défaut que la v0.895 avait corrigé côté héros et qui survivait ici. */
   color?: string;
+  /** La LETTRE de la pièce portée (B / A / S). */
   rank?: string;
+  /** Id du modèle nommé de la pièce portée, pour son illustration (`advGearArt`). */
+  model?: string;
   /** ⚠️ Case VIDE qu'une pièce du stock pourrait remplir tout de suite (`pendingAdvGear`).
    *  Un vide peut être normal (rien de sa lignée, tout trop rare) : sans ce drapeau les deux
    *  se lisaient pareil, et « il me manque une arme » ressemblait à une panne. */
@@ -454,17 +543,19 @@ export function advGearCells(
   return ADV_GEAR_SLOTS.map((slot) => {
     const piece = worn.find((g) => g.slot === slot);
     if (piece) {
-      const rk = rarityRank(piece.rarity);
+      // ⚠️ La LETTRE (B / A / S), comme les champions — plus le rang + étoiles du héros.
+      const b = advGearBadge(piece);
       const stat = advGearEffectTexts(piece)[0];
-      const grade = gradeLabel(piece); // « Bronze ★★☆☆☆ » — rang ET jet, comme le héros
+      const grade = b.label;
       return {
         slot,
         emoji: piece.emoji,
         name: piece.name,
         filled: true,
         piece,
-        color: rk.color,
+        color: b.color,
         rank: grade,
+        model: advGearModelOf(piece) ?? undefined,
         stat,
         title: `${piece.name} · ${grade}${stat ? ' · ' + stat : ''}`,
       };
@@ -540,16 +631,23 @@ export function normalizeAdvGearState(raw: unknown): AdvGearState {
   const isObj = (v: unknown): v is Record<string, unknown> =>
     !!v && typeof v === 'object' && !Array.isArray(v);
   const src = isObj(raw) ? raw : {};
-  const stock = (Array.isArray(src.stock) ? src.stock : []).filter(
-    (g): g is AdvGear =>
-      isObj(g) && typeof g.id === 'string' && typeof g.slot === 'string' && isObj(g.effect),
-  );
+  // ⚠️ Une pièce d'avant les lettres est un B (valeurs inchangées, B = 1) et reprend le nom
+  // de son MODÈLE (roster) : relire suffit, aucune migration.
+  const withGrade = <T extends Omit<AdvGear, 'id'>>(g: T): T =>
+    withModel(PULL_GRADES.includes(g.grade) ? g : { ...g, grade: 'B' });
+  const stock = (Array.isArray(src.stock) ? src.stock : [])
+    .filter(
+      (g): g is AdvGear =>
+        isObj(g) && typeof g.id === 'string' && typeof g.slot === 'string' && isObj(g.effect),
+    )
+    .map(withGrade);
   const isJob = (f: unknown): f is ForgeJob =>
     isObj(f) && isObj(f.piece) && typeof f.until === 'number' && typeof f.advId === 'string';
   // L'ancienne forge unique (`forge`) rejoint la file : une fabrication en cours avant la
   // mise à jour ne se perd pas.
   const forges = [...(Array.isArray(src.forges) ? src.forges : []), src.forge]
     .filter(isJob)
+    .map((f) => (typeof f.piece.lineage === 'string' ? { ...f, piece: withGrade(f.piece) } : f))
     .sort((a, b) => a.until - b.until);
   return { stock, forges };
 }
@@ -708,13 +806,16 @@ function capAdvGearToWearable(piece: Omit<AdvGear, 'id'>, cap: Rarity): Omit<Adv
   const out: Omit<AdvGear, 'id'> = {
     ...piece,
     rarity: cap,
-    effect: { type: piece.effect.type, value: advGearValue(piece.effect.type, cap, piece.roll) },
+    effect: {
+      type: piece.effect.type,
+      value: advGearValue(piece.effect.type, cap, piece.roll, piece.grade),
+    },
   };
   if (piece.effect2) {
     if (RARITY_RANK[cap] >= RARITY_RANK.magique) {
       out.effect2 = {
         type: piece.effect2.type,
-        value: advGearValue(piece.effect2.type, cap, piece.roll),
+        value: advGearValue(piece.effect2.type, cap, piece.roll, piece.grade),
       };
     } else {
       delete out.effect2;
@@ -752,7 +853,7 @@ function bestClassRarity(advs: Adventurer[], lineage: Lineage): Rarity | null {
 export function rollAdvGearDrop(
   rng: () => number,
   advs: Adventurer[],
-  opts: { chance: number; level: number; luck: number; playerLevel: number },
+  opts: { chance: number; level: number; luck: number; playerLevel: number; grade?: PullGrade },
 ): Omit<AdvGear, 'id'> | null {
   if (rng() >= opts.chance) return null;
   const lineage = pickLineage(rng, advs);
@@ -764,6 +865,7 @@ export function rollAdvGearDrop(
     level: opts.level,
     luck: opts.luck,
     playerLevel: opts.playerLevel,
+    ...(opts.grade ? { grade: opts.grade } : {}),
   });
   return capAdvGearToWearable(piece, cap);
 }
@@ -851,5 +953,8 @@ export function planOutfitBatch(
 }
 
 export function advGearSellValue(g: AdvGear): number {
-  return Math.max(1, Math.round(sellValueOf(g.rarity, g.roll, g.level) * ADV_GEAR.sellK));
+  return Math.max(
+    1,
+    Math.round(sellValueOf(g.rarity, g.roll, g.level) * ADV_GEAR.sellK * GEAR_GRADE_SHARE[g.grade]),
+  );
 }

@@ -733,6 +733,9 @@ export function refAdvGear(level: number, n: number = CARAVAN.refEscort): AdvGea
         name: piece.name,
         emoji: piece.emoji,
         rarity,
+        // ⚠️ L'étalon porte des B (`GEAR_GRADE_SHARE` B = 1) : la route reste calibrée sur
+        // l'équipement d'avant les lettres, que la grande majorité des pièces reproduit.
+        grade: 'B',
         roll: REF_GEAR_JET,
         level: L,
         effect: { type: t1, value: advGearValue(t1, rarity, REF_GEAR_JET) },

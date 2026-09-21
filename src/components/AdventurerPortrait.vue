@@ -124,7 +124,9 @@
         :disabled="disabled"
         @click="emit('gear', c.slot)"
       >
-        <span class="apg-emo">{{ c.emoji }}</span>
+        <span class="apg-emo"
+          ><AdvGearArt :model="c.model">{{ c.emoji }}</AdvGearArt></span
+        >
         <span v-if="c.rank" class="apg-rk">{{ c.rank }}</span>
       </button>
     </div>
@@ -162,6 +164,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import AdvGearArt from '@/components/AdvGearArt.vue';
 import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import {
   advGradeBadge,
@@ -174,12 +177,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
-import {
-  FAMILIAR_SLOT,
-  rarityRank,
-  type Equipped,
-  type Item,
-} from '@/lib/items';
+import { FAMILIAR_SLOT, rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
 
 const props = defineProps<{

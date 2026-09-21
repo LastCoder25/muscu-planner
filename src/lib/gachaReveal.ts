@@ -84,6 +84,8 @@ export interface RevealCell {
   name: string;
   /** L'identité du champion, `null` pour un B. */
   championId: string | null;
+  /** Le modèle de la pièce d'un B (son illustration), absent pour un champion. */
+  gearModel?: string | null;
 }
 
 export const cellOfChampion = (c: Champion): RevealCell => ({
@@ -172,7 +174,7 @@ export interface LotItem {
   /** `null` pour un B. */
   champion: Champion | null;
   /** La pièce d'un B (son nom et son visage), `null` pour un champion. */
-  gear: { name: string; emoji: string } | null;
+  gear: { name: string; emoji: string; model?: string | null } | null;
   duplicate: boolean;
   copies: number;
   manaBack: number;
@@ -186,6 +188,7 @@ export function cellOf(it: LotItem): RevealCell {
     emoji: it.gear?.emoji ?? '🎁',
     name: it.gear?.name ?? 'Pièce d’équipement',
     championId: null,
+    gearModel: it.gear?.model ?? null,
   };
 }
 
