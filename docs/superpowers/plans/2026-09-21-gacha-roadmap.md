@@ -5,34 +5,36 @@
 
 ## Décisions prises (2026-09-21)
 
-| # | Question | Réponse |
+| # | Sujet | Décision |
 |---|---|---|
 | 1 | Ampleur | **Refonte complète** (tout le scénario B) |
-| 2 | Noms des raretés | **★3 / ★4 / ★5** — et même échelle pour les armes (à confirmer, Q-A) |
-| 3 | Vedette | **Rotation chaque semaine** ; compteur de garantie **comme dans le genre** |
-| 4 | Étincelle | à confirmer (Q-B) — ce que « par points » veut dire est expliqué ci-dessous |
-| 5 | Arme signature des ★5 | **Oui** |
-| 6 | Roster | **Ajouter des champions** au fil du temps |
+| 2 | Échelle du gacha | **Lettres S / A / B**, pas d'étoiles (déjà prises dans l'app). Champions **S et A** ; **B** = le fond du tirage (pièce d'équipement de lignée ou matériau d'Éveil), jamais un champion |
+| 3 | Armes / équipement des champions | **Aussi en S / A / B** : arme signature S, équipement de lignée en S/A/B. L'équipement **du héros** garde ses 8 raretés (il suit le sport, pas le gacha) |
+| 4 | Vedette | **Rotation chaque semaine** ; compteurs **comme dans le genre** (voir plus bas) ; un champion **nouveau** n'est tirable **qu'en vedette** pendant sa semaine de sortie, puis rejoint la standard |
+| 5 | Filet contre la malchance longue | payé en **pierres de mana**, pas de monnaie de points ; **aucun objectif de rythme** du type « un S choisi tous les deux mois » (à préciser, cf. Q-B) |
+| 6 | Arme signature des S | **Oui** |
+| 7 | Roster | **Ajouter des champions** au fil du temps |
+| 8 | Comptes existants | **Reset des champions + compensation** |
+| 9 | Écran | l'invocation a **son propre onglet** dans l'Aventure |
+| 10 | Niveau max | **le même pour tous** : celui du héros (S comme A) |
+| 11 | Le héros dans les failles | **il compte dans la limite de 3** |
+| 12 | Notification | **le lundi**, quand la vedette change (nom seulement) |
 
 ### « Comme dans le genre » pour le compteur (Q3), concrètement
 
 - **Deux familles de bannières, deux compteurs** : la **standard** a le sien, **toutes les vedettes
   partagent le leur**. Changer de semaine ne remet rien à zéro : le compteur de la vedette suit
   d'une rotation à l'autre.
-- Dans chaque famille : ★5 garanti au **90ᵉ** (taux qui monte dès le 75ᵉ), ★4 ou mieux tous les
+- Dans chaque famille : S garanti au **90ᵉ** (taux qui monte dès le 75ᵉ), A ou mieux tous les
   **10** (compteur à part).
-- **50/50 sur la vedette** : quand un ★5 tombe, c'est le champion vedette une fois sur deux ; si ce
-  n'est pas lui, le **prochain ★5 est garanti** vedette. Cette garantie **se conserve** d'une semaine
+- **50/50 sur la vedette** : quand un S tombe, c'est le champion vedette une fois sur deux ; si ce
+  n'est pas lui, le **prochain S est garanti** vedette. Cette garantie **se conserve** d'une semaine
   à l'autre (on ne la perd jamais en s'absentant).
-- Les deux **★4 vedettes** se partagent la moitié des ★4 de la bannière.
+- Les deux **A vedettes** se partagent la moitié des A de la bannière.
 
-### « Par points » (Q4), concrètement
+### Filet contre la malchance longue
 
-Chaque tirage (standard ou vedette) donne **1 point d'étincelle**. À **N points** (≈ 150-200, à
-mesurer), on **échange** les points contre **un ★5 choisi** dans le pool. C'est le filet contre la
-malchance **longue** (celle que le pity de 90 ne couvre pas : tomber sur le mauvais ★5 plusieurs fois
-d'affilée). ⚠️ Dans plusieurs jeux les points **expirent avec la bannière** ; ici ils **se gardent**
-(on ne punit pas l'absence).
+Remplacé par la décision 5 : **pas de points**, le filet se paie en pierres de mana (cf. Q-B).
 
 ---
 
@@ -42,45 +44,46 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 
 ### P0 — Verrouiller les chiffres (~½ j)
 - Répondre aux questions ouvertes (bas de page).
-- Mesures de départ, sur les vraies libs : débit ★5/an avec 3 raretés et plancher corrigé (cible
-  10-20), seuil d'étincelle, écart de puissance ★3/★4/★5.
+- Mesures de départ, sur les vraies libs : débit S/an avec 3 raretés et plancher corrigé (cible
+  10-20), seuil d'étincelle, écart de puissance B/A/S.
 - Relevé des 4 comptes réels : champions, copies, compteurs de pity, mana en réserve.
 
 ### P1 — Trois raretés, rareté fixe (~1 j) · *le cœur*
-- `Champion.rarity` passe à ★3/★4/★5 ; roster redistribué **8 ★3 · 12 ★4 · 12 ★5** (rôles
-  répartis dans chaque rareté).
-- Budget de stats sur 3 crans ; « un ★3 investi bat un ★5 nu » et « à Éveil égal la rareté gagne »
+- `Champion.rarity` passe à **S / A** ; roster redistribué **~16 S · 16 A** (rôles répartis dans
+  chaque rareté). **B** = pièces d'équipement de lignée et matériaux d'Éveil, jamais un champion.
+- Budget de stats sur 3 crans ; « un A investi bat un S nu » et « à Éveil égal la rareté gagne »
   restent vrais (tests).
 - **Rareté fixe** : suppression de la rareté effective et de « mène du Bronze » ; l'équipement et
   les compagnons sont bornés par le **rang du champion** (son niveau).
 - Recalibrage des étalons (`refChampions`) : bandes d'embuscade, tenue des sièges, camps, failles
   (les deux camps bougent ensemble — leçon v0.795).
-- **Migration** des comptes réels : table de correspondance, copies et niveaux conservés, compteur
-  de pity reporté.
-- Écrans : Codex, collection du Panthéon, roulette, tuiles d'escorte en ★.
+- **Reset des champions** des comptes réels, avec **compensation** (cf. Q-K).
+- **Le héros compte dans la limite de 3** d'une faille (indépendant du reste, peut partir avant).
+- Écrans : Codex, collection du Panthéon, roulette, tuiles d'escorte en S/A/B.
 
 ### P2 — Bannières et compteurs (~1 j)
-- Bannière **standard** + bannière **vedette** hebdomadaire (1 ★5 + 2 ★4), calendrier
+- Bannière **standard** + bannière **vedette** hebdomadaire (1 S + 2 A), calendrier
   **déterministe** tiré de la semaine (aucun serveur, patron du boss mondial).
-- Compteurs séparés par famille, **50/50 + garantie** conservée, plancher « ★4 ou mieux » au taux
+- Compteurs séparés par famille, **50/50 + garantie** conservée, plancher « A ou mieux » au taux
   de base (fini les 45 %).
-- **Liste de souhaits** sur la standard (2-3 ★5 désignés, priorité au tirage).
+- **Liste de souhaits** sur la standard (2-3 S désignés, priorité au tirage).
 - **Historique** des 100 derniers tirages (jsonb, migration additive).
 
 ### P3 — Doublons, éclats, étincelle (~1 j)
 - Au-delà de C6 : des **éclats** au lieu du mana (**suppression de la boucle mana**).
-- **Points d'étincelle** (1 par tirage) et échange contre un ★5 choisi.
-- **Boutique d'éclats** : ★4 choisi, cran d'Éveil d'un champion possédé, pièces d'équipement.
-- Mesures : débit ★5/an, saturation à 1/3/6/12 mois.
+- **Filet** : achat d'un S choisi en pierres de mana (cf. Q-B), pas de points.
+- **Boutique d'éclats** : A choisi, cran d'Éveil d'un champion possédé, pièces d'équipement.
+- Mesures : débit S/an, saturation à 1/3/6/12 mois.
 
-### P4 — Armes signature des ★5 (~1 j)
-- Une arme par ★5, débloquée à **C1** ou achetable en boutique d'éclats.
+### P4 — Armes signature des S (~1 j)
+- Une arme par S, débloquée à **C1** ou achetable en boutique d'éclats.
 - Emplacement arme du champion ; effet propre à chaque arme (écrit, mesuré).
 - Pas de bannière d'armes (décision v0.556 maintenue).
 
 ### P5 — Écran d'invocation (~1 j)
+- **Onglet dédié** dans l'Aventure ; notification push le **lundi** quand la vedette change.
 - Deux onglets de bannière (vedette / standard), calendrier des prochaines vedettes.
-- **Lueur graduée** avant la révélation (bleu ★3, violet ★4, or ★5).
+- **Lueur graduée** avant la révélation (bleu B, violet A, or S).
 - Compteurs de pity, 50/50 et points d'étincelle toujours visibles ; historique ; taux par bannière.
 
 ### P6 — Équipement des champions (~½-1 j)
@@ -89,30 +92,27 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 
 ### P7 — Nouveaux champions (~½ j pour la chaîne, puis ~30 min par champion)
 - Chaîne d'ajout : données, portrait (script existant), tests de roster, place dans le calendrier.
-- Rythme cible ~2 ★5 (ou ★4) par mois, chacun vedette de sa semaine de sortie.
-- ⚠️ Règle v0.939 : **jamais de ★3 en plus**.
+- Un nouveau champion n'est tirable **qu'en vedette** pendant sa semaine de sortie.
+- Rythme cible ~2 S (ou A) par mois, chacun vedette de sa semaine de sortie.
+- ⚠️ Règle v0.939 : **jamais de champion B** (il n'en existe pas).
 
 **Total : ~6 à 7 jours.** Ordre imposé : P0 → P1 → P2 → P3 ; P4 à P7 dans n'importe quel ordre ensuite.
 
 ---
 
-## Questions ouvertes (à trancher en P0)
+## Questions encore ouvertes (à trancher en P0)
 
-- **Q-A — Armes en ★** : tu as dit « pareil pour les armes ? ». Proposition : l'**arme signature**
-  est toujours ★5 ; l'**équipement de lignée** passe aussi en ★3/★4/★5 (aujourd'hui il suit les 8
-  rangs). Ça rend tout lisible avec la même échelle, mais c'est une migration de plus.
-  L'**équipement du héros** garde ses 8 rangs (il suit le sport, pas le gacha). OK ?
-- **Q-B — Étincelle** : oui avec des points qui **ne s'effacent jamais** ? Seuil visé : un ★5
-  choisi tous les ~2 mois pour un joueur qui ferme une faille par jour ?
-- **Q-C — Comptes existants** : les 4 comptes gardent tout (champions, copies, niveaux) ; faut-il
-  **offrir un geste** (tirages, ou des points d'étincelle) pour marquer la refonte ?
-- **Q-D — Vedette ★5 inédite** : un champion ajouté est-il **tirable uniquement en vedette**
-  pendant sa semaine de sortie, puis rejoint la standard ? (Ce n'est pas une exclusivité, juste un
-  lancement.) Ou dans la standard dès le premier jour ?
-- **Q-E — Écran à part** : l'invocation vit aujourd'hui dans le panneau du Panthéon. Avec les
-  bannières, la boutique et l'historique, elle mérite **son propre onglet** dans l'Aventure. D'accord ?
-- **Q-F — Niveau max par rareté** : même plafond de niveau pour un ★3 et un ★5 (comme dans le
-  genre, la rareté ne joue que sur les stats), ou un ★3 plafonné plus bas ?
+- **Q-B — Le filet contre la malchance, en pierres de mana** : lecture retenue — pas de points
+  d'étincelle ; on peut **acheter un S choisi** avec des pierres de mana, à un prix élevé fixe (à
+  mesurer). ⚠️ À confirmer : c'est bien ça, ou tu voulais dire **aucun filet** au-delà du pity de 90 ?
+- **Q-H — Revenu plat** : le mana d'une faille cesse de suivre son niveau, pour tenir ~1,5-2
+  tirages/jour à tout niveau (aujourd'hui jusqu'à 3,7 au niveau 100). D'accord ?
+- **Q-I — Tirage offert quotidien** : le réduire à ½ tirage/jour, ou le garder entier mais lié à un
+  **jour d'entraînement** ?
+- **Q-J — Mana de première réussite** (premier nettoyage d'un donjon, premier boss, premier palier du
+  Labyrinthe) et **petit événement hebdo** lié à la vedette : oui/non ?
+- **Q-K — Compensation du reset** : en pierres de mana, calculée sur ce que chaque compte a investi
+  (tirages faits, copies) ? Et le compteur de garantie est-il conservé ou remis à zéro ?
 
 ## Améliorations proposées en plus (hors refonte, à prendre ou laisser)
 
@@ -187,7 +187,7 @@ jour** en moyenne, soit **90 tirages en ~45-60 jours**, et un ★5 vedette garan
 
 ---
 
-## Q-G — Lettres S / A / B au lieu des étoiles (demandé le 2026-09-21)
+## Q-G — Lettres S / A / B au lieu des étoiles — ✅ DÉCIDÉ (décisions 2 et 3)
 
 Précédent direct : **Zenless Zone Zero** classe ses personnages **S / A** et ses armes **S / A / B**.
 Avantages : se lit d'un coup d'œil, et ne se confond pas avec les **étoiles** déjà utilisées pour la
