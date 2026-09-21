@@ -642,6 +642,8 @@
         :report="siegeShown"
         :turret-level="turretLevel"
         :loot="lastLootPills"
+        :hero="siegeHero"
+        :portraits="siegePortraits"
         @done="closeSiege"
       />
     </q-dialog>
@@ -1060,6 +1062,9 @@ const props = defineProps<{
   /** Le combattant du héros, tel qu'il défendra vraiment. Fourni par l'Aventure : le
    *  recalculer ici ferait deux vérités pour un seul chiffre. */
   hero?: Combatant | null;
+  /** La silhouette du héros (pour le dessiner dans la cour du rejeu). Fournie par
+   *  l'Aventure, comme pour le rejeu des failles. */
+  heroProfile?: 'puissant' | 'agile' | 'polyvalent';
 }>();
 const emit = defineEmits<{ 'siege-seen': [] }>();
 const inTab = computed(() => !!props.inTab);
@@ -1173,6 +1178,17 @@ const repairAllCost = computed(() => (base.value ? totalRepairCost(base.value) :
  *  le bouton « Revoir l'assaut ». */
 const replay = ref<RaidReport | null>(null);
 const siegeShown = computed(() => replay.value ?? props.siege ?? null);
+/** ⚔️ Le héros dessiné dans la cour du rejeu — seulement s'il défendait. */
+const siegeHero = computed(() =>
+  siegeShown.value?.heroHome && props.heroProfile
+    ? { profile: props.heroProfile, equipped: char.row?.equipped ?? {} }
+    : null,
+);
+/** Défenseur → champion : la cour montre leur portrait. ⚠️ Le vivier d'AUJOURD'HUI, comme
+ *  le reste du rejeu : un champion renvoyé depuis garde l'emoji de sa classe. */
+const siegePortraits = computed<Record<string, string>>(() =>
+  Object.fromEntries(char.advList.flatMap((a) => (a.championId ? [[a.id, a.championId]] : []))),
+);
 const siegeKey = ref(0);
 const siegeOpen = computed({
   get: () => !!siegeShown.value,

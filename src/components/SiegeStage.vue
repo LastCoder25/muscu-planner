@@ -21,7 +21,33 @@
     <!-- Voile rouge quand le rempart encaisse -->
     <div class="hurt" :style="{ opacity: hurt }" />
 
-    <svg :viewBox="viewBox" class="board" role="img" aria-label="Assaut de la base">
+    <!-- ⚔️ LA COUR, VUE DE CÔTÉ : à l'ouverture de la brèche, le rejeu quitte la vue de
+         dessus pour la scène de mêlée (demandé : « un affichage comme les failles »). Le
+         déroulé reste celui-ci — la scène ne fait que peindre les mêmes temps. -->
+    <transition name="yard">
+      <div v-if="yardView" class="yard-wrap">
+        <YardStage
+          :beats="stage.beats"
+          :bodies="stage.bodies"
+          :defenders="stage.defenders"
+          :turret-count="hasTurrets ? TURRET_SLOTS : 0"
+          :idx="idx"
+          :impacted="impacted"
+          :state="state"
+          :hero-pv-pct="heroPvPct"
+          :hero="hero ?? null"
+          :portraits="portraits ?? {}"
+        />
+      </div>
+    </transition>
+
+    <svg
+      v-show="!yardView"
+      :viewBox="viewBox"
+      class="board"
+      role="img"
+      aria-label="Assaut de la base"
+    >
       <defs>
         <radialGradient id="siege-meadow" cx="50%" cy="50%" r="62%">
           <stop offset="0%" stop-color="#4a5a2a" />
@@ -268,6 +294,9 @@ import {
   type SiegeBody,
 } from '@/lib/siegeStage';
 import { mulberry32 } from '@/lib/combat';
+import { yardOpenIndex } from '@/lib/yardScene';
+import type { Equipped } from '@/lib/items';
+import YardStage from '@/components/YardStage.vue';
 import {
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -284,6 +313,10 @@ const props = defineProps<{
    *  il ne fait que rejouer un log de combat. Vide pour un rapport d'avant ce
    *  chantier, qui n'a pas de relevé : on n'invente pas un butin. */
   loot?: string[];
+  /** Le héros tel qu'on le dessine dans la cour (son avatar), s'il défendait. */
+  hero?: { profile: 'puissant' | 'agile' | 'polyvalent'; equipped: Equipped } | null;
+  /** Défenseur → champion : la cour montre son portrait, pas l'emoji de sa classe. */
+  portraits?: Record<string, string>;
 }>();
 const emit = defineEmits<{ done: [] }>();
 
@@ -379,6 +412,9 @@ const width = computed(() => cur.value?.width ?? 0);
 const breachedEnd = computed(() => finished.value && !stage.value.held);
 const corpseCount = computed(() => new Set(stage.value.beats.flatMap((b) => b.kills)).size);
 const inCourtyardView = computed(() => width.value > 0);
+/** Le temps qui ouvre la brèche : à partir de lui, on regarde la cour de côté. */
+const yardFrom = computed(() => yardOpenIndex(stage.value.beats));
+const yardView = computed(() => yardFrom.value >= 0 && idx.value >= yardFrom.value);
 
 /**
  * L'ÉTAT CUMULÉ à l'instant joué : qui est tombé (et à quel tour), qui est entré (et
@@ -831,6 +867,21 @@ onUnmounted(clearTimers);
   width: 100%;
   max-height: 74dvh;
   display: block;
+}
+/* La cour de côté prend la place du plateau : même encombrement, pour que le HUD et
+   l'écran de fin ne bougent pas au basculement. */
+.yard-wrap {
+  width: 100%;
+  height: min(74dvh, 118vw);
+}
+.yard-enter-active {
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s ease;
+}
+.yard-enter-from {
+  opacity: 0;
+  transform: scale(1.06);
 }
 .hurt {
   position: absolute;

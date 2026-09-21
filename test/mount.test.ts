@@ -17,7 +17,7 @@
 // ne s'exécute jamais et le défaut reste invisible. Un seul aventurier suffit.
 import { describe, it, expect } from 'vitest';
 import { makeBoss } from './helpers/friendBoss';
-import { createApp, h, type Component } from 'vue';
+import { createApp, h, nextTick, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import { advGradeBadge, engageCap } from '@/lib/adventurers';
@@ -62,6 +62,9 @@ async function mountIt(
   app.config.errorHandler = (e) => (err = e);
   const host = document.createElement('div');
   app.mount(host);
+  // ⚠️ Un tour de rendu : ce qu'un écran pose dans `onMounted` (un rejeu qui saute à son
+  // état final, par exemple) n'est peint qu'au flush suivant.
+  await nextTick();
   html?.(host.innerHTML);
   return err;
 }
@@ -189,6 +192,55 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       }),
     ).toBeNull();
   }, 30_000);
+  it('🧱⚔️ SiegeStage bascule dans la cour de côté quand la brèche s’ouvre', async () => {
+    const { default: SiegeStage } = await import('@/components/SiegeStage.vue');
+    const { resolveRaid, rollRaid } = await import('@/lib/raid');
+    const { buildSiegeStage } = await import('@/lib/siegeStage');
+    // Une enceinte à moitié : la brèche s'ouvre et des intrus entrent dans la cour.
+    const defs = [
+      { typeId: 'wall' as const, level: 10 },
+      { typeId: 'turret' as const, level: 10 },
+    ];
+    let report = null as ReturnType<typeof resolveRaid> | null;
+    for (let s2 = 1; s2 <= 40 && !report; s2++) {
+      const r = resolveRaid(
+        { defenses: defs, playerLevel: 28, hero: null, guard: [] },
+        rollRaid(s2 * 7919, 28, 0, 0),
+        0,
+        false,
+      );
+      if (buildSiegeStage(r, 8).beats.some((b) => b.kind === 'enter')) report = r;
+    }
+    expect(report).not.toBeNull();
+    // ⚠️ prefers-reduced-motion : le rejeu saute à l'état FINAL, donc à la cour — c'est le
+    // seul moyen de monter la scène de côté sans rejouer des dizaines de secondes.
+    const mm = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q })) as typeof window.matchMedia;
+    let out = '';
+    try {
+      expect(
+        await mountIt(
+          SiegeStage,
+          { report: report!, turretLevel: 10 },
+          undefined,
+          undefined,
+          '/',
+          (h) => (out = h),
+        ),
+      ).toBeNull();
+    } finally {
+      window.matchMedia = mm;
+    }
+    // ⚠️ SANS CETTE LECTURE LE TEST SERAIT CREUX : on compte les intrus DANS la cour.
+    const entres = new Set(
+      buildSiegeStage(report!, 8)
+        .beats.filter((b) => b.kind === 'enter')
+        .flatMap((b) => b.attackers),
+    );
+    expect(out).toContain('yard-wrap');
+    expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(entres.size);
+  }, 30_000);
+
   it('🕳️ RiftStage peint les corps, le gardien et la barre du groupe', async () => {
     const { default: RiftStage } = await import('@/components/RiftStage.vue');
     const { buildRiftStage } = await import('@/lib/riftStage');

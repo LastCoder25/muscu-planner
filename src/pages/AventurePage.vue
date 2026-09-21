@@ -1564,6 +1564,7 @@
           :embedded="embedded"
           :siege="siegeReport"
           :hero="fighter"
+          :hero-profile="c.profile"
           @siege-seen="siegeReport = null"
         />
       </template>
