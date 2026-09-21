@@ -91,3 +91,15 @@ export function championPortrait(championId: string | null | undefined): string 
   if (!championId || !Object.hasOwn(CHAMPION_PORTRAITS, championId)) return null;
   return CHAMPION_PORTRAITS[championId] ?? null;
 }
+
+/**
+ * 🖼️ LA VERSION GRANDE d'un portrait (560 px, v0.987) — pour la roulette verticale du
+ * tirage ×1, où le portrait prend presque la largeur de l'écran.
+ * ⚠️ DÉRIVÉE de la table, jamais une seconde table : même illustration (tirée du même
+ * rendu, cf. `scripts/fetch-champion-portraits.mjs`), seul le dossier change. Un test
+ * vérifie que chaque fichier existe.
+ */
+export function championPortraitLarge(championId: string | null | undefined): string | null {
+  const small = championPortrait(championId);
+  return small ? small.replace('/champions/', '/champions/lg/') : null;
+}

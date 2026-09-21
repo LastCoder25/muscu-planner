@@ -186,6 +186,12 @@ const CROP = 560;
  *  soit ~400 px réels sur un téléphone 3×. Le service worker ne cache RIEN, donc chaque
  *  octet compte — d'où le WebP, et d'où la mesure du total à la fin du script. */
 const SIZE = 256;
+/** 🖼️ La version GRANDE (v0.987, demandé : « le portrait presque de la largeur de
+ *  l'écran » pour la roulette verticale du tirage ×1). ⚠️ Tirée du MÊME tirage que la
+ *  petite — le service est déterministe à graine égale (vérifié : écart 0) — donc c'est la
+ *  même illustration, pas une nouvelle. 560 = le recadrage entier, sans agrandissement. */
+const LG = 560;
+const OUT_LG = resolve(OUT, 'lg');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -219,12 +225,14 @@ if (sansSujet.length) {
 }
 
 mkdirSync(OUT, { recursive: true });
+mkdirSync(OUT_LG, { recursive: true });
 
 let total = 0;
 let faits = 0;
 for (const c of CHAMPIONS) {
   const dest = resolve(OUT, `${c.id}.webp`);
-  if (!FORCE && existsSync(dest)) {
+  const destLg = resolve(OUT_LG, `${c.id}.webp`);
+  if (!FORCE && existsSync(dest) && existsSync(destLg)) {
     console.log(`· ${c.id} — déjà là`);
     continue;
   }
@@ -234,13 +242,12 @@ for (const c of CHAMPIONS) {
     console.error(`✖ ${c.id} — échec après 8 tentatives`);
     continue;
   }
-  const img = await sharp(brut)
-    .extract({ left: (GEN - CROP) >> 1, top: 0, width: CROP, height: CROP })
-    .resize(SIZE, SIZE)
-    .webp({ quality: 80 })
-    .toBuffer();
+  const cadre = sharp(brut).extract({ left: (GEN - CROP) >> 1, top: 0, width: CROP, height: CROP });
+  const img = await cadre.clone().resize(SIZE, SIZE).webp({ quality: 80 }).toBuffer();
+  const lg = await cadre.clone().resize(LG, LG).webp({ quality: 78 }).toBuffer();
   writeFileSync(dest, img);
-  total += img.length;
+  writeFileSync(destLg, lg);
+  total += img.length + lg.length;
   faits++;
   console.log(`✔ ${c.id} — ${(img.length / 1024).toFixed(1)} Ko`);
 }

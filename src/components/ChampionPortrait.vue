@@ -17,7 +17,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { championPortrait } from '@/data/championPortraits';
+import { championPortrait, championPortraitLarge } from '@/data/championPortraits';
 import { CHAMPION_BY_ID } from '@/data/champions';
 
 const props = defineProps<{
@@ -29,6 +29,8 @@ const props = defineProps<{
    * ne retombe pas sur le `<slot>`). Le `lazy` reste disponible pour une longue liste.
    */
   loading?: 'eager' | 'lazy';
+  /** La version 560 px — seulement là où le portrait est affiché en grand (roulette ×1). */
+  large?: boolean;
 }>();
 
 /**
@@ -43,7 +45,11 @@ const brokenId = ref<string | null>(null);
 // Un fichier qui ne charge pas retombe sur le repli, il ne laisse pas d'image cassée :
 // le test garantit l'existence au BUILD, pas un déploiement partiel ni un cache froid.
 const src = computed(() =>
-  brokenId.value === props.championId ? null : championPortrait(props.championId),
+  brokenId.value === props.championId
+    ? null
+    : props.large
+      ? championPortraitLarge(props.championId)
+      : championPortrait(props.championId),
 );
 // Le nom vient du champion lui-même : un `alt` à passer sur chaque site finirait oublié.
 const alt = computed(() =>

@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { CHAMPION_PORTRAITS, championPortrait } from '@/data/championPortraits';
+import {
+  CHAMPION_PORTRAITS,
+  championPortrait,
+  championPortraitLarge,
+} from '@/data/championPortraits';
 import { CHAMPIONS, CHAMPION_BY_ID } from '@/data/champions';
 
 // ⚠️ ON LIT LA DONNÉE EXPORTÉE, pas le TEXTE du fichier source. Une regex sur la source
@@ -74,5 +78,22 @@ describe('🖼️ LES PORTRAITS DE CHAMPIONS (v0.971)', () => {
       expect(url, c.id).toBe(CHAMPION_PORTRAITS[c.id]);
       expect(onDisk(url!), c.id).toBe(true);
     }
+  });
+});
+
+describe('🖼️ LES GRANDS PORTRAITS (v0.987, roulette verticale du ×1)', () => {
+  it('⚠️ CHAQUE CHAMPION ILLUSTRÉ A SA VERSION GRANDE SUR LE DISQUE', () => {
+    const manquants = IDS.filter((id) => !onDisk(championPortraitLarge(id)!));
+    expect(manquants, `grands portraits manquants : ${manquants.join(', ')}`).toEqual([]);
+  });
+  it('la grande est un AUTRE fichier que la petite, et suit le même repli', () => {
+    for (const id of IDS) expect(championPortraitLarge(id)).not.toBe(championPortrait(id));
+    expect(championPortraitLarge('nexistepas')).toBeNull();
+    expect(championPortraitLarge(null)).toBeNull();
+  });
+  it('⚠️ LE POIDS RESTE TENABLE — la roulette en montre des dizaines', () => {
+    const poids = IDS.map((id) => statSync(chemin(championPortraitLarge(id)!)).size);
+    expect(Math.max(...poids)).toBeLessThan(60_000);
+    expect(poids.reduce((a, b) => a + b, 0)).toBeLessThan(900_000);
   });
 });

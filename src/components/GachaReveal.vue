@@ -51,12 +51,14 @@
         </div>
       </div>
 
-      <!-- LA ROULETTE — une bande qui défile sous un repère fixe. -->
+      <!-- LA ROULETTE ×1 — VERTICALE, en grands portraits (v0.987, demandé : « la largeur
+           du portrait presque la largeur de l'écran »). Même moteur que l'horizontale d'avant
+           (`buildReveal`, arrêt sur `stopIndex`, queue après le tiré) : seul l'axe change. -->
       <div v-else-if="phase === 'spin'" class="gx-wheel">
         <div class="gx-halo" :style="haloStyle" aria-hidden="true"></div>
         <div class="gx-mark" aria-hidden="true">
-          <span class="gx-caret up">▼</span>
-          <span class="gx-caret dn">▲</span>
+          <span class="gx-caret up">▶</span>
+          <span class="gx-caret dn">◀</span>
         </div>
         <div class="gx-strip" :style="stripStyle">
           <div
@@ -66,7 +68,7 @@
             :style="{ '--c': RANK_COLOR[c.rarity] }"
           >
             <span class="gx-emo"
-              ><ChampionPortrait :champion-id="c.id">{{ c.emoji }}</ChampionPortrait></span
+              ><ChampionPortrait :champion-id="c.id" large>{{ c.emoji }}</ChampionPortrait></span
             >
             <span class="gx-crar">{{ RARITY_LABEL[c.rarity] }}</span>
           </div>
@@ -80,7 +82,9 @@
         </div>
         <div class="gx-portrait">
           <span class="gx-pemo"
-            ><ChampionPortrait :champion-id="champ.id">{{ champ.emoji }}</ChampionPortrait></span
+            ><ChampionPortrait :champion-id="champ.id" large>{{
+              champ.emoji
+            }}</ChampionPortrait></span
           >
         </div>
         <div class="gx-name font-display">{{ champ.name }}</div>
@@ -219,14 +223,13 @@ const verdictSub = computed(() => {
 /** La bande glisse jusqu'à amener sa DERNIÈRE case sous le repère. ⚠️ La translation est
  *  posée UNE image après le montage, sinon la transition n'a pas d'état de départ et la
  *  roulette saute directement à la fin. */
-/** Largeur d'une case + ses marges — en DUR ici ET dans la feuille de style : une seule
- *  valeur pilote les deux (`--cell`), sinon la bande s'arrêterait à côté du repère. */
-const CELL = 96;
+/** ⚠️ La taille d'une case vit en CSS (`--vs`, dérivée de l'écran) et la translation la
+ *  lit : une seule valeur pilote les deux, sinon la bande s'arrêterait à côté du repère. */
 const stripStyle = computed(() => {
   const ms = props.plan?.spinMs ?? 0;
   const i = rolling.value ? (props.plan?.stopIndex ?? 0) : 0;
   return {
-    transform: `translate3d(${-(CELL / 2 + i * CELL)}px, 0, 0)`,
+    transform: `translate3d(0, calc(-1 * var(--vs) * ${i + 0.5}), 0)`,
     transition: rolling.value ? `transform ${ms}ms cubic-bezier(0.1, 0.72, 0.16, 1)` : 'none',
   };
 });
@@ -365,22 +368,23 @@ onBeforeUnmount(() => window.clearTimeout(timer));
 
 /* ── LA ROULETTE ─────────────────────────────────────────────────────────── */
 .gx-wheel {
+  /* La case est CARRÉE et prend presque toute la largeur — bornée par la hauteur pour
+     qu'un écran bas garde une case entière visible, avec un peu des voisines. */
+  --vs: min(86vw, 440px, calc(100dvh - 230px));
   position: relative;
-  width: 100%;
-  max-width: 420px;
-  height: 112px;
+  width: var(--vs);
+  height: min(calc(var(--vs) * 1.7), calc(100dvh - 120px));
   overflow: hidden;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  border-radius: 18px;
   background: color-mix(in srgb, var(--surface) 70%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(180deg, transparent, #000 16%, #000 84%, transparent);
 }
 /* L'aura ne se colore QUE sur la fin (`glowFrom`) : trop tôt, on saurait dès le début. */
 .gx-halo {
   position: absolute;
   inset: 0;
   background: radial-gradient(
-    28% 100% at 50% 50%,
+    100% 34% at 50% 50%,
     color-mix(in srgb, var(--rar-c) 55%, transparent),
     transparent 70%
   );
@@ -388,6 +392,8 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   animation-name: gx-glow;
   animation-timing-function: ease-in;
   animation-fill-mode: forwards;
+  z-index: 1;
+  pointer-events: none;
 }
 @keyframes gx-glow {
   from {
@@ -405,50 +411,66 @@ onBeforeUnmount(() => window.clearTimeout(timer));
 }
 .gx-caret {
   position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 50%;
+  transform: translateY(-50%);
   color: var(--accent);
-  font-size: 13px;
+  font-size: 16px;
   line-height: 1;
+  text-shadow: 0 0 6px #000;
 }
 .gx-caret.up {
-  top: 2px;
+  left: 2px;
 }
 .gx-caret.dn {
-  bottom: 2px;
+  right: 2px;
 }
 .gx-strip {
   position: absolute;
-  left: 50%;
-  top: 0;
+  top: 50%;
+  left: 0;
+  width: 100%;
   display: flex;
-  height: 100%;
-  align-items: center;
+  flex-direction: column;
   will-change: transform;
 }
 .gx-cell {
-  flex: 0 0 92px;
-  height: 92px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  margin: 0 2px;
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--c) 12%, var(--bg));
-  border: 1px solid color-mix(in srgb, var(--c) 50%, transparent);
+  position: relative;
+  flex: 0 0 var(--vs);
+  height: var(--vs);
+  padding: 5px;
+  box-sizing: border-box;
 }
 .gx-emo {
-  font-size: 40px;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  overflow: hidden;
+  font-size: calc(var(--vs) * 0.45);
   line-height: 1;
+  background: color-mix(in srgb, var(--c) 12%, var(--bg));
+  border: 2px solid color-mix(in srgb, var(--c) 60%, transparent);
+}
+/* Le grand portrait remplit sa case (le composant le dimensionne sinon à l'emoji). */
+.gx-emo :deep(.cp) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
 }
 
 /* La rareté se LIT sur chaque case, pas seulement à sa teinte : huit couleurs voisines
    ne se distinguent pas au vol. Les leurres couvrant toute l'échelle, l'afficher ne
    trahit pas le résultat. */
 .gx-crar {
-  font-size: 9.5px;
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -612,8 +634,10 @@ onBeforeUnmount(() => window.clearTimeout(timer));
 .gx-portrait {
   position: relative;
   flex: none;
-  width: 132px;
-  height: 132px;
+  /* En grand (demandé) — borné par la hauteur, pour laisser la place au nom, à la
+     rareté et aux boutons. */
+  width: min(62vw, 260px, calc(100dvh - 380px));
+  height: min(62vw, 260px, calc(100dvh - 380px));
   display: grid;
   place-items: center;
   border-radius: 50%;
@@ -647,9 +671,21 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   }
 }
 .gx-pemo {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
   font-size: 64px;
   line-height: 1;
   filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+}
+/* Le portrait remplit le médaillon (le composant le dimensionne sinon à l'emoji). */
+.gx-pemo :deep(.cp) {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
 }
 .gx-name {
   margin-top: 4px;
