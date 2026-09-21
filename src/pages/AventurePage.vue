@@ -1791,7 +1791,7 @@
                 >{{ codexSum.championsFound }}/{{ codexSum.championsTotal }}</span
               >
             </div>
-            <div class="bestiary-grid">
+            <div class="bestiary-grid cx-champ-grid">
               <div
                 v-for="c in championList"
                 :key="c.champ.id"
@@ -1807,7 +1807,9 @@
                     c.owned ? c.champ.emoji : '❔'
                   }}</ChampionPortrait>
                 </span>
-                <span class="best-name">{{ c.owned ? c.champ.name : '???' }}</span>
+                <span class="best-name" :title="c.owned ? c.champ.name : undefined">{{
+                  c.owned ? c.champ.name : '???'
+                }}</span>
                 <span class="best-tier">{{ RARITY_LABEL[c.champ.rarity] }}</span>
                 <span v-if="c.owned && c.awaken > 0" class="cx-awk">✨ {{ c.awaken }}</span>
               </div>
@@ -11098,6 +11100,32 @@ button.pt-mini:active {
    cran d'Éveil. ⚠️ Pas de taux : l'écran d'invocation les vend, le Codex les nomme. */
 .cx-champ {
   position: relative;
+}
+/* Toutes les tuiles à la MÊME taille : des noms de 1 à 3 lignes et une vignette plus
+   haute qu'un emoji faisaient des rangées inégales. Rangées égales (`1fr`), vignette
+   dans une boîte fixe, nom borné à 2 lignes réservées, rareté calée en bas. */
+.cx-champ-grid {
+  grid-auto-rows: 1fr;
+}
+.cx-champ .best-emo {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.cx-champ .best-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.3em;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.cx-champ .best-tier {
+  margin-top: auto;
 }
 .cx-champ.found {
   border-color: color-mix(in srgb, var(--rk) 55%, var(--line));
