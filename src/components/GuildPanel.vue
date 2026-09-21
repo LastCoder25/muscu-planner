@@ -219,25 +219,38 @@
               {{ ADV_STATUS_LABEL[s] }} <span class="g-tab-n">{{ rosterCounts.get(s) }}</span>
             </button>
           </div>
-          <div v-if="roster.length" class="adv-grid">
-            <AdventurerPortrait
-              v-for="a in rosterShown"
-              :key="a.id"
-              :adv="a"
-              :look="lookOf(a)"
-              :familiar="famOf(a)"
-              :talent-icon="talIconOf(a)"
-              :power="powerOf(a)"
-              :state="stateOf(a)"
-              :tone="statusOf(a)"
-              :disabled="busy"
-              :gear="gearCellsOf(a)"
-              @gear="(slot) => (gearPick = { advId: a.id, slot })"
-              @open="detailAdv = a"
-              @familiar="pairFor = a"
-              @talent="talFor = a"
-            />
-          </div>
+          <!-- 🗂️ RANGÉ PAR RARETÉ (demandé) : une section par rareté, la plus haute en
+               tête ; dans chacune, rang puis étoiles décroissants (`groupByRarity`). -->
+          <section
+            v-for="g in rosterGroups"
+            :key="g.rarity"
+            class="adv-rgroup"
+            :style="{ '--c': RANK_COLOR[g.rarity] }"
+          >
+            <div class="adv-rhead">
+              <span class="adv-rname font-display">{{ RARITY_LABEL[g.rarity] }}</span>
+              <span class="adv-rn">{{ g.advs.length }}</span>
+            </div>
+            <div class="adv-grid">
+              <AdventurerPortrait
+                v-for="a in g.advs"
+                :key="a.id"
+                :adv="a"
+                :look="lookOf(a)"
+                :familiar="famOf(a)"
+                :talent-icon="talIconOf(a)"
+                :power="powerOf(a)"
+                :state="stateOf(a)"
+                :tone="statusOf(a)"
+                :disabled="busy"
+                :gear="gearCellsOf(a)"
+                @gear="(slot) => (gearPick = { advId: a.id, slot })"
+                @open="detailAdv = a"
+                @familiar="pairFor = a"
+                @talent="talFor = a"
+              />
+            </div>
+          </section>
         </template>
 
         <!-- ── 🗡️ LE STOCK D'ÉQUIPEMENT (onglet) ─────────────────────────────────────
@@ -763,7 +776,7 @@ import {
   advRoleLevels,
   advSignatureLevels,
   advStats,
-  compareAdventurers,
+  groupByRarity,
   advShapeLabel,
   ADV_ROLE_LABEL,
   ADV_SIGNATURE_LABEL,
@@ -1132,7 +1145,7 @@ const gearWorn = computed(() => wornGear(char.advList, char.advGearStock));
  *  seul calcul au niveau du panneau, qui ne dépend ni de `now` ni du rendu d'un portrait. */
 const looks = computed(() => advLooks(char.advList, char.advGearStock));
 function lookOf(a: Adventurer): AdvLook {
-  // Le portrait itère sur `rosterSorted`, dérivé de `char.advList` : l'entrée existe toujours.
+  // Le portrait itère sur `rosterGroups`, dérivé de `char.advList` : l'entrée existe toujours.
   return looks.value.get(a.id) ?? { profile: 'polyvalent', gear: {}, weaponKind: 'lame' };
 }
 /** Les 4 cases de chaque aventurier (portrait 2×2 ET fiche), calculées par la lib
@@ -1339,12 +1352,6 @@ const clock = setInterval(() => (now.value = Date.now()), 30_000);
 onUnmounted(() => clearInterval(clock));
 
 const roster = computed(() => char.advList);
-/** L’ordre d’AFFICHAGE : rang, puis expérience, puis puissance (`compareAdventurers`).
- *  ⚠️ Copie triée : `advList` garde l’ordre du vivier, dont dépendent l’attribution des
- *  places du Chenil et la graine du recrutement. */
-const rosterSorted = computed(() =>
-  [...roster.value].sort((a, b) => compareAdventurers(a, b, powerOf)),
-);
 
 // ── 🔎 FILTRE PAR ÉTAT (demandé) : qui peut partir, qui est sur la route, qui se soigne ──
 // ⚠️ `null` = tous. Le filtre ne RANGE rien de lui-même : il lit `statusOf`, donc la même
@@ -1354,15 +1361,19 @@ const rosterFilter = ref<AdvStatus | null>(null);
  *  proposer QUE les catégories peuplées (une puce « 0 » n'apprend rien et prend la place). */
 const rosterCounts = computed(() => {
   const m = new Map<AdvStatus, number>();
-  for (const a of rosterSorted.value) m.set(statusOf(a), (m.get(statusOf(a)) ?? 0) + 1);
+  for (const a of roster.value) m.set(statusOf(a), (m.get(statusOf(a)) ?? 0) + 1);
   return m;
 });
 const rosterChips = computed(() => ADV_STATUSES.filter((s) => rosterCounts.value.get(s)));
 const rosterShown = computed(() =>
   rosterFilter.value === null
-    ? rosterSorted.value
-    : rosterSorted.value.filter((a) => statusOf(a) === rosterFilter.value),
+    ? roster.value
+    : roster.value.filter((a) => statusOf(a) === rosterFilter.value),
 );
+/** Ce qu'on affiche, rangé par rareté puis rang/étoiles (`groupByRarity`) — le filtre
+ *  d'état s'applique AVANT le rangement. La lib COPIE : `advList` garde l'ordre du
+ *  vivier, dont dépendent d'autres règles. */
+const rosterGroups = computed(() => groupByRarity(rosterShown.value, powerOf));
 // ⚠️ Un filtre qui ne montre plus rien (le dernier convoi est rentré) se lit comme un vivier
 // vide : on retombe sur « Tous » dès que la catégorie choisie se vide.
 watch(rosterChips, (chips) => {
@@ -2178,6 +2189,27 @@ async function doPull() {
 }
 .adv.busy {
   opacity: 0.62;
+}
+.adv-rgroup {
+  margin-top: 14px;
+}
+.adv-rhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--c) 40%, transparent);
+}
+.adv-rname {
+  color: var(--c);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.adv-rn {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 12px;
 }
 .adv-grid {
   display: grid;
