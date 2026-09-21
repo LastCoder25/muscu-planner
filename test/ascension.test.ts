@@ -7,11 +7,14 @@ import {
   emptySeals,
   normalizeSeals,
   sealCount,
+  sealsSummary,
+  readyAscensions,
 } from '@/lib/ascension';
 import {
   advAscendedRank,
   advAscensionCap,
   advNextAscension,
+  advProgressOf,
   advXpToNext,
   ascendAdventurer,
   grantAdvXp,
@@ -165,5 +168,40 @@ describe('les sceaux d’une faille refermée', () => {
       rank: 2,
       n: 2,
     });
+  });
+});
+
+describe('🔱 les sceaux à la barre de ressources', () => {
+  it('le total, et le détail par rang du plus bas au plus haut', () => {
+    let s = addSeals(emptySeals(), 'champion', 2, 3);
+    s = addSeals(s, 'champion', 0, 1);
+    s = addSeals(s, 'gear', 1, 5);
+    const c = sealsSummary(s, 'champion');
+    expect(c.total).toBe(4);
+    expect(c.detail).toBe(`${CHARACTER_RANKS[0]!.name} 1 · ${CHARACTER_RANKS[2]!.name} 3`);
+    expect(sealsSummary(s, 'gear').total).toBe(5);
+    expect(sealsSummary(emptySeals(), 'gear')).toEqual({ total: 0, detail: '' });
+  });
+});
+
+describe('⬆️ on SAIT qu’un champion attend son ascension', () => {
+  it('l’annonce de mission le dit quand il bute sur le ★5', () => {
+    const avant = adv(9, 0);
+    const apres = grantAdvXp(avant, 1_000_000, 100);
+    const [e] = advProgressOf([avant], [apres]);
+    expect(e!.ascendReady).toBe(true);
+    const [f] = advProgressOf([adv(4, 0)], [grantAdvXp(adv(4, 0), advXpToNext(4), 100)]);
+    expect(f!.ascendReady).toBe(false);
+  });
+  it('mais pas à chaque mission une fois bloqué (plus d’étoile à annoncer)', () => {
+    const bloque = grantAdvXp(adv(9, 0), 1_000_000, 100);
+    expect(advProgressOf([bloque], [grantAdvXp(bloque, 5000, 100)])).toEqual([]);
+  });
+  it('la Base compte les ascensions PAYABLES, avec les mêmes refus que les boutons', () => {
+    const seals = addSeals(emptySeals(), 'champion', 1, 5);
+    const ctx = { pantheonLevel: 100, seals, gold: 1e12 };
+    expect(readyAscensions([adv(10, 0), adv(5, 0)], [], ctx)).toBe(1);
+    expect(readyAscensions([adv(10, 0)], [], { ...ctx, gold: 0 })).toBe(0);
+    expect(readyAscensions([adv(10, 0)], [], { ...ctx, seals: emptySeals() })).toBe(0);
   });
 });

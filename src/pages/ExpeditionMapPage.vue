@@ -1515,14 +1515,18 @@ async function doClaimCaravan(id: string) {
     // convoi ne se verrait qu'en rouvrant la Guilde pour y lire une barre. C'est le seul
     // retour qu'il ait sur des semaines de voyages.
     for (const e of events) {
-      if (e.to <= e.from) continue;
+      if (e.to <= e.from && !e.ascendReady) continue;
       // ⚠️ UN RANG GAGNÉ N'EST PAS UNE ÉTOILE DE PLUS : c'est un vrai palier de prestige,
       // il ne doit pas se lire comme un cran de routine.
       gameFx.celebrate({
         kind: 'levelup',
         emoji: e.rankUp ? e.rankEmoji : '⭐',
         title: e.rankUp ? `${e.name} passe ${e.rankName} !` : `${e.name} — ${rankStarStr(e.star)}`,
-        subtitle: e.rankUp ? `${rankStarStr(e.star)} · nouveau rang` : 'une étoile de plus',
+        subtitle: e.ascendReady
+          ? '★★★★★ — prêt pour l’ascension (Guilde)'
+          : e.rankUp
+            ? `${rankStarStr(e.star)} · nouveau rang`
+            : 'une étoile de plus',
         rarity: fxRarity(e.rarity),
       });
     }

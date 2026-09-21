@@ -177,6 +177,15 @@ describe('POI de récolte', () => {
     expect(haulPills(msg).some((x) => x.emoji === '💠')).toBe(true);
   });
 
+  it('🔱 les sceaux se peignent selon leur FAMILLE : champion 🔱, objet ⚜️', () => {
+    const base = { gold: 0 } as Parameters<typeof haulPills>[0];
+    const champ = haulPills({ ...base, seals: { kind: 'champion', rank: 1, n: 2 } });
+    const gear = haulPills({ ...base, seals: { kind: 'gear', rank: 1, n: 1 } });
+    expect(champ.find((x) => x.emoji === '🔱')?.n).toBe(2);
+    expect(gear.find((x) => x.emoji === '⚜️')?.n).toBe(1);
+    expect(gear.some((x) => x.emoji === '🔱')).toBe(false);
+  });
+
   it('⚠️ entrer dans une faille coûte de l’OR — « gratuite » portait sur le mana et l’énergie', () => {
     // La décision était : ni mana, ni énergie (ne jamais être à sec le jour où il faut
     // défendre). L'or, lui, est le péage UNIVERSEL de la carte et l'un des DEUX seuls puits

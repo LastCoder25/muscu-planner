@@ -91,6 +91,21 @@
               title="Pierres de mana — invoquer un champion (failles refermées, mines de mana)"
               >💠 {{ char.row.mana }}</span
             >
+            <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions (failles) et objets (boss). Ils ne
+                 servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle. Affichés
+                 dès qu'on en possède, comme les tickets. -->
+            <span
+              v-if="sealsChamp.total"
+              class="tb-r seals"
+              :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail}`"
+              >🔱 {{ sealsChamp.total }}</span
+            >
+            <span
+              v-if="sealsGear.total"
+              class="tb-r seals gear"
+              :title="`Sceaux d’objet — ascension d’un objet de champion (boss de palier) : ${sealsGear.detail}`"
+              >⚜️ {{ sealsGear.total }}</span
+            >
             <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés seulement quand il
                  y en a : la puce dit « tu as des tirages qui t'attendent ». -->
             <span
@@ -2577,6 +2592,12 @@
                   title="Pierres d’invocation (pour affronter les boss)"
                   >+{{ run.summonStones }} 🔮</span
                 >
+                <span
+                  v-if="run.gearSeals"
+                  class="gain-pill seals"
+                  title="Sceaux d’objet (ascension des objets de champion)"
+                  >+{{ run.gearSeals }} ⚜️</span
+                >
               </span>
             </div>
             <div class="result-sub">
@@ -3064,6 +3085,7 @@ import { bestiary, setCollection, codexSummary } from '@/lib/codex';
 import { monsterArt } from '@/data/monsterArt';
 import ChampionCollection from '@/components/ChampionCollection.vue';
 import { dailyFreeMana } from '@/lib/gacha';
+import { emptySeals, sealsSummary } from '@/lib/ascension';
 import {
   messageTitle,
   isClaimable,
@@ -3101,6 +3123,7 @@ interface RunView {
   drops: Item[];
   talentDrops?: TalentInstance[]; // talents tombés (affichés dans le rapport)
   summonStones?: number; // pierres d'invocation 🔮 gagnées (donjon → aller aux boss)
+  gearSeals?: number; // ⚜️ sceaux d'objet gagnés (boss de palier → ascension des objets)
 }
 
 // `embedded` : rendu dans le VOLET droit du cockpit (Z Fold déplié) → racine <div>
@@ -3635,6 +3658,8 @@ type RegionReveal = { id: string; emoji: string; name: string; blurb: string; co
 /** 💠 Ce que le bonus de connexion verse en plus de l’énergie — DÉRIVÉ du prix d’un
  *  tirage, jamais un second nombre écrit ici. */
 const freeMana = dailyFreeMana();
+const sealsChamp = computed(() => sealsSummary(char.row?.seals ?? emptySeals(), 'champion'));
+const sealsGear = computed(() => sealsSummary(char.row?.seals ?? emptySeals(), 'gear'));
 const pendingRegionReveal = ref<RegionReveal | null>(null);
 async function claimLogin() {
   const uid = auth.user?.id;
@@ -5027,7 +5052,7 @@ async function fightBoss(b: MilestoneBoss) {
         : [];
     // La pièce de set attend au sac que le drop soit RÉVÉLÉ : `autoFileSetPieces` ne range
     // rien pendant un combat (`busy`) ni pendant son animation (cf. plus bas).
-    await char.applyBossWin(uid, {
+    const gearSeals = await char.applyBossWin(uid, {
       bossId: b.id,
       summonCost,
       gold,
@@ -5062,6 +5087,7 @@ async function fightBoss(b: MilestoneBoss) {
       ],
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
+      ...(gearSeals ? { gearSeals: gearSeals.n } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
     // DIFFÉRÉE à la fin de l'animation de combat. ⚠️ Seulement la PREMIÈRE fois : un
@@ -6560,6 +6586,12 @@ onUnmounted(() => {
 }
 .tb-r.tickets {
   color: var(--accent);
+}
+.tb-r.seals {
+  color: #7fd4c1;
+}
+.tb-r.seals.gear {
+  color: #e0b36a;
 }
 .tb-r.energy.deficit {
   color: var(--d4, #ff6a45);
@@ -10274,6 +10306,11 @@ button.pt-mini:active {
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   border: 1px solid var(--accent);
+}
+.gain-pill.seals {
+  color: #e0b36a;
+  background: color-mix(in srgb, #e0b36a 16%, transparent);
+  border: 1px solid #e0b36a;
 }
 .gain-pill.summon {
   color: #ffd23f;

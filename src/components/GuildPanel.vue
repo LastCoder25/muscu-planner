@@ -1137,7 +1137,7 @@ function gearAscent(g: AdvGear) {
     gold: char.row?.gold ?? 0,
   });
   const rank = CHARACTER_RANKS[next]!;
-  const price = `🔱 ${sealCount(seals, 'gear', next)}/${cost.seals} · 🪙 ${cost.gold.toLocaleString('fr-FR')}`;
+  const price = `⚜️ ${sealCount(seals, 'gear', next)}/${cost.seals} · 🪙 ${cost.gold.toLocaleString('fr-FR')}`;
   return {
     rank,
     cost,

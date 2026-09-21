@@ -825,8 +825,14 @@ export const useCharacterStore = defineStore('character', () => {
     },
   ) {
     const cur = row.value;
-    if (!cur) return;
+    if (!cur) return null;
     const firstDefeat = input.defeated && !cur.defeated_bosses.includes(input.bossId);
+    // 🗡️ SCEAUX D'OBJET (v0.1015) : la SEULE source des ascensions d'équipement. Rendus à
+    // l'appelant pour que le rapport de combat les ANNONCE (crédités sans un mot sinon).
+    const gearSeals =
+      input.defeated && input.bossLevel != null
+        ? bossGearSeals(input.bossLevel, input.playerLevel ?? 1, firstDefeat)
+        : null;
     const defeated = firstDefeat ? [...cur.defeated_bosses, input.bossId] : cur.defeated_bosses;
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
     // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
@@ -851,14 +857,11 @@ export const useCharacterStore = defineStore('character', () => {
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, drops),
       keys: cur.keys + keyGain,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
-      // 🗡️ SCEAUX D'OBJET (v0.1015) : la SEULE source des ascensions d'équipement.
-      ...(input.defeated && input.bossLevel != null
-        ? (() => {
-            const s = bossGearSeals(input.bossLevel, input.playerLevel ?? 1, firstDefeat);
-            return { seals: addSeals(cur.seals, s.kind, s.rank, s.n) };
-          })()
+      ...(gearSeals
+        ? { seals: addSeals(cur.seals, gearSeals.kind, gearSeals.rank, gearSeals.n) }
         : {}),
     });
+    return gearSeals;
   }
 
   // Choisit une récompense parmi les candidats en attente → l'applique et purge.

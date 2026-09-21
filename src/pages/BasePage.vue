@@ -1051,6 +1051,7 @@ import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
 import { treePath } from '@/lib/expedition';
+import { emptySeals, readyAscensions } from '@/lib/ascension';
 
 const props = defineProps<{
   embedded?: boolean;
@@ -1427,6 +1428,10 @@ const yard = computed<YardCell[]>(() => {
       level: b?.level ?? 0,
       ready: b ? buildingAccrued(b, now.value) > 0 : false,
       damaged: false,
+      // ⬆️ Le Panthéon s'allume quand une ascension est PAYABLE (champion ou pièce) : sans ce
+      // signal, un champion bloqué au ★5 — dont les convois s'effondrent (v0.1017) — ne se
+      // verrait qu'en ouvrant sa fiche.
+      todo: b?.typeId === 'pantheon' && ascensionsReady.value > 0,
       onClick: () => (plotSlot.value = i),
     });
   }
@@ -1772,6 +1777,13 @@ const patients = computed(() =>
 );
 const patientsCost = computed(() => patients.value.reduce((s, p) => s + p.cost, 0));
 const patientCount = computed(() => patients.value.length + (wounded.value ? 1 : 0));
+const ascensionsReady = computed(() =>
+  readyAscensions(char.advList, char.advGearStock, {
+    pantheonLevel: char.pantheonLevel,
+    seals: char.row?.seals ?? emptySeals(),
+    gold: char.row?.gold ?? 0,
+  }),
+);
 /** 🦴 Ce que le dernier assaut a rapporté — posé à la résolution, jamais recalculé
  *  ici, et mis en forme par la LIB : l'écran de fin du rejeu affiche exactement les
  *  mêmes puces, et deux copies divergeraient au premier ajout de devise. */

@@ -13,7 +13,7 @@
  */
 import { buildingUpgradeCost } from './buildings';
 import { CHARACTER_RANKS, characterRank, rankStartLevel } from './characterRank';
-import { advGearLevelBand, advGearNextRank, type AdvGear } from './advGear';
+import { advGearLevelBand, advGearNextRank, advGearRankCap, type AdvGear } from './advGear';
 import { RARITY_RANK, type Rarity } from './items';
 import { advAscensionCap, advNextAscension, type Adventurer } from './adventurers';
 import type { SealDrop } from './expedition';
@@ -163,4 +163,44 @@ export function bossGearSeals(
     characterRank(Math.max(1, playerLevel)).rankIndex,
   );
   return { kind: 'gear', rank, n: firstDefeat ? 2 : 1 };
+}
+
+/** 🔱 Ce que la barre de ressources dit d'une famille de sceaux : le TOTAL (la puce) et le
+ *  détail PAR RANG (l'infobulle), du plus bas au plus haut. ⚠️ Un sceau ne sert qu'à SON rang :
+ *  un total seul ne dirait pas si l'on peut monter tel champion, d'où le détail. */
+export function sealsSummary(seals: Seals, kind: SealKind): { total: number; detail: string } {
+  const parts: string[] = [];
+  let total = 0;
+  for (let r = 0; r < CHARACTER_RANKS.length; r++) {
+    const n = sealCount(seals, kind, r);
+    if (n <= 0) continue;
+    total += n;
+    parts.push(`${CHARACTER_RANKS[r]!.name} ${n}`);
+  }
+  return { total, detail: parts.join(' · ') };
+}
+
+/** ⬆️ Combien d'ascensions sont PAYABLES tout de suite (champions + pièces) — ce qui allume
+ *  la tuile du Panthéon sur la Base. ⚠️ Lu par les MÊMES refus que les boutons
+ *  (`ascensionBlocker`, `advGearAscensionBlocker`) : la pastille ne peut pas promettre une
+ *  ascension que la Guilde refuserait. ⚠️ Le coût s'additionne : deux ascensions payables
+ *  séparément ne le sont pas forcément ensemble — la pastille dit « il y a à faire », pas
+ *  « tout est payable ». */
+export function readyAscensions(
+  advs: Adventurer[],
+  stock: AdvGear[],
+  ctx: { pantheonLevel: number; seals: Seals; gold: number },
+): number {
+  let n = 0;
+  for (const a of advs) if (ascensionBlocker(a, ctx) == null) n++;
+  for (const g of stock)
+    if (
+      advGearAscensionBlocker(g, {
+        rankCap: advGearRankCap(g, advs, stock),
+        seals: ctx.seals,
+        gold: ctx.gold,
+      }) == null
+    )
+      n++;
+  return n;
 }

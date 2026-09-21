@@ -495,7 +495,7 @@ export function haulPills(o: {
       { emoji: '🗝️', n: o.key ?? 0 },
       { emoji: '💠', n: o.mana ?? 0 },
       { emoji: '🎟️', n: o.tickets ?? 0 },
-      { emoji: '🔱', n: o.seals?.n ?? 0 },
+      { emoji: o.seals?.kind === 'gear' ? '⚜️' : '🔱', n: o.seals?.n ?? 0 },
     ] as const
   )
     .filter((p) => p.n > 0)

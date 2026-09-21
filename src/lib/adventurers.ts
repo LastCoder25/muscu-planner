@@ -1599,6 +1599,9 @@ export interface AdvProgress {
   rankName: string;
   /** Sa rareté de classe — la teinte de la célébration. */
   rarity: Rarity;
+  /** ⬆️ Il vient de BUTER sur le ★5 de son rang : l'XP s'arrête jusqu'à l'ascension. Dit
+   *  à part, sinon « une étoile de plus » cacherait qu'il faut maintenant agir. */
+  ascendReady: boolean;
 }
 
 /**
@@ -1624,7 +1627,11 @@ export function advProgressOf(
     if (!b) continue;
     const av = advRank(b);
     const ap = advRank(a);
-    if (ap.tier <= av.tier) continue;
+    // ⚠️ Le ★5 tombe AVANT le blocage (niveau 9 puis 10) : buter sur le plafond ne change
+    // donc plus d'étoile, et une annonce lue sur les seules étoiles le taisait.
+    const ascendReady =
+      advNextAscension(a) != null && a.level >= advAscensionCap(a) && b.level < advAscensionCap(a);
+    if (ap.tier <= av.tier && !ascendReady) continue;
     out.push({
       id: a.id,
       name: a.name,
@@ -1635,6 +1642,7 @@ export function advProgressOf(
       rankEmoji: ap.emoji,
       rankName: ap.name,
       rarity: advRarity(a),
+      ascendReady,
     });
   }
   return out;
