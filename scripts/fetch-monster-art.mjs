@@ -114,6 +114,69 @@ const SUBJECTS = {
   comete: 'a living comet, a blazing celestial beast made of fire and ice trailing a comet tail',
   gardien_infini:
     'a guardian of infinity, a serene cosmic knight in white and gold armor with an infinity sigil halo',
+
+  // ── LABYRINTHE (étape 2, v0.1008) — dans l'ordre des paliers : les premiers passent
+  //    d'abord, ce sont ceux que les joueurs croisent le plus tôt. Le gardien de chaque
+  //    palier suit son roster. « Golem de pierre » et « Léviathan » réutilisent l'image
+  //    des donjons (même nom = même créature).
+  l_rat: 'a big mangy sewer rat with red eyes and a long pink tail',
+  l_araignee: 'a large grey cave spider with hairy legs and many small eyes',
+  l_chauve_souris: 'a dark brown bat with wide leathery wings spread and bared fangs, flying',
+  l_serpent_ombres: 'a black shadow snake with glowing purple eyes, coiled and hissing',
+  l_matriarche:
+    'a huge bloated spider matriarch with a pale egg sac abdomen and a crown of bone spikes',
+  l_loup_errant: 'a lean brown stray wolf with a torn ear and matted fur, growling',
+  l_sanglier_furieux: 'a furious black wild boar with broken tusks and bristling mane, charging',
+  l_scorpion: 'a venomous orange desert scorpion with a raised glowing green stinger',
+  l_varan: 'a big monitor lizard with scaly olive skin, forked tongue and sharp claws',
+  l_alpha: 'a huge alpha wolf pack leader with silver fur, scars and a heavy mane, howling',
+  l_squelette: 'an undead skeleton warrior with a rusty sword and a cracked round shield',
+  l_goule: 'a hunched ghoul with grey rotting skin, long claws and a hungry mouth',
+  l_tisseuse_os:
+    'a spider made of bones weaving webs of bone threads, skull body, pale yellow bones',
+  l_revenant: 'a revenant, a ghostly armored knight with a tattered cloak and blue ghost flames',
+  l_roi_ossuaire:
+    'an ossuary king, a giant skeleton king standing tall, crown of bones, cape of skulls',
+  l_rampant:
+    'an abyssal crawler, a deep sea crustacean monster with tentacle mouth and glowing lure',
+  l_etreigneur: 'a strangler octopus monster with thick purple tentacles and a beak',
+  l_essaim: 'a buzzing swarm of giant mosquitoes forming the shape of a monster',
+  l_vase: 'a corrosive acid ooze blob, bubbling toxic yellow-green slime dripping',
+  l_etreigneur_abysses:
+    'a colossal abyssal strangler, giant dark blue octopus king with bioluminescent spots',
+  l_elementaire_feu: 'a fire elemental, a humanoid made of roaring flames with burning eyes',
+  l_fulgur: 'a lightning elemental, a crackling humanoid made of electric bolts, yellow and white',
+  l_spectre_glacial: 'an icy spectre, a floating frost ghost with icicle claws and freezing mist',
+  l_colosse_gouffre:
+    'a colossus of the chasm, a gigantic rock golem with glowing magma cracks and boulder fists',
+  l_oni: 'a blue oni demon with one horn, muscular, holding an iron club',
+  l_diablotin: 'a small mischievous red imp with bat wings, a pointed tail and a trident',
+  l_sangsue: 'a giant shadow leech, a dark slimy worm with a round toothed mouth, blood red glow',
+  l_liche_mineure: 'a minor lich, a skeletal mage in a ragged grey robe holding a candle staff',
+  l_seigneur_oni: 'an oni lord, a giant red demon warlord in samurai armor with a huge kanabo club',
+  l_tengu: 'a chaos tengu, a crow-headed yokai warrior with black wings and a curved sword',
+  l_wyverne: 'a green wyvern, two-legged dragon with bat wings and a barbed tail',
+  l_oeil_chaos: 'a chaos eye, a floating demonic eyeball with bat wings and blue iris',
+  l_mere_couvee:
+    'a brood mother spider, a giant black spider carrying many baby spiders on her back',
+  l_wyverne_ancienne:
+    'an ancient wyvern, a huge old grey-scaled wyvern with torn wings and moss on its horns',
+  l_seraphin: 'a fallen seraph, a dark angel with six black feathered wings and a broken halo',
+  l_sentinelle: 'an astral sentinel, a floating stone construct with a single glowing blue eye',
+  l_aberration: 'an aberration, a twisted mass of flesh with many eyes and mouths, pink and purple',
+  l_comete_vivante: 'a living comet creature, a fiery rock beast trailing blue flames',
+  l_veilleur: 'an astral watcher, a tall robed cosmic being with a starry face and many eyes',
+  l_devoreur_neant: 'a void devourer, a black shadow beast with a gaping mouth full of stars',
+  l_vide_rampant: 'a creeping void, a crawling shadow creature made of dark purple smoke',
+  l_horreur: 'a shapeless horror, a formless black blob with tentacles and glowing eyes',
+  l_fragment: 'a shattered fragment, a floating cracked crystal golem leaking violet energy',
+  l_gueule_neant:
+    'a maw of the void, a giant floating mouth with rows of teeth surrounded by darkness',
+  l_tyran_dechu: 'a fallen tyrant king, a gaunt undead emperor in rotting golden armor and crown',
+  l_cataclysme: 'a cataclysm elemental, a giant made of exploding fire, rock and lightning',
+  l_fleau_final: 'a final scourge, a towering skeletal reaper with a scythe and black wings',
+  l_tyran_infini:
+    'a tyrant of infinity, a colossal cosmic emperor in black and gold armor with a crown of stars',
 };
 
 const seedFor = (slug) => seedOf('monster:' + slug) % 100000;
@@ -276,12 +339,18 @@ async function write(slug, brut) {
   return out.length;
 }
 
-const slugs = [
-  ...new Set(
-    Object.values(MONSTER_ART).map((p) => p.replace('/monsters/', '').replace('.webp', '')),
-  ),
-];
-const sansSujet = slugs.filter((s) => !SUBJECTS[s]);
+/**
+ * ⚠️ ON GÉNÈRE DEPUIS `SUBJECTS`, PAS DEPUIS LA TABLE : la dotation gratuite (~60 images
+ * par jour) ne couvre pas un lot entier en une fois. La table (`monsterArt.ts`) ne recense
+ * donc que les images qui EXISTENT — son test reste strict —, et on l'étend au fur et à
+ * mesure que les fichiers arrivent. Ordre des sujets = ordre de génération : les paliers
+ * que les joueurs croisent en premier passent d'abord.
+ */
+const slugs = Object.keys(SUBJECTS);
+const tableSlugs = Object.values(MONSTER_ART).map((p) =>
+  p.replace('/monsters/', '').replace('.webp', ''),
+);
+const sansSujet = tableSlugs.filter((s) => !SUBJECTS[s]);
 if (sansSujet.length) {
   console.error(`✖ ennemis sans description : ${sansSujet.join(', ')}`);
   process.exit(1);

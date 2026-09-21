@@ -72,6 +72,20 @@ export const MONSTER_ART: Readonly<Record<string, string>> = {
   'Trident du Chaos': '/monsters/trident.webp',
   'Comète Vivante': '/monsters/comete.webp',
   'Gardien de l’Infini': '/monsters/gardien_infini.webp',
+  // ── Labyrinthe (étape 2, v0.1008) — ajoutés au fil de la dotation gratuite quotidienne,
+  //    palier par palier. « Golem de pierre » et « Léviathan » partagent déjà l'image des
+  //    donjons (même nom = même créature).
+  'Rat des galeries': '/monsters/l_rat.webp',
+  'Araignée grise': '/monsters/l_araignee.webp',
+  'Chauve-souris': '/monsters/l_chauve_souris.webp',
+  'Serpent des ombres': '/monsters/l_serpent_ombres.webp',
+  'Matriarche des galeries': '/monsters/l_matriarche.webp',
+  'Loup errant': '/monsters/l_loup_errant.webp',
+  'Sanglier furieux': '/monsters/l_sanglier_furieux.webp',
+  'Scorpion venimeux': '/monsters/l_scorpion.webp',
+  'Varan mordant': '/monsters/l_varan.webp',
+  'Alpha de la meute': '/monsters/l_alpha.webp',
+  Squelette: '/monsters/l_squelette.webp',
 };
 
 /**

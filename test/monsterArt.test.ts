@@ -4,11 +4,17 @@ import { resolve } from 'node:path';
 import { MONSTER_ART, monsterArt } from '@/data/monsterArt';
 import { MONSTERS } from '@/data/monsters';
 import { BOSSES } from '@/data/bosses';
+import { LABY_ROSTERS, LABY_GUARDIANS } from '@/data/labyrinthFoes';
 
 // On lit la DONNÉE exportée, jamais le texte du fichier (cf. championPortraits.test).
 const NAMES = Object.keys(MONSTER_ART);
 const chemin = (url: string) => resolve(__dirname, '../public' + url);
-const ENEMY_NAMES = new Set([...MONSTERS.map((m) => m.name), ...BOSSES.map((b) => b.name)]);
+const DUNGEON_NAMES = new Set([...MONSTERS.map((m) => m.name), ...BOSSES.map((b) => b.name)]);
+// Le Labyrinthe est illustré au fil de la dotation gratuite quotidienne : ses noms sont
+// ADMIS dans la table, mais pas encore EXIGÉS (le test « tous illustrés » ne couvre que
+// les donjons et boss — l'étendre au Labyrinthe une fois ses 48 créatures générées).
+const LABY_NAMES = [...LABY_ROSTERS.flat(), ...LABY_GUARDIANS].map((f) => f.name);
+const ENEMY_NAMES = new Set([...DUNGEON_NAMES, ...LABY_NAMES]);
 
 describe('🐉 LES ILLUSTRATIONS D’ENNEMIS (v0.1006)', () => {
   it('⚠️ CHAQUE FICHIER NOMMÉ EXISTE SUR LE DISQUE', () => {
@@ -24,7 +30,7 @@ describe('🐉 LES ILLUSTRATIONS D’ENNEMIS (v0.1006)', () => {
   });
 
   it('tous les monstres de donjon et tous les boss de palier sont illustrés', () => {
-    const sans = [...ENEMY_NAMES].filter((n) => !NAMES.includes(n));
+    const sans = [...DUNGEON_NAMES].filter((n) => !NAMES.includes(n));
     expect(sans, `ennemis sans illustration : ${sans.join(', ')}`).toEqual([]);
   });
 

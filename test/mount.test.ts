@@ -636,7 +636,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('/monsters/dragon.webp');
     const inconnu = {
       ...base,
-      fights: [{ name: 'Rat des galeries', emoji: '🐀', maxPv: 50, log: [] }],
+      fights: [{ name: 'Créature sans illustration', emoji: '🐀', maxPv: 50, log: [] }],
     };
     expect(
       await mountIt(CombatStage, inconnu, undefined, undefined, '/', (h) => (out = h)),
