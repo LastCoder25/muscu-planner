@@ -8,7 +8,7 @@
   <q-dialog :model-value="!!plan" maximized persistent @update:model-value="onClose">
     <div
       class="gx"
-      :class="[phase, rarClass, { lotspin: lotSpin }]"
+      :class="[phase, rarClass, { lotspin: lotSpin, lotdone: lotDone }]"
       :style="{ '--rar-c': rarColor }"
     >
       <div class="gx-sky" aria-hidden="true"></div>
@@ -240,6 +240,9 @@ const haloStyle = computed(() => {
   };
 });
 
+/** Écran de résultat d'un ×10 : révélation + grille de dix — plus haut que l'écran sur
+ *  un téléphone, d'où une mise en page compacte (`.lotdone`). */
+const lotDone = computed(() => phase.value === 'done' && lotRows.value.length > 1);
 /** Tirage ×10 en cours d'animation : les dix lignes remplacent la roulette seule. */
 const lotSpin = computed(() => phase.value === 'spin' && (props.lotPlans?.length ?? 0) > 1);
 /** Une ligne du ×10 — même geste que `stripStyle`, avec des cases carrées de `--rh`. */
@@ -288,20 +291,29 @@ onBeforeUnmount(() => window.clearTimeout(timer));
 <style scoped lang="scss">
 .gx {
   position: relative;
-  min-height: 100dvh;
+  /* HAUTEUR fixe (pas min-height) : sinon le contenu agrandit l'écran au lieu de le
+     faire défiler, et les boutons collants n'ont rien à quoi coller. */
+  height: 100dvh;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* ⚠️ `safe` + défilement : le résultat d'un ×10 (révélation + grille + boutons) peut
+     dépasser la hauteur d'un téléphone. Centré sans `safe` et en `overflow: hidden`, il
+     était ROGNÉ en haut ET en bas — les boutons sortaient de l'écran (signalé). */
+  justify-content: safe center;
   gap: 10px;
   padding: 16px;
   background: radial-gradient(120% 80% at 50% 38%, #241d15 0%, var(--bg) 62%);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   text-align: center;
 }
 /* Un ciel qui respire — assez discret pour ne pas concurrencer la roulette. */
 .gx-sky {
-  position: absolute;
+  /* fixe : en absolu, son débord (-20 %) rendrait l'écran défilable pour rien. */
+  position: fixed;
+  pointer-events: none;
   inset: -20%;
   background: radial-gradient(
     40% 30% at 50% 40%,
@@ -545,6 +557,26 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   color: var(--c);
 }
 
+/* ── LE RÉSULTAT D'UN ×10, COMPACT ─────────────────────────────────────── */
+.gx.lotdone {
+  gap: 6px;
+  padding-top: 12px;
+}
+.gx.lotdone .gx-portrait {
+  width: 92px;
+  height: 92px;
+}
+.gx.lotdone .gx-pemo {
+  font-size: 44px;
+}
+.gx.lotdone .gx-name {
+  margin-top: 0;
+  font-size: 21px;
+}
+.gx.lotdone .gx-lot {
+  margin-top: 6px;
+}
+
 /* ── LA RÉVÉLATION ───────────────────────────────────────────────────────── */
 .gx-reveal {
   position: relative;
@@ -734,7 +766,12 @@ onBeforeUnmount(() => window.clearTimeout(timer));
   font-weight: 700;
 }
 .gx-acts {
-  position: relative;
+  /* Les boutons restent à portée même si le lot fait défiler l'écran. */
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding-top: 8px;
+  background: linear-gradient(transparent, var(--bg) 30%);
   display: flex;
   flex-direction: column;
   gap: 6px;
