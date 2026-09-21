@@ -11,7 +11,7 @@
 | 2 | Échelle du gacha | **Lettres S / A / B**, pas d'étoiles (déjà prises dans l'app). Champions **S et A** ; **B** = le fond du tirage (pièce d'équipement de lignée ou matériau d'Éveil), jamais un champion |
 | 3 | Armes / équipement des champions | **Aussi en S / A / B** : arme signature S, équipement de lignée en S/A/B. L'équipement **du héros** garde ses 8 raretés (il suit le sport, pas le gacha) |
 | 4 | Vedette | **Rotation chaque semaine** ; compteurs **comme dans le genre** (voir plus bas) ; un champion **nouveau** n'est tirable **qu'en vedette** pendant sa semaine de sortie, puis rejoint la standard |
-| 5 | Filet contre la malchance longue | payé en **pierres de mana**, pas de monnaie de points ; **aucun objectif de rythme** du type « un S choisi tous les deux mois » (à préciser, cf. Q-B) |
+| 5 | Filet contre la malchance longue | **Points d'étincelle** : 1 point par tirage (standard comme vedette), échangé contre **un S choisi** à ~200 points (seuil à mesurer). Les points **ne s'effacent jamais** et n'ont aucun autre usage. Pas d'objectif de rythme imposé |
 | 6 | Arme signature des S | **Oui** |
 | 7 | Roster | **Ajouter des champions** au fil du temps |
 | 8 | Comptes existants | **Reset des champions + compensation** |
@@ -38,7 +38,7 @@
 
 ### Filet contre la malchance longue
 
-Remplacé par la décision 5 : **pas de points**, le filet se paie en pierres de mana (cf. Q-B).
+Voir la décision 5 : **points d'étincelle**, 1 par tirage, échangés contre un S choisi.
 
 ---
 
@@ -75,7 +75,7 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 
 ### P3 — Doublons, éclats, étincelle (~1 j)
 - Au-delà de C6 : des **éclats** au lieu du mana (**suppression de la boucle mana**).
-- **Filet** : achat d'un S choisi en pierres de mana (cf. Q-B), pas de points.
+- **Points d'étincelle** (1 par tirage, jamais effacés) et échange contre un S choisi.
 - **Boutique d'éclats** : A choisi, cran d'Éveil d'un champion possédé, pièces d'équipement.
 - Mesures : débit S/an, saturation à 1/3/6/12 mois.
 
@@ -106,10 +106,7 @@ Chaque phase se livre, se teste et se pousse seule. Durées = estimation de trav
 
 ## Questions encore ouvertes (à trancher en P0)
 
-- **Q-B — Le filet contre la malchance, en pierres de mana** : lecture retenue — pas de points
-  d'étincelle ; on peut **acheter un S choisi** avec des pierres de mana, à un prix élevé fixe (à
-  mesurer). ⚠️ Réexpliqué le 2026-09-21 : points d’étincelle (1 par tirage, échangés contre un S
-  choisi) contre achat direct en mana, ou aucun filet. En attente.
+Aucune : tout est tranché. Reste à mesurer en P0 (seuil d'étincelle, revenu plat, prix du tirage offert).
 
 ## Améliorations proposées en plus (hors refonte, à prendre ou laisser)
 
