@@ -41,9 +41,25 @@
           enter: monsterEnter,
         }"
       >
-        <div class="cs-emo-wrap">
+        <div class="cs-emo-wrap" :class="{ art: !!foeArt }">
           <span class="cs-aura" :class="'ar-' + foeArchetype" />
-          <div class="cs-emo" :class="['idle-' + foeArchetype, { hit: shakeSide === 'monster' }]">
+          <!-- 🐉 Illustration en pied, de profil, tournée vers le héros (v0.1006). Un
+               fichier qui ne charge pas retombe sur l'emoji, jamais sur une image cassée. -->
+          <img
+            v-if="foeArt"
+            :key="foeArt"
+            :src="foeArt"
+            :alt="foe?.name ?? ''"
+            class="cs-emo cs-art"
+            :class="['idle-' + foeArchetype, { hit: shakeSide === 'monster' }]"
+            draggable="false"
+            @error="artFailed = foeArt"
+          />
+          <div
+            v-else
+            class="cs-emo"
+            :class="['idle-' + foeArchetype, { hit: shakeSide === 'monster' }]"
+          >
             {{ foe?.emoji ?? '👾' }}
           </div>
         </div>
@@ -80,6 +96,7 @@ import type { CombatEvent } from '@/lib/combat';
 import { combatSkillInfo } from '@/lib/adventurers';
 import type { Equipped } from '@/lib/items';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import { monsterArt } from '@/data/monsterArt';
 
 interface StageFight {
   name: string;
@@ -139,6 +156,13 @@ const lastWin = ref(false);
 
 const foe = computed(() => props.fights[fightIdx.value] ?? null);
 const foeArchetype = computed(() => foe.value?.archetype ?? 'normal');
+// ⚠️ On retient le CHEMIN qui a échoué, pas un booléen : un donjon enchaîne trois monstres,
+// et l'échec de l'un ne doit pas priver les suivants de leur illustration.
+const artFailed = ref<string | null>(null);
+const foeArt = computed(() => {
+  const a = monsterArt(foe.value?.name);
+  return a && a !== artFailed.value ? a : null;
+});
 const pPct = computed(() => Math.round((playerPv.value / Math.max(1, props.playerMaxPv)) * 100));
 const mPct = computed(() =>
   Math.round((monsterPv.value / Math.max(1, foe.value?.maxPv ?? 1)) * 100),
@@ -322,6 +346,21 @@ onBeforeUnmount(() => {
   transition: filter 0.05s;
   position: relative;
   z-index: 1;
+}
+/* Illustration en pied : plus haute que l'emoji, posée sur la même ligne de sol. */
+.cs-emo-wrap.art {
+  width: 88px;
+  height: 88px;
+}
+.cs-art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom;
+  user-select: none;
+  /* ⚠️ Un halo clair : plusieurs ennemis sont presque noirs (Éclipse, Titan du Néant) et
+     disparaîtraient sur la scène sombre. Vu à l'œil sur la planche de relecture. */
+  filter: drop-shadow(0 0 3px rgba(255, 236, 200, 0.35));
 }
 .cs-emo.hit {
   filter: brightness(1.9) drop-shadow(0 0 5px var(--d4));

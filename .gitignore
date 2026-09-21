@@ -38,3 +38,5 @@ Thumbs.db
 /public/models/
 vapid.json
 .push-cron-secret
+/.monster-raw
+/.pollinations-token

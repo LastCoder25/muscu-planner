@@ -1,0 +1,48 @@
+import { describe, it, expect } from 'vitest';
+import { existsSync, statSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { MONSTER_ART, monsterArt } from '@/data/monsterArt';
+import { MONSTERS } from '@/data/monsters';
+import { BOSSES } from '@/data/bosses';
+
+// On lit la DONNÉE exportée, jamais le texte du fichier (cf. championPortraits.test).
+const NAMES = Object.keys(MONSTER_ART);
+const chemin = (url: string) => resolve(__dirname, '../public' + url);
+const ENEMY_NAMES = new Set([...MONSTERS.map((m) => m.name), ...BOSSES.map((b) => b.name)]);
+
+describe('🐉 LES ILLUSTRATIONS D’ENNEMIS (v0.1006)', () => {
+  it('⚠️ CHAQUE FICHIER NOMMÉ EXISTE SUR LE DISQUE', () => {
+    const manquants = NAMES.filter((n) => !existsSync(chemin(MONSTER_ART[n]!)));
+    expect(manquants, `illustrations déclarées sans fichier : ${manquants.join(', ')}`).toEqual([]);
+  });
+
+  it('⚠️ CHAQUE NOM DÉCLARÉ EST UN VRAI MONSTRE OU BOSS', () => {
+    // La table est indexée par NOM : une coquille serait une image chargée pour personne,
+    // et un ennemi qui garderait son emoji sans qu'on comprenne pourquoi.
+    const inconnus = NAMES.filter((n) => !ENEMY_NAMES.has(n));
+    expect(inconnus, `noms qui ne désignent aucun ennemi : ${inconnus.join(', ')}`).toEqual([]);
+  });
+
+  it('tous les monstres de donjon et tous les boss de palier sont illustrés', () => {
+    const sans = [...ENEMY_NAMES].filter((n) => !NAMES.includes(n));
+    expect(sans, `ennemis sans illustration : ${sans.join(', ')}`).toEqual([]);
+  });
+
+  it('⚠️ DEUX NOMS NE PARTAGENT JAMAIS LA MÊME IMAGE', () => {
+    const fichiers = NAMES.map((n) => MONSTER_ART[n]!);
+    expect(new Set(fichiers).size).toBe(fichiers.length);
+  });
+
+  it('⚠️ LE POIDS RESTE TENABLE — le bestiaire en affiche des dizaines', () => {
+    const lourds = NAMES.filter((n) => statSync(chemin(MONSTER_ART[n]!)).size > 60_000);
+    expect(lourds, `illustrations trop lourdes : ${lourds.join(', ')}`).toEqual([]);
+  });
+
+  it('un nom inconnu ou vide rend null, jamais un chemin deviné', () => {
+    expect(monsterArt('Gobelin inventé')).toBeNull();
+    expect(monsterArt('')).toBeNull();
+    expect(monsterArt(null)).toBeNull();
+    expect(monsterArt('constructor')).toBeNull();
+    expect(monsterArt('Dragon')).toBe(MONSTER_ART.Dragon);
+  });
+});

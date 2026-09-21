@@ -1777,7 +1777,19 @@
                 class="best-tile"
                 :class="{ found: m.discovered }"
               >
-                <span class="best-emo">{{ m.discovered ? m.emoji : '❔' }}</span>
+                <!-- 🐉 L'illustration quand elle existe ; pas encore découvert → sa
+                     SILHOUETTE (le teasing du bestiaire, sans révéler couleurs ni détails). -->
+                <img
+                  v-if="bestArt(m.name)"
+                  :src="bestArt(m.name)!"
+                  :alt="m.discovered ? m.name : ''"
+                  class="best-art"
+                  :class="{ shadow: !m.discovered }"
+                  loading="lazy"
+                  draggable="false"
+                  @error="bestArtFailed.add(bestArt(m.name)!)"
+                />
+                <span v-else class="best-emo">{{ m.discovered ? m.emoji : '❔' }}</span>
                 <span class="best-name">{{ m.discovered ? m.name : '???' }}</span>
                 <span class="best-tier">Palier {{ m.tier }}</span>
               </div>
@@ -3004,6 +3016,7 @@ import {
   type Region,
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
+import { monsterArt } from '@/data/monsterArt';
 import ChampionCollection from '@/components/ChampionCollection.vue';
 import { dailyFreeMana } from '@/lib/gacha';
 import {
@@ -4011,6 +4024,13 @@ const codexSum = computed(() =>
   ),
 );
 const bestiaryList = computed(() => bestiary(clearedIds.value));
+// ⚠️ Chemins qui ont échoué au chargement : l'emoji reprend leur place (jamais d'image
+// cassée). Un `Set` dans un `ref` reste réactif à `.add`, donc la grille se re-rend.
+const bestArtFailed = ref(new Set<string>());
+function bestArt(name: string): string | null {
+  const a = monsterArt(name);
+  return a && !bestArtFailed.value.has(a) ? a : null;
+}
 /** 🏅 Le roster ENTIER, marqué possédé ou non — le teasing déjà en place pour le
  *  bestiaire. ⚠️ Aucun taux : c'est l'écran d'invocation qui les vend. */
 const setsList = computed(() =>
@@ -11049,6 +11069,18 @@ button.pt-mini:active {
 }
 .best-emo {
   font-size: 26px;
+}
+.best-art {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  object-position: bottom;
+  /* Halo clair : les ennemis presque noirs se fondraient dans la tuile sombre. */
+  filter: drop-shadow(0 0 2px rgba(255, 236, 200, 0.35));
+}
+.best-art.shadow {
+  filter: brightness(0);
+  opacity: 0.45;
 }
 .best-name {
   font-size: 10.5px;

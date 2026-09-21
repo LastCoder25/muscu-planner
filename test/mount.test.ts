@@ -612,4 +612,32 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('1 🎟️');
     expect(out).toContain('🎟️ 3');
   }, 30_000);
+
+  // 🐉 v0.1006 : le rejeu de combat affiche l'illustration d'un ennemi connu, et l'emoji
+  // pour tout autre (Labyrinthe, arène…). ⚠️ On LIT le HTML : un composant qui rendrait
+  // l'emoji partout se monterait tout aussi bien.
+  it("CombatStage rend l'illustration d'un ennemi connu, l'emoji sinon", async () => {
+    const { default: CombatStage } = await import('@/components/CombatStage.vue');
+    const base = {
+      playerName: 'Héros',
+      playerMaxPv: 100,
+      playerProfile: 'polyvalent' as const,
+      playerEquipped: {},
+    };
+    let out = '';
+    const connu = { ...base, fights: [{ name: 'Dragon', emoji: '🐉', maxPv: 50, log: [] }] };
+    expect(
+      await mountIt(CombatStage, connu, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain('/monsters/dragon.webp');
+    const inconnu = {
+      ...base,
+      fights: [{ name: 'Rat des galeries', emoji: '🐀', maxPv: 50, log: [] }],
+    };
+    expect(
+      await mountIt(CombatStage, inconnu, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).not.toContain('/monsters/');
+    expect(out).toContain('🐀');
+  }, 30_000);
 });
