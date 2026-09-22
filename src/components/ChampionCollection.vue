@@ -21,12 +21,17 @@
         >
       </header>
       <div class="cc-grid">
-        <div
+        <!-- Un champion possédé s'ouvre EN GRAND au toucher ; un non-invoqué reste muet
+             (il n'y a rien à montrer derrière le ❔). -->
+        <component
+          :is="c.owned ? 'button' : 'div'"
           v-for="c in g.entries"
           :key="c.champ.id"
+          :type="c.owned ? 'button' : undefined"
           class="cc-tile"
           :class="{ found: c.owned }"
           :title="c.owned ? c.champ.name : 'Pas encore invoqué'"
+          @click="c.owned && (zoomed = c)"
         >
           <!-- Un id nul rend déjà le repli : l'emoji du champion découvert, le ❔ sinon. -->
           <span class="cc-emo">
@@ -36,22 +41,54 @@
           </span>
           <span class="cc-name">{{ c.owned ? c.champ.name : '???' }}</span>
           <span v-if="c.owned && c.awaken > 0" class="cc-awk">✨ {{ c.awaken }}</span>
-        </div>
+        </component>
       </div>
     </section>
+
+    <q-dialog v-model="zoomOpen">
+      <q-card v-if="zoomed" class="cc-zoom" :style="{ '--rk': GRADE_COLOR[zoomed.champ.grade] }">
+        <button class="cc-zoom-x" type="button" aria-label="Fermer" @click="zoomed = null">
+          ✕
+        </button>
+        <div class="cc-zoom-img">
+          <ChampionPortrait :champion-id="zoomed.champ.id" large>{{
+            zoomed.champ.emoji
+          }}</ChampionPortrait>
+        </div>
+        <div class="cc-zoom-name font-display">{{ zoomed.champ.name }}</div>
+        <div class="cc-zoom-meta">
+          <span class="cc-zoom-grade font-display">{{ zoomed.champ.grade }}</span>
+          <span v-if="zoomed.awaken > 0" class="cc-zoom-awk">✨ Éveil {{ zoomed.awaken }}</span>
+        </div>
+        <ul class="cc-zoom-skills">
+          <li v-if="zoomed.champ.role">{{ ADV_ROLE_LABEL[zoomed.champ.role] }}</li>
+          <li v-for="k in zoomed.champ.skills" :key="k">{{ ADV_SIGNATURE_LABEL[k] ?? k }}</li>
+        </ul>
+      </q-card>
+    </q-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { championGroups } from '@/lib/codex';
 import { GRADE_COLOR } from '@/data/champions';
-import type { Adventurer } from '@/lib/adventurers';
+import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, type Adventurer } from '@/lib/adventurers';
 
 const props = defineProps<{ advs: Adventurer[] }>();
 
 const groups = computed(() => championGroups(props.advs));
+
+type Entry = ReturnType<typeof championGroups>[number]['entries'][number];
+/** Le champion affiché en grand (null = fermé). */
+const zoomed = ref<Entry | null>(null);
+const zoomOpen = computed({
+  get: () => zoomed.value !== null,
+  set: (v) => {
+    if (!v) zoomed.value = null;
+  },
+});
 </script>
 
 <style scoped>
@@ -113,6 +150,18 @@ const groups = computed(() => championGroups(props.advs));
   border: 1px dashed color-mix(in srgb, var(--rk) 35%, var(--line));
   min-width: 0;
 }
+button.cc-tile {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button.cc-tile:active {
+  transform: scale(0.96);
+}
+button.cc-tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .cc-tile:not(.found) .cc-emo,
 .cc-tile:not(.found) .cc-name {
   opacity: 0.5;
@@ -148,6 +197,69 @@ const groups = computed(() => championGroups(props.advs));
   -webkit-line-clamp: 2;
   line-clamp: 2;
   overflow: hidden;
+}
+/* Vue en grand : le portrait 560 px, cadré par la couleur de sa lettre. */
+.cc-zoom {
+  position: relative;
+  width: min(92vw, 380px);
+  padding: 18px 16px 16px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--rk) 60%, var(--line));
+  background: var(--surface);
+  text-align: center;
+}
+.cc-zoom-x {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
+  background: none;
+  border: none;
+  color: var(--dim);
+  font-size: 18px;
+  cursor: pointer;
+}
+.cc-zoom-img {
+  font-size: min(64vw, 260px);
+  line-height: 1;
+  display: flex;
+  justify-content: center;
+  margin: 8px auto 10px;
+}
+.cc-zoom-img :deep(.cp) {
+  width: min(70vw, 280px);
+  height: min(70vw, 280px);
+  border-radius: 14px;
+  box-shadow: 0 0 24px color-mix(in srgb, var(--rk) 40%, transparent);
+}
+.cc-zoom-name {
+  font-size: 20px;
+  font-weight: 700;
+}
+.cc-zoom-meta {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  align-items: center;
+  margin: 4px 0 8px;
+}
+.cc-zoom-grade {
+  color: var(--rk);
+  font-weight: 800;
+  font-size: 16px;
+}
+.cc-zoom-awk {
+  color: var(--accent);
+  font-size: 13px;
+}
+.cc-zoom-skills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12.5px;
+  color: var(--dim);
+  line-height: 1.6;
 }
 .cc-awk {
   position: absolute;
