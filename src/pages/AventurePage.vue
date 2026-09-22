@@ -48,6 +48,16 @@
           <button class="inbox-btn" aria-label="Messages" @click="openInbox">
             📬<span v-if="unreadMessages" class="inbox-dot">{{ unreadMessages }}</span>
           </button>
+          <!-- 📖 Codex (bestiaire, champions, sets) : une icône à côté de la boîte, même
+               forme — c'est une consultation, comme les messages, pas une action de jeu. -->
+          <button
+            class="inbox-btn"
+            aria-label="Codex"
+            :title="`Codex · ${codexSum.championsFound}/${codexSum.championsTotal} champions · ${codexSum.monstersFound}/${codexSum.monstersTotal} monstres · ${codexSum.setsComplete}/${codexSum.setsTotal} sets`"
+            @click="codexOpen = true"
+          >
+            📖
+          </button>
         </div>
         <!-- ⚡ et 💠 sur la ligne du pseudo, tout à droite : ce sont les deux devises
              qu'on consulte le plus (jouer, invoquer). Le reste du plateau passe dessous. -->
@@ -781,20 +791,6 @@
         </q-dialog>
 
         <template v-if="persoSub === 'perso'">
-          <!-- Codex : bestiaire + journal des sets (méta de collection). -->
-          <button class="codex-btn" @click="codexOpen = true">
-            <span class="cx-emo">📖</span>
-            <span class="cx-main">
-              <span class="cx-title">Codex</span>
-              <span class="cx-sub">
-                🏅 {{ codexSum.championsFound }}/{{ codexSum.championsTotal }} champions · 👾
-                {{ codexSum.monstersFound }}/{{ codexSum.monstersTotal }} monstres · 🧩
-                {{ codexSum.setsComplete }}/{{ codexSum.setsTotal }} sets
-              </span>
-            </span>
-            <span class="cx-go">›</span>
-          </button>
-
           <div class="foot">
             <b>Chaque séance fait progresser ton aventurier.</b> Les stats et le niveau viennent du
             sport. La connexion quotidienne, elle, ne donne qu'un peu d'énergie pour jouer.
@@ -11193,42 +11189,6 @@ button.pt-mini:active {
   text-align: center;
 }
 /* Bouton d'entrée du Codex (onglet Perso) */
-.codex-btn {
-  width: 100%;
-  margin-top: 18px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  text-align: left;
-  cursor: pointer;
-}
-.cx-emo {
-  font-size: 26px;
-  flex: none;
-}
-.cx-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.cx-title {
-  font-weight: 700;
-  color: var(--text);
-  font-size: 15px;
-}
-.cx-sub {
-  font-size: 12px;
-  color: var(--dim);
-}
-.cx-go {
-  color: var(--dim);
-  font-size: 22px;
-}
 /* Modale Codex */
 .codex-card {
   max-height: 84vh;
