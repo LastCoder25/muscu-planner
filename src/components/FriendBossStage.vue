@@ -41,7 +41,6 @@
           <AventureAvatar
             :profile="a.look?.profile ?? 'polyvalent'"
             :equipped="a.look ? lookEquipped(a.look) : {}"
-            :voie="a.look?.voie ?? null"
           />
         </div>
         <div class="fbs-ally-n">{{ a.me ? 'Toi' : a.pseudo }}</div>

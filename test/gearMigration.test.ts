@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import {
-  AFFIX_TRANSLATION,
   LEGENDARY_PROCS,
   RARITY_RANK,
   RANK_ORDER,
@@ -12,6 +11,7 @@ import {
   affixValue,
   makeGearPiece,
   migrateGearItem,
+  setAffixValue,
   prestigeRankIndex,
   rollDrop,
   rollSetPiece,
@@ -48,20 +48,26 @@ describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
     expect(r.effect2).toBeDefined();
   });
 
-  it('traduit les stats sorties de leur emplacement (PV sur une arme → dégâts, etc.)', () => {
+  // ⚠️ RÉÉCRIT (sets spécialisés, 2026-09-22) : une pièce normale porte ses DEUX stats
+  // principales (dès 2 affixes) puis une utilitaire. Plus de table de traduction : ce que
+  // l'objet portait ne décide que de l'ORDRE (sa principale d'avant reste en tête).
+  it('une pièce normale convertie porte ses deux principales, puis une utilitaire', () => {
     const w = migrateGearItem(
       old({
         slot: 'weapon',
-        effect: { type: 'max_pv_pct', value: 12 },
-        effect2: { type: 'crit_pct', value: 5 },
+        effect: { type: 'crit_dmg_pct', value: 12 },
+        effect2: { type: 'execute_pct', value: 5 },
+        effect3: { type: 'gold_pct', value: 3 },
       }),
     );
-    // Le critique est désormais une stat de soutien de l'arme (sets spécialisés) : il reste.
-    expect([w.effect.type, w.effect2?.type]).toEqual(['damage_pct', 'crit_pct']);
-    const a = migrateGearItem(old({ slot: 'armor', effect: { type: 'crit_pct', value: 5 } }));
-    expect(a.effect.type).toBe('dmg_reduction_pct');
-    const r = migrateGearItem(old({ slot: 'accessory', effect: { type: 'damage_pct', value: 9 } }));
-    expect(r.effect.type).toBe('crit_pct');
+    expect([w.effect.type, w.effect2?.type, w.effect3?.type]).toEqual([
+      'crit_dmg_pct',
+      'damage_pct',
+      'gold_pct',
+    ]);
+    // Une principale d'avant qui n'en est plus une (PV sur une arme) cède la tête.
+    const p = migrateGearItem(old({ slot: 'weapon', effect: { type: 'max_pv_pct', value: 9 } }));
+    expect(p.effect.type).toBe('damage_pct');
   });
 
   it('recalcule les valeurs au nouveau barème, au même rang, même jet, même niveau', () => {
@@ -72,7 +78,7 @@ describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
     });
     const m = migrateGearItem(it0);
     expect(m.effect.value).toBe(affixValue('damage_pct', 'epique', 0.6, 'weapon'));
-    expect(m.effect2!.value).toBe(affixValue('accuracy_pct', 'epique', 0.6, 'weapon'));
+    expect(m.effect2!.value).toBe(affixValue('crit_dmg_pct', 'epique', 0.6, 'weapon'));
     expect([m.rarity, m.roll, m.level]).toEqual([it0.rarity, it0.roll, it0.level]);
   });
 
@@ -105,31 +111,20 @@ describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
             }),
           );
           const types = [m.effect.type, m.effect2?.type].filter(Boolean);
-          const allowed = [...SLOT_AFFIXES[slot].major, ...SLOT_AFFIXES[slot].support];
-          expect(
-            types.every((t) => allowed.includes(t!)),
-            `${slot} ${a}+${b}`,
-          ).toBe(true);
-          expect(new Set(types).size, `${slot} ${a}+${b}`).toBe(types.length);
-          // Deux stats d'avant traduites vers la MÊME stat : l'objet garde ses DEUX affixes.
-          expect(types, `${slot} ${a}+${b}`).toHaveLength(2);
-          expect(SLOT_AFFIXES[slot].major, `${slot} ${a}+${b}`).toContain(m.effect.type);
+          // Deux affixes → les deux principales de l'emplacement, dans un ordre ou l'autre.
+          expect([...types].sort(), `${slot} ${a}+${b}`).toEqual(
+            [...SLOT_AFFIXES[slot].major].sort(),
+          );
+          expect(migrateGearItem(m), `${slot} ${a}+${b} idempotent`).toEqual(m);
         }
-  });
-
-  it('la table de traduction ne vise que des stats de l’emplacement', () => {
-    for (const [slot, table] of Object.entries(AFFIX_TRANSLATION)) {
-      const l = SLOT_AFFIXES[slot as GearSlot];
-      for (const t of Object.values(table!)) expect([...l.major, ...l.support]).toContain(t);
-    }
   });
 
   it('une pièce de set garde sa stat principale d’emplacement, à la valeur d’une pièce de set', () => {
     const m = migrateGearItem(
       old({ slot: 'accessory', setId: 'voie:assassin', effect: { type: 'damage_pct', value: 9 } }),
     );
-    expect(m.effect.type).toBe('crit_pct');
-    expect(m.effect.value).toBe(affixValue('crit_pct', 'epique', 0.6, 'accessory', true));
+    expect(m.effect.type).toBe('crit_dmg_pct');
+    expect(m.effect.value).toBe(affixValue('crit_dmg_pct', 'epique', 0.6, 'accessory', true));
     expect(m.setId).toBe('voie:assassin');
   });
 
@@ -162,7 +157,8 @@ describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
       'thorns_pct',
       'riposte_pct',
     ]);
-    expect(m.effect2!.value).toBe(affixValue('thorns_pct', 'epique', 0.6, 'armor'));
+    // Les deux stats de voie se partagent la valeur d'une principale (`setAffixValue`).
+    expect(m.effect2!.value).toBe(setAffixValue('thorns_pct', 'epique', 0.6, 'armor', 2));
     // Idempotent : repasser ne change rien.
     expect(migrateGearItem(m)).toEqual(m);
   });

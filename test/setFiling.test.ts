@@ -19,7 +19,7 @@ import {
   type Item,
   type ItemSlot,
 } from '@/lib/items';
-import { VOIES, voiePassiveEffects } from '@/lib/voies';
+import { VOIES } from '@/lib/voies';
 import { mulberry32, combatPowerRaw } from '@/lib/combat';
 import { computeCharacter } from '@/lib/character';
 import { cumXpForLevel } from '@/lib/proceduralContent';
@@ -212,15 +212,12 @@ describe('⚖️ le barème : ce qu’une pièce vaut POUR SON SET', () => {
     const b = { ...a, id: 'forte', effect: { ...a.effect, value: a.effect.value * 3 } };
     expect(score(b)).toBeGreaterThan(score(a));
   });
-  it('⚠️ jugée DANS LA VOIE DU SET, pas dans la voie portée', () => {
-    // Même pièce Berserker, évaluée par le barème puis à la main dans SA voie (passif compris)
-    // et sans voie : le barème donne la première valeur, jamais la seconde.
+  // ⚠️ RÉÉCRIT (2026-09-22) : la voie ne change plus aucun calcul (elle se déduit du set
+  // porté) — le barème est la puissance brute de la pièce, avec les autres pièces du set.
+  it('⚠️ jugée avec les autres pièces rangées de son set', () => {
     const p = piece('berserker', 3);
-    const fx = mergeEffects(mergeEffects(), voiePassiveEffects('berserker'));
-    const inVoie = combatPowerRaw(playerWithGear('h', stats, { weapon: p }, fx, L, 'berserker'));
-    const noVoie = combatPowerRaw(playerWithGear('h', stats, { weapon: p }, {}, L, null));
-    expect(inVoie).not.toBe(noVoie);
-    expect(setPieceScorer(ctx)(p)).toBeCloseTo(inVoie, 9);
+    const plain = combatPowerRaw(playerWithGear('h', stats, { weapon: p }, {}, L));
+    expect(setPieceScorer(ctx)(p)).toBeCloseTo(plain, 9);
     const fourPieces = ['weapon', 'armor', 'accessory', 'relic'].map((slot, k) => ({
       ...rollSetPiece(mulberry32(50 + k), {
         setId: 'voie:berserker',

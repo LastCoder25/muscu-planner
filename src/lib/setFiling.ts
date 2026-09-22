@@ -17,7 +17,7 @@
 import type { Equipped, Item, Loadout, AggregatedEffects } from './items';
 import { SLOTS, MAX_LOADOUTS, canSell, playerWithGear, mergeEffects } from './items';
 import { combatPowerRaw } from './combat';
-import { VOIES, voiePassiveEffects } from './voies';
+import { VOIES } from './voies';
 
 /** Index du set (donc de la voie) d'une pièce de set de voie, −1 sinon. Loadout i ↔ VOIES[i]. */
 export function voieSetIndex(it: Item): number {
@@ -194,7 +194,7 @@ export function setPieceScorer(ctx: {
       if (stored) eq[s] = stored;
     }
     eq[it.slot] = it;
-    const fx = mergeEffects({ ...emptyFx(), ...ctx.fx }, voiePassiveEffects(voie));
+    const fx = { ...emptyFx(), ...ctx.fx };
     return combatPowerRaw(playerWithGear(ctx.name, ctx.stats, eq, fx, ctx.level, voie));
   };
 }

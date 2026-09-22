@@ -332,8 +332,6 @@ const props = defineProps<{
   /** Sans familier ni talent (un CHAMPION, v0.996 : ils sont réservés au héros) — les deux
    *  médaillons cliquables ne sont pas dessinés, plutôt que d'inviter à un geste impossible. */
   noCompanions?: boolean;
-  /** Voie du porteur : départage le set affiché à égalité de pièces. */
-  voie?: string | null;
   /** Forme de l'arme déjà décidée par la lib (portrait d'aventurier : `advLooks`). Sans
    *  elle, la forme est lue sur le NOM de l'arme (`weaponKind`), comme pour le héros. */
   weaponShape?: WeaponKind;
@@ -375,7 +373,7 @@ const PIP_X0 = 14;
 const pipStep = (120 - 2 * PIP_X0) / Math.max(1, SLOTS.length - 1);
 // La forme de l'arme et le set porté : la règle vit dans la lib, l'avatar ne fait que dessiner.
 const wKind = computed(() => props.weaponShape ?? weaponKind(props.equipped.weapon));
-const set = computed(() => wornSet(props.equipped, props.voie));
+const set = computed(() => wornSet(props.equipped));
 // RANG le plus haut parmi l'équipement (les 7 emplacements) → pilote l'aura de puissance.
 // (Remplace l'ancien pilotage par l'enchant, retiré : l'aura suit maintenant le grade.)
 const maxRankIdx = computed(() => {

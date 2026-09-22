@@ -543,7 +543,6 @@ import {
   legendaryOf,
   magicFindLuck,
   tierIndexOf,
-  mergeEffects,
   SLOT_LABEL,
   RANK_ORDER,
   familiarRankRef,
@@ -553,7 +552,6 @@ import { rollActivityFamiliar } from '@/data/familiars';
 import { pickLabyFoe, type LabyFoe } from '@/data/labyrinthFoes';
 import { rollChestGrade, pickLabyTrap, type ChestGrade, type LabyTrap } from '@/data/labyrinthLoot';
 import { talentEffects } from '@/lib/talents';
-import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import {
   simulateCombat,
   combatPower,
@@ -694,12 +692,7 @@ const character = computed(() =>
 );
 // Effets actifs = talents + passif de VOIE (comme la fiche Héros) → le Labyrinthe combat
 // avec ta vraie puissance de build.
-const talentFx = computed(() =>
-  mergeEffects(
-    talentEffects(char.row?.talents ?? []),
-    voiePassiveEffects(char.row?.voie as VoieId),
-  ),
-);
+const talentFx = computed(() => talentEffects(char.row?.talents ?? []));
 const fighter = computed<Combatant>(() =>
   playerWithGear(
     char.row?.pseudo ?? 'Toi',
@@ -725,7 +718,7 @@ function famRankOf(l: Labyrinth) {
 const famRankName = (l: Labyrinth) => rarityRank(famRankOf(l)).name;
 const rankColorOf = (l: Labyrinth) => RANK_COLOR[famRankOf(l)];
 // Magic find (stat mineure) de l'équipement → luck bonus sur les coffres du labyrinthe.
-const mfLuck = computed(() => magicFindLuck(char.row?.equipped ?? {}, char.row?.voie));
+const mfLuck = computed(() => magicFindLuck(char.row?.equipped ?? {}));
 
 // ── Comparatif d'un objet (coffre/sac) avec l'ÉQUIPÉ du même emplacement ──
 // Objet actuellement équipé sur l'emplacement de l'objet détaillé (pour la comparaison).

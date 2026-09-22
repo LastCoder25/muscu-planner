@@ -64,20 +64,20 @@ const foeHits = (p: Combatant, m: Combatant) =>
   fight(p, m).log.filter((e) => e.who === 'monster' && e.type !== 'dodge');
 
 describe('⭐ quand une signature s’active', () => {
-  it('les SIX pièces du set de ta voie — ni cinq, ni hors voie, ni sans voie', () => {
-    expect(setSignatureOf(fullSet('assassin'), 'assassin')?.id).toBe('sig_assassin');
-    expect(setSignatureOf(fullSet('assassin', SET_SIZE - 1), 'assassin')).toBeUndefined();
-    expect(setSignatureOf(fullSet('assassin'), 'gardien')).toBeUndefined();
-    expect(setSignatureOf(fullSet('assassin'), null)).toBeUndefined();
+  // ⚠️ RÉÉCRIT (2026-09-22) : plus de condition de voie — la voie se déduit du set porté.
+  it('les SIX pièces d’un même set — pas cinq', () => {
+    expect(setSignatureOf(fullSet('assassin'))?.id).toBe('sig_assassin');
+    expect(setSignatureOf(fullSet('assassin', SET_SIZE - 1))).toBeUndefined();
   });
   it('le combattant la porte — et pas autrement', () => {
     const stats = { puissance: 100, endurance: 100, agilite: 100 };
+    expect(playerWithGear('p', stats, fullSet('colosse'), {}, 20).procs?.has('sig_colosse')).toBe(
+      true,
+    );
     expect(
-      playerWithGear('p', stats, fullSet('colosse'), {}, 20, 'colosse').procs?.has('sig_colosse'),
-    ).toBe(true);
-    expect(
-      playerWithGear('p', stats, fullSet('colosse'), {}, 20, 'gardien').procs?.has('sig_colosse') ??
-        false,
+      playerWithGear('p', stats, fullSet('colosse', SET_SIZE - 1), {}, 20).procs?.has(
+        'sig_colosse',
+      ) ?? false,
     ).toBe(false);
   });
   it('une par set de voie, toutes distinctes et distinctes des procs d’objets', () => {

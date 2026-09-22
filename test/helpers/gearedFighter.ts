@@ -11,7 +11,7 @@ import {
   SLOTS,
   type Item,
 } from '@/lib/items';
-import { VOIES, voiePassiveEffects } from '@/lib/voies';
+import { VOIES } from '@/lib/voies';
 import { BOSSES } from '@/data/bosses';
 import { refBalancedStat } from '@/lib/proceduralContent';
 import { rollTalentDrop, talentEffects, talentsEarned, pickBestTalents } from '@/lib/talents';
@@ -46,7 +46,7 @@ export interface GearedBuild {
   inv: Item[];
   /** L'équipement retenu par l'optimiseur. */
   eq: Record<string, Item | undefined>;
-  /** Les effets des talents ÉQUIPÉS (vide si `companions` est faux) + le passif de sa voie. */
+  /** Les effets des talents ÉQUIPÉS (vide si `companions` est faux). */
   fx: ReturnType<typeof talentEffects>;
   /** ⚔️ Sa VOIE (tournante selon la graine) : il farme aussi le SET de cette voie sur les boss
    *  (2026-09-22 : les sets sont faits pour être portés — un joueur qui porte son set doit
@@ -120,7 +120,6 @@ export function gearedBuild(L: number, seed = 1, companions = true, sets = true)
   const inv: Item[] = SLOTS.flatMap((slot) => (top.get(slot) ?? []).map((x) => x.it));
   const voie = sets ? VOIES[(seed - 1) % VOIES.length]!.id : null;
   if (voie) inv.push(...voieSetPool(L, mulberry32(seed * 101 + L), voie));
-  const passive = voie ? voiePassiveEffects(voie) : undefined;
   const talents = [];
   if (companions) {
     for (let i = 0; i < 3; i++)
@@ -136,7 +135,7 @@ export function gearedBuild(L: number, seed = 1, companions = true, sets = true)
   }
   const fx = (ids: string[]) => {
     const t = talentEffects(talents.map((t) => ({ ...t, equipped: ids.includes(t.id) })));
-    return passive ? mergeEffects(t, passive) : t;
+    return t;
   };
   // 1re passe sans polissage (point de départ du choix de talent), comme `computeGearPlan`.
   const draft = bestGearLoadout('g', stats, {}, inv, L, fx([]), voie, undefined, false);

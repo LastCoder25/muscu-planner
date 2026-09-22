@@ -1,50 +1,65 @@
 import { describe, it, expect } from 'vitest';
-import { VOIES, VOIE_BY_ID, voiePassiveEffects } from '@/lib/voies';
-import { combatPowerRaw } from '@/lib/combat';
-import { playerWithGear, mergeEffects } from '@/lib/items';
-import { gearedBuild } from './helpers/gearedFighter';
+import { VOIES, VOIE_BY_ID } from '@/lib/voies';
+import { VOIE_SETS, VOIE_SET_STATS, wornVoie, type Equipped, type Item } from '@/lib/items';
 
-describe('voies (spécialisation)', () => {
-  it('catalogue cohérent : id unique, preferred non vide, passif défini', () => {
+describe('voies (profils, 2026-09-22)', () => {
+  it('catalogue cohérent : id unique, profil non vide', () => {
     const ids = new Set(VOIES.map((v) => v.id));
     expect(ids.size).toBe(VOIES.length);
     for (const v of VOIES) {
       expect(v.preferred.length).toBeGreaterThan(0);
-      expect(v.passive.base).toBeGreaterThan(0);
       expect(VOIE_BY_ID[v.id]).toBe(v);
     }
   });
-  it('voiePassiveEffects : applique le passif (fraction), neutre si aucune voie', () => {
-    // Lu sur le catalogue, pas écrit à la main : le test survit aux réglages d'équilibrage.
-    const berserk = voiePassiveEffects('berserker');
-    expect(berserk.damagePct).toBeCloseTo(VOIE_BY_ID.berserker!.passive.base / 100, 5);
-    const none = voiePassiveEffects(null);
-    expect(none.damagePct).toBe(0);
-    expect(none.dmgReduction).toBe(0);
-    const gardien = voiePassiveEffects('gardien');
-    expect(gardien.dmgReduction).toBeCloseTo(VOIE_BY_ID.gardien!.passive.base / 100, 5);
-  });
-  it('aucun passif ne porte du critique : il est plafonné, un passif critique ne ferait rien', () => {
-    // ⚠️ Mesuré (v0.837) : le critique de base atteint son plafond dès le niveau 20, donc les
-    // passifs critique d'Assassin et Duelliste valaient ~0 en combat. Ils sont passés en
-    // exécution et en dégâts.
-    for (const v of VOIES) expect(v.passive.type, v.id).not.toBe('crit_pct');
-  });
-  it('un passif est un PETIT bonus : jamais une stat de voie qui décide seule du choix', () => {
-    // ⚠️ RÉÉCRIT (refonte équipement, étape 7) : bornés en POINTS, les passifs ne disaient pas
-    // ce qu'ils valent (un point de rage ne pèse pas un point de PV). Mesuré sur le joueur de
-    // référence : 0,8 à 4 % avant, et le passif Vampire (1 % de vol de vie) atteignait seul le
-    // plafond de soin — ils décidaient de la voie à la place du set (177 échecs sur 288). La
-    // propriété est donc en PUISSANCE : chacun entre 0,3 et 2 %, aux niveaux 30 et 60.
-    for (const L of [30, 60]) {
-      const b = gearedBuild(L, 1);
-      const p0 = combatPowerRaw(playerWithGear('g', b.stats, b.eq, b.fx, L));
-      for (const v of VOIES) {
-        const fx = mergeEffects(b.fx, voiePassiveEffects(v.id));
-        const gain = combatPowerRaw(playerWithGear('g', b.stats, b.eq, fx, L)) / p0 - 1;
-        expect(gain, `${v.id} niveau ${L}`).toBeGreaterThan(0.003);
-        expect(gain, `${v.id} niveau ${L}`).toBeLessThan(0.02);
-      }
+  it('le profil d’une voie EST ce que portent les paliers de son set', () => {
+    for (const v of VOIES) {
+      const set = VOIE_SETS.find((s) => s.id === `voie:${v.id}`)!;
+      expect([...set.tiers.map((t) => t.type)].sort(), v.id).toEqual([...v.preferred].sort());
+      // Sa stat exclusive est aussi la stat identité de son set.
+      expect(v.preferred, v.id).toContain(VOIE_SET_STATS[v.id]![0]);
     }
+  });
+});
+
+describe('🧭 wornVoie — la voie se déduit du set porté', () => {
+  const piece = (slot: Item['slot'], setId: string, rarity: Item['rarity'] = 'rare'): Item =>
+    ({
+      id: `${setId}-${slot}`,
+      slot,
+      name: 'x',
+      emoji: '',
+      rarity,
+      level: 10,
+      baseLevel: 10,
+      effect: { type: 'damage_pct', value: 5 },
+      setId,
+    }) as Item;
+  it('sans set porté (ou une seule pièce), pas de voie', () => {
+    expect(wornVoie({})).toBeNull();
+    expect(wornVoie({ weapon: piece('weapon', 'voie:epineux') })).toBeNull();
+  });
+  it('dès deux pièces, la voie du set', () => {
+    const eq: Equipped = {
+      weapon: piece('weapon', 'voie:epineux'),
+      armor: piece('armor', 'voie:epineux'),
+    };
+    expect(wornVoie(eq)).toBe('epineux');
+  });
+  it('le set le plus fourni l’emporte, puis le plus haut rang à égalité', () => {
+    const eq: Equipped = {
+      weapon: piece('weapon', 'voie:gardien'),
+      armor: piece('armor', 'voie:gardien'),
+      shield: piece('shield', 'voie:gardien'),
+      helmet: piece('helmet', 'voie:epineux'),
+      boots: piece('boots', 'voie:epineux'),
+    };
+    expect(wornVoie(eq)).toBe('gardien');
+    const tie: Equipped = {
+      weapon: piece('weapon', 'voie:gardien', 'commun'),
+      armor: piece('armor', 'voie:gardien', 'commun'),
+      helmet: piece('helmet', 'voie:epineux', 'epique'),
+      boots: piece('boots', 'voie:epineux', 'epique'),
+    };
+    expect(wornVoie(tie)).toBe('epineux');
   });
 });

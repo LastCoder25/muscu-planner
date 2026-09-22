@@ -677,7 +677,7 @@ import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
-import { playerWithGear, mergeEffects, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
+import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import CaravanReportView from '@/components/CaravanReportView.vue';
 import PartyReportView from '@/components/PartyReportView.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
@@ -692,7 +692,6 @@ import {
 } from '@/lib/party';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
-import { voiePassiveEffects, type VoieId } from '@/lib/voies';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { PORTAL_VIEW } from '@/lib/riftPortal';
@@ -832,10 +831,7 @@ const fighter = computed<Combatant>(() =>
     char.row?.pseudo ?? 'Toi',
     character.value,
     char.row?.equipped ?? {},
-    mergeEffects(
-      talentEffects(char.row?.talents ?? []),
-      voiePassiveEffects(char.row?.voie as VoieId),
-    ),
+    talentEffects(char.row?.talents ?? []),
     heroLevel.value,
     char.row?.voie,
   ),

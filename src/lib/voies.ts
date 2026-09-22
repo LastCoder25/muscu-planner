@@ -1,9 +1,10 @@
-// voies.ts — SPÉCIALISATION du perso (« Voie » / archétype). Pur/testé.
-// Une voie ne donne PAS de puissance brute massive (le sport reste la source) et ne biaise
-// PLUS les drops (uniformes) : elle (1) accorde un PETIT passif de saveur ; (2) débloque le
-// CAPSTONE (6 pièces) du SET de sa voie (`voie:<id>` dans items.ts) → compléter le set de
-// SA voie = accomplir l'archétype. Réversible à tout moment (comme les talents).
-import { effectAsAggregate, type EffectType, type AggregatedEffects } from './items';
+// voies.ts — les 8 VOIES (archétypes) du héros. Pur/testé.
+// ⚠️ DEPUIS LE 2026-09-22 (spec `2026-09-22-sets-specialises-trophee-voies.md`, § 6) : la voie
+// ne se CHOISIT plus et ne donne plus de passif. Elle SE DÉDUIT du set porté (`wornVoie` dans
+// items.ts) : c'est l'identité qu'on affiche (fiche, avatar, codex) et celle que liront la
+// quête du trophée et la relique. Chaque voie a un PROFIL distinct (spec § 4) : un rôle en
+// combat et les stats spécialisées que portent les pièces de son set (`VOIE_SET_STATS`).
+import type { EffectType } from './items';
 
 export type VoieId =
   | 'berserker'
@@ -19,91 +20,70 @@ export interface Voie {
   id: VoieId;
   name: string;
   emoji: string;
+  /** Le rôle de la voie en combat (spec § 4). */
   blurb: string;
-  /** Stats de FOCUS de l'archétype (= le thème de son set de voie). Descriptif (les drops
-   *  ne sont plus biaisés) : sert au libellé UI + à générer le thème du set. */
+  /** Les stats du PROFIL (= les paliers de son set : stat identité, stat partagée, stat de
+   *  base). Descriptif : sert aux libellés et au départage « colle à ta voie ». */
   preferred: EffectType[];
-  /** Petit passif constant (type + magnitude en %). ⚠️ ~1 % de puissance chacun (refonte
-   *  équipement, étape 7, mesuré sur le joueur de référence aux niveaux 30/60/90) : plus gros,
-   *  il décidait de la voie à la place du set (la voie du set perdait 177 fois sur 288). */
-  passive: { type: EffectType; base: number };
 }
 
-// Chaque voie porte son IDENTITÉ (1re stat) MAIS ses `preferred` couvrent offense ET survie :
-// un build 100 % mono‑axe est non viable (le combat exige les deux — validé par simulation
-// 2026‑08‑23). L'identité reste lisible (stat dominante + passif) ; l'ancre de survie/offense
-// évite les builds « verre » (tout dégâts = meurt) ou « inerte » (tout défense = ne tue pas).
 export const VOIES: Voie[] = [
   {
     id: 'berserker',
     name: 'Berserker',
     emoji: '💥',
-    blurb: 'Dégâts bruts et exécution — frappe fort, se soigne en tapant.',
-    preferred: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
-    passive: { type: 'damage_pct', base: 2.4 },
+    blurb: 'Plus il est blessé, plus il frappe.',
+    preferred: ['rage_pct', 'bleed_pct', 'damage_pct'],
   },
   {
     id: 'gardien',
     name: 'Gardien',
     emoji: '🛡️',
-    blurb: 'Mur qui frappe : encaisse tout et rend les coups.',
-    preferred: ['dmg_reduction_pct', 'max_pv_pct', 'damage_pct'],
-    passive: { type: 'dmg_reduction_pct', base: 2 },
+    blurb: 'Bloque et pare tout ce qui passe.',
+    preferred: ['parry_pct', 'start_shield_pct', 'block_pct'],
   },
   {
     id: 'assassin',
     name: 'Assassin',
     emoji: '🗡️',
-    blurb: 'Critiques qui achèvent, et un vol de vie pour tenir.',
-    preferred: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
-    passive: { type: 'execute_pct', base: 24 },
+    blurb: 'Fait saigner, puis achève.',
+    preferred: ['execute_pct', 'bleed_pct', 'crit_dmg_pct'],
   },
   {
     id: 'vampire',
     name: 'Vampire',
     emoji: '🩸',
-    blurb: 'Vole la vie en frappant fort et se déchaîne au bord de la mort.',
-    preferred: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
-    passive: { type: 'rage_pct', base: 28 },
+    blurb: 'Tient en se soignant sur chaque coup.',
+    preferred: ['lifesteal_pct', 'rage_pct', 'max_pv_pct'],
   },
   {
     id: 'colosse',
     name: 'Colosse',
     emoji: '🪨',
-    blurb: 'Réservoir de PV qui encaisse et cogne dans la durée.',
-    preferred: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
-    passive: { type: 'max_pv_pct', base: 3.5 },
+    blurb: 'Encaisse les gros coups sans broncher.',
+    preferred: ['toughness_pct', 'start_shield_pct', 'max_pv_pct'],
   },
   {
     id: 'duelliste',
     name: 'Duelliste',
     emoji: '🎯',
-    blurb: 'Précision létale, adossée à des PV pour durer.',
-    preferred: ['crit_pct', 'damage_pct', 'max_pv_pct'],
-    passive: { type: 'damage_pct', base: 2.4 },
+    blurb: 'Évite, puis contre.',
+    preferred: ['riposte_pct', 'parry_pct', 'crit_dmg_pct'],
   },
   {
     id: 'epineux',
     name: 'Épineux',
     emoji: '🌵',
-    blurb: 'Encaisse, renvoie les coups et frappe en retour.',
-    preferred: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
-    passive: { type: 'max_pv_pct', base: 3.5 },
+    blurb: 'Punit qui le frappe.',
+    preferred: ['thorns_pct', 'riposte_pct', 'max_pv_pct'],
   },
   {
     id: 'frenetique',
     name: 'Frénétique',
     emoji: '🌀',
-    blurb: 'Monte en puissance au fil du combat, et se soigne en frappant.',
-    preferred: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
-    passive: { type: 'momentum_pct', base: 1 },
+    blurb: 'Lent au départ, écrasant en fin de combat.',
+    preferred: ['momentum_pct', 'lifesteal_pct', 'damage_pct'],
   },
 ];
 
 export const VOIE_BY_ID: Record<string, Voie> = Object.fromEntries(VOIES.map((v) => [v.id, v]));
-
-/** Passif d'une voie sous forme d'agrégat d'effets (vide si aucune voie). */
-export function voiePassiveEffects(voie: VoieId | null | undefined): AggregatedEffects {
-  const v = voie ? VOIE_BY_ID[voie] : undefined;
-  return v ? effectAsAggregate(v.passive.type, v.passive.base) : effectAsAggregate('gold_pct', 0);
-}

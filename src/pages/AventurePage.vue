@@ -217,12 +217,15 @@
                bas → carré). Voie ↖ · Prestige ↗ · Niveau ↙ · Puissance ↘. -->
           <div class="portrait" :style="{ '--rank-c': rank.color }">
             <div class="pt-square">
-              <!-- ↖ VOIE (spécialisation) -->
-              <button
+              <!-- ↖ VOIE : elle SE DÉDUIT du set porté (2026-09-22), elle ne se choisit plus. -->
+              <div
                 class="pt-mini corner tl voie"
-                type="button"
-                :title="currentVoie ? `Voie : ${currentVoie.name}` : 'Choisir une voie'"
-                @click="voieOpen = true"
+                role="img"
+                :title="
+                  currentVoie
+                    ? `Voie : ${currentVoie.name} (celle du set que tu portes)`
+                    : 'Pas de voie : porte au moins 2 pièces d’un même set'
+                "
               >
                 <svg viewBox="0 0 44 44" aria-hidden="true">
                   <circle class="ptm-track full" cx="22" cy="22" r="18" />
@@ -237,7 +240,7 @@
                   </text>
                 </svg>
                 <span class="ptm-ic">🧭</span>
-              </button>
+              </div>
               <!-- ↗ PRESTIGE (rang cosmétique) -->
               <button
                 class="pt-mini corner tr prestige"
@@ -274,7 +277,6 @@
                   class="pt-avatar"
                   :profile="c.profile"
                   :equipped="char.row.equipped"
-                  :voie="char.row.voie"
                   :talent-icon="firstTalentIcon"
                   @familiar-click="familiarsOpen = true"
                   @talent-click="talentsOpen = true"
@@ -496,42 +498,6 @@
         </q-dialog>
 
         <!-- Sélecteur de VOIE (ouvert depuis le cercle 🧭 en haut-gauche du carré) -->
-        <q-dialog v-model="voieOpen" position="bottom">
-          <q-card class="adv-modal">
-            <button class="adv-modal-x" aria-label="Fermer" @click="voieOpen = false">✕</button>
-            <div class="sec-title">🧭 Choisis ta voie</div>
-            <div class="sec-hint">
-              Ta voie ajoute un <b>petit passif</b> et débloque le <b>capstone (6 pièces)</b> du set
-              de sa voie. Les drops ne sont <b>pas biaisés</b> : c'est le
-              <b>set que tu complètes</b>
-              qui définit ton build. Changement libre à tout moment.
-            </div>
-            <div class="voie-list">
-              <button
-                v-for="v in VOIES"
-                :key="v.id"
-                class="voie-opt"
-                :class="{ on: char.row.voie === v.id }"
-                @click="doSetVoie(v.id)"
-              >
-                <span class="vo-emo">{{ v.emoji }}</span>
-                <div class="vo-main">
-                  <div class="vo-name font-display">
-                    {{ v.name }}
-                    <span v-if="char.row.voie === v.id" class="vo-eq">✓ Active</span>
-                  </div>
-                  <div class="vo-blurb">{{ v.blurb }}</div>
-                  <div class="vo-stats">
-                    Stats : {{ voieStatsLabel(v.id) }} · passif {{ voiePassiveLabel(v.id) }}
-                  </div>
-                </div>
-              </button>
-            </div>
-            <button v-if="char.row.voie" class="voie-clear" @click="doSetVoie(null)">
-              Retirer ma voie (aucun passif ni capstone)
-            </button>
-          </q-card>
-        </q-dialog>
 
         <q-dialog v-model="talentsOpen" position="bottom">
           <q-card class="adv-modal">
@@ -2000,7 +1966,7 @@
             <div class="lo-head">
               <span
                 class="lo-name font-display"
-                :class="{ mine: loadoutVoie(i) && char.row?.voie === loadoutVoie(i)!.id }"
+                :class="{ mine: loadoutVoie(i) && heroVoie === loadoutVoie(i)!.id }"
               >
                 <template v-if="loadoutVoie(i)"
                   >{{ loadoutVoie(i)!.emoji }} {{ loadoutVoie(i)!.name }}</template
@@ -2455,10 +2421,6 @@
                     }}</span></span
                   >
                 </div>
-                <div v-if="row.voieChange" class="plan-sub">
-                  Voie → <b>{{ VOIE_BY_ID[row.voie as VoieId]?.name ?? 'aucune voie' }}</b> — le
-                  bonus 6 pièces s’applique.
-                </div>
                 <div class="plan-sub">
                   Gain du set entier : ses pièces ne valent pas ça une à une.
                 </div>
@@ -2479,15 +2441,6 @@
                     {{ talentIcon(row.toTalent) }} {{ talentName(row.toTalent) }}
                   </div>
                   <div v-else class="plan-empty">—</div>
-                </div>
-              </div>
-
-              <!-- VOIE : elle conditionne le capstone 6 pièces, donc elle se décide aussi -->
-              <div v-else class="plan-voie">
-                {{ currentVoie?.name ?? 'aucune voie' }} →
-                <b>{{ VOIE_BY_ID[row.voie as VoieId]?.name ?? 'aucune voie' }}</b>
-                <div class="plan-sub">
-                  Le bonus 6 pièces ne s’applique qu’à la voie du set porté.
                 </div>
               </div>
             </div>
@@ -3070,7 +3023,7 @@ import {
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
 import { runSuccessPct, successTier } from '@/lib/runStats';
 import { recommendedPower } from '@/lib/proceduralContent';
-import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
+import { VOIES, VOIE_BY_ID } from '@/lib/voies';
 import {
   endlessFoe,
   endlessEnergy,
@@ -3087,8 +3040,8 @@ import {
   rollSetPiece,
   randomVoieSetId,
   voieSetId,
+  wornVoie,
   MAX_LOADOUTS,
-  mergeEffects,
   aggregateLines,
   effectLabelFor,
   setTierLabel,
@@ -3236,7 +3189,7 @@ const advFx = useAdvProgressFx();
 const helpRank = ref(false);
 // Bonus de luck du magic find (stat mineure) apporté par l'équipement actuel.
 function mfLuck(): number {
-  return char.row ? magicFindLuck(char.row.equipped, char.row.voie) : 0;
+  return char.row ? magicFindLuck(char.row.equipped) : 0;
 }
 // Détail d'un objet (clic sur un item équipé → modale d'inspection).
 const inspectItem = ref<Item | null>(null);
@@ -3404,42 +3357,19 @@ const setScore = computed(() =>
     loadouts: char.row?.loadouts ?? [],
   }),
 );
-// Effets « hors équipement » actifs = talents + PASSIF DE VOIE (spécialisation) → comptés
-// partout dans le combat/la puissance (fighter, powerWith, winPct, runExtra).
-const activeFx = computed(() =>
-  mergeEffects(talentFx.value, voiePassiveEffects(char.row?.voie as VoieId | null)),
-);
+// Effets « hors équipement » actifs = les talents → comptés partout dans le combat/la
+// puissance (fighter, powerWith, winPct, runExtra). ⚠️ Plus de passif de voie (2026-09-22) :
+// la voie se déduit du set porté.
+const activeFx = computed(() => talentFx.value);
 // Un siège PERDU envoie le héros à l'infirmerie : il est indisponible, comme s'il était
 // parti en expédition. Un simple malus de dégâts avait été essayé d'abord — sans mordant,
 // puisqu'on farme surtout du contenu qu'on domine largement.
 const heroWounded = computed(() => isWounded(char.row?.base, expeNow.value));
 const heroHealIn = computed(() => woundRemainingMs(char.row?.base, expeNow.value));
-// ── Voie (spécialisation) : sélecteur + libellés ──
-const voieOpen = ref(false);
-const currentVoie = computed(() => VOIES.find((v) => v.id === char.row?.voie) ?? null);
-function doSetVoie(id: VoieId | null) {
-  withUid((uid) => char.setVoie(uid, id), 'Impossible de changer de voie.');
-  voieOpen.value = false;
-}
-const EFFECT_SHORT: Record<string, string> = {
-  damage_pct: 'dégâts',
-  crit_pct: 'crit',
-  lifesteal_pct: 'vol de vie',
-  dmg_reduction_pct: 'réduction',
-  max_pv_pct: 'PV',
-  gold_pct: 'or',
-  execute_pct: 'exécution',
-  rage_pct: 'rage',
-  momentum_pct: 'élan',
-  thorns_pct: 'épines',
-};
-function voieStatsLabel(id: VoieId): string {
-  return (VOIE_BY_ID[id]?.preferred ?? []).map((t) => EFFECT_SHORT[t] ?? t).join(' / ');
-}
-function voiePassiveLabel(id: VoieId): string {
-  const p = VOIE_BY_ID[id]?.passive;
-  return p ? `+${p.base}% ${EFFECT_SHORT[p.type] ?? p.type}` : '';
-}
+// ── Voie ──
+// 🧭 La voie du héros SE DÉDUIT du set porté (2026-09-22) : plus de choix, plus de passif.
+const heroVoie = computed(() => wornVoie(char.row?.equipped ?? {}));
+const currentVoie = computed(() => VOIES.find((v) => v.id === heroVoie.value) ?? null);
 // Combattant complet (stats + équipement + talents + voie) → puissance de combat affichée.
 const fighter = computed(() =>
   playerWithGear(
@@ -3448,7 +3378,7 @@ const fighter = computed(() =>
     char.row?.equipped ?? {},
     activeFx.value,
     c.value.level.level,
-    char.row?.voie,
+    heroVoie.value,
   ),
 );
 const combatPowerVal = computed(() => combatPower(fighter.value));
@@ -3609,7 +3539,7 @@ const shieldPv = computed(() => Math.round(fighter.value.pv * (fighter.value.sta
 // plomberie pseudo/niveau/talentFx dupliquée (revue /simplify).
 function powerWith(eq: Equipped, fx: Partial<AggregatedEffects> = activeFx.value): number {
   return combatPower(
-    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level, char.row?.voie),
+    playerWithGear(char.row?.pseudo ?? 'Toi', c.value, eq, fx, c.value.level.level, heroVoie.value),
   );
 }
 // ── ⭐ RÉFÉRENCE UNIQUE : LE MEILLEUR BUILD POSSIBLE ────────────────────────────────
@@ -3629,7 +3559,7 @@ const optimumKey = computed(
   () =>
     `${char.row?.inventory?.length ?? 0}|${Object.values(char.row?.equipped ?? {})
       .map((i) => i?.id ?? '')
-      .join(',')}|${char.row?.voie ?? ''}|${c.value.level.level}|${
+      .join(',')}|${heroVoie.value ?? ''}|${c.value.level.level}|${
       normalizeTalents(char.row?.talents ?? []).filter((t) => t.equipped).length
     }`,
 );
@@ -3688,7 +3618,7 @@ function fighterWith(eq: Equipped): Combatant {
     eq,
     activeFx.value,
     c.value.level.level,
-    char.row?.voie,
+    heroVoie.value,
   );
 }
 /** 🎯 Les CHANCES réelles qui bougent si on porte `it` à la place de la pièce actuelle — ou,
@@ -3724,7 +3654,7 @@ function runWinPct(): number {
     char.row?.equipped ?? {},
     activeFx.value,
     c.value.level.level,
-    char.row?.voie,
+    heroVoie.value,
   );
   const d = lastDungeon.value;
   if (d) {
@@ -3839,7 +3769,7 @@ const talentSummary = computed(() => aggregateLines(talentFx.value, { emoji: tru
 // Somme de TOUT l'équipement porté, bonus de set compris (capstone selon la voie) : la
 // même agrégation que le combat, lue par la même table que les talents.
 const gearTotal = computed(() =>
-  aggregateLines(aggregateEffects(char.row?.equipped ?? {}, char.row?.voie ?? null), {
+  aggregateLines(aggregateEffects(char.row?.equipped ?? {}), {
     emoji: true,
   }),
 );
@@ -3898,10 +3828,7 @@ const canEquipMore = computed(() => equippedTalents.value.length < talentSlots.v
 function talentScore(ids: string[]): number {
   const owned = char.row?.talents ?? [];
   const combo = owned.filter((t) => ids.includes(t.id)).map((t) => ({ ...t, equipped: true }));
-  return powerWith(
-    char.row?.equipped ?? {},
-    mergeEffects(talentEffects(combo), voiePassiveEffects(char.row?.voie as VoieId)),
-  );
+  return powerWith(char.row?.equipped ?? {}, talentEffects(combo));
 }
 // TALENTS CONSEILLÉS (tickets 9f2c6a42 / 08b10b7f) : le(s) talent(s) qui MAXIMISENT la
 // puissance, un par code, en remplissant les emplacements (un seul depuis v0.845).
@@ -4247,7 +4174,7 @@ const setsList = computed(() =>
   ),
 );
 // Sets de VOIE : lien set↔voie (id = `voie:<id>`).
-const isMySetId = (setId: string) => !!char.row?.voie && setId === voieSetId(char.row.voie);
+const isMySetId = (setId: string) => !!heroVoie.value && setId === voieSetId(heroVoie.value);
 const setVoieName = (setId: string) => VOIE_BY_ID[setId.replace(/^voie:/, '')]?.name ?? '';
 
 // Catalogue des 8 SETS DE VOIE (détail complet, accessible côté Boss) : chaque set avec
@@ -4655,7 +4582,7 @@ function equippedInSlot(slot: ItemSlot): Item | undefined {
 const activeSets = computed(() => {
   const eq = char.row?.equipped ?? {};
   const counts = setCounts(eq);
-  const myVoie = char.row?.voie ?? null;
+  const myVoie = heroVoie.value ?? null;
   return ITEM_SETS.filter((s) => (counts[s.id] ?? 0) >= 1).map((s) => {
     const pieces = SLOTS.map((sl) => eq[sl]).filter((it): it is Item => it?.setId === s.id);
     const count = counts[s.id] ?? 0;
@@ -4832,7 +4759,7 @@ async function enterArena() {
       char.row.equipped,
       extra,
       c.value.level.level,
-      char.row.voie,
+      heroVoie.value,
     );
     const r = runArena(player, c.value.level.level, seed);
     // Mise en scène spatiale : purement dérivée de `r`, elle ne change aucun résultat.
@@ -4927,7 +4854,7 @@ async function explore(d: Dungeon) {
       char.row.equipped,
       extra,
       c.value.level.level,
-      char.row.voie,
+      heroVoie.value,
     );
     const r = simulateDungeon(player, dungeonFoes(d), { seed });
     const goldPct = aggregateEffects(char.row.equipped).goldPct + talentFx.value.goldPct;
@@ -5171,7 +5098,7 @@ async function fightBoss(b: MilestoneBoss) {
       char.row.equipped,
       extra,
       c.value.level.level,
-      char.row.voie,
+      heroVoie.value,
     );
     const r = simulateCombat(player, b.combatant, { seed, goldOnWin: b.gold });
     const win = r.win;
@@ -5313,7 +5240,7 @@ async function fightEndless() {
       char.row.equipped,
       extra,
       c.value.level.level,
-      char.row.voie,
+      heroVoie.value,
     );
     const foe = endlessFoe(tier);
     const r = simulateCombat(player, foe, { seed, goldOnWin: endlessGold(tier) });
@@ -5759,7 +5686,7 @@ function setFullyWorn(i: number): boolean {
     !!v &&
     equippedSet.value?.idx === i &&
     equippedSet.value.count >= SET_SIZE &&
-    char.row?.voie === v.id
+    heroVoie.value === v.id
   );
 }
 const equippedSet = computed<{ idx: number; name: string; emoji: string; count: number } | null>(
@@ -5798,7 +5725,7 @@ const equippedSet = computed<{ idx: number; name: string; emoji: string; count: 
 function loadoutPower(voieId: string | null): number {
   const row = char.row;
   if (!row) return 0;
-  const fx = mergeEffects(talentFx.value, voiePassiveEffects(voieId as VoieId | null));
+  const fx = talentFx.value;
   // ⚠️ TOUTES les réserves, comme l'action : depuis que l'optimiseur peut croiser deux
   // demi-sets venus de deux réserves différentes, un aperçu limité à une seule réserve
   // recommencerait à annoncer autre chose que ce que le bouton fait.
@@ -5912,7 +5839,7 @@ watch(
     char.row?.inventory,
     char.row?.equipped,
     char.row?.loadouts,
-    char.row?.voie,
+    heroVoie.value,
     char.row?.talents,
     c.value.level.level,
   ],
@@ -5932,8 +5859,7 @@ function doWearVoieSet(i: number) {
       c.value,
       c.value.level.level,
       char.row?.pseudo ?? 'Toi',
-      v.id,
-      `voie:${v.id}`, // ⚠️ le SET est imposé, pas seulement sa voie — cf. computeGearPlan
+      `voie:${v.id}`, // le SET est imposé — cf. computeGearPlan
     );
     $q.notify({
       type: 'positive',
@@ -6060,18 +5986,15 @@ function doEquip(itemId: string) {
 type PlanPiece = { slot: ItemSlot; fromItem: Item | null; toItem: Item | null };
 type PlanRow = {
   key: string;
-  kind: 'gear' | 'familiar' | 'talent' | 'voie' | 'set';
+  kind: 'gear' | 'familiar' | 'talent' | 'set';
   /** Les pièces d'un SET proposées ensemble (`kind: 'set'`). */
   pieces?: PlanPiece[];
-  /** Le set emporte aussi le changement de voie (son bonus 6 pièces en dépend). */
-  voieChange?: boolean;
   label: string;
   slot?: ItemSlot;
   fromItem?: Item | null;
   toItem?: Item | null;
   fromTalent?: TalentInstance | null;
   toTalent?: TalentInstance | null;
-  voie?: string | null;
 };
 const gearPlan = ref<{ equipped: Equipped; talentIds: string[]; voie: string | null } | null>(null);
 /** Lignes REFUSÉES (tout est accepté par défaut : le plan proposé est le meilleur). */
@@ -6119,10 +6042,8 @@ const planRows = computed<PlanRow[]>(() => {
       toTalent: t,
     });
   }
-  const voieChanges = (r.voie ?? null) !== (plan.voie ?? null);
   // 🧩 Les pièces proposées d'un MÊME set de voie (au moins deux) forment UNE ligne : leur
-  // valeur tient à leur réunion (bonus de set, 4-pièces), pas à chacune. Si le plan change
-  // aussi de voie pour CE set, la voie part avec lui.
+  // valeur tient à leur réunion (bonus de set), pas à chacune.
   const bySet = new Map<string, PlanRow[]>();
   for (const row of rows) {
     const sid = row.kind === 'gear' ? row.toItem?.setId : undefined;
@@ -6130,11 +6051,8 @@ const planRows = computed<PlanRow[]>(() => {
     bySet.set(sid, [...(bySet.get(sid) ?? []), row]);
   }
   const groups: PlanRow[] = [];
-  let voieTaken = false;
   for (const [sid, list] of bySet) {
     if (list.length < 2) continue;
-    const withVoie = voieChanges && `voie:${plan.voie ?? ''}` === sid;
-    voieTaken ||= withVoie;
     groups.push({
       key: 'set:' + sid,
       kind: 'set',
@@ -6144,14 +6062,10 @@ const planRows = computed<PlanRow[]>(() => {
         fromItem: x.fromItem ?? null,
         toItem: x.toItem ?? null,
       })),
-      voieChange: withVoie,
-      voie: plan.voie,
     });
   }
   const grouped = new Set(groups.flatMap((g) => g.pieces!.map((pc) => 's:' + pc.slot)));
   const out = [...groups, ...rows.filter((x) => !grouped.has(x.key))];
-  if (voieChanges && !voieTaken)
-    out.push({ key: 'voie', kind: 'voie', label: 'Voie', voie: plan.voie });
   return out;
 });
 
@@ -6164,27 +6078,25 @@ function planStateWithout(skip?: string) {
   let talentIds = normalizeTalents(r?.talents ?? [])
     .filter((t) => t.equipped)
     .map((t) => t.id);
-  let voie = r?.voie ?? null;
-  if (!plan || !r) return { equipped, talentIds, voie };
+  if (!plan || !r) return { equipped, talentIds, voie: wornVoie(equipped) };
   for (const row of planRows.value) {
     if (planOff.value.has(row.key) || row.key === skip) continue;
     if (row.slot) equipped[row.slot] = row.toItem ?? undefined;
     else if (row.kind === 'set') {
       for (const pc of row.pieces ?? []) equipped[pc.slot] = pc.toItem ?? undefined;
-      if (row.voieChange) voie = row.voie ?? null;
     } else if (row.kind === 'talent') {
       talentIds = talentIds.filter((id) => id !== row.fromTalent?.id);
       if (row.toTalent) talentIds = [...talentIds, row.toTalent.id];
-    } else if (row.kind === 'voie') voie = row.voie ?? null;
+    }
   }
-  return { equipped, talentIds, voie };
+  return { equipped, talentIds, voie: wornVoie(equipped) };
 }
 function planPowerOf(st: { equipped: Equipped; talentIds: string[]; voie: string | null }): number {
   const talents = normalizeTalents(char.row?.talents ?? []).map((t) => ({
     ...t,
     equipped: st.talentIds.includes(t.id),
   }));
-  const fx = mergeEffects(talentEffects(talents), voiePassiveEffects(st.voie as VoieId | null));
+  const fx = talentEffects(talents);
   return combatPower(
     playerWithGear(
       char.row?.pseudo ?? 'Toi',

@@ -31,7 +31,7 @@ import {
   fillSetPieceAffixes,
   bestGearLoadout,
   playerWithGear,
-  mergeEffects,
+  wornVoie,
   SLOTS,
   FAMILIAR_SLOT,
   WORN_SLOTS,
@@ -70,7 +70,7 @@ import {
   talentSurplus,
   type TalentInstance,
 } from '@/lib/talents';
-import { voiePassiveEffects, VOIES } from '@/lib/voies';
+import { VOIES } from '@/lib/voies';
 import {
   keysAfterPaying,
   labyIdOfClear,
@@ -1478,19 +1478,10 @@ export const useCharacterStore = defineStore('character', () => {
     return gain;
   }
 
-  // Choisit/retire la VOIE (spécialisation) — petit passif + capstone du set de la voie. Réversible.
-  async function setVoie(userId: string, voie: string | null) {
-    if (!row.value) return;
-    await persistOptimistic(userId, { voie });
-  }
-
-  // OPTIMISEUR D'ÉQUIPEMENT (v0.607) : trouve la MEILLEURE combinaison (voie + 4 slots) parmi
-  // l'équipé + le sac + les réserves de set. Il ÉVALUE PLUSIEURS VOIES : la voie actuelle et
-  // toute voie dont on possède ≥3 pièces de set (assez pour viser son capstone 4-pièces). Pour
-  // chaque voie candidate, il verse SA réserve dans le pool, calcule le meilleur loadout (bonus
-  // de set + capstone gaté par cette voie), et retient la voie qui donne la plus forte puissance.
-  // Si la meilleure voie diffère de l'actuelle, il CHANGE de voie automatiquement. Les non-retenus
-  // sont re-rangés (pièce de set → réserve de sa voie ; loose → sac). Le familier n'est pas touché.
+  // OPTIMISEUR D'ÉQUIPEMENT (v0.607) : trouve la MEILLEURE combinaison d'emplacements parmi
+  // l'équipé + le sac + les réserves de set. ⚠️ Plus de voie à essayer (2026-09-22) : la voie
+  // SE DÉDUIT du set porté (`wornVoie`), elle ne change plus aucun calcul — un seul plan suffit.
+  // Les non-retenus sont re-rangés (pièce de set → réserve de son set ; le reste → sac).
   /** Le PLAN proposé par l'optimiseur, sans rien appliquer. ⚠️ C'est un TOUT COHÉRENT :
    *  les talents sont choisis POUR ce gear, la voie POUR son capstone. Accepter une partie
    *  seulement donne donc un autre build — c'est pourquoi `applyGearPlan` **recalcule**
@@ -1500,8 +1491,7 @@ export const useCharacterStore = defineStore('character', () => {
     stats: { puissance: number; endurance: number; agilite: number },
     level: number,
     name: string,
-    forceVoie?: string | null, // « Porter ce set » : impose cette voie (pas de choix auto)
-    /** « Porter ce set » : impose AUSSI ses pièces, pas seulement sa voie.
+    /** « Porter ce set » : impose ses pièces.
      *  ⚠️ Sans ça, le bouton lançait l'optimiseur voie forcée mais stuff LIBRE — il rendait
      *  donc le meilleur build sur cette voie, souvent sans une seule pièce du set demandé
      *  (constaté : « Porter le set Frénétique » → 2 Gardien + 1 Duelliste + 1 Berserker).
@@ -1509,7 +1499,7 @@ export const useCharacterStore = defineStore('character', () => {
     forceSetId?: string,
     /** Rendre le build MÊME s'il n'améliore pas l'actuel (cf. `bestBuild`). */
     always?: boolean,
-    /** Appelée entre deux voies pour RENDRE LA MAIN à l'interface (cf. la boucle). */
+    /** Appelée entre deux étapes pour RENDRE LA MAIN à l'interface. */
     respire?: () => Promise<void>,
   ): Promise<{
     equipped: Equipped;
@@ -1529,15 +1519,14 @@ export const useCharacterStore = defineStore('character', () => {
       (_, k) => cur.loadouts[k] ?? { items: {} },
     );
 
-    // Plan complet pour une voie candidate (vIdx = index VOIES, -1 = aucune voie).
     type Plan = {
       equipped: Equipped;
       score: number;
-      voie: string | null;
+      voie: string | null; // la voie DÉDUITE du set retenu (affichage)
       talents: TalentInstance[]; // talents équipés retenus pour ce plan
     };
-    function planFor(vIdx: number, polish = false): Plan {
-      const voie = vIdx >= 0 ? VOIES[vIdx]!.id : null;
+    function planFor(polish = false): Plan {
+      const voie = null; // n'influe plus sur aucun calcul (voie déduite du set porté)
       // ⚠️ POOL = TOUT CE QU'ON POSSÈDE, toutes réserves confondues. Avant, seule la réserve
       // de la voie candidate était portable : une meilleure pièce d'un AUTRE set restait
       // invisible, et surtout aucun DEMI-SET croisé (2 pièces d'un set + 2 d'un autre) ne
@@ -1548,8 +1537,7 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ Doublons compris (v0.839) : une pièce battue AU BARÈME DU SET peut encore gagner
       // dans un autre build — le rangement ne doit jamais la rendre invisible.
       const pool = [...cur!.inventory, ...ownedInLoadouts(loadouts0)];
-      const fxOf = (ids: string[]) =>
-        mergeEffects(talentEffects(withEquipped(ids)), voiePassiveEffects(voie));
+      const fxOf = (ids: string[]) => talentEffects(withEquipped(ids));
       // Ascension par coordonnées talents ↔ gear : les meilleurs talents dépendent du gear
       // (et réciproquement). Deux passes suffisent en pratique — on part des talents déjà
       // équipés, on optimise le gear, on re-choisit les talents POUR ce gear, on refait le
@@ -1609,59 +1597,20 @@ export const useCharacterStore = defineStore('character', () => {
       const equipped: Equipped = { ...cur!.equipped };
       for (const s of WORN_SLOTS) equipped[s] = best[s];
       const score = combatPower(playerWithGear(name, stats, equipped, extra, level, voie));
-      return { equipped, score, voie, talents: withEquipped(talIds) };
+      return { equipped, score, voie: wornVoie(equipped), talents: withEquipped(talIds) };
     }
 
-    // Voies candidates. `forceVoie` (Porter ce set) → cette voie UNIQUEMENT. Sinon : l'actuelle
-    // + toute voie dont on possède ≥3 pièces (réserve) → on peut switcher pour le capstone.
-    const cand = new Set<number>();
-    if (forceVoie !== undefined) {
-      cand.add(forceVoie === null ? -1 : VOIES.findIndex((v) => v.id === forceVoie));
-    } else {
-      // ⚠️ TOUTES les voies, plus « aucune ». On ne retenait que la voie actuelle et celles
-      // dont la réserve comptait ≥3 pièces : une voie à 2 pièces — donc éligible au bonus
-      // 2-pièces ET à son passif — n'était jamais essayée, et « aucune voie » ne l'était
-      // qu'en dernier recours. Le coût d'un plan de plus est marginal devant le balayage.
-      for (let k = 0; k < MAX_LOADOUTS; k++) cand.add(k);
-      cand.add(-1);
-    }
-
-    // ⚠️ EXPLORATION SANS POLISSAGE : la passe d'amélioration locale coûte ~500 ms sur un
-    // gros sac, et on essaie une dizaine de voies × 2 passes — la polir partout prenait
-    // 9 SECONDES et l'écran paraissait mort. On explore vite, puis on POLIT le gagnant :
-    // la garantie « aucun échange simple ne gagne » n'a besoin de tenir que sur le plan
-    // effectivement proposé.
-    let bestIdx: number | null = null;
-    let best: Plan | null = null;
-    for (const vi of cand) {
-      const p = planFor(vi);
-      if (!best || p.score > best.score) {
-        best = p;
-        bestIdx = vi;
-      }
-      // ⚠️ ON REND LA MAIN ENTRE CHAQUE VOIE. Le calcul entier dure ~3 s : le laisser
-      // filer d'un trait FIGE l'onglet — l'utilisateur l'a constaté deux fois, et même
-      // un ⏳ annoncé ne rattrape pas une interface qui ne répond plus. Découpé, chaque
-      // tranche ne bloque que ~180 ms : on ne le remarque pas.
-      if (respire) await respire();
-    }
-    if (!best || bestIdx === null) return null;
-    best = planFor(bestIdx, true);
+    // Exploration rapide (sans polissage), puis polissage du plan retenu : la passe
+    // d'amélioration locale coûte ~500 ms sur un gros sac.
+    if (respire) await respire();
+    planFor();
+    if (respire) await respire();
+    const best = planFor(true);
     // GARDE-FOU ANTI-REGRESSION : on ne remplace le build actuel que par du STRICTEMENT
     // meilleur. Sans ca, un changement de regle (ex. plafond de talents abaisse) pourrait
     // faire PERDRE de la puissance a un clic sur « equipement automatique ».
     const curScore = combatPower(
-      playerWithGear(
-        name,
-        stats,
-        cur.equipped,
-        mergeEffects(
-          talentEffects(cur.talents),
-          voiePassiveEffects(cur.voie as Parameters<typeof voiePassiveEffects>[0]),
-        ),
-        level,
-        cur.voie,
-      ),
+      playerWithGear(name, stats, cur.equipped, talentEffects(cur.talents), level),
     );
     // ⚠️ Le garde-fou protège l'équipement AUTOMATIQUE d'une perte accidentelle. Il ne
     // s'applique PAS à « Porter ce set » : là, le joueur choisit une identité, et il a le
@@ -1692,7 +1641,7 @@ export const useCharacterStore = defineStore('character', () => {
     name: string,
     respire?: () => Promise<void>,
   ) {
-    return computeGearPlan(stats, level, name, undefined, undefined, true, respire);
+    return computeGearPlan(stats, level, name, undefined, true, respire);
   }
 
   /** Le plan proposé, SANS rien appliquer — c'est ce que l'écran de revue affiche. */
@@ -1702,7 +1651,7 @@ export const useCharacterStore = defineStore('character', () => {
     name: string,
     respire?: () => Promise<void>,
   ) {
-    return computeGearPlan(stats, level, name, undefined, undefined, undefined, respire);
+    return computeGearPlan(stats, level, name, undefined, undefined, respire);
   }
 
   /** Applique un build CHOISI (tout ou partie du plan). ⚠️ On ne « pose » pas des morceaux :
@@ -1744,23 +1693,21 @@ export const useCharacterStore = defineStore('character', () => {
       equipped: target.equipped,
       inventory: sac,
       loadouts,
-      voie: target.voie,
       talents,
     });
     return true;
   }
 
   /** Ancien geste « tout appliquer d'un coup » — conservé pour « Porter ce set », qui
-   *  impose une voie et n'a pas à passer par un écran de revue. */
+   *  impose ses pièces et n'a pas à passer par un écran de revue. */
   async function optimizeGear(
     userId: string,
     stats: { puissance: number; endurance: number; agilite: number },
     level: number,
     name: string,
-    forceVoie?: string | null,
     forceSetId?: string,
   ): Promise<boolean> {
-    const plan = await computeGearPlan(stats, level, name, forceVoie, forceSetId);
+    const plan = await computeGearPlan(stats, level, name, forceSetId);
     if (!plan || !row.value) return false;
     const cur = row.value;
     return applyGearPlan(
@@ -2884,7 +2831,6 @@ export const useCharacterStore = defineStore('character', () => {
     previewGearPlan,
     bestBuild,
     applyGearPlan,
-    setVoie,
     equipReplacing,
     unequip,
     equipTalent,

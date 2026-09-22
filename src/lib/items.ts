@@ -695,7 +695,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🪓',
     slots: ['weapon'],
     desc: 'Un ennemi tombé sous 15 % PV est exécuté sur-le-champ.',
-    echo: ['execute_pct', 'damage_pct'],
+    echo: ['execute_pct', 'bleed_pct', 'damage_pct'],
   },
   {
     id: 'charge',
@@ -728,7 +728,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🪨',
     slots: ['armor'],
     desc: `Sous ${Math.round(COMBAT.enduranceThreshold * 100)} % PV, tu réduis de ${Math.round(COMBAT.enduranceReduction * 100)} % supplémentaires les dégâts subis.`,
-    echo: ['dmg_reduction_pct', 'max_pv_pct'],
+    echo: ['dmg_reduction_pct', 'max_pv_pct', 'toughness_pct'],
   },
   {
     id: 'living_armor',
@@ -778,7 +778,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '👁️',
     slots: ['helmet'],
     desc: `Les coups de tes ${COMBAT.predatorTurns} premiers tours ne peuvent pas être esquivés et infligent ×${COMBAT.predatorMult}.`,
-    echo: ['accuracy_pct'],
+    echo: ['crit_dmg_pct'],
   },
   {
     id: 'vigilance',
@@ -786,7 +786,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🦉',
     slots: ['helmet'],
     desc: `Les ${COMBAT.vigilanceCrits} premiers coups critiques que tu reçois n’en sont pas.`,
-    echo: ['initiative_pct'], // sets spécialisés : le casque n’a plus de résistance aux critiques
+    echo: ['max_pv_pct'],
   },
   {
     id: 'sang_froid',
@@ -803,7 +803,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '⚡',
     slots: ['boots'],
     desc: `Les coups de tes ${COMBAT.initiativeTurns} premiers tours sont inesquivables et infligent ×${COMBAT.initiativeMult}.`,
-    echo: ['initiative_pct'],
+    echo: ['damage_pct'],
   },
   {
     id: 'sidestep',
@@ -811,7 +811,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '💨',
     slots: ['boots'],
     desc: 'La 1re attaque ennemie est esquivée d’office.',
-    echo: ['dodge_pct'],
+    echo: ['max_pv_pct'],
   },
   {
     id: 'dance',
@@ -819,7 +819,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '💃',
     slots: ['boots'],
     desc: 'Chaque attaque que tu esquives déclenche une riposte.',
-    echo: ['dodge_pct', 'riposte_pct'],
+    echo: ['riposte_pct'],
   },
   // 💍 ANNEAU
   {
@@ -844,7 +844,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🎯',
     slots: ['accessory'],
     desc: `Tes coups sur un ennemi sous ${Math.round(COMBAT.hunterThreshold * 100)} % PV sont des critiques certains.`,
-    echo: ['crit_pct'],
+    echo: ['crit_dmg_pct'],
   },
 ];
 /** Effets d'AVANT portés par des reliques pas encore converties (étape 8) : toujours lus par
@@ -925,8 +925,8 @@ export function legendaryOf(it: { legendary?: string }): LegendaryProc | undefin
   return it.legendary ? LEGENDARY_BY_ID[it.legendary] : undefined;
 }
 /** Ensemble des procs légendaires actifs de l'équipement (pour le combattant), plus la
- *  SIGNATURE du set complet porté dans sa voie. */
-export function aggregateLegendaries(equipped: Equipped, voie?: string | null): Set<string> {
+ *  SIGNATURE du set complet porté. */
+export function aggregateLegendaries(equipped: Equipped): Set<string> {
   const s = new Set<string>();
   for (const slot of SLOTS) {
     const it = equipped[slot];
@@ -934,18 +934,39 @@ export function aggregateLegendaries(equipped: Equipped, voie?: string | null): 
   }
   const fam = equipped[FAMILIAR_SLOT];
   if (fam?.legendary) s.add(fam.legendary);
-  const sig = setSignatureOf(equipped, voie);
+  const sig = setSignatureOf(equipped);
   if (sig) s.add(sig.id);
   return s;
 }
 
-/** ⭐ La signature active : les SIX pièces du set de ta voie, portées. Même règle que le
- *  capstone de stat (`setEffects`) — hors de sa voie, un set complet n’en donne pas. */
-export function setSignatureOf(equipped: Equipped, voie?: string | null): SetSignature | undefined {
-  if (!voie) return undefined;
-  const id = voieSetId(voie);
-  const n = SET_SLOTS.filter((sl) => equipped[sl]?.setId === id).length;
-  return n >= SET_SIZE ? SET_BY_ID[id]?.signature : undefined;
+/** ⭐ La signature active : les SIX pièces d'un même set, portées. ⚠️ Plus de condition de
+ *  voie (2026-09-22) : la voie SE DÉDUIT du set porté (`wornVoie`), la porter ne demande
+ *  rien de plus que de porter le set. */
+export function setSignatureOf(equipped: Equipped): SetSignature | undefined {
+  const id = fullSetId(equipped);
+  return id ? SET_BY_ID[id]?.signature : undefined;
+}
+/** Le set dont les SIX pièces sont portées, s'il y en a un. */
+function fullSetId(equipped: Equipped): string | undefined {
+  const counts = setCounts(equipped);
+  return Object.keys(counts).find((id) => (counts[id] ?? 0) >= SET_SIZE);
+}
+
+/** 🧭 LA VOIE DU HÉROS SE DÉDUIT DU SET PORTÉ (2026-09-22, spec § 6.2) : celle du set de voie
+ *  dont il porte le plus de pièces, à partir de 2. À égalité, le set le plus avancé (somme des
+ *  rangs de ses pièces), puis l'ordre des voies. Sans set de voie porté, pas de voie. */
+export function wornVoie(equipped: Equipped): string | null {
+  let best: { voie: string; n: number; rank: number } | null = null;
+  for (const set of VOIE_SETS) {
+    const pieces = SET_SLOTS.map((sl) => equipped[sl]).filter(
+      (it): it is Item => !!it && it.setId === set.id,
+    );
+    if (pieces.length < 2) continue;
+    const rank = pieces.reduce((t, it) => t + (RARITY_RANK[normRank(it.rarity)] ?? 0), 0);
+    if (!best || pieces.length > best.n || (pieces.length === best.n && rank > best.rank))
+      best = { voie: set.id.slice('voie:'.length), n: pieces.length, rank };
+  }
+  return best?.voie ?? null;
 }
 
 // PLANCHER de magnitude par RANG. Géométrique (ratio 1,166). REFONTE v0.574 : plus de
@@ -987,40 +1008,28 @@ const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
 // ⚠️ Remplace les listes COMMUNES d'avant (AFFIX_TIERS) : un drop tirait ses stats sans
 // regarder son emplacement — mesuré, une arme sur deux avait des PV ou de la réduction en
 // stat principale, et l'optimiseur en mettait sur 4 armes sur 4 aux niveaux 50 et 90.
+/** Stats UTILITAIRES (hors combat, ou presque) : le 3ᵉ affixe d'une pièce normale. */
+export const UTILITY_STATS: EffectType[] = ['gold_pct', 'magic_find_pct', 'regen_pct'];
+
 // ⚠️ SETS SPÉCIALISÉS (2026-09-22, spec `2026-09-22-sets-specialises-trophee-voies.md`) :
-// un DROP ne porte plus que des STATS DE BASE. Les stats spécialisées (`SPECIALIZED_STATS`)
-// sont exclusives aux pièces de set (`VOIE_SET_STATS`). Chaque emplacement garde deux stats
-// principales et deux de soutien, et une stat vit toujours sur deux emplacements au plus.
+// une pièce NORMALE porte ses DEUX stats principales (dès 2 affixes) puis une stat
+// UTILITAIRE (or, découverte, régénération). Les stats spécialisées sont exclusives aux sets
+// (`VOIE_SET_STATS`).
+// ⚠️ MESURÉ (combat réel, niveaux 30/60/90, boss et donjon) : seules les dégâts, PV, dégâts
+// critiques, blocage et réduction valent quelque chose (5 à 10 % pour un affixe). Critique,
+// précision, esquive, résistance aux critiques et initiative valaient 0 à 1 % (héros au
+// plafond de critique, ennemis qui esquivent et critiquent peu, héros qui joue toujours
+// en premier) : elles ne sont plus tirées sur les pièces, en attendant de revoir leurs
+// mécaniques. Les objets qui en portent sont convertis au chargement.
 export const SLOT_AFFIXES: Record<GearSlot, { major: EffectType[]; support: EffectType[] }> = {
-  weapon: {
-    major: ['damage_pct', 'crit_dmg_pct'],
-    support: ['accuracy_pct', 'crit_pct'],
-  },
-  armor: {
-    major: ['max_pv_pct', 'dmg_reduction_pct'],
-    support: ['regen_pct', 'crit_resist_pct'],
-  },
-  shield: {
-    major: ['block_pct', 'dmg_reduction_pct'],
-    support: ['crit_resist_pct', 'dodge_pct'],
-  },
-  helmet: {
-    major: ['max_pv_pct', 'accuracy_pct'],
-    support: ['initiative_pct', 'magic_find_pct'],
-  },
-  boots: {
-    major: ['dodge_pct', 'initiative_pct'],
-    support: ['regen_pct', 'gold_pct'],
-  },
-  accessory: {
-    major: ['crit_pct', 'crit_dmg_pct'],
-    support: ['gold_pct', 'magic_find_pct'],
-  },
+  weapon: { major: ['damage_pct', 'crit_dmg_pct'], support: UTILITY_STATS },
+  armor: { major: ['max_pv_pct', 'dmg_reduction_pct'], support: UTILITY_STATS },
+  shield: { major: ['block_pct', 'dmg_reduction_pct'], support: UTILITY_STATS },
+  helmet: { major: ['max_pv_pct', 'crit_dmg_pct'], support: UTILITY_STATS },
+  boots: { major: ['max_pv_pct', 'damage_pct'], support: UTILITY_STATS },
+  accessory: { major: ['damage_pct', 'crit_dmg_pct'], support: UTILITY_STATS },
   // La relique ne porte pas de stats (un pouvoir) : liste gardée pour le typage seulement.
-  relic: {
-    major: ['max_pv_pct'],
-    support: ['regen_pct'],
-  },
+  relic: { major: ['max_pv_pct'], support: UTILITY_STATS },
 };
 
 /** Stats SPÉCIALISÉES : aucun drop ne les porte, seules les pièces de set (spec § 3.1). */
@@ -1050,6 +1059,39 @@ export const VOIE_SET_STATS: Record<string, EffectType[]> = {
   gardien: ['parry_pct', 'start_shield_pct'],
   colosse: ['toughness_pct', 'start_shield_pct'],
 };
+
+/** VALEUR D'UNE STAT SPÉCIALISÉE, en « équivalent dégâts » : ce qu'il faut multiplier à la
+ *  valeur d'un affixe pour qu'il pèse autant en combat qu'un affixe de dégâts de même rang
+ *  (mesuré en vrai combat, niveaux 30/60/90, boss et donjon). ⚠️ Point de départ, recalibré
+ *  à la mesure (spec § 8). */
+export const SPEC_STAT_K: Partial<Record<EffectType, number>> = {
+  rage_pct: 1.55,
+  momentum_pct: 1.1,
+  bleed_pct: 1,
+  riposte_pct: 1.45,
+  parry_pct: 0.8,
+  start_shield_pct: 1.8,
+  toughness_pct: 0.95,
+  execute_pct: 1,
+  lifesteal_pct: 1,
+  thorns_pct: 1,
+};
+/** Part d'une pièce de set que portent ses stats spécialisées : ENSEMBLE, elles valent à peu
+ *  près une stat principale (dès 2 affixes) — une pièce de set vaut une pièce normale, et
+ *  l'avantage du set complet vient de ses paliers et de sa signature (spec, décision du
+ *  2026-09-22). En rareté basse (1 affixe pour un drop), la stat exclusive vaut une demie. */
+export function setAffixValue(
+  t: EffectType,
+  rarity: Rarity,
+  roll: number,
+  slot: ItemSlot,
+  nSpec: number,
+): number {
+  const budget = affixCountForRarity(rarity) >= 2 ? 1 : 0.5;
+  const v =
+    affixValue(t, rarity, roll, slot) * (SPEC_STAT_K[t] ?? 1) * (budget / Math.max(1, nSpec));
+  return Math.max(0.1, round1(v));
+}
 
 /** Les stats d'une pièce de set, dans l'ordre : la principale de base de l'emplacement, puis
  *  les stats spécialisées de sa voie. ⚠️ AU MOINS DEUX affixes, même en rareté basse : sans
@@ -1110,10 +1152,10 @@ const SET_SLOT_MAJORS: Partial<Record<ItemSlot, EffectType[]>> = {
   armor: ['max_pv_pct'],
   shield: ['block_pct'],
   helmet: ['max_pv_pct'],
-  boots: ['dodge_pct'],
-  // ⚠️ L'anneau passe des dégâts au critique : les dégâts ne sont plus une stat d'anneau
-  // (refonte équipement). Le plafond sec du critique n'existe plus (`CHANCE_CURVES`).
-  accessory: ['crit_pct'],
+  boots: ['max_pv_pct'],
+  // Sets spécialisés : l'esquive et le critique ne valent presque rien (mesuré) → PV et
+  // dégâts critiques.
+  accessory: ['crit_dmg_pct'],
   relic: ['max_pv_pct'],
 };
 
@@ -1862,7 +1904,7 @@ export function rollDrop(
   for (let a = 0; a < affixCount; a++) {
     // Gate des affixes = ton NIVEAU RÉEL (ilvlCenter), pas l'ilvl chanceux → un drop lucky
     // gagne de la MAGNITUDE (levelMult), pas des affixes exotiques hors de ta ligue.
-    const p = slotPool(slot, a === 0 ? 'major' : 'support', ilvlCenter).filter(
+    const p = slotPool(slot, a < 2 ? 'major' : 'support', ilvlCenter).filter(
       (t) => !affixes.some((x) => x.type === t),
     );
     if (!p.length) continue; // plus de stat libre dans la liste → on saute cet affixe
@@ -1979,9 +2021,10 @@ export function rollSetPiece(
   // ⚠️ SETS SPÉCIALISÉS (2026-09-22) : les affixes #2 et #3 sont les stats de la VOIE. Le
   // tirage « libre » d'avant (v0.803) répondait à des drops qui portaient AUSSI des stats
   // spécialisées ; ils n'en portent plus, le set est leur seule source.
-  const affixes: ItemEffect[] = setPieceTypes(slot as GearSlot, opts.setId, rarity).map((t, i) => ({
+  const pieceTypes = setPieceTypes(slot as GearSlot, opts.setId, rarity);
+  const affixes: ItemEffect[] = pieceTypes.map((t, i) => ({
     type: t,
-    value: i === 0 ? value : affixValue(t, rarity, roll, slot),
+    value: i === 0 ? value : setAffixValue(t, rarity, roll, slot, pieceTypes.length - 1),
   }));
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
   const legendary =
@@ -2030,67 +2073,6 @@ export function affixValue(
 /** Version de l'équipement. Une ligne sous cette version reçoit les cadeaux de la refonte. */
 export const GEAR_VERSION = 2;
 
-/** Traduction d'un affixe d'AVANT vers une stat de SON emplacement (spec § 9.2) : le joueur
- *  garde la valeur de son objet sous une forme qui a du sens (des PV sur une arme deviennent
- *  des dégâts, du critique sur une armure devient de la réduction). Les anciens objets
- *  n'existent que sur ces trois emplacements ; la relique reçoit un POUVOIR. Une stat hors
- *  table retombe sur la première stat principale de l'emplacement. */
-export const AFFIX_TRANSLATION: Partial<Record<GearSlot, Partial<Record<EffectType, EffectType>>>> =
-  {
-    // ⚠️ SETS SPÉCIALISÉS (2026-09-22) : une pièce NORMALE perd ses stats spécialisées, qui
-    // deviennent une stat de base proche de son emplacement (même rang, jet, niveau).
-    weapon: {
-      max_pv_pct: 'damage_pct',
-      dmg_reduction_pct: 'damage_pct',
-      thorns_pct: 'crit_dmg_pct',
-      rage_pct: 'crit_pct',
-      execute_pct: 'crit_pct',
-      bleed_pct: 'crit_dmg_pct',
-      momentum_pct: 'accuracy_pct',
-      lifesteal_pct: 'accuracy_pct',
-      regen_pct: 'accuracy_pct',
-      gold_pct: 'accuracy_pct',
-      magic_find_pct: 'accuracy_pct',
-      initiative_pct: 'accuracy_pct',
-    },
-    armor: {
-      damage_pct: 'max_pv_pct',
-      crit_pct: 'dmg_reduction_pct',
-      lifesteal_pct: 'regen_pct',
-      thorns_pct: 'crit_resist_pct',
-      start_shield_pct: 'regen_pct',
-      execute_pct: 'crit_resist_pct',
-      rage_pct: 'crit_resist_pct',
-      momentum_pct: 'regen_pct',
-      gold_pct: 'regen_pct',
-      magic_find_pct: 'regen_pct',
-      initiative_pct: 'crit_resist_pct',
-    },
-    shield: {
-      parry_pct: 'dmg_reduction_pct',
-      riposte_pct: 'crit_resist_pct',
-      thorns_pct: 'dodge_pct',
-    },
-    helmet: {
-      crit_resist_pct: 'initiative_pct',
-    },
-    boots: {
-      riposte_pct: 'regen_pct',
-    },
-    accessory: {
-      damage_pct: 'crit_pct',
-      rage_pct: 'crit_dmg_pct',
-      execute_pct: 'crit_dmg_pct',
-      momentum_pct: 'crit_dmg_pct',
-      thorns_pct: 'crit_dmg_pct',
-      lifesteal_pct: 'gold_pct',
-      max_pv_pct: 'magic_find_pct',
-      dmg_reduction_pct: 'magic_find_pct',
-      regen_pct: 'gold_pct',
-      initiative_pct: 'magic_find_pct',
-    },
-  };
-
 /** Effets légendaires d'avant qui DEVIENNENT un pouvoir de relique. */
 const LEGACY_PROC_POWER: Record<string, RelicPowerId> = {
   phoenix: 'phenix',
@@ -2126,35 +2108,30 @@ export function migrateGearItem(it: Item): Item {
   }
   const slot = it.slot as GearSlot;
   const lists = SLOT_AFFIXES[slot];
-  const allowed = [...lists.major, ...lists.support];
   const setMajor = it.setId ? SET_SLOT_MAJORS[slot]?.[0] : undefined;
   const olds = [it.effect, it.effect2, it.effect3].filter((e): e is ItemEffect => !!e);
   const types: EffectType[] = [];
   // Pièce de set (sets spécialisés) : les stats de sa voie, au même rang, jet et niveau.
   if (it.setId && SET_BY_ID[it.setId])
     types.push(...setPieceTypes(slot, it.setId, normRank(it.rarity)));
-  else
-    olds.forEach((e, i) => {
-      let t: EffectType =
-        i === 0 && setMajor
-          ? setMajor
-          : allowed.includes(e.type)
-            ? e.type
-            : (AFFIX_TRANSLATION[slot]?.[e.type] ?? lists.major[0]!);
-      if (types.includes(t)) t = allowed.find((x) => !types.includes(x)) ?? t;
-      if (!types.includes(t)) types.push(t);
-    });
-  // L'affixe #1 est une stat PRINCIPALE de l'emplacement (règle des drops).
-  if (!setMajor && types.length && !lists.major.includes(types[0]!)) {
-    const j = types.findIndex((t) => lists.major.includes(t));
-    if (j > 0) [types[0], types[j]] = [types[j]!, types[0]!];
-    else types[0] = lists.major.find((t) => !types.includes(t)) ?? lists.major[0]!;
+  else {
+    // Pièce normale (sets spécialisés) : ses DEUX principales dès 2 affixes — celle qu'elle
+    // portait en tête si c'en est une — puis une utilitaire (la sienne si elle en avait une).
+    const had = olds.map((e) => e.type);
+    const majors = [...lists.major].sort((a, b) => (had[0] === b ? 1 : 0) - (had[0] === a ? 1 : 0));
+    const util = had.find((t) => lists.support.includes(t)) ?? lists.support[0]!;
+    const n = olds.length;
+    types.push(...majors.slice(0, Math.min(2, n)));
+    if (n >= 3) types.push(util);
   }
   const rarity = normRank(it.rarity);
   const roll = it.roll ?? 0.5;
   const effects = types.map((type, i) => ({
     type,
-    value: affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
+    value:
+      setMajor && i > 0
+        ? setAffixValue(type, rarity, roll, slot, types.length - 1)
+        : affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
   }));
   // Effet légendaire déplacé : un effet de SON emplacement, dans les stats prolongées si possible.
   let legendary = it.legendary;
@@ -2190,14 +2167,17 @@ export function makeGearPiece(
   if (set) types.push(...setPieceTypes(slot, o.setId!, rarity));
   else
     for (let a = 0; a < affixCountForRarity(rarity); a++) {
-      const pool = slotPool(slot, a === 0 ? 'major' : 'support', level).filter(
+      const pool = slotPool(slot, a < 2 ? 'major' : 'support', level).filter(
         (t) => !types.includes(t),
       );
       if (pool.length) types.push(pick(rng, pool));
     }
   const effects = types.map((type, i) => ({
     type,
-    value: affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
+    value:
+      setMajor && i > 0
+        ? setAffixValue(type, rarity, roll, slot, types.length - 1)
+        : affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
   }));
   const legendary =
     RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK
@@ -2835,8 +2815,8 @@ const VOIE_SET_DEFS: {
     voie: 'berserker',
     name: 'Fureur du Berserker',
     emoji: '💥',
-    theme: 'Dégâts bruts et exécution — le set qui frappe.',
-    stats: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
+    theme: 'Plus il est blessé, plus il frappe.',
+    stats: ['rage_pct', 'bleed_pct', 'damage_pct'],
     tierScale: 0.9,
     capScale: 0.15,
     color: '#ff5a3c',
@@ -2845,8 +2825,8 @@ const VOIE_SET_DEFS: {
     voie: 'gardien',
     name: 'Rempart du Gardien',
     emoji: '🛡️',
-    theme: 'Le mur qui frappe : encaisse tout et tient.',
-    stats: ['dmg_reduction_pct', 'max_pv_pct', 'damage_pct'],
+    theme: 'Bloque et pare tout ce qui passe.',
+    stats: ['parry_pct', 'start_shield_pct', 'block_pct'],
     tierScale: 0.14,
     capScale: 0.08,
     color: '#4ea3ff',
@@ -2855,8 +2835,8 @@ const VOIE_SET_DEFS: {
     voie: 'assassin',
     name: 'Ombre de l’Assassin',
     emoji: '🗡️',
-    theme: 'Critiques qui achèvent, un vol de vie pour durer.',
-    stats: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
+    theme: 'Fait saigner, puis achève.',
+    stats: ['execute_pct', 'bleed_pct', 'crit_dmg_pct'],
     tierScale: 0.85,
     capScale: 1,
     color: '#9b7bff',
@@ -2865,8 +2845,8 @@ const VOIE_SET_DEFS: {
     voie: 'vampire',
     name: 'Soif du Vampire',
     emoji: '🩸',
-    theme: 'Vole la vie et se déchaîne au bord de la mort.',
-    stats: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
+    theme: 'Tient en se soignant sur chaque coup.',
+    stats: ['lifesteal_pct', 'rage_pct', 'max_pv_pct'],
     tierScale: 0.3,
     capScale: 0.4,
     color: '#e0325f',
@@ -2875,8 +2855,8 @@ const VOIE_SET_DEFS: {
     voie: 'colosse',
     name: 'Carcasse du Colosse',
     emoji: '🪨',
-    theme: 'Réservoir de PV qui cogne dans la durée.',
-    stats: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
+    theme: 'Encaisse les gros coups sans broncher.',
+    stats: ['toughness_pct', 'start_shield_pct', 'max_pv_pct'],
     tierScale: 0.1,
     capScale: 0.08,
     color: '#b08d5b',
@@ -2885,8 +2865,8 @@ const VOIE_SET_DEFS: {
     voie: 'duelliste',
     name: 'Élégance du Duelliste',
     emoji: '🎯',
-    theme: 'Précision létale adossée à des PV.',
-    stats: ['crit_pct', 'damage_pct', 'max_pv_pct'],
+    theme: 'Évite, puis contre.',
+    stats: ['riposte_pct', 'parry_pct', 'crit_dmg_pct'],
     tierScale: 0.16,
     capScale: 0.8,
     color: '#3fd0e0',
@@ -2895,8 +2875,8 @@ const VOIE_SET_DEFS: {
     voie: 'epineux',
     name: 'Carapace de l’Épineux',
     emoji: '🌵',
-    theme: 'Encaisse, renvoie les coups, frappe en retour.',
-    stats: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
+    theme: 'Punit qui le frappe.',
+    stats: ['thorns_pct', 'riposte_pct', 'max_pv_pct'],
     tierScale: 0.11,
     capScale: 0.8,
     color: '#5fcf4f',
@@ -2905,8 +2885,8 @@ const VOIE_SET_DEFS: {
     voie: 'frenetique',
     name: 'Transe du Frénétique',
     emoji: '🌀',
-    theme: 'Monte en puissance au fil du combat.',
-    stats: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
+    theme: 'Lent au départ, écrasant en fin de combat.',
+    stats: ['momentum_pct', 'lifesteal_pct', 'damage_pct'],
     tierScale: 0.4,
     capScale: 0.15,
     color: '#ff5cd8',
@@ -2923,15 +2903,17 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
     {
       pieces: 2,
       type: d.stats[2],
-      base: Math.max(0.1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 0.7 * d.tierScale)),
+      base: Math.max(0.1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 1.4 * d.tierScale)),
     },
     // ⚠️ REFONTE ÉQUIPEMENT (étape 5) : paliers à 2 / 4 / 6 pièces sur 6 emplacements.
+    // ⚠️ ×2 sur les paliers 2 et 4 (2026-09-22) : c’est le doublement de l’« affinité de voie »
+    // d’avant, qui s’appliquait dès qu’on portait le set dans sa voie — désormais toujours.
     {
       pieces: 4,
       type: d.stats[1],
-      base: Math.max(0.1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 1.0 * d.tierScale)),
+      base: Math.max(0.1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 2 * d.tierScale)),
     },
-    // 6-pièces = CAPSTONE (gaté par la voie) : la stat IDENTITÉ, amplifiée.
+    // 6-pièces = CAPSTONE : la stat IDENTITÉ de la voie, amplifiée.
     {
       pieces: 6,
       type: d.stats[0],
@@ -2981,23 +2963,21 @@ export function setTierLabel(type: EffectType, base: number, pieces: Item[]): st
   return effectLabelFor(type, base * setBonusMult(pieces));
 }
 
-/** 🎨 LE SET QUE L’ON PORTE, pour l’avatar : celui qui a le plus de pièces équipées, à
- *  partir de 2 (le seuil où il donne quelque chose). À égalité, celui de la voie. Rien sans
- *  couleur (sets d’avant les voies). */
+/** 🎨 LE SET QUE L’ON PORTE, pour l’avatar : celui de la voie portée (`wornVoie`), sinon le set
+ *  d’avant les voies le plus fourni, à partir de 2 pièces (le seuil où il donne quelque chose).
+ *  Rien sans couleur. */
 export function wornSet(
   equipped: Equipped,
-  voie?: string | null,
 ): { set: ItemSet; pieces: number; color: string } | null {
-  const mine = voieSetId(voie);
-  let best: { set: ItemSet; pieces: number; color: string } | null = null;
-  for (const [id, n] of Object.entries(setCounts(equipped))) {
-    const set = SET_BY_ID[id];
-    if (!set?.color || n < 2) continue;
-    if (!best || n > best.pieces || (n === best.pieces && id === mine)) {
-      best = { set, pieces: n, color: set.color };
-    }
-  }
-  return best;
+  const counts = setCounts(equipped);
+  const v = wornVoie(equipped);
+  const id =
+    (v && voieSetId(v)) ||
+    Object.keys(counts)
+      .filter((k) => (counts[k] ?? 0) >= 2 && SET_BY_ID[k]?.color)
+      .sort((a, b) => (counts[b] ?? 0) - (counts[a] ?? 0))[0];
+  const set = id ? SET_BY_ID[id] : undefined;
+  return set?.color ? { set, pieces: counts[id!] ?? 0, color: set.color } : null;
 }
 
 /** Nombre de pièces équipées par set. */
@@ -3013,49 +2993,25 @@ export function setCounts(equipped: Equipped): Record<string, number> {
 /** Effets cumulés des SETS actifs (≥2 pièces), scalés par le rang moyen des pièces.
  *  Le CAPSTONE (4-pièces) ne s'applique QUE si `voie` correspond au set (`voie:<voie>`) →
  *  compléter le set de SA voie = accomplir l'archétype. Les 2/3-pièces valent pour tous. */
-/** AFFINITÉ DE VOIE (v0.811) : porter la voie d'un set DOUBLE ses bonus 2 et 3 pièces.
- *
- *  ⚠️ LE DÉFAUT (signalé par l'utilisateur) : avec 3 pièces d'un set, le 4-pièces ne
- *  s'applique pas, et les 2/3-pièces valent pour TOUTES les voies. La voie ne décidait donc
- *  plus que de son PASSIF — et les passifs ne se valent pas (5 % de réduction pèse bien plus
- *  que 8 % d'épines dans la puissance). L'optimiseur proposait « porte le set Épineux, mais
- *  sois Gardien ». Mesuré : avec 3 pièces du set d'une voie, CETTE voie n'était la meilleure
- *  que 4 à 6 fois sur 32 ; sur le compte réel, Épineux arrivait avant-dernière (−3,4 %).
- *
- *  Balayage (3 pièces + un accessoire hors set, 8 voies × 4 tirages, niveaux 30/60/90) :
- *  ×1,5 → 12 à 28/32 · ×1,75 → 32/32 mais 0,2 % de marge · **×2 → 32/32, marge ≥ 1,2 %**.
- *  Réservé au palier 3 seul : 20 à 28/32 — insuffisant.
- *  ⚠️ PORTER UN SET HORS DE SA VOIE NE PERD RIEN (un bonus, pas une pénalité) : les demi-sets
- *  croisés gardent exactement leur valeur. Le capstone 6 pièces n'est pas touché.
- *  ⚠️ COÛT ASSUMÉ : un set de sa voie gagne 7 à 11 points de plus face aux meilleurs drops.
- *  ⚠️ PAS « seulement sur un set incomplet » : la 4ᵉ pièce aurait alors RETIRÉ l'affinité,
- *  et devenait inutile 5 fois sur 8 (mesuré). */
-const SET_AFFINITY_K = 1;
-
-export function setEffects(equipped: Equipped, voie?: string | null): AggregatedEffects {
+/** Bonus des sets portés : paliers 2 / 4 / 6 pièces. ⚠️ Plus de voie (2026-09-22) : le
+ *  palier 6 s'applique dès que les six pièces sont portées, et l'« affinité de voie » (v0.811,
+ *  paliers 2 et 4 doublés dans sa voie) disparaît — ce doublement est intégré aux paliers
+ *  eux-mêmes (`VOIE_SET_DEFS`), puisqu'un set porté est désormais toujours dans sa voie. */
+export function setEffects(equipped: Equipped): AggregatedEffects {
   const a = emptyEffects();
   const groups: Record<string, Item[]> = {};
   for (const slot of SET_SLOTS) {
     const it = equipped[slot];
     if (it?.setId) (groups[it.setId] ??= []).push(it);
   }
-  const capstoneId = voieSetId(voie);
   for (const [id, items] of Object.entries(groups)) {
     const def = SET_BY_ID[id];
     if (!def || items.length < 2) continue;
     const mult = setBonusMult(items);
-    const affinity = id === capstoneId ? 1 + SET_AFFINITY_K : 1;
     for (const t of def.tiers) {
       if (items.length < t.pieces) continue;
-      // Le DERNIER palier = CAPSTONE : gaté par la voie (l'archétype). Un set complet HORS
-      // voie ne donne que ses paliers inférieurs. ⚠️ « Dernier palier » et non « 6 pièces » :
-      // les sets d'avant (2/3/4) gardent ainsi leur règle sans cas particulier.
-      const cap = t === def.tiers[def.tiers.length - 1];
-      if (cap && id !== capstoneId) continue;
-      const k = cap ? 1 : affinity;
-      // Plancher à 0,1 point et non 1 (étape 7) : les paliers recalibrés valent souvent moins d'un
-      // point, et un plancher entier écrasait l'échelle ET le doublement de l'affinité de voie.
-      applyEffect(a, t.type, Math.max(0.1, round1(t.base * mult * k)) / 100);
+      // Plancher à 0,1 point et non 1 (étape 7) : les paliers valent souvent moins d'un point.
+      applyEffect(a, t.type, Math.max(0.1, round1(t.base * mult)) / 100);
     }
   }
   a.dmgReduction = Math.min(0.5, a.dmgReduction);
@@ -3065,7 +3021,7 @@ export function setEffects(equipped: Equipped, voie?: string | null): Aggregated
 // `capLevel` plafonne le niveau EFFECTIF de chaque objet au niveau du joueur (comme
 // l'upgrade) → un objet sur-leveled ne donne que la puissance de TON niveau (anti
 // « bas niveau en gear trop haut qui punch 3 tiers au-dessus », cf. simulation 2026‑08‑12).
-export function aggregateEffects(equipped: Equipped, voie?: string | null): AggregatedEffects {
+export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   const a = emptyEffects();
   // Le TROPHÉE se lit comme un objet (valeur × niveau d'objet) : sa retenue est déjà dans
   // ses valeurs (`TROPHY_K`), pas dans un multiplicateur à part.
@@ -3088,7 +3044,7 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
     if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * flm) / 100);
   }
   // Bonus de set (2/4 pièces pour tous ; capstone 6 pièces si la voie correspond).
-  const s = setEffects(equipped, voie);
+  const s = setEffects(equipped);
   for (const k of AGGREGATE_KEYS) a[k] += s[k];
   // ⚠️ Plus de plafond sec sur la réduction ici : la courbe de chance (`CHANCE_CURVES`)
   // s'en charge en aval, et les aventuriers gardent leur plafond dans `playerWithGear`.
@@ -3227,7 +3183,7 @@ export function playerWithGear(
 ): Combatant {
   const base = playerCombatant(name, stats, level);
   // `voie` gate le capstone (6 pièces) du set de la voie (cf. setEffects).
-  const e = aggregateEffects(equipped, voie);
+  const e = aggregateEffects(equipped);
   const damagePct = e.damagePct + (extra.damagePct ?? 0);
   const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);
   const critAdd = e.critAdd + (extra.critAdd ?? 0);
@@ -3248,7 +3204,7 @@ export function playerWithGear(
   // infini. Borné → build sustain fort mais pas increvable (ticket adab525d).
   const lifesteal = Math.min(0.5, e.lifesteal + (extra.lifesteal ?? 0));
   // Procs LÉGENDAIRES (non-scalants) portés par l'équipement.
-  const procs = aggregateLegendaries(equipped, voie);
+  const procs = aggregateLegendaries(equipped);
   // Stats MINEURES de combat : initiative (multiplicatif, léger) + régén de donjon (borné +30 %).
   const initiativePct = e.initiativePct + (extra.initiativePct ?? 0);
   const regen = Math.min(0.3, e.regenPct + (extra.regenPct ?? 0));
@@ -3269,17 +3225,17 @@ export function playerWithGear(
     ...(regen > 0 ? { regen } : {}),
     ...(procs.size ? { procs } : {}),
     ...(equipped.relic?.power ? { relic: relicCharge(equipped.relic) } : {}),
-    ...(legacy ? { momentumPerHit: true } : {}),
+    ...(legacy ? { momentumPerHit: true } : { specRules: true }),
     ...newStats(e, extra),
   };
 }
 /** Bonus de LUCK apporté par le magic find de l'équipement (borné → jamais hors ligue).
  *  À ajouter à la `luck` passée à rollDrop au moment du butin d'un run. */
-export function magicFindLuck(equipped: Equipped, voie?: string | null): number {
+export function magicFindLuck(equipped: Equipped): number {
   // magicFindPct est une fraction (ex. 0,30 = +30 %). On la convertit en luck avec un
   // facteur faible et un plafond → au mieux ~+0,25 de luck (épaissit un peu la pointe
   // haute de la pyramide, ne peut PAS franchir le cap +2 rangs de ta ligue).
-  return Math.min(0.25, aggregateEffects(equipped, voie).magicFindPct * 0.5);
+  return Math.min(0.25, aggregateEffects(equipped).magicFindPct * 0.5);
 }
 
 /** OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : cherche, parmi l'équipé + le sac, la

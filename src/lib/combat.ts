@@ -64,6 +64,11 @@ export interface Combatant {
   /** Élan compté PAR COUP (règle d'avant la refonte de l'équipement) : réservé aux
    *  aventuriers, dont la calibration (route, sièges, camps, failles) est mesurée à part. */
   momentumPerHit?: boolean;
+  /** RÈGLES DES SETS SPÉCIALISÉS (2026-09-22, héros seulement) : épines en part des PV max
+   *  ennemis, plafond de soin qui monte avec le vol de vie, seuil d'exécution qui monte avec
+   *  l'exécution. Les aventuriers et les monstres gardent les règles d'avant (leur
+   *  calibration — convois, sièges, camps — est mesurée à part). */
+  specRules?: boolean;
   thorns?: number; // 0..1 : part des dégâts reçus renvoyée à l'attaquant (épines, joueur)
   regen?: number; // 0..1 : BONUS de PV régénérés entre 2 combats d'un donjon (stat mineure, joueur)
   // ── Refonte équipement (étape 3) — joueur uniquement ──
@@ -238,6 +243,19 @@ export const COMBAT = {
   // ne pouvait franchir (le sport n'était plus le plafond). Borné ici → le sustain reste fort
   // mais un monstre de ta ligue finit par percer (v0.600, ticket anti-runaway difficulté).
   lifestealRoundCap: 0.08,
+  // ── Règles des sets spécialisés (héros, `specRules`) — cf. spec 2026-09-22 ──
+  // Vol de vie : le plafond de soin par tour est `lifestealRoundCap × lifesteal / lifestealRef`,
+  // borné à `lifestealCapMax` fois le plafond de base. Avant, le moindre point de vol de vie
+  // atteignait le plafond (le héros frappe ~17 fois par tour) : la stat saturait d'emblée.
+  lifestealRef: 0.06,
+  lifestealCapMax: 4,
+  // Épines : chaque coup reçu retire `thorns × thornsMaxPvK` des PV max de l'ennemi. Renvoyer
+  // une part du coup reçu ne pesait rien (l'ennemi frappe une fois par tour : 0,7 % mesuré).
+  thornsMaxPvK: 0.1,
+  // Exécution : le seuil monte avec la stat (`executeThreshold + execute × executeThresholdK`,
+  // plafonné à `executeThresholdMax`). Sous 25 % fixes, la fenêtre était trop courte (1,4 %).
+  executeThresholdK: 0.5,
+  executeThresholdMax: 0.6,
   // Effets signature (conditionnels) — seuils & plafond.
   executeThreshold: 0.25, // « Exécution » active si l'ennemi est sous 25 % PV
   rageThreshold: 0.3, // « Rage » active si le joueur est sous 30 % PV
@@ -438,11 +456,30 @@ function lifestealSizingFactor(c: Combatant): number {
   return 1 + COMBAT.powerLifestealW * Math.min(COMBAT.powerLifestealCap, c.lifesteal ?? 0);
 }
 
+/** Plafond de soin par tour (part des PV max) — il monte avec le vol de vie sous les règles
+ *  des sets spécialisés, il est fixe sinon. SOURCE UNIQUE : combat et estimateur. */
+export function lifestealCapShare(c: Pick<Combatant, 'lifesteal' | 'specRules'>): number {
+  if (!c.specRules) return COMBAT.lifestealRoundCap;
+  return (
+    COMBAT.lifestealRoundCap *
+    Math.min(COMBAT.lifestealCapMax, (c.lifesteal ?? 0) / COMBAT.lifestealRef)
+  );
+}
+
+/** Seuil d'exécution (part des PV ennemis) — il monte avec l'exécution sous les règles des
+ *  sets spécialisés. SOURCE UNIQUE : combat et estimateur. */
+export function executeThresholdOf(c: Pick<Combatant, 'execute' | 'specRules'>): number {
+  if (!c.specRules) return COMBAT.executeThreshold;
+  return Math.min(
+    COMBAT.executeThresholdMax,
+    COMBAT.executeThreshold + (c.execute ?? 0) * COMBAT.executeThresholdK,
+  );
+}
+
 /** Part des PV max rendue par tour par le vol de vie, plafonnée comme en combat. */
 function lifestealHealShare(c: Combatant): number {
   if (!c.lifesteal || c.pv <= 0) return 0;
-  const cap =
-    COMBAT.lifestealRoundCap * (c.procs?.has('sig_vampire') ? COMBAT.eternalHealCapMult : 1);
+  const cap = lifestealCapShare(c) * (c.procs?.has('sig_vampire') ? COMBAT.eternalHealCapMult : 1);
   const perRound = c.damage * (c.strikes ?? 1) * (1 + c.crit * (1 + (c.critDmg ?? 0)));
   return Math.min(cap, (c.lifesteal * perRound) / c.pv);
 }
@@ -821,7 +858,7 @@ export function simulateCombat(
     let roundHeal = 0;
     const healCap = Math.round(
       (turn === 'player' ? maxPPv : monsterMaxPv) *
-        COMBAT.lifestealRoundCap *
+        (turn === 'player' ? lifestealCapShare(player) : COMBAT.lifestealRoundCap) *
         (turn === 'player' && has('sig_vampire') ? COMBAT.eternalHealCapMult : 1) *
         (thirsty ? COMBAT.thirstHealCapMult : 1),
     );
@@ -903,7 +940,7 @@ export function simulateCombat(
         }
         // Effets signature (conditionnels), avant réduction.
         let mult = 1;
-        if (atk.execute && mPv / monsterMaxPv < COMBAT.executeThreshold) {
+        if (atk.execute && mPv / monsterMaxPv < executeThresholdOf(atk)) {
           mult += atk.execute;
           mark('execute');
         }
@@ -1128,7 +1165,12 @@ export function simulateCombat(
         }
         // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
         if (def.thorns && dmg > 0) {
-          const t = Math.max(1, Math.round(dmg * def.thorns));
+          const t = Math.max(
+            1,
+            Math.round(
+              def.specRules ? monsterMaxPv * def.thorns * COMBAT.thornsMaxPvK : dmg * def.thorns,
+            ),
+          );
           mPv = Math.max(0, mPv - t);
           mark('thorns');
         }
