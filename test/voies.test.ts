@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { VOIES, VOIE_BY_ID, voiePassiveEffects } from '@/lib/voies';
+import { combatPowerRaw } from '@/lib/combat';
+import { playerWithGear, mergeEffects } from '@/lib/items';
+import { gearedBuild } from './helpers/gearedFighter';
 
 describe('voies (spécialisation)', () => {
   it('catalogue cohérent : id unique, preferred non vide, passif défini', () => {
@@ -28,11 +31,20 @@ describe('voies (spécialisation)', () => {
     for (const v of VOIES) expect(v.passive.type, v.id).not.toBe('crit_pct');
   });
   it('un passif est un PETIT bonus : jamais une stat de voie qui décide seule du choix', () => {
-    // Bornes des familles (en points) : les pourcentages de dégâts/PV/réduction/vol de vie
-    // restent sous 6, l'exécution (qui ne vaut que sous 25 % des PV ennemis) sous 80.
-    for (const v of VOIES) {
-      const cap = v.passive.type === 'execute_pct' ? 80 : 6;
-      expect(v.passive.base, v.id).toBeLessThanOrEqual(cap);
+    // ⚠️ RÉÉCRIT (refonte équipement, étape 7) : bornés en POINTS, les passifs ne disaient pas
+    // ce qu'ils valent (un point de rage ne pèse pas un point de PV). Mesuré sur le joueur de
+    // référence : 0,8 à 4 % avant, et le passif Vampire (1 % de vol de vie) atteignait seul le
+    // plafond de soin — ils décidaient de la voie à la place du set (177 échecs sur 288). La
+    // propriété est donc en PUISSANCE : chacun entre 0,3 et 2 %, aux niveaux 30 et 60.
+    for (const L of [30, 60]) {
+      const b = gearedBuild(L, 1);
+      const p0 = combatPowerRaw(playerWithGear('g', b.stats, b.eq, b.fx, L));
+      for (const v of VOIES) {
+        const fx = mergeEffects(b.fx, voiePassiveEffects(v.id));
+        const gain = combatPowerRaw(playerWithGear('g', b.stats, b.eq, fx, L)) / p0 - 1;
+        expect(gain, `${v.id} niveau ${L}`).toBeGreaterThan(0.003);
+        expect(gain, `${v.id} niveau ${L}`).toBeLessThan(0.02);
+      }
     }
   });
 });

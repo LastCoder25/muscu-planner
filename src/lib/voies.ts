@@ -1,7 +1,7 @@
 // voies.ts — SPÉCIALISATION du perso (« Voie » / archétype). Pur/testé.
 // Une voie ne donne PAS de puissance brute massive (le sport reste la source) et ne biaise
 // PLUS les drops (uniformes) : elle (1) accorde un PETIT passif de saveur ; (2) débloque le
-// CAPSTONE (4-pièces) du SET de sa voie (`voie:<id>` dans items.ts) → compléter le set de
+// CAPSTONE (6 pièces) du SET de sa voie (`voie:<id>` dans items.ts) → compléter le set de
 // SA voie = accomplir l'archétype. Réversible à tout moment (comme les talents).
 import { effectAsAggregate, type EffectType, type AggregatedEffects } from './items';
 
@@ -23,7 +23,9 @@ export interface Voie {
   /** Stats de FOCUS de l'archétype (= le thème de son set de voie). Descriptif (les drops
    *  ne sont plus biaisés) : sert au libellé UI + à générer le thème du set. */
   preferred: EffectType[];
-  /** Petit passif constant (type + magnitude en %). */
+  /** Petit passif constant (type + magnitude en %). ⚠️ ~1 % de puissance chacun (refonte
+   *  équipement, étape 7, mesuré sur le joueur de référence aux niveaux 30/60/90) : plus gros,
+   *  il décidait de la voie à la place du set (la voie du set perdait 177 fois sur 288). */
   passive: { type: EffectType; base: number };
 }
 
@@ -38,7 +40,7 @@ export const VOIES: Voie[] = [
     emoji: '💥',
     blurb: 'Dégâts bruts et exécution — frappe fort, se soigne en tapant.',
     preferred: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
-    passive: { type: 'damage_pct', base: 5.5 },
+    passive: { type: 'damage_pct', base: 2.4 },
   },
   {
     id: 'gardien',
@@ -54,7 +56,7 @@ export const VOIES: Voie[] = [
     emoji: '🗡️',
     blurb: 'Critiques qui achèvent, et un vol de vie pour tenir.',
     preferred: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
-    passive: { type: 'execute_pct', base: 75 },
+    passive: { type: 'execute_pct', base: 24 },
   },
   {
     id: 'vampire',
@@ -62,7 +64,7 @@ export const VOIES: Voie[] = [
     emoji: '🩸',
     blurb: 'Vole la vie en frappant fort et se déchaîne au bord de la mort.',
     preferred: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
-    passive: { type: 'lifesteal_pct', base: 1 },
+    passive: { type: 'rage_pct', base: 28 },
   },
   {
     id: 'colosse',
@@ -70,7 +72,7 @@ export const VOIES: Voie[] = [
     emoji: '🪨',
     blurb: 'Réservoir de PV qui encaisse et cogne dans la durée.',
     preferred: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
-    passive: { type: 'max_pv_pct', base: 5.5 },
+    passive: { type: 'max_pv_pct', base: 3.5 },
   },
   {
     id: 'duelliste',
@@ -78,7 +80,7 @@ export const VOIES: Voie[] = [
     emoji: '🎯',
     blurb: 'Précision létale, adossée à des PV pour durer.',
     preferred: ['crit_pct', 'damage_pct', 'max_pv_pct'],
-    passive: { type: 'damage_pct', base: 5.5 },
+    passive: { type: 'damage_pct', base: 2.4 },
   },
   {
     id: 'epineux',
@@ -86,7 +88,7 @@ export const VOIES: Voie[] = [
     emoji: '🌵',
     blurb: 'Encaisse, renvoie les coups et frappe en retour.',
     preferred: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
-    passive: { type: 'max_pv_pct', base: 5.5 },
+    passive: { type: 'max_pv_pct', base: 3.5 },
   },
   {
     id: 'frenetique',
@@ -94,7 +96,7 @@ export const VOIES: Voie[] = [
     emoji: '🌀',
     blurb: 'Monte en puissance au fil du combat, et se soigne en frappant.',
     preferred: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
-    passive: { type: 'momentum_pct', base: 2 },
+    passive: { type: 'momentum_pct', base: 1 },
   },
 ];
 

@@ -535,21 +535,29 @@ export function bossReplaySteps(log: readonly CombatEvent[], max: number): RiftB
  * l'étalon change par PALIERS aux bords de rang (9, 12, 21, 41, 51, 61, 71), donc le renfort
  * saute aussi — il faut un point de CHAQUE côté d'un bord, sinon l'interpolation traverse
  * la marche. Re-bisecté sur 46 niveaux (cible 0,70) : mûre **0,63 à 0,77** partout.
+ *
+ * ⚠️ **NIVEAUX 10-11 ET 51-60 RE-BISECTÉS (refonte équipement, étape 7)** : l'escorte de
+ * référence choisit son équipement à la puissance affichée, qui compte désormais le vol de vie
+ * pour sa valeur réelle (le soin par tour) ; elle en prend davantage, et c'est au niveau 11 et
+ * au rang 51-60 qu'il pèse le plus. Mesuré avant : mûre **0,92** au niveau 11, **0,84** au
+ * 51 et au 60. Après : **0,67 à 0,73**. ⚠️ Le niveau 10 a désormais son propre point : sans
+ * lui, l'interpolation 9 → 11 le laissait à 0,51 (une falaise entre deux paliers d'étalon).
  */
 const RIFT_RELIEF: [number, number][] = [
   [1, 0.96],
   [2, 0.94],
   [8, 0.93],
   [9, 1.11],
-  [11, 1.1],
+  [10, 1.12],
+  [11, 1.2],
   [12, 1.19],
   [20, 1.2],
   [21, 0.96],
   [40, 0.96],
   [41, 0.99],
   [50, 1.0],
-  [51, 1.05],
-  [60, 1.07],
+  [51, 1.11],
+  [60, 1.12],
   [61, 1.11],
   [70, 1.11],
   [71, 1.13],

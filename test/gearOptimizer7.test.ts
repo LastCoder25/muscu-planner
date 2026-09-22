@@ -79,6 +79,10 @@ it('l’équipement conseillé retrouve le meilleur build, vite, sur 7 emplaceme
   // pour 0,2 et 0,3 % de puissance. Les couvrir coûterait un balayage de triplets ;
   // `SET_K` = 2 n'en rattrape qu'un. Même tolérance qu'à 7 emplacements : presque toujours
   // le meilleur, et jamais loin.
+  // ⚠️ Étape 7 (bonus de set recalibrés, ~+4 % pour les paliers 2 et 4) : les pièces d'un
+  // même set se valent à peu près, et le meilleur build se joue sur des DÉPLACEMENTS de
+  // pièces de set — mesuré 115/120, pire cas 96,6 %. La passe finale essaie donc deux pièces
+  // d'un coup, dont une de set, dans tout le sac : 118/120, pire cas 99,65 %.
   expect(agree).toBeGreaterThanOrEqual(118);
   expect(worst).toBeGreaterThan(0.995);
   // 7 emplacements, petits sacs : exhaustif vrai (4^7 combinaisons).

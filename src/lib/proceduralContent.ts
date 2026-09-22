@@ -83,19 +83,21 @@ const CALIB = {
 // légendaires (dès le rang 51), pouvoir de relique, signatures de set. Elle multiplie l'attaque
 // ET la survie attendues. Mesurée APRÈS les deux premières, en vrai combat : multiplicateur de
 // monstre qui ramène le joueur de référence à 70 % de nettoyage (donjons, 6 graines × 25) et
-// 55 % au palier (boss) — les deux concordent rang par rang (niveaux 51-100 : ×1,21 à ×1,31).
+// 55 % au palier (boss) — les deux concordent rang par rang (niveaux 51-100 : ×1,14 à ×1,23).
+// Re-mesurée quand la puissance affichée a compté le vol de vie pour sa valeur réelle (étape 7) :
+// le joueur de référence, qui choisit son équipement à la puissance, en porte davantage.
 // [premier niveau, dernier, attaque début, fin, survie début, fin, part invisible]
 const GEAR_BUDGET_BY_RANK: [number, number, number, number, number, number, number][] = [
   [1, 10, 1.0, 1.27, 1.06, 1.38, 1],
   [11, 20, 1.27, 1.3, 1.38, 1.46, 1],
-  [21, 30, 1.3, 1.54, 1.5, 1.68, 0.95],
-  [31, 40, 1.7, 1.75, 1.77, 1.95, 1.09],
-  [41, 50, 1.96, 2.46, 2.0, 2.17, 1.08],
+  [21, 30, 1.3, 1.54, 1.5, 1.68, 1],
+  [31, 40, 1.7, 1.75, 1.77, 1.95, 1.06],
+  [41, 50, 1.96, 2.46, 2.0, 2.17, 1.05],
   [51, 60, 2.74, 2.8, 2.2, 2.46, 1.21],
-  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.31],
-  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.25],
-  [81, 90, 5.62, 5.62, 3.95, 4.15, 1.3],
-  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.25],
+  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.23],
+  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.15],
+  [81, 90, 5.62, 5.62, 3.95, 4.15, 1.18],
+  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.14],
 ];
 export function gearBudget(level: number): { off: number; pv: number } {
   const L = Math.min(100, Math.max(1, level));

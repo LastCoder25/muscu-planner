@@ -4,6 +4,7 @@ import { levelCost } from '@/lib/levels';
 import { describe, it, expect } from 'vitest';
 import {
   aggregateLines,
+  setBonusMult,
   SLOT_AFFIXES,
   SLOT_WEIGHT,
   rarityRank,
@@ -2079,15 +2080,15 @@ describe('⚖️ ÉCHELLE DES PALIERS DE SET (v0.837) — ce qui rend les 8 sets
   const tier = (voie: string, pieces: number) =>
     SET_BY_ID[`voie:${voie}`]!.tiers.find((t) => t.pieces === pieces)!;
   it('à stat égale, les paliers ne valent pas pareil d’un set à l’autre', () => {
-    // Berserker et Assassin portent tous deux l’exécution au 3-pièces : sans échelle, même
-    // valeur. Mesuré : un palier d’exécution ne pèse presque rien, celui du Berserker est grossi.
-    // (paliers 2/4/6 depuis la refonte de l'équipement : l'ancien « 3 pièces » est le 4.)
+    // Berserker et Assassin portent tous deux l’exécution au 4-pièces : sans échelle, même
+    // valeur. ⚠️ RECALIBRÉ à la refonte équipement (étape 7, en vrai combat) : chaque set a son
+    // échelle, mesurée pour que ses paliers 2+4 vaillent ~+4 %.
     expect(tier('berserker', 4).type).toBe(tier('assassin', 4).type);
-    expect(tier('berserker', 4).base / tier('assassin', 4).base).toBeCloseTo(1.6, 1);
-    // Gardien et Colosse portent tous deux les dégâts au 2-pièces : le Gardien, dont les PV
-    // et la réduction pèsent lourd en combat, est le plus réduit.
+    expect(tier('berserker', 4).base).not.toBe(tier('assassin', 4).base);
+    // Gardien et Colosse portent tous deux les dégâts au 2-pièces : le Colosse, dont les PV et
+    // la réduction des autres paliers pèsent le plus en combat, est le plus réduit.
     expect(tier('gardien', 2).type).toBe(tier('colosse', 2).type);
-    expect(tier('gardien', 2).base).toBeLessThan(tier('colosse', 2).base);
+    expect(tier('colosse', 2).base).toBeLessThan(tier('gardien', 2).base);
   });
   it('l’échelle vaut pour les trois paliers, capstone compris', () => {
     // Vampire (vol de vie au 4-pièces) grossi, Berserker (vol de vie au 2-pièces) aussi : les
@@ -2144,13 +2145,16 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
       accessory: piece('voie:epineux', 'accessory', 9),
     };
     const tiers = SET_BY_ID['voie:epineux']!.tiers;
-    const t2 = tiers.find((t) => t.pieces === 2)!;
-    const t4 = tiers.find((t) => t.pieces === 6)!;
-    // Le multiplicateur du set se relit sur le 2-pièces HORS voie (valeur de base, non doublée).
-    const mult = (setEffects(eq, null).damagePct * 100) / t2.base;
+    const t6 = tiers.find((t) => t.pieces === 6)!;
+    // ⚠️ Le multiplicateur se lit sur `setBonusMult` et non plus sur le 2-pièces : les paliers
+    // recalibrés valent souvent moins d'un point, et l'arrondi au dixième faussait sa relecture.
+    const pieces = Object.values(eq).filter((i) => i?.setId === 'voie:epineux') as Item[];
     const capstone = setEffects(eq, 'epineux').thornsPct * 100;
     expect(capstone).toBeGreaterThan(0);
-    expect(Math.abs(capstone - t4.base * mult)).toBeLessThanOrEqual(0.2);
+    expect(capstone).toBeCloseTo(
+      Math.max(0.1, Math.round(t6.base * setBonusMult(pieces) * 10) / 10),
+      6,
+    );
   });
 
   it('avec 4 pièces du set d’une voie, CETTE voie donne la meilleure puissance', () => {
@@ -2211,11 +2215,10 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
           n++;
           if (own < best) {
             fails++;
-            // ⚠️ v0.875 (objets au rang du joueur) : aux niveaux 20-30 les pièces sont Bronze ou
-            // Argent (un seul affixe) et Gardien/Vampire perdent parfois de peu (mesuré ≤ 1,4 %
-            // depuis la v0.876, sans rang au-dessus). Hors liste connue, un échec doit rester marginal.
+            // Hors liste connue, un échec doit rester marginal. ⚠️ Refonte équipement (étape 7) :
+            // mesuré 2 échecs sur 288 (Duelliste, niveau 20), pertes ≤ 0,25 %.
             if (!known.has(V))
-              expect(1 - own / best, `${V} niv ${L} graine ${seed}`).toBeLessThan(0.02);
+              expect(1 - own / best, `${V} niv ${L} graine ${seed}`).toBeLessThan(0.01);
           }
         }
       }
@@ -2225,7 +2228,12 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
     // ⚠️ 8 % depuis la v0.894 (le rang du joueur s'ouvre sur la durée du rang : les pièces de
     // set tirées ici sont surtout du rang d'en dessous, un affixe de moins) : mesuré 20 échecs
     // sur 288 (6,9 %), toujours tous marginaux — l'écart de puissance reste vérifié ci-dessus.
-    expect(fails / n).toBeLessThan(0.08);
+    // ⚠️ REFONTE ÉQUIPEMENT (étape 7) : les paliers de set recalibrés ne rapportent plus
+    // qu'environ 2 % d'avantage d'affinité, et les PASSIFS de voie décidaient à leur place —
+    // mesuré 177 échecs sur 288 (jusqu'à 11 % de perte : le passif Vampire, 1 % de vol de vie,
+    // atteignait seul le plafond de soin, et l'exécution de l'Assassin valait +4 %). Passifs
+    // ramenés à ~1 % de puissance chacun : 2 échecs sur 288.
+    expect(fails / n).toBeLessThan(0.02);
   });
 });
 

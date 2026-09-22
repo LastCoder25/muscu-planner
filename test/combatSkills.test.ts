@@ -278,6 +278,7 @@ describe('⚠️ L’EMPREINTE ARMÉE — celle qui couvre VRAIMENT le marquage'
       'execute',
       'lifesteal',
       'momentum',
+      'rage',
       'retort',
       'sig_berserker',
       'thorns',
@@ -292,8 +293,11 @@ describe('⚠️ L’EMPREINTE ARMÉE — celle qui couvre VRAIMENT le marquage'
       // que la règle ne consomme aucun tirage de plus. Étape 5 : Égide passe de −45 % à −75 %
       // (« bloquée d'office ») — seul le 1er coup ENCAISSÉ change (mh133 → mh61), et avec lui
       // les coups de rage qui suivent (PV plus hauts). Encore une fois : aucun tirage de plus.
-    ).toBe('ph146,pc387,mh61,ph268,ph290,mh243,pd0,pc728,mc442,ph378,ph370,mh250');
-    expect(r.rounds).toBe(10); // élan par tour : un tour de plus (était 9)
-    expect(r.log).toHaveLength(15); // était 14
+      // Étape 7 : Carnage passe de +300 % à +45 % (signatures recalibrées) — seuls les DÉGÂTS
+      // du joueur changent, la suite qui/quoi est IDENTIQUE ; le combat, plus long, voit la rage
+      // mordre (d'où « rage » ci-dessus).
+    ).toBe('ph146,pc361,mh61,ph195,ph196,mh243,pd0,pc438,mc442,ph195,ph180,mh250');
+    expect(r.rounds).toBe(15); // Carnage plus faible : combat plus long (était 10)
+    expect(r.log).toHaveLength(22); // était 15
   });
 });

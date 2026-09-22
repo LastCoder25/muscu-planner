@@ -168,17 +168,18 @@ export const PROC_POWER: Record<string, { side: 'off' | 'surv'; weight: number }
   rage_seal: { side: 'off', weight: 0.16 },
   hunter: { side: 'off', weight: 0.16 },
   // ⚠️ SIGNATURES DE SET : leur poids n'est PAS la valeur de la signature seule, mais ce qui
-  // manque pour que la puissance affichée du SET COMPLET égale ce qu'il vaut en vrai combat
-  // (mesuré, v0.837). Les paliers d'un set ne pèsent pas pareil à l'écran et au combat selon
-  // leurs stats : ce poids rattrape l'écart, set par set. Sans lui, l'optimiseur préférerait
-  // un set qui brille à l'écran à un set qui gagne.
+  // manque pour que la puissance affichée du SET COMPLET égale ce qu'il vaut en vrai combat.
+  // Re-mesuré à la refonte équipement (étape 7), signatures recalibrées : la puissance du set
+  // complet suit le combat à quelques points près. ⚠️ Le Vampire reste SURESTIMÉ à l'écran
+  // (~+10 points aux niveaux 60-90) même à un poids quasi nul : c'est la valeur du vol de vie
+  // qui dépend du niveau du combat (cf. `powerSustainW`), pas sa signature.
   sig_berserker: { side: 'off', weight: 0.09 },
-  sig_gardien: { side: 'surv', weight: 0.27 },
-  sig_assassin: { side: 'off', weight: 0.55 },
-  sig_vampire: { side: 'surv', weight: 0.06 },
-  sig_colosse: { side: 'surv', weight: 0.23 },
-  sig_duelliste: { side: 'off', weight: 0.18 },
-  sig_epineux: { side: 'off', weight: 0.19 },
+  sig_gardien: { side: 'surv', weight: 0.09 },
+  sig_assassin: { side: 'off', weight: 0.07 },
+  sig_vampire: { side: 'surv', weight: 0.02 },
+  sig_colosse: { side: 'surv', weight: 0.1 },
+  sig_duelliste: { side: 'off', weight: 0.09 },
+  sig_epineux: { side: 'off', weight: 0.1 },
   sig_frenetique: { side: 'off', weight: 0.08 },
 };
 
@@ -266,25 +267,44 @@ export const COMBAT = {
   quarryHealPct: 0.22, // Curée : soigne 22 % des PV max du joueur (1× par combat)
   // SIGNATURES DE SET (v0.835) — le 4-pièces d'un set porté dans SA voie. Même famille que
   // les procs : non-scalantes, déterministes (aucune ne consomme de rng).
-  // ⚠️ RECALIBRÉES EN v0.837 AVEC LES PALIERS ET LES POIDS DE PUISSANCE (cf. VOIE_SETS) : un
-  // set complet porté dans sa voie vaut ~+24 % contre les meilleurs drops, pour les 8 voies,
-  // en vrai combat (boss de palier + donjon le plus profond, niveaux 30/60/90).
-  carnageMax: 3, // Berserker · Carnage : +dégâts ∝ PV manquants de l'ennemi, jusqu'à +300 %
+  // ⚠️ REFONTE ÉQUIPEMENT (étape 7) — RECALIBRÉES À ZÉRO sur le format 6 pièces (spec § 6.2) :
+  // un set complet dans sa voie vaut +5 à +10 % contre les meilleurs drops, et « 4 pièces +
+  // 2 meilleurs drops » vaut « 6 pièces » à ±3 %. Mesuré en vrai combat (boss de palier,
+  // niveaux 30/60/90, 3 builds de référence, dichotomie du multiplicateur de boss à 50 %) :
+  // signature seule +2 à +6 %. Elles valaient +3 % (Transe, Inébranlable) à +46 % (Soif
+  // éternelle) — le Vampire et l'Épineux gagnaient leur set par leur seule signature.
+  carnageMax: 0.45, // Berserker · Carnage : +dégâts ∝ PV manquants de l'ennemi, jusqu'à +45 %
   bastionHits: 3, // Gardien · Bastion : les 3 premières attaques ennemies qui touchent…
   bastionMult: 0.76, // …sont réduites d'un quart
-  graceCritMult: 3.35, // Assassin · Coup de grâce : un critique inflige ×3,35 au lieu de ×2
-  eternalHealCapMult: 3.5, // Vampire · Soif éternelle : plafond de soin par tour ×3,5
+  graceCritMult: 2.2, // Assassin · Coup de grâce : un critique inflige ×2,2 au lieu de ×2
+  eternalHealCapMult: 1.2, // Vampire · Soif éternelle : plafond de soin par tour ×1,2
   unshakenMaxHitPct: 0.4, // Colosse · Inébranlable : un coup retire au plus 40 % des PV max
   secretThrustEvery: 3, // Duelliste · Botte secrète : un coup porté sur 3 est critique…
-  secretThrustMult: 2.9, // …et ce critique-là inflige ×2,9
-  bramblesMaxPvPct: 0.09, // Épineux · Ronces : chaque coup reçu retire 9 % des PV max ennemis
+  secretThrustMult: 2.3, // …et ce critique-là inflige ×2,3
+  bramblesMaxPvPct: 0.009, // Épineux · Ronces : chaque coup reçu retire 0,9 % des PV max ennemis
   tranceMaxStacks: 6, // Frénétique · Transe : l'élan se cumule jusqu'à 6 tours au lieu de 4
   // ⚠️ POIDS DES STATS DANS `combatPower` (v0.837, mesurés en vrai combat) : la puissance
   // comptait le vol de vie PLEIN et ignorait son plafond de soin par tour, sur-valorisait
   // l'élan et les épines. L'optimiseur montait donc des stats qui brillaient à l'écran sans
   // gagner. Vol de vie : ×0,43 et plafonné à 0,3 (au-delà, le plafond de soin mange tout).
+  // ⚠️ Ces deux-là sont l'ESTIMATEUR DE DIMENSIONNEMENT (`offenseOf`) : routes, camps et
+  // failles calent leurs ennemis dessus, et leurs bandes ont été MESURÉES avec lui. La
+  // puissance AFFICHÉE compte le vol de vie autrement, cf. `powerSustainW`.
   powerLifestealW: 0.43,
   powerLifestealCap: 0.3,
+  // ⚠️ REFONTE ÉQUIPEMENT (étape 7) — la PUISSANCE AFFICHÉE compte le vol de vie pour ce qu'il
+  // est : de la SURVIE, dont la valeur est le SOIN PAR TOUR, plafonné à `lifestealRoundCap` des
+  // PV max. Part des PV rendue par tour = min(plafond, vol de vie × dégâts par tour ÷ PV).
+  // Mesuré en vrai combat (boss de palier ET donjon, 3 builds de référence) : le gain PLAFONNE
+  // exactement là où ce soin atteint le plafond, et au plafond il vaut +24 % de puissance au
+  // niveau 60 (+35 % au 30, +9,5 % au 90). L'écran en montrait +4 % : l'optimiseur laissait de
+  // côté la stat qui gagnait le plus de combats en milieu de partie.
+  // ⚠️ PAS dans `survivalOf` — essayé et MESURÉ : sa valeur réelle dépend du niveau, et
+  // l'escorte de référence en porte plus ou moins selon le niveau ; dimensionner la route
+  // dessus la rendait trop dure au niveau 26-45 et trop facile au 85 (elle était plate).
+  // Même règle que les effets légendaires et les pouvoirs de relique : ils ne pèsent que dans
+  // `combatPowerRaw`.
+  powerSustainW: 3,
   powerThornsW: 0.04,
   // Élan PAR TOUR (étape 1) : mesuré en vrai combat, +1 d'élan vaut ~+2,4 à +3,0 de dégâts
   // (boss et donjon, niveaux 30/60/90, 3 builds) → 2,75. Le 4,5 d'avant valait pour l'élan
@@ -362,10 +382,24 @@ export function offenseOf(c: Combatant): number {
     (1 + COMBAT.powerBleedW * (c.bleed ?? 0)) *
     (1 + COMBAT.powerAccuracyW * (c.accuracy ?? 0)) *
     (1 + COMBAT.powerRiposteW * (c.riposte ?? 0)) *
-    (1 + COMBAT.powerLifestealW * Math.min(COMBAT.powerLifestealCap, c.lifesteal ?? 0)) *
+    lifestealSizingFactor(c) *
     sig *
     (1 + COMBAT.powerThornsW * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
   );
+}
+
+/** Le vol de vie tel que l'ESTIMATEUR DE DIMENSIONNEMENT le compte (cf. `powerLifestealW`). */
+function lifestealSizingFactor(c: Combatant): number {
+  return 1 + COMBAT.powerLifestealW * Math.min(COMBAT.powerLifestealCap, c.lifesteal ?? 0);
+}
+
+/** Part des PV max rendue par tour par le vol de vie, plafonnée comme en combat. */
+function lifestealHealShare(c: Combatant): number {
+  if (!c.lifesteal || c.pv <= 0) return 0;
+  const cap =
+    COMBAT.lifestealRoundCap * (c.procs?.has('sig_vampire') ? COMBAT.eternalHealCapMult : 1);
+  const perRound = c.damage * (c.strikes ?? 1) * (1 + c.crit * (1 + (c.critDmg ?? 0)));
+  return Math.min(cap, (c.lifesteal * perRound) / c.pv);
 }
 
 /** SURVIE d’un combattant — PV corrigés de l’esquive et de la réduction. */
@@ -412,6 +446,9 @@ export function combatPowerRaw(c: Combatant): number {
     if (w.side === 'off') procOff += w.weight * c.relic.force;
     else procSurv += w.weight * c.relic.force;
   }
+  // Le vol de vie : l'estimateur (`offenseOf`) est remplacé par sa valeur MESURÉE (soin par
+  // tour, en survie) — cf. `powerSustainW`.
+  procSurv *= (1 + COMBAT.powerSustainW * lifestealHealShare(c)) ** 2 / lifestealSizingFactor(c);
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
   // humaine (~niveau², qq centaines au milieu de jeu au lieu de dizaines de milliers).

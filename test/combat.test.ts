@@ -74,11 +74,24 @@ describe('épines (thorns)', () => {
 
 describe('poids de puissance (v0.837, mesurés en vrai combat)', () => {
   const h = { name: 'h', pv: 1000, damage: 100, crit: 0.2, dodge: 0.1, initiative: 1, strikes: 2 };
-  it('le vol de vie compte, mais plafonné : au-delà du plafond, rien de plus', () => {
-    const p = (lifesteal: number) => combatPowerRaw({ ...h, lifesteal });
-    expect(p(0.1)).toBeGreaterThan(p(0));
-    expect(p(COMBAT.powerLifestealCap)).toBeGreaterThan(p(0.1));
-    expect(p(0.9)).toBe(p(COMBAT.powerLifestealCap));
+  // ⚠️ RÉÉCRIT (refonte équipement, étape 7) : le vol de vie est de la SURVIE et se compte par
+  // son SOIN PAR TOUR, plafonné comme en combat. h frappe 100 × 2 × (1 + 0,2) = 240 par tour
+  // pour 1000 PV : 10 % de vol de vie rendent 2,4 % des PV par tour.
+  it('le vol de vie vaut son soin par tour, plafonné comme en combat', () => {
+    const p = (lifesteal: number, extra = {}) => combatPowerRaw({ ...h, lifesteal, ...extra });
+    // La valeur exacte : puissance × (1 + poids × soin par tour).
+    expect(p(0.1) / p(0)).toBeCloseTo(1 + COMBAT.powerSustainW * 0.024, 6);
+    expect(p(0.3)).toBeGreaterThan(p(0.1));
+    // Au-delà du plafond de soin du tour (8 % des PV, atteint à 1/3 de vol de vie), plus rien.
+    const capAt = COMBAT.lifestealRoundCap / 0.24;
+    expect(p(0.9)).toBe(p(capAt + 0.01));
+    expect(p(capAt + 0.01) / p(0)).toBeCloseTo(
+      1 + COMBAT.powerSustainW * COMBAT.lifestealRoundCap,
+      6,
+    );
+    // Soif éternelle (Vampire) relève le plafond : la puissance le voit.
+    const vamp = { procs: new Set(['sig_vampire']) };
+    expect(p(0.9, vamp) / p(0, vamp)).toBeGreaterThan(p(0.9) / p(0));
   });
   it('l’élan pèse son poids mesuré', () => {
     const r = combatPowerRaw({ ...h, momentum: 0.02 }) / combatPowerRaw(h);

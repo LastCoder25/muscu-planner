@@ -2506,7 +2506,7 @@ export const SET_SIGNATURES: Record<string, SetSignature> = {
     id: 'sig_berserker',
     name: 'Carnage',
     emoji: '🪓',
-    desc: 'Plus l’ennemi saigne, plus tu frappes fort : jusqu’à +300 % de dégâts quand il est à terre.',
+    desc: 'Plus l’ennemi saigne, plus tu frappes fort : jusqu’à +45 % de dégâts quand il est à terre.',
   },
   gardien: {
     id: 'sig_gardien',
@@ -2518,13 +2518,13 @@ export const SET_SIGNATURES: Record<string, SetSignature> = {
     id: 'sig_assassin',
     name: 'Coup de grâce',
     emoji: '🗡️',
-    desc: 'Tes coups critiques infligent ×3,35 au lieu de ×2.',
+    desc: 'Tes coups critiques infligent ×2,2 au lieu de ×2.',
   },
   vampire: {
     id: 'sig_vampire',
     name: 'Soif éternelle',
     emoji: '🦇',
-    desc: 'Le soin que tu peux voler en un tour est multiplié par 3,5.',
+    desc: 'Le soin que tu peux voler en un tour est multiplié par 1,2.',
   },
   colosse: {
     id: 'sig_colosse',
@@ -2536,13 +2536,13 @@ export const SET_SIGNATURES: Record<string, SetSignature> = {
     id: 'sig_duelliste',
     name: 'Botte secrète',
     emoji: '🤺',
-    desc: 'Un coup porté sur 3 est un critique garanti, qui inflige ×2,9.',
+    desc: 'Un coup porté sur 3 est un critique garanti, qui inflige ×2,3.',
   },
   epineux: {
     id: 'sig_epineux',
     name: 'Ronces',
     emoji: '🥀',
-    desc: 'Chaque coup que tu reçois retire à l’ennemi 9 % de ses PV max.',
+    desc: 'Chaque coup que tu reçois retire à l’ennemi 0,9 % de ses PV max.',
   },
   frenetique: {
     id: 'sig_frenetique',
@@ -2630,12 +2630,16 @@ const VOIE_SET_DEFS: {
   emoji: string;
   theme: string;
   stats: [EffectType, EffectType, EffectType];
-  /** ⚠️ ÉCHELLE DES PALIERS (v0.837, mesuré) : ce qui rend les 8 sets ÉQUIVALENTS. Les mêmes
-   *  valeurs de base ne valent pas pareil en combat selon la stat (un palier de PV et de
-   *  réduction pesait bien plus qu'un palier d'exécution et de vol de vie) : un set complet
-   *  dans sa voie allait de +10 % (Berserker) à +41 % (Gardien) contre les meilleurs drops.
-   *  Calibrée avec la signature et son poids de puissance pour ~+24 % partout. */
+  /** ⚠️ ÉCHELLE DES PALIERS 2 ET 4 — ce qui rend les 8 sets ÉQUIVALENTS : les mêmes valeurs de
+   *  base ne valent pas pareil en combat selon la stat. RECALIBRÉE À ZÉRO à la refonte
+   *  équipement (étape 7, 6 pièces, spec § 6.2) en vrai combat : les paliers 2+4 valent ~+4 %,
+   *  le palier 6 et la signature ~+4 %, donc le set complet +5 à +10 % contre les meilleurs
+   *  drops, et « 4 + 2 meilleurs drops » à ±3 % des 6 pièces. Mesuré avant (format 4 pièces
+   *  recopié sur 6) : +17 à +80 % en combat. */
   tierScale: number;
+  /** Échelle du palier 6 (la stat IDENTITÉ), séparée des paliers 2 et 4 (refonte équipement,
+   *  étape 7) : la signature porte l’essentiel de la récompense des 6 pièces. */
+  capScale: number;
   /** 🎨 v0.832 (demandé : « épines = vert ») — une teinte par set, lisible sur l’avatar,
    *  choisie hors du jaune voltage de l’interface. */
   color: string;
@@ -2646,7 +2650,8 @@ const VOIE_SET_DEFS: {
     emoji: '💥',
     theme: 'Dégâts bruts et exécution — le set qui frappe.',
     stats: ['damage_pct', 'execute_pct', 'lifesteal_pct'],
-    tierScale: 1.6,
+    tierScale: 0.9,
+    capScale: 0.15,
     color: '#ff5a3c',
   },
   {
@@ -2655,7 +2660,8 @@ const VOIE_SET_DEFS: {
     emoji: '🛡️',
     theme: 'Le mur qui frappe : encaisse tout et tient.',
     stats: ['dmg_reduction_pct', 'max_pv_pct', 'damage_pct'],
-    tierScale: 0.6,
+    tierScale: 0.14,
+    capScale: 0.08,
     color: '#4ea3ff',
   },
   {
@@ -2664,7 +2670,8 @@ const VOIE_SET_DEFS: {
     emoji: '🗡️',
     theme: 'Critiques qui achèvent, un vol de vie pour durer.',
     stats: ['crit_pct', 'execute_pct', 'lifesteal_pct'],
-    tierScale: 1,
+    tierScale: 0.85,
+    capScale: 1,
     color: '#9b7bff',
   },
   {
@@ -2673,7 +2680,8 @@ const VOIE_SET_DEFS: {
     emoji: '🩸',
     theme: 'Vole la vie et se déchaîne au bord de la mort.',
     stats: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
-    tierScale: 1.6,
+    tierScale: 0.5,
+    capScale: 0.4,
     color: '#e0325f',
   },
   {
@@ -2682,7 +2690,8 @@ const VOIE_SET_DEFS: {
     emoji: '🪨',
     theme: 'Réservoir de PV qui cogne dans la durée.',
     stats: ['max_pv_pct', 'dmg_reduction_pct', 'damage_pct'],
-    tierScale: 0.7,
+    tierScale: 0.1,
+    capScale: 0.08,
     color: '#b08d5b',
   },
   {
@@ -2691,7 +2700,8 @@ const VOIE_SET_DEFS: {
     emoji: '🎯',
     theme: 'Précision létale adossée à des PV.',
     stats: ['crit_pct', 'damage_pct', 'max_pv_pct'],
-    tierScale: 0.8,
+    tierScale: 0.12,
+    capScale: 0.8,
     color: '#3fd0e0',
   },
   {
@@ -2700,7 +2710,8 @@ const VOIE_SET_DEFS: {
     emoji: '🌵',
     theme: 'Encaisse, renvoie les coups, frappe en retour.',
     stats: ['thorns_pct', 'max_pv_pct', 'damage_pct'],
-    tierScale: 0.8,
+    tierScale: 0.11,
+    capScale: 0.8,
     color: '#5fcf4f',
   },
   {
@@ -2709,7 +2720,8 @@ const VOIE_SET_DEFS: {
     emoji: '🌀',
     theme: 'Monte en puissance au fil du combat.',
     stats: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
-    tierScale: 0.9,
+    tierScale: 0.22,
+    capScale: 0.15,
     color: '#ff5cd8',
   },
 ];
@@ -2724,19 +2736,19 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
     {
       pieces: 2,
       type: d.stats[2],
-      base: Math.max(1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 0.7 * d.tierScale)),
+      base: Math.max(0.1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 0.7 * d.tierScale)),
     },
     // ⚠️ REFONTE ÉQUIPEMENT (étape 5) : paliers à 2 / 4 / 6 pièces sur 6 emplacements.
     {
       pieces: 4,
       type: d.stats[1],
-      base: Math.max(1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 1.0 * d.tierScale)),
+      base: Math.max(0.1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 1.0 * d.tierScale)),
     },
     // 6-pièces = CAPSTONE (gaté par la voie) : la stat IDENTITÉ, amplifiée.
     {
       pieces: 6,
       type: d.stats[0],
-      base: Math.max(1, round1((EFFECT_BASE[d.stats[0]] ?? 8) * 1.6 * d.tierScale)),
+      base: Math.max(0.1, round1((EFFECT_BASE[d.stats[0]] ?? 8) * 1.6 * d.capScale)),
     },
   ],
 }));
@@ -2763,7 +2775,7 @@ export const SET_BY_ID: Record<string, ItemSet> = Object.fromEntries(
  *  les pièces d'un boss plus profond ont un rang plus haut → bonus de set plus fort → on
  *  veut faire les boss suivants. Ancré au rang MOYEN (Rare) → un set Rare ≈ base d'origine,
  *  les sets plus hauts montent, les plus bas baissent un peu. */
-function setBonusMult(pieces: Item[]): number {
+export function setBonusMult(pieces: Item[]): number {
   if (!pieces.length) return 1;
   const anchor = RARITY_MULT.rare;
   // ⚠️ RARETÉ × NIVEAU D’OBJET (v0.803, mesuré). Le bonus ne suivait que la rareté, alors
@@ -2854,7 +2866,9 @@ export function setEffects(equipped: Equipped, voie?: string | null): Aggregated
       const cap = t === def.tiers[def.tiers.length - 1];
       if (cap && id !== capstoneId) continue;
       const k = cap ? 1 : affinity;
-      applyEffect(a, t.type, Math.max(1, round1(t.base * mult * k)) / 100);
+      // Plancher à 0,1 point et non 1 (étape 7) : les paliers recalibrés valent souvent moins d'un
+      // point, et un plancher entier écrasait l'échelle ET le doublement de l'affinité de voie.
+      applyEffect(a, t.type, Math.max(0.1, round1(t.base * mult * k)) / 100);
     }
   }
   a.dmgReduction = Math.min(0.5, a.dmgReduction);
@@ -3395,6 +3409,33 @@ export function bestGearLoadout(
         best = essai;
         gagne = true;
       }
+    }
+    // ⚠️ DEUX PIÈCES D'UN COUP, DONT AU MOINS UNE PIÈCE DE SET, cherchées dans TOUT le sac
+    // (refonte équipement, étape 7). Avec des bonus de set recalibrés (paliers 2 et 4 à ~+4 %),
+    // plusieurs pièces d'un même set se valent à peu près, et le meilleur build se joue sur des
+    // déplacements que ni l'échange simple ni le balayage des candidats RETENUS (une pièce par
+    // set et par emplacement) ne voient : l'armure du set cède sa place à un drop pendant que
+    // le bouclier du set entre ; une autre arme du set, plus un casque du même set. Mesuré sur
+    // 120 sacs : 115 builds exacts sans ce mouvement (pire cas à 96,6 %), 118 avec (pire cas à
+    // 99,65 %), pour 0,3 à 0,7 s par voie sur un sac de 800 objets. Garder 2 pièces par set
+    // dans les candidats donnait 120/120 mais 3 fois plus lent (1 à 2 s par voie) : écarté.
+    if (!gagne) {
+      const pieces = tous.filter((it) => it.setId && !pin?.[it.slot]);
+      const partenaires: Item[] = [...pieces];
+      for (const g of GEAR)
+        if (!pin?.[g]) for (const it of cand[g]) if (it && !it.setId) partenaires.push(it);
+      for (const x of pieces)
+        for (const y of partenaires) {
+          if (x.slot === y.slot || (y.setId && y.id <= x.id)) continue;
+          if (best[x.slot]?.id === x.id && best[y.slot]?.id === y.id) continue;
+          const essai = put(put(best, x.slot, x), y.slot, y);
+          const p = combatPower(playerWithGear(name, stats, essai, extra, level, voie));
+          if (p > bestP) {
+            bestP = p;
+            best = essai;
+            gagne = true;
+          }
+        }
     }
     if (!gagne) break; // point fixe atteint : plus aucun échange simple ne paie
   }
