@@ -113,7 +113,7 @@
               ><span class="tb-ico">🔱</span>{{ compactNumber(sealsChamp.total) }}</span
             >
             <span
-              class="tb-r seals gear"
+              class="tb-r seals seals-gear"
               :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail || 'aucun pour l’instant'}`"
               ><span class="tb-ico">⚜️</span>{{ compactNumber(sealsGear.total) }}</span
             >
@@ -6678,7 +6678,7 @@ onUnmounted(() => {
 .tb-r.seals {
   color: #7fd4c1;
 }
-.tb-r.seals.gear {
+.tb-r.seals-gear {
   color: #e0b36a;
 }
 .tb-r.energy.deficit {
