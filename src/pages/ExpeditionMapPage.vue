@@ -2245,7 +2245,7 @@ onUnmounted(() => {
 }
 .rank-filter {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   padding: 0 12px 8px;
   overflow-x: auto;
   scrollbar-width: none;
@@ -2253,8 +2253,18 @@ onUnmounted(() => {
 .rank-filter::-webkit-scrollbar {
   display: none;
 }
-/* Une boule de la couleur du rang par puce — cible tactile de 44 px, boule de 22. Affiché =
-   boule PLEINE, masqué = simple anneau estompé : l'état se lit sans dépendre de la couleur. */
+/* Rangée CENTRÉE par des marges automatiques et non `justify-content: center` : si les
+   puces débordent (écran étroit, beaucoup de rangs), un centrage flex couperait la première
+   hors de portée du défilement ; les marges auto, elles, retombent à zéro. */
+.rf-chip:first-child {
+  margin-left: auto;
+}
+.rf-chip:last-child {
+  margin-right: auto;
+}
+/* Une pastille ronde (cible tactile de 44 px) avec la boule du rang au centre. Affiché =
+   pastille cerclée de la couleur du rang, boule PLEINE ; masqué = pastille en pointillé,
+   boule réduite à un anneau estompé : l'état se lit sans dépendre de la couleur. */
 .rf-chip {
   flex: none;
   width: 44px;
@@ -2263,13 +2273,22 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: none;
-  background: none;
+  border-radius: 50%;
+  border: 1px dashed var(--line);
+  background: var(--surface);
   cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+.rf-chip.on {
+  border-style: solid;
+  border-color: var(--rk);
+  background: color-mix(in srgb, var(--rk) 14%, var(--surface));
 }
 .rf-dot {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 2px solid var(--rk);
   background: transparent;
@@ -2281,11 +2300,10 @@ onUnmounted(() => {
 .rf-chip.on .rf-dot {
   background: var(--rk);
   opacity: 1;
-  box-shadow: 0 0 0 2px var(--surface);
 }
-.rf-chip:focus-visible .rf-dot {
+.rf-chip:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 .outpost-hint {
   margin: 0 12px 10px;
