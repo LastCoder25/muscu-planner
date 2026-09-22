@@ -158,14 +158,33 @@
             :style="{ '--rk': poiRank(p).color }"
             @click="selectPoi(p)"
           >
-            <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
-            <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
+            <!-- 🌀 Une faille se dessine comme dans son incursion : un portail ovale cerné de
+                 flammes, à la couleur de son rang — on la reconnaît d'un écran à l'autre.
+                 ⚠️ Une cible de clic TRANSPARENTE dessous : sans elle, seuls les traits
+                 peints du portail captaient le toucher (leçon des tourelles, v0.673). -->
+            <template v-if="isRiftPoi(p)">
+              <ellipse :cx="p.x" :cy="p.y" rx="4.4" ry="6.4" class="rift-hit" />
+              <RiftPortal
+                :color="poiRank(p).color"
+                :seed="seedOf(p.id)"
+                :box="{
+                  x: p.x - RIFT_ICON.w / 2,
+                  y: p.y - RIFT_ICON.dy,
+                  w: RIFT_ICON.w,
+                  h: RIFT_ICON.h,
+                }"
+              />
+            </template>
+            <template v-else>
+              <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
+              <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
+            </template>
             <!-- 🏅 Le RANG du lieu, pas son niveau (demandé) : la boule du rang au-dessus et le
                  contour dans sa couleur — on repère d'un coup d'œil les lieux du rang de ses
                  champions, pour les y envoyer prendre de l'XP. ⚠️ Plus ses ÉTOILES : un rang
                  couvre dix niveaux, et un lieu Bronze ★5 écrase des champions Bronze ★1
                  (mesuré : 0 % de victoire). -->
-            <text :x="p.x" :y="p.y - 5.4" class="poi-rank">
+            <text :x="p.x" :y="p.y - (isRiftPoi(p) ? RIFT_ICON.dy + 0.5 : 5.4)" class="poi-rank">
               {{ poiRank(p).emoji }}
               <tspan class="poi-star">{{ poiRank(p).star }}★</tspan>
             </text>
@@ -656,7 +675,9 @@ import {
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { voiePassiveEffects, type VoieId } from '@/lib/voies';
-import { simulateCombat, type Combatant } from '@/lib/combat';
+import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
+import RiftPortal from '@/components/RiftPortal.vue';
+import { PORTAL_VIEW } from '@/lib/riftPortal';
 import {
   POI_EMO,
   POI_LABEL,
@@ -1677,6 +1698,14 @@ function winClass(pct: number): string {
   return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
 }
 /** 🏅 Le rang d'un lieu : celui de son niveau, sur l'échelle de tout le jeu (`characterRank`). */
+/** Le portail d'une faille sur la carte, en unités de carte : un peu plus haut que la
+ *  pastille d'un lieu (⌀ 9), les flammes comprises. `dy` = du haut du dessin au centre. */
+const RIFT_ICON = {
+  h: 14,
+  w: (14 * PORTAL_VIEW.w) / PORTAL_VIEW.h,
+  dy: (14 * PORTAL_VIEW.cy) / PORTAL_VIEW.h,
+};
+
 function poiRank(p: Poi) {
   return characterRank(p.level);
 }
@@ -1822,10 +1851,7 @@ onMounted(async () => {
   // dézoomé — on voit la ville et ses abords, le reste se trouve en faisant glisser ou au −).
   mapPx.value = Math.max(
     MIN_PX,
-    Math.min(
-      MAX_PX,
-      Math.round((contW.value * V.size) / (2 * (reveal.value + 6))) + ZOOM_STEP,
-    ),
+    Math.min(MAX_PX, Math.round((contW.value * V.size) / (2 * (reveal.value + 6))) + ZOOM_STEP),
   );
   await nextTick();
   centerTown();
@@ -2401,6 +2427,17 @@ onUnmounted(() => {
   fill: var(--surface);
   stroke: var(--rk, var(--line));
   stroke-width: 1;
+}
+/* La cible de clic d'une faille : invisible, sauf sélectionnée (le liseré d'accent de
+   tous les lieux, autour de l'ovale). */
+.rift-hit {
+  fill: transparent;
+  stroke: none;
+}
+.poi.sel .rift-hit {
+  stroke: var(--accent);
+  stroke-width: 0.8;
+  stroke-dasharray: 1.4 0.9;
 }
 .poi.sel .poi-bg {
   stroke: var(--accent);

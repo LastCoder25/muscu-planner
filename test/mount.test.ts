@@ -269,6 +269,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(stage.foes.length);
     expect(out).toContain('Faille niv 26');
     expect(out).toContain('pvbar');
+    // 🌀 Deux portails (l'entrée et la porte du gardien), à la couleur du RANG de la faille.
+    const { characterRank } = await import('@/lib/characterRank');
+    const rk = characterRank(26).color.toLowerCase();
+    expect([...out.matchAll(/class="portal/g)]).toHaveLength(2);
+    expect(out.toLowerCase()).toContain(`--pc: ${rk}`);
 
     // …et un rapport d'AVANT (sans sillage) : la scène tient, sans barre inventée.
     const vieux = buildRiftStage(

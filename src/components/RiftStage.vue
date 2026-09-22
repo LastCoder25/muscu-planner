@@ -1,5 +1,5 @@
 <template>
-  <div class="rift" :class="[shake, { reduce }]">
+  <div class="rift" :class="[shake, { reduce }]" :style="{ '--rift': rankColor }">
     <!-- Ambiance : la déchirure respire, des éclats de mana dérivent. Décor pur — mais
          c'est ce qui fait la différence entre « une simulation » et « un lieu ». -->
     <div class="amb" aria-hidden="true">
@@ -13,13 +13,17 @@
       <div class="field" :style="{ width: CAM_W * 100 + '%', transform: `translateX(${camPct}%)` }">
         <div class="ground" />
         <div class="ceil" />
-        <div class="breach" :class="{ sealing: sealed }" />
+        <!-- L'entrée : le portail d'où le groupe est sorti, à demi hors champ. -->
+        <div class="entry">
+          <RiftPortal :color="rankColor" :sealed="sealed" :seed="7" />
+        </div>
 
-        <!-- La porte du gardien : fermée tant qu'un monstre tient debout. -->
+        <!-- La porte du gardien : une faille dans la faille, dans la couleur de son RANG.
+             Le feu couve tant qu'un monstre tient debout ; elle s'embrase à l'ouverture,
+             et s'effondre sur elle-même quand le gardien tombe. -->
         <div class="door" :class="{ open: doorOpen }" :style="{ left: stage.doorX * 100 + '%' }">
-          <span class="leaf l" /><span class="leaf r" />
-          <span class="lintel" />
-          <span class="door-glow" />
+          <span class="door-burst" />
+          <RiftPortal :color="rankColor" :open="doorOpen" :sealed="sealed" :seed="level" />
         </div>
 
         <!-- La salle : un autel, des braseros. Elle n'existe qu'au-delà de la porte. -->
@@ -206,6 +210,8 @@ import { RIFT_STAGE, type RiftCastMember, type RiftStage } from '@/lib/riftStage
 import type { RiftBossStep } from '@/lib/rift';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import RiftPortal from '@/components/RiftPortal.vue';
+import { characterRank } from '@/lib/characterRank';
 
 const props = defineProps<{
   stage: RiftStage;
@@ -215,6 +221,9 @@ const props = defineProps<{
   cast: RiftCastMember[];
 }>();
 const emit = defineEmits<{ done: [] }>();
+
+/** La couleur de la faille : celle de son RANG, la même que sur la carte. */
+const rankColor = computed(() => characterRank(props.level).color);
 
 // ── Réglages de mise en scène ──
 /** Largeur du terrain, en écrans. ⚠️ À 1 écran, douze monstres tiendraient dans 46 % de
@@ -729,10 +738,10 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
-/* Teinte de la faille : hors du jaune de l'interface, du bleu du héros et du vert/rouge
-   de l'effort. Le mana est la seule couleur froide vive de l'écran. */
+/* Teinte de la faille : la couleur de son RANG (posée en ligne sur la racine), la même que
+   sur la carte — portails, lueur et horizon la suivent. Le violet n'est plus qu'un repli. */
 .rift {
-  --rift: #c07bff;
+  --rift: #c07bff; /* repli ; le rang de la faille le remplace (style en ligne) */
   --mana: #8ce0ff;
   position: relative;
   width: 100%;
@@ -858,7 +867,12 @@ onBeforeUnmount(() => {
   right: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(192, 123, 255, 0.55), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--rift) 55%, transparent),
+    transparent
+  );
 }
 .ceil {
   position: absolute;
@@ -868,89 +882,59 @@ onBeforeUnmount(() => {
   height: 40%;
   background: linear-gradient(0deg, transparent, #1a1226 70%);
 }
-.breach {
+/* L'entrée : un portail à demi hors champ, d'où le groupe est sorti. */
+.entry {
   position: absolute;
-  left: 0;
-  top: 8%;
-  bottom: 8%;
-  width: 3%;
-  background: linear-gradient(90deg, var(--rift), transparent);
-  opacity: 0.55;
-  filter: blur(6px);
+  left: -1.4%;
+  top: 20%;
+  height: 44%;
+  width: 7%;
+  z-index: 5;
+  opacity: 0.85;
 }
-
+/* La porte du gardien : plus grande que l'entrée — c'est le fond de la faille. Le portail
+   se pose EN BAS de sa boîte (xMidYMax) : son pied touche le sol où marche le groupe, en
+   portrait comme en paysage. */
 .door {
   position: absolute;
-  top: 30%;
-  height: 34%;
-  width: 4.2%;
+  top: 12%;
+  height: 52%;
+  width: 14%;
   transform: translateX(-50%);
   z-index: 6;
+  transition: filter 0.8s ease;
 }
-/* Chambranle : deux montants de pierre + un linteau. Sans eux, les battants se lisaient
-   comme un couloir, pas comme une porte (vu au banc). */
-.door::before,
-.door::after {
-  content: '';
+.door.open {
+  filter: drop-shadow(0 0 16px var(--rift));
+}
+/* À l'ouverture, une onde de feu part du portail. */
+.door-burst {
   position: absolute;
-  top: -10px;
-  bottom: -6px;
-  width: 7px;
-  background: linear-gradient(180deg, #6b5640, #3a2f22);
-  border-radius: 2px;
-}
-.door::before {
-  left: -8px;
-}
-.door::after {
-  right: -8px;
-}
-.leaf {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 50%;
-  background: linear-gradient(180deg, #4a3b2c, #2a2119);
-  border: 1px solid #6b5640;
-  transition: transform 0.7s ease;
-}
-.leaf.l {
-  left: 0;
-  border-right: none;
-}
-.leaf.r {
-  right: 0;
-  border-left: none;
-}
-.door.open .leaf.l {
-  transform: translateX(-96%) rotateY(28deg);
-}
-.door.open .leaf.r {
-  transform: translateX(96%) rotateY(-28deg);
-}
-.reduce .leaf {
-  transition: none;
-}
-.lintel {
-  position: absolute;
-  left: -14px;
-  right: -14px;
-  top: -16px;
-  height: 11px;
-  background: linear-gradient(180deg, #7d6749, #4a3b2c);
-  border-radius: 3px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
-}
-.door-glow {
-  position: absolute;
-  inset: 0;
-  background: var(--mana);
+  left: 50%;
+  top: 56%;
+  width: 60%;
+  aspect-ratio: 1 / 1.7;
+  border-radius: 50%;
+  border: 3px solid var(--rift);
+  transform: translate(-50%, -50%) scale(0.4);
   opacity: 0;
-  filter: blur(12px);
-  transition: opacity 0.7s ease;
+  pointer-events: none;
 }
-.door.open .door-glow {
-  opacity: 0.45;
+.door.open .door-burst {
+  animation: doorBurst 0.9s ease-out;
+}
+@keyframes doorBurst {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(2.2);
+  }
+}
+.reduce .door-burst {
+  animation: none;
 }
 
 .sanctum {
@@ -973,7 +957,7 @@ onBeforeUnmount(() => {
   height: 16%;
   background: linear-gradient(180deg, #52426b, #2c2340);
   border-radius: 4px 4px 0 0;
-  box-shadow: 0 0 24px rgba(192, 123, 255, 0.55);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--rift) 55%, transparent);
 }
 .brazier {
   position: absolute;
@@ -1027,7 +1011,11 @@ onBeforeUnmount(() => {
   height: 54px;
   margin: -27px 0 0 -27px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(192, 123, 255, 0.4), transparent 68%);
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--rift) 40%, transparent),
+    transparent 68%
+  );
 }
 .foe.boss .aura {
   width: 92px;
@@ -1479,17 +1467,6 @@ onBeforeUnmount(() => {
   letter-spacing: 0.05em;
 }
 
-/* La déchirure du fond s'éteint quand la faille se referme. */
-.breach {
-  transition:
-    opacity 1.4s ease,
-    width 1.4s ease;
-}
-.breach.sealing {
-  opacity: 0;
-  width: 0;
-}
-
 .flash {
   position: absolute;
   inset: 0;
@@ -1593,8 +1570,7 @@ onBeforeUnmount(() => {
 
 .reduce .foe.boss,
 .reduce .wave,
-.reduce .bars .bar,
-.reduce .breach {
+.reduce .bars .bar {
   animation: none;
   transition: none;
 }
