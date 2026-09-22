@@ -15,7 +15,7 @@ import {
   advGearAscensionBlocker,
   advGearAscensionCost,
   ascensionCost,
-  bossGearSeals,
+  lairGearSeals,
   emptySeals,
 } from '@/lib/ascension';
 
@@ -151,13 +151,12 @@ describe('l’ascension d’une pièce', () => {
   });
 });
 
-describe('les sceaux d’objet des boss', () => {
-  it('2 à la première victoire, 1 ensuite', () => {
-    expect(bossGearSeals(25, 60, true).n).toBe(2);
-    expect(bossGearSeals(25, 60, false).n).toBe(1);
+describe('les sceaux d’objet des repaires (v0.1040 — plus des boss de palier)', () => {
+  it('un par repaire pris', () => {
+    expect(lairGearSeals(25, 60).n).toBe(1);
   });
-  it('au rang du boss, plafonné par celui du joueur', () => {
-    expect(bossGearSeals(25, 60, false)).toEqual({ kind: 'gear', rank: 2, n: 1 });
-    expect(bossGearSeals(85, 30, false).rank).toBe(2);
+  it('au rang du repaire, plafonné par celui du joueur', () => {
+    expect(lairGearSeals(25, 60)).toEqual({ kind: 'gear', rank: 2, n: 1 });
+    expect(lairGearSeals(85, 30).rank).toBe(2);
   });
 });

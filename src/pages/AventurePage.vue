@@ -105,7 +105,7 @@
             <span
               v-if="sealsGear.total"
               class="tb-r seals gear"
-              :title="`Sceaux d’objet — ascension d’un objet de champion (boss de palier) : ${sealsGear.detail}`"
+              :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail}`"
               >⚜️ {{ compactNumber(sealsGear.total) }}</span
             >
             <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés seulement quand il
@@ -2619,12 +2619,6 @@
                   title="Pierres d’invocation (pour affronter les boss)"
                   >+{{ run.summonStones }} 🔮</span
                 >
-                <span
-                  v-if="run.gearSeals"
-                  class="gain-pill seals"
-                  title="Sceaux d’objet (ascension des objets de champion)"
-                  >+{{ run.gearSeals }} ⚜️</span
-                >
               </span>
             </div>
             <div class="result-sub">
@@ -3153,7 +3147,6 @@ interface RunView {
   drops: Item[];
   talentDrops?: TalentInstance[]; // talents tombés (affichés dans le rapport)
   summonStones?: number; // pierres d'invocation 🔮 gagnées (donjon → aller aux boss)
-  gearSeals?: number; // ⚜️ sceaux d'objet gagnés (boss de palier → ascension des objets)
 }
 
 // `embedded` : rendu dans le VOLET droit du cockpit (Z Fold déplié) → racine <div>
@@ -5090,7 +5083,7 @@ async function fightBoss(b: MilestoneBoss) {
         : [];
     // La pièce de set attend au sac que le drop soit RÉVÉLÉ : `autoFileSetPieces` ne range
     // rien pendant un combat (`busy`) ni pendant son animation (cf. plus bas).
-    const gearSeals = await char.applyBossWin(uid, {
+    await char.applyBossWin(uid, {
       bossId: b.id,
       summonCost,
       gold,
@@ -5100,7 +5093,6 @@ async function fightBoss(b: MilestoneBoss) {
       // Dressage d'ATTAQUE : le familier se bat aussi contre les boss.
       famAtkXp: (4 + b.unlockLevel) * (win ? 2 : 1),
       playerLevel: c.value.level.level,
-      bossLevel: b.unlockLevel,
     });
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {
@@ -5125,7 +5117,6 @@ async function fightBoss(b: MilestoneBoss) {
       ],
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
-      ...(gearSeals ? { gearSeals: gearSeals.n } : {}),
     };
     // Victoire de boss de palier = jalon MAJEUR → célébration centrale (gros éclat),
     // DIFFÉRÉE à la fin de l'animation de combat. ⚠️ Seulement la PREMIÈRE fois : un
