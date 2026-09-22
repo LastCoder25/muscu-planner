@@ -132,13 +132,12 @@ export const BUILDING_TYPES: BuildingType[] = [
   // ⚠️ DEUX LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
   // le trajet du HÉROS (`travelTimeMult`, asymptotique, qui gratte à chaque cran) et le
   // NOMBRE d'équipes en parallèle (`caravanSlots`, un PALIER tous les 9 niveaux).
-  // ⚠️ La vitesse des convois a disparu avec eux (v0.1033) : les champions vont au pas du
-  // héros SANS Avant-poste — sa réduction leur aurait fait faire 2,4× plus de camps par
-  // jour au niveau 60 (cf. `caravanLegMin`).
+  // ⚠️ Les champions en reçoivent la MOITIÉ (v0.1047, `championOutpostMult`) : à part
+  // pleine, 2,3× plus de camps par jour au niveau 60 (cf. `caravanLegMin`).
   {
     id: 'outpost',
     perLevelNote:
-      'trajets du héros plus courts à chaque niveau, +1 équipe en parallèle tous les 9 niveaux',
+      'trajets plus courts à chaque niveau (héros ; champions à moitié), +1 équipe en parallèle tous les 9 niveaux',
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',

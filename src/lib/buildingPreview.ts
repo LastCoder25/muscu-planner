@@ -23,7 +23,7 @@ import {
   type Building,
   type BuildingTypeId,
 } from './buildings';
-import { caravanSlots } from './caravan';
+import { caravanSlots, championOutpostMult } from './caravan';
 import { altarLuckBonus } from './items';
 
 export interface LevelPreview {
@@ -65,7 +65,8 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       // (une équipe de plus tous les 9 niveaux). Le troisième — la vitesse des convois — a
       // disparu avec eux : les champions vont au pas du héros sans Avant-poste.
       const n = caravanSlots(level);
-      return `−${pct(1 - travelTimeMult(one(typeId, level)))} de trajet (héros) · ${n} équipe${n > 1 ? 's' : ''} en parallèle`;
+      const hero = travelTimeMult(one(typeId, level));
+      return `−${pct(1 - hero)} de trajet (héros), −${pct(1 - championOutpostMult(hero))} (champions) · ${n} équipe${n > 1 ? 's' : ''} en parallèle`;
     }
     case 'labyrinth_gate':
       return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);

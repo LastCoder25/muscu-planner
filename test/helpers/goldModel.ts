@@ -11,6 +11,7 @@ import { rollDrop, sellValue } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
 import { caravanSlots, caravanWages, caravanLegMin, refChampionAdv } from '@/lib/caravan';
 import { rollRaid } from '@/lib/raid';
+import { travelTimeMult } from '@/lib/buildings';
 import { comboChestReward } from '@/lib/comboChest';
 
 export const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
@@ -95,22 +96,32 @@ function bossGoldPerDay(L: number): number {
   if (!b) return 0;
   return (stonesPerDay(L) / bossSummonCost(b.unlockLevel)) * 0.6 * b.gold;
 }
+/** 🧭 Multiplicateur de trajet du HÉROS pour un Avant-poste de ce niveau (les champions en
+ *  reçoivent une part, cf. `championOutpostMult`). */
+export function outpostMult(level: number): number {
+  return travelTimeMult([{ typeId: 'outpost', level, slot: 0, collectedAt: 0 }]);
+}
 /** Convois : chaque créneau fait un aller-retour de récolte au plus 3 fois par jour (on
  *  ouvre l'app matin et soir), salaires déduits. Une récolte ne paie qu'un FILET d'or
  *  (30 % du coût) : l'épave, qui payait en or, est retirée (v0.999). */
 function convoyGoldPerDay(L: number, comptoir: number): number {
   const poi = { level: L, distNorm: 0.6, type: 'well' } as Poi;
   const esc = [0, 1, 2].map((i) => refChampionAdv(L, i));
-  const legH = caravanLegMin(poi, esc, 0) / 60;
+  const legH = caravanLegMin(poi, esc, 0, outpostMult(comptoir)) / 60;
   const trips = Math.min(3, 24 / (2 * legH));
   const net = Math.round(goldCost('well', L) * 0.3) - caravanWages(esc, poi);
   return Math.max(0, caravanSlots(comptoir) * trips * net);
 }
 /** Camps de faction, en PART du revenu de référence — la valeur MESURÉE par
- *  `campEconomy.test` (+9 % au niveau 12, +16 à +19 % au 26, ~+17 % au-delà). Borne haute :
- *  un camp occupe un créneau qu'un convoi n'occupe donc pas. */
+ *  `campEconomy.test`. Borne haute : un camp occupe un créneau qu'un convoi n'occupe donc pas.
+ *  ⚠️ RE-MESURÉE en v0.1047 (les champions reçoivent la moitié de l'Avant-poste) : +27 % au
+ *  niveau 12, +19 % au 26, +21 % au 60 — l'ancienne valeur (+9/+16/+17) datait d'avant la
+ *  v0.1033 et n'avait jamais suivi. */
 function campShare(L: number): number {
-  return L <= 12 ? 0.09 : L <= 26 ? 0.09 + ((L - 12) / 14) * 0.07 : 0.17;
+  if (L <= 12) return 0.27;
+  if (L <= 26) return 0.27 - ((L - 12) / 14) * 0.08;
+  if (L <= 60) return 0.19 + ((L - 26) / 34) * 0.02;
+  return 0.21;
 }
 /** Or laissé par une armée repoussée (même barème que `lootCorpses`). */
 const siegeGold = memo((L) => {

@@ -11,7 +11,7 @@ import {
 import { engageCap, type Adventurer } from '@/lib/adventurers';
 import { campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
 import { partyAllies } from '@/lib/caravan';
-import { goldPerDay, stonesPerDay } from './helpers/goldModel';
+import { goldPerDay, outpostMult, stonesPerDay } from './helpers/goldModel';
 
 /**
  * 💰 LE DÉBIT DES CAMPS EN PARALLÈLE, mesuré contre le MÊME revenu de référence que le puits
@@ -62,6 +62,8 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
   const advs = roster(L, engageCap(L));
   const rd = road(L, advs.length);
   const busy = new Map<string, number>();
+  // 🧭 L'Avant-poste (niveau = `comptoir`) raccourcit aussi les champions (v0.1047).
+  const om = outpostMult(opts.comptoir);
   let map = createMap(seed, 0, L);
   const trips: Trip[] = [];
   let gold = 0;
@@ -85,14 +87,14 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
             esc = free.slice(0, n);
             win = campWinPct(c.p, c.spec!, partyAllies(esc, rd, null), 8);
           }
-          const h = (2 * caravanLegMin(c.p, esc, 0)) / 60;
+          const h = (2 * caravanLegMin(c.p, esc, 0, om)) / 60;
           const net = campGroupHaul(c.p, c.spec!).gold - caravanWages(esc, c.p);
           return { ...c, esc, win, score: (win * net) / h };
         })
         .filter((c) => c.win >= 0.5 && c.score > 0)
         .sort((a, b) => b.score - a.score)[0];
       if (!best) break;
-      const back = t + 2 * caravanLegMin(best.p, best.esc, 0) * 60_000;
+      const back = t + 2 * caravanLegMin(best.p, best.esc, 0, om) * 60_000;
       const o = resolveCamp({
         poi: best.p,
         spec: best.spec!,
@@ -122,7 +124,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
       const target = map.pois.find((p) => HARVEST_TYPES.has(p.type));
       if (!target) break;
       const esc = free.slice(0, 3);
-      const back = t + 2 * caravanLegMin(target, esc, 0) * 60_000;
+      const back = t + 2 * caravanLegMin(target, esc, 0, om) * 60_000;
       for (const a of esc) busy.set(a.id, back);
       trips.push({ returnAt: back });
       map = { ...map, pois: map.pois.filter((p) => p.id !== target.id) };

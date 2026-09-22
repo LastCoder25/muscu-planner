@@ -329,8 +329,10 @@ describe('⚠️ la cargaison se paie sur la durée qu’un HÉROS aurait mise',
     for (const level of [5, 20, 40, 80]) {
       const p = poi({ level });
       const hero = travelOneWayMin(p.level, p.distNorm);
-      expect(caravanLegMin(p, [], 0), `niveau ${level}`).toBe(Math.max(1, Math.round(hero)));
-      expect(caravanLegMin(p, team(3), 0), `niveau ${level}`).toBeLessThanOrEqual(Math.round(hero));
+      expect(caravanLegMin(p, [], 0, 1), `niveau ${level}`).toBe(Math.max(1, Math.round(hero)));
+      expect(caravanLegMin(p, team(3), 0, 1), `niveau ${level}`).toBeLessThanOrEqual(
+        Math.round(hero),
+      );
     }
   });
   it('…et la paie est celle du trajet du héros', () => {
@@ -407,8 +409,8 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
 describe('les rôles hors combat servent à quelque chose', () => {
   it('un 🧭 raccourcit le trajet', () => {
     const p = poi();
-    const sans = caravanLegMin(p, team(2, 20, 'haul'), 0);
-    const avec = caravanLegMin(p, team(2, 20, 'speed'), 0);
+    const sans = caravanLegMin(p, team(2, 20, 'haul'), 0, 1);
+    const avec = caravanLegMin(p, team(2, 20, 'speed'), 0, 1);
     expect(avec).toBeLessThan(sans);
   });
   it('un 🐫 grossit la cargaison', () => {
@@ -1485,9 +1487,9 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
   it('⚠️ une Longue-vue portée raccourcit le trajet, sous le plafond de vitesse', () => {
     const p = poi();
     const esc = [{ ...refAdventurer(20, 1), id: 'e' }];
-    const base = caravanLegMin(p, esc, 0);
-    expect(caravanLegMin(p, esc, 0.1)).toBeLessThan(base);
-    expect(caravanLegMin(p, esc, 99)).toBe(caravanLegMin(p, esc, CARAVAN.speedMax));
+    const base = caravanLegMin(p, esc, 0, 1);
+    expect(caravanLegMin(p, esc, 0.1, 1)).toBeLessThan(base);
+    expect(caravanLegMin(p, esc, 99, 1)).toBe(caravanLegMin(p, esc, CARAVAN.speedMax, 1));
   });
 
   it('⚠️ …et c’est bien ce trajet que le convoi réel fait', () => {

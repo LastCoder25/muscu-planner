@@ -132,6 +132,11 @@ export const CARAVAN = {
   /** Un rôle 🧭 raccourcit le trajet, un rôle 🐫 grossit la cargaison — par aventurier. */
   speedPerRole: 0.08,
   speedMax: 0.3,
+  /** 🧭 PART DE LA RÉDUCTION DE L'AVANT-POSTE QUE REÇOIVENT LES CHAMPIONS (v0.1047, demandé
+   *  par l'utilisateur). Le héros en a tout, les champions une partie. ⚠️ C'est le RYTHME des
+   *  camps en parallèle, donc l'or et les pierres par jour : ne pas monter sans relancer
+   *  `campEconomy.test` et `goldSink.test`. */
+  outpostShare: 0.5,
   haulPerRole: 0.12,
   haulMax: 0.4,
   /** Un 🩺 raccourcit les convalescences de l'équipe. */
@@ -667,8 +672,8 @@ export function suggestEscort(
   return team;
 }
 
-/** Trajet ALLER d'une équipe de champions, en minutes : celui du HÉROS SANS Avant-poste,
- *  puis raccourci par les rôles 🧭 de l'escorte ET par les
+/** Trajet ALLER d'une équipe de champions, en minutes : celui du HÉROS avec une PART de
+ *  l'Avant-poste (`championOutpostMult`, v0.1047), puis raccourci par les rôles 🧭 de l'escorte ET par les
  *  pièces qui portent ce rôle (`gearSpeed`, cf. `advGearRoles`) — les deux sous le MÊME
  *  plafond.
  *  ⚠️ PLUS DE LENTEUR PROPRE (v0.1033, demandé par l'utilisateur : « il n'y a plus de
@@ -676,19 +681,39 @@ export function suggestEscort(
  *  l'Avant-poste ne ramenait que vers ×1,27 au niveau 30) incarnait le CONVOI, plus lent que
  *  l'expédition du héros ; les convois ont disparu au profit des équipes. Mesuré avant :
  *  une équipe mettait ×1,5 le temps du héros sans Avant-poste, ×2,3 au niveau 30 (le héros
- *  profitait seul de la réduction). ⚠️ L'AVANT-POSTE N'ACCÉLÈRE PAS LES CHAMPIONS, et c'est MESURÉ (camps en
+ *  profitait seul de la réduction). ⚠️ L'AVANT-POSTE N'ACCÉLÉRAIT PAS LES CHAMPIONS (v0.1033), et c'était MESURÉ (camps en
  *  parallèle, niveau 60) : avec sa réduction, 27 camps par jour au lieu de 11, or des camps
  *  +39 % du revenu de référence au lieu de +16 %, pierres +62 % au lieu de +25 % — le puits
  *  d'or ne tiendrait plus. Au pas du héros SANS elle : 12 camps/jour, or +18 %, pierres
  *  +26 %, et des trajets 16 à 27 % plus courts qu'avant (choix de l'utilisateur).
+ *  ⚠️ v0.1047 (demandé : « la moitié de la réduction ») : les champions en reçoivent
+ *  `CARAVAN.outpostShare` = 0,5. Re-mesuré (`campEconomy.test`, 8 graines, Avant-poste au
+ *  niveau du joueur) : 9,3 / 10,9 / 14,6 camps par jour aux niveaux 12 / 26 / 60 (contre
+ *  9,1 / 10,3 / 12,1), or +27 / +19 / +21 % du revenu de référence (contre +27 / +18 / +18),
+ *  pierres +15 / +19 / +33 %. À part pleine, le niveau 60 bondit à 27 camps/jour et +39 %
+ *  d'or : c'est le mur, pas la pente. Puits d'or sur un an : 79,5 / 70,4 / 65,0 % du plafond.
  *  La cargaison reste payée sur le temps du héros (`heroEquivalentFactor`). */
-export function caravanLegMin(poi: Poi, escort: Adventurer[], gearSpeed: number): number {
-  const hero = travelOneWayMin(poiTravelLevel(poi), poi.distNorm);
+export function caravanLegMin(
+  poi: Poi,
+  escort: Adventurer[],
+  gearSpeed: number,
+  outpostMult: number,
+): number {
+  const hero =
+    travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * championOutpostMult(outpostMult);
   const speed = Math.min(
     CARAVAN.speedMax,
     countRole(escort, 'speed') * CARAVAN.speedPerRole + Math.max(0, gearSpeed),
   );
   return Math.max(1, Math.round(hero * (1 - speed)));
+}
+
+/** 🧭 Le multiplicateur de trajet des CHAMPIONS, dérivé de celui du héros (`travelTimeMult`) :
+ *  ils reçoivent `CARAVAN.outpostShare` de sa réduction. ⚠️ Dérivé, jamais une seconde courbe
+ *  par niveau d'Avant-poste qui finirait par diverger de celle du héros. */
+export function championOutpostMult(heroMult: number): number {
+  const cut = Math.min(1, Math.max(0, 1 - heroMult));
+  return 1 - cut * CARAVAN.outpostShare;
 }
 
 /** ⚠️ LA CARGAISON SE PAIE SUR LA DURÉE QU'UN HÉROS AURAIT MISE, pas sur celle de la
@@ -1193,7 +1218,8 @@ export function startCaravan(
   seed: number,
   kit: EscortKit,
 ): Caravan {
-  const leg = caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed) * 60_000;
+  // Convoi legacy (plus appelé par l'app) : sans Avant-poste.
+  const leg = caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed, 1) * 60_000;
   return {
     id,
     poi,
