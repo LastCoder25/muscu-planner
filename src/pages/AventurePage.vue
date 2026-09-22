@@ -858,6 +858,9 @@
           🧭 Set <b>{{ equippedSet.emoji }} {{ equippedSet.name }}</b> en cours ·
           {{ equippedSet.count }}/4 pièces
         </div>
+        <!-- UNE PIÈCE PAR LIGNE : icône à gauche, nom entier + toutes les stats au milieu,
+             « Retirer » et le badge 🎒 dans une colonne fixe à droite. La grille 2×2 coupait
+             le nom dès ~16 caractères et masquait la 3ᵉ stat d'un objet Épique+. -->
         <div class="gear">
           <div
             v-for="slot in SLOTS"
@@ -871,45 +874,49 @@
             :title="char.row.equipped[slot] ? 'Voir le détail' : undefined"
             @click="char.row.equipped[slot] && (inspectItem = char.row.equipped[slot]!)"
           >
-            <!-- Pièce de set → badge 🧩 en HAUT À DROITE de la tuile (ne rentre pas sur la
-                 ligne des pastilles rareté/niveau, ticket c0b3547f). -->
-            <span
-              v-if="char.row.equipped[slot]?.setId"
-              class="slot-set-corner"
-              :title="'Pièce de set — ' + setVoieName(char.row.equipped[slot]?.setId ?? '')"
-              >🧩</span
-            >
-            <div class="slot-head">
+            <div class="slot-ico">
               <ItemIcon
                 v-if="char.row.equipped[slot]"
                 :item="char.row.equipped[slot]!"
-                :size="38"
+                :size="44"
               />
               <span v-else class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
-              <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
             </div>
-            <template v-if="char.row.equipped[slot]">
-              <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
-              <!-- Méta : rang ★ · niveau. Le set = badge coin ; les étoiles = icône (badge bas). -->
-              <div class="pills">
-                <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
-                  gradeLabel(char.row.equipped[slot]!)
-                }}</span>
-                <span class="lvl-badge">Nv {{ char.row.equipped[slot]!.level }}</span>
-              </div>
-              <div class="slot-eff">
-                <div
-                  v-for="(ln, si) in itemStatLines(char.row.equipped[slot]!)"
-                  :key="si"
-                  class="stat-line"
+            <div class="slot-main">
+              <div class="slot-head">
+                <span class="slot-lbl">{{ SLOT_LABEL[slot] }}</span>
+                <span
+                  v-if="char.row.equipped[slot]?.setId"
+                  class="slot-set-corner"
+                  :title="'Pièce de set — ' + setVoieName(char.row.equipped[slot]?.setId ?? '')"
+                  >🧩</span
                 >
-                  {{ ln }}
+              </div>
+              <template v-if="char.row.equipped[slot]">
+                <div class="slot-name">{{ char.row.equipped[slot]!.name }}</div>
+                <div class="pills">
+                  <span class="gpill" :class="'p-' + char.row.equipped[slot]!.rarity">{{
+                    gradeLabel(char.row.equipped[slot]!)
+                  }}</span>
+                  <span class="lvl-badge">Nv {{ char.row.equipped[slot]!.level }}</span>
                 </div>
+                <div class="slot-eff">
+                  <span
+                    v-for="(ln, si) in itemStatLines(char.row.equipped[slot]!)"
+                    :key="si"
+                    class="stat-line"
+                    >{{ ln }}</span
+                  >
+                </div>
+              </template>
+              <div v-else class="slot-vide">
+                Emplacement vide<template v-if="bagCountForSlot(slot) > 0">
+                  · <b>{{ bagCountForSlot(slot) }} au sac</b></template
+                >
               </div>
-              <!-- Actions ancrées EN BAS (slot-eff flexible) → alignées d'une carte à l'autre. -->
-              <div class="slot-actions">
-                <button class="slot-remove" @click.stop="doUnequip(slot)">Retirer</button>
-              </div>
+            </div>
+            <div v-if="char.row.equipped[slot]" class="slot-actions">
+              <button class="slot-remove" @click.stop="doUnequip(slot)">Retirer</button>
               <!-- Badge : nb d'objets du SAC (même slot) au potentiel supérieur. Tap →
                      filtre le sac dessus. Cercle avec le 🎒 en fond. -->
               <button
@@ -925,11 +932,6 @@
               >
                 <span class="sb-n">{{ betterInBagCount(slot) }}</span>
               </button>
-            </template>
-            <div v-else class="slot-vide">
-              vide<template v-if="bagCountForSlot(slot) > 0">
-                · {{ bagCountForSlot(slot) }} au sac</template
-              >
             </div>
           </div>
         </div>
@@ -7768,10 +7770,11 @@ button.pt-mini:active {
 }
 
 /* Équipement */
+/* Une pièce par ligne (v0.1048) : la grille 2×2 coupait les noms et masquait des stats. */
 .gear {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 18px;
 }
 /* 🏆 Vitrine du trophée : un socle éclairé à gauche, le trophée dans la couleur de sa
@@ -7913,22 +7916,36 @@ button.pt-mini:active {
   color: var(--dim);
   margin: -4px 2px 10px;
 }
+/* Ligne : icône | nom + rang + stats | actions. La colonne centrale peut rétrécir
+   (minmax(0, 1fr)) → un nom long passe en ellipse au lieu de pousser les actions dehors. */
 .slot {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 11px;
   text-align: left;
   background: var(--surface);
   border: 1px solid var(--line);
   border-left-width: 3px;
   border-radius: 12px;
-  padding: 10px 12px;
-  /* Hauteur fixe : toutes les cartes identiques quel que soit le contenu (set/enchant/
-     effet à 1 ou 2 lignes) → l'affichage ne « bouge » plus d'une carte à l'autre. */
-  min-height: 118px;
-  /* Cellule de grille : autoriser le rétrécissement (sinon un nom de set long
-     force la colonne large → débordement à droite). */
+  padding: 10px 10px 10px 11px;
+  min-height: 72px;
+  min-width: 0;
+}
+.slot.empty {
+  border-style: dashed;
+}
+.slot-ico {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+}
+.slot-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   min-width: 0;
 }
 /* Badge « N objets du sac au potentiel supérieur » — cercle avec le 🎒 en fond,
@@ -8085,7 +8102,9 @@ button.pt-mini:active {
   transform: scale(0.98);
 }
 .slot-emo {
-  font-size: 18px;
+  font-size: 22px;
+  opacity: 0.55;
+  filter: grayscale(1);
 }
 .slot-lbl {
   font-size: 10px;
@@ -8133,31 +8152,38 @@ button.pt-mini:active {
   cursor: not-allowed;
 }
 .slot-name {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Effet flexible + clampé à 2 lignes → hauteur stable, pousse les actions en bas. */
+/* Toutes les stats, côte à côte, qui passent à la ligne au besoin (plus de coupe). */
 .slot-eff {
-  font-size: 11px;
-  color: var(--dim);
-  flex: 1 1 auto;
-  min-height: 26px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 10px;
 }
-/* Actions ancrées en bas → alignées d'une carte à l'autre. */
+.slot-eff .stat-line {
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+/* Colonne d'actions à droite : « Retirer » en haut, le badge 🎒 en bas. */
 .slot-actions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: 8px;
-  margin-top: auto;
+  align-self: stretch;
+  margin-top: 0;
+}
+/* Dans la colonne d'actions, le badge 🎒 suit le flux au lieu d'être posé en coin. */
+.slot-actions .slot-better {
+  position: relative;
+  right: auto;
+  bottom: auto;
 }
 /* Flèche ↑ du bouton de grade (⭐↑) : hérite de la couleur du texte, collée à l'étoile. */
 .gu-up {
@@ -8202,7 +8228,10 @@ button.pt-mini:active {
 .slot-vide {
   font-size: 12px;
   color: var(--dim);
-  opacity: 0.7;
+}
+.slot-vide b {
+  color: var(--text);
+  font-weight: 600;
 }
 /* Sets d'équipement */
 .setcard {
@@ -8794,10 +8823,7 @@ button.pt-mini:active {
 /* Badge « pièce de set » 🧩 en HAUT À DROITE de la tuile d'équipement (ticket c0b3547f) :
    libère la ligne des pastilles (rareté/niveau) qui débordait. */
 .slot-set-corner {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
   pointer-events: none;
