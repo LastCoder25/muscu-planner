@@ -49,21 +49,30 @@
             📬<span v-if="unreadMessages" class="inbox-dot">{{ unreadMessages }}</span>
           </button>
         </div>
+        <!-- ⚡ et 💠 sur la ligne du pseudo, tout à droite : ce sont les deux devises
+             qu'on consulte le plus (jouer, invoquer). Le reste du plateau passe dessous. -->
+        <div class="tb-tray tb-main">
+          <span
+            class="tb-r energy clickable"
+            :class="{ deficit: c.energy < 0 }"
+            role="button"
+            tabindex="0"
+            :title="`Énergie : ${c.energy.toLocaleString('fr-FR')} — appuie pour voir l'historique des 3 derniers jours (gagnée en faisant du sport)`"
+            @click="energyHistOpen = true"
+            @keyup.enter="energyHistOpen = true"
+            >⚡ {{ compactNumber(c.energy) }}</span
+          >
+          <!-- Les pierres de mana sont la monnaie du GACHA : elles décident si l'on peut invoquer. -->
+          <span
+            class="tb-r mana"
+            :title="`Pierres de mana : ${char.row.mana.toLocaleString('fr-FR')} — invoquer un champion (failles refermées, mines de mana)`"
+            >💠 {{ compactNumber(char.row.mana) }}</span
+          >
+        </div>
         <div class="tb-right">
-          <!-- Plateau de ressources : jauges (⚡ or) · séparateur · matériaux d'amélioration.
-               Une seule bordure = groupe lisible au lieu de 8 puces éparses. Chaque ressource
-               a une infobulle expliquant ce qu'elle fait monter. -->
+          <!-- Plateau des autres ressources. Une seule bordure = groupe lisible au lieu de
+               puces éparses. Chaque ressource a une infobulle expliquant ce qu'elle fait monter. -->
           <div class="tb-tray">
-            <span
-              class="tb-r energy clickable"
-              :class="{ deficit: c.energy < 0 }"
-              role="button"
-              tabindex="0"
-              :title="`Énergie : ${c.energy.toLocaleString('fr-FR')} — appuie pour voir l'historique des 3 derniers jours (gagnée en faisant du sport)`"
-              @click="energyHistOpen = true"
-              @keyup.enter="energyHistOpen = true"
-              >⚡ {{ compactNumber(c.energy) }}</span
-            >
             <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
             <span
               class="tb-r gold"
@@ -83,15 +92,6 @@
               class="tb-r keys"
               :title="`Clés : ${char.row.keys.toLocaleString('fr-FR')} — entrer dans le Labyrinthe (archives de la carte, coffres, boss)`"
               >🗝️ {{ compactNumber(char.row.keys) }}</span
-            >
-            <!-- ⚠️ MÊME RAISON QUE LES CLÉS : les pierres de mana sont la monnaie du
-                 GACHA, elles se gagnent en refermant des failles et en récoltant leurs
-                 mines — on ne pouvait voir sa réserve nulle part, alors qu’elle décide
-                 si l’on peut invoquer. -->
-            <span
-              class="tb-r mana"
-              :title="`Pierres de mana : ${char.row.mana.toLocaleString('fr-FR')} — invoquer un champion (failles refermées, mines de mana)`"
-              >💠 {{ compactNumber(char.row.mana) }}</span
             >
             <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions (failles) et objets (boss). Ils ne
                  servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle. Affichés
@@ -6557,12 +6557,25 @@ onUnmounted(() => {
   flex-wrap: wrap; /* écrans étroits (Z Fold plié ~344 px) : les puces passent à la ligne */
   margin-bottom: 14px;
 }
+/* Ligne 1 : niveau · pseudo · 📬 à gauche, ⚡ 💠 collés à droite. Le pseudo cède la place
+   (ellipse) plutôt que de faire passer ⚡ 💠 à la ligne. */
 .tb-left {
-  flex-wrap: wrap;
+  flex: 1 1 0;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   min-width: 0;
+}
+.tb-name {
+  min-width: 0;
+}
+.tb-main {
+  flex-shrink: 0;
+  flex-wrap: nowrap;
+}
+/* Ligne 2 : le reste du plateau, pleine largeur, calé à droite. */
+.tb-right {
+  flex-basis: 100%;
 }
 .tb-lvl {
   background: var(--surface-2, #2b241b);
