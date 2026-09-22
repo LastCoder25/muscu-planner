@@ -49,41 +49,29 @@ export function partyLegMin(
 }
 
 /**
- * 👥 UNE ÉQUIPE = 3 PLACES, PARTOUT (2026-09-21, décision de l'utilisateur : « on remplace les
- * convois par les expéditions ; les équipes de 3 champions, ou 1 héros et 1 champion, partent
- * sur tous les events »). SOURCE DE VÉRITÉ, override le plafond propre aux failles et
- * l'absence de plafond des camps.
+ * 👥 LA TAILLE D'UNE ÉQUIPE N'EST PLUS BORNÉE QUE PAR LE PANTHÉON (v0.1035, décision de
+ * l'utilisateur : « permettre aux expéditions de partir à plus que 3 pour abattre les events
+ * plus haut niveau ; plus il y a de champions plus l'XP est divisée, c'est tout »). SOURCE DE
+ * VÉRITÉ, override les « 3 places, le héros en prend 2 » de la v0.1020.
  *
- * ⚠️ **LE HÉROS PREND 2 PLACES**, et c'est cohérent avec ce qu'il VAUT : `heroPartyCombatant`
- * le borne à deux champions de référence de son niveau (v0.980). Héros + 1 champion vaut donc
- * au plus trois champions — exactement la force d'une équipe pleine. Le héros SEUL reste
- * permis (son expédition solo, ou une équipe à lui seul).
- *
- * ⚠️ **MESURÉ, et c'est pourquoi 3** : une faille mûre, sans le héros — 1 → 0 % · 2 → 0-2 % ·
- * 3 → 62-83 % · 4 → 99-100 %. Au-delà de 3 elle ne se joue plus. Les camps, eux, étaient
- * dimensionnés de 2 à 10 : ils passent à 1-3 (`CAMP_SIZES`), leur taille reste le gradateur.
+ * ⚠️ Ce que le nombre coûte désormais : l'XP. Au-delà de 3 membres (le héros compte pour 2),
+ * le socle de la mission se partage (`missionXpSplit`, caravan.ts). Une équipe nombreuse
+ * abat ce qu'une petite ne peut pas, mais chacun y apprend moins.
+ * ⚠️ Mesuré avant (v0.979) : une faille mûre passe de 62-83 % à 3 membres à 99-100 % à 4 —
+ * c'est voulu : sur une faille de son rang on en envoie 3, sur une faille plus haute plus.
  */
-export const TEAM_SLOTS = 3;
-/** Places que prend le héros dans une équipe (cf. `TEAM_SLOTS`). */
-export const HERO_TEAM_SLOTS = 2;
-
-/** Le plafond de champions RÉELLEMENT applicable : le plus strict entre celui du Panthéon et
- *  les places d'une équipe, héros déduit. ⚠️ Source unique — l'écran et le store l'appellent
- *  tous deux à travers `partySendBlocker`. `hero` est REQUIS : l'oublier rendrait deux
- *  places de trop. */
-export function partyCapFor(engage: number, hero: boolean): number {
-  const c = Math.max(0, Math.floor(engage));
-  return Math.max(0, Math.min(c, TEAM_SLOTS - (hero ? HERO_TEAM_SLOTS : 0)));
+/** Le plafond de champions d'une équipe : celui du Panthéon (`engageCap`). ⚠️ Source unique —
+ *  l'écran et le store l'appellent tous deux à travers `partySendBlocker`. */
+export function partyCapFor(engage: number): number {
+  return Math.max(0, Math.floor(engage));
 }
 
 /** Pourquoi une ÉQUIPE ne peut pas partir — `null` s'il le peut.
- *  ⚠️ Sa taille est bornée par le Panthéon, et plus strictement encore par ses 3 places
- *  (`TEAM_SLOTS`, héros = 2).
  *  ⚠️ Une équipe SANS le héros prend un CRÉNEAU de l'Avant-poste (`convoySlotsFree`, le même
  *  pool que les convois d'avant) : c'est ce qui borne le NOMBRE d'équipes en parallèle, donc
  *  l'or et les pierres par jour. L'équipe du héros n'en prend pas : il est sa propre limite.
  *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
-export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'teamFull';
+export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
@@ -95,13 +83,7 @@ export function partySendBlocker(
   if (!hero && escortCount <= 0) return 'empty';
   if (!hero && slotsFree <= 0) return 'slots';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
-  // ⚠️ Il vit ICI et non sur la personne (plus de banc) — mais il doit bien mordre quelque
-  // part : un groupe sans maximum est le seul endroit du jeu où l'effectif entier pourrait
-  // partir d'un coup, et c'est ce qui rendrait la collection décisive.
-  if (escortCount > Math.max(0, Math.floor(cap))) return 'tooMany';
-  // 👥 …ET LES 3 PLACES D'UNE ÉQUIPE, plus strictes : on distingue les deux refus parce qu'ils
-  // ne se corrigent pas pareil — l'un se lève en montant le Panthéon, l'autre jamais.
-  if (escortCount > partyCapFor(cap, hero)) return 'teamFull';
+  if (escortCount > partyCapFor(cap)) return 'tooMany';
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
@@ -109,7 +91,6 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   empty: 'l’équipe est vide',
   slots: 'tous les créneaux d’équipe de l’Avant-poste sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
-  teamFull: `une équipe compte ${TEAM_SLOTS} places, et le héros en prend ${HERO_TEAM_SLOTS}`,
 };
 export function canSendParty(
   poi: Poi,

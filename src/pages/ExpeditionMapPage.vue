@@ -446,7 +446,7 @@
               <span class="ph-sub">{{
                 partyHeroBlock
                   ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                  : `prend ${HERO_TEAM_SLOTS} places${partyHeroToll(selected) ? ` · 🪙 ${partyHeroToll(selected)}` : ''}`
+                  : `compte pour ${HERO_XP_WEIGHT} dans le partage d’XP${partyHeroToll(selected) ? ` · 🪙 ${partyHeroToll(selected)}` : ''}`
               }}</span>
             </span>
             <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
@@ -465,9 +465,14 @@
           </button>
           <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
                ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
+          <!-- 👥 v0.1035 : plus de plafond de 3 — seulement celui du Panthéon. Ce que le nombre
+               coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
           <p class="car-cap">
-            👥 Une équipe compte <b>{{ TEAM_SLOTS }}</b> places, et le héros en prend
-            <b>{{ HERO_TEAM_SLOTS }}</b> : <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions.
+            👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions (Panthéon). Jusqu'à
+            {{ XP_TEAM_REF }} membres chacun apprend pleinement ; au-delà l'XP se partage (le héros
+            compte pour {{ HERO_XP_WEIGHT }})<template v-if="partyXpSplit < 1">
+              : <b>XP ×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun</template
+            >.
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
@@ -646,8 +651,6 @@ import {
   PARTY_HERO_BLOCK_LABEL,
   PARTY_SEND_BLOCK_LABEL,
   partyCapFor,
-  TEAM_SLOTS,
-  HERO_TEAM_SLOTS,
   partySendBlocker,
   partyHeroBlocker,
   partyHeroToll,
@@ -717,6 +720,9 @@ import {
   isCaravanClaimable,
   poiOffers,
   partyAllies,
+  missionXpSplit,
+  XP_TEAM_REF,
+  HERO_XP_WEIGHT,
   type PartyHero,
 } from '@/lib/caravan';
 import { advGearRoles } from '@/lib/advGear';
@@ -1211,15 +1217,15 @@ const canSendPartyNow = computed(
     progress.ready.value &&
     !busyCaravan.value,
 );
-/** 🗿🕳️ Combien de champions CE lieu accepte — `partyCapFor`, jamais une copie de la
- *  règle : l'écran doit empêcher exactement ce que le store refuse. Un camp garde le
- *  plafond du Panthéon (sa TAILLE fait déjà le gradateur) ; une faille est bien plus
- *  stricte, parce qu'elle n'a qu'un seul axe de force. */
-const partyMax = computed(() => partyCapFor(cap.value, partyHeroOn.value));
+/** 🗿 Combien de champions on peut engager — `partyCapFor` (le Panthéon), jamais une copie
+ *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
+const partyMax = computed(() => partyCapFor(cap.value));
+/** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
+const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length, partyHeroOn.value));
 /** Vrai quand on ne peut plus en cocher — pour le dire AVANT qu'on essaie. */
 const partyFull = computed(() => partyAdvs.value.length >= partyMax.value);
-/** 🕳️ Emmener le héros dans une faille lui prend une place : si le groupe déborde, on
- *  retire les derniers cochés plutôt que de laisser un envoi impossible à l'écran. */
+/** Si le plafond baisse (Panthéon), on retire les derniers cochés plutôt que de laisser un
+ *  envoi impossible à l'écran. */
 watch(partyMax, (max) => {
   if (partyEscort.value.length > max) partyEscort.value = partyEscort.value.slice(0, max);
 });

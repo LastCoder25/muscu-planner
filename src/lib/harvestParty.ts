@@ -43,7 +43,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
       kills: {},
       heroKills: 0,
       // Une récolte ne se perd pas (aucun combat au lieu) : le socle entier.
-      xp: missionXpFor(escort, poi, true, {}),
+      xp: missionXpFor(escort, poi, true, {}, true),
       hurt: [],
       wages: caravanWages(escort, poi),
       journal: [out.text],

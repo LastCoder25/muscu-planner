@@ -9,7 +9,8 @@ import {
   riftStageInputOf,
   type RiftStageInput,
 } from '@/lib/riftStage';
-import { TEAM_SLOTS, partyReport } from '@/lib/party';
+import { partyReport } from '@/lib/party';
+import { XP_TEAM_REF } from '@/lib/caravan';
 import type { Adventurer } from '@/lib/adventurers';
 import {
   RIFT,
@@ -328,9 +329,12 @@ describe('bout en bout avec le moteur', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('le groupe ratisse la faille', () => {
-  it('la formation a une place par membre qu’une faille laisse entrer', () => {
-    // Sinon un membre se poserait sur la place d'un autre (ou n'en aurait aucune).
-    expect(RIFT_STAGE.formation).toHaveLength(TEAM_SLOTS);
+  it('la formation place au moins une équipe courante, sans deux membres au même endroit', () => {
+    // v0.1035 : les équipes ne sont plus bornées à 3 — la formation a une seconde ligne.
+    const f = RIFT_STAGE.formation;
+    expect(f.length).toBeGreaterThan(XP_TEAM_REF);
+    const key = (p: { dx: number; dy: number }) => p.dx + ':' + p.dy;
+    expect(new Set(f.map(key)).size).toBe(f.length);
   });
 
   it('les monstres se répartissent À TOUR DE RÔLE entre les membres', () => {
@@ -353,9 +357,10 @@ describe('le groupe ratisse la faille', () => {
     }
   });
 
-  it('la taille est bornée : au moins un, au plus les places d’une faille', () => {
+  it('la taille est bornée : au moins un, au plus les places de la formation', () => {
     expect(riftPartySize({ partySize: 0 })).toBe(1);
-    expect(riftPartySize({ partySize: 5 })).toBe(TEAM_SLOTS);
+    expect(riftPartySize({ partySize: 5 })).toBe(5);
+    expect(riftPartySize({ partySize: 40 })).toBe(RIFT_STAGE.formation.length);
     expect(riftPartySize({ partySize: 2 })).toBe(2);
   });
 
@@ -393,9 +398,10 @@ describe('la distribution : qui entre en scène', () => {
     expect(cast.map((m) => m.kind)).toEqual(['champion']);
   });
 
-  it('jamais plus de membres que de places (un rapport d’avant la v0.983 en portait 4)', () => {
-    const cast = riftCast({ ...partyResult(), hero: true, escort: ['a1', 'a2', 'a3'] }, roster);
-    expect(cast).toHaveLength(TEAM_SLOTS);
+  it('jamais plus de membres que la formation n’a de places', () => {
+    const escort = Array.from({ length: 12 }, (_, i) => 'a' + (i + 1));
+    const cast = riftCast({ ...partyResult(), hero: true, escort }, roster);
+    expect(cast).toHaveLength(RIFT_STAGE.formation.length);
     expect(cast[0]!.kind).toBe('hero');
   });
 });

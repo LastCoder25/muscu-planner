@@ -27,7 +27,7 @@
 
 import { mulberry32 } from './combat';
 import type { ExpeditionMessage, PartyResult } from './expedition';
-import { TEAM_SLOTS, partyReport } from './party';
+import { partyReport } from './party';
 import type { Adventurer } from './adventurers';
 import type { RaidFaction } from './raid';
 import { RIFT_RUN, riftDepth, riftFoeIdentity, riftRamp, type RiftBossReplay } from './rift';
@@ -54,9 +54,8 @@ export const RIFT_STAGE = {
   laneJitter: 0.06,
   /**
    * 🧭 LA FORMATION DU GROUPE — où se tient chaque membre par rapport au point de marche
-   * (fractions du terrain en x, de la hauteur en y). Une place par membre possible : une
-   * équipe ne compte que `TEAM_SLOTS` places, héros compris (un test tient les deux
-   * nombres d'accord).
+   * (fractions du terrain en x, de la hauteur en y). Une place par membre MONTRÉ : le plateau
+   * en affiche au plus autant que la formation compte de places (`riftPartySize`).
    *
    * ⚠️ En ÉVENTAIL et non en file : les monstres alternent de part et d'autre de l'axe
    * (`lane`), donc un membre en haut et un en bas couvrent les deux rangées — c'est ce qui
@@ -66,6 +65,13 @@ export const RIFT_STAGE = {
     { dx: 0, dy: 0 },
     { dx: -0.03, dy: -0.13 },
     { dx: -0.03, dy: 0.13 },
+    // ⚠️ SECONDE LIGNE (v0.1035) : les équipes ne sont plus bornées à 3. Derrière la
+    // première, en quinconce, pour ne recouvrir personne. Au-delà de sept membres, le plateau
+    // n'en montre que sept (`riftPartySize`) — le combat, lui, compte tout le monde.
+    { dx: -0.08, dy: -0.065 },
+    { dx: -0.08, dy: 0.065 },
+    { dx: -0.11, dy: -0.2 },
+    { dx: -0.11, dy: 0.2 },
   ],
 } as const;
 
@@ -176,11 +182,11 @@ export function riftStageInputOf(party: PartyResult): RiftStageInput | null {
   };
 }
 
-/** La taille du groupe sur le plateau : au moins un, au plus les places d'une faille
- *  (le plancher couvre un rapport bancal ; le plafond, une formation qui n'aurait pas de
- *  place pour un quatrième). */
+/** La taille du groupe sur le plateau : au moins un, au plus les places de la formation
+ *  (le plancher couvre un rapport bancal ; le plafond, une équipe plus nombreuse que ce que
+ *  le plateau sait placer — le combat, lui, compte tout le monde). */
 export function riftPartySize(input: Pick<RiftStageInput, 'partySize'>): number {
-  return Math.max(1, Math.min(TEAM_SLOTS, Math.round(input.partySize ?? 1)));
+  return Math.max(1, Math.min(RIFT_STAGE.formation.length, Math.round(input.partySize ?? 1)));
 }
 
 /** Où se tient le k-ième monstre sur l'axe de marche. */

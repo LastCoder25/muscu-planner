@@ -280,7 +280,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     escort.map((a) => [a.id, slainBy[a.id] ?? 0]),
   );
   const shares = skirmishXpShares(escort, bodies, d);
-  const xp = missionXpFor(escort, poi, d.win, shares);
+  const xp = missionXpFor(escort, poi, d.win, shares, !!hero);
 
   const party: PartyResult = {
     hero: !!hero,

@@ -12,7 +12,6 @@ import {
 } from '@/lib/camp';
 import {
   canSendParty,
-  TEAM_SLOTS,
   normalizeParties,
   PARTY_HERO_BLOCK_LABEL,
   partyClaimRoster,
@@ -54,6 +53,7 @@ import {
   caravanLegMin,
   missionXp,
   missionXpFor,
+  XP_TEAM_REF,
   refAdvGear,
   refChampionAdv,
   escortGear,
@@ -317,7 +317,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         );
         const parts = skirmishXpShares(esc, bodies, d);
         // Socle selon l'ISSUE + part des abattus : la règle EXACTE d'un convoi (v0.1014).
-        expect(o.party!.xp).toEqual(missionXpFor(esc, inp.poi, d.win, parts));
+        expect(o.party!.xp).toEqual(missionXpFor(esc, inp.poi, d.win, parts, !!inp.hero));
         expect(o.party!.xp[HERO_UNIT_ID]).toBeUndefined();
       }
   });
@@ -842,10 +842,12 @@ describe('🧾 normalizeParties — un jsonb malformé ne fait jamais planter', 
 });
 
 describe('👥 un camp se prend avec UNE équipe (2026-09-21)', () => {
-  it('aucune taille de camp ne dépasse une équipe pleine — sinon il serait imprenable', () => {
+  it('aucune taille de camp ne dépasse une équipe qui apprend pleinement (XP non partagée)', () => {
+    // v0.1035 : les équipes ne sont plus bornées à 3, mais au-delà l'XP se partage. Un camp
+    // de sa taille doit se prendre SANS ce partage.
     for (const s of [...CAMP_SIZES.camp, ...CAMP_SIZES.lair]) {
       expect(s).toBeGreaterThanOrEqual(1);
-      expect(s).toBeLessThanOrEqual(TEAM_SLOTS);
+      expect(s).toBeLessThanOrEqual(XP_TEAM_REF);
     }
     // …et un repaire en demande au moins deux.
     expect(Math.min(...CAMP_SIZES.lair)).toBeGreaterThanOrEqual(2);

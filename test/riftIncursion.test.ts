@@ -17,20 +17,16 @@ import { EXPE, harvestYield, type Poi } from '@/lib/expedition';
 import {
   caravanWages,
   missionXpFor,
+  missionXpSplit,
+  XP_TEAM_REF,
+  HERO_XP_WEIGHT,
   partyAllies,
   refAdvGear,
   refChampionAdv,
   type PartyHero,
   type EscortKit,
 } from '@/lib/caravan';
-import {
-  TEAM_SLOTS,
-  HERO_TEAM_SLOTS,
-  partyCapFor,
-  partyFightSeed,
-  partyForecastSeed,
-  partySendBlocker,
-} from '@/lib/party';
+import { partyCapFor, partyFightSeed, partyForecastSeed, partySendBlocker } from '@/lib/party';
 import { fuseUnits, skirmishXpShares } from '@/lib/skirmish';
 import { gearedFighter } from './helpers/gearedFighter';
 import { type Adventurer } from '@/lib/adventurers';
@@ -197,7 +193,8 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
         bodies,
       ),
     });
-    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares));
+    // ⚠️ 3 champions + le héros (compte pour 2) : 5 membres, le socle se partage (v0.1035).
+    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, true));
   });
 
   it('⚠️ le HÉROS ne prend AUCUNE part : les aventuriers partagent entre eux', () => {
@@ -437,55 +434,64 @@ describe('🔗 la résolution emprunte bien la graine DU COMBAT', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 🕳️ COMBIEN DE CHAMPIONS UNE FAILLE LAISSE ENTRER
+// 👥 LA TAILLE D'UNE ÉQUIPE : le Panthéon seul (v0.1035)
 //
-// ⚠️ MESURÉ : au-delà de 3, une faille ne se joue plus. Part nettoyée d'une faille MÛRE,
-// sans héros : 1 → 0 % · 2 → 0-2 % · 3 → 62-83 % · 4 → 99-100 % · 5+ → 100 %, identique
-// aux niveaux 12, 26, 45 et 70. La cause est structurelle : une faille n'a qu'UN axe de
-// force (son niveau), donc rien ne la fait grandir avec le groupe envoyé.
+// Décision de l'utilisateur : « permettre aux expéditions de partir à plus que 3 pour abattre
+// les events plus haut niveau ; plus il y a de champions plus l'XP est divisée, c'est tout ».
+// Mesuré avant (v0.979) : une faille mûre, sans héros — 3 → 62-83 %, 4 → 99-100 %. Au-delà de
+// 3 le nombre ne coûte plus une place, il coûte de l'XP (`missionXpSplit`).
 // ─────────────────────────────────────────────────────────────────────────────
-describe('👥 une ÉQUIPE compte 3 places, partout — le héros en prend 2 (2026-09-21)', () => {
+describe('👥 une équipe n’est bornée que par le Panthéon (v0.1035)', () => {
   const camp = (): Poi => ({ ...rift(), id: 'camp_x', type: 'camp' });
   const mine = (): Poi => ({ ...rift(), id: 'mine_x', type: 'mine' });
 
-  it('⚠️ 3 champions au plus, quel que soit le Panthéon', () => {
-    // Le Panthéon d'un joueur avancé en autorise 51 : ici il ne sert à rien.
-    for (const engage of [3, 16, 51]) expect(partyCapFor(engage, false)).toBe(TEAM_SLOTS);
-    // …mais il mord quand il est PLUS strict : un débutant n'en a pas trois.
-    expect(partyCapFor(2, false)).toBe(2);
-  });
-
-  it('⚠️ la MÊME règle sur un camp, une faille et un lieu de récolte', () => {
+  it('⚠️ le plafond est celui du Panthéon, plus 3', () => {
+    for (const engage of [2, 3, 16, 51]) expect(partyCapFor(engage)).toBe(engage);
     for (const p of [camp(), rift(), mine()]) {
-      expect(partySendBlocker(p, TEAM_SLOTS, false, 5, 51), p.type).toBeNull();
-      expect(partySendBlocker(p, TEAM_SLOTS + 1, false, 5, 51), p.type).toBe('teamFull');
+      expect(partySendBlocker(p, 16, false, 5, 16), p.type).toBeNull();
+      expect(partySendBlocker(p, 17, false, 5, 16), p.type).toBe('tooMany');
     }
   });
 
-  it('le refus DISTINGUE les deux plafonds — ils ne se corrigent pas pareil', () => {
-    // Trop pour le Panthéon : ça se lève en le montant.
-    expect(partySendBlocker(rift(), 3, false, 5, 2)).toBe('tooMany');
-    // Trop pour une équipe : ça ne se lèvera jamais.
-    expect(partySendBlocker(rift(), 4, false, 5, 51)).toBe('teamFull');
-  });
-
-  it('⚠️ le HÉROS PREND 2 PLACES : héros seul, ou héros + 1 champion', () => {
-    // Cohérent avec ce qu'il VAUT (au plus 2 champions de référence, `heroPartyCombatant`) :
-    // héros + 1 champion vaut une équipe pleine, jamais plus.
-    expect(HERO_TEAM_SLOTS).toBe(2);
-    expect(partyCapFor(51, true)).toBe(TEAM_SLOTS - HERO_TEAM_SLOTS);
+  it('le héros ne prend plus de place : il s’ajoute à autant de champions que permis', () => {
     expect(partySendBlocker(rift(), 0, true, 5, 51)).toBeNull();
-    expect(partySendBlocker(rift(), 1, true, 5, 51)).toBeNull();
-    expect(partySendBlocker(rift(), 2, true, 5, 51)).toBe('teamFull');
+    expect(partySendBlocker(rift(), 5, true, 5, 51)).toBeNull();
     // L'équipe du héros ne prend pas de créneau de l'Avant-poste.
     expect(partySendBlocker(mine(), 1, true, 0, 51)).toBeNull();
     expect(partySendBlocker(mine(), 1, false, 0, 51)).toBe('slots');
   });
+});
 
-  it('⚠️ 3 est SOUS le point où une faille cesse de se jouer', () => {
-    // Mesuré : une faille mûre, sans héros — 4 → 99-100 % à tout niveau (plus de décision),
-    // 2 → 0-2 % (imprenable). 3 est le seul nombre où « combien j'en envoie » compte.
-    expect(TEAM_SLOTS).toBeLessThan(4);
-    expect(TEAM_SLOTS).toBeGreaterThan(2);
+describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1035)', () => {
+  it('⚠️ jusqu’à 3 membres rien ne change — la calibration de la montée tient', () => {
+    for (const n of [1, 2, 3]) expect(missionXpSplit(n, false)).toBe(1);
+    expect(missionXpSplit(1, true)).toBe(1); // héros (2) + 1 = 3
+  });
+
+  it('au-delà, le socle se partage à parts égales ; le héros compte pour 2', () => {
+    expect(HERO_XP_WEIGHT).toBe(2);
+    expect(missionXpSplit(4, false)).toBeCloseTo(XP_TEAM_REF / 4);
+    expect(missionXpSplit(6, false)).toBeCloseTo(0.5);
+    expect(missionXpSplit(3, true)).toBeCloseTo(XP_TEAM_REF / 5);
+    for (let n = 3; n < 12; n++)
+      expect(missionXpSplit(n + 1, false)).toBeLessThanOrEqual(missionXpSplit(n, false));
+  });
+
+  it('le socle d’un membre baisse quand l’équipe grossit, la part des abattus reste la sienne', () => {
+    const p = rift({ level: 26 });
+    const trois = missionXpFor(team(3, 26), p, true, {}, false);
+    const six = missionXpFor(team(6, 26), p, true, {}, false);
+    expect(six.adv_0!).toBeLessThan(trois.adv_0!);
+    expect(six.adv_0!).toBeCloseTo(trois.adv_0! / 2, -1);
+    // Les abattus passent tels quels (déjà divisés entre les présents).
+    const avec = missionXpFor(team(6, 26), p, true, { adv_0: 40 }, false);
+    expect(avec.adv_0! - six.adv_0!).toBe(40);
+  });
+
+  it('⚠️ oublier le héros rendrait deux parts de trop', () => {
+    const p = rift({ level: 26 });
+    const sans = missionXpFor(team(3, 26), p, true, {}, false);
+    const avec = missionXpFor(team(3, 26), p, true, {}, true);
+    expect(avec.adv_0!).toBeLessThan(sans.adv_0!);
   });
 });

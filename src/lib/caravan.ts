@@ -740,15 +740,35 @@ export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
   );
 }
 
-/** L'XP de chaque membre d'une mission : socle (selon l'issue) + sa part des abattus. */
+/** 👥 LE PARTAGE DE L'XP D'UNE MISSION (v0.1035, décision de l'utilisateur : les équipes ne
+ *  sont plus bornées à 3 — « plus il y a de champions plus l'XP est divisée, c'est tout »).
+ *  Jusqu'à `XP_TEAM_REF` membres, rien ne change (toute la calibration de la montée en niveau
+ *  est faite sur ces équipes) ; au-delà, le socle d'une mission se partage à parts égales.
+ *  ⚠️ Le HÉROS compte pour `HERO_XP_WEIGHT` : il VAUT deux champions dans un groupe
+ *  (`heroPartyCombatant`), il en prend donc deux parts — perdues, son XP vient du sport. */
+export const XP_TEAM_REF = 3;
+export const HERO_XP_WEIGHT = 2;
+/** Facteur appliqué au socle de chaque champion (1 jusqu'à `XP_TEAM_REF` membres). */
+export function missionXpSplit(escortCount: number, hero: boolean): number {
+  const weight = Math.max(1, escortCount) + (hero ? HERO_XP_WEIGHT : 0);
+  return Math.min(1, XP_TEAM_REF / weight);
+}
+
+/** L'XP de chaque membre d'une mission : socle (selon l'issue, partagé au-delà de
+ *  `XP_TEAM_REF` membres) + sa part des abattus (déjà divisée entre les présents).
+ *  `hero` est REQUIS : l'oublier rendrait deux parts de trop aux champions. */
 export function missionXpFor(
   escort: readonly Adventurer[],
   poi: Poi,
   won: boolean,
   shares: Record<string, number>,
+  hero: boolean,
 ): Record<string, number> {
+  const split = missionXpSplit(escort.length, hero);
   const xp: Record<string, number> = {};
-  for (const a of escort) xp[a.id] = missionXp(a, poi, won) + Math.round(shares[a.id] ?? 0);
+  for (const a of escort)
+    xp[a.id] =
+      Math.max(1, Math.round(missionXp(a, poi, won) * split)) + Math.round(shares[a.id] ?? 0);
   return xp;
 }
 
@@ -1130,7 +1150,7 @@ export function resolveCaravan(
   };
   const wages = caravanWages(escort, poi);
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
-  const xp = missionXpFor(escort, poi, !lost, xpShare);
+  const xp = missionXpFor(escort, poi, !lost, xpShare, false);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
