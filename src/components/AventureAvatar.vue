@@ -66,10 +66,25 @@
         <path class="leg" d="M71 88 L72 116 Q72 122 67 122 L63 122 Q62 116 63 100 L64 88 Z" />
         <path class="boot" d="M46 118 Q46 126 52 126 L60 126 L60 118 Q54 120 46 118 Z" />
         <path class="boot" d="M74 118 Q74 126 68 126 L60 126 L60 118 Q66 120 74 118 Z" />
+        <!-- BOTTES (refonte, 7 emplacements) : tige et empeigne teintées par la rareté. -->
+        <g v-if="gear.boots" class="gboots" :style="{ '--rk': rankColor(gear.boots.rarity) }">
+          <path class="gboot" d="M46 112 L46 120 Q46 127 52 127 L60 127 L60 119 L57 112 Z" />
+          <path class="gboot" d="M74 112 L74 120 Q74 127 68 127 L60 127 L60 119 L63 112 Z" />
+          <rect class="gboot-cuff" x="46" y="111" width="11" height="3" rx="1.2" />
+          <rect class="gboot-cuff" x="63" y="111" width="11" height="3" rx="1.2" />
+        </g>
 
         <!-- bras arrière (gauche) + main -->
         <path class="arm" d="M44 52 Q34 62 33 82 Q33 88 38 88 Q41 72 47 60 Z" />
         <circle class="hand" cx="35" cy="86" r="5" />
+
+        <!-- BOUCLIER (refonte, 7 emplacements) : tenu de la main gauche, écu teinté par la
+             rareté, avec son umbo. Derrière le torse : il est porté sur le côté. -->
+        <g v-if="gear.shield" class="shield" :style="{ '--rk': rankColor(gear.shield.rarity) }">
+          <path class="board" d="M24 68 L44 68 L44 84 Q44 96 34 102 Q24 96 24 84 Z" />
+          <path class="board-band" d="M34 68 L34 101" />
+          <circle class="boss" cx="34" cy="82" r="3.2" />
+        </g>
 
         <!-- torse (tunique de base) -->
         <path class="tunic" d="M42 50 Q40 72 46 92 L74 92 Q80 72 78 50 Q60 44 42 50 Z" />
@@ -116,6 +131,15 @@
         <circle class="head" cx="60" cy="30" r="14" />
         <!-- cheveux / capuche teintés profil -->
         <path class="hair" d="M46 30 Q46 14 60 14 Q74 14 74 30 Q68 22 60 22 Q52 22 46 30 Z" />
+        <!-- CASQUE (refonte, 7 emplacements) : calotte, protège-nez et cimier teintés. -->
+        <g v-if="gear.helmet" class="helm" :style="{ '--rk': rankColor(gear.helmet.rarity) }">
+          <path
+            class="helm-dome"
+            d="M45 31 Q45 12 60 12 Q75 12 75 31 L70 31 Q69 23 60 23 Q51 23 50 31 Z"
+          />
+          <rect class="helm-nasal" x="58.8" y="22" width="2.4" height="11" rx="1" />
+          <path class="helm-crest" d="M57 12 Q60 4 63 12 Z" />
+        </g>
         <!-- yeux (petits) -->
         <circle class="eye" cx="55" cy="31" r="1.3" />
         <circle class="eye" cx="65" cy="31" r="1.3" />
@@ -264,16 +288,16 @@
       <circle class="hotspot-ring" cx="23" cy="114" r="16" />
     </g>
 
-    <!-- Pips d'équipement (4 slots) -->
+    <!-- Pips d'équipement (un par emplacement, répartis sur la largeur : 7 depuis la refonte) -->
     <g class="slots">
       <circle
         v-for="(s, i) in slotPips"
         :key="s.slot"
         class="pip"
         :class="s.on ? 'on r-' + s.rarity : 'off'"
-        :cx="18 + i * 28"
+        :cx="PIP_X0 + i * pipStep"
         cy="142"
-        r="4"
+        r="3.5"
       />
     </g>
   </svg>
@@ -342,11 +366,17 @@ const gear = computed(() => ({
   weapon: props.equipped.weapon,
   accessory: props.equipped.accessory,
   relic: props.equipped.relic,
+  shield: props.equipped.shield,
+  helmet: props.equipped.helmet,
+  boots: props.equipped.boots,
 }));
+/** Pips répartis sur la largeur utile, quel que soit le nombre d'emplacements. */
+const PIP_X0 = 14;
+const pipStep = (120 - 2 * PIP_X0) / Math.max(1, SLOTS.length - 1);
 // La forme de l'arme et le set porté : la règle vit dans la lib, l'avatar ne fait que dessiner.
 const wKind = computed(() => props.weaponShape ?? weaponKind(props.equipped.weapon));
 const set = computed(() => wornSet(props.equipped, props.voie));
-// RANG le plus haut parmi l'équipement (les 4 slots gear) → pilote l'aura de puissance.
+// RANG le plus haut parmi l'équipement (les 7 emplacements) → pilote l'aura de puissance.
 // (Remplace l'ancien pilotage par l'enchant, retiré : l'aura suit maintenant le grade.)
 const maxRankIdx = computed(() => {
   let m = -1;
@@ -375,7 +405,7 @@ const slotPips = computed(() =>
 );
 const label = computed(
   () =>
-    `Aventurier ${props.profile}, ${slotPips.value.filter((s) => s.on).length}/4 équipements : ` +
+    `Aventurier ${props.profile}, ${slotPips.value.filter((s) => s.on).length}/${SLOTS.length} équipements : ` +
     slotPips.value.map((s) => `${SLOT_LABEL[s.slot]}${s.on ? ' ✓' : ''}`).join(', '),
 );
 </script>
@@ -462,6 +492,39 @@ const label = computed(
 }
 
 /* ── Gear teinté par la rareté (var --rk) ── */
+.shield .board {
+  fill: color-mix(in srgb, var(--rk) 55%, #2c251e);
+  stroke: var(--rk);
+  stroke-width: 1.2;
+}
+.shield .board-band {
+  stroke: color-mix(in srgb, var(--rk) 80%, #fff);
+  stroke-width: 1.4;
+  opacity: 0.5;
+}
+.shield .boss {
+  fill: var(--rk);
+  stroke: #1c160f;
+  stroke-width: 0.5;
+}
+.helm .helm-dome {
+  fill: color-mix(in srgb, var(--rk) 60%, #2c251e);
+  stroke: var(--rk);
+  stroke-width: 1;
+}
+.helm .helm-nasal,
+.helm .helm-crest {
+  fill: var(--rk);
+}
+.gboots .gboot {
+  fill: color-mix(in srgb, var(--rk) 55%, #2f2620);
+  stroke: var(--rk);
+  stroke-width: 0.8;
+}
+.gboots .gboot-cuff {
+  fill: var(--rk);
+  opacity: 0.85;
+}
 .armor .plate {
   fill: color-mix(in srgb, var(--rk) 60%, #2c251e);
   stroke: var(--rk);

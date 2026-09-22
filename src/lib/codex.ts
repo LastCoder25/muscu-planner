@@ -43,9 +43,9 @@ export function bestiary(clearedDungeonIds: string[]): BestiaryEntry[] {
 
 export interface SetCollectionEntry {
   set: ItemSet;
-  owned: number; // slots distincts possédés (équipé + sac), max 4
-  total: number; // 4
-  complete: boolean; // 4/4
+  owned: number; // emplacements distincts possédés (équipé + sac), max SET_SIZE (6)
+  total: number; // SET_SIZE (6)
+  complete: boolean; // 6/6
 }
 
 /** Journal des sets (de voie) : pièces possédées par set (slots distincts). Les 8 sets

@@ -23,6 +23,17 @@
           <span class="p" :style="{ width: pPct + '%' }" />
         </div>
         <div class="cs-pv">{{ playerPv }}</div>
+        <!-- 🔮 JAUGE DE LA RELIQUE (refonte, étape 9) : lue sur le journal (`CombatEvent.gauge`),
+             jamais recalculée ; elle s'illumine quand le pouvoir part. -->
+        <div
+          v-if="relicPower"
+          class="cs-gauge"
+          :class="{ fired: relicFired }"
+          :title="relicPower.name + ' — jauge de la relique'"
+        >
+          <span class="g-emo">{{ relicPower.emoji }}</span>
+          <span class="g-track"><span class="g-fill" :style="{ width: gauge + '%' }" /></span>
+        </div>
         <div v-if="pop && pop.side === 'player'" class="cs-pop" :class="pop.kind">
           {{ pop.text }}
         </div>
@@ -94,7 +105,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { CombatEvent } from '@/lib/combat';
 import { combatSkillInfo } from '@/lib/adventurers';
-import type { Equipped } from '@/lib/items';
+import { relicPowerOf, type Equipped } from '@/lib/items';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { monsterArt } from '@/data/monsterArt';
 
@@ -138,6 +149,10 @@ const stepMs = computed(() => (steps.value.length > 60 ? 90 : steps.value.length
 const i = ref(0);
 const fightIdx = ref(0);
 const playerPv = ref(startPv.value);
+/** 🔮 Le pouvoir de la relique portée (sans relique à pouvoir : pas de jauge). */
+const relicPower = computed(() => relicPowerOf(props.playerEquipped.relic?.power));
+const gauge = ref(0);
+const relicFired = ref(false);
 const monsterPv = ref(props.fights[0]?.maxPv ?? 1);
 const pop = ref<{ side: 'player' | 'monster'; text: string; kind: string } | null>(null);
 const heal = ref<{ side: 'player' | 'monster'; text: string } | null>(null); // soin (vol de vie) / épines
@@ -202,6 +217,8 @@ function apply(step: { fi: number; e: CombatEvent }) {
   }
   playerPv.value = e.playerPv;
   monsterPv.value = e.monsterPv;
+  if (e.gauge !== undefined) gauge.value = e.gauge;
+  relicFired.value = (e.skills ?? []).some((s) => s.startsWith('rp_'));
   const attacker = e.who; // 'player' | 'monster'
   const defender = e.who === 'player' ? 'monster' : 'player';
   lungeSide.value = attacker; // l'attaquant s'élance vers la cible
@@ -254,6 +271,8 @@ function start() {
   clearFx();
   playerPv.value = startPv.value;
   monsterPv.value = props.fights[0]?.maxPv ?? 1;
+  gauge.value = 0;
+  relicFired.value = false;
   const reduce =
     typeof window !== 'undefined' &&
     window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
@@ -589,6 +608,41 @@ onBeforeUnmount(() => {
 .cs-bar .m {
   background: var(--d4);
   transition: width 0.1s linear;
+}
+.cs-gauge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+.cs-gauge .g-emo {
+  font-size: 12px;
+  line-height: 1;
+}
+.cs-gauge .g-track {
+  position: relative;
+  flex: 1;
+  height: 5px;
+  background: var(--surface-2, #2a241c);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.cs-gauge .g-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #b57bff;
+  transition: width 0.12s linear;
+}
+.cs-gauge.fired .g-track {
+  box-shadow: 0 0 8px #b57bff;
+}
+.cs-gauge.fired .g-fill {
+  background: #e3c8ff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cs-gauge .g-fill {
+    transition: none;
+  }
 }
 .cs-pv {
   font-size: 11px;

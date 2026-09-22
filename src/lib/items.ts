@@ -2808,7 +2808,7 @@ const HAND_SETS: ItemSet[] = [
 // correspond au set → « set complet de ta voie » = accomplir l'archétype. Les 2/3-pièces
 // (stats brutes) s'appliquent pour tout le monde. id = `voie:<voieId>` (lien avec voies.ts
 // par convention, garanti par un test — pas d'import pour éviter le cycle voies↔items).
-// stats = [PRIMAIRE (=capstone 4pc), secondaire (3pc), tertiaire (2pc)].
+// stats = [PRIMAIRE (=capstone 6 pièces), secondaire (4 pièces), tertiaire (2 pièces)].
 const VOIE_SET_DEFS: {
   voie: string;
   name: string;
@@ -3024,7 +3024,7 @@ export function setCounts(equipped: Equipped): Record<string, number> {
  *  ×1,5 → 12 à 28/32 · ×1,75 → 32/32 mais 0,2 % de marge · **×2 → 32/32, marge ≥ 1,2 %**.
  *  Réservé au palier 3 seul : 20 à 28/32 — insuffisant.
  *  ⚠️ PORTER UN SET HORS DE SA VOIE NE PERD RIEN (un bonus, pas une pénalité) : les demi-sets
- *  croisés gardent exactement leur valeur. Le capstone 4-pièces n'est pas touché.
+ *  croisés gardent exactement leur valeur. Le capstone 6 pièces n'est pas touché.
  *  ⚠️ COÛT ASSUMÉ : un set de sa voie gagne 7 à 11 points de plus face aux meilleurs drops.
  *  ⚠️ PAS « seulement sur un set incomplet » : la 4ᵉ pièce aurait alors RETIRÉ l'affinité,
  *  et devenait inutile 5 fois sur 8 (mesuré). */
@@ -3086,7 +3086,7 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
     applyEffect(a, fam.effect.type, (fam.effect.value * flm) / 100);
     if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * flm) / 100);
   }
-  // Bonus de set (2/3 pièces pour tous ; 4-pièces capstone si la voie correspond).
+  // Bonus de set (2/4 pièces pour tous ; capstone 6 pièces si la voie correspond).
   const s = setEffects(equipped, voie);
   for (const k of AGGREGATE_KEYS) a[k] += s[k];
   // ⚠️ Plus de plafond sec sur la réduction ici : la courbe de chance (`CHANCE_CURVES`)
@@ -3183,6 +3183,33 @@ export function ratingChance(cap: number, note: number): number {
   return (cap * g) / (g + cap);
 }
 
+/** Les CHANCES d'un combattant, dans l'ordre d'affichage. */
+const CHANCE_LABELS: [keyof Combatant, string][] = [
+  ['crit', 'critique'],
+  ['dodge', 'esquive'],
+  ['dmgReduction', 'réduction'],
+  ['accuracy', 'précision'],
+  ['block', 'blocage'],
+  ['parry', 'parade'],
+  ['riposte', 'riposte'],
+  ['critResist', 'résistance aux critiques'],
+  ['startShield', 'barrière de départ'],
+];
+/** Ce qu'un changement d'équipement fait aux CHANCES réelles du combat (« critique 38 % →
+ *  41 % ») — jamais à la note brute de l'objet : une note passe par une courbe à rendement
+ *  décroissant (`curveChance`, `ratingChance`), donc « +12 % blocage » sur l'objet ne veut
+ *  pas dire 12 points de blocage en combat (refonte, § 11). Seuls les canaux qui bougent
+ *  d'au moins un point arrondi sont listés. */
+export function chanceChanges(before: Combatant, after: Combatant): string[] {
+  const out: string[] = [];
+  for (const [k, label] of CHANCE_LABELS) {
+    const a = Math.round(((before[k] as number | undefined) ?? 0) * 100);
+    const b = Math.round(((after[k] as number | undefined) ?? 0) * 100);
+    if (a !== b) out.push(`${label} ${a} % → ${b} %`);
+  }
+  return out;
+}
+
 /** Combattant du joueur = stats (sport) + effets de l'équipement + `extra` (talents).
  *  `opts.legacyCaps` : anciens plafonds secs (aventuriers uniquement, cf. `CHANCE_CURVES`). */
 export function playerWithGear(
@@ -3195,7 +3222,7 @@ export function playerWithGear(
   opts: { legacyCaps?: boolean } = {},
 ): Combatant {
   const base = playerCombatant(name, stats, level);
-  // `voie` gate le capstone (4-pièces) du set de la voie (cf. setEffects).
+  // `voie` gate le capstone (6 pièces) du set de la voie (cf. setEffects).
   const e = aggregateEffects(equipped, voie);
   const damagePct = e.damagePct + (extra.damagePct ?? 0);
   const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);

@@ -486,7 +486,7 @@
             <button class="adv-modal-x" aria-label="Fermer" @click="voieOpen = false">✕</button>
             <div class="sec-title">🧭 Choisis ta voie</div>
             <div class="sec-hint">
-              Ta voie ajoute un <b>petit passif</b> et débloque le <b>capstone (4-pièces)</b> du set
+              Ta voie ajoute un <b>petit passif</b> et débloque le <b>capstone (6 pièces)</b> du set
               de sa voie. Les drops ne sont <b>pas biaisés</b> : c'est le
               <b>set que tu complètes</b>
               qui définit ton build. Changement libre à tout moment.
@@ -1176,6 +1176,10 @@
                         inOptimum(it) ? 'retenu par ton meilleur build' : 'vs ton meilleur build'
                       }}</i>
                     </span>
+                  </div>
+                  <!-- 🎯 Les chances RÉELLES si on la porte (pas la note brute de l'objet). -->
+                  <div v-if="chanceLinesFor(it).length" class="ii-chances">
+                    🎯 si portée : {{ chanceLinesFor(it).join(' · ') }}
                   </div>
                   <!-- Actions : Équiper · icônes vendre/lock -->
                   <div class="ii-actions">
@@ -2132,6 +2136,15 @@
           >
           <span class="insp-leg-desc">{{ legendaryOf(inspectItem)!.desc }}</span>
         </div>
+        <div v-if="chanceLinesFor(inspectItem).length" class="insp-chances">
+          🎯
+          {{
+            char.row?.equipped[inspectItem.slot]?.id === inspectItem.id
+              ? 'Ce qu’elle t’apporte'
+              : 'Si tu la portes'
+          }}
+          : {{ chanceLinesFor(inspectItem).join(' · ') }}
+        </div>
         <div v-if="inspectItem.setId && SET_BY_ID[inspectItem.setId]" class="insp-set">
           🧩 {{ SET_BY_ID[inspectItem.setId]!.emoji }} {{ SET_BY_ID[inspectItem.setId]!.name }}
         </div>
@@ -2400,7 +2413,7 @@
               </div>
 
               <!-- 🧩 SET : ses pièces se proposent ENSEMBLE (demandé par l’utilisateur) — une
-                   pièce de set seule ne vaut rien sans ses sœurs (bonus, 4-pièces), donc un
+                   pièce de set seule ne vaut rien sans ses sœurs (bonus, 6 pièces), donc un
                    gain par pièce mentirait. Un seul interrupteur, un seul gain : celui du set. -->
               <div v-else-if="row.kind === 'set'" class="plan-set">
                 <div v-for="pc in row.pieces" :key="pc.slot" class="plan-set-line">
@@ -2418,7 +2431,7 @@
                 </div>
                 <div v-if="row.voieChange" class="plan-sub">
                   Voie → <b>{{ VOIE_BY_ID[row.voie as VoieId]?.name ?? 'aucune voie' }}</b> — le
-                  4-pièces s’applique.
+                  bonus 6 pièces s’applique.
                 </div>
                 <div class="plan-sub">
                   Gain du set entier : ses pièces ne valent pas ça une à une.
@@ -2443,11 +2456,13 @@
                 </div>
               </div>
 
-              <!-- VOIE : elle conditionne le capstone 4-pièces, donc elle se décide aussi -->
+              <!-- VOIE : elle conditionne le capstone 6 pièces, donc elle se décide aussi -->
               <div v-else class="plan-voie">
                 {{ currentVoie?.name ?? 'aucune voie' }} →
                 <b>{{ VOIE_BY_ID[row.voie as VoieId]?.name ?? 'aucune voie' }}</b>
-                <div class="plan-sub">Le 4-pièces ne s’applique qu’à la voie du set porté.</div>
+                <div class="plan-sub">
+                  Le bonus 6 pièces ne s’applique qu’à la voie du set porté.
+                </div>
               </div>
             </div>
           </div>
@@ -3008,6 +3023,7 @@ import {
   fmtPow,
   fmtDelta,
   type CombatEvent,
+  type Combatant,
 } from '@/lib/combat';
 import { compactNumber } from '@/lib/compactNumber';
 import CombatStage from '@/components/CombatStage.vue';
@@ -3040,6 +3056,7 @@ import {
   famLevel,
   famXp,
   playerWithGear,
+  chanceChanges,
   aggregateEffects,
   rollDrop,
   rollSetPiece,
@@ -3635,6 +3652,29 @@ function inOptimum(it: Item): boolean {
 }
 // Puissance si `it` remplaçait la pièce du même slot — RAPPORTÉE À LA RÉFÉRENCE quand
 // elle est calculée, à l'équipement porté sinon (premier affichage, avant le calcul).
+/** Le combattant du joueur avec l'équipement `eq` (mêmes stats, talents, voie). */
+function fighterWith(eq: Equipped): Combatant {
+  return playerWithGear(
+    char.row?.pseudo ?? 'Toi',
+    c.value,
+    eq,
+    activeFx.value,
+    c.value.level.level,
+    char.row?.voie,
+  );
+}
+/** 🎯 Les CHANCES réelles qui bougent si on porte `it` à la place de la pièce actuelle — ou,
+ *  pour une pièce DÉJÀ portée, ce qu'elle apporte (sans elle → avec elle). Jamais la note brute
+ *  de l'objet : elle passe par une courbe à rendement décroissant (refonte, § 11). */
+function chanceLinesFor(it: Item): string[] {
+  const eq = char.row?.equipped ?? {};
+  if (eq[it.slot]?.id === it.id) {
+    const without = { ...eq };
+    delete without[it.slot];
+    return chanceChanges(fighterWith(without), fighter.value);
+  }
+  return chanceChanges(fighter.value, fighterWith({ ...eq, [it.slot]: it }));
+}
 function powerIfEquip(it: Item): number {
   return powerWith({ ...(optimum.value ?? char.row?.equipped ?? {}), [it.slot]: it });
 }
@@ -4176,7 +4216,7 @@ const isMySetId = (setId: string) => !!char.row?.voie && setId === voieSetId(cha
 const setVoieName = (setId: string) => VOIE_BY_ID[setId.replace(/^voie:/, '')]?.name ?? '';
 
 // Catalogue des 8 SETS DE VOIE (détail complet, accessible côté Boss) : chaque set avec
-// ses 3 paliers (2/3/4 pièces), le 4-pièces = capstone gaté par la voie. Bonus affichés à
+// ses 3 paliers (2/4/6 pièces), le 6-pièces = capstone gaté par la voie. Bonus affichés à
 // leur valeur de BASE (rang C de référence, cf. setBonusMult). Ma voie surlignée.
 const setsCatalogOpen = ref(false);
 const voieSetsCatalog = computed(() =>
@@ -5660,7 +5700,7 @@ const bagCount = computed(
 // Slot i ↔ voie i : chaque loadout est l'endroit où ranger le set de cette voie.
 const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
 // SET DE VOIE ACTUELLEMENT ÉQUIPÉ (≥2 pièces) → marque le loadout correspondant « en cours »
-// + bannière dans la vue Équipement. Dominant parmi les 4 slots gear équipés.
+// + bannière dans la vue Équipement. Dominant parmi les 7 emplacements équipés.
 /** « Set porté » = les 6 pièces portées ET la voie du set active. ⚠️ Pas seulement « un
  *  set en cours » (2 pièces suffisent) : le bouton se grisait avec 3 pièces sur 4, la
  *  dernière en réserve, sans plus aucun moyen de compléter le set ni de passer à sa voie. */
@@ -5691,7 +5731,7 @@ const equippedSet = computed<{ idx: number; name: string; emoji: string; count: 
 );
 // Puissance SI on porte ce set : ses 4 objets gear + le FAMILIER actuel, ET la VOIE DU SET
 // (voieId) — car porter le set équipe aussi sa voie → on prend en compte son passif + son
-// CAPSTONE (4-pièces). La comparaison au combatPower actuel reflète donc le vrai gain « set +
+// CAPSTONE (6 pièces). La comparaison au combatPower actuel reflète donc le vrai gain « set +
 // bascule de voie » (la voie qui remplacera l'actuelle).
 /** Puissance SI on appuie sur « Porter ce set ».
  *
@@ -5775,7 +5815,7 @@ const loadoutsView = computed(() => {
   });
 });
 // Nb de pièces de set POSSÉDÉES pour la voie i (équipées + rangées dans la réserve + au sac)
-// → complétion x/4 (distinctes par emplacement, où qu'elles soient).
+// → complétion x/6 (distinctes par emplacement, où qu'elles soient).
 // ⚠️ DÉRIVÉ du roster affiché, jamais recompté à part : c'est la divergence entre ce
 // compteur (qui comptait partout) et la liste (qui ne montrait que la réserve) qui rendait
 // « Mes sets » illisible — 4/4 annoncé au-dessus de deux objets.
@@ -5927,7 +5967,7 @@ function doSellTalent(id: string) {
       });
   }, 'Vente impossible.');
 }
-// Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/3/4
+// Animation de PALIER DE SET : si équiper `setId` a fait franchir un palier (2/4/6
 // pièces), on célèbre en montrant le set + le bonus tout juste débloqué.
 function celebrateSetTier(setId: string | undefined, before: number, after: number) {
   if (!setId || after <= before) return;
@@ -5974,7 +6014,7 @@ type PlanRow = {
   kind: 'gear' | 'familiar' | 'talent' | 'voie' | 'set';
   /** Les pièces d'un SET proposées ensemble (`kind: 'set'`). */
   pieces?: PlanPiece[];
-  /** Le set emporte aussi le changement de voie (son 4-pièces en dépend). */
+  /** Le set emporte aussi le changement de voie (son bonus 6 pièces en dépend). */
   voieChange?: boolean;
   label: string;
   slot?: ItemSlot;
@@ -8381,7 +8421,7 @@ button.pt-mini:active {
 .set-tier.set-sig b {
   font-weight: 800;
 }
-/* Capstone (4-pièces) atteint en pièces mais bloqué faute de la bonne voie. */
+/* Capstone (6 pièces) atteint en pièces mais bloqué faute de la bonne voie. */
 .set-tier.locked {
   color: var(--d4);
   opacity: 0.8;
@@ -9233,6 +9273,13 @@ button.pt-mini:active {
   color: var(--text);
   margin-top: 2px;
   line-height: 1.35;
+}
+.insp-chances,
+.ii-chances {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.4;
 }
 .insp-set {
   margin-top: 8px;
