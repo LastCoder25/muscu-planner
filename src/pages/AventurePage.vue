@@ -6211,6 +6211,44 @@ watch(
   () => void autoFileSetPieces(),
   { immediate: true },
 );
+// 🪙 VENTE AUTOMATIQUE DES TALENTS ET FAMILIERS EN TROP (demandé par l'utilisateur : « ne
+// garder que le meilleur de chaque catégorie et vendre les autres automatiquement ; le seul
+// doublon est celui équipé »). La règle vit dans `familiarSurplus` / `talentSurplus`.
+// ⚠️ Jamais pendant un combat ni tant que son rapport est ouvert : le butin s'y affiche avec
+// ses boutons, un familier ne doit pas disparaître sous le doigt de celui qui l'équipe.
+let sellingSurplus = false;
+async function autoSellSurplus() {
+  const uid = auth.user?.id;
+  if (!uid || !char.row || sellingSurplus || busy.value || reportOpen.value) return;
+  sellingSurplus = true;
+  try {
+    const r = await char.sellSurplusCompanions(uid);
+    const n = r.familiars + r.talents;
+    if (n)
+      gameFx.celebrate({
+        quiet: true,
+        kind: 'drop',
+        emoji: '🪙',
+        title: `${n} doublon${n > 1 ? 's' : ''} vendu${n > 1 ? 's' : ''} +${fmtPow(r.gold)} 🪙`,
+        subtitle:
+          [
+            r.talents ? `${r.talents} talent${r.talents > 1 ? 's' : ''}` : '',
+            r.familiars ? `${r.familiars} familier${r.familiars > 1 ? 's' : ''}` : '',
+          ]
+            .filter(Boolean)
+            .join(' · ') + ' — tu gardes le meilleur de chaque',
+      });
+  } catch {
+    // Rien de perdu : le prochain passage réessaie.
+  } finally {
+    sellingSurplus = false;
+  }
+}
+watch(
+  () => [char.row?.inventory, char.row?.talents, char.row?.equipped, busy.value, reportOpen.value],
+  () => void autoSellSurplus(),
+  { immediate: true },
+);
 /** Une seule annonce, discrète. ⚠️ Un doublon ne s'annonce PAS seul (v0.696) : annoncer
  *  « ta pièce était moins bonne » à chaque boss transformait une bonne nouvelle en
  *  reproche. Il se lit dans « Mes sets ». Plusieurs pièces d'un coup (retour du Labyrinthe,

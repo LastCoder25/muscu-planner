@@ -1819,6 +1819,40 @@ export function compareFamiliars(a: Item, b: Item): number {
   );
 }
 
+/** Stat RÉELLEMENT portée par un familier : sa valeur × niveau d'objet × dressage — la
+ *  même formule que le combat (`aggregateEffects`), donc ce qu'on garde est ce qui se bat. */
+function familiarStat(f: Item): number {
+  return f.effect.value * familiarMult(f);
+}
+
+/**
+ * 🪙 LES FAMILIERS EN TROP — ce que la vente automatique cède (demandé par l'utilisateur :
+ * « ne garder que le meilleur de chaque catégorie et vendre les autres automatiquement »).
+ *
+ * Par RACE (à défaut, par effet) on garde **le meilleur** — la plus forte stat réelle, la
+ * signature ✦ départageant à stat égale — et **celui qu'on porte**, même moins bon : c'est
+ * le seul doublon toléré, et il n'est jamais remplacé d'office (l'équipement reste un choix).
+ * ⚠️ Un 🔒 n'est jamais rendu : le verrou protège de toute vente, automatique comprise.
+ * Rend les ids du SAC à vendre ; le familier porté vit dans `equipped`, hors d'atteinte.
+ */
+export function familiarSurplus(
+  equipped: Item | null | undefined,
+  inventory: readonly Item[],
+): string[] {
+  const keyOf = (f: Item) => f.species ?? f.effect.type;
+  const better = (a: Item, b: Item) =>
+    familiarStat(a) - familiarStat(b) || (a.effect2?.value ?? 0) - (b.effect2?.value ?? 0);
+  const best = new Map<string, Item>();
+  for (const f of [...(equipped ? [equipped] : []), ...inventory]) {
+    if (!isFamiliar(f)) continue;
+    const cur = best.get(keyOf(f));
+    if (!cur || better(f, cur) > 0) best.set(keyOf(f), f);
+  }
+  return inventory
+    .filter((f) => isFamiliar(f) && !f.locked && best.get(keyOf(f))?.id !== f.id)
+    .map((f) => f.id);
+}
+
 /**
  * Range une collection en GROUPES d’exemplaires identiques (même talent, même race de
  * familier), chaque groupe du meilleur au pire, les groupes eux-mêmes ordonnés par leur

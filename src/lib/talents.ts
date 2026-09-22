@@ -275,6 +275,31 @@ export function talentEffects(raw: unknown): AggregatedEffects {
   );
 }
 
+/** Magnitude RÉELLE d'un talent (celle que le combat applique). 0 si le code est inconnu. */
+export function talentInstanceValue(inst: TalentInstance): number {
+  const def = BY_CODE.get(inst.code);
+  if (!def) return 0;
+  return talentValue(def, tierOf(inst), enchantOf(inst), talentRollOf(inst), inst.level ?? 1);
+}
+
+/**
+ * 🪙 LES TALENTS EN TROP — même règle que `familiarSurplus` : par TALENT (code), on garde
+ * **le meilleur** (la plus forte magnitude réelle) et **celui qu'on porte**, même moins bon —
+ * seul doublon toléré, jamais remplacé d'office. Tout le reste est vendu.
+ * ⚠️ Un code inconnu du catalogue n'est jamais rendu : ce qu'on ne sait pas évaluer, on ne
+ * le jette pas.
+ */
+export function talentSurplus(talents: readonly TalentInstance[]): string[] {
+  const best = new Map<string, TalentInstance>();
+  for (const t of talents) {
+    const cur = best.get(t.code);
+    if (!cur || talentInstanceValue(t) > talentInstanceValue(cur)) best.set(t.code, t);
+  }
+  return talents
+    .filter((t) => BY_CODE.has(t.code) && !t.equipped && best.get(t.code)?.id !== t.id)
+    .map((t) => t.id);
+}
+
 /** Le même cumul, sur des instances DÉJÀ normalisées (la normalisation reste à la
  *  FRONTIÈRE, où le JSONB peut porter l’ancien format `string[]`). */
 function effectsOfTalents(list: TalentInstance[]): AggregatedEffects {
