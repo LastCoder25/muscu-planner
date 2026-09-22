@@ -10,7 +10,7 @@ import {
 import { CHAMPIONS } from '@/data/champions';
 import { awakenLevel, type Adventurer } from '@/lib/adventurers';
 import { MONSTERS } from '@/data/monsters';
-import { ITEM_SETS, type Item, type ItemSlot } from '@/lib/items';
+import { ITEM_SETS, SET_SLOTS, type Item, type ItemSlot } from '@/lib/items';
 
 const setItem = (slot: ItemSlot, setId: string): Item => ({
   id: `${setId}_${slot}`,
@@ -52,16 +52,16 @@ describe('codex — journal des sets (voie)', () => {
     expect(bers.complete).toBe(false);
   });
 
-  it('4 slots distincts d’un set → complet', () => {
-    const inv = [
-      setItem('weapon', BERS),
-      setItem('armor', BERS),
-      setItem('accessory', BERS),
-      setItem('relic', BERS),
-    ];
+  it('6 emplacements distincts d’un set → complet ; une relique ne compte pas (étape 5)', () => {
+    const inv = SET_SLOTS.map((s) => setItem(s, BERS));
     const bers = setCollection({}, inv).find((s) => s.set.id === BERS)!;
-    expect(bers.owned).toBe(4);
+    expect(bers.total).toBe(6);
+    expect(bers.owned).toBe(6);
     expect(bers.complete).toBe(true);
+    const cinq = [...inv.slice(0, 5), setItem('relic', BERS)];
+    const b5 = setCollection({}, cinq).find((s) => s.set.id === BERS)!;
+    expect(b5.owned).toBe(5);
+    expect(b5.complete).toBe(false);
   });
 
   it('doublons de slot ne comptent qu’une fois (slots DISTINCTS)', () => {

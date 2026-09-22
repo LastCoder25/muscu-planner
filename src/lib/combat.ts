@@ -83,6 +83,14 @@ export const PROC_POWER: Record<string, { side: 'off' | 'surv'; weight: number }
   thirst: { side: 'surv', weight: 0.16 },
   endurance: { side: 'surv', weight: 0.16 },
   quarry: { side: 'surv', weight: 0.16 },
+  living_armor: { side: 'surv', weight: 0.16 },
+  scarring: { side: 'surv', weight: 0.16 },
+  vigilance: { side: 'surv', weight: 0.16 },
+  sang_froid: { side: 'surv', weight: 0.16 },
+  sidestep: { side: 'surv', weight: 0.16 },
+  dance: { side: 'off', weight: 0.16 },
+  rage_seal: { side: 'off', weight: 0.16 },
+  hunter: { side: 'off', weight: 0.16 },
   // ⚠️ SIGNATURES DE SET : leur poids n'est PAS la valeur de la signature seule, mais ce qui
   // manque pour que la puissance affichée du SET COMPLET égale ce qu'il vaut en vrai combat
   // (mesuré, v0.837). Les paliers d'un set ne pèsent pas pareil à l'écran et au combat selon
@@ -153,12 +161,11 @@ export const COMBAT = {
   // durait qu'un instant.
   initiativeMult: 2, // Initiative : les coups du 1er tour ×2, inesquivables
   initiativeTurns: 1,
-  predatorTurns: 3, // Œil du prédateur : les coups des 3 premiers tours sont critiques
-  aegisBlock: 0.45, // Égide : la 1re attaque ennemie qui touche perd 45 %
+  predatorTurns: 3, // Œil du prédateur : les coups des 3 premiers tours sont inesquivables
+  aegisBlock: 0.75, // Égide : la 1re attaque ennemie qui touche est BLOQUÉE d'office (−75 %, comme un blocage)
   retortHits: 3, // Rétorsion : les 3 premiers coups ennemis reçus…
   retortMaxPvPct: 0.07, // …retirent chacun 7 % des PV max de l'ennemi
   phoenixBlock: 0.5, // Phénix : le coup qui t'aurait tué perd la moitié de ses dégâts
-  thirstHealPct: 0.15, // Soif : …et tu récupères 15 % de TES PV max
   vampiricHealPct: 0.5, // Vampirisme : soin = 50 % des dégâts d'un crit
   executeKillThreshold: 0.15, // Bourreau : exécute un ennemi sous 15 % PV
   secondWindThreshold: 0.3, // Second souffle : déclenche sous 30 % PV
@@ -168,9 +175,15 @@ export const COMBAT = {
   chargeMult: 1.3, // …infligent +30 %
   cadenceFrom: 3, // Cadence : à partir du 3ᵉ tour du héros… (par tour, comme l'élan)
   cadenceMult: 1.18, // …+18 % de dégâts
-  thirstThreshold: 0.5, // Soif : déclenche en passant sous 50 % PV…
-  thirstDrainPct: 0.05, // …retire 5 % des PV max de l'ennemi
-  whettedTurns: 3, // Riposte affûtée : 3 tours entièrement critiques après la 1re attaque encaissée
+  thirstThreshold: 0.5, // Soif : sous 50 % PV…
+  thirstLifestealMult: 3, // …ton vol de vie est triplé (refonte équipement : anneau)
+  // ── Refonte équipement (étape 5) : 19 effets, chacun sur les stats de SON emplacement ──
+  livingArmorThreshold: 0.3, // Cuirasse vivante : sous 30 % PV, une fois…
+  livingArmorPct: 0.2, // …une barrière de 20 % des PV max
+  scarringMult: 2, // Cicatrisation : régénération entre deux combats doublée
+  sangFroidThreshold: 0.3, // Sang-froid : sous 30 % PV, les critiques ennemis n'en sont plus
+  rageSealThreshold: 0.5, // Sceau de rage : la rage s'active dès 50 % PV
+  hunterThreshold: 0.25, // Chasseur : critique certain sur un ennemi sous 25 % PV
   enduranceThreshold: 0.5, // Endurance : active sous 50 % PV
   enduranceReduction: 0.35, // Endurance : −35 % de dégâts subis en plus
   quarryThreshold: 0.3, // Curée : déclenche quand l'ennemi passe sous 30 % PV
@@ -383,6 +396,14 @@ export type CombatSkill =
   | 'secondwind'
   | 'executioner'
   | 'vampiric'
+  | 'living_armor'
+  | 'scarring'
+  | 'vigilance'
+  | 'sang_froid'
+  | 'sidestep'
+  | 'dance'
+  | 'rage_seal'
+  | 'hunter'
   | 'charge'
   | 'cadence'
   | 'quarry'
@@ -441,11 +462,11 @@ export function simulateCombat(
   let secondWindReady = has('secondwind');
   // Procs de SET (v0.701). ⚠️ Tous DÉTERMINISTES : aucun n'appelle `rng`, sinon deux objets
   // de procs différents feraient diverger un combat seedé — et tous les rejeux animés avec.
-  let thirstReady = has('thirst'); // Soif : draine une fois, au passage sous 50 % PV
+  let livingArmorReady = has('living_armor'); // Cuirasse vivante : une barrière, une fois
+  let vigilanceReady = has('vigilance'); // Vigilance : le 1er critique reçu est annulé
+  let sidestepReady = has('sidestep'); // Pas de côté : la 1re attaque est esquivée
   let quarryReady = has('quarry'); // Curée : soigne une fois, quand l'ennemi passe sous 30 %
   let pHits = 0; // coups PORTÉS par le joueur (Botte secrète)
-  let whettedLeft = 0; // tours entièrement critiques restants (Riposte affûtée)
-  let whettedNow = false;
   let retortLeft = has('retort') ? COMBAT.retortHits : 0;
   let bastionLeft = has('sig_gardien') ? COMBAT.bastionHits : 0; // Bastion : coups amortis restants
   const perHit = !!player.momentumPerHit;
@@ -465,6 +486,27 @@ export function simulateCombat(
   // mutation, un garde « pas deux de suite » ne pouvait jamais mordre).
   let stunNext = false;
   const monsterCritMult = 1 + (1 - (player.critResist ?? 0)); // ×2 réduit par la résistance
+  /** Une RIPOSTE : une volée (les coups d'un tour du héros), sans variance ni tirage.
+   *  Critique MOYEN compris ; Riposte affûtée (bouclier) en fait un critique entier. */
+  const riposteVolley = (extra: CombatSkill[]): void => {
+    if (pPv <= 0 || mPv <= 0) return;
+    const sharp = has('whetted');
+    const critPart = sharp ? critMult - 1 : player.crit * (critMult - 1);
+    const volley = player.damage * (player.strikes ?? 1) * (1 + critPart);
+    const r = Math.max(1, Math.round(volley * (1 - (monster.dmgReduction ?? 0))));
+    mPv = Math.max(0, mPv - r);
+    const skills: CombatSkill[] = ['riposte', ...extra];
+    if (sharp) skills.push('whetted');
+    log.push({
+      round,
+      who: 'player',
+      type: 'hit',
+      damage: r,
+      playerPv: pPv,
+      monsterPv: mPv,
+      skills,
+    });
+  };
 
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
   const strikeCount = (c: Combatant): number => {
@@ -505,10 +547,13 @@ export function simulateCombat(
     if (turn === 'player') {
       pTurn++;
       if (!perHit) pStacks = pTurn - 1; // l'élan monte à chaque tour du héros, pas à chaque coup
-      whettedNow = whettedLeft > 0;
-      if (whettedNow) whettedLeft--;
     }
     const opening = turn === 'player' && has('initiative') && pTurn <= COMBAT.initiativeTurns;
+    // Œil du prédateur : les premiers tours sont inesquivables (prolonge la précision du casque).
+    const eyeOpen = turn === 'player' && has('predator_eye') && pTurn <= COMBAT.predatorTurns;
+    // Soif : sous 50 % PV, le vol de vie est triplé (le plafond de soin du tour tient toujours).
+    const lsMult =
+      has('thirst') && pPv / maxPPv < COMBAT.thirstThreshold ? COMBAT.thirstLifestealMult : 1;
     // Soin de vol de vie de CE tour, plafonné à une fraction des PV max de l'attaquant
     // (empêche le multi-frappe de rendre le sustain infini — cf. COMBAT.lifestealRoundCap).
     let roundHeal = 0;
@@ -528,19 +573,16 @@ export function simulateCombat(
       const mark = (s: CombatSkill) => (skills ??= []).push(s);
       if (turn === 'player') {
         // ── Attaque du JOUEUR ──
-        if (!opening && rng() < def.dodge * (1 - (atk.accuracy ?? 0))) {
+        if (!opening && !eyeOpen && rng() < def.dodge * (1 - (atk.accuracy ?? 0))) {
           log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
           continue;
         }
+        if (eyeOpen && !opening) mark('predator_eye');
         let crit = rng() < atk.crit;
-        if (has('predator_eye') && pTurn <= COMBAT.predatorTurns) {
-          crit = true; // Œil
-          mark('predator_eye');
-        }
-        // Riposte affûtée : le tour qui suit la 1re attaque encaissée est entièrement critique.
-        if (whettedNow) {
+        // Chasseur : critique certain sur un ennemi affaibli.
+        if (has('hunter') && mPv / monsterMaxPv < COMBAT.hunterThreshold) {
           crit = true;
-          mark('whetted');
+          mark('hunter');
         }
         // Botte secrète : un coup porté sur N est un critique appuyé, sans jet.
         const thrust = has('sig_duelliste') && (pHits + 1) % COMBAT.secretThrustEvery === 0;
@@ -578,9 +620,10 @@ export function simulateCombat(
           mark('execute');
         }
         if (atk.accuracy && mPv / monsterMaxPv > COMBAT.accuracyOpenAbove) mult += atk.accuracy;
-        if (atk.rage && pPv / maxPPv < COMBAT.rageThreshold) {
+        const rageAt = has('rage_seal') ? COMBAT.rageSealThreshold : COMBAT.rageThreshold;
+        if (atk.rage && pPv / maxPPv < rageAt) {
           mult += atk.rage;
-          mark('rage');
+          mark(pPv / maxPPv < COMBAT.rageThreshold ? 'rage' : 'rage_seal');
         }
         if (atk.momentum && pStacks > 0) {
           mult += Math.min(momentumCap, pStacks) * atk.momentum;
@@ -601,8 +644,8 @@ export function simulateCombat(
         if (perHit) pStacks++; // aventuriers : élan par coup (règle d'avant)
         if (atk.lifesteal) {
           const before = pPv;
-          pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal)));
-          if (pPv > before) mark('lifesteal');
+          pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal * lsMult)));
+          if (pPv > before) mark(lsMult > 1 ? 'thirst' : 'lifesteal');
         }
         // Vampirisme : les crits soignent (compte dans le plafond de soin du tour).
         if (crit && has('vampiric')) {
@@ -634,8 +677,21 @@ export function simulateCombat(
         });
       } else {
         // ── Attaque du MONSTRE ──
-        if (rng() < def.dodge) {
-          log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
+        // Pas de côté : la 1re attaque est esquivée d'office (sans tirage).
+        const stepped = sidestepReady;
+        if (stepped || rng() < def.dodge) {
+          sidestepReady = false;
+          log.push({
+            round,
+            who: turn,
+            type: 'dodge',
+            damage: 0,
+            playerPv: pPv,
+            monsterPv: mPv,
+            ...(stepped ? { skills: ['sidestep'] } : {}),
+          });
+          // Pas de danse : chaque esquive déclenche une riposte.
+          if (has('dance')) riposteVolley(['dance']);
           continue;
         }
         // Parade : le coup est évité et l'ennemi saute son prochain tour.
@@ -652,7 +708,16 @@ export function simulateCombat(
           });
           continue;
         }
-        const crit = rng() < atk.crit;
+        let crit = rng() < atk.crit;
+        // Vigilance : le 1er critique reçu est annulé. Sang-froid : sous 30 % PV, plus aucun.
+        if (crit && vigilanceReady) {
+          crit = false;
+          vigilanceReady = false;
+          mark('vigilance');
+        } else if (crit && has('sang_froid') && pPv / maxPPv < COMBAT.sangFroidThreshold) {
+          crit = false;
+          mark('sang_froid');
+        }
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
         let dmg = Math.max(1, Math.round(atk.damage * (crit ? monsterCritMult : 1) * variance));
         if (def.block && rng() < def.block) {
@@ -690,7 +755,6 @@ export function simulateCombat(
           dmg = Math.round(dmg * (1 - COMBAT.aegisBlock));
           mark('aegis');
         }
-        if (firstEnemy && has('whetted')) whettedLeft = COMBAT.whettedTurns;
         mFirstLanded = false;
         const pBefore = pPv;
         // Barrière de départ : elle encaisse avant les PV.
@@ -701,13 +765,11 @@ export function simulateCombat(
           mark('start_shield');
         }
         pPv = Math.max(0, pPv - dmg);
-        // Soif : au passage sous 50 % PV, on blesse l'ennemi et on se remet d'aplomb.
-        if (thirstReady && pPv > 0 && pPv / maxPPv < COMBAT.thirstThreshold) {
-          const drain = Math.max(1, Math.round(monsterMaxPv * COMBAT.thirstDrainPct));
-          mPv = Math.max(0, mPv - drain);
-          pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.thirstHealPct));
-          thirstReady = false;
-          mark('thirst');
+        // Cuirasse vivante : au passage sous 30 % PV, une barrière se forme (une fois).
+        if (livingArmorReady && pPv > 0 && pPv / maxPPv < COMBAT.livingArmorThreshold) {
+          shieldLeft += Math.round(maxPPv * COMBAT.livingArmorPct);
+          livingArmorReady = false;
+          mark('living_armor');
         }
         // Phénix : amortit le coup fatal, une fois.
         if (pPv <= 0 && phoenixReady) {
@@ -750,21 +812,7 @@ export function simulateCombat(
         // UNE VOLÉE (les coups d'un tour du héros), sans critique ni variance : elle ne tire
         // au hasard que la chance. ⚠️ Un seul coup ne valait RIEN à haut niveau, où le héros
         // frappe jusqu'à 37 fois par tour (mesuré : +0 à +6 % de puissance).
-        if (def.riposte && pPv > 0 && mPv > 0 && rng() < def.riposte) {
-          // Critique MOYEN compris (aucun tirage) : sans lui la volée valait 1/1,5 d'une volée.
-          const volley = player.damage * (player.strikes ?? 1) * (1 + player.crit * (critMult - 1));
-          const r = Math.max(1, Math.round(volley * (1 - (monster.dmgReduction ?? 0))));
-          mPv = Math.max(0, mPv - r);
-          log.push({
-            round,
-            who: 'player',
-            type: 'hit',
-            damage: r,
-            playerPv: pPv,
-            monsterPv: mPv,
-            skills: ['riposte'],
-          });
-        }
+        if (def.riposte && pPv > 0 && mPv > 0 && rng() < def.riposte) riposteVolley([]);
       }
     }
     turn = turn === 'player' ? 'monster' : 'player';
@@ -780,6 +828,13 @@ export function simulateCombat(
   else if (pPv <= 0) win = false;
   else win = pPv / maxPPv > mPv / monsterMaxPv; // timeout → au % de vie
   return { win, rounds: round, log, gold: win ? opts.goldOnWin : 0 };
+}
+
+/** Part des PV max rendue ENTRE deux combats : la base du lieu + la régénération de
+ *  l'équipement, DOUBLÉES par Cicatrisation (armure). Source unique donjon / Labyrinthe. */
+export function betweenFightsHeal(player: Combatant, base: number): number {
+  const pct = base + (player.regen ?? 0);
+  return player.procs?.has('scarring') ? pct * COMBAT.scarringMult : pct;
 }
 
 export interface DungeonFoe {
@@ -835,7 +890,7 @@ export function simulateDungeon(
     gold += r.gold;
     defeated++;
     // Régén entre combats = base + bonus « régén » de l'équipement (stat mineure, borné).
-    const healPct = COMBAT.dungeonHealPct + (player.regen ?? 0);
+    const healPct = betweenFightsHeal(player, COMBAT.dungeonHealPct);
     pv = Math.min(player.pv, pv + Math.round(player.pv * healPct));
   }
   return {

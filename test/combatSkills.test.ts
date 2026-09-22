@@ -289,8 +289,10 @@ describe('⚠️ L’EMPREINTE ARMÉE — celle qui couvre VRAIMENT le marquage'
         .join(','),
       // ⚠️ Mise à jour SCIEMMENT à la refonte de l'équipement (étape 1) : l'élan se compte par
       // TOUR. Seuls les DÉGÂTS du joueur changent — la suite qui/quoi est identique, preuve
-      // que la règle ne consomme aucun tirage de plus.
-    ).toBe('ph146,pc387,mh133,ph270,ph292,mh243,pd0,pc732,mc442,ph380,ph371,mh250');
+      // que la règle ne consomme aucun tirage de plus. Étape 5 : Égide passe de −45 % à −75 %
+      // (« bloquée d'office ») — seul le 1er coup ENCAISSÉ change (mh133 → mh61), et avec lui
+      // les coups de rage qui suivent (PV plus hauts). Encore une fois : aucun tirage de plus.
+    ).toBe('ph146,pc387,mh61,ph268,ph290,mh243,pd0,pc728,mc442,ph378,ph370,mh250');
     expect(r.rounds).toBe(10); // élan par tour : un tour de plus (était 9)
     expect(r.log).toHaveLength(15); // était 14
   });

@@ -8,7 +8,7 @@
 // l'écran aurait annoncé 100 % pour un palier qui se nettoie à 60 %. Une estimation qui ne
 // joue pas le même parcours que le jeu finit toujours par mentir.
 
-import { mulberry32, simulateCombat, type Combatant } from './combat';
+import { COMBAT, mulberry32, simulateCombat, type Combatant } from './combat';
 import { generateFloor, type Floor, type Room } from './dungeonCrawl';
 import { RANK_ORDER } from './items';
 import { labyrinthFoeBase } from './proceduralContent';
@@ -61,6 +61,11 @@ export function labyrinthFighter(player: Combatant, pv: number): Combatant {
   return { ...player, pv, lifesteal: (player.lifesteal ?? 0) * LABY_RUN.lifesteal };
 }
 
+/** Part des PV max rendue par une salle de repos — doublée par Cicatrisation (armure). */
+export function labyrinthRest(player: Combatant, pct: number): number {
+  return player.procs?.has('scarring') ? pct * COMBAT.scarringMult : pct;
+}
+
 /** Dégâts d'un piège à dégâts : part des PV max (plancher), modulée par le type de piège. */
 export function labyrinthTrapDamage(maxPv: number, mult: number): number {
   const base = Math.max(LABY_RUN.trapMin, Math.round(maxPv * LABY_RUN.trapPct));
@@ -99,7 +104,10 @@ export function simulateLabyrinthRun(player: Combatant, laby: Labyrinth, seed: n
         const t = pickLabyTrap(mulberry32((rs ^ 0x7a17) >>> 0));
         if (t.kind === 'dmg') pv -= labyrinthTrapDamage(maxPv, t.mult);
       } else if (r.type === 'chest' || r.type === 'vault' || r.type === 'empty') {
-        pv = Math.min(maxPv, pv + Math.round(maxPv * LABY_RUN.regen[r.type]));
+        pv = Math.min(
+          maxPv,
+          pv + Math.round(maxPv * labyrinthRest(player, LABY_RUN.regen[r.type])),
+        );
       }
       if (pv <= 0) return false;
     }

@@ -36,11 +36,17 @@ function pool(seed: number, L: number, perSlot: number, slots: readonly ItemSlot
 // boucle imbriquée par emplacement ; la montée pas à pas qui le remplace doit retrouver le
 // même résultat. Mesuré à l'écriture : 120/120 sur 4 emplacements, 39/40 sur 7 (le 40e à
 // 0,07 % du meilleur), 21 ms sur un sac de 805 objets (≈ 3 s avant).
+// Étape 5 (sets à 6 pièces, paliers 2/4/6) : l'échange par paires d'un même set ne suffisait
+// plus (117/120, pire cas 98,9 %) — les cas ratés quittaient un set pour deux drops, ou
+// changeaient deux pièces de sets DIFFÉRENTS. D'où l'échange de deux pièces quelconques en
+// dernier recours : 120/120, 79 ms sur 800 objets.
 it('l’équipement conseillé retrouve le meilleur build, vite, sur 7 emplacements', () => {
   const L = 40;
   const s = refBalancedStat(L);
   const stats = { puissance: s, endurance: s, agilite: s };
-  const SL4: ItemSlot[] = ['weapon', 'armor', 'accessory', 'relic'];
+  // Quatre emplacements de SET (étape 5 : la relique n'a plus de pièce de set) — les
+  // paliers 2 et 4 pièces y sont atteignables, c'est ce qui rend la recherche difficile.
+  const SL4: ItemSlot[] = ['weapon', 'armor', 'shield', 'helmet'];
   let agree = 0;
   let total = 0;
   let worst = 1;
@@ -59,8 +65,8 @@ it('l’équipement conseillé retrouve le meilleur build, vite, sur 7 emplaceme
             const e: Equipped = {};
             if (a) e.weapon = a;
             if (b) e.armor = b;
-            if (c) e.accessory = c;
-            if (d) e.relic = d;
+            if (c) e.shield = c;
+            if (d) e.helmet = d;
             const p = combatPower(playerWithGear('T', stats, e, {}, L, voie));
             if (p > pBest) pBest = p;
           }

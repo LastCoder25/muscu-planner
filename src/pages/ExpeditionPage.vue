@@ -565,6 +565,7 @@ import {
   LABY_RUN,
   labyDepth,
   labyrinthFighter,
+  labyrinthRest,
   labyrinthFoe,
   labyrinthTrapDamage,
   labyTierIndex as tierIndexOfLaby,
@@ -1176,7 +1177,7 @@ function onRoomClick(id: number) {
 // des monstres plus coriaces ; pousser en profondeur (moins de salles sûres) reste risqué.
 function regen(pct: number) {
   const max = run.value.maxPv;
-  const pv = Math.min(max, run.value.pv + Math.round(max * pct));
+  const pv = Math.min(max, run.value.pv + Math.round(max * labyrinthRest(fighter.value, pct)));
   run.value = { ...run.value, pv };
 }
 

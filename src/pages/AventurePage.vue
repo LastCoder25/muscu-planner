@@ -182,7 +182,7 @@
           <li>🗺️ Onglet <b>Donjons</b> : avance dans la liste pour du butin.</li>
           <li>
             👑 Onglet <b>Boss</b> : un boss tous les 5 niveaux — chacun lâche une pièce de son
-            <b>set</b> (bonus à 2/3/4 pièces).
+            <b>set</b> (bonus à 2/4/6 pièces).
           </li>
         </ul>
         <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
@@ -850,7 +850,7 @@
         </div>
         <div v-if="equippedSet" class="equipped-set-banner">
           🧭 Set <b>{{ equippedSet.emoji }} {{ equippedSet.name }}</b> en cours ·
-          {{ equippedSet.count }}/4 pièces
+          {{ equippedSet.count }}/{{ SET_SIZE }} pièces
         </div>
         <!-- UNE PIÈCE PAR LIGNE : icône à gauche, nom entier + toutes les stats au milieu,
              « Retirer » et le badge 🎒 dans une colonne fixe à droite. La grille 2×2 coupait
@@ -979,19 +979,19 @@
           </div>
         </div>
 
-        <!-- Sets d'équipement (bonus 2/3/4 pièces) — rattachés à l'équipement -->
+        <!-- Sets d'équipement (bonus 2/4/6 pièces) — rattachés à l'équipement -->
         <template v-if="activeSets.length">
           <div class="sec-title">Sets</div>
           <div
             v-for="s in activeSets"
             :key="s.id"
             class="setcard"
-            :class="{ full: s.count >= 4 && s.mine }"
+            :class="{ full: s.count >= SET_SIZE && s.mine }"
           >
             <div class="set-top">
               <span class="set-name">{{ s.emoji }} {{ s.name }}</span>
               <span v-if="s.mine" class="set-mine">🧭 ta voie</span>
-              <span class="set-count font-display">{{ s.count }}/4</span>
+              <span class="set-count font-display">{{ s.count }}/{{ SET_SIZE }}</span>
             </div>
             <div class="set-theme">{{ s.theme }}</div>
             <div class="set-tiers">
@@ -1008,10 +1008,13 @@
               <span
                 v-if="s.signature"
                 class="set-tier set-sig"
-                :class="{ on: s.count >= 4 && s.mine, locked: s.count >= 4 && !s.mine }"
+                :class="{
+                  on: s.count >= SET_SIZE && s.mine,
+                  locked: s.count >= SET_SIZE && !s.mine,
+                }"
               >
                 ⭐ {{ s.signature.emoji }} <b>{{ s.signature.name }}</b> — {{ s.signature.desc }}
-                <template v-if="s.count >= 4 && !s.mine"> 🔒 voie</template>
+                <template v-if="s.count >= SET_SIZE && !s.mine"> 🔒 voie</template>
               </span>
             </div>
           </div>
@@ -1914,7 +1917,8 @@
                   <div class="setj-theme">{{ s.set.theme }}</div>
                   <div class="setj-voie" :class="{ mine: isMySetId(s.set.id) }">
                     <template v-if="isMySetId(s.set.id)"
-                      >🧭 Ta voie — complète-le (4/4) pour ta signature</template
+                      >🧭 Ta voie — complète-le ({{ SET_SIZE }}/{{ SET_SIZE }}) pour ta
+                      signature</template
                     >
                     <template v-else>🧭 Voie {{ setVoieName(s.set.id) }}</template>
                   </div>
@@ -1974,9 +1978,9 @@
                 <template v-else>Set {{ i + 1 }}</template>
                 <span
                   class="lo-count"
-                  :class="{ full: voieOwnedCount(i) >= 4 }"
+                  :class="{ full: voieOwnedCount(i) >= SET_SIZE }"
                   title="Pièces POSSÉDÉES pour cette voie (portées, en réserve ou au sac). Seules les pièces PORTÉES donnent le bonus."
-                  >{{ voieOwnedCount(i) }}/4</span
+                  >{{ voieOwnedCount(i) }}/{{ SET_SIZE }}</span
                 >
                 <span v-if="equippedSet?.idx === i" class="lo-active">✓ en cours</span>
               </span>
@@ -2278,7 +2282,7 @@
           <button class="shop-x" aria-label="Fermer" @click="setsCatalogOpen = false">✕</button>
         </div>
         <div class="sets-cat-sub">
-          Les boss droppent une pièce de <b>n'importe quel</b> set. Complète les 4 pièces du set de
+          Les boss droppent une pièce de <b>n'importe quel</b> set. Complète les 6 pièces du set de
           <b>ta voie</b> pour débloquer son <b>capstone</b> ⭐. Bonus indiqués à leur valeur de base
           (ils montent avec le rang de tes pièces).
         </div>
@@ -3061,6 +3065,7 @@ import {
   rollTier,
   RANK_ORDER,
   SLOTS,
+  SET_SIZE,
   SLOT_LABEL,
   SLOT_EMOJI,
   rarityRank,
@@ -4173,7 +4178,7 @@ const voieSetsCatalog = computed(() =>
     tiers: s.tiers.map((t) => ({
       pieces: t.pieces,
       label: effectLabelFor(t.type, t.base),
-      capstone: t.pieces >= 4,
+      capstone: t === s.tiers[s.tiers.length - 1],
     })),
   })),
 );
@@ -4578,12 +4583,12 @@ const activeSets = computed(() => {
       mine,
       // Le bonus de set est scalé par le RANG moyen des pièces (cf. setEffects, #3).
       tiers: s.tiers.map((t) => {
-        const capstone = t.pieces >= 4;
+        const capstone = t === s.tiers[s.tiers.length - 1];
         return {
           pieces: t.pieces,
           label: setTierLabel(t.type, t.base, pieces),
           capstone,
-          // 2/3-pièces : actif dès le compte atteint. 4-pièces (capstone) : + voie correspondante.
+          // Paliers 2/4 : actifs dès le compte atteint. Dernier palier (capstone) : + voie correspondante.
           on: count >= t.pieces && (!capstone || mine),
           // capstone atteint en pièces mais bloqué faute de la bonne voie.
           locked: capstone && count >= t.pieces && !mine,
@@ -5638,7 +5643,7 @@ const bagCount = computed(
 const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
 // SET DE VOIE ACTUELLEMENT ÉQUIPÉ (≥2 pièces) → marque le loadout correspondant « en cours »
 // + bannière dans la vue Équipement. Dominant parmi les 4 slots gear équipés.
-/** « Set porté » = les 4 pièces portées ET la voie du set active. ⚠️ Pas seulement « un
+/** « Set porté » = les 6 pièces portées ET la voie du set active. ⚠️ Pas seulement « un
  *  set en cours » (2 pièces suffisent) : le bouton se grisait avec 3 pièces sur 4, la
  *  dernière en réserve, sans plus aucun moyen de compléter le set ni de passer à sa voie. */
 function setFullyWorn(i: number): boolean {
@@ -5646,7 +5651,7 @@ function setFullyWorn(i: number): boolean {
   return (
     !!v &&
     equippedSet.value?.idx === i &&
-    equippedSet.value.count >= SLOTS.length &&
+    equippedSet.value.count >= SET_SIZE &&
     char.row?.voie === v.id
   );
 }
@@ -5919,9 +5924,10 @@ function celebrateSetTier(setId: string | undefined, before: number, after: numb
   gameFx.celebrate({
     kind: 'unlock',
     emoji: set.emoji,
-    title: `${set.emoji} ${set.name} — ${after}/4 pièces`,
+    title: `${set.emoji} ${set.name} — ${after}/${SET_SIZE} pièces`,
     subtitle: `Bonus ${top.pieces} pièces : ${setTierLabel(top.type, top.base, pieces)}`,
-    rarity: top.pieces >= 4 ? 'divin' : top.pieces >= 3 ? 'legendary' : 'epic',
+    rarity:
+      top === set.tiers[set.tiers.length - 1] ? 'divin' : top.pieces >= 4 ? 'legendary' : 'epic',
   });
 }
 // Équipe un objet du sac + déclenche l'animation de palier de set le cas échéant.

@@ -404,6 +404,10 @@ export const SLOTS: ItemSlot[] = [
   'accessory',
   'relic',
 ];
+/** Les emplacements d'un SET de voie : tous sauf la relique (elle porte un pouvoir, § 7). */
+export const SET_SLOTS: ItemSlot[] = SLOTS.filter((s) => s !== 'relic');
+/** Taille d'un set complet (6) — le palier de la signature et du capstone. */
+export const SET_SIZE = SET_SLOTS.length;
 /** TOUT ce que le héros peut porter : les 4 emplacements de gear + les parallèles.
  *  ⚠️ Source unique : les copies `[...SLOTS, FAMILIAR_SLOT]` auraient oublié le trophée. */
 export const WORN_SLOTS: ItemSlot[] = [...SLOTS, ...PARALLEL_SLOTS];
@@ -563,15 +567,12 @@ export interface LegendaryProc {
    *  sans écho ne pourra jamais tomber sur une pièce de set. */
   echo: EffectType[];
 }
+// ⚠️ REFONTE ÉQUIPEMENT (étape 5) : 19 effets, 3 ou 4 par emplacement, et chacun ne
+// prolonge QUE des stats de SON emplacement (son `echo` est inclus dans `SLOT_AFFIXES`, test
+// dédié). Jamais le même effet sur deux emplacements : un set complet porte donc des effets
+// tous différents. La relique n'a plus d'effet légendaire : elle porte un POUVOIR (étape 4).
 export const LEGENDARY_PROCS: LegendaryProc[] = [
-  {
-    id: 'initiative',
-    name: 'Initiative',
-    emoji: '⚡',
-    slots: ['weapon'],
-    desc: 'Les coups de ton 1er tour sont inesquivables et infligent le double.',
-    echo: ['crit_pct', 'damage_pct'],
-  },
+  // ⚔️ ARME
   {
     id: 'executioner',
     name: 'Bourreau',
@@ -580,59 +581,6 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     desc: 'Un ennemi tombé sous 15 % PV est exécuté sur-le-champ.',
     echo: ['execute_pct', 'damage_pct'],
   },
-  {
-    id: 'aegis',
-    name: 'Égide',
-    emoji: '🛡️',
-    slots: ['armor'],
-    desc: 'La 1re attaque ennemie qui te touche perd 45 % de ses dégâts.',
-    echo: ['dmg_reduction_pct'],
-  },
-  {
-    id: 'retort',
-    name: 'Rétorsion',
-    emoji: '🔁',
-    slots: ['armor'],
-    desc: 'Les 3 premiers coups que tu reçois retirent chacun 7 % des PV max de l’ennemi.',
-    echo: ['thorns_pct'],
-  },
-  {
-    id: 'vampiric',
-    name: 'Vampirisme',
-    emoji: '🩸',
-    slots: ['accessory'],
-    desc: 'Tes coups critiques te soignent de la moitié de leurs dégâts.',
-    echo: ['lifesteal_pct', 'crit_pct'],
-  },
-  {
-    id: 'predator_eye',
-    name: 'Œil du prédateur',
-    emoji: '👁️',
-    slots: ['accessory'],
-    desc: 'Les coups de tes 3 premiers tours sont des critiques garantis.',
-    echo: ['crit_pct'],
-  },
-  {
-    id: 'phoenix',
-    name: 'Phénix',
-    emoji: '🔥',
-    slots: ['relic'],
-    desc: 'La 1re fois qu’un coup te tuerait, il perd la moitié de ses dégâts.',
-    echo: ['max_pv_pct'],
-  },
-  {
-    id: 'secondwind',
-    name: 'Second souffle',
-    emoji: '💨',
-    slots: ['relic'],
-    desc: 'La 1re fois que tu passes sous 30 % PV, récupère 25 % de tes PV max.',
-    echo: ['max_pv_pct', 'rage_pct'],
-  },
-  // ── Ajoutés en v0.701 pour que les pièces de SET portent un proc cohérent avec leur
-  // thème. La matrice voie × emplacement comptait 16 trous sur 32, et deux stats de set
-  // n'avaient AUCUN proc : `damage_pct` (présent dans 7 sets sur 8) et `momentum_pct`
-  // (l'identité même du Frénétique). ⚠️ Aucun de ces procs ne consomme de `rng` — la règle
-  // « sans proc, rng byte-identique » doit valoir aussi ENTRE deux procs différents.
   {
     id: 'charge',
     name: 'Charge',
@@ -650,28 +598,157 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     echo: ['momentum_pct'],
   },
   {
-    id: 'thirst',
-    name: 'Soif',
+    id: 'vampiric',
+    name: 'Vampirisme',
     emoji: '🩸',
+    slots: ['weapon'],
+    desc: 'Tes coups critiques te soignent de la moitié de leurs dégâts.',
+    echo: ['lifesteal_pct', 'crit_dmg_pct'],
+  },
+  // 🥋 ARMURE
+  {
+    id: 'endurance',
+    name: 'Endurance',
+    emoji: '🪨',
     slots: ['armor'],
-    desc: 'La 1re fois que tu passes sous 50 % PV, tu retires 5 % des PV max de l’ennemi et récupères 15 % des tiens.',
-    echo: ['lifesteal_pct'],
+    desc: 'Sous 50 % PV, tu réduis de 35 % supplémentaires les dégâts subis.',
+    echo: ['dmg_reduction_pct', 'max_pv_pct'],
+  },
+  {
+    id: 'living_armor',
+    name: 'Cuirasse vivante',
+    emoji: '🐢',
+    slots: ['armor'],
+    desc: 'La 1re fois que tu passes sous 30 % PV, une barrière de 20 % de tes PV max se forme.',
+    echo: ['start_shield_pct', 'max_pv_pct'],
+  },
+  {
+    id: 'scarring',
+    name: 'Cicatrisation',
+    emoji: '🩹',
+    slots: ['armor'],
+    desc: 'Ta récupération entre deux combats est doublée.',
+    echo: ['regen_pct'],
+  },
+  // 🛡️ BOUCLIER
+  {
+    id: 'aegis',
+    name: 'Égide',
+    emoji: '🛡️',
+    slots: ['shield'],
+    desc: 'La 1re attaque ennemie qui te touche est bloquée d’office.',
+    echo: ['block_pct'],
   },
   {
     id: 'whetted',
     name: 'Riposte affûtée',
     emoji: '⚔️',
-    slots: ['armor'],
-    desc: 'Après la 1re attaque ennemie encaissée, tes 3 tours suivants sont entièrement critiques.',
-    echo: ['crit_pct'],
+    slots: ['shield'],
+    desc: 'Tes ripostes sont des coups critiques.',
+    echo: ['riposte_pct', 'parry_pct'],
   },
   {
-    id: 'endurance',
-    name: 'Endurance',
-    emoji: '🪨',
+    id: 'retort',
+    name: 'Rétorsion',
+    emoji: '🔁',
+    slots: ['shield'],
+    desc: 'Les 3 premiers coups que tu reçois retirent chacun 7 % des PV max de l’ennemi.',
+    echo: ['thorns_pct'],
+  },
+  // ⛑️ CASQUE
+  {
+    id: 'predator_eye',
+    name: 'Œil du prédateur',
+    emoji: '👁️',
+    slots: ['helmet'],
+    desc: 'Les coups de tes 3 premiers tours ne peuvent pas être esquivés.',
+    echo: ['accuracy_pct'],
+  },
+  {
+    id: 'vigilance',
+    name: 'Vigilance',
+    emoji: '🦉',
+    slots: ['helmet'],
+    desc: 'Le 1er coup critique que tu reçois n’en est pas un.',
+    echo: ['crit_resist_pct'],
+  },
+  {
+    id: 'sang_froid',
+    name: 'Sang-froid',
+    emoji: '🧊',
+    slots: ['helmet'],
+    desc: 'Sous 30 % PV, les coups critiques ennemis n’en sont plus.',
+    echo: ['crit_resist_pct', 'max_pv_pct'],
+  },
+  // 🥾 BOTTES
+  {
+    id: 'initiative',
+    name: 'Initiative',
+    emoji: '⚡',
+    slots: ['boots'],
+    desc: 'Les coups de ton 1er tour sont inesquivables et infligent le double.',
+    echo: ['initiative_pct'],
+  },
+  {
+    id: 'sidestep',
+    name: 'Pas de côté',
+    emoji: '💨',
+    slots: ['boots'],
+    desc: 'La 1re attaque ennemie est esquivée d’office.',
+    echo: ['dodge_pct'],
+  },
+  {
+    id: 'dance',
+    name: 'Pas de danse',
+    emoji: '💃',
+    slots: ['boots'],
+    desc: 'Chaque attaque que tu esquives déclenche une riposte.',
+    echo: ['dodge_pct', 'riposte_pct'],
+  },
+  // 💍 ANNEAU
+  {
+    id: 'thirst',
+    name: 'Soif',
+    emoji: '🍷',
     slots: ['accessory'],
-    desc: 'Sous 50 % PV, tu réduis de 35 % supplémentaires les dégâts subis.',
-    echo: ['max_pv_pct', 'dmg_reduction_pct'],
+    desc: 'Sous 50 % PV, ton vol de vie est triplé.',
+    echo: ['lifesteal_pct'],
+  },
+  {
+    id: 'rage_seal',
+    name: 'Sceau de rage',
+    emoji: '🔥',
+    slots: ['accessory'],
+    desc: 'Ta rage s’active dès 50 % PV au lieu de 30 %.',
+    echo: ['rage_pct'],
+  },
+  {
+    id: 'hunter',
+    name: 'Chasseur',
+    emoji: '🎯',
+    slots: ['accessory'],
+    desc: 'Tes coups sur un ennemi sous 25 % PV sont des critiques certains.',
+    echo: ['crit_pct'],
+  },
+];
+/** Effets d'AVANT portés par des reliques pas encore converties (étape 8) : toujours lus par
+ *  le combat et l'écran, mais plus jamais tirés. */
+const RELIC_LEGACY_PROCS: LegendaryProc[] = [
+  {
+    id: 'phoenix',
+    name: 'Phénix',
+    emoji: '🔥',
+    slots: ['relic'],
+    desc: 'La 1re fois qu’un coup te tuerait, il perd la moitié de ses dégâts.',
+    echo: ['max_pv_pct'],
+  },
+  {
+    id: 'secondwind',
+    name: 'Second souffle',
+    emoji: '💨',
+    slots: ['relic'],
+    desc: 'La 1re fois que tu passes sous 30 % PV, récupère 25 % de tes PV max.',
+    echo: ['max_pv_pct'],
   },
   {
     id: 'quarry',
@@ -679,11 +756,11 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '⚖️',
     slots: ['relic'],
     desc: 'Quand l’ennemi passe sous 30 % PV, tu récupères 22 % de tes PV max (1× par combat).',
-    echo: ['execute_pct', 'lifesteal_pct'],
+    echo: ['max_pv_pct'],
   },
 ];
 const LEGENDARY_BY_ID: Record<string, LegendaryProc> = Object.fromEntries(
-  LEGENDARY_PROCS.map((p) => [p.id, p]),
+  [...LEGENDARY_PROCS, ...RELIC_LEGACY_PROCS].map((p) => [p.id, p]),
 );
 // Rang minimal pour porter un proc légendaire (Légendaire = index 5).
 export const LEGENDARY_MIN_RANK = RARITY_RANK.legendaire;
@@ -746,13 +823,13 @@ export function aggregateLegendaries(equipped: Equipped, voie?: string | null): 
   return s;
 }
 
-/** ⭐ La signature active : les QUATRE pièces du set de ta voie, portées. Même règle que le
+/** ⭐ La signature active : les SIX pièces du set de ta voie, portées. Même règle que le
  *  capstone de stat (`setEffects`) — hors de sa voie, un set complet n’en donne pas. */
 export function setSignatureOf(equipped: Equipped, voie?: string | null): SetSignature | undefined {
   if (!voie) return undefined;
   const id = voieSetId(voie);
-  const n = SLOTS.filter((sl) => equipped[sl]?.setId === id).length;
-  return n >= 4 ? SET_BY_ID[id]?.signature : undefined;
+  const n = SET_SLOTS.filter((sl) => equipped[sl]?.setId === id).length;
+  return n >= SET_SIZE ? SET_BY_ID[id]?.signature : undefined;
 }
 
 // PLANCHER de magnitude par RANG. Géométrique (ratio 1,166). REFONTE v0.574 : plus de
@@ -1666,7 +1743,9 @@ export function rollSetPiece(
   },
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
-  const slot = opts.preferSlot ?? pick(rng, SLOTS);
+  // Un set n'a pas de relique : une demande de relique retombe sur un emplacement de set.
+  const slot =
+    opts.preferSlot && SET_SLOTS.includes(opts.preferSlot) ? opts.preferSlot : pick(rng, SET_SLOTS);
   // ⚠️ Depuis la v0.875 le rang suit la règle des familiers (`rollTier`) : le +0,35 et l'Autel
   // ne décalent plus le pic, ils deviennent de la chance (meilleur jet, un peu plus de +1 rang).
   // Historique : le RANG d'une pièce de set = pyramide centrée sur le PALIER du boss, LÉGÈREMENT remontée
@@ -2253,7 +2332,7 @@ export const SET_SIGNATURES: Record<string, SetSignature> = {
     id: 'sig_frenetique',
     name: 'Transe',
     emoji: '🌪️',
-    desc: 'Ton élan se cumule jusqu’à 8 coups au lieu de 6.',
+    desc: 'Ton élan se cumule sur 6 tours au lieu de 4.',
   },
 };
 
@@ -2431,14 +2510,15 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
       type: d.stats[2],
       base: Math.max(1, round1((EFFECT_BASE[d.stats[2]] ?? 8) * 0.7 * d.tierScale)),
     },
+    // ⚠️ REFONTE ÉQUIPEMENT (étape 5) : paliers à 2 / 4 / 6 pièces sur 6 emplacements.
     {
-      pieces: 3,
+      pieces: 4,
       type: d.stats[1],
       base: Math.max(1, round1((EFFECT_BASE[d.stats[1]] ?? 8) * 1.0 * d.tierScale)),
     },
-    // 4-pièces = CAPSTONE (gaté par la voie) : la stat IDENTITÉ, amplifiée.
+    // 6-pièces = CAPSTONE (gaté par la voie) : la stat IDENTITÉ, amplifiée.
     {
-      pieces: 4,
+      pieces: 6,
       type: d.stats[0],
       base: Math.max(1, round1((EFFECT_BASE[d.stats[0]] ?? 8) * 1.6 * d.tierScale)),
     },
@@ -2508,7 +2588,7 @@ export function wornSet(
 /** Nombre de pièces équipées par set. */
 export function setCounts(equipped: Equipped): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const slot of SLOTS) {
+  for (const slot of SET_SLOTS) {
     const it = equipped[slot];
     if (it?.setId) out[it.setId] = (out[it.setId] ?? 0) + 1;
   }
@@ -2540,7 +2620,7 @@ const SET_AFFINITY_K = 1;
 export function setEffects(equipped: Equipped, voie?: string | null): AggregatedEffects {
   const a = emptyEffects();
   const groups: Record<string, Item[]> = {};
-  for (const slot of SLOTS) {
+  for (const slot of SET_SLOTS) {
     const it = equipped[slot];
     if (it?.setId) (groups[it.setId] ??= []).push(it);
   }
@@ -2552,10 +2632,12 @@ export function setEffects(equipped: Equipped, voie?: string | null): Aggregated
     const affinity = id === capstoneId ? 1 + SET_AFFINITY_K : 1;
     for (const t of def.tiers) {
       if (items.length < t.pieces) continue;
-      // 4-pièces = CAPSTONE : gaté par la voie (l'archétype). Un set complet HORS voie
-      // ne donne que ses 2/3-pièces (stats brutes), pas la signature amplifiée.
-      if (t.pieces >= 4 && id !== capstoneId) continue;
-      const k = t.pieces < 4 ? affinity : 1;
+      // Le DERNIER palier = CAPSTONE : gaté par la voie (l'archétype). Un set complet HORS
+      // voie ne donne que ses paliers inférieurs. ⚠️ « Dernier palier » et non « 6 pièces » :
+      // les sets d'avant (2/3/4) gardent ainsi leur règle sans cas particulier.
+      const cap = t === def.tiers[def.tiers.length - 1];
+      if (cap && id !== capstoneId) continue;
+      const k = cap ? 1 : affinity;
       applyEffect(a, t.type, Math.max(1, round1(t.base * mult * k)) / 100);
     }
   }
@@ -2952,6 +3034,8 @@ export function bestGearLoadout(
     if (pin) for (const g of GEAR) if (pin[g]) o[g] = pin[g];
     return o;
   };
+  const setIds = new Set<string>();
+  for (const g of GEAR) for (const it of cand[g]) if (it?.setId) setIds.add(it.setId);
   const climb = (start: Equipped): { e: Equipped; p: number } => {
     let e = withPins(start);
     let p = power(e);
@@ -2970,26 +3054,34 @@ export function bestGearLoadout(
           }
         }
       }
-      for (let i = 0; i < GEAR.length; i++)
-        for (let j = i + 1; j < GEAR.length; j++) {
-          const ga = GEAR[i]!;
-          const gb = GEAR[j]!;
-          for (const x of cand[ga]) {
-            if (!x?.setId) continue;
-            for (const y of cand[gb]) {
-              if (y?.setId !== x.setId) continue;
-              if (e[ga]?.id === x.id && e[gb]?.id === y.id) continue;
-              const t = put(put(e, ga, x), gb, y);
-              const q = power(t);
-              if (q > p) {
-                e = t;
-                p = q;
-                gain = true;
+      // En DERNIER RECOURS, deux pièces quelconques d'un coup (sets différents, ou un set
+      // qu'on quitte pour deux drops) : mesuré, c'est ce qui manquait aux 3 builds ratés
+      // sur 120. Coûteux (paires d'emplacements × candidats²), donc seulement quand plus
+      // aucun échange simple ne paie. ⚠️ Un échange GROUPÉ par set (sous-ensembles de ses
+      // pièces) a été écrit puis retiré : la mutation l'a montré redondant avec les départs
+      // « set posé en entier » et ce dernier recours.
+      if (!gain)
+        for (let i = 0; i < GEAR.length && !gain; i++)
+          for (let j = i + 1; j < GEAR.length && !gain; j++) {
+            const ga = GEAR[i]!;
+            const gb = GEAR[j]!;
+            if (pin?.[ga] || pin?.[gb]) continue;
+            for (const x of cand[ga]) {
+              if (e[ga]?.id === x?.id) continue;
+              const ex = put(e, ga, x);
+              for (const y of cand[gb]) {
+                if (e[gb]?.id === y?.id) continue;
+                const t = put(ex, gb, y);
+                const q = power(t);
+                if (q > p) {
+                  e = t;
+                  p = q;
+                  gain = true;
+                }
               }
             }
           }
-        }
-      if (!gain) break; // plus aucun échange d'une ou deux pièces ne paie
+      if (!gain) break; // plus aucun échange ne paie
     }
     return { e, p };
   };
@@ -3023,8 +3115,6 @@ export function bestGearLoadout(
   }
   tryStart(greedy);
   // Chaque set posé en entier (ses meilleures pièces candidates), le reste inchangé.
-  const setIds = new Set<string>();
-  for (const g of GEAR) for (const it of cand[g]) if (it?.setId) setIds.add(it.setId);
   for (const id of setIds) {
     const start: Equipped = { ...base };
     for (const g of GEAR) {
@@ -3157,14 +3247,14 @@ export function voieSetRoster(
 ): Partial<Record<ItemSlot, SetRosterEntry>> {
   const out: Partial<Record<ItemSlot, SetRosterEntry>> = {};
   const consider = (it: Item | undefined, worn: boolean) => {
-    if (!it || it.setId !== setId || !SLOTS.includes(it.slot)) return;
+    if (!it || it.setId !== setId || !SET_SLOTS.includes(it.slot)) return;
     const cur = out[it.slot];
     // Strictement meilleure pour remplacer : à score égal on garde la première vue, et
     // l'ordre de balayage commence par l'ÉQUIPÉ — un doublon exact reste donc marqué porté.
     if (!cur || score(it) > score(cur.item)) out[it.slot] = { item: it, worn };
   };
-  for (const s of SLOTS) consider(equipped[s], true);
-  for (const s of SLOTS) consider(stored?.[s], false);
+  for (const s of SET_SLOTS) consider(equipped[s], true);
+  for (const s of SET_SLOTS) consider(stored?.[s], false);
   for (const it of inventory) consider(it, false);
   // La pièce PORTÉE ne disparaît jamais : si une meilleure l'a supplantée dans l'affichage,
   // elle reste attachée à l'entrée. C'est ce couple qui rend l'écart LISIBLE.

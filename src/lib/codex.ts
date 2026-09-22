@@ -4,13 +4,7 @@
 // vaincus / équipement) → aucune colonne DB en plus. N'affecte ni combat ni drops.
 import { MONSTERS } from '@/data/monsters';
 import { DUNGEONS } from '@/data/dungeons';
-import {
-  ITEM_SETS,
-  SLOTS,
-  type Equipped,
-  type Item,
-  type ItemSet,
-} from './items';
+import { ITEM_SETS, SET_SLOTS, SET_SIZE, type Equipped, type Item, type ItemSet } from './items';
 import { CHAMPIONS, type Champion, type ChampionGrade } from '@/data/champions';
 
 /** Ordre des lettres de champion, du plus bas au plus haut (l'entrée, puis la collection). */
@@ -64,14 +58,17 @@ export function setCollection(
   seen: Record<string, string[]> = {},
 ): SetCollectionEntry[] {
   const all: Item[] = [
-    ...SLOTS.map((s) => equipped[s]).filter((i): i is Item => !!i),
+    ...SET_SLOTS.map((s) => equipped[s]).filter((i): i is Item => !!i),
     ...inventory,
   ];
   return ITEM_SETS.map((set) => {
-    const slotsOwned = new Set<string>(seen[set.id] ?? []);
-    for (const it of all) if (it.setId === set.id) slotsOwned.add(it.slot);
-    const owned = Math.min(4, slotsOwned.size);
-    return { set, owned, total: 4, complete: owned >= 4 };
+    // Un set compte ses SIX emplacements hors relique (refonte équipement, étape 5) : une
+    // ancienne pièce de relique, vue ou possédée, ne compte plus.
+    const inSet = (s: string) => (SET_SLOTS as string[]).includes(s);
+    const slotsOwned = new Set<string>((seen[set.id] ?? []).filter(inSet));
+    for (const it of all) if (it.setId === set.id && inSet(it.slot)) slotsOwned.add(it.slot);
+    const owned = Math.min(SET_SIZE, slotsOwned.size);
+    return { set, owned, total: SET_SIZE, complete: owned >= SET_SIZE };
   });
 }
 

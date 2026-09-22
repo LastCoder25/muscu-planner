@@ -54,6 +54,8 @@ import {
   LEGENDARY_MIN_RANK,
   magicFindLuck,
   SLOTS,
+  SET_SLOTS,
+  SET_SIZE,
   normRank,
   fullInfuseCost,
   infuseToMaxCost,
@@ -648,12 +650,9 @@ describe('sets d’équipement (voie)', () => {
       effect: { type: 'damage_pct', value: 10 },
       setId: BERS,
     });
-  const fullBers = (): Equipped => ({
-    weapon: bersPiece('weapon'),
-    armor: bersPiece('armor'),
-    accessory: bersPiece('accessory'),
-    relic: bersPiece('relic'),
-  });
+  // ⚠️ Refonte équipement (étape 5) : un set complet = SIX pièces, une par emplacement hors relique.
+  const fullBers = (): Equipped =>
+    Object.fromEntries(SET_SLOTS.map((s) => [s, bersPiece(s)])) as Equipped;
 
   it('setCounts compte les pièces par set', () => {
     const eq: Equipped = { weapon: bersPiece('weapon'), armor: bersPiece('armor') };
@@ -668,11 +667,27 @@ describe('sets d’équipement (voie)', () => {
     expect(e.lifesteal).toBeGreaterThan(0);
     expect(e.damagePct).toBe(0); // le capstone (4pc) n'est pas encore là
   });
-  it('4 pièces + voie CORRESPONDANTE → capstone (4pc dégâts) actif', () => {
+  it('6 pièces + voie CORRESPONDANTE → capstone (6pc dégâts) actif', () => {
+    expect(SET_SIZE).toBe(6);
     const e = setEffects(fullBers(), 'berserker');
     expect(e.lifesteal).toBeGreaterThan(0); // 2pc
-    expect(e.executePct).toBeGreaterThan(0); // 3pc
-    expect(e.damagePct).toBeGreaterThan(0); // 4pc CAPSTONE
+    expect(e.executePct).toBeGreaterThan(0); // 4pc
+    expect(e.damagePct).toBeGreaterThan(0); // 6pc CAPSTONE
+  });
+  it('5 pièces dans sa voie : paliers 2 et 4, PAS le capstone', () => {
+    const eq = fullBers();
+    delete eq.boots;
+    const e = setEffects(eq, 'berserker');
+    expect(e.executePct).toBeGreaterThan(0);
+    expect(e.damagePct).toBe(0);
+  });
+  it('3 pièces : le palier 4 n’est pas encore là', () => {
+    const e = setEffects(
+      { weapon: bersPiece('weapon'), armor: bersPiece('armor'), shield: bersPiece('shield') },
+      'berserker',
+    );
+    expect(e.lifesteal).toBeGreaterThan(0);
+    expect(e.executePct).toBe(0);
   });
   it('4 pièces mais voie DIFFÉRENTE → capstone NON appliqué (2/3pc seulement)', () => {
     const e = setEffects(fullBers(), 'gardien');
@@ -706,8 +721,19 @@ describe('sets d’équipement (voie)', () => {
     expect(ITEM_SETS.some((s) => s.id === BERS)).toBe(true);
   });
   it('anti-doublon : preferSlot force le slot manquant', () => {
-    const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10, preferSlot: 'relic' });
-    expect(piece.slot).toBe('relic');
+    const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10, preferSlot: 'boots' });
+    expect(piece.slot).toBe('boots');
+  });
+  it('un set n’a PAS de relique : une pièce de set tombe toujours hors relique', () => {
+    expect(SET_SLOTS).not.toContain('relic');
+    for (let s = 1; s <= 200; s++) {
+      const p = rollSetPiece(mulberry32(s), {
+        setId: BERS,
+        level: 30,
+        preferSlot: s % 2 ? 'relic' : undefined,
+      });
+      expect(SET_SLOTS).toContain(p.slot);
+    }
   });
   it('la stat PRINCIPALE d’une pièce de set est une stat principale de son emplacement', () => {
     // v0.803 : le thème vit dans les PALIERS, plus dans les pièces. Refonte équipement : la
@@ -1098,7 +1124,9 @@ describe('bestGearLoadout — jamais de PERTE de puissance (auto-équip)', () =>
 
 describe('effets légendaires (Phase 3)', () => {
   it('rollLegendaryProc : renvoie un proc dont les slots incluent le slot demandé', () => {
-    for (const slot of SLOTS) {
+    // La relique n'a plus d'effet légendaire : elle porte un POUVOIR (étape 4).
+    expect(rollLegendaryProc(mulberry32(3), 'relic')).toBeUndefined();
+    for (const slot of SET_SLOTS) {
       const id = rollLegendaryProc(mulberry32(3), slot);
       expect(id).toBeTruthy();
       const proc = LEGENDARY_PROCS.find((p) => p.id === id)!;
@@ -1110,6 +1138,10 @@ describe('effets légendaires (Phase 3)', () => {
     for (let s = 1; s <= 600; s++) {
       const d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level: 90, luck: 1 });
       if (!d) continue;
+      if (d.slot === 'relic') {
+        expect(d.legendary).toBeUndefined(); // pouvoir, pas proc (étape 4)
+        continue;
+      }
       if (d.legendary) {
         legendaries++;
         expect(RARITY_RANK[d.rarity]).toBeGreaterThanOrEqual(LEGENDARY_MIN_RANK);
@@ -1308,20 +1340,28 @@ describe('procs légendaires des pièces de SET — cohérents avec le thème (v
     }
   });
 
-  it('⚠️ AUCUN TROU : chaque (set × emplacement) a un proc dans son thème', () => {
-    // C'est LA garantie. La matrice comptait 16 trous sur 32 avant la v0.701, et deux stats
-    // de set n'avaient aucun proc : `damage_pct` (7 sets sur 8 !) et `momentum_pct`.
-    const trous: string[] = [];
-    for (const set of VOIE_SETS) {
-      const stats = set.tiers.map((t) => t.type);
-      for (const slot of SLOTS) {
-        const ok = LEGENDARY_PROCS.some(
-          (p) => p.slots.includes(slot) && p.echo.some((t) => stats.includes(t)),
-        );
-        if (!ok) trous.push(`${set.name} / ${slot}`);
+  // ⚠️ RÉÉCRIT à la refonte de l'équipement (étape 5). La garantie d'avant (« chaque set ×
+  // emplacement a un proc dans son thème ») ne peut plus tenir : un effet ne prolonge
+  // désormais QUE des stats de SON emplacement, et les 6 listes sont disjointes — un thème de
+  // 3 stats couvre au mieux ~3 emplacements sur 6 (mesuré : 22 cases sur 48). Le repli sur
+  // l'effet de l'emplacement, déjà prévu, devient simplement plus fréquent.
+  it('⚠️ LA RÈGLE : un effet ne prolonge QUE des stats de son emplacement', () => {
+    for (const p of LEGENDARY_PROCS)
+      for (const slot of p.slots) {
+        const l = SLOT_AFFIXES[slot as keyof typeof SLOT_AFFIXES];
+        for (const t of p.echo)
+          expect([...l.major, ...l.support], `${p.name} (${slot}) prolonge ${t}`).toContain(t);
       }
+  });
+  it('19 effets : 3 ou 4 par emplacement hors relique, jamais le même sur deux', () => {
+    expect(LEGENDARY_PROCS).toHaveLength(19);
+    for (const p of LEGENDARY_PROCS) expect(p.slots, p.name).toHaveLength(1);
+    for (const slot of SET_SLOTS) {
+      const n = LEGENDARY_PROCS.filter((p) => p.slots.includes(slot)).length;
+      expect(n, slot).toBeGreaterThanOrEqual(3);
+      expect(n, slot).toBeLessThanOrEqual(4);
     }
-    expect(trous, `trous : ${trous.join(' · ')}`).toEqual([]);
+    expect(new Set(LEGENDARY_PROCS.map((p) => p.id)).size).toBe(19);
   });
 
   it('toute stat de set est couverte par au moins un proc', () => {
@@ -1331,33 +1371,38 @@ describe('procs légendaires des pièces de SET — cohérents avec le thème (v
         expect(couvertes.has(t), `aucun proc ne prolonge ${t} (${set.name})`).toBe(true);
   });
 
-  it('le proc tiré est TOUJOURS dans le thème du set, à tous les emplacements', () => {
+  it('le proc tiré est dans le thème du set dès que son emplacement en a un', () => {
     for (const set of VOIE_SETS) {
       const stats = set.tiers.map((t) => t.type);
-      for (const slot of SLOTS) {
+      for (const slot of SET_SLOTS) {
+        const themed = LEGENDARY_PROCS.some(
+          (p) => p.slots.includes(slot) && p.echo.some((t) => stats.includes(t)),
+        );
         for (let seed = 0; seed < 40; seed++) {
           const id = rollSetLegendaryProc(mulberry32(seed), slot, stats);
           const proc = LEGENDARY_PROCS.find((p) => p.id === id)!;
           expect(proc.slots).toContain(slot);
-          expect(
-            proc.echo.some((t) => stats.includes(t)),
-            `${set.name}/${slot} → ${proc.name} hors thème`,
-          ).toBe(true);
+          if (themed)
+            expect(
+              proc.echo.some((t) => stats.includes(t)),
+              `${set.name}/${slot} → ${proc.name} hors thème`,
+            ).toBe(true);
         }
       }
     }
   });
 
-  it('⚠️ un set COMPLET donne 4 procs DISTINCTS — les doublons s’annuleraient', () => {
+  it('⚠️ un set COMPLET donne 6 procs DISTINCTS — les doublons s’annuleraient', () => {
     // `aggregateLegendaries` renvoie un Set : deux pièces au même proc n'en valent qu'une.
     // C'est la raison pour laquelle on garde la liaison au slot (pools disjoints).
     for (const set of VOIE_SETS) {
       const stats = set.tiers.map((t) => t.type);
       for (let seed = 0; seed < 30; seed++) {
-        const ids = SLOTS.map((slot) =>
+        const ids = SET_SLOTS.map((slot) =>
           rollSetLegendaryProc(mulberry32(seed * 31 + 7), slot, stats),
         );
-        expect(new Set(ids).size, `${set.name} (graine ${seed})`).toBe(SLOTS.length);
+        expect(ids.every(Boolean)).toBe(true);
+        expect(new Set(ids).size, `${set.name} (graine ${seed})`).toBe(SET_SIZE);
       }
     }
   });
@@ -1438,11 +1483,11 @@ describe('roster d’un set de voie — la COLLECTION, pas ce qu’on ne porte p
     const r = voieSetRoster(
       SET,
       { weapon: mk('weapon', 20), armor: mk('armor', 15) },
-      { relic: mk('relic', 12) },
-      [mk('accessory', 9)],
+      { shield: mk('shield', 12), helmet: mk('helmet', 8) },
+      [mk('accessory', 9), mk('boots', 4)],
     );
-    expect(Object.keys(r).length).toBe(4); // 4/4 affiché ⇒ 4 objets listés
-    expect(SLOTS.every((s) => !!r[s])).toBe(true);
+    expect(Object.keys(r).length).toBe(SET_SIZE); // 6/6 affiché ⇒ 6 objets listés
+    expect(SET_SLOTS.every((s) => !!r[s])).toBe(true);
   });
 
   it('les pièces d’un AUTRE set, et le familier, n’y entrent jamais', () => {
@@ -2029,8 +2074,9 @@ describe('⚖️ ÉCHELLE DES PALIERS DE SET (v0.837) — ce qui rend les 8 sets
   it('à stat égale, les paliers ne valent pas pareil d’un set à l’autre', () => {
     // Berserker et Assassin portent tous deux l’exécution au 3-pièces : sans échelle, même
     // valeur. Mesuré : un palier d’exécution ne pèse presque rien, celui du Berserker est grossi.
-    expect(tier('berserker', 3).type).toBe(tier('assassin', 3).type);
-    expect(tier('berserker', 3).base / tier('assassin', 3).base).toBeCloseTo(1.6, 1);
+    // (paliers 2/4/6 depuis la refonte de l'équipement : l'ancien « 3 pièces » est le 4.)
+    expect(tier('berserker', 4).type).toBe(tier('assassin', 4).type);
+    expect(tier('berserker', 4).base / tier('assassin', 4).base).toBeCloseTo(1.6, 1);
     // Gardien et Colosse portent tous deux les dégâts au 2-pièces : le Gardien, dont les PV
     // et la réduction pèsent lourd en combat, est le plus réduit.
     expect(tier('gardien', 2).type).toBe(tier('colosse', 2).type);
@@ -2039,7 +2085,7 @@ describe('⚖️ ÉCHELLE DES PALIERS DE SET (v0.837) — ce qui rend les 8 sets
   it('l’échelle vaut pour les trois paliers, capstone compris', () => {
     // Vampire (vol de vie au 4-pièces) grossi, Berserker (vol de vie au 2-pièces) aussi : les
     // deux restent au-dessus d’Assassin, qui porte la même stat au 2-pièces sans échelle.
-    expect(tier('vampire', 4).type).toBe('lifesteal_pct');
+    expect(tier('vampire', 6).type).toBe('lifesteal_pct');
     expect(tier('berserker', 2).base).toBeGreaterThan(tier('assassin', 2).base);
   });
 });
@@ -2058,17 +2104,19 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
     }
     return best!;
   };
+  // Quatre pièces (paliers 2 et 4 actifs, capstone à 6) — l'ancien « trois sur quatre ».
   const threeOf = (voie: string, seed = 1, level = 40): Equipped => ({
     weapon: piece(`voie:${voie}`, 'weapon', seed, level),
     armor: piece(`voie:${voie}`, 'armor', seed + 1, level),
-    relic: piece(`voie:${voie}`, 'relic', seed + 2, level),
+    shield: piece(`voie:${voie}`, 'shield', seed + 2, level),
+    helmet: piece(`voie:${voie}`, 'helmet', seed + 3, level),
   });
 
-  it('dans sa voie, les bonus 2 et 3 pièces valent le double (arrondi à 0,1 point près)', () => {
+  it('dans sa voie, les bonus 2 et 4 pièces valent le double (arrondi à 0,1 point près)', () => {
     const eq = threeOf('epineux');
     const own = setEffects(eq, 'epineux');
     const off = setEffects(eq, 'gardien');
-    // Épineux : 2 pièces = dégâts, 3 pièces = PV.
+    // Épineux : 2 pièces = dégâts, 4 pièces = PV.
     expect(off.damagePct).toBeGreaterThan(0);
     expect(off.maxPvPct).toBeGreaterThan(0);
     expect(Math.abs(own.damagePct - 2 * off.damagePct)).toBeLessThanOrEqual(0.0011);
@@ -2082,14 +2130,15 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
     expect(setEffects(eq, 'berserker')).toEqual(setEffects(eq, null));
   });
 
-  it('le capstone 4 pièces n’est PAS doublé', () => {
+  it('le capstone 6 pièces n’est PAS doublé', () => {
     const eq: Equipped = {
       ...threeOf('epineux'),
+      boots: piece('voie:epineux', 'boots', 8),
       accessory: piece('voie:epineux', 'accessory', 9),
     };
     const tiers = SET_BY_ID['voie:epineux']!.tiers;
     const t2 = tiers.find((t) => t.pieces === 2)!;
-    const t4 = tiers.find((t) => t.pieces === 4)!;
+    const t4 = tiers.find((t) => t.pieces === 6)!;
     // Le multiplicateur du set se relit sur le 2-pièces HORS voie (valeur de base, non doublée).
     const mult = (setEffects(eq, null).damagePct * 100) / t2.base;
     const capstone = setEffects(eq, 'epineux').thornsPct * 100;
@@ -2097,7 +2146,7 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
     expect(Math.abs(capstone - t4.base * mult)).toBeLessThanOrEqual(0.2);
   });
 
-  it('avec 3 pièces du set d’une voie, CETTE voie donne la meilleure puissance', () => {
+  it('avec 4 pièces du set d’une voie, CETTE voie donne la meilleure puissance', () => {
     // Le défaut signalé : 3 pièces Épineux, et l'optimiseur proposait une autre voie.
     // 288 cas (6 niveaux × 8 voies × 6 tirages, dont des pièces en retard de 15 niveaux).
     // Mesuré : sans affinité, la voie du set perdait 238 fois (Épineux 36/36) ; avec, 10 fois.
@@ -2117,7 +2166,7 @@ describe('🧭 AFFINITÉ DE VOIE : porter la voie d’un set double ses bonus 2 
         for (let seed = 1; seed <= 6; seed++) {
           const rng = mulberry32(seed * 977 + L * 13 + V.length);
           const eq: Equipped = {};
-          for (const slot of ['weapon', 'armor', 'relic'] as Item['slot'][]) {
+          for (const slot of ['weapon', 'armor', 'shield', 'helmet'] as Item['slot'][]) {
             let b: Item | null = null;
             for (let k = 0; k < 1 + (seed % 4); k++) {
               const lvl = seed % 3 === 0 ? Math.max(1, L - 15) : L;
@@ -2233,7 +2282,7 @@ describe('🪓 L’AVATAR MONTRE L’ARME ET LE SET PORTÉS (v0.832)', () => {
   });
 
   it('le set porté : à partir de 2 pièces, le plus fourni, la voie départage', () => {
-    const piece = (slot: 'weapon' | 'armor' | 'accessory' | 'relic', setId: string) =>
+    const piece = (slot: 'weapon' | 'armor' | 'accessory' | 'shield', setId: string) =>
       ({
         id: slot + setId,
         slot,
@@ -2252,14 +2301,14 @@ describe('🪓 L’AVATAR MONTRE L’ARME ET LE SET PORTÉS (v0.832)', () => {
     const trois = {
       ...deux,
       accessory: piece('accessory', 'voie:gardien'),
-      relic: piece('relic', 'voie:gardien'),
+      shield: piece('shield', 'voie:gardien'),
     };
     expect(wornSet(trois, 'gardien')?.set.id).toBe('voie:gardien');
     expect(wornSet(trois, 'epineux')?.set.id).toBe('voie:epineux');
     const plus = {
       ...deux,
       accessory: piece('accessory', 'voie:epineux'),
-      relic: piece('relic', 'voie:gardien'),
+      shield: piece('shield', 'voie:gardien'),
     };
     expect(wornSet(plus, 'gardien')?.pieces).toBe(3);
   });

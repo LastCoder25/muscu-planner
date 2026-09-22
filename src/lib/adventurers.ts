@@ -23,7 +23,7 @@
 // mesuré, le niveau d'un aventurier ÉGALE celui du joueur à chaque relevé — l'XP n'est
 // jamais le frein, le Panthéon l'est toujours.
 import {
-  LEGENDARY_PROCS,
+  legendaryOf,
   SET_SIGNATURES,
   prestigeRankIndex,
   RANK_ORDER,
@@ -144,6 +144,14 @@ const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set'> = {
   endurance: 'proc',
   whetted: 'proc',
   thirst: 'proc',
+  living_armor: 'proc',
+  scarring: 'proc',
+  vigilance: 'proc',
+  sang_froid: 'proc',
+  sidestep: 'proc',
+  dance: 'proc',
+  rage_seal: 'proc',
+  hunter: 'proc',
   sig_berserker: 'set',
   sig_gardien: 'set',
   sig_assassin: 'set',
@@ -154,7 +162,6 @@ const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set'> = {
   sig_frenetique: 'set',
 };
 
-const PROC_BY_ID = new Map(LEGENDARY_PROCS.map((p) => [p.id, p]));
 const SET_SIG_BY_ID = new Map(Object.values(SET_SIGNATURES).map((x) => [x.id, x]));
 
 /**
@@ -171,7 +178,7 @@ export function combatSkillInfo(skill: CombatSkill): { emoji: string; name: stri
     const info = ADV_SIGNATURE_INFO[(skill + '_pct') as EffectType];
     return info ? { emoji: info.emoji, name: info.name } : undefined;
   }
-  const src = where === 'proc' ? PROC_BY_ID.get(skill) : SET_SIG_BY_ID.get(skill);
+  const src = where === 'proc' ? legendaryOf({ legendary: skill }) : SET_SIG_BY_ID.get(skill);
   return src ? { emoji: src.emoji, name: src.name } : undefined;
 }
 

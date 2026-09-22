@@ -9,7 +9,8 @@ import {
   SET_SIGNATURES,
   VOIE_SETS,
   LEGENDARY_PROCS,
-  SLOTS,
+  SET_SLOTS,
+  SET_SIZE,
   voieSetId,
   setSignatureOf,
   playerWithGear,
@@ -30,8 +31,8 @@ const piece = (slot: string, setId: string): Item =>
     setId,
     effect: { type: 'damage_pct', value: 1 },
   }) as Item;
-const fullSet = (voie: string, n = 4): Equipped =>
-  Object.fromEntries(SLOTS.slice(0, n).map((sl) => [sl, piece(sl, voieSetId(voie))]));
+const fullSet = (voie: string, n = SET_SIZE): Equipped =>
+  Object.fromEntries(SET_SLOTS.slice(0, n).map((sl) => [sl, piece(sl, voieSetId(voie))]));
 
 const hero = (over: Partial<Combatant> = {}): Combatant => ({
   name: 'h',
@@ -63,9 +64,9 @@ const foeHits = (p: Combatant, m: Combatant) =>
   fight(p, m).log.filter((e) => e.who === 'monster' && e.type !== 'dodge');
 
 describe('⭐ quand une signature s’active', () => {
-  it('les QUATRE pièces du set de ta voie — ni trois, ni hors voie, ni sans voie', () => {
+  it('les SIX pièces du set de ta voie — ni cinq, ni hors voie, ni sans voie', () => {
     expect(setSignatureOf(fullSet('assassin'), 'assassin')?.id).toBe('sig_assassin');
-    expect(setSignatureOf(fullSet('assassin', 3), 'assassin')).toBeUndefined();
+    expect(setSignatureOf(fullSet('assassin', SET_SIZE - 1), 'assassin')).toBeUndefined();
     expect(setSignatureOf(fullSet('assassin'), 'gardien')).toBeUndefined();
     expect(setSignatureOf(fullSet('assassin'), null)).toBeUndefined();
   });

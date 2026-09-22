@@ -10,7 +10,9 @@ import {
   mulberry32,
   fmtPow,
   fmtDelta,
+  betweenFightsHeal,
 } from '@/lib/combat';
+import { labyrinthRest } from '@/lib/labyrinthRun';
 // Import STATIQUE : @/data/monsters construit tout le contenu procédural au chargement.
 // En import dynamique dans le test, ce coût tombait DANS son délai de 5 s et le faisait
 // expirer sous la charge de la suite complète.
@@ -127,7 +129,7 @@ describe('procs légendaires (Phase 3)', () => {
       (e) => e.who === 'monster' && e.type !== 'dodge',
     );
 
-  it('Égide : la 1re attaque ennemie qui touche perd 45 %, pas la 2e', () => {
+  it('Égide : la 1re attaque ennemie qui touche est bloquée d’office (−75 %), pas la 2e', () => {
     const m = mon({ initiative: 99 }); // le monstre frappe en premier
     const avec = monHits(['aegis'], m);
     const sans = monHits([], m);
@@ -173,13 +175,15 @@ describe('procs légendaires (Phase 3)', () => {
     expect(playerLog([], dodgy, { strikes: 3 })[0]!.type).toBe('dodge'); // sans le proc
   });
 
-  it('Œil du prédateur : les coups des 3 premiers tours sont critiques, pas ceux du 4e', () => {
-    const avec = playerLog(['predator_eye'], mon({ damage: 0, pv: 1e6 }), { strikes: 2 });
+  // ⚠️ RÉÉCRIT (refonte équipement, étape 5) : l'Œil passe au CASQUE et prolonge la
+  // précision (inesquivable) au lieu du critique, stat de l'anneau.
+  it('Œil du prédateur : les coups des 3 premiers tours sont inesquivables, pas ceux du 4e', () => {
+    const avec = playerLog(['predator_eye'], mon({ dodge: 1, damage: 0, pv: 1e6 }), { strikes: 2 });
     const rounds = [...new Set(avec.map((e) => e.round))];
     const ofTurn = (i: number) => avec.filter((e) => e.round === rounds[i]).map((e) => e.type);
     for (let t = 0; t < COMBAT.predatorTurns; t++)
-      expect(ofTurn(t), `tour ${t + 1}`).toEqual(['crit', 'crit']);
-    expect(ofTurn(COMBAT.predatorTurns)).toEqual(['hit', 'hit']);
+      expect(ofTurn(t), `tour ${t + 1}`).toEqual(['hit', 'hit']);
+    expect(ofTurn(COMBAT.predatorTurns)).toEqual(['dodge', 'dodge']);
   });
 
   it('Vampirisme : les crits soignent', () => {
@@ -478,18 +482,17 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
     expect(avec[5]!.damage).toBeGreaterThan(sans[5]!.damage); // l'élan, lui, paie
   });
 
-  it('Riposte affûtée : les 3 tours suivant la 1re attaque encaissée sont entièrement critiques', () => {
-    const m = mon({ initiative: 99 }); // le monstre ouvre
-    const hits = (procs: string[]) =>
-      simulateCombat(pl(procs, { strikes: 2 }), m, { seed: 11, goldOnWin: 0 }).log.filter(
-        (e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'),
-      );
-    const avec = hits(['whetted']);
-    const sans = hits([]);
-    // 2 frappes par tour × 3 tours = 6 critiques, puis le 4e tour redevient normal.
-    expect(avec.slice(0, 6).every((e) => e.type === 'crit')).toBe(true);
-    expect(avec[6]!.type).toBe('hit');
-    expect(sans.slice(0, 7).every((e) => e.type === 'hit')).toBe(true);
+  // ⚠️ RÉÉCRIT (étape 5) : Riposte affûtée passe au BOUCLIER et rend les RIPOSTES critiques.
+  it('Riposte affûtée : une riposte vaut une volée CRITIQUE entière, pas le critique moyen', () => {
+    const m = mon({ initiative: 99, pv: 1e6 });
+    const riposte = (procs: string[]) =>
+      simulateCombat(pl(procs, { riposte: 1, strikes: 2 }), m, { seed: 11, goldOnWin: 0 }).log.find(
+        (e) => e.skills?.includes('riposte'),
+      )!;
+    // crit 0, ×2 : 20 × 2 frappes × 2 = 80 contre 40 sans le proc.
+    expect(riposte(['whetted']).damage).toBe(80);
+    expect(riposte(['whetted']).skills).toContain('whetted');
+    expect(riposte([]).damage).toBe(40);
   });
 
   it('Endurance : sous 50 % PV, on encaisse moins', () => {
@@ -501,16 +504,115 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
     expect(firstTaken(['endurance'])).toBeLessThan(firstTaken([]));
   });
 
-  it('Soif : au passage sous 50 % PV, on draine l’ennemi (soin ET dégâts)', () => {
-    const m = mon({ initiative: 99, pv: 5000 });
-    const run = (procs: string[]) =>
-      simulateCombat(pl(procs), m, { seed: 4, goldOnWin: 0, startPlayerPv: 110 }).log.find(
-        (e) => e.who === 'monster' && e.type === 'hit',
-      )!;
-    const avec = run(['thirst']);
-    const sans = run([]);
-    expect(avec.playerPv).toBeGreaterThan(sans.playerPv); // soigné
-    expect(avec.monsterPv).toBeLessThan(sans.monsterPv); // et l'ennemi a payé
+  // ⚠️ RÉÉCRIT (étape 5) : la Soif passe à l'ANNEAU et triple le vol de vie sous 50 % PV.
+  it('Soif : sous 50 % PV le vol de vie est triplé, au-dessus il ne change pas', () => {
+    const m = mon({ damage: 0, pv: 1e6 });
+    const healed = (procs: string[], start: number) => {
+      const e = simulateCombat(pl(procs, { lifesteal: 0.1 }), m, {
+        seed: 4,
+        goldOnWin: 0,
+        startPlayerPv: start,
+      }).log.find((x) => x.who === 'player')!;
+      return e.playerPv - start;
+    };
+    expect(healed([], 50)).toBeGreaterThan(0);
+    // Au point près, à l'arrondi du soin près (le triple est arrondi une fois, pas trois).
+    expect(Math.abs(healed(['thirst'], 50) - 3 * healed([], 50))).toBeLessThanOrEqual(1);
+    expect(healed(['thirst'], 150)).toBe(healed([], 150)); // au-dessus de 50 % : rien
+  });
+
+  // ── Les 8 effets NOUVEAUX (refonte équipement, étape 5) ──
+  const monHits = (procs: string[], m: ReturnType<typeof mon>, over = {}) =>
+    simulateCombat(pl(procs, over), m, { seed: 5, goldOnWin: 0 }).log.filter(
+      (e) => e.who === 'monster' && e.type !== 'dodge',
+    );
+  it('Cuirasse vivante : sous 30 % PV, une barrière de 20 % des PV max encaisse la suite', () => {
+    const m = mon({ initiative: 99, damage: 40, pv: 1e6 });
+    const avec = monHits(['living_armor'], m).map((e) => e.playerPv);
+    const sans = monHits([], m).map((e) => e.playerPv);
+    const k = sans.findIndex((pv) => pv < 60); // premier passage sous 30 % de 200
+    expect(k).toBeGreaterThan(0);
+    expect(avec[k]).toBe(sans[k]);
+    expect(avec[k + 1]).toBeGreaterThan(sans[k + 1] ?? 0);
+  });
+
+  it('Cicatrisation : la récupération entre deux combats est doublée (donjon ET Labyrinthe)', () => {
+    const p = pl(['scarring'], { regen: 0.1 });
+    expect(betweenFightsHeal(p, 0.12)).toBeCloseTo(
+      2 * betweenFightsHeal(pl([], { regen: 0.1 }), 0.12),
+    );
+    expect(labyrinthRest(p, 0.09)).toBeCloseTo(0.18);
+    expect(labyrinthRest(pl([]), 0.09)).toBeCloseTo(0.09);
+  });
+
+  it('Vigilance : le 1er critique reçu n’en est pas un, le 2e si', () => {
+    const m = mon({ initiative: 99, crit: 1, pv: 1e6 });
+    const avec = monHits(['vigilance'], m, { pv: 1e6 });
+    expect(avec[0]!.type).toBe('hit');
+    expect(avec[0]!.skills).toContain('vigilance');
+    expect(avec[1]!.type).toBe('crit');
+    expect(monHits([], m, { pv: 1e6 })[0]!.type).toBe('crit');
+  });
+
+  it('Sang-froid : sous 30 % PV, plus aucun critique ennemi ; au-dessus, si', () => {
+    const m = mon({ initiative: 99, crit: 1, damage: 1, pv: 1e6 });
+    const first = (start: number) =>
+      simulateCombat(pl(['sang_froid']), m, {
+        seed: 5,
+        goldOnWin: 0,
+        startPlayerPv: start,
+      }).log.find((e) => e.who === 'monster')!.type;
+    expect(first(40)).toBe('hit'); // 20 % PV
+    expect(first(150)).toBe('crit');
+  });
+
+  it('Pas de côté : la 1re attaque ennemie est esquivée d’office, la 2e non', () => {
+    const m = mon({ initiative: 99 });
+    const log = simulateCombat(pl(['sidestep']), m, { seed: 5, goldOnWin: 0 }).log.filter(
+      (e) => e.who === 'monster',
+    );
+    expect(log[0]!.type).toBe('dodge');
+    expect(log[0]!.skills).toContain('sidestep');
+    expect(log[1]!.type).toBe('hit');
+  });
+
+  it('Pas de danse : chaque esquive déclenche une riposte, sans stat de riposte', () => {
+    const m = mon({ initiative: 99, pv: 1e6 });
+    const ripostes = (procs: string[]) =>
+      simulateCombat(pl(procs, { dodge: 1 }), m, { seed: 5, goldOnWin: 0 }).log.filter((e) =>
+        e.skills?.includes('dance'),
+      ).length;
+    expect(ripostes(['dance'])).toBeGreaterThan(3);
+    expect(ripostes([])).toBe(0);
+  });
+
+  it('Sceau de rage : la rage s’active dès 50 % PV (au lieu de 30 %)', () => {
+    const m = mon({ damage: 0, pv: 1e6 });
+    const first = (procs: string[]) =>
+      simulateCombat(pl(procs, { rage: 0.5 }), m, {
+        seed: 5,
+        goldOnWin: 0,
+        startPlayerPv: 80,
+      }).log.find((e) => e.who === 'player')!.damage;
+    expect(first(['rage_seal'])).toBeGreaterThan(first([])); // 40 % PV : seule la rage scellée mord
+  });
+
+  it('Chasseur : critique certain sur un ennemi sous 25 %, pas au-dessus', () => {
+    const log = (pv: number) =>
+      simulateCombat(pl(['hunter']), mon({ damage: 0, pv }), { seed: 5, goldOnWin: 0 }).log.filter(
+        (e) => e.who === 'player',
+      );
+    expect(log(1e6)[0]!.type).toBe('hit');
+    // Entre 25 et 60 % de PV, rien de garanti (le héros n'a aucun critique) : le seuil compte.
+    const mid = log(100).filter(
+      (e, i, a) => i > 0 && a[i - 1]!.monsterPv >= 25 && a[i - 1]!.monsterPv < 60,
+    );
+    expect(mid.length).toBeGreaterThan(0);
+    expect(mid.every((e) => e.type === 'hit')).toBe(true);
+    // Ennemi à 100 PV : une fois sous 25 PV restants, tous les coups sont critiques.
+    const low = log(100).filter((e, i, a) => i > 0 && a[i - 1]!.monsterPv < 25);
+    expect(low.length).toBeGreaterThan(0);
+    expect(low.every((e) => e.type === 'crit')).toBe(true);
   });
 
   it('Curée : quand l’ennemi passe sous 30 % PV, on récupère des PV', () => {

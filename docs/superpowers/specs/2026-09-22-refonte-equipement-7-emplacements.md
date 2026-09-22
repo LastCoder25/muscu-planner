@@ -331,6 +331,35 @@ emplacement : c'est déjà le comportement de repli aujourd'hui, il sera simplem
 fréquent. À mesurer : la part de pièces de set avec un effet dans le thème (34 % avant la
 v0.701, cible > 60 %).
 
+**✅ Livré à l'étape 5 (2026-09-22) — ce que la mesure a dit.**
+
+- **Couverture du thème : 22 cases sur 48 (46 %)**, pas les 60 % visés. C'est STRUCTUREL :
+  un thème de 3 stats, face à 6 listes d'emplacement disjointes, couvre au mieux ~3
+  emplacements sur 6. Le bouclier et les bottes n'ont presque jamais d'effet dans le thème
+  (leurs stats — blocage, parade, riposte, esquive — n'apparaissent dans aucun thème de
+  set). Pour dépasser 60 %, il faudrait réécrire les thèmes des sets avec les nouvelles
+  stats : une décision à part, non prise ici.
+- **Un set est désormais compté sur ses 6 emplacements hors relique** (compteur, bonus,
+  signature, collection, « Mes sets »). Une ancienne pièce de set de RELIQUE ne compte plus :
+  l'étape 8 la convertira.
+- **Le capstone est le DERNIER palier du set**, plus « 4 pièces » : les sets d'avant (2/3/4)
+  gardent leur règle sans cas particulier.
+- **L'optimiseur a dû suivre** : l'échange de deux pièces d'un même set ne suffisait plus
+  (117/120 sur la recherche exhaustive à 4 emplacements, pire cas −1,1 %). Les builds ratés
+  quittaient un set pour deux drops, ou échangeaient deux pièces de sets DIFFÉRENTS. Un
+  échange de deux pièces quelconques, lancé seulement quand plus aucun échange simple ne
+  paie, rétablit 120/120 — 79 ms sur un sac de 800 objets.
+- **Phénix, Second souffle et Curée ne sont plus tirés** (la relique n'a plus d'effet
+  légendaire) mais restent lus par le combat et l'écran pour les reliques pas encore
+  converties.
+- **Égide** passe de −45 % à −75 % (« bloquée d'office » = un blocage) ; la **Soif**
+  d'avant (drain au passage sous 50 %) est remplacée par le vol de vie triplé.
+- **Mutations : 18, 18 rouges** après correction (un test de Chasseur trop large ; un
+  échange groupé par set, mesuré redondant, retiré).
+- **Reste à l'étape 7** : les poids de puissance des 8 nouveaux effets (0,16 de départ), et
+  le réglage des sets à 6 pièces (`tierScale`, `SET_PIECE_MAJOR_K`, affinité, poids des
+  signatures) contre la cible +5 à +10 % — il dépend de la courbe de budget.
+
 **Les 19 sont re-mesurés** : même cible qu'en v0.837, environ +8 % de puissance chacun, y
 compris les effets déplacés (leur valeur change avec leur nouveau contexte).
 
