@@ -34,7 +34,8 @@ export const MINE_DIST = 0.9;
 export function mineNet(level: number): number {
   const rth = (2 * travelOneWayMin(level, MINE_DIST)) / 60;
   const cost = goldCost('mine', level);
-  return Math.round(cost * (1.3 + travelFactor(rth))) - cost;
+  // ⚠️ Plus de coût d'envoi (v0.1069) : la récolte entière est gagnée.
+  return Math.round(cost * (1.3 + travelFactor(rth)));
 }
 // ⚠️ PLUS DE MINE D’OR : le bâtiment a été retiré du registre (demandé), donc plus
 // aucune production passive d’or. Mesuré avant retrait, elle pesait 19,3 % du revenu au

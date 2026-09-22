@@ -7,11 +7,11 @@
       <div class="iconbtn" />
     </header>
 
-    <!-- UNE seule ligne pour l'or, le trajet et les filtres (demandé : voir les deux
-         premières lignes de voyages en bas de l'écran). Le niveau et « En expédition » sont
-         retirés : la tuile du héros, en bas, dit déjà qu'il voyage. -->
+    <!-- UNE seule ligne pour le trajet et les filtres (demandé : voir les deux premières
+         lignes de voyages en bas de l'écran). Le niveau, « En expédition » et l'or sont
+         retirés : la tuile du héros, en bas, dit déjà qu'il voyage, et envoyer ne coûte
+         plus d'or (v0.1069). -->
     <div class="bar">
-      <span class="bar-chip">🪙 {{ char.row?.gold ?? 0 }}</span>
       <span v-if="outpostBuilt && travelMult < 1" class="bar-chip">
         🧭 −{{ Math.round((1 - travelMult) * 100) }}%
       </span>
@@ -346,11 +346,6 @@
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
       </button>
     </div>
-    <!-- 📜 Les derniers convois encaissés restent consultables : c'est en les mettant côte à
-         côte qu'on voit ce qu'un long voyage apprend de plus qu'un court. -->
-    <button v-if="pastVans.length" class="past-vans" @click="historyOpen = true">
-      📜 Derniers convois <span class="pv-n">{{ pastVans.length }}</span>
-    </button>
 
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
@@ -479,7 +474,7 @@
               <span class="ph-sub">{{
                 partyHeroBlock
                   ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                  : `compte pour ${HERO_XP_WEIGHT} dans le partage d’XP${partyHeroToll(selected) ? ` · 🪙 ${partyHeroToll(selected)}` : ''}`
+                  : `compte pour ${HERO_XP_WEIGHT} dans le partage d’XP`
               }}</span>
             </span>
             <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
@@ -660,18 +655,6 @@
       </q-card>
     </q-dialog>
 
-    <q-dialog v-model="historyOpen">
-      <q-card class="van-card">
-        <div class="van-kicker">📜 Derniers convois</div>
-        <div v-for="v in pastVans" :key="v.id" class="van-past">
-          <CaravanReportView :van="v" :roster="char.advList" />
-        </div>
-        <div class="van-actions">
-          <q-btn flat no-caps label="Fermer" @click="historyOpen = false" />
-        </div>
-      </q-card>
-    </q-dialog>
-
     <div v-if="!active && !pois.length" class="empty">
       La carte se peuple avec le temps — de nouvelles activités apparaissent régulièrement. Reviens
       bientôt.
@@ -705,7 +688,6 @@ import {
   partyCapFor,
   partySendBlocker,
   partyHeroBlocker,
-  partyHeroToll,
   partyLegMin,
 } from '@/lib/party';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
@@ -724,9 +706,7 @@ import {
   voyageProgress,
   poiCombatant,
   simulateArena,
-  goldCost,
   poiTravelLevel,
-  poiRewardLevel,
   travelOneWayMin,
   expeditionTerrain,
   MAP_VIEW,
@@ -775,7 +755,6 @@ import {
 } from '@/lib/rift';
 import {
   convoySlotsFree,
-  claimedCaravans,
   isCaravanClaimable,
   poiOffers,
   partyAllies,
@@ -1270,8 +1249,6 @@ const partyHeroBlock = computed(() =>
         onExpedition: !!active.value,
         healMs: heroHealIn.value,
         outpost: outpostBuilt.value,
-        gold: char.row?.gold ?? 0,
-        cost: partyHeroToll(selected.value),
       })
     : null,
 );
@@ -1603,8 +1580,6 @@ watch(
 const reportId = ref<string | null>(null);
 const reportStars = ref<string[]>([]);
 const reportVan = computed(() => char.caravanList.find((c) => c.id === reportId.value) ?? null);
-const historyOpen = ref(false);
-const pastVans = computed(() => claimedCaravans(char.caravanList));
 
 async function doClaimCaravan(id: string) {
   const uid = auth.user?.id;
@@ -1789,7 +1764,6 @@ const poiFacts = computed<PoiFact[]>(() => {
       label: 'Trajet héros',
       value: formatDurationMin(roundTripMin(p)),
     });
-    out.push({ icon: '🪙', label: 'Coût héros', value: String(costOf(p)) });
     if (p.type === 'arena')
       out.push({ icon: '🌊', label: 'Vagues tenues', value: `~${arenaWaves.value}` });
     else if (!HARVEST_TYPES.has(p.type))
@@ -1844,7 +1818,6 @@ function poiRank(p: Poi) {
   return characterRank(p.level);
 }
 
-const costOf = (p: Poi) => goldCost(p.type, poiRewardLevel(p));
 // Avant-poste : débloque les expéditions + réduit les trajets.
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
@@ -1886,14 +1859,12 @@ const canSend = computed(
     !heroUnavailable.value &&
     !!char.row &&
     progress.ready.value &&
-    outpostBuilt.value &&
-    (char.row?.gold ?? 0) >= costOf(selected.value),
+    outpostBuilt.value,
 );
 const sendLabel = computed(() => {
   if (!selected.value) return 'Envoyer';
   if (!outpostBuilt.value) return '🧭 Construis un Avant-poste d’abord';
-  if ((char.row?.gold ?? 0) < costOf(selected.value)) return 'Pas assez d’or';
-  return `Envoyer le héros (🪙 ${costOf(selected.value)})`;
+  return 'Envoyer le héros';
 });
 
 async function send() {
@@ -2734,23 +2705,6 @@ onUnmounted(() => {
    avait sans balayer, et rien ne l'annonçait. Une grille les montre TOUS d'un coup.
    ⚠️ `minmax(0, 1fr)` et non `1fr` : sans le minimum à zéro, une piste de grille refuse
    de passer sous la taille de son contenu et la grille déborderait du cadre à 344 px. */
-.past-vans {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0 2px 8px auto;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--text);
-  font: 600 12.5px var(--font-ui);
-  cursor: pointer;
-}
-.pv-n {
-  color: var(--dim);
-}
 .van-card {
   background: var(--surface);
   color: var(--text);
@@ -2766,11 +2720,6 @@ onUnmounted(() => {
   color: var(--dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-.van-past + .van-past {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
 }
 .van-actions {
   display: flex;

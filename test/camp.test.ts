@@ -16,7 +16,6 @@ import {
   PARTY_HERO_BLOCK_LABEL,
   partyClaimRoster,
   partyHeroBlocker,
-  partyHeroToll,
   partyLegMin,
   partyReport,
   partySendBlocker,
@@ -490,13 +489,11 @@ describe('🧭 trajet et départ d’un groupe', () => {
     const a = startParty(i, 1000, 30, resolveCamp(i));
     expect(a.midAt).toBe(1000 + 30 * 60_000);
     expect(a.returnAt).toBe(1000 + 60 * 60_000);
-    // ⚠️ PLUS DE PÉAGE SUR UN CAMP (v0.980) : le héros n'y décide plus du butin.
+    // ⚠️ PLUS AUCUN PÉAGE (v0.1069, décision de l'utilisateur) : ni sur un camp (v0.980),
+    // ni sur une faille, qui le gardait depuis la v0.932.
     expect(a.goldCost).toBe(0);
-    expect(partyHeroToll(i.poi)).toBe(0);
-    // …mais une FAILLE le garde : c'est le coût de sa présence (v0.932).
     const r = { ...i, poi: poi({ type: 'rift' }) };
-    expect(startParty(r, 1000, 30, resolveCamp(i)).goldCost).toBe(goldCost('rift', 20));
-    expect(partyHeroToll(r.poi)).toBe(goldCost('rift', 20));
+    expect(startParty(r, 1000, 30, resolveCamp(i)).goldCost).toBe(0);
     expect(a.outcome.party).toBeDefined();
     const j = input();
     expect(startParty(j, 1000, 30, resolveCamp(j)).goldCost).toBe(0);
@@ -645,14 +642,14 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     expect(canSendParty(poi(), 4, false, 5, 3)).toBe(false);
   });
 
-  it('partyHeroBlocker : expédition, infirmerie, Avant-poste, or — dans cet ordre, sinon libre', () => {
-    const ok = { onExpedition: false, healMs: 0, outpost: true, gold: 100, cost: 100 };
+  it('partyHeroBlocker : expédition, infirmerie, Avant-poste — dans cet ordre, sinon libre', () => {
+    // ⚠️ Plus de refus pour l'or (v0.1069) : le héros part sans rien payer.
+    const ok = { onExpedition: false, healMs: 0, outpost: true };
     expect(partyHeroBlocker(ok)).toBeNull();
-    expect(partyHeroBlocker({ ...ok, gold: 99 })).toBe('gold');
-    expect(partyHeroBlocker({ ...ok, outpost: false, gold: 0 })).toBe('outpost');
+    expect(partyHeroBlocker({ ...ok, outpost: false })).toBe('outpost');
     expect(partyHeroBlocker({ ...ok, healMs: 1, outpost: false })).toBe('infirmary');
     expect(partyHeroBlocker({ ...ok, onExpedition: true, healMs: 1 })).toBe('expedition');
-    for (const k of ['expedition', 'infirmary', 'outpost', 'gold'] as const)
+    for (const k of ['expedition', 'infirmary', 'outpost'] as const)
       expect(PARTY_HERO_BLOCK_LABEL[k].length).toBeGreaterThan(0);
   });
 

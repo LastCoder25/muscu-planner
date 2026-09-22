@@ -93,7 +93,6 @@ import {
   riftOverflows,
   startExpedition,
   buildMessage,
-  goldCost as expeGoldCost,
   type ActiveExpedition,
   type ExpeditionMap,
   type ExpeditionMessage,
@@ -193,7 +192,6 @@ import {
   partySendBlocker,
   PARTY_SEND_BLOCK_LABEL,
   partyHeroBlocker,
-  partyHeroToll,
   PARTY_HERO_BLOCK_LABEL,
   normalizeParties,
   partyClaimRoster,
@@ -1810,8 +1808,7 @@ export const useCharacterStore = defineStore('character', () => {
       );
     if (!expeditionsUnlocked(cur.buildings))
       throw new Error('Construis un Avant-poste d’expédition pour envoyer des héros.');
-    const cost = expeGoldCost(poi.type, poi.level);
-    if (cur.gold < cost) throw new Error('Pas assez d’or pour cette expédition.');
+    // ⚠️ Plus de coût d'envoi (v0.1069, décision de l'utilisateur).
     // Réduction de trajet selon le niveau de l'avant-poste.
     const exp = startExpedition(
       hero,
@@ -1825,7 +1822,7 @@ export const useCharacterStore = defineStore('character', () => {
       cur.expedition_map ??
       createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost'));
     const map: ExpeditionMap = { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) };
-    await persist(userId, { gold: cur.gold - cost, expedition: exp, expedition_map: map });
+    await persist(userId, { expedition: exp, expedition_map: map });
   }
   // À l'arrivée à l'objectif : dépose le rapport (une seule fois). Renvoie le message si nouveau.
   async function expeTick(userId: string, now: number): Promise<ExpeditionMessage | null> {
@@ -2712,8 +2709,6 @@ export const useCharacterStore = defineStore('character', () => {
           onExpedition: !!cur.expedition,
           healMs: woundRemainingMs(cur.base, now),
           outpost: expeditionsUnlocked(cur.buildings),
-          gold: cur.gold,
-          cost: partyHeroToll(poi),
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
@@ -2742,13 +2737,11 @@ export const useCharacterStore = defineStore('character', () => {
             : null;
     if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
     const trip = startParty({ poi, hero, seed }, now, leg, outcome);
-    if (cur.gold < trip.goldCost) return `héros : ${PARTY_HERO_BLOCK_LABEL.gold}`;
     const busy = new Set(opts.escortIds);
     const map = cur.expedition_map
       ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
       : cur.expedition_map;
     await persist(userId, {
-      gold: cur.gold - trip.goldCost,
       expedition_map: map,
       adventurers: advList.value.map((a) =>
         busy.has(a.id) ? { ...a, busyUntil: trip.returnAt } : a,

@@ -279,7 +279,7 @@ describe('expedition — résolution', () => {
       expect(aller).toBeGreaterThan(0);
       expect(retour).toBeLessThanOrEqual(aller + 1); // jamais RALENTI
       expect(Math.abs(retour - aller * e.outcome.returnMult)).toBeLessThanOrEqual(2);
-      expect(e.goldCost).toBe(goldCost('mine', mine.level));
+      expect(e.goldCost).toBe(0); // plus de coût d’envoi (v0.1069)
       expect(e.outcome).toBeTruthy();
     }
   });

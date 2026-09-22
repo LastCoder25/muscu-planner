@@ -170,7 +170,7 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       let somme = 0;
       for (let s = 1; s <= 300; s++)
         somme += resolveOutcome(refFighter(lv), p as never, s, lv).gold;
-      const reel = somme / 300 - goldCost('mine', lv);
+      const reel = somme / 300; // plus de coût d’envoi (v0.1069)
       const ecart = mineNet(lv) / reel;
       // Le modèle peut être un peu SOUS le jeu (il ignore les rencontres, d'espérance
       // légèrement positive) — jamais AU-DESSUS, et jamais d'un facteur.

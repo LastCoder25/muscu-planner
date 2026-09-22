@@ -813,7 +813,9 @@ export const ARENA = {
  *  les options du filtre de difficulté. Le rang d’un lieu est `characterRank(level)`,
  *  exactement ce que sa pastille affiche : le filtre ne peut pas dire autre chose que la carte.
  *  Seuls les rangs présents sont proposés — un filtre « Divin : 0 » n’apprend rien. */
-export function poiRankCounts(pois: readonly Pick<Poi, 'level'>[]): { rankIndex: number; count: number }[] {
+export function poiRankCounts(
+  pois: readonly Pick<Poi, 'level'>[],
+): { rankIndex: number; count: number }[] {
   const n = new Map<number, number>();
   for (const p of pois) {
     const r = characterRank(p.level).rankIndex;
@@ -2330,7 +2332,7 @@ export function startExpedition(
     sentAt: now,
     midAt: now + oneWayMs,
     returnAt: now + oneWayMs + backMs,
-    goldCost: goldCost(poi.type, poiRewardLevel(poi)),
+    goldCost: 0, // plus de coût d’envoi (v0.1069)  (champ gardé : les voyages d’avant le portent)
     seed: seed >>> 0 || 1,
     outcome,
   };

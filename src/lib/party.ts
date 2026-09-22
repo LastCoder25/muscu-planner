@@ -17,11 +17,9 @@
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
 import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
 import {
-  CAMP_TYPES,
   PARTY_TARGETS,
   buildMessage,
   depositMessages,
-  goldCost,
   poiTravelLevel,
   travelOneWayMin,
   type ActiveExpedition,
@@ -29,7 +27,6 @@ import {
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
-  poiRewardLevel,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
@@ -104,26 +101,23 @@ export function canSendParty(
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.
  *  ⚠️ SOURCE UNIQUE : le store (`sendParty`) refuse avec la MÊME règle, l'écran dit POURQUOI
  *  le héros est grisé au lieu de le cacher. Ordre : déjà parti, à l'infirmerie, sans
- *  Avant-poste, sans l'or du départ. */
-export type PartyHeroBlock = 'expedition' | 'infirmary' | 'outpost' | 'gold';
+ *  Avant-poste. ⚠️ Plus de péage d'or (v0.1069, décision de l'utilisateur) : envoyer le
+ *  héros ne coûte plus rien, en groupe comme seul. */
+export type PartyHeroBlock = 'expedition' | 'infirmary' | 'outpost';
 export function partyHeroBlocker(ctx: {
   onExpedition: boolean;
   healMs: number;
   outpost: boolean;
-  gold: number;
-  cost: number;
 }): PartyHeroBlock | null {
   if (ctx.onExpedition) return 'expedition';
   if (ctx.healMs > 0) return 'infirmary';
   if (!ctx.outpost) return 'outpost';
-  if (ctx.gold < ctx.cost) return 'gold';
   return null;
 }
 export const PARTY_HERO_BLOCK_LABEL: Record<PartyHeroBlock, string> = {
   expedition: '🧭 déjà en expédition',
   infirmary: '🤕 à l’infirmerie',
   outpost: '🧭 Avant-poste requis',
-  gold: '🪙 pas assez d’or',
 };
 
 /** Ce que `startParty` a besoin de savoir d'un envoi, quelle que soit la cible. Les entrées
@@ -134,21 +128,8 @@ export interface PartyVoyage {
   seed: number;
 }
 
-/**
- * 🪙 LE PÉAGE D'OR DU HÉROS dans un groupe.
- *
- * ⚠️ **PLUS SUR UN CAMP (v0.980).** Le péage était le prix du butin d'une expédition solo, que
- * le héros faisait tomber ; depuis qu'il n'y compte plus que pour deux champions et que le
- * butin est celui d'un groupe (`resolveCamp`), le lui faire payer rendrait sa présence
- * net-négative. Failles et bandes le gardent (mesuré en v0.932 : c'est le coût de sa présence).
- * ⚠️ SOURCE UNIQUE : `startParty`, le refus du store et la tuile de l'écran le lisent.
- */
-export function partyHeroToll(poi: Pick<Poi, 'type' | 'level'>): number {
-  return CAMP_TYPES.has(poi.type) ? 0 : goldCost(poi.type, poiRewardLevel(poi));
-}
-
-/** Construit le voyage d'un groupe. ⚠️ Le coût d'or ne se paie qu'avec le HÉROS
- *  (`partyHeroToll`) ; l'escorte est payée en salaires à l'encaissement.
+/** Construit le voyage d'un groupe. ⚠️ AUCUN coût d'envoi (v0.1069) : l'escorte est payée
+ *  en salaires à l'encaissement, le héros ne paie plus de péage.
  *  ⚠️ L'ISSUE EST PASSÉE, jamais calculée ici : c'est le seul chemin d'envoi (le store) qui
  *  choisit la résolution, au lieu que ce constructeur décide pour lui. */
 export function startParty(
@@ -163,7 +144,7 @@ export function startParty(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    goldCost: input.hero ? partyHeroToll(input.poi) : 0,
+    goldCost: 0,
     seed: input.seed >>> 0 || 1,
     outcome,
   };
