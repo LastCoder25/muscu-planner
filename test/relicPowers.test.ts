@@ -221,6 +221,16 @@ describe('🔮 chaque pouvoir fait ce qu’il annonce', () => {
     expect(plein.skills).toContain('rp_moisson');
     expect(plein.damage).toBeGreaterThan(vide.damage);
   });
+  // ⚠️ 2026-09-22 (demandé) : Moisson se charge AUSSI en combat — sans ça elle valait 0 contre
+  // un boss (un seul combat, aucun monstre abattu avant).
+  it('Moisson : arracher sa part des PV d’un ennemi remplit la jauge, pour la fin du combat', () => {
+    const log = run(hero(R('moisson')), foe({ pv: 1000 })).log.filter((e) => e.who === 'player');
+    const k = log.findIndex((e) => e.skills?.includes('rp_moisson'));
+    expect(k).toBeGreaterThan(0);
+    const avant = log.slice(0, k).reduce((a, e) => a + e.damage, 0);
+    expect(avant).toBeGreaterThanOrEqual(1000 * RELIC.moissonHpShare);
+    expect(log[k]!.damage).toBeGreaterThan(log[0]!.damage);
+  });
   it('Phénix : le coup fatal perd une part qui suit la force (plafonnée)', () => {
     // Coup de ~70 sur 50 PV : sans le Phénix il tue ; amorti de 40 % (× force), il laisse vivant.
     const m = foe({ damage: 70, initiative: 99 });

@@ -722,3 +722,11 @@ refaire.
    complets déjà possédés.
 5. **Les 7 nouveaux effets légendaires** (§ 6.3) et les **14 pouvoirs** (§ 7).
 6. **La conversion des objets** (§ 9) plutôt que les laisser tels quels.
+
+## Équilibrage du 2026-09-22 (après livraison)
+
+- **Sets remontés** : stat principale d’une pièce de set = celle d’un drop (`SET_PIECE_MAJOR_K` 1). Joueur réaliste : 5 à 6 pièces gardées à tous les niveaux, +13 à +28 % contre les boss (avant : 1 à 4 pièces au niveau 90, +3 %). Vampire 0,3 / Frénétique 0,4 / Duelliste 0,16 en `tierScale`.
+- **Sources comparables** : sur les 13 derniers niveaux, meilleures pièces de set et meilleurs drops au même rang et au même jet ; l’ilvl des pièces de set a 1 à 8 niveaux de retard (boss tous les 5 niveaux), ≤ ~5 % de magnitude.
+- **Contenu recalé sur un joueur qui porte son set** (`gearedFighter` farme le set de sa voie) : à son niveau, donjons 56-73 %, boss 54-66 % au palier ; mur conservé en dessous.
+- **Moisson** : se charge aussi en combat (25 % des PV ennemis arrachés) → 4 à 13 %, boss compris. **Initiative** sur 3 tours, **Œil** +40 % → 5 à 10 %.
+- **Cadeaux** : pièces de départ au rang du joueur ; les pièces qui complètent un set restent un rang dessous.

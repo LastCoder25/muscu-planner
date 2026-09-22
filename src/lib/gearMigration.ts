@@ -34,10 +34,11 @@ export interface GearGifts {
  *    neuves (bouclier, casque, bottes) un rang sous le rang moyen de ses pièces, jet moyen —
  *    sans quoi il perdrait sa signature. Équipées si le set est porté, sinon au sac (où le
  *    rangement automatique les classe dans « Mes sets ») ;
- *  - chaque emplacement neuf encore vide reçoit une pièce de départ un rang sous le rang du
- *    joueur, jet moyen, équipée.
- *  ⚠️ Un cadeau n'est jamais meilleur que ce qu'on trouve à son rang : le premier drop à son
- *  rang reste une amélioration. */
+ *  - chaque emplacement neuf encore vide reçoit une pièce de départ AU RANG du joueur, jet
+ *    moyen, équipée (décision du 2026-09-22 : un rang dessous affaiblissait trop les comptes
+ *    existants — Last 78 % → 87 % au donjon de son niveau).
+ *  ⚠️ Seules les pièces qui COMPLÈTENT un set restent un rang dessous : il reste un set à
+ *  farmer ; une pièce de départ au jet moyen reste battue par un bon drop de son rang. */
 export function gearRefonteGifts(
   p: { equipped: Equipped; inventory: Item[]; loadouts: Loadout[] },
   playerLevel: number,
@@ -90,8 +91,8 @@ export function gearRefonteGifts(
     const gift: Item = {
       ...makeGearPiece(rng, {
         slot,
-        rarity: RANK_ORDER[Math.max(0, mineRank - 1)]!,
-        roll: mineRank === 0 ? GIFT_ROLL.low : GIFT_ROLL.mid,
+        rarity: RANK_ORDER[mineRank]!,
+        roll: GIFT_ROLL.mid,
         level: Math.max(1, Math.floor(playerLevel)),
       }),
       id: newId(),

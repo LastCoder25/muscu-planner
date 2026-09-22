@@ -86,18 +86,25 @@ const CALIB = {
 // 55 % au palier (boss) — les deux concordent rang par rang (niveaux 51-100 : ×1,14 à ×1,23).
 // Re-mesurée quand la puissance affichée a compté le vol de vie pour sa valeur réelle (étape 7) :
 // le joueur de référence, qui choisit son équipement à la puissance, en porte davantage.
+// ⚠️ 2026-09-22 : les SETS sont remontés pour valoir le coup (+13 à +28 % contre les drops) et
+// le joueur de référence farme et PORTE désormais le set de sa voie (`gearedFighter`). Part
+// invisible multipliée par l'écart mesuré entre les deux joueurs de référence (8 voies, boss
+// et donjon moyennés) : ×1,00 (rang 1) · ×1,07 (2-3) · ×1,07 (4-5) · ×1,08 (6) · ×1,14 (7) ·
+// ×1,10 (8) · ×1,22 (9) · ×1,20 (10), puis, rangs 6 à 10, recherche directe du multiplicateur
+// qui ramène ce joueur à ~72 % de nettoyage et ~57 % au palier : ×1,06 · ×1,12 · ×1,22 · ×1,11 ·
+// ×1,09. Un joueur qui ne porte pas son set est donc en dessous.
 // [premier niveau, dernier, attaque début, fin, survie début, fin, part invisible]
 const GEAR_BUDGET_BY_RANK: [number, number, number, number, number, number, number][] = [
   [1, 10, 1.0, 1.27, 1.06, 1.38, 1],
-  [11, 20, 1.27, 1.3, 1.38, 1.46, 1],
-  [21, 30, 1.3, 1.54, 1.5, 1.68, 1],
-  [31, 40, 1.7, 1.75, 1.77, 1.95, 1.06],
-  [41, 50, 1.96, 2.46, 2.0, 2.17, 1.05],
-  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.21],
-  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.23],
-  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.15],
-  [81, 90, 5.62, 5.62, 3.95, 4.15, 1.18],
-  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.14],
+  [11, 20, 1.27, 1.3, 1.38, 1.46, 1.07],
+  [21, 30, 1.3, 1.54, 1.5, 1.68, 1.07],
+  [31, 40, 1.7, 1.75, 1.77, 1.95, 1.13],
+  [41, 50, 1.96, 2.46, 2.0, 2.17, 1.13],
+  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.38],
+  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.57],
+  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.55],
+  [81, 90, 5.62, 5.62, 3.95, 4.15, 1.6],
+  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.5],
 ];
 export function gearBudget(level: number): { off: number; pv: number } {
   const L = Math.min(100, Math.max(1, level));

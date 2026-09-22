@@ -176,15 +176,19 @@ describe('procs légendaires (Phase 3)', () => {
       (e) => e.who === 'player',
     );
 
-  it('Initiative : TOUS les coups du 1er tour sont inesquivables, pas ceux du 2e', () => {
+  it('Initiative : TOUS les coups de ses premiers tours sont inesquivables, pas ceux du suivant', () => {
     // ⚠️ Un héros frappe plusieurs fois par tour (~17 au niveau 60) : un proc limité au
-    // 1er COUP ne durait qu’un instant, il vaut désormais pour le 1er TOUR (v0.837).
+    // 1er COUP ne durait qu’un instant, il vaut pour des TOURS (v0.837) — trois depuis le
+    // 2026-09-22 (sur un seul, il ne valait rien contre un boss).
     const dodgy = mon({ dodge: 1, damage: 5, pv: 1e6 });
     const avec = playerLog(['initiative'], dodgy, { strikes: 3 });
-    const first = avec.filter((e) => e.round === avec[0]!.round);
-    expect(first).toHaveLength(3);
-    expect(first.map((e) => e.type)).not.toContain('dodge');
-    expect(avec.find((e) => e.round > avec[0]!.round)!.type).toBe('dodge');
+    const rounds = [...new Set(avec.map((e) => e.round))];
+    const opening = avec.filter((e) => rounds.indexOf(e.round) < COMBAT.initiativeTurns);
+    expect(opening).toHaveLength(3 * COMBAT.initiativeTurns);
+    expect(opening.map((e) => e.type)).not.toContain('dodge');
+    expect(avec.find((e) => e.round === rounds[COMBAT.initiativeTurns])!.type).toBe('dodge');
+    // Mesuré (2026-09-22) : sur UN seul tour, −3 à +4 % contre un boss — rien. Trois tours : +5 à +10 %.
+    expect(COMBAT.initiativeTurns).toBeGreaterThanOrEqual(3);
     expect(playerLog([], dodgy, { strikes: 3 })[0]!.type).toBe('dodge'); // sans le proc
   });
 

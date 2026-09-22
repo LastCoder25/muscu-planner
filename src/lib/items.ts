@@ -661,8 +661,9 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     id: 'moisson',
     name: 'Moisson',
     emoji: '⚰️',
-    charge: 'chaque monstre abattu dans un donjon',
-    effect: (f) => `le combat suivant : +${pctOf(RELIC.moissonBuff * f)} de dégâts`,
+    charge: `chaque monstre abattu, ou ${pctOf(RELIC.moissonHpShare)} des PV d’un ennemi arrachés`,
+    effect: (f) =>
+      `+${pctOf(RELIC.moissonBuff * f)} de dégâts pour le reste du combat (ou le suivant)`,
   },
   {
     id: 'phenix',
@@ -861,7 +862,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Initiative',
     emoji: '⚡',
     slots: ['boots'],
-    desc: 'Les coups de ton 1er tour sont inesquivables et infligent le double.',
+    desc: `Les coups de tes ${COMBAT.initiativeTurns} premiers tours sont inesquivables et infligent ×${COMBAT.initiativeMult}.`,
     echo: ['initiative_pct'],
   },
   {
@@ -1105,12 +1106,14 @@ function slotPool(slot: ItemSlot, kind: 'major' | 'support', level: number): Eff
 }
 
 /** Valeur de la stat principale d’une pièce de set, relative à un drop de même rareté.
- *  ⚠️ < 1 PARCE QU’ELLE PORTE UNE STAT QU’UN DROP N’A PAS À CET EMPLACEMENT (des dégâts sur un
- *  accessoire) et que les paliers s’y ajoutent. Mesuré, set complet de sa voie contre les 4
- *  meilleurs drops (40 tirages par emplacement), moyenne des 8 voies aux niveaux 30/60/90 :
- *  ×1 → +23/+30/+23 % · **×0,7 → +10/+12/+5 %** (cible de l’utilisateur : +5 à +10 %) ·
- *  ×0,55 → +3/+4/−4 %. */
-const SET_PIECE_MAJOR_K = 0.7;
+ *  ⚠️ 1 DEPUIS LE 2026-09-22 (demandé : « les sets doivent être attrayants par rapport aux
+ *  pièces normales »). Depuis la refonte à 7 emplacements, la stat principale d’une pièce de
+ *  set est celle de l’emplacement (plus de dégâts sur un anneau) : la minorer n’avait plus de
+ *  motif. Mesuré sur un joueur réaliste (butin de ses 13 derniers niveaux, set de sa voie au
+ *  débit réel des boss, 8 voies) : à ×0,7 l’optimiseur ne gardait qu’1 à 4 pièces du set au
+ *  niveau 90 pour +3 % ; à ×1 il en garde 5 à 6 à tous les niveaux, pour +13 à +28 % contre
+ *  les boss et +8 à +37 % en donjon. Le contenu est recalé sur ce joueur (`gearBudget`). */
+const SET_PIECE_MAJOR_K = 1;
 
 /** Stat PRINCIPALE d’une pièce de set, par emplacement : dégâts ou PV.
  *  ⚠️ JAMAIS UNE STAT PLAFONNÉE (critique, réduction). Mesuré : dès le niveau 30 le
@@ -2865,7 +2868,7 @@ const VOIE_SET_DEFS: {
     emoji: '🩸',
     theme: 'Vole la vie et se déchaîne au bord de la mort.',
     stats: ['lifesteal_pct', 'damage_pct', 'rage_pct'],
-    tierScale: 0.5,
+    tierScale: 0.3,
     capScale: 0.4,
     color: '#e0325f',
   },
@@ -2885,7 +2888,7 @@ const VOIE_SET_DEFS: {
     emoji: '🎯',
     theme: 'Précision létale adossée à des PV.',
     stats: ['crit_pct', 'damage_pct', 'max_pv_pct'],
-    tierScale: 0.12,
+    tierScale: 0.16,
     capScale: 0.8,
     color: '#3fd0e0',
   },
@@ -2905,7 +2908,7 @@ const VOIE_SET_DEFS: {
     emoji: '🌀',
     theme: 'Monte en puissance au fil du combat.',
     stats: ['momentum_pct', 'damage_pct', 'lifesteal_pct'],
-    tierScale: 0.22,
+    tierScale: 0.4,
     capScale: 0.15,
     color: '#ff5cd8',
   },
@@ -3606,7 +3609,11 @@ export function bestGearLoadout(
     ...WORN_SLOTS.map((s) => equipped[s]).filter((x): x is Item => !!x),
   ]);
   for (const s of WORN_SLOTS) if (equipped[s]) tous.push(equipped[s]);
-  for (let tour = 0; tour < 4; tour++) {
+  // ⚠️ 12 tours au plus, pas 4 (2026-09-22) : avec des sets plus forts, une amélioration en
+  // appelle une autre (une pièce du set entre, une autre devient rentable) — à 4 tours la passe
+  // s’arrêtait avant son point fixe et un échange simple gagnait encore (test dédié). Elle
+  // s’arrête d’elle-même dès qu’un tour ne gagne rien.
+  for (let tour = 0; tour < 12; tour++) {
     let gagne = false;
     for (const it of tous) {
       // ⚠️ On NE TOUCHE PAS aux emplacements IMPOSÉS : « Porter ce set » promet ces

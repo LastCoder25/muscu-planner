@@ -1,13 +1,18 @@
 import { mulberry32, combatPower, type Combatant } from '@/lib/combat';
 import {
   rollDrop,
+  rollSetPiece,
+  setPiecesPerLevel,
   bestGearLoadout,
   playerWithGear,
+  mergeEffects,
   dropsPerLevel,
   DROP_CHANCE,
   SLOTS,
   type Item,
 } from '@/lib/items';
+import { VOIES, voiePassiveEffects } from '@/lib/voies';
+import { BOSSES } from '@/data/bosses';
 import { refBalancedStat } from '@/lib/proceduralContent';
 import { rollTalentDrop, talentEffects, talentsEarned, pickBestTalents } from '@/lib/talents';
 import { rollActivityFamiliar } from '@/data/familiars';
@@ -41,17 +46,45 @@ export interface GearedBuild {
   inv: Item[];
   /** L'équipement retenu par l'optimiseur. */
   eq: Record<string, Item | undefined>;
-  /** Les effets des talents ÉQUIPÉS (vide si `companions` est faux). */
+  /** Les effets des talents ÉQUIPÉS (vide si `companions` est faux) + le passif de sa voie. */
   fx: ReturnType<typeof talentEffects>;
+  /** ⚔️ Sa VOIE (tournante selon la graine) : il farme aussi le SET de cette voie sur les boss
+   *  (2026-09-22 : les sets sont faits pour être portés — un joueur qui porte son set doit
+   *  rester dans les bandes de difficulté, donc le joueur de référence le porte aussi). */
+  voie: string | null;
 }
 
-export function gearedFighter(L: number, seed = 1, companions = true): Combatant {
-  const b = gearedBuild(L, seed, companions);
-  return playerWithGear('geared', b.stats, b.eq, b.fx, L);
+export function gearedFighter(L: number, seed = 1, companions = true, sets = true): Combatant {
+  const b = gearedBuild(L, seed, companions, sets);
+  return playerWithGear('geared', b.stats, b.eq, b.fx, L, b.voie);
 }
 
-export function gearedBuild(L: number, seed = 1, companions = true): GearedBuild {
-  const key = `${L}:${seed}:${companions}`;
+/** Pièces du set de `voie` qu'un joueur ramasse sur ses 13 derniers niveaux, au volume
+ *  qu'un niveau finance (`setPiecesPerLevel`), sur le boss de palier le plus profond. */
+function voieSetPool(L: number, rng: () => number, voie: string): Item[] {
+  const out: Item[] = [];
+  let n = 0;
+  for (let l = Math.max(1, L - 12); l <= L; l++) {
+    const boss = [...BOSSES].filter((b) => b.unlockLevel <= l).pop();
+    if (!boss) continue;
+    const x = setPiecesPerLevel(l);
+    const k = Math.floor(x) + (rng() < x % 1 ? 1 : 0);
+    for (let i = 0; i < k; i++)
+      out.push({
+        ...rollSetPiece(rng, {
+          setId: `voie:${voie}`,
+          level: boss.dropLevel,
+          luck: 0.6,
+          playerLevel: l,
+        }),
+        id: `s${n++}`,
+      } as Item);
+  }
+  return out;
+}
+
+export function gearedBuild(L: number, seed = 1, companions = true, sets = true): GearedBuild {
+  const key = `${L}:${seed}:${companions}:${sets}`;
   const hit = cache.get(key);
   if (hit) return hit;
   const rng = mulberry32(seed * 7919 + L);
@@ -85,6 +118,9 @@ export function gearedBuild(L: number, seed = 1, companions = true): GearedBuild
     }
   }
   const inv: Item[] = SLOTS.flatMap((slot) => (top.get(slot) ?? []).map((x) => x.it));
+  const voie = sets ? VOIES[(seed - 1) % VOIES.length]!.id : null;
+  if (voie) inv.push(...voieSetPool(L, mulberry32(seed * 101 + L), voie));
+  const passive = voie ? voiePassiveEffects(voie) : undefined;
   const talents = [];
   if (companions) {
     for (let i = 0; i < 3; i++)
@@ -98,19 +134,22 @@ export function gearedBuild(L: number, seed = 1, companions = true): GearedBuild
         id: 't' + i,
       });
   }
-  const fx = (ids: string[]) =>
-    talentEffects(talents.map((t) => ({ ...t, equipped: ids.includes(t.id) })));
+  const fx = (ids: string[]) => {
+    const t = talentEffects(talents.map((t) => ({ ...t, equipped: ids.includes(t.id) })));
+    return passive ? mergeEffects(t, passive) : t;
+  };
   // 1re passe sans polissage (point de départ du choix de talent), comme `computeGearPlan`.
-  const draft = bestGearLoadout('g', stats, {}, inv, L, {}, undefined, undefined, false);
+  const draft = bestGearLoadout('g', stats, {}, inv, L, fx([]), voie, undefined, false);
   const ids = pickBestTalents(talents, talentsEarned(L), (x) =>
-    combatPower(playerWithGear('g', stats, draft, fx(x), L)),
+    combatPower(playerWithGear('g', stats, draft, fx(x), L, voie)),
   );
   const eff = fx(ids);
   const build: GearedBuild = {
     stats,
     inv,
-    eq: bestGearLoadout('g', stats, draft, inv, L, eff),
+    eq: bestGearLoadout('g', stats, draft, inv, L, eff, voie),
     fx: eff,
+    voie,
   };
   cache.set(key, build);
   return build;

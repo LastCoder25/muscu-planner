@@ -406,6 +406,8 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
     // (54 %) est retiré : même constat que les boss 70/85 — aux niveaux 61-80 le joueur qui
     // farme vraiment dépasse déjà la calibration d'origine, l'ancien harnais le cachait. À
     // recalibrer à part.
+    // ⚠️ 2026-09-22 : le joueur de référence PORTE le set de sa voie (sets remontés) et le
+    // contenu est recalé sur lui. Mesuré : à son niveau 66 % (49) et 68 % (79).
     for (const L of [49, 79]) {
       const at = gearedClearPct(L, L);
       expect(at, `niv ${L}`).toBeGreaterThan(0.5);
@@ -426,6 +428,7 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
     // ⚠️ v0.895 (étoiles, recalage rang × étoile) : palier 40 → 49 % (8 % cinq niveaux en
     // dessous), 55 → 63 % (5 %). Borne haute 62 % → 66 % : 1 point au-dessus, dans le bruit
     // de la table (mesurée sur les donjons, ±0,04).
+    // ⚠️ 2026-09-22 (référence avec son set, contenu recalé) : palier 40 → 59 %, 55 → 54 %.
     for (const L of [40, 55]) {
       const at = bossWinPct(L, L);
       expect(at, `palier ${L}`).toBeLessThan(0.66);

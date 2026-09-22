@@ -192,8 +192,8 @@ describe('🏆 TROPHÉE — tirage', () => {
  *  `companions: false` = objets seuls ; `true` = objets + 3 familiers + talents.
  *  ⚠️ Les DEUX formes servent : sans compagnons, le critique et la réduction restent loin de
  *  leur plafond et le défaut des trophées « tirage »/« gainage » (v0.880) est invisible. */
-const geared = (L: number, seed: number) => gearedBuild(L, seed, false);
-const realistic = (L: number, seed: number) => gearedBuild(L, seed, true);
+const geared = (L: number, seed: number) => gearedBuild(L, seed, false, false);
+const realistic = (L: number, seed: number) => gearedBuild(L, seed, true, false);
 
 describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
   it('garde le trophée porté et prend un meilleur trophée du sac', () => {

@@ -120,7 +120,11 @@ export const RELIC = {
   ouvertureMult: 2.5, // jauge PLEINE au début de chaque combat : 2,5 volées d'entrée…
   ouvertureCharge: 5, // …puis elle se recharge lentement (5 par tour)
   moissonCharge: 50, // par monstre abattu (la jauge suit le donjon)
-  moissonBuff: 0.4, // jauge pleine au début d'un combat : +40 % de dégâts pour ce combat
+  moissonBuff: 0.33, // jauge pleine au début d'un combat : +33 % de dégâts pour ce combat
+  // ⚠️ …ET UNE CHARGE EN COMBAT (2026-09-22, demandé) : sans elle, Moisson valait 0 contre un
+  // boss (un seul combat, aucun monstre abattu avant). Arracher cette part des PV de
+  // l'ennemi remplit la jauge : le bonus vaut pour la fin du combat.
+  moissonHpShare: 0.25,
   phenixBlock: 0.4, // le coup fatal perd 40 % (× force)…
   phenixMax: 0.9, // …au plus 90 %
   souffleHeal: 0.12, // sous 30 % PV, une fois : 12 % des PV max (× force)…
@@ -248,12 +252,15 @@ export const COMBAT = {
   // 30/60/90). Avant : de −1 % (Initiative) à +35 % (Soif). Les procs « premiers coups » comptent
   // désormais des TOURS : un héros frappe ~17 fois par tour au niveau 60, un compte de coups ne
   // durait qu'un instant.
-  initiativeMult: 2, // Initiative : les coups du 1er tour ×2, inesquivables
-  initiativeTurns: 1,
+  initiativeMult: 2, // Initiative : les coups des premiers tours ×2, inesquivables…
+  // …sur 3 tours (2026-09-22, mesuré) : sur un seul tour elle valait −3 à +4 % contre un boss,
+  // un combat de boss durant bien plus longtemps. Désormais +5 à +10 %.
+  initiativeTurns: 3,
+  // Œil : +40 % (2026-09-22) — à +30 % il valait +4 à +7 %, désormais +5 à +8 %.
   predatorTurns: 6, // Œil du prédateur : les coups des 6 premiers tours sont inesquivables…
   // …⚠️ et frappent plus fort (refonte équipement, étape 7) : rendre inesquivable ne valait
   // presque rien (~1 % mesuré), les boss et les monstres esquivant peu.
-  predatorMult: 1.3,
+  predatorMult: 1.4,
   aegisBlock: 0.75, // Égide : la 1re attaque ennemie qui touche est BLOQUÉE d'office (−75 %, comme un blocage)
   retortHits: 3, // Rétorsion : les 3 premiers coups ennemis reçus…
   retortMaxPvPct: 0.07, // …retirent chacun 7 % des PV max de l'ennemi
@@ -667,6 +674,7 @@ export function simulateCombat(
   let fatalNext = false; // Coup fatal : le prochain coup du héros
   let momentumOffset = 0; // Tempête : l'élan retombe à zéro
   let harvest = 0; // Moisson : bonus de dégâts de CE combat
+  let harvestFresh = false; // Moisson : le bonus vient de s'allumer en combat (à annoncer)
   if (rid === 'moisson' && gauge >= RELIC.full) {
     harvest = RELIC.moissonBuff * rf;
     gauge = 0;
@@ -908,11 +916,20 @@ export function simulateCombat(
         }
         if (harvest) {
           mult += harvest;
-          if (pHits === 0) mark('rp_moisson');
+          if (pHits === 0 || harvestFresh) mark('rp_moisson');
+          harvestFresh = false;
         }
         if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
+        // Moisson : la jauge se remplit aussi des PV arrachés à l'ennemi (charge en combat).
+        if (rid === 'moisson' && !harvest && mPv > 0) {
+          if (charge((dmg / monsterMaxPv / RELIC.moissonHpShare) * RELIC.full)) {
+            harvest = RELIC.moissonBuff * rf;
+            harvestFresh = true;
+            gauge = 0;
+          }
+        }
         if (atk.bleed) {
           bleedPool += dmg * atk.bleed;
           mark('bleed');

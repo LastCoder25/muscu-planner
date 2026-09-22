@@ -7,6 +7,11 @@
 // (le format 4 pièces recopié sur 6) : +17 à +80 %, la Soif éternelle du Vampire valant à elle
 // seule +46 %.
 //
+// ⚠️ 2026-09-22 — LES SETS SONT REMONTÉS (demandé : « il faut que les sets soient attrayants
+// par rapport aux pièces normales »). La stat principale d'une pièce de set vaut celle d'un drop
+// (×1 au lieu de ×0,7) : mesuré sur un joueur réaliste, l'optimiseur garde 5 à 6 pièces du set
+// à tous les niveaux, pour +13 à +28 % contre les boss. Le contenu est recalé sur ce joueur.
+//
 // Ce test en est le GARDE-FOU, pas la mesure : il lit la PUISSANCE (rapide, et fidèle au combat
 // à quelques points près depuis que le vol de vie y compte pour sa valeur réelle) et borne
 // juste au-dessus de ce qu'elle rend aujourd'hui. Remettre des paliers ou une signature de
@@ -24,14 +29,15 @@ import {
 } from '@/lib/items';
 import { gearedBuild } from './helpers/gearedFighter';
 
-// Mesuré à l'écriture (graine 1) — set complet contre meilleurs drops, en puissance :
-// niveau 30 : +11,1 à +14,3 % ; niveau 60 : +15,3 à +22,5 %. Ce que la VOIE ajoute (affinité
-// des paliers 2 et 4, palier 6, signature) : +4,7 à +8,2 %.
-const BORNES: Record<number, number> = { 30: 0.18, 60: 0.27 };
+// Mesuré à l'écriture (graine 1, 40 pièces par emplacement) — set complet contre meilleurs
+// drops, en puissance : niveau 30 : +19,5 à +21,5 % ; niveau 60 : +31 à +36 %. Ce que la VOIE
+// ajoute (affinité des paliers 2 et 4, palier 6, signature) : +4,4 à +6,7 %.
+// Plancher : le set doit VALOIR LE COUP ; plafond : il ne doit pas devenir écrasant.
+const BORNES: Record<number, [number, number]> = { 30: [0.12, 0.26], 60: [0.2, 0.42] };
 
-it('un set complet porté dans sa voie reste un BONUS, pas une obligation', () => {
+it('un set complet porté dans sa voie vaut le coup face aux drops, sans devenir écrasant', () => {
   for (const L of [30, 60]) {
-    const b = gearedBuild(L, 1);
+    const b = gearedBuild(L, 1, true, false); // référence SANS set : on mesure le set contre les drops
     const nonSet = b.inv.filter((d) => !SET_SLOTS.includes(d.slot as ItemSlot));
     for (const set of VOIE_SETS) {
       const voie = set.id.replace('voie:', '');
@@ -65,8 +71,8 @@ it('un set complet porté dans sa voie reste un BONUS, pas une obligation', () =
       );
       expect(SET_SLOTS.filter((s) => six[s]?.setId === set.id).length, voie).toBe(6);
       const gain = pw(six, voie) / pw(drops, voie) - 1;
-      expect(gain, `${voie} niveau ${L}`).toBeGreaterThan(0);
-      expect(gain, `${voie} niveau ${L}`).toBeLessThan(BORNES[L]!);
+      expect(gain, `${voie} niveau ${L}`).toBeGreaterThan(BORNES[L]![0]);
+      expect(gain, `${voie} niveau ${L}`).toBeLessThan(BORNES[L]![1]);
       // Ce que la voie ajoute au même set : jamais l'essentiel de sa valeur.
       expect(pw(six, voie) / pw(six, null) - 1, `${voie} niveau ${L}`).toBeLessThan(0.1);
     }

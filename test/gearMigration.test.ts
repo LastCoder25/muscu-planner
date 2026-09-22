@@ -210,7 +210,7 @@ describe('gearRefonteGifts — cadeaux de la refonte (spec § 9.4-9.5)', () => {
     );
     expect(bag).toHaveLength(3);
     expect(bag.every((x) => x.rarity === 'magique')).toBe(true);
-    const rank = RANK_ORDER[prestigeRankIndex(30) - 1];
+    const rank = RANK_ORDER[prestigeRankIndex(30)]; // pièce de départ : au rang du joueur
     for (const s of NEW_SLOTS) {
       expect(g.equipped[s]?.setId).toBeUndefined();
       expect(g.equipped[s]?.rarity).toBe(rank);
@@ -236,13 +236,11 @@ describe('gearRefonteGifts — cadeaux de la refonte (spec § 9.4-9.5)', () => {
     expect(g.gifts.map((x) => x.slot).sort()).toEqual(['boots', 'helmet']);
   });
 
-  it('un cadeau n’est jamais au-dessus du rang du joueur', () => {
+  it('un cadeau n’est jamais au-dessus du rang du joueur ; une pièce de départ est à son rang', () => {
     for (const L of [1, 10, 30, 60, 90]) {
       const g = gearRefonteGifts({ equipped: {}, inventory: [], loadouts: [] }, L, 'u', newId);
       for (const x of g.gifts)
-        expect(RARITY_RANK[x.rarity], `niveau ${L}`).toBeLessThan(
-          Math.max(1, prestigeRankIndex(L) + 1),
-        );
+        expect(RARITY_RANK[x.rarity], `niveau ${L}`).toBe(prestigeRankIndex(L));
     }
     expect(SLOTS).toEqual(expect.arrayContaining(NEW_SLOTS));
   });

@@ -761,8 +761,8 @@ describe('sets d’équipement (voie)', () => {
         expect(SLOT_AFFIXES[slot].major).toContain(attendu[slot]);
       }
   });
-  it('la stat principale d’une pièce vaut ~0,7 × celle d’un drop de même rareté et même jet', () => {
-    // v0.803 : mesuré, à valeur pleine un set complet battait 4 bons drops de +23 à +30 %.
+  it('la stat principale d’une pièce vaut celle d’un drop de même rareté et même jet', () => {
+    // v0.803 : ×0,7. ⚠️ 2026-09-22 : ×1 — les sets doivent valoir le coup face aux drops.
     const baseOf = (it: { rarity: Item['rarity']; roll?: number; effect: { value: number } }) =>
       it.effect.value / rankRollMult(it.rarity, it.roll ?? 0);
     // Niveau 90 : les rangs y sont hauts, donc les valeurs assez grandes pour que l'arrondi au
@@ -782,8 +782,8 @@ describe('sets d’équipement (voie)', () => {
         preferSlot: 'weapon',
       });
       if (p.effect.value < 20) continue; // l’arrondi au dixième brouille les petites valeurs
-      expect(baseOf(p) / drop!).toBeGreaterThan(0.65);
-      expect(baseOf(p) / drop!).toBeLessThan(0.75);
+      expect(baseOf(p) / drop!).toBeGreaterThan(0.95);
+      expect(baseOf(p) / drop!).toBeLessThan(1.05);
     }
   });
   it('les paliers du set suivent aussi le NIVEAU D’OBJET des pièces, pas seulement leur rareté', () => {
