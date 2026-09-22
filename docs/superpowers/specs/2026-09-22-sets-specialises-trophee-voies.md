@@ -1,6 +1,6 @@
 # Sets spécialisés, trophée à quête, reliques et voies
 
-Date : 2026-09-22 · Statut : **en validation** (aucun code écrit) · Suite de la refonte à 7
+Date : 2026-09-22 · Statut : **validée** (2026-09-22) · Suite de la refonte à 7
 emplacements (`2026-09-22-refonte-equipement-7-emplacements.md`, livrée en v0.1071).
 
 ## 1. Ce qui a été décidé avec l'utilisateur
@@ -219,9 +219,9 @@ seul vrai choix était donc « quel set je porte ».
 - **Lien avec les sets spécialisés** : les jauges de voie se chargent sur le geste de la voie
   (parade, critique, épines…). Les stats spécialisées des sets alimentent donc directement la
   relique de la même voie.
-- ⚠️ **Le Rempart vengeur (Gardien) se charge aujourd'hui sur le BLOCAGE**, qui reste une stat
-  de base. À voir à la mesure : le passer sur la parade, ou le laisser sur le blocage (tout le
-  monde peut alors le charger).
+- **Rempart vengeur (Gardien) se charge sur la PARADE**, plus sur le blocage (décidé) : le
+  blocage reste une stat de base que toute voie peut avoir, la parade devient la stat du
+  Gardien — sa relique se charge donc avec ses pièces de set.
 
 ## 7. Migration des objets existants
 
@@ -273,9 +273,5 @@ puis les sondes sont supprimées et les chiffres vont dans le commit.
 
 ## 10. Questions ouvertes
 
-Validés : les 8 profils, la robustesse du Colosse, les 8 pouvoirs de trophée (avec les
-corrections Berserker/Assassin du § 3.3). L'équilibrage prendra du temps (§ 8).
-
-1. **Rempart vengeur** (pouvoir de relique du Gardien) : il se charge sur le **blocage**, qui
-   reste une stat de base que tout le monde peut avoir. Le laisser, ou le passer sur la
-   **parade**, qui devient la stat du Gardien ?
+Aucune. Tout est tranché : 8 profils, robustesse du Colosse, 8 pouvoirs de trophée (avec les
+corrections du § 3.3), Rempart vengeur sur la parade. L'équilibrage prendra du temps (§ 8).
