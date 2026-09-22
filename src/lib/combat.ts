@@ -24,6 +24,29 @@ export function seedOf(text: string): number {
   return h || 1;
 }
 
+/** 🔮 Les 12 POUVOIRS DE RELIQUE (refonte équipement, étape 4). Les 8 premiers sont ceux
+ *  des voies ; phénix et second souffle se déclenchent sur une condition, sans jauge. */
+export type RelicPowerId =
+  | 'brasier'
+  | 'rempart'
+  | 'coup_fatal'
+  | 'festin'
+  | 'tempete'
+  | 'riposte_parfaite'
+  | 'ronces'
+  | 'carapace'
+  | 'ouverture'
+  | 'moisson'
+  | 'phenix'
+  | 'second_souffle';
+/** La relique portée, telle que le combat la lit : son pouvoir et sa FORCE (rang × jet ×
+ *  niveau d'objet, cf. `relicForce`). `fast` : Légendaire+, la jauge se remplit plus vite. */
+export interface RelicCharge {
+  id: RelicPowerId;
+  force: number;
+  fast?: boolean;
+}
+
 export interface Combatant {
   name: string;
   pv: number;
@@ -59,7 +82,60 @@ export interface Combatant {
   // Procs LÉGENDAIRES (objets Légendaire+, joueur uniquement) — effets NON-scalants,
   // one-shot par combat. Cf. LEGENDARY_PROCS (items.ts) pour les ids/libellés.
   procs?: ReadonlySet<string>;
+  /** 🔮 Le pouvoir de la relique portée (joueur uniquement). */
+  relic?: RelicCharge;
 }
+
+/** 🔮 RÉGLAGES DES POUVOIRS DE RELIQUE. La jauge va de 0 à `full` ; chaque action qui la
+ *  charge y ajoute sa part (× `fastMult` pour une relique Légendaire+). Les valeurs d'effet
+ *  sont multipliées par la FORCE de la relique. ⚠️ Point de départ : réglé à l'étape 7.
+ *  ⚠️ Aucun pouvoir ne consomme de `rng` : sans relique, un combat seedé est inchangé. */
+export const RELIC = {
+  full: 100,
+  fastMult: 1.25,
+  /** Plafond des pouvoirs qui rendent un STOCK de dégâts, en part des PV max ennemis
+   *  (× force) : sans lui, un boss à beaucoup de PV nourrit un stock qui l'écrase. */
+  stockCapPct: 0.2,
+  brasierCharge: 34, // par tour du héros SOUS le seuil de rage — trois tours
+  brasierMult: 0.8, // une volée × 0,8…
+  brasierMissing: 2, // …× (1 + 2 × part des PV qui manquent)
+  rempartCharge: 25, // par blocage (le stock = les dégâts évités)
+  fatalCharge: 20, // par critique porté
+  fatalBonus: 0.5, // le coup fatal : critique × (1 + 0,5 × force), inesquivable
+  festinScale: 0.1, // 10 % des PV max de soin perdu (plafond du tour) remplissent la jauge
+  tempeteCharge: 25, // par tour du héros une fois l'élan au maximum
+  tempeteMult: 1.5, // l'élan retombe, contre une rafale de 1,5 volée
+  riposteCharge: 34, // par parade ou riposte
+  roncesCharge: 20, // par coup d'épines (le stock = les dégâts renvoyés)
+  carapaceScale: 0.5, // encaisser 50 % de ses PV max remplit la jauge…
+  carapaceShield: 0.12, // …et donne une barrière de 12 % des PV max
+  ouvertureMult: 1.5, // jauge PLEINE au début de chaque combat : 1,5 volée d'entrée…
+  ouvertureCharge: 5, // …puis elle se recharge lentement (5 par tour)
+  moissonCharge: 50, // par monstre abattu (la jauge suit le donjon)
+  moissonBuff: 0.25, // jauge pleine au début d'un combat : +25 % de dégâts pour ce combat
+  phenixBlock: 0.5, // le coup fatal perd 50 % (× force)…
+  phenixMax: 0.9, // …au plus 90 %
+  souffleHeal: 0.25, // sous 30 % PV, une fois : 25 % des PV max (× force)…
+  souffleMax: 0.5, // …au plus 50 %
+} as const;
+
+/** Poids de chaque pouvoir dans la puissance affichée, × la force de la relique (une relique
+ *  plus forte au même pouvoir est donc toujours mieux notée). ⚠️ Point de départ (0,16, la
+ *  valeur des procs légendaires) : mesuré en vrai combat à l'étape 7. */
+export const RELIC_POWER_W: Record<RelicPowerId, { side: 'off' | 'surv'; weight: number }> = {
+  brasier: { side: 'off', weight: 0.16 },
+  rempart: { side: 'surv', weight: 0.16 },
+  coup_fatal: { side: 'off', weight: 0.16 },
+  festin: { side: 'surv', weight: 0.16 },
+  tempete: { side: 'off', weight: 0.16 },
+  riposte_parfaite: { side: 'off', weight: 0.16 },
+  ronces: { side: 'surv', weight: 0.16 },
+  carapace: { side: 'surv', weight: 0.16 },
+  ouverture: { side: 'off', weight: 0.16 },
+  moisson: { side: 'off', weight: 0.16 },
+  phenix: { side: 'surv', weight: 0.16 },
+  second_souffle: { side: 'surv', weight: 0.16 },
+};
 
 // POIDS DE CHAQUE PROC dans `combatPower` (légendaires d'objets ET signatures de set).
 // ⚠️ MESURÉS EN VRAI COMBAT (v0.837) : proc ajouté seul à un build optimisé, boss de palier +
@@ -331,6 +407,11 @@ export function combatPowerRaw(c: Combatant): number {
       if (w?.side === 'off') procOff += w.weight;
       else if (w) procSurv += w.weight;
     }
+  if (c.relic) {
+    const w = RELIC_POWER_W[c.relic.id];
+    if (w.side === 'off') procOff += w.weight * c.relic.force;
+    else procSurv += w.weight * c.relic.force;
+  }
   // offense×survie croît ≈ niveau⁴ → chiffres énormes (dizaines de milliers dès le
   // début). On prend la RACINE : indice toujours monotone/comparable mais à échelle
   // humaine (~niveau², qq centaines au milieu de jeu au lieu de dizaines de milliers).
@@ -396,6 +477,18 @@ export type CombatSkill =
   | 'secondwind'
   | 'executioner'
   | 'vampiric'
+  | 'rp_brasier'
+  | 'rp_rempart'
+  | 'rp_coup_fatal'
+  | 'rp_festin'
+  | 'rp_tempete'
+  | 'rp_riposte_parfaite'
+  | 'rp_ronces'
+  | 'rp_carapace'
+  | 'rp_ouverture'
+  | 'rp_moisson'
+  | 'rp_phenix'
+  | 'rp_second_souffle'
   | 'living_armor'
   | 'scarring'
   | 'vigilance'
@@ -430,19 +523,23 @@ export interface CombatEvent {
    *  lieu d'un tableau vide : un combat en produit ~150, et la plupart des coups sont
    *  ordinaires — on n'alloue que lorsqu'il y a quelque chose à dire. */
   skills?: CombatSkill[];
+  /** 🔮 Jauge de la relique APRÈS cet événement (0..100) — seulement si le héros en porte une. */
+  gauge?: number;
 }
 export interface CombatResult {
   win: boolean;
   rounds: number;
   log: CombatEvent[];
   gold: number; // 0 si défaite
+  /** 🔮 Jauge de la relique en fin de combat (reportée au combat suivant d'un donjon). */
+  gauge?: number;
 }
 
 /** Simule un combat auto tour par tour. `seed` rend le combat reproductible. */
 export function simulateCombat(
   player: Combatant,
   monster: Combatant,
-  opts: { seed: number; goldOnWin: number; startPlayerPv?: number },
+  opts: { seed: number; goldOnWin: number; startPlayerPv?: number; gauge?: number },
 ): CombatResult {
   const rng = mulberry32(opts.seed);
   let pPv = opts.startPlayerPv ?? player.pv;
@@ -458,8 +555,12 @@ export function simulateCombat(
   const has = (p: string): boolean => player.procs?.has(p) ?? false;
   let pTurn = 0; // tours du JOUEUR entamés (Initiative / Œil / Charge / Riposte)
   let mFirstLanded = true; // 1re attaque ennemie qui TOUCHE le joueur (Égide / Rétorsion)
-  let phoenixReady = has('phoenix');
-  let secondWindReady = has('secondwind');
+  // 🔮 Relique : Phénix et Second souffle en pouvoir (force) ou en effet d'avant (fixe).
+  const relic = player.relic;
+  const rid = relic?.id;
+  const rf = relic?.force ?? 0;
+  let phoenixReady = has('phoenix') || rid === 'phenix';
+  let secondWindReady = has('secondwind') || rid === 'second_souffle';
   // Procs de SET (v0.701). ⚠️ Tous DÉTERMINISTES : aucun n'appelle `rng`, sinon deux objets
   // de procs différents feraient diverger un combat seedé — et tous les rejeux animés avec.
   let livingArmorReady = has('living_armor'); // Cuirasse vivante : une barrière, une fois
@@ -486,18 +587,63 @@ export function simulateCombat(
   // mutation, un garde « pas deux de suite » ne pouvait jamais mordre).
   let stunNext = false;
   const monsterCritMult = 1 + (1 - (player.critResist ?? 0)); // ×2 réduit par la résistance
+  /** Une VOLÉE du héros (les coups d'un tour), sans variance : critique moyen, ou entier. */
+  const volley = (critFull: boolean): number =>
+    player.damage *
+    (player.strikes ?? 1) *
+    (1 + (critFull ? critMult - 1 : player.crit * (critMult - 1)));
+  // 🔮 JAUGE DE RELIQUE. Ouverture : pleine au début de CHAQUE combat.
+  let gauge = rid === 'ouverture' ? RELIC.full : Math.min(RELIC.full, opts.gauge ?? 0);
+  let relicStock = 0; // Rempart / Ronces / Festin : ce qui a été accumulé
+  let fatalNext = false; // Coup fatal : le prochain coup du héros
+  let momentumOffset = 0; // Tempête : l'élan retombe à zéro
+  let harvest = 0; // Moisson : bonus de dégâts de CE combat
+  if (rid === 'moisson' && gauge >= RELIC.full) {
+    harvest = RELIC.moissonBuff * rf;
+    gauge = 0;
+  }
+  const push = (e: CombatEvent): void => {
+    if (relic) e.gauge = Math.round(gauge);
+    log.push(e);
+  };
+  /** Remplit la jauge ; `true` si elle est pleine. */
+  const charge = (n: number): boolean => {
+    gauge = Math.min(RELIC.full, gauge + n * (relic?.fast ? RELIC.fastMult : 1));
+    return gauge >= RELIC.full;
+  };
+  /** Un coup de relique : un événement à part, la jauge repart de zéro. `raw` passe par la
+   *  réduction ennemie, sauf un stock (déjà des dégâts subis/évités, comme les épines). */
+  const relicHit = (raw: number, skill: CombatSkill, pierce = false): void => {
+    gauge = 0;
+    if (mPv <= 0) return;
+    const r = Math.max(1, Math.round(pierce ? raw : raw * (1 - (monster.dmgReduction ?? 0))));
+    mPv = Math.max(0, mPv - r);
+    push({
+      round,
+      who: 'player',
+      type: 'hit',
+      damage: r,
+      playerPv: pPv,
+      monsterPv: mPv,
+      skills: [skill],
+    });
+  };
+  /** Vide le stock en un coup, plafonné à une part des PV max ennemis. */
+  const releaseStock = (skill: CombatSkill): void => {
+    const cap = monsterMaxPv * RELIC.stockCapPct * rf;
+    relicHit(Math.min(relicStock * rf, cap), skill, true);
+    relicStock = 0;
+  };
   /** Une RIPOSTE : une volée (les coups d'un tour du héros), sans variance ni tirage.
    *  Critique MOYEN compris ; Riposte affûtée (bouclier) en fait un critique entier. */
   const riposteVolley = (extra: CombatSkill[]): void => {
     if (pPv <= 0 || mPv <= 0) return;
     const sharp = has('whetted');
-    const critPart = sharp ? critMult - 1 : player.crit * (critMult - 1);
-    const volley = player.damage * (player.strikes ?? 1) * (1 + critPart);
-    const r = Math.max(1, Math.round(volley * (1 - (monster.dmgReduction ?? 0))));
+    const r = Math.max(1, Math.round(volley(sharp) * (1 - (monster.dmgReduction ?? 0))));
     mPv = Math.max(0, mPv - r);
     const skills: CombatSkill[] = ['riposte', ...extra];
     if (sharp) skills.push('whetted');
-    log.push({
+    push({
       round,
       who: 'player',
       type: 'hit',
@@ -506,6 +652,9 @@ export function simulateCombat(
       monsterPv: mPv,
       skills,
     });
+    // Riposte parfaite : chaque riposte charge la jauge.
+    if (rid === 'riposte_parfaite' && charge(RELIC.riposteCharge))
+      relicHit(volley(true) * rf, 'rp_riposte_parfaite');
   };
 
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
@@ -525,7 +674,7 @@ export function simulateCombat(
         const tick = Math.max(1, Math.round(bleedPool / COMBAT.bleedTicks));
         bleedPool = Math.max(0, bleedPool - tick);
         mPv = Math.max(0, mPv - tick);
-        log.push({
+        push({
           round,
           who: 'player',
           type: 'hit',
@@ -546,7 +695,28 @@ export function simulateCombat(
     const hits = Math.max(1, strikeCount(atk));
     if (turn === 'player') {
       pTurn++;
-      if (!perHit) pStacks = pTurn - 1; // l'élan monte à chaque tour du héros, pas à chaque coup
+      if (!perHit) pStacks = pTurn - 1 - momentumOffset; // l'élan monte à chaque tour du héros
+      // 🔮 Pouvoirs qui se chargent au fil des tours.
+      if (rid === 'ouverture') {
+        if (gauge >= RELIC.full) relicHit(volley(false) * RELIC.ouvertureMult * rf, 'rp_ouverture');
+        charge(RELIC.ouvertureCharge);
+      } else if (rid === 'brasier') {
+        const rageAt = has('rage_seal') ? COMBAT.rageSealThreshold : COMBAT.rageThreshold;
+        if (pPv / maxPPv < rageAt && charge(RELIC.brasierCharge)) {
+          const missing = 1 - pPv / maxPPv;
+          relicHit(
+            volley(false) * RELIC.brasierMult * rf * (1 + RELIC.brasierMissing * missing),
+            'rp_brasier',
+          );
+        }
+      } else if (rid === 'tempete' && !perHit && pStacks >= momentumCap) {
+        if (charge(RELIC.tempeteCharge)) {
+          momentumOffset = pTurn - 1; // l'élan retombe (il repart de 1 au tour suivant)
+          pStacks = 0;
+          relicHit(volley(false) * RELIC.tempeteMult * rf, 'rp_tempete');
+        }
+      }
+      if (mPv <= 0) break;
     }
     const opening = turn === 'player' && has('initiative') && pTurn <= COMBAT.initiativeTurns;
     // Œil du prédateur : les premiers tours sont inesquivables (prolonge la précision du casque).
@@ -565,6 +735,12 @@ export function simulateCombat(
     const gainHeal = (raw: number): number => {
       const h = Math.max(0, Math.min(raw, healCap - roundHeal));
       roundHeal += h;
+      // Festin : le soin PERDU au plafond du tour devient un stock de dégâts.
+      if (rid === 'festin' && turn === 'player' && raw > h) {
+        relicStock += raw - h;
+        if (charge(((raw - h) / (maxPPv * RELIC.festinScale)) * RELIC.full))
+          releaseStock('rp_festin');
+      }
       return h;
     };
     for (let h = 0; h < hits && pPv > 0 && mPv > 0; h++) {
@@ -573,8 +749,10 @@ export function simulateCombat(
       const mark = (s: CombatSkill) => (skills ??= []).push(s);
       if (turn === 'player') {
         // ── Attaque du JOUEUR ──
-        if (!opening && !eyeOpen && rng() < def.dodge * (1 - (atk.accuracy ?? 0))) {
-          log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
+        const fatal = fatalNext;
+        fatalNext = false;
+        if (!opening && !eyeOpen && !fatal && rng() < def.dodge * (1 - (atk.accuracy ?? 0))) {
+          push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
           continue;
         }
         if (eyeOpen && !opening) mark('predator_eye');
@@ -591,7 +769,20 @@ export function simulateCombat(
           mark('sig_duelliste');
         }
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
-        const cm = thrust ? Math.max(critMult, COMBAT.secretThrustMult) : critMult;
+        if (fatal) {
+          crit = true;
+          mark('rp_coup_fatal');
+        }
+        const cm = fatal
+          ? critMult * (1 + RELIC.fatalBonus * rf)
+          : thrust
+            ? Math.max(critMult, COMBAT.secretThrustMult)
+            : critMult;
+        // Coup fatal : chaque critique porté charge la jauge (pas le coup fatal lui-même).
+        if (crit && !fatal && rid === 'coup_fatal' && charge(RELIC.fatalCharge)) {
+          gauge = 0;
+          fatalNext = true;
+        }
         // Coup de grâce : il ne se déclenche pas, il AMPLIFIE chaque critique (il est déjà
         // dans `critMult`, calculé hors boucle) — donc on le marque sur le coup concerné.
         if (crit && has('sig_assassin')) mark('sig_assassin');
@@ -634,6 +825,10 @@ export function simulateCombat(
           mult += COMBAT.carnageMax * (1 - mPv / monsterMaxPv);
           mark('sig_berserker');
         }
+        if (harvest) {
+          mult += harvest;
+          if (pHits === 0) mark('rp_moisson');
+        }
         if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
@@ -666,7 +861,7 @@ export function simulateCombat(
           mark('quarry');
         }
         pHits++;
-        log.push({
+        push({
           round,
           who: turn,
           type: crit ? 'crit' : 'hit',
@@ -681,7 +876,7 @@ export function simulateCombat(
         const stepped = sidestepReady;
         if (stepped || rng() < def.dodge) {
           sidestepReady = false;
-          log.push({
+          push({
             round,
             who: turn,
             type: 'dodge',
@@ -697,7 +892,9 @@ export function simulateCombat(
         // Parade : le coup est évité et l'ennemi saute son prochain tour.
         if (def.parry && rng() < def.parry) {
           stunNext = true;
-          log.push({
+          if (rid === 'riposte_parfaite' && charge(RELIC.riposteCharge))
+            relicHit(volley(true) * rf, 'rp_riposte_parfaite');
+          push({
             round,
             who: turn,
             type: 'dodge',
@@ -720,8 +917,11 @@ export function simulateCombat(
         }
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
         let dmg = Math.max(1, Math.round(atk.damage * (crit ? monsterCritMult : 1) * variance));
+        let blockedStock = 0;
         if (def.block && rng() < def.block) {
+          const full = dmg;
           dmg = Math.max(1, Math.round(dmg * COMBAT.blockKeep));
+          blockedStock = full - dmg;
           mark('block');
         }
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
@@ -765,6 +965,17 @@ export function simulateCombat(
           mark('start_shield');
         }
         pPv = Math.max(0, pPv - dmg);
+        // Carapace : ce qu'on encaisse se transforme en barrière.
+        if (
+          rid === 'carapace' &&
+          dmg > 0 &&
+          pPv > 0 &&
+          charge((dmg / (maxPPv * RELIC.carapaceScale)) * RELIC.full)
+        ) {
+          shieldLeft += Math.round(maxPPv * RELIC.carapaceShield * rf);
+          gauge = 0;
+          mark('rp_carapace');
+        }
         // Cuirasse vivante : au passage sous 30 % PV, une barrière se forme (une fois).
         if (livingArmorReady && pPv > 0 && pPv / maxPPv < COMBAT.livingArmorThreshold) {
           shieldLeft += Math.round(maxPPv * COMBAT.livingArmorPct);
@@ -774,14 +985,22 @@ export function simulateCombat(
         // Phénix : amortit le coup fatal, une fois.
         if (pPv <= 0 && phoenixReady) {
           // Le coup fatal est amorti : s'il reste mortel, on tombe quand même.
-          pPv = Math.max(0, pBefore - Math.round(dmg * (1 - COMBAT.phoenixBlock)));
+          const block =
+            rid === 'phenix'
+              ? Math.min(RELIC.phenixMax, RELIC.phenixBlock * rf)
+              : COMBAT.phoenixBlock;
+          pPv = Math.max(0, pBefore - Math.round(dmg * (1 - block)));
           phoenixReady = false;
-          mark('phoenix');
+          mark(rid === 'phenix' ? 'rp_phenix' : 'phoenix');
         } else if (pPv > 0 && secondWindReady && pPv / maxPPv < COMBAT.secondWindThreshold) {
           // Second souffle : sous 30 % PV pour la 1re fois → soin.
-          pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.secondWindHealPct));
+          const heal =
+            rid === 'second_souffle'
+              ? Math.min(RELIC.souffleMax, RELIC.souffleHeal * rf)
+              : COMBAT.secondWindHealPct;
+          pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * heal));
           secondWindReady = false;
-          mark('secondwind');
+          mark(rid === 'second_souffle' ? 'rp_second_souffle' : 'secondwind');
         }
         if (atk.lifesteal) {
           const avant = mPv;
@@ -790,8 +1009,10 @@ export function simulateCombat(
         }
         // Épines : le joueur (défenseur) renvoie une part des dégâts reçus.
         if (def.thorns && dmg > 0) {
-          mPv = Math.max(0, mPv - Math.max(1, Math.round(dmg * def.thorns)));
+          const t = Math.max(1, Math.round(dmg * def.thorns));
+          mPv = Math.max(0, mPv - t);
           mark('thorns');
+          if (rid === 'ronces') relicStock += t;
         }
         // Ronces : chaque coup reçu blesse l'ennemi d'une part de SES PV max — les épines
         // ordinaires suivent les dégâts reçus, donc restent muettes face à un colosse.
@@ -799,7 +1020,7 @@ export function simulateCombat(
           mPv = Math.max(0, mPv - Math.max(1, Math.round(monsterMaxPv * COMBAT.bramblesMaxPvPct)));
           mark('sig_epineux');
         }
-        log.push({
+        push({
           round,
           who: turn,
           type: crit ? 'crit' : 'hit',
@@ -808,6 +1029,12 @@ export function simulateCombat(
           monsterPv: mPv,
           ...(skills ? { skills } : {}),
         });
+        // 🔮 Rempart vengeur / Éclat de ronces : le stock part quand la jauge est pleine.
+        if (rid === 'rempart' && blockedStock > 0) {
+          relicStock += blockedStock;
+          if (charge(RELIC.rempartCharge)) releaseStock('rp_rempart');
+        } else if (rid === 'ronces' && def.thorns && dmg > 0 && charge(RELIC.roncesCharge))
+          releaseStock('rp_ronces');
         // Riposte : après un coup reçu (bloqué ou non), chance de contre-attaquer aussitôt.
         // UNE VOLÉE (les coups d'un tour du héros), sans critique ni variance : elle ne tire
         // au hasard que la chance. ⚠️ Un seul coup ne valait RIEN à haut niveau, où le héros
@@ -827,7 +1054,15 @@ export function simulateCombat(
   if (mPv <= 0 && pPv > 0) win = true;
   else if (pPv <= 0) win = false;
   else win = pPv / maxPPv > mPv / monsterMaxPv; // timeout → au % de vie
-  return { win, rounds: round, log, gold: win ? opts.goldOnWin : 0 };
+  // Moisson : chaque monstre abattu charge la jauge, qui suit le donjon.
+  if (win && rid === 'moisson') charge(RELIC.moissonCharge);
+  return {
+    win,
+    rounds: round,
+    log,
+    gold: win ? opts.goldOnWin : 0,
+    ...(relic ? { gauge: Math.round(gauge) } : {}),
+  };
 }
 
 /** Part des PV max rendue ENTRE deux combats : la base du lieu + la régénération de
@@ -877,13 +1112,16 @@ export function simulateDungeon(
   let gold = 0;
   let defeated = 0;
   const fights: DungeonFight[] = [];
+  let gauge = 0; // 🔮 la jauge de relique suit le donjon, comme les PV
   for (let i = 0; i < foes.length; i++) {
     const foe = foes[i]!;
     const r = simulateCombat(player, foe.combatant, {
       seed: opts.seed + i * 1000,
       goldOnWin: foe.gold,
       startPlayerPv: pv,
+      gauge,
     });
+    gauge = r.gauge ?? gauge;
     fights.push({ monster: foe.combatant.name, win: r.win, result: r, maxPv: foe.combatant.pv });
     pv = r.log.length ? r.log[r.log.length - 1]!.playerPv : pv;
     if (!r.win) break;

@@ -524,7 +524,7 @@ describe('rollDrop', () => {
   it('nombre d’affixes = affixCountForRarity (multi-affixe, Phase 2)', () => {
     for (let s = 1; s <= 200; s++) {
       const d = rollDrop(mulberry32(s), { cleared: true, defeated: 3, level: 60, luck: 1 });
-      if (!d) continue;
+      if (!d || d.power) continue; // une relique porte un pouvoir, pas d'affixe (étape 4)
       const n = affixCountForRarity(d.rarity);
       const got = 1 + (d.effect2 ? 1 : 0) + (d.effect3 ? 1 : 0);
       expect(got).toBe(n);
@@ -724,16 +724,22 @@ describe('sets d’équipement (voie)', () => {
     const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10, preferSlot: 'boots' });
     expect(piece.slot).toBe('boots');
   });
-  it('un set n’a PAS de relique : une pièce de set tombe toujours hors relique', () => {
+  it('un set n’a PAS de relique : un boss donne la RELIQUE DE LA VOIE, hors set, avec son pouvoir', () => {
     expect(SET_SLOTS).not.toContain('relic');
+    let reliques = 0;
     for (let s = 1; s <= 200; s++) {
       const p = rollSetPiece(mulberry32(s), {
         setId: BERS,
         level: 30,
         preferSlot: s % 2 ? 'relic' : undefined,
       });
-      expect(SET_SLOTS).toContain(p.slot);
+      if (p.slot === 'relic') {
+        reliques++;
+        expect(p.setId).toBeUndefined(); // elle ne compte pas dans le set
+        expect(p.power).toBe('brasier'); // toujours le pouvoir de sa voie
+      } else expect(p.setId).toBe(BERS);
     }
+    expect(reliques).toBeGreaterThan(100); // les 100 demandées + ~1 sur 7 des autres
   });
   it('la stat PRINCIPALE d’une pièce de set est une stat principale de son emplacement', () => {
     // v0.803 : le thème vit dans les PALIERS, plus dans les pièces. Refonte équipement : la
@@ -859,7 +865,7 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     return drops;
   }
   it('affixes selon la rareté : Commun/Inhabituel 1, Magique/Rare 2, Épique+ 3', () => {
-    const drops = scan(80, 1); // large éventail de raretés
+    const drops = scan(80, 1).filter((d) => !d.power); // les reliques n'ont plus d'affixe
     for (const d of drops) {
       const got = 1 + (d.effect2 ? 1 : 0) + (d.effect3 ? 1 : 0);
       expect(got).toBe(affixCountForRarity(d.rarity));
@@ -1196,6 +1202,7 @@ describe('pieces de set — multi-affixe (correctif : les sets ne valaient jamai
         luck: 0.9,
         playerLevel: 40,
       });
+      if (p.power) continue; // la relique de la voie : un pouvoir, pas d'affixe
       expect(nAff(p)).toBe(affixCountForRarity(p.rarity));
     }
   });

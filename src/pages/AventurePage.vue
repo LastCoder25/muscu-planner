@@ -3052,6 +3052,7 @@ import {
   setTierLabel,
   rollJet,
   legendaryOf,
+  relicPowerText,
   magicFindLuck,
   itemLevelMult,
   round1,
@@ -3205,6 +3206,7 @@ function affixText(
   return effectLabelFor(e.type, round1(e.value * itemLevelMult(it.level)));
 }
 function itemAffixLines(it: Item): string[] {
+  if (it.power) return [relicPowerText(it)];
   const lines = [affixText(it, it.effect)];
   if (it.effect2) lines.push(affixText(it, it.effect2));
   if (it.effect3) lines.push(affixText(it, it.effect3));
@@ -4761,6 +4763,7 @@ async function enterArena() {
         spread: 1,
         luck: Math.min(1, rw.luck + (lucky ? 0.5 : 0) + mfLuck()),
         playerLevel: c.value.level.level,
+        relicPower: char.row?.equipped?.relic?.power, // 🔮 affinité 1/3
       });
       if (rolled) {
         const dr: Item = { ...rolled, id: crypto.randomUUID() };
@@ -4857,6 +4860,7 @@ async function explore(d: Dungeon) {
         spread: 1, // le donjon peut lâcher un cran sous son niveau (fourrage à upgrader)
         luck: dropLuck,
         playerLevel: c.value.level.level,
+        relicPower: char.row?.equipped?.relic?.power, // 🔮 affinité 1/3
       });
       if (rolled) {
         const dr: Item = { ...rolled, id: crypto.randomUUID() };
@@ -4974,6 +4978,7 @@ function bossLockReason(b: MilestoneBoss): string {
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
+  if (it.power) return relicPowerText(it);
   // OBJETS ET FAMILIERS : magnitude 100 % définie par le drop (grade × qualité, bakée
   // dans effect.value) → libellé direct, 1 décimale (la qualité reste visible, #6).
   const parts = [affixText(it, it.effect)];
@@ -4985,6 +4990,7 @@ function itemEffects(it: Omit<Item, 'id'>): string {
 }
 // Stats d'un objet en LIGNES séparées (une stat par ligne) + proc légendaire → affichage clair.
 function itemStatLines(it: Omit<Item, 'id'>): string[] {
+  if (it.power) return [relicPowerText(it)];
   const lines = [affixText(it, it.effect)];
   if (it.effect2) lines.push(affixText(it, it.effect2));
   if (it.effect3) lines.push(affixText(it, it.effect3));
@@ -5223,6 +5229,7 @@ async function fightEndless() {
           level: endlessDropLevel(tier),
           luck: Math.min(1, 0.6 + (lucky ? 0.4 : 0) + mfLuck()),
           playerLevel: c.value.level.level,
+          relicPower: char.row?.equipped?.relic?.power, // 🔮 affinité 1/3
         });
       }
       if (rolled) {

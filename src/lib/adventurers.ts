@@ -24,6 +24,7 @@
 // jamais le frein, le Panthéon l'est toujours.
 import {
   legendaryOf,
+  relicPowerOf,
   SET_SIGNATURES,
   prestigeRankIndex,
   RANK_ORDER,
@@ -119,7 +120,19 @@ const ADV_SIGNATURE_INFO: Partial<
  * ⚠️ **EXHAUSTIF PAR CONSTRUCTION** : ajouter une `CombatSkill` sans dire où la lire ne
  * compile plus. C'est le patron des `Record<PoiType, …>`.
  */
-const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set'> = {
+const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set' | 'relic'> = {
+  rp_brasier: 'relic',
+  rp_rempart: 'relic',
+  rp_coup_fatal: 'relic',
+  rp_festin: 'relic',
+  rp_tempete: 'relic',
+  rp_riposte_parfaite: 'relic',
+  rp_ronces: 'relic',
+  rp_carapace: 'relic',
+  rp_ouverture: 'relic',
+  rp_moisson: 'relic',
+  rp_phenix: 'relic',
+  rp_second_souffle: 'relic',
   execute: 'sig',
   rage: 'sig',
   momentum: 'sig',
@@ -177,6 +190,11 @@ export function combatSkillInfo(skill: CombatSkill): { emoji: string; name: stri
     // pour la stat et pour son déclenchement, donc aucune table de correspondance à tenir.
     const info = ADV_SIGNATURE_INFO[(skill + '_pct') as EffectType];
     return info ? { emoji: info.emoji, name: info.name } : undefined;
+  }
+  // 🔮 Pouvoir de relique : l'id de la compétence est `rp_` + celui du pouvoir.
+  if (where === 'relic') {
+    const p = relicPowerOf(skill.slice('rp_'.length));
+    return p ? { emoji: p.emoji, name: p.name } : undefined;
   }
   const src = where === 'proc' ? legendaryOf({ legendary: skill }) : SET_SIG_BY_ID.get(skill);
   return src ? { emoji: src.emoji, name: src.name } : undefined;

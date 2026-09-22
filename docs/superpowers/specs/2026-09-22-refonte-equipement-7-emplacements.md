@@ -418,6 +418,38 @@ pour progresser. Trois conditions :
 À mesurer au point 11 du § 10 : nombre de niveaux pour passer ta relique au rang
 supérieur, avec le même pouvoir. Cible : le même rythme que les autres emplacements.
 
+### ✅ Livré à l'étape 4 (2026-09-22)
+
+- **Moteur** (`simulateCombat`, `RELIC`) : jauge de 0 à 100, reportée d'un combat à l'autre
+  dans un donjon et dans le Labyrinthe (simulé ET joué), et inscrite sur chaque événement du
+  journal (`CombatEvent.gauge`) pour l'animation. Aucun pouvoir ne consomme de tirage : sans
+  relique, un combat seedé est inchangé (empreintes d'avant toujours vertes).
+- **Ce qui charge chaque jauge** : Brasier (chaque tour sous le seuil de rage), Rempart
+  vengeur (chaque blocage, stock des dégâts évités), Coup fatal (chaque critique), Festin (le
+  soin perdu au plafond du tour), Tempête (chaque tour élan au maximum), Riposte parfaite
+  (parade ou riposte), Éclat de ronces (chaque coup d'épines, stock des dégâts renvoyés),
+  Carapace (les dégâts encaissés), Ouverture (pleine au début de chaque combat, puis 5 par
+  tour), Moisson (50 par monstre abattu). Phénix et Second souffle : sans jauge.
+- **Force** = racine de (rang × jet × niveau d'objet) : un pouvoir agit en pourcentages
+  entiers, une force linéaire aurait rendu une relique primordiale écrasante. Strictement
+  croissante sur chaque axe (test pour les 12 pouvoirs). Légendaire+ : jauge ×1,25.
+- **Plafond des stocks** (Rempart, Ronces, Festin) : 20 % des PV max de l'ennemi × force.
+- **Tirage** : une relique trouvée porte un pouvoir, aucune stat, aucun effet légendaire ;
+  affinité 1/3 pour le pouvoir de la relique portée, branchée sur les 6 drops JOUÉS
+  (donjons, boss, Portail sans fin, Labyrinthe). ⚠️ Pas sur les drops d'expédition idle ni
+  de siège (libs sans accès à l'équipement porté) : à brancher à l'étape 8 si besoin.
+- **Relique de voie** : un boss tire les 6 emplacements du set ET la relique (1 chance sur
+  7). Elle ne compte pas dans le set et porte toujours le pouvoir de sa voie.
+- **Optimiseur** : le tri par dominance compare les reliques à pouvoir ÉGAL et sur leur
+  force (sans ça, toutes les reliques paraissaient identiques : 15/40 au test d'optimalité).
+- **Reste à l'étape 7** : poids des 12 pouvoirs dans la puissance (0,16 × force pour
+  l'instant) et leurs réglages, mesurés avec ET sans la stat qui les charge ; rythme de
+  remplacement d'une relique au même pouvoir (point 11 du § 10).
+- **Reste à l'étape 8** : les reliques déjà possédées gardent leurs stats tant qu'elles ne
+  sont pas converties. **Étape 9** : la jauge à l'écran (le journal la porte déjà).
+- Mutations : 21, 21 rouges (après avoir renforcé 3 tests : Coup fatal inesquivable,
+  retombée de la Tempête, Phénix qui suit la force).
+
 ## 7 bis. Le trophée (boss entre amis) — à revoir aussi (demande du 2026-09-22)
 
 Le trophée est une 8ᵉ pièce portée, à part : il ne tombe pas en donjon, son rang est celui

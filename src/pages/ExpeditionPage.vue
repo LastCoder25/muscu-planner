@@ -804,6 +804,7 @@ const roomFx = ref<{
 } | null>(null);
 const stageFights = ref<StageFight[]>([]);
 const stageStartPv = ref(0); // PV du joueur AU DÉBUT du combat animé (attrition)
+const relicGauge = ref(0); // 🔮 jauge de relique, reportée d'un combat à l'autre du run
 const fxDone = ref(false); // combat : résultat révélé à la fin de l'animation
 const combatSkipped = ref(false); // AUTO rapide : animation de combat sautée (résultat direct)
 const playerProfile = computed(() => character.value.profile);
@@ -823,6 +824,7 @@ onMounted(async () => {
   // tant que le run n'a pas commencé (uniquement la salle de départ visitée).
   if (run.value.visited.length <= 1)
     run.value = startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv));
+  relicGauge.value = 0;
 });
 
 const floor = computed(() => dungeon.value[run.value.floor]!);
@@ -947,7 +949,9 @@ function fightRoom(id: number, isBoss: boolean) {
     seed: roomSeed(id),
     goldOnWin: goldWin,
     startPlayerPv: run.value.pv,
+    gauge: relicGauge.value,
   });
+  relicGauge.value = res.gauge ?? relicGauge.value;
   const finalPv = res.log.length ? res.log[res.log.length - 1]!.playerPv : run.value.pv;
   run.value = { ...run.value, pv: finalPv, status: finalPv <= 0 ? 'dead' : run.value.status };
   if (res.win) {
@@ -1012,6 +1016,7 @@ function openChest(id: number) {
       luck,
       spread: 1,
       playerLevel: heroLevel.value,
+      relicPower: char.row?.equipped?.relic?.power, // 🔮 affinité 1/3
     });
   const item = drop ? { ...drop, id: crypto.randomUUID() } : null;
   dust.value += 3 + grade.dustBonus;
@@ -1068,6 +1073,7 @@ function openVault(id: number) {
       level: runDropLevel() + 2,
       luck: Math.min(1, runLuck() + 0.35),
       playerLevel: heroLevel.value,
+      relicPower: char.row?.equipped?.relic?.power, // 🔮 affinité 1/3
     });
     if (d && (!best || RARITY_RANK[d.rarity] > RARITY_RANK[best.rarity])) best = d;
   }
@@ -1237,6 +1243,7 @@ function rollTreasure(): Item | null {
       luck,
       spread: 0,
       playerLevel: heroLevel.value,
+      relicPower: char.row?.equipped?.relic?.power, // 🔮 affinité 1/3
     });
     if (cand && (!best || tierIndexOf(cand) > tierIndexOf(best))) best = cand;
   }
@@ -1247,6 +1254,7 @@ function rollTreasure(): Item | null {
 function freshRun() {
   dungeon.value = generateDungeon(seed.value, floorsWanted.value);
   run.value = startRun(floorsWanted.value, dungeon.value[0]!, fighter.value.pv || 140);
+  relicGauge.value = 0;
   gold.value = 0;
   dust.value = 0;
   loot.value = [];
@@ -1335,6 +1343,7 @@ function bossWinnableNow(): boolean {
     seed: roomSeed(bossRoom.id),
     goldOnWin: 0,
     startPlayerPv: run.value.pv,
+    gauge: relicGauge.value,
   }).win;
 }
 

@@ -317,8 +317,11 @@ describe('boss — pierres d’invocation 🔮', () => {
       expect(avec.plus2, `niveau ${L} : deux rangs au-dessus`).toBe(0);
       // v0.876 : plus aucun rang au-dessus, Autel ou pas.
       expect(avec.plus1, `niveau ${L} : un rang au-dessus`).toBe(0);
-      // …et il sert à quelque chose : un meilleur jet.
-      expect(avec.jet, `niveau ${L}`).toBeGreaterThan(sans.jet + 0.02);
+      // …et il sert à quelque chose : un meilleur jet. ⚠️ +0,015 et non +0,02 depuis la relique
+      // de voie (étape 4) : une pièce sur 7 suit un autre chemin de tirage, et au niveau 40 le
+      // gain mesuré va de +0,017 à +0,026 selon la graine (4 graines) — la graine du test
+      // tombait à +0,0197, sous l'ancien seuil, par pur échantillonnage.
+      expect(avec.jet, `niveau ${L}`).toBeGreaterThan(sans.jet + 0.015);
     }
   });
 });

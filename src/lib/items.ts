@@ -1,6 +1,16 @@
 // items.ts — équipement RPG (Phase 2c). RÈGLE : l'équipement ne donne PAS de
 // stats (elles viennent du sport) — il donne des EFFETS de gameplay. Pur/testable.
-import { COMBAT, playerCombatant, combatPower, mulberry32, seedOf, type Combatant } from './combat';
+import {
+  COMBAT,
+  RELIC,
+  playerCombatant,
+  combatPower,
+  mulberry32,
+  seedOf,
+  type Combatant,
+  type RelicCharge,
+  type RelicPowerId,
+} from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
 import { PROCEDURAL, refBalancedStat } from '@/lib/proceduralContent';
 import {
@@ -151,6 +161,9 @@ export interface Item {
   fxp?: number; // familier : progression d'INFUSION vers le prochain pas de tier (rang+qualité)
   enchant?: number; // ENCHANT +N (façon L2) — magnitude par-dessus le grade. Défaut 0. (étape 1)
   legendary?: string; // proc LÉGENDAIRE (id, cf. LEGENDARY_PROCS) — Légendaire+ uniquement, non-scalant
+  /** 🔮 RELIQUE (étape 4) : le POUVOIR qu'elle porte (cf. RELIC_POWERS). Une relique à pouvoir
+   *  ne donne AUCUNE stat : son `effect` n'est plus lu (`aggregateEffects` l'ignore). */
+  power?: RelicPowerId;
   // ── DRESSAGE (familiers uniquement, cf. FAM_TRAIN) : UNE seule expérience (v0.805).
   xp?: number; // gagnée partout où il se bat : donjon (héros), convoi et défense (aventurier)
   // ⚠️ LEGACY : les deux carrières d’avant la v0.805. Relues par `famXp`, jamais écrites.
@@ -550,6 +563,170 @@ export function affixCountForRarity(rarity: Rarity): number {
   const i = RARITY_RANK[rarity] ?? 0;
   return i <= 1 ? 1 : i <= 3 ? 2 : 3;
 }
+
+// ─── 🔮 POUVOIRS DE RELIQUE (refonte équipement, étape 4) ─────────────────────
+// La relique ne donne plus de stats : elle porte UN pouvoir, une attaque spéciale qui se
+// déclenche seule quand sa jauge est pleine (`simulateCombat`). Rang, jet et niveau d'objet
+// en règlent la FORCE ; à partir de Légendaire, la jauge se remplit aussi plus vite.
+export interface RelicPowerDef {
+  id: RelicPowerId;
+  name: string;
+  emoji: string;
+  /** La voie dont c'est le pouvoir (sa relique de set tombe des boss). */
+  voie?: string;
+  /** Ce qui charge la jauge — en toutes lettres. */
+  charge: string;
+  /** Ce qu'il fait, chiffré à la force de la relique. */
+  effect: (force: number) => string;
+}
+const pctOf = (x: number) => `${Math.round(x * 100)} %`;
+export const RELIC_POWERS: RelicPowerDef[] = [
+  {
+    id: 'brasier',
+    name: 'Brasier',
+    emoji: '🔥',
+    voie: 'berserker',
+    charge: 'se charge vite, mais seulement sous le seuil de rage',
+    effect: (f) =>
+      `une frappe de ${(RELIC.brasierMult * f).toFixed(1)} volée, jusqu’à ×${1 + RELIC.brasierMissing} selon les PV qui te manquent`,
+  },
+  {
+    id: 'rempart',
+    name: 'Rempart vengeur',
+    emoji: '🛡️',
+    voie: 'gardien',
+    charge: 'chaque blocage (les dégâts évités s’accumulent)',
+    effect: (f) =>
+      `renvoie ${pctOf(f)} des dégâts évités (au plus ${pctOf(RELIC.stockCapPct * f)} des PV max de l’ennemi)`,
+  },
+  {
+    id: 'coup_fatal',
+    name: 'Coup fatal',
+    emoji: '🎯',
+    voie: 'assassin',
+    charge: 'chaque coup critique',
+    effect: (f) =>
+      `le coup suivant est un critique ×${(1 + RELIC.fatalBonus * f).toFixed(2)} plus fort, inesquivable`,
+  },
+  {
+    id: 'festin',
+    name: 'Festin',
+    emoji: '🩸',
+    voie: 'vampire',
+    charge: 'le soin perdu au plafond du vol de vie',
+    effect: (f) =>
+      `ce soin perdu revient en dégâts (×${f.toFixed(2)}, au plus ${pctOf(RELIC.stockCapPct * f)} des PV max de l’ennemi)`,
+  },
+  {
+    id: 'tempete',
+    name: 'Tempête',
+    emoji: '🌀',
+    voie: 'frenetique',
+    charge: 'chaque tour une fois ton élan au maximum',
+    effect: (f) =>
+      `l’élan retombe, contre une rafale de ${(RELIC.tempeteMult * f).toFixed(1)} volée`,
+  },
+  {
+    id: 'riposte_parfaite',
+    name: 'Riposte parfaite',
+    emoji: '🤺',
+    voie: 'duelliste',
+    charge: 'chaque parade ou riposte',
+    effect: (f) => `une riposte critique entière de ${f.toFixed(1)} volée`,
+  },
+  {
+    id: 'ronces',
+    name: 'Éclat de ronces',
+    emoji: '🌵',
+    voie: 'epineux',
+    charge: 'chaque coup d’épines (les dégâts renvoyés s’accumulent)',
+    effect: (f) =>
+      `une explosion de ${pctOf(f)} du stock (au plus ${pctOf(RELIC.stockCapPct * f)} des PV max de l’ennemi)`,
+  },
+  {
+    id: 'carapace',
+    name: 'Carapace',
+    emoji: '🐢',
+    voie: 'colosse',
+    charge: 'les dégâts que tu encaisses',
+    effect: (f) => `une barrière de ${pctOf(RELIC.carapaceShield * f)} de tes PV max`,
+  },
+  {
+    id: 'ouverture',
+    name: 'Ouverture',
+    emoji: '⚡',
+    charge: 'pleine au début de chaque combat, puis lentement',
+    effect: (f) =>
+      `une frappe de ${(RELIC.ouvertureMult * f).toFixed(1)} volée dès ton premier tour`,
+  },
+  {
+    id: 'moisson',
+    name: 'Moisson',
+    emoji: '⚰️',
+    charge: 'chaque monstre abattu dans un donjon',
+    effect: (f) => `le combat suivant : +${pctOf(RELIC.moissonBuff * f)} de dégâts`,
+  },
+  {
+    id: 'phenix',
+    name: 'Phénix',
+    emoji: '🐦‍🔥',
+    charge: 'sans jauge : le premier coup qui te tuerait',
+    effect: (f) =>
+      `ce coup perd ${pctOf(Math.min(RELIC.phenixMax, RELIC.phenixBlock * f))} de ses dégâts`,
+  },
+  {
+    id: 'second_souffle',
+    name: 'Second souffle',
+    emoji: '💨',
+    charge: 'sans jauge : la première fois sous 30 % de PV',
+    effect: (f) =>
+      `tu récupères ${pctOf(Math.min(RELIC.souffleMax, RELIC.souffleHeal * f))} de tes PV max`,
+  },
+];
+const RELIC_POWER_BY_ID: Record<string, RelicPowerDef> = Object.fromEntries(
+  RELIC_POWERS.map((p) => [p.id, p]),
+);
+export function relicPowerOf(id: string | undefined): RelicPowerDef | undefined {
+  return id ? RELIC_POWER_BY_ID[id] : undefined;
+}
+/** Le pouvoir de la relique d'une voie (celle de son set). */
+export function voieRelicPower(voie: string): RelicPowerId | undefined {
+  return RELIC_POWERS.find((p) => p.voie === voie)?.id;
+}
+/** 🔮 FORCE d'une relique : rang × jet × niveau d'objet, comme une stat — mais en RACINE,
+ *  parce qu'un pouvoir agit en pourcentages entiers (une relique primordiale × 6 retirerait
+ *  la moitié d'un boss d'un coup). Strictement croissante sur chaque axe (test) : deux
+ *  reliques au même pouvoir se comparent comme deux armes. */
+export function relicForce(it: { rarity: Rarity; roll?: number; level?: number }): number {
+  return Math.sqrt(rankRollMult(it.rarity, it.roll ?? 0) * itemLevelMult(it.level ?? 1));
+}
+/** Ce que le combat lit d'une relique portée (`undefined` sans pouvoir). */
+export function relicCharge(it: Item | undefined): RelicCharge | undefined {
+  if (!it?.power) return undefined;
+  return {
+    id: it.power,
+    force: relicForce(it),
+    ...(RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK ? { fast: true } : {}),
+  };
+}
+/** Le pouvoir d'une relique en toutes lettres, chiffré (« 🔥 Brasier — … »). */
+export function relicPowerText(it: Omit<Item, 'id'>): string {
+  const p = relicPowerOf(it.power);
+  if (!p) return '';
+  const fast = RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK ? ' · jauge plus rapide' : '';
+  return `${p.emoji} ${p.name} — ${p.effect(relicForce(it))} (${p.charge}${fast})`;
+}
+/** Part des reliques trouvées qui portent le pouvoir de la relique ÉQUIPÉE : sans elle, sur
+ *  12 pouvoirs, améliorer SA relique à pouvoir égal serait trop rare (spec § 7). */
+export const RELIC_AFFINITY = 1 / 3;
+/** Tire le pouvoir d'une relique trouvée : 1 chance sur 3 celui de la relique portée. */
+export function rollRelicPower(rng: () => number, equippedPower?: string): RelicPowerId {
+  if (equippedPower && relicPowerOf(equippedPower) && rng() < RELIC_AFFINITY)
+    return equippedPower as RelicPowerId;
+  return RELIC_POWERS[Math.floor(rng() * RELIC_POWERS.length)]!.id;
+}
+/** Une relique neutre n'a pas de stat : son `effect` obligatoire vaut 0, et n'est pas lu. */
+const RELIC_NO_STAT: ItemEffect = { type: 'max_pv_pct', value: 0 };
 
 // ─── EFFETS LÉGENDAIRES (Phase 3, façon Diablo) ──────────────────────────────
 // Procs NON-scalants (une valeur fixe, pas d'axe niveau/jet), 1 par objet Légendaire+,
@@ -1649,6 +1826,8 @@ export function rollDrop(
     luck?: number;
     rollFloor?: number; // 0..1 : plancher de qualité de roll (Autel des boss) → meilleures étoiles
     playerLevel?: number; // cap anti-runaway : le rang est plafonné à playerLevel + marge
+    /** Pouvoir de la relique PORTÉE : une relique trouvée a 1 chance sur 3 de le porter. */
+    relicPower?: string;
   },
 ): Omit<Item, 'id'> | null {
   if (opts.defeated <= 0) return null;
@@ -1672,6 +1851,21 @@ export function rollDrop(
     floorRanks,
     opts.playerLevel,
   );
+  // 🔮 RELIQUE : un pouvoir, aucune stat (étape 4). Rang, jet et niveau d'objet en règlent la force.
+  if (slot === 'relic') {
+    const power = rollRelicPower(rng, opts.relicPower);
+    return {
+      slot,
+      name: `${pick(rng, NAMES.relic)} « ${relicPowerOf(power)!.name} »`,
+      emoji: SLOT_EMOJI.relic,
+      rarity,
+      level: lvl,
+      baseLevel: lvl,
+      effect: RELIC_NO_STAT,
+      power,
+      roll,
+    };
+  }
   // value = base × intervalle du RANG selon le JET (rankRollMult). La PROFONDEUR est encodée
   // par le RANG (pyramide) ; le jet (roll) balaie tout l'intervalle du rang → chasse au bon jet.
   const w = slotWeight(slot);
@@ -1743,9 +1937,10 @@ export function rollSetPiece(
   },
 ): Omit<Item, 'id'> {
   const set = SET_BY_ID[opts.setId];
-  // Un set n'a pas de relique : une demande de relique retombe sur un emplacement de set.
+  // Les 6 emplacements du set, plus la RELIQUE DE LA VOIE (une chance sur 7) : elle ne compte
+  // pas dans le set mais porte toujours le pouvoir de sa voie — la source sûre de ce pouvoir.
   const slot =
-    opts.preferSlot && SET_SLOTS.includes(opts.preferSlot) ? opts.preferSlot : pick(rng, SET_SLOTS);
+    opts.preferSlot && SLOTS.includes(opts.preferSlot) ? opts.preferSlot : pick(rng, SLOTS);
   // ⚠️ Depuis la v0.875 le rang suit la règle des familiers (`rollTier`) : le +0,35 et l'Autel
   // ne décalent plus le pic, ils deviennent de la chance (meilleur jet, un peu plus de +1 rang).
   // Historique : le RANG d'une pièce de set = pyramide centrée sur le PALIER du boss, LÉGÈREMENT remontée
@@ -1763,6 +1958,24 @@ export function rollSetPiece(
     opts.playerLevel,
     setPiecesPerLevel,
   );
+  // 🔮 La RELIQUE de la voie : pas une pièce du set (aucun `setId`), mais toujours son pouvoir.
+  if (slot === 'relic') {
+    const voie = opts.setId.startsWith('voie:') ? opts.setId.slice('voie:'.length) : '';
+    const power = voieRelicPower(voie) ?? rollRelicPower(rng);
+    const center = opts.playerLevel != null ? Math.min(opts.level, opts.playerLevel) : opts.level;
+    const lvl = rollItemLevel(rng, center, opts.luck ?? 0);
+    return {
+      slot,
+      name: `${pick(rng, NAMES.relic)} « ${relicPowerOf(power)!.name} »`,
+      emoji: set?.emoji ?? SLOT_EMOJI.relic,
+      rarity,
+      level: lvl,
+      baseLevel: lvl,
+      effect: RELIC_NO_STAT,
+      power,
+      roll,
+    };
+  }
   // ⚠️ L’AFFIXE #1 EST LA STAT MAJEURE NATURELLE DE L’EMPLACEMENT, comme un drop (v0.803,
   // mesuré). Il était tiré dans le THÈME du set selon l’emplacement : les voies défensives
   // tombaient sur des PV et de la réduction, les voies offensives sur de l’exécution, de la
@@ -2654,7 +2867,7 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   // ses valeurs (`TROPHY_K`), pas dans un multiplicateur à part.
   for (const slot of [...SLOTS, TROPHY_SLOT]) {
     const it = equipped[slot];
-    if (!it) continue;
+    if (!it || it.power) continue; // une relique à pouvoir ne donne aucune stat
     // OBJETS : magnitude = valeur bakée (rareté × jet) × MULTIPLICATEUR DE NIVEAU (ilvl,
     // v0.583) → un même objet farmé plus profond est plus fort. Valeur PRÉCISE (float).
     const lm = itemLevelMult(it.level);
@@ -2822,6 +3035,7 @@ export function playerWithGear(
     thorns: e.thornsPct + (extra.thornsPct ?? 0),
     ...(regen > 0 ? { regen } : {}),
     ...(procs.size ? { procs } : {}),
+    ...(equipped.relic?.power ? { relic: relicCharge(equipped.relic) } : {}),
     ...(legacy ? { momentumPerHit: true } : {}),
     ...newStats(e, extra),
   };
@@ -2861,7 +3075,10 @@ export function trainingMult(equipped: Equipped, voie?: string | null): number {
 export function elagueDomines(items: Item[]): Item[] {
   const groupes = new Map<string, Item[]>();
   for (const it of items) {
-    const k = `${it.slot}|${it.setId ?? ''}|${it.legendary ?? ''}`;
+    // 🔮 Une relique se compare à pouvoir ÉGAL : deux pouvoirs ne se mettent pas sur la même
+    // échelle (et sans stat, toutes les reliques paraîtraient identiques — mesuré, le test
+    // d'optimalité tombait de 39 à 15 sur 40 : une seule relique survivait au tri).
+    const k = `${it.slot}|${it.setId ?? ''}|${it.legendary ?? ''}|${it.power ?? ''}`;
     (groupes.get(k) ?? groupes.set(k, []).get(k)!).push(it);
   }
   const vecteur = (it: Item): Record<string, number> => {
@@ -2877,6 +3094,11 @@ export function elagueDomines(items: Item[]): Item[] {
     // plus faibles mais de niveau plus haut était jugée dominée — et elle gagnait pourtant
     // par le bonus (v0.803, trouvé par le test d’optimalité locale).
     if (it.setId) v['__set'] = (RARITY_MULT[it.rarity] ?? 1) * itemLevelMult(it.level ?? 1);
+    // 🔮 La force du pouvoir, et la jauge rapide (Légendaire+) : deux axes, pas un.
+    if (it.power) {
+      v['__power'] = relicForce(it);
+      v['__fast'] = RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK ? 1 : 0;
+    }
     return v;
   };
   const out: Item[] = [];
