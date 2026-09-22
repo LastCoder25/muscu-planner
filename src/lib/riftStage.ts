@@ -65,7 +65,7 @@ export const RIFT_STAGE = {
     { dx: 0, dy: 0 },
     { dx: -0.03, dy: -0.13 },
     { dx: -0.03, dy: 0.13 },
-    // ⚠️ SECONDE LIGNE (v0.1035) : les équipes ne sont plus bornées à 3. Derrière la
+    // ⚠️ SECONDE LIGNE (v0.1038) : les équipes ne sont plus bornées à 3. Derrière la
     // première, en quinconce, pour ne recouvrir personne. Au-delà de sept membres, le plateau
     // n'en montre que sept (`riftPartySize`) — le combat, lui, compte tout le monde.
     { dx: -0.08, dy: -0.065 },

@@ -49,7 +49,7 @@ export function partyLegMin(
 }
 
 /**
- * 👥 LA TAILLE D'UNE ÉQUIPE N'EST PLUS BORNÉE QUE PAR LE PANTHÉON (v0.1035, décision de
+ * 👥 LA TAILLE D'UNE ÉQUIPE N'EST PLUS BORNÉE QUE PAR LE PANTHÉON (v0.1038, décision de
  * l'utilisateur : « permettre aux expéditions de partir à plus que 3 pour abattre les events
  * plus haut niveau ; plus il y a de champions plus l'XP est divisée, c'est tout »). SOURCE DE
  * VÉRITÉ, override les « 3 places, le héros en prend 2 » de la v0.1020.

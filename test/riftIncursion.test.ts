@@ -193,7 +193,7 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
         bodies,
       ),
     });
-    // ⚠️ 3 champions + le héros (compte pour 2) : 5 membres, le socle se partage (v0.1035).
+    // ⚠️ 3 champions + le héros (compte pour 2) : 5 membres, le socle se partage (v0.1038).
     expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, true));
   });
 
@@ -434,14 +434,14 @@ describe('🔗 la résolution emprunte bien la graine DU COMBAT', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 👥 LA TAILLE D'UNE ÉQUIPE : le Panthéon seul (v0.1035)
+// 👥 LA TAILLE D'UNE ÉQUIPE : le Panthéon seul (v0.1038)
 //
 // Décision de l'utilisateur : « permettre aux expéditions de partir à plus que 3 pour abattre
 // les events plus haut niveau ; plus il y a de champions plus l'XP est divisée, c'est tout ».
 // Mesuré avant (v0.979) : une faille mûre, sans héros — 3 → 62-83 %, 4 → 99-100 %. Au-delà de
 // 3 le nombre ne coûte plus une place, il coûte de l'XP (`missionXpSplit`).
 // ─────────────────────────────────────────────────────────────────────────────
-describe('👥 une équipe n’est bornée que par le Panthéon (v0.1035)', () => {
+describe('👥 une équipe n’est bornée que par le Panthéon (v0.1038)', () => {
   const camp = (): Poi => ({ ...rift(), id: 'camp_x', type: 'camp' });
   const mine = (): Poi => ({ ...rift(), id: 'mine_x', type: 'mine' });
 
@@ -462,7 +462,7 @@ describe('👥 une équipe n’est bornée que par le Panthéon (v0.1035)', () =
   });
 });
 
-describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1035)', () => {
+describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => {
   it('⚠️ jusqu’à 3 membres rien ne change — la calibration de la montée tient', () => {
     for (const n of [1, 2, 3]) expect(missionXpSplit(n, false)).toBe(1);
     expect(missionXpSplit(1, true)).toBe(1); // héros (2) + 1 = 3

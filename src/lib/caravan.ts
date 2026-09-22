@@ -740,7 +740,7 @@ export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
   );
 }
 
-/** 👥 LE PARTAGE DE L'XP D'UNE MISSION (v0.1035, décision de l'utilisateur : les équipes ne
+/** 👥 LE PARTAGE DE L'XP D'UNE MISSION (v0.1038, décision de l'utilisateur : les équipes ne
  *  sont plus bornées à 3 — « plus il y a de champions plus l'XP est divisée, c'est tout »).
  *  Jusqu'à `XP_TEAM_REF` membres, rien ne change (toute la calibration de la montée en niveau
  *  est faite sur ces équipes) ; au-delà, le socle d'une mission se partage à parts égales.
