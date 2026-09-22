@@ -667,28 +667,31 @@ export function suggestEscort(
   return team;
 }
 
-/** Trajet ALLER d'une équipe de champions, en minutes : celui du HÉROS SANS Avant-poste,
- *  puis raccourci par les rôles 🧭 de l'escorte ET par les
- *  pièces qui portent ce rôle (`gearSpeed`, cf. `advGearRoles`) — les deux sous le MÊME
- *  plafond.
- *  ⚠️ PLUS DE LENTEUR PROPRE (v0.1033, demandé par l'utilisateur : « il n'y a plus de
- *  convois, il faudrait accélérer les déplacements des champions »). Le ×1,5 (`slow`, que
- *  l'Avant-poste ne ramenait que vers ×1,27 au niveau 30) incarnait le CONVOI, plus lent que
- *  l'expédition du héros ; les convois ont disparu au profit des équipes. Mesuré avant :
- *  une équipe mettait ×1,5 le temps du héros sans Avant-poste, ×2,3 au niveau 30 (le héros
- *  profitait seul de la réduction). ⚠️ L'AVANT-POSTE N'ACCÉLÈRE PAS LES CHAMPIONS, et c'est MESURÉ (camps en
- *  parallèle, niveau 60) : avec sa réduction, 27 camps par jour au lieu de 11, or des camps
- *  +39 % du revenu de référence au lieu de +16 %, pierres +62 % au lieu de +25 % — le puits
- *  d'or ne tiendrait plus. Au pas du héros SANS elle : 12 camps/jour, or +18 %, pierres
- *  +26 %, et des trajets 16 à 27 % plus courts qu'avant (choix de l'utilisateur).
- *  La cargaison reste payée sur le temps du héros (`heroEquivalentFactor`). */
-export function caravanLegMin(poi: Poi, escort: Adventurer[], gearSpeed: number): number {
+/** Trajet ALLER d'une équipe de champions, en minutes : celui du HÉROS, Avant-poste compris
+ *  (`travelMult`), puis raccourci par les rôles 🧭 de l'escorte ET par les pièces qui portent
+ *  ce rôle (`gearSpeed`, cf. `advGearRoles`) — les deux sous le MÊME plafond.
+ *
+ *  ⚠️ PLUS DE LENTEUR PROPRE (v0.1036) : le ×1,5 incarnait le CONVOI, disparu au profit des
+ *  équipes.
+ *  ⚠️ ET L'AVANT-POSTE ACCÉLÈRE LES CHAMPIONS (v0.1040, choix de l'utilisateur) : depuis qu'il
+ *  AGRANDIT la carte (`revealRadius`), les lieux s'éloignent en moyenne, et sans sa réduction
+ *  un aller-retour d'équipe dépassait 28 h au bout de la carte en fin de partie. Mesuré sur le
+ *  trajet MOYEN : ×1,1 à ×1,3 voyages/jour jusqu'au niveau 30, ×1,6 à ×1,8 au-delà du 40 —
+ *  la carte agrandie absorbe une partie de la réduction (sur la carte fixe d'avant : ×2,4).
+ *  La cargaison reste payée sur le temps du héros (`heroEquivalentFactor`).
+ *  ⚠️ `travelMult` est REQUIS : l'oublier annoncerait un trajet sans Avant-poste. */
+export function caravanLegMin(
+  poi: Poi,
+  escort: Adventurer[],
+  gearSpeed: number,
+  travelMult: number,
+): number {
   const hero = travelOneWayMin(poiTravelLevel(poi), poi.distNorm);
   const speed = Math.min(
     CARAVAN.speedMax,
     countRole(escort, 'speed') * CARAVAN.speedPerRole + Math.max(0, gearSpeed),
   );
-  return Math.max(1, Math.round(hero * (1 - speed)));
+  return Math.max(1, Math.round(hero * travelMult * (1 - speed)));
 }
 
 /** ⚠️ LA CARGAISON SE PAIE SUR LA DURÉE QU'UN HÉROS AURAIT MISE, pas sur celle de la
@@ -1192,8 +1195,11 @@ export function startCaravan(
   now: number,
   seed: number,
   kit: EscortKit,
+  /** ⚠️ REQUIS : réduction de trajet de l'Avant-poste (`travelTimeMult`). */
+  travelMult: number,
 ): Caravan {
-  const leg = caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed) * 60_000;
+  const leg =
+    caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed, travelMult) * 60_000;
   return {
     id,
     poi,

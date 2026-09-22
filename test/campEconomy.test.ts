@@ -12,6 +12,11 @@ import { engageCap, type Adventurer } from '@/lib/adventurers';
 import { campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
 import { partyAllies } from '@/lib/caravan';
 import { goldPerDay, stonesPerDay } from './helpers/goldModel';
+import { travelTimeMult } from '@/lib/buildings';
+
+/** Réduction de trajet de l'Avant-poste au niveau donné (héros ET champions, v0.1040). */
+const outpostMult = (level: number) =>
+  travelTimeMult([{ typeId: 'outpost', level, slot: 0, collectedAt: 0 }]);
 
 /**
  * 💰 LE DÉBIT DES CAMPS EN PARALLÈLE, mesuré contre le MÊME revenu de référence que le puits
@@ -62,7 +67,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
   const advs = roster(L, engageCap(L));
   const rd = road(L, advs.length);
   const busy = new Map<string, number>();
-  let map = createMap(seed, 0, L);
+  let map = createMap(seed, 0, L, opts.comptoir);
   const trips: Trip[] = [];
   let gold = 0;
   let wages = 0;
@@ -70,7 +75,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
   let keys = 0;
   let parties = 0;
   for (let t = 0; t <= opts.days * DAY; t += STEP) {
-    map = advanceWorld(map, t, L);
+    map = advanceWorld(map, t, L, opts.comptoir);
     // ⚔️ D'abord les camps (le pire cas pour l'or : on leur donne tous les créneaux).
     for (;;) {
       if (opts.slotCap && convoySlotsFree(opts.comptoir, trips, t) <= 0) break;
@@ -85,14 +90,14 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
             esc = free.slice(0, n);
             win = campWinPct(c.p, c.spec!, partyAllies(esc, rd, null), 8);
           }
-          const h = (2 * caravanLegMin(c.p, esc, 0)) / 60;
+          const h = (2 * caravanLegMin(c.p, esc, 0, outpostMult(opts.comptoir))) / 60;
           const net = campGroupHaul(c.p, c.spec!).gold - caravanWages(esc, c.p);
           return { ...c, esc, win, score: (win * net) / h };
         })
         .filter((c) => c.win >= 0.5 && c.score > 0)
         .sort((a, b) => b.score - a.score)[0];
       if (!best) break;
-      const back = t + 2 * caravanLegMin(best.p, best.esc, 0) * 60_000;
+      const back = t + 2 * caravanLegMin(best.p, best.esc, 0, outpostMult(opts.comptoir)) * 60_000;
       const o = resolveCamp({
         poi: best.p,
         spec: best.spec!,
@@ -122,7 +127,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
       const target = map.pois.find((p) => HARVEST_TYPES.has(p.type));
       if (!target) break;
       const esc = free.slice(0, 3);
-      const back = t + 2 * caravanLegMin(target, esc, 0) * 60_000;
+      const back = t + 2 * caravanLegMin(target, esc, 0, outpostMult(opts.comptoir)) * 60_000;
       for (const a of esc) busy.set(a.id, back);
       trips.push({ returnAt: back });
       map = { ...map, pois: map.pois.filter((p) => p.id !== target.id) };

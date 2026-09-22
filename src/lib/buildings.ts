@@ -129,16 +129,15 @@ export const BUILDING_TYPES: BuildingType[] = [
   // le VOYAGE, l'un pour le héros et l'autre pour les convois, et on montait l'un sans
   // comprendre pourquoi l'autre ne suivait pas.
   //
-  // ⚠️ DEUX LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
-  // le trajet du HÉROS (`travelTimeMult`, asymptotique, qui gratte à chaque cran) et le
-  // NOMBRE d'équipes en parallèle (`caravanSlots`, un PALIER tous les 9 niveaux).
-  // ⚠️ La vitesse des convois a disparu avec eux (v0.1033) : les champions vont au pas du
-  // héros SANS Avant-poste — sa réduction leur aurait fait faire 2,4× plus de camps par
-  // jour au niveau 60 (cf. `caravanLegMin`).
+  // ⚠️ TROIS LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
+  // le TRAJET du héros ET des champions (`travelTimeMult`, asymptotique), la TAILLE DE LA
+  // CARTE révélée et son nombre de lieux (`revealRadius` / `mapQuota`, qui grandissent à
+  // chaque cran — v0.1040), et le NOMBRE d'équipes en parallèle (`caravanSlots`, un PALIER
+  // tous les 9 niveaux).
   {
     id: 'outpost',
     perLevelNote:
-      'trajets du héros plus courts à chaque niveau, +1 équipe en parallèle tous les 9 niveaux',
+      'carte plus grande avec plus de lieux, trajets plus courts (héros et champions) à chaque niveau, +1 équipe en parallèle tous les 9 niveaux',
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',
@@ -154,7 +153,7 @@ export const BUILDING_TYPES: BuildingType[] = [
       where:
         'Ici, sur la carte : envoie ton héros explorer, ou une équipe de champions à ta place.',
     },
-    desc: 'Débloque les expéditions. Chaque niveau raccourcit les trajets du héros, et ajoute une équipe de champions en parallèle tous les 9 niveaux.',
+    desc: 'Débloque les expéditions. Chaque niveau repousse le brouillard (la carte s’agrandit et se peuple de nouveaux lieux et failles), raccourcit les trajets du héros et des champions, et ajoute une équipe en parallèle tous les 9 niveaux.',
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin

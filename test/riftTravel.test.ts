@@ -9,6 +9,9 @@ import {
   travelOneWayMin,
   type Poi,
 } from '@/lib/expedition';
+// 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+const OUT = 7;
 
 // 🕳️ v0.1012 : le TRAJET d'une faille se calcule sur le niveau que sa DISTANCE justifie,
 // pas sur son niveau (tiré par rang, v0.929). Avant, mesuré au niveau 60 : une faille
@@ -21,10 +24,10 @@ const DAY = 24 * H;
 /** Toutes les failles et tous les lieux de quota vus sur 14 jours de carte. */
 function collect(seed: number, level: number) {
   const t0 = 1_700_000_000_000;
-  let map = createMap(seed, t0, level);
+  let map = createMap(seed, t0, level, OUT);
   const seen = new Map<string, Poi>();
   for (let t = t0; t <= t0 + 14 * DAY; t += 6 * H) {
-    map = advanceWorld(map, t, level);
+    map = advanceWorld(map, t, level, OUT);
     for (const p of map.pois) seen.set(p.id, p);
   }
   return [...seen.values()];
@@ -86,6 +89,7 @@ describe('🕳️ le trajet d’une faille se lit sur la carte', () => {
       },
       EXPE.lifespanMs.rift + H,
       60,
+      OUT,
     );
     expect(m.pois.find((p) => p.type === 'mana_mine')?.travelLevel).toBe(40);
     expect(m.pois.find((p) => p.type === 'warband')?.travelLevel).toBe(40);

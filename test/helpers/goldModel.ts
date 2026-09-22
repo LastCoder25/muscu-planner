@@ -11,6 +11,7 @@ import { rollDrop, sellValue } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
 import { caravanSlots, caravanWages, caravanLegMin, refChampionAdv } from '@/lib/caravan';
 import { rollRaid } from '@/lib/raid';
+import { travelTimeMult } from '@/lib/buildings';
 import { comboChestReward } from '@/lib/comboChest';
 
 export const LEVELS = [5, 10, 15, 20, 26, 35, 50, 70, 100];
@@ -101,7 +102,13 @@ function bossGoldPerDay(L: number): number {
 function convoyGoldPerDay(L: number, comptoir: number): number {
   const poi = { level: L, distNorm: 0.6, type: 'well' } as Poi;
   const esc = [0, 1, 2].map((i) => refChampionAdv(L, i));
-  const legH = caravanLegMin(poi, esc, 0) / 60;
+  const legH =
+    caravanLegMin(
+      poi,
+      esc,
+      0,
+      travelTimeMult([{ typeId: 'outpost', level: comptoir, slot: 0, collectedAt: 0 }]),
+    ) / 60;
   const trips = Math.min(3, 24 / (2 * legH));
   const net = Math.round(goldCost('well', L) * 0.3) - caravanWages(esc, poi);
   return Math.max(0, caravanSlots(comptoir) * trips * net);

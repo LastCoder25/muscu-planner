@@ -20,6 +20,9 @@ import { RAID, armyCombatant } from '@/lib/raid';
 import { refAdventurer } from '@/lib/caravan';
 import { simulateCombat } from '@/lib/combat';
 import type { Adventurer } from '@/lib/adventurers';
+// 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+const OUT = 7;
 
 const H = 3600_000;
 const LIFE = EXPE.lifespanMs.rift;
@@ -45,7 +48,7 @@ const carte = (pois: Poi[]): ExpeditionMap => ({
 });
 /** Fait déborder une faille et rend la bande qui en sort. */
 function bandeDe(map: ExpeditionMap, now: number): Poi {
-  const m = advanceWorld(map, now, 20);
+  const m = advanceWorld(map, now, 20, OUT);
   const w = m.pois.find(isWarbandPoi);
   if (!w) throw new Error('aucune bande');
   return w;
@@ -63,7 +66,7 @@ describe('la bande naît du débordement', () => {
   const now = T0 + LIFE + H;
 
   it('une faille qui déborde laisse SA MINE **et** son armée', () => {
-    const m = advanceWorld(carte([rift('r', 0, 30)]), now, 20);
+    const m = advanceWorld(carte([rift('r', 0, 30)]), now, 20, OUT);
     expect(m.pois.filter((p) => p.type === 'mana_mine')).toHaveLength(1);
     expect(m.pois.filter(isWarbandPoi)).toHaveLength(1);
   });
@@ -97,7 +100,7 @@ describe('elle MARCHE vers la ville', () => {
   function aT(dt: number): Poi {
     // On refait naître la bande puis on avance la carte de `dt`.
     const w = bandeDe(carte([rift('r', 0, 40)]), dep + 1);
-    const m = advanceWorld(carte([w]), dep + dt, 20);
+    const m = advanceWorld(carte([w]), dep + dt, 20, OUT);
     const x = m.pois.find(isWarbandPoi);
     if (!x) throw new Error(`élaguée à dt=${dt}`);
     return x;
@@ -120,13 +123,13 @@ describe('elle MARCHE vers la ville', () => {
     // C'est le piège : son `distNorm` tombe vers 0 sans qu'elle perde une once de force.
     // Sans exemption, elle disparaîtrait juste avant d'être interceptable.
     const haute = { ...bandeDe(carte([rift('r', 0, 40)]), dep + 1), level: 90 };
-    const m = advanceWorld(carte([haute]), dep + EXPE.lifespanMs.warband - H, 5);
+    const m = advanceWorld(carte([haute]), dep + EXPE.lifespanMs.warband - H, 5, OUT);
     expect(m.pois.filter(isWarbandPoi)).toHaveLength(1);
   });
 
   it('elle DISPARAÎT à la fin de sa fenêtre : l’occasion est passée', () => {
     const w = bandeDe(carte([rift('r', 0, 40)]), dep + 1);
-    const m = advanceWorld(carte([w]), dep + EXPE.lifespanMs.warband + H, 20);
+    const m = advanceWorld(carte([w]), dep + EXPE.lifespanMs.warband + H, 20, OUT);
     expect(m.pois.filter(isWarbandPoi)).toHaveLength(0);
   });
 });

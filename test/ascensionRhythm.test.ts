@@ -27,8 +27,8 @@ function trioStuckShare(xpDay: number, riftsPerDay: number, seed: number): numbe
     const L = Math.min(100, computeLevel(xp).level);
     const r = characterRank(L).rankIndex;
     for (let i = 0; i < riftsPerDay; i++)
-      // Une faille sur deux est refermée après la moitié de sa maturation (2 sceaux).
-      seals[Math.floor(rng() * (r + 1))]! += rng() < 1 - RIFT.secondSealAt ? 2 : 1;
+      // Une faille sur deux est refermée avant la moitié de sa maturation (2 sceaux, v0.1040).
+      seals[Math.floor(rng() * (r + 1))]! += rng() < RIFT.secondSealAt ? 2 : 1;
     for (let pass = 0; pass < 3; pass++)
       for (let i = 0; i < ranks.length; i++) {
         if (L <= capOf(ranks[i]!) || ranks[i]! >= r) continue;

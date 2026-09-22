@@ -4,22 +4,22 @@
        seed. Ici, Vue ne les re-diffe que si `terrain` change — jamais au tick. -->
   <g class="map-terrain" aria-hidden="true">
     <defs>
-      <radialGradient id="mt-sea" cx="50%" cy="50%" r="70%">
-        <stop offset="0%" stop-color="#2d5c76" />
-        <stop offset="100%" stop-color="#152e3d" />
-      </radialGradient>
       <!-- Même prairie que la Base : verte au centre, plus sombre vers les bords. -->
-      <radialGradient id="mt-meadow" cx="50%" cy="48%" r="62%">
+      <radialGradient id="mt-meadow" cx="50%" cy="50%" r="70%">
         <stop offset="0%" stop-color="#5c7034" />
         <stop offset="60%" stop-color="#48592a" />
         <stop offset="100%" stop-color="#36451f" />
       </radialGradient>
     </defs>
-    <rect :x="-10" :y="-10" :width="size + 20" :height="size + 20" fill="url(#mt-sea)" />
-    <!-- Côte en trois couches : hauts-fonds (bande claire côté mer), sable, puis la terre. -->
-    <path :d="terrain.coast" class="mt-shallows" />
-    <path :d="terrain.coast" class="mt-sand" />
-    <path :d="terrain.coast" class="mt-land" />
+    <!-- ⚠️ PLUS D'ÎLE (v0.1040) : la prairie couvre toute la fenêtre ; c'est le brouillard
+         (dessiné par la page) qui borne ce qu'on voit, et il recule avec l'Avant-poste. -->
+    <rect
+      :x="view.min - 10"
+      :y="view.min - 10"
+      :width="view.size + 20"
+      :height="view.size + 20"
+      class="mt-land"
+    />
     <ellipse v-for="(p, i) in terrain.patches" :key="'p' + i" v-bind="p" class="mt-patch" />
     <path v-for="(rv, i) in terrain.rivers" :key="'rv' + i" :d="rv" class="mt-river" />
     <path v-for="(rv, i) in terrain.rivers" :key="'rw' + i" :d="rv" class="mt-river-inner" />
@@ -37,28 +37,13 @@
 <script setup lang="ts">
 import type { Terrain } from '@/lib/expedition';
 
-defineProps<{ terrain: Terrain; size: number }>();
+defineProps<{ terrain: Terrain; view: { min: number; size: number } }>();
 </script>
 
 <style>
 /* Non scopé (les règles vivent dans le SVG parent) ; préfixe mt- pour ne rien heurter. */
-.mt-shallows {
-  fill: none;
-  stroke: #3f7d98;
-  stroke-width: 5;
-  stroke-linejoin: round;
-  opacity: 0.55;
-}
-.mt-sand {
-  fill: none;
-  stroke: #c8b378;
-  stroke-width: 2.2;
-  stroke-linejoin: round;
-}
 .mt-land {
   fill: url(#mt-meadow);
-  stroke: #3a4a22;
-  stroke-width: 0.4;
 }
 /* Les taches disent « la prairie n'est pas uniforme », elles ne doivent pas se lire
    comme des flaques : assez sombres pour exister, assez transparentes pour se fondre. */

@@ -11,6 +11,9 @@ import {
   type RiftAmbush,
 } from '@/lib/expedition';
 import { ambushChance } from '@/lib/caravan';
+// 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+const OUT = 7;
 
 // 🐫 RÈGLE v0.1009 (demandée par l'utilisateur) : une faille qui MÛRIT ne harcèle rien. Au
 // DÉBORDEMENT (7 j), une partie de ses monstres s'EMBUSQUE autour d'elle pendant 2 jours,
@@ -84,13 +87,13 @@ describe('le débordement pose une embuscade de deux jours', () => {
   const cible = () => poi('a', 0, 50);
 
   it('avant le débordement : aucune embuscade, aucun drapeau', () => {
-    const m = advanceWorld(carte([faille(), cible()]), LIFE - H, 20);
+    const m = advanceWorld(carte([faille(), cible()]), LIFE - H, 20, OUT);
     expect(m.ambushes).toBeUndefined();
     expect(m.pois.find((p) => p.id === 'a')?.riftPeril).toBeUndefined();
   });
 
   it('au débordement : l’embuscade est posée À LA PLACE DE LA FAILLE, pour 2 jours', () => {
-    const m = advanceWorld(carte([faille(), cible()]), LIFE + H, 20);
+    const m = advanceWorld(carte([faille(), cible()]), LIFE + H, 20, OUT);
     expect(m.ambushes).toHaveLength(1);
     const a = m.ambushes![0]!;
     expect(a.x).toBe(EXPE.town.x);
@@ -101,29 +104,29 @@ describe('le débordement pose une embuscade de deux jours', () => {
   });
 
   it('elle survit à la faille (devenue mine) puis s’ÉTEINT après ses deux jours', () => {
-    const pendant = advanceWorld(carte([faille(), cible()]), LIFE + H, 20);
-    const encore = advanceWorld(pendant, LIFE + EXPE.ambushMs - H, 20);
+    const pendant = advanceWorld(carte([faille(), cible()]), LIFE + H, 20, OUT);
+    const encore = advanceWorld(pendant, LIFE + EXPE.ambushMs - H, 20, OUT);
     expect(encore.pois.find((p) => p.id === 'a')?.riftPeril).toBe(true);
-    const apres = advanceWorld(encore, LIFE + EXPE.ambushMs + H, 20);
+    const apres = advanceWorld(encore, LIFE + EXPE.ambushMs + H, 20, OUT);
     expect(apres.ambushes).toBeUndefined();
     expect(apres.pois.find((p) => p.id === 'a')?.riftPeril).toBeUndefined();
   });
 
   it('rejouer le passage ne DUPLIQUE pas l’embuscade', () => {
-    const m1 = advanceWorld(carte([faille(), cible()]), LIFE + H, 20);
-    const m2 = advanceWorld(m1, LIFE + 2 * H, 20);
+    const m1 = advanceWorld(carte([faille(), cible()]), LIFE + H, 20, OUT);
+    const m2 = advanceWorld(m1, LIFE + 2 * H, 20, OUT);
     expect(m2.ambushes).toHaveLength(1);
   });
 
   it('une absence plus longue que l’embuscade ne la prolonge pas', () => {
-    const m = advanceWorld(carte([faille(), cible()]), LIFE + EXPE.ambushMs + DAY, 20);
+    const m = advanceWorld(carte([faille(), cible()]), LIFE + EXPE.ambushMs + DAY, 20, OUT);
     expect(m.ambushes).toBeUndefined();
     expect(m.pois.find((p) => p.id === 'a')?.riftPeril).toBeUndefined();
   });
 
   it('N’ÉCRIT PAS À VIDE : sans embuscade, pas de clé `ambushes` et le POI garde sa référence', () => {
     const p = poi('b', 0, 60);
-    const m = advanceWorld(carte([faille(), p]), LIFE - H, 20);
+    const m = advanceWorld(carte([faille(), p]), LIFE - H, 20, OUT);
     expect('ambushes' in m).toBe(false);
     expect(m.pois.find((x) => x.id === 'b')).toBe(p);
   });
@@ -149,7 +152,7 @@ describe('le levier : refermer ses failles avant 7 jours empêche toute embuscad
   /** Part des lieux de RÉCOLTE harcelés sur 30 jours, selon ce qu'on ferme par jour. */
   function partIrradiee(perDay: number, seed: number): number {
     const t0 = 1_700_000_000_000;
-    let map = createMap(seed, t0, 30);
+    let map = createMap(seed, t0, 30, OUT);
     let budget = 0;
     const parts: number[] = [];
     for (let t = t0 + H; t <= t0 + 30 * DAY; t += H) {
@@ -160,7 +163,7 @@ describe('le levier : refermer ses failles avant 7 jours empêche toute embuscad
         map = { ...map, pois: map.pois.filter((p) => p.id !== rs[0]!.id) };
         budget -= 1;
       }
-      map = advanceWorld(map, t, 30);
+      map = advanceWorld(map, t, 30, OUT);
       const rec = map.pois.filter((p) => HARVEST_TYPES.has(p.type) && !isRiftPoi(p));
       parts.push(rec.length ? rec.filter((p) => p.riftPeril).length / rec.length : 0);
     }
@@ -195,10 +198,10 @@ describe('le levier : refermer ses failles avant 7 jours empêche toute embuscad
 
   it('il reste des lieux de récolte PROPRES même quand on ignore tout', () => {
     const t0 = 1_700_000_000_000;
-    let map = createMap(4242, t0, 30);
+    let map = createMap(4242, t0, 30, OUT);
     let creux = Infinity;
     for (let t = t0 + H; t <= t0 + 30 * DAY; t += H) {
-      map = advanceWorld(map, t, 30);
+      map = advanceWorld(map, t, 30, OUT);
       const rec = map.pois.filter((p) => HARVEST_TYPES.has(p.type) && !isRiftPoi(p));
       creux = Math.min(creux, rec.filter((p) => !p.riftPeril).length);
     }
