@@ -3047,7 +3047,7 @@ import {
   setTierLabel,
   rollJet,
   legendaryOf,
-  relicPowerText,
+  itemPowerText,
   magicFindLuck,
   itemLevelMult,
   round1,
@@ -3202,7 +3202,7 @@ function affixText(
   return effectLabelFor(e.type, round1(e.value * itemLevelMult(it.level)));
 }
 function itemAffixLines(it: Item): string[] {
-  if (it.power) return [relicPowerText(it)];
+  if (it.power) return [itemPowerText(it)];
   const lines = [affixText(it, it.effect)];
   if (it.effect2) lines.push(affixText(it, it.effect2));
   if (it.effect3) lines.push(affixText(it, it.effect3));
@@ -4996,7 +4996,7 @@ function bossLockReason(b: MilestoneBoss): string {
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
-  if (it.power) return relicPowerText(it);
+  if (it.power) return itemPowerText(it);
   // OBJETS ET FAMILIERS : magnitude 100 % définie par le drop (grade × qualité, bakée
   // dans effect.value) → libellé direct, 1 décimale (la qualité reste visible, #6).
   const parts = [affixText(it, it.effect)];
@@ -5011,7 +5011,7 @@ function itemEffects(it: Omit<Item, 'id'>): string {
  *  légendaire sont des phrases, on n'y met pas un nombre en gras au hasard. */
 function itemStatRows(it: Omit<Item, 'id'>): StatParts[] {
   const whole = (pre: string): StatParts => ({ pre, value: '', post: '' });
-  if (it.power) return [whole(relicPowerText(it))];
+  if (it.power) return [whole(itemPowerText(it))];
   const rows = [it.effect, it.effect2, it.effect3]
     .filter((e): e is NonNullable<typeof e> => !!e)
     .map((e) => splitStat(affixText(it, e)));
@@ -5021,7 +5021,7 @@ function itemStatRows(it: Omit<Item, 'id'>): StatParts[] {
 }
 // Stats d'un objet en LIGNES séparées (une stat par ligne) + proc légendaire → affichage clair.
 function itemStatLines(it: Omit<Item, 'id'>): string[] {
-  if (it.power) return [relicPowerText(it)];
+  if (it.power) return [itemPowerText(it)];
   const lines = [affixText(it, it.effect)];
   if (it.effect2) lines.push(affixText(it, it.effect2));
   if (it.effect3) lines.push(affixText(it, it.effect3));

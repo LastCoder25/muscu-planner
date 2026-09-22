@@ -25,6 +25,7 @@
 import {
   legendaryOf,
   relicPowerOf,
+  trophyPowerOf,
   SET_SIGNATURES,
   prestigeRankIndex,
   RANK_ORDER,
@@ -122,7 +123,7 @@ const ADV_SIGNATURE_INFO: Partial<
  * ⚠️ **EXHAUSTIF PAR CONSTRUCTION** : ajouter une `CombatSkill` sans dire où la lire ne
  * compile plus. C'est le patron des `Record<PoiType, …>`.
  */
-const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set' | 'relic'> = {
+const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set' | 'relic' | 'trophy'> = {
   rp_brasier: 'relic',
   rp_rempart: 'relic',
   rp_coup_fatal: 'relic',
@@ -176,6 +177,15 @@ const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set' | 'relic'> = {
   sig_duelliste: 'set',
   sig_epineux: 'set',
   sig_frenetique: 'set',
+  tr_quest: 'trophy',
+  tr_dechainer: 'trophy',
+  tr_achever: 'trophy',
+  tr_annuler: 'trophy',
+  tr_retourner: 'trophy',
+  tr_etaler: 'trophy',
+  tr_desarmer: 'trophy',
+  tr_renvoyer: 'trophy',
+  tr_accelerer: 'trophy',
 };
 
 const SET_SIG_BY_ID = new Map(Object.values(SET_SIGNATURES).map((x) => [x.id, x]));
@@ -193,6 +203,12 @@ export function combatSkillInfo(skill: CombatSkill): { emoji: string; name: stri
     // pour la stat et pour son déclenchement, donc aucune table de correspondance à tenir.
     const info = ADV_SIGNATURE_INFO[(skill + '_pct') as EffectType];
     return info ? { emoji: info.emoji, name: info.name } : undefined;
+  }
+  // 🏆 Trophée : `tr_quest` = la quête accomplie ; `tr_<pouvoir>` = son effet.
+  if (where === 'trophy') {
+    if (skill === 'tr_quest') return { emoji: '🏆', name: 'Quête accomplie' };
+    const p = trophyPowerOf(skill.slice('tr_'.length));
+    return p ? { emoji: p.emoji, name: p.name } : undefined;
   }
   // 🔮 Pouvoir de relique : l'id de la compétence est `rp_` + celui du pouvoir.
   if (where === 'relic') {

@@ -40,6 +40,9 @@ import {
   gachaOdds,
   pullMany,
   multiPullCost,
+  nextGacha,
+  GACHA_VERSION,
+  type GachaState,
 } from '@/lib/gacha';
 
 /** Tire `n` fois et rend la suite des lettres obtenues. */
@@ -539,5 +542,36 @@ describe('🎰 LE LOT DE 10 (v0.968)', () => {
     expect(pullMany(mulberry32(1), emptyPity(), 0).results).toEqual([]);
     expect(pullMany(mulberry32(1), emptyPity(), -3).results).toEqual([]);
     expect(pullMany(mulberry32(1), emptyPity(), 2.7).results).toHaveLength(2);
+  });
+});
+
+describe('🎰 nextGacha — écrire l’état du gacha ne perd RIEN (v0.1083)', () => {
+  it('⚠️ la marque de bienvenue SURVIT à un tirage — c’est le défaut qui a versé 10 fois', () => {
+    const prev: GachaState = { sinceTop: 4, sinceFloor: 2, pulls: 7, v: 2, welcomed: true };
+    const apres = nextGacha(prev, { sinceTop: 5, sinceFloor: 3 }, 17);
+    expect(apres.welcomed).toBe(true);
+    expect(apres.sinceTop).toBe(5); // le pity, lui, est bien celui du tirage
+    expect(apres.sinceFloor).toBe(3);
+    expect(apres.pulls).toBe(17);
+    expect(apres.v).toBe(GACHA_VERSION);
+  });
+  it('un compte jamais marqué ne l’invente pas', () => {
+    const apres = nextGacha(
+      { sinceTop: 0, sinceFloor: 0, pulls: 0 },
+      { sinceTop: 1, sinceFloor: 1 },
+      1,
+    );
+    expect(apres.welcomed).toBeUndefined();
+  });
+  it('le RESET remet le pity à zéro sans perdre la marque', () => {
+    const prev: GachaState = { sinceTop: 30, sinceFloor: 5, pulls: 99, welcomed: true };
+    const apres = nextGacha(prev, { sinceTop: 0, sinceFloor: 0 }, 0);
+    expect(apres).toEqual({
+      sinceTop: 0,
+      sinceFloor: 0,
+      pulls: 0,
+      v: GACHA_VERSION,
+      welcomed: true,
+    });
   });
 });

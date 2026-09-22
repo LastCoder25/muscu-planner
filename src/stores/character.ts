@@ -215,6 +215,7 @@ import {
   wipeLegacyAdventurers,
   type GachaState,
   GACHA_VERSION,
+  nextGacha,
   pullMany,
   rollGearGrade,
 } from '@/lib/gacha';
@@ -741,7 +742,9 @@ export const useCharacterStore = defineStore('character', () => {
       await persist(userId, {
         adventurers: advs.filter((a) => !a.championId),
         mana: cur.mana + mana,
-        gacha: { sinceTop: 0, sinceFloor: 0, pulls: 0, v: GACHA_VERSION },
+        // Le RESET remet le pity à zéro — mais il ne perd pas ce qui n'est pas du pity
+        // (la marque de bienvenue), sans quoi il rouvrirait la même boucle.
+        gacha: nextGacha(cur.gacha, { sinceTop: 0, sinceFloor: 0 }, 0),
       });
     } catch {
       return;
@@ -1244,7 +1247,9 @@ export const useCharacterStore = defineStore('character', () => {
       mana: cur.mana - (pay.kind === 'mana' ? pay.cost : 0) + manaBack,
       ...(pay.kind === 'tickets' ? { gacha_tickets: cur.gacha_tickets - pay.cost } : {}),
       adventurers: advs,
-      gacha: { ...lot.pity, pulls: cur.gacha.pulls + count, v: GACHA_VERSION },
+      // ⚠️ `nextGacha` REPORTE l'état précédent : écrit à plat, le tirage effaçait la marque
+      // `welcomed` et la bienvenue se re-versait au chargement suivant (v0.1083).
+      gacha: nextGacha(cur.gacha, lot.pity, cur.gacha.pulls + count),
       ...(pieces.length ? { adv_gear: withAdvGear(cur, pieces) } : {}),
     });
     return results;

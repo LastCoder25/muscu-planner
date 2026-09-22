@@ -25,7 +25,7 @@
 import { REP_XP, XP_MULT } from './athlete';
 import { normMuscle } from './muscles';
 import { mulberry32, seedOf } from './combat';
-import { rollTrophy, type EffectType, type Item } from './items';
+import { rollTrophy, type Item } from './items';
 import { CONDITIONING_CHALLENGE_IDS, isCardioChallengeExercise } from '@/data/cardio';
 import { bossGoldForLevel, bossSummonCost } from '@/data/bosses';
 import type { HeroLook } from './heroLook';
@@ -806,47 +806,11 @@ export function earlyKillFraction(
 
 // ── Coffre ─────────────────────────────────────────────────────────────────────────
 
-/** STATS DU TROPHÉE selon ce que l'exercice travaille (refonte équipement, § 7 bis) : deux
- *  stats principales IMPOSÉES, puis les suivantes tirées dans la liste de soutien de la
- *  même famille. ⚠️ Un trophée ne porte que des stats de sa famille — comme un objet ne
- *  porte que celles de son emplacement. Remplace l'ancienne table (élan pour le
- *  conditionnement, critique et réduction pour tirage et gainage : les stats mesurées
- *  mortes ou plafonnées avant la refonte). */
-export const TROPHY_MAINS: Record<BossFamily, readonly EffectType[]> = {
-  push: ['damage_pct', 'crit_dmg_pct'],
-  legs: ['max_pv_pct', 'dodge_pct'],
-  // ⚠️ Précision + dégâts critiques, pas vol de vie : le vol de vie bute sur le plafond de
-  // soin par tour. Mesuré (joueur de référence, médiane de 18 trophées) : 1,9 / 3,6 / 4,8 %
-  // de puissance aux niveaux 30 / 50 / 70 avec le vol de vie, 3,5 / 6,4 / 9,0 % ainsi —
-  // la bande des autres familles (4-5 / 5-9 / 8-14 %).
-  pull: ['accuracy_pct', 'crit_dmg_pct'],
-  core: ['dmg_reduction_pct', 'block_pct'],
-  // ⚠️ PV + initiative, et non initiative + rage : mesuré, la rage (dégâts sous 30 % de PV)
-  // et l'initiative seules valaient +0,3 % de puissance au niveau 30 — un trophée mort. Le
-  // cardio construit l'endurance : les PV sont sa stat, l'initiative sa vitesse.
-  conditioning: ['max_pv_pct', 'initiative_pct'],
-};
-/** 🎚️ FORCE DU TROPHÉE PAR FAMILLE (× `TROPHY_K`), MESURÉE. Les stats ne pèsent pas pareil :
- *  les dégâts se composent avec tout le reste de l'attaque et grandissent avec le niveau,
- *  les PV beaucoup moins. Mesuré au même coefficient (médiane de 18 trophées, joueur de
- *  référence avec compagnons), niveaux 30 / 50 / 70 / 90 : poussée 5,1 / 8,6 / 14,1 / 16,9 %,
- *  jambes 4,2 / 5,6 / 7,0 / 6,1 %, tirage 3,5 / 6,6 / 9,1 / 12,5 %, gainage 4,0 / 5,5 /
- *  11,4 / 12,8 %, conditionnement 2,8 / 6,9 / 5,4 / 9,7 %. Ces facteurs ramènent chaque
- *  famille dans la bande « modeste » (≈ +2 à +9 %) sans qu'aucune ne soit morte. */
-export const TROPHY_FAMILY_K: Record<BossFamily, number> = {
-  push: 0.5,
-  legs: 0.85,
-  pull: 0.65,
-  core: 0.7, // 2026-09-22 : 0,65 → 0,7, la puissance ayant recompté parade et barrière (sets spécialisés)
-  conditioning: 0.85,
-};
-export const TROPHY_SUPPORT: Record<BossFamily, readonly EffectType[]> = {
-  push: ['execute_pct', 'thorns_pct'],
-  legs: ['regen_pct', 'initiative_pct'],
-  pull: ['lifesteal_pct', 'crit_pct', 'riposte_pct'],
-  core: ['start_shield_pct', 'crit_resist_pct'],
-  conditioning: ['momentum_pct', 'regen_pct', 'rage_pct'],
-};
+/** ⚠️ Les tables de stats du trophée par famille d'exercice (`TROPHY_MAINS`,
+ *  `TROPHY_SUPPORT`, `TROPHY_FAMILY_K`) sont RETIRÉES : un trophée ne porte plus de stats
+ *  mais un POUVOIR à quête, tiré au hasard parmi les huit (décidé — aucun lien entre l'exo
+ *  et le pouvoir). Cf. `TROPHY_POWERS` dans items.ts.
+ */
 
 export const FRIEND_BOSS_CHEST = {
   /** Or et pierres du coffre, en boss de palier du niveau du joueur : un boss entre amis
@@ -900,9 +864,6 @@ export function friendBossChest(
     early,
     tickets: tier.tickets,
     trophy: rollTrophy(rng, {
-      mains: TROPHY_MAINS[b.family],
-      support: TROPHY_SUPPORT[b.family],
-      scale: TROPHY_FAMILY_K[b.family],
       title: b.exerciseName,
       level,
       // ⚠️ La chance du CRAN s'AJOUTE à celle du « tué tôt » : les deux disent « tu as fait
