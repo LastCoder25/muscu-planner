@@ -1494,8 +1494,6 @@ async function endRun(outcome: 'cleared' | 'dead' | 'retreat') {
         gold: Math.floor(gold.value * keep),
         drops: outcome === 'dead' ? [] : loot.value,
         // Dressage d'ATTAQUE : le familier a couru le Labyrinthe avec le héros.
-        famAtkXp: 3 + (run.value.floor + 1) * 4,
-        playerLevel: heroLevel.value,
         // Nettoyage → débloque le palier suivant (mort/retraite ne débloquent pas).
         ...(outcome === 'cleared' && selectedLaby.value
           ? { clearedDungeonId: labyClearId(selectedLaby.value.id) }

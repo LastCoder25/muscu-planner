@@ -84,11 +84,8 @@ import {
   RARITY_LABEL,
   rarityRank,
   rollFamiliar,
-  famXpForLevel,
   familiarMult,
-  famXp,
-  famLevel,
-  grantFamiliarXp,
+  itemLevelMult,
   type Item,
 } from '@/lib/items';
 import { combatPower, offenseOf, survivalOf, type Combatant } from '@/lib/combat';
@@ -933,10 +930,8 @@ describe('🗡️ LE REMPART : chaque champion avec SES pièces (v0.996)', () =>
     expect(guardUnits(26, [], 99, nus)).toEqual([]);
   });
 });
-describe('🎓 UN SEUL DRESSAGE PAR FAMILIER (v0.805)', () => {
-  // Demandé par l’utilisateur : « une expérience globale, montée par les convois et les
-  // défenses ». Il y avait deux carrières (attaque en donjon, défense au mur) aux pentes
-  // différentes ; le même animal valait deux choses selon le terrain.
+describe('🐾 UN FAMILIER N’A PLUS D’EXPÉRIENCE (2026-09-22)', () => {
+  // Décision de l’utilisateur : sa valeur est FIXÉE AU DROP (rang, étoiles, niveau d’objet).
   const f = (o: Partial<Item> = {}): Item =>
     ({
       id: 'f',
@@ -950,29 +945,14 @@ describe('🎓 UN SEUL DRESSAGE PAR FAMILIER (v0.805)', () => {
       ...o,
     }) as Item;
 
-  it('⚠️ l’ancien dressage est RELU, sans migration et sans rien perdre', () => {
-    // L’ancienne XP de défense se comptait 4 fois moins cher : un familier dressé au mur
-    // garde exactement le niveau qu’il avait gagné.
-    expect(famXp(f({ atkXp: 100, defXp: 50 }))).toBe(300);
-    expect(famLevel(famXp(f({ defXp: famXpForLevel(6) / 4 })))).toBe(6);
-    // Dès qu’il regagne, c’est la nouvelle XP qui fait foi.
-    expect(famXp(f({ xp: 42, atkXp: 9999 }))).toBe(42);
+  it('son multiplicateur est son seul niveau d’objet', () => {
+    expect(familiarMult(f())).toBe(itemLevelMult(10));
+    expect(familiarMult(f({ level: 40 }))).toBe(itemLevelMult(40));
   });
 
-  it('⚠️ gagner écrit UNE expérience, et fond les deux anciennes dedans', () => {
-    const g = grantFamiliarXp(f({ atkXp: 100, defXp: 50 }), 20, 50);
-    expect(g.xp).toBe(320);
-    expect(g.atkXp).toBeUndefined();
-    expect(g.defXp).toBeUndefined();
-  });
-
-  it('⚠️ plafonnée au niveau du joueur, jamais en recul', () => {
-    const cap = famXpForLevel(6) - 1;
-    expect(grantFamiliarXp(f(), 1e9, 5).xp).toBe(cap);
-    // Un familier dressé avant que le plafond ne bouge garde son acquis.
-    const haut = f({ xp: famXpForLevel(30) });
-    expect(grantFamiliarXp(haut, 10, 5).xp).toBe(famXpForLevel(30));
-    expect(grantFamiliarXp(haut, 10, 5)).toBe(haut);
+  it('⚠️ l’ancienne XP de dressage restée dans le JSON n’a plus aucun effet', () => {
+    const vieux = f({ xp: 99999, atkXp: 5000, defXp: 5000 } as Partial<Item>);
+    expect(familiarMult(vieux)).toBe(familiarMult(f()));
   });
 });
 

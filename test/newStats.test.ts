@@ -6,7 +6,6 @@ import {
   playerWithGear,
   RATING_CAPS,
   ratingChance,
-  trainingMult,
   type Equipped,
   type Item,
 } from '@/lib/items';
@@ -117,23 +116,6 @@ describe('chaque stat nouvelle fait ce qu’elle annonce', () => {
     // 5 000 de barrière : après ~5 coups de ~1 000, les PV baissent.
     expect(t.at(-1)!.playerPv).toBeLessThan(10_000);
   });
-
-  it('dressage : le familier porté apprend plus vite', () => {
-    const ring = {
-      id: 'r',
-      slot: 'accessory',
-      name: 'Anneau',
-      emoji: '💍',
-      rarity: 'commun',
-      level: 1,
-      baseLevel: 1,
-      effect: { type: 'training_pct', value: 20 },
-      desc: '',
-    } as unknown as Item;
-    const eq: Equipped = { accessory: ring };
-    expect(trainingMult({})).toBe(1);
-    expect(trainingMult(eq)).toBeCloseTo(1.2, 5);
-  });
 });
 
 describe('garde-fous', () => {
@@ -206,7 +188,6 @@ describe('garde-fous', () => {
       'crit_resist_pct',
       'start_shield_pct',
       'dodge_pct',
-      'training_pct',
     ] as const)
       expect(effectLabelFor(t, 5)).toMatch(/5/);
   });

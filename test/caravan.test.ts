@@ -70,7 +70,6 @@ import {
 } from '@/lib/talents';
 import { mulberry32, offenseOf, simulateCombat, survivalOf } from '@/lib/combat';
 import {
-  famXpForLevel,
   aggregateEffects,
   mergeEffects,
   FAMILIAR_SLOT,

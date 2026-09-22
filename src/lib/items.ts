@@ -135,8 +135,7 @@ export type EffectType =
   | 'riposte_pct' // riposte : chance de contre-attaquer après un coup reçu (bouclier, bottes)
   | 'crit_resist_pct' // résistance aux critiques : les critiques ennemis font moins mal
   | 'start_shield_pct' // barrière de départ : X % des PV encaissés en premier, au début du combat
-  | 'dodge_pct' // esquive (bottes) — même canal que l'esquive des talents
-  | 'training_pct'; // dressage : + XP gagnée par le familier (hors combat)
+  | 'dodge_pct'; // esquive (bottes) — même canal que l'esquive des talents
 
 export interface ItemEffect {
   type: EffectType;
@@ -158,81 +157,21 @@ export interface Item {
   locked?: boolean; // 🔒 protégé : exclu de la casse/vente (en masse ET individuelle)
   species?: string; // slot 'familiar' uniquement : id de la RACE (cf. FAMILIAR_SPECIES)
   roll?: number; // qualité du roll de l'effet principal (0..1 dans la bande ±20 %) → étoiles
-  fxp?: number; // familier : progression d'INFUSION vers le prochain pas de tier (rang+qualité)
   enchant?: number; // ENCHANT +N (façon L2) — magnitude par-dessus le grade. Défaut 0. (étape 1)
   legendary?: string; // proc LÉGENDAIRE (id, cf. LEGENDARY_PROCS) — Légendaire+ uniquement, non-scalant
   /** 🔮 RELIQUE (étape 4) : le POUVOIR qu'elle porte (cf. RELIC_POWERS). Une relique à pouvoir
    *  ne donne AUCUNE stat : son `effect` n'est plus lu (`aggregateEffects` l'ignore). */
   power?: RelicPowerId;
-  // ── DRESSAGE (familiers uniquement, cf. FAM_TRAIN) : UNE seule expérience (v0.805).
-  xp?: number; // gagnée partout où il se bat : donjon (héros), convoi et défense (aventurier)
-  // ⚠️ LEGACY : les deux carrières d’avant la v0.805. Relues par `famXp`, jamais écrites.
-  atkXp?: number;
-  defXp?: number;
-  fatigueUntil?: number; // ms epoch : sorti d’un siège, il souffle (effet réduit, jamais perdu)
 }
 
-// ── DRESSAGE DES FAMILIERS ──
-// Un 4ᵉ axe, VOLONTAIREMENT à part des trois autres (rang, jet, ilvl) : il ne touche
-// à aucun d'eux et il est BORNÉ (plafonné au niveau du joueur à l’attribution).
-//
-// ⚠️ UNE SEULE EXPÉRIENCE, UN SEUL MULTIPLICATEUR (v0.805 ; demandé par l’utilisateur :
-// « le familier booste l’aventurier comme le héros, que ce soit en défense ou en
-// attaque — une expérience globale, montée par les convois et les défenses »). Il y
-// avait DEUX carrières (attaque en donjon, défense au mur) aux pentes différentes :
-// le même animal valait deux choses selon le terrain, et le dressage gagné par un
-// aventurier au rempart ne servait à rien sur la route.
-const FAM_TRAIN = {
-  // XP cumulée pour le niveau L = xpPerLevel × L². Calée sur l’ancienne carrière
-  // d’ATTAQUE : ~648 XP par séance de sport, donc niveau 5 ≈ 10 séances.
-  xpPerLevel: 260,
-  // La pente de l’ilvl (LEVEL_MULT_K) — « un familier dressé vaut un familier d'un cran
-  // d'ilvl au-dessus ». Avare À DESSEIN : le combat du héros est calibré au serré, et
-  // c’est désormais la MÊME formule pour le héros et pour ses aventuriers.
-  k: 0.006,
-  // Conversion de l’ancienne XP de DÉFENSE (65 par niveau² contre 260) : un familier
-  // dressé au mur garde exactement le niveau qu’il avait gagné.
-  legacyDefToXp: 4,
-} as const;
-
-/** L’expérience d’un familier. ⚠️ Relit les deux carrières d’avant la v0.805 tant qu’il
- *  n’a rien regagné — sans migration, et sans rien perdre de ce qui avait été dressé. */
-export function famXp(it: Pick<Item, 'xp' | 'atkXp' | 'defXp'>): number {
-  return it.xp ?? (it.atkXp ?? 0) + (it.defXp ?? 0) * FAM_TRAIN.legacyDefToXp;
-}
-/** XP cumulée nécessaire pour atteindre le niveau `level`. */
-export function famXpForLevel(level: number): number {
-  return FAM_TRAIN.xpPerLevel * Math.max(0, level) ** 2;
-}
-/** Niveau de dressage correspondant à une XP. ⚠️ Le PLAFOND (niveau du joueur) est
- *  appliqué à l'ATTRIBUTION de l'XP (`grantFamiliarXp`), pas ici. */
-export function famLevel(xp: number | undefined): number {
-  return Math.floor(Math.sqrt(Math.max(0, xp ?? 0) / FAM_TRAIN.xpPerLevel));
-}
-function famTrainMult(level: number): number {
-  return 1 + Math.max(0, level) * FAM_TRAIN.k;
-}
-/**
- * CE QU’UN FAMILIER VAUT, au héros comme à un aventurier : niveau d’objet × dressage.
- * ⚠️ SOURCE UNIQUE — `aggregateEffects` (le héros) et `companionEffects` (l’aventurier,
- * route comme rempart) la lisent tous les deux. C’est ce qui garantit « comme le héros ».
- */
+// ── CE QU’UN FAMILIER VAUT ──
+// ⚠️ PLUS DE DRESSAGE (2026-09-22, décision de l'utilisateur) : un familier n'a plus
+// d'expérience. Sa valeur est FIXÉE AU DROP — rang, étoiles (jet) et niveau d'objet, comme
+// un objet. Le dressage (v0.805) servait aussi aux aventuriers, qui ne portent plus de
+// familier depuis la v0.996 ; l'XP déjà gagnée par un familier reste dans le JSON, sans effet.
+/** SOURCE UNIQUE du multiplicateur d'un familier : son niveau d'objet. */
 export function familiarMult(fam: Item): number {
-  return itemLevelMult(fam.level) * famTrainMult(famLevel(famXp(fam)));
-}
-/** Crédite de l'XP, PLAFONNÉE au niveau du joueur — « le sport est le plafond » vaut
- *  aussi pour les compagnons. Rend l'objet inchangé si rien ne bouge. Écrit `xp` et
- *  retire les deux champs legacy, déjà comptés par `famXp`. */
-export function grantFamiliarXp(it: Item, amount: number, playerLevel: number): Item {
-  if (amount <= 0) return it;
-  const cur = famXp(it);
-  const cap = famXpForLevel(Math.max(0, playerLevel) + 1) - 1;
-  // Jamais de recul : un familier dressé avant que le plafond ne descende garde son acquis.
-  const out = Math.max(cur, Math.min(cap, cur + amount));
-  if (out === it.xp) return it;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { atkXp, defXp, ...rest } = it;
-  return { ...rest, xp: out };
+  return itemLevelMult(fam.level);
 }
 
 // JET du roll (0..100 %) — REFONTE v0.574 : fini les qualités ★1-5. Le `roll` (0..1, figé au
@@ -1070,7 +1009,7 @@ export const SLOT_AFFIXES: Record<GearSlot, { major: EffectType[]; support: Effe
   },
   accessory: {
     major: ['crit_pct', 'rage_pct'],
-    support: ['lifesteal_pct', 'gold_pct', 'magic_find_pct', 'training_pct'],
+    support: ['lifesteal_pct', 'gold_pct', 'magic_find_pct'],
   },
   // ⚠️ TRANSITOIRE : la relique devient une attaque spéciale à jauge (étape 4) et perd ses
   // stats. D'ici là elle garde des stats de survie, hors de la règle des deux emplacements.
@@ -1163,7 +1102,6 @@ const EFFECT_BASE: Record<EffectType, number> = {
   crit_resist_pct: 15,
   start_shield_pct: 8,
   dodge_pct: 5,
-  training_pct: 15,
 };
 
 /** Base d'un effet (avant rareté, jet et niveau d'objet) — celle d'un drop du héros. */
@@ -1355,8 +1293,6 @@ export function effectLabelFor(type: EffectType, v: number): string {
       return `+${s}% barrière de départ`;
     case 'dodge_pct':
       return `+${s}% esquive`;
-    case 'training_pct':
-      return `+${s}% dressage du familier`;
   }
 }
 /** Comment se LIT chaque canal d’un agrégat.
@@ -1395,7 +1331,6 @@ const AGGREGATE_AS: Record<keyof AggregatedEffects, EffectType> = {
   ripostePct: 'riposte_pct',
   critResistPct: 'crit_resist_pct',
   startShieldPct: 'start_shield_pct',
-  trainingPct: 'training_pct',
 };
 /** Le pictogramme de chaque canal — repris de la fiche Héros, qui les affichait déjà. */
 const AGGREGATE_EMOJI: Record<keyof AggregatedEffects, string> = {
@@ -1421,7 +1356,6 @@ const AGGREGATE_EMOJI: Record<keyof AggregatedEffects, string> = {
   ripostePct: '↩️',
   critResistPct: '🪖',
   startShieldPct: '🔰',
-  trainingPct: '🐾',
 };
 const AGGREGATE_KEYS = Object.keys(AGGREGATE_AS) as (keyof AggregatedEffects)[];
 
@@ -2095,7 +2029,7 @@ export const AFFIX_TRANSLATION: Partial<Record<GearSlot, Partial<Record<EffectTy
       max_pv_pct: 'lifesteal_pct',
       dmg_reduction_pct: 'lifesteal_pct',
       regen_pct: 'lifesteal_pct',
-      initiative_pct: 'training_pct',
+      initiative_pct: 'magic_find_pct',
     },
   };
 /** Effets légendaires d'avant qui DEVIENNENT un pouvoir de relique. */
@@ -2398,7 +2332,7 @@ export function compareFamiliars(a: Item, b: Item): number {
   );
 }
 
-/** Stat RÉELLEMENT portée par un familier : sa valeur × niveau d'objet × dressage — la
+/** Stat RÉELLEMENT portée par un familier : sa valeur × niveau d'objet — la
  *  même formule que le combat (`aggregateEffects`), donc ce qu'on garde est ce qui se bat. */
 function familiarStat(f: Item): number {
   return f.effect.value * familiarMult(f);
@@ -2578,7 +2512,6 @@ export interface AggregatedEffects {
   ripostePct: number; // note de riposte (→ chance, courbe)
   critResistPct: number; // note de résistance aux critiques (→ part retirée, courbe)
   startShieldPct: number; // note de barrière de départ (→ part des PV, courbe)
-  trainingPct: number; // fraction : + XP de dressage du familier (hors combat)
 }
 
 export function emptyEffects(): AggregatedEffects {
@@ -2605,7 +2538,6 @@ export function emptyEffects(): AggregatedEffects {
     ripostePct: 0,
     critResistPct: 0,
     startShieldPct: 0,
-    trainingPct: 0,
   };
 }
 
@@ -2634,7 +2566,6 @@ const EFFECT_CHANNEL: Record<EffectType, keyof AggregatedEffects> = {
   crit_resist_pct: 'critResistPct',
   start_shield_pct: 'startShieldPct',
   dodge_pct: 'dodgeAdd',
-  training_pct: 'trainingPct',
 };
 
 /** Applique une valeur (fraction) d'un EffectType donné à un agrégat. */
@@ -3084,7 +3015,6 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   // NIVEAU (ilvl, v0.592) → comme les objets, un familier plus haut niveau est plus fort.
   const fam = equipped[FAMILIAR_SLOT];
   if (fam) {
-    // × son DRESSAGE (4ᵉ axe, borné) — la même formule que pour un aventurier.
     const flm = familiarMult(fam);
     applyEffect(a, fam.effect.type, (fam.effect.value * flm) / 100);
     if (fam.effect2) applyEffect(a, fam.effect2.type, (fam.effect2.value * flm) / 100);
@@ -3279,11 +3209,6 @@ export function magicFindLuck(equipped: Equipped, voie?: string | null): number 
   // facteur faible et un plafond → au mieux ~+0,25 de luck (épaissit un peu la pointe
   // haute de la pyramide, ne peut PAS franchir le cap +2 rangs de ta ligue).
   return Math.min(0.25, aggregateEffects(equipped, voie).magicFindPct * 0.5);
-}
-/** Multiplicateur de l'XP de dressage du familier porté (stat « dressage », refonte
- *  équipement). Hors combat : il ne change ni la puissance ni un combat. */
-export function trainingMult(equipped: Equipped, voie?: string | null): number {
-  return 1 + Math.max(0, aggregateEffects(equipped, voie).trainingPct);
 }
 
 /** OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : cherche, parmi l'équipé + le sac, la

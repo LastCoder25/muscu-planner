@@ -34,6 +34,19 @@ const old = (o: Partial<Item> & Pick<Item, 'slot'>): Item => ({
 });
 
 describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
+  it('⚠️ la stat « dressage » retirée (2026-09-22) est convertie en une stat vivante', () => {
+    const r = migrateGearItem(
+      old({
+        slot: 'accessory',
+        effect: { type: 'crit_pct', value: 5 },
+        effect2: { type: 'training_pct' as never, value: 15 },
+      }),
+    );
+    const types = [r.effect.type, r.effect2?.type, r.effect3?.type];
+    expect(types).not.toContain('training_pct');
+    expect(r.effect2).toBeDefined();
+  });
+
   it('traduit les stats sorties de leur emplacement (PV sur une arme → dégâts, etc.)', () => {
     const w = migrateGearItem(
       old({

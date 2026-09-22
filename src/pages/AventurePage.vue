@@ -764,14 +764,6 @@
                       >
                       <span class="lvl-badge">Nv {{ f.level }}</span>
                       <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
-                      <!-- Dressage : le familier ÉQUIPÉ gagne de l'XP en combat (donjon, boss,
-                         Labyrinthe, arène, portail) ; les champions ne portent plus de familier
-                         depuis la v0.996, donc plus de convoi ni de défense. -->
-                      <span
-                        class="fam-train"
-                        title="Dressage — gagné par le familier équipé en donjon, contre les boss et au Labyrinthe"
-                        >🎓 {{ famLevel(famXp(f)) }}</span
-                      >
                     </div>
                     <div class="tal-eff">{{ itemEffects(f) }}</div>
                     <!-- Pastille de comparaison (ticket 25091d45) : gain/perte de puissance si
@@ -3089,8 +3081,6 @@ import {
 } from '@/data/endless';
 import {
   sellValue,
-  famLevel,
-  famXp,
   playerWithGear,
   chanceChanges,
   aggregateEffects,
@@ -4871,8 +4861,6 @@ async function enterArena() {
       energyCost: arenaCost.value,
       gold,
       drops,
-      famAtkXp: 3 + r.waves * 2,
-      playerLevel: c.value.level.level,
     });
     run.value = {
       name: `Arène — ${r.waves} vague${r.waves > 1 ? 's' : ''}`,
@@ -4990,8 +4978,6 @@ async function explore(d: Dungeon) {
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
       // Dressage d'ATTAQUE : ∝ la profondeur du donjon et ce qu'on y a abattu.
-      famAtkXp: (2 + d.recoLevel) * Math.max(1, r.defeated),
-      playerLevel: c.value.level.level,
     });
     // En bandeau, comme au boss : un donjon se refarme, un éclat plein écran bloquerait la suite.
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
@@ -5234,8 +5220,6 @@ async function fightBoss(b: MilestoneBoss) {
       drops,
       ...(talentDrops.length ? { talentDrops } : {}),
       // Dressage d'ATTAQUE : le familier se bat aussi contre les boss.
-      famAtkXp: (4 + b.unlockLevel) * (win ? 2 : 1),
-      playerLevel: c.value.level.level,
     });
     if (talentDrops.length) queueFx(() => celebrateTalentDrop(talentDrops[0]!, true));
     run.value = {
@@ -5363,8 +5347,6 @@ async function fightEndless() {
       gold,
       drops,
       cleared: win,
-      famAtkXp: 4 + tier * 2,
-      playerLevel: c.value.level.level,
     });
     // Nouveau palier RECORD du Portail → célébration (progression end-game),
     // différée à la fin de l'animation de combat.
@@ -7741,14 +7723,6 @@ button.pt-mini:active {
   color: var(--dim);
 }
 /* Badge « effet signature » (✦) sur une carte familier, harmonisé avec les talents. */
-.fam-train {
-  font-size: 10.5px;
-  padding: 1px 5px;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  font-variant-numeric: tabular-nums;
-}
 .fam-sig-badge {
   flex: 0 0 auto;
   color: #ffd23f;
