@@ -130,6 +130,55 @@ reprennent son geste. Les deux voies défensives sont séparées nettement :
 Ces forces et faiblesses sont **des cibles de mesure** (§ 8) : chaque set doit rester
 jouable partout, mais être nettement meilleur sur son terrain.
 
+### 4.1 bis — CE QUE LA MESURE DIT (2026-09-22, § 8 mesure 4)
+
+Protocole : deux terrains à **menace égale** (mêmes PV, mêmes dégâts par tour) dont seule la
+FORME change — « gros coups » (1 frappe très forte) contre « horde » (6 frappes faibles) —
+puis un second banc « combat court » (peu de PV, frappe énorme) contre « combat long ».
+Difficulté égalisée par bissection du multiplicateur de monstre à 50 % de victoire (m50),
+**moyenné sur 5 tirages d'équipement**, niveaux 30/60/90.
+
+⚠️ **Il n'y a qu'UN axe, pas deux** : les deux bancs se recouvrent presque entièrement
+(« combat long » = beaucoup de tours = beaucoup de petits coups). Le vrai axe est
+**dégâts CONCENTRÉS ↔ dégâts ÉTALÉS**.
+
+| Voie          | Mesuré (L60 / L90)    | Cible § 4.1              | Verdict                       |
+| ------------- | --------------------- | ------------------------ | ----------------------------- |
+| 🪨 Colosse    | **+97 % / +148 %**    | gros coups espacés       | ✅ net, stable sur 10 tirages |
+| 🌵 Épineux    | **−64 % / −62 %**     | hordes                   | ✅ net, stable sur 10 tirages |
+| 🤺 Duelliste  | **−51 % / −30 %**     | « frappe peu mais fort » | ❌ **l'inverse de la cible**  |
+| 🛡️ Gardien    | −17 % / −3 %          | coups nombreux et moyens | ~ bon sens, faible            |
+| 💥 Berserker  | −0 % / +40 % (bruité) | combats longs            | ❌ plutôt les courts          |
+| 🗡️ Assassin   | +3 % / +52 % (bruité) | boss à gros PV           | ~ signe attendu, bruité       |
+| 🩸 Vampire    | −1 % / +9 %           | longues descentes        | — pas de profil sur cet axe   |
+| 🌀 Frénétique | +4 % / +20 %          | combats longs            | ❌ plutôt les courts          |
+
+**Trois conclusions, toutes mesurées.**
+
+1. **Les 4 sets DÉFENSIFS ont un profil, les 4 OFFENSIFS n'en ont pas** — et c'est
+   structurel : « durer » est un axe de SURVIE. Un set offensif tue plus vite, ce qui aide
+   **autant** en combat court ; il ne peut donc pas se différencier là-dessus. Les cases
+   « combats longs » de Berserker, Vampire et Frénétique sont inatteignables avec des stats
+   offensives — c'est la SPEC qui doit changer, pas le code.
+2. ⚠️ **Le Duelliste est structurellement un contre-horde** : parade et riposte agissent
+   **par COUP**, donc plus il y a de coups, plus elles paient. Le rendre bon contre les gros
+   coups demanderait de changer la mécanique (riposte proportionnelle au coup encaissé), pas
+   un réglage. **Décision de conception à prendre** — et sa case actuelle double celle de
+   l'Épineux.
+3. **L'ÉLAN sature au 5e tour.** Mesuré au point d'équilibre, un combat COURT dure 2 à 3 tours
+   et un combat LONG **15 à 34** ; le plafond d'élan vaut 4 (8 avec Transe). Passé le 5e tour,
+   durer ne rapporte plus rien — d'où « lent au départ, écrasant en fin de combat » qui mesure
+   l'inverse. ⚠️ **Deux leviers ont été écrits, mesurés, puis JETÉS** : compter l'élan en tours
+   de COMBAT (il aide autant les combats courts, donc ne sert pas l'identité) et faire monter
+   le plafond avec la stat (+5 à +10 points de clear sur boss et donjons → recalibrage complet
+   du contenu, **sans renverser le profil** : +117 % → +106 % à L90). Le jeu n'en vaut pas la
+   chandelle tant que l'axe reste un axe de survie.
+
+⚠️ **PIÈGE DE MESURE, la leçon de la v0.730 re-rencontrée** : sur UN seul tirage d'équipement,
+le même set mesure 13,06 et 24,09 de m50 au même niveau (presque le double), et le SIGNE de
+l'écart s'inverse pour 5 sets sur 8. **Le tirage pèse plus que la voie** — toute mesure de
+profil se moyenne sur plusieurs tirages.
+
 ### 4.2 La stat du Colosse (à décider après validation des profils)
 
 Aucune stat existante ne dit « encaisser un gros coup ». Piste : **robustesse** — un coup
