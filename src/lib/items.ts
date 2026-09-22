@@ -586,7 +586,7 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     name: 'Brasier',
     emoji: '🔥',
     voie: 'berserker',
-    charge: 'se charge vite, mais seulement sous le seuil de rage',
+    charge: `se charge vite, dès que tu passes sous ${Math.round(RELIC.brasierThreshold * 100)} % de tes PV`,
     effect: (f) =>
       `une frappe de ${(RELIC.brasierMult * f).toFixed(1)} volée, jusqu’à ×${1 + RELIC.brasierMissing} selon les PV qui te manquent`,
   },
@@ -595,9 +595,8 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     name: 'Rempart vengeur',
     emoji: '🛡️',
     voie: 'gardien',
-    charge: 'chaque blocage (les dégâts évités s’accumulent)',
-    effect: (f) =>
-      `renvoie ${pctOf(f)} des dégâts évités (au plus ${pctOf(RELIC.stockCapPct * f)} des PV max de l’ennemi)`,
+    charge: 'chaque blocage',
+    effect: (f) => `une contre-attaque de ${(RELIC.rempartMult * f).toFixed(1)} volée`,
   },
   {
     id: 'coup_fatal',
@@ -639,9 +638,8 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     name: 'Éclat de ronces',
     emoji: '🌵',
     voie: 'epineux',
-    charge: 'chaque coup d’épines (les dégâts renvoyés s’accumulent)',
-    effect: (f) =>
-      `une explosion de ${pctOf(f)} du stock (au plus ${pctOf(RELIC.stockCapPct * f)} des PV max de l’ennemi)`,
+    charge: 'chaque coup d’épines',
+    effect: (f) => `une explosion de ${(RELIC.roncesMult * f).toFixed(1)} volée`,
   },
   {
     id: 'carapace',
@@ -763,7 +761,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Charge',
     emoji: '🐗',
     slots: ['weapon'],
-    desc: 'Les coups de tes 3 premiers tours infligent +30 %.',
+    desc: `Les coups de tes ${COMBAT.chargeTurns} premiers tours infligent ×${COMBAT.chargeMult}.`,
     echo: ['damage_pct'],
   },
   {
@@ -779,7 +777,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Vampirisme',
     emoji: '🩸',
     slots: ['weapon'],
-    desc: 'Tes coups critiques te soignent de la moitié de leurs dégâts.',
+    desc: `Tes coups critiques te soignent de la moitié de leurs dégâts, jusqu’à ${Math.round(COMBAT.vampiricCapPct * 100)} % de tes PV max par tour, en plus de ton vol de vie.`,
     echo: ['lifesteal_pct', 'crit_dmg_pct'],
   },
   // 🥋 ARMURE
@@ -788,7 +786,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Endurance',
     emoji: '🪨',
     slots: ['armor'],
-    desc: 'Sous 50 % PV, tu réduis de 35 % supplémentaires les dégâts subis.',
+    desc: `Sous ${Math.round(COMBAT.enduranceThreshold * 100)} % PV, tu réduis de ${Math.round(COMBAT.enduranceReduction * 100)} % supplémentaires les dégâts subis.`,
     echo: ['dmg_reduction_pct', 'max_pv_pct'],
   },
   {
@@ -804,7 +802,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Cicatrisation',
     emoji: '🩹',
     slots: ['armor'],
-    desc: 'Ta récupération entre deux combats est doublée.',
+    desc: `Tu récupères ${Math.round(COMBAT.scarringTurnHeal * 1000) / 10} % de tes PV max à chaque tour, et ta récupération entre deux combats est doublée.`,
     echo: ['regen_pct'],
   },
   // 🛡️ BOUCLIER
@@ -821,7 +819,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Riposte affûtée',
     emoji: '⚔️',
     slots: ['shield'],
-    desc: 'Tes ripostes sont des coups critiques.',
+    desc: `Tes ripostes sont des coups critiques, ×${COMBAT.whettedMult}.`,
     echo: ['riposte_pct', 'parry_pct'],
   },
   {
@@ -838,7 +836,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Œil du prédateur',
     emoji: '👁️',
     slots: ['helmet'],
-    desc: 'Les coups de tes 3 premiers tours ne peuvent pas être esquivés.',
+    desc: `Les coups de tes ${COMBAT.predatorTurns} premiers tours ne peuvent pas être esquivés et infligent ×${COMBAT.predatorMult}.`,
     echo: ['accuracy_pct'],
   },
   {
@@ -846,7 +844,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Vigilance',
     emoji: '🦉',
     slots: ['helmet'],
-    desc: 'Le 1er coup critique que tu reçois n’en est pas un.',
+    desc: `Les ${COMBAT.vigilanceCrits} premiers coups critiques que tu reçois n’en sont pas.`,
     echo: ['crit_resist_pct'],
   },
   {
@@ -854,7 +852,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Sang-froid',
     emoji: '🧊',
     slots: ['helmet'],
-    desc: 'Sous 30 % PV, les coups critiques ennemis n’en sont plus.',
+    desc: 'Les coups critiques ennemis n’en sont plus.',
     echo: ['crit_resist_pct', 'max_pv_pct'],
   },
   // 🥾 BOTTES
@@ -888,7 +886,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Soif',
     emoji: '🍷',
     slots: ['accessory'],
-    desc: 'Sous 50 % PV, ton vol de vie est triplé.',
+    desc: `Sous ${Math.round(COMBAT.thirstThreshold * 100)} % PV, le soin que tu peux voler en un tour est multiplié par ${COMBAT.thirstHealCapMult}.`,
     echo: ['lifesteal_pct'],
   },
   {
@@ -896,7 +894,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Sceau de rage',
     emoji: '🔥',
     slots: ['accessory'],
-    desc: 'Ta rage s’active dès 50 % PV au lieu de 30 %.',
+    desc: 'Ta rage reste active quels que soient tes PV.',
     echo: ['rage_pct'],
   },
   {
@@ -904,7 +902,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Chasseur',
     emoji: '🎯',
     slots: ['accessory'],
-    desc: 'Tes coups sur un ennemi sous 25 % PV sont des critiques certains.',
+    desc: `Tes coups sur un ennemi sous ${Math.round(COMBAT.hunterThreshold * 100)} % PV sont des critiques certains.`,
     echo: ['crit_pct'],
   },
 ];

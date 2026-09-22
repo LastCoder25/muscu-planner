@@ -132,8 +132,13 @@ describe('🔮 chaque pouvoir fait ce qu’il annonce', () => {
     // Même en arrivant jauge vide d'un combat précédent, elle repart pleine.
     expect(run(hero(R('ouverture')), foe(), { gauge: 0 }).log[0]!.skills).toContain('rp_ouverture');
   });
-  it('Brasier : ne se charge que sous le seuil de rage, et frappe plus fort si on saigne', () => {
+  it('Brasier : ne se charge que sous son seuil, et frappe plus fort si on saigne', () => {
     expect(fired(hero(R('brasier')), foe({ damage: 1 }), 'rp_brasier')).toHaveLength(0);
+    // Seuil propre (étape 7), au-dessus du seuil de rage : à mi-vie il se charge déjà.
+    const mid = (RELIC.brasierThreshold - 0.05) * 1000;
+    expect(
+      fired(hero(R('brasier')), foe({ damage: 1 }), 'rp_brasier', { startPlayerPv: mid }).length,
+    ).toBeGreaterThan(0);
     const low = fired(hero(R('brasier')), foe({ damage: 1 }), 'rp_brasier', { startPlayerPv: 100 });
     expect(low.length).toBeGreaterThan(0);
     expect(low[0]!.damage).toBeGreaterThan(50 * RELIC.brasierMult * 2); // ×(1 + 2 × 0,9)
@@ -159,16 +164,18 @@ describe('🔮 chaque pouvoir fait ce qu’il annonce', () => {
   it('Rempart vengeur : les blocages s’accumulent puis repartent en un coup', () => {
     const log = fired(hero(R('rempart'), { block: 1 }), foe(), 'rp_rempart');
     expect(log.length).toBeGreaterThan(0);
-    // 4 blocages de ~30 × 0,75 évités ≈ 90 renvoyés.
-    expect(log[0]!.damage).toBeGreaterThan(60);
+    // ⚠️ Étape 7 : une contre-attaque d'une volée et demie (volée de 50, force 1), et non plus
+    // les dégâts évités (ils ne pesaient rien face à un boss).
+    expect(log[0]!.damage).toBe(Math.round(50 * RELIC.rempartMult));
     expect(fired(hero(R('rempart')), foe(), 'rp_rempart')).toHaveLength(0); // sans blocage, rien
   });
-  it('Éclat de ronces : les épines s’accumulent puis explosent ; le stock est plafonné', () => {
-    expect(fired(hero(R('ronces'), { thorns: 0.5 }), foe(), 'rp_ronces').length).toBeGreaterThan(0);
-    // 5 coups d'épines de 300 = 1 500 en stock, plafonnés à 20 % de 5 000 = 1 000.
-    const m = foe({ pv: 5000, damage: 100, initiative: 99 });
-    const hit = fired(hero(R('ronces'), { thorns: 3, pv: 1e6, damage: 1 }), m, 'rp_ronces')[0]!;
-    expect(hit.damage).toBe(5000 * RELIC.stockCapPct);
+  // ⚠️ RÉÉCRIT (étape 7) : l'explosion vaut une VOLÉE, et non plus le stock des dégâts renvoyés
+  // — minuscule face aux PV d'un boss, il ne valait rien (0 % mesuré, même avec 30 % d'épines).
+  it('Éclat de ronces : les coups d’épines chargent une explosion d’une volée et demie', () => {
+    const log = fired(hero(R('ronces'), { thorns: 0.5 }), foe(), 'rp_ronces');
+    expect(log.length).toBeGreaterThan(0);
+    expect(log[0]!.damage).toBe(Math.round(50 * RELIC.roncesMult)); // volée de 50, force 1
+    expect(fired(hero(R('ronces')), foe(), 'rp_ronces')).toHaveLength(0); // sans épines, rien
   });
   it('Festin : le soin perdu au plafond du tour revient en dégâts', () => {
     const p = hero(R('festin'), { lifesteal: 1, strikes: 4 });
@@ -215,7 +222,8 @@ describe('🔮 chaque pouvoir fait ce qu’il annonce', () => {
     expect(plein.damage).toBeGreaterThan(vide.damage);
   });
   it('Phénix : le coup fatal perd une part qui suit la force (plafonnée)', () => {
-    const m = foe({ damage: 80, initiative: 99 });
+    // Coup de ~70 sur 50 PV : sans le Phénix il tue ; amorti de 40 % (× force), il laisse vivant.
+    const m = foe({ damage: 70, initiative: 99 });
     const p = (f: number) =>
       run(hero(R('phenix', f), { pv: 50 }), m).log.find((e) => e.who === 'monster')!;
     expect(p(1).playerPv).toBeGreaterThan(0);

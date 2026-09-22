@@ -262,7 +262,7 @@ describe('⚠️ L’EMPREINTE ARMÉE — celle qui couvre VRAIMENT le marquage'
     };
     const f: Combatant = {
       name: 'F',
-      pv: 5000,
+      pv: 7000, // étape 7 : Charge plus forte raccourcit le combat — 7 000 PV pour que la rage morde
       damage: 260,
       crit: 0.15,
       dodge: 0.08,
@@ -295,9 +295,10 @@ describe('⚠️ L’EMPREINTE ARMÉE — celle qui couvre VRAIMENT le marquage'
       // les coups de rage qui suivent (PV plus hauts). Encore une fois : aucun tirage de plus.
       // Étape 7 : Carnage passe de +300 % à +45 % (signatures recalibrées) — seuls les DÉGÂTS
       // du joueur changent, la suite qui/quoi est IDENTIQUE ; le combat, plus long, voit la rage
-      // mordre (d'où « rage » ci-dessus).
-    ).toBe('ph146,pc361,mh61,ph195,ph196,mh243,pd0,pc438,mc442,ph195,ph180,mh250');
-    expect(r.rounds).toBe(15); // Carnage plus faible : combat plus long (était 10)
-    expect(r.log).toHaveLength(22); // était 15
+      // mordre (d'où « rage » ci-dessus). Étape 7 bis : Charge ×2 sur 4 tours — encore seuls les
+      // dégâts du joueur changent ; l'adversaire passe à 7 000 PV pour garder la rage en jeu.
+    ).toBe('ph224,pc556,mh61,ph301,ph303,mh243,pd0,pc676,mc442,ph391,ph363,mh250');
+    expect(r.rounds).toBe(15);
+    expect(r.log).toHaveLength(23);
   });
 });

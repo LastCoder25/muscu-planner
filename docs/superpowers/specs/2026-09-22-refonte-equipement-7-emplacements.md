@@ -61,13 +61,13 @@ Sonde jetable (supprimée) sur les vraies fonctions : joueur de référence du p
 (`test/helpers/gearedFighter` — butin des 13 derniers niveaux aux taux réels,
 optimiseur du jeu, familiers et talent), 4 tirages par niveau.
 
-| Niveau | Nu | Avec objets | Avec tout | Perte si on retire UN emplacement | Familier |
-| --- | --- | --- | --- | --- | --- |
-| 10 | 117 | ×1,21 | ×1,37 | ~4 % | 2,8 % |
-| 30 | 1 976 | ×1,72 | ×1,93 | 8 à 11 % | 4,7 % |
-| 50 | 7 985 | ×2,32 | ×2,73 | 13 à 15 % | 7,4 % |
-| 70 | 20 816 | ×4,24 | ×5,03 | ~22 % | 6,8 % |
-| 90 | 43 096 | ×5,30 | ×6,78 | ~22,5 % | 12,3 % |
+| Niveau | Nu     | Avec objets | Avec tout | Perte si on retire UN emplacement | Familier |
+| ------ | ------ | ----------- | --------- | --------------------------------- | -------- |
+| 10     | 117    | ×1,21       | ×1,37     | ~4 %                              | 2,8 %    |
+| 30     | 1 976  | ×1,72       | ×1,93     | 8 à 11 %                          | 4,7 %    |
+| 50     | 7 985  | ×2,32       | ×2,73     | 13 à 15 %                         | 7,4 %    |
+| 70     | 20 816 | ×4,24       | ×5,03     | ~22 %                             | 6,8 %    |
+| 90     | 43 096 | ×5,30       | ×6,78     | ~22,5 %                           | 12,3 %   |
 
 **Cinq constats.**
 
@@ -157,29 +157,29 @@ possible.
 
 ### 3.3 Le catalogue : 21 stats
 
-| Stat | Ce qu'elle fait | Type | État |
-| --- | --- | --- | --- |
-| Dégâts | + % sur chaque coup | attaque | existe |
-| **Dégâts critiques** | un critique fait plus que ×2 | attaque | nouvelle |
-| **Précision** | réduit l'esquive de l'ennemi | attaque | nouvelle |
-| Élan | + dégâts par tour de combat, jusqu'à 6 | attaque | redéfinie (§ 3.2) |
-| Exécution | + dégâts sur un ennemi sous 25 % | attaque | existe |
-| **Saignement** | les coups laissent des dégâts sur la durée | attaque | nouvelle |
-| Vol de vie | soin sur les dégâts infligés | attaque / survie | existe |
-| Chance de critique | note de critique | attaque (indirect) | redéfinie (§ 3.1) |
-| Rage | + dégâts sous 30 % de PV | attaque (indirect) | existe |
-| PV | + % de PV max | survie | existe |
-| Réduction | note de réduction | survie | redéfinie (§ 3.1) |
-| **Blocage** | note : un coup reçu ne fait que 25 % | survie | nouvelle |
-| **Parade** | note : coup évité, l'ennemi saute un tour | survie | nouvelle |
-| **Riposte** | après un coup reçu, chance de contre-attaquer | survie / attaque | nouvelle |
-| Épines | renvoie une part des dégâts reçus | survie / attaque | existe |
-| **Résistance aux critiques** | les critiques ennemis font moins mal | survie | nouvelle |
-| **Bouclier de départ** | barrière de X % des PV au début du combat | survie | nouvelle |
-| Régénération | PV récupérés entre deux combats | survie (indirect) | existe |
-| Esquive | note d'esquive | survie (indirect) | existe (talents), nouvelle sur objet |
-| Initiative | commencer le combat en premier | indirect | existe |
-| Or · Découverte d'objets · **Dressage** | économie, butin, XP du familier | confort | dressage nouvelle |
+| Stat                                    | Ce qu'elle fait                               | Type               | État                                 |
+| --------------------------------------- | --------------------------------------------- | ------------------ | ------------------------------------ |
+| Dégâts                                  | + % sur chaque coup                           | attaque            | existe                               |
+| **Dégâts critiques**                    | un critique fait plus que ×2                  | attaque            | nouvelle                             |
+| **Précision**                           | réduit l'esquive de l'ennemi                  | attaque            | nouvelle                             |
+| Élan                                    | + dégâts par tour de combat, jusqu'à 6        | attaque            | redéfinie (§ 3.2)                    |
+| Exécution                               | + dégâts sur un ennemi sous 25 %              | attaque            | existe                               |
+| **Saignement**                          | les coups laissent des dégâts sur la durée    | attaque            | nouvelle                             |
+| Vol de vie                              | soin sur les dégâts infligés                  | attaque / survie   | existe                               |
+| Chance de critique                      | note de critique                              | attaque (indirect) | redéfinie (§ 3.1)                    |
+| Rage                                    | + dégâts sous 30 % de PV                      | attaque (indirect) | existe                               |
+| PV                                      | + % de PV max                                 | survie             | existe                               |
+| Réduction                               | note de réduction                             | survie             | redéfinie (§ 3.1)                    |
+| **Blocage**                             | note : un coup reçu ne fait que 25 %          | survie             | nouvelle                             |
+| **Parade**                              | note : coup évité, l'ennemi saute un tour     | survie             | nouvelle                             |
+| **Riposte**                             | après un coup reçu, chance de contre-attaquer | survie / attaque   | nouvelle                             |
+| Épines                                  | renvoie une part des dégâts reçus             | survie / attaque   | existe                               |
+| **Résistance aux critiques**            | les critiques ennemis font moins mal          | survie             | nouvelle                             |
+| **Bouclier de départ**                  | barrière de X % des PV au début du combat     | survie             | nouvelle                             |
+| Régénération                            | PV récupérés entre deux combats               | survie (indirect)  | existe                               |
+| Esquive                                 | note d'esquive                                | survie (indirect)  | existe (talents), nouvelle sur objet |
+| Initiative                              | commencer le combat en premier                | indirect           | existe                               |
+| Or · Découverte d'objets · **Dressage** | économie, butin, XP du familier               | confort            | dressage nouvelle                    |
 
 **Retirées du projet d'objets** : vitesse d'attaque (le sport en donne déjà jusqu'à 37 par
 tour, en ajouter exploserait), pénétration (presque aucun monstre n'a de réduction), XP,
@@ -189,15 +189,15 @@ tour, en ajouter exploserait), pénétration (presque aucun monstre n'a de rédu
 
 ## 4. Les 7 emplacements
 
-| Emplacement | Rôle | Stats principales (#1) | Stats de soutien (#2, #3) |
-| --- | --- | --- | --- |
-| ⚔️ **Arme** | le coup porté | dégâts · dégâts critiques | précision · élan · exécution · saignement · vol de vie |
-| 🥋 **Armure** | encaisser | PV · réduction | épines · régénération · bouclier de départ |
-| 🛡️ **Bouclier** | arrêter le coup | blocage · parade | riposte · épines · résistance aux critiques |
-| ⛑️ **Casque** | protéger, voir venir | PV · précision | initiative · résistance aux critiques · découverte d'objets |
-| 🥾 **Bottes** | le jeu de jambes | esquive · initiative | riposte · régénération |
-| 💍 **Anneau** | les bonus indirects | chance de critique · rage | vol de vie · or · découverte d'objets · dressage |
-| 🔮 **Relique** | l'attaque spéciale | **un pouvoir** (§ 7) | — |
+| Emplacement     | Rôle                 | Stats principales (#1)    | Stats de soutien (#2, #3)                                   |
+| --------------- | -------------------- | ------------------------- | ----------------------------------------------------------- |
+| ⚔️ **Arme**     | le coup porté        | dégâts · dégâts critiques | précision · élan · exécution · saignement · vol de vie      |
+| 🥋 **Armure**   | encaisser            | PV · réduction            | épines · régénération · bouclier de départ                  |
+| 🛡️ **Bouclier** | arrêter le coup      | blocage · parade          | riposte · épines · résistance aux critiques                 |
+| ⛑️ **Casque**   | protéger, voir venir | PV · précision            | initiative · résistance aux critiques · découverte d'objets |
+| 🥾 **Bottes**   | le jeu de jambes     | esquive · initiative      | riposte · régénération                                      |
+| 💍 **Anneau**   | les bonus indirects  | chance de critique · rage | vol de vie · or · découverte d'objets · dressage            |
+| 🔮 **Relique**  | l'attaque spéciale   | **un pouvoir** (§ 7)      | —                                                           |
 
 - **Chaque stat vit sur 1 ou 2 emplacements**, jamais plus.
 - Le nombre d'affixes par rareté ne change pas (1 en Commun/Inhabituel, 2 en
@@ -212,15 +212,15 @@ tour, en ajouter exploserait), pénétration (presque aucun monstre n'a de rédu
 Le budget total de l'équipement (§ 5) est réparti par emplacement, de façon à ce que
 **l'attaque et la survie reçoivent autant l'une que l'autre** :
 
-| Emplacement | Poids | Côté |
-| --- | --- | --- |
-| Arme | 1,5 | attaque |
-| Anneau | 1 | attaque (indirect) |
-| Armure | 1 | survie |
-| Bouclier | 0,75 | survie |
-| Casque | 0,75 | survie / attaque (précision) |
-| Bottes | 0,5 | survie / tempo |
-| Relique | 1 | selon le pouvoir |
+| Emplacement | Poids | Côté                         |
+| ----------- | ----- | ---------------------------- |
+| Arme        | 1,5   | attaque                      |
+| Anneau      | 1     | attaque (indirect)           |
+| Armure      | 1     | survie                       |
+| Bouclier    | 0,75  | survie                       |
+| Casque      | 0,75  | survie / attaque (précision) |
+| Bottes      | 0,5   | survie / tempo               |
+| Relique     | 1     | selon le pouvoir             |
 
 La valeur d'une stat devient : **base × rang et jet × niveau d'objet × poids de
 l'emplacement**. Les poids sont un point de départ : ils se règlent à la mesure (§ 10),
@@ -292,15 +292,15 @@ de son emplacement.** Son « écho » (les stats qu'il prolonge, déjà un champ
 être inclus dans la liste de stats de l'emplacement (§ 4). Aujourd'hui les effets ont bien
 un emplacement, mais l'accord avec la fonction de l'objet n'est pas garanti :
 
-| Effet actuel | Emplacement actuel | Ce qui ne va pas |
-| --- | --- | --- |
-| Vampirisme (les critiques soignent) | accessoire | le soin par le coup porté est une affaire d'arme |
-| Endurance (−35 % de dégâts sous 50 % de PV) | accessoire | effet défensif sur un bijou |
-| Soif (vol de PV sous 50 %) | armure | du vol de vie sur une armure |
-| Riposte affûtée (critiques après un coup reçu) | armure | parer et riposter, c'est le bouclier |
-| Égide (la 1re attaque perd 45 %) | armure | arrêter le premier coup, c'est le bouclier |
-| Initiative (1er tour ×2, inesquivable) | arme | frapper avant l'autre, c'est la vitesse (bottes) |
-| Œil du prédateur (critiques les 3 premiers tours) | accessoire | le regard, c'est le casque |
+| Effet actuel                                      | Emplacement actuel | Ce qui ne va pas                                 |
+| ------------------------------------------------- | ------------------ | ------------------------------------------------ |
+| Vampirisme (les critiques soignent)               | accessoire         | le soin par le coup porté est une affaire d'arme |
+| Endurance (−35 % de dégâts sous 50 % de PV)       | accessoire         | effet défensif sur un bijou                      |
+| Soif (vol de PV sous 50 %)                        | armure             | du vol de vie sur une armure                     |
+| Riposte affûtée (critiques après un coup reçu)    | armure             | parer et riposter, c'est le bouclier             |
+| Égide (la 1re attaque perd 45 %)                  | armure             | arrêter le premier coup, c'est le bouclier       |
+| Initiative (1er tour ×2, inesquivable)            | arme               | frapper avant l'autre, c'est la vitesse (bottes) |
+| Œil du prédateur (critiques les 3 premiers tours) | accessoire         | le regard, c'est le casque                       |
 
 **La répartition** : 11 effets gardés (dont 8 changent d'emplacement — les 7 ci-dessus plus
 Rétorsion, qui passe de l'armure au bouclier pour lui laisser trois effets — et 2 sont
@@ -308,14 +308,14 @@ retravaillés) et 8 nouveaux, soit
 **19**, 3 ou 4 par emplacement, jamais le même effet sur deux emplacements (c'est ce qui
 garantit des effets différents sur un set complet).
 
-| Emplacement | Effets légendaires | Stats qu'ils prolongent |
-| --- | --- | --- |
-| ⚔️ **Arme** | **Bourreau** (achève un ennemi sous 15 %) · **Charge** (+30 % les 3 premiers tours) · **Cadence** (+18 % à partir du 3ᵉ tour) · **Vampirisme** ↪ (tes critiques te soignent) | exécution · dégâts · élan · vol de vie · dégâts critiques |
-| 🥋 **Armure** | **Endurance** ↪ (−35 % de dégâts sous 50 % de PV) · ✨ **Cuirasse vivante** (sous 30 % de PV, une barrière de 20 % des PV, une fois) · ✨ **Cicatrisation** (régénération doublée entre deux combats) | réduction · PV · bouclier de départ · régénération |
-| 🛡️ **Bouclier** | **Égide** ↪ (la 1re attaque est bloquée d'office) · **Riposte affûtée** ↪ (tes ripostes sont des critiques) · **Rétorsion** ↪ (les 3 premiers coups reçus renvoient 7 % des PV max de l'ennemi) | blocage · riposte · épines |
-| ⛑️ **Casque** | **Œil du prédateur** ↪ (3 premiers tours : tes coups ne peuvent pas être esquivés) · ✨ **Vigilance** (le 1er critique reçu est annulé) · ✨ **Sang-froid** (sous 30 % de PV, les critiques ennemis n'en sont plus) | précision · résistance aux critiques · PV |
-| 🥾 **Bottes** | **Initiative** ↪ (1er tour : coups ×2, inesquivables) · ✨ **Pas de côté** (la 1re attaque est esquivée) · ✨ **Pas de danse** (chaque esquive déclenche une riposte) | initiative · esquive · riposte |
-| 💍 **Anneau** | **Soif** ↪ retravaillée (sous 50 % de PV, ton vol de vie est triplé) · ✨ **Sceau de rage** (la rage s'active dès 50 % de PV) · ✨ **Chasseur** (critique certain sur un ennemi sous 25 %) | vol de vie · rage · chance de critique |
+| Emplacement     | Effets légendaires                                                                                                                                                                                                  | Stats qu'ils prolongent                                   |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| ⚔️ **Arme**     | **Bourreau** (achève un ennemi sous 15 %) · **Charge** (+30 % les 3 premiers tours) · **Cadence** (+18 % à partir du 3ᵉ tour) · **Vampirisme** ↪ (tes critiques te soignent)                                        | exécution · dégâts · élan · vol de vie · dégâts critiques |
+| 🥋 **Armure**   | **Endurance** ↪ (−35 % de dégâts sous 50 % de PV) · ✨ **Cuirasse vivante** (sous 30 % de PV, une barrière de 20 % des PV, une fois) · ✨ **Cicatrisation** (régénération doublée entre deux combats)               | réduction · PV · bouclier de départ · régénération        |
+| 🛡️ **Bouclier** | **Égide** ↪ (la 1re attaque est bloquée d'office) · **Riposte affûtée** ↪ (tes ripostes sont des critiques) · **Rétorsion** ↪ (les 3 premiers coups reçus renvoient 7 % des PV max de l'ennemi)                     | blocage · riposte · épines                                |
+| ⛑️ **Casque**   | **Œil du prédateur** ↪ (3 premiers tours : tes coups ne peuvent pas être esquivés) · ✨ **Vigilance** (le 1er critique reçu est annulé) · ✨ **Sang-froid** (sous 30 % de PV, les critiques ennemis n'en sont plus) | précision · résistance aux critiques · PV                 |
+| 🥾 **Bottes**   | **Initiative** ↪ (1er tour : coups ×2, inesquivables) · ✨ **Pas de côté** (la 1re attaque est esquivée) · ✨ **Pas de danse** (chaque esquive déclenche une riposte)                                               | initiative · esquive · riposte                            |
+| 💍 **Anneau**   | **Soif** ↪ retravaillée (sous 50 % de PV, ton vol de vie est triplé) · ✨ **Sceau de rage** (la rage s'active dès 50 % de PV) · ✨ **Chasseur** (critique certain sur un ennemi sous 25 %)                          | vol de vie · rage · chance de critique                    |
 
 ↪ = effet existant déplacé ou retravaillé · ✨ = nouveau. Œil du prédateur passe de
 « critiques garantis » à « inesquivable », pour prolonger la précision (stat du casque) au
@@ -356,7 +356,8 @@ v0.701, cible > 60 %).
   d'avant (drain au passage sous 50 %) est remplacée par le vol de vie triplé.
 - **Mutations : 18, 18 rouges** après correction (un test de Chasseur trop large ; un
   échange groupé par set, mesuré redondant, retiré).
-- **Reste à l'étape 7** : les poids de puissance des 8 nouveaux effets (0,16 de départ), et
+- **Fait à l'étape 7** (cf. § 10) : poids et réglages des effets, et sets à 6 pièces.
+- ~~Reste à l'étape 7~~ : les poids de puissance des 8 nouveaux effets (0,16 de départ), et
   le réglage des sets à 6 pièces (`tierScale`, `SET_PIECE_MAJOR_K`, affinité, poids des
   signatures) contre la cible +5 à +10 % — il dépend de la courbe de budget.
 
@@ -442,7 +443,8 @@ supérieur, avec le même pouvoir. Cible : le même rythme que les autres emplac
   7). Elle ne compte pas dans le set et porte toujours le pouvoir de sa voie.
 - **Optimiseur** : le tri par dominance compare les reliques à pouvoir ÉGAL et sur leur
   force (sans ça, toutes les reliques paraissaient identiques : 15/40 au test d'optimalité).
-- **Reste à l'étape 7** : poids des 12 pouvoirs dans la puissance (0,16 × force pour
+- **Fait à l'étape 7** (cf. § 10) : poids et réglages des pouvoirs, rythme de remplacement.
+- ~~Reste à l'étape 7~~ : poids des 12 pouvoirs dans la puissance (0,16 × force pour
   l'instant) et leurs réglages, mesurés avec ET sans la stat qui les charge ; rythme de
   remplacement d'une relique au même pouvoir (point 11 du § 10).
 - **Reste à l'étape 8** : les reliques déjà possédées gardent leurs stats tant qu'elles ne
@@ -469,13 +471,13 @@ la refonte :
 
 **Le trophée prend les stats de ce que l'exercice travaille :**
 
-| Famille d'exercice | Stats principales | Stats de soutien |
-| --- | --- | --- |
-| 💪 Poussée (pompes, dips…) | dégâts · dégâts critiques | exécution · épines |
-| 🦵 Jambes (squats, fentes…) | PV · esquive | régénération · initiative |
-| 🧗 Tirage (tractions, rowing…) | précision · vol de vie | chance de critique · riposte |
-| 🧱 Gainage (planche…) | réduction · blocage | bouclier de départ · résistance aux critiques |
-| 🔥 Conditionnement (burpees, corde…) | initiative · rage | élan · régénération |
+| Famille d'exercice                   | Stats principales         | Stats de soutien                              |
+| ------------------------------------ | ------------------------- | --------------------------------------------- |
+| 💪 Poussée (pompes, dips…)           | dégâts · dégâts critiques | exécution · épines                            |
+| 🦵 Jambes (squats, fentes…)          | PV · esquive              | régénération · initiative                     |
+| 🧗 Tirage (tractions, rowing…)       | précision · vol de vie    | chance de critique · riposte                  |
+| 🧱 Gainage (planche…)                | réduction · blocage       | bouclier de départ · résistance aux critiques |
+| 🔥 Conditionnement (burpees, corde…) | initiative · rage         | élan · régénération                           |
 
 Même règle que pour les objets : un trophée ne porte que des stats de sa famille. La
 famille décide du rôle (le gainage protège, la poussée frappe), le cran du boss et le
@@ -521,7 +523,7 @@ précédents).
    nouveau barème.
 3. **Reliques** : chaque relique reçoit un pouvoir à sa rareté ; une relique de set reçoit
    celui de sa voie.
-3 bis. **Effets légendaires déplacés** : un objet dont l'effet n'appartient plus à son
+   3 bis. **Effets légendaires déplacés** : un objet dont l'effet n'appartient plus à son
    emplacement (un accessoire avec Vampirisme, une armure avec Égide…) reçoit un effet de
    la liste de son emplacement, **choisi dans les mêmes stats prolongées si possible**, sinon
    au hasard. Le tirage utilise l'identifiant de l'objet, donc il donne toujours le même
@@ -551,22 +553,59 @@ conversion, qui ne doit baisser pour personne.
 Chaque ligne est une propriété déjà tenue par le projet, à retrouver sur le nouveau
 modèle.
 
-| # | Ce qu'on mesure | Cible |
-| --- | --- | --- |
-| 1 | Build équilibré meilleur que les extrêmes (nouvelles courbes de chance) | comme `combat.test` aujourd'hui |
-| 2 | Joueur de référence sur 7 emplacements | tient `gearBudget(L)` à ±5 % |
-| 3 | Part de chaque emplacement | proportionnelle à son poids ; aucune stat morte |
-| 4 | Donjons | ~70 % de réussite au niveau conseillé ; mur à +3 / +6 niveaux |
-| 5 | Boss de palier | 50 à 60 % au palier |
-| 6 | Labyrinthe | ~70 % au niveau conseillé, ~90 % sur les paliers d'initiation |
-| 7 | Arène, sièges (le héros défend) | tenue comme aujourd'hui |
-| 8 | Sets | set complet de sa voie : +5 à +10 % contre les meilleurs drops ; « 4 + 2 légendaires » à ±3 % de « 6 » |
-| 9 | Voies | la voie du set est la meilleure pour lui (exceptions listées) |
-| 10 | Effets légendaires et pouvoirs de relique | ~+8 % chacun ; pouvoirs mesurés avec et sans leur stat |
-| 11 | Ouverture des rangs | 4 emplacements… désormais 6, à son rang vers la moitié du rang ; ajuster le nombre de drops si besoin |
-| 12 | Puissance affichée | fidèle au vrai combat pour chaque stat nouvelle (poids dans `combatPower`) |
-| 13 | Optimiseur | ≥ 98 % d'accord avec l'exhaustif sur 4 emplacements ; < 2 s sur 7 |
-| 14 | Migration | aucune baisse de puissance sur les 4 comptes réels |
+| #   | Ce qu'on mesure                                                         | Cible                                                                                                  |
+| --- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| 1   | Build équilibré meilleur que les extrêmes (nouvelles courbes de chance) | comme `combat.test` aujourd'hui                                                                        |
+| 2   | Joueur de référence sur 7 emplacements                                  | tient `gearBudget(L)` à ±5 %                                                                           |
+| 3   | Part de chaque emplacement                                              | proportionnelle à son poids ; aucune stat morte                                                        |
+| 4   | Donjons                                                                 | ~70 % de réussite au niveau conseillé ; mur à +3 / +6 niveaux                                          |
+| 5   | Boss de palier                                                          | 50 à 60 % au palier                                                                                    |
+| 6   | Labyrinthe                                                              | ~70 % au niveau conseillé, ~90 % sur les paliers d'initiation                                          |
+| 7   | Arène, sièges (le héros défend)                                         | tenue comme aujourd'hui                                                                                |
+| 8   | Sets                                                                    | set complet de sa voie : +5 à +10 % contre les meilleurs drops ; « 4 + 2 légendaires » à ±3 % de « 6 » |
+| 9   | Voies                                                                   | la voie du set est la meilleure pour lui (exceptions listées)                                          |
+| 10  | Effets légendaires et pouvoirs de relique                               | ~+8 % chacun ; pouvoirs mesurés avec et sans leur stat                                                 |
+| 11  | Ouverture des rangs                                                     | 4 emplacements… désormais 6, à son rang vers la moitié du rang ; ajuster le nombre de drops si besoin  |
+| 12  | Puissance affichée                                                      | fidèle au vrai combat pour chaque stat nouvelle (poids dans `combatPower`)                             |
+| 13  | Optimiseur                                                              | ≥ 98 % d'accord avec l'exhaustif sur 4 emplacements ; < 2 s sur 7                                      |
+| 14  | Migration                                                               | aucune baisse de puissance sur les 4 comptes réels                                                     |
+
+### ✅ Livré à l'étape 7 (2026-09-22)
+
+- **Budget unique** (`gearBudget`) : un segment par rang, mesuré à chaque niveau sur le joueur
+  de référence, plus la part que `offenseOf`/`survivalOf` ne voient pas (effets légendaires,
+  relique) : ×1,05 à ×1,23 à partir du rang 31. `CONTENT_K` : donjon 1, boss 1,17,
+  Labyrinthe 1,47. Retirés : `ITEM_RANK_RELIEF`, `RANK_OPENING_RELIEF`,
+  `PROC_DUNGEON_BOOST`, `LABY_CONTENT_BOOST`, `bossContentBoost`. Fournaise ×0,85,
+  Nécropole ×0,76. Failles re-bisectées (niveaux 10-11 et 51-60).
+- **Sets (#8)** : set complet de sa voie **+5,8 à +12,3 %** en vrai combat contre les
+  meilleurs drops ; « 4 + 2 » à −1,6/+3,2 points de « 6 ». `tierScale` (paliers 2 et 4) et
+  `capScale` (palier 6) par voie. ⚠️ C'est bien moins que les +24 % de la v0.837 : les
+  signatures sont ramenées à +2..+6 %.
+- **Voies (#9)** : passifs à ~1 % ; la voie du set perd 2 fois sur 288.
+- **Puissance affichée (#12)** : le vol de vie compte pour son vrai soin par tour, plafonné.
+- **Optimiseur (#13)** : 118/120 contre l'exhaustif (paires de pièces dans la passe finale).
+- **Effets légendaires et pouvoirs (#10)**, mesurés en vrai combat aux niveaux 60 et 90
+  (boss et donjon) : effets légendaires surtout entre **4 et 9 %** ; pouvoirs entre **5 et
+  12 %**, puissance affichée 7 à 9 %. Retouchés parce qu'ils ne valaient presque rien :
+  Charge (×2 sur 4 tours), Chasseur (sous 75 %), Sang-froid et Sceau de rage (sans seuil de
+  PV), Vigilance (3 critiques), Œil du prédateur (+30 % de dégâts), Riposte affûtée (×3),
+  Cicatrisation (2 % des PV max par tour), Soif (plafond de soin ×1,4 au lieu du vol de vie
+  triplé), Vampirisme (réserve propre de 2 % par tour) ; Brasier (seuil propre à 60 %),
+  Rempart vengeur et Éclat de ronces (une volée ×1,5 au lieu du stock). ⚠️ Écarts connus :
+  **Moisson vaut 0 contre un boss** (sa jauge se remplit en abattant, un boss est un seul
+  combat) et **Initiative / Œil du prédateur** tombent à −1 / +0,4 % contre le boss du niveau 90
+  (8 / 4,5 % en donjon).
+- **Ouverture des rangs (#11)**, simulé : 6 emplacements à ton rang en médiane au **5e
+  niveau** du rang avec les pièces de ton set de voie (7 avec les seuls drops ; un boss tire
+  les pièces des 8 sets, donc en pratique plus vite encore). Aucun réglage du nombre de drops.
+- **Relique au même pouvoir, à ton rang** : cumul ~2 à mi-rang pour le pouvoir de ta voie
+  (plus vite que les autres emplacements, 1,4) ; **~0,6 à mi-rang et 1,8 sur le rang** pour un
+  autre pouvoir, soit ~2,5 fois plus lent. Laissé tel quel : l'affinité 1/3 est le choix de
+  conception.
+- **Trophée** : `TROPHY_FAMILY_K` par famille ; tirage = précision + dégâts critiques,
+  conditionnement = PV + initiative.
+- Mutations : 8 (7a) + 9 (7b) + 9 (7c), toutes rouges.
 
 **Hors périmètre, non touchés** : l'équipement des aventuriers, les caravanes, les
 camps, les failles (ils ne lisent pas l'équipement du héros), et la défense de la base
@@ -595,19 +634,19 @@ camps, les failles (ils ne lisent pas l'équipement du héros), et la défense d
 Tout est fait sur une branche et livré ensemble. Les étapes ci-dessous sont des points de
 contrôle internes, pas des livraisons.
 
-| # | Étape | Estimation |
-| --- | --- | --- |
-| 1 | Courbes de chance à rendement décroissant, élan par tour, recalibration du combat de base | 2 j |
-| 2 | 7 emplacements : types, noms, icônes, tirage des drops, listes de stats, poids | 1 j |
-| 3 | 10 stats nouvelles dans le moteur de combat et dans `combatPower` | 2 j |
-| 4 | Relique : jauge, 12 pouvoirs | 2 j |
-| 5 | Sets à 6 pièces, 18 effets légendaires, rangement et « Mes sets » | 1,5 j |
-| 6 | Nouvel optimiseur | 1 j |
-| 7 | Budget `gearBudget`, joueur de référence, suppression des 5 tables, recalibration du contenu | 2 à 3 j |
-| 8 | Migration + vérification sur les comptes réels | 1 j |
-| 9 | Écran : grille, avatar, jauge, fiches | 2 j |
-| 10 | Tests réécrits (items, combat, sets, voies, contenu procédural, Labyrinthe, trophée…), mutations, 6 portes | 1,5 à 2,5 j |
-| | **Total** | **~15 à 19 jours** |
+| #   | Étape                                                                                                      | Estimation         |
+| --- | ---------------------------------------------------------------------------------------------------------- | ------------------ |
+| 1   | Courbes de chance à rendement décroissant, élan par tour, recalibration du combat de base                  | 2 j                |
+| 2   | 7 emplacements : types, noms, icônes, tirage des drops, listes de stats, poids                             | 1 j                |
+| 3   | 10 stats nouvelles dans le moteur de combat et dans `combatPower`                                          | 2 j                |
+| 4   | Relique : jauge, 12 pouvoirs                                                                               | 2 j                |
+| 5   | Sets à 6 pièces, 18 effets légendaires, rangement et « Mes sets »                                          | 1,5 j              |
+| 6   | Nouvel optimiseur                                                                                          | 1 j                |
+| 7   | Budget `gearBudget`, joueur de référence, suppression des 5 tables, recalibration du contenu               | 2 à 3 j            |
+| 8   | Migration + vérification sur les comptes réels                                                             | 1 j                |
+| 9   | Écran : grille, avatar, jauge, fiches                                                                      | 2 j                |
+| 10  | Tests réécrits (items, combat, sets, voies, contenu procédural, Labyrinthe, trophée…), mutations, 6 portes | 1,5 à 2,5 j        |
+|     | **Total**                                                                                                  | **~15 à 19 jours** |
 
 Ordre imposé par les dépendances : 1 → 2 → 3 → (4, 5, 6 en parallèle) → 7 → 8 → 9 → 10.
 La recalibration (7) vient après toutes les briques : la faire avant reviendrait à la

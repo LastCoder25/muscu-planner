@@ -96,45 +96,57 @@ export const RELIC = {
   /** Plafond des pouvoirs qui rendent un STOCK de dégâts, en part des PV max ennemis
    *  (× force) : sans lui, un boss à beaucoup de PV nourrit un stock qui l'écrase. */
   stockCapPct: 0.2,
-  brasierCharge: 34, // par tour du héros SOUS le seuil de rage — trois tours
+  brasierCharge: 34, // par tour du héros sous le seuil — trois tours
+  // ⚠️ Seuil propre (étape 7) : il fallait passer sous 30 % des PV (le seuil de rage), rare
+  // dans un combat gagné — mesuré ~2,6 % de puissance.
+  brasierThreshold: 0.6,
   brasierMult: 0.8, // une volée × 0,8…
   brasierMissing: 2, // …× (1 + 2 × part des PV qui manquent)
-  rempartCharge: 25, // par blocage (le stock = les dégâts évités)
+  // ⚠️ REMPART ET RONCES LIBÈRENT UNE VOLÉE (étape 7), et non plus leur stock : les dégâts
+  // évités ou renvoyés sont minuscules face aux PV d'un boss — mesuré 0 % de puissance, même
+  // avec 20 % de blocage ou 30 % d'épines. La jauge se remplit toujours par l'action.
+  rempartCharge: 100, // un blocage remplit la jauge…
+  rempartMult: 1.5, // …puis une contre-attaque de 1,5 volée
   fatalCharge: 20, // par critique porté
   fatalBonus: 0.5, // le coup fatal : critique × (1 + 0,5 × force), inesquivable
   festinScale: 0.1, // 10 % des PV max de soin perdu (plafond du tour) remplissent la jauge
   tempeteCharge: 25, // par tour du héros une fois l'élan au maximum
   tempeteMult: 1.5, // l'élan retombe, contre une rafale de 1,5 volée
-  riposteCharge: 34, // par parade ou riposte
-  roncesCharge: 20, // par coup d'épines (le stock = les dégâts renvoyés)
+  riposteCharge: 100, // une parade ou une riposte remplit la jauge
+  roncesCharge: 34, // par coup d'épines (trois coups)…
+  roncesMult: 1.5, // …puis une explosion de 1,5 volée
   carapaceScale: 0.5, // encaisser 50 % de ses PV max remplit la jauge…
-  carapaceShield: 0.12, // …et donne une barrière de 12 % des PV max
-  ouvertureMult: 1.5, // jauge PLEINE au début de chaque combat : 1,5 volée d'entrée…
+  carapaceShield: 0.05, // …et donne une barrière de 5 % des PV max
+  ouvertureMult: 2.5, // jauge PLEINE au début de chaque combat : 2,5 volées d'entrée…
   ouvertureCharge: 5, // …puis elle se recharge lentement (5 par tour)
   moissonCharge: 50, // par monstre abattu (la jauge suit le donjon)
-  moissonBuff: 0.25, // jauge pleine au début d'un combat : +25 % de dégâts pour ce combat
-  phenixBlock: 0.5, // le coup fatal perd 50 % (× force)…
+  moissonBuff: 0.4, // jauge pleine au début d'un combat : +40 % de dégâts pour ce combat
+  phenixBlock: 0.4, // le coup fatal perd 40 % (× force)…
   phenixMax: 0.9, // …au plus 90 %
-  souffleHeal: 0.25, // sous 30 % PV, une fois : 25 % des PV max (× force)…
+  souffleHeal: 0.12, // sous 30 % PV, une fois : 12 % des PV max (× force)…
   souffleMax: 0.5, // …au plus 50 %
 } as const;
 
 /** Poids de chaque pouvoir dans la puissance affichée, × la force de la relique (une relique
- *  plus forte au même pouvoir est donc toujours mieux notée). ⚠️ Point de départ (0,16, la
- *  valeur des procs légendaires) : mesuré en vrai combat à l'étape 7. */
+ *  plus forte au même pouvoir est donc toujours mieux notée). ⚠️ MESURÉ EN VRAI COMBAT (étape
+ *  7 ; boss de palier + donjon, niveaux 60/90, joueur de référence, avec la stat du pouvoir
+ *  quand il en a une) : après rééquilibrage, chaque pouvoir vaut ~+3 à +12 %, la plupart +6 à
+ *  +10 % — avant, de 0 % (Rempart, Ronces : leur stock ne pesait rien face à un boss) à +28 %
+ *  (Carapace). La force montant avec le niveau, 0,075 × force affiche +7 % (niveau 60) à +9 %
+ *  (niveau 90) : ce que le combat mesure. À 0,16 l'écran annonçait +14 à +19 %. */
 export const RELIC_POWER_W: Record<RelicPowerId, { side: 'off' | 'surv'; weight: number }> = {
-  brasier: { side: 'off', weight: 0.16 },
-  rempart: { side: 'surv', weight: 0.16 },
-  coup_fatal: { side: 'off', weight: 0.16 },
-  festin: { side: 'surv', weight: 0.16 },
-  tempete: { side: 'off', weight: 0.16 },
-  riposte_parfaite: { side: 'off', weight: 0.16 },
-  ronces: { side: 'surv', weight: 0.16 },
-  carapace: { side: 'surv', weight: 0.16 },
-  ouverture: { side: 'off', weight: 0.16 },
-  moisson: { side: 'off', weight: 0.16 },
-  phenix: { side: 'surv', weight: 0.16 },
-  second_souffle: { side: 'surv', weight: 0.16 },
+  brasier: { side: 'off', weight: 0.075 },
+  rempart: { side: 'surv', weight: 0.075 },
+  coup_fatal: { side: 'off', weight: 0.075 },
+  festin: { side: 'surv', weight: 0.075 },
+  tempete: { side: 'off', weight: 0.075 },
+  riposte_parfaite: { side: 'off', weight: 0.075 },
+  ronces: { side: 'surv', weight: 0.075 },
+  carapace: { side: 'surv', weight: 0.075 },
+  ouverture: { side: 'off', weight: 0.075 },
+  moisson: { side: 'off', weight: 0.075 },
+  phenix: { side: 'surv', weight: 0.075 },
+  second_souffle: { side: 'surv', weight: 0.075 },
 };
 
 // POIDS DE CHAQUE PROC dans `combatPower` (légendaires d'objets ET signatures de set).
@@ -238,31 +250,51 @@ export const COMBAT = {
   // durait qu'un instant.
   initiativeMult: 2, // Initiative : les coups du 1er tour ×2, inesquivables
   initiativeTurns: 1,
-  predatorTurns: 3, // Œil du prédateur : les coups des 3 premiers tours sont inesquivables
+  predatorTurns: 6, // Œil du prédateur : les coups des 6 premiers tours sont inesquivables…
+  // …⚠️ et frappent plus fort (refonte équipement, étape 7) : rendre inesquivable ne valait
+  // presque rien (~1 % mesuré), les boss et les monstres esquivant peu.
+  predatorMult: 1.3,
   aegisBlock: 0.75, // Égide : la 1re attaque ennemie qui touche est BLOQUÉE d'office (−75 %, comme un blocage)
   retortHits: 3, // Rétorsion : les 3 premiers coups ennemis reçus…
   retortMaxPvPct: 0.07, // …retirent chacun 7 % des PV max de l'ennemi
   phoenixBlock: 0.5, // Phénix : le coup qui t'aurait tué perd la moitié de ses dégâts
-  vampiricHealPct: 0.5, // Vampirisme : soin = 50 % des dégâts d'un crit
+  vampiricHealPct: 0.5, // Vampirisme : soin = 50 % des dégâts d'un crit…
+  // …⚠️ HORS du plafond de soin du tour (refonte équipement, étape 7), dans une réserve à part
+  // de N % des PV max par tour : dans le plafond, il ne valait RIEN (0 % mesuré) sur un build
+  // qui l'atteint déjà par son vol de vie — c'est-à-dire tout build équipé passé le niveau 30.
+  vampiricCapPct: 0.02,
   executeKillThreshold: 0.15, // Bourreau : exécute un ennemi sous 15 % PV
   secondWindThreshold: 0.3, // Second souffle : déclenche sous 30 % PV
   secondWindHealPct: 0.25, // Second souffle : soigne 25 % des PV max
   // Procs de SET (v0.701) — même famille : non-scalants, et AUCUN ne consomme de rng.
-  chargeTurns: 3, // Charge : les coups des 3 premiers tours…
-  chargeMult: 1.3, // …infligent +30 %
+  chargeTurns: 4, // Charge : les coups des 4 premiers tours…
+  chargeMult: 2, // …infligent le double
   cadenceFrom: 3, // Cadence : à partir du 3ᵉ tour du héros… (par tour, comme l'élan)
   cadenceMult: 1.18, // …+18 % de dégâts
   thirstThreshold: 0.5, // Soif : sous 50 % PV…
-  thirstLifestealMult: 3, // …ton vol de vie est triplé (refonte équipement : anneau)
+  // …⚠️ le PLAFOND DE SOIN du tour est multiplié (refonte équipement, étape 7). Tripler le vol
+  // de vie ne servait à rien (0 % mesuré) : le soin bute sur le plafond bien avant.
+  thirstHealCapMult: 1.4,
   // ── Refonte équipement (étape 5) : 19 effets, chacun sur les stats de SON emplacement ──
   livingArmorThreshold: 0.3, // Cuirasse vivante : sous 30 % PV, une fois…
   livingArmorPct: 0.2, // …une barrière de 20 % des PV max
-  scarringMult: 2, // Cicatrisation : régénération entre deux combats doublée
-  sangFroidThreshold: 0.3, // Sang-froid : sous 30 % PV, les critiques ennemis n'en sont plus
-  rageSealThreshold: 0.5, // Sceau de rage : la rage s'active dès 50 % PV
-  hunterThreshold: 0.25, // Chasseur : critique certain sur un ennemi sous 25 % PV
+  scarringMult: 2, // Cicatrisation : régénération entre deux combats doublée…
+  // …⚠️ et une part des PV max rendue à CHAQUE tour du héros (étape 7), hors plafond du vol de
+  // vie : entre deux combats seulement, elle ne valait rien contre un boss (0 % mesuré).
+  scarringTurnHeal: 0.02,
+  // Riposte affûtée : ses ripostes, déjà des critiques, frappent aussi plus fort (étape 7) —
+  // seulement critiques, elles n'apportaient presque rien à un joueur déjà près du plafond.
+  whettedMult: 3,
+  // Sang-froid : les critiques ennemis n'en sont plus — dès 101 %, donc TOUJOURS (étape 7 :
+  // sous un seuil de PV il ne valait que 0,5 à 3 %, les ennemis critiquant peu).
+  sangFroidThreshold: 1.01,
+  vigilanceCrits: 3, // Vigilance : les 3 premiers critiques reçus sont annulés
+  // Sceau de rage : ta rage reste active quels que soient tes PV (dès 101 %). À 50 % il ne
+  // valait que ~1 %, même avec 30 % de rage (étape 7).
+  rageSealThreshold: 1.01,
+  hunterThreshold: 0.75, // Chasseur : critique certain sur un ennemi sous 75 % PV
   enduranceThreshold: 0.5, // Endurance : active sous 50 % PV
-  enduranceReduction: 0.35, // Endurance : −35 % de dégâts subis en plus
+  enduranceReduction: 0.2, // Endurance : −20 % de dégâts subis en plus
   quarryThreshold: 0.3, // Curée : déclenche quand l'ennemi passe sous 30 % PV
   quarryHealPct: 0.22, // Curée : soigne 22 % des PV max du joueur (1× par combat)
   // SIGNATURES DE SET (v0.835) — le 4-pièces d'un set porté dans SA voie. Même famille que
@@ -601,7 +633,7 @@ export function simulateCombat(
   // Procs de SET (v0.701). ⚠️ Tous DÉTERMINISTES : aucun n'appelle `rng`, sinon deux objets
   // de procs différents feraient diverger un combat seedé — et tous les rejeux animés avec.
   let livingArmorReady = has('living_armor'); // Cuirasse vivante : une barrière, une fois
-  let vigilanceReady = has('vigilance'); // Vigilance : le 1er critique reçu est annulé
+  let vigilanceLeft = has('vigilance') ? COMBAT.vigilanceCrits : 0; // critiques reçus annulés
   let sidestepReady = has('sidestep'); // Pas de côté : la 1re attaque est esquivée
   let quarryReady = has('quarry'); // Curée : soigne une fois, quand l'ennemi passe sous 30 %
   let pHits = 0; // coups PORTÉS par le joueur (Botte secrète)
@@ -676,7 +708,12 @@ export function simulateCombat(
   const riposteVolley = (extra: CombatSkill[]): void => {
     if (pPv <= 0 || mPv <= 0) return;
     const sharp = has('whetted');
-    const r = Math.max(1, Math.round(volley(sharp) * (1 - (monster.dmgReduction ?? 0))));
+    const r = Math.max(
+      1,
+      Math.round(
+        volley(sharp) * (sharp ? COMBAT.whettedMult : 1) * (1 - (monster.dmgReduction ?? 0)),
+      ),
+    );
     mPv = Math.max(0, mPv - r);
     const skills: CombatSkill[] = ['riposte', ...extra];
     if (sharp) skills.push('whetted');
@@ -732,6 +769,8 @@ export function simulateCombat(
     const hits = Math.max(1, strikeCount(atk));
     if (turn === 'player') {
       pTurn++;
+      if (has('scarring'))
+        pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.scarringTurnHeal));
       if (!perHit) pStacks = pTurn - 1 - momentumOffset; // l'élan monte à chaque tour du héros
       // 🔮 Pouvoirs qui se chargent au fil des tours.
       if (rid === 'ouverture') {
@@ -739,7 +778,8 @@ export function simulateCombat(
         charge(RELIC.ouvertureCharge);
       } else if (rid === 'brasier') {
         const rageAt = has('rage_seal') ? COMBAT.rageSealThreshold : COMBAT.rageThreshold;
-        if (pPv / maxPPv < rageAt && charge(RELIC.brasierCharge)) {
+        const brasierAt = Math.max(rageAt, RELIC.brasierThreshold);
+        if (pPv / maxPPv < brasierAt && charge(RELIC.brasierCharge)) {
           const missing = 1 - pPv / maxPPv;
           relicHit(
             volley(false) * RELIC.brasierMult * rf * (1 + RELIC.brasierMissing * missing),
@@ -758,17 +798,19 @@ export function simulateCombat(
     const opening = turn === 'player' && has('initiative') && pTurn <= COMBAT.initiativeTurns;
     // Œil du prédateur : les premiers tours sont inesquivables (prolonge la précision du casque).
     const eyeOpen = turn === 'player' && has('predator_eye') && pTurn <= COMBAT.predatorTurns;
-    // Soif : sous 50 % PV, le vol de vie est triplé (le plafond de soin du tour tient toujours).
-    const lsMult =
-      has('thirst') && pPv / maxPPv < COMBAT.thirstThreshold ? COMBAT.thirstLifestealMult : 1;
+    // Soif : sous 50 % PV, le plafond de soin du tour est multiplié.
+    const thirsty = turn === 'player' && has('thirst') && pPv / maxPPv < COMBAT.thirstThreshold;
     // Soin de vol de vie de CE tour, plafonné à une fraction des PV max de l'attaquant
     // (empêche le multi-frappe de rendre le sustain infini — cf. COMBAT.lifestealRoundCap).
     let roundHeal = 0;
     const healCap = Math.round(
       (turn === 'player' ? maxPPv : monsterMaxPv) *
         COMBAT.lifestealRoundCap *
-        (turn === 'player' && has('sig_vampire') ? COMBAT.eternalHealCapMult : 1),
+        (turn === 'player' && has('sig_vampire') ? COMBAT.eternalHealCapMult : 1) *
+        (thirsty ? COMBAT.thirstHealCapMult : 1),
     );
+    // Vampirisme : sa propre réserve de soin par tour, HORS du plafond ci-dessus.
+    let vampiricLeft = turn === 'player' ? Math.round(maxPPv * COMBAT.vampiricCapPct) : 0;
     const gainHeal = (raw: number): number => {
       const h = Math.max(0, Math.min(raw, healCap - roundHeal));
       roundHeal += h;
@@ -828,6 +870,8 @@ export function simulateCombat(
           dmg = Math.round(dmg * COMBAT.initiativeMult);
           mark('initiative');
         }
+        // Œil du prédateur : ses premiers tours frappent aussi plus fort.
+        if (eyeOpen) dmg = Math.round(dmg * COMBAT.predatorMult);
         // Charge : ouverture brutale, sur le(s) premier(s) tour(s).
         if (has('charge') && pTurn <= COMBAT.chargeTurns) {
           dmg = Math.round(dmg * COMBAT.chargeMult);
@@ -876,13 +920,18 @@ export function simulateCombat(
         if (perHit) pStacks++; // aventuriers : élan par coup (règle d'avant)
         if (atk.lifesteal) {
           const before = pPv;
-          pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal * lsMult)));
-          if (pPv > before) mark(lsMult > 1 ? 'thirst' : 'lifesteal');
+          const cap0 = roundHeal;
+          pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal)));
+          const overCap =
+            thirsty && roundHeal > maxPPv * COMBAT.lifestealRoundCap && roundHeal > cap0;
+          if (pPv > before) mark(overCap ? 'thirst' : 'lifesteal');
         }
         // Vampirisme : les crits soignent (compte dans le plafond de soin du tour).
         if (crit && has('vampiric')) {
           const before = pPv;
-          pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * COMBAT.vampiricHealPct)));
+          const h = Math.min(vampiricLeft, Math.round(dmg * COMBAT.vampiricHealPct));
+          vampiricLeft -= h;
+          pPv = Math.min(maxPPv, pPv + h);
           if (pPv > before) mark('vampiric');
         }
         // Bourreau : exécute un ennemi tombé très bas.
@@ -944,9 +993,9 @@ export function simulateCombat(
         }
         let crit = rng() < atk.crit;
         // Vigilance : le 1er critique reçu est annulé. Sang-froid : sous 30 % PV, plus aucun.
-        if (crit && vigilanceReady) {
+        if (crit && vigilanceLeft > 0) {
           crit = false;
-          vigilanceReady = false;
+          vigilanceLeft--;
           mark('vigilance');
         } else if (crit && has('sang_froid') && pPv / maxPPv < COMBAT.sangFroidThreshold) {
           crit = false;
@@ -1049,7 +1098,6 @@ export function simulateCombat(
           const t = Math.max(1, Math.round(dmg * def.thorns));
           mPv = Math.max(0, mPv - t);
           mark('thorns');
-          if (rid === 'ronces') relicStock += t;
         }
         // Ronces : chaque coup reçu blesse l'ennemi d'une part de SES PV max — les épines
         // ordinaires suivent les dégâts reçus, donc restent muettes face à un colosse.
@@ -1068,10 +1116,10 @@ export function simulateCombat(
         });
         // 🔮 Rempart vengeur / Éclat de ronces : le stock part quand la jauge est pleine.
         if (rid === 'rempart' && blockedStock > 0) {
-          relicStock += blockedStock;
-          if (charge(RELIC.rempartCharge)) releaseStock('rp_rempart');
+          if (charge(RELIC.rempartCharge))
+            relicHit(volley(false) * RELIC.rempartMult * rf, 'rp_rempart');
         } else if (rid === 'ronces' && def.thorns && dmg > 0 && charge(RELIC.roncesCharge))
-          releaseStock('rp_ronces');
+          relicHit(volley(false) * RELIC.roncesMult * rf, 'rp_ronces');
         // Riposte : après un coup reçu (bloqué ou non), chance de contre-attaquer aussitôt.
         // UNE VOLÉE (les coups d'un tour du héros), sans critique ni variance : elle ne tire
         // au hasard que la chance. ⚠️ Un seul coup ne valait RIEN à haut niveau, où le héros

@@ -199,6 +199,32 @@ describe('procs légendaires (Phase 3)', () => {
     expect(ofTurn(COMBAT.predatorTurns)).toEqual(['dodge', 'dodge']);
   });
 
+  it('Œil du prédateur : les coups de ses tours frappent plus fort, pas ceux d’après', () => {
+    const m = mon({ damage: 0, pv: 1e6 });
+    const avec = playerLog(['predator_eye'], m);
+    const sans = playerLog([], m);
+    // À l'arrondi près : le multiplicateur s'applique avant l'arrondi final du coup.
+    expect(Math.abs(avec[0]!.damage - sans[0]!.damage * COMBAT.predatorMult)).toBeLessThanOrEqual(
+      1,
+    );
+    expect(avec[0]!.damage).toBeGreaterThan(sans[0]!.damage);
+    expect(avec[COMBAT.predatorTurns]!.damage).toBe(sans[COMBAT.predatorTurns]!.damage);
+  });
+
+  it('Vampirisme : le soin des critiques a sa propre réserve par tour', () => {
+    // Crit de 1 000 sur 200 PV max : sans réserve il soignerait 500 ; il en rend 2 % des PV max.
+    const e = simulateCombat(
+      pl(['vampiric'], { crit: 1, damage: 1000 }),
+      mon({ damage: 0, pv: 1e6 }),
+      {
+        seed: 9,
+        goldOnWin: 0,
+        startPlayerPv: 10,
+      },
+    ).log.find((x) => x.who === 'player')!;
+    expect(e.playerPv - 10).toBe(Math.round(200 * COMBAT.vampiricCapPct));
+  });
+
   it('Vampirisme : les crits soignent', () => {
     const m = mon({ damage: 0, pv: 5000 });
     const firstPlayerPv = (procs: string[]) =>
@@ -475,17 +501,20 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
       (e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'),
     );
 
-  it('Charge : les coups des 3 premiers tours frappent plus fort, pas ceux du 4e', () => {
-    // 2 frappes par tour : les coups 1 à 6 sont chargés, le 7e (4e tour) redevient normal.
+  it('Charge : les coups des premiers tours frappent plus fort, pas ceux du tour suivant', () => {
+    // 2 frappes par tour : les coups des `chargeTurns` premiers tours sont chargés, le
+    // suivant redevient normal. Monstre robuste : le combat doit durer jusque-là.
     const hits = (procs: string[]) =>
-      simulateCombat(pl(procs, { strikes: 2 }), mon(), { seed: 11, goldOnWin: 0 }).log.filter(
-        (e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'),
-      );
+      simulateCombat(pl(procs, { strikes: 2 }), mon({ pv: 1e6 }), {
+        seed: 11,
+        goldOnWin: 0,
+      }).log.filter((e) => e.who === 'player' && (e.type === 'hit' || e.type === 'crit'));
     const avec = hits(['charge']);
     const sans = hits([]);
+    const last = COMBAT.chargeTurns * 2 - 1;
     expect(avec[0]!.damage).toBeGreaterThan(sans[0]!.damage);
-    expect(avec[5]!.damage).toBeGreaterThan(sans[5]!.damage); // 2e coup du 3e tour
-    expect(avec[6]!.damage).toBe(sans[6]!.damage); // 4e tour : redevenu normal
+    expect(avec[last]!.damage).toBeGreaterThan(sans[last]!.damage); // 2e coup du dernier tour
+    expect(avec[last + 1]!.damage).toBe(sans[last + 1]!.damage); // tour suivant : normal
   });
 
   it('Cadence : rien au début, puis le gain s’installe — l’inverse de la Charge', () => {
@@ -502,8 +531,8 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
       simulateCombat(pl(procs, { riposte: 1, strikes: 2 }), m, { seed: 11, goldOnWin: 0 }).log.find(
         (e) => e.skills?.includes('riposte'),
       )!;
-    // crit 0, ×2 : 20 × 2 frappes × 2 = 80 contre 40 sans le proc.
-    expect(riposte(['whetted']).damage).toBe(80);
+    // crit 0, ×2 : 20 × 2 frappes × 2 = 80, × `whettedMult` (étape 7), contre 40 sans le proc.
+    expect(riposte(['whetted']).damage).toBe(80 * COMBAT.whettedMult);
     expect(riposte(['whetted']).skills).toContain('whetted');
     expect(riposte([]).damage).toBe(40);
   });
@@ -518,20 +547,24 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
   });
 
   // ⚠️ RÉÉCRIT (étape 5) : la Soif passe à l'ANNEAU et triple le vol de vie sous 50 % PV.
-  it('Soif : sous 50 % PV le vol de vie est triplé, au-dessus il ne change pas', () => {
+  // ⚠️ RÉÉCRIT (étape 7) : la Soif multiplie le PLAFOND de soin du tour, et non plus le vol de
+  // vie — tripler un vol de vie qui bute déjà sur le plafond ne rapportait rien (0 % mesuré).
+  it('Soif : sous le seuil, le plafond de soin du tour est relevé ; au-dessus il ne change pas', () => {
     const m = mon({ damage: 0, pv: 1e6 });
+    // Vol de vie énorme : le soin bute sur le plafond (8 % de 200 PV = 16).
     const healed = (procs: string[], start: number) => {
-      const e = simulateCombat(pl(procs, { lifesteal: 0.1 }), m, {
+      const e = simulateCombat(pl(procs, { lifesteal: 5 }), m, {
         seed: 4,
         goldOnWin: 0,
         startPlayerPv: start,
       }).log.find((x) => x.who === 'player')!;
       return e.playerPv - start;
     };
-    expect(healed([], 50)).toBeGreaterThan(0);
-    // Au point près, à l'arrondi du soin près (le triple est arrondi une fois, pas trois).
-    expect(Math.abs(healed(['thirst'], 50) - 3 * healed([], 50))).toBeLessThanOrEqual(1);
-    expect(healed(['thirst'], 150)).toBe(healed([], 150)); // au-dessus de 50 % : rien
+    expect(healed([], 50)).toBe(Math.round(200 * COMBAT.lifestealRoundCap));
+    expect(healed(['thirst'], 50)).toBe(
+      Math.round(200 * COMBAT.lifestealRoundCap * COMBAT.thirstHealCapMult),
+    );
+    expect(healed(['thirst'], 150)).toBe(healed([], 150)); // au-dessus du seuil : rien
   });
 
   // ── Les 8 effets NOUVEAUX (refonte équipement, étape 5) ──
@@ -558,25 +591,40 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
     expect(labyrinthRest(pl([]), 0.09)).toBeCloseTo(0.09);
   });
 
-  it('Vigilance : le 1er critique reçu n’en est pas un, le 2e si', () => {
+  it('Cicatrisation : une part des PV max revient à chaque tour du héros', () => {
+    const first = (procs: string[]) =>
+      simulateCombat(pl(procs), mon({ damage: 0, pv: 1e6 }), {
+        seed: 3,
+        goldOnWin: 0,
+        startPlayerPv: 100,
+      }).log.find((e) => e.who === 'player')!.playerPv;
+    expect(first([])).toBe(100);
+    expect(first(['scarring'])).toBe(100 + Math.round(200 * COMBAT.scarringTurnHeal));
+  });
+
+  it('Vigilance : les premiers critiques reçus n’en sont pas, le suivant si', () => {
     const m = mon({ initiative: 99, crit: 1, pv: 1e6 });
     const avec = monHits(['vigilance'], m, { pv: 1e6 });
-    expect(avec[0]!.type).toBe('hit');
-    expect(avec[0]!.skills).toContain('vigilance');
-    expect(avec[1]!.type).toBe('crit');
+    for (let i = 0; i < COMBAT.vigilanceCrits; i++) {
+      expect(avec[i]!.type).toBe('hit');
+      expect(avec[i]!.skills).toContain('vigilance');
+    }
+    expect(avec[COMBAT.vigilanceCrits]!.type).toBe('crit');
     expect(monHits([], m, { pv: 1e6 })[0]!.type).toBe('crit');
   });
 
-  it('Sang-froid : sous 30 % PV, plus aucun critique ennemi ; au-dessus, si', () => {
+  // ⚠️ RÉÉCRIT (étape 7) : plus de seuil de PV — sous 30 % il ne valait que 0,5 à 3 %.
+  it('Sang-froid : plus aucun critique ennemi, quels que soient tes PV', () => {
     const m = mon({ initiative: 99, crit: 1, damage: 1, pv: 1e6 });
-    const first = (start: number) =>
-      simulateCombat(pl(['sang_froid']), m, {
+    const first = (procs: string[], start?: number) =>
+      simulateCombat(pl(procs), m, {
         seed: 5,
         goldOnWin: 0,
-        startPlayerPv: start,
+        ...(start ? { startPlayerPv: start } : {}),
       }).log.find((e) => e.who === 'monster')!.type;
-    expect(first(40)).toBe('hit'); // 20 % PV
-    expect(first(150)).toBe('crit');
+    expect(first(['sang_froid'], 40)).toBe('hit');
+    expect(first(['sang_froid'])).toBe('hit'); // PV pleins
+    expect(first([])).toBe('crit');
   });
 
   it('Pas de côté : la 1re attaque ennemie est esquivée d’office, la 2e non', () => {
@@ -610,20 +658,19 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
     expect(first(['rage_seal'])).toBeGreaterThan(first([])); // 40 % PV : seule la rage scellée mord
   });
 
-  it('Chasseur : critique certain sur un ennemi sous 25 %, pas au-dessus', () => {
+  it('Chasseur : critique certain sur un ennemi sous le seuil, pas au-dessus', () => {
+    const seuil = COMBAT.hunterThreshold * 1000;
     const log = (pv: number) =>
       simulateCombat(pl(['hunter']), mon({ damage: 0, pv }), { seed: 5, goldOnWin: 0 }).log.filter(
         (e) => e.who === 'player',
       );
     expect(log(1e6)[0]!.type).toBe('hit');
-    // Entre 25 et 60 % de PV, rien de garanti (le héros n'a aucun critique) : le seuil compte.
-    const mid = log(100).filter(
-      (e, i, a) => i > 0 && a[i - 1]!.monsterPv >= 25 && a[i - 1]!.monsterPv < 60,
-    );
-    expect(mid.length).toBeGreaterThan(0);
-    expect(mid.every((e) => e.type === 'hit')).toBe(true);
-    // Ennemi à 100 PV : une fois sous 25 PV restants, tous les coups sont critiques.
-    const low = log(100).filter((e, i, a) => i > 0 && a[i - 1]!.monsterPv < 25);
+    // Au-dessus du seuil, rien de garanti (le héros n'a aucun critique) : le seuil compte.
+    const high = log(1000).filter((e, i, a) => i > 0 && a[i - 1]!.monsterPv >= seuil);
+    expect(high.length).toBeGreaterThan(0);
+    expect(high.every((e) => e.type === 'hit')).toBe(true);
+    // Une fois sous le seuil, tous les coups sont critiques.
+    const low = log(1000).filter((e, i, a) => i > 0 && a[i - 1]!.monsterPv < seuil);
     expect(low.length).toBeGreaterThan(0);
     expect(low.every((e) => e.type === 'crit')).toBe(true);
   });
