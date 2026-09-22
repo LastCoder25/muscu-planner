@@ -898,10 +898,11 @@
                 </div>
                 <div class="slot-eff">
                   <span
-                    v-for="(ln, si) in itemStatLines(char.row.equipped[slot]!)"
+                    v-for="(p, si) in itemStatRows(char.row.equipped[slot]!)"
                     :key="si"
                     class="stat-line"
-                    >{{ ln }}</span
+                    >{{ p.pre }}<b v-if="p.value" class="st-v">{{ p.value }}</b
+                    >{{ p.post }}</span
                   >
                 </div>
               </template>
@@ -3031,6 +3032,7 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
+import { splitStat, type StatParts } from '@/lib/statText';
 import PartyReportView from '@/components/PartyReportView.vue';
 import {
   simulateDungeon,
@@ -5069,6 +5071,19 @@ function itemEffects(it: Omit<Item, 'id'>): string {
   const leg = legendaryOf(it);
   if (leg) parts.push(`${leg.emoji} ${leg.name}`);
   return parts.join(' · ');
+}
+/** Les mêmes lignes que `itemStatLines`, découpées autour du CHIFFRE pour le mettre en avant
+ *  (v0.1074). ⚠️ Seules les STATS sont découpées : le pouvoir d'une relique et un effet
+ *  légendaire sont des phrases, on n'y met pas un nombre en gras au hasard. */
+function itemStatRows(it: Omit<Item, 'id'>): StatParts[] {
+  const whole = (pre: string): StatParts => ({ pre, value: '', post: '' });
+  if (it.power) return [whole(relicPowerText(it))];
+  const rows = [it.effect, it.effect2, it.effect3]
+    .filter((e): e is NonNullable<typeof e> => !!e)
+    .map((e) => splitStat(affixText(it, e)));
+  const leg = legendaryOf(it);
+  if (leg) rows.push(whole(`${leg.emoji} ${leg.name}`));
+  return rows;
 }
 // Stats d'un objet en LIGNES séparées (une stat par ligne) + proc légendaire → affichage clair.
 function itemStatLines(it: Omit<Item, 'id'>): string[] {
@@ -8344,7 +8359,21 @@ button.pt-mini:active {
 }
 .slot-eff .stat-line {
   font-size: 11.5px;
-  white-space: nowrap;
+  /* ⚠️ PAS de `nowrap` : le pouvoir d'une relique (« 🤺 Riposte parfaite — une riposte
+     critique entière de… ») faisait 567 px et faisait glisser tout l'écran de côté. */
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: break-word;
+  /* Le libellé s'adoucit, le CHIFFRE ressort (v0.1074) : sans couleur de plus, pour ne
+     pas refaire du jaune après la passe sobre. */
+  color: color-mix(in srgb, var(--text) 78%, var(--dim));
+}
+.slot-eff .st-v {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.2px;
 }
 /* Colonne d'actions à droite : « Retirer » en haut, le badge 🎒 en bas. */
 .slot-actions {
