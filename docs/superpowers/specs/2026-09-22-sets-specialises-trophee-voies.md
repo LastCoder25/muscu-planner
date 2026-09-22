@@ -123,12 +123,12 @@ FORME des coups reçus. Les quatre voies **OFFENSIVES** n'en ont pas, et c'est s
 en combat court. Elles se distinguent par leur **STYLE** (le canal par lequel elles font
 leurs dégâts), jamais par le terrain.
 
-| Voie          | Terrain / style                                         | Peine contre…                        | Relique (existante) | Quête du trophée            |
-| ------------- | ------------------------------------------------------- | ------------------------------------ | ------------------- | --------------------------- |
+| Voie          | Terrain / style                                          | Peine contre…                        | Relique (existante) | Quête du trophée            |
+| ------------- | -------------------------------------------------------- | ------------------------------------ | ------------------- | --------------------------- |
 | 💥 Berserker  | **style** : monte en puissance à mesure qu'il est blessé | _(aucun terrain mesuré)_             | Brasier             | perdre des PV               |
 | 🗡️ Assassin   | **style** : ouvre, fait saigner, achève                  | _(aucun terrain mesuré)_             | Coup fatal          | porter des critiques        |
 | 🩸 Vampire    | **style** : tient en se soignant sur chaque coup         | _(aucun terrain mesuré)_             | Festin              | se soigner par vol de vie   |
-| 🌀 Frénétique | **style** : monte vite, puis tient son plein régime       | _(aucun terrain mesuré)_             | Tempête             | tenir l'élan au maximum     |
+| 🌀 Frénétique | **style** : monte vite, puis tient son plein régime      | _(aucun terrain mesuré)_             | Tempête             | tenir l'élan au maximum     |
 | 🌵 Épineux    | **terrain** : les hordes qui frappent souvent            | les boss qui frappent peu            | Éclat de ronces     | renvoyer des coups d'épines |
 | 🤺 Duelliste  | **terrain** : les ennemis qui frappent peu mais fort     | les hordes (trop de coups à lire)    | Riposte parfaite    | riposter                    |
 | 🛡️ Gardien    | **terrain** : les coups nombreux et moyens               | les attaques qui ignorent le blocage | Rempart vengeur     | parer                       |
@@ -193,9 +193,19 @@ Difficulté égalisée par bissection du multiplicateur de monstre à 50 % de vi
    offensives — c'est la SPEC qui doit changer, pas le code.
 2. ⚠️ **Le Duelliste est structurellement un contre-horde** : parade et riposte agissent
    **par COUP**, donc plus il y a de coups, plus elles paient. Le rendre bon contre les gros
-   coups demanderait de changer la mécanique (riposte proportionnelle au coup encaissé), pas
-   un réglage. **Décision de conception à prendre** — et sa case actuelle double celle de
-   l'Épineux.
+   coups demandait donc de changer la MÉCANIQUE, pas un réglage. **Deux ont été essayées** :
+   - ❌ **Riposte proportionnelle au coup encaissé** (écrite, mesurée, **jetée**) : elle paie
+     mieux les gros coups mais ne renverse rien — riposter demande d'avoir **encaissé**, or
+     contre un gros coup on meurt avant d'en avoir encaissé beaucoup.
+   - ✅ **La LECTURE DU GESTE** (retenue, 2026-09-22) : au-delà de 15 % des PV max, le coup est
+     **annulé** et contré, avec une chance qui est une part de la riposte. Mesuré, le profil
+     passe de **−5 % à +11 %** au niveau 90. ⚠️ **Deux réserves** : au niveau 60 il reste à
+     **−46 %** (les gros coups y sont trop rares), et elle ajoute **+25 % de puissance** au
+     niveau 90 que `specScale` ne compense pas — ce surplus rejoint le chantier de
+     l'équivalence des sets (§ CLAUDE.md v0.1092).
+   - ⚠️ **Adossée à la RIPOSTE, jamais à la parade** : la parade est la stat du **Gardien**,
+     dont la case est « les coups nombreux et moyens » — la toucher aurait cassé son profil.
+     Vérifié : le Gardien ne bouge d'aucun point.
 3. **L'ÉLAN sature au 5e tour.** Mesuré au point d'équilibre, un combat COURT dure 2 à 3 tours
    et un combat LONG **15 à 34** ; le plafond d'élan vaut 4 (8 avec Transe). Passé le 5e tour,
    durer ne rapporte plus rien — d'où « lent au départ, écrasant en fin de combat » qui mesure

@@ -145,6 +145,7 @@ const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set' | 'relic' | 'trop
   block: 'sig',
   parry: 'sig',
   riposte: 'sig',
+  read: 'sig',
   start_shield: 'sig',
   toughness: 'sig',
   initiative: 'proc',

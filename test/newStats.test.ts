@@ -102,6 +102,52 @@ describe('chaque stat nouvelle fait ce qu’elle annonce', () => {
     expect(r[0]!.damage).toBe(300); // 100 × 3 coups, sans critique ni réduction
   });
 
+  // 🤺 LECTURE DU GESTE — la lecture est OCCASIONNELLE (sa chance est une part de la
+  // riposte), donc on BALAIE des graines au lieu d'épingler le premier coup : un test posé
+  // sur une seule graine mesurerait cette graine, pas la règle.
+  const lectures = (h: Partial<Combatant>, degats: number) => {
+    const recus = [];
+    for (let seed = 1; seed <= 60; seed++)
+      recus.push(...theirs(run(hero({ pv: 1000, ...h }), foe({ damage: degats }), seed)));
+    return { recus, lus: recus.filter((e) => e.skills?.includes('read')) };
+  };
+
+  it('🤺 lecture du geste : un GROS coup est lu et ANNULÉ, un petit ne l’est jamais', () => {
+    // Le Duelliste lit les grands gestes : au-delà d'une part de ses PV max, le coup est
+    // annulé et contré. ⚠️ Sa chance est sa RIPOSTE — pas sa parade, qui est la stat du
+    // Gardien (la toucher aurait fait du Gardien un anti-gros-coup, contre sa case de spec).
+    const gros = lectures({ riposte: 1 }, 900);
+    expect(gros.lus.length).toBeGreaterThan(0);
+    // Un coup lu ne touche pas du tout.
+    expect(gros.lus.every((e) => e.type === 'dodge' && e.damage === 0)).toBe(true);
+    // …et un petit coup n'est JAMAIS lu, même à pleine riposte : c'est bien la TAILLE du
+    // geste qui le rend lisible.
+    const petit = lectures({ riposte: 1 }, 10);
+    expect(petit.recus.length).toBeGreaterThan(50); // sinon on ne mesure rien
+    expect(petit.lus.length).toBe(0);
+  });
+
+  it('🤺 lecture du geste : elle exige la RIPOSTE — la parade seule ne lit rien', () => {
+    // Sinon le Gardien, qui porte la parade, deviendrait un anti-gros-coup.
+    // ⚠️ Parade PARTIELLE : à parry = 1 tout est paré AVANT la lecture, donc le test ne
+    // pourrait rien distinguer — il faut des coups qui passent la parade pour éprouver
+    // qu'ils ne sont pas lus pour autant.
+    const parade = lectures({ parry: 0.4 }, 900);
+    expect(parade.recus.some((e) => e.type === 'hit')).toBe(true); // des coups passent bien
+    expect(parade.lus.length).toBe(0);
+    expect(lectures({}, 900).lus.length).toBe(0);
+  });
+
+  it('🤺 lecture du geste : sa chance est BORNÉE — elle ne lit pas tous les gros coups', () => {
+    // Mesuré : à pleine riposte, sans facteur, elle annulait la majorité des gros coups et
+    // ajoutait +140 % de puissance. Le facteur la ramène à une lecture occasionnelle, qui
+    // suffit à renverser le profil au niveau 90 (+11 % contre −5 %) pour +25 % de puissance.
+    expect(COMBAT.readK).toBeGreaterThan(0);
+    expect(COMBAT.readK).toBeLessThan(0.5);
+    const gros = lectures({ riposte: 1 }, 900);
+    expect(gros.lus.length / gros.recus.length).toBeLessThan(0.5);
+  });
+
   it('résistance aux critiques : un critique ennemi résisté en entier frappe comme un coup normal', () => {
     const a = theirs(run(hero(), foe({ crit: 1 })));
     const b = theirs(run(hero({ critResist: 1 }), foe({ crit: 1 })));

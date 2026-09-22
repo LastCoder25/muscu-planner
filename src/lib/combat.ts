@@ -488,6 +488,15 @@ export const COMBAT = {
   // pour +16,7 % annoncé à 0,5).
   powerBleedW: 0.66, // saignement 0,3 → +19,8 % de dégâts
   powerAccuracyW: 0.28, // précision 0,3 → +8,3 % de dégâts
+  // 🤺 LECTURE DU GESTE (2026-09-22, décision de l'utilisateur) : un coup qui retire plus
+  // que cette part des PV max est un « grand geste », que le Duelliste lit et annule — sa
+  // chance d'y parvenir est sa RIPOSTE. ⚠️ Adossé à la riposte et NON à la parade : la parade
+  // est la stat exclusive du GARDIEN, dont la case est « les coups nombreux et moyens ». La
+  // toucher aurait fait du Gardien un anti-gros-coup, c'est-à-dire cassé son profil.
+  // ⚠️ L'Épineux partage la riposte, donc il en profite — mais l'effet ne se déclenche que
+  // sur les GROS coups, or son terrain est la horde : il y gagne un filet, pas un profil.
+  readShare: 0.15, // part des PV max au-delà de laquelle un coup est un « grand geste »
+  readK: 0.15, // …et la part de ta riposte qui sert de chance à le lire
   powerRiposteW: 0.26, // riposte 0,3 → +7,8 % de dégâts
   powerBlockW: 0.91, // blocage 0,3 → +25,7 % de PV
   powerParryW: 0.96, // parade 0,15 → +16,9 % de PV
@@ -715,6 +724,7 @@ export type CombatSkill =
   | 'block'
   | 'parry'
   | 'riposte'
+  | 'read'
   | 'start_shield'
   | 'toughness'
   /**
@@ -1375,6 +1385,28 @@ export function simulateCombat(
           const avant = dmg;
           dmg = Math.min(dmg, Math.max(1, Math.round(maxPPv * COMBAT.unshakenMaxHitPct)));
           if (dmg < avant) mark('sig_colosse');
+        }
+        // 🤺 Lecture du geste : un GRAND geste se voit venir. Le seuil porte sur le coup
+        // RÉELLEMENT reçu (après réduction, robustesse et amortis) — c'est ce qu'il aurait
+        // coûté qui le rend lisible.
+        // ⚠️ Le garde `def.riposte` n'est qu'une sortie rapide : c'est la CHANCE
+        // (`def.riposte * readK`) qui porte la garantie — l'élargir à la parade serait
+        // strictement ÉQUIVALENT (sans riposte, la chance vaut zéro). Écrit ici plutôt que
+        // couvert par un test qui ferait semblant ; ce qui compte (« c'est la riposte, pas
+        // la parade ») est bien éprouvé par la mutation qui échange les deux stats.
+        if (def.riposte && dmg > maxPPv * COMBAT.readShare && rng() < def.riposte * COMBAT.readK) {
+          push({
+            round,
+            who: turn,
+            type: 'dodge',
+            damage: 0,
+            playerPv: pPv,
+            monsterPv: mPv,
+            skills: ['read'],
+          });
+          riposteVolley(['read']);
+          if (pPv <= 0 || mPv <= 0) break;
+          continue;
         }
         const firstEnemy = mFirstLanded;
         // Rétorsion : les premiers coups ennemis reçus blessent l'ennemi d'une part de SES PV max.
