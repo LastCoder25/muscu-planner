@@ -2024,7 +2024,7 @@ export function advStatus(adv: Adventurer, now: number): AdvStatus {
 /** Les catégories dans l'ordre où on les propose : ce qui peut partir d'abord. */
 export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt'];
 export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
-  free: '✅ déployés',
-  busy: '🐫 en convoi',
+  free: '✅ disponibles',
+  busy: '🧭 en expédition',
   hurt: '🛏️ infirmerie',
 };
