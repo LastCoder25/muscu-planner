@@ -734,7 +734,10 @@ export function caravanWages(escort: Adventurer[], poi: Poi): number {
 export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
   const ratio = Math.max(0.15, Math.min(2, poi.level / Math.max(1, adv.level)));
   const issue = won ? 1 : CARAVAN.xpLossShare;
-  return Math.max(1, Math.round(trialXpBase(poi.level) * Math.min(1, ratio) ** 1.5 * issue));
+  return Math.max(
+    1,
+    Math.round(trialXpBase(poiRewardLevel(poi)) * Math.min(1, ratio) ** 1.5 * issue),
+  );
 }
 
 /** L'XP de chaque membre d'une mission : socle (selon l'issue) + sa part des abattus. */

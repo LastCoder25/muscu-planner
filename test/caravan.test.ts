@@ -444,6 +444,18 @@ describe('salaires, XP et garde-fous', () => {
       missionXp(refAdventurer(3), facile, true),
     );
   });
+  it('🪙 le SOCLE suit le niveau de RÉCOMPENSE, la réduction suit le RANG (v0.1033)', () => {
+    // Un lieu tiré Bronze (niv 5) sur la carte d'un joueur 40 : sa récompense vaut niv 40.
+    const bronze = { ...poi({ level: 5 }), rewardLevel: 40 };
+    // Un champion Bronze y prend le socle PLEIN du niveau de récompense (il rattrape)…
+    expect(missionXp(refAdventurer(5), bronze, true)).toBe(Math.round(trialXpBase(40)));
+    // …un champion de niveau 40 y garde la réduction (5/40 → plancher 0,15).
+    expect(missionXp(refAdventurer(40), bronze, true)).toBe(
+      Math.round(trialXpBase(40) * 0.15 ** 1.5),
+    );
+    // Sans niveau de récompense (lieux d'avant, failles), rien ne change.
+    expect(missionXp(refAdventurer(5), poi({ level: 5 }), true)).toBe(Math.round(trialXpBase(5)));
+  });
   it('⚠️ le nombre de convois monte SANS FIN mais reste bridé par le vivier', () => {
     // Le plafond dur (4) a sauté avec la règle « aucun niveau mort » : un Comptoir de
     // niveau 100 doit apporter quelque chose. Ce qui empêche l'inflation n'est donc plus
