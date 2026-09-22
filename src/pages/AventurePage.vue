@@ -6569,9 +6569,13 @@ onUnmounted(() => {
 .tb-name {
   min-width: 0;
 }
-.tb-main {
-  flex-shrink: 0;
-  flex-wrap: nowrap;
+/* ⚠️ `.tb-tray.tb-main` et non `.tb-main` : `.tb-tray` (plus bas) pose `width: 100%` pour que
+   le plateau du dessous tienne sur UNE ligne — sans cette spécificité la pastille ⚡ 💠
+   prenait toute la largeur et passait SOUS le pseudo. */
+.tb-tray.tb-main {
+  flex: 0 0 auto;
+  width: auto;
+  overflow: visible;
 }
 /* Ligne 2 : le reste du plateau, pleine largeur, calé à droite. */
 .tb-right {
