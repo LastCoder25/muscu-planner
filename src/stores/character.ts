@@ -2061,14 +2061,20 @@ export const useCharacterStore = defineStore('character', () => {
     userId: string,
     now: number,
     ctx: { playerLevel: number; activeDays7: number; globalXp: number; hero: Combatant | null },
-  ): Promise<{ detected: Raid | null; report: RaidReport | null }> {
-    if (!row.value) return { detected: null, report: null };
+  ): Promise<{
+    detected: Raid | null;
+    report: RaidReport | null;
+    /** ⭐ Ce que le siège a changé pour les DÉFENSEURS — étoiles, rang, « prêt pour
+     *  l'ascension ». Rendu à l'écran, qui l'annonce APRÈS le rejeu (sinon il spoilerait). */
+    advProgress: AdvProgress[];
+  }> {
+    if (!row.value) return { detected: null, report: null, advProgress: [] };
     const cur = row.value;
-    if (!cur) return { detected: null, report: null };
+    if (!cur) return { detected: null, report: null, advProgress: [] };
     const t = advanceBase(baseOf(cur, now), ctx, now);
     if (!t.dueRaid) {
       if (t.changed) await persist(userId, { base: t.base });
-      return { detected: t.detected, report: null };
+      return { detected: t.detected, report: null, advProgress: [] };
     }
 
     const home = heroIsHome(cur);
@@ -2154,6 +2160,11 @@ export const useCharacterStore = defineStore('character', () => {
       });
       Object.assign(patch, gearTrainedPatch(cur, advList.value, patch.adventurers as Adventurer[]));
     }
+    // ⭐ La MÊME lecture que les camps, les failles et les convois (`advProgressOf`) : un
+    // champion qui bute sur son ★5 en défendant doit l'apprendre comme ailleurs.
+    const advProgress = defenders.length
+      ? advProgressOf(advList.value, patch.adventurers as Adventurer[])
+      : [];
     if (drops.length) {
       patch.inventory = [...cur.inventory, ...drops];
       patch.set_pieces_seen = mergeSetSeen(cur.set_pieces_seen, drops);
@@ -2164,7 +2175,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (damage.stockStolen && cur.buildings.length)
       patch.buildings = cur.buildings.map((b) => ({ ...b, collectedAt: now }));
     await persist(userId, patch);
-    return { detected: t.detected, report };
+    return { detected: t.detected, report, advProgress };
   }
 
   /** Soins d'urgence : remet le héros sur pied TOUT DE SUITE, contre de l'OR (cher)

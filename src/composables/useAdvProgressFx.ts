@@ -19,7 +19,7 @@ export function useAdvProgressFx() {
         emoji: e.rankUp ? e.rankEmoji : '⭐',
         title: e.rankUp ? `${e.name} passe ${e.rankName} !` : `${e.name} — ${rankStarStr(e.star)}`,
         subtitle: e.ascendReady
-          ? '★★★★★ — prêt pour l’ascension (Guilde)'
+          ? '★★★★★ — prêt pour l’ascension (Panthéon)'
           : e.rankUp
             ? `${rankStarStr(e.star)} · nouveau rang`
             : 'une étoile de plus',

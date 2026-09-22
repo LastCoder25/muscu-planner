@@ -1565,7 +1565,7 @@
           :siege="siegeReport"
           :hero="fighter"
           :hero-profile="c.profile"
-          @siege-seen="siegeReport = null"
+          @siege-seen="onSiegeSeen"
         />
       </template>
     </template>
@@ -2956,6 +2956,7 @@ import { useProgress } from '@/composables/useProgress';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useAdvProgressFx } from '@/composables/useAdvProgressFx';
+import type { AdvProgress } from '@/lib/adventurers';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
 import { usePush } from '@/composables/usePush';
@@ -5296,6 +5297,14 @@ const baseFrozen = computed(() => !!char.row?.base?.freeze);
 /** Rapport dont l'assaut n'a pas encore été REJOUÉ. Tant qu'il est posé, le plateau
  *  s'ouvre : on découvre l'issue par l'animation, jamais par une notification. */
 const siegeReport = ref<RaidReport | null>(null);
+/** ⭐ Ce que le siège a changé pour les défenseurs, annoncé à la FERMETURE du rejeu :
+ *  pendant, l'annonce recouvrirait l'animation et révélerait l'issue qu'elle doit dévoiler. */
+const siegeAdvProgress = ref<AdvProgress[]>([]);
+function onSiegeSeen() {
+  siegeReport.value = null;
+  advFx.announce(siegeAdvProgress.value);
+  siegeAdvProgress.value = [];
+}
 const baseAlert = computed(() => !!baseRaid.value || baseFrozen.value || heroWounded.value);
 
 /** SÉANCES des 7 derniers jours — c'est ce qui règle la fréquence des sièges : une
@@ -5402,6 +5411,7 @@ async function baseLifecycle() {
     // retirerait tout enjeu au rejeu. On ouvre le plateau, qui révèle le résultat à la
     // fin. C'est aussi pour ça que l'animation se lance d'office, sans le demander.
     if (r.report) {
+      siegeAdvProgress.value = r.advProgress;
       siegeReport.value = r.report;
       tab.value = 'base';
     }
