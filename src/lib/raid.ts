@@ -702,12 +702,12 @@ export const RAID = {
 
 /** ⏳ COMBIEN DE TEMPS LES CORPS RESTENT — du décor, plus une réserve de butin.
  *
- *  ⚠️ « Quelques heures » (demandé), et non les 24 h de la fouille : le butin étant
+ *  ⚠️ UNE HEURE (demandé ; c'était 6 h), et non les 24 h de la fouille : le butin étant
  *  crédité à la résolution, laisser le champ traîner une journée entière donnerait une
  *  base qui a l’air assiégée en permanence, pour rien. Bien en deçà de l’intervalle
  *  entre deux sièges (24 à 72 h) → on retrouve sa ville propre avant le suivant. */
 export const SCAV = {
-  fieldMs: 6 * 3600_000, // les corps sont emportés au bout de quelques heures
+  fieldMs: 3600_000, // les corps sont emportés au bout d'une heure (demandé)
 } as const;
 
 // ── Rosters par faction ──

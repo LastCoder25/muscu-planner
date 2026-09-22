@@ -819,16 +819,12 @@ describe('cycle de vie', () => {
     expect(b.field).toBeNull();
   });
 
-  it('⚠️ les corps ne restent que QUELQUES HEURES — c’est du décor, plus une réserve', () => {
+  it('⚠️ les corps ne restent qu’UNE HEURE — c’est du décor, plus une réserve', () => {
     // Le butin étant crédité à la résolution, le champ n'a plus rien à garder : il montre
-    // la bataille, puis la ville se nettoie. ⚠️ BIEN EN DEÇÀ de l'intervalle entre deux
-    // sièges (24 h au plus serré, pour un joueur qui s'entraîne tous les jours) — sinon on
-    // aurait une base à l'air assiégé en PERMANENCE, pour rien. C'est ce RAPPORT qui est
-    // gardé, pas la valeur : le jour où le rythme des sièges change, la règle suit.
+    // la bataille, puis la ville se nettoie. Une heure (demandé ; c'était 6 h). ⚠️ BIEN EN
+    // DEÇÀ de l'intervalle entre deux sièges — c'est ce RAPPORT qui est gardé.
     expect(SCAV.fieldMs).toBeLessThan(raidIntervalMs(7) / 2);
-    // …et assez longtemps pour qu'on les voie : rentrer le soir après un siège du matin
-    // doit encore montrer quelque chose.
-    expect(SCAV.fieldMs).toBeGreaterThan(3 * H);
+    expect(SCAV.fieldMs).toBe(H);
   });
 });
 

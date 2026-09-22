@@ -596,16 +596,6 @@
         </template>
       </div>
 
-      <div class="keep-legend">
-        <span
-          >🧱 Muraille {{ wallLevel || '—'
-          }}<b v-if="wallLevel && wallLevel < heroLevel" class="up">
-            ↑ {{ heroLevel }} possible</b
-          ></span
-        >
-        <span>🏹 {{ turretsBuilt }}/{{ TURRET_SLOTS }} tourelles</span>
-        <span>🗼 Guet {{ watchLevel || '—' }}</span>
-      </div>
       <p class="keep-hint">Touche un bâtiment pour le construire, l’améliorer ou récolter.</p>
     </div>
 
@@ -2237,10 +2227,6 @@ function doHarvest() {
 .wall-lvl {
   pointer-events: none; /* le clic passe à la bande de la muraille, dessous */
 }
-.keep-legend .up {
-  color: #ffb23f;
-  font-weight: 700;
-}
 /* Emplacement de structure encore vide (corps de garde) */
 /* La porte : une arche sombre percée dans le rempart, avec sa flèche de sortie. */
 /* ── Le terrain ── */
@@ -2946,13 +2932,6 @@ function doHarvest() {
 }
 .dp-atk {
   color: var(--d3);
-}
-.keep-legend {
-  display: flex;
-  justify-content: space-around;
-  font-size: 11px;
-  color: var(--dim);
-  padding: 6px 0 2px;
 }
 
 /* ── Panneaux ── */
