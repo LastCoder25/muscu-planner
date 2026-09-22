@@ -1,8 +1,8 @@
 // items.ts — équipement RPG (Phase 2c). RÈGLE : l'équipement ne donne PAS de
 // stats (elles viennent du sport) — il donne des EFFETS de gameplay. Pur/testable.
-import { playerCombatant, combatPower, mulberry32, seedOf, type Combatant } from './combat';
+import { COMBAT, playerCombatant, combatPower, mulberry32, seedOf, type Combatant } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
-import { PROCEDURAL } from '@/lib/proceduralContent';
+import { PROCEDURAL, refBalancedStat } from '@/lib/proceduralContent';
 import {
   CHARACTER_RANKS,
   characterRank,
@@ -96,7 +96,7 @@ export type EffectType =
   | 'thorns_pct' // renvoie une part des dégâts reçus (épines)
   | 'execute_pct' // SIGNATURE : + dégâts quand l'ennemi est bas (< 25 % PV)
   | 'rage_pct' // SIGNATURE : + dégâts quand TU es bas (< 30 % PV)
-  | 'momentum_pct' // SIGNATURE : + dégâts par coup consécutif porté (cumul)
+  | 'momentum_pct' // SIGNATURE : + dégâts à chaque tour du combat (cumul, 4 tours)
   // ── TIER MINEUR (affixe #3, Épique+) : bonus « light » d'éco/confort (hors puissance brute) ──
   | 'gold_pct' // + or gagné par run
   | 'magic_find_pct' // + chance de meilleur loot (luck bornée → ne franchit jamais ta ligue)
@@ -607,7 +607,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     name: 'Cadence',
     emoji: '🌀',
     slots: ['weapon'],
-    desc: 'À partir de ton 5ᵉ coup porté, tes coups infligent +18 %.',
+    desc: 'À partir de ton 3ᵉ tour, tes coups infligent +18 %.',
     echo: ['momentum_pct'],
   },
   {
@@ -1005,7 +1005,7 @@ export function effectLabelFor(type: EffectType, v: number): string {
     case 'rage_pct':
       return `+${s}% dégâts (toi < 30% PV)`;
     case 'momentum_pct':
-      return `+${s}% dégâts/coup (cumul)`;
+      return `+${s}% dégâts par tour (cumul, 4 tours)`;
     case 'thorns_pct':
       return `renvoie ${s}% des dégâts reçus`;
   }
@@ -1105,7 +1105,7 @@ export function effectLabel(e: ItemEffect, level = 1): string {
     case 'rage_pct':
       return `+${v}% dégâts (toi < 30% PV)`;
     case 'momentum_pct':
-      return `+${v}% dégâts/coup (cumul)`;
+      return `+${v}% dégâts par tour (cumul, 4 tours)`;
     case 'thorns_pct':
       return `renvoie ${v}% des dégâts reçus`;
   }
@@ -2520,7 +2520,62 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   return a;
 }
 
-/** Combattant du joueur = stats (sport) + effets de l'équipement + `extra` (talents). */
+/** 🎯 COURBES DE CHANCE À RENDEMENT DÉCROISSANT (refonte équipement, étape 1).
+ *
+ *  ⚠️ LE DÉFAUT MESURÉ : critique, esquive et réduction étaient des sommes plafonnées, et
+ *  le SPORT SEUL remplissait le plafond dès le niveau 20 (critique 51 %, réduction 46 %,
+ *  esquive 40 % = son plafond). Une stat d'objet de ces trois canaux ne rapportait donc
+ *  plus RIEN, et l'optimiseur mettait des PV sur les armes (4 armes sur 4 aux niveaux 50
+ *  et 90). Ici la chance APPROCHE un plafond sans jamais l'atteindre :
+ *  chance = plafond × x / (x + K), où x = part du sport (rapportée au joueur de référence
+ *  du niveau) + part de l'équipement.
+ *
+ *  ⚠️ TROIS PROPRIÉTÉS, toutes testées :
+ *  1. **Le joueur de référence NU garde exactement sa chance d'avant** (K est choisi pour
+ *     ça, à chaque niveau) → le contenu, calibré sur lui, ne bouge pas.
+ *  2. **Au point de référence, un point d'équipement vaut ce qu'il valait** (pente 1, via
+ *     G) : les magnitudes d'objets restent dans leur ordre de grandeur.
+ *  3. **Aucun plafond n'est jamais atteint** : chaque point compte, un peu moins que le
+ *     précédent.
+ *
+ *  Réservé au HÉROS : les aventuriers (convois, sièges, camps, failles) gardent l'ancienne
+ *  règle (`legacyCaps`), leur calibration est mesurée à part et hors de cette refonte. */
+export const CHANCE_CURVES = {
+  crit: { cap: 0.75, perStat: COMBAT.critPerAgilite, legacyCap: COMBAT.critCap, gearCap: 0.6 },
+  dodge: { cap: 0.5, perStat: COMBAT.dodgePerAgilite, legacyCap: COMBAT.dodgeCap, gearCap: 0.4 },
+  reduction: {
+    cap: 0.65,
+    perStat: COMBAT.defPerPuissance,
+    legacyCap: COMBAT.defCap,
+    gearCap: 0.5,
+  },
+} as const;
+type ChanceCurve = (typeof CHANCE_CURVES)[keyof typeof CHANCE_CURVES];
+/** En dessous, le joueur de référence n'a presque rien de ce canal (tout début de partie) :
+ *  la courbe n'a pas de sens, on garde la somme d'avant. */
+const CURVE_MIN_REF = 0.02;
+
+/** Chance d'un canal : `sportRaw` = valeur brute du sport (stat × coefficient, sans
+ *  plafond), `gear` = somme des bonus d'équipement, talents, familier et sets (fraction). */
+export function curveChance(
+  ch: ChanceCurve,
+  sportRaw: number,
+  gear: number,
+  level: number,
+): number {
+  const refRaw = refBalancedStat(Math.max(1, level)) * ch.perStat;
+  const t = Math.min(ch.legacyCap, refRaw);
+  if (t < CURVE_MIN_REF) return Math.max(0, Math.min(ch.gearCap, sportRaw + gear));
+  const K = ch.cap / t - 1;
+  // Pente de la courbe en x = 1 : cap·K/(1+K)². G la ramène à 1 → un point d'équipement
+  // vaut, AU POINT DE RÉFÉRENCE, ce qu'il valait en somme simple.
+  const G = (1 + K) ** 2 / (ch.cap * K);
+  const x = Math.max(0, sportRaw / refRaw + gear * G);
+  return (ch.cap * x) / (x + K);
+}
+
+/** Combattant du joueur = stats (sport) + effets de l'équipement + `extra` (talents).
+ *  `opts.legacyCaps` : anciens plafonds secs (aventuriers uniquement, cf. `CHANCE_CURVES`). */
 export function playerWithGear(
   name: string,
   stats: { puissance: number; endurance: number; agilite: number },
@@ -2528,6 +2583,7 @@ export function playerWithGear(
   extra: Partial<AggregatedEffects> = {},
   level = 1,
   voie?: string | null,
+  opts: { legacyCaps?: boolean } = {},
 ): Combatant {
   const base = playerCombatant(name, stats, level);
   // `voie` gate le capstone (4-pièces) du set de la voie (cf. setEffects).
@@ -2536,11 +2592,17 @@ export function playerWithGear(
   const maxPvPct = e.maxPvPct + (extra.maxPvPct ?? 0);
   const critAdd = e.critAdd + (extra.critAdd ?? 0);
   const dodgeAdd = e.dodgeAdd + (extra.dodgeAdd ?? 0);
-  // La Défense de la Puissance se cumule à la réduction du gear (plafond 50 %).
-  const dmgReduction = Math.min(
-    0.5,
-    (base.dmgReduction ?? 0) + e.dmgReduction + (extra.dmgReduction ?? 0),
-  );
+  const redAdd = e.dmgReduction + (extra.dmgReduction ?? 0);
+  const legacy = !!opts.legacyCaps;
+  const crit = legacy
+    ? Math.min(0.6, base.crit + critAdd)
+    : curveChance(CHANCE_CURVES.crit, stats.agilite * COMBAT.critPerAgilite, critAdd, level);
+  const dodge = legacy
+    ? Math.min(0.4, base.dodge + dodgeAdd)
+    : curveChance(CHANCE_CURVES.dodge, stats.agilite * COMBAT.dodgePerAgilite, dodgeAdd, level);
+  const dmgReduction = legacy
+    ? Math.min(0.5, (base.dmgReduction ?? 0) + redAdd)
+    : curveChance(CHANCE_CURVES.reduction, stats.puissance * COMBAT.defPerPuissance, redAdd, level);
   // Vol de vie PLAFONNÉ à 50 % (comme la réduction de dégâts) : il stacke (arme +
   // talent + set + familier) et, avec le multi-frappe, rendait le sustain quasi
   // infini. Borné → build sustain fort mais pas increvable (ticket adab525d).
@@ -2554,8 +2616,8 @@ export function playerWithGear(
     name,
     pv: Math.round(base.pv * (1 + maxPvPct)),
     damage: Math.max(1, Math.round(base.damage * (1 + damagePct))),
-    crit: Math.min(0.6, base.crit + critAdd),
-    dodge: Math.min(0.4, base.dodge + dodgeAdd),
+    crit,
+    dodge,
     initiative: base.initiative * (1 + initiativePct),
     dmgReduction,
     lifesteal,
@@ -2566,6 +2628,7 @@ export function playerWithGear(
     thorns: e.thornsPct + (extra.thornsPct ?? 0),
     ...(regen > 0 ? { regen } : {}),
     ...(procs.size ? { procs } : {}),
+    ...(legacy ? { momentumPerHit: true } : {}),
   };
 }
 /** Bonus de LUCK apporté par le magic find de l'équipement (borné → jamais hors ligue).

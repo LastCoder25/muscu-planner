@@ -37,7 +37,10 @@ export interface Combatant {
   // Effets SIGNATURE (objets rares, joueur uniquement) — bonus de dégâts CONDITIONNELS.
   execute?: number; // + dégâts quand l'ENNEMI est bas (< executeThreshold PV)
   rage?: number; // + dégâts quand TOI tu es bas (< rageThreshold PV)
-  momentum?: number; // + dégâts par coup consécutif porté dans le combat (cumul plafonné)
+  momentum?: number; // + dégâts à chaque tour du joueur dans le combat (cumul plafonné)
+  /** Élan compté PAR COUP (règle d'avant la refonte de l'équipement) : réservé aux
+   *  aventuriers, dont la calibration (route, sièges, camps, failles) est mesurée à part. */
+  momentumPerHit?: boolean;
   thorns?: number; // 0..1 : part des dégâts reçus renvoyée à l'attaquant (épines, joueur)
   regen?: number; // 0..1 : BONUS de PV régénérés entre 2 combats d'un donjon (stat mineure, joueur)
   // Procs LÉGENDAIRES (objets Légendaire+, joueur uniquement) — effets NON-scalants,
@@ -120,7 +123,15 @@ export const COMBAT = {
   // Effets signature (conditionnels) — seuils & plafond.
   executeThreshold: 0.25, // « Exécution » active si l'ennemi est sous 25 % PV
   rageThreshold: 0.3, // « Rage » active si le joueur est sous 30 % PV
-  momentumMaxStacks: 6, // « Déferlante » : cumul plafonné à 6 coups
+  // ⚠️ ÉLAN COMPTÉ PAR TOUR (refonte équipement, étape 1). Compté par COUP, il était au maximum
+  // avant la fin du 1er tour dès que le héros frappait plusieurs fois (5 coups par tour au
+  // niveau 30, 37 au niveau 90) : ce n'était plus un bonus qui monte, c'étaient des dégâts
+  // sous un autre nom. Mesuré, un combat dure 2,4 à 6,8 tours du héros : 4 tours de cumul
+  // pour qu'il monte VRAIMENT pendant le combat.
+  momentumMaxStacks: 4, // « Déferlante » : cumul plafonné à 4 tours
+  momentumMaxStacksPerHit: 6, // aventuriers (élan par coup, règle d'avant)
+  tranceMaxStacksPerHit: 8,
+  cadenceFromHit: 5,
   // Procs légendaires (non-scalants).
   // ⚠️ RÉÉQUILIBRÉS EN v0.837 (mesuré, choix de l'utilisateur) : chaque proc vaut ~+8 % de
   // puissance ÉQUIVALENTE en vrai combat (proc seul sur un build optimisé, boss + donjon, niveaux
@@ -142,7 +153,7 @@ export const COMBAT = {
   // Procs de SET (v0.701) — même famille : non-scalants, et AUCUN ne consomme de rng.
   chargeTurns: 3, // Charge : les coups des 3 premiers tours…
   chargeMult: 1.3, // …infligent +30 %
-  cadenceFrom: 5, // Cadence : à partir du 5ᵉ coup porté…
+  cadenceFrom: 3, // Cadence : à partir du 3ᵉ tour du héros… (par tour, comme l'élan)
   cadenceMult: 1.18, // …+18 % de dégâts
   thirstThreshold: 0.5, // Soif : déclenche en passant sous 50 % PV…
   thirstDrainPct: 0.05, // …retire 5 % des PV max de l'ennemi
@@ -165,7 +176,7 @@ export const COMBAT = {
   secretThrustEvery: 3, // Duelliste · Botte secrète : un coup porté sur 3 est critique…
   secretThrustMult: 2.9, // …et ce critique-là inflige ×2,9
   bramblesMaxPvPct: 0.09, // Épineux · Ronces : chaque coup reçu retire 9 % des PV max ennemis
-  tranceMaxStacks: 8, // Frénétique · Transe : l'élan se cumule jusqu'à 8 coups au lieu de 6
+  tranceMaxStacks: 6, // Frénétique · Transe : l'élan se cumule jusqu'à 6 tours au lieu de 4
   // ⚠️ POIDS DES STATS DANS `combatPower` (v0.837, mesurés en vrai combat) : la puissance
   // comptait le vol de vie PLEIN et ignorait son plafond de soin par tour, sur-valorisait
   // l'élan et les épines. L'optimiseur montait donc des stats qui brillaient à l'écran sans
@@ -173,7 +184,11 @@ export const COMBAT = {
   powerLifestealW: 0.43,
   powerLifestealCap: 0.3,
   powerThornsW: 0.04,
-  powerMomentumW: 4.5,
+  // Élan PAR TOUR (étape 1) : mesuré en vrai combat, +1 d'élan vaut ~+2,4 à +3,0 de dégâts
+  // (boss et donjon, niveaux 30/60/90, 3 builds) → 2,75. Le 4,5 d'avant valait pour l'élan
+  // par coup, toujours au maximum dès le 1er tour.
+  powerMomentumW: 2.75,
+  powerMomentumWPerHit: 4.5, // aventuriers : l'élan par coup d'avant, inchangé
 };
 
 /** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
@@ -218,7 +233,10 @@ export function playerCombatant(
  */
 export function offenseOf(c: Combatant): number {
   const sig =
-    1 + 0.12 * (c.execute ?? 0) + 0.1 * (c.rage ?? 0) + (c.momentum ?? 0) * COMBAT.powerMomentumW;
+    1 +
+    0.12 * (c.execute ?? 0) +
+    0.1 * (c.rage ?? 0) +
+    (c.momentum ?? 0) * (c.momentumPerHit ? COMBAT.powerMomentumWPerHit : COMBAT.powerMomentumW);
   return (
     c.damage *
     (c.strikes ?? 1) *
@@ -370,7 +388,7 @@ export function simulateCombat(
   let turn: CombatActor = player.initiative >= monster.initiative ? 'player' : 'monster';
   let round = 0;
   const monsterMaxPv = monster.pv;
-  let pStacks = 0; // Déferlante : coups consécutifs du joueur dans CE combat
+  let pStacks = 0; // Déferlante : tours ACHEVÉS du joueur dans CE combat (par tour, pas par coup)
 
   // Procs légendaires du JOUEUR (non-scalants, one-shot par combat).
   const has = (p: string): boolean => player.procs?.has(p) ?? false;
@@ -382,12 +400,18 @@ export function simulateCombat(
   // de procs différents feraient diverger un combat seedé — et tous les rejeux animés avec.
   let thirstReady = has('thirst'); // Soif : draine une fois, au passage sous 50 % PV
   let quarryReady = has('quarry'); // Curée : soigne une fois, quand l'ennemi passe sous 30 %
-  let pHits = 0; // coups PORTÉS par le joueur (Charge, Cadence)
+  let pHits = 0; // coups PORTÉS par le joueur (Botte secrète)
   let whettedLeft = 0; // tours entièrement critiques restants (Riposte affûtée)
   let whettedNow = false;
   let retortLeft = has('retort') ? COMBAT.retortHits : 0;
   let bastionLeft = has('sig_gardien') ? COMBAT.bastionHits : 0; // Bastion : coups amortis restants
-  const momentumCap = has('sig_frenetique') ? COMBAT.tranceMaxStacks : COMBAT.momentumMaxStacks;
+  const perHit = !!player.momentumPerHit;
+  const baseCap = perHit ? COMBAT.momentumMaxStacksPerHit : COMBAT.momentumMaxStacks;
+  const momentumCap = has('sig_frenetique')
+    ? perHit
+      ? COMBAT.tranceMaxStacksPerHit
+      : COMBAT.tranceMaxStacks
+    : baseCap;
   const critMult = has('sig_assassin') ? COMBAT.graceCritMult : 2;
 
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
@@ -404,6 +428,7 @@ export function simulateCombat(
     const hits = Math.max(1, strikeCount(atk));
     if (turn === 'player') {
       pTurn++;
+      if (!perHit) pStacks = pTurn - 1; // l'élan monte à chaque tour du héros, pas à chaque coup
       whettedNow = whettedLeft > 0;
       if (whettedNow) whettedLeft--;
     }
@@ -463,7 +488,10 @@ export function simulateCombat(
           mark('charge');
         }
         // Cadence : récompense au contraire la DURÉE — l'élan, pas l'ouverture.
-        if (has('cadence') && pHits >= COMBAT.cadenceFrom - 1) {
+        if (
+          has('cadence') &&
+          (perHit ? pHits >= COMBAT.cadenceFromHit - 1 : pTurn >= COMBAT.cadenceFrom)
+        ) {
           dmg = Math.round(dmg * COMBAT.cadenceMult);
           mark('cadence');
         }
@@ -479,7 +507,7 @@ export function simulateCombat(
         }
         if (atk.momentum && pStacks > 0) {
           mult += Math.min(momentumCap, pStacks) * atk.momentum;
-          mark(momentumCap > COMBAT.momentumMaxStacks ? 'sig_frenetique' : 'momentum');
+          mark(momentumCap > baseCap ? 'sig_frenetique' : 'momentum');
         } else if (atk.momentum) mult += Math.min(momentumCap, pStacks) * atk.momentum;
         // Carnage : plus l'ennemi saigne, plus on frappe fort.
         if (has('sig_berserker')) {
@@ -489,7 +517,7 @@ export function simulateCombat(
         if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
-        pStacks++; // Déferlante : coup porté
+        if (perHit) pStacks++; // aventuriers : élan par coup (règle d'avant)
         if (atk.lifesteal) {
           const before = pPv;
           pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal)));

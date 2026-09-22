@@ -343,6 +343,10 @@ export function escortCombatant(
     {},
     mergeEffects(skills ? escortEffects(advs) : emptyEffects(), { ...emptyEffects(), ...extra }),
     level,
+    undefined,
+    // Anciens plafonds secs : la route, les sièges, les camps et les failles sont calibrés
+    // dessus (hors refonte de l'équipement du héros, cf. `CHANCE_CURVES`).
+    { legacyCaps: true },
   );
 }
 

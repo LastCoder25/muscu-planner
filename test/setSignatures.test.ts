@@ -117,13 +117,14 @@ describe('⭐ chaque signature fait ce qu’elle annonce', () => {
       expect(t, `coup ${i + 1}`).toBe((i + 1) % COMBAT.secretThrustEvery === 0 ? 'crit' : 'hit'),
     );
   });
-  it('Transe : l’élan continue de monter au-delà de 6 coups', () => {
+  it('Transe : l’élan continue de monter au-delà de 4 tours', () => {
     const p = hero({ momentum: 0.1 });
     const a = playerHits(p, foe({ pv: 1e9 }));
     const b = playerHits(withSig('frenetique', p), foe({ pv: 1e9 }));
     // ⚠️ Même coup, même graine, avec et sans : deux coups différents n'ont pas la même
     // variance, les comparer entre eux ne prouve rien (premier jet de ce test).
-    expect(b[5]!.damage).toBe(a[5]!.damage); // 5 cumuls : sous les deux plafonds
+    // Un coup par tour ici : le coup i est le tour i+1, donc i cumuls d'élan (par tour).
+    expect(b[3]!.damage).toBe(a[3]!.damage); // 3 cumuls : sous les deux plafonds
     const attendu = (1 + COMBAT.tranceMaxStacks * 0.1) / (1 + COMBAT.momentumMaxStacks * 0.1);
     expect(b[12]!.damage / a[12]!.damage).toBeCloseTo(attendu, 1);
   });
