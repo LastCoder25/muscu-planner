@@ -2099,6 +2099,9 @@ function doHarvest() {
 /* ── La cour : chaque bâtiment est une TUILE cliquable ── */
 .hit {
   cursor: pointer;
+  /* Pas de rectangle de surbrillance au toucher (mobile) : il encadrait tout le groupe SVG,
+     bien au-delà du dessin, et se lisait comme un bug. */
+  -webkit-tap-highlight-color: transparent;
 }
 .yard-ground {
   fill: #221c14;
@@ -2272,7 +2275,10 @@ function doHarvest() {
   stroke: #4a3d2b;
   stroke-width: 0.7;
 }
-.hit.camp:focus-visible {
+/* ⚠️ `:focus` et non seulement `:focus-visible` : au clic, certains navigateurs posent le
+   contour de focus (blanc) autour de la boîte ENTIÈRE du groupe. Le clavier garde son
+   retour, en accent sur la caravane (ci-dessous). */
+.hit.camp:focus {
   outline: none;
 }
 .hit.camp:focus-visible .cart-tilt,
