@@ -1,6 +1,5 @@
 <template>
   <router-view />
-  <FeedbackFab />
   <VersionBadge />
   <GameFxOverlay />
   <XpGainOverlay />
@@ -17,7 +16,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue';
 import VersionBadge from '@/components/VersionBadge.vue';
-import FeedbackFab from '@/components/FeedbackFab.vue';
 import GameFxOverlay from '@/components/GameFxOverlay.vue';
 import XpGainOverlay from '@/components/XpGainOverlay.vue';
 import GoldGainOverlay from '@/components/GoldGainOverlay.vue';
