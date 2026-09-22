@@ -72,6 +72,30 @@ gras.
 - **Arme et bottes** : un soutien de plus chacune, sans stat spécialisée.
 - Chaque stat ajoutée existe déjà dans le moteur : aucune nouvelle mécanique.
 
+### 3.3 Ce que les ennemis savent faire (vérifié le 2026-09-22)
+
+Une stat qui agit sur l'ennemi ne vaut que si l'ennemi a de quoi la subir. Relevé dans le
+code, pour **tous** les adversaires du héros (monstres écrits et procéduraux, boss de
+palier, Labyrinthe, expéditions, failles, camps, embuscades) :
+
+| L'ennemi…          | Réalité                                               | Conséquence                                                           |
+| ------------------ | ----------------------------------------------------- | --------------------------------------------------------------------- |
+| fait des critiques | **oui**, 2 à 20 % (souvent 5 à 14 %)                  | résistance aux critiques vivante, mais **faible** : à mesurer         |
+| esquive            | **oui**, 0 à 16 % (souvent 5 %)                       | la précision agit, surtout par son **second effet** (dégâts d'entrée) |
+| frappe             | **une fois par tour** (deux pour l'archétype « vif ») | blocage, parade, riposte, épines se déclenchent peu : à calibrer      |
+| a de la réduction  | **non, jamais**                                       | tout effet « ignore la réduction » serait **vide**                    |
+| bloque ou pare     | **non, jamais**                                       | tout effet « ignore le blocage / la parade » serait **vide**          |
+| se soigne          | seulement la « sangsue » du Labyrinthe                | un effet « anti-soin » ne servirait presque nulle part                |
+
+**Corrections faites dans cette spec** : les trophées Berserker (« ignore la réduction et le
+blocage ») et Assassin (« ni esquiver ni parer ») visaient des stats que les ennemis n'ont
+pas. Ils deviennent : le Berserker **déclenche sa rage à plein** quels que soient ses PV,
+l'Assassin **exécute son prochain coup** comme si l'ennemi était à terre (§ 5.2).
+
+**À surveiller à la mesure** : la résistance aux critiques pèse peu tant que les ennemis
+critiquent à 5-14 %. Si elle reste marginale, on la garde en soutien seulement, ou on
+relève le critique des ennemis (ce qui recalerait le contenu).
+
 ## 4. Les 8 profils
 
 Chaque voie a **un rôle en combat**, **une stat exclusive** (sa marque), **une stat partagée**
@@ -131,18 +155,18 @@ coups) ni le blocage (qui dépend du hasard).
 ### 5.2 Les 8 pouvoirs (noms provisoires)
 
 Chaque récompense appartient à une **famille différente**, pour qu'aucune ne ressemble à
-une autre : percer, viser, annuler, retourner, étaler, désarmer, renvoyer, accélérer.
+une autre : déchaîner, achever, annuler, retourner, étaler, désarmer, renvoyer, accélérer.
 
-| Voie          | Quête                       | Accomplie, il se passe…                                                | Famille   |
-| ------------- | --------------------------- | ---------------------------------------------------------------------- | --------- |
-| 💥 Berserker  | perdre des PV               | tes coups du prochain tour ignorent la réduction et le blocage         | percer    |
-| 🗡️ Assassin   | porter des critiques        | l'ennemi ne peut ni esquiver ni parer ton prochain tour                | viser     |
-| 🛡️ Gardien    | parer                       | le prochain coup ennemi est annulé                                     | annuler   |
-| 🩸 Vampire    | se soigner par vol de vie   | le prochain coup ennemi te soigne au lieu de te blesser                | retourner |
-| 🪨 Colosse    | encaisser des coups         | le prochain coup ennemi est **étalé sur trois tours**                  | étaler    |
-| 🤺 Duelliste  | riposter                    | **l'ennemi est désarmé : il perd son prochain tour**                   | désarmer  |
-| 🌵 Épineux    | renvoyer des coups d'épines | le prochain coup ennemi lui revient en entier, sans que tu le subisses | renvoyer  |
-| 🌀 Frénétique | tenir l'élan au maximum     | tu joues un tour supplémentaire                                        | accélérer |
+| Voie          | Quête                       | Accomplie, il se passe…                                                 | Famille   |
+| ------------- | --------------------------- | ----------------------------------------------------------------------- | --------- |
+| 💥 Berserker  | perdre des PV               | ta rage joue à plein pendant ton prochain tour, quels que soient tes PV | déchaîner |
+| 🗡️ Assassin   | porter des critiques        | ton prochain coup exécute, comme si l'ennemi était déjà à terre         | achever   |
+| 🛡️ Gardien    | parer                       | le prochain coup ennemi est annulé                                      | annuler   |
+| 🩸 Vampire    | se soigner par vol de vie   | le prochain coup ennemi te soigne au lieu de te blesser                 | retourner |
+| 🪨 Colosse    | encaisser des coups         | le prochain coup ennemi est **étalé sur trois tours**                   | étaler    |
+| 🤺 Duelliste  | riposter                    | **l'ennemi est désarmé : il perd son prochain tour**                    | désarmer  |
+| 🌵 Épineux    | renvoyer des coups d'épines | le prochain coup ennemi lui revient en entier, sans que tu le subisses  | renvoyer  |
+| 🌀 Frénétique | tenir l'élan au maximum     | tu joues un tour supplémentaire                                         | accélérer |
 
 - **Colosse** : l'effet « l'ennemi perd son tour » passe au Duelliste (un duelliste désarme,
   c'est son métier). Le Colosse reçoit un effet de tank passif : un coup énorme devient
@@ -249,8 +273,9 @@ puis les sondes sont supprimées et les chiffres vont dans le commit.
 
 ## 10. Questions ouvertes
 
-1. **Les 8 profils** (§ 4) te conviennent-ils ?
-2. **Stat du Colosse** : la « robustesse » (§ 4.2) ?
-3. **Listes des pièces normales** (§ 3.2) : les ajouts proposés te vont-ils ?
-4. **Pouvoirs de trophée** (§ 5.2) : les 8 familles, et les changements Colosse/Duelliste ?
-5. **Rempart vengeur** : se charge-t-il toujours sur le blocage, ou passe-t-il sur la parade ?
+Validés : les 8 profils, la robustesse du Colosse, les 8 pouvoirs de trophée (avec les
+corrections Berserker/Assassin du § 3.3). L'équilibrage prendra du temps (§ 8).
+
+1. **Rempart vengeur** (pouvoir de relique du Gardien) : il se charge sur le **blocage**, qui
+   reste une stat de base que tout le monde peut avoir. Le laisser, ou le passer sur la
+   **parade**, qui devient la stat du Gardien ?
