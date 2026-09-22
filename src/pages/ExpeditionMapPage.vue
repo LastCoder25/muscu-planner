@@ -1705,14 +1705,8 @@ const poiFacts = computed<PoiFact[]>(() => {
       value: `≈ ${camp.size} champion${camp.size > 1 ? 's' : ''}`,
       title: 'La force du camp, comptée en champions de référence',
     });
-  // 🛡️ Les gardes d'un lieu de récolte (v0.1043) : il faut les abattre pour récolter.
-  if (guard)
-    out.push({
-      icon: '🛡️',
-      label: 'Gardes',
-      value: `≈ ${String(+guard.size.toFixed(1)).replace('.', ',')} champion${guard.size > 1 ? 's' : ''}`,
-      title: 'Les gardes du lieu, comptés en champions de référence',
-    });
+  // (La force des gardes d'un lieu de récolte n'est plus affichée — demandé : la faction
+  // et la réussite de l'équipe suffisent.)
   if (rift) {
     out.push({
       icon: '👾',
@@ -1782,7 +1776,6 @@ const poiFacts = computed<PoiFact[]>(() => {
       value: partySize.value ? formatDurationMin(partyMin.value) : 'compose ton équipe',
       cls: partySize.value ? undefined : 'dim',
     });
-    out.push({ icon: '⚡', label: 'Énergie', value: '0 — gratuit' });
     if (teamOnly.value || guard)
       out.push(
         partyWin.value === null
