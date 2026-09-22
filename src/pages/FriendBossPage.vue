@@ -13,8 +13,8 @@
         <span class="fb-tok-n font-display">🎫 {{ tokens }}</span>
         <span class="fb-dim"
           >/ {{ BOSS_TOKENS.stockMax }} jetons · gagnés par le sport : 1 dès
-          {{ BOSS_TOKENS.firstAt }} XP dans la journée, 2 dès {{ BOSS_TOKENS.secondAt }}. Lancer ou
-          rejoindre coûte le prix du cran.</span
+          {{ BOSS_TOKENS.firstAt }} XP dans la journée, 2 dès {{ BOSS_TOKENS.secondAt }}. Lancer
+          coûte le prix du cran ; rejoindre est gratuit.</span
         >
       </div>
 
@@ -36,7 +36,7 @@
         </div>
         <div class="fb-acts">
           <button class="fb-btn" :disabled="busy || !!inviteBlock(b)" @click="doRespond(b, true)">
-            Rejoindre · {{ bossTokenCost(b.tier) }} 🎫
+            Rejoindre · gratuit
           </button>
           <button class="fb-btn ghost" :disabled="busy" @click="doRespond(b, false)">
             Refuser
@@ -179,6 +179,10 @@
       </button>
       <section v-if="!current || launchOpen" class="fb-card">
         <div class="fb-sec-t first">Lancer un boss</div>
+        <p v-if="launchWait" class="fb-hint warn">
+          Tu pourras lancer un nouveau boss dans {{ fmtBossSpan(launchWait - now) }} (48 h après la
+          fin du dernier que tu as lancé). En attendant, tu peux rejoindre celui d’un ami.
+        </p>
         <!-- Lancer exige l'Autel des boss (le serveur le vérifie aussi, migr. 0071) ;
              rejoindre l'invitation d'un ami, non. -->
         <template v-if="!hasAltar">
@@ -269,7 +273,9 @@
             <span>{{ f.pseudo }}</span>
           </label>
 
-          <p v-if="declareBlock" class="fb-hint warn">{{ bossErrorMessage(declareBlock) }}</p>
+          <p v-if="declareBlock && declareBlock !== 'cooldown'" class="fb-hint warn">
+            {{ bossErrorMessage(declareBlock) }}
+          </p>
           <button
             class="fb-btn big wide"
             :disabled="!pickedExo || busy || !!declareBlock"
@@ -344,6 +350,8 @@ import {
   BOSS_TOKENS,
   bossErrorMessage,
   bossJoinBlocker,
+  bossLaunchBlocker,
+  nextDeclareAt,
   bossTokenCost,
   bossShareUnits,
   bossTier,
@@ -416,12 +424,13 @@ const current = computed(
   () => running.value.find((b) => b.id === selectedId.value) ?? running.value[0] ?? null,
 );
 const tokens = computed(() => char.row?.boss_tokens ?? 0);
-/** Même règle que `fboss_respond` : les jetons, et un seul boss par exercice. */
+/** Même règle que `fboss_respond` : gratuit, un seul boss par exercice. */
 const inviteBlock = (b: FriendBoss) =>
-  bossJoinBlocker(
-    { tokens: tokens.value, tier: b.tier, exerciseId: b.exerciseId, mine: running.value },
-    now.value,
-  );
+  bossJoinBlocker({ exerciseId: b.exerciseId, mine: running.value }, now.value);
+/** Le délai de 48 h du lanceur (migr. 0087) : il vaut avant même d'avoir choisi un exo. */
+const owned = computed(() => store.bosses.filter((b) => b.ownerId === uid.value));
+const nextAt = computed(() => nextDeclareAt(owned.value));
+const launchWait = computed(() => (nextAt.value && nextAt.value > now.value ? nextAt.value : null));
 const takenExo = computed(() => new Set(running.value.map((b) => b.exerciseId)));
 const launchOpen = ref(false);
 const invitations = computed(() => store.invitations(now.value));
@@ -652,12 +661,13 @@ const pickedTier = ref<string>(BOSS_TIER_DEFAULT);
 /** Même règle que `fboss_declare`. */
 const declareBlock = computed(() =>
   pickedExo.value
-    ? bossJoinBlocker(
+    ? bossLaunchBlocker(
         {
           tokens: tokens.value,
           tier: pickedTier.value,
           exerciseId: pickedExo.value.id,
           mine: running.value,
+          owned: owned.value,
         },
         now.value,
       )

@@ -14,9 +14,10 @@
 //    dès que tous ont répondu (un refus compte) ; sans invité, il démarre tout de suite.
 //    Avant le démarrage, on ne frappe pas.
 //  • Il dure 7 jours à partir de son démarrage.
-//  • Lancer OU rejoindre coûte des JETONS 🎫 (le prix du cran), gagnés par le sport — au
-//    plus 2 par jour, réserve de 6 (v0.1066). Plusieurs boss à la fois, un seul par
-//    exercice ; on ne quitte pas un boss. Plus de délai de relance.
+//  • LANCER coûte des JETONS 🎫 (le prix du cran), gagnés par le sport — au plus 2 par jour,
+//    réserve de 6 (v0.1066) — et le lanceur attend 48 h après la fin de son dernier boss
+//    avant d'en relancer un (v0.1067). REJOINDRE est gratuit. Plusieurs boss à la fois, un
+//    seul par exercice ; on ne quitte pas un boss.
 //  • Une rep = 1000 points de dégât, pour tout le monde (égalité). Chaque participant
 //    ajoute sa part de PV.
 //  • Les reps comptent comme du sport ; une prime de complétion s'ajoute si le boss meurt
@@ -40,6 +41,9 @@ export const FRIEND_BOSS = {
   inviteWindowMs: 24 * HOUR,
   /** Durée du combat, à partir du démarrage. */
   durationMs: 7 * DAY,
+  /** Délai avant que le LANCEUR puisse relancer, à partir de la fin (mort ou 7 jours) de
+   *  son dernier boss (migr. 0087, par-dessus les jetons). Rejoindre n'est pas concerné. */
+  cooldownMs: 48 * HOUR,
   /** Part de PV d'UN participant, en unités de l'exo (reps, ou secondes pour le gainage).
    *  ⚠️ C'est un volume EN PLUS de la semaine (v0.869, décision de l'utilisateur) : le Défi
    *  360 est l'entraînement global, le boss un bonus RELATIVEMENT FACILE. Une part vaut
@@ -125,11 +129,11 @@ export interface BossTier {
    *  farmer (30 pompes, pour un seul jeton). Au-dessus, un ticket par cran — et le plus
    *  dur (4) reste sous un Défi 360 intense (5), qui est une SEMAINE entière. */
   tickets: number;
-  /** 🎫 Jetons que coûte ce cran — à LANCER comme à REJOINDRE (v0.1066). Doit rester égal à
-   *  `fboss_token_cost` (migr. 0086). ⚠️ Rejoindre coûte autant que lancer : mesuré,
-   *  rejoindre à 1 jeton des boss Inhumains donnait jusqu'à +110 % d'or par semaine (un
-   *  coffre ×13,8 pour un seul jeton). Au même prix, le rendement par jeton est le même pour
-   *  tous, et les coffres restent sous +25 % du revenu d'une semaine. */
+  /** 🎫 Jetons que coûte ce cran au LANCEUR (v0.1066). Doit rester égal à `fboss_token_cost`
+   *  (migr. 0086). ⚠️ Rejoindre est GRATUIT (v0.1067, décision de l'utilisateur) : mesuré,
+   *  rejoindre des Inhumains à 1 jeton pouvait déjà doubler l'or d'une semaine ; gratuit, le
+   *  rythme n'est plus borné que par les lanceurs (jetons + 48 h chacun), donc un joueur avec
+   *  beaucoup d'amis actifs ouvre un coffre par boss d'ami. Assumé. */
   tokens: number;
 }
 
@@ -333,7 +337,7 @@ export function bossErrorMessage(code: string): string {
     same_exercise: 'Tu as déjà un boss en cours sur cet exercice — choisis-en un autre.',
     // Codes d'avant les jetons (migr. 0078) : un onglet resté ouvert peut encore les voir.
     busy: 'Tu as déjà un boss en cours — recharge la page.',
-    cooldown: 'Tu pourras lancer un nouveau boss plus tard — recharge la page.',
+    cooldown: 'Tu pourras lancer un nouveau boss 48 h après la fin du dernier que tu as lancé.',
     not_friend: 'Tu ne peux inviter que tes amis.',
     too_many_invites: `Au plus ${FRIEND_BOSS.maxInvites} amis par boss.`,
     closed: 'Les invitations sont closes : le combat a commencé.',
@@ -595,26 +599,50 @@ export function advanceBossTokens(
   return { state: next, stock: stock + kept, gained: kept };
 }
 
-/** Coût d'un cran, à lancer comme à rejoindre. */
+/** Coût d'un cran — payé par le LANCEUR seul (rejoindre est gratuit, v0.1067). */
 export function bossTokenCost(tier: string | null | undefined): number {
   return bossTier(tier).tokens;
 }
 
-/** Pourquoi on ne peut pas lancer ou rejoindre CE boss (null = on peut). Même règle que
- *  `fboss_declare` / `fboss_respond` : les jetons, et un seul boss en cours par exercice
- *  (sinon une même série frapperait deux boss). */
+type BossTimes = Pick<FriendBoss, 'createdAt' | 'startAt' | 'defeatedAt'>;
+type MyBoss = Pick<FriendBoss, 'exerciseId' | 'createdAt' | 'startAt' | 'defeatedAt'>;
+
+const sameExerciseBusy = (mine: readonly MyBoss[], exerciseId: string, now: number) =>
+  mine.some((b) => bossInProgress(b, now) && b.exerciseId === exerciseId);
+
+/** Pourquoi on ne peut pas REJOINDRE ce boss (null = on peut). Même règle que
+ *  `fboss_respond` : gratuit, mais un seul boss en cours par exercice (sinon une même série
+ *  frapperait deux boss). */
 export function bossJoinBlocker(
+  opts: { exerciseId: string; mine: readonly MyBoss[] },
+  now: number,
+): 'same_exercise' | null {
+  return sameExerciseBusy(opts.mine, opts.exerciseId, now) ? 'same_exercise' : null;
+}
+
+/** Instant où le LANCEUR pourra déclarer à nouveau (null = tout de suite) : 48 h après la
+ *  fin du dernier boss qu'il a lancé. Un boss lancé encore en cours rend un instant futur. */
+export function nextDeclareAt(owned: readonly BossTimes[]): number | null {
+  if (!owned.length) return null;
+  return Math.max(...owned.map(bossEndedAt)) + FRIEND_BOSS.cooldownMs;
+}
+
+/** Pourquoi on ne peut pas LANCER ce boss (null = on peut). Même règle et même ordre que
+ *  `fboss_declare` : un seul boss par exercice, le délai de 48 h, puis les jetons. */
+export function bossLaunchBlocker(
   opts: {
     tokens: number;
     tier: string | null | undefined;
     exerciseId: string;
-    /** Mes boss en cours (lancés ou rejoints). */
-    mine: readonly Pick<FriendBoss, 'exerciseId' | 'createdAt' | 'startAt' | 'defeatedAt'>[];
+    mine: readonly MyBoss[];
+    /** Les boss que j'ai lancés (pour le délai). */
+    owned: readonly BossTimes[];
   },
   now: number,
-): 'no_tokens' | 'same_exercise' | null {
-  if (opts.mine.some((b) => bossInProgress(b, now) && b.exerciseId === opts.exerciseId))
-    return 'same_exercise';
+): 'same_exercise' | 'cooldown' | 'no_tokens' | null {
+  if (sameExerciseBusy(opts.mine, opts.exerciseId, now)) return 'same_exercise';
+  const next = nextDeclareAt(opts.owned);
+  if (next != null && now < next) return 'cooldown';
   if (opts.tokens < bossTokenCost(opts.tier)) return 'no_tokens';
   return null;
 }

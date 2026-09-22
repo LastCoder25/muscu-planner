@@ -138,10 +138,6 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
 
   async function respond(bossId: string, accept: boolean) {
     await rpc('fboss_respond', { p_boss: bossId, p_accept: accept });
-    if (accept) {
-      const tier = bosses.value.find((b) => b.id === bossId)?.tier;
-      useCharacterStore().spentBossTokens(bossTokenCost(tier));
-    }
     await fetchMine();
   }
 

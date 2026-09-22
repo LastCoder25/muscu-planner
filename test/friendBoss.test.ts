@@ -25,6 +25,8 @@ import {
   advanceBossTokens,
   bossTokenCost,
   bossJoinBlocker,
+  bossLaunchBlocker,
+  nextDeclareAt,
   type BossTokenState,
   acceptedUnits,
   metMinShare,
@@ -275,30 +277,49 @@ describe('🐉 BOSS ENTRE AMIS — 🎫 jetons', () => {
     expect(r.gained).toBe(1);
   });
 
-  it('un cran coûte ses jetons, à lancer comme à rejoindre', () => {
+  it('lancer coûte les jetons du cran ; rejoindre est gratuit', () => {
     expect(BOSS_TIERS.map((t) => bossTokenCost(t.id))).toEqual([1, 1, 2, 3, 4]);
     expect(bossTokenCost(null)).toBe(1);
-    const mine: FriendBoss[] = [];
-    expect(bossJoinBlocker({ tokens: 3, tier: 'inhumain', exerciseId: 'x', mine }, T0)).toBe(
-      'no_tokens',
-    );
-    expect(bossJoinBlocker({ tokens: 4, tier: 'inhumain', exerciseId: 'x', mine }, T0)).toBeNull();
+    const base = { exerciseId: 'x', mine: [] as FriendBoss[], owned: [] as FriendBoss[] };
+    expect(bossLaunchBlocker({ ...base, tokens: 3, tier: 'inhumain' }, T0)).toBe('no_tokens');
+    expect(bossLaunchBlocker({ ...base, tokens: 4, tier: 'inhumain' }, T0)).toBeNull();
+    // Rejoindre ne regarde pas les jetons (il n'y en a même pas dans sa signature).
+    expect(bossJoinBlocker({ exerciseId: 'x', mine: [] }, T0)).toBeNull();
   });
 
   it('plusieurs boss à la fois, mais un seul par exercice (tant qu’il est en cours)', () => {
     const enCours = boss({ startAt: T0, exerciseId: 'ex_pushup' });
     const at = T0 + D;
-    const opts = { tokens: 6, tier: 'serieux', mine: [enCours] };
-    expect(bossJoinBlocker({ ...opts, exerciseId: 'ex_pushup' }, at)).toBe('same_exercise');
-    expect(bossJoinBlocker({ ...opts, exerciseId: 'ex_squat' }, at)).toBeNull();
+    expect(bossJoinBlocker({ mine: [enCours], exerciseId: 'ex_pushup' }, at)).toBe('same_exercise');
+    expect(bossJoinBlocker({ mine: [enCours], exerciseId: 'ex_squat' }, at)).toBeNull();
+    const launch = { tokens: 6, tier: 'serieux', mine: [enCours], owned: [] as FriendBoss[] };
+    expect(bossLaunchBlocker({ ...launch, exerciseId: 'ex_pushup' }, at)).toBe('same_exercise');
     // Fini (mort ou 7 jours écoulés) : l'exercice se libère.
     const mort = boss({ startAt: T0, defeatedAt: T0 + D, exerciseId: 'ex_pushup' });
-    expect(
-      bossJoinBlocker({ ...opts, mine: [mort], exerciseId: 'ex_pushup' }, T0 + 2 * D),
-    ).toBeNull();
+    expect(bossJoinBlocker({ mine: [mort], exerciseId: 'ex_pushup' }, T0 + 2 * D)).toBeNull();
+  });
+
+  it('⏳ le LANCEUR attend 48 h après la fin de son dernier boss (v0.1067)', () => {
+    const dead = boss({ startAt: T0, defeatedAt: T0 + 3 * D });
+    expect(nextDeclareAt([dead])).toBe(T0 + 5 * D);
+    const o = { tokens: 6, tier: 'serieux', exerciseId: 'x', mine: [], owned: [dead] };
+    expect(bossLaunchBlocker(o, T0 + 5 * D - 1)).toBe('cooldown');
+    expect(bossLaunchBlocker(o, T0 + 5 * D)).toBeNull();
+    // Survécu : 48 h après la fin des 7 jours. Encore en cours : bloqué aussi.
+    const exp = boss({ startAt: T0 });
+    expect(nextDeclareAt([exp])).toBe(T0 + 9 * D);
+    expect(bossLaunchBlocker({ ...o, owned: [exp] }, T0 + D)).toBe('cooldown');
+    // Le plus récent compte, pas le premier.
+    expect(nextDeclareAt([dead, exp])).toBe(T0 + 9 * D);
+    expect(nextDeclareAt([])).toBeNull();
+  });
+
+  it('avoir seulement REJOINT ne donne aucun délai', () => {
+    const aide = boss({ startAt: T0, defeatedAt: T0 + 2 * D, exerciseId: 'y' });
+    const o = { tokens: 6, tier: 'serieux', exerciseId: 'x', mine: [aide], owned: [] };
+    expect(bossLaunchBlocker(o, T0 + 2 * D)).toBeNull();
   });
 });
-
 describe('🐉 BOSS ENTRE AMIS — saisies et récompense', () => {
   const share = FRIEND_BOSS.shareUnits.push;
 
@@ -470,29 +491,30 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     expect(sql).toContain("public.fboss_start(b) + interval '7 days'");
   });
 
-  it('🎫 mêmes coûts de cran des deux côtés, et plus de délai ni de « un seul boss »', () => {
+  it('🎫 mêmes coûts de cran des deux côtés ; seul le LANCEUR paie et attend 48 h', () => {
     const cost = lastDef('fboss_token_cost');
     for (const t of BOSS_TIERS) expect(cost).toContain(`when '${t.id}' then ${t.tokens}`);
-    for (const fn of ['fboss_declare', 'fboss_respond']) {
-      const body = lastDef(fn);
-      expect(body, fn).toContain("raise exception 'no_tokens'");
-      expect(body, fn).toContain("raise exception 'same_exercise'");
-      expect(body, fn).toContain('boss_tokens = boss_tokens - ');
-      expect(body, fn).not.toContain('fboss_busy');
-      expect(body, fn).not.toContain("interval '48 hours'");
-    }
-    // ⚠️ Rejoindre paie le cran du BOSS, jamais un prix fixe (mesuré : à 1 jeton, rejoindre
-    // des Inhumains doublait le revenu d'or de la semaine).
-    expect(lastDef('fboss_respond')).toContain(
-      'coalesce(v_tokens, 0) < public.fboss_token_cost(b.tier)',
-    );
-    expect(lastDef('fboss_declare')).toContain('v_cost integer := public.fboss_token_cost(p_tier)');
-    expect(lastDef('fboss_declare')).toContain('coalesce(v_tokens, 0) < v_cost');
+    const decl = lastDef('fboss_declare');
+    expect(decl).toContain("raise exception 'no_tokens'");
+    expect(decl).toContain("raise exception 'same_exercise'");
+    expect(decl).toContain('v_cost integer := public.fboss_token_cost(p_tier)');
+    expect(decl).toContain('coalesce(v_tokens, 0) < v_cost');
+    expect(decl).toContain('boss_tokens = boss_tokens - v_cost');
+    expect(FRIEND_BOSS.cooldownMs).toBe(48 * H);
+    expect(decl).toContain("public.fboss_ended(b) + interval '48 hours' > now()");
+    expect(decl).toContain('b.owner_id = v_uid');
+    expect(decl).not.toContain('fboss_busy');
+    // Rejoindre : gratuit, sans délai, mais un seul boss par exercice.
+    const resp = lastDef('fboss_respond');
+    expect(resp).toContain("raise exception 'same_exercise'");
+    expect(resp).not.toContain('no_tokens');
+    expect(resp).not.toContain('boss_tokens');
+    expect(resp).not.toContain("interval '48 hours'");
+    expect(resp).not.toContain('fboss_busy');
     expect(fs.readFileSync('supabase/migrations/0086_fboss_tokens.sql', 'utf8')).toContain(
       `check (boss_tokens between 0 and ${BOSS_TOKENS.stockMax})`,
     );
   });
-
   it('⚠️ 150 pompes par saisie, et saisir encore et encore ne bloque jamais (v0.892)', () => {
     expect(Math.floor(FRIEND_BOSS.shareUnits.push * FRIEND_BOSS.hitMaxShare)).toBe(150);
     // Aucun historique n'entre dans la règle : la 20ᵉ saisie du jour passe comme la 1ʳᵉ.
