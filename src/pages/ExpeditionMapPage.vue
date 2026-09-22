@@ -1817,10 +1817,15 @@ onMounted(async () => {
   await nextTick();
   measure();
   // Vue de départ : le disque révélé tient dans la largeur (la carte grandit avec
-  // l'Avant-poste, un zoom fixe montrerait un tout petit disque en début de partie).
+  // l'Avant-poste, un zoom fixe montrerait un tout petit disque en début de partie),
+  // puis UN CRAN de plus (demandé par l'utilisateur : le disque entier était un cran trop
+  // dézoomé — on voit la ville et ses abords, le reste se trouve en faisant glisser ou au −).
   mapPx.value = Math.max(
     MIN_PX,
-    Math.min(MAX_PX, Math.round((contW.value * V.size) / (2 * (reveal.value + 6)))),
+    Math.min(
+      MAX_PX,
+      Math.round((contW.value * V.size) / (2 * (reveal.value + 6))) + ZOOM_STEP,
+    ),
   );
   await nextTick();
   centerTown();
