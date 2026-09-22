@@ -17,6 +17,7 @@ type GameFxKind =
   | 'unlock'
   | 'building'
   | 'chest' // coffre de fin de Défi 360 : couvercle qui s'ouvre, butin qui jaillit
+  | 'tickets' // tickets d'invocation distribués un par un en éventail (`count`)
   | 'generic';
 
 export interface GameFx {
@@ -27,6 +28,8 @@ export interface GameFx {
   subtitle?: string;
   // Rareté → couleur + intensité de l'effet (divin = explosion). Optionnel.
   rarity?: FxRarity;
+  /** Nombre d'objets à distribuer (`kind: 'tickets'`) : un ticket dessiné par unité. */
+  count?: number;
   /** DISCRET : bandeau en haut qui LAISSE PASSER LES TOUCHES, au lieu de l'overlay plein
    *  écran. Pour ce qui se répète (boss refarmé, drop, set renforcé) : enchaîner plusieurs
    *  overlays bloquait « Réattaquer » pendant des secondes. */
@@ -61,5 +64,20 @@ export function useGameFx() {
   function dismissToast(id: number): void {
     toasts.value = toasts.value.filter((t) => t.id !== id);
   }
-  return { queue, toasts, celebrate, dismiss, dismissToast };
+  /** 🎟️ GAIN DE TICKETS D'INVOCATION — la MÊME animation à chaque gain (demandé par
+   *  l'utilisateur) : niveau franchi, coffre de Défi 360 ou de boss entre amis encaissé,
+   *  Panthéon posé. Une seule définition, sinon chaque source finirait par avoir la sienne. */
+  function celebrateTickets(count: number, subtitle: string): void {
+    const n = Math.round(count || 0);
+    if (n <= 0) return;
+    celebrate({
+      kind: 'tickets',
+      emoji: '🎟️',
+      count: n,
+      title: `+${n} ticket${n > 1 ? 's' : ''} d’invocation`,
+      subtitle,
+      rarity: 'legendary', // or : la couleur des tickets
+    });
+  }
+  return { queue, toasts, celebrate, celebrateTickets, dismiss, dismissToast };
 }

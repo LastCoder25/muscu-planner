@@ -44,6 +44,22 @@
           </g>
           <rect class="fx-lock" x="46" y="54" width="8" height="9" rx="2" />
         </svg>
+        <!-- TICKETS : distribués UN PAR UN en éventail, puis le total — on compte ce qu'on
+             reçoit au lieu de lire un chiffre. -->
+        <div v-else-if="cur.kind === 'tickets'" class="fx-tickets" aria-hidden="true">
+          <div class="fx-tk-grid" :style="{ '--cols': Math.min(5, ticketCount) }">
+            <span
+              v-for="i in ticketCount"
+              :key="i"
+              class="fx-tk"
+              :style="{ '--i': i - 1, '--r': (i % 2 ? -1 : 1) * 3 + 'deg' }"
+              ><span class="fx-tk-star">✦</span><span class="fx-tk-stub"
+            /></span>
+          </div>
+          <span class="fx-tk-total font-display" :style="{ '--n': ticketCount }"
+            >×{{ cur.count }}</span
+          >
+        </div>
         <div v-else class="fx-emoji">{{ cur.emoji }}</div>
         <div class="fx-title font-display">{{ cur.title }}</div>
         <div v-if="cur.subtitle" class="fx-sub">{{ cur.subtitle }}</div>
@@ -78,6 +94,13 @@ const reduced =
 // Particules : plus la rareté est haute, plus il y en a (divin = explosion). 0 si
 // mouvement réduit.
 const particles = computed(() => (reduced ? 0 : 6 + tier.value * 6));
+/** Tickets DESSINÉS : un par unité, plafonnés pour que l'éventail reste lisible sur un
+ *  téléphone (le total affiché, lui, dit le vrai nombre). */
+const TICKETS_DRAWN_MAX = 12;
+const TICKET_DEAL_MS = 90; // écart entre deux tickets distribués
+const ticketCount = computed(() =>
+  Math.max(0, Math.min(TICKETS_DRAWN_MAX, Math.round(cur.value?.count ?? 0))),
+);
 
 // Auto-dismiss : plus long pour les raretés hautes (on savoure le divin).
 let timer: ReturnType<typeof setTimeout> | undefined;
@@ -86,7 +109,9 @@ watch(
   (fx) => {
     if (timer) clearTimeout(timer);
     if (!fx) return;
-    const ms = reduced ? 1100 : 1600 + tier.value * 350;
+    // La distribution des tickets doit avoir le temps de finir avant qu'on referme.
+    const deal = fx.kind === 'tickets' ? ticketCount.value * TICKET_DEAL_MS + 900 : 0;
+    const ms = reduced ? 1100 : 1600 + tier.value * 350 + deal;
     timer = setTimeout(dismiss, ms);
   },
   { immediate: true },
@@ -298,6 +323,98 @@ onBeforeUnmount(() => {
     opacity: 0.12;
   }
 }
+/* ── Tickets distribués UN PAR UN ─────────────────────────────────────────
+   Un vrai TICKET dessiné, pas un emoji dans une case : carton doré, encoches sur
+   les côtés (masque radial), perforation qui détache la souche, étoile. Chacun
+   tombe à son tour (--i × 90 ms) avec une légère inclinaison alternée (--r), puis
+   un reflet le traverse. ⚠️ Cartes séparées, jamais superposées : un premier essai
+   en arc (emoji serrés + halo) donnait une bande floue illisible. */
+.fx-tickets {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 4px;
+}
+.fx-tk-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 44px);
+  gap: 12px 10px;
+}
+.fx-tk {
+  position: relative;
+  width: 44px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #fff1a8 0%, #ffd23f 42%, #e8a917 100%);
+  color: #5a3d00;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.55));
+  /* Encoches : un demi-disque découpé au milieu de chaque côté. */
+  -webkit-mask:
+    radial-gradient(circle 5px at 0 50%, transparent 97%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle 5px at 100% 50%, transparent 97%, #000) right / 51% 100% no-repeat;
+  mask:
+    radial-gradient(circle 5px at 0 50%, transparent 97%, #000) left / 51% 100% no-repeat,
+    radial-gradient(circle 5px at 100% 50%, transparent 97%, #000) right / 51% 100% no-repeat;
+  transform: rotate(var(--r, 0deg));
+  animation: fx-deal 0.46s cubic-bezier(0.2, 1.5, 0.4, 1) calc(var(--i) * 90ms) both;
+}
+.fx-tk-star {
+  font-size: 15px;
+  line-height: 1;
+  z-index: 1;
+}
+/* Souche : perforation en pointillés, à droite. */
+.fx-tk-stub {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  right: 12px;
+  border-left: 2px dotted rgba(90, 61, 0, 0.55);
+}
+/* Reflet qui traverse le carton une fois posé. */
+.fx-tk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.75) 48%,
+    transparent 64%
+  );
+  transform: translateX(-120%);
+  animation: fx-shine 0.9s ease-out calc(var(--i) * 90ms + 0.45s) both;
+}
+@keyframes fx-deal {
+  0% {
+    opacity: 0;
+    transform: translateY(-26px) rotate(calc(var(--r, 0deg) * -4)) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(var(--r, 0deg)) scale(1);
+  }
+}
+@keyframes fx-shine {
+  to {
+    transform: translateX(120%);
+  }
+}
+.fx-tk-total {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  color: var(--fx-color, #ffd23f);
+  text-shadow: 0 2px 10px color-mix(in srgb, var(--fx-color, #ffd23f) 45%, transparent);
+  animation: fx-pop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) calc(var(--n) * 90ms + 0.1s) both;
+}
 .fx-emoji {
   font-size: 84px;
   line-height: 1;
@@ -370,6 +487,14 @@ onBeforeUnmount(() => {
   .fx-sub,
   .fx-flash,
   .fx-tap {
+    animation: none;
+  }
+  /* État FINAL direct : l'éventail en place, le total affiché. */
+  .fx-tk,
+  .fx-tk::after {
+    animation: none;
+  }
+  .fx-tk-total {
     animation: none;
   }
 }

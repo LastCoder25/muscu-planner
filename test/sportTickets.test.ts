@@ -7,7 +7,10 @@ import {
   levelUpTickets,
   pullPayment,
   ticketCost,
+  buildTickets,
+  WELCOME_TICKETS,
 } from '@/lib/sportTickets';
+import { useGameFx } from '@/composables/useGameFx';
 import {
   CHEST_MAX_MULT,
   CHEST_MIN_MULT,
@@ -154,4 +157,37 @@ describe('📏 rythme du gacha avec les tickets', () => {
       expect(tops).toBeLessThanOrEqual(20);
     });
   }
+});
+
+describe('🛕 tickets de bienvenue — le Panthéon (v0.1079)', () => {
+  it('10 tickets à la pose du Panthéon, rien pour les autres bâtiments', () => {
+    expect(WELCOME_TICKETS).toBe(10);
+    expect(buildTickets('pantheon')).toBe(10);
+    for (const id of ['outpost', 'energy_font', 'labyrinth_gate', 'boss_altar'] as const)
+      expect(buildTickets(id)).toBe(0);
+  });
+  it('10 tickets = un lot ×10 (9 payés) et il en reste', () => {
+    expect(WELCOME_TICKETS).toBeGreaterThanOrEqual(ticketCost(10));
+  });
+});
+
+describe('🎟️ l’animation de gain de tickets', () => {
+  it('se joue pour tout gain positif, avec le nombre gagné', () => {
+    const fx = useGameFx();
+    const avant = fx.queue.value.length;
+    fx.celebrateTickets(3, 'Niveau 4 franchi');
+    const last = fx.queue.value[fx.queue.value.length - 1]!;
+    expect(fx.queue.value.length).toBe(avant + 1);
+    expect(last.kind).toBe('tickets');
+    expect(last.count).toBe(3);
+    expect(last.title).toContain('+3');
+    expect(last.quiet).toBeFalsy(); // un vrai moment, pas un bandeau
+  });
+  it('ne se joue pas pour un gain nul (coffre sans ticket, bâtiment ordinaire)', () => {
+    const fx = useGameFx();
+    const avant = fx.queue.value.length;
+    fx.celebrateTickets(0, 'x');
+    fx.celebrateTickets(-2, 'x');
+    expect(fx.queue.value.length).toBe(avant);
+  });
 });

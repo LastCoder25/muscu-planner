@@ -33,6 +33,7 @@
  */
 
 import { GACHA } from './gacha';
+import type { BuildingTypeId } from './buildings';
 
 export const SPORT_TICKETS = {
   /** Tickets d'un 360 « moyen » (facteur d'effort 1, ~76 séries). ⚠️ Multiplié par le MÊME
@@ -42,6 +43,22 @@ export const SPORT_TICKETS = {
   /** Tickets par niveau global gagné. */
   perLevel: 1,
 } as const;
+
+/** 🛕 TICKETS DE BIENVENUE — versés UNE fois, à la construction du Panthéon (v0.1079,
+ *  demandé par l'utilisateur : « on donne 10 tickets au début ? »).
+ *
+ *  Mesuré sur la base : AUCUN joueur n'avait de ticket, et un débutant n'avait pour tirer
+ *  que ses 110 💠 quotidiens — la boucle des champions restait invisible. ⚠️ À la
+ *  CONSTRUCTION, pas à la création du compte : c'est le moment où ils servent, et le
+ *  Panthéon étant `unique`, ils ne peuvent tomber qu'une fois. Dix tickets = un lot ×10
+ *  (9 payés) + 1, donc au moins un épique garanti par le plancher. Hors bande de débit du
+ *  gacha : c'est un versement ponctuel, pas un robinet. */
+export const WELCOME_TICKETS = 10;
+
+/** Tickets versés en construisant le bâtiment `typeId` (0 pour tout autre que le Panthéon). */
+export function buildTickets(typeId: BuildingTypeId): number {
+  return typeId === 'pantheon' ? WELCOME_TICKETS : 0;
+}
 
 /** 🎯 Tickets d'un Défi 360 bouclé, pour un facteur d'effort donné. */
 export function comboTickets(effortMult: number): number {

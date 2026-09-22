@@ -186,6 +186,7 @@ import { engageCap } from '@/lib/adventurers';
 import { championOutpostMult } from '@/lib/caravan';
 import { altarLuckBonus } from '@/lib/items';
 import { GACHA } from '@/lib/gacha';
+import { buildTickets } from '@/lib/sportTickets';
 import {
   perLevelLabel,
   BUILD,
@@ -436,6 +437,11 @@ function doBuild(slot: number, typeId: BuildingTypeId) {
       subtitle: t.label,
       rarity: 'legendary',
     });
+    // 🛕 Les tickets de bienvenue ont leur propre moment, juste après : la file les enchaîne.
+    gameFx.celebrateTickets(
+      buildTickets(typeId),
+      'Offerts par le Panthéon — de quoi lancer un tirage ×10',
+    );
     if (t.unlock) unlockInfo.value = { emoji: t.emoji, label: t.label, unlock: t.unlock };
   });
 }

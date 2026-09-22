@@ -227,7 +227,7 @@ import {
   normalizeSeals,
   type Seals,
 } from '@/lib/ascension';
-import { levelUpTickets, pullPayment } from '@/lib/sportTickets';
+import { levelUpTickets, pullPayment, buildTickets } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
 import { gearRefonteGifts } from '@/lib/gearMigration';
 import { useGameFx } from '@/composables/useGameFx';
@@ -1258,6 +1258,12 @@ export const useCharacterStore = defineStore('character', () => {
         amount: energy,
       }),
     });
+    useGameFx().celebrateTickets(
+      tickets,
+      currentLevel > prev + 1
+        ? `Niveaux ${prev + 1} à ${currentLevel} franchis`
+        : `Niveau ${currentLevel} franchi`,
+    );
     return { from: prev, to: currentLevel, energy, tickets };
   }
 
@@ -2056,6 +2062,8 @@ export const useCharacterStore = defineStore('character', () => {
       claimedLocally.delete(m.id);
       throw e;
     }
+    // 🎟️ Après l'écriture : une animation ne doit jamais annoncer un gain qui n'a pas eu lieu.
+    useGameFx().celebrateTickets(ent(m.tickets), m.title ?? 'Coffre encaissé');
     return { ...m, advProgress };
   }
   async function expeMarkRead(userId: string) {
@@ -2089,9 +2097,13 @@ export const useCharacterStore = defineStore('character', () => {
     if (!canBuildType(typeId, playerLevel, cur.buildings)) return; // niveau/unicité
     if (cur.gold < t.buildGold) return;
     const b: Building = { typeId, level: 1, slot, collectedAt: now };
+    // 🛕 Le Panthéon verse ses tickets de bienvenue dans la MÊME écriture que sa pose : il est
+    // unique, donc jamais deux fois.
+    const tickets = buildTickets(typeId);
     await persistOptimistic(userId, {
       gold: cur.gold - t.buildGold,
       buildings: [...cur.buildings, b],
+      ...(tickets ? { gacha_tickets: cur.gacha_tickets + tickets } : {}),
     });
   }
   // Améliore un filon (or ; plafonné au niveau du joueur).
