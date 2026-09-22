@@ -1064,7 +1064,7 @@ export const VOIE_SET_STATS: Record<string, EffectType[]> = {
  *  valeur d'un affixe pour qu'il pèse autant en combat qu'un affixe de dégâts de même rang
  *  (mesuré en vrai combat, niveaux 30/60/90, boss et donjon). ⚠️ Point de départ, recalibré
  *  à la mesure (spec § 8). */
-export const SPEC_STAT_K: Partial<Record<EffectType, number>> = {
+const SPEC_STAT_K: Partial<Record<EffectType, number>> = {
   // Mesuré (combat réel, niveaux 30/60/90, boss et donjon) : ce qu'un affixe apporte, rapporté
   // à un affixe de dégâts du même rang. Les stats conditionnelles valent moins par point, les
   // stats qui s'accumulent plus — ce facteur les ramène toutes à la même valeur.

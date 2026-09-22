@@ -486,7 +486,7 @@ function lifestealSizingFactor(c: Combatant): number {
 
 /** Plafond de soin par tour (part des PV max) — il monte avec le vol de vie sous les règles
  *  des sets spécialisés, il est fixe sinon. SOURCE UNIQUE : combat et estimateur. */
-export function lifestealCapShare(c: Pick<Combatant, 'lifesteal' | 'specRules'>): number {
+function lifestealCapShare(c: Pick<Combatant, 'lifesteal' | 'specRules'>): number {
   if (!c.specRules) return COMBAT.lifestealRoundCap;
   return (
     COMBAT.lifestealRoundCap *
@@ -496,7 +496,7 @@ export function lifestealCapShare(c: Pick<Combatant, 'lifesteal' | 'specRules'>)
 
 /** Seuil d'exécution (part des PV ennemis) — il monte avec l'exécution sous les règles des
  *  sets spécialisés. SOURCE UNIQUE : combat et estimateur. */
-export function executeThresholdOf(c: Pick<Combatant, 'execute' | 'specRules'>): number {
+function executeThresholdOf(c: Pick<Combatant, 'execute' | 'specRules'>): number {
   if (!c.specRules) return COMBAT.executeThreshold;
   return Math.min(
     COMBAT.executeThresholdMax,

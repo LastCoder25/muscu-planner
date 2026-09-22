@@ -6,7 +6,7 @@
 // combat et les stats spécialisées que portent les pièces de son set (`VOIE_SET_STATS`).
 import type { EffectType } from './items';
 
-export type VoieId =
+type VoieId =
   | 'berserker'
   | 'gardien'
   | 'assassin'
