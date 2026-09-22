@@ -227,6 +227,7 @@ import {
   normalizeSeals,
   type Seals,
 } from '@/lib/ascension';
+import { singleFlight } from '@/lib/singleFlight';
 import { levelUpTickets, pullPayment, buildTickets, welcomeTicketsDue } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
 import { gearRefonteGifts } from '@/lib/gearMigration';
@@ -492,7 +493,21 @@ export const useCharacterStore = defineStore('character', () => {
     return r;
   }
 
-  async function fetchMine() {
+  /** ⚠️ CHARGEMENT EN VOL PARTAGÉ — la cause du DOUBLE VERSEMENT (v0.1082, constaté en
+   *  base : 20 tickets de bienvenue au lieu de 10).
+   *
+   *  `fetchMine` est appelée par une dizaine d'écrans, souvent gardées par `!char.row` —
+   *  un garde qui ne vaut RIEN entre deux appels CONCURRENTS (en cockpit, deux volets se
+   *  montent ensemble) : les deux lisent la ligne avant que l'écriture de l'autre n'arrive,
+   *  donc les deux croient que rien n'a encore été versé. Toutes les régularisations
+   *  one-shot (`settle*`) en dépendent.
+   *
+   *  ⚠️ Le garde par la MARQUE reste indispensable (un second onglet, un autre appareil) :
+   *  celui-ci supprime la course locale, le `filter` de `settleWelcomeTickets` supprime
+   *  celle qui traverse le réseau. */
+  const fetchMine = singleFlight(loadMine);
+
+  async function loadMine() {
     // ⚠️ FILTRE EXPLICITE OBLIGATOIRE (v0.699) — la RLS borne ce qu'on a le DROIT de lire,
     // jamais ce qu'on VEUT lire. Ici l'enjeu est double : `maybeSingle()` LÈVE une erreur si
     // plusieurs lignes reviennent, donc l'ajout d'une policy SELECT élargie sur `characters`
@@ -751,14 +766,30 @@ export const useCharacterStore = defineStore('character', () => {
       !!cur.gacha.welcomed,
     );
     if (!due) return;
+    // ⚠️ LA CONDITION VIT DANS LA REQUÊTE (`filter`), pas seulement dans le `if` au-dessus :
+    // deux clients (deux onglets, deux appareils) peuvent lire la ligne « pas encore marquée »
+    // en même temps. Ici le SECOND ne met à jour AUCUNE ligne — et ne crédite donc rien, ni
+    // n'annonce rien. C'est ce qui manquait : 20 tickets versés au lieu de 10.
+    let data: CharacterRow | null = null;
     try {
-      await persist(userId, {
-        gacha_tickets: cur.gacha_tickets + due,
-        gacha: { ...cur.gacha, welcomed: true },
-      });
+      const res = await supabase
+        .from('characters')
+        .update({
+          gacha_tickets: cur.gacha_tickets + due,
+          gacha: { ...cur.gacha, welcomed: true },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('user_id', userId)
+        .filter('gacha->>welcomed', 'is', null)
+        .select(COLS)
+        .maybeSingle();
+      if (res.error) return;
+      data = res.data;
     } catch {
       return;
     }
+    if (!data) return; // quelqu'un d'autre a déjà marqué la ligne : rien n'est dû
+    row.value = normalizeRow(data);
     useGameFx().celebrateTickets(due, 'Bienvenue — offerts par ton Panthéon');
   }
 
