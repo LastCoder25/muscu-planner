@@ -145,6 +145,24 @@ export interface GachaState extends PityState {
 export const GACHA_VERSION = 2;
 
 /**
+ * 🎰 LE PROCHAIN ÉTAT DU GACHA — la SEULE façon d'écrire cette colonne.
+ *
+ * ⚠️ Écrite après un vrai incident (v0.1083, constaté en base) : Cypher a reçu une DIZAINE
+ * de fois les 10 tickets de bienvenue. Le tirage écrivait `{ ...pity, pulls, v }`, un objet
+ * NEUF — il effaçait donc `welcomed`, la marque qui dit « bienvenue déjà versée ». D'où une
+ * boucle : on reçoit les tickets → on tire → la marque disparaît → au chargement suivant on
+ * les reçoit encore. Neuf lots tirés = une dizaine de versements.
+ *
+ * ⚠️ **ON REPORTE L'ÉTAT PRÉCÉDENT** (`...prev`) : tout champ que le tirage ne connaît pas
+ * (la marque aujourd'hui, ce qu'on ajoutera demain) survit. Un objet reconstruit à plat est
+ * une perte de données silencieuse — rien ne la signale, elle se voit des jours plus tard
+ * sur le solde d'un joueur.
+ */
+export function nextGacha(prev: GachaState, pity: PityState, pulls: number): GachaState {
+  return { ...prev, ...pity, pulls, v: GACHA_VERSION };
+}
+
+/**
  * Taux du S à ce tirage, pity compris.
  *
  * ⚠️ La rampe est **linéaire de `softPityStart` à `hardPity`**, et elle atteint 1 pile au
