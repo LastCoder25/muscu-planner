@@ -70,13 +70,13 @@
             :title="`Énergie : ${c.energy.toLocaleString('fr-FR')} — appuie pour voir l'historique des 3 derniers jours (gagnée en faisant du sport)`"
             @click="energyHistOpen = true"
             @keyup.enter="energyHistOpen = true"
-            >⚡ {{ compactNumber(c.energy) }}</span
+            ><span class="tb-ico">⚡</span>{{ compactNumber(c.energy) }}</span
           >
           <!-- Les pierres de mana sont la monnaie du GACHA : elles décident si l'on peut invoquer. -->
           <span
             class="tb-r mana"
             :title="`Pierres de mana : ${char.row.mana.toLocaleString('fr-FR')} — invoquer un champion (failles refermées, mines de mana)`"
-            >💠 {{ compactNumber(char.row.mana) }}</span
+            ><span class="tb-ico">💠</span>{{ compactNumber(char.row.mana) }}</span
           >
         </div>
         <div class="tb-right">
@@ -87,12 +87,12 @@
             <span
               class="tb-r gold"
               :title="`Or : ${char.row.gold.toLocaleString('fr-FR')} — expéditions et construction des bâtiments`"
-              >🪙 {{ compactNumber(char.row.gold) }}</span
+              ><span class="tb-ico">🪙</span>{{ compactNumber(char.row.gold) }}</span
             >
             <span
               class="tb-r summon"
               :title="`Pierres d’invocation : ${char.row.summon_stones.toLocaleString('fr-FR')} — tenter un boss de palier (gagnées en nettoyant des donjons)`"
-              >🔮 {{ compactNumber(char.row.summon_stones) }}</span
+              ><span class="tb-ico">🔮</span>{{ compactNumber(char.row.summon_stones) }}</span
             >
             <!-- ⚠️ Les CLÉS 🗝️ manquaient au plateau alors qu'elles gardent le
                  Labyrinthe — seule source de familiers — et qu'elles se gagnent sur
@@ -101,7 +101,7 @@
             <span
               class="tb-r keys"
               :title="`Clés : ${char.row.keys.toLocaleString('fr-FR')} — entrer dans le Labyrinthe (archives de la carte, coffres, boss)`"
-              >🗝️ {{ compactNumber(char.row.keys) }}</span
+              ><span class="tb-ico">🗝️</span>{{ compactNumber(char.row.keys) }}</span
             >
             <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions (failles) et objets (boss). Ils ne
                  servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle.
@@ -110,19 +110,19 @@
             <span
               class="tb-r seals"
               :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail || 'aucun pour l’instant'}`"
-              >🔱 {{ compactNumber(sealsChamp.total) }}</span
+              ><span class="tb-ico">🔱</span>{{ compactNumber(sealsChamp.total) }}</span
             >
             <span
               class="tb-r seals gear"
               :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail || 'aucun pour l’instant'}`"
-              >⚜️ {{ compactNumber(sealsGear.total) }}</span
+              ><span class="tb-ico">⚜️</span>{{ compactNumber(sealsGear.total) }}</span
             >
             <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés même à zéro,
                  comme toutes les devises du plateau. -->
             <span
               class="tb-r tickets"
               title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
-              >🎟️ {{ compactNumber(char.row.gacha_tickets) }}</span
+              ><span class="tb-ico">🎟️</span>{{ compactNumber(char.row.gacha_tickets) }}</span
             >
           </div>
         </div>
@@ -6621,6 +6621,24 @@ onUnmounted(() => {
   .tb-tray .tb-r {
     font-size: 12px;
   }
+}
+/* ⚠️ L'icône vit dans une BOÎTE FIXE : les emojis n'ont pas tous la même hauteur ni la
+   même ligne de base selon la police du téléphone (⚜️ et 🔱 décrochaient de la rangée).
+   Centrer une boîte carrée aligne toutes les puces, quelle que soit la police. */
+.tb-r {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 1;
+}
+.tb-ico {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25em;
+  height: 1.25em;
+  line-height: 1;
+  flex-shrink: 0;
 }
 .tb-r {
   font-size: 13px;
