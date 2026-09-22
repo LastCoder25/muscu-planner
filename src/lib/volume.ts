@@ -5,6 +5,8 @@ import { legSets, type ComboChallenge } from './combo';
 import type { Challenge } from './challenges';
 import { isCardioChallengeExercise } from '@/data/cardio';
 import { localDayIso } from './localDay';
+import { normMuscle } from './muscles';
+import { comboSlot } from '@/data/combo';
 
 export interface MuscleSets {
   muscle: string;
@@ -30,6 +32,14 @@ const MUSCLE_COLORS: Record<string, string> = {
 };
 export function muscleColor(m: string): string {
   return MUSCLE_COLORS[m.toLowerCase()] ?? '#9A8F7E';
+}
+
+/** Couleur du groupe musculaire d'un exo du Défi 360 — la MÊME que l'Équilibre du corps
+ *  (`muscleColor`, sur le muscle normalisé). Un exo enregistré sans
+ *  `muscle_primary` se rabat sur le premier muscle de son emplacement. */
+export function comboLegColor(leg: { muscle_primary?: string | null; slot: string }): string {
+  const m = normMuscle(leg.muscle_primary) || normMuscle(comboSlot(leg.slot)?.muscles[0]);
+  return muscleColor(m);
 }
 
 // Séries prévues par muscle pour une séance (prescription si présente, sinon target.sets).

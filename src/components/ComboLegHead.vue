@@ -22,7 +22,7 @@
         @click="emit('history')"
       >
         <span class="lh-range">🎯 {{ range }}</span>
-        <span class="lh-count" :class="{ ok: legComplete(leg) }">
+        <span class="lh-count" :class="{ ok: legComplete(leg) }" :style="{ '--mc': color }">
           {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
           <span v-if="extra > 0" class="lh-extra">+{{ extra }}</span>
         </span>
@@ -43,6 +43,7 @@ import {
   type ComboLeg,
 } from '@/lib/combo';
 import { repRangeLabel } from '@/lib/repScheme';
+import { comboLegColor } from '@/lib/volume';
 import type { Objective } from '@/lib/types';
 
 const props = withDefaults(
@@ -62,6 +63,8 @@ const range = computed(() =>
   repRangeLabel(legRepRange(props.leg, props.objective), legMode(props.leg) === 'time'),
 );
 const extra = computed(() => legDone(props.leg) - props.leg.target);
+/** Couleur du groupe musculaire, celle de l'Équilibre du corps : on relie l'exo à sa barre. */
+const color = computed(() => comboLegColor(props.leg));
 </script>
 
 <style scoped>
@@ -140,7 +143,8 @@ const extra = computed(() => legDone(props.leg) - props.leg.target);
 .lh-count {
   padding: 1px 8px;
   border-radius: 999px;
-  border: 1px solid var(--line);
+  /* Le contour porte la couleur du groupe musculaire (Équilibre du corps). */
+  border: 1.5px solid var(--mc, var(--line));
   background: var(--surface-2);
   font-size: 12px;
   font-weight: 700;
@@ -151,7 +155,6 @@ const extra = computed(() => legDone(props.leg) - props.leg.target);
 .lh-count.ok {
   color: #15120e;
   background: var(--d1);
-  border-color: var(--d1);
 }
 .lh-extra {
   margin-left: 3px;

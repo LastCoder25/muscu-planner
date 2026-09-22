@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { normMuscle } from '@/lib/muscles';
 import {
+  comboLegColor,
+  muscleColor,
   isMuscuLog,
   mondayOf,
   comboLogEntries,
@@ -261,5 +264,23 @@ describe('muscuWeekStreak', () => {
   });
   it('0 si aucune séance', () => {
     expect(muscuWeekStreak([], '2026-08-15')).toBe(0);
+  });
+});
+
+describe('comboLegColor — le 360 parle la couleur de l’Équilibre du corps', () => {
+  it('même couleur que muscleColor sur le muscle normalisé', () => {
+    expect(comboLegColor({ muscle_primary: 'Pectoraux', slot: 'push' })).toBe(
+      muscleColor('pectoraux'),
+    );
+    // Un alias de la base doit retrouver la couleur du groupe affiché, pas le gris par défaut.
+    expect(comboLegColor({ muscle_primary: 'Deltoïde antérieur', slot: 'push' })).toBe(
+      muscleColor(normMuscle('deltoïde antérieur')),
+    );
+    expect(muscleColor(normMuscle('deltoïde antérieur'))).not.toBe(muscleColor('inconnu'));
+  });
+  it('sans muscle enregistré, on se rabat sur l’emplacement', () => {
+    expect(comboLegColor({ muscle_primary: null, slot: 'squat' })).toBe(muscleColor('quadriceps'));
+    expect(comboLegColor({ slot: 'pull' })).toBe(muscleColor('dos'));
+    expect(comboLegColor({ muscle_primary: '', slot: 'squat' })).not.toBe(muscleColor(''));
   });
 });
