@@ -53,7 +53,7 @@ const moy = (perDay: number, level: number, k: 'ferme' | 'mines' | 'total' = 'to
   [1, 2, 3, 4].reduce((a, s) => a + debit(perDay, level, s * 7919)[k], 0) / 4;
 
 describe('la courbe de population', () => {
-  it('⚠️ LA FAILLE SE PEUPLE EN VIEILLISSANT : plus dure, pour AUCUN mana de plus (v0.1040)', () => {
+  it('⚠️ LA FAILLE SE PEUPLE EN VIEILLISSANT : plus dure, pour AUCUN mana de plus (v0.1047)', () => {
     // C'est ce qui crée l'urgence : l'effectif (donc la difficulté) accélère sur la fin, et
     // le mana, lui, est fixe. Attendre ne coûte que du risque.
     const r = { id: 'r', level: 30, spawnedAt: T0 };
@@ -62,7 +62,7 @@ describe('la courbe de population', () => {
   });
 });
 
-describe('⚠️ FERMER VITE PAIE — l’effort, pas l’attente (v0.1040)', () => {
+describe('⚠️ FERMER VITE PAIE — l’effort, pas l’attente (v0.1047)', () => {
   it('le mana suit le NOMBRE de failles fermées', () => {
     // Avant (mana selon l'âge), 1 fermeture/jour rendait PLUS que 2 : attendre payait. Mesuré
     // désormais au niveau 30 : 57 / 108 / 161 💠/j pour 1 / 2 / 3 fermetures par jour.
@@ -92,7 +92,7 @@ describe('le débit, niveau par niveau', () => {
   });
 
   it('⚠️ LA BANDE DE RÉFÉRENCE DU GACHA — à recalibrer ensemble si on la déplace', () => {
-    // ⚠️ RÉGIME DE RÉFÉRENCE : DEUX fermetures par jour (v0.1040). Le mana étant fixe par
+    // ⚠️ RÉGIME DE RÉFÉRENCE : DEUX fermetures par jour (v0.1047). Le mana étant fixe par
     // faille, c'est ce rythme qui retrouve le débit d'avant (une par jour, au mana d'âge) :
     // mesuré 66 / 108 / 170 / 255 💠/j aux niveaux 12 / 30 / 60 / 100, contre 71 / 117 / 189 /
     // 240 avant — environ un tirage (110 💠) par jour.
@@ -104,7 +104,7 @@ describe('le débit, niveau par niveau', () => {
 
   it('un joueur PASSIF touche quand même un filet, par les mines résiduelles', () => {
     // La boucle « je ne combats pas » (convois) doit atteindre le gacha, lentement.
-    // ⚠️ Plus mince depuis la v0.1040 (mine ÷~3 pour que fermer vaille ~3× l'ignorer) :
+    // ⚠️ Plus mince depuis la v0.1047 (mine ÷~3 pour que fermer vaille ~3× l'ignorer) :
     // mesuré 3,7 / 13 / 33 / 56 💠/j aux niveaux 12 / 30 / 60 / 100 — un filet, jamais nul.
     for (const l of [12, 30, 60, 100]) expect(moy(0, l, 'mines')).toBeGreaterThan(2);
   });

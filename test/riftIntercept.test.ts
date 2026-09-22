@@ -21,7 +21,7 @@ import { refAdventurer } from '@/lib/caravan';
 import { simulateCombat } from '@/lib/combat';
 import type { Adventurer } from '@/lib/adventurers';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
-// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
 
 const H = 3600_000;

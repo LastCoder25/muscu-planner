@@ -330,7 +330,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;
 
   const haul = d.win ? campGroupHaul(poi, spec) : { gold: 0, summonStones: 0 };
-  // ⚜️ Un REPAIRE pris laisse un sceau d'objet (v0.1040) — leur seule source.
+  // ⚜️ Un REPAIRE pris laisse un sceau d'objet (v0.1047) — leur seule source.
   const seals = d.win && poi.type === 'lair' ? lairGearSeals(poi.level, input.playerLevel) : null;
   return {
     win: d.win,

@@ -151,7 +151,7 @@ describe('l’ascension d’une pièce', () => {
   });
 });
 
-describe('les sceaux d’objet des repaires (v0.1040 — plus des boss de palier)', () => {
+describe('les sceaux d’objet des repaires (v0.1047 — plus des boss de palier)', () => {
   it('un par repaire pris', () => {
     expect(lairGearSeals(25, 60).n).toBe(1);
   });

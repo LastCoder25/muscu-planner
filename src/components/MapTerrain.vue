@@ -11,7 +11,7 @@
         <stop offset="100%" stop-color="#36451f" />
       </radialGradient>
     </defs>
-    <!-- ⚠️ PLUS D'ÎLE (v0.1040) : la prairie couvre toute la fenêtre ; c'est le brouillard
+    <!-- ⚠️ PLUS D'ÎLE (v0.1047) : la prairie couvre toute la fenêtre ; c'est le brouillard
          (dessiné par la page) qui borne ce qu'on voit, et il recule avec l'Avant-poste. -->
     <rect
       :x="view.min - 10"

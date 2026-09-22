@@ -576,7 +576,7 @@ export const HARVEST = {
    *  encore, donc aucun de ces deux nombres ne peut être calibré aujourd'hui. Ce qui est
    *  vrai et testé, c'est le RATIO « fermer une faille > l'ignorer et ramasser sa mine »
    *  (cf. `rift.ts`). */
-  // ⚠️ ÷~3 en v0.1040 : le mana d'une faille fermée est désormais FIXE (`RIFT.manaFoesPaid`,
+  // ⚠️ ÷~3 en v0.1047 : le mana d'une faille fermée est désormais FIXE (`RIFT.manaFoesPaid`,
   // plus de prime à l'attente) — à 3 / 0,5 la mine la plus lointaine rendait PLUS que fermer
   // la faille au niveau 5 (24 contre 21 💠). À 1 / 0,15 fermer vaut ~3× la mine partout.
   manaBase: 1,
@@ -608,7 +608,7 @@ export const EXPE = {
   // failles imposait donc de rendre 4 places : **-20 % de lieux ordinaires**, donc mines,
   // camps et épaves en moins — d'où la re-mesure de `campEconomy`, `goldSink` et
   // `scrapEconomy`, dont les bornes étaient calibrées sur 20.
-  // ⚠️ **RÉFÉRENCES DE DENSITÉ, plus des plafonds (v0.1040).** Depuis que l'Avant-poste
+  // ⚠️ **RÉFÉRENCES DE DENSITÉ, plus des plafonds (v0.1047).** Depuis que l'Avant-poste
   // agrandit la carte (`revealRadius`), le nombre de lieux SUIT LA SURFACE révélée
   // (`mapQuota`) : ces 16 lieux et 6 failles sont ceux que porte l'anneau de RÉFÉRENCE
   // (rayon 18 → `distMax`, 64) — la densité à laquelle l'espacement `minDistPoi` a été
@@ -713,7 +713,7 @@ export const EXPE = {
   // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
   // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
   distMin: 18, // distance mini ville↔POI (coord ; la ville est au centre)
-  // ⚠️ Depuis la v0.1040 ce n'est plus le bord de la carte (c'est `revealRadius`) mais
+  // ⚠️ Depuis la v0.1047 ce n'est plus le bord de la carte (c'est `revealRadius`) mais
   // l'ÉCHELLE DE DISTANCE : `distNorm` vaut 1 à 64 et continue au-delà (`distNormAt`) —
   // un lieu plus loin met plus de temps. Et l'anneau 18 → 64 sert de référence de densité.
   distMax: 64,
@@ -849,7 +849,7 @@ export function poiRewardLevel(p: Pick<Poi, 'level' | 'rewardLevel'>): number {
 }
 
 /**
- * 🗺️ LA CARTE GRANDIT AVEC L'AVANT-POSTE (v0.1040, demandé par l'utilisateur : « le niveau
+ * 🗺️ LA CARTE GRANDIT AVEC L'AVANT-POSTE (v0.1047, demandé par l'utilisateur : « le niveau
  * d'Avant-poste agrandit la map et le nombre d'events dessus, failles comprises »).
  *
  * Un BROUILLARD couvre le monde ; l'Avant-poste en révèle un disque autour de la ville, qui
@@ -2117,7 +2117,7 @@ function inView(x: number, y: number, margin = 0): boolean {
 /**
  * Une rivière serpentant depuis (x,y) (path lissé).
  *
- * ⚠️ PLUS DE CÔTE (v0.1040) : la carte n'est plus une île, la rivière s'arrête donc au BORD
+ * ⚠️ PLUS DE CÔTE (v0.1047) : la carte n'est plus une île, la rivière s'arrête donc au BORD
  * de la fenêtre dessinée au lieu de se jeter à la mer.
  */
 function riverPath(rng: () => number, x: number, y: number, dir: number, len: number): string {
@@ -2156,7 +2156,7 @@ const DECOR_SCALE = (MAP_VIEW.size * MAP_VIEW.size) / (Math.PI * 88 * 88);
 /**
  * Terrain de la carte (déterministe pour un `seed`) : prairie CONTINUE + reliefs + rivières.
  *
- * ⚠️ PLUS D'ÎLE (v0.1040, demandé par l'utilisateur) : le sol couvre toute la fenêtre, sans
+ * ⚠️ PLUS D'ÎLE (v0.1047, demandé par l'utilisateur) : le sol couvre toute la fenêtre, sans
  * mer ni littoral — c'est le BROUILLARD (écran) qui borne ce qu'on voit, et il recule avec
  * l'Avant-poste. Le monde entier est tiré une fois ; il ne change pas quand la carte grandit.
  */

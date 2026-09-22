@@ -35,7 +35,7 @@ import {
   type Poi,
 } from '@/lib/expedition';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
-// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
 
 const H = 3600_000;
@@ -132,7 +132,7 @@ describe('expedition — terrain (fond de carte)', () => {
     const t1 = expeditionTerrain(42);
     const t2 = expeditionTerrain(42);
     expect(t1).toEqual(t2); // même seed → même terrain
-    // Plus d'île (v0.1040) : le relief couvre toute la fenêtre, au-delà de l'ancienne côte.
+    // Plus d'île (v0.1047) : le relief couvre toute la fenêtre, au-delà de l'ancienne côte.
     expect(t1.features.some((f) => Math.hypot(f.x - EXPE.town.x, f.y - EXPE.town.y) > 90)).toBe(
       true,
     );

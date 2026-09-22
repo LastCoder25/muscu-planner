@@ -59,7 +59,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
   const { poi, escort, road, hero, seed } = input;
   const spec = harvestGuardOf(poi);
   if (!spec) throw new Error(`resolveHarvestParty : ${poi.type} n'est pas un lieu de récolte.`);
-  const g = fightCampForce({ poi, spec, escort, road, hero, seed });
+  const g = fightCampForce({ poi, spec, escort, road, hero, seed, playerLevel: input.playerLevel });
   const tag = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`;
   const base = {
     hero: !!hero,

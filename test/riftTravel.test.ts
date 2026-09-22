@@ -10,7 +10,7 @@ import {
   type Poi,
 } from '@/lib/expedition';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
-// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
 
 // 🕳️ v0.1012 : le TRAJET d'une faille se calcule sur le niveau que sa DISTANCE justifie,
