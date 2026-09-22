@@ -170,14 +170,17 @@
       </section>
 
       <!-- ── LANCER UN BOSS ────────────────────────────────────────────────────── -->
+      <!-- ⚠️ Pendant le délai de relance, on ne propose RIEN à lancer : seul le message orange
+           dit quand on pourra (demandé). Le formulaire d'un boss qu'on ne peut pas lancer
+           se lisait comme une action disponible. -->
       <button
-        v-if="current && !launchOpen"
+        v-if="current && !launchOpen && !launchWait"
         class="fb-btn ghost big wide fb-more"
         @click="launchOpen = true"
       >
         ＋ Lancer un autre boss
       </button>
-      <section v-if="!current || launchOpen" class="fb-card">
+      <section v-if="!current || launchOpen || launchWait" class="fb-card">
         <div class="fb-sec-t first">Lancer un boss</div>
         <p v-if="launchWait" class="fb-hint warn">
           Tu pourras lancer un nouveau boss dans {{ fmtBossSpan(launchWait - now) }} (48 h après la
@@ -185,7 +188,7 @@
         </p>
         <!-- Lancer exige l'Autel des boss (le serveur le vérifie aussi, migr. 0071) ;
              rejoindre l'invitation d'un ami, non. -->
-        <template v-if="!hasAltar">
+        <template v-else-if="!hasAltar">
           <p class="fb-hint">
             🔮 Pour lancer un boss, construis d’abord l’<b>Autel des boss</b> dans ta base. Tu peux
             déjà rejoindre le boss d’un ami quand il t’invite.
