@@ -14,7 +14,7 @@ import { partyAllies } from '@/lib/caravan';
 import { goldPerDay, stonesPerDay } from './helpers/goldModel';
 import { travelTimeMult } from '@/lib/buildings';
 
-/** Réduction de trajet de l'Avant-poste au niveau donné (héros ET champions, v0.1040). */
+/** Réduction de trajet de l'Avant-poste au niveau donné (héros ET champions, v0.1047). */
 const outpostMult = (level: number) =>
   travelTimeMult([{ typeId: 'outpost', level, slot: 0, collectedAt: 0 }]);
 

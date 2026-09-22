@@ -102,7 +102,7 @@ const road = (level: number, n: number): EscortKit => ({
 });
 /** Les unités d'une escorte — la signature RÉELLE : `roadUnits(escort, escortGear(escort, road))`. */
 const units = (esc: Adventurer[], rd: EscortKit) => roadUnits(esc, escortGear(esc, rd));
-describe('⚜️ un REPAIRE pris laisse un sceau d’objet — un camp non (v0.1040)', () => {
+describe('⚜️ un REPAIRE pris laisse un sceau d’objet — un camp non (v0.1047)', () => {
   it('repaire gagné : un sceau d’objet ; camp gagné : aucun ; défaite : aucun', () => {
     let lairWon = 0;
     let lairLost = 0;
@@ -477,7 +477,7 @@ describe('🧭 trajet et départ d’un groupe', () => {
     const p = poi();
     const hero = Math.round(travelOneWayMin(p.level, p.distNorm) * 0.8);
     expect(partyLegMin(p, [], { hero: true, travelMult: 0.8, gearSpeed: 0 })).toBe(hero);
-    const adv = caravanLegMin(p, esc, 0, 0.8); // les champions profitent aussi de l'Avant-poste (v0.1040)
+    const adv = caravanLegMin(p, esc, 0, 0.8); // les champions profitent aussi de l'Avant-poste (v0.1047)
     expect(partyLegMin(p, esc, { hero: true, travelMult: 0.8, gearSpeed: 0 })).toBe(
       Math.max(hero, adv),
     );

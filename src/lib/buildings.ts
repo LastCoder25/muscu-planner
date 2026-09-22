@@ -132,7 +132,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // ⚠️ TROIS LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
   // le TRAJET du héros ET des champions (`travelTimeMult`, asymptotique), la TAILLE DE LA
   // CARTE révélée et son nombre de lieux (`revealRadius` / `mapQuota`, qui grandissent à
-  // chaque cran — v0.1040), et le NOMBRE d'équipes en parallèle (`caravanSlots`, un PALIER
+  // chaque cran — v0.1047), et le NOMBRE d'équipes en parallèle (`caravanSlots`, un PALIER
   // tous les 9 niveaux).
   {
     id: 'outpost',

@@ -109,7 +109,7 @@ export const RIFT = {
   /** Ce que le BOSS ajoute, en part du mana des monstres — la prime de fermeture. */
   bossManaShare: 0.5,
 
-  /** 💠 MANA FIXE PAR FAILLE (v0.1040, choix de l'utilisateur) : une faille paie comme si l'on
+  /** 💠 MANA FIXE PAR FAILLE (v0.1047, choix de l'utilisateur) : une faille paie comme si l'on
    *  y abattait CE nombre de monstres, quel que soit son âge. ⚠️ AVANT, le mana suivait
    *  l'effectif (2 → 12 monstres en 7 jours) et ATTENDRE payait : fermer une faille par jour
    *  rendait plus que d'en fermer deux (117 contre 83 💠/j au niveau 30). L'idée voulue est
@@ -122,7 +122,7 @@ export const RIFT = {
   manaFoesPaid: 3.5,
 
   /** 🔱 Maturité (0..1) AVANT laquelle le gardien laisse un SECOND sceau d'ascension :
-   *  refermer tôt paie double (v0.1040 ; avant, c'était l'attente qui payait). */
+   *  refermer tôt paie double (v0.1047 ; avant, c'était l'attente qui payait). */
   secondSealAt: 0.5,
 
   /** ⚠️ CE QUE LA MINE RÉSIDUELLE REND N'EST PAS DÉFINI ICI NON PLUS, et c'est un défaut
@@ -216,7 +216,7 @@ export function riftMana(foes: number, level: number): number {
 
 /**
  * Ce que rapporte une incursion qui va au bout : un mana FIXE (`manaFoesPaid`) + la prime
- * du gardien — **le même à tout âge** (v0.1040). Attendre ne rapporte plus rien.
+ * du gardien — **le même à tout âge** (v0.1047). Attendre ne rapporte plus rien.
  *
  * ⚠️ C'est la référence de l'invariant économique : fermer doit rester nettement plus
  * payant que laisser déborder et ramasser la mine.
@@ -229,7 +229,7 @@ export function riftClearMana(rift: Pick<RiftLike, 'level'>): number {
 /**
  * 🔱 Les sceaux d'ascension que laisse le GARDIEN d'une faille refermée (v0.1014) : sceaux de
  * CHAMPION, au rang de la faille. ⚠️ **2 si elle est refermée AVANT `RIFT.secondSealAt` de sa
- * maturité, 1 après** (v0.1040, inversé) : comme le mana, le sceau récompense la RAPIDITÉ —
+ * maturité, 1 après** (v0.1047, inversé) : comme le mana, le sceau récompense la RAPIDITÉ —
  * avant, le second sceau payait l'attente, à contre-courant de l'urgence voulue.
  * ⚠️ `null` si la faille n'est pas refermée : c'est le gardien qui les porte, et une incursion
  * ratée ne l'abat pas.

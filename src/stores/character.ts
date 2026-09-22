@@ -825,7 +825,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return null;
     const firstDefeat = input.defeated && !cur.defeated_bosses.includes(input.bossId);
-    // ⚜️ Plus de sceaux d'objet sur les boss de palier (v0.1040) : ils viennent des REPAIRES de
+    // ⚜️ Plus de sceaux d'objet sur les boss de palier (v0.1047) : ils viennent des REPAIRES de
     // la carte — aucune ressource de champion ne se farme dans la partie héros.
     const defeated = firstDefeat ? [...cur.defeated_bosses, input.bossId] : cur.defeated_bosses;
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
@@ -1697,7 +1697,7 @@ export const useCharacterStore = defineStore('character', () => {
     // elles sont encore sur la carte : lui les remplace par leur mine de mana résiduel.
     // Après lui, il n'y a plus rien à voir, et l'armée disparaîtrait avec la faille.
     const over = prev ? riftOverflows(prev, now) : [];
-    // 🗺️ L'Avant-poste fixe la taille de la carte révélée et son nombre de lieux (v0.1040).
+    // 🗺️ L'Avant-poste fixe la taille de la carte révélée et son nombre de lieux (v0.1047).
     const outpost = buildingLevel(cur.buildings, 'outpost');
     const map: ExpeditionMap = prev
       ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)

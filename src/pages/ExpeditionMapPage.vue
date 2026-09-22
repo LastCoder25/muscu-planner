@@ -34,7 +34,7 @@
           <!-- Le SOL : mer, côte, prairie, reliefs — même langage que la Base (v0.749). -->
           <MapTerrain :terrain="terrain" :view="V" />
 
-          <!-- 🌫️ BROUILLARD DE GUERRE (v0.1040) : l'Avant-poste révèle un disque autour de la
+          <!-- 🌫️ BROUILLARD DE GUERRE (v0.1047) : l'Avant-poste révèle un disque autour de la
                ville, qui grandit à chaque niveau. Au-delà, on devine le relief sans voir
                aucun lieu. Bord fondu (dégradé radial), liseré pointillé pour lire la limite. -->
           <defs>

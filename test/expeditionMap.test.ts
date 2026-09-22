@@ -46,7 +46,7 @@ import { resolveCamp, campGroupHaul } from '@/lib/camp';
 import { campSpecOf } from '@/lib/expedition';
 import { poiOffers } from '@/lib/caravan';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
-// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
 
 const HOUR = 3_600_000;
@@ -433,7 +433,7 @@ describe('rythme de la carte', () => {
     const occupe =
       (mapQuota(OUT).pois + mapQuota(OUT).rifts) * Math.PI * (EXPE.minDistPoi / 2) ** 2;
     expect(occupe / aire, 'occupation de la couronne au plafond').toBeLessThan(0.35);
-    // 🗺️ Et la DENSITÉ reste celle-là à toutes les tailles de carte (v0.1040) : le nombre de
+    // 🗺️ Et la DENSITÉ reste celle-là à toutes les tailles de carte (v0.1047) : le nombre de
     // lieux suit la SURFACE révélée, donc l'occupation ne monte pas avec l'Avant-poste.
     for (let L = 1; L <= 100; L++) {
       const R = revealRadius(L);
@@ -510,7 +510,7 @@ describe('rythme de la carte', () => {
     expect(sansProche / snaps, 'cartes sans aucune option proche').toBeLessThan(0.05);
   });
 
-  it('🌫️ aucun lieu hors du disque RÉVÉLÉ, à tout niveau d’Avant-poste (v0.1040)', () => {
+  it('🌫️ aucun lieu hors du disque RÉVÉLÉ, à tout niveau d’Avant-poste (v0.1047)', () => {
     // Plus d'île : c'est le brouillard qui borne la carte. Un lieu hors du disque serait
     // dessiné dans le brouillard, donc invisible et pourtant proposé.
     for (const L of [1, 7, 30, 100]) {
@@ -531,7 +531,7 @@ describe('rythme de la carte', () => {
     expect(revealRadius(MAP_REACH.maxLevel) + 6).toBeLessThan(bord);
   });
 
-  it('🗺️ LA CARTE GRANDIT À CHAQUE NIVEAU D’AVANT-POSTE (v0.1040) — sans niveau muet', () => {
+  it('🗺️ LA CARTE GRANDIT À CHAQUE NIVEAU D’AVANT-POSTE (v0.1047) — sans niveau muet', () => {
     // Rayon strictement croissant de 1 à 100, et le nombre de lieux ne recule jamais.
     for (let L = 2; L <= 100; L++) {
       expect(revealRadius(L), `rayon, niveau ${L}`).toBeGreaterThan(revealRadius(L - 1));

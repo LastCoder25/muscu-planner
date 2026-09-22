@@ -12,7 +12,7 @@ import {
 } from '@/lib/expedition';
 import { ambushChance } from '@/lib/caravan';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
-// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
 
 // 🐫 RÈGLE v0.1009 (demandée par l'utilisateur) : une faille qui MÛRIT ne harcèle rien. Au

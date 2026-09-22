@@ -673,7 +673,7 @@ export function suggestEscort(
  *
  *  ⚠️ PLUS DE LENTEUR PROPRE (v0.1036) : le ×1,5 incarnait le CONVOI, disparu au profit des
  *  équipes.
- *  ⚠️ ET L'AVANT-POSTE ACCÉLÈRE LES CHAMPIONS (v0.1040, choix de l'utilisateur) : depuis qu'il
+ *  ⚠️ ET L'AVANT-POSTE ACCÉLÈRE LES CHAMPIONS (v0.1047, choix de l'utilisateur) : depuis qu'il
  *  AGRANDIT la carte (`revealRadius`), les lieux s'éloignent en moyenne, et sans sa réduction
  *  un aller-retour d'équipe dépassait 28 h au bout de la carte en fin de partie. Mesuré sur le
  *  trajet MOYEN : ×1,1 à ×1,3 voyages/jour jusqu'au niveau 30, ×1,6 à ×1,8 au-delà du 40 —

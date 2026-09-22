@@ -161,7 +161,7 @@ describe('les sceaux d’une faille refermée', () => {
     expect(riftSeals(rift(25), life, false)).toBeNull();
   });
 
-  it('au rang de la faille, un de plus quand elle est refermée TÔT (v0.1040, inversé)', () => {
+  it('au rang de la faille, un de plus quand elle est refermée TÔT (v0.1047, inversé)', () => {
     // Comme le mana : refermer vite paie, attendre ne paie plus.
     expect(riftSeals(rift(25), 0, true)).toEqual({ kind: 'champion', rank: 2, n: 2 });
     expect(riftSeals(rift(25), life * RIFT.secondSealAt, true)).toEqual({

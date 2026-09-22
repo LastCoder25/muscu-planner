@@ -152,7 +152,7 @@ export function advGearAscensionBlocker(
 
 /** 🗡️ Les sceaux d'OBJET d'un REPAIRE pris sur la carte : 1, au rang du repaire PLAFONNÉ à
  *  celui du joueur — le sport reste le plafond.
- *  ⚠️ **SUR LA CARTE, PLUS SUR LES BOSS DE PALIER (v0.1040, règle de l'utilisateur : « aucune
+ *  ⚠️ **SUR LA CARTE, PLUS SUR LES BOSS DE PALIER (v0.1047, règle de l'utilisateur : « aucune
  *  ressource de champion à farmer dans la partie héros »).** Les deux familles de sceaux
  *  viennent désormais de la carte : 🔱 le gardien d'une faille, ⚜️ un repaire. Le héros, lui,
  *  peut profiter de tout ; ce sont les champions qui ne se nourrissent que de la carte. */

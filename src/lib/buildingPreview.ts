@@ -62,7 +62,7 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       // autres chiffres encombraient la ligne sans rien dire d’aussi décisif.
       return `champions jusqu'au niveau ${Math.max(1, level)}`;
     case 'outpost': {
-      // ⚠️ TROIS LEVIERS (v0.1040) : la CARTE (lieux + failles, qui grandissent à chaque
+      // ⚠️ TROIS LEVIERS (v0.1047) : la CARTE (lieux + failles, qui grandissent à chaque
       // cran), le TRAJET (héros et champions) et un PALIER (une équipe de plus tous les 9
       // niveaux). Tous DÉRIVÉS des fonctions du jeu.
       const n = caravanSlots(level);

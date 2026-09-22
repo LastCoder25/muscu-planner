@@ -119,14 +119,14 @@ describe('💎 le mana : ce que paient une incursion, une fermeture, et la mine'
     expect(riftMana(10, 60)).toBeGreaterThan(riftMana(10, 30));
   });
 
-  it('fermer paie un mana FIXE, prime du gardien comprise (v0.1040)', () => {
+  it('fermer paie un mana FIXE, prime du gardien comprise (v0.1047)', () => {
     const r = rift();
     const foes = riftMana(RIFT.manaFoesPaid, r.level);
     expect(riftClearMana(r)).toBe(Math.round(foes * (1 + RIFT.bossManaShare)));
     expect(riftClearMana(r)).toBeGreaterThan(foes);
   });
 
-  it('⚠️ ATTENDRE NE PAIE PLUS : le mana ne dépend pas de l’âge — c’est l’URGENCE (v0.1040)', () => {
+  it('⚠️ ATTENDRE NE PAIE PLUS : le mana ne dépend pas de l’âge — c’est l’URGENCE (v0.1047)', () => {
     // Avant, le mana suivait l'effectif (×6 entre l'ouverture et la maturité) et fermer une
     // faille par jour rendait plus que d'en fermer deux. Désormais la faille devient plus
     // DURE en vieillissant (l'effectif monte toujours) pour AUCUN gain : on la ferme vite.
@@ -242,7 +242,7 @@ describe('💎 le mana d’une incursion', () => {
       finalPv: 0,
       journal: [],
     };
-    // ⚠️ La PART abattue du mana fixe (v0.1040), pas un compte de monstres : payée au
+    // ⚠️ La PART abattue du mana fixe (v0.1047), pas un compte de monstres : payée au
     // monstre, une faille mûre (plus peuplée) rapporterait plus en échouant qu'une jeune
     // en réussissant — l'attente reviendrait par la bande.
     expect(incursionMana(rate, 30)).toBe(riftMana((RIFT.manaFoesPaid * 5) / 12, 30));
