@@ -180,6 +180,8 @@ import {
   normalizeAdvGearState,
   advGearAwakenPlan,
   awakenAdvGear,
+  awakenAllAdvGear,
+  stripAdvGear,
   advGearNextRank,
   advGearRankCap,
   ascendAdvGear,
@@ -2335,6 +2337,18 @@ export const useCharacterStore = defineStore('character', () => {
     return { gear: adventurers.reduce((s, a) => s + Object.keys(a.gear ?? {}).length, 0) };
   }
 
+  /** 🗡️ TOUT RETIRER : le vivier rendu sans une seule pièce (`stripAdvGear`). Rien n'est
+   *  vendu ni perdu — les pièces retournent simplement au stock disponible. Rend le nombre
+   *  de pièces retirées, 0 s'il n'y avait rien à faire (aucune écriture alors). */
+  async function stripAllAdvGear(userId: string): Promise<number> {
+    const cur = row.value;
+    if (!cur) return 0;
+    const { advs, removed } = stripAdvGear(cur.adventurers ?? []);
+    if (!removed) return 0;
+    await persistOptimistic(userId, { adventurers: advs });
+    return removed;
+  }
+
   /** ⬆️ ASCENSION d'un champion : il paie l'or et les sceaux du rang visé, le rang s'ouvre, et
    *  l'XP mise de côté à ★5 est reversée (`ascendAdventurer`). ⚠️ Le refus vit ICI, avec la
    *  MÊME règle que le bouton (`ascensionBlocker`) : l'écran ne propose pas l'impossible, il
@@ -2391,6 +2405,21 @@ export const useCharacterStore = defineStore('character', () => {
       adv_gear: { ...(cur.adv_gear ?? {}), stock: awakenAdvGear(stock, plan) },
     });
     return null;
+  }
+
+  /** ✨ TOUT FUSIONNER : l'éveil sur chaque modèle jusqu'à épuisement (`awakenAllAdvGear`).
+   *  ⚠️ Le plan est recalculé ICI, avec les mêmes exclusions que le bouton d'une ligne —
+   *  jamais une pièce portée ni 🔒. Rend ce qui a fondu ET ce qui reste bloqué, pour que
+   *  l'écran puisse dire pourquoi il n'a rien fait. Aucune écriture si rien ne fond. */
+  async function awakenAllGear(
+    userId: string,
+  ): Promise<{ merged: number; worn: number; locked: number }> {
+    const cur = row.value;
+    if (!cur) return { merged: 0, worn: 0, locked: 0 };
+    const out = awakenAllAdvGear(cur.adv_gear?.stock ?? [], cur.adventurers ?? []);
+    if (out.merged)
+      await persist(userId, { adv_gear: { ...(cur.adv_gear ?? {}), stock: out.stock } });
+    return { merged: out.merged, worn: out.worn, locked: out.locked };
   }
 
   async function ascendChampion(userId: string, advId: string): Promise<string | null> {
@@ -2860,6 +2889,8 @@ export const useCharacterStore = defineStore('character', () => {
     ascendChampion,
     ascendGear,
     awakenGear,
+    awakenAllGear,
+    stripAllAdvGear,
     sellAdvGear,
     toggleAdvGearLock,
     withAdvGear,

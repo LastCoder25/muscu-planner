@@ -186,6 +186,42 @@
                 🗡️ Portées <span class="g-tab-n">{{ stockWorn.length }}</span>
               </button>
             </div>
+            <!-- 🗡️✨ LES DEUX GESTES DE MASSE (demandés). ⚠️ Chacun ANNONCE ce qu'il va faire
+                 AVANT qu'on touche, et se grise en DISANT pourquoi quand il ne peut rien :
+                 un bouton muet se lit comme une panne. C'est d'autant plus vrai pour la
+                 fusion — le cas COURANT est que les doublons soient portés, donc qu'il n'y
+                 ait rien à fondre tant qu'on ne les a pas retirés. -->
+            <div class="stock-acts">
+              <button
+                type="button"
+                class="sa-btn"
+                :disabled="busy || !stockWornCount"
+                @click="doStripGear"
+              >
+                <span class="sa-ico" aria-hidden="true">🗡️</span>
+                <span class="sa-txt">
+                  <span class="sa-title">Tout retirer</span>
+                  <span class="sa-sub">{{
+                    stockWornCount
+                      ? `${stockWornCount} pièce${stockWornCount > 1 ? 's reviennent' : ' revient'} au stock`
+                      : 'personne ne porte rien'
+                  }}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                class="sa-btn"
+                :class="{ ready: mergePreview.merged > 0 }"
+                :disabled="busy || !mergePreview.merged"
+                @click="doMergeGear"
+              >
+                <span class="sa-ico" aria-hidden="true">✨</span>
+                <span class="sa-txt">
+                  <span class="sa-title">Tout fusionner</span>
+                  <span class="sa-sub">{{ mergeSub }}</span>
+                </span>
+              </button>
+            </div>
             <!-- Un état vide qui DIT laquelle des deux situations on regarde : « aucune
                  pièce » sous un onglet se lit sinon comme un stock vide. -->
             <p v-if="!stockShown.length" class="g-empty">
@@ -683,6 +719,7 @@ import {
   lineageOf,
   wornGear,
   advGearAwakenPlan,
+  awakenAllAdvGear,
   advGearLevelBand,
   advGearNextRank,
   advGearRankCap,
@@ -1144,6 +1181,54 @@ function doAwaken(g: AdvGear) {
     void pair(async (uid) => {
       const err = await char.awakenGear(uid, g.id);
       if (err) throw new Error(err);
+    });
+  });
+}
+/** 🗡️ Combien de pièces sont ASSIGNÉES — sur `gear` brut, comme `stripAdvGear` : une pièce
+ *  que le combat ignore (mauvais métier) compte, puisque le bouton la retirera. */
+const stockWornCount = computed(() =>
+  char.advList.reduce((s, a) => s + Object.values(a.gear ?? {}).filter((id) => !!id).length, 0),
+);
+/** ✨ Ce que « Tout fusionner » ferait. ⚠️ La MÊME fonction que le geste : l'aperçu ne peut
+ *  pas promettre autre chose que ce que le bouton fait. Ne dépend pas de l'horloge du
+ *  panneau — il ne se recalcule qu'au changement du stock ou du vivier. */
+const mergePreview = computed(() => awakenAllAdvGear(char.advGearStock, char.advList));
+/** ⚠️ Un bouton grisé DIT pourquoi : sans ça, « rien ne se passe » se lit comme une panne —
+ *  et le cas courant est que les doublons soient portés. */
+const mergeSub = computed(() => {
+  const m = mergePreview.value;
+  if (m.merged)
+    return `${m.merged} doublon${m.merged > 1 ? 's' : ''} fondu${m.merged > 1 ? 's' : ''}`;
+  if (m.worn)
+    return `${m.worn} doublon${m.worn > 1 ? 's sont portés' : ' est porté'} — retire-les d’abord`;
+  if (m.locked) return `${m.locked} doublon${m.locked > 1 ? 's' : ''} 🔒 — déverrouille-les`;
+  return 'aucun doublon à fondre';
+});
+function doStripGear() {
+  if (!stockWornCount.value) return;
+  const n = stockWornCount.value;
+  $q.dialog({
+    title: '🗡️ Tout retirer',
+    message: `${n} pièce${n > 1 ? 's' : ''} ${n > 1 ? 'reviennent' : 'revient'} au stock. Rien n’est vendu ni perdu, et « Confier au mieux » les redistribue d’un geste.`,
+    cancel: true,
+  }).onOk(() => {
+    void pair(async (uid) => {
+      const removed = await char.stripAllAdvGear(uid);
+      $q.notify({ type: 'positive', message: `🗡️ ${removed} pièce(s) de retour au stock` });
+    });
+  });
+}
+function doMergeGear() {
+  const m = mergePreview.value;
+  if (!m.merged) return;
+  $q.dialog({
+    title: '✨ Tout fusionner',
+    message: `${m.merged} doublon${m.merged > 1 ? 's' : ''} ${m.merged > 1 ? 'sont fondus' : 'est fondu'} dans l’exemplaire le plus avancé de chaque modèle : +${Math.round(AWAKEN.perStep * 100)} % de stats par cran. Les pièces portées et 🔒 ne sont jamais fondues.`,
+    cancel: true,
+  }).onOk(() => {
+    void pair(async (uid) => {
+      const out = await char.awakenAllGear(uid);
+      $q.notify({ type: 'positive', message: `✨ ${out.merged} doublon(s) fondu(s)` });
     });
   });
 }
@@ -2060,5 +2145,73 @@ function leftOf(at: number): string {
 .gear-btn:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* 🗡️✨ Les deux gestes de masse du stock. Deux colonnes égales : ils se comparent, et à
+   344 px chacun garde une cible de 48 px de haut. Plus discrets que « Confier au mieux »
+   (contour neutre) — ce ne sont pas eux qu’on vient chercher en ouvrant l’onglet. */
+.stock-acts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 6px;
+}
+.sa-btn {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 48px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, #2a2419);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+/* Seule la fusion s’allume, et seulement quand elle a quelque chose à fondre : l’accent
+   dit « il y a à faire » partout ailleurs dans l’app. */
+.sa-btn.ready {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.sa-btn:not(:disabled):active {
+  transform: scale(0.985);
+}
+.sa-btn:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+.sa-ico {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 15px;
+  background: color-mix(in srgb, var(--line) 70%, transparent);
+}
+.sa-btn.ready .sa-ico {
+  background: var(--accent);
+  color: #15120e;
+}
+.sa-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.sa-title {
+  font-family: Oswald, sans-serif;
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+}
+/* Le motif peut être long (« 3 doublons sont portés — retire-les d’abord ») : il se replie
+   plutôt que de déborder, et ne se tronque jamais — c’est lui qui explique le gris. */
+.sa-sub {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--dim);
 }
 </style>

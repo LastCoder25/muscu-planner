@@ -854,6 +854,74 @@ export function awakenAdvGear(
     .map((x) => (x.id === plan.keep.id ? { ...x, awaken: aw } : x));
 }
 
+/**
+ * ✨ TOUT FUSIONNER — l'éveil appliqué à chaque modèle jusqu'à épuisement (demandé : « une
+ * option pour fusionner les items identiques »).
+ *
+ * ⚠️ AUCUNE RÈGLE NOUVELLE : on rejoue `advGearAwakenPlan` modèle par modèle, donc les mêmes
+ * exclusions (jamais une pièce PORTÉE ni 🔒), le même exemplaire gardé et le même plafond.
+ * Une seconde règle de fusion finirait par contredire le bouton ✨ d'une ligne.
+ *
+ * ⚠️ La boucle TERMINE par construction : chaque éveil retire une pièce du stock.
+ *
+ * `worn`/`locked` comptent les doublons qu'on ne peut PAS fondre, pour que le bouton dise
+ * pourquoi il ne fera rien plutôt que de rendre « 0 » en silence — c'est le cas COURANT, la
+ * pièce gardée étant souvent portée et ses doublons avec. ⚠️ Comptés seulement sur les
+ * modèles dont le gardé n'est pas déjà au maximum : ailleurs ce ne sont pas des doublons
+ * bloqués, juste des doublons devenus inutiles.
+ */
+export function awakenAllAdvGear(
+  stock: AdvGear[],
+  advs: Adventurer[],
+): { stock: AdvGear[]; merged: number; worn: number; locked: number } {
+  const models = [...new Set(stock.map((g) => advGearModelOf(g)).filter((m) => !!m))];
+  let cur = stock;
+  let merged = 0;
+  for (const m of models)
+    for (;;) {
+      const any = cur.find((g) => advGearModelOf(g) === m);
+      if (!any) break;
+      const plan = advGearAwakenPlan(any, cur, advs);
+      if (!plan) break;
+      cur = awakenAdvGear(cur, plan);
+      merged++;
+    }
+  // Ce qui reste bloqué une fois fondu tout ce qui pouvait l'être.
+  const wornIds = new Set([...wornGear(advs, cur).values()].flat().map((x) => x.id));
+  let worn = 0;
+  let locked = 0;
+  for (const m of models) {
+    const copies = cur.filter((g) => advGearModelOf(g) === m).sort(gearAhead);
+    const keep = copies[0];
+    if (!keep || (keep.awaken ?? 0) >= ADV_GEAR_AWAKEN.max) continue;
+    for (const x of copies.slice(1)) {
+      if (wornIds.has(x.id)) worn++;
+      else if (x.locked) locked++;
+    }
+  }
+  return { stock: cur, merged, worn, locked };
+}
+
+/**
+ * 🗡️ TOUT RETIRER — le vivier rendu sans une seule pièce (demandé : « une option pour
+ * déséquiper tous les items des champions »).
+ *
+ * ⚠️ Sur `gear` BRUT et non `wornGear` : une pièce assignée que le combat ignore (mauvais
+ * métier, classe trop basse) doit partir elle aussi — sinon le bouton en annoncerait moins
+ * qu'il n'en retire, et elle resterait collée à son porteur sans servir à rien.
+ *
+ * ⚠️ Le 🔒 ne protège QUE de la vente (c'est ce que son libellé dit, et ce que `dropAdvGear`
+ * applique) : une pièce verrouillée se retire comme les autres.
+ *
+ * Rend le MÊME tableau quand personne ne porte rien — on n'écrit pas à vide.
+ */
+export function stripAdvGear(advs: Adventurer[]): { advs: Adventurer[]; removed: number } {
+  const carried = (a: Adventurer) => Object.values(a.gear ?? {}).filter((id) => !!id).length;
+  const removed = advs.reduce((s, a) => s + carried(a), 0);
+  if (!removed) return { advs, removed: 0 };
+  return { advs: advs.map((a) => (carried(a) ? { ...a, gear: {} } : a)), removed };
+}
+
 // ── 🏅 RANG, ÉTOILES ET TRI D'UNE PIÈCE (demandé : « comme les héros, par rareté ») ──────────
 
 /** Le RANG et les ÉTOILES d'une pièce, lus comme ceux d'un champion : le rang vient de sa
