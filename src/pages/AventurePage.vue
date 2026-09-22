@@ -1022,6 +1022,18 @@
           </div>
         </template>
 
+        <!-- TOTAL de l'équipement porté (objets + familier + trophée + bonus de set) : la
+             somme que le combat applique, via `aggregateEffects` — jamais recalculée ici. -->
+        <template v-if="gearTotal.length">
+          <div class="sec-title">Total de l'équipement</div>
+          <div class="gear-total">
+            <div class="gt-sub">Objets, familier, trophée et bonus de set réunis</div>
+            <div class="tb-list">
+              <span v-for="(g, i) in gearTotal" :key="i" class="tb-chip">{{ g }}</span>
+            </div>
+          </div>
+        </template>
+
         <!-- Sac : MODALE ouverte par l'icône 🎒 en haut à droite (plus d'inline). -->
         <div v-if="bagOpen" class="shop-backdrop" @click.self="bagOpen = false">
           <div class="shop-card bag-card">
@@ -3813,6 +3825,13 @@ const talPickOpen = computed({
  *  de dégâts se lisait « +0.1 % ». C'est le facteur cent que `aggregateLines` existe
  *  pour tuer — une seule table, partagée avec le panneau de la Guilde. */
 const talentSummary = computed(() => aggregateLines(talentFx.value, { emoji: true }));
+// Somme de TOUT l'équipement porté, bonus de set compris (capstone selon la voie) : la
+// même agrégation que le combat, lue par la même table que les talents.
+const gearTotal = computed(() =>
+  aggregateLines(aggregateEffects(char.row?.equipped ?? {}, char.row?.voie ?? null), {
+    emoji: true,
+  }),
+);
 
 /** Talents proposés pour une case : les DISPONIBLES seulement, plus celui qui occupe déjà
  *  cette case — même règle qu'au chenil. Proposer un talent équipé ailleurs n'aurait mené
@@ -7524,6 +7543,18 @@ button.pt-mini:active {
   text-transform: uppercase;
   color: var(--dim);
   margin-bottom: 6px;
+}
+.gear-total {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.gt-sub {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin-bottom: 8px;
 }
 .tb-list {
   display: flex;
