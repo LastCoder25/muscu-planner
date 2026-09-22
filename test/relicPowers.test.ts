@@ -179,7 +179,19 @@ describe('🔮 chaque pouvoir fait ce qu’il annonce', () => {
     const log = fired(hero(R('ronces'), { thorns: 0.5 }), foe(), 'rp_ronces');
     expect(log.length).toBeGreaterThan(0);
     expect(log[0]!.damage).toBe(Math.round(50 * RELIC.roncesMult)); // volée de 50, force 1
+    // ⚠️ La rafale vaut PLUS qu'une volée ordinaire : sinon le pouvoir ne sert à rien (et un
+    // test qui ne lit que la constante suit n'importe quelle valeur, même dérisoire).
+    expect(log[0]!.damage).toBeGreaterThan(50);
     expect(fired(hero(R('ronces')), foe(), 'rp_ronces')).toHaveLength(0); // sans épines, rien
+  });
+  it('⚠️ Ronces : UN coup d’épines suffit — trois, et elle ne partait jamais', () => {
+    // Mesuré : un combat de boss n'apporte que ~1,4 coup encaissé, d'où 0 déclenchement en
+    // 20 combats tant qu'il en fallait trois. On éprouve donc le PREMIER coup reçu.
+    const un = run(hero(R('ronces'), { thorns: 0.2, pv: 60 }), foe({ damage: 30 })).log;
+    const k = un.findIndex((e) => e.skills?.includes('rp_ronces'));
+    expect(k).toBeGreaterThan(-1);
+    // Un seul coup du monstre a précédé la rafale.
+    expect(un.slice(0, k).filter((e) => e.who === 'monster' && e.damage > 0)).toHaveLength(1);
   });
   it('Festin : le soin perdu au plafond du tour revient en dégâts', () => {
     const p = hero(R('festin'), { lifesteal: 1, strikes: 4 });
@@ -188,19 +200,42 @@ describe('🔮 chaque pouvoir fait ce qu’il annonce', () => {
     ).toBeGreaterThan(0);
     expect(fired(hero(R('festin')), foe({ damage: 0 }), 'rp_festin')).toHaveLength(0); // sans vol de vie
   });
-  it('Tempête : l’élan au maximum se charge, retombe, et rend une rafale', () => {
-    // Élan fort (+50 % par tour) : la retombée se lit au-dessus de la variance des coups.
+  it('Tempête : une rafale PORTÉE par l’élan, qui ne le casse pas', () => {
     const log = run(hero(R('tempete'), { momentum: 0.5 }), foe({ damage: 1 })).log;
     const k = log.findIndex((e) => e.skills?.includes('rp_tempete'));
     expect(k).toBeGreaterThan(0);
-    // Juste après, le coup suivant du héros a perdu son élan.
+    // ⚠️ L'élan NE retombe PAS : le coup suivant garde au moins ce qu'il avait avant la rafale.
+    // C'est tout l'objet du correctif — la casser faisait de Tempête un pouvoir nuisible au
+    // Frénétique, dont l'élan EST la stat principale.
     const avant = log
       .slice(0, k)
-      .filter((e) => e.who === 'player')
+      .filter((e) => e.who === 'player' && e.type === 'hit')
       .pop()!;
     const apres = log.slice(k + 1).find((e) => e.who === 'player' && e.type === 'hit')!;
-    // Élan au maximum (4 tours × 50 % = ×3) contre élan retombé (×1) : bien au-delà de la variance.
-    expect(apres.damage).toBeLessThan(avant.damage * 0.6);
+    expect(apres.damage).toBeGreaterThanOrEqual(avant.damage);
+    // …et elle GROSSIT avec l'élan porté : sans élan, elle ne part même pas.
+    const fort = run(hero(R('tempete'), { momentum: 0.5 }), foe({ damage: 1 })).log.find((e) =>
+      e.skills?.includes('rp_tempete'),
+    )!;
+    const faible = run(hero(R('tempete'), { momentum: 0.1 }), foe({ damage: 1 })).log.find((e) =>
+      e.skills?.includes('rp_tempete'),
+    )!;
+    expect(fort.damage).toBeGreaterThan(faible.damage);
+    expect(fired(hero(R('tempete')), foe({ damage: 1 }), 'rp_tempete')).toHaveLength(0);
+  });
+  it('⚠️ Tempête part sur un élan BIEN LANCÉ, pas au plafond — sinon elle ne part jamais', () => {
+    // Le cas RÉEL : le set du Frénétique donne la Transe, qui DOUBLE le plafond d'élan. Tant
+    // que la rafale l'attendait, elle ne partait jamais (mesuré : 0 fois en 20 combats) —
+    // un combat ne dure que 2 à 6 tours du héros.
+    const transe = hero(R('tempete'), {
+      momentum: 0.5,
+      procs: new Set(['sig_frenetique']),
+    });
+    const log = run(transe, foe({ damage: 1 })).log;
+    const k = log.findIndex((e) => e.skills?.includes('rp_tempete'));
+    expect(k).toBeGreaterThan(-1);
+    const tours = log.slice(0, k).filter((e) => e.who === 'player' && e.type !== 'miss').length;
+    expect(tours).toBeLessThanOrEqual(COMBAT.momentumMaxStacks);
   });
   it('Riposte parfaite : chaque riposte charge, puis une riposte critique entière', () => {
     const log = fired(hero(R('riposte_parfaite'), { riposte: 1 }), foe(), 'rp_riposte_parfaite');
@@ -269,7 +304,7 @@ describe('🔮 la jauge', () => {
   });
   it('⚠️ elle SUIT le donjon : le 2ᵉ combat repart de la jauge du 1er', () => {
     const d = simulateDungeon(
-      hero(R('ronces'), { thorns: 0.2 }),
+      hero(R('carapace')),
       [0, 1].map(() => ({ combatant: foe({ pv: 120, damage: 20 }), gold: 0 })),
       { seed: 3 },
     );

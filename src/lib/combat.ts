@@ -190,11 +190,25 @@ export const RELIC = {
   fatalCharge: 20, // par critique porté
   fatalBonus: 0.5, // le coup fatal : critique × (1 + 0,5 × force), inesquivable
   festinScale: 0.1, // 10 % des PV max de soin perdu (plafond du tour) remplissent la jauge
-  tempeteCharge: 25, // par tour du héros une fois l'élan au maximum
-  tempeteMult: 1.5, // l'élan retombe, contre une rafale de 1,5 volée
+  // ⚠️ TEMPÊTE NE SE DÉCLENCHAIT JAMAIS (mesuré : 0 fois en 20 combats, dans sa propre
+  // voie) : elle attendait l'élan AU PLAFOND, or un combat ne dure que 2 à 6 tours du héros
+  // et le plafond vaut 8 avec la Transe du set — que porte justement le Frénétique. Elle part
+  // désormais sur un élan BIEN LANCÉ, et se charge en deux tours.
+  tempeteStacks: 2, // élan requis (au plus le plafond) pour que la rafale parte
+  tempeteCharge: 100, // la rafale part dès que cet élan est atteint
+  // ⚠️ ELLE NE CASSE PLUS L'ÉLAN. Mesuré : remettre l'élan à zéro faisait de Tempête un
+  // pouvoir NUISIBLE dans sa propre voie (−3,7 % au niveau 60, −13,3 % au 90) — le Frénétique
+  // porte l'élan comme stat principale, le lui retirer coûte plus que la rafale ne rapporte.
+  // La rafale est désormais PORTÉE par l'élan (× cumuls × élan porté) : elle grossit avec lui
+  // au lieu de le dépenser, et ne vaut presque rien pour qui n'en porte pas (mesuré : +5,1 %
+  // dans sa voie contre +1,0 % hors d'elle).
+  tempeteMult: 0.35, // × cumuls d'élan × élan porté
   riposteCharge: 100, // une parade ou une riposte remplit la jauge
-  roncesCharge: 34, // par coup d'épines (trois coups)…
-  roncesMult: 1.5, // …puis une explosion de 1,5 volée
+  // ⚠️ RONCES NE SE DÉCLENCHAIT JAMAIS non plus (0 fois en 20 combats) : trois coups
+  // d'épines, quand un combat n'en apporte que 1,45. Un coup suffit, comme une parade remplit
+  // la jauge du Rempart et de la Riposte parfaite.
+  roncesCharge: 100, // un coup d'épines remplit la jauge…
+  roncesMult: 2.2, // …puis une explosion de 2,2 volées
   carapaceScale: 0.5, // encaisser 50 % de ses PV max remplit la jauge…
   carapaceShield: 0.05, // …et donne une barrière de 5 % des PV max
   ouvertureMult: 2.5, // jauge PLEINE au début de chaque combat : 2,5 volées d'entrée…
@@ -885,7 +899,7 @@ export function simulateCombat(
   let gauge = rid === 'ouverture' ? RELIC.full : Math.min(RELIC.full, opts.gauge ?? 0);
   let relicStock = 0; // Rempart / Ronces / Festin : ce qui a été accumulé
   let fatalNext = false; // Coup fatal : le prochain coup du héros
-  let momentumOffset = 0; // Tempête : l'élan retombe à zéro
+  const momentumOffset = 0; // Tempête : l'élan retombe à zéro
   let harvest = 0; // Moisson : bonus de dégâts de CE combat
   let harvestFresh = false; // Moisson : le bonus vient de s'allumer en combat (à annoncer)
   if (rid === 'moisson' && gauge >= RELIC.full) {
@@ -1039,11 +1053,18 @@ export function simulateCombat(
             'rp_brasier',
           );
         }
-      } else if (rid === 'tempete' && !perHit && pStacks >= momentumCap) {
+      } else if (
+        rid === 'tempete' &&
+        !perHit &&
+        // Sans élan porté, la rafale ne vaudrait rien : autant ne pas la déclencher.
+        player.momentum &&
+        pStacks >= Math.min(momentumCap, RELIC.tempeteStacks)
+      ) {
         if (charge(RELIC.tempeteCharge)) {
-          momentumOffset = pTurn - 1; // l'élan retombe (il repart de 1 au tour suivant)
-          pStacks = 0;
-          relicHit(volley(false) * RELIC.tempeteMult * rf, 'rp_tempete');
+          relicHit(
+            volley(false) * RELIC.tempeteMult * pStacks * (player.momentum ?? 0) * rf,
+            'rp_tempete',
+          );
         }
       }
       if (mPv <= 0) break;

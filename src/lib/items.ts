@@ -564,9 +564,8 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     name: 'Tempête',
     emoji: '🌀',
     voie: 'frenetique',
-    charge: 'chaque tour une fois ton élan au maximum',
-    effect: (f) =>
-      `l’élan retombe, contre une rafale de ${(RELIC.tempeteMult * f).toFixed(1)} volée`,
+    charge: `chaque tour une fois ton élan à ${RELIC.tempeteStacks}`,
+    effect: () => 'une rafale portée par ton élan (plus il est haut, plus elle frappe)',
   },
   {
     id: 'riposte_parfaite',
