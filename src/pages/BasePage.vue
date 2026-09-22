@@ -161,21 +161,21 @@
         </g>
         <!-- 🧱 Pastille de niveau de la MURAILLE, au milieu du pan ouest (demande de
              l'utilisateur : on ne savait pas qu'elle était à monter). Un « ↑ » orange
-             quand elle est SOUS le niveau du joueur — la seule structure sans pastille
+             quand elle est SOUS le niveau du joueur ET que l'or de l'amélioration est là (v0.1059 : sans les fonds, la flèche promettait une amélioration refusée) — la seule structure sans pastille
              était précisément celle qui active les sièges. -->
-        <g v-if="wallLevel" class="lvl-badge wall-lvl" :class="{ upgrade: wallLevel < heroLevel }">
+        <g v-if="wallLevel" class="lvl-badge wall-lvl" :class="{ upgrade: canUpgrade('wall') }">
           <circle :cx="100 - APOTHEM" cy="100" r="5.4" />
           <text :x="100 - APOTHEM" y="102">{{ wallLevel }}</text>
-          <text v-if="wallLevel < heroLevel" :x="100 - APOTHEM + 6.4" y="95.6" class="lvl-up">
+          <text v-if="canUpgrade('wall')" :x="100 - APOTHEM + 6.4" y="95.6" class="lvl-up">
             ↑
           </text>
         </g>
         <!-- Pastille de niveau des tourelles, sur la 1re tour -->
-        <g v-if="turretsBuilt" class="lvl-badge" :class="{ upgrade: turretLevel < heroLevel }">
+        <g v-if="turretsBuilt" class="lvl-badge" :class="{ upgrade: canUpgrade('turret') }">
           <circle :cx="octagon[0]!.x + 7" :cy="octagon[0]!.y - 8" r="5" />
           <text :x="octagon[0]!.x + 7" :y="octagon[0]!.y - 6.2">{{ turretLevel }}</text>
           <text
-            v-if="turretLevel < heroLevel"
+            v-if="canUpgrade('turret')"
             :x="octagon[0]!.x + 13.4"
             :y="octagon[0]!.y - 12.4"
             class="lvl-up"
