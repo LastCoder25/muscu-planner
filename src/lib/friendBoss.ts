@@ -806,17 +806,25 @@ export function earlyKillFraction(
 
 // ── Coffre ─────────────────────────────────────────────────────────────────────────
 
-/** Affixe PRINCIPAL du trophée selon la famille de l'exo (choisi avec l'utilisateur).
- *  ⚠️ Tirage et gainage portent DEUX stats (v0.880, mesuré) : le critique et la réduction
- *  sont PLAFONNÉS, et un héros équipé en est déjà presque au plafond — seuls, ils valaient
- *  0 à 1,3 % de puissance avant le niveau 50, contre 1,6 à 3,7 % pour poussée et jambes.
- *  Dégâts + critique et PV + réduction ramènent ces familles au niveau des autres. */
+/** STATS DU TROPHÉE selon ce que l'exercice travaille (refonte équipement, § 7 bis) : deux
+ *  stats principales IMPOSÉES, puis les suivantes tirées dans la liste de soutien de la
+ *  même famille. ⚠️ Un trophée ne porte que des stats de sa famille — comme un objet ne
+ *  porte que celles de son emplacement. Remplace l'ancienne table (élan pour le
+ *  conditionnement, critique et réduction pour tirage et gainage : les stats mesurées
+ *  mortes ou plafonnées avant la refonte). */
 export const TROPHY_MAINS: Record<BossFamily, readonly EffectType[]> = {
-  push: ['damage_pct'],
-  legs: ['max_pv_pct'],
-  pull: ['damage_pct', 'crit_pct'],
-  core: ['max_pv_pct', 'dmg_reduction_pct'],
-  conditioning: ['momentum_pct', 'initiative_pct'],
+  push: ['damage_pct', 'crit_dmg_pct'],
+  legs: ['max_pv_pct', 'dodge_pct'],
+  pull: ['accuracy_pct', 'lifesteal_pct'],
+  core: ['dmg_reduction_pct', 'block_pct'],
+  conditioning: ['initiative_pct', 'rage_pct'],
+};
+export const TROPHY_SUPPORT: Record<BossFamily, readonly EffectType[]> = {
+  push: ['execute_pct', 'thorns_pct'],
+  legs: ['regen_pct', 'initiative_pct'],
+  pull: ['crit_pct', 'riposte_pct'],
+  core: ['start_shield_pct', 'crit_resist_pct'],
+  conditioning: ['momentum_pct', 'regen_pct'],
 };
 
 export const FRIEND_BOSS_CHEST = {
@@ -872,6 +880,7 @@ export function friendBossChest(
     tickets: tier.tickets,
     trophy: rollTrophy(rng, {
       mains: TROPHY_MAINS[b.family],
+      support: TROPHY_SUPPORT[b.family],
       title: b.exerciseName,
       level,
       // ⚠️ La chance du CRAN s'AJOUTE à celle du « tué tôt » : les deux disent « tu as fait

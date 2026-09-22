@@ -28,6 +28,7 @@ import {
   FRIEND_BOSS,
   FRIEND_BOSS_CHEST,
   TROPHY_MAINS,
+  TROPHY_SUPPORT,
   chestMark,
   chestState,
   friendBossChest,
@@ -57,7 +58,13 @@ describe('🏆 TROPHÉE — rang et étoiles (v0.894)', () => {
     const stars = [0, 0, 0, 0, 0];
     const ranks = new Set<string>();
     for (let i = 0; i < n; i++) {
-      const t = rollTrophy(rng, { mains: TROPHY_MAINS.push, title: 'x', level, luck });
+      const t = rollTrophy(rng, {
+        mains: TROPHY_MAINS.push,
+        support: TROPHY_SUPPORT.push,
+        title: 'x',
+        level,
+        luck,
+      });
       stars[jetStar(t.roll) - 1]!++;
       ranks.add(t.rarity);
     }
@@ -83,7 +90,12 @@ describe('🏆 TROPHÉE — rang et étoiles (v0.894)', () => {
     expect(s3[2]!).toBeCloseTo(STAR_JET.top, 1);
   });
   it('gradeLabel l’écrit en rang et étoiles — comme un familier depuis la v0.907', () => {
-    const t = rollTrophy(mulberry32(3), { mains: TROPHY_MAINS.push, title: 'x', level: 30 });
+    const t = rollTrophy(mulberry32(3), {
+      mains: TROPHY_MAINS.push,
+      support: TROPHY_SUPPORT.push,
+      title: 'x',
+      level: 30,
+    });
     expect(gradeLabel(t)).toMatch(/★/);
     // L'emplacement ne décide plus de rien : c'est le JET qui donne les étoiles.
     expect(gradeLabel({ ...t, slot: 'familiar' })).toBe(gradeLabel(t));
@@ -96,7 +108,12 @@ describe('🏆 TROPHÉE — tirage', () => {
     const rng = mulberry32(7);
     for (const f of FAMILIES) {
       for (let i = 0; i < 30; i++) {
-        const t = rollTrophy(rng, { mains: TROPHY_MAINS[f], title: 'Pompes', level: 60 });
+        const t = rollTrophy(rng, {
+          mains: TROPHY_MAINS[f],
+          support: TROPHY_SUPPORT[f],
+          title: 'Pompes',
+          level: 60,
+        });
         expect(t.slot).toBe(TROPHY_SLOT);
         expect(t.name).toContain('Pompes');
         expect(t.legendary).toBeUndefined();
@@ -110,18 +127,34 @@ describe('🏆 TROPHÉE — tirage', () => {
   it('a autant d’affixes qu’un drop de sa rareté (au moins ses affixes imposés)', () => {
     const rng = mulberry32(11);
     for (let i = 0; i < 200; i++) {
-      const t = rollTrophy(rng, { mains: TROPHY_MAINS.push, title: 'x', level: 70 });
+      const t = rollTrophy(rng, {
+        mains: TROPHY_MAINS.push,
+        support: TROPHY_SUPPORT.push,
+        title: 'x',
+        level: 70,
+      });
       const n = [t.effect, t.effect2, t.effect3].filter(Boolean).length;
       expect(n).toBe(affixCountForRarity(t.rarity));
     }
-    const c = rollTrophy(mulberry32(3), { mains: TROPHY_MAINS.conditioning, title: 'x', level: 1 });
-    expect([c.effect, c.effect2].map((e) => e!.type)).toEqual(['momentum_pct', 'initiative_pct']);
+    const c = rollTrophy(mulberry32(3), {
+      mains: TROPHY_MAINS.conditioning,
+      support: TROPHY_SUPPORT.conditioning,
+      title: 'x',
+      level: 1,
+    });
+    // Les deux stats IMPOSÉES de la famille, dans l'ordre, même au rang le plus bas.
+    expect([c.effect, c.effect2].map((e) => e!.type)).toEqual([...TROPHY_MAINS.conditioning]);
   });
 
   it('vaut TROPHY_K × un drop de même rareté et même jet (jamais la valeur pleine)', () => {
     const rng = mulberry32(5);
     for (let i = 0; i < 50; i++) {
-      const t = rollTrophy(rng, { mains: TROPHY_MAINS.legs, title: 'x', level: 40 });
+      const t = rollTrophy(rng, {
+        mains: TROPHY_MAINS.legs,
+        support: TROPHY_SUPPORT.legs,
+        title: 'x',
+        level: 40,
+      });
       const full = effectBase('max_pv_pct') * rankRollMult(t.rarity, t.roll);
       expect(t.effect.value).toBeCloseTo(full * TROPHY_K, 1);
     }
@@ -129,7 +162,12 @@ describe('🏆 TROPHÉE — tirage', () => {
 
   it('compte au combat comme un objet : valeur × niveau d’objet', () => {
     const t = {
-      ...rollTrophy(mulberry32(9), { mains: TROPHY_MAINS.push, title: 'x', level: 30 }),
+      ...rollTrophy(mulberry32(9), {
+        mains: TROPHY_MAINS.push,
+        support: TROPHY_SUPPORT.push,
+        title: 'x',
+        level: 30,
+      }),
       id: 't',
     };
     const withIt = aggregateEffects({ [TROPHY_SLOT]: t });
@@ -162,7 +200,12 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
     const { stats, eq, inv } = geared(L, 1);
     const rng = mulberry32(21);
     const trophies = Array.from({ length: 12 }, (_, i) => ({
-      ...rollTrophy(rng, { mains: TROPHY_MAINS.push, title: 'x', level: L }),
+      ...rollTrophy(rng, {
+        mains: TROPHY_MAINS.push,
+        support: TROPHY_SUPPORT.push,
+        title: 'x',
+        level: L,
+      }),
       id: 'tr' + i,
     }));
     const power = (e: typeof eq) => combatPower(playerWithGear('g', stats, e, {}, L));
@@ -205,7 +248,12 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
           const rng = mulberry32(seed * 131 + L);
           for (let i = 0; i < 6; i++) {
             const t = {
-              ...rollTrophy(rng, { mains: TROPHY_MAINS[f], title: 'x', level: L }),
+              ...rollTrophy(rng, {
+                mains: TROPHY_MAINS[f],
+                support: TROPHY_SUPPORT[f],
+                title: 'x',
+                level: L,
+              }),
               id: 't',
             };
             gains.push(
@@ -241,7 +289,12 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
         for (const f of FAMILIES)
           for (let i = 0; i < 6; i++) {
             const t = {
-              ...rollTrophy(rng, { mains: TROPHY_MAINS[f], title: 'x', level: L }),
+              ...rollTrophy(rng, {
+                mains: TROPHY_MAINS[f],
+                support: TROPHY_SUPPORT[f],
+                title: 'x',
+                level: L,
+              }),
               id: 't',
             };
             gains.push(

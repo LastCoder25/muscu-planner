@@ -18,7 +18,21 @@ import { levelCost } from './levels';
 // mais EXCLU de SLOTS (donc des drops normaux / sets / forge). Cf. src/data/familiars.ts.
 // `trophy` = 6ᵉ emplacement PARALLÈLE (v0.864) : le TROPHÉE du boss entre amis, qui ne tombe
 // que de son coffre. Même traitement que le familier — compté, optimisé, jamais tiré ailleurs.
-export type ItemSlot = 'weapon' | 'armor' | 'accessory' | 'relic' | 'familiar' | 'trophy';
+// ⚠️ REFONTE ÉQUIPEMENT (étape 2) : 7 emplacements portés — arme, armure, BOUCLIER, CASQUE,
+// BOTTES, anneau (l'identifiant `accessory` est gardé : les objets déjà possédés restent
+// valides sans migration) et relique.
+export type ItemSlot =
+  | 'weapon'
+  | 'armor'
+  | 'shield'
+  | 'helmet'
+  | 'boots'
+  | 'accessory'
+  | 'relic'
+  | 'familiar'
+  | 'trophy';
+/** Les emplacements d'équipement proprement dits (hors familier et trophée). */
+export type GearSlot = Exclude<ItemSlot, 'familiar' | 'trophy'>;
 export const FAMILIAR_SLOT: ItemSlot = 'familiar';
 export const TROPHY_SLOT: ItemSlot = 'trophy';
 /** Emplacements parallèles : portés et comptés, mais hors des drops et des sets. */
@@ -381,21 +395,35 @@ export interface PendingReward {
   candidates: RewardCandidate[];
 }
 
-export const SLOTS: ItemSlot[] = ['weapon', 'armor', 'accessory', 'relic'];
+export const SLOTS: ItemSlot[] = [
+  'weapon',
+  'armor',
+  'shield',
+  'helmet',
+  'boots',
+  'accessory',
+  'relic',
+];
 /** TOUT ce que le héros peut porter : les 4 emplacements de gear + les parallèles.
  *  ⚠️ Source unique : les copies `[...SLOTS, FAMILIAR_SLOT]` auraient oublié le trophée. */
 export const WORN_SLOTS: ItemSlot[] = [...SLOTS, ...PARALLEL_SLOTS];
 export const SLOT_LABEL: Record<ItemSlot, string> = {
   weapon: 'Arme',
   armor: 'Armure',
-  accessory: 'Accessoire',
+  shield: 'Bouclier',
+  helmet: 'Casque',
+  boots: 'Bottes',
+  accessory: 'Anneau',
   relic: 'Relique',
   familiar: 'Familier',
   trophy: 'Trophée',
 };
 export const SLOT_EMOJI: Record<ItemSlot, string> = {
   weapon: '⚔️',
-  armor: '🛡️',
+  armor: '🥋',
+  shield: '🛡️',
+  helmet: '⛑️',
+  boots: '🥾',
   accessory: '💍',
   relic: '🔮',
   familiar: '🐾',
@@ -496,7 +524,7 @@ export function fillSetPieceAffixes(it: Item): Item {
     (e): e is ItemEffect => !!e,
   );
   for (let a = affixes.length; a < want; a++) {
-    const pool = tierPool(TIER_ORDER[a]!, it.level ?? 1).filter(
+    const pool = slotPool(it.slot, a === 0 ? 'major' : 'support', it.level ?? 1).filter(
       (t) => !affixes.some((x) => x.type === t),
     );
     if (!pool.length) continue;
@@ -758,19 +786,71 @@ const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
   thorns_pct: 9, // épines : build défensif « qui pique » → débloqué en profondeur
 };
 
-// ── TIERS D'AFFIXE (multi-affixe façon Diablo, v0.581) ──────────────────────────
-// Un drop tire 1 stat par TIER selon sa rareté (affixCountForRarity) : #1 = majeur,
-// #2 = secondaire, #3 = mineur. Du plus IMPACTANT (dégâts/PV) au plus LIGHT (or/loot).
-type AffixTier = 'major' | 'secondary' | 'minor';
-const AFFIX_TIERS: Record<AffixTier, EffectType[]> = {
-  // Majeur : la grosse stat de combat qui définit l'objet.
-  major: ['damage_pct', 'max_pv_pct', 'dmg_reduction_pct', 'crit_pct'],
-  // Secondaire : soutien de combat + signatures conditionnelles (gatées en profondeur).
-  secondary: ['lifesteal_pct', 'thorns_pct', 'execute_pct', 'rage_pct', 'momentum_pct'],
-  // Mineur : bonus « light » d'éco/confort — n'augmentent PAS la puissance de combat brute.
-  minor: ['gold_pct', 'magic_find_pct', 'regen_pct', 'initiative_pct'],
+// ── STATS PAR EMPLACEMENT (refonte équipement, étape 2) ──────────────────────────
+// Un objet donne ce qu'il FAIT : l'arme agit sur le coup porté, les protections sur les
+// coups reçus, l'anneau sur des choses indirectes. L'affixe #1 est tiré dans `major`, les
+// #2 et #3 dans `support`, sans doublon. ⚠️ Une stat vit sur DEUX emplacements au plus
+// (test dédié), sinon plus aucun emplacement n'a d'identité.
+// ⚠️ Remplace les listes COMMUNES d'avant (AFFIX_TIERS) : un drop tirait ses stats sans
+// regarder son emplacement — mesuré, une arme sur deux avait des PV ou de la réduction en
+// stat principale, et l'optimiseur en mettait sur 4 armes sur 4 aux niveaux 50 et 90.
+export const SLOT_AFFIXES: Record<GearSlot, { major: EffectType[]; support: EffectType[] }> = {
+  weapon: {
+    major: ['damage_pct', 'crit_dmg_pct'],
+    support: ['accuracy_pct', 'momentum_pct', 'execute_pct', 'bleed_pct', 'lifesteal_pct'],
+  },
+  armor: {
+    major: ['max_pv_pct', 'dmg_reduction_pct'],
+    support: ['thorns_pct', 'regen_pct', 'start_shield_pct'],
+  },
+  shield: {
+    major: ['block_pct', 'parry_pct'],
+    support: ['riposte_pct', 'thorns_pct', 'crit_resist_pct'],
+  },
+  helmet: {
+    major: ['max_pv_pct', 'accuracy_pct'],
+    support: ['initiative_pct', 'crit_resist_pct', 'magic_find_pct'],
+  },
+  boots: {
+    major: ['dodge_pct', 'initiative_pct'],
+    support: ['riposte_pct', 'regen_pct'],
+  },
+  accessory: {
+    major: ['crit_pct', 'rage_pct'],
+    support: ['lifesteal_pct', 'gold_pct', 'magic_find_pct', 'training_pct'],
+  },
+  // ⚠️ TRANSITOIRE : la relique devient une attaque spéciale à jauge (étape 4) et perd ses
+  // stats. D'ici là elle garde des stats de survie, hors de la règle des deux emplacements.
+  relic: {
+    major: ['max_pv_pct'],
+    support: ['rage_pct', 'regen_pct'],
+  },
 };
-const TIER_ORDER: AffixTier[] = ['major', 'secondary', 'minor'];
+
+/** POIDS de chaque emplacement dans le budget de puissance (valeur × poids). L'arme porte
+ *  seule les dégâts directs : elle pèse plus, pour que l'attaque et la survie reçoivent
+ *  autant l'une que l'autre. ⚠️ Point de départ : réglé à la mesure à l'étape 7 (budget). */
+export const SLOT_WEIGHT: Record<GearSlot, number> = {
+  weapon: 1.5,
+  armor: 1,
+  shield: 0.75,
+  helmet: 0.75,
+  boots: 0.5,
+  accessory: 1,
+  relic: 1,
+};
+
+/** Le poids d'un emplacement (1 pour le familier et le trophée, qui ne sont pas tirés). */
+function slotWeight(slot: ItemSlot): number {
+  return slot in SLOT_WEIGHT ? SLOT_WEIGHT[slot as GearSlot] : 1;
+}
+
+/** Stats tirables pour un emplacement À CE NIVEAU (verrous de niveau des signatures).
+ *  Jamais vide : chaque liste garde au moins une stat sans verrou (test dédié). */
+function slotPool(slot: ItemSlot, kind: 'major' | 'support', level: number): EffectType[] {
+  const lists = slot in SLOT_AFFIXES ? SLOT_AFFIXES[slot as GearSlot] : SLOT_AFFIXES.weapon;
+  return lists[kind].filter((t) => (EFFECT_MIN_LEVEL[t] ?? 1) <= level);
+}
 
 /** Valeur de la stat principale d’une pièce de set, relative à un drop de même rareté.
  *  ⚠️ < 1 PARCE QU’ELLE PORTE UNE STAT QU’UN DROP N’A PAS À CET EMPLACEMENT (des dégâts sur un
@@ -790,46 +870,18 @@ const SET_PIECE_MAJOR_K = 0.7;
 const SET_SLOT_MAJORS: Partial<Record<ItemSlot, EffectType[]>> = {
   weapon: ['damage_pct'],
   armor: ['max_pv_pct'],
-  accessory: ['damage_pct'],
+  shield: ['block_pct'],
+  helmet: ['max_pv_pct'],
+  boots: ['dodge_pct'],
+  // ⚠️ L'anneau passe des dégâts au critique : les dégâts ne sont plus une stat d'anneau
+  // (refonte équipement). Le plafond sec du critique n'existe plus (`CHANCE_CURVES`).
+  accessory: ['crit_pct'],
   relic: ['max_pv_pct'],
-};
-
-const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
-  weapon: [
-    { type: 'damage_pct', base: 8 },
-    { type: 'crit_pct', base: 4 },
-    { type: 'lifesteal_pct', base: 6 },
-    { type: 'execute_pct', base: 12 }, // signature : achève les ennemis bas
-    { type: 'momentum_pct', base: 3 }, // signature : monte en puissance dans le combat
-  ],
-  armor: [
-    { type: 'dmg_reduction_pct', base: 6 },
-    { type: 'max_pv_pct', base: 10 },
-    { type: 'thorns_pct', base: 12 }, // épines : renvoie des dégâts (build tanky offensif)
-  ],
-  // L'accessoire roule un effet de COMBAT (l'or ne servait à rien en combat → un
-  // accessoire +or était un slot « mort », personne ne le prenait ; retiré).
-  accessory: [
-    { type: 'crit_pct', base: 5 },
-    { type: 'lifesteal_pct', base: 5 },
-    { type: 'dmg_reduction_pct', base: 5 },
-  ],
-  relic: [
-    { type: 'crit_pct', base: 6 },
-    { type: 'max_pv_pct', base: 8 },
-    { type: 'rage_pct', base: 12 }, // signature : fureur quand tu es au bord de la mort
-  ],
-  // Familier : l'effet vient de la RACE (cf. rollFamiliar), pas de ce pool (jamais
-  // tiré par pick(rng, SLOTS)). Entrée requise par le type Record<ItemSlot,…>.
-  familiar: [{ type: 'damage_pct', base: 6 }],
-  // Trophée : l'affixe principal vient de la FAMILLE de l'exo (cf. rollTrophy). Entrée
-  // requise par le type ; jamais lue (le trophée n'est pas tiré par pick(rng, SLOTS)).
-  trophy: [{ type: 'damage_pct', base: 8 }],
 };
 
 /** Base de chaque effet, avant rareté, jet, niveau d'objet et poids d'emplacement.
  *  ⚠️ ÉCRITE EN CLAIR ET EXHAUSTIVE (refonte équipement) : elle était déduite de la 1re
- *  occurrence dans `SLOT_EFFECTS`, donc une retouche des listes par emplacement pouvait
+ *  occurrence dans la table des stats par emplacement, donc une retouche pouvait
  *  changer en silence la magnitude de TOUS les objets. Les 13 valeurs d'avant sont
  *  reprises à l'identique (test dédié). */
 const EFFECT_BASE: Record<EffectType, number> = {
@@ -864,18 +916,9 @@ export function effectBase(t: EffectType): number {
   return EFFECT_BASE[t];
 }
 
-/** Stats d'un TIER réellement disponibles à ce niveau (gate des signatures). Jamais vide
- *  (chaque tier a des options non gatées) → un affixe de tier trouve toujours une stat. */
-function tierPool(tier: AffixTier, level: number): EffectType[] {
-  return AFFIX_TIERS[tier].filter((t) => (EFFECT_MIN_LEVEL[t] ?? 1) <= level);
-}
-
-/** Effets réellement disponibles pour un slot À CE NIVEAU (pool progressif — les
- *  effets exotiques/signature ne se débloquent qu'en profondeur via EFFECT_MIN_LEVEL).
- *  Fallback PV si rien n'est débloqué. Partagé par rollDrop / forge / reroll. */
+/** Effets tirables par la FORGE (code mort, testé) : la stat principale de l'emplacement. */
 function availableEffects(slot: ItemSlot, level: number): { type: EffectType; base: number }[] {
-  const avail = SLOT_EFFECTS[slot].filter((e) => (EFFECT_MIN_LEVEL[e.type] ?? 1) <= level);
-  return avail.length ? avail : [{ type: 'max_pv_pct', base: 6 }];
+  return slotPool(slot, 'major', level).map((type) => ({ type, base: EFFECT_BASE[type] }));
 }
 
 // Noms ÉVOCATEURS des objets à effet signature (« légendaires nommés » → le drop
@@ -955,7 +998,12 @@ export function itemNoun(it: { name?: string; slot?: ItemSlot } | null | undefin
 const NAMES: Record<ItemSlot, string[]> = {
   weapon: Object.keys(WEAPON_NOUN_KIND),
   armor: ['Plastron', 'Cotte', 'Cuirasse', 'Harnois'],
-  accessory: ['Anneau', 'Amulette', 'Talisman', 'Bracelet'],
+  shield: ['Écu', 'Pavois', 'Rondache', 'Targe'],
+  helmet: ['Heaume', 'Casque', 'Bassinet', 'Morion'],
+  boots: ['Bottes', 'Grèves', 'Solerets', 'Jambières'],
+  // Anneau : « Amulette », « Talisman » et « Bracelet » restent reconnus (objets déjà
+  // possédés, cf. NOUN_ICON) mais ne tombent plus.
+  accessory: ['Anneau', 'Chevalière', 'Bague', 'Jonc'],
   relic: ['Éclat', 'Totem', 'Sceau', 'Idole'],
   familiar: ['Compagnon'], // nom réel = nom de la race (cf. rollFamiliar)
   trophy: ['Trophée'], // nom réel = l'exo du boss (cf. rollTrophy)
@@ -1549,8 +1597,9 @@ export function rollDrop(
   );
   // value = base × intervalle du RANG selon le JET (rankRollMult). La PROFONDEUR est encodée
   // par le RANG (pyramide) ; le jet (roll) balaie tout l'intervalle du rang → chasse au bon jet.
+  const w = slotWeight(slot);
   const rollValue = (t: EffectType) =>
-    Math.max(1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll)));
+    Math.max(0.1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll) * w));
   // MULTI-AFFIXE PAR TIER (v0.581, façon Diablo) : la rareté donne 1→3 affixes, tirés
   // UN PAR TIER (majeur → secondaire → mineur). Plus la rareté est haute, plus on descend
   // l'échelle d'impact (une grosse stat + du soutien + un bonus light). Tiers disjoints →
@@ -1560,8 +1609,10 @@ export function rollDrop(
   for (let a = 0; a < affixCount; a++) {
     // Gate des affixes = ton NIVEAU RÉEL (ilvlCenter), pas l'ilvl chanceux → un drop lucky
     // gagne de la MAGNITUDE (levelMult), pas des affixes exotiques hors de ta ligue.
-    const p = tierPool(TIER_ORDER[a]!, ilvlCenter);
-    if (!p.length) continue; // tier vide (ne devrait pas arriver) → on saute cet affixe
+    const p = slotPool(slot, a === 0 ? 'major' : 'support', ilvlCenter).filter(
+      (t) => !affixes.some((x) => x.type === t),
+    );
+    if (!p.length) continue; // plus de stat libre dans la liste → on saute cet affixe
     const type = pick(rng, p);
     affixes.push({ type, value: rollValue(type) });
   }
@@ -1645,7 +1696,8 @@ export function rollSetPiece(
   // L’IDENTITÉ DU SET VIT DÉSORMAIS DANS SES PALIERS (2/3/4 pièces), plus dans ses pièces.
   const chosenType: EffectType = SET_SLOT_MAJORS[slot]?.[0] ?? 'max_pv_pct';
   const base = EFFECT_BASE[chosenType] ?? 8;
-  const value = Math.max(1, round1(base * rankRollMult(rarity, roll) * SET_PIECE_MAJOR_K));
+  const w = slotWeight(slot);
+  const value = Math.max(0.1, round1(base * rankRollMult(rarity, roll) * SET_PIECE_MAJOR_K * w));
   const noun = pick(rng, NAMES[slot]);
   // NIVEAU D'OBJET (ilvl) de la pièce de set = pyramide centrée sur min(palier, perso).
   const setCenter = opts.playerLevel != null ? Math.min(opts.level, opts.playerLevel) : opts.level;
@@ -1658,7 +1710,7 @@ export function rollSetPiece(
   // mineur, comme un drop.
   const affixes: ItemEffect[] = [{ type: chosenType, value }];
   for (let a = 1; a < affixCountForRarity(rarity); a++) {
-    const pool = tierPool(TIER_ORDER[a]!, setCenter).filter(
+    const pool = slotPool(slot, 'support', setCenter).filter(
       (t) => !affixes.some((x) => x.type === t),
     );
     if (!pool.length) continue;
@@ -1667,7 +1719,7 @@ export function rollSetPiece(
     const t = pick(rng, pool);
     affixes.push({
       type: t,
-      value: Math.max(1, round1((EFFECT_BASE[t] ?? 8) * rankRollMult(rarity, roll))),
+      value: Math.max(0.1, round1((EFFECT_BASE[t] ?? 8) * rankRollMult(rarity, roll) * w)),
     });
   }
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
@@ -1701,12 +1753,19 @@ export const TROPHY_K = 0.4;
 /**
  * Tire le TROPHÉE d'un boss entre amis. Son RANG est toujours celui du joueur (une
  * récompense de sport, pas de chasse) et ses ÉTOILES suivent la sienne (`starOdds`, v0.894) ;
- * son affixe PRINCIPAL est imposé par la famille de l'exo (`mains`, parfois deux), les
- * suivants sont libres comme ceux d'un drop. Jamais de proc légendaire.
+ * ses stats PRINCIPALES sont imposées par la famille de l'exo (`mains`), les suivantes
+ * tirées dans sa liste de SOUTIEN (`support`). Jamais de proc légendaire.
  */
 export function rollTrophy(
   rng: () => number,
-  opts: { mains: readonly EffectType[]; title: string; level: number; luck?: number },
+  opts: {
+    mains: readonly EffectType[];
+    /** Stats de SOUTIEN de la famille : les affixes suivants sont tirés ici, jamais ailleurs. */
+    support: readonly EffectType[];
+    title: string;
+    level: number;
+    luck?: number;
+  },
 ): Omit<Item, 'id'> {
   const luck = opts.luck ?? 0;
   const rarity = RANK_ORDER[prestigeRankIndex(opts.level)]!;
@@ -1718,9 +1777,9 @@ export function rollTrophy(
     Math.max(0.1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll) * TROPHY_K));
   const affixes: ItemEffect[] = opts.mains.map((t) => ({ type: t, value: value(t) }));
   for (let a = affixes.length; a < affixCountForRarity(rarity); a++) {
-    const pool = tierPool(TIER_ORDER[a]!, opts.level).filter(
-      (t) => !affixes.some((x) => x.type === t),
-    );
+    const pool = opts.support
+      .filter((t) => (EFFECT_MIN_LEVEL[t] ?? 1) <= opts.level)
+      .filter((t) => !affixes.some((x) => x.type === t));
     if (!pool.length) continue;
     const t = pick(rng, pool);
     affixes.push({ type: t, value: value(t) });
@@ -2794,6 +2853,9 @@ export function bestGearLoadout(
   const bySlot: Record<ItemSlot, Item[]> = {
     weapon: [],
     armor: [],
+    shield: [],
+    helmet: [],
+    boots: [],
     accessory: [],
     relic: [],
     familiar: [],

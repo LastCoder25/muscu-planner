@@ -4,6 +4,8 @@ import { levelCost } from '@/lib/levels';
 import { describe, it, expect } from 'vitest';
 import {
   aggregateLines,
+  SLOT_AFFIXES,
+  SLOT_WEIGHT,
   rarityRank,
   gradeLabel,
   RARITY_LABEL,
@@ -552,23 +554,22 @@ describe('rollDrop', () => {
     expect(RARITY_RANK[deep.rarity]).toBeGreaterThan(RARITY_RANK[shallow.rarity]);
     expect(deep.effect.value).toBeGreaterThan(shallow.effect.value);
   });
-  it('tiers d’affixe : #1 toujours MAJEUR, #2 SECONDAIRE, #3 MINEUR', () => {
-    const MAJOR = new Set(['damage_pct', 'max_pv_pct', 'dmg_reduction_pct', 'crit_pct']);
-    const SECONDARY = new Set([
-      'lifesteal_pct',
-      'thorns_pct',
-      'execute_pct',
-      'rage_pct',
-      'momentum_pct',
-    ]);
-    const MINOR = new Set(['gold_pct', 'magic_find_pct', 'regen_pct', 'initiative_pct']);
-    for (let s = 1; s <= 400; s++) {
+  // ⚠️ RÉÉCRIT à la refonte de l'équipement (étape 2) : les stats ne sont plus tirées dans
+  // des listes communes (majeur / secondaire / mineur) mais dans celles de l'EMPLACEMENT.
+  it('#1 dans les stats principales de son emplacement, #2 et #3 dans ses stats de soutien', () => {
+    let n = 0;
+    for (let s = 1; s <= 600; s++) {
       const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 60, luck: 1 });
       if (!d) continue;
-      expect(MAJOR.has(d.effect.type)).toBe(true); // affixe #1 = majeur
-      if (d.effect2) expect(SECONDARY.has(d.effect2.type)).toBe(true); // #2 = secondaire
-      if (d.effect3) expect(MINOR.has(d.effect3.type)).toBe(true); // #3 = mineur
+      const lists = SLOT_AFFIXES[d.slot as keyof typeof SLOT_AFFIXES];
+      expect(lists.major, d.name).toContain(d.effect.type);
+      for (const e of [d.effect2, d.effect3])
+        if (e) expect(lists.support, d.name).toContain(e.type);
+      const types = [d.effect, d.effect2, d.effect3].filter(Boolean).map((e) => e!.type);
+      expect(new Set(types).size).toBe(types.length); // jamais deux fois la même stat
+      n++;
     }
+    expect(n).toBeGreaterThan(100);
   });
   it('tier majeur dispo dès le niveau 1 (crit/réduction ne sont plus gatés)', () => {
     const seen = new Set<string>();
@@ -579,14 +580,51 @@ describe('rollDrop', () => {
     // au niveau 1, on voit plusieurs stats majeures (dont crit/réduction, désormais du core).
     expect(seen.size).toBeGreaterThanOrEqual(2);
   });
-  it('les stats MINEURES ne tombent que sur l’affixe #3 (Épique+), jamais en #1/#2', () => {
-    const MINOR = new Set(['gold_pct', 'magic_find_pct', 'regen_pct', 'initiative_pct']);
-    for (let s = 1; s <= 400; s++) {
-      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 60, luck: 1 });
+  it('⚠️ LA DEMANDE : jamais de PV ni de réduction sur une arme, jamais de dégâts sur une armure', () => {
+    for (let s = 1; s <= 1500; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 70, luck: 1 });
       if (!d) continue;
-      expect(MINOR.has(d.effect.type)).toBe(false);
-      if (d.effect2) expect(MINOR.has(d.effect2.type)).toBe(false);
+      const types = [d.effect, d.effect2, d.effect3].filter(Boolean).map((e) => e!.type);
+      if (d.slot === 'weapon') {
+        expect(types).not.toContain('max_pv_pct');
+        expect(types).not.toContain('dmg_reduction_pct');
+      }
+      if (d.slot === 'armor') expect(types).not.toContain('damage_pct');
     }
+  });
+  it('une stat vit sur DEUX emplacements au plus — sinon plus aucun n’a d’identité', () => {
+    const where = new Map<string, Set<string>>();
+    for (const [slot, l] of Object.entries(SLOT_AFFIXES)) {
+      if (slot === 'relic') continue; // transitoire : la relique perd ses stats à l'étape 4
+      for (const t of [...l.major, ...l.support])
+        where.set(t, (where.get(t) ?? new Set()).add(slot));
+    }
+    for (const [t, slots] of where) expect(slots.size, t).toBeLessThanOrEqual(2);
+  });
+  it('chaque liste garde une stat sans verrou de niveau (jamais d’affixe sauté au niveau 1)', () => {
+    for (const [slot, l] of Object.entries(SLOT_AFFIXES))
+      for (const kind of ['major', 'support'] as const) {
+        const seen = new Set<string>();
+        for (let s = 1; s <= 300; s++) {
+          const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 1, luck: 1 });
+          if (d && d.slot === slot) seen.add(d.effect.type);
+        }
+        expect(l[kind].length, `${slot} ${kind}`).toBeGreaterThan(0);
+        if (kind === 'major') expect(seen.size, slot).toBeGreaterThan(0);
+      }
+  });
+  it('le POIDS de l’emplacement pèse sur la valeur (bottes 0,5 contre arme 1,5)', () => {
+    expect(SLOT_WEIGHT.weapon).toBeGreaterThan(SLOT_WEIGHT.boots);
+    // Même graine, même tirage : seul l'emplacement change, via le poids.
+    const vals: Record<string, number[]> = {};
+    for (let s = 1; s <= 3000; s++) {
+      const d = rollDrop(mulberry32(s), { cleared: true, defeated: 1, level: 40, luck: 0.5 });
+      if (!d || d.effect.type !== 'initiative_pct') continue;
+      (vals[d.slot] ??= []).push(d.effect.value / rankRollMult(d.rarity, d.roll ?? 0));
+    }
+    const mean = (a: number[]) => a.reduce((x, y) => x + y, 0) / a.length;
+    // L'initiative est une stat principale des bottes (poids 0,5).
+    expect(mean(vals.boots!)).toBeCloseTo(effectBase('initiative_pct') * SLOT_WEIGHT.boots, 0);
   });
 });
 
@@ -671,19 +709,23 @@ describe('sets d’équipement (voie)', () => {
     const piece = rollSetPiece(() => 0.3, { setId: BERS, level: 10, preferSlot: 'relic' });
     expect(piece.slot).toBe('relic');
   });
-  it('la stat PRINCIPALE d’une pièce de set est la majeure non plafonnée de son emplacement', () => {
-    // v0.803 : le thème vit dans les PALIERS, plus dans les pièces. Crit et réduction sont
-    // plafonnés au combat → une pièce qui les imposait gaspillait son emplacement.
+  it('la stat PRINCIPALE d’une pièce de set est une stat principale de son emplacement', () => {
+    // v0.803 : le thème vit dans les PALIERS, plus dans les pièces. Refonte équipement : la
+    // stat principale suit les listes de l'emplacement (l'anneau passe des dégâts au critique).
     const attendu = {
       weapon: 'damage_pct',
       armor: 'max_pv_pct',
-      accessory: 'damage_pct',
+      shield: 'block_pct',
+      helmet: 'max_pv_pct',
+      boots: 'dodge_pct',
+      accessory: 'crit_pct',
       relic: 'max_pv_pct',
-    };
+    } as const;
     for (const set of ITEM_SETS)
-      for (const slot of ['weapon', 'armor', 'accessory', 'relic'] as const) {
+      for (const slot of Object.keys(attendu) as (keyof typeof attendu)[]) {
         const piece = rollSetPiece(() => 0.5, { setId: set.id, level: 20, preferSlot: slot });
         expect(piece.effect.type, `${set.id} ${slot}`).toBe(attendu[slot]);
+        expect(SLOT_AFFIXES[slot].major).toContain(attendu[slot]);
       }
   });
   it('la stat principale d’une pièce vaut ~0,7 × celle d’un drop de même rareté et même jet', () => {
@@ -839,7 +881,10 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     const NOUNS: Record<string, string[]> = {
       weapon: ['Lame', 'Hache', 'Masse', 'Dague', 'Fléau', 'Faux'],
       armor: ['Plastron', 'Cotte', 'Cuirasse', 'Harnois'],
-      accessory: ['Anneau', 'Amulette', 'Talisman', 'Bracelet'],
+      shield: ['Écu', 'Pavois', 'Rondache', 'Targe'],
+      helmet: ['Heaume', 'Casque', 'Bassinet', 'Morion'],
+      boots: ['Bottes', 'Grèves', 'Solerets', 'Jambières'],
+      accessory: ['Anneau', 'Chevalière', 'Bague', 'Jonc'],
       relic: ['Éclat', 'Totem', 'Sceau', 'Idole'],
     };
     let n = 0;
@@ -862,7 +907,7 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
       roll: 0.99,
     };
     const r = renameLegacyItem(old);
-    expect(r.name).toBe('Bracelet « Déferlante »');
+    expect(r.name).toBe('Jonc « Déferlante »'); // l'anneau (refonte : plus de bracelet)
     expect(renameLegacyItem(r)).toEqual(r); // idempotent
     expect(renameLegacyItem({ ...old, slot: 'weapon' as const, name: 'Guillotine' }).name).toBe(
       'Hache « Guillotine »',
@@ -872,7 +917,11 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
   it('l’icône suit le NOM d’objet, jamais la stat : une hache à critique reste une hache', () => {
     expect(itemIconName({ slot: 'weapon', name: 'Hache d’or' })).toBe('mdi-axe-battle');
     expect(itemIconName({ slot: 'relic', name: 'Sceau d’argent' })).toBe('mdi-seal');
-    expect(itemIconName({ slot: 'armor', name: 'Inconnu' })).toBe('mdi-shield');
+    // L'armure n'a plus une icône de bouclier : il y a un vrai BOUCLIER (refonte équipement).
+    expect(itemIconName({ slot: 'armor', name: 'Inconnu' })).toBe('mdi-tshirt-crew');
+    expect(itemIconName({ slot: 'shield', name: 'Inconnu' })).toBe('mdi-shield');
+    // Un nom d'avant la refonte reste reconnu.
+    expect(itemIconName({ slot: 'accessory', name: 'Amulette de bronze' })).toBe('mdi-necklace');
   });
 });
 
@@ -1126,7 +1175,7 @@ describe('pieces de set — multi-affixe (correctif : les sets ne valaient jamai
       const prev = vu.get(p.slot);
       if (prev) expect(p.effect.type).toBe(prev);
       vu.set(p.slot, p.effect.type);
-      expect(['damage_pct', 'max_pv_pct']).toContain(p.effect.type);
+      expect(SLOT_AFFIXES[p.slot as keyof typeof SLOT_AFFIXES].major).toContain(p.effect.type);
     }
   });
 
