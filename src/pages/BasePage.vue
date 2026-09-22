@@ -282,62 +282,74 @@
             <line x1="91" :y1="WALL_BOTTOM + 8.7" x2="109" :y2="WALL_BOTTOM + 8.7" />
             <line x1="91" :y1="WALL_BOTTOM + 11.3" x2="109" :y2="WALL_BOTTOM + 11.3" />
           </g>
-          <!-- ── LE CAMPEMENT DE DÉPART (coin bas-gauche) ──────────────────────
-               ⚠️ PAS UN SECOND ACCÈS : il vit DANS le groupe de la porte, donc il
-               partage son unique `@click`. La porte reste la sortie ; le chemin s'y
-               sépare et mène au campement où l'on s'équipe avant de partir. Deux
-               boutons pour le même geste auraient été le doublon que ce projet
-               combat ailleurs (« un bâtiment, un endroit ») ; ici c'est une seule
-               scène, plus large et plus parlante, qui remplit un coin resté vide. -->
-          <g
-            class="hit camp"
-            role="button"
-            tabindex="0"
-            aria-label="Partir en expédition"
-            @click="openMap"
-            @keydown.enter="openMap"
-            @keydown.space.prevent="openMap"
-          >
-            <!-- Cible tactile élargie : les dessins se cliquent, mais un doigt vise mal. -->
-            <!-- ⚠️ Bornée pour rester HORS du rempart : son coin haut-droit doit être
-                 au-delà de WALL_R + la demi-épaisseur du trait (72 + 4), sinon un clic près
-                 du mur bas-gauche ouvrirait les expéditions. Mesuré : 77,7 > 76. -->
-            <rect x="4" y="164" width="52" height="34" class="gate-hit" />
-            <ellipse cx="36" cy="187" rx="31" ry="7.5" class="camp-ground" />
-            <!-- ⚠️ UNE CARAVANE, pas une tente : c'est d'ici que partent les convois et les
-                 expéditions, une tente ne racontait rien de ce qu'on vient y faire. -->
-            <g class="camel">
-              <path
-                d="M10 180 C10 176.5 13.5 175 17.5 175 C21.5 175 25 176.5 25 180 C25 182.8 22 183.8 17.5 183.8 C13 183.8 10 182.8 10 180 Z"
-              />
-              <path d="M12.4 176 C13.3 172.2 15.6 172.2 16.5 176 Z" />
-              <path d="M18 175.6 C19 171.6 21.8 171.6 22.8 175.6 Z" />
-              <path
-                d="M24 178.6 C26.3 177.2 27.2 173.9 26.8 171 L29 171 C29.5 174.4 28.5 178.2 25.7 180 Z"
-              />
-              <path d="M26.4 169.2 C29.2 168.3 31 169.7 30.6 172 L26.9 172.4 Z" />
-              <rect x="11.6" y="183.4" width="1.5" height="4.8" rx="0.6" />
-              <rect x="15.8" y="183.4" width="1.5" height="4.8" rx="0.6" />
-              <rect x="20" y="183.4" width="1.5" height="4.8" rx="0.6" />
-            </g>
-            <!-- Le chariot bâché qu'il tire. -->
-            <g class="cart">
-              <path
-                d="M35 182.6 L57 182.6 L57 175.6 C57 171.2 52.8 169.2 46 169.2 C39.2 169.2 35 171.2 35 175.6 Z"
-                class="cart-tilt"
-              />
-              <path
-                d="M35 175.6 C35 171.2 39.2 169.2 46 169.2 L46 182.6 L35 182.6 Z"
-                class="cart-tilt-dark"
-              />
-              <rect x="33" y="182.2" width="26" height="3.4" rx="1" class="cart-bed" />
-              <circle cx="38.5" cy="187.6" r="3.1" class="cart-wheel" />
-              <circle cx="53.5" cy="187.6" r="3.1" class="cart-wheel" />
-            </g>
-            <rect x="60" y="179.5" width="8" height="6" rx="1" class="camp-crate" />
-            <!-- Le libellé, comme au bord de la route : on sait où mène ce départ. -->
-            <text x="36" y="196.5" class="camp-label">Expéditions ›</text>
+        </g>
+
+        <!-- ── L'ACCÈS AUX EXPÉDITIONS (coin bas-gauche) ─────────────────────
+             Un panneau indicateur et TES champions en route vers lui : c'est d'ici qu'on
+             les envoie. ⚠️ HORS du groupe `v-once` de la porte : les médaillons suivent
+             le vivier (qui peut arriver après le premier rendu), un groupe figé les
+             aurait laissés vides pour toujours. -->
+        <g
+          class="hit camp"
+          role="button"
+          tabindex="0"
+          aria-label="Partir en expédition"
+          @click="openMap"
+          @keydown.enter="openMap"
+          @keydown.space.prevent="openMap"
+        >
+          <!-- Cible tactile élargie : les dessins se cliquent, mais un doigt vise mal. -->
+          <!-- ⚠️ Bornée pour rester HORS du rempart : son coin haut-droit doit être
+               au-delà de WALL_R + la demi-épaisseur du trait (72 + 4), sinon un clic près
+               du mur bas-gauche ouvrirait les expéditions. Mesuré : 77,7 > 76. -->
+          <rect x="4" y="164" width="52" height="34" class="gate-hit" />
+          <ellipse cx="36" cy="187" rx="31" ry="7.5" class="camp-ground" />
+          <!-- Le panneau : planche en flèche vers le dehors, boussole gravée. -->
+          <g class="sign">
+            <rect x="12.6" y="167" width="2.4" height="22" rx="0.6" class="sign-post" />
+            <path d="M5 171.2 L8.6 167.4 L22 167.4 L22 175 L8.6 175 Z" class="sign-board" />
+            <text x="14.6" y="173.4" class="sign-ico">🧭</text>
           </g>
+          <defs>
+            <clipPath id="camp-disc" clipPathUnits="objectBoundingBox">
+              <circle cx="0.5" cy="0.5" r="0.5" />
+            </clipPath>
+          </defs>
+          <!-- Les champions en marche vers le panneau : les trois premiers de ton vivier
+               (disponibles d'abord), leur portrait dans un médaillon à la couleur de leur
+               rareté. Sans portrait, l'emoji de leur classe ; sans vivier, des silhouettes. -->
+          <g
+            v-for="(m, i) in expeParty"
+            :key="m.key"
+            class="march"
+            :class="{ ghost: !m.real }"
+            :style="{ '--rk': m.color, animationDelay: i * 0.22 + 's' }"
+          >
+            <ellipse
+              :cx="CAMP_SPOTS[i]!.x"
+              :cy="CAMP_SPOTS[i]!.y + 7.2"
+              rx="5"
+              ry="1.4"
+              class="march-shadow"
+            />
+            <circle :cx="CAMP_SPOTS[i]!.x" :cy="CAMP_SPOTS[i]!.y" r="6.4" class="march-bg" />
+            <image
+              v-if="m.src"
+              :href="m.src"
+              :x="CAMP_SPOTS[i]!.x - 6"
+              :y="CAMP_SPOTS[i]!.y - 6"
+              width="12"
+              height="12"
+              clip-path="url(#camp-disc)"
+              preserveAspectRatio="xMidYMid slice"
+            />
+            <text v-else :x="CAMP_SPOTS[i]!.x" :y="CAMP_SPOTS[i]!.y + 2.3" class="march-emo">
+              {{ m.emoji }}
+            </text>
+            <circle :cx="CAMP_SPOTS[i]!.x" :cy="CAMP_SPOTS[i]!.y" r="6.4" class="march-rim" />
+          </g>
+          <!-- Le libellé, comme au bord de la route : on sait où mène ce départ. -->
+          <text x="36" y="196.5" class="camp-label">Expéditions ›</text>
         </g>
 
         <!-- ── LE SOL DE LA COUR ────────────────────────────────────────────
@@ -957,7 +969,9 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
 import SummonPanel from '@/components/SummonPanel.vue';
-import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
+import { advAvailable, advRarity, advTitle, engageCap } from '@/lib/adventurers';
+import { championPortrait } from '@/data/championPortraits';
+import { RANK_COLOR } from '@/lib/items';
 import SiegeStage from '@/components/SiegeStage.vue';
 import {
   BUILD,
@@ -1046,6 +1060,34 @@ function back() {
 }
 /** Sortir de la base → la carte des expéditions. En cockpit, elle prend le volet droit ;
  *  sinon c'est une route plein écran. */
+/** Où se tiennent les trois champions du relais d'expédition : en file vers le panneau,
+ *  le premier devant. ⚠️ Tous dans la cible tactile et loin du rempart. */
+const CAMP_SPOTS = [
+  { x: 28, y: 180 },
+  { x: 40.5, y: 181.5 },
+  { x: 53, y: 179.5 },
+] as const;
+
+/** Les champions dessinés au relais : les trois premiers du vivier, DISPONIBLES d'abord
+ *  (ce sont eux qu'on peut envoyer). Complété de silhouettes s'il en manque. */
+const expeParty = computed(() => {
+  const now = coarseNow.value;
+  const sorted = [...char.advList].sort(
+    (a, b) => Number(advAvailable(b, now)) - Number(advAvailable(a, now)),
+  );
+  return CAMP_SPOTS.map((_, i) => {
+    const a = sorted[i];
+    if (!a) return { key: 'vide' + i, real: false, src: null, emoji: '🧑', color: '#6b5a40' };
+    return {
+      key: a.id,
+      real: true,
+      src: championPortrait(a.championId),
+      emoji: advTitle(a)?.emoji ?? '🧑',
+      color: RANK_COLOR[advRarity(a)],
+    };
+  });
+});
+
 function openMap() {
   openPath(router, '/expedition-map', props.embedded);
 }
@@ -2235,31 +2277,52 @@ function doHarvest() {
   fill: #4b3c28;
   opacity: 0.55;
 }
-.camel > path,
-.camel > rect {
-  fill: #a98c5f;
-  stroke: #5a4c36;
-  stroke-width: 0.6;
-  stroke-linejoin: round;
-}
-.cart-tilt {
-  fill: #cbbb95;
-  stroke: #5a4c36;
-  stroke-width: 0.8;
-  stroke-linejoin: round;
-}
-.cart-tilt-dark {
-  fill: #a2906c;
-}
-.cart-bed {
+.sign-post {
   fill: #6b5a40;
   stroke: #4a3d2b;
   stroke-width: 0.6;
 }
-.cart-wheel {
-  fill: #4a3d2b;
-  stroke: #8a7856;
-  stroke-width: 1;
+.sign-board {
+  fill: #a98c5f;
+  stroke: #5a4c36;
+  stroke-width: 0.7;
+  stroke-linejoin: round;
+}
+.sign-ico {
+  font-size: 5px;
+  text-anchor: middle;
+}
+.march {
+  animation: march 1.1s ease-in-out infinite alternate;
+}
+@keyframes march {
+  to {
+    transform: translateY(-1.1px);
+  }
+}
+.march.ghost {
+  opacity: 0.45;
+}
+.march-shadow {
+  fill: rgba(0, 0, 0, 0.35);
+}
+.march-bg {
+  fill: #221c14;
+}
+.march-emo {
+  font-size: 7px;
+  text-anchor: middle;
+}
+/* Liseré à la couleur de la rareté du champion — la même que partout ailleurs. */
+.march-rim {
+  fill: none;
+  stroke: var(--rk);
+  stroke-width: 1.3;
+}
+@media (prefers-reduced-motion: reduce) {
+  .march {
+    animation: none;
+  }
 }
 /* Le libellé du relais, même rôle que celui au bord de la route : dire où mène ce départ. */
 .camp-label {
@@ -2270,21 +2333,16 @@ function doHarvest() {
   text-anchor: middle;
   letter-spacing: 0.02em;
 }
-.camp-crate {
-  fill: #7a6647;
-  stroke: #4a3d2b;
-  stroke-width: 0.7;
-}
 /* ⚠️ `:focus` et non seulement `:focus-visible` : au clic, certains navigateurs posent le
    contour de focus (blanc) autour de la boîte ENTIÈRE du groupe. Le clavier garde son
    retour, en accent sur la caravane (ci-dessous). */
 .hit.camp:focus {
   outline: none;
 }
-.hit.camp:focus-visible .cart-tilt,
-.hit.camp:hover .cart-tilt {
+.hit.camp:focus-visible .sign-board,
+.hit.camp:hover .sign-board {
   stroke: var(--accent, #ffd23f);
-  stroke-width: 1.4;
+  stroke-width: 1.2;
 }
 
 /* ── La porte ── */
