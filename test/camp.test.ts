@@ -455,16 +455,12 @@ describe('🧭 trajet et départ d’un groupe', () => {
   it('héros seul = trajet du héros ; avec des aventuriers = le plus lent des deux', () => {
     const p = poi();
     const hero = Math.round(travelOneWayMin(p.level, p.distNorm) * 0.8);
-    expect(
-      partyLegMin(p, [], { hero: true, travelMult: 0.8, comptoirLevel: 0, gearSpeed: 0 }),
-    ).toBe(hero);
-    const adv = caravanLegMin(p, esc, 4, 0);
-    expect(
-      partyLegMin(p, esc, { hero: true, travelMult: 0.8, comptoirLevel: 4, gearSpeed: 0 }),
-    ).toBe(Math.max(hero, adv));
-    expect(
-      partyLegMin(p, esc, { hero: false, travelMult: 0.8, comptoirLevel: 4, gearSpeed: 0 }),
-    ).toBe(adv);
+    expect(partyLegMin(p, [], { hero: true, travelMult: 0.8, gearSpeed: 0 })).toBe(hero);
+    const adv = caravanLegMin(p, esc, 0);
+    expect(partyLegMin(p, esc, { hero: true, travelMult: 0.8, gearSpeed: 0 })).toBe(
+      Math.max(hero, adv),
+    );
+    expect(partyLegMin(p, esc, { hero: false, travelMult: 0.8, gearSpeed: 0 })).toBe(adv);
   });
   it('startParty : le voyage seul — il REÇOIT l’issue, il ne la calcule plus', () => {
     // ⚠️ La dispatch camp/faille vit au seul chemin d’envoi (le store) : ce constructeur

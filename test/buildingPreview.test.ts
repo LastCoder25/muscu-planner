@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
 import { BUILDING_TYPES } from '@/lib/buildings';
-import { caravanSlots, caravanSlowFor } from '@/lib/caravan';
+import { caravanSlots } from '@/lib/caravan';
 
 describe('aperçu des prochains niveaux d’un bâtiment', () => {
   it('⚠️ CHAQUE type de bâtiment a un aperçu — un bâtiment muet est une régression', () => {
@@ -19,7 +19,7 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
     const l = 9;
     const ligne = buildingPreview('outpost', l, 0)[0]!;
     expect(ligne.text).toContain(String(caravanSlots(l)));
-    expect(ligne.text).toContain(caravanSlowFor(l).toFixed(2));
+    expect(ligne.text).toContain('équipe');
     expect(ligne.text, 'le trajet du héros').toMatch(/−\d+ % de trajet/);
     // ⚠️ RÉÉCRIT (v0.962, demandé : « enlève le nombre d'engagés et le temps de forge »).
     // Le Panthéon n'annonce plus que son levier le plus FORT — le niveau maximal d'un

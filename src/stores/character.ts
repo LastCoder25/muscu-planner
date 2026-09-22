@@ -2653,7 +2653,6 @@ export const useCharacterStore = defineStore('character', () => {
     const leg = partyLegMin(poi, escort, {
       hero: !!hero,
       travelMult: travelTimeMult(cur.buildings),
-      comptoirLevel: comptoirLevel.value,
       gearSpeed: advGearRoles(escort, road.advGear).speed,
     });
     // ⚔️🕳️ LA DISPATCH VIT ICI, à l’UNIQUE chemin d’envoi : `startParty` ne choisit plus la

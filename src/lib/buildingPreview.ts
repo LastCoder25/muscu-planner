@@ -23,7 +23,7 @@ import {
   type Building,
   type BuildingTypeId,
 } from './buildings';
-import { caravanSlots, caravanSlowFor } from './caravan';
+import { caravanSlots } from './caravan';
 import { altarLuckBonus } from './items';
 
 export interface LevelPreview {
@@ -61,12 +61,11 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       // autres chiffres encombraient la ligne sans rien dire d’aussi décisif.
       return `champions jusqu'au niveau ${Math.max(1, level)}`;
     case 'outpost': {
-      // ⚠️ LES TROIS LEVIERS, depuis qu'il a absorbé le Comptoir : deux COURBES (le
-      // trajet du héros et la vitesse d'un convoi, qui grattent à chaque cran) sous un
-      // PALIER (un convoi de plus tous les 9 niveaux). N’en montrer qu’un laisserait
-      // croire que les deux autres tiers du bâtiment sont figés.
+      // ⚠️ DEUX LEVIERS (v0.1033) : le TRAJET DU HÉROS, qui gratte à chaque cran, et un PALIER
+      // (une équipe de plus tous les 9 niveaux). Le troisième — la vitesse des convois — a
+      // disparu avec eux : les champions vont au pas du héros sans Avant-poste.
       const n = caravanSlots(level);
-      return `−${pct(1 - travelTimeMult(one(typeId, level)))} de trajet · ${n} convoi${n > 1 ? 's' : ''} · ×${caravanSlowFor(level).toFixed(2)} le temps du héros`;
+      return `−${pct(1 - travelTimeMult(one(typeId, level)))} de trajet (héros) · ${n} équipe${n > 1 ? 's' : ''} en parallèle`;
     }
     case 'labyrinth_gate':
       return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);

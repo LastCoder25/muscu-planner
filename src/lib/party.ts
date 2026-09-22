@@ -39,12 +39,12 @@ import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
 export function partyLegMin(
   poi: Poi,
   escort: Adventurer[],
-  opts: { hero: boolean; travelMult: number; comptoirLevel: number; gearSpeed: number },
+  opts: { hero: boolean; travelMult: number; gearSpeed: number },
 ): number {
   const hero = opts.hero
     ? Math.round(travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * opts.travelMult)
     : 0;
-  const advs = escort.length ? caravanLegMin(poi, escort, opts.comptoirLevel, opts.gearSpeed) : 0;
+  const advs = escort.length ? caravanLegMin(poi, escort, opts.gearSpeed) : 0;
   return Math.max(1, hero, advs);
 }
 

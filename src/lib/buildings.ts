@@ -3,8 +3,8 @@
 // (construction + upgrades = le vrai puits d'or). Dimensionné par simulation.
 //
 // ÉTAT ACTUEL : 5 bâtiments pour 5 emplacements — `BUILD.plotCap` est DÉRIVÉ du registre.
-//  • UTILITAIRES : Avant-poste (expéditions + caravanes : trajet du héros, vitesse ET
-//    nombre des convois) · Panthéon.
+//  • UTILITAIRES : Avant-poste (expéditions : trajet du héros, nombre d'équipes en
+//    parallèle) · Panthéon.
 //  • PRODUCTEUR : Dynamo ⚡ (énergie de jeu).
 //  • HYBRIDES (effet + production) : Porte du Labyrinthe (débloque + luck coffres, PRODUIT
 //    des clés 🗝️) · Autel des boss (rareté des pièces de boss, PRODUIT des pierres 🔮).
@@ -129,15 +129,16 @@ export const BUILDING_TYPES: BuildingType[] = [
   // le VOYAGE, l'un pour le héros et l'autre pour les convois, et on montait l'un sans
   // comprendre pourquoi l'autre ne suivait pas.
   //
-  // ⚠️ TROIS LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
-  // le trajet du héros (`travelTimeMult`, asymptotique), la VITESSE d'un convoi
-  // (`caravanSlowFor`, asymptotique elle aussi) et leur NOMBRE (`caravanSlots`, un PALIER
-  // tous les 9 niveaux). Deux courbes continues sous un palier : aucun cran ne peut être
-  // muet, pas même entre deux convois.
+  // ⚠️ DEUX LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
+  // le trajet du HÉROS (`travelTimeMult`, asymptotique, qui gratte à chaque cran) et le
+  // NOMBRE d'équipes en parallèle (`caravanSlots`, un PALIER tous les 9 niveaux).
+  // ⚠️ La vitesse des convois a disparu avec eux (v0.1033) : les champions vont au pas du
+  // héros SANS Avant-poste — sa réduction leur aurait fait faire 2,4× plus de camps par
+  // jour au niveau 60 (cf. `caravanLegMin`).
   {
     id: 'outpost',
     perLevelNote:
-      'trajets plus courts et convois plus rapides à chaque niveau, +1 convoi tous les 9 niveaux',
+      'trajets du héros plus courts à chaque niveau, +1 équipe en parallèle tous les 9 niveaux',
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',
@@ -149,10 +150,11 @@ export const BUILDING_TYPES: BuildingType[] = [
     unlockLevel: 3,
     unique: true,
     unlock: {
-      activity: 'Les Expéditions et les Caravanes',
-      where: 'Ici, sur la carte : envoie ton héros explorer, ou un convoi récolter à ta place.',
+      activity: 'Les Expéditions',
+      where:
+        'Ici, sur la carte : envoie ton héros explorer, ou une équipe de champions à ta place.',
     },
-    desc: 'Débloque les expéditions et les caravanes. Chaque niveau raccourcit les trajets du héros, accélère les convois, et en ajoute un tous les 9 niveaux.',
+    desc: 'Débloque les expéditions. Chaque niveau raccourcit les trajets du héros, et ajoute une équipe de champions en parallèle tous les 9 niveaux.',
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin

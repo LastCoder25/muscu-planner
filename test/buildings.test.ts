@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sessionXp } from '@/lib/athlete';
 import { buildingPreview } from '@/lib/buildingPreview';
-import { CARAVAN, caravanSlots, caravanSlowFor } from '@/lib/caravan';
+import { CARAVAN, caravanSlots } from '@/lib/caravan';
 import { engageCap } from '@/lib/adventurers';
 import {
   perLevelLabel,
@@ -448,8 +448,6 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     outpost: (l) => -travelTimeMult(one('outpost', l)),
     labyrinth_gate: (l) => labyrinthLuckBonus(one('labyrinth_gate', l)),
     boss_altar: (l) => bossAltarRollFloor(one('boss_altar', l)),
-    // Nombre de convois ET vitesse : le nombre reste borné par le vivier, la vitesse continue.
-    caravanserail: (l) => caravanSlots(l) * 1000 + (2 - caravanSlowFor(l)) * 100,
     // Déploiement ET niveau maximal d'un champion : le déploiement saute d'un cran tous les
     // 2 niveaux, le niveau maximal (`grantAdvXp`, plafonné au niveau du Panthéon) monte à
     // CHAQUE cran — il suffit qu'UN des deux bouge. (La forge est partie en v0.1012.)
@@ -481,7 +479,6 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     expect(travelTimeMult(one('outpost', 100))).toBeGreaterThan(0.15);
     expect(travelTimeMult(one('outpost', 999))).toBeGreaterThan(0.1);
     expect(bossAltarRollFloor(one('boss_altar', 999))).toBeLessThan(1);
-    expect(caravanSlowFor(999)).toBeGreaterThan(1); // jamais plus rapide que le héros
   });
 
   it('⚠️ on PROLONGE sans NERFER : la valeur au plafond d’origine est inchangée', () => {

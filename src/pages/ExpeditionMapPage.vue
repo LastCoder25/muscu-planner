@@ -1158,7 +1158,6 @@ const partyMin = computed(() =>
       partyLegMin(selected.value, partyAdvs.value, {
         hero: partyHeroOn.value,
         travelMult: travelMult.value,
-        comptoirLevel: char.comptoirLevel,
         gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
       })
     : 0,

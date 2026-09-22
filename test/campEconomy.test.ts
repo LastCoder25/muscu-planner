@@ -85,14 +85,14 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
             esc = free.slice(0, n);
             win = campWinPct(c.p, c.spec!, partyAllies(esc, rd, null), 8);
           }
-          const h = (2 * caravanLegMin(c.p, esc, opts.comptoir, 0)) / 60;
+          const h = (2 * caravanLegMin(c.p, esc, 0)) / 60;
           const net = campGroupHaul(c.p, c.spec!).gold - caravanWages(esc, c.p);
           return { ...c, esc, win, score: (win * net) / h };
         })
         .filter((c) => c.win >= 0.5 && c.score > 0)
         .sort((a, b) => b.score - a.score)[0];
       if (!best) break;
-      const back = t + 2 * caravanLegMin(best.p, best.esc, opts.comptoir, 0) * 60_000;
+      const back = t + 2 * caravanLegMin(best.p, best.esc, 0) * 60_000;
       const o = resolveCamp({
         poi: best.p,
         spec: best.spec!,
@@ -122,7 +122,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
       const target = map.pois.find((p) => HARVEST_TYPES.has(p.type));
       if (!target) break;
       const esc = free.slice(0, 3);
-      const back = t + 2 * caravanLegMin(target, esc, opts.comptoir, 0) * 60_000;
+      const back = t + 2 * caravanLegMin(target, esc, 0) * 60_000;
       for (const a of esc) busy.set(a.id, back);
       trips.push({ returnAt: back });
       map = { ...map, pois: map.pois.filter((p) => p.id !== target.id) };
@@ -143,8 +143,11 @@ const NIV = [12, 26, 60];
 // alors que le profil moyen des POI ne bougeait que de 0,6 % sur 23 200 tirages. On mesure
 // donc le joueur MÉDIAN, pas celui qui a eu de la chance (même correctif qu'en v0.730).
 const SEEDS = [12345, 777, 31337, 4242, 9001, 555, 60613, 1024];
-/** Part du revenu d'or de référence qu'un joueur peut ajouter en enchaînant des camps. */
-const GOLD_MAX = 0.25;
+/** Part du revenu d'or de référence qu'un joueur peut ajouter en enchaînant des camps.
+ *  ⚠️ RELEVÉE 0,25 → 0,30 en v0.1033 (champions au pas du héros, choix de l'utilisateur) :
+ *  mesuré +27 / +18 / +18 % aux niveaux 12 / 26 / 60, contre +25 / +17 / +16 % avant. Le
+ *  niveau 12 était déjà à la borne ; les niveaux 26 et 60 restent loin dessous. */
+const GOLD_MAX = 0.3;
 /** Part de la production de pierres d'une journée de donjons. */
 const STONES_MAX = 0.5;
 

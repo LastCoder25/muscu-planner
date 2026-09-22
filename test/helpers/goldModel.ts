@@ -101,7 +101,7 @@ function bossGoldPerDay(L: number): number {
 function convoyGoldPerDay(L: number, comptoir: number): number {
   const poi = { level: L, distNorm: 0.6, type: 'well' } as Poi;
   const esc = [0, 1, 2].map((i) => refChampionAdv(L, i));
-  const legH = caravanLegMin(poi, esc, comptoir, 0) / 60;
+  const legH = caravanLegMin(poi, esc, 0) / 60;
   const trips = Math.min(3, 24 / (2 * legH));
   const net = Math.round(goldCost('well', L) * 0.3) - caravanWages(esc, poi);
   return Math.max(0, caravanSlots(comptoir) * trips * net);

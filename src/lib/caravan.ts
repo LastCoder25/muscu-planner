@@ -88,9 +88,6 @@ import {
 } from './advGear';
 
 export const CARAVAN = {
-  /** Une caravane va PLUS LENTEMENT qu'un héros — c'est ce qui incarne « du temps au lieu
-   *  de l'énergie », et ce qui la distingue de l'expédition (rapide, chère en énergie). */
-  slow: 1.5,
   /** Escorte maximale par convoi. */
   escortMax: 4,
   /** Taille de l'escorte de RÉFÉRENCE qui sert de mètre-étalon à la route. */
@@ -166,8 +163,6 @@ export const CARAVAN = {
    *  qu'on ne peut pas armer. À 1 tous les 9 niveaux : 12 convois au niveau 100 pour
    *  17 escortes possibles. */
   slotEvery: 9,
-  /** Niveaux de Comptoir pour gagner la MOITIÉ de l’accélération possible. */
-  speedHalf: 35,
   /** 🎓 Part du SOCLE d'XP versée sur une DÉFAITE (v0.1014, demandé par l'utilisateur :
    *  « xp de défaite différente de celle de victoire »). On apprend en perdant — une défaite
    *  coûte déjà la cargaison ou le butin, et l'infirmerie —, mais moins qu'en gagnant. */
@@ -672,23 +667,28 @@ export function suggestEscort(
   return team;
 }
 
-/** Trajet ALLER d'une caravane, en minutes : celui d'un héros, ralenti, puis raccourci
- *  par les rôles 🧭 de l'escorte ET par les pièces qui portent ce rôle (`gearSpeed`,
- *  cf. `advGearRoles`) — les deux sous le MÊME plafond.
- *  ⚠️ `comptoirLevel` et `gearSpeed` sont REQUIS : l'écran omettait le Comptoir et
- *  annonçait un trajet plus long que celui que le convoi fait réellement. */
-export function caravanLegMin(
-  poi: Poi,
-  escort: Adventurer[],
-  comptoirLevel: number,
-  gearSpeed: number,
-): number {
+/** Trajet ALLER d'une équipe de champions, en minutes : celui du HÉROS SANS Avant-poste,
+ *  puis raccourci par les rôles 🧭 de l'escorte ET par les
+ *  pièces qui portent ce rôle (`gearSpeed`, cf. `advGearRoles`) — les deux sous le MÊME
+ *  plafond.
+ *  ⚠️ PLUS DE LENTEUR PROPRE (v0.1033, demandé par l'utilisateur : « il n'y a plus de
+ *  convois, il faudrait accélérer les déplacements des champions »). Le ×1,5 (`slow`, que
+ *  l'Avant-poste ne ramenait que vers ×1,27 au niveau 30) incarnait le CONVOI, plus lent que
+ *  l'expédition du héros ; les convois ont disparu au profit des équipes. Mesuré avant :
+ *  une équipe mettait ×1,5 le temps du héros sans Avant-poste, ×2,3 au niveau 30 (le héros
+ *  profitait seul de la réduction). ⚠️ L'AVANT-POSTE N'ACCÉLÈRE PAS LES CHAMPIONS, et c'est MESURÉ (camps en
+ *  parallèle, niveau 60) : avec sa réduction, 27 camps par jour au lieu de 11, or des camps
+ *  +39 % du revenu de référence au lieu de +16 %, pierres +62 % au lieu de +25 % — le puits
+ *  d'or ne tiendrait plus. Au pas du héros SANS elle : 12 camps/jour, or +18 %, pierres
+ *  +26 %, et des trajets 16 à 27 % plus courts qu'avant (choix de l'utilisateur).
+ *  La cargaison reste payée sur le temps du héros (`heroEquivalentFactor`). */
+export function caravanLegMin(poi: Poi, escort: Adventurer[], gearSpeed: number): number {
   const hero = travelOneWayMin(poiTravelLevel(poi), poi.distNorm);
   const speed = Math.min(
     CARAVAN.speedMax,
     countRole(escort, 'speed') * CARAVAN.speedPerRole + Math.max(0, gearSpeed),
   );
-  return Math.max(1, Math.round(hero * caravanSlowFor(comptoirLevel) * (1 - speed)));
+  return Math.max(1, Math.round(hero * (1 - speed)));
 }
 
 /** ⚠️ LA CARGAISON SE PAIE SUR LA DURÉE QU'UN HÉROS AURAIT MISE, pas sur celle de la
@@ -775,20 +775,6 @@ export function convoySlotsFree(
 ): number {
   const busy = trips.filter((t) => now < t.returnAt).length;
   return Math.max(0, caravanSlots(comptoirLevel) - busy);
-}
-
-/** Ce que le Comptoir apporte ENTRE deux convois gagnés : il accélère les convois.
- *
- *  ⚠️ C'est la réponse à « aucun niveau mort » pour un bâtiment dont la grandeur
- *  naturelle (le nombre de convois) doit rester bornée — on ne veut pas de caravanes par
- *  dizaines. Le NOMBRE monte lentement, la VITESSE continue sans fin. Et elle est
- *  ASYMPTOTIQUE : la caravane se rapproche du temps du héros **sans jamais l'atteindre**,
- *  parce que « plus lente que le héros » est son identité — la rendre plus rapide
- *  retirerait toute raison d'envoyer le héros lui-même. */
-export function caravanSlowFor(comptoirLevel: number): number {
-  const l = Math.max(0, comptoirLevel);
-  const gagne = (CARAVAN.slow - 1) * (l / (l + CARAVAN.speedHalf));
-  return CARAVAN.slow - gagne;
 }
 
 /** Une caravane peut-elle partir vers ce POI ? Récolte uniquement, escorte non vide. */
@@ -1186,11 +1172,8 @@ export function startCaravan(
   now: number,
   seed: number,
   kit: EscortKit,
-  /** ⚠️ REQUIS : le trajet du convoi dépend du Comptoir — l'oublier le rallongerait. */
-  comptoirLevel: number,
 ): Caravan {
-  const leg =
-    caravanLegMin(poi, escort, comptoirLevel, advGearRoles(escort, kit.advGear).speed) * 60_000;
+  const leg = caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed) * 60_000;
   return {
     id,
     poi,

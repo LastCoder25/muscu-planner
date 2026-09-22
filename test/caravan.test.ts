@@ -9,7 +9,6 @@ import {
   caravanSlots,
   convoySlotsFree,
   poiOffers,
-  caravanSlowFor,
   caravanWages,
   escortCombatant,
   ambushChance,
@@ -323,19 +322,23 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
 });
 
 describe('⚠️ la cargaison se paie sur la durée qu’un HÉROS aurait mise', () => {
-  it('la caravane est plus LENTE que le héros', () => {
-    const p = poi();
-    expect(caravanLegMin(p, team(3), 0, 0)).toBeGreaterThan(travelOneWayMin(p.level, p.distNorm));
+  it('une équipe va au pas du HÉROS sans Avant-poste (v0.1033)', () => {
+    // Avant : ×1,5 le temps du héros, ×1,27 au mieux avec l'Avant-poste. Les convois ont
+    // disparu : plus de lenteur propre. Sans rôle 🧭, exactement le trajet du héros ; les
+    // rôles 🧭 la rendent plus rapide.
+    for (const level of [5, 20, 40, 80]) {
+      const p = poi({ level });
+      const hero = travelOneWayMin(p.level, p.distNorm);
+      expect(caravanLegMin(p, [], 0), `niveau ${level}`).toBe(Math.max(1, Math.round(hero)));
+      expect(caravanLegMin(p, team(3), 0), `niveau ${level}`).toBeLessThanOrEqual(Math.round(hero));
+    }
   });
-  it('…mais le facteur de paie est celui du héros, pas le sien', () => {
-    // `travelFactor` est SUPER-LINÉAIRE : payer sur le temps réel ferait de la lenteur
-    // une prime (×1,75 pour un ralentissement de ×1,5) et la caravane écraserait
-    // l'expédition du héros.
+  it('…et la paie est celle du trajet du héros', () => {
+    // `travelFactor` est SUPER-LINÉAIRE : payer sur le temps réel ferait de la vitesse
+    // (rôles 🧭) une PÉNALITÉ par voyage. La paie ne dépend que du lieu.
     const p = poi();
     const heroH = (2 * travelOneWayMin(p.level, p.distNorm)) / 60;
     expect(heroEquivalentFactor(p)).toBeCloseTo(travelFactor(heroH), 6);
-    const vanH = (2 * caravanLegMin(p, team(3), 0, 0)) / 60;
-    expect(heroEquivalentFactor(p)).toBeLessThan(travelFactor(vanH));
   });
 });
 
@@ -404,8 +407,8 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
 describe('les rôles hors combat servent à quelque chose', () => {
   it('un 🧭 raccourcit le trajet', () => {
     const p = poi();
-    const sans = caravanLegMin(p, team(2, 20, 'haul'), 0, 0);
-    const avec = caravanLegMin(p, team(2, 20, 'speed'), 0, 0);
+    const sans = caravanLegMin(p, team(2, 20, 'haul'), 0);
+    const avec = caravanLegMin(p, team(2, 20, 'speed'), 0);
     expect(avec).toBeLessThan(sans);
   });
   it('un 🐫 grossit la cargaison', () => {
@@ -467,8 +470,6 @@ describe('salaires, XP et garde-fous', () => {
     // Un cran de Comptoir coûte cher : il ne doit jamais offrir un convoi de plus.
     for (let l = 1; l <= 200; l++)
       expect(caravanSlots(l) - caravanSlots(l - 1)).toBeLessThanOrEqual(1);
-    // Et le convoi reste TOUJOURS plus lent que le héros — sinon la caravane le remplace.
-    for (const l of [0, 9, 45, 100, 999]) expect(caravanSlowFor(l)).toBeGreaterThan(1);
   });
 });
 
@@ -479,7 +480,7 @@ describe('le convoi lui-même', () => {
     expect(a).toEqual(b);
   });
   it('l’aller et le retour sont symétriques, le rapport lisible à mi-chemin', () => {
-    const c = startCaravan('c1', poi(), team(3), 1000, 7, NUS, 0, 100);
+    const c = startCaravan('c1', poi(), team(3), 1000, 7, NUS);
     expect(c.midAt).toBeGreaterThan(c.sentAt);
     expect(c.returnAt - c.midAt).toBe(c.midAt - c.sentAt);
     expect(c.escort).toHaveLength(3);
@@ -487,7 +488,7 @@ describe('le convoi lui-même', () => {
   it('⚠️ `claimed === undefined` = DÉJÀ crédité, jamais « à récupérer »', () => {
     // Même règle que les rapports d'expédition : traiter l'absence de champ comme
     // « non réclamé » offrirait une seconde fois le butin de chaque convoi passé.
-    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0, 100);
+    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS);
     const later = base.returnAt + 1;
     expect(isCaravanClaimable(base, later)).toBe(true);
     expect(isCaravanClaimable({ ...base, claimed: true }, later)).toBe(false);
@@ -496,7 +497,7 @@ describe('le convoi lui-même', () => {
     expect(isCaravanClaimable(legacy, later)).toBe(false);
   });
   it('rien ne se récupère avant le RETOUR en ville', () => {
-    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS, 0, 100);
+    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS);
     expect(isCaravanClaimable(c, c.midAt)).toBe(false);
     expect(isCaravanClaimable(c, c.returnAt)).toBe(true);
   });
@@ -509,7 +510,7 @@ describe('🎁 caravanClaimRoster — ce que l’encaissement change au vivier',
   /** Un convoi rentré, dont l’XP et les blessés sont FORCÉS pour que le test porte sur la
    *  règle d’encaissement et non sur un tirage d’embuscade. */
   const van = (over: Partial<Caravan['outcome']> = {}): Caravan => {
-    const c = startCaravan('c1', poi(), esc, 0, 7, NUS, 0, 100);
+    const c = startCaravan('c1', poi(), esc, 0, 7, NUS);
     return {
       ...c,
       outcome: {
@@ -805,7 +806,7 @@ describe('🧹 LA LISTE DE CONVOIS NE GROSSIT PAS SANS FIN', () => {
   // ⚠️ Elle n’était JAMAIS purgée : mesuré sur le compte réel, **35 convois stockés dont
   // 30 déjà encaissés**. La ligne `characters` porte déjà le sac, les talents, les
   // aventuriers et la carte — un tableau qui ne fait que croître finit par peser.
-  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS, 0, 100);
+  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS);
   const lot = (n: number, claimed: boolean, from = 0) =>
     Array.from({ length: n }, (_, i) => ({
       ...base,
@@ -991,7 +992,7 @@ describe('⚠️ un convoi VOYAGE comme le héros', () => {
   // Le convoi est situé sur la carte par la MÊME fonction que le héros
   // (`travelPosition`) : deux copies de cette interpolation divergeraient à la
   // première retouche — c'est le piège des libellés de POI, déjà rencontré deux fois.
-  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS, 0, 100);
+  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS);
 
   it('part de la ville, atteint son lieu, et en revient', () => {
     expect(travelPosition(van, van.sentAt)).toMatchObject({ ...EXPE.town, phase: 'outbound' });
@@ -1189,7 +1190,7 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
 describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET COMBIEN DE TEMPS', () => {
   const escort = team(3, 20);
   const van = (over: Partial<Caravan> = {}): Caravan => ({
-    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS, 0, 100),
+    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS),
     ...over,
   });
 
@@ -1484,9 +1485,9 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
   it('⚠️ une Longue-vue portée raccourcit le trajet, sous le plafond de vitesse', () => {
     const p = poi();
     const esc = [{ ...refAdventurer(20, 1), id: 'e' }];
-    const base = caravanLegMin(p, esc, 0, 0);
-    expect(caravanLegMin(p, esc, 0, 0.1)).toBeLessThan(base);
-    expect(caravanLegMin(p, esc, 0, 99)).toBe(caravanLegMin(p, esc, 0, CARAVAN.speedMax));
+    const base = caravanLegMin(p, esc, 0);
+    expect(caravanLegMin(p, esc, 0.1)).toBeLessThan(base);
+    expect(caravanLegMin(p, esc, 99)).toBe(caravanLegMin(p, esc, CARAVAN.speedMax));
   });
 
   it('⚠️ …et c’est bien ce trajet que le convoi réel fait', () => {
@@ -1500,17 +1501,8 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
     });
     const e = { ...refAdventurer(20, 1), path: ['eclaireur'], id: 'e' };
     const road = (advGear: AdvGear[]) => ({ advGear });
-    const avec = startCaravan(
-      'c',
-      p,
-      [{ ...e, gear: { accessory: 'lv' } }],
-      0,
-      7,
-      road([lv]),
-      0,
-      100,
-    );
-    const sans = startCaravan('c', p, [e], 0, 7, road([]), 0, 100);
+    const avec = startCaravan('c', p, [{ ...e, gear: { accessory: 'lv' } }], 0, 7, road([lv]));
+    const sans = startCaravan('c', p, [e], 0, 7, road([]));
     expect(avec.midAt).toBeLessThan(sans.midAt);
   });
 });

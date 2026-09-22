@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import { EXPE, travelOneWayMin } from '@/lib/expedition';
-import { caravanSlowFor } from '@/lib/caravan';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -51,24 +50,21 @@ describe('⏳ formatage des durées', () => {
 
   it('⚠️ SUR LA PLAGE DU JEU (niveau 0→100), AUCUN TRAJET NE CHANGE D’ASPECT', () => {
     // Mesuré sur les VRAIES fonctions, jamais sur un nombre écrit à la main : l’aller le
-    // plus long vaut 7,5 h (niveau 100, bout de la carte) et le convoi le plus lent
-    // 22 h 18 d’aller-retour. Tout reste donc sous les 24 h, donc sous le seuil des
-    // jours : ajouter les jours ne pouvait PAS abîmer l’affichage d’un voyage.
+    // plus long vaut 7,5 h (niveau 100, bout de la carte) et une équipe va au pas
+    // du héros depuis la v0.1033 (15 h d’aller-retour au pire).
+    // Tout reste donc sous les 24 h, donc sous le seuil des jours : ajouter les jours ne pouvait PAS abîmer l’affichage d’un voyage.
     const allerMax = travelOneWayMin(100, 1);
     expect(allerMax * MIN).toBeLessThan(DAY);
-    for (let comptoir = 0; comptoir <= 100; comptoir++) {
-      const rt = 2 * allerMax * caravanSlowFor(comptoir);
-      expect(formatDurationMin(rt), `Comptoir ${comptoir}`).not.toMatch(/ j/);
-    }
+    expect(formatDurationMin(2 * allerMax)).not.toMatch(/ j/);
   });
 
   it('…et un voyage qui dépasserait 24 h se lirait quand même bien', () => {
     // ⚠️ L’invariant ci-dessus vaut pour la plage de CONCEPTION (« du 0 au 100 », v0.731),
-    // pas pour l’éternité : mesuré, un convoi au Comptoir 0 franchit les 24 h vers le
-    // **niveau 111**, qui n’est borné par rien. Ce n’est pas un défaut — « 1 j 1 h » se
+    // pas pour l’éternité : rien ne borne le niveau au-delà de 100,
+    // donc un trajet finira par dépasser 24 h. Ce n’est pas un défaut — « 1 j 1 h » se
     // lit mieux que « 25 h 00 » — mais c’est écrit ici pour que personne ne prenne
     // l’invariant précédent pour une garantie structurelle.
-    const rt = 2 * travelOneWayMin(111, 1) * caravanSlowFor(0);
+    const rt = 25 * 60; // un aller-retour de 25 h
     expect(rt * MIN).toBeGreaterThan(DAY);
     // ⚠️ Pas de regex ici : sur ce poste, un échappement avalé par le shell rend le
     // motif complaisant sans que rien ne rougisse — ça vient de se produire en écrivant

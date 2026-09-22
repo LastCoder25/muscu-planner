@@ -514,7 +514,7 @@ describe('calibration du siège', () => {
       // …mais ça reste largement payant : c'est un plafond, pas un nerf du vivier.
       expect(plein, `niveau ${L}, tout investi`).toBeGreaterThan(70);
     }
-  });
+  }, 30_000); // lourd : ~3 s seul, dépassait 5 s sous la charge de la suite
 
   it('la difficulté ne s’ÉTEINT PAS en fin de partie', () => {
     // Le défaut d'un écart de niveau FIXE : mesuré, la tenue à défenses-à-niveau montait
