@@ -16,6 +16,24 @@
       </span>
     </div>
 
+    <!-- 🎚️ Filtre de difficulté (par RANG, la langue de la carte). On garde les rangs
+         MASQUÉS, pas les affichés : un rang nouveau apparaît visible par défaut. -->
+    <div v-if="rankOptions.length > 1" class="rank-filter" role="group" aria-label="Filtrer les lieux par rang">
+      <button
+        v-for="o in rankOptions"
+        :key="o.rankIndex"
+        type="button"
+        class="rf-chip"
+        :class="{ on: !hiddenRanks.has(o.rankIndex) }"
+        :style="{ '--rk': CHARACTER_RANKS[o.rankIndex]!.color }"
+        :aria-pressed="!hiddenRanks.has(o.rankIndex)"
+        @click="toggleRank(o.rankIndex)"
+      >
+        {{ CHARACTER_RANKS[o.rankIndex]!.emoji }} {{ CHARACTER_RANKS[o.rankIndex]!.name }}
+        <span class="rf-n">{{ o.count }}</span>
+      </button>
+    </div>
+
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
          désormais sur l'écran « Ma base » (v0.664) → on y renvoie explicitement. -->
     <div v-if="!outpostBuilt" class="outpost-hint">
@@ -151,7 +169,7 @@
 
           <!-- POI -->
           <g
-            v-for="p in pois"
+            v-for="p in shownPois"
             :key="p.id"
             class="poi"
             :class="{ sel: selected?.id === p.id, dim: dimmed(p) }"
@@ -703,6 +721,7 @@ import {
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
+  poiRankCounts,
   type PartyResult,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
@@ -723,7 +742,7 @@ import {
   advUnavailableReason,
   engageCap,
 } from '@/lib/adventurers';
-import { characterRank, rankStarStr } from '@/lib/characterRank';
+import { characterRank, rankStarStr, CHARACTER_RANKS } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   RIFT,
@@ -915,7 +934,7 @@ const edgeIndicators = computed(() => {
   const cw = contW.value;
   const ch = contH.value;
   const m = 22;
-  const src = [...pois.value, ...(active.value ? [active.value.poi] : [])];
+  const src = [...shownPois.value, ...(active.value ? [active.value.poi] : [])];
   const out: { id: string; poi: Poi; x: number; y: number; deg: number }[] = [];
   for (const p of src) {
     const px = ((p.x - V.min) / V.size) * mapPx.value - scrollX.value;
@@ -939,6 +958,45 @@ const edgeIndicators = computed(() => {
 });
 
 const selected = ref<Poi | null>(null);
+
+// ── 🎚️ Filtre de difficulté par rang (mémorisé par appareil) ──
+const RANK_FILTER_KEY = 'muscu:emap:hidden-ranks';
+function loadHiddenRanks(): Set<number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(RANK_FILTER_KEY) ?? '[]') as unknown;
+    if (Array.isArray(raw)) return new Set(raw.filter((r): r is number => Number.isInteger(r)));
+  } catch {
+    /* stockage indisponible : tout est affiché */
+  }
+  return new Set();
+}
+const hiddenRanks = ref<Set<number>>(loadHiddenRanks());
+const rankOptions = computed(() => poiRankCounts(pois.value));
+function toggleRank(r: number) {
+  const next = new Set(hiddenRanks.value);
+  if (next.has(r)) next.delete(r);
+  else {
+    // Jamais de carte vide : on ne masque pas le dernier rang encore affiché.
+    const visible = rankOptions.value.filter((o) => !next.has(o.rankIndex)).length;
+    if (visible <= 1) return;
+    next.add(r);
+  }
+  hiddenRanks.value = next;
+  try {
+    localStorage.setItem(RANK_FILTER_KEY, JSON.stringify([...next]));
+  } catch {
+    /* le filtre vaut pour la session */
+  }
+}
+const shownPois = computed(() =>
+  pois.value.filter((p) => !hiddenRanks.value.has(characterRank(p.level).rankIndex)),
+);
+// Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
+watch(shownPois, (list) => {
+  const s = selected.value;
+  if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
+    selected.value = null;
+});
 const sheetEl = ref<HTMLElement | null>(null);
 
 /** ⚠️ CE QUE LE DÉPART COÛTE, face à l'armée qui arrive (demandé par l'utilisateur :
@@ -2180,6 +2238,45 @@ onUnmounted(() => {
   display: flex;
   gap: 8px;
   padding: 0 12px 8px;
+}
+.rank-filter {
+  display: flex;
+  gap: 6px;
+  padding: 0 12px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rank-filter::-webkit-scrollbar {
+  display: none;
+}
+.rf-chip {
+  flex: 1 0 auto;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.rf-chip.on {
+  opacity: 1;
+  color: var(--text);
+  border-style: solid;
+  border-color: var(--rk);
+  background: color-mix(in srgb, var(--rk) 14%, var(--surface));
+}
+.rf-n {
+  font-family: 'Oswald', sans-serif;
+  opacity: 0.8;
 }
 .outpost-hint {
   margin: 0 12px 10px;
