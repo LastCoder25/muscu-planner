@@ -136,11 +136,17 @@ leurs dégâts), jamais par le terrain.
 
 ⚠️ **DEUX RÉSERVES, toutes deux mesurées.**
 
-1. **Le Duelliste ne tient pas encore son terrain** : parade et riposte agissent **par coup**,
-   donc plus il y a de coups, plus elles paient — mesuré **−51 % (L60) / −30 % (L90)**, soit
-   l'inverse de sa case. Décision prise : **la riposte deviendra proportionnelle au coup
-   encaissé**, pour qu'elle paie contre les gros coups. Tant que ce n'est pas fait, sa ligne
-   ci-dessus est une **cible**, pas un état.
+1. ⚠️ **Le Duelliste ne tient PAS son terrain, et la riposte n'est pas le levier** (mesuré
+   2026-09-22, chantier écrit puis jeté). Écart gros/horde **−44 % (L60) / −18 % (L90)**, et
+   une riposte proportionnelle au coup — même super-linéaire — ne le bouge pas (au mieux
+   −44 %, et **pire** au niveau 90). **L'ablation montre pourquoi** : sans riposte, sans
+   parade et sans sa signature, il reste à **−28 %**. Ce n'est pas une de ses mécaniques,
+   c'est le fait qu'un build **DÉFENSIF** préfère encaisser beaucoup de petits coups — à
+   menace égale une horde étale les dégâts, un gros coup peut tuer d'un coup. Le seul set qui
+   inverse ce biais est le **Colosse**, parce qu'il porte une mécanique **anti-gros-coup** (la
+   robustesse, créée pour lui, § 4.2). **Sa ligne ci-dessus reste une cible non atteinte** :
+   soit il devient officiellement contre-horde, soit il lui faut une mécanique anti-gros-coup
+   distincte de celle du Colosse. **Décision ouverte.**
 2. **L'élan du Frénétique sature au 5ᵉ tour** (plafond 4, ou 8 avec la Transe) alors qu'un
    combat long dure **15 à 34 tours** : son style annoncé n'est donc tenu qu'au début. Deux
    leviers ont été écrits, mesurés et **jetés** (§ 4.1 bis).
