@@ -109,7 +109,7 @@ describe('chaque stat nouvelle fait ce qu’elle annonce', () => {
     expect(b[0]!.damage / a[0]!.damage).toBeCloseTo(0.5, 1);
   });
 
-  it('bouclier de départ : la barrière encaisse avant les PV', () => {
+  it('barrière de départ : elle encaisse avant les PV', () => {
     const log = run(hero({ startShield: 0.5 }), foe({ damage: 1000 }));
     const t = theirs(log);
     expect(t[0]!.playerPv).toBe(10_000);

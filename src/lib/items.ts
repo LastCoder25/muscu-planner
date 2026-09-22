@@ -134,7 +134,7 @@ export type EffectType =
   | 'parry_pct' // parade : chance d'éviter un coup ET que l'ennemi saute son tour (bouclier)
   | 'riposte_pct' // riposte : chance de contre-attaquer après un coup reçu (bouclier, bottes)
   | 'crit_resist_pct' // résistance aux critiques : les critiques ennemis font moins mal
-  | 'start_shield_pct' // bouclier de départ : barrière de X % des PV au début du combat
+  | 'start_shield_pct' // barrière de départ : X % des PV encaissés en premier, au début du combat
   | 'dodge_pct' // esquive (bottes) — même canal que l'esquive des talents
   | 'training_pct'; // dressage : + XP gagnée par le familier (hors combat)
 
@@ -1352,7 +1352,7 @@ export function effectLabelFor(type: EffectType, v: number): string {
     case 'crit_resist_pct':
       return `+${s}% résistance aux critiques`;
     case 'start_shield_pct':
-      return `+${s}% bouclier de départ`;
+      return `+${s}% barrière de départ`;
     case 'dodge_pct':
       return `+${s}% esquive`;
     case 'training_pct':
@@ -2577,7 +2577,7 @@ export interface AggregatedEffects {
   parryPct: number; // note de parade (→ chance, courbe)
   ripostePct: number; // note de riposte (→ chance, courbe)
   critResistPct: number; // note de résistance aux critiques (→ part retirée, courbe)
-  startShieldPct: number; // note de bouclier de départ (→ part des PV, courbe)
+  startShieldPct: number; // note de barrière de départ (→ part des PV, courbe)
   trainingPct: number; // fraction : + XP de dressage du familier (hors combat)
 }
 

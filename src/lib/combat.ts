@@ -365,7 +365,7 @@ export const COMBAT = {
   powerBlockW: 0.91, // blocage 0,3 → +25,7 % de PV
   powerParryW: 0.96, // parade 0,15 → +16,9 % de PV
   powerCritResistW: 0.14, // résistance aux critiques 0,5 → +6,8 % de PV
-  powerShieldW: 0.52, // bouclier de départ 0,3 → +15,6 % de PV
+  powerShieldW: 0.52, // barrière de départ 0,3 → +15,6 % de PV
 };
 
 /** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */

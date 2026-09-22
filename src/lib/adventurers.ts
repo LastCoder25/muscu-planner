@@ -103,7 +103,7 @@ const ADV_SIGNATURE_INFO: Partial<
   start_shield_pct: {
     emoji: '🔰',
     what: 'Commence le combat derrière une barrière',
-    name: 'Barrière',
+    name: 'Barrière de départ',
   },
 };
 // ─────────────────────────────────────────────────────────────────────────────

@@ -465,6 +465,16 @@
                   <b>{{ pctA(fighter.lifesteal) }}</b></span
                 >
               </div>
+              <!-- Barrière de départ : la VRAIE part des PV (après rendement décroissant), et
+                   son équivalent en PV — la note « +X % » de l'objet n'est pas cette part. -->
+              <div class="gfx">
+                <span class="gfx-l">🔰 Barrière de départ</span>
+                <span class="gfx-v"
+                  >{{ pctA(baseFighter.startShield) }} <i>→</i>
+                  <b>{{ pctA(fighter.startShield) }}</b>
+                  <template v-if="shieldPv > 0"> ({{ shieldPv }} PV)</template></span
+                >
+              </div>
               <div class="gfx total">
                 <span class="gfx-l">Puissance de combat</span>
                 <span class="gfx-v"
@@ -476,6 +486,12 @@
             <div class="gear-fx-note">
               Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
               effets (→).
+            </div>
+            <div class="gear-fx-note">
+              🔰 <b>Barrière de départ</b> : au début de chaque combat, une réserve de PV en plus
+              qui encaisse les coups avant tes PV, puis disparaît. La note « +X % » d'un objet
+              passe par un rendement décroissant (plafond 60 %) : c'est la ligne ci-dessus qui
+              compte.
             </div>
           </q-card>
         </q-dialog>
@@ -3595,6 +3611,8 @@ const baseFighter = computed(() =>
   playerWithGear(char.row?.pseudo ?? 'Toi', c.value, {}, {}, c.value.level.level),
 );
 const pctA = (x?: number) => Math.round((x ?? 0) * 100) + '%';
+// Barrière de départ en PV : la formule du combat (`PV max × part`, arrondie).
+const shieldPv = computed(() => Math.round(fighter.value.pv * (fighter.value.startShield ?? 0)));
 // Puissance de combat avec un ensemble d'équipement donné (+ effets extra = talents).
 // Helper UNIQUE derrière toutes les comparaisons (objet/familier/talent/loadout) → plus de
 // plomberie pseudo/niveau/talentFx dupliquée (revue /simplify).
