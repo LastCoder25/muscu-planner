@@ -348,36 +348,7 @@
         </div>
         <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
              se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
-<<<<<<< Updated upstream
         <template v-if="offers.hero && !partyTarget">
-          <div class="sh-row">
-            <span class="sh-chip">⏱️ {{ formatDurationMin(roundTripMin(selected)) }}</span>
-            <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
-            <span v-if="selected.type === 'arena'" class="sh-chip"
-              >🌊 ~{{ arenaWaves }} vagues</span
-            >
-            <!-- 🕳️ DEUX CAUSES, DEUX MESSAGES — et c'est tout l'intérêt de les avoir gardées
-               distinctes. « Route dangereuse » est tirée au spawn : on la subit, on choisit
-               ailleurs. L'embuscade d'une faille (v0.1009) se PRÉVIENT — refermer ses failles
-               avant 7 jours — puis s'attend : elle dure deux jours et on affiche combien il
-               en reste. Les fondre en un seul drapeau perdrait cette information. -->
-            <span v-if="selected.riftPeril" class="sh-chip peril"
-              >🕳️ Monstres embusqués, sortis d'une faille — embuscades doublées<template
-                v-if="selectedAmbushLeft"
-              >
-                encore {{ formatDuration(selectedAmbushLeft) }}</template
-              ></span
-            >
-            <span v-else-if="selected.perilous" class="sh-chip peril"
-              >⚠️ Route dangereuse — embuscades doublées, butin renforcé</span
-            >
-            <span v-else-if="selected.type !== 'mine'" class="sh-chip" :class="winClass(winPct)"
-              >🎯 {{ winPct }}%</span
-            >
-          </div>
-=======
-        <template v-if="offers.hero && !teamOnly">
->>>>>>> Stashed changes
           <p v-if="riskHero && riskHero.worsens" class="sh-risk" :class="{ bad: riskHero.risky }">
             ⚠️ Une armée arrive : sans le héros, « {{ ODDS_LABEL[riskHero.after] }} » au lieu de «
             {{ ODDS_LABEL[riskHero.before] }} ».
@@ -396,42 +367,7 @@
              Les règles vivent dans `camp.ts` / `rift.ts` et `party.ts` ; l’écran les montre,
              et dit POURQUOI quelqu’un ne peut pas venir. -->
         <template v-if="partyTarget">
-<<<<<<< Updated upstream
           <div v-if="offers.hero && !partyTarget" class="car-sep">ou bien — une équipe</div>
-          <!-- 🧺 Une récolte en équipe : des GARDES à abattre d'abord (`harvestGuardOf`, force
-               d'un petit camp), puis des bandits possibles sur la route (`resolveHarvestParty`).
-               ⚠️ Le 🎯 est la victoire contre les gardes : perdue, rien n'est récolté. -->
-          <div v-if="selectedGuard" class="sh-row sh-wrap">
-            <span class="sh-chip" title="Les gardes du lieu, comptés en champions de référence"
-              >{{ FACTION_EMOJI[selectedGuard.faction] }} Gardes · 💪 ≈
-              {{ String(+selectedGuard.size.toFixed(1)).replace('.', ',') }} champion{{ selectedGuard.size > 1 ? 's' : '' }}</span
-            >
-            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
-            <span class="sh-chip">⚡ 0</span>
-            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
-              >🎯 {{ partyWin }}%</span
-            >
-            <span v-if="selected.riftPeril || selected.perilous" class="sh-chip peril"
-              >⚠️ Route dangereuse — embuscades doublées</span
-            >
-          </div>
-          <div v-if="selectedCamp" class="sh-row sh-wrap">
-            <span class="sh-chip"
-              >{{ FACTION_EMOJI[selectedCamp.faction] }}
-              {{ FACTION_LABEL[selectedCamp.faction] }}</span
-            >
-            <span class="sh-chip" title="La force du camp, comptée en champions de référence"
-              >💪 ≈ {{ selectedCamp.size }} champion{{ selectedCamp.size > 1 ? 's' : '' }}</span
-            >
-            <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
-            <span class="sh-chip">⚡ 0</span>
-            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
-              >🎯 {{ partyWin }}%</span
-            >
-          </div>
-=======
-          <div v-if="offers.hero && !teamOnly" class="car-sep">ou bien — une équipe</div>
->>>>>>> Stashed changes
           <!-- Le héros : une tuile comme les autres. ⚠️ Il n'y compte que pour
                HERO_PARTY_WORTH champions (v0.980) — l'écran le DIT, sinon on croirait
                emmener la puissance de sa fiche. Grisée avec la raison plutôt que cachée. -->
@@ -1581,8 +1517,9 @@ const poiFacts = computed<PoiFact[]>(() => {
   const rift = selectedRift.value;
   const band = selectedWarband.value;
   const camp = selectedCamp.value;
+  const guard = selectedGuard.value;
   // Ce qu'on affronte.
-  const faction = rift?.faction ?? band?.faction ?? camp?.faction;
+  const faction = rift?.faction ?? band?.faction ?? camp?.faction ?? guard?.faction;
   if (faction)
     out.push({ icon: FACTION_EMOJI[faction], label: 'Faction', value: FACTION_LABEL[faction] });
   if (camp)
@@ -1591,6 +1528,14 @@ const poiFacts = computed<PoiFact[]>(() => {
       label: 'Force',
       value: `≈ ${camp.size} champion${camp.size > 1 ? 's' : ''}`,
       title: 'La force du camp, comptée en champions de référence',
+    });
+  // 🛡️ Les gardes d'un lieu de récolte (v0.1043) : il faut les abattre pour récolter.
+  if (guard)
+    out.push({
+      icon: '🛡️',
+      label: 'Gardes',
+      value: `≈ ${String(+guard.size.toFixed(1)).replace('.', ',')} champion${guard.size > 1 ? 's' : ''}`,
+      title: 'Les gardes du lieu, comptés en champions de référence',
     });
   if (rift) {
     out.push({
@@ -1637,7 +1582,7 @@ const poiFacts = computed<PoiFact[]>(() => {
     });
   }
   // Le héros seul.
-  if (offers.value.hero && !teamOnly.value) {
+  if (offers.value.hero && !partyTarget.value) {
     out.push({
       icon: '⏱️',
       label: 'Trajet héros',
@@ -1663,7 +1608,7 @@ const poiFacts = computed<PoiFact[]>(() => {
       cls: partySize.value ? undefined : 'dim',
     });
     out.push({ icon: '⚡', label: 'Énergie', value: '0 — gratuit' });
-    if (teamOnly.value)
+    if (teamOnly.value || guard)
       out.push(
         partyWin.value === null
           ? {
