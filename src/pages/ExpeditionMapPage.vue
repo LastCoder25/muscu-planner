@@ -18,7 +18,12 @@
 
     <!-- 🎚️ Filtre de difficulté (par RANG, la langue de la carte). On garde les rangs
          MASQUÉS, pas les affichés : un rang nouveau apparaît visible par défaut. -->
-    <div v-if="rankOptions.length > 1" class="rank-filter" role="group" aria-label="Filtrer les lieux par rang">
+    <div
+      v-if="rankOptions.length > 1"
+      class="rank-filter"
+      role="group"
+      aria-label="Filtrer les lieux par rang"
+    >
       <button
         v-for="o in rankOptions"
         :key="o.rankIndex"
@@ -168,6 +173,11 @@
             class="rift-halo"
           />
 
+          <!-- 🔴 Le lieu du voyage qu'on a touché sous la carte : un halo DERRIÈRE lui, pour voir
+               duquel on parle. Posé aux coordonnées que porte le voyage — le lieu d'un convoi
+               est retiré de la carte au départ, il doit se retrouver quand même. -->
+          <circle v-if="focusPoi" :cx="focusPoi.x" :cy="focusPoi.y" r="8" class="trip-focus-halo" />
+
           <!-- POI -->
           <g
             v-for="p in shownPois"
@@ -308,26 +318,27 @@
          Trois cartes empilées poussaient la carte hors de l'écran dès deux convois, et
          répétaient « total » et « escorte » dont on n'a pas besoin en un coup d'œil :
          il faut QUI voyage, VERS QUOI, et COMBIEN DE TEMPS. Le reste se lit sur la carte
-         ou dans le rapport. Disposée en DEUX COLONNES (jusqu'à 12 convois possibles).
+         ou dans le rapport. Disposée en TROIS COLONNES (jusqu'à 12 convois possibles). Toucher une tuile
+         allume un halo rouge sur elle et sur son lieu ; la retoucher les éteint.
          ⚠️ Un convoi RENTRÉ reste dans la rangée, en tuile ACTIONNABLE : sa cargaison ne
          se verse pas toute seule (même règle que les rapports d'expédition). -->
-    <div v-if="trips.length" ref="tripsEl" class="trips" role="list">
-      <component
-        :is="t.claim ? 'button' : 'div'"
+    <div v-if="trips.length" ref="tripsEl" class="trips">
+      <button
         v-for="t in trips"
         :key="t.key"
-        role="listitem"
+        type="button"
         class="trip"
-        :class="[t.kind, { back: t.back, ready: t.claim }]"
+        :class="[t.kind, { back: t.back, ready: t.claim, focus: focusTrip === t.key }]"
         :disabled="t.claim ? busyCaravan : undefined"
         :title="t.title"
-        @click="t.claim && doClaimCaravan(t.claim)"
+        :aria-pressed="t.claim ? undefined : focusTrip === t.key"
+        @click="t.claim ? doClaimCaravan(t.claim) : toggleFocusTrip(t.key)"
       >
         <span class="tr-who">{{ t.who }}</span>
         <span class="tr-poi">{{ POI_EMO[t.poi.type] }}</span>
         <span class="tr-time">{{ t.time }}</span>
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
-      </component>
+      </button>
     </div>
     <!-- 📜 Les derniers convois encaissés restent consultables : c'est en les mettant côte à
          côte qu'on voit ce qu'un long voyage apprend de plus qu'un court. -->
@@ -1498,6 +1509,15 @@ const trips = computed(() => {
   // Les cargaisons prêtes d'abord : c'est la seule tuile sur laquelle il y a à faire.
   return out.sort((x, y) => Number(!!y.claim) - Number(!!x.claim));
 });
+/** 🔴 Le voyage qu'on a touché : sa tuile et son lieu sur la carte portent un halo ;
+ *  retoucher la même tuile les éteint. Un voyage qui se termine emporte son halo
+ *  (`focusPoi` ne le retrouve plus). La tuile d'une cargaison prête garde son geste :
+ *  la toucher encaisse. */
+const focusTrip = ref<string | null>(null);
+const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.value)?.poi ?? null);
+function toggleFocusTrip(key: string) {
+  focusTrip.value = focusTrip.value === key ? null : key;
+}
 const claimable = computed(() => char.caravanList.filter((c) => isCaravanClaimable(c, now.value)));
 /** Aventurier dont la feuille de promotion doit s’ouvrir, et celui qui ATTEND que les
  *  éclats aient fini de jouer. ⚠️ L’overlay de célébration est au-dessus des modales :
@@ -2757,6 +2777,40 @@ onUnmounted(() => {
 }
 .trip.back .tr-bar {
   background: #7bc86c;
+}
+.trip {
+  cursor: pointer;
+}
+/* 🔴 La tuile touchée : le même rouge que le halo posé sur son lieu, pour qu'on relie les deux. */
+.trip.focus {
+  box-shadow:
+    0 0 0 2px #ff5d5d,
+    0 0 12px 2px rgb(255 93 93 / 55%);
+}
+.trip-focus-halo {
+  fill: rgb(255 93 93 / 28%);
+  stroke: #ff5d5d;
+  stroke-width: 1.2;
+  pointer-events: none;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: trip-halo 1.6s ease-in-out infinite;
+}
+@keyframes trip-halo {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.18);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .trip-focus-halo {
+    animation: none;
+  }
 }
 .trip.ready {
   cursor: pointer;
