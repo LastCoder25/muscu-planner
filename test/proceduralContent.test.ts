@@ -194,6 +194,7 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
     const corriges = DUNGEONS.filter((d) => (d.foeMult ?? 1) !== 1).map((d) => d.id);
     expect(corriges.sort()).toEqual(
       [
+        'sentier',
         'fournaise',
         'behemoth_caverne',
         'chimere_den',

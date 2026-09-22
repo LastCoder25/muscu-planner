@@ -11,6 +11,7 @@ import {
   slotUnlockLevel,
   canBuildOnSlot,
   emptySlotLocked,
+  quotaUsed,
   repackBuildingSlots,
   buildingUpgradeCost,
   canUpgradeBuilding,
@@ -112,11 +113,39 @@ describe('canBuildOnSlot : on construit LÀ OÙ ON TOUCHE, pas dans l’ordre (v
     const deux = [mk('outpost', 1, 0, 5), mk('energy_font', 1, 0, 9)];
     expect(canBuildOnSlot(2, deux, 3)).toBe(true);
   });
-  it('quota atteint → aucun emplacement vide constructible', () => {
-    // 3 bâtiments posés (slots 0, 1, 9) à un niveau qui n’en autorise que 3.
-    const trois = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, 1), mk('boss_altar', 1, 0, 9)];
-    expect(canBuildOnSlot(2, trois, 3)).toBe(false);
-    expect(canBuildOnSlot(6, trois, 3)).toBe(false);
+  it('quota atteint → plus aucun bâtiment QUI COMPTE ; une fois le Panthéon posé, plus rien', () => {
+    // 3 bâtiments posés (slots 0, 1, 5) à un niveau qui n’en autorise que 3.
+    const trois = [mk('outpost', 1, 0, 0), mk('energy_font', 1, 0, 1), mk('boss_altar', 1, 0, 5)];
+    expect(canBuildOnSlot(2, trois, 3, 'labyrinth_gate')).toBe(false);
+    expect(canBuildOnSlot(4, trois, 3, 'labyrinth_gate')).toBe(false);
+    // Le Panthéon, hors quota (v0.1078), passe encore ; une fois posé, tout est plein.
+    const avecPantheon = [...trois, mk('pantheon', 1, 0, 2)];
+    expect(canBuildOnSlot(4, avecPantheon, 3)).toBe(false);
+    expect(canBuildOnSlot(4, avecPantheon, 3, 'labyrinth_gate')).toBe(false);
+  });
+  it('🛕 le Panthéon est HORS QUOTA : on le pose même emplacements pleins, dès le niveau 1', () => {
+    // Le cas réel (v0.1078) : niveau 3, trois emplacements pris par des producteurs.
+    const trois = [
+      mk('outpost', 1, 0, 0),
+      mk('energy_font', 1, 0, 1),
+      mk('labyrinth_gate', 1, 0, 2),
+    ];
+    expect(canBuildOnSlot(3, trois, 3, 'pantheon')).toBe(true);
+    expect(canBuildOnSlot(3, trois, 3, 'boss_altar')).toBe(false); // les autres attendent
+    // L'emplacement vide reste donc ouvert à l'écran tant que le Panthéon manque…
+    expect(canBuildOnSlot(3, trois, 3)).toBe(true);
+    expect(emptySlotLocked(3, trois, 3)).toBe(false);
+    // …et se verrouille une fois posé.
+    const quatre = [...trois, mk('pantheon', 1, 0, 3)];
+    expect(canBuildOnSlot(4, quatre, 3)).toBe(false);
+    // Il ne prend pas de place au quota : un producteur de plus passe au niveau suivant.
+    expect(quotaUsed(quatre)).toBe(3);
+    expect(canBuildOnSlot(4, quatre, 4, 'boss_altar')).toBe(true);
+    // Et il se construit dès le niveau 1.
+    expect(buildingUnlockLevel('pantheon')).toBe(1);
+    expect(canBuildType('pantheon', 1, [])).toBe(true);
+    // Un emplacement occupé reste refusé, Panthéon compris.
+    expect(canBuildOnSlot(0, trois, 3, 'pantheon')).toBe(false);
   });
   it('un emplacement occupé n’est jamais constructible', () => {
     const b = [mk('outpost', 1, 0, 4)];

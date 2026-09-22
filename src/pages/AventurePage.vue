@@ -489,9 +489,8 @@
             </div>
             <div class="gear-fx-note">
               🔰 <b>Barrière de départ</b> : au début de chaque combat, une réserve de PV en plus
-              qui encaisse les coups avant tes PV, puis disparaît. La note « +X % » d'un objet
-              passe par un rendement décroissant (plafond 60 %) : c'est la ligne ci-dessus qui
-              compte.
+              qui encaisse les coups avant tes PV, puis disparaît. La note « +X % » d'un objet passe
+              par un rendement décroissant (plafond 60 %) : c'est la ligne ci-dessus qui compte.
             </div>
           </q-card>
         </q-dialog>
@@ -3163,6 +3162,7 @@ import {
   regionProgress,
   regionOfDungeon,
   regionMapGeometry,
+  dungeonUnlockedIn,
   type Region,
 } from '@/lib/regions';
 import { bestiary, setCollection, codexSummary } from '@/lib/codex';
@@ -4789,9 +4789,11 @@ function itemDone(it: { dungeon?: Dungeon; boss?: MilestoneBoss }): boolean {
   return it.boss ? defeatedBossSet.value.has(it.boss.id) : clearedSet.value.has(it.dungeon!.id);
 }
 function dungeonUnlocked(d: Dungeon): boolean {
-  const order = dungeonChain.value;
-  const i = order.findIndex((x) => x.id === d.id);
-  return i <= 0 || clearedSet.value.has(order[i - 1]!.id);
+  return dungeonUnlockedIn(
+    dungeonChain.value.map((x) => x.id),
+    d.id,
+    clearedSet.value,
+  );
 }
 function prevDungeonName(d: Dungeon): string {
   const order = dungeonChain.value;

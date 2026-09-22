@@ -7,10 +7,10 @@ describe('advUnlocks — calendrier des déblocages', () => {
       expect(ADV_SCHEDULE[i]!.level).toBeGreaterThanOrEqual(ADV_SCHEDULE[i - 1]!.level);
   });
 
-  it('niveau 5 : boss (Golem) + emplacement de talent', () => {
+  it('niveau 5 : boss (Golem) — l’emplacement de talent est ouvert dès le niveau 1 (v0.1078)', () => {
     const kinds = new Set(unlocksAtLevel(5).map((u) => u.kind));
     expect(kinds.has('boss')).toBe(true);
-    expect(kinds.has('talent')).toBe(true);
+    expect(kinds.has('talent')).toBe(false);
     // Plus de palier de rang au niveau 5 depuis la v0.875 : les objets suivent le rang du joueur.
     expect(kinds.has('rarity')).toBe(false);
     const boss = unlocksAtLevel(5).find((u) => u.kind === 'boss');
@@ -19,7 +19,7 @@ describe('advUnlocks — calendrier des déblocages', () => {
   });
 
   it('emplacement de talent = un SLOT (drop-based), pas un choix 1-parmi-3', () => {
-    const tal = unlocksAtLevel(5).find((u) => u.kind === 'talent');
+    const tal = unlocksAtLevel(1).find((u) => u.kind === 'talent');
     expect(tal?.title).toContain('Emplacement');
     expect(tal?.detail).toContain('droppent');
   });
@@ -50,9 +50,9 @@ describe('advUnlocks — calendrier des déblocages', () => {
     expect(rangs.find((u) => u.level === 41)!.detail).not.toContain('effet légendaire');
   });
 
-  it('UN SEUL déblocage de talent dans tout le calendrier, au niveau 5', () => {
+  it('UN SEUL déblocage de talent dans tout le calendrier, dès le niveau 1', () => {
     const tal = ADV_SCHEDULE.filter((u) => u.kind === 'talent');
-    expect(tal.map((u) => u.level)).toEqual([5]);
+    expect(tal.map((u) => u.level)).toEqual([1]);
   });
 
   it('les signatures sont gatées en profondeur (Exécution 12 / Rage 15 / Déferlante 18)', () => {

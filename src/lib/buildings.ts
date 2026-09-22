@@ -260,7 +260,7 @@ export const BUILDING_TYPES: BuildingType[] = [
   // le lien farm → boss. Ici elle couperait failles → pierres de mana → tirage, qui EST la
   // boucle entière.
   //
-  // ⚠️ Coût de pose et niveau de déblocage REPRIS DE LA GUILDE (700 / niveau 3) : le mur
+  // ⚠️ Coût de pose REPRIS DE LA GUILDE (700 ; son niveau 3 est passé à 1 en v0.1078) : le mur
   // d'entrée d'un débutant reste à DEUX bâtiments pour 1 200 or — mesuré en v0.727, et un
   // test le verrouille parce que c'est le seul chiffre qui décide si la feature existe
   // pour le joueur qu'elle vise.
@@ -276,7 +276,12 @@ export const BUILDING_TYPES: BuildingType[] = [
     // différentes. Le reste de son métier vit dans `desc`, qui est là pour ça.
     perLevelNote: 'des champions d’un niveau plus haut',
     buildGold: 700,
-    unlockLevel: 3,
+    // ⚠️ DÈS LE NIVEAU 1, et HORS QUOTA d'emplacements (`QUOTA_FREE`, v0.1078) : mesuré sur un
+    // compte réel, un joueur de niveau 3 avait rempli ses 3 emplacements (Dynamo, Avant-poste,
+    // Porte du Labyrinthe) et ne pouvait plus poser le Panthéon — donc aucun champion, aucun
+    // convoi, et son tirage offert dormait. Le Panthéon ouvre toute une boucle : il ne doit
+    // jamais être en concurrence avec un producteur.
+    unlockLevel: 1,
     unique: true,
     unlock: { activity: 'Les champions', where: 'sur ta base' },
     desc: 'Invoque tes champions et garde ta collection — tout ce que tu tires reste utilisable. Son niveau fixe jusqu’où ils peuvent monter, et combien agissent à la fois : la taille d’un groupe, l’escorte d’un convoi, les défenseurs du rempart.',
@@ -433,16 +438,39 @@ export function slotUnlockLevel(slot: number): number {
   return slot + 1;
 }
 
+/** Bâtiment qui ne compte PAS dans le quota d'emplacements : le Panthéon (cf. sa définition).
+ *  Il occupe un emplacement de la cour — `plotCap` les compte tous — mais n'en prend jamais
+ *  un au quota du niveau (`plotsForLevel`). */
+const QUOTA_FREE: BuildingTypeId = 'pantheon';
+
+/** Nombre de bâtiments posés qui COMPTENT dans le quota (`plotsForLevel`). */
+export function quotaUsed(buildings: Building[]): number {
+  return buildings.filter((b) => b.typeId !== QUOTA_FREE).length;
+}
+
 /** UN EMPLACEMENT VIDE EST-IL CONSTRUCTIBLE MAINTENANT ? On construit LÀ OÙ ON TOUCHE,
  *  pas dans l'ordre positionnel : tout emplacement vide (0..plotCap-1) l'est tant que le
- *  QUOTA (le nombre de bâtiments déjà posés, où qu'ils soient) n'a pas atteint
- *  `plotsForLevel(level)`. Les bâtiments existants gardent leur `slot`, occupé n'est JAMAIS
- *  constructible — c'est le store (`buildFilon`), `VillagePlots.vue` et `BasePage.vue` qui
- *  appellent tous cette même règle, pour qu'aucune copie ne diverge. */
-export function canBuildOnSlot(slot: number, buildings: Building[], level: number): boolean {
+ *  QUOTA (le nombre de bâtiments déjà posés, où qu'ils soient — Panthéon exclu,
+ *  `quotaUsed`) n'a pas atteint `plotsForLevel(level)`. Les bâtiments existants gardent
+ *  leur `slot`, occupé n'est JAMAIS constructible — c'est le store (`buildFilon`),
+ *  `VillagePlots.vue` et `BasePage.vue` qui appellent tous cette même règle, pour
+ *  qu'aucune copie ne diverge.
+ *
+ *  `typeId` = le type qu'on veut y bâtir. Sans lui, la question est « peut-on bâtir
+ *  QUELQUE CHOSE ici ? » (affichage d'un emplacement vide) : oui tant que le quota le
+ *  permet OU que le Panthéon, hors quota, reste à poser. */
+export function canBuildOnSlot(
+  slot: number,
+  buildings: Building[],
+  level: number,
+  typeId?: BuildingTypeId,
+): boolean {
   if (slot < 0 || slot >= BUILD.plotCap) return false;
   if (buildings.some((b) => b.slot === slot)) return false; // occupé : jamais constructible
-  return buildings.length < plotsForLevel(level);
+  if (typeId === QUOTA_FREE) return true; // l'unicité est jugée par `canBuildType`
+  const quotaOk = quotaUsed(buildings) < plotsForLevel(level);
+  if (typeId) return quotaOk;
+  return quotaOk || !buildings.some((b) => b.typeId === QUOTA_FREE);
 }
 
 /** L'emplacement VIDE est-il VERROUILLÉ (quota atteint) ? Un emplacement OCCUPÉ n'est

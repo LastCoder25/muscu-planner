@@ -201,6 +201,7 @@ import {
   canBuildOnSlot,
   canUpgradeBuilding,
   slotUnlockLevel,
+  quotaUsed,
   travelTimeMult,
   labyrinthLuckBonus,
   bossAltarRollFloor,
@@ -253,7 +254,7 @@ const plots = computed<PlotView[]>(() => {
 /** Niveau requis pour que le PROCHAIN bâtiment (le quota, pas une position) devienne
  *  constructible — la même valeur pour TOUS les emplacements vides verrouillés, quel que
  *  soit celui qu'on a touché. */
-const nextSlotLevel = computed(() => slotUnlockLevel(buildings.value.length));
+const nextSlotLevel = computed(() => slotUnlockLevel(quotaUsed(buildings.value)));
 
 /** L'emplacement ouvert est piloté par le PARENT : c'est le dessin de l'enceinte qui
  *  sert de sélecteur (comme l'anneau de la carte le faisait avant). */
@@ -396,13 +397,21 @@ const buildGroups = computed(() =>
     ),
   })).filter((g) => g.types.length),
 );
+/** Constructible SUR L'EMPLACEMENT OUVERT : le type (niveau, unicité) ET l'emplacement
+ *  pour CE type — le Panthéon passe hors quota, les autres attendent le niveau suivant. */
 function typeBuildable(t: BuildingType): boolean {
-  return canBuildType(t.id, heroLevel.value, buildings.value);
+  const slot = selectedSlot.value;
+  return (
+    canBuildType(t.id, heroLevel.value, buildings.value) &&
+    slot !== null &&
+    canBuildOnSlot(slot, buildings.value, heroLevel.value, t.id)
+  );
 }
-/** Les types VERROUILLÉS PAR LE NIVEAU restent visibles (avec leur 🔒) : seuls les
- *  types déjà construits sont retirés, plus haut, de `buildGroups`. */
+/** Les types VERROUILLÉS PAR LE NIVEAU (ou par le quota) restent visibles avec leur 🔒 :
+ *  seuls les types déjà construits sont retirés, plus haut, de `buildGroups`. */
 function typeLockReason(t: BuildingType): string {
-  return heroLevel.value < buildingUnlockLevel(t.id) ? `🔒 niv ${buildingUnlockLevel(t.id)}` : '';
+  const lvl = Math.max(buildingUnlockLevel(t.id), nextSlotLevel.value);
+  return `🔒 niv ${lvl}`;
 }
 
 const unlockInfo = ref<{ emoji: string; label: string; unlock: BuildingUnlock } | null>(null);

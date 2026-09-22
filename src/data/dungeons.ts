@@ -59,6 +59,26 @@ const HAND_DUNGEONS: Dungeon[] = [
     dropLuck: 0,
   },
   {
+    // Le PALIER qui manquait entre le tutoriel (niv 1) et la Caverne (niv 4) : sans lui, un
+    // joueur qui s'entraîne peu (~90 XP/jour, mesuré sur un compte réel) passait une semaine
+    // à ne pouvoir refaire que la Clairière.
+    id: 'sentier',
+    name: 'Sentier des loups',
+    emoji: '🐾',
+    tier: 1,
+    energyCost: 22,
+    monsterIds: ['wolf', 'wolf', 'boar'],
+    recoLevel: 3,
+    hintStat: 'agilite',
+    hint: 'Deux loups vifs puis un sanglier têtu → un peu d’Agilité et de PV.',
+    dropLevel: 3,
+    dropLuck: 0.05,
+    // Mesuré (harnais de la chaîne, niveau 3, butin de la Clairière) : 67 % équipé, 24 % nu,
+    // 0 % au niveau 2 — le profil de la Caverne à son niveau (70 / 27). Sans correction :
+    // 44 / 8 ; loup + sanglier seuls : 77 / 43 (plus assez gaté par l'équipement).
+    foeMult: 0.95,
+  },
+  {
     id: 'caverne',
     name: 'Caverne sombre',
     emoji: '🕳️',

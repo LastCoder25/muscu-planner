@@ -31,11 +31,11 @@ import {
 } from '@/lib/talents';
 
 describe('talentsEarned', () => {
-  it('UN SEUL emplacement, à partir du niveau 5 (v0.845 — c’était 1 tous les 5 niveaux)', () => {
-    expect(talentsEarned(1)).toBe(0);
-    expect(talentsEarned(4)).toBe(0);
-    expect(talentsEarned(TALENT_SLOT_LEVEL)).toBe(1);
-    expect(TALENT_SLOT_LEVEL).toBe(5);
+  it('UN SEUL emplacement, dès le niveau 1 (v0.1078 ; niveau 5 avant, 1 tous les 5 niveaux avant la v0.845)', () => {
+    expect(TALENT_SLOT_LEVEL).toBe(1);
+    expect(talentsEarned(0)).toBe(0);
+    expect(talentsEarned(1)).toBe(1);
+    expect(talentsEarned(4)).toBe(1);
     // ⚠️ Le cœur de la décision : il ne grandit plus avec le niveau.
     for (const L of [10, 20, 50, 100]) expect(talentsEarned(L)).toBe(1);
   });

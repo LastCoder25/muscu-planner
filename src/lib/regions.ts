@@ -22,7 +22,7 @@ const HAND_REGIONS: Region[] = [
     emoji: '🌲',
     color: '#7BC86C',
     blurb: 'Clairières et ruines : on fait ses armes.',
-    dungeonIds: ['clairiere', 'caverne', 'repaire'],
+    dungeonIds: ['clairiere', 'sentier', 'caverne', 'repaire'],
   },
   {
     id: 'gouffres',
@@ -74,6 +74,26 @@ export function regionOfDungeon(dungeonId: string): Region | undefined {
 export function frontierDungeonId(clearedIds: string[]): string {
   const cleared = new Set(clearedIds);
   return ORDERED_IDS.find((id) => !cleared.has(id)) ?? ORDERED_IDS[ORDERED_IDS.length - 1]!;
+}
+
+/** DÉBLOCAGE SÉQUENTIEL d'un donjon dans la chaîne `orderIds` (triée par recoLevel) : ouvert si
+ *  c'est le premier, si le PRÉCÉDENT est nettoyé — ou si lui-même ou un donjon PLUS LOIN
+ *  l'est déjà.
+ *
+ *  ⚠️ Cette seconde moitié protège les comptes existants quand on INSÈRE un donjon dans la
+ *  chaîne (v0.1078, Sentier des loups entre la Clairière et la Caverne) : un joueur qui a
+ *  déjà nettoyé la Caverne ne l'a pas fait passer par le Sentier, et le lire au pied de la
+ *  lettre lui VERROUILLERAIT la Caverne — et toute la suite — jusqu'à refaire un donjon de
+ *  niveau 3. Ce qu'on a passé reste passé. */
+export function dungeonUnlockedIn(
+  orderIds: string[],
+  id: string,
+  clearedIds: Iterable<string>,
+): boolean {
+  const cleared = new Set(clearedIds);
+  const i = orderIds.indexOf(id);
+  if (i <= 0) return true;
+  return orderIds.slice(i - 1).some((x) => cleared.has(x));
 }
 
 /** Région COURANTE = celle du donjon frontière. */

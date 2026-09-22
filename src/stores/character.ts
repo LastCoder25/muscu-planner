@@ -2085,7 +2085,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     const t = buildingType(typeId);
     if (!cur || !t) return;
-    if (!canBuildOnSlot(slot, cur.buildings, playerLevel)) return; // quota atteint / occupé / hors bornes
+    if (!canBuildOnSlot(slot, cur.buildings, playerLevel, typeId)) return; // quota atteint / occupé / hors bornes
     if (!canBuildType(typeId, playerLevel, cur.buildings)) return; // niveau/unicité
     if (cur.gold < t.buildGold) return;
     const b: Building = { typeId, level: 1, slot, collectedAt: now };

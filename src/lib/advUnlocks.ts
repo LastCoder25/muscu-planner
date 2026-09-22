@@ -1,7 +1,7 @@
 // advUnlocks.ts — CALENDRIER DES DÉBLOCAGES de l'Aventure par niveau (pur/testé).
 // But : rendre VISIBLE ce que monter d'un niveau apporte. Alimente l'écran de level-up
 // (« ce que tu débloques ») et la timeline « À venir » de l'onglet Perso. Dérivé des
-// données/règles ACTUELLES : BOSSES (data), talentsEarned (un seul emplacement, au niv. 5), la rareté
+// données/règles ACTUELLES : BOSSES (data), talentsEarned (un seul emplacement, dès le niv. 1), la rareté
 // des objets (prestigeRankIndex, un rang tous les 10 niveaux) et EFFECT_MIN_LEVEL (effets/
 // signatures gatés en profondeur). Aucune dépendance Vue/Supabase.
 import { BOSSES } from '@/data/bosses';

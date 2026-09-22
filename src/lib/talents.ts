@@ -219,11 +219,13 @@ export function talentValue(
 }
 
 /** Niveau joueur à partir duquel le personnage peut équiper son talent. */
-export const TALENT_SLOT_LEVEL = 5;
+export const TALENT_SLOT_LEVEL = 1;
 /** Nombre MAXIMAL de talents équipés, à tout niveau. */
 const TALENT_MAX_SLOTS = 1;
 
-/** Nombre d'emplacements de talents ÉQUIPÉS : **UN SEUL**, à partir du niveau 5.
+/** Nombre d'emplacements de talents ÉQUIPÉS : **UN SEUL**, dès le niveau 1 (v0.1078 ; il
+ *  s'ouvrait au niveau 5 — un joueur qui s'entraîne peu droppait un talent sans pouvoir
+ *  le porter pendant des semaines).
  *  ⚠️ C'était 1 tous les 5 niveaux (20 au niveau 100). Mesuré le 2026-09-14 : les talents
  *  étaient le plus gros levier de puissance hors objets (−15 à −19 % si retirés) et
  *  n'étaient attendus par AUCUN calibrage de difficulté — ils faisaient tomber le mur

@@ -8,6 +8,7 @@ import {
   regionProgress,
   regionMapGeometry,
   mapFillFraction,
+  dungeonUnlockedIn,
 } from '@/lib/regions';
 import { DUNGEONS } from '@/data/dungeons';
 
@@ -34,7 +35,9 @@ describe('regions — biomes de l’Aventure', () => {
 
   it('frontière = 1er donjon non nettoyé (sinon le dernier)', () => {
     expect(frontierDungeonId([])).toBe('clairiere');
-    expect(frontierDungeonId(['clairiere', 'caverne'])).toBe('repaire');
+    expect(frontierDungeonId(['clairiere', 'sentier', 'caverne'])).toBe('repaire');
+    // Un compte d'avant le Sentier (v0.1078) : sa frontière redescend sur ce palier inséré.
+    expect(frontierDungeonId(['clairiere', 'caverne'])).toBe('sentier');
     const allIds = REGIONS.flatMap((r) => r.dungeonIds);
     expect(frontierDungeonId(allIds)).toBe(allIds[allIds.length - 1]);
   });
@@ -53,8 +56,34 @@ describe('regions — biomes de l’Aventure', () => {
 
   it('regionProgress compte les donjons nettoyés de la région', () => {
     const r = REGIONS[0]!;
-    expect(regionProgress(r, [])).toEqual({ done: 0, total: 3 });
-    expect(regionProgress(r, ['clairiere', 'caverne'])).toEqual({ done: 2, total: 3 });
+    expect(regionProgress(r, [])).toEqual({ done: 0, total: 4 });
+    expect(regionProgress(r, ['clairiere', 'caverne'])).toEqual({ done: 2, total: 4 });
+  });
+
+  it('le Sentier des loups est le palier entre la Clairière et la Caverne', () => {
+    const order = [...DUNGEONS].sort((a, b) => a.recoLevel - b.recoLevel).map((d) => d.id);
+    expect(order.slice(0, 3)).toEqual(['clairiere', 'sentier', 'caverne']);
+  });
+
+  it('déblocage séquentiel : le précédent nettoyé ouvre le suivant', () => {
+    const order = ['a', 'b', 'c', 'd'];
+    expect(dungeonUnlockedIn(order, 'a', [])).toBe(true); // le premier, toujours
+    expect(dungeonUnlockedIn(order, 'b', [])).toBe(false);
+    expect(dungeonUnlockedIn(order, 'b', ['a'])).toBe(true);
+    expect(dungeonUnlockedIn(order, 'c', ['a'])).toBe(false);
+  });
+
+  it('⚠️ un donjon INSÉRÉ dans la chaîne ne reverrouille pas ce qu’un compte a déjà passé', () => {
+    // Compte d'avant le Sentier : Clairière et Caverne nettoyées, jamais le Sentier.
+    const order = ['clairiere', 'sentier', 'caverne', 'repaire'];
+    const cleared = ['clairiere', 'caverne'];
+    expect(dungeonUnlockedIn(order, 'sentier', cleared)).toBe(true);
+    expect(dungeonUnlockedIn(order, 'caverne', cleared)).toBe(true); // déjà nettoyée
+    expect(dungeonUnlockedIn(order, 'repaire', cleared)).toBe(true);
+    // Un donjon plus loin nettoyé suffit aussi (ex. seul le Repaire l'avait été).
+    expect(dungeonUnlockedIn(order, 'caverne', ['clairiere', 'repaire'])).toBe(true);
+    // Mais on ne saute pas plus loin que ce qu'on a fait.
+    expect(dungeonUnlockedIn(order, 'repaire', ['clairiere'])).toBe(false);
   });
 
   it('regionMapGeometry : nœuds en zigzag + chemin', () => {
