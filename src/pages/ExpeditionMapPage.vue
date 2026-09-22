@@ -1790,11 +1790,13 @@ onUnmounted(() => {
 
 <style scoped lang="scss">
 /* ── 🗂️ LA FICHE DU LIEU — une grande tuile, teintée par le RANG du lieu (`--rk`) ── */
+/* Contour appuyé (2 px, couleur du rang à 75 %) et marges latérales : collée au bord de
+   l'écran et cerclée d'un trait pâle, la tuile se lisait mal comme un bloc (demandé). */
 .poi-card {
-  margin: 4px 0 12px;
+  margin: 6px 10px 12px;
   padding: 14px;
   border-radius: 16px;
-  border: 1px solid color-mix(in srgb, var(--rk) 45%, var(--line));
+  border: 2px solid color-mix(in srgb, var(--rk) 75%, var(--line));
   background:
     radial-gradient(
       120% 90% at 0% 0%,
