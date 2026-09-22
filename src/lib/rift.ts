@@ -645,6 +645,7 @@ export function simulateIncursion(
   // ⚠️ AUCUN CALCUL N'EN DÉPEND : on ne fait qu'inscrire ce que le combat a déjà décidé
   // (un test de non-régression l'exige — même issue, mêmes abattus, mêmes PV finaux).
   const pvTrail: number[] = [];
+  let shield: number | undefined; // 🔰 une barrière de départ par incursion
 
   for (let i = 0; i < population; i++) {
     const foe = riftFoe(rift.level, faction, i, false);
@@ -653,7 +654,9 @@ export function simulateIncursion(
       seed: rs,
       goldOnWin: 0,
       startPlayerPv: pv,
+      ...(shield !== undefined ? { shield } : {}),
     });
+    shield = res.shield ?? shield;
     if (res.log.length) pv = res.log.at(-1)!.playerPv;
     if (!res.win) {
       journal.push(`💀 ${foe.emoji} ${foe.name} a eu le dernier mot.`);
@@ -681,6 +684,7 @@ export function simulateIncursion(
     seed: (seed * 7919 + 13) >>> 0 || 1,
     goldOnWin: 0,
     startPlayerPv: pv,
+    ...(shield !== undefined ? { shield } : {}),
   });
   if (res.log.length) pv = res.log.at(-1)!.playerPv;
   journal.push(

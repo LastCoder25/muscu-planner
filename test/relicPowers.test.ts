@@ -161,13 +161,17 @@ describe('🔮 chaque pouvoir fait ce qu’il annonce', () => {
     // Le dernier déclenchement peut être encore en attente en fin de combat.
     expect(fatals).toBeGreaterThanOrEqual(Math.floor(crits / (RELIC.full / RELIC.fatalCharge)) - 1);
   });
-  it('Rempart vengeur : les blocages s’accumulent puis repartent en un coup', () => {
-    const log = fired(hero(R('rempart'), { block: 1 }), foe(), 'rp_rempart');
+  // ⚠️ RÉÉCRIT (sets spécialisés, 2026-09-22) : il se charge sur la PARADE, plus sur le
+  // blocage — la parade est le geste du Gardien, le blocage appartient à tous les boucliers.
+  it('Rempart vengeur : chaque parade déclenche une contre-attaque', () => {
+    const log = fired(hero(R('rempart'), { parry: 1 }), foe(), 'rp_rempart');
     expect(log.length).toBeGreaterThan(0);
     // ⚠️ Étape 7 : une contre-attaque d'une volée et demie (volée de 50, force 1), et non plus
     // les dégâts évités (ils ne pesaient rien face à un boss).
     expect(log[0]!.damage).toBe(Math.round(50 * RELIC.rempartMult));
-    expect(fired(hero(R('rempart')), foe(), 'rp_rempart')).toHaveLength(0); // sans blocage, rien
+    expect(fired(hero(R('rempart')), foe(), 'rp_rempart')).toHaveLength(0); // sans parade, rien
+    // Le blocage seul ne le charge plus.
+    expect(fired(hero(R('rempart'), { block: 1 }), foe(), 'rp_rempart')).toHaveLength(0);
   });
   // ⚠️ RÉÉCRIT (étape 7) : l'explosion vaut une VOLÉE, et non plus le stock des dégâts renvoyés
   // — minuscule face aux PV d'un boss, il ne valait rien (0 % mesuré, même avec 30 % d'épines).

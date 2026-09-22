@@ -93,18 +93,23 @@ const CALIB = {
 // ×1,10 (8) · ×1,22 (9) · ×1,20 (10), puis, rangs 6 à 10, recherche directe du multiplicateur
 // qui ramène ce joueur à ~72 % de nettoyage et ~57 % au palier : ×1,06 · ×1,12 · ×1,22 · ×1,11 ·
 // ×1,09. Un joueur qui ne porte pas son set est donc en dessous.
+// ⚠️ 2026-09-22 (SETS SPÉCIALISÉS : stats de voie, signatures qui s'en nourrissent, puissance
+// ré-alignée sur le combat) : recherche directe rang par rang (8 voies × 20 combats, donjon le
+// plus profond et boss du palier) du multiplicateur qui ramène le joueur de référence à ~72 %
+// et ~57 % — donjon et boss concordent : ×0,94 (rangs 3-4) · ×0,96 (5) · ×1,20 (6) · ×1,21 (7) ·
+// ×1,29 (8) · ×1,27 (9-10). Rangs 1-2 inchangés (tutoriel et rampe d'amorçage, déjà testés).
 // [premier niveau, dernier, attaque début, fin, survie début, fin, part invisible]
 const GEAR_BUDGET_BY_RANK: [number, number, number, number, number, number, number][] = [
   [1, 10, 1.0, 1.27, 1.06, 1.38, 1],
   [11, 20, 1.27, 1.3, 1.38, 1.46, 1.07],
-  [21, 30, 1.3, 1.54, 1.5, 1.68, 1.07],
-  [31, 40, 1.7, 1.75, 1.77, 1.95, 1.13],
-  [41, 50, 1.96, 2.46, 2.0, 2.17, 1.13],
-  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.38],
-  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.57],
-  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.55],
-  [81, 90, 5.62, 5.62, 3.95, 4.15, 1.6],
-  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.5],
+  [21, 30, 1.3, 1.54, 1.5, 1.68, 1.01],
+  [31, 40, 1.7, 1.75, 1.77, 1.95, 1.06],
+  [41, 50, 1.96, 2.46, 2.0, 2.17, 1.085],
+  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.65],
+  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.9],
+  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.93],
+  [81, 90, 5.62, 5.62, 3.95, 4.15, 2.03],
+  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.9],
 ];
 export function gearBudget(level: number): { off: number; pv: number } {
   const L = Math.min(100, Math.max(1, level));
@@ -148,8 +153,26 @@ export const CONTENT_K: { dungeon: number; boss: number; laby: number } = {
  *  pouvoir de relique y pèsent sur toute une descente, et le joueur de début de partie n'en a
  *  aucun. Les donjons, eux, suivent le budget sans pente (×1,0 sur toute la chaîne). */
 function labyAttritionRamp(level: number): number {
-  return 0.4 + 0.6 * Math.min(1, Math.max(0, level - 2) / 38);
+  return (
+    (0.4 + 0.6 * Math.min(1, Math.max(0, level - 2) / 38)) * interpolate(LABY_SPEC_RELIEF, level)
+  );
 }
+
+/** ⚠️ 2026-09-22 — SETS SPÉCIALISÉS : recherche directe, palier par palier (8 voies × 16
+ *  descentes), du multiplicateur qui ramène le joueur de référence à ~70 % à son niveau.
+ *  Le budget d'équipement a été relevé pour les donjons et les boss dès le rang 6 ; une
+ *  longue descente ne suit pas la même pente (la barrière de départ ne sert plus qu'une fois
+ *  par descente). Paliers d'initiation (≤ 20) inchangés : ils visent 90 %, déjà testés. */
+const LABY_SPEC_RELIEF: [number, number][] = [
+  [6, 1],
+  [12, 1.2],
+  [20, 1],
+  [28, 0.88],
+  [40, 0.66],
+  [52, 0.5],
+  [66, 0.6],
+  [85, 0.7],
+];
 
 /** Lecture d'une table de points mesurés [niveau, valeur] : interpolée entre deux points,
  *  valeur du bout le plus proche au-delà.

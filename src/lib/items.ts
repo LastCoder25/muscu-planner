@@ -535,7 +535,7 @@ export const RELIC_POWERS: RelicPowerDef[] = [
     name: 'Rempart vengeur',
     emoji: '🛡️',
     voie: 'gardien',
-    charge: 'chaque blocage',
+    charge: 'chaque parade',
     effect: (f) => `une contre-attaque de ${(RELIC.rempartMult * f).toFixed(1)} volée`,
   },
   {
@@ -1065,16 +1065,19 @@ export const VOIE_SET_STATS: Record<string, EffectType[]> = {
  *  (mesuré en vrai combat, niveaux 30/60/90, boss et donjon). ⚠️ Point de départ, recalibré
  *  à la mesure (spec § 8). */
 export const SPEC_STAT_K: Partial<Record<EffectType, number>> = {
-  rage_pct: 1.55,
-  momentum_pct: 1.1,
-  bleed_pct: 1,
-  riposte_pct: 1.45,
-  parry_pct: 0.8,
-  start_shield_pct: 1.8,
-  toughness_pct: 0.95,
-  execute_pct: 1,
-  lifesteal_pct: 1,
-  thorns_pct: 1,
+  // Mesuré (combat réel, niveaux 30/60/90, boss et donjon) : ce qu'un affixe apporte, rapporté
+  // à un affixe de dégâts du même rang. Les stats conditionnelles valent moins par point, les
+  // stats qui s'accumulent plus — ce facteur les ramène toutes à la même valeur.
+  execute_pct: 1.3,
+  rage_pct: 2.2,
+  momentum_pct: 0.8,
+  bleed_pct: 0.7,
+  lifesteal_pct: 0.45,
+  thorns_pct: 0.55,
+  riposte_pct: 1.8,
+  parry_pct: 1,
+  start_shield_pct: 3,
+  toughness_pct: 0.45,
 };
 /** Part d'une pièce de set que portent ses stats spécialisées : ENSEMBLE, elles valent à peu
  *  près une stat principale (dès 2 affixes) — une pièce de set vaut une pièce normale, et
@@ -1086,10 +1089,14 @@ export function setAffixValue(
   roll: number,
   slot: ItemSlot,
   nSpec: number,
+  setId: string,
 ): number {
   const budget = affixCountForRarity(rarity) >= 2 ? 1 : 0.5;
   const v =
-    affixValue(t, rarity, roll, slot) * (SPEC_STAT_K[t] ?? 1) * (budget / Math.max(1, nSpec));
+    affixValue(t, rarity, roll, slot) *
+    (SPEC_STAT_K[t] ?? 1) *
+    specScaleOf(setId) *
+    (budget / Math.max(1, nSpec));
   return Math.max(0.1, round1(v));
 }
 
@@ -1098,7 +1105,7 @@ export function setAffixValue(
  *  la stat exclusive, une pièce de set commune ne se distinguerait pas d'un drop. Un set sans
  *  voie (legacy) retombe sur les stats de soutien de l'emplacement. */
 export function setPieceTypes(slot: GearSlot, setId: string, rarity: Rarity): EffectType[] {
-  const major = SET_SLOT_MAJORS[slot]?.[0] ?? SLOT_AFFIXES[slot].major[0]!;
+  const major = setSlotMajor(slot);
   const voie = setId.startsWith('voie:') ? setId.slice('voie:'.length) : '';
   const spec = (VOIE_SET_STATS[voie] ?? SLOT_AFFIXES[slot].support).filter((t) => t !== major);
   const n = Math.min(1 + spec.length, Math.max(2, affixCountForRarity(rarity)));
@@ -1147,12 +1154,20 @@ const SET_PIECE_MAJOR_K = 1;
  *  deux emplacements sur quatre, là où un drop en choisit une autre. Avec critique et
  *  réduction imposés sur l’accessoire et l’armure, un set complet décrochait de +8 % au
  *  niveau 30 à −1 % au niveau 90 ; en dégâts/PV l’écart est PLAT avec le niveau. */
+/** La principale qu'une pièce de set GARDE (une sur deux). ⚠️ Mesuré : les deux ne se
+ *  valent pas — la réduction et les dégâts critiques sont les multiplicateurs du build. Le
+ *  bouclier gardait le blocage : aucun set n'avait de réduction (un Gardien sans réduction !).
+ *  Un choix PAR VOIE a été mesuré puis écarté : les 8 voies retombaient sur la même table. */
+function setSlotMajor(slot: ItemSlot): EffectType {
+  return SET_SLOT_MAJORS[slot]?.[0] ?? 'max_pv_pct';
+}
+
 const SET_SLOT_MAJORS: Partial<Record<ItemSlot, EffectType[]>> = {
   weapon: ['damage_pct'],
   armor: ['max_pv_pct'],
-  shield: ['block_pct'],
+  shield: ['dmg_reduction_pct'], // mesuré : garder la réduction vaut +2 à +5 points au set
   helmet: ['max_pv_pct'],
-  boots: ['max_pv_pct'],
+  boots: ['damage_pct'],
   // Sets spécialisés : l'esquive et le critique ne valent presque rien (mesuré) → PV et
   // dégâts critiques.
   accessory: ['crit_dmg_pct'],
@@ -2006,7 +2021,7 @@ export function rollSetPiece(
   // les quatre pièces, et la puissance étant MULTIPLICATIVE l’assassin tombait à −57 % ;
   // (2) « la majeure du thème si l’emplacement la propose » : assassin encore −45 %.
   // L’IDENTITÉ DU SET VIT DÉSORMAIS DANS SES PALIERS (2/3/4 pièces), plus dans ses pièces.
-  const chosenType: EffectType = SET_SLOT_MAJORS[slot]?.[0] ?? 'max_pv_pct';
+  const chosenType: EffectType = setSlotMajor(slot);
   const value = affixValue(chosenType, rarity, roll, slot, true);
   const noun = pick(rng, NAMES[slot]);
   // NIVEAU D'OBJET (ilvl) de la pièce de set = pyramide centrée sur min(palier, perso).
@@ -2024,7 +2039,8 @@ export function rollSetPiece(
   const pieceTypes = setPieceTypes(slot as GearSlot, opts.setId, rarity);
   const affixes: ItemEffect[] = pieceTypes.map((t, i) => ({
     type: t,
-    value: i === 0 ? value : setAffixValue(t, rarity, roll, slot, pieceTypes.length - 1),
+    value:
+      i === 0 ? value : setAffixValue(t, rarity, roll, slot, pieceTypes.length - 1, opts.setId),
   }));
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
   const legendary =
@@ -2108,7 +2124,7 @@ export function migrateGearItem(it: Item): Item {
   }
   const slot = it.slot as GearSlot;
   const lists = SLOT_AFFIXES[slot];
-  const setMajor = it.setId ? SET_SLOT_MAJORS[slot]?.[0] : undefined;
+  const setMajor = it.setId ? setSlotMajor(slot) : undefined;
   const olds = [it.effect, it.effect2, it.effect3].filter((e): e is ItemEffect => !!e);
   const types: EffectType[] = [];
   // Pièce de set (sets spécialisés) : les stats de sa voie, au même rang, jet et niveau.
@@ -2130,7 +2146,7 @@ export function migrateGearItem(it: Item): Item {
     type,
     value:
       setMajor && i > 0
-        ? setAffixValue(type, rarity, roll, slot, types.length - 1)
+        ? setAffixValue(type, rarity, roll, slot, types.length - 1, it.setId!)
         : affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
   }));
   // Effet légendaire déplacé : un effet de SON emplacement, dans les stats prolongées si possible.
@@ -2162,7 +2178,7 @@ export function makeGearPiece(
 ): Omit<Item, 'id'> {
   const { slot, rarity, roll, level } = o;
   const set = o.setId ? SET_BY_ID[o.setId] : undefined;
-  const setMajor = set ? SET_SLOT_MAJORS[slot]?.[0] : undefined;
+  const setMajor = set ? setSlotMajor(slot) : undefined;
   const types: EffectType[] = [];
   if (set) types.push(...setPieceTypes(slot, o.setId!, rarity));
   else
@@ -2176,7 +2192,7 @@ export function makeGearPiece(
     type,
     value:
       setMajor && i > 0
-        ? setAffixValue(type, rarity, roll, slot, types.length - 1)
+        ? setAffixValue(type, rarity, roll, slot, types.length - 1, o.setId!)
         : affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
   }));
   const legendary =
@@ -2798,12 +2814,15 @@ const VOIE_SET_DEFS: {
   theme: string;
   stats: [EffectType, EffectType, EffectType];
   /** ⚠️ ÉCHELLE DES PALIERS 2 ET 4 — ce qui rend les 8 sets ÉQUIVALENTS : les mêmes valeurs de
-   *  base ne valent pas pareil en combat selon la stat. RECALIBRÉE À ZÉRO à la refonte
-   *  équipement (étape 7, 6 pièces, spec § 6.2) en vrai combat : les paliers 2+4 valent ~+4 %,
-   *  le palier 6 et la signature ~+4 %, donc le set complet +5 à +10 % contre les meilleurs
-   *  drops, et « 4 + 2 meilleurs drops » à ±3 % des 6 pièces. Mesuré avant (format 4 pièces
-   *  recopié sur 6) : +17 à +80 % en combat. */
+   *  base ne valent pas pareil selon la stat. RECALIBRÉE avec les sets spécialisés
+   *  (2026-09-22), avec `specScale` et `capScale` : set complet contre les meilleurs drops,
+   *  niveaux 30/60/90, dans la puissance ré-alignée sur le combat réel — +21 à +25 % en
+   *  moyenne pour chaque set (Colosse +21 %, le plus bas : sa force est situationnelle). */
   tierScale: number;
+  /** Budget des stats SPÉCIALISÉES de ses pièces (× `SPEC_STAT_K`, qui les ramène à la
+   *  valeur d'un affixe de dégâts) : les stats défensives saturent (chances plafonnées), il
+   *  leur en faut plus pour valoir autant. */
+  specScale: number;
   /** Échelle du palier 6 (la stat IDENTITÉ), séparée des paliers 2 et 4 (refonte équipement,
    *  étape 7) : la signature porte l’essentiel de la récompense des 6 pièces. */
   capScale: number;
@@ -2817,8 +2836,9 @@ const VOIE_SET_DEFS: {
     emoji: '💥',
     theme: 'Plus il est blessé, plus il frappe.',
     stats: ['rage_pct', 'bleed_pct', 'damage_pct'],
-    tierScale: 0.9,
+    tierScale: 0.92,
     capScale: 0.15,
+    specScale: 0.26,
     color: '#ff5a3c',
   },
   {
@@ -2827,8 +2847,9 @@ const VOIE_SET_DEFS: {
     emoji: '🛡️',
     theme: 'Bloque et pare tout ce qui passe.',
     stats: ['parry_pct', 'start_shield_pct', 'block_pct'],
-    tierScale: 0.14,
-    capScale: 0.08,
+    tierScale: 0.43,
+    capScale: 0.25,
+    specScale: 1.54,
     color: '#4ea3ff',
   },
   {
@@ -2837,8 +2858,9 @@ const VOIE_SET_DEFS: {
     emoji: '🗡️',
     theme: 'Fait saigner, puis achève.',
     stats: ['execute_pct', 'bleed_pct', 'crit_dmg_pct'],
-    tierScale: 0.85,
-    capScale: 1,
+    tierScale: 1.44,
+    capScale: 1.7,
+    specScale: 0.43,
     color: '#9b7bff',
   },
   {
@@ -2847,8 +2869,9 @@ const VOIE_SET_DEFS: {
     emoji: '🩸',
     theme: 'Tient en se soignant sur chaque coup.',
     stats: ['lifesteal_pct', 'rage_pct', 'max_pv_pct'],
-    tierScale: 0.3,
-    capScale: 0.4,
+    tierScale: 1.02,
+    capScale: 1.36,
+    specScale: 0.43,
     color: '#e0325f',
   },
   {
@@ -2857,8 +2880,9 @@ const VOIE_SET_DEFS: {
     emoji: '🪨',
     theme: 'Encaisse les gros coups sans broncher.',
     stats: ['toughness_pct', 'start_shield_pct', 'max_pv_pct'],
-    tierScale: 0.1,
-    capScale: 0.08,
+    tierScale: 0.65,
+    capScale: 0.52,
+    specScale: 2.16,
     color: '#b08d5b',
   },
   {
@@ -2867,8 +2891,9 @@ const VOIE_SET_DEFS: {
     emoji: '🎯',
     theme: 'Évite, puis contre.',
     stats: ['riposte_pct', 'parry_pct', 'crit_dmg_pct'],
-    tierScale: 0.16,
-    capScale: 0.8,
+    tierScale: 1.5,
+    capScale: 7.49,
+    specScale: 2.08,
     color: '#3fd0e0',
   },
   {
@@ -2877,8 +2902,9 @@ const VOIE_SET_DEFS: {
     emoji: '🌵',
     theme: 'Punit qui le frappe.',
     stats: ['thorns_pct', 'riposte_pct', 'max_pv_pct'],
-    tierScale: 0.11,
-    capScale: 0.8,
+    tierScale: 0.28,
+    capScale: 2.05,
+    specScale: 2.56,
     color: '#5fcf4f',
   },
   {
@@ -2887,8 +2913,9 @@ const VOIE_SET_DEFS: {
     emoji: '🌀',
     theme: 'Lent au départ, écrasant en fin de combat.',
     stats: ['momentum_pct', 'lifesteal_pct', 'damage_pct'],
-    tierScale: 0.4,
-    capScale: 0.15,
+    tierScale: 0.86,
+    capScale: 0.32,
+    specScale: 0.72,
     color: '#ff5cd8',
   },
 ];
@@ -2922,6 +2949,10 @@ export const VOIE_SETS: ItemSet[] = VOIE_SET_DEFS.map((d) => ({
   ],
 }));
 const VOIE_SET_IDS: string[] = VOIE_SETS.map((s) => s.id);
+/** Budget des stats spécialisées d'un set (1 hors set de voie). */
+function specScaleOf(setId: string): number {
+  return VOIE_SET_DEFS.find((d) => `voie:${d.voie}` === setId)?.specScale ?? 1;
+}
 /** id du set d'une voie (`voie:<id>`) — source unique du lien voie↔set. */
 export function voieSetId(voie: string | null | undefined): string {
   return `voie:${voie ?? ''}`;
@@ -3130,11 +3161,11 @@ function newStats(e: AggregatedEffects, x: Partial<AggregatedEffects>): Partial<
 export const RATING_CAPS = {
   accuracy: 0.8,
   block: 0.6,
-  parry: 0.25,
-  riposte: 0.5,
+  parry: 0.45,
+  riposte: 0.7,
   critResist: 0.8,
-  startShield: 0.6,
-  toughness: 0.6,
+  startShield: 0.9,
+  toughness: 0.85,
 } as const;
 /** Une note d'équipement (fraction) convertie en chance, à rendement décroissant. */
 export function ratingChance(cap: number, note: number): number {

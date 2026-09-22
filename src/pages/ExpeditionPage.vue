@@ -798,6 +798,8 @@ const roomFx = ref<{
 const stageFights = ref<StageFight[]>([]);
 const stageStartPv = ref(0); // PV du joueur AU DÉBUT du combat animé (attrition)
 const relicGauge = ref(0); // 🔮 jauge de relique, reportée d'un combat à l'autre du run
+// 🔰 barrière de départ restante : UNE par descente (absente = pleine, au premier combat)
+const barrierLeft = ref<number | undefined>(undefined);
 const fxDone = ref(false); // combat : résultat révélé à la fin de l'animation
 const combatSkipped = ref(false); // AUTO rapide : animation de combat sautée (résultat direct)
 const playerProfile = computed(() => character.value.profile);
@@ -818,6 +820,7 @@ onMounted(async () => {
   if (run.value.visited.length <= 1)
     run.value = startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv));
   relicGauge.value = 0;
+  barrierLeft.value = undefined;
 });
 
 const floor = computed(() => dungeon.value[run.value.floor]!);
@@ -943,8 +946,10 @@ function fightRoom(id: number, isBoss: boolean) {
     goldOnWin: goldWin,
     startPlayerPv: run.value.pv,
     gauge: relicGauge.value,
+    ...(barrierLeft.value !== undefined ? { shield: barrierLeft.value } : {}),
   });
   relicGauge.value = res.gauge ?? relicGauge.value;
+  barrierLeft.value = res.shield ?? barrierLeft.value;
   const finalPv = res.log.length ? res.log[res.log.length - 1]!.playerPv : run.value.pv;
   run.value = { ...run.value, pv: finalPv, status: finalPv <= 0 ? 'dead' : run.value.status };
   if (res.win) {
@@ -1248,6 +1253,7 @@ function freshRun() {
   dungeon.value = generateDungeon(seed.value, floorsWanted.value);
   run.value = startRun(floorsWanted.value, dungeon.value[0]!, fighter.value.pv || 140);
   relicGauge.value = 0;
+  barrierLeft.value = undefined;
   gold.value = 0;
   dust.value = 0;
   loot.value = [];
@@ -1337,6 +1343,7 @@ function bossWinnableNow(): boolean {
     goldOnWin: 0,
     startPlayerPv: run.value.pv,
     gauge: relicGauge.value,
+    ...(barrierLeft.value !== undefined ? { shield: barrierLeft.value } : {}),
   }).win;
 }
 

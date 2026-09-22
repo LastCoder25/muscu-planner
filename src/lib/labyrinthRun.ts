@@ -86,6 +86,7 @@ export function simulateLabyrinthRun(player: Combatant, laby: Labyrinth, seed: n
   const maxPv = player.pv;
   let pv = maxPv;
   let gauge = 0; // 🔮 la jauge de relique suit le run
+  let shield: number | undefined; // 🔰 la barrière de départ aussi (une par descente)
   const tier = labyTierIndex(laby);
   for (let f = 0; f < laby.floors; f++) {
     const floor = generateFloor(seed, f, laby.floors);
@@ -98,9 +99,16 @@ export function simulateLabyrinthRun(player: Combatant, laby: Labyrinth, seed: n
         const res = simulateCombat(
           labyrinthFighter(player, pv),
           labyrinthFoe(laby.recoLevel, isBoss, depth, foe),
-          { seed: rs, goldOnWin: 0, startPlayerPv: pv, gauge },
+          {
+            seed: rs,
+            goldOnWin: 0,
+            startPlayerPv: pv,
+            gauge,
+            ...(shield !== undefined ? { shield } : {}),
+          },
         );
         gauge = res.gauge ?? gauge;
+        shield = res.shield ?? shield;
         if (res.log.length) pv = res.log[res.log.length - 1]!.playerPv;
       } else if (r.type === 'trap') {
         const t = pickLabyTrap(mulberry32((rs ^ 0x7a17) >>> 0));

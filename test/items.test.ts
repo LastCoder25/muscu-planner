@@ -752,9 +752,11 @@ describe('sets d’équipement (voie)', () => {
     const attendu = {
       weapon: 'damage_pct',
       armor: 'max_pv_pct',
-      shield: 'block_pct',
+      // Sets spécialisés : une pièce ne garde qu'UNE principale sur deux — mesuré, garder
+      // la réduction (bouclier) et les dégâts (bottes) vaut +2 à +5 points au set complet.
+      shield: 'dmg_reduction_pct',
       helmet: 'max_pv_pct',
-      boots: 'max_pv_pct', // sets spécialisés : l'esquive ne vaut presque rien (mesuré)
+      boots: 'damage_pct',
       accessory: 'crit_dmg_pct', // idem le critique
       relic: 'max_pv_pct',
     } as const;

@@ -158,7 +158,9 @@ describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
       'riposte_pct',
     ]);
     // Les deux stats de voie se partagent la valeur d'une principale (`setAffixValue`).
-    expect(m.effect2!.value).toBe(setAffixValue('thorns_pct', 'epique', 0.6, 'armor', 2));
+    expect(m.effect2!.value).toBe(
+      setAffixValue('thorns_pct', 'epique', 0.6, 'armor', 2, 'voie:epineux'),
+    );
     // Idempotent : repasser ne change rien.
     expect(migrateGearItem(m)).toEqual(m);
   });

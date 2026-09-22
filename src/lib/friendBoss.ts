@@ -837,7 +837,7 @@ export const TROPHY_FAMILY_K: Record<BossFamily, number> = {
   push: 0.5,
   legs: 0.85,
   pull: 0.65,
-  core: 0.65,
+  core: 0.7, // 2026-09-22 : 0,65 → 0,7, la puissance ayant recompté parade et barrière (sets spécialisés)
   conditioning: 0.85,
 };
 export const TROPHY_SUPPORT: Record<BossFamily, readonly EffectType[]> = {

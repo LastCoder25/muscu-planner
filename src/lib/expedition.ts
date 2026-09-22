@@ -995,6 +995,7 @@ export interface ArenaRun {
 export function runArena(hero: Combatant, level: number, seed: number): ArenaRun {
   let pv = hero.pv;
   let waves = 0;
+  let shield: number | undefined; // 🔰 une barrière de départ pour toute l'arène
   const fights: ArenaFight[] = [];
   for (let w = 0; w < ARENA.maxWaves; w++) {
     const foe = arenaWaveCombatant(level, w);
@@ -1003,7 +1004,9 @@ export function runArena(hero: Combatant, level: number, seed: number): ArenaRun
       seed: seed + w * 1009,
       goldOnWin: 0,
       startPlayerPv: pv,
+      ...(shield !== undefined ? { shield } : {}),
     });
+    shield = r.shield ?? shield;
     pv = r.log.length ? r.log[r.log.length - 1]!.playerPv : pv;
     fights.push({
       wave: w + 1,

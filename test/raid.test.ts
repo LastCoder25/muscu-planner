@@ -511,9 +511,17 @@ describe('calibration du siège', () => {
     // l'ancienne pente écrite à la main. Mesuré sur 400 : 85 / 90 / 87 % aux niveaux
     // 50 / 80 / 100 (contre 83 / 84 / 80 avec l'ancien héros). Le plafond tient, mais sur
     // 200 graines le niveau 80 tombait pile sur 92 : une mesure au bord du bruit.
+    // ⚠️ 2026-09-22 (SETS SPÉCIALISÉS) : le budget d'équipement du joueur a été relevé dès le
+    // rang 6 — les sets valent enfin le coup, et le contenu (donjons, boss, Labyrinthe) a été
+    // recalé dessus. Le HÉROS QUI DÉFEND en profite aussi (`gearExpect`), donc la base tient un
+    // peu mieux : 85 / 93 / 87 % aux niveaux 50 / 80 / 100. Monter l'armée en face a été mesuré
+    // puis ÉCARTÉ — un bump global (+2 à +4 % de PV et de dégâts) fait tomber les planchers du
+    // début de partie (« bâtir à son niveau tient le plus souvent », niveaux 8-10), qui ne sont
+    // pas concernés : le budget n'a pas bougé sous le rang 3. Le plafond passe donc de 92 à 94,
+    // et c'est un CONSTAT, pas un blanc-seing : au-delà, il faut une armée qui suit le niveau.
     for (const L of [50, 80, 100]) {
       const plein = holdRate(L, L, true, 400, rosterOf(L));
-      expect(plein, `niveau ${L}, tout investi`).toBeLessThan(92);
+      expect(plein, `niveau ${L}, tout investi`).toBeLessThan(94);
       // …mais ça reste largement payant : c'est un plafond, pas un nerf du vivier.
       expect(plein, `niveau ${L}, tout investi`).toBeGreaterThan(70);
     }

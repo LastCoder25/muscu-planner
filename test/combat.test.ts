@@ -380,6 +380,69 @@ describe('simulateCombat', () => {
   });
 });
 
+describe('barrière de départ (🔰 start_shield)', () => {
+  // ⚠️ UNE PAR DESCENTE, pas une par combat (sets spécialisés, 2026-09-22). Elle se rechargeait
+  // à chaque combat : avec ~60 % des PV en barrière, un Gardien ou un Colosse ne s'usaient plus
+  // jamais dans une descente — mesuré, 100 % des paliers du Labyrinthe pour eux contre 0 à 20 %
+  // pour les autres voies. Ce qu'il en reste passe au combat suivant, comme la jauge de relique.
+  const porteur = {
+    ...playerCombatant('B', { puissance: 20, endurance: 40, agilite: 5 }, 8),
+    startShield: 0.5,
+  };
+  const cogneur = {
+    name: 'C',
+    pv: 4000,
+    damage: 90,
+    crit: 0,
+    dodge: 0,
+    initiative: 99,
+    strikes: 1,
+  };
+  it('le combat rend ce qu’il en reste, et il DESCEND d’un combat à l’autre', () => {
+    const un = simulateCombat(porteur, cogneur, { seed: 5, goldOnWin: 0 });
+    expect(un.shield).toBeGreaterThanOrEqual(0);
+    expect(un.shield).toBeLessThan(Math.round(porteur.pv * 0.5)); // elle a encaissé
+    const deux = simulateCombat(porteur, cogneur, {
+      seed: 5,
+      goldOnWin: 0,
+      startPlayerPv: un.log.at(-1)!.playerPv,
+      shield: un.shield!,
+    });
+    expect(deux.shield!).toBeLessThanOrEqual(un.shield!);
+  });
+  it('sans barrière portée, le combat n’en annonce aucune', () => {
+    expect(simulateCombat(strong, cogneur, { seed: 5, goldOnWin: 0 }).shield).toBeUndefined();
+  });
+  it('dans un donjon, le 2ᵉ combat commence avec ce qu’il en RESTE (pas une barrière neuve)', () => {
+    // Le mordeur vide la barrière pendant le 1er combat ; au 2ᵉ, les PV baissent dès le premier
+    // coup reçu. Avec une barrière neuve par combat, ils resteraient intacts le temps qu'elle
+    // s'épuise à nouveau.
+    const mordeur = {
+      name: 'D',
+      pv: 700,
+      damage: 28,
+      crit: 0,
+      dodge: 0,
+      initiative: 99,
+      strikes: 1,
+    };
+    const r = simulateDungeon(
+      porteur,
+      [
+        { combatant: mordeur, gold: 0 },
+        { combatant: { ...mordeur, name: 'D2' }, gold: 0 },
+      ],
+      { seed: 11 },
+    );
+    expect(r.defeated).toBe(2);
+    // Coups reçus qui ONT coûté des PV (la barrière les encaisse sans rien coûter).
+    const touches = (fight: (typeof r.fights)[number]) =>
+      fight.result.log.filter((e) => e.who === 'monster' && e.damage > 0).length;
+    expect(touches(r.fights[0]!)).toBe(0); // 1er combat : la barrière absorbe tout
+    expect(touches(r.fights[1]!)).toBeGreaterThan(0); // 2ᵉ : elle est vide, les coups portent
+  });
+});
+
 describe('simulateDungeon', () => {
   const foes = [
     { combatant: { ...dummy, name: 'M1' }, gold: 10 },

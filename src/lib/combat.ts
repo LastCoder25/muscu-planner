@@ -114,7 +114,7 @@ export const RELIC = {
   // ⚠️ REMPART ET RONCES LIBÈRENT UNE VOLÉE (étape 7), et non plus leur stock : les dégâts
   // évités ou renvoyés sont minuscules face aux PV d'un boss — mesuré 0 % de puissance, même
   // avec 20 % de blocage ou 30 % d'épines. La jauge se remplit toujours par l'action.
-  rempartCharge: 100, // un blocage remplit la jauge…
+  rempartCharge: 100, // une parade remplit la jauge…
   rempartMult: 1.5, // …puis une contre-attaque de 1,5 volée
   fatalCharge: 20, // par critique porté
   fatalBonus: 0.5, // le coup fatal : critique × (1 + 0,5 × force), inesquivable
@@ -194,18 +194,21 @@ export const PROC_POWER: Record<string, { side: 'off' | 'surv'; weight: number }
   hunter: { side: 'off', weight: 0.16 },
   // ⚠️ SIGNATURES DE SET : leur poids n'est PAS la valeur de la signature seule, mais ce qui
   // manque pour que la puissance affichée du SET COMPLET égale ce qu'il vaut en vrai combat.
-  // Re-mesuré à la refonte équipement (étape 7), signatures recalibrées : la puissance du set
-  // complet suit le combat à quelques points près. ⚠️ Le Vampire reste SURESTIMÉ à l'écran
-  // (~+10 points aux niveaux 60-90) même à un poids quasi nul : c'est la valeur du vol de vie
-  // qui dépend du niveau du combat (cf. `powerSustainW`), pas sa signature.
-  sig_berserker: { side: 'off', weight: 0.09 },
-  sig_gardien: { side: 'surv', weight: 0.09 },
-  sig_assassin: { side: 'off', weight: 0.07 },
-  sig_vampire: { side: 'surv', weight: 0.02 },
-  sig_colosse: { side: 'surv', weight: 0.1 },
-  sig_duelliste: { side: 'off', weight: 0.09 },
-  sig_epineux: { side: 'off', weight: 0.1 },
-  sig_frenetique: { side: 'off', weight: 0.08 },
+  // RE-MESURÉ avec les sets spécialisés (2026-09-22) : set complet contre les meilleurs drops,
+  // boss de palier + donjon le plus profond aux niveaux 30/60/90 ; poids bissecté pour que la
+  // puissance moyenne du set égale son gain moyen en combat. ⚠️ Ils ont beaucoup monté : les
+  // stats spécialisées nourrissent désormais les signatures (le saignement nourrit Carnage,
+  // l'élan la Transe…), une interaction qu'aucun poids par stat ne voit. ⚠️ L'accord n'est
+  // qu'EN MOYENNE : la forme selon le niveau diffère encore (le Colosse vaut ~0 au niveau 30
+  // en combat, +24 % affiché ; le Berserker l'inverse).
+  sig_berserker: { side: 'off', weight: 0.94 },
+  sig_gardien: { side: 'surv', weight: 0.3 },
+  sig_assassin: { side: 'off', weight: 0.42 },
+  sig_vampire: { side: 'surv', weight: 0.27 },
+  sig_colosse: { side: 'surv', weight: 0.36 },
+  sig_duelliste: { side: 'off', weight: 0.11 },
+  sig_epineux: { side: 'off', weight: 0.01 },
+  sig_frenetique: { side: 'off', weight: 0.46 },
 };
 
 // Coefficients d'équilibrage (ajustables en un endroit).
@@ -244,11 +247,14 @@ export const COMBAT = {
   // mais un monstre de ta ligue finit par percer (v0.600, ticket anti-runaway difficulté).
   lifestealRoundCap: 0.08,
   // ── Règles des sets spécialisés (héros, `specRules`) — cf. spec 2026-09-22 ──
-  // Vol de vie : le plafond de soin par tour est `lifestealRoundCap × lifesteal / lifestealRef`,
+  // Vol de vie : le plafond de soin par tour est `lifestealRoundCap × (1 + lifesteal / lifestealRef)`,
   // borné à `lifestealCapMax` fois le plafond de base. Avant, le moindre point de vol de vie
   // atteignait le plafond (le héros frappe ~17 fois par tour) : la stat saturait d'emblée.
-  lifestealRef: 0.06,
-  lifestealCapMax: 4,
+  // ⚠️ PROPORTIONNEL, sans plancher : le héros frappe si fort que le soin brut dépasse toujours
+  // le plafond — c'est donc le PLAFOND qui fait la valeur de la stat. Un plancher (« 1 + ») rendait
+  // le premier point énorme (tout le soin d'un coup : +12 à +42 % de combat mesuré).
+  lifestealRef: 0.3,
+  lifestealCapMax: 3,
   // Épines : chaque coup reçu retire `thorns × thornsMaxPvK` des PV max de l'ennemi. Renvoyer
   // une part du coup reçu ne pesait rien (l'ennemi frappe une fois par tour : 0,7 % mesuré).
   thornsMaxPvK: 0.1,
@@ -367,10 +373,16 @@ export const COMBAT = {
   // `combatPowerRaw`.
   powerSustainW: 3,
   powerThornsW: 0.04,
+  // Sets spécialisés (héros, `specRules`) : les épines prennent une part des PV max ennemis,
+  // l'exécution a un seuil qui monte — leurs poids sont MESURÉS sur ces règles (combat réel,
+  // niveaux 30/60/90) : sans eux la puissance affichée les sous-estimait de 2 à 13 fois, et
+  // l'optimiseur les laissait de côté.
+  powerThornsSpecW: 0.55,
+  powerExecuteSpecW: 0.25,
   // Élan PAR TOUR (étape 1) : mesuré en vrai combat, +1 d'élan vaut ~+2,4 à +3,0 de dégâts
   // (boss et donjon, niveaux 30/60/90, 3 builds) → 2,75. Le 4,5 d'avant valait pour l'élan
   // par coup, toujours au maximum dès le 1er tour.
-  powerMomentumW: 2.75,
+  powerMomentumW: 1.8, // re-mesuré (sets spécialisés) : 2,75 surestimait l'élan de ~50 %
   powerMomentumWPerHit: 4.5, // aventuriers : l'élan par coup d'avant, inchangé
   // ── Refonte équipement (étape 3) ──
   blockKeep: 0.25, // un coup bloqué ne fait que 25 % de ses dégâts
@@ -386,11 +398,27 @@ export const COMBAT = {
   powerRiposteW: 0.26, // riposte 0,3 → +7,8 % de dégâts
   powerBlockW: 0.91, // blocage 0,3 → +25,7 % de PV
   powerParryW: 0.96, // parade 0,15 → +16,9 % de PV
-  toughnessThreshold: 0.2, // au-delà de 20 % des PV max, un coup est « gros »
-  powerToughnessW: 0.2, // ⚠️ point de départ, recalibré à la mesure (étape 2)
+  toughnessThreshold: 0.12, // au-delà de 12 % des PV max, un coup est « gros »
+  powerToughnessW: 1, // mesuré en combat réel (niveaux 30/60/90)
   powerCritResistW: 0.14, // résistance aux critiques 0,5 → +6,8 % de PV
   powerShieldW: 0.52, // barrière de départ 0,3 → +15,6 % de PV
+  // Sets spécialisés (héros, `specRules`) : RE-MESURÉ en combat réel (niveaux 30/60/90, boss
+  // + donjon, 1 et 3 affixes, rapporté aux dégâts). Sous ces règles la puissance affichée
+  // sous-estimait la rage ×3, la riposte ×2, la parade ×1,5 et la barrière ×1,4 — et c'est
+  // cette puissance qui choisit l'équipement : les sets défensifs paraissaient faibles
+  // surtout parce que l'arbitre les comptait mal.
+  powerRageSpecW: 0.28,
+  powerRiposteSpecW: 0.52,
+  powerParrySpecW: 1.44,
+  powerShieldSpecW: 0.73,
 };
+
+/** Le poids d'une stat dans l'estimateur : la valeur mesurée sous les règles des sets
+ *  spécialisés pour le héros, l'ancienne sinon (aventuriers et monstres gardent leur
+ *  calibration). */
+function specW(c: Pick<Combatant, 'specRules'>, base: number, spec: number): number {
+  return c.specRules ? spec : base;
+}
 
 /** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
 export function playerCombatant(
@@ -435,8 +463,8 @@ export function playerCombatant(
 export function offenseOf(c: Combatant): number {
   const sig =
     1 +
-    0.12 * (c.execute ?? 0) +
-    0.1 * (c.rage ?? 0) +
+    (c.specRules ? COMBAT.powerExecuteSpecW : 0.12) * (c.execute ?? 0) +
+    specW(c, 0.1, COMBAT.powerRageSpecW) * (c.rage ?? 0) +
     (c.momentum ?? 0) * (c.momentumPerHit ? COMBAT.powerMomentumWPerHit : COMBAT.powerMomentumW);
   return (
     c.damage *
@@ -444,10 +472,10 @@ export function offenseOf(c: Combatant): number {
     (1 + c.crit * (1 + (c.critDmg ?? 0))) *
     (1 + COMBAT.powerBleedW * (c.bleed ?? 0)) *
     (1 + COMBAT.powerAccuracyW * (c.accuracy ?? 0)) *
-    (1 + COMBAT.powerRiposteW * (c.riposte ?? 0)) *
+    (1 + specW(c, COMBAT.powerRiposteW, COMBAT.powerRiposteSpecW) * (c.riposte ?? 0)) *
     lifestealSizingFactor(c) *
     sig *
-    (1 + COMBAT.powerThornsW * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
+    (1 + (c.specRules ? COMBAT.powerThornsSpecW : COMBAT.powerThornsW) * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
   );
 }
 
@@ -488,11 +516,11 @@ function lifestealHealShare(c: Combatant): number {
 export function survivalOf(c: Combatant): number {
   return (
     ((c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0))) *
-      (1 + COMBAT.powerShieldW * (c.startShield ?? 0)) *
+      (1 + specW(c, COMBAT.powerShieldW, COMBAT.powerShieldSpecW) * (c.startShield ?? 0)) *
       (1 + COMBAT.powerCritResistW * (c.critResist ?? 0)) *
       (1 + COMBAT.powerToughnessW * (c.toughness ?? 0))) /
     (1 - COMBAT.powerBlockW * (1 - COMBAT.blockKeep) * (c.block ?? 0)) /
-    (1 - Math.min(0.9, COMBAT.powerParryW * (c.parry ?? 0)))
+    (1 - Math.min(0.9, specW(c, COMBAT.powerParryW, COMBAT.powerParrySpecW) * (c.parry ?? 0)))
   );
 }
 
@@ -654,13 +682,23 @@ export interface CombatResult {
   gold: number; // 0 si défaite
   /** 🔮 Jauge de la relique en fin de combat (reportée au combat suivant d'un donjon). */
   gauge?: number;
+  /** 🔰 Ce qui reste de la barrière de départ (PV), reporté au combat suivant d'une descente —
+   *  seulement si le héros en porte une. */
+  shield?: number;
 }
 
 /** Simule un combat auto tour par tour. `seed` rend le combat reproductible. */
 export function simulateCombat(
   player: Combatant,
   monster: Combatant,
-  opts: { seed: number; goldOnWin: number; startPlayerPv?: number; gauge?: number },
+  opts: {
+    seed: number;
+    goldOnWin: number;
+    startPlayerPv?: number;
+    gauge?: number;
+    /** Barrière restante d'un combat précédent de la même descente (absente = pleine). */
+    shield?: number;
+  },
 ): CombatResult {
   const rng = mulberry32(opts.seed);
   let pPv = opts.startPlayerPv ?? player.pv;
@@ -702,7 +740,12 @@ export function simulateCombat(
   // Refonte équipement (étape 3). ⚠️ Chaque tirage n'a lieu QUE si le joueur porte la stat :
   // sans elle, un combat seedé reste identique au bit près (test d'empreinte).
   let bleedPool = 0; // saignement en réserve (se vide sur les tours ennemis)
-  let shieldLeft = Math.round(maxPPv * (player.startShield ?? 0)); // barrière de départ
+  // Barrière de départ : UNE par descente, pas une par combat. Elle se rechargeait à chaque
+  // combat d'un donjon ou du Labyrinthe : avec ~60 % des PV en barrière et la régénération
+  // entre deux salles, un Gardien ou un Colosse ne s'usaient plus jamais — mesuré, 100 % des
+  // paliers du Labyrinthe pour eux, 0 à 20 % pour les autres voies. Ce qu'il en reste passe au
+  // combat suivant (`opts.shield`), comme la jauge de relique.
+  let shieldLeft = opts.shield ?? Math.round(maxPPv * (player.startShield ?? 0));
   // Parade : l'ennemi sautera son prochain tour. ⚠️ Jamais deux de suite, et SANS garde :
   // un tour sauté ne contient aucune attaque, donc aucune parade possible (mesuré par
   // mutation, un garde « pas deux de suite » ne pouvait jamais mordre).
@@ -1042,6 +1085,10 @@ export function simulateCombat(
           stunNext = true;
           if (rid === 'riposte_parfaite' && charge(RELIC.riposteCharge))
             relicHit(volley(true) * rf, 'rp_riposte_parfaite');
+          // 🔮 Rempart vengeur : il se charge sur la PARADE (sets spécialisés, décidé) — la
+          // parade est le geste du Gardien, le blocage appartient à tous les boucliers.
+          else if (rid === 'rempart' && charge(RELIC.rempartCharge))
+            relicHit(volley(false) * RELIC.rempartMult * rf, 'rp_rempart');
           push({
             round,
             who: turn,
@@ -1065,11 +1112,8 @@ export function simulateCombat(
         }
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
         let dmg = Math.max(1, Math.round(atk.damage * (crit ? monsterCritMult : 1) * variance));
-        let blockedStock = 0;
         if (def.block && rng() < def.block) {
-          const full = dmg;
           dmg = Math.max(1, Math.round(dmg * COMBAT.blockKeep));
-          blockedStock = full - dmg;
           mark('block');
         }
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
@@ -1189,11 +1233,8 @@ export function simulateCombat(
           monsterPv: mPv,
           ...(skills ? { skills } : {}),
         });
-        // 🔮 Rempart vengeur / Éclat de ronces : le stock part quand la jauge est pleine.
-        if (rid === 'rempart' && blockedStock > 0) {
-          if (charge(RELIC.rempartCharge))
-            relicHit(volley(false) * RELIC.rempartMult * rf, 'rp_rempart');
-        } else if (rid === 'ronces' && def.thorns && dmg > 0 && charge(RELIC.roncesCharge))
+        // 🔮 Éclat de ronces : le stock part quand la jauge est pleine.
+        if (rid === 'ronces' && def.thorns && dmg > 0 && charge(RELIC.roncesCharge))
           relicHit(volley(false) * RELIC.roncesMult * rf, 'rp_ronces');
         // Riposte : après un coup reçu (bloqué ou non), chance de contre-attaquer aussitôt.
         // UNE VOLÉE (les coups d'un tour du héros), sans critique ni variance : elle ne tire
@@ -1222,6 +1263,7 @@ export function simulateCombat(
     log,
     gold: win ? opts.goldOnWin : 0,
     ...(relic ? { gauge: Math.round(gauge) } : {}),
+    ...(player.startShield ? { shield: shieldLeft } : {}),
   };
 }
 
@@ -1273,6 +1315,7 @@ export function simulateDungeon(
   let defeated = 0;
   const fights: DungeonFight[] = [];
   let gauge = 0; // 🔮 la jauge de relique suit le donjon, comme les PV
+  let shield: number | undefined; // 🔰 la barrière de départ aussi (une par descente)
   for (let i = 0; i < foes.length; i++) {
     const foe = foes[i]!;
     const r = simulateCombat(player, foe.combatant, {
@@ -1280,8 +1323,10 @@ export function simulateDungeon(
       goldOnWin: foe.gold,
       startPlayerPv: pv,
       gauge,
+      ...(shield !== undefined ? { shield } : {}),
     });
     gauge = r.gauge ?? gauge;
+    shield = r.shield ?? shield;
     fights.push({ monster: foe.combatant.name, win: r.win, result: r, maxPv: foe.combatant.pv });
     pv = r.log.length ? r.log[r.log.length - 1]!.playerPv : pv;
     if (!r.win) break;
