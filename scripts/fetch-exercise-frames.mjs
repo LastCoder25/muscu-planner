@@ -3,6 +3,11 @@
 // Usage : node scripts/fetch-exercise-frames.mjs
 // Ces images animent l'exécution (bascule 0↔1) via src/components/ExerciseAnim.vue.
 import { writeFileSync, mkdirSync } from 'node:fs';
+import sharp from 'sharp';
+// ⚠️ ALLÉGÉES AU TÉLÉCHARGEMENT (v0.1033) : la plus grande vue fait 440 px CSS (~880 px réels) ;
+// 640 px en qualité 75 divise le poids par deux sans différence visible. Le service worker ne
+// cache rien : chaque octet est resservi par Vercel.
+export const SHRINK = { width: 640, quality: 75 };
 const BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
 // exo interne → dossier source (free-exercise-db)
 const MAP = {
@@ -124,7 +129,10 @@ for (const [id, src] of Object.entries(MAP)) {
     try {
       const r = await fetch(BASE + src + '/' + frame + '.jpg');
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      const buf = Buffer.from(await r.arrayBuffer());
+      const buf = await sharp(Buffer.from(await r.arrayBuffer()))
+        .resize({ width: SHRINK.width, withoutEnlargement: true })
+        .jpeg({ quality: SHRINK.quality, mozjpeg: true, progressive: true })
+        .toBuffer();
       writeFileSync('public/exercises/' + out, buf);
       ok++;
     } catch (e) {
