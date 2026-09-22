@@ -8373,9 +8373,19 @@ button.pt-mini:active {
 .slot-eff {
   display: flex;
   flex-wrap: wrap;
-  gap: 1px 10px;
+  gap: 4px;
+  margin-top: 2px;
 }
+/* Une PASTILLE par stat (demandé) : les stats se lisent séparément au lieu d'une
+   ligne continue où l'on ne voit plus où l'une finit et l'autre commence. */
 .slot-eff .stat-line {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  /* 10 px et non 999 : pilule sur une ligne, mais un pouvoir de relique qui passe sur
+     plusieurs lignes reste un bloc arrondi au lieu d'un ovale. */
+  border-radius: 10px;
+  background: var(--surface-2, color-mix(in srgb, var(--text) 6%, var(--surface)));
+  line-height: 1.35;
   font-size: 11.5px;
   /* ⚠️ PAS de `nowrap` : le pouvoir d'une relique (« 🤺 Riposte parfaite — une riposte
      critique entière de… ») faisait 567 px et faisait glisser tout l'écran de côté. */
