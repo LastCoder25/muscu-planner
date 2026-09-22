@@ -12,12 +12,7 @@
 // dégâts élevés = check de SURVIE (pas un mur de PV qui tuerait le coureur).
 // Distinct du boss communautaire hebdo (world boss).
 import type { Combatant } from '@/lib/combat';
-import {
-  PROCEDURAL,
-  bossGearExpect,
-  bossContentBoost,
-  itemRankRelief,
-} from '@/lib/proceduralContent';
+import { PROCEDURAL, bossGearExpect, CONTENT_K } from '@/lib/proceduralContent';
 import { DUNGEONS, dungeonGold } from '@/data/dungeons';
 
 export interface MilestoneBoss {
@@ -46,8 +41,8 @@ const HAND_BOSSES: MilestoneBoss[] = [
     hint: 'Un mur de pierre. Il faut des PV (Endurance) pour tenir et cogner longtemps.',
     combatant: {
       name: 'Golem ancestral',
-      pv: 700,
-      damage: 130,
+      pv: 496, // ×0,71 (étape 7, mesuré : 55 % au palier)
+      damage: 92,
       crit: 0.05,
       dodge: 0.05,
       initiative: 8,
@@ -65,8 +60,8 @@ const HAND_BOSSES: MilestoneBoss[] = [
     hint: 'Frappe fort et crit souvent → gros dégâts (Puissance) pour l’abattre vite.',
     combatant: {
       name: 'Dragon primordial',
-      pv: 2700,
-      damage: 620,
+      pv: 1777, // ×0,66 (étape 7)
+      damage: 408,
       crit: 0.12,
       dodge: 0.08,
       initiative: 22,
@@ -84,8 +79,8 @@ const HAND_BOSSES: MilestoneBoss[] = [
     hint: 'Esquive beaucoup → Agilité pour la toucher, et des PV pour encaisser ses sorts.',
     combatant: {
       name: 'Liche couronnée',
-      pv: 11500,
-      damage: 1100,
+      pv: 8947, // ×0,78 (étape 7)
+      damage: 856,
       crit: 0.15,
       dodge: 0.12,
       initiative: 28,
@@ -105,8 +100,8 @@ const HAND_BOSSES: MilestoneBoss[] = [
       name: 'Titan du Néant',
       // Dégâts relevés (1800→2600) : il était trivialisé une fois équipé (dmg trop
       // bas pour menacer un joueur en gear du palier, cf. simulation globale 2026‑08‑15).
-      pv: 32000,
-      damage: 2600,
+      pv: 22432, // ×0,70 (étape 7)
+      damage: 1823,
       crit: 0.1,
       dodge: 0.06,
       initiative: 16,
@@ -126,8 +121,8 @@ const HAND_BOSSES: MilestoneBoss[] = [
       name: 'Archidémon',
       // ×1,45 (45000/2900, v0.848, mesuré) : à progression réelle (talent, familier, sets,
       // voie), on le battait 91 % du temps à son palier ; la cible est 55 %.
-      pv: 65250,
-      damage: 4205,
+      pv: 46850, // ×0,72 (étape 7)
+      damage: 3019,
       crit: 0.15,
       dodge: 0.08,
       initiative: 26,
@@ -169,7 +164,8 @@ export const BOSSES: MilestoneBoss[] = [...HAND_BOSSES, ...PROCEDURAL.bosses].ma
   const ge = bossGearExpect(b.unlockLevel);
   // Renfort de contenu (v0.848) : l'attente de TOUT le reste du build (talent, familier, sets, voie).
   // … et le recalage des objets au rang du joueur (v0.875).
-  const boost = bossContentBoost(b.unlockLevel) * itemRankRelief(b.unlockLevel);
+  // Le coefficient de difficulté des boss, MESURÉ (refonte équipement, étape 7).
+  const boost = CONTENT_K.boss;
   return {
     ...b,
     combatant: {

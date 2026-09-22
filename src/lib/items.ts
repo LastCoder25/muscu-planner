@@ -1085,12 +1085,12 @@ export const SLOT_AFFIXES: Record<GearSlot, { major: EffectType[]; support: Effe
  *  seule les dégâts directs : elle pèse plus, pour que l'attaque et la survie reçoivent
  *  autant l'une que l'autre. ⚠️ Point de départ : réglé à la mesure à l'étape 7 (budget). */
 export const SLOT_WEIGHT: Record<GearSlot, number> = {
-  weapon: 1.5,
-  armor: 1,
-  shield: 0.75,
-  helmet: 0.75,
-  boots: 0.5,
-  accessory: 1,
+  weapon: 0.8,
+  armor: 1.2,
+  shield: 0.6,
+  helmet: 0.6,
+  boots: 0.4,
+  accessory: 0.8,
   relic: 1,
 };
 
@@ -2057,16 +2057,19 @@ export function rollTrophy(
     title: string;
     level: number;
     luck?: number;
+    /** Force de la famille (`TROPHY_FAMILY_K`), × `TROPHY_K`. 1 par défaut. */
+    scale?: number;
   },
 ): Omit<Item, 'id'> {
   const luck = opts.luck ?? 0;
+  const k = TROPHY_K * (opts.scale ?? 1);
   const rarity = RANK_ORDER[prestigeRankIndex(opts.level)]!;
   const roll = rollStarJet(rng, characterRank(opts.level), luck);
   const level = rollItemLevel(rng, opts.level, luck);
   // Plancher à 0,1 et non à 1 : à TROPHY_K < 1, un plancher entier écraserait rareté et jet
   // des petites stats (même leçon que l'équipement des aventuriers).
   const value = (t: EffectType) =>
-    Math.max(0.1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll) * TROPHY_K));
+    Math.max(0.1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll) * k));
   const affixes: ItemEffect[] = opts.mains.map((t) => ({ type: t, value: value(t) }));
   for (let a = affixes.length; a < affixCountForRarity(rarity); a++) {
     const pool = opts.support

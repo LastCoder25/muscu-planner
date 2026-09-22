@@ -29,6 +29,7 @@ import {
   FRIEND_BOSS_CHEST,
   TROPHY_MAINS,
   TROPHY_SUPPORT,
+  TROPHY_FAMILY_K,
   chestMark,
   chestState,
   friendBossChest,
@@ -235,10 +236,14 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
     expect(kept[TROPHY_SLOT]?.id).toBe(ranked[0]!.id);
   });
 
-  it('aucune famille ne donne un trophée nettement plus faible que les autres', () => {
+  it('aucune famille ne donne un trophée nettement plus faible — ni nettement plus fort — que les autres', () => {
     // ⚠️ Le critique seul (tirage) et la réduction seule (gainage) valaient 0 à 1,3 % de
     // puissance avant le niveau 50 : stats plafonnées, un héros équipé en est déjà au bord.
-    for (const L of [30, 50]) {
+    // Refonte équipement (étape 7) : l'écart se creusait AUSSI par le haut — au même
+    // coefficient, la poussée valait 16,9 % au niveau 90 contre 6,1 % pour les jambes (les
+    // dégâts se composent avec tout le reste de l'attaque). D'où `TROPHY_FAMILY_K`, et une
+    // borne haute ici.
+    for (const L of [30, 50, 70, 90]) {
       const med: Record<string, number> = {};
       for (const f of FAMILIES) {
         const gains: number[] = [];
@@ -251,6 +256,7 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
               ...rollTrophy(rng, {
                 mains: TROPHY_MAINS[f],
                 support: TROPHY_SUPPORT[f],
+                scale: TROPHY_FAMILY_K[f],
                 title: 'x',
                 level: L,
               }),
@@ -265,7 +271,10 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
         med[f] = gains[Math.floor(gains.length / 2)]!;
       }
       const ref = (med.push! + med.legs!) / 2;
-      for (const f of FAMILIES) expect(med[f]!, `${f} au niveau ${L}`).toBeGreaterThan(ref * 0.5);
+      for (const f of FAMILIES) {
+        expect(med[f]!, `${f} au niveau ${L}`).toBeGreaterThan(ref * 0.5);
+        expect(med[f]!, `${f} au niveau ${L}`).toBeLessThan(ref * 2);
+      }
     }
   });
 
@@ -292,6 +301,7 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
               ...rollTrophy(rng, {
                 mains: TROPHY_MAINS[f],
                 support: TROPHY_SUPPORT[f],
+                scale: TROPHY_FAMILY_K[f],
                 title: 'x',
                 level: L,
               }),
@@ -326,6 +336,23 @@ describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
     expect(c.gold).toBe(Math.round((bossGoldForLevel(28) * FRIEND_BOSS_CHEST.bosses) / 10) * 10);
     expect(c.stones).toBe(bossSummonCost(28) * FRIEND_BOSS_CHEST.bosses);
     expect(c.trophy.name).toContain('Pompes');
+  });
+
+  it('le trophée du coffre porte la force de SA famille (TROPHY_FAMILY_K)', () => {
+    // ⚠️ Sans ce facteur, l'équilibre entre familles mesuré ci-dessus ne vaudrait que pour
+    // les tests : le coffre tirerait au coefficient brut.
+    const b = boss();
+    const c = friendBossChest(b, 'u', 60);
+    const scale = TROPHY_FAMILY_K[b.family];
+    expect(scale).not.toBe(1);
+    const t = c.trophy;
+    const exact = Math.max(
+      0.1,
+      Math.round(
+        effectBase(t.effect.type) * rankRollMult(t.rarity, t.roll) * TROPHY_K * scale * 10,
+      ) / 10,
+    );
+    expect(t.effect.value).toBeCloseTo(exact, 1);
   });
 
   it('tué tôt, il rapporte plus d’or, de pierres et de chance au trophée', () => {

@@ -508,13 +508,19 @@ describe('calibration du siège', () => {
     // d'ouvrir le système (`unlockLevel` 3, `enableShare` 0,85) et son enceinte à niveau
     // écrase encore des armées à peine plus fortes que lui. Le borner là forcerait à
     // durcir une rampe qui sert précisément à apprendre.
+    //
+    // ⚠️ 400 SIÈGES, et non 200 (refonte équipement, étape 7) : le héros de ce harnais
+    // (`gearExpect`) EST désormais le budget mesuré du vrai joueur équipé — plus fort que
+    // l'ancienne pente écrite à la main. Mesuré sur 400 : 85 / 90 / 87 % aux niveaux
+    // 50 / 80 / 100 (contre 83 / 84 / 80 avec l'ancien héros). Le plafond tient, mais sur
+    // 200 graines le niveau 80 tombait pile sur 92 : une mesure au bord du bruit.
     for (const L of [50, 80, 100]) {
-      const plein = holdRate(L, L, true, 200, rosterOf(L));
+      const plein = holdRate(L, L, true, 400, rosterOf(L));
       expect(plein, `niveau ${L}, tout investi`).toBeLessThan(92);
       // …mais ça reste largement payant : c'est un plafond, pas un nerf du vivier.
       expect(plein, `niveau ${L}, tout investi`).toBeGreaterThan(70);
     }
-  }, 30_000); // lourd : ~3 s seul, dépassait 5 s sous la charge de la suite
+  }, 60_000); // lourd : ~5 s seul, dépassait 5 s sous la charge de la suite
 
   it('la difficulté ne s’ÉTEINT PAS en fin de partie', () => {
     // Le défaut d'un écart de niveau FIXE : mesuré, la tenue à défenses-à-niveau montait

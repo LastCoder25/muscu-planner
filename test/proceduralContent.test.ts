@@ -28,7 +28,8 @@ import {
   dungeonGearExpect,
   recommendedPower,
   bossGearExpect,
-  itemRankRelief,
+  gearBudget,
+  CONTENT_K,
 } from '@/lib/proceduralContent';
 import { computeCharacter } from '@/lib/character';
 import { rankStartLevel } from '@/lib/characterRank';
@@ -53,19 +54,25 @@ describe('le 1er donjon est gagnable par un joueur qui débute', () => {
     expect(clearRate(debutant())).toBeGreaterThan(0.9);
   });
 
-  it('l’attente d’équipement vaut ×1 au niveau 1 et rejoint gearExpect au niveau 8', () => {
-    // Niveau 8 = là où gearExpect commence sa propre pente (L − 8).
-    expect(dungeonGearExpect(1)).toEqual({ off: 1, pv: 1 });
-    for (const L of [8, 9, 10, 40, 90]) expect(dungeonGearExpect(L)).toEqual(gearExpect(L));
-    expect(dungeonGearExpect(4).off).toBeLessThan(gearExpect(4).off);
-    // Entre les deux : monotone, et jamais au-dessus de l'attente pleine.
-    let prev = dungeonGearExpect(1);
-    for (const L of [2, 3, 4, 5, 6, 7, 8]) {
-      const ge = dungeonGearExpect(L);
-      expect(ge.off).toBeGreaterThan(prev.off);
-      expect(ge.pv).toBeGreaterThan(prev.pv);
-      expect(ge.off).toBeLessThanOrEqual(gearExpect(L).off);
-      prev = ge;
+  // ⚠️ RÉÉCRIT (refonte équipement, étape 7) : la rampe d'attente écrite à la main a disparu.
+  // L'attente de TOUT contenu est le budget mesuré, qui vaut déjà ~×1 au niveau 1 —
+  // l'équipement ne vient que des donjons.
+  it('l’attente d’équipement est le BUDGET, pour tout contenu, et vaut ~×1 au niveau 1', () => {
+    expect(gearBudget(1).off).toBe(1);
+    expect(gearBudget(1).pv).toBeLessThanOrEqual(1.1);
+    for (const L of [1, 4, 8, 10, 40, 90]) {
+      expect(dungeonGearExpect(L)).toEqual(gearBudget(L));
+      expect(gearExpect(L)).toEqual(gearBudget(L));
+      expect(bossGearExpect(L)).toEqual(gearBudget(L));
+    }
+    // Il grandit avec le niveau (l'équipement ne se perd pas).
+    for (const [a, b] of [
+      [1, 10],
+      [10, 50],
+      [50, 100],
+    ] as const) {
+      expect(gearBudget(b).off).toBeGreaterThan(gearBudget(a).off);
+      expect(gearBudget(b).pv).toBeGreaterThan(gearBudget(a).pv);
     }
   });
 
@@ -76,13 +83,14 @@ describe('le 1er donjon est gagnable par un joueur qui débute', () => {
   });
 
   it('la puissance conseillée de la Clairière suit l’attente réellement appliquée', () => {
-    // L'écran annonce ce que le combat applique : au niveau 1, pas de gear attendu.
-    expect(recommendedPower(1)).toBe(combatPower(refFighter(1)));
-    // Au-delà de la rampe : l'attente d'équipement ET le recalage des objets (v0.875).
-    const ge = gearExpect(10);
-    expect(recommendedPower(10)).toBe(
-      Math.round(combatPower(refFighter(10)) * Math.sqrt(ge.off * ge.pv) * itemRankRelief(10)),
-    );
+    // L'écran annonce ce que le combat applique.
+    // Ensuite : le budget × le coefficient des donjons — rien d'autre (étape 7).
+    for (const L of [1, 10]) {
+      const ge = gearBudget(L);
+      expect(recommendedPower(L)).toBe(
+        Math.round(combatPower(refFighter(L)) * Math.sqrt(ge.off * ge.pv) * CONTENT_K.dungeon),
+      );
+    }
   });
 });
 
@@ -163,7 +171,7 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
     }
   });
 
-  it('au-delà du niveau 12, les monstres sont exactement ceux d’avant (×1,5, attente pleine, correction du donjon)', () => {
+  it('au-delà du niveau 12, les monstres = base × 1,5 × budget × correction du donjon × coefficient', () => {
     // Les rampes n'adoucissent que le début de partie : le contenu profond, calibré ailleurs,
     // ne doit pas bouger d'un point de vie.
     for (const d of DUNGEONS.filter((x) => x.recoLevel >= 12)) {
@@ -171,22 +179,30 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
       const foes = dungeonFoes(d);
       d.monsterIds.forEach((id, k) => {
         const m = MONSTERS.find((x) => x.id === id)!;
-        const c = (d.foeMult ?? 1) * itemRankRelief(d.recoLevel);
+        const c = (d.foeMult ?? 1) * CONTENT_K.dungeon;
         expect(foes[k]!.combatant.pv, d.id).toBe(Math.round(m.pv * 1.5 * ge.off * c));
         expect(foes[k]!.combatant.damage, d.id).toBe(Math.round(m.damage * 1.5 * ge.pv * c));
       });
     }
   });
 
-  it('⚠️ le creux 13-19 est corrigé là et seulement là, sans toucher à l’or', () => {
-    // Mesuré v0.828 avec un harnais de progression réaliste (trop lent pour la suite) :
-    // 14-21 % au niveau recommandé contre 33-40 % pour les voisins. ×0,8 → 29-34 %.
-    // Parmi les donjons écrits à la main : les procéduraux portent leur propre correction (v0.848).
-    const corriges = DUNGEONS.filter((d) => d.recoLevel <= 22 && (d.foeMult ?? 1) !== 1).map(
-      (d) => d.id,
-    );
+  it('⚠️ les donjons écrits à la main trop durs sont corrigés là et seulement là, sans toucher à l’or', () => {
+    // Mesuré v0.828 : le creux 13-19 (×0,8). Étape 7 (refonte équipement) : les trois derniers
+    // donjons écrits (20-22) demandaient ×0,72 à ×0,83 pour 70 % à leur niveau, et la
+    // Fournaise (8) ×0,85 pour la chaîne du début de partie. Les donjons
+    // générés n'ont plus aucune correction : le budget les porte.
+    const corriges = DUNGEONS.filter((d) => (d.foeMult ?? 1) !== 1).map((d) => d.id);
     expect(corriges.sort()).toEqual(
-      ['behemoth_caverne', 'chimere_den', 'hydre_marais', 'leviathan_fosse'].sort(),
+      [
+        'fournaise',
+        'behemoth_caverne',
+        'chimere_den',
+        'hydre_marais',
+        'leviathan_fosse',
+        'kraken_abysses',
+        'necropole',
+        'faille_chaos',
+      ].sort(),
     );
     for (const d of DUNGEONS.filter((x) => x.recoLevel <= 22 && x.foeMult)) {
       expect(d.foeMult).toBeGreaterThanOrEqual(0.7);
@@ -201,17 +217,6 @@ describe('la chaîne des premiers donjons suit le niveau annoncé', () => {
     for (let i = 1; i < chain.length; i++) {
       expect(rates(i, chain[i]!.recoLevel - 1).equipped, chain[i]!.id).toBeLessThan(0.2);
     }
-  });
-});
-
-describe('recalage de l’ouverture du rang : par rang ET par étoile (v0.895)', () => {
-  it('dans un même palier, le facteur suit l’étoile du niveau (mesuré : rang 21-30 de 0,83 à 1,10)', () => {
-    // 21 et 30 sont dans le même palier d'ITEM_RANK_RELIEF : seul l'axe étoile les sépare.
-    expect(itemRankRelief(30) / itemRankRelief(21)).toBeCloseTo(1.1 / 0.83, 6);
-    // Rang 51-60 (Légendaire) : le plus adouci.
-    expect(itemRankRelief(53) / itemRankRelief(51)).toBeCloseTo(0.65 / 0.8, 6);
-    // Bronze et au-delà des 8 raretés : non touchés.
-    expect(itemRankRelief(5)).toBe(itemRankRelief(6));
   });
 });
 
@@ -369,8 +374,10 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
       const base = combatPower(refFighter(L));
       const dg = dungeonGearExpect(L);
       const d = DUNGEONS.find((x) => x.recoLevel === L)!;
+      // Étape 7 : plus de correction propre aux donjons générés — le coefficient seul.
+      expect(d.foeMult).toBeUndefined();
       expect(recommendedPower(L) / (base * Math.sqrt(dg.off * dg.pv))).toBeCloseTo(
-        d.foeMult! * itemRankRelief(L),
+        CONTENT_K.dungeon,
         2,
       );
       const bg = bossGearExpect(L);
@@ -380,9 +387,7 @@ describe('procedural — anti-runaway ÉQUIPÉ (v0.622, « sport = plafond »)',
         b.combatant.pv / brut,
         2,
       );
-      expect(d.foeMult!).toBeGreaterThan(1.3);
-      // La correction du procédural existe toujours, une fois le recalage des objets retiré.
-      expect(b.combatant.pv / brut / itemRankRelief(L)).toBeGreaterThan(1.2);
+      expect(b.combatant.pv / brut).toBeCloseTo(CONTENT_K.boss, 2);
     }
   });
   it('un joueur ÉQUIPÉ ne roule PLUS sur du contenu +15 (mur restauré)', () => {

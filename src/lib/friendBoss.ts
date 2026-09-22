@@ -815,16 +815,37 @@ export function earlyKillFraction(
 export const TROPHY_MAINS: Record<BossFamily, readonly EffectType[]> = {
   push: ['damage_pct', 'crit_dmg_pct'],
   legs: ['max_pv_pct', 'dodge_pct'],
-  pull: ['accuracy_pct', 'lifesteal_pct'],
+  // ⚠️ Précision + dégâts critiques, pas vol de vie : le vol de vie bute sur le plafond de
+  // soin par tour. Mesuré (joueur de référence, médiane de 18 trophées) : 1,9 / 3,6 / 4,8 %
+  // de puissance aux niveaux 30 / 50 / 70 avec le vol de vie, 3,5 / 6,4 / 9,0 % ainsi —
+  // la bande des autres familles (4-5 / 5-9 / 8-14 %).
+  pull: ['accuracy_pct', 'crit_dmg_pct'],
   core: ['dmg_reduction_pct', 'block_pct'],
-  conditioning: ['initiative_pct', 'rage_pct'],
+  // ⚠️ PV + initiative, et non initiative + rage : mesuré, la rage (dégâts sous 30 % de PV)
+  // et l'initiative seules valaient +0,3 % de puissance au niveau 30 — un trophée mort. Le
+  // cardio construit l'endurance : les PV sont sa stat, l'initiative sa vitesse.
+  conditioning: ['max_pv_pct', 'initiative_pct'],
+};
+/** 🎚️ FORCE DU TROPHÉE PAR FAMILLE (× `TROPHY_K`), MESURÉE. Les stats ne pèsent pas pareil :
+ *  les dégâts se composent avec tout le reste de l'attaque et grandissent avec le niveau,
+ *  les PV beaucoup moins. Mesuré au même coefficient (médiane de 18 trophées, joueur de
+ *  référence avec compagnons), niveaux 30 / 50 / 70 / 90 : poussée 5,1 / 8,6 / 14,1 / 16,9 %,
+ *  jambes 4,2 / 5,6 / 7,0 / 6,1 %, tirage 3,5 / 6,6 / 9,1 / 12,5 %, gainage 4,0 / 5,5 /
+ *  11,4 / 12,8 %, conditionnement 2,8 / 6,9 / 5,4 / 9,7 %. Ces facteurs ramènent chaque
+ *  famille dans la bande « modeste » (≈ +2 à +9 %) sans qu'aucune ne soit morte. */
+export const TROPHY_FAMILY_K: Record<BossFamily, number> = {
+  push: 0.5,
+  legs: 0.85,
+  pull: 0.65,
+  core: 0.65,
+  conditioning: 0.85,
 };
 export const TROPHY_SUPPORT: Record<BossFamily, readonly EffectType[]> = {
   push: ['execute_pct', 'thorns_pct'],
   legs: ['regen_pct', 'initiative_pct'],
-  pull: ['crit_pct', 'riposte_pct'],
+  pull: ['lifesteal_pct', 'crit_pct', 'riposte_pct'],
   core: ['start_shield_pct', 'crit_resist_pct'],
-  conditioning: ['momentum_pct', 'regen_pct'],
+  conditioning: ['momentum_pct', 'regen_pct', 'rage_pct'],
 };
 
 export const FRIEND_BOSS_CHEST = {
@@ -881,6 +902,7 @@ export function friendBossChest(
     trophy: rollTrophy(rng, {
       mains: TROPHY_MAINS[b.family],
       support: TROPHY_SUPPORT[b.family],
+      scale: TROPHY_FAMILY_K[b.family],
       title: b.exerciseName,
       level,
       // ⚠️ La chance du CRAN s'AJOUTE à celle du « tué tôt » : les deux disent « tu as fait

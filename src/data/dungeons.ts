@@ -5,7 +5,7 @@
 // rareté 0..1) → les donjons durs récompensent mieux.
 import type { DungeonFoe } from '@/lib/combat';
 import { MONSTERS } from '@/data/monsters';
-import { PROCEDURAL, dungeonGearExpect, itemRankRelief } from '@/lib/proceduralContent';
+import { PROCEDURAL, dungeonGearExpect, CONTENT_K } from '@/lib/proceduralContent';
 
 export type StatKey = 'puissance' | 'endurance' | 'agilite';
 
@@ -35,8 +35,8 @@ export interface Dungeon {
    *  de la chaîne écrite à la main — ses monstres fixes grandissaient plus vite que le joueur.
    *  ×0,8 les ramène à 29-34 % (×0,65 : 41-53 %, trop généreux). L'or n'est pas touché.
    *
-   *  Les donjons PROCÉDURAUX (reco ≥ 25) portent ici leur renfort `proceduralDungeonBoost`
-   *  (v0.848) : même point de passage, lu par `dungeonFoes` comme par la puissance conseillée. */
+   *  Refonte équipement (étape 7) : les trois derniers donjons écrits (20-22) ont aussi la leur.
+   *  Les donjons PROCÉDURAUX n'en ont AUCUNE : le budget d'équipement les porte. */
   foeMult?: number;
 }
 // NB : les SETS ne droppent plus sur les donjons — uniquement sur les BOSS de
@@ -109,6 +109,10 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Le troll est une montagne de PV → grosse Puissance (muscu) requise.',
     dropLevel: 8,
     dropLuck: 0.5,
+    // Refonte équipement (étape 7) : équipé du butin des quatre donjons précédents, on n'y
+    // gagnait plus que 21 % à son niveau (la marche la plus raide de la chaîne). ×0,85 : 52 %
+    // équipé, 31 % sans équipement — le donjon reste gaté par le butin.
+    foeMult: 0.85,
   },
   {
     id: 'abime',
@@ -221,6 +225,8 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Tentacules puis nécromancie → PV au max obligatoires jusqu’au bout.',
     dropLevel: 20,
     dropLuck: 1,
+    // Refonte équipement (étape 7) : mesuré ×0.72 pour 70 % de nettoyage à son niveau.
+    foeMult: 0.72,
   },
   {
     id: 'necropole',
@@ -234,6 +240,9 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Jusqu’à l’Avatar du Chaos → gros PV et Puissance pour l’abattre vite.',
     dropLevel: 21,
     dropLuck: 1,
+    // Refonte équipement (étape 7) : mesuré ×0.72 pour 70 % de nettoyage à son niveau
+    // (÷0,95, la part invisible du budget de son rang).
+    foeMult: 0.76,
   },
   {
     id: 'faille_chaos',
@@ -247,6 +256,8 @@ const HAND_DUNGEONS: Dungeon[] = [
     hint: 'Le contenu le plus profond, deux Avatars du Chaos au bout : build complet, tout au max.',
     dropLevel: 23,
     dropLuck: 1,
+    // Refonte équipement (étape 7) : mesuré ×0.83 pour 70 % de nettoyage à son niveau.
+    foeMult: 0.83,
   },
 ];
 
@@ -313,7 +324,8 @@ export function dungeonFoes(d: Dungeon): DungeonFoe[] {
   const early = dungeonDifficultyMult(d.recoLevel);
   const ge = dungeonGearExpect(d.recoLevel);
   // Recalage des objets au rang du joueur (v0.875) : même facteur pour tout le contenu.
-  const k = (d.foeMult ?? 1) * itemRankRelief(d.recoLevel);
+  // Le coefficient de difficulté des donjons, MESURÉ (refonte équipement, étape 7).
+  const k = (d.foeMult ?? 1) * CONTENT_K.dungeon;
   const pvMult = early * ge.off * k;
   const dmgMult = early * ge.pv * k;
   return d.monsterIds
