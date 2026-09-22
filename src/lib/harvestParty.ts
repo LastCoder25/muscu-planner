@@ -4,12 +4,23 @@
 // mine, un puits, un sanctuaire, des archives ou une mine de mana — les camps, failles et
 // armées ont déjà la leur (`resolveCamp`, `resolveIncursion`, `resolveInterception`).
 //
-// ⚠️ ON NE RÉINVENTE RIEN, on DÉLÈGUE :
+// 🛡️ DES GARDES D'ABORD (2026-09-22, décision de l'utilisateur : « toutes les mines ont des
+// ennemis qu'il faut tuer pour y accéder », force « comme un petit camp », défaite = « rien
+// n'est récolté »). Le lieu est gardé par une force de camp (`harvestGuardOf`, 1-2 champions
+// de référence) : on la combat avec le MÊME choc que les camps (`fightCampForce`), ce qui
+// donne enfin un 🎯 % à un sanctuaire et de l'XP d'abattus aux champions partout.
+// - Défaite : RIEN n'est récolté, le socle d'XP de défaite, les tombés à l'infirmerie
+//   (`campHurt`), les salaires quand même.
+// - Victoire : la récolte telle qu'avant, plus la part des gardes abattus.
+//
+// ⚠️ ON NE RÉINVENTE RIEN, on DÉLÈGUE la récolte :
 // - SANS le héros : c'est le CONVOI d'avant (`resolveCaravan`) — embuscades à danger ABSOLU,
 //   calibrées sur un trio de référence (1 → 0 %, 3 → pari, 4 → quasi sûr), cargaison, blessés,
 //   salaires. Une équipe de 3 champions EST un convoi de 3 : les bandes restent vraies.
 // - AVEC le héros : c'est son EXPÉDITION (`resolveOutcome`) — la récolte pleine et les
 //   rencontres de trajet ; le champion qui l'accompagne apprend (XP) et touche son salaire.
+// ⚠️ Le héros SEUL y passe aussi par ce module (plus par `expeSend`) : sinon une expédition
+// solo contournait les gardes.
 import {
   caravanWages,
   missionXpFor,
@@ -17,7 +28,15 @@ import {
   type EscortKit,
   type PartyHero,
 } from './caravan';
-import { resolveOutcome, type ExpeditionOutcome, type PartyResult, type Poi } from './expedition';
+import { campHurt, fightCampForce } from './camp';
+import {
+  harvestGuardOf,
+  resolveOutcome,
+  type ExpeditionOutcome,
+  type PartyResult,
+  type Poi,
+} from './expedition';
+import { FACTION_EMOJI } from './raid';
 import type { Adventurer } from './adventurers';
 
 export interface HarvestPartyInput {
@@ -29,45 +48,82 @@ export interface HarvestPartyInput {
   playerLevel: number;
 }
 
+/** Ajoute la part des gardes abattus à l'XP de la récolte (arrondie comme `missionXpFor`). */
+function withShares(xp: Record<string, number>, shares: Record<string, number>) {
+  const out: Record<string, number> = { ...xp };
+  for (const [id, v] of Object.entries(shares)) out[id] = (out[id] ?? 0) + Math.round(v);
+  return out;
+}
+
 export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome {
   const { poi, escort, road, hero, seed } = input;
+  const spec = harvestGuardOf(poi);
+  if (!spec) throw new Error(`resolveHarvestParty : ${poi.type} n'est pas un lieu de récolte.`);
+  const g = fightCampForce({ poi, spec, escort, road, hero, seed });
+  const tag = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`;
+  const base = {
+    hero: !!hero,
+    faction: spec.faction,
+    escort: escort.map((a) => a.id),
+    foes: g.foes,
+    slain: g.slain,
+    kills: g.kills,
+    heroKills: g.heroKills,
+    wages: caravanWages(escort, poi),
+  };
+
+  if (!g.skirmish.win) {
+    const party: PartyResult = {
+      ...base,
+      win: false,
+      xp: missionXpFor(escort, poi, false, g.shares, !!hero),
+      hurt: campHurt(g.skirmish, escort),
+      journal: g.journal,
+    };
+    return {
+      win: false,
+      gold: 0,
+      energy: 0,
+      summonStones: 0,
+      mana: 0,
+      item: null,
+      items: [],
+      key: 0,
+      reconBonus: 0,
+      returnMult: 1,
+      text: `💀 Repoussés par les gardes — rien n’a été récolté. ${tag}`,
+      party,
+    };
+  }
+
   if (hero) {
     const out = resolveOutcome(hero.combatant, poi, seed, input.playerLevel);
     const party: PartyResult = {
-      hero: true,
-      faction: 'bandits',
-      escort: escort.map((a) => a.id),
+      ...base,
       win: true,
-      foes: 0,
-      slain: 0,
-      kills: {},
-      heroKills: 0,
-      // Une récolte ne se perd pas (aucun combat au lieu) : le socle entier.
-      xp: missionXpFor(escort, poi, true, {}, true),
+      xp: missionXpFor(escort, poi, true, g.shares, true),
       hurt: [],
-      wages: caravanWages(escort, poi),
-      journal: [out.text],
+      journal: [...g.journal, out.text],
     };
-    return { ...out, party };
+    return { ...out, text: `${tag} ${out.text}`, party };
   }
   const c = resolveCaravan(poi, escort, seed, road);
   const ambushes = c.events.filter((e) => e.kind === 'bandits');
-  const kills = c.kills ?? {};
+  const kills = { ...g.kills };
+  for (const [id, n] of Object.entries(c.kills ?? {})) kills[id] = (kills[id] ?? 0) + n;
+  const roadSlain = ambushes.reduce((s, e) => s + (e.slain ?? 0), 0);
   const party: PartyResult = {
-    hero: false,
-    faction: 'bandits',
-    escort: escort.map((a) => a.id),
-    // ⚠️ La « victoire » d'une récolte = aucune embuscade PERDUE (sans combat compris) : la
+    ...base,
+    // ⚠️ La « victoire » d'une récolte = les gardes abattus ET aucune embuscade PERDUE : la
     // même règle que l'XP du convoi (`missionXpFor(…, !lost, …)`).
     win: !ambushes.some((e) => e.won === false),
-    foes: ambushes.reduce((s, e) => s + (e.slain ?? 0), 0),
-    slain: ambushes.reduce((s, e) => s + (e.slain ?? 0), 0),
+    foes: g.foes + roadSlain,
+    slain: g.slain + roadSlain,
     kills,
-    heroKills: 0,
-    xp: c.xp,
+    xp: withShares(c.xp, g.shares),
     hurt: c.hurt,
     wages: c.wages,
-    journal: c.events.map((e) => e.text),
+    journal: [...g.journal, ...c.events.map((e) => e.text)],
   };
   return {
     win: party.win,
@@ -80,7 +136,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     key: c.keys,
     reconBonus: 0,
     returnMult: 1,
-    text: c.text,
+    text: `${tag} ${c.text}`,
     party,
   };
 }

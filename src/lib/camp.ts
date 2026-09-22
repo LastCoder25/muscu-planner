@@ -245,6 +245,50 @@ function campJournal(d: SkirmishResult, allies: SkirmishUnit[], bodies: Skirmish
     : lines;
 }
 
+/** Ce qu'un combat contre une force de camp laisse derrière lui. */
+export interface CampFight {
+  skirmish: SkirmishResult;
+  foes: number;
+  slain: number;
+  /** Abattus PAR aventurier (le héros n'y figure pas). */
+  kills: Record<string, number>;
+  heroKills: number;
+  /** Parts d'XP des abattus, par aventurier (`skirmishXpShares`). */
+  shares: Record<string, number>;
+  journal: string[];
+}
+
+/**
+ * ⚔️ LE COMBAT contre une force de camp — celui d'un camp, ET celui des gardes d'un lieu de
+ * récolte (`harvestGuardOf`, 2026-09-22). ⚠️ UNE SEULE implémentation : le % affiché
+ * (`campWinPct`), le camp et la récolte gardée rejouent exactement le même choc, sur la
+ * graine PAIRE du départ (`partyFightSeed`), jamais sur celles du pronostic.
+ */
+export function fightCampForce(input: PartyInput): CampFight {
+  const { poi, spec, escort, hero, seed } = input;
+  const allies = partyAllies(escort, input.road, hero);
+  const foe = campFoe(poi, spec);
+  const bodies = campBodies(poi, spec, foe);
+  const group = fuseUnits(allies, 'Groupe');
+  const fight = simulateCombat(group, foe, { seed: partyFightSeed(seed), goldOnWin: 0 });
+  const d = deriveSkirmish(
+    { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
+    allies,
+    bodies,
+    seed,
+  );
+  const slainBy = slainByAlly(allies, d);
+  return {
+    skirmish: d,
+    foes: bodies.length,
+    slain: d.foesDown.length,
+    kills: Object.fromEntries(escort.map((a) => [a.id, slainBy[a.id] ?? 0])),
+    heroKills: hero ? (slainBy[HERO_UNIT_ID] ?? 0) : 0,
+    shares: skirmishXpShares(escort, bodies, d),
+    journal: campJournal(d, allies, bodies),
+  };
+}
+
 /**
  * ⚔️ La résolution d'une attaque de camp (seedée au DÉPART, révélée aux horodatages).
  *
@@ -263,38 +307,22 @@ function campJournal(d: SkirmishResult, allies: SkirmishUnit[], bodies: Skirmish
  * ⚠️ `poi.perilous` d'un camp reste tiré au spawn, mais n'a AUCUN effet sur une attaque.
  */
 export function resolveCamp(input: PartyInput): ExpeditionOutcome {
-  const { poi, spec, escort, hero, seed } = input;
-  const allies = partyAllies(escort, input.road, hero);
-  const foe = campFoe(poi, spec);
-  const bodies = campBodies(poi, spec, foe);
-  const group = fuseUnits(allies, 'Groupe');
-  const fight = simulateCombat(group, foe, { seed: partyFightSeed(seed), goldOnWin: 0 });
-  const d = deriveSkirmish(
-    { log: fight.log, win: fight.win, allyPv: group.pv, foePv: foe.pv },
-    allies,
-    bodies,
-    seed,
-  );
-  const slainBy = slainByAlly(allies, d);
-  const kills: Record<string, number> = Object.fromEntries(
-    escort.map((a) => [a.id, slainBy[a.id] ?? 0]),
-  );
-  const shares = skirmishXpShares(escort, bodies, d);
-  const xp = missionXpFor(escort, poi, d.win, shares, !!hero);
-
+  const { poi, spec, escort, hero } = input;
+  const g = fightCampForce(input);
+  const d = g.skirmish;
   const party: PartyResult = {
     hero: !!hero,
     faction: spec.faction,
     escort: escort.map((a) => a.id),
     win: d.win,
-    foes: bodies.length,
-    slain: d.foesDown.length,
-    kills,
-    heroKills: hero ? (slainBy[HERO_UNIT_ID] ?? 0) : 0,
-    xp,
+    foes: g.foes,
+    slain: g.slain,
+    kills: g.kills,
+    heroKills: g.heroKills,
+    xp: missionXpFor(escort, poi, d.win, g.shares, !!hero),
     hurt: campHurt(d, escort),
     wages: caravanWages(escort, poi),
-    journal: campJournal(d, allies, bodies),
+    journal: g.journal,
   };
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;
 

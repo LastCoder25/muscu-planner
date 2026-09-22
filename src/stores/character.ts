@@ -1740,10 +1740,10 @@ export const useCharacterStore = defineStore('character', () => {
     // gardien — ni, pour une faille, la MINE D’OR dans laquelle `resolveOutcome` la faisait
     // tomber (v0.926). ⚠️ Une expédition héros DÉJÀ en route vers un camp (ancien format)
     // reste résolue et encaissée normalement.
-    // ⚠️ Les lieux de RÉCOLTE sont aussi des cibles d'équipe (2026-09-21), mais le héros SEUL
-    // y garde son expédition solo (décision de l'utilisateur : « oui, seul aussi »).
-    if (PARTY_TARGETS.has(poi.type) && !HARVEST_TYPES.has(poi.type))
-      throw new Error('Ce lieu s’attaque en groupe.');
+    // ⚠️ Les lieux de RÉCOLTE aussi, depuis qu'ils sont GARDÉS (2026-09-22) : le héros seul y
+    // part toujours (« oui, seul aussi »), mais en groupe d'un, pour affronter les gardes
+    // (`resolveHarvestParty`) — une expédition solo les contournait.
+    if (PARTY_TARGETS.has(poi.type)) throw new Error('Ce lieu s’attaque en groupe.');
     // ⚠️ L'infirmerie n'était vérifiée que par l'écran Aventure (`expeBlocked`) : depuis la
     // carte, un héros blessé repartait. Le refus vit ici pour qu'aucun écran ne l'oublie.
     const healIn = woundRemainingMs(cur.base, now);

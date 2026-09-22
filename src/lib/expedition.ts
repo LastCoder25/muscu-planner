@@ -217,6 +217,37 @@ export function campSpecOf(poi: Pick<Poi, 'id' | 'type'>): CampSpec | null {
   return { faction, size: sizes[Math.floor(rng() * sizes.length)]! };
 }
 
+/** 🛡️ Force des GARDES d'un lieu de récolte, en champions de référence (cf. `campFoe`).
+ *  Décision de l'utilisateur (2026-09-22) : « toutes les mines ont des ennemis qu'il faut
+ *  tuer pour y accéder », force « comme un petit camp ». */
+export const HARVEST_GUARD_SIZES: readonly number[] = [1, 2];
+/** 🌱 RAMPE DE DÉBUT DE PARTIE : la taille des gardes vaut `start` au niveau 1 et monte de
+ *  `perLevel` par niveau jusqu'à 1 (niveau 7). ⚠️ MESURÉE : sans elle, un héros seul de
+ *  niveau 1 ne prenait AUCUN lieu (0 %, et 19 % au niveau 2) — or la récolte est l'or du
+ *  débutant, et la moitié de ses lieux sont « au-dessus » (`riftLevelFor`). Avec : 61 à
+ *  76 % des lieux pris seul aux niveaux 1-5, et rien ne change à partir du niveau 7. */
+export const HARVEST_GUARD_RAMP = { start: 0.4, perLevel: 0.1 };
+
+/**
+ * 🛡️ Les gardes d'une mine, d'un puits, d'un sanctuaire, d'archives ou d'une mine de mana —
+ * DÉRIVÉS de l'id, jamais stockés, patron exact de `campSpecOf`.
+ * ⚠️ GÉNÉRATEUR SÉPARÉ (constante XOR propre, ≠ camps et failles) : le spawn ne tire rien de
+ * plus, la carte reste identique au bit près, et un lieu déjà sur une carte sauvegardée a ses
+ * gardes sans migration. ⚠️ Distinct de `campSpecOf`, qui reste « ce qui se RÉSOUT comme un
+ * camp » (la dispatch du store s'y fie) : un lieu gardé se résout comme une récolte.
+ */
+export function harvestGuardOf(poi: Pick<Poi, 'id' | 'type' | 'level'>): CampSpec | null {
+  if (!HARVEST_TYPES.has(poi.type)) return null;
+  const rng = mulberry32((hashId(poi.id) ^ 0x5851f42d) >>> 0 || 1);
+  const faction = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
+  const base = HARVEST_GUARD_SIZES[Math.floor(rng() * HARVEST_GUARD_SIZES.length)]!;
+  const ramp = Math.min(
+    1,
+    HARVEST_GUARD_RAMP.start + HARVEST_GUARD_RAMP.perLevel * Math.max(0, poi.level - 1),
+  );
+  return { faction, size: base * ramp };
+}
+
 export interface Poi {
   id: string;
   type: PoiType;

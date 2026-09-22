@@ -371,7 +371,7 @@
         </template>
         <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
              se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
-        <template v-if="offers.hero && !teamOnly">
+        <template v-if="offers.hero && !partyTarget">
           <div class="sh-row">
             <span class="sh-chip">⏱️ {{ formatDurationMin(roundTripMin(selected)) }}</span>
             <span class="sh-chip">🪙 {{ costOf(selected) }}</span>
@@ -415,12 +415,20 @@
              Les règles vivent dans `camp.ts` / `rift.ts` et `party.ts` ; l’écran les montre,
              et dit POURQUOI quelqu’un ne peut pas venir. -->
         <template v-if="partyTarget">
-          <div v-if="offers.hero && !teamOnly" class="car-sep">ou bien — une équipe</div>
-          <!-- 🧺 Une récolte en équipe : pas de combat au lieu, des bandits possibles sur la
-               route (le moteur des convois d’avant, `resolveHarvestParty`). -->
-          <div v-if="!teamOnly" class="sh-row sh-wrap">
+          <div v-if="offers.hero && !partyTarget" class="car-sep">ou bien — une équipe</div>
+          <!-- 🧺 Une récolte en équipe : des GARDES à abattre d'abord (`harvestGuardOf`, force
+               d'un petit camp), puis des bandits possibles sur la route (`resolveHarvestParty`).
+               ⚠️ Le 🎯 est la victoire contre les gardes : perdue, rien n'est récolté. -->
+          <div v-if="selectedGuard" class="sh-row sh-wrap">
+            <span class="sh-chip" title="Les gardes du lieu, comptés en champions de référence"
+              >{{ FACTION_EMOJI[selectedGuard.faction] }} Gardes · 💪 ≈
+              {{ String(+selectedGuard.size.toFixed(1)).replace('.', ',') }} champion{{ selectedGuard.size > 1 ? 's' : '' }}</span
+            >
             <span v-if="partySize" class="sh-chip">⏱️ {{ formatDurationMin(partyMin) }}</span>
             <span class="sh-chip">⚡ 0</span>
+            <span v-if="partyWin !== null" class="sh-chip" :class="winClass(partyWin)"
+              >🎯 {{ partyWin }}%</span
+            >
             <span v-if="selected.riftPeril || selected.perilous" class="sh-chip peril"
               >⚠️ Route dangereuse — embuscades doublées</span
             >
@@ -527,9 +535,10 @@
             ; le héros, lui, rentre sans butin.
           </p>
           <p v-else-if="!teamOnly" class="sh-note">
-            L’équipe récolte le lieu ; sur la route, des bandits peuvent tendre une embuscade — plus
-            l’équipe est complète, mieux elle tient. Sans le héros, elle prend un créneau de
-            l’Avant-poste.
+            Des gardes tiennent le lieu : il faut les abattre pour récolter. Repoussée, l’équipe ne
+            ramène rien et les champions tombés partent à l’infirmerie. Sur la route, des bandits
+            peuvent tendre une embuscade — plus l’équipe est complète, mieux elle tient. Sans le
+            héros, elle prend un créneau de l’Avant-poste.
           </p>
           <p v-else class="sh-note">
             Sans le héros, l’équipe prend un créneau de l’Avant-poste — et une faille ne rend que du
@@ -707,6 +716,7 @@ import {
   type PoiType,
   HARVEST_TYPES,
   campSpecOf,
+  harvestGuardOf,
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
@@ -1061,6 +1071,8 @@ const offerHero = computed(() => offers.value.hero);
 // ne fait que la montrer. ⚠️ Le héros n'attaque plus un camp par `expeSend` (le store le
 // refuse) : même seul, il y passe par `sendParty`.
 const selectedCamp = computed(() => (selected.value ? campSpecOf(selected.value) : null));
+/** 🛡️ Les gardes d'un lieu de récolte (2026-09-22) — même force qu'un petit camp. */
+const selectedGuard = computed(() => (selected.value ? harvestGuardOf(selected.value) : null));
 /** Le rang du lieu sélectionné — la MÊME fonction que la boule sur la carte. */
 const selectedRank = computed(() => poiRank(selected.value!));
 
@@ -1183,7 +1195,8 @@ const partyWin = computed(() => {
     return Math.round(
       estimateInterception(p, partyAdvs.value, roadCtx.value, heroForParty.value, 40) * 100,
     );
-  const spec = selectedCamp.value;
+  // 🛡️ Un lieu de récolte gardé : le MÊME combat que les camps (`fightCampForce`).
+  const spec = selectedCamp.value ?? selectedGuard.value;
   if (!spec) return null;
   return Math.round(campWinPct(p, spec, allies, 40) * 100);
 });

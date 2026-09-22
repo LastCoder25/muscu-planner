@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { resolveHarvestParty } from '@/lib/harvestParty';
-import { refAdvGear, refChampionAdv, resolveCaravan, type PartyHero } from '@/lib/caravan';
-import { resolveOutcome, type Poi } from '@/lib/expedition';
+import {
+  missionXpFor,
+  partyAllies,
+  refAdvGear,
+  refChampionAdv,
+  resolveCaravan,
+  type PartyHero,
+} from '@/lib/caravan';
+import { campWinPct, fightCampForce } from '@/lib/camp';
+import {
+  HARVEST_GUARD_RAMP,
+  HARVEST_GUARD_SIZES,
+  HARVEST_TYPES,
+  harvestGuardOf,
+  resolveOutcome,
+  type Poi,
+} from '@/lib/expedition';
 import { refFighter } from '@/lib/proceduralContent';
 import type { Adventurer } from '@/lib/adventurers';
 
@@ -31,28 +46,28 @@ const road = { advGear: refAdvGear(26, 3) };
 const hero: PartyHero = { name: 'H', level: 26, combatant: refFighter(26) };
 
 describe('🧺 une équipe sur un lieu de récolte', () => {
-  it('SANS le héros : c’est le convoi — même cargaison, même route, même XP', () => {
+  it('SANS le héros, gardes abattus : c’est le convoi — même cargaison, même route, XP + gardes', () => {
+    let vus = 0;
     for (const t of ['well', 'mine', 'shrine', 'archive'] as const)
       for (const seed of [1, 7, 42]) {
         const p = poi(t);
+        const input = { poi: p, escort: team(3), road, hero: null, seed, playerLevel: 26 };
+        const g = fightCampForce({ ...input, spec: harvestGuardOf(p)! });
+        if (!g.skirmish.win) continue;
+        vus++;
         const c = resolveCaravan(p, team(3), seed, road);
-        const o = resolveHarvestParty({
-          poi: p,
-          escort: team(3),
-          road,
-          hero: null,
-          seed,
-          playerLevel: 26,
-        });
+        const o = resolveHarvestParty(input);
         expect(o.gold, t).toBe(c.gold);
         expect(o.energy, t).toBe(c.energy);
         expect(o.summonStones, t).toBe(c.summonStones);
         expect(o.key, t).toBe(c.keys);
-        expect(o.party!.xp).toEqual(c.xp);
+        for (const [id, v] of Object.entries(c.xp))
+          expect(o.party!.xp[id]).toBe(v + Math.round(g.shares[id] ?? 0));
         expect(o.party!.hurt).toEqual(c.hurt);
         expect(o.party!.wages).toBe(c.wages);
         expect(o.party!.hero).toBe(false);
       }
+    expect(vus).toBeGreaterThan(6); // un trio de son niveau prend presque toujours les gardes
   });
 
   it('⚠️ 💠 une mine de mana rapporte ENFIN du mana en équipe — le convoi n’en rendait pas', () => {
@@ -101,5 +116,86 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
     expect(o.party!.xp.a0).toBeGreaterThan(0);
     expect(o.party!.wages).toBeGreaterThan(0);
     expect(o.party!.hurt).toEqual([]);
+  });
+});
+
+describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
+  it('tous les lieux de récolte sont gardés — et eux seuls', () => {
+    for (const t of HARVEST_TYPES) expect(harvestGuardOf(poi(t)), t).not.toBeNull();
+    for (const t of ['camp', 'lair', 'rift', 'arena'] as const)
+      expect(harvestGuardOf(poi(t)), t).toBeNull();
+  });
+
+  it('la force est celle d’un petit camp (1-2 champions), dérivée de l’id, déterministe', () => {
+    const sizes = new Set<number>();
+    for (let i = 0; i < 200; i++) {
+      const p = poi('shrine', { id: 'g' + i });
+      const g = harvestGuardOf(p)!;
+      expect(harvestGuardOf({ ...p, x: 1, distNorm: 0.9 })).toEqual(g);
+      expect(HARVEST_GUARD_SIZES).toContain(g.size);
+      sizes.add(g.size);
+    }
+    expect([...sizes].sort()).toEqual([...HARVEST_GUARD_SIZES].sort());
+  });
+
+  it('🌱 rampe de début de partie : plus petits jusqu’au niveau 7, pleins ensuite', () => {
+    const at = (level: number) => harvestGuardOf(poi('mine', { id: 'g1', level }))!.size;
+    const full = at(30);
+    expect(at(1)).toBeCloseTo(full * HARVEST_GUARD_RAMP.start);
+    for (let l = 2; l <= 7; l++) expect(at(l)).toBeGreaterThan(at(l - 1));
+    expect(at(7)).toBe(full);
+    expect(at(8)).toBe(full);
+  });
+
+  it('défaite : RIEN n’est récolté, XP de défaite, les tombés à l’infirmerie', () => {
+    let vu = false;
+    for (let s = 1; s < 80 && !vu; s++) {
+      const p = poi('mine', { id: 'dur' + s });
+      if (harvestGuardOf(p)!.size < 2) continue;
+      const o = resolveHarvestParty({ poi: p, escort: team(1), road, hero: null, seed: s, playerLevel: 26 });
+      if (o.party!.win) continue;
+      vu = true;
+      expect(o.win).toBe(false);
+      expect(o.gold + o.energy + o.summonStones + o.mana + o.key).toBe(0);
+      expect(o.party!.hurt).toEqual(['a0']);
+      expect(o.party!.xp.a0).toBeGreaterThan(0);
+      expect(o.party!.xp.a0).toBeLessThan(missionXpFor(team(1), p, true, {}, false).a0!);
+    }
+    expect(vu).toBe(true);
+  });
+
+  it('⚠️ le héros SEUL affronte aussi les gardes — une défaite ne récolte rien', () => {
+    const faible: PartyHero = { name: 'H', level: 3, combatant: refFighter(3) };
+    let vu = false;
+    for (let s = 1; s < 80 && !vu; s++) {
+      const p = poi('shrine', { id: 'h' + s, level: 26 });
+      const o = resolveHarvestParty({ poi: p, escort: [], road, hero: faible, seed: s, playerLevel: 26 });
+      if (o.party!.win) continue;
+      vu = true;
+      expect(o.gold + o.summonStones + o.energy).toBe(0);
+    }
+    expect(vu).toBe(true);
+  });
+
+  it('🎯 le % affiché est celui du combat réel (même choc, graines disjointes)', () => {
+    const p = poi('mine', { id: 'pct' });
+    const spec = harvestGuardOf(p)!;
+    const allies = partyAllies(team(1), road, null);
+    const pct = campWinPct(p, spec, allies, 200);
+    let w = 0;
+    const N = 200;
+    for (let s = 1; s <= N; s++)
+      if (resolveHarvestParty({ poi: p, escort: team(1), road, hero: null, seed: s, playerLevel: 26 }).party!.win) w++;
+    // La victoire de la récolte exige AUSSI de tenir la route : elle ne dépasse pas le %.
+    expect(w / N).toBeLessThanOrEqual(pct + 0.08);
+    expect(Math.abs(w / N - pct)).toBeLessThan(0.35);
+  });
+
+  it('plus l’équipe est grande, mieux elle prend les gardes', () => {
+    const p = poi('archive', { id: 'grad' });
+    const spec = { ...harvestGuardOf(p)!, size: 2 };
+    const pc = (n: number) => campWinPct(p, spec, partyAllies(team(n), road, null), 60);
+    expect(pc(1)).toBeLessThan(0.2);
+    expect(pc(3)).toBeGreaterThan(0.9);
   });
 });
