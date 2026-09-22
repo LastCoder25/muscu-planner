@@ -102,8 +102,26 @@ describe('poids de puissance (v0.837, mesurés en vrai combat)', () => {
     const w = LEGENDARY_PROCS.map((p) => PROC_POWER[p.id]?.weight);
     expect(w.every((x) => (x ?? 0) > 0)).toBe(true);
     expect(new Set(w).size).toBe(1);
-    const r = combatPowerRaw({ ...h, procs: new Set(['thirst']) }) / combatPowerRaw(h);
-    expect(r).toBeCloseTo(Math.sqrt(1 + PROC_POWER.thirst!.weight), 6);
+    // 'charge' ne dépend d'aucune stat : il pèse toujours.
+    const r = combatPowerRaw({ ...h, procs: new Set(['charge']) }) / combatPowerRaw(h);
+    expect(r).toBeCloseTo(Math.sqrt(1 + PROC_POWER.charge!.weight), 6);
+  });
+  it('⚠️ un proc qui AMPLIFIE une stat ne pèse que si le combattant la porte', () => {
+    // Mesuré : un proc de riposte vaut +17,5 % chez le Duelliste et 0,0 % chez qui n'en porte
+    // pas — la puissance le comptait quand même, donc l'optimiseur équipait un objet pour un
+    // pouvoir qui ne se déclencherait jamais.
+    for (const [id, stat] of [
+      ['whetted', 'riposte'],
+      ['thirst', 'lifesteal'],
+      ['rage_seal', 'rage'],
+    ] as const) {
+      expect(PROC_POWER[id]!.needs).toBe(stat);
+      const sans = combatPowerRaw({ ...h, procs: new Set([id]) }) / combatPowerRaw(h);
+      expect(sans).toBe(1); // sans la stat : rien
+      const base = { ...h, [stat]: 0.5 };
+      const avec = combatPowerRaw({ ...base, procs: new Set([id]) }) / combatPowerRaw(base);
+      expect(avec).toBeCloseTo(Math.sqrt(1 + PROC_POWER[id]!.weight), 6);
+    }
   });
   it('deux procs du même côté s’additionnent sur leur facteur', () => {
     const two = combatPowerRaw({ ...h, procs: new Set(['charge', 'cadence']) });

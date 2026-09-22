@@ -254,19 +254,25 @@ const RELIC_POWER_W: Record<RelicPowerId, { side: 'off' | 'surv'; weight: number
 // −1 % (Initiative) à +35 % (Soif). Les 14 procs légendaires ont été RÉÉQUILIBRÉS à ~+8 %
 // chacun (cf. COMBAT) : ils pèsent donc tous 0,16. Le côté (offense/survie) ne sert qu'au
 // cumul de plusieurs procs.
-export const PROC_POWER: Record<string, { side: 'off' | 'surv'; weight: number }> = {
+// ⚠️ CERTAINS PROCS NE FONT RIEN SANS LA STAT QU'ILS AMPLIFIENT (`needs`) — mesuré : un
+// proc de riposte vaut **+17,5 % chez le Duelliste et 0,0 % chez qui n'en porte pas**, et la
+// puissance le comptait quand même. L'optimiseur préférait donc un objet au proc inutile.
+export const PROC_POWER: Record<
+  string,
+  { side: 'off' | 'surv'; weight: number; needs?: 'riposte' | 'lifesteal' | 'rage' }
+> = {
   initiative: { side: 'off', weight: 0.16 },
   executioner: { side: 'off', weight: 0.16 },
   predator_eye: { side: 'off', weight: 0.16 },
   vampiric: { side: 'off', weight: 0.16 },
   charge: { side: 'off', weight: 0.16 },
   cadence: { side: 'off', weight: 0.16 },
-  whetted: { side: 'off', weight: 0.16 },
+  whetted: { side: 'off', weight: 0.16, needs: 'riposte' },
   aegis: { side: 'surv', weight: 0.16 },
   retort: { side: 'surv', weight: 0.16 },
   phoenix: { side: 'surv', weight: 0.16 },
   secondwind: { side: 'surv', weight: 0.16 },
-  thirst: { side: 'surv', weight: 0.16 },
+  thirst: { side: 'surv', weight: 0.16, needs: 'lifesteal' },
   endurance: { side: 'surv', weight: 0.16 },
   quarry: { side: 'surv', weight: 0.16 },
   living_armor: { side: 'surv', weight: 0.16 },
@@ -275,7 +281,7 @@ export const PROC_POWER: Record<string, { side: 'off' | 'surv'; weight: number }
   sang_froid: { side: 'surv', weight: 0.16 },
   sidestep: { side: 'surv', weight: 0.16 },
   dance: { side: 'off', weight: 0.16 },
-  rage_seal: { side: 'off', weight: 0.16 },
+  rage_seal: { side: 'off', weight: 0.16, needs: 'rage' },
   hunter: { side: 'off', weight: 0.16 },
   // ⚠️ SIGNATURES DE SET : leur poids n'est PAS la valeur de la signature seule, mais ce qui
   // manque pour que la puissance affichée du SET COMPLET égale ce qu'il vaut en vrai combat.
@@ -634,8 +640,11 @@ export function combatPowerRaw(c: Combatant): number {
   if (c.procs)
     for (const p of c.procs) {
       const w = PROC_POWER[p];
-      if (w?.side === 'off') procOff += w.weight;
-      else if (w) procSurv += w.weight;
+      // Un proc qui amplifie une stat absente ne vaut rien : ne pas le compter, sinon
+      // l'optimiseur équipe un objet pour un pouvoir qui ne se déclenchera jamais.
+      if (!w || (w.needs && !c[w.needs])) continue;
+      if (w.side === 'off') procOff += w.weight;
+      else procSurv += w.weight;
     }
   if (c.relic) {
     const w = RELIC_POWER_W[c.relic.id];

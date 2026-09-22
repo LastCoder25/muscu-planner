@@ -105,11 +105,18 @@ const GEAR_BUDGET_BY_RANK: [number, number, number, number, number, number, numb
   [21, 30, 1.3, 1.54, 1.5, 1.68, 1.01],
   [31, 40, 1.7, 1.75, 1.77, 1.95, 1.06],
   [41, 50, 1.96, 2.46, 2.0, 2.17, 1.085],
-  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.65],
-  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.9],
-  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.93],
-  [81, 90, 5.62, 5.62, 3.95, 4.15, 2.03],
-  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.9],
+  // ⚠️ RECALÉE (v0.1087) après le conditionnement des procs qui amplifient une stat absente :
+  // l'optimiseur cessant d'équiper un objet pour un pouvoir qui ne se déclenchera jamais, le
+  // joueur de référence gagne 7 à 17 points de clear à partir du niveau 55. Facteur MESURÉ par
+  // bissection du multiplicateur de monstre qui le ramène à son taux d'avant : boss 40 ×1,004
+  // (rien), donjon 49 ×1,001 (rien), boss 55 ×1,061, boss 70 ×1,099, donjon 79 ×1,064,
+  // boss 85 ×1,086. Sous le niveau 50, rien ne bouge — les effets légendaires n'arrivent
+  // qu'au rang Légendaire. Le segment 91-100 n'est pas mesuré : il prend la moyenne (×1,08).
+  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.75],
+  [61, 70, 3.58, 3.74, 2.72, 3.1, 2.09],
+  [71, 80, 4.76, 4.85, 3.14, 3.77, 2.05],
+  [81, 90, 5.62, 5.62, 3.95, 4.15, 2.2],
+  [91, 100, 5.65, 6.19, 4.15, 4.2, 2.05],
 ];
 export function gearBudget(level: number): { off: number; pv: number } {
   const L = Math.min(100, Math.max(1, level));
