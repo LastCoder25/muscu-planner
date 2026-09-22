@@ -655,8 +655,8 @@ camps, les failles (ils ne lisent pas l'équipement du héros), et la défense d
 
 ## 11. L'écran
 
-- **Grille d'équipement** 3 × 3 : arme, armure, bouclier / casque, bottes, anneau /
-  relique, familier, trophée. À vérifier à 344 px.
+- ~~**Grille d'équipement** 3 × 3~~ — **écartée (décision du 2026-09-22)** : la liste reste
+  « une pièce par ligne » (v0.1048), la grille coupait les noms et cachait des stats.
 - **Avatar** (`AventureAvatar.vue`) : dessiner bouclier, casque et bottes, teintés de leur
   rang, comme les pièces actuelles. C'est ce qui rend la refonte visible.
 - **Relique** : la jauge dans l'animation de combat (`CombatStage`), le pouvoir écrit en
