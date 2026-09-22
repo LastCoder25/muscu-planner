@@ -1498,7 +1498,7 @@
         </button>
         <div class="dungeons">
           <div
-            v-for="b in bossChain"
+            v-for="b in visibleBosses"
             :key="b.id"
             class="dgn mboss"
             :class="{ locked: !bossUnlocked(b), beaten: isBossBeaten(b) }"
@@ -1573,13 +1573,9 @@
             >
               ⚔️ {{ isBossBeaten(b) ? 'Réaffronter' : 'Combattre' }} ({{ summonCostFor(b) }} 🔮)
             </button>
-            <!-- Pas assez de pierres → on dit d'où elles viennent (nettoyage de donjon). -->
-            <div
-              v-if="bossUnlocked(b) && (char.row?.summon_stones ?? 0) < summonCostFor(b)"
-              class="dgn-hint summon-hint"
-            >
-              🔮 Nettoie des donjons pour gagner des pierres d'invocation ↓
-            </div>
+            <!-- ⚠️ Rien ne doit s'intercaler entre le bouton ci-dessus et les deux v-else
+                 qui suivent : un élément glissé ici devenait la tête de la chaîne, et un
+                 boss DÉBLOQUÉ affichait en plus le bouton grisé « 🔒 ». -->
             <!-- Verrouillé par l'Autel manquant → bouton qui EMMÈNE le construire. -->
             <button
               v-else-if="!hasBossAltar"
@@ -1590,6 +1586,13 @@
             </button>
             <!-- Verrouillé par la chaîne → on dit quel boss battre d'abord (juste au-dessus). -->
             <button v-else class="fight mboss-fight" disabled>🔒 {{ bossLockReason(b) }}</button>
+            <!-- Pas assez de pierres → on dit d'où elles viennent (nettoyage de donjon). -->
+            <div
+              v-if="bossUnlocked(b) && (char.row?.summon_stones ?? 0) < summonCostFor(b)"
+              class="dgn-hint summon-hint"
+            >
+              🔮 Nettoie des donjons pour gagner des pierres d'invocation ↓
+            </div>
           </div>
         </div>
       </template>
@@ -5020,6 +5023,13 @@ function bossUnlocked(b: MilestoneBoss): boolean {
   const i = order.findIndex((x) => x.id === b.id);
   return i <= 0 || defeatedBossSet.value.has(order[i - 1]!.id);
 }
+// Boss affichés : tous ceux déjà débloqués + le PROCHAIN à débloquer, et pas ceux
+// d'après — la liste montre où l'on en est, pas toute la chaîne verrouillée.
+const visibleBosses = computed(() => {
+  const order = bossChain.value;
+  const next = order.findIndex((b) => !bossUnlocked(b));
+  return next < 0 ? order : order.slice(0, next + 1);
+});
 function bossLockReason(b: MilestoneBoss): string {
   if (!hasBossAltar.value) return '🔮 Construis l’Autel des boss (carte)';
   const order = bossChain.value;
