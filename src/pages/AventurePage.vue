@@ -1537,6 +1537,19 @@
                 :title="powTitle(b.unlockLevel, true)"
                 >⚔️ {{ fmtPow(recoPow(b.unlockLevel, true)) }}</span
               >
+              <!-- 🎯 % de réussite RÉEL (tentatives comptées depuis v0.1061), comme le Labyrinthe. -->
+              <span
+                v-if="bossUnlocked(b)"
+                class="dgn-chip succ"
+                :class="bossSuccess(b) === null ? 'none' : successTier(bossSuccess(b)!)"
+                title="Tes victoires sur ce boss, parmi tes tentatives"
+                >🎯
+                {{
+                  bossSuccess(b) === null
+                    ? 'jamais tenté'
+                    : `${bossSuccess(b)} % réussis (${bossRuns(b)} essai${bossRuns(b) > 1 ? 's' : ''})`
+                }}</span
+              >
             </div>
 
             <div class="mboss-set">
@@ -3007,6 +3020,7 @@ import {
   type Dungeon,
 } from '@/data/dungeons';
 import { BOSSES, bossSummonCost, type MilestoneBoss } from '@/data/bosses';
+import { runSuccessPct, successTier } from '@/lib/runStats';
 import { recommendedPower } from '@/lib/proceduralContent';
 import { VOIES, VOIE_BY_ID, voiePassiveEffects, type VoieId } from '@/lib/voies';
 import {
@@ -4929,6 +4943,10 @@ function isBossBeaten(b: MilestoneBoss): boolean {
 // L'Autel des boss (bâtiment) est REQUIS pour affronter les boss de palier.
 const hasBossAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
 // Coût d’un boss en pierres d’invocation 🔮 (∝ palier). ⚠️ L’Autel ne le réduit plus (v0.799).
+// % de réussite RÉEL sur un boss (null = jamais tenté depuis que les tentatives sont comptées).
+const bossSuccess = (b: MilestoneBoss) => runSuccessPct(char.row?.boss_stats ?? {}, b.id);
+const bossRuns = (b: MilestoneBoss) => char.row?.boss_stats?.[b.id]?.runs ?? 0;
+
 function summonCostFor(b: MilestoneBoss): number {
   return bossSummonCost(b.unlockLevel);
 }
@@ -9840,6 +9858,16 @@ button.pt-mini:active {
 }
 .dgn-chip.gold {
   color: var(--accent);
+}
+/* % de réussite réel sur un boss — mêmes teintes que le Labyrinthe (`successTier`). */
+.dgn-chip.succ.ok {
+  color: color-mix(in srgb, #7bc86c 78%, var(--dim));
+}
+.dgn-chip.succ.mid {
+  color: color-mix(in srgb, #ffb23f 78%, var(--dim));
+}
+.dgn-chip.succ.bad {
+  color: color-mix(in srgb, #ff6a45 70%, var(--dim));
 }
 /* Réserve de pierres affichée à côté du coût du boss (plus discrète). */
 .chip-reserve {

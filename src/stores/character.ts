@@ -73,6 +73,7 @@ import {
   normalizeLabyStats,
   type LabyStats,
 } from '@/data/labyrinths';
+import { normalizeRunStats, runAttempt, type RunStats } from '@/lib/runStats';
 import {
   PARTY_TARGETS,
   HARVEST_TYPES,
@@ -281,6 +282,7 @@ export interface CharacterRow {
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
   adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
   laby_stats: LabyStats; // Labyrinthe : runs lancés / nettoyés par palier (migr. 0073)
+  boss_stats: RunStats; // Boss de palier : tentatives / victoires par boss (migr. 0085)
   parties: ActiveParty[] | null; // ⚔️ groupes de camp partis SANS le héros (migr. 0077)
 }
 
@@ -316,7 +318,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, parties, gacha, gacha_tickets, seals';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, parties, gacha, gacha_tickets, seals';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -346,6 +348,7 @@ export const useCharacterStore = defineStore('character', () => {
     // malgré le type nullable qui reflète ce que la DB peut renvoyer).
     r.adv_gear = normalizeAdvGearState(r.adv_gear);
     r.laby_stats = normalizeLabyStats(r.laby_stats);
+    r.boss_stats = normalizeRunStats(r.boss_stats);
     // ⚔️ Groupes de camp (migr. 0077) : absent/malformé → [] ; une entrée incomplète est
     // écartée (`buildMessage` la lirait à chaque tick).
     r.parties = normalizeParties(r.parties);
@@ -848,6 +851,8 @@ export const useCharacterStore = defineStore('character', () => {
       ink_dust: cur.ink_dust + (input.defeated ? (input.inkDust ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
+      // % de réussite RÉEL affiché sur la carte du boss : chaque tentative compte, gagnée ou perdue.
+      boss_stats: runAttempt(cur.boss_stats, input.bossId, input.defeated),
       equipped: dist.equipped,
       inventory: dist.inventory,
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, drops),

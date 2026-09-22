@@ -27,10 +27,11 @@
         :class="{ on: !hiddenRanks.has(o.rankIndex) }"
         :style="{ '--rk': CHARACTER_RANKS[o.rankIndex]!.color }"
         :aria-pressed="!hiddenRanks.has(o.rankIndex)"
+        :aria-label="rankChipLabel(o)"
+        :title="rankChipLabel(o)"
         @click="toggleRank(o.rankIndex)"
       >
-        {{ CHARACTER_RANKS[o.rankIndex]!.emoji }} {{ CHARACTER_RANKS[o.rankIndex]!.name }}
-        <span class="rf-n">{{ o.count }}</span>
+        <span class="rf-dot" />
       </button>
     </div>
 
@@ -972,6 +973,9 @@ function loadHiddenRanks(): Set<number> {
 }
 const hiddenRanks = ref<Set<number>>(loadHiddenRanks());
 const rankOptions = computed(() => poiRankCounts(pois.value));
+// La puce n'affiche qu'une boule : son nom et son compte passent par l'étiquette.
+const rankChipLabel = (o: { rankIndex: number; count: number }) =>
+  `${CHARACTER_RANKS[o.rankIndex]?.name ?? ''} · ${o.count} lieu${o.count > 1 ? 'x' : ''}`;
 function toggleRank(r: number) {
   const next = new Set(hiddenRanks.value);
   if (next.has(r)) next.delete(r);
@@ -2249,34 +2253,39 @@ onUnmounted(() => {
 .rank-filter::-webkit-scrollbar {
   display: none;
 }
+/* Une boule de la couleur du rang par puce — cible tactile de 44 px, boule de 22. Affiché =
+   boule PLEINE, masqué = simple anneau estompé : l'état se lit sans dépendre de la couleur. */
 .rf-chip {
-  flex: 1 0 auto;
-  min-height: 44px;
+  flex: none;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px dashed var(--line);
-  background: var(--surface);
-  color: var(--dim);
-  font-size: 12.5px;
-  font-weight: 700;
-  white-space: nowrap;
+  padding: 0;
+  border: none;
+  background: none;
   cursor: pointer;
-  opacity: 0.55;
 }
-.rf-chip.on {
+.rf-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--rk);
+  background: transparent;
+  opacity: 0.45;
+  transition:
+    background 0.15s,
+    opacity 0.15s;
+}
+.rf-chip.on .rf-dot {
+  background: var(--rk);
   opacity: 1;
-  color: var(--text);
-  border-style: solid;
-  border-color: var(--rk);
-  background: color-mix(in srgb, var(--rk) 14%, var(--surface));
+  box-shadow: 0 0 0 2px var(--surface);
 }
-.rf-n {
-  font-family: 'Oswald', sans-serif;
-  opacity: 0.8;
+.rf-chip:focus-visible .rf-dot {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .outpost-hint {
   margin: 0 12px 10px;

@@ -527,6 +527,7 @@ import {
   labySuccessPct,
   type Labyrinth,
 } from '@/data/labyrinths';
+import { successTier } from '@/lib/runStats';
 import { computeCharacter } from '@/lib/character';
 import {
   playerWithGear,
@@ -752,7 +753,7 @@ const detailPowerDelta = computed<number | null>(() => {
 // Demande de l'utilisateur : plus d'estimation simulée, le vrai bilan de ses runs. Compté au
 // lancement (`spendKey`) et au nettoyage (`applyExpedition`), relu dans `laby_stats`.
 // Couleur du % de réussite : vert ≥70, orange 40-69, rouge <40.
-const pctClass = (pct: number) => (pct >= 70 ? 'ok' : pct >= 40 ? 'mid' : 'bad');
+const pctClass = successTier;
 
 const CELL = 66;
 const SIZE = 46; // côté d'une salle (carré arrondi) ; salles alignées sur la grille
