@@ -482,14 +482,32 @@
               :on="partyEscort.includes(a.id)"
               @toggle="togglePartyAdv(a.id)"
             />
-            <AdvPickTile
-              v-for="b in partyBlocked"
-              :key="b.adv.id"
-              :adv="b.adv"
-              :on="false"
-              :reason="ADV_UNAVAILABLE_LABEL[b.why]"
-            />
+            <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
+                 de la grille pour des tuiles qu'on ne peut pas toucher. Le bouton dit combien il
+                 y en a, et pourquoi chacun est indisponible reste écrit sur sa tuile. -->
+            <template v-if="showBlocked">
+              <AdvPickTile
+                v-for="b in partyBlocked"
+                :key="b.adv.id"
+                :adv="b.adv"
+                :on="false"
+                :reason="ADV_UNAVAILABLE_LABEL[b.why]"
+              />
+            </template>
           </div>
+          <button
+            v-if="char.advList.length && partyBlocked.length"
+            type="button"
+            class="car-blocked-toggle"
+            :aria-expanded="showBlocked"
+            @click="showBlocked = !showBlocked"
+          >
+            {{
+              showBlocked
+                ? `Masquer les indisponibles`
+                : `Voir les ${partyBlocked.length} indisponible${partyBlocked.length > 1 ? 's' : ''}`
+            }}
+          </button>
           <p v-else class="sh-away">
             ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
           </p>
@@ -1102,6 +1120,8 @@ const partyAdvs = computed(() => freeStable.value.filter((a) => partyEscort.valu
 const blockedKey = computed(() =>
   char.advList.map((a) => `${a.id}:${advUnavailableReason(a, now.value) ?? ''}`).join('|'),
 );
+/** Champions indisponibles : masqués par défaut dans le choix d'une équipe (demandé). */
+const showBlocked = ref(false);
 const partyBlocked = computed(() => {
   const why = new Map(
     blockedKey.value.split('|').map((kv) => {
@@ -1745,11 +1765,24 @@ onUnmounted(() => {
   opacity: 0.45;
   cursor: default;
 }
+/* 👥 DEUX CHAMPIONS PAR LIGNE, en grand (demandé) : on compose une équipe sur le visage, la
+   rareté et les compétences — à 78 px par tuile rien ne se lisait. */
 .car-pick {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
   margin-bottom: 8px;
+}
+.car-blocked-toggle {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: none;
+  color: var(--dim);
+  font-size: 12.5px;
+  cursor: pointer;
 }
 /* ⚔️ Le héros dans un groupe de camp : pleine largeur, 44 px, coché comme une tuile. */
 .party-hero {

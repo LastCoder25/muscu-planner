@@ -30,7 +30,7 @@
     <span class="ca-rar" :style="{ color: rar.color }">{{ rar.label }}</span>
     <span class="ca-rank" :style="{ color: rank.color }">{{ rankStarStr(rank.star) }}</span>
     <!-- ✨ Son Éveil : jusqu'à +48 % de stats. On compose une escorte ici, et il ne se
-         lisait qu'au tirage et dans le Codex. Compact (la tuile est étroite) : la fiche
+         lisait qu'au tirage et dans le Codex. Compact (deux tuiles par ligne) : la fiche
          de la Guilde donne le /6. -->
     <span v-if="awaken" class="ca-awk">✨{{ awaken }}</span>
     <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
@@ -77,12 +77,12 @@ const rar = computed(() => advGradeBadge(props.adv));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 3px;
   min-width: 0;
-  padding: 7px 4px;
+  padding: 10px 6px 9px;
   background: #1d1913;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--text);
   min-height: 44px;
   cursor: pointer;
@@ -97,12 +97,15 @@ const rar = computed(() => advGradeBadge(props.adv));
   border-style: dashed;
   opacity: 0.6;
 }
+/* En GRAND (demandé) : deux tuiles par ligne, le portrait est ce qu'on reconnaît. */
 .ca-emo {
-  font-size: 20px;
+  font-size: 40px;
+  line-height: 1;
 }
 .ca-name {
-  font-size: 11px;
-  color: var(--dim);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -110,7 +113,8 @@ const rar = computed(() => advGradeBadge(props.adv));
 }
 /* La rareté de classe : mêmes mots et mêmes couleurs que la Guilde et que le butin. */
 .ca-rar {
-  font-size: 9px;
+  font-size: 11px;
+  font-weight: 700;
   line-height: 1.1;
   text-transform: capitalize;
   max-width: 100%;
@@ -121,12 +125,12 @@ const rar = computed(() => advGradeBadge(props.adv));
 /* Les étoiles : le travail de terrain, dans la teinte de son rang. */
 /* ✨ Même teinte que le Codex et la Guilde : une seule couleur pour l’Éveil. */
 .ca-awk {
-  font-size: 9px;
+  font-size: 11px;
   line-height: 1;
   color: var(--accent);
 }
 .ca-rank {
-  font-size: 9px;
+  font-size: 12px;
   letter-spacing: -0.5px;
   line-height: 1;
 }
@@ -136,14 +140,14 @@ const rar = computed(() => advGradeBadge(props.adv));
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 2px;
+  gap: 4px;
   line-height: 1;
 }
 .ca-skill {
-  font-size: 11px;
+  font-size: 15px;
 }
 .ca-skill b {
-  font-size: 8px;
+  font-size: 10px;
   color: var(--accent);
   vertical-align: super;
 }
@@ -153,12 +157,12 @@ const rar = computed(() => advGradeBadge(props.adv));
   opacity: 0.65;
 }
 .ca-none {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--dim);
   opacity: 0.6;
 }
 .ca-why {
-  font-size: 9.5px;
+  font-size: 11.5px;
   line-height: 1.1;
   color: var(--text);
   text-align: center;
