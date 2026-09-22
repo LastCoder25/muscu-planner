@@ -128,7 +128,7 @@ leurs dégâts), jamais par le terrain.
 | 💥 Berserker  | **style** : monte en puissance à mesure qu'il est blessé | _(aucun terrain mesuré)_             | Brasier             | perdre des PV               |
 | 🗡️ Assassin   | **style** : ouvre, fait saigner, achève                  | _(aucun terrain mesuré)_             | Coup fatal          | porter des critiques        |
 | 🩸 Vampire    | **style** : tient en se soignant sur chaque coup         | _(aucun terrain mesuré)_             | Festin              | se soigner par vol de vie   |
-| 🌀 Frénétique | **style** : monte avec la durée ⚠️ (voir ci-dessous)     | _(aucun terrain mesuré)_             | Tempête             | tenir l'élan au maximum     |
+| 🌀 Frénétique | **style** : monte vite, puis tient son plein régime       | _(aucun terrain mesuré)_             | Tempête             | tenir l'élan au maximum     |
 | 🌵 Épineux    | **terrain** : les hordes qui frappent souvent            | les boss qui frappent peu            | Éclat de ronces     | renvoyer des coups d'épines |
 | 🤺 Duelliste  | **terrain** : les ennemis qui frappent peu mais fort     | les hordes (trop de coups à lire)    | Riposte parfaite    | riposter                    |
 | 🛡️ Gardien    | **terrain** : les coups nombreux et moyens               | les attaques qui ignorent le blocage | Rempart vengeur     | parer                       |
@@ -147,9 +147,14 @@ leurs dégâts), jamais par le terrain.
    robustesse, créée pour lui, § 4.2). **Sa ligne ci-dessus reste une cible non atteinte** :
    soit il devient officiellement contre-horde, soit il lui faut une mécanique anti-gros-coup
    distincte de celle du Colosse. **Décision ouverte.**
-2. **L'élan du Frénétique sature au 5ᵉ tour** (plafond 4, ou 8 avec la Transe) alors qu'un
-   combat long dure **15 à 34 tours** : son style annoncé n'est donc tenu qu'au début. Deux
-   leviers ont été écrits, mesurés et **jetés** (§ 4.1 bis).
+2. ✅ **L'élan du Frénétique sature au 5ᵉ tour — ASSUMÉ (décision de l'utilisateur).** Le
+   plafond vaut 4 (6 avec la Transe) alors qu'un combat long dure **15 à 34 tours** : son
+   identité n'est pas « écrasant en fin de combat » mais **« monte vite, puis tient son plein
+   régime »**, et les textes joueur (`voies.ts`, `items.ts`) le disent désormais. ⚠️ Le frein
+   n'est pas le plafond : à haut niveau le héros ne joue que **8 tours sur 16** (il frappe
+   jusqu'à 37 fois par tour), donc l'élan n'atteint que 7 sur un plafond de 8. Deux leviers ont
+   été écrits, mesurés et **jetés** (§ 4.1 bis) ; rouvrir demanderait de changer ce que
+   « durer » veut dire pour lui.
 
 Ces forces et faiblesses sont **des cibles de mesure** (§ 8) : chaque set doit rester
 jouable partout, mais être nettement meilleur sur son terrain — **pour les quatre voies

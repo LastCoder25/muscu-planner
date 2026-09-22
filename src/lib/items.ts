@@ -3028,7 +3028,7 @@ const VOIE_SET_DEFS: {
     voie: 'frenetique',
     name: 'Transe du Frénétique',
     emoji: '🌀',
-    theme: 'Lent au départ, écrasant en fin de combat.',
+    theme: 'Monte en puissance à chaque tour, jusqu’à son plein régime.', // ⚠️ mesuré : l'élan sature au 5e tour (cf. voies.ts)
     stats: ['momentum_pct', 'lifesteal_pct', 'damage_pct'],
     tierScale: 0.86,
     capScale: 0.32,

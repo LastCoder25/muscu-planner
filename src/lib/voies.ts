@@ -81,7 +81,10 @@ export const VOIES: Voie[] = [
     id: 'frenetique',
     name: 'Frénétique',
     emoji: '🌀',
-    blurb: 'Lent au départ, écrasant en fin de combat.',
+    // ⚠️ Il annonçait « écrasant en FIN de combat » : mesuré, son élan SATURE au 5e tour
+    // (plafond 4, ou 6 avec la Transe) alors qu'un combat long en dure 15 à 34. Le texte dit
+    // désormais ce qu'il fait vraiment — il monte vite, puis il tient son plein régime.
+    blurb: 'Monte en puissance à chaque tour, jusqu’à son plein régime.',
     preferred: ['momentum_pct', 'lifesteal_pct', 'damage_pct'],
   },
 ];
