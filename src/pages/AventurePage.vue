@@ -869,10 +869,12 @@
             @click="char.row.equipped[slot] && (inspectItem = char.row.equipped[slot]!)"
           >
             <div class="slot-ico">
+              <!-- Tuile NEUTRE : le rang se lit déjà sur la barre et la pastille de la ligne. -->
               <ItemIcon
                 v-if="char.row.equipped[slot]"
                 :item="char.row.equipped[slot]!"
                 :size="44"
+                plain
               />
               <span v-else class="slot-emo">{{ SLOT_EMOJI[slot] }}</span>
             </div>
@@ -8896,7 +8898,9 @@ button.pt-mini:active {
   color: var(--dim);
   background: var(--surface);
 }
-/* Pastille de NIVEAU d'objet — mise en avant (accent). */
+/* Pastille de NIVEAU d'objet — NEUTRE (v0.1073). Elle était en accent plein, quel que soit
+   le rang : en stuff full Or, ce jaune se confondait avec celui du rang, et l'accent dit
+   partout ailleurs « il y a quelque chose à faire ». */
 .lvl-badge {
   display: inline-flex;
   align-items: center;
@@ -8905,9 +8909,9 @@ button.pt-mini:active {
   font-size: 11px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
-  color: #15120e;
-  background: var(--accent);
-  border: 1px solid var(--accent);
+  color: var(--text);
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--line);
   letter-spacing: 0.2px;
 }
 /* Stats d'un objet, une par ligne (affichage clair). */
@@ -8917,10 +8921,12 @@ button.pt-mini:active {
   gap: 2px;
   margin-top: 4px;
 }
+/* ⚠️ En couleur de TEXTE (v0.1073), plus en accent : le jaune d'accent se confondait avec
+   celui du rang Or, et une ligne de stats n'est pas une action. */
 .stat-line {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--accent);
+  color: var(--text);
   line-height: 1.3;
 }
 /* Pastille d'enchant +N (objet). */

@@ -1,7 +1,7 @@
 <template>
   <!-- Tuile d'objet façon ARPG : glyphe (MDI pour le gear, emoji d'espèce pour un familier)
        dans un cadre « gemme » teinté par le RANG, avec ★ de qualité et 🧩 set. -->
-  <div class="item-icon" :class="{ fam: isFamiliar }" :style="frameStyle">
+  <div class="item-icon" :class="{ fam: isFamiliar, plain }" :style="frameStyle">
     <span v-if="isFamiliar" class="ii-emoji" aria-hidden="true">{{ item.emoji }}</span>
     <q-icon v-else :name="icon" class="ii-glyph" :size="glyphSize + 'px'" />
 
@@ -20,8 +20,16 @@ import { itemIconName } from '@/data/itemIcons';
 
 // `id` non requis : on affiche aussi des objets « sans id » (butin d'un message d'expédition).
 const props = withDefaults(
-  defineProps<{ item: Omit<Item, 'id'>; size?: number; showStars?: boolean }>(),
-  { size: 44, showStars: true },
+  defineProps<{
+    item: Omit<Item, 'id'>;
+    size?: number;
+    showStars?: boolean;
+    /** Tuile NEUTRE (sans la couleur du rang) : là où le rang se lit déjà ailleurs sur la
+     *  ligne (barre et pastille de l'équipement porté). Un stuff full Or faisait sinon un
+     *  écran entièrement jaune, le jaune d'Or étant presque celui de l'accent. */
+    plain?: boolean;
+  }>(),
+  { size: 44, showStars: true, plain: false },
 );
 
 const rankColor = computed(() => RANK_COLOR[props.item.rarity]);
@@ -59,6 +67,18 @@ const frameStyle = computed(() => ({
   box-shadow:
     0 0 8px color-mix(in srgb, var(--rk) 26%, transparent),
     inset 0 1px 0 color-mix(in srgb, #fff 12%, transparent);
+}
+/* Tuile neutre : fond et contour de carte, pas de halo. */
+.item-icon.plain {
+  background: var(--surface-2, var(--surface));
+  border-color: var(--line);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
+}
+.item-icon.plain .ii-glyph {
+  color: var(--text);
+}
+.item-icon.plain .ii-jet {
+  color: var(--dim);
 }
 /* Glyphe MDI : teinte rang CLAIRE → contraste sur la tuile sombre. */
 .ii-glyph {
