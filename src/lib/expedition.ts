@@ -1813,6 +1813,10 @@ export function rollTravelEncounters(
           luck: 0.35,
           spread: 1,
           playerLevel,
+          // 🔮 Affinité 1/3 : elle était MORTE ici (le paramètre n'était pas passé), donc
+          // améliorer sa relique au même pouvoir y était trois fois moins probable
+          // qu'ailleurs. Le pouvoir porté voyage avec le héros, on ne peut plus l'oublier.
+          relicPower: hero.relic?.id,
         });
         text += ` ⚔️ Embuscade repoussée ${LEG_FR[leg]}`;
         if (spoil) {
@@ -2044,6 +2048,7 @@ export function resolveOutcome(
         luck: Math.min(0.95, 0.35 + w * 0.05),
         spread: 0,
         playerLevel,
+        relicPower: hero.relic?.id, // 🔮 affinité 1/3 (cf. embuscade)
       });
       if (d) items.push(d);
     }

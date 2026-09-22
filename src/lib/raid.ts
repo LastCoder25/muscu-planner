@@ -2695,6 +2695,10 @@ export function lootCorpses(
   faction: RaidFaction,
   playerLevel: number,
   seed: number,
+  /** 🔮 Pouvoir de la relique PORTÉE (affinité 1/3). ⚠️ REQUIS, même s'il peut être absent :
+   *  l'affinité était morte ici faute d'être passée, et un paramètre qu'on peut oublier finit
+   *  par l'être — le compilateur désigne l'appelant. */
+  relicPower: string | undefined,
 ): CorpseLoot {
   const rng = mulberry32((seed ^ 0x2545f491) >>> 0 || 1);
   const loot: CorpseLoot = { gold: 0, summonStones: 0, keys: 0, items: [] };
@@ -2739,6 +2743,7 @@ export function lootCorpses(
       level: L,
       luck: c.champion ? 0.45 : 0.1,
       playerLevel,
+      relicPower,
     });
     // ⚠️ LES BANDITS LÂCHENT DE L'ÉQUIPEMENT, les bêtes presque pas — parce que c'est ce
     // qu'on trouve sur eux. Un homme en armes porte une arme et une armure ; un loup ne

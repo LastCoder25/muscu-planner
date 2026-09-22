@@ -310,6 +310,34 @@ describe('expedition — butin par ennemi vaincu (arene / embuscade)', () => {
     expiresAt: 999 * H,
   };
 
+  it('🔮 le butin de la CARTE honore l affinite de relique (elle y etait morte)', () => {
+    // La relique portee voyage avec le heros : 1 drop de relique sur 3 doit reprendre SON
+    // pouvoir, sinon ameliorer sa relique a pouvoir egal y est 3 fois moins probable
+    // qu'ailleurs (mesure du defaut : le parametre n'etait pas passe).
+    const porte = { ...hero, relic: { id: 'carapace' as const, force: 1 } };
+    const part = (h: typeof hero, lieu: Poi, n: number): number => {
+      let meme = 0;
+      let total = 0;
+      for (let seed = 1; seed <= n; seed++)
+        for (const it of resolveOutcome(h, lieu, seed, 20).items ?? []) {
+          if (it.slot !== 'relic') continue;
+          total++;
+          if (it.power === 'carapace') meme++;
+        }
+      expect(total).toBeGreaterThan(20); // sinon on ne mesure rien
+      return meme / total;
+    };
+    // ⚠️ LES DEUX SOURCES SEPAREMENT : l arene tire un objet par vague et noyait le butin
+    // d EMBUSCADE, qui est la seule voie par laquelle un lieu de RECOLTE lache un objet.
+    for (const [lieu, n] of [
+      [arena, 300],
+      [camp, 4000],
+    ] as const) {
+      // Sans affinite, un pouvoir sur douze. Avec, un bon tiers.
+      expect(part(porte, lieu, n)).toBeGreaterThan(0.25);
+      expect(part(porte, lieu, n)).toBeGreaterThan(part(hero, lieu, n) * 1.8);
+    }
+  });
   it('arene : le butin suit les VAGUES tenues (plus de vagues -> plus d objets, en moyenne)', () => {
     // Moyenne sur plusieurs graines : le lien vagues -> objets doit ressortir du bruit.
     let lowWaves = 0;

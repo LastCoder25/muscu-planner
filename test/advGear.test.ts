@@ -506,7 +506,7 @@ describe('🚫 plus aucun drop d’équipement de champion (v0.1012)', () => {
       x: 0,
       y: 0,
     }));
-    const l = lootCorpses(corpses, 'bandits', 30, 9);
+    const l = lootCorpses(corpses, 'bandits', 30, 9, undefined);
     expect(l).not.toHaveProperty('advGear');
     expect(l.items.length).toBeGreaterThan(0);
   });

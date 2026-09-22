@@ -2225,6 +2225,7 @@ export const useCharacterStore = defineStore('character', () => {
           report.faction,
           ctx.playerLevel,
           (report.resolvedAt ^ cur.base!.seed) >>> 0 || 1,
+          cur.equipped?.relic?.power,
         )
       : null;
     const drops = (loot?.items ?? []).map((it) => ({ ...it, id: crypto.randomUUID() }));
