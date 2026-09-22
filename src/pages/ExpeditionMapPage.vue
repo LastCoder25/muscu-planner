@@ -264,8 +264,25 @@
         <div class="sh-head">
           <span class="sh-emo">{{ POI_EMO[selected.type] }}</span>
           <div class="sh-main">
+            <!-- 🏅 LE RANG À CÔTÉ DU NOM (demandé) : la boule de la carte dit déjà la couleur,
+                 la feuille doit dire le rang en toutes lettres, étoiles comprises — pour TOUT
+                 lieu, pas seulement une faille. Même échelle que la carte (`poiRank`). -->
             <div class="sh-title font-display">
-              {{ POI_LABEL[selected.type] }} · niv {{ selected.level }}
+              <span
+                >{{ POI_LABEL[selected.type] }}
+                <span class="sh-lvl">· niv {{ selected.level }}</span></span
+              >
+              <span
+                class="sh-rank"
+                :style="{ '--rk': selectedRank.color }"
+                :title="
+                  selectedRift
+                    ? 'Rang de la faille — fixé à son apparition, il ne monte pas avec l’âge'
+                    : 'Rang du lieu'
+                "
+                >{{ selectedRank.emoji }} {{ selectedRank.name }}
+                {{ rankStarStr(selectedRank.star) }}</span
+              >
             </div>
             <div class="sh-sub">{{ poiRewardLabel(selected) }}</div>
           </div>
@@ -276,13 +293,6 @@
              juste en dessous est le MÊME que celui d’un camp — on y entre pareil. -->
         <template v-if="selectedRift">
           <div class="sh-row sh-wrap">
-            <span
-              class="sh-chip rift-rank"
-              :style="{ '--rk': selectedRift.rank.color }"
-              title="Rang de la faille — fixé à son apparition, il ne monte pas avec l'âge"
-              >{{ selectedRift.rank.emoji }} {{ selectedRift.rank.name }}
-              {{ selectedRift.stars }}</span
-            >
             <!-- ⬆️ Une faille AU-DESSUS du joueur (v0.980) : son rang peut être le même que
                  le sien en début de partie, donc on DIT l'écart à part. -->
             <span
@@ -1051,6 +1061,8 @@ const offerHero = computed(() => offers.value.hero);
 // ne fait que la montrer. ⚠️ Le héros n'attaque plus un camp par `expeSend` (le store le
 // refuse) : même seul, il y passe par `sendParty`.
 const selectedCamp = computed(() => (selected.value ? campSpecOf(selected.value) : null));
+/** Le rang du lieu sélectionné — la MÊME fonction que la boule sur la carte. */
+const selectedRank = computed(() => poiRank(selected.value!));
 
 // ── 🕳️ FAILLE : ce qu'on en sait AVANT d'y entrer ──
 // ⚠️ LE RANG EST FIGÉ À L'APPARITION, il ne monte PAS avec l'âge. Il dérive du niveau du
@@ -1061,10 +1073,8 @@ const selectedCamp = computed(() => (selected.value ? campSpecOf(selected.value)
 const selectedRift = computed(() => {
   const p = selected.value;
   if (!p || !isRiftPoi(p)) return null;
-  const rank = characterRank(p.level);
+  // Son RANG s'affiche à côté du nom, comme pour tout lieu (`selectedRank`).
   return {
-    rank,
-    stars: rankStarStr(rank.star),
     faction: riftSpecOf(p).faction,
     foes: riftPopulation(p, now.value),
     maxFoes: RIFT.maxFoes,
@@ -1846,15 +1856,33 @@ onUnmounted(() => {
   border-color: var(--d3);
   color: var(--d3);
 }
-/* 🕳️ Rang d'une faille : la pastille prend la COULEUR DU RANG, posée en ligne
+/* 🏅 Rang du lieu, à côté de son nom : la pastille prend la COULEUR DU RANG, posée en ligne
    (`--rk`) — une classe par rang n'aurait aucun sens ici, le rang est calculé. */
+.sh-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+/* « · niv 100 » ne se coupe jamais en deux : sur un nom long à 344 px, « niv » et le
+   nombre se retrouvaient sur deux lignes (vu au banc). */
+.sh-lvl {
+  white-space: nowrap;
+}
+.sh-rank {
+  font-family: 'Inter', sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rk);
+  color: var(--rk);
+  background: color-mix(in srgb, var(--rk) 14%, transparent);
+  white-space: nowrap;
+}
 .sh-chip.rift-above {
   color: var(--d3);
   border-color: color-mix(in srgb, var(--d3) 55%, transparent);
-}
-.sh-chip.rift-rank {
-  border-color: var(--rk);
-  color: var(--rk);
 }
 
 .emap {
