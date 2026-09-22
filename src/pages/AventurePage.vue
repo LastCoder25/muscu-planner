@@ -59,19 +59,21 @@
               :class="{ deficit: c.energy < 0 }"
               role="button"
               tabindex="0"
-              title="Énergie — appuie pour voir l'historique des 3 derniers jours (gagnée en faisant du sport)"
+              :title="`Énergie : ${c.energy.toLocaleString('fr-FR')} — appuie pour voir l'historique des 3 derniers jours (gagnée en faisant du sport)`"
               @click="energyHistOpen = true"
               @keyup.enter="energyHistOpen = true"
-              >⚡ {{ c.energy }}</span
+              >⚡ {{ compactNumber(c.energy) }}</span
             >
             <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
-            <span class="tb-r gold" title="Or — expéditions et construction des bâtiments"
-              >🪙 {{ char.row.gold }}</span
+            <span
+              class="tb-r gold"
+              :title="`Or : ${char.row.gold.toLocaleString('fr-FR')} — expéditions et construction des bâtiments`"
+              >🪙 {{ compactNumber(char.row.gold) }}</span
             >
             <span
               class="tb-r summon"
-              title="Pierres d’invocation — tenter un boss de palier (gagnées en nettoyant des donjons)"
-              >🔮 {{ char.row.summon_stones }}</span
+              :title="`Pierres d’invocation : ${char.row.summon_stones.toLocaleString('fr-FR')} — tenter un boss de palier (gagnées en nettoyant des donjons)`"
+              >🔮 {{ compactNumber(char.row.summon_stones) }}</span
             >
             <!-- ⚠️ Les CLÉS 🗝️ manquaient au plateau alors qu'elles gardent le
                  Labyrinthe — seule source de familiers — et qu'elles se gagnent sur
@@ -79,8 +81,8 @@
                  sans jamais voir sa réserve force à aller la chercher ailleurs. -->
             <span
               class="tb-r keys"
-              title="Clés — entrer dans le Labyrinthe (archives de la carte, coffres, boss)"
-              >🗝️ {{ char.row.keys }}</span
+              :title="`Clés : ${char.row.keys.toLocaleString('fr-FR')} — entrer dans le Labyrinthe (archives de la carte, coffres, boss)`"
+              >🗝️ {{ compactNumber(char.row.keys) }}</span
             >
             <!-- ⚠️ MÊME RAISON QUE LES CLÉS : les pierres de mana sont la monnaie du
                  GACHA, elles se gagnent en refermant des failles et en récoltant leurs
@@ -88,8 +90,8 @@
                  si l’on peut invoquer. -->
             <span
               class="tb-r mana"
-              title="Pierres de mana — invoquer un champion (failles refermées, mines de mana)"
-              >💠 {{ char.row.mana }}</span
+              :title="`Pierres de mana : ${char.row.mana.toLocaleString('fr-FR')} — invoquer un champion (failles refermées, mines de mana)`"
+              >💠 {{ compactNumber(char.row.mana) }}</span
             >
             <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions (failles) et objets (boss). Ils ne
                  servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle. Affichés
@@ -98,13 +100,13 @@
               v-if="sealsChamp.total"
               class="tb-r seals"
               :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail}`"
-              >🔱 {{ sealsChamp.total }}</span
+              >🔱 {{ compactNumber(sealsChamp.total) }}</span
             >
             <span
               v-if="sealsGear.total"
               class="tb-r seals gear"
               :title="`Sceaux d’objet — ascension d’un objet de champion (boss de palier) : ${sealsGear.detail}`"
-              >⚜️ {{ sealsGear.total }}</span
+              >⚜️ {{ compactNumber(sealsGear.total) }}</span
             >
             <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés seulement quand il
                  y en a : la puce dit « tu as des tirages qui t'attendent ». -->
@@ -112,7 +114,7 @@
               v-if="char.row.gacha_tickets"
               class="tb-r tickets"
               title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
-              >🎟️ {{ char.row.gacha_tickets }}</span
+              >🎟️ {{ compactNumber(char.row.gacha_tickets) }}</span
             >
           </div>
         </div>
@@ -2975,6 +2977,7 @@ import {
   fmtDelta,
   type CombatEvent,
 } from '@/lib/combat';
+import { compactNumber } from '@/lib/compactNumber';
 import CombatStage from '@/components/CombatStage.vue';
 import ArenaStage from '@/components/ArenaStage.vue';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
@@ -6548,23 +6551,41 @@ onUnmounted(() => {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ⚠️ LES RESSOURCES SUR UNE SEULE LIGNE (demandé) : le plateau prend sa PROPRE rangée,
+   pleine largeur, et ne passe JAMAIS à la ligne. Les nombres sont courts (`compactNumber` :
+   12,3k, 400k, 4,2M), la valeur exacte vit dans l'infobulle. Filet de sécurité : si les
+   8 devises ne tiennent toujours pas (Z Fold plié), la rangée DÉFILE sur le côté au lieu
+   de se casser en deux. */
 .tb-right {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
+  flex: 1 0 100%;
+  min-width: 0;
 }
-/* Plateau de ressources : un seul contenant bordé qui regroupe toutes les puces. */
 .tb-tray {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 3px 10px;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: 8px;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 4px 12px;
+}
+.tb-tray::-webkit-scrollbar {
+  display: none;
+}
+/* Écrans étroits : un cran plus serré pour que les 8 devises tiennent sans défiler. */
+@media (max-width: 420px) {
+  .tb-tray {
+    gap: 4px;
+    padding: 4px 8px;
+  }
+  .tb-tray .tb-r {
+    font-size: 12px;
+  }
 }
 .tb-r {
   font-size: 13px;
