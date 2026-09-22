@@ -2660,27 +2660,32 @@ onUnmounted(() => {
   justify-content: flex-end;
   margin-top: 8px;
 }
+/* TROIS tuiles par ligne (demandé par l'utilisateur). En flex centré plutôt qu'en grille :
+   la dernière ligne, incomplète, se CENTRE toute seule quel que soit le reste (1 ou 2) —
+   laissée dans ses colonnes, elle se collait à gauche avec un trou, ce qui se lit comme un
+   élément manquant plutôt que comme la fin de la liste. */
 .trips {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   padding: 2px 2px 6px;
 }
-/* Une tuile ORPHELINE (compte impair) prend les deux colonnes et se centre : laissée
-   dans sa colonne, elle se collait à gauche avec un trou à droite, ce qui se lit comme
-   un élément manquant plutôt que comme le dernier de la liste. */
-.trip:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
-  justify-self: center;
+.trips > .trip {
+  /* border-box : sans lui padding et bordure s'ajoutaient au tiers, et il n'en tenait que deux. */
+  box-sizing: border-box;
+  flex: 0 0 calc((100% - 16px) / 3);
 }
 .trip {
   position: relative;
   min-width: 0;
   display: flex;
+  flex-wrap: wrap; /* à trois par ligne, le temps passe SOUS les emojis : côte à côte il était coupé à 344 px */
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 1px 4px;
   min-height: 44px; /* cible tactile : la tuile « rentré » est un bouton */
-  padding: 7px 11px 9px;
+  padding: 7px 7px 9px;
   border: 1px solid var(--accent);
   border-radius: 12px;
   background: var(--surface);
@@ -2702,6 +2707,9 @@ onUnmounted(() => {
   font-size: 15px;
 }
 .tr-time {
+  flex-basis: 100%;
+  text-align: center;
+  white-space: nowrap;
   font-size: 13px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
