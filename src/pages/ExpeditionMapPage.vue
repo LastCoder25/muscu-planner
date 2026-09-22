@@ -737,6 +737,7 @@ import {
   type PartyResult,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
+import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
 import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import {
@@ -939,6 +940,45 @@ function zoom(dir: number) {
   const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
   mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, mapPx.value + dir * ZOOM_STEP));
   void nextTick(() => centerOn(V.min + cx * V.size, V.min + cy * V.size));
+}
+
+// ── 🤏 Zoom à deux doigts (pincer / écarter) ──
+// ⚠️ `touch-action: pan-x pan-y` laisse le défilement au navigateur mais lui retire le zoom :
+// c'est nous qui zoomons. Le `touchmove` est NON passif pour empêcher, à deux doigts, le
+// défilement natif de se battre avec le nôtre (le geste fait déjà glisser la carte).
+let pinch: PinchStart | null = null;
+function touchGeometry(e: TouchEvent) {
+  const el = scrollEl.value!;
+  const r = el.getBoundingClientRect();
+  const [a, b] = [e.touches[0]!, e.touches[1]!];
+  return {
+    dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+    midX: (a.clientX + b.clientX) / 2 - r.left,
+    midY: (a.clientY + b.clientY) / 2 - r.top,
+  };
+}
+function onTouchStart(e: TouchEvent) {
+  const el = scrollEl.value;
+  if (!el || e.touches.length !== 2) return;
+  const g = touchGeometry(e);
+  pinch = pinchStart(mapPx.value, g.dist, g.midX, g.midY, el.scrollLeft, el.scrollTop);
+}
+function onTouchMove(e: TouchEvent) {
+  const el = scrollEl.value;
+  if (!el || !pinch || e.touches.length !== 2) return;
+  e.preventDefault();
+  const g = touchGeometry(e);
+  const r = pinchUpdate(pinch, g.dist, g.midX, g.midY, MIN_PX, MAX_PX);
+  mapPx.value = r.px;
+  // Après le redimensionnement du SVG : sinon le défilement est borné à l'ANCIENNE taille.
+  void nextTick(() => {
+    el.scrollLeft = r.scrollLeft;
+    el.scrollTop = r.scrollTop;
+    onScroll();
+  });
+}
+function onTouchEnd(e: TouchEvent) {
+  if (e.touches.length < 2) pinch = null;
 }
 // Activités hors écran → flèche au bord pointant vers elles (clic = slide dessus).
 const edgeIndicators = computed(() => {
@@ -1938,6 +1978,11 @@ onMounted(async () => {
   await nextTick();
   centerTown();
   window.addEventListener('resize', measure);
+  const el = scrollEl.value;
+  el?.addEventListener('touchstart', onTouchStart, { passive: true });
+  el?.addEventListener('touchmove', onTouchMove, { passive: false });
+  el?.addEventListener('touchend', onTouchEnd, { passive: true });
+  el?.addEventListener('touchcancel', onTouchEnd, { passive: true });
   timer = setInterval(() => {
     now.value = Date.now();
     void lifecycle();
@@ -1946,6 +1991,11 @@ onMounted(async () => {
 onUnmounted(() => {
   if (timer) clearInterval(timer);
   window.removeEventListener('resize', measure);
+  const el = scrollEl.value;
+  el?.removeEventListener('touchstart', onTouchStart);
+  el?.removeEventListener('touchmove', onTouchMove);
+  el?.removeEventListener('touchend', onTouchEnd);
+  el?.removeEventListener('touchcancel', onTouchEnd);
 });
 
 // ── Formatage durées ──
