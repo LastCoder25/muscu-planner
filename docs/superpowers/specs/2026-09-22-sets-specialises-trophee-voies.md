@@ -116,19 +116,39 @@ reprennent son geste. Les deux voies défensives sont séparées nettement :
 
 ### 4.1 Forces, faiblesses, relique, trophée
 
-| Voie          | Brille contre…                         | Peine contre…                         | Relique (existante) | Quête du trophée            |
-| ------------- | -------------------------------------- | ------------------------------------- | ------------------- | --------------------------- |
-| 💥 Berserker  | les combats longs, les boss            | les ennemis qui tuent vite            | Brasier             | perdre des PV               |
-| 🗡️ Assassin   | les boss à gros réservoir de PV        | les hordes (l'exécution sert peu)     | Coup fatal          | porter des critiques        |
-| 🩸 Vampire    | les longues descentes                  | les coups énormes qui passent le soin | Festin              | se soigner par vol de vie   |
-| 🌀 Frénétique | les combats longs                      | les combats courts                    | Tempête             | tenir l'élan au maximum     |
-| 🌵 Épineux    | les hordes qui frappent souvent        | les boss qui frappent peu             | Éclat de ronces     | renvoyer des coups d'épines |
-| 🤺 Duelliste  | les ennemis qui frappent peu mais fort | les hordes (trop de coups à lire)     | Riposte parfaite    | riposter                    |
-| 🛡️ Gardien    | les coups nombreux et moyens           | les attaques qui ignorent le blocage  | Rempart vengeur     | parer                       |
-| 🪨 Colosse    | les gros coups espacés                 | l'usure (beaucoup de petits coups)    | Carapace            | encaisser des coups         |
+⚠️ **CE TABLEAU A ÉTÉ CORRIGÉ PAR LA MESURE (2026-09-22, § 4.1 bis ; décision de
+l'utilisateur).** Seules les voies **DÉFENSIVES** ont un terrain : elles réagissent à la
+FORME des coups reçus. Les quatre voies **OFFENSIVES** n'en ont pas, et c'est structurel —
+« durer » est un axe de SURVIE, or un set offensif tue plus vite, ce qui l'aide **autant**
+en combat court. Elles se distinguent par leur **STYLE** (le canal par lequel elles font
+leurs dégâts), jamais par le terrain.
+
+| Voie          | Terrain / style                                         | Peine contre…                        | Relique (existante) | Quête du trophée            |
+| ------------- | ------------------------------------------------------- | ------------------------------------ | ------------------- | --------------------------- |
+| 💥 Berserker  | **style** : monte en puissance à mesure qu'il est blessé | _(aucun terrain mesuré)_             | Brasier             | perdre des PV               |
+| 🗡️ Assassin   | **style** : ouvre, fait saigner, achève                  | _(aucun terrain mesuré)_             | Coup fatal          | porter des critiques        |
+| 🩸 Vampire    | **style** : tient en se soignant sur chaque coup         | _(aucun terrain mesuré)_             | Festin              | se soigner par vol de vie   |
+| 🌀 Frénétique | **style** : monte avec la durée ⚠️ (voir ci-dessous)     | _(aucun terrain mesuré)_             | Tempête             | tenir l'élan au maximum     |
+| 🌵 Épineux    | **terrain** : les hordes qui frappent souvent            | les boss qui frappent peu            | Éclat de ronces     | renvoyer des coups d'épines |
+| 🤺 Duelliste  | **terrain** : les ennemis qui frappent peu mais fort     | les hordes (trop de coups à lire)    | Riposte parfaite    | riposter                    |
+| 🛡️ Gardien    | **terrain** : les coups nombreux et moyens               | les attaques qui ignorent le blocage | Rempart vengeur     | parer                       |
+| 🪨 Colosse    | **terrain** : les gros coups espacés                     | l'usure (beaucoup de petits coups)   | Carapace            | encaisser des coups         |
+
+⚠️ **DEUX RÉSERVES, toutes deux mesurées.**
+
+1. **Le Duelliste ne tient pas encore son terrain** : parade et riposte agissent **par coup**,
+   donc plus il y a de coups, plus elles paient — mesuré **−51 % (L60) / −30 % (L90)**, soit
+   l'inverse de sa case. Décision prise : **la riposte deviendra proportionnelle au coup
+   encaissé**, pour qu'elle paie contre les gros coups. Tant que ce n'est pas fait, sa ligne
+   ci-dessus est une **cible**, pas un état.
+2. **L'élan du Frénétique sature au 5ᵉ tour** (plafond 4, ou 8 avec la Transe) alors qu'un
+   combat long dure **15 à 34 tours** : son style annoncé n'est donc tenu qu'au début. Deux
+   leviers ont été écrits, mesurés et **jetés** (§ 4.1 bis).
 
 Ces forces et faiblesses sont **des cibles de mesure** (§ 8) : chaque set doit rester
-jouable partout, mais être nettement meilleur sur son terrain.
+jouable partout, mais être nettement meilleur sur son terrain — **pour les quatre voies
+défensives**. Pour les quatre offensives, la cible est le STYLE, pas un taux de victoire par
+terrain.
 
 ### 4.1 bis — CE QUE LA MESURE DIT (2026-09-22, § 8 mesure 4)
 
