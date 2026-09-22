@@ -26,6 +26,8 @@ import {
   round1,
   normRank,
   renameLegacyItem,
+  migrateGearItem,
+  GEAR_VERSION,
   fillSetPieceAffixes,
   bestGearLoadout,
   playerWithGear,
@@ -229,6 +231,7 @@ import {
 } from '@/lib/ascension';
 import { levelUpTickets, pullPayment } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
+import { gearRefonteGifts } from '@/lib/gearMigration';
 import { useGameFx } from '@/composables/useGameFx';
 import { useGoldFx } from '@/composables/useGoldFx';
 
@@ -292,6 +295,9 @@ export interface CharacterRow {
   boss_tokens: number;
   boss_token_state: BossTokenState | null;
   parties: ActiveParty[] | null; // ⚔️ groupes de camp partis SANS le héros (migr. 0077)
+  /** ⚙️ Version de l'équipement (migr. 0088) : sous `GEAR_VERSION`, la ligne reçoit une fois
+   *  les cadeaux de la refonte à 7 emplacements (`gearRefonteGifts`). */
+  gear_version: number;
 }
 
 // Énergie offerte à la création du perso (~1 session ≈ de quoi lancer plusieurs
@@ -326,7 +332,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -363,7 +369,11 @@ export const useCharacterStore = defineStore('character', () => {
     // écartée (`buildMessage` la lirait à chaque tick).
     r.parties = normalizeParties(r.parties);
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
-    const fixItem = (it: Item): Item => {
+    // ⚙️ Refonte à 7 emplacements (étape 8) : chaque objet est converti APRÈS les anciennes
+    // migrations (idempotent, cf. `migrateGearItem`) — ses valeurs sont recalculées au
+    // nouveau barème, un enchant baké d'avant compris.
+    const fixItem = (it: Item): Item => migrateGearItem(fixLegacyItem(it));
+    const fixLegacyItem = (it: Item): Item => {
       const rarity = normRank(it.rarity);
       // Nom d'avant la v0.874 (« Cuirasse mythique ») : il contredirait le rang affiché.
       it = renameLegacyItem({ ...it, rarity });
@@ -446,6 +456,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
     if (typeof r.summon_stones !== 'number') r.summon_stones = 0; // colonne récente (migr. 0050)
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
+    if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
     r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
     if (typeof r.ink_dust !== 'number') r.ink_dust = 0; // poussière d'encre (migr. 0053)
     if (typeof r.enchant_scrolls !== 'number') r.enchant_scrolls = 0; // migr. 0054
@@ -536,6 +547,9 @@ export const useCharacterStore = defineStore('character', () => {
     };
     if (isNew) {
       patch.login_energy = WELCOME_ENERGY;
+      // Un personnage NEUF n'a rien à convertir : pas de cadeau de la refonte (le début de
+      // partie est calibré sans eux).
+      patch.gear_version = GEAR_VERSION;
       patch.energy_log = pushEnergyLog(undefined, {
         date: isoDayLocal(Date.now()),
         emoji: '🎉',
@@ -625,6 +639,43 @@ export const useCharacterStore = defineStore('character', () => {
    * one-shot est donc **atomique par construction** : ça passe, ou rien ne bouge et on
    * retentera au prochain chargement. Aucune fenêtre de double compensation.
    */
+  /**
+   * ⚙️ LES CADEAUX DE LA REFONTE À 7 EMPLACEMENTS (étape 8 ; spec § 9.4-9.5) : les pièces
+   * neuves des sets possédés en entier, puis une pièce de départ par emplacement neuf vide.
+   * ⚠️ Demande le NIVEAU du joueur, que la ligne ne porte pas : appelé par l'Aventure une fois
+   * `progress.ready`. ⚠️ ONE-SHOT : la version est écrite dans la MÊME requête que les
+   * cadeaux (et que l'équipement converti), donc impossible d'offrir deux fois. Un échec
+   * réseau laisse la base intacte ; on retentera.
+   */
+  async function settleGearRefonte(playerLevel: number) {
+    const cur = row.value;
+    if (!cur || cur.gear_version >= GEAR_VERSION) return;
+    const g = gearRefonteGifts(
+      { equipped: cur.equipped, inventory: cur.inventory, loadouts: cur.loadouts },
+      playerLevel,
+      cur.user_id,
+      () => crypto.randomUUID(),
+    );
+    try {
+      await persist(cur.user_id, {
+        equipped: g.equipped,
+        inventory: g.inventory,
+        loadouts: cur.loadouts,
+        gear_version: GEAR_VERSION,
+      });
+    } catch {
+      return;
+    }
+    if (!g.gifts.length) return;
+    useGameFx().celebrate({
+      kind: 'unlock',
+      emoji: '🛡️',
+      title: 'Bouclier, casque et bottes',
+      subtitle: `L'équipement passe à 7 emplacements — ${g.gifts.length} pièce${g.gifts.length > 1 ? 's' : ''} offerte${g.gifts.length > 1 ? 's' : ''}, un rang sous le tien`,
+      rarity: 'legendary',
+    });
+  }
+
   async function settleWipe(userId: string) {
     const cur = row.value;
     if (!cur) return;
@@ -2790,6 +2841,7 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   return {
+    settleGearRefonte,
     row,
     loaded,
     fetchMine,

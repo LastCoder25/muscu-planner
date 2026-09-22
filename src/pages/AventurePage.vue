@@ -3861,6 +3861,17 @@ watch(
   },
   { immediate: true },
 );
+// ⚙️ Refonte à 7 emplacements (étape 8) : les cadeaux (pièces de set manquantes, pièces
+// de départ) demandent le NIVEAU — donc `progress.ready` — et ne tombent qu'une fois
+// (`gear_version`, écrit dans la même requête).
+watch(
+  [() => char.row?.gear_version, progress.ready],
+  () => {
+    if (!char.row || !progress.ready.value) return;
+    void char.settleGearRefonte(heroLevel.value);
+  },
+  { immediate: true },
+);
 // Vue enrichie, RANGÉE PAR TALENT (v0.862) : les exemplaires d'un même talent sont
 // regroupés du meilleur au pire, les groupes ordonnés par leur meilleur exemplaire.
 const talentsView = computed(() => {

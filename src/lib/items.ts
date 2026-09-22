@@ -1866,9 +1866,7 @@ export function rollDrop(
   }
   // value = base × intervalle du RANG selon le JET (rankRollMult). La PROFONDEUR est encodée
   // par le RANG (pyramide) ; le jet (roll) balaie tout l'intervalle du rang → chasse au bon jet.
-  const w = slotWeight(slot);
-  const rollValue = (t: EffectType) =>
-    Math.max(0.1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll) * w));
+  const rollValue = (t: EffectType) => affixValue(t, rarity, roll, slot);
   // MULTI-AFFIXE PAR TIER (v0.581, façon Diablo) : la rareté donne 1→3 affixes, tirés
   // UN PAR TIER (majeur → secondaire → mineur). Plus la rareté est haute, plus on descend
   // l'échelle d'impact (une grosse stat + du soutien + un bonus light). Tiers disjoints →
@@ -1985,9 +1983,7 @@ export function rollSetPiece(
   // (2) « la majeure du thème si l’emplacement la propose » : assassin encore −45 %.
   // L’IDENTITÉ DU SET VIT DÉSORMAIS DANS SES PALIERS (2/3/4 pièces), plus dans ses pièces.
   const chosenType: EffectType = SET_SLOT_MAJORS[slot]?.[0] ?? 'max_pv_pct';
-  const base = EFFECT_BASE[chosenType] ?? 8;
-  const w = slotWeight(slot);
-  const value = Math.max(0.1, round1(base * rankRollMult(rarity, roll) * SET_PIECE_MAJOR_K * w));
+  const value = affixValue(chosenType, rarity, roll, slot, true);
   const noun = pick(rng, NAMES[slot]);
   // NIVEAU D'OBJET (ilvl) de la pièce de set = pyramide centrée sur min(palier, perso).
   const setCenter = opts.playerLevel != null ? Math.min(opts.level, opts.playerLevel) : opts.level;
@@ -2009,7 +2005,7 @@ export function rollSetPiece(
     const t = pick(rng, pool);
     affixes.push({
       type: t,
-      value: Math.max(0.1, round1((EFFECT_BASE[t] ?? 8) * rankRollMult(rarity, roll) * w)),
+      value: affixValue(t, rarity, roll, slot),
     });
   }
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
@@ -2028,6 +2024,197 @@ export function rollSetPiece(
     ...(affixes[1] ? { effect2: affixes[1] } : {}),
     ...(affixes[2] ? { effect3: affixes[2] } : {}),
     ...(set ? { setId: opts.setId } : {}),
+    ...(legendary ? { legendary } : {}),
+    roll,
+  };
+}
+
+/** VALEUR d'un affixe d'objet du héros : base × intervalle du rang selon le jet × poids de
+ *  l'emplacement (× `SET_PIECE_MAJOR_K` pour la stat principale d'une pièce de set).
+ *  ⚠️ SOURCE UNIQUE — lue par `rollDrop`, `rollSetPiece`, `makeGearPiece` et la migration
+ *  (`migrateGearItem`). L'ordre des multiplications est celui d'avant : les drops seedés
+ *  gardent leurs valeurs au dixième près. */
+export function affixValue(
+  t: EffectType,
+  rarity: Rarity,
+  roll: number,
+  slot: ItemSlot,
+  setMajor = false,
+): number {
+  let v = (EFFECT_BASE[t] ?? 8) * rankRollMult(rarity, roll);
+  if (setMajor) v *= SET_PIECE_MAJOR_K;
+  return Math.max(0.1, round1(v * slotWeight(slot)));
+}
+
+// ─── ⚙️ PASSAGE À LA NOUVELLE VERSION (refonte équipement, étape 8 ; spec § 9) ──────────
+// Tout est converti AU CHARGEMENT (`character.normalizeRow`), objet par objet, de façon
+// IDEMPOTENTE : un objet déjà au nouveau format ressort inchangé. Les CADEAUX (pièces de set
+// manquantes, pièces de départ) demandent le niveau du joueur : ils vivent à part
+// (`gearMigration.ts`), une seule fois, gardés par `characters.gear_version`.
+
+/** Version de l'équipement. Une ligne sous cette version reçoit les cadeaux de la refonte. */
+export const GEAR_VERSION = 2;
+
+/** Traduction d'un affixe d'AVANT vers une stat de SON emplacement (spec § 9.2) : le joueur
+ *  garde la valeur de son objet sous une forme qui a du sens (des PV sur une arme deviennent
+ *  des dégâts, du critique sur une armure devient de la réduction). Les anciens objets
+ *  n'existent que sur ces trois emplacements ; la relique reçoit un POUVOIR. Une stat hors
+ *  table retombe sur la première stat principale de l'emplacement. */
+export const AFFIX_TRANSLATION: Partial<Record<GearSlot, Partial<Record<EffectType, EffectType>>>> =
+  {
+    weapon: {
+      crit_pct: 'crit_dmg_pct',
+      max_pv_pct: 'damage_pct',
+      dmg_reduction_pct: 'damage_pct',
+      thorns_pct: 'bleed_pct',
+      rage_pct: 'execute_pct',
+      regen_pct: 'lifesteal_pct',
+      gold_pct: 'accuracy_pct',
+      magic_find_pct: 'accuracy_pct',
+      initiative_pct: 'accuracy_pct',
+    },
+    armor: {
+      damage_pct: 'max_pv_pct',
+      crit_pct: 'dmg_reduction_pct',
+      lifesteal_pct: 'regen_pct',
+      execute_pct: 'thorns_pct',
+      rage_pct: 'thorns_pct',
+      momentum_pct: 'start_shield_pct',
+      gold_pct: 'start_shield_pct',
+      magic_find_pct: 'start_shield_pct',
+      initiative_pct: 'start_shield_pct',
+    },
+    accessory: {
+      damage_pct: 'crit_pct',
+      execute_pct: 'rage_pct',
+      momentum_pct: 'rage_pct',
+      thorns_pct: 'rage_pct',
+      max_pv_pct: 'lifesteal_pct',
+      dmg_reduction_pct: 'lifesteal_pct',
+      regen_pct: 'lifesteal_pct',
+      initiative_pct: 'training_pct',
+    },
+  };
+/** Effets légendaires d'avant qui DEVIENNENT un pouvoir de relique. */
+const LEGACY_PROC_POWER: Record<string, RelicPowerId> = {
+  phoenix: 'phenix',
+  secondwind: 'second_souffle',
+};
+
+/** Convertit un objet au format de la refonte (spec § 9.2, 9.3, 9.3 bis). Familiers et
+ *  trophées ressortent inchangés. Idempotent : un objet déjà converti ressort identique. */
+export function migrateGearItem(it: Item): Item {
+  if (!(it.slot in SLOT_AFFIXES)) return it;
+  const rng = mulberry32(seedOf(`gear:${it.id}`));
+  // 🔮 RELIQUE : un pouvoir, aucune stat. Celle d'un set prend le pouvoir de sa voie.
+  if (it.slot === 'relic') {
+    if (it.power) return it;
+    const voie = it.setId?.startsWith('voie:') ? it.setId.slice('voie:'.length) : '';
+    const power =
+      voieRelicPower(voie) ??
+      (it.legendary ? LEGACY_PROC_POWER[it.legendary] : undefined) ??
+      RELIC_POWERS[Math.floor(rng() * RELIC_POWERS.length)]!.id;
+    const first = it.name.split(' ')[0] ?? '';
+    const noun = NAMES.relic.includes(first) ? first : pick(rng, NAMES.relic);
+    const rest: Item = { ...it };
+    delete rest.effect2;
+    delete rest.effect3;
+    delete rest.legendary;
+    delete rest.setId;
+    return {
+      ...rest,
+      name: `${noun} « ${relicPowerOf(power)!.name} »`,
+      effect: RELIC_NO_STAT,
+      power,
+    };
+  }
+  const slot = it.slot as GearSlot;
+  const lists = SLOT_AFFIXES[slot];
+  const allowed = [...lists.major, ...lists.support];
+  const setMajor = it.setId ? SET_SLOT_MAJORS[slot]?.[0] : undefined;
+  const olds = [it.effect, it.effect2, it.effect3].filter((e): e is ItemEffect => !!e);
+  const types: EffectType[] = [];
+  olds.forEach((e, i) => {
+    let t: EffectType =
+      i === 0 && setMajor
+        ? setMajor
+        : allowed.includes(e.type)
+          ? e.type
+          : (AFFIX_TRANSLATION[slot]?.[e.type] ?? lists.major[0]!);
+    if (types.includes(t)) t = allowed.find((x) => !types.includes(x)) ?? t;
+    if (!types.includes(t)) types.push(t);
+  });
+  // L'affixe #1 est une stat PRINCIPALE de l'emplacement (règle des drops).
+  if (!setMajor && types.length && !lists.major.includes(types[0]!)) {
+    const j = types.findIndex((t) => lists.major.includes(t));
+    if (j > 0) [types[0], types[j]] = [types[j]!, types[0]!];
+    else types[0] = lists.major.find((t) => !types.includes(t)) ?? lists.major[0]!;
+  }
+  const rarity = normRank(it.rarity);
+  const roll = it.roll ?? 0.5;
+  const effects = types.map((type, i) => ({
+    type,
+    value: affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
+  }));
+  // Effet légendaire déplacé : un effet de SON emplacement, dans les stats prolongées si possible.
+  let legendary = it.legendary;
+  if (legendary && !LEGENDARY_BY_ID[legendary]?.slots.includes(slot)) {
+    const pool = LEGENDARY_PROCS.filter((p) => p.slots.includes(slot));
+    const echo = pool.filter((p) => p.echo.some((t) => types.includes(t)));
+    const use = echo.length ? echo : pool;
+    legendary = use.length ? use[Math.floor(rng() * use.length)]!.id : undefined;
+  }
+  const out: Item = { ...it, rarity, roll, effect: effects[0] ?? it.effect };
+  delete out.effect2;
+  delete out.effect3;
+  delete out.legendary;
+  return {
+    ...out,
+    ...(effects[1] ? { effect2: effects[1] } : {}),
+    ...(effects[2] ? { effect3: effects[2] } : {}),
+    ...(legendary ? { legendary } : {}),
+  };
+}
+
+/** Fabrique une pièce À UN RANG ET UN JET DONNÉS (cadeaux de la refonte, spec § 9.4-9.5) :
+ *  mêmes formules qu'un drop (`affixValue`) ; une pièce de set suit `rollSetPiece` (stat
+ *  principale de l'emplacement, affixes libres, effet légendaire dans le thème). */
+export function makeGearPiece(
+  rng: () => number,
+  o: { slot: GearSlot; rarity: Rarity; roll: number; level: number; setId?: string },
+): Omit<Item, 'id'> {
+  const { slot, rarity, roll, level } = o;
+  const set = o.setId ? SET_BY_ID[o.setId] : undefined;
+  const setMajor = set ? SET_SLOT_MAJORS[slot]?.[0] : undefined;
+  const types: EffectType[] = [];
+  for (let a = 0; a < affixCountForRarity(rarity); a++) {
+    const pool = (
+      a === 0 && setMajor ? [setMajor] : slotPool(slot, a === 0 ? 'major' : 'support', level)
+    ).filter((t) => !types.includes(t));
+    if (pool.length) types.push(pick(rng, pool));
+  }
+  const effects = types.map((type, i) => ({
+    type,
+    value: affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
+  }));
+  const legendary =
+    RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK
+      ? set
+        ? rollSetLegendaryProc(rng, slot, setThemeStats(o.setId))
+        : rollLegendaryProc(rng, slot)
+      : undefined;
+  const noun = pick(rng, NAMES[slot]);
+  return {
+    slot,
+    name: set ? `${noun} · ${set.name}` : `${noun} ${RARITY_ADJ[rarity]}`,
+    emoji: set ? set.emoji : SLOT_EMOJI[slot],
+    rarity,
+    level,
+    baseLevel: level,
+    effect: effects[0]!,
+    ...(effects[1] ? { effect2: effects[1] } : {}),
+    ...(effects[2] ? { effect3: effects[2] } : {}),
+    ...(set ? { setId: o.setId } : {}),
     ...(legendary ? { legendary } : {}),
     roll,
   };

@@ -546,6 +546,46 @@ précédents).
 Vérification sur les 4 comptes réels avant livraison : puissance avant / après
 conversion, qui ne doit baisser pour personne.
 
+### ✅ Livré à l'étape 8 (2026-09-22)
+
+- **Conversion au chargement** (`migrateGearItem`, dans `normalizeRow`, après les anciennes
+  migrations) : affixes traduits (`AFFIX_TRANSLATION`, 3 emplacements × 13 stats d'avant),
+  stat principale d'emplacement en tête, aucun doublon, **même nombre d'affixes** ; valeurs
+  recalculées au nouveau barème (`affixValue`, désormais la formule unique de `rollDrop` et
+  `rollSetPiece` — ordre des multiplications conservé, drops seedés inchangés) ; relique →
+  pouvoir (celui de sa voie pour une relique de set, Phénix/Second souffle hérités d'un effet
+  légendaire, sinon tiré sur l'id), sans stat ni `setId` ; effet légendaire déplacé → un
+  effet de son emplacement, dans les stats prolongées si possible. **Idempotente** (test sur
+  400 drops et pièces de set neufs) : elle tourne à chaque chargement, donc un objet d'avant
+  crédité plus tard (boîte 📬, récompense en attente) est converti aussi.
+- **Cadeaux** (`gearRefonteGifts`, une seule fois, gardés par `characters.gear_version`,
+  migr. 0088, écrits dans la même requête que l'équipement) : bouclier, casque et bottes de
+  chaque set possédé en entier (arme, armure, anneau), un rang sous le rang moyen, jet 0,5
+  (0,2 au rang le plus bas), équipés si le set est porté, sinon au sac (rangés dans « Mes
+  sets ») ; puis une pièce de départ par emplacement neuf vide, un rang sous le rang du
+  joueur. Appelés par l'Aventure une fois `progress.ready`. Un personnage neuf naît à la
+  version courante (pas de cadeau).
+- **Vérifié sur les comptes réels** — réussite au donjon de leur niveau, **ancien code contre
+  nouveau**, mêmes stats (niveau estimé par l'ilvl porté) :
+
+  | Compte | Niveau | Avant | Après | Puissance / référence avant → après |
+  | ------ | ------ | ----- | ----- | ----------------------------------- |
+  | Last   | 30     | 98 %  | 78 %  | 1,39 → 0,95                         |
+  | Cypher | 19     | 100 % | 94 %  | 1,46 → 1,28                         |
+  | Knat   | 5      | 81 %  | 56 %  | 0,91 → 0,91                         |
+  | Mimi   | 6      | 100 % | 100 % | 0,89 → 0,89                         |
+
+  ⚠️ **La condition « ne baisse pour personne » n'est PAS tenue, et la conversion n'en est pas
+  la cause.** Last portait de l'élan sur ses 4 objets : sans lui, dans l'ANCIEN code, il
+  tombe déjà de 5 403 à 3 866 de puissance (référence 3 895) et de 98 % à 34 % — son avance
+  venait tout entière de l'élan compté par coup, corrigé à l'étape 1. Converti, il fait
+  mieux (78 %). Knat garde exactement sa puissance relative : sa baisse vient du recalage du
+  début de chaîne (étape 7). Cadeaux à son rang au lieu d'un rang dessous : Last 87 %, Cypher
+  97 % — mesuré, non retenu (décision du 2026-09-22).
+
+- Mutations : 14, 14 rouges (dont une qui a d'abord survécu : sans dédoublonnage, un objet
+  dont deux stats se traduisent vers la même perdait un affixe en silence).
+
 ---
 
 ## 10. Recalibration : ce qu'on mesure, dans l'ordre

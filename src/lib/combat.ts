@@ -134,7 +134,7 @@ export const RELIC = {
  *  +10 % — avant, de 0 % (Rempart, Ronces : leur stock ne pesait rien face à un boss) à +28 %
  *  (Carapace). La force montant avec le niveau, 0,075 × force affiche +7 % (niveau 60) à +9 %
  *  (niveau 90) : ce que le combat mesure. À 0,16 l'écran annonçait +14 à +19 %. */
-export const RELIC_POWER_W: Record<RelicPowerId, { side: 'off' | 'surv'; weight: number }> = {
+const RELIC_POWER_W: Record<RelicPowerId, { side: 'off' | 'surv'; weight: number }> = {
   brasier: { side: 'off', weight: 0.075 },
   rempart: { side: 'surv', weight: 0.075 },
   coup_fatal: { side: 'off', weight: 0.075 },

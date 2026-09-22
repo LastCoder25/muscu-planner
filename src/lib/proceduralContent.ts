@@ -140,7 +140,7 @@ export const CONTENT_K: { dungeon: number; boss: number; laby: number } = {
  *  Le Labyrinthe est une LONGUE attrition : régénération, vol de vie, effets légendaires et
  *  pouvoir de relique y pèsent sur toute une descente, et le joueur de début de partie n'en a
  *  aucun. Les donjons, eux, suivent le budget sans pente (×1,0 sur toute la chaîne). */
-export function labyAttritionRamp(level: number): number {
+function labyAttritionRamp(level: number): number {
   return 0.4 + 0.6 * Math.min(1, Math.max(0, level - 2) / 38);
 }
 
