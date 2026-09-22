@@ -362,6 +362,67 @@ dans un build ordinaire.
 
 ---
 
+### Remplacer sa relique par une meilleure du même pouvoir (demande du 2026-09-22)
+
+Une fois un pouvoir choisi, il faut pouvoir **trouver une relique plus forte avec ce même
+pouvoir**. Sinon on reste bloqué sur sa première relique, ou on doit changer de pouvoir
+pour progresser. Trois conditions :
+
+1. **La force du pouvoir suit le rang, les étoiles et le niveau d'objet**, avec la même
+   formule que les stats. Deux reliques avec le même pouvoir se comparent donc comme deux
+   armes : celle de rang, d'étoiles ou de niveau supérieur est **strictement meilleure**.
+   L'équipement conseillé, la comparaison du sac et le verdict « ↑ » la montrent sans cas
+   particulier. **Test** : même pouvoir, rang (ou jet, ou niveau d'objet) plus haut ⇒
+   puissance plus haute, pour les 12 pouvoirs.
+2. **Il doit en tomber assez souvent.** Mesuré aujourd'hui, un niveau finance 79 (niv. 10)
+   à 650 (niv. 90) objets. Avec 7 emplacements, ça fait ~11 à ~93 reliques par niveau. Mais
+   avec 12 pouvoirs tirés au hasard, seules ~1 à 8 ont **ton** pouvoir, et au début d'un
+   rang presque aucune n'est à ton rang (v0.895) : l'amélioration serait trop rare.
+3. **D'où une affinité** : une relique trouvée a **1 chance sur 3 de porter le pouvoir de
+   la relique que tu portes**. Sinon, elle tire parmi les 12, ce qui laisse de quoi
+   découvrir un autre pouvoir. C'est le même principe que le ciblage de l'Autel pour les
+   pièces de set.
+4. **Les pouvoirs de voie ont en plus une source sûre** : la relique d'un set de voie porte
+   toujours son pouvoir et tombe des boss, comme les autres pièces de set (≈ 1,8 à 15
+   pièces par set et par niveau, dont une sur 7 est la relique).
+
+À mesurer au point 11 du § 10 : nombre de niveaux pour passer ta relique au rang
+supérieur, avec le même pouvoir. Cible : le même rythme que les autres emplacements.
+
+## 7 bis. Le trophée (boss entre amis) — à revoir aussi (demande du 2026-09-22)
+
+Le trophée est une 8ᵉ pièce portée, à part : il ne tombe pas en donjon, son rang est celui
+du joueur, sa stat principale vient de la **famille d'exercice** du boss (`TROPHY_MAINS`),
+et ses affixes #2 et #3 sont tirés **dans les listes communes**, comme un drop
+d'aujourd'hui. Sa valeur vaut 40 % d'une pièce (`TROPHY_K`). Trois choses changent avec
+la refonte :
+
+1. **Ses stats principales actuelles tombent sur les défauts mesurés au § 1** : l'élan
+   (conditionnement) devient une stat par tour propre à l'arme, et le critique et la
+   réduction (tirage, gainage) étaient les stats mortes. Déjà en v0.880, le tirage et le
+   gainage étaient les trophées les plus faibles.
+2. **Ses affixes #2 et #3 sont tirés dans les listes communes**, qui n'existent plus : ils
+   doivent venir de la liste **de sa famille**.
+3. **Sa valeur (`TROPHY_K`)** se recalcule avec le budget (§ 5) : il reste un bonus modeste
+   (+2 à +5 % de puissance, la cible de la v0.866), pas une 8ᵉ pièce entière.
+
+**Le trophée prend les stats de ce que l'exercice travaille :**
+
+| Famille d'exercice | Stats principales | Stats de soutien |
+| --- | --- | --- |
+| 💪 Poussée (pompes, dips…) | dégâts · dégâts critiques | exécution · épines |
+| 🦵 Jambes (squats, fentes…) | PV · esquive | régénération · initiative |
+| 🧗 Tirage (tractions, rowing…) | précision · vol de vie | chance de critique · riposte |
+| 🧱 Gainage (planche…) | réduction · blocage | bouclier de départ · résistance aux critiques |
+| 🔥 Conditionnement (burpees, corde…) | initiative · rage | élan · régénération |
+
+Même règle que pour les objets : un trophée ne porte que des stats de sa famille. La
+famille décide du rôle (le gainage protège, la poussée frappe), le cran du boss et le
+« tué tôt » décident des étoiles et du niveau d'objet, comme aujourd'hui.
+
+**Trophées existants** : convertis comme les objets (§ 9) — même rang, même jet, même
+niveau d'objet, stats traduites vers la liste de leur famille.
+
 ## 8. L'optimiseur (équipement conseillé)
 
 `bestGearLoadout` essaie toutes les combinaisons, avec **une boucle imbriquée par
