@@ -216,7 +216,11 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
     );
     const worn = { ...eq, [TROPHY_SLOT]: ranked[0]! };
     const out = bestGearLoadout('g', stats, worn, [...inv, ...ranked.slice(1)], L);
-    expect(out[TROPHY_SLOT]?.id).toBe(ranked[ranked.length - 1]!.id);
+    // Le meilleur trophée DANS LE BUILD RETENU (l'optimiseur peut aussi changer le reste,
+    // et le meilleur trophée dépend alors de ce reste — sets spécialisés, 2026-09-22).
+    const bestFor = (e: typeof eq) =>
+      [...trophies].sort((x, y) => power({ ...e, trophy: y }) - power({ ...e, trophy: x }))[0]!.id;
+    expect(out[TROPHY_SLOT]?.id).toBe(bestFor(out));
     // ⚠️ AUSSI SANS la passe de polissage : c'est ainsi que `computeGearPlan` explore les
     // voies — sans elle, seul l'examen des emplacements parallèles peut trouver le trophée.
     const rough = bestGearLoadout(
@@ -230,7 +234,7 @@ describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
       undefined,
       false,
     );
-    expect(rough[TROPHY_SLOT]?.id).toBe(ranked[ranked.length - 1]!.id);
+    expect(rough[TROPHY_SLOT]?.id).toBe(bestFor(rough));
     // Sans rien au sac, l'optimiseur ne le retire jamais.
     const kept = bestGearLoadout('g', stats, worn, inv, L);
     expect(kept[TROPHY_SLOT]?.id).toBe(ranked[0]!.id);

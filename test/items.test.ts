@@ -6,6 +6,9 @@ import {
   aggregateLines,
   setBonusMult,
   SLOT_AFFIXES,
+  SPECIALIZED_STATS,
+  VOIE_SET_STATS,
+  setPieceTypes,
   SLOT_WEIGHT,
   rarityRank,
   gradeLabel,
@@ -879,56 +882,21 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     // il existe bien des objets à 3 affixes (Épique+) dans un contenu profond.
     expect(drops.some((d) => d.effect3)).toBe(true);
   });
-  it('les effets signature n’apparaissent qu’en profondeur (gate de niveau)', () => {
-    const SIG = new Set(['execute_pct', 'rage_pct', 'momentum_pct']);
-    const hasSig = (d: Item) => [d.effect, d.effect2, d.effect3].some((e) => e && SIG.has(e.type));
-    const low = scan(3, 1).filter(hasSig);
-    // Niveau 25 (rang Or → 2 affixes) : sous le rang Or un drop n'a qu'un affixe, jamais signature.
-    const deep = scan(25, 1).filter(hasSig);
-    expect(low).toHaveLength(0);
-    expect(deep.length).toBeGreaterThan(0);
-  });
-  it('un objet à effet signature porte un nom évocateur', () => {
-    const NAMED = [
-      'Guillotine',
-      'Couperet du Bourreau',
-      'Faux des Âmes',
-      'Déferlante',
-      'Crescendo',
-      'Élan Implacable',
-      'Cœur du Berserk',
-      'Fureur Écarlate',
-      'Rage du Damné',
-    ];
-    const SIG = ['execute_pct', 'rage_pct', 'momentum_pct'];
-    const sig = scan(25, 1).find((d) =>
-      [d.effect, d.effect2, d.effect3].some((e) => e && SIG.includes(e.type)),
-    );
-    expect(sig).toBeTruthy();
-    // ⚠️ v0.888 : l’OBJET d’abord, l’épithète ensuite — « Cuirasse « Élan Implacable » ».
-    const m = /^(\S+) « (.+) »$/.exec(sig!.name);
-    expect(m, sig!.name).toBeTruthy();
-    expect(NAMED).toContain(m![2]);
-  });
-  it('⚠️ LE CAS RÉEL : un objet signature commence par le nom d’un objet de SON emplacement', () => {
-    const NOUNS: Record<string, string[]> = {
-      weapon: ['Lame', 'Hache', 'Masse', 'Dague', 'Fléau', 'Faux'],
-      armor: ['Plastron', 'Cotte', 'Cuirasse', 'Harnois'],
-      shield: ['Écu', 'Pavois', 'Rondache', 'Targe'],
-      helmet: ['Heaume', 'Casque', 'Bassinet', 'Morion'],
-      boots: ['Bottes', 'Grèves', 'Solerets', 'Jambières'],
-      accessory: ['Anneau', 'Chevalière', 'Bague', 'Jonc'],
-      relic: ['Éclat', 'Totem', 'Sceau', 'Idole'],
-    };
+  // ⚠️ RÉÉCRIT (sets spécialisés, 2026-09-22) : les stats spécialisées (dont les signatures
+  // exécution/rage/élan) sont EXCLUSIVES aux sets. Un drop n'en porte plus, à aucun niveau.
+  it('⚠️ SETS SPÉCIALISÉS : aucun drop ne porte de stat spécialisée, à aucun niveau', () => {
     let n = 0;
-    for (const d of scan(40, 1)) {
-      if (!d.name.includes('«')) continue;
-      n++;
-      expect(NOUNS[d.slot], d.name).toContain(itemNoun(d));
-      expect(itemIconName(d), d.name).not.toBe('mdi-help-circle');
-    }
-    expect(n).toBeGreaterThan(0);
-    // La forme d’arme suit l’épithète : une Guillotine reste une hache, la Faux une faux.
+    for (const L of [3, 25, 60, 90])
+      for (const d of scan(L, 1, 1500)) {
+        for (const e of [d.effect, d.effect2, d.effect3])
+          if (e) expect(SPECIALIZED_STATS.has(e.type), `${d.name} ${e.type}`).toBe(false);
+        n++;
+      }
+    expect(n).toBeGreaterThan(1000);
+  });
+  it('un drop n’a plus de nom signature ; la forme d’arme suit toujours l’épithète d’avant', () => {
+    for (const d of scan(40, 1)) if (!d.power) expect(d.name, d.name).not.toContain('«');
+    // Les objets d'avant la gardent : une Guillotine reste une hache, la Faux une faux.
     expect(weaponKind({ name: 'Hache « Guillotine »' })).toBe('hache');
     expect(weaponKind({ name: 'Faux « Faux des Âmes »' })).toBe('faux');
   });
@@ -1195,17 +1163,39 @@ describe('pieces de set — multi-affixe (correctif : les sets ne valaient jamai
   const nAff = (it: { effect?: unknown; effect2?: unknown; effect3?: unknown }) =>
     [it.effect, it.effect2, it.effect3].filter(Boolean).length;
 
-  it('rollSetPiece pose AUTANT d affixes que sa rarete l autorise (comme un drop)', () => {
-    for (let seed = 1; seed <= 40; seed++) {
-      const p = rollSetPiece(mulberry32(seed), {
-        setId,
-        level: 40,
-        luck: 0.9,
-        playerLevel: 40,
-      });
-      if (p.power) continue; // la relique de la voie : un pouvoir, pas d'affixe
-      expect(nAff(p)).toBe(affixCountForRarity(p.rarity));
-    }
+  // ⚠️ RÉÉCRIT (sets spécialisés, 2026-09-22) : une pièce de set porte la stat principale de
+  // son emplacement PUIS les stats de sa voie — l'exclusive toujours en #2, et au moins deux
+  // affixes même en rareté basse (sinon une pièce commune ne se distinguerait pas d'un drop).
+  it('rollSetPiece : la principale de l’emplacement, puis les stats de SA voie', () => {
+    for (const set of VOIE_SETS)
+      for (let seed = 1; seed <= 30; seed++) {
+        const p = rollSetPiece(mulberry32(seed), {
+          setId: set.id,
+          level: 40,
+          luck: 0.9,
+          playerLevel: 40,
+        });
+        if (p.power) continue; // la relique de la voie : un pouvoir, pas d'affixe
+        const voie = set.id.slice('voie:'.length);
+        const types = [p.effect, p.effect2, p.effect3].filter(Boolean).map((e) => e!.type);
+        expect(types).toEqual(setPieceTypes(p.slot as GearSlot, set.id, p.rarity));
+        expect(types.length, p.name).toBeGreaterThanOrEqual(2);
+        expect(types[1], p.name).toBe(VOIE_SET_STATS[voie]![0]);
+      }
+  });
+  it('une pièce de set COMMUNE porte déjà la stat exclusive de sa voie', () => {
+    expect(setPieceTypes('armor', 'voie:epineux', 'commun')).toEqual(['max_pv_pct', 'thorns_pct']);
+    expect(setPieceTypes('armor', 'voie:epineux', 'epique')).toEqual([
+      'max_pv_pct',
+      'thorns_pct',
+      'riposte_pct',
+    ]);
+  });
+  it('chaque voie a une stat exclusive qu’aucune autre voie ne porte en exclusive', () => {
+    const excl = Object.values(VOIE_SET_STATS).map((l) => l[0]!);
+    expect(new Set(excl).size).toBe(excl.length);
+    for (const l of Object.values(VOIE_SET_STATS))
+      for (const t of l) expect(SPECIALIZED_STATS.has(t), t).toBe(true);
   });
 
   it('l affixe PRINCIPAL ne depend pas du tirage (identite stable par emplacement)', () => {
@@ -1357,8 +1347,13 @@ describe('procs légendaires des pièces de SET — cohérents avec le thème (v
     for (const p of LEGENDARY_PROCS)
       for (const slot of p.slots) {
         const l = SLOT_AFFIXES[slot as keyof typeof SLOT_AFFIXES];
+        // Sets spécialisés : une stat spécialisée vit sur une pièce de set, quel que soit
+        // l'emplacement — elle compte comme « de son emplacement » pour un proc de set.
         for (const t of p.echo)
-          expect([...l.major, ...l.support], `${p.name} (${slot}) prolonge ${t}`).toContain(t);
+          expect(
+            [...l.major, ...l.support].includes(t) || SPECIALIZED_STATS.has(t),
+            `${p.name} (${slot}) prolonge ${t}`,
+          ).toBe(true);
       }
   });
   it('19 effets : 3 ou 4 par emplacement hors relique, jamais le même sur deux', () => {

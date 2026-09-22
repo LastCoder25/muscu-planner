@@ -135,7 +135,8 @@ export type EffectType =
   | 'riposte_pct' // riposte : chance de contre-attaquer après un coup reçu (bouclier, bottes)
   | 'crit_resist_pct' // résistance aux critiques : les critiques ennemis font moins mal
   | 'start_shield_pct' // barrière de départ : X % des PV encaissés en premier, au début du combat
-  | 'dodge_pct'; // esquive (bottes) — même canal que l'esquive des talents
+  | 'dodge_pct' // esquive (bottes) — même canal que l'esquive des talents
+  | 'toughness_pct'; // robustesse (set du Colosse) : la part d'un gros coup au-delà d'un seuil est réduite
 
 export interface ItemEffect {
   type: EffectType;
@@ -785,7 +786,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🦉',
     slots: ['helmet'],
     desc: `Les ${COMBAT.vigilanceCrits} premiers coups critiques que tu reçois n’en sont pas.`,
-    echo: ['crit_resist_pct'],
+    echo: ['initiative_pct'], // sets spécialisés : le casque n’a plus de résistance aux critiques
   },
   {
     id: 'sang_froid',
@@ -793,7 +794,7 @@ export const LEGENDARY_PROCS: LegendaryProc[] = [
     emoji: '🧊',
     slots: ['helmet'],
     desc: 'Les coups critiques ennemis n’en sont plus.',
-    echo: ['crit_resist_pct', 'max_pv_pct'],
+    echo: ['max_pv_pct'],
   },
   // 🥾 BOTTES
   {
@@ -986,38 +987,81 @@ const EFFECT_MIN_LEVEL: Partial<Record<EffectType, number>> = {
 // ⚠️ Remplace les listes COMMUNES d'avant (AFFIX_TIERS) : un drop tirait ses stats sans
 // regarder son emplacement — mesuré, une arme sur deux avait des PV ou de la réduction en
 // stat principale, et l'optimiseur en mettait sur 4 armes sur 4 aux niveaux 50 et 90.
+// ⚠️ SETS SPÉCIALISÉS (2026-09-22, spec `2026-09-22-sets-specialises-trophee-voies.md`) :
+// un DROP ne porte plus que des STATS DE BASE. Les stats spécialisées (`SPECIALIZED_STATS`)
+// sont exclusives aux pièces de set (`VOIE_SET_STATS`). Chaque emplacement garde deux stats
+// principales et deux de soutien, et une stat vit toujours sur deux emplacements au plus.
 export const SLOT_AFFIXES: Record<GearSlot, { major: EffectType[]; support: EffectType[] }> = {
   weapon: {
     major: ['damage_pct', 'crit_dmg_pct'],
-    support: ['accuracy_pct', 'momentum_pct', 'execute_pct', 'bleed_pct', 'lifesteal_pct'],
+    support: ['accuracy_pct', 'crit_pct'],
   },
   armor: {
     major: ['max_pv_pct', 'dmg_reduction_pct'],
-    support: ['thorns_pct', 'regen_pct', 'start_shield_pct'],
+    support: ['regen_pct', 'crit_resist_pct'],
   },
   shield: {
-    major: ['block_pct', 'parry_pct'],
-    support: ['riposte_pct', 'thorns_pct', 'crit_resist_pct'],
+    major: ['block_pct', 'dmg_reduction_pct'],
+    support: ['crit_resist_pct', 'dodge_pct'],
   },
   helmet: {
     major: ['max_pv_pct', 'accuracy_pct'],
-    support: ['initiative_pct', 'crit_resist_pct', 'magic_find_pct'],
+    support: ['initiative_pct', 'magic_find_pct'],
   },
   boots: {
     major: ['dodge_pct', 'initiative_pct'],
-    support: ['riposte_pct', 'regen_pct'],
+    support: ['regen_pct', 'gold_pct'],
   },
   accessory: {
-    major: ['crit_pct', 'rage_pct'],
-    support: ['lifesteal_pct', 'gold_pct', 'magic_find_pct'],
+    major: ['crit_pct', 'crit_dmg_pct'],
+    support: ['gold_pct', 'magic_find_pct'],
   },
-  // ⚠️ TRANSITOIRE : la relique devient une attaque spéciale à jauge (étape 4) et perd ses
-  // stats. D'ici là elle garde des stats de survie, hors de la règle des deux emplacements.
+  // La relique ne porte pas de stats (un pouvoir) : liste gardée pour le typage seulement.
   relic: {
     major: ['max_pv_pct'],
-    support: ['rage_pct', 'regen_pct'],
+    support: ['regen_pct'],
   },
 };
+
+/** Stats SPÉCIALISÉES : aucun drop ne les porte, seules les pièces de set (spec § 3.1). */
+export const SPECIALIZED_STATS: ReadonlySet<EffectType> = new Set<EffectType>([
+  'execute_pct',
+  'rage_pct',
+  'momentum_pct',
+  'bleed_pct',
+  'lifesteal_pct',
+  'thorns_pct',
+  'riposte_pct',
+  'parry_pct',
+  'start_shield_pct',
+  'toughness_pct',
+]);
+
+/** Les stats spécialisées d'un set de voie : [exclusive, partagée] (spec § 4). L'exclusive est
+ *  TOUJOURS l'affixe #2 d'une pièce du set — l'Épineux porte des épines sur ses 6 pièces.
+ *  La « robustesse » du Colosse est la seule stat créée pour eux (spec § 4.2). */
+export const VOIE_SET_STATS: Record<string, EffectType[]> = {
+  berserker: ['rage_pct', 'bleed_pct'],
+  assassin: ['execute_pct', 'bleed_pct'],
+  vampire: ['lifesteal_pct', 'rage_pct'],
+  frenetique: ['momentum_pct', 'lifesteal_pct'],
+  epineux: ['thorns_pct', 'riposte_pct'],
+  duelliste: ['riposte_pct', 'parry_pct'],
+  gardien: ['parry_pct', 'start_shield_pct'],
+  colosse: ['toughness_pct', 'start_shield_pct'],
+};
+
+/** Les stats d'une pièce de set, dans l'ordre : la principale de base de l'emplacement, puis
+ *  les stats spécialisées de sa voie. ⚠️ AU MOINS DEUX affixes, même en rareté basse : sans
+ *  la stat exclusive, une pièce de set commune ne se distinguerait pas d'un drop. Un set sans
+ *  voie (legacy) retombe sur les stats de soutien de l'emplacement. */
+export function setPieceTypes(slot: GearSlot, setId: string, rarity: Rarity): EffectType[] {
+  const major = SET_SLOT_MAJORS[slot]?.[0] ?? SLOT_AFFIXES[slot].major[0]!;
+  const voie = setId.startsWith('voie:') ? setId.slice('voie:'.length) : '';
+  const spec = (VOIE_SET_STATS[voie] ?? SLOT_AFFIXES[slot].support).filter((t) => t !== major);
+  const n = Math.min(1 + spec.length, Math.max(2, affixCountForRarity(rarity)));
+  return [major, ...spec].slice(0, n);
+}
 
 /** POIDS de chaque emplacement dans le budget de puissance (valeur × poids). L'arme porte
  *  seule les dégâts directs : elle pèse plus, pour que l'attaque et la survie reçoivent
@@ -1100,6 +1144,7 @@ const EFFECT_BASE: Record<EffectType, number> = {
   parry_pct: 5,
   riposte_pct: 8,
   crit_resist_pct: 15,
+  toughness_pct: 15,
   start_shield_pct: 8,
   dodge_pct: 5,
 };
@@ -1289,6 +1334,8 @@ export function effectLabelFor(type: EffectType, v: number): string {
       return `+${s}% riposte`;
     case 'crit_resist_pct':
       return `+${s}% résistance aux critiques`;
+    case 'toughness_pct':
+      return `+${s}% robustesse`;
     case 'start_shield_pct':
       return `+${s}% barrière de départ`;
     case 'dodge_pct':
@@ -1331,6 +1378,7 @@ const AGGREGATE_AS: Record<keyof AggregatedEffects, EffectType> = {
   ripostePct: 'riposte_pct',
   critResistPct: 'crit_resist_pct',
   startShieldPct: 'start_shield_pct',
+  toughnessPct: 'toughness_pct',
 };
 /** Le pictogramme de chaque canal — repris de la fiche Héros, qui les affichait déjà. */
 const AGGREGATE_EMOJI: Record<keyof AggregatedEffects, string> = {
@@ -1356,6 +1404,7 @@ const AGGREGATE_EMOJI: Record<keyof AggregatedEffects, string> = {
   ripostePct: '↩️',
   critResistPct: '🪖',
   startShieldPct: '🔰',
+  toughnessPct: '🪨',
 };
 const AGGREGATE_KEYS = Object.keys(AGGREGATE_AS) as (keyof AggregatedEffects)[];
 
@@ -1823,13 +1872,9 @@ export function rollDrop(
   const chosen = affixes[0]!;
   const effect2 = affixes[1];
   const effect3 = affixes[2];
-  // Objet portant un affixe SIGNATURE (n'importe quel tier) → nom évocateur (« Guillotine ») ;
-  // sinon nom + adjectif de rareté.
-  const sigAffix = affixes.find((e) => SIGNATURE_NAMES[e.type]);
-  const sig = sigAffix ? pick(rng, SIGNATURE_NAMES[sigAffix.type]!) : null;
-  const name = sig
-    ? `${signatureNoun(slot, sig, roll)} « ${sig} »`
-    : `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
+  // Nom + adjectif de rareté. ⚠️ Plus de nom SIGNATURE (« Guillotine ») sur un drop : il n'en
+  // porte plus aucune stat (sets spécialisés, 2026-09-22). Les objets d'avant gardent le leur.
+  const name = `${pick(rng, NAMES[slot])} ${RARITY_ADJ[rarity]}`;
   // NIVEAU D'OBJET (v0.583) = ilvl tiré ci-dessus → 3ᵉ axe de magnitude (itemLevelMult).
   // La valeur des affixes reste level-indépendante ; le multiplicateur de niveau est appliqué
   // en aval (aggregateEffects/effectiveValue) → un même objet à ilvl plus haut est plus fort.
@@ -1931,20 +1976,13 @@ export function rollSetPiece(
   // paliers) perdait systématiquement contre du stuff mixte (12 stats), et les bonus de
   // set ne rattrapaient pas l'écart. Les affixes suivants viennent des tiers secondaire/
   // mineur, comme un drop.
-  const affixes: ItemEffect[] = [{ type: chosenType, value }];
-  for (let a = 1; a < affixCountForRarity(rarity); a++) {
-    const pool = slotPool(slot, 'support', setCenter).filter(
-      (t) => !affixes.some((x) => x.type === t),
-    );
-    if (!pool.length) continue;
-    // ⚠️ LIBRE, comme un drop. Préférer le thème ici a été mesuré puis retiré : les stats
-    // conditionnelles en affixe #2 creusaient l’écart de 6 à 27 points selon la voie.
-    const t = pick(rng, pool);
-    affixes.push({
-      type: t,
-      value: affixValue(t, rarity, roll, slot),
-    });
-  }
+  // ⚠️ SETS SPÉCIALISÉS (2026-09-22) : les affixes #2 et #3 sont les stats de la VOIE. Le
+  // tirage « libre » d'avant (v0.803) répondait à des drops qui portaient AUSSI des stats
+  // spécialisées ; ils n'en portent plus, le set est leur seule source.
+  const affixes: ItemEffect[] = setPieceTypes(slot as GearSlot, opts.setId, rarity).map((t, i) => ({
+    type: t,
+    value: i === 0 ? value : affixValue(t, rarity, roll, slot),
+  }));
   // Une pièce de set Légendaire+ porte AUSSI un proc légendaire (rareté orthogonale au set).
   const legendary =
     RARITY_RANK[rarity] >= LEGENDARY_MIN_RANK
@@ -1999,13 +2037,18 @@ export const GEAR_VERSION = 2;
  *  table retombe sur la première stat principale de l'emplacement. */
 export const AFFIX_TRANSLATION: Partial<Record<GearSlot, Partial<Record<EffectType, EffectType>>>> =
   {
+    // ⚠️ SETS SPÉCIALISÉS (2026-09-22) : une pièce NORMALE perd ses stats spécialisées, qui
+    // deviennent une stat de base proche de son emplacement (même rang, jet, niveau).
     weapon: {
-      crit_pct: 'crit_dmg_pct',
       max_pv_pct: 'damage_pct',
       dmg_reduction_pct: 'damage_pct',
-      thorns_pct: 'bleed_pct',
-      rage_pct: 'execute_pct',
-      regen_pct: 'lifesteal_pct',
+      thorns_pct: 'crit_dmg_pct',
+      rage_pct: 'crit_pct',
+      execute_pct: 'crit_pct',
+      bleed_pct: 'crit_dmg_pct',
+      momentum_pct: 'accuracy_pct',
+      lifesteal_pct: 'accuracy_pct',
+      regen_pct: 'accuracy_pct',
       gold_pct: 'accuracy_pct',
       magic_find_pct: 'accuracy_pct',
       initiative_pct: 'accuracy_pct',
@@ -2014,24 +2057,40 @@ export const AFFIX_TRANSLATION: Partial<Record<GearSlot, Partial<Record<EffectTy
       damage_pct: 'max_pv_pct',
       crit_pct: 'dmg_reduction_pct',
       lifesteal_pct: 'regen_pct',
-      execute_pct: 'thorns_pct',
-      rage_pct: 'thorns_pct',
-      momentum_pct: 'start_shield_pct',
-      gold_pct: 'start_shield_pct',
-      magic_find_pct: 'start_shield_pct',
-      initiative_pct: 'start_shield_pct',
+      thorns_pct: 'crit_resist_pct',
+      start_shield_pct: 'regen_pct',
+      execute_pct: 'crit_resist_pct',
+      rage_pct: 'crit_resist_pct',
+      momentum_pct: 'regen_pct',
+      gold_pct: 'regen_pct',
+      magic_find_pct: 'regen_pct',
+      initiative_pct: 'crit_resist_pct',
+    },
+    shield: {
+      parry_pct: 'dmg_reduction_pct',
+      riposte_pct: 'crit_resist_pct',
+      thorns_pct: 'dodge_pct',
+    },
+    helmet: {
+      crit_resist_pct: 'initiative_pct',
+    },
+    boots: {
+      riposte_pct: 'regen_pct',
     },
     accessory: {
       damage_pct: 'crit_pct',
-      execute_pct: 'rage_pct',
-      momentum_pct: 'rage_pct',
-      thorns_pct: 'rage_pct',
-      max_pv_pct: 'lifesteal_pct',
-      dmg_reduction_pct: 'lifesteal_pct',
-      regen_pct: 'lifesteal_pct',
+      rage_pct: 'crit_dmg_pct',
+      execute_pct: 'crit_dmg_pct',
+      momentum_pct: 'crit_dmg_pct',
+      thorns_pct: 'crit_dmg_pct',
+      lifesteal_pct: 'gold_pct',
+      max_pv_pct: 'magic_find_pct',
+      dmg_reduction_pct: 'magic_find_pct',
+      regen_pct: 'gold_pct',
       initiative_pct: 'magic_find_pct',
     },
   };
+
 /** Effets légendaires d'avant qui DEVIENNENT un pouvoir de relique. */
 const LEGACY_PROC_POWER: Record<string, RelicPowerId> = {
   phoenix: 'phenix',
@@ -2071,16 +2130,20 @@ export function migrateGearItem(it: Item): Item {
   const setMajor = it.setId ? SET_SLOT_MAJORS[slot]?.[0] : undefined;
   const olds = [it.effect, it.effect2, it.effect3].filter((e): e is ItemEffect => !!e);
   const types: EffectType[] = [];
-  olds.forEach((e, i) => {
-    let t: EffectType =
-      i === 0 && setMajor
-        ? setMajor
-        : allowed.includes(e.type)
-          ? e.type
-          : (AFFIX_TRANSLATION[slot]?.[e.type] ?? lists.major[0]!);
-    if (types.includes(t)) t = allowed.find((x) => !types.includes(x)) ?? t;
-    if (!types.includes(t)) types.push(t);
-  });
+  // Pièce de set (sets spécialisés) : les stats de sa voie, au même rang, jet et niveau.
+  if (it.setId && SET_BY_ID[it.setId])
+    types.push(...setPieceTypes(slot, it.setId, normRank(it.rarity)));
+  else
+    olds.forEach((e, i) => {
+      let t: EffectType =
+        i === 0 && setMajor
+          ? setMajor
+          : allowed.includes(e.type)
+            ? e.type
+            : (AFFIX_TRANSLATION[slot]?.[e.type] ?? lists.major[0]!);
+      if (types.includes(t)) t = allowed.find((x) => !types.includes(x)) ?? t;
+      if (!types.includes(t)) types.push(t);
+    });
   // L'affixe #1 est une stat PRINCIPALE de l'emplacement (règle des drops).
   if (!setMajor && types.length && !lists.major.includes(types[0]!)) {
     const j = types.findIndex((t) => lists.major.includes(t));
@@ -2124,12 +2187,14 @@ export function makeGearPiece(
   const set = o.setId ? SET_BY_ID[o.setId] : undefined;
   const setMajor = set ? SET_SLOT_MAJORS[slot]?.[0] : undefined;
   const types: EffectType[] = [];
-  for (let a = 0; a < affixCountForRarity(rarity); a++) {
-    const pool = (
-      a === 0 && setMajor ? [setMajor] : slotPool(slot, a === 0 ? 'major' : 'support', level)
-    ).filter((t) => !types.includes(t));
-    if (pool.length) types.push(pick(rng, pool));
-  }
+  if (set) types.push(...setPieceTypes(slot, o.setId!, rarity));
+  else
+    for (let a = 0; a < affixCountForRarity(rarity); a++) {
+      const pool = slotPool(slot, a === 0 ? 'major' : 'support', level).filter(
+        (t) => !types.includes(t),
+      );
+      if (pool.length) types.push(pick(rng, pool));
+    }
   const effects = types.map((type, i) => ({
     type,
     value: affixValue(type, rarity, roll, slot, i === 0 && !!setMajor),
@@ -2512,6 +2577,7 @@ export interface AggregatedEffects {
   ripostePct: number; // note de riposte (→ chance, courbe)
   critResistPct: number; // note de résistance aux critiques (→ part retirée, courbe)
   startShieldPct: number; // note de barrière de départ (→ part des PV, courbe)
+  toughnessPct: number; // note de robustesse (→ part d’un gros coup retirée, courbe)
 }
 
 export function emptyEffects(): AggregatedEffects {
@@ -2538,6 +2604,7 @@ export function emptyEffects(): AggregatedEffects {
     ripostePct: 0,
     critResistPct: 0,
     startShieldPct: 0,
+    toughnessPct: 0,
   };
 }
 
@@ -2565,6 +2632,7 @@ const EFFECT_CHANNEL: Record<EffectType, keyof AggregatedEffects> = {
   riposte_pct: 'ripostePct',
   crit_resist_pct: 'critResistPct',
   start_shield_pct: 'startShieldPct',
+  toughness_pct: 'toughnessPct',
   dodge_pct: 'dodgeAdd',
 };
 
@@ -3096,6 +3164,7 @@ function newStats(e: AggregatedEffects, x: Partial<AggregatedEffects>): Partial<
     o.critResist = ratingChance(RATING_CAPS.critResist, g('critResistPct'));
   if (g('startShieldPct') > 0)
     o.startShield = ratingChance(RATING_CAPS.startShield, g('startShieldPct'));
+  if (g('toughnessPct') > 0) o.toughness = ratingChance(RATING_CAPS.toughness, g('toughnessPct'));
   return o;
 }
 
@@ -3109,6 +3178,7 @@ export const RATING_CAPS = {
   riposte: 0.5,
   critResist: 0.8,
   startShield: 0.6,
+  toughness: 0.6,
 } as const;
 /** Une note d'équipement (fraction) convertie en chance, à rendement décroissant. */
 export function ratingChance(cap: number, note: number): number {
@@ -3127,6 +3197,7 @@ const CHANCE_LABELS: [keyof Combatant, string][] = [
   ['riposte', 'riposte'],
   ['critResist', 'résistance aux critiques'],
   ['startShield', 'barrière de départ'],
+  ['toughness', 'robustesse'],
 ];
 /** Ce qu'un changement d'équipement fait aux CHANCES réelles du combat (« critique 38 % →
  *  41 % ») — jamais à la note brute de l'objet : une note passe par une courbe à rendement

@@ -38,7 +38,7 @@ export const TALENTS: TalentDef[] = [
   },
   {
     code: 't_pv',
-    name: 'Robustesse',
+    name: 'Vitalité', // « Robustesse » est la stat du set du Colosse (2026-09-22)
     desc: 'PV max',
     icon: '❤️',
     effectKey: 'maxPvPct',

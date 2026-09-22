@@ -91,7 +91,8 @@ const ADV_SIGNATURE_INFO: Partial<
   crit_pct: { emoji: '🎯', what: 'Coups critiques plus souvent', name: 'Précision' },
   execute_pct: { emoji: '☠️', what: 'Achève les ennemis affaiblis', name: 'Exécution' },
   lifesteal_pct: { emoji: '🩸', what: 'Se soigne en frappant', name: 'Vol de vie' },
-  max_pv_pct: { emoji: '❤️', what: 'Plus robuste', name: 'Robustesse' },
+  // ⚠️ « Vitalité » et non « Robustesse » : ce nom est celui de la stat du Colosse (2026-09-22).
+  max_pv_pct: { emoji: '❤️', what: 'Plus de PV', name: 'Vitalité' },
   momentum_pct: { emoji: '🌀', what: 'Frappe de plus en plus fort', name: 'Élan' },
   rage_pct: { emoji: '🔥', what: 'Redoutable quand il est mal en point', name: 'Rage' },
   thorns_pct: { emoji: '🛡️', what: 'Renvoie une part des coups reçus', name: 'Épines' },
@@ -105,6 +106,7 @@ const ADV_SIGNATURE_INFO: Partial<
     what: 'Commence le combat derrière une barrière',
     name: 'Barrière de départ',
   },
+  toughness_pct: { emoji: '🪨', what: 'Encaisse les gros coups sans broncher', name: 'Robustesse' },
 };
 // ─────────────────────────────────────────────────────────────────────────────
 // ⚔️ CE QUI A MORDU PENDANT UN COMBAT
@@ -143,6 +145,7 @@ const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set' | 'relic'> = {
   parry: 'sig',
   riposte: 'sig',
   start_shield: 'sig',
+  toughness: 'sig',
   initiative: 'proc',
   predator_eye: 'proc',
   aegis: 'proc',

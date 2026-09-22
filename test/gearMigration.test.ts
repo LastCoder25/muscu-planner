@@ -7,6 +7,7 @@ import {
   RANK_ORDER,
   SLOT_AFFIXES,
   SLOTS,
+  SPECIALIZED_STATS,
   affixCountForRarity,
   affixValue,
   makeGearPiece,
@@ -55,7 +56,8 @@ describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
         effect2: { type: 'crit_pct', value: 5 },
       }),
     );
-    expect([w.effect.type, w.effect2?.type]).toEqual(['damage_pct', 'crit_dmg_pct']);
+    // Le critique est désormais une stat de soutien de l'arme (sets spécialisés) : il reste.
+    expect([w.effect.type, w.effect2?.type]).toEqual(['damage_pct', 'crit_pct']);
     const a = migrateGearItem(old({ slot: 'armor', effect: { type: 'crit_pct', value: 5 } }));
     expect(a.effect.type).toBe('dmg_reduction_pct');
     const r = migrateGearItem(old({ slot: 'accessory', effect: { type: 'damage_pct', value: 9 } }));
@@ -129,6 +131,40 @@ describe('migrateGearItem — conversion au chargement (spec § 9)', () => {
     expect(m.effect.type).toBe('crit_pct');
     expect(m.effect.value).toBe(affixValue('crit_pct', 'epique', 0.6, 'accessory', true));
     expect(m.setId).toBe('voie:assassin');
+  });
+
+  it('⚠️ SETS SPÉCIALISÉS : une pièce normale perd ses stats spécialisées', () => {
+    const w = migrateGearItem(
+      old({
+        slot: 'weapon',
+        effect: { type: 'damage_pct', value: 12 },
+        effect2: { type: 'execute_pct', value: 5 },
+        effect3: { type: 'lifesteal_pct', value: 3 },
+      }),
+    );
+    for (const e of [w.effect, w.effect2, w.effect3])
+      if (e) expect(SPECIALIZED_STATS.has(e.type), e.type).toBe(false);
+    expect([w.effect, w.effect2, w.effect3].filter(Boolean)).toHaveLength(3);
+  });
+
+  it('⚠️ SETS SPÉCIALISÉS : une pièce de set reçoit les stats de sa voie', () => {
+    const m = migrateGearItem(
+      old({
+        slot: 'armor',
+        setId: 'voie:epineux',
+        effect: { type: 'max_pv_pct', value: 9 },
+        effect2: { type: 'regen_pct', value: 3 },
+        effect3: { type: 'crit_resist_pct', value: 3 },
+      }),
+    );
+    expect([m.effect.type, m.effect2?.type, m.effect3?.type]).toEqual([
+      'max_pv_pct',
+      'thorns_pct',
+      'riposte_pct',
+    ]);
+    expect(m.effect2!.value).toBe(affixValue('thorns_pct', 'epique', 0.6, 'armor'));
+    // Idempotent : repasser ne change rien.
+    expect(migrateGearItem(m)).toEqual(m);
   });
 
   it('une relique reçoit un pouvoir et perd ses stats ; celle d’un set prend le pouvoir de sa voie', () => {

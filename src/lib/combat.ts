@@ -79,6 +79,10 @@ export interface Combatant {
   riposte?: number; // 0..1 : chance de contre-attaquer après un coup reçu
   critResist?: number; // 0..1 : part du bonus de critique ennemi retirée
   startShield?: number; // 0..1 : barrière de départ, en part des PV max
+  /** 0..1 : ROBUSTESSE (set du Colosse) — la part d'un coup reçu qui dépasse
+   *  `toughnessThreshold` des PV max est réduite d'autant. Mesuré : un coup ennemi pèse en
+   *  général 10 à 40 % des PV du héros, un coup de boss 20 à 77 %. */
+  toughness?: number;
   // Procs LÉGENDAIRES (objets Légendaire+, joueur uniquement) — effets NON-scalants,
   // one-shot par combat. Cf. LEGENDARY_PROCS (items.ts) pour les ids/libellés.
   procs?: ReadonlySet<string>;
@@ -364,6 +368,8 @@ export const COMBAT = {
   powerRiposteW: 0.26, // riposte 0,3 → +7,8 % de dégâts
   powerBlockW: 0.91, // blocage 0,3 → +25,7 % de PV
   powerParryW: 0.96, // parade 0,15 → +16,9 % de PV
+  toughnessThreshold: 0.2, // au-delà de 20 % des PV max, un coup est « gros »
+  powerToughnessW: 0.2, // ⚠️ point de départ, recalibré à la mesure (étape 2)
   powerCritResistW: 0.14, // résistance aux critiques 0,5 → +6,8 % de PV
   powerShieldW: 0.52, // barrière de départ 0,3 → +15,6 % de PV
 };
@@ -446,7 +452,8 @@ export function survivalOf(c: Combatant): number {
   return (
     ((c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0))) *
       (1 + COMBAT.powerShieldW * (c.startShield ?? 0)) *
-      (1 + COMBAT.powerCritResistW * (c.critResist ?? 0))) /
+      (1 + COMBAT.powerCritResistW * (c.critResist ?? 0)) *
+      (1 + COMBAT.powerToughnessW * (c.toughness ?? 0))) /
     (1 - COMBAT.powerBlockW * (1 - COMBAT.blockKeep) * (c.block ?? 0)) /
     (1 - Math.min(0.9, COMBAT.powerParryW * (c.parry ?? 0)))
   );
@@ -539,6 +546,7 @@ export type CombatSkill =
   | 'parry'
   | 'riposte'
   | 'start_shield'
+  | 'toughness'
   /**
    * ── Procs légendaires et signatures de set ──
    * ⚠️ **LES IDS DE `LEGENDARY_PROCS` ET DE `SET_SIGNATURES`, à la lettre.** Inventer une
@@ -1028,6 +1036,14 @@ export function simulateCombat(
           mark('block');
         }
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
+        // Robustesse : la part d'un gros coup au-delà du seuil est réduite.
+        if (def.toughness) {
+          const seuil = maxPPv * COMBAT.toughnessThreshold;
+          if (dmg > seuil) {
+            dmg = Math.max(1, Math.round(seuil + (dmg - seuil) * (1 - def.toughness)));
+            mark('toughness');
+          }
+        }
         // Endurance : le colosse se raidit quand il saigne. S'applique APRÈS la réduction
         // ordinaire (elle s'y ajoute au lieu de la remplacer) et reste bornée par elle.
         if (has('endurance') && pPv / maxPPv < COMBAT.enduranceThreshold) {
