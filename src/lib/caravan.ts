@@ -132,6 +132,11 @@ export const CARAVAN = {
   /** Un rôle 🧭 raccourcit le trajet, un rôle 🐫 grossit la cargaison — par aventurier. */
   speedPerRole: 0.08,
   speedMax: 0.3,
+  /** 🧭 PART DE LA RÉDUCTION DE L'AVANT-POSTE QUE REÇOIVENT LES CHAMPIONS (v0.1049, demandé
+   *  par l'utilisateur : « la moitié »). Le héros en a tout. ⚠️ C'est le RYTHME des camps en
+   *  parallèle, donc l'or et les pierres par jour : ne pas bouger sans relancer
+   *  `campEconomy.test` et `goldSink.test`. */
+  outpostShare: 0.5,
   haulPerRole: 0.12,
   haulMax: 0.4,
   /** Un 🩺 raccourcit les convalescences de l'équipe. */
@@ -678,6 +683,12 @@ export function suggestEscort(
  *  un aller-retour d'équipe dépassait 28 h au bout de la carte en fin de partie. Mesuré sur le
  *  trajet MOYEN : ×1,1 à ×1,3 voyages/jour jusqu'au niveau 30, ×1,6 à ×1,8 au-delà du 40 —
  *  la carte agrandie absorbe une partie de la réduction (sur la carte fixe d'avant : ×2,4).
+ *  ⚠️ v0.1049 (demandé : « la moitié ») : les champions n'en reçoivent plus que
+ *  `CARAVAN.outpostShare` = 0,5 (`championOutpostMult`). Mesuré sur la carte agrandie
+ *  (`campEconomy.test`, 8 graines, Avant-poste au niveau du joueur), part entière → moitié :
+ *  camps/jour 9,3 → 8,9 · 11,8 → 10,5 · 15,3 → 13,0 aux niveaux 12 / 26 / 60 ; or des camps
+ *  +29 → +29 · +23 → +21 · +29 → +23 % du revenu de référence ; pierres +19 → +17 ·
+ *  +28 → +23 · +42 → +34 %.
  *  La cargaison reste payée sur le temps du héros (`heroEquivalentFactor`).
  *  ⚠️ `travelMult` est REQUIS : l'oublier annoncerait un trajet sans Avant-poste. */
 export function caravanLegMin(
@@ -691,7 +702,15 @@ export function caravanLegMin(
     CARAVAN.speedMax,
     countRole(escort, 'speed') * CARAVAN.speedPerRole + Math.max(0, gearSpeed),
   );
-  return Math.max(1, Math.round(hero * travelMult * (1 - speed)));
+  return Math.max(1, Math.round(hero * championOutpostMult(travelMult) * (1 - speed)));
+}
+
+/** 🧭 Le multiplicateur de trajet des CHAMPIONS, dérivé de celui du héros (`travelTimeMult`) :
+ *  ils reçoivent `CARAVAN.outpostShare` de sa réduction (v0.1049). ⚠️ Dérivé, jamais une
+ *  seconde courbe par niveau d'Avant-poste qui finirait par diverger de celle du héros. */
+export function championOutpostMult(heroMult: number): number {
+  const cut = Math.min(1, Math.max(0, 1 - heroMult));
+  return 1 - cut * CARAVAN.outpostShare;
 }
 
 /** ⚠️ LA CARGAISON SE PAIE SUR LA DURÉE QU'UN HÉROS AURAIT MISE, pas sur celle de la

@@ -104,24 +104,22 @@
               >🗝️ {{ compactNumber(char.row.keys) }}</span
             >
             <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions (failles) et objets (boss). Ils ne
-                 servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle. Affichés
-                 dès qu'on en possède, comme les tickets. -->
+                 servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle.
+                 ⚠️ TOUJOURS affichés, même à zéro : une devise qui n'apparaît qu'une fois
+                 obtenue ne dit ni qu'elle existe, ni qu'on peut aller la chercher. -->
             <span
-              v-if="sealsChamp.total"
               class="tb-r seals"
-              :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail}`"
+              :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail || 'aucun pour l’instant'}`"
               >🔱 {{ compactNumber(sealsChamp.total) }}</span
             >
             <span
-              v-if="sealsGear.total"
               class="tb-r seals gear"
-              :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail}`"
+              :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail || 'aucun pour l’instant'}`"
               >⚜️ {{ compactNumber(sealsGear.total) }}</span
             >
-            <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés seulement quand il
-                 y en a : la puce dit « tu as des tirages qui t'attendent ». -->
+            <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés même à zéro,
+                 comme toutes les devises du plateau. -->
             <span
-              v-if="char.row.gacha_tickets"
               class="tb-r tickets"
               title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
               >🎟️ {{ compactNumber(char.row.gacha_tickets) }}</span
