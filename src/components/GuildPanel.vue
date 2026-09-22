@@ -24,32 +24,6 @@
       </p>
 
       <template v-else>
-        <!-- 🗂️ DEUX ONGLETS (v0.881, demandé) : le vivier, et le STOCK d'équipement où l'on
-             voit ses pièces et les confie. Le stock vivait replié sous le vivier, hors écran
-             dès quelques aventuriers. -->
-        <div v-if="section !== 'gear'" class="g-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            class="g-tab"
-            :class="{ on: guildTab === 'roster' }"
-            :aria-selected="guildTab === 'roster'"
-            @click="guildTab = 'roster'"
-          >
-            🏅 Champions
-          </button>
-          <button
-            type="button"
-            role="tab"
-            class="g-tab"
-            :class="{ on: guildTab === 'collection' }"
-            :aria-selected="guildTab === 'collection'"
-            @click="guildTab = 'collection'"
-          >
-            📖 Collection <span class="g-tab-n">{{ collectionOwned }}/{{ CHAMPIONS.length }}</span>
-          </button>
-        </div>
-
         <template v-if="guildTab === 'roster'">
           <!-- ⚠️ Le RECRUTEMENT et la PROMOTION ont disparu avec l'arbre de classes
              (v0.951) : on n'élève plus une recrue, on INVOQUE un champion et ses doublons
@@ -362,7 +336,6 @@
         <!-- 📖 LA COLLECTION (demandé : « voir ce qu'on a ou pas et leur rareté »). La même
            galerie que le Codex (un seul composant) : elle vit AUSSI ici parce que c'est
            au Panthéon qu'on invoque, donc là qu'on veut voir ce qui manque. -->
-        <ChampionCollection v-else-if="guildTab === 'collection'" :advs="roster" />
       </template>
 
       <div class="g-actions">
@@ -692,8 +665,6 @@ import { fmtPow, fmtDelta } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
 import RankStarBadge from '@/components/RankStarBadge.vue';
-import ChampionCollection from '@/components/ChampionCollection.vue';
-import { CHAMPIONS } from '@/data/champions';
 import { type EscortKit } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
@@ -724,7 +695,7 @@ import {
 
 const props = defineProps<{
   open: boolean;
-  /** Quelle feuille : le vivier (+ collection) ou le stock d'équipement. Défaut : vivier. */
+  /** Quelle feuille : le vivier ou le stock d'équipement. Défaut : vivier. */
   section?: 'champions' | 'gear';
 }>();
 const emit = defineEmits<{ close: [] }>();
@@ -908,9 +879,7 @@ function pickGear(id: string | null) {
 }
 
 // ── 🗂️ ONGLETS ──
-const guildTab = ref<'roster' | 'stock' | 'collection'>(
-  props.section === 'gear' ? 'stock' : 'roster',
-);
+const guildTab = ref<'roster' | 'stock'>(props.section === 'gear' ? 'stock' : 'roster');
 // ⚠️ La feuille d'équipement ne montre QUE le stock ; celle des champions ne le montre
 // plus (il a sa tuile). Suivi à chaque ouverture : le composant reste monté.
 watch(
@@ -919,10 +888,6 @@ watch(
     if (sec === 'gear') guildTab.value = 'stock';
     else if (guildTab.value === 'stock') guildTab.value = 'roster';
   },
-);
-/** Champions DISTINCTS possédés — même définition que la galerie (`championId` unique). */
-const collectionOwned = computed(
-  () => new Set(roster.value.map((a) => a.championId).filter(Boolean)).size,
 );
 
 // ── 🗡️ LE STOCK — équiper / vendre / verrouiller une pièce d'aventurier ──
@@ -2020,29 +1985,6 @@ function leftOf(at: number): string {
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-}
-.g-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  margin: 4px 0 10px;
-}
-.g-tab {
-  min-height: 44px;
-  padding: 4px 6px;
-  line-height: 1.2;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--dim);
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-.g-tab.on {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line));
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 /* 🔎 Puces de filtre du vivier — mêmes teintes que le cadre des portraits (une catégorie,
    une couleur, partout). Elles DÉFILENT plutôt que de se replier : à 344 px, quatre puces
