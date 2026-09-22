@@ -17,7 +17,7 @@
  *    selon les séries réellement comptées (le même facteur d'effort que son coffre).
  *  - **🐉 Boss entre amis abattu** — 0 à 4 selon le cran. ⚠️ **L'Échauffement ne paie
  *    RIEN**, et c'est délibéré : c'est le cran qu'on enchaînerait pour farmer (30 pompes par
- *    personne, relançable 48 h après).
+ *    personne, pour un seul jeton de boss).
  *  - **⭐ Niveau global gagné** — 1 par niveau. Le niveau global EST le sport (XP de fond),
  *    et il ralentit naturellement en montant : pas de plafond à écrire.
  *

@@ -27,7 +27,12 @@ export function useFriendBossEntry() {
       boss.bosses.some((b) => chestState(b, boss.myMembership(b.id), cleared) !== 'none')
     );
   });
-  const current = computed(() => boss.current(now.value));
+  const running = computed(() => boss.inProgress(now.value));
+  const current = computed(() => running.value[0] ?? null);
+  /** Plusieurs boss en cours : on annonce le plus récent, et combien d'autres attendent. */
+  const more = computed(() =>
+    running.value.length > 1 ? ` · +${running.value.length - 1} autre(s)` : '',
+  );
 
   const line = computed(() => {
     const inv = invites.value[0];
@@ -38,8 +43,8 @@ export function useFriendBossEntry() {
     if (!cur) return 'Lance un boss et abats-le avec tes amis, rep après rep.';
     const pv = Math.max(0, cur.hpTotal - cur.damage);
     return bossPhase(cur, now.value) === 'recruiting'
-      ? `« ${cur.exerciseName} » — démarre dans ${fmtBossSpan(bossStartAt(cur) - now.value)}`
-      : `« ${cur.exerciseName} » — ${fmtBossPv(pv)} PV, encore ${fmtBossSpan(bossEndsAt(cur) - now.value)}`;
+      ? `« ${cur.exerciseName} » — démarre dans ${fmtBossSpan(bossStartAt(cur) - now.value)}${more.value}`
+      : `« ${cur.exerciseName} » — ${fmtBossPv(pv)} PV, encore ${fmtBossSpan(bossEndsAt(cur) - now.value)}${more.value}`;
   });
 
   /** Il se passe quelque chose : une invitation, un coffre ou un boss en cours. */

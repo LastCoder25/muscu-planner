@@ -706,6 +706,7 @@ import { useLiveStore } from '@/stores/live';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
+import { useBossTokenAccrual } from '@/composables/useBossTokenAccrual';
 import { useXpFx } from '@/composables/useXpFx';
 import { useWeather, searchCities } from '@/composables/useWeather';
 import {
@@ -743,6 +744,7 @@ const live = useLiveStore();
 const liveCourt = useLiveCourtStore();
 const courtResume = computed(() => liveCourt.savedMeta());
 const progress = useProgress();
+useBossTokenAccrual(); // 🎫 jetons de boss gagnés par le sport
 const xpFx = useXpFx();
 // Météo (ligne sous le prénom) → panneau : lieu (ma position / favoris / recherche),
 // actuel, heure par heure PAR JOUR, 10 jours.

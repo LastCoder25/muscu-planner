@@ -8,6 +8,16 @@
     <div v-if="!loaded" class="fb-empty"><q-spinner color="primary" size="28px" /></div>
 
     <template v-else>
+      <!-- 🎫 La réserve de jetons : ce qu'on peut encore lancer ou rejoindre. -->
+      <div class="fb-tokens">
+        <span class="fb-tok-n font-display">🎫 {{ tokens }}</span>
+        <span class="fb-dim"
+          >/ {{ BOSS_TOKENS.stockMax }} jetons · gagnés par le sport : 1 dès
+          {{ BOSS_TOKENS.firstAt }} XP dans la journée, 2 dès {{ BOSS_TOKENS.secondAt }}. Lancer ou
+          rejoindre coûte le prix du cran.</span
+        >
+      </div>
+
       <!-- ── INVITATIONS : la seule chose urgente (24 h pour répondre) ───────────── -->
       <section v-for="b in invitations" :key="'inv-' + b.id" class="fb-card invite">
         <div class="fb-inv-t">
@@ -21,12 +31,12 @@
           {{ bossUnitLabel(b.family) }} sur 7 jours · réponds dans
           {{ fmtBossSpan(bossStartAt(b) - now) }}
         </div>
-        <div v-if="current" class="fb-inv-s warn">
-          Tu mènes déjà un boss : termine-le avant d’en rejoindre un autre.
+        <div v-if="inviteBlock(b)" class="fb-inv-s warn">
+          {{ bossErrorMessage(inviteBlock(b)!) }}
         </div>
         <div class="fb-acts">
-          <button class="fb-btn" :disabled="busy || !!current" @click="doRespond(b, true)">
-            Rejoindre
+          <button class="fb-btn" :disabled="busy || !!inviteBlock(b)" @click="doRespond(b, true)">
+            Rejoindre · {{ bossTokenCost(b.tier) }} 🎫
           </button>
           <button class="fb-btn ghost" :disabled="busy" @click="doRespond(b, false)">
             Refuser
@@ -35,6 +45,21 @@
       </section>
 
       <!-- ── BOSS EN COURS ─────────────────────────────────────────────────────── -->
+      <!-- Plusieurs boss à la fois depuis les jetons : un par exercice. On en regarde un. -->
+      <div v-if="running.length > 1" class="fb-pick" role="tablist">
+        <button
+          v-for="b in running"
+          :key="b.id"
+          role="tab"
+          class="fb-pick-b"
+          :class="{ on: current?.id === b.id }"
+          :aria-selected="current?.id === b.id"
+          @click="selectedId = b.id"
+        >
+          {{ bossEmoji(b.id) }} {{ b.exerciseName }}
+          <span class="fb-dim">{{ bossTier(b.tier).emoji }}</span>
+        </button>
+      </div>
       <section v-if="current" class="fb-card boss">
         <div class="fb-boss-s">
           <template v-if="phase === 'recruiting'">
@@ -145,15 +170,18 @@
       </section>
 
       <!-- ── LANCER UN BOSS ────────────────────────────────────────────────────── -->
-      <section v-else class="fb-card">
+      <button
+        v-if="current && !launchOpen"
+        class="fb-btn ghost big wide fb-more"
+        @click="launchOpen = true"
+      >
+        ＋ Lancer un autre boss
+      </button>
+      <section v-if="!current || launchOpen" class="fb-card">
         <div class="fb-sec-t first">Lancer un boss</div>
-        <p v-if="nextAt && nextAt > now" class="fb-hint">
-          Ton dernier boss est fini : tu pourras en lancer un nouveau dans
-          {{ fmtBossSpan(nextAt - now) }}. En attendant, tu peux rejoindre celui d’un ami.
-        </p>
         <!-- Lancer exige l'Autel des boss (le serveur le vérifie aussi, migr. 0071) ;
              rejoindre l'invitation d'un ami, non. -->
-        <template v-else-if="!hasAltar">
+        <template v-if="!hasAltar">
           <p class="fb-hint">
             🔮 Pour lancer un boss, construis d’abord l’<b>Autel des boss</b> dans ta base. Tu peux
             déjà rejoindre le boss d’un ami quand il t’invite.
@@ -181,13 +209,15 @@
               :key="e.id"
               class="fb-exo"
               :class="{ on: pickedExo?.id === e.id }"
+              :disabled="takenExo.has(e.id)"
               @click="pickedExo = e"
             >
               <span>{{ BOSS_FAMILY_LABEL[e.family].emoji }} {{ e.name }}</span>
-              <span class="fb-dim"
-                >{{ bossShareUnits(e.family, pickedTier) }}
-                {{ bossUnitLabel(e.family) }}/pers.</span
-              >
+              <span class="fb-dim">{{
+                takenExo.has(e.id)
+                  ? 'déjà un boss en cours'
+                  : `${bossShareUnits(e.family, pickedTier)} ${bossUnitLabel(e.family)}/pers.`
+              }}</span>
             </button>
           </div>
 
@@ -212,6 +242,9 @@
               }}</span>
               <span class="fb-tier-r">🎁 ×{{ tierRewardMult(t).toFixed(1) }}</span>
               <span class="fb-tier-r">{{ t.tickets ? `🎟️ ${t.tickets}` : '🎟️ —' }}</span>
+              <span class="fb-tier-r" :class="{ short: t.tokens > tokens }"
+                >coûte {{ t.tokens }} 🎫</span
+              >
             </button>
           </div>
           <p class="fb-hint">
@@ -236,9 +269,15 @@
             <span>{{ f.pseudo }}</span>
           </label>
 
-          <button class="fb-btn big wide" :disabled="!pickedExo || busy" @click="doDeclare">
+          <p v-if="declareBlock" class="fb-hint warn">{{ bossErrorMessage(declareBlock) }}</p>
+          <button
+            class="fb-btn big wide"
+            :disabled="!pickedExo || busy || !!declareBlock"
+            @click="doDeclare"
+          >
             <template v-if="pickedExo">
-              Lancer · {{ fmtBossPv(bossHpTotal(pickedExo.family, 1, pickedTier)) }} PV
+              Lancer · {{ bossTokenCost(pickedTier) }} 🎫 ·
+              {{ fmtBossPv(bossHpTotal(pickedExo.family, 1, pickedTier)) }} PV
               {{
                 invitees.size
                   ? `(+${fmtBossPv(bossHpTotal(pickedExo.family, 1, pickedTier))} par ami qui rejoint)`
@@ -289,6 +328,7 @@ import { useFriendBossStore, FriendBossError } from '@/stores/friendBoss';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
+import { useBossTokenAccrual } from '@/composables/useBossTokenAccrual';
 import { fxRarity, gradeLabel } from '@/lib/items';
 import { bossAltarBuilt } from '@/lib/buildings';
 import { computeCharacter } from '@/lib/character';
@@ -301,6 +341,10 @@ import {
   BOSS_FAMILY_LABEL,
   BOSS_TIERS,
   BOSS_TIER_DEFAULT,
+  BOSS_TOKENS,
+  bossErrorMessage,
+  bossJoinBlocker,
+  bossTokenCost,
   bossShareUnits,
   bossTier,
   type BossTier,
@@ -322,7 +366,6 @@ import {
   friendBossChest,
   isBossExercise,
   metMinShare,
-  nextDeclareAt,
   type BossFamily,
   type FriendBoss,
 } from '@/lib/friendBoss';
@@ -338,6 +381,7 @@ const library = useLibraryStore();
 const gameFx = useGameFx();
 const char = useCharacterStore();
 const progress = useProgress();
+useBossTokenAccrual(); // 🎫 jetons de boss gagnés par le sport
 
 const uid = computed(() => auth.user?.id ?? '');
 const now = ref(Date.now());
@@ -365,7 +409,21 @@ onUnmounted(() => {
   if (timer) clearInterval(timer);
 });
 
-const current = computed(() => store.current(now.value));
+/** Mes boss en cours (un par exercice) ; on en regarde un à la fois. */
+const running = computed(() => store.inProgress(now.value));
+const selectedId = ref<string | null>(null);
+const current = computed(
+  () => running.value.find((b) => b.id === selectedId.value) ?? running.value[0] ?? null,
+);
+const tokens = computed(() => char.row?.boss_tokens ?? 0);
+/** Même règle que `fboss_respond` : les jetons, et un seul boss par exercice. */
+const inviteBlock = (b: FriendBoss) =>
+  bossJoinBlocker(
+    { tokens: tokens.value, tier: b.tier, exerciseId: b.exerciseId, mine: running.value },
+    now.value,
+  );
+const takenExo = computed(() => new Set(running.value.map((b) => b.exerciseId)));
+const launchOpen = ref(false);
 const invitations = computed(() => store.invitations(now.value));
 const phase = computed(() => (current.value ? bossPhase(current.value, now.value) : null));
 const isMember = computed(
@@ -463,6 +521,11 @@ watch(
   },
   { immediate: true },
 );
+// Changer de boss replie les jours du précédent : on repart du plus récent de celui-ci.
+watch(
+  () => current.value?.id,
+  () => (openDays.value = new Set(hitDays.value[0] ? [hitDays.value[0].day] : [])),
+);
 function toggleDay(day: string) {
   const next = new Set(openDays.value);
   if (!next.delete(day)) next.add(day);
@@ -559,10 +622,8 @@ async function doRespond(b: FriendBoss, accept: boolean) {
 }
 
 // ── Lancer ──
-const owned = computed(() => store.bosses.filter((b) => b.ownerId === uid.value));
 /** Lancer un boss exige l'Autel des boss — même règle que `fboss_declare` (migr. 0071). */
 const hasAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
-const nextAt = computed(() => nextDeclareAt(owned.value));
 const exoQuery = ref('');
 interface BossExo {
   id: string;
@@ -588,6 +649,20 @@ const exoChoices = computed(() => {
 });
 const pickedExo = ref<BossExo | null>(null);
 const pickedTier = ref<string>(BOSS_TIER_DEFAULT);
+/** Même règle que `fboss_declare`. */
+const declareBlock = computed(() =>
+  pickedExo.value
+    ? bossJoinBlocker(
+        {
+          tokens: tokens.value,
+          tier: pickedTier.value,
+          exerciseId: pickedExo.value.id,
+          mine: running.value,
+        },
+        now.value,
+      )
+    : null,
+);
 /** Ce que le cran multiplie sur le COFFRE (or, pierres) — la même formule que
  *  `friendBossChest`, jamais un second barème : c'est ce qui rend l'annonce vraie. */
 const tierRewardMult = (t: BossTier) => t.mult ** FRIEND_BOSS.rewardExp;
@@ -613,6 +688,8 @@ async function doDeclare() {
     });
     pickedExo.value = null;
     invitees.value = new Set();
+    launchOpen.value = false;
+    selectedId.value = null; // le plus récent, donc celui qu'on vient de lancer
   } catch (e) {
     notifyError(e);
   } finally {
@@ -720,6 +797,53 @@ function notifyError(e: unknown) {
 }
 .fb-inv-s.warn {
   color: var(--d3);
+}
+/* 🎫 Réserve de jetons */
+.fb-tokens {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+.fb-tok-n {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--accent);
+}
+.fb-hint.warn {
+  color: var(--d3);
+}
+.fb-tier-r.short {
+  color: var(--d4);
+}
+.fb-exo:disabled {
+  opacity: 0.45;
+}
+/* Plusieurs boss en cours : on choisit celui qu'on regarde */
+.fb-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.fb-pick-b {
+  min-height: 44px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+.fb-pick-b.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.fb-more {
+  margin-bottom: 14px;
 }
 .fb-acts {
   display: flex;

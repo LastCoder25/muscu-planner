@@ -14,8 +14,9 @@
 //    dès que tous ont répondu (un refus compte) ; sans invité, il démarre tout de suite.
 //    Avant le démarrage, on ne frappe pas.
 //  • Il dure 7 jours à partir de son démarrage.
-//  • Un joueur n'a qu'UN boss en cours, lancé ou rejoint. On ne quitte pas un boss.
-//  • Le lanceur relance 48 h après la fin (mort du boss, ou bout des 7 jours).
+//  • Lancer OU rejoindre coûte des JETONS 🎫 (le prix du cran), gagnés par le sport — au
+//    plus 2 par jour, réserve de 6 (v0.1066). Plusieurs boss à la fois, un seul par
+//    exercice ; on ne quitte pas un boss. Plus de délai de relance.
 //  • Une rep = 1000 points de dégât, pour tout le monde (égalité). Chaque participant
 //    ajoute sa part de PV.
 //  • Les reps comptent comme du sport ; une prime de complétion s'ajoute si le boss meurt
@@ -39,9 +40,6 @@ export const FRIEND_BOSS = {
   inviteWindowMs: 24 * HOUR,
   /** Durée du combat, à partir du démarrage. */
   durationMs: 7 * DAY,
-  /** Délai avant que le LANCEUR puisse relancer, à partir de la fin du boss (48 h depuis
-   *  la v0.893, 7 jours avant — migr. 0076). */
-  cooldownMs: 48 * HOUR,
   /** Part de PV d'UN participant, en unités de l'exo (reps, ou secondes pour le gainage).
    *  ⚠️ C'est un volume EN PLUS de la semaine (v0.869, décision de l'utilisateur) : le Défi
    *  360 est l'entraînement global, le boss un bonus RELATIVEMENT FACILE. Une part vaut
@@ -57,7 +55,7 @@ export const FRIEND_BOSS = {
    *  que ce soit intéressant de lancer un boss dur au lieu d'enchaîner des faciles »).
    *
    *  ⚠️ IL DOIT ÊTRE > 1, ET LA MESURE LE DIT. Or gagné PAR JOUR au niveau 30, en comptant
-   *  le CYCLE de chaque cran (durée pour l'abattre + 48 h de délai) : à l'exposant **0,5**
+   *  le CYCLE de chaque cran (durée pour l'abattre + 48 h de délai, règle d'avant les jetons) : à l'exposant **0,5**
    *  le meilleur choix reste ×1 — un boss dur ne paie pas sa peine ; à **1,0** le cran le
    *  plus dur rapporte 14 789/jour contre 4 437 en enchaînant du facile (×3,3) mais l'or PAR
    *  REP est constant ; à **1,2** il rapporte 20 405 contre 3 862 (**×5,3**) ET l'or par rep
@@ -124,17 +122,31 @@ export interface BossTier {
   luck: number;
   /** 🎟️ Tickets d'invocation versés dans le coffre (v0.992, « le sport alimente le
    *  gacha »). ⚠️ **L'Échauffement ne paie RIEN** : c'est le cran qu'on enchaînerait pour
-   *  farmer (30 pompes, relançable 48 h après). Au-dessus, un ticket par cran — et le plus
+   *  farmer (30 pompes, pour un seul jeton). Au-dessus, un ticket par cran — et le plus
    *  dur (4) reste sous un Défi 360 intense (5), qui est une SEMAINE entière. */
   tickets: number;
+  /** 🎫 Jetons que coûte ce cran — à LANCER comme à REJOINDRE (v0.1066). Doit rester égal à
+   *  `fboss_token_cost` (migr. 0086). ⚠️ Rejoindre coûte autant que lancer : mesuré,
+   *  rejoindre à 1 jeton des boss Inhumains donnait jusqu'à +110 % d'or par semaine (un
+   *  coffre ×13,8 pour un seul jeton). Au même prix, le rendement par jeton est le même pour
+   *  tous, et les coffres restent sous +25 % du revenu d'une semaine. */
+  tokens: number;
 }
 
 export const BOSS_TIERS: readonly BossTier[] = [
-  { id: 'echauffement', label: 'Échauffement', emoji: '🌱', mult: 0.5, luck: 0, tickets: 0 },
-  { id: 'serieux', label: 'Sérieux', emoji: '💪', mult: 1, luck: 0.15, tickets: 1 },
-  { id: 'costaud', label: 'Costaud', emoji: '🔥', mult: 2, luck: 0.4, tickets: 2 },
-  { id: 'brutal', label: 'Brutal', emoji: '⚡', mult: 3, luck: 0.6, tickets: 3 },
-  { id: 'inhumain', label: 'Inhumain', emoji: '💀', mult: 5, luck: 1, tickets: 4 },
+  {
+    id: 'echauffement',
+    label: 'Échauffement',
+    emoji: '🌱',
+    mult: 0.5,
+    luck: 0,
+    tickets: 0,
+    tokens: 1,
+  },
+  { id: 'serieux', label: 'Sérieux', emoji: '💪', mult: 1, luck: 0.15, tickets: 1, tokens: 1 },
+  { id: 'costaud', label: 'Costaud', emoji: '🔥', mult: 2, luck: 0.4, tickets: 2, tokens: 2 },
+  { id: 'brutal', label: 'Brutal', emoji: '⚡', mult: 3, luck: 0.6, tickets: 3, tokens: 3 },
+  { id: 'inhumain', label: 'Inhumain', emoji: '💀', mult: 5, luck: 1, tickets: 4, tokens: 4 },
 ];
 
 /** Le cran par DÉFAUT — et celui des boss d'AVANT les crans. ⚠️ Son `mult` vaut 1 : un boss
@@ -317,8 +329,11 @@ export function friendBossXp(
 /** Libellé français d'un refus du serveur (codes levés par la migration 0067). */
 export function bossErrorMessage(code: string): string {
   const table: Record<string, string> = {
-    busy: 'Tu as déjà un boss en cours — on n’en mène qu’un à la fois.',
-    cooldown: 'Tu pourras lancer un nouveau boss 48 h après la fin du précédent.',
+    no_tokens: 'Pas assez de jetons 🎫 : ils se gagnent en faisant du sport.',
+    same_exercise: 'Tu as déjà un boss en cours sur cet exercice — choisis-en un autre.',
+    // Codes d'avant les jetons (migr. 0078) : un onglet resté ouvert peut encore les voir.
+    busy: 'Tu as déjà un boss en cours — recharge la page.',
+    cooldown: 'Tu pourras lancer un nouveau boss plus tard — recharge la page.',
     not_friend: 'Tu ne peux inviter que tes amis.',
     too_many_invites: `Au plus ${FRIEND_BOSS.maxInvites} amis par boss.`,
     closed: 'Les invitations sont closes : le combat a commencé.',
@@ -487,27 +502,121 @@ export function fmtBossPv(n: number): string {
   return Math.max(0, Math.round(n)).toLocaleString('fr-FR');
 }
 
-/** Instant où le LANCEUR pourra déclarer à nouveau (null = tout de suite). */
-export function nextDeclareAt(
-  ownedBosses: readonly Pick<FriendBoss, 'createdAt' | 'startAt' | 'defeatedAt'>[],
-): number | null {
-  if (!ownedBosses.length) return null;
-  const lastEnd = Math.max(...ownedBosses.map(bossEndedAt));
-  return lastEnd + FRIEND_BOSS.cooldownMs;
+// ── 🎫 Jetons de boss (v0.1066) ─────────────────────────────────────────────────────
+//
+// On LANCE et on REJOINT un boss en dépensant des jetons, qui se GAGNENT PAR LE SPORT : au
+// plus deux par jour, selon l'XP gagnée ce jour-là. Plus de délai de 48 h ni de « un seul
+// boss à la fois » : c'est la réserve de jetons qui borne le rythme.
+//
+// ⚠️ MESURÉ SUR LES COMPTES RÉELS (2026-09-22) : un sportif « normal » fait 100 à 700 XP
+// par jour actif, le plus actif ~1 100. Une règle PROPORTIONNELLE à l'XP donnait 0,8 jeton
+// par semaine au joueur qui vient souvent mais en petites séances (il l'écrasait) ; un jeton
+// par jour actif en donnait un pour 10 XP (quelques reps de défi). Les SEUILS donnent
+// 2 à 12,5 jetons par semaine selon le profil : le gros sportif gagne plus, mais au plus
+// deux fois plus, jamais dix.
+
+export const BOSS_TOKENS = {
+  /** XP du jour à partir de laquelle on gagne le 1er jeton : une vraie petite séance. */
+  firstAt: 80,
+  /** …et le 2e : une grosse journée (un jour sur trois pour un sportif régulier). */
+  secondAt: 500,
+  /** Réserve maximale : on épargne pour un Inhumain (4), jamais une montagne. Doit rester
+   *  égal à la contrainte de `characters.boss_tokens` (migr. 0086). */
+  stockMax: 6,
+  /** Un trou de plus de 7 jours sans observation ne rapporte pas plus que 7 jours. */
+  gapMaxDays: 7,
+} as const;
+
+/** Jetons que vaut une journée à `xp` points. */
+export function tokensForDayXp(xp: number): number {
+  if (!(xp >= BOSS_TOKENS.firstAt)) return 0;
+  return xp >= BOSS_TOKENS.secondAt ? 2 : 1;
 }
 
-/** Peut-on déclarer un boss maintenant ? Aucun boss en cours (lancé ou rejoint), et le
- *  délai de relance écoulé pour les boss qu'on a lancés. */
-export function canDeclareBoss(
+/** Ce qui est retenu entre deux observations (JSONB `characters.boss_token_state`). */
+export interface BossTokenState {
+  /** Jour observé en dernier (AAAA-MM-JJ). */
+  day: string;
+  /** XP totale au début de ce jour : l'XP du jour = total − base. */
+  base: number;
+  /** Jetons déjà versés pour ce jour. */
+  credited: number;
+  /** Dernière XP totale observée. */
+  lastXp: number;
+}
+
+const dayDiff = (from: string, to: string) =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+
+/**
+ * Fait avancer les jetons jusqu'à `today`, à partir de l'XP TOTALE de sport observée.
+ *
+ * ⚠️ L'XP du jour se lit par DIFFÉRENCE (total − XP au début du jour) : c'est la seule
+ * mesure qui compte toutes les sources (séances, sorties, défis, Défi 360, boss) sans
+ * refaire leurs calculs. Première observation : on part de zéro, aucun rattrapage.
+ *
+ * ⚠️ JOURS NON OBSERVÉS : l'app n'a pas été ouverte, donc on ne sait pas quel jour l'XP a
+ * été gagnée. Elle est RÉPARTIE à parts égales sur les jours écoulés (7 au plus) — sinon
+ * trois jours de sport sans ouvrir l'app ne vaudraient qu'une journée, plafonnée à 2.
+ *
+ * Jamais de reprise : une XP qui baisse (séance supprimée) ne retire aucun jeton déjà versé.
+ */
+export function advanceBossTokens(
+  state: BossTokenState | null,
+  totalXp: number,
+  today: string,
+  stock: number,
+): { state: BossTokenState; stock: number; gained: number } {
+  const total = Math.max(0, Math.round(totalXp));
+  if (!state) {
+    return { state: { day: today, base: total, credited: 0, lastXp: total }, stock, gained: 0 };
+  }
+  let gained = 0;
+  let next: BossTokenState;
+  const gap = dayDiff(state.day, today);
+  if (gap <= 0) {
+    // Même jour (ou horloge reculée) : on complète ce jour.
+    const earned = tokensForDayXp(total - state.base);
+    gained = Math.max(0, earned - state.credited);
+    next = { ...state, credited: Math.max(state.credited, earned), lastXp: total };
+  } else {
+    // 1) On clôt le dernier jour observé avec ce qu'on en savait.
+    gained += Math.max(0, tokensForDayXp(state.lastXp - state.base) - state.credited);
+    // 2) L'XP apparue depuis est répartie sur les jours écoulés (aujourd'hui compris).
+    const days = Math.min(gap, BOSS_TOKENS.gapMaxDays);
+    const per = Math.max(0, total - state.lastXp) / days;
+    gained += (days - 1) * tokensForDayXp(per);
+    const todayTokens = tokensForDayXp(per);
+    gained += todayTokens;
+    next = { day: today, base: total - per, credited: todayTokens, lastXp: total };
+  }
+  const room = Math.max(0, BOSS_TOKENS.stockMax - stock);
+  const kept = Math.min(gained, room);
+  return { state: next, stock: stock + kept, gained: kept };
+}
+
+/** Coût d'un cran, à lancer comme à rejoindre. */
+export function bossTokenCost(tier: string | null | undefined): number {
+  return bossTier(tier).tokens;
+}
+
+/** Pourquoi on ne peut pas lancer ou rejoindre CE boss (null = on peut). Même règle que
+ *  `fboss_declare` / `fboss_respond` : les jetons, et un seul boss en cours par exercice
+ *  (sinon une même série frapperait deux boss). */
+export function bossJoinBlocker(
   opts: {
-    owned: readonly Pick<FriendBoss, 'createdAt' | 'startAt' | 'defeatedAt'>[];
-    joined: readonly Pick<FriendBoss, 'createdAt' | 'startAt' | 'defeatedAt'>[];
+    tokens: number;
+    tier: string | null | undefined;
+    exerciseId: string;
+    /** Mes boss en cours (lancés ou rejoints). */
+    mine: readonly Pick<FriendBoss, 'exerciseId' | 'createdAt' | 'startAt' | 'defeatedAt'>[];
   },
   now: number,
-): boolean {
-  if ([...opts.owned, ...opts.joined].some((b) => bossInProgress(b, now))) return false;
-  const next = nextDeclareAt(opts.owned);
-  return next == null || now >= next;
+): 'no_tokens' | 'same_exercise' | null {
+  if (opts.mine.some((b) => bossInProgress(b, now) && b.exerciseId === opts.exerciseId))
+    return 'same_exercise';
+  if (opts.tokens < bossTokenCost(opts.tier)) return 'no_tokens';
+  return null;
 }
 
 /** Ce qu'une saisie peut encore apporter, plafonds compris, en reps : le plafond d'une

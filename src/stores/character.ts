@@ -1,7 +1,12 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { localDayIso } from '@/lib/localDay';
-import { chestMark, type FriendBossChest } from '@/lib/friendBoss';
+import {
+  advanceBossTokens,
+  chestMark,
+  type BossTokenState,
+  type FriendBossChest,
+} from '@/lib/friendBoss';
 import { defineStore, acceptHMRUpdate } from 'pinia';
 import { computed, ref } from 'vue';
 import { supabase } from '@/lib/supabase';
@@ -283,6 +288,10 @@ export interface CharacterRow {
   adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
   laby_stats: LabyStats; // Labyrinthe : runs lancés / nettoyés par palier (migr. 0073)
   boss_stats: RunStats; // Boss de palier : tentatives / victoires par boss (migr. 0085)
+  /** 🎫 Jetons de boss entre amis (migr. 0086) : gagnés par le sport (`accrueBossTokens`),
+   *  dépensés par le SERVEUR au lancement et à l'adhésion. */
+  boss_tokens: number;
+  boss_token_state: BossTokenState | null;
   parties: ActiveParty[] | null; // ⚔️ groupes de camp partis SANS le héros (migr. 0077)
 }
 
@@ -318,7 +327,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, parties, gacha, gacha_tickets, seals';
+    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -349,6 +358,8 @@ export const useCharacterStore = defineStore('character', () => {
     r.adv_gear = normalizeAdvGearState(r.adv_gear);
     r.laby_stats = normalizeLabyStats(r.laby_stats);
     r.boss_stats = normalizeRunStats(r.boss_stats);
+    if (typeof r.boss_tokens !== 'number') r.boss_tokens = 0; // 🎫 migr. 0086
+    if (!r.boss_token_state || typeof r.boss_token_state !== 'object') r.boss_token_state = null;
     // ⚔️ Groupes de camp (migr. 0077) : absent/malformé → [] ; une entrée incomplète est
     // écartée (`buildMessage` la lirait à chaque tick).
     r.parties = normalizeParties(r.parties);
@@ -1179,6 +1190,24 @@ export const useCharacterStore = defineStore('character', () => {
   // depuis le dernier récompensé (croissant). reward_level=0 = jamais initialisé →
   // on cale la base au niveau actuel SANS bonus rétroactif. Renvoie l'événement à
   // célébrer, ou null. Idempotent (basé sur reward_level persisté).
+  /** 🎫 Fait avancer les jetons de boss avec l'XP totale de sport (`advanceBossTokens`).
+   *  N'écrit que si quelque chose a changé ; rend les jetons gagnés. */
+  async function accrueBossTokens(userId: string, totalXp: number, today: string) {
+    const cur = row.value;
+    if (!cur) return 0;
+    const r = advanceBossTokens(cur.boss_token_state, totalXp, today, cur.boss_tokens);
+    if (JSON.stringify(r.state) === JSON.stringify(cur.boss_token_state) && !r.gained) return 0;
+    await persistOptimistic(userId, { boss_tokens: r.stock, boss_token_state: r.state });
+    return r.gained;
+  }
+
+  /** Le serveur vient de dépenser des jetons (lancer / rejoindre) : on le reflète tout de
+   *  suite, sans quoi un gain de jetons écrirait la réserve d'AVANT la dépense. */
+  function spentBossTokens(n: number) {
+    const cur = row.value;
+    if (cur) row.value = { ...cur, boss_tokens: Math.max(0, cur.boss_tokens - n) };
+  }
+
   async function claimLevelUps(userId: string, currentLevel: number) {
     const cur = row.value;
     if (!cur) return null;
@@ -2768,6 +2797,8 @@ export const useCharacterStore = defineStore('character', () => {
     row,
     loaded,
     fetchMine,
+    accrueBossTokens,
+    spentBossTokens,
     setPseudo,
     expeSyncMap,
     expeSend,

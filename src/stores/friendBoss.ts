@@ -5,10 +5,12 @@ import { defineStore, acceptHMRUpdate } from 'pinia';
 import { ref, computed } from 'vue';
 import { supabase } from '@/lib/supabase';
 import { useAuthStore } from '@/stores/auth';
+import { useCharacterStore } from '@/stores/character';
 import {
   bossFromRow,
   bossPhase,
   bossErrorMessage,
+  bossTokenCost,
   type BossFamily,
   type FriendBoss,
   type FriendBossHit,
@@ -88,14 +90,13 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
   const myMembership = (bossId: string) =>
     members.value.find((m) => m.bossId === bossId && m.userId === uid.value) ?? null;
 
-  /** Le boss que je mène ou ai rejoint et qui n'est pas terminé (au plus un). */
-  function current(now: number): FriendBoss | null {
-    return (
-      bosses.value.find((b) => {
-        const p = bossPhase(b, now);
-        return (p === 'recruiting' || p === 'active') && myMembership(b.id)?.status === 'accepted';
-      }) ?? null
-    );
+  /** Les boss que je mène ou ai rejoints et qui ne sont pas terminés (plusieurs depuis les
+   *  jetons 🎫, un seul par exercice), du plus récent au plus ancien. */
+  function inProgress(now: number): FriendBoss[] {
+    return bosses.value.filter((b) => {
+      const p = bossPhase(b, now);
+      return (p === 'recruiting' || p === 'active') && myMembership(b.id)?.status === 'accepted';
+    });
   }
 
   /** Invitations sur lesquelles je peux encore agir. */
@@ -130,11 +131,17 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       // silence — sinon l'écran promettrait un volume que le serveur n'appliquerait pas.
       p_tier: tier,
     });
+    // Le serveur a dépensé les jetons : on le reflète avant qu'un gain ne réécrive l'ancienne réserve.
+    useCharacterStore().spentBossTokens(bossTokenCost(tier));
     await fetchMine();
   }
 
   async function respond(bossId: string, accept: boolean) {
     await rpc('fboss_respond', { p_boss: bossId, p_accept: accept });
+    if (accept) {
+      const tier = bosses.value.find((b) => b.id === bossId)?.tier;
+      useCharacterStore().spentBossTokens(bossTokenCost(tier));
+    }
     await fetchMine();
   }
 
@@ -185,7 +192,7 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
     loaded,
     myHits,
     myMembership,
-    current,
+    inProgress,
     invitations,
     fetchMine,
     declare,

@@ -2982,6 +2982,7 @@ import { useCharacterStore, PseudoTakenError, WELCOME_ENERGY } from '@/stores/ch
 import { useComboStore } from '@/stores/combo';
 import { depositComboChest } from '@/composables/useComboChest';
 import { useProgress } from '@/composables/useProgress';
+import { useBossTokenAccrual } from '@/composables/useBossTokenAccrual';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useAdvProgressFx } from '@/composables/useAdvProgressFx';
@@ -3176,6 +3177,7 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const combo = useComboStore();
 const progress = useProgress();
+useBossTokenAccrual(); // 🎫 jetons de boss gagnés par le sport
 const gameFx = useGameFx();
 const advFx = useAdvProgressFx();
 // Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le

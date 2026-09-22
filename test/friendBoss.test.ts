@@ -20,8 +20,12 @@ import {
   BOSS_HEAVY_SHARE,
   BOSS_SHOT_MS,
   bossEmoji,
-  canDeclareBoss,
-  nextDeclareAt,
+  BOSS_TOKENS,
+  tokensForDayXp,
+  advanceBossTokens,
+  bossTokenCost,
+  bossJoinBlocker,
+  type BossTokenState,
   acceptedUnits,
   metMinShare,
   bossRepsXp,
@@ -198,30 +202,100 @@ describe('🐉 BOSS ENTRE AMIS — démarrage et fin', () => {
   });
 });
 
-describe('🐉 BOSS ENTRE AMIS — qui peut en lancer un', () => {
-  it('un boss en cours bloque, qu’on l’ait lancé OU rejoint', () => {
-    const enCours = boss({ startAt: T0 });
-    expect(canDeclareBoss({ owned: [enCours], joined: [] }, T0 + D)).toBe(false);
-    expect(canDeclareBoss({ owned: [], joined: [enCours] }, T0 + D)).toBe(false);
-    // Encore en recrutement : il occupe aussi.
-    expect(canDeclareBoss({ owned: [], joined: [boss()] }, T0 + H)).toBe(false);
+describe('🐉 BOSS ENTRE AMIS — 🎫 jetons', () => {
+  const st = (over: Partial<BossTokenState> = {}): BossTokenState => ({
+    day: '2026-09-20',
+    base: 1000,
+    credited: 0,
+    lastXp: 1000,
+    ...over,
   });
 
-  it('le lanceur relance 48 h après la MORT du boss (v0.893)', () => {
-    const dead = boss({ startAt: T0, defeatedAt: T0 + 3 * D });
-    expect(nextDeclareAt([dead])).toBe(T0 + 5 * D);
-    expect(canDeclareBoss({ owned: [dead], joined: [] }, T0 + 5 * D - 1)).toBe(false);
-    expect(canDeclareBoss({ owned: [dead], joined: [] }, T0 + 5 * D)).toBe(true);
+  it('une journée vaut 0, 1 ou 2 jetons selon ses seuils — jamais plus', () => {
+    expect(tokensForDayXp(BOSS_TOKENS.firstAt - 1)).toBe(0);
+    expect(tokensForDayXp(BOSS_TOKENS.firstAt)).toBe(1);
+    expect(tokensForDayXp(BOSS_TOKENS.secondAt - 1)).toBe(1);
+    expect(tokensForDayXp(BOSS_TOKENS.secondAt)).toBe(2);
+    expect(tokensForDayXp(50_000)).toBe(2);
+    expect(tokensForDayXp(Number.NaN)).toBe(0);
   });
 
-  it('…ou 48 h après la fin des 7 jours s’il a survécu', () => {
-    const exp = boss({ startAt: T0 });
-    expect(nextDeclareAt([exp])).toBe(T0 + 9 * D);
+  it('première observation : on part de zéro, aucun rattrapage', () => {
+    const r = advanceBossTokens(null, 40_000, '2026-09-20', 2);
+    expect(r.gained).toBe(0);
+    expect(r.stock).toBe(2);
+    expect(r.state).toEqual({ day: '2026-09-20', base: 40_000, credited: 0, lastXp: 40_000 });
   });
 
-  it('avoir seulement AIDÉ ne donne aucun délai', () => {
-    const aide = boss({ startAt: T0, defeatedAt: T0 + 2 * D });
-    expect(canDeclareBoss({ owned: [], joined: [aide] }, T0 + 2 * D)).toBe(true);
+  it('le même jour, les jetons suivent l’XP du jour et ne sont jamais versés deux fois', () => {
+    const a = advanceBossTokens(st(), 1000 + 100, '2026-09-20', 0);
+    expect(a.gained).toBe(1);
+    const b = advanceBossTokens(a.state, 1000 + 120, '2026-09-20', a.stock);
+    expect(b.gained).toBe(0);
+    const c = advanceBossTokens(b.state, 1000 + 600, '2026-09-20', b.stock);
+    expect(c.gained).toBe(1);
+    expect(c.stock).toBe(2);
+    const d = advanceBossTokens(c.state, 1000 + 3000, '2026-09-20', c.stock);
+    expect(d.gained).toBe(0);
+  });
+
+  it('une XP qui baisse ne reprend jamais un jeton', () => {
+    const a = advanceBossTokens(st(), 1600, '2026-09-20', 0);
+    const b = advanceBossTokens(a.state, 1000, '2026-09-20', a.stock);
+    expect(b.stock).toBe(a.stock);
+  });
+
+  it('au jour suivant, la veille est close puis on repart du total observé', () => {
+    // Veille : 100 XP vus mais jamais crédités (l'app s'est fermée avant).
+    const r = advanceBossTokens(st({ lastXp: 1100 }), 1100, '2026-09-21', 0);
+    expect(r.gained).toBe(1);
+    expect(r.state.day).toBe('2026-09-21');
+    expect(r.state.base).toBe(1100);
+  });
+
+  it('⚠️ des jours non observés : l’XP est répartie, pas écrasée sur une journée', () => {
+    // 3 jours de 300 XP sans ouvrir l'app → 3 jetons, pas 1.
+    const r = advanceBossTokens(st(), 1000 + 900, '2026-09-23', 0);
+    expect(r.gained).toBe(3);
+    // Aujourd'hui compte déjà sa part : une séance de plus dans la journée ne recrédite pas.
+    const again = advanceBossTokens(r.state, 1000 + 900 + 10, '2026-09-23', r.stock);
+    expect(again.gained).toBe(0);
+  });
+
+  it('un long trou ne rapporte pas plus que `gapMaxDays` jours', () => {
+    const r = advanceBossTokens(st(), 1000 + 100_000, '2026-12-20', 0);
+    expect(r.gained).toBeLessThanOrEqual(BOSS_TOKENS.stockMax);
+    const huge = advanceBossTokens(st(), 1000 + 100_000, '2026-12-20', -1000);
+    expect(huge.gained).toBe(2 * BOSS_TOKENS.gapMaxDays);
+  });
+
+  it('la réserve est plafonnée : l’excédent est perdu', () => {
+    const r = advanceBossTokens(st(), 1600, '2026-09-20', BOSS_TOKENS.stockMax - 1);
+    expect(r.stock).toBe(BOSS_TOKENS.stockMax);
+    expect(r.gained).toBe(1);
+  });
+
+  it('un cran coûte ses jetons, à lancer comme à rejoindre', () => {
+    expect(BOSS_TIERS.map((t) => bossTokenCost(t.id))).toEqual([1, 1, 2, 3, 4]);
+    expect(bossTokenCost(null)).toBe(1);
+    const mine: FriendBoss[] = [];
+    expect(bossJoinBlocker({ tokens: 3, tier: 'inhumain', exerciseId: 'x', mine }, T0)).toBe(
+      'no_tokens',
+    );
+    expect(bossJoinBlocker({ tokens: 4, tier: 'inhumain', exerciseId: 'x', mine }, T0)).toBeNull();
+  });
+
+  it('plusieurs boss à la fois, mais un seul par exercice (tant qu’il est en cours)', () => {
+    const enCours = boss({ startAt: T0, exerciseId: 'ex_pushup' });
+    const at = T0 + D;
+    const opts = { tokens: 6, tier: 'serieux', mine: [enCours] };
+    expect(bossJoinBlocker({ ...opts, exerciseId: 'ex_pushup' }, at)).toBe('same_exercise');
+    expect(bossJoinBlocker({ ...opts, exerciseId: 'ex_squat' }, at)).toBeNull();
+    // Fini (mort ou 7 jours écoulés) : l'exercice se libère.
+    const mort = boss({ startAt: T0, defeatedAt: T0 + D, exerciseId: 'ex_pushup' });
+    expect(
+      bossJoinBlocker({ ...opts, mine: [mort], exerciseId: 'ex_pushup' }, T0 + 2 * D),
+    ).toBeNull();
   });
 });
 
@@ -396,10 +470,26 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     expect(sql).toContain("public.fboss_start(b) + interval '7 days'");
   });
 
-  it('même délai de relance que la DERNIÈRE définition de fboss_declare (48 h)', () => {
-    expect(FRIEND_BOSS.cooldownMs).toBe(48 * H);
-    expect(lastDef('fboss_declare')).toContain(
-      "public.fboss_ended(b) + interval '48 hours' > now()",
+  it('🎫 mêmes coûts de cran des deux côtés, et plus de délai ni de « un seul boss »', () => {
+    const cost = lastDef('fboss_token_cost');
+    for (const t of BOSS_TIERS) expect(cost).toContain(`when '${t.id}' then ${t.tokens}`);
+    for (const fn of ['fboss_declare', 'fboss_respond']) {
+      const body = lastDef(fn);
+      expect(body, fn).toContain("raise exception 'no_tokens'");
+      expect(body, fn).toContain("raise exception 'same_exercise'");
+      expect(body, fn).toContain('boss_tokens = boss_tokens - ');
+      expect(body, fn).not.toContain('fboss_busy');
+      expect(body, fn).not.toContain("interval '48 hours'");
+    }
+    // ⚠️ Rejoindre paie le cran du BOSS, jamais un prix fixe (mesuré : à 1 jeton, rejoindre
+    // des Inhumains doublait le revenu d'or de la semaine).
+    expect(lastDef('fboss_respond')).toContain(
+      'coalesce(v_tokens, 0) < public.fboss_token_cost(b.tier)',
+    );
+    expect(lastDef('fboss_declare')).toContain('v_cost integer := public.fboss_token_cost(p_tier)');
+    expect(lastDef('fboss_declare')).toContain('coalesce(v_tokens, 0) < v_cost');
+    expect(fs.readFileSync('supabase/migrations/0086_fboss_tokens.sql', 'utf8')).toContain(
+      `check (boss_tokens between 0 and ${BOSS_TOKENS.stockMax})`,
     );
   });
 
@@ -623,8 +713,8 @@ describe('🐉 BOSS ENTRE AMIS — lectures du store (v0.863)', () => {
   });
 
   it('les refus du serveur sont traduits, un code inconnu reste lisible', () => {
-    expect(bossErrorMessage('busy')).toMatch(/déjà un boss/);
-    expect(bossErrorMessage('ERROR: cooldown')).toMatch(/48 h/);
+    expect(bossErrorMessage('ERROR: no_tokens')).toMatch(/jetons/);
+    expect(bossErrorMessage('same_exercise')).toMatch(/cet exercice/);
     expect(bossErrorMessage('xyz')).toMatch(/impossible/);
   });
 });
