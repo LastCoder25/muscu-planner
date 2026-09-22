@@ -219,8 +219,13 @@ export function campSpecOf(poi: Pick<Poi, 'id' | 'type'>): CampSpec | null {
 
 /** 🛡️ Force des GARDES d'un lieu de récolte, en champions de référence (cf. `campFoe`).
  *  Décision de l'utilisateur (2026-09-22) : « toutes les mines ont des ennemis qu'il faut
- *  tuer pour y accéder », force « comme un petit camp ». */
-export const HARVEST_GUARD_SIZES: readonly number[] = [1, 2];
+ *  tuer pour y accéder », force « comme un petit camp ».
+ *  ⚠️ DEMI-CRANS (2026-09-22, demandé par l'utilisateur) : 1 et 2 seuls faisaient sauter une
+ *  même équipe de « gagné d'avance » à « perdu d'avance ». Mesuré (moyenne des champions de
+ *  référence) : 1 → un champion ~82 % · 1,5 → deux champions ~100 %, un seul ~5 % · 2 → deux
+ *  champions 74-97 % · 2,5 → trois champions ~99 %, deux seuls 23-55 %. Le nombre d'ennemis
+ *  affiché suit (`campBodies` arrondit la taille). */
+export const HARVEST_GUARD_SIZES: readonly number[] = [1, 1.5, 2, 2.5];
 /** 🌱 RAMPE DE DÉBUT DE PARTIE : la taille des gardes vaut `start` au niveau 1 et monte de
  *  `perLevel` par niveau jusqu'à 1 (niveau 7). ⚠️ MESURÉE : sans elle, un héros seul de
  *  niveau 1 ne prenait AUCUN lieu (0 %, et 19 % au niveau 2) — or la récolte est l'or du

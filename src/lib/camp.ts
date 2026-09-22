@@ -13,6 +13,7 @@
 // ⚠️ AUCUNE FERRAILLE : elle ne vient plus que de l'épave et de la Fonderie (v0.856 : retirée
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
 import { lairGearSeals } from './ascension';
+import { prestigeRankIndex } from './items';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
 import {
   deriveSkirmish,
@@ -102,15 +103,43 @@ export interface PartyInput {
 }
 
 /**
+ * 🧍 CORRECTION DES PETITES FORCES, PAR RANG (2026-09-22, mesuré ; demandé par l'utilisateur :
+ * « aplanir la courbe par niveau »). La force d'un camp est une fraction LINÉAIRE du trio de
+ * référence fondu : juste pour 2 contre 2 et 3 contre 3 (74-100 % à tous les niveaux), faux
+ * pour UN champion contre une force de taille 1 — un champion seul n'a pas la forme équilibrée
+ * du trio, et les champions de haut rang sont plus SPÉCIALISÉS. Mesuré (moyenne des 3 champions
+ * de référence contre une taille 1) : 83-86 % aux rangs 0-3, puis 75 · 69 · 61 · 51 · 49 · 46 %
+ * aux rangs 4 à 9. Chaque valeur est bisectée pour ramener ce cas à ~82 % (la valeur des
+ * premiers rangs) ; les rangs 0-3, déjà dans la bande, restent à 1 (on ne durcit rien).
+ * ⚠️ Pleine à la taille 1, elle s'efface linéairement jusqu'à la taille 2 (`smallForceWeight`) :
+ * au-delà, la calibration mesurée des camps est intacte.
+ */
+export const SMALL_FORCE_RELIEF: readonly number[] = [
+  1, 1, 1, 1, 0.96, 0.93, 0.82, 0.85, 0.85, 0.84,
+];
+
+/** Poids de la correction selon la taille : 1 jusqu'à la taille 1, 0 à partir de 2. */
+export function smallForceWeight(size: number): number {
+  return Math.min(1, Math.max(0, 2 - size));
+}
+
+/** Multiplicateur de force d'une force de taille `size` au niveau `level`. */
+export function smallForceMult(level: number, size: number): number {
+  const i = Math.min(SMALL_FORCE_RELIEF.length - 1, prestigeRankIndex(Math.max(1, level)));
+  return 1 + smallForceWeight(size) * (SMALL_FORCE_RELIEF[i]! - 1);
+}
+
+/**
  * 🗡️ L'ENNEMI FONDU d'un camp — danger ABSOLU.
  * ⚠️ Dimensionné sur le groupe de RÉFÉRENCE du niveau du lieu, jamais sur le groupe envoyé :
  * sinon « combien j'en envoie » ne voudrait plus rien dire (même règle que la route).
  * ⚠️ Linéaire en taille, et la faction n'y entre pas : ISO-MENACE par construction (elle ne
  * change que les noms et le butin).
+ * ⚠️ Sauf pour les PETITES forces (taille < 2), corrigées par rang : `smallForceMult`.
  */
 export function campFoe(poi: Poi, spec: CampSpec): Combatant {
   const ref = fuseUnits(refEscortUnits(poi.level), 'Référence');
-  const m = Math.max(0, spec.size) / CAMP.refGroup;
+  const m = (Math.max(0, spec.size) / CAMP.refGroup) * smallForceMult(poi.level, spec.size);
   return {
     name: FACTION_LABEL[spec.faction],
     pv: Math.max(1, Math.round(Math.max(1, offenseOf(ref)) * CAMP.pvTurns * m)),
