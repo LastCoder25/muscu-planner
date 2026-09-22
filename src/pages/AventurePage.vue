@@ -252,7 +252,16 @@
                 <span class="ptm-ic txt font-display">{{ rank.star }}★</span>
               </button>
 
-              <div class="pt-frame" :title="`${rank.name} ${rank.star}/5`">
+              <!-- Toucher le perso ouvre ses stats de combat ; le familier et le talent
+                   (`.hotspot`) gardent leur propre clic. -->
+              <div
+                class="pt-frame clickable"
+                role="button"
+                tabindex="0"
+                :title="`${rank.name} ${rank.star}/5 — stats de combat`"
+                @click="onFrameClick"
+                @keydown.enter="combatOpen = true"
+              >
                 <AventureAvatar
                   class="pt-avatar"
                   :profile="c.profile"
@@ -303,7 +312,12 @@
                 <span class="ptm-ic txt font-display">LvL</span>
               </div>
               <!-- ↘ PUISSANCE -->
-              <div class="pt-mini corner br pow" :title="`Puissance ${fmtPow(combatPowerVal)}`">
+              <button
+                type="button"
+                class="pt-mini corner br pow"
+                :title="`Puissance ${fmtPow(combatPowerVal)} — stats de combat`"
+                @click="combatOpen = true"
+              >
                 <svg viewBox="0 0 44 44" aria-hidden="true">
                   <circle class="ptm-track full" cx="22" cy="22" r="18" />
                   <text
@@ -317,7 +331,7 @@
                   </text>
                 </svg>
                 <span class="ptm-ic">⚔️</span>
-              </div>
+              </button>
             </div>
             <!-- Le nom du rang n'est plus répété sous le portrait : le coin haut-droit (★) le
                  porte déjà et ouvre la liste des rangs. -->
@@ -385,68 +399,78 @@
           </div>
         </template>
 
-        <!-- Stats de combat : fusionnées dans la Fiche (plus de sous-onglet Stats). -->
-        <template v-if="persoSub === 'perso'">
-          <div class="sec-title">Combat : base → équipé</div>
-          <div class="gear-fx">
-            <div class="gfx">
-              <span class="gfx-l">❤️ PV</span>
-              <span class="gfx-v"
-                >{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span
-              >
+        <!-- Stats de combat : modale ouverte en touchant le perso ou sa puissance. -->
+        <q-dialog v-model="combatOpen" position="bottom">
+          <q-card class="adv-modal">
+            <button
+              class="adv-modal-x"
+              aria-label="Fermer"
+              type="button"
+              @click="combatOpen = false"
+            >
+              ✕
+            </button>
+            <div class="sec-title">Combat : base → équipé</div>
+            <div class="gear-fx">
+              <div class="gfx">
+                <span class="gfx-l">❤️ PV</span>
+                <span class="gfx-v"
+                  >{{ baseFighter.pv }} <i>→</i> <b>{{ fighter.pv }}</b></span
+                >
+              </div>
+              <div class="gfx">
+                <span class="gfx-l">⚔️ Dégâts/coup</span>
+                <span class="gfx-v"
+                  >{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span
+                >
+              </div>
+              <div class="gfx">
+                <span class="gfx-l">⚡ Frappes/tour</span>
+                <span class="gfx-v"
+                  >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
+                  <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
+                >
+              </div>
+              <div class="gfx">
+                <span class="gfx-l">🎯 Crit</span>
+                <span class="gfx-v"
+                  >{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span
+                >
+              </div>
+              <div class="gfx">
+                <span class="gfx-l">💨 Esquive</span>
+                <span class="gfx-v"
+                  >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
+                >
+              </div>
+              <div class="gfx">
+                <span class="gfx-l">🛡️ Défense</span>
+                <span class="gfx-v"
+                  >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
+                  <b>{{ pctA(fighter.dmgReduction) }}</b></span
+                >
+              </div>
+              <div class="gfx">
+                <span class="gfx-l">🩸 Vol de vie</span>
+                <span class="gfx-v"
+                  >{{ pctA(baseFighter.lifesteal) }} <i>→</i>
+                  <b>{{ pctA(fighter.lifesteal) }}</b></span
+                >
+              </div>
+              <div class="gfx total">
+                <span class="gfx-l">Puissance de combat</span>
+                <span class="gfx-v"
+                  >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
+                  <b>{{ fmtPow(combatPowerVal) }}</b></span
+                >
+              </div>
             </div>
-            <div class="gfx">
-              <span class="gfx-l">⚔️ Dégâts/coup</span>
-              <span class="gfx-v"
-                >{{ baseFighter.damage }} <i>→</i> <b>{{ fighter.damage }}</b></span
-              >
+            <div class="gear-fx-note">
+              Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
+              effets (→).
             </div>
-            <div class="gfx">
-              <span class="gfx-l">⚡ Frappes/tour</span>
-              <span class="gfx-v"
-                >{{ (baseFighter.strikes ?? 1).toFixed(2) }} <i>→</i>
-                <b>{{ (fighter.strikes ?? 1).toFixed(2) }}</b></span
-              >
-            </div>
-            <div class="gfx">
-              <span class="gfx-l">🎯 Crit</span>
-              <span class="gfx-v"
-                >{{ pctA(baseFighter.crit) }} <i>→</i> <b>{{ pctA(fighter.crit) }}</b></span
-              >
-            </div>
-            <div class="gfx">
-              <span class="gfx-l">💨 Esquive</span>
-              <span class="gfx-v"
-                >{{ pctA(baseFighter.dodge) }} <i>→</i> <b>{{ pctA(fighter.dodge) }}</b></span
-              >
-            </div>
-            <div class="gfx">
-              <span class="gfx-l">🛡️ Défense</span>
-              <span class="gfx-v"
-                >{{ pctA(baseFighter.dmgReduction) }} <i>→</i>
-                <b>{{ pctA(fighter.dmgReduction) }}</b></span
-              >
-            </div>
-            <div class="gfx">
-              <span class="gfx-l">🩸 Vol de vie</span>
-              <span class="gfx-v"
-                >{{ pctA(baseFighter.lifesteal) }} <i>→</i>
-                <b>{{ pctA(fighter.lifesteal) }}</b></span
-              >
-            </div>
-            <div class="gfx total">
-              <span class="gfx-l">Puissance de combat</span>
-              <span class="gfx-v"
-                >{{ fmtPow(combatPower(baseFighter)) }} <i>→</i>
-                <b>{{ fmtPow(combatPowerVal) }}</b></span
-              >
-            </div>
-          </div>
-          <div class="gear-fx-note">
-            Les stats <b>💪❤️⚡</b> viennent du sport ; l'<b>équipement + talents</b> ajoutent les
-            effets (→).
-          </div>
-        </template>
+          </q-card>
+        </q-dialog>
 
         <!-- Sélecteur de VOIE (ouvert depuis le cercle 🧭 en haut-gauche du carré) -->
         <q-dialog v-model="voieOpen" position="bottom">
@@ -3251,6 +3275,13 @@ const persoSub = ref<'perso'>('perso');
 const talentsOpen = ref(false);
 const familiarsOpen = ref(false);
 const ranksOpen = ref(false);
+// Stats de combat (base → équipé) : modale ouverte depuis le perso ou sa puissance.
+const combatOpen = ref(false);
+// Le familier et le talent de l'avatar (`.hotspot`) ouvrent leur propre inventaire.
+function onFrameClick(e: MouseEvent) {
+  if ((e.target as Element | null)?.closest('.hotspot')) return;
+  combatOpen.value = true;
+}
 // Historique d'énergie gagnée sur 3 jours — modale au clic sur la puce ⚡ (energyHist
 // défini plus bas, après `c`/`heroLevel`).
 const energyHistOpen = ref(false);
@@ -6929,22 +6960,23 @@ onUnmounted(() => {
 /* Stats — 3 cercles sur une ligne (anneau = part du build, chiffre = valeur réelle) */
 .stats-circles {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-  margin-bottom: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
 }
 .statc {
+  min-width: 0;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 10px 6px 9px;
+  padding: 7px 4px 6px;
   text-align: center;
 }
 .statc .ring {
-  width: 78px;
-  height: 78px;
+  width: 60px;
+  height: 60px;
   display: block;
-  margin: 0 auto 4px;
+  margin: 0 auto 2px;
 }
 .ring .track {
   fill: none;
@@ -7007,7 +7039,7 @@ onUnmounted(() => {
   text-align: center;
   font-size: 13px;
   color: var(--dim);
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 .pv-line b {
   font-size: 20px;
@@ -7073,7 +7105,7 @@ onUnmounted(() => {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  margin-bottom: 16px;
+  margin-bottom: 8px;
   text-align: center;
 }
 .pt-frame {
@@ -7090,6 +7122,13 @@ onUnmounted(() => {
   box-shadow:
     0 0 20px color-mix(in srgb, var(--rank-c, var(--accent)) 34%, transparent),
     inset 0 0 24px color-mix(in srgb, var(--rank-c, var(--accent)) 16%, transparent);
+}
+.pt-frame.clickable {
+  cursor: pointer;
+}
+.pt-frame.clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 .pt-avatar {
   position: absolute;
@@ -7167,8 +7206,8 @@ onUnmounted(() => {
    (alignés horizontalement) → un carré parfait autour du perso. */
 .pt-square {
   position: relative;
-  width: 280px;
-  max-width: 90vw;
+  width: 260px;
+  max-width: 86vw;
   aspect-ratio: 1;
   margin: 4px auto 2px;
   display: flex;
