@@ -876,12 +876,17 @@ export function revealRadius(outpostLevel: number): number {
 /** Nombre de lieux et de failles sur la carte révélée : PROPORTIONNEL À SA SURFACE, à la
  *  densité de l'anneau de référence (`poiRef` + `riftRef` sur 18 → 64). ⚠️ La part des
  *  failles garde celle de la référence, sans descendre sous `riftFloor` (l'accès au mana). */
-export function mapQuota(outpostLevel: number): { pois: number; rifts: number } {
+export function mapQuota(outpostLevel: number): { pois: number; rifts: number; econ: number } {
   const R = revealRadius(outpostLevel);
   const ref = EXPE.poiRef + EXPE.riftRef;
   const n = Math.round((ref * annulusArea(R)) / REF_AREA);
   const rifts = Math.max(EXPE.riftFloor, Math.round((n * EXPE.riftRef) / ref));
-  return { pois: Math.max(1, n - rifts), rifts };
+  const pois = Math.max(1, n - rifts);
+  // 💰 Les lieux d'ÉCONOMIE (or et pierres) suivent la densité JUSQU'À la carte de référence,
+  // puis restent à son nombre : cf. `ECON_TYPES`.
+  const econShare = ECON_WEIGHT / SPAWN_TABLE.length;
+  const econ = Math.round(Math.min(pois, EXPE.poiRef) * econShare);
+  return { pois, rifts, econ };
 }
 
 /** Fenêtre DESSINÉE de la carte : le disque révélable au plus grand, plus une marge.
@@ -1095,7 +1100,8 @@ export function createMap(
     riftCount: 0,
     nextRiftAt: now,
   };
-  for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel, reach);
+  const econCap = mapQuota(outpostLevel).econ;
+  for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel, reach, econCap);
   // 🕳️ On sème aussi le PLANCHER de failles : sans elles, une carte neuve n'aurait ni accès
   // au mana ni siège à venir jusqu'au premier `advanceWorld`.
   for (let i = 0; i < EXPE.riftFloor; i++) spawnRift(map, now, playerLevel, reach);
@@ -1105,27 +1111,64 @@ export function createMap(
 }
 
 // Fait apparaître 1 POI (déterministe via seed + spawnCount), placé espacé.
-function spawnOne(map: ExpeditionMap, now: number, playerLevel: number, reach: number): void {
+/** Tirage des lieux ordinaires : la MOITIÉ sont des POI de RESSOURCES (v0.658). */
+const SPAWN_TABLE = [
+  'mine',
+  'mine',
+  'camp',
+  'camp',
+  'lair',
+  'arena',
+  'well',
+  'well',
+  'shrine',
+  'shrine',
+  'archive',
+  'archive',
+] as const satisfies readonly PoiType[];
+
+/**
+ * 💰 Les lieux qui rapportent de l'OR ou des PIERRES D'INVOCATION : mines, camps, repaires,
+ * arène, sanctuaires.
+ *
+ * ⚠️ **LEUR NOMBRE NE GRANDIT PAS AU-DELÀ DE LA CARTE DE RÉFÉRENCE (v0.1047, décision de
+ * l'utilisateur).** Mesuré (joueur optimal, champions au pas du héros Avant-poste compris) :
+ * avec une carte trois fois plus peuplée de TOUS les types, l'or des camps passait de +18 %
+ * à +54 % du revenu de référence au niveau 60, et les pierres de +26 % à +82 % — un joueur
+ * trouve toujours un camp proche quand il y en a trois fois plus. Les terres révélées en plus
+ * apportent donc des FAILLES (mana, sceaux, XP des champions) et des SOURCES et ARCHIVES
+ * (énergie, clés) : la carte grandit et se peuple, l'or et les pierres ne s'emballent pas.
+ */
+const ECON_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
+  'mine',
+  'camp',
+  'lair',
+  'arena',
+  'shrine',
+]);
+const ECON_WEIGHT = SPAWN_TABLE.filter((t) => ECON_TYPES.has(t)).length;
+/** Ce qu'un lieu d'économie devient quand leur quota est plein. */
+const EXTRA_TABLE = ['well', 'archive'] as const satisfies readonly PoiType[];
+
+function spawnOne(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+  reach: number,
+  econCap: number,
+): void {
   const rng = mulberry32((map.seed + map.spawnCount * 2654435761) >>> 0);
   map.spawnCount++;
   // Pondération : la MOITIÉ des spawns sont des POI de RESSOURCES (v0.658). C'est le
   // cœur du correctif : à haut niveau la carte ne peut plus produire de butin utile,
   // mais elle peut toujours produire des devises qui, elles, ne se périment pas.
-  let type = pick(rng, [
-    'mine',
-    'mine',
-    'camp',
-    'camp',
-    'lair',
-    'arena',
-    'well',
-    'well',
-    'shrine',
-    'shrine',
-    'archive',
-    'archive',
-    // ⚓ Plus d'ÉPAVE (v0.999) : sans la ferraille, elle doublait la mine en moins bien.
-  ] as const);
+  // ⚓ Plus d'ÉPAVE (v0.999) : sans la ferraille, elle doublait la mine en moins bien.
+  let type: PoiType = pick(rng, SPAWN_TABLE);
+  // 💰 Quota d'économie plein → une source ou des archives (cf. `ECON_TYPES`). ⚠️ Le tirage de
+  // remplacement ne consomme le flux aléatoire QUE dans ce cas : sur une carte qui n'excède
+  // pas la référence, rien ne change au bit près.
+  if (ECON_TYPES.has(type) && map.pois.filter((p) => ECON_TYPES.has(p.type)).length >= econCap)
+    type = pick(rng, EXTRA_TABLE);
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   placePoiOfType(map, now, playerLevel, reach, type, rng, `poi_${map.seed}_${map.spawnCount}`);
@@ -1511,14 +1554,14 @@ export function advanceWorld(
   // (jusqu'au cap), sinon la carte restait à 1 spawn/ouverture et se vidait.
   let guard = 0;
   while (now >= next.nextSpawnAt && quota() < cap.pois && guard++ < cap.pois) {
-    spawnOne(next, now, playerLevel, reach);
+    spawnOne(next, now, playerLevel, reach, cap.econ);
     const rng = mulberry32((next.seed + next.spawnCount * 40503) >>> 0);
     next.nextSpawnAt = next.nextSpawnAt + EXPE.spawnMinMs + Math.floor(rng() * EXPE.spawnJitterMs);
   }
   // PLANCHER : la carte ne descend jamais sous `poiFloor` activités → on complète
   // immédiatement (les activités de base sont toujours dispo ; la rareté/churn ne
   // joue qu'entre le plancher et le cap).
-  while (quota() < cap.pois) spawnOne(next, now, playerLevel, reach);
+  while (quota() < cap.pois) spawnOne(next, now, playerLevel, reach, cap.econ);
   if (next.nextSpawnAt <= now) next.nextSpawnAt = now + EXPE.spawnMinMs;
 
   // 🕳️ FAILLES : même mécanique, quota et horloge PROPRES. ⚠️ Le plancher garantit qu'il y

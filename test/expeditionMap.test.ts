@@ -549,6 +549,26 @@ describe('rythme de la carte', () => {
     expect(mapQuota(0)).toEqual(q1);
   });
 
+  it('💰 les lieux d’OR et de PIERRES restent au nombre de la référence : le surplus est source/archives (v0.1047)', () => {
+    // Sans cette règle, une carte 3× plus peuplée faisait +54 % d’or et +82 % de pierres au
+    // niveau 60 (camps trouvés partout). Les terres en plus : failles, sources, archives.
+    const ECON = new Set(['mine', 'camp', 'lair', 'arena', 'shrine']);
+    expect(mapQuota(100).econ).toBe(mapQuota(OUT).econ);
+    for (let s = 1; s <= 6; s++) {
+      let map = createMap(s * 211, 0, 80, 100);
+      for (let t = 0; t <= 3 * 24 * HOUR; t += 6 * HOUR) {
+        map = advanceWorld(map, t, 80, 100);
+        const econ = map.pois.filter((p) => ECON.has(p.type)).length;
+        // +1 : l’arène en double se rabat sur un camp (règle d’avant, antérieure au quota).
+        expect(econ, `lieux d’économie, graine ${s}`).toBeLessThanOrEqual(mapQuota(100).econ + 1);
+      }
+      const q = map.pois.filter(isQuotaPoi);
+      expect(q.filter((p) => p.type === 'well' || p.type === 'archive').length).toBeGreaterThan(
+        q.length / 2,
+      );
+    }
+  });
+
   it('monter l’Avant-poste révèle AUSSITÔT de nouveaux lieux, sans en retirer', () => {
     let map = createMap(2024, 0, 30, 5);
     map = advanceWorld(map, HOUR, 30, 5);
