@@ -1505,17 +1505,12 @@ const clarity = computed(() =>
       )
     : 0,
 );
-/** Deux replis, mémorisés PAR APPAREIL — un réglage d’affichage n’a rien à faire en
- *  base. Même traitement que la carte des mondes (v0.745). */
-/** 🛡️ Tuile Défense — REPLIÉE par défaut (demandé), état mémorisé par appareil. */
-const defTileOpen = ref(localStorage.getItem('muscu:base:def-tile') === '1');
+/** 🛡️ Tuile Défense — TOUJOURS REPLIÉE à l'ouverture de la base (demandé). ⚠️ Elle n'est
+ *  plus mémorisée : ouverte une fois, elle restait ouverte à chaque visite. Le résumé de la
+ *  tuile repliée (`defSummary`) dit déjà le verdict. */
+const defTileOpen = ref(false);
 function toggleDefTile() {
   defTileOpen.value = !defTileOpen.value;
-  try {
-    localStorage.setItem('muscu:base:def-tile', defTileOpen.value ? '1' : '0');
-  } catch {
-    /* privé */
-  }
 }
 /** Ce que la tuile repliée doit DIRE : le verdict s'il y a une armée qu'on sait jauger,
  *  sinon qu'elle arrive sans qu'on sache la jauger, sinon le calme. */
@@ -1527,6 +1522,8 @@ const defSummary = computed(() => {
 });
 // ── 🎰 Tirage ──
 const summonOpen = ref(false);
+/** Deux replis de la tuile Défense, mémorisés PAR APPAREIL — un réglage d’affichage n’a
+ *  rien à faire en base. Même traitement que la carte des mondes (v0.745). */
 const partsOpen = ref(localStorage.getItem('muscu:base:parts') === '1');
 const helpOpen = ref(localStorage.getItem('muscu:base:help') === '1');
 function togglePartsOpen() {
