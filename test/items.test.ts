@@ -1649,16 +1649,8 @@ describe('« Porter ce set » : les pièces du set sont IMPOSÉES (v0.711)', () 
   const SET = 'voie:frenetique';
   // Le set est VOLONTAIREMENT plus faible pièce à pièce que les objets nus : c'est le seul
   // cas qui prouve l'imposition — si le set gagnait, l'optimiseur le prendrait tout seul.
-  const pool: Item[] = [
-    mkI('weapon', 8, SET),
-    mkI('armor', 8, SET),
-    mkI('accessory', 8, SET),
-    mkI('relic', 8, SET),
-    mkI('weapon', 40),
-    mkI('armor', 40),
-    mkI('accessory', 40),
-    mkI('relic', 40),
-  ];
+  // Tous les emplacements (7 depuis la refonte de l'équipement).
+  const pool: Item[] = [...SLOTS.map((sl) => mkI(sl, 8, SET)), ...SLOTS.map((sl) => mkI(sl, 40))];
 
   it('⚠️ le set demandé est PORTÉ, même s’il est moins puissant', () => {
     const pin: Partial<Record<ItemSlot, Item>> = {};

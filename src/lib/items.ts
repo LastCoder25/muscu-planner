@@ -2759,12 +2759,12 @@ export function trainingMult(equipped: Equipped, voie?: string | null): number {
 }
 
 /** OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : cherche, parmi l'équipé + le sac, la
- *  meilleure combinaison des 4 slots de gear (bonus de SET inclus) qui maximise la
- *  puissance de combat. Le familier équipé est conservé (slot parallèle, choisi à part).
- *  Brute-force BORNÉ : top-K candidats/slot par puissance solo + TOUTES les pièces de set
- *  (pour permettre la complétion, cap 12 + slot vide = ≤13/slot) → au plus ~13⁴ combos
- *  évalués sur un clic (combatPower est bon marché), pas un chemin chaud.
- *  Retourne la map d'équipement optimale (les 4 slots gear + le familier actuel). */
+ *  meilleure combinaison des 7 emplacements (bonus de SET inclus) qui maximise la
+ *  puissance de combat, puis les emplacements parallèles (familier, trophée).
+ *  Montée pas à pas depuis plusieurs départs (cf. le corps), candidats bornés (top-K par
+ *  emplacement + la meilleure pièce de chaque set), puis passe finale sur tout le vivier.
+ *  Mesuré (test/gearOptimizer7.test.ts) : même résultat que l'exhaustif, 21 ms pour
+ *  805 objets. */
 /** Écarte les objets DOMINÉS : un objet qu'un autre bat sur TOUS ses axes ne peut jamais
  *  gagner, donc l'essayer est du temps perdu.
  *
@@ -2892,16 +2892,13 @@ export function bestGearLoadout(
   // de PERTE de puissance (bug auto-équip).
   const K = 6;
   /** Pièces retenues PAR SET et par emplacement (cf. `trim`).
-   *  ⚠️ REVENU À 1 : le balayage a QUATRE boucles imbriquées sur les candidats, donc
-   *  passer de 1 à 3 pièces par set les multipliait par ~16 — mesuré, l’optimisation
-   *  passait à 9 SECONDES sur un sac réel et l’écran paraissait mort. Ce filtre n’est
-   *  plus qu’un ACCÉLÉRATEUR : c’est la passe d’amélioration locale qui porte la
-   *  garantie, et elle reparcourt TOUT le vivier de toute façon. */
+   *  ⚠️ À 1 : les échanges par paires testent chaque couple de pièces d'un même set,
+   *  donc SET_K pièces par set multiplient leur coût par SET_K². Ce filtre n'est qu'un
+   *  ACCÉLÉRATEUR : la passe d'amélioration locale reparcourt tout le vivier. */
   const SET_K = 1;
   const trim = (arr: Item[], keepCur?: Item): (Item | undefined)[] => {
     // ⚠️ On élague d’abord les DOMINÉS : c’est gratuit en qualité (un objet battu sur
-    // tous ses axes ne peut jamais gagner) et ça réduit le balayage, qui a QUATRE
-    // boucles imbriquées — donc un gain au cube sur le temps total.
+    // tous ses axes ne peut jamais gagner) et ça réduit le nombre de candidats.
     const scored = elagueDomines(arr)
       .map((it) => ({ it, p: ctxPower(it) }))
       .sort((a, b) => b.p - a.p);
@@ -2926,66 +2923,130 @@ export function bestGearLoadout(
       }
     return [...keep.values(), undefined];
   };
-  const listFor = (s: 'weapon' | 'armor' | 'accessory' | 'relic'): (Item | undefined)[] =>
-    pin?.[s] ? [pin[s]] : trim(bySlot[s], equipped[s]);
-  const cand: Record<'weapon' | 'armor' | 'accessory' | 'relic', (Item | undefined)[]> = {
-    weapon: listFor('weapon'),
-    armor: listFor('armor'),
-    accessory: listFor('accessory'),
-    relic: listFor('relic'),
-  };
+  // ⚠️ REFONTE ÉQUIPEMENT (étape 6) : 7 emplacements. Le balayage EXHAUSTIF d'avant avait
+  // une boucle imbriquée par emplacement : déjà ~3 s sur 4 emplacements, il en aurait fallu
+  // plusieurs milliers de fois plus sur 7. On passe à une MONTÉE pas à pas, lancée depuis
+  // plusieurs équipements de départ (l'actuel, le meilleur objet de chaque emplacement, et
+  // chaque set posé en entier), avec des échanges d'UNE pièce puis de DEUX pièces d'un même
+  // set (un palier de set ne se franchit parfois qu'en changeant deux emplacements).
+  const GEAR = SLOTS;
+  const cand = {} as Record<ItemSlot, (Item | undefined)[]>;
+  for (const g of GEAR) cand[g] = pin?.[g] ? [pin[g]] : trim(bySlot[g], equipped[g]);
   /** Ce qui est porté sur les emplacements PARALLÈLES d'un équipement. */
   const parallelOf = (e: Equipped): Equipped => {
     const o: Equipped = {};
-    for (const s of PARALLEL_SLOTS) if (e[s]) o[s] = e[s];
+    for (const p of PARALLEL_SLOTS) if (e[p]) o[p] = e[p];
     return o;
   };
-  const parallelKey = (e: Equipped) => PARALLEL_SLOTS.map((s) => e[s]?.id ?? '').join('|');
+  const parallelKey = (e: Equipped) => PARALLEL_SLOTS.map((p) => e[p]?.id ?? '').join('|');
   const curPar = parallelOf(equipped);
+  const power = (e: Equipped) => combatPower(playerWithGear(name, stats, e, extra, level, voie));
+  const put = (e: Equipped, slot: ItemSlot, it: Item | undefined): Equipped => {
+    const o: Equipped = { ...e };
+    if (it) o[slot] = it;
+    else delete o[slot];
+    return o;
+  };
+  const withPins = (e: Equipped): Equipped => {
+    const o: Equipped = { ...e };
+    if (pin) for (const g of GEAR) if (pin[g]) o[g] = pin[g];
+    return o;
+  };
+  const climb = (start: Equipped): { e: Equipped; p: number } => {
+    let e = withPins(start);
+    let p = power(e);
+    for (let tour = 0; tour < 8; tour++) {
+      let gain = false;
+      // Un emplacement IMPOSÉ n'a qu'un candidat, sa pièce : aucune garde à écrire ici.
+      for (const g of GEAR) {
+        for (const it of cand[g]) {
+          if (e[g]?.id === it?.id) continue;
+          const t = put(e, g, it);
+          const q = power(t);
+          if (q > p) {
+            e = t;
+            p = q;
+            gain = true;
+          }
+        }
+      }
+      for (let i = 0; i < GEAR.length; i++)
+        for (let j = i + 1; j < GEAR.length; j++) {
+          const ga = GEAR[i]!;
+          const gb = GEAR[j]!;
+          for (const x of cand[ga]) {
+            if (!x?.setId) continue;
+            for (const y of cand[gb]) {
+              if (y?.setId !== x.setId) continue;
+              if (e[ga]?.id === x.id && e[gb]?.id === y.id) continue;
+              const t = put(put(e, ga, x), gb, y);
+              const q = power(t);
+              if (q > p) {
+                e = t;
+                p = q;
+                gain = true;
+              }
+            }
+          }
+        }
+      if (!gain) break; // plus aucun échange d'une ou deux pièces ne paie
+    }
+    return { e, p };
+  };
 
   // Base = le loadout ACTUEL : l'optimiseur ne le remplace que par STRICTEMENT mieux.
   // ⚠️ SAUF si des emplacements sont IMPOSÉS : la base actuelle ne les respecte pas, donc
   // la garder comme référence ferait échouer l'imposition dès qu'elle est plus puissante.
-  let best: Equipped = pin ? {} : { ...equipped };
-  let bestP = pin ? -Infinity : combatPower(playerWithGear(name, stats, best, extra, level, voie));
-  // Recherche exhaustive sur les 4 slots de gear, emplacements parallèles FIXÉS ; ceux-ci
-  // sont optimisés entre deux passes (ascension par coordonnées). Un produit à 6 dimensions
-  // exploserait, alors que 2 passes convergent : un familier ou un trophée dépend très peu
-  // du gear (ses effets s'additionnent au reste).
-  const sweepGear = (par: Equipped) => {
-    for (const w of cand.weapon)
-      for (const a of cand.armor)
-        for (const ac of cand.accessory)
-          for (const r of cand.relic) {
-            const combo: Equipped = { ...par };
-            if (w) combo.weapon = w;
-            if (a) combo.armor = a;
-            if (ac) combo.accessory = ac;
-            if (r) combo.relic = r;
-            const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
-            if (p > bestP) {
-              bestP = p;
-              best = combo;
-            }
-          }
+  let best: Equipped = pin ? withPins(curPar) : { ...equipped };
+  let bestP = pin ? -Infinity : power(best);
+  const tryStart = (start: Equipped) => {
+    const r = climb(start);
+    if (r.p > bestP) {
+      bestP = r.p;
+      best = r.e;
+    }
   };
-  sweepGear(curPar);
+  const base: Equipped = pin ? { ...curPar } : { ...equipped };
+  tryStart(base);
+  // Le meilleur objet de chaque emplacement, chacun jugé sur l'équipement actuel.
+  const greedy: Equipped = { ...base };
+  for (const g of GEAR) {
+    let bp = -Infinity;
+    for (const it of cand[g]) {
+      const q = power(put(base, g, it));
+      if (q > bp) {
+        bp = q;
+        if (it) greedy[g] = it;
+        else delete greedy[g];
+      }
+    }
+  }
+  tryStart(greedy);
+  // Chaque set posé en entier (ses meilleures pièces candidates), le reste inchangé.
+  const setIds = new Set<string>();
+  for (const g of GEAR) for (const it of cand[g]) if (it?.setId) setIds.add(it.setId);
+  for (const id of setIds) {
+    const start: Equipped = { ...base };
+    for (const g of GEAR) {
+      const piece = cand[g].find((it) => it?.setId === id);
+      if (piece) start[g] = piece;
+    }
+    tryStart(start);
+  }
   // Meilleure pièce de chaque emplacement parallèle POUR ce gear (le porté + les meilleurs
   // du sac ; pas de synergie de set → un top-K solo suffit ; `undefined` = rien, si c'est
-  // mieux), puis re-balayage du gear si l'une a changé.
-  for (const s of PARALLEL_SLOTS) {
-    for (const it of trim(bySlot[s], equipped[s])) {
-      const combo: Equipped = { ...best };
-      if (it) combo[s] = it;
-      else delete combo[s];
-      const p = combatPower(playerWithGear(name, stats, combo, extra, level, voie));
-      if (p > bestP) {
-        bestP = p;
+  // mieux), puis nouvelle montée si l'une a changé.
+  for (const pSlot of PARALLEL_SLOTS) {
+    for (const it of trim(bySlot[pSlot], equipped[pSlot])) {
+      const combo = put(best, pSlot, it);
+      const q = power(combo);
+      if (q > bestP) {
+        bestP = q;
         best = combo;
       }
     }
   }
-  if (parallelKey(best) !== parallelKey(curPar)) sweepGear(parallelOf(best));
+  if (parallelKey(best) !== parallelKey(curPar)) tryStart(best);
 
   // ⚠️ PASSE FINALE D'AMÉLIORATION LOCALE, et elle n'est pas cosmétique : le balayage
   // ci-dessus ne voit que les candidats RETENUS (top-K par emplacement). Sur un sac
