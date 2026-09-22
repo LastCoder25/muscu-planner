@@ -7,37 +7,38 @@
       <div class="iconbtn" />
     </header>
 
+    <!-- UNE seule ligne pour l'or, le trajet et les filtres (demandé : voir les deux
+         premières lignes de voyages en bas de l'écran). Le niveau et « En expédition » sont
+         retirés : la tuile du héros, en bas, dit déjà qu'il voyage. -->
     <div class="bar">
       <span class="bar-chip">🪙 {{ char.row?.gold ?? 0 }}</span>
-      <span class="bar-chip">Niv. {{ heroLevel }}</span>
-      <span v-if="active" class="bar-chip live">🧭 En expédition</span>
-      <span v-else-if="outpostBuilt && travelMult < 1" class="bar-chip">
-        🧭 −{{ Math.round((1 - travelMult) * 100) }}% trajet
+      <span v-if="outpostBuilt && travelMult < 1" class="bar-chip">
+        🧭 −{{ Math.round((1 - travelMult) * 100) }}%
       </span>
-    </div>
 
-    <!-- 🎚️ Filtre de difficulté (par RANG, la langue de la carte). On garde les rangs
+      <!-- 🎚️ Filtre de difficulté (par RANG, la langue de la carte). On garde les rangs
          MASQUÉS, pas les affichés : un rang nouveau apparaît visible par défaut. -->
-    <div
-      v-if="rankOptions.length > 1"
-      class="rank-filter"
-      role="group"
-      aria-label="Filtrer les lieux par rang"
-    >
-      <button
-        v-for="o in rankOptions"
-        :key="o.rankIndex"
-        type="button"
-        class="rf-chip"
-        :class="{ on: !hiddenRanks.has(o.rankIndex) }"
-        :style="{ '--rk': CHARACTER_RANKS[o.rankIndex]!.color }"
-        :aria-pressed="!hiddenRanks.has(o.rankIndex)"
-        :aria-label="rankChipLabel(o)"
-        :title="rankChipLabel(o)"
-        @click="toggleRank(o.rankIndex)"
+      <div
+        v-if="rankOptions.length > 1"
+        class="rank-filter"
+        role="group"
+        aria-label="Filtrer les lieux par rang"
       >
-        <span class="rf-dot" />
-      </button>
+        <button
+          v-for="o in rankOptions"
+          :key="o.rankIndex"
+          type="button"
+          class="rf-chip"
+          :class="{ on: !hiddenRanks.has(o.rankIndex) }"
+          :style="{ '--rk': CHARACTER_RANKS[o.rankIndex]!.color }"
+          :aria-pressed="!hiddenRanks.has(o.rankIndex)"
+          :aria-label="rankChipLabel(o)"
+          :title="rankChipLabel(o)"
+          @click="toggleRank(o.rankIndex)"
+        >
+          <span class="rf-dot" />
+        </button>
+      </div>
     </div>
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
@@ -49,7 +50,12 @@
 
     <!-- Carte -->
     <div class="map-outer">
-      <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
+      <div
+        ref="scrollEl"
+        class="map-scroll"
+        :class="{ 'with-trips': trips.length }"
+        @scroll="onScroll"
+      >
         <svg
           :viewBox="`${V.min} ${V.min} ${V.size} ${V.size}`"
           class="map"
@@ -1573,6 +1579,12 @@ const claimable = computed(() => char.caravanList.filter((c) => isCaravanClaimab
  *  (même patron que le `?tab=` de l’Aventure, v0.748).
  *  ⚠️ `immediate` : en cockpit l’écran peut être DÉJÀ monté quand la query change. */
 const tripsEl = ref<HTMLElement | null>(null);
+// La carte raccourcit quand des voyages sont en cours (.with-trips) : on remesure, sinon
+// les flèches de bord se calent sur l'ancienne hauteur.
+watch(
+  () => trips.value.length > 0,
+  () => void nextTick(measure),
+);
 watch(
   () => [route.query.claim, claimable.value.length] as const,
   async ([flag, n]) => {
@@ -2310,13 +2322,18 @@ onUnmounted(() => {
 }
 .bar {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 6px;
   padding: 0 12px 8px;
 }
+.bar-chip {
+  flex: none;
+}
 .rank-filter {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  gap: 8px;
-  padding: 0 12px 8px;
+  gap: 5px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -2332,13 +2349,13 @@ onUnmounted(() => {
 .rf-chip:last-child {
   margin-right: auto;
 }
-/* Une pastille ronde (cible tactile de 44 px) avec la boule du rang au centre. Affiché =
+/* Une pastille ronde (36 px, resserrée pour tenir sur la ligne de l’or) avec la boule du rang au centre. Affiché =
    pastille cerclée de la couleur du rang, boule PLEINE ; masqué = pastille en pointillé,
    boule réduite à un anneau estompé : l'état se lit sans dépendre de la couleur. */
 .rf-chip {
   flex: none;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2357,8 +2374,8 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--rk) 14%, var(--surface));
 }
 .rf-dot {
-  width: 18px;
-  height: 18px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid var(--rk);
   background: transparent;
@@ -2393,10 +2410,6 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 700;
 }
-.bar-chip.live {
-  border-color: var(--accent);
-  color: var(--accent);
-}
 .map-outer {
   position: relative;
   margin: 0 8px;
@@ -2410,6 +2423,13 @@ onUnmounted(() => {
   touch-action: pan-x pan-y;
   background: #d7d0bd;
   scrollbar-width: none;
+}
+/* Des voyages en cours : la carte laisse la place à leurs DEUX premières lignes en bas
+   de l'écran (en-tête ~60 px, barre ~44, deux lignes de tuiles ~104, marges). Jamais plus
+   haute qu'avant (62vh). */
+.map-scroll.with-trips {
+  height: min(62vh, calc(100vh - 244px));
+  height: min(62vh, calc(100dvh - 244px));
 }
 .map-scroll::-webkit-scrollbar {
   display: none;
