@@ -183,6 +183,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import { engageCap } from '@/lib/adventurers';
+import { championOutpostMult } from '@/lib/caravan';
 import { altarLuckBonus } from '@/lib/items';
 import { GACHA } from '@/lib/gacha';
 import {
@@ -326,8 +327,10 @@ function produces(b: Building): boolean {
 }
 /** Libellé d'effet d'un utilitaire à un niveau donné. */
 function utilityEffectLabel(b: Building): string {
-  if (b.typeId === 'outpost')
-    return `−${Math.round((1 - travelTimeMult([b])) * 100)}% temps de trajet`;
+  if (b.typeId === 'outpost') {
+    const hero = travelTimeMult([b]);
+    return `−${Math.round((1 - hero) * 100)}% trajet du héros · −${Math.round((1 - championOutpostMult(hero)) * 100)}% champions`;
+  }
   if (b.typeId === 'labyrinth_gate')
     return `+${Math.round(labyrinthLuckBonus([b]) * 100)}% butin des coffres`;
   if (b.typeId === 'boss_altar')

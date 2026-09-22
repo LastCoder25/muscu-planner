@@ -116,8 +116,14 @@ function convoyGoldPerDay(L: number, comptoir: number): number {
 /** Camps de faction, en PART du revenu de référence — la valeur MESURÉE par
  *  `campEconomy.test` (+9 % au niveau 12, +16 à +19 % au 26, ~+17 % au-delà). Borne haute :
  *  un camp occupe un créneau qu'un convoi n'occupe donc pas. */
+// ⚠️ RE-MESURÉE en v0.1049 (carte agrandie par l'Avant-poste, champions à la moitié de sa
+// réduction) : +29 % au niveau 12, +21 % au 26, +23 % au 60. La valeur d'avant (+9/+16/+17)
+// datait d'avant la v0.1033 et n'avait jamais suivi.
 function campShare(L: number): number {
-  return L <= 12 ? 0.09 : L <= 26 ? 0.09 + ((L - 12) / 14) * 0.07 : 0.17;
+  if (L <= 12) return 0.29;
+  if (L <= 26) return 0.29 - ((L - 12) / 14) * 0.08;
+  if (L <= 60) return 0.21 + ((L - 26) / 34) * 0.02;
+  return 0.23;
 }
 /** Or laissé par une armée repoussée (même barème que `lootCorpses`). */
 const siegeGold = memo((L) => {
