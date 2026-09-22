@@ -306,9 +306,9 @@
           <ellipse cx="36" cy="187" rx="31" ry="7.5" class="camp-ground" />
           <!-- Le panneau : planche en flèche vers le dehors, boussole gravée. -->
           <g class="sign">
-            <rect x="12.6" y="167" width="2.4" height="22" rx="0.6" class="sign-post" />
-            <path d="M5 171.2 L8.6 167.4 L22 167.4 L22 175 L8.6 175 Z" class="sign-board" />
-            <text x="14.6" y="173.4" class="sign-ico">🧭</text>
+            <rect x="12.6" y="166" width="3.2" height="24" rx="0.8" class="sign-post" />
+            <path d="M2.5 170 L8 164 L26 164 L26 176 L8 176 Z" class="sign-board" />
+            <text x="16" y="172.6" class="sign-ico">🧭</text>
           </g>
           <defs>
             <clipPath id="camp-disc" clipPathUnits="objectBoundingBox">
@@ -1063,9 +1063,9 @@ function back() {
 /** Où se tiennent les trois champions du relais d'expédition : en file vers le panneau,
  *  le premier devant. ⚠️ Tous dans la cible tactile et loin du rempart. */
 const CAMP_SPOTS = [
-  { x: 28, y: 180 },
-  { x: 40.5, y: 181.5 },
-  { x: 53, y: 179.5 },
+  { x: 32, y: 180 },
+  { x: 44, y: 181.5 },
+  { x: 55.5, y: 179.5 },
 ] as const;
 
 /** Les champions dessinés au relais : les trois premiers du vivier, DISPONIBLES d'abord
@@ -2282,14 +2282,23 @@ function doHarvest() {
   stroke: #4a3d2b;
   stroke-width: 0.6;
 }
+/* Le panneau doit se voir d'un coup d'œil sur la prairie : bois clair, liseré accent,
+   halo sombre dessous pour le détacher du vert, et une lueur qui respire. */
 .sign-board {
-  fill: #a98c5f;
-  stroke: #5a4c36;
-  stroke-width: 0.7;
+  fill: #e2c386;
+  stroke: var(--accent, #ffd23f);
+  stroke-width: 1.1;
   stroke-linejoin: round;
+  filter: drop-shadow(0 0 1.6px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 2.4px rgba(255, 210, 63, 0.55));
+  animation: signGlow 2.4s ease-in-out infinite;
+}
+@keyframes signGlow {
+  50% {
+    filter: drop-shadow(0 0 1.6px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 4px rgba(255, 210, 63, 0.9));
+  }
 }
 .sign-ico {
-  font-size: 5px;
+  font-size: 8px;
   text-anchor: middle;
 }
 .march {
@@ -2320,7 +2329,8 @@ function doHarvest() {
   stroke-width: 1.3;
 }
 @media (prefers-reduced-motion: reduce) {
-  .march {
+  .march,
+  .sign-board {
     animation: none;
   }
 }
@@ -2341,8 +2351,7 @@ function doHarvest() {
 }
 .hit.camp:focus-visible .sign-board,
 .hit.camp:hover .sign-board {
-  stroke: var(--accent, #ffd23f);
-  stroke-width: 1.2;
+  stroke-width: 1.6;
 }
 
 /* ── La porte ── */
