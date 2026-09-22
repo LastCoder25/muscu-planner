@@ -123,6 +123,19 @@ describe('poids de puissance (v0.837, mesurés en vrai combat)', () => {
       expect(avec).toBeCloseTo(Math.sqrt(1 + PROC_POWER[id]!.weight), 6);
     }
   });
+  it('⚠️ aucun proc ne couvre tout un combat, ni ne rend une stat permanente', () => {
+    // Les bornes qui PORTENT le rééquilibrage (2026-09-22) : mesuré, un combat de boss au
+    // point d'équilibre dure 2 à 6 tours du héros. Un proc « premiers tours » qui en couvre
+    // autant vaut pour TOUT le combat — c'est ce qui mettait Initiative à +18,6 %, Charge à
+    // +16,6 % et l'Œil du prédateur à +14,3 %, contre +2,4 % pour le plus faible.
+    expect(COMBAT.initiativeTurns).toBeLessThanOrEqual(2);
+    expect(COMBAT.chargeTurns).toBeLessThanOrEqual(2);
+    expect(COMBAT.predatorTurns).toBeLessThanOrEqual(4);
+    // Le Sceau de rage valait 101 % — donc la rage ACTIVE en permanence, quels que soient les
+    // PV : mesuré 19 % dans sa voie, le double de la bande. Il l'avance, il ne la donne pas.
+    expect(COMBAT.rageSealThreshold).toBeLessThan(1);
+    expect(COMBAT.rageSealThreshold).toBeGreaterThan(COMBAT.rageThreshold);
+  });
   it('deux procs du même côté s’additionnent sur leur facteur', () => {
     const two = combatPowerRaw({ ...h, procs: new Set(['charge', 'cadence']) });
     const w = PROC_POWER.charge!.weight + PROC_POWER.cadence!.weight;
@@ -205,8 +218,9 @@ describe('procs légendaires (Phase 3)', () => {
     expect(opening).toHaveLength(3 * COMBAT.initiativeTurns);
     expect(opening.map((e) => e.type)).not.toContain('dodge');
     expect(avec.find((e) => e.round === rounds[COMBAT.initiativeTurns])!.type).toBe('dodge');
-    // Mesuré (2026-09-22) : sur UN seul tour, −3 à +4 % contre un boss — rien. Trois tours : +5 à +10 %.
-    expect(COMBAT.initiativeTurns).toBeGreaterThanOrEqual(3);
+    // Mesuré : sur UN seul tour il ne valait rien contre un boss (−3 à +4 %). Il lui en faut
+    // donc PLUSIEURS — deux depuis le rééquilibrage des procs, où il vaut 9,1 %.
+    expect(COMBAT.initiativeTurns).toBeGreaterThanOrEqual(2);
     expect(playerLog([], dodgy, { strikes: 3 })[0]!.type).toBe('dodge'); // sans le proc
   });
 
@@ -230,7 +244,11 @@ describe('procs légendaires (Phase 3)', () => {
       1,
     );
     expect(avec[0]!.damage).toBeGreaterThan(sans[0]!.damage);
-    expect(avec[COMBAT.predatorTurns]!.damage).toBe(sans[COMBAT.predatorTurns]!.damage);
+    // ⚠️ APRÈS ses tours, le coup n'est PLUS multiplié — vérifié par le RAPPORT, pas par une
+    // égalité stricte : le proc rend les coups inesquivables, donc il ne tire pas d'esquive et
+    // les deux combats divergent sur le flux aléatoire. L'égalité ne tenait que par chance.
+    const apres = avec[COMBAT.predatorTurns]!.damage / sans[COMBAT.predatorTurns]!.damage;
+    expect(apres).toBeLessThan(COMBAT.predatorMult * 0.9);
   });
 
   it('Vampirisme : le soin des critiques a sa propre réserve par tour', () => {
@@ -712,14 +730,18 @@ describe('procs de SET (v0.701) — chacun doit CHANGER le combat', () => {
     expect(first([])).toBe('crit');
   });
 
-  it('Pas de côté : la 1re attaque ennemie est esquivée d’office, la 2e non', () => {
+  it('Pas de côté : ses premières attaques sont esquivées d’office, la suivante non', () => {
     const m = mon({ initiative: 99 });
     const log = simulateCombat(pl(['sidestep']), m, { seed: 5, goldOnWin: 0 }).log.filter(
       (e) => e.who === 'monster',
     );
-    expect(log[0]!.type).toBe('dodge');
-    expect(log[0]!.skills).toContain('sidestep');
-    expect(log[1]!.type).toBe('hit');
+    for (let i = 0; i < COMBAT.sidestepHits; i++) {
+      expect(log[i]!.type, `attaque ${i + 1}`).toBe('dodge');
+      expect(log[i]!.skills).toContain('sidestep');
+    }
+    expect(log[COMBAT.sidestepHits]!.type).toBe('hit');
+    // Mesuré : à UNE seule attaque il valait 5,0 %, sous la bande des autres procs.
+    expect(COMBAT.sidestepHits).toBeGreaterThanOrEqual(2);
   });
 
   it('Pas de danse : chaque esquive déclenche une riposte, sans stat de riposte', () => {

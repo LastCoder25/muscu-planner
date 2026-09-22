@@ -112,11 +112,11 @@ const GEAR_BUDGET_BY_RANK: [number, number, number, number, number, number, numb
   // (rien), donjon 49 ×1,001 (rien), boss 55 ×1,061, boss 70 ×1,099, donjon 79 ×1,064,
   // boss 85 ×1,086. Sous le niveau 50, rien ne bouge — les effets légendaires n'arrivent
   // qu'au rang Légendaire. Le segment 91-100 n'est pas mesuré : il prend la moyenne (×1,08).
-  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.75],
-  [61, 70, 3.58, 3.74, 2.72, 3.1, 2.09],
-  [71, 80, 4.76, 4.85, 3.14, 3.77, 2.05],
-  [81, 90, 5.62, 5.62, 3.95, 4.15, 2.2],
-  [91, 100, 5.65, 6.19, 4.15, 4.2, 2.05],
+  [51, 60, 2.74, 2.8, 2.2, 2.46, 1.8],
+  [61, 70, 3.58, 3.74, 2.72, 3.1, 1.99],
+  [71, 80, 4.76, 4.85, 3.14, 3.77, 1.98],
+  [81, 90, 5.62, 5.62, 3.95, 4.15, 1.98],
+  [91, 100, 5.65, 6.19, 4.15, 4.2, 1.95],
 ];
 export function gearBudget(level: number): { off: number; pv: number } {
   const L = Math.min(100, Math.max(1, level));

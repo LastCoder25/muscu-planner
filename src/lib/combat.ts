@@ -371,29 +371,30 @@ export const COMBAT = {
   // 30/60/90). Avant : de −1 % (Initiative) à +35 % (Soif). Les procs « premiers coups » comptent
   // désormais des TOURS : un héros frappe ~17 fois par tour au niveau 60, un compte de coups ne
   // durait qu'un instant.
-  initiativeMult: 2, // Initiative : les coups des premiers tours ×2, inesquivables…
+  initiativeMult: 1.8, // Initiative : les coups des premiers tours ×2, inesquivables…
   // …sur 3 tours (2026-09-22, mesuré) : sur un seul tour elle valait −3 à +4 % contre un boss,
   // un combat de boss durant bien plus longtemps. Désormais +5 à +10 %.
-  initiativeTurns: 3,
+  initiativeTurns: 2,
   // Œil : +40 % (2026-09-22) — à +30 % il valait +4 à +7 %, désormais +5 à +8 %.
-  predatorTurns: 6, // Œil du prédateur : les coups des 6 premiers tours sont inesquivables…
+  predatorTurns: 4, // Œil du prédateur : les coups des 6 premiers tours sont inesquivables…
   // …⚠️ et frappent plus fort (refonte équipement, étape 7) : rendre inesquivable ne valait
   // presque rien (~1 % mesuré), les boss et les monstres esquivant peu.
   predatorMult: 1.4,
-  aegisBlock: 0.75, // Égide : la 1re attaque ennemie qui touche est BLOQUÉE d'office (−75 %, comme un blocage)
+  aegisBlock: 0.95,
+  sidestepHits: 2, // Pas de côté : les 2 premières attaques ennemies sont esquivées // Égide : la 1re attaque ennemie qui touche est BLOQUÉE d'office (−75 %, comme un blocage)
   retortHits: 3, // Rétorsion : les 3 premiers coups ennemis reçus…
-  retortMaxPvPct: 0.07, // …retirent chacun 7 % des PV max de l'ennemi
+  retortMaxPvPct: 0.045, // …retirent chacun 7 % des PV max de l'ennemi
   phoenixBlock: 0.5, // Phénix : le coup qui t'aurait tué perd la moitié de ses dégâts
-  vampiricHealPct: 0.5, // Vampirisme : soin = 50 % des dégâts d'un crit…
+  vampiricHealPct: 0.85, // Vampirisme : soin = 50 % des dégâts d'un crit…
   // …⚠️ HORS du plafond de soin du tour (refonte équipement, étape 7), dans une réserve à part
   // de N % des PV max par tour : dans le plafond, il ne valait RIEN (0 % mesuré) sur un build
   // qui l'atteint déjà par son vol de vie — c'est-à-dire tout build équipé passé le niveau 30.
-  vampiricCapPct: 0.02,
-  executeKillThreshold: 0.15, // Bourreau : exécute un ennemi sous 15 % PV
+  vampiricCapPct: 0.035,
+  executeKillThreshold: 0.25, // Bourreau : exécute un ennemi sous 15 % PV
   secondWindThreshold: 0.3, // Second souffle : déclenche sous 30 % PV
   secondWindHealPct: 0.25, // Second souffle : soigne 25 % des PV max
   // Procs de SET (v0.701) — même famille : non-scalants, et AUCUN ne consomme de rng.
-  chargeTurns: 4, // Charge : les coups des 4 premiers tours…
+  chargeTurns: 2, // Charge : les coups des 4 premiers tours…
   chargeMult: 2, // …infligent le double
   cadenceFrom: 3, // Cadence : à partir du 3ᵉ tour du héros… (par tour, comme l'élan)
   cadenceMult: 1.18, // …+18 % de dégâts
@@ -403,24 +404,25 @@ export const COMBAT = {
   thirstHealCapMult: 1.4,
   // ── Refonte équipement (étape 5) : 19 effets, chacun sur les stats de SON emplacement ──
   livingArmorThreshold: 0.3, // Cuirasse vivante : sous 30 % PV, une fois…
-  livingArmorPct: 0.2, // …une barrière de 20 % des PV max
+  livingArmorPct: 0.32, // …une barrière de 20 % des PV max
   scarringMult: 2, // Cicatrisation : régénération entre deux combats doublée…
   // …⚠️ et une part des PV max rendue à CHAQUE tour du héros (étape 7), hors plafond du vol de
   // vie : entre deux combats seulement, elle ne valait rien contre un boss (0 % mesuré).
-  scarringTurnHeal: 0.02,
+  scarringTurnHeal: 0.035,
   // Riposte affûtée : ses ripostes, déjà des critiques, frappent aussi plus fort (étape 7) —
   // seulement critiques, elles n'apportaient presque rien à un joueur déjà près du plafond.
-  whettedMult: 3,
+  whettedMult: 1.8,
   // Sang-froid : les critiques ennemis n'en sont plus — dès 101 %, donc TOUJOURS (étape 7 :
   // sous un seuil de PV il ne valait que 0,5 à 3 %, les ennemis critiquant peu).
   sangFroidThreshold: 1.01,
-  vigilanceCrits: 3, // Vigilance : les 3 premiers critiques reçus sont annulés
-  // Sceau de rage : ta rage reste active quels que soient tes PV (dès 101 %). À 50 % il ne
-  // valait que ~1 %, même avec 30 % de rage (étape 7).
-  rageSealThreshold: 1.01,
+  vigilanceCrits: 4, // Vigilance : les 3 premiers critiques reçus sont annulés
+  // Sceau de rage : ta rage s'active bien plus tôt (au lieu de 30 % des PV).
+  // ⚠️ Il valait 101 % — donc rage PERMANENTE : mesuré 19 % dans sa voie, le double de la
+  // bande. À 50 % il ne valait que ~1 % (étape 7) : le bon réglage est entre les deux.
+  rageSealThreshold: 0.75,
   hunterThreshold: 0.75, // Chasseur : critique certain sur un ennemi sous 75 % PV
   enduranceThreshold: 0.5, // Endurance : active sous 50 % PV
-  enduranceReduction: 0.2, // Endurance : −20 % de dégâts subis en plus
+  enduranceReduction: 0.3, // Endurance : −20 % de dégâts subis en plus
   quarryThreshold: 0.3, // Curée : déclenche quand l'ennemi passe sous 30 % PV
   quarryHealPct: 0.22, // Curée : soigne 22 % des PV max du joueur (1× par combat)
   // SIGNATURES DE SET (v0.835) — le 4-pièces d'un set porté dans SA voie. Même famille que
@@ -840,7 +842,7 @@ export function simulateCombat(
   // de procs différents feraient diverger un combat seedé — et tous les rejeux animés avec.
   let livingArmorReady = has('living_armor'); // Cuirasse vivante : une barrière, une fois
   let vigilanceLeft = has('vigilance') ? COMBAT.vigilanceCrits : 0; // critiques reçus annulés
-  let sidestepReady = has('sidestep'); // Pas de côté : la 1re attaque est esquivée
+  let sidestepLeft = has('sidestep') ? COMBAT.sidestepHits : 0; // Pas de côté : attaques esquivées
   let quarryReady = has('quarry'); // Curée : soigne une fois, quand l'ennemi passe sous 30 %
   let pHits = 0; // coups PORTÉS par le joueur (Botte secrète)
   let retortLeft = has('retort') ? COMBAT.retortHits : 0;
@@ -1294,9 +1296,9 @@ export function simulateCombat(
         // qu'une fois sur dix combats (mesuré).
         questDone ||= questTick('annuler');
         // Pas de côté : la 1re attaque est esquivée d'office (sans tirage).
-        const stepped = sidestepReady;
+        const stepped = sidestepLeft > 0;
         if (stepped || rng() < def.dodge) {
-          sidestepReady = false;
+          if (stepped) sidestepLeft--;
           push({
             round,
             who: turn,

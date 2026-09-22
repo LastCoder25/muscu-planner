@@ -297,8 +297,12 @@ describe('⚠️ L’EMPREINTE ARMÉE — celle qui couvre VRAIMENT le marquage'
       // du joueur changent, la suite qui/quoi est IDENTIQUE ; le combat, plus long, voit la rage
       // mordre (d'où « rage » ci-dessus). Étape 7 bis : Charge ×2 sur 4 tours — encore seuls les
       // dégâts du joueur changent ; l'adversaire passe à 7 000 PV pour garder la rage en jeu.
-    ).toBe('ph224,pc556,mh61,ph301,ph303,mh243,pd0,pc676,mc442,ph391,ph363,mh250');
-    expect(r.rounds).toBe(15);
-    expect(r.log).toHaveLength(23);
+      // ⚠️ Rééquilibrage des procs (2026-09-22) : Égide passe de −75 % à −95 % (le coup encaissé
+      // tombe de 61 à 12) et Charge de 4 tours à 2 (le joueur tape moins fort au début, d'où un
+      // combat plus long). ENCORE UNE FOIS, la suite qui/quoi est IDENTIQUE — ph,pc,mh,ph,ph,mh,
+      // pd,pc,mc,ph,ph,mh — seuls les DÉGÂTS changent : aucun tirage de plus.
+    ).toBe('ph224,pc556,mh12,ph298,ph300,mh243,pd0,pc332,mc442,ph189,ph174,mh250');
+    expect(r.rounds).toBe(21);
+    expect(r.log).toHaveLength(31);
   });
 });
