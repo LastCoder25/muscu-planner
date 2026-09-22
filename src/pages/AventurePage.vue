@@ -764,11 +764,12 @@
                       >
                       <span class="lvl-badge">Nv {{ f.level }}</span>
                       <span v-if="f.effect2" class="fam-sig-badge" title="Effet signature">✦</span>
-                      <!-- UN seul dressage (v0.805) : il monte en donjon, en convoi et en
-                         défense, et vaut la même chose au héros et à un aventurier. -->
+                      <!-- Dressage : le familier ÉQUIPÉ gagne de l'XP en combat (donjon, boss,
+                         Labyrinthe, arène, portail) ; les champions ne portent plus de familier
+                         depuis la v0.996, donc plus de convoi ni de défense. -->
                       <span
                         class="fam-train"
-                        title="Dressage — gagné en donjon, en convoi et en défense"
+                        title="Dressage — gagné par le familier équipé en donjon, contre les boss et au Labyrinthe"
                         >🎓 {{ famLevel(famXp(f)) }}</span
                       >
                     </div>
