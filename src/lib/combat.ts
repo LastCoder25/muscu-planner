@@ -41,6 +41,75 @@ export type RelicPowerId =
   | 'second_souffle';
 /** La relique portée, telle que le combat la lit : son pouvoir et sa FORCE (rang × jet ×
  *  niveau d'objet, cf. `relicForce`). `fast` : Légendaire+, la jauge se remplit plus vite. */
+/** 🏆 POUVOIR D'UN TROPHÉE (sets spécialisés, spec § 5) : il n'a AUCUNE stat — une QUÊTE qui
+ *  suit le geste d'une voie, et un effet quand elle s'accomplit. Une famille par pouvoir, pour
+ *  qu'aucun ne ressemble à un autre. */
+export type TrophyPowerId =
+  | 'dechainer'
+  | 'achever'
+  | 'annuler'
+  | 'retourner'
+  | 'etaler'
+  | 'desarmer'
+  | 'renvoyer'
+  | 'accelerer';
+
+/** La quête d'un trophée porté : son pouvoir, sa longueur (rang et étoiles la raccourcissent)
+ *  et si la VOIE PORTÉE correspond — auquel cas chaque geste compte double. */
+export interface TrophyQuest {
+  id: TrophyPowerId;
+  len: number;
+  fast?: boolean;
+}
+
+/** 🏆 Réglages des pouvoirs de trophée. ⚠️ Aucun ne consomme de `rng` : sans trophée, un
+ *  combat seedé reste identique au bit près (test d'empreinte). */
+export const TROPHY = {
+  /** « Étaler » : le coup encaissé est réparti sur ce nombre de tours ennemis. */
+  spreadTurns: 3,
+  /** « Achever » et « Déchaîner » sur un héros qui ne porte NI exécution NI rage : le trophée
+   *  vaut quand même quelque chose (sinon un Berserker sans rage n'aurait aucun pouvoir). */
+  executeMult: 0.6,
+  rageMult: 0.6,
+  /** Longueur de quête de RÉFÉRENCE dans la puissance affichée (la plus longue) : un trophée
+   *  dont la quête est deux fois plus courte se déclenche deux fois plus souvent. */
+  questRef: 6,
+  /** ⚠️ COÛT DE CHAQUE POUVOIR, en longueur de quête — MESURÉ en vrai combat (boss + donjon,
+   *  niveaux 30/60/90). Annuler un tour ennemi vaut bien plus que frapper une fois plus fort :
+   *  au même rythme, « annuler » valait +37 % de combat quand « achever » en valait +0,2. Le
+   *  coût rétablit l'équilibre — chaque pouvoir vaut ~+3 à +5 %, la bande « modeste ». */
+  cost: {
+    dechainer: 0.83,
+    achever: 0.83,
+    annuler: 4.62,
+    retourner: 2.31,
+    etaler: 0.83,
+    desarmer: 1.64,
+    renvoyer: 0.9,
+    accelerer: 1.83,
+  } as Record<TrophyPowerId, number>,
+  /** Ce que la VOIE PORTÉE ajoute à la fréquence (chaque geste compte double, mais toute la
+   *  quête ne se remplit pas que de gestes : mesuré, ×1,6 et non ×2). */
+  fastMult: 1.6,
+} as const;
+
+/** Poids de chaque pouvoir de trophée dans la puissance affichée, × sa fréquence.
+ *  ⚠️ MESURÉS EN VRAI COMBAT (boss de palier + donjon le plus profond, niveaux 30/60/90,
+ *  joueur de référence avec son set) : chaque pouvoir vaut +3,5 à +5,4 % une fois son COÛT
+ *  de quête calibré, et ces poids alignent la puissance affichée dessus. Sans eux, annuler et
+ *  accélérer étaient sous-estimés d'un facteur 4 à 5 — et c'est la puissance qui choisit
+ *  l'équipement. */
+const TROPHY_POWER_W: Record<TrophyPowerId, { side: 'off' | 'surv'; weight: number }> = {
+  dechainer: { side: 'off', weight: 0.06 },
+  achever: { side: 'off', weight: 0.073 },
+  annuler: { side: 'surv', weight: 0.24 },
+  retourner: { side: 'surv', weight: 0.18 },
+  etaler: { side: 'surv', weight: 0.062 },
+  desarmer: { side: 'surv', weight: 0.111 },
+  renvoyer: { side: 'surv', weight: 0.073 },
+  accelerer: { side: 'off', weight: 0.21 },
+};
+
 export interface RelicCharge {
   id: RelicPowerId;
   force: number;
@@ -93,6 +162,8 @@ export interface Combatant {
   procs?: ReadonlySet<string>;
   /** 🔮 Le pouvoir de la relique portée (joueur uniquement). */
   relic?: RelicCharge;
+  /** 🏆 La quête du trophée porté (joueur uniquement). */
+  trophy?: TrophyQuest;
 }
 
 /** 🔮 RÉGLAGES DES POUVOIRS DE RELIQUE. La jauge va de 0 à `full` ; chaque action qui la
@@ -557,6 +628,15 @@ export function combatPowerRaw(c: Combatant): number {
     if (w.side === 'off') procOff += w.weight * c.relic.force;
     else procSurv += w.weight * c.relic.force;
   }
+  // 🏆 Trophée : son pouvoir vaut d'autant plus que sa QUÊTE est courte — c'est la seule
+  // chose que le rang et les étoiles changent (la magnitude, elle, est fixe). Rapporté à la
+  // quête la plus longue, pour qu'un trophée de bronze compte pour ~1 et le sommet ~2,5.
+  if (c.trophy) {
+    const w = TROPHY_POWER_W[c.trophy.id];
+    const freq = (TROPHY.questRef / c.trophy.len) * (c.trophy.fast ? TROPHY.fastMult : 1);
+    if (w.side === 'off') procOff += w.weight * freq;
+    else procSurv += w.weight * freq;
+  }
   // Le vol de vie : l'estimateur (`offenseOf`) est remplacé par sa valeur MESURÉE (soin par
   // tour, en survie) — cf. `powerSustainW`.
   procSurv *= (1 + COMBAT.powerSustainW * lifestealHealShare(c)) ** 2 / lifestealSizingFactor(c);
@@ -627,6 +707,15 @@ export type CombatSkill =
   | 'executioner'
   | 'vampiric'
   | 'rp_brasier'
+  | 'tr_quest'
+  | 'tr_dechainer'
+  | 'tr_achever'
+  | 'tr_annuler'
+  | 'tr_retourner'
+  | 'tr_etaler'
+  | 'tr_desarmer'
+  | 'tr_renvoyer'
+  | 'tr_accelerer'
   | 'rp_rempart'
   | 'rp_coup_fatal'
   | 'rp_festin'
@@ -674,6 +763,10 @@ export interface CombatEvent {
   skills?: CombatSkill[];
   /** 🔮 Jauge de la relique APRÈS cet événement (0..100) — seulement si le héros en porte une. */
   gauge?: number;
+  /** 🏆 Gestes accomplis de la quête du trophée APRÈS cet événement — seulement s'il en porte
+   *  un. Le rejeu en fait une petite barre : sans elle, on ne comprend pas pourquoi l'ennemi
+   *  vient de perdre son tour (spec § 5.1). */
+  quest?: number;
 }
 export interface CombatResult {
   win: boolean;
@@ -746,6 +839,38 @@ export function simulateCombat(
   // paliers du Labyrinthe pour eux, 0 à 20 % pour les autres voies. Ce qu'il en reste passe au
   // combat suivant (`opts.shield`), comme la jauge de relique.
   let shieldLeft = opts.shield ?? Math.round(maxPPv * (player.startShield ?? 0));
+  // 🏆 TROPHÉE À QUÊTE : on compte des GESTES, jamais les coups PORTÉS — le héros frappe
+  // jusqu'à 37 fois par tour, un compteur dessus ne vaudrait rien (spec § 5.3). La voie portée
+  // fait compter chaque geste DOUBLE.
+  // ⚠️ CHAQUE GESTE EST UNIVERSEL : mesuré, un geste qui dépend d'une STAT (parade, riposte,
+  // épines) ne se produit JAMAIS hors de sa voie — six trophées sur huit valaient 0 % en
+  // combat. La stat de la voie le rend seulement plus FRÉQUENT (parer compte comme éviter,
+  // riposter comme contrer, les épines comme encaisser).
+  const quest = player.trophy;
+  const questStep = quest?.fast ? 2 : 1;
+  let questAt = 0; // gestes accomplis depuis la dernière fois
+  let armed: TrophyPowerId | null = null; // pouvoir prêt à se déclencher
+  let spread = 0; // « étaler » : dégâts en attente, versés au fil des tours ennemis
+  let spreadLeft = 0;
+  let extraTurn = false; // « accélérer » : le héros rejoue
+  let questDone = false; // une quête vient de s'accomplir → à marquer sur le prochain coup
+  let justHit = false; // le héros vient d'encaisser : son prochain tour est une contre-attaque
+  /** Un GESTE de la quête. Rend `true` si elle vient de s'accomplir. */
+  const questTick = (id: TrophyPowerId, n = 1): boolean => {
+    if (!quest || quest.id !== id || armed) return false;
+    questAt += n * questStep;
+    if (questAt < quest.len) return false;
+    questAt = 0;
+    armed = quest.id;
+    // ⚠️ Pouvoir INSTANTANÉ : il ne s'arme pas, il se déclenche. Sans ça, « désarmer » restait
+    // armé pour toujours (rien ne le consommait) et la quête ne repartait jamais (mesuré : 0 %
+    // de gain en combat).
+    if (quest.id === 'desarmer') {
+      stunNext = true;
+      armed = null;
+    }
+    return true;
+  };
   // Parade : l'ennemi sautera son prochain tour. ⚠️ Jamais deux de suite, et SANS garde :
   // un tour sauté ne contient aucune attaque, donc aucune parade possible (mesuré par
   // mutation, un garde « pas deux de suite » ne pouvait jamais mordre).
@@ -769,6 +894,7 @@ export function simulateCombat(
   }
   const push = (e: CombatEvent): void => {
     if (relic) e.gauge = Math.round(gauge);
+    if (quest) e.quest = questAt;
     log.push(e);
   };
   /** Remplit la jauge ; `true` si elle est pleine. */
@@ -812,6 +938,8 @@ export function simulateCombat(
     );
     mPv = Math.max(0, mPv - r);
     const skills: CombatSkill[] = ['riposte', ...extra];
+    // 🏆 « Désarmer » : chaque riposte avance la quête ; accomplie, l'ennemi perd son tour.
+    if (questTick('desarmer')) skills.push('tr_quest', 'tr_desarmer');
     if (sharp) skills.push('whetted');
     push({
       round,
@@ -839,6 +967,22 @@ export function simulateCombat(
     const atk = turn === 'player' ? player : monster;
     const def = turn === 'player' ? monster : player;
     if (turn === 'monster') {
+      // 🏆 « Étaler » : le coup encaissé se paie en trois fois, un tiers par tour ennemi.
+      if (spreadLeft > 0) {
+        const part = Math.max(1, Math.round(spread / TROPHY.spreadTurns));
+        spreadLeft--;
+        pPv = Math.max(0, pPv - part);
+        push({
+          round,
+          who: 'monster',
+          type: 'hit',
+          damage: part,
+          playerPv: pPv,
+          monsterPv: mPv,
+          skills: ['tr_etaler'],
+        });
+        if (pPv <= 0) break;
+      }
       // Saignement : une part de la réserve tombe au début de chaque tour ennemi.
       if (bleedPool > 0) {
         const tick = Math.max(1, Math.round(bleedPool / COMBAT.bleedTicks));
@@ -863,8 +1007,21 @@ export function simulateCombat(
       }
     }
     const hits = Math.max(1, strikeCount(atk));
+    let critThisTurn = false;
+    let woundedHitThisTurn = false;
     if (turn === 'player') {
       pTurn++;
+      // 🏆 « Accélérer » : l'élan, c'est la DURÉE — un tour du héros est le geste.
+      if (questTick('accelerer')) {
+        extraTurn = true;
+        armed = null;
+        questDone = true;
+      }
+      // 🏆 « Désarmer » : contrer, c'est frapper juste après avoir encaissé.
+      if (justHit) {
+        justHit = false;
+        questDone ||= questTick('desarmer');
+      }
       if (has('scarring'))
         pPv = Math.min(maxPPv, pPv + Math.round(maxPPv * COMBAT.scarringTurnHeal));
       if (!perHit) pStacks = pTurn - 1 - momentumOffset; // l'élan monte à chaque tour du héros
@@ -922,6 +1079,13 @@ export function simulateCombat(
       // ⚠️ `undefined` tant que rien n'a mordu — cf. `CombatEvent.skills`.
       let skills: CombatSkill[] | undefined;
       const mark = (s: CombatSkill) => (skills ??= []).push(s);
+      // 🏆 La quête accomplie se voit sur le coup qui l'a accomplie (le rejeu en fait une barre).
+      const markQuest = () => {
+        if (questDone) {
+          questDone = false;
+          mark('tr_quest');
+        }
+      };
       if (turn === 'player') {
         // ── Attaque du JOUEUR ──
         const fatal = fatalNext;
@@ -983,15 +1147,29 @@ export function simulateCombat(
         }
         // Effets signature (conditionnels), avant réduction.
         let mult = 1;
-        if (atk.execute && mPv / monsterMaxPv < executeThresholdOf(atk)) {
+        // 🏆 « Achever » : le prochain coup exécute, comme si l'ennemi était déjà à terre.
+        const acheve = armed === 'achever' && turn === 'player';
+        if (atk.execute && (acheve || mPv / monsterMaxPv < executeThresholdOf(atk))) {
           mult += atk.execute;
           mark('execute');
         }
+        if (acheve) {
+          // Sans exécution portée, le coup achève quand même.
+          if (!atk.execute) mult += TROPHY.executeMult;
+          mark('tr_achever');
+        }
         if (atk.accuracy && mPv / monsterMaxPv > COMBAT.accuracyOpenAbove) mult += atk.accuracy;
         const rageAt = has('rage_seal') ? COMBAT.rageSealThreshold : COMBAT.rageThreshold;
-        if (atk.rage && pPv / maxPPv < rageAt) {
+        // 🏆 « Déchaîner » : ta rage joue à plein pendant ce tour, quels que soient tes PV.
+        const dechaine = armed === 'dechainer' && turn === 'player';
+        if (atk.rage && (dechaine || pPv / maxPPv < rageAt)) {
           mult += atk.rage;
           mark(pPv / maxPPv < COMBAT.rageThreshold ? 'rage' : 'rage_seal');
+        }
+        if (dechaine) {
+          // Un seul tour de rage ne pesait rien (mesuré +0,6 % de combat) : elle joue DOUBLE.
+          mult += atk.rage ? atk.rage : TROPHY.rageMult;
+          mark('tr_dechainer');
         }
         if (atk.momentum && pStacks > 0) {
           mult += Math.min(momentumCap, pStacks) * atk.momentum;
@@ -1023,13 +1201,21 @@ export function simulateCombat(
           mark('bleed');
         }
         if (perHit) pStacks++; // aventuriers : élan par coup (règle d'avant)
+        // 🏆 « Retourner » : sans aucun soin, reprendre l'avantage en frappant blessé compte.
+        if (turn === 'player' && !atk.lifesteal && pPv < maxPPv && !woundedHitThisTurn) {
+          woundedHitThisTurn = true;
+          questDone ||= questTick('retourner');
+        }
         if (atk.lifesteal) {
           const before = pPv;
           const cap0 = roundHeal;
           pPv = Math.min(maxPPv, pPv + gainHeal(Math.round(dmg * atk.lifesteal)));
           const overCap =
             thirsty && roundHeal > maxPPv * COMBAT.lifestealRoundCap && roundHeal > cap0;
-          if (pPv > before) mark(overCap ? 'thirst' : 'lifesteal');
+          if (pPv > before) {
+            mark(overCap ? 'thirst' : 'lifesteal');
+            questDone ||= questTick('retourner');
+          }
         }
         // Vampirisme : les crits soignent (compte dans le plafond de soin du tour).
         if (crit && has('vampiric')) {
@@ -1037,7 +1223,10 @@ export function simulateCombat(
           const h = Math.min(vampiricLeft, Math.round(dmg * COMBAT.vampiricHealPct));
           vampiricLeft -= h;
           pPv = Math.min(maxPPv, pPv + h);
-          if (pPv > before) mark('vampiric');
+          if (pPv > before) {
+            mark('vampiric');
+            questDone ||= questTick('retourner');
+          }
         }
         // Bourreau : exécute un ennemi tombé très bas.
         if (mPv > 0 && has('executioner') && mPv / monsterMaxPv < COMBAT.executeKillThreshold) {
@@ -1052,6 +1241,13 @@ export function simulateCombat(
           mark('quarry');
         }
         pHits++;
+        // ⚠️ UN TOUR, pas un coup : à 37 frappes par tour, compter les coups faisait tomber
+        // la quête 18 fois par combat (mesuré).
+        if (turn === 'player' && crit && !critThisTurn) {
+          critThisTurn = true;
+          questDone ||= questTick('achever');
+        }
+        markQuest();
         push({
           round,
           who: turn,
@@ -1063,6 +1259,10 @@ export function simulateCombat(
         });
       } else {
         // ── Attaque du MONSTRE ──
+        // 🏆 « Annuler » : tenir tête, c'est encaisser l'attaque — qu'elle passe ou non. Compté
+        // sur l'ATTAQUE et non sur la parade : sans la parade du Gardien, la quête ne tombait
+        // qu'une fois sur dix combats (mesuré).
+        questDone ||= questTick('annuler');
         // Pas de côté : la 1re attaque est esquivée d'office (sans tirage).
         const stepped = sidestepReady;
         if (stepped || rng() < def.dodge) {
@@ -1083,6 +1283,7 @@ export function simulateCombat(
         // Parade : le coup est évité et l'ennemi saute son prochain tour.
         if (def.parry && rng() < def.parry) {
           stunNext = true;
+          questDone ||= questTick('annuler');
           if (rid === 'riposte_parfaite' && charge(RELIC.riposteCharge))
             relicHit(volley(true) * rf, 'rp_riposte_parfaite');
           // 🔮 Rempart vengeur : il se charge sur la PARADE (sets spécialisés, décidé) — la
@@ -1157,6 +1358,30 @@ export function simulateCombat(
         }
         mFirstLanded = false;
         const pBefore = pPv;
+        // 🏆 TROPHÉE — ce qui arrive AU COUP REÇU. Un seul pouvoir peut être armé à la fois.
+        if (armed && dmg > 0) {
+          if (armed === 'annuler') {
+            dmg = 0;
+            armed = null;
+            mark('tr_annuler');
+          } else if (armed === 'retourner') {
+            pPv = Math.min(maxPPv, pPv + dmg);
+            dmg = 0;
+            armed = null;
+            mark('tr_retourner');
+          } else if (armed === 'renvoyer') {
+            mPv = Math.max(0, mPv - dmg);
+            dmg = 0;
+            armed = null;
+            mark('tr_renvoyer');
+          } else if (armed === 'etaler') {
+            spread = dmg;
+            spreadLeft = TROPHY.spreadTurns - 1;
+            dmg = Math.max(1, Math.round(dmg / TROPHY.spreadTurns));
+            armed = null;
+            mark('tr_etaler');
+          }
+        }
         // Barrière de départ : elle encaisse avant les PV.
         if (shieldLeft > 0 && dmg > 0) {
           const soaked = Math.min(shieldLeft, dmg);
@@ -1165,6 +1390,13 @@ export function simulateCombat(
           mark('start_shield');
         }
         pPv = Math.max(0, pPv - dmg);
+        if (dmg > 0) {
+          questDone ||= questTick('etaler');
+          questDone ||= questTick('desarmer');
+          if (!def.thorns) questDone ||= questTick('renvoyer'); // sans épines : encaisser suffit
+          justHit = true; // le prochain tour du héros sera une contre-attaque
+        }
+        if (pPv < pBefore) questDone ||= questTick('dechainer');
         // Carapace : ce qu'on encaisse se transforme en barrière.
         if (
           rid === 'carapace' &&
@@ -1217,6 +1449,7 @@ export function simulateCombat(
           );
           mPv = Math.max(0, mPv - t);
           mark('thorns');
+          questDone ||= questTick('renvoyer');
         }
         // Ronces : chaque coup reçu blesse l'ennemi d'une part de SES PV max — les épines
         // ordinaires suivent les dégâts reçus, donc restent muettes face à un colosse.
@@ -1224,6 +1457,7 @@ export function simulateCombat(
           mPv = Math.max(0, mPv - Math.max(1, Math.round(monsterMaxPv * COMBAT.bramblesMaxPvPct)));
           mark('sig_epineux');
         }
+        markQuest();
         push({
           round,
           who: turn,
@@ -1242,6 +1476,12 @@ export function simulateCombat(
         // frappe jusqu'à 37 fois par tour (mesuré : +0 à +6 % de puissance).
         if (def.riposte && pPv > 0 && mPv > 0 && rng() < def.riposte) riposteVolley([]);
       }
+    }
+    // 🏆 « Déchaîner » et « Achever » valent pour CE tour ; « accélérer » fait rejouer.
+    if (turn === 'player' && (armed === 'dechainer' || armed === 'achever')) armed = null;
+    if (turn === 'player' && extraTurn) {
+      extraTurn = false;
+      continue; // le héros rejoue : on ne passe pas la main
     }
     turn = turn === 'player' ? 'monster' : 'player';
   }

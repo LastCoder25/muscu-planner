@@ -10,6 +10,9 @@ import {
   type Combatant,
   type RelicCharge,
   type RelicPowerId,
+  type TrophyPowerId,
+  type TrophyQuest,
+  TROPHY,
 } from './combat';
 import type { FamiliarSpecies } from '@/data/familiars';
 import { PROCEDURAL, refBalancedStat } from '@/lib/proceduralContent';
@@ -162,7 +165,7 @@ export interface Item {
   legendary?: string; // proc LÉGENDAIRE (id, cf. LEGENDARY_PROCS) — Légendaire+ uniquement, non-scalant
   /** 🔮 RELIQUE (étape 4) : le POUVOIR qu'elle porte (cf. RELIC_POWERS). Une relique à pouvoir
    *  ne donne AUCUNE stat : son `effect` n'est plus lu (`aggregateEffects` l'ignore). */
-  power?: RelicPowerId;
+  power?: RelicPowerId | TrophyPowerId;
 }
 
 // ── CE QU’UN FAMILIER VAUT ──
@@ -641,9 +644,12 @@ export function relicForce(it: { rarity: Rarity; roll?: number; level?: number }
 }
 /** Ce que le combat lit d'une relique portée (`undefined` sans pouvoir). */
 export function relicCharge(it: Item | undefined): RelicCharge | undefined {
-  if (!it?.power) return undefined;
+  // ⚠️ On passe par la TABLE : `power` porte aussi les pouvoirs de TROPHÉE depuis les sets
+  // spécialisés, et une relique ne doit jamais en charger un.
+  const p = relicPowerOf(it?.power);
+  if (!it || !p) return undefined;
   return {
-    id: it.power,
+    id: p.id,
     force: relicForce(it),
     ...(RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK ? { fast: true } : {}),
   };
@@ -655,6 +661,135 @@ export function relicPowerText(it: Omit<Item, 'id'>): string {
   const fast = RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK ? ' · jauge plus rapide' : '';
   return `${p.emoji} ${p.name} — ${p.effect(relicForce(it))} (${p.charge}${fast})`;
 }
+// ─── 🏆 POUVOIRS DE TROPHÉE (sets spécialisés, spec § 5) ─────────────────────
+// Le trophée ne donne AUCUNE stat : il porte un POUVOIR dont la QUÊTE suit le geste d'une
+// voie (parer, riposter, encaisser…). Accomplie, l'effet se déclenche et la quête recommence.
+// Rang et étoiles ne changent pas la magnitude — seulement la FRÉQUENCE (la longueur de la
+// quête) : un trophée n'est pas une pièce d'équipement de plus, c'est un rythme.
+export interface TrophyPowerDef {
+  id: TrophyPowerId;
+  name: string;
+  emoji: string;
+  /** La voie dont c'est le geste : portée, la quête avance DEUX FOIS plus vite. */
+  voie: string;
+  /** Le geste qui fait avancer la quête, en toutes lettres. */
+  quest: string;
+  /** Ce qui se passe quand elle s'accomplit. */
+  effect: string;
+}
+/** ⚠️ NOMS CHOISIS HORS de ceux déjà pris : signatures de set (Carnage, Bastion, Coup de
+ *  grâce, Soif éternelle, Inébranlable, Botte secrète, Ronces, Transe) et pouvoirs de relique
+ *  (Brasier, Rempart vengeur, Coup fatal, Festin, Tempête, Riposte parfaite, Éclat de ronces,
+ *  Carapace, Ouverture, Moisson, Phénix, Second souffle) — un test le vérifie. */
+export const TROPHY_POWERS: TrophyPowerDef[] = [
+  {
+    id: 'dechainer',
+    name: 'Sang qui bout',
+    emoji: '💢',
+    voie: 'berserker',
+    quest: 'perdre des PV',
+    effect: 'ta rage joue à plein pendant ton prochain tour, quels que soient tes PV',
+  },
+  {
+    id: 'achever',
+    name: 'Sentence',
+    emoji: '☠️',
+    voie: 'assassin',
+    quest: 'porter des critiques',
+    effect: 'ton prochain coup achève, comme si l’ennemi était déjà à terre',
+  },
+  {
+    id: 'annuler',
+    name: 'Mur de fer',
+    emoji: '🧱',
+    voie: 'gardien',
+    quest: 'éviter des coups (parade, esquive, blocage)',
+    effect: 'le prochain coup ennemi est annulé',
+  },
+  {
+    id: 'retourner',
+    name: 'Don du sang',
+    emoji: '🧛',
+    voie: 'vampire',
+    quest: 'te soigner, ou frapper blessé',
+    effect: 'le prochain coup ennemi te soigne au lieu de te blesser',
+  },
+  {
+    id: 'etaler',
+    name: 'Longue patience',
+    emoji: '⛰️',
+    voie: 'colosse',
+    quest: 'encaisser des coups',
+    effect: `le prochain coup ennemi est étalé sur ${TROPHY.spreadTurns} tours`,
+  },
+  {
+    id: 'desarmer',
+    name: 'Désarmement',
+    emoji: '🪶',
+    voie: 'duelliste',
+    quest: 'contrer juste après avoir encaissé',
+    effect: 'l’ennemi est désarmé : il perd son prochain tour',
+  },
+  {
+    id: 'renvoyer',
+    name: 'Retour à l’envoyeur',
+    emoji: '↩️',
+    voie: 'epineux',
+    quest: 'renvoyer des coups d’épines (ou les encaisser)',
+    effect: 'le prochain coup ennemi lui revient en entier, sans que tu le subisses',
+  },
+  {
+    id: 'accelerer',
+    name: 'Seconde main',
+    emoji: '⏩',
+    voie: 'frenetique',
+    quest: 'tenir la durée, tour après tour',
+    effect: 'tu joues un tour supplémentaire',
+  },
+];
+const TROPHY_BY_ID = new Map<string, TrophyPowerDef>(TROPHY_POWERS.map((p) => [p.id, p]));
+export function trophyPowerOf(id: string | undefined): TrophyPowerDef | undefined {
+  return id ? TROPHY_BY_ID.get(id) : undefined;
+}
+/** LONGUEUR de la quête : le rang et les étoiles la raccourcissent (spec § 5.1), jamais la
+ *  magnitude de l'effet. Du plus bas cran (Bronze ★1) au plus haut. */
+// ⚠️ MESURÉ, pas choisi (spec § 5.3) : un combat de boss dure 8 à 14 tours, soit 4 à 6
+// gestes encaissés ou portés. À 10 gestes, six trophées sur huit ne se déclenchaient JAMAIS.
+export const TROPHY_QUEST = { long: 6, court: 3 } as const;
+export function trophyQuestLen(it: { rarity: Rarity; roll?: number; power?: string }): number {
+  const crans = RANK_ORDER.length * STARS_PER_RANK - 1;
+  const cran = RARITY_RANK[normRank(it.rarity)] * STARS_PER_RANK + (jetStar(it.roll ?? 0) - 1);
+  const t = crans > 0 ? cran / crans : 0;
+  const base = Math.max(
+    TROPHY_QUEST.court,
+    Math.round(TROPHY_QUEST.long - (TROPHY_QUEST.long - TROPHY_QUEST.court) * t),
+  );
+  // ⚠️ × le COÛT du pouvoir : annuler un tour ennemi ne se paie pas comme frapper plus fort.
+  const p = trophyPowerOf(it.power);
+  return Math.max(1, Math.round(base * (p ? TROPHY.cost[p.id] : 1)));
+}
+/** Ce que le combat lit d'un trophée porté. `voie` = celle qu'on porte (déduite du set) :
+ *  si c'est celle du pouvoir, chaque geste compte double. */
+export function trophyQuest(it: Item | undefined, voie: string | null): TrophyQuest | undefined {
+  const p = trophyPowerOf(it?.power);
+  if (!it || !p) return undefined;
+  return { id: p.id, len: trophyQuestLen(it), ...(voie === p.voie ? { fast: true } : {}) };
+}
+/** Le pouvoir d'un trophée en toutes lettres (« 🧱 Mur de fer — parer 6 fois : … »). */
+export function trophyPowerText(it: Omit<Item, 'id'>): string {
+  const p = trophyPowerOf(it.power);
+  if (!p) return '';
+  return `${p.emoji} ${p.name} — ${p.quest} ${trophyQuestLen(it)} fois : ${p.effect}`;
+}
+
+/** Le POUVOIR d'un objet en toutes lettres — relique ou trophée. ⚠️ SOURCE UNIQUE des
+ *  écrans : `Item.power` porte les deux familles depuis les sets spécialisés, et les quatre
+ *  sites d'affichage appelaient `relicPowerText`, qui rend '' pour un trophée (donc une
+ *  carte vide). */
+export function itemPowerText(it: Omit<Item, 'id'>): string {
+  return it.slot === TROPHY_SLOT ? trophyPowerText(it) : relicPowerText(it);
+}
+
 /** Part des reliques trouvées qui portent le pouvoir de la relique ÉQUIPÉE : sans elle, sur
  *  12 pouvoirs, améliorer SA relique à pouvoir égal serait trop rare (spec § 7). */
 export const RELIC_AFFINITY = 1 / 3;
@@ -2098,6 +2233,17 @@ const LEGACY_PROC_POWER: Record<string, RelicPowerId> = {
 /** Convertit un objet au format de la refonte (spec § 9.2, 9.3, 9.3 bis). Familiers et
  *  trophées ressortent inchangés. Idempotent : un objet déjà converti ressort identique. */
 export function migrateGearItem(it: Item): Item {
+  // 🏆 TROPHÉE (sets spécialisés) : plus de stats, un POUVOIR — tiré sur l'id de l'objet,
+  // donc le même trophée reçoit toujours le même. Idempotent : celui qui en a un le garde.
+  if (it.slot === TROPHY_SLOT) {
+    const power = trophyPowerOf(it.power)?.id ?? pick(mulberry32(seedOf(it.id)), TROPHY_POWERS).id;
+    const out: Item = { ...it, effect: RELIC_NO_STAT, power };
+    delete out.effect2;
+    delete out.effect3;
+    return out;
+  }
+  // ⚠️ APRÈS le trophée : il n'est pas un emplacement d'équipement (`SLOT_AFFIXES`), donc
+  // cette garde le renverrait tel quel — avec ses stats d'avant.
   if (!(it.slot in SLOT_AFFIXES)) return it;
   const rng = mulberry32(seedOf(`gear:${it.id}`));
   // 🔮 RELIQUE : un pouvoir, aucune stat. Celle d'un set prend le pouvoir de sa voie.
@@ -2218,13 +2364,6 @@ export function makeGearPiece(
   };
 }
 
-/** Valeur des affixes d'un TROPHÉE, relative à un drop de même rareté et même jet.
- *  ⚠️ C'est un 6ᵉ emplacement QUI S'AJOUTE à un build complet : à la valeur pleine il
- *  vaudrait une pièce d'équipement entière, et toute la calibration du contenu
- *  (`gearExpect`, renforts procéduraux) suppose cinq emplacements. Mesuré (v0.864) — cf.
- *  `test/trophy.test.ts`. */
-export const TROPHY_K = 0.4;
-
 /**
  * Tire le TROPHÉE d'un boss entre amis. Son RANG est toujours celui du joueur (une
  * récompense de sport, pas de chasse) et ses ÉTOILES suivent la sienne (`starOdds`, v0.894) ;
@@ -2233,35 +2372,15 @@ export const TROPHY_K = 0.4;
  */
 export function rollTrophy(
   rng: () => number,
-  opts: {
-    mains: readonly EffectType[];
-    /** Stats de SOUTIEN de la famille : les affixes suivants sont tirés ici, jamais ailleurs. */
-    support: readonly EffectType[];
-    title: string;
-    level: number;
-    luck?: number;
-    /** Force de la famille (`TROPHY_FAMILY_K`), × `TROPHY_K`. 1 par défaut. */
-    scale?: number;
-  },
+  opts: { title: string; level: number; luck?: number },
 ): Omit<Item, 'id'> {
   const luck = opts.luck ?? 0;
-  const k = TROPHY_K * (opts.scale ?? 1);
   const rarity = RANK_ORDER[prestigeRankIndex(opts.level)]!;
   const roll = rollStarJet(rng, characterRank(opts.level), luck);
   const level = rollItemLevel(rng, opts.level, luck);
-  // Plancher à 0,1 et non à 1 : à TROPHY_K < 1, un plancher entier écraserait rareté et jet
-  // des petites stats (même leçon que l'équipement des aventuriers).
-  const value = (t: EffectType) =>
-    Math.max(0.1, round1(EFFECT_BASE[t] * rankRollMult(rarity, roll) * k));
-  const affixes: ItemEffect[] = opts.mains.map((t) => ({ type: t, value: value(t) }));
-  for (let a = affixes.length; a < affixCountForRarity(rarity); a++) {
-    const pool = opts.support
-      .filter((t) => (EFFECT_MIN_LEVEL[t] ?? 1) <= opts.level)
-      .filter((t) => !affixes.some((x) => x.type === t));
-    if (!pool.length) continue;
-    const t = pick(rng, pool);
-    affixes.push({ type: t, value: value(t) });
-  }
+  // ⚠️ AUCUN LIEN ENTRE L'EXO ET LE POUVOIR (décidé) : un boss de pompes peut donner le
+  // trophée du Gardien. C'est le rang et les étoiles qui disent la valeur, pas la famille.
+  const power = pick(rng, TROPHY_POWERS).id;
   return {
     slot: TROPHY_SLOT,
     name: `Trophée · ${opts.title}`,
@@ -2269,9 +2388,8 @@ export function rollTrophy(
     rarity,
     level,
     baseLevel: level,
-    effect: affixes[0]!,
-    ...(affixes[1] ? { effect2: affixes[1] } : {}),
-    ...(affixes[2] ? { effect3: affixes[2] } : {}),
+    effect: RELIC_NO_STAT,
+    power,
     roll,
   };
 }
@@ -3054,8 +3172,9 @@ export function setEffects(equipped: Equipped): AggregatedEffects {
 // « bas niveau en gear trop haut qui punch 3 tiers au-dessus », cf. simulation 2026‑08‑12).
 export function aggregateEffects(equipped: Equipped): AggregatedEffects {
   const a = emptyEffects();
-  // Le TROPHÉE se lit comme un objet (valeur × niveau d'objet) : sa retenue est déjà dans
-  // ses valeurs (`TROPHY_K`), pas dans un multiplicateur à part.
+  // ⚠️ Le trophée ne porte plus de STATS depuis les sets spécialisés (un POUVOIR à quête) :
+  // il reste dans la boucle parce qu'un trophée d'avant la refonte peut encore en porter
+  // tant que la migration ne l'a pas relu — et il est écarté deux lignes plus bas par `power`.
   for (const slot of [...SLOTS, TROPHY_SLOT]) {
     const it = equipped[slot];
     if (!it || it.power) continue; // une relique à pouvoir ne donne aucune stat
@@ -3256,6 +3375,12 @@ export function playerWithGear(
     ...(regen > 0 ? { regen } : {}),
     ...(procs.size ? { procs } : {}),
     ...(equipped.relic?.power ? { relic: relicCharge(equipped.relic) } : {}),
+    // 🏆 La quête du trophée, et la VOIE PORTÉE (déduite du set) : si c'est la sienne, chaque
+    // geste compte double.
+    ...(() => {
+      const q = trophyQuest(equipped[TROPHY_SLOT], wornVoie(equipped));
+      return q ? { trophy: q } : {};
+    })(),
     ...(legacy ? { momentumPerHit: true } : { specRules: true }),
     ...newStats(e, extra),
   };

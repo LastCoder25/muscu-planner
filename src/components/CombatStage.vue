@@ -34,6 +34,19 @@
           <span class="g-emo">{{ relicPower.emoji }}</span>
           <span class="g-track"><span class="g-fill" :style="{ width: gauge + '%' }" /></span>
         </div>
+        <!-- 🏆 QUÊTE DU TROPHÉE : les gestes accomplis, et l'éclat quand elle tombe. -->
+        <div
+          v-if="trophyPower && questLen"
+          class="cs-gauge quest"
+          :class="{ fired: questFired }"
+          :title="trophyPower.name + ' — ' + trophyPower.quest"
+        >
+          <span class="g-emo">{{ trophyPower.emoji }}</span>
+          <span class="g-track"
+            ><span class="g-fill" :style="{ width: (100 * questAt) / questLen + '%' }"
+          /></span>
+          <span class="g-num">{{ questAt }}/{{ questLen }}</span>
+        </div>
         <div v-if="pop && pop.side === 'player'" class="cs-pop" :class="pop.kind">
           {{ pop.text }}
         </div>
@@ -105,7 +118,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { CombatEvent } from '@/lib/combat';
 import { combatSkillInfo } from '@/lib/adventurers';
-import { relicPowerOf, type Equipped } from '@/lib/items';
+import { relicPowerOf, trophyPowerOf, trophyQuestLen, type Equipped } from '@/lib/items';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { monsterArt } from '@/data/monsterArt';
 
@@ -153,6 +166,15 @@ const playerPv = ref(startPv.value);
 const relicPower = computed(() => relicPowerOf(props.playerEquipped.relic?.power));
 const gauge = ref(0);
 const relicFired = ref(false);
+// 🏆 QUÊTE DU TROPHÉE : lue sur le journal (`CombatEvent.quest`), jamais recomptée ici — le
+// rejeu MONTRE ce que le combat a décidé, il ne le rejoue pas.
+const trophyPower = computed(() => trophyPowerOf(props.playerEquipped.trophy?.power));
+const questLen = computed(() => {
+  const t = props.playerEquipped.trophy;
+  return t ? trophyQuestLen(t) : 0;
+});
+const questAt = ref(0);
+const questFired = ref(false);
 const monsterPv = ref(props.fights[0]?.maxPv ?? 1);
 const pop = ref<{ side: 'player' | 'monster'; text: string; kind: string } | null>(null);
 const heal = ref<{ side: 'player' | 'monster'; text: string } | null>(null); // soin (vol de vie) / épines
@@ -219,6 +241,8 @@ function apply(step: { fi: number; e: CombatEvent }) {
   monsterPv.value = e.monsterPv;
   if (e.gauge !== undefined) gauge.value = e.gauge;
   relicFired.value = (e.skills ?? []).some((s) => s.startsWith('rp_'));
+  if (e.quest !== undefined) questAt.value = e.quest;
+  questFired.value = (e.skills ?? []).some((s) => s.startsWith('tr_'));
   const attacker = e.who; // 'player' | 'monster'
   const defender = e.who === 'player' ? 'monster' : 'player';
   lungeSide.value = attacker; // l'attaquant s'élance vers la cible
@@ -680,6 +704,15 @@ onBeforeUnmount(() => {
   .cs-skills {
     transition: none;
   }
+}
+.cs-gauge.quest .g-fill {
+  background: var(--d1);
+}
+.g-num {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--dim);
+  line-height: 1;
 }
 .cs-pop {
   position: absolute;
