@@ -8,6 +8,7 @@ import {
   pullPayment,
   ticketCost,
   buildTickets,
+  welcomeTicketsDue,
   WELCOME_TICKETS,
 } from '@/lib/sportTickets';
 import { useGameFx } from '@/composables/useGameFx';
@@ -189,5 +190,19 @@ describe('🎟️ l’animation de gain de tickets', () => {
     fx.celebrateTickets(0, 'x');
     fx.celebrateTickets(-2, 'x');
     expect(fx.queue.value.length).toBe(avant);
+  });
+});
+
+describe('🎟️ rattrapage des tickets de bienvenue (v0.1081)', () => {
+  it('un compte qui a DÉJÀ son Panthéon les reçoit une fois, puis plus jamais', () => {
+    expect(welcomeTicketsDue(true, false)).toBe(WELCOME_TICKETS);
+    expect(welcomeTicketsDue(true, true)).toBe(0); // la marque est posée
+  });
+  it('sans Panthéon : rien, et rien n’est dû tant qu’il n’est pas bâti', () => {
+    expect(welcomeTicketsDue(false, false)).toBe(0);
+    expect(welcomeTicketsDue(false, true)).toBe(0);
+  });
+  it('les deux chemins versent le MÊME nombre — pose et rattrapage ne peuvent pas diverger', () => {
+    expect(welcomeTicketsDue(true, false)).toBe(buildTickets('pantheon'));
   });
 });

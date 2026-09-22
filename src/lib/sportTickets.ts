@@ -60,6 +60,21 @@ export function buildTickets(typeId: BuildingTypeId): number {
   return typeId === 'pantheon' ? WELCOME_TICKETS : 0;
 }
 
+/** 🎟️ RATTRAPAGE — tickets dus à un compte QUI A DÉJÀ SON PANTHÉON (v0.1081, décision de
+ *  l'utilisateur).
+ *
+ *  ⚠️ Mesuré en base : versés à la seule CONSTRUCTION, les deux comptes les plus avancés
+ *  ne pouvaient jamais les recevoir — ils avaient bâti leur Panthéon avant la règle. Le
+ *  rattrapage les leur donne UNE fois, au chargement.
+ *
+ *  ⚠️ **LA MARQUE (`welcomed`) EST LA SEULE GARANTIE D'UNICITÉ**, et elle est posée par les
+ *  DEUX chemins (pose et rattrapage) dans la même écriture que les tickets : sans elle, le
+ *  rattrapage repasserait à chaque ouverture. Pas de Panthéon → rien, et rien n'est marqué :
+ *  le joueur les recevra en le construisant. */
+export function welcomeTicketsDue(hasPantheon: boolean, welcomed: boolean): number {
+  return hasPantheon && !welcomed ? WELCOME_TICKETS : 0;
+}
+
 /** 🎯 Tickets d'un Défi 360 bouclé, pour un facteur d'effort donné. */
 export function comboTickets(effortMult: number): number {
   return Math.max(0, Math.round(SPORT_TICKETS.comboRef * Math.max(0, effortMult)));

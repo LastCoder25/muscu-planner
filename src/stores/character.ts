@@ -227,7 +227,7 @@ import {
   normalizeSeals,
   type Seals,
 } from '@/lib/ascension';
-import { levelUpTickets, pullPayment, buildTickets } from '@/lib/sportTickets';
+import { levelUpTickets, pullPayment, buildTickets, welcomeTicketsDue } from '@/lib/sportTickets';
 import type { LotItem } from '@/lib/gachaReveal';
 import { gearRefonteGifts } from '@/lib/gearMigration';
 import { useGameFx } from '@/composables/useGameFx';
@@ -448,6 +448,10 @@ export const useCharacterStore = defineStore('character', () => {
       sinceFloor: Math.max(0, Math.floor(Number(g.sinceFloor) || 0)),
       pulls: Math.max(0, Math.floor(Number(g.pulls) || 0)),
       ...(g.v ? { v: Math.floor(Number(g.v)) } : {}),
+      // 🎟️ ⚠️ LA MARQUE DES TICKETS DE BIENVENUE DOIT SURVIVRE À LA RELECTURE : sans cette
+      // ligne, `normalizeRow` la jetait à chaque lecture et le rattrapage se rejouait à
+      // CHAQUE chargement — des tickets à l'infini.
+      ...(g.welcomed ? { welcomed: true } : {}),
     };
     if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
     if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
@@ -525,6 +529,7 @@ export const useCharacterStore = defineStore('character', () => {
       });
     if (row.value) await settleWipe(uid);
     if (row.value) await settleGachaReset(uid);
+    if (row.value) await settleWelcomeTickets(uid);
     return row.value;
   }
 
@@ -732,6 +737,29 @@ export const useCharacterStore = defineStore('character', () => {
       subtitle: `Nouvelle invocation S / A / B — ${partants} champion${partants > 1 ? 's' : ''} rendu${partants > 1 ? 's' : ''}, +${mana} 💠 pour réinvoquer`,
       rarity: 'legendary',
     });
+  }
+
+  /** 🎟️ RATTRAPAGE DES TICKETS DE BIENVENUE — one-shot, gardé par la marque `gacha.welcomed`
+   *  écrite dans la MÊME requête que les tickets (donc jamais deux fois ; un échec réseau
+   *  laisse la base intacte et on retentera au prochain chargement). Ne concerne que les
+   *  comptes qui avaient DÉJÀ posé leur Panthéon avant la v0.1079. */
+  async function settleWelcomeTickets(userId: string) {
+    const cur = row.value;
+    if (!cur) return;
+    const due = welcomeTicketsDue(
+      cur.buildings.some((b) => b.typeId === 'pantheon'),
+      !!cur.gacha.welcomed,
+    );
+    if (!due) return;
+    try {
+      await persist(userId, {
+        gacha_tickets: cur.gacha_tickets + due,
+        gacha: { ...cur.gacha, welcomed: true },
+      });
+    } catch {
+      return;
+    }
+    useGameFx().celebrateTickets(due, 'Bienvenue — offerts par ton Panthéon');
   }
 
   async function persist(userId: string, patch: Record<string, unknown>) {
@@ -2050,7 +2078,11 @@ export const useCharacterStore = defineStore('character', () => {
     await persistOptimistic(userId, {
       gold: cur.gold - t.buildGold,
       buildings: [...cur.buildings, b],
-      ...(tickets ? { gacha_tickets: cur.gacha_tickets + tickets } : {}),
+      // ⚠️ La MARQUE part avec les tickets, dans la même écriture : c'est elle qui empêche
+      // le rattrapage (`settleWelcomeTickets`) de les redonner au chargement suivant.
+      ...(tickets
+        ? { gacha_tickets: cur.gacha_tickets + tickets, gacha: { ...cur.gacha, welcomed: true } }
+        : {}),
     });
   }
   // Améliore un filon (or ; plafonné au niveau du joueur).

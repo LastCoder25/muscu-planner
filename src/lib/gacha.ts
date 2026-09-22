@@ -136,6 +136,9 @@ export interface GachaState extends PityState {
   /** Version du gacha. `2` = refonte S/A/B (2026-09-21). Absent = ancien système, que le
    *  store remplace UNE fois (reset des champions + compensation). */
   v?: number;
+  /** 🎟️ Tickets de bienvenue du Panthéon déjà versés ? La MARQUE qui rend le versement
+   *  unique — à la pose comme au rattrapage des comptes qui l'avaient déjà bâti. */
+  welcomed?: boolean;
 }
 
 /** 🎰 Version courante du gacha — celle que `settleGachaReset` pose après le reset. */
