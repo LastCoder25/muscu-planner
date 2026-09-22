@@ -33,9 +33,8 @@ import {
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
-/** Trajet ALLER d'un groupe (minutes) : héros seul → son trajet (Avant-poste compris) ;
- *  avec des aventuriers → le plus LENT des deux (un groupe ne va pas plus vite que ses
- *  marcheurs). ⚠️ Tous les paramètres sont REQUIS, comme `caravanLegMin`. */
+/** Trajet ALLER d'un groupe (minutes) : héros et champions profitent TOUS DEUX de
+ *  l'Avant-poste (v0.1040) ; le groupe va au pas du plus LENT (sans rôle 🧭, c'est le héros). ⚠️ Tous les paramètres sont REQUIS, comme `caravanLegMin`. */
 export function partyLegMin(
   poi: Poi,
   escort: Adventurer[],
@@ -44,7 +43,7 @@ export function partyLegMin(
   const hero = opts.hero
     ? Math.round(travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * opts.travelMult)
     : 0;
-  const advs = escort.length ? caravanLegMin(poi, escort, opts.gearSpeed) : 0;
+  const advs = escort.length ? caravanLegMin(poi, escort, opts.gearSpeed, opts.travelMult) : 0;
   return Math.max(1, hero, advs);
 }
 

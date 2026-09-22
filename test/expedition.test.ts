@@ -10,6 +10,7 @@ import {
   goldCost,
   travelOneWayMin,
   createMap,
+  mapQuota,
   advanceWorld,
   travelPosition,
   voyageProgress,
@@ -33,6 +34,9 @@ import {
   type ExpeditionMessage,
   type Poi,
 } from '@/lib/expedition';
+// 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+const OUT = 7;
 
 const H = 3600_000;
 
@@ -57,7 +61,7 @@ describe('expedition — éco & géométrie', () => {
 
 describe('expedition — carte / monde', () => {
   it('createMap : POI d’entrée, rang tiré, récompense dans la fenêtre, espacés', () => {
-    const m = createMap(123, 0, 10, 3);
+    const m = createMap(123, 0, 10, OUT, 3);
     expect(m.pois.length).toBeGreaterThanOrEqual(1);
     const w = spawnWindow(10);
     // 🏅 Depuis la v0.1028 TOUS les lieux tirent leur niveau par RANG, comme les failles
@@ -81,45 +85,45 @@ describe('expedition — carte / monde', () => {
       }
   });
   it('déterministe : même seed/now/niveau → même carte', () => {
-    expect(createMap(7, 0, 10)).toEqual(createMap(7, 0, 10));
+    expect(createMap(7, 0, 10, OUT)).toEqual(createMap(7, 0, 10, OUT));
   });
   it('AU PLUS UNE arène sur la carte (rare, placée loin)', () => {
     for (const seed of [1, 7, 42, 123, 999]) {
-      const m = createMap(seed, 0, 20, 12);
+      const m = createMap(seed, 0, 20, OUT, 12);
       const arenas = m.pois.filter((p) => p.type === 'arena');
       expect(arenas.length).toBeLessThanOrEqual(1);
       for (const a of arenas) expect(a.distNorm).toBeGreaterThan(0.7); // spawn loin
     }
   });
   it('advanceWorld : expire les POI périmés (sauf la cible protégée)', () => {
-    const m = createMap(5, 0, 10, 2);
+    const m = createMap(5, 0, 10, OUT, 2);
     const target = m.pois[0]!.id;
     // Tout est périmé après lifespan max.
     const later = EXPE.lifespanMs.lair + 1;
-    const adv = advanceWorld(m, later, 10, target);
+    const adv = advanceWorld(m, later, 10, OUT, target);
     expect(adv.pois.some((p) => p.id === target)).toBe(true); // protégé
     // Les non-protégés périmés sont retirés.
     for (const p of adv.pois) if (p.id !== target) expect(p.expiresAt).toBeGreaterThan(later);
   });
   it('createMap : démarre au PLANCHER par défaut (~une dizaine d’activités)', () => {
-    const m = createMap(9, 0, 10);
-    expect(m.pois.filter(isQuotaPoi).length).toBe(EXPE.poiFloor);
-    expect(m.pois.filter(isQuotaPoi).length).toBeLessThanOrEqual(EXPE.poiCap);
+    const m = createMap(9, 0, 10, OUT);
+    expect(m.pois.filter(isQuotaPoi).length).toBe(mapQuota(OUT).pois);
+    expect(m.pois.filter(isQuotaPoi).length).toBeLessThanOrEqual(mapQuota(OUT).pois);
   });
   it('advanceWorld : maintient le PLANCHER + avance l’horloge de spawn', () => {
     // Carte volontairement sous le plancher (1 POI) → advanceWorld doit la recompléter.
-    const m = createMap(9, 0, 10, 1);
-    const adv = advanceWorld(m, m.nextSpawnAt + 1, 10);
-    expect(adv.pois.filter(isQuotaPoi).length).toBeGreaterThanOrEqual(EXPE.poiFloor);
-    expect(adv.pois.filter(isQuotaPoi).length).toBeLessThanOrEqual(EXPE.poiCap);
+    const m = createMap(9, 0, 10, OUT, 1);
+    const adv = advanceWorld(m, m.nextSpawnAt + 1, 10, OUT);
+    expect(adv.pois.filter(isQuotaPoi).length).toBeGreaterThanOrEqual(mapQuota(OUT).pois);
+    expect(adv.pois.filter(isQuotaPoi).length).toBeLessThanOrEqual(mapQuota(OUT).pois);
     expect(adv.nextSpawnAt).toBeGreaterThan(m.nextSpawnAt);
   });
   it('advanceWorld : rattrape les spawns manqués après une longue absence (jusqu’au cap)', () => {
-    const m = createMap(3, 0, 10, 1);
+    const m = createMap(3, 0, 10, OUT, 1);
     // Très loin dans le futur → beaucoup d’intervalles écoulés, mais jamais > cap.
-    const adv = advanceWorld(m, 500 * H, 10);
-    expect(adv.pois.filter(isQuotaPoi).length).toBeLessThanOrEqual(EXPE.poiCap);
-    expect(adv.pois.filter(isQuotaPoi).length).toBeGreaterThanOrEqual(EXPE.poiFloor);
+    const adv = advanceWorld(m, 500 * H, 10, OUT);
+    expect(adv.pois.filter(isQuotaPoi).length).toBeLessThanOrEqual(mapQuota(OUT).pois);
+    expect(adv.pois.filter(isQuotaPoi).length).toBeGreaterThanOrEqual(mapQuota(OUT).pois);
   });
 });
 
@@ -128,7 +132,10 @@ describe('expedition — terrain (fond de carte)', () => {
     const t1 = expeditionTerrain(42);
     const t2 = expeditionTerrain(42);
     expect(t1).toEqual(t2); // même seed → même terrain
-    expect(t1.coast.startsWith('M ')).toBe(true);
+    // Plus d'île (v0.1040) : le relief couvre toute la fenêtre, au-delà de l'ancienne côte.
+    expect(t1.features.some((f) => Math.hypot(f.x - EXPE.town.x, f.y - EXPE.town.y) > 90)).toBe(
+      true,
+    );
     expect(t1.features.length).toBeGreaterThan(0);
     expect(t1.features[0]!.d.startsWith('M ')).toBe(true);
     // Seeds différents → terrains différents.
@@ -490,9 +497,9 @@ describe('🏕️ campSpecOf — faction et taille d’un camp', () => {
   });
 
   it('⚠️ la carte ne change pas : createMap ne porte aucun champ de camp', () => {
-    const m = createMap(42, 0, 20);
+    const m = createMap(42, 0, 20, OUT);
     for (const q of m.pois) expect(Object.keys(q)).not.toContain('camp');
-    expect(createMap(42, 0, 20)).toEqual(m);
+    expect(createMap(42, 0, 20, OUT)).toEqual(m);
   });
 });
 

@@ -32,7 +32,11 @@ import {
   rollTravelEncounters,
   startExpedition,
   TRAVEL,
-  landRadius,
+  revealRadius,
+  travelOneWayMin,
+  mapQuota,
+  MAP_VIEW,
+  MAP_REACH,
   type ExpeditionMap,
   type Poi,
   type PoiType,
@@ -41,6 +45,9 @@ import { playerCombatant, mulberry32 } from '@/lib/combat';
 import { resolveCamp, campGroupHaul } from '@/lib/camp';
 import { campSpecOf } from '@/lib/expedition';
 import { poiOffers } from '@/lib/caravan';
+// 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+const OUT = 7;
 
 const HOUR = 3_600_000;
 const hero = playerCombatant('Héros', { puissance: 600, endurance: 500, agilite: 400 }, 26);
@@ -122,15 +129,15 @@ describe('POI de récolte', () => {
     // Sans la ferraille, elle n'était plus qu'une mine en moins bien — on ne la choisissait
     // jamais. Le type reste LEGACY (rapports, convois d'avant, cible en cours).
     expect(HARVEST_TYPES.has('wreck')).toBe(false);
-    let m = createMap(11, 0, 30);
-    for (let h = 0; h < 24 * 30; h += 6) m = advanceWorld(m, h * 3600_000, 30);
+    let m = createMap(11, 0, 30, OUT);
+    for (let h = 0; h < 24 * 30; h += 6) m = advanceWorld(m, h * 3600_000, 30, OUT);
     expect(m.pois.some((p) => p.type === 'wreck')).toBe(false);
     // Une carte sauvegardée avant en porte encore une : elle est retirée…
     const vieille = { ...m, pois: [...m.pois, { ...m.pois[0]!, id: 'w', type: 'wreck' as const }] };
     const t = 24 * 30 * 3600_000;
-    expect(advanceWorld(vieille, t, 30).pois.some((p) => p.id === 'w')).toBe(false);
+    expect(advanceWorld(vieille, t, 30, OUT).pois.some((p) => p.id === 'w')).toBe(false);
     // …sauf si le héros y est, physiquement : on ne la fait pas disparaître sous ses pieds.
-    expect(advanceWorld(vieille, t, 30, 'w').pois.some((p) => p.id === 'w')).toBe(true);
+    expect(advanceWorld(vieille, t, 30, OUT, 'w').pois.some((p) => p.id === 'w')).toBe(true);
     // Et rien ne peut plus y être envoyé : ni le héros, ni un convoi, ni un groupe.
     const w = { ...m.pois[0]!, type: 'wreck' as const };
     expect(
@@ -273,26 +280,26 @@ describe('rythme de la carte', () => {
     // DENSITÉ qui rend le dégradé lisible — il faut du monde à toutes les distances pour
     // qu'on voie la pente, et l'arbitrage est devenu « près et facile » contre « loin et
     // payant », pas « en prendre un avant qu'il disparaisse ».
-    expect(EXPE.poiFloor).toBe(EXPE.poiCap);
-    let map = createMap(1234, 0, 26);
+    expect(mapQuota(OUT).pois).toBe(mapQuota(OUT).pois);
+    let map = createMap(1234, 0, 26, OUT);
     for (let t = 0; t <= 7 * 24 * HOUR; t += 2 * HOUR) {
-      map = advanceWorld(map, t, 26);
+      map = advanceWorld(map, t, 26, OUT);
       // ⚠️ ON COMPTE LE QUOTA, pas `pois.length` : les failles et leurs mines résiduelles
       // ont leur PROPRE quota et s'AJOUTENT aux 16 — les compter ici reviendrait à laisser
       // une faille voler la place d'une mine d'or ou d'un camp, dont l'économie est mesurée.
-      expect(map.pois.filter(isQuotaPoi).length).toBe(EXPE.poiCap);
+      expect(map.pois.filter(isQuotaPoi).length).toBe(mapQuota(OUT).pois);
     }
   });
 
   it('🕳️ les FAILLES ont leur propre quota, et elles s’ajoutent aux 16', () => {
-    let map = createMap(4321, 0, 26);
+    let map = createMap(4321, 0, 26, OUT);
     for (let t = 0; t <= 10 * 24 * HOUR; t += 2 * HOUR) {
-      map = advanceWorld(map, t, 26);
+      map = advanceWorld(map, t, 26, OUT);
       const rifts = map.pois.filter(isRiftPoi).length;
       expect(rifts, `t=${t}`).toBeGreaterThanOrEqual(EXPE.riftFloor);
-      expect(rifts, `t=${t}`).toBeLessThanOrEqual(EXPE.riftCap);
+      expect(rifts, `t=${t}`).toBeLessThanOrEqual(mapQuota(OUT).rifts);
       // Le quota général n'est jamais entamé par elles.
-      expect(map.pois.filter(isQuotaPoi).length).toBe(EXPE.poiCap);
+      expect(map.pois.filter(isQuotaPoi).length).toBe(mapQuota(OUT).pois);
     }
   });
 
@@ -300,10 +307,10 @@ describe('rythme de la carte', () => {
     // ⚠️ Et le débordement doit passer AVANT le filtrage des POI périmés : la durée de vie
     // d'une faille EST sa maturation, donc filtrer d'abord la ferait simplement « expirer »
     // et la mine n'existerait jamais.
-    let map = createMap(777, 0, 26);
+    let map = createMap(777, 0, 26, OUT);
     const rift = map.pois.find((p) => p.type === 'rift')!;
     const at = rift.spawnedAt + EXPE.lifespanMs.rift;
-    map = advanceWorld(map, at, 26);
+    map = advanceWorld(map, at, 26, OUT);
     expect(map.pois.some((p) => p.id === rift.id)).toBe(false);
     const mine = map.pois.find((p) => p.id === `${rift.id}_mine`);
     expect(mine, 'la mine résiduelle').toBeTruthy();
@@ -317,23 +324,23 @@ describe('rythme de la carte', () => {
   it('⚠️ après une longue absence, la mine est DATÉE de son débordement — donc déjà périmée', () => {
     // On ne punit pas l'absence, on ne la récompense pas non plus : revenir trois semaines
     // plus tard ne doit pas faire trouver une mine intacte pour chaque faille oubliée.
-    let map = createMap(888, 0, 26);
-    map = advanceWorld(map, 21 * 24 * HOUR, 26);
+    let map = createMap(888, 0, 26, OUT);
+    map = advanceWorld(map, 21 * 24 * HOUR, 26, OUT);
     expect(map.pois.some((p) => p.type === 'mana_mine')).toBe(false);
     // …et la carte est quand même repeuplée (failles comprises).
-    expect(map.pois.filter(isQuotaPoi).length).toBe(EXPE.poiCap);
+    expect(map.pois.filter(isQuotaPoi).length).toBe(mapQuota(OUT).pois);
     expect(map.pois.filter(isRiftPoi).length).toBeGreaterThanOrEqual(EXPE.riftFloor);
   });
 
   it('⚠️ le flux aléatoire des failles est SÉPARÉ : elles ne décalent pas les autres POI', () => {
     // Partagé avec `spawnCount`, chaque faille décalerait le tirage de tous les spawns
     // suivants — la carte de chaque joueur changerait de composition sans raison.
-    const map = createMap(999, 0, 26);
+    const map = createMap(999, 0, 26, OUT);
     const ids = map.pois.filter(isQuotaPoi).map((p) => p.id);
     expect(ids.every((id) => id.startsWith('poi_'))).toBe(true);
     expect(map.pois.filter(isRiftPoi).every((p) => p.id.startsWith('rift_'))).toBe(true);
     // Les compteurs sont distincts.
-    expect(map.spawnCount).toBe(EXPE.poiFloor);
+    expect(map.spawnCount).toBe(mapQuota(OUT).pois);
     expect(map.riftCount).toBe(EXPE.riftFloor);
   });
 
@@ -344,10 +351,10 @@ describe('rythme de la carte', () => {
     // carte de 16 lieux, une corrélation aléatoire peut valoir ±0,5 par pur hasard.
     const pts: { d: number; l: number; t: number; r: number }[] = [];
     for (const seed of [4242, 7, 91, 1234]) {
-      let map = createMap(seed, 0, 26);
+      let map = createMap(seed, 0, 26, OUT);
       const seen = new Map<string, Poi>();
       for (let t = 0; t <= 14 * 24 * HOUR; t += 2 * HOUR) {
-        map = advanceWorld(map, t, 26);
+        map = advanceWorld(map, t, 26, OUT);
         for (const p of map.pois.filter(isQuotaPoi)) seen.set(p.id, p);
       }
       for (const p of seen.values())
@@ -423,15 +430,41 @@ describe('rythme de la carte', () => {
     // élargissant la couronne. ⚠️ `minDistPoi` N'EST PAS LE LEVIER : mesuré à 14/12/11/10/9,
     // les chevauchements font 105/159/138/46/1629 — erratique, parce qu’à 26 POI la boucle de
     // placement n’atteint jamais sa cible et ne garde que le meilleur de 24 essais.
-    const occupe = (EXPE.poiCap + EXPE.riftCap) * Math.PI * (EXPE.minDistPoi / 2) ** 2;
+    const occupe =
+      (mapQuota(OUT).pois + mapQuota(OUT).rifts) * Math.PI * (EXPE.minDistPoi / 2) ** 2;
     expect(occupe / aire, 'occupation de la couronne au plafond').toBeLessThan(0.35);
+    // 🗺️ Et la DENSITÉ reste celle-là à toutes les tailles de carte (v0.1040) : le nombre de
+    // lieux suit la SURFACE révélée, donc l'occupation ne monte pas avec l'Avant-poste.
+    for (let L = 1; L <= 100; L++) {
+      const R = revealRadius(L);
+      const q = mapQuota(L);
+      const occ =
+        ((q.pois + q.rifts) * Math.PI * (EXPE.minDistPoi / 2) ** 2) /
+        (Math.PI * (R ** 2 - EXPE.distMin ** 2));
+      expect(occ, `occupation, Avant-poste ${L}`).toBeLessThan(0.36);
+    }
+    // …et sur le terrain au niveau 100 aussi : la plus grande carte ne s'empile pas plus.
+    let pires100 = 0;
+    for (let s = 1; s <= 4; s++) {
+      let map = createMap(s * 97, 0, 90, 100);
+      for (let t = 0; t <= 2 * 24 * HOUR; t += 4 * HOUR) {
+        map = advanceWorld(map, t, 90, 100);
+        for (let i = 0; i < map.pois.length; i++)
+          for (let j = i + 1; j < map.pois.length; j++) {
+            const a = map.pois[i]!;
+            const b = map.pois[j]!;
+            if (Math.hypot(a.x - b.x, a.y - b.y) < 10) pires100++;
+          }
+      }
+    }
+    expect(pires100, 'chevauchements sur la carte du niveau 100').toBe(0);
 
     // …et vérification sur le terrain : aucune paire ne se chevauche visuellement.
     let pires = 0;
     for (let s = 1; s <= 20; s++) {
-      let map = createMap(s * 331, 0, 26);
+      let map = createMap(s * 331, 0, 26, OUT);
       for (let t = 0; t <= 5 * 24 * HOUR; t += 3 * HOUR) {
-        map = advanceWorld(map, t, 26);
+        map = advanceWorld(map, t, 26, OUT);
         for (let i = 0; i < map.pois.length; i++) {
           for (let j = i + 1; j < map.pois.length; j++) {
             const a = map.pois[i]!;
@@ -456,9 +489,9 @@ describe('rythme de la carte', () => {
     let sansProche = 0;
     let troisBandes = 0;
     for (let s = 1; s <= 30; s++) {
-      let map = createMap(s * 7919, 0, 26);
+      let map = createMap(s * 7919, 0, 26, OUT);
       for (let t = 0; t <= 7 * 24 * HOUR; t += 3 * HOUR) {
-        map = advanceWorld(map, t, 26);
+        map = advanceWorld(map, t, 26, OUT);
         if (!map.pois.length) continue;
         snaps++;
         const bands = new Set(
@@ -477,23 +510,71 @@ describe('rythme de la carte', () => {
     expect(sansProche / snaps, 'cartes sans aucune option proche').toBeLessThan(0.05);
   });
 
-  it('⚓ aucun POI ne finit à la MER : ils tiennent dans la terre ferme garantie', () => {
-    // `distMax` valait 88 = le rayon NOMINAL du littoral. Or la côte est irrégulière et
-    // pince par endroits : un POI tombé dans un renfoncement se retrouvait dessiné en
-    // pleine mer. Le maxi est donc désormais borné par `landRadius()` — le rayon sous
-    // lequel il y a de la terre quelle que soit la graine du terrain.
-    const GLYPH = 6; // demi-largeur du pictogramme + sa pastille de niveau
-    expect(EXPE.distMax + GLYPH).toBeLessThan(landRadius());
-    for (let s = 1; s <= 25; s++) {
-      let map = createMap(s * 613, 0, 26);
-      for (let t = 0; t <= 5 * 24 * HOUR; t += 3 * HOUR) {
-        map = advanceWorld(map, t, 26);
-        for (const p of map.pois) {
-          const d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
-          expect(d + GLYPH, `POI ${p.type} à ${d.toFixed(0)} du centre`).toBeLessThan(landRadius());
+  it('🌫️ aucun lieu hors du disque RÉVÉLÉ, à tout niveau d’Avant-poste (v0.1040)', () => {
+    // Plus d'île : c'est le brouillard qui borne la carte. Un lieu hors du disque serait
+    // dessiné dans le brouillard, donc invisible et pourtant proposé.
+    for (const L of [1, 7, 30, 100]) {
+      const R = revealRadius(L);
+      for (let s = 1; s <= 6; s++) {
+        let map = createMap(s * 613, 0, Math.max(L, 5), L);
+        for (let t = 0; t <= 3 * 24 * HOUR; t += 4 * HOUR) {
+          map = advanceWorld(map, t, Math.max(L, 5), L);
+          for (const p of map.pois) {
+            const d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
+            expect(d, `${p.type} à ${d.toFixed(0)}, Avant-poste ${L}`).toBeLessThanOrEqual(R + 1);
+          }
         }
       }
     }
+    // Et le plus grand disque tient dans la fenêtre DESSINÉE, marge comprise.
+    const bord = EXPE.town.x - MAP_VIEW.min;
+    expect(revealRadius(MAP_REACH.maxLevel) + 6).toBeLessThan(bord);
+  });
+
+  it('🗺️ LA CARTE GRANDIT À CHAQUE NIVEAU D’AVANT-POSTE (v0.1040) — sans niveau muet', () => {
+    // Rayon strictement croissant de 1 à 100, et le nombre de lieux ne recule jamais.
+    for (let L = 2; L <= 100; L++) {
+      expect(revealRadius(L), `rayon, niveau ${L}`).toBeGreaterThan(revealRadius(L - 1));
+      const a = mapQuota(L - 1);
+      const b = mapQuota(L);
+      expect(b.pois + b.rifts, `lieux, niveau ${L}`).toBeGreaterThanOrEqual(a.pois + a.rifts);
+    }
+    // Les deux bouts choisis par l'utilisateur (simulation du 2026-09-22, scénario C).
+    const q1 = mapQuota(1);
+    expect(q1.pois + q1.rifts).toBe(7);
+    expect(q1.rifts).toBe(EXPE.riftFloor);
+    const q100 = mapQuota(100);
+    expect(q100.pois + q100.rifts).toBe(3 * (EXPE.poiRef + EXPE.riftRef));
+    // Sans Avant-poste : la carte du niveau 1, jamais une carte vide.
+    expect(mapQuota(0)).toEqual(q1);
+  });
+
+  it('monter l’Avant-poste révèle AUSSITÔT de nouveaux lieux, sans en retirer', () => {
+    let map = createMap(2024, 0, 30, 5);
+    map = advanceWorld(map, HOUR, 30, 5);
+    const avant = new Set(map.pois.map((p) => p.id));
+    const grand = advanceWorld(map, 2 * HOUR, 30, 30);
+    // Plus de lieux, tout de suite (le plancher = le quota du nouveau niveau).
+    expect(grand.pois.filter(isQuotaPoi).length).toBe(mapQuota(30).pois);
+    // Ceux qui étaient là et pas expirés restent : un rayon qui grandit ne retire rien.
+    for (const p of map.pois)
+      if (p.expiresAt > 2 * HOUR)
+        expect(
+          grand.pois.some((q) => q.id === p.id),
+          p.id,
+        ).toBe(true);
+    // Et les nouveaux ont des lieux AU-DELÀ de l'ancien rayon.
+    const R5 = revealRadius(5);
+    const neufs = grand.pois.filter((p) => !avant.has(p.id));
+    expect(
+      neufs.some((p) => Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y) > R5),
+      'des lieux dans la terre nouvellement révélée',
+    ).toBe(true);
+  });
+
+  it('⏱️ LE TRAJET SUIT LA DISTANCE RÉELLE : au-delà de l’ancien bord, il s’allonge', () => {
+    // `distNorm` n'est plus plafonné à 1 : un lieu à 100 met plus longtemps qu'un lieu à 64.
+    expect(travelOneWayMin(10, 1.8)).toBeGreaterThan(travelOneWayMin(10, 1));
   });
 
   it('une carte SAUVEGARDÉE avant le recadrage se soigne au chargement', () => {
@@ -511,13 +592,13 @@ describe('rythme de la carte', () => {
         { ...mkPoi('mine', 131, 29), expiresAt: 99 * HOUR },
       ],
     };
-    const fresh = advanceWorld(stale, HOUR, 26);
+    const fresh = advanceWorld(stale, HOUR, 26, OUT);
     for (const p of fresh.pois) {
       const d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
-      expect(d, 'aucun rescapé au large').toBeLessThanOrEqual(EXPE.distMax + 1);
+      expect(d, 'aucun rescapé hors du disque révélé').toBeLessThanOrEqual(revealRadius(OUT) + 1);
     }
     // …et le plancher les remplace aussitôt : la carte ne se vide pas.
-    expect(fresh.pois.length).toBeGreaterThanOrEqual(EXPE.poiFloor);
+    expect(fresh.pois.length).toBeGreaterThanOrEqual(mapQuota(OUT).pois);
   });
 
   it('mais la cible d’une expédition EN COURS est préservée', () => {
@@ -529,7 +610,7 @@ describe('rythme de la carte', () => {
       nextSpawnAt: 10 * HOUR,
       pois: [target],
     };
-    const fresh = advanceWorld(stale, HOUR, 26, 'cible');
+    const fresh = advanceWorld(stale, HOUR, 26, OUT, 'cible');
     expect(fresh.pois.some((p) => p.id === 'cible')).toBe(true);
   });
 
@@ -537,8 +618,8 @@ describe('rythme de la carte', () => {
     // `distMin` valait 30 tant que l'anneau de bâtiments occupait cette couronne ; son
     // départ pour l'écran « Ma base » y a laissé un vide et la ville semblait isolée.
     expect(EXPE.distMin).toBeLessThan(25);
-    let map = createMap(4242, 0, 26);
-    for (let t = 0; t <= 3 * 24 * HOUR; t += 3 * HOUR) map = advanceWorld(map, t, 26);
+    let map = createMap(4242, 0, 26, OUT);
+    for (let t = 0; t <= 3 * 24 * HOUR; t += 3 * HOUR) map = advanceWorld(map, t, 26, OUT);
     const nearest = Math.min(
       ...map.pois.map((p) => Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y)),
     );
@@ -726,10 +807,10 @@ describe('route dangereuse (télégraphiée)', () => {
   });
 
   it('est posée au spawn, donc annonçable avant l’envoi', () => {
-    let map = createMap(4242, 0, 26);
+    let map = createMap(4242, 0, 26, OUT);
     let vu = 0;
     for (let t = 0; t <= 30 * 24 * HOUR; t += 3 * HOUR) {
-      map = advanceWorld(map, t, 26);
+      map = advanceWorld(map, t, 26, OUT);
       vu += map.pois.filter((p) => p.perilous).length;
     }
     expect(vu, 'aucun POI dangereux généré en 30 jours').toBeGreaterThan(0);
@@ -921,7 +1002,7 @@ describe('🕳️ le RANG d’une faille', () => {
     // ville au-dessus du joueur, elle est « trop forte pour son éloignement » — sans
     // l'exemption de `levelFitsDistance`, le tick suivant l'effacerait (sa mine aussi).
     for (const L of [12, 30, 60]) {
-      const base = createMap(9137, 0, L);
+      const base = createMap(9137, 0, L, OUT);
       const lv = L + riftAboveSpan(L);
       const proche = (type: PoiType, id: string): Poi => ({
         id,
@@ -937,7 +1018,7 @@ describe('🕳️ le RANG d’une faille', () => {
         ...base,
         pois: [...base.pois, proche('rift', 'rift_proche'), proche('mana_mine', 'mine_proche')],
       };
-      const apres = advanceWorld(map, HOUR, L);
+      const apres = advanceWorld(map, HOUR, L, OUT);
       expect(
         apres.pois.some((p) => p.id === 'rift_proche'),
         `niveau ${L}`,
@@ -950,9 +1031,9 @@ describe('🕳️ le RANG d’une faille', () => {
     // …et sur le terrain : sur 14 jours, le quota de failles ne descend jamais sous son
     // plancher — donc aucune n’est écartée en dehors de sa maturation.
     for (const L of [12, 30, 60]) {
-      let map = createMap(9137, 0, L);
+      let map = createMap(9137, 0, L, OUT);
       for (let t = 0; t <= 14 * 24 * HOUR; t += 2 * HOUR) {
-        map = advanceWorld(map, t, L);
+        map = advanceWorld(map, t, L, OUT);
         expect(map.pois.filter(isRiftPoi).length, `niveau ${L}, t=${t}`).toBeGreaterThanOrEqual(
           EXPE.riftFloor,
         );
@@ -964,7 +1045,7 @@ describe('🕳️ le RANG d’une faille', () => {
     // Le filtre « trop fort pour ta distance » (v0.688) existait pour faire respecter le
     // dégradé près = faible. Le dégradé n'existe plus : le garder effacerait au tick suivant
     // tout lieu fort tiré près de la ville — exactement la variété qu'on vient d'ouvrir.
-    const base = createMap(9137, 0, 30);
+    const base = createMap(9137, 0, 30, OUT);
     const map: ExpeditionMap = {
       ...base,
       pois: [
@@ -981,30 +1062,30 @@ describe('🕳️ le RANG d’une faille', () => {
         },
       ],
     };
-    expect(advanceWorld(map, HOUR, 30).pois.some((p) => p.id === 'puits_proche')).toBe(true);
+    expect(advanceWorld(map, HOUR, 30, OUT).pois.some((p) => p.id === 'puits_proche')).toBe(true);
   });
   it('⚠️ LE PLANCHER RESTE À 2 : une carte neuve se REMPLIT, elle ne pulse pas', () => {
     // À `riftFloor` = `riftCap`, une carte neuve spawnerait ses six failles au MÊME instant —
     // donc six armées au même instant sept jours plus tard, puis sept jours de silence. Un
     // PULSE, pas un rythme. À 2, l’horloge (8–16 h) remplit jusqu’à 6 en ~2,5 jours et les âges
     // se désynchronisent d’eux-mêmes, sans jamais antidater une faille.
-    expect(EXPE.riftFloor).toBeLessThan(EXPE.riftCap);
-    let map = createMap(42, 0, 30);
+    expect(EXPE.riftFloor).toBeLessThan(mapQuota(OUT).rifts);
+    let map = createMap(42, 0, 30, OUT);
     expect(map.pois.filter(isRiftPoi).length).toBe(EXPE.riftFloor);
     const ages = new Set<number>();
     for (let h = 0; h <= 96; h++) {
-      map = advanceWorld(map, h * HOUR, 30);
+      map = advanceWorld(map, h * HOUR, 30, OUT);
       for (const p of map.pois.filter(isRiftPoi)) ages.add(p.spawnedAt);
     }
     // Pleine au bout de 4 jours…
-    expect(map.pois.filter(isRiftPoi).length).toBe(EXPE.riftCap);
+    expect(map.pois.filter(isRiftPoi).length).toBe(mapQuota(OUT).rifts);
     // …et elles n’ont PAS toutes le même âge : c’est ce qui étale les débordements. La
     // borne est DÉRIVÉE, et c’est le MAXIMUM atteignable : les `riftFloor` premières
     // naissent ensemble (à la création de la carte), les suivantes une par une au fil de
     // l’horloge. Six failles nées ensemble n’en feraient qu’UN seul instant, deux spawns
     // simultanés en feraient un de moins : les deux font rougir.
     expect(ages.size, `${ages.size} instants d’apparition distincts`).toBe(
-      EXPE.riftCap - EXPE.riftFloor + 1,
+      mapQuota(OUT).rifts - EXPE.riftFloor + 1,
     );
   });
 
@@ -1023,9 +1104,9 @@ describe('🕳️ le RANG d’une faille', () => {
     let mesures = 0;
     let memeRang = 0;
     for (const graine of [11, 22, 33, 44, 55, 66]) {
-      let map = createMap(graine, 0, 35);
+      let map = createMap(graine, 0, 35, OUT);
       for (let h = 1; h <= HEURES; h++) {
-        map = advanceWorld(map, h * HOUR, 35);
+        map = advanceWorld(map, h * HOUR, 35, OUT);
         if (h % 12 === 0) {
           const r = map.pois.filter(isRiftPoi).sort((x, y) => x.spawnedAt - y.spawnedAt);
           if (r[0]) map = { ...map, pois: map.pois.filter((q) => q.id !== r[0]!.id) };
@@ -1136,9 +1217,9 @@ describe('🪙 le RANG d’un lieu ne touche pas sa récompense (v0.1028)', () =
   // rang affiché et de l'XP des champions ; or, ressources et coût gardent la fenêtre.
   // Mesuré avant ce garde : récompense sur le rang = or de la carte −58 à −75 %.
   const spawned: Poi[] = [];
-  let map = createMap(4242, 0, 30);
+  let map = createMap(4242, 0, 30, OUT);
   for (let t = 0; t <= 7 * 24 * HOUR; t += 3 * HOUR) {
-    map = advanceWorld(map, t, 30);
+    map = advanceWorld(map, t, 30, OUT);
     for (const p of map.pois)
       if (isQuotaPoi(p) && !spawned.some((q) => q.id === p.id)) spawned.push(p);
   }

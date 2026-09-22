@@ -576,8 +576,11 @@ export const HARVEST = {
    *  encore, donc aucun de ces deux nombres ne peut être calibré aujourd'hui. Ce qui est
    *  vrai et testé, c'est le RATIO « fermer une faille > l'ignorer et ramasser sa mine »
    *  (cf. `rift.ts`). */
-  manaBase: 3,
-  manaPerLevel: 0.5,
+  // ⚠️ ÷~3 en v0.1040 : le mana d'une faille fermée est désormais FIXE (`RIFT.manaFoesPaid`,
+  // plus de prime à l'attente) — à 3 / 0,5 la mine la plus lointaine rendait PLUS que fermer
+  // la faille au niveau 5 (24 contre 21 💠). À 1 / 0,15 fermer vaut ~3× la mine partout.
+  manaBase: 1,
+  manaPerLevel: 0.15,
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
   /** Trajet (facteur de voyage) à partir duquel une archive rend une 2ᵉ clé : aller loin
@@ -605,8 +608,12 @@ export const EXPE = {
   // failles imposait donc de rendre 4 places : **-20 % de lieux ordinaires**, donc mines,
   // camps et épaves en moins — d'où la re-mesure de `campEconomy`, `goldSink` et
   // `scrapEconomy`, dont les bornes étaient calibrées sur 20.
-  poiCap: 16,
-  poiFloor: 16,
+  // ⚠️ **RÉFÉRENCES DE DENSITÉ, plus des plafonds (v0.1040).** Depuis que l'Avant-poste
+  // agrandit la carte (`revealRadius`), le nombre de lieux SUIT LA SURFACE révélée
+  // (`mapQuota`) : ces 16 lieux et 6 failles sont ceux que porte l'anneau de RÉFÉRENCE
+  // (rayon 18 → `distMax`, 64) — la densité à laquelle l'espacement `minDistPoi` a été
+  // mesuré. Densité constante = espacement tenu à toutes les tailles de carte.
+  poiRef: 16,
   /**
    * 🕳️ Failles simultanées — quota PROPRE, en plus des 16 (cf. `isQuotaPoi`).
    *
@@ -624,7 +631,7 @@ export const EXPE = {
    * ⚠️ **C'est le PLANCHER qui empilait**, pas le plafond — mesuré : cap 4/plancher 2 → 15
    * chevauchements, cap 4/plancher **3** → 102.
    */
-  riftCap: 6,
+  riftRef: 6,
   riftFloor: 2,
   /** Rythme d'apparition d'une faille. ⚠️ Volontairement plus LENT que celui des POI
    *  ordinaires (1-2 h) : une faille vit 7 jours, donc le quota se remplit de toute façon,
@@ -706,11 +713,10 @@ export const EXPE = {
   // 30 → 18 (v0.667) : l'anneau de bâtiments occupait cette couronne, son départ pour
   // l'écran « Ma base » y a laissé un trou et la ville avait l'air isolée.
   distMin: 18, // distance mini ville↔POI (coord ; la ville est au centre)
-  // ⚠️ Le maxi est BORNÉ PAR LA CÔTE, pas choisi librement : à 88 il valait le rayon
-  // NOMINAL du littoral, qui pince par endroits — les POI d'un renfoncement se
-  // retrouvaient donc dessinés en pleine mer. Cf. `landRadius()`, qui donne le rayon
-  // garanti de terre ferme, et le test qui vérifie que distMax reste dessous.
-  distMax: 64, // distance maxi (rayon → POI tout autour, 360°)
+  // ⚠️ Depuis la v0.1040 ce n'est plus le bord de la carte (c'est `revealRadius`) mais
+  // l'ÉCHELLE DE DISTANCE : `distNorm` vaut 1 à 64 et continue au-delà (`distNormAt`) —
+  // un lieu plus loin met plus de temps. Et l'anneau 18 → 64 sert de référence de densité.
+  distMax: 64,
   spawnMinMs: 3600_000, // intervalle de spawn : 1 h..2 h (jitter)
   spawnJitterMs: 3600_000,
   lifespanMs: {
@@ -842,11 +848,61 @@ export function poiRewardLevel(p: Pick<Poi, 'level' | 'rewardLevel'>): number {
   return p.rewardLevel ?? p.level;
 }
 
+/**
+ * 🗺️ LA CARTE GRANDIT AVEC L'AVANT-POSTE (v0.1040, demandé par l'utilisateur : « le niveau
+ * d'Avant-poste agrandit la map et le nombre d'events dessus, failles comprises »).
+ *
+ * Un BROUILLARD couvre le monde ; l'Avant-poste en révèle un disque autour de la ville, qui
+ * grandit à CHAQUE niveau (aucun niveau muet). Sa SURFACE va du rayon `r1` au niveau 1 à
+ * `areaMult100` fois l'anneau de référence au niveau 100, en racine du niveau : on découvre
+ * vite au début, puis ça ralentit (scénario C de la simulation, choisi par l'utilisateur).
+ * Mesuré : rayon 40 · 60 · 68 · 84 · 93 · 108 et 7 · 19 · 25 · 39 · 49 · 66 événements aux
+ * niveaux 1 · 5 · 10 · 30 · 50 · 100.
+ */
+export const MAP_REACH = { r1: 40, areaMult100: 3, maxLevel: 100, margin: 14 } as const;
+
+const annulusArea = (r: number) => Math.PI * (r * r - EXPE.distMin * EXPE.distMin);
+const REF_AREA = annulusArea(EXPE.distMax);
+
+/** Rayon RÉVÉLÉ autour de la ville pour un niveau d'Avant-poste (sans Avant-poste : niveau 1). */
+export function revealRadius(outpostLevel: number): number {
+  const L = Math.min(MAP_REACH.maxLevel, Math.max(1, Math.floor(outpostLevel) || 1));
+  const a1 = annulusArea(MAP_REACH.r1);
+  const a100 = REF_AREA * MAP_REACH.areaMult100;
+  const t = Math.sqrt((L - 1) / (MAP_REACH.maxLevel - 1));
+  return Math.sqrt((a1 + (a100 - a1) * t) / Math.PI + EXPE.distMin * EXPE.distMin);
+}
+
+/** Nombre de lieux et de failles sur la carte révélée : PROPORTIONNEL À SA SURFACE, à la
+ *  densité de l'anneau de référence (`poiRef` + `riftRef` sur 18 → 64). ⚠️ La part des
+ *  failles garde celle de la référence, sans descendre sous `riftFloor` (l'accès au mana). */
+export function mapQuota(outpostLevel: number): { pois: number; rifts: number } {
+  const R = revealRadius(outpostLevel);
+  const ref = EXPE.poiRef + EXPE.riftRef;
+  const n = Math.round((ref * annulusArea(R)) / REF_AREA);
+  const rifts = Math.max(EXPE.riftFloor, Math.round((n * EXPE.riftRef) / ref));
+  return { pois: Math.max(1, n - rifts), rifts };
+}
+
+/** Fenêtre DESSINÉE de la carte : le disque révélable au plus grand, plus une marge.
+ *  ⚠️ La ville reste en (100, 100) — les lieux, trajets et équipes sauvegardés gardent leurs
+ *  coordonnées : la carte s'étend en NÉGATIF autour, aucune migration de données. */
+export const MAP_VIEW = (() => {
+  const half = revealRadius(MAP_REACH.maxLevel) + MAP_REACH.margin;
+  return { min: EXPE.town.x - half, size: 2 * half };
+})();
+
+/** Distance normalisée d'un point à la ville : 0 à `distMin`, 1 à `distMax`, et AU-DELÀ
+ *  sans plafond — c'est ce qui allonge le trajet vers les terres révélées plus tard. */
+export function distNormAt(d: number): number {
+  return Math.max(0, (d - EXPE.distMin) / (EXPE.distMax - EXPE.distMin));
+}
+
 /** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
 export function travelOneWayMin(level: number, distNorm: number): number {
   const base =
     EXPE.travelOneWayMinMin +
-    (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * clamp01(distNorm);
+    (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * Math.max(0, distNorm);
   return Math.round(base * (1 + Math.max(0, level) * 0.02));
 }
 
@@ -998,25 +1054,26 @@ function pick<T>(rng: () => number, arr: readonly T[]): T {
  *  ni l'économie ne bougent**. `minFrac` (l'arène, qu'on veut loin) prime sur la bande. */
 function placePoi(
   rng: () => number,
+  reach: number,
   minFrac = 0,
   band?: number,
 ): { x: number; y: number; distNorm: number } {
-  const { town, distMin, distMax, mapSize } = EXPE;
-  const pad = 10;
-  const lo = distMin + clamp01(minFrac) * (distMax - distMin);
+  const { town, distMin } = EXPE;
+  const lo = distMin + clamp01(minFrac) * (reach - distMin);
   // Tiers visé (ignoré si un plancher explicite a déjà resserré la fenêtre).
   const nb = EXPE.distBands;
   const b = band === undefined || minFrac > 0 ? null : ((band % nb) + nb) % nb;
   for (let tries = 0; tries < 40; tries++) {
     const ang = rng() * Math.PI * 2; // angle libre → POI dans tous les sens
-    const span = distMax - lo;
+    const span = reach - lo;
     const dd = b === null ? lo + rng() * span : lo + ((b + rng()) / nb) * span;
     const x = Math.round(town.x + Math.cos(ang) * dd);
     const y = Math.round(town.y + Math.sin(ang) * dd);
-    if (x < pad || x > mapSize - pad || y < pad || y > mapSize - pad) continue;
-    return { x, y, distNorm: clamp01((dd - distMin) / (distMax - distMin)) };
+    // ⚠️ L'arrondi peut pousser d'un cheveu hors du disque révélé : on retire.
+    if (Math.hypot(x - town.x, y - town.y) > reach) continue;
+    return { x, y, distNorm: distNormAt(dd) };
   }
-  return { x: town.x + lo, y: town.y, distNorm: clamp01((lo - distMin) / (distMax - distMin)) };
+  return { x: Math.round(town.x + lo), y: town.y, distNorm: distNormAt(lo) };
 }
 
 /** Crée une carte neuve avec `seedPois` POI d'entrée (à la 1re visite). Par défaut,
@@ -1025,8 +1082,11 @@ export function createMap(
   seed: number,
   now: number,
   playerLevel: number,
-  seedPois = EXPE.poiFloor,
+  /** ⚠️ REQUIS : la taille de la carte et le nombre de lieux en dépendent. */
+  outpostLevel: number,
+  seedPois = mapQuota(outpostLevel).pois,
 ): ExpeditionMap {
+  const reach = revealRadius(outpostLevel);
   const map: ExpeditionMap = {
     seed: seed >>> 0 || 1,
     spawnCount: 0,
@@ -1035,17 +1095,17 @@ export function createMap(
     riftCount: 0,
     nextRiftAt: now,
   };
-  for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel);
+  for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel, reach);
   // 🕳️ On sème aussi le PLANCHER de failles : sans elles, une carte neuve n'aurait ni accès
   // au mana ni siège à venir jusqu'au premier `advanceWorld`.
-  for (let i = 0; i < EXPE.riftFloor; i++) spawnRift(map, now, playerLevel);
+  for (let i = 0; i < EXPE.riftFloor; i++) spawnRift(map, now, playerLevel, reach);
   map.nextSpawnAt = now + EXPE.spawnMinMs;
   map.nextRiftAt = now + EXPE.riftSpawnMinMs;
   return map;
 }
 
 // Fait apparaître 1 POI (déterministe via seed + spawnCount), placé espacé.
-function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
+function spawnOne(map: ExpeditionMap, now: number, playerLevel: number, reach: number): void {
   const rng = mulberry32((map.seed + map.spawnCount * 2654435761) >>> 0);
   map.spawnCount++;
   // Pondération : la MOITIÉ des spawns sont des POI de RESSOURCES (v0.658). C'est le
@@ -1068,7 +1128,7 @@ function spawnOne(map: ExpeditionMap, now: number, playerLevel: number): void {
   ] as const);
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
-  placePoiOfType(map, now, playerLevel, type, rng, `poi_${map.seed}_${map.spawnCount}`);
+  placePoiOfType(map, now, playerLevel, reach, type, rng, `poi_${map.seed}_${map.spawnCount}`);
 }
 
 /**
@@ -1165,7 +1225,7 @@ export function riftSlotOf(level: number, playerLevel: number): number {
     : characterRank(level).rankIndex;
 }
 
-function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
+function spawnRift(map: ExpeditionMap, now: number, playerLevel: number, reach: number): void {
   const n = map.riftCount ?? 0;
   const rng = mulberry32(((map.seed ^ 0x52ff3a1d) + n * 2654435761) >>> 0 || 1);
   map.riftCount = n + 1;
@@ -1173,6 +1233,7 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number): void {
     map,
     now,
     playerLevel,
+    reach,
     'rift',
     rng,
     `rift_${map.seed}_${n + 1}`,
@@ -1194,6 +1255,7 @@ function placePoiOfType(
   map: ExpeditionMap,
   now: number,
   playerLevel: number,
+  reach: number,
   type: PoiType,
   rng: () => number,
   id: string,
@@ -1211,12 +1273,12 @@ function placePoiOfType(
   // (mesuré : 17 paires chevauchantes sur quelques jours de simulation). On tente plus
   // longtemps, et surtout on GARDE LE MEILLEUR candidat : à défaut d'un emplacement
   // parfait, on prend le moins mauvais au lieu du dernier venu.
-  let pos = placePoi(rng, minFrac, band);
+  let pos = placePoi(rng, reach, minFrac, band);
   const clearance = (p: { x: number; y: number }) =>
     map.pois.length ? Math.min(...map.pois.map((q) => dist(q.x, q.y, p.x, p.y))) : Infinity;
   let best = clearance(pos);
   for (let k = 0; k < 24 && best < EXPE.minDistPoi; k++) {
-    const cand = placePoi(rng, minFrac, band);
+    const cand = placePoi(rng, reach, minFrac, band);
     const gap = clearance(cand);
     if (gap > best) {
       best = gap;
@@ -1252,7 +1314,9 @@ function placePoiOfType(
   // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement
   // justifie (`travelLevel`, v0.1012), sinon un lieu fort près de la ville mettrait autant
   // de temps qu'un lieu lointain — le trajet ne se lirait plus sur la carte.
-  const travelLevel = win.min + Math.round(pos.distNorm * span);
+  // ⚠️ Plafonné à 1 : au-delà de l'échelle, c'est la DISTANCE qui allonge le trajet
+  // (`travelOneWayMin`), pas un niveau hors de la fenêtre.
+  const travelLevel = win.min + Math.round(Math.min(1, pos.distNorm) * span);
   // Route dangereuse : tirée AU SPAWN pour être annoncée avant l'envoi (télégraphiée).
   const perilous = rng() < EXPE.perilousChance;
   const poi: Poi = {
@@ -1339,8 +1403,12 @@ export function advanceWorld(
   map: ExpeditionMap,
   now: number,
   playerLevel: number,
+  /** ⚠️ REQUIS : la taille de la carte et le nombre de lieux en dépendent. */
+  outpostLevel: number,
   protectedPoiId?: string,
 ): ExpeditionMap {
+  const reach = revealRadius(outpostLevel);
+  const cap = mapQuota(outpostLevel);
   // 🕳️ DÉBORDEMENT D'ABORD, avant tout filtrage : une faille arrivée à maturité
   // s'effondre et laisse une MINE DE MANA RÉSIDUEL. ⚠️ Si on filtrait d'abord, la faille
   // serait simplement « expirée » (sa durée de vie EST sa maturation) et la mine n'aurait
@@ -1428,7 +1496,9 @@ export function advanceWorld(
     // est physiquement, on ne la fait pas disparaître sous ses pieds.
     // ⚓ Et les ÉPAVES, type retiré (v0.999) : une carte sauvegardée avant en porte encore.
     pois: withMines.filter(
-      (p) => p.id === protectedPoiId || (p.type !== 'wreck' && p.expiresAt > now && withinLand(p)),
+      (p) =>
+        p.id === protectedPoiId ||
+        (p.type !== 'wreck' && p.expiresAt > now && withinLand(p, reach)),
     ),
   };
   // ⚠️ LES QUOTAS SE COMPTENT SÉPARÉMENT (`isQuotaPoi`) : une faille ou une mine qui
@@ -1440,28 +1510,28 @@ export function advanceWorld(
   // PLUSIEURS fois → on fait apparaître autant de POI que d'intervalles écoulés
   // (jusqu'au cap), sinon la carte restait à 1 spawn/ouverture et se vidait.
   let guard = 0;
-  while (now >= next.nextSpawnAt && quota() < EXPE.poiCap && guard++ < EXPE.poiCap) {
-    spawnOne(next, now, playerLevel);
+  while (now >= next.nextSpawnAt && quota() < cap.pois && guard++ < cap.pois) {
+    spawnOne(next, now, playerLevel, reach);
     const rng = mulberry32((next.seed + next.spawnCount * 40503) >>> 0);
     next.nextSpawnAt = next.nextSpawnAt + EXPE.spawnMinMs + Math.floor(rng() * EXPE.spawnJitterMs);
   }
   // PLANCHER : la carte ne descend jamais sous `poiFloor` activités → on complète
   // immédiatement (les activités de base sont toujours dispo ; la rareté/churn ne
   // joue qu'entre le plancher et le cap).
-  while (quota() < EXPE.poiFloor) spawnOne(next, now, playerLevel);
+  while (quota() < cap.pois) spawnOne(next, now, playerLevel, reach);
   if (next.nextSpawnAt <= now) next.nextSpawnAt = now + EXPE.spawnMinMs;
 
   // 🕳️ FAILLES : même mécanique, quota et horloge PROPRES. ⚠️ Le plancher garantit qu'il y
   // a toujours de quoi aller refermer quelque chose — une carte sans faille, et le joueur
   // n'a plus d'accès au mana ni de siège à venir.
   let rGuard = 0;
-  while (now >= (next.nextRiftAt ?? now) && rifts() < EXPE.riftCap && rGuard++ < EXPE.riftCap) {
-    spawnRift(next, now, playerLevel);
+  while (now >= (next.nextRiftAt ?? now) && rifts() < cap.rifts && rGuard++ < cap.rifts) {
+    spawnRift(next, now, playerLevel, reach);
     const rng = mulberry32(((next.seed ^ 0x1b873593) + (next.riftCount ?? 0) * 40503) >>> 0 || 1);
     next.nextRiftAt =
       (next.nextRiftAt ?? now) + EXPE.riftSpawnMinMs + Math.floor(rng() * EXPE.riftSpawnJitterMs);
   }
-  while (rifts() < EXPE.riftFloor) spawnRift(next, now, playerLevel);
+  while (rifts() < EXPE.riftFloor) spawnRift(next, now, playerLevel, reach);
   if ((next.nextRiftAt ?? now) <= now) next.nextRiftAt = now + EXPE.riftSpawnMinMs;
   // 🐫 HARCÈLEMENT DES CONVOIS — dérivé EN DERNIER, une fois la carte stable (débordements
   // retirés, embuscades posées ou expirées, spawns et plancher posés). Seules les
@@ -1481,7 +1551,7 @@ export function advanceWorld(
     const y = p.from.y + (EXPE.town.y - p.from.y) * t;
     if (x === p.x && y === p.y) return p;
     const d = Math.hypot(x - EXPE.town.x, y - EXPE.town.y);
-    const distNorm = clamp01((d - EXPE.distMin) / (EXPE.distMax - EXPE.distMin));
+    const distNorm = distNormAt(d);
     return { ...p, x, y, distNorm };
   });
   const irr = irradiatedPoiIds(next.pois, next.ambushes, now);
@@ -2011,7 +2081,6 @@ interface Motif {
   y: number;
 }
 export interface Terrain {
-  coast: string; // contour de la CÔTE (continent) — path fermé
   features: Motif[]; // reliefs dessinés (chaînes de montagnes, forêts, dunes)
   rivers: string[]; // rivières serpentant depuis les reliefs
   /** Décor de prairie (v0.749) : touffes d'herbe et taches plus sombres, sur la terre
@@ -2021,32 +2090,6 @@ export interface Terrain {
 }
 
 const f1 = (v: number) => v.toFixed(1);
-
-// Blob organique fermé (lissé) autour de (cx,cy).
-/** Contour irrégulier fermé. ⚠️ Son rayon ne descend JAMAIS sous `r × COAST.min` : c'est
- *  ce plancher qui garantit que les POI restent sur la terre ferme (cf. `landRadius`).
- *  Avant, le rayon variait de 0,74 à 1,20 × r — la côte pinçait donc jusqu'à ~65 alors
- *  que les POI allaient jusqu'à 88 : ceux tombés dans un renfoncement flottaient en mer. */
-function blobPath(rng: () => number, cx: number, cy: number, r: number, n: number): string {
-  const pts: [number, number][] = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const rr = r * (COAST.min + rng() * COAST.span);
-    pts.push([cx + Math.cos(a) * rr, cy + Math.sin(a) * rr]);
-  }
-  const mid = (i: number): [number, number] => {
-    const p = pts[i]!;
-    const q = pts[(i + 1) % n]!;
-    return [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-  };
-  let d = `M ${f1(mid(n - 1)[0])} ${f1(mid(n - 1)[1])}`;
-  for (let i = 0; i < n; i++) {
-    const p = pts[i]!;
-    const m = mid(i);
-    d += ` Q ${f1(p[0])} ${f1(p[1])} ${f1(m[0])} ${f1(m[1])}`;
-  }
-  return d + ' Z';
-}
 
 // Un pic de montagne dessiné à l'encre (contour + versant hachuré).
 function peakPath(x: number, y: number, s: number): string {
@@ -2063,18 +2106,21 @@ export function treePath(x: number, y: number, s: number): string {
 function dunePath(x: number, y: number, s: number): string {
   return `M ${f1(x - 4 * s)} ${f1(y)} Q ${f1(x)} ${f1(y - 2.2 * s)} ${f1(x + 4 * s)} ${f1(y)}`;
 }
+
+/** Le point est-il DANS la fenêtre dessinée (marge comprise) ? */
+function inView(x: number, y: number, margin = 0): boolean {
+  const lo = MAP_VIEW.min + margin;
+  const hi = MAP_VIEW.min + MAP_VIEW.size - margin;
+  return x >= lo && x <= hi && y >= lo && y <= hi;
+}
+
 /**
- * Une rivière serpentant depuis (x,y) vers l'extérieur (path lissé).
+ * Une rivière serpentant depuis (x,y) (path lissé).
  *
- * ⚠️ ELLE S'ARRÊTE À LA CÔTE. Sans cette borne, le tracé continuait tout droit sur sa
- * longueur (30 à 60) sans savoir où finit la terre : des rivières coulaient EN PLEINE
- * MER et sortaient du cadre. Le défaut existait depuis l'origine — l'encre monochrome
- * le rendait invisible, le sol peint l'a montré du premier coup d'œil. Le fleuve se
- * jette donc à l'eau : on coupe au premier point hors du rayon de terre ferme.
+ * ⚠️ PLUS DE CÔTE (v0.1040) : la carte n'est plus une île, la rivière s'arrête donc au BORD
+ * de la fenêtre dessinée au lieu de se jeter à la mer.
  */
 function riverPath(rng: () => number, x: number, y: number, dir: number, len: number): string {
-  const C = EXPE.mapSize / 2;
-  const shore = landRadius() + 2; // un cheveu au-delà : l'embouchure touche la mer
   let px = x;
   let py = y;
   let d = `M ${f1(px)} ${f1(py)}`;
@@ -2087,7 +2133,7 @@ function riverPath(rng: () => number, x: number, y: number, dir: number, len: nu
     const my = py + Math.sin(a) * seg * 0.5;
     const nx = px + Math.cos(a) * seg;
     const ny = py + Math.sin(a) * seg;
-    if (Math.hypot(nx - C, ny - C) > shore) break; // la rivière se jette à la mer
+    if (!inView(nx, ny)) break;
     px = nx;
     py = ny;
     d += ` Q ${f1(mx)} ${f1(my)} ${f1(px)} ${f1(py)}`;
@@ -2095,35 +2141,33 @@ function riverPath(rng: () => number, x: number, y: number, dir: number, len: nu
   return d;
 }
 
-/** Réglages du littoral. `min`/`span` = fraction du rayon nominal : le contour va donc de
- *  `min` à `min + span`. Le PLANCHER est ce qui compte — c'est lui qui garantit la terre
- *  ferme sous les POI. */
-const COAST = { r: 0.44, min: 0.86, span: 0.28, pinch: 0.988 } as const;
-
-/** Rayon de terre ferme GARANTI autour de la ville. La courbe de côte étant tracée en
- *  Bézier par les milieux des points de contrôle, elle passe légèrement en deçà du
- *  plancher entre deux points bas : `pinch` l'encaisse. Tout POI doit tenir là-dedans. */
-export function landRadius(): number {
-  return EXPE.mapSize * COAST.r * COAST.min * COAST.pinch;
+/** Un POI tient-il dans la carte RÉVÉLÉE ? Sert à PÉRIMER les lieux hors du disque (cartes
+ *  sauvegardées avant les bornes actuelles). Petite tolérance pour ne pas balayer un POI
+ *  légitime posé pile sur la limite. ⚠️ Le rayon ne fait que GRANDIR (un niveau de bâtiment
+ *  ne redescend jamais) : un lieu déjà révélé n'est jamais retiré par ce filtre. */
+function withinLand(p: { x: number; y: number }, reach: number): boolean {
+  return Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y) <= reach + 1;
 }
 
-/** Un POI tient-il dans la fenêtre de la carte ? Sert à PÉRIMER les POI des cartes
- *  sauvegardées avant que `distMax` ne soit borné par le littoral (v0.668) : sans ça, un
- *  joueur garderait jusqu'à 48 h des POI dessinés en pleine mer. Petite tolérance pour ne
- *  pas balayer un POI parfaitement légitime posé pile sur la limite. */
-function withinLand(p: { x: number; y: number }): boolean {
-  return Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y) <= EXPE.distMax + 1;
-}
+/** Surface dessinée rapportée à l'ancienne île (rayon ~88) : sert à garder la MÊME densité
+ *  de décor sur une carte plus grande. */
+const DECOR_SCALE = (MAP_VIEW.size * MAP_VIEW.size) / (Math.PI * 88 * 88);
 
-/** Terrain de la carte (déterministe pour un `seed`) : côte + reliefs + rivières (encre). */
+/**
+ * Terrain de la carte (déterministe pour un `seed`) : prairie CONTINUE + reliefs + rivières.
+ *
+ * ⚠️ PLUS D'ÎLE (v0.1040, demandé par l'utilisateur) : le sol couvre toute la fenêtre, sans
+ * mer ni littoral — c'est le BROUILLARD (écran) qui borne ce qu'on voit, et il recule avec
+ * l'Avant-poste. Le monde entier est tiré une fois ; il ne change pas quand la carte grandit.
+ */
 export function expeditionTerrain(seed: number): Terrain {
   const rng = mulberry32(seed >>> 0 || 1);
-  const C = EXPE.mapSize / 2; // centre de la carte
-  // Continent : grand contour irrégulier, très découpé (détaillé).
-  const coast = blobPath(rng, C, C, EXPE.mapSize * COAST.r, 20);
+  const C = EXPE.town.x; // centre de la carte = la ville
+  const half = MAP_VIEW.size / 2;
   const features: Motif[] = [];
   const rivers: string[] = [];
   const push = (kind: MotifKind, x: number, y: number, s: number) => {
+    if (!inView(x, y, 2)) return;
     const d =
       kind === 'mountain'
         ? peakPath(x, y, s)
@@ -2132,20 +2176,18 @@ export function expeditionTerrain(seed: number): Terrain {
           : dunePath(x, y, s);
     features.push({ kind, d, x, y });
   };
-  // Amas de relief (chaîne / forêt / désert) répartis dans le continent — nombre
-  // et étalement mis à l'échelle de la carte (plus grande = plus de reliefs, étalés).
-  const clusters = 8 + Math.floor(rng() * 4);
-  const spread = EXPE.mapSize * 0.3; // rayon d'étalement des amas (reste dans la côte)
+  // Amas de relief (chaîne / forêt / désert) répartis sur toute la fenêtre, à la même
+  // densité qu'autrefois sur l'île.
+  const clusters = Math.round((8 + Math.floor(rng() * 4)) * DECOR_SCALE);
   const centers: [number, number][] = [];
   for (let c = 0; c < clusters; c++) {
     let cx = C;
     let cy = C;
     for (let tries = 0; tries < 24; tries++) {
-      const a = rng() * Math.PI * 2;
-      const rr = EXPE.mapSize * 0.1 + rng() * spread;
-      cx = C + Math.cos(a) * rr;
-      cy = C + Math.sin(a) * rr;
-      if (centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 24)) break;
+      cx = C + (rng() * 2 - 1) * (half - 6);
+      cy = C + (rng() * 2 - 1) * (half - 6);
+      const loin = Math.hypot(cx - C, cy - C) > 20; // pas sur la ville
+      if (loin && centers.every(([px, py]) => Math.hypot(px - cx, py - cy) > 24)) break;
     }
     centers.push([cx, cy]);
     const kind: MotifKind = (['mountain', 'tree', 'dune', 'mountain', 'tree'] as const)[
@@ -2180,30 +2222,29 @@ export function expeditionTerrain(seed: number): Terrain {
   }
   // Ordre peintre : du fond (haut) vers l'avant (bas).
   features.sort((a, b) => a.y - b.y);
-  // ⚠️ Décor de prairie tiré d'un rng SÉPARÉ : ajouté après coup, il ne doit pas décaler
-  // les tirages de la côte, des reliefs et des rivières (sorties byte-identiques).
+  // Décor de prairie tiré d'un rng SÉPARÉ (il ne décale pas les tirages du relief).
   const dec = mulberry32((seed ^ 0x5bd1e995) >>> 0 || 7);
-  const inland = landRadius() - 6;
   const tufts: string[] = [];
   const patches: Terrain['patches'] = [];
-  for (let i = 0; i < 400 && tufts.length < 70; i++) {
-    const x = dec() * EXPE.mapSize;
-    const y = dec() * EXPE.mapSize;
-    const dc = Math.hypot(x - C, y - C);
-    if (dc > inland || dc < 14) continue; // ni en mer, ni sous la ville
+  const nTufts = Math.round(70 * DECOR_SCALE);
+  const nPatches = Math.round(12 * DECOR_SCALE);
+  const rx = () => MAP_VIEW.min + dec() * MAP_VIEW.size;
+  for (let i = 0; i < nTufts * 6 && tufts.length < nTufts; i++) {
+    const x = rx();
+    const y = rx();
+    if (Math.hypot(x - C, y - C) < 14) continue; // pas sous la ville
     const h = 1.6 + dec() * 1.2;
     tufts.push(
       `M${f1(x)} ${f1(y)} l-0.9 -${f1(h * 0.8)} M${f1(x)} ${f1(y)} l0 -${f1(h)} M${f1(x)} ${f1(y)} l0.9 -${f1(h * 0.8)}`,
     );
   }
-  for (let i = 0; i < 120 && patches.length < 12; i++) {
-    const cx = dec() * EXPE.mapSize;
-    const cy = dec() * EXPE.mapSize;
-    const dc = Math.hypot(cx - C, cy - C);
-    if (dc > inland - 6 || dc < 16) continue;
+  for (let i = 0; i < nPatches * 10 && patches.length < nPatches; i++) {
+    const cx = rx();
+    const cy = rx();
+    if (Math.hypot(cx - C, cy - C) < 16) continue;
     patches.push({ cx: +f1(cx), cy: +f1(cy), rx: +f1(5 + dec() * 8), ry: +f1(2.5 + dec() * 3.5) });
   }
-  return { coast, features, rivers, tufts, patches };
+  return { features, rivers, tufts, patches };
 }
 
 /** Construit une expédition (au moment de l'envoi). `now` = ms epoch. `travelMult`

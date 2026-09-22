@@ -119,17 +119,20 @@ describe('💎 le mana : ce que paient une incursion, une fermeture, et la mine'
     expect(riftMana(10, 60)).toBeGreaterThan(riftMana(10, 30));
   });
 
-  it('fermer paie le boss EN PLUS des monstres', () => {
+  it('fermer paie un mana FIXE, prime du gardien comprise (v0.1040)', () => {
     const r = rift();
-    const at = riftOverflowAt(r);
-    const foes = riftMana(riftPopulation(r, at), r.level);
-    expect(riftClearMana(r, at)).toBe(Math.round(foes * (1 + RIFT.bossManaShare)));
-    expect(riftClearMana(r, at)).toBeGreaterThan(foes);
+    const foes = riftMana(RIFT.manaFoesPaid, r.level);
+    expect(riftClearMana(r)).toBe(Math.round(foes * (1 + RIFT.bossManaShare)));
+    expect(riftClearMana(r)).toBeGreaterThan(foes);
   });
 
-  it('une faille mûre paie bien plus qu’une faille jeune (c’est l’arbitraire tôt/tard)', () => {
+  it('⚠️ ATTENDRE NE PAIE PLUS : le mana ne dépend pas de l’âge — c’est l’URGENCE (v0.1040)', () => {
+    // Avant, le mana suivait l'effectif (×6 entre l'ouverture et la maturité) et fermer une
+    // faille par jour rendait plus que d'en fermer deux. Désormais la faille devient plus
+    // DURE en vieillissant (l'effectif monte toujours) pour AUCUN gain : on la ferme vite.
     const r = rift();
-    expect(riftClearMana(r, riftOverflowAt(r))).toBeGreaterThan(riftClearMana(r, T0) * 3);
+    expect(riftClearMana({ level: r.level })).toBe(riftClearMana(r));
+    expect(riftPopulation(r, riftOverflowAt(r))).toBeGreaterThan(riftPopulation(r, T0) * 3);
   });
 });
 
@@ -239,8 +242,14 @@ describe('💎 le mana d’une incursion', () => {
       finalPv: 0,
       journal: [],
     };
-    expect(incursionMana(rate, 30)).toBe(riftMana(5, 30));
+    // ⚠️ La PART abattue du mana fixe (v0.1040), pas un compte de monstres : payée au
+    // monstre, une faille mûre (plus peuplée) rapporterait plus en échouant qu'une jeune
+    // en réussissant — l'attente reviendrait par la bande.
+    expect(incursionMana(rate, 30)).toBe(riftMana((RIFT.manaFoesPaid * 5) / 12, 30));
     expect(incursionMana(rate, 30)).toBeGreaterThan(0);
+    const jeune = { ...rate, killed: 1, population: 2 };
+    const mure = { ...rate, killed: 6, population: 12 };
+    expect(incursionMana(jeune, 30)).toBe(incursionMana(mure, 30));
   });
 
   it('fermer ajoute la prime du gardien', () => {
@@ -254,7 +263,7 @@ describe('💎 le mana d’une incursion', () => {
     };
     const partial = { ...done, cleared: false, bossDown: false };
     expect(incursionMana(done, 30)).toBeGreaterThan(incursionMana(partial, 30));
-    expect(incursionMana(done, 30)).toBe(Math.round(riftMana(12, 30) * (1 + RIFT.bossManaShare)));
+    expect(incursionMana(done, 30)).toBe(riftClearMana({ level: 30 })); // le mana fixe, gardien compris
   });
 
   it('rien d’abattu, rien de payé', () => {

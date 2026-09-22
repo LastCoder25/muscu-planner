@@ -27,17 +27,56 @@
     <div class="map-outer">
       <div ref="scrollEl" class="map-scroll" @scroll="onScroll">
         <svg
-          :viewBox="`0 0 ${MAP} ${MAP}`"
+          :viewBox="`${V.min} ${V.min} ${V.size} ${V.size}`"
           class="map"
           :style="{ width: mapPx + 'px', height: mapPx + 'px' }"
         >
           <!-- Le SOL : mer, côte, prairie, reliefs — même langage que la Base (v0.749). -->
-          <MapTerrain :terrain="terrain" :size="MAP" />
+          <MapTerrain :terrain="terrain" :view="V" />
+
+          <!-- 🌫️ BROUILLARD DE GUERRE (v0.1040) : l'Avant-poste révèle un disque autour de la
+               ville, qui grandit à chaque niveau. Au-delà, on devine le relief sans voir
+               aucun lieu. Bord fondu (dégradé radial), liseré pointillé pour lire la limite. -->
+          <defs>
+            <radialGradient
+              id="fog-edge"
+              gradientUnits="userSpaceOnUse"
+              :cx="TOWN.x"
+              :cy="TOWN.y"
+              :r="reveal + FOG_SOFT"
+            >
+              <stop :offset="fogInner" stop-color="#15120e" stop-opacity="0" />
+              <stop offset="1" stop-color="#15120e" stop-opacity="0.9" />
+            </radialGradient>
+          </defs>
+          <rect
+            :x="V.min"
+            :y="V.min"
+            :width="V.size"
+            :height="V.size"
+            fill="url(#fog-edge)"
+            class="fog"
+          />
+          <circle :cx="TOWN.x" :cy="TOWN.y" :r="reveal" class="fog-rim" />
 
           <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
-          <rect x="1.5" y="1.5" :width="MAP - 3" :height="MAP - 3" rx="2" class="map-frame" />
-          <rect x="3.5" y="3.5" :width="MAP - 7" :height="MAP - 7" rx="1" class="map-frame thin" />
-          <g class="compass" :transform="`translate(${MAP - 100} 0)`">
+          <rect
+            :x="V.min + 1.5"
+            :y="V.min + 1.5"
+            :width="V.size - 3"
+            :height="V.size - 3"
+            rx="2"
+            class="map-frame"
+          />
+          <rect
+            :x="V.min + 3.5"
+            :y="V.min + 3.5"
+            :width="V.size - 7"
+            :height="V.size - 7"
+            rx="1"
+            class="map-frame thin"
+          />
+          <g class="compass" :transform="`translate(${V.min + V.size - 100} ${V.min})`">
             <circle cx="90" cy="10" r="5.5" class="comp-bg" />
             <path d="M 90 5 L 91.4 10 L 90 8.7 L 88.6 10 Z" class="comp-needle" />
             <text x="90" y="4" class="comp-n">N</text>
@@ -633,6 +672,8 @@ import {
   poiRewardLevel,
   travelOneWayMin,
   expeditionTerrain,
+  MAP_VIEW,
+  revealRadius,
   type Poi,
   type PoiType,
   HARVEST_TYPES,
@@ -722,7 +763,6 @@ const townYard = townPts
  *  corps de garde, la porte et le départ du chemin — exactement comme sur l'écran Base. */
 const TOWN_AP = TOWN_R * Math.cos(Math.PI / 8);
 const townRoad = `M${TOWN.x - 1.2} ${TOWN.y + TOWN_AP} L${TOWN.x - 2.2} ${TOWN.y + 14} L${TOWN.x + 2.2} ${TOWN.y + 14} L${TOWN.x + 1.2} ${TOWN.y + TOWN_AP} Z`;
-const MAP = EXPE.mapSize;
 
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -769,8 +809,14 @@ const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
 const terrain = computed(() =>
   char.row?.expedition_map
     ? expeditionTerrain(char.row.expedition_map.seed)
-    : { coast: '', features: [], rivers: [], tufts: [], patches: [] },
+    : { features: [], rivers: [], tufts: [], patches: [] },
 );
+/** 🗺️ Fenêtre dessinée (la ville reste en 100,100 ; la carte s'étend en négatif autour). */
+const V = MAP_VIEW;
+/** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
+const reveal = computed(() => revealRadius(char.comptoirLevel));
+const FOG_SOFT = 10; // largeur du fondu du brouillard
+const fogInner = computed(() => Math.max(0, (reveal.value - 3) / (reveal.value + FOG_SOFT)));
 const hero = computed(() => (active.value ? travelPosition(active.value, now.value) : null));
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
@@ -824,8 +870,8 @@ function onScroll() {
 function centerOn(svgX: number, svgY: number) {
   const el = scrollEl.value;
   if (!el) return;
-  el.scrollLeft = (svgX / MAP) * mapPx.value - el.clientWidth / 2;
-  el.scrollTop = (svgY / MAP) * mapPx.value - el.clientHeight / 2;
+  el.scrollLeft = ((svgX - V.min) / V.size) * mapPx.value - el.clientWidth / 2;
+  el.scrollTop = ((svgY - V.min) / V.size) * mapPx.value - el.clientHeight / 2;
   onScroll();
 }
 function centerTown() {
@@ -840,7 +886,7 @@ function zoom(dir: number) {
   const cx = ((el?.scrollLeft ?? 0) + contW.value / 2) / mapPx.value;
   const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
   mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, mapPx.value + dir * ZOOM_STEP));
-  void nextTick(() => centerOn(cx * MAP, cy * MAP));
+  void nextTick(() => centerOn(V.min + cx * V.size, V.min + cy * V.size));
 }
 // Activités hors écran → flèche au bord pointant vers elles (clic = slide dessus).
 const edgeIndicators = computed(() => {
@@ -851,8 +897,8 @@ const edgeIndicators = computed(() => {
   const src = [...pois.value, ...(active.value ? [active.value.poi] : [])];
   const out: { id: string; poi: Poi; x: number; y: number; deg: number }[] = [];
   for (const p of src) {
-    const px = (p.x / MAP) * mapPx.value - scrollX.value;
-    const py = (p.y / MAP) * mapPx.value - scrollY.value;
+    const px = ((p.x - V.min) / V.size) * mapPx.value - scrollX.value;
+    const py = ((p.y - V.min) / V.size) * mapPx.value - scrollY.value;
     if (px >= 0 && px <= cw && py >= 0 && py <= ch) continue; // visible
     const dx = px - cw / 2;
     const dy = py - ch / 2;
@@ -1013,7 +1059,7 @@ const selectedRift = computed(() => {
     maxFoes: RIFT.maxFoes,
     overflowIn: riftOverflowAt(p) - now.value,
     /** Ce que la REFERMER rapporte, gardien compris — annoncé avant d’entrer. */
-    clearMana: riftClearMana(p, now.value),
+    clearMana: riftClearMana(p),
   };
 });
 /** ⚔️🕳️ Ce lieu s’attaque-t-il en GROUPE ? Un camp ou une faille. ⚠️ UNE seule définition,
@@ -1770,8 +1816,12 @@ onMounted(async () => {
   if (uid) await char.expeSyncMap(uid, Date.now(), progressionLevel.value).catch(() => undefined);
   await nextTick();
   measure();
-  // Vue de départ : base large (grande carte) + 2 crans de zoom (1 cran = 200 px).
-  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, Math.round(contW.value * 1.3) + 2 * ZOOM_STEP));
+  // Vue de départ : le disque révélé tient dans la largeur (la carte grandit avec
+  // l'Avant-poste, un zoom fixe montrerait un tout petit disque en début de partie).
+  mapPx.value = Math.max(
+    MIN_PX,
+    Math.min(MAX_PX, Math.round((contW.value * V.size) / (2 * (reveal.value + 6)))),
+  );
   await nextTick();
   centerTown();
   window.addEventListener('resize', measure);
@@ -2191,6 +2241,17 @@ onUnmounted(() => {
 /* Décor de carte */
 /* Terrain : le sol vit dans MapTerrain.vue (mer, côte, prairie, reliefs). Ici ne
    restent que le cadre, la boussole et la ville. */
+.fog {
+  pointer-events: none;
+}
+.fog-rim {
+  fill: none;
+  stroke: #e8dcc0;
+  stroke-width: 0.5;
+  stroke-dasharray: 2 2.5;
+  opacity: 0.45;
+  pointer-events: none;
+}
 .map-frame {
   fill: none;
   stroke: #6b5a40;

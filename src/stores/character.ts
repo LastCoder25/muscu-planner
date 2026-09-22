@@ -1708,9 +1708,11 @@ export const useCharacterStore = defineStore('character', () => {
     // elles sont encore sur la carte : lui les remplace par leur mine de mana résiduel.
     // Après lui, il n'y a plus rien à voir, et l'armée disparaîtrait avec la faille.
     const over = prev ? riftOverflows(prev, now) : [];
+    // 🗺️ L'Avant-poste fixe la taille de la carte révélée et son nombre de lieux (v0.1040).
+    const outpost = buildingLevel(cur.buildings, 'outpost');
     const map: ExpeditionMap = prev
-      ? advanceWorld(prev, now, level, cur.expedition?.poi.id)
-      : createMap(newSeed(now), now, level);
+      ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
+      : createMap(newSeed(now), now, level, outpost);
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
@@ -1764,7 +1766,9 @@ export const useCharacterStore = defineStore('character', () => {
       travelTimeMult(cur.buildings),
       level,
     );
-    const baseMap = cur.expedition_map ?? createMap(newSeed(now), now, level);
+    const baseMap =
+      cur.expedition_map ??
+      createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost'));
     const map: ExpeditionMap = { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) };
     await persist(userId, { gold: cur.gold - cost, expedition: exp, expedition_map: map });
   }

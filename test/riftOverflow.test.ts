@@ -25,6 +25,9 @@ import {
 } from '@/lib/raid';
 import { riftOverflowOf, riftSpecOf, type RiftLike } from '@/lib/rift';
 import { EXPE, advanceWorld, createMap, isRiftPoi, riftOverflows } from '@/lib/expedition';
+// 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
+// éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1040).
+const OUT = 7;
 
 const H = 3_600_000;
 const T0 = Date.UTC(2026, 8, 19, 8, 0, 0);
@@ -232,7 +235,7 @@ describe('🕳️ le marquage est CONSOMMÉ au tirage', () => {
 
 describe('🗺️ la carte DÉSIGNE les débordements', () => {
   it('ne rend que les failles dont l’heure est passée', () => {
-    let map = createMap(4242, T0, 26);
+    let map = createMap(4242, T0, 26, OUT);
     expect(riftOverflows(map, T0).length).toBe(0);
     const jeune = map.pois.filter(isRiftPoi);
     expect(jeune.length).toBeGreaterThan(0);
@@ -248,32 +251,32 @@ describe('🗺️ la carte DÉSIGNE les débordements', () => {
     // vieux que la maturation d'une faille serait « débordé » et `advanceWorld` en ferait
     // une mine de mana. Les autres POI vivent 10 à 48 h, donc le cas se produit dès
     // qu'une absence dépasse 7 jours — et il transformerait un puits en mine.
-    const map = createMap(31337, T0, 26);
+    const map = createMap(31337, T0, 26, OUT);
     const vieux = { ...map.pois.find((p) => !isRiftPoi(p))!, spawnedAt: T0 - 30 * 24 * H };
     const truque = { ...map, pois: [...map.pois.filter(isRiftPoi), vieux] };
     for (const p of riftOverflows(truque, T0)) expect(isRiftPoi(p)).toBe(true);
     expect(riftOverflows(truque, T0).some((p) => p.id === vieux.id)).toBe(false);
     // Et la carte avancée ne fabrique aucune mine à partir de lui.
-    const apres = advanceWorld(truque, T0, 26);
+    const apres = advanceWorld(truque, T0, 26, OUT);
     expect(apres.pois.some((p) => p.id === `${vieux.id}_mine`)).toBe(false);
   });
 
   it('UN SEUL PRÉDICAT : chaque faille désignée devient sa mine, aucune ne survit', () => {
-    let map = createMap(99, T0, 26);
+    let map = createMap(99, T0, 26, OUT);
     const at = T0 + EXPE.lifespanMs.rift + H;
     const over = riftOverflows(map, at);
     expect(over.length).toBeGreaterThan(0);
     const ids = new Set(over.map((p) => p.id));
-    map = advanceWorld(map, at, 26);
+    map = advanceWorld(map, at, 26, OUT);
     // Ni doublon (la faille ET sa mine), ni faille fantôme.
     for (const id of ids) expect(map.pois.some((p) => p.id === id)).toBe(false);
     expect(riftOverflows(map, at).length).toBe(0);
   });
 
   it('se lit AVANT `advanceWorld` — après, il n’y a plus rien à voir', () => {
-    const map = createMap(1717, T0, 26);
+    const map = createMap(1717, T0, 26, OUT);
     const at = T0 + EXPE.lifespanMs.rift + H;
     expect(riftOverflows(map, at).length).toBeGreaterThan(0);
-    expect(riftOverflows(advanceWorld(map, at, 26), at).length).toBe(0);
+    expect(riftOverflows(advanceWorld(map, at, 26, OUT), at).length).toBe(0);
   });
 });
