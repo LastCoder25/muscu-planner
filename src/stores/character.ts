@@ -213,7 +213,6 @@ import {
   addSeals,
   advGearAscensionBlocker,
   advGearAscensionCost,
-  bossGearSeals,
   GEAR_ASCENSION_BLOCK_LABEL,
   ascensionBlocker,
   ascensionCost,
@@ -821,19 +820,13 @@ export const useCharacterStore = defineStore('character', () => {
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
       famAtkXp?: number; // dressage d'attaque du familier équipé
       playerLevel?: number;
-      /** 🗡️ Niveau du boss : fixe le RANG des sceaux d'objet gagnés (`bossGearSeals`). */
-      bossLevel?: number;
     },
   ) {
     const cur = row.value;
     if (!cur) return null;
     const firstDefeat = input.defeated && !cur.defeated_bosses.includes(input.bossId);
-    // 🗡️ SCEAUX D'OBJET (v0.1015) : la SEULE source des ascensions d'équipement. Rendus à
-    // l'appelant pour que le rapport de combat les ANNONCE (crédités sans un mot sinon).
-    const gearSeals =
-      input.defeated && input.bossLevel != null
-        ? bossGearSeals(input.bossLevel, input.playerLevel ?? 1, firstDefeat)
-        : null;
+    // ⚜️ Plus de sceaux d'objet sur les boss de palier (v0.1040) : ils viennent des REPAIRES de
+    // la carte — aucune ressource de champion ne se farme dans la partie héros.
     const defeated = firstDefeat ? [...cur.defeated_bosses, input.bossId] : cur.defeated_bosses;
     // Clé d'expédition : GARANTIE à la 1re victoire (jalon) ; ~6 % ensuite sur les
     // réaffrontements (raréfié 2026‑08‑18) → pas de flux de clés en spammant un boss.
@@ -858,11 +851,7 @@ export const useCharacterStore = defineStore('character', () => {
       set_pieces_seen: mergeSetSeen(cur.set_pieces_seen, drops),
       keys: cur.keys + keyGain,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
-      ...(gearSeals
-        ? { seals: addSeals(cur.seals, gearSeals.kind, gearSeals.rank, gearSeals.n) }
-        : {}),
     });
-    return gearSeals;
   }
 
   // Choisit une récompense parmi les candidats en attente → l'applique et purge.
@@ -2681,7 +2670,7 @@ export const useCharacterStore = defineStore('character', () => {
       : isWarbandPoi(poi)
         ? resolveInterception({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
         : spec
-          ? resolveCamp({ poi, spec, escort, road, hero, seed })
+          ? resolveCamp({ poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel })
           : HARVEST_TYPES.has(poi.type)
             ? resolveHarvestParty({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
             : null;

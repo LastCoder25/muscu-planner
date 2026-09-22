@@ -128,7 +128,7 @@ export const GEAR_ASCENSION_BLOCK_LABEL: Record<GearAscensionBlock, string> = {
   top: 'Elle est au sommet : plus aucun rang à ouvrir.',
   notReady: 'Elle doit d’abord atteindre ★★★★★ dans son rang, en combattant.',
   wearer: 'Aucun champion de sa lignée ne peut porter le rang suivant — fais monter le champion.',
-  seals: 'Il manque des sceaux d’objet de ce rang — bats des boss de palier.',
+  seals: 'Il manque des sceaux d’objet de ce rang — prends des repaires sur la carte.',
   gold: 'Il manque de l’or.',
 };
 
@@ -150,19 +150,18 @@ export function advGearAscensionBlocker(
   return null;
 }
 
-/** 🗡️ Les sceaux d'OBJET d'une victoire sur un boss de palier (spec § 2) : 2 à la première
- *  victoire, 1 ensuite, au rang du boss PLAFONNÉ à celui du joueur — le sport reste le
- *  plafond, et chaque système a sa source (champions : failles, objets : boss). */
-export function bossGearSeals(
-  bossLevel: number,
-  playerLevel: number,
-  firstDefeat: boolean,
-): SealDrop {
+/** 🗡️ Les sceaux d'OBJET d'un REPAIRE pris sur la carte : 1, au rang du repaire PLAFONNÉ à
+ *  celui du joueur — le sport reste le plafond.
+ *  ⚠️ **SUR LA CARTE, PLUS SUR LES BOSS DE PALIER (v0.1040, règle de l'utilisateur : « aucune
+ *  ressource de champion à farmer dans la partie héros »).** Les deux familles de sceaux
+ *  viennent désormais de la carte : 🔱 le gardien d'une faille, ⚜️ un repaire. Le héros, lui,
+ *  peut profiter de tout ; ce sont les champions qui ne se nourrissent que de la carte. */
+export function lairGearSeals(lairLevel: number, playerLevel: number): SealDrop {
   const rank = Math.min(
-    characterRank(Math.max(1, bossLevel)).rankIndex,
+    characterRank(Math.max(1, lairLevel)).rankIndex,
     characterRank(Math.max(1, playerLevel)).rankIndex,
   );
-  return { kind: 'gear', rank, n: firstDefeat ? 2 : 1 };
+  return { kind: 'gear', rank, n: 1 };
 }
 
 /** 🔱 Ce que la barre de ressources dit d'une famille de sceaux : le TOTAL (la puce) et le

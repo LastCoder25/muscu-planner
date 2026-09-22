@@ -102,6 +102,27 @@ const road = (level: number, n: number): EscortKit => ({
 });
 /** Les unités d'une escorte — la signature RÉELLE : `roadUnits(escort, escortGear(escort, road))`. */
 const units = (esc: Adventurer[], rd: EscortKit) => roadUnits(esc, escortGear(esc, rd));
+describe('⚜️ un REPAIRE pris laisse un sceau d’objet — un camp non (v0.1040)', () => {
+  it('repaire gagné : un sceau d’objet ; camp gagné : aucun ; défaite : aucun', () => {
+    let lairWon = 0;
+    let lairLost = 0;
+    for (let s = 1; s <= 60; s++) {
+      const lair = resolveCamp(input({ seed: s, poi: poi({ type: 'lair' }), hero: fort(20) }));
+      if (lair.win) {
+        expect(lair.seals, `graine ${s}`).toEqual({ kind: 'gear', rank: expect.any(Number), n: 1 });
+        lairWon++;
+      } else {
+        expect(lair.seals).toBeUndefined();
+        lairLost++;
+      }
+      const camp = resolveCamp(input({ seed: s, hero: fort(20) }));
+      expect(camp.seals).toBeUndefined();
+    }
+    expect(lairWon, 'aucun repaire gagné : le test ne prouve rien').toBeGreaterThan(0);
+    void lairLost;
+  });
+});
+
 const input = (over: Partial<PartyInput> = {}): PartyInput => {
   const L = over.poi?.level ?? 20;
   const n = over.escort?.length ?? 3;

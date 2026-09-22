@@ -12,6 +12,7 @@
 // demande nettement plus que trois aventuriers, et rien ne borne la taille du groupe.
 // ⚠️ AUCUNE FERRAILLE : elle ne vient plus que de l'épave et de la Fonderie (v0.856 : retirée
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
+import { lairGearSeals } from './ascension';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
 import {
   deriveSkirmish,
@@ -96,6 +97,8 @@ export interface PartyInput {
   road: EscortKit;
   hero: PartyHero | null;
   seed: number;
+  /** ⚠️ REQUIS : plafonne le rang des sceaux d'objet d'un repaire (`lairGearSeals`). */
+  playerLevel: number;
 }
 
 /**
@@ -227,7 +230,7 @@ export function campRewardLabel(poi: Poi): string {
       : spec.faction === 'bandits'
         ? 'or 🪙 en quantité'
         : 'or 🪙';
-  return devise;
+  return poi.type === 'lair' ? `${devise} + sceau d’objet ⚜️` : devise;
 }
 
 /** Le récit : qui abat qui, borné. */
@@ -327,8 +330,11 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;
 
   const haul = d.win ? campGroupHaul(poi, spec) : { gold: 0, summonStones: 0 };
+  // ⚜️ Un REPAIRE pris laisse un sceau d'objet (v0.1040) — leur seule source.
+  const seals = d.win && poi.type === 'lair' ? lairGearSeals(poi.level, input.playerLevel) : null;
   return {
     win: d.win,
+    ...(seals ? { seals } : {}),
     gold: haul.gold,
     energy: 0,
     summonStones: haul.summonStones,
