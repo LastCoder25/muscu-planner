@@ -101,7 +101,18 @@ export type EffectType =
   | 'gold_pct' // + or gagné par run
   | 'magic_find_pct' // + chance de meilleur loot (luck bornée → ne franchit jamais ta ligue)
   | 'regen_pct' // + PV régénérés entre deux combats d'un donjon/labyrinthe
-  | 'initiative_pct'; // + initiative (commence le combat en premier plus souvent)
+  | 'initiative_pct' // + initiative (commence le combat en premier plus souvent)
+  // ── REFONTE ÉQUIPEMENT (étape 3) : stats liées à ce que fait chaque objet ──
+  | 'crit_dmg_pct' // dégâts critiques : un critique frappe plus que ×2 (arme)
+  | 'accuracy_pct' // précision : réduit l'esquive de l'ennemi (arme, casque)
+  | 'bleed_pct' // saignement : une part des dégâts continue sur les tours suivants (arme)
+  | 'block_pct' // blocage : chance qu'un coup reçu ne fasse que 25 % (bouclier)
+  | 'parry_pct' // parade : chance d'éviter un coup ET que l'ennemi saute son tour (bouclier)
+  | 'riposte_pct' // riposte : chance de contre-attaquer après un coup reçu (bouclier, bottes)
+  | 'crit_resist_pct' // résistance aux critiques : les critiques ennemis font moins mal
+  | 'start_shield_pct' // bouclier de départ : barrière de X % des PV au début du combat
+  | 'dodge_pct' // esquive (bottes) — même canal que l'esquive des talents
+  | 'training_pct'; // dressage : + XP gagnée par le familier (hors combat)
 
 export interface ItemEffect {
   type: EffectType;
@@ -816,22 +827,37 @@ const SLOT_EFFECTS: Record<ItemSlot, { type: EffectType; base: number }[]> = {
   trophy: [{ type: 'damage_pct', base: 8 }],
 };
 
-/** Base canonique par type d'effet (1re occurrence dans SLOT_EFFECTS + bases explicites
- *  des stats MINEURES, absentes des pools de slot). Sert à valoriser un affixe (tier) et
- *  une stat de SET choisie par THÈME. */
-const EFFECT_BASE: Record<EffectType, number> = (() => {
-  // Bases explicites des stats mineures (light) — volontairement basses vs les stats de
-  // combat pour ne pas gonfler itemScore ni voler la vedette aux affixes majeurs.
-  const m = {
-    gold_pct: 14,
-    magic_find_pct: 6,
-    regen_pct: 8,
-    initiative_pct: 10,
-  } as Record<EffectType, number>;
-  for (const slot of Object.keys(SLOT_EFFECTS) as ItemSlot[])
-    for (const e of SLOT_EFFECTS[slot]) if (m[e.type] === undefined) m[e.type] = e.base;
-  return m;
-})();
+/** Base de chaque effet, avant rareté, jet, niveau d'objet et poids d'emplacement.
+ *  ⚠️ ÉCRITE EN CLAIR ET EXHAUSTIVE (refonte équipement) : elle était déduite de la 1re
+ *  occurrence dans `SLOT_EFFECTS`, donc une retouche des listes par emplacement pouvait
+ *  changer en silence la magnitude de TOUS les objets. Les 13 valeurs d'avant sont
+ *  reprises à l'identique (test dédié). */
+const EFFECT_BASE: Record<EffectType, number> = {
+  damage_pct: 8,
+  crit_pct: 4,
+  lifesteal_pct: 6,
+  execute_pct: 12,
+  momentum_pct: 3,
+  dmg_reduction_pct: 6,
+  max_pv_pct: 10,
+  thorns_pct: 12,
+  rage_pct: 12,
+  gold_pct: 14,
+  magic_find_pct: 6,
+  regen_pct: 8,
+  initiative_pct: 10,
+  // Nouvelles (étape 3) — premières valeurs, réglées à l'étape 7 (budget).
+  crit_dmg_pct: 20,
+  accuracy_pct: 10,
+  bleed_pct: 10,
+  block_pct: 8,
+  parry_pct: 5,
+  riposte_pct: 8,
+  crit_resist_pct: 15,
+  start_shield_pct: 8,
+  dodge_pct: 5,
+  training_pct: 15,
+};
 
 /** Base d'un effet (avant rareté, jet et niveau d'objet) — celle d'un drop du héros. */
 export function effectBase(t: EffectType): number {
@@ -1008,6 +1034,26 @@ export function effectLabelFor(type: EffectType, v: number): string {
       return `+${s}% dégâts par tour (cumul, 4 tours)`;
     case 'thorns_pct':
       return `renvoie ${s}% des dégâts reçus`;
+    case 'crit_dmg_pct':
+      return `+${s}% dégâts critiques`;
+    case 'accuracy_pct':
+      return `+${s}% précision`;
+    case 'bleed_pct':
+      return `${s}% des dégâts en saignement`;
+    case 'block_pct':
+      return `+${s}% blocage`;
+    case 'parry_pct':
+      return `+${s}% parade`;
+    case 'riposte_pct':
+      return `+${s}% riposte`;
+    case 'crit_resist_pct':
+      return `+${s}% résistance aux critiques`;
+    case 'start_shield_pct':
+      return `+${s}% bouclier de départ`;
+    case 'dodge_pct':
+      return `+${s}% esquive`;
+    case 'training_pct':
+      return `+${s}% dressage du familier`;
   }
 }
 /** Comment se LIT chaque canal d’un agrégat.
@@ -1022,13 +1068,13 @@ export function effectLabelFor(type: EffectType, v: number): string {
  * Au niveau MODULE, et pré-« entrée » : la table est constante, la reconstruire à
  * chaque appel coûtait ~16 allocations jetables pour lire des littéraux.
  */
-const AGGREGATE_AS: Record<keyof AggregatedEffects, EffectType | 'dodge'> = {
+const AGGREGATE_AS: Record<keyof AggregatedEffects, EffectType> = {
   // Ordre de LECTURE : ce qui pèse d'abord, les stats de confort en dernier.
   damagePct: 'damage_pct',
   maxPvPct: 'max_pv_pct',
   dmgReduction: 'dmg_reduction_pct',
   critAdd: 'crit_pct',
-  dodgeAdd: 'dodge',
+  dodgeAdd: 'dodge_pct',
   lifesteal: 'lifesteal_pct',
   thornsPct: 'thorns_pct',
   executePct: 'execute_pct',
@@ -1038,6 +1084,15 @@ const AGGREGATE_AS: Record<keyof AggregatedEffects, EffectType | 'dodge'> = {
   magicFindPct: 'magic_find_pct',
   regenPct: 'regen_pct',
   initiativePct: 'initiative_pct',
+  critDmgPct: 'crit_dmg_pct',
+  accuracyPct: 'accuracy_pct',
+  bleedPct: 'bleed_pct',
+  blockPct: 'block_pct',
+  parryPct: 'parry_pct',
+  ripostePct: 'riposte_pct',
+  critResistPct: 'crit_resist_pct',
+  startShieldPct: 'start_shield_pct',
+  trainingPct: 'training_pct',
 };
 /** Le pictogramme de chaque canal — repris de la fiche Héros, qui les affichait déjà. */
 const AGGREGATE_EMOJI: Record<keyof AggregatedEffects, string> = {
@@ -1055,6 +1110,15 @@ const AGGREGATE_EMOJI: Record<keyof AggregatedEffects, string> = {
   magicFindPct: '🍀',
   regenPct: '💧',
   initiativePct: '⚡',
+  critDmgPct: '💥',
+  accuracyPct: '👁️',
+  bleedPct: '🩸',
+  blockPct: '🛡️',
+  parryPct: '🤺',
+  ripostePct: '↩️',
+  critResistPct: '🪖',
+  startShieldPct: '🔰',
+  trainingPct: '🐾',
 };
 const AGGREGATE_KEYS = Object.keys(AGGREGATE_AS) as (keyof AggregatedEffects)[];
 
@@ -1074,41 +1138,14 @@ export function aggregateLines(fx: AggregatedEffects, opts?: { emoji?: boolean }
     const pct = fx[key] * 100;
     if (Math.round(pct * 10) === 0) return [];
     const type = AGGREGATE_AS[key];
-    const txt = type === 'dodge' ? `+${fmtEffectValue(pct)}% esquive` : effectLabelFor(type, pct);
+    const txt = effectLabelFor(type, pct);
     return [opts?.emoji ? `${AGGREGATE_EMOJI[key]} ${txt}` : txt];
   });
 }
 /** Libellé de l'effet à un niveau d'objet donné (valeur réelle) — legacy (familiers). */
 export function effectLabel(e: ItemEffect, level = 1): string {
-  const v = effectiveValue(e, level);
-  switch (e.type) {
-    case 'damage_pct':
-      return `+${v}% dégâts`;
-    case 'crit_pct':
-      return `+${v}% critique`;
-    case 'lifesteal_pct':
-      return `+${v}% vol de vie`;
-    case 'dmg_reduction_pct':
-      return `−${v}% dégâts reçus`;
-    case 'max_pv_pct':
-      return `+${v}% PV`;
-    case 'gold_pct':
-      return `+${v}% or`;
-    case 'magic_find_pct':
-      return `+${v}% butin (loot)`;
-    case 'regen_pct':
-      return `+${v}% régén entre combats`;
-    case 'initiative_pct':
-      return `+${v}% initiative`;
-    case 'execute_pct':
-      return `+${v}% dégâts (ennemi < 25% PV)`;
-    case 'rage_pct':
-      return `+${v}% dégâts (toi < 30% PV)`;
-    case 'momentum_pct':
-      return `+${v}% dégâts par tour (cumul, 4 tours)`;
-    case 'thorns_pct':
-      return `renvoie ${v}% des dégâts reçus`;
-  }
+  // ⚠️ Délègue : c'était une COPIE de `effectLabelFor`, qui aurait divergé au premier ajout.
+  return effectLabelFor(e.type, effectiveValue(e, level));
 }
 
 /** Puissance indicative d'un objet (somme des affixes au niveau courant) → compare deux objets. */
@@ -1990,6 +2027,16 @@ export interface AggregatedEffects {
   magicFindPct: number; // fraction : + luck de drop (bornée en aval → jamais hors ligue)
   regenPct: number; // fraction : + PV régénérés entre combats de donjon
   initiativePct: number; // fraction : + initiative (qui commence)
+  // ── Refonte équipement (étape 3) ──
+  critDmgPct: number; // fraction ajoutée au multiplicateur de critique (×2 → ×2 + x)
+  accuracyPct: number; // note de précision (→ chance, courbe) : réduit l'esquive ennemie
+  bleedPct: number; // fraction des dégâts infligés qui saigne sur les tours suivants
+  blockPct: number; // note de blocage (→ chance, courbe)
+  parryPct: number; // note de parade (→ chance, courbe)
+  ripostePct: number; // note de riposte (→ chance, courbe)
+  critResistPct: number; // note de résistance aux critiques (→ part retirée, courbe)
+  startShieldPct: number; // note de bouclier de départ (→ part des PV, courbe)
+  trainingPct: number; // fraction : + XP de dressage du familier (hors combat)
 }
 
 export function emptyEffects(): AggregatedEffects {
@@ -2008,52 +2055,49 @@ export function emptyEffects(): AggregatedEffects {
     magicFindPct: 0,
     regenPct: 0,
     initiativePct: 0,
+    critDmgPct: 0,
+    accuracyPct: 0,
+    bleedPct: 0,
+    blockPct: 0,
+    parryPct: 0,
+    ripostePct: 0,
+    critResistPct: 0,
+    startShieldPct: 0,
+    trainingPct: 0,
   };
 }
 
+/** LE CANAL de chaque effet. ⚠️ EXHAUSTIVE PAR CONSTRUCTION : ajouter un `EffectType` sans
+ *  dire où il s'agrège ne compile plus (l'ancien `switch` l'aurait ignoré en silence). */
+const EFFECT_CHANNEL: Record<EffectType, keyof AggregatedEffects> = {
+  damage_pct: 'damagePct',
+  crit_pct: 'critAdd',
+  lifesteal_pct: 'lifesteal',
+  dmg_reduction_pct: 'dmgReduction',
+  max_pv_pct: 'maxPvPct',
+  gold_pct: 'goldPct',
+  execute_pct: 'executePct',
+  rage_pct: 'ragePct',
+  momentum_pct: 'momentumPct',
+  thorns_pct: 'thornsPct',
+  magic_find_pct: 'magicFindPct',
+  regen_pct: 'regenPct',
+  initiative_pct: 'initiativePct',
+  crit_dmg_pct: 'critDmgPct',
+  accuracy_pct: 'accuracyPct',
+  bleed_pct: 'bleedPct',
+  block_pct: 'blockPct',
+  parry_pct: 'parryPct',
+  riposte_pct: 'ripostePct',
+  crit_resist_pct: 'critResistPct',
+  start_shield_pct: 'startShieldPct',
+  dodge_pct: 'dodgeAdd',
+  training_pct: 'trainingPct',
+};
+
 /** Applique une valeur (fraction) d'un EffectType donné à un agrégat. */
 function applyEffect(a: AggregatedEffects, type: EffectType, v: number): void {
-  switch (type) {
-    case 'damage_pct':
-      a.damagePct += v;
-      break;
-    case 'crit_pct':
-      a.critAdd += v;
-      break;
-    case 'lifesteal_pct':
-      a.lifesteal += v;
-      break;
-    case 'dmg_reduction_pct':
-      a.dmgReduction += v;
-      break;
-    case 'max_pv_pct':
-      a.maxPvPct += v;
-      break;
-    case 'gold_pct':
-      a.goldPct += v;
-      break;
-    case 'execute_pct':
-      a.executePct += v;
-      break;
-    case 'rage_pct':
-      a.ragePct += v;
-      break;
-    case 'momentum_pct':
-      a.momentumPct += v;
-      break;
-    case 'thorns_pct':
-      a.thornsPct += v;
-      break;
-    case 'magic_find_pct':
-      a.magicFindPct += v;
-      break;
-    case 'regen_pct':
-      a.regenPct += v;
-      break;
-    case 'initiative_pct':
-      a.initiativePct += v;
-      break;
-  }
+  a[EFFECT_CHANNEL[type]] += v;
 }
 
 /** Agrégat ne contenant qu'un effet (pct → fraction) — pour un passif ponctuel (ex. Voie). */
@@ -2066,22 +2110,8 @@ export function effectAsAggregate(type: EffectType, pct: number): AggregatedEffe
  *  plafond 50 % est appliqué en aval par playerWithGear). */
 export function mergeEffects(...list: AggregatedEffects[]): AggregatedEffects {
   const a = emptyEffects();
-  for (const e of list) {
-    a.damagePct += e.damagePct;
-    a.critAdd += e.critAdd;
-    a.dodgeAdd += e.dodgeAdd;
-    a.lifesteal += e.lifesteal;
-    a.dmgReduction += e.dmgReduction;
-    a.maxPvPct += e.maxPvPct;
-    a.goldPct += e.goldPct;
-    a.executePct += e.executePct;
-    a.ragePct += e.ragePct;
-    a.momentumPct += e.momentumPct;
-    a.thornsPct += e.thornsPct;
-    a.magicFindPct += e.magicFindPct;
-    a.regenPct += e.regenPct;
-    a.initiativePct += e.initiativePct;
-  }
+  // ⚠️ En boucle sur les canaux : la liste écrite à la main oubliait tout canal ajouté.
+  for (const e of list) for (const k of AGGREGATE_KEYS) a[k] += e[k] ?? 0;
   return a;
 }
 
@@ -2502,21 +2532,9 @@ export function aggregateEffects(equipped: Equipped, voie?: string | null): Aggr
   }
   // Bonus de set (2/3 pièces pour tous ; 4-pièces capstone si la voie correspond).
   const s = setEffects(equipped, voie);
-  a.damagePct += s.damagePct;
-  a.critAdd += s.critAdd;
-  a.dodgeAdd += s.dodgeAdd;
-  a.lifesteal += s.lifesteal;
-  a.dmgReduction += s.dmgReduction;
-  a.maxPvPct += s.maxPvPct;
-  a.goldPct += s.goldPct;
-  a.executePct += s.executePct;
-  a.ragePct += s.ragePct;
-  a.momentumPct += s.momentumPct;
-  a.thornsPct += s.thornsPct;
-  a.magicFindPct += s.magicFindPct;
-  a.regenPct += s.regenPct;
-  a.initiativePct += s.initiativePct;
-  a.dmgReduction = Math.min(0.5, a.dmgReduction); // plafond 50 %
+  for (const k of AGGREGATE_KEYS) a[k] += s[k];
+  // ⚠️ Plus de plafond sec sur la réduction ici : la courbe de chance (`CHANCE_CURVES`)
+  // s'en charge en aval, et les aventuriers gardent leur plafond dans `playerWithGear`.
   return a;
 }
 
@@ -2574,6 +2592,41 @@ export function curveChance(
   return (ch.cap * x) / (x + K);
 }
 
+/** Les stats nouvelles d'un combattant : présentes seulement si non nulles, pour qu'un
+ *  combattant sans elles reste strictement identique à celui d'avant. */
+function newStats(e: AggregatedEffects, x: Partial<AggregatedEffects>): Partial<Combatant> {
+  const g = (k: keyof AggregatedEffects) => e[k] + (x[k] ?? 0);
+  const o: Partial<Combatant> = {};
+  if (g('critDmgPct') > 0) o.critDmg = g('critDmgPct');
+  if (g('bleedPct') > 0) o.bleed = g('bleedPct');
+  if (g('accuracyPct') > 0) o.accuracy = ratingChance(RATING_CAPS.accuracy, g('accuracyPct'));
+  if (g('blockPct') > 0) o.block = ratingChance(RATING_CAPS.block, g('blockPct'));
+  if (g('parryPct') > 0) o.parry = ratingChance(RATING_CAPS.parry, g('parryPct'));
+  if (g('ripostePct') > 0) o.riposte = ratingChance(RATING_CAPS.riposte, g('ripostePct'));
+  if (g('critResistPct') > 0)
+    o.critResist = ratingChance(RATING_CAPS.critResist, g('critResistPct'));
+  if (g('startShieldPct') > 0)
+    o.startShield = ratingChance(RATING_CAPS.startShield, g('startShieldPct'));
+  return o;
+}
+
+/** Plafonds des stats NOUVELLES, qui ne viennent que de l'équipement (aucune part du sport).
+ *  Même idée que `CHANCE_CURVES` : on approche le plafond sans l'atteindre, et le premier
+ *  point vaut 1 (chance = plafond × note / (note + plafond)). */
+export const RATING_CAPS = {
+  accuracy: 0.8,
+  block: 0.6,
+  parry: 0.25,
+  riposte: 0.5,
+  critResist: 0.8,
+  startShield: 0.6,
+} as const;
+/** Une note d'équipement (fraction) convertie en chance, à rendement décroissant. */
+export function ratingChance(cap: number, note: number): number {
+  const g = Math.max(0, note);
+  return (cap * g) / (g + cap);
+}
+
 /** Combattant du joueur = stats (sport) + effets de l'équipement + `extra` (talents).
  *  `opts.legacyCaps` : anciens plafonds secs (aventuriers uniquement, cf. `CHANCE_CURVES`). */
 export function playerWithGear(
@@ -2629,6 +2682,7 @@ export function playerWithGear(
     ...(regen > 0 ? { regen } : {}),
     ...(procs.size ? { procs } : {}),
     ...(legacy ? { momentumPerHit: true } : {}),
+    ...newStats(e, extra),
   };
 }
 /** Bonus de LUCK apporté par le magic find de l'équipement (borné → jamais hors ligue).
@@ -2638,6 +2692,11 @@ export function magicFindLuck(equipped: Equipped, voie?: string | null): number 
   // facteur faible et un plafond → au mieux ~+0,25 de luck (épaissit un peu la pointe
   // haute de la pyramide, ne peut PAS franchir le cap +2 rangs de ta ligue).
   return Math.min(0.25, aggregateEffects(equipped, voie).magicFindPct * 0.5);
+}
+/** Multiplicateur de l'XP de dressage du familier porté (stat « dressage », refonte
+ *  équipement). Hors combat : il ne change ni la puissance ni un combat. */
+export function trainingMult(equipped: Equipped, voie?: string | null): number {
+  return 1 + Math.max(0, aggregateEffects(equipped, voie).trainingPct);
 }
 
 /** OPTIMISEUR D'ÉQUIPEMENT (ticket 6d69c2fc) : cherche, parmi l'équipé + le sac, la

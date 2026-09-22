@@ -441,7 +441,10 @@ describe('économie — infusion & coûts', () => {
 });
 
 describe('aggregateEffects', () => {
-  it('somme les effets et plafonne la réduction de dégâts à 50 %', () => {
+  // ⚠️ Réécrit à la refonte de l'équipement : l'agrégat ne plafonne plus la réduction, c'est
+  // la courbe de chance du héros qui le fait (cf. test/chanceCurves.test.ts), et les
+  // aventuriers gardent leur plafond de 50 % dans playerWithGear.
+  it('somme les effets sans plafonner la réduction (la courbe s’en charge en aval)', () => {
     const eq: Equipped = {
       weapon: item({ slot: 'weapon', effect: { type: 'lifesteal_pct', value: 10 } }),
       armor: item({ slot: 'armor', effect: { type: 'dmg_reduction_pct', value: 80 } }),
@@ -449,7 +452,19 @@ describe('aggregateEffects', () => {
     };
     const a = aggregateEffects(eq);
     expect(a.lifesteal).toBeCloseTo(0.1);
-    expect(a.dmgReduction).toBe(0.5);
+    expect(a.dmgReduction).toBeCloseTo(0.8);
+    const hero = playerWithGear('H', { puissance: 200, endurance: 200, agilite: 200 }, eq, {}, 30);
+    expect(hero.dmgReduction!).toBeLessThan(0.65);
+    const adv = playerWithGear(
+      'A',
+      { puissance: 200, endurance: 200, agilite: 200 },
+      eq,
+      {},
+      30,
+      undefined,
+      { legacyCaps: true },
+    );
+    expect(adv.dmgReduction).toBe(0.5);
     expect(a.critAdd).toBeCloseTo(0.06);
   });
   it('agrège les épines (thorns) et playerWithGear les propage', () => {

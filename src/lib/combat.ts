@@ -43,6 +43,19 @@ export interface Combatant {
   momentumPerHit?: boolean;
   thorns?: number; // 0..1 : part des dégâts reçus renvoyée à l'attaquant (épines, joueur)
   regen?: number; // 0..1 : BONUS de PV régénérés entre 2 combats d'un donjon (stat mineure, joueur)
+  // ── Refonte équipement (étape 3) — joueur uniquement ──
+  critDmg?: number; // ajouté au multiplicateur de critique (×2 → ×2 + critDmg)
+  /** 0..1 : PRÉCISION. Annule cette part de l'esquive ennemie ET ajoute autant de dégâts
+   *  tant que l'ennemi a plus de `accuracyOpenAbove` de ses PV (frapper juste d'entrée).
+   *  ⚠️ Mesuré : l'esquive seule ne valait RIEN à haut niveau (les monstres esquivent 5 à
+   *  8 %, et le héros frappe jusqu'à 37 fois par tour) — une stat morte. */
+  accuracy?: number;
+  bleed?: number; // part des dégâts infligés qui saigne ensuite (répartie sur 3 tours ennemis)
+  block?: number; // 0..1 : chance qu'un coup reçu ne fasse que blockKeep de ses dégâts
+  parry?: number; // 0..1 : chance d'éviter un coup reçu ET d'étourdir l'ennemi un tour
+  riposte?: number; // 0..1 : chance de contre-attaquer après un coup reçu
+  critResist?: number; // 0..1 : part du bonus de critique ennemi retirée
+  startShield?: number; // 0..1 : barrière de départ, en part des PV max
   // Procs LÉGENDAIRES (objets Légendaire+, joueur uniquement) — effets NON-scalants,
   // one-shot par combat. Cf. LEGENDARY_PROCS (items.ts) pour les ids/libellés.
   procs?: ReadonlySet<string>;
@@ -189,6 +202,22 @@ export const COMBAT = {
   // par coup, toujours au maximum dès le 1er tour.
   powerMomentumW: 2.75,
   powerMomentumWPerHit: 4.5, // aventuriers : l'élan par coup d'avant, inchangé
+  // ── Refonte équipement (étape 3) ──
+  blockKeep: 0.25, // un coup bloqué ne fait que 25 % de ses dégâts
+  accuracyOpenAbove: 0.75, // précision : bonus de dégâts tant que l'ennemi est au-dessus
+  bleedTicks: 3, // le saignement se vide sur 3 tours de l'ennemi
+  // Poids dans combatPower, MESURÉS en vrai combat (étape 3) : la stat ajoutée seule à un
+  // build de référence équipé (gearedFighter), boss de palier + donjon le plus profond,
+  // niveaux 30/60/90, 2 builds ; on cherche le gain de dégâts (attaque) ou de PV (survie)
+  // qui donne le même taux de victoire. Dégâts critiques : la formule suffit (+15,6 % mesuré
+  // pour +16,7 % annoncé à 0,5).
+  powerBleedW: 0.66, // saignement 0,3 → +19,8 % de dégâts
+  powerAccuracyW: 0.28, // précision 0,3 → +8,3 % de dégâts
+  powerRiposteW: 0.26, // riposte 0,3 → +7,8 % de dégâts
+  powerBlockW: 0.91, // blocage 0,3 → +25,7 % de PV
+  powerParryW: 0.96, // parade 0,15 → +16,9 % de PV
+  powerCritResistW: 0.14, // résistance aux critiques 0,5 → +6,8 % de PV
+  powerShieldW: 0.52, // bouclier de départ 0,3 → +15,6 % de PV
 };
 
 /** Construit le combattant du joueur à partir de ses 3 stats et de son NIVEAU. */
@@ -240,7 +269,10 @@ export function offenseOf(c: Combatant): number {
   return (
     c.damage *
     (c.strikes ?? 1) *
-    (1 + c.crit) *
+    (1 + c.crit * (1 + (c.critDmg ?? 0))) *
+    (1 + COMBAT.powerBleedW * (c.bleed ?? 0)) *
+    (1 + COMBAT.powerAccuracyW * (c.accuracy ?? 0)) *
+    (1 + COMBAT.powerRiposteW * (c.riposte ?? 0)) *
     (1 + COMBAT.powerLifestealW * Math.min(COMBAT.powerLifestealCap, c.lifesteal ?? 0)) *
     sig *
     (1 + COMBAT.powerThornsW * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
@@ -249,7 +281,13 @@ export function offenseOf(c: Combatant): number {
 
 /** SURVIE d’un combattant — PV corrigés de l’esquive et de la réduction. */
 export function survivalOf(c: Combatant): number {
-  return c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0));
+  return (
+    ((c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0))) *
+      (1 + COMBAT.powerShieldW * (c.startShield ?? 0)) *
+      (1 + COMBAT.powerCritResistW * (c.critResist ?? 0))) /
+    (1 - COMBAT.powerBlockW * (1 - COMBAT.blockKeep) * (c.block ?? 0)) /
+    (1 - Math.min(0.9, COMBAT.powerParryW * (c.parry ?? 0)))
+  );
 }
 
 /** Indice synthétique de puissance de combat (offense × survie) — pour l'UI. */
@@ -326,6 +364,11 @@ export type CombatSkill =
   | 'momentum'
   | 'lifesteal'
   | 'thorns'
+  | 'bleed'
+  | 'block'
+  | 'parry'
+  | 'riposte'
+  | 'start_shield'
   /**
    * ── Procs légendaires et signatures de set ──
    * ⚠️ **LES IDS DE `LEGENDARY_PROCS` ET DE `SET_SIGNATURES`, à la lettre.** Inventer une
@@ -412,7 +455,16 @@ export function simulateCombat(
       ? COMBAT.tranceMaxStacksPerHit
       : COMBAT.tranceMaxStacks
     : baseCap;
-  const critMult = has('sig_assassin') ? COMBAT.graceCritMult : 2;
+  const critMult = (has('sig_assassin') ? COMBAT.graceCritMult : 2) + (player.critDmg ?? 0);
+  // Refonte équipement (étape 3). ⚠️ Chaque tirage n'a lieu QUE si le joueur porte la stat :
+  // sans elle, un combat seedé reste identique au bit près (test d'empreinte).
+  let bleedPool = 0; // saignement en réserve (se vide sur les tours ennemis)
+  let shieldLeft = Math.round(maxPPv * (player.startShield ?? 0)); // barrière de départ
+  // Parade : l'ennemi sautera son prochain tour. ⚠️ Jamais deux de suite, et SANS garde :
+  // un tour sauté ne contient aucune attaque, donc aucune parade possible (mesuré par
+  // mutation, un garde « pas deux de suite » ne pouvait jamais mordre).
+  let stunNext = false;
+  const monsterCritMult = 1 + (1 - (player.critResist ?? 0)); // ×2 réduit par la résistance
 
   // Nombre de frappes d'un tour (Vitesse) : partie entière + reste probabiliste.
   const strikeCount = (c: Combatant): number => {
@@ -425,6 +477,30 @@ export function simulateCombat(
     round++;
     const atk = turn === 'player' ? player : monster;
     const def = turn === 'player' ? monster : player;
+    if (turn === 'monster') {
+      // Saignement : une part de la réserve tombe au début de chaque tour ennemi.
+      if (bleedPool > 0) {
+        const tick = Math.max(1, Math.round(bleedPool / COMBAT.bleedTicks));
+        bleedPool = Math.max(0, bleedPool - tick);
+        mPv = Math.max(0, mPv - tick);
+        log.push({
+          round,
+          who: 'player',
+          type: 'hit',
+          damage: tick,
+          playerPv: pPv,
+          monsterPv: mPv,
+          skills: ['bleed'],
+        });
+        if (mPv <= 0) break;
+      }
+      // Parade : l'ennemi étourdi saute ce tour (jamais deux de suite).
+      if (stunNext) {
+        stunNext = false;
+        turn = 'player';
+        continue;
+      }
+    }
     const hits = Math.max(1, strikeCount(atk));
     if (turn === 'player') {
       pTurn++;
@@ -452,7 +528,7 @@ export function simulateCombat(
       const mark = (s: CombatSkill) => (skills ??= []).push(s);
       if (turn === 'player') {
         // ── Attaque du JOUEUR ──
-        if (!opening && rng() < def.dodge) {
+        if (!opening && rng() < def.dodge * (1 - (atk.accuracy ?? 0))) {
           log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
           continue;
         }
@@ -501,6 +577,7 @@ export function simulateCombat(
           mult += atk.execute;
           mark('execute');
         }
+        if (atk.accuracy && mPv / monsterMaxPv > COMBAT.accuracyOpenAbove) mult += atk.accuracy;
         if (atk.rage && pPv / maxPPv < COMBAT.rageThreshold) {
           mult += atk.rage;
           mark('rage');
@@ -517,6 +594,10 @@ export function simulateCombat(
         if (mult !== 1) dmg = Math.max(1, Math.round(dmg * mult));
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         mPv = Math.max(0, mPv - dmg);
+        if (atk.bleed) {
+          bleedPool += dmg * atk.bleed;
+          mark('bleed');
+        }
         if (perHit) pStacks++; // aventuriers : élan par coup (règle d'avant)
         if (atk.lifesteal) {
           const before = pPv;
@@ -557,9 +638,27 @@ export function simulateCombat(
           log.push({ round, who: turn, type: 'dodge', damage: 0, playerPv: pPv, monsterPv: mPv });
           continue;
         }
+        // Parade : le coup est évité et l'ennemi saute son prochain tour.
+        if (def.parry && rng() < def.parry) {
+          stunNext = true;
+          log.push({
+            round,
+            who: turn,
+            type: 'dodge',
+            damage: 0,
+            playerPv: pPv,
+            monsterPv: mPv,
+            skills: ['parry'],
+          });
+          continue;
+        }
         const crit = rng() < atk.crit;
         const variance = COMBAT.varianceMin + rng() * COMBAT.varianceSpan;
-        let dmg = Math.max(1, Math.round(atk.damage * (crit ? 2 : 1) * variance));
+        let dmg = Math.max(1, Math.round(atk.damage * (crit ? monsterCritMult : 1) * variance));
+        if (def.block && rng() < def.block) {
+          dmg = Math.max(1, Math.round(dmg * COMBAT.blockKeep));
+          mark('block');
+        }
         if (def.dmgReduction) dmg = Math.max(1, Math.round(dmg * (1 - def.dmgReduction)));
         // Endurance : le colosse se raidit quand il saigne. S'applique APRÈS la réduction
         // ordinaire (elle s'y ajoute au lieu de la remplacer) et reste bornée par elle.
@@ -594,6 +693,13 @@ export function simulateCombat(
         if (firstEnemy && has('whetted')) whettedLeft = COMBAT.whettedTurns;
         mFirstLanded = false;
         const pBefore = pPv;
+        // Barrière de départ : elle encaisse avant les PV.
+        if (shieldLeft > 0 && dmg > 0) {
+          const soaked = Math.min(shieldLeft, dmg);
+          shieldLeft -= soaked;
+          dmg -= soaked;
+          mark('start_shield');
+        }
         pPv = Math.max(0, pPv - dmg);
         // Soif : au passage sous 50 % PV, on blesse l'ennemi et on se remet d'aplomb.
         if (thirstReady && pPv > 0 && pPv / maxPPv < COMBAT.thirstThreshold) {
@@ -640,6 +746,25 @@ export function simulateCombat(
           monsterPv: mPv,
           ...(skills ? { skills } : {}),
         });
+        // Riposte : après un coup reçu (bloqué ou non), chance de contre-attaquer aussitôt.
+        // UNE VOLÉE (les coups d'un tour du héros), sans critique ni variance : elle ne tire
+        // au hasard que la chance. ⚠️ Un seul coup ne valait RIEN à haut niveau, où le héros
+        // frappe jusqu'à 37 fois par tour (mesuré : +0 à +6 % de puissance).
+        if (def.riposte && pPv > 0 && mPv > 0 && rng() < def.riposte) {
+          // Critique MOYEN compris (aucun tirage) : sans lui la volée valait 1/1,5 d'une volée.
+          const volley = player.damage * (player.strikes ?? 1) * (1 + player.crit * (critMult - 1));
+          const r = Math.max(1, Math.round(volley * (1 - (monster.dmgReduction ?? 0))));
+          mPv = Math.max(0, mPv - r);
+          log.push({
+            round,
+            who: 'player',
+            type: 'hit',
+            damage: r,
+            playerPv: pPv,
+            monsterPv: mPv,
+            skills: ['riposte'],
+          });
+        }
       }
     }
     turn = turn === 'player' ? 'monster' : 'player';

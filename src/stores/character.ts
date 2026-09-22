@@ -35,6 +35,7 @@ import {
   WORN_SLOTS,
   MAX_LOADOUTS,
   grantFamiliarXp,
+  trainingMult,
   rarityRank,
   type Item,
   type ItemEffect,
@@ -764,7 +765,9 @@ export const useCharacterStore = defineStore('character', () => {
   ) {
     const fam = dist.equipped[FAMILIAR_SLOT];
     if (!fam || !input.famAtkXp) return;
-    const trained = grantFamiliarXp(fam, input.famAtkXp, input.playerLevel ?? 1);
+    // Dressage (stat d'anneau, refonte équipement) : le familier porté apprend plus vite.
+    const xp = input.famAtkXp * trainingMult(dist.equipped);
+    const trained = grantFamiliarXp(fam, xp, input.playerLevel ?? 1);
     if (trained !== fam) dist.equipped = { ...dist.equipped, [FAMILIAR_SLOT]: trained };
   }
 

@@ -94,6 +94,16 @@ const ADV_SIGNATURE_INFO: Partial<
   momentum_pct: { emoji: '🌀', what: 'Frappe de plus en plus fort', name: 'Élan' },
   rage_pct: { emoji: '🔥', what: 'Redoutable quand il est mal en point', name: 'Rage' },
   thorns_pct: { emoji: '🛡️', what: 'Renvoie une part des coups reçus', name: 'Épines' },
+  // Refonte de l'équipement du héros (étape 3) : nommées ici pour le bandeau de combat.
+  bleed_pct: { emoji: '🩸', what: 'Fait saigner ses cibles', name: 'Saignement' },
+  block_pct: { emoji: '🛡️', what: 'Bloque une partie des coups', name: 'Blocage' },
+  parry_pct: { emoji: '🤺', what: 'Pare et étourdit', name: 'Parade' },
+  riposte_pct: { emoji: '↩️', what: 'Contre-attaque quand on le frappe', name: 'Riposte' },
+  start_shield_pct: {
+    emoji: '🔰',
+    what: 'Commence le combat derrière une barrière',
+    name: 'Barrière',
+  },
 };
 // ─────────────────────────────────────────────────────────────────────────────
 // ⚔️ CE QUI A MORDU PENDANT UN COMBAT
@@ -115,6 +125,11 @@ const SKILL_SOURCE: Record<CombatSkill, 'sig' | 'proc' | 'set'> = {
   momentum: 'sig',
   lifesteal: 'sig',
   thorns: 'sig',
+  bleed: 'sig',
+  block: 'sig',
+  parry: 'sig',
+  riposte: 'sig',
+  start_shield: 'sig',
   initiative: 'proc',
   predator_eye: 'proc',
   aegis: 'proc',
