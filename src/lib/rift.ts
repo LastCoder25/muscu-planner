@@ -739,6 +739,9 @@ export interface IncursionInput {
   hero: PartyHero | null;
   seed: number;
   now: number;
+  /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
+   *  que `grantAdvXp` applique, jamais le niveau du joueur. */
+  pantheonLevel: number;
 }
 
 /**
@@ -818,7 +821,7 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
 
   const bodies = incursionBodies(poi, now);
   const shares = skirmishXpShares(escort, bodies, { foesDown: incursionFoesDown(run, bodies) });
-  const xp = missionXpFor(escort, poi, run.cleared, shares, !!hero);
+  const xp = missionXpFor(escort, poi, run.cleared, shares, !!hero, input.pantheonLevel);
 
   const mana = incursionMana(run, poi.level);
   const seals = riftSeals(poi, now, run.cleared);
@@ -994,6 +997,9 @@ export interface InterceptionInput {
   hero: PartyHero | null;
   seed: number;
   playerLevel: number;
+  /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
+   *  que `grantAdvXp` applique, jamais le niveau du joueur. */
+  pantheonLevel: number;
 }
 
 /**
@@ -1032,7 +1038,7 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
   // rien non plus quand le combattant fondu tombe.
   const foesDown = run.win ? bodies.map((b) => b.id) : [];
   const shares = skirmishXpShares(escort, bodies, { foesDown });
-  const xp = missionXpFor(escort, poi, run.win, shares, !!hero);
+  const xp = missionXpFor(escort, poi, run.win, shares, !!hero, input.pantheonLevel);
 
   const mana = interceptionMana(raid, army, run);
   const effectif = raid.groups.reduce((s, g) => s + g.count, 0);

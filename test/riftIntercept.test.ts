@@ -208,6 +208,7 @@ describe('ce que l’interception rapporte', () => {
       hero: null,
       seed: 12345,
       playerLevel: 30,
+      pantheonLevel: 3,
     });
     expect(o.gold).toBe(0);
     expect(o.energy).toBe(0);
@@ -227,6 +228,7 @@ describe('ce que l’interception rapporte', () => {
       hero: null,
       seed: 7,
       playerLevel: 70, // armée hors de portée : la défaite est probable
+      pantheonLevel: 3, // ⚠️ AU NIVEAU du groupe : la prime de rattrapage vaut 1
     });
     for (const a of team(5, 3)) expect(o.party!.xp[a.id]).toBeGreaterThan(0);
   });
@@ -240,6 +242,7 @@ describe('ce que l’interception rapporte', () => {
       hero: null,
       seed: 3,
       playerLevel: 80,
+      pantheonLevel: 1,
     });
     expect(perdu.win).toBe(false);
     expect(perdu.party!.hurt).toHaveLength(1);
@@ -251,6 +254,7 @@ describe('ce que l’interception rapporte', () => {
       hero: null,
       seed: 3,
       playerLevel: 4,
+      pantheonLevel: 6,
     });
     expect(gagne.win).toBe(true);
     expect(gagne.party!.hurt).toHaveLength(0);

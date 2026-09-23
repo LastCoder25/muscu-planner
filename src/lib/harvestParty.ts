@@ -46,6 +46,9 @@ export interface HarvestPartyInput {
   hero: PartyHero | null;
   seed: number;
   playerLevel: number;
+  /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
+   *  que `grantAdvXp` applique, jamais le niveau du joueur. */
+  pantheonLevel: number;
 }
 
 /** Ajoute la part des gardes abattus à l'XP de la récolte (arrondie comme `missionXpFor`). */
@@ -59,7 +62,16 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
   const { poi, escort, road, hero, seed } = input;
   const spec = harvestGuardOf(poi);
   if (!spec) throw new Error(`resolveHarvestParty : ${poi.type} n'est pas un lieu de récolte.`);
-  const g = fightCampForce({ poi, spec, escort, road, hero, seed, playerLevel: input.playerLevel });
+  const g = fightCampForce({
+    poi,
+    spec,
+    escort,
+    road,
+    hero,
+    seed,
+    playerLevel: input.playerLevel,
+    pantheonLevel: input.pantheonLevel,
+  });
   const tag = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`;
   const base = {
     hero: !!hero,
@@ -76,7 +88,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     const party: PartyResult = {
       ...base,
       win: false,
-      xp: missionXpFor(escort, poi, false, g.shares, !!hero),
+      xp: missionXpFor(escort, poi, false, g.shares, !!hero, input.pantheonLevel),
       hurt: campHurt(g.skirmish, escort),
       journal: g.journal,
     };
@@ -101,13 +113,13 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     const party: PartyResult = {
       ...base,
       win: true,
-      xp: missionXpFor(escort, poi, true, g.shares, true),
+      xp: missionXpFor(escort, poi, true, g.shares, true, input.pantheonLevel),
       hurt: [],
       journal: [...g.journal, out.text],
     };
     return { ...out, text: `${tag} ${out.text}`, party };
   }
-  const c = resolveCaravan(poi, escort, seed, road);
+  const c = resolveCaravan(poi, escort, seed, road, input.pantheonLevel);
   const ambushes = c.events.filter((e) => e.kind === 'bandits');
   const kills = { ...g.kills };
   for (const [id, n] of Object.entries(c.kills ?? {})) kills[id] = (kills[id] ?? 0) + n;

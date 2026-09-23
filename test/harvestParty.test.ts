@@ -51,11 +51,19 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
     for (const t of ['well', 'mine', 'shrine', 'archive'] as const)
       for (const seed of [1, 7, 42]) {
         const p = poi(t);
-        const input = { poi: p, escort: team(3), road, hero: null, seed, playerLevel: 26 };
+        const input = {
+          poi: p,
+          escort: team(3),
+          road,
+          hero: null,
+          seed,
+          playerLevel: 26,
+          pantheonLevel: 26,
+        };
         const g = fightCampForce({ ...input, spec: harvestGuardOf(p)! });
         if (!g.skirmish.win) continue;
         vus++;
-        const c = resolveCaravan(p, team(3), seed, road);
+        const c = resolveCaravan(p, team(3), seed, road, 26);
         const o = resolveHarvestParty(input);
         expect(o.gold, t).toBe(c.gold);
         expect(o.energy, t).toBe(c.energy);
@@ -78,6 +86,7 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
       hero: null,
       seed: 3,
       playerLevel: 26,
+      pantheonLevel: 26,
     });
     expect(o.mana).toBeGreaterThan(0);
   });
@@ -93,6 +102,7 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
         hero: null,
         seed: s,
         playerLevel: 26,
+        pantheonLevel: 26,
       });
       if (!o.party!.win) perdu = true;
     }
@@ -108,6 +118,7 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
       hero,
       seed: 9,
       playerLevel: 26,
+      pantheonLevel: 26,
     });
     const solo = resolveOutcome(hero.combatant, p, 9, 26);
     expect(o.gold).toBe(solo.gold);
@@ -152,14 +163,22 @@ describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
     for (let s = 1; s < 80 && !vu; s++) {
       const p = poi('mine', { id: 'dur' + s });
       if (harvestGuardOf(p)!.size < 2) continue;
-      const o = resolveHarvestParty({ poi: p, escort: team(1), road, hero: null, seed: s, playerLevel: 26 });
+      const o = resolveHarvestParty({
+        poi: p,
+        escort: team(1),
+        road,
+        hero: null,
+        seed: s,
+        playerLevel: 26,
+        pantheonLevel: 26,
+      });
       if (o.party!.win) continue;
       vu = true;
       expect(o.win).toBe(false);
       expect(o.gold + o.energy + o.summonStones + o.mana + o.key).toBe(0);
       expect(o.party!.hurt).toEqual(['a0']);
       expect(o.party!.xp.a0).toBeGreaterThan(0);
-      expect(o.party!.xp.a0).toBeLessThan(missionXpFor(team(1), p, true, {}, false).a0!);
+      expect(o.party!.xp.a0).toBeLessThan(missionXpFor(team(1), p, true, {}, false, 26).a0!);
     }
     expect(vu).toBe(true);
   });
@@ -169,7 +188,15 @@ describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
     let vu = false;
     for (let s = 1; s < 80 && !vu; s++) {
       const p = poi('shrine', { id: 'h' + s, level: 26 });
-      const o = resolveHarvestParty({ poi: p, escort: [], road, hero: faible, seed: s, playerLevel: 26 });
+      const o = resolveHarvestParty({
+        poi: p,
+        escort: [],
+        road,
+        hero: faible,
+        seed: s,
+        playerLevel: 26,
+        pantheonLevel: 26,
+      });
       if (o.party!.win) continue;
       vu = true;
       expect(o.gold + o.summonStones + o.energy).toBe(0);
@@ -185,7 +212,18 @@ describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
     let w = 0;
     const N = 200;
     for (let s = 1; s <= N; s++)
-      if (resolveHarvestParty({ poi: p, escort: team(1), road, hero: null, seed: s, playerLevel: 26 }).party!.win) w++;
+      if (
+        resolveHarvestParty({
+          poi: p,
+          escort: team(1),
+          road,
+          hero: null,
+          seed: s,
+          playerLevel: 26,
+          pantheonLevel: 26,
+        }).party!.win
+      )
+        w++;
     // La victoire de la récolte exige AUSSI de tenir la route : elle ne dépasse pas le %.
     expect(w / N).toBeLessThanOrEqual(pct + 0.08);
     expect(Math.abs(w / N - pct)).toBeLessThan(0.35);
