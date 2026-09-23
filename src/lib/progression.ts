@@ -15,8 +15,12 @@ const COMPOUND_INC = 2.5; // kg, exos polyarticulaires
 const ISOLATION_INC = 1.25; // kg, exos d'isolation
 const ISOLATION_HINTS = ['biceps', 'triceps', 'épaule', 'deltoïde', 'mollet', 'avant-bras'];
 
-function incrementFor(ex: PlannedExercise): number {
-  const m = (ex.muscle_primary || '').toLowerCase();
+/** Le pas de charge d'un exercice — 2,5 kg polyarticulaire, 1,25 kg isolation.
+ *  ⚠️ Il prend le MUSCLE et non un `PlannedExercise` : une séance libre n'a pas de plan,
+ *  et lui faire fabriquer un exercice planifié bidon pour obtenir un pas aurait été une
+ *  seconde définition de la même règle. */
+function incrementFor(musclePrimary?: string | null): number {
+  const m = (musclePrimary || '').toLowerCase();
   return ISOLATION_HINTS.some((h) => m.includes(h)) ? ISOLATION_INC : COMPOUND_INC;
 }
 
@@ -62,16 +66,9 @@ function recentInstances(
   lastLog: SessionLog,
   history: SessionLog[],
 ): LoggedExercise[] {
-  const logs = [lastLog, ...history.filter((h) => h.id !== lastLog.id)];
-  const seen = new Set<string>();
-  const out: LoggedExercise[] = [];
-  for (const l of logs) {
-    if (seen.has(l.id)) continue;
-    seen.add(l.id);
-    const le = l.exercises.find((e) => e.id === ex.id || e.swapped_from === ex.id);
-    if (le && le.performed.length) out.push(le);
-  }
-  return out;
+  // ⚠️ Délègue à `instancesOf`, qui déduplique déjà par identifiant de bilan : le filtre
+  // `h.id !== lastLog.id` écrit ici était la MÊME règle, écrite deux fois.
+  return instancesOf(ex.id, [lastLog, ...history]);
 }
 
 const DELOAD_LOAD_MULT = 0.9; // −10 % de charge en semaine de décharge
@@ -141,11 +138,11 @@ export function verdictLabel(v: ExerciseVerdict): { text: string; tone: string }
  *    reprendre la dernière série. Double progression, détection de plateau et décharge
  *    ne s'appliquaient donc jamais à la façon dont on s'entraîne réellement.
  *
- * ⚠️ ET CE SECOND USAGE N'EST PAS ENCORE ACQUIS — l'extraction a été faite à la frontière
- * de l'appelant ACTUEL, pas du concept. Une séance libre construit `planned: {sets: 0,
- * reps_min: 0, reps_max: 0}` (`live.addExercise`), donc `allHitMin`/`allHitMax` y sont
- * trivialement vrais et le verdict serait « up » à CHAQUE série. La servir demande une
- * fourchette de reps dérivée — `repRangeFor` (repScheme.ts) existe pour ça. À faire.
+ * ⚠️ LE SECOND USAGE EST SERVI PAR `setAdvice` (v0.1105), pas par un appel direct : une
+ * séance libre construit `planned: {sets: 0, reps_min: 0, reps_max: 0}`
+ * (`live.addExercise`), donc `allHitMin`/`allHitMax` y seraient trivialement vrais et le
+ * verdict « up » à chaque série. C'est `setAdvice` qui lui fabrique une cible tenable —
+ * charge de la dernière séance, fourchette dérivée de l'objectif.
  *
  * ⚠️ UNE SEULE RÈGLE : `nextSessionDeterministic` l'appelle désormais au lieu de refaire
  * le calcul. Deux implémentations auraient fini par rendre deux verdicts sur la même
@@ -210,6 +207,105 @@ export function exerciseProgression(input: {
   if (stalled) return mk('plateau_stall', from * 0.95);
   // sinon : charge maintenue, la progression se fait en répétitions
   return mk('hold');
+}
+
+/* ───────────────────────── un exercice SANS plan ───────────────────────── */
+
+/** Ce qu'on propose pour la prochaine série d'un exercice sans plan. */
+export interface SetAdvice {
+  verdict: ExerciseVerdict;
+  /** La charge à proposer (kg, ou lest pour un exercice au poids du corps). */
+  load: number;
+  /** Les répétitions à viser. */
+  reps: number;
+  /** La fourchette retenue — l'écran la DIT, sinon la consigne tombe du ciel. */
+  range: { min: number; max: number };
+}
+
+/** Les séances passées de CET exercice, la plus récente d'abord. ⚠️ Un exercice ÉCHANGÉ
+ *  en cours de séance (`swapped_from`) compte pour celui qu'il remplace : c'est déjà la
+ *  règle du moteur, et deux définitions de « la même séance » auraient divergé. */
+export function instancesOf(exerciseId: string, logs: SessionLog[]): LoggedExercise[] {
+  const out: LoggedExercise[] = [];
+  const seen = new Set<string>();
+  for (const l of logs) {
+    if (seen.has(l.id)) continue;
+    seen.add(l.id);
+    const le = l.exercises.find((e) => e.id === exerciseId || e.swapped_from === exerciseId);
+    if (le && le.performed.length) out.push(le);
+  }
+  return out;
+}
+
+/**
+ * 🏋️ LA PROGRESSION D'UN EXERCICE SANS PLAN — séance libre (v0.1105).
+ *
+ * ⚠️ **POURQUOI UNE FONCTION DE PLUS ET NON UN APPEL DIRECT** : `exerciseProgression`
+ * juge une séance CONTRE SA CIBLE (« as-tu tenu les 8 à 12 reps prévues ? »). Une séance
+ * libre n'a aucune cible — elle démarrait même à 0 kg et 8 reps en dur, sans rien relire
+ * de la dernière fois. Il faut donc lui en FABRIQUER une : la charge de la dernière
+ * séance, et une fourchette que l'appelant dérive de l'objectif du profil
+ * (`repRangeForExercise`). Sans elle, `reps_min`/`reps_max` valent 0, tout set les
+ * « atteint », et le verdict serait « monte la charge » à chaque série.
+ *
+ * ⚠️ **LA FOURCHETTE EST REÇUE, PAS CALCULÉE ICI** : elle dépend de l'objectif du profil
+ * ET de la nature de l'exo (temps, isolation), deux choses qui vivent dans `repScheme`.
+ * L'importer d'ici ferait remonter `challengeLimits` dans le moteur pour une table de
+ * quatre lignes.
+ *
+ * ⚠️ **AU POIDS DU CORPS SANS LEST, LA CHARGE NE MONTE PAS.** Le moteur dirait « +2,5 kg »
+ * sur des pompes : il raisonne en charge, et à mains nues il n'y en a pas. Le verdict
+ * retombe donc sur `hold`, dont le libellé dit déjà la vraie règle — « progresse en
+ * répétitions ». Un exercice LESTÉ (tractions avec ceinture) garde la progression en
+ * charge, puisque le lest en est une.
+ */
+export function setAdvice(input: {
+  instances: LoggedExercise[];
+  range: { min: number; max: number };
+  scheme: Progression;
+  musclePrimary?: string | null;
+  /** Exercice au poids du corps : la charge n'est un levier que s'il y a du lest. */
+  bodyweight?: boolean;
+}): SetAdvice {
+  const { instances, range, scheme, musclePrimary, bodyweight } = input;
+  const last = instances[0];
+  // Jamais fait : rien à dire, on ouvre en bas de fourchette.
+  if (!last) {
+    return {
+      verdict: { kind: 'none', loadFrom: 0, loadTo: 0, window: 0 },
+      load: 0,
+      reps: range.min,
+      range,
+    };
+  }
+
+  const from = topLoad(last);
+  const target: ExerciseTarget = {
+    sets: last.performed.length,
+    reps_min: range.min,
+    reps_max: range.max,
+    ...(bodyweight && from === 0 ? { added_kg: 0 } : { load_kg: from }),
+  };
+  let verdict = exerciseProgression({
+    target,
+    scheme,
+    increment: incrementFor(musclePrimary),
+    instances,
+  });
+  // Au poids du corps sans lest : « monte la charge » n'a pas de sens, on monte les reps.
+  if (bodyweight && from === 0 && verdict.kind === 'up') {
+    verdict = { ...verdict, kind: 'hold', loadTo: verdict.loadFrom };
+  }
+
+  // La charge monte → on repart en BAS de fourchette (c'est la double progression, et
+  // c'est exactement ce que `up` veut dire). Elle baisse ou ne bouge pas → on vise une
+  // répétition de plus que la dernière fois, sans dépasser le haut de la fourchette.
+  const reps =
+    verdict.kind === 'up' || verdict.loadTo !== verdict.loadFrom
+      ? range.min
+      : Math.max(range.min, Math.min(range.max, topReps(last) + 1));
+
+  return { verdict, load: verdict.loadTo, reps, range };
 }
 
 /**
@@ -305,7 +401,7 @@ export function planNextSession(
     const v = exerciseProgression({
       target: ex.target,
       scheme: ex.progression || cfg.default_progression,
-      increment: incrementFor(ex),
+      increment: incrementFor(ex.muscle_primary),
       instances: recentInstances(ex, lastLog, history),
     });
     verdicts.push({ id: ex.id, name: ex.name, verdict: v });
