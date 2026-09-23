@@ -12,10 +12,6 @@
          retirés : la tuile du héros, en bas, dit déjà qu'il voyage, et envoyer ne coûte
          plus d'or (v0.1069). -->
     <div class="bar">
-      <span v-if="outpostBuilt && travelMult < 1" class="bar-chip">
-        🧭 −{{ Math.round((1 - travelMult) * 100) }}%
-      </span>
-
       <!-- 🎚️ Filtre de difficulté (par RANG, la langue de la carte). On garde les rangs
          MASQUÉS, pas les affichés : un rang nouveau apparaît visible par défaut. -->
       <div
@@ -40,21 +36,20 @@
         </button>
       </div>
 
-      <!-- 🕳️ Afficher / masquer les failles. Il se COMBINE aux rangs : une faille ne se
-           montre que si son rang est affiché ET que ce filtre est allumé ; le compte ne
-           parle que des failles des rangs affichés. -->
+      <!-- 🕳️ Filtre des failles, à TROIS états (un toucher passe au suivant) :
+           tout · failles SEULES · sans failles. Il se COMBINE aux rangs : une faille ne se
+           montre que si son rang est affiché, et le compte ne parle que de ces failles. -->
       <button
         v-if="riftTotal > 0"
         type="button"
         class="rf-chip rift-chip"
-        :class="{ on: !hideRifts }"
-        :aria-pressed="!hideRifts"
+        :class="['rm-' + riftMode, { on: riftMode !== 'none' }]"
         :aria-label="riftChipLabel"
         :title="riftChipLabel"
-        @click="toggleRifts"
+        @click="cycleRiftMode"
       >
         <span class="rift-emo">🕳️</span>
-        <span class="rift-count">{{ riftInRanks }}</span>
+        <span class="rift-count">{{ riftMode === 'only' ? 'seules' : riftInRanks }}</span>
       </button>
     </div>
 
@@ -1074,19 +1069,23 @@ function toggleRank(r: number) {
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
 // ── 🕳️ Filtre des failles (mémorisé par appareil), combiné aux rangs ──
-const RIFT_FILTER_KEY = 'muscu:emap:hide-rifts';
-function loadHideRifts(): boolean {
+type RiftMode = 'all' | 'only' | 'none';
+const RIFT_MODES: RiftMode[] = ['all', 'only', 'none'];
+const RIFT_FILTER_KEY = 'muscu:emap:rift-mode';
+function loadRiftMode(): RiftMode {
   try {
-    return localStorage.getItem(RIFT_FILTER_KEY) === '1';
+    const v = localStorage.getItem(RIFT_FILTER_KEY);
+    if (v && (RIFT_MODES as string[]).includes(v)) return v as RiftMode;
   } catch {
-    return false;
+    /* stockage indisponible : tout est affiché */
   }
+  return 'all';
 }
-const hideRifts = ref(loadHideRifts());
-function toggleRifts() {
-  hideRifts.value = !hideRifts.value;
+const riftMode = ref<RiftMode>(loadRiftMode());
+function cycleRiftMode() {
+  riftMode.value = RIFT_MODES[(RIFT_MODES.indexOf(riftMode.value) + 1) % RIFT_MODES.length]!;
   try {
-    localStorage.setItem(RIFT_FILTER_KEY, hideRifts.value ? '1' : '0');
+    localStorage.setItem(RIFT_FILTER_KEY, riftMode.value);
   } catch {
     /* le filtre vaut pour la session */
   }
@@ -1094,12 +1093,21 @@ function toggleRifts() {
 const rankShown = (p: Poi) => !hiddenRanks.value.has(rankOf(p).rankIndex);
 const riftTotal = computed(() => pois.value.filter(isRiftPoi).length);
 const riftInRanks = computed(() => pois.value.filter((p) => isRiftPoi(p) && rankShown(p)).length);
+const RIFT_MODE_LABEL: Record<RiftMode, string> = {
+  all: 'Tous les lieux',
+  only: 'Failles seules',
+  none: 'Failles masquées',
+};
 const riftChipLabel = computed(
   () =>
-    `${hideRifts.value ? 'Afficher' : 'Masquer'} les failles · ${riftInRanks.value} dans les rangs affichés`,
+    `${RIFT_MODE_LABEL[riftMode.value]} · ${riftInRanks.value} faille${riftInRanks.value > 1 ? 's' : ''} dans les rangs affichés — toucher pour changer`,
 );
 const shownPois = computed(() =>
-  pois.value.filter((p) => rankShown(p) && !(hideRifts.value && isRiftPoi(p))),
+  pois.value.filter(
+    (p) =>
+      rankShown(p) &&
+      (riftMode.value === 'all' || (riftMode.value === 'only') === isRiftPoi(p)),
+  ),
 );
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
@@ -2394,9 +2402,6 @@ onUnmounted(() => {
   gap: 6px;
   padding: 0 12px 8px;
 }
-.bar-chip {
-  flex: none;
-}
 .rank-filter {
   flex: 1;
   min-width: 0;
@@ -2480,6 +2485,11 @@ onUnmounted(() => {
 .rift-chip.on .rift-count {
   color: var(--text);
 }
+/* Failles SEULES : pastille pleine, le mode le plus fort se voit d'un coup d'œil. */
+.rift-chip.rm-only {
+  background: color-mix(in srgb, var(--rk) 34%, var(--surface));
+  box-shadow: 0 0 6px color-mix(in srgb, var(--rk) 55%, transparent);
+}
 .rf-chip:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -2493,14 +2503,6 @@ onUnmounted(() => {
   color: var(--text);
   font-size: 12.5px;
   line-height: 1.4;
-}
-.bar-chip {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 700;
 }
 .map-outer {
   position: relative;
