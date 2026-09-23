@@ -68,22 +68,34 @@ export function partyCapFor(engage: number): number {
  *  pool que les convois d'avant) : c'est ce qui borne le NOMBRE d'équipes en parallèle, donc
  *  l'or et les pierres par jour. L'équipe du héros n'en prend pas : il est sa propre limite.
  *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
-export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany';
+export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'hopeless';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
   hero: boolean,
   slotsFree: number,
   cap: number,
+  /** 🎯 Chance de revenir vainqueur (`partyWinChance`), `null` quand il n'y a RIEN à
+   *  combattre (récolte sans gardes) ou rien à simuler. ⚠️ REQUIS : un paramètre qu'on peut
+   *  oublier finit par l'être, et l'omettre rouvrirait en silence le départ perdu d'avance.
+   *  ⚠️ `null` ne vaut PAS zéro — le confondre interdirait la récolte. */
+  winChance: number | null,
 ): PartySendBlock | null {
   if (!PARTY_TARGETS.has(poi.type)) return 'notTarget';
   if (!hero && escortCount <= 0) return 'empty';
   if (!hero && slotsFree <= 0) return 'slots';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
   if (escortCount > partyCapFor(cap)) return 'tooMany';
+  // 💀 PERDU D'AVANCE (demandé par l'utilisateur) : aucune victoire sur tout l'échantillon
+  // de pronostic. ⚠️ Le seuil est le ZÉRO STRICT, et c'est délibéré — la mesure rejoue le
+  // VRAI combat, donc « 0 sur 40 » veut dire qu'aucune graine n'a jamais vu ce groupe
+  // revenir. Y mettre un plancher (« moins de 5 % ») interdirait des paris que le joueur a
+  // le droit de prendre ; ici il n'y a pas de pari, seulement une certitude.
+  if (winChance !== null && winChance <= 0) return 'hopeless';
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
+  hopeless: 'perdu d’avance — aucun d’eux n’en reviendrait vainqueur',
   notTarget: 'on n’envoie pas d’équipe sur ce lieu',
   empty: 'l’équipe est vide',
   slots: 'tous les créneaux d’équipe de l’Avant-poste sont pris',
@@ -95,8 +107,9 @@ export function canSendParty(
   hero: boolean,
   slotsFree: number,
   cap: number,
+  winChance: number | null,
 ): boolean {
-  return partySendBlocker(poi, escortCount, hero, slotsFree, cap) === null;
+  return partySendBlocker(poi, escortCount, hero, slotsFree, cap, winChance) === null;
 }
 
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.
