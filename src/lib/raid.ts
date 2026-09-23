@@ -2945,7 +2945,7 @@ export function applyRaidOutcome(
   report: RaidReport,
   ctx: { activeDays7: number; globalXp: number },
   now: number,
-): { base: BaseState; damage: RaidDamage; corpses: Corpse[] } {
+): { base: BaseState; damage: RaidDamage; corpses: Corpse[]; woundUntil: number | null } {
   const dmg = raidDamage(report);
   const rng = mulberry32((base.seed ^ raid.seed) >>> 0 || 1);
   const corpses = corpsesFrom(raid, report, raid.seed);
@@ -2960,7 +2960,10 @@ export function applyRaidOutcome(
   // n'avait pas joué non plus pendant ce temps.
   // ⚠️ `until` rend `null` quand la durée est DÉJÀ écoulée : on ne pose pas un état mort
   // que le tick suivant effacerait, et qui immobiliserait le héros une seconde pour rien.
-  const until = (ms: number) => (raid.arrivesAt + ms > now ? raid.arrivesAt + ms : null);
+  const until = (ms: number) => {
+    const at = raid.arrivesAt + ms;
+    return at > now ? at : null;
+  };
   const woundUntil = until(
     woundMsFor(defenseLevel(base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7)),
   );
@@ -2987,6 +2990,11 @@ export function applyRaidOutcome(
       freeze: dmg.freeze && freezeUntil ? { until: freezeUntil, atXp: ctx.globalXp } : null,
     },
     damage: dmg,
+    // ⚠️ RENDU À L’APPELANT : les AVENTURIERS tombés partent à l’infirmerie pour la MÊME
+    // durée que le héros, et le store le recalculait de son côté — sans le plancher, donc en
+    // posant une échéance DÉJÀ dépassée après une longue absence. Exactement l’état mort que
+    // ce correctif refuse pour le héros. Une seule règle, un seul plancher.
+    woundUntil,
     // ⚠️ RENDUS À L’APPELANT, plus laissés à fouiller : le butin des corps est crédité
     // À LA RÉSOLUTION et figure dans le rapport de bataille (demandé). Le champ qu’on
     // pose sur la base juste au-dessus ne sert plus qu’à MONTRER la bataille quelques

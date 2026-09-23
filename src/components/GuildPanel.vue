@@ -720,6 +720,7 @@ import {
   wornGear,
   advGearAwakenPlan,
   awakenAllAdvGear,
+  countAssignedGear,
   advGearLevelBand,
   advGearNextRank,
   advGearRankCap,
@@ -1184,11 +1185,13 @@ function doAwaken(g: AdvGear) {
     });
   });
 }
-/** 🗡️ Combien de pièces sont ASSIGNÉES — sur `gear` brut, comme `stripAdvGear` : une pièce
- *  que le combat ignore (mauvais métier) compte, puisque le bouton la retirera. */
-const stockWornCount = computed(() =>
-  char.advList.reduce((s, a) => s + Object.values(a.gear ?? {}).filter((id) => !!id).length, 0),
-);
+/** 🗡️ Ce que « Tout retirer » ferait. ⚠️ LA MÊME RÈGLE que le geste (`stripAdvGear` lit
+ *  la même primitive), sans exécuter le geste : appeler `stripAdvGear` ici clonerait tout
+ *  le vivier pour afficher un entier.
+ *  ⚠️ Ce nombre ne coïncide PAS forcément avec le chip « 🗡️ Portées » juste au-dessus, qui
+ *  compte les pièces DU STOCK ayant un porteur : un id qui ne désigne plus rien est compté
+ *  ici et pas là-bas. Les deux sont justes, ils ne répondent pas à la même question. */
+const stockWornCount = computed(() => countAssignedGear(char.advList));
 /** ✨ Ce que « Tout fusionner » ferait. ⚠️ La MÊME fonction que le geste : l'aperçu ne peut
  *  pas promettre autre chose que ce que le bouton fait. Ne dépend pas de l'horloge du
  *  panneau — il ne se recalcule qu'au changement du stock ou du vivier. */
