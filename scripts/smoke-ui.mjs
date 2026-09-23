@@ -182,6 +182,20 @@ try {
       }
       await page.waitForTimeout(1800);
 
+      // ⚠️ L'app est-elle PEUPLÉE après la connexion ? Le compte de test a deux bilans et
+      // un programme ; si l'accueil annonce le contraire, c'est que les données de fond
+      // n'ont pas été chargées. Ce n'est pas théorique : ce contrôle a révélé que les sept
+      // `fetch` de `useProgress` partaient AVANT le login (donc en anonyme, donc vides) et
+      // que leur cache figeait ce vide jusqu'au rechargement — tout utilisateur arrivant
+      // par l'écran de connexion voyait une app vide, sans XP ni séance.
+      const corps = (await page.textContent('body')) ?? '';
+      if (corps.includes('Aucune séance encore')) {
+        fail.push(
+          `${width}px : après connexion, l’accueil dit « Aucune séance encore » alors que ` +
+            `le compte de test en a deux (données de fond non chargées)`,
+        );
+      }
+
       for (const e of ECRANS) {
         const avant = errors.length;
         // Mode hash (le routeur du projet) : on navigue par le fragment.

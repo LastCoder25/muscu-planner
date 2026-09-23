@@ -105,7 +105,8 @@ import { computed, toRaw } from 'vue';
 import { useProgress } from '@/composables/useProgress';
 import { useLogsStore } from '@/stores/logs';
 import { personalRecords } from '@/lib/estimates';
-import { dayLabelShort } from '@/lib/startDate';
+import { logicalToday } from '@/lib/challenges';
+import { dayLabelShort, daysAgoLabel } from '@/lib/startDate';
 import { muscleColor } from '@/lib/volume';
 import {
   buildTrophies,
@@ -148,16 +149,11 @@ function fmtDay(iso: string): string {
   return y === String(new Date().getFullYear()) ? court : `${court} ${y.slice(2)}`;
 }
 
-/** Ancienneté d'un record : « aujourd'hui », « il y a 12 j », « il y a 6 mois ». */
+/** Ancienneté d'un record. ⚠️ `logicalToday()` et pas `new Date()` : c'est le même
+ *  « aujourd'hui » que le reste de l'app (bascule à 4 h), donc un record établi cette nuit
+ *  ne se met pas à dater d'hier au milieu d'une séance. */
 function ago(iso: string): string {
-  const j = Math.floor((Date.now() - new Date(`${iso}T12:00:00Z`).getTime()) / 86400000);
-  if (j <= 0) return "aujourd'hui";
-  if (j === 1) return 'hier';
-  if (j < 31) return `il y a ${j} j`;
-  const mois = Math.round(j / 30.4);
-  if (mois < 12) return `il y a ${mois} mois`;
-  const ans = Math.floor(mois / 12);
-  return `il y a ${ans} an${ans > 1 ? 's' : ''}`;
+  return daysAgoLabel(iso, logicalToday());
 }
 const trophies = computed(() => buildTrophies(entries.value));
 const counts = computed(() => trophyCounts(trophies.value));
@@ -323,7 +319,12 @@ function sportEmoji(cat: SportCategory, hasDistance: boolean): string {
 }
 .pal-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  // ⚠️ `minmax(0, 1fr)` et NON `1fr` : un `1fr` garde un minimum implicite de `auto`, donc
+  // une colonne refuse de passer sous la largeur de son contenu et la grille déborde —
+  // mesuré ici, 345 px pour un écran de 344 (« 🔒 100 séances · 2/100 »). Le projet
+  // connaissait déjà ce piège (la rangée de trajets, v0.756) ; il n'avait pas traversé
+  // jusqu'à cet écran, parce que la page n'avait jamais été regardée AVEC des données.
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 .pal {

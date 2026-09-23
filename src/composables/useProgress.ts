@@ -1,7 +1,7 @@
 // useProgress — les 5 niveaux de l'utilisateur, réactifs.
 // Muscu / Tennis (drills + prépa) / Cardio (course/vélo/marche) / Challenges / Global.
 // Niveaux numériques purs (computeLevel), sans rang ni palier.
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { useLogsStore } from '@/stores/logs';
 import { useTennisStore } from '@/stores/tennis';
 import { useChallengesStore } from '@/stores/challenges';
@@ -60,19 +60,47 @@ export function useProgress() {
 
   // Vrai une fois les données de fond chargées (évite d'agir sur un niveau « stale »).
   const ready = ref(false);
-  onMounted(() => {
-    void Promise.allSettled([
-      logs.fetchAll(),
-      tennis.fetchLogs(),
-      challenges.fetchMine(),
-      sessions.fetchMine(),
-      cardio.fetchLogs(),
-      combo.fetchMine(),
-      friendBoss.fetchMine(),
-    ]).finally(() => {
-      ready.value = true;
-    });
-  });
+
+  // ⚠️ ON ATTEND QU'IL Y AIT UN UTILISATEUR. Ces sept chargements partaient d'un
+  // `onMounted`, or ce composable est instancié par `useComboChest`, monté dans `App.vue`
+  // — donc DÈS L'ÉCRAN DE CONNEXION, sans session. Les requêtes partaient alors avec la
+  // seule clé anon, la RLS ne rendait AUCUNE ligne (un 200 avec un tableau vide, jamais
+  // une erreur), et chaque store marquait son cache « chargé ». Résultat mesuré : toute
+  // personne arrivant par l'écran de connexion voyait une app VIDE — « Aucune séance
+  // encore », niveau Global 1, zéro XP — jusqu'à ce qu'elle recharge la page. Invisible
+  // pour qui a une session persistée, systématique pour les autres.
+  //
+  // ⚠️ ET ON FORCE quand l'utilisateur CHANGE. Deux cas, une seule règle : après une
+  // connexion, les caches contiennent des réponses anonymes (vides) qu'il faut jeter ; et
+  // si un second compte se connecte dans le même onglet, il ne doit pas hériter du cache
+  // du premier — la RLS protège la BASE, elle ne protège pas un cache déjà en mémoire.
+  // `avant === undefined` distingue le premier appel (session déjà là au boot : le cache
+  // est sain, rien à forcer) d'une transition null → uid ou A → B.
+  watch(
+    () => auth.user?.id,
+    (uid, avant) => {
+      ready.value = false;
+      if (!uid) return;
+      // ⚠️ `force` n'est passé qu'à `logs.fetchAll` : c'est le SEUL de ces sept à refuser de
+      // repartir quand il a déjà chargé (`allLoaded`), donc le seul dont un cache vide
+      // survivrait à la connexion. Les six autres re-requêtent à chaque appel — leur
+      // `loaded` n'est qu'un drapeau « on a déjà essayé », lu ailleurs. Vérifié un par un ;
+      // le jour où l'un d'eux gagne une garde de cache, il devra rejoindre cette ligne.
+      const force = avant !== undefined;
+      void Promise.allSettled([
+        logs.fetchAll(force),
+        tennis.fetchLogs(),
+        challenges.fetchMine(),
+        sessions.fetchMine(),
+        cardio.fetchLogs(),
+        combo.fetchMine(),
+        friendBoss.fetchMine(),
+      ]).finally(() => {
+        ready.value = true;
+      });
+    },
+    { immediate: true },
+  );
 
   // Séances « spécifiques » (hors muscu de fond) → comptent dans le Tennis/Spécifique :
   // prépa physique, crossfit, hyrox. Tag porté par la séance OU directement par le log

@@ -109,3 +109,29 @@ export function startLabel(dateIso: string, todayIso: string): string {
   if (Number.isNaN(d.getTime())) return dateIso;
   return `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}`;
 }
+
+/**
+ * « aujourd'hui », « hier », « il y a 12 j », « il y a 6 mois », « il y a 2 ans » —
+ * l'ancienneté d'une date PASSÉE, pendant de `startLabel` qui regarde vers l'avenir.
+ *
+ * ⚠️ ELLE COMPARE DEUX JOURS, jamais un jour et un INSTANT. La version qui vivait dans
+ * `TrophiesPage` faisait `Date.now() - new Date(iso + 'T12:00:00Z')` : tant qu'il est avant
+ * midi UTC — c'est-à-dire toute la matinée en France — le quotient tombe un cran trop bas
+ * et l'écran annonçait « hier » pour avant-hier, « il y a 8 j » pour neuf. Mélanger un jour
+ * de calendrier et un horodatage, c'est le décalage d'un jour que ce projet a déjà payé
+ * deux fois (cf. `localDay.ts` et `dateRangeLabel`).
+ *
+ * ⚠️ Une date FUTURE (horloge de l'appareil en retard, saisie antidatée) rend
+ * « aujourd'hui » plutôt qu'un « il y a −3 j » absurde.
+ */
+export function daysAgoLabel(dateIso: string, todayIso: string): string {
+  const j = daysBetweenUtcIso(dateIso, todayIso);
+  if (j <= 0) return "aujourd'hui";
+  if (j === 1) return 'hier';
+  if (j < 31) return `il y a ${j} j`;
+  // 30,44 = la longueur moyenne d'un mois : sans elle, 365 jours donneraient 13 mois.
+  const mois = Math.round(j / 30.44);
+  if (mois < 12) return `il y a ${mois} mois`;
+  const ans = Math.floor(mois / 12);
+  return `il y a ${ans} an${ans > 1 ? 's' : ''}`;
+}
