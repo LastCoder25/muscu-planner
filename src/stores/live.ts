@@ -191,6 +191,16 @@ export const useLiveStore = defineStore('live', () => {
     equipment?: string;
     unit?: string | null;
     unilateral?: boolean | null;
+    /**
+     * 🏋️ Ce que le moteur conseille pour la PREMIÈRE série (v0.1105) — `setAdvice`, calculé
+     * par l'écran qui, lui, a l'historique et le profil.
+     *
+     * ⚠️ **SANS LUI, L'EXERCICE OUVRAIT À 0 kg ET 8 REPS EN DUR**, sans rien relire de la
+     * dernière fois : double progression, plateau et décharge ne s'appliquaient jamais à
+     * une séance libre. La cible reste à 0 — une séance libre n'a pas de plan, et lui en
+     * inventer un ferait mentir tout ce qui compare le prévu au réalisé.
+     */
+    start?: { load: number; reps: number };
   }) {
     if (!run.value) return;
     const bodyweight = def.equipment === 'poids_du_corps' || def.equipment === 'élastique';
@@ -212,8 +222,8 @@ export const useLiveStore = defineStore('live', () => {
       sets: [
         {
           uid: crypto.randomUUID(),
-          load_kg: 0,
-          reps: isTime ? 30 : 8,
+          load_kg: def.start?.load ?? 0,
+          reps: def.start?.reps ?? (isTime ? 30 : 8),
           done: false,
           difficulty: 0,
           rir: null,
