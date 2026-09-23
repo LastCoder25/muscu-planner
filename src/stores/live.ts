@@ -12,6 +12,7 @@ import type {
   Difficulty,
 } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
+import { warmupSets } from '@/lib/warmup';
 
 export interface LiveSet {
   uid: string; // clé stable (évite les décalages de liste à la suppression)
@@ -22,6 +23,11 @@ export interface LiveSet {
   rir: number | null;
   comment: string;
   rest_seconds?: number; // repos propre à cette série (sinon repos de l'exo)
+  // Série d'APPROCHE (montée en charge). ⚠️ Elle n'entre JAMAIS dans le `SessionLog`
+  // (`buildLog` l'écarte) : c'est ce qui garantit, par construction, qu'elle ne compte
+  // ni en XP, ni en tonnage, ni en séries par muscle, ni en records, ni dans le moteur
+  // de progression — sans un filtre à répéter chez les 12 lecteurs de `performed`.
+  warmup?: boolean;
 }
 
 export interface LiveExercise {
@@ -113,7 +119,18 @@ export const useLiveStore = defineStore('live', () => {
         let sets: LiveSet[] = prescribed
           ? ex.prescription!.map((p) => blank(p.load_kg ?? base, p.reps, p.rest_seconds))
           : Array.from({ length: ex.target.sets }, () => blank(base, ex.target.reps_min));
+        // ⚠️ La séance allégée retire une série de TRAVAIL : on applique `light` AVANT de
+        // préfixer les approches, sinon un exercice lourd à une seule série de travail
+        // verrait celle-ci sautée au profit de son échauffement.
         if (light && sets.length > 2) sets = sets.slice(0, sets.length - 1);
+        // Séries d'approche en tête (dérivées de la charge, jamais persistées). Elles
+        // sortiront du log dans `buildLog` : elles ne comptent nulle part.
+        const warm = warmupSets(ex).map((w) => {
+          const s = blank(w.load_kg ?? base, w.reps, w.rest_seconds);
+          s.warmup = true;
+          return s;
+        });
+        if (warm.length) sets = [...warm, ...sets];
         return {
           id: ex.id,
           name: ex.name,
@@ -286,8 +303,13 @@ export const useLiveStore = defineStore('live', () => {
         muscle_primary: ex.muscle_primary,
         swapped_from: ex.swapped_from,
         planned: ex.planned,
+        // ⚠️ LE POINT DE PASSAGE UNIQUE. Les séries d'APPROCHE sortent ici, et nulle part
+        // ailleurs : le log ne contient que du TRAVAIL. C'est ce qui rend corrects par
+        // construction les 12 lecteurs de `performed` (XP, tonnage, séries par muscle,
+        // équilibre du corps, records e1RM, moteur de progression, stats) — y compris
+        // ceux qu'on écrira demain. Filtrer chez chacun aurait garanti la divergence.
         performed: ex.sets
-          .filter((s) => s.done)
+          .filter((s) => s.done && !s.warmup)
           .map<PerformedSet>((s, i) => {
             const ps: PerformedSet = {
               set: i + 1,

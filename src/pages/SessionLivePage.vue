@@ -74,7 +74,7 @@
             <div class="ring-num">
               <div class="ring-time font-display">{{ restDisplay }}</div>
               <div class="ring-next">
-                Puis <b>série {{ curSetIndex + 1 }}</b>
+                Puis <b>{{ setName(curSetIndex) }}</b>
               </div>
             </div>
           </div>
@@ -98,11 +98,11 @@
             class="btile"
             :class="[
               s.done ? 'done' : i === curSetIndex ? 'cur' : 'todo',
-              { sel: i === activeIdx },
+              { sel: i === activeIdx, warm: s.warmup },
             ]"
             @click="selectTile(i, s)"
           >
-            <span class="bt-n">S{{ i + 1 }}</span>
+            <span class="bt-n">{{ (s.warmup ? 'A' : 'S') + setOrdinal(ex.sets, i) }}</span>
             <span class="bt-v font-display">
               <template v-if="ex.bodyweight && !s.load_kg">PdC</template>
               <template v-else
@@ -120,7 +120,8 @@
         <!-- Éditeur de la série active (courante ou tuile touchée) -->
         <div v-if="activeSet" class="editor">
           <div class="editor-h">
-            {{ editIdx >= 0 ? `Modifier la série ${activeIdx + 1}` : `Série ${activeIdx + 1}` }}
+            {{ editIdx >= 0 ? 'Modifier ' : '' }}{{ setName(activeIdx) }}
+            <span v-if="activeSet?.warmup" class="warm-tag">échauffement · ne compte pas</span>
           </div>
           <div class="editor-row">
             <div class="ed-cell">
@@ -322,6 +323,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
+import { setOrdinal } from '@/lib/warmup';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
 import SwapSheet from '@/components/SwapSheet.vue';
@@ -350,14 +352,32 @@ const ex = computed(() => live.current);
 const exAnim = computed(() => (ex.value ? !!exerciseFrames(ex.value.id) : false));
 const exImg = computed(() => (ex.value ? exerciseImage(ex.value.id) : undefined));
 const curSetIndex = computed(() => ex.value?.sets.findIndex((s) => !s.done) ?? -1);
+// Index de la 1re série de TRAVAIL : c'est elle qui porte la charge de référence, pas
+// `sets[0]` — les approches la précèdent. Source unique des tests « suis-je sur la
+// première série ? », qui pilotent le report de charge.
+const firstWorkIdx = computed(() => ex.value?.sets.findIndex((s: LiveSet) => !s.warmup) ?? -1);
+// « Approche 2 » / « Série 3 » — numérotées chacune dans sa suite (cf. setOrdinal).
+function setName(i: number): string {
+  const sets = ex.value?.sets;
+  if (!sets || i < 0 || !sets[i]) return 'série';
+  return `${sets[i].warmup ? 'approche' : 'série'} ${setOrdinal(sets, i)}`;
+}
 const curSet = computed(() => (curSetIndex.value >= 0 ? ex.value!.sets[curSetIndex.value]! : null));
+// ⚠️ Les approches sont HORS du volume, comme elles sont hors du log : sinon l'écran
+// annoncerait un tonnage (ici +745 kg sur un développé couché à 80 kg) que le bilan
+// ne confirmerait jamais — deux chiffres pour la même chose.
 const volume = computed(() =>
-  ex.value ? ex.value.sets.filter((s) => s.done).reduce((a, s) => a + s.load_kg * s.reps, 0) : 0,
+  ex.value
+    ? ex.value.sets.filter((s) => s.done && !s.warmup).reduce((a, s) => a + s.load_kg * s.reps, 0)
+    : 0,
 );
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
 const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
 function exDone(e: LiveExercise): boolean {
-  return e.sets.length > 0 && e.sets.every((s) => s.done);
+  // Un exercice est fait quand son TRAVAIL est fait : sauter l'échauffement ne doit pas
+  // le laisser éternellement « en cours » dans la frise des exos.
+  const work = e.sets.filter((s: LiveSet) => !s.warmup);
+  return work.length > 0 && work.every((s: LiveSet) => s.done);
 }
 
 const swapOpen = ref(false);
@@ -433,23 +453,31 @@ function skipRest() {
 // ── Actions séries ──────────────────────────────────────
 function adj(s: LiveSet, key: 'load_kg' | 'reps', d: number) {
   s[key] = Math.max(0, Math.round((s[key] + d) * 10) / 10);
-  if (key === 'load_kg' && s === curSet.value && curSetIndex.value === 0) propagateLoad();
+  if (key === 'load_kg' && s === curSet.value && curSetIndex.value === firstWorkIdx.value)
+    propagateLoad();
   live.persist();
 }
-// Reporte la charge de la 1re série sur les séries suivantes non faites (pré-remplissage
-// après un changement d'exo). PAS pour un exo à charges par série (import pyramide) :
-// chaque série garde sa charge propre. Les séries restent ensuite indépendantes.
+// Reporte la charge de la 1re série DE TRAVAIL sur les séries de travail suivantes non
+// faites (pré-remplissage après un changement d'exo). PAS pour un exo à charges par série
+// (import pyramide) : chaque série garde sa charge propre. Ensuite, séries indépendantes.
+//
+// ⚠️ LES APPROCHES SONT HORS JEU, DES DEUX CÔTÉS. Elles vivent EN TÊTE de `sets`, donc
+// partir de `sets[0]` reporterait la charge d'échauffement (25 kg) sur tout le travail
+// (50 kg) ; et les inclure comme cibles écraserait la montée en charge d'un seul coup.
 function propagateLoad() {
   const e = ex.value;
-  if (!e || e.prescribed || e.sets.length === 0) return;
-  const load = e.sets[0]!.load_kg;
-  for (let j = 1; j < e.sets.length; j++) {
-    if (!e.sets[j]!.done) e.sets[j]!.load_kg = load;
+  if (!e || e.prescribed) return;
+  const first = firstWorkIdx.value;
+  if (first < 0) return;
+  const load = e.sets[first]!.load_kg;
+  for (let j = first + 1; j < e.sets.length; j++) {
+    const s = e.sets[j]!;
+    if (!s.done && !s.warmup) s.load_kg = load;
   }
 }
 function onActiveLoad() {
   // Report de la charge uniquement depuis la 1re série de la série courante.
-  if (editIdx.value < 0 && activeIdx.value === 0) propagateLoad();
+  if (editIdx.value < 0 && activeIdx.value === firstWorkIdx.value) propagateLoad();
   live.persist();
 }
 function skipExercise() {
@@ -931,6 +959,31 @@ onBeforeUnmount(() => {
 }
 .btile.sel {
   box-shadow: 0 0 0 2px var(--accent);
+}
+/* Série d'APPROCHE : elle ne compte pas, elle doit donc se lire comme du préliminaire.
+   Pointillé + retrait — le langage déjà employé pour la zone bonus du Défi 360. Elle
+   est déclarée APRÈS .todo/.cur pour neutraliser le rouge « à faire » : un échauffement
+   n'appelle pas, il précède. Deux différences (trait ET opacité), pas seulement la
+   couleur : la règle du projet pour qui ne sépare pas deux teintes. */
+.btile.warm {
+  border-style: dashed;
+  border-color: var(--line);
+  background: transparent;
+  opacity: 0.72;
+}
+.btile.warm .bt-v {
+  font-size: 18px;
+  color: var(--dim);
+}
+.btile.warm.done {
+  border-color: #7bc86c55;
+}
+.warm-tag {
+  margin-left: 8px;
+  font-size: 10px;
+  letter-spacing: 0.3px;
+  text-transform: none;
+  color: var(--dim-2);
 }
 .bt-n {
   font-size: 10px;
