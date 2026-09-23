@@ -578,6 +578,13 @@
             🐫 {{ PARTY_SEND_BLOCK_LABEL.slots }} : sans le héros, une équipe en prend un. Emmène
             ton héros, ou attends le retour d’une équipe.
           </p>
+          <!-- 💀 ON DIT POURQUOI (demandé : « empêche d'envoyer une expédition à 0 % ») :
+               un bouton qui se grise en silence se lit comme une panne, et le joueur ne
+               saurait pas quoi changer. La parade est donc écrite avec le refus. -->
+          <p v-if="partySendBlock === 'hopeless'" class="sh-risk">
+            💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
+            un lieu d’un rang plus bas.
+          </p>
           <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
             {{ partySendLabel }}
           </button>
@@ -1337,6 +1344,10 @@ const partySendBlock = computed(() =>
         partyHeroOn.value,
         vansLeft.value,
         cap.value,
+        // 💀 Le 🎯 % DÉJÀ affiché juste au-dessus : on ne laisse pas partir un groupe qui
+        // ne peut pas gagner. ⚠️ Le MÊME nombre que le pronostic — deux estimations
+        // finiraient par dire « 0 % » d'un côté et laisser partir de l'autre.
+        partyWin.value === null ? null : partyWin.value / 100,
       )
     : null,
 );
@@ -1406,6 +1417,8 @@ function togglePartyAll() {
 /** Le bouton dit OÙ l’on va : un camp se prend, une faille se referme. */
 const partySendLabel = computed(() => {
   if (!partySize.value) return 'Choisis ton groupe';
+  // ⚠️ Le bouton DIT le refus, il ne se contente pas d'être gris.
+  if (partySendBlock.value === 'hopeless') return '💀 Perdu d’avance';
   if (!teamOnly.value) return `🧺 Envoyer l’équipe (${partySize.value})`;
   return selectedRift.value
     ? `🌀 Entrer dans la faille (${partySize.value})`

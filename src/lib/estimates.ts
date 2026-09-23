@@ -1,6 +1,7 @@
 // estimates.ts — estimation de force (1RM) à partir des séries réalisées.
 // Pur (aucune dépendance Vue/Supabase). Consommé par le Bilan (Étape 4.1)
 // et l'affichage de tendances. Formule d'Epley.
+import { localDayIso } from './localDay';
 import type { PerformedSet, Session, SessionLog } from './types';
 import { warmupSeconds } from './warmup';
 
@@ -108,7 +109,11 @@ export function personalRecords(
   // peut être renommé en base), et « la plus ancienne date à valeur égale » tombe tout seul.
   const ordered = [...logs].sort((a, b) => a.performedAt.localeCompare(b.performedAt));
   for (const { performedAt, log } of ordered) {
-    const day = performedAt.slice(0, 10);
+    // ⚠️ Le JOUR LOCAL, jamais `performedAt.slice(0, 10)` : un horodatage de bilan est en
+    // UTC, donc une séance faite à 1 h du matin en France y porte encore la VEILLE. C'est
+    // le piège que `localDay.ts` documente (« JAMAIS `toISOString().slice(0, 10)` ») sous
+    // une autre forme, et le projet s'est déjà fait décaler d'un jour par là.
+    const day = localDayIso(new Date(performedAt));
     for (const ex of log.exercises ?? []) {
       const top = bestSetE1RM(ex.performed ?? []);
       if (!top) continue;

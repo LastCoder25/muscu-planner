@@ -201,6 +201,7 @@ import {
   startParty,
   type ActiveParty,
 } from '@/lib/party';
+import { partyWinChance } from '@/lib/partyForecast';
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
@@ -2741,12 +2742,19 @@ export const useCharacterStore = defineStore('character', () => {
       return 'un aventurier du groupe n’est plus disponible';
     // ⚠️ Groupe vide, ou SANS le héros alors que tous les créneaux de convoi sont pris : la
     // MÊME règle que l'écran (`partySendBlocker`), un seul pool avec les convois.
+    // 🗡️ Ce que le groupe emmène — il faut le connaître AVANT le refus, puisque le
+    // pronostic se joue avec l'équipement réellement porté.
+    const road = escortKitOf(cur);
     const sendBlock = partySendBlocker(
       poi,
       escort.length,
       !!hero,
       convoySlotsFree(comptoirLevel.value, [...caravanList.value, ...partyList.value], now),
       engageCap(pantheonLevel.value),
+      // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
+      // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
+      // dessous — un lieu ne peut pas se pronostiquer autrement qu’il ne se résout.
+      partyWinChance(poi, escort, road, hero, now),
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
@@ -2759,8 +2767,6 @@ export const useCharacterStore = defineStore('character', () => {
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
-    // 🗡️ Ce que le groupe emmène (`escortKitOf`).
-    const road = escortKitOf(cur);
     const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
     const leg = partyLegMin(poi, escort, {
       hero: !!hero,
