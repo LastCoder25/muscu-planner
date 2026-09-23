@@ -10,10 +10,11 @@
   <button
     type="button"
     class="car-adv"
-    :class="{ on, off: !!reason }"
+    :class="{ on: on && !readonly, off: !!reason, ro: readonly }"
     :disabled="!!reason"
-    :aria-pressed="on"
-    @click="emit('toggle')"
+    :aria-pressed="readonly ? undefined : on"
+    :tabindex="readonly ? -1 : undefined"
+    @click="readonly || emit('toggle')"
   >
     <!-- 🖼️ SON PORTRAIT, comme partout où un champion se montre (tirage, Guilde, Codex).
          Le repli reste son emoji : un aventurier legacy n'en a pas. -->
@@ -77,6 +78,8 @@ const props = defineProps<{
   reason?: string | null;
   /** Ce qu'il gagnerait sur le lieu visé (absent = on ne vise rien, ex. la Guilde). */
   xp?: MissionXpPreview | null;
+  /** Lecture seule : on MONTRE qui voyage, sans rien proposer de cocher. */
+  readonly?: boolean;
 }>();
 /** Un multiplicateur se lit « ×2 » ou « ×2,5 », jamais « ×2.50 ». */
 const fmtMult = (m: number) => (Math.round(m * 10) / 10).toString().replace('.', ',');
@@ -123,6 +126,9 @@ const rar = computed(() => advGradeBadge(props.adv));
   background: linear-gradient(180deg, rgba(255, 210, 63, 0.16), #1d1913 65%);
 }
 /* Indisponible : lisible (on doit lire POURQUOI), mais visiblement hors jeu. */
+.car-adv.ro {
+  cursor: default;
+}
 .car-adv.off {
   cursor: default;
   border-style: dashed;

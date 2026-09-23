@@ -359,6 +359,24 @@
       </button>
     </div>
 
+    <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
+    <div v-if="focusCrew" class="trip-crew">
+      <div class="tc-head">
+        👥 En route vers {{ POI_LABEL[focusCrew.poi.type] }} niv {{ focusCrew.poi.level }}
+      </div>
+      <div class="car-pick">
+        <div v-if="focusCrew.hero" class="tc-hero">🧝 <b>Ton héros</b></div>
+        <AdvPickTile v-for="a in focusCrew.advs" :key="a.id" :adv="a" :on="true" readonly />
+      </div>
+      <p v-if="!focusCrew.hero && !focusCrew.advs.length && !focusCrew.gone" class="tc-none">
+        Personne à bord.
+      </p>
+      <p v-if="focusCrew.gone" class="tc-none">
+        {{ focusCrew.gone }} champion{{ focusCrew.gone > 1 ? 's ne sont' : " n'est" }} plus dans ton
+        vivier.
+      </p>
+    </div>
+
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
       <div v-if="selected" ref="sheetEl" class="sheet">
@@ -765,6 +783,7 @@ import {
   advAvailable,
   advUnavailableReason,
   engageCap,
+  type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr, CHARACTER_RANKS } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
@@ -1105,8 +1124,7 @@ const riftChipLabel = computed(
 const shownPois = computed(() =>
   pois.value.filter(
     (p) =>
-      rankShown(p) &&
-      (riftMode.value === 'all' || (riftMode.value === 'only') === isRiftPoi(p)),
+      rankShown(p) && (riftMode.value === 'all' || (riftMode.value === 'only') === isRiftPoi(p)),
   ),
 );
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
@@ -1537,6 +1555,7 @@ const vansOnMap = computed(() =>
       id: c.id,
       poi: c.poi,
       escort: c.escort.length,
+      members: c.escort,
       at: travelPosition(c, now.value),
       prog: voyageProgress(c, now.value),
     })),
@@ -1550,6 +1569,8 @@ const partiesOnMap = computed(() =>
       id: g.id,
       poi: g.poi,
       escort: g.outcome.party?.escort.length ?? 0,
+      members: g.outcome.party?.escort ?? [],
+      hero: !!g.outcome.party?.hero,
       at: travelPosition(g, now.value),
       prog: voyageProgress(g, now.value),
     })),
@@ -1575,6 +1596,9 @@ const trips = computed(() => {
     back: boolean;
     claim?: string;
     title: string;
+    /** Qui voyage : le héros, et les ids des champions (montrés quand on touche la tuile). */
+    withHero: boolean;
+    members: string[];
   }[] = [];
   const a = active.value;
   const h = hero.value;
@@ -1591,6 +1615,8 @@ const trips = computed(() => {
           : formatDuration(back ? h.remainTotalMs : h.remainToObjectiveMs),
       pct: heroProg.value.overall * 100,
       back,
+      withHero: true,
+      members: a.outcome.party?.escort ?? [],
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''}`,
     });
   }
@@ -1604,6 +1630,8 @@ const trips = computed(() => {
       time: formatDuration(back ? v.at.remainTotalMs : v.at.remainToObjectiveMs),
       pct: v.prog.overall * 100,
       back,
+      withHero: false,
+      members: v.members,
       title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort}`,
     });
   }
@@ -1617,6 +1645,8 @@ const trips = computed(() => {
       time: formatDuration(back ? g.at.remainTotalMs : g.at.remainToObjectiveMs),
       pct: g.prog.overall * 100,
       back,
+      withHero: g.hero,
+      members: g.members,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''}`,
     });
   }
@@ -1630,6 +1660,8 @@ const trips = computed(() => {
       pct: 100,
       back: true,
       claim: c.id,
+      withHero: false,
+      members: c.escort,
       title: `Convoi rentré de ${POI_LABEL[c.poi.type]} — récupérer la cargaison`,
     });
   }
@@ -1642,6 +1674,16 @@ const trips = computed(() => {
  *  la toucher encaisse. */
 const focusTrip = ref<string | null>(null);
 const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.value)?.poi ?? null);
+/** 👥 Les membres du voyage touché (demandé : « quand je clique sur une expédition, voir les
+ *  champions qui sont dedans »). Un champion renvoyé depuis n'est plus dans le vivier : il est
+ *  compté à part plutôt que de faire tomber l'écran. */
+const focusCrew = computed(() => {
+  const t = trips.value.find((x) => x.key === focusTrip.value);
+  if (!t) return null;
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
+  return { hero: t.withHero, advs, gone: t.members.length - advs.length, poi: t.poi };
+});
 function toggleFocusTrip(key: string) {
   focusTrip.value = focusTrip.value === key ? null : key;
 }
@@ -2859,6 +2901,33 @@ onUnmounted(() => {
   justify-content: center;
   gap: 8px;
   padding: 2px 2px 6px;
+}
+.trip-crew {
+  margin: 0 2px 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.tc-head {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.tc-hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 44px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  font-size: 13px;
+}
+.tc-none {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--dim);
 }
 .trips > .trip {
   /* border-box : sans lui padding et bordure s'ajoutaient au tiers, et il n'en tenait que deux. */

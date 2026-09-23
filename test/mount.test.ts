@@ -105,6 +105,27 @@ const ROW = {
 };
 
 describe('🚪 montage des écrans (erreurs de setup)', () => {
+  // 👥 v0.1108 : toucher un voyage montre son équipe en tuiles LECTURE SEULE — ni case
+  // cochée, ni cible au clavier (elles ne proposent rien).
+  it('AdvPickTile en lecture seule ne se présente pas comme un choix', async () => {
+    const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');
+    let out = '';
+    const adv = ROW.adventurers[0];
+    expect(
+      await mountIt(
+        AdvPickTile,
+        { adv, on: true, readonly: true },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Léa');
+    expect(out).toContain('tabindex="-1"');
+    expect(out).not.toContain('aria-pressed');
+  }, 30_000);
+
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     let out = '';
