@@ -1990,7 +1990,8 @@
               </span>
               <span v-else class="lo-empty-tag">vide</span>
             </div>
-            <div v-if="lo.count" class="lo-items">
+            <!-- REPLIÉ : une pastille par pièce, pour lire la collection d'un coup d'œil. -->
+            <div v-if="lo.count && setDetail !== i" class="lo-items">
               <button
                 v-for="e in lo.entries"
                 :key="e.item.slot"
@@ -2009,6 +2010,61 @@
                 {{ SLOT_EMOJI[e.item.slot] }}
                 <span v-if="e.worn" class="lo-worn" aria-label="portée">✓</span>
               </button>
+            </div>
+            <!-- DÉPLIÉ : le MÊME markup et la MÊME CSS que l'équipement porté du héros
+                 (`.gear` / `.slot`) — « comme l'équipement » doit être littéralement vrai,
+                 sinon le même objet se lirait de deux façons dans le même onglet. La rangée
+                 de pastilles disparaît : deux lectures du même set l'une sur l'autre, c'est
+                 de la redondance, pas du détail. -->
+            <div v-else-if="lo.count" class="gear lo-detail">
+              <div
+                v-for="r in lo.rows"
+                :key="r.slot"
+                class="slot"
+                :class="[r.entry ? 'r-' + r.entry.item.rarity : 'empty', { clickable: !!r.entry }]"
+                :role="r.entry ? 'button' : undefined"
+                :title="r.entry ? 'Voir le détail' : undefined"
+                @click="r.entry && (inspectItem = r.entry.item)"
+              >
+                <div class="slot-ico">
+                  <ItemIcon v-if="r.entry" :item="r.entry.item" :size="44" plain />
+                  <span v-else class="slot-emo">{{ SLOT_EMOJI[r.slot] }}</span>
+                </div>
+                <div class="slot-main">
+                  <div class="slot-head">
+                    <span class="slot-lbl">{{ SLOT_LABEL[r.slot] }}</span>
+                  </div>
+                  <template v-if="r.entry">
+                    <div class="slot-name">{{ r.entry.item.name }}</div>
+                    <div class="pills">
+                      <span class="gpill" :class="'p-' + r.entry.item.rarity">{{
+                        gradeLabel(r.entry.item)
+                      }}</span>
+                      <span class="lvl-badge">Nv {{ r.entry.item.level }}</span>
+                    </div>
+                    <div class="slot-eff">
+                      <span
+                        v-for="(pp, si) in itemStatRows(r.entry.item)"
+                        :key="si"
+                        class="stat-line"
+                        >{{ pp.pre }}<b v-if="pp.value" class="st-v">{{ pp.value }}</b
+                        >{{ pp.post }}</span
+                      >
+                    </div>
+                    <!-- ⚠️ SEULES les pièces portées donnent le bonus : quand on porte moins
+                         bien à cet emplacement, le dire SUR la ligne où l'écart se voit. -->
+                    <div v-if="r.entry.wornItem" class="slot-vide">
+                      Tu portes <b>{{ r.entry.wornItem.name }}</b> ici.
+                    </div>
+                  </template>
+                  <div v-else class="slot-vide">Pièce manquante</div>
+                </div>
+                <div v-if="r.entry" class="slot-actions">
+                  <span class="lo-state" :class="{ on: r.entry.worn }">{{
+                    r.entry.worn ? '✓ portée' : 'en réserve'
+                  }}</span>
+                </div>
+              </div>
             </div>
             <!-- ⚠️ SEULES les pièces PORTÉES donnent le bonus (cf. setEffects). Le dire ici
                  évite le contresens le plus naturel : croire qu'un set « complet » dans la
@@ -2030,6 +2086,16 @@
               </template>
               Touche un objet pour ses stats.
             </div>
+            <button
+              v-if="lo.count"
+              type="button"
+              class="lo-fold"
+              :aria-expanded="setDetail === i"
+              @click="setDetail = setDetail === i ? null : i"
+            >
+              <span class="lo-chev" :class="{ open: setDetail === i }" aria-hidden="true">▸</span>
+              {{ setDetail === i ? 'Replier' : 'Voir le détail (' + lo.count + ')' }}
+            </button>
             <!-- Porter = passer à cette voie + optimiser (le set + les meilleurs objets du sac).
                  Grisé si on ne possède aucune pièce de cette voie. -->
             <button
@@ -3061,6 +3127,7 @@ import {
   rollTier,
   RANK_ORDER,
   SLOTS,
+  SET_SLOTS,
   SET_SIZE,
   SLOT_LABEL,
   SLOT_EMOJI,
@@ -5776,6 +5843,10 @@ const loadoutsView = computed(() => {
     const spareLot = sparesLot(los, i);
     return {
       entries,
+      // Le DÉTAIL « une pièce par ligne » parcourt TOUS les emplacements du set, y compris
+      // ceux qu'on ne possède pas : c'est ce qui dit ce qu'il reste à trouver, là où la
+      // rangée d'emojis ne montrait que ce qu'on a déjà.
+      rows: SET_SLOTS.map((slot) => ({ slot, entry: roster[slot] })),
       count: entries.length,
       spares,
       sparesGold: spareLot.sold.reduce((s, it) => s + sellValue(it), 0),
@@ -5800,6 +5871,9 @@ const allSparesGold = computed(() =>
   sparesLot(char.row?.loadouts ?? []).sold.reduce((s, it) => s + sellValue(it), 0),
 );
 const voieOwnedCount = (i: number): number => loadoutsView.value[i]?.count ?? 0;
+/** Set déplié dans « Mes sets » (une pièce par ligne). ⚠️ UN SEUL à la fois : la modale
+ *  porte huit cartes, et huit détails ouverts en feraient un mur à faire défiler. */
+const setDetail = ref<number | null>(null);
 
 /** Badge de l'icône 📦 : combien de sets EN STOCK augmentent la puissance si on les porte.
  *  « Augmente » = `loadoutPower` — la MÊME fonction que les cartes de « Mes sets », dans la
@@ -8250,13 +8324,17 @@ button.pt-mini:active {
   opacity: 0.35;
   cursor: not-allowed;
 }
+/* ⚠️ Le nom SE REPLIE au lieu d'être coupé : mesuré au banc, « Hache bâtarde de garde
+   « Élan Implacable » » demande 279 px pour 151 disponibles dans une carte de set — on en
+   perdait la moitié, et un nom d'objet signature est précisément ce qui l'identifie. C'est
+   le défaut que la v0.1048 corrigeait pour la grille 2×2 ; il restait pour les noms longs,
+   arrivés depuis avec les épithètes (v0.888). */
 .slot-name {
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.2;
   color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 /* Toutes les stats, côte à côte, qui passent à la ligne au besoin (plus de coupe). */
 .slot-eff {
@@ -8780,6 +8858,56 @@ button.pt-mini:active {
   font-size: 10.5px;
   color: var(--dim);
   margin: -2px 0 6px;
+}
+/* DÉTAIL d'un set : la liste `.gear` du héros, resserrée pour tenir dans une carte.
+   On ne redéfinit RIEN de `.slot` — c'est ce qui garantit que les deux écrans
+   montrent le même objet de la même façon. */
+.lo-detail {
+  gap: 6px;
+  margin: 7px 0;
+}
+/* Bouton de pliage : discret (ce n'est pas l'action de la carte, qui est « Porter »)
+   mais à la cible mobile de 44 px. */
+.lo-fold {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+.lo-fold:active {
+  color: var(--text);
+}
+.lo-chev {
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+.lo-chev.open {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lo-chev {
+    transition: none;
+  }
+}
+/* État d'une pièce dans la colonne d'actions : portée (donc elle compte pour le bonus)
+   ou en réserve. Vert « gain » pour la portée, comme la coche des pastilles. */
+.lo-state {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.lo-state.on {
+  color: #7bc86c;
 }
 .lo-btn {
   width: 100%;
