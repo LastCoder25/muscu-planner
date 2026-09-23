@@ -96,28 +96,41 @@ describe('🎟️ tickets de niveau', () => {
 
 describe('🎟️ payer un tirage', () => {
   it('les tickets d’abord quand ils couvrent le prix', () => {
-    expect(pullPayment(1, { tickets: 1, mana: 9999 })).toEqual({ kind: 'tickets', cost: 1 });
+    expect(pullPayment(1, { tickets: 1, mana: 9999 })).toEqual({ tickets: 1, mana: 0 });
   });
 
-  it('le lot garde sa remise en tickets (9 pour 10)', () => {
+  it('le lot garde sa remise en tickets : 9 utilisés, jamais 10', () => {
     expect(ticketCost(GACHA.multiCount)).toBe(GACHA.multiPaid);
     expect(pullPayment(GACHA.multiCount, { tickets: GACHA.multiPaid, mana: 0 })).toEqual({
-      kind: 'tickets',
-      cost: GACHA.multiPaid,
+      tickets: GACHA.multiPaid,
+      mana: 0,
     });
+    // Avec 10 ou 50 tickets en poche, un ×10 n'en prend que 9 (le 10ᵉ reste offert).
+    for (const t of [GACHA.multiCount, 50]) {
+      expect(pullPayment(GACHA.multiCount, { tickets: t, mana: 0 })).toEqual({
+        tickets: GACHA.multiPaid,
+        mana: 0,
+      });
+    }
   });
 
-  it('jamais de mélange : pas assez de tickets pour le lot → mana, sinon rien', () => {
-    const t = GACHA.multiPaid - 1;
-    expect(pullPayment(GACHA.multiCount, { tickets: t, mana: 99_999 })).toEqual({
-      kind: 'mana',
-      cost: GACHA.multiPaid * GACHA.pullCost,
+  it('tickets et mana se combinent : le reste du lot se paie en mana', () => {
+    const t = 5;
+    const missing = (GACHA.multiPaid - t) * GACHA.pullCost;
+    expect(pullPayment(GACHA.multiCount, { tickets: t, mana: missing })).toEqual({
+      tickets: t,
+      mana: missing,
     });
-    expect(pullPayment(GACHA.multiCount, { tickets: t, mana: 0 })).toBeNull();
+    expect(pullPayment(GACHA.multiCount, { tickets: t, mana: missing - 1 })).toBeNull();
+    // Sans ticket : prix plein du lot en mana (9 tirages).
+    expect(pullPayment(GACHA.multiCount, { tickets: 0, mana: 99_999 })).toEqual({
+      tickets: 0,
+      mana: GACHA.multiPaid * GACHA.pullCost,
+    });
     expect(pullPayment(1, { tickets: 0, mana: GACHA.pullCost - 1 })).toBeNull();
     expect(pullPayment(1, { tickets: 0, mana: GACHA.pullCost })).toEqual({
-      kind: 'mana',
-      cost: GACHA.pullCost,
+      tickets: 0,
+      mana: GACHA.pullCost,
     });
   });
 

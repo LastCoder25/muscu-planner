@@ -91,23 +91,20 @@ export function ticketCost(count: number): number {
   return count > 1 ? GACHA.multiPaid : 1;
 }
 
-/** Prix d'un tirage en mana — le même que le store applique. */
-function manaCost(count: number): number {
-  return count > 1 ? GACHA.multiPaid * GACHA.pullCost : GACHA.pullCost;
-}
-
 /**
- * Comment payer ce tirage ? ⚠️ **LES TICKETS D'ABORD** quand ils couvrent le prix : ils n'ont
- * pas d'autre usage, alors que la mana en aura (élévation des champions, à venir). Jamais de
- * paiement MIXTE — on sait toujours ce qu'on dépense. `null` = ni l'un ni l'autre ne suffit.
+ * Comment payer ce tirage ? ⚠️ **LES TICKETS D'ABORD** : ils n'ont pas d'autre usage, alors
+ * que la mana en aura. Un ticket vaut UN tirage payé ; s'il en manque, le reste se paie en
+ * mana au tarif d'un tirage — tickets et mana se COMBINENT (v0.1108, demandé par
+ * l'utilisateur). ⚠️ Le lot garde sa remise dans tous les cas : il coûte `multiPaid` tirages
+ * payés (9), jamais 10 — donc au plus 9 tickets, même avec 10 en poche.
+ * `null` = même combinés, tickets et mana ne suffisent pas.
  */
 export function pullPayment(
   count: number,
   wallet: { tickets: number; mana: number },
-): { kind: 'tickets' | 'mana'; cost: number } | null {
-  const t = ticketCost(count);
-  if (wallet.tickets >= t) return { kind: 'tickets', cost: t };
-  const m = manaCost(count);
-  if (wallet.mana >= m) return { kind: 'mana', cost: m };
-  return null;
+): { tickets: number; mana: number } | null {
+  const paid = ticketCost(count);
+  const tickets = Math.max(0, Math.min(Math.floor(wallet.tickets), paid));
+  const mana = (paid - tickets) * GACHA.pullCost;
+  return wallet.mana >= mana ? { tickets, mana } : null;
 }

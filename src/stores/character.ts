@@ -1184,7 +1184,7 @@ export const useCharacterStore = defineStore('character', () => {
   async function pullGacha(userId: string, count: number) {
     const cur = row.value;
     if (!cur) return null;
-    // 🎟️ Les tickets d'abord s'ils couvrent le prix, sinon la mana — jamais un mélange.
+    // 🎟️ Les tickets d'abord, le reste en mana (combinables) ; un ×10 coûte 9 tirages payés.
     const pay = pullPayment(count, { tickets: cur.gacha_tickets, mana: cur.mana });
     if (!pay) return null;
     const lot = pullMany(Math.random, cur.gacha, count);
@@ -1214,8 +1214,8 @@ export const useCharacterStore = defineStore('character', () => {
       }
     }
     await persist(userId, {
-      mana: cur.mana - (pay.kind === 'mana' ? pay.cost : 0) + manaBack,
-      ...(pay.kind === 'tickets' ? { gacha_tickets: cur.gacha_tickets - pay.cost } : {}),
+      mana: cur.mana - pay.mana + manaBack,
+      ...(pay.tickets ? { gacha_tickets: cur.gacha_tickets - pay.tickets } : {}),
       adventurers: advs,
       // ⚠️ `nextGacha` REPORTE l'état précédent : écrit à plat, le tirage effaçait la marque
       // `welcomed` et la bienvenue se re-versait au chargement suivant (v0.1083).

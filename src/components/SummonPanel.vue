@@ -38,7 +38,7 @@
             <span class="st-x font-display">×1</span>
             <span class="st-lab">Invoquer un champion</span>
             <span class="st-cost font-display">{{ costLabel(payOne, pullCost) }}</span>
-            <small v-if="payOne?.kind === 'tickets'" class="st-sub">
+            <small v-if="payOne?.tickets" class="st-sub">
               {{ tickets }} ticket{{ tickets > 1 ? 's' : '' }} gagné{{ tickets > 1 ? 's' : '' }} au
               sport
             </small>
@@ -52,13 +52,14 @@
             <span class="st-x font-display">×{{ multiCount }}</span>
             <span class="st-lab">Invoquer {{ multiCount }} champions</span>
             <span class="st-cost font-display">{{ costLabel(payTen, multiCost) }}</span>
-            <small v-if="payTen?.kind === 'tickets'" class="st-sub"
+            <small v-if="payTen?.tickets && !payTen.mana" class="st-sub"
               >1 offert · payé en tickets</small
             >
-            <small v-else-if="mana >= multiCost" class="st-sub"
+            <small v-else-if="payTen?.tickets" class="st-sub">1 offert · tickets + mana</small>
+            <small v-else-if="payTen" class="st-sub"
               >1 offert · au lieu de {{ pullCost * multiCount }}</small
             >
-            <small v-else class="st-sub short">il manque {{ multiCost - mana }} 💠</small>
+            <small v-else class="st-sub short">il manque {{ manaShort(GACHA.multiPaid) }} 💠</small>
           </button>
         </div>
 
@@ -140,8 +141,17 @@ const payOne = computed(() => pullPayment(1, { tickets: tickets.value, mana: man
 const payTen = computed(() =>
   pullPayment(GACHA.multiCount, { tickets: tickets.value, mana: mana.value }),
 );
+/** Le prix affiché : tickets, mana, ou les deux combinés (« 5 🎟️ + 440 💠 »). */
 function costLabel(pay: ReturnType<typeof pullPayment>, manaCost: number): string {
-  return pay?.kind === 'tickets' ? `${pay.cost} 🎟️` : `${manaCost} 💠`;
+  if (!pay) return `${manaCost} 💠`;
+  const parts: string[] = [];
+  if (pay.tickets) parts.push(`${pay.tickets} 🎟️`);
+  if (pay.mana || !pay.tickets) parts.push(`${pay.mana} 💠`);
+  return parts.join(' + ');
+}
+/** Mana manquante pour ce tirage, les tickets déjà comptés (ils passent en premier). */
+function manaShort(paid: number): number {
+  return Math.max(0, (paid - Math.min(tickets.value, paid)) * pullCost - mana.value);
 }
 
 /** Combien de tirages la réserve permet. ⚠️ Le chiffre qui décide si on appuie : « 1 831
