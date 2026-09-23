@@ -71,6 +71,17 @@
             </div>
           </div>
 
+          <!-- 🏋️ LE CONSEIL DU MOTEUR (v0.1105). ⚠️ Il DIT la consigne autant que le
+               verdict : sans la fourchette, « +2,5 kg » tombe du ciel — et sans le verdict,
+               on ne saurait pas qu'on tourne en rond depuis trois séances. -->
+          <div v-if="advice" class="advice">
+            <span class="adv-range">🎯 {{ repRangeLabel(advice.range, isTimeEx) }}</span>
+            <span v-if="adviceText" class="adv-verdict" :class="adviceText.tone">
+              {{ adviceText.text }}
+            </span>
+            <span v-if="adviceIsNew" class="adv-new">première fois</span>
+          </div>
+
           <!-- Progression des séries (🟩 faite · 🟨 en cours · 🟥 à faire) -->
           <div v-if="ex.sets.length" class="set-tiles">
             <div
@@ -483,6 +494,8 @@ import { useProfileStore } from '@/stores/profile';
 import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
 import { useLibraryStore, type ExerciseRow } from '@/stores/library';
+import { setAdvice, instancesOf, verdictLabel, type SetAdvice } from '@/lib/progression';
+import { repRangeForExercise, repRangeLabel } from '@/lib/repScheme';
 import { exerciseImage, exerciseFrames } from '@/data/exerciseImages';
 import ExerciseAnim from '@/components/ExerciseAnim.vue';
 
@@ -526,6 +539,19 @@ const totalVolume = computed(() =>
     : 0,
 );
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
+/** Le conseil du moteur, par exercice ajouté — gardé pour le DIRE tant qu'on est dessus.
+ *  ⚠️ Calculé À L'AJOUT et non à l'affichage : il juge les séances PASSÉES, et le
+ *  recalculer pendant qu'on travaille le ferait changer sous les yeux du joueur. */
+const advices = ref<Record<string, SetAdvice>>({});
+const advice = computed(() => (ex.value ? advices.value[ex.value.id] : undefined));
+/** ⚠️ Rien à DIRE quand l'exercice n'a jamais été fait : `verdictLabel` annoncerait
+ *  « maintenu », ce qui laisserait croire à une décision alors qu'il n'y a aucune séance
+ *  à juger. C'est `window === 0` — donc aucune instance — qui le distingue. */
+const adviceText = computed(() => {
+  const a = advice.value;
+  return a && a.verdict.window > 0 ? verdictLabel(a.verdict) : null;
+});
+const adviceIsNew = computed(() => !!advice.value && advice.value.verdict.window === 0);
 const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
 const canFinish = computed(
   () => !!run.value && run.value.exercises.some((e) => e.sets.some((s) => s.done)),
@@ -671,7 +697,35 @@ const MUSCLE_COLORS: Record<string, string> = {
 function exColor(e: ExerciseRow): string {
   return MUSCLE_COLORS[(e.muscle_primary ?? '').toLowerCase()] ?? '#9A8F7E';
 }
+/**
+ * 🏋️ CE QUE LE MOTEUR CONSEILLE pour cet exercice (v0.1105).
+ *
+ * ⚠️ La séance libre ouvrait à **0 kg et 8 reps en dur** : elle ne relisait RIEN de la
+ * dernière fois, donc double progression, plateau et décharge ne s'y appliquaient jamais —
+ * alors que c'est ainsi qu'on s'entraîne vraiment. Le moteur, lui, savait tout dire.
+ *
+ * ⚠️ La fourchette vient de l'OBJECTIF du profil et de la nature de l'exo
+ * (`repRangeForExercise`) : c'est elle qui rend le verdict sensé, faute de plan.
+ */
+function adviceFor(e: ExerciseRow): SetAdvice {
+  const range = repRangeForExercise(profileStore.profile?.objective, {
+    time: e.unit === 'time',
+    muscle_primary: e.muscle_primary,
+  });
+  return setAdvice({
+    instances: instancesOf(
+      e.id,
+      logs.all.map((r) => r.payload),
+    ),
+    range,
+    scheme: profileStore.levelConfig?.default_progression ?? 'double',
+    musclePrimary: e.muscle_primary,
+    bodyweight: e.equipment === 'poids_du_corps' || e.equipment === 'élastique',
+  });
+}
 function pick(e: ExerciseRow) {
+  const a = adviceFor(e);
+  advices.value[e.id] = a;
   live.addExercise({
     id: e.id,
     name: e.name,
@@ -679,6 +733,7 @@ function pick(e: ExerciseRow) {
     equipment: e.equipment ?? undefined,
     unit: e.unit ?? undefined,
     unilateral: e.unilateral ?? undefined,
+    start: { load: a.load, reps: a.reps },
   });
   skipRest();
   editIdx.value = -1;
@@ -804,6 +859,11 @@ onMounted(async () => {
   } finally {
     loadingLib.value = false;
   }
+  // 🏋️ L historique sert le conseil de progression (setAdvice). ⚠️ En tâche de fond et
+  // APRÈS la bibliothèque : sans lui on ouvre à 0 kg comme avant, avec lui on ouvre à ce
+  // que le moteur décide — mais jamais au prix d un écran qui attend pour s afficher.
+  // fetchAll est mise en cache et dédoublonne les appels concurrents.
+  logs.fetchAll().catch(() => undefined);
 });
 
 onBeforeUnmount(() => {
@@ -984,6 +1044,40 @@ onBeforeUnmount(() => {
   color: var(--accent);
   border-color: var(--accent);
   text-transform: none;
+}
+
+/* 🏋️ LE CONSEIL DU MOTEUR — mêmes teintes que le verdict du Bilan (`.prog-delta`) : le
+   même verdict doit se lire pareil sur les deux écrans. Le plateau est ORANGE et non
+   rouge — le rouge dit « ça a raté », un plateau est un constat qui appelle une décision. */
+.advice {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 10px 0 2px;
+  font-size: 13px;
+}
+.adv-range {
+  color: var(--dim);
+}
+.adv-verdict {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.adv-verdict.up {
+  color: var(--d1);
+}
+.adv-verdict.down {
+  color: var(--d4);
+}
+.adv-verdict.warn {
+  color: var(--d3);
+}
+.adv-verdict.same {
+  color: var(--dim-2);
+}
+.adv-new {
+  color: var(--dim-2);
 }
 
 .timer {
