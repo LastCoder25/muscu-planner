@@ -1198,6 +1198,7 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
               hero: { name: 'h', level: 26, combatant: hero },
               seed: s,
               playerLevel: 26,
+              pantheonLevel: 26,
             })
           : resolveOutcome(hero, poi, s * 97 + 3, 26)) as unknown as Record<string, unknown>;
         // Les champs n’existent plus sur le type : on vérifie qu’aucun ne réapparaît.

@@ -100,6 +100,9 @@ export interface PartyInput {
   seed: number;
   /** ⚠️ REQUIS : plafonne le rang des sceaux d'objet d'un repaire (`lairGearSeals`). */
   playerLevel: number;
+  /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
+   *  que `grantAdvXp` applique, jamais le niveau du joueur. */
+  pantheonLevel: number;
 }
 
 /**
@@ -351,7 +354,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     slain: g.slain,
     kills: g.kills,
     heroKills: g.heroKills,
-    xp: missionXpFor(escort, poi, d.win, g.shares, !!hero),
+    xp: missionXpFor(escort, poi, d.win, g.shares, !!hero, input.pantheonLevel),
     hurt: campHurt(d, escort),
     wages: caravanWages(escort, poi),
     journal: g.journal,

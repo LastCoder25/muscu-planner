@@ -106,6 +106,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
         hero: null,
         seed: (t ^ (best.p.level * 2654435761)) >>> 0 || 1,
         playerLevel: L,
+        pantheonLevel: L,
       });
       gold += o.gold;
       wages += o.party!.wages;

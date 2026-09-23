@@ -142,8 +142,6 @@ import {
   retireKennel,
   healCost,
   woundRemainingMs,
-  woundMsFor,
-  raidIntervalMs,
   type BaseState,
   type DefenseId,
   type DefenseStructure,
@@ -2776,13 +2774,38 @@ export const useCharacterStore = defineStore('character', () => {
     // d’être résolu en silence comme une incursion.
     const spec = campSpecOf(poi);
     const outcome = isRiftPoi(poi)
-      ? resolveIncursion({ poi, escort, road, hero, seed, now })
+      ? resolveIncursion({ poi, escort, road, hero, seed, now, pantheonLevel: pantheonLevel.value })
       : isWarbandPoi(poi)
-        ? resolveInterception({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
+        ? resolveInterception({
+            poi,
+            escort,
+            road,
+            hero,
+            seed,
+            playerLevel: opts.playerLevel,
+            pantheonLevel: pantheonLevel.value,
+          })
         : spec
-          ? resolveCamp({ poi, spec, escort, road, hero, seed, playerLevel: opts.playerLevel })
+          ? resolveCamp({
+              poi,
+              spec,
+              escort,
+              road,
+              hero,
+              seed,
+              playerLevel: opts.playerLevel,
+              pantheonLevel: pantheonLevel.value,
+            })
           : HARVEST_TYPES.has(poi.type)
-            ? resolveHarvestParty({ poi, escort, road, hero, seed, playerLevel: opts.playerLevel })
+            ? resolveHarvestParty({
+                poi,
+                escort,
+                road,
+                hero,
+                seed,
+                playerLevel: opts.playerLevel,
+                pantheonLevel: pantheonLevel.value,
+              })
             : null;
     if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
     const trip = startParty({ poi, hero, seed }, now, leg, outcome);

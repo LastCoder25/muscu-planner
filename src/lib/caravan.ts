@@ -77,6 +77,7 @@ import {
   type Adventurer,
   type AdvRole,
 } from './adventurers';
+import { rankStartLevel } from './characterRank';
 import {
   ADV_GEAR_SLOTS,
   advGearEffects,
@@ -801,21 +802,88 @@ export function missionXpSplit(escortCount: number, hero: boolean): number {
   return Math.max(CARAVAN.xpLossShare, Math.min(1, XP_TEAM_REF / weight));
 }
 
+/** Le pas de la prime de rattrapage : UN RANG de retard (10 niveaux) double l'apprentissage.
+ *  ⚠️ DÉRIVÉ de l'échelle de prestige, jamais écrit — `rankStartLevel(1)` est le ★1 du rang
+ *  suivant, donc le niveau juste avant est le ★5 du premier rang. */
+const CATCH_UP_RANK = rankStartLevel(1) - 1;
+
+/**
+ * 🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de RATTRAPAGE (v0.1097, mesurée ;
+ * demandée par l'utilisateur : « il faut que les bronze gagnent beaucoup d'XP quand ils
+ * combattent en or noir… que ça ne prenne pas des semaines ou des mois à monter un champion
+ * qu'on tire en bronze, surtout quand on sera au rang max »).
+ *
+ * ⚠️ **CE QUI CLOCHAIT, MESURÉ.** Le socle d'une mission ne dépend que du NIVEAU DU LIEU
+ * (`missionXp` écrête le ratio à 1) : un champion de niveau 1 sur un lieu de niveau 100
+ * touchait donc EXACTEMENT les 166 XP d'un champion de niveau 100 au même endroit. Il n'était
+ * pas pénalisé — mais il n'avait aucune prime, alors que le coût d'un rattrapage, lui, est
+ * QUADRATIQUE (`advXpToNext` est linéaire en niveau) : 8 150 XP pour rejoindre un joueur de
+ * niveau 26, **112 860 pour un joueur de niveau 100**. Mesuré à 6 missions/jour, ascensions
+ * gratuites : **29 jours à P=26 mais 114 à P=100**. C'est le « des mois » refusé.
+ *
+ * ⚠️ **LA PRIME SUIT LE RETARD EN NIVEAUX, PAS EN PROPORTION — et c'est le seul choix qui
+ * supprime la DÉRIVE.** Une prime en part du retard (`1 + K(1 − L/P)`) accélère tout le monde
+ * du même facteur : mesurée à K=12, elle laissait P=100 **4,0× plus long** que P=26, la dérive
+ * intacte. La forme retenue croît avec l'écart ABSOLU, donc le multiplicateur grandit avec le
+ * niveau du monde — ce que la fiction dit déjà : plus la maison a d'avance, plus le nouveau
+ * venu apprend au contact. Mesuré, la dérive tombe de **4,0× à 2,3×**, et ce qu'il en reste
+ * est LOGARITHMIQUE (le calcul le donne : missions ≈ 13,75 · pas · ln P).
+ *
+ * ⚠️ **LE PAS EST UN RANG** (`CATCH_UP_RANK`), donc la règle se dit en une phrase : **un rang
+ * de retard double l'apprentissage**. Mesuré à 6 missions/jour : **16 / 25 / 33 / 36 jours**
+ * aux niveaux 26 / 50 / 80 / 100, contre 29 / 57 / 91 / 114 avant.
+ *
+ * ⚠️ **ELLE VAUT EXACTEMENT 1 À NIVEAU** : un champion à jour ne gagne rien, donc la
+ * calibration mesurée de la montée en niveau (`advXpToNext`) n'est pas déplacée. Et elle est
+ * discrète au petit retard (2 niveaux → ×1,20, 5 → ×1,50) : la mesure des sceaux de la
+ * v0.1017, calibrée sur « un trio 5 niveaux en retard », est assistée, pas annulée.
+ *
+ * ⚠️ **LA RÉFÉRENCE EST LE PANTHÉON, PAS LE NIVEAU DU JOUEUR** — c'est le plafond que
+ * `grantAdvXp` applique. Sur le niveau du joueur, un champion déjà au plafond du Panthéon
+ * recevrait encore une prime pour un retard qu'il n'a pas le droit de combler : le
+ * multiplicateur annoncerait un gain que rien ne peut convertir.
+ *
+ * ⚠️ **AUCUN FARM POSSIBLE** : elle s'éteint exactement quand il rattrape, et garder un
+ * champion bas ne paie rien (il est faible, perd ses missions — `xpLossShare` — et occupe un
+ * créneau). Le sport reste le plafond : `grantAdvXp` cape toujours au Panthéon.
+ *
+ * ⚠️ **ON NE DÉPLACE PAS LE GOULOT VERS L'ATTENTE.** Mesuré à part, réunir les sceaux d'un
+ * champion neuf coûte **14 jours** à P=100 (2 failles/jour) : l'XP en coûtait 114, elle en
+ * coûte 36. Elle reste donc le goulot dominant — « faire jouer ses champions » demeure ce qui
+ * les monte, au lieu d'« attendre un sceau ».
+ */
+export function catchUpMult(advLevel: number, pantheonLevel: number): number {
+  const gap = Math.max(0, Math.max(1, pantheonLevel) - Math.max(1, advLevel));
+  return 1 + gap / CATCH_UP_RANK;
+}
+
 /** L'XP de chaque membre d'une mission : socle (selon l'issue, partagé au-delà de
- *  `XP_TEAM_REF` membres) + sa part des abattus (déjà divisée entre les présents).
- *  `hero` est REQUIS : l'oublier rendrait deux parts de trop aux champions. */
+ *  `XP_TEAM_REF` membres, et primé s'il est en retard) + sa part des abattus (déjà divisée
+ *  entre les présents).
+ *  `hero` est REQUIS : l'oublier rendrait deux parts de trop aux champions.
+ *  `pantheonLevel` est REQUIS : c'est la référence de la prime de rattrapage, et un
+ *  paramètre qu'on peut oublier finit par l'être — l'omettre éteindrait la prime en silence.
+ *  ⚠️ LA PRIME NE TOUCHE QUE LE SOCLE, jamais la part des abattus : cette dernière est bornée
+ *  par `SKIRMISH.carryMargin`, le garde-fou anti-portage (« un vétéran élèverait des recrues
+ *  à sa place en les emmenant hors de leur ligue »). L'y appliquer l'annulerait. Mesuré, elle
+ *  ne pèse de toute façon que ~6 % de l'XP d'un champion très en retard, précisément à cause
+ *  de cette marge. */
 export function missionXpFor(
   escort: readonly Adventurer[],
   poi: Poi,
   won: boolean,
   shares: Record<string, number>,
   hero: boolean,
+  pantheonLevel: number,
 ): Record<string, number> {
   const split = missionXpSplit(escort.length, hero);
   const xp: Record<string, number> = {};
   for (const a of escort)
     xp[a.id] =
-      Math.max(1, Math.round(missionXp(a, poi, won) * split)) + Math.round(shares[a.id] ?? 0);
+      Math.max(
+        1,
+        Math.round(missionXp(a, poi, won) * split * catchUpMult(a.level, pantheonLevel)),
+      ) + Math.round(shares[a.id] ?? 0);
   return xp;
 }
 
@@ -1099,6 +1167,9 @@ export function resolveCaravan(
   /** ⚠️ REQUIS, pas optionnel : un paramètre qu’on peut oublier finit par l’être. Une
    *  escorte nue se déclare avec `{ advGear: [] }`. */
   kit: EscortKit,
+  /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
+   *  que `grantAdvXp` applique, jamais le niveau du joueur. */
+  pantheonLevel: number,
 ): CaravanOutcome {
   // ⚠️ Plus aucun équipement de champion sur la route (v0.1012) : il ne vient QUE du tirage.
   // Le générateur dédié qui le tirait a disparu avec lui — il ne lisait rien du flux `rng`,
@@ -1197,7 +1268,7 @@ export function resolveCaravan(
   };
   const wages = caravanWages(escort, poi);
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
-  const xp = missionXpFor(escort, poi, !lost, xpShare, false);
+  const xp = missionXpFor(escort, poi, !lost, xpShare, false, pantheonLevel);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
@@ -1241,6 +1312,9 @@ export function startCaravan(
   kit: EscortKit,
   /** ⚠️ REQUIS : réduction de trajet de l'Avant-poste (`travelTimeMult`). */
   travelMult: number,
+  /** ⚠️ REQUIS : la référence de la prime de rattrapage. L'issue étant FIGÉE au départ,
+   *  c'est le Panthéon de CE moment — comme le reste du rapport, annoncé puis tenu. */
+  pantheonLevel: number,
 ): Caravan {
   const leg =
     caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed, travelMult) * 60_000;
@@ -1251,7 +1325,7 @@ export function startCaravan(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    outcome: resolveCaravan(poi, escort, seed, kit),
+    outcome: resolveCaravan(poi, escort, seed, kit, pantheonLevel),
     claimed: false,
   };
 }

@@ -133,6 +133,7 @@ const input = (over: Partial<PartyInput> = {}): PartyInput => {
     hero: null,
     seed: 11,
     playerLevel: L,
+    pantheonLevel: L,
     ...over,
   };
 };
@@ -337,7 +338,9 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         );
         const parts = skirmishXpShares(esc, bodies, d);
         // Socle selon l'ISSUE + part des abattus : la règle EXACTE d'un convoi (v0.1014).
-        expect(o.party!.xp).toEqual(missionXpFor(esc, inp.poi, d.win, parts, !!inp.hero));
+        expect(o.party!.xp).toEqual(
+          missionXpFor(esc, inp.poi, d.win, parts, !!inp.hero, inp.pantheonLevel),
+        );
         expect(o.party!.xp[HERO_UNIT_ID]).toBeUndefined();
       }
   });
@@ -381,6 +384,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
       road: road(L, 10),
       spec: { faction: 'mortsvivants', size: 5 },
       playerLevel: L,
+      pantheonLevel: L,
     });
     const o = resolveCamp(inp);
     expect(o.party!.win).toBe(true);
@@ -421,6 +425,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
           road: road(60, 6),
           spec: { faction, size: 5 },
           playerLevel: 60,
+          pantheonLevel: 60,
         });
         const o = resolveCamp(inp);
         expect(o.key, `${faction} graine ${s}`).toBe(0);
@@ -455,6 +460,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         poi: poi({ level: 5, type: 'lair' }),
         spec: { faction: 'betes', size: CAMP.journalMax + 20 },
         playerLevel: 60,
+        pantheonLevel: 60,
       }),
     );
     const r = o.party!;
@@ -684,6 +690,7 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
         road: road(L, 10),
         spec: { faction: 'mortsvivants', size: 5 },
         playerLevel: L,
+        pantheonLevel: L,
       }),
     );
     const r = partyReport(o.party!, esc);

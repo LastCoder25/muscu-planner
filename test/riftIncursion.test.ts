@@ -90,6 +90,9 @@ function run(o: Opts = {}) {
     hero: o.hero ?? null,
     seed: o.seed ?? 4242,
     now: o.now ?? at(7),
+    // ⚠️ Panthéon AU NIVEAU du lieu : la prime de rattrapage vaut 1, comme dans toutes
+    // les calibrations de ce fichier (elle a ses tests à part).
+    pantheonLevel: o.pantheonLevel ?? poi.level,
   });
 }
 
@@ -196,7 +199,7 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
       ),
     });
     // ⚠️ 3 champions + le héros (compte pour 2) : 5 membres, le socle se partage (v0.1038).
-    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, true));
+    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, true, 26));
   });
 
   it('⚠️ le HÉROS ne prend AUCUNE part : les aventuriers partagent entre eux', () => {
@@ -485,9 +488,9 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
   // gagnent qu'à 8, la meilleure stratégie était d'envoyer 3 champions et de PERDRE.
   it('⚠️ GAGNER ne rapporte JAMAIS moins que PERDRE avec l’escorte de référence', () => {
     const p = rift({ level: 26 });
-    const perduARef = missionXpFor(team(XP_TEAM_REF, 26), p, false, {}, false).adv_0!;
+    const perduARef = missionXpFor(team(XP_TEAM_REF, 26), p, false, {}, false, 26).adv_0!;
     for (const n of [4, 6, 8, 10, 14, 20]) {
-      const gagne = missionXpFor(team(n, 26), p, true, {}, false).adv_0!;
+      const gagne = missionXpFor(team(n, 26), p, true, {}, false, 26).adv_0!;
       expect(gagne, `escorte de ${n}`).toBeGreaterThanOrEqual(perduARef);
     }
   });
@@ -522,19 +525,19 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
 
   it('le socle d’un membre baisse quand l’équipe grossit, la part des abattus reste la sienne', () => {
     const p = rift({ level: 26 });
-    const trois = missionXpFor(team(3, 26), p, true, {}, false);
-    const six = missionXpFor(team(6, 26), p, true, {}, false);
+    const trois = missionXpFor(team(3, 26), p, true, {}, false, 26);
+    const six = missionXpFor(team(6, 26), p, true, {}, false, 26);
     expect(six.adv_0!).toBeLessThan(trois.adv_0!);
     expect(six.adv_0!).toBeCloseTo(trois.adv_0! / 2, -1);
     // Les abattus passent tels quels (déjà divisés entre les présents).
-    const avec = missionXpFor(team(6, 26), p, true, { adv_0: 40 }, false);
+    const avec = missionXpFor(team(6, 26), p, true, { adv_0: 40 }, false, 26);
     expect(avec.adv_0! - six.adv_0!).toBe(40);
   });
 
   it('⚠️ oublier le héros rendrait deux parts de trop', () => {
     const p = rift({ level: 26 });
-    const sans = missionXpFor(team(3, 26), p, true, {}, false);
-    const avec = missionXpFor(team(3, 26), p, true, {}, true);
+    const sans = missionXpFor(team(3, 26), p, true, {}, false, 26);
+    const avec = missionXpFor(team(3, 26), p, true, {}, true, 26);
     expect(avec.adv_0!).toBeLessThan(sans.adv_0!);
   });
 });
