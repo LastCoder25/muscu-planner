@@ -24,10 +24,10 @@
  *
  * On pourrait fabriquer le prompt depuis les champs (`lineage` + `role` + `rarity`) — et on
  * obtiendrait **32 variations molles du même archétype**, puisque six lignées et quatre
- * rôles ne font que vingt-quatre combinaisons. Or ce qui distingue Boulin Grosse-Malle de
- * Tessa la Meneuse (tous deux caravaniers porteurs) n'est dans AUCUN champ : c'est leur
- * nom. `SUBJECTS` est donc écrit, une ligne par champion, et la compilation du prompt ne
- * fait qu'y ajouter le style et le cadrage.
+ * rôles ne font que vingt-quatre combinaisons. Or ce qui distingue Balthus de Thessa
+ * (tous deux caravaniers porteurs) n'est dans AUCUN champ — ⚠️ ni dans leur nom, depuis
+ * qu'ils sont des mononymes (2026-09-23). `SUBJECTS` est donc écrit, une ligne par
+ * champion, et la compilation du prompt ne fait qu'y ajouter le style et le cadrage.
  *
  * ⚠️ **LE ROSTER EST LU DEPUIS `src/data/champions.ts`**, jamais recopié ici — l'ancienne
  * version embarquait sa propre liste des 32, qui aurait divergé au premier champion ajouté.

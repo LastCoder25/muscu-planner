@@ -18,9 +18,11 @@
  *
  * ⚠️ **CHAQUE PORTRAIT EST ÉCRIT, pas dérivé des champs.** `lineage` + `role` + `rarity` ne
  * font que 24 combinaisons pour 32 champions, et ne disent rien de ce qui les distingue
- * vraiment : leur NOM. « Boulin Grosse-Malle » et « Tessa la Meneuse » sont tous deux
- * caravaniers porteurs — l'un est un gros marchand jovial, l'autre une cheffe de caravane
- * du désert. Les descriptions vivent dans le script, à raison d'une par champion.
+ * vraiment : leur PERSONNAGE. Balthus et Thessa sont tous deux caravaniers porteurs —
+ * l'un est un gros marchand jovial, l'autre une cheffe de caravane du désert, et AUCUN
+ * champ ne le dit. ⚠️ Leur nom non plus depuis qu'ils sont des mononymes (2026-09-23) :
+ * les descriptions vivent dans le script, à raison d'une par champion, et elles sont
+ * désormais la SEULE source de ce qu'un champion est.
  *
  * ⚠️ **LE PROJET A DÉJÀ ABANDONNÉ DEUX VOIES PROCÉDURALES** — un bonhomme SVG (`figure.ts`)
  * et un humanoïde 3D (`Hero3D`) : **l'anatomie est ce que le procédural fait le plus mal**.

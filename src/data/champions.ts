@@ -114,12 +114,37 @@ const C = (
  * Chaque lignée est donc placée **délibérément** — jamais absente des trois plus hautes
  * raretés, sinon `capAdvGearToWearable` plafonnerait ses pièces très bas **pour toujours**,
  * et un tiers du stock d'équipement deviendrait mort. Un test le vérifie.
+ *
+ * ── LES NOMS (2026-09-23, demande de l'utilisateur : « plus beaux, plus uniques, comme
+ * dans les gacha ») ──────────────────────────────────────────────────────────────────
+ * **UN SEUL MOT, mythique et sonore.** C'est la forme du genre (Ganyu, Surtr, Nahida) et
+ * elle règle trois choses d'un coup :
+ *   1. ⚠️ **Les noms se ressemblaient entre eux.** 12 sur 32 suivaient le MÊME moule à
+ *      trait d'union descriptif — Grosse-Malle, Large-Dos, Casse-Mur, Porte-Enclume,
+ *      Taille-Route, Sans-Bruit… Un roster où douze noms sont bâtis pareil n'a pas de
+ *      noms uniques, il a un gabarit.
+ *   2. La lettre s'entend : un S doit claquer (Fulgur, Nyx, Éos, Ouranos).
+ *   3. La place : mesuré, le nom dispose de **155 px** sur un portrait du vivier à 344 px,
+ *      et **3 des anciens noms y étaient déjà coupés** (Barthe Porte-Enclume, Lysandre des
+ *      Sources, Molosse Porte-Monde, 19-20 car.). Le plus long tient maintenant en 9.
+ *
+ * ⚠️ **CHAQUE NOM EST ÉCRIT EN REGARD DE SON PORTRAIT**, pas au hasard : les illustrations
+ * existent (`scripts/fetch-champion-portraits.mjs`, `SUBJECTS`) et un nom qui les
+ * contredirait sauterait aux yeux. D'où les clins d'œil qui tombent juste — **Argus** pour
+ * le vieux guetteur à la longue-vue (le géant aux cent yeux), **Brontès** pour le forgeron
+ * à l'enclume (le cyclope de Vulcain), **Sybille** pour la vieille femme qui sait la route,
+ * **Éos** pour la déesse de l'aurore. Le genre du nom suit celui du portrait.
+ *
+ * ⚠️ **LES `id` NE CHANGENT JAMAIS.** Ils sont persistés dans
+ * `characters.adventurers[].championId` : les renommer effacerait les champions déjà tirés
+ * par les joueurs. Le nom est de l'affichage, l'id est de l'identité — et c'est aussi lui
+ * qui porte la graine du portrait et le fichier d'illustration.
  */
 export const CHAMPIONS: Champion[] = [
   // ── A (vague 1) — l'ENTRÉE. Petite par conception : c'est ici que les doublons pleuvent. ──
   C(
     'orsene',
-    'Orsène le Baumier',
+    'Orsène',
     '🌿',
     'A',
     'mage',
@@ -130,7 +155,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'boulin',
-    'Boulin Grosse-Malle',
+    'Balthus',
     '🧳',
     'A',
     'caravanier',
@@ -141,7 +166,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'fila',
-    'Fila Pied-Leste',
+    'Fila',
     '👣',
     'A',
     'eclaireur',
@@ -152,7 +177,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'teck',
-    'Teck l’Guetteur',
+    'Argus',
     '🔭',
     'A',
     'archer',
@@ -165,7 +190,7 @@ export const CHAMPIONS: Champion[] = [
   // ── A (vague 2) ──
   C(
     'sauge',
-    'Mère Sauge',
+    'Sybille',
     '🍵',
     'A',
     'caravanier',
@@ -176,7 +201,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'gorm',
-    'Gorm Large-Dos',
+    'Gorm',
     '🪵',
     'A',
     'homme_armes',
@@ -187,7 +212,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'sylve',
-    'Sylve la Flèche',
+    'Sylvane',
     '🏹',
     'A',
     'archer',
@@ -198,7 +223,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'vig',
-    'Vig Deux-Lunes',
+    'Selven',
     '🌘',
     'A',
     'eclaireur',
@@ -211,7 +236,7 @@ export const CHAMPIONS: Champion[] = [
   // ── A (vague 3) — deux signatures à partir d'ici. ──
   C(
     'anselme',
-    'Anselme du Cloître',
+    'Anselme',
     '📿',
     'A',
     'mage',
@@ -222,7 +247,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'barthe',
-    'Barthe Porte-Enclume',
+    'Brontès',
     '⚒️',
     'A',
     'guerrier',
@@ -244,7 +269,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'verre',
-    'Œil-de-Verre',
+    'Cassiel',
     '🔎',
     'A',
     'mage',
@@ -257,7 +282,7 @@ export const CHAMPIONS: Champion[] = [
   // ── A (vague 4) ──
   C(
     'lysandre',
-    'Lysandre des Sources',
+    'Lysandra',
     '💧',
     'A',
     'mage',
@@ -271,7 +296,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'tessa',
-    'Tessa la Meneuse',
+    'Thessa',
     '🐪',
     'A',
     'caravanier',
@@ -282,7 +307,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'roan',
-    'Roän Taille-Route',
+    'Roän',
     '🗡️',
     'A',
     'guerrier',
@@ -293,7 +318,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'miren',
-    'Miren Sans-Bruit',
+    'Myrren',
     '🤫',
     'A',
     'archer',
@@ -309,7 +334,7 @@ export const CHAMPIONS: Champion[] = [
   // ── S (vague 1) ──
   C(
     'ferrand',
-    'Doyen Ferrand',
+    'Vesper',
     '🕯️',
     'S',
     'caravanier',
@@ -320,7 +345,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'ursk',
-    'Ursk Casse-Mur',
+    'Ursk',
     '🔨',
     'S',
     'homme_armes',
@@ -334,7 +359,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'nive',
-    'Nive des Cols',
+    'Nive',
     '🏔️',
     'S',
     'eclaireur',
@@ -345,7 +370,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'kaell',
-    'Kaell Œil-Froid',
+    'Kaell',
     '❄️',
     'S',
     'guerrier',
@@ -372,7 +397,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'tarn',
-    'Tarn le Rempart',
+    'Tarn',
     '🏯',
     'S',
     'guerrier',
@@ -383,7 +408,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'ysolde',
-    'Ysolde Trait-Long',
+    'Ysolde',
     '🪶',
     'S',
     'archer',
@@ -397,7 +422,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'corvin',
-    'Corvin des Brumes',
+    'Corvin',
     '🐦‍⬛',
     'S',
     'eclaireur',
@@ -410,7 +435,7 @@ export const CHAMPIONS: Champion[] = [
   // ── S (vague 3) ──
   C(
     'brume',
-    'Vieille Brume',
+    'Morgane',
     '🌫️',
     'S',
     'caravanier',
@@ -424,7 +449,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'molosse',
-    'Molosse Porte-Monde',
+    'Ormund',
     '🐗',
     'S',
     'homme_armes',
@@ -449,7 +474,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'nyx',
-    'Nyx la Silencieuse',
+    'Nyx',
     '🕸️',
     'S',
     'archer',
@@ -462,7 +487,7 @@ export const CHAMPIONS: Champion[] = [
   // ── S (vague 4) — le sommet. ⚠️ On n'ajoute qu'en S, jamais en A. ──
   C(
     'aurore',
-    'Aurore Première',
+    'Éos',
     '🌅',
     'S',
     'mage',
@@ -476,7 +501,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'atlas',
-    'Atlas des Cimes',
+    'Atlas',
     '🗻',
     'S',
     'homme_armes',
@@ -490,7 +515,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'ventcourt',
-    'Vent-Qui-Court',
+    'Sirocco',
     '🌪️',
     'S',
     'eclaireur',
@@ -504,7 +529,7 @@ export const CHAMPIONS: Champion[] = [
   ),
   C(
     'oeildumonde',
-    'Œil du Monde',
+    'Ouranos',
     '🔱',
     'S',
     'guerrier',
