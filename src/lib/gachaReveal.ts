@@ -9,7 +9,10 @@
  *
  * ## La séquence (remplace la roulette de portraits, retirée à la demande)
  *
- * 1. **On maintient le cercle** pour invoquer (`INVOKE.holdMs`, plus long pour un ×10).
+ * 1. **Le cercle se charge TOUT SEUL** (`INVOKE.chargeMs`, un peu plus long pour un ×10) :
+ *    choisir ×1 ou ×10 lance la séquence, il n'y a plus un geste à faire (v0.1101, demandé).
+ *    ⚠️ Et c'est là que vit le **présage de la scène** (`omenOf`) : le sanctuaire réagit
+ *    quand la meilleure lettre du tirage est un A ou un S.
  * 2. **Un orbe est lancé** : il ralentit comme sous la gravité, s'arrête, puis retombe
  *    lourdement. ⚠️ **Il ne se déforme jamais** (demandé), et **aucune traînée à la descente**.
  * 3. **Sa couleur est le PRÉSAGE** : la lettre elle-même (bleu B, violet A, or S).
@@ -45,9 +48,17 @@ export const RANK_GRADE: readonly PullGrade[] = ['B', 'A', 'S'];
  * le composant lit ces valeurs, il n'en écrit aucune.
  */
 export const INVOKE = {
-  /** Maintien du doigt pour lancer un ×1, et un ×10 (demandé : « plus long » pour le ×10). */
-  holdMs: 1000,
-  holdMsLot: 2500,
+  /**
+   * Charge du cercle avant le lancer — ×1 et ×10.
+   *
+   * ⚠️ **C'ÉTAIT UN MAINTIEN DU DOIGT (1000 / 2500 ms), ce n'en est plus un** : depuis que
+   * le choix du tirage lance tout (v0.1101), ces millisecondes ne sont plus un GESTE mais
+   * l'ouverture de l'animation. Un geste se paie volontiers, une attente non — elles sont
+   * donc nettement plus courtes. Le ×10 garde une longueur d'avance : son grand cercle a
+   * plus de couches à allumer.
+   */
+  chargeMs: 620,
+  chargeMsLot: 900,
   /** Montée de l'orbe (décélération), arrêt à l'apogée, prise d'élan, chute (accélération). */
   riseMs: 820,
   apexMs: 260,
@@ -211,6 +222,45 @@ export function bestRank(plan: RevealPlan): number {
   return Math.max(0, ...plan.items.map(finalRank));
 }
 
+/**
+ * 🔮 LE PRÉSAGE DE LA SCÈNE — ce que le sanctuaire laisse deviner pendant que le cercle se
+ * charge (v0.1101, demandé : « un effet subtil mais visible avec la rareté max du tirage,
+ * pour les A et S uniquement »).
+ *
+ * ⚠️ **RIEN POUR UN B, ET C'EST CE QUI FAIT LE SIGNAL.** Le fond de tirage est la ligne de
+ * base : un présage permanent ne présagerait plus rien. Il ne vaut quelque chose que parce
+ * qu'il n'apparaît PAS la plupart du temps — donc sa seule présence dit déjà « il y a au
+ * moins un A », avant même qu'on lise sa couleur.
+ *
+ * ⚠️ **IL ANNONCE LA MEILLEURE LETTRE, DONC IL DEVANCE LA SURPRISE DE L'ORBE** — assumé, et
+ * c'est déjà la doctrine de cet écran : l'apogée et la silhouette durent d'autant plus
+ * longtemps que la lettre est haute (« ça ne spoile pas, ça fait monter la tension »,
+ * v0.960). Il dit qu'il se passe quelque chose ; la lettre, elle, dit quoi.
+ *
+ * ⚠️ **IL NE SE DIT PAS EN MOTS, seulement en lumière** : écrire « un S approche » ne serait
+ * plus un présage mais une annonce, et il n'y aurait plus rien à attendre.
+ *
+ * ⚠️ `prefers-reduced-motion` → **aucun présage** : l'écran saute à l'état final, il n'y a
+ * pas d'animation à teinter. C'est la lib qui le décide, pas un cas particulier de l'écran.
+ */
+export const OMEN_STRENGTH: Record<'A' | 'S', number> = { A: 0.5, S: 1 };
+
+export interface Omen {
+  /** La meilleure lettre du tirage : elle donne la couleur. */
+  grade: 'A' | 'S';
+  rank: number;
+  /** 0..1 — l'intensité de l'ambiance : un S en met deux fois plus qu'un A. */
+  strength: number;
+}
+
+export function omenOf(plan: RevealPlan): Omen | null {
+  if (plan.reduced) return null;
+  const rank = bestRank(plan);
+  const grade = RANK_GRADE[rank];
+  if (grade !== 'A' && grade !== 'S') return null;
+  return { grade, rank, strength: OMEN_STRENGTH[grade] };
+}
+
 /** Durée de l'arrêt à l'apogée pour ce rang. */
 export const apexMs = (rank: number) => INVOKE.apexMs + rank * INVOKE.apexMsParRang;
 /** Durée de la silhouette pour ce rang. */
@@ -218,7 +268,7 @@ export const silhouetteMs = (rank: number) =>
   INVOKE.silhouetteMs + rank * INVOKE.silhouetteMsParRang;
 
 /**
- * ⏱️ Durée de la séquence d'un ×1, du lâcher du doigt au nom écrit — hors maintien, hors
+ * ⏱️ Durée de la séquence d'un ×1, du lancer de l'orbe au nom écrit — hors charge, hors
  * lecture du résultat. ⚠️ Bornée par un test : une révélation qui traîne se subit au
  * dixième tirage, même avec « Passer ».
  */

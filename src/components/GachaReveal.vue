@@ -1,23 +1,21 @@
 <template>
   <!-- 🎰 L'INVOCATION, EN PLEIN ÉCRAN (v1.002 — maquette validée le 2026-09-21, remplace la
-       roulette de portraits). On MAINTIENT le cercle, un orbe est lancé, sa couleur est le
-       présage, il retombe, et la lettre s'abat avant le portrait.
+       roulette de portraits ; v0.1101 : le choix du tirage lance tout, il n'y a plus de
+       maintien). Le cercle se charge seul, un orbe est lancé, sa couleur est le présage, il
+       retombe, et la lettre s'abat avant le portrait.
        ⚠️ ELLE NE DÉCIDE RIEN : tout est déjà tiré par le store (avec le pity persisté) ;
        l'écran ne fait que jouer le plan de `gachaReveal.ts`, où vivent le présage et le
        rythme — la règle de `siegeStage` et d'`arenaStage`. -->
   <q-dialog :model-value="!!plan || !!pending" maximized persistent @update:model-value="onClose">
-    <div class="ivk" :style="{ '--c': color }">
+    <!-- 🔮 `--omen` / `omened` : le présage de la scène (A et S seulement). ⚠️ Posé ICI, sur
+         la racine, et non sur le `shaker` : pendant une animation WAAPI, Chrome fige les
+         variables HÉRITÉES — le sanctuaire garderait la teinte du tirage précédent. -->
+    <div
+      class="ivk"
+      :class="{ omened: !!omen }"
+      :style="{ '--c': color, '--omen': omenColor, '--omen-k': omen?.strength ?? 0 }"
+    >
       <div class="ivk-top">
-        <!-- 🔙 Retour au choix du tirage : seulement tant que RIEN n'est payé (le tirage ne
-             part qu'au bout du maintien). Après, revenir laisserait croire qu'on annule. -->
-        <button
-          v-if="phase === 'hold' && !plan && !awaiting"
-          type="button"
-          class="ivk-skip"
-          @click="onClose(false)"
-        >
-          ‹ Retour
-        </button>
         <span class="ivk-title font-display">{{ title }}</span>
         <button
           type="button"
@@ -27,9 +25,9 @@
         >
           {{ sfx.enabled.value ? '🔊' : '🔇' }}
         </button>
-        <!-- ⚠️ « Passer » dès le maintien : on coupe l'animation, jamais l'écran de résultat. -->
+        <!-- ⚠️ « Passer » dès la charge : on coupe l'animation, jamais l'écran de résultat. -->
         <button
-          v-if="plan && (phase === 'hold' || phase === 'play')"
+          v-if="plan && (phase === 'charge' || phase === 'play')"
           type="button"
           class="ivk-skip"
           @click="skip"
@@ -44,7 +42,7 @@
              cet élément), Chrome fige la valeur HÉRITÉE — la couleur de la lettre restait
              celle du tirage précédent (trouvé sur la maquette). -->
         <div ref="shaker" class="ivk-shaker" :style="{ '--c': color }">
-          <div v-if="phase === 'hold'" class="ivk-cost">
+          <div v-if="phase === 'charge'" class="ivk-cost">
             <div class="ivk-cost-t font-display">Tirage ×{{ count }}</div>
             <div class="ivk-cost-s">
               {{ isLot ? 'Dix orbes, dix trésors' : 'B, A ou S : le cercle te le dira' }}
@@ -57,12 +55,9 @@
             :variant="isLot ? 'big' : 'small'"
             :charge="charge"
             :speed="sigilSpeed"
-            :holding="holding"
+            :charging="charging"
             :dim="sigilDim"
             :revealing="sigilRevealing"
-            label="Maintiens pour invoquer (ou maintiens Espace)"
-            @hold="startHold"
-            @release="endHold"
           />
 
           <!-- 🃏 LE ×10 : dix cartes face cachée, les B se retournent seuls, les A et S
@@ -142,8 +137,11 @@
       </div>
 
       <div class="ivk-bar">
-        <template v-if="phase === 'hold'">
-          <div class="ivk-msg"><b>Maintiens</b> le cercle pour invoquer</div>
+        <!-- ⚠️ LE PRÉSAGE NE SE DIT PAS EN MOTS : « un S approche » ne serait plus un
+             présage mais une annonce. La ligne reste neutre ; ce sont les braseros et la
+             lueur du sanctuaire qui parlent. -->
+        <template v-if="phase === 'charge'">
+          <div class="ivk-msg">Le cercle s’éveille…</div>
         </template>
         <template v-else-if="phase === 'await'">
           <div class="ivk-msg">Touche les cartes qui brillent ({{ hotLeft }})</div>
@@ -179,6 +177,7 @@ import {
   bestRank,
   finalRank,
   igniteOrder,
+  omenOf,
   silhouetteMs,
   type LotItem,
   type RevealCell,
@@ -207,17 +206,16 @@ const props = defineProps<{
   /** Le lot d'un ×10, dans l'ordre du tirage (les étiquettes NOUVEAU / Éveil des cartes). */
   lot?: LotItem[] | null;
   /**
-   * 🔙 Un tirage DEMANDÉ mais pas encore payé (1 ou 10). L'écran s'ouvre sur le cercle
-   * sans plan : on peut encore revenir au choix du tirage sans rien perdre. Le tirage
-   * n'est fait (`charged`) qu'une fois le cercle chargé à fond.
+   * 🎰 Le tirage DEMANDÉ (1 ou 10), le temps que son plan arrive. ⚠️ L'écran s'ouvre
+   * dessus IMMÉDIATEMENT : le parent tire dans la foulée, et c'est ce cercle qui tourne à
+   * vide qui masque l'aller-retour réseau. Sans lui, le choix du tirage resterait sans
+   * réponse un quart de seconde et se lirait comme un bouton mort.
    */
   pending?: number | null;
 }>();
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'again'): void;
-  /** Le cercle est chargé : le parent tire et paie MAINTENANT, puis fournit le plan. */
-  (e: 'charged'): void;
 }>();
 
 const sfx = useInvokeSfx();
@@ -225,17 +223,25 @@ const items = computed<RevealItem[]>(() => props.plan?.items ?? []);
 /** Combien de tirages : ceux du plan, sinon ceux demandés (avant paiement). */
 const count = computed(() => (props.plan ? items.value.length : (props.pending ?? 0)));
 const isLot = computed(() => count.value > 1);
-/** Cercle chargé, tirage demandé au parent, plan pas encore arrivé. */
-const awaiting = ref(false);
 
-type Phase = 'hold' | 'play' | 'await' | 'focus' | 'done';
-const phase = ref<Phase>('hold');
+type Phase = 'charge' | 'play' | 'await' | 'focus' | 'done';
+const phase = ref<Phase>('charge');
 const charge = ref(0);
-const holding = ref(false);
+/** Le cercle est en train de se charger (il enfle et vibre). Il n'y a plus de doigt. */
+const charging = ref(false);
 const sigilSpeed = ref(12);
 const sigilDim = ref(false);
 const sigilRevealing = ref(false);
 const color = ref<string>(GRADE_COLOR.B);
+
+/**
+ * 🔮 LE PRÉSAGE DE LA SCÈNE — la lib décide (A et S seulement, rien sur un B, rien en
+ * mouvement réduit), l'écran ne fait que le peindre. ⚠️ Il est lu sur le PLAN, donc il
+ * n'existe qu'une fois le tirage revenu : pendant que le cercle tourne à vide, le
+ * sanctuaire ne promet rien.
+ */
+const omen = computed(() => (props.plan ? omenOf(props.plan) : null));
+const omenColor = computed(() => (omen.value ? GRADE_COLOR[omen.value.grade] : undefined));
 
 const stage = ref<HTMLElement | null>(null);
 const shaker = ref<HTMLElement | null>(null);
@@ -639,58 +645,51 @@ function clearFx() {
   flash.value?.getAnimations().forEach((a) => a.cancel());
 }
 
-/* ─────────── le maintien ─────────── */
-let holdRaf = 0;
-let holdLast = 0;
+/* ─────────── la charge du cercle ───────────
+ * ⚠️ ELLE SE FAIT TOUTE SEULE (v0.1101, demandé : « que le choix du tirage lance
+ * automatiquement l'animation »). Il n'y a plus de maintien, donc plus de retour en
+ * arrière : choisir ×1 ou ×10 TIRE ET PAIE. Ce qui reste du geste — les runes qui
+ * s'allument, les gemmes aspirées, le bourdonnement — n'est plus une épreuve mais
+ * l'ouverture de la séquence, et c'est pourquoi elle est bien plus courte qu'avant. */
+let chargeRaf = 0;
+let chargeLast = 0;
 let gemAcc = 0;
 let tickAcc = 0;
-const holdMs = () => (isLot.value ? INVOKE.holdMsLot : INVOKE.holdMs);
-function startHold() {
-  if (phase.value !== 'hold' || awaiting.value) return;
-  holding.value = true;
+const chargeMs = () => (isLot.value ? INVOKE.chargeMsLot : INVOKE.chargeMs);
+/** On n'attaque la charge qu'une fois le plan là : c'est LUI qui porte le présage. */
+function startCharge() {
+  if (charging.value || phase.value !== 'charge') return;
+  charging.value = true;
+  gemAcc = 0;
+  tickAcc = 0;
+  chargeLast = 0;
   sfx.humStart();
+  chargeRaf = requestAnimationFrame(chargeLoop);
 }
-function endHold() {
-  if (!holding.value) return;
-  holding.value = false;
-  sfx.humStop();
-}
-function holdLoop(t: number) {
-  const dt = Math.min(0.05, (t - (holdLast || t)) / 1000);
-  holdLast = t;
-  if (phase.value !== 'hold') return;
-  const H = holdMs();
-  charge.value = holding.value
-    ? Math.min(1, charge.value + (dt * 1000) / H)
-    : Math.max(0, charge.value - (dt * 2000) / H);
-  sigilSpeed.value = holding.value ? 40 + charge.value * 520 : 12;
+function chargeLoop(t: number) {
+  const dt = Math.min(0.05, (t - (chargeLast || t)) / 1000);
+  chargeLast = t;
+  if (phase.value !== 'charge' || !charging.value) return;
+  charge.value = Math.min(1, charge.value + (dt * 1000) / chargeMs());
+  sigilSpeed.value = 40 + charge.value * 520;
   sfx.humSet(charge.value);
-  if (holding.value) {
-    gemAcc += dt;
-    if (gemAcc > 0.06 - charge.value * 0.035) {
-      gemAcc = 0;
-      spawnGem();
-    }
-    tickAcc += dt;
-    if (tickAcc > 0.18 - charge.value * 0.1) {
-      tickAcc = 0;
-      vib(6);
-    }
-    if (charge.value >= 1) {
-      holding.value = false;
-      sfx.humStop();
-      // ⚠️ Pas encore payé : on demande le tirage MAINTENANT ; le cercle reste chargé
-      // (le rAF s'arrête, la vitesse reste au max) jusqu'à ce que le plan arrive.
-      if (!props.plan) {
-        awaiting.value = true;
-        emit('charged');
-        return;
-      }
-      void (isLot.value ? playLot() : playSingle());
-      return;
-    }
+  gemAcc += dt;
+  if (gemAcc > 0.06 - charge.value * 0.035) {
+    gemAcc = 0;
+    spawnGem();
   }
-  holdRaf = requestAnimationFrame(holdLoop);
+  tickAcc += dt;
+  if (tickAcc > 0.18 - charge.value * 0.1) {
+    tickAcc = 0;
+    vib(6);
+  }
+  if (charge.value >= 1) {
+    charging.value = false;
+    sfx.humStop();
+    void (isLot.value ? playLot() : playSingle());
+    return;
+  }
+  chargeRaf = requestAnimationFrame(chargeLoop);
 }
 
 /* ─────────── la révélation au centre ─────────── */
@@ -1069,8 +1068,8 @@ function revealAll() {
 /** L'état FINAL, sans animation. ⚠️ C'est aussi ce que voit un `prefers-reduced-motion`. */
 function showFinal() {
   run++;
-  cancelAnimationFrame(holdRaf);
-  holding.value = false;
+  cancelAnimationFrame(chargeRaf);
+  charging.value = false;
   sfx.humStop();
   clearFx();
   const plan = props.plan;
@@ -1099,7 +1098,7 @@ function skip() {
 function onClose(v?: boolean) {
   if (v === true) return;
   run++;
-  cancelAnimationFrame(holdRaf);
+  cancelAnimationFrame(chargeRaf);
   sfx.humStop();
   clearFx();
   emit('close');
@@ -1108,23 +1107,20 @@ function onClose(v?: boolean) {
 watch(
   () => [props.plan, props.pending] as const,
   ([p, pend], prev) => {
-    // ⚠️ SEULE LA DEMANDE SE CLÔT : le parent pose le plan PUIS remet `pending` à null
-    // (dans son `finally`), et ce second changement arrive APRÈS que le premier a lancé
-    // l'animation. Le traiter comme une nouvelle ouverture remettait tout à zéro en pleine
-    // révélation : l'écran repartait sur le cercle et « le maintien ne faisait rien ».
-    if (prev && p && p === prev[0] && !pend) return;
-    const wasAwaiting = awaiting.value;
-    awaiting.value = false;
-    // Le plan demandé au bout du maintien arrive : on enchaîne SANS remettre le cercle à
-    // zéro (le joueur vient de le charger).
-    if (p && wasAwaiting) {
+    // ⚠️ LE MÊME PLAN NE SE REJOUE PAS : le parent peut toucher `pending` après avoir posé
+    // le plan, et traiter ce second changement comme une nouvelle ouverture remettrait
+    // tout à zéro en pleine révélation — l'écran repartirait sur le cercle.
+    if (prev && p && p === prev[0]) return;
+    // 🎰 Le plan demandé arrive pendant que le cercle tourne à vide : on enchaîne SANS
+    // rouvrir l'écran, la charge part immédiatement.
+    if (p && prev?.[1] && phase.value === 'charge') {
       if (p.reduced) void nextTick(showFinal);
-      else void (isLot.value ? playLot() : playSingle());
+      else startCharge();
       return;
     }
     run++;
-    cancelAnimationFrame(holdRaf);
-    holding.value = false;
+    cancelAnimationFrame(chargeRaf);
+    charging.value = false;
     clearFx();
     rv.item = null;
     cards.value = [];
@@ -1139,15 +1135,16 @@ watch(
       void nextTick(showFinal);
       return;
     }
-    phase.value = 'hold';
-    holdLast = 0;
-    holdRaf = requestAnimationFrame(holdLoop);
+    phase.value = 'charge';
+    // Le plan est déjà là → on charge tout de suite ; sinon le cercle tourne à vide et
+    // `startCharge` partira à l'arrivée du plan (branche du haut).
+    if (p) startCharge();
   },
   { immediate: true },
 );
 onBeforeUnmount(() => {
   run++;
-  cancelAnimationFrame(holdRaf);
+  cancelAnimationFrame(chargeRaf);
   sfx.humStop();
   stopEmbers();
 });
