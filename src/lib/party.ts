@@ -16,6 +16,7 @@
 // ⚠️ Aucun cycle : ce module importe `expedition`, `caravan` et `adventurers` ; aucun des
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
 import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
+import { sinceEvent } from './sinceEvent';
 import {
   PARTY_TARGETS,
   buildMessage,
@@ -237,18 +238,25 @@ export function settleParties(
 export function partyClaimRoster(
   party: PartyResult,
   roster: readonly Adventurer[],
-  ctx: { pantheonLevel: number; infirmaryLevel: number; now: number },
+  /** ⚠️ `backAt` est REQUIS : c'est le RETOUR du groupe en ville, l'instant d'où court la
+   *  convalescence. `now` ne sert qu'à écarter celle qui est déjà écoulée. Optionnel, il
+   *  serait oublié au premier appelant — et c'est exactement le défaut qu'on corrige. */
+  ctx: { pantheonLevel: number; infirmaryLevel: number; backAt: number; now: number },
 ): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
   const escort = party.escort
     .map((id) => roster.find((a) => a.id === id))
     .filter((a): a is Adventurer => !!a);
-  const hurtUntil = ctx.now + caravanHurtMs(escort, ctx.infirmaryLevel);
+  // ⏱️ DEPUIS LE RETOUR DU GROUPE, pas depuis le clic « Encaisser » — même règle que les
+  // convois et que le siège. `null` = déjà écoulée, personne ne part à l'infirmerie.
+  const hurtUntil = sinceEvent(ctx.backAt, caravanHurtMs(escort, ctx.infirmaryLevel), ctx.now);
   const hurt = new Set(party.hurt);
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
     if (gain === undefined) return a;
     const up = grantAdvXp(a, gain, ctx.pantheonLevel);
-    return hurt.has(a.id) ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) } : up;
+    return hurtUntil && hurt.has(a.id)
+      ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) }
+      : up;
   });
   return { adventurers, escort, wages: Math.max(0, Math.round(party.wages || 0)) };
 }

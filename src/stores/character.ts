@@ -1995,6 +1995,9 @@ export const useCharacterStore = defineStore('character', () => {
       const claim = partyClaimRoster(party, advList.value, {
         pantheonLevel: pantheonLevel.value,
         infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
+        // ⏱️ Le RETOUR en ville (`claimAt`), pas ce clic : la convalescence a déjà couru.
+        // Les rapports d’avant n’ont que `resolvedAt` — le même repli qu`isClaimable`.
+        backAt: m.claimAt ?? m.resolvedAt,
         now,
       });
       wages = claim.wages;

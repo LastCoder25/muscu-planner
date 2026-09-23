@@ -31,6 +31,7 @@ import {
   type Combatant,
 } from './combat';
 import { refFighter } from './proceduralContent';
+import { sinceEvent } from './sinceEvent';
 import { rollDrop, type AggregatedEffects, type Item } from './items';
 import { escortCombatant, escortGear, unitEffects, type EscortKit } from './caravan';
 import { ADV_GEAR_SLOTS, canWearAdvGear, type AdvGear, type AdvGearSlot } from './advGear';
@@ -2960,10 +2961,7 @@ export function applyRaidOutcome(
   // n'avait pas joué non plus pendant ce temps.
   // ⚠️ `until` rend `null` quand la durée est DÉJÀ écoulée : on ne pose pas un état mort
   // que le tick suivant effacerait, et qui immobiliserait le héros une seconde pour rien.
-  const until = (ms: number) => {
-    const at = raid.arrivesAt + ms;
-    return at > now ? at : null;
-  };
+  const until = (ms: number) => sinceEvent(raid.arrivesAt, ms, now);
   const woundUntil = until(
     woundMsFor(defenseLevel(base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7)),
   );
