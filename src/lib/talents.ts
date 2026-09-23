@@ -278,7 +278,7 @@ export function talentEffects(raw: unknown): AggregatedEffects {
 }
 
 /** Magnitude RÉELLE d'un talent (celle que le combat applique). 0 si le code est inconnu. */
-export function talentInstanceValue(inst: TalentInstance): number {
+function talentInstanceValue(inst: TalentInstance): number {
   const def = BY_CODE.get(inst.code);
   if (!def) return 0;
   return talentValue(def, tierOf(inst), enchantOf(inst), talentRollOf(inst), inst.level ?? 1);

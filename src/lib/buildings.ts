@@ -39,12 +39,7 @@
 // `fragments` = poussière d'âme (rang des familiers) ; `ink_dust` = poussière d'encre
 // (rang des talents). Noms de colonnes conservés (`fragments`) ; libellés UI = « poussière ».
 export type BuildResource =
-  | 'dust'
-  | 'stone'
-  | 'energy'
-  | 'parchemins'
-  | 'fragments'
-  | 'ink_dust'
+  | 'energy' // ⚡ Dynamo tellurique
   | 'summon' // 🔮 pierres d'invocation (Autel des boss)
   | 'keys'; // 🗝️ clés de labyrinthe (Porte du Labyrinthe)
 
@@ -309,13 +304,6 @@ export const RESOURCE_EMOJI: Record<BuildResource, string> = {
   energy: '⚡',
   keys: '🗝️',
   summon: '🔮',
-  // Devises historiques, conservées pour les anciennes lignes (plus produites).
-  // 🪙 et 🔩 les ont rejointes : elles se gagnent sur la carte, plus jamais au bâtiment.
-  dust: '✨',
-  stone: '💎',
-  parchemins: '📜',
-  fragments: '🧩',
-  ink_dust: '🖋️',
 };
 
 const BY_ID = new Map(BUILDING_TYPES.map((t) => [t.id, t]));
@@ -786,16 +774,7 @@ export function buildingAccrued(b: Building, now: number): number {
 
 /** Somme des ressources prêtes à récolter, par ressource. */
 export function collectable(buildings: Building[], now: number): Record<BuildResource, number> {
-  const acc: Record<BuildResource, number> = {
-    dust: 0,
-    stone: 0,
-    energy: 0,
-    parchemins: 0,
-    fragments: 0,
-    ink_dust: 0,
-    summon: 0,
-    keys: 0,
-  };
+  const acc: Record<BuildResource, number> = { energy: 0, summon: 0, keys: 0 };
   for (const b of buildings) {
     const t = buildingType(b.typeId);
     if (!t?.resource) continue; // utilitaires : ne produisent rien

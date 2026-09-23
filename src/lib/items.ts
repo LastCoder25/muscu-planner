@@ -232,10 +232,6 @@ function rankIndex(r: Rarity): number {
  *  (+2,5 %/★) reste visible sur les petites stats (ticket df3feade). Partagé avec la
  *  migration des sauvegardes (character.normalizeRow) pour une précision cohérente. */
 export const round1 = (x: number): number => Math.round(x * 10) / 10;
-// Poussière/or de base par rang (croissance géométrique douce, ~×1,5 et ×1,6 par rang).
-const DUST_BY_RARITY: Record<Rarity, number> = Object.fromEntries(
-  RANK_ORDER.map((r, i) => [r, Math.round(4 * Math.pow(1.5, i))]),
-) as Record<Rarity, number>;
 // Or de vente PAR RANG (v0.614) : base + ratio RELEVÉS pour que vendre ait un VRAI intérêt
 // face à l'économie (donjons/bâtiments en milliers d'or). Courbe RAIDE (×1,8/rang) → la
 // rareté pèse fort : commun 70 → primordial ≈ 4 300. Le JET et le NIVEAU d'objet ajoutent
@@ -259,26 +255,6 @@ const RARITY_COST_MULT: Record<Rarity, number> = Object.fromEntries(
  *  l'infusion un vrai puits qui reste un but en fin de partie. */
 export function upgradeCost(level: number, rarity: Rarity): number {
   return Math.round((5 + level * 3 + level * level * 0.4) * RARITY_COST_MULT[rarity]);
-}
-/** Coût TOTAL pour construire un objet du niveau 1 jusqu'à `level` (sous C, tout
- *  drop part du niveau 1). Sert au recyclage history-independent + à l'affichage. */
-export function fullInfuseCost(level: number, rarity: Rarity): number {
-  let sum = 0;
-  for (let k = 1; k < level; k++) sum += upgradeCost(k, rarity);
-  return sum;
-}
-/** Coût pour infuser un objet de son niveau ACTUEL jusqu'au cap `playerLevel`. */
-export function infuseToMaxCost(it: Item, playerLevel: number): number {
-  let sum = 0;
-  for (let k = it.level; k < playerLevel; k++) sum += upgradeCost(k, it.rarity);
-  return sum;
-}
-/** Casser un objet → base de rareté + une FRACTION du coût de construction 1→niveau.
- *  HISTORY-INDEPENDENT (refonte C) : ne dépend QUE de rareté + niveau actuel, donc un
- *  objet DROPPÉ au niv.N se recycle comme un niv.1 INFUSÉ →N (fin de l'incohérence).
- *  Faucet-free car tout drop part du niveau 1 (coût(1→1)=0). */
-export function salvageValue(it: Item): number {
-  return DUST_BY_RARITY[it.rarity];
 }
 /** Or de vente d'un drop selon RANG + JET + NIVEAU d'objet (source unique objets/talents/
  *  familiers). Rang = base RAIDE (×1,8/rang) ; jet = jusqu'à +70 % ; ilvl = bonus de niveau
@@ -323,26 +299,6 @@ export interface Loadout {
   spares?: Item[];
 }
 export const MAX_LOADOUTS = 8;
-
-/** Échange les 4 slots gear (weapon/armor/accessory/relic) entre l'équipement et un
- *  loadout → renvoie le nouvel équipement + les items du loadout. Le familier reste
- *  équipé (non touché). Sert au « ranger » (loadout vide) comme au swap de sets. */
-export function swapLoadoutGear(
-  equipped: Equipped,
-  loadoutItems: Equipped,
-): { equipped: Equipped; loadoutItems: Equipped } {
-  const eq: Equipped = { ...equipped };
-  const lo: Equipped = { ...loadoutItems };
-  for (const slot of SLOTS) {
-    const held = eq[slot];
-    const stored = lo[slot];
-    if (stored) eq[slot] = stored;
-    else delete eq[slot];
-    if (held) lo[slot] = held;
-    else delete lo[slot];
-  }
-  return { equipped: eq, loadoutItems: lo };
-}
 
 // Récompense « au choix » d'un boss : 3 candidats tirés, le joueur en garde 1.
 export type RewardCandidate = { kind: 'item'; item: Item } | { kind: 'gold'; gold: number };
@@ -1345,11 +1301,6 @@ export function effectBase(t: EffectType): number {
   return EFFECT_BASE[t];
 }
 
-/** Effets tirables par la FORGE (code mort, testé) : la stat principale de l'emplacement. */
-function availableEffects(slot: ItemSlot, level: number): { type: EffectType; base: number }[] {
-  return slotPool(slot, 'major', level).map((type) => ({ type, base: EFFECT_BASE[type] }));
-}
-
 // Noms ÉVOCATEURS des objets à effet signature (« légendaires nommés » → le drop
 // devient un événement, pas un « Lame mythique » de plus).
 const SIGNATURE_NAMES: Partial<Record<EffectType, string[]>> = {
@@ -1951,21 +1902,11 @@ export function dropBand(
   return { lo: { rank: RANK_ORDER[loI]!, quality: 3 }, hi: { rank: RANK_ORDER[ref]!, quality: 3 } };
 }
 
-/** Libellé compact de la bande de drop, en RANGS : « Argent → Or » (ou « Or » seul). */
-export function dropBandLabel(level: number, luck = 0, playerLevel?: number): string {
-  const { lo, hi } = dropBand(level, luck, playerLevel);
-  const name = (r: Rarity) => rarityRank(r).name;
-  return lo.rank === hi.rank ? name(lo.rank) : `${name(lo.rank)} → ${name(hi.rank)}`;
-}
 /** Rang le PLUS PROBABLE d'un drop : le rang de référence (min contenu, joueur), ou celui
  *  d'en dessous tant que le rang du joueur ne s'est pas assez ouvert (`ownRankChance`). */
 export function dropPeakRank(level: number, playerLevel?: number): Rarity {
   const g = rankGate(level, playerLevel);
   return RANK_ORDER[g.own < 0.5 ? g.ref - 1 : g.ref]!;
-}
-/** Rang seul (utilitaires forge/familier qui n'ont pas besoin de la qualité fine). */
-function rollRarity(rng: () => number, luck = 0, level = 1): Rarity {
-  return rollTier(rng, level, luck).rank;
 }
 
 /**
@@ -2406,14 +2347,6 @@ export function familiarStoneCost(level: number, rarity: Rarity): number {
   return Math.round((3 + level * 2) * RARITY_COST_MULT[rarity]);
 }
 
-// Ordre des rangs (fusion : 3 d'un rang → 1 du rang juste au-dessus).
-const RARITY_ORDER: Rarity[] = RANK_ORDER;
-/** Rang juste au-dessus, ou `null` si déjà au maximum (SSS). */
-export function nextRarity(r: Rarity): Rarity | null {
-  const i = RARITY_ORDER.indexOf(r);
-  return i >= 0 && i < RARITY_ORDER.length - 1 ? RARITY_ORDER[i + 1]! : null;
-}
-
 // Effets SIGNATURE possibles sur un familier (2ᵉ effet conditionnel, en plus du bonus
 // de race). Bases modestes → une cerise, pas un doublon d'objet ; grandit à l'infusion.
 const FAMILIAR_SIGNATURE: { type: EffectType; base: number }[] = [
@@ -2606,63 +2539,9 @@ function rarityStep(rarity: Rarity): number {
   return Math.pow(1.5, rankIndex(rarity)); // 1 · 1,5 · 2,25 … ≈ 25 au SSS
 }
 
-// A. FORGE — créer un objet neuf. Ciblé (choisir l'emplacement) = plus cher que l'aléatoire.
-export function forgeCost(level: number, targeted: boolean): number {
-  const base = 50 + Math.max(1, level) * 20;
-  return targeted ? Math.round(base * 1.8) : base;
-}
-export function forgeItem(
-  rng: () => number,
-  opts: { level: number; slot?: ItemSlot; luck?: number },
-): Omit<Item, 'id'> {
-  const slot = opts.slot ?? pick(rng, SLOTS);
-  const level = Math.max(1, Math.round(opts.level));
-  // Rang gaté par le NIVEAU de forge (comme les drops) : forger à ton niveau donne des
-  // rangs cohérents avec ta profondeur, jamais du SSS gratuit.
-  const rarity = rollRarity(rng, opts.luck ?? 0.25, level);
-  const chosen = pick(rng, availableEffects(slot, level));
-  const value = Math.max(1, round1(chosen.base * RARITY_MULT[rarity]));
-  return {
-    slot,
-    name: `${pick(rng, NAMES[slot])} forgé`,
-    emoji: SLOT_EMOJI[slot],
-    rarity,
-    level,
-    baseLevel: level,
-    effect: { type: chosen.type, value },
-  };
-}
-
 // B. REROLL d'effet — change la stat (même rareté/niveau), un autre effet du slot.
 export function rerollCost(item: Item): number {
   return Math.round((40 + item.level * 15) * rarityStep(item.rarity));
-}
-// Reroll du JET : re-tire le `roll` de l'objet en gardant le TYPE d'effet, le RANG et le
-// NIVEAU. Ne touche JAMAIS le rang ; sert à retenter un meilleur jet. On rescale la valeur
-// par le rapport des multiplicateurs d'intervalle (rankRollMult) → la valeur reste cohérente
-// avec le nouveau jet.
-export function rerolledQuality(
-  rng: () => number,
-  item: Item,
-): { effect: ItemEffect; effect2?: ItemEffect; effect3?: ItemEffect; roll: number } {
-  const oldRoll = item.roll ?? 0.5;
-  const newRoll = rng();
-  const ratio = rankRollMult(item.rarity, newRoll) / rankRollMult(item.rarity, oldRoll);
-  const scale = (e: ItemEffect): ItemEffect => ({
-    type: e.type,
-    value: Math.max(1, Math.round(e.value * ratio)),
-  });
-  return {
-    effect: scale(item.effect),
-    ...(item.effect2 ? { effect2: scale(item.effect2) } : {}),
-    ...(item.effect3 ? { effect3: scale(item.effect3) } : {}),
-    roll: newRoll,
-  };
-}
-
-// D. CRAFT de pièce de set ciblée — coût élevé (réutilise rollSetPiece pour l'objet).
-export function craftSetCost(level: number): number {
-  return 300 + Math.max(1, level) * 60;
 }
 
 export interface AggregatedEffects {
