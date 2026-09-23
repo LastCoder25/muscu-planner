@@ -179,7 +179,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar, copyToClipboard } from 'quasar';
 import type { Session, SessionLog, ExerciseTarget } from '@/lib/types';
-import { nextSessionDeterministic } from '@/lib/progression';
+import { planNextSession, verdictLabel, type NamedVerdict } from '@/lib/progression';
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
 import { bestE1RM, detectLiftPRs, type LiftPR } from '@/lib/estimates';
 import { setsByMuscleFromLog, muscleColor, isMuscuLog } from '@/lib/volume';
@@ -203,6 +203,7 @@ const loading = ref(true);
 const log = ref<SessionLog | null>(null);
 const source = ref<Session | null>(null);
 const nextPlan = ref<Session | null>(null);
+const verdicts = ref<NamedVerdict[]>([]);
 const history = ref<SessionLog[]>([]);
 const prs = ref<LiftPR[]>([]);
 const applying = ref(false);
@@ -223,9 +224,6 @@ const totalVolume = computed(() =>
     : 0,
 );
 
-function loadOf(t: Partial<ExerciseTarget> | undefined): number {
-  return t?.load_kg ?? t?.added_kg ?? 0;
-}
 function plannedLabel(t: Partial<ExerciseTarget>): string {
   const range = `${t.sets ?? '?'} × ${t.reps_min ?? '?'}–${t.reps_max ?? '?'}`;
   if (t.unit === 'time') return `${range} s`;
@@ -234,25 +232,22 @@ function plannedLabel(t: Partial<ExerciseTarget>): string {
   return t.load_kg ? `${range} · ${t.load_kg} kg` : range;
 }
 
-// Deltas de charge proposés par le moteur (source vs nextPlan, même ordre/id).
-const deltas = computed(() => {
-  if (!source.value || !nextPlan.value) return [];
-  const out: { id: string; name: string; label: string; cls: string }[] = [];
-  source.value.exercises.forEach((src, i) => {
-    const nxt = nextPlan.value!.exercises[i];
-    if (!nxt) return;
-    const before = loadOf(src.target);
-    const after = loadOf(nxt.target);
-    const diff = Math.round((after - before) * 100) / 100;
-    if (diff > 0) out.push({ id: src.id, name: src.name, label: `+${diff} kg`, cls: 'up' });
-    else if (diff < 0) out.push({ id: src.id, name: src.name, label: `${diff} kg`, cls: 'down' });
-    else out.push({ id: src.id, name: src.name, label: 'maintenu', cls: 'same' });
-  });
-  return out;
-});
+// Ce que le moteur a décidé, ET POURQUOI. ⚠️ On ne RECONSTRUIT plus le delta en comparant
+// l'avant et l'après : le moteur le savait déjà, il le DIT enfin. C'est ce qui fait
+// apparaître les plateaux, jusqu'ici calculés pour baisser la charge puis jetés.
+const deltas = computed(() =>
+  verdicts.value.map((v) => {
+    const l = verdictLabel(v.verdict);
+    return { id: v.id, name: v.name, label: l.text, cls: l.tone };
+  }),
+);
 
-// La prochaine séance est-elle une DÉCHARGE planifiée ? (marquée par le moteur.)
-const isDeloadNext = computed(() => !!nextPlan.value?.name?.includes('Décharge'));
+// ⚠️ Lu sur le VERDICT, et non en cherchant « Décharge » dans le NOM de la séance :
+// deviner une décision dans une chaîne de caractères, c'est la perdre au premier
+// renommage — et le moteur, lui, n'a jamais eu de doute.
+const isDeloadNext = computed(() =>
+  verdicts.value.some((v) => v.verdict.kind === 'deload_planned'),
+);
 
 const coachJson = computed(() => {
   const profile = profileStore.profile;
@@ -351,13 +346,15 @@ onMounted(async () => {
       if (sessionsStore.list.length === 0) await sessionsStore.fetchMine();
       source.value = sessionsStore.list.find((s) => s.id === sid)?.payload ?? null;
       if (source.value && cfg) {
-        nextPlan.value = nextSessionDeterministic(
+        const p = planNextSession(
           source.value,
           log.value,
           cfg,
           engineHistory.length ? engineHistory : history.value,
           { muscuSessionCount: muscuCount, deloadEvery },
         );
+        nextPlan.value = p.session;
+        verdicts.value = p.verdicts;
       }
     }
 
@@ -679,6 +676,14 @@ onMounted(async () => {
 }
 .prog-delta.same {
   color: var(--dim-2);
+}
+/* Plateau : ORANGE, pas rouge. Le rouge dit « ça a raté » ; un plateau est un constat
+   qui appelle une décision — et la décharge PROGRAMMÉE (`down`), elle, n'est même pas
+   une mauvaise nouvelle. Trois choses différentes, trois teintes. */
+.prog-delta.warn {
+  color: var(--d3);
+  font-size: 12.5px;
+  text-align: right;
 }
 
 .ia-box {
