@@ -21,15 +21,40 @@
           <div class="recap-item">
             <span class="rv font-display">{{ totalVolume }}</span
             ><span class="rl">kg volume</span>
+            <span
+              v-if="totalDelta('volume', 'kg')"
+              class="rd"
+              :class="totalDelta('volume', 'kg')!.tone"
+              >{{ totalDelta('volume', 'kg')!.text }}</span
+            >
           </div>
           <div class="recap-item">
             <span class="rv font-display">{{ log.duration_min ?? '–' }}</span
             ><span class="rl">minutes</span>
+            <span
+              v-if="totalDelta('minutes', 'min')"
+              class="rd"
+              :class="totalDelta('minutes', 'min')!.tone"
+              >{{ totalDelta('minutes', 'min')!.text }}</span
+            >
           </div>
           <div class="recap-item">
             <span class="rv font-display">{{ log.global_difficulty ?? '–' }}</span
             ><span class="rl">note /4</span>
+            <!-- ⚠️ PAS de delta ici : une note d'effort est SUBJECTIVE, et « +1 » ne se lit
+                 ni comme un gain ni comme une perte. Le delta de séries, lui, irait encore
+                 moins bien sous une note — deux grandeurs sans rapport. Il vit ci-dessous. -->
           </div>
+        </div>
+        <!-- Sans référence, « 4 200 kg » ne dit rien : est-ce bien ou pas ? -->
+        <div v-if="compare?.prev" class="recap-ref">
+          vs la même séance, il y a {{ compare.prev.daysSince }} j
+          <template v-if="totalDelta('sets', 'séries')"
+            >·
+            <span :class="totalDelta('sets', 'séries')!.tone">{{
+              totalDelta('sets', 'séries')!.text
+            }}</span></template
+          >
         </div>
         <div v-if="log.global_comment" class="global-comment">« {{ log.global_comment }} »</div>
 
@@ -85,6 +110,18 @@
           </div>
           <div v-if="ex.performed.length" class="ex-e1rm">
             Max estimé : <b>{{ bestE1RM(ex.performed) }} kg</b>
+          </div>
+          <!-- Ce que cet exercice valait la dernière fois. ⚠️ Distinct des records : passer
+               de 60 à 62,5 kg sans battre son record de l'an dernier ne s'affichait nulle
+               part, alors que c'est exactement ce qu'on veut savoir en sortant de séance. -->
+          <div v-if="lastTime(ex.id)" class="ex-prev">
+            <span class="exp-lbl">Il y a {{ lastTime(ex.id)!.daysSince }} j :</span>
+            {{ lastTime(ex.id)!.prevLoad }} kg × {{ lastTime(ex.id)!.prevReps }}
+            <span
+              class="exp-d"
+              :class="deltaLabel(lastTime(ex.id)!.e1rm, lastTime(ex.id)!.prevE1rm, 'kg').tone"
+              >{{ deltaLabel(lastTime(ex.id)!.e1rm, lastTime(ex.id)!.prevE1rm, 'kg').text }}</span
+            >
           </div>
           <div v-if="ex.exercise_comment" class="ex-comment">« {{ ex.exercise_comment }} »</div>
         </div>
@@ -180,6 +217,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useQuasar, copyToClipboard } from 'quasar';
 import type { Session, SessionLog, ExerciseTarget } from '@/lib/types';
 import { planNextSession, verdictLabel, type NamedVerdict } from '@/lib/progression';
+import { compareSession, deltaLabel, type SessionCompare } from '@/lib/sessionCompare';
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
 import { bestE1RM, detectLiftPRs, type LiftPR } from '@/lib/estimates';
 import { setsByMuscleFromLog, muscleColor, isMuscuLog } from '@/lib/volume';
@@ -204,6 +242,17 @@ const log = ref<SessionLog | null>(null);
 const source = ref<Session | null>(null);
 const nextPlan = ref<Session | null>(null);
 const verdicts = ref<NamedVerdict[]>([]);
+const compare = ref<SessionCompare | null>(null);
+/** Le delta d'un total de séance, ou null s'il n'y a pas de séance comparable. */
+function totalDelta(champ: 'volume' | 'sets' | 'minutes', unit: string) {
+  const c = compare.value;
+  if (!c?.prev) return null;
+  return deltaLabel(c.totals[champ], c.prev[champ], unit);
+}
+/** Ce que cet exercice valait la dernière fois — null s'il est nouveau. */
+function lastTime(id: string) {
+  return compare.value?.exercises.find((e) => e.id === id) ?? null;
+}
 const history = ref<SessionLog[]>([]);
 const prs = ref<LiftPR[]>([]);
 const applying = ref(false);
@@ -358,6 +407,17 @@ onMounted(async () => {
       }
     }
 
+    // « Et par rapport à la dernière fois ? » ⚠️ Vaut AUSSI en revue d'historique, contrairement
+    // aux records : la comparaison ne regarde que ce qui PRÉCÈDE la séance affichée, donc
+    // relire un vieux bilan montre ce qu'il valait À L'ÉPOQUE, ce qui est exactement juste.
+    const moi = allRows.find((r) => r.payload?.id === log.value!.id);
+    if (moi && log.value) {
+      compare.value = compareSession(
+        { performedAt: moi.performed_at, log: log.value },
+        allRows.map((r) => ({ performedAt: r.performed_at, log: r.payload })),
+      );
+    }
+
     // Records de force (1RM estimé) — uniquement à la sortie d'une VRAIE séance
     // (pas en revue d'historique) pour ne pas comparer contre des bilans postérieurs.
     if (!readOnly.value && log.value) {
@@ -457,6 +517,59 @@ onMounted(async () => {
 .rl {
   font-size: 11px;
   color: var(--dim);
+}
+/* Le delta vit SOUS le libellé, en petit : c'est la référence du chiffre, pas le chiffre.
+   Vert / rouge / neutre — et le neutre reste gris, « = » n'est ni un gain ni une perte. */
+.rd {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.rd.up {
+  color: var(--d1);
+}
+.rd.down {
+  color: var(--d4);
+}
+.rd.same {
+  color: var(--dim-2);
+}
+.recap-ref {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim-2);
+  .up {
+    color: var(--d1);
+  }
+  .down {
+    color: var(--d4);
+  }
+  .same {
+    color: var(--dim-2);
+  }
+}
+.ex-prev {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+.exp-lbl {
+  color: var(--dim);
+}
+.exp-d {
+  margin-left: 6px;
+  font-weight: 600;
+}
+.exp-d.up {
+  color: var(--d1);
+}
+.exp-d.down {
+  color: var(--d4);
+}
+.exp-d.same {
+  color: var(--dim-2);
 }
 .global-comment {
   color: var(--dim);
