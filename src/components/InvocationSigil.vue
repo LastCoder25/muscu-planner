@@ -1,28 +1,15 @@
 <template>
-  <!-- 🔯 LE CERCLE D'INVOCATION — qu'on MAINTIENT pour invoquer (maquette validée).
-       Deux variantes : le PETIT pour le ×1, le GRAND pour le ×10 (demandé : « seul le ×10
-       en gros cercle »). Chaque couche tourne à sa vitesse, dans son sens ; pendant
-       l'appui, runes, nœuds, médaillons et perles s'allument en doré.
+  <!-- 🔯 LE CERCLE D'INVOCATION (maquette validée). Deux variantes : le PETIT pour le ×1, le
+       GRAND pour le ×10 (demandé : « seul le ×10 en gros cercle »). Chaque couche tourne à
+       sa vitesse, dans son sens ; pendant la charge, runes, nœuds, médaillons et perles
+       s'allument en doré.
+       ⚠️ CE N'EST PLUS UN BOUTON (v0.1101) : on ne le maintient plus, le choix du tirage
+       lance tout. Il n'a donc ni rôle ni focus — annoncer un contrôle qui ne répond à rien
+       tromperait qui navigue au clavier ou au lecteur d'écran.
        ⚠️ Rotation et allumage sont posés à la main sur les nœuds SVG, jamais par le rendu
        Vue : ils changent à chaque image, et re-rendre ~250 éléments 60 fois par seconde
        n'apporterait rien. -->
-  <div
-    ref="root"
-    class="ivs"
-    :class="[variant, { dim, revealing }]"
-    role="button"
-    tabindex="0"
-    :aria-label="label"
-    @pointerdown="onDown"
-    @pointerup="emit('release')"
-    @pointercancel="emit('release')"
-    @lostpointercapture="emit('release')"
-    @contextmenu.prevent
-    @keydown.space.prevent="onKey"
-    @keydown.enter.prevent="onKey"
-    @keyup.space="emit('release')"
-    @keyup.enter="emit('release')"
-  >
+  <div ref="root" class="ivs" :class="[variant, { dim, revealing, charging }]" aria-hidden="true">
     <svg ref="svg" :viewBox="`0 0 ${size} ${size}`" aria-hidden="true">
       <defs>
         <radialGradient :id="`${uid}-core`">
@@ -259,17 +246,15 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
 const props = defineProps<{
   variant: 'small' | 'big';
-  /** Charge du maintien, 0..1 : l'anneau se remplit, les runes s'allument. */
+  /** Charge du cercle, 0..1 : l'anneau se remplit, les runes s'allument. */
   charge: number;
   /** Vitesse de rotation visée (°/s) — le cercle s'y accorde en douceur. */
   speed: number;
-  /** Le doigt est posé : le cercle grossit un peu et vibre avec la charge. */
-  holding: boolean;
+  /** La charge est en cours : le cercle grossit un peu et vibre avec elle. */
+  charging: boolean;
   dim?: boolean;
   revealing?: boolean;
-  label?: string;
 }>();
-const emit = defineEmits<{ hold: []; release: [] }>();
 
 let seq = 0;
 const uid = `ivs${++seq}${Math.floor(Math.random() * 1e6)}`;
@@ -395,7 +380,7 @@ function frame(t: number) {
   const c = C.value;
   for (const s of spinners) s.el.setAttribute('transform', `rotate(${angle * s.k} ${c} ${c})`);
   if (svg.value) {
-    const k = props.holding ? props.charge : 0;
+    const k = props.charging ? props.charge : 0;
     svg.value.style.transform = k
       ? `scale(${1 + k * 0.06}) translate(${(Math.random() - 0.5) * k * 3}px,${(Math.random() - 0.5) * k * 3}px)`
       : '';
@@ -422,18 +407,6 @@ onMounted(() => {
 });
 onBeforeUnmount(() => cancelAnimationFrame(raf));
 
-function onDown(e: PointerEvent) {
-  e.preventDefault();
-  try {
-    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-  } catch {
-    /* capture refusée : le relâchement arrivera quand même */
-  }
-  emit('hold');
-}
-function onKey(e: KeyboardEvent) {
-  if (!e.repeat) emit('hold');
-}
 defineExpose({ el: root });
 </script>
 
@@ -444,8 +417,9 @@ defineExpose({ el: root });
   top: 60%;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  cursor: pointer;
-  touch-action: none;
+  /* ⚠️ Décor, plus un bouton : il ne doit intercepter aucun toucher — le grand cercle du
+     ×10 déborde de la scène et volerait les gestes de ce qui est dessous. */
+  pointer-events: none;
   -webkit-user-select: none;
   user-select: none;
   &.small {
@@ -468,11 +442,6 @@ defineExpose({ el: root });
     opacity: 0.55;
     transition: opacity 400ms;
     pointer-events: none;
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent, #ffd23f);
-    outline-offset: 4px;
-    border-radius: 50%;
   }
   svg {
     width: 100%;

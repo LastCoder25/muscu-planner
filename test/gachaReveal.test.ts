@@ -17,6 +17,8 @@ import {
   RANK_GRADE,
   bestOfLot,
   lotOrder,
+  omenOf,
+  OMEN_STRENGTH,
   type LotItem,
   type RevealCell,
   type RevealPlan,
@@ -117,8 +119,62 @@ describe('🎰 L’INVOCATION ×1 — elle MET EN SCÈNE, elle ne décide rien',
     expect(singleSequenceMs(buildReveal(B, () => 0.9))).toBeLessThan(4_000);
   });
 
-  it('le maintien du ×10 est plus long que celui du ×1 (demandé)', () => {
-    expect(INVOKE.holdMsLot).toBeGreaterThan(INVOKE.holdMs);
+  /**
+   * ⚠️ RÉÉCRIT (v0.1101) : il gardait « le MAINTIEN du ×10 est plus long ». Le maintien a
+   * disparu — le choix du tirage lance tout — mais la propriété qui compte survit : le
+   * grand cercle du ×10 a plus de couches à allumer. Ce qui change, c'est qu'une CHARGE
+   * n'est plus un geste : personne ne doit attendre une seconde pour rien.
+   */
+  it('la charge du ×10 est plus longue que celle du ×1, et aucune des deux ne fait attendre', () => {
+    expect(INVOKE.chargeMsLot).toBeGreaterThan(INVOKE.chargeMs);
+    expect(INVOKE.chargeMsLot).toBeLessThanOrEqual(1200);
+  });
+});
+
+/**
+ * 🔮 LE PRÉSAGE DE LA SCÈNE (v0.1101, demandé : « un effet subtil mais visible avec la
+ * rareté max du tirage, pour les A et S uniquement »).
+ */
+describe('🔮 LE PRÉSAGE — le sanctuaire réagit aux A et aux S, jamais aux B', () => {
+  const plan = (grades: PullGrade[], seed = 1): RevealPlan =>
+    buildLotReveal(
+      grades.map((g) => it0(g)),
+      mulberry32(seed),
+    );
+
+  it('⚠️ RIEN SUR UN B — c’est la ligne de base, et c’est elle qui fait le signal', () => {
+    expect(omenOf(buildReveal(B, mulberry32(1)))).toBeNull();
+    expect(omenOf(plan(['B', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B']))).toBeNull();
+  });
+
+  it('il porte la MEILLEURE lettre du tirage, pas la première ni la dernière', () => {
+    expect(omenOf(plan(['B', 'A', 'B', 'S', 'B', 'B', 'A', 'B', 'B', 'B']))?.grade).toBe('S');
+    expect(omenOf(plan(['B', 'A', 'B', 'B', 'B', 'B', 'A', 'B', 'B', 'B']))?.grade).toBe('A');
+    expect(omenOf(plan(['S', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'A']))?.grade).toBe('S');
+  });
+
+  it('un S en met plus qu’un A — sinon les deux lettres se liraient pareil', () => {
+    const a = omenOf(buildReveal(A, mulberry32(1)))!;
+    const s = omenOf(buildReveal(S, mulberry32(1)))!;
+    expect(s.strength).toBeGreaterThan(a.strength);
+    expect(s.strength).toBe(OMEN_STRENGTH.S);
+    expect(a.strength).toBe(OMEN_STRENGTH.A);
+    // Bornée : une ambiance qui déborde cesse d'être « subtile ».
+    expect(s.strength).toBeLessThanOrEqual(1);
+    expect(a.strength).toBeGreaterThan(0);
+  });
+
+  it('⚠️ AUCUN PRÉSAGE EN MOUVEMENT RÉDUIT : il n’y a pas d’animation à teinter', () => {
+    for (const g of PULL_GRADES) {
+      expect(omenOf(buildReveal(CELL[g], mulberry32(1), { reduced: true }))).toBeNull();
+    }
+  });
+
+  it('il ne dépend PAS du présage de l’orbe : une surprise ne le change pas', () => {
+    // Le même S, annoncé bleu (surprise) ou or d'emblée : le sanctuaire dit la même chose.
+    const surprise: RevealPlan = { items: [{ cell: S, path: [0, 1, 2] }], reduced: false };
+    const franc: RevealPlan = { items: [{ cell: S, path: [2] }], reduced: false };
+    expect(omenOf(surprise)).toEqual(omenOf(franc));
   });
 });
 

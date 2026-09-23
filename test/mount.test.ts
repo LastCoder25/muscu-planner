@@ -139,9 +139,21 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // ⚠️ L'INVOCATION (v1.002) : c'est le `watch` immédiat qui ouvre le maintien du cercle,
     // donc le chemin qui a déjà cassé une fois (zone morte temporelle, v0.910).
     const plan = buildReveal(cellOfChampion(champ), mulberry32(1));
+    let lance = '';
     expect(
-      await mountIt(GachaReveal, { plan, verdict: v, canAgain: true, busy: false }),
+      await mountIt(
+        GachaReveal,
+        { plan, verdict: v, canAgain: true, busy: false },
+        undefined,
+        undefined,
+        '/',
+        (h) => (lance = h),
+      ),
     ).toBeNull();
+    // ⚠️ LA CHARGE PART TOUTE SEULE (v0.1101) : sans elle, le cercle tournerait à vide pour
+    // toujours et le tirage ne se montrerait jamais. Un levier qu'aucun test ne regarde
+    // reste vert quand on le retire (la leçon de la v0.772) — d'où l'état lisible au DOM.
+    expect(lance).toContain('ivs small charging');
     // …et l'état FINAL direct, qui emprunte l'autre branche du même `watch`.
     const court = buildReveal(cellOfChampion(champ), mulberry32(1), { reduced: true });
     expect(
@@ -181,16 +193,74 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         lot,
       }),
     ).toBeNull();
-    // …et le tirage DEMANDÉ mais pas payé (v1.003) : cercle ouvert SANS plan, bouton Retour.
+    // 🔮 LE PRÉSAGE DE LA SCÈNE (v0.1101) : l'écran le LIT et le PEINT. ⚠️ Une règle juste
+    // dans la lib mais jamais branchée reste verte partout ailleurs — c'est le levier mort
+    // de la v0.772. On regarde donc le HTML rendu, pas seulement l'absence d'erreur.
+    const { GRADE_COLOR } = await import('@/data/champions');
+    const { OMEN_STRENGTH } = await import('@/lib/gachaReveal');
+    const gradeCell = (g: 'B' | 'A' | 'S') =>
+      g === 'B'
+        ? { grade: g, emoji: '🗡️', name: 'Épée', championId: null }
+        : cellOfChampion(CHAMPIONS.find((c) => c.grade === g)!);
+    for (const g of ['A', 'S'] as const) {
+      let out = '';
+      expect(
+        await mountIt(
+          GachaReveal,
+          {
+            plan: buildReveal(gradeCell(g), mulberry32(1)),
+            verdict: v,
+            canAgain: false,
+            busy: false,
+          },
+          undefined,
+          undefined,
+          '/',
+          (h) => (out = h),
+        ),
+      ).toBeNull();
+      // ⚠️ ON VISE L'ATTRIBUT, PAS LE MOT : « omened » apparaît aussi dans un commentaire
+      // du template, et une première rédaction passait au vert pour cette seule raison.
+      expect(out, `présage ${g}`).toContain('class="ivk omened"');
+      expect(out, `couleur du présage ${g}`).toContain(`--omen: ${GRADE_COLOR[g]}`);
+      // …et son INTENSITÉ : c'est elle qui distingue un A d'un S, la couleur seule se
+      // fondrait dans un sanctuaire déjà violet et doré.
+      expect(out, `force du présage ${g}`).toContain(`--omen-k: ${OMEN_STRENGTH[g]}`);
+    }
+    // …et RIEN sur un B : c'est la ligne de base, et c'est elle qui fait le signal.
+    let sansPresage = '';
     expect(
-      await mountIt(GachaReveal, {
-        plan: null,
-        pending: 10,
-        verdict: null,
-        canAgain: false,
-        busy: false,
-      }),
+      await mountIt(
+        GachaReveal,
+        {
+          plan: buildReveal(gradeCell('B'), mulberry32(1)),
+          verdict: v,
+          canAgain: false,
+          busy: false,
+        },
+        undefined,
+        undefined,
+        '/',
+        (h) => (sansPresage = h),
+      ),
     ).toBeNull();
+    expect(sansPresage).not.toContain('class="ivk omened"');
+    expect(sansPresage).not.toContain('--omen:');
+
+    // …et le tirage DEMANDÉ dont le plan n'est pas encore revenu (v0.1101) : l'écran s'ouvre
+    // sur un cercle qui tourne à vide le temps de l'aller-retour réseau. ⚠️ C'est la branche
+    // du `watch` où `startCharge` N'EST PAS appelée — celle qui casserait en silence.
+    for (const pending of [1, 10]) {
+      expect(
+        await mountIt(GachaReveal, {
+          plan: null,
+          pending,
+          verdict: null,
+          canAgain: false,
+          busy: false,
+        }),
+      ).toBeNull();
+    }
   }, 30_000);
   it('🧱⚔️ SiegeStage bascule dans la cour de côté quand la brèche s’ouvre', async () => {
     const { default: SiegeStage } = await import('@/components/SiegeStage.vue');

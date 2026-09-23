@@ -53,6 +53,10 @@
     <div class="ivb-shaft s2"></div>
     <div class="ivb-shaft s3"></div>
     <div class="ivb-glow"></div>
+    <!-- 🔮 LE PRÉSAGE : une respiration teintée qui ne s'allume QUE sur un A ou un S
+         (`omenOf`). Éteinte, elle ne coûte rien ; allumée, elle est le seul élément de la
+         scène à pulser — c'est ce qui la rend visible sans rien crier. -->
+    <div class="ivb-omen"></div>
     <div v-for="side in ['l', 'r']" :key="side" class="ivb-brazier" :class="side">
       <div class="ivb-halo"></div>
       <div class="ivb-fl"></div>
@@ -285,11 +289,62 @@ const motes = Array.from({ length: 16 }, () => {
     opacity: 0;
   }
 }
+/* 🔮 LE PRÉSAGE DE LA SCÈNE (v0.1101) — le sanctuaire réagit quand la meilleure lettre du
+   tirage est un A ou un S. `--omen` (la couleur de la lettre) et `--omen-k` (0,5 pour un A,
+   1 pour un S) sont posées par l'écran ; sans présage, rien de tout cela ne s'allume.
+
+   ⚠️ LA COULEUR SEULE NE SUFFIRAIT PAS À LE RENDRE VISIBLE : le sanctuaire est DÉJÀ violet
+   (les rais de lumière) et doré (les braseros) — un A violet s'y fondrait, un S doré aussi.
+   C'est donc l'INTENSITÉ et la respiration qui signalent, la couleur qui dit laquelle. */
+.ivb-omen {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  background: radial-gradient(
+    58% 42% at 50% 58%,
+    color-mix(in srgb, var(--omen, transparent) 34%, transparent),
+    transparent 70%
+  );
+  transition: opacity 420ms ease-out;
+}
+.ivk.omened {
+  .ivb-omen {
+    opacity: calc(0.42 + var(--omen-k) * 0.42);
+    animation: ivb-omen 2.3s ease-in-out infinite alternate;
+  }
+  /* Les braseros répondent : un peu plus larges, plus vifs, à la couleur de la lettre.
+     ⚠️ MESURÉ AU BANC : à `× 0.5` d'échelle, les deux halos noyaient le tiers bas de
+     l'écran sur un S — « visible » était tenu, « subtil » non. C'est la RESPIRATION
+     centrale qui doit porter le signal, pas la taille des feux. */
+  .ivb-halo {
+    background: radial-gradient(
+      closest-side,
+      color-mix(in srgb, var(--omen) calc(22% + var(--omen-k) * 16%), transparent),
+      transparent
+    );
+    transform: scale(calc(1 + var(--omen-k) * 0.22));
+  }
+  .ivb-mote {
+    background: var(--omen);
+    box-shadow: 0 0 calc(6px + var(--omen-k) * 6px) var(--omen);
+  }
+}
+@keyframes ivb-omen {
+  from {
+    opacity: calc(0.3 + var(--omen-k) * 0.28);
+    transform: scale(0.98);
+  }
+  to {
+    opacity: calc(0.52 + var(--omen-k) * 0.5);
+    transform: scale(1.07);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .ivb-shaft,
   .ivb-fl,
   .ivb-halo,
-  .ivb-mote {
+  .ivb-mote,
+  .ivk.omened .ivb-omen {
     animation: none;
   }
 }
