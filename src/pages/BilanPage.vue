@@ -21,22 +21,16 @@
           <div class="recap-item">
             <span class="rv font-display">{{ totalVolume }}</span
             ><span class="rl">kg volume</span>
-            <span
-              v-if="totalDelta('volume', 'kg')"
-              class="rd"
-              :class="totalDelta('volume', 'kg')!.tone"
-              >{{ totalDelta('volume', 'kg')!.text }}</span
-            >
+            <span v-if="recapDelta" class="rd" :class="recapDelta.volume.tone">{{
+              recapDelta.volume.text
+            }}</span>
           </div>
           <div class="recap-item">
             <span class="rv font-display">{{ log.duration_min ?? '–' }}</span
             ><span class="rl">minutes</span>
-            <span
-              v-if="totalDelta('minutes', 'min')"
-              class="rd"
-              :class="totalDelta('minutes', 'min')!.tone"
-              >{{ totalDelta('minutes', 'min')!.text }}</span
-            >
+            <span v-if="recapDelta" class="rd" :class="recapDelta.minutes.tone">{{
+              recapDelta.minutes.text
+            }}</span>
           </div>
           <div class="recap-item">
             <span class="rv font-display">{{ log.global_difficulty ?? '–' }}</span
@@ -49,11 +43,8 @@
         <!-- Sans référence, « 4 200 kg » ne dit rien : est-ce bien ou pas ? -->
         <div v-if="compare?.prev" class="recap-ref">
           vs la même séance, il y a {{ compare.prev.daysSince }} j
-          <template v-if="totalDelta('sets', 'séries')"
-            >·
-            <span :class="totalDelta('sets', 'séries')!.tone">{{
-              totalDelta('sets', 'séries')!.text
-            }}</span></template
+          <template v-if="recapDelta"
+            >· <span :class="recapDelta.sets.tone">{{ recapDelta.sets.text }}</span></template
           >
         </div>
         <div v-if="log.global_comment" class="global-comment">« {{ log.global_comment }} »</div>
@@ -114,14 +105,10 @@
           <!-- Ce que cet exercice valait la dernière fois. ⚠️ Distinct des records : passer
                de 60 à 62,5 kg sans battre son record de l'an dernier ne s'affichait nulle
                part, alors que c'est exactement ce qu'on veut savoir en sortant de séance. -->
-          <div v-if="lastTime(ex.id)" class="ex-prev">
-            <span class="exp-lbl">Il y a {{ lastTime(ex.id)!.daysSince }} j :</span>
-            {{ lastTime(ex.id)!.prevLoad }} kg × {{ lastTime(ex.id)!.prevReps }}
-            <span
-              class="exp-d"
-              :class="deltaLabel(lastTime(ex.id)!.e1rm, lastTime(ex.id)!.prevE1rm, 'kg').tone"
-              >{{ deltaLabel(lastTime(ex.id)!.e1rm, lastTime(ex.id)!.prevE1rm, 'kg').text }}</span
-            >
+          <div v-for="(p, k) in prevOf(ex.id)" :key="k" class="ex-prev">
+            <span class="exp-lbl">Il y a {{ p.daysSince }} j :</span>
+            {{ p.load }} kg × {{ p.reps }}
+            <span class="exp-d" :class="p.d.tone">{{ p.d.text }}</span>
           </div>
           <div v-if="ex.exercise_comment" class="ex-comment">« {{ ex.exercise_comment }} »</div>
         </div>
@@ -217,7 +204,14 @@ import { useRoute, useRouter } from 'vue-router';
 import { useQuasar, copyToClipboard } from 'quasar';
 import type { Session, SessionLog, ExerciseTarget } from '@/lib/types';
 import { planNextSession, verdictLabel, type NamedVerdict } from '@/lib/progression';
-import { compareSession, deltaLabel, type SessionCompare } from '@/lib/sessionCompare';
+import {
+  compareSession,
+  deltaLabel,
+  sessionTotals,
+  type SessionCompare,
+} from '@/lib/sessionCompare';
+
+type Delta = ReturnType<typeof deltaLabel>;
 import { buildCoachRequest, validateImportedSession } from '@/lib/coach';
 import { bestE1RM, detectLiftPRs, type LiftPR } from '@/lib/estimates';
 import { setsByMuscleFromLog, muscleColor, isMuscuLog } from '@/lib/volume';
@@ -243,15 +237,44 @@ const source = ref<Session | null>(null);
 const nextPlan = ref<Session | null>(null);
 const verdicts = ref<NamedVerdict[]>([]);
 const compare = ref<SessionCompare | null>(null);
-/** Le delta d'un total de séance, ou null s'il n'y a pas de séance comparable. */
-function totalDelta(champ: 'volume' | 'sets' | 'minutes', unit: string) {
+/** Les trois deltas du récap, prêts à peindre — null s'il n'y a pas de séance comparable.
+ *  ⚠️ Un `computed`, pas une fonction appelée depuis le template : chacun des trois était
+ *  invoqué TROIS fois (le `v-if`, la classe, le texte), donc neuf appels et six assertions
+ *  `!` pour trois valeurs. Les assertions sont le symptôme : le template ne peut pas
+ *  affiner le type d'un appel de fonction, donc il faut lui jurer ce qu'il vient de
+ *  tester. En le calculant ici, il n'y a plus rien à jurer. */
+const recapDelta = computed(() => {
   const c = compare.value;
   if (!c?.prev) return null;
-  return deltaLabel(c.totals[champ], c.prev[champ], unit);
-}
-/** Ce que cet exercice valait la dernière fois — null s'il est nouveau. */
-function lastTime(id: string) {
-  return compare.value?.exercises.find((e) => e.id === id) ?? null;
+  return {
+    volume: deltaLabel(c.totals.volume, c.prev.volume, 'kg'),
+    minutes: deltaLabel(c.totals.minutes, c.prev.minutes, 'min'),
+    sets: deltaLabel(c.totals.sets, c.prev.sets, 'séries'),
+  };
+});
+
+/** Ce que chaque exercice valait la dernière fois, prêt à peindre : un tableau de 0 ou 1
+ *  élément par exercice. ⚠️ Le tableau plutôt qu'un objet nullable est délibéré : un
+ *  `v-for` n'a rien à affiner, là où un `v-if` obligeait à répéter `lastTime(ex.id)!`
+ *  cinq fois dans le même bloc. Les lignes sont construites UNE fois et gardées stables,
+ *  sinon chaque rendu en recréerait de neuves et Vue re-patcherait le bloc pour rien. */
+const AUCUN: never[] = [];
+const prevRows = computed(() => {
+  const m = new Map<string, { daysSince: number; load: number; reps: number; d: Delta }[]>();
+  for (const e of compare.value?.exercises ?? []) {
+    m.set(e.id, [
+      {
+        daysSince: e.daysSince,
+        load: e.prevLoad,
+        reps: e.prevReps,
+        d: deltaLabel(e.e1rm, e.prevE1rm, 'kg'),
+      },
+    ]);
+  }
+  return m;
+});
+function prevOf(id: string) {
+  return prevRows.value.get(id) ?? AUCUN;
 }
 const history = ref<SessionLog[]>([]);
 const prs = ref<LiftPR[]>([]);
@@ -264,14 +287,11 @@ const importing = ref(false);
 
 const muscleVolume = computed(() => (log.value ? setsByMuscleFromLog(log.value) : []));
 
-const totalVolume = computed(() =>
-  log.value
-    ? log.value.exercises.reduce(
-        (a, ex) => a + ex.performed.reduce((b, s) => b + s.load_kg * s.reps, 0),
-        0,
-      )
-    : 0,
-);
+/** Tonnage de la séance. ⚠️ `sessionTotals`, pas un second `reduce` : le MÊME chiffre était
+ *  calculé deux fois sur CET écran — celui-ci, non arrondi, pour l'affichage, et celui de
+ *  `compare.totals.volume`, arrondi, pour le delta juste en dessous. Deux formules pour une
+ *  quantité finissent toujours par se contredire, et elles avaient déjà commencé. */
+const totalVolume = computed(() => (log.value ? sessionTotals(log.value).volume : 0));
 
 function plannedLabel(t: Partial<ExerciseTarget>): string {
   const range = `${t.sets ?? '?'} × ${t.reps_min ?? '?'}–${t.reps_max ?? '?'}`;

@@ -10,14 +10,16 @@
 //    opposer le volume d'un bas du corps à celui d'un haut du corps ne veut rien dire ;
 //  - au niveau de l'EXERCICE, on compare à la dernière fois qu'on l'a fait, quelle que
 //    soit la séance — c'est toujours pertinent, et c'est ce qui parle le plus.
-import type { SessionLog } from './types';
 import { bestSetE1RM } from './estimates';
+import { daysBetweenUtcIso } from './startDate';
+import type { SessionLog } from './types';
+import type { LogEntry } from './volume';
 
-/** Un bilan avec la date à laquelle il a été enregistré. */
-export interface DatedLog {
-  performedAt: string;
-  log: SessionLog;
-}
+// ⚠️ On réemploie `LogEntry` (volume.ts) plutôt que d'en redéclarer la forme : c'est déjà
+// la monnaie courante de `bodyBalance`, `weeklyVolumeSeries` et `useBalanceInput`. Trois
+// noms pour une structure, et le jour où elle gagne un champ, ces fonctions ne se composent
+// plus sans adaptateur.
+export type { LogEntry };
 
 /** Ce qu'un exercice valait aujourd'hui, et la dernière fois. */
 /** ⚠️ NON exporté : rien ne l'importe (`npm run dead`), et il reste atteignable par
@@ -36,7 +38,7 @@ interface ExerciseDelta {
   daysSince: number;
 }
 
-export interface SessionTotals {
+interface SessionTotals {
   volume: number; // tonnage (kg soulevés)
   sets: number;
   minutes: number;
@@ -63,18 +65,21 @@ export function sessionTotals(log: SessionLog): SessionTotals {
   return { volume: Math.round(volume), sets, minutes: log.duration_min ?? 0 };
 }
 
-function joursEntre(a: string, b: string): number {
-  const ms =
-    new Date(`${a.slice(0, 10)}T12:00:00Z`).getTime() -
-    new Date(`${b.slice(0, 10)}T12:00:00Z`).getTime();
-  return Math.max(0, Math.round(ms / 86400000));
+/** Jours entre deux horodatages de bilan. ⚠️ Passe par `daysBetweenUtcIso` (startDate.ts)
+ *  au lieu d'une 3e copie du même quotient — mais avec DEUX précautions VÉRIFIÉES : elle
+ *  prend ses arguments dans l'ordre INVERSE (ancien, récent), et elle exige un
+ *  `YYYY-MM-DD` — un horodatage complet lui rendrait `NaN`, donc **0 en silence**. D'où le
+ *  découpage, qui n'est pas cosmétique. Le `Math.max(0, …)` d'origine part : `avant` est
+ *  déjà filtré sur `performedAt < current.performedAt`, il ne pouvait jamais mordre. */
+function joursEntre(recent: string, ancien: string): number {
+  return daysBetweenUtcIso(ancien.slice(0, 10), recent.slice(0, 10));
 }
 
 /**
  * Compare une séance à ce qui l'a précédée. `priors` = les autres bilans, dans n'importe
  * quel ordre ; la séance courante en est exclue par son id.
  */
-export function compareSession(current: DatedLog, priors: DatedLog[]): SessionCompare {
+export function compareSession(current: LogEntry, priors: LogEntry[]): SessionCompare {
   // Strictement AVANT la séance courante, du plus récent au plus ancien : la première
   // occurrence trouvée est donc « la dernière fois ».
   // ⚠️ Pas de filtre sur l'id : la comparaison stricte écarte DÉJÀ la séance courante,
@@ -105,7 +110,7 @@ export function compareSession(current: DatedLog, priors: DatedLog[]): SessionCo
     const top = bestSetE1RM(ex.performed ?? []);
     if (!top) continue;
     // La dernière fois qu'on a fait CET exercice, quelle que soit la séance.
-    let found: { d: DatedLog; top: NonNullable<ReturnType<typeof bestSetE1RM>> } | null = null;
+    let found: { d: LogEntry; top: NonNullable<ReturnType<typeof bestSetE1RM>> } | null = null;
     for (const p of avant) {
       const le = (p.log.exercises ?? []).find((e) => e.id === ex.id);
       const t = le ? bestSetE1RM(le.performed ?? []) : null;

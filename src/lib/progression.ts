@@ -24,6 +24,16 @@ function round(n: number, step = 0.25): number {
   return Math.round(n / step) * step;
 }
 
+/** La charge de travail d'une cible — kg, ou lest pour un exercice au poids du corps.
+ *  ⚠️ Écrite TROIS fois avant cette revue, dont DEUX dans la seule branche de décharge
+ *  (avant et après mutation). Et ce diff venait justement d'en supprimer le jumeau de
+ *  `BilanPage`. Une notion, un endroit — mais PRIVÉE : les trois copies vivaient toutes
+ *  dans ce fichier, donc l'exporter n'élargissait la surface publique pour personne.
+ *  `npm run dead` l'a dit dans la foulée. */
+function loadOf(t: ExerciseTarget): number {
+  return t.load_kg ?? t.added_kg ?? 0;
+}
+
 function applyLoad(t: ExerciseTarget, fn: (l: number) => number): void {
   if (typeof t.load_kg === 'number') t.load_kg = Math.max(0, fn(t.load_kg));
   else if (typeof t.added_kg === 'number') t.added_kg = Math.max(0, fn(t.added_kg));
@@ -91,6 +101,13 @@ export interface ExerciseVerdict {
  *
  * `tone` : 'up' (on monte) · 'warn' (plateau — c'est l'information qui manquait) ·
  * 'down' (décharge programmée, qui n'est pas un échec) · 'same' (rien à signaler).
+ *
+ * ⚠️ NE DÉLÈGUE PAS à `deltaLabel` (sessionCompare), qui formate pourtant le même « +X kg »
+ * sur le MÊME écran — et c'est délibéré : `round()` travaille ici au pas de 0,25 kg, donc
+ * un delta vaut 0,25 / 0,75 / −4,75… que l'arrondi au dixième de `deltaLabel` afficherait
+ * « −4,8 kg ». Une charge réelle ne doit pas être arrondie pour ressembler à un tonnage.
+ * Même refus motivé que les trois copies d'`offensePerRound` : elles se ressemblent, elles
+ * ne font pas la même chose.
  */
 export function verdictLabel(v: ExerciseVerdict): { text: string; tone: string } {
   const d = Math.round((v.loadTo - v.loadFrom) * 100) / 100;
@@ -124,6 +141,12 @@ export function verdictLabel(v: ExerciseVerdict): { text: string; tone: string }
  *    reprendre la dernière série. Double progression, détection de plateau et décharge
  *    ne s'appliquaient donc jamais à la façon dont on s'entraîne réellement.
  *
+ * ⚠️ ET CE SECOND USAGE N'EST PAS ENCORE ACQUIS — l'extraction a été faite à la frontière
+ * de l'appelant ACTUEL, pas du concept. Une séance libre construit `planned: {sets: 0,
+ * reps_min: 0, reps_max: 0}` (`live.addExercise`), donc `allHitMin`/`allHitMax` y sont
+ * trivialement vrais et le verdict serait « up » à CHAQUE série. La servir demande une
+ * fourchette de reps dérivée — `repRangeFor` (repScheme.ts) existe pour ça. À faire.
+ *
  * ⚠️ UNE SEULE RÈGLE : `nextSessionDeterministic` l'appelle désormais au lieu de refaire
  * le calcul. Deux implémentations auraient fini par rendre deux verdicts sur la même
  * série — le défaut que ce projet documente à répétition.
@@ -138,25 +161,30 @@ export function exerciseProgression(input: {
   instances: LoggedExercise[];
 }): ExerciseVerdict {
   const { target: t, scheme, increment: inc, instances } = input;
-  const from = t.load_kg ?? t.added_kg ?? 0;
-  const flat = (kind: ProgressionKind): ExerciseVerdict => ({
+  const from = loadOf(t);
+  // Fenêtre des 3 dernières séances de cet exercice — déclarée AVANT la fabrique : sinon
+  // celle-ci doit réécrire sa taille en `Math.min(instances.length, 3)`, soit la MÊME
+  // quantité exprimée de deux façons, ce qui finit toujours par diverger.
+  const window = instances.slice(0, 3);
+  /** UNE fabrique de verdict : sans `to`, la charge ne bouge pas. ⚠️ On n'arrondit PAS
+   *  `from` (une charge saisie à la main peut ne pas tomber sur le pas de 0,25), sinon le
+   *  test `loadTo !== loadFrom` de `planNextSession` déclencherait une écriture inutile. */
+  const mk = (kind: ProgressionKind, to?: number): ExerciseVerdict => ({
     kind,
     loadFrom: from,
-    loadTo: from,
-    window: Math.min(instances.length, 3),
+    loadTo: to === undefined ? from : round(to),
+    window: window.length,
   });
 
   const last = instances[0];
-  if (!last || last.performed.length === 0) return flat('none');
-  if (scheme === 'fixed') return flat('none');
+  if (!last || last.performed.length === 0) return mk('none');
+  if (scheme === 'fixed') return mk('none');
 
   const sets = last.performed;
   const meanDiff = sets.reduce((a, s) => a + s.difficulty, 0) / sets.length;
   const allHitMax = sets.every((s) => s.reps >= t.reps_max);
   const allHitMin = sets.every((s) => s.reps >= t.reps_min);
 
-  // Fenêtre des 3 dernières séances de cet exercice.
-  const window = instances.slice(0, 3);
   // Plateau 1 : échec sous le minimum sur ≥2 des 3 dernières séances.
   const failing = window.filter((le) => le.performed.some((s) => s.reps < t.reps_min)).length >= 2;
   // Plateau 2 : stagnation — charge de travail identique ET meilleures reps qui ne
@@ -169,26 +197,19 @@ export function exerciseProgression(input: {
   const repsFlat = reps.length >= 3 && Math.max(...reps) - Math.min(...reps) <= 1;
   const stalled = sameLoad && repsFlat && !allHitMax;
 
-  const verdict = (kind: ProgressionKind, to: number): ExerciseVerdict => ({
-    kind,
-    loadFrom: from,
-    loadTo: round(to),
-    window: window.length,
-  });
-
   if (scheme === 'linear') {
-    if (failing) return verdict('plateau_fail', from * 0.9);
-    if (stalled) return verdict('plateau_stall', from * 0.9);
-    if (allHitMin) return verdict('up', from + inc);
-    return flat('hold');
+    if (failing) return mk('plateau_fail', from * 0.9);
+    if (stalled) return mk('plateau_stall', from * 0.9);
+    if (allHitMin) return mk('up', from + inc);
+    return mk('hold');
   }
 
   // double / rir (autorégulation via la note 1–4)
-  if (allHitMax && meanDiff <= 2) return verdict('up', from + inc);
-  if (failing) return verdict('plateau_fail', from * 0.95);
-  if (stalled) return verdict('plateau_stall', from * 0.95);
+  if (allHitMax && meanDiff <= 2) return mk('up', from + inc);
+  if (failing) return mk('plateau_fail', from * 0.95);
+  if (stalled) return mk('plateau_stall', from * 0.95);
   // sinon : charge maintenue, la progression se fait en répétitions
-  return flat('hold');
+  return mk('hold');
 }
 
 /**

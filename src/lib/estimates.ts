@@ -113,19 +113,27 @@ export function personalRecords(
       const top = bestSetE1RM(ex.performed ?? []);
       if (!top) continue;
       const prev = best.get(ex.id);
-      const rec: PersonalRecord = {
-        id: ex.id,
-        name: ex.name,
-        e1rm: top.e1rm,
-        load: top.set.load_kg,
-        reps: top.set.reps,
-        dateIso: day,
-        sessions: (prev?.sessions ?? 0) + 1,
-      };
-      if (ex.muscle_primary) rec.muscle = ex.muscle_primary;
+      // ⚠️ On n'alloue QUE sur un vrai record. L'écriture d'avant construisait `rec` à
+      // chaque paire (bilan, exercice) pour la jeter aussitôt, puis en allouait un SECOND
+      // par étalement juste pour incrémenter un compteur — mesuré ~3 550 objets pour 50
+      // résultats, et deux fois le temps de calcul.
       // Strictement supérieur : une égalité laisse le record à sa date d'origine.
-      if (!prev || top.e1rm > prev.e1rm) best.set(ex.id, rec);
-      else best.set(ex.id, { ...prev, name: ex.name, sessions: rec.sessions });
+      if (!prev || top.e1rm > prev.e1rm) {
+        const rec: PersonalRecord = {
+          id: ex.id,
+          name: ex.name,
+          e1rm: top.e1rm,
+          load: top.set.load_kg,
+          reps: top.set.reps,
+          dateIso: day,
+          sessions: (prev?.sessions ?? 0) + 1,
+        };
+        if (ex.muscle_primary) rec.muscle = ex.muscle_primary;
+        best.set(ex.id, rec);
+      } else {
+        prev.sessions++;
+        prev.name = ex.name; // le nom le plus RÉCENT gagne (un exercice peut être renommé)
+      }
     }
   }
   return [...best.values()].sort((a, b) => b.e1rm - a.e1rm || a.name.localeCompare(b.name, 'fr'));

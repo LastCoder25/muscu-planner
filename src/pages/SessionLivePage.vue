@@ -189,7 +189,7 @@
               {{ d.n }}
             </button>
             <button
-              v-if="ex.sets.length > 1"
+              v-if="workSets(ex.sets).length > 1"
               class="ediff rm"
               aria-label="Supprimer la série"
               @click="removeAt(activeIdx)"
@@ -323,7 +323,7 @@ import { useProfileStore } from '@/stores/profile';
 import { useSessionsStore } from '@/stores/sessions';
 import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
-import { setOrdinal } from '@/lib/warmup';
+import { firstWorkIndex, isWorkSet, setOrdinal, workSets } from '@/lib/warmup';
 import { useProgress } from '@/composables/useProgress';
 import { useXpFx } from '@/composables/useXpFx';
 import SwapSheet from '@/components/SwapSheet.vue';
@@ -355,7 +355,7 @@ const curSetIndex = computed(() => ex.value?.sets.findIndex((s) => !s.done) ?? -
 // Index de la 1re série de TRAVAIL : c'est elle qui porte la charge de référence, pas
 // `sets[0]` — les approches la précèdent. Source unique des tests « suis-je sur la
 // première série ? », qui pilotent le report de charge.
-const firstWorkIdx = computed(() => ex.value?.sets.findIndex((s: LiveSet) => !s.warmup) ?? -1);
+const firstWorkIdx = computed(() => (ex.value ? firstWorkIndex(ex.value.sets) : -1));
 // « Approche 2 » / « Série 3 » — numérotées chacune dans sa suite (cf. setOrdinal).
 function setName(i: number): string {
   const sets = ex.value?.sets;
@@ -368,7 +368,9 @@ const curSet = computed(() => (curSetIndex.value >= 0 ? ex.value!.sets[curSetInd
 // ne confirmerait jamais — deux chiffres pour la même chose.
 const volume = computed(() =>
   ex.value
-    ? ex.value.sets.filter((s) => s.done && !s.warmup).reduce((a, s) => a + s.load_kg * s.reps, 0)
+    ? ex.value.sets
+        .filter((s) => s.done && isWorkSet(s))
+        .reduce((a, s) => a + s.load_kg * s.reps, 0)
     : 0,
 );
 const showRir = computed(() => profileStore.levelConfig?.effort_signal === 'rir');
@@ -376,7 +378,7 @@ const isTimeEx = computed(() => ex.value?.planned.unit === 'time');
 function exDone(e: LiveExercise): boolean {
   // Un exercice est fait quand son TRAVAIL est fait : sauter l'échauffement ne doit pas
   // le laisser éternellement « en cours » dans la frise des exos.
-  const work = e.sets.filter((s: LiveSet) => !s.warmup);
+  const work = workSets(e.sets);
   return work.length > 0 && work.every((s: LiveSet) => s.done);
 }
 
@@ -472,7 +474,7 @@ function propagateLoad() {
   const load = e.sets[first]!.load_kg;
   for (let j = first + 1; j < e.sets.length; j++) {
     const s = e.sets[j]!;
-    if (!s.done && !s.warmup) s.load_kg = load;
+    if (!s.done && isWorkSet(s)) s.load_kg = load;
   }
 }
 function onActiveLoad() {

@@ -12,7 +12,7 @@ import type {
   Difficulty,
 } from '@/lib/types';
 import { SCHEMA_VERSION } from '@/lib/types';
-import { warmupSets } from '@/lib/warmup';
+import { isWorkSet, warmupSets, workSets } from '@/lib/warmup';
 
 export interface LiveSet {
   uid: string; // clé stable (évite les décalages de liste à la suppression)
@@ -126,7 +126,7 @@ export const useLiveStore = defineStore('live', () => {
         // Séries d'approche en tête (dérivées de la charge, jamais persistées). Elles
         // sortiront du log dans `buildLog` : elles ne comptent nulle part.
         const warm = warmupSets(ex).map((w) => {
-          const s = blank(w.load_kg ?? base, w.reps, w.rest_seconds);
+          const s = blank(w.load_kg, w.reps, w.rest_seconds);
           s.warmup = true;
           return s;
         });
@@ -249,7 +249,10 @@ export const useLiveStore = defineStore('live', () => {
 
   function removeSet(i: number) {
     const ex = current.value;
-    if (!ex || ex.sets.length <= 1) return;
+    // ⚠️ « au moins UNE SÉRIE DE TRAVAIL », pas « au moins une ligne » : avec les approches,
+    // le garde d'origine laissait supprimer toutes les séries de travail d'un exercice qui
+    // en compte trois — il ne se terminait alors jamais et sortait du log vide.
+    if (!ex || workSets(ex.sets).length <= 1) return;
     ex.sets.splice(i, 1);
     persist();
   }
@@ -309,7 +312,7 @@ export const useLiveStore = defineStore('live', () => {
         // équilibre du corps, records e1RM, moteur de progression, stats) — y compris
         // ceux qu'on écrira demain. Filtrer chez chacun aurait garanti la divergence.
         performed: ex.sets
-          .filter((s) => s.done && !s.warmup)
+          .filter((s) => s.done && isWorkSet(s))
           .map<PerformedSet>((s, i) => {
             const ps: PerformedSet = {
               set: i + 1,

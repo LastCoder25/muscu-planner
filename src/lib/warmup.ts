@@ -1,6 +1,10 @@
 // warmup.ts — séries d'APPROCHE d'un exercice chargé (montée en charge avant le travail).
 //
-// ⚠️ ELLES SONT DÉRIVÉES, JAMAIS PERSISTÉES. Une approche n'est qu'un pourcentage de la
+// ⚠️ Nuance sur « jamais persistées » : c'est vrai de la BASE, pas du `localStorage`. Le run
+// en cours y est écrit entier par `live.persist`, approches comprises — sinon reprendre une
+// séance au milieu d'une montée en charge redemanderait les approches déjà faites.
+//
+// ⚠️ ELLES SONT DÉRIVÉES, JAMAIS ÉCRITES EN BASE. Une approche n'est qu'un pourcentage de la
 // charge de travail : la stocker, c'est se condamner à la recalculer à chaque fois que la
 // charge bouge (progression, deload, décharge planifiée) — et à la voir diverger le jour où
 // un chemin oublie de le faire. Dérivée, elle suit toute seule, et `nextSessionDeterministic`
@@ -48,7 +52,7 @@ function roundTo(n: number, step: number): number {
  * Garanties (testées) : charges STRICTEMENT croissantes, toujours sous la charge de
  * travail, jamais nulles, et reps décroissantes.
  */
-export function warmupSets(ex: PlannedExercise): PrescribedSet[] {
+export function warmupSets(ex: PlannedExercise): WarmupSet[] {
   const t = ex.target;
   // Chaque série a sa charge propre (pyramide importée d'une IA) : l'auteur a écrit la
   // montée lui-même, et elle commence souvent léger. On ne s'en mêle pas — même retenue
@@ -79,6 +83,42 @@ export function warmupSets(ex: PlannedExercise): PrescribedSet[] {
   }));
 }
 
+/** Une approche a TOUJOURS sa charge et son repos — `warmupSets` les pose tous les deux.
+ *  ⚠️ Le dire au TYPE plutôt que le rattraper par des replis `??` chez les appelants :
+ *  deux d'entre eux en portaient, tous deux inatteignables (la famille de gardes dormants
+ *  que ce fichier documente plus bas). Une propriété prouvée vaut mieux qu'une propriété
+ *  rattrapée. `WarmupSet[]` reste assignable partout où `PrescribedSet[]` est attendu. */
+export type WarmupSet = Required<PrescribedSet>;
+
+/** Une série qui COMPTE : du travail, pas de l'échauffement. */
+export function isWorkSet(s: { warmup?: boolean }): boolean {
+  return !s.warmup;
+}
+
+/**
+ * Les séries de TRAVAIL d'un exercice en cours.
+ *
+ * ⚠️ SOURCE UNIQUE DE « QU'EST-CE QUI COMPTE ». Le LOG est protégé par un point de passage
+ * unique (`buildLog` écarte les approches), mais `LiveExercise.sets`, lui, les contient —
+ * et SEPT endroits ré-exprimaient chacun la règle à leur façon (volume, exDone, report de
+ * charge, première série, buildLog, et deux gardes « il reste au moins une série »).
+ *
+ * ⚠️ L'UN D'EUX ÉTAIT FAUX, et il a fallu une revue pour le voir : `removeSet` gardait
+ * `sets.length <= 1`, qui voulait dire « on garde au moins une série » et disait depuis
+ * les approches « au moins une série OU approche ». Sur un exercice à 3 approches, on
+ * pouvait donc supprimer les 3 séries de TRAVAIL : l'exercice ne se terminait alors
+ * jamais (`exDone` sur une liste de travail vide) et sortait du log sans une seule série.
+ * Le drapeau fuit dans TOUT invariant exprimé sur `sets` — d'où cette partition nommée.
+ */
+export function workSets<T extends { warmup?: boolean }>(sets: T[]): T[] {
+  return sets.filter(isWorkSet);
+}
+
+/** Index de la 1re série de TRAVAIL (−1 s'il n'y en a pas) : elle porte la charge de référence. */
+export function firstWorkIndex(sets: { warmup?: boolean }[]): number {
+  return sets.findIndex(isWorkSet);
+}
+
 /**
  * Rang d'une série DANS SA PROPRE SUITE (1-based) : les approches se comptent entre
  * elles, les séries de travail entre elles. Sans ça, un exercice à 2 approches afficherait
@@ -99,7 +139,7 @@ export function warmupSeconds(ex: PlannedExercise): number {
   for (const s of warmupSets(ex)) {
     // Même modèle d'exécution que `estimateDurationMin` : ~4 s par rep, et les deux
     // côtés d'un unilatéral.
-    sec += (s.rest_seconds ?? WARMUP.restSec) + s.reps * 4 * sides;
+    sec += s.rest_seconds + s.reps * 4 * sides;
   }
   return sec;
 }

@@ -1,13 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { deriveLevelConfig } from '@/lib/levelConfig';
 import type { Level } from '@/lib/types';
 
 const NIVEAUX: Level[] = ['debutant', 'intermediaire', 'avance'];
 
+// ⚠️ Chemin ancré sur CE fichier, pas sur le répertoire courant : un `'src'` relatif ne
+// vaut que si le lanceur part de la racine — et un test dont le résultat dépend du dossier
+// d'où on l'appelle rend une LISTE VIDE plutôt qu'une erreur, donc il passe au vert en ne
+// vérifiant plus rien. C'est le mode de panne que ce garde-fou existe pour éviter.
+const RACINE_SRC = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
+
 /** Tout `src/`, sauf les deux fichiers qui DÉCLARENT le contrat. */
-function fichiersSrc(dir = 'src', out: string[] = []): string[] {
+function fichiersSrc(dir = RACINE_SRC, out: string[] = []): string[] {
   for (const e of readdirSync(dir)) {
     const p = join(dir, e);
     if (statSync(p).isDirectory()) fichiersSrc(p, out);
@@ -26,17 +33,26 @@ describe('level_config — le contrat ne promet que ce que le code tient', () =>
   it('CHAQUE champ dérivé est lu quelque part dans src/', () => {
     const champs = Object.keys(deriveLevelConfig('intermediaire'));
     const sources = fichiersSrc().map((f) => readFileSync(f, 'utf8'));
-    // MÉTADONNÉES : elles décrivent le document, pas un comportement, donc n'avoir aucun
-    // lecteur applicatif est normal — elles partent dans l'export `coach_request` où une
-    // IA externe les lit.
-    // ⚠️ `overridable` est le cas LIMITE, et ce test l'a trouvé : il annonce « on peut
-    // écraser n'importe quel champ ensuite » et AUCUN code ne le permet. C'est la même
-    // promesse non tenue que `ui_density` et `auto_deload`, en plus discret. Exempté ici
-    // parce qu'il sort du périmètre du retrait décidé — à TRANCHER : le brancher (une
-    // surcharge de profil) ou le retirer du contrat.
-    const META = ['schema_version', 'type', 'derived_from', 'overridable'];
+    // ⚠️ Un balayage qui ne trouve rien à balayer passe au vert en ne prouvant rien.
+    expect(champs.length, 'le contrat a des champs').toBeGreaterThan(5);
+    expect(sources.length, 'on a bien lu src/').toBeGreaterThan(50);
+    // MÉTADONNÉES du document stocké en base (colonne `level_config` jsonb) : elles
+    // décrivent le DOCUMENT, pas un comportement, donc n'avoir aucun lecteur applicatif
+    // est normal — `schema_version` sert à la migration le jour où le contrat bouge.
+    // ⚠️ La première rédaction de ce commentaire les disait « lues par une IA externe via
+    // l'export `coach_request` ». VÉRIFIÉ : `coach.ts` ne mentionne pas `level_config` une
+    // seule fois. Une exemption justifiée par une raison fausse est une exemption qu'on
+    // finit par étendre — la moitié du travail d'un garde-fou est de dire le vrai.
+    const META = ['schema_version', 'type', 'derived_from'];
+    // ⚠️ DETTE ASSUMÉE, et séparée des métadonnées EXPRÈS : `overridable` n'en est pas une.
+    // Il annonce « on peut écraser n'importe quel champ ensuite » et AUCUN code ne le
+    // permet — la même promesse non tenue que `ui_density` et `auto_deload`, en plus
+    // discret. Exempté parce qu'il sort du périmètre du retrait décidé, pas parce qu'il
+    // est légitime. À TRANCHER : le brancher (une surcharge de profil) ou le retirer.
+    const DETTE = ['overridable'];
+    const exempts = [...META, ...DETTE];
     const orphelins = champs.filter(
-      (c) => !META.includes(c) && !sources.some((s) => s.includes(c)),
+      (c) => !exempts.includes(c) && !sources.some((s) => s.includes(c)),
     );
     expect(
       orphelins,

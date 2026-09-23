@@ -101,10 +101,11 @@
 
 <script setup lang="ts">
 defineProps<{ embedded?: boolean }>();
-import { computed } from 'vue';
+import { computed, toRaw } from 'vue';
 import { useProgress } from '@/composables/useProgress';
 import { useLogsStore } from '@/stores/logs';
 import { personalRecords } from '@/lib/estimates';
+import { dayLabelShort } from '@/lib/startDate';
 import { muscleColor } from '@/lib/volume';
 import {
   buildTrophies,
@@ -119,32 +120,33 @@ const entries = computed(() => progress.sportEntries.value);
 // Mur de records. ⚠️ On lit le cache PARTAGÉ des bilans (`useProgress` appelle déjà
 // `logs.fetchAll()`) : une seconde requête ici referait le travail pour rien — le
 // double téléchargement corrigé en v0.842.
+// ⚠️ `toRaw` sur le PAYLOAD, pas sur le tableau. `personalRecords` descend jusqu'à chaque
+// série de chaque exercice de chaque bilan : à travers les proxies de Vue, chacun de ces
+// accès passe par un `get` qui enregistre une dépendance — mesuré 3 à 9 fois plus lent,
+// ~30-45 ms sur un téléphone, pour un résultat qu'on ne relit jamais champ par champ.
+// ⚠️ Débruter le TABLEAU ferait perdre le suivi de l'itération, et `logs.add` fait un
+// `unshift` EN PLACE : un bilan enregistré n'apparaîtrait plus. On garde donc `.map` sur
+// le tableau réactif (longueur et indices suivis) et on ne débrute que ce qu'on parcourt.
 const logsStore = useLogsStore();
 const records = computed(() =>
-  personalRecords(logsStore.all.map((r) => ({ performedAt: r.performed_at, log: r.payload }))),
+  personalRecords(
+    logsStore.all.map((r) => ({ performedAt: r.performed_at, log: toRaw(r.payload) })),
+  ),
 );
 
 /** « 18 juin » cette année, « 18 juin 25 » sinon. ⚠️ L'année courante est du bruit : sans
- *  cette coupe, la ligne de méta passe sur deux lignes à 344 px (vu au banc). */
+ *  cette coupe, la ligne de méta passe sur deux lignes à 344 px (vu au banc).
+ *
+ *  ⚠️ Le jour et le mois viennent de `dayLabelShort`, PAS d'une table écrite à la main :
+ *  la mienne donnait « 18 sep » là où les autres écrans, tous passés par `Intl`, écrivent
+ *  « 18 sept. » — une seule app, deux façons d'abréger un mois. Seule la coupe d'année
+ *  reste ici : `dayLabelShort` ne la porte pas, et elle n'a de sens que pour un record,
+ *  qui peut dater de l'an dernier. */
 function fmtDay(iso: string): string {
-  const [y, m, d] = iso.split('-');
-  const court = `${d} ${MOIS[Number(m) - 1]}`;
-  return y === String(new Date().getFullYear()) ? court : `${court} ${y!.slice(2)}`;
+  const court = dayLabelShort(iso);
+  const y = iso.slice(0, 4);
+  return y === String(new Date().getFullYear()) ? court : `${court} ${y.slice(2)}`;
 }
-const MOIS = [
-  'jan',
-  'fév',
-  'mar',
-  'avr',
-  'mai',
-  'juin',
-  'juil',
-  'août',
-  'sep',
-  'oct',
-  'nov',
-  'déc',
-];
 
 /** Ancienneté d'un record : « aujourd'hui », « il y a 12 j », « il y a 6 mois ». */
 function ago(iso: string): string {
