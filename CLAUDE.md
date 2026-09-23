@@ -2945,10 +2945,39 @@ bascule cockpit) — et échoue sur : HTTP ≠ 200, **toute** erreur console ou 
 **débordement horizontal** (garde-fou explicite du § Responsive), page quasi vide. Captures dans
 `dist/smoke/` (déjà gitignoré via `/dist`).
 
-⚠️ **PORTÉE HONNÊTE — elle ne dépasse pas l’écran de connexion.** Sans identifiants Supabase elle
-attrape le boot cassé, le chunk manquant, l’erreur au démarrage et le débordement ; **PAS** la
-géométrie de la base ni les écrans de jeu, qui sont précisément là où les défauts cités sont nés.
-Aller plus loin demanderait un compte de test dédié — **jamais d'identifiants dans le dépôt**.
+⚠️ **ELLE PASSE LA CONNEXION DEPUIS LA v0.1103** (avant : elle s'arrêtait à l'écran de connexion,
+donc elle ne voyait AUCUN des écrans où les trois défauts cités sont nés). Avec un compte de test,
+elle parcourt **14 écrans à 344 et 390 px**, clique les **4 onglets de l'Aventure** et capture
+tout. Sans `SMOKE_EMAIL`/`SMOKE_PASSWORD` dans `.env` (gitignoré), elle garde **exactement** son
+ancien comportement — aucune régression sur un poste ou une CI qui ne les a pas. Le compte se
+(re)pose avec **`node scripts/seed-smoke-account.mjs`** (idempotent, mot de passe TIRÉ AU HASARD
+puis ajouté à `.env` ; `.env.example` ne porte que des clés vides). **Jamais d'identifiants dans le
+dépôt.**
+
+- ⚠️ **Elle ne va JAMAIS sur `/leaderboard`** : cette page **PUBLIE** les niveaux du compte courant
+  dans un classement que tous les joueurs voient.
+- ⚠️ Le compte **écrit dans la base de PRODUCTION**, et c'est assumé (RLS own-only). Le script
+  passe par **le JWT du compte, jamais en service role** : une policy qui refuse s'apprend là.
+- Ses données (`scripts/smoke-seed.json`) sont **GÉNÉRÉES par le code** (`formToProfile`,
+  `deriveLevelConfig`, `buildProgram`) puis figées — conformes au contrat par construction. Deux
+  bilans de la **même séance** à une semaine d'écart, un exercice qui monte et un qui stagne : le
+  minimum pour que le bilan ait une comparaison, des verdicts et des records à montrer.
+- ⚠️ **Un onglet introuvable la fait ÉCHOUER.** Le premier sélecteur ne connaissait que `.q-tab`
+  alors que l'Aventure utilise des boutons maison (`.seg-b`) : les 4 onglets n'étaient jamais
+  cliqués, **en silence**, et elle passait au vert. Un parcours qui saute la moitié des écrans
+  sans le dire donne le vert sans la couverture.
+
+🐛 **ET ELLE A TROUVÉ UN DÉFAUT STRUCTUREL DÈS SA PREMIÈRE EXÉCUTION (v0.1103)** : `/program`
+débordait de 16 px aux deux largeurs — et la cause n'était pas dans `/program`. Les **36 pages**
+s'ouvrent par `<component :is="embedded ? 'div' : 'q-page'">` (la forme du cockpit, où une page
+devient un `div` dans le volet droit). Or **`@quasar/app-vite` importe les composants en ANALYSANT
+LES TEMPLATES** : il voit `<q-page>` écrit en clair, **pas une CHAÎNE passée à `:is`**. QPage
+n'était donc importé nulle part et Vue rendait un **élément HTML inconnu**, donc `display: inline`
+— les gouttières de 16 px ne poussaient pas leur contenu (les cartes touchaient les bords) et le
+`min-height` calculé depuis la hauteur du header n'existait pas. Corrigé **à la racine**, en une
+ligne dans **`src/boot/qpage.ts`** (`app.component('QPage', QPage)`) plutôt que par 36 imports qui
+divergeraient : il aurait suffi qu'une page future oublie le sien pour retrouver le même silence.
+⚠️ **Tout composant nommé par une CHAÎNE a le même problème** — il n'est jamais auto-importé.
 
 ⚠️ **Vérifiée par MUTATION, comme le veut la règle** : un débordement injecté et une erreur JS
 injectée dans le build la font échouer toutes les deux. Une porte jamais vue rouge ne prouve rien.
