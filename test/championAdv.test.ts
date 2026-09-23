@@ -331,3 +331,22 @@ describe('✨ ce que veut dire « Éveil » (awakenExplain)', () => {
     expect(e.intro).toContain('n’en a pas');
   });
 });
+
+describe('🏷️ le nom d’un champion suit le roster', () => {
+  it('un champion tiré avant un renommage reprend son nom actuel, le reste ne bouge pas', async () => {
+    const { syncChampionName } = await import('@/lib/adventurers');
+    const champ = CHAMPIONS[0]!;
+    const base = { id: 'x', seed: 1, path: [], level: 1, xp: 0 };
+    const old = { ...base, name: 'Ancien Nom', championId: champ.id };
+    expect(syncChampionName(old).name).toBe(champ.name);
+    expect(syncChampionName(old).id).toBe('x');
+    // Déjà à jour → le MÊME objet (pas d'écriture pour rien).
+    const ok = { ...base, name: champ.name, championId: champ.id };
+    expect(syncChampionName(ok)).toBe(ok);
+    // Un aventurier legacy garde son prénom ; un id inconnu ne casse rien.
+    const legacy = { ...base, name: 'Léa', path: ['guerrier'] };
+    expect(syncChampionName(legacy)).toBe(legacy);
+    const gone = { ...base, name: 'Fantôme', championId: 'nexiste-pas' };
+    expect(syncChampionName(gone)).toBe(gone);
+  });
+});

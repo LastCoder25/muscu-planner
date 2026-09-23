@@ -157,6 +157,7 @@ import {
   advNextAscension,
   ascendAdventurer,
   engageCap,
+  syncChampionName,
   type Adventurer,
 } from '@/lib/adventurers';
 import {
@@ -343,7 +344,8 @@ export const useCharacterStore = defineStore('character', () => {
       const rest: Record<string, unknown> = { ...a };
       delete rest.familiarId;
       delete rest.talentId;
-      return rest as unknown as Adventurer;
+      // 🏷️ Les champions tirés avant le renommage du roster reprennent leur nom actuel.
+      return syncChampionName(rest as unknown as Adventurer);
     });
     // ⚠️ Les convois ENCAISSÉS sont taillés au chargement : la liste ne se purgeait
     // jamais (35 convois mesurés sur un compte réel, dont 30 dépensés). Un non-encaissé

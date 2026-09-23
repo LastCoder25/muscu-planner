@@ -1346,6 +1346,15 @@ export function advChampion(adv: Adventurer): Champion | undefined {
   return CHAMPION_BY_ID.get(adv.championId) ?? REF_CHAMPION_BY_ID.get(adv.championId);
 }
 
+/** 🏷️ Le nom d'un champion est COPIÉ dans le vivier au tirage (`grantChampion`) : quand le
+ *  roster est renommé (v0.1106, noms de gacha), les champions déjà tirés gardaient l'ancien.
+ *  On le relit au chargement — le roster fait foi, l'id ne change jamais. Rend le MÊME objet
+ *  quand rien ne change (pas d'écriture pour rien). Un aventurier legacy garde son prénom. */
+export function syncChampionName(adv: Adventurer): Adventurer {
+  const champ = adv.championId ? CHAMPION_BY_ID.get(adv.championId) : undefined;
+  return champ && adv.name !== champ.name ? { ...adv, name: champ.name } : adv;
+}
+
 /** Son rang d'Éveil, dérivé du nombre d'exemplaires. */
 export function advAwaken(adv: Adventurer): number {
   return awakenLevel(adv.copies ?? 1);
