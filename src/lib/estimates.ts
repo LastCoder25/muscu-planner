@@ -2,6 +2,7 @@
 // Pur (aucune dépendance Vue/Supabase). Consommé par le Bilan (Étape 4.1)
 // et l'affichage de tendances. Formule d'Epley.
 import type { PerformedSet, Session, SessionLog } from './types';
+import { warmupSeconds } from './warmup';
 
 function round(n: number, step = 0.25): number {
   return Math.round(n / step) * step;
@@ -83,6 +84,10 @@ export function estimateDurationMin(session: Session): number {
     const exec = isTime ? repsAvg : Math.max(30, repsAvg * 4);
     const sides = ex.unilateral ? 2 : 1; // unilatéral : exécution des deux côtés
     sec += SETUP_PER_EXERCISE_SEC;
+    // Montée en charge (dérivée, cf. warmup.ts). Le forfait `WARMUP_SEC` couvre
+    // l'échauffement GÉNÉRAL (entrée en salle, mobilité) ; ceci couvre les approches
+    // à la barre, qui ne se voient nulle part ailleurs dans la durée.
+    sec += warmupSeconds(ex);
     if (ex.prescription?.length) {
       // Repos propre à chaque série (pyramide importée : repos croissant).
       for (const p of ex.prescription) sec += (p.rest_seconds ?? exRest) + exec * sides;
