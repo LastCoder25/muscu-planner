@@ -468,9 +468,27 @@ describe('👥 une équipe n’est bornée que par le Panthéon (v0.1038)', () =
 });
 
 describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => {
-  it('⚠️ jusqu’à 3 membres rien ne change — la calibration de la montée tient', () => {
-    for (const n of [1, 2, 3]) expect(missionXpSplit(n, false)).toBe(1);
-    expect(missionXpSplit(1, true)).toBe(1); // héros (2) + 1 = 3
+  it('⚠️ le partage est STRICT dès le 1er membre (v0.1107)', () => {
+    // ⚠️ RÉÉCRIT. Il épinglait « jusqu’à 3 membres rien ne change » — le palier que la
+    // refonte supprime (décision de l’utilisateur : « c’est normal de diviser le total
+    // d’XP d’un lieu entre les participants »). L’XP d’un lieu est désormais FIXE et se
+    // divise dès le deuxième champion : un champion seul la prend entière.
+    expect(missionXpSplit(1, false)).toBeCloseTo(XP_TEAM_REF);
+    expect(missionXpSplit(2, false)).toBeCloseTo(XP_TEAM_REF / 2);
+    expect(missionXpSplit(XP_TEAM_REF, false)).toBe(1);
+    // Le héros prend deux parts : il VAUT deux champions dans un groupe.
+    expect(missionXpSplit(1, true)).toBe(1);
+  });
+
+  it('⚠️ PARTAGER veut dire que le TOTAL de l’équipe ne bouge pas', () => {
+    // La propriété centrale du partage, et elle n’était testée nulle part : tant que le
+    // plancher ne mord pas, l’XP du LIEU est une enveloppe — la répartir autrement ne la
+    // crée ni ne la détruit. C’est ce qui rend « qualité ou quantité » honnête.
+    const total = (n: number) => n * missionXpSplit(n, false);
+    for (let n = 1; n <= 6; n++) expect(total(n), `n=${n}`).toBeCloseTo(XP_TEAM_REF);
+    // Au-delà, le plancher en rend PLUS que l’enveloppe : c’est voulu (cf. plus bas),
+    // sinon gagner à 10 rapporterait moins que perdre à 3.
+    expect(total(10)).toBeGreaterThan(XP_TEAM_REF);
   });
 
   it('au-delà, le socle se partage à parts égales ; le héros compte pour 2', () => {
@@ -518,9 +536,11 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
     // Un champion en surnombre rapporte toujours moins qu'à l'escorte de référence…
     for (let n = XP_TEAM_REF + 1; n <= 20; n++)
       expect(missionXpSplit(n, false)).toBeLessThan(missionXpSplit(XP_TEAM_REF, false));
-    // …et jusqu'à 6 membres, RIEN ne change (la calibration d'avant est intacte).
+    // …et le partage suit exactement l’enveloppe tant que le plancher ne mord pas.
     for (const n of [1, 2, 3, 4, 5, 6])
-      expect(missionXpSplit(n, false), `n=${n}`).toBeCloseTo(Math.min(1, XP_TEAM_REF / n));
+      expect(missionXpSplit(n, false), `n=${n}`).toBeCloseTo(
+        Math.max(CARAVAN.xpLossShare, XP_TEAM_REF / n),
+      );
   });
 
   it('le socle d’un membre baisse quand l’équipe grossit, la part des abattus reste la sienne', () => {

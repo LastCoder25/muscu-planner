@@ -16,6 +16,7 @@ import {
   CARAVAN,
   catchUpMult,
   missionXpFor,
+  missionXpSplit,
   missionXpPreview,
   canSendCaravan,
   caravanClaimRoster,
@@ -105,6 +106,7 @@ import {
   type Poi,
   type PoiType,
 } from '@/lib/expedition';
+import { poiDifficultyLevel } from '@/lib/poiDifficulty';
 
 const poi = (over: Partial<Poi> = {}): Poi => ({
   id: 'p',
@@ -450,31 +452,34 @@ describe('salaires, XP et garde-fous', () => {
       caravanWages(team(3), poi({ level: 10 })),
     );
   });
-  it('⚠️ l’XP a un RENDEMENT DÉCROISSANT sous le niveau de l’aventurier', () => {
-    // Sinon on farme la route la plus courte à l'infini et le choix de destination meurt.
-    // ⚠️ À MÊME POI : c’est l’écart de niveau qui doit faire chuter le gain. Comparer
-    // deux POI de niveaux différents ne testait que le socle `base`, pas la décroissance —
-    // la mutation qui retire le ratio passait donc au vert.
+  it('⚠️ l’XP a un RENDEMENT DÉCROISSANT sous la DIFFICULTÉ du lieu', () => {
+    // Sinon on farme le lieu le plus facile à l’infini et le choix de destination meurt.
+    // ⚠️ À MÊME POI : c’est l’écart de niveau qui doit faire chuter le gain. Comparer deux
+    // POI différents ne testerait que le socle, pas la décroissance.
+    // ⚠️ La comparaison se fait sur la DIFFICULTÉ (v0.1107), pas sur `poi.level` : un lieu
+    // à un seul ennemi ne vaut pas un lieu qui en aligne trois.
     const facile = poi({ level: 5 });
-    expect(missionXp(refAdventurer(30), facile, true)).toBeLessThan(
-      missionXp(refAdventurer(5), facile, true),
+    const d = poiDifficultyLevel(facile);
+    expect(missionXp(refAdventurer(d * 4), facile, true)).toBeLessThan(
+      missionXp(refAdventurer(d), facile, true),
     );
-    // …et une route à son niveau reste pleine.
-    expect(missionXp(refAdventurer(5), facile, true)).toBe(
-      missionXp(refAdventurer(3), facile, true),
+    // …et un lieu à sa hauteur reste plein : sous la difficulté, le ratio est plafonné.
+    expect(missionXp(refAdventurer(d), facile, true)).toBe(
+      missionXp(refAdventurer(Math.max(1, d - 1)), facile, true),
     );
   });
-  it('🪙 le SOCLE suit le niveau de RÉCOMPENSE, la réduction suit le RANG (v0.1033)', () => {
-    // Un lieu tiré Bronze (niv 5) sur la carte d'un joueur 40 : sa récompense vaut niv 40.
-    const bronze = { ...poi({ level: 5 }), rewardLevel: 40 };
-    // Un champion Bronze y prend le socle PLEIN du niveau de récompense (il rattrape)…
-    expect(missionXp(refAdventurer(5), bronze, true)).toBe(Math.round(trialXpBase(40)));
-    // …un champion de niveau 40 y garde la réduction (5/40 → plancher 0,15).
-    expect(missionXp(refAdventurer(40), bronze, true)).toBe(
-      Math.round(trialXpBase(40) * 0.15 ** 1.5),
+  it('🎯 le SOCLE suit la DIFFICULTÉ — le niveau des ennemis ET leur nombre (v0.1107)', () => {
+    // ⚠️ RÉÉCRIT. Il épinglait « le socle suit le niveau de RÉCOMPENSE » (v0.1033) : le
+    // socle lisait donc une fenêtre calée sur le JOUEUR, si bien qu’un lieu à 1 ennemi et
+    // un lieu à 3 du même niveau rapportaient EXACTEMENT la même chose (mesuré : 30/30/30).
+    // Ce que le joueur affronte ne se lisait nulle part dans son XP.
+    const p5 = poi({ level: 5 });
+    expect(missionXp(refAdventurer(1), p5, true)).toBe(
+      Math.round(trialXpBase(poiDifficultyLevel(p5))),
     );
-    // Sans niveau de récompense (lieux d'avant, failles), rien ne change.
-    expect(missionXp(refAdventurer(5), poi({ level: 5 }), true)).toBe(Math.round(trialXpBase(5)));
+    // ⚠️ Le niveau de RÉCOMPENSE n’y entre plus : il paie l’or, pas l’apprentissage.
+    const riche = { ...poi({ level: 5 }), rewardLevel: 40 };
+    expect(missionXp(refAdventurer(1), riche, true)).toBe(missionXp(refAdventurer(1), p5, true));
   });
   it('⚠️ le nombre de convois monte SANS FIN mais reste bridé par le vivier', () => {
     // Le plafond dur (4) a sauté avec la règle « aucun niveau mort » : un Comptoir de
@@ -1120,15 +1125,17 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
 
   it('⚠️ c’est bien CE calcul que la mission verse : le SOCLE est primé, pas les abattus', () => {
     const neuf = champ(1, 'neuf');
-    const vieux = champ(100, 'vieux');
+    const vieux = champ(poiDifficultyLevel(p), 'vieux');
     const socle = missionXp(neuf[0]!, p, true);
     // ⚠️ Le socle NU est le MÊME pour les deux (le ratio est écrêté à 1) : c'est exactement
     // ce qui manquait au champion en retard, et la prime est donc TOUT l'écart.
     expect(missionXp(vieux[0]!, p, true)).toBe(socle);
     expect(missionXpFor(neuf, p, true, {}, false, 100).neuf).toBe(
-      Math.round(socle * catchUpMult(1, 100)),
+      Math.round(socle * missionXpSplit(1, false) * catchUpMult(1, 100)),
     );
-    expect(missionXpFor(vieux, p, true, {}, false, 100).vieux).toBe(socle);
+    expect(missionXpFor(vieux, p, true, {}, false, 100).vieux).toBe(
+      Math.round(socle * missionXpSplit(1, false) * catchUpMult(poiDifficultyLevel(p), 100)),
+    );
     // ⚠️ La part des ABATTUS passe TELLE QUELLE : `SKIRMISH.carryMargin`, le garde-fou
     // anti-portage, n'est pas défait.
     const avec = missionXpFor(neuf, p, true, { neuf: 40 }, false, 100).neuf!;
@@ -1140,7 +1147,9 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     // Un champion au plafond du Panthéon n'a plus de retard à combler : le multiplicateur
     // ne doit pas annoncer un gain que `grantAdvXp` refuserait de convertir.
     const au = champ(40);
-    expect(missionXpFor(au, p, true, {}, false, 40).x).toBe(missionXp(au[0]!, p, true));
+    expect(missionXpFor(au, p, true, {}, false, 40).x).toBe(
+      Math.round(missionXp(au[0]!, p, true) * missionXpSplit(1, false)),
+    );
     expect(missionXpFor(au, p, true, {}, false, 100).x!).toBeGreaterThan(
       missionXp(au[0]!, p, true),
     );
@@ -1174,7 +1183,10 @@ describe('⚠️ l’XP de combat suit les ennemis ABATTUS, pas l’étiquette',
   });
   it('missionXp lit la base d’épreuve partagée avec le combat de groupe', () => {
     const p = poi({ level: 33 });
-    expect(missionXp(refAdventurer(33), p, true)).toBe(Math.round(trialXpBase(33)));
+    // ⚠️ Sur la DIFFICULTÉ (v0.1107), pas sur `poi.level` : c’est ce que le champion
+    // affronte réellement, nombre d’ennemis compris.
+    const d = poiDifficultyLevel(p);
+    expect(missionXp(refAdventurer(d), p, true)).toBe(Math.round(trialXpBase(d)));
   });
 });
 
@@ -1754,7 +1766,11 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     // Seule la RÉPARTITION des abattus bouge (3/1/1 → 2/2/1, un tombé de moins en 2ᵉ jambe) :
     // la cargaison, l'XP et le blessé sont identiques — le flux aléatoire n'a pas fui.
     // v0.1014 : une embuscade perdue → socle de DÉFAITE (70 → 35) + la même part des abattus (23).
-    expect(o.xp).toEqual({ ref0: 58, ref1: 58, ref2: 58 });
+    // v0.1107 : le socle lit la DIFFICULTÉ (niveau des ennemis ET leur nombre) au lieu du
+    // niveau de récompense, et le partage est strict dès le 1er membre — 58 → 47. ⚠️ Ce
+    // qui compte ici n'a PAS bougé d'un chiffre : la cargaison ci-dessus. L'XP n'en est
+    // que le témoin.
+    expect(o.xp).toEqual({ ref0: 47, ref1: 47, ref2: 47 });
     expect(o.kills).toEqual({ ref0: 2, ref1: 2, ref2: 1 });
     expect(o.hurt).toEqual(['ref1']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);

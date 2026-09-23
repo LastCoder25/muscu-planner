@@ -4,9 +4,18 @@
 // l'autre. Le défaut d'origine : deux lieux « Argent ★3 », l'un pris à 93 % par trois
 // champions, l'autre à 0 % avec les mêmes.
 import { describe, it, expect } from 'vitest';
-import { DIFFICULTY_MAX_LEVEL, difficultyLevel, forceShare, refPowerAt } from '@/lib/poiDifficulty';
+import {
+  DIFFICULTY_MAX_LEVEL,
+  REF_POWER,
+  REF_TEAM,
+  difficultyLevel,
+  forceShare,
+  refPowerAt,
+} from '@/lib/poiDifficulty';
 import { campFoe, campWinPct } from '@/lib/camp';
-import { partyAllies, refChampionAdv, CARAVAN } from '@/lib/caravan';
+import { partyAllies, refChampionAdv, refEscortUnits, CARAVAN } from '@/lib/caravan';
+import { fuseUnits } from '@/lib/skirmish';
+import { combatPowerRaw } from '@/lib/combat';
 import { characterRank } from '@/lib/characterRank';
 import type { CampSpec, Poi } from '@/lib/expedition';
 
@@ -20,6 +29,23 @@ function team(n: number, lvl: number) {
 }
 
 describe('la courbe de référence', () => {
+  it('EST celle de l’équipe de référence, au niveau près', () => {
+    // ⚠️ TEST DE FIDÉLITÉ. `REF_POWER` est tabulée pour que `poiDifficulty` n'ait aucune
+    // dépendance (sinon `caravan.ts`, qui doit lire la difficulté pour l'XP, ferait un
+    // cycle). Une table figée finit par mentir : celle-ci est comparée à la vraie fonction.
+    for (let L = 1; L <= REF_POWER.length; L++) {
+      const vrai = combatPowerRaw(fuseUnits(refEscortUnits(L), 'R'));
+      expect(refPowerAt(L)).toBeCloseTo(vrai, 1);
+    }
+  });
+
+  it('compte le MÊME nombre de champions que l’étalon des combats', () => {
+    // Une seconde valeur ferait diverger « la force d'un lieu » de l'équipe sur laquelle
+    // les combats sont calibrés.
+    expect(REF_TEAM).toBe(CARAVAN.refEscort);
+    expect(refEscortUnits(20)).toHaveLength(REF_TEAM);
+  });
+
   it('est STRICTEMENT croissante — c’est ce qui autorise la recherche binaire', () => {
     for (let L = 2; L <= 120; L++) expect(refPowerAt(L)).toBeGreaterThan(refPowerAt(L - 1));
   });

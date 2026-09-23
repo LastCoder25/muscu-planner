@@ -78,6 +78,7 @@ import {
   type AdvRole,
 } from './adventurers';
 import { rankStartLevel } from './characterRank';
+import { poiDifficultyLevel, REF_TEAM } from './poiDifficulty';
 import {
   ADV_GEAR_SLOTS,
   advGearEffects,
@@ -93,7 +94,7 @@ export const CARAVAN = {
   /** Escorte maximale par convoi. */
   escortMax: 4,
   /** Taille de l'escorte de RÉFÉRENCE qui sert de mètre-étalon à la route. */
-  refEscort: 3,
+  refEscort: REF_TEAM,
   /** PV d'un groupe de bandits ≈ N tours d'offense de l'escorte de référence.
    *  ⚠️ RE-MESURÉ à 3 quand l’offense de référence a cessé d’ignorer les signatures : la
    *  même valeur ne veut plus dire la même chose, puisque l’unité elle-même a grandi.
@@ -760,12 +761,10 @@ export function caravanWages(escort: Adventurer[], poi: Poi): number {
  *  ⚠️ SOURCE UNIQUE des quatre missions (convoi, camp, incursion, interception) : une
  *  copie par lieu aurait divergé au premier réglage. */
 export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
-  const ratio = Math.max(0.15, Math.min(2, poi.level / Math.max(1, adv.level)));
+  const d = poiDifficultyLevel(poi);
+  const ratio = Math.max(0.15, Math.min(2, d / Math.max(1, adv.level)));
   const issue = won ? 1 : CARAVAN.xpLossShare;
-  return Math.max(
-    1,
-    Math.round(trialXpBase(poiRewardLevel(poi)) * Math.min(1, ratio) ** 1.5 * issue),
-  );
+  return Math.max(1, Math.round(trialXpBase(d) * Math.min(1, ratio) ** 1.5 * issue));
 }
 
 /** 👥 LE PARTAGE DE L'XP D'UNE MISSION (v0.1038, décision de l'utilisateur : les équipes ne
@@ -799,7 +798,7 @@ export const HERO_XP_WEIGHT = 2;
  */
 export function missionXpSplit(escortCount: number, hero: boolean): number {
   const weight = Math.max(1, escortCount) + (hero ? HERO_XP_WEIGHT : 0);
-  return Math.max(CARAVAN.xpLossShare, Math.min(1, XP_TEAM_REF / weight));
+  return Math.max(CARAVAN.xpLossShare, XP_TEAM_REF / weight);
 }
 
 /** Le pas de la prime de rattrapage : UN RANG de retard (10 niveaux) double l'apprentissage.

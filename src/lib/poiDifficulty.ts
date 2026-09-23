@@ -16,12 +16,17 @@
 // ⚠️ UN SEUL ARBITRE : `combatPower`, celui qui tranche déjà les objets, les donjons, les
 // familiers et la défense de la base. En inventer un second pour la carte recréerait le
 // défaut « deux comparateurs qui disent des trucs différents » (v0.744).
-import { combatPowerRaw } from './combat';
-import { refEscortUnits, CARAVAN } from './caravan';
-import { fuseUnits } from './skirmish';
 import { prestigeRankIndex } from './items';
 import { characterRank, type CharacterRank } from './characterRank';
 import { campSpecOf, harvestGuardOf, type Poi } from './expedition';
+
+/** Le nombre de champions d'une équipe de RÉFÉRENCE — l'unité dans laquelle se comptent la
+ *  force d'un lieu (`forceShare`) et l'équipe qui sert d'étalon aux combats
+ *  (`CARAVAN.refEscort`, qui la LIT).
+ *  ⚠️ Elle vit ICI, dans le module sans dépendance, et non dans `caravan.ts` : sinon
+ *  `poiDifficulty` devrait importer `caravan`, qui doit lire la difficulté pour l'XP de
+ *  mission — un cycle. */
+export const REF_TEAM = 3;
 
 /**
  * 🧍 CORRECTION DES PETITES FORCES, PAR RANG (2026-09-22, mesuré ; demandé par l'utilisateur :
@@ -60,24 +65,50 @@ export function smallForceMult(level: number, size: number): number {
  * le combat n'applique pas.
  */
 export function forceShare(level: number, size: number): number {
-  return (Math.max(0, size) / CARAVAN.refEscort) * smallForceMult(level, size);
+  return (Math.max(0, size) / REF_TEAM) * smallForceMult(level, size);
 }
 
-/** La puissance d'une équipe PLEINE de référence du niveau `L`, mémoïsée.
- *  ⚠️ PARESSEUSE et par PRÉFIXE : chaque niveau coûte la construction de 3 champions et de
- *  leurs 12 pièces, et la carte en interroge une vingtaine à chaque rendu. */
-const POWERS: number[] = [];
+/**
+ * 📐 LA COURBE DE RÉFÉRENCE : la puissance d'une équipe PLEINE de `REF_TEAM` champions de
+ * référence, ÉQUIPÉS, du niveau 1 au niveau 160 — c'est l'échelle dans laquelle toute
+ * difficulté s'exprime.
+ *
+ * ⚠️ TABULÉE, et c'est un choix : elle se calcule depuis `refEscortUnits` (caravan.ts), or
+ * `caravan.ts` doit LIRE la difficulté pour l'XP de mission. L'importer d'ici ferait un
+ * cycle. C'est le patron des autres courbes de calibration du projet
+ * (`RANK_OPENING_RELIEF`, `LABY_CONTENT_BOOST`, `RIFT_RELIEF`) : une table mesurée, et un
+ * TEST qui la compare à la vraie fonction — elle ne peut donc pas dériver en silence.
+ * ⚠️ NE PAS la modifier à la main : la régénérer depuis `refEscortUnits` si la référence
+ * change (le test dira laquelle des deux a bougé).
+ */
+export const REF_POWER: readonly number[] = [
+  21.88, 28.96, 35.7, 41.63, 48.63, 55.86, 62.47, 68.58, 75.58, 82.6, 109.52, 118.22, 126.89,
+  136.59, 144.44, 154.18, 163.76, 173.59, 182.94, 192.93, 236.23, 248.06, 260.6, 273.8, 285.43,
+  299.21, 314.09, 326.81, 341.18, 356.94, 447.93, 466.13, 484.86, 503.7, 522.9, 542.76, 562.77,
+  583.28, 604.17, 625.61, 856.77, 889.62, 924.66, 959.19, 993.06, 1028.92, 1060.63, 1092.39,
+  1125.46, 1155.7, 1779.37, 1827.92, 1880.8, 1931.77, 1986.28, 2039.86, 2097.21, 2151.09, 2208.54,
+  2264.29, 2971.35, 3046.02, 3118.59, 3192.37, 3269.91, 3344.11, 3421.16, 3501.44, 3580.63, 3657.89,
+  3976.74, 4063.23, 4153.75, 4235.68, 4313.3, 4396.81, 4474.52, 4557.56, 4640.96, 4723.72, 4801.84,
+  4882.4, 4958.65, 5040.65, 5119.65, 5198.24, 5276.89, 5360.76, 5439.54, 5525.48, 5607.17, 5691.52,
+  5773.03, 5855.66, 5939.85, 6022.59, 6109.13, 6194.69, 6283.41, 6366.75, 6456.2, 6542.18, 6628.76,
+  6715.48, 6806.7, 6892.24, 6985.7, 7074.03, 7163.94, 7255.14, 7345.8, 7435.77, 7526.23, 7620.99,
+  7713.33, 7811.41, 7900.14, 7998.87, 8091.7, 8185, 8278.31, 8377.6, 8471.84, 8566.42, 8667.35,
+  8763.95, 8862.91, 8960.22, 9056.76, 9154.98, 9255.48, 9355.62, 9459.35, 9556.61, 9661.13, 9761.43,
+  9862.31, 9962.15, 10064.71, 10168.73, 10271.07, 10378.58, 10479.18, 10583.66, 10687.22, 10790.19,
+  10893.48, 11000.7, 11105.82, 11213.98, 11317.28, 11427.28, 11532.76, 11638.44, 11744.44, 11852.07,
+  11961.58, 12069.74, 12183.89, 12292.7,
+];
+
+/** La puissance d'une équipe PLEINE de référence du niveau `L`. */
 export function refPowerAt(level: number): number {
-  const L = Math.max(1, Math.round(level));
-  for (let i = POWERS.length; i < L; i++)
-    POWERS.push(combatPowerRaw(fuseUnits(refEscortUnits(i + 1), 'Référence')));
-  return POWERS[L - 1]!;
+  const L = Math.max(1, Math.min(REF_POWER.length, Math.round(level)));
+  return REF_POWER[L - 1]!;
 }
 
 /** Jusqu'où on cherche un niveau équivalent. ⚠️ Au-delà du plafond du jeu (100) : un lieu
  *  « au-dessus du joueur » (v0.982) peut dépasser, et rendre 100 pour tout ce qui suit
  *  écraserait les écarts au moment où ils comptent le plus. */
-export const DIFFICULTY_MAX_LEVEL = 160;
+export const DIFFICULTY_MAX_LEVEL = REF_POWER.length;
 
 /**
  * 🎯 LE NIVEAU ÉQUIVALENT : celui auquel une équipe PLEINE de référence aurait la force de ce
@@ -117,7 +148,7 @@ export function difficultyLevel(level: number, size: number): number {
  * affiché à côté (`👾 7 / 12`), donc rien n'est caché. Une bande en marche et l'arène
  * gardent le leur pour la même raison : leur effectif est dit ailleurs.
  */
-function poiDifficultyLevel(poi: Pick<Poi, 'id' | 'type' | 'level'>): number {
+export function poiDifficultyLevel(poi: Pick<Poi, 'id' | 'type' | 'level'>): number {
   const spec = campSpecOf(poi) ?? harvestGuardOf(poi);
   return spec ? difficultyLevel(poi.level, spec.size) : Math.max(1, poi.level);
 }
