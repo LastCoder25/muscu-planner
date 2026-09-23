@@ -706,3 +706,75 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('🐀');
   }, 30_000);
 });
+
+// ⚠️ PREMIER ÉCRAN SPORT DANS CETTE PORTE. Elle ne couvrait que du jeu (Guilde, invocation,
+// faille, combat) — or le mur de records vit dans une page qu'AUCUNE porte ne regarde : le
+// smoke s'arrête à l'écran de connexion, et `personalRecords` peut être parfaite pendant que
+// la page ne l'appelle pas. On éprouve donc le CÂBLAGE, pas la formule.
+describe('TrophiesPage — le mur de records', () => {
+  /** Amorce le cache PARTAGÉ des bilans : `sportEntries` et les records en dérivent tous deux. */
+  async function seedLogs(exercises: unknown[]) {
+    const { useLogsStore } = await import('@/stores/logs');
+    const s = useLogsStore();
+    s.all = [
+      {
+        id: 'l1',
+        name: 'Séance',
+        performed_at: '2026-01-10T18:00:00Z',
+        payload: { id: 'l1', exercises } as never,
+      },
+    ] as never;
+    // ⚠️ Sinon `useProgress` part chercher Supabase, qui n'existe pas ici.
+    s.allLoaded = true;
+  }
+
+  it('se monte et affiche le record avec la série qui l’a produit', async () => {
+    const TrophiesPage = (await import('@/pages/TrophiesPage.vue')).default;
+    let out = '';
+    const err = await mountIt(
+      TrophiesPage,
+      {},
+      undefined,
+      () =>
+        seedLogs([
+          {
+            id: 'ex_dc',
+            name: 'Développé couché',
+            muscle_primary: 'pectoraux',
+            planned: {},
+            performed: [{ set: 1, load_kg: 100, reps: 5, difficulty: 2 }],
+          },
+        ]),
+      '/',
+      (h) => (out = h),
+    );
+    expect(err).toBeNull();
+    expect(out).toContain('Records de force');
+    expect(out).toContain('Développé couché');
+    // La SÉRIE réelle, pas seulement le 1RM estimé (116,7 kg).
+    expect(out).toContain('100 kg × 5');
+  }, 30_000);
+
+  it('n’annonce aucun record de force quand rien n’a été chargé', async () => {
+    const TrophiesPage = (await import('@/pages/TrophiesPage.vue')).default;
+    let out = '';
+    const err = await mountIt(
+      TrophiesPage,
+      {},
+      undefined,
+      () =>
+        seedLogs([
+          {
+            id: 'ex_pompes',
+            name: 'Pompes',
+            planned: {},
+            performed: [{ set: 1, load_kg: 0, reps: 30, difficulty: 2 }],
+          },
+        ]),
+      '/',
+      (h) => (out = h),
+    );
+    expect(err).toBeNull();
+    expect(out).not.toContain('Records de force');
+  }, 30_000);
+});

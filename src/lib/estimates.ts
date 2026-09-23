@@ -15,14 +15,24 @@ export function estimate1RM(loadKg: number, reps: number): number {
   return round(loadKg * (1 + reps / 30));
 }
 
-/** Meilleur 1RM estimé parmi les séries réalisées (ignore les séries sans charge). */
-export function bestE1RM(performed: PerformedSet[]): number {
-  let best = 0;
+/**
+ * La série qui produit le MEILLEUR 1RM estimé, et sa valeur. `null` si aucune série
+ * chargée. Source unique de « quelle série est la meilleure » : `bestE1RM` en dérive,
+ * et le mur de records s'en sert pour montrer la série RÉELLE (« 100 kg × 5 »), qui
+ * parle bien plus qu'un 1RM estimé qu'on n'a jamais soulevé.
+ */
+export function bestSetE1RM(performed: PerformedSet[]): { set: PerformedSet; e1rm: number } | null {
+  let best: { set: PerformedSet; e1rm: number } | null = null;
   for (const s of performed) {
     const e = estimate1RM(s.load_kg, s.reps);
-    if (e > best) best = e;
+    if (e > 0 && (!best || e > best.e1rm)) best = { set: s, e1rm: e };
   }
   return best;
+}
+
+/** Meilleur 1RM estimé parmi les séries réalisées (ignore les séries sans charge). */
+export function bestE1RM(performed: PerformedSet[]): number {
+  return bestSetE1RM(performed)?.e1rm ?? 0;
 }
 
 /** Un record de force battu sur un exercice. */
@@ -62,6 +72,63 @@ export function detectLiftPRs(current: SessionLog, priors: SessionLog[]): LiftPR
     }
   }
   return out.sort((a, b) => b.e1rm - a.e1rm);
+}
+
+/** Le record de force d'un exercice : sa meilleure série, et quand elle a été faite. */
+export interface PersonalRecord {
+  id: string;
+  name: string;
+  muscle?: string;
+  e1rm: number;
+  load: number; // la charge RÉELLE de la série record
+  reps: number; // ses répétitions
+  dateIso: string; // jour où le record a été ÉTABLI (YYYY-MM-DD)
+  sessions: number; // nombre de séances où l'exercice apparaît chargé
+}
+
+/**
+ * Le mur de records : un record par exercice, du plus lourd au plus léger.
+ *
+ * ⚠️ On rend la SÉRIE qui a produit le record, pas seulement le 1RM estimé : « 100 kg × 5 »
+ * est un souvenir, « 116,7 kg » est un calcul qu'on n'a jamais soulevé.
+ *
+ * ⚠️ À valeur ÉGALE, on garde la date la PLUS ANCIENNE : un record s'établit une fois ; le
+ * refaire ne le déplace pas dans le temps. Sans cette règle, répéter sa meilleure série
+ * ferait rajeunir le record à chaque séance et « depuis quand ? » ne voudrait plus rien dire.
+ *
+ * Les exercices sans charge (poids du corps, gainage) n'ont pas de record de FORCE et
+ * sortent d'eux-mêmes : leur 1RM estimé vaut 0. Les séries d'approche, elles, ne sont
+ * jamais dans le log (cf. warmup.ts) — rien à filtrer ici.
+ */
+export function personalRecords(
+  logs: { performedAt: string; log: SessionLog }[],
+): PersonalRecord[] {
+  const best = new Map<string, PersonalRecord>();
+  // Du plus ancien au plus récent : le nom retenu sera donc le plus récent (un exercice
+  // peut être renommé en base), et « la plus ancienne date à valeur égale » tombe tout seul.
+  const ordered = [...logs].sort((a, b) => a.performedAt.localeCompare(b.performedAt));
+  for (const { performedAt, log } of ordered) {
+    const day = performedAt.slice(0, 10);
+    for (const ex of log.exercises ?? []) {
+      const top = bestSetE1RM(ex.performed ?? []);
+      if (!top) continue;
+      const prev = best.get(ex.id);
+      const rec: PersonalRecord = {
+        id: ex.id,
+        name: ex.name,
+        e1rm: top.e1rm,
+        load: top.set.load_kg,
+        reps: top.set.reps,
+        dateIso: day,
+        sessions: (prev?.sessions ?? 0) + 1,
+      };
+      if (ex.muscle_primary) rec.muscle = ex.muscle_primary;
+      // Strictement supérieur : une égalité laisse le record à sa date d'origine.
+      if (!prev || top.e1rm > prev.e1rm) best.set(ex.id, rec);
+      else best.set(ex.id, { ...prev, name: ex.name, sessions: rec.sessions });
+    }
+  }
+  return [...best.values()].sort((a, b) => b.e1rm - a.e1rm || a.name.localeCompare(b.name, 'fr'));
 }
 
 /**

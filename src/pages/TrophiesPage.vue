@@ -10,6 +10,32 @@
     </div>
 
     <template v-else>
+      <!-- Mur de records : le plus personnel, donc en tête. Un record par exercice, du
+           plus lourd au plus léger. Absent tant qu'aucune série chargée n'existe. -->
+      <section v-if="records.length" class="tr-card">
+        <div class="tr-head"><span class="tr-emo">🏆</span> Records de force</div>
+        <div class="pr-list">
+          <button
+            v-for="r in records"
+            :key="r.id"
+            class="pr"
+            :style="{ '--m': muscleColor(r.muscle ?? '') }"
+            @click="$router.push(`/exercise/${r.id}`)"
+          >
+            <span class="pr-bar" />
+            <span class="pr-mid">
+              <span class="pr-name">{{ r.name }}</span>
+              <span class="pr-set"
+                >{{ r.load }} kg × {{ r.reps }} · {{ fmtDay(r.dateIso) }} ·
+                {{ ago(r.dateIso) }}</span
+              >
+            </span>
+            <span class="pr-val font-display">{{ r.e1rm }}<small> kg</small></span>
+          </button>
+        </div>
+        <div class="pr-foot">Max estimé (Epley) — touche un exercice pour voir sa courbe.</div>
+      </section>
+
       <!-- Succès globaux -->
       <section class="tr-card">
         <div class="tr-head"><span class="tr-emo">🌍</span> Global</div>
@@ -77,6 +103,9 @@
 defineProps<{ embedded?: boolean }>();
 import { computed } from 'vue';
 import { useProgress } from '@/composables/useProgress';
+import { useLogsStore } from '@/stores/logs';
+import { personalRecords } from '@/lib/estimates';
+import { muscleColor } from '@/lib/volume';
 import {
   buildTrophies,
   trophyCounts,
@@ -86,6 +115,48 @@ import {
 
 const progress = useProgress();
 const entries = computed(() => progress.sportEntries.value);
+
+// Mur de records. ⚠️ On lit le cache PARTAGÉ des bilans (`useProgress` appelle déjà
+// `logs.fetchAll()`) : une seconde requête ici referait le travail pour rien — le
+// double téléchargement corrigé en v0.842.
+const logsStore = useLogsStore();
+const records = computed(() =>
+  personalRecords(logsStore.all.map((r) => ({ performedAt: r.performed_at, log: r.payload }))),
+);
+
+/** « 18 juin » cette année, « 18 juin 25 » sinon. ⚠️ L'année courante est du bruit : sans
+ *  cette coupe, la ligne de méta passe sur deux lignes à 344 px (vu au banc). */
+function fmtDay(iso: string): string {
+  const [y, m, d] = iso.split('-');
+  const court = `${d} ${MOIS[Number(m) - 1]}`;
+  return y === String(new Date().getFullYear()) ? court : `${court} ${y!.slice(2)}`;
+}
+const MOIS = [
+  'jan',
+  'fév',
+  'mar',
+  'avr',
+  'mai',
+  'juin',
+  'juil',
+  'août',
+  'sep',
+  'oct',
+  'nov',
+  'déc',
+];
+
+/** Ancienneté d'un record : « aujourd'hui », « il y a 12 j », « il y a 6 mois ». */
+function ago(iso: string): string {
+  const j = Math.floor((Date.now() - new Date(`${iso}T12:00:00Z`).getTime()) / 86400000);
+  if (j <= 0) return "aujourd'hui";
+  if (j === 1) return 'hier';
+  if (j < 31) return `il y a ${j} j`;
+  const mois = Math.round(j / 30.4);
+  if (mois < 12) return `il y a ${mois} mois`;
+  const ans = Math.floor(mois / 12);
+  return `il y a ${ans} an${ans > 1 ? 's' : ''}`;
+}
 const trophies = computed(() => buildTrophies(entries.value));
 const counts = computed(() => trophyCounts(trophies.value));
 
@@ -153,6 +224,71 @@ function sportEmoji(cat: SportCategory, hasDistance: boolean): string {
 }
 .tr-emo {
   font-size: 20px;
+}
+/* Mur de records. ⚠️ Préfixe `pr-` et NON `rec-` : `.rec` existe déjà dans cette page
+   (les records par sport, juste en dessous) — réutiliser le nom aurait écrasé son style
+   en silence, le défaut des classes `.fp-*` de la v0.751. */
+.pr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pr {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 52px; /* cible tactile confortable : c'est un bouton */
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  text-align: left;
+}
+.pr-bar {
+  flex: 0 0 4px;
+  align-self: stretch;
+  border-radius: 2px;
+  background: var(--m, var(--dim));
+}
+.pr-mid {
+  flex: 1 1 auto;
+  min-width: 0; /* sinon un nom long refuse de se tronquer et pousse la valeur dehors */
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pr-name {
+  font-size: 14px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-set {
+  font-size: 11px;
+  color: var(--dim);
+  /* Ceinture : la méta tient sur UNE ligne, sinon la carte grandit et les valeurs se
+     désalignent (vu au banc à 344 px, « il y a 3 / mois »). */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pr-val {
+  flex: 0 0 auto;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.pr-val small {
+  font-size: 11px;
+  color: var(--dim);
+}
+.pr-foot {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--dim-2);
 }
 .rec-row {
   display: flex;
