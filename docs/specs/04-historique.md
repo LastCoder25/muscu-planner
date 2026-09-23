@@ -29,7 +29,7 @@ Point d'entrée de l'app : lancer une séance, voir l'historique, gérer la bibl
 
 ## Adaptation niveau
 
-- `ui_density = dense` (avancé) : afficher tonnage, tendances, PR. `comfortable` (débutant) : épuré, conseils.
+- ⚠️ NON FAIT : `ui_density` a été retiré du contrat (v0.1099), il n'était lu nulle part. Tonnage, tendances et records s'affichent pour tout le monde (cf. le mur de records, v0.1097).
 
 ## Done
 

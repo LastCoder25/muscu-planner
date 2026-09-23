@@ -44,7 +44,11 @@ Mode sombre forcé (`Dark.set(true)` au boot, ou `config: { dark: true }`).
 
 - **Mobile d'abord** : viewport ~390 px, cibles tactiles ≥ 44 px, pensé pour mains moites en salle.
 - Un seul accent fort (jaune). Le reste reste graphite et discret.
-- La densité s'adapte au niveau via `level_config.ui_density` (`comfortable` débutant → `dense` avancé).
+- ⚠️ La densité NE s'adapte PAS au niveau. `ui_density` a été retiré du contrat (v0.1099) :
+  il était dérivé et lu par personne — un débutant et un avancé voyaient la même interface.
+  Ce qui distingue encore les niveaux : le RIR affiché (`effort_signal`), la profondeur
+  d'historique du moteur (`coach_history_depth`) et le mode de création (`program_mode`).
+  Pour rouvrir le sujet, il faut BRANCHER la densité, pas seulement la déclarer.
 
 ## Catalogue d'interactions — écran live (à reproduire)
 

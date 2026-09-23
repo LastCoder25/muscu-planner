@@ -262,13 +262,25 @@ Le même contrat sert un grand débutant **et** un pratiquant de 15 ans. Tout le
   "effort_signal": "rir_optional",
   "coach_history_depth": 2,
   "program_mode": "assisted",
-  "ui_density": "standard",
-  "auto_deload": false,
   "overridable": true
 }
 ```
 
-Valeurs cadrées : `effort_signal` ∈ `simple` · `rir_optional` · `rir` ; `program_mode` ∈ `guided` · `assisted` · `free` ; `ui_density` ∈ `comfortable` · `standard` · `dense`.
+Valeurs cadrées : `effort_signal` ∈ `simple` · `rir_optional` · `rir` ; `program_mode` ∈ `guided` · `assisted` · `free`.
+
+> ⚠️ **`ui_density` et `auto_deload` ont été RETIRÉS du contrat (v0.1099).** Ils étaient
+> dérivés, écrits en base et lus par personne : un débutant et un avancé voyaient la même
+> interface, et aucune décharge ne se déclenchait d'elle-même. Un champ calculé qu'on ne lit
+> jamais est une promesse écrite que le code ne tient pas ; on branche ou on retire, on ne
+> laisse pas. Les colonnes JSONB existantes les portent encore, sans effet —
+> `deriveLevelConfig` réécrit `level_config` à chaque sauvegarde de profil.
+>
+> La **décharge planifiée existe bel et bien**, mais elle n'a jamais été pilotée par
+> `auto_deload` : elle est cadencée sur la fréquence du profil (`ProgressionOpts.deloadEvery`,
+> ~toutes les 5,5 semaines), pour tous les niveaux.
+>
+> `test/levelConfig.test.ts` EXIGE désormais qu'un champ du contrat ait un lecteur dans
+> `src/` : en rajouter un sans l'utiliser fait rougir la suite.
 
 Concrètement pour les deux cas réels de l'app :
 

@@ -47,7 +47,7 @@ pour l'import, avec gestion d'erreurs lisible). Insère la nouvelle session.
 ```
 Implémente docs/specs/04-historique.md : home (démarrer la prochaine séance), historique des
 session_logs avec courbes de progression par exo, CRUD des sessions et de la bibliothèque
-d'exercices (table exercises, perso + globaux). Respecte les RLS et l'adaptation par ui_density.
+d'exercices (table exercises, perso + globaux). Respecte les RLS. (⚠️ `ui_density` a été retiré du contrat en v0.1099 : il n'a jamais été lu.)
 ```
 
 ---

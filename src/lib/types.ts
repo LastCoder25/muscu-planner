@@ -85,9 +85,15 @@ export interface LevelConfig {
   effort_signal: 'simple' | 'rir_optional' | 'rir';
   coach_history_depth: number;
   program_mode: 'guided' | 'assisted' | 'free';
-  ui_density: 'comfortable' | 'standard' | 'dense';
-  auto_deload: boolean;
   overridable: boolean;
+  // ⚠️ `ui_density` et `auto_deload` ont été RETIRÉS du contrat (v0.1099). Ils étaient
+  // dérivés, écrits en base, et lus par PERSONNE : un débutant et un avancé voyaient
+  // exactement la même interface, et aucune décharge ne se déclenchait d'elle-même. Le
+  // contrat promettait donc deux comportements que le code ne tenait pas — et les laisser
+  // était le pire des trois choix : soit on branche, soit on retire. Les colonnes JSONB
+  // existantes les portent encore, sans effet : `deriveLevelConfig` réécrit `level_config`
+  // à chaque sauvegarde de profil, donc elles se nettoient d'elles-mêmes.
+  // ⚠️ Pour en rajouter un : `test/levelConfig.test.ts` EXIGE qu'un champ ait un lecteur.
 }
 
 export interface ExerciseTarget {
