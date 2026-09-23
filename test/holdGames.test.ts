@@ -5,11 +5,14 @@ import {
   HOLD,
   HOLD_GAMES,
   HOLD_GAME_EXERCISES,
+  activeBeats,
   buildHoldPlan,
   holdGame,
   holdGameAllowed,
+  holdLeadMs,
   judgeTap,
   scoreHold,
+  targetBeat,
   type HoldPlan,
   type HoldTap,
 } from '@/lib/holdGames';
@@ -21,6 +24,15 @@ function perfectTaps(plan: HoldPlan): HoldTap[] {
 
 function gaps(plan: HoldPlan): number[] {
   return plan.beats.slice(1).map((b, i) => b.at - plan.beats[i]!.at);
+}
+
+/**
+ * Les intervalles de la partie CIBLE du plan. ⚠️ Au-delà, le rythme est volontairement
+ * plafonné : y mesurer la rampe reviendrait à mesurer le plateau.
+ */
+function rampGaps(plan: HoldPlan): number[] {
+  const b = plan.beats.filter((x) => x.at <= plan.durationSec * 1000);
+  return b.slice(1).map((x, i) => x.at - b[i]!.at);
 }
 
 describe('les trois jeux', () => {
@@ -87,14 +99,26 @@ describe('le plan', () => {
     expect(buildHoldPlan('repousse', 45, 8)).not.toEqual(a);
   });
 
-  it('ne déborde jamais de la durée tenue', () => {
+  it('va AU-DELÀ de la cible — se surpasser ne doit pas laisser seul avec son chrono', () => {
+    // ⚠️ Un gainage n'a pas de fin imposée : on tient ce qu'on peut. Le plan doit donc
+    // couvrir le dépassement, et rester borné pour ne pas générer à l'infini.
     for (const game of ['repousse', 'cadence', 'tri'] as const) {
       for (const sec of [20, 30, 45, 60]) {
         const plan = buildHoldPlan(game, sec, 3);
         expect(plan.beats.length).toBeGreaterThan(3);
-        for (const b of plan.beats) expect(b.at).toBeLessThan(sec * 1000);
+        const last = plan.beats.at(-1)!.at;
+        expect(last, `${game}/${sec}s : le plan s'arrête à la cible`).toBeGreaterThan(sec * 1000);
+        expect(last).toBeLessThan(sec * 1000 * HOLD.overrun);
       }
     }
+  });
+
+  it("cesse de presser une fois la cible passée, au lieu de s'emballer sans fin", () => {
+    const plan = buildHoldPlan('cadence', 30, 3);
+    const apres = plan.beats.filter((b) => b.at > 30_000);
+    const g = apres.slice(1).map((b, i) => b.at - apres[i]!.at);
+    // Au-delà de la cible le rythme reste celui atteint : plus aucune variation.
+    for (const x of g) expect(Math.abs(x - g[0]!)).toBeLessThanOrEqual(2);
   });
 
   it('ne boucle pas sur une durée nulle ou absurde', () => {
@@ -105,7 +129,7 @@ describe('le plan', () => {
   it("ACCÉLÈRE, et resserre la fenêtre — c'est ce qui tient les dernières secondes", () => {
     for (const game of ['repousse', 'cadence', 'tri'] as const) {
       const plan = buildHoldPlan(game, 60, 11);
-      const g = gaps(plan);
+      const g = rampGaps(plan);
       const third = Math.floor(g.length / 3);
       const head = g.slice(0, third).reduce((s, x) => s + x, 0) / third;
       const tail = g.slice(-third).reduce((s, x) => s + x, 0) / third;
@@ -120,7 +144,7 @@ describe('le plan', () => {
   it('monte en COURBE, pas en droite — doux au début, franc à la fin', () => {
     // Avec une rampe linéaire, le milieu tomberait à mi-chemin des deux extrêmes.
     const plan = buildHoldPlan('cadence', 60, 5);
-    const g = gaps(plan);
+    const g = rampGaps(plan);
     const mid = g[Math.floor(g.length / 2)]!;
     const head = g[0]!;
     const tail = g.at(-1)!;
@@ -176,6 +200,66 @@ describe('ce qui distingue vraiment les trois', () => {
     // mauvais côté. Sans conflits, ce n'est qu'un Repousse plus lent.
     const conflits = plan.beats.filter((b) => b.from !== b.answer).length;
     expect(conflits / plan.beats.length).toBeGreaterThan(0.3);
+  });
+});
+
+describe("ce qui est visible, et ce qu'une frappe vise", () => {
+  it('le Tri se voit venir de plus loin — il faut le temps de LIRE', () => {
+    expect(holdLeadMs('tri')).toBeGreaterThan(holdLeadMs('repousse'));
+    expect(holdLeadMs('tri')).toBeGreaterThan(holdLeadMs('cadence'));
+  });
+
+  it("n'apparaît qu'à l'approche, et disparaît la fenêtre passée", () => {
+    const plan = buildHoldPlan('repousse', 45, 6);
+    const b = plan.beats[4]!;
+    const lead = holdLeadMs('repousse');
+    const vide = new Set<number>();
+
+    const ids = (now: number) => activeBeats(plan, now, vide).map((a) => a.beat.id);
+    expect(ids(b.at - lead - 50)).not.toContain(b.id);
+    expect(ids(b.at - lead + 10)).toContain(b.id);
+    expect(ids(b.at)).toContain(b.id);
+    expect(ids(b.at + b.windowMs + 50)).not.toContain(b.id);
+  });
+
+  it('va de 0 à 1 entre son apparition et le moment de répondre', () => {
+    const plan = buildHoldPlan('repousse', 45, 6);
+    const b = plan.beats[4]!;
+    const lead = holdLeadMs('repousse');
+    const at = (now: number) =>
+      activeBeats(plan, now, new Set()).find((a) => a.beat.id === b.id)!.progress;
+    expect(at(b.at - lead + 1)).toBeCloseTo(0, 2);
+    expect(at(b.at - lead / 2)).toBeCloseTo(0.5, 2);
+    expect(at(b.at)).toBeCloseTo(1, 2);
+  });
+
+  it('ne redessine jamais ce qui est déjà résolu', () => {
+    const plan = buildHoldPlan('repousse', 45, 6);
+    const b = plan.beats[4]!;
+    expect(activeBeats(plan, b.at, new Set([b.id]))).toHaveLength(0);
+  });
+
+  it('une frappe vise la sollicitation la plus proche encore ouverte', () => {
+    const plan = buildHoldPlan('repousse', 45, 6);
+    const b = plan.beats[4]!;
+    expect(targetBeat(plan, b.at, new Set())?.id).toBe(b.id);
+    expect(targetBeat(plan, b.at, new Set([b.id]))?.id).not.toBe(b.id);
+  });
+
+  it("ne vise RIEN quand rien n'est ouvert — taper dans le vide ne coûte rien", () => {
+    const plan = buildHoldPlan('repousse', 45, 6);
+    expect(targetBeat(plan, -5000, new Set())).toBeNull();
+  });
+
+  it('IGNORE le côté tapé — sans ça, se tromper deviendrait impossible', () => {
+    // ⚠️ La règle qui fait exister le Tri. Si la frappe cherchait « le beat dont la
+    // réponse correspond », il n'y aurait plus jamais d'erreur, donc plus de décision.
+    const plan = buildHoldPlan('tri', 60, 6);
+    const b = plan.beats.find((x) => x.from !== x.answer)!;
+    const mauvais = b.answer === 'left' ? 'right' : 'left';
+    const cible = targetBeat(plan, b.at, new Set());
+    expect(cible?.id).toBe(b.id);
+    expect(judgeTap(cible!, mauvais, b.at)).toBe('wrong');
   });
 });
 
@@ -249,6 +333,22 @@ describe('le score', () => {
       { beatId: b.id, side: b.answer, at: b.at },
       { beatId: b.id, side: b.answer, at: b.at },
     ]);
+    expect(s.hits).toBe(1);
+  });
+
+  it("ne compte pas ce qui n'a pas eu sa chance", () => {
+    // ⚠️ Le plan va au-delà de la cible : sans borne, lâcher à 20 s sur une cible de 45
+    // récolterait des dizaines de « manqués » pour des sollicitations jamais tombées.
+    const s = scoreHold(plan, [], 10_000);
+    const eues = plan.beats.filter((b) => b.at + b.windowMs <= 10_000).length;
+    expect(s.misses).toBe(eues);
+    expect(eues).toBeGreaterThan(0);
+    expect(eues).toBeLessThan(plan.beats.length);
+  });
+
+  it('compte une réussite même après la borne — elle a bien eu lieu', () => {
+    const b = plan.beats.at(-1)!;
+    const s = scoreHold(plan, [{ beatId: b.id, side: b.answer, at: b.at }], 1000);
     expect(s.hits).toBe(1);
   });
 

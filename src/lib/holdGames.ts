@@ -119,6 +119,13 @@ export const HOLD = {
    * en « 10 dernières secondes », pour valoir autant sur 20 s que sur 60.
    */
   rampExp: 1.6,
+  /**
+   * ⚠️ LE PLAN VA AU-DELÀ DE LA DURÉE VISÉE. Un gainage n'a pas de fin imposée : on tient
+   * ce qu'on peut, et se surpasser est précisément le moment qu'il ne faut PAS laisser
+   * sans jeu. La rampe, elle, reste calée sur la cible et plafonne — au-delà, le rythme
+   * demeure à son maximum plutôt que de s'emballer sans fin.
+   */
+  overrun: 2,
   /** Jamais plus de N fois le même côté d'affilée : au-delà, ça se lit comme une panne. */
   maxSameSide: 3,
   /** Une frappe dans cette fraction de la fenêtre est « parfaite ». */
@@ -138,6 +145,8 @@ interface Tuning {
   /** Fenêtre de réponse, au départ puis à la fin. */
   windowStart: number;
   windowEnd: number;
+  /** Combien de temps à l'avance la sollicitation est VISIBLE. */
+  leadMs: number;
 }
 
 /**
@@ -150,13 +159,40 @@ interface Tuning {
  *
  * `tri` est le plus LENT des trois alors qu'il est le plus difficile : sa charge est
  * cognitive, il faut le temps de lire l'objet avant de décider. Le presser ne le rendrait
- * pas plus intéressant, juste injouable.
+ * pas plus intéressant, juste injouable. ⚠️ C'est aussi pourquoi il se voit venir de plus
+ * LOIN que les deux autres : on doit pouvoir lire l'objet avant qu'il n'arrive.
  */
 const TUNING: Record<HoldGameId, Tuning> = {
-  repousse: { gapStart: 1500, gapEnd: 750, jitter: 0.35, windowStart: 1100, windowEnd: 650 },
-  cadence: { gapStart: 900, gapEnd: 550, jitter: 0, windowStart: 450, windowEnd: 320 },
-  tri: { gapStart: 1700, gapEnd: 1000, jitter: 0.2, windowStart: 1400, windowEnd: 900 },
+  repousse: {
+    gapStart: 1500,
+    gapEnd: 750,
+    jitter: 0.35,
+    windowStart: 1100,
+    windowEnd: 650,
+    leadMs: 1200,
+  },
+  cadence: {
+    gapStart: 900,
+    gapEnd: 550,
+    jitter: 0,
+    windowStart: 450,
+    windowEnd: 320,
+    leadMs: 1200,
+  },
+  tri: {
+    gapStart: 1700,
+    gapEnd: 1000,
+    jitter: 0.2,
+    windowStart: 1400,
+    windowEnd: 900,
+    leadMs: 1700,
+  },
 };
+
+/** Combien de temps à l'avance une sollicitation est visible, pour ce jeu. */
+export function holdLeadMs(game: HoldGameId): number {
+  return TUNING[game].leadMs;
+}
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -166,7 +202,10 @@ function lerp(a: number, b: number, t: number): number {
 export function buildHoldPlan(game: HoldGameId, durationSec: number, seed: number): HoldPlan {
   const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0 || 1);
   const t = TUNING[game];
-  const total = Math.max(0, durationSec) * 1000;
+  const target = Math.max(0, durationSec) * 1000;
+  // On génère plus loin que la cible : celui qui se surpasse ne doit pas se retrouver
+  // seul avec son chrono au moment précis où il a le plus besoin d'être occupé.
+  const total = target * HOLD.overrun;
   const beats: HoldBeat[] = [];
 
   let at = 0;
@@ -175,7 +214,9 @@ export function buildHoldPlan(game: HoldGameId, durationSec: number, seed: numbe
 
   for (;;) {
     // La difficulté suit le TEMPS écoulé, jamais le nombre de sollicitations déjà tombées.
-    const p = total > 0 ? Math.min(1, at / total) : 1;
+    // ⚠️ Rapportée à la CIBLE et plafonnée : au-delà, le rythme reste au maximum atteint
+    // plutôt que de s'emballer indéfiniment.
+    const p = target > 0 ? Math.min(1, at / target) : 1;
     const eased = Math.pow(p, HOLD.rampExp);
     const gap = lerp(t.gapStart, t.gapEnd, eased);
     at += t.jitter > 0 ? gap * (1 + (rng() * 2 - 1) * t.jitter) : gap;
@@ -219,6 +260,60 @@ export function judgeTap(beat: HoldBeat, side: HoldSide, at: number): HoldVerdic
   return off <= beat.windowMs * HOLD.perfectShare ? 'perfect' : 'good';
 }
 
+export interface ActiveBeat {
+  beat: HoldBeat;
+  /** 0 à l'apparition, 1 au moment de répondre, au-delà tant que la fenêtre dure. */
+  progress: number;
+}
+
+/**
+ * Ce qu'il y a à DESSINER à cet instant : les sollicitations déjà visibles et pas encore
+ * résolues. ⚠️ En lib et non dans la scène : c'est du gameplay — « à quel moment ça
+ * devient visible » décide de ce qu'on peut anticiper. Trois scènes qui en auraient
+ * chacune leur idée ne joueraient pas au même jeu.
+ */
+export function activeBeats(
+  plan: HoldPlan,
+  nowMs: number,
+  resolved: ReadonlySet<number>,
+): ActiveBeat[] {
+  const lead = holdLeadMs(plan.game);
+  const out: ActiveBeat[] = [];
+  for (const beat of plan.beats) {
+    if (resolved.has(beat.id)) continue;
+    const from = beat.at - lead;
+    if (nowMs < from || nowMs > beat.at + beat.windowMs) continue;
+    out.push({ beat, progress: (nowMs - from) / lead });
+  }
+  return out;
+}
+
+/**
+ * Quelle sollicitation une frappe vise : la plus proche encore ouverte.
+ *
+ * ⚠️ LE CÔTÉ TAPÉ N'ENTRE PAS DANS LE CHOIX, et c'est la règle qui fait exister le Tri :
+ * viser « le beat dont la réponse correspond » rendrait toute erreur impossible. On
+ * désigne la sollicitation, puis `judgeTap` dit si on s'est trompé.
+ */
+export function targetBeat(
+  plan: HoldPlan,
+  nowMs: number,
+  resolved: ReadonlySet<number>,
+): HoldBeat | null {
+  let best: HoldBeat | null = null;
+  let bestOff = Infinity;
+  for (const beat of plan.beats) {
+    if (resolved.has(beat.id)) continue;
+    const off = Math.abs(nowMs - beat.at);
+    if (off > beat.windowMs) continue;
+    if (off < bestOff) {
+      best = beat;
+      bestOff = off;
+    }
+  }
+  return best;
+}
+
 export interface HoldTap {
   beatId: number;
   side: HoldSide;
@@ -237,8 +332,14 @@ export interface HoldScore {
 /**
  * Rejoue les réponses contre le plan. ⚠️ Une frappe ratée ou fautive ne RETIRE jamais de
  * points : elle coupe seulement la série. C'est toute la tolérance du système.
+ *
+ * ⚠️ `untilMs` = l'instant où l'on a lâché. Le plan va plus loin que la durée visée, donc
+ * sans cette borne quelqu'un qui tient 30 s sur une cible de 45 récolterait des dizaines
+ * de « manqués » pour des sollicitations qui ne sont jamais tombées. Une sollicitation
+ * dont la fenêtre était encore ouverte à l'arrêt n'est ni réussie ni ratée : elle
+ * n'a pas eu sa chance.
  */
-export function scoreHold(plan: HoldPlan, taps: readonly HoldTap[]): HoldScore {
+export function scoreHold(plan: HoldPlan, taps: readonly HoldTap[], untilMs = Infinity): HoldScore {
   const byBeat = new Map<number, HoldTap>();
   for (const tap of taps) if (!byBeat.has(tap.beatId)) byBeat.set(tap.beatId, tap);
 
@@ -252,6 +353,8 @@ export function scoreHold(plan: HoldPlan, taps: readonly HoldTap[]): HoldScore {
 
   for (const beat of plan.beats) {
     const tap = byBeat.get(beat.id);
+    // Ni jugée ni comptée : on s'est arrêté avant qu'elle ait eu sa chance.
+    if (!tap && beat.at + beat.windowMs > untilMs) continue;
     const verdict = tap ? judgeTap(beat, tap.side, tap.at) : 'late';
 
     if (verdict === 'perfect' || verdict === 'good') {

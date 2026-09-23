@@ -848,3 +848,72 @@ describe('TrophiesPage — le mur de records', () => {
     expect(out).not.toContain('Records de force');
   }, 30_000);
 });
+
+describe('HoldGame — les mini-jeux du gainage', () => {
+  it('se monte en cours de partie', async () => {
+    // ⚠️ CE QUI EST VRAIMENT ÉPROUVÉ ICI, c'est le SETUP : `HoldGame` porte un `watch`
+    // IMMÉDIAT, donc évalué pendant le setup, qui lit `score` — exactement la forme qui a
+    // fait tomber la Guilde (v0.910). Le contenu du `q-dialog`, lui, ne rend rien dans ce
+    // harnais (les composants Quasar n'y sont pas enregistrés) : c'est pour ça que les
+    // SCÈNES sont éprouvées séparément juste en dessous, elles, sur leur HTML.
+    const { default: HoldGame } = await import('@/components/HoldGame.vue');
+    expect(
+      await mountIt(HoldGame, {
+        modelValue: true,
+        game: 'repousse',
+        targetSec: 45,
+        elapsedSec: 12,
+        running: true,
+      }),
+    ).toBeNull();
+  }, 30_000);
+
+  it('se monte aussi fermé, et en pause', async () => {
+    const { default: HoldGame } = await import('@/components/HoldGame.vue');
+    for (const [modelValue, running] of [
+      [false, false],
+      [true, false],
+    ] as const) {
+      expect(
+        await mountIt(HoldGame, {
+          modelValue,
+          game: 'tri',
+          targetSec: 30,
+          elapsedSec: 0,
+          running,
+        }),
+      ).toBeNull();
+    }
+  }, 30_000);
+
+  it('chaque scène dessine vraiment ce qui arrive', async () => {
+    const { activeBeats, buildHoldPlan } = await import('@/lib/holdGames');
+    const scenes = {
+      repousse: () => import('@/components/hold/HoldSceneRepousse.vue'),
+      cadence: () => import('@/components/hold/HoldSceneCadence.vue'),
+      tri: () => import('@/components/hold/HoldSceneTri.vue'),
+    } as const;
+
+    for (const game of ['repousse', 'cadence', 'tri'] as const) {
+      const plan = buildHoldPlan(game, 45, 3);
+      const beat = plan.beats[6]!;
+      const beats = activeBeats(plan, beat.at, new Set());
+      expect(beats.length, `${game} : rien à dessiner`).toBeGreaterThan(0);
+
+      const { default: Scene } = await scenes[game]();
+      let out = '';
+      const err = await mountIt(
+        Scene,
+        { beats, pulse: { side: 'left', verdict: 'perfect', at: beat.at }, reduced: false },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      expect(err, `${game} : erreur de setup`).toBeNull();
+      // ⚠️ On lit le HTML : sans ça, une scène qui ne rendrait RIEN resterait verte et le
+      // test ne garderait que son propre montage.
+      expect(out.length, `${game} : scène vide`).toBeGreaterThan(80);
+    }
+  }, 30_000);
+});
