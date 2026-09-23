@@ -42,34 +42,41 @@ export interface HoldGameDef {
  * trois plutôt qu'un repeint. Le réflexe, le rythme et la décision ne marchent pas sur
  * les mêmes gens, et chacun donne une sensation d'effort différente.
  */
-export const HOLD_GAMES: readonly HoldGameDef[] = [
-  {
+/**
+ * ⚠️ UN `Record` SUR L'UNION, PAS UN TABLEAU : ajouter un `HoldGameId` sans écrire sa
+ * définition doit casser la COMPILATION. Avec un simple tableau, ça compilait et le jeu
+ * explosait à l'exécution — c'est le patron `Record<PoiType, …>` que le projet emploie
+ * déjà pour que nommer un nouveau cas ne soit pas facultatif.
+ */
+const DEFS: Record<HoldGameId, HoldGameDef> = {
+  repousse: {
     id: 'repousse',
     emoji: '🛡️',
     name: 'Repousse',
     rule: 'Tape du côté où ils arrivent.',
     skill: 'Réflexe',
   },
-  {
+  cadence: {
     id: 'cadence',
     emoji: '🔨',
     name: 'Cadence',
     rule: "Frappe quand le marteau touche l'enclume.",
     skill: 'Rythme',
   },
-  {
+  tri: {
     id: 'tri',
     emoji: '🎒',
     name: 'Tri',
     rule: 'Garde à gauche, recycle à droite — quel que soit le côté où ça tombe.',
     skill: 'Décision',
   },
-];
+};
+
+/** Les trois jeux, dans l'ordre où ils se proposent. */
+export const HOLD_GAMES: readonly HoldGameDef[] = Object.values(DEFS);
 
 export function holdGame(id: HoldGameId): HoldGameDef {
-  const g = HOLD_GAMES.find((x) => x.id === id);
-  if (!g) throw new Error(`jeu inconnu : ${id}`);
-  return g;
+  return DEFS[id];
 }
 
 /**
@@ -134,6 +141,12 @@ export const HOLD = {
   /** Bonus tous les N enchaînements réussis. */
   streakEvery: 5,
   streakBonus: 5,
+  /**
+   * Combien de temps le retour d'une frappe reste allumé. ⚠️ Ici et non dans l'écran :
+   * c'est le RETOUR d'un geste de jeu, pas une durée de transition décorative — et trois
+   * scènes plus l'hôte avaient chacune de quoi s'en inventer une.
+   */
+  flashMs: 180,
 } as const;
 
 interface Tuning {
@@ -252,6 +265,43 @@ export function buildHoldPlan(game: HoldGameId, durationSec: number, seed: numbe
 
 export type HoldVerdict = 'perfect' | 'good' | 'wrong' | 'late';
 
+/** Le retour de la dernière frappe, ce dont une scène se sert pour réagir. */
+export interface HoldPulse {
+  side: HoldSide;
+  verdict: HoldVerdict;
+  at: number;
+}
+
+/**
+ * Le retour de frappe s'il est encore FRAIS, `null` sinon.
+ *
+ * ⚠️ SANS CETTE PÉREMPTION, LE RETOUR NE S'ÉTEINT JAMAIS : une frappe posait un `pulse`
+ * que rien ne retirait avant la partie suivante, donc le rempart restait vert (ou rouge)
+ * en permanence, un bac du Tri restait allumé pour toujours, et le marteau gardait sa
+ * classe d'animation — qui ne se rejouait donc plus jamais.
+ *
+ * ⚠️ ET ELLE EST ICI, PAS DANS CHAQUE SCÈNE : « depuis quand ? » était décidé à quatre
+ * endroits, avec quatre réponses différentes — les pads s'éteignaient au bout de 180 ms,
+ * les trois scènes jamais. Une seule définition, quatre consommateurs qui en héritent.
+ */
+export function activePulse(pulse: HoldPulse | null, nowMs: number): HoldPulse | null {
+  return pulse && nowMs - pulse.at < HOLD.flashMs ? pulse : null;
+}
+
+/**
+ * Le contrat COMMUN des trois scènes. ⚠️ Il vit ici parce que c'est lui qui permet à
+ * l'hôte de les traiter comme interchangeables (`<component :is>`) sans un seul cas
+ * particulier ; écrit quatre fois à l'identique, il aurait divergé au premier champ ajouté.
+ * ⚠️ `reduced` n'est pas lu par toutes : Cadence en a BESOIN (ses étincelles resteraient
+ * figées à l'écran sous `animation: none`), les autres se contentent de leur media query.
+ * C'est un contrat, pas un oubli.
+ */
+export interface HoldSceneProps {
+  beats: ActiveBeat[];
+  pulse: HoldPulse | null;
+  reduced: boolean;
+}
+
 /** Ce que vaut une frappe. Hors fenêtre → `late` : l'écran ne devrait pas la router. */
 export function judgeTap(beat: HoldBeat, side: HoldSide, at: number): HoldVerdict {
   const off = Math.abs(at - beat.at);
@@ -327,6 +377,13 @@ export interface HoldScore {
   wrongs: number;
   misses: number;
   bestStreak: number;
+  /**
+   * La série EN COURS à `untilMs` — distincte de `bestStreak`, qui est la meilleure du run.
+   * ⚠️ Rendue ici plutôt que recalculée par l'écran : elle est déjà comptée dans cette
+   * boucle, et la version du composant repassait sur tout le plan en cherchant chaque
+   * frappe (quadratique) à chaque image.
+   */
+  streak: number;
 }
 
 /**
@@ -371,5 +428,37 @@ export function scoreHold(plan: HoldPlan, taps: readonly HoldTap[], untilMs = In
     }
   }
 
-  return { score, hits, perfects, wrongs, misses, bestStreak };
+  return { score, hits, perfects, wrongs, misses, bestStreak, streak };
+}
+
+// ── Le record, par appareil ────────────────────────────────────────────────────
+// ⚠️ EN LIB, sur le modèle de `weightMemory.ts` : posé dans le composant, c'était le seul
+// morceau d'état de la feature que ni `holdGames.test` ni `mount.test` ne pouvaient
+// atteindre (le contenu d'un `q-dialog` ne rend rien dans ce harnais). La règle « on
+// n'écrase que si c'est mieux » vaut d'être vérifiée.
+//
+// ⚠️ Purement cosmétique : ni énergie, ni or, ni XP. L'effort est DÉJÀ payé par l'exercice
+// — le payer une seconde fois via un mini-jeu rouvrirait un chantier d'équilibrage.
+
+function bestKey(game: HoldGameId): string {
+  return `muscu:hold:best:${game}`;
+}
+
+export function readHoldBest(game: HoldGameId): number {
+  try {
+    return Number(localStorage.getItem(bestKey(game)) ?? 0) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** Rend le record APRÈS coup : celui qu'on vient de battre, ou celui qui tenait. */
+export function saveHoldBest(game: HoldGameId, value: number, known: number): number {
+  if (!(value > known)) return known;
+  try {
+    localStorage.setItem(bestKey(game), String(value));
+  } catch {
+    /* navigation privée, stockage bloqué : un record n'est pas essentiel */
+  }
+  return value;
 }

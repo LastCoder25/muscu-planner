@@ -30,13 +30,9 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { ActiveBeat, HoldItemKind, HoldSide, HoldVerdict } from '@/lib/holdGames';
+import type { HoldItemKind, HoldSceneProps } from '@/lib/holdGames';
 
-const props = defineProps<{
-  beats: ActiveBeat[];
-  pulse: { side: HoldSide; verdict: HoldVerdict; at: number } | null;
-  reduced: boolean;
-}>();
+const props = defineProps<HoldSceneProps>();
 
 // ⚠️ Deux familles franchement distinctes : ce qui brille se garde, ce qui est cassé se
 // recycle. Si la lecture demandait une seconde d'hésitation, le jeu deviendrait pénible
@@ -60,16 +56,36 @@ const lit = computed(() =>
   inset: 0;
   overflow: hidden;
 }
+/* Deux rails : ils disent que l'objet DESCEND vers un bac, et que le côté d'où il tombe
+   n'a rien à voir avec celui où il doit aller. */
+.tr::before,
+.tr::after {
+  content: '';
+  position: absolute;
+  top: 4%;
+  bottom: 22%;
+  width: 2px;
+  background: linear-gradient(180deg, transparent, var(--line) 30%, var(--line));
+}
+.tr::before {
+  left: 25%;
+}
+.tr::after {
+  right: 25%;
+}
 .tr-item {
   position: absolute;
-  font-size: 34px;
+  font-size: 40px;
+  line-height: 1;
   will-change: top;
 }
 .tr-item.left {
-  left: 18%;
+  left: 25%;
+  transform: translateX(-50%);
 }
 .tr-item.right {
-  right: 18%;
+  right: 25%;
+  transform: translateX(50%);
 }
 /* Un halo de la couleur de la DESTINATION, jamais du côté d'où ça tombe : c'est un
    indice sur la règle, pas sur la position. */

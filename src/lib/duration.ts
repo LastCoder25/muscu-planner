@@ -46,3 +46,24 @@ export function formatDuration(ms: number): string {
 export function formatDurationMin(min: number): string {
   return formatDuration(min * MIN);
 }
+
+/**
+ * Un CHRONO : « 42 » sous la minute, « 2:05 » au-delà.
+ *
+ * ⚠️ AUTRE BESOIN QUE `formatDuration`, qui parle en « 6 h 30 » — ici on lit des secondes
+ * pendant l'effort, à la seconde près. Elle vit quand même dans CE module : c'est celui
+ * que le projet a créé pour que le formatage d'une durée cesse d'être recopié.
+ *
+ * ⚠️ L'EXPRESSION EST DÉJÀ ÉCRITE UNE DIZAINE DE FOIS dans les écrans de chrono
+ * (`ChallengeDetailPage` ×3, `ComboSessionPage`, `SessionLivePage`, `FreeSessionPage`,
+ * `CourtLivePage`…), et elles ont DÉJÀ divergé : `ChallengeNewPage` pade les minutes
+ * (« 02:05 »), les autres non. On ne rajoute pas une copie de plus ; les existantes
+ * restent à rapatrier ici le jour où l'on touche à ces écrans.
+ *
+ * ⚠️ Sous la minute on rend le nombre NU, sans « 0: » : c'est ce que font déjà les écrans
+ * de gainage, et c'est bien plus lisible en grand sur un téléphone posé devant soi.
+ */
+export function formatClock(sec: number): string {
+  const s = Math.max(0, Math.floor(sec));
+  return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : String(s);
+}

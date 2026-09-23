@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDuration, formatDurationMin } from '@/lib/duration';
+import { formatClock, formatDuration, formatDurationMin } from '@/lib/duration';
 import { EXPE, travelOneWayMin } from '@/lib/expedition';
 
 const MIN = 60_000;
@@ -70,5 +70,31 @@ describe('⏳ formatage des durées', () => {
     // motif complaisant sans que rien ne rougisse — ça vient de se produire en écrivant
     // ce test même.
     expect(formatDurationMin(rt).startsWith('1 j')).toBe(true);
+  });
+});
+
+describe('formatClock — le chrono de l’effort', () => {
+  it('rend le nombre NU sous la minute, et m:ss au-delà', () => {
+    // ⚠️ Sous la minute on n'écrit pas « 0:42 » : en grand sur un téléphone posé devant
+    // soi pendant un gainage, le nombre seul se lit bien mieux.
+    expect(formatClock(0)).toBe('0');
+    expect(formatClock(42)).toBe('42');
+    expect(formatClock(59)).toBe('59');
+    expect(formatClock(60)).toBe('1:00');
+    expect(formatClock(65)).toBe('1:05');
+    expect(formatClock(125)).toBe('2:05');
+    expect(formatClock(600)).toBe('10:00');
+  });
+
+  it('pade les SECONDES, jamais les minutes', () => {
+    // Les copies éparpillées dans les écrans ont divergé exactement là-dessus :
+    // `ChallengeNewPage` écrit « 02:05 », tous les autres « 2:05 ».
+    expect(formatClock(65)).toBe('1:05');
+    expect(formatClock(65).startsWith('1:')).toBe(true);
+  });
+
+  it('ne part jamais en négatif ni en décimales', () => {
+    expect(formatClock(-10)).toBe('0');
+    expect(formatClock(42.7)).toBe('42');
   });
 });

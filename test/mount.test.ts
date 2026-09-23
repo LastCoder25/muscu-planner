@@ -66,6 +66,11 @@ async function mountIt(
   // état final, par exemple) n'est peint qu'au flush suivant.
   await nextTick();
   html?.(host.innerHTML);
+  // ⚠️ ON DÉMONTE, et ce n'est pas de l'hygiène : `HoldGame` est le premier composant du
+  // projet à installer une boucle 60 Hz, qui sans ça tournerait jusqu'à la fin du fichier
+  // en retenant tout son scope. Et ça fait enfin PASSER le test par `onBeforeUnmount`,
+  // que rien ne couvrait — un composant qui plante au démontage restait vert.
+  app.unmount();
   return err;
 }
 

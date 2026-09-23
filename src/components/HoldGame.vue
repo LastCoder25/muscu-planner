@@ -7,16 +7,16 @@
       <header class="hg-top">
         <div class="hg-clock">{{ clock }}</div>
         <div class="hg-rule">{{ def.rule }}</div>
-        <q-btn flat dense round icon="close" aria-label="Quitter le jeu" @click="quit" />
+        <q-btn flat dense round icon="close" aria-label="Quitter le jeu" @click="open = false" />
       </header>
 
       <div class="hg-stage">
-        <component :is="scene" :beats="visible" :pulse="pulse" :reduced="reduced" />
+        <component :is="scene" :beats="visible" :pulse="livePulse" :reduced="reduced" />
       </div>
 
       <div class="hg-hud">
         <span class="hg-score">{{ score.score }}</span>
-        <span v-if="score.bestStreak > 2" class="hg-streak">série {{ streak }}</span>
+        <span v-if="score.streak > 2" class="hg-streak">série {{ score.streak }}</span>
         <span v-if="best > 0" class="hg-best">record {{ best }}</span>
       </div>
 
@@ -25,7 +25,7 @@
       <div class="hg-pads">
         <button
           class="hg-pad"
-          :class="{ lit: litLeft }"
+          :class="{ lit: lit === 'left' }"
           aria-label="Gauche"
           @pointerdown.prevent="tap('left')"
         >
@@ -33,7 +33,7 @@
         </button>
         <button
           class="hg-pad"
-          :class="{ lit: litRight }"
+          :class="{ lit: lit === 'right' }"
           aria-label="Droite"
           @pointerdown.prevent="tap('right')"
         >
@@ -48,18 +48,22 @@
 import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue';
 import {
   activeBeats,
+  activePulse,
   buildHoldPlan,
   holdGame,
   judgeTap,
+  readHoldBest,
+  saveHoldBest,
   scoreHold,
   targetBeat,
   type ActiveBeat,
   type HoldGameId,
   type HoldPlan,
+  type HoldPulse,
   type HoldSide,
   type HoldTap,
-  type HoldVerdict,
 } from '@/lib/holdGames';
+import { formatClock } from '@/lib/duration';
 import HoldSceneRepousse from './hold/HoldSceneRepousse.vue';
 import HoldSceneCadence from './hold/HoldSceneCadence.vue';
 import HoldSceneTri from './hold/HoldSceneTri.vue';
@@ -75,10 +79,7 @@ const props = defineProps<{
   running: boolean;
 }>();
 
-const emit = defineEmits<{
-  'update:modelValue': [boolean];
-  quit: [];
-}>();
+const emit = defineEmits<{ 'update:modelValue': [boolean] }>();
 
 const open = computed({
   get: () => props.modelValue,
@@ -87,11 +88,12 @@ const open = computed({
 
 const def = computed(() => holdGame(props.game));
 
-const SCENES = {
+// Exhaustive par construction : ajouter un jeu sans sa scène ne compile plus.
+const SCENES: Record<HoldGameId, unknown> = {
   repousse: HoldSceneRepousse,
   cadence: HoldSceneCadence,
   tri: HoldSceneTri,
-} as const;
+};
 const scene = computed(() => SCENES[props.game]);
 
 const reduced =
@@ -128,10 +130,16 @@ function stop() {
 onBeforeUnmount(stop);
 
 // ── La partie ──────────────────────────────────────────────────────────────────
-const plan = shallowRef<HoldPlan>(buildHoldPlan(props.game, props.targetSec, 1));
-const resolved = ref(new Set<number>());
-const taps = ref<HoldTap[]>([]);
-const pulse = ref<{ side: HoldSide; verdict: HoldVerdict; at: number } | null>(null);
+// Plan VIDE au départ : `reset()` le remplit avant la première image, et un plan
+// construit ici avec une graine bidon serait généré puis jeté à chaque montage.
+const plan = shallowRef<HoldPlan>({ game: props.game, durationSec: props.targetSec, beats: [] });
+// ⚠️ `shallowRef` POUR LES TROIS : `tap()` remplace toujours la valeur ENTIÈRE, donc la
+// réactivité se déclenche à l'identique — mais un `ref` profond enveloppe chaque élément
+// dans un proxy, et ces structures sont relues à CHAQUE image. Mesuré : ~1 million
+// d'opérations de proxy par seconde, plus une dépendance reconstruite par sollicitation.
+const resolved = shallowRef(new Set<number>());
+const taps = shallowRef<HoldTap[]>([]);
+const pulse = shallowRef<HoldPulse | null>(null);
 const best = ref(0);
 
 function reset() {
@@ -141,33 +149,33 @@ function reset() {
   taps.value = [];
   pulse.value = null;
   nowMs.value = props.elapsedSec * 1000;
-  best.value = readBest(props.game);
+  best.value = readHoldBest(props.game);
 }
 
 const visible = computed<ActiveBeat[]>(() => activeBeats(plan.value, nowMs.value, resolved.value));
 
-// ⚠️ Le score vient de `scoreHold`, jamais d'un compteur tenu à part : deux façons de
-// compter finiraient par afficher un chiffre que le record ne reconnaît pas.
-const score = computed(() => scoreHold(plan.value, taps.value, nowMs.value));
+/**
+ * ⚠️ LE SCORE NE SE RECALCULE QU'À LA SECONDE, pas à chaque image. Il ne change qu'à une
+ * frappe (`taps`) ou quand une sollicitation expire — soit au plus une fois par seconde.
+ * Adossé à `nowMs`, il reparcourait tout le plan 60 fois par seconde pour un chiffre
+ * identique.
+ *
+ * ⚠️ Et il vient de `scoreHold`, jamais d'un compteur tenu à part : deux façons de
+ * compter finiraient par afficher un chiffre que le record ne reconnaît pas. La série en
+ * cours en fait partie — elle était recalculée ici à la main, en quadratique.
+ */
+const nowSec = computed(() => Math.floor(nowMs.value / 1000));
+const score = computed(() => scoreHold(plan.value, taps.value, nowSec.value * 1000));
 
-const streak = computed(() => {
-  let n = 0;
-  for (const beat of plan.value.beats) {
-    const tap = taps.value.find((x) => x.beatId === beat.id);
-    if (!tap) {
-      if (beat.at + beat.windowMs <= nowMs.value) n = 0;
-      continue;
-    }
-    const v = judgeTap(beat, tap.side, tap.at);
-    n = v === 'perfect' || v === 'good' ? n + 1 : 0;
-  }
-  return n;
-});
+const clock = computed(() => formatClock(props.elapsedSec));
 
-const clock = computed(() => {
-  const s = Math.max(0, Math.floor(props.elapsedSec));
-  return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : String(s);
-});
+/**
+ * Le retour de la dernière frappe, ÉTEINT une fois périmé.
+ * ⚠️ C'est LUI qu'on passe aux scènes, jamais `pulse` brut : sans péremption, le rempart
+ * restait vert en permanence et un bac du Tri allumé pour toujours.
+ */
+const livePulse = computed(() => activePulse(pulse.value, nowMs.value));
+const lit = computed(() => livePulse.value?.side ?? null);
 
 // ⚠️ LES WATCHERS VIENNENT APRÈS `score`, ET CE N'EST PAS COSMÉTIQUE : un `watch` immédiat
 // s'exécute PENDANT le setup. Déclaré plus haut, il lirait `score` avant son initialisation
@@ -181,7 +189,7 @@ watch(
       if (props.running) start();
     } else {
       stop();
-      saveBest(props.game, score.value.score);
+      best.value = saveHoldBest(props.game, score.value.score, best.value);
     }
   },
   { immediate: true },
@@ -196,12 +204,6 @@ watch(
   },
 );
 
-const litLeft = computed(() => pulse.value?.side === 'left' && fresh(pulse.value.at));
-const litRight = computed(() => pulse.value?.side === 'right' && fresh(pulse.value.at));
-function fresh(at: number) {
-  return nowMs.value - at < 180;
-}
-
 function tap(side: HoldSide) {
   if (!props.running) return;
   const beat = targetBeat(plan.value, nowMs.value, resolved.value);
@@ -210,37 +212,6 @@ function tap(side: HoldSide) {
   resolved.value = new Set(resolved.value).add(beat.id);
   taps.value = [...taps.value, { beatId: beat.id, side, at: nowMs.value }];
   pulse.value = { side, verdict: judgeTap(beat, side, nowMs.value), at: nowMs.value };
-}
-
-function quit() {
-  saveBest(props.game, score.value.score);
-  emit('quit');
-  open.value = false;
-}
-
-// ── Le record, par appareil ────────────────────────────────────────────────────
-// ⚠️ Purement cosmétique : ni énergie, ni or, ni XP. L'effort est DÉJÀ payé par l'exo,
-// le payer une seconde fois via un mini-jeu rouvrirait un chantier d'équilibrage.
-function key(game: HoldGameId) {
-  return `muscu:hold:best:${game}`;
-}
-
-function readBest(game: HoldGameId): number {
-  try {
-    return Number(localStorage.getItem(key(game)) ?? 0) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-function saveBest(game: HoldGameId, value: number) {
-  if (value <= best.value) return;
-  best.value = value;
-  try {
-    localStorage.setItem(key(game), String(value));
-  } catch {
-    /* navigation privée, stockage bloqué : le record n'est pas essentiel */
-  }
 }
 </script>
 

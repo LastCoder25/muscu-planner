@@ -6,11 +6,14 @@ import {
   HOLD_GAMES,
   HOLD_GAME_EXERCISES,
   activeBeats,
+  activePulse,
   buildHoldPlan,
   holdGame,
   holdGameAllowed,
   holdLeadMs,
   judgeTap,
+  readHoldBest,
+  saveHoldBest,
   scoreHold,
   targetBeat,
   type HoldPlan,
@@ -49,10 +52,87 @@ describe('les trois jeux', () => {
     expect(new Set(HOLD_GAMES.map((g) => g.skill)).size).toBe(3);
   });
 
-  it('se retrouvent par leur id, et un id inconnu ne passe pas en silence', () => {
+  it('se retrouvent par leur id, et la table ne peut pas en oublier un', () => {
+    // ⚠️ RÉÉCRIT : la garantie a changé de NATURE. Avant, un id absent de la table
+    // explosait à l'exécution (`find` + `throw`) ; la table étant désormais un
+    // `Record<HoldGameId, …>`, ajouter un jeu sans sa définition ne COMPILE plus — ce
+    // qu'aucun test ne peut observer. Reste à vérifier ce qui l'est : chaque définition
+    // répond bien de son propre id, et aucune ne manque à l'appel.
+    for (const g of HOLD_GAMES) expect(holdGame(g.id)).toBe(g);
     expect(holdGame('cadence').name).toBe('Cadence');
-    // @ts-expect-error id volontairement hors union
-    expect(() => holdGame('inconnu')).toThrow();
+  });
+});
+
+describe('le retour de frappe', () => {
+  const pulse = { side: 'left' as const, verdict: 'perfect' as const, at: 1000 };
+
+  it("s'éteint tout seul — sinon il ne s'éteint JAMAIS", () => {
+    // ⚠️ Le défaut que ça répare : rien ne remettait `pulse` à null avant la partie
+    // suivante, donc le rempart restait vert en permanence, un bac du Tri allumé pour
+    // toujours, et l'animation du marteau ne se rejouait plus.
+    expect(activePulse(pulse, 1000)).toBe(pulse);
+    expect(activePulse(pulse, 1000 + HOLD.flashMs - 1)).toBe(pulse);
+    expect(activePulse(pulse, 1000 + HOLD.flashMs)).toBeNull();
+    expect(activePulse(pulse, 5000)).toBeNull();
+  });
+
+  it("n'invente rien quand il n'y a rien", () => {
+    expect(activePulse(null, 1000)).toBeNull();
+  });
+});
+
+describe('le record', () => {
+  /**
+   * ⚠️ UN STOCKAGE FACTICE, parce que sans lui le test est CREUX : « on n'écrase pas à
+   * égalité » ne se voit pas dans la valeur rendue (elle vaut l'ancienne dans les deux
+   * cas), seulement dans l'ÉCRITURE. Une mutation qui écrasait à égalité survivait.
+   */
+  function withStore<T>(fn: (writes: string[]) => T): T {
+    const writes: string[] = [];
+    const store = new Map<string, string>();
+    const g = globalThis as { localStorage?: unknown };
+    const saved = g.localStorage;
+    g.localStorage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        writes.push(`${k}=${v}`);
+        store.set(k, v);
+      },
+    };
+    try {
+      return fn(writes);
+    } finally {
+      g.localStorage = saved;
+    }
+  }
+
+  it("ne s'écrase que par un STRICTEMENT meilleur", () => {
+    withStore((writes) => {
+      expect(saveHoldBest('tri', 120, 50)).toBe(120);
+      expect(writes).toHaveLength(1);
+
+      expect(saveHoldBest('tri', 30, 120)).toBe(120);
+      expect(writes, 'un moins bon a été écrit').toHaveLength(1);
+
+      // À égalité on n'écrit même pas : rien à réécrire.
+      expect(saveHoldBest('tri', 120, 120)).toBe(120);
+      expect(writes, 'une égalité a été réécrite').toHaveLength(1);
+    });
+  });
+
+  it('se relit tel qu’il a été écrit', () => {
+    withStore(() => {
+      saveHoldBest('cadence', 340, 0);
+      expect(readHoldBest('cadence')).toBe(340);
+      // Chaque jeu a SON record : un bon score au Tri ne flatte pas la Cadence.
+      expect(readHoldBest('tri')).toBe(0);
+    });
+  });
+
+  it('survit à un stockage indisponible', () => {
+    // Navigation privée, stockage refusé : un record n'est pas essentiel au jeu.
+    expect(() => readHoldBest('repousse')).not.toThrow();
+    expect(readHoldBest('repousse')).toBe(0);
   });
 });
 
@@ -317,6 +397,16 @@ describe('le score', () => {
     expect(fautes.score).toBeGreaterThan(0);
     expect(fautes.wrongs).toBe(plan.beats.length - 5);
     expect(silence.misses).toBe(plan.beats.length - 5);
+  });
+
+  it('publie la série EN COURS, distincte de la meilleure', () => {
+    // ⚠️ Le HUD affiche la série courante : sans ce test, la rendre égale à `bestStreak`
+    // passait inaperçu — et l'écran aurait annoncé une série qu'on vient de casser.
+    const taps = perfectTaps(plan).slice(0, 12);
+    taps[11] = { ...taps[11]!, side: taps[11]!.side === 'left' ? 'right' : 'left' };
+    const s = scoreHold(plan, taps, plan.beats[11]!.at + plan.beats[11]!.windowMs);
+    expect(s.bestStreak).toBe(11);
+    expect(s.streak, 'la faute vient de casser la série').toBe(0);
   });
 
   it('coupe la série sur une faute', () => {

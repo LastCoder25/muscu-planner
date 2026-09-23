@@ -14,28 +14,30 @@
       :key="a.beat.id"
       class="cd-mark"
       :class="[a.beat.from, { near: a.progress > 0.88 }]"
-      :style="{ top: `${Math.min(1, a.progress) * 78}%` }"
+      :style="{ top: `${3 + Math.min(1, a.progress) * 75}%` }"
     />
 
     <div class="cd-anvil" :class="pulseClass">
-      <span class="cd-hammer" :class="{ hit: recent }">🔨</span>
+      <!-- ⚠️ `:key` sur l'INSTANT de la frappe : c'est le remplacement du nœud qui rejoue
+           l'animation. Avec une simple classe, le marteau frappait UNE fois au premier
+           tap et ne bougeait plus de toute la partie — la classe n'était jamais retirée. -->
+      <span :key="pulse?.at ?? 0" class="cd-hammer hit">🔨</span>
       <div class="cd-line" />
     </div>
-    <div v-for="n in sparks" :key="n" class="cd-spark" :style="sparkStyle(n)" />
+    <div
+      v-for="n in sparks"
+      :key="`${pulse?.at ?? 0}-${n}`"
+      class="cd-spark"
+      :style="sparkStyle(n)"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import type { ActiveBeat, HoldSide, HoldVerdict } from '@/lib/holdGames';
+import type { HoldSceneProps } from '@/lib/holdGames';
 
-const props = defineProps<{
-  beats: ActiveBeat[];
-  pulse: { side: HoldSide; verdict: HoldVerdict; at: number } | null;
-  reduced: boolean;
-}>();
-
-const recent = computed(() => !!props.pulse);
+const props = defineProps<HoldSceneProps>();
 
 const pulseClass = computed(() => {
   if (!props.pulse) return '';
@@ -43,10 +45,12 @@ const pulseClass = computed(() => {
   return v === 'perfect' ? 'perfect' : v === 'wrong' ? 'hurt' : 'good';
 });
 
-/** Les étincelles ne sont que du décor : aucune sur mouvement réduit. */
-const sparks = computed(() =>
-  props.reduced || props.pulse?.verdict === 'wrong' ? [] : [1, 2, 3, 4, 5],
-);
+/**
+ * Les étincelles sont du décor. ⚠️ Le gate JS est NÉCESSAIRE ici, il ne double pas la
+ * media query : sous `animation: none`, les cinq traits resteraient figés à l'écran à
+ * pleine opacité au lieu de disparaître.
+ */
+const sparks = computed(() => (props.reduced || props.pulse?.verdict === 'wrong' ? 0 : 5));
 
 function sparkStyle(n: number) {
   const angle = -120 + n * 15;
@@ -71,15 +75,18 @@ function sparkStyle(n: number) {
   gap: 10px;
   padding: 0 14px;
 }
+/* ⚠️ Un FOND, pas des pointillés : au banc, deux bordures en tirets se confondaient avec
+   le reste et les couloirs ne se lisaient pas. */
 .cd-lane {
-  border-left: 1px dashed var(--line);
-  border-right: 1px dashed var(--line);
-  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  border-radius: 14px;
 }
 .cd-mark {
   position: absolute;
   width: 34%;
-  height: 16px;
+  height: 18px;
+  /* Centré sur sa position : sinon le marqueur imminent déborde SOUS la ligne de frappe. */
+  transform: translateY(-50%);
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 55%, var(--surface));
   border: 1px solid var(--accent);
@@ -96,18 +103,21 @@ function sparkStyle(n: number) {
   background: var(--accent);
   box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 60%, transparent);
 }
+/* ⚠️ La ligne D'ABORD, le marteau DESSOUS : au banc il flottait au-dessus de sa propre
+   ligne de frappe, donc on ne savait plus où viser. */
 .cd-anvil {
   position: absolute;
   left: 0;
   right: 0;
   top: 78%;
   display: flex;
-  flex-direction: column;
+  flex-direction: column-reverse;
   align-items: center;
 }
 .cd-line {
   width: 100%;
-  height: 3px;
+  height: 4px;
+  border-radius: 2px;
   background: var(--line);
   transition: background 100ms linear;
 }
@@ -121,7 +131,9 @@ function sparkStyle(n: number) {
   background: var(--d4);
 }
 .cd-hammer {
-  font-size: 30px;
+  font-size: 38px;
+  line-height: 1;
+  margin-bottom: 2px;
   transform-origin: 80% 80%;
 }
 .cd-hammer.hit {
