@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   RIFT,
   incursionBodies,
@@ -18,6 +19,7 @@ import {
   caravanWages,
   missionXpFor,
   missionXpSplit,
+  CARAVAN,
   XP_TEAM_REF,
   HERO_XP_WEIGHT,
   partyAllies,
@@ -475,6 +477,47 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
     expect(missionXpSplit(3, true)).toBeCloseTo(XP_TEAM_REF / 5);
     for (let n = 3; n < 12; n++)
       expect(missionXpSplit(n + 1, false)).toBeLessThanOrEqual(missionXpSplit(n, false));
+  });
+
+  // ⚠️ PLANCHER À `xpLossShare` (v0.1095, mesuré ; décision de l'utilisateur : « si le lieu
+  // est trop dur il faut envoyer tout le monde, mais du coup on ne peut pas les envoyer
+  // ailleurs — en soi c'est déjà un inconvénient »). Sans lui, sur les lieux qui ne se
+  // gagnent qu'à 8, la meilleure stratégie était d'envoyer 3 champions et de PERDRE.
+  it('⚠️ GAGNER ne rapporte JAMAIS moins que PERDRE avec l’escorte de référence', () => {
+    const p = rift({ level: 26 });
+    const perduARef = missionXpFor(team(XP_TEAM_REF, 26), p, false, {}, false).adv_0!;
+    for (const n of [4, 6, 8, 10, 14, 20]) {
+      const gagne = missionXpFor(team(n, 26), p, true, {}, false).adv_0!;
+      expect(gagne, `escorte de ${n}`).toBeGreaterThanOrEqual(perduARef);
+    }
+  });
+
+  it('le plancher EST la part d’un échec, et il en est dérivé', () => {
+    for (let n = 1; n <= 50; n++)
+      expect(missionXpSplit(n, false), `n=${n}`).toBeGreaterThanOrEqual(CARAVAN.xpLossShare);
+    // Il MORD : au-delà de 6, le partage à parts égales passerait dessous.
+    expect(XP_TEAM_REF / 8).toBeLessThan(CARAVAN.xpLossShare);
+    expect(missionXpSplit(8, false)).toBeCloseTo(CARAVAN.xpLossShare);
+  });
+
+  // ⚠️ TEST DE COPIE, assumé comme tel : écrire `0.5` en dur donne EXACTEMENT le même
+  // résultat tant que `xpLossShare` vaut 0,5 — aucune valeur d'exécution ne peut les
+  // distinguer. Ce qu'on garde ici, c'est que le plancher SUIVRA si cette part change ;
+  // sinon la garantie « gagner ≥ perdre » tomberait en silence au prochain réglage.
+  it('le plancher est LU sur xpLossShare, pas recopié', () => {
+    const src = readFileSync(new URL('../src/lib/caravan.ts', import.meta.url), 'utf8');
+    const corps = src.slice(src.indexOf('export function missionXpSplit'));
+    const fin = corps.slice(0, corps.indexOf('}'));
+    expect(fin).toContain('CARAVAN.xpLossShare');
+  });
+
+  it('⚠️ il supprime une punition, il n’ajoute AUCUNE prime à sur-remplir', () => {
+    // Un champion en surnombre rapporte toujours moins qu'à l'escorte de référence…
+    for (let n = XP_TEAM_REF + 1; n <= 20; n++)
+      expect(missionXpSplit(n, false)).toBeLessThan(missionXpSplit(XP_TEAM_REF, false));
+    // …et jusqu'à 6 membres, RIEN ne change (la calibration d'avant est intacte).
+    for (const n of [1, 2, 3, 4, 5, 6])
+      expect(missionXpSplit(n, false), `n=${n}`).toBeCloseTo(Math.min(1, XP_TEAM_REF / n));
   });
 
   it('le socle d’un membre baisse quand l’équipe grossit, la part des abattus reste la sienne', () => {

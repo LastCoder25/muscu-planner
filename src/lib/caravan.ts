@@ -774,10 +774,30 @@ export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
  *  (`heroPartyCombatant`), il en prend donc deux parts — perdues, son XP vient du sport. */
 export const XP_TEAM_REF = 3;
 export const HERO_XP_WEIGHT = 2;
-/** Facteur appliqué au socle de chaque champion (1 jusqu'à `XP_TEAM_REF` membres). */
+/**
+ * Facteur appliqué au socle de chaque champion (1 jusqu'à `XP_TEAM_REF` membres).
+ *
+ * ⚠️ PLANCHER À `xpLossShare` (v0.1095, mesuré ; décision de l'utilisateur : « si le lieu est
+ * trop dur il faut envoyer tout le monde, mais du coup on ne peut pas les envoyer ailleurs —
+ * en soi c'est déjà un inconvénient, donc il faudrait que l'XP suive »). Sans lui, au-delà de
+ * 6 membres le partage tombait SOUS ce que rapporte un échec : mesuré, sur les lieux qui ne
+ * se gagnent qu'à 8, la meilleure stratégie était d'envoyer 3 champions et de PERDRE
+ * (9,9 contre 8,1 XP/h/champion) — gagner à 8 rendait `3/8 = 37,5 %` du socle quand perdre à
+ * 3 en rend 50 %. On punissait celui qui monte l'équipe nécessaire pour venir à bout d'un
+ * lieu dur, alors que le COÛT D'OPPORTUNITÉ le punit déjà (ces champions ne sont nulle part
+ * ailleurs).
+ *
+ * ⚠️ Le plancher EST `xpLossShare`, et il en est DÉRIVÉ : la propriété garantie est « une
+ * victoire ne rapporte jamais moins qu'un échec avec l'escorte de référence », et elle doit
+ * suivre si cette part change.
+ *
+ * ⚠️ Il ne crée AUCUNE incitation à sur-remplir : le plancher vaut la moitié du socle, donc
+ * un champion en surnombre rapporte toujours moins qu'à `XP_TEAM_REF`. Il supprime une
+ * punition, il n'ajoute pas de prime.
+ */
 export function missionXpSplit(escortCount: number, hero: boolean): number {
   const weight = Math.max(1, escortCount) + (hero ? HERO_XP_WEIGHT : 0);
-  return Math.min(1, XP_TEAM_REF / weight);
+  return Math.max(CARAVAN.xpLossShare, Math.min(1, XP_TEAM_REF / weight));
 }
 
 /** L'XP de chaque membre d'une mission : socle (selon l'issue, partagé au-delà de
