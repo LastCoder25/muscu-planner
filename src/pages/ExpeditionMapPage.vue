@@ -697,7 +697,7 @@ import CaravanReportView from '@/components/CaravanReportView.vue';
 import PartyReportView from '@/components/PartyReportView.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel, campWinPct } from '@/lib/camp';
-import { poiRank, poiRankCounts } from '@/lib/poiDifficulty';
+import { poiRank, poiRankCounts } from '@/lib/poiRank';
 import {
   PARTY_HERO_BLOCK_LABEL,
   PARTY_SEND_BLOCK_LABEL,

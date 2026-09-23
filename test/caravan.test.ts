@@ -106,7 +106,7 @@ import {
   type Poi,
   type PoiType,
 } from '@/lib/expedition';
-import { poiDifficultyLevel } from '@/lib/poiDifficulty';
+import { poiDifficultyLevel } from '@/lib/poiRank';
 
 const poi = (over: Partial<Poi> = {}): Poi => ({
   id: 'p',

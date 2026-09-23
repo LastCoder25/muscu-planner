@@ -34,6 +34,7 @@ import {
   type ExpeditionMessage,
   type Poi,
 } from '@/lib/expedition';
+import { poiDifficultyLevel } from '@/lib/poiRank';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
 // éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
@@ -64,12 +65,16 @@ describe('expedition — carte / monde', () => {
     const m = createMap(123, 0, 10, OUT, 3);
     expect(m.pois.length).toBeGreaterThanOrEqual(1);
     const w = spawnWindow(10);
-    // 🏅 Depuis la v0.1028 TOUS les lieux tirent leur niveau par RANG, comme les failles
+    // 🏅 Depuis la v0.1028 TOUS les lieux tirent leur RANG, comme les failles
     // (`riftLevelFor`) : entre le niveau 1 et le joueur, plus la place « au-dessus ». La
     // RÉCOMPENSE, elle, garde la fenêtre (`poiRewardLevel`) — l'économie ne bouge pas.
+    // ⚠️ RÉÉCRIT (v0.1108) : c’est la DIFFICULTÉ qui est bornée, plus le niveau des
+    // ennemis. Depuis que le rang tiré est celui de la difficulté, le niveau en est
+    // DÉRIVÉ — un lieu qui n’aligne qu’un ennemi lui donne un niveau plus élevé pour peser
+    // le même rang. Borner `p.level` interdirait précisément « peu d’ennemis très forts ».
     for (const p of m.pois.filter(isQuotaPoi)) {
       expect(p.level).toBeGreaterThanOrEqual(1);
-      expect(p.level).toBeLessThanOrEqual(10 + riftAboveSpan(10));
+      expect(poiDifficultyLevel(p)).toBeLessThanOrEqual(10 + riftAboveSpan(10));
       expect(poiRewardLevel(p)).toBeGreaterThanOrEqual(w.min);
       expect(poiRewardLevel(p)).toBeLessThanOrEqual(w.max);
     }

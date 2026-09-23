@@ -11,6 +11,7 @@ import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank'
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
+import { levelForDifficulty } from './poiDifficulty';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
  *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
@@ -1360,7 +1361,21 @@ function placePoiOfType(
   // ⚠️ SAUF L'ARÈNE : réservée au héros (aucun champion n'y va), et son or croît avec les vagues
   // tenues — une arène Bronze pour un héros de niveau 30 se tiendrait sans fin et rapporterait
   // d'autant plus. Elle garde donc la fenêtre, niveau et récompense confondus.
-  const level = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  // 🎯 LE RANG TIRÉ EST CELUI DE LA DIFFICULTÉ, et on en DÉRIVE le niveau des ennemis
+  // (v0.1108). Sans ça, le rang affiché — qui dit la difficulté depuis la v0.1106 — glissait
+  // vers le bas : mesuré, un joueur Argent ne voyait plus que 18 % de lieux à son rang au
+  // lieu de 64 %, et le « au-dessus de toi » tombait de 28 % à 3 % chez un joueur Or. On
+  // tirait un rang de NIVEAU, on affichait un rang de DIFFICULTÉ : deux échelles.
+  // ⚠️ La TAILLE ne bouge pas : elle reste dérivée de l’id (une carte sauvegardée garde la
+  // sienne, sans migration). C’est le NIVEAU qui compense — donc un lieu à 1 ennemi aligne
+  // un ennemi plus fort, et « peu de forts » ou « beaucoup de faibles » remplissent le même
+  // rang. Exactement ce que le joueur lit.
+  const vise = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  // ⚠️ Les gardes d’une récolte ont une RAMPE de début de partie qui lit le niveau : on
+  // l’estime sur la difficulté visée. Au-delà du niveau 7 elle vaut 1, donc sans effet ; en
+  // deçà le lieu sort un peu plus facile que sa cible — c’est la rampe d’apprentissage.
+  const force = campSpecOf({ id, type }) ?? harvestGuardOf({ id, type, level: vise });
+  const level = force ? levelForDifficulty(vise, force.size) : vise;
   const rewardLevel = forcedLevel === undefined && level !== rewardRoll ? rewardRoll : undefined;
   // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement
   // justifie (`travelLevel`, v0.1012), sinon un lieu fort près de la ville mettrait autant

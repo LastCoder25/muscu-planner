@@ -6,7 +6,7 @@
 // davantage, c'est l'ACCORD : le filtre doit ranger les lieux exactement là où la pastille
 // les affiche — sinon filtrer « Argent » cesse de montrer les lieux marqués Argent.
 import { describe, it, expect } from 'vitest';
-import { poiRank, poiRankCounts } from '@/lib/poiDifficulty';
+import { poiRank, poiRankCounts } from '@/lib/poiRank';
 import { characterRank } from '@/lib/characterRank';
 import { campSpecOf, harvestGuardOf, type Poi } from '@/lib/expedition';
 

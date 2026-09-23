@@ -78,7 +78,8 @@ import {
   type AdvRole,
 } from './adventurers';
 import { rankStartLevel } from './characterRank';
-import { poiDifficultyLevel, REF_TEAM } from './poiDifficulty';
+import { REF_TEAM } from './poiDifficulty';
+import { poiDifficultyLevel } from './poiRank';
 import {
   ADV_GEAR_SLOTS,
   advGearEffects,
