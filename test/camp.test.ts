@@ -801,7 +801,8 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
     wages: 123.6,
     ...over,
   });
-  const ctx = { pantheonLevel: 30, infirmaryLevel: 4, now: 1_000_000 };
+  // ⏱️ `backAt` = le RETOUR du groupe, `now` = le clic « Encaisser ». Ici ils coïncident.
+  const ctx = { pantheonLevel: 30, infirmaryLevel: 4, backAt: 1_000_000, now: 1_000_000 };
 
   it('XP de chacun = grantAdvXp ; celui qui n’est pas parti est intact', () => {
     const r = partyClaimRoster(party(), roster, ctx);
@@ -815,10 +816,30 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
 
   it('🤕 les blessés du camp partent à l’infirmerie (durée d’un convoi), les autres non', () => {
     const r = partyClaimRoster(party(), roster, ctx);
-    const until = ctx.now + caravanHurtMs(esc, ctx.infirmaryLevel);
+    const until = ctx.backAt + caravanHurtMs(esc, ctx.infirmaryLevel);
     expect(r.adventurers[1]!.hurtUntil).toBe(until);
     expect(r.adventurers[0]!.hurtUntil).toBeUndefined();
     expect(r.adventurers[2]!.hurtUntil).toBeUndefined();
+  });
+
+  // ⏱️ LA CONVALESCENCE COURT DEPUIS LE RETOUR, PAS DEPUIS LE CLIC (v0.1096 ; même défaut
+  // que le siège — signalé par l'utilisateur — mais en PIRE : le décalage n'était pas borné
+  // par un tick, il l'était par le moment où l'on pense à encaisser.
+  it('⏱️ encaisser plus tard ne fait pas recommencer la convalescence', () => {
+    const tard = { ...ctx, now: ctx.backAt + 2 * 3600000 };
+    const tot = partyClaimRoster(party(), roster, tard).adventurers[1]!.hurtUntil;
+    const suite = partyClaimRoster(party(), roster, ctx).adventurers[1]!.hurtUntil;
+    expect(tot).toBe(suite);
+    // …donc il lui reste DEUX HEURES DE MOINS à l'écran : c'est tout l'objet du correctif.
+    expect(tot! - tard.now).toBeLessThan(suite! - ctx.now);
+  });
+
+  it('⏱️ une convalescence déjà écoulée ne met personne à l’infirmerie', () => {
+    const tres = { ...ctx, now: ctx.backAt + 500 * 3600000 };
+    const r = partyClaimRoster(party(), roster, tres);
+    expect(r.adventurers[1]!.hurtUntil).toBeUndefined();
+    // L'XP, elle, est bien versée : seul l'état mort est écarté.
+    expect(r.adventurers[1]!.xp).not.toBe(roster[1]!.xp);
   });
 
   it('⚠️ une convalescence plus longue (siège perdu) n’est jamais raccourcie', () => {

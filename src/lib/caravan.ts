@@ -22,6 +22,7 @@ import {
   prestigeRankIndex,
   type AggregatedEffects,
 } from './items';
+import { sinceEvent } from './sinceEvent';
 import {
   simulateCombat,
   mulberry32,
@@ -1285,13 +1286,20 @@ export function caravanClaimRoster(
   const escort = van.escort
     .map((id) => roster.find((a) => a.id === id))
     .filter((a): a is Adventurer => !!a);
-  const hurtUntil = ctx.now + caravanHurtMs(escort, ctx.infirmaryLevel);
+  // ⏱️ DEPUIS LE RETOUR DU CONVOI, pas depuis le clic « Encaisser » : le blessé arrive à
+  // l'infirmerie quand le convoi rentre, et encaisser deux jours plus tard ne doit pas lui
+  // faire recommencer sa convalescence. C'était le même défaut que le siège, en PIRE — le
+  // décalage n'était pas borné par un tick mais par le moment où l'on pense à encaisser.
+  // ⚠️ `null` = elle est déjà écoulée : il est debout, on ne pose pas un état mort.
+  const hurtUntil = sinceEvent(van.returnAt, caravanHurtMs(escort, ctx.infirmaryLevel), ctx.now);
   const hurt = new Set(o.hurt);
   const adventurers = roster.map((a) => {
     const gain = o.xp[a.id];
     if (gain === undefined) return a;
     const up = grantAdvXp(a, gain, ctx.pantheonLevel);
-    return hurt.has(a.id) ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) } : up;
+    return hurtUntil && hurt.has(a.id)
+      ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) }
+      : up;
   });
   return { adventurers, escort, wages: Math.max(0, Math.round(o.wages || 0)) };
 }

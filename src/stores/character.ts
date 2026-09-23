@@ -1995,6 +1995,9 @@ export const useCharacterStore = defineStore('character', () => {
       const claim = partyClaimRoster(party, advList.value, {
         pantheonLevel: pantheonLevel.value,
         infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
+        // ⏱️ Le RETOUR en ville (`claimAt`), pas ce clic : la convalescence a déjà couru.
+        // Les rapports d’avant n’ont que `resolvedAt` — le même repli qu`isClaimable`.
+        backAt: m.claimAt ?? m.resolvedAt,
         now,
       });
       wages = claim.wages;
@@ -2181,7 +2184,12 @@ export const useCharacterStore = defineStore('character', () => {
       t.dueRaid,
       home,
     );
-    const { base: nb, damage, corpses } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
+    const {
+      base: nb,
+      damage,
+      corpses,
+      woundUntil,
+    } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
     const patch: Record<string, unknown> = { base: nb };
 
     // 🦴 LE BUTIN DES CORPS EST CRÉDITÉ TOUT DE SUITE (demandé), et il part avec le
@@ -2222,14 +2230,11 @@ export const useCharacterStore = defineStore('character', () => {
     // qui va avec. Le barème vit dans `siegeXp` (lib, testé), jamais ici.
     // 🤕 Siège PERDU : ceux qui sont tombés partent à l’infirmerie, comme le héros, pour
     // la MÊME durée (l’Infirmerie l’abrège). La règle vit dans `siegeHurtIds` (lib).
-    // ⚠️ DEPUIS LA BATAILLE, pas depuis l’instant où on la découvre — la même règle que la
-    // convalescence du héros (`applyRaidOutcome`) : un siège se résout à son heure, que
-    // l’app soit ouverte ou non, et on ne fait pas payer une absence. `report.resolvedAt`
-    // EST cette heure, donc les deux ne peuvent pas diverger.
-    const hurt = new Set(siegeHurtIds(report));
-    const hurtUntil =
-      report.resolvedAt +
-      woundMsFor(defenseLevel(t.base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7));
+    // ⚠️ LA MÊME ÉCHÉANCE QUE LE HÉROS, rendue par `applyRaidOutcome` — plus recalculée ici.
+    // Recopiée, elle perdait le plancher de la lib : après une longue absence le héros
+    // revenait indemne pendant qu’on écrivait aux défenseurs une convalescence DÉJÀ dépassée.
+    // `null` = elle est écoulée, personne ne part à l’infirmerie.
+    const hurt = woundUntil ? new Set(siegeHurtIds(report)) : new Set<string>();
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
       const gains: Record<string, number> = {};
@@ -2239,7 +2244,7 @@ export const useCharacterStore = defineStore('character', () => {
         gains[a.id] = gain;
         const next = grantAdvXp(a, gain, pantheonLevel.value);
         return hurt.has(a.id)
-          ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, hurtUntil) }
+          ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, woundUntil ?? 0) }
           : next;
       });
       Object.assign(patch, gearTrainedPatch(cur, advList.value, patch.adventurers as Adventurer[]));

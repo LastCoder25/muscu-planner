@@ -813,6 +813,21 @@ function gearAhead(a: AdvGear, b: AdvGear): number {
   );
 }
 
+/** Les ids RÉELLEMENT portés, en un seul ensemble. ⚠️ La dérivation « Map de `wornGear`
+ *  → Set d'ids » était écrite trois fois : le jour où `wornGear` change de forme de
+ *  retour, un seul oubli donnerait un Set d'`undefined`, donc un compteur muet. */
+function wornGearIds(advs: Adventurer[], stock: AdvGear[]): Set<string> {
+  return new Set([...wornGear(advs, stock).values()].flat().map((x) => x.id));
+}
+
+/** Les exemplaires d'un MODÈLE, du plus avancé au moins avancé (`gearAhead`). ⚠️ SOURCE
+ *  UNIQUE : le plan d'une ligne et le geste de masse doivent désigner le MÊME exemplaire
+ *  gardé — deux tris finiraient par se contredire, et l'écran annoncerait des doublons
+ *  bloqués autour d'une pièce que le bouton ✨ ne monte pas. */
+function modelCopies(stock: AdvGear[], model: string): AdvGear[] {
+  return stock.filter((x) => advGearModelOf(x) === model).sort(gearAhead);
+}
+
 /**
  * ✨ Ce qu'un éveil ferait dans ce MODÈLE (lignée × emplacement × lettre) : quelle pièce on
  * GARDE, laquelle on FOND, et combien de doublons restent disponibles. `null` s'il n'y a rien
@@ -825,13 +840,18 @@ export function advGearAwakenPlan(
   g: AdvGear,
   stock: AdvGear[],
   advs: Adventurer[],
+  /** Les ids portés, quand l’appelant les a déjà. ⚠️ INVARIANT pendant une série d’éveils :
+   *  la pièce fondue n’est jamais portée (le plan l’exclut) et la pièce gardée garde son id,
+   *  sa lignée et sa rareté — `wornGear` rend donc le même ensemble à chaque tour. L’omettre
+   *  ne change QUE le coût : on le recalcule. */
+  worn = wornGearIds(advs, stock),
 ): { keep: AdvGear; consume: AdvGear; spare: number } | null {
   const model = advGearModelOf(g);
   if (!model) return null;
-  const copies = stock.filter((x) => advGearModelOf(x) === model).sort(gearAhead);
+  const copies = modelCopies(stock, model);
   const keep = copies[0];
+  // ⚠️ `!keep` est ATTEIGNABLE ici : `g` peut ne pas appartenir à `stock`.
   if (!keep || (keep.awaken ?? 0) >= ADV_GEAR_AWAKEN.max) return null;
-  const worn = new Set([...wornGear(advs, stock).values()].flat().map((x) => x.id));
   const free = copies.slice(1).filter((x) => !worn.has(x.id) && !x.locked);
   const consume = free[free.length - 1];
   return consume ? { keep, consume, spare: free.length } : null;
@@ -874,29 +894,36 @@ export function awakenAllAdvGear(
   stock: AdvGear[],
   advs: Adventurer[],
 ): { stock: AdvGear[]; merged: number; worn: number; locked: number } {
-  const models = [...new Set(stock.map((g) => advGearModelOf(g)).filter((m) => !!m))];
+  // UN REPRÉSENTANT par modèle, pris une fois. ⚠️ `advGearAwakenPlan` ne lit de son premier
+  // argument que son MODÈLE (lignée × emplacement × lettre), qui ne change jamais : le
+  // représentant reste valide même une fois fondu.
+  const reps = new Map<string, AdvGear>();
+  for (const g of stock) {
+    const m = advGearModelOf(g);
+    if (m && !reps.has(m)) reps.set(m, g);
+  }
+  // ⚠️ UNE SEULE construction de `wornGear` pour toute la fusion : mesuré, la rejouer à
+  // chaque tour coûtait ~89 reconstructions (≈9 ms sur un stock réel, bien plus derrière les
+  // proxies réactifs). Elle est invariante — cf. le paramètre `worn` du plan.
+  const wornIds = wornGearIds(advs, stock);
   let cur = stock;
   let merged = 0;
-  for (const m of models)
-    for (;;) {
-      const any = cur.find((g) => advGearModelOf(g) === m);
-      if (!any) break;
-      const plan = advGearAwakenPlan(any, cur, advs);
-      if (!plan) break;
+  for (const g of reps.values())
+    for (let plan; (plan = advGearAwakenPlan(g, cur, advs, wornIds)); ) {
       cur = awakenAdvGear(cur, plan);
       merged++;
     }
-  // Ce qui reste bloqué une fois fondu tout ce qui pouvait l'être.
-  const wornIds = new Set([...wornGear(advs, cur).values()].flat().map((x) => x.id));
+  // Ce qui reste bloqué une fois fondu tout ce qui pouvait l'être. ⚠️ La boucle ci-dessus
+  // ne quitte un modèle que lorsque plus AUCUN doublon n'est libre : tout ce qui suit la
+  // pièce gardée est donc porté ou 🔒, et le `else` dit cet invariant au lieu de le supposer.
   let worn = 0;
   let locked = 0;
-  for (const m of models) {
-    const copies = cur.filter((g) => advGearModelOf(g) === m).sort(gearAhead);
-    const keep = copies[0];
-    if (!keep || (keep.awaken ?? 0) >= ADV_GEAR_AWAKEN.max) continue;
+  for (const m of reps.keys()) {
+    const copies = modelCopies(cur, m);
+    if ((copies[0]!.awaken ?? 0) >= ADV_GEAR_AWAKEN.max) continue;
     for (const x of copies.slice(1)) {
       if (wornIds.has(x.id)) worn++;
-      else if (x.locked) locked++;
+      else locked++;
     }
   }
   return { stock: cur, merged, worn, locked };
@@ -915,11 +942,23 @@ export function awakenAllAdvGear(
  *
  * Rend le MÊME tableau quand personne ne porte rien — on n'écrit pas à vide.
  */
+/** Combien de pièces sont ASSIGNÉES au vivier — sur `gear` BRUT (ce que `stripAdvGear`
+ *  retirera), jamais `wornGear` (ce que le combat retient). ⚠️ SOURCE UNIQUE : l’écran
+ *  annonçait ce nombre avec sa propre boucle, et il devait exécuter le geste entier pour
+ *  obtenir un entier. Zéro allocation.
+ *  ⚠️ À NE PAS confondre avec le chip « 🗡️ Portées », qui compte les pièces DU STOCK ayant
+ *  un porteur : un id qui ne désigne plus rien est compté ici et pas là-bas. */
+export function countAssignedGear(advs: readonly Adventurer[]): number {
+  let n = 0;
+  for (const a of advs) for (const s of ADV_GEAR_SLOTS) if (a.gear?.[s]) n++;
+  return n;
+}
+
 export function stripAdvGear(advs: Adventurer[]): { advs: Adventurer[]; removed: number } {
-  const carried = (a: Adventurer) => Object.values(a.gear ?? {}).filter((id) => !!id).length;
-  const removed = advs.reduce((s, a) => s + carried(a), 0);
+  const removed = countAssignedGear(advs);
   if (!removed) return { advs, removed: 0 };
-  return { advs: advs.map((a) => (carried(a) ? { ...a, gear: {} } : a)), removed };
+  const porte = (a: Adventurer) => ADV_GEAR_SLOTS.some((sl) => !!a.gear?.[sl]);
+  return { advs: advs.map((a) => (porte(a) ? { ...a, gear: {} } : a)), removed };
 }
 
 // ── 🏅 RANG, ÉTOILES ET TRI D'UNE PIÈCE (demandé : « comme les héros, par rareté ») ──────────

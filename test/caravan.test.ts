@@ -537,9 +537,30 @@ describe('🎁 caravanClaimRoster — ce que l’encaissement change au vivier',
 
   it('🤕 les blessés partent à l’infirmerie (durée d’un convoi), les autres non', () => {
     const r = caravanClaimRoster(van(), roster, ctx);
-    expect(r.adventurers[1]!.hurtUntil).toBe(ctx.now + caravanHurtMs(esc, ctx.infirmaryLevel));
+    // ⏱️ Depuis le RETOUR du convoi, pas depuis le clic.
+    expect(r.adventurers[1]!.hurtUntil).toBe(
+      van().returnAt + caravanHurtMs(esc, ctx.infirmaryLevel),
+    );
     expect(r.adventurers[0]!.hurtUntil).toBeUndefined();
     expect(r.adventurers[2]!.hurtUntil).toBeUndefined();
+  });
+
+  // ⏱️ DEPUIS LE RETOUR DU CONVOI, PAS DEPUIS LE CLIC (v0.1096). C'était le défaut de
+  // l'infirmerie du siège, sur une porte non fermée — et en pire : le décalage n'était pas
+  // borné par un tick mais par le moment où l'on pense à encaisser.
+  it('⏱️ encaisser deux jours plus tard ne fait pas recommencer la convalescence', () => {
+    const v = van();
+    // Encaisser une heure après le retour : la MÊME échéance qu’en encaissant aussitôt.
+    const tot = { ...ctx, now: v.returnAt };
+    const peu = { ...ctx, now: v.returnAt + 1 * 3600000 };
+    const a = caravanClaimRoster(v, roster, tot).adventurers[1]!.hurtUntil;
+    const b = caravanClaimRoster(v, roster, peu).adventurers[1]!.hurtUntil;
+    expect(b).toBe(a);
+    // …donc il lui reste une heure de MOINS, au lieu de tout recommencer.
+    expect(b! - peu.now).toBeLessThan(a! - tot.now);
+    // Et bien après, elle est écoulée : personne ne part à l’infirmerie.
+    const tard = { ...ctx, now: v.returnAt + 500 * 3600000 };
+    expect(caravanClaimRoster(v, roster, tard).adventurers[1]!.hurtUntil).toBeUndefined();
   });
 
   it('⚠️ une convalescence plus longue (siège perdu) n’est JAMAIS raccourcie', () => {
@@ -557,7 +578,7 @@ describe('🎁 caravanClaimRoster — ce que l’encaissement change au vivier',
     const court = ctx.now + 600_000;
     const presque = roster.map((a) => (a.id === 'a1' ? { ...a, hurtUntil: court } : a));
     expect(caravanClaimRoster(van(), presque, ctx).adventurers[1]!.hurtUntil).toBe(
-      ctx.now + caravanHurtMs(esc, ctx.infirmaryLevel),
+      van().returnAt + caravanHurtMs(esc, ctx.infirmaryLevel),
     );
   });
 
