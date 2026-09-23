@@ -41,7 +41,6 @@ import {
   starOdds,
   RANK_COLOR,
   dropBand,
-  dropBandLabel,
   dropPeakRank,
   prestigeRankIndex,
   RANK_ORDER,
@@ -62,11 +61,8 @@ import {
   SET_SLOTS,
   SET_SIZE,
   normRank,
-  fullInfuseCost,
-  infuseToMaxCost,
   itemScore,
   effectiveValue,
-  salvageValue,
   sellValue,
   canSell,
   upgradeCost,
@@ -74,15 +70,10 @@ import {
   setCounts,
   setEffects,
   ITEM_SETS,
-  forgeCost,
-  forgeItem,
   rerollCost,
-  craftSetCost,
-  rerolledQuality,
   rankRollMult,
   itemLevelMult,
   rollJet,
-  swapLoadoutGear,
   bestGearLoadout,
   elagueDomines,
   type Item,
@@ -333,8 +324,6 @@ describe('rollTier : le rang des objets s’ouvre sur la durée du rang (v0.894)
     expect(dropPeakRank(4)).toBe(RANK_ORDER[0]);
     expect(dropPeakRank(25)).toBe(RANK_ORDER[prestigeRankIndex(25) - 1]);
     expect(dropPeakRank(85, 20)).toBe(RANK_ORDER[prestigeRankIndex(20) - 1]);
-    expect(dropBandLabel(35, 0)).toMatch(/Or/);
-    expect(dropBandLabel(35, 0)).not.toMatch(/rare|epique|magique/);
   });
 });
 
@@ -379,15 +368,13 @@ describe('recyclage / vente', () => {
       effect: { type: 'damage_pct', value: 28 },
       rarity: 'legendaire',
     });
-    expect(salvageValue(high)).toBeGreaterThan(salvageValue(low));
     expect(sellValue(high)).toBeGreaterThan(sellValue(low));
   });
-  it('recyclage/vente : poussière & or ∝ RANG (enchant retiré)', () => {
+  it('vente : l’or ∝ RANG (enchant retiré)', () => {
     const rarity = 'magique' as const;
     const base = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 10 }, rarity });
-    // rang plus haut → plus de poussière ET plus d'or (base de rang, plus d'axe enchant)
+    // rang plus haut → plus d'or (base de rang, plus d'axe enchant)
     const higher = item({ ...base, rarity: 'legendaire' });
-    expect(salvageValue(higher)).toBeGreaterThan(salvageValue(base));
     expect(sellValue(higher)).toBeGreaterThan(sellValue(base));
   });
   it('vente : le JET et le NIVEAU impactent le prix (même rang)', () => {
@@ -419,33 +406,6 @@ describe('recyclage / vente', () => {
     expect(canSell(fam)).toBe(false);
     expect(canSell(arme)).toBe(true);
     expect(canSell({ ...arme, locked: true })).toBe(false);
-  });
-});
-
-describe('économie — infusion & coûts', () => {
-  it('fullInfuseCost(1) = 0 et croît avec le niveau cible', () => {
-    expect(fullInfuseCost(1, 'magique')).toBe(0);
-    expect(fullInfuseCost(5, 'magique')).toBe(
-      upgradeCost(1, 'magique') +
-        upgradeCost(2, 'magique') +
-        upgradeCost(3, 'magique') +
-        upgradeCost(4, 'magique'),
-    );
-    expect(fullInfuseCost(10, 'magique')).toBeGreaterThan(fullInfuseCost(5, 'magique'));
-  });
-  it('infuseToMaxCost : du niveau actuel jusqu’au cap joueur', () => {
-    const lvl1 = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 8 },
-      rarity: 'commun',
-      baseLevel: 1,
-      level: 1,
-    });
-    expect(infuseToMaxCost(lvl1, 1)).toBe(0);
-    expect(infuseToMaxCost(lvl1, 5)).toBe(fullInfuseCost(5, 'commun'));
-    expect(infuseToMaxCost({ ...lvl1, level: 3 }, 5)).toBe(
-      upgradeCost(3, 'commun') + upgradeCost(4, 'commun'),
-    );
   });
 });
 
@@ -811,35 +771,7 @@ describe('sets d’équipement (voie)', () => {
   });
 });
 
-describe('atelier de poussière (forge / reroll / craft)', () => {
-  it('forge : ciblé coûte plus que l’aléatoire, et ça monte avec le niveau', () => {
-    expect(forgeCost(10, true)).toBeGreaterThan(forgeCost(10, false));
-    expect(forgeCost(20, false)).toBeGreaterThan(forgeCost(5, false));
-  });
-  it('forge : objet neuf au niveau demandé, slot respecté si ciblé', () => {
-    const it = forgeItem(mulberry32(1), { level: 8, slot: 'weapon' });
-    expect(it.slot).toBe('weapon');
-    expect(it.level).toBe(8);
-    expect(it.effect.value).toBeGreaterThan(0);
-  });
-  it('reroll du JET : garde le type + le rang, ne touche que la valeur/le jet', () => {
-    const sword = item({
-      slot: 'weapon',
-      effect: { type: 'damage_pct', value: 8 },
-      level: 5,
-      roll: 0.1,
-    });
-    expect(rerollCost(sword)).toBeGreaterThan(0);
-    const rq = rerolledQuality(mulberry32(2), sword);
-    expect(rq.effect.type).toBe('damage_pct');
-    expect(rq.effect.value).toBeGreaterThan(0);
-    expect(rq.roll).toBeGreaterThanOrEqual(0);
-    expect(rq.roll).toBeLessThanOrEqual(1);
-  });
-  it('craft de set : coût élevé qui monte avec le niveau', () => {
-    expect(craftSetCost(10)).toBeGreaterThan(200);
-    expect(craftSetCost(20)).toBeGreaterThan(craftSetCost(10));
-  });
+describe('coût de reroll (le reste de l’Atelier est retiré)', () => {
   it('coûts qui montent avec le NIVEAU + le rang (reroll)', () => {
     const lo = item({ slot: 'weapon', effect: { type: 'damage_pct', value: 8 }, level: 3 });
     const hi = item({ ...lo, level: 20 });
@@ -913,45 +845,6 @@ describe('effets signature & payoff haut-rang (rollDrop)', () => {
     expect(itemIconName({ slot: 'shield', name: 'Inconnu' })).toBe('mdi-shield');
     // Un nom d'avant la refonte reste reconnu.
     expect(itemIconName({ slot: 'accessory', name: 'Amulette de bronze' })).toBe('mdi-necklace');
-  });
-});
-
-describe('swapLoadoutGear — ranger / échanger un set (4 slots gear, familier intact)', () => {
-  const mk = (slot: string, name: string): Item =>
-    ({
-      id: name,
-      slot,
-      name,
-      emoji: '🗡️',
-      rarity: 'magique',
-      level: 1,
-      effect: { type: 'damage_pct', value: 10 },
-    }) as unknown as Item;
-
-  it('loadout vide + équipé plein → « ranger » : le joueur devient nu, le loadout garde le stuff', () => {
-    const equipped: Equipped = {
-      weapon: mk('weapon', 'W'),
-      armor: mk('armor', 'legendaire'),
-      familiar: mk('familiar', 'inhabituel'),
-    };
-    const { equipped: eq, loadoutItems: lo } = swapLoadoutGear(equipped, {});
-    // Les 4 slots gear sont vidés, le familier RESTE équipé.
-    expect(eq.weapon).toBeUndefined();
-    expect(eq.armor).toBeUndefined();
-    expect(eq.familiar?.name).toBe('inhabituel');
-    expect(lo.weapon?.name).toBe('W');
-    expect(lo.armor?.name).toBe('legendaire');
-    expect(lo.familiar).toBeUndefined(); // le familier n'est jamais rangé
-  });
-
-  it('swap deux sets : ce qu’on portait passe dans le loadout, on porte le loadout', () => {
-    const equipped: Equipped = { weapon: mk('weapon', 'W1') };
-    const stored: Equipped = { weapon: mk('weapon', 'W2'), armor: mk('armor', 'A2') };
-    const { equipped: eq, loadoutItems: lo } = swapLoadoutGear(equipped, stored);
-    expect(eq.weapon?.name).toBe('W2');
-    expect(eq.armor?.name).toBe('A2');
-    expect(lo.weapon?.name).toBe('W1');
-    expect(lo.armor).toBeUndefined();
   });
 });
 

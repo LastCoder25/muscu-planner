@@ -241,7 +241,6 @@ export interface CharacterRow {
   user_id: string;
   pseudo: string;
   gold: number;
-  dust: number;
   energy_spent: number;
   equipped: Equipped;
   inventory: Item[];
@@ -252,17 +251,10 @@ export interface CharacterRow {
   login_grace_used: boolean;
   last_login_date: string | null;
   login_energy: number;
-  consumables: Record<string, number>;
   reward_level: number;
   endless_best: number;
   pending_reward: PendingReward | null;
   keys: number; // clés d'expédition (donjons à étages)
-  stones: number; // pierres magiques 💎 : montée de niveau des familiers
-  parchemins: number; // parchemins de maîtrise 📜 : montée de NIVEAU des talents (migr. 0048)
-  fragments: number; // poussière d'âme : montée du RANG des familiers (migr. 0049 ; ex-🧩)
-  ink_dust: number; // poussière d'encre : montée du RANG des talents (migr. 0053)
-  enchant_scrolls: number; // 📜 parchemins d'enchantement : 1 par TENTATIVE d'enchant (migr. 0054)
-  protections: number; // 🛡️ protections : évite le retour à +0 sur échec d'enchant (migr. 0054)
   summon_stones: number; // pierres d'invocation 🔮 : tenter les boss (migr. 0050)
   expedition: ActiveExpedition | null; // mode idle « Expédition » en cours
   expedition_map: ExpeditionMap | null; // carte du monde (POI)
@@ -334,7 +326,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, dust, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, consumables, reward_level, endless_best, pending_reward, keys, stones, parchemins, fragments, ink_dust, enchant_scrolls, protections, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -410,7 +402,6 @@ export const useCharacterStore = defineStore('character', () => {
       const it = r.equipped[k];
       if (it) r.equipped[k] = fixItem(it);
     }
-    r.consumables = obj<Record<string, number>>(r.consumables);
     // Loadouts (migr. 0051) : max 3 sets rangés ; on normalise le rang des objets rangés.
     r.loadouts = arr<Loadout>(r.loadouts)
       .slice(0, MAX_LOADOUTS)
@@ -457,16 +448,10 @@ export const useCharacterStore = defineStore('character', () => {
       // CHAQUE chargement — des tickets à l'infini.
       ...(g.welcomed ? { welcomed: true } : {}),
     };
-    if (typeof r.stones !== 'number') r.stones = 0; // colonne récente (migr. 0045)
-    if (typeof r.parchemins !== 'number') r.parchemins = 0; // colonne récente (migr. 0048)
-    if (typeof r.fragments !== 'number') r.fragments = 0; // colonne récente (migr. 0049)
     if (typeof r.summon_stones !== 'number') r.summon_stones = 0; // colonne récente (migr. 0050)
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
     r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
-    if (typeof r.ink_dust !== 'number') r.ink_dust = 0; // poussière d'encre (migr. 0053)
-    if (typeof r.enchant_scrolls !== 'number') r.enchant_scrolls = 0; // migr. 0054
-    if (typeof r.protections !== 'number') r.protections = 0; // migr. 0054
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
     // 🔩 → 🪙 LA FERRAILLE EST RETIRÉE (v0.998). La réserve d'un compte est convertie en
     // or, une fois, au taux de l'épave (`SCRAP_TO_GOLD`). ⚠️ Même politique que le
@@ -875,10 +860,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold: number;
       drops: Item[];
       clearedDungeonId?: string;
-      stones?: number; // pierres magiques 💎 (filet diffus, familiers)
       summonStones?: number; // pierres d'invocation 🔮 (drop de donjon nettoyé)
-      parchemins?: number; // parchemins 📜 (filet de donjon nettoyé, niveau des talents)
-      inkDust?: number; // poussière d'encre (filet de donjon nettoyé, RANG des talents)
       enchantScrolls?: number; // 📜 parchemins d'enchantement (filet de donjon nettoyé)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
     },
@@ -896,10 +878,7 @@ export const useCharacterStore = defineStore('character', () => {
     const gotKey = input.clearedDungeonId && Math.random() < 0.02 ? 1 : 0;
     return persist(userId, {
       gold: cur.gold + input.gold,
-      stones: cur.stones + (input.stones ?? 0),
       summon_stones: cur.summon_stones + (input.summonStones ?? 0),
-      parchemins: cur.parchemins + (input.parchemins ?? 0),
-      ink_dust: cur.ink_dust + (input.inkDust ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -921,9 +900,6 @@ export const useCharacterStore = defineStore('character', () => {
       gold: number;
       defeated: boolean;
       drops?: Item[]; // butin (comme un donjon) — distribué (auto-équipe si slot libre/meilleur)
-      stones?: number; // pierres magiques 💎 (jalon boss)
-      parchemins?: number; // parchemins 📜 (jalon boss, niveau des talents)
-      inkDust?: number; // poussière d'encre (jalon boss, RANG des talents)
       enchantScrolls?: number; // 📜 parchemins d'enchantement (jalon boss)
       protections?: number; // 🛡️ protections d'enchant (jalon boss — la source précieuse)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
@@ -948,9 +924,6 @@ export const useCharacterStore = defineStore('character', () => {
     const dist = distributeItems(cur.equipped, [...cur.inventory, ...setDrops], otherDrops);
     await persist(userId, {
       gold: cur.gold + input.gold,
-      stones: cur.stones + (input.defeated ? (input.stones ?? 0) : 0),
-      parchemins: cur.parchemins + (input.defeated ? (input.parchemins ?? 0) : 0),
-      ink_dust: cur.ink_dust + (input.defeated ? (input.inkDust ?? 0) : 0),
       summon_stones: Math.max(0, cur.summon_stones - input.summonCost),
       defeated_bosses: defeated,
       // % de réussite RÉEL affiché sur la carte du boss : chaque tentative compte, gagnée ou perdue.
@@ -999,7 +972,6 @@ export const useCharacterStore = defineStore('character', () => {
       gold: number;
       drops: Item[];
       cleared: boolean;
-      stones?: number; // pierres magiques 💎 (fin de jeu)
     },
   ) {
     const cur = row.value;
@@ -1007,7 +979,6 @@ export const useCharacterStore = defineStore('character', () => {
     const dist = distributeItems(cur.equipped, cur.inventory, input.drops);
     return persist(userId, {
       gold: cur.gold + input.gold,
-      stones: cur.stones + (input.stones ?? 0),
       energy_spent: cur.energy_spent + input.energyCost,
       equipped: dist.equipped,
       inventory: dist.inventory,
@@ -2639,14 +2610,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !cur.buildings.length) return null;
     const got = collectable(cur.buildings, now);
-    const total =
-      got.stone +
-      got.energy +
-      got.parchemins +
-      got.fragments +
-      got.ink_dust +
-      got.summon +
-      got.keys;
+    const total = got.energy + got.summon + got.keys;
     if (total <= 0) return null;
     // Report du reliquat : chaque filon n'avance son `collectedAt` que du temps des
     // unités ENTIÈRES récoltées → pas de perte de fraction, un filon lent n'est plus
@@ -2655,10 +2619,6 @@ export const useCharacterStore = defineStore('character', () => {
       login_energy: cur.login_energy + got.energy, // ⚡ Dynamo → énergie de jeu
       summon_stones: cur.summon_stones + got.summon, // 🔮 Autel des boss
       keys: cur.keys + got.keys, // 🗝️ Porte du Labyrinthe
-      stones: cur.stones + got.stone,
-      parchemins: cur.parchemins + got.parchemins,
-      fragments: cur.fragments + got.fragments,
-      ink_dust: cur.ink_dust + got.ink_dust,
       buildings: cur.buildings.map((b) => ({ ...b, collectedAt: nextCollectedAt(b, now) })),
       energy_log: pushEnergyLog(cur.energy_log, {
         date: isoDayLocal(now),

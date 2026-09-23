@@ -919,7 +919,7 @@ export const MAP_VIEW = (() => {
 
 /** Distance normalisée d'un point à la ville : 0 à `distMin`, 1 à `distMax`, et AU-DELÀ
  *  sans plafond — c'est ce qui allonge le trajet vers les terres révélées plus tard. */
-export function distNormAt(d: number): number {
+function distNormAt(d: number): number {
   return Math.max(0, (d - EXPE.distMin) / (EXPE.distMax - EXPE.distMin));
 }
 

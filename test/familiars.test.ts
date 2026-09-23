@@ -3,7 +3,6 @@ import {
   rollFamiliar,
   familiarStoneCost,
   isFamiliar,
-  nextRarity,
   rollJet,
   tierIndexOf,
   aggregateEffects,
@@ -162,10 +161,6 @@ describe('familiers — pierres magiques & sélection', () => {
 });
 
 describe('familiers — infusion (incubateur)', () => {
-  it('nextRarity : rang juste au-dessus, null au max (SSS)', () => {
-    expect(nextRarity('commun')).toBe('inhabituel');
-    expect(nextRarity('primordial')).toBeNull();
-  });
   it('rollFamiliar : rang forçable', () => {
     const f = rollFamiliar(mulberry32(1), wolf, { level: 1, rarity: 'epique' });
     expect(f.rarity).toBe('epique');
