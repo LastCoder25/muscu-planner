@@ -16,6 +16,7 @@ import {
   CARAVAN,
   catchUpMult,
   missionXpFor,
+  missionXpPreview,
   canSendCaravan,
   caravanClaimRoster,
   caravanHurtMs,
@@ -1057,6 +1058,64 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
       expect(m, `niveau ${L}`).toBeGreaterThan(prev);
       prev = m;
     }
+  });
+
+  it('🔮 l’annonce AVANT l’envoi dit EXACTEMENT ce que la mission versera', () => {
+    // ⚠️ La garantie est là : aucune formule d’affichage à part. Ce que la tuile annonce
+    // est ce que `missionXpFor` verse, au chiffre près.
+    const a = champ(10, 'a')[0]!;
+    const b = { ...champ(30, 'b')[0]!, id: 'b' };
+    const vue = missionXpPreview([a, b], [a.id, b.id], p, false, 100);
+    const verse = missionXpFor([a, b], p, true, {}, false, 100);
+    expect(vue[a.id]!.xp).toBe(verse[a.id]);
+    expect(vue[b.id]!.xp).toBe(verse[b.id]);
+  });
+
+  it('🔮 un champion NON sélectionné est chiffré comme si on l’AJOUTAIT', () => {
+    // Sinon deux tuiles ne se comparent pas : celle du coché porterait le partage, celle
+    // du non-coché un partage qui n’existe pas.
+    const a = champ(10, 'a')[0]!;
+    const b = { ...champ(10, 'b')[0]!, id: 'b' };
+    const c = { ...champ(10, 'c')[0]!, id: 'c' };
+    const d = { ...champ(10, 'd')[0]!, id: 'd' };
+    const eq = [a, b, c, d];
+    // Trois cochés : le quatrième est chiffré à QUATRE (le partage qu’il subirait).
+    const vue = missionXpPreview(eq, [a.id, b.id, c.id], p, false, 100);
+    expect(vue[d.id]!.xp).toBe(missionXpFor(eq, p, true, {}, false, 100)[d.id]);
+    // …et il annonce donc MOINS que les cochés, qui ne sont encore que trois.
+    expect(vue[d.id]!.xp).toBeLessThan(vue[a.id]!.xp);
+  });
+
+  it('🔮 elle DIT quand le lieu est sous le niveau du champion — la règle invisible', () => {
+    // Mesuré (v0.1102) : c’est CE seuil qui fait varier l’apprentissage du simple au
+    // quadruple, et rien à l’écran ne le disait.
+    const bas = champ(10, 'bas')[0]!;
+    const haut = { ...champ(60, 'haut')[0]!, id: 'haut' };
+    const vue = missionXpPreview([bas, haut], [], poi({ level: 20 }), false, 100);
+    expect(vue[bas.id]!.full).toBe(true); // 20 ≥ 10
+    expect(vue[haut.id]!.full).toBe(false); // 20 < 60
+    // …et ce n’est pas qu’une étiquette : celui qui est au-dessus touche moins.
+    expect(vue[haut.id]!.xp).toBeLessThan(vue[bas.id]!.xp);
+  });
+
+  it('🔮 elle annonce la prime de retard, et c’est CELLE du moteur', () => {
+    const neuf = champ(1, 'neuf')[0]!;
+    const vue = missionXpPreview([neuf], [neuf.id], p, false, 100);
+    expect(vue[neuf.id]!.catchUp).toBe(catchUpMult(1, 100));
+    expect(vue[neuf.id]!.catchUp).toBeGreaterThan(1);
+  });
+
+  it('🔮 le HÉROS dilue l’annonce, comme il dilue le versement', () => {
+    // ⚠️ À UN SEUL champion le héros ne dilue RIEN (poids 1 + 2 = la référence) : il faut
+    // une équipe de deux pour que le partage morde — un test posé à un seul ne verrait rien.
+    const a = champ(10, 'a')[0]!;
+    const b2 = { ...champ(10, 'b')[0]!, id: 'b' };
+    const eq = [a, b2];
+    const ids = [a.id, b2.id];
+    const sans = missionXpPreview(eq, ids, p, false, 100)[a.id]!.xp;
+    const avec = missionXpPreview(eq, ids, p, true, 100)[a.id]!.xp;
+    expect(avec).toBeLessThan(sans);
+    expect(avec).toBe(missionXpFor(eq, p, true, {}, true, 100)[a.id]);
   });
 
   it('⚠️ c’est bien CE calcul que la mission verse : le SOCLE est primé, pas les abattus', () => {
