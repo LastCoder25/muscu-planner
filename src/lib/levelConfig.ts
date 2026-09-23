@@ -20,8 +20,6 @@ export function deriveLevelConfig(level: Level): LevelConfig {
         effort_signal: 'simple',
         coach_history_depth: 1,
         program_mode: 'guided',
-        ui_density: 'comfortable',
-        auto_deload: false,
       };
     case 'avance':
       return {
@@ -30,8 +28,6 @@ export function deriveLevelConfig(level: Level): LevelConfig {
         effort_signal: 'rir',
         coach_history_depth: 4,
         program_mode: 'free',
-        ui_density: 'dense',
-        auto_deload: true,
       };
     case 'intermediaire':
     default:
@@ -41,8 +37,6 @@ export function deriveLevelConfig(level: Level): LevelConfig {
         effort_signal: 'rir_optional',
         coach_history_depth: 2,
         program_mode: 'assisted',
-        ui_density: 'standard',
-        auto_deload: false,
       };
   }
 }

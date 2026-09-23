@@ -32,7 +32,7 @@ Exécuter une `session` exercice par exercice, série par série, et produire un
 ## Adaptation niveau
 
 - `effort_signal = rir` (avancé) → champ RIR optionnel à côté de la note 1–4. Sinon masqué.
-- `ui_density = dense` → afficher tonnage/série, repos par défaut plus court.
+- ⚠️ NON FAIT : `ui_density` a été retiré du contrat (v0.1099), il n'était lu nulle part. Le tonnage et le repos sont les mêmes à tous les niveaux. Seul le RIR (`effort_signal`) distingue l'avancé.
 
 ## Done
 
