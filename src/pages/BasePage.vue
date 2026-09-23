@@ -166,9 +166,7 @@
         <g v-if="wallLevel" class="lvl-badge wall-lvl" :class="{ upgrade: canUpgrade('wall') }">
           <circle :cx="100 - APOTHEM" cy="100" r="5.4" />
           <text :x="100 - APOTHEM" y="102">{{ wallLevel }}</text>
-          <text v-if="canUpgrade('wall')" :x="100 - APOTHEM + 6.4" y="95.6" class="lvl-up">
-            ↑
-          </text>
+          <text v-if="canUpgrade('wall')" :x="100 - APOTHEM + 6.4" y="95.6" class="lvl-up">↑</text>
         </g>
         <!-- Pastille de niveau des tourelles, sur la 1re tour -->
         <g v-if="turretsBuilt" class="lvl-badge" :class="{ upgrade: canUpgrade('turret') }">
@@ -391,33 +389,55 @@
           @click="y.onClick()"
         >
           <rect
-            :x="y.x - YARD_HIT"
-            :y="y.y - YARD_HIT"
-            :width="YARD_HIT * 2"
-            :height="YARD_HIT * 2"
+            :x="y.x - y.half - HIT_PAD"
+            :y="y.y - y.half - HIT_PAD"
+            :width="(y.half + HIT_PAD) * 2"
+            :height="(y.half + HIT_PAD) * 2"
             class="yard-hit"
           />
           <rect
-            :x="y.x - YARD_HALF"
-            :y="y.y - YARD_HALF"
-            :width="YARD_HALF * 2"
-            :height="YARD_HALF * 2"
-            rx="5"
+            :x="y.x - y.half"
+            :y="y.y - y.half"
+            :width="y.half * 2"
+            :height="y.half * 2"
+            :rx="y.half * 0.55"
             class="yard-pad"
           />
-          <text v-if="y.built" :x="y.x" :y="y.y + 4" class="yard-emo">{{ y.emoji }}</text>
-          <text v-else :x="y.x" :y="y.y + 4" class="yard-plus">{{ y.locked ? '🔒' : '＋' }}</text>
+          <text
+            v-if="y.built"
+            :x="y.x"
+            :y="y.y + y.half * 0.44"
+            class="yard-emo"
+            :style="{ fontSize: y.half * (4 / 3) + 'px' }"
+          >
+            {{ y.emoji }}
+          </text>
+          <text
+            v-else
+            :x="y.x"
+            :y="y.y + y.half * 0.44"
+            class="yard-plus"
+            :style="{ fontSize: y.half * (13 / 9) + 'px' }"
+          >
+            {{ y.locked ? '🔒' : '＋' }}
+          </text>
           <g v-if="y.built" class="lvl-badge">
-            <circle :cx="y.x + 7.5" :cy="y.y - 7.5" r="4.6" />
-            <text :x="y.x + 7.5" :y="y.y - 5.9">{{ y.level }}</text>
+            <circle :cx="y.x + y.half - 1.5" :cy="y.y - y.half + 1.5" r="4.6" />
+            <text :x="y.x + y.half - 1.5" :y="y.y - y.half + 3.1">{{ y.level }}</text>
           </g>
-          <circle v-if="y.ready" :cx="y.x - 7.5" :cy="y.y - 7.5" r="2.6" class="yard-ready" />
+          <circle
+            v-if="y.ready"
+            :cx="y.x - y.half + 1.5"
+            :cy="y.y - y.half + 1.5"
+            r="2.6"
+            class="yard-ready"
+          />
           <rect
             v-if="y.todo"
-            :x="y.x - YARD_HALF - 2"
-            :y="y.y - YARD_HALF - 2"
-            :width="YARD_HALF * 2 + 4"
-            :height="YARD_HALF * 2 + 4"
+            :x="y.x - y.half - 2"
+            :y="y.y - y.half - 2"
+            :width="y.half * 2 + 4"
+            :height="y.half * 2 + 4"
             rx="7"
             class="yard-ring todo"
           />
@@ -1367,6 +1387,9 @@ interface YardCell {
   damaged: boolean;
   /** Quelque chose est À FAIRE ici (des corps à fouiller, des fossoyeurs rentrés). */
   todo?: boolean;
+  /** Demi-côté DESSINÉ. ⚠️ Porté par la cellule et non global : le Panthéon trône au
+   *  centre et doit se voir comme tel — tout le reste de la cour garde `YARD_HALF`. */
+  half: number;
   onClick: () => void;
 }
 // ── LA VILLE EN DEUX ANNEAUX ──────────────────────────────────────────────────
@@ -1411,9 +1434,19 @@ const SVC_POS = RING(YARD_SERVICES.length, SVC_R, Math.PI);
 /** Le cœur de la place, où trône le Panthéon une fois bâti. */
 const YARD_CENTER = { x: 100, y: 100 };
 const YARD_HALF = 9; // demi-côté DESSINÉ
-// Cible tactile plus large que le dessin, sans chevauchement (elle vaut exactement l'écart
-// entre deux colonnes) → ~37 px sur un téléphone, contre 33 pour la tuile visible seule.
-const YARD_HIT = 10;
+/** 🛕 Le Panthéon est DESSINÉ PLUS GRAND (demandé) : 1,8× la largeur d'un atelier, 3,2× la
+ *  surface. Il ouvre la boucle des champions, il trône déjà au centre — il devait se voir.
+ *  ⚠️ MESURÉ, pas choisi au jugé (5 emplacements sur la couronne, r = 43) : à 16, il reste
+ *  **7,8 unités** entre sa cible tactile et celle de l'atelier le plus proche, et ses coins
+ *  tombent à 22,6 du centre pour une place pavée de rayon 29 — donc la place l'entoure
+ *  encore. À 20 la place disparaît sous lui (0,7), à 22 il la déborde (−2,1).
+ *  ⚠️ Cette taille ne s'applique QUE s'il est bâti : tant qu'il ne l'est pas, aucune
+ *  cellule n'occupe le centre (les emplacements vides restent sur la couronne). */
+const PANTHEON_HALF = 16;
+// La cible tactile déborde le dessin d'une marge CONSTANTE, quelle que soit la taille de
+// la tuile : ce qu'on gagne à toucher est le même partout, et l'écart mesuré entre deux
+// tuiles voisines (7,8 au plus serré) l'absorbe sans chevauchement.
+const HIT_PAD = 1;
 const yard = computed<YardCell[]>(() => {
   const cells: YardCell[] = [];
   const bs = char.row?.buildings ?? [];
@@ -1445,6 +1478,7 @@ const yard = computed<YardCell[]>(() => {
       // signal, un champion bloqué au ★5 — dont les convois s'effondrent (v0.1017) — ne se
       // verrait qu'en ouvrant sa fiche.
       todo: b?.typeId === 'pantheon' && ascensionsReady.value > 0,
+      half: i === pantheonSlot ? PANTHEON_HALF : YARD_HALF,
       onClick: () => (plotSlot.value = i),
     });
   }
@@ -1474,6 +1508,7 @@ const yard = computed<YardCell[]>(() => {
       // jamais — son alerte vit désormais sur son propre dessin (`.watch-alarm`), et le
       // champ `alert` de la tuile est retiré plutôt que laissé à `false` en dur.
       todo: id === 'infirmary' && patientCount.value > 0,
+      half: YARD_HALF,
       onClick: () => openDef(id),
     });
   });

@@ -645,10 +645,30 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // deviendrait creux — le piège déjà rencontré sur GuildPanel.
     expect(out, 'la cour doit être dessinée').toContain('yard');
     expect(out, 'le champ de bataille est du décor, mais il se dessine').toContain('corpse');
-    // 🛕 v0.1006 : le Panthéon bâti trône au CENTRE (cible tactile à 100 ± 10), et
-    // l'Infirmerie a quitté sa place sous le centre (100, 116) pour son emplacement.
-    expect(out, 'une tuile au centre de la cour').toMatch(/x="90" y="90"/);
-    expect(out, 'plus rien sous le centre').not.toMatch(/x="90" y="106"/);
+    // 🛕 Le Panthéon bâti trône au CENTRE (v0.1006) et s'y dessine PLUS GRAND que les
+    // ateliers (v0.1107). ⚠️ On lit les carrés dessinés et on raisonne sur leur GÉOMÉTRIE,
+    // jamais sur une coordonnée écrite à la main : la version d'avant épinglait `x="90"`
+    // — le centre moins la cible tactile d'alors — et tombait au moindre réglage de
+    // taille sans rien protéger de plus.
+    const pads = [...out.matchAll(/<rect[^>]*class="yard-pad"[^>]*>/g)].map((m) => {
+      const n = (a: string) => Number(m[0].match(new RegExp(a + '="([-0-9.]+)"'))?.[1] ?? NaN);
+      const w = n('width');
+      return { cx: n('x') + w / 2, cy: n('y') + n('height') / 2, w };
+    });
+    expect(pads.length, 'la cour dessine ses tuiles').toBeGreaterThan(1);
+    const centre = pads.find((t) => Math.abs(t.cx - 100) < 0.5 && Math.abs(t.cy - 100) < 0.5);
+    expect(centre, 'une tuile trône au centre de la cour').toBeTruthy();
+    const autres = pads.filter((t) => t !== centre);
+    expect(
+      Math.min(...autres.map((t) => centre!.w / t.w)),
+      'et elle est nettement plus grande que les ateliers',
+    ).toBeGreaterThan(1.5);
+    // Rien ne doit plus occuper la place sous le centre : l'Infirmerie l'a quittée pour
+    // l'emplacement libéré par le Panthéon.
+    expect(
+      pads.some((t) => Math.abs(t.cx - 100) < 0.5 && Math.abs(t.cy - 116) < 0.5),
+      'plus rien sous le centre',
+    ).toBe(false);
     // ⚠️ CE QUE CE TEST NE COUVRE PAS : l'affichage du BUTIN. Il vit dans l'écran de fin du
     // rejeu et dans la feuille de la Tour de guet — deux chemins qui demandent une
     // interaction (ouvrir une structure) ou un rejeu animé. Ce qui le garde, c'est
