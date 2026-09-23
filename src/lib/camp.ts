@@ -111,7 +111,8 @@ export interface PartyInput {
  * sinon « combien j'en envoie » ne voudrait plus rien dire (même règle que la route).
  * ⚠️ Linéaire en taille, et la faction n'y entre pas : ISO-MENACE par construction (elle ne
  * change que les noms et le butin).
- * ⚠️ Sauf pour les PETITES forces (taille < 2), corrigées par rang : `smallForceMult`.
+ * ⚠️ Sauf pour les PETITES forces (taille < 2), corrigées par rang — `forceShare`
+ * (poiDifficulty.ts) porte la correction, et le rang affiché lit la MÊME expression.
  */
 export function campFoe(poi: Poi, spec: CampSpec): Combatant {
   const ref = fuseUnits(refEscortUnits(poi.level), 'Référence');
@@ -126,13 +127,20 @@ export function campFoe(poi: Poi, spec: CampSpec): Combatant {
   };
 }
 
+/** ⚰️ LA TROUPE d'une force de taille `size`, meneur NON compris — ce que `campBodies`
+ *  répartit. ⚠️ C'est ELLE la primitive : l'écran ajoute le meneur (`campBodyCount`), le
+ *  moteur ne le retranche pas — on n'ajoute plus 1 pour le retirer aussitôt. */
+function campTroopCount(size: number): number {
+  return Math.max(1, Math.round(size));
+}
+
 /** 👾 COMBIEN d'ennemis une force de taille `size` aligne : la troupe, plus son meneur.
  *  ⚠️ Écrit UNE fois et lu par `campBodies` comme par l'écran : annoncer un nombre que le
  *  combat ne produit pas serait pire que de ne rien annoncer.
  *  ⚠️ Et ce nombre NE DIT PAS la difficulté — il arrondit, donc une force de 1,5 et une force
  *  de 2 alignent toutes deux 3 corps. C'est le RANG du lieu qui porte la difficulté. */
 export function campBodyCount(size: number): number {
-  return Math.max(1, Math.round(size)) + 1;
+  return campTroopCount(size) + 1;
 }
 
 /**
@@ -162,7 +170,7 @@ export function campBodies(
   const roster = factionRoster(spec.faction);
   const troop = roster.slice(0, -1);
   const lead = roster[roster.length - 1]!;
-  const n = campBodyCount(spec.size) - 1;
+  const n = campTroopCount(spec.size);
   const leadW = poi.type === 'lair' ? CAMP.championWeight : CAMP.chiefWeight;
   const parts = troopOf(foe, {
     count: n + leadW,

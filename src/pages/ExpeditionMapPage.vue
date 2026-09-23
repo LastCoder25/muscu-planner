@@ -190,7 +190,7 @@
             :key="p.id"
             class="poi"
             :class="{ sel: selected?.id === p.id, dim: dimmed(p) }"
-            :style="{ '--rk': poiRank(p).color }"
+            :style="{ '--rk': rankOf(p).color }"
             @click="selectPoi(p)"
           >
             <!-- 🌀 Une faille se dessine comme dans son incursion : un portail ovale cerné de
@@ -200,7 +200,7 @@
             <template v-if="isRiftPoi(p)">
               <ellipse :cx="p.x" :cy="p.y" rx="4.4" ry="6.4" class="rift-hit" />
               <RiftPortal
-                :color="poiRank(p).color"
+                :color="rankOf(p).color"
                 :seed="seedOf(p.id)"
                 :box="{
                   x: p.x - RIFT_ICON.w / 2,
@@ -220,8 +220,8 @@
                  couvre dix niveaux, et un lieu Bronze ★5 écrase des champions Bronze ★1
                  (mesuré : 0 % de victoire). -->
             <text :x="p.x" :y="p.y - (isRiftPoi(p) ? RIFT_ICON.dy + 0.5 : 5.4)" class="poi-rank">
-              {{ poiRank(p).emoji }}
-              <tspan class="poi-star">{{ poiRank(p).star }}★</tspan>
+              {{ rankOf(p).emoji }}
+              <tspan class="poi-star">{{ rankOf(p).star }}★</tspan>
             </text>
           </g>
 
@@ -305,7 +305,7 @@
         v-for="e in edgeIndicators"
         :key="'edge' + e.id"
         class="edge-ind"
-        :style="{ left: e.x + 'px', top: e.y + 'px', '--rk': poiRank(e.poi).color }"
+        :style="{ left: e.x + 'px', top: e.y + 'px', '--rk': rankOf(e.poi).color }"
         @click="panToPoi(e.poi)"
       >
         <span class="ei-arrow" :style="{ transform: `rotate(${e.deg}deg)` }">➤</span>
@@ -496,11 +496,9 @@
           <!-- 👥 v0.1035 : plus de plafond de 3 — seulement celui du Panthéon. Ce que le nombre
                coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
           <p class="car-cap">
-            👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions (Panthéon). Jusqu'à
-            {{ XP_TEAM_REF }} membres chacun apprend pleinement ; au-delà l'XP se partage (le héros
-            compte pour {{ HERO_XP_WEIGHT }})<template v-if="partyXpSplit < 1">
-              : <b>XP ×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun</template
-            >.
+            👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions (Panthéon). L'XP du lieu se
+            partage entre les participants (le héros compte pour {{ HERO_XP_WEIGHT }}) :
+            <b>XP ×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun.
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
@@ -731,6 +729,7 @@ import {
   HARVEST_TYPES,
   campSpecOf,
   harvestGuardOf,
+  poiForceOf,
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
@@ -775,7 +774,6 @@ import {
   missionXpPreview,
   missionXpSplit,
   type MissionXpPreview,
-  XP_TEAM_REF,
   HERO_XP_WEIGHT,
   type PartyHero,
 } from '@/lib/caravan';
@@ -1051,8 +1049,15 @@ function toggleRank(r: number) {
     /* le filtre vaut pour la session */
   }
 }
+/** 🏅 Le rang de CHAQUE lieu, calculé une fois par changement de carte.
+ *  ⚠️ La carte se re-rend à la seconde (les convois avancent) et chaque tuile lit son rang
+ *  quatre fois : sans ce mémo, c'est une bisection par lecture, ~65 fois par seconde.
+ *  ⚠️ REPLI sur le calcul direct : la CIBLE d'un voyage en cours n'est plus sur la carte
+ *  (un lieu est consommé au départ), et la barre de bord l'affiche quand même. */
+const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
+const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
 const shownPois = computed(() =>
-  pois.value.filter((p) => !hiddenRanks.value.has(poiRank(p).rankIndex)),
+  pois.value.filter((p) => !hiddenRanks.value.has(rankOf(p).rankIndex)),
 );
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
@@ -1182,6 +1187,8 @@ const offerHero = computed(() => offers.value.hero);
 const selectedCamp = computed(() => (selected.value ? campSpecOf(selected.value) : null));
 /** 🛡️ Les gardes d'un lieu de récolte (2026-09-22) — même force qu'un petit camp. */
 const selectedGuard = computed(() => (selected.value ? harvestGuardOf(selected.value) : null));
+/** ⚔️ Ce que le lieu ALIGNE — camp ou gardes, la dispatch de `poiForceOf`, jamais recopiée. */
+const selectedForce = computed(() => (selected.value ? poiForceOf(selected.value) : null));
 /** Le rang du lieu sélectionné — la MÊME fonction que la boule sur la carte. */
 const selectedRank = computed(() => poiRank(selected.value!));
 
@@ -1303,7 +1310,7 @@ const partyWin = computed(() => {
       estimateInterception(p, partyAdvs.value, roadCtx.value, heroForParty.value, 40) * 100,
     );
   // 🛡️ Un lieu de récolte gardé : le MÊME combat que les camps (`fightCampForce`).
-  const spec = selectedCamp.value ?? selectedGuard.value;
+  const spec = selectedForce.value;
   if (!spec) return null;
   return Math.round(campWinPct(p, spec, allies, 40) * 100);
 });
@@ -1749,7 +1756,7 @@ const poiFacts = computed<PoiFact[]>(() => {
   // ⚠️ Les gardes ne l'affichaient pas (v0.1043) : deux lieux du même rang pouvaient donc
   // aligner 2 ou 4 ennemis sans que rien ne le dise, et c'est ce qui a été signalé. Le
   // NOMBRE seul ne dit pas la difficulté (le rang s'en charge) : il dit ce qu'on voit.
-  const force = camp ?? guard;
+  const force = selectedForce.value;
   if (force)
     out.push({
       icon: '👾',

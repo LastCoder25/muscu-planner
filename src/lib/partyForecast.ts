@@ -1,6 +1,6 @@
 import { campWinPct } from './camp';
 import { partyAllies, type EscortKit, type PartyHero } from './caravan';
-import { campSpecOf, harvestGuardOf, isRiftPoi, isWarbandPoi, type Poi } from './expedition';
+import { isRiftPoi, isWarbandPoi, poiForceOf, type Poi } from './expedition';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
 
@@ -37,6 +37,6 @@ export function partyWinChance(
   // ⚔️ L'interception prend l'escorte BRUTE : elle refond le groupe elle-même.
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.
-  const spec = campSpecOf(poi) ?? harvestGuardOf(poi);
+  const spec = poiForceOf(poi);
   return spec ? campWinPct(poi, spec, allies, samples) : null;
 }

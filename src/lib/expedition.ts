@@ -254,6 +254,19 @@ export function harvestGuardOf(poi: Pick<Poi, 'id' | 'type' | 'level'>): CampSpe
   return { faction, size: base * ramp };
 }
 
+/**
+ * ⚔️ CE QUE CE LIEU ALIGNE : les défenseurs qu'un groupe y affrontera, camp comme lieu de
+ * récolte gardé — `null` quand il n'y a personne à combattre.
+ * ⚠️ SOURCE UNIQUE de la dispatch : le spawn (qui en dérive le niveau des ennemis), le rang
+ * affiché, le % de réussite annoncé et la fiche la lisent. Quatre copies finiraient par
+ * diverger d'un type de lieu, et la carte annoncerait un rang qu'elle ne fait pas combattre.
+ * ⚠️ Une faille, une bande en marche et l'arène rendent `null` : leur effectif ne se dérive
+ * pas de l'id (il dépend du temps, ou du niveau du joueur) et se dit ailleurs.
+ */
+export function poiForceOf(poi: Pick<Poi, 'id' | 'type' | 'level'>): CampSpec | null {
+  return campSpecOf(poi) ?? harvestGuardOf(poi);
+}
+
 export interface Poi {
   id: string;
   type: PoiType;
@@ -1374,7 +1387,7 @@ function placePoiOfType(
   // ⚠️ Les gardes d’une récolte ont une RAMPE de début de partie qui lit le niveau : on
   // l’estime sur la difficulté visée. Au-delà du niveau 7 elle vaut 1, donc sans effet ; en
   // deçà le lieu sort un peu plus facile que sa cible — c’est la rampe d’apprentissage.
-  const force = campSpecOf({ id, type }) ?? harvestGuardOf({ id, type, level: vise });
+  const force = poiForceOf({ id, type, level: vise });
   const level = force ? levelForDifficulty(vise, force.size) : vise;
   const rewardLevel = forcedLevel === undefined && level !== rewardRoll ? rewardRoll : undefined;
   // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement

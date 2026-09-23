@@ -458,14 +458,17 @@ describe('salaires, XP et garde-fous', () => {
     // POI différents ne testerait que le socle, pas la décroissance.
     // ⚠️ La comparaison se fait sur la DIFFICULTÉ (v0.1107), pas sur `poi.level` : un lieu
     // à un seul ennemi ne vaut pas un lieu qui en aligne trois.
-    const facile = poi({ level: 5 });
+    // ⚠️ Un lieu de HAUT niveau : à niveau 5 la difficulté vaut 2, donc « un cran sous »
+    //    ne laisse qu'un intervalle d'un niveau et la propriété ne s'observe pas.
+    const facile = poi({ level: 33 });
     const d = poiDifficultyLevel(facile);
+    expect(d).toBeGreaterThan(10);
     expect(missionXp(refAdventurer(d * 4), facile, true)).toBeLessThan(
       missionXp(refAdventurer(d), facile, true),
     );
     // …et un lieu à sa hauteur reste plein : sous la difficulté, le ratio est plafonné.
     expect(missionXp(refAdventurer(d), facile, true)).toBe(
-      missionXp(refAdventurer(Math.max(1, d - 1)), facile, true),
+      missionXp(refAdventurer(Math.round(d / 2)), facile, true),
     );
   });
   it('🎯 le SOCLE suit la DIFFICULTÉ — le niveau des ennemis ET leur nombre (v0.1107)', () => {
@@ -1110,9 +1113,23 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     expect(vue[neuf.id]!.catchUp).toBeGreaterThan(1);
   });
 
+  it('🎯 « plein tarif » se juge sur la DIFFICULTÉ, pas sur le niveau du lieu', () => {
+    // ⚠️ C'est `missionXp` qui écrête sur la difficulté : comparer au niveau ferait annoncer
+    //    « plein tarif » sur un lieu de haut niveau tenu par un seul ennemi, que la formule
+    //    paie pourtant au rabais. Une étiquette qui diverge du moteur.
+    const p33 = poi({ level: 33 });
+    const d = poiDifficultyLevel(p33);
+    expect(d).toBeLessThan(33);
+    const a = { ...champ(33, 'a')[0]!, id: 'a' };
+    expect(missionXpPreview([a], [a.id], p33, false, 100)[a.id]!.full).toBe(false);
+    // …et un champion sous la difficulté, lui, est bien à plein tarif.
+    const b = { ...champ(Math.max(1, d - 2), 'b')[0]!, id: 'b' };
+    expect(missionXpPreview([b], [b.id], p33, false, 100)[b.id]!.full).toBe(true);
+  });
+
   it('🔮 le HÉROS dilue l’annonce, comme il dilue le versement', () => {
-    // ⚠️ À UN SEUL champion le héros ne dilue RIEN (poids 1 + 2 = la référence) : il faut
-    // une équipe de deux pour que le partage morde — un test posé à un seul ne verrait rien.
+    // ⚠️ Le héros prend `HERO_XP_WEIGHT` parts de l'enveloppe : à deux champions la dilution
+    // se lit sans ambiguïté (2 parts contre 4).
     const a = champ(10, 'a')[0]!;
     const b2 = { ...champ(10, 'b')[0]!, id: 'b' };
     const eq = [a, b2];

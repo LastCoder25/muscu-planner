@@ -109,54 +109,68 @@ export function refPowerAt(level: number): number {
 export const DIFFICULTY_MAX_LEVEL = REF_POWER.length;
 
 /**
+ * ⚖️ CE QUE CE LIEU PÈSE, dans l'unité de la courbe de référence : `size` ennemis du niveau
+ * `level` valent cette puissance-là. C'est la SEULE quantité que les deux fonctions ci-dessous
+ * comparent — l'une cherche le niveau qui la PORTE, l'autre le niveau qui l'ATTEINT. Écrite une
+ * fois, l'inversion se lit au lieu d'être postulée en commentaire.
+ */
+function poiPower(level: number, size: number): number {
+  return forceShare(level, size) * refPowerAt(level);
+}
+
+/**
  * 🎯 LE NIVEAU ÉQUIVALENT : celui auquel une équipe PLEINE de référence aurait la force de ce
  * lieu. C'est LUI que le rang affiché doit dire — pas `poi.level`, qui ne parle que de ce que
  * vaut un ennemi pris isolément.
  *
  * ⚠️ Bornes assumées : sous la force d'une équipe de niveau 1 on rend 1 (un lieu peut être
  * plus facile que le plancher du jeu — un seul ennemi de bas niveau), au-dessus on rend
- * `DIFFICULTY_MAX_LEVEL`.
+ * `DIFFICULTY_MAX_LEVEL`. ⚠️ AUCUNE sortie rapide sur ces deux bornes : la bisection y converge
+ * déjà (`hi` descend jusqu'à 1, `lo` monte jusqu'au plafond). Un garde qu'aucune valeur ne peut
+ * distinguer donne la confiance sans la couverture — la saturation vit dans un TEST.
  */
 export function difficultyLevel(level: number, size: number): number {
-  const target = forceShare(level, size) * refPowerAt(level);
-  if (target <= refPowerAt(1)) return 1;
-  // `refPowerAt` est strictement croissante (testé) : une recherche binaire suffit, et elle
-  // ne remplit la table que jusqu'au plafond une fois.
+  const vaut = poiPower(level, size);
+  // `refPowerAt` est strictement croissante (testé) : une recherche binaire suffit.
   let lo = 1;
   let hi = DIFFICULTY_MAX_LEVEL;
-  if (target >= refPowerAt(hi)) return hi;
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2);
-    if (refPowerAt(mid) <= target) lo = mid;
+    if (refPowerAt(mid) <= vaut) lo = mid;
     else hi = mid - 1;
   }
   return lo;
 }
 
 /**
- * 🎲 L'INVERSE : le niveau à donner à une force de `size` ennemis pour qu'elle PÈSE la
- * difficulté `cible`. C'est ce qui permet au spawn de tirer un RANG de difficulté puis d'en
- * dériver le niveau des ennemis — « peu de forts » et « beaucoup de faibles » deviennent
- * deux façons de remplir le même rang.
+ * 🎲 L'INVERSE : le niveau à donner à une force de `size` ennemis pour qu'elle ATTEIGNE OU
+ * DÉPASSE la difficulté `cible`. C'est ce qui permet au spawn de tirer un RANG de difficulté
+ * puis d'en dériver le niveau des ennemis — « peu de forts » et « beaucoup de faibles »
+ * deviennent deux façons de remplir le même rang.
  *
- * ⚠️ `difficultyLevel(·, size)` est croissante en son premier argument (la courbe l'est, et
- * la force ne dépend du niveau que par elle) : une recherche binaire suffit.
+ * ⚠️ Ce n'est PAS une inversion exacte : la courbe avance par crans, donc le niveau retenu
+ * dépasse souvent la cible (testé). On cherche le plus petit qui l'atteint.
+ * ⚠️ Elle compare le MÊME `poiPower` que `difficultyLevel`, au lieu de bisecter SUR une
+ * bisection : la propriété cherchée s'écrit en une comparaison, pas en O(log²).
  * ⚠️ BORNÉ. Aux rangs les plus hauts, « peu d'ennemis très forts » n'existe pas : il faudrait
  * un ennemi plus puissant que ce que le plafond du jeu produit. On rend alors le niveau
  * maximal, et la difficulté reste SOUS la cible — le rang affiché, lui, est calculé, donc il
  * dira la vérité plutôt que la cible manquée.
  */
 export function levelForDifficulty(cible: number, size: number): number {
-  const c = Math.max(1, Math.round(cible));
+  // ⚠️ BORNÉE AU PLAFOND, explicitement : au-delà, `refPowerAt` écrête de toute façon, et
+  // laisser la cible déborder ferait dépendre le résultat d'un écrêtage implicite. Inatteignable
+  // en jeu (la cible vient de `riftLevelFor`, bornée par le niveau du joueur).
+  const c = Math.max(1, Math.min(DIFFICULTY_MAX_LEVEL, Math.round(cible)));
+  // ⚠️ Ce garde-ci MORD : une force nulle ne porte jamais rien, donc la bisection partirait au
+  // plafond là où le niveau 1 suffit à « atteindre » la difficulté 1.
+  if (c <= 1) return 1;
+  const vise = refPowerAt(c);
   let lo = 1;
   let hi = DIFFICULTY_MAX_LEVEL;
-  // ⚠️ Pas de sortie rapide quand la cible est hors de portée : la bisection converge
-  // déjà vers le plafond (la courbe est croissante, donc aucun `mid` ne l’atteint et `lo`
-  // remonte jusqu’à `hi`). Un garde qu’aucune valeur ne peut distinguer donne la confiance
-  // sans la couverture — la propriété vit dans un TEST.
   while (lo < hi) {
     const mid = Math.floor((lo + hi) / 2);
-    if (difficultyLevel(mid, size) >= c) hi = mid;
+    if (poiPower(mid, size) >= vise) hi = mid;
     else lo = mid + 1;
   }
   return lo;

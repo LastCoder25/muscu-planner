@@ -4,7 +4,7 @@
 // (`expedition.ts`) doit pouvoir dériver un niveau depuis une difficulté visée, or ce module
 // lit `expedition` pour connaître la taille d'une force. Les garder ensemble ferait un cycle.
 import { characterRank, type CharacterRank } from './characterRank';
-import { campSpecOf, harvestGuardOf, type Poi } from './expedition';
+import { poiForceOf, type Poi } from './expedition';
 import { difficultyLevel } from './poiDifficulty';
 
 /**
@@ -21,7 +21,7 @@ import { difficultyLevel } from './poiDifficulty';
  * gardent le leur pour la même raison : leur effectif est dit ailleurs.
  */
 export function poiDifficultyLevel(poi: Pick<Poi, 'id' | 'type' | 'level'>): number {
-  const spec = campSpecOf(poi) ?? harvestGuardOf(poi);
+  const spec = poiForceOf(poi);
   return spec ? difficultyLevel(poi.level, spec.size) : Math.max(1, poi.level);
 }
 

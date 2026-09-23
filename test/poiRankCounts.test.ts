@@ -1,4 +1,4 @@
-// 🏅 LE FILTRE DE DIFFICULTÉ DE LA CARTE — cf. `poiRankCounts` (poiDifficulty.ts).
+// 🏅 LE FILTRE DE DIFFICULTÉ DE LA CARTE — cf. `poiRankCounts` (poiRank.ts).
 //
 // ⚠️ RÉÉCRIT le 2026-09-23. Il épinglait « le rang d'un lieu = `characterRank(p.level)` »,
 // c'est-à-dire précisément ce qui a changé : le rang affiché dit maintenant la DIFFICULTÉ
@@ -28,8 +28,12 @@ describe('poiRankCounts — les options du filtre de difficulté de la carte', (
       const r = poiRank(p).rankIndex;
       attendu.set(r, (attendu.get(r) ?? 0) + 1);
     }
-    for (const { rankIndex, count } of poiRankCounts(pois))
-      expect(count).toBe(attendu.get(rankIndex));
+    const out = poiRankCounts(pois);
+    // ⚠️ La BOUCLE seule passerait à vide si la fonction ne rendait rien : on épingle
+    //    d'abord le nombre de seaux et le total des lieux.
+    expect(out).toHaveLength(attendu.size);
+    expect(out.reduce((n, o) => n + o.count, 0)).toBe(pois.length);
+    for (const { rankIndex, count } of out) expect(count).toBe(attendu.get(rankIndex));
   });
 
   it('rend les rangs du plus bas au plus haut, et aucun rang vide', () => {

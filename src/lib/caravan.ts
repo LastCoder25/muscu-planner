@@ -770,14 +770,14 @@ export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
 
 /** 👥 LE PARTAGE DE L'XP D'UNE MISSION (v0.1038, décision de l'utilisateur : les équipes ne
  *  sont plus bornées à 3 — « plus il y a de champions plus l'XP est divisée, c'est tout »).
- *  Jusqu'à `XP_TEAM_REF` membres, rien ne change (toute la calibration de la montée en niveau
- *  est faite sur ces équipes) ; au-delà, le socle d'une mission se partage à parts égales.
+ *  L'XP d'un lieu est une ENVELOPPE de `XP_TEAM_REF` parts : un champion seul la prend
+ *  entière, et chacun en prend `XP_TEAM_REF / effectif` — le TOTAL de l'équipe ne bouge pas.
  *  ⚠️ Le HÉROS compte pour `HERO_XP_WEIGHT` : il VAUT deux champions dans un groupe
  *  (`heroPartyCombatant`), il en prend donc deux parts — perdues, son XP vient du sport. */
-export const XP_TEAM_REF = 3;
+export const XP_TEAM_REF = REF_TEAM;
 export const HERO_XP_WEIGHT = 2;
 /**
- * Facteur appliqué au socle de chaque champion (1 jusqu'à `XP_TEAM_REF` membres).
+ * Facteur appliqué au socle de chaque champion : la part d'enveloppe qui lui revient.
  *
  * ⚠️ PLANCHER À `xpLossShare` (v0.1095, mesuré ; décision de l'utilisateur : « si le lieu est
  * trop dur il faut envoyer tout le monde, mais du coup on ne peut pas les envoyer ailleurs —
@@ -907,7 +907,9 @@ export interface MissionXpPreview {
   /** Le socle qu'il touchera si la mission réussit (part des abattus en plus). */
   xp: number;
   /** Le lieu est-il à son niveau ou au-dessus ? En dessous, l'apprentissage chute en
-   *  puissance 1,5 — c'est LA règle que personne ne pouvait deviner. */
+   *  puissance 1,5 — c'est LA règle que personne ne pouvait deviner.
+   *  ⚠️ Comparé à la DIFFICULTÉ, pas à `poi.level` : c'est elle que `missionXp` écrête, donc
+   *  un lieu de haut niveau tenu par un seul ennemi n'annonce plus « plein tarif » à tort. */
   full: boolean;
   /** Sa prime de retard (1 = aucune). Une BONNE nouvelle : on la montre. */
   catchUp: number;
@@ -920,14 +922,16 @@ export function missionXpPreview(
   pantheonLevel: number,
 ): Record<string, MissionXpPreview> {
   const escort = advs.filter((a) => escortIds.includes(a.id));
+  // ⚠️ L'XP de l'escorte est la MÊME pour tous ses membres : on l'évalue une fois, au lieu
+  //    d'une passe par champion (qui reboucle sur toute l'équipe et re-dérive la difficulté).
+  const dejaLa = missionXpFor(escort, poi, true, {}, hero, pantheonLevel);
+  const d = poiDifficultyLevel(poi);
   const out: Record<string, MissionXpPreview> = {};
   for (const a of advs) {
-    const team = escortIds.includes(a.id) ? escort : [...escort, a];
-    out[a.id] = {
-      xp: missionXpFor(team, poi, true, {}, hero, pantheonLevel)[a.id] ?? 0,
-      full: poi.level >= a.level,
-      catchUp: catchUpMult(a.level, pantheonLevel),
-    };
+    const xp = escortIds.includes(a.id)
+      ? (dejaLa[a.id] ?? 0)
+      : (missionXpFor([...escort, a], poi, true, {}, hero, pantheonLevel)[a.id] ?? 0);
+    out[a.id] = { xp, full: d >= a.level, catchUp: catchUpMult(a.level, pantheonLevel) };
   }
   return out;
 }
