@@ -681,7 +681,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -785,11 +784,21 @@ import { advGearRoles } from '@/lib/advGear';
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
 const route = useRoute();
-const { gameBack } = useGamePanel();
-// Retour : dans le volet jeu (cockpit) → revient à l'Aventure du volet ; sinon route.
+const { openPath } = useGamePanel();
+/**
+ * 🏰 RETOUR = L'ÉCRAN DE LA BASE (demandé par l'utilisateur). On entre sur la carte par la
+ * PORTE du rempart sud : on en ressort par là, pas sur l'onglet Héros.
+ *
+ * ⚠️ On ne peut PAS s'en remettre à `router.back()` : l'onglet de l'Aventure ne vit pas dans
+ * l'URL (`/aventure` tout court ouvre « Héros »), donc revenir en arrière rouvrirait le mauvais
+ * onglet. Il faut viser `?tab=base`, que l'Aventure lit.
+ *
+ * ⚠️ `openPath` est la SOURCE UNIQUE de « volet droit en cockpit, route plein écran sinon » :
+ * la réécrire ici en ferait une troisième copie, aveugle au cockpit — le défaut exact corrigé
+ * en v0.748. Elle reporte la query sur la route courante quand l'Aventure est déjà montée.
+ */
 function back() {
-  if (props.embedded) return gameBack();
-  backOr(router, '/aventure');
+  openPath(router, '/aventure?tab=base', props.embedded);
 }
 const $q = useQuasar();
 const auth = useAuthStore();
