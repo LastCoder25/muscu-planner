@@ -2208,7 +2208,6 @@ export const useCharacterStore = defineStore('character', () => {
         guard: guardUnits(ctx.playerLevel, defenders, engageCap(pantheonLevel.value), cctx),
       },
       t.dueRaid,
-      now,
       home,
     );
     const { base: nb, damage, corpses } = applyRaidOutcome(t.base, t.dueRaid, report, ctx, now);
@@ -2252,9 +2251,14 @@ export const useCharacterStore = defineStore('character', () => {
     // qui va avec. Le barème vit dans `siegeXp` (lib, testé), jamais ici.
     // 🤕 Siège PERDU : ceux qui sont tombés partent à l’infirmerie, comme le héros, pour
     // la MÊME durée (l’Infirmerie l’abrège). La règle vit dans `siegeHurtIds` (lib).
+    // ⚠️ DEPUIS LA BATAILLE, pas depuis l’instant où on la découvre — la même règle que la
+    // convalescence du héros (`applyRaidOutcome`) : un siège se résout à son heure, que
+    // l’app soit ouverte ou non, et on ne fait pas payer une absence. `report.resolvedAt`
+    // EST cette heure, donc les deux ne peuvent pas diverger.
     const hurt = new Set(siegeHurtIds(report));
     const hurtUntil =
-      now + woundMsFor(defenseLevel(t.base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7));
+      report.resolvedAt +
+      woundMsFor(defenseLevel(t.base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7));
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
       const gains: Record<string, number> = {};

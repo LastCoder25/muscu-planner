@@ -152,7 +152,7 @@ function holdRate(
         advGear: [],
       }),
     };
-    if (resolveRaid(base, raid, 0, heroHome).held) held++;
+    if (resolveRaid(base, raid, heroHome).held) held++;
   }
   return (held / n) * 100;
 }
@@ -222,9 +222,7 @@ describe('silhouette de faction', () => {
         const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
         if (raid.faction !== f) continue;
         n++;
-        if (
-          resolveRaid({ defenses: defs(26, 26), playerLevel: 26, hero: null }, raid, 0, false).held
-        )
+        if (resolveRaid({ defenses: defs(26, 26), playerLevel: 26, hero: null }, raid, false).held)
           held++;
       }
       rates[f] = (held / n) * 100;
@@ -556,7 +554,7 @@ describe('calibration du siège', () => {
     let held = 0;
     for (let i = 0; i < 200; i++) {
       const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
-      if (resolveRaid({ defenses: broken, playerLevel: 26, hero: hero(26) }, raid, 0, true).held)
+      if (resolveRaid({ defenses: broken, playerLevel: 26, hero: hero(26) }, raid, true).held)
         held++;
     }
     expect((held / 200) * 100).toBeGreaterThan(25);
@@ -756,7 +754,6 @@ describe('cycle de vie', () => {
     const rep = resolveRaid(
       { defenses: defs(40, 40), playerLevel: 40, hero: hero(40) },
       raid,
-      0,
       true,
     );
     expect(rep.held).toBe(true);
@@ -779,7 +776,6 @@ describe('cycle de vie', () => {
     const rep = resolveRaid(
       { defenses: defs(40, 40), playerLevel: 40, hero: hero(40) },
       raid,
-      0,
       true,
     );
     const { base: nb, corpses } = applyRaidOutcome(
@@ -795,6 +791,61 @@ describe('cycle de vie', () => {
     expect(corpses.length).toBeGreaterThan(0);
     // …et ils valent vraiment quelque chose : c'est ce que le store crédite.
     expect(lootCorpses(corpses, rep.faction, 40, 1, undefined).gold).toBeGreaterThan(0);
+  });
+
+  // ⏱️ CE QUI DATE DE LA BATAILLE COURT DEPUIS LA BATAILLE (v0.1094 ; signalé par
+  // l'utilisateur : « le délai d'infirmerie ne se lance que quand j'ai vu l'animation,
+  // même si la défense date de plusieurs heures avant »). Un siège se résout à son heure,
+  // que l'app soit ouverte ou non : l'instant du tick peut valoir des heures de plus.
+  describe('les durées d’un siège partent de la bataille', () => {
+    const H = 3600_000;
+    /** Une DÉFAITE : le héros est là, l'enceinte ne l'est pas. */
+    function perdu(at: number) {
+      const b = { ...base(0), defenses: defs(26, 26, 6), raid: null };
+      const raid = rollRaid(4242, 26, at, 0);
+      const rep = resolveRaid({ defenses: [], playerLevel: 26, hero: hero(2) }, raid, true);
+      expect(rep.held).toBe(false);
+      return { b, raid, rep };
+    }
+
+    it('le rapport est daté de la BATAILLE, pas de l’instant où on la découvre', () => {
+      const { raid, rep } = perdu(10 * H);
+      expect(rep.resolvedAt).toBe(raid.arrivesAt);
+    });
+
+    it('la convalescence a déjà couru pendant l’absence', () => {
+      const at = 10 * H;
+      const { b, raid, rep } = perdu(at);
+      const ctx = { activeDays7: 7, globalXp: 0 };
+      // On découvre la bataille DEUX HEURES plus tard.
+      const tard = applyRaidOutcome(b, raid, rep, ctx, at + 2 * H).base;
+      // …et tout de suite.
+      const suite = applyRaidOutcome(b, raid, rep, ctx, at).base;
+      expect(tard.wound!.until).toBe(suite.wound!.until);
+      // Donc il lui reste DEUX HEURES DE MOINS à l'écran : c'est le défaut signalé.
+      expect(tard.wound!.until - (at + 2 * H)).toBeLessThan(suite.wound!.until - at);
+    });
+
+    it('une bataille assez ancienne ne blesse plus personne — pas d’état mort', () => {
+      const at = 10 * H;
+      const { b, raid, rep } = perdu(at);
+      // Bien au-delà de la convalescence la plus longue.
+      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, at + 72 * H).base;
+      expect(nb.wound).toBeNull();
+      expect(nb.field).toBeNull();
+      expect(nb.freeze).toBeNull();
+    });
+
+    it('⚠️ LE PROCHAIN SIÈGE, LUI, PART DE MAINTENANT — sinon une absence donne une SALVE', () => {
+      // Compté depuis la bataille, un retour après trois jours rendrait le siège suivant dû
+      // à la seconde même, puis le suivant, et le suivant : l'arriéré que la règle 1
+      // interdit. C'est la SEULE durée qui ne suit pas la bataille.
+      const at = 10 * H;
+      const { b, raid, rep } = perdu(at);
+      const now = at + 72 * H;
+      const nb = applyRaidOutcome(b, raid, rep, { activeDays7: 7, globalXp: 0 }, now).base;
+      expect(nb.nextRaidAt).toBeGreaterThan(now);
+    });
   });
 
   it('🦴 le relevé du butin se lit en PUCES — une seule mise en forme pour deux écrans', () => {
@@ -1164,7 +1215,7 @@ describe('blessure du héros', () => {
     const raid = rollRaid(77, 26, 0, 0);
     const lost = { ...raid, groups: raid.groups } as never;
     const report = {
-      ...resolveRaid({ defenses: [], playerLevel: 26, hero: null }, lost, 0, true),
+      ...resolveRaid({ defenses: [], playerLevel: 26, hero: null }, lost, true),
       held: false,
       heroHome: true,
     };
@@ -1193,7 +1244,6 @@ describe('blessure du héros', () => {
     const rep = resolveRaid(
       { defenses: defs(40, 40), playerLevel: 40, hero: hero(40) },
       raid,
-      0,
       true,
     );
     expect(rep.held).toBe(true);
@@ -2207,7 +2257,6 @@ describe('🏥 infirmerie des aventuriers', () => {
           guard: guardUnits(L, advs, 99, ctx0),
         },
         raid,
-        0,
         true,
       );
       const hurt = siegeHurtIds(rep);
@@ -2315,7 +2364,6 @@ describe('🗿 LE PLAFOND D’ENGAGEMENT — ce qui AGIT est borné, pas ce qu�
           guard: guardUnits(L, advs, 5, ctx0),
         },
         raid,
-        0,
         true,
       );
     const a = run(grand);

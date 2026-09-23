@@ -37,7 +37,6 @@ describe('🧱⚔️ la cour vue de côté', () => {
       const rep = resolveRaid(
         { defenses: defs, playerLevel: 28, hero: null, guard: [] },
         rollRaid(s * 7919, 28, 0, 0),
-        0,
         false,
       );
       const st = buildSiegeStage(rep, 8);

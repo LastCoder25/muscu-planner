@@ -110,7 +110,7 @@ describe('⚖️ LE PRONOSTIC EST MESURÉ, PAS ESTIMÉ', () => {
       for (let s = 0; s < N; s++) {
         const raid = rollRaid(3000 + s * 7919, lvl, NOW, 0);
         annonce += siegeHoldChance(defs, lvl, hero, [], raid, 8);
-        if (resolveRaid({ defenses: defs, playerLevel: lvl, hero }, raid, NOW, true).held) reel++;
+        if (resolveRaid({ defenses: defs, playerLevel: lvl, hero }, raid, true).held) reel++;
       }
       // Sur 40 armées, l’annonce moyenne et le taux réel ne doivent pas s’écarter de plus
       // de 12 points — l’écart restant est l’échantillonnage, pas un biais de modèle.

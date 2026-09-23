@@ -206,7 +206,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       const r = resolveRaid(
         { defenses: defs, playerLevel: 28, hero: null, guard: [] },
         rollRaid(s2 * 7919, 28, 0, 0),
-        0,
         false,
       );
       if (buildSiegeStage(r, 8).beats.some((b) => b.kind === 'enter')) report = r;

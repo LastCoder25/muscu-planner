@@ -2354,7 +2354,6 @@ export function resolveRaid(
     guard?: GuardUnit[];
   },
   raid: Raid,
-  now: number,
   heroHome: boolean,
 ): RaidReport {
   const wall = siegeWallOf(input.defenses, input.playerLevel);
@@ -2388,7 +2387,12 @@ export function resolveRaid(
     heroHome,
     log: r.log,
     breached: r.breached,
-    resolvedAt: now,
+    // ⚠️ L'HEURE DE LA BATAILLE, pas celle où on la découvre : un siège se résout à son
+    // heure, que l'app soit ouverte ou non, donc l'instant du tick peut valoir des heures
+    // de plus. Même règle qu'un rapport d'expédition, daté de `midAt`. Elle vient de
+    // `raid`, donc plus aucun appelant ne peut la passer fausse — c'est pourquoi le
+    // paramètre a disparu.
+    resolvedAt: raid.arrivesAt,
     seed: raid.seed,
     defenders: def
       .filter((d) => d.origin !== 'turret')
@@ -2948,6 +2952,20 @@ export function applyRaidOutcome(
   const defenses = base.defenses.map((d) =>
     dmg.damaged.includes(d.typeId) ? { ...d, damaged: true } : d,
   );
+  // ⚠️ TOUT CE QUI DATE DE LA BATAILLE COURT DEPUIS LA BATAILLE, pas depuis l'instant où on
+  // la découvre. Un siège se résout à son heure, que l'app soit ouverte ou non (c'est la
+  // promesse du système) : `now` peut donc valoir des heures de plus. Sans ça la
+  // convalescence du héros ne démarrait qu'à l'ouverture — on lui faisait payer une
+  // absence, ce que ce jeu ne fait jamais (règle 1), et deux fois plutôt qu'une puisqu'il
+  // n'avait pas joué non plus pendant ce temps.
+  // ⚠️ `until` rend `null` quand la durée est DÉJÀ écoulée : on ne pose pas un état mort
+  // que le tick suivant effacerait, et qui immobiliserait le héros une seconde pour rien.
+  const until = (ms: number) => (raid.arrivesAt + ms > now ? raid.arrivesAt + ms : null);
+  const woundUntil = until(
+    woundMsFor(defenseLevel(base.defenses, 'infirmary'), raidIntervalMs(ctx.activeDays7)),
+  );
+  const fieldUntil = until(SCAV.fieldMs);
+  const freezeUntil = until(RAID.freezeMs);
   return {
     base: {
       ...base,
@@ -2957,19 +2975,16 @@ export function applyRaidOutcome(
       // Le héros présent ne sort meurtri que d'une DÉFAITE : sa présence reste un pari
       // gagnant (il fait fortement monter les chances de tenir, et ne paie que si ça rate).
       wound:
-        !report.held && report.heroHome
-          ? {
-              until:
-                now +
-                woundMsFor(
-                  defenseLevel(base.defenses, 'infirmary'),
-                  raidIntervalMs(ctx.activeDays7),
-                ),
-            }
+        !report.held && report.heroHome && woundUntil
+          ? { until: woundUntil }
           : (base.wound ?? null),
+      // ⚠️ LE PROCHAIN SIÈGE EST LA SEULE EXCEPTION : il part de MAINTENANT. Compté depuis
+      // la bataille, une absence de trois jours le rendrait dû à la seconde où l'on ouvre
+      // l'app, puis le suivant, et le suivant — une salve de sièges au retour, c'est-à-dire
+      // exactement l'arriéré que la règle 1 interdit.
       nextRaidAt: now + raidIntervalMs(ctx.activeDays7, rng),
-      field: corpses.length ? { corpses, expiresAt: now + SCAV.fieldMs } : null,
-      freeze: dmg.freeze ? { until: now + RAID.freezeMs, atXp: ctx.globalXp } : null,
+      field: corpses.length && fieldUntil ? { corpses, expiresAt: fieldUntil } : null,
+      freeze: dmg.freeze && freezeUntil ? { until: freezeUntil, atXp: ctx.globalXp } : null,
     },
     damage: dmg,
     // ⚠️ RENDUS À L’APPELANT, plus laissés à fouiller : le butin des corps est crédité

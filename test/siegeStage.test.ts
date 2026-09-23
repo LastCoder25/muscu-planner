@@ -57,7 +57,6 @@ function siege(seed: number, playerLevel = 26, w = 26, t = 26, home = true) {
   const report = resolveRaid(
     { defenses: defs(w, t), playerLevel, hero: home ? hero(playerLevel) : null },
     raid,
-    0,
     home,
   );
   return { raid, report, stage: buildSiegeStage(report, turretCount(t)) };
@@ -428,7 +427,6 @@ function breche(seed: number, L = 28) {
   const report = resolveRaid(
     { defenses: defs(lvl, lvl), playerLevel: L, hero: hero(L), guard: garde(L) },
     raid,
-    0,
     true,
   );
   return { raid, report, lvl, stage: buildSiegeStage(report, turretCount(lvl)) };
