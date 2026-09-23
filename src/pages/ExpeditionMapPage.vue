@@ -39,6 +39,23 @@
           <span class="rf-dot" />
         </button>
       </div>
+
+      <!-- 🕳️ Afficher / masquer les failles. Il se COMBINE aux rangs : une faille ne se
+           montre que si son rang est affiché ET que ce filtre est allumé ; le compte ne
+           parle que des failles des rangs affichés. -->
+      <button
+        v-if="riftTotal > 0"
+        type="button"
+        class="rf-chip rift-chip"
+        :class="{ on: !hideRifts }"
+        :aria-pressed="!hideRifts"
+        :aria-label="riftChipLabel"
+        :title="riftChipLabel"
+        @click="toggleRifts"
+      >
+        <span class="rift-emo">🕳️</span>
+        <span class="rift-count">{{ riftInRanks }}</span>
+      </button>
     </div>
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
@@ -1056,8 +1073,33 @@ function toggleRank(r: number) {
  *  (un lieu est consommé au départ), et la barre de bord l'affiche quand même. */
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
+// ── 🕳️ Filtre des failles (mémorisé par appareil), combiné aux rangs ──
+const RIFT_FILTER_KEY = 'muscu:emap:hide-rifts';
+function loadHideRifts(): boolean {
+  try {
+    return localStorage.getItem(RIFT_FILTER_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+const hideRifts = ref(loadHideRifts());
+function toggleRifts() {
+  hideRifts.value = !hideRifts.value;
+  try {
+    localStorage.setItem(RIFT_FILTER_KEY, hideRifts.value ? '1' : '0');
+  } catch {
+    /* le filtre vaut pour la session */
+  }
+}
+const rankShown = (p: Poi) => !hiddenRanks.value.has(rankOf(p).rankIndex);
+const riftTotal = computed(() => pois.value.filter(isRiftPoi).length);
+const riftInRanks = computed(() => pois.value.filter((p) => isRiftPoi(p) && rankShown(p)).length);
+const riftChipLabel = computed(
+  () =>
+    `${hideRifts.value ? 'Afficher' : 'Masquer'} les failles · ${riftInRanks.value} dans les rangs affichés`,
+);
 const shownPois = computed(() =>
-  pois.value.filter((p) => !hiddenRanks.value.has(rankOf(p).rankIndex)),
+  pois.value.filter((p) => rankShown(p) && !(hideRifts.value && isRiftPoi(p))),
 );
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
@@ -2413,6 +2455,30 @@ onUnmounted(() => {
 .rf-chip.on .rf-dot {
   background: var(--rk);
   opacity: 1;
+}
+.rift-chip {
+  width: auto;
+  min-width: 36px;
+  padding: 0 8px;
+  gap: 3px;
+  border-radius: 18px;
+  --rk: #b57bff;
+}
+.rift-emo {
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.45;
+}
+.rift-chip.on .rift-emo {
+  opacity: 1;
+}
+.rift-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--dim);
+}
+.rift-chip.on .rift-count {
+  color: var(--text);
 }
 .rf-chip:focus-visible {
   outline: 2px solid var(--accent);
