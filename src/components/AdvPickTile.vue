@@ -33,6 +33,13 @@
          lisait qu'au tirage et dans le Codex. Compact (deux tuiles par ligne) : la fiche
          de la Guilde donne le /6. -->
     <span v-if="awaken" class="ca-awk">✨{{ awaken }}</span>
+    <!-- 🔮 CE QU'IL VA GAGNER ICI (demandé) : on choisissait une destination sans savoir que,
+         selon elle, un champion apprend du simple au quadruple. ⚠️ ATTÉNUÉ quand le lieu est
+         SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
+         ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
+    <span v-if="xp && !reason" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
+      +{{ xp.xp }} XP<b v-if="xp.catchUp > 1">×{{ fmtMult(xp.catchUp) }}</b>
+    </span>
     <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
          store, `advUnavailableReason`). -->
     <span v-if="reason" class="ca-why">{{ reason }}</span>
@@ -62,8 +69,32 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
+import type { MissionXpPreview } from '@/lib/caravan';
 
-const props = defineProps<{ adv: Adventurer; on: boolean; reason?: string | null }>();
+const props = defineProps<{
+  adv: Adventurer;
+  on: boolean;
+  reason?: string | null;
+  /** Ce qu'il gagnerait sur le lieu visé (absent = on ne vise rien, ex. la Guilde). */
+  xp?: MissionXpPreview | null;
+}>();
+/** Un multiplicateur se lit « ×2 » ou « ×2,5 », jamais « ×2.50 ». */
+const fmtMult = (m: number) => (Math.round(m * 10) / 10).toString().replace('.', ',');
+const xpWhy = computed(() => {
+  const x = props.xp;
+  if (!x) return '';
+  const parts = [
+    x.full
+      ? 'Ce lieu est à son niveau ou au-dessus : il apprend à plein.'
+      : 'Ce lieu est SOUS son niveau : il apprend beaucoup moins. Envoie-le sur un lieu de son niveau ou plus.',
+  ];
+  if (x.catchUp > 1)
+    parts.push(
+      `Prime de retard ×${fmtMult(x.catchUp)} : un rang de retard double l'apprentissage.`,
+    );
+  parts.push('Socle si la mission réussit ; les ennemis abattus s’y ajoutent.');
+  return parts.join(' ');
+});
 const emit = defineEmits<{ toggle: [] }>();
 const rank = computed(() => advRank(props.adv));
 const badges = computed(() => advBadges(props.adv));
@@ -155,6 +186,24 @@ const rar = computed(() => advGradeBadge(props.adv));
    convoi, et son opacité le dit sans ajouter un mot. */
 .ca-skill.sig {
   opacity: 0.65;
+}
+/* L'XP à gagner : c'est le chiffre qui décide d'une destination, il se lit avant les
+   compétences. Accent = plein tarif ; atténué = le lieu est sous son niveau. */
+.ca-xp {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+}
+.ca-xp.low {
+  color: var(--dim);
+  font-weight: 600;
+}
+/* La prime de retard : un gain, donc la teinte du gain (celle du vert de la charte). */
+.ca-xp b {
+  margin-left: 3px;
+  font-size: 10.5px;
+  color: #7bc86c;
 }
 .ca-none {
   font-size: 11px;

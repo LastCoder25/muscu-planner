@@ -508,6 +508,7 @@
               :key="a.id"
               :adv="a"
               :on="partyEscort.includes(a.id)"
+              :xp="partyXp[a.id]"
               @toggle="togglePartyAdv(a.id)"
             />
             <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
@@ -523,6 +524,14 @@
               />
             </template>
           </div>
+          <!-- 🔮 LA RÈGLE QUE PERSONNE NE POUVAIT DEVINER, dite une seule fois : sous son
+               niveau, un champion apprend beaucoup moins (mesuré v0.1102 : du simple au
+               quadruple selon la destination). Affichée seulement s'il y a quelqu'un que ça
+               concerne — sinon c'est du bruit. -->
+          <p v-if="partyLowXp" class="car-xp-note">
+            📉 Atténué = ce lieu est <b>sous son niveau</b>, il y apprendra beaucoup moins. Un lieu
+            de son niveau ou plus paie plein tarif.
+          </p>
           <button
             v-if="char.advList.length && partyBlocked.length"
             type="button"
@@ -757,7 +766,9 @@ import {
   isCaravanClaimable,
   poiOffers,
   partyAllies,
+  missionXpPreview,
   missionXpSplit,
+  type MissionXpPreview,
   XP_TEAM_REF,
   HERO_XP_WEIGHT,
   type PartyHero,
@@ -1345,6 +1356,24 @@ const canSendPartyNow = computed(
 const partyMax = computed(() => partyCapFor(cap.value));
 /** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
 const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length, partyHeroOn.value));
+/** 🔮 Ce que CHAQUE champion gagnerait sur le lieu visé (demandé). ⚠️ La règle vit en lib
+ *  (`missionXpPreview`), qui appelle `missionXpFor` — ce que le store verse vraiment :
+ *  une seconde formule d'affichage finirait par annoncer une XP que l'encaissement dément. */
+const partyXp = computed<Record<string, MissionXpPreview>>(() =>
+  selected.value
+    ? missionXpPreview(
+        char.advList,
+        partyEscort.value,
+        selected.value,
+        partyHeroOn.value,
+        char.pantheonLevel,
+      )
+    : {},
+);
+/** La note ne s'affiche que si un champion DISPONIBLE y perd : sinon c'est du bruit. */
+const partyLowXp = computed(() =>
+  freeStable.value.some((a) => partyXp.value[a.id]?.full === false),
+);
 /** Vrai quand on ne peut plus en cocher — pour le dire AVANT qu'on essaie. */
 const partyFull = computed(() => partyAdvs.value.length >= partyMax.value);
 /** Si le plafond baisse (Panthéon), on retire les derniers cochés plutôt que de laisser un
@@ -2155,6 +2184,16 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.35;
   color: var(--dim);
+}
+/* La règle de l XP, sous la grille : elle explique les tuiles atténuées. */
+.car-xp-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--dim);
+}
+.car-xp-note b {
+  color: var(--text);
 }
 .car-cap b {
   color: var(--text);

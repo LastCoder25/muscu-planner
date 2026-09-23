@@ -887,6 +887,51 @@ export function missionXpFor(
   return xp;
 }
 
+/** 🔮 CE QU'UN CHAMPION VA GAGNER SUR CE LIEU, annoncé AVANT l'envoi (v0.1103, demandé par
+ *  l'utilisateur). Mesuré (v0.1102) : selon la destination, un champion apprend du simple au
+ *  quadruple — et rien ne le disait. La carte montre un rang et des étoiles, jamais « ce lieu
+ *  paiera plein tarif pour CE champion ».
+ *
+ *  ⚠️ ELLE N'A AUCUNE FORMULE À ELLE : elle APPELLE `missionXpFor`, ce que le store verse
+ *  vraiment. Une seconde règle d'affichage finirait par annoncer une XP que l'encaissement
+ *  dément — le défaut que ce projet documente partout (libellés de POI, budget de ferraille).
+ *
+ *  ⚠️ `shares` est VIDE : la part des abattus dépend du combat, qui n'a pas eu lieu. Le
+ *  chiffre annoncé est donc le SOCLE d'une mission RÉUSSIE — un plancher, jamais une promesse
+ *  haute. `won: false` rendrait un chiffre qui décourage un envoi qui, le plus souvent, passe.
+ *
+ *  ⚠️ Un champion NON sélectionné est chiffré COMME SI on l'ajoutait (escorte + lui) : c'est la
+ *  seule façon de comparer deux tuiles, et ça rend visible que s'ajouter DILUE le partage.
+ */
+export interface MissionXpPreview {
+  /** Le socle qu'il touchera si la mission réussit (part des abattus en plus). */
+  xp: number;
+  /** Le lieu est-il à son niveau ou au-dessus ? En dessous, l'apprentissage chute en
+   *  puissance 1,5 — c'est LA règle que personne ne pouvait deviner. */
+  full: boolean;
+  /** Sa prime de retard (1 = aucune). Une BONNE nouvelle : on la montre. */
+  catchUp: number;
+}
+export function missionXpPreview(
+  advs: readonly Adventurer[],
+  escortIds: readonly string[],
+  poi: Poi,
+  hero: boolean,
+  pantheonLevel: number,
+): Record<string, MissionXpPreview> {
+  const escort = advs.filter((a) => escortIds.includes(a.id));
+  const out: Record<string, MissionXpPreview> = {};
+  for (const a of advs) {
+    const team = escortIds.includes(a.id) ? escort : [...escort, a];
+    out[a.id] = {
+      xp: missionXpFor(team, poi, true, {}, hero, pantheonLevel)[a.id] ?? 0,
+      full: poi.level >= a.level,
+      catchUp: catchUpMult(a.level, pantheonLevel),
+    };
+  }
+  return out;
+}
+
 /** Convois simultanés qu'autorise le Comptoir. ⚠️ SECOND garde-fou de l'inflation :
  *  le rendement par convoi est bridé (`yieldShare`), mais c'est le NOMBRE qui multiplie.
  *  Un débutant en a un seul ; le plafond reste bas, et le niveau du Comptoir est lui-même
