@@ -365,13 +365,13 @@
                 {{ POI_LABEL[selected.type] }}
               </div>
               <div class="pc-tags">
-                <span class="pc-lvl">Niveau {{ selected.level }}</span>
+                <span class="pc-lvl">Ennemis niv {{ selected.level }}</span>
                 <span
                   class="sh-rank"
                   :title="
                     selectedRift
                       ? 'Rang de la faille — fixé à son apparition, il ne monte pas avec l’âge'
-                      : 'Rang du lieu'
+                      : 'Difficulté du lieu — le niveau de ses ennemis ET leur nombre réunis'
                   "
                   >{{ selectedRank.emoji }} {{ selectedRank.name }}
                   {{ rankStarStr(selectedRank.star) }}</span
@@ -696,7 +696,8 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import CaravanReportView from '@/components/CaravanReportView.vue';
 import PartyReportView from '@/components/PartyReportView.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import { campRewardLabel, campWinPct } from '@/lib/camp';
+import { campBodyCount, campRewardLabel, campWinPct } from '@/lib/camp';
+import { poiRank, poiRankCounts } from '@/lib/poiDifficulty';
 import {
   PARTY_HERO_BLOCK_LABEL,
   PARTY_SEND_BLOCK_LABEL,
@@ -733,7 +734,6 @@ import {
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
-  poiRankCounts,
   type PartyResult,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
@@ -755,7 +755,7 @@ import {
   advUnavailableReason,
   engageCap,
 } from '@/lib/adventurers';
-import { characterRank, rankStarStr, CHARACTER_RANKS } from '@/lib/characterRank';
+import { rankStarStr, CHARACTER_RANKS } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   RIFT,
@@ -1052,7 +1052,7 @@ function toggleRank(r: number) {
   }
 }
 const shownPois = computed(() =>
-  pois.value.filter((p) => !hiddenRanks.value.has(characterRank(p.level).rankIndex)),
+  pois.value.filter((p) => !hiddenRanks.value.has(poiRank(p).rankIndex)),
 );
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
@@ -1745,15 +1745,18 @@ const poiFacts = computed<PoiFact[]>(() => {
   const faction = rift?.faction ?? band?.faction ?? camp?.faction ?? guard?.faction;
   if (faction)
     out.push({ icon: FACTION_EMOJI[faction], label: 'Faction', value: FACTION_LABEL[faction] });
-  if (camp)
+  // 👾 COMBIEN ils sont — pour un camp COMME pour les gardes d'un lieu de récolte.
+  // ⚠️ Les gardes ne l'affichaient pas (v0.1043) : deux lieux du même rang pouvaient donc
+  // aligner 2 ou 4 ennemis sans que rien ne le dise, et c'est ce qui a été signalé. Le
+  // NOMBRE seul ne dit pas la difficulté (le rang s'en charge) : il dit ce qu'on voit.
+  const force = camp ?? guard;
+  if (force)
     out.push({
-      icon: '💪',
-      label: 'Force',
-      value: `≈ ${camp.size} champion${camp.size > 1 ? 's' : ''}`,
-      title: 'La force du camp, comptée en champions de référence',
+      icon: '👾',
+      label: 'Ennemis',
+      value: String(campBodyCount(force.size)),
+      title: `Une force de ${force.size} champion${force.size > 1 ? 's' : ''} de référence du niveau du lieu`,
     });
-  // (La force des gardes d'un lieu de récolte n'est plus affichée — demandé : la faction
-  // et la réussite de l'équipe suffisent.)
   if (rift) {
     out.push({
       icon: '👾',
@@ -1845,7 +1848,6 @@ const poiFacts = computed<PoiFact[]>(() => {
 function winClass(pct: number): string {
   return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
 }
-/** 🏅 Le rang d'un lieu : celui de son niveau, sur l'échelle de tout le jeu (`characterRank`). */
 /** Le portail d'une faille sur la carte, en unités de carte : un peu plus haut que la
  *  pastille d'un lieu (⌀ 9), les flammes comprises. `dy` = du haut du dessin au centre. */
 const RIFT_ICON = {
@@ -1853,10 +1855,6 @@ const RIFT_ICON = {
   w: (14 * PORTAL_VIEW.w) / PORTAL_VIEW.h,
   dy: (14 * PORTAL_VIEW.cy) / PORTAL_VIEW.h,
 };
-
-function poiRank(p: Poi) {
-  return characterRank(p.level);
-}
 
 // Avant-poste : débloque les expéditions + réduit les trajets.
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));

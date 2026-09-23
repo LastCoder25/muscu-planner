@@ -1,13 +1,8 @@
 // 🧍 PETITES FORCES ET DEMI-CRANS DE GARDES (2026-09-22) — cf. `SMALL_FORCE_RELIEF`
-// (camp.ts) et `HARVEST_GUARD_SIZES` (expedition.ts).
+// (poiDifficulty.ts) et `HARVEST_GUARD_SIZES` (expedition.ts).
 import { describe, it, expect } from 'vitest';
-import {
-  campFoe,
-  campWinPct,
-  smallForceMult,
-  smallForceWeight,
-  SMALL_FORCE_RELIEF,
-} from '@/lib/camp';
+import { campFoe, campWinPct } from '@/lib/camp';
+import { smallForceMult, smallForceWeight, SMALL_FORCE_RELIEF } from '@/lib/poiDifficulty';
 import { refEscortUnits } from '@/lib/caravan';
 import { HARVEST_GUARD_SIZES, harvestGuardOf, type Poi } from '@/lib/expedition';
 

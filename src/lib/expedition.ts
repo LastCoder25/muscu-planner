@@ -809,21 +809,6 @@ export const ARENA = {
  *  poussière, ressources suivent `poi.level`) sans rendre quoi que ce soit inatteignable.
  *  ⚠️ Ça n'améliore PAS la rareté du butin : elle reste centrée sur `min(contenu, joueur)`
  *  — c'est l'anti-runaway, et il est intentionnel. */
-/** Les RANGS présents sur la carte, du plus bas au plus haut, avec leur nombre de lieux —
- *  les options du filtre de difficulté. Le rang d’un lieu est `characterRank(level)`,
- *  exactement ce que sa pastille affiche : le filtre ne peut pas dire autre chose que la carte.
- *  Seuls les rangs présents sont proposés — un filtre « Divin : 0 » n’apprend rien. */
-export function poiRankCounts(
-  pois: readonly Pick<Poi, 'level'>[],
-): { rankIndex: number; count: number }[] {
-  const n = new Map<number, number>();
-  for (const p of pois) {
-    const r = characterRank(p.level).rankIndex;
-    n.set(r, (n.get(r) ?? 0) + 1);
-  }
-  return [...n].sort((a, b) => a[0] - b[0]).map(([rankIndex, count]) => ({ rankIndex, count }));
-}
-
 export function spawnWindow(playerLevel: number): { min: number; max: number } {
   const base = Math.max(1, playerLevel);
   return { min: base, max: base + 10 };
