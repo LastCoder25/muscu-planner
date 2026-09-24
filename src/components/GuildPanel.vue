@@ -157,7 +157,9 @@
                 :disabled="busy"
                 :gear="gearCellsOf(a)"
                 :ascend="ascReady.champions.has(a.id)"
+                :ascend-gear="[...ascReady.gear]"
                 @gear="(slot) => onGearCell(a, slot)"
+                @ascend-gear="ascendGearById"
                 @open="detailAdv = a"
               />
             </div>
@@ -1327,6 +1329,17 @@ watch(
   },
   { immediate: true },
 );
+// 🔄 Les feuilles ouvertes gardent une COPIE de l'aventurier / de la pièce : après une
+// ascension, un éveil ou un changement d'équipement, le store relit sa ligne mais la fiche
+// affichait encore l'état d'avant (signalé : « remettre à jour l'affichage une fois l'item
+// monté »). On les relit donc par id à chaque changement du vivier ou du stock.
+watch(
+  () => [char.advList, char.advGearStock] as const,
+  ([advs, stock]) => {
+    if (detailAdv.value) detailAdv.value = advs.find((x) => x.id === detailAdv.value!.id) ?? null;
+    if (stockEquip.value) stockEquip.value = stock.find((x) => x.id === stockEquip.value!.id) ?? null;
+  },
+);
 /** ⬆️ L'ascension à proposer — seulement quand son XP BUTE sur la fin de son rang (★★★★★),
  *  sinon le bloc serait une promesse lointaine qui encombre la fiche. */
 function ascentOf(a: Adventurer) {
@@ -1474,6 +1487,11 @@ function doMergeGear() {
       $q.notify({ type: 'positive', message: `✨ ${out.merged} doublon(s) fondu(s)` });
     });
   });
+}
+/** ⬆️ Depuis le portrait d'un champion de la liste : même geste que le stock. */
+function ascendGearById(id: string) {
+  const g = char.advGearStock.find((x) => x.id === id);
+  if (g) doAscendGear(g);
 }
 function doAscendGear(g: AdvGear) {
   const s = gearAscent(g);

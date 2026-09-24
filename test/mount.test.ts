@@ -751,6 +751,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     };
     expect(await mountIt(P, base)).toBeNull();
     expect(await mountIt(P, { ...base, tone: 'busy', state: '🐫 en route · 2 h' })).toBeNull();
+    // ⬆️ Une pièce PRÊTE a son bouton d'ascension sur le portrait (demandé : on ne pouvait
+    // monter les pièces que depuis le stock) ; une pièce non listée n'en a pas.
+    const piece = { id: 'g1', name: 'Épée courte' };
+    const cell = { slot: 'weapon', emoji: '🗡️', name: 'Arme', filled: true, piece };
+    let out = '';
+    await mountIt(P, { ...base, gear: [cell], ascendGear: ['g1'] }, undefined, undefined, '/', (h) => (out = h));
+    expect(out).toContain('Ascension : Épée courte');
+    await mountIt(P, { ...base, gear: [cell], ascendGear: [] }, undefined, undefined, '/', (h) => (out = h));
+    expect(out).not.toContain('Ascension : Épée courte');
   }, 30_000);
   // ⚠️ AventurePage N'EST PAS ICI, et c'est une décision mesurée. Monté dans ce harnais,
   // l'écran rend son formulaire de CRÉATION DE PSEUDO : le store `character` recharge sa

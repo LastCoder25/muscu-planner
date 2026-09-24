@@ -113,7 +113,7 @@
         :key="c.slot"
         type="button"
         class="apg-cell"
-        :class="{ empty: !c.filled, pending: c.pending }"
+        :class="{ empty: !c.filled, pending: c.pending, asc: !!c.piece && ascendGear?.includes(c.piece.id) }"
         :style="c.color ? { '--gc': c.color } : {}"
         :title="c.title"
         :aria-label="c.title"
@@ -124,9 +124,27 @@
           ><AdvGearArt :model="c.model">{{ c.emoji }}</AdvGearArt></span
         >
         <span v-if="c.rank" class="apg-rk">{{ c.rank }}</span>
+        <span v-if="c.piece && ascendGear?.includes(c.piece.id)" class="apg-up" aria-hidden="true">⬆️</span>
         <span v-if="c.bar" class="apg-bar" :style="{ '--bc': c.bar.rank.color }"
           ><span :style="{ width: c.bar.pct + '%' }"
         /></span>
+      </button>
+    </div>
+
+    <!-- ⬆️ Les pièces dont l'ascension se paie TOUT DE SUITE : un bouton par pièce, sous la
+         grille (une case ouvre le choix de la pièce — elle ne peut pas porter deux gestes). -->
+    <div v-if="gearAscents.length" class="ap-gasc">
+      <button
+        v-for="c in gearAscents"
+        :key="c.piece!.id"
+        type="button"
+        class="ap-gasc-btn"
+        :disabled="disabled"
+        :title="`Ascension : ${c.piece!.name}`"
+        :aria-label="`Ascension : ${c.piece!.name}`"
+        @click="emit('ascendGear', c.piece!.id)"
+      >
+        ⬆️ <AdvGearArt :model="c.model">{{ c.emoji }}</AdvGearArt>
       </button>
     </div>
 
@@ -204,11 +222,18 @@ const props = defineProps<{
   /** ⬆️ Son ascension est PAYABLE tout de suite (`readyAscensionIds`) : le portrait le dit,
    *  sinon on cherche parmi tout le vivier celui qui allume le Panthéon. */
   ascend?: boolean;
+  /** ⬆️ Ids des pièces PORTÉES dont l'ascension est payable tout de suite
+   *  (`readyAscensionIds`, même règle que le bouton du stock). */
+  ascendGear?: string[];
 }>();
 const emit = defineEmits<{
   open: [];
   gear: [slot: AdvGearSlot];
+  ascendGear: [gearId: string];
 }>();
+const gearAscents = computed(() =>
+  props.gear.filter((c) => c.piece && props.ascendGear?.includes(c.piece.id)),
+);
 
 const rank = computed(() => advRank(props.adv));
 const awaken = computed(() => advAwaken(props.adv));
@@ -310,6 +335,35 @@ function starTf(i: number): string {
     inset 0 0 0 2px color-mix(in srgb, var(--tone-c, transparent) 42%, transparent),
     0 0 0 2px var(--d1, #7bc86c),
     0 0 12px color-mix(in srgb, var(--d1, #7bc86c) 45%, transparent);
+}
+.ap-gasc {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+.ap-gasc-btn {
+  min-width: 44px;
+  min-height: 32px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--d1, #7bc86c);
+  color: #15120e;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.apg-up {
+  position: absolute;
+  top: 1px;
+  left: 2px;
+  font-size: 10px;
+  line-height: 1;
+}
+.apg-cell.asc {
+  border-color: var(--d1, #7bc86c) !important;
 }
 .ap-asc {
   margin-top: 4px;
