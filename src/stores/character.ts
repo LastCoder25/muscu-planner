@@ -2838,12 +2838,12 @@ export const useCharacterStore = defineStore('character', () => {
     const { now, hero } = opts;
     // ⚠️ Un id répété ferait partir deux fois le même aventurier.
     if (new Set(opts.escortIds).size !== opts.escortIds.length)
-      return 'un aventurier est choisi deux fois';
+      return 'un champion est choisi deux fois';
     const escort = opts.escortIds
       .map((id) => advList.value.find((a) => a.id === id))
       .filter((a): a is Adventurer => !!a && advAvailable(a, now));
     if (escort.length !== opts.escortIds.length)
-      return 'un aventurier du groupe n’est plus disponible';
+      return 'un champion du groupe n’est plus disponible';
     // ⚠️ Groupe vide, ou SANS le héros alors que tous les créneaux de convoi sont pris : la
     // MÊME règle que l'écran (`partySendBlocker`), un seul pool avec les convois.
     // 🗡️ Ce que le groupe emmène — il faut le connaître AVANT le refus, puisque le

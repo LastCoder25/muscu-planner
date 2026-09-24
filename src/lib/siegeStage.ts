@@ -966,7 +966,7 @@ function defendersOf(
       if (!id || ATT.test(id) || TUR.test(id) || seen.has(id)) continue;
       seen.set(id, {
         id,
-        name: id === 'hero' ? 'Héros' : 'Aventurier',
+        name: id === 'hero' ? 'Héros' : 'Champion',
         emoji: id === 'hero' ? '🦸' : '⚔️',
         kind: 'melee',
       });

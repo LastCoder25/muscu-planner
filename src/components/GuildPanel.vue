@@ -65,7 +65,7 @@
                     armer</template
                   ><template v-else>🗡️ équipement du vivier</template
                   ><template v-if="autoPreview.changes">
-                    · {{ autoPreview.changes }} aventurier{{
+                    · {{ autoPreview.changes }} champion{{
                       autoPreview.changes > 1 ? 's' : ''
                     }}</template
                   >
@@ -105,7 +105,7 @@
           </div>
           <!-- ── Le vivier ── -->
           <div v-if="!roster.length" class="g-empty">
-            Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
+            Personne encore. Invoque ton premier champion — il partira en expédition pour toi.
           </div>
           <!-- 🖼️ LE VIVIER EN PORTRAITS (v0.807 ; demandé par l'utilisateur) : chaque
              aventurier est présenté comme le héros à l'entrée de l'Aventure — avatar au
@@ -622,7 +622,7 @@
 
       <!-- ⚠️ Une compétence apprise DEUX FOIS n'est pas listée deux fois : elle monte
            d'un NIVEAU, et son effet suit. Répétée, elle se lisait comme un bug. -->
-      <div v-if="rolesOf(detailAdv).length" class="d-sec">🐫 Sur les convois</div>
+      <div v-if="rolesOf(detailAdv).length" class="d-sec">🐫 En expédition</div>
       <div v-if="rolesOf(detailAdv).length" class="d-perks">
         <span v-for="s in rolesOf(detailAdv)" :key="s.what" class="d-perk">
           {{ ADV_ROLE_LABEL[s.what] }}
@@ -639,7 +639,7 @@
       </div>
 
       <p v-if="!rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length" class="g-note">
-        Ni rôle de convoi ni signature — de la stat brute.
+        Ni rôle d’expédition ni signature — de la stat brute.
       </p>
 
       <div class="g-actions">

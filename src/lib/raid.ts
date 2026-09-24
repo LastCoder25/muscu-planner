@@ -1523,7 +1523,7 @@ export function defenseBreakdown(
     // « qui est parti » — un convoi en route, c’est autant de moins ici.
     {
       id: 'garrison',
-      label: 'Garnison',
+      label: 'Champions',
       emoji: '⚔️',
       ...contrib(defenses, hero, []),
       active: guard.length > 0,

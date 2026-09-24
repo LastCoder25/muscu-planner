@@ -641,7 +641,7 @@
     <div v-if="pushOk" class="panel push-panel">
       <div class="p-title font-display">🔔 Me prévenir</div>
       <div class="p-sub">
-        Armée repérée, assaut résolu, héros, convoi ou groupe rentré, et ce qui bouge sur un boss
+        Armée repérée, assaut résolu, héros ou équipe rentrés, et ce qui bouge sur un boss
         entre amis — même app fermée.
       </div>
       <button class="push-btn" :disabled="pushBusy" @click="togglePush">
@@ -928,7 +928,7 @@
           <div class="sh-gtitle">🤕 Blessés — {{ patientCount }}</div>
           <p v-if="!patientCount" class="sh-gnote">
             Personne n’est alité. Un siège perdu envoie ici le héros s’il défendait et les
-            aventuriers tombés ; une embuscade perdue, le blessé du convoi.
+            champions tombés ; une expédition perdue, les champions de l’équipe.
           </p>
           <div v-if="wounded" class="inf-row">
             <span class="inf-emo">🦸</span>
@@ -960,7 +960,7 @@
             :disabled="(char.row?.gold ?? 0) < patientsCost"
             @click="doHealAdv(patients.map((p) => p.id))"
           >
-            ⛑️ Soigner tous les aventuriers · {{ fmtPow(patientsCost) }} 🪙
+            ⛑️ Soigner tous les champions · {{ fmtPow(patientsCost) }} 🪙
           </button>
           <p v-if="patientCount" class="sh-gnote">
             Attendre est gratuit : les soins n’achètent que l’immédiateté, et coûtent d’autant plus
@@ -1644,7 +1644,7 @@ const STRUCTURE_LINK: Record<DefenseId, string> = {
   turret:
     'Seule structure qui ABAT quelqu’un. Abritée par la Muraille : plus elle tient, plus elles tirent.',
   watchtower: 'Le préavis ne sert que si les 🔔 notifications sont actives.',
-  infirmary: 'Soigne le héros ET les champions tombés au siège ou en convoi.',
+  infirmary: 'Soigne le héros ET les champions tombés au siège ou en expédition.',
 };
 /** Ce qu'apporte le PROCHAIN niveau de chaque structure — par `defensePerLevelLabel`,
  *  la fonction du jeu : un texte recopié finirait par mentir. */

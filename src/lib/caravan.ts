@@ -1296,7 +1296,7 @@ export function resolveCaravan(
         won: r.win,
         slain: abattus,
         down: [...d.down],
-        text: r.win ? 'Une embuscade repoussée.' : 'Des bandits emportent une part du convoi.',
+        text: r.win ? 'Une embuscade repoussée.' : 'Des bandits emportent une part de la cargaison.',
       });
       // 🛡️ `slainByAlly` : jamais `d.killsBy`, qui mélange les deux sens sous la même clé
       // (cf. sa doc) — un id d'aventurier qui collisionnerait avec un id de troupe (`foe0`)
@@ -1327,7 +1327,7 @@ export function resolveCaravan(
       mult *= 1.1;
       keysBonus += rng() < 0.25 ? 1 : 0;
     } else if (roll >= base && roll < 0.42) {
-      events.push({ kind: 'detour', text: 'Un pont coupé : le convoi allonge.' });
+      events.push({ kind: 'detour', text: 'Un pont coupé : le trajet s’allonge.' });
       mult *= 0.92;
     } else {
       events.push({ kind: 'calme', text: 'Route tranquille.' });

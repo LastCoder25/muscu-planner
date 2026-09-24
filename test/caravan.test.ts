@@ -1572,7 +1572,7 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
       won: false,
       slain: 0,
       down: [escort[1]!.id, escort[0]!.id, escort[2]!.id],
-      text: 'Des bandits emportent une part du convoi.',
+      text: 'Des bandits emportent une part de la cargaison.',
     };
     const r = caravanReport(
       { ...v, outcome: { ...v.outcome, events: [evPerdue], hurt: [escort[1]!.id] } },
