@@ -340,8 +340,12 @@ defineExpose({ play, die });
 .fbs-boss.shake {
   animation: fbs-shake 0.38s linear;
 }
+/* À terre : l'état final de `fbs-die` — sans lui, le boss reprenait sa taille d'un coup à la
+   fin de l'animation. */
 .fbs-boss.dead {
-  filter: grayscale(1) brightness(0.7);
+  filter: grayscale(1) brightness(0.55);
+  transform: translateY(18px) scale(0.78) rotate(-8deg);
+  opacity: 0.75;
   animation: none;
 }
 /* La mort : tremble, blanchit, puis s'effondre en pâlissant. */
