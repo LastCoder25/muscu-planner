@@ -182,6 +182,10 @@
                le vivier — un seul dispositif de filtre dans la Guilde, mêmes teintes
                (vert = disponible, jaune = confié) que les cadres des tuiles. -->
           <template v-else>
+            <p class="g-note dim">
+              Dégâts et PV en valeur réelle : pour son porteur, ou pour un champion de ton niveau si
+              personne ne la porte.
+            </p>
             <!-- ⬆️ Même signal que l'anneau du Panthéon : sans lui, on cherche le bouton ⬆️
                  parmi toutes les tuiles. -->
             <div v-if="ascReady.gear.size" class="asc-banner">
@@ -658,7 +662,7 @@
       </div>
       <p class="g-note">
         {{ lineageLabel(stockEquip.lineage) }} · {{ advGearBadge(stockEquip).label }} ·
-        {{ advGearEffectTexts(stockEquip).join(' · ') }}
+        {{ gearEffectTexts(stockEquip).join(' · ') }}
       </p>
       <p class="g-note">{{ GAIN_NOTE }}</p>
       <button v-if="ownerOf(stockEquip)" class="cta ghost" :disabled="busy" @click="unequipStock">
@@ -932,7 +936,13 @@ import {
 } from '@/lib/adventurers';
 import { GRADE_COLOR } from '@/data/champions';
 import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
-import { champShowK, champStat, fmtChampDelta, fmtChampPow } from '@/lib/champDisplay';
+import {
+  champShowK,
+  champStat,
+  fmtChampDelta,
+  fmtChampPow,
+  realGearTexts,
+} from '@/lib/champDisplay';
 import CountUp from '@/components/CountUp.vue';
 import { fxRarity } from '@/lib/items';
 import { useGameFx } from '@/composables/useGameFx';
@@ -940,7 +950,7 @@ import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
 import RankStarBadge from '@/components/RankStarBadge.vue';
 import GearStarBar from '@/components/GearStarBar.vue';
-import { type EscortKit } from '@/lib/caravan';
+import { escortCombatant, refChampionAdv, type EscortKit } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
   advGearBadge,
@@ -952,7 +962,6 @@ import {
   groupGearByGrade,
   advGearCells,
   advGearModelOf,
-  advGearEffectTexts,
   advGearOptions,
   advGearSellValue,
   advLooks,
@@ -1101,7 +1110,12 @@ const gearCells = computed(
 function gearCellsOf(a: Adventurer): AdvGearCell[] {
   return gearCells.value.get(a.id) ?? advGearCells(a, []);
 }
-const detailGearSlots = computed(() => (detailAdv.value ? gearCellsOf(detailAdv.value) : []));
+const detailGearSlots = computed(() => {
+  const a = detailAdv.value;
+  if (!a) return [];
+  // La stat de la case, en valeur réelle pour CE champion.
+  return gearCellsOf(a).map((c) => (c.piece ? { ...c, stat: gearEffectTexts(c.piece, a)[0] } : c));
+});
 /** ⬆️ Les pièces PORTÉES par ce champion dont l'ascension est permise tout de suite. */
 const detailGearAscents = computed(() =>
   detailGearSlots.value.flatMap((c) => {
@@ -1110,7 +1124,25 @@ const detailGearAscents = computed(() =>
     return x && !x.block ? [{ piece: c.piece, rank: x.rank, cost: x.cost }] : [];
   }),
 );
-const gearEffectTexts = advGearEffectTexts;
+/** 🗡️ Les stats d'une pièce EN VALEUR RÉELLE (`realGearTexts`) : dégâts et PV en ce qu'ils
+ *  ajoutent à un champion, à l'échelle d'affichage. Pour `forAdv` si donné (la candidate d'un
+ *  sélecteur), sinon pour son PORTEUR, sinon pour un champion de référence de ton niveau.
+ *  ⚠️ Le combattant NU de chacun est calculé une fois par changement du vivier. */
+const baseCombatants = computed(() => new Map(char.advList.map((a) => [a.id, escortCombatant([a], a.name)])));
+const refBase = computed(() => {
+  const a = refChampionAdv(Math.max(1, props.playerLevel ?? 1));
+  return escortCombatant([a], a.name);
+});
+const wearerByGear = computed(() => {
+  const out = new Map<string, string>();
+  for (const [advId, list] of gearWorn.value) for (const g of list) out.set(g.id, advId);
+  return out;
+});
+function gearEffectTexts(g: AdvGear, forAdv?: Adventurer): string[] {
+  const id = forAdv?.id ?? wearerByGear.value.get(g.id);
+  const base = (id && baseCombatants.value.get(id)) || refBase.value;
+  return realGearTexts(g, base, showK.value);
+}
 /** Ce que l'aventurier vaudrait avec CETTE pièce à CET emplacement — calculé par
  *  `adventurerGearPower` (le MÊME arbitre que `pairBonusOf`, `combatPower` sur les
  *  paires du vivier complet), mais SANS recalculer la puissance de tout le monde à
@@ -1143,7 +1175,7 @@ const gearRows = computed(() => {
     rows: [...c.options].sort(compareAdvGear).map((g) => ({
       g,
       color: advGearBadge(g).color,
-      texts: gearEffectTexts(g),
+      texts: gearEffectTexts(g, a),
       power: gearPowerFor(a, p.slot, g.id),
     })),
   };
@@ -1623,8 +1655,8 @@ const gearAscPreview = computed(() => {
   const powAfter = wearer
     ? adventurerGearPower(char.advList, wearer, g.slot, g.id, { ...compCtx.value, advGear: upStock })
     : 0;
-  const tb = advGearEffectTexts(g);
-  const ta = advGearEffectTexts(up);
+  const tb = gearEffectTexts(g, wearer);
+  const ta = gearEffectTexts(up, wearer);
   const from = CHARACTER_RANKS[(advGearNextRank(g) ?? 1) - 1] ?? s.rank;
   return {
     g,

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { CHAMP_SHOW_SHARE, champShowK, champStat, fmtChampDelta } from '@/lib/champDisplay';
+import {
+  CHAMP_SHOW_SHARE,
+  champShowK,
+  champStat,
+  fmtChampDelta,
+  realGearTexts,
+} from '@/lib/champDisplay';
 import { refChampionAdv } from '@/lib/caravan';
 import { adventurerPowers } from '@/lib/raid';
 import { refFighter } from '@/lib/proceduralContent';
@@ -49,5 +55,32 @@ describe('🏅 l’échelle d’affichage des champions', () => {
 
   it('la puissance d’un champion n’est plus arrondie (sinon l’écran perd les petits gains)', () => {
     expect(Number.isInteger(champAt(10))).toBe(false);
+  });
+});
+
+describe('🗡️ les stats d’une pièce en valeur réelle', () => {
+  const base = { damage: 485, pv: 1260 };
+  const g = (type: 'damage_pct' | 'max_pv_pct' | 'crit_pct', value: number, level = 1) =>
+    ({ effect: { type, value }, level }) as Parameters<typeof realGearTexts>[0];
+
+  it('dégâts et PV : ce qu’ils AJOUTENT au porteur, à l’échelle d’affichage', () => {
+    // 1,4 % de 485 dégâts, ×10 à l'affichage = +68.
+    expect(realGearTexts(g('damage_pct', 1.4), base, 10)).toEqual(['+68 dégâts']);
+    expect(realGearTexts(g('max_pv_pct', 2), base, 1)).toEqual(['+25 PV']);
+  });
+
+  it('suit le multiplicateur du COMBAT (niveau d’objet) — jamais une seconde formule', () => {
+    const plain = realGearTexts(g('damage_pct', 10, 1), base, 1)[0];
+    const leveled = realGearTexts(g('damage_pct', 10, 60), base, 1)[0];
+    expect(leveled).not.toBe(plain);
+  });
+
+  it('une chance reste en % : on n’invente pas d’unité', () => {
+    expect(realGearTexts(g('crit_pct', 0.7), base, 10)[0]).toContain('%');
+  });
+
+  it('la seconde stat suit la même règle', () => {
+    const two = { effect: { type: 'damage_pct', value: 1 }, effect2: { type: 'crit_pct', value: 0.5 }, level: 1 } as Parameters<typeof realGearTexts>[0];
+    expect(realGearTexts(two, base, 1)).toHaveLength(2);
   });
 });

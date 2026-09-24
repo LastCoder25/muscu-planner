@@ -387,7 +387,7 @@ export const ADV_GEAR_AWAKEN = { max: 5 } as const;
 
 /** Le multiplicateur de valeur d'une pièce : niveau d'objet × éveil. ⚠️ SOURCE UNIQUE du
  *  combat ET des textes affichés — deux copies ont déjà dit deux choses différentes ici. */
-function advGearMult(g: Pick<AdvGear, 'level' | 'awaken'>): number {
+export function advGearMult(g: Pick<AdvGear, 'level' | 'awaken'>): number {
   // Le plafond (5) est posé à la RELECTURE (`onModel`) et à la fusion (`awakenAdvGear`) :
   // le reposer ici serait un garde qu'aucune donnée réelle n'atteint.
   const aw = Math.max(0, Math.floor(g.awaken ?? 0));

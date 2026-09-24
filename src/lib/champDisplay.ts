@@ -18,7 +18,9 @@
 // ⚠️ UNE SEULE ÉCHELLE pour la puissance, les stats 💪❤️⚡ et ce qu'une pièce apporte : une pièce
 // qui annonce « ⚔️ +48 » doit se retrouver dans le « ⚔️ » de son porteur.
 
-import { combatPower, fmtDelta, fmtPow } from './combat';
+import { combatPower, fmtDelta, fmtPow, type Combatant } from './combat';
+import { advGearMult, type AdvGear } from './advGear';
+import { effectLabelFor, round1 } from './items';
 import { refChampionAdv } from './caravan';
 import { refFighter } from './proceduralContent';
 import { adventurerPowers } from './raid';
@@ -64,4 +66,35 @@ export function fmtChampDelta(cur: number, next: number, k: number): string {
 /** Une stat 💪❤️⚡ de champion, arrondie après l'échelle. */
 export function champStat(n: number, k: number): number {
   return Math.round(n * k);
+}
+
+/**
+ * 🗡️ LES STATS D'UNE PIÈCE EN VALEUR RÉELLE (v0.1135 ; demandé : « +1 %, c'est ridicule —
+ * pas possible d'avoir de vraies stats ? »). AFFICHAGE SEUL.
+ *
+ * Les dégâts et les PV s'affichent en ce qu'ils AJOUTENT au champion : « +52 dégâts » plutôt
+ * que « +1,4 % dégâts » — la part appliquée à SES dégâts / PV de base (`base`, son combattant
+ * SANS équipement : c'est sur lui que le pourcentage s'applique), à l'échelle d'affichage `k`,
+ * comme sa puissance. ⚠️ La valeur de la pièce vient de `advGearMult`, le multiplicateur que
+ * le COMBAT applique (niveau d'objet × éveil) : l'écran ne peut pas annoncer autre chose.
+ *
+ * ⚠️ Le critique, la réduction de dégâts et les stats conditionnelles (exécution, élan, épines,
+ * vol de vie) RESTENT en % : ce sont des chances ou des parts, les convertir en points serait
+ * inventer une unité.
+ */
+export function realGearTexts(
+  g: Pick<AdvGear, 'effect' | 'effect2' | 'level' | 'awaken'>,
+  base: Pick<Combatant, 'damage' | 'pv'>,
+  k: number,
+): string[] {
+  const m = advGearMult(g);
+  const one = (e: { type: AdvGear['effect']['type']; value: number }) => {
+    const v = (e.value * m) / 100;
+    if (e.type === 'damage_pct') return `+${fmtPow(base.damage * v * k)} dégâts`;
+    if (e.type === 'max_pv_pct') return `+${fmtPow(base.pv * v * k)} PV`;
+    return effectLabelFor(e.type, round1(e.value * m));
+  };
+  const out = [one(g.effect)];
+  if (g.effect2) out.push(one(g.effect2));
+  return out;
 }
