@@ -7,8 +7,13 @@
           v-for="(t, i) in ev.tracks"
           :key="t.id"
           class="ax-row"
-          :class="{ pop: rows[i]?.pop }"
+          :class="{ pop: rows[i]?.pop, ready: ascendable(i) }"
           :style="{ '--d': i * 0.08 + 's', '--rc': seg(i).rankColor }"
+          :role="ascendable(i) ? 'button' : undefined"
+          :tabindex="ascendable(i) ? 0 : undefined"
+          :aria-label="ascendable(i) ? `Ouvrir l’ascension de ${t.name}` : undefined"
+          @click="rowClick($event, i)"
+          @keydown.enter="rowClick($event, i)"
         >
           <div class="ax-face">
             <ChampionPortrait :champion-id="t.championId" class="ax-img">{{
@@ -42,7 +47,7 @@
             </div>
             <div v-else-if="rows[i]?.pop === 'star'" class="ax-note">⭐ Une étoile de plus !</div>
             <div v-else-if="rows[i]?.done && t.ascendReady" class="ax-note asc">
-              ⬆️ ★★★★★ — prêt pour l’ascension (Panthéon)
+              ⬆️ ★★★★★ — prêt pour l’ascension · <b>toucher pour y aller ›</b>
             </div>
           </div>
         </div>
@@ -57,6 +62,9 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import ChampionPortrait from './ChampionPortrait.vue';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { rankStarStr } from '@/lib/characterRank';
+import { useRouter } from 'vue-router';
+import { useChampionFocus } from '@/composables/useChampionFocus';
+import { useGamePanel } from '@/composables/useGamePanel';
 
 /** État affiché d'une ligne. La barre avance segment par segment (une étoile chacun). */
 interface RowState {
@@ -164,6 +172,28 @@ watch(
   { immediate: true },
 );
 
+const router = useRouter();
+const { focus } = useChampionFocus();
+const { openPath } = useGamePanel();
+/** La ligne mène à l'ascension seulement une fois sa barre jouée : pendant l'animation, le
+ *  premier toucher sert à la passer (la note « prêt » n'est pas encore affichée). */
+const ascendable = (i: number) => !!rows.value[i]?.done && !!ev.value?.tracks[i]?.ascendReady;
+/** ⬆️ Un champion bute sur son ★5 : on ferme et on ouvre SA fiche au Panthéon, là où vit le
+ *  bouton d'ascension. `openPath` gère le cockpit (volet droit) comme le téléphone. */
+function goAscend(advId: string) {
+  clearTimers();
+  focus(advId);
+  dismiss();
+  openPath(router, '/aventure?tab=base');
+}
+/** Une ligne prête intercepte le toucher ; les autres le laissent passer au fond (passer/fermer). */
+function rowClick(e: Event, i: number) {
+  const t = ev.value?.tracks[i];
+  if (!t || !ascendable(i)) return;
+  e.stopPropagation();
+  goAscend(t.id);
+}
+
 /** Premier toucher : on saute à la fin. Second : on ferme. */
 function tap() {
   if (finished.value) {
@@ -221,6 +251,14 @@ onBeforeUnmount(clearTimers);
   &.pop {
     border-color: var(--rc);
     box-shadow: 0 0 16px color-mix(in srgb, var(--rc) 45%, transparent);
+  }
+  // ⬆️ Prêt pour l'ascension : la ligne devient un bouton, et le dit par son liseré.
+  &.ready {
+    border-color: var(--accent);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent);
+    &:active {
+      transform: scale(0.98);
+    }
   }
 }
 .ax-face {

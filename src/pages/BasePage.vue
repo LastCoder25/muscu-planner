@@ -683,7 +683,12 @@
       </button>
     </div>
 
-    <GuildPanel :open="guildOpen" :section="guildSection" @close="guildOpen = false" />
+    <GuildPanel
+      :open="guildOpen"
+      :section="guildSection"
+      :focus-id="guildFocusId"
+      @close="closeGuild"
+    />
     <SummonPanel :open="summonOpen" @close="summonOpen = false" />
 
     <!-- ⚠️ LA PAGE NE GARDE QUE CE QUI SE LIT D'UN COUP D'ŒIL. Espionnage, dernier
@@ -967,7 +972,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { formatDuration } from '@/lib/duration';
 import { backOr } from '@/lib/nav';
@@ -976,6 +981,7 @@ import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useGamePanel } from '@/composables/useGamePanel';
+import { useChampionFocus } from '@/composables/useChampionFocus';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
 import SummonPanel from '@/components/SummonPanel.vue';
@@ -1525,6 +1531,23 @@ const guildSection = ref<'champions' | 'gear'>('champions');
 function openGuild(section: 'champions' | 'gear' = 'champions') {
   guildSection.value = section;
   guildOpen.value = true;
+}
+// ⬆️ « Prêt pour l'ascension » touché au retour de mission : on ouvre le Panthéon SUR la
+// fiche du champion. Immédiat : la Base se monte souvent juste après le dépôt de l'id.
+const champFocus = useChampionFocus();
+const guildFocusId = ref<string | null>(null);
+watch(
+  champFocus.pending,
+  (id) => {
+    if (!id) return;
+    guildFocusId.value = champFocus.take();
+    openGuild('champions');
+  },
+  { immediate: true },
+);
+function closeGuild() {
+  guildOpen.value = false;
+  guildFocusId.value = null;
 }
 const defOpen = ref<DefenseId | null>(null);
 const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) ?? null);

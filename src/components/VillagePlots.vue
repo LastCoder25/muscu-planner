@@ -138,15 +138,33 @@
           <!-- 🛕 LES TROIS PORTES DU PANTHÉON, en grand (demandé : elles vivaient en petites
                tuiles sur la page Base, loin du bâtiment). Un bâtiment, un endroit. -->
           <div v-if="isPantheon" class="pan-tiles">
-            <button type="button" class="pan-tile" @click="emit('open-guild', 'champions')">
+            <button
+              type="button"
+              class="pan-tile"
+              :class="{ ascend: ascReady.champions }"
+              @click="emit('open-guild', 'champions')"
+            >
               <span class="pan-emo">🏅</span>
               <span class="pan-t font-display">Champions</span>
               <span class="pan-s">{{ champSummary }}</span>
+              <span v-if="ascReady.champions" class="pan-asc"
+                >⬆️ {{ ascReady.champions }} prêt{{ ascReady.champions > 1 ? 's' : '' }} à monter de
+                rang</span
+              >
             </button>
-            <button type="button" class="pan-tile" @click="emit('open-guild', 'gear')">
+            <button
+              type="button"
+              class="pan-tile"
+              :class="{ ascend: ascReady.gear }"
+              @click="emit('open-guild', 'gear')"
+            >
               <span class="pan-emo">🗡️</span>
               <span class="pan-t font-display">Équipements</span>
               <span class="pan-s">{{ gearSummary }}</span>
+              <span v-if="ascReady.gear" class="pan-asc"
+                >⬆️ {{ ascReady.gear }} pièce{{ ascReady.gear > 1 ? 's' : '' }} à monter de
+                rang</span
+              >
             </button>
             <button type="button" class="pan-tile summon" @click="emit('open-summon')">
               <span class="pan-emo">🎰</span>
@@ -206,6 +224,7 @@ import { championOutpostMult } from '@/lib/caravan';
 import { altarLuckBonus } from '@/lib/items';
 import { GACHA } from '@/lib/gacha';
 import { buildTickets } from '@/lib/sportTickets';
+import { emptySeals, readyAscensionIds } from '@/lib/ascension';
 import {
   perLevelLabel,
   BUILD,
@@ -299,6 +318,17 @@ const champSummary = computed(() => {
 const gearSummary = computed(() => {
   const n = char.advGearStock.length;
   return n ? `${n} pièce${n > 1 ? 's' : ''} en stock` : 'Aucune pièce — elles sortent du tirage';
+});
+/** ⬆️ Ce qui peut monter de rang tout de suite — la MÊME règle que l'anneau vert de la
+ *  tuile sur la Base (`readyAscensions`) : sans elle, on entrait dans un Panthéon allumé
+ *  sans savoir pourquoi. */
+const ascReady = computed(() => {
+  const r = readyAscensionIds(char.advList, char.advGearStock, {
+    pantheonLevel: char.pantheonLevel,
+    seals: char.row?.seals ?? emptySeals(),
+    gold: char.row?.gold ?? 0,
+  });
+  return { champions: r.champions.size, gear: r.gear.size };
 });
 /** 🎰 Ce que la tuile Tirage résume : combien de tirages la réserve permet. */
 const summonSummary = computed(() => {
@@ -843,6 +873,21 @@ function collectAll() {
 .pan-s {
   font-size: 13px;
   color: var(--dim);
+}
+/* ⬆️ Le vert « gain » de l'anneau de la Base (`--d1`) : on retrouve ici le signal qui a
+   fait entrer, sur la porte qui mène à ce qu'il annonce. */
+.pan-tile.ascend {
+  border-color: color-mix(in srgb, var(--d1, #7bc86c) 70%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--d1, #7bc86c) 40%, transparent);
+}
+.pan-asc {
+  margin-top: 2px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--d1, #7bc86c);
+  background: color-mix(in srgb, var(--d1, #7bc86c) 16%, transparent);
 }
 .pan-mana {
   position: absolute;

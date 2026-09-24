@@ -74,7 +74,11 @@
           >
           <!-- Les pierres de mana sont la monnaie du GACHA : elles décident si l'on peut invoquer. -->
           <span
-            class="tb-r mana"
+            class="tb-r clickable mana"
+            role="button"
+            tabindex="0"
+            @click="resInfo = 'mana'"
+            @keyup.enter="resInfo = 'mana'"
             :title="`Pierres de mana : ${char.row.mana.toLocaleString('fr-FR')} — invoquer un champion (failles refermées, mines de mana)`"
             ><span class="tb-ico">💠</span>{{ compactNumber(char.row.mana) }}</span
           >
@@ -85,12 +89,20 @@
           <div class="tb-tray">
             <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
             <span
-              class="tb-r gold"
+              class="tb-r clickable gold"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'gold'"
+              @keyup.enter="resInfo = 'gold'"
               :title="`Or : ${char.row.gold.toLocaleString('fr-FR')} — expéditions et construction des bâtiments`"
               ><span class="tb-ico">🪙</span>{{ compactNumber(char.row.gold) }}</span
             >
             <span
-              class="tb-r summon"
+              class="tb-r clickable summon"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'summon'"
+              @keyup.enter="resInfo = 'summon'"
               :title="`Pierres d’invocation : ${char.row.summon_stones.toLocaleString('fr-FR')} — tenter un boss de palier (gagnées en nettoyant des donjons)`"
               ><span class="tb-ico">🔮</span>{{ compactNumber(char.row.summon_stones) }}</span
             >
@@ -99,7 +111,11 @@
                  plusieurs écrans (archives, coffres, boss). Une devise qu'on dépense
                  sans jamais voir sa réserve force à aller la chercher ailleurs. -->
             <span
-              class="tb-r keys"
+              class="tb-r clickable keys"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'keys'"
+              @keyup.enter="resInfo = 'keys'"
               :title="`Clés : ${char.row.keys.toLocaleString('fr-FR')} — entrer dans le Labyrinthe (archives de la carte, coffres, boss)`"
               ><span class="tb-ico">🗝️</span>{{ compactNumber(char.row.keys) }}</span
             >
@@ -108,19 +124,31 @@
                  ⚠️ TOUJOURS affichés, même à zéro : une devise qui n'apparaît qu'une fois
                  obtenue ne dit ni qu'elle existe, ni qu'on peut aller la chercher. -->
             <span
-              class="tb-r seals"
+              class="tb-r clickable seals"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'sealsChamp'"
+              @keyup.enter="resInfo = 'sealsChamp'"
               :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail || 'aucun pour l’instant'}`"
               ><span class="tb-ico">🔱</span>{{ compactNumber(sealsChamp.total) }}</span
             >
             <span
-              class="tb-r seals seals-gear"
+              class="tb-r clickable seals seals-gear"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'sealsGear'"
+              @keyup.enter="resInfo = 'sealsGear'"
               :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail || 'aucun pour l’instant'}`"
               ><span class="tb-ico">⚜️</span>{{ compactNumber(sealsGear.total) }}</span
             >
             <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés même à zéro,
                  comme toutes les devises du plateau. -->
             <span
-              class="tb-r tickets"
+              class="tb-r clickable tickets"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'tickets'"
+              @keyup.enter="resInfo = 'tickets'"
               title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
               ><span class="tb-ico">🎟️</span>{{ compactNumber(char.row.gacha_tickets) }}</span
             >
@@ -1400,6 +1428,23 @@
                 :title="powTitle(it.dungeon.recoLevel)"
                 >⚔️ {{ fmtPow(recoPow(it.dungeon.recoLevel)) }}</span
               >
+              <!-- 🎯 % de réussite RÉEL (tentatives comptées depuis v0.1116), comme les boss. -->
+              <span
+                v-if="dungeonUnlocked(it.dungeon)"
+                class="dgn-chip succ"
+                :class="
+                  dungeonSuccess(it.dungeon) === null
+                    ? 'none'
+                    : successTier(dungeonSuccess(it.dungeon)!)
+                "
+                title="Tes nettoyages de ce donjon, parmi tes tentatives"
+                >🎯
+                {{
+                  dungeonSuccess(it.dungeon) === null
+                    ? 'jamais tenté'
+                    : `${dungeonSuccess(it.dungeon)} % réussis (${dungeonRuns(it.dungeon)} essai${dungeonRuns(it.dungeon) > 1 ? 's' : ''})`
+                }}</span
+              >
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="dgn-loot"
@@ -1738,70 +1783,19 @@
             <div v-if="!(char.row?.messages ?? []).length" class="inbox-empty">
               Aucun message. Les rapports de tes expéditions apparaîtront ici.
             </div>
-            <div
+            <!-- 📜 Un rapport = une carte compacte (v0.1116) : trois lignes, le reste replié,
+                 une seule ligne une fois encaissé. Le butin ne se verse qu'au geste. -->
+            <MissionReportCard
               v-for="m in char.row?.messages ?? []"
               :key="m.id"
-              class="inbox-msg"
-              :class="m.win ? 'win' : 'lose'"
-            >
-              <div class="im-head">
-                <span class="im-emo">{{ m.chest ? '🎁' : m.win ? '🏆' : '💀' }}</span>
-                <span class="im-title">
-                  {{ messageTitle(m) }}<template v-if="!m.chest"> · niv {{ m.level }}</template>
-                </span>
-              </div>
-              <div class="im-text">{{ m.text }}</div>
-              <div class="im-haul">
-                <span v-for="p in haulPills(m)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
-              </div>
-              <!-- ⚔️ Rapport d'un groupe : faction, abattus, XP de chacun, journal. Une
-                   INCURSION de faille y propose en plus son rejeu. -->
-              <PartyReportView
-                v-if="m.party"
-                :party="m.party"
-                :roster="char.advList"
-                @replay="riftReplay = m.party"
-              />
-              <!-- Butin à ENCAISSER. Tant qu'on n'a pas cliqué, rien n'est crédité : c'est
-                   le geste qui donne au retour d'expédition un moment à lui. Un rapport
-                   d'avant la récupération manuelle n'a pas de `claimed` → déjà crédité. -->
-              <button v-if="isClaimable(m, expeNow)" class="im-claim" @click="doClaimMsg(m)">
-                {{ m.chest ? '🎁 Ouvrir le coffre' : '🎁 Récupérer le butin' }}
-              </button>
-              <div v-else-if="m.claimed === false" class="im-wait">
-                🧭 {{ m.party && !m.party.hero ? 'Le groupe est' : 'Le héros est' }} encore sur la
-                route — retour dans
-                {{ fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow) }}
-              </div>
-              <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
-              <div
-                v-for="lt in msgLoot(m)"
-                :key="'loot-' + lt.item.name"
-                class="im-loot"
-                :class="'p-' + lt.item.rarity"
-              >
-                <ItemIcon :item="lt.item" :size="38" />
-                <div class="im-loot-main">
-                  <div class="im-loot-name">
-                    {{ lt.item.name }}<span v-if="lt.item.setId" class="im-loot-set"> 🧩</span>
-                  </div>
-                  <div class="im-loot-sub">
-                    <span :class="'p-' + lt.item.rarity">{{ gradeLabel(lt.item) }}</span> ·
-                    {{ SLOT_LABEL[lt.item.slot] }}
-                  </div>
-                  <div class="im-loot-eff">{{ itemEffects(lt.item) }}</div>
-                  <div v-if="lt.more > 0" class="im-loot-more">
-                    🎁 +{{ lt.more }} autre{{ lt.more > 1 ? 's' : '' }} objet{{
-                      lt.more > 1 ? 's' : ''
-                    }}
-                    au sac
-                  </div>
-                </div>
-              </div>
-              <span v-if="!msgLoot(m).length && m.itemName" class="im-item"
-                >🎁 {{ m.itemName }}</span
-              >
-            </div>
+              :card="messageCard(m, char.advList)"
+              :state="msgState(m)"
+              :now="expeNow"
+              :wait-label="`retour dans ${fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow)}`"
+              :claim-label="m.chest ? '🎁 Ouvrir' : '🎁 Prendre'"
+              @claim="doClaimMsg(m)"
+              @replay="riftReplay = m.party ?? null"
+            />
           </div>
         </div>
       </div>
@@ -1989,6 +1983,13 @@
                 ⚔️ {{ fmtPow(lo.power) }} <b>({{ fmtDelta(combatPowerVal, lo.power) }})</b>
               </span>
               <span v-else class="lo-empty-tag">vide</span>
+            </div>
+            <!-- Le THÈME du set : ce qu'il fait, lisible avant d'ouvrir une pièce. -->
+            <!-- Pastille dans la couleur du set (celle de l’écharpe de l’avatar). -->
+            <div v-if="loadoutSet(i)" class="lo-theme-row">
+              <span class="lo-theme" :style="{ '--sc': loadoutSet(i)!.color ?? 'var(--dim)' }">{{
+                loadoutSet(i)!.theme
+              }}</span>
             </div>
             <!-- REPLIÉ : une pastille par pièce, pour lire la collection d'un coup d'œil. -->
             <div v-if="lo.count && setDetail !== i" class="lo-items">
@@ -2284,6 +2285,41 @@
             <div v-else class="enh-empty">— aucune activité</div>
           </div>
         </div>
+        <div class="res-src-title">D’où elle vient</div>
+        <ul class="res-src">
+          <li v-for="s in RESOURCE_SOURCES.energy.sources" :key="s.label">
+            <span class="res-src-emo">{{ s.emoji }}</span>
+            <span class="res-src-txt"
+              ><b>{{ s.label }}</b
+              ><small v-if="s.detail"> · {{ s.detail }}</small></span
+            >
+          </li>
+        </ul>
+      </q-card>
+    </q-dialog>
+
+    <!-- D'où vient une ressource (clic sur une puce du plateau). -->
+    <q-dialog
+      :model-value="resInfo !== null"
+      position="bottom"
+      @update:model-value="(v: boolean) => !v && (resInfo = null)"
+    >
+      <q-card v-if="resInfoData" class="adv-modal">
+        <button class="adv-modal-x" aria-label="Fermer" type="button" @click="resInfo = null">
+          ✕
+        </button>
+        <div class="sec-title">{{ resInfoData.emoji }} {{ resInfoData.name }}</div>
+        <div class="sec-hint">{{ resInfoData.use }}</div>
+        <div class="res-src-title">Où en trouver</div>
+        <ul class="res-src">
+          <li v-for="s in resInfoData.sources" :key="s.label">
+            <span class="res-src-emo">{{ s.emoji }}</span>
+            <span class="res-src-txt"
+              ><b>{{ s.label }}</b
+              ><small v-if="s.detail"> · {{ s.detail }}</small></span
+            >
+          </li>
+        </ul>
       </q-card>
     </q-dialog>
 
@@ -3056,7 +3092,8 @@ import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { splitStat, type StatParts } from '@/lib/statText';
-import PartyReportView from '@/components/PartyReportView.vue';
+import MissionReportCard from '@/components/MissionReportCard.vue';
+import { messageCard } from '@/lib/missionCard';
 import {
   simulateDungeon,
   simulateCombat,
@@ -3075,6 +3112,7 @@ import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { familiarSpecies } from '@/data/familiars';
+import { RESOURCE_SOURCES, type ResourceId } from '@/data/resourceSources';
 import {
   DUNGEONS,
   dungeonFoes,
@@ -3112,6 +3150,7 @@ import {
   itemPowerText,
   magicFindLuck,
   itemLevelMult,
+  itemEffectsText,
   round1,
   canSell,
   isFamiliar,
@@ -3357,6 +3396,9 @@ function onFrameClick(e: MouseEvent) {
 // Historique d'énergie gagnée sur 3 jours — modale au clic sur la puce ⚡ (energyHist
 // défini plus bas, après `c`/`heroLevel`).
 const energyHistOpen = ref(false);
+// Fiche « d'où vient cette ressource » (clic sur une puce du plateau).
+const resInfo = ref<ResourceId | null>(null);
+const resInfoData = computed(() => (resInfo.value ? RESOURCE_SOURCES[resInfo.value] : null));
 // Liste des 10 rangs de prestige (cosmétiques, dérivés du niveau) : 1 rang = 10 niveaux
 // (5 étoiles × 2 niveaux). Marque le rang courant + sa plage de niveaux.
 const rankList = computed(() =>
@@ -4968,6 +5010,7 @@ async function explore(d: Dungeon) {
       gold,
       drops,
       summonStones,
+      dungeonId: d.id,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
       // Dressage d'ATTAQUE : ∝ la profondeur du donjon et ce qu'on y a abattu.
@@ -5032,6 +5075,8 @@ const hasBossAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
 // % de réussite RÉEL sur un boss (null = jamais tenté depuis que les tentatives sont comptées).
 const bossSuccess = (b: MilestoneBoss) => runSuccessPct(char.row?.boss_stats ?? {}, b.id);
 const bossRuns = (b: MilestoneBoss) => char.row?.boss_stats?.[b.id]?.runs ?? 0;
+const dungeonSuccess = (d: Dungeon) => runSuccessPct(char.row?.dungeon_stats ?? {}, d.id);
+const dungeonRuns = (d: Dungeon) => char.row?.dungeon_stats?.[d.id]?.runs ?? 0;
 
 function summonCostFor(b: MilestoneBoss): number {
   return bossSummonCost(b.unlockLevel);
@@ -5060,15 +5105,7 @@ function bossLockReason(b: MilestoneBoss): string {
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
-  if (it.power) return itemPowerText(it);
-  // OBJETS ET FAMILIERS : magnitude 100 % définie par le drop (grade × qualité, bakée
-  // dans effect.value) → libellé direct, 1 décimale (la qualité reste visible, #6).
-  const parts = [affixText(it, it.effect)];
-  if (it.effect2) parts.push(affixText(it, it.effect2));
-  if (it.effect3) parts.push(affixText(it, it.effect3));
-  const leg = legendaryOf(it);
-  if (leg) parts.push(`${leg.emoji} ${leg.name}`);
-  return parts.join(' · ');
+  return itemEffectsText(it);
 }
 /** Les mêmes lignes que `itemStatLines`, découpées autour du CHIFFRE pour le mettre en avant
  *  (v0.1074). ⚠️ Seules les STATS sont découpées : le pouvoir d'une relique et un effet
@@ -5642,10 +5679,11 @@ async function doClaimMsg(m: ExpeditionMessage) {
   if (top) celebrateRareDrop({ ...top, id: '' }); // même éclat que les drops de donjon
 }
 
-/** L'objet d'un message sous forme de liste (0 ou 1) — pour le poser dans un `v-for`. */
-function msgLoot(m: ExpeditionMessage) {
-  const l = messageLoot(m);
-  return l ? [l] : [];
+/** L'état d'un rapport dans la boîte : à prendre, encore sur la route, ou encaissé
+ *  (replié sur une ligne). `claimed === undefined` = déjà crédité (cf. `isClaimable`). */
+function msgState(m: ExpeditionMessage): 'claim' | 'wait' | 'done' {
+  if (isClaimable(m, expeNow.value)) return 'claim';
+  return m.claimed === false ? 'wait' : 'done';
 }
 
 function fmtExpeMs(ms: number): string {
@@ -5739,6 +5777,8 @@ const bagCount = computed(
 // ── Loadouts (sets d'équipement rangés) — 1 par VOIE (8 slots) ──
 // Slot i ↔ voie i : chaque loadout est l'endroit où ranger le set de cette voie.
 const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
+/** Set de voie de la carte i (`VOIE_SETS`, source unique du thème et de la couleur). */
+const loadoutSet = (i: number) => (VOIES[i] ? SET_BY_ID[`voie:${VOIES[i].id}`] : undefined);
 // SET DE VOIE ACTUELLEMENT ÉQUIPÉ (≥2 pièces) → marque le loadout correspondant « en cours »
 // + bannière dans la vue Équipement. Dominant parmi les 7 emplacements équipés.
 /** « Set porté » = les 6 pièces portées ET la voie du set active. ⚠️ Pas seulement « un
@@ -6922,6 +6962,46 @@ onUnmounted(() => {
   margin-top: 14px;
 }
 /* Historique d'énergie (modale) : un bloc par jour, détail par activité dedans. */
+/* D'où vient une ressource (fiche ouverte depuis le plateau). */
+.res-src-title {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.res-src {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.res-src li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+}
+.res-src-emo {
+  flex: none;
+  width: 22px;
+  text-align: center;
+  font-size: 17px;
+}
+.res-src-txt {
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+.res-src-txt small {
+  color: var(--dim);
+}
 .enh-list {
   display: flex;
   flex-direction: column;
@@ -8813,6 +8893,20 @@ button.pt-mini:active {
 .lo-name.mine {
   color: var(--accent);
 }
+.lo-theme-row {
+  margin-top: 4px;
+}
+.lo-theme {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--sc) 70%, var(--text));
+  background: color-mix(in srgb, var(--sc) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sc) 55%, transparent);
+}
 .loadout.active {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent) inset;
@@ -10201,94 +10295,6 @@ button.pt-mini:active {
   font-size: 13px;
   text-align: center;
   padding: 20px;
-}
-.inbox-msg {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: var(--bg);
-}
-.inbox-msg.win {
-  border-left-color: #7bc86c;
-}
-.inbox-msg.lose {
-  border-left-color: var(--d4);
-}
-.im-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 13.5px;
-}
-.im-text {
-  font-size: 12px;
-  color: var(--dim);
-  margin: 4px 0;
-  line-height: 1.3;
-}
-.im-claim {
-  margin-top: 8px;
-  width: 100%;
-  padding: 9px 12px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--bg);
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-.im-wait {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--dim);
-}
-.im-haul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 12px;
-  font-weight: 700;
-}
-.im-item {
-  color: var(--accent);
-}
-/* Objet gagné : mini-carte détaillée (bordure teintée par la rareté via currentColor). */
-.im-loot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-}
-.im-loot-main {
-  flex: 1;
-  min-width: 0;
-}
-.im-loot-name {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--text);
-}
-.im-loot-sub {
-  font-size: 11px;
-  color: var(--dim);
-  margin-top: 1px;
-}
-.im-loot-eff {
-  font-size: 12px;
-  color: var(--accent);
-  margin-top: 2px;
-}
-.im-loot-more {
-  font-size: 11.5px;
-  color: var(--dim);
-  margin-top: 3px;
 }
 .expe-card {
   display: flex;

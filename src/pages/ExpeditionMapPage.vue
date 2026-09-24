@@ -714,45 +714,19 @@
          (clic-dehors ou croix pour fermer ; plus de scroll en bas de page). -->
     <!-- Modale de collecte au retour -->
     <q-dialog v-model="collectOpen">
-      <q-card class="coll-card" v-if="lastOutcome">
-        <div class="coll-emo">
-          {{ lastOutcome.waves !== undefined ? '🏟️' : lastOutcome.win ? '🏆' : '💀' }}
-        </div>
-        <div class="coll-title font-display">
-          <template v-if="lastOutcome.waves !== undefined"
-            >{{ lastOutcome.waves }} vague{{ lastOutcome.waves > 1 ? 's' : '' }} tenue{{
-              lastOutcome.waves > 1 ? 's' : ''
-            }}</template
-          >
-          <template v-else-if="lastOutcome.party">{{
-            lastOutcome.win ? 'Camp pris !' : 'Groupe repoussé'
-          }}</template>
-          <template v-else>{{
-            lastOutcome.win ? 'Expédition réussie !' : 'Expédition ratée'
-          }}</template>
-        </div>
-        <div class="coll-text">{{ lastOutcome.text }}</div>
-        <div class="coll-haul">
-          <span v-for="p in haulPills(lastOutcome)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
-          <span v-for="(it, i) in lastOutcomeItems" :key="i" class="coll-item">
-            <ItemIcon :item="it" :size="26" :show-stars="false" />{{ it.name }}</span
-          >
-        </div>
-        <div v-if="lastOutcome.party" class="coll-party">
-          <PartyReportView
-            :party="lastOutcome.party"
-            :roster="char.advList"
-            @replay="riftReplay = lastOutcome.party ?? null"
-          />
-        </div>
-        <q-btn
-          color="primary"
-          text-color="dark"
-          no-caps
-          unelevated
-          :label="lastPending ? '🎁 Récupérer le butin' : 'Super'"
-          @click="lastPending ? doClaim() : (collectOpen = false)"
+      <q-card v-if="lastOutcome" class="van-card">
+        <div class="van-kicker">📬 Retour de mission</div>
+        <MissionReportCard
+          :card="messageCard(lastOutcome, char.advList)"
+          :state="lastPending ? 'claim' : 'none'"
+          :now="now"
+          claim-label="🎁 Récupérer le butin"
+          @claim="doClaim"
+          @replay="riftReplay = lastOutcome.party ?? null"
         />
+        <div class="van-actions">
+          <q-btn flat no-caps label="Fermer" @click="collectOpen = false" />
+        </div>
       </q-card>
     </q-dialog>
 
@@ -776,7 +750,7 @@
     <q-dialog :model-value="!!reportVan" @update:model-value="(v) => !v && (reportId = null)">
       <q-card v-if="reportVan" class="van-card">
         <div class="van-kicker">🐫 Convoi rentré · cargaison récupérée</div>
-        <CaravanReportView :van="reportVan" :roster="char.advList" :stars="reportStars" />
+        <MissionReportCard :card="caravanCard(reportVan, char.advList, reportStars)" :now="now" />
         <div class="van-actions">
           <q-btn flat no-caps label="Fermer" @click="reportId = null" />
         </div>
@@ -801,12 +775,11 @@ import { useGameFx } from '@/composables/useGameFx';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
-import ItemIcon from '@/components/ItemIcon.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
-import CaravanReportView from '@/components/CaravanReportView.vue';
-import PartyReportView from '@/components/PartyReportView.vue';
+import MissionReportCard from '@/components/MissionReportCard.vue';
+import { caravanCard, messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel } from '@/lib/camp';
 import { poiRank, poiRankCounts } from '@/lib/poiRank';
@@ -830,7 +803,6 @@ import {
   POI_EMO,
   POI_LABEL,
   type ExpeditionMessage,
-  haulPills,
   EXPE,
   travelPosition,
   tripTimeLabel,
@@ -1878,12 +1850,6 @@ const lastOutcome = ref<ExpeditionMessage | null>(null);
 const riftReplay = ref<PartyResult | null>(null);
 // ▶️ Il se lance aussi tout seul : à l'arrivée sur la faille, ou à la prochaine ouverture.
 useRiftAutoReplay(riftReplay);
-// Objets ramenés (l'arène en rend PLUSIEURS via `items`, les autres un seul via `item`).
-const lastOutcomeItems = computed(() => {
-  const o = lastOutcome.value;
-  if (!o) return [];
-  return o.items && o.items.length ? o.items : o.item ? [o.item] : [];
-});
 /** Le rapport ouvert attend-il d'être encaissé ? (sinon la modale n'est qu'un compte rendu) */
 const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.claimed === false);
 /** Le rapport du héros À ENCAISSER, s'il y en a un — UNE définition de « prêt » (`isClaimable`),
@@ -3327,14 +3293,6 @@ onUnmounted(() => {
   opacity: 0;
   transform: translateY(12px);
 }
-.coll-card {
-  padding: 24px;
-  text-align: center;
-  background: var(--surface);
-  color: var(--text);
-  border-radius: 16px;
-  min-width: 260px;
-}
 /* Annonce « activité débloquée » (construction d'un bâtiment de déblocage). */
 .unlock-card {
   padding: 24px;
@@ -3345,39 +3303,6 @@ onUnmounted(() => {
   min-width: 280px;
   max-width: 360px;
   border: 1px solid var(--accent);
-}
-.coll-emo {
-  font-size: 48px;
-}
-.coll-title {
-  font-size: 20px;
-  font-weight: 800;
-  margin: 6px 0;
-}
-.coll-text {
-  font-size: 13px;
-  color: var(--dim);
-  margin-bottom: 12px;
-}
-.coll-haul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  justify-content: center;
-  font-weight: 700;
-  margin-bottom: 16px;
-}
-/* Le rapport du groupe se lit en colonne (noms, XP, journal) : aligné à gauche, et la
-   carte ne s'élargit pas au-delà de l'écran plié. */
-.coll-party {
-  margin: -6px 0 14px;
-  max-width: 340px;
-}
-.coll-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--accent);
 }
 .empty {
   margin: 24px 16px;

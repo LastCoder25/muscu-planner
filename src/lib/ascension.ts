@@ -204,8 +204,23 @@ export function readyAscensions(
   stock: AdvGear[],
   ctx: { pantheonLevel: number; seals: Seals; gold: number },
 ): number {
-  let n = 0;
-  for (const a of advs) if (ascensionBlocker(a, ctx) == null) n++;
+  const r = readyAscensionIds(advs, stock, ctx);
+  return r.champions.size + r.gear.size;
+}
+
+/** ⬆️ QUI peut monter de rang tout de suite — la même règle que `readyAscensions`, rendue
+ *  par ids. ⚠️ C'est ce que le Panthéon doit MONTRER : la tuile de la Base s'allumait sur ce
+ *  compte, mais une fois dedans rien ne disait qui (signalé : « je vois le Panthéon en vert
+ *  mais quand je clique dessus ça ne me dit rien de plus »). Une seule définition pour la
+ *  pastille et les écrans, sinon l'une annoncerait une ascension que l'autre ne montre pas. */
+export function readyAscensionIds(
+  advs: Adventurer[],
+  stock: AdvGear[],
+  ctx: { pantheonLevel: number; seals: Seals; gold: number },
+): { champions: Set<string>; gear: Set<string> } {
+  const champions = new Set<string>();
+  const gear = new Set<string>();
+  for (const a of advs) if (ascensionBlocker(a, ctx) == null) champions.add(a.id);
   for (const g of stock)
     if (
       advGearAscensionBlocker(g, {
@@ -214,6 +229,6 @@ export function readyAscensions(
         gold: ctx.gold,
       }) == null
     )
-      n++;
-  return n;
+      gear.add(g.id);
+  return { champions, gear };
 }

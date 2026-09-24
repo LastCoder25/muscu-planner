@@ -9,6 +9,7 @@ import {
   sealCount,
   sealsSummary,
   readyAscensions,
+  readyAscensionIds,
 } from '@/lib/ascension';
 import {
   advAscendedRank,
@@ -204,5 +205,16 @@ describe('⬆️ on SAIT qu’un champion attend son ascension', () => {
     expect(readyAscensions([adv(10, 0), adv(5, 0)], [], ctx)).toBe(1);
     expect(readyAscensions([adv(10, 0)], [], { ...ctx, gold: 0 })).toBe(0);
     expect(readyAscensions([adv(10, 0)], [], { ...ctx, seals: emptySeals() })).toBe(0);
+  });
+
+  it('le Panthéon montre QUI peut monter — les mêmes que la pastille compte', () => {
+    const seals = addSeals(emptySeals(), 'champion', 1, 5);
+    const ctx = { pantheonLevel: 100, seals, gold: 1e12 };
+    const ready = { ...adv(10, 0), id: 'pret' };
+    const early = { ...adv(5, 0), id: 'tot' };
+    const ids = readyAscensionIds([ready, early], [], ctx);
+    expect([...ids.champions]).toEqual(['pret']);
+    expect(ids.gear.size).toBe(0);
+    expect(ids.champions.size + ids.gear.size).toBe(readyAscensions([ready, early], [], ctx));
   });
 });

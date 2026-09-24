@@ -855,7 +855,7 @@ export function incursionFoesDown(run: RiftRun, bodies: readonly SkirmishUnit[])
  * - **Salaires** à l'encaissement (`caravanWages`), comme un camp.
  *
  * ⚠️ `kills` est VIDE (combat fondu : aucune attribution par aventurier n'est calculable) —
- * `PartyReportView` masque déjà une colonne d'abattus à zéro.
+ * `MissionReportCard` masque déjà une colonne d'abattus à zéro.
  */
 export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
   const { poi, escort, hero, seed, now } = input;
