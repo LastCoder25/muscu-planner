@@ -786,19 +786,20 @@ defineExpose({ el: root });
 .ivs-st-i {
   stop-color: var(--ivs-i);
 }
-/* ✨ Le halo d'une boule colorée : éteint tant qu'elle ne l'est pas — ni avant la charge,
-   ni dans un tirage sans A (ou sans S). Une boule bleue n'en a pas. */
+/* ✨ Le halo d'une boule : éteint tant qu'elle n'est pas ALLUMÉE (rien ne se devine avant la
+   charge). Allumée, elle brille dans sa couleur — celle du rang B quand le tirage n'a ni A ni
+   S. La poussière et le halo qui respire, eux, restent réservés au violet et à l'or. */
 .ivs-halo {
   opacity: 0;
   transition: opacity 350ms ease-out;
 }
-.ivs.tint-o .ivs-tone-o.on .ivs-halo,
-.ivs.tint-o .ivs-halo.ivs-tone-o.on,
-.ivs.tint-i .ivs-tone-i.on .ivs-halo,
-.ivs.tint-i .ivs-halo.ivs-tone-i.on {
+.ivs-tone-o.on .ivs-halo,
+.ivs-halo.ivs-tone-o.on,
+.ivs-tone-i.on .ivs-halo,
+.ivs-halo.ivs-tone-i.on {
   opacity: 1;
 }
-/* 🔮 Les boules colorées allumées deviennent des sphères (reflet, teinte, bord sombre). */
+/* 🔮 Les boules allumées deviennent des sphères (reflet, teinte, bord sombre). */
 .ivs-st-o-hi {
   stop-color: color-mix(in srgb, var(--ivs-o) 25%, #fff);
 }
@@ -811,14 +812,14 @@ defineExpose({ el: root });
 .ivs-st-i-lo {
   stop-color: color-mix(in srgb, var(--ivs-i) 45%, #0d0b09);
 }
-.ivs.tint-o .ivs-medal.ivs-tone-o.on circle:not(.ivs-halo) {
+.ivs-medal.ivs-tone-o.on circle:not(.ivs-halo) {
   fill: var(--sph-o);
 }
-.ivs.tint-o .ivs-medal.ivs-tone-o.on text {
+.ivs-medal.ivs-tone-o.on text {
   fill: #fff;
 }
-.ivs.tint-i .ivs-moon.ivs-tone-i.on .ivs-moonb,
-.ivs.tint-i .ivs-node.ivs-tone-i.on {
+.ivs-moon.ivs-tone-i.on .ivs-moonb,
+.ivs-node.ivs-tone-i.on {
   fill: var(--sph-i);
 }
 /* 🌟 L'OR EST UNE EXCELLENTE NOUVELLE : son halo respire, en plus de semer deux fois plus
