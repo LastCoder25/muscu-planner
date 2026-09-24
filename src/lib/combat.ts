@@ -93,23 +93,6 @@ export const TROPHY = {
   fastMult: 1.6,
 } as const;
 
-/** Poids de chaque pouvoir de trophée dans la puissance affichée, × sa fréquence.
- *  ⚠️ MESURÉS EN VRAI COMBAT (boss de palier + donjon le plus profond, niveaux 30/60/90,
- *  joueur de référence avec son set) : chaque pouvoir vaut +3,5 à +5,4 % une fois son COÛT
- *  de quête calibré, et ces poids alignent la puissance affichée dessus. Sans eux, annuler et
- *  accélérer étaient sous-estimés d'un facteur 4 à 5 — et c'est la puissance qui choisit
- *  l'équipement. */
-const TROPHY_POWER_W: Record<TrophyPowerId, { side: 'off' | 'surv'; weight: number }> = {
-  dechainer: { side: 'off', weight: 0.06 },
-  achever: { side: 'off', weight: 0.073 },
-  annuler: { side: 'surv', weight: 0.24 },
-  retourner: { side: 'surv', weight: 0.18 },
-  etaler: { side: 'surv', weight: 0.062 },
-  desarmer: { side: 'surv', weight: 0.111 },
-  renvoyer: { side: 'surv', weight: 0.073 },
-  accelerer: { side: 'off', weight: 0.21 },
-};
-
 export interface RelicCharge {
   id: RelicPowerId;
   force: number;
@@ -662,15 +645,9 @@ export function combatPowerRaw(c: Combatant): number {
     if (w.side === 'off') procOff += w.weight * c.relic.force;
     else procSurv += w.weight * c.relic.force;
   }
-  // 🏆 Trophée : son pouvoir vaut d'autant plus que sa QUÊTE est courte — c'est la seule
-  // chose que le rang et les étoiles changent (la magnitude, elle, est fixe). Rapporté à la
-  // quête la plus longue, pour qu'un trophée de bronze compte pour ~1 et le sommet ~2,5.
-  if (c.trophy) {
-    const w = TROPHY_POWER_W[c.trophy.id];
-    const freq = (TROPHY.questRef / c.trophy.len) * (c.trophy.fast ? TROPHY.fastMult : 1);
-    if (w.side === 'off') procOff += w.weight * freq;
-    else procSurv += w.weight * freq;
-  }
+  // 🏆 Le trophée N'ENTRE PAS dans la puissance (décision de l'utilisateur, v0.1145) : ses
+  // huit pouvoirs sont réglés pour se valoir, chacun choisit le sien pour sa façon de jouer.
+  // Son pouvoir joue toujours au combat (`simulateCombat`), donc dans les % de réussite.
   // Le vol de vie : l'estimateur (`offenseOf`) est remplacé par sa valeur MESURÉE (soin par
   // tour, en survie) — cf. `powerSustainW`.
   procSurv *= (1 + COMBAT.powerSustainW * lifestealHealShare(c)) ** 2 / lifestealSizingFactor(c);

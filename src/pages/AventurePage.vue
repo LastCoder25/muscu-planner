@@ -1123,7 +1123,8 @@
                   <div class="ii-head">
                     <ItemIcon :item="it" :size="40" />
                     <div class="ii-name">{{ it.name }}</div>
-                    <span class="ii-verdict" :class="powerVerdict(it).cls">{{
+                    <!-- 🏆 Un trophée ne se compare pas en puissance : c'est le choix du joueur. -->
+                    <span v-if="!isTrophy(it)" class="ii-verdict" :class="powerVerdict(it).cls">{{
                       powerVerdict(it).label
                     }}</span>
                   </div>
@@ -1188,7 +1189,7 @@
                     </div>
                   </div>
                   <!-- PUISSANCE si équipé (rang + qualité) vs l'objet équipé du même slot. -->
-                  <div class="ii-cmp2">
+                  <div v-if="!isTrophy(it)" class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
                     <span
                       class="ii-cmp2-chip"

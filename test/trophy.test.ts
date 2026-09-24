@@ -233,63 +233,34 @@ describe('🏆 TROPHÉE — un pouvoir, pas des stats', () => {
 const geared = (L: number, seed: number) => gearedBuild(L, seed, false, false);
 const realistic = (L: number, seed: number) => gearedBuild(L, seed, true, false);
 
-describe('🏆 TROPHÉE — l’optimiseur le voit', () => {
-  it('garde le trophée porté et prend un meilleur trophée du sac', () => {
-    const L = 40;
-    const { stats, eq, inv } = geared(L, 1);
+describe('🏆 TROPHÉE — le choix du joueur, hors de la puissance (v0.1145)', () => {
+  const L = 40;
+  const trophies = () => {
     const rng = mulberry32(21);
-    const trophies = Array.from({ length: 12 }, (_, i) => ({
+    return Array.from({ length: 12 }, (_, i) => ({
       ...rollTrophy(rng, { title: 'x', level: L }),
       id: 'tr' + i,
     }));
-    const power = (e: typeof eq) => combatPower(playerWithGear('g', stats, e, {}, L));
-    const ranked = [...trophies].sort(
-      (a, b) => power({ ...eq, trophy: a }) - power({ ...eq, trophy: b }),
-    );
-    const worn = { ...eq, [TROPHY_SLOT]: ranked[0]! };
-    const out = bestGearLoadout('g', stats, worn, [...inv, ...ranked.slice(1)], L);
-    // Le trophée retenu est le meilleur POUR le build retenu (l'optimiseur change aussi le
-    // reste, et la valeur d'un pouvoir dépend de ce reste).
-    const best = Math.max(...trophies.map((t) => power({ ...out, trophy: t })));
-    expect(power({ ...out, trophy: out[TROPHY_SLOT]! })).toBeCloseTo(best, 6);
-    // Sans rien au sac, l'optimiseur ne le retire jamais.
-    const kept = bestGearLoadout('g', stats, worn, inv, L);
-    expect(kept[TROPHY_SLOT]?.id).toBe(ranked[0]!.id);
-  });
+  };
 
-  it('un trophée à quête COURTE vaut plus qu’un à quête longue', () => {
-    // C'est la seule chose que le rang et les étoiles changent : la fréquence.
-    const L = 40;
+  it('ne change pas la puissance affichée, quel qu’il soit', () => {
     const { stats, eq } = geared(L, 1);
-    const base = rollTrophy(mulberry32(9), { title: 'x', level: L });
-    const power = (t: Item) => combatPower(playerWithGear('g', stats, { ...eq, trophy: t }, {}, L));
-    const court: Item = { ...base, rarity: RANK_ORDER.at(-1)!, roll: 1, id: 'c' };
-    const long: Item = { ...base, rarity: RANK_ORDER[0]!, roll: 0, id: 'l' };
-    expect(trophyQuestLen(court)).toBeLessThan(trophyQuestLen(long));
-    expect(power(court)).toBeGreaterThan(power(long));
+    const base = combatPower(playerWithGear('g', stats, eq, {}, L));
+    for (const t of trophies())
+      expect(combatPower(playerWithGear('g', stats, { ...eq, trophy: t }, {}, L))).toBe(base);
   });
 
-  it('ajoute un bonus mesurable mais modeste à un build complet', () => {
-    // ⚠️ Le trophée reste un BONUS (spec § 5.3) : un joueur sans amis ne doit pas être en
-    // retard. Mesuré sur le joueur qui existe (objets + familiers + talents).
-    for (const L of [30, 90]) {
-      const gains: number[] = [];
-      for (let seed = 1; seed <= 2; seed++) {
-        const { stats, eq, fx } = realistic(L, seed);
-        const base = combatPower(playerWithGear('g', stats, eq, fx, L));
-        const rng = mulberry32(seed * 31 + L);
-        for (let i = 0; i < 24; i++) {
-          const t = { ...rollTrophy(rng, { title: 'x', level: L }), id: 't' };
-          gains.push(
-            combatPower(playerWithGear('g', stats, { ...eq, trophy: t }, fx, L)) / base - 1,
-          );
-        }
-      }
-      gains.sort((a, b) => a - b);
-      const med = gains[Math.floor(gains.length / 2)]!;
-      expect(med, `niveau ${L}`).toBeGreaterThan(0.01);
-      expect(med, `niveau ${L}`).toBeLessThan(0.09);
-    }
+  it('l’optimiseur garde le trophée porté, même avec d’autres au sac', () => {
+    const { stats, eq, inv } = geared(L, 1);
+    const [worn, ...rest] = trophies();
+    const out = bestGearLoadout('g', stats, { ...eq, [TROPHY_SLOT]: worn! }, [...inv, ...rest], L);
+    expect(out[TROPHY_SLOT]?.id).toBe(worn!.id);
+  });
+
+  it('l’optimiseur n’expose jamais un trophée à ta place', () => {
+    const { stats, eq, inv } = geared(L, 1);
+    const out = bestGearLoadout('g', stats, eq, [...inv, ...trophies()], L);
+    expect(out[TROPHY_SLOT]).toBeUndefined();
   });
 });
 

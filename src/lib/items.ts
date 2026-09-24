@@ -3566,7 +3566,10 @@ export function bestGearLoadout(
   // Meilleure pièce de chaque emplacement parallèle POUR ce gear (le porté + les meilleurs
   // du sac ; pas de synergie de set → un top-K solo suffit ; `undefined` = rien, si c'est
   // mieux), puis nouvelle montée si l'une a changé.
+  // ⚠️ Le TROPHÉE n'est pas optimisé : il ne pèse rien dans la puissance, c'est le choix du
+  // joueur. Il reste porté tel quel (la base part de l'équipement actuel).
   for (const pSlot of PARALLEL_SLOTS) {
+    if (pSlot === TROPHY_SLOT) continue;
     for (const it of trim(bySlot[pSlot], equipped[pSlot])) {
       const combo = put(best, pSlot, it);
       const q = power(combo);
@@ -3605,7 +3608,7 @@ export function bestGearLoadout(
       // ⚠️ On NE TOUCHE PAS aux emplacements IMPOSÉS : « Porter ce set » promet ces
       // pièces-là. Les remplacer parce qu’elles sont moins fortes ferait mentir le
       // bouton — c’est très exactement le défaut corrigé en v0.688.
-      if (pin?.[it.slot]) continue;
+      if (pin?.[it.slot] || it.slot === TROPHY_SLOT) continue;
       if (best[it.slot]?.id === it.id) continue;
       const essai: Equipped = { ...best, [it.slot]: it };
       const p = combatPower(playerWithGear(name, stats, essai, extra, level, voie));
