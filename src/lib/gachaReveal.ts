@@ -261,6 +261,27 @@ export function omenOf(plan: RevealPlan): Omen | null {
   return { grade, rank, strength: OMEN_STRENGTH[grade] };
 }
 
+/**
+ * 🎨 LES COULEURS DU CERCLE (v0.1110, demandé : « le cercle de la couleur des rangs B, les
+ * boules extérieures de la couleur du rang A s'il y en a dans le tirage et les boules
+ * intérieures en couleur S s'il y en a »). Le cercle est toujours B ; les boules
+ * extérieures passent en A dès qu'un A est dans le tirage, les intérieures en S dès qu'un S
+ * y est. ⚠️ Deux signaux INDÉPENDANTS : un ×10 avec un A et un S allume les deux.
+ * Tant que le plan n'est pas arrivé, tout reste B — on ne sait encore rien.
+ * ⚠️ Lu sur la vraie lettre (`finalRank`), jamais sur le présage : la couleur ne ment pas.
+ */
+export interface SigilTints {
+  outer: PullGrade;
+  inner: PullGrade;
+}
+export function sigilTints(plan: RevealPlan | null): SigilTints {
+  const ranks = plan?.items.map(finalRank) ?? [];
+  return {
+    outer: ranks.includes(GRADE_RANK.A) ? 'A' : 'B',
+    inner: ranks.includes(GRADE_RANK.S) ? 'S' : 'B',
+  };
+}
+
 /** Durée de l'arrêt à l'apogée pour ce rang. */
 export const apexMs = (rank: number) => INVOKE.apexMs + rank * INVOKE.apexMsParRang;
 /** Durée de la silhouette pour ce rang. */

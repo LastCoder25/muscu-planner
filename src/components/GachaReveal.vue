@@ -58,6 +58,7 @@
             :charging="charging"
             :dim="sigilDim"
             :revealing="sigilRevealing"
+            :tints="tints"
           />
 
           <!-- 🃏 LE ×10 : dix cartes face cachée, les B se retournent seuls, les A et S
@@ -178,6 +179,7 @@ import {
   finalRank,
   igniteOrder,
   omenOf,
+  sigilTints,
   silhouetteMs,
   type LotItem,
   type RevealCell,
@@ -242,6 +244,8 @@ const color = ref<string>(GRADE_COLOR.B);
  */
 const omen = computed(() => (props.plan ? omenOf(props.plan) : null));
 const omenColor = computed(() => (omen.value ? GRADE_COLOR[omen.value.grade] : undefined));
+/** 🎨 Le cercle en B, ses boules extérieures en A et intérieures en S si le tirage en a. */
+const tints = computed(() => sigilTints(props.plan));
 
 const stage = ref<HTMLElement | null>(null);
 const shaker = ref<HTMLElement | null>(null);

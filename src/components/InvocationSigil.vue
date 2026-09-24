@@ -9,7 +9,13 @@
        ⚠️ Rotation et allumage sont posés à la main sur les nœuds SVG, jamais par le rendu
        Vue : ils changent à chaque image, et re-rendre ~250 éléments 60 fois par seconde
        n'apporterait rien. -->
-  <div ref="root" class="ivs" :class="[variant, { dim, revealing, charging }]" aria-hidden="true">
+  <div
+    ref="root"
+    class="ivs"
+    :class="[variant, { dim, revealing, charging }]"
+    :style="tintStyle"
+    aria-hidden="true"
+  >
     <!-- ⚡ FLUIDITÉ (v0.1109) : chaque couche qui tourne est son PROPRE <svg>, superposé aux
          autres, et tourne par une animation CSS (Web Animations) que le COMPOSITEUR joue
          seul. Avant, on réécrivait l'attribut `transform` de groupes SVG à chaque image : le
@@ -19,19 +25,19 @@
       <svg class="ivs-l" :viewBox="vb">
         <defs>
           <radialGradient :id="`${uid}-core`">
-            <stop offset="0" stop-color="#e6d6ff" stop-opacity=".6" />
-            <stop offset=".45" stop-color="#b57bff" stop-opacity=".3" />
-            <stop offset="1" stop-color="#b57bff" stop-opacity="0" />
+            <stop offset="0" class="ivs-st-light" stop-opacity=".6" />
+            <stop offset=".45" class="ivs-st" stop-opacity=".3" />
+            <stop offset="1" class="ivs-st" stop-opacity="0" />
           </radialGradient>
           <radialGradient :id="`${uid}-aura`">
-            <stop offset=".6" stop-color="#ffd23f" stop-opacity="0" />
-            <stop offset=".82" stop-color="#ffd23f" stop-opacity=".35" />
-            <stop offset="1" stop-color="#ffd23f" stop-opacity="0" />
+            <stop offset=".6" class="ivs-st" stop-opacity="0" />
+            <stop offset=".82" class="ivs-st" stop-opacity=".35" />
+            <stop offset="1" class="ivs-st" stop-opacity="0" />
           </radialGradient>
           <radialGradient :id="`${uid}-disc`">
-            <stop offset="0" stop-color="#b57bff" stop-opacity=".16" />
-            <stop offset=".7" stop-color="#b57bff" stop-opacity=".06" />
-            <stop offset="1" stop-color="#b57bff" stop-opacity="0" />
+            <stop offset="0" class="ivs-st" stop-opacity=".16" />
+            <stop offset=".7" class="ivs-st" stop-opacity=".06" />
+            <stop offset="1" class="ivs-st" stop-opacity="0" />
           </radialGradient>
         </defs>
         <circle v-if="big" :cx="C" :cy="C" r="198" :fill="`url(#${uid}-disc)`" />
@@ -65,7 +71,7 @@
       <!-- couronne de perles (grand cercle) -->
       <svg v-if="big" class="ivs-l" :viewBox="vb" data-spin="0.6">
         <circle class="ivs-ring thin" :cx="C" :cy="C" r="210" stroke-dasharray="2 6" />
-        <g v-for="(b, i) in beadsOuter" :key="'bo' + i" data-lit="bo" class="ivs-beadg">
+        <g v-for="(b, i) in beadsOuter" :key="'bo' + i" data-lit="bo" class="ivs-beadg ivs-tone-o">
           <circle class="ivs-bead" :class="{ big: b.big }" :cx="b.x" :cy="b.y" :r="b.r" />
           <template v-if="b.big">
             <circle
@@ -106,7 +112,7 @@
       <template v-if="big">
         <!-- perles entre les runes et les médaillons -->
         <svg class="ivs-l" :viewBox="vb" data-spin="-1.3">
-          <g v-for="(b, i) in beadsMid" :key="'bm' + i" data-lit="bm" class="ivs-beadg">
+          <g v-for="(b, i) in beadsMid" :key="'bm' + i" data-lit="bm" class="ivs-beadg ivs-tone-o">
             <circle class="ivs-bead" :class="{ big: b.big }" :cx="b.x" :cy="b.y" :r="b.r" />
             <template v-if="b.big">
               <circle
@@ -141,17 +147,17 @@
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="128" />
         </svg>
         <svg class="ivs-l" :viewBox="vb" data-spin="-3.4">
-          <g v-for="(b, i) in beadsArc" :key="'ba' + i" data-lit="ba" class="ivs-beadg">
+          <g v-for="(b, i) in beadsArc" :key="'ba' + i" data-lit="ba" class="ivs-beadg ivs-tone-i">
             <circle class="ivs-bead" :cx="b.x" :cy="b.y" :r="b.r" />
           </g>
         </svg>
       </template>
       <!-- satellites (petit cercle) -->
       <svg v-else class="ivs-l" :viewBox="vb" data-spin="2.4">
-        <path class="ivs-sat" d="M150,-6 l4,8 l-4,8 l-4,-8 z" />
-        <path class="ivs-sat" d="M150,290 l4,8 l-4,8 l-4,-8 z" />
-        <path class="ivs-sat" d="M-6,150 l8,4 l8,-4 l-8,-4 z" />
-        <path class="ivs-sat" d="M290,150 l8,4 l8,-4 l-8,-4 z" />
+        <path class="ivs-sat ivs-tone-o" d="M150,-6 l4,8 l-4,8 l-4,-8 z" />
+        <path class="ivs-sat ivs-tone-o" d="M150,290 l4,8 l-4,8 l-4,-8 z" />
+        <path class="ivs-sat ivs-tone-o" d="M-6,150 l8,4 l8,-4 l-8,-4 z" />
+        <path class="ivs-sat ivs-tone-o" d="M290,150 l8,4 l8,-4 l-8,-4 z" />
       </svg>
 
       <!-- étoiles + nœuds (contre-rotation) -->
@@ -182,7 +188,7 @@
           v-for="(n, i) in nodes"
           :key="'nd' + i"
           data-lit="nd"
-          class="ivs-node"
+          class="ivs-node ivs-tone-i"
           :cx="n.x"
           :cy="n.y"
           :r="big ? 4 : 4.5"
@@ -212,7 +218,7 @@
         <!-- lunes : six petits cercles qui orbitent, chacun tournant sur lui-même -->
         <svg class="ivs-l" :viewBox="vb" data-spin="2">
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="74" />
-          <g v-for="(m, i) in moons" :key="'mo' + i" data-lit="mo" class="ivs-moon">
+          <g v-for="(m, i) in moons" :key="'mo' + i" data-lit="mo" class="ivs-moon ivs-tone-i">
             <circle class="ivs-moonb" :cx="m.x" :cy="m.y" r="7" />
             <circle class="ivs-spinner" :class="{ rev: i % 2 === 1 }" :cx="m.x" :cy="m.y" r="11" />
             <circle class="ivs-bead" :cx="m.sx" :cy="m.sy" r="2" />
@@ -259,6 +265,8 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { GRADE_COLOR } from '@/data/champions';
+import type { SigilTints } from '@/lib/gachaReveal';
 
 const props = defineProps<{
   variant: 'small' | 'big';
@@ -270,7 +278,17 @@ const props = defineProps<{
   charging: boolean;
   dim?: boolean;
   revealing?: boolean;
+  /** 🎨 Couleur des boules extérieures et intérieures (`sigilTints`) ; le cercle est B. */
+  tints?: SigilTints;
 }>();
+
+/** Le cercle en B, les boules extérieures en A, les intérieures en S — la couleur vient de
+ *  `GRADE_COLOR`, la même que la lettre révélée ensuite. */
+const tintStyle = computed(() => ({
+  '--ivs-b': GRADE_COLOR.B,
+  '--ivs-o': GRADE_COLOR[props.tints?.outer ?? 'B'],
+  '--ivs-i': GRADE_COLOR[props.tints?.inner ?? 'B'],
+}));
 
 let seq = 0;
 const uid = `ivs${++seq}${Math.floor(Math.random() * 1e6)}`;
@@ -508,9 +526,37 @@ defineExpose({ el: root });
     will-change: transform;
   }
 }
+/* 🎨 LES COULEURS (v0.1110) : le cercle est en B, les boules extérieures en A et les
+   intérieures en S quand le tirage en contient (`sigilTints`). Chaque élément peint avec
+   `--c` (sa teinte) et ses dérivés ; allumé par la charge, il s'éclaircit DANS sa teinte —
+   plus en or, qui se confondait avec un S. ⚠️ Les dérivés sont recalculés sur chaque élément
+   qui change `--c` : une variable qui en référence une autre se résout là où elle est posée. */
+.ivs {
+  --c: var(--ivs-b);
+}
+.ivs-tone-o {
+  --c: var(--ivs-o);
+}
+.ivs-tone-i {
+  --c: var(--ivs-i);
+}
+.ivs,
+.ivs-tone-o,
+.ivs-tone-i {
+  --c-light: color-mix(in srgb, var(--c) 55%, #fff);
+  --c-hot: color-mix(in srgb, var(--c) 35%, #fff);
+  --c-deep: color-mix(in srgb, var(--c) 28%, #0d0b09);
+  --c-night: color-mix(in srgb, var(--c) 10%, #0d0b09);
+}
+.ivs-st {
+  stop-color: var(--c);
+}
+.ivs-st-light {
+  stop-color: var(--c-light);
+}
 .ivs-ring {
   fill: none;
-  stroke: #b57bff;
+  stroke: var(--c);
   stroke-width: 1.2;
   opacity: 0.7;
   &.thin {
@@ -524,7 +570,7 @@ defineExpose({ el: root });
 }
 .ivs-tick {
   fill: none;
-  stroke: #b57bff;
+  stroke: var(--c);
   stroke-width: 5;
   opacity: 0.45;
   &.major {
@@ -533,7 +579,7 @@ defineExpose({ el: root });
   }
 }
 .ivs-rune {
-  fill: color-mix(in srgb, #b57bff 70%, #fff 30%);
+  fill: var(--c-light);
   font-family: 'Segoe UI Symbol', 'Noto Sans Runic', serif;
   font-size: 13px;
   text-anchor: middle;
@@ -549,84 +595,84 @@ defineExpose({ el: root });
     font-size: 8px;
   }
   &.on {
-    fill: #fff6d6;
+    fill: var(--c-hot);
     opacity: 1;
-    filter: drop-shadow(0 0 3px #ffd23f);
+    filter: drop-shadow(0 0 3px var(--c));
   }
 }
 .ivs-node {
   fill: #15120e;
-  stroke: #b57bff;
+  stroke: var(--c);
   stroke-width: 1.4;
   &.on {
-    fill: #ffd23f;
-    stroke: #fff6d6;
-    filter: drop-shadow(0 0 4px #ffd23f);
+    fill: var(--c);
+    stroke: var(--c-hot);
+    filter: drop-shadow(0 0 4px var(--c));
   }
 }
 .ivs-star {
-  fill: color-mix(in srgb, #b57bff 8%, transparent);
-  stroke: #b57bff;
+  fill: color-mix(in srgb, var(--c) 8%, transparent);
+  stroke: var(--c);
   stroke-width: 1.2;
   opacity: 0.8;
 }
 .ivs-sat {
-  fill: #d9c4ff;
-  filter: drop-shadow(0 0 4px #b57bff);
+  fill: var(--c-light);
+  filter: drop-shadow(0 0 4px var(--c));
 }
 .ivs-spoke {
-  stroke: #b57bff;
+  stroke: var(--c);
   stroke-width: 0.8;
   opacity: 0.45;
 }
 .ivs-arcs {
   fill: none;
-  stroke: #b57bff;
+  stroke: var(--c);
   stroke-width: 3.5;
   opacity: 0.5;
 }
 .ivs-medal {
   circle {
-    fill: #15101f;
-    stroke: #b57bff;
+    fill: var(--c-night);
+    stroke: var(--c);
     stroke-width: 1.3;
   }
   text {
-    fill: #d9c4ff;
+    fill: var(--c-light);
     font-size: 12px;
     text-anchor: middle;
     dominant-baseline: central;
   }
   &.on circle {
-    fill: #3a2a0c;
-    stroke: #ffd23f;
-    filter: drop-shadow(0 0 5px #ffd23f);
+    fill: var(--c-deep);
+    stroke: var(--c);
+    filter: drop-shadow(0 0 5px var(--c));
   }
   &.on text {
-    fill: #fff6d6;
+    fill: var(--c-hot);
   }
 }
 .ivs-bead {
-  fill: #c9a6ff;
+  fill: var(--c-light);
   opacity: 0.8;
   &.big {
-    fill: #15101f;
-    stroke: #b57bff;
+    fill: var(--c-night);
+    stroke: var(--c);
     stroke-width: 1.2;
   }
 }
 .ivs-beadg.on .ivs-bead {
-  fill: #ffd23f;
+  fill: var(--c);
   opacity: 1;
-  filter: drop-shadow(0 0 3px #ffd23f);
+  filter: drop-shadow(0 0 3px var(--c));
   &.big {
-    fill: #3a2a0c;
-    stroke: #ffd23f;
+    fill: var(--c-deep);
+    stroke: var(--c-hot);
   }
 }
 .ivs-spinner {
   fill: none;
-  stroke: #d9c4ff;
+  stroke: var(--c-light);
   stroke-width: 1;
   stroke-dasharray: 2 2.6;
   transform-box: fill-box;
@@ -639,22 +685,22 @@ defineExpose({ el: root });
   }
 }
 .ivs-moonb {
-  fill: #15101f;
-  stroke: #b57bff;
+  fill: var(--c-night);
+  stroke: var(--c);
   stroke-width: 1.2;
 }
 .ivs-moon.on .ivs-moonb {
-  fill: #3a2a0c;
-  stroke: #ffd23f;
-  filter: drop-shadow(0 0 4px #ffd23f);
+  fill: var(--c-deep);
+  stroke: var(--c);
+  filter: drop-shadow(0 0 4px var(--c));
 }
 .ivs-moon.on .ivs-spinner,
 .ivs-beadg.on .ivs-spinner {
-  stroke: #ffd23f;
+  stroke: var(--c-hot);
 }
 .ivs-glyph {
   fill: none;
-  stroke: #e6d6ff;
+  stroke: var(--c-light);
   stroke-width: 1.6;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -662,10 +708,10 @@ defineExpose({ el: root });
 }
 .ivs-prog {
   fill: none;
-  stroke: #ffd23f;
+  stroke: var(--c-hot);
   stroke-width: 4;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 6px #ffd23f);
+  filter: drop-shadow(0 0 6px var(--c));
 }
 .ivs-aura {
   opacity: 0;

@@ -18,6 +18,7 @@ import {
   bestOfLot,
   lotOrder,
   omenOf,
+  sigilTints,
   OMEN_STRENGTH,
   type LotItem,
   type RevealCell,
@@ -273,5 +274,34 @@ describe('🎰 LE LOT — la grille et le meilleur', () => {
     expect(c.championId).toBeNull();
     expect(c.name).toBe('Épée');
     expect(cellOf(it0('S')).championId).toBe(champS.id);
+  });
+});
+
+describe('🎨 LES COULEURS DU CERCLE — B partout, A dehors, S dedans', () => {
+  const lot = (gs: PullGrade[]) =>
+    buildLotReveal(
+      gs.map((g) => it0(g)),
+      mulberry32(3),
+    );
+  it('sans plan, tout reste B : on ne sait encore rien', () => {
+    expect(sigilTints(null)).toEqual({ outer: 'B', inner: 'B' });
+  });
+  it('un tirage sans A ni S laisse le cercle entièrement B', () => {
+    expect(sigilTints(lot(Array(10).fill('B')))).toEqual({ outer: 'B', inner: 'B' });
+    expect(sigilTints(buildReveal(B, mulberry32(1)))).toEqual({ outer: 'B', inner: 'B' });
+  });
+  it('un A colore les boules extérieures, un S les intérieures — indépendamment', () => {
+    expect(sigilTints(buildReveal(A, mulberry32(1)))).toEqual({ outer: 'A', inner: 'B' });
+    expect(sigilTints(buildReveal(S, mulberry32(1)))).toEqual({ outer: 'B', inner: 'S' });
+    const both: PullGrade[] = ['B', 'A', 'B', 'B', 'S', 'B', 'B', 'B', 'B', 'B'];
+    expect(sigilTints(lot(both))).toEqual({ outer: 'A', inner: 'S' });
+  });
+  it('lu sur la VRAIE lettre, jamais sur le présage : un S masqué colore quand même', () => {
+    // Un S peut partir bleu (surprise) : son chemin commence sous S, la couleur, elle, est S.
+    for (let s = 1; s <= 200; s++) {
+      const p = buildReveal(S, mulberry32(s));
+      expect(sigilTints(p).inner).toBe('S');
+      expect(sigilTints(p).outer).toBe('B');
+    }
   });
 });
