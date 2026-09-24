@@ -56,7 +56,17 @@
         >
           <span class="shadow" />
           <span class="aura" />
-          <span class="emo">{{ f.emoji }}</span>
+          <!-- 🕳️ Le gardien a son illustration en pied, tournée vers le groupe (v0.1108).
+               Un fichier qui ne charge pas retombe sur l'emoji, jamais sur une image cassée. -->
+          <img
+            v-if="f.boss && bossArt"
+            :src="bossArt"
+            :alt="f.name"
+            class="art"
+            draggable="false"
+            @error="artFailed = bossArt"
+          />
+          <span v-else class="emo">{{ f.emoji }}</span>
         </div>
 
         <!-- Le groupe : chaque membre à sa place dans l'éventail. Celui dont c'est le
@@ -212,6 +222,7 @@ import AventureAvatar from '@/components/AventureAvatar.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { characterRank } from '@/lib/characterRank';
+import { monsterArt } from '@/data/monsterArt';
 
 const props = defineProps<{
   stage: RiftStage;
@@ -249,6 +260,14 @@ const beats = computed(() => props.stage.beats);
 const beatMs = computed(() => (beats.value.length > 10 ? 560 : 680));
 
 const monsterCount = computed(() => props.stage.foes.filter((f) => !f.boss).length);
+
+/** L'illustration du gardien (par son NOM, comme tous les ennemis) — `null` si elle
+ *  n'existe pas ou n'a pas chargé : on retombe alors sur l'emoji. */
+const artFailed = ref<string | null>(null);
+const bossArt = computed(() => {
+  const a = monsterArt(props.stage.foes.find((f) => f.boss)?.name);
+  return a && a !== artFailed.value ? a : null;
+});
 
 const cursor = ref(0);
 const downs = ref(new Set<number>());
@@ -1003,6 +1022,19 @@ onBeforeUnmount(() => {
 .foe.boss .emo {
   font-size: 40px;
 }
+/* L'illustration pose les pieds au bas de son carré (cf. le script) : un peu plus grande
+   que l'emoji pour que la silhouette, qui n'en remplit pas tout le cadre, pèse autant.
+   Halo clair : plusieurs gardiens sont sombres et disparaîtraient sur le fond de la faille
+   (même remède que le rejeu de donjon). */
+.foe .art {
+  display: block;
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35)) drop-shadow(0 3px 5px rgba(0, 0, 0, 0.6));
+}
 .foe .aura {
   position: absolute;
   left: 50%;
@@ -1038,7 +1070,8 @@ onBeforeUnmount(() => {
   background: rgba(0, 0, 0, 0.5);
   filter: blur(2px);
 }
-.foe.target .emo {
+.foe.target .emo,
+.foe.target .art {
   filter: drop-shadow(0 0 7px var(--accent));
 }
 .foe.hurt {
@@ -1387,7 +1420,8 @@ onBeforeUnmount(() => {
   background: radial-gradient(circle, rgba(255, 70, 40, 0.75), transparent 66%);
   animation-duration: 0.9s;
 }
-.foe.boss.enraged .emo {
+.foe.boss.enraged .emo,
+.foe.boss.enraged .art {
   filter: drop-shadow(0 0 10px var(--d4));
 }
 /* L'éclatement : il gonfle, blanchit et se dissout — la faille se referme derrière. */

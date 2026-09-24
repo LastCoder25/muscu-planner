@@ -5,6 +5,8 @@ import { MONSTER_ART, monsterArt } from '@/data/monsterArt';
 import { MONSTERS } from '@/data/monsters';
 import { BOSSES } from '@/data/bosses';
 import { LABY_ROSTERS, LABY_GUARDIANS } from '@/data/labyrinthFoes';
+import { factionRoster, type RaidFaction } from '@/lib/raid';
+import { riftFoeIdentity } from '@/lib/rift';
 
 // On lit la DONNÉE exportée, jamais le texte du fichier (cf. championPortraits.test).
 const NAMES = Object.keys(MONSTER_ART);
@@ -14,7 +16,14 @@ const DUNGEON_NAMES = new Set([...MONSTERS.map((m) => m.name), ...BOSSES.map((b)
 // ADMIS dans la table, mais pas encore EXIGÉS (le test « tous illustrés » ne couvre que
 // les donjons et boss — l'étendre au Labyrinthe une fois ses 48 créatures générées).
 const LABY_NAMES = [...LABY_ROSTERS.flat(), ...LABY_GUARDIANS].map((f) => f.name);
-const ENEMY_NAMES = new Set([...DUNGEON_NAMES, ...LABY_NAMES]);
+// Les gardiens de faille (v0.1108) : une espèce du roster de sa faction, en version élite.
+// Leurs noms viennent de `riftFoeIdentity` — la fonction du COMBAT —, jamais recopiés :
+// si la règle de nommage change, ce test le voit.
+const FACTIONS: RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
+const RIFT_GUARDIANS = FACTIONS.flatMap((f) =>
+  factionRoster(f).map((_, i) => riftFoeIdentity(f, i, true).name),
+);
+const ENEMY_NAMES = new Set([...DUNGEON_NAMES, ...LABY_NAMES, ...RIFT_GUARDIANS]);
 
 describe('🐉 LES ILLUSTRATIONS D’ENNEMIS (v0.1006)', () => {
   it('⚠️ CHAQUE FICHIER NOMMÉ EXISTE SUR LE DISQUE', () => {

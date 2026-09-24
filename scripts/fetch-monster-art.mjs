@@ -177,6 +177,24 @@ const SUBJECTS = {
   l_fleau_final: 'a final scourge, a towering skeletal reaper with a scythe and black wings',
   l_tyran_infini:
     'a tyrant of infinity, a colossal cosmic emperor in black and gold armor with a crown of stars',
+  // ── GARDIENS DE FAILLE (v0.1108) — le gardien d'une faille est une espèce du roster de
+  //    sa faction, en version ÉLITE : plus grande, parée, et marquée par la faille (fissures
+  //    et aura d'énergie violette). 3 factions × 5 espèces = 15. Nom « X (gardien) ».
+  g_coupe_jarret: 'an elite bandit cutthroat guardian, tall masked rogue in black leather with twin curved daggers, torn red cape, glowing violet cracks of rift energy on his armor',
+  g_archer: 'an elite deserter archer guardian, hooded soldier in battered steel and green cloak drawing a huge black longbow, glowing violet rift energy arrows',
+  g_brise_porte: 'an elite bandit gatebreaker guardian, huge muscular brute with an enormous double-bladed battle axe, iron shoulder plates, glowing violet rift cracks on his skin',
+  g_mercenaire: 'an elite mercenary guardian, heavily armored knight in dented steel plate with a tower shield and a longsword, glowing violet rift sigils on the shield',
+  g_chef_bande: 'a bandit warlord guardian, scarred chieftain in a fur mantle and red war paint, spiked iron crown, huge greatsword, glowing violet rift energy aura',
+  g_loup: 'a gigantic famished dire wolf guardian, gaunt black-furred wolf with visible ribs, jagged glowing violet cracks across its body, snarling fangs',
+  g_arachne: 'a giant forest arachne guardian, huge green and brown spider with moss and bark on its carapace, dripping venom fangs, glowing violet eyes',
+  g_sanglier: 'a colossal enraged boar guardian, massive boar with huge iron-banded tusks, bristling dark fur split by glowing violet rift cracks',
+  g_ours: 'a colossal cave bear guardian, huge brown bear standing on its hind legs, stone-like armored hide, glowing violet crystals growing from its back',
+  g_scorpion: 'a colossal giant scorpion guardian, obsidian black carapace with glowing violet veins, enormous pincers, raised crystal stinger tail',
+  g_revenant: 'a revenant guardian, towering undead knight in rusted black armor, rotting grey skin, ghostly violet flames in its eye sockets, notched sword',
+  g_spectre: 'a wailing spectre guardian, huge floating pale ghost woman in tattered shroud, screaming mouth, long spectral claws, violet ethereal glow',
+  g_ossuaire: 'a walking ossuary guardian, huge hulking golem made of countless fused bones and skulls, glowing violet core in its ribcage',
+  g_necromant: 'a necromancer guardian, gaunt sorcerer in black and purple robes with a skull staff, swirling violet necrotic magic, floating skulls around him',
+  g_porte_linceul: 'a shroud bearer guardian, tall faceless undead monk wrapped in grey burial shrouds, carrying a coffin chained on its back, violet glow under the hood',
 };
 
 const seedFor = (slug) => seedOf('monster:' + slug) % 100000;

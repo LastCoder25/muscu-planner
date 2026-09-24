@@ -86,6 +86,17 @@ export const MONSTER_ART: Readonly<Record<string, string>> = {
   'Varan mordant': '/monsters/l_varan.webp',
   'Alpha de la meute': '/monsters/l_alpha.webp',
   Squelette: '/monsters/l_squelette.webp',
+  // ── Gardiens de faille (v0.1108) — affichés par `RiftStage`. Descriptions et slugs
+  //    prêts dans le script (`g_*`) ; à ajouter ICI une fois les fichiers générés (la table
+  //    ne recense que ce qui existe) :
+  //    'Coupe-jarret (gardien)' g_coupe_jarret · 'Archer déserteur (gardien)' g_archer ·
+  //    'Brise-porte (gardien)' g_brise_porte · 'Mercenaire (gardien)' g_mercenaire ·
+  //    'Chef de bande (gardien)' g_chef_bande · 'Loup famélique (gardien)' g_loup ·
+  //    'Arachné des bois (gardien)' g_arachne · 'Sanglier enragé (gardien)' g_sanglier ·
+  //    'Ours des cavernes (gardien)' g_ours · 'Scorpion géant (gardien)' g_scorpion ·
+  //    'Revenant (gardien)' g_revenant · 'Spectre plaintif (gardien)' g_spectre ·
+  //    'Ossuaire ambulant (gardien)' g_ossuaire · 'Nécromant (gardien)' g_necromant ·
+  //    'Porte-linceul (gardien)' g_porte_linceul
 };
 
 /**
