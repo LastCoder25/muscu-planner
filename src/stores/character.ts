@@ -226,6 +226,7 @@ import {
   GEAR_ASCENSION_BLOCK_LABEL,
   ascensionBlocker,
   ascensionCost,
+  ascensionMana,
   ASCENSION_BLOCK_LABEL,
   normalizeSeals,
   type Seals,
@@ -235,6 +236,7 @@ import { levelUpTickets, pullPayment, buildTickets, welcomeTicketsDue } from '@/
 import type { LotItem } from '@/lib/gachaReveal';
 import { gearRefonteGifts } from '@/lib/gearMigration';
 import { useGameFx } from '@/composables/useGameFx';
+import { CHARACTER_RANKS } from '@/lib/characterRank';
 import { useGoldFx } from '@/composables/useGoldFx';
 
 export interface CharacterRow {
@@ -2432,10 +2434,22 @@ export const useCharacterStore = defineStore('character', () => {
     const next = advNextAscension(adv)!;
     const cost = ascensionCost(next);
     const up = ascendAdventurer(adv, pantheonLevel.value);
+    // 💠 La récompense part dans la MÊME écriture que le coût : jamais l'un sans l'autre.
+    const mana = ascensionMana(next);
     await persist(userId, {
       gold: cur.gold - cost.gold,
+      mana: cur.mana + mana,
       seals: addSeals(cur.seals, 'champion', next, -cost.seals),
       adventurers: advs.map((a) => (a.id === advId ? up : a)),
+    });
+    // Annoncée APRÈS l'écriture : une animation n'annonce jamais un gain qui n'a pas eu lieu.
+    const to = CHARACTER_RANKS[next]!;
+    useGameFx().celebrate({
+      kind: 'rankup',
+      emoji: to.emoji,
+      ranks: { from: next - 1, to: next },
+      title: `${adv.name} passe ${to.name}`,
+      subtitle: `+${mana} 💠 pierres de mana`,
     });
     return null;
   }

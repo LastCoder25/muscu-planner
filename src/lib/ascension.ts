@@ -17,6 +17,7 @@ import { advGearLevelBand, advGearNextRank, advGearRankCap, type AdvGear } from 
 import { RARITY_RANK, type Rarity } from './items';
 import { advAscensionCap, advNextAscension, type Adventurer } from './adventurers';
 import type { SealDrop } from './expedition';
+import { GACHA } from './gacha';
 
 export type SealKind = SealDrop['kind'];
 
@@ -38,6 +39,8 @@ const ASCENSION = {
    *  faille/jour, **0 à 2 %** à deux. Un coût de 1 fixe rendait l'ascension formelle (≤ 1 %). */
   sealBase: 1,
   sealRankDiv: 4,
+  /** Récompense en mana : `pullCost × rang visé / manaRankDiv` (cf. `ascensionMana`). */
+  manaRankDiv: 10,
 } as const;
 
 /** Relecture défensive du jsonb `seals` : tout ce qui n'est pas un compte entier positif
@@ -79,6 +82,17 @@ export function ascensionCost(targetRank: number): { gold: number; seals: number
     gold: Math.round(buildingUpgradeCost(lvl) / ASCENSION.goldDiv),
     seals: ASCENSION.sealBase + Math.floor(targetRank / ASCENSION.sealRankDiv),
   };
+}
+
+/** 💠 La récompense d'une ascension : des pierres de mana, selon le rang VISÉ —
+ *  `pullCost × rang / 10`, soit 11 💠 pour Argent, 55 pour Demi-dieu, 99 pour Tout-puissant.
+ *  ⚠️ DÉRIVÉ du prix d'un tirage, jamais écrit : si `pullCost` bouge, la récompense suit.
+ *  ⚠️ « QUELQUES » pierres, et c'est borné par construction : chaque champion ne franchit
+ *  chaque rang qu'UNE fois, donc toute sa carrière rapporte `pullCost × 45 / 10` ≈ 4,5
+ *  tirages. Le vrai frein reste les sceaux ; la récompense ne peut pas devenir un robinet. */
+export function ascensionMana(targetRank: number): number {
+  const r = Math.max(0, Math.min(CHARACTER_RANKS.length - 1, Math.floor(targetRank)));
+  return Math.round((GACHA.pullCost * r) / ASCENSION.manaRankDiv);
 }
 
 export type AscensionBlock = 'top' | 'notReady' | 'pantheon' | 'seals' | 'gold';

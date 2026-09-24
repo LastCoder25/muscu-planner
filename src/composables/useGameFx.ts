@@ -18,6 +18,7 @@ type GameFxKind =
   | 'building'
   | 'chest' // coffre de fin de Défi 360 : couvercle qui s'ouvre, butin qui jaillit
   | 'tickets' // tickets d'invocation distribués un par un en éventail (`count`)
+  | 'rankup' // ascension d'un champion : le médaillon passe de la couleur d'un rang à l'autre
   | 'generic';
 
 export interface GameFx {
@@ -30,6 +31,9 @@ export interface GameFx {
   rarity?: FxRarity;
   /** Nombre d'objets à distribuer (`kind: 'tickets'`) : un ticket dessiné par unité. */
   count?: number;
+  /** Rangs (index de `CHARACTER_RANKS`) d'un changement de rang (`kind: 'rankup'`) :
+   *  l'overlay en tire les couleurs et les emblèmes, jamais une seconde table. */
+  ranks?: { from: number; to: number };
   /** DISCRET : bandeau en haut qui LAISSE PASSER LES TOUCHES, au lieu de l'overlay plein
    *  écran. Pour ce qui se répète (boss refarmé, drop, set renforcé) : enchaîner plusieurs
    *  overlays bloquait « Réattaquer » pendant des secondes. */

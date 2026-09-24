@@ -23,7 +23,11 @@
   <transition name="fx-fade">
     <div v-if="cur" :key="cur.id" class="fx-overlay" :class="'tier-' + tier" @click="dismiss">
       <div class="fx-flash" v-if="tier >= 3" />
-      <div class="fx-card" :style="{ '--fx-color': color }">
+      <div
+        class="fx-card"
+        :class="{ rankup: cur.kind === 'rankup' }"
+        :style="{ '--fx-color': color, '--swap': RANK_SWAP_MS + 'ms' }"
+      >
         <!-- Anneau + particules qui jaillissent (nombre/intensité selon rareté) -->
         <div class="fx-ring" />
         <span
@@ -60,6 +64,24 @@
             >×{{ cur.count }}</span
           >
         </div>
+        <!-- ASCENSION : le médaillon porte la couleur de l'ANCIEN rang, puis bascule vers
+             celle du nouveau (l'emblème change avec) — et seulement alors l'éclat part. -->
+        <div v-else-if="cur.kind === 'rankup' && rankFx" class="fx-rank" aria-hidden="true">
+          <span
+            class="fx-rank-disc"
+            :style="{ '--from': rankFx.from.color, '--to': rankFx.to.color }"
+          >
+            <span class="fx-rank-emo old">{{ rankFx.from.emoji }}</span>
+            <span class="fx-rank-emo new">{{ rankFx.to.emoji }}</span>
+          </span>
+          <span class="fx-rank-names">
+            <span class="fx-rank-old" :style="{ color: rankFx.from.color }">{{
+              rankFx.from.name
+            }}</span>
+            →
+            <b :style="{ color: rankFx.to.color }">{{ rankFx.to.name }}</b>
+          </span>
+        </div>
         <div v-else class="fx-emoji">{{ cur.emoji }}</div>
         <div class="fx-title font-display">{{ cur.title }}</div>
         <div v-if="cur.subtitle" class="fx-sub">{{ cur.subtitle }}</div>
@@ -72,6 +94,7 @@
 <script setup lang="ts">
 import { computed, watch, onBeforeUnmount } from 'vue';
 import { useGameFx } from '@/composables/useGameFx';
+import { CHARACTER_RANKS } from '@/lib/characterRank';
 
 const { queue, toasts, dismiss, dismissToast } = useGameFx();
 const cur = computed(() => queue.value[0] ?? null);
@@ -84,9 +107,27 @@ const RARITY_COLOR: Record<string, string> = {
   divin: '#ff5cd8',
 };
 const RARITY_TIER: Record<string, number> = { common: 0, rare: 1, epic: 2, legendary: 3, divin: 4 };
-const tier = computed(() => (cur.value?.rarity ? (RARITY_TIER[cur.value.rarity] ?? 2) : 2));
+/** Les deux rangs d'une ascension, lus dans `CHARACTER_RANKS` (la seule table des rangs). */
+const rankFx = computed(() => {
+  const r = cur.value?.kind === 'rankup' ? cur.value.ranks : undefined;
+  const from = r ? CHARACTER_RANKS[r.from] : undefined;
+  const to = r ? CHARACTER_RANKS[r.to] : undefined;
+  return from && to ? { from, to } : null;
+});
+/** Une ascension haute éclate plus fort : l'intensité suit le rang atteint. */
+const tier = computed(() => {
+  if (rankFx.value) {
+    const t = cur.value!.ranks!.to;
+    return t >= 7 ? 4 : t >= 4 ? 3 : 2;
+  }
+  return cur.value?.rarity ? (RARITY_TIER[cur.value.rarity] ?? 2) : 2;
+});
 const color = computed(() =>
-  cur.value?.rarity ? (RARITY_COLOR[cur.value.rarity] ?? '#ffd23f') : '#ffd23f',
+  rankFx.value
+    ? rankFx.value.to.color
+    : cur.value?.rarity
+      ? (RARITY_COLOR[cur.value.rarity] ?? '#ffd23f')
+      : '#ffd23f',
 );
 
 const reduced =
@@ -98,6 +139,8 @@ const particles = computed(() => (reduced ? 0 : 6 + tier.value * 6));
  *  téléphone (le total affiché, lui, dit le vrai nombre). */
 const TICKETS_DRAWN_MAX = 12;
 const TICKET_DEAL_MS = 90; // écart entre deux tickets distribués
+/** Instant où le médaillon d'une ascension bascule vers le nouveau rang (= `--swap` en CSS). */
+const RANK_SWAP_MS = 750;
 const ticketCount = computed(() =>
   Math.max(0, Math.min(TICKETS_DRAWN_MAX, Math.round(cur.value?.count ?? 0))),
 );
@@ -110,7 +153,13 @@ watch(
     if (timer) clearTimeout(timer);
     if (!fx) return;
     // La distribution des tickets doit avoir le temps de finir avant qu'on referme.
-    const deal = fx.kind === 'tickets' ? ticketCount.value * TICKET_DEAL_MS + 900 : 0;
+    // …et la bascule de couleur d'une ascension, avant que l'éclat ne parte.
+    const deal =
+      fx.kind === 'tickets'
+        ? ticketCount.value * TICKET_DEAL_MS + 900
+        : fx.kind === 'rankup'
+          ? RANK_SWAP_MS + 900
+          : 0;
     const ms = reduced ? 1100 : 1600 + tier.value * 350 + deal;
     timer = setTimeout(dismiss, ms);
   },
@@ -497,5 +546,103 @@ onBeforeUnmount(() => {
   .fx-tk-total {
     animation: none;
   }
+  /* Ascension : directement aux couleurs du nouveau rang. */
+  .fx-rank-disc {
+    animation: none;
+    background: color-mix(in srgb, var(--to) 30%, #15120e);
+    border-color: var(--to);
+  }
+  .fx-rank-emo {
+    animation: none;
+  }
+  .fx-rank-emo.old {
+    opacity: 0;
+  }
+}
+
+/* ── Ascension d'un champion ───────────────────────────────────────────
+   Le médaillon naît aux couleurs de l'ANCIEN rang, pulse, puis bascule vers celles du
+   nouveau à `--swap` ; l'anneau et les particules partent À la bascule, pas avant. */
+.fx-rank {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.fx-rank-disc {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  border: 4px solid var(--to);
+  background: color-mix(in srgb, var(--to) 30%, #15120e);
+  box-shadow: 0 0 28px color-mix(in srgb, var(--to) 55%, transparent);
+  animation: rank-swap calc(var(--swap) + 0.5s) ease-out both;
+}
+@keyframes rank-swap {
+  0% {
+    transform: scale(0.6);
+    border-color: var(--from);
+    background: color-mix(in srgb, var(--from) 30%, #15120e);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--from) 40%, transparent);
+  }
+  45% {
+    transform: scale(1);
+    border-color: var(--from);
+    background: color-mix(in srgb, var(--from) 30%, #15120e);
+  }
+  60% {
+    transform: scale(1.18);
+  }
+  100% {
+    transform: scale(1);
+    border-color: var(--to);
+    background: color-mix(in srgb, var(--to) 30%, #15120e);
+    box-shadow: 0 0 28px color-mix(in srgb, var(--to) 55%, transparent);
+  }
+}
+.fx-rank-emo {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 50px;
+  line-height: 1;
+}
+.fx-rank-emo.old {
+  animation: rank-out 0.3s ease-in var(--swap) both;
+}
+.fx-rank-emo.new {
+  animation: rank-in 0.45s cubic-bezier(0.3, 1.6, 0.5, 1) var(--swap) both;
+}
+@keyframes rank-out {
+  to {
+    opacity: 0;
+    transform: scale(0.3) rotate(-30deg);
+  }
+}
+@keyframes rank-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2) rotate(30deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.fx-rank-names {
+  font-size: 15px;
+  color: var(--dim, #9a8f7e);
+}
+.fx-rank-old {
+  opacity: 0.75;
+}
+.fx-card.rankup .fx-ring {
+  animation-delay: var(--swap);
+  animation-fill-mode: both;
+}
+.fx-card.rankup .fx-particle {
+  animation-delay: calc(var(--d, 0s) + var(--swap));
 }
 </style>
