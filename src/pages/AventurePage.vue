@@ -171,7 +171,7 @@
             ><span class="tb-ico">🏅</span>{{ dispo.champFree }}/{{ dispo.champTotal }}</span
           >
           <span v-if="dispo.champHurt" class="td-cell hurt"
-            ><span class="tb-ico">🤕</span>{{ dispo.champHurt }}</span
+            ><span class="tb-ico">⛑️</span>{{ dispo.champHurt }}</span
           >
           <span v-if="dispo.teamTotal" class="td-cell" :class="{ none: !dispo.teamFree }"
             ><span class="tb-ico">🧭</span>{{ dispo.teamFree }}/{{ dispo.teamTotal }}</span
@@ -5461,7 +5461,7 @@ const expeHero = computed(() =>
  *  (c'est lui qui dit quand il redevient disponible, pas l'arrivée sur le lieu), ou sa
  *  convalescence. L'infirmerie passe devant : c'est elle qui le retient le plus longtemps. */
 const heroDispo = computed<{ label: string; tone: 'ok' | 'away' | 'hurt' }>(() => {
-  if (heroWounded.value) return { label: `🤕 ${fmtExpeMs(heroHealIn.value)}`, tone: 'hurt' };
+  if (heroWounded.value) return { label: `⛑️ ${fmtExpeMs(heroHealIn.value)}`, tone: 'hurt' };
   const h = expeHero.value;
   if (h && h.phase !== 'done') return { label: fmtExpeMs(h.remainTotalMs), tone: 'away' };
   return { label: 'dispo', tone: 'ok' };
@@ -5473,7 +5473,7 @@ const dispo = computed(() => {
   const champHurt = advs.filter((a) => (a.hurtUntil ?? 0) > expeNow.value).length;
   return {
     champFree: advs.filter((a) => advAvailable(a, expeNow.value)).length,
-    // 🤕 Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
+    // ⛑️ Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
     champTotal: advs.length - champHurt,
     champHurt,
     teamFree: convoySlotsFree(
