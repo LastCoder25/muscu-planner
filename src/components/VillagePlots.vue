@@ -337,11 +337,16 @@ const summonSummary = computed(() => {
     ? `×1 · ×10 — ${n} tirage${n > 1 ? 's' : ''} possible${n > 1 ? 's' : ''}`
     : 'Referme une faille pour gagner des 💠';
 });
-/** Les prochains niveaux, chiffrés. Voir l'horizon est l'intérêt : savoir qu'un convoi
- *  de plus arrive au niveau 18 aide à décider AUJOURD'HUI. */
+/** Le niveau actuel et les 2 SUIVANTS, chiffrés (demandé : 5 niveaux chargeaient la fiche).
+ *  Un palier plus lointain reste annoncé à part (`milestone`). */
+const PREVIEW_AHEAD = 2;
 const preview = computed(() =>
   selectedPlot.value?.building
-    ? buildingPreview(selectedPlot.value.building.typeId, selectedPlot.value.building.level, 5)
+    ? buildingPreview(
+        selectedPlot.value.building.typeId,
+        selectedPlot.value.building.level,
+        PREVIEW_AHEAD,
+      )
     : [],
 );
 /** Ce qui vaut pour tous les niveaux (l'Avant-poste : la carte grandit), dit une fois. */
