@@ -1093,7 +1093,13 @@ describe('📊 barre d’étoile au retour de mission', () => {
         ascendReady: false,
         segments: [s(0.1, 0.4)],
         gear: [
-          { id: 'g1', name: 'Épée courte', emoji: '🗡️', ascendReady: false, segments: [s(0.25, 0.75)] },
+          {
+            id: 'g1',
+            name: 'Épée courte',
+            emoji: '🗡️',
+            ascendReady: false,
+            segments: [s(0.25, 0.75)],
+          },
         ],
       },
     ]);

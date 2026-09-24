@@ -2425,7 +2425,7 @@ export const useCharacterStore = defineStore('character', () => {
     gearPatch: ReturnType<typeof gearTrainedPatch>,
   ): AdvXpTrack[] {
     const stock = cur.adv_gear?.stock ?? [];
-    const next = ('adv_gear' in gearPatch ? gearPatch.adv_gear?.stock : undefined) ?? stock;
+    const next = gearPatch.adv_gear?.stock ?? stock;
     return withGearTracks(advXpTracks(before, after), stock, next, after);
   }
 

@@ -124,7 +124,9 @@
           ><AdvGearArt :model="c.model">{{ c.emoji }}</AdvGearArt></span
         >
         <span v-if="c.rank" class="apg-rk">{{ c.rank }}</span>
-        <GearStarBar v-if="c.piece" class="apg-bar" :g="c.piece" thin />
+        <span v-if="c.bar" class="apg-bar" :style="{ '--bc': c.bar.rank.color }"
+          ><span :style="{ width: c.bar.pct + '%' }"
+        /></span>
       </button>
     </div>
 
@@ -165,7 +167,6 @@
 import { computed } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
-import GearStarBar from '@/components/GearStarBar.vue';
 import RankStarBadge from '@/components/RankStarBadge.vue';
 import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import {
@@ -482,12 +483,20 @@ button.ap-mini {
   color: var(--text);
 }
 /* 📊 L'avancement de la pièce vers l'étoile suivante, en bas de la case (rang et % au survol). */
-.apg-cell .apg-bar {
+.apg-bar {
   position: absolute;
   left: 5px;
   right: 5px;
   bottom: 3px;
-  width: auto;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bc) 22%, transparent);
+  overflow: hidden;
+}
+.apg-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--bc);
 }
 .apg-cell.empty {
   border-style: dashed;

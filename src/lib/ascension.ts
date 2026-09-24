@@ -13,7 +13,7 @@
  */
 import { buildingUpgradeCost } from './buildings';
 import { CHARACTER_RANKS, characterRank, rankStartLevel } from './characterRank';
-import { advGearLevelBand, advGearNextRank, advGearRankCap, type AdvGear } from './advGear';
+import { advGearAtRankCap, advGearNextRank, advGearRankCap, type AdvGear } from './advGear';
 import { RARITY_RANK, type Rarity } from './items';
 import { advAscensionCap, advNextAscension, type Adventurer } from './adventurers';
 import type { SealDrop } from './expedition';
@@ -154,7 +154,7 @@ export function advGearAscensionBlocker(
 ): GearAscensionBlock | null {
   const next = advGearNextRank(g);
   if (next == null) return 'top';
-  if (g.level < advGearLevelBand(g.rarity).max) return 'notReady';
+  if (!advGearAtRankCap(g)) return 'notReady';
   // ⚠️ Ouvrir un rang que personne ne peut porter rendrait la pièce INUTILISABLE : elle
   // tomberait de son porteur (`canWearAdvGear`), et les sceaux seraient dépensés pour rien.
   if (!ctx.rankCap || RARITY_RANK[ctx.rankCap] < next) return 'wearer';

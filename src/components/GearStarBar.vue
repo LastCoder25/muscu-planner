@@ -3,7 +3,16 @@
        Son niveau est caché comme celui d'un champion : sans cette barre, une pièce apprend
        plusieurs missions sans que rien ne bouge. Un seul dessin pour le stock, le sélecteur,
        la fiche et la feuille d'une pièce : plusieurs copies finiraient par diverger. -->
-  <span class="gsb" :class="{ big, thin }" :style="{ '--rc': rs.color }" :title="thin ? `${rs.name} ${stars} · ${capped ? '★5, ascension' : pct + ' % vers l’étoile suivante'}` : undefined">
+  <span
+    class="gsb"
+    :class="{ big, thin }"
+    :style="{ '--rc': rs.color }"
+    :title="
+      thin
+        ? `${rs.name} ${stars} · ${capped ? '★5, ascension' : pct + ' % vers l’étoile suivante'}`
+        : undefined
+    "
+  >
     <span v-if="!thin" class="gsb-top">
       <span class="gsb-rk">{{ rs.emoji }} {{ rs.name }}</span>
       <span class="gsb-stars">{{ stars }}</span>
@@ -24,12 +33,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import {
-  advGearAtRankCap,
-  advGearProgress,
-  advGearRankStar,
-  type AdvGear,
-} from '@/lib/advGear';
+import { advGearBar, type AdvGear } from '@/lib/advGear';
 import { rankStarStr } from '@/lib/characterRank';
 
 const props = defineProps<{
@@ -38,10 +42,12 @@ const props = defineProps<{
   /** La barre seule, pour une case étroite (fiche, portrait) : rang et % au survol. */
   thin?: boolean;
 }>();
-const rs = computed(() => advGearRankStar(props.g));
+// ⚠️ Une seule lecture de la lib par rendu (`advGearBar`) : rang, étoiles et avancement.
+const bar = computed(() => advGearBar(props.g));
+const rs = computed(() => bar.value.rank);
 const stars = computed(() => rankStarStr(rs.value.star));
-const pct = computed(() => Math.round(advGearProgress(props.g) * 100));
-const capped = computed(() => advGearAtRankCap(props.g));
+const pct = computed(() => bar.value.pct);
+const capped = computed(() => bar.value.capped);
 </script>
 
 <style scoped>

@@ -750,7 +750,7 @@
       </div>
       <GearStarBar class="gi-bar" :g="gearInfoPiece" big />
       <p class="g-note">
-        {{ gearInfoText.status }}
+        {{ gearInfoStatus }}
         <template v-if="gearInfoWearer"> · Porteur : {{ gearInfoWearer.name }}</template>
       </p>
       <div class="g-actions">
@@ -830,7 +830,8 @@ import {
   ADV_GEAR_SLOTS,
   advGearBadge,
   advGearRankStar,
-  advGearProgressInfo,
+  advGearStatus,
+  advGearWearerOf,
   compareAdvGear,
   groupGearByGrade,
   advGearCells,
@@ -846,7 +847,7 @@ import {
   advGearAwakenPlan,
   awakenAllAdvGear,
   countAssignedGear,
-  advGearLevelBand,
+  advGearAtRankCap,
   advGearNextRank,
   advGearRankCap,
   type AdvGear,
@@ -1044,17 +1045,13 @@ const gearInfoPiece = computed(() =>
   gearInfo.value ? char.advGearStock.find((g) => g.id === gearInfo.value!.gearId) : undefined,
 );
 /** Celui qui la porte VRAIMENT (`wornGear`, la règle qui la fait apprendre). */
-const gearInfoWearer = computed(() => {
-  const id = gearInfoPiece.value?.id;
-  if (!id) return undefined;
-  for (const [advId, list] of gearWorn.value)
-    if (list.some((g) => g.id === id)) return char.advList.find((a) => a.id === advId);
-  return undefined;
-});
-const gearInfoText = computed(() =>
+const gearInfoWearer = computed(() =>
   gearInfoPiece.value
-    ? advGearProgressInfo(gearInfoPiece.value, gearInfoWearer.value?.level)
-    : { title: '', pct: 0, status: '' },
+    ? (advGearWearerOf(gearInfoPiece.value.id, char.advList, char.advGearStock) ?? undefined)
+    : undefined,
+);
+const gearInfoStatus = computed(() =>
+  gearInfoPiece.value ? advGearStatus(gearInfoPiece.value, gearInfoWearer.value?.level) : '',
 );
 /** Toucher une case : une pièce portée ouvre SA feuille, une case vide le sélecteur. */
 function onGearCell(a: Adventurer, slot: AdvGearSlot) {
@@ -1365,7 +1362,7 @@ const detailAscent = computed(() => {
  *  n'est pas à ★5 : un bouton qui promettrait une échéance lointaine encombrerait la tuile. */
 function gearAscent(g: AdvGear) {
   const next = advGearNextRank(g);
-  if (next == null || g.level < advGearLevelBand(g.rarity).max) return null;
+  if (next == null || !advGearAtRankCap(g)) return null;
   const cost = advGearAscensionCost(next);
   const seals = char.row?.seals ?? emptySeals();
   const block = advGearAscensionBlocker(g, {

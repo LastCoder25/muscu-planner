@@ -21,7 +21,7 @@ import {
   type Rarity,
   type WeaponKind,
 } from './items';
-import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
+import { CHARACTER_RANKS, rankStarStr, rankStartLevel } from './characterRank';
 import { GRADE_COLOR, PULL_GRADES, type PullGrade } from '../data/champions';
 import { advGearModelId, advGearModelName } from '../data/advGearModels';
 import {
@@ -538,6 +538,9 @@ export interface AdvGearCell {
   pending?: boolean;
   /** Stat principale, telle que le combat la lit (valeur × niveau d'objet). */
   stat?: string;
+  /** 📊 Rang, étoile et avancement de la pièce portée (`advGearBar`) — calculé une fois ici,
+   *  pour tout le vivier, plutôt qu'un composant par case. */
+  bar?: ReturnType<typeof advGearBar>;
   title: string;
 }
 
@@ -568,6 +571,8 @@ export function advGearCells(
       const b = advGearBadge(piece);
       const stat = advGearEffectTexts(piece)[0];
       const grade = b.label;
+      const bar = advGearBar(piece);
+      const progress = bar.capped ? '★5, ascension' : `${bar.pct} % vers l’étoile suivante`;
       return {
         slot,
         emoji: piece.emoji,
@@ -578,7 +583,8 @@ export function advGearCells(
         rank: grade,
         model: advGearModelOf(piece) ?? undefined,
         stat,
-        title: `${piece.name} · ${grade}${stat ? ' · ' + stat : ''}`,
+        bar,
+        title: `${piece.name} · ${grade} · ${bar.rank.name} ${rankStarStr(bar.rank.star)} (${progress})${stat ? ' · ' + stat : ''}`,
       };
     }
     const d = defs?.[slot];
@@ -715,16 +721,26 @@ export function trainWornGear(
 /** Le rang le plus haut qu'une pièce peut OUVRIR : celui de son porteur si elle est portée,
  *  sinon celui du champion le plus avancé de sa lignée (spec § 2). `null` = personne. */
 export function advGearRankCap(g: AdvGear, advs: Adventurer[], stock: AdvGear[]): Rarity | null {
-  for (const [id, list] of wornGear(advs, stock))
-    if (list.some((x) => x.id === g.id)) {
-      const w = advs.find((a) => a.id === id);
-      return w ? advRarity(w) : null;
-    }
+  const worn = advGearWearerOf(g.id, advs, stock);
+  if (worn !== undefined) return worn ? advRarity(worn) : null;
   return bestClassRarity(advs, g.lineage);
 }
 
+/** Le champion qui PORTE VRAIMENT une pièce (`wornGear`, la règle du combat et de l'XP) :
+ *  `undefined` = personne ; `null` = portée par un id qui ne désigne plus personne.
+ *  ⚠️ SOURCE UNIQUE de « qui la porte » pour les règles et la feuille d'une pièce. */
+export function advGearWearerOf(
+  gearId: string,
+  advs: Adventurer[],
+  stock: AdvGear[],
+): Adventurer | null | undefined {
+  for (const [id, list] of wornGear(advs, stock))
+    if (list.some((x) => x.id === gearId)) return advs.find((a) => a.id === id) ?? null;
+  return undefined;
+}
+
 /** Le rang que la prochaine ascension ouvrirait (index), ou `null` au sommet. */
-export function advGearNextRank(g: AdvGear): number | null {
+export function advGearNextRank(g: Pick<AdvGear, 'rarity'>): number | null {
   const i = RANK_ORDER.indexOf(g.rarity);
   return i < 0 || i >= RANK_ORDER.length - 1 ? null : i + 1;
 }
@@ -969,10 +985,17 @@ export function advGearRankStar(g: Pick<AdvGear, 'rarity' | 'level'>): {
 } {
   const i = Math.max(0, Math.min(CHARACTER_RANKS.length - 1, RARITY_RANK[g.rarity] ?? 0));
   const r = CHARACTER_RANKS[i]!;
+  const star = Math.max(1, Math.min(5, Math.floor(gearStarPos(g, 0)) + 1));
+  return { emoji: r.emoji, name: r.name, color: r.color, star };
+}
+
+/** La position CONTINUE d'une pièce dans la tranche de son rang, en étoiles (0..5) : le
+ *  niveau, plus `frac` du niveau en cours. ⚠️ SOURCE UNIQUE du découpage en étoiles — l'étoile
+ *  affichée et l'avancement vers la suivante en dérivent, ils ne peuvent pas se contredire. */
+function gearStarPos(g: Pick<AdvGear, 'rarity' | 'level'>, frac: number): number {
   const band = advGearLevelBand(g.rarity);
   const span = Math.max(1, band.max - band.min + 1);
-  const star = Math.max(1, Math.min(5, Math.floor(((g.level - band.min) * 5) / span) + 1));
-  return { emoji: r.emoji, name: r.name, color: r.color, star };
+  return ((g.level - band.min + frac) * 5) / span;
 }
 
 // ── 📊 L'AVANCEMENT D'UNE PIÈCE VERS L'ÉTOILE SUIVANTE (v0.1126, demandé) ────────────────
@@ -983,12 +1006,23 @@ export function advGearRankStar(g: Pick<AdvGear, 'rarity' | 'level'>): {
  *  ne bougerait qu'au passage de niveau. Au ★5 de son rang (bout de sa tranche), elle est
  *  PLEINE : elle n'avancera plus avant l'ascension. */
 export function advGearProgress(g: Pick<AdvGear, 'rarity' | 'level' | 'xp'>): number {
-  const band = advGearLevelBand(g.rarity);
-  if (g.level >= band.max) return 1;
-  const span = Math.max(1, band.max - band.min + 1);
+  if (advGearAtRankCap(g)) return 1;
   const frac = Math.min(1, Math.max(0, (g.xp ?? 0) / advXpToNext(g.level)));
-  const pos = ((Math.max(band.min, g.level) - band.min + frac) * 5) / span;
-  return Math.min(1, Math.max(0, pos - (advGearRankStar(g).star - 1)));
+  return Math.min(1, Math.max(0, gearStarPos(g, frac) - (advGearRankStar(g).star - 1)));
+}
+
+/** Tout ce qu'une barre d'avancement affiche, en une lecture : rang + étoile, pourcentage
+ *  vers l'étoile suivante, et « bute sur son ★5 ». Lu par `GearStarBar` et les cases. */
+export function advGearBar(g: Pick<AdvGear, 'rarity' | 'level' | 'xp'>): {
+  rank: ReturnType<typeof advGearRankStar>;
+  pct: number;
+  capped: boolean;
+} {
+  return {
+    rank: advGearRankStar(g),
+    pct: Math.round(advGearProgress(g) * 100),
+    capped: advGearAtRankCap(g),
+  };
 }
 
 /** Elle bute sur le ★5 de son rang : seule l'ascension la fera avancer. */
@@ -1002,27 +1036,22 @@ function advGearTier(g: Pick<AdvGear, 'rarity' | 'level'>): number {
   return Math.max(0, RARITY_RANK[g.rarity] ?? 0) * 5 + advGearRankStar(g).star - 1;
 }
 
-/** 📜 Ce que dit une pièce quand on la touche : son rang, ses étoiles, où elle en est et ce
- *  qui la fait avancer. ⚠️ Aucun niveau affiché. `wearerLevel` absent = personne ne la porte. */
-export function advGearProgressInfo(
+/** 📜 Ce que dit une pièce quand on la touche : où elle en est et ce qui la fait avancer.
+ *  ⚠️ Aucun niveau affiché. `wearerLevel` absent = personne ne la porte. */
+export function advGearStatus(
   g: Pick<AdvGear, 'rarity' | 'level' | 'xp'>,
   wearerLevel?: number,
-): { title: string; pct: number; status: string } {
-  const rs = advGearRankStar(g);
-  const pct = Math.round(advGearProgress(g) * 100);
-  const stars = '★'.repeat(rs.star) + '☆'.repeat(5 - rs.star);
-  let status: string;
+): string {
   if (advGearAtRankCap(g))
-    status =
-      RANK_ORDER.indexOf(g.rarity) >= RANK_ORDER.length - 1
-        ? 'Au sommet : elle ne peut plus monter.'
-        : '★5 atteint : elle attend son ascension (⬆️ sur sa tuile du stock).';
-  else if (wearerLevel == null)
-    status = 'Au stock, elle n’apprend rien : confie-la à un champion pour la faire progresser.';
-  else if (g.level >= wearerLevel)
-    status = 'Elle a rattrapé son porteur : elle avancera quand il montera à son tour.';
-  else status = `${pct} % vers ★${rs.star + 1} · elle apprend avec son porteur, à chaque mission.`;
-  return { title: `${rs.emoji} ${rs.name} ${stars}`, pct, status };
+    return advGearNextRank(g) == null
+      ? 'Au sommet : elle ne peut plus monter.'
+      : '★5 atteint : elle attend son ascension (⬆️ sur sa tuile du stock).';
+  if (wearerLevel == null)
+    return 'Au stock, elle n’apprend rien : confie-la à un champion pour la faire progresser.';
+  if (g.level >= wearerLevel)
+    return 'Elle a rattrapé son porteur : elle avancera quand il montera à son tour.';
+  const pct = Math.round(advGearProgress(g) * 100);
+  return `${pct} % vers ★${advGearRankStar(g).star + 1} · elle apprend avec son porteur, à chaque mission.`;
 }
 
 /** La barre de chaque pièce qui a appris entre deux instantanés du stock. */

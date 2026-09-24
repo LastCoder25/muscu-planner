@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   advGearLevelBand,
   advGearProgress,
-  advGearProgressInfo,
+  advGearStatus,
   advGearRankStar,
   makeAdvGear,
   trainWornGear,
@@ -76,31 +76,25 @@ describe('l’avancement d’une pièce dans son étoile', () => {
 });
 
 describe('ce que dit une pièce quand on la touche', () => {
-  it('donne son rang, ses étoiles et ce qui reste vers l’étoile suivante', () => {
-    const i = advGearProgressInfo(piece('p', { level: 2 }), 20);
-    expect(i.title).toContain('★☆☆☆☆');
-    expect(i.pct).toBe(50);
-    expect(i.status).toContain('50 % vers ★2');
+  it('dit ce qui reste vers l’étoile suivante', () => {
+    expect(advGearStatus(piece('p', { level: 2 }), 20)).toContain('50 % vers ★2');
   });
 
   it('au stock, elle dit qu’elle n’apprend rien', () => {
-    expect(advGearProgressInfo(piece('p'), undefined).status).toContain('Au stock');
+    expect(advGearStatus(piece('p'), undefined)).toContain('Au stock');
   });
 
   it('bloquée par son porteur, elle le dit — pas « à 50 % »', () => {
-    expect(advGearProgressInfo(piece('p', { level: 4 }), 4).status).toContain('rattrapé');
+    expect(advGearStatus(piece('p', { level: 4 }), 4)).toContain('rattrapé');
   });
 
   it('au ★5, elle renvoie à l’ascension', () => {
     const band = advGearLevelBand('commun');
-    expect(advGearProgressInfo(piece('p', { level: band.max }), 50).status).toContain(
-      'ascension',
-    );
+    expect(advGearStatus(piece('p', { level: band.max }), 50)).toContain('ascension');
   });
 
   it('ne dit jamais son niveau', () => {
-    const i = advGearProgressInfo(piece('p', { level: 7, xp: 3 }), 20);
-    expect(`${i.title} ${i.status}`).not.toMatch(/niveau|niv\.?\s*\d/i);
+    expect(advGearStatus(piece('p', { level: 7, xp: 3 }), 20)).not.toMatch(/niveau|niv\.?\s*\d/i);
   });
 });
 
@@ -127,7 +121,11 @@ describe('le découpage étoile par étoile', () => {
 });
 
 describe('au retour de mission, les pièces du champion ont leur barre', () => {
-  const stock = [piece('p1'), piece('p2', { slot: 'armor' }), piece('libre', { slot: 'accessory' })];
+  const stock = [
+    piece('p1'),
+    piece('p2', { slot: 'armor' }),
+    piece('libre', { slot: 'accessory' }),
+  ];
   const before = [adv('a', 1, { weapon: 'p1', armor: 'p2' })];
   const gain = advXpToNext(1) + advXpToNext(2) + 5;
   const after = before.map((a) => grantAdvXp(a, gain, 100));
@@ -150,10 +148,7 @@ describe('au retour de mission, les pièces du champion ont leur barre', () => {
   });
 
   it('chaque champion n’a QUE ses pièces, pas celles de son voisin', () => {
-    const b2 = [
-      adv('a', 1, { weapon: 'p1' }),
-      adv('b', 1, { armor: 'p2' }),
-    ];
+    const b2 = [adv('a', 1, { weapon: 'p1' }), adv('b', 1, { armor: 'p2' })];
     const a2 = b2.map((a) => grantAdvXp(a, gain, 100));
     const n2 = trainWornGear(b2, a2, stock);
     const t2 = withGearTracks(advXpTracks(b2, a2), stock, n2, a2);
