@@ -18,6 +18,7 @@ import {
   advProgressOf,
   advRank,
   advRankProgress,
+  advRarity,
   advStats,
   advXpToNext,
   ascendAdventurer,
@@ -29,6 +30,7 @@ import { CHARACTER_RANKS, rankStartLevel } from '@/lib/characterRank';
 import { EXPE } from '@/lib/expedition';
 import { RIFT, riftSeals } from '@/lib/rift';
 import { CHAMPIONS } from '@/data/champions';
+import { RANK_ORDER } from '@/lib/items';
 
 const adv = (level: number, ascended?: number, xp = 0): Adventurer => ({
   id: 'a',
@@ -238,6 +240,16 @@ describe('la fiche se met à jour à l’ascension (signalé : « rang et stats 
     expect(advRank(monte).rankIndex).toBe(1); // …mais le rang affiché, si
     expect(advRank(monte).star).toBe(1);
     expect(advRank(monte).tier).toBeGreaterThan(advRank(bloque).tier);
+  });
+
+  it('…et il PORTE aussitôt le rang ouvert, ce qui débloque l’ascension de son équipement', () => {
+    const bloque = champ(10, 0);
+    expect(advRarity(bloque)).toBe(RANK_ORDER[0]);
+    const monte = ascendAdventurer(bloque, 100);
+    expect(monte.level).toBe(10);
+    expect(advRarity(monte)).toBe(RANK_ORDER[1]);
+    // Le niveau prime quand il est plus haut (un ancien `ascended` ne rétrograde rien).
+    expect(advRarity(champ(25, 0))).toBe(RANK_ORDER[2]);
   });
 
   it('…et les stats montent aussitôt (+5 %)', () => {

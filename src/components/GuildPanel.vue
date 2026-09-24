@@ -569,6 +569,23 @@
           >
         </button>
       </div>
+      <!-- ⬆️ L'ascension d'une pièce, depuis la fiche de son porteur (demandé : on la
+           cherchait dans le stock). Seulement quand elle est POSSIBLE — la raison d'un refus
+           reste au stock ; ici on ne propose que ce qui se fait. Même règle et même geste
+           (`gearAscent` / `doAscendGear`) que la tuile du stock. -->
+      <div v-if="detailGearAscents.length" class="d-gear-asc">
+        <button
+          v-for="x in detailGearAscents"
+          :key="x.piece.id"
+          type="button"
+          class="d-gear-asc-btn"
+          :disabled="busy"
+          @click="doAscendGear(x.piece)"
+        >
+          ⬆️ {{ x.piece.name }} → {{ x.rank.emoji }} {{ x.rank.name }}
+          <span class="d-gear-asc-cost">⚜️ {{ x.cost.seals }} · 🪙 {{ x.cost.gold.toLocaleString('fr-FR') }}</span>
+        </button>
+      </div>
 
       <div class="adv-bar" :title="barTitle(detailAdv)">
         <span class="adv-fill" :style="{ width: Math.round(progressOf(detailAdv) * 100) + '%' }" />
@@ -983,6 +1000,14 @@ function gearCellsOf(a: Adventurer): AdvGearCell[] {
   return gearCells.value.get(a.id) ?? advGearCells(a, []);
 }
 const detailGearSlots = computed(() => (detailAdv.value ? gearCellsOf(detailAdv.value) : []));
+/** ⬆️ Les pièces PORTÉES par ce champion dont l'ascension est permise tout de suite. */
+const detailGearAscents = computed(() =>
+  detailGearSlots.value.flatMap((c) => {
+    if (!c.piece) return [];
+    const x = gearAscent(c.piece);
+    return x && !x.block ? [{ piece: c.piece, rank: x.rank, cost: x.cost }] : [];
+  }),
+);
 const gearEffectTexts = advGearEffectTexts;
 /** Ce que l'aventurier vaudrait avec CETTE pièce à CET emplacement — calculé par
  *  `adventurerGearPower` (le MÊME arbitre que `pairBonusOf`, `combatPower` sur les
@@ -2205,6 +2230,33 @@ function leftOf(at: number): string {
   display: flex;
   gap: 8px;
   margin-bottom: 8px;
+}
+.d-gear-asc {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.d-gear-asc-btn {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+.d-gear-asc-cost {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--dim);
+  font-weight: 500;
 }
 .d-gear-slot {
   flex: 1;

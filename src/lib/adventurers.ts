@@ -1448,7 +1448,16 @@ export function advRarity(adv: Adventurer): Rarity {
   // ⚠️ Pour un champion, c'est son RANG (son niveau) — jamais sa lettre (refonte 2026-09-21).
   // C'est lui qui borne son équipement : un S tiré au niveau 1 porte du
   // Bronze, comme un A. « Le sport est le plafond » passe par le NIVEAU, pas par l'étiquette.
-  if (advChampion(adv)) return RANK_ORDER[prestigeRankIndex(Math.max(1, adv.level))]!;
+  // ⬆️ …ou le rang que son ASCENSION a ouvert, s'il est plus haut : sans XP en réserve, un
+  // champion ascensionné reste au niveau 10 (★5 Bronze) — lu au seul niveau, il affichait
+  // Argent (`advRank`) sans pouvoir porter d'Argent, et l'ascension de son équipement restait
+  // bloquée (signalé : « j'ai fait l'ascension de Myreen mais son équipement ne peut toujours
+  // pas »). Même règle que `advRank` : le rang OUVERT prime.
+  if (advChampion(adv)) {
+    const byLevel = prestigeRankIndex(Math.max(1, adv.level));
+    const opened = Math.min(RANK_ORDER.length - 1, advAscendedRank(adv));
+    return RANK_ORDER[Math.max(byLevel, opened)]!;
+  }
   const top = adv.path.reduce((m, id) => Math.max(m, advClass(id)?.stratum ?? 0), 0);
   return RANK_ORDER[Math.min(RANK_ORDER.length - 1, top)]!;
 }
