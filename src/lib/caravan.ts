@@ -66,6 +66,7 @@ import {
   poiRewardLevel,
 } from './expedition';
 import {
+  advBankedLevel,
   advRarity,
   advRoles,
   advSignatureLevels,
@@ -844,6 +845,10 @@ const CATCH_UP_RANK = rankStartLevel(1) - 1;
  * recevrait encore une prime pour un retard qu'il n'a pas le droit de combler : le
  * multiplicateur annoncerait un gain que rien ne peut convertir.
  *
+ * ⚠️ **ELLE LIT LE NIVEAU DE SA RÉSERVE** (`advBankedLevel`), pas son niveau affiché : bloqué
+ * à ★5, il gardait sinon la prime pleine sur toute l'XP mise de côté, et retarder ses
+ * ascensions faisait gagner 41 à 69 % de missions (mesuré, v0.1126).
+ *
  * ⚠️ **AUCUN FARM POSSIBLE** : elle s'éteint exactement quand il rattrape, et garder un
  * champion bas ne paie rien (il est faible, perd ses missions — `xpLossShare` — et occupe un
  * créneau). Le sport reste le plafond : `grantAdvXp` cape toujours au Panthéon.
@@ -878,12 +883,16 @@ export function missionXpFor(
 ): Record<string, number> {
   const split = missionXpSplit(escort.length);
   const xp: Record<string, number> = {};
-  for (const a of escort)
+  for (const a of escort) {
+    // ⚠️ LE NIVEAU DE SA RÉSERVE, pour la prime ET pour le rendement décroissant : bloqué à
+    // ★5, son niveau affiché ne bouge plus, et les deux liraient un retard qu'il n'a plus.
+    const L = advBankedLevel(a, pantheonLevel);
     xp[a.id] =
       Math.max(
         1,
-        Math.round(missionXp(a, poi, won) * split * catchUpMult(a.level, pantheonLevel)),
+        Math.round(missionXp({ ...a, level: L }, poi, won) * split * catchUpMult(L, pantheonLevel)),
       ) + Math.round(shares[a.id] ?? 0);
+  }
   return xp;
 }
 
@@ -930,7 +939,8 @@ export function missionXpPreview(
     const xp = escortIds.includes(a.id)
       ? (dejaLa[a.id] ?? 0)
       : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel)[a.id] ?? 0);
-    out[a.id] = { xp, full: d >= a.level, catchUp: catchUpMult(a.level, pantheonLevel) };
+    const L = advBankedLevel(a, pantheonLevel);
+    out[a.id] = { xp, full: d >= L, catchUp: catchUpMult(L, pantheonLevel) };
   }
   return out;
 }

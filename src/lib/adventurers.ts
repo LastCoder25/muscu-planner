@@ -2128,6 +2128,29 @@ export function ascendAdventurer(adv: Adventurer, pantheonLevel: number): Advent
   return grantAdvXp({ ...adv, ascended: next }, 0, pantheonLevel);
 }
 
+/**
+ * 🏦 LE NIVEAU QUE SA RÉSERVE LUI VAUT : le niveau qu'il atteindrait si toute l'XP mise de
+ * côté était versée, plafonné au Panthéon seul (jamais à l'ascension).
+ *
+ * ⚠️ C'EST LUI QUE LA PRIME DE RATTRAPAGE LIT (`catchUpMult`), PAS `adv.level` (v0.1126).
+ * Bloqué à ★5 en attendant son ascension, un champion garde son niveau affiché — donc un
+ * retard qui ne fond jamais, et la prime pleine. Mesuré : le laisser bloqué puis enchaîner
+ * les ascensions menait du niveau 10 au Panthéon en **41 % (P=30) à 69 % (P=100) de missions
+ * en moins** que les ascensions au fil de l'eau. Retarder ses ascensions était la meilleure
+ * stratégie. Lue ici, la prime baisse à mesure que la réserve grossit, comme s'il montait.
+ * Sans réserve (le cas normal : le reliquat reste sous un niveau), c'est `adv.level`. Pur.
+ */
+export function advBankedLevel(adv: Adventurer, pantheonLevel: number): number {
+  const cap = Math.max(1, pantheonLevel);
+  let level = adv.level;
+  let pool = Math.max(0, adv.xp);
+  while (level < cap && pool >= advXpToNext(level)) {
+    pool -= advXpToNext(level);
+    level++;
+  }
+  return level;
+}
+
 /** Applique l’XP gagnée : montées de niveau EN CHAÎNE (un gros voyage peut en donner
  *  plusieurs), plafonnées par la Guilde.
  *

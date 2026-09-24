@@ -71,6 +71,10 @@ import {
   advRarity,
   advRoles,
   grantAdvXp,
+  advBankedLevel,
+  advXpToNext,
+  advAscensionCap,
+  ascendAdventurer,
   engageCap,
   PROMO_LEVELS,
   type Adventurer,
@@ -1068,6 +1072,58 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     }
   });
 
+  it('🏦 la réserve compte comme des niveaux — sans réserve, c’est le niveau affiché', () => {
+    const a = champ(10, 'a')[0]!;
+    expect(advBankedLevel({ ...a, xp: 0 }, 60)).toBe(10);
+    // Tout juste de quoi passer 3 niveaux : 10 → 13.
+    const trois = [10, 11, 12].reduce((t, l) => t + advXpToNext(l), 0);
+    expect(advBankedLevel({ ...a, xp: trois }, 60)).toBe(13);
+    expect(advBankedLevel({ ...a, xp: trois - 1 }, 60)).toBe(12);
+    // Plafonnée au Panthéon, jamais au-delà.
+    expect(advBankedLevel({ ...a, xp: 1e9 }, 60)).toBe(60);
+  });
+
+  it('⚠️ bloqué à ★5 avec une grosse réserve, il touche la prime de son niveau VIRTUEL', () => {
+    // Le défaut (v0.1126) : la prime lisait le niveau affiché, figé à 10 tant qu'on
+    // n'ascensionne pas — donc ×6 au Panthéon 60, quelle que soit la réserve accumulée.
+    const bloque = { ...champ(10, 'a')[0]!, ascended: 0, xp: 1e9 };
+    const monte = { ...champ(60, 'b')[0]!, ascended: 5 };
+    const xp = missionXpFor([bloque, monte], p, true, {}, 60);
+    expect(xp[bloque.id]).toBe(xp[monte.id]);
+    expect(missionXpPreview([bloque], [bloque.id], p, 60)[bloque.id]!.catchUp).toBe(1);
+    // …et l’étiquette « plein tarif » lit le même niveau : un lieu 20 est SOUS sa réserve.
+    expect(missionXpPreview([bloque], [], poi({ level: 20 }), 60)[bloque.id]!.full).toBe(false);
+  });
+
+  it('⚠️ retarder ses ascensions ne rapporte RIEN — même nombre de missions pour rattraper', () => {
+    // Mesuré avant correctif : 41 % (P=30) à 69 % (P=100) de missions en moins pour qui
+    // restait bloqué à ★5 puis enchaînait les ascensions.
+    for (const P of [30, 60, 100]) {
+      const lieu = poi({ level: P });
+      const depart = { ...champ(10, 'x')[0]!, ascended: 0, xp: 0 };
+      const mission = (a: typeof depart) =>
+        grantAdvXp(a, missionXpFor([a], lieu, true, {}, P)[a.id]!, P);
+      // A : ascensionne dès que possible.
+      let a = depart;
+      let nA = 0;
+      while (a.level < P && nA < 10000) {
+        a = mission(a);
+        nA++;
+        while (a.level >= advAscensionCap(a) && a.level < P) a = ascendAdventurer(a, P);
+      }
+      // B : reste bloqué jusqu'à ce que sa réserve le mène au Panthéon, puis enchaîne.
+      let b = depart;
+      let nB = 0;
+      while (advBankedLevel(b, P) < P && nB < 10000) {
+        b = mission(b);
+        nB++;
+      }
+      while (b.level < P) b = ascendAdventurer(b, P);
+      expect(b.level, `P=${P}`).toBe(P);
+      expect(nB, `P=${P}`).toBeGreaterThanOrEqual(nA);
+    }
+  });
+
   it('🔮 l’annonce AVANT l’envoi dit EXACTEMENT ce que la mission versera', () => {
     // ⚠️ La garantie est là : aucune formule d’affichage à part. Ce que la tuile annonce
     // est ce que `missionXpFor` verse, au chiffre près.
@@ -1167,9 +1223,7 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     expect(missionXpFor(au, p, true, {}, 40).x).toBe(
       Math.round(missionXp(au[0]!, p, true) * missionXpSplit(1)),
     );
-    expect(missionXpFor(au, p, true, {}, 100).x!).toBeGreaterThan(
-      missionXp(au[0]!, p, true),
-    );
+    expect(missionXpFor(au, p, true, {}, 100).x!).toBeGreaterThan(missionXp(au[0]!, p, true));
   });
 
   it('⚠️ elle S’ÉTEINT en rattrapant : aucun farm à garder un champion bas', () => {
