@@ -19,6 +19,10 @@ import {
   lotOrder,
   omenOf,
   sigilTints,
+  SIGIL_ZONES,
+  zoneCharge,
+  zoneSpins,
+  zoneDirection,
   OMEN_STRENGTH,
   type LotItem,
   type RevealCell,
@@ -277,31 +281,48 @@ describe('🎰 LE LOT — la grille et le meilleur', () => {
   });
 });
 
-describe('🎨 LES COULEURS DU CERCLE — B partout, A dehors, S dedans', () => {
+describe('🎨 LES COULEURS DU CERCLE — B partout, A sur les médaillons, S sur les boules', () => {
   const lot = (gs: PullGrade[]) =>
     buildLotReveal(
       gs.map((g) => it0(g)),
       mulberry32(3),
     );
   it('sans plan, tout reste B : on ne sait encore rien', () => {
-    expect(sigilTints(null)).toEqual({ outer: 'B', inner: 'B' });
+    expect(sigilTints(null)).toEqual({ medals: 'B', beads: 'B' });
   });
   it('un tirage sans A ni S laisse le cercle entièrement B', () => {
-    expect(sigilTints(lot(Array(10).fill('B')))).toEqual({ outer: 'B', inner: 'B' });
-    expect(sigilTints(buildReveal(B, mulberry32(1)))).toEqual({ outer: 'B', inner: 'B' });
+    expect(sigilTints(lot(Array(10).fill('B')))).toEqual({ medals: 'B', beads: 'B' });
+    expect(sigilTints(buildReveal(B, mulberry32(1)))).toEqual({ medals: 'B', beads: 'B' });
   });
-  it('un A colore les boules extérieures, un S les intérieures — indépendamment', () => {
-    expect(sigilTints(buildReveal(A, mulberry32(1)))).toEqual({ outer: 'A', inner: 'B' });
-    expect(sigilTints(buildReveal(S, mulberry32(1)))).toEqual({ outer: 'B', inner: 'S' });
+  it('un A colore les médaillons, un S les boules intérieures — indépendamment', () => {
+    expect(sigilTints(buildReveal(A, mulberry32(1)))).toEqual({ medals: 'A', beads: 'B' });
+    expect(sigilTints(buildReveal(S, mulberry32(1)))).toEqual({ medals: 'B', beads: 'S' });
     const both: PullGrade[] = ['B', 'A', 'B', 'B', 'S', 'B', 'B', 'B', 'B', 'B'];
-    expect(sigilTints(lot(both))).toEqual({ outer: 'A', inner: 'S' });
+    expect(sigilTints(lot(both))).toEqual({ medals: 'A', beads: 'S' });
   });
   it('lu sur la VRAIE lettre, jamais sur le présage : un S masqué colore quand même', () => {
-    // Un S peut partir bleu (surprise) : son chemin commence sous S, la couleur, elle, est S.
     for (let s = 1; s <= 200; s++) {
       const p = buildReveal(S, mulberry32(s));
-      expect(sigilTints(p).inner).toBe('S');
-      expect(sigilTints(p).outer).toBe('B');
+      expect(sigilTints(p)).toEqual({ medals: 'B', beads: 'S' });
     }
+  });
+});
+
+describe('🔯 LA CHARGE EN TROIS PARTIES — extérieur, milieu, centre', () => {
+  it('chaque partie se charge sur SON tiers, dans l’ordre', () => {
+    expect(SIGIL_ZONES).toBe(3);
+    expect([0, 1, 2].map((z) => zoneCharge(0.2, z))).toEqual([0.6000000000000001, 0, 0]);
+    expect([0, 1, 2].map((z) => zoneCharge(0.5, z))).toEqual([1, 0.5, 0]);
+    expect([0, 1, 2].map((z) => zoneCharge(1, z))).toEqual([1, 1, 1]);
+    expect([0, 1, 2].map((z) => zoneCharge(0, z))).toEqual([0, 0, 0]);
+  });
+  it('la première tourne d’emblée, les suivantes seulement une fois la précédente chargée', () => {
+    expect([0, 1, 2].map((z) => zoneSpins(0, z))).toEqual([true, false, false]);
+    expect([0, 1, 2].map((z) => zoneSpins(0.3, z))).toEqual([true, false, false]);
+    expect([0, 1, 2].map((z) => zoneSpins(1 / 3, z))).toEqual([true, true, false]);
+    expect([0, 1, 2].map((z) => zoneSpins(0.7, z))).toEqual([true, true, true]);
+  });
+  it('les sens alternent, et la dernière tourne comme la première', () => {
+    expect([0, 1, 2].map(zoneDirection)).toEqual([1, -1, 1]);
   });
 });

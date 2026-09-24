@@ -1,8 +1,9 @@
 <template>
   <!-- 🔯 LE CERCLE D'INVOCATION (maquette validée). Deux variantes : le PETIT pour le ×1, le
-       GRAND pour le ×10 (demandé : « seul le ×10 en gros cercle »). Chaque couche tourne à
-       sa vitesse, dans son sens ; pendant la charge, runes, nœuds, médaillons et perles
-       s'allument en doré.
+       GRAND pour le ×10 (demandé : « seul le ×10 en gros cercle »). Il est en TROIS parties,
+       de l'extérieur vers le centre : chacune se charge sur un tiers, ne tourne qu'une fois
+       la précédente chargée, et les sens alternent (+, −, +) — v0.1111. Pendant la charge,
+       runes, nœuds, médaillons et perles s'allument dans leur teinte.
        ⚠️ CE N'EST PLUS UN BOUTON (v0.1101) : on ne le maintient plus, le choix du tirage
        lance tout. Il n'a donc ni rôle ni focus — annoncer un contrôle qui ne répond à rien
        tromperait qui navigue au clavier ou au lecteur d'écran.
@@ -69,9 +70,9 @@
       </svg>
 
       <!-- couronne de perles (grand cercle) -->
-      <svg v-if="big" class="ivs-l" :viewBox="vb" data-spin="0.6">
+      <svg v-if="big" class="ivs-l" :viewBox="vb" data-spin="0.6" data-zone="0">
         <circle class="ivs-ring thin" :cx="C" :cy="C" r="210" stroke-dasharray="2 6" />
-        <g v-for="(b, i) in beadsOuter" :key="'bo' + i" data-lit="bo" class="ivs-beadg ivs-tone-o">
+        <g v-for="(b, i) in beadsOuter" :key="'bo' + i" data-lit="bo" class="ivs-beadg">
           <circle class="ivs-bead" :class="{ big: b.big }" :cx="b.x" :cy="b.y" :r="b.r" />
           <template v-if="b.big">
             <circle
@@ -87,7 +88,7 @@
       </svg>
 
       <!-- bande de runes -->
-      <svg class="ivs-l" :viewBox="vb" data-spin="1">
+      <svg class="ivs-l" :viewBox="vb" data-spin="1" data-zone="0">
         <text
           v-for="(t, i) in runesOuter"
           :key="'ro' + i"
@@ -111,8 +112,8 @@
 
       <template v-if="big">
         <!-- perles entre les runes et les médaillons -->
-        <svg class="ivs-l" :viewBox="vb" data-spin="-1.3">
-          <g v-for="(b, i) in beadsMid" :key="'bm' + i" data-lit="bm" class="ivs-beadg ivs-tone-o">
+        <svg class="ivs-l" :viewBox="vb" data-spin="1.3" data-zone="0">
+          <g v-for="(b, i) in beadsMid" :key="'bm' + i" data-lit="bm" class="ivs-beadg">
             <circle class="ivs-bead" :class="{ big: b.big }" :cx="b.x" :cy="b.y" :r="b.r" />
             <template v-if="b.big">
               <circle
@@ -127,15 +128,15 @@
           </g>
         </svg>
         <!-- médaillons planétaires reliés en octogone -->
-        <svg class="ivs-l" :viewBox="vb" data-spin="-0.45">
+        <svg class="ivs-l" :viewBox="vb" data-spin="0.45" data-zone="1">
           <polygon class="ivs-ring thin" :points="medalPoly" />
-          <g v-for="(m, i) in medals" :key="'md' + i" data-lit="md" class="ivs-medal">
+          <g v-for="(m, i) in medals" :key="'md' + i" data-lit="md" class="ivs-medal ivs-tone-o">
             <circle :cx="m.x" :cy="m.y" r="12" />
             <text :x="m.x" :y="m.y">{{ m.ch }}</text>
           </g>
         </svg>
         <!-- arcs segmentés -->
-        <svg class="ivs-l" :viewBox="vb" data-spin="3">
+        <svg class="ivs-l" :viewBox="vb" data-spin="3" data-zone="1">
           <circle
             class="ivs-arcs"
             :cx="C"
@@ -146,22 +147,22 @@
           />
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="128" />
         </svg>
-        <svg class="ivs-l" :viewBox="vb" data-spin="-3.4">
+        <svg class="ivs-l" :viewBox="vb" data-spin="3.4" data-zone="1">
           <g v-for="(b, i) in beadsArc" :key="'ba' + i" data-lit="ba" class="ivs-beadg ivs-tone-i">
             <circle class="ivs-bead" :cx="b.x" :cy="b.y" :r="b.r" />
           </g>
         </svg>
       </template>
       <!-- satellites (petit cercle) -->
-      <svg v-else class="ivs-l" :viewBox="vb" data-spin="2.4">
-        <path class="ivs-sat ivs-tone-o" d="M150,-6 l4,8 l-4,8 l-4,-8 z" />
-        <path class="ivs-sat ivs-tone-o" d="M150,290 l4,8 l-4,8 l-4,-8 z" />
-        <path class="ivs-sat ivs-tone-o" d="M-6,150 l8,4 l8,-4 l-8,-4 z" />
-        <path class="ivs-sat ivs-tone-o" d="M290,150 l8,4 l8,-4 l-8,-4 z" />
+      <svg v-else class="ivs-l" :viewBox="vb" data-spin="2.4" data-zone="0">
+        <path data-lit="sa" class="ivs-sat ivs-tone-o" d="M150,-6 l4,8 l-4,8 l-4,-8 z" />
+        <path data-lit="sa" class="ivs-sat ivs-tone-o" d="M150,290 l4,8 l-4,8 l-4,-8 z" />
+        <path data-lit="sa" class="ivs-sat ivs-tone-o" d="M-6,150 l8,4 l8,-4 l-8,-4 z" />
+        <path data-lit="sa" class="ivs-sat ivs-tone-o" d="M290,150 l8,4 l8,-4 l-8,-4 z" />
       </svg>
 
       <!-- étoiles + nœuds (contre-rotation) -->
-      <svg class="ivs-l" :viewBox="vb" data-spin="-0.7">
+      <svg class="ivs-l" :viewBox="vb" data-spin="0.7" data-zone="1">
         <template v-if="big">
           <polygon class="ivs-star" :points="star12" />
           <polygon class="ivs-star" :points="star8" opacity=".7" />
@@ -196,7 +197,7 @@
       </svg>
 
       <!-- hexagramme et runes intérieures -->
-      <svg class="ivs-l" :viewBox="vb" data-spin="1.5">
+      <svg class="ivs-l" :viewBox="vb" data-spin="1.5" data-zone="2">
         <circle v-if="big" class="ivs-ring" :cx="C" :cy="C" r="104" />
         <polygon class="ivs-ring" :points="hexA" />
         <polygon class="ivs-ring" :points="hexB" />
@@ -216,7 +217,7 @@
 
       <template v-if="big">
         <!-- lunes : six petits cercles qui orbitent, chacun tournant sur lui-même -->
-        <svg class="ivs-l" :viewBox="vb" data-spin="2">
+        <svg class="ivs-l" :viewBox="vb" data-spin="2" data-zone="2">
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="74" />
           <g v-for="(m, i) in moons" :key="'mo' + i" data-lit="mo" class="ivs-moon ivs-tone-i">
             <circle class="ivs-moonb" :cx="m.x" :cy="m.y" r="7" />
@@ -224,7 +225,7 @@
             <circle class="ivs-bead" :cx="m.sx" :cy="m.sy" r="2" />
           </g>
         </svg>
-        <svg class="ivs-l" :viewBox="vb" data-spin="-2.2">
+        <svg class="ivs-l" :viewBox="vb" data-spin="2.2" data-zone="2">
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="62" stroke-dasharray="2 3" />
           <text
             v-for="(t, i) in runesCore"
@@ -266,7 +267,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { GRADE_COLOR } from '@/data/champions';
-import type { SigilTints } from '@/lib/gachaReveal';
+import {
+  SIGIL_ZONES,
+  zoneCharge,
+  zoneDirection,
+  zoneSpins,
+  type SigilTints,
+} from '@/lib/gachaReveal';
 
 const props = defineProps<{
   variant: 'small' | 'big';
@@ -278,16 +285,17 @@ const props = defineProps<{
   charging: boolean;
   dim?: boolean;
   revealing?: boolean;
-  /** 🎨 Couleur des boules extérieures et intérieures (`sigilTints`) ; le cercle est B. */
+  /** 🎨 Couleur des médaillons et des boules intérieures (`sigilTints`) ; le cercle est B. */
   tints?: SigilTints;
 }>();
 
-/** Le cercle en B, les boules extérieures en A, les intérieures en S — la couleur vient de
- *  `GRADE_COLOR`, la même que la lettre révélée ensuite. */
+/** Le cercle en B, les médaillons en A, les boules intérieures en S — la couleur vient de
+ *  `GRADE_COLOR`, la même que la lettre révélée ensuite. Elle ne s'applique qu'aux
+ *  éléments ALLUMÉS (règle CSS `.on`) : avant la charge, rien ne se devine. */
 const tintStyle = computed(() => ({
   '--ivs-b': GRADE_COLOR.B,
-  '--ivs-o': GRADE_COLOR[props.tints?.outer ?? 'B'],
-  '--ivs-i': GRADE_COLOR[props.tints?.inner ?? 'B'],
+  '--ivs-o': GRADE_COLOR[props.tints?.medals ?? 'B'],
+  '--ivs-i': GRADE_COLOR[props.tints?.beads ?? 'B'],
 }));
 
 let seq = 0;
@@ -393,40 +401,77 @@ const vb = computed(() => `0 0 ${size.value} ${size.value}`);
 /** Vitesse de référence (°/s) : une couche de facteur 1 y fait un tour en 30 s. Les autres
  *  vitesses s'obtiennent par `playbackRate` — la rotation reste sur le compositeur. */
 const BASE_SPEED = 12;
-let spinners: Animation[] = [];
-let litGroups: Element[][] = [];
+/** Les calques qui tournent, rangés par PARTIE (0 = extérieure, `SIGIL_ZONES` - 1 = centre). */
+let spinners: { anim: Animation; zone: number }[] = [];
+/** Groupes allumés par la charge, chacun rattaché à sa partie. */
+const LIT_ZONE: Record<string, number> = {
+  ro: 0,
+  bo: 0,
+  bm: 0,
+  sa: 0,
+  md: 1,
+  ba: 1,
+  nd: 1,
+  ri: 2,
+  mo: 2,
+  rc: 2,
+};
+let litGroups: { els: Element[]; zone: number }[] = [];
 let litN: number[] = [];
 let raf = 0;
 let last = 0;
 let spd = 12;
-let rate = 1;
+/** Vitesse lissée de chaque partie (en multiple de `BASE_SPEED`) : une partie qui démarre
+ *  prend son élan au lieu de sauter d'un coup à pleine vitesse. */
+const zoneRate = Array.from({ length: SIGIL_ZONES }, () => 0);
+/** La charge la plus haute depuis le début de la charge en cours (`zoneSpins`). */
+let peak = 0;
 
-/** L'allumage suit la charge : les runes et nœuds s'éclairent un à un. ⚠️ Posé à la main,
- *  comme l'aura et l'anneau : lier `charge` au template re-rendrait les ~250 nœuds du
- *  cercle à chaque image de la charge. */
+/** L'allumage suit la charge : chaque partie s'éclaire pendant SON tiers, de l'extérieur
+ *  vers le centre. ⚠️ Posé à la main, comme l'aura et l'anneau : lier `charge` au template
+ *  re-rendrait les ~250 nœuds du cercle à chaque image de la charge. */
 function paintCharge(c: number) {
-  litGroups.forEach((arr, j) => {
-    const n = Math.round(c * arr.length);
+  peak = Math.max(peak, c);
+  litGroups.forEach(({ els, zone }, j) => {
+    const n = Math.round(zoneCharge(c, zone) * els.length);
     if (n === litN[j]) return;
     litN[j] = n;
-    arr.forEach((e, i) => e.classList.toggle('on', i < n));
+    els.forEach((e, i) => e.classList.toggle('on', i < n));
   });
   if (aura.value) aura.value.style.opacity = String(c * 0.9);
   prog.value?.setAttribute('stroke-dashoffset', String(1 - c));
 }
 watch(() => props.charge, paintCharge);
+// Une nouvelle charge repart de la partie extérieure seule.
+watch(
+  () => props.charging,
+  (on) => {
+    if (on) peak = props.charge;
+  },
+);
+
+/** Rapproche la vitesse de chaque partie de sa cible (0 si elle n'est pas encore atteinte). */
+function stepZones(ease: number) {
+  for (let z = 0; z < SIGIL_ZONES; z++) {
+    const target = zoneSpins(peak, z) ? spd / BASE_SPEED : 0;
+    const cur = zoneRate[z]!;
+    let next = cur + (target - cur) * ease;
+    if (Math.abs(next - target) < 0.01) next = target;
+    // Un écart infime ne vaut pas un message au compositeur.
+    if (next === cur || (next !== target && Math.abs(next - cur) < cur * 0.005)) continue;
+    zoneRate[z] = next;
+    for (const s of spinners) if (s.zone === z) s.anim.updatePlaybackRate(next);
+  }
+}
 
 function frame(t: number) {
   const dt = Math.min(0.05, (t - (last || t)) / 1000);
   last = t;
-  // La vitesse visée s'atteint en douceur ; on ne touche au compositeur que si elle a
-  // vraiment changé (`updatePlaybackRate` raccorde sans à-coup).
+  // La vitesse visée s'atteint en douceur, partie par partie ; une partie pas encore
+  // atteinte vise 0. On ne touche au compositeur que si la vitesse a vraiment changé
+  // (`updatePlaybackRate` raccorde sans à-coup).
   spd += (props.speed - spd) * Math.min(1, dt * 4);
-  const r = spd / BASE_SPEED;
-  if (Math.abs(r - rate) > rate * 0.01) {
-    rate = r;
-    for (const a of spinners) a.updatePlaybackRate(r);
-  }
+  stepZones(Math.min(1, dt * 3));
   // Pendant la charge, le cercle enfle et VIBRE : une vibration continue (sommes de
   // sinus) plutôt qu'un saut aléatoire à chaque image, qui se lisait comme une saccade.
   if (stack.value) {
@@ -441,30 +486,32 @@ function frame(t: number) {
 onMounted(() => {
   const el = root.value;
   if (!el) return;
-  const keys = ['ro', 'ri', 'rc', 'nd', 'md', 'bo', 'bm', 'ba', 'mo'];
-  litGroups = keys
-    .map((k) => [...el.querySelectorAll(`[data-lit="${k}"]`)])
-    .filter((a) => a.length);
+  litGroups = Object.entries(LIT_ZONE)
+    .map(([k, zone]) => ({ els: [...el.querySelectorAll(`[data-lit="${k}"]`)], zone }))
+    .filter((g) => g.els.length);
   litN = litGroups.map(() => -1);
+  peak = props.charge;
   paintCharge(props.charge);
   // ⚠️ Mouvement réduit : le cercle reste immobile (il s'allume quand même, c'est une information).
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
   spd = props.speed;
-  rate = spd / BASE_SPEED;
+  for (let z = 0; z < SIGIL_ZONES; z++) zoneRate[z] = zoneSpins(peak, z) ? spd / BASE_SPEED : 0;
+  // Le SENS vient de la partie (+, −, +) ; `data-spin` ne donne que la vitesse relative.
   spinners = [...el.querySelectorAll<SVGSVGElement>('[data-spin]')].map((e) => {
-    const k = Number(e.getAttribute('data-spin'));
-    const a = e.animate(
-      [{ transform: 'rotate(0deg)' }, { transform: `rotate(${Math.sign(k) * 360}deg)` }],
-      { duration: (360 / (Math.abs(k) * BASE_SPEED)) * 1000, iterations: Infinity },
+    const k = Math.abs(Number(e.getAttribute('data-spin')));
+    const zone = Number(e.getAttribute('data-zone'));
+    const anim = e.animate(
+      [{ transform: 'rotate(0deg)' }, { transform: `rotate(${zoneDirection(zone) * 360}deg)` }],
+      { duration: (360 / (k * BASE_SPEED)) * 1000, iterations: Infinity },
     );
-    a.playbackRate = rate;
-    return a;
+    anim.playbackRate = zoneRate[zone]!;
+    return { anim, zone };
   });
   raf = requestAnimationFrame(frame);
 });
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf);
-  for (const a of spinners) a.cancel();
+  for (const s of spinners) s.anim.cancel();
 });
 
 defineExpose({ el: root });
@@ -526,18 +573,19 @@ defineExpose({ el: root });
     will-change: transform;
   }
 }
-/* 🎨 LES COULEURS (v0.1110) : le cercle est en B, les boules extérieures en A et les
-   intérieures en S quand le tirage en contient (`sigilTints`). Chaque élément peint avec
+/* 🎨 LES COULEURS (v0.1110-0.1111) : le cercle est en B, les médaillons à motifs en A et
+   les boules intérieures en S quand le tirage en contient (`sigilTints`). Chaque élément peint avec
    `--c` (sa teinte) et ses dérivés ; allumé par la charge, il s'éclaircit DANS sa teinte —
    plus en or, qui se confondait avec un S. ⚠️ Les dérivés sont recalculés sur chaque élément
    qui change `--c` : une variable qui en référence une autre se résout là où elle est posée. */
 .ivs {
   --c: var(--ivs-b);
 }
-.ivs-tone-o {
+/* ⚠️ La teinte A/S ne s'applique qu'une fois ALLUMÉ par la charge : avant, rien ne se devine. */
+.ivs-tone-o.on {
   --c: var(--ivs-o);
 }
-.ivs-tone-i {
+.ivs-tone-i.on {
   --c: var(--ivs-i);
 }
 .ivs,
@@ -619,6 +667,10 @@ defineExpose({ el: root });
 .ivs-sat {
   fill: var(--c-light);
   filter: drop-shadow(0 0 4px var(--c));
+  &.on {
+    fill: var(--c-hot);
+    filter: drop-shadow(0 0 6px var(--c));
+  }
 }
 .ivs-spoke {
   stroke: var(--c);

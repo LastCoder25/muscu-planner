@@ -262,25 +262,49 @@ export function omenOf(plan: RevealPlan): Omen | null {
 }
 
 /**
- * 🎨 LES COULEURS DU CERCLE (v0.1110, demandé : « le cercle de la couleur des rangs B, les
- * boules extérieures de la couleur du rang A s'il y en a dans le tirage et les boules
- * intérieures en couleur S s'il y en a »). Le cercle est toujours B ; les boules
- * extérieures passent en A dès qu'un A est dans le tirage, les intérieures en S dès qu'un S
- * y est. ⚠️ Deux signaux INDÉPENDANTS : un ×10 avec un A et un S allume les deux.
- * Tant que le plan n'est pas arrivé, tout reste B — on ne sait encore rien.
- * ⚠️ Lu sur la vraie lettre (`finalRank`), jamais sur le présage : la couleur ne ment pas.
+ * 🎨 LES COULEURS DU CERCLE (v0.1110-0.1111, demandé : « le cercle de la couleur des rangs
+ * B ; les cercles violets, c'est pour les cercles avec les motifs, et les boules à
+ * l'intérieur pour l'or ; et pas visible tant que l'animation ne se charge pas »).
+ * Le cercle est toujours B ; les médaillons à motifs passent en A dès qu'un A est dans le
+ * tirage, les boules intérieures en S dès qu'un S y est — mais seulement quand leur partie
+ * s'ALLUME pendant la charge (c'est le composant qui le peint). ⚠️ Deux signaux
+ * INDÉPENDANTS : un ×10 avec un A et un S allume les deux. Tant que le plan n'est pas
+ * arrivé, tout reste B. ⚠️ Lu sur la vraie lettre (`finalRank`), jamais sur le présage.
  */
 export interface SigilTints {
-  outer: PullGrade;
-  inner: PullGrade;
+  /** Les médaillons à motifs (le petit cercle n'en a pas : ses losanges les remplacent). */
+  medals: PullGrade;
+  /** Les boules intérieures. */
+  beads: PullGrade;
 }
 export function sigilTints(plan: RevealPlan | null): SigilTints {
   const ranks = plan?.items.map(finalRank) ?? [];
   return {
-    outer: ranks.includes(GRADE_RANK.A) ? 'A' : 'B',
-    inner: ranks.includes(GRADE_RANK.S) ? 'S' : 'B',
+    medals: ranks.includes(GRADE_RANK.A) ? 'A' : 'B',
+    beads: ranks.includes(GRADE_RANK.S) ? 'S' : 'B',
   };
 }
+
+/**
+ * 🔯 LA CHARGE EN TROIS PARTIES (v0.1111, demandé : « séparer les parties à charger : que
+ * la première tourne avant que celle plus à l'intérieur commence à tourner dans l'autre
+ * sens, et enfin la dernière partie dans le sens de la première »). De l'extérieur vers le
+ * centre, chaque partie se charge sur un tiers de la charge ; elle ne tourne qu'une fois la
+ * précédente chargée, et les sens alternent (+, −, +).
+ */
+export const SIGIL_ZONES = 3;
+/** Avancement de la charge DANS une partie (0 = extérieure), de 0 à 1. */
+export function zoneCharge(charge: number, zone: number): number {
+  return Math.min(1, Math.max(0, charge * SIGIL_ZONES - zone));
+}
+/** Une partie tourne une fois atteinte : la première toujours, les suivantes quand la
+ *  charge a rempli les précédentes. `peak` = la charge la plus haute depuis le début de
+ *  la charge en cours — la charge retombe à 0 à la révélation, le cercle ne s'arrête pas. */
+export function zoneSpins(peak: number, zone: number): boolean {
+  return zone === 0 || peak * SIGIL_ZONES >= zone;
+}
+/** Le sens de rotation d'une partie : alterné, la dernière dans le sens de la première. */
+export const zoneDirection = (zone: number): 1 | -1 => (zone % 2 === 0 ? 1 : -1);
 
 /** Durée de l'arrêt à l'apogée pour ce rang. */
 export const apexMs = (rank: number) => INVOKE.apexMs + rank * INVOKE.apexMsParRang;
