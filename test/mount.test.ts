@@ -1010,3 +1010,34 @@ describe('⬆️ AscensionReveal — la scène d’ascension se monte', () => {
     expect(out).toContain('<img');
   }, 30_000);
 });
+
+describe('📊 barre d’étoile au retour de mission', () => {
+  it('AdvXpGainOverlay se monte et part de l’avancement AVANT', async () => {
+    const { advXpTracks } = await import('@/lib/adventurers');
+    const { useAdvXpFx } = await import('@/composables/useAdvXpFx');
+    const AdvXpGainOverlay = (await import('@/components/AdvXpGainOverlay.vue')).default;
+    const a = (level: number, xp: number) => ({
+      id: 'a3',
+      name: 'Orsène',
+      seed: 3,
+      path: [],
+      level,
+      xp,
+      championId: 'orsene',
+    });
+    const tracks = advXpTracks([a(2, 10)], [a(4, 30)]);
+    expect(tracks).toHaveLength(1);
+    let out = '';
+    const fx = useAdvXpFx();
+    fx.show(tracks);
+    expect(await mountIt(AdvXpGainOverlay, {}, undefined, undefined, '/', (h) => (out = h))).toBe(
+      null,
+    );
+    fx.dismiss();
+    expect(out).toContain('Orsène');
+    expect(out).toContain(`+${tracks[0]!.xp} XP`);
+    // Avant l'animation : la barre montre l'avancement d'AVANT la mission, pas celui d'après.
+    const from = tracks[0]!.segments[0]!.from;
+    expect(out).toContain(`width: ${from * 100}%`);
+  });
+});

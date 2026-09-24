@@ -1455,12 +1455,7 @@ const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length));
  *  une seconde formule d'affichage finirait par annoncer une XP que l'encaissement dément. */
 const partyXp = computed<Record<string, MissionXpPreview>>(() =>
   selected.value
-    ? missionXpPreview(
-        char.advList,
-        partyEscort.value,
-        selected.value,
-        char.pantheonLevel,
-      )
+    ? missionXpPreview(char.advList, partyEscort.value, selected.value, char.pantheonLevel)
     : {},
 );
 /** La note ne s'affiche que si un champion DISPONIBLE y perd : sinon c'est du bruit. */
@@ -1741,7 +1736,7 @@ async function doClaimCaravan(id: string) {
     // retour qu'il ait sur des semaines de voyages.
     // 📊 La barre d’étoile de chaque membre, avant → après : elle porte aussi les étoiles et
     // les rangs gagnés, donc elle remplace l’annonce seule (qui ne jouait rien entre deux).
-    advXpFx.show(tracks, "Retour de convoi");
+    advXpFx.show(tracks, 'Retour de convoi');
   } finally {
     busyCaravan.value = false;
   }

@@ -22,7 +22,9 @@
             </div>
             <div class="ax-rank">
               <span class="ax-rk">{{ seg(i).rankEmoji }} {{ seg(i).rankName }}</span>
-              <span class="ax-stars" :class="{ bump: rows[i]?.pop }">{{ rankStarStr(seg(i).star) }}</span>
+              <span class="ax-stars" :class="{ bump: rows[i]?.pop }">{{
+                rankStarStr(seg(i).star)
+              }}</span>
               <span class="ax-pct">{{ Math.round((rows[i]?.width ?? 0) * 100) }} %</span>
             </div>
             <div class="ax-bar">
