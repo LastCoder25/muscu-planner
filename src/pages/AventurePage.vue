@@ -1783,7 +1783,7 @@
             <MissionReportCard
               v-for="m in inboxMessages"
               :key="m.id"
-              folded
+              :folded="m.id !== focusMsgId"
               :card="messageCard(m, char.advList)"
               :state="msgState(m)"
               :now="expeNow"
@@ -2641,6 +2641,7 @@
       v-model:replay="riftReplay"
       :roster="char.advList"
       :hero-profile="c.profile"
+      @report="openRiftReport"
       :hero-equipped="char.row?.equipped ?? {}"
     />
 
@@ -4448,7 +4449,15 @@ const arenaWaves = ref<StageWave[] | null>(null);
 const arenaOpen = ref(false);
 const riftReplay = ref<PartyResult | null>(null);
 // ▶️ Il se lance aussi tout seul : à l'arrivée sur la faille, ou à la prochaine ouverture.
-useRiftAutoReplay(riftReplay);
+const riftAutoMsgId = useRiftAutoReplay(riftReplay);
+/** 📜 Le rapport à ouvrir DÉPLIÉ dans la boîte (fin d'un rejeu automatique). */
+const focusMsgId = ref<string | null>(null);
+function openRiftReport() {
+  const id = riftAutoMsgId.value;
+  if (!id) return; // lancé depuis un rapport déjà ouvert : fermer suffit
+  focusMsgId.value = id;
+  openInbox();
+}
 function onArenaDone() {
   arenaOpen.value = false;
   openReport();
@@ -5451,6 +5460,7 @@ function openInbox() {
  *  que la boîte affichait à l'instant de la fermeture. */
 function closeInbox() {
   inboxOpen.value = false;
+  focusMsgId.value = null;
   const uid = auth.user?.id;
   const seen = new Set(inboxMessages.value.map((m) => m.id));
   if (uid) void char.expeDropSeen(uid, seen);

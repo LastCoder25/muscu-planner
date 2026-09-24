@@ -12,7 +12,7 @@
         :level="input.level"
         :hero="hero"
         :cast="cast"
-        @done="close"
+        @done="onDone"
       />
     </div>
   </q-dialog>
@@ -40,7 +40,7 @@ const props = defineProps<{
   heroProfile: 'puissant' | 'agile' | 'polyvalent';
   heroEquipped: Equipped;
 }>();
-const emit = defineEmits<{ 'update:replay': [PartyResult | null] }>();
+const emit = defineEmits<{ 'update:replay': [PartyResult | null]; report: [] }>();
 
 /** ⚠️ Remonté à chaque ouverture : sans clé neuve, Vue réutiliserait le composant déjà
  *  monté et le second rejeu resterait figé sur l'état final du premier. */
@@ -73,6 +73,13 @@ const cast = computed(() => (props.replay ? riftCast(props.replay, props.roster)
 
 function close(): void {
   emit('update:replay', null);
+}
+/** « Voir le rapport » (fin du rejeu) : on dit à la page d'ouvrir le rapport, PUIS on ferme.
+ *  ⚠️ Sans ce signal le bouton ne faisait que fermer (signalé : « il ne fait rien ») — le
+ *  rejeu automatique ne part d'aucun rapport ouvert, il n'y avait donc rien derrière. */
+function onDone(): void {
+  emit('report');
+  close();
 }
 </script>
 

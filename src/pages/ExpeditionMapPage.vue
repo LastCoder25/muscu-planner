@@ -735,6 +735,7 @@
       v-model:replay="riftReplay"
       :roster="char.advList"
       :hero-profile="character.profile"
+      @report="openRiftReport"
       :hero-equipped="char.row?.equipped ?? {}"
     />
 
@@ -1849,7 +1850,15 @@ const lastOutcome = ref<ExpeditionMessage | null>(null);
 /** 🕳️ Rapport d'incursion à rejouer (cf. `RiftReplayDialog`). */
 const riftReplay = ref<PartyResult | null>(null);
 // ▶️ Il se lance aussi tout seul : à l'arrivée sur la faille, ou à la prochaine ouverture.
-useRiftAutoReplay(riftReplay);
+const riftAutoMsgId = useRiftAutoReplay(riftReplay);
+/** 📜 Fin d'un rejeu AUTOMATIQUE : « Voir le rapport » ouvre la fenêtre de CE rapport. */
+function openRiftReport() {
+  const id = riftAutoMsgId.value;
+  const m = id ? (char.row?.messages ?? []).find((x) => x.id === id) : undefined;
+  if (!m) return; // lancé depuis le rapport déjà ouvert : fermer suffit
+  lastOutcome.value = m;
+  collectOpen.value = true;
+}
 /** Le rapport ouvert attend-il d'être encaissé ? (sinon la modale n'est qu'un compte rendu) */
 const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.claimed === false);
 /** Le rapport du héros À ENCAISSER, s'il y en a un — UNE définition de « prêt » (`isClaimable`),

@@ -9,7 +9,7 @@
 // ⚠️ MÉMOIRE PAR APPAREIL (`localStorage`) : c'est une commodité d'affichage, pas un état
 // de jeu. Revoir une incursion sur un second appareil est acceptable ; ne jamais la revoir
 // parce que le stockage est bloqué (navigation privée) l'est aussi — d'où les try/catch.
-import { watch, type Ref } from 'vue';
+import { ref, watch, type Ref } from 'vue';
 import type { PartyResult } from '@/lib/expedition';
 import { riftAutoReplay } from '@/lib/riftStage';
 import { useCharacterStore } from '@/stores/character';
@@ -34,8 +34,17 @@ function writeSeen(ids: string[]): void {
   }
 }
 
-export function useRiftAutoReplay(replay: Ref<PartyResult | null>): void {
+/** Rend l'id du MESSAGE rejoué automatiquement (`null` sinon, et remis à `null` à la
+ *  fermeture du rejeu) : « Voir le rapport » en fin de rejeu doit mener à CE rapport.
+ *  ⚠️ Un rejeu lancé à la main part d'un rapport déjà ouvert : là, fermer suffit — d'où
+ *  l'id seulement sur le chemin automatique. */
+export function useRiftAutoReplay(replay: Ref<PartyResult | null>): Ref<string | null> {
   const char = useCharacterStore();
+  const autoMsgId = ref<string | null>(null);
+  watch(replay, (r) => {
+    // Vidé APRÈS le « report » (émis avant la fermeture) : le gestionnaire l'a déjà lu.
+    if (!r) autoMsgId.value = null;
+  });
   watch(
     () => char.row?.messages,
     (messages) => {
@@ -44,8 +53,12 @@ export function useRiftAutoReplay(replay: Ref<PartyResult | null>): void {
       if (!messages || replay.value) return;
       const t = riftAutoReplay(messages, readSeen(), Date.now());
       writeSeen(t.seen);
-      if (t.play?.party) replay.value = t.play.party;
+      if (t.play?.party) {
+        autoMsgId.value = t.play.id;
+        replay.value = t.play.party;
+      }
     },
     { immediate: true },
   );
+  return autoMsgId;
 }
