@@ -84,6 +84,25 @@
               Remplace les choix faits à la main.
             </div>
           </template>
+          <!-- ⬆️ QUI PEUT MONTER DE RANG, EN TÊTE (signalé : « je vois le Panthéon en vert
+               mais quand je clique dessus ça ne me dit rien de plus »). Chaque nom ouvre la
+               fiche, où vit le bouton d'ascension. -->
+          <div v-if="ascChampions.length" class="asc-banner">
+            <div class="asc-t font-display">
+              ⬆️ Prêt{{ ascChampions.length > 1 ? 's' : '' }} à monter de rang
+            </div>
+            <div class="asc-list">
+              <button
+                v-for="a in ascChampions"
+                :key="a.id"
+                type="button"
+                class="asc-chip"
+                @click="detailAdv = a"
+              >
+                {{ a.name }} <span class="asc-go">›</span>
+              </button>
+            </div>
+          </div>
           <!-- ── Le vivier ── -->
           <div v-if="!roster.length" class="g-empty">
             Personne encore. Recrute ton premier aventurier — il escortera tes caravanes.
@@ -137,6 +156,7 @@
                 :tone="statusOf(a)"
                 :disabled="busy"
                 :gear="gearCellsOf(a)"
+                :ascend="ascReady.champions.has(a.id)"
                 @gear="(slot) => (gearPick = { advId: a.id, slot })"
                 @open="detailAdv = a"
               />
@@ -160,6 +180,16 @@
                le vivier — un seul dispositif de filtre dans la Guilde, mêmes teintes
                (vert = disponible, jaune = confié) que les cadres des tuiles. -->
           <template v-else>
+            <!-- ⬆️ Même signal que l'anneau du Panthéon : sans lui, on cherche le bouton ⬆️
+                 parmi toutes les tuiles. -->
+            <div v-if="ascReady.gear.size" class="asc-banner">
+              <div class="asc-t font-display">
+                ⬆️ {{ ascReady.gear.size }} pièce{{ ascReady.gear.size > 1 ? 's' : '' }} prête{{
+                  ascReady.gear.size > 1 ? 's' : ''
+                }}
+                à monter de rang — touche le ⬆️ vert sur sa tuile
+              </div>
+            </div>
             <div class="adv-filter">
               <button
                 type="button"
@@ -685,6 +715,7 @@ import {
   ascensionBlocker,
   ascensionCost,
   emptySeals,
+  readyAscensionIds,
   sealCount,
 } from '@/lib/ascension';
 import {
@@ -1071,6 +1102,17 @@ watch(rosterChips, (chips) => {
   if (rosterFilter.value && !chips.includes(rosterFilter.value)) rosterFilter.value = null;
 });
 const pantheonLevel = computed(() => char.pantheonLevel);
+/** ⬆️ Qui peut monter de rang TOUT DE SUITE (champions et pièces) — la même règle que
+ *  l'anneau vert du Panthéon sur la Base (`readyAscensions`). ⚠️ Sans elle, on entrait dans
+ *  un Panthéon allumé sans que rien ne dise qui (signalé par l'utilisateur). */
+const ascReady = computed(() =>
+  readyAscensionIds(char.advList, char.advGearStock, {
+    pantheonLevel: pantheonLevel.value,
+    seals: char.row?.seals ?? emptySeals(),
+    gold: char.row?.gold ?? 0,
+  }),
+);
+const ascChampions = computed(() => roster.value.filter((a) => ascReady.value.champions.has(a.id)));
 /** ⚠️ `engageCap`, JAMAIS une copie de sa formule : l'écran doit annoncer exactement ce
  *  que le jeu applique (c'est `advUnavailableReason` qui met au banc au-delà). */
 const maxRoster = computed(() => engageCap(pantheonLevel.value));
@@ -1706,6 +1748,37 @@ function leftOf(at: number): string {
 }
 .adv.busy {
   opacity: 0.62;
+}
+/* ⬆️ Le vert « gain » de l'anneau du Panthéon sur la Base : même signal, on le suit. */
+.asc-banner {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--d1, #7bc86c) 60%, var(--line));
+  background: color-mix(in srgb, var(--d1, #7bc86c) 12%, var(--surface));
+}
+.asc-t {
+  font-size: 14px;
+  color: var(--d1, #7bc86c);
+  margin-bottom: 6px;
+}
+.asc-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.asc-chip {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--d1, #7bc86c) 60%, var(--line));
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+.asc-go {
+  color: var(--d1, #7bc86c);
 }
 .adv-rgroup {
   margin-top: 14px;

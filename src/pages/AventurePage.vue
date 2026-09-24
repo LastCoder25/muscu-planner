@@ -1428,6 +1428,23 @@
                 :title="powTitle(it.dungeon.recoLevel)"
                 >⚔️ {{ fmtPow(recoPow(it.dungeon.recoLevel)) }}</span
               >
+              <!-- 🎯 % de réussite RÉEL (tentatives comptées depuis v0.1116), comme les boss. -->
+              <span
+                v-if="dungeonUnlocked(it.dungeon)"
+                class="dgn-chip succ"
+                :class="
+                  dungeonSuccess(it.dungeon) === null
+                    ? 'none'
+                    : successTier(dungeonSuccess(it.dungeon)!)
+                "
+                title="Tes nettoyages de ce donjon, parmi tes tentatives"
+                >🎯
+                {{
+                  dungeonSuccess(it.dungeon) === null
+                    ? 'jamais tenté'
+                    : `${dungeonSuccess(it.dungeon)} % réussis (${dungeonRuns(it.dungeon)} essai${dungeonRuns(it.dungeon) > 1 ? 's' : ''})`
+                }}</span
+              >
               <button
                 v-if="dungeonUnlocked(it.dungeon)"
                 class="dgn-loot"
@@ -5035,6 +5052,7 @@ async function explore(d: Dungeon) {
       gold,
       drops,
       summonStones,
+      dungeonId: d.id,
       ...(r.cleared ? { clearedDungeonId: d.id } : {}),
       ...(talentDrops.length ? { talentDrops } : {}),
       // Dressage d'ATTAQUE : ∝ la profondeur du donjon et ce qu'on y a abattu.
@@ -5099,6 +5117,8 @@ const hasBossAltar = computed(() => bossAltarBuilt(char.row?.buildings ?? []));
 // % de réussite RÉEL sur un boss (null = jamais tenté depuis que les tentatives sont comptées).
 const bossSuccess = (b: MilestoneBoss) => runSuccessPct(char.row?.boss_stats ?? {}, b.id);
 const bossRuns = (b: MilestoneBoss) => char.row?.boss_stats?.[b.id]?.runs ?? 0;
+const dungeonSuccess = (d: Dungeon) => runSuccessPct(char.row?.dungeon_stats ?? {}, d.id);
+const dungeonRuns = (d: Dungeon) => char.row?.dungeon_stats?.[d.id]?.runs ?? 0;
 
 function summonCostFor(b: MilestoneBoss): number {
   return bossSummonCost(b.unlockLevel);
