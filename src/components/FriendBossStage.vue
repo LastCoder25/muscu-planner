@@ -6,7 +6,15 @@
     <div class="fbs-boss-zone">
       <div ref="bossEl" class="fbs-boss" :class="{ shake, dead: shownHp <= 0 }">
         <span class="fbs-aura" aria-hidden="true" />
-        <span class="fbs-boss-emo" aria-hidden="true">{{ bossEmoji }}</span>
+        <img
+          v-if="art"
+          :src="art"
+          alt=""
+          class="fbs-boss-art"
+          draggable="false"
+          @error="artFailed = art"
+        />
+        <span v-else class="fbs-boss-emo" aria-hidden="true">{{ bossEmoji }}</span>
         <span v-if="flash" :key="flash" class="fbs-flash" aria-hidden="true" />
         <span class="fbs-family" :title="familyName">{{ familyEmoji }}</span>
       </div>
@@ -83,6 +91,8 @@ export interface StageAlly {
 const props = defineProps<{
   bossName: string;
   bossEmoji: string;
+  /** Illustration de la silhouette (`friendBossArt`) — `null` : on garde l'emoji. */
+  bossArt?: string | null;
   familyEmoji: string;
   familyName: string;
   hpTotal: number;
@@ -100,6 +110,12 @@ function setAllyEl(id: string, el: Element | ComponentPublicInstance | null) {
   if (el instanceof HTMLElement) allyEls.set(id, el);
   else allyEls.delete(id);
 }
+
+/** Un fichier qui ne charge pas retombe sur l'emoji, jamais sur une image cassée. */
+const artFailed = ref<string | null>(null);
+const art = computed(() =>
+  props.bossArt && props.bossArt !== artFailed.value ? props.bossArt : null,
+);
 
 const shownHp = ref(props.hpLeft);
 const ghostHp = ref(props.hpLeft);
@@ -307,6 +323,20 @@ defineExpose({ play });
 .fbs-boss-emo {
   font-size: 64px;
   line-height: 1;
+}
+/* Posé au fond du médaillon (l'image a les pieds en bas de son carré) et un peu plus grand
+   que lui : la tête dépasse du cercle, le boss domine le groupe. */
+.fbs-boss-art {
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  width: 132px;
+  height: 132px;
+  transform: translateX(-50%);
+  object-fit: contain;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.35)) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.6));
 }
 .fbs-family {
   position: absolute;
