@@ -21,6 +21,7 @@
         charging,
         'tint-o': tone.o !== 'B',
         'tint-i': tone.i !== 'B',
+        'rare-s': !big && rare === 'S',
       },
     ]"
     :style="tintStyle"
@@ -44,6 +45,20 @@
             <stop offset=".82" class="ivs-st" stop-opacity=".35" />
             <stop offset="1" class="ivs-st" stop-opacity="0" />
           </radialGradient>
+          <!-- 🌊 Les mêmes, dans la couleur du rang : la vague du ×1 y bascule ce qu'elle
+               recouvre (un dégradé lit sa couleur là où il est déclaré). -->
+          <template v-if="!big">
+            <radialGradient :id="`${uid}-core-x`">
+              <stop offset="0" class="ivs-st-x-light" stop-opacity=".6" />
+              <stop offset=".45" class="ivs-st-x" stop-opacity=".3" />
+              <stop offset="1" class="ivs-st-x" stop-opacity="0" />
+            </radialGradient>
+            <radialGradient :id="`${uid}-aura-x`">
+              <stop offset=".6" class="ivs-st-x" stop-opacity="0" />
+              <stop offset=".82" class="ivs-st-x" stop-opacity=".35" />
+              <stop offset="1" class="ivs-st-x" stop-opacity="0" />
+            </radialGradient>
+          </template>
           <radialGradient :id="`${uid}-disc`">
             <stop offset="0" class="ivs-st" stop-opacity=".16" />
             <stop offset=".7" class="ivs-st" stop-opacity=".06" />
@@ -51,7 +66,7 @@
           </radialGradient>
           <!-- ✨ Halos des boules colorées (v0.1113). ⚠️ Un dégradé lit la couleur là où il
                est DÉCLARÉ, pas là où on l'emploie : d'où un dégradé par teinte (A, S). -->
-          <radialGradient v-for="t in ['o', 'i']" :id="`${uid}-halo-${t}`" :key="t">
+          <radialGradient v-for="t in ['o', 'i', 'x']" :id="`${uid}-halo-${t}`" :key="t">
             <stop offset="0" :class="`ivs-st-${t}`" stop-opacity=".7" />
             <stop offset=".4" :class="`ivs-st-${t}`" stop-opacity=".32" />
             <stop offset="1" :class="`ivs-st-${t}`" stop-opacity="0" />
@@ -59,7 +74,7 @@
           <!-- 🔮 Les boules colorées sont des SPHÈRES (v0.1114) : un reflet en haut à gauche,
                la teinte, puis un bord sombre. -->
           <radialGradient
-            v-for="t in ['o', 'i']"
+            v-for="t in ['o', 'i', 'x']"
             :id="`${uid}-sph-${t}`"
             :key="'s' + t"
             cx=".5"
@@ -318,6 +333,12 @@
       </svg>
       <!-- ✨ La poussière scintillante semée par les boules colorées (v0.1114). Plus grande
            que le cercle : les grains débordent de la couronne. -->
+      <!-- 🌊 Les fronts de la vague du ×1 : un cercle qui s'élargit depuis le centre, puis un
+           second qui revient vers lui passé mi-rayon (`colorWave`). -->
+      <svg v-if="!big" class="ivs-l ivs-frontl" :viewBox="vb">
+        <circle ref="front0" class="ivs-front" :cx="C" :cy="C" r="0" />
+        <circle ref="front1" class="ivs-front" :cx="C" :cy="C" r="0" />
+      </svg>
       <canvas ref="dust" class="ivs-dust" />
     </div>
   </div>
@@ -328,6 +349,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { GRADE_COLOR, type PullGrade } from '@/data/champions';
 import { drawDust, makeSprites, stepDust, type DustSource, type Grain } from '@/lib/sigilDust';
 import {
+  colorWave,
+  inWave,
+  WAVE,
   SIGIL_ZONES,
   zoneCharge,
   zoneDirection,
@@ -347,6 +371,8 @@ const props = defineProps<{
   revealing?: boolean;
   /** 🎨 Couleur des médaillons et des boules intérieures (`sigilTints`) ; le cercle est B. */
   tints?: SigilTints;
+  /** 🌊 Durée de la vague de couleur du ×1 (défaut `WAVE.ms` ; la démo la ralentit). */
+  waveMs?: number;
 }>();
 
 /** Le cercle en B, les médaillons en A, les boules intérieures en S — la couleur vient de
@@ -358,8 +384,14 @@ const tone = computed<{ o: PullGrade; i: PullGrade }>(() => {
   const medals = props.tints?.medals ?? 'B';
   const beads = props.tints?.beads ?? 'B';
   if (props.variant === 'big') return { o: medals, i: beads };
-  const one = beads !== 'B' ? beads : medals;
-  return { o: one, i: one };
+  // Le ×1 part bleu : c'est la VAGUE qui y apporte la couleur du rang (`colorWave`).
+  return { o: 'B', i: 'B' };
+});
+/** La lettre du ×1 (son seul résultat) : bleu, violet OU or. */
+const rare = computed<PullGrade>(() => {
+  const medals = props.tints?.medals ?? 'B';
+  const beads = props.tints?.beads ?? 'B';
+  return beads !== 'B' ? beads : medals;
 });
 const tintStyle = computed(() => ({
   '--ivs-b': GRADE_COLOR.B,
@@ -367,6 +399,11 @@ const tintStyle = computed(() => ({
   '--ivs-i': GRADE_COLOR[tone.value.i],
   '--sph-o': `url(#${uid}-sph-o)`,
   '--sph-i': `url(#${uid}-sph-i)`,
+  '--ivs-x': GRADE_COLOR[rare.value],
+  '--sph-x': `url(#${uid}-sph-x)`,
+  '--halo-x': `url(#${uid}-halo-x)`,
+  '--core-x': `url(#${uid}-core-x)`,
+  '--aura-x': `url(#${uid}-aura-x)`,
 }));
 
 let seq = 0;
@@ -523,7 +560,8 @@ function dustSources(): DustSource[] {
   const s = (dustW / size.value) * dpr();
   const off = dustW * DUST_PAD * dpr();
   for (const b of dustBalls) {
-    const grade = tone.value[b.tone];
+    // Sur le ×1, une boule ne sème que si la vague l'a déjà colorée.
+    const grade = big.value ? tone.value[b.tone] : b.el.classList.contains('wv') ? rare.value : 'B';
     if (grade !== 'A' && grade !== 'S') continue;
     if (!b.el.classList.contains('on')) continue;
     const p = b.spin?.anim.effect?.getComputedTiming().progress ?? 0;
@@ -604,6 +642,70 @@ const zoneRate = Array.from({ length: SIGIL_ZONES }, () => 0);
 /** La charge la plus haute depuis le début de la charge en cours (`zoneSpins`). */
 let peak = 0;
 
+/* ───────────── 🌊 la vague de couleur du ×1 ───────────── */
+const front0 = ref<SVGCircleElement | null>(null);
+const front1 = ref<SVGCircleElement | null>(null);
+/** Chaque trait du petit cercle et son rayon (normé, 1 = bord). Un rayon ne change pas quand
+ *  le calque tourne autour du centre : on le mesure une fois, au montage. */
+let waveEls: { el: Element; r: number; in: boolean }[] = [];
+/** Début de la vague en cours (horloge des images) ; -1 = à caler sur la prochaine image. */
+let waveStart = 0;
+let waveP = 0;
+function stepWave(t: number) {
+  if (big.value) return;
+  if (waveStart < 0) waveStart = t;
+  const p = waveStart ? Math.min(1, (t - waveStart) / (props.waveMs ?? WAVE.ms)) : 0;
+  if (p === waveP) return;
+  waveP = p;
+  paintWave(p);
+}
+
+const num = (e: Element, a: string) => Number(e.getAttribute(a) ?? NaN);
+/** Distance au centre d'un trait, lue sur ses attributs (anneau centré : son rayon). */
+function radiusOf(e: Element, c: number): number {
+  if (e.tagName === 'circle') {
+    const d = Math.hypot(num(e, 'cx') - c, num(e, 'cy') - c);
+    return d < 0.5 ? num(e, 'r') : d;
+  }
+  if (e.tagName === 'polygon') {
+    const p = (e.getAttribute('points') ?? '').trim().split(/\s+/);
+    const ds = p.map((q) => {
+      const [x, y] = q.split(',').map(Number);
+      return Math.hypot((x ?? c) - c, (y ?? c) - c);
+    });
+    return ds.reduce((a, b) => a + b, 0) / (ds.length || 1);
+  }
+  if (e.tagName === 'text') return Math.hypot(num(e, 'x') - c, num(e, 'y') - c);
+  const b = (e as SVGGraphicsElement).getBBox?.();
+  return b ? Math.hypot(b.x + b.width / 2 - c, b.y + b.height / 2 - c) : 0;
+}
+function collectWaveEls(el: HTMLElement) {
+  const c = C.value;
+  waveEls = [...el.querySelectorAll('svg.ivs-l :is(circle, polygon, path, text, line)')]
+    .filter((e) => !e.closest('defs') && !e.classList.contains('ivs-front'))
+    .map((e) => ({ el: e, r: Math.min(1, (radiusOf(e, c) || 0) / c), in: false }));
+}
+function paintWave(p: number) {
+  if (big.value) return;
+  const st = colorWave(p, rare.value !== 'B');
+  for (const w of waveEls) {
+    const on = inWave(w.r, st.band);
+    if (on === w.in) continue;
+    w.in = on;
+    w.el.classList.toggle('wv', on);
+  }
+  // Bleu jusqu'à mi-rayon ; ensuite, la couleur du rang (bleue pour un B).
+  const col = st.band ? GRADE_COLOR[rare.value] : GRADE_COLOR.B;
+  [front0.value, front1.value].forEach((fr, i) => {
+    if (!fr) return;
+    const f = st.fronts[i];
+    fr.setAttribute('r', String((f ?? 0) * C.value));
+    // Un front naît et s'éteint en douceur, au centre comme au bord.
+    fr.style.opacity = f === undefined ? '0' : String(Math.min(1, f * 6, (1 - f) * 6));
+    fr.style.setProperty('--fc', col);
+  });
+}
+
 /** L'allumage suit la charge : chaque partie s'éclaire pendant SON tiers, de l'extérieur
  *  vers le centre. ⚠️ Posé à la main, comme l'aura et l'anneau : lier `charge` au template
  *  re-rendrait les ~250 nœuds du cercle à chaque image de la charge. */
@@ -617,6 +719,8 @@ function paintCharge(c: number) {
   });
   if (aura.value) aura.value.style.opacity = String(c * 0.9);
   prog.value?.setAttribute('stroke-dashoffset', String(1 - c));
+  // Sans animation (mouvement réduit), la vague suit simplement la charge.
+  if (!raf) paintWave(c);
 }
 watch(() => props.charge, paintCharge);
 // Une nouvelle charge repart de la partie extérieure seule.
@@ -624,6 +728,8 @@ watch(
   () => props.charging,
   (on) => {
     if (on) peak = props.charge;
+    // La vague repart du centre à chaque nouvelle charge.
+    if (on) waveStart = -1;
   },
 );
 
@@ -657,6 +763,7 @@ function frame(t: number) {
       ? `scale(${1 + k * 0.06}) translate(${(Math.sin(t / 23) + Math.sin(t / 41)) * k * 0.9}px,${(Math.cos(t / 29) + Math.sin(t / 53)) * k * 0.9}px)`
       : '';
   }
+  stepWave(t);
   stepDustFrame(dt, t);
   raf = requestAnimationFrame(frame);
 }
@@ -668,6 +775,8 @@ onMounted(() => {
     .map(([k, zone]) => ({ els: [...el.querySelectorAll(`[data-lit="${k}"]`)], zone }))
     .filter((g) => g.els.length);
   litN = litGroups.map(() => -1);
+  if (!big.value) collectWaveEls(el);
+  if (props.charging) waveStart = -1;
   peak = props.charge;
   paintCharge(props.charge);
   // ⚠️ Mouvement réduit : le cercle reste immobile (il s'allume quand même, c'est une information).
@@ -775,9 +884,15 @@ defineExpose({ el: root });
 .ivs-tone-i.on {
   --c: var(--ivs-i);
 }
+/* 🌊 La vague du ×1 recolore ce qu'elle recouvre. Déclarée APRÈS les teintes des boules :
+   à spécificité égale, c'est elle qui l'emporte. */
+.ivs .wv {
+  --c: var(--ivs-x);
+}
 .ivs,
 .ivs-tone-o,
-.ivs-tone-i {
+.ivs-tone-i,
+.ivs .wv {
   --c-light: color-mix(in srgb, var(--c) 55%, #fff);
   --c-hot: color-mix(in srgb, var(--c) 35%, #fff);
   --c-deep: color-mix(in srgb, var(--c) 28%, #0d0b09);
@@ -794,6 +909,42 @@ defineExpose({ el: root });
 }
 .ivs-st-i {
   stop-color: var(--ivs-i);
+}
+.ivs-st-x {
+  stop-color: var(--ivs-x);
+}
+.ivs-st-x-light {
+  stop-color: color-mix(in srgb, var(--ivs-x) 55%, #fff);
+}
+.ivs-st-x-hi {
+  stop-color: color-mix(in srgb, var(--ivs-x) 25%, #fff);
+}
+.ivs-st-x-lo {
+  stop-color: color-mix(in srgb, var(--ivs-x) 45%, #0d0b09);
+}
+.ivs .ivs-halo.wv {
+  fill: var(--halo-x);
+}
+.ivs .ivs-node.wv.on {
+  fill: var(--sph-x);
+}
+.ivs-corel circle.wv {
+  fill: var(--core-x);
+}
+.ivs-aura circle.wv {
+  fill: var(--aura-x);
+}
+.ivs.rare-s .ivs-halo.wv.on {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ivs-halo-gold 1.3s ease-in-out infinite;
+}
+.ivs-front {
+  fill: none;
+  stroke: var(--fc, #fff);
+  stroke-width: 2.5;
+  opacity: 0;
+  filter: drop-shadow(0 0 5px var(--fc, #fff)) drop-shadow(0 0 12px var(--fc, #fff));
 }
 /* ✨ Le halo d'une boule : éteint tant qu'elle n'est pas ALLUMÉE (rien ne se devine avant la
    charge). Allumée, elle brille dans sa couleur — celle du rang B quand le tirage n'a ni A ni

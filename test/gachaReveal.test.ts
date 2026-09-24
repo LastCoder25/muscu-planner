@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
+  colorWave,
+  inWave,
+  WAVE,
   buildReveal,
   buildLotReveal,
   cellOf,
@@ -324,5 +327,35 @@ describe('🔯 LA CHARGE EN TROIS PARTIES — extérieur, milieu, centre', () =>
   });
   it('les sens alternent, et la dernière tourne comme la première', () => {
     expect([0, 1, 2].map(zoneDirection)).toEqual([1, -1, 1]);
+  });
+});
+
+describe('🌊 la vague de couleur du ×1', () => {
+  it('avant mi-rayon, rien ne dit la rareté — un seul front, bleu', () => {
+    for (const c of [0.1, 0.2, 0.4]) {
+      const s = colorWave(c * WAVE.end, true);
+      expect(s.band).toBeNull();
+      expect(s.fronts).toHaveLength(s.w > 0 ? 1 : 0);
+    }
+  });
+  it('à mi-rayon, un A ou un S se colore et se dédouble vers le centre et le bord', () => {
+    const s = colorWave(0.7 * WAVE.end, true);
+    expect(s.band![0]).toBeCloseTo(0.3);
+    expect(s.band![1]).toBeCloseTo(0.7);
+    expect(s.fronts.map((f) => +f.toFixed(2))).toEqual([0.7, 0.3]);
+    expect(inWave(0.5, s.band)).toBe(true);
+    expect(inWave(0.2, s.band)).toBe(false);
+    expect(inWave(0.9, s.band)).toBe(false);
+  });
+  it('un B garde ses deux fronts mais ne se colore jamais', () => {
+    const s = colorWave(0.7 * WAVE.end, false);
+    expect(s.band).toBeNull();
+    expect(s.fronts).toHaveLength(2);
+  });
+  it('au bout de la vague, tout le cercle est coloré et les fronts s’éteignent', () => {
+    const s = colorWave(1, true);
+    expect(s.band).toEqual([0, 1]);
+    expect(s.fronts).toEqual([]);
+    expect(inWave(0, s.band) && inWave(1, s.band)).toBe(true);
   });
 });

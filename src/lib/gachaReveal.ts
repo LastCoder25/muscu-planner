@@ -400,3 +400,39 @@ export function lotOrder(lot: readonly LotItem[]): LotItem[] {
     .sort((a, b) => GRADE_RANK[b.it.grade] - GRADE_RANK[a.it.grade] || a.i - b.i)
     .map((x) => x.it);
 }
+
+/* ───────────── 🌊 la vague de couleur du ×1 (v0.1115) ───────────── */
+
+/**
+ * Sur le petit cercle, la couleur du rang ne s'allume pas d'un coup : une VAGUE part du centre
+ * en bleu. À MI-RAYON, si le tirage est un A ou un S, elle prend la couleur du rang et se
+ * dédouble — un front continue vers l'extérieur, l'autre revient vers le centre et y remplace
+ * le bleu. Un B garde ses deux fronts bleus : avant la moitié, rien ne distingue un B d'un S.
+ * Elle a sa PROPRE durée (`ms`) : la charge du ×1 ne dure que 0,62 s, trop peu pour lire une
+ * propagation — la vague part avec la charge et s'achève pendant la montée de l'orbe.
+ * `end` = la part de sa durée où elle a tout recouvert (on voit le cercle entier coloré un
+ * instant) ; `mid` = le rayon (normé, 1 = bord) où la couleur se décide.
+ */
+export const WAVE = { ms: INVOKE.chargeMs + INVOKE.riseMs, end: 0.9, mid: 0.5 };
+
+export interface WaveState {
+  /** Rayon atteint par le front extérieur, 0..1. */
+  w: number;
+  /** Les fronts visibles (rayons normés) : un seul avant mi-rayon, deux ensuite. */
+  fronts: number[];
+  /** L'anneau déjà coloré [intérieur, extérieur], `null` tant qu'aucune couleur ne s'y lit. */
+  band: [number, number] | null;
+}
+
+/** `p` = avancement de la vague dans sa durée, 0..1. */
+export function colorWave(p: number, rare: boolean): WaveState {
+  const w = Math.min(1, Math.max(0, p / WAVE.end));
+  const split = w >= WAVE.mid;
+  const fronts = (split ? [w, 1 - w] : [w]).filter((f) => f > 0 && f < 1);
+  return { w, fronts, band: rare && split ? [1 - w, w] : null };
+}
+
+/** L'élément à ce rayon (normé) est-il déjà recouvert par la couleur du rang ? */
+export function inWave(r: number, band: [number, number] | null): boolean {
+  return !!band && r >= band[0] && r <= band[1];
+}
