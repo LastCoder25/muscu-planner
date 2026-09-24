@@ -40,6 +40,9 @@ export interface GameFx {
    *  écran. Pour ce qui se répète (boss refarmé, drop, set renforcé) : enchaîner plusieurs
    *  overlays bloquait « Réattaquer » pendant des secondes. */
   quiet?: boolean;
+  /** Reste à l'écran jusqu'au toucher (pas de fermeture automatique) : pour ce qu'on doit
+   *  avoir le temps de LIRE, comme le contenu d'un coffre. */
+  sticky?: boolean;
 }
 
 /** Durée d'affichage d'un bandeau discret. */

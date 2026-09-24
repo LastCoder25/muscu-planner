@@ -4,7 +4,7 @@
        ici : les dégâts viennent du serveur, la scène ne fait que les montrer. -->
   <div ref="root" class="fbs">
     <div class="fbs-boss-zone">
-      <div ref="bossEl" class="fbs-boss" :class="{ shake, dead: shownHp <= 0 }">
+      <div ref="bossEl" class="fbs-boss" :class="{ shake, dying, dead: shownHp <= 0 && !dying }">
         <span class="fbs-aura" aria-hidden="true" />
         <img
           v-if="art"
@@ -17,7 +17,18 @@
         <span v-else class="fbs-boss-emo" aria-hidden="true">{{ bossEmoji }}</span>
         <span v-if="flash" :key="flash" class="fbs-flash" aria-hidden="true" />
         <span class="fbs-family" :title="familyName">{{ familyEmoji }}</span>
+        <!-- MORT : éclats qui jaillissent du boss pendant qu'il s'effondre. -->
+        <template v-if="dying">
+          <span
+            v-for="i in SHARDS"
+            :key="i"
+            class="fbs-shard"
+            aria-hidden="true"
+            :style="{ '--a': (i / SHARDS) * 360 + 'deg' }"
+          />
+        </template>
       </div>
+      <span v-if="dying" class="fbs-ko font-display" role="status">VAINCU !</span>
       <div class="fbs-name font-display">{{ bossName }}</div>
       <div
         class="fbs-hp"
@@ -140,6 +151,11 @@ const hpPct = computed(() => pct(shownHp.value));
 const ghostPct = computed(() => pct(Math.max(ghostHp.value, shownHp.value)));
 
 const strikerId = ref<string | null>(null);
+/** Le boss s'effondre (`die`) : secousse, éclats, chute, puis « VAINCU ». */
+const dying = ref(false);
+const SHARDS = 10;
+/** Durée de la mort, alignée sur l'animation CSS `fbs-die` (+ la bannière). */
+const DEATH_MS = 2200;
 const shake = ref(false);
 const flash = ref(0);
 const projs = ref<{ key: number; x: number; y: number; dx: number; dy: number }[]>([]);
@@ -269,7 +285,22 @@ async function play(strikes: BossStrike[], startHp?: number) {
   if (skipped) ghostHp.value = props.hpLeft;
 }
 
-defineExpose({ play });
+/** L'animation de mort, APRÈS la dernière frappe : on la regarde, puis la page affiche le
+ *  résultat. `prefers-reduced-motion` : rien à attendre. */
+async function die() {
+  shownHp.value = 0;
+  if (reduced() || !alive) return;
+  // Le dernier projectile et le cri « dernier souffle » ont le temps d'arriver.
+  await wait(500);
+  if (!alive) return;
+  clearCry();
+  dying.value = true;
+  await wait(DEATH_MS);
+  if (!alive) return;
+  dying.value = false;
+}
+
+defineExpose({ play, die });
 </script>
 
 <style scoped lang="scss">
@@ -312,6 +343,40 @@ defineExpose({ play });
 .fbs-boss.dead {
   filter: grayscale(1) brightness(0.7);
   animation: none;
+}
+/* La mort : tremble, blanchit, puis s'effondre en pâlissant. */
+.fbs-boss.dying {
+  animation: fbs-die 1.9s ease-in forwards;
+}
+.fbs-boss.dying .fbs-aura {
+  animation: fbs-spin 0.6s linear infinite;
+  border-color: #fff;
+}
+.fbs-shard {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--d4) 60%, #fff);
+  box-shadow: 0 0 8px var(--d4);
+  pointer-events: none;
+  animation: fbs-shard 1.1s ease-out 0.7s both;
+}
+.fbs-ko {
+  position: absolute;
+  top: 44px;
+  left: 50%;
+  font-size: 34px;
+  letter-spacing: 2px;
+  color: var(--accent);
+  text-shadow:
+    0 3px 0 #000,
+    0 0 18px color-mix(in srgb, var(--accent) 70%, transparent);
+  pointer-events: none;
+  animation: fbs-ko 2.2s ease-out both;
 }
 .fbs-aura {
   position: absolute;
@@ -528,6 +593,59 @@ defineExpose({ play });
   }
   70% {
     transform: translate(-4px, 1px);
+  }
+}
+@keyframes fbs-die {
+  0% {
+    transform: translate(0, 0);
+    filter: none;
+  }
+  8%,
+  24%,
+  40% {
+    transform: translate(-8px, 2px) rotate(-4deg);
+    filter: brightness(1.8);
+  }
+  16%,
+  32%,
+  48% {
+    transform: translate(8px, -2px) rotate(4deg);
+    filter: brightness(1);
+  }
+  60% {
+    transform: scale(1.12);
+    filter: brightness(2.4) saturate(0);
+  }
+  100% {
+    transform: translateY(18px) scale(0.78) rotate(-8deg);
+    filter: grayscale(1) brightness(0.55);
+    opacity: 0.75;
+  }
+}
+@keyframes fbs-shard {
+  from {
+    opacity: 1;
+    transform: rotate(var(--a)) translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: rotate(var(--a)) translateX(90px) scale(0.4);
+  }
+}
+@keyframes fbs-ko {
+  0%,
+  45% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.5);
+  }
+  60% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1.2);
+  }
+  75%,
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
   }
 }
 @keyframes fbs-spin {

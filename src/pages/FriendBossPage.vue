@@ -68,6 +68,7 @@
             }}
             réponse{{ invitedCount > 1 ? 's' : '' }}
           </template>
+          <template v-else-if="phase === 'defeated'">💀 Vaincu !</template>
           <template v-else>⚔️ Encore {{ fmtBossSpan(bossEndsAt(current) - now) }}</template>
           <span class="fb-dim">
             · {{ bossTier(current.tier).emoji }} {{ bossTier(current.tier).label }} · 1
@@ -299,6 +300,49 @@
         </template>
       </section>
 
+      <!-- ── RÉSULTAT d'un boss qu'on vient d'abattre (après son animation de mort) ── -->
+      <q-dialog
+        :model-value="!!victory"
+        persistent
+        @update:model-value="(v) => !v && closeVictory()"
+      >
+        <div v-if="victory" class="fb-victory">
+          <div class="fb-v-emo">🏆</div>
+          <div class="fb-v-title font-display">Le boss est tombé !</div>
+          <div class="fb-v-sub">
+            {{ victory.exerciseName }} · {{ bossTier(victory.tier).emoji }}
+            {{ bossTier(victory.tier).label }}
+          </div>
+          <div class="fb-v-line">
+            Tu as apporté <b>{{ store.myMembership(victory.id)?.units ?? 0 }}</b>
+            {{ bossUnitLabel(victory.family) }}
+          </div>
+          <div v-if="victoryChest" class="fb-v-loot">
+            <div class="fb-v-loot-t">Ton butin</div>
+            <div>🏆 {{ victoryChest.trophy.name }} · {{ gradeLabel(victoryChest.trophy) }}</div>
+            <div>
+              🪙 +{{ victoryChest.gold }} · 🔮 +{{ victoryChest.stones
+              }}<template v-if="victoryChest.tickets"> · 🎟️ +{{ victoryChest.tickets }}</template>
+            </div>
+            <div class="fb-dim">Trophée rangé dans ton sac à trophées</div>
+          </div>
+          <template v-else-if="chestOf(victory) !== 'none'">
+            <div class="fb-v-line fb-dim">Ton coffre t’attend : or, pierres et un trophée.</div>
+            <button
+              class="fb-btn big fb-chest"
+              :disabled="busy || !progress.ready.value"
+              @click="openVictoryChest"
+            >
+              🎁 Ouvrir le coffre
+            </button>
+          </template>
+          <div v-else class="fb-v-line fb-dim">
+            Pas de coffre : il fallait apporter au moins la moitié de ta part.
+          </div>
+          <button class="fb-btn fb-v-close" :disabled="busy" @click="closeVictory">Fermer</button>
+        </div>
+      </q-dialog>
+
       <!-- ── BOSS PASSÉS ───────────────────────────────────────────────────────── -->
       <section v-if="past.length" class="fb-sec">
         <div class="fb-sec-t">Boss passés</div>
@@ -425,8 +469,16 @@ onUnmounted(() => {
 /** Mes boss en cours (un par exercice) ; on en regarde un à la fois. */
 const running = computed(() => store.inProgress(now.value));
 const selectedId = ref<string | null>(null);
+/** Le boss qu'on vient d'abattre reste à l'écran le temps de sa mort et du résultat : sans
+ *  ça, le rechargement après la frappe fatale le sort des « en cours » et la scène se démonte
+ *  au milieu de l'animation. */
+const pinnedId = ref<string | null>(null);
 const current = computed(
-  () => running.value.find((b) => b.id === selectedId.value) ?? running.value[0] ?? null,
+  () =>
+    (pinnedId.value ? store.bosses.find((b) => b.id === pinnedId.value) : undefined) ??
+    running.value.find((b) => b.id === selectedId.value) ??
+    running.value[0] ??
+    null,
 );
 const tokens = computed(() => char.row?.boss_tokens ?? 0);
 /** Même règle que `fboss_respond` : gratuit, un seul boss par exercice. */
@@ -590,11 +642,13 @@ async function doHit() {
   if (!b || busy.value) return;
   const before = hpLeft.value;
   busy.value = true;
+  pinnedId.value = b.id;
   let res: { accepted: number; defeated: boolean };
   try {
     res = await store.hit(b.id, amount.value);
   } catch (e) {
     busy.value = false;
+    pinnedId.value = null;
     notifyError(e);
     return;
   }
@@ -607,14 +661,29 @@ async function doHit() {
   } catch {
     /* rien */
   }
-  if (res.defeated)
-    gameFx.celebrate({
-      kind: 'generic',
-      emoji: '🏆',
-      title: 'Le boss est tombé !',
-      subtitle: `${b.exerciseName} · ton groupe l’a abattu`,
-      rarity: 'legendary',
-    });
+  if (!res.defeated) {
+    pinnedId.value = null;
+    return;
+  }
+  // Fin du combat : on regarde les frappes, PUIS la mort, PUIS le résultat.
+  busy.value = true;
+  await stage.value?.die();
+  busy.value = false;
+  victoryChest.value = null;
+  victory.value = store.bosses.find((x) => x.id === b.id) ?? b;
+}
+
+// ── Résultat d'un boss abattu ──
+const victory = ref<FriendBoss | null>(null);
+const victoryChest = ref<ReturnType<typeof friendBossChest> | null>(null);
+function closeVictory() {
+  victory.value = null;
+  victoryChest.value = null;
+  pinnedId.value = null;
+}
+async function openVictoryChest() {
+  if (!victory.value) return;
+  victoryChest.value = await doOpenChest(victory.value);
 }
 
 // ── Répondre ──
@@ -728,10 +797,10 @@ function chestOf(b: FriendBoss) {
 /** Ouvre le coffre : le serveur le marque pris, puis il est déposé dans la boîte 📬 et
  *  encaissé aussitôt. ⚠️ Le niveau doit être connu (`progress.ready`) : un coffre tiré au
  *  niveau 1 serait définitif. */
-async function doOpenChest(b: FriendBoss) {
+async function doOpenChest(b: FriendBoss): Promise<ReturnType<typeof friendBossChest> | null> {
   const me = uid.value;
   const state = chestOf(b);
-  if (!me || state === 'none' || busy.value || !progress.ready.value) return;
+  if (!me || state === 'none' || busy.value || !progress.ready.value) return null;
   busy.value = true;
   try {
     if (state === 'open') await store.claim(b.id);
@@ -739,15 +808,19 @@ async function doOpenChest(b: FriendBoss) {
     const now = Date.now();
     const msgId = await char.grantFriendBossChest(me, b.id, b.exerciseName, chest, now);
     if (msgId) await char.expeClaim(me, msgId, now);
+    // Reste à l'écran jusqu'au toucher : il y a tout un butin à lire.
     gameFx.celebrate({
-      kind: 'generic',
+      kind: 'chest',
       emoji: '🏆',
       title: `Trophée : ${chest.trophy.name}`,
       subtitle: `${gradeLabel(chest.trophy)} · +${chest.gold} 🪙 · +${chest.stones} 🔮${chest.tickets ? ` · +${chest.tickets} 🎟️` : ''} · rangé dans ton sac à trophées 🏆`,
       rarity: fxRarity(chest.trophy.rarity),
+      sticky: true,
     });
+    return chest;
   } catch (e) {
     notifyError(e);
+    return null;
   } finally {
     busy.value = false;
   }
@@ -1173,5 +1246,50 @@ function notifyError(e: unknown) {
   padding: 0 12px;
   font-size: 13px;
   white-space: nowrap;
+}
+.fb-victory {
+  width: min(92vw, 360px);
+  padding: 20px 18px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.fb-v-emo {
+  font-size: 44px;
+  line-height: 1;
+}
+.fb-v-title {
+  font-size: 22px;
+  color: var(--accent);
+}
+.fb-v-sub,
+.fb-v-line {
+  font-size: 14px;
+}
+.fb-v-loot {
+  margin-top: 4px;
+  padding: 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+.fb-v-loot-t {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--dim);
+}
+.fb-victory .fb-btn {
+  min-height: 44px;
+}
+.fb-v-close {
+  margin-top: 4px;
 }
 </style>

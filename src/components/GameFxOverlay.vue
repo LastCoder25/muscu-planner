@@ -138,7 +138,7 @@ watch(
   cur,
   (fx) => {
     if (timer) clearTimeout(timer);
-    if (!fx) return;
+    if (!fx || fx.sticky) return;
     // La distribution des tickets doit avoir le temps de finir avant qu'on referme.
     // …et la bascule de couleur d'une ascension, avant que l'éclat ne parte.
     const deal =
