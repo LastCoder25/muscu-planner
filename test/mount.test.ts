@@ -432,12 +432,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         },
         ROW.adventurers,
       );
-    const render = async (card: unknown, state: string) => {
+    const render = async (card: unknown, state: string, folded = false) => {
       let html = '';
       expect(
         await mountIt(
           MissionReportCard,
-          { card, state, now: Date.now() },
+          { card, state, now: Date.now(), folded },
           undefined,
           undefined,
           '/',
@@ -458,9 +458,15 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(faille).toContain('faille refermée');
     // Encaissé : une seule ligne, sans bouton ni détails.
     const done = await render(msg(base), 'done');
-    expect(done).toContain('mrc done');
+    expect(done).toContain('mrc folded');
+    expect(done).toContain(' done');
     expect(done).not.toContain('class="take"');
     expect(done).not.toContain('more-btn');
+    // La boîte 📬 les replie TOUS : un butin à prendre garde son bouton sur la ligne.
+    const box = await render(msg(base), 'claim', true);
+    expect(box).toContain('mrc folded');
+    expect(box).toContain('take mini');
+    expect(box).not.toContain('more-btn');
   }, 30_000);
 
   it('🕳️ RiftReplayDialog construit sa scène au setup', async () => {

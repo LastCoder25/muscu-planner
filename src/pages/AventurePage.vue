@@ -1784,10 +1784,11 @@
               Aucun message. Les rapports de tes expéditions apparaîtront ici.
             </div>
             <!-- 📜 Un rapport = une carte compacte (v0.1116) : trois lignes, le reste replié,
-                 une seule ligne une fois encaissé. Le butin ne se verse qu'au geste. -->
+                 toutes REPLIÉES par défaut, chacune dans sa tuile (v0.1123). Le butin ne se verse qu'au geste. -->
             <MissionReportCard
               v-for="m in char.row?.messages ?? []"
               :key="m.id"
+              folded
               :card="messageCard(m, char.advList)"
               :state="msgState(m)"
               :now="expeNow"
