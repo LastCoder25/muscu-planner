@@ -773,6 +773,26 @@
         {{ gearInfoStatus }}
         <template v-if="gearInfoWearer"> · Porteur : {{ gearInfoWearer.name }}</template>
       </p>
+      <!-- ⬆️ L'ascension, là où l'on touche la pièce (signalé : « je vois la flèche mais en
+           cliquant sur l'item je ne vois rien pour le up »). Affichée dès ★★★★★ ; bloquée, elle
+           reste touchable et dit pourquoi (`doAscendGear`), comme la tuile du stock. -->
+      <button
+        v-if="gearInfoAscent"
+        type="button"
+        class="d-gear-asc-btn gi-asc"
+        :class="{ blocked: !!gearInfoAscent.block }"
+        :disabled="busy"
+        @click="doAscendGear(gearInfoPiece)"
+      >
+        ⬆️ Ascension → {{ gearInfoAscent.rank.emoji }} {{ gearInfoAscent.rank.name }}
+        <span class="d-gear-asc-cost"
+          >⚜️ {{ gearInfoAscent.have }}/{{ gearInfoAscent.cost.seals }} · 🪙
+          {{ gearInfoAscent.cost.gold.toLocaleString('fr-FR') }}</span
+        >
+      </button>
+      <p v-if="gearInfoAscent?.block" class="g-note">
+        {{ GEAR_ASCENSION_BLOCK_LABEL[gearInfoAscent.block] }}
+      </p>
       <div class="g-actions">
         <q-btn
           v-if="gearInfo?.advId && gearInfo.slot"
@@ -1081,6 +1101,7 @@ const gearInfoWearer = computed(() =>
 const gearInfoStatus = computed(() =>
   gearInfoPiece.value ? advGearStatus(gearInfoPiece.value, gearInfoWearer.value?.level) : '',
 );
+const gearInfoAscent = computed(() => (gearInfoPiece.value ? gearAscent(gearInfoPiece.value) : null));
 /** Toucher une case : une pièce portée ouvre SA feuille, une case vide le sélecteur. */
 function onGearCell(a: Adventurer, slot: AdvGearSlot) {
   const worn = (gearWorn.value.get(a.id) ?? []).find((g) => g.slot === slot);
@@ -2269,6 +2290,15 @@ function leftOf(at: number): string {
   font-size: 13px;
   font-weight: 600;
   text-align: left;
+}
+.gi-asc {
+  width: 100%;
+  margin-top: 8px;
+}
+.d-gear-asc-btn.blocked {
+  opacity: 0.45;
+  border-color: var(--line);
+  background: transparent;
 }
 .d-gear-asc-cost {
   flex-shrink: 0;
