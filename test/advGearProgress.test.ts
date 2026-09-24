@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  advGearEffects,
   advGearLevelBand,
   advGearRankCap,
   ascendAdvGear,
@@ -18,6 +19,7 @@ import {
   lairGearSeals,
   emptySeals,
 } from '@/lib/ascension';
+import { RANK_ORDER } from '@/lib/items';
 
 const piece = (id: string, over: Partial<AdvGear> = {}): AdvGear => ({
   id,
@@ -105,6 +107,24 @@ describe('l’ascension d’une pièce', () => {
       makeAdvGear({ lineage: 'guerrier', slot: 'weapon', rank: 'inhabituel', grade: 'B' }).effect
         .value,
     );
+  });
+
+  it('ses stats MONTENT à chaque rang, ★5 d’avant contre ★1 d’après (demandé : « comme les champions »)', () => {
+    // Valeur au combat = valeur × niveau d'objet (`advGearEffects`, sans éveil ici).
+    // Mesuré : +17 à +29 % par ascension, sur les deux affixes, à tous les rangs.
+    for (const lineage of ['guerrier', 'mage', 'archer'] as const)
+      for (let r = 0; r < RANK_ORDER.length - 1; r++) {
+        const rank = RANK_ORDER[r]!;
+        const g: AdvGear = {
+          id: 'x',
+          ...makeAdvGear({ lineage, slot: 'weapon', rank, grade: 'B', level: advGearLevelBand(rank).max }),
+        };
+        const up = ascendAdvGear(g, 100);
+        const before = advGearEffects([g]);
+        const after = advGearEffects([up]);
+        for (const k of Object.keys(before) as (keyof typeof before)[])
+          if (before[k] > 0) expect(after[k], `${lineage} ${rank} ${k}`).toBeGreaterThan(before[k] * 1.1);
+      }
   });
 
   it('coûte le quart de l’or d’un champion et la moitié de ses sceaux', () => {
