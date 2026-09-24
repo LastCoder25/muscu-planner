@@ -4,7 +4,7 @@
        ici : les dégâts viennent du serveur, la scène ne fait que les montrer. -->
   <div ref="root" class="fbs">
     <div class="fbs-boss-zone">
-      <div ref="bossEl" class="fbs-boss" :class="{ shake, dying, dead: shownHp <= 0 && !dying }">
+      <div ref="bossEl" class="fbs-boss" :class="{ shake, dying, dead: fallen && !dying }">
         <span class="fbs-aura" aria-hidden="true" />
         <img
           v-if="art"
@@ -153,6 +153,9 @@ const ghostPct = computed(() => pct(Math.max(ghostHp.value, shownHp.value)));
 const strikerId = ref<string | null>(null);
 /** Le boss s'effondre (`die`) : secousse, éclats, chute, puis « VAINCU ». */
 const dying = ref(false);
+/** À terre : seulement APRÈS l'animation de mort (ou un boss déjà mort à l'ouverture). Lier
+ *  l'état aux PV le faisait noircir dès le dernier impact, AVANT de briller puis de tomber. */
+const fallen = ref(props.hpLeft <= 0);
 const SHARDS = 10;
 /** Durée de la mort, alignée sur l'animation CSS `fbs-die` (+ la bannière). */
 const DEATH_MS = 2200;
@@ -289,7 +292,10 @@ async function play(strikes: BossStrike[], startHp?: number) {
  *  résultat. `prefers-reduced-motion` : rien à attendre. */
 async function die() {
   shownHp.value = 0;
-  if (reduced() || !alive) return;
+  if (reduced() || !alive) {
+    fallen.value = true;
+    return;
+  }
   // Le dernier projectile et le cri « dernier souffle » ont le temps d'arriver.
   await wait(500);
   if (!alive) return;
@@ -297,6 +303,7 @@ async function die() {
   dying.value = true;
   await wait(DEATH_MS);
   if (!alive) return;
+  fallen.value = true;
   dying.value = false;
 }
 
