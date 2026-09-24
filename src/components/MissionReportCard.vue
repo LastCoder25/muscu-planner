@@ -7,7 +7,7 @@
   <div
     v-if="!isOpen"
     class="mrc folded"
-    :class="{ todo: state === 'claim', done: state === 'done' }"
+    :class="{ todo: state === 'claim', done: state === 'done', lost: !card.win }"
     role="button"
     tabindex="0"
     :aria-label="`Ouvrir le rapport : ${card.title}`"
@@ -42,7 +42,11 @@
     </div>
   </div>
 
-  <div v-else class="mrc" :class="{ todo: state === 'claim', open: expanded }">
+  <div
+    v-else
+    class="mrc"
+    :class="{ todo: state === 'claim', done: state === 'done', lost: !card.win, open: expanded }"
+  >
     <!-- 1 · où, rang, verdict, quand -->
     <div class="l1">
       <div
@@ -58,8 +62,11 @@
           <RiftPortal v-if="card.rift" :color="card.color" :seed="seed" still />
           <template v-else>{{ card.emoji }}</template>
         </span>
-        <span class="name font-display">{{ card.title }}</span>
-        <span v-if="card.rank" class="rank" :style="{ color: card.color }">{{ card.rank }}</span>
+        <!-- Le rang passe SOUS le nom : sur une ligne, à 344 px, il écrasait le lieu. -->
+        <span class="nm-col">
+          <span class="name font-display">{{ card.title }}</span>
+          <span v-if="card.rank" class="rank" :style="{ color: card.color }">{{ card.rank }}</span>
+        </span>
       </div>
       <span class="verdict" :class="card.win ? 'win' : 'lose'">
         {{ card.win ? '✓' : '✗' }} {{ card.verdict }}
@@ -127,7 +134,9 @@
 
     <div class="l4">
       <span class="facts">
-        <template v-if="card.kills">⚔️ <b>{{ card.kills }}</b></template>
+        <template v-if="card.kills"
+          >⚔️ <b>{{ card.kills }}</b></template
+        >
         <template v-if="card.kills && card.totalXp"> · </template>
         <b v-if="card.totalXp" class="xp">+{{ card.totalXp }} XP</b>
         <template v-if="canReplay"> · {{ when }}</template>
@@ -142,51 +151,66 @@
       </button>
     </div>
 
-    <!-- Replié par défaut : le récit, la route, le détail de chacun, le journal. -->
+    <!-- Replié par défaut : chiffres clés, récit, butin, route, équipe, journal — chacun
+         dans son encart titré, pour qu'on trouve ce qu'on cherche sans tout lire. -->
     <div v-if="expanded" class="details">
-      <p v-if="card.story" class="story">{{ card.story }}</p>
-      <div v-for="(it, i) in card.loot" :key="'ld' + i" class="loot-row">
-        <ItemIcon :item="it" :size="32" />
-        <div class="loot-main">
-          <div class="loot-name">
-            {{ it.name }}<span v-if="it.setId"> 🧩</span>
-          </div>
-          <div class="loot-sub">{{ gradeLabel(it) }} · {{ SLOT_LABEL[it.slot] }}</div>
-          <div class="loot-eff">{{ itemEffectsText(it) }}</div>
+      <div v-if="stats.length" class="stats">
+        <div v-for="s in stats" :key="s.label" class="stat">
+          <span class="st-val" :class="s.cls">{{ s.val }}</span>
+          <span class="st-lab">{{ s.label }}</span>
         </div>
       </div>
-      <div v-if="card.road.length">
-        <h4>Route</h4>
+      <p v-if="card.story" class="story">{{ card.story }}</p>
+      <section v-if="card.loot.length" class="sec">
+        <h4>
+          🎁 Butin <span class="cnt">{{ card.loot.length }}</span>
+        </h4>
+        <div v-for="(it, i) in card.loot" :key="'ld' + i" class="loot-row">
+          <ItemIcon :item="it" :size="32" />
+          <div class="loot-main">
+            <div class="loot-name">{{ it.name }}<span v-if="it.setId"> 🧩</span></div>
+            <div class="loot-sub">{{ gradeLabel(it) }} · {{ SLOT_LABEL[it.slot] }}</div>
+            <div class="loot-eff">{{ itemEffectsText(it) }}</div>
+          </div>
+        </div>
+      </section>
+      <section v-if="card.road.length" class="sec">
+        <h4>
+          🛣️ Route <span class="cnt">{{ card.road.length }}</span>
+        </h4>
         <ul class="road">
           <li v-for="(e, i) in card.road" :key="i">
-            {{ e.text }}<span v-if="e.slain" class="slain"> ⚔️ {{ e.slain }}</span>
+            <span class="r-txt">{{ e.text }}</span>
+            <span v-if="e.slain" class="slain">⚔️ {{ e.slain }}</span>
           </li>
         </ul>
-      </div>
-      <div v-if="card.team.length">
-        <h4>Équipe</h4>
+      </section>
+      <section v-if="card.team.length" class="sec">
+        <h4>
+          🧭 Équipe <span class="cnt">{{ card.team.length }}</span>
+        </h4>
         <ul class="team">
           <li v-for="m in card.team" :key="m.id" :class="{ gone: m.gone }">
-            <span>{{ m.emoji }}</span>
+            <span class="t-emo">{{ m.emoji }}</span>
             <span class="t-name">{{ m.name }}</span>
-            <span v-if="m.star" title="Une étoile de plus">⭐</span>
-            <span v-if="m.hurt" title="Blessé : à l’infirmerie">🤕</span>
-            <span v-else-if="m.down" class="t-down" title="À terre, relevé : pas d’infirmerie"
-              >à terre</span
-            >
-            <span v-if="m.kills" class="t-kills">⚔️ {{ m.kills }}</span>
-            <b class="xp">+{{ m.xp }} XP</b>
+            <span class="t-tags">
+              <span v-if="m.star" title="Une étoile de plus">⭐</span>
+              <span v-if="m.hurt" title="Blessé : à l’infirmerie">🤕</span>
+              <span v-else-if="m.down" class="t-down" title="À terre, relevé : pas d’infirmerie"
+                >à terre</span
+              >
+            </span>
+            <span class="t-kills">{{ m.kills ? `⚔️ ${m.kills}` : '' }}</span>
+            <b class="xp t-xp">+{{ m.xp }}</b>
           </li>
         </ul>
-      </div>
-      <ol v-if="card.journal.length" class="journal">
-        <li v-for="(l, i) in card.journal" :key="i">{{ l }}</li>
-      </ol>
-      <div v-if="card.travelMs" class="rate">
-        ⏱ {{ formatDuration(card.travelMs) }} de voyage<template v-if="card.xpPerHour">
-          · ≈ <b>{{ fmtRate(card.xpPerHour) }} XP/h</b> par champion</template
-        >
-      </div>
+      </section>
+      <section v-if="card.journal.length" class="sec">
+        <h4>📜 Journal</h4>
+        <ol class="journal">
+          <li v-for="(l, i) in card.journal" :key="i">{{ l }}</li>
+        </ol>
+      </section>
     </div>
   </div>
 </template>
@@ -244,6 +268,18 @@ const summary = computed(() => {
   return parts.join(' · ') || props.card.verdict;
 });
 
+/** Les chiffres clés du détail, en tête : voyage, rendement, combat, XP. */
+const stats = computed(() => {
+  const c = props.card;
+  const out: { label: string; val: string; cls?: string }[] = [];
+  if (c.travelMs) out.push({ label: 'de voyage', val: formatDuration(c.travelMs) });
+  if (c.xpPerHour)
+    out.push({ label: 'XP/h par champion', val: `≈ ${fmtRate(c.xpPerHour)}`, cls: 'acc' });
+  if (c.kills) out.push({ label: 'abattus', val: c.kills });
+  if (c.totalXp) out.push({ label: 'XP au total', val: `+${fmt(c.totalXp)}`, cls: 'xp' });
+  return out;
+});
+
 function fmt(n: number): string {
   return Math.round(n).toLocaleString('fr-FR');
 }
@@ -253,9 +289,14 @@ function fmtRate(n: number): string {
 </script>
 
 <style scoped lang="scss">
+/* La tuile se détache de la fenêtre qui la porte (elle-même sur --surface) : fond plus
+   clair, ombre, et un LISERÉ à gauche qui dit l'état d'un coup d'œil — accent pour un
+   butin à prendre, vert gagné, rouge perdu, neutre une fois encaissé. */
 .mrc {
-  background: var(--surface);
-  border: 1px solid var(--line-soft);
+  --mrc-c: var(--d1);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--mrc-c);
   border-radius: 12px;
   padding: 10px 12px;
   display: grid;
@@ -263,9 +304,21 @@ function fmtRate(n: number): string {
   text-align: left;
   color: var(--text);
   min-width: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.mrc.lost {
+  --mrc-c: var(--d4);
+}
+.mrc.done {
+  border-left-color: color-mix(in srgb, var(--mrc-c) 40%, var(--line));
+  background: color-mix(in srgb, var(--surface-2) 55%, var(--surface));
+  box-shadow: none;
 }
 .mrc.todo {
+  --mrc-c: var(--accent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface-2));
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-left-color: var(--accent);
 }
 .l1,
 .l2,
@@ -301,6 +354,11 @@ function fmtRate(n: number): string {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+.nm-col {
+  display: grid;
+  min-width: 0;
+  line-height: 1.2;
 }
 .rank {
   flex: none;
@@ -443,27 +501,87 @@ function fmtRate(n: number): string {
 .details {
   display: grid;
   gap: 8px;
-  border-top: 1px solid var(--line-soft);
-  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 2px;
   font-size: 12.5px;
 }
-.details h4 {
-  margin: 0 0 3px;
-  font-size: 11px;
+/* Chiffres clés : une grille de petites cases, valeur en gros, libellé dessous. */
+.stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+.stat {
+  display: grid;
+  gap: 1px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--bg) 45%, var(--surface-2));
+  min-width: 0;
+}
+.st-val {
+  font-family: 'Oswald', sans-serif;
+  font-size: 15px;
   font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.st-val.xp {
+  color: var(--d1);
+}
+.st-val.acc {
+  color: var(--accent);
+}
+.st-lab {
+  font-size: 10.5px;
+  color: var(--dim);
+  line-height: 1.25;
+}
+.story {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--line);
+  color: var(--dim);
+  font-style: italic;
+  line-height: 1.45;
+}
+/* Un encart par sujet : titre en capitales, contenu dessous. */
+.sec {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px 9px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg) 45%, var(--surface-2));
+}
+.sec h4 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dim);
 }
-.story {
-  margin: 0;
-  color: var(--dim);
-  line-height: 1.45;
+.cnt {
+  font-size: 10.5px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  letter-spacing: 0;
 }
 .loot-row {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+.loot-row + .loot-row {
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
 }
 .loot-main {
   min-width: 0;
@@ -477,48 +595,95 @@ function fmtRate(n: number): string {
   color: var(--dim);
 }
 .road,
-.journal {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 2px;
-}
-.journal {
-  color: var(--dim);
-  font-size: 11.5px;
-}
-.slain {
-  color: var(--dim);
-}
 .team {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 3px;
 }
-.team li {
+/* La route : une frise, un point par rencontre. */
+.road li {
+  position: relative;
   display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 3px 0 3px 16px;
+  line-height: 1.4;
+}
+.road li::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dim);
+}
+.road li:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 5.5px;
+  top: 16px;
+  bottom: -5px;
+  width: 1px;
+  background: var(--line);
+}
+.r-txt {
+  flex: 1;
+  min-width: 0;
+}
+.slain {
+  flex: none;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+/* L'équipe : un tableau aligné — nom, marques, abattus, XP à droite. */
+.team li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto 44px 44px;
   align-items: center;
   gap: 6px;
+  padding: 4px 0;
+}
+.team li + li {
+  border-top: 1px solid var(--line-soft);
 }
 .team li.gone {
   color: var(--dim);
 }
+.t-emo {
+  text-align: center;
+}
 .t-name {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.t-tags {
+  display: flex;
+  gap: 3px;
+  align-items: center;
 }
 .t-down,
 .t-kills {
   color: var(--dim);
   font-size: 11.5px;
 }
-.rate b {
-  color: var(--accent);
+.t-kills,
+.t-xp {
+  text-align: right;
+  white-space: nowrap;
+}
+.journal {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+  color: var(--dim);
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 /* Replié : une TUILE d'une ligne, qu'on touche pour ouvrir. */
 .mrc.folded {
