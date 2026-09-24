@@ -170,6 +170,9 @@
           <span v-if="dispo.champTotal" class="td-cell" :class="{ none: !dispo.champFree }"
             ><span class="tb-ico">🏅</span>{{ dispo.champFree }}/{{ dispo.champTotal }}</span
           >
+          <span v-if="dispo.champHurt" class="td-cell hurt"
+            ><span class="tb-ico">🤕</span>{{ dispo.champHurt }}</span
+          >
           <span v-if="dispo.teamTotal" class="td-cell" :class="{ none: !dispo.teamFree }"
             ><span class="tb-ico">🧭</span>{{ dispo.teamFree }}/{{ dispo.teamTotal }}</span
           >
@@ -5467,9 +5470,12 @@ const heroDispo = computed<{ label: string; tone: 'ok' | 'away' | 'hurt' }>(() =
 const dispo = computed(() => {
   const advs = char.advList;
   const teamTotal = caravanSlots(char.comptoirLevel);
+  const champHurt = advs.filter((a) => (a.hurtUntil ?? 0) > expeNow.value).length;
   return {
     champFree: advs.filter((a) => advAvailable(a, expeNow.value)).length,
-    champTotal: advs.length,
+    // 🤕 Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
+    champTotal: advs.length - champHurt,
+    champHurt,
     teamFree: convoySlotsFree(
       char.comptoirLevel,
       [...char.caravanList, ...char.partyList],
@@ -5487,6 +5493,7 @@ const dispoTitle = computed(() => {
         ? `Héros à l'infirmerie — de retour dans ${fmtExpeMs(heroHealIn.value)}`
         : `Héros en expédition — de retour dans ${heroDispo.value.label}`,
   ];
+  if (d.champHurt) parts.push(`${d.champHurt} champion(s) à l'infirmerie`);
   if (d.champTotal) parts.push(`${d.champFree} champion(s) disponible(s) sur ${d.champTotal}`);
   if (d.teamTotal) parts.push(`${d.teamFree} équipe(s) libre(s) sur ${d.teamTotal}`);
   return parts.join(' · ');
