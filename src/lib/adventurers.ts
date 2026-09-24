@@ -1727,7 +1727,7 @@ export function advTotalXp(a: Adventurer): number {
 }
 
 /** Un morceau de la barre d'étoile : du `from` au `to` (0..1) DANS l'étoile `star` du rang. */
-interface AdvXpSegment {
+export interface AdvXpSegment {
   star: number;
   rankName: string;
   rankEmoji: string;
@@ -1738,6 +1738,20 @@ interface AdvXpSegment {
   starUp: boolean;
   /** L'étoile gagnée ouvre un NOUVEAU rang (★5 → ★1 du rang suivant). */
   rankUp: boolean;
+}
+
+/** 🗡️ La barre d'une PIÈCE portée, AVANT → APRÈS la même mission (v0.1126) : elle apprend
+ *  avec son champion, et son niveau est caché comme le sien. Construite dans `advGear.ts`
+ *  (`withGearTracks`) ; ce type n'est qu'une forme, pour ne pas importer l'équipement ici. */
+export interface AdvXpBar {
+  id: string;
+  name: string;
+  emoji: string;
+  /** Id du modèle d'illustration (`AdvGearArt`), s'il existe. */
+  model?: string;
+  segments: AdvXpSegment[];
+  /** Elle vient de buter sur le ★5 de son rang : son ascension l'attend. */
+  ascendReady: boolean;
 }
 
 /** Ce qu'une mission a fait avancer un aventurier, découpé étoile par étoile — la matière de
@@ -1752,6 +1766,33 @@ export interface AdvXpTrack {
   segments: AdvXpSegment[];
   /** Il vient de buter sur le ★5 de son rang : l'XP s'arrête jusqu'à l'ascension. */
   ascendReady: boolean;
+  /** 🗡️ Ses pièces portées qui ont appris avec lui (absent si aucune n'a bougé). */
+  gear?: AdvXpBar[];
+}
+
+/** La barre découpée étoile par étoile, du cran GLOBAL `t0` (avancement `p0`) au cran `t1`
+ *  (avancement `p1`). ⚠️ SOURCE UNIQUE : champions et pièces la lisent, sinon les deux
+ *  finiraient par ne pas annoncer les étoiles au même moment. */
+export function starSegments(t0: number, t1: number, p0: number, p1: number): AdvXpSegment[] {
+  const top = Math.max(t0, t1);
+  const segments: AdvXpSegment[] = [];
+  for (let t = t0; t <= top; t++) {
+    const rankIndex = Math.min(CHARACTER_RANKS.length - 1, Math.floor(t / ADV_STARS));
+    const r = CHARACTER_RANKS[rankIndex]!;
+    const from = t === t0 ? p0 : 0;
+    const to = t === top ? Math.max(from, p1) : 1;
+    segments.push({
+      star: (t % ADV_STARS) + 1,
+      rankName: r.name,
+      rankEmoji: r.emoji,
+      rankColor: r.color,
+      from,
+      to,
+      starUp: t < top,
+      rankUp: t < top && Math.floor((t + 1) / ADV_STARS) > rankIndex,
+    });
+  }
+  return segments;
 }
 
 /**
@@ -1776,27 +1817,12 @@ export function advXpTracks(
     if (!b) continue;
     const xp = advTotalXp(a) - advTotalXp(b);
     if (xp <= 0) continue;
-    const t0 = advRank(b).tier;
-    const t1 = Math.max(t0, advRank(a).tier);
-    const p0 = advRankProgress(b);
-    const p1 = advRankProgress(a);
-    const segments: AdvXpSegment[] = [];
-    for (let t = t0; t <= t1; t++) {
-      const rankIndex = Math.floor(t / ADV_STARS);
-      const r = CHARACTER_RANKS[rankIndex]!;
-      const from = t === t0 ? p0 : 0;
-      const to = t === t1 ? Math.max(from, p1) : 1;
-      segments.push({
-        star: (t % ADV_STARS) + 1,
-        rankName: r.name,
-        rankEmoji: r.emoji,
-        rankColor: r.color,
-        from,
-        to,
-        starUp: t < t1,
-        rankUp: t < t1 && Math.floor((t + 1) / ADV_STARS) > rankIndex,
-      });
-    }
+    const segments = starSegments(
+      advRank(b).tier,
+      advRank(a).tier,
+      advRankProgress(b),
+      advRankProgress(a),
+    );
     const ascendReady =
       advNextAscension(a) != null && a.level >= advAscensionCap(a) && b.level < advAscensionCap(a);
     out.push({

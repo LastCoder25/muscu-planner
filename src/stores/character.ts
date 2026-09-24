@@ -189,6 +189,7 @@ import {
   advGearRankCap,
   ascendAdvGear,
   trainWornGear,
+  withGearTracks,
   wornGear,
   type AdvGear,
   type AdvGearSlot,
@@ -2047,11 +2048,9 @@ export const useCharacterStore = defineStore('character', () => {
       });
       wages = claim.wages;
       advProgress = advProgressOf(advList.value, claim.adventurers);
-      advTracks = advXpTracks(advList.value, claim.adventurers);
-      partyPatch = {
-        adventurers: claim.adventurers,
-        ...gearTrainedPatch(cur, advList.value, claim.adventurers),
-      };
+      const gearPatch = gearTrainedPatch(cur, advList.value, claim.adventurers);
+      advTracks = gearAwareTracks(cur, advList.value, claim.adventurers, gearPatch);
+      partyPatch = { adventurers: claim.adventurers, ...gearPatch };
     }
     // ⚠️ ENTIERS À L'ENCAISSEMENT : ces colonnes sont `integer`, une valeur décimale fait
     // échouer la sauvegarde ENTIÈRE sans rien afficher (bug de la cargaison, v0.796).
@@ -2417,6 +2416,19 @@ export const useCharacterStore = defineStore('character', () => {
     return next === stock ? {} : { adv_gear: { ...(cur.adv_gear ?? {}), stock: next } };
   }
 
+  /** 📊 Les barres du retour de mission, pièces portées comprises (`withGearTracks`) : le
+   *  stock APRÈS est celui du patch, sans quoi on animerait un stock qui n'a pas bougé. */
+  function gearAwareTracks(
+    cur: CharacterRow,
+    before: Adventurer[],
+    after: Adventurer[],
+    gearPatch: ReturnType<typeof gearTrainedPatch>,
+  ): AdvXpTrack[] {
+    const stock = cur.adv_gear?.stock ?? [];
+    const next = ('adv_gear' in gearPatch ? gearPatch.adv_gear?.stock : undefined) ?? stock;
+    return withGearTracks(advXpTracks(before, after), stock, next, after);
+  }
+
   /** ⬆️ ASCENSION D'UNE PIÈCE : rang suivant contre de l'or et des sceaux d'objet de ce rang.
    *  Même règle que le bouton (`advGearAscensionBlocker`). `null` si c'est fait. */
   async function ascendGear(userId: string, gearId: string): Promise<string | null> {
@@ -2776,6 +2788,8 @@ export const useCharacterStore = defineStore('character', () => {
     // la lecture, comme les POI périmés et les garnisons obsolètes : le code se corrige,
     // la donnée se répare toute seule au passage.
     const ent = (n: number) => Math.max(0, Math.round(n || 0));
+    const gearPatch = gearTrainedPatch(cur, before, advs);
+    const tracks = gearAwareTracks(cur, before, advs, gearPatch);
     await persist(userId, {
       // Les salaires sont déduits ICI, à l'encaissement : l'aventurier est payé au retour.
       // (`wages` vient de `caravanClaimRoster`, déjà entier — comme la voie des groupes.)
@@ -2785,11 +2799,11 @@ export const useCharacterStore = defineStore('character', () => {
       summon_stones: cur.summon_stones + ent(o.summonStones),
       keys: cur.keys + ent(o.keys),
       adventurers: advs,
-      ...gearTrainedPatch(cur, before, advs),
+      ...gearPatch,
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
-    return { events: advProgressOf(before, advs), tracks: advXpTracks(before, advs) };
+    return { events: advProgressOf(before, advs), tracks };
   }
 
   /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et

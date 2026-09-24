@@ -31,6 +31,9 @@ import {
   advTotalXp,
   advXpToNext,
   AWAKEN,
+  starSegments,
+  type AdvXpBar,
+  type AdvXpTrack,
   type AdvAvatarProfile,
   type ADV_AVATAR_SLOTS,
   type Adventurer,
@@ -970,6 +973,98 @@ export function advGearRankStar(g: Pick<AdvGear, 'rarity' | 'level'>): {
   const span = Math.max(1, band.max - band.min + 1);
   const star = Math.max(1, Math.min(5, Math.floor(((g.level - band.min) * 5) / span) + 1));
   return { emoji: r.emoji, name: r.name, color: r.color, star };
+}
+
+// ── 📊 L'AVANCEMENT D'UNE PIÈCE VERS L'ÉTOILE SUIVANTE (v0.1126, demandé) ────────────────
+// ⚠️ Le niveau d'une pièce est CACHÉ, comme celui d'un champion : entre deux étoiles, elle
+// apprend pendant plusieurs missions sans que rien ne bouge à l'écran. Cette barre le dit.
+
+/** Avancement DANS l'étoile courante (0..1). L'XP du niveau en cours compte : sinon la barre
+ *  ne bougerait qu'au passage de niveau. Au ★5 de son rang (bout de sa tranche), elle est
+ *  PLEINE : elle n'avancera plus avant l'ascension. */
+export function advGearProgress(g: Pick<AdvGear, 'rarity' | 'level' | 'xp'>): number {
+  const band = advGearLevelBand(g.rarity);
+  if (g.level >= band.max) return 1;
+  const span = Math.max(1, band.max - band.min + 1);
+  const frac = Math.min(1, Math.max(0, (g.xp ?? 0) / advXpToNext(g.level)));
+  const pos = ((Math.max(band.min, g.level) - band.min + frac) * 5) / span;
+  return Math.min(1, Math.max(0, pos - (advGearRankStar(g).star - 1)));
+}
+
+/** Elle bute sur le ★5 de son rang : seule l'ascension la fera avancer. */
+export function advGearAtRankCap(g: Pick<AdvGear, 'rarity' | 'level'>): boolean {
+  return g.level >= advGearLevelBand(g.rarity).max;
+}
+
+/** Le CRAN GLOBAL d'une pièce : rang × 5 + étoile − 1. ⚠️ Monotone, contrairement à l'étoile
+ *  seule qui retombe à ★1 à l'ascension — c'est lui que la barre animée lit. */
+function advGearTier(g: Pick<AdvGear, 'rarity' | 'level'>): number {
+  return Math.max(0, RARITY_RANK[g.rarity] ?? 0) * 5 + advGearRankStar(g).star - 1;
+}
+
+/** 📜 Ce que dit une pièce quand on la touche : son rang, ses étoiles, où elle en est et ce
+ *  qui la fait avancer. ⚠️ Aucun niveau affiché. `wearerLevel` absent = personne ne la porte. */
+export function advGearProgressInfo(
+  g: Pick<AdvGear, 'rarity' | 'level' | 'xp'>,
+  wearerLevel?: number,
+): { title: string; pct: number; status: string } {
+  const rs = advGearRankStar(g);
+  const pct = Math.round(advGearProgress(g) * 100);
+  const stars = '★'.repeat(rs.star) + '☆'.repeat(5 - rs.star);
+  let status: string;
+  if (advGearAtRankCap(g))
+    status =
+      RANK_ORDER.indexOf(g.rarity) >= RANK_ORDER.length - 1
+        ? 'Au sommet : elle ne peut plus monter.'
+        : '★5 atteint : elle attend son ascension (⬆️ sur sa tuile du stock).';
+  else if (wearerLevel == null)
+    status = 'Au stock, elle n’apprend rien : confie-la à un champion pour la faire progresser.';
+  else if (g.level >= wearerLevel)
+    status = 'Elle a rattrapé son porteur : elle avancera quand il montera à son tour.';
+  else status = `${pct} % vers ★${rs.star + 1} · elle apprend avec son porteur, à chaque mission.`;
+  return { title: `${rs.emoji} ${rs.name} ${stars}`, pct, status };
+}
+
+/** La barre de chaque pièce qui a appris entre deux instantanés du stock. */
+function advGearXpBars(before: readonly AdvGear[], after: readonly AdvGear[]): AdvXpBar[] {
+  const was = new Map(before.map((g) => [g.id, g]));
+  const out: AdvXpBar[] = [];
+  for (const g of after) {
+    const b = was.get(g.id);
+    if (!b || (b.level === g.level && (b.xp ?? 0) === (g.xp ?? 0))) continue;
+    const model = advGearModelOf(g);
+    out.push({
+      id: g.id,
+      name: g.name,
+      emoji: g.emoji,
+      ...(model ? { model } : {}),
+      segments: starSegments(
+        advGearTier(b),
+        advGearTier(g),
+        advGearProgress(b),
+        advGearProgress(g),
+      ),
+      ascendReady: advGearAtRankCap(g) && !advGearAtRankCap(b),
+    });
+  }
+  return out;
+}
+
+/** 🗡️ Rattache à chaque champion la barre des pièces qu'il PORTE et qui ont appris avec lui.
+ *  Le porteur se lit sur le vivier APRÈS (`wornGear`, la règle du combat). */
+export function withGearTracks(
+  tracks: readonly AdvXpTrack[],
+  before: readonly AdvGear[],
+  after: readonly AdvGear[],
+  advs: Adventurer[],
+): AdvXpTrack[] {
+  const bars = new Map(advGearXpBars(before, after).map((b) => [b.id, b]));
+  if (!bars.size) return [...tracks];
+  const worn = wornGear(advs, [...after]);
+  return tracks.map((t) => {
+    const gear = (worn.get(t.id) ?? []).flatMap((g) => bars.get(g.id) ?? []);
+    return gear.length ? { ...t, gear } : t;
+  });
 }
 
 /** 🗂️ L'ORDRE D'UNE LISTE DE PIÈCES — celui du sac du héros (rareté, puis qualité) :
