@@ -56,6 +56,22 @@
             <stop offset=".4" :class="`ivs-st-${t}`" stop-opacity=".32" />
             <stop offset="1" :class="`ivs-st-${t}`" stop-opacity="0" />
           </radialGradient>
+          <!-- 🔮 Les boules colorées sont des SPHÈRES (v0.1114) : un reflet en haut à gauche,
+               la teinte, puis un bord sombre. -->
+          <radialGradient
+            v-for="t in ['o', 'i']"
+            :id="`${uid}-sph-${t}`"
+            :key="'s' + t"
+            cx=".5"
+            cy=".5"
+            r=".55"
+            fx=".34"
+            fy=".3"
+          >
+            <stop offset="0" :class="`ivs-st-${t}-hi`" />
+            <stop offset=".35" :class="`ivs-st-${t}`" />
+            <stop offset="1" :class="`ivs-st-${t}-lo`" />
+          </radialGradient>
         </defs>
         <circle v-if="big" :cx="C" :cy="C" r="198" :fill="`url(#${uid}-disc)`" />
         <!-- cadran fixe : graduations -->
@@ -300,6 +316,9 @@
           :transform="`rotate(-90 ${C} ${C})`"
         />
       </svg>
+      <!-- ✨ La poussière scintillante semée par les boules colorées (v0.1114). Plus grande
+           que le cercle : les grains débordent de la couronne. -->
+      <canvas ref="dust" class="ivs-dust" />
     </div>
   </div>
 </template>
@@ -307,6 +326,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { GRADE_COLOR } from '@/data/champions';
+import { drawDust, makeSprites, stepDust, type DustSource, type Grain } from '@/lib/sigilDust';
 import {
   SIGIL_ZONES,
   zoneCharge,
@@ -336,6 +356,8 @@ const tintStyle = computed(() => ({
   '--ivs-b': GRADE_COLOR.B,
   '--ivs-o': GRADE_COLOR[props.tints?.medals ?? 'B'],
   '--ivs-i': GRADE_COLOR[props.tints?.beads ?? 'B'],
+  '--sph-o': `url(#${uid}-sph-o)`,
+  '--sph-i': `url(#${uid}-sph-i)`,
 }));
 
 let seq = 0;
@@ -451,7 +473,99 @@ const vb = computed(() => `0 0 ${size.value} ${size.value}`);
  *  vitesses s'obtiennent par `playbackRate` — la rotation reste sur le compositeur. */
 const BASE_SPEED = 12;
 /** Les calques qui tournent, rangés par PARTIE (0 = extérieure, `SIGIL_ZONES` - 1 = centre). */
-let spinners: { anim: Animation; zone: number }[] = [];
+let spinners: { anim: Animation; zone: number; el: Element }[] = [];
+
+/* ───────────── ✨ la poussière des boules colorées (`sigilDust`) ───────────── */
+const dust = ref<HTMLCanvasElement | null>(null);
+/** Une boule qui peut semer : son élément (qui porte `.on`), sa position au repos dans le
+ *  repère du cercle, le calque qui la fait tourner et sa teinte (médaillon ou boule). */
+interface DustBall {
+  el: Element;
+  x: number;
+  y: number;
+  spin: { anim: Animation; zone: number } | null;
+  tone: 'o' | 'i';
+}
+let dustBalls: DustBall[] = [];
+let grains: Grain[] = [];
+const dustAcc: number[] = [];
+let sprites: ReturnType<typeof makeSprites> | null = null;
+/** Le canevas déborde du cercle de `DUST_PAD` de chaque côté (en part de sa largeur). */
+const DUST_PAD = 0.25;
+let dustW = 0;
+let dustFrame = 0;
+const dpr = () => Math.min(2, window.devicePixelRatio || 1);
+
+/** Mesure le cercle (rarement : la mesure force une mise en page) et cale le canevas. */
+function sizeDust() {
+  const cv = dust.value;
+  const w = stack.value?.offsetWidth ?? 0;
+  if (!cv || !w || w === dustW) return;
+  dustW = w;
+  const px = Math.round(w * (1 + 2 * DUST_PAD) * dpr());
+  cv.width = px;
+  cv.height = px;
+}
+
+/** Où est chaque boule colorée ALLUMÉE à cet instant, en pixels du canevas. */
+function dustSources(): DustSource[] {
+  const out: DustSource[] = [];
+  const c = C.value;
+  const s = (dustW / size.value) * dpr();
+  const off = dustW * DUST_PAD * dpr();
+  for (const b of dustBalls) {
+    const grade = b.tone === 'o' ? props.tints?.medals : props.tints?.beads;
+    if (grade !== 'A' && grade !== 'S') continue;
+    if (!b.el.classList.contains('on')) continue;
+    const p = b.spin?.anim.effect?.getComputedTiming().progress ?? 0;
+    const deg = (p ?? 0) * 360 * zoneDirection(b.spin?.zone ?? 0);
+    const r = (deg * Math.PI) / 180;
+    const dx = b.x - c;
+    const dy = b.y - c;
+    out.push({
+      x: off + (c + dx * Math.cos(r) - dy * Math.sin(r)) * s,
+      y: off + (c + dx * Math.sin(r) + dy * Math.cos(r)) * s,
+      grade,
+    });
+  }
+  return out;
+}
+
+function stepDustFrame(dt: number, t: number) {
+  const cv = dust.value;
+  if (!cv || !dustBalls.length) return;
+  if (dustFrame++ % 30 === 0) sizeDust();
+  if (!dustW) return;
+  const sources = props.dim ? [] : dustSources();
+  if (!sources.length && !grains.length) return;
+  grains = stepDust(grains, sources, dustAcc, dt, (dustW / size.value) * dpr(), Math.random);
+  const ctx = cv.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  sprites ??= makeSprites({ A: GRADE_COLOR.A, S: GRADE_COLOR.S });
+  drawDust(ctx, grains, sprites, t / 1000);
+}
+
+/** Recense les boules colorées une fois le cercle monté et ses calques animés. */
+function collectDustBalls(el: HTMLElement) {
+  dustBalls = [...el.querySelectorAll('[data-lit].ivs-tone-o, [data-lit].ivs-tone-i')]
+    .filter((e) => !e.classList.contains('ivs-halo'))
+    .map((e) => {
+      const shape = (
+        e.matches('circle, path') ? e : e.querySelector('circle:not(.ivs-halo)')
+      ) as SVGGraphicsElement | null;
+      const box = shape?.getBBox?.();
+      const layer = e.closest('svg[data-spin]');
+      return {
+        el: e,
+        x: box ? box.x + box.width / 2 : 0,
+        y: box ? box.y + box.height / 2 : 0,
+        spin: spinners.find((s) => s.el === layer) ?? null,
+        tone: e.classList.contains('ivs-tone-o') ? ('o' as const) : ('i' as const),
+      };
+    })
+    .filter((b) => b.x || b.y);
+}
 /** Groupes allumés par la charge, chacun rattaché à sa partie. */
 const LIT_ZONE: Record<string, number> = {
   ro: 0,
@@ -532,6 +646,7 @@ function frame(t: number) {
       ? `scale(${1 + k * 0.06}) translate(${(Math.sin(t / 23) + Math.sin(t / 41)) * k * 0.9}px,${(Math.cos(t / 29) + Math.sin(t / 53)) * k * 0.9}px)`
       : '';
   }
+  stepDustFrame(dt, t);
   raf = requestAnimationFrame(frame);
 }
 
@@ -557,13 +672,19 @@ onMounted(() => {
       { duration: (360 / (k * BASE_SPEED)) * 1000, iterations: Infinity },
     );
     anim.playbackRate = zoneRate[zone]!;
-    return { anim, zone };
+    return { anim, zone, el: e };
   });
+  collectDustBalls(el);
   raf = requestAnimationFrame(frame);
 });
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf);
-  for (const s of spinners) s.anim.cancel();
+  // Annuler rejette la promesse `finished` : on la déclare attendue, sinon elle remonte en
+  // erreur non gérée.
+  for (const s of spinners) {
+    s.anim.finished.catch(() => undefined);
+    s.anim.cancel();
+  }
 });
 
 defineExpose({ el: root });
@@ -674,6 +795,50 @@ defineExpose({ el: root });
 .ivs.tint-i .ivs-tone-i.on .ivs-halo,
 .ivs.tint-i .ivs-halo.ivs-tone-i.on {
   opacity: 1;
+}
+/* 🔮 Les boules colorées allumées deviennent des sphères (reflet, teinte, bord sombre). */
+.ivs-st-o-hi {
+  stop-color: color-mix(in srgb, var(--ivs-o) 25%, #fff);
+}
+.ivs-st-i-hi {
+  stop-color: color-mix(in srgb, var(--ivs-i) 25%, #fff);
+}
+.ivs-st-o-lo {
+  stop-color: color-mix(in srgb, var(--ivs-o) 45%, #0d0b09);
+}
+.ivs-st-i-lo {
+  stop-color: color-mix(in srgb, var(--ivs-i) 45%, #0d0b09);
+}
+.ivs.tint-o .ivs-medal.ivs-tone-o.on circle:not(.ivs-halo) {
+  fill: var(--sph-o);
+}
+.ivs.tint-o .ivs-medal.ivs-tone-o.on text {
+  fill: #fff;
+}
+.ivs.tint-i .ivs-moon.ivs-tone-i.on .ivs-moonb,
+.ivs.tint-i .ivs-node.ivs-tone-i.on {
+  fill: var(--sph-i);
+}
+/* 🌟 L'OR EST UNE EXCELLENTE NOUVELLE : son halo respire, en plus de semer deux fois plus
+   de poussière. Le violet reste posé — plus rare, plus spectaculaire. */
+.ivs.tint-i .ivs-tone-i.on .ivs-halo,
+.ivs.tint-i .ivs-halo.ivs-tone-i.on {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ivs-halo-gold 1.3s ease-in-out infinite;
+}
+@keyframes ivs-halo-gold {
+  50% {
+    opacity: 0.55;
+    transform: scale(1.25);
+  }
+}
+.ivs-dust {
+  position: absolute;
+  inset: -25%;
+  width: 150%;
+  height: 150%;
+  pointer-events: none;
 }
 .ivs-ring {
   fill: none;
@@ -858,8 +1023,9 @@ defineExpose({ el: root });
 }
 @media (prefers-reduced-motion: reduce) {
   .ivs-corel,
-  .ivs-spinner {
-    animation: none;
+  .ivs-spinner,
+  .ivs-halo {
+    animation: none !important;
   }
 }
 </style>

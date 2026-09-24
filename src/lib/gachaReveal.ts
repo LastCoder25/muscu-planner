@@ -286,6 +286,34 @@ export function sigilTints(plan: RevealPlan | null): SigilTints {
 }
 
 /**
+ * ✨ LA POUSSIÈRE SCINTILLANTE derrière les boules colorées (v0.1114, demandé : « des sortes
+ * de traînées pas définies, comme de la poussière scintillante derrière ; avoir du violet
+ * est une bonne nouvelle, avoir de l'or une excellente nouvelle ; le joueur veut voir ses
+ * couleurs, et plus c'est rare plus ce doit être spectaculaire »). Chaque boule allumée
+ * sème des grains qui restent sur place pendant qu'elle file — la traînée naît de sa
+ * course. ⚠️ L'or doit l'emporter sur TOUS les axes (testé) : plus de grains, qui vivent
+ * plus longtemps, plus gros, plus souvent en étoile, qui scintillent plus vite.
+ */
+export interface DustStyle {
+  /** Grains semés par seconde et par boule. */
+  rate: number;
+  /** Durée de vie d'un grain (s), entre ces deux bornes. */
+  life: [number, number];
+  /** Taille d'un grain (px CSS), entre ces deux bornes. */
+  size: [number, number];
+  /** Part des grains dessinés en étoile scintillante. */
+  stars: number;
+  /** Fréquence du scintillement (Hz). */
+  twinkle: number;
+  /** Part des grains qui deviennent de grandes étoiles éclatantes. */
+  flares: number;
+}
+export const DUST: Record<'A' | 'S', DustStyle> = {
+  A: { rate: 16, life: [0.7, 1.3], size: [3, 6.5], stars: 0.18, twinkle: 7, flares: 0 },
+  S: { rate: 34, life: [0.9, 1.8], size: [3.5, 8], stars: 0.35, twinkle: 11, flares: 0.06 },
+};
+
+/**
  * 🔯 LA CHARGE EN TROIS PARTIES (v0.1111, demandé : « séparer les parties à charger : que
  * la première tourne avant que celle plus à l'intérieur commence à tourner dans l'autre
  * sens, et enfin la dernière partie dans le sens de la première »). De l'extérieur vers le
