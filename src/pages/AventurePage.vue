@@ -74,7 +74,11 @@
           >
           <!-- Les pierres de mana sont la monnaie du GACHA : elles décident si l'on peut invoquer. -->
           <span
-            class="tb-r mana"
+            class="tb-r clickable mana"
+            role="button"
+            tabindex="0"
+            @click="resInfo = 'mana'"
+            @keyup.enter="resInfo = 'mana'"
             :title="`Pierres de mana : ${char.row.mana.toLocaleString('fr-FR')} — invoquer un champion (failles refermées, mines de mana)`"
             ><span class="tb-ico">💠</span>{{ compactNumber(char.row.mana) }}</span
           >
@@ -85,12 +89,20 @@
           <div class="tb-tray">
             <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
             <span
-              class="tb-r gold"
+              class="tb-r clickable gold"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'gold'"
+              @keyup.enter="resInfo = 'gold'"
               :title="`Or : ${char.row.gold.toLocaleString('fr-FR')} — expéditions et construction des bâtiments`"
               ><span class="tb-ico">🪙</span>{{ compactNumber(char.row.gold) }}</span
             >
             <span
-              class="tb-r summon"
+              class="tb-r clickable summon"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'summon'"
+              @keyup.enter="resInfo = 'summon'"
               :title="`Pierres d’invocation : ${char.row.summon_stones.toLocaleString('fr-FR')} — tenter un boss de palier (gagnées en nettoyant des donjons)`"
               ><span class="tb-ico">🔮</span>{{ compactNumber(char.row.summon_stones) }}</span
             >
@@ -99,7 +111,11 @@
                  plusieurs écrans (archives, coffres, boss). Une devise qu'on dépense
                  sans jamais voir sa réserve force à aller la chercher ailleurs. -->
             <span
-              class="tb-r keys"
+              class="tb-r clickable keys"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'keys'"
+              @keyup.enter="resInfo = 'keys'"
               :title="`Clés : ${char.row.keys.toLocaleString('fr-FR')} — entrer dans le Labyrinthe (archives de la carte, coffres, boss)`"
               ><span class="tb-ico">🗝️</span>{{ compactNumber(char.row.keys) }}</span
             >
@@ -108,19 +124,31 @@
                  ⚠️ TOUJOURS affichés, même à zéro : une devise qui n'apparaît qu'une fois
                  obtenue ne dit ni qu'elle existe, ni qu'on peut aller la chercher. -->
             <span
-              class="tb-r seals"
+              class="tb-r clickable seals"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'sealsChamp'"
+              @keyup.enter="resInfo = 'sealsChamp'"
               :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail || 'aucun pour l’instant'}`"
               ><span class="tb-ico">🔱</span>{{ compactNumber(sealsChamp.total) }}</span
             >
             <span
-              class="tb-r seals seals-gear"
+              class="tb-r clickable seals seals-gear"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'sealsGear'"
+              @keyup.enter="resInfo = 'sealsGear'"
               :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail || 'aucun pour l’instant'}`"
               ><span class="tb-ico">⚜️</span>{{ compactNumber(sealsGear.total) }}</span
             >
             <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés même à zéro,
                  comme toutes les devises du plateau. -->
             <span
-              class="tb-r tickets"
+              class="tb-r clickable tickets"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'tickets'"
+              @keyup.enter="resInfo = 'tickets'"
               title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
               ><span class="tb-ico">🎟️</span>{{ compactNumber(char.row.gacha_tickets) }}</span
             >
@@ -2284,6 +2312,41 @@
             <div v-else class="enh-empty">— aucune activité</div>
           </div>
         </div>
+        <div class="res-src-title">D’où elle vient</div>
+        <ul class="res-src">
+          <li v-for="s in RESOURCE_SOURCES.energy.sources" :key="s.label">
+            <span class="res-src-emo">{{ s.emoji }}</span>
+            <span class="res-src-txt"
+              ><b>{{ s.label }}</b
+              ><small v-if="s.detail"> · {{ s.detail }}</small></span
+            >
+          </li>
+        </ul>
+      </q-card>
+    </q-dialog>
+
+    <!-- D'où vient une ressource (clic sur une puce du plateau). -->
+    <q-dialog
+      :model-value="resInfo !== null"
+      position="bottom"
+      @update:model-value="(v: boolean) => !v && (resInfo = null)"
+    >
+      <q-card v-if="resInfoData" class="adv-modal">
+        <button class="adv-modal-x" aria-label="Fermer" type="button" @click="resInfo = null">
+          ✕
+        </button>
+        <div class="sec-title">{{ resInfoData.emoji }} {{ resInfoData.name }}</div>
+        <div class="sec-hint">{{ resInfoData.use }}</div>
+        <div class="res-src-title">Où en trouver</div>
+        <ul class="res-src">
+          <li v-for="s in resInfoData.sources" :key="s.label">
+            <span class="res-src-emo">{{ s.emoji }}</span>
+            <span class="res-src-txt"
+              ><b>{{ s.label }}</b
+              ><small v-if="s.detail"> · {{ s.detail }}</small></span
+            >
+          </li>
+        </ul>
       </q-card>
     </q-dialog>
 
@@ -3075,6 +3138,7 @@ import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
 import { familiarSpecies } from '@/data/familiars';
+import { RESOURCE_SOURCES, type ResourceId } from '@/data/resourceSources';
 import {
   DUNGEONS,
   dungeonFoes,
@@ -3357,6 +3421,9 @@ function onFrameClick(e: MouseEvent) {
 // Historique d'énergie gagnée sur 3 jours — modale au clic sur la puce ⚡ (energyHist
 // défini plus bas, après `c`/`heroLevel`).
 const energyHistOpen = ref(false);
+// Fiche « d'où vient cette ressource » (clic sur une puce du plateau).
+const resInfo = ref<ResourceId | null>(null);
+const resInfoData = computed(() => (resInfo.value ? RESOURCE_SOURCES[resInfo.value] : null));
 // Liste des 10 rangs de prestige (cosmétiques, dérivés du niveau) : 1 rang = 10 niveaux
 // (5 étoiles × 2 niveaux). Marque le rang courant + sa plage de niveaux.
 const rankList = computed(() =>
@@ -6922,6 +6989,46 @@ onUnmounted(() => {
   margin-top: 14px;
 }
 /* Historique d'énergie (modale) : un bloc par jour, détail par activité dedans. */
+/* D'où vient une ressource (fiche ouverte depuis le plateau). */
+.res-src-title {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.res-src {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.res-src li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+}
+.res-src-emo {
+  flex: none;
+  width: 22px;
+  text-align: center;
+  font-size: 17px;
+}
+.res-src-txt {
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+.res-src-txt small {
+  color: var(--dim);
+}
 .enh-list {
   display: flex;
   flex-direction: column;
