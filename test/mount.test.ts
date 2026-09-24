@@ -963,3 +963,25 @@ describe('HoldGame — les mini-jeux du gainage', () => {
     }
   }, 30_000);
 });
+
+describe('HoldGameLauncher — le bouton 🎮 à côté du chrono', () => {
+  it("s'affiche sur un gainage à deux mains, pas ailleurs", async () => {
+    const { default: HoldGameLauncher } = await import('@/components/HoldGameLauncher.vue');
+    const render = async (exerciseId: string) => {
+      let out = '';
+      const err = await mountIt(
+        HoldGameLauncher,
+        { exerciseId, targetSec: 45, elapsedSec: 0, running: false },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      expect(err).toBeNull();
+      return out;
+    };
+    expect(await render('ex_plank')).toContain('hgl-btn');
+    // Le gainage latéral n'a qu'une main libre : pas de jeu (cf. HOLD_GAME_EXERCISES).
+    expect(await render('ex_side_plank')).not.toContain('hgl-btn');
+  }, 30_000);
+});

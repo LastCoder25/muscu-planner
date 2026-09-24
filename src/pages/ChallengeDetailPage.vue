@@ -204,6 +204,14 @@
                 {{ running ? 'Pause' : doneToday > 0 ? 'Reprendre' : 'Démarrer' }}
                 <span class="cc-time">{{ chronoDisplay }}</span>
               </button>
+              <HoldGameLauncher
+                :exercise-id="ch.exercise_id"
+                :target-sec="holdTargetSec"
+                :elapsed-sec="running ? Math.max(0, chronoSec - segStart) : 0"
+                :running="running"
+                @start="toggleChrono"
+                @stop="toggleChrono"
+              />
               <div class="chrono-hint">
                 ⏸️ Chaque <b>pause</b> enregistre une série (sa durée) dans le journal du jour.
               </div>
@@ -503,6 +511,7 @@ import ChallengeCelebration from '@/components/ChallengeCelebration.vue';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { recallWeight, rememberWeight } from '@/lib/weightMemory';
 import ExerciseDemo from '@/components/ExerciseDemo.vue';
+import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -524,7 +533,7 @@ const running = ref(false);
 // Chrono gainage : elapsed_sec au DÉBUT du segment courant → à la pause, le segment
 // (elapsed_sec − segStart) est enregistré comme une « série » (durée) affichée dans le
 // journal du jour, comme les reps/série des autres exos.
-let segStart = 0;
+const segStart = ref(0);
 let tick: ReturnType<typeof setInterval> | undefined;
 const scrollBox = ref<HTMLElement | null>(null);
 const celebrate = ref(false); // animation de fin de challenge
@@ -718,6 +727,8 @@ const RING_TICKS = computed(() =>
   }),
 );
 const chronoSec = computed(() => entryOf(dayIndex.value)?.elapsed_sec ?? 0);
+// 🎮 Ce qu'il reste à tenir aujourd'hui, pour caler la difficulté du mini-jeu.
+const holdTargetSec = computed(() => Math.max(30, todayTarget.value - segStart.value));
 const chronoDisplay = computed(
   () => `${Math.floor(chronoSec.value / 60)}:${String(chronoSec.value % 60).padStart(2, '0')}`,
 );
@@ -1033,7 +1044,7 @@ function toggleChrono() {
   if (!inToday.value) return;
   running.value = !running.value;
   if (running.value) {
-    segStart = ensureToday().elapsed_sec; // début du segment courant
+    segStart.value = ensureToday().elapsed_sec; // début du segment courant
     clearInterval(tick);
     tick = setInterval(() => {
       const e = ensureToday();
@@ -1048,7 +1059,7 @@ function toggleChrono() {
     // PAUSE : on fige le segment comme une « série » (durée) dans le journal du jour.
     if (isGainageTime.value) {
       const e = ensureToday();
-      const seg = Math.max(0, e.elapsed_sec - segStart);
+      const seg = Math.max(0, e.elapsed_sec - segStart.value);
       if (seg > 0) (e.sets ??= []).push({ reps: 0, sec: seg });
     }
     void afterChange(); // sauvegarde à la pause
