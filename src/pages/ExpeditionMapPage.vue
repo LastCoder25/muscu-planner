@@ -48,7 +48,7 @@
         :title="riftChipLabel"
         @click="cycleRiftMode"
       >
-        <span class="rift-emo">🕳️</span>
+        <span class="rift-emo"><RiftPortal color="#b57bff" :seed="7" still /></span>
         <span class="rift-count">{{ riftMode === 'only' ? 'seules' : riftInRanks }}</span>
       </button>
     </div>
@@ -238,11 +238,26 @@
           </g>
 
           <!-- Objectif actif -->
-          <g v-if="active" class="poi target">
-            <circle :cx="active.poi.x" :cy="active.poi.y" r="4.8" class="poi-bg" />
-            <text :x="active.poi.x" :y="active.poi.y + 1.4" class="poi-emo">
-              {{ POI_EMO[active.poi.type] }}
-            </text>
+          <!-- 🌀 Une faille garde son PORTAIL même quand on y va ou qu'on en revient : la
+               pastille 🕳️ d'avant ne se reconnaissait plus d'un écran à l'autre. -->
+          <g v-if="active" class="poi target" :class="{ 'rift-target': isRiftPoi(active.poi) }">
+            <RiftPortal
+              v-if="isRiftPoi(active.poi)"
+              :color="rankOf(active.poi).color"
+              :seed="seedOf(active.poi.id)"
+              :box="{
+                x: active.poi.x - RIFT_ICON.w / 2,
+                y: active.poi.y - RIFT_ICON.dy,
+                w: RIFT_ICON.w,
+                h: RIFT_ICON.h,
+              }"
+            />
+            <template v-else>
+              <circle :cx="active.poi.x" :cy="active.poi.y" r="4.8" class="poi-bg" />
+              <text :x="active.poi.x" :y="active.poi.y + 1.4" class="poi-emo">
+                {{ POI_EMO[active.poi.type] }}
+              </text>
+            </template>
           </g>
 
           <!-- ⚠️ Destination d'un CONVOI. Le lieu est retiré de la carte au départ — il
@@ -255,10 +270,23 @@
             v-for="v in travelersOnMap"
             :key="'vg' + v.id"
             class="poi target van-target"
-            :class="v.kind"
+            :class="[v.kind, { 'rift-target': isRiftPoi(v.poi) }]"
           >
-            <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
-            <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ POI_EMO[v.poi.type] }}</text>
+            <RiftPortal
+              v-if="isRiftPoi(v.poi)"
+              :color="rankOf(v.poi).color"
+              :seed="seedOf(v.poi.id)"
+              :box="{
+                x: v.poi.x - RIFT_ICON.w / 2,
+                y: v.poi.y - RIFT_ICON.dy,
+                w: RIFT_ICON.w,
+                h: RIFT_ICON.h,
+              }"
+            />
+            <template v-else>
+              <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
+              <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ POI_EMO[v.poi.type] }}</text>
+            </template>
           </g>
 
           <!-- Héros -->
@@ -321,7 +349,10 @@
         @click="panToPoi(e.poi)"
       >
         <span class="ei-arrow" :style="{ transform: `rotate(${e.deg}deg)` }">➤</span>
-        <span class="ei-emo">{{ POI_EMO[e.poi.type] }}</span>
+        <span v-if="isRiftPoi(e.poi)" class="ei-emo ei-rift">
+          <RiftPortal :color="rankOf(e.poi).color" :seed="seedOf(e.poi.id)" still />
+        </span>
+        <span v-else class="ei-emo">{{ POI_EMO[e.poi.type] }}</span>
       </button>
 
       <!-- Zoom -->
@@ -2506,9 +2537,15 @@ onUnmounted(() => {
   --rk: #b57bff;
 }
 .rift-emo {
-  font-size: 15px;
-  line-height: 1;
+  display: inline-block;
+  width: 12px;
+  height: 19px;
   opacity: 0.45;
+}
+.ei-rift {
+  display: inline-block;
+  width: 10px;
+  height: 16px;
 }
 .rift-chip.on .rift-emo {
   opacity: 1;
