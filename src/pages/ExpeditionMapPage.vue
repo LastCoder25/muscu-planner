@@ -626,7 +626,7 @@
             }}
           </button>
           <p v-else class="sh-away">
-            ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
+            🏅 Aucun champion : invoque-les au Panthéon de ta base pour attaquer sans le héros.
           </p>
           <!-- 🎒 RAVITAILLEMENT — un de chaque consommable, pris dans le stock. ⚠️ Ils entrent
                dans le kit du groupe (`partyRoad`), donc le 🎯 % ci-dessus les voit comme le
