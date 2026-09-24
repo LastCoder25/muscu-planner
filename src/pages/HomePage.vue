@@ -396,25 +396,6 @@
         </div>
       </div>
 
-      <!-- 🐉 Boss entre amis : seulement quand il se passe quelque chose (invitation, coffre à
-           ouvrir, boss en cours) — une carte « lance un boss » permanente encombrerait l'accueil. -->
-      <button
-        v-if="bossEntry.active.value"
-        class="boss-entry"
-        :class="{ hot: bossEntry.hot.value }"
-        @click="router.push('/boss-amis')"
-      >
-        <span class="be-emo">🐉</span>
-        <span class="be-main">
-          <span class="be-t font-display">Boss entre amis</span>
-          <span class="be-s">{{ bossEntry.line.value }}</span>
-        </span>
-        <span v-if="bossEntry.invites.value.length" class="be-badge">{{
-          bossEntry.invites.value.length
-        }}</span>
-        <span class="be-go">›</span>
-      </button>
-
       <!-- 🔥 LE CENTRE NÉVRALGIQUE (v0.961, demandé par l'utilisateur : « une tuile design
            relativement grande pour montrer que c'est le centre névralgique de l'app »).
            ⚠️ Elle REMPLACE le raccourci « Défis » du header : deux chemins vers le même
@@ -498,6 +479,25 @@
           </button>
         </div>
       </div>
+
+      <!-- 🐉 Boss entre amis : toujours visible, sous les défis (demandé par l’utilisateur).
+           Sans rien en cours, la ligne invite à en lancer un. -->
+      <button
+        class="boss-entry"
+        type="button"
+        :class="{ hot: bossEntry.hot.value }"
+        @click="router.push('/boss-amis')"
+      >
+        <span class="be-emo">🐉</span>
+        <span class="be-main">
+          <span class="be-t font-display">Boss entre amis</span>
+          <span class="be-s">{{ bossEntry.line.value }}</span>
+        </span>
+        <span v-if="bossEntry.invites.value.length" class="be-badge">{{
+          bossEntry.invites.value.length
+        }}</span>
+        <span class="be-go">›</span>
+      </button>
 
       <q-btn
         class="add-session full-width"
