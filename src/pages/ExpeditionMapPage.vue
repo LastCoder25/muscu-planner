@@ -487,6 +487,21 @@
             elle déborde : une partie de ses monstres s’embusque deux jours autour d’elle, le reste
             marche sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
           </p>
+          <!-- 🧿 LE SCEAU DE BRÈCHE se pose ICI, sur la faille — il n'accompagne aucun voyage. -->
+          <template v-if="selectedRift">
+            <p v-if="selected.sealed" class="pc-note">
+              🧿 Scellée : cette faille a déjà reçu son répit.
+            </p>
+            <button
+              v-else-if="sealStock > 0"
+              type="button"
+              class="sup-seal"
+              :disabled="busySeal"
+              @click="doSeal"
+            >
+              🧿 Poser un sceau de brèche — 24 h de répit ({{ sealStock }} en stock)
+            </button>
+          </template>
           <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne est une PERTE ÉVITÉE, et on DIT quand ça
                n'en évite plus aucune (renfort figé au tirage de l'armée, `Raid.overflow`). -->
           <template v-if="selectedWarband">
@@ -613,6 +628,38 @@
           <p v-else class="sh-away">
             ⚔️ Aucun aventurier : recrute-les à la Guilde de ta base pour attaquer sans le héros.
           </p>
+          <!-- 🎒 RAVITAILLEMENT — un de chaque consommable, pris dans le stock. ⚠️ Ils entrent
+               dans le kit du groupe (`partyRoad`), donc le 🎯 % ci-dessus les voit comme le
+               combat les verra. Ceux qui ne servent à rien ICI sont grisés AVEC la raison. -->
+          <div class="sup-block">
+            <div class="sup-title">
+              🎒 Ravitaillement
+              <span class="sup-sub">un de chaque · le 🎯 % en tient compte</span>
+            </div>
+            <div v-if="supplyRows.length" class="sup-grid">
+              <button
+                v-for="r in supplyRows"
+                :key="r.id"
+                type="button"
+                class="sup"
+                :class="{ on: r.on && !r.why, off: !!r.why }"
+                :disabled="!!r.why"
+                :aria-pressed="r.on && !r.why"
+                :title="`${r.def.name} — ${r.why ?? r.def.what}`"
+                @click="toggleSupply(r.id)"
+              >
+                <span class="sup-emo">{{ r.def.emoji }}</span>
+                <span class="sup-main">
+                  <span class="sup-name">{{ r.def.name }} ×{{ r.n }}</span>
+                  <span class="sup-what">{{ r.why ?? r.def.what }}</span>
+                </span>
+                <span class="sup-check">{{ r.on && !r.why ? '✓' : '＋' }}</span>
+              </button>
+            </div>
+            <p v-else class="sup-empty">
+              Aucun consommable en stock — ils tombent en butin de voyage.
+            </p>
+          </div>
           <p v-if="selectedCamp" class="sh-note">
             Sans le héros : de l’or (et des pierres chez les morts-vivants) — l’équipe prend un
             créneau de l’Avant-poste. En cas de défaite, les champions tombés partent à l’infirmerie
@@ -761,7 +808,7 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import CaravanReportView from '@/components/CaravanReportView.vue';
 import PartyReportView from '@/components/PartyReportView.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import { campBodyCount, campRewardLabel, campWinPct } from '@/lib/camp';
+import { campBodyCount, campRewardLabel } from '@/lib/camp';
 import { poiRank, poiRankCounts } from '@/lib/poiRank';
 import {
   PARTY_HERO_BLOCK_LABEL,
@@ -770,7 +817,10 @@ import {
   partySendBlocker,
   partyHeroBlocker,
   partyLegMin,
+  supplyTarget,
 } from '@/lib/party';
+import { partyWinChance } from '@/lib/partyForecast';
+import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
@@ -827,19 +877,16 @@ import { rankStarStr, CHARACTER_RANKS } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   RIFT,
-  incursionWinPct,
   riftClearMana,
   riftOverflowAt,
   riftPopulation,
   riftSpecOf,
-  estimateInterception,
   warbandArmy,
 } from '@/lib/rift';
 import {
   convoySlotsFree,
   isCaravanClaimable,
   poiOffers,
-  partyAllies,
   missionXpPreview,
   missionXpSplit,
   type MissionXpPreview,
@@ -1396,28 +1443,53 @@ const heroForParty = computed<PartyHero | null>(() =>
     : null,
 );
 const partySize = computed(() => partyAdvs.value.length + (partyHeroOn.value ? 1 : 0));
-/** 🎯 % de victoire — le MÊME groupe (`partyAllies`) et le MÊME parcours que la résolution,
- *  échantillonnés sur des graines qui ne rejouent JAMAIS le vrai combat (parité, v0.767).
- *  Sur une faille, c’est la FERMETURE qu’on pronostique (gardien compris) : c’est la seule
- *  issue qui la referme.
- *  ⚠️ HORLOGE GROSSIÈRE pour la faille (`coarseNow`) : son effectif dépend de l’instant, et
- *  une incursion enchaîne jusqu’à 13 combats — à 40 échantillons par seconde, ce serait ~520
+/** 🎒 Les consommables choisis pour CE voyage — remis à zéro quand on change de lieu. */
+const chosenSupplies = ref<SupplyId[]>([]);
+watch(
+  () => selected.value?.id,
+  () => (chosenSupplies.value = []),
+);
+/** Le stock, tuile par tuile, et POURQUOI un consommable ne servirait à rien ici. */
+const supplyRows = computed(() => {
+  const p = selected.value;
+  const stock = char.row?.supplies ?? {};
+  const t = p ? supplyTarget(p, partyHeroOn.value, partyAdvs.value.length) : null;
+  return SUPPLY_IDS.filter((id) => SUPPLIES[id].voyage && (stock[id] ?? 0) > 0).map((id) => ({
+    id,
+    def: SUPPLIES[id],
+    n: stock[id]!,
+    on: chosenSupplies.value.includes(id),
+    why: t ? supplyUselessWhy(id, t) : null,
+  }));
+});
+/** ⚠️ Un consommable coché qui DEVIENT inutile (on retire le héros, par exemple) n'est plus
+ *  emporté : on ne dépense pas un objet qui ne fait rien. */
+const activeSupplies = computed(() => supplyRows.value.filter((r) => r.on && !r.why).map((r) => r.id));
+function toggleSupply(id: SupplyId) {
+  chosenSupplies.value = chosenSupplies.value.includes(id)
+    ? chosenSupplies.value.filter((x) => x !== id)
+    : [...chosenSupplies.value, id];
+}
+/** Le kit du groupe AVEC ses consommables : c'est lui que lisent le 🎯 % et le trajet. */
+const partyRoad = computed(() => ({ ...roadCtx.value, supplies: activeSupplies.value }));
+/** 🎯 % de victoire — `partyWinChance`, LA MÊME dispatch que le store (qui s'en sert pour
+ *  refuser un départ perdu d'avance) : l'écran en avait une copie, qui aurait dû apprendre
+ *  les consommables séparément. Graines de pronostic, jamais celle du vrai combat.
+ *  ⚠️ HORLOGE GROSSIÈRE (`coarseNow`) : l'effectif d'une faille dépend de l'instant, et une
+ *  incursion enchaîne jusqu'à 13 combats — à 40 échantillons par seconde, ce serait ~520
  *  combats rejoués à chaque tick pour un effectif qui bouge sur SEPT JOURS. */
 const partyWin = computed(() => {
   const p = selected.value;
   if (!p || !partySize.value) return null;
-  const allies = partyAllies(partyAdvs.value, roadCtx.value, heroForParty.value);
-  if (selectedRift.value) return Math.round(incursionWinPct(p, allies, coarseNow.value, 40) * 100);
-  // ⚔️ L'interception : le MÊME combat que la résolution, rejoué sur des graines dérivées
-  // (disjointes par parité de celles du vrai choc). Jamais une seconde formule.
-  if (selectedWarband.value)
-    return Math.round(
-      estimateInterception(p, partyAdvs.value, roadCtx.value, heroForParty.value, 40) * 100,
-    );
-  // 🛡️ Un lieu de récolte gardé : le MÊME combat que les camps (`fightCampForce`).
-  const spec = selectedForce.value;
-  if (!spec) return null;
-  return Math.round(campWinPct(p, spec, allies, 40) * 100);
+  const w = partyWinChance(
+    p,
+    partyAdvs.value,
+    partyRoad.value,
+    heroForParty.value,
+    coarseNow.value,
+    40,
+  );
+  return w === null ? null : Math.round(w * 100);
 });
 /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
 const partyMin = computed(() =>
@@ -1427,6 +1499,7 @@ const partyMin = computed(() =>
         hero: partyHeroOn.value,
         travelMult: travelMult.value,
         gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
+        supplies: activeSupplies.value,
       })
     : 0,
 );
@@ -1556,6 +1629,7 @@ async function doSendParty() {
       // ne change pas. SANS lui : le niveau de SPORT, comme les convois (pièces d'aventurier).
       playerLevel: partyHeroOn.value ? progressionLevel.value : heroLevel.value,
       now: Date.now(),
+      supplies: activeSupplies.value,
     });
     if (!refused) selected.value = null;
     // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
@@ -1573,6 +1647,26 @@ async function doSendParty() {
     );
   } finally {
     busyCaravan.value = false;
+  }
+}
+
+/** 🧿 Le sceau de brèche : combien il en reste, et le poser sur la faille ouverte. */
+const sealStock = computed(() => char.row?.supplies.sceau ?? 0);
+const busySeal = ref(false);
+async function doSeal() {
+  const uid = auth.user?.id;
+  const p = selected.value;
+  if (!uid || !p || busySeal.value) return;
+  busySeal.value = true;
+  try {
+    const refused = await char.sealRiftPoi(uid, p.id);
+    $q.notify(
+      refused
+        ? { type: 'negative', message: `Sceau impossible : ${refused}.` }
+        : { type: 'positive', message: '🧿 La faille est scellée : 24 h de répit.' },
+    );
+  } finally {
+    busySeal.value = false;
   }
 }
 
@@ -2431,6 +2525,96 @@ onUnmounted(() => {
   font-size: 16px;
   font-weight: 800;
   color: var(--accent);
+}
+/* 🎒 Ravitaillement : même langage que la tuile du héros (coché = liseré accent, inutile ici
+   = pointillé et grisé, la raison écrite dessous). Une colonne : le nom ET l'effet doivent
+   se lire, sur 344 px deux colonnes les couperaient. */
+.sup-block {
+  margin: 10px 0;
+}
+.sup-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.sup-sub {
+  font-weight: 400;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.sup-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sup {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  background: #1d1913;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.sup.on {
+  border-color: var(--accent);
+  background: linear-gradient(90deg, rgba(255, 210, 63, 0.16), #1d1913 70%);
+}
+.sup.off {
+  cursor: default;
+  border-style: dashed;
+  opacity: 0.55;
+}
+.sup-emo {
+  font-size: 20px;
+  flex: none;
+}
+.sup-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.sup-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+.sup-what {
+  font-size: 11.5px;
+  color: var(--dim);
+  line-height: 1.3;
+}
+.sup-check {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--accent);
+}
+.sup-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+}
+.sup-seal {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border: 1px solid #b57bff;
+  border-radius: 10px;
+  background: rgba(181, 123, 255, 0.12);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.sup-seal:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 .sh-note {
   margin: 0 0 8px;
