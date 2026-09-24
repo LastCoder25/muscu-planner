@@ -365,7 +365,8 @@
                       v-if="gearAscent(g)"
                       type="button"
                       class="gear-btn ascend"
-                      :disabled="busy || !!gearAscent(g)!.block"
+                      :class="{ blocked: !!gearAscent(g)!.block }"
+                      :disabled="busy"
                       :title="gearAscent(g)!.title"
                       :aria-label="gearAscent(g)!.title"
                       @click="doAscendGear(g)"
@@ -1372,6 +1373,7 @@ function gearAscent(g: AdvGear) {
     rank,
     cost,
     block,
+    have: sealCount(seals, 'gear', next),
     title: block
       ? `Ascension vers ${rank.name} — ${GEAR_ASCENSION_BLOCK_LABEL[block]} (${price})`
       : `Ascension vers ${rank.name} (${price})`,
@@ -1450,7 +1452,16 @@ function doMergeGear() {
 }
 function doAscendGear(g: AdvGear) {
   const s = gearAscent(g);
-  if (!s || s.block) return;
+  if (!s) return;
+  // ⚠️ Bloquée : on DIT pourquoi au lieu de ne rien faire — sur téléphone il n'y a pas de
+  // survol, donc le `title` du bouton n'est jamais lu, et un bouton muet se lit comme une panne.
+  if (s.block) {
+    $q.dialog({
+      title: `⬆️ ${g.name} → ${s.rank.emoji} ${s.rank.name}`,
+      message: `${GEAR_ASCENSION_BLOCK_LABEL[s.block]} Coût : ${s.cost.seals} sceau(x) d’objet ⚜️ ${s.rank.name} (tu en as ${s.have}) et ${s.cost.gold.toLocaleString('fr-FR')} 🪙.`,
+    });
+    return;
+  }
   $q.dialog({
     title: `⬆️ ${g.name} → ${s.rank.emoji} ${s.rank.name}`,
     message: `Coût : ${s.cost.seals} sceau(x) d’objet ${s.rank.name} et ${s.cost.gold.toLocaleString('fr-FR')} 🪙. Son éveil est conservé.`,
@@ -2476,7 +2487,12 @@ function leftOf(at: number): string {
   color: var(--text);
   font-size: 12px;
 }
-.gear-btn.ascend:not(:disabled) {
+/* ⬆️ Bloquée : reste touchable (sur téléphone un `title` ne s'affiche pas — le toucher
+ *  ouvre la raison), mais se lit éteinte comme un bouton désactivé. */
+.gear-btn.ascend.blocked {
+  opacity: 0.4;
+}
+.gear-btn.ascend:not(:disabled):not(.blocked) {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
