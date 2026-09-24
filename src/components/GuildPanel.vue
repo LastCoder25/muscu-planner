@@ -717,7 +717,7 @@
     </q-card>
   </q-dialog>
 
-  <!-- 📊 LA FEUILLE D'UNE PIÈCE (v0.1126, demandé : « au clic sur la pièce, partout ») :
+  <!-- 📊 LA FEUILLE D'UNE PIÈCE (v0.1129, demandé : « au clic sur la pièce, partout ») :
        son rang, ses étoiles, son avancement vers l'étoile suivante et ce qui la fait
        avancer. ⚠️ Toujours pas de niveau affiché. -->
   <q-dialog :model-value="!!gearInfo" position="bottom" @update:model-value="gearInfo = null">
@@ -1037,7 +1037,7 @@ const gearHereId = computed(() => {
   const a = gearPickAdv.value;
   return p && a ? (a.gear?.[p.slot] ?? null) : null;
 });
-// ── 📊 LA FEUILLE D'UNE PIÈCE (v0.1126) ──
+// ── 📊 LA FEUILLE D'UNE PIÈCE (v0.1129) ──
 // `advId`/`slot` présents = ouverte depuis une case d'un champion : elle propose alors de
 // changer la pièce (ce que la case faisait directement avant).
 const gearInfo = ref<{ gearId: string; advId?: string; slot?: AdvGearSlot } | null>(null);

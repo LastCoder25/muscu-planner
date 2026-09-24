@@ -998,7 +998,7 @@ function gearStarPos(g: Pick<AdvGear, 'rarity' | 'level'>, frac: number): number
   return ((g.level - band.min + frac) * 5) / span;
 }
 
-// ── 📊 L'AVANCEMENT D'UNE PIÈCE VERS L'ÉTOILE SUIVANTE (v0.1126, demandé) ────────────────
+// ── 📊 L'AVANCEMENT D'UNE PIÈCE VERS L'ÉTOILE SUIVANTE (v0.1129, demandé) ────────────────
 // ⚠️ Le niveau d'une pièce est CACHÉ, comme celui d'un champion : entre deux étoiles, elle
 // apprend pendant plusieurs missions sans que rien ne bouge à l'écran. Cette barre le dit.
 

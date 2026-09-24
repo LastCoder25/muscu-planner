@@ -17,7 +17,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 
-// 📊 La barre d'une pièce vers l'étoile suivante (v0.1126) : son niveau est caché comme celui
+// 📊 La barre d'une pièce vers l'étoile suivante (v0.1129) : son niveau est caché comme celui
 // d'un champion, donc sans elle une pièce apprend plusieurs missions sans que rien ne bouge.
 
 const piece = (id: string, over: Partial<AdvGear> = {}): AdvGear => ({

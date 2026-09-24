@@ -1740,7 +1740,7 @@ export interface AdvXpSegment {
   rankUp: boolean;
 }
 
-/** 🗡️ La barre d'une PIÈCE portée, AVANT → APRÈS la même mission (v0.1126) : elle apprend
+/** 🗡️ La barre d'une PIÈCE portée, AVANT → APRÈS la même mission (v0.1129) : elle apprend
  *  avec son champion, et son niveau est caché comme le sien. Construite dans `advGear.ts`
  *  (`withGearTracks`) ; ce type n'est qu'une forme, pour ne pas importer l'équipement ici. */
 export interface AdvXpBar {

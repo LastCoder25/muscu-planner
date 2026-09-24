@@ -597,7 +597,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
     expect(stockHtml).toContain(avecStock.adv_gear.stock[0]!.name);
     expect(stockHtml).toMatch(/class="adv-rname[^"]*">B</);
-    // 📊 v0.1126 : la tuile porte le rang de la pièce et son avancement vers l'étoile
+    // 📊 v0.1129 : la tuile porte le rang de la pièce et son avancement vers l'étoile
     // suivante (niveau 3 d'une Bronze = début de ★2, donc 0 %).
     expect(stockHtml).toContain('role="progressbar"');
     expect(stockHtml).toMatch(/class="gsb-pct[^"]*">0 %</);
@@ -1068,7 +1068,7 @@ describe('📊 barre d’étoile au retour de mission', () => {
     expect(out).toContain(`width: ${from * 100}%`);
   });
 
-  // 🗡️ v0.1126 : les pièces qu'il porte ont LEUR barre sous la sienne, elles aussi parties
+  // 🗡️ v0.1129 : les pièces qu'il porte ont LEUR barre sous la sienne, elles aussi parties
   // de leur avancement d'avant la mission.
   it('AdvXpGainOverlay : les pièces portées ont leur barre sous le champion', async () => {
     const { useAdvXpFx } = await import('@/composables/useAdvXpFx');

@@ -45,7 +45,7 @@
             <div v-else-if="rows[b]?.done && t.ascendReady" class="ax-note asc">
               ⬆️ ★★★★★ — prêt pour l’ascension · <b>toucher pour y aller ›</b>
             </div>
-            <!-- 🗡️ SES PIÈCES PORTÉES (v0.1126, demandé) : elles apprennent avec lui, et leur
+            <!-- 🗡️ SES PIÈCES PORTÉES (v0.1129, demandé) : elles apprennent avec lui, et leur
                  niveau est caché comme le sien — sans cette barre, rien ne disait qu'elles
                  avaient avancé. Même animation que la sienne, un peu décalée. -->
             <div v-if="gear.length" class="ax-gear">

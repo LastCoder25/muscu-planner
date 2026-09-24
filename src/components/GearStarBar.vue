@@ -1,5 +1,5 @@
 <template>
-  <!-- 📊 LE RANG D'UNE PIÈCE ET SON AVANCEMENT VERS L'ÉTOILE SUIVANTE (v0.1126, demandé).
+  <!-- 📊 LE RANG D'UNE PIÈCE ET SON AVANCEMENT VERS L'ÉTOILE SUIVANTE (v0.1129, demandé).
        Son niveau est caché comme celui d'un champion : sans cette barre, une pièce apprend
        plusieurs missions sans que rien ne bouge. Un seul dessin pour le stock, le sélecteur,
        la fiche et la feuille d'une pièce : plusieurs copies finiraient par diverger. -->
