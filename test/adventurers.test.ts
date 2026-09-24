@@ -31,6 +31,7 @@ import {
   advAvatar,
   compareAdventurers,
   groupByGrade,
+  sortByGradeThenRank,
   advShapeLabel,
 } from '@/lib/adventurers';
 import { RANK_ORDER } from '@/lib/items';
@@ -620,6 +621,13 @@ describe('🗂️ LE VIVIER RANGÉ PAR LETTRE — puis rang et étoiles décrois
     const g = groupByGrade([c('a', 'A', 5), c('b', 'S', 1), c('e', 'A', 2)], none);
     expect(g.map((x) => x.grade)).toEqual(['S', 'A']);
     expect(groupByGrade([c('a', 'A', 5)], none).map((x) => x.grade)).toEqual(['A']);
+  });
+
+  it('🎯 choix d’équipe : lettre puis rang, à plat, sans toucher la liste reçue', () => {
+    const l = [c('a2', 'A', 2), c('s1', 'S', 1), c('a12', 'A', 12), c('s30', 'S', 30)];
+    const avant = l.map((a) => a.id);
+    expect(sortByGradeThenRank(l).map((a) => a.id)).toEqual(['s30', 's1', 'a12', 'a2']);
+    expect(l.map((a) => a.id)).toEqual(avant);
   });
 
   it('dans une section, rang puis étoiles DÉCROISSANTS', () => {

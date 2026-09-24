@@ -584,7 +584,7 @@
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
-              v-for="a in freeStable"
+              v-for="a in freeSorted"
               :key="a.id"
               :adv="a"
               :on="partyEscort.includes(a.id)"
@@ -844,6 +844,7 @@ import {
   advAvailable,
   advUnavailableReason,
   engageCap,
+  sortByGradeThenRank,
   type Adventurer,
 } from '@/lib/adventurers';
 import { rankStarStr, CHARACTER_RANKS } from '@/lib/characterRank';
@@ -1279,6 +1280,9 @@ const freeStable = computed(() => {
  *  groupe ou d'une escorte, et le nombre de défenseurs au rempart. ⚠️ Nommé une seule fois :
  *  le bouton d'envoi, le risque de départ et le store doivent parler du même plafond. */
 const cap = computed(() => engageCap(char.pantheonLevel));
+/** 🎯 Les champions libres, dans l’ordre d’affichage (lettre puis rang). ⚠️ Pour l’ÉCRAN et
+ *  « Tout le vivier » seulement : `freeStable` garde l’ordre du vivier pour le reste. */
+const freeSorted = computed(() => sortByGradeThenRank(freeStable.value));
 /** Créneaux de convoi libres — ⚠️ UN SEUL pool avec les groupes partis SANS le héros
  *  (`convoySlotsFree`, même règle que le store). */
 const vansLeft = computed(() =>
@@ -1392,7 +1396,7 @@ const partyBlocked = computed(() => {
       return [kv.slice(0, cut), kv.slice(cut + 1)] as const;
     }),
   );
-  return char.advList.flatMap((a) => {
+  return sortByGradeThenRank(char.advList).flatMap((a) => {
     const w = why.get(a.id);
     return w ? [{ adv: a, why: w as NonNullable<ReturnType<typeof advUnavailableReason>> }] : [];
   });
@@ -1569,7 +1573,7 @@ function togglePartyAdv(id: string) {
 /** ✨ Tout le vivier disponible d'un geste (et de nouveau pour tout retirer) : un repaire
  *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
 /** Ce que « tout le vivier » peut réellement prendre ici. */
-const partyAllIds = computed(() => freeStable.value.slice(0, partyMax.value).map((a) => a.id));
+const partyAllIds = computed(() => freeSorted.value.slice(0, partyMax.value).map((a) => a.id));
 const partyAllOn = computed(
   () => partyAllIds.value.length > 0 && partyAdvs.value.length === partyAllIds.value.length,
 );

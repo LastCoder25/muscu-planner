@@ -1976,6 +1976,14 @@ export function groupByGrade(
   return out;
 }
 
+/** 🎯 LE CHOIX D’UNE ÉQUIPE, RANGÉ (demandé) : la LETTRE d’abord (S puis A), puis le rang et
+ *  les étoiles décroissants. ⚠️ C’est la liste à plat de `groupByGrade` — une seconde règle de
+ *  tri finirait par ranger l’écran d’envoi autrement que la Guilde. Sans puissance : à rang
+ *  égal, l’ordre du vivier est conservé (tri stable). On COPIE, jamais en place. */
+export function sortByGradeThenRank(advs: readonly Adventurer[]): Adventurer[] {
+  return groupByGrade(advs, () => 0).flatMap((g) => g.advs);
+}
+
 /** Étoile courante, 1..5 — la progression du niveau DANS le rang. */
 export function advStar(adv: Adventurer): number {
   return advRank(adv).star;
