@@ -7,7 +7,7 @@
        (« un aventurier de manga ») — le rang et l’anneau disent où il en est. -->
   <div
     class="ap"
-    :class="[tone ? 'tone-' + tone : '', { busy: tone ? tone !== 'free' : false }]"
+    :class="[tone ? 'tone-' + tone : '', { busy: tone ? tone !== 'free' : false, ascend }]"
     :style="{ '--rank-c': rank.color, '--rar-c': rarColor, '--nom-c': nomColor }"
   >
     <div class="ap-square">
@@ -154,6 +154,9 @@
       </button>
     </div>
     <div v-if="state" class="ap-state">{{ state }}</div>
+    <button v-if="ascend" type="button" class="ap-asc" @click="emit('open')">
+      ⬆️ Monter de rang
+    </button>
   </div>
 </template>
 
@@ -195,6 +198,9 @@ const props = defineProps<{
   disabled?: boolean;
   /** Les 4 emplacements d'équipement, dans l'ordre de la grille. */
   gear: AdvGearCell[];
+  /** ⬆️ Son ascension est PAYABLE tout de suite (`readyAscensionIds`) : le portrait le dit,
+   *  sinon on cherche parmi tout le vivier celui qui allume le Panthéon. */
+  ascend?: boolean;
 }>();
 const emit = defineEmits<{
   open: [];
@@ -293,6 +299,26 @@ function starTf(i: number): string {
    (permanent), le liseré son ÉTAT (transitoire, et déjà dit par l'opacité et le texte). */
 .ap[class*='tone-'] {
   box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tone-c) 42%, transparent);
+}
+/* ⬆️ Prêt à monter de rang : le vert « gain » de l'anneau du Panthéon, en halo EXTÉRIEUR —
+   le contour garde la rareté, le liseré intérieur l'état. */
+.ap.ascend {
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--tone-c, transparent) 42%, transparent),
+    0 0 0 2px var(--d1, #7bc86c),
+    0 0 12px color-mix(in srgb, var(--d1, #7bc86c) 45%, transparent);
+}
+.ap-asc {
+  margin-top: 4px;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 0;
+  background: var(--d1, #7bc86c);
+  color: #15120e;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
 }
 .ap[class*='tone-'] .ap-state {
   color: color-mix(in srgb, var(--tone-c) 78%, var(--text));
