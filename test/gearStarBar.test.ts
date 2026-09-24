@@ -149,6 +149,18 @@ describe('au retour de mission, les pièces du champion ont leur barre', () => {
     expect(bar.segments[0]!.starUp).toBe(true);
   });
 
+  it('chaque champion n’a QUE ses pièces, pas celles de son voisin', () => {
+    const b2 = [
+      adv('a', 1, { weapon: 'p1' }),
+      adv('b', 1, { armor: 'p2' }),
+    ];
+    const a2 = b2.map((a) => grantAdvXp(a, gain, 100));
+    const n2 = trainWornGear(b2, a2, stock);
+    const t2 = withGearTracks(advXpTracks(b2, a2), stock, n2, a2);
+    expect(t2.find((t) => t.id === 'a')!.gear!.map((g) => g.id)).toEqual(['p1']);
+    expect(t2.find((t) => t.id === 'b')!.gear!.map((g) => g.id)).toEqual(['p2']);
+  });
+
   it('rien ne bouge, rien n’est rattaché', () => {
     const t = withGearTracks(advXpTracks(before, after), stock, stock, after);
     expect(t[0]!.gear).toBeUndefined();
