@@ -1984,6 +1984,8 @@
               </span>
               <span v-else class="lo-empty-tag">vide</span>
             </div>
+            <!-- Le THÈME du set : ce qu'il fait, lisible avant d'ouvrir une pièce. -->
+            <div v-if="loadoutSetTheme(i)" class="lo-theme">{{ loadoutSetTheme(i) }}</div>
             <!-- REPLIÉ : une pastille par pièce, pour lire la collection d'un coup d'œil. -->
             <div v-if="lo.count && setDetail !== i" class="lo-items">
               <button
@@ -5770,6 +5772,9 @@ const bagCount = computed(
 // ── Loadouts (sets d'équipement rangés) — 1 par VOIE (8 slots) ──
 // Slot i ↔ voie i : chaque loadout est l'endroit où ranger le set de cette voie.
 const loadoutVoie = (i: number): (typeof VOIES)[number] | null => VOIES[i] ?? null;
+/** Thème du set de voie de la carte i (la phrase de `VOIE_SETS`, source unique). */
+const loadoutSetTheme = (i: number): string =>
+  (VOIES[i] && SET_BY_ID[`voie:${VOIES[i].id}`]?.theme) || '';
 // SET DE VOIE ACTUELLEMENT ÉQUIPÉ (≥2 pièces) → marque le loadout correspondant « en cours »
 // + bannière dans la vue Équipement. Dominant parmi les 7 emplacements équipés.
 /** « Set porté » = les 6 pièces portées ET la voie du set active. ⚠️ Pas seulement « un
@@ -8883,6 +8888,12 @@ button.pt-mini:active {
 }
 .lo-name.mine {
   color: var(--accent);
+}
+.lo-theme {
+  margin-top: 2px;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--dim);
 }
 .loadout.active {
   border-color: var(--accent);
