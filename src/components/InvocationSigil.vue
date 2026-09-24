@@ -10,50 +10,60 @@
        Vue : ils changent à chaque image, et re-rendre ~250 éléments 60 fois par seconde
        n'apporterait rien. -->
   <div ref="root" class="ivs" :class="[variant, { dim, revealing, charging }]" aria-hidden="true">
-    <svg ref="svg" :viewBox="`0 0 ${size} ${size}`" aria-hidden="true">
-      <defs>
-        <radialGradient :id="`${uid}-core`">
-          <stop offset="0" stop-color="#e6d6ff" stop-opacity=".6" />
-          <stop offset=".45" stop-color="#b57bff" stop-opacity=".3" />
-          <stop offset="1" stop-color="#b57bff" stop-opacity="0" />
-        </radialGradient>
-        <radialGradient :id="`${uid}-aura`">
-          <stop offset=".6" stop-color="#ffd23f" stop-opacity="0" />
-          <stop offset=".82" stop-color="#ffd23f" stop-opacity=".35" />
-          <stop offset="1" stop-color="#ffd23f" stop-opacity="0" />
-        </radialGradient>
-        <radialGradient :id="`${uid}-disc`">
-          <stop offset="0" stop-color="#b57bff" stop-opacity=".16" />
-          <stop offset=".7" stop-color="#b57bff" stop-opacity=".06" />
-          <stop offset="1" stop-color="#b57bff" stop-opacity="0" />
-        </radialGradient>
-      </defs>
-      <circle :cx="C" :cy="C" :r="g.aura" :fill="`url(#${uid}-aura)`" :opacity="charge * 0.9" />
-      <circle v-if="big" :cx="C" :cy="C" r="198" :fill="`url(#${uid}-disc)`" />
-      <!-- cadran fixe : graduations -->
-      <circle class="ivs-ring thin" :cx="C" :cy="C" :r="g.dial" />
-      <circle
-        class="ivs-tick"
-        :cx="C"
-        :cy="C"
-        :r="g.tick"
-        :pathLength="g.ticks"
-        stroke-dasharray=".12 .88"
-      />
-      <circle
-        class="ivs-tick major"
-        :cx="C"
-        :cy="C"
-        :r="g.tick"
-        :pathLength="g.majors"
-        stroke-dasharray=".03 .97"
-        stroke-dashoffset=".015"
-      />
-      <circle class="ivs-ring" :cx="C" :cy="C" :r="g.dialIn" />
-      <circle v-if="big" class="ivs-ring thin" :cx="C" :cy="C" r="183" stroke-dasharray="1 3" />
+    <!-- ⚡ FLUIDITÉ (v0.1109) : chaque couche qui tourne est son PROPRE <svg>, superposé aux
+         autres, et tourne par une animation CSS (Web Animations) que le COMPOSITEUR joue
+         seul. Avant, on réécrivait l'attribut `transform` de groupes SVG à chaque image : le
+         navigateur repeignait tout le cercle — halos (`drop-shadow`) compris — soixante fois
+         par seconde, et ça saccadait dès que la révélation chargeait le fil principal. -->
+    <div ref="stack" class="ivs-stack">
+      <svg class="ivs-l" :viewBox="vb">
+        <defs>
+          <radialGradient :id="`${uid}-core`">
+            <stop offset="0" stop-color="#e6d6ff" stop-opacity=".6" />
+            <stop offset=".45" stop-color="#b57bff" stop-opacity=".3" />
+            <stop offset="1" stop-color="#b57bff" stop-opacity="0" />
+          </radialGradient>
+          <radialGradient :id="`${uid}-aura`">
+            <stop offset=".6" stop-color="#ffd23f" stop-opacity="0" />
+            <stop offset=".82" stop-color="#ffd23f" stop-opacity=".35" />
+            <stop offset="1" stop-color="#ffd23f" stop-opacity="0" />
+          </radialGradient>
+          <radialGradient :id="`${uid}-disc`">
+            <stop offset="0" stop-color="#b57bff" stop-opacity=".16" />
+            <stop offset=".7" stop-color="#b57bff" stop-opacity=".06" />
+            <stop offset="1" stop-color="#b57bff" stop-opacity="0" />
+          </radialGradient>
+        </defs>
+        <circle v-if="big" :cx="C" :cy="C" r="198" :fill="`url(#${uid}-disc)`" />
+        <!-- cadran fixe : graduations -->
+        <circle class="ivs-ring thin" :cx="C" :cy="C" :r="g.dial" />
+        <circle
+          class="ivs-tick"
+          :cx="C"
+          :cy="C"
+          :r="g.tick"
+          :pathLength="g.ticks"
+          stroke-dasharray=".12 .88"
+        />
+        <circle
+          class="ivs-tick major"
+          :cx="C"
+          :cy="C"
+          :r="g.tick"
+          :pathLength="g.majors"
+          stroke-dasharray=".03 .97"
+          stroke-dashoffset=".015"
+        />
+        <circle class="ivs-ring" :cx="C" :cy="C" :r="g.dialIn" />
+        <circle v-if="big" class="ivs-ring thin" :cx="C" :cy="C" r="183" stroke-dasharray="1 3" />
+      </svg>
+      <!-- l'aura a son calque : son opacité suit la charge, le compositeur la fond sans repeindre. -->
+      <svg ref="aura" class="ivs-l ivs-aura" :viewBox="vb">
+        <circle :cx="C" :cy="C" :r="g.aura" :fill="`url(#${uid}-aura)`" />
+      </svg>
 
       <!-- couronne de perles (grand cercle) -->
-      <g v-if="big" data-spin="0.6">
+      <svg v-if="big" class="ivs-l" :viewBox="vb" data-spin="0.6">
         <circle class="ivs-ring thin" :cx="C" :cy="C" r="210" stroke-dasharray="2 6" />
         <g v-for="(b, i) in beadsOuter" :key="'bo' + i" data-lit="bo" class="ivs-beadg">
           <circle class="ivs-bead" :class="{ big: b.big }" :cx="b.x" :cy="b.y" :r="b.r" />
@@ -68,10 +78,10 @@
             <circle class="ivs-bead" :cx="b.x" :cy="b.y" :r="b.r * 0.4" />
           </template>
         </g>
-      </g>
+      </svg>
 
       <!-- bande de runes -->
-      <g data-spin="1">
+      <svg class="ivs-l" :viewBox="vb" data-spin="1">
         <text
           v-for="(t, i) in runesOuter"
           :key="'ro' + i"
@@ -91,11 +101,11 @@
           :r="g.runeRing - 4"
           :stroke-dasharray="big ? undefined : '1 4'"
         />
-      </g>
+      </svg>
 
       <template v-if="big">
         <!-- perles entre les runes et les médaillons -->
-        <g data-spin="-1.3">
+        <svg class="ivs-l" :viewBox="vb" data-spin="-1.3">
           <g v-for="(b, i) in beadsMid" :key="'bm' + i" data-lit="bm" class="ivs-beadg">
             <circle class="ivs-bead" :class="{ big: b.big }" :cx="b.x" :cy="b.y" :r="b.r" />
             <template v-if="b.big">
@@ -109,17 +119,17 @@
               <circle class="ivs-bead" :cx="b.x" :cy="b.y" :r="b.r * 0.4" />
             </template>
           </g>
-        </g>
+        </svg>
         <!-- médaillons planétaires reliés en octogone -->
-        <g data-spin="-0.45">
+        <svg class="ivs-l" :viewBox="vb" data-spin="-0.45">
           <polygon class="ivs-ring thin" :points="medalPoly" />
           <g v-for="(m, i) in medals" :key="'md' + i" data-lit="md" class="ivs-medal">
             <circle :cx="m.x" :cy="m.y" r="12" />
             <text :x="m.x" :y="m.y">{{ m.ch }}</text>
           </g>
-        </g>
+        </svg>
         <!-- arcs segmentés -->
-        <g data-spin="3">
+        <svg class="ivs-l" :viewBox="vb" data-spin="3">
           <circle
             class="ivs-arcs"
             :cx="C"
@@ -129,23 +139,23 @@
             stroke-dasharray="1.6 .4"
           />
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="128" />
-        </g>
-        <g data-spin="-3.4">
+        </svg>
+        <svg class="ivs-l" :viewBox="vb" data-spin="-3.4">
           <g v-for="(b, i) in beadsArc" :key="'ba' + i" data-lit="ba" class="ivs-beadg">
             <circle class="ivs-bead" :cx="b.x" :cy="b.y" :r="b.r" />
           </g>
-        </g>
+        </svg>
       </template>
       <!-- satellites (petit cercle) -->
-      <g v-else data-spin="2.4">
+      <svg v-else class="ivs-l" :viewBox="vb" data-spin="2.4">
         <path class="ivs-sat" d="M150,-6 l4,8 l-4,8 l-4,-8 z" />
         <path class="ivs-sat" d="M150,290 l4,8 l-4,8 l-4,-8 z" />
         <path class="ivs-sat" d="M-6,150 l8,4 l8,-4 l-8,-4 z" />
         <path class="ivs-sat" d="M290,150 l8,4 l8,-4 l-8,-4 z" />
-      </g>
+      </svg>
 
       <!-- étoiles + nœuds (contre-rotation) -->
-      <g data-spin="-0.7">
+      <svg class="ivs-l" :viewBox="vb" data-spin="-0.7">
         <template v-if="big">
           <polygon class="ivs-star" :points="star12" />
           <polygon class="ivs-star" :points="star8" opacity=".7" />
@@ -177,10 +187,10 @@
           :cy="n.y"
           :r="big ? 4 : 4.5"
         />
-      </g>
+      </svg>
 
       <!-- hexagramme et runes intérieures -->
-      <g data-spin="1.5">
+      <svg class="ivs-l" :viewBox="vb" data-spin="1.5">
         <circle v-if="big" class="ivs-ring" :cx="C" :cy="C" r="104" />
         <polygon class="ivs-ring" :points="hexA" />
         <polygon class="ivs-ring" :points="hexB" />
@@ -196,19 +206,19 @@
         >
           {{ t.ch }}
         </text>
-      </g>
+      </svg>
 
       <template v-if="big">
         <!-- lunes : six petits cercles qui orbitent, chacun tournant sur lui-même -->
-        <g data-spin="2">
+        <svg class="ivs-l" :viewBox="vb" data-spin="2">
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="74" />
           <g v-for="(m, i) in moons" :key="'mo' + i" data-lit="mo" class="ivs-moon">
             <circle class="ivs-moonb" :cx="m.x" :cy="m.y" r="7" />
             <circle class="ivs-spinner" :class="{ rev: i % 2 === 1 }" :cx="m.x" :cy="m.y" r="11" />
             <circle class="ivs-bead" :cx="m.sx" :cy="m.sy" r="2" />
           </g>
-        </g>
-        <g data-spin="-2.2">
+        </svg>
+        <svg class="ivs-l" :viewBox="vb" data-spin="-2.2">
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="62" stroke-dasharray="2 3" />
           <text
             v-for="(t, i) in runesCore"
@@ -222,22 +232,28 @@
             {{ t.ch }}
           </text>
           <polygon class="ivs-ring thin" points="200,158 236,179 236,221 200,242 164,221 164,179" />
-        </g>
+        </svg>
       </template>
 
-      <circle class="ivs-core" :cx="C" :cy="C" :r="big ? 80 : 70" :fill="`url(#${uid}-core)`" />
-      <path class="ivs-glyph" :d="glyph" />
-      <circle
-        class="ivs-prog"
-        :cx="C"
-        :cy="C"
-        :r="g.prog"
-        pathLength="1"
-        stroke-dasharray="1"
-        :stroke-dashoffset="1 - charge"
-        :transform="`rotate(-90 ${C} ${C})`"
-      />
-    </svg>
+      <!-- le cœur qui respire a son propre calque : sinon il repeindrait l'anneau de charge. -->
+      <svg class="ivs-l ivs-corel" :viewBox="vb">
+        <circle :cx="C" :cy="C" :r="big ? 80 : 70" :fill="`url(#${uid}-core)`" />
+      </svg>
+      <svg class="ivs-l" :viewBox="vb">
+        <path class="ivs-glyph" :d="glyph" />
+        <circle
+          ref="prog"
+          class="ivs-prog"
+          :cx="C"
+          :cy="C"
+          :r="g.prog"
+          pathLength="1"
+          stroke-dasharray="1"
+          stroke-dashoffset="1"
+          :transform="`rotate(-90 ${C} ${C})`"
+        />
+      </svg>
+    </div>
   </div>
 </template>
 
@@ -352,37 +368,53 @@ const glyph = V
   : 'M150,126 L150,174 M132,138 L168,162 M168,138 L132,162 M143,150 A7,7 0 1 0 157,150 A7,7 0 1 0 143,150';
 
 const root = ref<HTMLElement | null>(null);
-const svg = ref<SVGSVGElement | null>(null);
-let spinners: { el: Element; k: number }[] = [];
+const stack = ref<HTMLElement | null>(null);
+const aura = ref<SVGSVGElement | null>(null);
+const prog = ref<SVGCircleElement | null>(null);
+const vb = computed(() => `0 0 ${size.value} ${size.value}`);
+/** Vitesse de référence (°/s) : une couche de facteur 1 y fait un tour en 30 s. Les autres
+ *  vitesses s'obtiennent par `playbackRate` — la rotation reste sur le compositeur. */
+const BASE_SPEED = 12;
+let spinners: Animation[] = [];
 let litGroups: Element[][] = [];
 let litN: number[] = [];
 let raf = 0;
 let last = 0;
-let angle = 0;
 let spd = 12;
+let rate = 1;
 
-/** L'allumage suit la charge : les runes et nœuds s'éclairent un à un. */
-function paintLit(c: number) {
+/** L'allumage suit la charge : les runes et nœuds s'éclairent un à un. ⚠️ Posé à la main,
+ *  comme l'aura et l'anneau : lier `charge` au template re-rendrait les ~250 nœuds du
+ *  cercle à chaque image de la charge. */
+function paintCharge(c: number) {
   litGroups.forEach((arr, j) => {
     const n = Math.round(c * arr.length);
     if (n === litN[j]) return;
     litN[j] = n;
     arr.forEach((e, i) => e.classList.toggle('on', i < n));
   });
+  if (aura.value) aura.value.style.opacity = String(c * 0.9);
+  prog.value?.setAttribute('stroke-dashoffset', String(1 - c));
 }
-watch(() => props.charge, paintLit);
+watch(() => props.charge, paintCharge);
 
 function frame(t: number) {
   const dt = Math.min(0.05, (t - (last || t)) / 1000);
   last = t;
+  // La vitesse visée s'atteint en douceur ; on ne touche au compositeur que si elle a
+  // vraiment changé (`updatePlaybackRate` raccorde sans à-coup).
   spd += (props.speed - spd) * Math.min(1, dt * 4);
-  angle += spd * dt;
-  const c = C.value;
-  for (const s of spinners) s.el.setAttribute('transform', `rotate(${angle * s.k} ${c} ${c})`);
-  if (svg.value) {
+  const r = spd / BASE_SPEED;
+  if (Math.abs(r - rate) > rate * 0.01) {
+    rate = r;
+    for (const a of spinners) a.updatePlaybackRate(r);
+  }
+  // Pendant la charge, le cercle enfle et VIBRE : une vibration continue (sommes de
+  // sinus) plutôt qu'un saut aléatoire à chaque image, qui se lisait comme une saccade.
+  if (stack.value) {
     const k = props.charging ? props.charge : 0;
-    svg.value.style.transform = k
-      ? `scale(${1 + k * 0.06}) translate(${(Math.random() - 0.5) * k * 3}px,${(Math.random() - 0.5) * k * 3}px)`
+    stack.value.style.transform = k
+      ? `scale(${1 + k * 0.06}) translate(${(Math.sin(t / 23) + Math.sin(t / 41)) * k * 0.9}px,${(Math.cos(t / 29) + Math.sin(t / 53)) * k * 0.9}px)`
       : '';
   }
   raf = requestAnimationFrame(frame);
@@ -391,21 +423,31 @@ function frame(t: number) {
 onMounted(() => {
   const el = root.value;
   if (!el) return;
-  spinners = [...el.querySelectorAll('[data-spin]')].map((e) => ({
-    el: e,
-    k: Number(e.getAttribute('data-spin')),
-  }));
   const keys = ['ro', 'ri', 'rc', 'nd', 'md', 'bo', 'bm', 'ba', 'mo'];
   litGroups = keys
     .map((k) => [...el.querySelectorAll(`[data-lit="${k}"]`)])
     .filter((a) => a.length);
   litN = litGroups.map(() => -1);
-  paintLit(props.charge);
+  paintCharge(props.charge);
   // ⚠️ Mouvement réduit : le cercle reste immobile (il s'allume quand même, c'est une information).
-  if (!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
-    raf = requestAnimationFrame(frame);
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+  spd = props.speed;
+  rate = spd / BASE_SPEED;
+  spinners = [...el.querySelectorAll<SVGSVGElement>('[data-spin]')].map((e) => {
+    const k = Number(e.getAttribute('data-spin'));
+    const a = e.animate(
+      [{ transform: 'rotate(0deg)' }, { transform: `rotate(${Math.sign(k) * 360}deg)` }],
+      { duration: (360 / (Math.abs(k) * BASE_SPEED)) * 1000, iterations: Infinity },
+    );
+    a.playbackRate = rate;
+    return a;
+  });
+  raf = requestAnimationFrame(frame);
 });
-onBeforeUnmount(() => cancelAnimationFrame(raf));
+onBeforeUnmount(() => {
+  cancelAnimationFrame(raf);
+  for (const a of spinners) a.cancel();
+});
 
 defineExpose({ el: root });
 </script>
@@ -443,11 +485,27 @@ defineExpose({ el: root });
     transition: opacity 400ms;
     pointer-events: none;
   }
-  svg {
-    width: 100%;
-    height: 100%;
-    overflow: visible;
-    display: block;
+}
+/* Les calques se superposent exactement : même boîte, même viewBox. Chacun tourne autour de
+   son centre (celui du cercle) — une transformation que le compositeur applique sans
+   repeindre le dessin. */
+.ivs-stack {
+  position: absolute;
+  inset: 0;
+  /* ⚠️ Elle enfle et vibre pendant la charge : sans ce calque, chaque échelle différente
+     forcerait à redessiner tous les calques du cercle à la nouvelle taille. */
+  will-change: transform;
+}
+.ivs-l {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  display: block;
+  transform-origin: 50% 50%;
+  &[data-spin] {
+    will-change: transform;
   }
 }
 .ivs-ring {
@@ -609,10 +667,12 @@ defineExpose({ el: root });
   stroke-linecap: round;
   filter: drop-shadow(0 0 6px #ffd23f);
 }
-.ivs-core {
+.ivs-aura {
+  opacity: 0;
+  will-change: opacity;
+}
+.ivs-corel {
   animation: ivs-breathe 3.2s ease-in-out infinite;
-  transform-origin: center;
-  transform-box: fill-box;
 }
 @keyframes ivs-breathe {
   50% {
@@ -626,7 +686,7 @@ defineExpose({ el: root });
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ivs-core,
+  .ivs-corel,
   .ivs-spinner {
     animation: none;
   }
