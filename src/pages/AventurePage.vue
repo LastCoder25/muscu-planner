@@ -5135,6 +5135,9 @@ function itemStatCmp(
   it: Omit<Item, 'id'>,
   other?: Omit<Item, 'id'> | null,
 ): { text: string; cls: string }[] {
+  // Relique ou trophée : aucune stat, un POUVOIR. Son `effect` obligatoire est un marqueur à 0
+  // qu'on ne lit pas — le comparer affichait « +0 % PV » (même règle que `itemStatLines`).
+  if (it.power) return [{ text: itemPowerText(it), cls: '' }];
   const om = other ? affixValues(other) : new Map<string, number>();
   const out: { text: string; cls: string }[] = [];
   const push = (e?: { type: Parameters<typeof effectLabelFor>[0]; value: number }) => {
