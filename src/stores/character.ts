@@ -295,7 +295,7 @@ export interface CharacterRow {
    *  et non dans `gacha` : chaque tirage réécrit `gacha`, un oubli y effacerait les tickets. */
   gacha_tickets: number;
   seals: Seals; // 🔱 sceaux d'ascension (migr. 0083)
-  /** 🎒 Consommables d'expédition (migr. 0089) — gagnés en butin, emportés au départ. */
+  /** 🎒 Consommables d'expédition (migr. 0090) — gagnés en butin, emportés au départ. */
   supplies: SupplyStock;
   scrap: number; // 🔩 LEGACY (migr. 0060) : devise retirée (v0.998), convertie en or au chargement // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
@@ -472,7 +472,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
     r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
-    r.supplies = normalizeSupplies(r.supplies); // 🎒 migr. 0089
+    r.supplies = normalizeSupplies(r.supplies); // 🎒 migr. 0090
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
     // 🔩 → 🪙 LA FERRAILLE EST RETIRÉE (v0.998). La réserve d'un compte est convertie en
     // or, une fois, au taux de l'épave (`SCRAP_TO_GOLD`). ⚠️ Même politique que le

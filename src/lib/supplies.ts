@@ -149,7 +149,7 @@ function pct(x: number): string {
   return `${Math.round(x * 100)} %`;
 }
 
-/** Le stock du joueur (`characters.supplies`, migr. 0089) : un compte par consommable. */
+/** Le stock du joueur (`characters.supplies`, migr. 0090) : un compte par consommable. */
 export type SupplyStock = Partial<Record<SupplyId, number>>;
 
 const IS_ID = new Set<string>(SUPPLY_IDS);
