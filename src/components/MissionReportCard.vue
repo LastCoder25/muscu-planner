@@ -1,17 +1,19 @@
 <template>
   <!-- 📜 Rapport de mission COMPACT (v0.1119) : trois lignes — où et quoi, ce que ça
-       rapporte, qui y était — et le reste replié sous « Détails ». Un rapport encaissé
-       tient sur UNE ligne, qu'on touche pour le rouvrir. Toute la donnée vient de
-       `missionCard` (lib, testée) ; ce composant ne fait que peindre. -->
+       rapporte, qui y était — et le reste replié sous « Détails ». Replié, un rapport tient
+       dans une TUILE d'une ligne qu'on touche pour l'ouvrir — la boîte 📬 les replie tous
+       par défaut (v0.1123), le butin à prendre garde son bouton sur la ligne. Toute la
+       donnée vient de `missionCard` (lib, testée) ; ce composant ne fait que peindre. -->
   <div
-    v-if="folded"
-    class="mrc done"
+    v-if="!isOpen"
+    class="mrc folded"
+    :class="{ todo: state === 'claim', done: state === 'done' }"
     role="button"
     tabindex="0"
-    aria-label="Rouvrir le rapport"
-    @click="reopened = true"
-    @keydown.enter.prevent="reopened = true"
-    @keydown.space.prevent="reopened = true"
+    :aria-label="`Ouvrir le rapport : ${card.title}`"
+    @click="isOpen = true"
+    @keydown.enter.self.prevent="isOpen = true"
+    @keydown.space.self.prevent="isOpen = true"
   >
     <div class="l1">
       <div class="where">
@@ -20,16 +22,38 @@
           <template v-else>{{ card.emoji }}</template>
         </span>
         <span class="name font-display">{{ card.title }}</span>
+        <span class="dot" :class="card.win ? 'win' : 'lose'" :title="card.verdict">{{
+          card.win ? '✓' : '✗'
+        }}</span>
       </div>
       <span class="sum">{{ summary }}</span>
-      <span class="when">{{ when }}</span>
+      <button
+        v-if="state === 'claim'"
+        type="button"
+        class="take mini"
+        :disabled="busy"
+        :aria-label="claimLabel"
+        @click.stop="emit('claim')"
+      >
+        🎁
+      </button>
+      <span v-else-if="state === 'wait'" class="when" :title="waitLabel">🧭</span>
+      <span v-else class="when">{{ when }}</span>
     </div>
   </div>
 
   <div v-else class="mrc" :class="{ todo: state === 'claim', open: expanded }">
     <!-- 1 · où, rang, verdict, quand -->
     <div class="l1">
-      <div class="where">
+      <div
+        class="where"
+        :class="{ foldable: folded }"
+        :role="folded ? 'button' : undefined"
+        :tabindex="folded ? 0 : undefined"
+        :aria-label="folded ? 'Replier le rapport' : undefined"
+        @click="folded && (isOpen = false)"
+        @keydown.enter.self.prevent="folded && (isOpen = false)"
+      >
         <span class="ico" :class="{ rift: card.rift }">
           <RiftPortal v-if="card.rift" :color="card.color" :seed="seed" still />
           <template v-else>{{ card.emoji }}</template>
@@ -187,14 +211,17 @@ const props = withDefaults(
     waitLabel?: string;
     claimLabel?: string;
     busy?: boolean;
+    /** Replié par défaut (la boîte 📬) : une tuile d'une ligne. Sinon, seul un rapport
+     *  encaissé part replié. */
+    folded?: boolean;
   }>(),
-  { state: 'none', waitLabel: '', claimLabel: '🎁 Prendre', busy: false },
+  { state: 'none', waitLabel: '', claimLabel: '🎁 Prendre', busy: false, folded: false },
 );
 const emit = defineEmits<{ claim: []; replay: [] }>();
 
 const expanded = ref(false);
-const reopened = ref(false);
-const folded = computed(() => props.state === 'done' && !reopened.value);
+// ⚠️ Lu UNE fois : encaisser un rapport ouvert ne doit pas le refermer sous le doigt.
+const isOpen = ref(!props.folded && props.state !== 'done');
 
 const seed = computed(() => seedOf(props.card.id));
 const when = computed(() => missionWhen(props.card.at, props.now));
@@ -493,20 +520,43 @@ function fmtRate(n: number): string {
 .rate b {
   color: var(--accent);
 }
-/* Encaissé : une ligne, grisée, qu'on touche pour rouvrir. */
-.mrc.done {
-  padding: 8px 12px;
+/* Replié : une TUILE d'une ligne, qu'on touche pour ouvrir. */
+.mrc.folded {
+  padding: 8px 10px 8px 12px;
   cursor: pointer;
-  border-color: transparent;
-  background: color-mix(in srgb, var(--surface) 60%, var(--bg));
+  min-height: 48px;
+  align-content: center;
 }
-.mrc.done .where {
+.mrc.folded .where {
   flex: none;
   max-width: 55%;
 }
-.mrc.done .name {
-  color: var(--dim);
+.mrc.folded .name {
   font-size: 14px;
+}
+.mrc.folded.done .name,
+.mrc.folded.done .sum {
+  color: var(--dim);
+}
+.dot {
+  flex: none;
+  font-size: 11px;
+  font-weight: 800;
+}
+.dot.win {
+  color: var(--d1);
+}
+.dot.lose {
+  color: var(--d4);
+}
+.take.mini {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  font-size: 15px;
+}
+.where.foldable {
+  cursor: pointer;
 }
 .sum {
   flex: 1;
