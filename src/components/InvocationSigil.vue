@@ -148,7 +148,7 @@
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="128" />
         </svg>
         <svg class="ivs-l" :viewBox="vb" data-spin="3.4" data-zone="1">
-          <g v-for="(b, i) in beadsArc" :key="'ba' + i" data-lit="ba" class="ivs-beadg ivs-tone-i">
+          <g v-for="(b, i) in beadsArc" :key="'ba' + i" data-lit="ba" class="ivs-beadg">
             <circle class="ivs-bead" :cx="b.x" :cy="b.y" :r="b.r" />
           </g>
         </svg>
@@ -189,7 +189,8 @@
           v-for="(n, i) in nodes"
           :key="'nd' + i"
           data-lit="nd"
-          class="ivs-node ivs-tone-i"
+          class="ivs-node"
+          :class="{ 'ivs-tone-i': !big }"
           :cx="n.x"
           :cy="n.y"
           :r="big ? 4 : 4.5"
@@ -581,7 +582,10 @@ defineExpose({ el: root });
 .ivs {
   --c: var(--ivs-b);
 }
-/* ⚠️ La teinte A/S ne s'applique qu'une fois ALLUMÉ par la charge : avant, rien ne se devine. */
+/* ⚠️ La teinte A/S ne s'applique qu'une fois ALLUMÉ par la charge : avant, rien ne se devine.
+   Sur le grand cercle, seules les LUNES portent le S : la rangée de boules de l'étoile,
+   voisine des médaillons violets, se lisait comme la leur — elle reste bleue (v0.1112). Le
+   petit cercle, sans médaillons ni lunes, garde le S sur les nœuds de son étoile. */
 .ivs-tone-o.on {
   --c: var(--ivs-o);
 }
