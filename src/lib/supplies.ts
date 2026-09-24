@@ -264,7 +264,11 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
     case 'cor':
       return CAMPS.has(t.type) ? null : 'seulement sur un camp ou un repaire';
     case 'carte':
-      return !harvest ? 'seulement sur la route d’une récolte' : t.hero ? 'sans effet avec le héros' : null;
+      return !harvest
+        ? 'seulement sur la route d’une récolte'
+        : t.hero
+          ? 'sans effet avec le héros'
+          : null;
     case 'bats':
       return harvest ? null : 'seulement sur un lieu de récolte';
     case 'lanterne':

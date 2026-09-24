@@ -1464,7 +1464,9 @@ const supplyRows = computed(() => {
 });
 /** ⚠️ Un consommable coché qui DEVIENT inutile (on retire le héros, par exemple) n'est plus
  *  emporté : on ne dépense pas un objet qui ne fait rien. */
-const activeSupplies = computed(() => supplyRows.value.filter((r) => r.on && !r.why).map((r) => r.id));
+const activeSupplies = computed(() =>
+  supplyRows.value.filter((r) => r.on && !r.why).map((r) => r.id),
+);
 function toggleSupply(id: SupplyId) {
   chosenSupplies.value = chosenSupplies.value.includes(id)
     ? chosenSupplies.value.filter((x) => x !== id)

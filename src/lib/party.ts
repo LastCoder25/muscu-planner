@@ -46,9 +46,7 @@ export function partyLegMin(
   // vitesse) ; pour le héros, qui n'a pas de rôle, directement.
   const speed = supplyFx(opts.supplies).speed;
   const hero = opts.hero
-    ? Math.round(
-        travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * opts.travelMult * (1 - speed),
-      )
+    ? Math.round(travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * opts.travelMult * (1 - speed))
     : 0;
   const advs = escort.length
     ? caravanLegMin(poi, escort, opts.gearSpeed + speed, opts.travelMult)
