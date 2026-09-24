@@ -766,6 +766,8 @@ const props = defineProps<{
   open: boolean;
   /** Quelle feuille : le vivier ou le stock d'équipement. Défaut : vivier. */
   section?: 'champions' | 'gear';
+  /** Ouvre directement la fiche de ce champion (retour de mission « prêt pour l'ascension »). */
+  focusId?: string | null;
 }>();
 const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
@@ -1165,6 +1167,17 @@ function stateOf(a: Adventurer): string {
 }
 // ── Fiche d'un aventurier ──
 const detailAdv = ref<Adventurer | null>(null);
+// ⬆️ Ouverture ciblée : la fiche porte le bloc d'ascension. Suivi à chaque ouverture — le
+// composant reste monté entre deux. Un id qui ne désigne plus personne n'ouvre rien.
+watch(
+  () => [props.focusId, props.open] as const,
+  ([id, open]) => {
+    if (!id || !open) return;
+    const a = char.advList.find((x) => x.id === id);
+    if (a) detailAdv.value = a;
+  },
+  { immediate: true },
+);
 /** ⬆️ L'ascension à proposer — seulement quand son XP BUTE sur la fin de son rang (★★★★★),
  *  sinon le bloc serait une promesse lointaine qui encombre la fiche. */
 function ascentOf(a: Adventurer) {

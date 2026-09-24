@@ -1057,4 +1057,71 @@ describe('📊 barre d’étoile au retour de mission', () => {
     const from = tracks[0]!.segments[0]!.from;
     expect(out).toContain(`width: ${from * 100}%`);
   });
+
+  // ⬆️ v0.1119 : un champion « prêt pour l'ascension » au retour de mission se TOUCHE — la
+  // ligne dépose son id et ferme l'overlay ; la Base ouvre alors le Panthéon sur sa fiche.
+  it('AdvXpGainOverlay : toucher un champion prêt mène à son ascension', async () => {
+    const { useAdvXpFx } = await import('@/composables/useAdvXpFx');
+    const { useChampionFocus } = await import('@/composables/useChampionFocus');
+    const AdvXpGainOverlay = (await import('@/components/AdvXpGainOverlay.vue')).default;
+    const seg = { from: 0.4, to: 1, starUp: false, rankUp: false };
+    const track = (id: string, ascendReady: boolean) => ({
+      id,
+      name: id,
+      xp: 50,
+      ascendReady,
+      segments: [{ ...seg, star: 5, rankEmoji: '🟤', rankName: 'Bronze', rankColor: '#b87333' }],
+    });
+    // Mouvement réduit : l'état FINAL d'emblée, c'est lui qui rend la ligne cliquable.
+    const mm = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q })) as typeof window.matchMedia;
+    const fx = useAdvXpFx();
+    const focus = useChampionFocus();
+    focus.take();
+    fx.show([track('pret', true), track('pas-pret', false)] as never);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const app = createApp({ render: () => h(AdvXpGainOverlay) });
+    app.use(pinia);
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [{ path: '/:all(.*)*', component: { render: () => null } }],
+    });
+    await router.replace('/');
+    app.use(router);
+    app.config.warnHandler = () => {};
+    const host = document.createElement('div');
+    app.mount(host);
+    await nextTick();
+    const rows = host.querySelectorAll<HTMLElement>('.ax-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.classList.contains('ready'), 'une ligne sans ascension reste inerte').toBe(
+      false,
+    );
+    // (un toucher sur la ligne inerte remonte au fond : il FERME l'overlay, sans rien cibler)
+    expect(rows[0]!.classList.contains('ready')).toBe(true);
+    rows[0]!.click();
+    expect(focus.pending.value).toBe('pret');
+    expect(fx.current.value, 'l’overlay se ferme').toBeNull();
+    app.unmount();
+    window.matchMedia = mm;
+    focus.take();
+  });
+
+  it('GuildPanel s’ouvre SUR la fiche du champion ciblé', async () => {
+    const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
+    let sans = '';
+    let avec = '';
+    await mountIt(GuildPanel, { open: true }, ROW, undefined, '/', (h) => (sans = h));
+    await mountIt(
+      GuildPanel,
+      { open: true, focusId: 'a1' },
+      ROW,
+      undefined,
+      '/',
+      (h) => (avec = h),
+    );
+    expect(sans).not.toContain('d-pow-val');
+    expect(avec).toContain('d-pow-val');
+  }, 30_000);
 });
