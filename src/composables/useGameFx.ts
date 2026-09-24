@@ -34,6 +34,8 @@ export interface GameFx {
   /** Rangs (index de `CHARACTER_RANKS`) d'un changement de rang (`kind: 'rankup'`) :
    *  l'overlay en tire les couleurs et les emblèmes, jamais une seconde table. */
   ranks?: { from: number; to: number };
+  /** Le champion mis en scène (`kind: 'rankup'`) : son portrait est au centre. */
+  championId?: string | null;
   /** DISCRET : bandeau en haut qui LAISSE PASSER LES TOUCHES, au lieu de l'overlay plein
    *  écran. Pour ce qui se répète (boss refarmé, drop, set renforcé) : enchaîner plusieurs
    *  overlays bloquait « Réattaquer » pendant des secondes. */

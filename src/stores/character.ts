@@ -156,6 +156,7 @@ import {
   grantAdvXp,
   advNextAscension,
   ascendAdventurer,
+  advTitle,
   engageCap,
   syncChampionName,
   type Adventurer,
@@ -2443,13 +2444,14 @@ export const useCharacterStore = defineStore('character', () => {
       adventurers: advs.map((a) => (a.id === advId ? up : a)),
     });
     // Annoncée APRÈS l'écriture : une animation n'annonce jamais un gain qui n'a pas eu lieu.
-    const to = CHARACTER_RANKS[next]!;
     useGameFx().celebrate({
       kind: 'rankup',
-      emoji: to.emoji,
+      // Repli si le champion n'a pas d'illustration : le visage de sa classe.
+      emoji: advTitle(adv)?.emoji ?? CHARACTER_RANKS[next]!.emoji,
       ranks: { from: next - 1, to: next },
-      title: `${adv.name} passe ${to.name}`,
-      subtitle: `+${mana} 💠 pierres de mana`,
+      championId: adv.championId ?? null,
+      title: adv.name,
+      count: mana,
     });
     return null;
   }

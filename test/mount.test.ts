@@ -985,3 +985,28 @@ describe('HoldGameLauncher — le bouton 🎮 à côté du chrono', () => {
     expect(await render('ex_side_plank')).not.toContain('hgl-btn');
   }, 30_000);
 });
+
+describe('⬆️ AscensionReveal — la scène d’ascension se monte', () => {
+  it('portrait du champion, rangs et récompense', async () => {
+    const AscensionReveal = (await import('@/components/AscensionReveal.vue')).default;
+    const { CHARACTER_RANKS } = await import('@/lib/characterRank');
+    const { CHAMPIONS } = await import('@/data/champions');
+    const c = CHAMPIONS[0]!;
+    let out = '';
+    const props = {
+      from: CHARACTER_RANKS[2],
+      to: CHARACTER_RANKS[3],
+      name: c.name,
+      championId: c.id,
+      emoji: c.emoji,
+      mana: 33,
+    };
+    expect(
+      await mountIt(AscensionReveal, props, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain(c.name);
+    expect(out).toContain('Or noir');
+    expect(out).toContain('+33');
+    expect(out).toContain('<img');
+  }, 30_000);
+});
