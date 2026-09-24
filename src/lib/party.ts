@@ -51,7 +51,7 @@ export function partyLegMin(
  * plus haut niveau ; plus il y a de champions plus l'XP est divisée, c'est tout »). SOURCE DE
  * VÉRITÉ, override les « 3 places, le héros en prend 2 » de la v0.1020.
  *
- * ⚠️ Ce que le nombre coûte désormais : l'XP. Au-delà de 3 membres (le héros compte pour 2),
+ * ⚠️ Ce que le nombre coûte désormais : l'XP. Au-delà de 3 champions (le héros n'en prend pas),
  * le socle de la mission se partage (`missionXpSplit`, caravan.ts). Une équipe nombreuse
  * abat ce qu'une petite ne peut pas, mais chacun y apprend moins.
  * ⚠️ Mesuré avant (v0.979) : une faille mûre passe de 62-83 % à 3 membres à 99-100 % à 4 —

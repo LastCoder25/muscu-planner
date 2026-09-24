@@ -178,7 +178,7 @@ describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
       expect(o.gold + o.energy + o.summonStones + o.mana + o.key).toBe(0);
       expect(o.party!.hurt).toEqual(['a0']);
       expect(o.party!.xp.a0).toBeGreaterThan(0);
-      expect(o.party!.xp.a0).toBeLessThan(missionXpFor(team(1), p, true, {}, false, 26).a0!);
+      expect(o.party!.xp.a0).toBeLessThan(missionXpFor(team(1), p, true, {}, 26).a0!);
     }
     expect(vu).toBe(true);
   });

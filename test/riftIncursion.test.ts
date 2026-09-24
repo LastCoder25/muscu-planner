@@ -17,11 +17,11 @@ import {
 import { EXPE, harvestYield, type Poi } from '@/lib/expedition';
 import {
   caravanWages,
+  missionXp,
   missionXpFor,
   missionXpSplit,
   CARAVAN,
   XP_TEAM_REF,
-  HERO_XP_WEIGHT,
   partyAllies,
   refAdvGear,
   refChampionAdv,
@@ -199,7 +199,7 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
       ),
     });
     // ⚠️ 3 champions + le héros (compte pour 2) : 5 membres, le socle se partage (v0.1038).
-    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, true, 26));
+    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, 26));
   });
 
   it('⚠️ le HÉROS ne prend AUCUNE part : les aventuriers partagent entre eux', () => {
@@ -473,31 +473,27 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
     // refonte supprime (décision de l’utilisateur : « c’est normal de diviser le total
     // d’XP d’un lieu entre les participants »). L’XP d’un lieu est désormais FIXE et se
     // divise dès le deuxième champion : un champion seul la prend entière.
-    expect(missionXpSplit(1, false)).toBeCloseTo(XP_TEAM_REF);
-    expect(missionXpSplit(2, false)).toBeCloseTo(XP_TEAM_REF / 2);
-    expect(missionXpSplit(XP_TEAM_REF, false)).toBe(1);
-    // Le héros prend deux parts : il VAUT deux champions dans un groupe.
-    expect(missionXpSplit(1, true)).toBe(1);
+    expect(missionXpSplit(1)).toBeCloseTo(XP_TEAM_REF);
+    expect(missionXpSplit(2)).toBeCloseTo(XP_TEAM_REF / 2);
+    expect(missionXpSplit(XP_TEAM_REF)).toBe(1);
   });
 
   it('⚠️ PARTAGER veut dire que le TOTAL de l’équipe ne bouge pas', () => {
     // La propriété centrale du partage, et elle n’était testée nulle part : tant que le
     // plancher ne mord pas, l’XP du LIEU est une enveloppe — la répartir autrement ne la
     // crée ni ne la détruit. C’est ce qui rend « qualité ou quantité » honnête.
-    const total = (n: number) => n * missionXpSplit(n, false);
+    const total = (n: number) => n * missionXpSplit(n);
     for (let n = 1; n <= 6; n++) expect(total(n), `n=${n}`).toBeCloseTo(XP_TEAM_REF);
     // Au-delà, le plancher en rend PLUS que l’enveloppe : c’est voulu (cf. plus bas),
     // sinon gagner à 10 rapporterait moins que perdre à 3.
     expect(total(10)).toBeGreaterThan(XP_TEAM_REF);
   });
 
-  it('au-delà, le socle se partage à parts égales ; le héros compte pour 2', () => {
-    expect(HERO_XP_WEIGHT).toBe(2);
-    expect(missionXpSplit(4, false)).toBeCloseTo(XP_TEAM_REF / 4);
-    expect(missionXpSplit(6, false)).toBeCloseTo(0.5);
-    expect(missionXpSplit(3, true)).toBeCloseTo(XP_TEAM_REF / 5);
+  it('au-delà, le socle se partage à parts égales entre les champions', () => {
+    expect(missionXpSplit(4)).toBeCloseTo(XP_TEAM_REF / 4);
+    expect(missionXpSplit(6)).toBeCloseTo(0.5);
     for (let n = 3; n < 12; n++)
-      expect(missionXpSplit(n + 1, false)).toBeLessThanOrEqual(missionXpSplit(n, false));
+      expect(missionXpSplit(n + 1)).toBeLessThanOrEqual(missionXpSplit(n));
   });
 
   // ⚠️ PLANCHER À `xpLossShare` (v0.1095, mesuré ; décision de l'utilisateur : « si le lieu
@@ -506,19 +502,19 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
   // gagnent qu'à 8, la meilleure stratégie était d'envoyer 3 champions et de PERDRE.
   it('⚠️ GAGNER ne rapporte JAMAIS moins que PERDRE avec l’escorte de référence', () => {
     const p = rift({ level: 26 });
-    const perduARef = missionXpFor(team(XP_TEAM_REF, 26), p, false, {}, false, 26).adv_0!;
+    const perduARef = missionXpFor(team(XP_TEAM_REF, 26), p, false, {}, 26).adv_0!;
     for (const n of [4, 6, 8, 10, 14, 20]) {
-      const gagne = missionXpFor(team(n, 26), p, true, {}, false, 26).adv_0!;
+      const gagne = missionXpFor(team(n, 26), p, true, {}, 26).adv_0!;
       expect(gagne, `escorte de ${n}`).toBeGreaterThanOrEqual(perduARef);
     }
   });
 
   it('le plancher EST la part d’un échec, et il en est dérivé', () => {
     for (let n = 1; n <= 50; n++)
-      expect(missionXpSplit(n, false), `n=${n}`).toBeGreaterThanOrEqual(CARAVAN.xpLossShare);
+      expect(missionXpSplit(n), `n=${n}`).toBeGreaterThanOrEqual(CARAVAN.xpLossShare);
     // Il MORD : au-delà de 6, le partage à parts égales passerait dessous.
     expect(XP_TEAM_REF / 8).toBeLessThan(CARAVAN.xpLossShare);
-    expect(missionXpSplit(8, false)).toBeCloseTo(CARAVAN.xpLossShare);
+    expect(missionXpSplit(8)).toBeCloseTo(CARAVAN.xpLossShare);
   });
 
   // ⚠️ TEST DE COPIE, assumé comme tel : écrire `0.5` en dur donne EXACTEMENT le même
@@ -535,29 +531,35 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
   it('⚠️ il supprime une punition, il n’ajoute AUCUNE prime à sur-remplir', () => {
     // Un champion en surnombre rapporte toujours moins qu'à l'escorte de référence…
     for (let n = XP_TEAM_REF + 1; n <= 20; n++)
-      expect(missionXpSplit(n, false)).toBeLessThan(missionXpSplit(XP_TEAM_REF, false));
+      expect(missionXpSplit(n)).toBeLessThan(missionXpSplit(XP_TEAM_REF));
     // …et le partage suit exactement l’enveloppe tant que le plancher ne mord pas.
     for (const n of [1, 2, 3, 4, 5, 6])
-      expect(missionXpSplit(n, false), `n=${n}`).toBeCloseTo(
+      expect(missionXpSplit(n), `n=${n}`).toBeCloseTo(
         Math.max(CARAVAN.xpLossShare, XP_TEAM_REF / n),
       );
   });
 
   it('le socle d’un membre baisse quand l’équipe grossit, la part des abattus reste la sienne', () => {
     const p = rift({ level: 26 });
-    const trois = missionXpFor(team(3, 26), p, true, {}, false, 26);
-    const six = missionXpFor(team(6, 26), p, true, {}, false, 26);
+    const trois = missionXpFor(team(3, 26), p, true, {}, 26);
+    const six = missionXpFor(team(6, 26), p, true, {}, 26);
     expect(six.adv_0!).toBeLessThan(trois.adv_0!);
     expect(six.adv_0!).toBeCloseTo(trois.adv_0! / 2, -1);
     // Les abattus passent tels quels (déjà divisés entre les présents).
-    const avec = missionXpFor(team(6, 26), p, true, { adv_0: 40 }, false, 26);
+    const avec = missionXpFor(team(6, 26), p, true, { adv_0: 40 }, 26);
     expect(avec.adv_0! - six.adv_0!).toBe(40);
   });
 
-  it('⚠️ oublier le héros rendrait deux parts de trop', () => {
+  it('⚠️ le HÉROS ne prend AUCUNE part du partage (v0.1109, demandé)', () => {
+    // Il comptait pour deux parts, perdues : sa présence coûtait de l'XP aux champions. Le
+    // partage ne CONNAÎT plus le héros — la garantie est dans la SIGNATURE : un paramètre
+    // « héros » qui reviendrait rouvrirait la porte, et c'est ça qu'on interdit.
+    expect(missionXpSplit.length).toBe(1);
+    expect(missionXpFor.length).toBe(5);
+    // Trois champions touchent leur part entière, avec ou sans héros à leurs côtés.
     const p = rift({ level: 26 });
-    const sans = missionXpFor(team(3, 26), p, true, {}, false, 26);
-    const avec = missionXpFor(team(3, 26), p, true, {}, true, 26);
-    expect(avec.adv_0!).toBeLessThan(sans.adv_0!);
+    expect(missionXpFor(team(3, 26), p, true, {}, 26).adv_0!).toBe(
+      Math.round(missionXp(team(3, 26)[0]!, p, true)),
+    );
   });
 });

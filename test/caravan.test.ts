@@ -1073,8 +1073,8 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     // est ce que `missionXpFor` verse, au chiffre près.
     const a = champ(10, 'a')[0]!;
     const b = { ...champ(30, 'b')[0]!, id: 'b' };
-    const vue = missionXpPreview([a, b], [a.id, b.id], p, false, 100);
-    const verse = missionXpFor([a, b], p, true, {}, false, 100);
+    const vue = missionXpPreview([a, b], [a.id, b.id], p, 100);
+    const verse = missionXpFor([a, b], p, true, {}, 100);
     expect(vue[a.id]!.xp).toBe(verse[a.id]);
     expect(vue[b.id]!.xp).toBe(verse[b.id]);
   });
@@ -1088,8 +1088,8 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     const d = { ...champ(10, 'd')[0]!, id: 'd' };
     const eq = [a, b, c, d];
     // Trois cochés : le quatrième est chiffré à QUATRE (le partage qu’il subirait).
-    const vue = missionXpPreview(eq, [a.id, b.id, c.id], p, false, 100);
-    expect(vue[d.id]!.xp).toBe(missionXpFor(eq, p, true, {}, false, 100)[d.id]);
+    const vue = missionXpPreview(eq, [a.id, b.id, c.id], p, 100);
+    expect(vue[d.id]!.xp).toBe(missionXpFor(eq, p, true, {}, 100)[d.id]);
     // …et il annonce donc MOINS que les cochés, qui ne sont encore que trois.
     expect(vue[d.id]!.xp).toBeLessThan(vue[a.id]!.xp);
   });
@@ -1099,7 +1099,7 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     // quadruple, et rien à l’écran ne le disait.
     const bas = champ(10, 'bas')[0]!;
     const haut = { ...champ(60, 'haut')[0]!, id: 'haut' };
-    const vue = missionXpPreview([bas, haut], [], poi({ level: 20 }), false, 100);
+    const vue = missionXpPreview([bas, haut], [], poi({ level: 20 }), 100);
     expect(vue[bas.id]!.full).toBe(true); // 20 ≥ 10
     expect(vue[haut.id]!.full).toBe(false); // 20 < 60
     // …et ce n’est pas qu’une étiquette : celui qui est au-dessus touche moins.
@@ -1108,7 +1108,7 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
 
   it('🔮 elle annonce la prime de retard, et c’est CELLE du moteur', () => {
     const neuf = champ(1, 'neuf')[0]!;
-    const vue = missionXpPreview([neuf], [neuf.id], p, false, 100);
+    const vue = missionXpPreview([neuf], [neuf.id], p, 100);
     expect(vue[neuf.id]!.catchUp).toBe(catchUpMult(1, 100));
     expect(vue[neuf.id]!.catchUp).toBeGreaterThan(1);
   });
@@ -1121,23 +1121,23 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     const d = poiDifficultyLevel(p33);
     expect(d).toBeLessThan(33);
     const a = { ...champ(33, 'a')[0]!, id: 'a' };
-    expect(missionXpPreview([a], [a.id], p33, false, 100)[a.id]!.full).toBe(false);
+    expect(missionXpPreview([a], [a.id], p33, 100)[a.id]!.full).toBe(false);
     // …et un champion sous la difficulté, lui, est bien à plein tarif.
     const b = { ...champ(Math.max(1, d - 2), 'b')[0]!, id: 'b' };
-    expect(missionXpPreview([b], [b.id], p33, false, 100)[b.id]!.full).toBe(true);
+    expect(missionXpPreview([b], [b.id], p33, 100)[b.id]!.full).toBe(true);
   });
 
-  it('🔮 le HÉROS dilue l’annonce, comme il dilue le versement', () => {
-    // ⚠️ Le héros prend `HERO_XP_WEIGHT` parts de l'enveloppe : à deux champions la dilution
-    // se lit sans ambiguïté (2 parts contre 4).
+  it('🔮 le HÉROS ne dilue plus l’annonce, ni le versement (v0.1109)', () => {
+    // ⚠️ RÉÉCRIT. Il prenait deux parts de l'enveloppe ; il n'en prend plus aucune. L'annonce
+    // ne connaît donc plus le héros (signature), et elle reste ce que la mission verse.
+    expect(missionXpPreview.length).toBe(4);
     const a = champ(10, 'a')[0]!;
     const b2 = { ...champ(10, 'b')[0]!, id: 'b' };
     const eq = [a, b2];
     const ids = [a.id, b2.id];
-    const sans = missionXpPreview(eq, ids, p, false, 100)[a.id]!.xp;
-    const avec = missionXpPreview(eq, ids, p, true, 100)[a.id]!.xp;
-    expect(avec).toBeLessThan(sans);
-    expect(avec).toBe(missionXpFor(eq, p, true, {}, true, 100)[a.id]);
+    expect(missionXpPreview(eq, ids, p, 100)[a.id]!.xp).toBe(
+      missionXpFor(eq, p, true, {}, 100)[a.id],
+    );
   });
 
   it('⚠️ c’est bien CE calcul que la mission verse : le SOCLE est primé, pas les abattus', () => {
@@ -1147,16 +1147,16 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     // ⚠️ Le socle NU est le MÊME pour les deux (le ratio est écrêté à 1) : c'est exactement
     // ce qui manquait au champion en retard, et la prime est donc TOUT l'écart.
     expect(missionXp(vieux[0]!, p, true)).toBe(socle);
-    expect(missionXpFor(neuf, p, true, {}, false, 100).neuf).toBe(
-      Math.round(socle * missionXpSplit(1, false) * catchUpMult(1, 100)),
+    expect(missionXpFor(neuf, p, true, {}, 100).neuf).toBe(
+      Math.round(socle * missionXpSplit(1) * catchUpMult(1, 100)),
     );
-    expect(missionXpFor(vieux, p, true, {}, false, 100).vieux).toBe(
-      Math.round(socle * missionXpSplit(1, false) * catchUpMult(poiDifficultyLevel(p), 100)),
+    expect(missionXpFor(vieux, p, true, {}, 100).vieux).toBe(
+      Math.round(socle * missionXpSplit(1) * catchUpMult(poiDifficultyLevel(p), 100)),
     );
     // ⚠️ La part des ABATTUS passe TELLE QUELLE : `SKIRMISH.carryMargin`, le garde-fou
     // anti-portage, n'est pas défait.
-    const avec = missionXpFor(neuf, p, true, { neuf: 40 }, false, 100).neuf!;
-    const sans = missionXpFor(neuf, p, true, {}, false, 100).neuf!;
+    const avec = missionXpFor(neuf, p, true, { neuf: 40 }, 100).neuf!;
+    const sans = missionXpFor(neuf, p, true, {}, 100).neuf!;
     expect(avec - sans).toBe(40);
   });
 
@@ -1164,10 +1164,10 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     // Un champion au plafond du Panthéon n'a plus de retard à combler : le multiplicateur
     // ne doit pas annoncer un gain que `grantAdvXp` refuserait de convertir.
     const au = champ(40);
-    expect(missionXpFor(au, p, true, {}, false, 40).x).toBe(
-      Math.round(missionXp(au[0]!, p, true) * missionXpSplit(1, false)),
+    expect(missionXpFor(au, p, true, {}, 40).x).toBe(
+      Math.round(missionXp(au[0]!, p, true) * missionXpSplit(1)),
     );
-    expect(missionXpFor(au, p, true, {}, false, 100).x!).toBeGreaterThan(
+    expect(missionXpFor(au, p, true, {}, 100).x!).toBeGreaterThan(
       missionXp(au[0]!, p, true),
     );
   });
@@ -1175,7 +1175,7 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
   it('⚠️ elle S’ÉTEINT en rattrapant : aucun farm à garder un champion bas', () => {
     let prev = Infinity;
     for (const L of [1, 25, 50, 75, 99, 100]) {
-      const v = missionXpFor(champ(L), p, true, {}, false, 100).x!;
+      const v = missionXpFor(champ(L), p, true, {}, 100).x!;
       expect(v, `niveau ${L}`).toBeLessThanOrEqual(prev);
       prev = v;
     }

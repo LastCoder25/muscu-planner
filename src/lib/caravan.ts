@@ -772,10 +772,11 @@ export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
  *  sont plus bornées à 3 — « plus il y a de champions plus l'XP est divisée, c'est tout »).
  *  L'XP d'un lieu est une ENVELOPPE de `XP_TEAM_REF` parts : un champion seul la prend
  *  entière, et chacun en prend `XP_TEAM_REF / effectif` — le TOTAL de l'équipe ne bouge pas.
- *  ⚠️ Le HÉROS compte pour `HERO_XP_WEIGHT` : il VAUT deux champions dans un groupe
- *  (`heroPartyCombatant`), il en prend donc deux parts — perdues, son XP vient du sport. */
+ *  ⚠️ LE HÉROS N'EN PREND AUCUNE PART (v0.1109, demandé : « il ne prend pas d'XP »). Il
+ *  comptait pour deux parts, perdues — son XP vient du sport —, ce qui faisait payer sa
+ *  présence aux champions. Il vaut toujours deux champions au COMBAT (`heroPartyCombatant`) ;
+ *  l'XP, elle, ne se partage qu'entre ceux qui l'apprennent. */
 export const XP_TEAM_REF = REF_TEAM;
-export const HERO_XP_WEIGHT = 2;
 /**
  * Facteur appliqué au socle de chaque champion : la part d'enveloppe qui lui revient.
  *
@@ -797,9 +798,8 @@ export const HERO_XP_WEIGHT = 2;
  * un champion en surnombre rapporte toujours moins qu'à `XP_TEAM_REF`. Il supprime une
  * punition, il n'ajoute pas de prime.
  */
-export function missionXpSplit(escortCount: number, hero: boolean): number {
-  const weight = Math.max(1, escortCount) + (hero ? HERO_XP_WEIGHT : 0);
-  return Math.max(CARAVAN.xpLossShare, XP_TEAM_REF / weight);
+export function missionXpSplit(escortCount: number): number {
+  return Math.max(CARAVAN.xpLossShare, XP_TEAM_REF / Math.max(1, escortCount));
 }
 
 /** Le pas de la prime de rattrapage : UN RANG de retard (10 niveaux) double l'apprentissage.
@@ -860,7 +860,7 @@ export function catchUpMult(advLevel: number, pantheonLevel: number): number {
 /** L'XP de chaque membre d'une mission : socle (selon l'issue, partagé au-delà de
  *  `XP_TEAM_REF` membres, et primé s'il est en retard) + sa part des abattus (déjà divisée
  *  entre les présents).
- *  `hero` est REQUIS : l'oublier rendrait deux parts de trop aux champions.
+ *  ⚠️ Le HÉROS n’y figure pas : il ne prend aucune part (cf. `missionXpSplit`).
  *  `pantheonLevel` est REQUIS : c'est la référence de la prime de rattrapage, et un
  *  paramètre qu'on peut oublier finit par l'être — l'omettre éteindrait la prime en silence.
  *  ⚠️ LA PRIME NE TOUCHE QUE LE SOCLE, jamais la part des abattus : cette dernière est bornée
@@ -873,10 +873,9 @@ export function missionXpFor(
   poi: Poi,
   won: boolean,
   shares: Record<string, number>,
-  hero: boolean,
   pantheonLevel: number,
 ): Record<string, number> {
-  const split = missionXpSplit(escort.length, hero);
+  const split = missionXpSplit(escort.length);
   const xp: Record<string, number> = {};
   for (const a of escort)
     xp[a.id] =
@@ -918,19 +917,18 @@ export function missionXpPreview(
   advs: readonly Adventurer[],
   escortIds: readonly string[],
   poi: Poi,
-  hero: boolean,
   pantheonLevel: number,
 ): Record<string, MissionXpPreview> {
   const escort = advs.filter((a) => escortIds.includes(a.id));
   // ⚠️ L'XP de l'escorte est la MÊME pour tous ses membres : on l'évalue une fois, au lieu
   //    d'une passe par champion (qui reboucle sur toute l'équipe et re-dérive la difficulté).
-  const dejaLa = missionXpFor(escort, poi, true, {}, hero, pantheonLevel);
+  const dejaLa = missionXpFor(escort, poi, true, {}, pantheonLevel);
   const d = poiDifficultyLevel(poi);
   const out: Record<string, MissionXpPreview> = {};
   for (const a of advs) {
     const xp = escortIds.includes(a.id)
       ? (dejaLa[a.id] ?? 0)
-      : (missionXpFor([...escort, a], poi, true, {}, hero, pantheonLevel)[a.id] ?? 0);
+      : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel)[a.id] ?? 0);
     out[a.id] = { xp, full: d >= a.level, catchUp: catchUpMult(a.level, pantheonLevel) };
   }
   return out;
@@ -1317,7 +1315,7 @@ export function resolveCaravan(
   };
   const wages = caravanWages(escort, poi);
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
-  const xp = missionXpFor(escort, poi, !lost, xpShare, false, pantheonLevel);
+  const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais

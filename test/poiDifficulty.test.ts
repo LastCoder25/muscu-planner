@@ -57,7 +57,7 @@ describe('la courbe de référence', () => {
     expect(refEscortUnits(20)).toHaveLength(REF_TEAM);
     // ⚠️ Et l'ENVELOPPE d'XP se compte dans la même unité : une équipe pleine de référence
     //    encaisse exactement le socle d'un lieu calibré sur elle.
-    expect(missionXpSplit(REF_TEAM, false)).toBe(1);
+    expect(missionXpSplit(REF_TEAM)).toBe(1);
   });
 
   it('est STRICTEMENT croissante — c’est ce qui autorise la recherche binaire', () => {

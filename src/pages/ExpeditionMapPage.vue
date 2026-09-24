@@ -504,7 +504,7 @@
               <span class="ph-sub">{{
                 partyHeroBlock
                   ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                  : `compte pour ${HERO_XP_WEIGHT} dans le partage d’XP`
+                  : 'vaut 2 champions au combat, ne prend pas d’XP'
               }}</span>
             </span>
             <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
@@ -527,7 +527,7 @@
                coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
           <p class="car-cap">
             👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions (Panthéon). L'XP du lieu se
-            partage entre les participants (le héros compte pour {{ HERO_XP_WEIGHT }}) :
+            partage entre les champions (le héros n’en prend pas) :
             <b>XP ×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun.
           </p>
           <div v-if="char.advList.length" class="car-pick">
@@ -805,7 +805,6 @@ import {
   missionXpPreview,
   missionXpSplit,
   type MissionXpPreview,
-  HERO_XP_WEIGHT,
   type PartyHero,
 } from '@/lib/caravan';
 import { advGearRoles } from '@/lib/advGear';
@@ -1450,7 +1449,7 @@ const canSendPartyNow = computed(
  *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
 const partyMax = computed(() => partyCapFor(cap.value));
 /** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
-const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length, partyHeroOn.value));
+const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length));
 /** 🔮 Ce que CHAQUE champion gagnerait sur le lieu visé (demandé). ⚠️ La règle vit en lib
  *  (`missionXpPreview`), qui appelle `missionXpFor` — ce que le store verse vraiment :
  *  une seconde formule d'affichage finirait par annoncer une XP que l'encaissement dément. */
@@ -1460,7 +1459,6 @@ const partyXp = computed<Record<string, MissionXpPreview>>(() =>
         char.advList,
         partyEscort.value,
         selected.value,
-        partyHeroOn.value,
         char.pantheonLevel,
       )
     : {},

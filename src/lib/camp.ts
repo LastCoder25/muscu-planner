@@ -344,7 +344,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     slain: g.slain,
     kills: g.kills,
     heroKills: g.heroKills,
-    xp: missionXpFor(escort, poi, d.win, g.shares, !!hero, input.pantheonLevel),
+    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel),
     hurt: campHurt(d, escort),
     wages: caravanWages(escort, poi),
     journal: g.journal,

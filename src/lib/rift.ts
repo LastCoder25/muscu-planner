@@ -854,7 +854,7 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
 
   const bodies = incursionBodies(poi, now);
   const shares = skirmishXpShares(escort, bodies, { foesDown: incursionFoesDown(run, bodies) });
-  const xp = missionXpFor(escort, poi, run.cleared, shares, !!hero, input.pantheonLevel);
+  const xp = missionXpFor(escort, poi, run.cleared, shares, input.pantheonLevel);
 
   const mana = incursionMana(run, poi.level);
   const seals = riftSeals(poi, now, run.cleared);
@@ -1071,7 +1071,7 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
   // rien non plus quand le combattant fondu tombe.
   const foesDown = run.win ? bodies.map((b) => b.id) : [];
   const shares = skirmishXpShares(escort, bodies, { foesDown });
-  const xp = missionXpFor(escort, poi, run.win, shares, !!hero, input.pantheonLevel);
+  const xp = missionXpFor(escort, poi, run.win, shares, input.pantheonLevel);
 
   const mana = interceptionMana(raid, army, run);
   const effectif = raid.groups.reduce((s, g) => s + g.count, 0);

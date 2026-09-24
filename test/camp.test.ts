@@ -413,7 +413,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         const parts = skirmishXpShares(esc, bodies, d);
         // Socle selon l'ISSUE + part des abattus : la règle EXACTE d'un convoi (v0.1014).
         expect(o.party!.xp).toEqual(
-          missionXpFor(esc, inp.poi, d.win, parts, !!inp.hero, inp.pantheonLevel),
+          missionXpFor(esc, inp.poi, d.win, parts, inp.pantheonLevel),
         );
         expect(o.party!.xp[HERO_UNIT_ID]).toBeUndefined();
       }
