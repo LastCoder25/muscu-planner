@@ -890,7 +890,13 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
     ...over,
   });
   // ⏱️ `backAt` = le RETOUR du groupe, `now` = le clic « Encaisser ». Ici ils coïncident.
-  const ctx = { pantheonLevel: 30, infirmaryLevel: 4, backAt: 1_000_000, now: 1_000_000 };
+  const ctx = {
+    pantheonLevel: 30,
+    infirmaryLevel: 4,
+    backAt: 1_000_000,
+    now: 1_000_000,
+    xpGranted: false,
+  };
 
   it('XP de chacun = grantAdvXp ; celui qui n’est pas parti est intact', () => {
     const r = partyClaimRoster(party(), roster, ctx);

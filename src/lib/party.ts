@@ -270,8 +270,41 @@ export function settleParties(
 }
 
 /**
+ * 🎓 L'XP DES CHAMPIONS TOMBE À L'ARRIVÉE DU RAPPORT (demandé par l'utilisateur : « voir
+ * l'animation de l'évolution quand le rapport arrive, et plus sur la récompense, qui n'est
+ * pas sur tous les events »). Verse `party.xp` des rapports FRAIS (`fresh`) et les marque
+ * `xpGranted` dans la boîte — la MÊME écriture, sinon l'encaissement la reverserait.
+ * - un rapport déjà marqué, ou sans groupe, ne verse rien ;
+ * - rend les MÊMES références quand il n'y a rien à faire (le store n'écrit pas à vide) ;
+ * - `granted` : les messages effectivement crédités, pour l'animation.
+ * ⚠️ Blessures et salaires restent à l'ENCAISSEMENT (`partyClaimRoster`).
+ */
+export function grantReportXp(
+  box: ExpeditionMessage[],
+  fresh: readonly ExpeditionMessage[],
+  roster: Adventurer[],
+  pantheonLevel: number,
+): { messages: ExpeditionMessage[]; adventurers: Adventurer[]; granted: ExpeditionMessage[] } {
+  const ids = new Set(box.map((m) => m.id));
+  const granted = fresh.filter((m) => m.party && !m.xpGranted && ids.has(m.id));
+  if (!granted.length) return { messages: box, adventurers: roster, granted };
+  let adventurers = roster;
+  for (const m of granted) {
+    const xp = m.party!.xp;
+    adventurers = adventurers.map((a) => {
+      const gain = xp[a.id];
+      return gain === undefined ? a : grantAdvXp(a, gain, pantheonLevel);
+    });
+  }
+  const done = new Set(granted.map((m) => m.id));
+  const messages = box.map((m) => (done.has(m.id) ? { ...m, xpGranted: true } : m));
+  return { messages, adventurers, granted };
+}
+
+/**
  * 🎁 Ce que l'ENCAISSEMENT d'un rapport de groupe change au vivier — PUR.
- * - XP par aventurier (`party.xp`, calculée au départ), plafonnée par la Guilde (`grantAdvXp`) ;
+ * - XP par aventurier (`party.xp`, calculée au départ), plafonnée par la Guilde (`grantAdvXp`)
+ *   — ⚠️ SEULEMENT si elle n'a pas déjà été versée à l'arrivée du rapport (`xpGranted`) ;
  * - 🤕 les blessés du camp (`party.hurt`) partent à l'infirmerie pour la durée d'un convoi
  *   (`caravanHurtMs`, soigneurs de l'escorte et Infirmerie compris). ⚠️ Jamais RACCOURCIE :
  *   un aventurier déjà alité plus longtemps (siège perdu) garde son échéance ;
@@ -285,7 +318,15 @@ export function partyClaimRoster(
   /** ⚠️ `backAt` est REQUIS : c'est le RETOUR du groupe en ville, l'instant d'où court la
    *  convalescence. `now` ne sert qu'à écarter celle qui est déjà écoulée. Optionnel, il
    *  serait oublié au premier appelant — et c'est exactement le défaut qu'on corrige. */
-  ctx: { pantheonLevel: number; infirmaryLevel: number; backAt: number; now: number },
+  ctx: {
+    pantheonLevel: number;
+    infirmaryLevel: number;
+    backAt: number;
+    now: number;
+    /** ⚠️ REQUIS : l'XP a-t-elle déjà été versée à l'arrivée (`grantReportXp`) ? L'oublier
+     *  la verserait deux fois. */
+    xpGranted: boolean;
+  },
 ): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
   const escort = party.escort
     .map((id) => roster.find((a) => a.id === id))
@@ -302,7 +343,7 @@ export function partyClaimRoster(
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
     if (gain === undefined) return a;
-    const up = grantAdvXp(a, gain, ctx.pantheonLevel);
+    const up = ctx.xpGranted ? a : grantAdvXp(a, gain, ctx.pantheonLevel);
     return hurtUntil && hurt.has(a.id)
       ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) }
       : up;

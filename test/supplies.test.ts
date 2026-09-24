@@ -230,7 +230,7 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
       wages: 0,
       journal: [],
     };
-    const ctx = { pantheonLevel: 20, infirmaryLevel: 0, backAt: 1_000_000, now: 1_000_000 };
+    const ctx = { pantheonLevel: 20, infirmaryLevel: 0, backAt: 1_000_000, now: 1_000_000, xpGranted: false };
     const full = partyClaimRoster(party, escort, ctx).adventurers[0]!.hurtUntil!;
     const half = partyClaimRoster({ ...party, healMult: SUPPLY.healMult }, escort, ctx)
       .adventurers[0]!.hurtUntil!;

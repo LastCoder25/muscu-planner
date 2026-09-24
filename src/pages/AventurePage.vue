@@ -3061,7 +3061,7 @@ import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useAdvProgressFx } from '@/composables/useAdvProgressFx';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
-import type { AdvProgress } from '@/lib/adventurers';
+import type { AdvProgress, AdvXpTrack } from '@/lib/adventurers';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
 import { usePush } from '@/composables/usePush';
@@ -5481,10 +5481,18 @@ const siegeReport = ref<RaidReport | null>(null);
 /** ⭐ Ce que le siège a changé pour les défenseurs, annoncé à la FERMETURE du rejeu :
  *  pendant, l'annonce recouvrirait l'animation et révélerait l'issue qu'elle doit dévoiler. */
 const siegeAdvProgress = ref<AdvProgress[]>([]);
+/** 📊 Les barres AVANT → APRÈS des défenseurs : elles portent déjà étoiles, rangs et
+ *  « prêt pour l'ascension », donc elles REMPLACENT l'annonce quand il y a eu de l'XP. */
+const siegeAdvTracks = ref<AdvXpTrack[]>([]);
+// ⏸️ Aucune barre de rapport par-dessus le rejeu du siège : elle en révélerait l'issue.
+watch(siegeReport, (r) => advXpFx.hold('siege', !!r));
 function onSiegeSeen() {
   siegeReport.value = null;
-  advFx.announce(siegeAdvProgress.value);
+  if (siegeAdvTracks.value.some((t) => t.xp > 0))
+    advXpFx.show(siegeAdvTracks.value, 'Défense de la base');
+  else advFx.announce(siegeAdvProgress.value);
   siegeAdvProgress.value = [];
+  siegeAdvTracks.value = [];
 }
 const baseAlert = computed(() => !!baseRaid.value || baseFrozen.value || heroWounded.value);
 
@@ -5593,6 +5601,7 @@ async function baseLifecycle() {
     // fin. C'est aussi pour ça que l'animation se lance d'office, sans le demander.
     if (r.report) {
       siegeAdvProgress.value = r.advProgress;
+      siegeAdvTracks.value = r.advTracks;
       siegeReport.value = r.report;
       tab.value = 'base';
     }

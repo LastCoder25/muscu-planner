@@ -9,7 +9,8 @@
 // ⚠️ MÉMOIRE PAR APPAREIL (`localStorage`) : c'est une commodité d'affichage, pas un état
 // de jeu. Revoir une incursion sur un second appareil est acceptable ; ne jamais la revoir
 // parce que le stockage est bloqué (navigation privée) l'est aussi — d'où les try/catch.
-import { ref, watch, type Ref } from 'vue';
+import { onScopeDispose, ref, watch, type Ref } from 'vue';
+import { useAdvXpFx } from './useAdvXpFx';
 import type { PartyResult } from '@/lib/expedition';
 import { riftAutoReplay } from '@/lib/riftStage';
 import { useCharacterStore } from '@/stores/character';
@@ -41,6 +42,11 @@ function writeSeen(ids: string[]): void {
 export function useRiftAutoReplay(replay: Ref<PartyResult | null>): Ref<string | null> {
   const char = useCharacterStore();
   const autoMsgId = ref<string | null>(null);
+  // ⏸️ Le rapport et son rejeu arrivent ENSEMBLE : les barres d'XP attendent la fin du rejeu,
+  // sinon elles le recouvriraient et en révéleraient l'issue (le gain dépend de la victoire).
+  const advXpFx = useAdvXpFx();
+  watch(replay, (r) => advXpFx.hold('rift', !!r), { immediate: true });
+  onScopeDispose(() => advXpFx.hold('rift', false));
   watch(replay, (r) => {
     // Vidé APRÈS le « report » (émis avant la fermeture) : le gestionnaire l'a déjà lu.
     if (!r) autoMsgId.value = null;

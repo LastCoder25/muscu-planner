@@ -448,6 +448,10 @@ export interface ExpeditionMessage {
   key: number;
   waves?: number; // 'arena' : vagues tenues
   party?: PartyResult; // ⚔️ rapport d'un groupe de camp (absent des rapports d'avant)
+  /** 🎓 L'XP des champions a été versée À L'ARRIVÉE du rapport (`grantReportXp`), plus à
+   *  l'encaissement. ⚠️ ABSENT des rapports déposés avant ce changement : leur XP est
+   *  versée à l'encaissement, comme avant — sinon elle serait perdue. */
+  xpGranted?: boolean;
   resolvedAt: number; // ms epoch (midAt)
   /** À partir de quand le butin peut être récupéré = le retour en ville. Avant, le héros
    *  est encore sur la route : on lit le rapport, on ne touche pas au chargement. */

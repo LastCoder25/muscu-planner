@@ -90,6 +90,7 @@ import {
   dropSeenMessages,
   MESSAGES_CAP,
   isClaimable,
+  messageTitle,
   createMap,
   advanceWorld,
   riftOverflows,
@@ -203,6 +204,7 @@ import {
   partyHeroBlocker,
   PARTY_HERO_BLOCK_LABEL,
   normalizeParties,
+  grantReportXp,
   partyClaimRoster,
   partyLegMin,
   settleParties,
@@ -255,6 +257,7 @@ import { gearRefonteGifts } from '@/lib/gearMigration';
 import { useGameFx } from '@/composables/useGameFx';
 import { CHARACTER_RANKS } from '@/lib/characterRank';
 import { useGoldFx } from '@/composables/useGoldFx';
+import { useAdvXpFx } from '@/composables/useAdvXpFx';
 
 export interface CharacterRow {
   user_id: string;
@@ -1886,8 +1889,9 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
-    const messages = boxWith(cur, [msg], MESSAGES_CAP);
-    await persist(userId, { expedition: { ...exp, reported: true }, messages });
+    const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
+    await persist(userId, { expedition: { ...exp, reported: true }, messages: x.messages, ...x.patch });
+    x.play();
     return msg;
   }
   // Au retour en ville : crédite le butin (or/poussière/objet/clé) et libère le héros.
@@ -1907,11 +1911,13 @@ export const useCharacterStore = defineStore('character', () => {
     // `buildMessage(...)`, qui porte `claimed: false` : un butin encaissé entre le retour
     // (`claimAt`) et ce tick redevenait encaissable (revue finale des camps — or, objets, XP
     // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
-    const messages = exp.reported ? null : boxWith(cur, [msg], MESSAGES_CAP);
+    const x = exp.reported ? null : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
     await persist(userId, {
-      ...(messages && messages !== cur.messages ? { messages } : {}),
+      ...(x && x.messages !== cur.messages ? { messages: x.messages } : {}),
+      ...(x?.patch ?? {}),
       expedition: null,
     });
+    x?.play();
     return msg;
   }
 
@@ -2045,6 +2051,9 @@ export const useCharacterStore = defineStore('character', () => {
         // Les rapports d’avant n’ont que `resolvedAt` — le même repli qu`isClaimable`.
         backAt: m.claimAt ?? m.resolvedAt,
         now,
+        // 🎓 Versée à l'ARRIVÉE du rapport (`grantReportXp`) ; les rapports d'avant ce
+        // changement ne l'ont pas reçue et la reçoivent ici.
+        xpGranted: !!m.xpGranted,
       });
       wages = claim.wages;
       advProgress = advProgressOf(advList.value, claim.adventurers);
@@ -2209,14 +2218,15 @@ export const useCharacterStore = defineStore('character', () => {
     /** ⭐ Ce que le siège a changé pour les DÉFENSEURS — étoiles, rang, « prêt pour
      *  l'ascension ». Rendu à l'écran, qui l'annonce APRÈS le rejeu (sinon il spoilerait). */
     advProgress: AdvProgress[];
+    advTracks: AdvXpTrack[];
   }> {
-    if (!row.value) return { detected: null, report: null, advProgress: [] };
+    if (!row.value) return { detected: null, report: null, advProgress: [], advTracks: [] };
     const cur = row.value;
-    if (!cur) return { detected: null, report: null, advProgress: [] };
+    if (!cur) return { detected: null, report: null, advProgress: [], advTracks: [] };
     const t = advanceBase(baseOf(cur, now), ctx, now);
     if (!t.dueRaid) {
       if (t.changed) await persist(userId, { base: t.base });
-      return { detected: t.detected, report: null, advProgress: [] };
+      return { detected: t.detected, report: null, advProgress: [], advTracks: [] };
     }
 
     const home = heroIsHome(cur);
@@ -2303,6 +2313,7 @@ export const useCharacterStore = defineStore('character', () => {
     // revenait indemne pendant qu’on écrivait aux défenseurs une convalescence DÉJÀ dépassée.
     // `null` = elle est écoulée, personne ne part à l’infirmerie.
     const hurt = woundUntil ? new Set(siegeHurtIds(report)) : new Set<string>();
+    let siegeGear: ReturnType<typeof gearTrainedPatch> = {};
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
       const gains: Record<string, number> = {};
@@ -2315,12 +2326,17 @@ export const useCharacterStore = defineStore('character', () => {
           ? { ...next, hurtUntil: Math.max(next.hurtUntil ?? 0, woundUntil ?? 0) }
           : next;
       });
-      Object.assign(patch, gearTrainedPatch(cur, advList.value, patch.adventurers as Adventurer[]));
+      siegeGear = gearTrainedPatch(cur, advList.value, patch.adventurers as Adventurer[]);
+      Object.assign(patch, siegeGear);
     }
     // ⭐ La MÊME lecture que les camps, les failles et les convois (`advProgressOf`) : un
     // champion qui bute sur son ★5 en défendant doit l'apprendre comme ailleurs.
     const advProgress = defenders.length
       ? advProgressOf(advList.value, patch.adventurers as Adventurer[])
+      : [];
+    // 📊 Les barres AVANT → APRÈS des défenseurs, jouées à la FERMETURE du rejeu (l'écran).
+    const advTracks = defenders.length
+      ? gearAwareTracks(cur, advList.value, patch.adventurers as Adventurer[], siegeGear)
       : [];
     if (drops.length) {
       patch.inventory = [...cur.inventory, ...drops];
@@ -2332,7 +2348,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (damage.stockStolen && cur.buildings.length)
       patch.buildings = cur.buildings.map((b) => ({ ...b, collectedAt: now }));
     await persist(userId, patch);
-    return { detected: t.detected, report, advProgress };
+    return { detected: t.detected, report, advProgress, advTracks };
   }
 
   /** Soins d'urgence : remet le héros sur pied TOUT DE SUITE, contre de l'OR (cher)
@@ -2407,6 +2423,22 @@ export const useCharacterStore = defineStore('character', () => {
    *  l'XP mise de côté à ★5 est reversée (`ascendAdventurer`). ⚠️ Le refus vit ICI, avec la
    *  MÊME règle que le bouton (`ascensionBlocker`) : l'écran ne propose pas l'impossible, il
    *  ne le garantit pas. Rend `null` si c'est fait, sinon la raison du refus. */
+  /** 🎓 L'XP DES CHAMPIONS À L'ARRIVÉE D'UN RAPPORT (`grantReportXp`, lib) : la boîte
+   *  marquée, le patch du vivier (pièces portées comprises) et l'animation à jouer APRÈS
+   *  l'écriture — une animation n'annonce jamais un gain qui n'a pas eu lieu. */
+  function reportXp(cur: CharacterRow, box: ExpeditionMessage[], fresh: ExpeditionMessage[]) {
+    const g = grantReportXp(box, fresh, advList.value, pantheonLevel.value);
+    if (!g.granted.length) return { messages: box, patch: {}, play: () => {} };
+    const gearPatch = gearTrainedPatch(cur, advList.value, g.adventurers);
+    const tracks = gearAwareTracks(cur, advList.value, g.adventurers, gearPatch);
+    const title = g.granted.length === 1 ? `Rapport : ${messageTitle(g.granted[0]!)}` : 'Rapports de mission';
+    return {
+      messages: g.messages,
+      patch: { adventurers: g.adventurers, ...gearPatch },
+      play: () => useAdvXpFx().show(tracks, title),
+    };
+  }
+
   /** 🗡️ Les pièces portées apprennent avec leur champion (`trainWornGear`, lib) : le patch
    *  `adv_gear` à joindre à TOUTE écriture qui change le vivier par de l'XP. Vide si rien
    *  n'a bougé — on n'écrit pas `adv_gear` à vide. */
@@ -2990,6 +3022,8 @@ export const useCharacterStore = defineStore('character', () => {
     // guet a annoncée (règle écrite sur `Raid.overflow` : figée au tirage). L'interception
     // agit sur le PROCHAIN siège, et l'écran le dit avant l'envoi.
     const gagne = t.fresh.some((m) => m.poiType === 'warband' && m.win);
+    // 🎓 L'XP des champions tombe ICI, à l'arrivée du rapport — et l'animation avec.
+    const x = reportXp(cur, t.messages, t.fresh);
     const base = gagne && cur.base?.overflow ? { ...cur.base, overflow: null } : null;
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
@@ -2997,10 +3031,12 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
-      ...(t.messages !== cur.messages ? { messages: t.messages } : {}),
+      ...(x.messages !== cur.messages ? { messages: x.messages } : {}),
       // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
       //  ne fait que le confirmer.)
+      ...x.patch,
     });
+    x.play();
     return t.fresh;
   }
 
