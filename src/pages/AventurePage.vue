@@ -824,7 +824,7 @@
               title="Trophées — tes trophées de boss entre amis"
               @click="openTrophyBag()"
             >
-              🏆<span v-if="trophyBag.length" class="gi-badge">{{ trophyBag.length }}</span>
+              🏆
             </button>
             <button
               class="gi-b"
