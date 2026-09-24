@@ -1,6 +1,6 @@
 <template>
   <!-- Contenu du coffre de fin d'un Défi 360, relu depuis le défi lui-même (migr. 0064) :
-       la boîte 📬 ne garde que 30 messages, le défi garde son coffre pour toujours. -->
+       la boîte 📬 ne garde que 3 messages (plus les butins à prendre), le défi garde son coffre pour toujours. -->
   <div class="ccv" :class="{ compact }">
     <span class="ccv-t"
       >🎁 <template v-if="!compact">Coffre de fin · niveau {{ chest.level }}</template></span

@@ -29,6 +29,7 @@ import {
   campSpecOf,
   buildMessage,
   depositMessages,
+  MESSAGES_CAP,
   keepMessages,
   type ActiveExpedition,
   type ExpeditionMessage,
@@ -596,6 +597,24 @@ describe('📬 le rapport de groupe et la boîte', () => {
       const box = [base('lu1', true), base('lu2', true), base('attend', false)];
       const out = depositMessages(box, [base('n', false)], 2);
       expect(out.map((m) => m.id)).toEqual(['n', 'lu1', 'attend']);
+    });
+    it('📬 une boîte trop pleine se taille SANS rien de neuf — les butins à prendre restent', () => {
+      // Une boîte d'avant (plafond 30) redescend au prochain passage (lecture, encaissement).
+      const box = [
+        base('a', true),
+        base('b', true),
+        base('c', true),
+        base('d', true),
+        base('attend', false),
+        base('e', true),
+      ];
+      const out = depositMessages(box, [], MESSAGES_CAP);
+      expect(out.map((m) => m.id)).toEqual(['a', 'b', 'c', 'attend']);
+      // Déjà à la bonne taille : la MÊME référence (le store n'écrit pas à vide).
+      expect(depositMessages(out, [], MESSAGES_CAP)).toBe(out);
+    });
+    it('📬 la boîte garde les 3 derniers rapports', () => {
+      expect(MESSAGES_CAP).toBe(3);
     });
   });
 

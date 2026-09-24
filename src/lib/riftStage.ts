@@ -20,7 +20,7 @@
 // ## ⚠️ Une granularité de RENCONTRE, pas de coup
 //
 // `arenaStage` rejoue le log coup par coup parce que l'arène s'ouvre aussitôt. Un rapport
-// d'incursion, lui, dort dans la boîte 📬 (30 messages) : y persister les logs complets de
+// d'incursion, lui, dort dans la boîte 📬 (3 messages) : y persister les logs complets de
 // treize combats gonflerait la ligne du personnage pour un gain d'une fraction de seconde
 // d'animation. Un battement vaut donc UNE rencontre, et le sillage de PV (`pvTrail`, 13
 // nombres) suffit à dire l'attrition sans rien inventer.

@@ -125,7 +125,7 @@ export const comboChestMessageId = (comboId: string) => `chest:${comboId}`;
 
 /** Que faire du coffre d'un 360 bouclé ?
  *  • déjà conservé sur le défi → rien (`null`) : c'est la preuve DURABLE du versement.
- *    ⚠️ La boîte ne l'est pas — elle ne garde que 30 messages ; se fier à elle seule
+ *    ⚠️ La boîte ne l'est pas — elle ne garde que 3 messages (plus les butins à prendre) ; se fier à elle seule
  *    ferait verser deux fois un coffre dont le message a été chassé ;
  *  • message encore dans la boîte, mais pas conservé → on le RELIT, sans reverser
  *    (versement fait par une version d'avant, ou écriture du défi qui a échoué) ;

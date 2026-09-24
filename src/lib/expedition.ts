@@ -473,8 +473,10 @@ export function isClaimable(m: ExpeditionMessage, now: number): boolean {
 /** Taille de la boîte 📬 — UNE seule valeur pour tous ses écrivains. ⚠️ Elle valait 20 dans
  *  deux d'entre eux (`expeTick`, `expeSettle`) et 30 dans les six autres : la même boîte se
  *  taillait donc différemment selon l'écriture qui passait en dernier, et un rapport lu
- *  pouvait disparaître plus tôt sans raison. */
-export const MESSAGES_CAP = 30;
+ *  pouvait disparaître plus tôt sans raison.
+ *  📬 3 depuis la v0.1127 (demandé) : on ne garde que les 3 derniers rapports — PLUS tout
+ *  rapport dont la récompense n'a pas été prise, jamais supprimé (`keepMessages`). */
+export const MESSAGES_CAP = 3;
 
 /** Taille la boîte 📬 SANS jamais jeter un butin à récupérer. ⚠️ Un `slice` brut pouvait
  *  pousser dehors un rapport non encaissé — et avec lui l'XP d'un groupe entier.
@@ -520,8 +522,12 @@ export function depositMessages(
     seen.add(m.id);
     added.unshift(m); // le dernier déposé passe devant, comme `[msg, ...box]`
   }
-  if (!added.length) return marked ? base : box;
-  return keepMessages([...added, ...base], cap);
+  // ⚠️ On taille AUSSI sans rien de neuf : une boîte écrite avec un plafond plus haut
+  // (30 avant la v0.1127) redescend au prochain passage (lecture, encaissement) au lieu
+  // d'attendre le prochain rapport. Rien à tailler → la même référence, comme avant.
+  const kept = keepMessages(added.length ? [...added, ...base] : base, cap);
+  if (!added.length && !marked && kept.length === box.length) return box;
+  return kept;
 }
 
 /** Ce qu'une expédition a rapporté, prêt à afficher. ⚠️ SOURCE UNIQUE des deux écrans

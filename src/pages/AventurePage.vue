@@ -1780,13 +1780,13 @@
             <button class="shop-x" aria-label="Fermer" @click="inboxOpen = false">✕</button>
           </div>
           <div class="inbox-list">
-            <div v-if="!(char.row?.messages ?? []).length" class="inbox-empty">
+            <div v-if="!inboxMessages.length" class="inbox-empty">
               Aucun message. Les rapports de tes expéditions apparaîtront ici.
             </div>
             <!-- 📜 Un rapport = une carte compacte (v0.1116) : trois lignes, le reste replié,
                  toutes REPLIÉES par défaut, chacune dans sa tuile (v0.1123). Le butin ne se verse qu'au geste. -->
             <MissionReportCard
-              v-for="m in char.row?.messages ?? []"
+              v-for="m in inboxMessages"
               :key="m.id"
               folded
               :card="messageCard(m, char.advList)"
@@ -3229,6 +3229,8 @@ import { emptySeals, sealsSummary } from '@/lib/ascension';
 import {
   messageTitle,
   isClaimable,
+  keepMessages,
+  MESSAGES_CAP,
   type ExpeditionMessage,
   haulPills,
   messageLoot,
@@ -5457,8 +5459,11 @@ const expeNow = ref(Date.now());
 const expeHero = computed(() =>
   char.row?.expedition ? travelPosition(char.row.expedition, expeNow.value) : null,
 );
+/** 📬 Ce que la boîte montre : les 3 derniers, plus tout butin encore à prendre (la même
+ *  règle que l'écriture — une boîte d'avant, plus pleine, se lit déjà taillée). */
+const inboxMessages = computed(() => keepMessages(char.row?.messages ?? [], MESSAGES_CAP));
 const unreadMessages = computed(
-  () => (char.row?.messages ?? []).filter((m) => !m.read || isClaimable(m, expeNow.value)).length,
+  () => inboxMessages.value.filter((m) => !m.read || isClaimable(m, expeNow.value)).length,
 );
 const inboxOpen = ref(false);
 function openInbox() {

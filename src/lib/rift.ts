@@ -446,7 +446,7 @@ export interface RiftRun {
    * mise en scène devrait inventer une courbe d'attrition — c'est-à-dire mentir sur la
    * seule tension que la faille produise. 13 nombres contre les centaines d'événements
    * d'un log complet : c'est ce qui permet de le persister dans la boîte 📬, qui garde
-   * 30 messages.
+   * 3 messages (plus les butins à prendre).
    */
   pvTrail: number[];
   /** Le duel contre le gardien, résumé pour le rejeu — absent si la porte ne s'est pas
