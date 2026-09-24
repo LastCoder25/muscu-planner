@@ -13,7 +13,16 @@
   <div
     ref="root"
     class="ivs"
-    :class="[variant, { dim, revealing, charging }]"
+    :class="[
+      variant,
+      {
+        dim,
+        revealing,
+        charging,
+        'tint-o': (tints?.medals ?? 'B') !== 'B',
+        'tint-i': (tints?.beads ?? 'B') !== 'B',
+      },
+    ]"
     :style="tintStyle"
     aria-hidden="true"
   >
@@ -39,6 +48,13 @@
             <stop offset="0" class="ivs-st" stop-opacity=".16" />
             <stop offset=".7" class="ivs-st" stop-opacity=".06" />
             <stop offset="1" class="ivs-st" stop-opacity="0" />
+          </radialGradient>
+          <!-- ✨ Halos des boules colorées (v0.1113). ⚠️ Un dégradé lit la couleur là où il
+               est DÉCLARÉ, pas là où on l'emploie : d'où un dégradé par teinte (A, S). -->
+          <radialGradient v-for="t in ['o', 'i']" :id="`${uid}-halo-${t}`" :key="t">
+            <stop offset="0" :class="`ivs-st-${t}`" stop-opacity=".7" />
+            <stop offset=".4" :class="`ivs-st-${t}`" stop-opacity=".32" />
+            <stop offset="1" :class="`ivs-st-${t}`" stop-opacity="0" />
           </radialGradient>
         </defs>
         <circle v-if="big" :cx="C" :cy="C" r="198" :fill="`url(#${uid}-disc)`" />
@@ -131,6 +147,7 @@
         <svg class="ivs-l" :viewBox="vb" data-spin="0.45" data-zone="1">
           <polygon class="ivs-ring thin" :points="medalPoly" />
           <g v-for="(m, i) in medals" :key="'md' + i" data-lit="md" class="ivs-medal ivs-tone-o">
+            <circle class="ivs-halo" :cx="m.x" :cy="m.y" r="26" :fill="`url(#${uid}-halo-o)`" />
             <circle :cx="m.x" :cy="m.y" r="12" />
             <text :x="m.x" :y="m.y">{{ m.ch }}</text>
           </g>
@@ -155,6 +172,16 @@
       </template>
       <!-- satellites (petit cercle) -->
       <svg v-else class="ivs-l" :viewBox="vb" data-spin="2.4" data-zone="0">
+        <circle
+          v-for="(h, i) in satHalos"
+          :key="'sh' + i"
+          data-lit="sh"
+          class="ivs-halo ivs-tone-o"
+          :cx="h[0]"
+          :cy="h[1]"
+          r="18"
+          :fill="`url(#${uid}-halo-o)`"
+        />
         <path data-lit="sa" class="ivs-sat ivs-tone-o" d="M150,-6 l4,8 l-4,8 l-4,-8 z" />
         <path data-lit="sa" class="ivs-sat ivs-tone-o" d="M150,290 l4,8 l-4,8 l-4,-8 z" />
         <path data-lit="sa" class="ivs-sat ivs-tone-o" d="M-6,150 l8,4 l8,-4 l-8,-4 z" />
@@ -184,6 +211,17 @@
           <polygon class="ivs-star" points="150,52 248,150 150,248 52,150" />
           <polygon class="ivs-star" points="81,81 219,81 219,219 81,219" />
           <circle class="ivs-ring" cx="150" cy="150" r="72" />
+          <!-- halos des nœuds dorés (petit cercle) : allumés en même temps qu'eux -->
+          <circle
+            v-for="(n, i) in nodes"
+            :key="'nh' + i"
+            data-lit="nh"
+            class="ivs-halo ivs-tone-i"
+            :cx="n.x"
+            :cy="n.y"
+            r="21"
+            :fill="`url(#${uid}-halo-i)`"
+          />
         </template>
         <circle
           v-for="(n, i) in nodes"
@@ -221,6 +259,7 @@
         <svg class="ivs-l" :viewBox="vb" data-spin="2" data-zone="2">
           <circle class="ivs-ring thin" :cx="C" :cy="C" r="74" />
           <g v-for="(m, i) in moons" :key="'mo' + i" data-lit="mo" class="ivs-moon ivs-tone-i">
+            <circle class="ivs-halo" :cx="m.x" :cy="m.y" r="25" :fill="`url(#${uid}-halo-i)`" />
             <circle class="ivs-moonb" :cx="m.x" :cy="m.y" r="7" />
             <circle class="ivs-spinner" :class="{ rev: i % 2 === 1 }" :cx="m.x" :cy="m.y" r="11" />
             <circle class="ivs-bead" :cx="m.sx" :cy="m.sy" r="2" />
@@ -390,6 +429,15 @@ const moons = V
       return { x, y, sx, sy };
     })
   : [];
+/** Centres des quatre losanges du petit cercle (leurs halos). */
+const satHalos = V
+  ? []
+  : [
+      [150, 2],
+      [150, 298],
+      [2, 150],
+      [298, 150],
+    ];
 const glyph = V
   ? 'M200,170 L200,230 M178,185 L222,215 M222,185 L178,215 M191,200 A9,9 0 1 0 209,200 A9,9 0 1 0 191,200'
   : 'M150,126 L150,174 M132,138 L168,162 M168,138 L132,162 M143,150 A7,7 0 1 0 157,150 A7,7 0 1 0 143,150';
@@ -416,6 +464,9 @@ const LIT_ZONE: Record<string, number> = {
   ri: 2,
   mo: 2,
   rc: 2,
+  // halos du petit cercle : même partie que les boules qu'ils entourent
+  sh: 0,
+  nh: 1,
 };
 let litGroups: { els: Element[]; zone: number }[] = [];
 let litN: number[] = [];
@@ -606,6 +657,24 @@ defineExpose({ el: root });
 .ivs-st-light {
   stop-color: var(--c-light);
 }
+.ivs-st-o {
+  stop-color: var(--ivs-o);
+}
+.ivs-st-i {
+  stop-color: var(--ivs-i);
+}
+/* ✨ Le halo d'une boule colorée : éteint tant qu'elle ne l'est pas — ni avant la charge,
+   ni dans un tirage sans A (ou sans S). Une boule bleue n'en a pas. */
+.ivs-halo {
+  opacity: 0;
+  transition: opacity 350ms ease-out;
+}
+.ivs.tint-o .ivs-tone-o.on .ivs-halo,
+.ivs.tint-o .ivs-halo.ivs-tone-o.on,
+.ivs.tint-i .ivs-tone-i.on .ivs-halo,
+.ivs.tint-i .ivs-halo.ivs-tone-i.on {
+  opacity: 1;
+}
 .ivs-ring {
   fill: none;
   stroke: var(--c);
@@ -688,7 +757,7 @@ defineExpose({ el: root });
   opacity: 0.5;
 }
 .ivs-medal {
-  circle {
+  circle:not(.ivs-halo) {
     fill: var(--c-night);
     stroke: var(--c);
     stroke-width: 1.3;
@@ -699,7 +768,7 @@ defineExpose({ el: root });
     text-anchor: middle;
     dominant-baseline: central;
   }
-  &.on circle {
+  &.on circle:not(.ivs-halo) {
     fill: var(--c-deep);
     stroke: var(--c);
     filter: drop-shadow(0 0 5px var(--c));
