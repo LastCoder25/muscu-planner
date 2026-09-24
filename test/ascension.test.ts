@@ -16,6 +16,9 @@ import {
   advAscensionCap,
   advNextAscension,
   advProgressOf,
+  advRank,
+  advRankProgress,
+  advStats,
   advXpToNext,
   ascendAdventurer,
   grantAdvXp,
@@ -25,6 +28,7 @@ import { buildingUpgradeCost } from '@/lib/buildings';
 import { CHARACTER_RANKS, rankStartLevel } from '@/lib/characterRank';
 import { EXPE } from '@/lib/expedition';
 import { RIFT, riftSeals } from '@/lib/rift';
+import { CHAMPIONS } from '@/data/champions';
 
 const adv = (level: number, ascended?: number, xp = 0): Adventurer => ({
   id: 'a',
@@ -216,5 +220,45 @@ describe('⬆️ on SAIT qu’un champion attend son ascension', () => {
     expect([...ids.champions]).toEqual(['pret']);
     expect(ids.gear.size).toBe(0);
     expect(ids.champions.size + ids.gear.size).toBe(readyAscensions([ready, early], [], ctx));
+  });
+});
+
+describe('la fiche se met à jour à l’ascension (signalé : « rang et stats inchangés »)', () => {
+  const champ = (level: number, ascended?: number): Adventurer => ({
+    ...adv(level, ascended),
+    championId: CHAMPIONS[0]!.id,
+  });
+
+  it('sans XP en réserve, le rang affiché passe au ★1 du rang ouvert', () => {
+    const bloque = champ(10, 0);
+    expect(advRank(bloque).rankIndex).toBe(0);
+    expect(advRank(bloque).star).toBe(5);
+    const monte = ascendAdventurer(bloque, 100);
+    expect(monte.level).toBe(10); // aucune réserve : le niveau ne bouge pas…
+    expect(advRank(monte).rankIndex).toBe(1); // …mais le rang affiché, si
+    expect(advRank(monte).star).toBe(1);
+    expect(advRank(monte).tier).toBeGreaterThan(advRank(bloque).tier);
+  });
+
+  it('…et les stats montent aussitôt (+5 %)', () => {
+    const bloque = champ(10, 0);
+    const monte = ascendAdventurer(bloque, 100);
+    const b = advStats(bloque);
+    const a = advStats(monte);
+    expect(a.puissance + a.endurance + a.agilite).toBeGreaterThan(
+      b.puissance + b.endurance + b.agilite,
+    );
+  });
+
+  it('la barre repart de zéro, puis ne recule pas au niveau suivant', () => {
+    const monte = ascendAdventurer(champ(10, 0), 100);
+    expect(advRankProgress(monte)).toBe(0);
+    expect(advRankProgress({ ...monte, level: 11 })).toBeGreaterThanOrEqual(0);
+    expect(advRank({ ...monte, level: 11 }).tier).toBe(advRank(monte).tier);
+  });
+
+  it('un aventurier sans ascension garde le rang de son niveau', () => {
+    expect(advRank(champ(10)).star).toBe(5);
+    expect(advRank(champ(15)).rankIndex).toBe(1);
   });
 });

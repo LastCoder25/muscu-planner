@@ -1871,6 +1871,12 @@ export const ADV_STARS = 5;
 export function advRank(adv: Adventurer): CharacterRank {
   const byLevel = characterRank(Math.max(1, adv.level));
   const cap = advRankCap(adv);
+  // ⬆️ UNE ASCENSION SE VOIT TOUT DE SUITE (signalé : « la fiche ne s'est pas mise à jour
+  // avec le nouveau rang »). Sans XP en réserve, le niveau reste au ★5 de l'ancien rang ;
+  // lu au seul niveau, le rang affiché ne bougeait qu'au niveau suivant — on payait, et
+  // rien ne changeait à l'écran. Le rang OUVERT prime donc, à ★1.
+  const opened = adv.championId ? advAscendedRank(adv) : 0;
+  if (opened > byLevel.rankIndex) return rankAtStar1(opened);
   if (byLevel.rankIndex <= cap) return byLevel;
   // ⚠️ PAS PROMU, PAS DE NOUVEAU RANG À L’ÉCRAN (v0.834 ; demandé par l’utilisateur : « s’il
   // n’a pas été promu, ne change pas le visuel de son rang »). Son niveau a franchi le
@@ -1886,6 +1892,19 @@ export function advRank(adv: Adventurer): CharacterRank {
     color: t.color,
     star: ADV_STARS,
     tier: cap * ADV_STARS + ADV_STARS - 1,
+  };
+}
+
+/** Un rang à sa PREMIÈRE étoile — ce qu'une ascension ouvre. */
+function rankAtStar1(rankIndex: number): CharacterRank {
+  const t = CHARACTER_RANKS[rankIndex]!;
+  return {
+    rankIndex,
+    name: t.name,
+    emoji: t.emoji,
+    color: t.color,
+    star: 1,
+    tier: rankIndex * ADV_STARS,
   };
 }
 
@@ -1959,6 +1978,11 @@ export function advStar(adv: Adventurer): number {
 export function advRankProgress(adv: Adventurer): number {
   // Bloqué à son rang faute de promotion : la barre est pleine, il n’avance plus ici.
   if (characterRank(Math.max(1, adv.level)).rankIndex > advRankCap(adv)) return 1;
+  // Ascensionné sans XP en réserve : affiché au ★1 du rang ouvert alors que son niveau est
+  // encore au ★5 du précédent — la barre part de zéro plutôt que de montrer la fin d'une
+  // étoile déjà dépassée (sinon elle reculerait au niveau suivant).
+  if (adv.championId && advAscendedRank(adv) > characterRank(Math.max(1, adv.level)).rankIndex)
+    return 0;
   return rankProgress(adv.level, Math.max(0, adv.xp) / advXpToNext(adv.level));
 }
 

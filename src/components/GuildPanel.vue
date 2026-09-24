@@ -1339,14 +1339,10 @@ const detailAscent = computed(() => {
     { key: 'e', emoji: '❤️', label: 'Endurance', b: sb.endurance, a: sa.endurance },
     { key: 'g', emoji: '⚡', label: 'Agilité', b: sb.agilite, a: sa.agilite },
   ];
-  // ⚠️ Le rang AFFICHÉ suit le niveau : sans XP en réserve, il reste à ★★★★★ de l'ancien
-  // rang jusqu'au niveau suivant. On montre alors le rang OUVERT, sans étoiles (« ouvert »),
-  // plutôt qu'un « Bronze → Bronze » qui laisserait croire que rien ne change.
+  // Le rang OUVERT s'affiche dès l'ascension (`advRank`), même sans XP en réserve : l'aperçu
+  // et la fiche d'après disent donc la même chose.
   const ra = advRank(after);
-  const rankAfter =
-    ra.rankIndex >= (advNextAscension(a) ?? 0)
-      ? { name: ra.name, emoji: ra.emoji, color: ra.color, stars: stars(ra.star) }
-      : { name: s.rank.name, emoji: s.rank.emoji, color: s.rank.color, stars: 'ouvert' };
+  const rankAfter = { name: ra.name, emoji: ra.emoji, color: ra.color, stars: stars(ra.star) };
   return {
     ...s,
     rows,
