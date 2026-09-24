@@ -1,13 +1,19 @@
 <template>
-  <!-- ⬆️ ASCENSION D'UN CHAMPION — une scène, pas un pictogramme.
-       Temps 1 : le portrait, terni, dans le cadre de l'ANCIEN rang ; la lumière monte.
-       Temps 2 (`--swap`) : un éclat balaie la carte, le cadre prend la couleur du NOUVEAU
-       rang, le portrait se ravive, l'emblème se retourne, l'onde et les étincelles partent.
-       Temps 3 : le nom, la bascule de rang, la récompense. -->
+  <!-- ⬆️ ASCENSION D'UN CHAMPION — l'AVANT/APRÈS se lit sur une carte qui se retourne.
+       Recto : le portrait dans le cadre de l'ANCIEN rang, ★★★★★ (condition pour monter).
+       Verso : le cadre du NOUVEAU rang, ★☆☆☆☆, portrait ravivé, éclat qui balaie.
+       ⚠️ Les faces se permutent par OPACITÉ à mi-rotation, pas par `backface-visibility` :
+       mesuré au banc, Chrome montrait le recto EN MIROIR à la fin du retournement. -->
   <div
     class="asc"
     :class="{ still: reduced }"
-    :style="{ '--from': from.color, '--to': to.color, '--swap': ASCENSION_SWAP_MS + 'ms' }"
+    :style="{
+      '--from': from.color,
+      '--to': to.color,
+      '--swap': FLIP_AT_MS + 'ms',
+      '--turn': TURN_MS + 'ms',
+      '--swapEnd': ASCENSION_SWAP_MS + 'ms',
+    }"
   >
     <div class="asc-rays" aria-hidden="true" />
     <div class="asc-glow" aria-hidden="true" />
@@ -16,41 +22,39 @@
       :key="s.i"
       class="asc-spark"
       aria-hidden="true"
-      :style="{
-        '--x': s.x + '%',
-        '--dl': s.delay + 's',
-        '--dur': s.dur + 's',
-        '--sz': s.size + 'px',
-      }"
+      :style="{ '--x': s.x + '%', '--dl': s.delay + 's', '--dur': s.dur + 's' }"
     />
 
     <div class="asc-kicker font-display">Ascension</div>
 
-    <div class="asc-stage">
-      <div class="asc-beam" aria-hidden="true" />
+    <div class="asc-flip">
       <div class="asc-wave" aria-hidden="true" />
       <div class="asc-wave w2" aria-hidden="true" />
       <div class="asc-card">
-        <div class="asc-frame" aria-hidden="true" />
-        <div class="asc-pic">
-          <ChampionPortrait :champion-id="championId" large class="asc-img">
-            <span class="asc-fallback">{{ emoji }}</span>
-          </ChampionPortrait>
-          <div class="asc-shade" aria-hidden="true" />
-          <div class="asc-shine" aria-hidden="true" />
-        </div>
-        <div class="asc-badge" aria-hidden="true">
-          <span class="asc-badge-face old">{{ from.emoji }}</span>
-          <span class="asc-badge-face new">{{ to.emoji }}</span>
+        <div v-for="f in faces" :key="f.key" class="asc-face" :class="f.key">
+          <div class="asc-frame" aria-hidden="true" />
+          <div class="asc-pic">
+            <ChampionPortrait :champion-id="championId" large class="asc-img">
+              <span class="asc-fallback">{{ emoji }}</span>
+            </ChampionPortrait>
+          </div>
+          <div v-if="f.key === 'new'" class="asc-shine-wrap" aria-hidden="true">
+            <div class="asc-shine" />
+          </div>
+          <div class="asc-ribbon font-display">{{ f.rank.name }}</div>
+          <div class="asc-stars" aria-hidden="true">
+            {{ '★'.repeat(f.stars) }}<i>{{ '★'.repeat(STARS_PER_RANK - f.stars) }}</i>
+          </div>
+          <div class="asc-badge" aria-hidden="true">{{ f.rank.emoji }}</div>
         </div>
       </div>
     </div>
 
     <div class="asc-name font-display">{{ name }}</div>
     <div class="asc-ranks">
-      <span class="asc-r-old" :style="{ color: from.color }">{{ from.name }}</span>
+      <s :style="{ color: from.color }">{{ from.name }} {{ '★'.repeat(STARS_PER_RANK) }}</s>
       <span class="asc-arrow">➜</span>
-      <b class="asc-r-new" :style="{ color: to.color }">{{ to.name }}</b>
+      <b :style="{ color: to.color }">{{ to.name }} ★</b>
     </div>
     <div v-if="mana > 0" class="asc-reward">
       <span class="asc-gem">💠</span>
@@ -61,10 +65,11 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
-import type { RankTier } from '@/lib/characterRank';
+import { STARS_PER_RANK, type RankTier } from '@/lib/characterRank';
 
-defineProps<{
+const props = defineProps<{
   from: RankTier;
   to: RankTier;
   name: string;
@@ -74,24 +79,32 @@ defineProps<{
   mana: number;
 }>();
 
+/** Recto au maximum de l'ancien rang (c'est la condition d'ascension), verso au ★1. */
+const faces = computed(() => [
+  { key: 'old', rank: props.from, stars: STARS_PER_RANK },
+  { key: 'new', rank: props.to, stars: 1 },
+]);
+
 const reduced =
   typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 /** Étincelles qui montent : positions DÉTERMINISTES (un rendu ne doit pas sautiller). */
 const sparks = reduced
   ? []
-  : Array.from({ length: 22 }, (_, i) => ({
+  : Array.from({ length: 20 }, (_, i) => ({
       i,
       x: (i * 37) % 100,
-      delay: +(((i * 0.29) % 2.4) + 0.2).toFixed(2),
+      delay: +((i * 0.29) % 2.4).toFixed(2),
       dur: +(2.2 + ((i * 0.41) % 1.6)).toFixed(2),
-      size: 3 + (i % 4),
     }));
 </script>
 
 <script lang="ts">
-/** Instant de la bascule vers le nouveau rang — lu aussi par l'overlay pour sa durée. */
-export const ASCENSION_SWAP_MS = 1100;
+/** Début du retournement, et sa durée. */
+const FLIP_AT_MS = 1300;
+const TURN_MS = 900;
+/** Instant où le VERSO apparaît (mi-rotation) — lu aussi par l'overlay pour sa durée. */
+export const ASCENSION_SWAP_MS = FLIP_AT_MS + TURN_MS / 2;
 </script>
 
 <style scoped lang="scss">
@@ -101,7 +114,6 @@ export const ASCENSION_SWAP_MS = 1100;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
   isolation: isolate;
 }
 
@@ -109,299 +121,352 @@ export const ASCENSION_SWAP_MS = 1100;
 .asc-rays {
   position: absolute;
   z-index: -2;
-  top: 38%;
+  top: 190px;
   left: 50%;
-  width: 760px;
-  height: 760px;
-  margin: -380px 0 0 -380px;
+  width: 820px;
+  height: 820px;
+  margin: -410px 0 0 -410px;
   background: repeating-conic-gradient(
     from 0deg,
-    color-mix(in srgb, var(--to) 26%, transparent) 0deg 7deg,
+    color-mix(in srgb, var(--to) 24%, transparent) 0deg 7deg,
     transparent 7deg 22deg
   );
-  mask: radial-gradient(circle, #000 0%, transparent 62%);
+  mask: radial-gradient(circle, #000, transparent 60%);
   opacity: 0;
   animation:
-    asc-fade-in 0.8s ease-out var(--swap) both,
-    asc-spin 26s linear infinite;
+    asc-fade 0.9s ease-out var(--swapEnd) both,
+    asc-spin 28s linear infinite;
 }
 .asc-glow {
   position: absolute;
   z-index: -1;
-  top: 38%;
+  top: 190px;
   left: 50%;
-  width: 420px;
-  height: 420px;
-  margin: -210px 0 0 -210px;
+  width: 460px;
+  height: 460px;
+  margin: -230px 0 0 -230px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    color-mix(in srgb, var(--to) 45%, transparent),
+    color-mix(in srgb, var(--to) 42%, transparent),
     transparent 65%
   );
-  animation: asc-glow 1.2s ease-out var(--swap) both;
+  opacity: 0;
+  animation: asc-glow 1.3s ease-out var(--swapEnd) both;
 }
 .asc-spark {
   position: absolute;
   z-index: -1;
-  bottom: 18%;
+  top: 420px;
   left: var(--x);
-  width: var(--sz);
-  height: var(--sz);
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--to);
   box-shadow: 0 0 8px var(--to);
   opacity: 0;
-  animation: asc-rise var(--dur) ease-out calc(var(--swap) + var(--dl)) infinite;
+  animation: asc-rise var(--dur) ease-out calc(var(--swapEnd) + var(--dl)) infinite;
 }
-
 .asc-kicker {
   font-size: 13px;
   letter-spacing: 0.42em;
   text-transform: uppercase;
   color: var(--to);
-  text-shadow: 0 0 14px color-mix(in srgb, var(--to) 70%, transparent);
+  text-shadow: 0 0 14px var(--to);
+  margin-bottom: 26px;
   animation: asc-up 0.6s ease-out 0.1s both;
 }
 
-/* ── La carte du champion ────────────────────────────────────────────── */
-.asc-stage {
+/* ── La carte qui se retourne ────────────────────────────────────────── */
+.asc-flip {
   position: relative;
-  width: 196px;
-  height: 256px;
-  margin: 6px 0 18px;
-}
-.asc-beam {
-  position: absolute;
-  left: 50%;
-  bottom: -30px;
-  width: 150px;
-  height: 420px;
-  margin-left: -75px;
-  background: linear-gradient(
-    to top,
-    color-mix(in srgb, var(--to) 55%, transparent),
-    transparent 80%
-  );
-  filter: blur(14px);
-  transform-origin: bottom;
-  animation: asc-beam 1.3s ease-out calc(var(--swap) - 0.35s) both;
-}
-.asc-wave {
-  position: absolute;
-  inset: 0;
-  border-radius: 26px;
-  border: 3px solid var(--to);
-  opacity: 0;
-  animation: asc-wave 1s ease-out var(--swap) both;
-}
-.asc-wave.w2 {
-  animation-delay: calc(var(--swap) + 0.18s);
+  width: 206px;
+  height: 280px;
+  perspective: 1100px;
 }
 .asc-card {
   position: absolute;
   inset: 0;
+  transform-style: preserve-3d;
   animation:
     asc-enter 0.7s cubic-bezier(0.2, 1.3, 0.4, 1) both,
-    asc-pulse 0.6s ease-out var(--swap);
+    asc-turn var(--turn) cubic-bezier(0.6, -0.05, 0.25, 1.15) var(--swap) both;
+}
+.asc-face {
+  position: absolute;
+  inset: 0;
+  border-radius: 24px;
+}
+.asc-face.old {
+  --c: var(--from);
+  --gl: 14px;
+  animation: asc-out var(--turn) linear var(--swap) both;
+}
+.asc-face.new {
+  --c: var(--to);
+  --gl: 40px;
+  transform: rotateY(180deg);
+  animation: asc-in var(--turn) linear var(--swap) both;
 }
 .asc-frame {
   position: absolute;
-  inset: -5px;
-  border-radius: 26px;
-  padding: 3px;
-  background: linear-gradient(160deg, var(--from), color-mix(in srgb, var(--from) 40%, #15120e));
-  box-shadow: 0 0 22px color-mix(in srgb, var(--from) 45%, transparent);
-  animation: asc-frame 0.5s ease-out var(--swap) both;
+  inset: -6px;
+  border-radius: 28px;
+  /* Cadre MÉTALLIQUE : reflets clairs et creux sombres de la couleur du rang. */
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--c) 55%, #fff) 0%,
+    var(--c) 22%,
+    color-mix(in srgb, var(--c) 45%, #000) 50%,
+    var(--c) 72%,
+    color-mix(in srgb, var(--c) 60%, #fff) 100%
+  );
+  box-shadow: 0 0 var(--gl) color-mix(in srgb, var(--c) 60%, transparent);
 }
 .asc-pic {
   position: absolute;
   inset: 0;
-  overflow: hidden;
   border-radius: 22px;
+  overflow: hidden;
   background: #1c1813;
   display: grid;
   place-items: center;
+}
+.asc-pic::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(10, 8, 6, 0.85), transparent 42%);
 }
 .asc-img {
   width: 100%;
   height: 100%;
   border-radius: 0;
-  filter: saturate(0.25) brightness(0.62);
-  animation: asc-revive 0.6s ease-out var(--swap) both;
 }
 .asc-fallback {
   font-size: 96px;
   line-height: 1;
-  filter: saturate(0.25) brightness(0.62);
-  animation: asc-revive 0.6s ease-out var(--swap) both;
 }
-.asc-shade {
+.asc-face.old .asc-img,
+.asc-face.old .asc-fallback {
+  filter: saturate(0.55) brightness(0.8);
+}
+.asc-shine-wrap {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to top, rgba(10, 8, 6, 0.75), transparent 45%);
+  border-radius: 22px;
+  overflow: hidden;
+  pointer-events: none;
 }
 .asc-shine {
   position: absolute;
   top: -20%;
-  left: -80%;
-  width: 60%;
+  left: -90%;
+  width: 55%;
   height: 140%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.75), transparent);
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.7), transparent);
   transform: skewX(-18deg);
   opacity: 0;
-  animation: asc-shine 0.7s ease-in-out calc(var(--swap) - 0.2s) both;
+  animation: asc-shine 0.8s ease-in-out calc(var(--swapEnd) + 0.15s) both;
+}
+.asc-ribbon {
+  position: absolute;
+  top: -15px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 16px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: #15120e;
+  background: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--c) 60%, #fff),
+    var(--c) 45%,
+    color-mix(in srgb, var(--c) 70%, #000)
+  );
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.asc-stars {
+  position: absolute;
+  bottom: 38px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 17px;
+  letter-spacing: 2px;
+  color: var(--c);
+  text-shadow: 0 1px 4px #000;
+}
+.asc-stars i {
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.28);
 }
 .asc-badge {
   position: absolute;
-  left: 50%;
   bottom: -26px;
-  width: 58px;
-  height: 58px;
-  margin-left: -29px;
-  perspective: 300px;
-}
-.asc-badge-face {
-  position: absolute;
-  inset: 0;
+  left: 50%;
+  margin-left: -28px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 30px;
-  border-radius: 50%;
+  font-size: 28px;
   background: #15120e;
-  backface-visibility: hidden;
+  border: 3px solid var(--c);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--c) 60%, transparent);
 }
-.asc-badge-face.old {
-  border: 3px solid var(--from);
-  animation: asc-flip-out 0.5s ease-in var(--swap) both;
-}
-.asc-badge-face.new {
+.asc-wave {
+  position: absolute;
+  inset: -6px;
+  border-radius: 28px;
   border: 3px solid var(--to);
-  box-shadow: 0 0 18px color-mix(in srgb, var(--to) 70%, transparent);
-  animation: asc-flip-in 0.5s ease-out var(--swap) both;
+  opacity: 0;
+  animation: asc-wave 1s ease-out var(--swapEnd) both;
+}
+.asc-wave.w2 {
+  animation-delay: calc(var(--swapEnd) + 0.18s);
 }
 
 /* ── Texte ───────────────────────────────────────────────────────────── */
 .asc-name {
-  font-size: 30px;
+  margin-top: 46px;
+  font-size: 31px;
   line-height: 1.1;
   text-align: center;
   color: var(--text, #f3eee6);
-  animation: asc-up 0.5s ease-out calc(var(--swap) + 0.15s) both;
+  animation: asc-up 0.5s ease-out calc(var(--swapEnd) + 0.1s) both;
 }
 .asc-ranks {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 10px;
+  gap: 4px 10px;
+  margin-top: 6px;
   font-size: 16px;
-  animation: asc-up 0.5s ease-out calc(var(--swap) + 0.3s) both;
+  animation: asc-up 0.5s ease-out calc(var(--swapEnd) + 0.25s) both;
 }
-.asc-r-old {
+.asc-ranks s {
   opacity: 0.7;
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
 }
 .asc-arrow {
   color: var(--dim, #9a8f7e);
 }
-.asc-r-new {
+.asc-ranks b {
   font-size: 19px;
-  text-shadow: 0 0 12px color-mix(in srgb, var(--to) 60%, transparent);
+  text-shadow: 0 0 12px currentColor;
 }
 .asc-reward {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 14px;
   padding: 8px 16px;
   border-radius: 999px;
   background: color-mix(in srgb, #6fb8ff 14%, #15120e);
   border: 1px solid color-mix(in srgb, #6fb8ff 55%, transparent);
   color: var(--text, #f3eee6);
   font-size: 14px;
-  animation: asc-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) calc(var(--swap) + 0.55s) both;
+  animation: asc-pop 0.5s cubic-bezier(0.3, 1.6, 0.5, 1) calc(var(--swapEnd) + 0.45s) both;
 }
 .asc-reward b {
   font-size: 20px;
   color: #8fcaff;
 }
 .asc-gem {
-  font-size: 20px;
+  font-size: 18px;
 }
 
 /* ── Keyframes ───────────────────────────────────────────────────────── */
 @keyframes asc-enter {
   from {
     opacity: 0;
-    transform: translateY(24px) scale(0.85);
+    transform: translateY(26px) scale(0.85);
   }
 }
-@keyframes asc-pulse {
-  40% {
-    transform: scale(1.07);
+@keyframes asc-turn {
+  0% {
+    transform: rotateY(0) scale(1);
+  }
+  45% {
+    transform: rotateY(90deg) scale(1.1);
+  }
+  100% {
+    transform: rotateY(180deg) scale(1);
   }
 }
-@keyframes asc-frame {
-  to {
-    background: linear-gradient(160deg, var(--to), color-mix(in srgb, var(--to) 40%, #15120e));
-    box-shadow: 0 0 34px color-mix(in srgb, var(--to) 65%, transparent);
+@keyframes asc-out {
+  0%,
+  49.9% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
   }
 }
-@keyframes asc-revive {
-  to {
-    filter: saturate(1.1) brightness(1);
+@keyframes asc-in {
+  0%,
+  49.9% {
+    opacity: 0;
+  }
+  50%,
+  100% {
+    opacity: 1;
   }
 }
 @keyframes asc-shine {
   0% {
-    left: -80%;
+    left: -90%;
     opacity: 0;
   }
   20% {
     opacity: 1;
   }
   100% {
-    left: 130%;
+    left: 135%;
     opacity: 0;
-  }
-}
-@keyframes asc-beam {
-  0% {
-    opacity: 0;
-    transform: scaleY(0.2);
-  }
-  40% {
-    opacity: 1;
-    transform: scaleY(1);
-  }
-  100% {
-    opacity: 0.35;
   }
 }
 @keyframes asc-wave {
   0% {
+    opacity: 0;
+  }
+  1% {
     opacity: 0.9;
     transform: scale(1);
   }
   100% {
     opacity: 0;
-    transform: scale(1.6);
+    transform: scale(1.55);
   }
 }
-@keyframes asc-flip-out {
-  to {
-    transform: rotateY(90deg);
+@keyframes asc-glow {
+  0% {
     opacity: 0;
+    transform: scale(0.4);
   }
-}
-@keyframes asc-flip-in {
-  from {
-    transform: rotateY(-90deg);
-    opacity: 0;
-  }
-  to {
-    transform: rotateY(0);
+  50% {
     opacity: 1;
+  }
+  100% {
+    opacity: 0.75;
+    transform: scale(1);
+  }
+}
+@keyframes asc-fade {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes asc-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 @keyframes asc-up {
@@ -416,61 +481,35 @@ export const ASCENSION_SWAP_MS = 1100;
     transform: scale(0.5);
   }
 }
-@keyframes asc-fade-in {
-  to {
-    opacity: 1;
-  }
-}
-@keyframes asc-glow {
-  0% {
-    opacity: 0;
-    transform: scale(0.4);
-  }
-  50% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 0.7;
-    transform: scale(1);
-  }
-}
-@keyframes asc-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 @keyframes asc-rise {
   0% {
     opacity: 0;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
   15% {
     opacity: 1;
   }
   100% {
     opacity: 0;
-    transform: translateY(-340px) scale(0.3);
+    transform: translateY(-330px) scale(0.3);
   }
 }
 
-/* Mouvement réduit : l'état FINAL directement, aux couleurs du nouveau rang. */
-.asc.still *,
-.asc.still {
+/* Mouvement réduit : l'état FINAL directement — le verso, aux couleurs du nouveau rang. */
+.asc.still,
+.asc.still * {
   animation: none !important;
 }
-.asc.still .asc-frame {
-  background: linear-gradient(160deg, var(--to), color-mix(in srgb, var(--to) 40%, #15120e));
+.asc.still .asc-card {
+  transform: rotateY(180deg);
 }
-.asc.still .asc-img,
-.asc.still .asc-fallback {
-  filter: none;
-}
-.asc.still .asc-badge-face.old,
-.asc.still .asc-shine,
-.asc.still .asc-wave {
+.asc.still .asc-face.old,
+.asc.still .asc-wave,
+.asc.still .asc-shine {
   opacity: 0;
 }
-.asc.still .asc-rays {
+.asc.still .asc-rays,
+.asc.still .asc-glow {
   opacity: 1;
 }
 </style>
