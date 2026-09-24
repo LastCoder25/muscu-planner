@@ -542,7 +542,9 @@ function stepDustFrame(dt: number, t: number) {
   const ctx = cv.getContext('2d');
   if (!ctx) return;
   ctx.clearRect(0, 0, cv.width, cv.height);
-  sprites ??= makeSprites({ A: GRADE_COLOR.A, S: GRADE_COLOR.S });
+  // Le violet du rang, additionné au bleu du cercle, s'y fond : sa poussière prend une teinte
+  // plus claire et plus rose, qui reste lisible sur le fond.
+  sprites ??= makeSprites({ A: '#e6a6ff', S: GRADE_COLOR.S });
   drawDust(ctx, grains, sprites, t / 1000);
 }
 

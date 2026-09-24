@@ -309,8 +309,8 @@ export interface DustStyle {
   flares: number;
 }
 export const DUST: Record<'A' | 'S', DustStyle> = {
-  A: { rate: 22, life: [0.8, 1.5], size: [3.5, 7], stars: 0.22, twinkle: 7, flares: 0 },
-  S: { rate: 46, life: [0.9, 1.8], size: [4, 8.5], stars: 0.35, twinkle: 11, flares: 0.06 },
+  A: { rate: 22, life: [0.9, 1.6], size: [4.5, 8.5], stars: 0.3, twinkle: 7, flares: 0 },
+  S: { rate: 46, life: [1, 1.9], size: [5, 10], stars: 0.4, twinkle: 11, flares: 0.06 },
 };
 
 /**
