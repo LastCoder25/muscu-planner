@@ -170,7 +170,9 @@
         🧭 Ton héros est en expédition —
         <!-- Le temps jusqu'au RETOUR en ville (aller + retour à l'aller) : c'est lui qui dit
              quand le héros redevient disponible, pas l'arrivée sur le lieu. -->
-        <b v-if="expeHero.phase !== 'done'">de retour dans {{ fmtExpeMs(expeHero.remainTotalMs) }}</b>
+        <b v-if="expeHero.phase !== 'done'"
+          >de retour dans {{ fmtExpeMs(expeHero.remainTotalMs) }}</b
+        >
         <b v-else>de retour !</b>. Donjons, boss et équipement indisponibles.
       </button>
 
@@ -2426,6 +2428,10 @@
             {{ fmtDelta(planPowerNow, planPowerSel) }}
           </span>
         </div>
+        <div class="plan-note">
+          Puissance de tout le build retenu, recalculée à chaque case cochée ou décochée. Une pièce
+          ne se chiffre pas seule : bonus de set, voie et stats qui se multiplient.
+        </div>
 
         <div class="plan-rows">
           <div
@@ -2444,9 +2450,6 @@
             <div class="plan-main">
               <div class="plan-lbl">
                 <span class="plan-kind">{{ row.label }}</span>
-                <span class="plan-gain" :class="rowGain(row.key) >= 0 ? 'up' : 'down'">
-                  {{ fmtDelta(0, rowGain(row.key)) }}
-                </span>
               </div>
 
               <!-- OBJET / FAMILIER : l'actuel à gauche, le proposé à droite -->
@@ -2513,9 +2516,6 @@
                       gradeLabel(pc.toItem)
                     }}</span></span
                   >
-                </div>
-                <div class="plan-sub">
-                  Gain du set entier : ses pièces ne valent pas ça une à une.
                 </div>
               </div>
 
@@ -6121,10 +6121,11 @@ function doEquip(itemId: string) {
 // ce qui avait bougé. On propose désormais chaque remplacement, avec son détail et son
 // gain, et le joueur accepte ligne par ligne.
 //
-// ⚠️ LE GAIN DE CHAQUE LIGNE EST RECALCULÉ, jamais figé. Le plan de l'optimiseur est un
-// TOUT COHÉRENT — les talents sont choisis POUR ce gear, la voie POUR son capstone — donc
-// refuser une ligne change la valeur de toutes les autres. Afficher un « +312 » calculé
-// une fois pour toutes serait un mensonge dès le premier refus.
+// ⚠️ AUCUN GAIN PAR LIGNE (v0.1139 ; signalé : un set Berserker à −52 et des pièces
+// annoncées « +600 »). Le plan est un TOUT COHÉRENT — talents choisis pour ce gear, voie
+// déduite du set porté, bonus de set, stats qui se multiplient — donc la valeur marginale
+// d'une ligne dépend de tout le reste et les lignes ne s'additionnent pas. Seule la
+// puissance GLOBALE du build retenu s'affiche, recalculée à chaque bascule.
 type PlanPiece = { slot: ItemSlot; fromItem: Item | null; toItem: Item | null };
 type PlanRow = {
   key: string;
@@ -6252,20 +6253,6 @@ function planPowerOf(st: { equipped: Equipped; talentIds: string[]; voie: string
 }
 const planPowerNow = computed(() => planPowerOf(planStateWithout('__all__')));
 const planPowerSel = computed(() => planPowerOf(planStateWithout()));
-/** Ce que CETTE ligne apporte, dans le contexte des lignes actuellement acceptées. */
-function rowGain(key: string): number {
-  if (planOff.value.has(key)) {
-    // Refusée : on mesure ce qu'elle apporterait si on l'acceptait.
-    const off = new Set(planOff.value);
-    off.delete(key);
-    const saved = planOff.value;
-    planOff.value = off;
-    const withIt = planPowerOf(planStateWithout());
-    planOff.value = saved;
-    return withIt - planPowerSel.value;
-  }
-  return planPowerSel.value - planPowerOf(planStateWithout(key));
-}
 function togglePlanRow(key: string) {
   const next = new Set(planOff.value);
   if (next.has(key)) next.delete(key);
@@ -8705,13 +8692,17 @@ button.pt-mini:active {
   margin-left: auto;
   font-weight: 700;
 }
-.pp-delta.up,
-.plan-gain.up {
+.pp-delta.up {
   color: var(--d1, #7bc86c);
 }
-.pp-delta.down,
-.plan-gain.down {
+.pp-delta.down {
   color: var(--d4, #ff6a45);
+}
+.plan-note {
+  font-size: 11.5px;
+  color: var(--dim);
+  margin: -4px 0 10px;
+  line-height: 1.35;
 }
 .plan-rows {
   flex: 1;
@@ -8754,12 +8745,6 @@ button.pt-mini:active {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--dim);
-}
-.plan-gain {
-  margin-left: auto;
-  font-weight: 700;
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
 }
 .plan-cmp {
   display: grid;
