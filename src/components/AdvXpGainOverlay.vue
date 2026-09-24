@@ -276,6 +276,8 @@ onBeforeUnmount(clearTimers);
   font-weight: 700;
 }
 .ax-stars {
+  display: inline-block;
+  transform-origin: left center;
   color: var(--rc);
   letter-spacing: 1px;
   &.bump {
@@ -307,6 +309,7 @@ onBeforeUnmount(clearTimers);
   animation: ax-flash 0.6s ease-out both;
 }
 .ax-note {
+  transform-origin: left center;
   font-size: 12px;
   font-weight: 700;
   color: var(--rc);
