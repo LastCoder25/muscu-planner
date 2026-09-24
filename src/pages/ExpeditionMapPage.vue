@@ -384,7 +384,10 @@
         @click="t.claim ? doClaimCaravan(t.claim) : toggleFocusTrip(t.key)"
       >
         <span class="tr-who">{{ t.who }}</span>
-        <span class="tr-poi">{{ POI_EMO[t.poi.type] }}</span>
+        <span v-if="isRiftPoi(t.poi)" class="tr-poi tr-rift">
+          <RiftPortal :color="rankOf(t.poi).color" :seed="seedOf(t.poi.id)" still />
+        </span>
+        <span v-else class="tr-poi">{{ POI_EMO[t.poi.type] }}</span>
         <span class="tr-time">{{ t.time }}</span>
         <i class="tr-bar" :style="{ width: t.pct + '%' }" />
       </button>
@@ -418,7 +421,10 @@
              ici : la grille lit les MÊMES `computed` qu'avant (`poiFacts`). -->
         <div class="poi-card" :style="{ '--rk': selectedRank.color }">
           <div class="pc-head">
-            <span class="pc-emo">{{ POI_EMO[selected.type] }}</span>
+            <span v-if="isRiftPoi(selected)" class="pc-emo pc-rift">
+              <RiftPortal :color="selectedRank.color" :seed="seedOf(selected.id)" />
+            </span>
+            <span v-else class="pc-emo">{{ POI_EMO[selected.type] }}</span>
             <div class="pc-main">
               <!-- 🏅 LE RANG À CÔTÉ DU NOM : la boule de la carte dit déjà la couleur, la fiche
                    dit le rang en toutes lettres, étoiles comprises (`poiRank`). -->
@@ -2169,6 +2175,9 @@ onUnmounted(() => {
   align-items: center;
   gap: 12px;
 }
+.pc-rift {
+  padding: 4px 0;
+}
 .pc-emo {
   flex: none;
   width: 56px;
@@ -2994,6 +3003,12 @@ onUnmounted(() => {
 }
 .tr-poi {
   font-size: 15px;
+}
+/* 🌀 La faille garde son portail sous la carte aussi, à la taille de l'emoji. */
+.tr-rift {
+  display: inline-block;
+  width: 11px;
+  height: 18px;
 }
 .tr-time {
   flex-basis: 100%;
