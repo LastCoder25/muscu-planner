@@ -168,14 +168,9 @@
         @click="openGame('/expedition-map')"
       >
         🧭 Ton héros est en expédition —
-        <b v-if="expeHero.phase !== 'done'"
-          >{{ expeHero.phase === 'return' ? 'retour' : 'arrivée' }} dans
-          {{
-            fmtExpeMs(
-              expeHero.phase === 'return' ? expeHero.remainTotalMs : expeHero.remainToObjectiveMs,
-            )
-          }}</b
-        >
+        <!-- Le temps jusqu'au RETOUR en ville (aller + retour à l'aller) : c'est lui qui dit
+             quand le héros redevient disponible, pas l'arrivée sur le lieu. -->
+        <b v-if="expeHero.phase !== 'done'">de retour dans {{ fmtExpeMs(expeHero.remainTotalMs) }}</b>
         <b v-else>de retour !</b>. Donjons, boss et équipement indisponibles.
       </button>
 
