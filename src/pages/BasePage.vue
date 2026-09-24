@@ -727,6 +727,19 @@
                  NIVEAU CHANGE — la seule question qu’on se pose devant « Améliorer ».
                  Chiffres DÉRIVÉS des vraies fonctions, jamais recopiés. -->
             <div v-if="lvlOf(defSel.id)" class="sh-gain">{{ perLevel(defSel.id) }}</div>
+            <!-- ⚔️ Ce que le niveau suivant ajoute à la puissance de défense (même calcul que
+                 le chiffre de tête : mêmes héros et gardes présents). -->
+            <div v-if="defGain" class="sh-pow">
+              <template v-if="defGain.after > defGain.before">
+                ⚔️ Puissance de la base {{ fmtPow(defGain.before) }} →
+                <b>{{ fmtPow(defGain.after) }}</b>
+                <span class="up">(+{{ fmtPow(defGain.after - defGain.before) }})</span>
+                {{ lvlOf(defSel.id) ? 'au niveau suivant' : 'une fois construite' }}
+              </template>
+              <template v-else>
+                ⚔️ N’ajoute rien à la puissance de la base — elle sert ailleurs.
+              </template>
+            </div>
             <div v-if="defSel.id === 'turret' && lvlOf('turret')" class="sh-note">
               Les {{ TURRET_SLOTS }} tourelles montent ensemble — un seul niveau les arme toutes.
             </div>
@@ -1028,6 +1041,7 @@ import {
   heroDefends,
   siegeHoldChance,
   defensePower,
+  defenseUpgradeGain,
   siegeOdds,
   ODDS_LABEL,
   scoutClarity,
@@ -1559,6 +1573,17 @@ const defSel = computed(() => DEFENSE_TYPES.find((d) => d.id === defOpen.value) 
 /** Ce qu’un niveau de plus apporte à CETTE structure. ⚠️ On passe l’intervalle RÉEL
  *  entre deux sièges : la convalescence en dépend, et sans lui l’Infirmerie
  *  promettrait un gain que le rythme d’entraînement annule déjà. */
+const defGain = computed(() =>
+  defSel.value
+    ? defenseUpgradeGain(
+        defenses.value,
+        defSel.value.id,
+        heroLevel.value,
+        heroForDefense.value,
+        guardNow.value,
+      )
+    : null,
+);
 function perLevel(id: DefenseId): string {
   return defensePerLevelLabel(id, lvlOf(id), {
     playerLevel: heroLevel.value,
@@ -2498,6 +2523,16 @@ function doHarvest() {
   color: var(--accent);
 }
 /* Le gain du prochain niveau : accent, parce que c’est sur ce chiffre qu’on décide. */
+.sh-pow {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text);
+}
+.sh-pow .up {
+  color: var(--d1, #7bc86c);
+  font-weight: 700;
+}
 .sh-gain {
   margin-top: 6px;
   font-size: 12px;

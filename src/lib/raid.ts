@@ -1409,6 +1409,29 @@ export function defensePower(
   return combatPower(defenseCombatant(defenses, playerLevel, hero ?? null, guard));
 }
 
+/** ⬆️ Ce qu'UN niveau de plus sur une structure ajoute à la puissance de défense (v0.1148,
+ *  demandé : le dire quand on la sélectionne). Mesuré par le MÊME appel que le chiffre de
+ *  tête (`defensePower`, mêmes héros et gardes) : l'annonce ne peut pas diverger du total.
+ *  `null` si elle ne peut pas monter (déjà au niveau du joueur). Une structure qui ne combat
+ *  pas (Tour de guet, Infirmerie) rend un gain de 0 : c'est une information. */
+export function defenseUpgradeGain(
+  defenses: DefenseStructure[],
+  id: DefenseId,
+  playerLevel: number,
+  hero: Combatant | null,
+  guard: GuardUnit[],
+): { before: number; after: number } | null {
+  const lvl = defenseLevel(defenses, id);
+  if (lvl >= playerLevel) return null;
+  const up = defenses.some((d) => d.typeId === id)
+    ? defenses.map((d) => (d.typeId === id ? { ...d, level: lvl + 1 } : d))
+    : [...defenses, { typeId: id, level: 1 }];
+  return {
+    before: defensePower(defenses, playerLevel, hero, guard),
+    after: defensePower(up, playerLevel, hero, guard),
+  };
+}
+
 /** Puissance d'ASSAUT de l'armée, dans la même unité que la défense — ET À LA MÊME
  *  ÉCHELLE : à puissances égales, la base tient environ une fois sur deux
  *  (cf. `RAID.assaultEvenK`). */
