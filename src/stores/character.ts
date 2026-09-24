@@ -289,6 +289,7 @@ export interface CharacterRow {
   adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
   laby_stats: LabyStats; // Labyrinthe : runs lancés / nettoyés par palier (migr. 0073)
   boss_stats: RunStats; // Boss de palier : tentatives / victoires par boss (migr. 0085)
+  dungeon_stats: RunStats; // Donjons : tentatives / nettoyages par donjon (migr. 0089)
   /** 🎫 Jetons de boss entre amis (migr. 0086) : gagnés par le sport (`accrueBossTokens`),
    *  dépensés par le SERVEUR au lancement et à l'adhésion. */
   boss_tokens: number;
@@ -331,7 +332,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -363,6 +364,7 @@ export const useCharacterStore = defineStore('character', () => {
     r.adv_gear = normalizeAdvGearState(r.adv_gear);
     r.laby_stats = normalizeLabyStats(r.laby_stats);
     r.boss_stats = normalizeRunStats(r.boss_stats);
+    r.dungeon_stats = normalizeRunStats(r.dungeon_stats);
     if (typeof r.boss_tokens !== 'number') r.boss_tokens = 0; // 🎫 migr. 0086
     if (!r.boss_token_state || typeof r.boss_token_state !== 'object') r.boss_token_state = null;
     // ⚔️ Groupes de camp (migr. 0077) : absent/malformé → [] ; une entrée incomplète est
@@ -866,6 +868,9 @@ export const useCharacterStore = defineStore('character', () => {
       gold: number;
       drops: Item[];
       clearedDungeonId?: string;
+      // Donjon TENTÉ (nettoyé ou non) : compte pour le % de réussite réel. Absent pour
+      // l'arène, qui passe aussi par ici mais n'est pas un donjon.
+      dungeonId?: string;
       summonStones?: number; // pierres d'invocation 🔮 (drop de donjon nettoyé)
       enchantScrolls?: number; // 📜 parchemins d'enchantement (filet de donjon nettoyé)
       talentDrops?: TalentInstance[]; // talents tombés (drop-only)
@@ -889,6 +894,16 @@ export const useCharacterStore = defineStore('character', () => {
       equipped: dist.equipped,
       inventory: dist.inventory,
       cleared_dungeons: cleared,
+      // % de réussite RÉEL affiché sur la tuile du donjon : chaque tentative compte.
+      ...(input.dungeonId
+        ? {
+            dungeon_stats: runAttempt(
+              cur.dungeon_stats,
+              input.dungeonId,
+              input.clearedDungeonId === input.dungeonId,
+            ),
+          }
+        : {}),
       keys: cur.keys + gotKey,
       ...(input.talentDrops?.length ? { talents: [...cur.talents, ...input.talentDrops] } : {}),
     });
