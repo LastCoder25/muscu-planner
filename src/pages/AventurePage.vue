@@ -2598,7 +2598,7 @@
                     rarityVerdict(cand.item).label
                   }}</span>
                 </div>
-                <div class="pow-cmp">
+                <div v-if="!setDropCmp(cand.item)" class="pow-cmp">
                   ⚔️ vs ton meilleur build {{ fmtPow(refPower) }} →
                   <b :class="powerIfEquip(cand.item) >= refPower ? 'up' : 'down'"
                     >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
@@ -2609,13 +2609,7 @@
                 <div v-if="rewardDupNote(cand.item)" class="rc-dup">
                   {{ rewardDupNote(cand.item) }}
                 </div>
-                <div
-                  v-if="rewardLoadoutCmp(cand.item)"
-                  class="rc-loadcmp"
-                  :class="rewardLoadoutCmp(cand.item)!.cls"
-                >
-                  {{ rewardLoadoutCmp(cand.item)!.text }}
-                </div>
+                <SetPieceCmp :cmp="setDropCmp(cand.item)" />
               </div>
             </template>
             <template v-else>
@@ -2788,13 +2782,7 @@
                      quand même si elle est intéressante (Δ puissance si équipée) + où elle est
                      rangée. Conflit (emplacement occupé) → dialogue de choix par-dessus. -->
                 <template v-if="run.kind === 'boss' && d.setId">
-                  <div class="ii-cmp2">
-                    <span class="ii-cmp2-ic">⚔️</span>
-                    <span class="ii-cmp2-chip" :class="powerIfEquip(d) >= refPower ? 'up' : 'down'">
-                      <b>{{ fmtDelta(refPower, powerIfEquip(d)) }}</b
-                      ><i>si équipée seule</i>
-                    </span>
-                  </div>
+                  <SetPieceCmp :cmp="setDropCmp(d)" />
                   <div class="drop-done set-note">
                     🧩 Rangée dans ton set <b>{{ setVoieName(d.setId) }}</b> — porte-le via «
                     Mes&nbsp;sets »
@@ -2912,7 +2900,7 @@
                     <div v-if="rewardCmpEquipped(cand.item)" class="drop-cmp rc-cmp">
                       Équipé : {{ rewardCmpEquipped(cand.item) }}
                     </div>
-                    <div class="pow-cmp">
+                    <div v-if="!setDropCmp(cand.item)" class="pow-cmp">
                       ⚔️ vs ton meilleur build {{ fmtPow(refPower) }} →
                       <b :class="powerIfEquip(cand.item) >= refPower ? 'up' : 'down'"
                         >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
@@ -2923,13 +2911,7 @@
                     <div v-if="rewardDupNote(cand.item)" class="rc-dup">
                       {{ rewardDupNote(cand.item) }}
                     </div>
-                    <div
-                      v-if="rewardLoadoutCmp(cand.item)"
-                      class="rc-loadcmp"
-                      :class="rewardLoadoutCmp(cand.item)!.cls"
-                    >
-                      {{ rewardLoadoutCmp(cand.item)!.text }}
-                    </div>
+                    <SetPieceCmp :cmp="setDropCmp(cand.item)" />
                   </div>
                 </template>
                 <template v-else>
@@ -3092,6 +3074,7 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
+import SetPieceCmp from '@/components/SetPieceCmp.vue';
 import { splitStat, type StatParts } from '@/lib/statText';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
@@ -3205,6 +3188,8 @@ import { advanceStreak, dailyLoginEnergy, daysBetweenIso } from '@/lib/loginStre
 import {
   setPieceScorer,
   voieSetIndex,
+  compareSetPiece,
+  setPieceRival,
   ownedInLoadouts,
   sparesLot,
   type FiledPiece,
@@ -4771,19 +4756,15 @@ function rewardFitsVoie(it: Item): boolean {
   const v = currentVoie.value;
   return !!v && v.preferred.includes(it.effect.type);
 }
-// Comparaison d'une pièce de set (candidat de récompense) vs son ÉQUIVALENT dans le loadout
-// de sa voie → dit ce qui se passera si on la choisit (rangée / remplace / vendue). Même
-// logique que chooseReward (magnitude d'effet). Null si ce n'est pas une pièce de set de voie.
-function rewardLoadoutCmp(it: Item): { text: string; cls: string } | null {
-  const idx = voieSetIndex(it);
-  if (idx < 0) return null;
-  const existing = char.row?.loadouts?.[idx]?.items?.[it.slot];
-  if (!existing) return { text: '📦 emplacement libre → rangée', cls: 'good' };
-  // Même barème et même règle que le rangement (`fileSetPieces`) : l'annonce ne peut pas
-  // promettre autre chose que ce qui se passera.
-  return setScore.value(it) > setScore.value(existing)
-    ? { text: '📦 meilleure que ta pièce rangée → la remplace', cls: 'good' }
-    : { text: '📦 ≤ ta pièce rangée → rangée en doublon', cls: 'bad' };
+// 🧩 Une pièce de set de voie (butin ou récompense de boss) se compare à SA pièce du set
+// — même emplacement, dans « Mes sets » — et à elle seule (demandé : « pas le comparatif de
+// puissance seul »). Avant le rangement : la pièce en place ; après : celle qu'elle a
+// délogée (vendue depuis, d'où le compte rendu). Même barème que le rangement, donc
+// l'annonce ne peut pas promettre autre chose que ce qui se passera. Null hors set de voie.
+function setDropCmp(it: Item) {
+  if (voieSetIndex(it) < 0) return null;
+  const rival = setPieceRival(it, char.row?.loadouts ?? [], filedRecords.value.get(it.id));
+  return compareSetPiece(it, rival, setScore.value);
 }
 // Index du candidat conseillé (meilleur score). -1 si pas de récompense en attente.
 const recommendedRewardIndex = computed(() => {
@@ -6385,6 +6366,9 @@ function doToggleLock(it: Item) {
 // ⚠️ Jamais pendant un combat (`busy`) ni pendant son animation : l'annonce « set renforcé »
 // ne doit pas recouvrir le combat qu'on regarde. Le drop révélé, le rangement suit.
 let filing = false;
+/** Compte rendu du rangement, par pièce (cf. `setDropCmp`). ⚠️ Déclaré AVANT le `watch`
+ *  immédiat qui range : sinon zone morte temporelle au montage (le défaut de la v0.910). */
+const filedRecords = ref(new Map<string, FiledPiece>());
 async function autoFileSetPieces() {
   const uid = auth.user?.id;
   const row = char.row;
@@ -6400,6 +6384,11 @@ async function autoFileSetPieces() {
   filing = true;
   try {
     const r = await char.fileBagSetPieces(uid, setScore.value);
+    // On garde le compte rendu : la pièce délogée est VENDUE aussitôt, seul lui s'en
+    // souvient — et c'est à elle que le rapport de boss compare la nouvelle.
+    const next = new Map(filedRecords.value);
+    for (const f of r.filed) next.set(f.item.id, f);
+    filedRecords.value = next;
     announceFiled(r.filed, r.gold);
   } catch {
     // Rien de perdu : les pièces restent au sac, le prochain passage réessaie.
@@ -9951,17 +9940,6 @@ button.pt-mini:active {
   font-size: 10.5px;
   font-weight: 700;
   color: var(--d4);
-}
-.rc-loadcmp {
-  margin-top: 3px;
-  font-size: 10.5px;
-  font-weight: 700;
-}
-.rc-loadcmp.good {
-  color: var(--d1);
-}
-.rc-loadcmp.bad {
-  color: var(--dim);
 }
 .rc-pills {
   display: flex;

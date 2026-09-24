@@ -203,3 +203,48 @@ export function setPieceScorer(ctx: {
 function emptyFx(): AggregatedEffects {
   return mergeEffects();
 }
+
+/** Verdict d'une pièce de set face à SA pièce du set (même emplacement, dans la réserve).
+ *  ⚠️ Le seul comparatif honnête pour une pièce de set : « si équipée seule » la juge hors
+ *  de son set (sans ses paliers ni sa voie), donc elle paraît souvent pire qu'elle n'est.
+ *  Ici on mesure la puissance du SET complet avec l'une puis l'autre — le barème même du
+ *  rangement (`score`), donc le verdict dit exactement ce que le rangement va faire. */
+export interface SetPieceCmp {
+  verdict: 'free' | 'better' | 'equal' | 'worse';
+  /** La pièce du set à laquelle on la compare (absente si l'emplacement est libre). */
+  other?: Item;
+  /** Puissance du set avec `other`, puis avec la nouvelle pièce (brutes). */
+  before?: number;
+  after?: number;
+}
+export function compareSetPiece(
+  piece: Item,
+  other: Item | undefined,
+  score: (it: Item) => number,
+): SetPieceCmp {
+  if (!other || other.id === piece.id) return { verdict: 'free' };
+  const before = score(other);
+  const after = score(piece);
+  // Même règle que `fileSetPieces` : à égalité, la pièce en place reste.
+  const verdict = after > before ? 'better' : after === before ? 'equal' : 'worse';
+  return { verdict, other, before, after };
+}
+
+/** La pièce du set à laquelle comparer `piece`. Avant le rangement : celle qui occupe
+ *  l'emplacement. Après (`filed` connu) : celle qu'elle a délogée, ou celle qui l'a gardée
+ *  — ⚠️ la délogée est VENDUE aussitôt (v0.890), donc elle n'est plus dans la réserve et
+ *  seul le compte rendu du rangement s'en souvient. */
+export function setPieceRival(
+  piece: Item,
+  loadouts: readonly (Loadout | undefined)[],
+  filed?: FiledPiece,
+): Item | undefined {
+  const i = voieSetIndex(piece);
+  if (i < 0) return undefined;
+  if (filed) {
+    if (filed.outcome === 'added') return undefined;
+    if (filed.outcome === 'upgraded') return filed.displaced;
+  }
+  const held = loadouts[i]?.items?.[piece.slot];
+  return held && held.id !== piece.id ? held : undefined;
+}

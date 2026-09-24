@@ -1178,3 +1178,30 @@ describe('📊 barre d’étoile au retour de mission', () => {
     expect(avec).toContain('d-pow-val');
   }, 30_000);
 });
+
+describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () => {
+  it('verdict, pièce comparée et puissance du set avant → après', async () => {
+    const SetPieceCmp = (await import('@/components/SetPieceCmp.vue')).default;
+    const other = {
+      id: 'o',
+      slot: 'weapon',
+      name: 'Hache · Carapace',
+      emoji: '🪓',
+      rarity: 'rare',
+      level: 20,
+      effect: { type: 'damage_pct', value: 10 },
+      setId: 'voie:berserker',
+    };
+    let out = '';
+    const cmp = { verdict: 'better', other, before: 1200, after: 1260 };
+    expect(await mountIt(SetPieceCmp, { cmp }, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    expect(out).toContain('Meilleure');
+    expect(out).toContain('Hache · Carapace');
+    expect(out).toContain('1200');
+    expect(out).toContain('+60');
+    // Hors set : rien du tout.
+    let vide = '';
+    expect(await mountIt(SetPieceCmp, { cmp: null }, undefined, undefined, '/', (h) => (vide = h))).toBeNull();
+    expect(vide).not.toContain('spc');
+  }, 30_000);
+});

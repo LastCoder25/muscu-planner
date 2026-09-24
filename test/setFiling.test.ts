@@ -9,6 +9,8 @@ import {
   setPieceScorer,
   voieSetIndex,
   normalizeLoadouts,
+  compareSetPiece,
+  setPieceRival,
 } from '@/lib/setFiling';
 import {
   MAX_LOADOUTS,
@@ -247,5 +249,45 @@ describe('⚖️ le barème : ce qu’une pièce vaut POUR SON SET', () => {
   });
   it('une pièce hors set vaut 0 (elle ne se range pas)', () => {
     expect(setPieceScorer(ctx)({ ...mk('weapon', 5), setId: undefined })).toBe(0);
+  });
+});
+
+describe('🧩 une pièce de set se compare à SA pièce du set, pas au build porté', () => {
+  it('emplacement libre → rien à comparer', () => {
+    expect(compareSetPiece(mk('weapon', 10), undefined, byValue)).toEqual({ verdict: 'free' });
+    // Déjà rangée dans l'emplacement : elle ne se compare pas à elle-même.
+    const p = mk('weapon', 10);
+    expect(compareSetPiece(p, p, byValue).verdict).toBe('free');
+  });
+  it('meilleure / moins bonne / égale — et la puissance du SET avant → après', () => {
+    const c = compareSetPiece(mk('weapon', 20), mk('weapon', 10), byValue);
+    expect(c).toMatchObject({ verdict: 'better', before: 10, after: 20 });
+    expect(compareSetPiece(mk('weapon', 5), mk('weapon', 10), byValue).verdict).toBe('worse');
+    const twin = { ...mk('weapon', 10), id: 'jumelle' };
+    expect(compareSetPiece(twin, mk('weapon', 10), byValue).verdict).toBe('equal');
+  });
+  it('le verdict dit ce que le rangement va faire (même barème, même égalité)', () => {
+    for (const [held, neu] of [
+      [10, 20],
+      [20, 10],
+      [10, 10],
+    ] as const) {
+      const start = fileSetPieces([], [mk('weapon', held)], byValue).loadouts;
+      const piece = { ...mk('weapon', neu), id: 'neuve' };
+      const v = compareSetPiece(piece, setPieceRival(piece, start), byValue).verdict;
+      const r = fileSetPieces(start, [piece], byValue);
+      expect(v === 'better').toBe(r.filed[0]!.outcome === 'upgraded');
+    }
+  });
+  it('après rangement : la rivale est la pièce DÉLOGÉE (vendue depuis), ou celle qui a gardé sa place', () => {
+    const start = fileSetPieces([], [mk('weapon', 10)], byValue).loadouts;
+    const up = fileSetPieces(start, [mk('weapon', 20)], byValue);
+    expect(setPieceRival(mk('weapon', 20), up.loadouts, up.filed[0])?.effect.value).toBe(10);
+    const down = fileSetPieces(start, [mk('weapon', 5)], byValue);
+    expect(setPieceRival(mk('weapon', 5), down.loadouts, down.filed[0])?.effect.value).toBe(10);
+    const add = fileSetPieces([], [mk('weapon', 5)], byValue);
+    expect(setPieceRival(mk('weapon', 5), add.loadouts, add.filed[0])).toBeUndefined();
+    // Hors set de voie : aucune rivale.
+    expect(setPieceRival({ ...mk('weapon', 5), setId: undefined }, start)).toBeUndefined();
   });
 });
