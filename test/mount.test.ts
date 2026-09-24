@@ -597,6 +597,10 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     ).toBeNull();
     expect(stockHtml).toContain(avecStock.adv_gear.stock[0]!.name);
     expect(stockHtml).toMatch(/class="adv-rname[^"]*">B</);
+    // 📊 v0.1126 : la tuile porte le rang de la pièce et son avancement vers l'étoile
+    // suivante (niveau 3 d'une Bronze = début de ★2, donc 0 %).
+    expect(stockHtml).toContain('role="progressbar"');
+    expect(stockHtml).toMatch(/class="gsb-pct[^"]*">0 %</);
   }, 30_000);
 
   it('VillagePlots se monte, Équipementier ouvert sur un aventurier', async () => {
@@ -1062,6 +1066,43 @@ describe('📊 barre d’étoile au retour de mission', () => {
     // Avant l'animation : la barre montre l'avancement d'AVANT la mission, pas celui d'après.
     const from = tracks[0]!.segments[0]!.from;
     expect(out).toContain(`width: ${from * 100}%`);
+  });
+
+  // 🗡️ v0.1126 : les pièces qu'il porte ont LEUR barre sous la sienne, elles aussi parties
+  // de leur avancement d'avant la mission.
+  it('AdvXpGainOverlay : les pièces portées ont leur barre sous le champion', async () => {
+    const { useAdvXpFx } = await import('@/composables/useAdvXpFx');
+    const AdvXpGainOverlay = (await import('@/components/AdvXpGainOverlay.vue')).default;
+    const s = (from: number, to: number) => ({
+      star: 2,
+      rankEmoji: '🟤',
+      rankName: 'Bronze',
+      rankColor: '#b87333',
+      from,
+      to,
+      starUp: false,
+      rankUp: false,
+    });
+    let out = '';
+    const fx = useAdvXpFx();
+    fx.show([
+      {
+        id: 'a1',
+        name: 'Orsène',
+        xp: 40,
+        ascendReady: false,
+        segments: [s(0.1, 0.4)],
+        gear: [
+          { id: 'g1', name: 'Épée courte', emoji: '🗡️', ascendReady: false, segments: [s(0.25, 0.75)] },
+        ],
+      },
+    ]);
+    expect(await mountIt(AdvXpGainOverlay, {}, undefined, undefined, '/', (h) => (out = h))).toBe(
+      null,
+    );
+    fx.dismiss();
+    expect(out).toContain('Épée courte');
+    expect(out).toContain('width: 25%');
   });
 
   // ⬆️ v0.1119 : un champion « prêt pour l'ascension » au retour de mission se TOUCHE — la

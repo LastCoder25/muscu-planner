@@ -7,8 +7,8 @@
           v-for="(t, i) in ev.tracks"
           :key="t.id"
           class="ax-row"
-          :class="{ pop: rows[i]?.pop, ready: ascendable(i) }"
-          :style="{ '--d': i * 0.08 + 's', '--rc': seg(i).rankColor }"
+          :class="{ pop: rows[bi(i)]?.pop, ready: ascendable(i) }"
+          :style="{ '--d': i * 0.08 + 's', '--rc': seg(bi(i)).rankColor }"
           :role="ascendable(i) ? 'button' : undefined"
           :tabindex="ascendable(i) ? 0 : undefined"
           :aria-label="ascendable(i) ? `Ouvrir l’ascension de ${t.name}` : undefined"
@@ -17,7 +17,7 @@
         >
           <div class="ax-face">
             <ChampionPortrait :champion-id="t.championId" class="ax-img">{{
-              seg(i).rankEmoji
+              seg(bi(i)).rankEmoji
             }}</ChampionPortrait>
           </div>
           <div class="ax-main">
@@ -26,28 +26,65 @@
               <span class="ax-xp">+{{ t.xp }} XP</span>
             </div>
             <div class="ax-rank">
-              <span class="ax-rk">{{ seg(i).rankEmoji }} {{ seg(i).rankName }}</span>
-              <span class="ax-stars" :class="{ bump: rows[i]?.pop }">{{
-                rankStarStr(seg(i).star)
+              <span class="ax-rk">{{ seg(bi(i)).rankEmoji }} {{ seg(bi(i)).rankName }}</span>
+              <span class="ax-stars" :class="{ bump: rows[bi(i)]?.pop }">{{
+                rankStarStr(seg(bi(i)).star)
               }}</span>
-              <span class="ax-pct">{{ Math.round((rows[i]?.width ?? 0) * 100) }} %</span>
+              <span class="ax-pct">{{ Math.round((rows[bi(i)]?.width ?? 0) * 100) }} %</span>
             </div>
             <div class="ax-bar">
-              <div
-                class="ax-fill"
-                :style="{
-                  width: (rows[i]?.width ?? 0) * 100 + '%',
-                  transitionDuration: (rows[i]?.anim ? rows[i]!.dur : 0) + 'ms',
-                }"
-              />
-              <div v-if="rows[i]?.pop" class="ax-flash" />
+              <div class="ax-fill" :style="fillStyle(bi(i))" />
+              <div v-if="rows[bi(i)]?.pop" class="ax-flash" />
             </div>
-            <div v-if="rows[i]?.pop === 'rank'" class="ax-note rank">
-              {{ seg(i).rankEmoji }} Nouveau rang : {{ seg(i).rankName }} !
+            <div v-if="rows[bi(i)]?.pop === 'rank'" class="ax-note rank">
+              {{ seg(bi(i)).rankEmoji }} Nouveau rang : {{ seg(bi(i)).rankName }} !
             </div>
-            <div v-else-if="rows[i]?.pop === 'star'" class="ax-note">⭐ Une étoile de plus !</div>
-            <div v-else-if="rows[i]?.done && t.ascendReady" class="ax-note asc">
+            <div v-else-if="rows[bi(i)]?.pop === 'star'" class="ax-note">
+              ⭐ Une étoile de plus !
+            </div>
+            <div v-else-if="rows[bi(i)]?.done && t.ascendReady" class="ax-note asc">
               ⬆️ ★★★★★ — prêt pour l’ascension · <b>toucher pour y aller ›</b>
+            </div>
+            <!-- 🗡️ SES PIÈCES PORTÉES (v0.1126, demandé) : elles apprennent avec lui, et leur
+                 niveau est caché comme le sien — sans cette barre, rien ne disait qu'elles
+                 avaient avancé. Même animation que la sienne, un peu décalée. -->
+            <div v-if="t.gear?.length" class="ax-gear">
+              <div
+                v-for="(g, j) in t.gear"
+                :key="g.id"
+                class="ax-g"
+                :class="{ pop: rows[bi(i) + 1 + j]?.pop }"
+                :style="{ '--rc': seg(bi(i) + 1 + j).rankColor }"
+              >
+                <span class="ax-g-emo"
+                  ><AdvGearArt :model="g.model ?? null">{{ g.emoji }}</AdvGearArt></span
+                >
+                <div class="ax-g-main">
+                  <div class="ax-g-head">
+                    <span class="ax-g-name ellipsis">{{ g.name }}</span>
+                    <span class="ax-stars" :class="{ bump: rows[bi(i) + 1 + j]?.pop }"
+                      >{{ seg(bi(i) + 1 + j).rankEmoji }}
+                      {{ rankStarStr(seg(bi(i) + 1 + j).star) }}</span
+                    >
+                    <span class="ax-pct"
+                      >{{ Math.round((rows[bi(i) + 1 + j]?.width ?? 0) * 100) }} %</span
+                    >
+                  </div>
+                  <div class="ax-bar thin">
+                    <div class="ax-fill" :style="fillStyle(bi(i) + 1 + j)" />
+                    <div v-if="rows[bi(i) + 1 + j]?.pop" class="ax-flash" />
+                  </div>
+                  <div v-if="rows[bi(i) + 1 + j]?.pop === 'rank'" class="ax-note">
+                    {{ seg(bi(i) + 1 + j).rankEmoji }} Rang {{ seg(bi(i) + 1 + j).rankName }} !
+                  </div>
+                  <div v-else-if="rows[bi(i) + 1 + j]?.pop === 'star'" class="ax-note">
+                    ⭐ Une étoile de plus
+                  </div>
+                  <div v-else-if="rows[bi(i) + 1 + j]?.done && g.ascendReady" class="ax-note asc">
+                    ⬆️ ★★★★★ — prête pour l’ascension
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -60,13 +97,15 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import ChampionPortrait from './ChampionPortrait.vue';
+import AdvGearArt from './AdvGearArt.vue';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { rankStarStr } from '@/lib/characterRank';
+import type { AdvXpSegment, AdvXpTrack } from '@/lib/adventurers';
 import { useRouter } from 'vue-router';
 import { useChampionFocus } from '@/composables/useChampionFocus';
 import { useGamePanel } from '@/composables/useGamePanel';
 
-/** État affiché d'une ligne. La barre avance segment par segment (une étoile chacun). */
+/** État affiché d'une barre. Elle avance segment par segment (une étoile chacun). */
 interface RowState {
   segIdx: number;
   width: number;
@@ -84,16 +123,42 @@ const MIN_MS = 350;
 const HOLD_MS = 550;
 const STAR_POP_MS = 750;
 const RANK_POP_MS = 1300;
+/** Les pièces partent un peu après leur champion : on lit la sienne d'abord. */
+const GEAR_LAG_MS = 250;
 
 const { current, dismiss } = useAdvXpFx();
 const ev = computed(() => current.value);
+
+/** 🗡️ Toutes les barres à jouer, à plat : chaque champion, puis ses pièces. `base[i]` est
+ *  l'index de la barre du champion `i` ; celle de sa pièce `j` est `base[i] + 1 + j`. */
+const layout = computed(() => {
+  const segs: AdvXpSegment[][] = [];
+  const base: number[] = [];
+  const delay: number[] = [];
+  (ev.value?.tracks ?? []).forEach((t: AdvXpTrack, i) => {
+    base.push(segs.length);
+    segs.push(t.segments);
+    delay.push(HOLD_MS + i * 120);
+    for (const g of t.gear ?? []) {
+      segs.push(g.segments);
+      delay.push(HOLD_MS + i * 120 + GEAR_LAG_MS);
+    }
+  });
+  return { segs, base, delay };
+});
+const bi = (i: number) => layout.value.base[i] ?? 0;
+
 const rows = ref<RowState[]>([]);
 
-const seg = (i: number) => {
-  const t = ev.value!.tracks[i]!;
-  const r = rows.value[i];
-  return t.segments[Math.min(r?.segIdx ?? 0, t.segments.length - 1)]!;
+const seg = (b: number) => {
+  const s = layout.value.segs[b] ?? [];
+  const r = rows.value[b];
+  return s[Math.min(r?.segIdx ?? 0, s.length - 1)]!;
 };
+const fillStyle = (b: number) => ({
+  width: (rows.value[b]?.width ?? 0) * 100 + '%',
+  transitionDuration: (rows.value[b]?.anim ? rows.value[b]!.dur : 0) + 'ms',
+});
 const finished = computed(() => rows.value.length > 0 && rows.value.every((r) => r.done));
 
 let timers: ReturnType<typeof setTimeout>[] = [];
@@ -104,9 +169,9 @@ const clearTimers = () => {
 };
 
 function finalState(): RowState[] {
-  return (ev.value?.tracks ?? []).map((t) => ({
-    segIdx: t.segments.length - 1,
-    width: t.segments.at(-1)!.to,
+  return layout.value.segs.map((s) => ({
+    segIdx: s.length - 1,
+    width: s.at(-1)!.to,
     anim: false,
     dur: 0,
     pop: null,
@@ -114,12 +179,12 @@ function finalState(): RowState[] {
   }));
 }
 
-/** Joue le segment `k` de la ligne `i`, puis enchaîne l'étoile gagnée et le suivant. */
-function play(i: number, k: number) {
-  const t = ev.value?.tracks[i];
-  const r = rows.value[i];
-  if (!t || !r) return;
-  const s = t.segments[k]!;
+/** Joue le segment `k` de la barre `b`, puis enchaîne l'étoile gagnée et le suivant. */
+function play(b: number, k: number) {
+  const segs = layout.value.segs[b];
+  const r = rows.value[b];
+  if (!segs || !r) return;
+  const s = segs[k]!;
   const dur = Math.max(MIN_MS, (s.to - s.from) * FULL_MS);
   r.segIdx = k;
   r.anim = true;
@@ -140,7 +205,7 @@ function play(i: number, k: number) {
         // à l'écran, ce qui se lit comme une perte.
         r.anim = false;
         r.width = 0;
-        later(() => play(i, k + 1), 40);
+        later(() => play(b, k + 1), 40);
       },
       s.rankUp ? RANK_POP_MS : STAR_POP_MS,
     );
@@ -159,15 +224,15 @@ watch(
       rows.value = finalState();
       return;
     }
-    rows.value = e.tracks.map((t) => ({
+    rows.value = layout.value.segs.map((s) => ({
       segIdx: 0,
-      width: t.segments[0]!.from,
+      width: s[0]!.from,
       anim: false,
       dur: 0,
       pop: null,
       done: false,
     }));
-    e.tracks.forEach((_, i) => later(() => play(i, 0), HOLD_MS + i * 120));
+    layout.value.delay.forEach((ms, b) => later(() => play(b, 0), ms));
   },
   { immediate: true },
 );
@@ -177,7 +242,7 @@ const { focus } = useChampionFocus();
 const { openPath } = useGamePanel();
 /** La ligne mène à l'ascension seulement une fois sa barre jouée : pendant l'animation, le
  *  premier toucher sert à la passer (la note « prêt » n'est pas encore affichée). */
-const ascendable = (i: number) => !!rows.value[i]?.done && !!ev.value?.tracks[i]?.ascendReady;
+const ascendable = (i: number) => !!rows.value[bi(i)]?.done && !!ev.value?.tracks[i]?.ascendReady;
 /** ⬆️ Un champion bute sur son ★5 : on ferme et on ouvre SA fiche au Panthéon, là où vit le
  *  bouton d'ascension. `openPath` gère le cockpit (volet droit) comme le téléphone. */
 function goAscend(advId: string) {
@@ -358,6 +423,59 @@ onBeforeUnmount(clearTimers);
   &.asc {
     color: var(--accent);
   }
+}
+/* 🗡️ Les pièces du champion, en dessous de sa barre : plus petites, même animation. */
+.ax-gear {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+}
+.ax-g {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  transition: box-shadow 0.25s;
+  &.pop {
+    box-shadow: 0 0 10px color-mix(in srgb, var(--rc) 45%, transparent);
+  }
+}
+.ax-g-emo {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--rc);
+}
+.ax-g-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ax-g-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--dim);
+}
+.ax-g-name {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+.ax-bar.thin {
+  height: 6px;
 }
 .ax-tap {
   position: absolute;
