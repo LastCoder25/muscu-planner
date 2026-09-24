@@ -24,7 +24,6 @@ import {
   type BuildingTypeId,
 } from './buildings';
 import { caravanSlots, championOutpostMult } from './caravan';
-import { mapQuota } from './expedition';
 import { altarLuckBonus } from './items';
 
 export interface LevelPreview {
@@ -33,6 +32,8 @@ export interface LevelPreview {
   text: string;
   /** Ce niveau apporte-t-il un PALIER, et non une simple continuation ? */
   milestone?: boolean;
+  /** Les bonus un par un, quand l'écran les montre en pastilles (Avant-poste). */
+  bits?: string[];
 }
 
 const one = (typeId: BuildingTypeId, level: number): Building[] => [
@@ -65,10 +66,9 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       // ⚠️ TROIS LEVIERS (v0.1047) : la CARTE (lieux + failles, qui grandissent à chaque
       // cran), le TRAJET (héros ; champions à moitié, v0.1049) et un PALIER (une équipe de plus tous les 9
       // niveaux). Tous DÉRIVÉS des fonctions du jeu.
-      const n = caravanSlots(level);
-      const q = mapQuota(level);
-      const hero = travelTimeMult(one(typeId, level));
-      return `${q.pois + q.rifts} lieux (${q.rifts} failles) · −${pct(1 - hero)} de trajet (héros), −${pct(1 - championOutpostMult(hero))} (champions) · ${n} équipe${n > 1 ? 's' : ''} en parallèle`;
+      // ⚠️ Le NOMBRE de lieux n'est plus annoncé par niveau (demandé) : la fiche dit une
+      // fois, au-dessus de l'aperçu, que la carte grandit à chaque niveau (`previewNote`).
+      return outpostBits(level).join(' · ');
     }
     case 'labyrinth_gate':
       return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);
@@ -82,6 +82,22 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       // Producteurs purs : le débit horaire et ce que la réserve peut contenir.
       return prod || null;
   }
+}
+
+/** Les bonus de l'Avant-poste à un niveau, un par pastille (demandé : « un par ligne »). */
+function outpostBits(level: number): string[] {
+  const n = caravanSlots(level);
+  const hero = travelTimeMult(one('outpost', level));
+  return [
+    `−${pct(1 - hero)} de trajet (héros)`,
+    `−${pct(1 - championOutpostMult(hero))} de trajet (champions)`,
+    `${n} équipe${n > 1 ? 's' : ''} en parallèle`,
+  ];
+}
+
+/** Ce qui vaut pour TOUS les niveaux, dit une fois au-dessus de l'aperçu. */
+export function previewNote(typeId: BuildingTypeId): string | null {
+  return typeId === 'outpost' ? '🗺️ La carte grandit à chaque niveau' : null;
 }
 
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
@@ -110,7 +126,12 @@ export function buildingPreview(
     // rien. (Impossible depuis « aucun niveau mort » (v0.731), mais si un jour un effet
     // se remet à stagner, l'aperçu ne le déguisera pas en progression.)
     if (out.length && out[out.length - 1]!.text === text) continue;
-    out.push({ level: l, text, milestone: isMilestone(typeId, l) });
+    out.push({
+      level: l,
+      text,
+      milestone: isMilestone(typeId, l),
+      ...(typeId === 'outpost' ? { bits: outpostBits(l) } : {}),
+    });
   }
   return out;
 }
@@ -126,7 +147,13 @@ export function nextMilestone(
   for (let l = current + 1; l <= current + horizon; l++) {
     if (!isMilestone(typeId, l)) continue;
     const text = textAt(typeId, l);
-    if (text) return { level: l, text, milestone: true };
+    if (text)
+      return {
+        level: l,
+        text,
+        milestone: true,
+        ...(typeId === 'outpost' ? { bits: outpostBits(l) } : {}),
+      };
   }
   return null;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
+import { buildingPreview, nextMilestone, previewNote } from '@/lib/buildingPreview';
 import { BUILDING_TYPES } from '@/lib/buildings';
 import { caravanSlots } from '@/lib/caravan';
 
@@ -28,6 +28,14 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
     const pan = buildingPreview('pantheon', 8, 0)[0]!;
     expect(pan.text).toContain('8');
     expect(buildingPreview('pantheon', 30, 0)[0]!.text).toContain('30');
+  });
+
+  it('Avant-poste : un bonus par pastille, et plus de nombre de lieux', () => {
+    const r = buildingPreview('outpost', 9, 0)[0]!;
+    expect(r.bits).toHaveLength(3);
+    expect(r.text).not.toMatch(/lieux|failles/);
+    expect(previewNote('outpost')).toMatch(/carte grandit/);
+    expect(previewNote('pantheon')).toBeNull();
   });
 
   it('marque les PALIERS, et eux seuls', () => {

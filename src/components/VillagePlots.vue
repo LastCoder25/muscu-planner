@@ -100,6 +100,7 @@
                CHIFFRES des prochains paliers — calculés par les fonctions du jeu, donc
                ils ne peuvent pas mentir. -->
           <div v-if="preview.length && selectedPlot.building.typeId !== 'pantheon'" class="pm-prev">
+            <div v-if="previewHint" class="pm-prev-note">{{ previewHint }}</div>
             <div class="pm-prev-t">Aux prochains niveaux</div>
             <div
               v-for="r in preview"
@@ -108,12 +109,18 @@
               :class="{ now: r.level === selectedPlot.building.level, step: r.milestone }"
             >
               <span class="pp-lv">niv {{ r.level }}</span>
-              <span class="pp-tx">{{ r.text }}</span>
+              <span v-if="r.bits" class="pp-bits">
+                <span v-for="b in r.bits" :key="b" class="pp-bit">{{ b }}</span>
+              </span>
+              <span v-else class="pp-tx">{{ r.text }}</span>
               <span v-if="r.level === selectedPlot.building.level" class="pp-tag">actuel</span>
             </div>
             <div v-if="milestone" class="pm-prev-r step far">
               <span class="pp-lv">niv {{ milestone.level }}</span>
-              <span class="pp-tx">{{ milestone.text }}</span>
+              <span v-if="milestone.bits" class="pp-bits">
+                <span v-for="b in milestone.bits" :key="b" class="pp-bit">{{ b }}</span>
+              </span>
+              <span v-else class="pp-tx">{{ milestone.text }}</span>
             </div>
           </div>
           <!-- 🛕 LES TROIS PORTES DU PANTHÉON, en grand (demandé : elles vivaient en petites
@@ -213,7 +220,7 @@ import {
   RESOURCE_EMOJI,
   type BuildingTypeId,
 } from '@/lib/buildings';
-import { buildingPreview, nextMilestone } from '@/lib/buildingPreview';
+import { buildingPreview, nextMilestone, previewNote } from '@/lib/buildingPreview';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
 const emit = defineEmits<{
@@ -294,6 +301,10 @@ const preview = computed(() =>
   selectedPlot.value?.building
     ? buildingPreview(selectedPlot.value.building.typeId, selectedPlot.value.building.level, 5)
     : [],
+);
+/** Ce qui vaut pour tous les niveaux (l'Avant-poste : la carte grandit), dit une fois. */
+const previewHint = computed(() =>
+  selectedPlot.value?.building ? previewNote(selectedPlot.value.building.typeId) : null,
 );
 /** Le prochain palier quand il tombe HORS de l'aperçu — sinon on croit qu'il n'arrivera
  *  jamais. Masqué s'il est déjà listé. */
@@ -533,6 +544,30 @@ function collectAll() {
 .pp-tx {
   flex: 1;
   min-width: 0;
+}
+.pm-prev-note {
+  font-size: 12.5px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+/* Un bonus par ligne, en pastille (Avant-poste). */
+.pp-bits {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.pp-bit {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12px;
+}
+.pm-prev-r.step .pp-bit {
+  color: var(--accent);
 }
 .pp-tag {
   font-size: 10px;
