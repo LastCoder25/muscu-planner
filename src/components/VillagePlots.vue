@@ -110,7 +110,13 @@
             >
               <span class="pp-lv">niv {{ r.level }}</span>
               <span v-if="r.bits" class="pp-bits">
-                <span v-for="b in r.bits" :key="b" class="pp-bit">{{ b }}</span>
+                <span
+                  v-for="b in r.bits"
+                  :key="b.text"
+                  class="pp-bit"
+                  :class="{ teams: b.tone === 'teams' }"
+                  >{{ b.text }}</span
+                >
               </span>
               <span v-else class="pp-tx">{{ r.text }}</span>
               <span v-if="r.level === selectedPlot.building.level" class="pp-tag">actuel</span>
@@ -118,7 +124,13 @@
             <div v-if="milestone" class="pm-prev-r step far">
               <span class="pp-lv">niv {{ milestone.level }}</span>
               <span v-if="milestone.bits" class="pp-bits">
-                <span v-for="b in milestone.bits" :key="b" class="pp-bit">{{ b }}</span>
+                <span
+                  v-for="b in milestone.bits"
+                  :key="b.text"
+                  class="pp-bit"
+                  :class="{ teams: b.tone === 'teams' }"
+                  >{{ b.text }}</span
+                >
               </span>
               <span v-else class="pp-tx">{{ milestone.text }}</span>
             </div>
@@ -568,6 +580,17 @@ function collectAll() {
 }
 .pm-prev-r.step .pp-bit {
   color: var(--accent);
+}
+/* Le nombre d'expéditions en parallèle, dans le violet des voyages de groupe sur la carte :
+   c'est la ligne qui dit combien d'équipes on peut envoyer à la fois. */
+.pp-bit.teams,
+.pm-prev-r.step .pp-bit.teams {
+  color: #b57bff;
+  border-color: color-mix(in srgb, #b57bff 55%, transparent);
+  background: color-mix(in srgb, #b57bff 12%, transparent);
+}
+.pm-prev-r.step .pp-bit.teams {
+  font-weight: 700;
 }
 .pp-tag {
   font-size: 10px;
