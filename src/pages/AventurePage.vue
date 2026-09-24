@@ -1783,70 +1783,19 @@
             <div v-if="!(char.row?.messages ?? []).length" class="inbox-empty">
               Aucun message. Les rapports de tes expéditions apparaîtront ici.
             </div>
-            <div
+            <!-- 📜 Un rapport = une carte compacte (v0.1116) : trois lignes, le reste replié,
+                 une seule ligne une fois encaissé. Le butin ne se verse qu'au geste. -->
+            <MissionReportCard
               v-for="m in char.row?.messages ?? []"
               :key="m.id"
-              class="inbox-msg"
-              :class="m.win ? 'win' : 'lose'"
-            >
-              <div class="im-head">
-                <span class="im-emo">{{ m.chest ? '🎁' : m.win ? '🏆' : '💀' }}</span>
-                <span class="im-title">
-                  {{ messageTitle(m) }}<template v-if="!m.chest"> · niv {{ m.level }}</template>
-                </span>
-              </div>
-              <div class="im-text">{{ m.text }}</div>
-              <div class="im-haul">
-                <span v-for="p in haulPills(m)" :key="p.emoji">{{ p.emoji }} +{{ p.n }}</span>
-              </div>
-              <!-- ⚔️ Rapport d'un groupe : faction, abattus, XP de chacun, journal. Une
-                   INCURSION de faille y propose en plus son rejeu. -->
-              <PartyReportView
-                v-if="m.party"
-                :party="m.party"
-                :roster="char.advList"
-                @replay="riftReplay = m.party"
-              />
-              <!-- Butin à ENCAISSER. Tant qu'on n'a pas cliqué, rien n'est crédité : c'est
-                   le geste qui donne au retour d'expédition un moment à lui. Un rapport
-                   d'avant la récupération manuelle n'a pas de `claimed` → déjà crédité. -->
-              <button v-if="isClaimable(m, expeNow)" class="im-claim" @click="doClaimMsg(m)">
-                {{ m.chest ? '🎁 Ouvrir le coffre' : '🎁 Récupérer le butin' }}
-              </button>
-              <div v-else-if="m.claimed === false" class="im-wait">
-                🧭 {{ m.party && !m.party.hero ? 'Le groupe est' : 'Le héros est' }} encore sur la
-                route — retour dans
-                {{ fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow) }}
-              </div>
-              <!-- Objet gagné : détail complet (rareté / niveau / effet). -->
-              <div
-                v-for="lt in msgLoot(m)"
-                :key="'loot-' + lt.item.name"
-                class="im-loot"
-                :class="'p-' + lt.item.rarity"
-              >
-                <ItemIcon :item="lt.item" :size="38" />
-                <div class="im-loot-main">
-                  <div class="im-loot-name">
-                    {{ lt.item.name }}<span v-if="lt.item.setId" class="im-loot-set"> 🧩</span>
-                  </div>
-                  <div class="im-loot-sub">
-                    <span :class="'p-' + lt.item.rarity">{{ gradeLabel(lt.item) }}</span> ·
-                    {{ SLOT_LABEL[lt.item.slot] }}
-                  </div>
-                  <div class="im-loot-eff">{{ itemEffects(lt.item) }}</div>
-                  <div v-if="lt.more > 0" class="im-loot-more">
-                    🎁 +{{ lt.more }} autre{{ lt.more > 1 ? 's' : '' }} objet{{
-                      lt.more > 1 ? 's' : ''
-                    }}
-                    au sac
-                  </div>
-                </div>
-              </div>
-              <span v-if="!msgLoot(m).length && m.itemName" class="im-item"
-                >🎁 {{ m.itemName }}</span
-              >
-            </div>
+              :card="messageCard(m, char.advList)"
+              :state="msgState(m)"
+              :now="expeNow"
+              :wait-label="`retour dans ${fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow)}`"
+              :claim-label="m.chest ? '🎁 Ouvrir' : '🎁 Prendre'"
+              @claim="doClaimMsg(m)"
+              @replay="riftReplay = m.party ?? null"
+            />
           </div>
         </div>
       </div>
@@ -3136,7 +3085,8 @@ import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { splitStat, type StatParts } from '@/lib/statText';
-import PartyReportView from '@/components/PartyReportView.vue';
+import MissionReportCard from '@/components/MissionReportCard.vue';
+import { messageCard } from '@/lib/missionCard';
 import {
   simulateDungeon,
   simulateCombat,
@@ -3193,6 +3143,7 @@ import {
   itemPowerText,
   magicFindLuck,
   itemLevelMult,
+  itemEffectsText,
   round1,
   canSell,
   isFamiliar,
@@ -5147,15 +5098,7 @@ function bossLockReason(b: MilestoneBoss): string {
 // Libellé des 2 stats d'un objet (primaire · secondaire). Les anciens objets
 // (1 stat) n'affichent que la primaire.
 function itemEffects(it: Omit<Item, 'id'>): string {
-  if (it.power) return itemPowerText(it);
-  // OBJETS ET FAMILIERS : magnitude 100 % définie par le drop (grade × qualité, bakée
-  // dans effect.value) → libellé direct, 1 décimale (la qualité reste visible, #6).
-  const parts = [affixText(it, it.effect)];
-  if (it.effect2) parts.push(affixText(it, it.effect2));
-  if (it.effect3) parts.push(affixText(it, it.effect3));
-  const leg = legendaryOf(it);
-  if (leg) parts.push(`${leg.emoji} ${leg.name}`);
-  return parts.join(' · ');
+  return itemEffectsText(it);
 }
 /** Les mêmes lignes que `itemStatLines`, découpées autour du CHIFFRE pour le mettre en avant
  *  (v0.1074). ⚠️ Seules les STATS sont découpées : le pouvoir d'une relique et un effet
@@ -5729,10 +5672,11 @@ async function doClaimMsg(m: ExpeditionMessage) {
   if (top) celebrateRareDrop({ ...top, id: '' }); // même éclat que les drops de donjon
 }
 
-/** L'objet d'un message sous forme de liste (0 ou 1) — pour le poser dans un `v-for`. */
-function msgLoot(m: ExpeditionMessage) {
-  const l = messageLoot(m);
-  return l ? [l] : [];
+/** L'état d'un rapport dans la boîte : à prendre, encore sur la route, ou encaissé
+ *  (replié sur une ligne). `claimed === undefined` = déjà crédité (cf. `isClaimable`). */
+function msgState(m: ExpeditionMessage): 'claim' | 'wait' | 'done' {
+  if (isClaimable(m, expeNow.value)) return 'claim';
+  return m.claimed === false ? 'wait' : 'done';
 }
 
 function fmtExpeMs(ms: number): string {
@@ -10328,94 +10272,6 @@ button.pt-mini:active {
   font-size: 13px;
   text-align: center;
   padding: 20px;
-}
-.inbox-msg {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line);
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: var(--bg);
-}
-.inbox-msg.win {
-  border-left-color: #7bc86c;
-}
-.inbox-msg.lose {
-  border-left-color: var(--d4);
-}
-.im-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-  font-size: 13.5px;
-}
-.im-text {
-  font-size: 12px;
-  color: var(--dim);
-  margin: 4px 0;
-  line-height: 1.3;
-}
-.im-claim {
-  margin-top: 8px;
-  width: 100%;
-  padding: 9px 12px;
-  border: none;
-  border-radius: 10px;
-  background: var(--accent);
-  color: var(--bg);
-  font-weight: 700;
-  font-size: 13px;
-  cursor: pointer;
-}
-.im-wait {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--dim);
-}
-.im-haul {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  font-size: 12px;
-  font-weight: 700;
-}
-.im-item {
-  color: var(--accent);
-}
-/* Objet gagné : mini-carte détaillée (bordure teintée par la rareté via currentColor). */
-.im-loot {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  background: var(--surface);
-  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
-}
-.im-loot-main {
-  flex: 1;
-  min-width: 0;
-}
-.im-loot-name {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--text);
-}
-.im-loot-sub {
-  font-size: 11px;
-  color: var(--dim);
-  margin-top: 1px;
-}
-.im-loot-eff {
-  font-size: 12px;
-  color: var(--accent);
-  margin-top: 2px;
-}
-.im-loot-more {
-  font-size: 11.5px;
-  color: var(--dim);
-  margin-top: 3px;
 }
 .expe-card {
   display: flex;

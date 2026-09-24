@@ -397,8 +397,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out2).not.toContain('pvbar');
   }, 30_000);
 
-  it('🕳️ le rapport n’offre le rejeu QUE sur une incursion', async () => {
-    const { default: PartyReportView } = await import('@/components/PartyReportView.vue');
+  it('📜 le rapport compact : rejeu QUE sur une incursion, une ligne une fois encaissé', async () => {
+    const { default: MissionReportCard } = await import('@/components/MissionReportCard.vue');
+    const { messageCard } = await import('@/lib/missionCard');
     const base = {
       hero: true,
       faction: 'bandits' as const,
@@ -414,36 +415,52 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       wages: 8,
       journal: [],
     };
-    // Un CAMP : pas de bouton, et le verbe d'un camp.
-    let camp = '';
-    expect(
-      await mountIt(
-        PartyReportView,
-        { party: base, roster: ROW.adventurers },
-        undefined,
-        undefined,
-        '/',
-        (h) => (camp = h),
-      ),
-    ).toBeNull();
-    expect(camp).not.toContain('pr-replay');
+    const msg = (party: typeof base & { rift?: unknown }) =>
+      messageCard(
+        {
+          id: 'm1',
+          poiType: party.rift ? 'rift' : 'camp',
+          level: 26,
+          win: true,
+          text: 'récit',
+          gold: 120,
+          energy: 0,
+          key: 0,
+          party: party as never,
+          resolvedAt: Date.now() - 3_600_000,
+          read: true,
+        },
+        ROW.adventurers,
+      );
+    const render = async (card: unknown, state: string) => {
+      let html = '';
+      expect(
+        await mountIt(
+          MissionReportCard,
+          { card, state, now: Date.now() },
+          undefined,
+          undefined,
+          '/',
+          (h) => (html = h),
+        ),
+      ).toBeNull();
+      return html;
+    };
+    // Un CAMP : pas de rejeu, le verbe d'un camp, le bouton d'encaissement.
+    const camp = await render(msg(base), 'claim');
+    expect(camp).not.toContain('class="replay"');
     expect(camp).toContain('camp pris');
-
-    // Une INCURSION : le bouton, et le verbe de la faille.
-    let faille = '';
+    expect(camp).toContain('class="take"');
+    // Une INCURSION : le rejeu, et le verbe de la faille.
     const rift = { ...base, rift: { level: 26, maxPv: 800, pvTrail: [700, 600, 500, 420, 300] } };
-    expect(
-      await mountIt(
-        PartyReportView,
-        { party: rift, roster: ROW.adventurers },
-        undefined,
-        undefined,
-        '/',
-        (h) => (faille = h),
-      ),
-    ).toBeNull();
-    expect(faille).toContain('pr-replay');
+    const faille = await render(msg(rift), 'none');
+    expect(faille).toContain('class="replay"');
     expect(faille).toContain('faille refermée');
+    // Encaissé : une seule ligne, sans bouton ni détails.
+    const done = await render(msg(base), 'done');
+    expect(done).toContain('mrc done');
+    expect(done).not.toContain('class="take"');
+    expect(done).not.toContain('more-btn');
   }, 30_000);
 
   it('🕳️ RiftReplayDialog construit sa scène au setup', async () => {

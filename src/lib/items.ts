@@ -3736,3 +3736,18 @@ export function voieSetRoster(
   }
   return out;
 }
+
+/** Les stats d'un objet sur une ligne (« +12 % dégâts · +4 % critique · 🐉 Bourreau »),
+ *  valeurs × niveau d'objet comme partout à l'écran. ⚠️ Source unique : la boîte 📬 et le
+ *  rapport de mission la lisent ; l'Aventure en portait sa propre copie. */
+export function itemEffectsText(it: Omit<Item, 'id'>): string {
+  if (it.power) return itemPowerText(it);
+  const aff = (e: { type: EffectType; value: number }) =>
+    effectLabelFor(e.type, round1(e.value * itemLevelMult(it.level)));
+  const parts = [it.effect, it.effect2, it.effect3]
+    .filter((e): e is NonNullable<typeof e> => !!e)
+    .map(aff);
+  const leg = legendaryOf(it);
+  if (leg) parts.push(`${leg.emoji} ${leg.name}`);
+  return parts.join(' · ');
+}
