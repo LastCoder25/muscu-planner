@@ -2173,7 +2173,9 @@ export function adventurerPowers(advs: Adventurer[], ctx?: EscortKit): Map<strin
   return new Map(
     advs.map((a) => [
       a.id,
-      combatPower(escortCombatant([a], a.name, pairEffects(pairs.get(a.id)))),
+      // ⚠️ NON ARRONDIE : un champion vaut ~26 au niveau 10, l'arrondi y mangeait un +5 %
+      // d'ascension ou le gain d'une pièce. L'écran arrondit (après l'échelle ×10).
+      combatPowerRaw(escortCombatant([a], a.name, pairEffects(pairs.get(a.id)))),
     ]),
   );
 }
@@ -2207,7 +2209,7 @@ export function adventurerGearPower(
     a.id === target.id ? { ...a, gear: { ...(a.gear ?? {}), [slot]: gearId } } : a,
   );
   const pairs = escortGear(modified, ctx);
-  return combatPower(escortCombatant([target], target.name, pairEffects(pairs.get(target.id))));
+  return combatPowerRaw(escortCombatant([target], target.name, pairEffects(pairs.get(target.id))));
 }
 
 /**

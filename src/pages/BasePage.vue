@@ -687,6 +687,7 @@
       :open="guildOpen"
       :section="guildSection"
       :focus-id="guildFocusId"
+      :player-level="heroLevel"
       @close="closeGuild"
     />
     <SummonPanel :open="summonOpen" @close="summonOpen = false" />

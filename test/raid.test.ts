@@ -88,7 +88,7 @@ import {
   itemLevelMult,
   type Item,
 } from '@/lib/items';
-import { combatPower, offenseOf, survivalOf, type Combatant } from '@/lib/combat';
+import { combatPower, combatPowerRaw, offenseOf, survivalOf, type Combatant } from '@/lib/combat';
 import { CHAMPIONS } from '@/data/champions';
 import { talentTierFloor, type TalentInstance } from '@/lib/talents';
 import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
@@ -974,7 +974,8 @@ describe('🗡️ LE REMPART : chaque champion avec SES pièces (v0.996)', () =>
   it('⚠️ LE MÊME ARBITRE QUE LE HÉROS, sans bonus de terrain', () => {
     const a = vrai();
     const p = adventurerPowers([a]).get('a')!;
-    expect(p).toBe(combatPower(escortCombatant([a], a.name)));
+    // Non arrondie (v0.1136) : l'arrondi mangeait un +5 % d'ascension sur un petit champion.
+    expect(p).toBe(combatPowerRaw(escortCombatant([a], a.name)));
     expect(p).toBeGreaterThan(0);
   });
 

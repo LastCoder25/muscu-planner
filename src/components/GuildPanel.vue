@@ -77,7 +77,7 @@
                 {{ autoPreview.pending }}<small>🗡️</small>
               </span>
               <span v-else-if="autoPreview.changes && autoPreview.gain > 0" class="ga-gain">
-                +{{ fmtPow(autoPreview.gain) }}<small>⚔️</small>
+                +{{ fmtChampPow(autoPreview.gain, showK) }}<small>⚔️</small>
               </span>
             </button>
             <div v-if="autoPreview.changes" class="g-note dim ga-note">
@@ -151,7 +151,7 @@
                 :key="a.id"
                 :adv="a"
                 :look="lookOf(a)"
-                :power="powerOf(a)"
+                :power="powerOf(a) * showK"
                 :state="stateOf(a)"
                 :tone="statusOf(a)"
                 :disabled="busy"
@@ -339,7 +339,10 @@
                     <!-- Les effets en pleine couleur, un par ligne : c'est ce qui départage
                          deux pièces. Jamais un « · » entre deux textes, qui resterait orphelin
                          en bout de ligne. -->
-                    <span class="d-gain gear-fx">
+                    <span v-if="(wornGain.get(g.id) ?? 0) > 0" class="gear-power font-display"
+                      >⚔️ +{{ fmtChampPow(wornGain.get(g.id) ?? 0, showK) }}</span
+                    >
+                    <span class="d-gain gear-fx" :class="{ small: (wornGain.get(g.id) ?? 0) > 0 }">
                       <span v-for="(t, i) in gearEffectTexts(g)" :key="i">{{ t }}</span>
                     </span>
                   </div>
@@ -460,9 +463,9 @@
       <!-- ⚔️ La puissance, et ce que l'ÉQUIPEMENT y ajoute : sans l’écart, on ne sait pas si
            les pièces confiées servent à quelque chose. -->
       <div class="d-pow">
-        <span class="d-pow-val font-display">⚔️ {{ fmtPow(powerOf(detailAdv)) }}</span>
+        <span class="d-pow-val font-display">⚔️ <CountUp :value="powerOf(detailAdv)" :format="(n: number) => fmtChampPow(n, showK)" /></span>
         <span v-if="pairBonusOf(detailAdv) > 0" class="d-pow-gain">
-          dont +{{ fmtPow(pairBonusOf(detailAdv)) }} grâce à son équipement
+          dont +{{ fmtChampPow(pairBonusOf(detailAdv), showK) }} grâce à son équipement
         </span>
         <span v-else class="d-pow-gain">sans équipement qui compte</span>
       </div>
@@ -489,13 +492,13 @@
         <div class="da-grid">
           <template v-for="r in detailAscent.rows" :key="r.key">
             <span class="da-lab">{{ r.emoji }} {{ r.label }}</span>
-            <span class="da-b">{{ r.key === 'pow' ? fmtPow(r.b) : r.b }}</span>
+            <span class="da-b">{{ r.key === 'pow' ? fmtChampPow(r.b, showK) : champStat(r.b, showK) }}</span>
             <span class="da-arrow">→</span>
             <span class="da-a" :class="{ up: r.a > r.b }">{{
-              r.key === 'pow' ? fmtPow(r.a) : r.a
+              r.key === 'pow' ? fmtChampPow(r.a, showK) : champStat(r.a, showK)
             }}</span>
             <span class="da-d" :class="{ up: r.a > r.b }">{{
-              r.a > r.b ? '+' + (r.key === 'pow' ? fmtPow(r.a - r.b) : r.a - r.b) : '='
+              r.a > r.b ? '+' + (r.key === 'pow' ? fmtChampPow(r.a - r.b, showK) : champStat(r.a, showK) - champStat(r.b, showK)) : '='
             }}</span>
           </template>
         </div>
@@ -537,9 +540,9 @@
 
       <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
       <div class="d-stats">
-        <span class="d-stat">💪 {{ statsOf(detailAdv).puissance }}</span>
-        <span class="d-stat">❤️ {{ statsOf(detailAdv).endurance }}</span>
-        <span class="d-stat">⚡ {{ statsOf(detailAdv).agilite }}</span>
+        <span class="d-stat">💪 {{ champStat(statsOf(detailAdv).puissance, showK) }}</span>
+        <span class="d-stat">❤️ {{ champStat(statsOf(detailAdv).endurance, showK) }}</span>
+        <span class="d-stat">⚡ {{ champStat(statsOf(detailAdv).agilite, showK) }}</span>
       </div>
 
       <!-- 🗡️ SES 4 EMPLACEMENTS D'ÉQUIPEMENT — une pièce par métier, jamais deux fois
@@ -567,7 +570,7 @@
           <!-- Ce que la pièce APPORTE : la stat seule ne se compare pas d'une pièce à
                l'autre (des dégâts contre de la réduction) et ne dit pas son assiette. -->
           <span v-if="(detailGearGain.get(s.slot) ?? 0) > 0" class="dg-gain"
-            >⚔️ +{{ fmtPow(detailGearGain.get(s.slot) ?? 0) }}</span
+            >⚔️ +{{ fmtChampPow(detailGearGain.get(s.slot) ?? 0, showK) }}</span
           >
         </button>
       </div>
@@ -686,7 +689,7 @@
             r.wearing ? 'porte ' + r.wearing : 'emplacement vide'
           }}</span>
           <span class="d-gain" :class="{ neg: r.power < r.cur }">
-            ⚔️ {{ fmtDelta(r.cur, r.power) }}
+            ⚔️ {{ fmtChampDelta(r.cur, r.power, showK) }}
           </span>
         </span>
       </button>
@@ -729,7 +732,7 @@
           <GearStarBar :g="r.g" />
           <span v-for="(t, i) in r.texts" :key="i" class="d-gain">{{ t }}</span>
           <span class="d-gain" :class="{ neg: r.power < gearRows.curPower }">
-            ⚔️ {{ fmtDelta(gearRows.curPower, r.power) }}
+            ⚔️ {{ fmtChampDelta(gearRows.curPower, r.power, showK) }}
           </span>
         </span>
       </button>
@@ -773,6 +776,10 @@
         {{ gearInfoStatus }}
         <template v-if="gearInfoWearer"> · Porteur : {{ gearInfoWearer.name }}</template>
       </p>
+      <p v-if="gearInfoWearer && (wornGain.get(gearInfoPiece.id) ?? 0) > 0" class="gi-power">
+        <span class="font-display">⚔️ +{{ fmtChampPow(wornGain.get(gearInfoPiece.id) ?? 0, showK) }}</span>
+        de puissance pour {{ gearInfoWearer.name }}
+      </p>
       <!-- ⬆️ L'ascension, là où l'on touche la pièce (signalé : « je vois la flèche mais en
            cliquant sur l'item je ne vois rien pour le up »). Affichée dès ★★★★★ ; bloquée, elle
            reste touchable et dit pourquoi (`doAscendGear`), comme la tuile du stock. -->
@@ -803,6 +810,71 @@
         />
         <q-btn flat no-caps label="Fermer" @click="gearInfo = null" />
       </div>
+    </q-card>
+  </q-dialog>
+
+  <!-- ⬆️ L'ASCENSION D'UNE PIÈCE, AVANT → APRÈS (v0.1136 ; demandé : « que ça fasse de
+       l'effet de up les items »). Même lecture que celle d'un champion : le RANG gagné, ce
+       que ça CHANGE, ce que ça COÛTE. ⚠️ L'« après » vient de `ascendAdvGear` — la fonction
+       que le store applique — et la puissance du porteur de `adventurerGearPower` : l'aperçu
+       ne peut pas annoncer autre chose que ce que le bouton fera. -->
+  <q-dialog :model-value="!!gearAscPreview" @update:model-value="ascGearId = null">
+    <q-card v-if="gearAscPreview" class="guild-card ga-card">
+      <div class="g-head">
+        <div class="g-title font-display">⬆️ Ascension</div>
+        <button class="iconbtn" aria-label="Fermer" @click="ascGearId = null">✕</button>
+      </div>
+      <div class="ga-piece">
+        <span class="d-pair-emo gi-art"
+          ><AdvGearArt :model="advGearModelOf(gearAscPreview.g)">{{
+            gearAscPreview.g.emoji
+          }}</AdvGearArt></span
+        >
+        <b>{{ gearAscPreview.g.name }}</b>
+      </div>
+      <div class="da-ranks">
+        <span class="da-rank" :style="{ '--c': gearAscPreview.from.color }">
+          {{ gearAscPreview.from.emoji }} {{ gearAscPreview.from.name }}
+        </span>
+        <span class="da-arrow">→</span>
+        <span class="da-rank to" :style="{ '--c': gearAscPreview.to.color }">
+          {{ gearAscPreview.to.emoji }} {{ gearAscPreview.to.name }}
+        </span>
+      </div>
+      <div v-if="gearAscPreview.powGain > 0" class="ga-pow">
+        <span class="ga-pow-lab">⚔️ {{ gearAscPreview.wearer }}</span>
+        <span class="font-display ga-pow-b">{{ fmtChampPow(gearAscPreview.powBefore, showK) }}</span>
+        <span class="da-arrow">→</span>
+        <span class="font-display ga-pow-a">{{ fmtChampPow(gearAscPreview.powAfter, showK) }}</span>
+        <span class="ga-pow-d font-display">+{{ fmtChampPow(gearAscPreview.powGain, showK) }}</span>
+      </div>
+      <div class="ga-fx">
+        <template v-for="(r, i) in gearAscPreview.rows" :key="i">
+          <span class="ga-fx-b">{{ r.b }}</span>
+          <span class="da-arrow">→</span>
+          <span class="ga-fx-a">{{ r.a }}</span>
+        </template>
+      </div>
+      <p class="da-note">Son éveil ✨ est conservé.</p>
+      <div class="da-cost">
+        <span class="da-c">
+          ⚜️ {{ gearAscPreview.have }}/{{ gearAscPreview.cost.seals }} sceau{{
+            gearAscPreview.cost.seals > 1 ? 'x' : ''
+          }}
+          {{ gearAscPreview.to.name }}
+        </span>
+        <span class="da-c">🪙 {{ gearAscPreview.cost.gold.toLocaleString('fr-FR') }}</span>
+      </div>
+      <q-btn
+        unelevated
+        no-caps
+        class="d-ascent-btn"
+        color="primary"
+        text-color="dark"
+        label="Faire l’ascension"
+        :disable="busy"
+        @click="confirmAscendGear"
+      />
     </q-card>
   </q-dialog>
 </template>
@@ -860,7 +932,10 @@ import {
 } from '@/lib/adventurers';
 import { GRADE_COLOR } from '@/data/champions';
 import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
-import { fmtPow, fmtDelta } from '@/lib/combat';
+import { champShowK, champStat, fmtChampDelta, fmtChampPow } from '@/lib/champDisplay';
+import CountUp from '@/components/CountUp.vue';
+import { fxRarity } from '@/lib/items';
+import { useGameFx } from '@/composables/useGameFx';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
 import RankStarBadge from '@/components/RankStarBadge.vue';
@@ -872,6 +947,7 @@ import {
   advGearRankStar,
   advGearStatus,
   advGearWearerOf,
+  ascendAdvGear,
   compareAdvGear,
   groupGearByGrade,
   advGearCells,
@@ -903,11 +979,15 @@ const props = defineProps<{
   section?: 'champions' | 'gear';
   /** Ouvre directement la fiche de ce champion (retour de mission « prêt pour l'ascension »). */
   focusId?: string | null;
+  /** Niveau du joueur : il règle l'ÉCHELLE D'AFFICHAGE des champions (`champShowK`). */
+  playerLevel?: number;
 }>();
 const emit = defineEmits<{ close: [] }>();
 const $q = useQuasar();
 const auth = useAuthStore();
 const char = useCharacterStore();
+/** 🏅 L'échelle d'affichage des champions (`champDisplay.ts`) — AFFICHAGE SEUL. */
+const showK = computed(() => champShowK(props.playerLevel ?? 1));
 
 // ── 🗡️ CE QU'UN CHAMPION PORTE : son équipement, et rien d'autre ─────────────────
 // ⚠️ Plus de compagnon ni de talent (v0.996, décision de l'utilisateur : « on les garde
@@ -977,7 +1057,7 @@ function autoPair() {
     const after = rosterPower();
     $q.notify({
       type: 'positive',
-      message: `✨ ${r.gear} pièce(s) confiée(s) · puissance du vivier ${fmtPow(before)} → ${fmtPow(after)}`,
+      message: `✨ ${r.gear} pièce(s) confiée(s) · puissance du vivier ${fmtChampPow(before, showK.value)} → ${fmtChampPow(after, showK.value)}`,
     });
   });
 }
@@ -1240,6 +1320,7 @@ function sellOneGear(g: AdvGear) {
 }
 
 const busy = ref(false);
+const gameFx = useGameFx();
 const now = ref(Date.now());
 // ⚠️ NETTOYÉE au démontage. Posée au niveau du setup et jamais arrêtée, elle continuait de
 // battre après la fermeture du panneau en retenant la ref ET le composant — exactement la
@@ -1526,15 +1607,54 @@ function doAscendGear(g: AdvGear) {
     });
     return;
   }
-  $q.dialog({
-    title: `⬆️ ${g.name} → ${s.rank.emoji} ${s.rank.name}`,
-    message: `Coût : ${s.cost.seals} sceau(x) d’objet ${s.rank.name} et ${s.cost.gold.toLocaleString('fr-FR')} 🪙. Son éveil est conservé.`,
-    cancel: true,
-  }).onOk(() => {
-    void pair(async (uid) => {
-      const err = await char.ascendGear(uid, g.id);
-      if (err) throw new Error(err);
-      $q.notify({ type: 'positive', message: `⬆️ ${g.name} passe au rang ${s.rank.name}.` });
+  ascGearId.value = g.id;
+}
+const ascGearId = ref<string | null>(null);
+const gearAscPreview = computed(() => {
+  const g = ascGearId.value ? char.advGearStock.find((x) => x.id === ascGearId.value) : undefined;
+  const s = g ? gearAscent(g) : null;
+  if (!g || !s) return null;
+  const wearer = advGearWearerOf(g.id, char.advList, char.advGearStock) ?? undefined;
+  const up = ascendAdvGear(g, wearer?.level ?? 1);
+  const upStock = char.advGearStock.map((x) => (x.id === g.id ? up : x));
+  const powBefore = wearer
+    ? adventurerGearPower(char.advList, wearer, g.slot, g.id, compCtx.value)
+    : 0;
+  const powAfter = wearer
+    ? adventurerGearPower(char.advList, wearer, g.slot, g.id, { ...compCtx.value, advGear: upStock })
+    : 0;
+  const tb = advGearEffectTexts(g);
+  const ta = advGearEffectTexts(up);
+  const from = CHARACTER_RANKS[(advGearNextRank(g) ?? 1) - 1] ?? s.rank;
+  return {
+    g,
+    ...s,
+    from,
+    to: s.rank,
+    wearer: wearer?.name ?? '',
+    powBefore,
+    powAfter,
+    powGain: powAfter - powBefore,
+    rows: ta.map((a, i) => ({ b: tb[i] ?? '—', a })),
+  };
+});
+function confirmAscendGear() {
+  const p = gearAscPreview.value;
+  if (!p) return;
+  void pair(async (uid) => {
+    const err = await char.ascendGear(uid, p.g.id);
+    if (err) throw new Error(err);
+    ascGearId.value = null;
+    // Annoncé APRÈS l'écriture : une animation n'annonce jamais un gain qui n'a pas eu lieu.
+    gameFx.celebrate({
+      kind: 'unlock',
+      emoji: p.g.emoji,
+      title: `${p.g.name} → ${p.to.emoji} ${p.to.name}`,
+      subtitle:
+        p.powGain > 0
+          ? `⚔️ ${fmtChampPow(p.powBefore, showK.value)} → ${fmtChampPow(p.powAfter, showK.value)} (+${fmtChampPow(p.powGain, showK.value)}) pour ${p.wearer}`
+          : 'Ses stats montent d’un rang.',
+      rarity: fxRarity(p.g.rarity),
     });
   });
 }
@@ -1567,6 +1687,21 @@ const detailGearGain = computed(() => {
     const without = adventurerGearPower(char.advList, a, c.slot, undefined, detailCtx.value);
     out.set(c.slot, withIt - without);
   }
+  return out;
+});
+/** ⚔️ Ce que CHAQUE pièce portée apporte à son porteur (avec − sans) — la valeur réelle
+ *  d'une pièce, là où « +0,8 % dégâts » ne disait rien (v0.1136, demandé). Même calcul que
+ *  la fiche (`detailGearGain`), pour tout le vivier : le stock et la fiche d'une pièce le
+ *  lisent. Ne dépend ni de l'horloge ni du rendu : recalculé seulement quand le vivier ou
+ *  le stock change. */
+const wornGain = computed(() => {
+  const out = new Map<string, number>();
+  for (const a of char.advList)
+    for (const g of gearWorn.value.get(a.id) ?? []) {
+      const withIt = adventurerGearPower(char.advList, a, g.slot, g.id, compCtx.value);
+      const without = adventurerGearPower(char.advList, a, g.slot, undefined, compCtx.value);
+      out.set(g.id, withIt - without);
+    }
   return out;
 });
 const statsOf = (a: Adventurer) => advStats(a);
@@ -2351,7 +2486,7 @@ function leftOf(at: number): string {
 }
 /* Le gain de puissance : c'est le verdict, il se lit avant la stat brute. */
 .dg-gain {
-  font-size: 10px;
+  font-size: 12.5px;
   font-weight: 700;
   line-height: 1.2;
   color: var(--d1);
@@ -2498,6 +2633,76 @@ function leftOf(at: number): string {
 }
 /* Un effet par ligne : en pleine largeur chacun tient sur la sienne, et deux effets
    collés sur une même ligne se lisaient comme un seul. */
+.gear-power {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--d1, #7bc86c);
+  line-height: 1.1;
+}
+.gear-fx.small {
+  font-size: 10.5px;
+  color: var(--dim);
+  font-weight: 500;
+}
+.ga-piece {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+.ga-pow {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--d1, #7bc86c) 12%, transparent);
+}
+.ga-pow-lab {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--dim);
+}
+.ga-pow-b {
+  font-size: 20px;
+  color: var(--dim);
+}
+.ga-pow-a {
+  font-size: 28px;
+  color: var(--text);
+}
+.ga-pow-d {
+  font-size: 18px;
+  color: var(--d1, #7bc86c);
+  margin-left: auto;
+}
+.ga-fx {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  font-size: 13px;
+}
+.ga-fx-b {
+  color: var(--dim);
+}
+.ga-fx-a {
+  color: var(--d1, #7bc86c);
+  font-weight: 700;
+}
+.gi-power {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text);
+}
+.gi-power .font-display {
+  font-size: 22px;
+  color: var(--d1, #7bc86c);
+  margin-right: 4px;
+}
 .gear-fx {
   display: flex;
   flex-direction: column;

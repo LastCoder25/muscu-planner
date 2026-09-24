@@ -740,6 +740,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="cc-tile/g)?.length).toBe(CHAMPIONS.length);
   }, 30_000);
 
+  it('CountUp se monte et affiche la valeur formatée', async () => {
+    const { default: C } = await import('@/components/CountUp.vue');
+    let out = '';
+    const err = await mountIt(C, { value: 1234, format: (n: number) => 'P' + Math.round(n) }, undefined, undefined, '/', (h) => (out = h));
+    expect(err).toBeNull();
+    expect(out).toContain('P1234');
+  }, 30_000);
+
   it('AdventurerPortrait se monte, avec et sans teinte d’état', async () => {
     const { default: P } = await import('@/components/AdventurerPortrait.vue');
     const base = {
