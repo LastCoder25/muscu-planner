@@ -1727,7 +1727,7 @@ export function advTotalXp(a: Adventurer): number {
 }
 
 /** Un morceau de la barre d'étoile : du `from` au `to` (0..1) DANS l'étoile `star` du rang. */
-export interface AdvXpSegment {
+interface AdvXpSegment {
   star: number;
   rankName: string;
   rankEmoji: string;
