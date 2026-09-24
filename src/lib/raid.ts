@@ -192,6 +192,8 @@ interface HeroWound {
 export interface BattleLoot {
   corpses: number;
   gold: number;
+  /** 💠 pierres de mana des monstres abattus (`siegeMana`) — absent des rapports d'avant. */
+  mana?: number;
   keys: number;
   summonStones: number;
   items: number;
@@ -211,6 +213,7 @@ export function battleLootPills(loot: BattleLoot | null | undefined): string[] {
   if (!loot) return [];
   const p: string[] = [];
   if (loot.gold) p.push(`+${loot.gold} 🪙`);
+  if (loot.mana) p.push(`+${loot.mana} 💠`);
   if (loot.summonStones) p.push(`+${loot.summonStones} 🔮`);
   if (loot.keys) p.push(`+${loot.keys} 🗝️`);
   if (loot.items) p.push(`+${loot.items} objet${loot.items > 1 ? 's' : ''}`);

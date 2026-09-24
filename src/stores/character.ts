@@ -207,7 +207,7 @@ import { partyWinChance } from '@/lib/partyForecast';
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
 import { resolveHarvestParty } from '@/lib/harvestParty';
-import { resolveIncursion, resolveInterception, riftOverflowOf } from '@/lib/rift';
+import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
 import {
   GACHA,
   dailyFreeMana,
@@ -2208,19 +2208,27 @@ export const useCharacterStore = defineStore('character', () => {
         )
       : null;
     const drops = (loot?.items ?? []).map((it) => ({ ...it, id: crypto.randomUUID() }));
+    // 💠 LE MANA DES MONSTRES ABATTUS, versé MÊME EN CAS DE DÉFAITE (demandé) : il suit ce
+    // qui est tombé, pas l'issue. Calculé à part des corps, qui ne comptent que les
+    // groupes tombés en entier — un groupe à moitié abattu paie sa moitié.
+    const mana = siegeMana(t.dueRaid, report);
+    if (mana > 0) patch.mana = cur.mana + mana;
     if (loot) {
       patch.gold = cur.gold + loot.gold;
       patch.summon_stones = cur.summon_stones + loot.summonStones;
       patch.keys = cur.keys + loot.keys;
+    }
+    if (loot || mana > 0) {
       // Le relevé part avec le rapport : on le pose sur la base que `applyRaidOutcome`
       // vient de rendre, pas dans un second `persist`.
       patch.base = {
         ...nb,
         lastLoot: {
           corpses: corpses.length,
-          gold: loot.gold,
-          keys: loot.keys,
-          summonStones: loot.summonStones,
+          gold: loot?.gold ?? 0,
+          mana,
+          keys: loot?.keys ?? 0,
+          summonStones: loot?.summonStones ?? 0,
           items: drops.length,
         },
       };

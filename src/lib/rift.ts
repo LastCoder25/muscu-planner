@@ -68,7 +68,9 @@ import {
   factionRoster,
   groupCombatant,
   rollRaid,
+  siegeAttackers,
   type Raid,
+  type RaidReport,
   type RaidFaction,
   type RiftOverflow,
 } from './raid';
@@ -105,6 +107,14 @@ export const RIFT = {
    *  FORME de la courbe et les RATIOS — pas ces deux nombres. */
   manaFoeBase: 2,
   manaFoePerLevel: 0.4,
+
+  /** 💠 MANA D'UN SIÈGE DE LA BASE (v0.1108, demandé : « pousser à défendre et à tuer un
+   *  max de monstres, même si la défaite est actée »). Une armée ENTIÈREMENT abattue paie
+   *  comme ce nombre de monstres de faille de son niveau ; une armée à moitié abattue, la
+   *  moitié. ⚠️ Calé SOUS une faille refermée (`manaFoesPaid` × prime du gardien = 5,25) :
+   *  un siège arrive sans qu'on le choisisse (1 par jour au mieux), il ne doit pas
+   *  détrôner les failles comme source de mana. */
+  siegeManaFoes: 2,
 
   /** Ce que le BOSS ajoute, en part du mana des monstres — la prime de fermeture. */
   bossManaShare: 0.5,
@@ -212,6 +222,29 @@ export function riftPopulation(rift: Pick<RiftLike, 'spawnedAt'>, now: number): 
 export function riftMana(foes: number, level: number): number {
   const per = RIFT.manaFoeBase + Math.max(1, level) * RIFT.manaFoePerLevel;
   return Math.round(Math.max(0, foes) * per);
+}
+
+/**
+ * 💠 Le mana d'un SIÈGE de la base : la part de l'armée RÉELLEMENT abattue, au PRORATA des
+ * PV de chaque corps (un champion pèse plus qu'un loup), × `RIFT.siegeManaFoes` monstres de
+ * faille du niveau de l'armée.
+ *
+ * ⚠️ **PAYÉ MÊME EN CAS DE DÉFAITE** (demandé) : ce qui compte, c'est ce qu'on a abattu.
+ * Un groupe à moitié tué rapporte sa moitié — on ne lit donc PAS `report.defeated`, qui ne
+ * compte que les groupes tombés en entier. Les morts viennent du journal de la bataille
+ * (`down`), rattachées aux assaillants que `siegeAttackers` reconstruit à l'identique :
+ * rien n'est re-simulé.
+ * ⚠️ Au prorata des PV et non du nombre de corps : une horde de bêtes compte 2,5× plus de
+ * corps qu'une bande de brigands pour la même menace (`countMult × unitMult ≈ 1`) —
+ * payer au corps ferait des bêtes la faction la plus rentable.
+ */
+export function siegeMana(raid: Raid, report: Pick<RaidReport, 'log'>): number {
+  const att = siegeAttackers(raid);
+  const total = att.reduce((a, u) => a + u.pv, 0);
+  if (total <= 0) return 0;
+  const down = new Set(report.log.filter((e) => e.kind === 'down').map((e) => e.to));
+  const slain = att.reduce((a, u) => a + (down.has(u.id) ? u.pv : 0), 0);
+  return riftMana(RIFT.siegeManaFoes * (slain / total), raid.level);
 }
 
 /**
