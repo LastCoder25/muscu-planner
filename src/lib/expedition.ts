@@ -12,6 +12,7 @@ import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } 
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import { levelForDifficulty } from './poiDifficulty';
+import { formatDuration } from './duration';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
  *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
@@ -1711,6 +1712,27 @@ export function travelPosition(
     };
   }
   return { x: town.x, y: town.y, phase: 'done', frac: 1, remainToObjectiveMs: 0, remainTotalMs: 0 };
+}
+
+/**
+ * Ce qu'une tuile de voyage affiche : le temps restant de l'ÉTAPE EN COURS, et son SENS.
+ *
+ * ⚠️ Le chiffre seul était ambigu (signalé par l'utilisateur : « c'est l'aller-retour, ou
+ * juste le trajet en cours ? ») : à l'aller il compte jusqu'à l'arrivée sur le lieu, au
+ * retour jusqu'à la ville — et rien ne disait lequel. La flèche le dit (→ aller, ↩ retour).
+ * Le temps jusqu'au retour en ville, qui décide de la disponibilité des champions, part
+ * dans `untilHome` (l'info-bulle) : dès l'aller, il inclut les deux jambes.
+ */
+export function tripTimeLabel(
+  pos: Pick<ReturnType<typeof travelPosition>, 'phase' | 'remainToObjectiveMs' | 'remainTotalMs'>,
+): { time: string; untilHome: string } {
+  if (pos.phase === 'done') return { time: 'rentré', untilHome: 'rentré en ville' };
+  const home = `retour en ville dans ${formatDuration(pos.remainTotalMs)}`;
+  if (pos.phase === 'return') return { time: `↩ ${formatDuration(pos.remainTotalMs)}`, untilHome: home };
+  return {
+    time: `→ ${formatDuration(pos.remainToObjectiveMs)}`,
+    untilHome: `arrivée dans ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,
+  };
 }
 
 /** Réglages des rencontres de TRAJET (aller / retour). */

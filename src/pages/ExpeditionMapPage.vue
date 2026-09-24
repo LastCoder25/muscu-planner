@@ -746,6 +746,7 @@ import {
   haulPills,
   EXPE,
   travelPosition,
+  tripTimeLabel,
   voyageProgress,
   poiCombatant,
   simulateArena,
@@ -1602,15 +1603,12 @@ const trips = computed(() => {
       kind: 'hero',
       who: '🧝',
       poi: a.poi,
-      time:
-        h.phase === 'done'
-          ? 'rentré'
-          : formatDuration(back ? h.remainTotalMs : h.remainToObjectiveMs),
+      time: tripTimeLabel(h).time,
       pct: heroProg.value.overall * 100,
       back,
       withHero: true,
       members: a.outcome.party?.escort ?? [],
-      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''}`,
+      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
   for (const v of vansOnMap.value) {
@@ -1620,12 +1618,12 @@ const trips = computed(() => {
       kind: 'van',
       who: '🐫',
       poi: v.poi,
-      time: formatDuration(back ? v.at.remainTotalMs : v.at.remainToObjectiveMs),
+      time: tripTimeLabel(v.at).time,
       pct: v.prog.overall * 100,
       back,
       withHero: false,
       members: v.members,
-      title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort}`,
+      title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort} · ${tripTimeLabel(v.at).untilHome}`,
     });
   }
   for (const g of partiesOnMap.value) {
@@ -1635,12 +1633,12 @@ const trips = computed(() => {
       kind: 'van',
       who: '⚔️',
       poi: g.poi,
-      time: formatDuration(back ? g.at.remainTotalMs : g.at.remainToObjectiveMs),
+      time: tripTimeLabel(g.at).time,
       pct: g.prog.overall * 100,
       back,
       withHero: g.hero,
       members: g.members,
-      title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''}`,
+      title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
     });
   }
   for (const c of claimable.value) {
