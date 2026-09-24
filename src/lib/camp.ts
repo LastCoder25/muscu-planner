@@ -12,7 +12,8 @@
 // demande nettement plus que trois aventuriers, et rien ne borne la taille du groupe.
 // ⚠️ AUCUNE FERRAILLE : elle ne vient plus que de l'épave et de la Fonderie (v0.856 : retirée
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
-import { lairGearSeals } from './ascension';
+import { mapGearSeals } from './ascension';
+import { mulberry32 } from './combat';
 import { forceShare } from './poiDifficulty';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
 import {
@@ -99,7 +100,7 @@ export interface PartyInput {
   road: EscortKit;
   hero: PartyHero | null;
   seed: number;
-  /** ⚠️ REQUIS : plafonne le rang des sceaux d'objet d'un repaire (`lairGearSeals`). */
+  /** ⚠️ REQUIS : le nombre de sceaux d'objet d'un camp ou d'un repaire suit le rang du joueur (`mapGearSeals`). */
   playerLevel: number;
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
@@ -363,8 +364,16 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
         gold: Math.round(full.gold * retreat),
         summonStones: Math.round(full.summonStones * retreat),
       };
-  // ⚜️ Un REPAIRE pris laisse un sceau d'objet (v0.1047) — leur seule source.
-  const seals = d.win && poi.type === 'lair' ? lairGearSeals(poi.level, input.playerLevel) : null;
+  // ⚜️ Un REPAIRE pris laisse un sceau d'objet, un CAMP une fois sur deux (v0.1138). ⚠️ Tirage
+  // sur un générateur À PART : le combat et le butin gardent leurs valeurs seedées.
+  const seals =
+    d.win && (poi.type === 'lair' || poi.type === 'camp')
+      ? mapGearSeals(
+          poi.type,
+          mulberry32((input.seed ^ 0x2f6b9c1d) >>> 0 || 1)(),
+          input.playerLevel,
+        )
+      : null;
   return {
     win: d.win,
     ...(seals ? { seals } : {}),

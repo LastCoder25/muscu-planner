@@ -91,6 +91,8 @@ describe('les sceaux', () => {
   it('se relisent défensivement', () => {
     const s = normalizeSeals({ champion: { 1: 3, 2: -1, x: 4, 99: 2 }, gear: { 0: 2.7 }, foo: 1 });
     expect(s).toEqual({ champion: { 1: 3 }, gear: { 0: 2 } });
+    // ⚜️ les sceaux d’objet d’avant (par rang) s’ADDITIONNENT en une seule réserve
+    expect(normalizeSeals({ gear: { 1: 2, 3: 4 } }).gear).toEqual({ 0: 6 });
     expect(normalizeSeals(null)).toEqual(emptySeals());
   });
 

@@ -104,22 +104,31 @@ const road = (level: number, n: number): EscortKit => ({
 /** Les unités d'une escorte — la signature RÉELLE : `roadUnits(escort, escortGear(escort, road))`. */
 const units = (esc: Adventurer[], rd: EscortKit) => roadUnits(esc, escortGear(esc, rd));
 describe('⚜️ un REPAIRE pris laisse un sceau d’objet — un camp non (v0.1047)', () => {
-  it('repaire gagné : un sceau d’objet ; camp gagné : aucun ; défaite : aucun', () => {
+  it('repaire gagné : un sceau d’objet ; camp gagné : un sur deux ; défaite : aucun', () => {
     let lairWon = 0;
     let lairLost = 0;
+    let campSeal = 0;
+    let campNone = 0;
     for (let s = 1; s <= 60; s++) {
       const lair = resolveCamp(input({ seed: s, poi: poi({ type: 'lair' }), hero: fort(20) }));
       if (lair.win) {
-        expect(lair.seals, `graine ${s}`).toEqual({ kind: 'gear', rank: expect.any(Number), n: 1 });
+        expect(lair.seals, `graine ${s}`).toEqual({ kind: 'gear', rank: 0, n: 2 }); // niveau 20 = Argent
         lairWon++;
       } else {
         expect(lair.seals).toBeUndefined();
         lairLost++;
       }
       const camp = resolveCamp(input({ seed: s, hero: fort(20) }));
-      expect(camp.seals).toBeUndefined();
+      if (!camp.win) expect(camp.seals).toBeUndefined();
+      else if (camp.seals) {
+        expect(camp.seals).toEqual({ kind: 'gear', rank: 0, n: 2 });
+        campSeal++;
+      } else campNone++;
     }
     expect(lairWon, 'aucun repaire gagné : le test ne prouve rien').toBeGreaterThan(0);
+    // ~1 camp gagné sur 2 laisse un sceau : ni jamais, ni toujours
+    expect(campSeal).toBeGreaterThan(10);
+    expect(campNone).toBeGreaterThan(10);
     void lairLost;
   });
 });
@@ -412,9 +421,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         );
         const parts = skirmishXpShares(esc, bodies, d);
         // Socle selon l'ISSUE + part des abattus : la règle EXACTE d'un convoi (v0.1014).
-        expect(o.party!.xp).toEqual(
-          missionXpFor(esc, inp.poi, d.win, parts, inp.pantheonLevel),
-        );
+        expect(o.party!.xp).toEqual(missionXpFor(esc, inp.poi, d.win, parts, inp.pantheonLevel));
         expect(o.party!.xp[HERO_UNIT_ID]).toBeUndefined();
       }
   });

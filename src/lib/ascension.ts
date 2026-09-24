@@ -21,10 +21,22 @@ import { GACHA } from './gacha';
 
 export type SealKind = SealDrop['kind'];
 
-/** Le stock de sceaux : par famille, par rang (index de `CHARACTER_RANKS`). */
+/** Le stock de sceaux : par famille, par rang (index de `CHARACTER_RANKS`).
+ *  ⚠️ Les sceaux d'OBJET n'ont PAS de rang (v0.1138, décision de l'utilisateur) : ils vivent
+ *  tous sous la clé `GEAR_SEAL_KEY`, et c'est le NOMBRE demandé qui suit le rang visé. */
 export type Seals = Record<SealKind, Partial<Record<number, number>>>;
 
 export const emptySeals = (): Seals => ({ champion: {}, gear: {} });
+
+/** La seule clé des sceaux d'objet (sans rang). */
+export const GEAR_SEAL_KEY = 0;
+
+/** Où vit un sceau : son rang pour un champion, la clé unique pour un objet. ⚠️ Appliqué par
+ *  `sealCount`, `addSeals` et `normalizeSeals` : un sceau d'objet tombé avant la v0.1138 (avec
+ *  un rang, ou dans un message pas encore encaissé) rejoint la réserve commune. */
+function sealSlot(kind: SealKind, rank: number): number {
+  return kind === 'gear' ? GEAR_SEAL_KEY : rank;
+}
 
 const ASCENSION = {
   /** Or d'une ascension = ce que coûte un cran de BÂTIMENT au premier niveau du rang visé,
@@ -54,24 +66,28 @@ export function normalizeSeals(raw: unknown): Seals {
     for (const [k, v] of Object.entries(src as Record<string, unknown>)) {
       const rank = Number(k);
       const n = typeof v === 'number' ? Math.floor(v) : 0;
-      if (Number.isInteger(rank) && rank >= 0 && rank < CHARACTER_RANKS.length && n > 0)
-        out[kind][rank] = n;
+      if (Number.isInteger(rank) && rank >= 0 && rank < CHARACTER_RANKS.length && n > 0) {
+        // ⚠️ Les sceaux d'objet d'avant (un compte par rang) s'ADDITIONNENT : rien n'est perdu.
+        const slot = sealSlot(kind, rank);
+        out[kind][slot] = (out[kind][slot] ?? 0) + n;
+      }
     }
   }
   return out;
 }
 
 export function sealCount(seals: Seals, kind: SealKind, rank: number): number {
-  return seals[kind][rank] ?? 0;
+  return seals[kind][sealSlot(kind, rank)] ?? 0;
 }
 
 /** Ajoute (ou retire, `n` négatif) des sceaux — PUR, rend un nouveau stock. Jamais sous 0. */
 export function addSeals(seals: Seals, kind: SealKind, rank: number, n: number): Seals {
   // Un compte ≤ 0 SUPPRIME l'entrée : c'est ce qui garantit « jamais sous zéro ».
-  const v = sealCount(seals, kind, rank) + Math.round(n);
+  const slot = sealSlot(kind, rank);
+  const v = sealCount(seals, kind, slot) + Math.round(n);
   const fam = { ...seals[kind] };
-  if (v > 0) fam[rank] = v;
-  else delete fam[rank];
+  if (v > 0) fam[slot] = v;
+  else delete fam[slot];
   return { ...seals, [kind]: fam };
 }
 
@@ -127,13 +143,13 @@ export function ascensionBlocker(
 
 // ── 🗡️ ASCENSION DES OBJETS (v0.1015, étape C) ───────────────────────────────────────────
 
-/** Ce que coûte l'ascension d'une PIÈCE vers ce rang. ⚠️ DÉRIVÉ de celui d'un champion :
- *  un champion porte QUATRE pièces, donc l'or d'une pièce en vaut le quart (équiper tout un
- *  champion coûte l'ascension du champion lui-même), et les sceaux la moitié arrondie au-dessus
- *  (spec § 2 : « N plus bas que pour un champion »). */
+/** Ce que coûte l'ascension d'une PIÈCE vers ce rang. L'or est DÉRIVÉ de celui d'un champion
+ *  (le quart : un champion porte quatre pièces). Les sceaux, SANS RANG depuis la v0.1138, se
+ *  paient en NOMBRE : autant que le rang visé (Argent 1, Or 2, Or noir 3… Tout-puissant 9) —
+ *  mener une pièce de Bronze à Or noir en coûte 6. */
 export function advGearAscensionCost(targetRank: number): { gold: number; seals: number } {
   const c = ascensionCost(targetRank);
-  return { gold: Math.round(c.gold / 4), seals: Math.ceil(c.seals / 2) };
+  return { gold: Math.round(c.gold / 4), seals: Math.max(1, targetRank) };
 }
 
 export type GearAscensionBlock = 'top' | 'notReady' | 'wearer' | 'seals' | 'gold';
@@ -142,7 +158,7 @@ export const GEAR_ASCENSION_BLOCK_LABEL: Record<GearAscensionBlock, string> = {
   top: 'Elle est au sommet : plus aucun rang à ouvrir.',
   notReady: 'Elle doit d’abord atteindre ★★★★★ dans son rang, en combattant.',
   wearer: 'Aucun champion de sa lignée ne peut porter le rang suivant — fais monter le champion.',
-  seals: 'Il manque des sceaux d’objet de ce rang — prends des repaires sur la carte.',
+  seals: 'Il manque des sceaux d’objet — prends des camps et des repaires sur la carte.',
   gold: 'Il manque de l’or.',
 };
 
@@ -164,19 +180,31 @@ export function advGearAscensionBlocker(
   return null;
 }
 
-/** 🗡️ Les sceaux d'OBJET d'un REPAIRE pris sur la carte : 1, au rang du repaire PLAFONNÉ à
- *  celui du joueur — le sport reste le plafond.
+/** 🗡️ Les sceaux d'OBJET d'un lieu pris sur la carte (sans rang, v0.1138) : un REPAIRE en
+ *  laisse `1 + rang du joueur` (Bronze 1, Argent 2, Or 3…), un CAMP autant une fois sur deux
+ *  (`CAMP_GEAR_SEAL_CHANCE`). `roll` ∈ [0, 1) vient d'un générateur À PART, pour ne décaler
+ *  aucun autre tirage du combat.
+ *  ⚠️ **MESURÉ** (joueur simulé du niveau 1, 3 rythmes de sport, 70 % des lieux pris, tous les
+ *  champions engagés montés avec leurs 4 pièces) : sceaux amassés ÷ sceaux demandés à l'entrée
+ *  de chaque rang = **1,1 à 1,5** (joueur régulier ou très actif), jusqu'à ~2 pour le joueur
+ *  lent (qui passe plus de jours par rang). Avec 1 sceau fixe par lieu, le même rapport tombait
+ *  de 1,2 à **0,23** : on ne rattrapait jamais. Il faut donc farmer, et ça suffit.
  *  ⚠️ **SUR LA CARTE, PLUS SUR LES BOSS DE PALIER (v0.1047, règle de l'utilisateur : « aucune
  *  ressource de champion à farmer dans la partie héros »).** Les deux familles de sceaux
  *  viennent désormais de la carte : 🔱 le gardien d'une faille, ⚜️ un repaire. Le héros, lui,
  *  peut profiter de tout ; ce sont les champions qui ne se nourrissent que de la carte. */
-export function lairGearSeals(lairLevel: number, playerLevel: number): SealDrop {
-  const rank = Math.min(
-    characterRank(Math.max(1, lairLevel)).rankIndex,
-    characterRank(Math.max(1, playerLevel)).rankIndex,
-  );
-  return { kind: 'gear', rank, n: 1 };
+export function mapGearSeals(
+  type: 'camp' | 'lair',
+  roll: number,
+  playerLevel: number,
+): SealDrop | null {
+  if (type === 'camp' && roll >= CAMP_GEAR_SEAL_CHANCE) return null;
+  const n = 1 + characterRank(Math.max(1, playerLevel)).rankIndex;
+  return { kind: 'gear', rank: GEAR_SEAL_KEY, n };
 }
+
+/** Chance qu'un camp pris laisse un sceau d'objet (le repaire, plus dur, en laisse toujours un). */
+export const CAMP_GEAR_SEAL_CHANCE = 0.5;
 
 /** 🔱 Ce que la barre de ressources dit d'une famille de sceaux : le TOTAL (la puce) et le
  *  détail PAR RANG (l'infobulle), du plus bas au plus haut. ⚠️ Un sceau ne sert qu'à SON rang :
@@ -184,6 +212,8 @@ export function lairGearSeals(lairLevel: number, playerLevel: number): SealDrop 
 export function sealsSummary(seals: Seals, kind: SealKind): { total: number; detail: string } {
   const parts: string[] = [];
   let total = 0;
+  // ⚜️ Sans rang : le total seul dit tout.
+  if (kind === 'gear') return { total: sealCount(seals, 'gear', GEAR_SEAL_KEY), detail: '' };
   for (let r = 0; r < CHARACTER_RANKS.length; r++) {
     const n = sealCount(seals, kind, r);
     if (n <= 0) continue;

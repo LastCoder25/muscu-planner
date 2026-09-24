@@ -16,7 +16,10 @@ import {
   advGearAscensionBlocker,
   advGearAscensionCost,
   ascensionCost,
-  lairGearSeals,
+  mapGearSeals,
+  sealCount,
+  GEAR_SEAL_KEY,
+  CAMP_GEAR_SEAL_CHANCE,
   emptySeals,
 } from '@/lib/ascension';
 import { RANK_ORDER } from '@/lib/items';
@@ -117,21 +120,36 @@ describe('l’ascension d’une pièce', () => {
         const rank = RANK_ORDER[r]!;
         const g: AdvGear = {
           id: 'x',
-          ...makeAdvGear({ lineage, slot: 'weapon', rank, grade: 'B', level: advGearLevelBand(rank).max }),
+          ...makeAdvGear({
+            lineage,
+            slot: 'weapon',
+            rank,
+            grade: 'B',
+            level: advGearLevelBand(rank).max,
+          }),
         };
         const up = ascendAdvGear(g, 100);
         const before = advGearEffects([g]);
         const after = advGearEffects([up]);
         for (const k of Object.keys(before) as (keyof typeof before)[])
-          if (before[k] > 0) expect(after[k], `${lineage} ${rank} ${k}`).toBeGreaterThan(before[k] * 1.1);
+          if (before[k] > 0)
+            expect(after[k], `${lineage} ${rank} ${k}`).toBeGreaterThan(before[k] * 1.1);
       }
   });
 
-  it('coûte le quart de l’or d’un champion et la moitié de ses sceaux', () => {
+  it('coûte le quart de l’or d’un champion, et autant de sceaux (sans rang) que le rang visé', () => {
     for (const r of [1, 4, 9]) {
       expect(advGearAscensionCost(r).gold).toBe(Math.round(ascensionCost(r).gold / 4));
-      expect(advGearAscensionCost(r).seals).toBe(Math.ceil(ascensionCost(r).seals / 2));
+      expect(advGearAscensionCost(r).seals).toBe(r);
     }
+  });
+
+  it('⚜️ un sceau d’objet sert à TOUS les rangs (plus de sceau par rang)', () => {
+    const stock = addSeals(emptySeals(), 'gear', 0, 3);
+    expect(sealCount(stock, 'gear', 3)).toBe(3);
+    expect(sealCount(stock, 'gear', 1)).toBe(3);
+    // un sceau crédité avec un rang (ancien message) rejoint la même réserve
+    expect(sealCount(addSeals(stock, 'gear', 5, 2), 'gear', 0)).toBe(5);
   });
 
   const ready = piece('p', { level: 10 });
@@ -171,12 +189,15 @@ describe('l’ascension d’une pièce', () => {
   });
 });
 
-describe('les sceaux d’objet des repaires (v0.1047 — plus des boss de palier)', () => {
-  it('un par repaire pris', () => {
-    expect(lairGearSeals(25, 60).n).toBe(1);
+describe('les sceaux d’objet de la carte (v0.1138 : sans rang, repaires ET camps)', () => {
+  it('un repaire en laisse toujours, 1 + rang du joueur', () => {
+    expect(mapGearSeals('lair', 0.99, 5)).toEqual({ kind: 'gear', rank: GEAR_SEAL_KEY, n: 1 });
+    expect(mapGearSeals('lair', 0.99, 15)?.n).toBe(2); // Argent
+    expect(mapGearSeals('lair', 0.99, 35)?.n).toBe(4); // Or noir
   });
-  it('au rang du repaire, plafonné par celui du joueur', () => {
-    expect(lairGearSeals(25, 60)).toEqual({ kind: 'gear', rank: 2, n: 1 });
-    expect(lairGearSeals(85, 30).rank).toBe(2);
+  it('un camp, autant une fois sur deux', () => {
+    expect(mapGearSeals('camp', CAMP_GEAR_SEAL_CHANCE - 0.01, 35)?.n).toBe(4);
+    expect(mapGearSeals('camp', CAMP_GEAR_SEAL_CHANCE, 35)).toBeNull();
+    expect(CAMP_GEAR_SEAL_CHANCE).toBe(0.5);
   });
 });
