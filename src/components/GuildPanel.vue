@@ -455,6 +455,74 @@
         <span v-else class="d-pow-gain">sans équipement qui compte</span>
       </div>
 
+      <!-- ⬆️ L'ASCENSION (v0.1014 ; réorganisée, demandé « montrer le changement de stat
+           avant et après »). Placée EN HAUT de la fiche : c'est l'action qui attend.
+           Trois lectures dans l'ordre où on les cherche — le RANG qu'il gagne, ce que ça
+           CHANGE (avant → après), ce que ça COÛTE — puis le bouton.
+           ⚠️ La raison d'un refus vient de `ascensionBlocker`, la règle du store. -->
+      <div v-if="detailAscent" class="d-ascent" :class="{ ready: !detailAscent.block }">
+        <div class="da-t font-display">⬆️ Ascension</div>
+        <div class="da-ranks">
+          <span class="da-rank" :style="{ '--c': detailAscent.rankBefore.color }">
+            {{ detailAscent.rankBefore.emoji }} {{ detailAscent.rankBefore.name }}
+            <small>{{ stars(detailAscent.rankBefore.star) }}</small>
+          </span>
+          <span class="da-arrow">→</span>
+          <span class="da-rank to" :style="{ '--c': detailAscent.rankAfter.color }">
+            {{ detailAscent.rankAfter.emoji }} {{ detailAscent.rankAfter.name }}
+            <small>{{ detailAscent.rankAfter.stars }}</small>
+          </span>
+        </div>
+
+        <div class="da-grid">
+          <template v-for="r in detailAscent.rows" :key="r.key">
+            <span class="da-lab">{{ r.emoji }} {{ r.label }}</span>
+            <span class="da-b">{{ r.key === 'pow' ? fmtPow(r.b) : r.b }}</span>
+            <span class="da-arrow">→</span>
+            <span class="da-a" :class="{ up: r.a > r.b }">{{
+              r.key === 'pow' ? fmtPow(r.a) : r.a
+            }}</span>
+            <span class="da-d" :class="{ up: r.a > r.b }">{{
+              r.a > r.b ? '+' + (r.key === 'pow' ? fmtPow(r.a - r.b) : r.a - r.b) : '='
+            }}</span>
+          </template>
+        </div>
+        <p class="da-note">
+          <template v-if="detailAscent.gained">
+            Il récupère aussitôt l’expérience gardée en réserve à ★★★★★.
+          </template>
+          <template v-else>
+            Pas d’expérience en réserve : ses stats ne bougent pas tout de suite, mais il reprend sa
+            progression jusqu’à ★★★★★ {{ detailAscent.rankAfter.name }}.
+          </template>
+        </p>
+
+        <div class="da-cost">
+          <span class="da-c" :class="{ short: detailAscent.sealsShort }">
+            🔱 {{ detailAscent.have }}/{{ detailAscent.cost.seals }} sceau{{
+              detailAscent.cost.seals > 1 ? 'x' : ''
+            }}
+            {{ detailAscent.rank.name }}
+          </span>
+          <span class="da-c" :class="{ short: detailAscent.goldShort }">
+            🪙 {{ detailAscent.cost.gold.toLocaleString('fr-FR') }}
+          </span>
+        </div>
+        <p v-if="detailAscent.block" class="d-ascent-why">
+          {{ ASCENSION_BLOCK_LABEL[detailAscent.block] }}
+        </p>
+        <q-btn
+          unelevated
+          no-caps
+          class="d-ascent-btn"
+          color="primary"
+          text-color="dark"
+          label="Faire l’ascension"
+          :disable="!!detailAscent.block || busy"
+          @click="doAscend(detailAdv)"
+        />
+      </div>
+
       <!-- Les STATS, qui n'étaient lisibles nulle part une fois la promotion faite. -->
       <div class="d-stats">
         <span class="d-stat">💪 {{ statsOf(detailAdv).puissance }}</span>
@@ -503,43 +571,6 @@
           🐫 en route · {{ leftOf(busyOf(detailAdv)) }}
         </template>
         <template v-else>✅ disponible</template>
-      </div>
-
-      <!-- ⬆️ L'ASCENSION (v0.1014) : à ★★★★★ la fin de son rang bloque son XP ; ouvrir le
-           suivant coûte de l'or et des sceaux DE CE RANG (gardiens de faille). ⚠️ La raison
-           d'un refus vient de `ascensionBlocker`, la règle du store — jamais un bouton
-           grisé en silence. -->
-      <div v-if="ascentOf(detailAdv)" class="d-ascent">
-        <div class="d-ascent-t">
-          ⬆️ Ascension vers {{ ascentOf(detailAdv)!.rank.emoji }}
-          <b :style="{ color: ascentOf(detailAdv)!.rank.color }">{{
-            ascentOf(detailAdv)!.rank.name
-          }}</b>
-        </div>
-        <div class="d-ascent-cost">
-          <span :class="{ short: ascentOf(detailAdv)!.have < ascentOf(detailAdv)!.cost.seals }"
-            >🔱 {{ ascentOf(detailAdv)!.have }}/{{ ascentOf(detailAdv)!.cost.seals }} sceau{{
-              ascentOf(detailAdv)!.cost.seals > 1 ? 'x' : ''
-            }}
-            {{ ascentOf(detailAdv)!.rank.name }}</span
-          >
-          <span :class="{ short: char.row!.gold < ascentOf(detailAdv)!.cost.gold }"
-            >🪙 {{ ascentOf(detailAdv)!.cost.gold.toLocaleString('fr-FR') }}</span
-          >
-        </div>
-        <p v-if="ascentOf(detailAdv)!.block" class="d-ascent-why">
-          {{ ASCENSION_BLOCK_LABEL[ascentOf(detailAdv)!.block!] }}
-        </p>
-        <q-btn
-          unelevated
-          no-caps
-          class="d-ascent-btn"
-          color="primary"
-          text-color="dark"
-          label="Faire l’ascension"
-          :disable="!!ascentOf(detailAdv)!.block || busy"
-          @click="doAscend(detailAdv)"
-        />
       </div>
 
       <!-- ⚠️ LE PARCOURS est la vraie raison d'être de cette fiche : chaque promotion est
@@ -721,6 +752,7 @@ import {
 import {
   AWAKEN,
   advAscensionCap,
+  ascendAdventurer,
   advAwaken,
   advNextAscension,
   advSubtitle,
@@ -1196,6 +1228,45 @@ function ascentOf(a: Adventurer) {
     }),
   };
 }
+/** ⬆️ CE QUE L'ASCENSION CHANGE, avant → après (demandé : « montrer le changement de stat »).
+ *  ⚠️ L'« après » est calculé par `ascendAdventurer` — la fonction que le store applique —
+ *  puis passé par les MÊMES calculs que la fiche (`advStats`, `adventurerPowers` avec son
+ *  équipement) : l'aperçu ne peut pas annoncer autre chose que ce que le bouton fera.
+ *  Un seul calcul pour tout le bloc, au lieu de rappeler `ascentOf` à chaque ligne. */
+const detailAscent = computed(() => {
+  const a = detailAdv.value;
+  const s = a ? ascentOf(a) : null;
+  if (!a || !s) return null;
+  const after = ascendAdventurer(a, pantheonLevel.value);
+  const list = char.advList.map((x) => (x.id === a.id ? after : x));
+  const powAfter = adventurerPowers(list, compCtx.value).get(a.id) ?? 0;
+  const sb = advStats(a);
+  const sa = advStats(after);
+  const rows = [
+    { key: 'pow', emoji: '⚔️', label: 'Combat', b: powerOf(a), a: powAfter },
+    { key: 'p', emoji: '💪', label: 'Puissance', b: sb.puissance, a: sa.puissance },
+    { key: 'e', emoji: '❤️', label: 'Endurance', b: sb.endurance, a: sa.endurance },
+    { key: 'g', emoji: '⚡', label: 'Agilité', b: sb.agilite, a: sa.agilite },
+  ];
+  // ⚠️ Le rang AFFICHÉ suit le niveau : sans XP en réserve, il reste à ★★★★★ de l'ancien
+  // rang jusqu'au niveau suivant. On montre alors le rang OUVERT, sans étoiles (« ouvert »),
+  // plutôt qu'un « Bronze → Bronze » qui laisserait croire que rien ne change.
+  const ra = advRank(after);
+  const rankAfter =
+    ra.rankIndex >= (advNextAscension(a) ?? 0)
+      ? { name: ra.name, emoji: ra.emoji, color: ra.color, stars: stars(ra.star) }
+      : { name: s.rank.name, emoji: s.rank.emoji, color: s.rank.color, stars: 'ouvert' };
+  return {
+    ...s,
+    rows,
+    rankBefore: advRank(a),
+    rankAfter,
+    // ⚠️ Niveau CACHÉ (règle de conception) : on dit seulement s'il récupère de l'XP gardée.
+    gained: after.level > a.level,
+    goldShort: (char.row?.gold ?? 0) < s.cost.gold,
+    sealsShort: s.have < s.cost.seals,
+  };
+});
 /** ⬆️ L'ascension d'une PIÈCE — même patron que celle d'un champion. `null` tant qu'elle
  *  n'est pas à ★5 : un bouton qui promettrait une échéance lointaine encombrerait la tuile. */
 function gearAscent(g: AdvGear) {
@@ -1562,18 +1633,95 @@ function leftOf(at: number): string {
   border-radius: 12px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
-.d-ascent-t {
-  font-size: 14px;
-  margin-bottom: 6px;
+/* Payable tout de suite : le vert « gain » de l'anneau du Panthéon, même signal. */
+.d-ascent.ready {
+  border-color: var(--d1, #7bc86c);
+  background: color-mix(in srgb, var(--d1, #7bc86c) 10%, transparent);
 }
-.d-ascent-cost {
+.da-t {
+  font-size: 15px;
+  margin-bottom: 8px;
+}
+.da-ranks {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 6px 14px;
+  gap: 6px 8px;
+  margin-bottom: 10px;
+}
+.da-rank {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--c) 60%, var(--line));
+  color: var(--c);
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.da-rank small {
+  font-size: 10px;
+  opacity: 0.85;
+}
+.da-rank.to {
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+.da-arrow {
+  color: var(--dim);
+}
+/* Une ligne par stat, colonnes alignées : on compare d'un coup d'œil. */
+.da-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+  align-items: baseline;
+  gap: 4px 8px;
   font-size: 13px;
 }
-.d-ascent-cost .short {
+.da-lab {
+  min-width: 0;
+  color: var(--dim);
+}
+.da-b,
+.da-a,
+.da-d {
+  font-family: Oswald, sans-serif;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.da-b {
+  color: var(--dim);
+}
+.da-a {
+  font-size: 15px;
+}
+.da-a.up,
+.da-d.up {
+  color: var(--d1, #7bc86c);
+}
+.da-d {
+  min-width: 3ch;
+  color: var(--dim);
+  font-size: 12px;
+}
+.da-note {
+  margin: 8px 0 10px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.da-cost {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.da-c {
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 600;
+}
+.da-c.short {
   color: var(--d4);
+  border-color: color-mix(in srgb, var(--d4) 55%, var(--line));
 }
 .d-ascent-why {
   margin: 6px 0 0;
