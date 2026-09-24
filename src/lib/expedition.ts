@@ -13,6 +13,7 @@ import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import { levelForDifficulty } from './poiDifficulty';
 import { formatDuration } from './duration';
+import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
  *  RANG (index de `CHARACTER_RANKS`) et leur nombre. Défini ICI (le module de la carte)
@@ -170,6 +171,8 @@ export interface PartyResult {
   hurt: string[];
   /** Salaires de l'escorte, déduits à l'encaissement. */
   wages: number;
+  /** 🩹 Trousse de soins emportée : multiplicateur de convalescence (< 1). Absent = aucune. */
+  healMult?: number;
   journal: string[];
   /**
    * 🕳️ Ce qu'il faut pour REJOUER une incursion de faille (`riftStage.ts`) — et rien de
@@ -279,6 +282,8 @@ export interface Poi {
    *  (`routePerilous`), parce que l'écran doit pouvoir dire LAQUELLE et que l'une des deux
    *  est actionnable (refermer ses failles AVANT 7 j empêche toute embuscade). */
   perilous?: boolean;
+  /** 🧿 Faille déjà scellée par un sceau de brèche (`sealRift`) : un seul par faille. */
+  sealed?: boolean;
   /** 🕳️ Harcelé par les monstres EMBUSQUÉS d'une faille qui a débordé (v0.1009 ; avant :
    *  par toute faille ouverte). ⚠️ DÉRIVÉ, recalculé à chaque `advanceWorld` : il s'éteint
    *  tout seul quand l'embuscade expire. Ne jamais l'écrire ailleurs — il serait faux dès
@@ -385,6 +390,8 @@ export interface ExpeditionOutcome {
   /** 🔱 Sceaux d'ascension — le gardien d'une faille refermée (`riftSeals`). Absent partout
    *  ailleurs. */
   seals?: SealDrop;
+  /** 🎒 Consommable trouvé en route (`rollSupplyDrop`), crédité à l'encaissement. */
+  supplies?: SupplyStock;
   item: Omit<Item, 'id'> | null; // la « prise » principale (pièce de set / objet) ou null
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
@@ -432,6 +439,7 @@ export interface ExpeditionMessage {
   scrap?: number;
   mana?: number; // 💠 pierres de mana (mine résiduelle d'une faille)
   seals?: SealDrop; // 🔱 sceaux d'ascension (gardien d'une faille refermée)
+  supplies?: SupplyStock; // 🎒 consommables trouvés (crédités à l'encaissement)
   tickets?: number; // 🎟️ tickets d'invocation (coffres gagnés par le sport, v0.992)
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
@@ -529,7 +537,13 @@ export function haulPills(o: {
   mana?: number;
   tickets?: number;
   seals?: SealDrop;
+  supplies?: SupplyStock;
 }): { emoji: string; n: number }[] {
+  // 🎒 Les consommables à la suite : un par type, dans l'ordre du catalogue.
+  const supplies = SUPPLY_IDS.filter((id) => (o.supplies?.[id] ?? 0) > 0).map((id) => ({
+    emoji: SUPPLIES[id].emoji,
+    n: o.supplies![id]!,
+  }));
   return (
     [
       { emoji: '🪙', n: o.gold ?? 0 },
@@ -542,7 +556,8 @@ export function haulPills(o: {
     ] as const
   )
     .filter((p) => p.n > 0)
-    .map((p) => ({ emoji: p.emoji, n: p.n }));
+    .map((p): { emoji: string; n: number } => ({ emoji: p.emoji, n: p.n }))
+    .concat(supplies);
 }
 
 /** L'objet à montrer dans un message de la boîte, et combien d'autres il porte.
@@ -574,6 +589,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     ...(o.summonStones ? { summonStones: o.summonStones } : {}),
     ...(o.mana ? { mana: o.mana } : {}),
     ...(o.seals ? { seals: o.seals } : {}),
+    ...(o.supplies && Object.keys(o.supplies).length ? { supplies: o.supplies } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     // Les objets vivent DANS le message : c'est lui qui sera encaissé, donc c'est lui

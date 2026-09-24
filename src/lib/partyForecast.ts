@@ -3,6 +3,7 @@ import { partyAllies, type EscortKit, type PartyHero } from './caravan';
 import { isRiftPoi, isWarbandPoi, poiForceOf, type Poi } from './expedition';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
+import { supplyFx } from './supplies';
 
 /**
  * 🎯 LA CHANCE QU'UN GROUPE REVIENNE VAINQUEUR, pour les QUATRE natures de lieu.
@@ -33,10 +34,11 @@ export function partyWinChance(
 ): number | null {
   const allies = partyAllies(escort, road, hero);
   if (!allies.length) return null;
-  if (isRiftPoi(poi)) return incursionWinPct(poi, allies, now, samples);
+  const fx = supplyFx(road.supplies);
+  if (isRiftPoi(poi)) return incursionWinPct(poi, allies, now, samples, fx.riftFoeMult);
   // ⚔️ L'interception prend l'escorte BRUTE : elle refond le groupe elle-même.
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.
   const spec = poiForceOf(poi);
-  return spec ? campWinPct(poi, spec, allies, samples) : null;
+  return spec ? campWinPct(poi, spec, allies, samples, fx.guardMult) : null;
 }

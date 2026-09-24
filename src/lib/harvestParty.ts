@@ -37,6 +37,7 @@ import {
   type Poi,
 } from './expedition';
 import { FACTION_EMOJI } from './raid';
+import { supplyFx } from './supplies';
 import type { Adventurer } from './adventurers';
 
 export interface HarvestPartyInput {
@@ -109,7 +110,21 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
   }
 
   if (hero) {
-    const out = resolveOutcome(hero.combatant, poi, seed, input.playerLevel);
+    const raw = resolveOutcome(hero.combatant, poi, seed, input.playerLevel);
+    // 🧺 Les bâts : avec le héros, la cargaison vient de SON expédition — le +20 % s'y applique
+    // directement (le plafond du rôle 🐫 ne concerne que les champions).
+    const k = 1 + supplyFx(road.supplies).haul;
+    const out =
+      k === 1
+        ? raw
+        : {
+            ...raw,
+            gold: Math.round(raw.gold * k),
+            energy: Math.round(raw.energy * k),
+            summonStones: Math.round(raw.summonStones * k),
+            mana: Math.round(raw.mana * k),
+            key: Math.round(raw.key * k),
+          };
     const party: PartyResult = {
       ...base,
       win: true,

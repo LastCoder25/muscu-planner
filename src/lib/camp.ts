@@ -34,6 +34,7 @@ import {
   type PartyHero,
   type EscortKit,
 } from './caravan';
+import { supplyFx } from './supplies';
 import {
   campSpecOf,
   goldCost,
@@ -114,9 +115,11 @@ export interface PartyInput {
  * ⚠️ Sauf pour les PETITES forces (taille < 2), corrigées par rang — `forceShare`
  * (poiDifficulty.ts) porte la correction, et le rang affiché lit la MÊME expression.
  */
-export function campFoe(poi: Poi, spec: CampSpec): Combatant {
+export function campFoe(poi: Poi, spec: CampSpec, foeMult = 1): Combatant {
   const ref = fuseUnits(refEscortUnits(poi.level), 'Référence');
-  const m = forceShare(poi.level, spec.size);
+  // 🔥 `foeMult` : le fumigène (`supplies.ts`). ⚠️ Appliqué ICI, là où la force se calcule,
+  // pour que le combat, les corps (`campBodies`) et le pronostic la voient tous.
+  const m = forceShare(poi.level, spec.size) * foeMult;
   return {
     name: FACTION_LABEL[spec.faction],
     pv: Math.max(1, Math.round(Math.max(1, offenseOf(ref)) * CAMP.pvTurns * m)),
@@ -292,7 +295,7 @@ export interface CampFight {
 export function fightCampForce(input: PartyInput): CampFight {
   const { poi, spec, escort, hero, seed } = input;
   const allies = partyAllies(escort, input.road, hero);
-  const foe = campFoe(poi, spec);
+  const foe = campFoe(poi, spec, supplyFx(input.road.supplies).guardMult);
   const bodies = campBodies(poi, spec, foe);
   const group = fuseUnits(allies, 'Groupe');
   const fight = simulateCombat(group, foe, { seed: partyFightSeed(seed), goldOnWin: 0 });
@@ -351,7 +354,15 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   };
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;
 
-  const haul = d.win ? campGroupHaul(poi, spec) : { gold: 0, summonStones: 0 };
+  // 📯 Le cor de retraite : une défaite garde une PART du butin au lieu de rien.
+  const retreat = supplyFx(input.road.supplies).retreatShare;
+  const full = d.win || retreat > 0 ? campGroupHaul(poi, spec) : { gold: 0, summonStones: 0 };
+  const haul = d.win
+    ? full
+    : {
+        gold: Math.round(full.gold * retreat),
+        summonStones: Math.round(full.summonStones * retreat),
+      };
   // ⚜️ Un REPAIRE pris laisse un sceau d'objet (v0.1047) — leur seule source.
   const seals = d.win && poi.type === 'lair' ? lairGearSeals(poi.level, input.playerLevel) : null;
   return {
@@ -378,10 +389,12 @@ export function campWinPct(
   spec: CampSpec,
   allies: readonly SkirmishUnit[],
   samples: number,
+  /** 🔥 Le fumigène — le MÊME multiplicateur que la résolution (`fightCampForce`). */
+  foeMult = 1,
 ): number {
   if (!allies.length) return 0;
   const group = fuseUnits(allies, 'Groupe');
-  const foe = campFoe(poi, spec);
+  const foe = campFoe(poi, spec, foeMult);
   const n = Math.max(1, samples);
   let w = 0;
   for (let s = 0; s < n; s++)

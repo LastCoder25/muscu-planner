@@ -80,6 +80,7 @@ import {
 import { rankStartLevel } from './characterRank';
 import { REF_TEAM } from './poiDifficulty';
 import { poiDifficultyLevel } from './poiRank';
+import { boostCombatant, supplyFx, type SupplyId } from './supplies';
 import {
   ADV_GEAR_SLOTS,
   advGearEffects,
@@ -1023,9 +1024,14 @@ const AMBUSH_BASE = { calme: 0.24, perilous: 0.42 } as const;
  * levier se marchent dessus. Un convoi bien éclairé a donc une alternative à la force
  * brute — passer inaperçu.
  */
-export function ambushChance(poi: Poi, escort: Adventurer[]): number {
+export function ambushChance(poi: Poi, escort: Adventurer[], extraScout = 0): number {
   const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
-  const cut = Math.min(CARAVAN.scoutMax, countRole(escort, 'scout') * CARAVAN.scoutPerRole);
+  // 🗺️ La carte de contrebandier s'ajoute aux éclaireurs SOUS LEUR plafond : elle comble un
+  // trou, elle ne le dépasse pas.
+  const cut = Math.min(
+    CARAVAN.scoutMax,
+    countRole(escort, 'scout') * CARAVAN.scoutPerRole + Math.max(0, extraScout),
+  );
   return base * (1 - cut);
 }
 
@@ -1034,6 +1040,10 @@ export function ambushChance(poi: Poi, escort: Adventurer[]): number {
  *  finit par l'être. Une escorte nue passe `{ advGear: [] }`. */
 export interface EscortKit {
   advGear: AdvGear[];
+  /** 🎒 Les consommables emportés (`supplies.ts`). ⚠️ Ils voyagent DANS le kit parce que le kit
+   *  suit le groupe du pronostic à la résolution : le 🎯 % et le vrai combat les voient donc
+   *  forcément tous les deux. Absent = aucun (le rempart, les tests, les étalons). */
+  supplies?: readonly SupplyId[];
 }
 
 /**
@@ -1123,7 +1133,11 @@ export function partyAllies(
       level: hero.level,
       combatant: heroPartyCombatant(hero),
     });
-  return units;
+  // 🧪🪨 Les consommables de combat s'appliquent ICI, au point de passage UNIQUE du groupe :
+  // camps, failles, bandes et pronostic le lisent tous.
+  const fx = supplyFx(kit.supplies);
+  if (!fx.pv && !fx.dmg) return units;
+  return units.map((u) => ({ ...u, combatant: boostCombatant(u.combatant, fx) }));
 }
 /** 🧭 Les unités de RÉFÉRENCE d'un niveau : `CARAVAN.refEscort` aventuriers, un par
  *  orientation, équipés (`refAdvGear`). ⚠️ SOURCE UNIQUE du mètre-étalon des CAMPS et des
@@ -1177,12 +1191,14 @@ function pairedEscortEffects(
 /** Multiplicateur de CARGAISON d'une escorte : rôles 🐫 + pièces qui portent ce rôle,
  *  sous UN plafond. ⚠️ Extrait pour être éprouvé directement : un plafond qu'on ne peut
  *  vérifier qu'à travers un voyage entier est un plafond qu'on ne vérifie pas. */
-export function caravanHaulMult(escort: Adventurer[], stock: AdvGear[]): number {
+export function caravanHaulMult(escort: Adventurer[], stock: AdvGear[], extraHaul = 0): number {
   return (
     1 +
     Math.min(
       CARAVAN.haulMax,
-      countRole(escort, 'haul') * CARAVAN.haulPerRole + advGearRoles(escort, stock).haul,
+      countRole(escort, 'haul') * CARAVAN.haulPerRole +
+        advGearRoles(escort, stock).haul +
+        Math.max(0, extraHaul),
     )
   );
 }
@@ -1233,7 +1249,12 @@ export function resolveCaravan(
   const foe = roadFoe(poi);
   // 🗡️ Qui porte quoi, calculé UNE fois : le combattant fondu et les unités en sont deux lectures.
   const pairs = escortGear(escort, kit);
-  const guards = escortCombatant(escort, 'Escorte', pairedEscortEffects(escort, pairs));
+  const fx = supplyFx(kit.supplies);
+  // 🧪🪨 Potion et pierre renforcent aussi l'escorte sur la ROUTE, pas seulement devant les gardes.
+  const guards = boostCombatant(
+    escortCombatant(escort, 'Escorte', pairedEscortEffects(escort, pairs)),
+    fx,
+  );
   // Unités et troupe calculées à la première embuscade seulement (inutiles sur une route
   // tranquille). La troupe EST `foe` réparti en corps (`roadTroop` → `troopOf`).
   let group: { units: SkirmishUnit[]; troop: SkirmishUnit[] } | null = null;
@@ -1244,7 +1265,7 @@ export function resolveCaravan(
   // Une rencontre par jambe de trajet — deux fois plus sur une route dangereuse.
   const legs = routePerilous(poi) ? 4 : 2;
   const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
-  const amb = ambushChance(poi, escort);
+  const amb = ambushChance(poi, escort, fx.scout);
   for (let i = 0; i < legs; i++) {
     const roll = rng();
     if (roll < amb) {
@@ -1304,7 +1325,7 @@ export function resolveCaravan(
   }
 
   const tfH = heroEquivalentFactor(poi);
-  const haul = caravanHaulMult(escort, kit.advGear);
+  const haul = caravanHaulMult(escort, kit.advGear, fx.haul);
   const k = mult * haul;
   const raw = harvestYield(poi.type, poiRewardLevel(poi), tfH);
   const y = {

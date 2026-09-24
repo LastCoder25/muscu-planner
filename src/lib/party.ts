@@ -17,6 +17,7 @@
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
 import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
 import { sinceEvent } from './sinceEvent';
+import { supplyFx, type SupplyId } from './supplies';
 import {
   PARTY_TARGETS,
   buildMessage,
@@ -36,12 +37,19 @@ import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
 export function partyLegMin(
   poi: Poi,
   escort: Adventurer[],
-  opts: { hero: boolean; travelMult: number; gearSpeed: number },
+  opts: { hero: boolean; travelMult: number; gearSpeed: number; supplies?: readonly SupplyId[] },
 ): number {
+  // 🥖 Les rations : pour les champions, SOUS le plafond du rôle 🧭 (elles s'ajoutent à leur
+  // vitesse) ; pour le héros, qui n'a pas de rôle, directement.
+  const speed = supplyFx(opts.supplies).speed;
   const hero = opts.hero
-    ? Math.round(travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * opts.travelMult)
+    ? Math.round(
+        travelOneWayMin(poiTravelLevel(poi), poi.distNorm) * opts.travelMult * (1 - speed),
+      )
     : 0;
-  const advs = escort.length ? caravanLegMin(poi, escort, opts.gearSpeed, opts.travelMult) : 0;
+  const advs = escort.length
+    ? caravanLegMin(poi, escort, opts.gearSpeed + speed, opts.travelMult)
+    : 0;
   return Math.max(1, hero, advs);
 }
 
@@ -261,7 +269,12 @@ export function partyClaimRoster(
     .filter((a): a is Adventurer => !!a);
   // ⏱️ DEPUIS LE RETOUR DU GROUPE, pas depuis le clic « Encaisser » — même règle que les
   // convois et que le siège. `null` = déjà écoulée, personne ne part à l'infirmerie.
-  const hurtUntil = sinceEvent(ctx.backAt, caravanHurtMs(escort, ctx.infirmaryLevel), ctx.now);
+  // 🩹 La trousse de soins emportée divise la convalescence (`healMult`, posé au départ).
+  const hurtUntil = sinceEvent(
+    ctx.backAt,
+    caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1),
+    ctx.now,
+  );
   const hurt = new Set(party.hurt);
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
