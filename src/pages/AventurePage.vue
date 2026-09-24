@@ -6278,16 +6278,16 @@ const planRows = computed<PlanRow[]>(() => {
 
 /** L'ÉTAT RETENU : l'équipement, les talents et la voie tels que les lignes acceptées
  *  les définissent. C'est lui qu'on applique, et c'est sur lui qu'on mesure. */
-function planStateWithout(skip?: string) {
+function planState(withRows = true) {
   const r = char.row;
   const plan = gearPlan.value;
   const equipped: Equipped = { ...(r?.equipped ?? {}) };
   let talentIds = normalizeTalents(r?.talents ?? [])
     .filter((t) => t.equipped)
     .map((t) => t.id);
-  if (!plan || !r) return { equipped, talentIds, voie: wornVoie(equipped) };
+  if (!plan || !r || !withRows) return { equipped, talentIds, voie: wornVoie(equipped) };
   for (const row of planRows.value) {
-    if (planOff.value.has(row.key) || row.key === skip) continue;
+    if (planOff.value.has(row.key)) continue;
     if (row.slot) equipped[row.slot] = row.toItem ?? undefined;
     else if (row.kind === 'set') {
       for (const pc of row.pieces ?? []) equipped[pc.slot] = pc.toItem ?? undefined;
@@ -6315,8 +6315,11 @@ function planPowerOf(st: { equipped: Equipped; talentIds: string[]; voie: string
     ),
   );
 }
-const planPowerNow = computed(() => planPowerOf(planStateWithout('__all__')));
-const planPowerSel = computed(() => planPowerOf(planStateWithout()));
+// ⚠️ « Maintenant » = AUCUNE ligne appliquée. Le repère '__all__' d'avant n'était comparé
+// qu'à la clé d'une ligne (jamais égale) : il appliquait tout, et l'écran annonçait
+// « 7461 → 7461 » pour une puissance réelle de 7285.
+const planPowerNow = computed(() => planPowerOf(planState(false)));
+const planPowerSel = computed(() => planPowerOf(planState()));
 function togglePlanRow(key: string) {
   const next = new Set(planOff.value);
   if (next.has(key)) next.delete(key);
@@ -6353,7 +6356,7 @@ async function doOptimizeGear() {
   }
 }
 function applyPlan() {
-  const st = planStateWithout();
+  const st = planState();
   gearPlan.value = null;
   withUid(async (uid) => {
     await char.applyGearPlan(uid, st, setScore.value);
