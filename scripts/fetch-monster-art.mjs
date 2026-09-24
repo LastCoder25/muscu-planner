@@ -408,7 +408,11 @@ async function write(slug, brut) {
  * mesure que les fichiers arrivent. Ordre des sujets = ordre de génération : les paliers
  * que les joueurs croisent en premier passent d'abord.
  */
-const slugs = Object.keys(SUBJECTS);
+// Le Labyrinthe passe EN DERNIER (demandé) : gardiens de faille et boss entre amis d'abord,
+// tri stable, donc l'ordre écrit est gardé à l'intérieur de chaque groupe.
+const slugs = Object.keys(SUBJECTS).sort(
+  (x, y) => Number(x.startsWith('l_')) - Number(y.startsWith('l_')),
+);
 const tableSlugs = Object.values(MONSTER_ART).map((p) =>
   p.replace('/monsters/', '').replace('.webp', ''),
 );
