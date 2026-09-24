@@ -27,7 +27,11 @@ const party = (xp: Record<string, number>): PartyResult =>
     journal: [],
   }) as unknown as PartyResult;
 
-const msg = (id: string, p?: PartyResult, over: Partial<ExpeditionMessage> = {}): ExpeditionMessage =>
+const msg = (
+  id: string,
+  p?: PartyResult,
+  over: Partial<ExpeditionMessage> = {},
+): ExpeditionMessage =>
   ({
     id,
     level: 20,

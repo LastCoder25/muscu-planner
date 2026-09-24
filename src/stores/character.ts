@@ -1890,7 +1890,11 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
     const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
-    await persist(userId, { expedition: { ...exp, reported: true }, messages: x.messages, ...x.patch });
+    await persist(userId, {
+      expedition: { ...exp, reported: true },
+      messages: x.messages,
+      ...x.patch,
+    });
     x.play();
     return msg;
   }
@@ -2431,7 +2435,8 @@ export const useCharacterStore = defineStore('character', () => {
     if (!g.granted.length) return { messages: box, patch: {}, play: () => {} };
     const gearPatch = gearTrainedPatch(cur, advList.value, g.adventurers);
     const tracks = gearAwareTracks(cur, advList.value, g.adventurers, gearPatch);
-    const title = g.granted.length === 1 ? `Rapport : ${messageTitle(g.granted[0]!)}` : 'Rapports de mission';
+    const title =
+      g.granted.length === 1 ? `Rapport : ${messageTitle(g.granted[0]!)}` : 'Rapports de mission';
     return {
       messages: g.messages,
       patch: { adventurers: g.adventurers, ...gearPatch },
