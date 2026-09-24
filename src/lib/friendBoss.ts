@@ -416,7 +416,7 @@ export function bossUnitsLeft(b: Pick<FriendBoss, 'hpTotal' | 'damage'>): number
 
 // ── Scène de combat ───────────────────────────────────────────────────────────────
 
-const BOSS_EMOJIS = ['🐉', '👹', '🦖', '🐙', '🦂', '🧌', '🐲', '👾'] as const;
+export const BOSS_EMOJIS = ['🐉', '👹', '🦖', '🐙', '🦂', '🧌', '🐲', '👾'] as const;
 
 /** Silhouette du boss : tirée de son id, donc la même pour tout le groupe et à chaque visite. */
 export function bossEmoji(bossId: string): string {

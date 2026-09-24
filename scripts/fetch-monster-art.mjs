@@ -180,22 +180,66 @@ const SUBJECTS = {
   // ── GARDIENS DE FAILLE (v0.1108) — le gardien d'une faille est une espèce du roster de
   //    sa faction, en version ÉLITE : plus grande, parée, et marquée par la faille (fissures
   //    et aura d'énergie violette). 3 factions × 5 espèces = 15. Nom « X (gardien) ».
-  g_coupe_jarret: 'an elite bandit cutthroat guardian, tall masked rogue in black leather with twin curved daggers, torn red cape, glowing violet cracks of rift energy on his armor',
-  g_archer: 'an elite deserter archer guardian, hooded soldier in battered steel and green cloak drawing a huge black longbow, glowing violet rift energy arrows',
-  g_brise_porte: 'an elite bandit gatebreaker guardian, huge muscular brute with an enormous double-bladed battle axe, iron shoulder plates, glowing violet rift cracks on his skin',
-  g_mercenaire: 'an elite mercenary guardian, heavily armored knight in dented steel plate with a tower shield and a longsword, glowing violet rift sigils on the shield',
-  g_chef_bande: 'a bandit warlord guardian, scarred chieftain in a fur mantle and red war paint, spiked iron crown, huge greatsword, glowing violet rift energy aura',
-  g_loup: 'a gigantic famished dire wolf guardian, gaunt black-furred wolf with visible ribs, jagged glowing violet cracks across its body, snarling fangs',
-  g_arachne: 'a giant forest arachne guardian, huge green and brown spider with moss and bark on its carapace, dripping venom fangs, glowing violet eyes',
-  g_sanglier: 'a colossal enraged boar guardian, massive boar with huge iron-banded tusks, bristling dark fur split by glowing violet rift cracks',
-  g_ours: 'a colossal cave bear guardian, huge brown bear standing on its hind legs, stone-like armored hide, glowing violet crystals growing from its back',
-  g_scorpion: 'a colossal giant scorpion guardian, obsidian black carapace with glowing violet veins, enormous pincers, raised crystal stinger tail',
-  g_revenant: 'a revenant guardian, towering undead knight in rusted black armor, rotting grey skin, ghostly violet flames in its eye sockets, notched sword',
-  g_spectre: 'a wailing spectre guardian, huge floating pale ghost woman in tattered shroud, screaming mouth, long spectral claws, violet ethereal glow',
-  g_ossuaire: 'a walking ossuary guardian, huge hulking golem made of countless fused bones and skulls, glowing violet core in its ribcage',
-  g_necromant: 'a necromancer guardian, gaunt sorcerer in black and purple robes with a skull staff, swirling violet necrotic magic, floating skulls around him',
-  g_porte_linceul: 'a shroud bearer guardian, tall faceless undead monk wrapped in grey burial shrouds, carrying a coffin chained on its back, violet glow under the hood',
+  g_coupe_jarret:
+    'an elite bandit cutthroat guardian, tall masked rogue in black leather with twin curved daggers, torn red cape, glowing violet cracks of rift energy on his armor',
+  g_archer:
+    'an elite deserter archer guardian, hooded soldier in battered steel and green cloak drawing a huge black longbow, glowing violet rift energy arrows',
+  g_brise_porte:
+    'an elite bandit gatebreaker guardian, huge muscular brute with an enormous double-bladed battle axe, iron shoulder plates, glowing violet rift cracks on his skin',
+  g_mercenaire:
+    'an elite mercenary guardian, heavily armored knight in dented steel plate with a tower shield and a longsword, glowing violet rift sigils on the shield',
+  g_chef_bande:
+    'a bandit warlord guardian, scarred chieftain in a fur mantle and red war paint, spiked iron crown, huge greatsword, glowing violet rift energy aura',
+  g_loup:
+    'a gigantic famished dire wolf guardian, gaunt black-furred wolf with visible ribs, jagged glowing violet cracks across its body, snarling fangs',
+  g_arachne:
+    'a giant forest arachne guardian, huge green and brown spider with moss and bark on its carapace, dripping venom fangs, glowing violet eyes',
+  g_sanglier:
+    'a colossal enraged boar guardian, massive boar with huge iron-banded tusks, bristling dark fur split by glowing violet rift cracks',
+  g_ours:
+    'a colossal cave bear guardian, huge brown bear standing on its hind legs, stone-like armored hide, glowing violet crystals growing from its back',
+  g_scorpion:
+    'a colossal giant scorpion guardian, obsidian black carapace with glowing violet veins, enormous pincers, raised crystal stinger tail',
+  g_revenant:
+    'a revenant guardian, towering undead knight in rusted black armor, rotting grey skin, ghostly violet flames in its eye sockets, notched sword',
+  g_spectre:
+    'a wailing spectre guardian, huge floating pale ghost woman in tattered shroud, screaming mouth, long spectral claws, violet ethereal glow',
+  g_ossuaire:
+    'a walking ossuary guardian, huge hulking golem made of countless fused bones and skulls, glowing violet core in its ribcage',
+  g_necromant:
+    'a necromancer guardian, gaunt sorcerer in black and purple robes with a skull staff, swirling violet necrotic magic, floating skulls around him',
+  g_porte_linceul:
+    'a shroud bearer guardian, tall faceless undead monk wrapped in grey burial shrouds, carrying a coffin chained on its back, violet glow under the hood',
+
+  // ── BOSS ENTRE AMIS (v0.1109) — une silhouette par emoji de `BOSS_EMOJIS` (friendBoss.ts),
+  //    tirée de l'id du boss. ⚠️ DE FACE (cf. `FRONT`) : la scène le pose EN HAUT, le groupe
+  //    en ligne dessous — il leur fait face, pas un héros à sa gauche.
+  fb_dragon:
+    'a colossal raid boss dragon, massive dark red dragon rearing up with wings spread wide, horned head roaring, glowing ember chest',
+  fb_oni:
+    'a colossal raid boss oni demon king, giant red-skinned demon with two big horns, wild white hair, golden armor, huge iron kanabo club held in both hands',
+  fb_tyran:
+    'a colossal raid boss tyrannosaurus, giant armored dinosaur with bone plates and spikes, jaws wide open roaring, glowing orange eyes',
+  fb_kraken:
+    'a colossal raid boss kraken, gigantic dark teal octopus monster rising up, many huge tentacles spread around, one glowing yellow eye',
+  fb_scorpion:
+    'a colossal raid boss scorpion king, gigantic golden and black armored scorpion, huge raised pincers, stinger tail arched high over its head',
+  fb_troll:
+    'a colossal raid boss mountain troll, giant hunched troll with mossy stone skin, tree trunk club, bone necklace, snarling tusks',
+  fb_long:
+    'a colossal raid boss eastern dragon, long serpentine jade green chinese dragon coiled upright, flowing whiskers and mane, holding a glowing pearl',
+  fb_xeno:
+    'a colossal raid boss alien horror, giant purple insectoid alien with many glowing eyes, scythe arms raised, chitinous armor',
 };
+
+/** Ceux dessinés DE FACE plutôt que de profil — les boss entre amis, posés au-dessus du
+ *  groupe. Même style, cadrage différent. */
+const FRONT = new Set(Object.keys(SUBJECTS).filter((s) => s.startsWith('fb_')));
+const STYLE_AVANT_FACE =
+  'anime key visual, 2D anime art style, flat cel shaded colors, bold black outlines, full body front view of';
+const FRAMING_FACE =
+  'facing the viewer, symmetrical imposing pose, whole creature visible from head to feet, ' +
+  'isolated on a plain flat pure white background, no ground, no scenery, no text';
 
 const seedFor = (slug) => seedOf('monster:' + slug) % 100000;
 
@@ -395,7 +439,9 @@ for (const slug of slugs) {
     console.error(`✖ dotation du jour épuisée (${solde}) — arrêt, rien de payant consommé`);
     break;
   }
-  const prompt = `${STYLE_AVANT} ${SUBJECTS[slug]}, ${FRAMING}, ${STYLE_APRES}`;
+  const prompt = FRONT.has(slug)
+    ? `${STYLE_AVANT_FACE} ${SUBJECTS[slug]}, ${FRAMING_FACE}, ${STYLE_APRES}`
+    : `${STYLE_AVANT} ${SUBJECTS[slug]}, ${FRAMING}, ${STYLE_APRES}`;
   const brut = await fetchImage(prompt, seedFor(slug));
   if (!brut) {
     console.error(`✖ ${slug} — échec`);

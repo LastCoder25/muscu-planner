@@ -79,6 +79,7 @@
           ref="stage"
           :boss-name="current.exerciseName"
           :boss-emoji="bossEmoji(current.id)"
+          :boss-art="friendBossArt(current.id)"
           :family-emoji="BOSS_FAMILY_LABEL[current.family].emoji"
           :family-name="BOSS_FAMILY_LABEL[current.family].name"
           :hp-total="current.hpTotal"
@@ -380,6 +381,7 @@ import {
   type BossFamily,
   type FriendBoss,
 } from '@/lib/friendBoss';
+import { friendBossArt } from '@/data/friendBossArt';
 
 defineProps<{ embedded?: boolean }>();
 
