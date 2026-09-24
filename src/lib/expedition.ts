@@ -1728,7 +1728,8 @@ export function tripTimeLabel(
 ): { time: string; untilHome: string } {
   if (pos.phase === 'done') return { time: 'rentré', untilHome: 'rentré en ville' };
   const home = `retour en ville dans ${formatDuration(pos.remainTotalMs)}`;
-  if (pos.phase === 'return') return { time: `↩ ${formatDuration(pos.remainTotalMs)}`, untilHome: home };
+  if (pos.phase === 'return')
+    return { time: `↩ ${formatDuration(pos.remainTotalMs)}`, untilHome: home };
   return {
     time: `→ ${formatDuration(pos.remainToObjectiveMs)}`,
     untilHome: `arrivée dans ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,
