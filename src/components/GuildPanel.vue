@@ -157,7 +157,7 @@
                 :disabled="busy"
                 :gear="gearCellsOf(a)"
                 :ascend="ascReady.champions.has(a.id)"
-                @gear="(slot) => (gearPick = { advId: a.id, slot })"
+                @gear="(slot) => onGearCell(a, slot)"
                 @open="detailAdv = a"
               />
             </div>
@@ -289,7 +289,15 @@
                   class="gear-stock-row"
                   :class="ownerOf(g) ? 'tone-busy' : 'tone-free'"
                 >
-                  <div class="gear-stock-top">
+                  <!-- 📊 Toucher la pièce ouvre sa feuille : rang, étoiles, avancement. -->
+                  <div
+                    class="gear-stock-top tap"
+                    role="button"
+                    tabindex="0"
+                    :aria-label="`Progression de ${g.name}`"
+                    @click="gearInfo = { gearId: g.id }"
+                    @keydown.enter.prevent="gearInfo = { gearId: g.id }"
+                  >
                     <span class="d-pair-emo"
                       ><AdvGearArt :model="advGearModelOf(g)">{{ g.emoji }}</AdvGearArt></span
                     >
@@ -309,6 +317,7 @@
                      à 148 px de tuile il leur restait ~60 px, et tout passait à la ligne mot
                      par mot — illisible. -->
                   <div class="gear-stock-body">
+                    <GearStarBar :g="g" />
                     <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
                          étoiles du héros (demandé). -->
                     <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
@@ -540,7 +549,7 @@
           type="button"
           class="d-gear-slot"
           :class="{ empty: !s.piece }"
-          @click="gearPick = { advId: detailAdv.id, slot: s.slot }"
+          @click="onGearCell(detailAdv, s.slot)"
         >
           <span class="dg-emo"
             ><AdvGearArt :model="s.model">{{ s.emoji }}</AdvGearArt></span
@@ -551,6 +560,7 @@
           <span v-if="s.rank" class="dg-rk" :style="{ color: s.color }">{{ s.rank }}</span>
           <RankStarBadge v-if="s.piece" class="dg-rsb" v-bind="advGearRankStar(s.piece)" />
           <span v-if="s.stat" class="dg-stat">{{ s.stat }}</span>
+          <GearStarBar v-if="s.piece" class="dg-bar" :g="s.piece" thin />
           <!-- Ce que la pièce APPORTE : la stat seule ne se compare pas d'une pièce à
                l'autre (des dégâts contre de la réduction) et ne dit pas son assiette. -->
           <span v-if="(detailGearGain.get(s.slot) ?? 0) > 0" class="dg-gain"
@@ -696,6 +706,7 @@
             <b :style="{ color: r.color }">{{ r.g.name }}</b>
             <span v-if="r.g.awaken" class="d-train awk">✨{{ r.g.awaken }}</span>
           </span>
+          <GearStarBar :g="r.g" />
           <span v-for="(t, i) in r.texts" :key="i" class="d-gain">{{ t }}</span>
           <span class="d-gain" :class="{ neg: r.power < gearRows.curPower }">
             ⚔️ {{ fmtDelta(gearRows.curPower, r.power) }}
@@ -703,6 +714,55 @@
         </span>
       </button>
       <div class="g-actions"><q-btn flat no-caps label="Fermer" @click="gearPick = null" /></div>
+    </q-card>
+  </q-dialog>
+
+  <!-- 📊 LA FEUILLE D'UNE PIÈCE (v0.1126, demandé : « au clic sur la pièce, partout ») :
+       son rang, ses étoiles, son avancement vers l'étoile suivante et ce qui la fait
+       avancer. ⚠️ Toujours pas de niveau affiché. -->
+  <q-dialog :model-value="!!gearInfo" position="bottom" @update:model-value="gearInfo = null">
+    <q-card v-if="gearInfoPiece" class="guild-card">
+      <div class="g-head">
+        <div class="g-title font-display">🗡️ {{ gearInfoPiece.name }}</div>
+        <button class="iconbtn" aria-label="Fermer" @click="gearInfo = null">✕</button>
+      </div>
+      <div class="gi-top">
+        <span class="d-pair-emo gi-art"
+          ><AdvGearArt :model="advGearModelOf(gearInfoPiece)">{{
+            gearInfoPiece.emoji
+          }}</AdvGearArt></span
+        >
+        <RankStarBadge class="gear-rsb" v-bind="advGearRankStar(gearInfoPiece)" />
+        <span class="d-pair-main">
+          <span class="d-pair-sub gear-meta">
+            <span class="d-rk" :style="{ '--rk': advGearBadge(gearInfoPiece).color }">{{
+              advGearBadge(gearInfoPiece).label
+            }}</span>
+            <span>{{ lineageLabel(gearInfoPiece.lineage) }}</span>
+            <span v-if="gearInfoPiece.awaken" class="d-train awk"
+              >✨{{ gearInfoPiece.awaken }}</span
+            >
+          </span>
+          <span class="d-gain gear-fx">
+            <span v-for="(t, i) in gearEffectTexts(gearInfoPiece)" :key="i">{{ t }}</span>
+          </span>
+        </span>
+      </div>
+      <GearStarBar class="gi-bar" :g="gearInfoPiece" big />
+      <p class="g-note">
+        {{ gearInfoText.status }}
+        <template v-if="gearInfoWearer"> · Porteur : {{ gearInfoWearer.name }}</template>
+      </p>
+      <div class="g-actions">
+        <q-btn
+          v-if="gearInfo?.advId && gearInfo.slot"
+          flat
+          no-caps
+          label="🔁 Changer de pièce"
+          @click="gearInfoChange"
+        />
+        <q-btn flat no-caps label="Fermer" @click="gearInfo = null" />
+      </div>
     </q-card>
   </q-dialog>
 </template>
@@ -764,11 +824,13 @@ import { fmtPow, fmtDelta } from '@/lib/combat';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
 import RankStarBadge from '@/components/RankStarBadge.vue';
+import GearStarBar from '@/components/GearStarBar.vue';
 import { type EscortKit } from '@/lib/caravan';
 import {
   ADV_GEAR_SLOTS,
   advGearBadge,
   advGearRankStar,
+  advGearProgressInfo,
   compareAdvGear,
   groupGearByGrade,
   advGearCells,
@@ -974,6 +1036,38 @@ const gearHereId = computed(() => {
   const a = gearPickAdv.value;
   return p && a ? (a.gear?.[p.slot] ?? null) : null;
 });
+// ── 📊 LA FEUILLE D'UNE PIÈCE (v0.1126) ──
+// `advId`/`slot` présents = ouverte depuis une case d'un champion : elle propose alors de
+// changer la pièce (ce que la case faisait directement avant).
+const gearInfo = ref<{ gearId: string; advId?: string; slot?: AdvGearSlot } | null>(null);
+const gearInfoPiece = computed(() =>
+  gearInfo.value ? char.advGearStock.find((g) => g.id === gearInfo.value!.gearId) : undefined,
+);
+/** Celui qui la porte VRAIMENT (`wornGear`, la règle qui la fait apprendre). */
+const gearInfoWearer = computed(() => {
+  const id = gearInfoPiece.value?.id;
+  if (!id) return undefined;
+  for (const [advId, list] of gearWorn.value)
+    if (list.some((g) => g.id === id)) return char.advList.find((a) => a.id === advId);
+  return undefined;
+});
+const gearInfoText = computed(() =>
+  gearInfoPiece.value
+    ? advGearProgressInfo(gearInfoPiece.value, gearInfoWearer.value?.level)
+    : { title: '', pct: 0, status: '' },
+);
+/** Toucher une case : une pièce portée ouvre SA feuille, une case vide le sélecteur. */
+function onGearCell(a: Adventurer, slot: AdvGearSlot) {
+  const worn = (gearWorn.value.get(a.id) ?? []).find((g) => g.slot === slot);
+  if (worn) gearInfo.value = { gearId: worn.id, advId: a.id, slot };
+  else gearPick.value = { advId: a.id, slot };
+}
+function gearInfoChange() {
+  const i = gearInfo.value;
+  gearInfo.value = null;
+  if (i?.advId && i.slot) gearPick.value = { advId: i.advId, slot: i.slot };
+}
+
 function pickGear(id: string | null) {
   const p = gearPick.value;
   if (!p) return;
@@ -2225,6 +2319,29 @@ function leftOf(at: number): string {
 .gear-stock-row[class*='tone-'] {
   border-color: color-mix(in srgb, var(--tone-c) 55%, var(--line));
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-c) 14%, transparent);
+}
+/* 📊 Toucher l'en-tête d'une pièce ouvre sa feuille. */
+.gear-stock-top.tap {
+  cursor: pointer;
+  border-radius: 8px;
+}
+.gear-stock-top.tap:active {
+  background: var(--surface-2, #2b241b);
+}
+.dg-bar {
+  margin-top: 2px;
+}
+.gi-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.gi-art {
+  font-size: 34px;
+}
+.gi-bar {
+  margin-bottom: 4px;
 }
 .gear-stock-top {
   display: flex;
