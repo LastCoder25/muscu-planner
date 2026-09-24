@@ -1717,6 +1717,100 @@ export function advProgressOf(
   return out;
 }
 
+/** L'XP TOTALE accumulée par un aventurier (niveaux gagnés + réserve). Une ascension, un
+ *  soin ou une formation ne la changent pas : comparer deux instantanés dit donc ce qu'une
+ *  mission a appris, quelle que soit la source. */
+export function advTotalXp(a: Adventurer): number {
+  let t = Math.max(0, a.xp);
+  for (let l = 1; l < a.level; l++) t += advXpToNext(l);
+  return t;
+}
+
+/** Un morceau de la barre d'étoile : du `from` au `to` (0..1) DANS l'étoile `star` du rang. */
+export interface AdvXpSegment {
+  star: number;
+  rankName: string;
+  rankEmoji: string;
+  rankColor: string;
+  from: number;
+  to: number;
+  /** La barre atteint le bout ET l'étoile est gagnée : on la célèbre avant de repartir. */
+  starUp: boolean;
+  /** L'étoile gagnée ouvre un NOUVEAU rang (★5 → ★1 du rang suivant). */
+  rankUp: boolean;
+}
+
+/** Ce qu'une mission a fait avancer un aventurier, découpé étoile par étoile — la matière de
+ *  la barre animée au retour. */
+export interface AdvXpTrack {
+  id: string;
+  name: string;
+  championId?: string;
+  /** XP réellement gagnée (différence d'XP totale). */
+  xp: number;
+  /** Au moins un segment ; plusieurs si des étoiles tombent pendant la mission. */
+  segments: AdvXpSegment[];
+  /** Il vient de buter sur le ★5 de son rang : l'XP s'arrête jusqu'à l'ascension. */
+  ascendReady: boolean;
+}
+
+/**
+ * La barre d'avancement vers l'étoile suivante, AVANT → APRÈS une mission.
+ *
+ * ⚠️ Le niveau est CACHÉ : entre deux étoiles, « +142 XP » ne dit pas si l'on est près de
+ * la prochaine. La barre le dit — et c'est le cas le plus fréquent (la plupart des missions
+ * ne font gagner aucune étoile, et l'annonce d'étoile ne jouait donc rien).
+ *
+ * ⚠️ Les segments se lisent sur le CRAN GLOBAL (`advRank().tier`), monotone, jamais sur
+ * l'étoile seule qui retombe de ★5 à ★1 au passage de rang. Les deux bouts viennent de
+ * `advRankProgress`, la barre de la Guilde : on anime exactement ce qu'elle affichera.
+ */
+export function advXpTracks(
+  before: readonly Adventurer[],
+  after: readonly Adventurer[],
+): AdvXpTrack[] {
+  const was = new Map(before.map((a) => [a.id, a]));
+  const out: AdvXpTrack[] = [];
+  for (const a of after) {
+    const b = was.get(a.id);
+    if (!b) continue;
+    const xp = advTotalXp(a) - advTotalXp(b);
+    if (xp <= 0) continue;
+    const t0 = advRank(b).tier;
+    const t1 = Math.max(t0, advRank(a).tier);
+    const p0 = advRankProgress(b);
+    const p1 = advRankProgress(a);
+    const segments: AdvXpSegment[] = [];
+    for (let t = t0; t <= t1; t++) {
+      const rankIndex = Math.floor(t / ADV_STARS);
+      const r = CHARACTER_RANKS[rankIndex]!;
+      const from = t === t0 ? p0 : 0;
+      const to = t === t1 ? Math.max(from, p1) : 1;
+      segments.push({
+        star: (t % ADV_STARS) + 1,
+        rankName: r.name,
+        rankEmoji: r.emoji,
+        rankColor: r.color,
+        from,
+        to,
+        starUp: t < t1,
+        rankUp: t < t1 && Math.floor((t + 1) / ADV_STARS) > rankIndex,
+      });
+    }
+    const ascendReady =
+      advNextAscension(a) != null && a.level >= advAscensionCap(a) && b.level < advAscensionCap(a);
+    out.push({
+      id: a.id,
+      name: a.name,
+      ...(a.championId ? { championId: a.championId } : {}),
+      xp,
+      segments,
+      ascendReady,
+    });
+  }
+  return out;
+}
+
 /** Plafond de l’échelle affichée — celui du jeu, et donc du barème de prestige. */
 export const ADV_MAX_LEVEL = 100;
 

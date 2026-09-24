@@ -28,6 +28,7 @@ import {
   advAvatar,
   advChampion,
   advRarity,
+  advTotalXp,
   advXpToNext,
   AWAKEN,
   type AdvAvatarProfile,
@@ -679,16 +680,6 @@ export function grantAdvGearXp(g: AdvGear, xp: number, wearerLevel: number): Adv
     level++;
   }
   return level === g.level && pool === (g.xp ?? 0) ? g : { ...g, level, xp: pool };
-}
-
-/** L'XP TOTALE accumulée par un aventurier (niveaux gagnés + réserve). ⚠️ C'est ce qui rend
- *  l'entraînement des objets indépendant de la SOURCE : on compare le vivier avant/après,
- *  et tout gain (convoi, groupe, siège) passe par le même chemin sans qu'aucun site n'ait
- *  à s'en souvenir. Une ascension, une promotion ou un soin ne changent pas ce total. */
-function advTotalXp(a: Adventurer): number {
-  let t = Math.max(0, a.xp);
-  for (let l = 1; l < a.level; l++) t += advXpToNext(l);
-  return t;
 }
 
 /**
