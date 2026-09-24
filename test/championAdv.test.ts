@@ -386,9 +386,13 @@ describe('⬆️ UNE ASCENSION SE VOIT DANS LES STATS (+5 % par rang ouvert)', (
     expect(advAscensionMult(at(primordial, 5, 0))).toBe(1);
   });
 
-  it('les champions de RÉFÉRENCE n’en reçoivent pas (calibration intacte)', () => {
-    const ref = { ...at(primordial, 60, 5), championId: `ref:${primordial.id}` };
-    expect(advAscensionMult(ref)).toBe(1);
+  it('les champions de RÉFÉRENCE le reçoivent AUSSI, au rang de leur niveau (l’ennemi suit)', () => {
+    // Ils n'ont jamais de `ascended` : leur rang ouvert est celui de leur niveau, donc un
+    // champion À JOUR de ses ascensions vaut exactement l'étalon — la difficulté ne bouge pas.
+    const ref = { ...asAdv(primordial, 60), championId: `ref:${primordial.id}` };
+    const ajour = at(primordial, 60, 5);
+    expect(advAscensionMult(ref)).toBeCloseTo(Math.pow(1.05, 5), 9);
+    expect(advAscensionMult(ref)).toBe(advAscensionMult(ajour));
   });
 
   it('le ★1 d’un rang dépasse le ★5 du rang précédent, pour un S comme pour un A', () => {

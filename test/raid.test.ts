@@ -2136,7 +2136,10 @@ describe('🛡️ LE RENFORT DE SIÈGE D’UN DÉFENSEUR (v0.801, recalibré v0.
   // écarts −7 à +9 points, dans le bruit d’un échantillon de 120.
   // ⚠️ Il vit au SIÈGE seul : la calibration mesurée des embuscades n’en voit rien.
   it('ses PV et ses dégâts de siège valent ceux de la route × guardSiegeK', () => {
-    const adv = refChampionAdv(40, 0);
+    // ⚠️ `ascended: 0` : au siège le bonus d'ascension est ramené à l'étalon du niveau du
+    // joueur (l'armée ne connaît que le héros) — la route, elle, le garde. On compare donc au
+    // même champion SANS rang ouvert, ce que `guardUnits` lui fait valoir ici.
+    const adv = { ...refChampionAdv(40, 0), ascended: 0 };
     const [g] = guardUnits(40, [adv], 99, {
       now: 0,
       kennelLevel: 40,
@@ -2171,6 +2174,8 @@ describe('⚔️ LES COMPÉTENCES D’UN CHAMPION COMPTENT AU SIÈGE', () => {
       xp: 0,
       championId: id,
       copies,
+      // ⚠️ Sans rang ouvert : c'est ce que le siège lui fait valoir à son niveau (cf. plus haut).
+      ascended: 0,
     }) as Adventurer;
   /** Le même champion privé de ses compétences, par la même règle que le jeu. */
   const sansComp = (a: Adventurer) => {

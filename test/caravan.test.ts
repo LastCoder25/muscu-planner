@@ -1819,8 +1819,8 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
       { advGear: [] },
       aJour(escort),
     );
-    expect(o.gold).toBe(2028); // une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
-    expect(o.energy).toBe(62);
+    expect(o.gold).toBe(996); // v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
+    expect(o.energy).toBe(30);
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et
     // l'énergie apparaît. Tout le reste (clés, salaires, XP, blessé, journal) est inchangé au
@@ -1841,19 +1841,21 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     // niveau de récompense, et le partage est strict dès le 1er membre — 58 → 47. ⚠️ Ce
     // qui compte ici n'a PAS bougé d'un chiffre : la cargaison ci-dessus. L'XP n'en est
     // que le témoin.
-    expect(o.xp).toEqual({ ref0: 47, ref1: 47, ref2: 47 });
-    expect(o.kills).toEqual({ ref0: 2, ref1: 2, ref2: 1 });
-    expect(o.hurt).toEqual(['ref1']);
+    // v0.1120 : +5 % de stats par rang ouvert, appliqué AUSSI à l'étalon — même graine, même
+    // flux, mais la 2ᵉ embuscade bascule en défaite (issue d'un combat, pas une fuite de flux).
+    expect(o.xp).toEqual({ ref0: 43, ref1: 43, ref2: 43 });
+    expect(o.kills).toEqual({ ref0: 1, ref1: 1, ref2: 2 });
+    expect(o.hurt).toEqual(['ref1', 'ref0']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);
-    expect(o.events[1]!.down).toHaveLength(1); // à terre, mais la victoire ne blesse personne
+    expect(o.events[1]!.down).toEqual(['ref0', 'ref2', 'ref1']);
     expect(o.events.map((e) => [e.slain, e.down?.length])).toEqual([
       [2, 3],
-      [3, 1],
+      [2, 3],
       [undefined, undefined],
       [undefined, undefined],
     ]);
     expect(o.events.map((e) => e.kind)).toEqual(['bandits', 'bandits', 'calme', 'calme']);
-    expect(o.events.map((e) => e.won)).toEqual([false, true, undefined, undefined]);
+    expect(o.events.map((e) => e.won)).toEqual([false, false, undefined, undefined]);
   });
 });
 

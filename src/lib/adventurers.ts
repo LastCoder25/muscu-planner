@@ -2143,16 +2143,23 @@ export function advAscendedRank(adv: Adventurer): number {
  *  seul le niveau le fait) — un bouton payé en or et en sceaux dont l'écran « avant → après »
  *  montrait des chiffres identiques (signalé : « l'upgrade est fade »). Rendu visible et
  *  immédiat, il reste modeste : un niveau d'aventurier vaut ~+15 % de stats de base.
- *  ⚠️ Les champions de RÉFÉRENCE (`ref:…`) n'en reçoivent PAS : ce sont les étalons sur
- *  lesquels routes, camps, failles et sièges sont calibrés — le bonus est un vrai gain pour
- *  le joueur, sans déplacer la difficulté (décision de l'utilisateur : « sans changer le
- *  reste »). */
+ *  ⚠️ Les champions de RÉFÉRENCE (`ref:…`) le reçoivent AUSSI, au rang de leur niveau : ils
+ *  sont les étalons de la route, des camps et des failles, donc l'ennemi monte avec eux et un
+ *  champion À JOUR de ses ascensions retrouve exactement la difficulté d'avant (décision de
+ *  l'utilisateur). Le bonus se voit contre un champion qui n'a pas encore franchi le cap. */
 export const ASCENSION_STAT_STEP = 0.05;
 export function advAscensionMult(adv: Adventurer): number {
-  if (!adv.championId || adv.championId.startsWith('ref:')) return 1;
+  if (!adv.championId) return 1;
   // ⚠️ COMPOSÉ, pas additif : additif, le saut d'une ascension fondait avec le rang (mesuré
   // +5,7 % à la première, +3,6 % à la neuvième). Composé, chaque clic vaut bien +5 %.
   return Math.pow(1 + ASCENSION_STAT_STEP, advAscendedRank(adv));
+}
+
+/** Le rang qu'un champion À JOUR a ouvert à ce niveau (toutes ses ascensions faites).
+ *  ⚠️ Sert au siège : l'armée se calibre sur le HÉROS, pas sur les champions de référence,
+ *  donc le vivier est ramené à cet étalon — sinon le bonus rendrait la base imprenable. */
+export function ascensionRankAt(level: number): number {
+  return characterRank(Math.max(1, level)).rankIndex;
 }
 
 /** Le niveau le plus haut que son ascension lui permet : le ★5 du rang ouvert (niveau 10,

@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import {
-  CHAMPIONS,
-  CHAMPION_BY_ID,
-  REF_CHAMPIONS_BY_RANK,
-  type Champion,
-} from '@/data/champions';
+import { CHAMPIONS, CHAMPION_BY_ID, REF_CHAMPIONS_BY_RANK, type Champion } from '@/data/champions';
 import { RANK_ORDER, prestigeRankIndex } from '@/lib/items';
-import { advChampion, advRarity, advStats, championStats } from '@/lib/adventurers';
+import {
+  advAscensionMult,
+  advChampion,
+  advRarity,
+  advStats,
+  championStats,
+} from '@/lib/adventurers';
 import { refAdvGear, refAdventurer, refChampionAdv, refChampions } from '@/lib/caravan';
 
 const part = (c: Champion, axe: 'p' | 'e' | 'a') => c.form[axe] / (c.form.p + c.form.e + c.form.a);
@@ -35,7 +36,14 @@ describe('📏 l’étalon des combats, FIGÉ à la refonte S/A (2026-09-21)', (
       for (let s = 0; s < 3; s++) {
         const a = refChampionAdv(L, s);
         expect(advChampion(a)!.grade).toBe('S');
-        expect(advStats(a)).toEqual(championStats(advChampion(a)!, L, 1));
+        // × le bonus d'ascension du rang de leur niveau (ils sont « à jour »).
+        const st = championStats(advChampion(a)!, L, 1);
+        const k = advAscensionMult(a);
+        expect(advStats(a)).toEqual({
+          puissance: Math.round(st.puissance * k),
+          endurance: Math.round(st.endurance * k),
+          agilite: Math.round(st.agilite * k),
+        });
       }
   });
 

@@ -36,7 +36,13 @@ import { rollDrop, type AggregatedEffects, type Item } from './items';
 import { escortCombatant, escortGear, unitEffects, type EscortKit } from './caravan';
 import { ADV_GEAR_SLOTS, canWearAdvGear, type AdvGear, type AdvGearSlot } from './advGear';
 import { beyondCap, buildingUpgradeCost } from './buildings';
-import { advStats, advTitle, type Adventurer } from './adventurers';
+import {
+  advAscendedRank,
+  advStats,
+  advTitle,
+  ascensionRankAt,
+  type Adventurer,
+} from './adventurers';
 import {
   BATTLE,
   simulateSiege,
@@ -2313,8 +2319,15 @@ export function guardUnits(
   cap: number,
   ctx?: EscortKit,
 ): GuardUnit[] {
-  void playerLevel;
-  const retenus = rampartGuard(advs, cap, ctx);
+  // ⬆️ Le bonus d'ascension est ramené à l'étalon du NIVEAU DU JOUEUR : l'armée ne connaît
+  // que le héros (`refFighter`), pas les champions de référence, donc sans ça le +5 %/rang
+  // rendrait la base imprenable. On compte seulement les rangs ouverts AU-DELÀ de celui du
+  // joueur — un vivier à jour défend exactement comme avant (au point de vie près : on
+  // recalcule les stats, on ne divise pas des PV qui ont une part fixe).
+  const pRank = ascensionRankAt(playerLevel);
+  const retenus = rampartGuard(advs, cap, ctx).map((a) =>
+    a.championId ? { ...a, ascended: Math.max(0, advAscendedRank(a) - pRank) } : a,
+  );
   const pairs = ctx ? escortGear(retenus, ctx) : new Map<string, AdvGear[]>();
   return retenus.map((a) => {
     // ⚠️ `escortCombatant` NU (sans compétences ni équipement), et on replie ensuite :
