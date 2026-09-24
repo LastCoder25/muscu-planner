@@ -181,8 +181,8 @@ export function advGearAscensionBlocker(
 }
 
 /** 🗡️ Les sceaux d'OBJET d'un lieu pris sur la carte (sans rang, v0.1138) : un REPAIRE en
- *  laisse `1 + rang du joueur` (Bronze 1, Argent 2, Or 3…), un CAMP autant une fois sur deux
- *  (`CAMP_GEAR_SEAL_CHANCE`). `roll` ∈ [0, 1) vient d'un générateur À PART, pour ne décaler
+ *  laisse `1 + rang du joueur` (Bronze 1, Argent 2, Or 3…), un CAMP autant (à chaque fois depuis
+ *  la v0.1147, `CAMP_GEAR_SEAL_CHANCE`). `roll` ∈ [0, 1) vient d'un générateur À PART, pour ne décaler
  *  aucun autre tirage du combat.
  *  ⚠️ **MESURÉ** (joueur simulé du niveau 1, 3 rythmes de sport, 70 % des lieux pris, tous les
  *  champions engagés montés avec leurs 4 pièces) : sceaux amassés ÷ sceaux demandés à l'entrée
@@ -203,8 +203,9 @@ export function mapGearSeals(
   return { kind: 'gear', rank: GEAR_SEAL_KEY, n };
 }
 
-/** Chance qu'un camp pris laisse un sceau d'objet (le repaire, plus dur, en laisse toujours un). */
-export const CAMP_GEAR_SEAL_CHANCE = 0.5;
+/** Chance qu'un camp pris laisse ses sceaux d'objet. ⚠️ 1 depuis la v0.1147 (demandé : « comme le
+ *  repaire, à chaque fois ») — 0,5 avant. */
+export const CAMP_GEAR_SEAL_CHANCE = 1;
 
 /** 🔱 Ce que la barre de ressources dit d'une famille de sceaux : le TOTAL (la puce) et le
  *  détail PAR RANG (l'infobulle), du plus bas au plus haut. ⚠️ Un sceau ne sert qu'à SON rang :

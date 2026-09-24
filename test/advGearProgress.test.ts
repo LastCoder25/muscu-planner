@@ -195,9 +195,8 @@ describe('les sceaux d’objet de la carte (v0.1138 : sans rang, repaires ET cam
     expect(mapGearSeals('lair', 0.99, 15)?.n).toBe(2); // Argent
     expect(mapGearSeals('lair', 0.99, 35)?.n).toBe(4); // Or noir
   });
-  it('un camp, autant une fois sur deux', () => {
-    expect(mapGearSeals('camp', CAMP_GEAR_SEAL_CHANCE - 0.01, 35)?.n).toBe(4);
-    expect(mapGearSeals('camp', CAMP_GEAR_SEAL_CHANCE, 35)).toBeNull();
-    expect(CAMP_GEAR_SEAL_CHANCE).toBe(0.5);
+  it('un camp, autant, à chaque fois — comme le repaire (v0.1147)', () => {
+    expect(CAMP_GEAR_SEAL_CHANCE).toBe(1);
+    for (const roll of [0, 0.5, 0.999]) expect(mapGearSeals('camp', roll, 35)?.n).toBe(4);
   });
 });

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { mapGearSeals } from '@/lib/ascension';
 import {
   CAMP,
   campBodies,
@@ -104,7 +105,7 @@ const road = (level: number, n: number): EscortKit => ({
 /** Les unités d'une escorte — la signature RÉELLE : `roadUnits(escort, escortGear(escort, road))`. */
 const units = (esc: Adventurer[], rd: EscortKit) => roadUnits(esc, escortGear(esc, rd));
 describe('⚜️ un REPAIRE pris laisse un sceau d’objet — un camp non (v0.1047)', () => {
-  it('repaire gagné : un sceau d’objet ; camp gagné : un sur deux ; défaite : aucun', () => {
+  it('repaire ou camp gagné : des sceaux d’objet à chaque fois ; défaite : aucun', () => {
     let lairWon = 0;
     let lairLost = 0;
     let campSeal = 0;
@@ -126,9 +127,9 @@ describe('⚜️ un REPAIRE pris laisse un sceau d’objet — un camp non (v0.1
       } else campNone++;
     }
     expect(lairWon, 'aucun repaire gagné : le test ne prouve rien').toBeGreaterThan(0);
-    // ~1 camp gagné sur 2 laisse un sceau : ni jamais, ni toujours
+    // ⚜️ Comme le repaire (v0.1147) : un camp gagné laisse TOUJOURS ses sceaux.
     expect(campSeal).toBeGreaterThan(10);
-    expect(campNone).toBeGreaterThan(10);
+    expect(campNone).toBe(0);
     void lairLost;
   });
 });
@@ -753,6 +754,9 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
         const haul = campGroupHaul(p, spec);
         expect(label.includes('🔮'), label).toBe(haul.summonStones > 0);
         expect(label.includes('🗝️'), label).toBe(false);
+        // ⚜️ Camp et repaire laissent des sceaux d'objet (`mapGearSeals`) : la carte le dit.
+        expect(label, label).toContain('⚜️');
+        expect(label.includes('%'), label).toBe(mapGearSeals(type, 0.99, 30) === null);
         expect(label).not.toContain('🔩');
         expect(label).not.toContain('🧩');
         expect(label).not.toContain('pièce');

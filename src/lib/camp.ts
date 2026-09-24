@@ -12,7 +12,7 @@
 // demande nettement plus que trois aventuriers, et rien ne borne la taille du groupe.
 // ⚠️ AUCUNE FERRAILLE : elle ne vient plus que de l'épave et de la Fonderie (v0.856 : retirée
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
-import { mapGearSeals } from './ascension';
+import { CAMP_GEAR_SEAL_CHANCE, mapGearSeals } from './ascension';
 import { mulberry32 } from './combat';
 import { forceShare } from './poiDifficulty';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
@@ -256,7 +256,12 @@ export function campRewardLabel(poi: Poi): string {
       : spec.faction === 'bandits'
         ? 'or 🪙 en quantité'
         : 'or 🪙';
-  return poi.type === 'lair' ? `${devise} + sceau d’objet ⚜️` : devise;
+  // ⚜️ Camp et repaire laissent leurs sceaux d'objet (`mapGearSeals`) ; la chance ne s'annonce
+  // que si elle n'est pas certaine.
+  const sure = poi.type === 'lair' || CAMP_GEAR_SEAL_CHANCE >= 1;
+  return sure
+    ? `${devise} + sceaux d’objet ⚜️`
+    : `${devise} + sceaux d’objet ⚜️ (${Math.round(CAMP_GEAR_SEAL_CHANCE * 100)} % de chance)`;
 }
 
 /** Le récit : qui abat qui, borné. */
@@ -364,7 +369,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
         gold: Math.round(full.gold * retreat),
         summonStones: Math.round(full.summonStones * retreat),
       };
-  // ⚜️ Un REPAIRE pris laisse un sceau d'objet, un CAMP une fois sur deux (v0.1138). ⚠️ Tirage
+  // ⚜️ Un REPAIRE ou un CAMP pris laisse ses sceaux d'objet (camp : `CAMP_GEAR_SEAL_CHANCE`). ⚠️ Tirage
   // sur un générateur À PART : le combat et le butin gardent leurs valeurs seedées.
   const seals =
     d.win && (poi.type === 'lair' || poi.type === 'camp')
