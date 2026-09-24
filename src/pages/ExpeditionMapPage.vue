@@ -1003,11 +1003,17 @@ const contH = ref(1);
 const MIN_PX = 340;
 const MAX_PX = 1700;
 const ZOOM_STEP = 200; // 1 cran de zoom (± via les boutons +/−)
+/** Dézoom maximal : la carte (carrée) couvre toujours le cadre en largeur ET en hauteur.
+ *  En dessous, un bandeau vide apparaissait sous la carte (demandé par l'utilisateur). */
+const minPx = computed(() => Math.max(MIN_PX, contW.value, contH.value));
+const clampPx = (px: number) => Math.max(minPx.value, Math.min(MAX_PX, px));
 function measure() {
   const el = scrollEl.value;
   if (!el) return;
   contW.value = el.clientWidth;
   contH.value = el.clientHeight;
+  // Le cadre peut grandir (rotation, rangée de voyages qui disparaît) : on rattrape.
+  if (mapPx.value < minPx.value) mapPx.value = minPx.value;
 }
 function onScroll() {
   const el = scrollEl.value;
@@ -1033,7 +1039,7 @@ function zoom(dir: number) {
   // Fraction du centre du viewport (0..1) → on la conserve après le zoom.
   const cx = ((el?.scrollLeft ?? 0) + contW.value / 2) / mapPx.value;
   const cy = ((el?.scrollTop ?? 0) + contH.value / 2) / mapPx.value;
-  mapPx.value = Math.max(MIN_PX, Math.min(MAX_PX, mapPx.value + dir * ZOOM_STEP));
+  mapPx.value = clampPx(mapPx.value + dir * ZOOM_STEP);
   void nextTick(() => centerOn(V.min + cx * V.size, V.min + cy * V.size));
 }
 
@@ -1063,7 +1069,7 @@ function onTouchMove(e: TouchEvent) {
   if (!el || !pinch || e.touches.length !== 2) return;
   e.preventDefault();
   const g = touchGeometry(e);
-  const r = pinchUpdate(pinch, g.dist, g.midX, g.midY, MIN_PX, MAX_PX);
+  const r = pinchUpdate(pinch, g.dist, g.midX, g.midY, minPx.value, MAX_PX);
   mapPx.value = r.px;
   // Après le redimensionnement du SVG : sinon le défilement est borné à l'ANCIENNE taille.
   void nextTick(() => {
@@ -2197,10 +2203,7 @@ onMounted(async () => {
   // l'Avant-poste, un zoom fixe montrerait un tout petit disque en début de partie),
   // puis UN CRAN de plus (demandé par l'utilisateur : le disque entier était un cran trop
   // dézoomé — on voit la ville et ses abords, le reste se trouve en faisant glisser ou au −).
-  mapPx.value = Math.max(
-    MIN_PX,
-    Math.min(MAX_PX, Math.round((contW.value * V.size) / (2 * (reveal.value + 6))) + ZOOM_STEP),
-  );
+  mapPx.value = clampPx(Math.round((contW.value * V.size) / (2 * (reveal.value + 6))) + ZOOM_STEP);
   await nextTick();
   centerTown();
   window.addEventListener('resize', measure);
