@@ -29,6 +29,7 @@ import {
   campSpecOf,
   buildMessage,
   depositMessages,
+  dropSeenMessages,
   MESSAGES_CAP,
   keepMessages,
   type ActiveExpedition,
@@ -615,6 +616,19 @@ describe('📬 le rapport de groupe et la boîte', () => {
     });
     it('📬 la boîte garde les 3 derniers rapports', () => {
       expect(MESSAGES_CAP).toBe(3);
+    });
+    it('📬 à la fermeture, les messages vus partent — sauf un butin à prendre', () => {
+      const box = [
+        base('lu', true), // encaissé
+        base('legacy'), // claimed absent = déjà crédité
+        base('attend', false), // récompense à prendre : reste
+        base('neuf', true), // arrivé après l'affichage : pas vu, reste
+      ];
+      const out = dropSeenMessages(box, new Set(['lu', 'legacy', 'attend']));
+      expect(out.map((m) => m.id)).toEqual(['attend', 'neuf']);
+      // Rien à retirer : la MÊME référence (le store n'écrit pas à vide).
+      expect(dropSeenMessages(out, new Set(['attend']))).toBe(out);
+      expect(dropSeenMessages(box, new Set())).toBe(box);
     });
   });
 

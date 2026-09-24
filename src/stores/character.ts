@@ -87,6 +87,7 @@ import {
   isWarbandPoi,
   campSpecOf,
   depositMessages,
+  dropSeenMessages,
   MESSAGES_CAP,
   isClaimable,
   createMap,
@@ -2102,6 +2103,17 @@ export const useCharacterStore = defineStore('character', () => {
     useGameFx().celebrateTickets(ent(m.tickets), m.title ?? 'Coffre encaissé');
     return { ...m, advProgress, advTracks };
   }
+  /** 📬 Fermeture de la boîte : retire les messages vus, sauf un butin à prendre
+   *  (`dropSeenMessages`). La boîte part de `boxWith` : un encaissement PARTI (pas encore
+   *  relu du serveur) y est déjà `claimed`, donc retirable. */
+  async function expeDropSeen(userId: string, seen: ReadonlySet<string>) {
+    const cur = row.value;
+    if (!cur || !seen.size) return;
+    const box = boxWith(cur, [], MESSAGES_CAP);
+    const next = dropSeenMessages(box, seen);
+    if (next === cur.messages) return;
+    await persist(userId, { messages: next });
+  }
   async function expeMarkRead(userId: string) {
     const cur = row.value;
     if (!cur || !cur.messages.some((m) => !m.read)) return;
@@ -2994,6 +3006,7 @@ export const useCharacterStore = defineStore('character', () => {
     grantFriendBossChest,
     expeClaim,
     expeMarkRead,
+    expeDropSeen,
     buildFilon,
     upgradeFilon,
     collectFilons,

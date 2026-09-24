@@ -1773,11 +1773,11 @@
 
     <!-- Boîte à messages 📬 : rapports d'expédition -->
     <transition name="salv-fade">
-      <div v-if="inboxOpen" class="shop-backdrop" @click.self="inboxOpen = false">
+      <div v-if="inboxOpen" class="shop-backdrop" @click.self="closeInbox">
         <div class="shop-card">
           <div class="shop-head">
             <div class="shop-title font-display">📬 Messages</div>
-            <button class="shop-x" aria-label="Fermer" @click="inboxOpen = false">✕</button>
+            <button class="shop-x" aria-label="Fermer" @click="closeInbox">✕</button>
           </div>
           <div class="inbox-list">
             <div v-if="!inboxMessages.length" class="inbox-empty">
@@ -5470,6 +5470,14 @@ function openInbox() {
   inboxOpen.value = true;
   const uid = auth.user?.id;
   if (uid) void char.expeMarkRead(uid);
+}
+/** 📬 En fermant, les messages VUS sont supprimés — sauf un butin à prendre. « Vu » = ce
+ *  que la boîte affichait à l'instant de la fermeture. */
+function closeInbox() {
+  inboxOpen.value = false;
+  const uid = auth.user?.id;
+  const seen = new Set(inboxMessages.value.map((m) => m.id));
+  if (uid) void char.expeDropSeen(uid, seen);
 }
 // ── DÉFENSE DE LA BASE ──
 // Le siège se résout par HORLOGE, comme les expéditions : le tick d'une seconde suffit,

@@ -488,6 +488,21 @@ export function keepMessages(list: ExpeditionMessage[], cap: number): Expedition
   return list.filter((m, i) => i < cap || m.claimed === false);
 }
 
+/** 📬 À la FERMETURE de la boîte : les messages VUS (`seen` = ceux qu'elle affichait) sont
+ *  supprimés — SAUF ceux dont la récompense reste à prendre (`claimed === false`, héros
+ *  encore en route compris : le butin ne se périme pas). Un message arrivé pendant qu'elle
+ *  était ouverte mais pas encore affiché n'est pas `seen`, il reste.
+ *  ⚠️ Supprimer un rapport encaissé ne peut pas le faire revenir encaissable : un rapport
+ *  n'est DÉPOSÉ qu'une fois (drapeau `reported` de l'expédition et du groupe).
+ *  Rien à retirer → la MÊME référence (le store n'écrit pas à vide). */
+export function dropSeenMessages(
+  list: ExpeditionMessage[],
+  seen: ReadonlySet<string>,
+): ExpeditionMessage[] {
+  const out = list.filter((m) => !seen.has(m.id) || m.claimed === false);
+  return out.length === list.length ? list : out;
+}
+
 /**
  * 📬 DÉPOSE des rapports dans la boîte COURANTE — sans jamais dégrader un encaissement ni
  * doubler un message. SOURCE UNIQUE des écrivains de la boîte (`expeTick`, `expeSettle`,
