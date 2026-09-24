@@ -195,6 +195,8 @@ import {
 } from '@/lib/advGear';
 import {
   partySendBlocker,
+  suppliesBlocker,
+  supplyTarget,
   PARTY_SEND_BLOCK_LABEL,
   partyHeroBlocker,
   PARTY_HERO_BLOCK_LABEL,
@@ -206,6 +208,16 @@ import {
   type ActiveParty,
 } from '@/lib/party';
 import { partyWinChance } from '@/lib/partyForecast';
+import {
+  addSupplies,
+  normalizeSupplies,
+  rollSupplyDrop,
+  sealRift,
+  supplyFx,
+  takeSupplies,
+  type SupplyId,
+  type SupplyStock,
+} from '@/lib/supplies';
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
@@ -283,6 +295,8 @@ export interface CharacterRow {
    *  et non dans `gacha` : chaque tirage réécrit `gacha`, un oubli y effacerait les tickets. */
   gacha_tickets: number;
   seals: Seals; // 🔱 sceaux d'ascension (migr. 0083)
+  /** 🎒 Consommables d'expédition (migr. 0089) — gagnés en butin, emportés au départ. */
+  supplies: SupplyStock;
   scrap: number; // 🔩 LEGACY (migr. 0060) : devise retirée (v0.998), convertie en or au chargement // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
   caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
@@ -331,7 +345,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -458,6 +472,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
     r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
+    r.supplies = normalizeSupplies(r.supplies); // 🎒 migr. 0089
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
     // 🔩 → 🪙 LA FERRAILLE EST RETIRÉE (v0.998). La réserve d'un compte est convertie en
     // or, une fois, au taux de l'épave (`SCRAP_TO_GOLD`). ⚠️ Même politique que le
@@ -1829,7 +1844,7 @@ export const useCharacterStore = defineStore('character', () => {
       throw new Error('Construis un Avant-poste d’expédition pour envoyer des héros.');
     // ⚠️ Plus de coût d'envoi (v0.1069, décision de l'utilisateur).
     // Réduction de trajet selon le niveau de l'avant-poste.
-    const exp = startExpedition(
+    const started = startExpedition(
       hero,
       poi,
       now,
@@ -1837,6 +1852,11 @@ export const useCharacterStore = defineStore('character', () => {
       travelTimeMult(cur.buildings),
       level,
     );
+    // 🎒 Un consommable peut tomber de TOUT voyage (« tout partout »), tiré sur sa graine.
+    const exp = {
+      ...started,
+      outcome: { ...started.outcome, supplies: rollSupplyDrop(started.seed) },
+    };
     const baseMap =
       cur.expedition_map ??
       createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost'));
@@ -2043,6 +2063,10 @@ export const useCharacterStore = defineStore('character', () => {
         mana: cur.mana + ent(m.mana),
         // 🎟️ coffres gagnés par le sport (360, boss entre amis) → tickets d'invocation.
         gacha_tickets: cur.gacha_tickets + ent(m.tickets),
+        // 🎒 consommables trouvés en route (`rollSupplyDrop`).
+        ...(m.supplies && Object.keys(m.supplies).length
+          ? { supplies: addSupplies(cur.supplies, m.supplies) }
+          : {}),
         // 🔱 sceaux du gardien d'une faille refermée (`riftSeals`).
         ...(m.seals && m.seals.n > 0
           ? { seals: addSeals(cur.seals, m.seals.kind, m.seals.rank, m.seals.n) }
@@ -2757,7 +2781,14 @@ export const useCharacterStore = defineStore('character', () => {
   async function sendParty(
     userId: string,
     poi: Poi,
-    opts: { hero: PartyHero | null; escortIds: string[]; playerLevel: number; now: number },
+    opts: {
+      hero: PartyHero | null;
+      escortIds: string[];
+      playerLevel: number;
+      now: number;
+      /** 🎒 Les consommables emportés — un de chaque type, pris dans le stock au départ. */
+      supplies?: SupplyId[];
+    },
   ): Promise<string | null> {
     // ⚠️ Rend la RAISON d'un refus (null = parti) : un « départ impossible » générique laissait
     // deviner lequel des aventuriers, de l'or ou du héros bloquait.
@@ -2776,7 +2807,14 @@ export const useCharacterStore = defineStore('character', () => {
     // MÊME règle que l'écran (`partySendBlocker`), un seul pool avec les convois.
     // 🗡️ Ce que le groupe emmène — il faut le connaître AVANT le refus, puisque le
     // pronostic se joue avec l'équipement réellement porté.
-    const road = escortKitOf(cur);
+    // 🎒 Les consommables : utiles sur CE voyage, et bien en stock. ⚠️ Vérifiés AVANT tout :
+    // ils entrent dans le kit, donc dans le pronostic qui décide du refus « perdu d'avance ».
+    const supplies = opts.supplies ?? [];
+    const supplyBlock = suppliesBlocker(supplies, supplyTarget(poi, !!hero, escort.length));
+    if (supplyBlock) return supplyBlock;
+    const stockAfter = takeSupplies(cur.supplies, supplies);
+    if (!stockAfter) return 'un consommable choisi n’est plus en stock';
+    const road = { ...escortKitOf(cur), supplies };
     const sendBlock = partySendBlocker(
       poi,
       escort.length,
@@ -2804,6 +2842,7 @@ export const useCharacterStore = defineStore('character', () => {
       hero: !!hero,
       travelMult: travelTimeMult(cur.buildings),
       gearSpeed: advGearRoles(escort, road.advGear).speed,
+      supplies,
     });
     // ⚔️🕳️ LA DISPATCH VIT ICI, à l’UNIQUE chemin d’envoi : `startParty` ne choisit plus la
     // résolution, il REÇOIT l’issue. Un camp se résout par son combat de faction, une faille
@@ -2846,19 +2885,47 @@ export const useCharacterStore = defineStore('character', () => {
               })
             : null;
     if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
-    const trip = startParty({ poi, hero, seed }, now, leg, outcome);
+    // 🩹 La trousse agit à l'ENCAISSEMENT (la convalescence part du retour) : elle voyage donc
+    // dans le rapport. 🎒 Et un consommable peut tomber de tout voyage.
+    const healMult = supplyFx(supplies).healMult;
+    const withSupplies = {
+      ...outcome,
+      ...(outcome.party && healMult < 1 ? { party: { ...outcome.party, healMult } } : {}),
+      supplies: rollSupplyDrop(seed),
+    };
+    const trip = startParty({ poi, hero, seed }, now, leg, withSupplies);
     const busy = new Set(opts.escortIds);
     const map = cur.expedition_map
       ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
       : cur.expedition_map;
     await persist(userId, {
       expedition_map: map,
+      ...(supplies.length ? { supplies: stockAfter } : {}),
       adventurers: advList.value.map((a) =>
         busy.has(a.id) ? { ...a, busyUntil: trip.returnAt } : a,
       ),
       ...(hero
         ? { expedition: trip }
         : { parties: [...partyList.value, { ...trip, id: `party_${now.toString(36)}` }] }),
+    });
+    return null;
+  }
+
+  /** 🧿 Pose un sceau de brèche sur une faille : 24 h de répit (`sealRift`). Rend la RAISON
+   *  d'un refus, `null` si c'est fait. ⚠️ Carte et stock partent dans la MÊME écriture : un
+   *  sceau dépensé sans faille scellée (ou l'inverse) serait un objet perdu ou gratuit. */
+  async function sealRiftPoi(userId: string, poiId: string): Promise<string | null> {
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return 'la carte n’est pas chargée';
+    if ((cur.supplies.sceau ?? 0) < 1) return 'aucun sceau de brèche en stock';
+    const poi = map.pois.find((p) => p.id === poiId);
+    const sealed = poi ? sealRift(poi) : null;
+    if (!sealed) return poi?.sealed ? 'cette faille est déjà scellée' : 'ce n’est pas une faille';
+    const stock = takeSupplies(cur.supplies, ['sceau'])!;
+    await persist(userId, {
+      supplies: stock,
+      expedition_map: { ...map, pois: map.pois.map((p) => (p.id === poiId ? sealed : p)) },
     });
     return null;
   }
@@ -2947,6 +3014,7 @@ export const useCharacterStore = defineStore('character', () => {
     pantheonLevel,
     comptoirLevel,
     claimCaravan,
+    sealRiftPoi,
     partyList,
     sendParty,
     partyTick,

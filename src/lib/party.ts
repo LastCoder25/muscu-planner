@@ -17,9 +17,12 @@
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
 import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
 import { sinceEvent } from './sinceEvent';
-import { supplyFx, type SupplyId } from './supplies';
+import { supplyFx, supplyUselessWhy, SUPPLIES, type SupplyId, type SupplyTarget } from './supplies';
 import {
   PARTY_TARGETS,
+  isRiftPoi,
+  isWarbandPoi,
+  poiForceOf,
   buildMessage,
   depositMessages,
   poiTravelLevel,
@@ -51,6 +54,28 @@ export function partyLegMin(
     ? caravanLegMin(poi, escort, opts.gearSpeed + speed, opts.travelMult)
     : 0;
   return Math.max(1, hero, advs);
+}
+
+/** 🎒 Ce que ce voyage offre aux consommables (`supplyUselessWhy`). ⚠️ Vit ICI et non dans
+ *  `supplies.ts` : il lit `poiForceOf`, et `expedition.ts` importe déjà `supplies.ts`. */
+export function supplyTarget(poi: Poi, hero: boolean, escort: number): SupplyTarget {
+  return {
+    type: poi.type,
+    fights: isRiftPoi(poi) || isWarbandPoi(poi) || !!poiForceOf(poi),
+    hero,
+    escort,
+  };
+}
+
+/** Pourquoi on ne peut pas emporter ces consommables sur ce voyage — `null` s'ils servent
+ *  tous. ⚠️ SOURCE UNIQUE de l'écran (tuile grisée et sa raison) et du store (refus). */
+export function suppliesBlocker(ids: readonly SupplyId[], t: SupplyTarget): string | null {
+  if (new Set(ids).size !== ids.length) return 'un consommable est choisi deux fois';
+  for (const id of ids) {
+    const why = supplyUselessWhy(id, t);
+    if (why) return `${SUPPLIES[id].name} : ${why}`;
+  }
+  return null;
 }
 
 /**
