@@ -675,7 +675,7 @@ export const TROPHY_POWERS: TrophyPowerDef[] = [
     emoji: '⛰️',
     voie: 'colosse',
     quest: 'encaisser des coups',
-    effect: `le prochain coup ennemi est étalé sur ${TROPHY.spreadTurns} tours`,
+    effect: `tu récupères ${Math.round(TROPHY.patienceShare * 100)} % des PV perdus pendant la quête`,
   },
   {
     id: 'desarmer',

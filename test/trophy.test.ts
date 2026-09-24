@@ -323,8 +323,8 @@ describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
 });
 
 describe('🏆 quête — ce que le texte promet est ce que le combat fait', () => {
-  it('TROPHY.spreadTurns est ce que « étaler » annonce', () => {
+  it('TROPHY.patienceShare est ce que « Longue patience » annonce', () => {
     const etaler = TROPHY_POWERS.find((p) => p.id === 'etaler')!;
-    expect(etaler.effect).toContain(String(TROPHY.spreadTurns));
+    expect(etaler.effect).toContain(`${Math.round(TROPHY.patienceShare * 100)} %`);
   });
 });

@@ -115,22 +115,25 @@ describe('🏆 chaque pouvoir fait ce qu’il annonce', () => {
     expect(fired[0]!.monsterPv).toBeLessThan(log[i - 1]!.monsterPv); // tout pour l'ennemi
   });
 
-  it('⛰️ Longue patience : le coup est ÉTALÉ sur trois tours', () => {
-    const p = hero({ trophy: quest('etaler', 2), pv: 400000, damage: 1 });
+  it('⛰️ Longue patience : rend une part de ce qui a été ENCAISSÉ pendant la quête', () => {
+    const p = hero({ trophy: quest('etaler', 3), pv: 400000, damage: 1 });
     const cible = foe({ pv: 400000, damage: 600 });
     const log = run(p, cible).log;
-    const parts = log.filter((e) => e.skills?.length === 1 && e.skills[0] === 'tr_etaler');
-    expect(parts.length).toBeGreaterThanOrEqual(TROPHY.spreadTurns - 1);
-    // ⚠️ CE QUI DISTINGUE L'ÉTALEMENT : un coup étalé se paie en PLUSIEURS fois. Sans
-    // répartition, le pouvoir marquerait le coup mais n'ajouterait aucune échéance.
-    const echeances = (t?: Combatant['trophy']) =>
-      run({ ...p, trophy: t }, cible).log.filter((e) => e.who === 'monster' && e.damage > 0).length;
-    expect(echeances(p.trophy)).toBeGreaterThan(echeances(undefined));
-    // Chaque part est une FRACTION : plus petite que le coup plein qui l'a déclenchée.
-    const plein = run({ ...p, trophy: undefined }, cible).log.find(
-      (e) => e.who === 'monster' && e.damage > 0,
-    )!;
-    expect(parts[0]!.damage).toBeLessThan(plein.damage);
+    const soins = log.filter((e) => e.skills?.includes('tr_etaler'));
+    expect(soins.length).toBeGreaterThan(1);
+    // Le soin vaut EXACTEMENT la part de ce que les coups de la quête ont retiré.
+    let depuis = 0; // index du début de la quête en cours
+    for (const e of soins) {
+      const i = log.indexOf(e);
+      const coups = log.slice(depuis, i + 1).filter((x) => x.who === 'monster' && x.damage > 0);
+      const encaisse = coups.reduce((t, x) => t + x.damage, 0);
+      const avant = log[i - 1]!.playerPv;
+      expect(e.playerPv - (avant - e.damage)).toBe(Math.round(encaisse * TROPHY.patienceShare));
+      depuis = i + 1;
+    }
+    // ⚠️ Le soin est un VRAI gain : sans trophée, on finit plus bas.
+    const fin = (t?: Combatant['trophy']) => run({ ...p, trophy: t }, cible).log.at(-1)!.playerPv;
+    expect(fin(p.trophy)).toBeGreaterThan(fin(undefined));
   });
 
   it('🪶 Désarmement : il se DÉCLENCHE là où la quête tombe, riposte ou pas', () => {

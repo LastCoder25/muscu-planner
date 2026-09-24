@@ -65,8 +65,10 @@ export interface TrophyQuest {
 /** 🏆 Réglages des pouvoirs de trophée. ⚠️ Aucun ne consomme de `rng` : sans trophée, un
  *  combat seedé reste identique au bit près (test d'empreinte). */
 export const TROPHY = {
-  /** « Étaler » : le coup encaissé est réparti sur ce nombre de tours ennemis. */
-  spreadTurns: 3,
+  /** « Longue patience » : quand la quête s'accomplit, le héros récupère cette part de ce
+   *  qu'il a encaissé PENDANT la quête (v0.1146 ; remplace l'étalement d'un coup sur trois
+   *  tours, contre-intuitif : le total ne changeait pas). */
+  patienceShare: 0.2,
   /** « Achever » et « Déchaîner » sur un héros qui ne porte NI exécution NI rage : le trophée
    *  vaut quand même quelque chose (sinon un Berserker sans rage n'aurait aucun pouvoir). */
   executeMult: 0.6,
@@ -862,8 +864,7 @@ export function simulateCombat(
   const questStep = quest?.fast ? 2 : 1;
   let questAt = 0; // gestes accomplis depuis la dernière fois
   let armed: TrophyPowerId | null = null; // pouvoir prêt à se déclencher
-  let spread = 0; // « étaler » : dégâts en attente, versés au fil des tours ennemis
-  let spreadLeft = 0;
+  let questTaken = 0; // « Longue patience » : PV perdus depuis le début de la quête
   let extraTurn = false; // « accélérer » : le héros rejoue
   let questDone = false; // une quête vient de s'accomplir → à marquer sur le prochain coup
   let justHit = false; // le héros vient d'encaisser : son prochain tour est une contre-attaque
@@ -881,6 +882,8 @@ export function simulateCombat(
       stunNext = true;
       armed = null;
     }
+    // « Longue patience » aussi : le soin tombe au coup qui l'accomplit (au site du coup).
+    if (quest.id === 'etaler') armed = null;
     return true;
   };
   // Parade : l'ennemi sautera son prochain tour. ⚠️ Jamais deux de suite, et SANS garde :
@@ -979,22 +982,6 @@ export function simulateCombat(
     const atk = turn === 'player' ? player : monster;
     const def = turn === 'player' ? monster : player;
     if (turn === 'monster') {
-      // 🏆 « Étaler » : le coup encaissé se paie en trois fois, un tiers par tour ennemi.
-      if (spreadLeft > 0) {
-        const part = Math.max(1, Math.round(spread / TROPHY.spreadTurns));
-        spreadLeft--;
-        pPv = Math.max(0, pPv - part);
-        push({
-          round,
-          who: 'monster',
-          type: 'hit',
-          damage: part,
-          playerPv: pPv,
-          monsterPv: mPv,
-          skills: ['tr_etaler'],
-        });
-        if (pPv <= 0) break;
-      }
       // Saignement : une part de la réserve tombe au début de chaque tour ennemi.
       if (bleedPool > 0) {
         const tick = Math.max(1, Math.round(bleedPool / COMBAT.bleedTicks));
@@ -1415,12 +1402,6 @@ export function simulateCombat(
             dmg = 0;
             armed = null;
             mark('tr_renvoyer');
-          } else if (armed === 'etaler') {
-            spread = dmg;
-            spreadLeft = TROPHY.spreadTurns - 1;
-            dmg = Math.max(1, Math.round(dmg / TROPHY.spreadTurns));
-            armed = null;
-            mark('tr_etaler');
           }
         }
         // Barrière de départ : elle encaisse avant les PV.
@@ -1432,7 +1413,16 @@ export function simulateCombat(
         }
         pPv = Math.max(0, pPv - dmg);
         if (dmg > 0) {
-          questDone ||= questTick('etaler');
+          // ⛰️ Longue patience : on tient, puis on se relève d'une part de ce qu'on a encaissé.
+          if (quest?.id === 'etaler') questTaken += pBefore - pPv;
+          if (questTick('etaler')) {
+            questDone = true;
+            if (pPv > 0) {
+              pPv = Math.min(maxPPv, pPv + Math.round(questTaken * TROPHY.patienceShare));
+              mark('tr_etaler');
+            }
+            questTaken = 0;
+          }
           questDone ||= questTick('desarmer');
           if (!def.thorns) questDone ||= questTick('renvoyer'); // sans épines : encaisser suffit
           justHit = true; // le prochain tour du héros sera une contre-attaque
