@@ -26,6 +26,12 @@ import {
 import { caravanSlots, championOutpostMult } from './caravan';
 import { altarLuckBonus } from './items';
 
+/** Une pastille d'aperçu. `teams` = le nombre d'expéditions en parallèle (couleur à part). */
+export interface PreviewBit {
+  text: string;
+  tone?: 'teams';
+}
+
 export interface LevelPreview {
   level: number;
   /** Ce que le bâtiment vaut À CE NIVEAU. */
@@ -33,7 +39,7 @@ export interface LevelPreview {
   /** Ce niveau apporte-t-il un PALIER, et non une simple continuation ? */
   milestone?: boolean;
   /** Les bonus un par un, quand l'écran les montre en pastilles (Avant-poste). */
-  bits?: string[];
+  bits?: PreviewBit[];
 }
 
 const one = (typeId: BuildingTypeId, level: number): Building[] => [
@@ -68,7 +74,9 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
       // niveaux). Tous DÉRIVÉS des fonctions du jeu.
       // ⚠️ Le NOMBRE de lieux n'est plus annoncé par niveau (demandé) : la fiche dit une
       // fois, au-dessus de l'aperçu, que la carte grandit à chaque niveau (`previewNote`).
-      return outpostBits(level).join(' · ');
+      return outpostBits(level)
+        .map((b) => b.text)
+        .join(' · ');
     }
     case 'labyrinth_gate':
       return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);
@@ -85,13 +93,13 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
 }
 
 /** Les bonus de l'Avant-poste à un niveau, un par pastille (demandé : « un par ligne »). */
-function outpostBits(level: number): string[] {
+function outpostBits(level: number): PreviewBit[] {
   const n = caravanSlots(level);
   const hero = travelTimeMult(one('outpost', level));
   return [
-    `−${pct(1 - hero)} de trajet (héros)`,
-    `−${pct(1 - championOutpostMult(hero))} de trajet (champions)`,
-    `${n} équipe${n > 1 ? 's' : ''} en parallèle`,
+    { text: `−${pct(1 - hero)} de trajet (héros)` },
+    { text: `−${pct(1 - championOutpostMult(hero))} de trajet (champions)` },
+    { text: `${n} équipe${n > 1 ? 's' : ''} en parallèle`, tone: 'teams' },
   ];
 }
 

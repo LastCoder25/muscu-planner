@@ -33,6 +33,10 @@ describe('aperçu des prochains niveaux d’un bâtiment', () => {
   it('Avant-poste : un bonus par pastille, et plus de nombre de lieux', () => {
     const r = buildingPreview('outpost', 9, 0)[0]!;
     expect(r.bits).toHaveLength(3);
+    // Le nombre d'expéditions a sa propre couleur : une seule pastille le porte.
+    expect(r.bits!.filter((b) => b.tone === 'teams').map((b) => b.text)).toEqual([
+      `${caravanSlots(9)} équipe${caravanSlots(9) > 1 ? 's' : ''} en parallèle`,
+    ]);
     expect(r.text).not.toMatch(/lieux|failles/);
     expect(previewNote('outpost')).toMatch(/carte grandit/);
     expect(previewNote('pantheon')).toBeNull();
