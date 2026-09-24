@@ -3045,6 +3045,7 @@ import { useBossTokenAccrual } from '@/composables/useBossTokenAccrual';
 import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useAdvProgressFx } from '@/composables/useAdvProgressFx';
+import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import type { AdvProgress } from '@/lib/adventurers';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
@@ -3244,6 +3245,7 @@ const progress = useProgress();
 useBossTokenAccrual(); // 🎫 jetons de boss gagnés par le sport
 const gameFx = useGameFx();
 const advFx = useAdvProgressFx();
+const advXpFx = useAdvXpFx();
 // Explication « rang » / « qualité » (ouverte en cliquant le pastille de rang ou le
 // chiffre de qualité d'un objet — ticket d094eac6). Les 10 rangs pour l'échelle visuelle.
 // ⚠️ C'était `'rank' | 'quality' | null`, mais RIEN ne posait jamais `'quality'` : la moitié
@@ -5613,7 +5615,7 @@ async function doClaimMsg(m: ExpeditionMessage) {
   if (!uid) return;
   const done = await char.expeClaim(uid, m.id, Date.now());
   if (!done) return;
-  advFx.announce(done.advProgress);
+  advXpFx.show(done.advTracks);
   const haul = haulPills(done)
     .map((h) => `${h.emoji} +${h.n}`)
     .join(' · ');

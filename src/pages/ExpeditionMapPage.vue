@@ -714,7 +714,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
-import { useAdvProgressFx } from '@/composables/useAdvProgressFx';
+import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
@@ -833,7 +833,7 @@ const auth = useAuthStore();
 const char = useCharacterStore();
 const progress = useProgress();
 const gameFx = useGameFx();
-const advFx = useAdvProgressFx();
+const advXpFx = useAdvXpFx();
 
 const TOWN = EXPE.town;
 /** La ville en miniature = l'enceinte de la Base (octogone décalé d'un demi-pas : pans
@@ -1731,14 +1731,17 @@ async function doClaimCaravan(id: string) {
   busyCaravan.value = true;
   try {
     // ⚠️ Une liste VIDE vaut « encaissé » (elle est truthy) ; c'est `null` qui dit l'échec.
-    const events = await char.claimCaravan(uid, id);
-    if (!events) return;
+    const claimed = await char.claimCaravan(uid, id);
+    if (!claimed) return;
+    const { events, tracks } = claimed;
     reportStars.value = events.filter((e) => e.to > e.from).map((e) => e.id);
     reportId.value = id;
     // ⚠️ LE NIVEAU D'UN AVENTURIER EST CACHÉ : sans cette annonce, une étoile gagnée en
     // convoi ne se verrait qu'en rouvrant la Guilde pour y lire une barre. C'est le seul
     // retour qu'il ait sur des semaines de voyages.
-    advFx.announce(events);
+    // 📊 La barre d’étoile de chaque membre, avant → après : elle porte aussi les étoiles et
+    // les rangs gagnés, donc elle remplace l’annonce seule (qui ne jouait rien entre deux).
+    advXpFx.show(tracks, "Retour de convoi");
   } finally {
     busyCaravan.value = false;
   }
@@ -2059,7 +2062,7 @@ async function doClaim() {
   const done = await char.expeClaim(uid, m.id, Date.now());
   collectOpen.value = false;
   if (!done) return;
-  advFx.announce(done.advProgress);
+  advXpFx.show(done.advTracks);
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
   const rk = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK] ?? 0;
   const top = drops.slice().sort((a, b) => rk(b.rarity) - rk(a.rarity))[0];

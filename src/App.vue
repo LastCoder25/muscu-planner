@@ -3,6 +3,7 @@
   <VersionBadge />
   <GameFxOverlay />
   <XpGainOverlay />
+  <AdvXpGainOverlay />
   <GoldGainOverlay />
   <!-- ⚠️ Ce projet déploie plusieurs fois par jour : un onglet resté ouvert fait
        tourner l'ANCIEN code indéfiniment, et un correctif livré est alors signalé
@@ -18,6 +19,7 @@ import { onMounted } from 'vue';
 import VersionBadge from '@/components/VersionBadge.vue';
 import GameFxOverlay from '@/components/GameFxOverlay.vue';
 import XpGainOverlay from '@/components/XpGainOverlay.vue';
+import AdvXpGainOverlay from '@/components/AdvXpGainOverlay.vue';
 import GoldGainOverlay from '@/components/GoldGainOverlay.vue';
 import { useBodyReminder } from '@/composables/useBodyReminder';
 import { useChallengeReminder } from '@/composables/useChallengeReminder';

@@ -151,6 +151,8 @@ import {
 import {
   advAvailable,
   advProgressOf,
+  advXpTracks,
+  type AdvXpTrack,
   type AdvProgress,
   advRarity,
   grantAdvXp,
@@ -1995,6 +1997,9 @@ export const useCharacterStore = defineStore('character', () => {
     // ⭐ Ce que la mission a changé pour le GROUPE — étoiles, rang, « prêt pour l'ascension ».
     // Les convois l'annonçaient depuis la v0.794 ; les camps et les failles, jamais.
     let advProgress: AdvProgress[] = [];
+    // 📊 La barre d’étoile AVANT → APRÈS de chaque membre : l’annonce d’étoile ne jouait rien
+    // pour un gain qui reste entre deux étoiles — le cas le plus fréquent.
+    let advTracks: AdvXpTrack[] = [];
     if (party) {
       const claim = partyClaimRoster(party, advList.value, {
         pantheonLevel: pantheonLevel.value,
@@ -2006,6 +2011,7 @@ export const useCharacterStore = defineStore('character', () => {
       });
       wages = claim.wages;
       advProgress = advProgressOf(advList.value, claim.adventurers);
+      advTracks = advXpTracks(advList.value, claim.adventurers);
       partyPatch = {
         adventurers: claim.adventurers,
         ...gearTrainedPatch(cur, advList.value, claim.adventurers),
@@ -2055,7 +2061,7 @@ export const useCharacterStore = defineStore('character', () => {
     }
     // 🎟️ Après l'écriture : une animation ne doit jamais annoncer un gain qui n'a pas eu lieu.
     useGameFx().celebrateTickets(ent(m.tickets), m.title ?? 'Coffre encaissé');
-    return { ...m, advProgress };
+    return { ...m, advProgress, advTracks };
   }
   async function expeMarkRead(userId: string) {
     const cur = row.value;
@@ -2694,7 +2700,7 @@ export const useCharacterStore = defineStore('character', () => {
    *  ⚠️ Un booléen ne suffisait plus : le niveau d’un aventurier est CACHÉ, donc une
    *  étoile gagnée en convoi ne se voyait qu’en rouvrant la Guilde. L’écran a besoin
    *  du AVANT/APRÈS pour l’annoncer — et c’est la LIB qui compare, pas lui.
-   *  ⚠️ Une liste VIDE reste « encaissé avec succès » (elle est truthy) : c’est `null`
+   *  Rend `{ events, tracks }` (annonces d’étoile + barres avant/après) ; c’est `null`
    *  qui dit l’échec. */
   async function claimCaravan(userId: string, caravanId: string) {
     const cur = row.value;
@@ -2732,7 +2738,7 @@ export const useCharacterStore = defineStore('character', () => {
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
     if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
-    return advProgressOf(before, advs);
+    return { events: advProgressOf(before, advs), tracks: advXpTracks(before, advs) };
   }
 
   /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et
