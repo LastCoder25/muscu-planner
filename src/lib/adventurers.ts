@@ -1413,7 +1413,16 @@ export function advStats(adv: Adventurer): {
   // 🏅 Un champion n'a pas de chemin à cumuler : sa rareté DIT son budget, sa forme le
   // répartit, et ses doublons le multiplient. Même courbe de niveau, quelques lignes plus bas.
   const champ = advChampion(adv);
-  if (champ) return championStats(champ, adv.level, adv.copies ?? 1);
+  if (champ) {
+    const st = championStats(champ, adv.level, adv.copies ?? 1);
+    const k = advAscensionMult(adv);
+    if (k === 1) return st;
+    return {
+      puissance: Math.round(st.puissance * k),
+      endurance: Math.round(st.endurance * k),
+      agilite: Math.round(st.agilite * k),
+    };
+  }
   let p = 0;
   let e = 0;
   let a = 0;
@@ -2127,6 +2136,23 @@ export function advAscendedRank(adv: Adventurer): number {
   const last = CHARACTER_RANKS.length - 1;
   const r = adv.ascended ?? characterRank(Math.max(1, adv.level)).rankIndex;
   return Math.max(0, Math.min(last, Math.floor(r)));
+}
+
+/** ⬆️ Ce qu'une ascension ajoute aux STATS : +5 % par rang ouvert au-delà de Bronze.
+ *  ⚠️ Sans lui, l'ascension ne changeait RIEN au clic (le rang ne pesait pas dans les stats,
+ *  seul le niveau le fait) — un bouton payé en or et en sceaux dont l'écran « avant → après »
+ *  montrait des chiffres identiques (signalé : « l'upgrade est fade »). Rendu visible et
+ *  immédiat, il reste modeste : un niveau d'aventurier vaut ~+15 % de stats de base.
+ *  ⚠️ Les champions de RÉFÉRENCE (`ref:…`) n'en reçoivent PAS : ce sont les étalons sur
+ *  lesquels routes, camps, failles et sièges sont calibrés — le bonus est un vrai gain pour
+ *  le joueur, sans déplacer la difficulté (décision de l'utilisateur : « sans changer le
+ *  reste »). */
+export const ASCENSION_STAT_STEP = 0.05;
+export function advAscensionMult(adv: Adventurer): number {
+  if (!adv.championId || adv.championId.startsWith('ref:')) return 1;
+  // ⚠️ COMPOSÉ, pas additif : additif, le saut d'une ascension fondait avec le rang (mesuré
+  // +5,7 % à la première, +3,6 % à la neuvième). Composé, chaque clic vaut bien +5 %.
+  return Math.pow(1 + ASCENSION_STAT_STEP, advAscendedRank(adv));
 }
 
 /** Le niveau le plus haut que son ascension lui permet : le ★5 du rang ouvert (niveau 10,

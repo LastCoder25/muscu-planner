@@ -17,6 +17,7 @@ import {
   advAvailable,
   advAvatar,
   advStats,
+  advAscensionMult,
   advUnavailableReason,
   engageCap,
   advTitle,
@@ -33,6 +34,17 @@ function asAdv(c: Champion, level: number, copies = 1): Adventurer {
 }
 
 /** Un S et un A du roster (les noms restent ceux d'avant la refonte : le haut et le bas). */
+/** Les stats d'un champion, × le bonus d'ascension de son rang ouvert (+5 %/rang). */
+function statsOf(a: Adventurer, c: Champion) {
+  const st = championStats(c, a.level, a.copies ?? 1);
+  const k = advAscensionMult(a);
+  return {
+    puissance: Math.round(st.puissance * k),
+    endurance: Math.round(st.endurance * k),
+    agilite: Math.round(st.agilite * k),
+  };
+}
+
 const primordial = championsOf('S')[0]!;
 const commun = championsOf('A')[0]!;
 
@@ -63,7 +75,7 @@ describe('🏅 un champion à la place d’un aventurier', () => {
   it('ses STATS sont celles du champion, pas un cumul de classes', () => {
     for (const L of [1, 20, 60, 100]) {
       for (const c of [commun, primordial]) {
-        expect(advStats(asAdv(c, L))).toEqual(championStats(c, L, 1));
+        expect(advStats(asAdv(c, L))).toEqual(statsOf(asAdv(c, L), c));
       }
     }
   });
@@ -157,7 +169,7 @@ describe('⚠️ LES DEUX TROUS QUE LA MUTATION A RÉVÉLÉS', () => {
     // transmis » survivait : un champion éveillé aurait eu les stats d'un champion nu.
     for (const copies of [2, 4, AWAKEN.max + 1]) {
       const a = asAdv(primordial, 60, copies);
-      expect(advStats(a)).toEqual(championStats(primordial, 60, copies));
+      expect(advStats(a)).toEqual(statsOf(a, primordial));
       const nu = advStats(asAdv(primordial, 60, 1));
       expect(advStats(a).puissance).toBeGreaterThan(nu.puissance);
     }
@@ -348,5 +360,40 @@ describe('🏷️ le nom d’un champion suit le roster', () => {
     expect(syncChampionName(legacy)).toBe(legacy);
     const gone = { ...base, name: 'Fantôme', championId: 'nexiste-pas' };
     expect(syncChampionName(gone)).toBe(gone);
+  });
+});
+
+describe('⬆️ UNE ASCENSION SE VOIT DANS LES STATS (+5 % par rang ouvert)', () => {
+  const at = (c: Champion, level: number, ascended: number): Adventurer => ({
+    ...asAdv(c, level),
+    ascended,
+  });
+  const total = (a: Adventurer) => {
+    const s = advStats(a);
+    return s.puissance + s.endurance + s.agilite;
+  };
+
+  it('chaque clic vaut ~+5 %, composé (le saut ne fond pas avec le rang)', () => {
+    for (let r = 0; r < 9; r++) {
+      expect(advAscensionMult(at(primordial, 10 * r + 10, r + 1))).toBeCloseTo(
+        advAscensionMult(at(primordial, 10 * r + 10, r)) * 1.05,
+        6,
+      );
+      const avant = total(at(primordial, 10 * r + 10, r));
+      const apres = total(at(primordial, 10 * r + 10, r + 1));
+      expect(apres).toBeGreaterThan(avant);
+    }
+    expect(advAscensionMult(at(primordial, 5, 0))).toBe(1);
+  });
+
+  it('les champions de RÉFÉRENCE n’en reçoivent pas (calibration intacte)', () => {
+    const ref = { ...at(primordial, 60, 5), championId: `ref:${primordial.id}` };
+    expect(advAscensionMult(ref)).toBe(1);
+  });
+
+  it('le ★1 d’un rang dépasse le ★5 du rang précédent, pour un S comme pour un A', () => {
+    for (const c of [primordial, commun])
+      for (let r = 1; r < 10; r++)
+        expect(total(at(c, 10 * r + 1, r))).toBeGreaterThan(total(at(c, 10 * r, r - 1)));
   });
 });
