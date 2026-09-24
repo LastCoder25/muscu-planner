@@ -20,18 +20,22 @@
          siège perdu vole le stock non ramassé). L'infirmerie, elle, reste : c'est une
          échéance propre à la base, et elle bloque le héros. -->
     <div class="bar">
-      <button
-        v-for="p in prodPills"
-        :key="p.res"
-        class="bar-chip prod"
-        :class="{ ready: p.ready > 0, full: p.full }"
-        :title="p.title"
-        :disabled="!anyReady"
-        @click="doHarvest"
-      >
-        {{ p.emoji }} {{ p.ready }}<small>/{{ p.max }}</small>
-      </button>
-      <button v-if="anyReady" class="bar-chip harvest" @click="doHarvest">🧺 Récolter</button>
+      <!-- Ressources et bouton sur UNE seule ligne (demandé) : les pastilles se partagent la
+           largeur restante, le bouton garde la sienne. -->
+      <div v-if="prodPills.length" class="bar-prod">
+        <button
+          v-for="p in prodPills"
+          :key="p.res"
+          class="bar-chip prod"
+          :class="{ ready: p.ready > 0, full: p.full }"
+          :title="p.title"
+          :disabled="!anyReady"
+          @click="doHarvest"
+        >
+          {{ p.emoji }} {{ p.ready }}<small>/{{ p.max }}</small>
+        </button>
+        <button v-if="anyReady" class="bar-chip harvest" @click="doHarvest">🧺 Récolter</button>
+      </div>
       <span v-if="!prodPills.length" class="bar-chip dim">Aucun bâtiment de production</span>
       <span v-if="wounded" class="bar-chip hurt">🤕 Héros à l’infirmerie — {{ healIn }}</span>
     </div>
@@ -641,8 +645,8 @@
     <div v-if="pushOk" class="panel push-panel">
       <div class="p-title font-display">🔔 Me prévenir</div>
       <div class="p-sub">
-        Armée repérée, assaut résolu, héros ou équipe rentrés, et ce qui bouge sur un boss
-        entre amis — même app fermée.
+        Armée repérée, assaut résolu, héros ou équipe rentrés, et ce qui bouge sur un boss entre
+        amis — même app fermée.
       </div>
       <button class="push-btn" :disabled="pushBusy" @click="togglePush">
         {{ pushOn ? 'Désactiver les notifications' : 'Activer les notifications' }}
@@ -927,8 +931,8 @@
         <div v-if="defSel.id === 'infirmary'" class="sh-garrison">
           <div class="sh-gtitle">🤕 Blessés — {{ patientCount }}</div>
           <p v-if="!patientCount" class="sh-gnote">
-            Personne n’est alité. Un siège perdu envoie ici le héros s’il défendait et les
-            champions tombés ; une expédition perdue, les champions de l’équipe.
+            Personne n’est alité. Un siège perdu envoie ici le héros s’il défendait et les champions
+            tombés ; une expédition perdue, les champions de l’équipe.
           </p>
           <div v-if="wounded" class="inf-row">
             <span class="inf-emo">🦸</span>
@@ -2004,6 +2008,25 @@ function doHarvest() {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
+}
+.bar-prod {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+.bar-prod .bar-chip {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 3px 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bar-prod .bar-chip.harvest {
+  flex: none;
+  padding: 3px 10px;
 }
 .bar-chip {
   background: var(--surface);
