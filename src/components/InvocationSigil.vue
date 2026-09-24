@@ -19,8 +19,8 @@
         dim,
         revealing,
         charging,
-        'tint-o': (tints?.medals ?? 'B') !== 'B',
-        'tint-i': (tints?.beads ?? 'B') !== 'B',
+        'tint-o': tone.o !== 'B',
+        'tint-i': tone.i !== 'B',
       },
     ]"
     :style="tintStyle"
@@ -325,7 +325,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { GRADE_COLOR } from '@/data/champions';
+import { GRADE_COLOR, type PullGrade } from '@/data/champions';
 import { drawDust, makeSprites, stepDust, type DustSource, type Grain } from '@/lib/sigilDust';
 import {
   SIGIL_ZONES,
@@ -352,10 +352,19 @@ const props = defineProps<{
 /** Le cercle en B, les médaillons en A, les boules intérieures en S — la couleur vient de
  *  `GRADE_COLOR`, la même que la lettre révélée ensuite. Elle ne s'applique qu'aux
  *  éléments ALLUMÉS (règle CSS `.on`) : avant la charge, rien ne se devine. */
+/** La lettre portée par chaque famille de boules. Un ×1 (petit cercle) n'a qu'UN résultat :
+ *  toutes ses boules prennent donc la même couleur — bleu, violet OU or, jamais un mélange. */
+const tone = computed<{ o: PullGrade; i: PullGrade }>(() => {
+  const medals = props.tints?.medals ?? 'B';
+  const beads = props.tints?.beads ?? 'B';
+  if (props.variant === 'big') return { o: medals, i: beads };
+  const one = beads !== 'B' ? beads : medals;
+  return { o: one, i: one };
+});
 const tintStyle = computed(() => ({
   '--ivs-b': GRADE_COLOR.B,
-  '--ivs-o': GRADE_COLOR[props.tints?.medals ?? 'B'],
-  '--ivs-i': GRADE_COLOR[props.tints?.beads ?? 'B'],
+  '--ivs-o': GRADE_COLOR[tone.value.o],
+  '--ivs-i': GRADE_COLOR[tone.value.i],
   '--sph-o': `url(#${uid}-sph-o)`,
   '--sph-i': `url(#${uid}-sph-i)`,
 }));
@@ -514,7 +523,7 @@ function dustSources(): DustSource[] {
   const s = (dustW / size.value) * dpr();
   const off = dustW * DUST_PAD * dpr();
   for (const b of dustBalls) {
-    const grade = b.tone === 'o' ? props.tints?.medals : props.tints?.beads;
+    const grade = tone.value[b.tone];
     if (grade !== 'A' && grade !== 'S') continue;
     if (!b.el.classList.contains('on')) continue;
     const p = b.spin?.anim.effect?.getComputedTiming().progress ?? 0;
