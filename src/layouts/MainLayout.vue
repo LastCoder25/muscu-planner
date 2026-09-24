@@ -212,7 +212,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, watch } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 // Chargés à la demande : le volet jeu n'existe qu'en cockpit → un téléphone ne
@@ -274,6 +274,12 @@ const isCockpit = computed(() => $q.screen.width >= WIDE_MIN && $q.screen.height
 const { view: gameView, cockpit } = useGamePanel();
 // Le composable ne connaît pas l'écran : on lui publie l'état du cockpit (cf. openPath).
 watch(isCockpit, (v) => (cockpit.value = v), { immediate: true });
+// ⚠️ Le volet jeu n'existe QUE sous ce layout : sur un écran plein écran (carte
+// d'expédition, Labyrinthe, séance…) le layout est démonté. Laisser `cockpit` à vrai faisait
+// croire à `openPath` qu'un volet droit attendait — il ne posait qu'un `?tab=` sur la route
+// courante, et rien ne s'ouvrait (signalé : « prêt pour l'ascension » fermait l'animation
+// sans mener nulle part).
+onUnmounted(() => (cockpit.value = false));
 const GAME_PANES = {
   aventure: AventurePage,
   'expedition-map': ExpeditionMapPage,
