@@ -92,7 +92,7 @@ export const POI_EMO: Record<PoiType, string> = {
   warband: '⚔️',
 };
 
-/** POI de récolte pure : aucun combat, on ramasse et on rentre (comme la mine). */
+/** POI de récolte : on ramasse et on rentre (comme la mine) — gardé depuis 2026-09-22 (`harvestGuardOf`). */
 export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'mine',
   'well',

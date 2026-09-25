@@ -1916,7 +1916,7 @@ function selectPoi(p: Poi) {
 // % de victoire (Monte-Carlo) contre l'adversaire du POI.
 const winPct = computed(() => {
   const p = selected.value;
-  if (!p || HARVEST_TYPES.has(p.type) || p.type === 'arena') return 100; // récolte : pas de combat
+  if (!p || HARVEST_TYPES.has(p.type) || p.type === 'arena') return 100; // récolte : ses gardes se jugent au 🎯 de l’équipe
   const foe = poiCombatant(p.level, p.type);
   let w = 0;
   for (let s = 0; s < 40; s++)
@@ -2080,13 +2080,13 @@ const roundTripMin = (p: Poi) =>
  *  pour une FAILLE et une MINE DE MANA. Ajouter un POI sans dire ce qu’il donne casse
  *  désormais la compilation, au lieu de mentir en silence. */
 const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
-  mine: () => 'Or 🪙 + énergie ⚡ (récolte)',
-  well: () => 'Énergie ⚡ en quantité (récolte, sans combat)',
-  shrine: () => "Pierres d'invocation 🔮 (récolte, sans combat)",
-  archive: () => 'Clés du Labyrinthe 🗝️ (récolte, sans combat)',
+  mine: () => 'Or 🪙 + énergie ⚡ (récolte gardée)',
+  well: () => 'Énergie ⚡ en quantité (récolte gardée)',
+  shrine: () => "Pierres d'invocation 🔮 (récolte gardée)",
+  archive: () => 'Clés du Labyrinthe 🗝️ (récolte gardée)',
   wreck: () => 'Épave (ancienne) — plus rien à démonter',
   // 💠 Ce qu’une faille laisse en s’effondrant — une récolte, bien moins que la refermer.
-  mana_mine: () => 'Mana 💠 résiduel (récolte, sans combat)',
+  mana_mine: () => 'Mana 💠 résiduel (récolte gardée)',
   // ⚔️ Camp / repaire : ce que rapporte le groupe AVEC ou SANS le héros, selon la faction
   // (règle écrite à côté de `campGroupHaul`, testée contre lui). Jamais de ferraille.
   camp: (p) => campRewardLabel(p),
