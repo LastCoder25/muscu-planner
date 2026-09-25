@@ -1904,18 +1904,25 @@ export function advRank(adv: Adventurer): CharacterRank {
   };
 }
 
-/** Des aventuriers comptés PAR RANG (`advRank`, le rang affiché partout), du plus haut au
- *  plus bas, seuls les rangs représentés. La carte s'en sert pour dire, d'un coup d'œil,
- *  quels rangs peuvent partir — c'est ce qui décide d'un lieu. */
-export function countByRank(
+/** Les effectifs PAR RANG (`advRank`, le rang de la fiche), du plus haut au plus bas, seuls
+ *  les rangs possédés : combien de ce rang PEUVENT partir (`isFree`) sur combien on en a.
+ *  La carte s'en sert pour dire d'un coup d'œil quels rangs envoyer — c'est ce qui décide
+ *  d'un lieu. `isFree` est reçu, jamais recopié : c'est la règle de l'envoi. */
+export function rankAvailability(
   advs: readonly Adventurer[],
-): { rankIndex: number; name: string; color: string; count: number }[] {
-  const by = new Map<number, { rankIndex: number; name: string; color: string; count: number }>();
+  isFree: (a: Adventurer) => boolean,
+): { rankIndex: number; name: string; color: string; free: number; total: number }[] {
+  type Row = { rankIndex: number; name: string; color: string; free: number; total: number };
+  const by = new Map<number, Row>();
   for (const a of advs) {
     const r = advRank(a);
-    const cur = by.get(r.rankIndex);
-    if (cur) cur.count++;
-    else by.set(r.rankIndex, { rankIndex: r.rankIndex, name: r.name, color: r.color, count: 1 });
+    let row = by.get(r.rankIndex);
+    if (!row) {
+      row = { rankIndex: r.rankIndex, name: r.name, color: r.color, free: 0, total: 0 };
+      by.set(r.rankIndex, row);
+    }
+    row.total++;
+    if (isFree(a)) row.free++;
   }
   return [...by.values()].sort((x, y) => y.rankIndex - x.rankIndex);
 }

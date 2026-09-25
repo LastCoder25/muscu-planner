@@ -6,30 +6,33 @@
   <component
     :is="interactive ? 'button' : 'div'"
     class="av-line"
-    :class="{ interactive }"
+    :class="{ interactive, ranked: byRank }"
     :title="title"
     :aria-label="interactive ? `${title} — ouvrir la carte d'expédition` : title"
     @click="interactive && emit('open')"
   >
     <span class="av-cell" :class="hero.tone"><span class="av-ico">🦸</span>{{ hero.label }}</span>
-    <span v-if="d.champTotal" class="av-cell" :class="{ none: !d.champFree }"
+    <span v-if="d.champTotal && !byRank" class="av-cell" :class="{ none: !d.champFree }"
       ><span class="av-ico">🏅</span>{{ d.champFree }}/{{ d.champTotal }}</span
     >
-    <!-- Par rang (sur la carte) : ce qui compte pour choisir un lieu, c'est le rang de
-         ceux qui peuvent partir. Une pastille par rang représenté, à sa couleur. -->
-    <template v-if="byRank">
-      <span
-        v-for="r in freeByRank"
-        :key="r.rankIndex"
-        class="av-rank"
-        :style="{ '--rk': r.color }"
-        :title="`${r.count} ${r.name} disponible(s)`"
-        ><span class="av-dot" />{{ r.count }}</span
-      >
-    </template>
     <span v-if="d.champHurt" class="av-cell hurt"
       ><span class="av-ico">⛑️</span>{{ d.champHurt }}</span
     >
+    <!-- 🏅 PAR RANG (sur la carte) : ce qui décide d'un lieu, c'est le rang de ceux qui
+         peuvent partir. Une pastille par rang possédé, nommée et à sa couleur : libres sur
+         le total de ce rang (blessés exclus, comptés à part). Sur leur propre ligne. -->
+    <span v-if="byRank && rankRows.length" class="av-ranks">
+      <span
+        v-for="r in rankRows"
+        :key="r.rankIndex"
+        class="av-rank"
+        :class="{ none: !r.free }"
+        :style="{ '--rk': r.color }"
+        :title="`${r.free} ${r.name} disponible(s) sur ${r.total}`"
+        ><span class="av-dot" />{{ r.name }} <b>{{ r.free }}</b
+        >/{{ r.total }}</span
+      >
+    </span>
     <span v-if="d.teamTotal" class="av-cell" :class="{ none: !d.teamFree }"
       ><span class="av-ico">🧭</span>{{ d.teamFree }}/{{ d.teamTotal }}</span
     >
@@ -40,7 +43,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useCharacterStore } from '@/stores/character';
-import { advAvailable, countByRank } from '@/lib/adventurers';
+import { advAvailable, rankAvailability } from '@/lib/adventurers';
 import { caravanSlots, convoySlotsFree } from '@/lib/caravan';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
@@ -89,10 +92,13 @@ const d = computed(() => {
   };
 });
 
-/** Champions disponibles comptés par rang (`advRank`, le rang affiché partout), du plus
- *  haut au plus bas. */
-const freeByRank = computed(() =>
-  countByRank(char.advList.filter((a) => advAvailable(a, props.now))),
+/** Champions par rang (`advRank`, le rang de la fiche), du plus haut au plus bas : libres
+ *  sur possédés, blessés exclus (ils sont comptés à part). */
+const rankRows = computed(() =>
+  rankAvailability(
+    char.advList.filter((a) => (a.hurtUntil ?? 0) <= props.now),
+    (a) => advAvailable(a, props.now),
+  ),
 );
 
 const title = computed(() => {
@@ -161,6 +167,29 @@ const title = computed(() => {
 }
 .av-cell.none {
   color: var(--dim);
+}
+/* Par rang : la ligne passe à la ligne, les rangs occupent la leur (on ne les fait pas
+   défiler, ils sont la raison d'être de la ligne sur la carte). */
+.av-line.ranked {
+  flex-wrap: wrap;
+  row-gap: 6px;
+  padding: 6px 12px;
+  border-radius: 14px;
+  overflow-x: visible;
+}
+.av-ranks {
+  order: 10;
+  flex: 1 0 100%;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+.av-rank b {
+  font-size: 13px;
+}
+.av-rank.none {
+  opacity: 0.5;
 }
 .av-rank {
   display: inline-flex;

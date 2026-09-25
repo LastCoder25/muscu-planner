@@ -2778,11 +2778,11 @@ onUnmounted(() => {
   scrollbar-width: none;
 }
 /* Des voyages en cours : la carte laisse la place à leurs DEUX premières lignes en bas
-   de l'écran (en-tête ~60 px, barre ~44, disponibilités ~40, deux lignes de tuiles ~104, marges). Jamais plus
+   de l'écran (en-tête ~60 px, barre ~44, disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
    haute qu'avant (62vh). */
 .map-scroll.with-trips {
-  height: min(62vh, calc(100vh - 284px));
-  height: min(62vh, calc(100dvh - 284px));
+  height: min(62vh, calc(100vh - 316px));
+  height: min(62vh, calc(100dvh - 316px));
 }
 .map-scroll::-webkit-scrollbar {
   display: none;

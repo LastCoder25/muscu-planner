@@ -141,10 +141,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    // 2 libres sur 3 (Marc est en convoi) ; tous Bronze → une seule pastille, « 2 ».
-    expect(out).toContain('2/3');
-    const pills = [...out.matchAll(/class="av-rank"[^>]*>.*?<\/span>(\d+)</g)].map((m) => m[1]);
-    expect(pills).toEqual(['2']);
+    // 2 libres sur 3 (Marc est en convoi) ; tous Bronze → UNE pastille nommée, « 2/3 ». Le
+    // total 🏅 disparaît : les rangs le remplacent, on ne dit pas deux fois la même chose.
+    const pills = [...out.matchAll(/class="av-rank[^"]*"[^>]*>(.*?)<\/span>\s*<\/span>/g)].map(
+      (m) => m[1]!.replace(/<[^>]+>/g, '').trim(),
+    );
+    expect(pills).toEqual(['Bronze 2/3']);
+    expect(out).not.toContain('av-ico">🏅');
   }, 30_000);
 
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
