@@ -402,8 +402,17 @@
       <div class="tc-head">
         👥 En route vers {{ POI_LABEL[focusCrew.poi.type] }} niv {{ focusCrew.poi.level }}
       </div>
+      <div v-if="focusCrew.haul.length" class="tc-haul">
+        <span class="tc-haul-lab">Ramène</span>
+        <span v-for="p in focusCrew.haul" :key="p.emoji" class="tc-pill">{{ p.emoji }} {{ p.n }}</span>
+      </div>
       <div class="car-pick">
-        <div v-if="focusCrew.hero" class="tc-hero">🧝 <b>Ton héros</b></div>
+        <div v-if="focusCrew.hero" class="tc-hero">
+          <div class="tc-hero-av">
+            <AventureAvatar :profile="character.profile" :equipped="char.row?.equipped ?? {}" no-companions />
+          </div>
+          <b>Ton héros</b>
+        </div>
         <AdvPickTile v-for="a in focusCrew.advs" :key="a.id" :adv="a" :on="true" readonly />
       </div>
       <p v-if="!focusCrew.hero && !focusCrew.advs.length && !focusCrew.gone" class="tc-none">
@@ -787,6 +796,7 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { caravanCard, messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import AventureAvatar from '@/components/AventureAvatar.vue';
 import { campBodyCount, campRewardLabel } from '@/lib/camp';
 import { poiRank, poiRankCounts } from '@/lib/poiRank';
 import {
@@ -829,6 +839,7 @@ import {
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
+  haulPills,
   type PartyResult,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
@@ -1660,6 +1671,25 @@ async function doSeal() {
   }
 }
 
+/** 🎒 Ce qu'un voyage ramènera : ses devises (`haulPills`, la même lecture que la boîte 📬)
+ *  et le nombre d'objets. L'issue est tirée au DÉPART, donc elle est déjà connue. */
+function expeHaul(o: {
+  gold?: number;
+  energy?: number;
+  summonStones?: number;
+  key?: number;
+  mana?: number;
+  item?: unknown;
+  items?: unknown[];
+}): { emoji: string; n: number }[] {
+  const pills = haulPills(o);
+  const objets = o.items?.length ?? (o.item ? 1 : 0);
+  return objets > 0 ? [...pills, { emoji: '🎒', n: objets }] : pills;
+}
+/** Un convoi nomme ses clés `keys` là où une expédition dit `key`. */
+function caravanHaul(o: { gold: number; energy: number; summonStones: number; keys: number; mana?: number }) {
+  return expeHaul({ ...o, key: o.keys });
+}
 /** Les convois EN ROUTE, situés par la même interpolation que le héros
  *  (`travelPosition`) : un convoi part, atteint son lieu, et revient — on doit le voir
  *  faire, sinon la seule trace d'une caravane est une carte « 🎁 Récupérer ». */
@@ -1671,6 +1701,7 @@ const vansOnMap = computed(() =>
       poi: c.poi,
       escort: c.escort.length,
       members: c.escort,
+      haul: caravanHaul(c.outcome),
       at: travelPosition(c, now.value),
       prog: voyageProgress(c, now.value),
     })),
@@ -1686,6 +1717,7 @@ const partiesOnMap = computed(() =>
       escort: g.outcome.party?.escort.length ?? 0,
       members: g.outcome.party?.escort ?? [],
       hero: !!g.outcome.party?.hero,
+      haul: expeHaul(g.outcome),
       at: travelPosition(g, now.value),
       prog: voyageProgress(g, now.value),
     })),
@@ -1714,6 +1746,8 @@ const trips = computed(() => {
     /** Qui voyage : le héros, et les ids des champions (montrés quand on touche la tuile). */
     withHero: boolean;
     members: string[];
+    /** Ce que le voyage ramènera (tiré au départ), montré au-dessus de l'équipe. */
+    haul: { emoji: string; n: number }[];
   }[] = [];
   const a = active.value;
   const h = hero.value;
@@ -1729,6 +1763,7 @@ const trips = computed(() => {
       back,
       withHero: true,
       members: a.outcome.party?.escort ?? [],
+      haul: expeHaul(a.outcome),
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
@@ -1744,6 +1779,7 @@ const trips = computed(() => {
       back,
       withHero: false,
       members: v.members,
+      haul: v.haul,
       title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort} · ${tripTimeLabel(v.at).untilHome}`,
     });
   }
@@ -1759,6 +1795,7 @@ const trips = computed(() => {
       back,
       withHero: g.hero,
       members: g.members,
+      haul: g.haul,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
     });
   }
@@ -1774,6 +1811,7 @@ const trips = computed(() => {
       claim: c.id,
       withHero: false,
       members: c.escort,
+      haul: caravanHaul(c.outcome),
       title: `Convoi rentré de ${POI_LABEL[c.poi.type]} — récupérer la cargaison`,
     });
   }
@@ -1794,7 +1832,7 @@ const focusCrew = computed(() => {
   if (!t) return null;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
-  return { hero: t.withHero, advs, gone: t.members.length - advs.length, poi: t.poi };
+  return { hero: t.withHero, advs, gone: t.members.length - advs.length, poi: t.poi, haul: t.haul };
 });
 function toggleFocusTrip(key: string) {
   focusTrip.value = focusTrip.value === key ? null : key;
@@ -3131,15 +3169,40 @@ onUnmounted(() => {
   font-weight: 600;
   margin-bottom: 8px;
 }
+.tc-haul {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.tc-haul-lab {
+  font-size: 12px;
+  color: var(--dim);
+}
+.tc-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--line);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
 .tc-hero {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 2px;
+  padding: 4px;
   min-height: 44px;
   border: 1px solid var(--accent);
   border-radius: 10px;
   font-size: 13px;
+}
+.tc-hero-av {
+  width: 64px;
+  height: 64px;
 }
 .tc-none {
   margin: 6px 0 0;
