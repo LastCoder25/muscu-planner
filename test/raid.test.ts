@@ -95,6 +95,7 @@ import { BATTLE, simulateSiege } from '@/lib/siegeBattle';
 import { PROMO_LEVELS, engageCap, type Adventurer } from '@/lib/adventurers';
 import { refChampionAdv, escortCombatant } from '@/lib/caravan';
 import { FAMILIAR_SPECIES } from '@/data/familiars';
+import { gearedFighter } from './helpers/gearedFighter';
 
 const H = 3600_000;
 
@@ -107,10 +108,16 @@ function defs(wall: number, turret: number, watch = 0): DefenseStructure[] {
   return d;
 }
 
+/** Le héros qui défend = le JOUEUR DE RÉFÉRENCE (`gearedFighter` : butin réel de ses 13
+ *  derniers niveaux, familier, talent, set de sa voie), celui sur lequel donjons et boss sont
+ *  recalés.
+ *  ⚠️ RÉÉCRIT (v0.1145). C'était `refFighter × gearExpect` : même PUISSANCE, mais deux fois
+ *  plus de SURVIE que le vrai joueur au-delà du niveau 60 (mesuré : 28 243 contre 13 924 au
+ *  niveau 100) — or au siège le héros tient la brèche au corps à corps, c'est sa survie qui
+ *  compte. Héros seul au niveau 100 : 81 % avec l'ancien harnais, 54 % avec le vrai joueur.
+ *  Les garde-fous mesuraient un joueur qui n'existe pas. */
 function hero(L: number): Combatant {
-  const f = refFighter(L);
-  const ge = gearExpect(L);
-  return { ...f, damage: Math.round(f.damage * ge.off), pv: Math.round(f.pv * ge.pv) };
+  return gearedFighter(L, 1);
 }
 
 /** Un vivier plausible : les lignées de référence (mêlée, agile, civile), PROMUES au
@@ -277,6 +284,34 @@ describe('silhouette de faction', () => {
     // renoncer à la garantie.
     expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.1);
   });
+
+  it('… et le reste en FIN DE PARTIE, héros et vivier compris', () => {
+    // ⚠️ AJOUTÉ (v0.1145). Le test ci-dessus ne mesure qu'au niveau 26, base nue : rien ne
+    // vérifiait que les factions se valent là où l'armée est la plus grosse et la cour la
+    // plus disputée. Une première sonde à 150 sièges y annonçait 16 points d'écart
+    // (bêtes 72 / bandits 88 au niveau 100) — c'était du BRUIT, ~50 sièges par faction.
+    // Mesuré sur ~400 par faction : 79/83/84 (niv 60) · 82/84/86 (80) · 74/77/78 (100).
+    for (const L of [60, 100]) {
+      const guard = guardUnits(L, rosterOf(L), 99, {
+        now: 0,
+        kennelLevel: L,
+        familiars: [],
+        talents: [],
+        advGear: [],
+      });
+      const h = hero(L);
+      const acc: Record<string, [number, number]> = {};
+      for (let i = 0; i < 1200; i++) {
+        const raid = rollRaid(i * 7919 + 13, L, 0, 0);
+        const a = (acc[raid.faction] ??= [0, 0]);
+        a[1]++;
+        if (resolveRaid({ defenses: defs(L, L), playerLevel: L, hero: h, guard }, raid, true).held)
+          a[0]++;
+      }
+      const vals = Object.values(acc).map(([held, n]) => (held / n) * 100);
+      expect(Math.max(...vals) - Math.min(...vals), `niveau ${L}`).toBeLessThan(10);
+    }
+  }, 120_000);
 
   it('⚠️ TOUT l’effectif repoussé est dépouillé, quelle que soit la silhouette', () => {
     // ⚠️ RÉÉCRIT. Il vérifiait que la fouille par vagues rattrapait la masse avant que
@@ -517,6 +552,9 @@ describe('calibration du siège', () => {
     // début de partie (« bâtir à son niveau tient le plus souvent », niveaux 8-10), qui ne sont
     // pas concernés : le budget n'a pas bougé sous le rang 3. Le plafond passe donc de 92 à 94,
     // et c'est un CONSTAT, pas un blanc-seing : au-delà, il faut une armée qui suit le niveau.
+    // ⚠️ v0.1145 : le héros de ce harnais est désormais le JOUEUR DE RÉFÉRENCE (`gearedFighter`),
+    // qui a deux fois moins de survie que `refFighter × gearExpect` au-delà du niveau 60.
+    // Mesuré (1 200 sièges) : ~84 % au niveau 80, ~76 % au niveau 100 — on est loin du plafond.
     for (const L of [50, 80, 100]) {
       const plein = holdRate(L, L, true, 400, rosterOf(L));
       expect(plein, `niveau ${L}, tout investi`).toBeLessThan(94);

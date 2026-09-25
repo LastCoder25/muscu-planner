@@ -507,8 +507,13 @@ export const RAID = {
    *  montée jusqu’à `1 + peak` au niveau `fullFrom`, plein jusqu’à `holdUntil`, retour
    *  linéaire à 1 au niveau `fadeUntil` — la fin de partie, déjà calibrée, n’est pas touchée.
    *  ⚠️ Pourquoi l’ARMÉE et pas les aventuriers : mesuré, diviser par 2 leur bonus de siège
-   *  laissait un vivier complet à 95-100 % — seule une armée plus forte le fait bouger. */
-  earlyThreat: { learnUntil: 5, fullFrom: 7, holdUntil: 16, fadeUntil: 26, peak: 0.35 },
+   *  laissait un vivier complet à 95-100 % — seule une armée plus forte le fait bouger.
+   *  ⚠️ `peak` 0,35 → **0,30** (v0.1145, mesuré, 400 sièges, héros = joueur de référence) :
+   *  le vivier complet était retombé à **78 %** au niveau 12 (82 au 10, 81 au 16), sous les
+   *  87-98 % visés en v0.829 — le garde-fou « pas un mur » passait au bord du bruit. À 0,30 :
+   *  vivier complet **91/87/86/86/89 %** aux niveaux 8/10/12/16/20, héros seul toujours durci
+   *  (19/26/29/33/42 %). 0,25 donnait 89-94 %, trop près de l’ancien « gagné d’avance ». */
+  earlyThreat: { learnUntil: 5, fullFrom: 7, holdUntil: 16, fadeUntil: 26, peak: 0.3 },
   /** 🕳️ RENFORT D'UNE ARMÉE SORTIE D'UNE FAILLE — **×1,3, MESURÉ** (tenue d'un siège,
    *  enceinte à niveau, héros présent, vivier complet, 150 sièges par case) :
    *
