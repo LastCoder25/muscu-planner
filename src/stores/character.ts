@@ -2291,21 +2291,24 @@ export const useCharacterStore = defineStore('character', () => {
       patch.summon_stones = cur.summon_stones + loot.summonStones;
       patch.keys = cur.keys + loot.keys;
     }
-    if (loot || mana > 0) {
-      // Le relevé part avec le rapport : on le pose sur la base que `applyRaidOutcome`
-      // vient de rendre, pas dans un second `persist`.
-      patch.base = {
-        ...nb,
-        lastLoot: {
-          corpses: corpses.length,
-          gold: loot?.gold ?? 0,
-          mana,
-          keys: loot?.keys ?? 0,
-          summonStones: loot?.summonStones ?? 0,
-          items: drops.length,
-        },
-      };
-    }
+    // Le relevé part avec le rapport : on le pose sur la base que `applyRaidOutcome`
+    // vient de rendre, pas dans un second `persist`.
+    // ⚠️ TOUJOURS réécrit, `null` compris : `applyRaidOutcome` recopie la base, donc un
+    // siège sans butin gardait le relevé du PRÉCÉDENT et l'affichait comme le sien.
+    patch.base = {
+      ...nb,
+      lastLoot:
+        loot || mana > 0
+          ? {
+              corpses: corpses.length,
+              gold: loot?.gold ?? 0,
+              mana,
+              keys: loot?.keys ?? 0,
+              summonStones: loot?.summonStones ?? 0,
+              items: drops.length,
+            }
+          : null,
+    };
     // ⚠️ CEUX QUI ONT DÉFENDU APPRENNENT (demandé par l’utilisateur). Les familiers postés
     // gagnaient de l’XP depuis la v0.663 ; les aventuriers, qui tiennent pourtant la
     // brèche, n’en gagnaient aucune — rester défendre coûtait un convoi ET la progression
