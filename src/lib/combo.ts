@@ -23,6 +23,9 @@ export interface ComboSet {
   reps: number;
   weight?: number | null; // charge de la série (kg) — poids du corps = vide
   assisted?: boolean; // exo poids du corps fait assisté (élastique/machine) → XP ×0,6
+  /** Heure de saisie (ISO) : distingue les séries enchaînées des séries étalées pour le
+   *  conseil de charge. Absente des séries saisies avant la v0.1159. */
+  at?: string;
 }
 // Ancien format (reps cumulées/jour) — lu pour migration des défis existants.
 interface ComboLegEntry {
@@ -1239,18 +1242,29 @@ export function comboExportText(c: ComboChallenge, today: string): string {
 // --- Conseil de charge par exo -----------------------------------------------
 // Une série se fait à 1 à 3 reps de l’échec : on part de ce principe, donc les reps
 // réalisées DISENT si la charge est bonne. Toucher le haut de la fourchette à 1-3 reps
-// de l’échec = on pourrait en faire au-delà → la charge est trop légère, on conseille de
-// monter. Rester sous le bas de la fourchette alors qu’on est déjà près de l’échec = trop
-// lourd. Entre les deux, la charge est la bonne : on vise une rep de plus.
-// ⚠️ On ne dit JAMAIS de combien monter : le pas dépend de l’exo (haltère, barre, machine,
-// lest). Le conseil se relit après chaque série et se corrige de lui-même.
+// de l’échec = on pourrait en faire au-delà → trop léger, on conseille de monter. Rester
+// sous le bas alors qu’on est déjà près de l’échec = trop lourd. Entre les deux, la charge
+// est la bonne : on vise une rep de plus.
+// ⚠️ On ne dit JAMAIS de combien monter : le pas dépend de l’exo (haltère, barre, lest).
+//
+// ⚠️ LE 360 N’A PAS DE SÉANCE : les séries s’étalent dans la journée. On ne suppose donc
+// pas qu’une série plus faible que la précédente l’est par fatigue — sauf si elles sont
+// ENCHAÎNÉES (moins de `LOAD_ADVICE.chainMin` d’écart, lu sur `ComboSet.at`) : un bloc
+// enchaîné ne compte que par sa meilleure série. Une série sans heure (saisie avant) est
+// un bloc à elle seule. Puis on lit les `window` derniers blocs à la charge actuelle, et
+// il en faut `agree` dans le même sens pour monter ou alléger : une série faite très en
+// forme, ou ratée en fin de journée, ne suffit pas à changer de charge.
+
+export const LOAD_ADVICE = { chainMin: 20, window: 3, agree: 2 } as const;
 
 export type LoadCall = 'up' | 'hold' | 'down';
 export interface LegLoadAdvice {
   /** Charge de référence (kg) — null au poids du corps sans lest. */
   weight: number | null;
+  /** La dernière série était assistée : « monter » veut dire moins d’assistance. */
+  assisted: boolean;
   call: LoadCall;
-  /** Reps à viser à cette charge (seulement pour « hold »). */
+  /** Reps à viser à cette charge (pour « hold »), bas de fourchette sinon. */
   reps: number;
 }
 
@@ -1269,6 +1283,29 @@ function adviceSets(leg: ComboLeg, history: ComboChallenge[]): ComboSet[] {
   return [];
 }
 
+const loadOf = (s: ComboSet) => (s.weight && s.weight > 0 ? s.weight : null);
+
+/** Deux séries sont enchaînées si elles ont une heure et moins de `chainMin` d’écart. */
+function chained(a: ComboSet, b: ComboSet): boolean {
+  if (!a.at || !b.at) return false;
+  const gap = Date.parse(b.at) - Date.parse(a.at);
+  return gap >= 0 && gap <= LOAD_ADVICE.chainMin * 60_000;
+}
+
+/** Blocs (meilleure série de chaque bloc enchaîné) à la charge de la dernière série. */
+export function loadBlocks(sets: readonly ComboSet[]): number[] {
+  const last = sets[sets.length - 1];
+  if (!last) return [];
+  const same = sets.filter((s) => loadOf(s) === loadOf(last) && !!s.assisted === !!last.assisted);
+  const blocks: number[] = [];
+  same.forEach((s, i) => {
+    if (i > 0 && chained(same[i - 1]!, s))
+      blocks[blocks.length - 1] = Math.max(blocks[blocks.length - 1]!, s.reps);
+    else blocks.push(s.reps);
+  });
+  return blocks;
+}
+
 export function legLoadAdvice(
   leg: ComboLeg,
   history: ComboChallenge[],
@@ -1278,17 +1315,12 @@ export function legLoadAdvice(
   const sets = adviceSets(leg, history);
   const last = sets[sets.length - 1];
   if (!last) return null; // jamais fait : rien à juger
-  const weight = last.weight && last.weight > 0 ? last.weight : null;
-  // Meilleure série à CETTE charge, le jour de la dernière : les suivantes baissent par
-  // fatigue, ce n’est pas la charge qui est trop lourde.
-  const best = Math.max(
-    ...sets
-      .filter(
-        (s) => s.date === last.date && (s.weight && s.weight > 0 ? s.weight : null) === weight,
-      )
-      .map((s) => s.reps),
-  );
-  if (best >= range.max) return { weight, call: 'up', reps: range.min };
-  if (best < range.min) return { weight, call: 'down', reps: range.min };
-  return { weight, call: 'hold', reps: Math.min(range.max, best + 1) };
+  const recent = loadBlocks(sets).slice(-LOAD_ADVICE.window);
+  const base = { weight: loadOf(last), assisted: !!last.assisted };
+  if (recent.filter((r) => r >= range.max).length >= LOAD_ADVICE.agree)
+    return { ...base, call: 'up', reps: range.min };
+  if (recent.filter((r) => r < range.min).length >= LOAD_ADVICE.agree)
+    return { ...base, call: 'down', reps: range.min };
+  // Ta meilleure série récente dit ce que tu fais frais ; les moins bonnes = fatigue passagère.
+  return { ...base, call: 'hold', reps: Math.min(range.max, Math.max(...recent) + 1) };
 }
