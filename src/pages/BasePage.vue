@@ -639,6 +639,21 @@
       />
     </q-dialog>
 
+    <!-- ── 🎒 LE BUTIN DU DERNIER SIÈGE, SUR LA PAGE (demandé : « je ne vois pas ce que
+         j'ai récupéré sur les corps »). Il n'était visible qu'en fin de rejeu, puis
+         enfoui dans la feuille de la Tour de guet. Affiché 24 h après la bataille. -->
+    <div v-if="recentLoot" class="panel loot-panel">
+      <div class="p-title">
+        🎒 Ramassé sur les corps
+        <span class="loot-when">· {{ recentLoot.when }}</span>
+      </div>
+      <div class="scav-pills">
+        <span v-for="(b, i) in lastLootPills" :key="i" class="scav-pill">{{ b }}</span>
+      </div>
+      <div class="p-sub">Déjà crédité — rien à aller chercher.</div>
+      <button class="cta ghost" @click="replaySiege">▶ Revoir l’assaut</button>
+    </div>
+
     <!-- Revoir le dernier assaut -->
     <!-- ⚠️ Sans notification, le PRÉAVIS que la Tour de guet fait payer ne sert qu'à
          ceux qui ouvraient l'app de toute façon. C'est l'objet de cet interrupteur. -->
@@ -1866,6 +1881,15 @@ const ascensionsReady = computed(() =>
  *  ici, et mis en forme par la LIB : l'écran de fin du rejeu affiche exactement les
  *  mêmes puces, et deux copies divergeraient au premier ajout de devise. */
 const lastLootPills = computed(() => battleLootPills(base.value?.lastLoot));
+/** Le butin du dernier siège s'affiche sur la page pendant 24 h après la bataille. */
+const LOOT_SHOWN_MS = 24 * 3_600_000;
+const recentLoot = computed(() => {
+  const at = lastReport.value?.resolvedAt;
+  if (!at || !lastLootPills.value.length) return null;
+  const ago = now.value - at;
+  if (ago > LOOT_SHOWN_MS) return null;
+  return { when: ago < 60_000 ? 'à l’instant' : `il y a ${formatDuration(ago)}` };
+});
 
 // ── Structures ──
 function lvlOf(id: DefenseId): number {
@@ -3328,6 +3352,20 @@ function doHarvest() {
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--line);
+}
+/* 🎒 Le butin du dernier siège, en vert « gain » (d1) : ce n'est pas une tâche. */
+.loot-panel {
+  border-color: rgba(123, 200, 108, 0.5);
+}
+.loot-panel .scav-pill {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 3px 10px;
+}
+.loot-when {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--dim);
 }
 /* Ce qui MANQUE se voit : le reste de la phrase reste lisible. */
 .miss {

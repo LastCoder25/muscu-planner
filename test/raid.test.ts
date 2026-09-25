@@ -111,7 +111,7 @@ function defs(wall: number, turret: number, watch = 0): DefenseStructure[] {
 /** Le héros qui défend = le JOUEUR DE RÉFÉRENCE (`gearedFighter` : butin réel de ses 13
  *  derniers niveaux, familier, talent, set de sa voie), celui sur lequel donjons et boss sont
  *  recalés.
- *  ⚠️ RÉÉCRIT (v0.1145). C'était `refFighter × gearExpect` : même PUISSANCE, mais deux fois
+ *  ⚠️ RÉÉCRIT (v0.1149). C'était `refFighter × gearExpect` : même PUISSANCE, mais deux fois
  *  plus de SURVIE que le vrai joueur au-delà du niveau 60 (mesuré : 28 243 contre 13 924 au
  *  niveau 100) — or au siège le héros tient la brèche au corps à corps, c'est sa survie qui
  *  compte. Héros seul au niveau 100 : 81 % avec l'ancien harnais, 54 % avec le vrai joueur.
@@ -286,7 +286,7 @@ describe('silhouette de faction', () => {
   });
 
   it('… et le reste en FIN DE PARTIE, héros et vivier compris', () => {
-    // ⚠️ AJOUTÉ (v0.1145). Le test ci-dessus ne mesure qu'au niveau 26, base nue : rien ne
+    // ⚠️ AJOUTÉ (v0.1149). Le test ci-dessus ne mesure qu'au niveau 26, base nue : rien ne
     // vérifiait que les factions se valent là où l'armée est la plus grosse et la cour la
     // plus disputée. Une première sonde à 150 sièges y annonçait 16 points d'écart
     // (bêtes 72 / bandits 88 au niveau 100) — c'était du BRUIT, ~50 sièges par faction.
@@ -552,7 +552,7 @@ describe('calibration du siège', () => {
     // début de partie (« bâtir à son niveau tient le plus souvent », niveaux 8-10), qui ne sont
     // pas concernés : le budget n'a pas bougé sous le rang 3. Le plafond passe donc de 92 à 94,
     // et c'est un CONSTAT, pas un blanc-seing : au-delà, il faut une armée qui suit le niveau.
-    // ⚠️ v0.1145 : le héros de ce harnais est désormais le JOUEUR DE RÉFÉRENCE (`gearedFighter`),
+    // ⚠️ v0.1149 : le héros de ce harnais est désormais le JOUEUR DE RÉFÉRENCE (`gearedFighter`),
     // qui a deux fois moins de survie que `refFighter × gearExpect` au-delà du niveau 60.
     // Mesuré (1 200 sièges) : ~84 % au niveau 80, ~76 % au niveau 100 — on est loin du plafond.
     for (const L of [50, 80, 100]) {

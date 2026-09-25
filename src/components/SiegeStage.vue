@@ -263,8 +263,16 @@
         </div>
         <!-- 🦴 LE BUTIN EST LÀ, juste après la bataille (demandé) : il a été crédité à
              la résolution, il n'y a plus de fouille à venir chercher. -->
-        <div v-if="loot.length" class="end-loot">
-          <span v-for="(b, i) in loot" :key="i" class="end-pill">{{ b }}</span>
+        <!-- ⚠️ UN TITRE, pas des puces nues : sans lui le butin se lisait comme une
+             statistique de plus sous le verdict, et on ne savait pas ce qu'on avait gagné. -->
+        <div v-if="loot.length" class="end-box">
+          <div class="end-box-t">🎒 Ramassé sur les corps · déjà dans tes poches</div>
+          <div class="end-loot">
+            <span v-for="(b, i) in loot" :key="i" class="end-pill">{{ b }}</span>
+          </div>
+        </div>
+        <div v-else-if="!corpseCount" class="end-box none">
+          🎒 Aucun corps à dépouiller cette fois.
         </div>
         <button class="end-cta" @click="emit('done')">Fermer</button>
       </div>
@@ -1290,9 +1298,33 @@ onUnmounted(clearTimers);
   gap: 6px;
   margin: 2px 0 10px;
 }
-.end-pill {
+.end-box {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(123, 200, 108, 0.45);
+  background: rgba(123, 200, 108, 0.08);
+  max-width: 320px;
+}
+.end-box.none {
+  border-color: var(--line);
+  background: none;
+  font-size: 13px;
+  color: #9a8f7e;
+}
+.end-box-t {
   font-size: 12px;
-  padding: 3px 9px;
+  font-weight: 600;
+  color: #7bc86c;
+  margin-bottom: 8px;
+}
+.end-box .end-loot {
+  margin: 0;
+}
+.end-pill {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 4px 11px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface-2, #2a241c);
