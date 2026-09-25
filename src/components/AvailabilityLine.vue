@@ -19,8 +19,9 @@
       ><span class="av-ico">⛑️</span>{{ d.champHurt }}</span
     >
     <!-- 🏅 PAR RANG (sur la carte) : ce qui décide d'un lieu, c'est le rang de ceux qui
-         peuvent partir. Une pastille par rang possédé, nommée et à sa couleur : libres sur
-         le total de ce rang (blessés exclus, comptés à part), sur la même ligne. -->
+         peuvent partir. Une pastille par rang possédé : une MÉDAILLE à la couleur du rang
+         (le nom reste dans l'infobulle et pour les lecteurs d'écran), libres sur le total
+         de ce rang (blessés exclus, comptés à part), sur la même ligne. -->
     <span v-if="byRank && rankRows.length" class="av-ranks">
       <span
         v-for="r in rankRows"
@@ -29,7 +30,12 @@
         :class="{ none: !r.free }"
         :style="{ '--rk': r.color }"
         :title="`${r.free} ${r.name} disponible(s) sur ${r.total}`"
-        ><span class="av-dot" />{{ r.name }} <b>{{ r.free }}</b
+        :aria-label="`${r.name} : ${r.free} disponible(s) sur ${r.total}`"
+        ><svg class="av-medal" viewBox="0 0 14 18" aria-hidden="true">
+          <path class="av-ribbon" d="M3 0h3l2 7H5zM8 0h3L9 7H6z" />
+          <circle cx="7" cy="12" r="5.2" />
+          <circle class="av-shine" cx="7" cy="12" r="2.6" /></svg
+        ><b>{{ r.free }}</b
         >/{{ r.total }}</span
       >
     </span>
@@ -190,24 +196,38 @@ const title = computed(() => {
 .av-rank.none {
   opacity: 0.5;
 }
+/* La médaille porte la couleur : plus de cadre autour, la place sert à tenir sur une ligne. */
 .av-rank {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 6px 1px 4px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--rk) 55%, transparent);
-  background: color-mix(in srgb, var(--rk) 16%, transparent);
-  font-size: 12px;
+  gap: 2px;
+  font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
-.av-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--rk);
+/* Médaille : ruban sombre, disque à la couleur du rang, reflet clair au centre. */
+.av-medal {
+  width: 13px;
+  height: 17px;
+  flex: none;
+}
+.av-medal circle {
+  fill: var(--rk);
+  stroke: color-mix(in srgb, var(--rk) 55%, #000);
+  stroke-width: 0.8;
+}
+.av-medal .av-shine {
+  fill: color-mix(in srgb, var(--rk) 55%, #fff);
+  stroke: none;
+  opacity: 0.55;
+}
+.av-ribbon {
+  fill: color-mix(in srgb, var(--rk) 45%, #3a2f24);
+}
+/* Centrée, la ligne garde son chevron à côté du reste (un auto le repousserait seul au bord). */
+.av-line.ranked .av-go {
+  margin-left: 0;
 }
 .av-go {
   margin-left: auto;

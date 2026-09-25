@@ -155,7 +155,12 @@
           </div>
         </div>
         <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->
-        <AvailabilityLine :now="expeNow" interactive @open="openGame('/expedition-map')" />
+        <AvailabilityLine
+          :now="expeNow"
+          interactive
+          by-rank
+          @open="openGame('/expedition-map')"
+        />
       </div>
 
       <div v-if="c.energy < 0" class="deficit-banner">

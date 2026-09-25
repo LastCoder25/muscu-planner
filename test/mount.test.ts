@@ -141,12 +141,16 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    // 2 libres sur 3 (Marc est en convoi) ; tous Bronze → UNE pastille nommée, « 2/3 ». Le
+    // 2 libres sur 3 (Marc est en convoi) ; tous Bronze → UNE pastille, « 2/3 », avec une
+    // MÉDAILLE à la couleur du rang (plus le nom en lettres, v0.1158) : le nom ne vit plus que
+    // dans l’infobulle et l’aria-label. Le
     // total 🏅 disparaît : les rangs le remplacent, on ne dit pas deux fois la même chose.
     const pills = [...out.matchAll(/class="av-rank[^"]*"[^>]*>(.*?)<\/span>\s*<\/span>/g)].map(
       (m) => m[1]!.replace(/<[^>]+>/g, '').trim(),
     );
-    expect(pills).toEqual(['Bronze 2/3']);
+    expect(pills).toEqual(['2/3']);
+    expect(out).toContain('class="av-medal"');
+    expect(out).toContain('aria-label="Bronze : 2 disponible(s) sur 3"');
     expect(out).not.toContain('av-ico">🏅');
   }, 30_000);
 
