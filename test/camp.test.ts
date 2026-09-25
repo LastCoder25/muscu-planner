@@ -461,7 +461,9 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
   it('SANS le héros, victoire : or et pierres ; jamais d’objet du héros, de ferraille ni de pièce de champion', () => {
     const L = 60;
     const inp = input({
-      poi: poi({ level: 5, type: 'lair' }),
+      // ⚠️ Niveau 30, pas 5 : le butin suit la DIFFICULTÉ du lieu (v0.1153), et les pierres
+      // d'un repaire de niveau 5 s'arrondissent à zéro.
+      poi: poi({ level: 30, type: 'lair' }),
       escort: team(10, L),
       road: road(L, 10),
       spec: { faction: 'mortsvivants', size: 5 },

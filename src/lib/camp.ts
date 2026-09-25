@@ -39,8 +39,7 @@ import {
   campSpecOf,
   goldCost,
   harvestYield,
-  travelFactor,
-  travelOneWayMin,
+  rewardTripHours,
   type CampSpec,
   type ExpeditionOutcome,
   type PartyResult,
@@ -89,6 +88,9 @@ export const CAMP = {
   groupGoldShare: 0.18,
   banditGoldMult: 1.5,
   stoneShare: 0.11,
+  /** 🎯 Échelle du butin d'un camp depuis qu'il suit la DIFFICULTÉ (v0.1153) : la taille n'y
+   *  est plus un facteur à part (`poiRewardLevel` la compte déjà). Calibré (campEconomy). */
+  difficultyGoldK: 1,
   journalMax: 40,
 } as const;
 
@@ -221,21 +223,20 @@ export function campHurt(
  *  que pour deux champions (`heroPartyCombatant`), rien ne justifie qu'il fasse tomber le
  *  butin d'une expédition solo. */
 export function campGroupHaul(poi: Poi, spec: CampSpec): { gold: number; summonStones: number } {
-  // 🪙 Récompense sur le niveau de RÉCOMPENSE (`poiRewardLevel`), pas le niveau de rang.
+  // 🪙 Récompense sur la DIFFICULTÉ du lieu (`poiRewardLevel`, v0.1153) — qui compte DÉJÀ le
+  // nombre d'ennemis : la taille n'est donc plus un facteur à part (elle serait comptée deux
+  // fois). ⚠️ La distance ne paie plus : trajet de RÉFÉRENCE de sa difficulté (`rewardTripHours`).
   const L = Math.max(1, poiRewardLevel(poi));
-  const rthH = (2 * travelOneWayMin(L, poi.distNorm)) / 60;
-  const tfH = travelFactor(rthH);
-  const k = Math.max(0, spec.size) / CAMP.refGroup;
   const gold = Math.round(
     goldCost('camp', L) *
-      (1 + rthH * 0.1) *
+      (1 + rewardTripHours(L) * 0.1) *
       CAMP.groupGoldShare *
-      k *
+      CAMP.difficultyGoldK *
       (spec.faction === 'bandits' ? CAMP.banditGoldMult : 1),
   );
   const summonStones =
     spec.faction === 'mortsvivants'
-      ? Math.round(harvestYield('shrine', L, tfH).summonStones * CAMP.stoneShare * k)
+      ? Math.round(harvestYield('shrine', L).summonStones * CAMP.stoneShare * CAMP.difficultyGoldK)
       : 0;
   return { gold, summonStones };
 }

@@ -58,7 +58,7 @@ import {
   isRiftPoi,
   haulPills,
   goldCost,
-  travelFactor,
+  harvestGuardOf,
   poiTravelLevel,
   travelOneWayMin,
   type Poi,
@@ -721,14 +721,9 @@ export function championOutpostMult(heroMult: number): number {
  *  temps réel ferait de sa lenteur une PRIME (ralentir de ×1,5 paierait ×1,75 de plus) et
  *  elle écraserait l'expédition du héros. Le marché doit rester lisible : la caravane
  *  coûte plus de TEMPS (abondant) et zéro ÉNERGIE (rare) ; elle ne rapporte pas plus. */
-export function heroEquivalentFactor(poi: Poi): number {
-  return tripFactor(poiTravelLevel(poi), poi.distNorm);
-}
-
-/** Le facteur de trajet d'un POI, à niveau et distance donnés (la cargaison). */
-function tripFactor(level: number, distNorm: number): number {
-  return travelFactor((2 * travelOneWayMin(level, distNorm)) / 60);
-}
+// ⚠️ DEPUIS LA v0.1153 la distance ne paie plus du tout : la cargaison se calcule sur le facteur
+// des RESSOURCES (`harvestYield`), le même pour tous les lieux — la règle ci-dessus tient donc
+// par construction (ni la lenteur du convoi, ni l'éloignement ne changent la paie).
 
 /** 🎓 XP de MISSION d'un aventurier (v0.1014, refonte demandée par l'utilisateur : « on ne
  *  relie plus l'xp à la distance mais au niveau de l'évent ; une xp fixe selon le niveau de
@@ -1319,10 +1314,9 @@ export function resolveCaravan(
     }
   }
 
-  const tfH = heroEquivalentFactor(poi);
   const haul = caravanHaulMult(escort, kit.advGear, fx.haul);
   const k = mult * haul;
-  const raw = harvestYield(poi.type, poiRewardLevel(poi), tfH);
+  const raw = harvestYield(poi.type, poiRewardLevel(poi), harvestGuardOf(poi)?.size ?? 0);
   const y = {
     energy: raw.energy * CARAVAN.yieldShare,
     summonStones: raw.summonStones * CARAVAN.yieldShare,

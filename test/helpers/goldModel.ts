@@ -4,7 +4,19 @@
 // FACTION se mesure contre LE MÊME dénominateur. Une seconde copie du modèle aurait divergé
 // au premier réglage, et c'est précisément par un mauvais dénominateur que ce fichier a déjà
 // laissé passer un puits qui débordait (v0.684) puis un puits devenu mur (v0.733).
-import { goldCost, travelOneWayMin, travelFactor, type Poi } from '@/lib/expedition';
+import {
+  goldCost,
+  harvestGuardOf,
+  createMap,
+  advanceWorld,
+  resolveOutcome,
+  poiRewardLevel,
+  HARVEST_TYPES,
+  type Poi,
+} from '@/lib/expedition';
+import { gearedFighter } from './gearedFighter';
+import { resolveHarvestParty } from '@/lib/harvestParty';
+import { levelForDifficulty } from '@/lib/poiDifficulty';
 import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 import { BOSSES, bossSummonCost } from '@/data/bosses';
 import { rollDrop, sellValue } from '@/lib/items';
@@ -26,17 +38,6 @@ const bestDungeon = (L: number) =>
   [...DUNGEONS].filter((d) => d.recoLevel <= L).sort((a, b) => b.recoLevel - a.recoLevel)[0] ??
   DUNGEONS[0]!;
 
-/** Net d'une expédition de mine LOINTAINE — ce que joue un joueur qui optimise.
- *  ⚠️ ÉTAIT à distance MOYENNE (0,5), et c'est ce qui a fait SOUS-ESTIMER le revenu d'un
- *  facteur ~3 : depuis la v0.683 la récompense est SUPER-LINÉAIRE en temps de trajet
- *  (`TRAVEL_EXP` 1,4), donc aller loin paie bien plus que proportionnellement. */
-export const MINE_DIST = 0.9;
-export function mineNet(level: number): number {
-  const rth = (2 * travelOneWayMin(level, MINE_DIST)) / 60;
-  const cost = goldCost('mine', level);
-  // ⚠️ Plus de coût d'envoi (v0.1069) : la récolte entière est gagnée.
-  return Math.round(cost * (1.3 + travelFactor(rth)));
-}
 // ⚠️ PLUS DE MINE D’OR : le bâtiment a été retiré du registre (demandé), donc plus
 // aucune production passive d’or. Mesuré avant retrait, elle pesait 19,3 % du revenu au
 // niveau 10 mais seulement 3,4 % au niveau 100 — l’or vient des donjons et de la carte.
@@ -70,6 +71,64 @@ const memo = <T>(f: (L: number) => T) => {
     return c.get(L)!;
   };
 };
+
+const bestPlaces = memo((L) => {
+  const DAY = 24 * 3600_000;
+  // ⚠️ Un héros ÉQUIPÉ (le harnais partagé) + un champion : les gardes sont calibrés contre
+  // eux — nu, le héros perdait toutes les mines du début de partie.
+  const hero = gearedFighter(L);
+  const ally = refChampionAdv(L, 0);
+  let gold = 0;
+  let diff = 0;
+  let n = 0;
+  for (let seed = 1; seed <= 12; seed++) {
+    let map = createMap(seed * 7919, 0, L, L);
+    for (let d = 1; d <= 2; d++) {
+      map = advanceWorld(map, d * DAY, L, L);
+      const lieux = map.pois
+        .filter((p) => HARVEST_TYPES.has(p.type))
+        .map((p) => {
+          let g = 0;
+          for (let s = 1; s <= 3; s++) {
+            // ⚠️ Le VRAI chemin : un lieu de récolte est GARDÉ (v0.1043), le héros y va en
+            // groupe et peut PERDRE — la défaite compte, elle ne rapporte rien.
+            const o = resolveHarvestParty({
+              poi: p,
+              escort: [ally],
+              road: { advGear: [] },
+              hero: { name: 'H', level: L, combatant: hero },
+              seed: s * 31 + seed,
+              playerLevel: L,
+              pantheonLevel: L,
+            });
+            g += o.gold;
+          }
+          return { g: g / 3, d: poiRewardLevel(p) };
+        })
+        .sort((a, b) => b.g - a.g)
+        .slice(0, 2);
+      for (const x of lieux) {
+        gold += x.g;
+        diff += x.d;
+        n++;
+      }
+    }
+  }
+  return {
+    gold: n ? Math.round(gold / n) : 0,
+    level: n ? Math.round(diff / n) : Math.max(1, L),
+  };
+});
+/** 🎯 La DIFFICULTÉ des deux meilleurs lieux qu'une vraie carte propose au niveau L. */
+export const bestPlaceLevel = (L: number): number => bestPlaces(L).level;
+/** Or d'une expédition : la moyenne des DEUX MEILLEURS lieux de récolte d'une vraie carte,
+ *  défaites comprises.
+ *  ⚠️ ÉCHANTILLONNÉ SUR DE VRAIES CARTES (v0.1153), avec les fonctions du jeu (`createMap`,
+ *  `advanceWorld`, `resolveHarvestParty`), plus supposé. Depuis que la récompense suit la
+ *  DIFFICULTÉ, ce qu'on gagne dépend de ce que la carte PROPOSE et de ce qu'on BAT : une
+ *  « mine de ton niveau, gagnée » comptait ×2 à ×4 l'or réel — l'erreur de dénominateur qui a
+ *  déjà fait déborder (v0.684) puis murer (v0.733) ce puits. */
+export const mineNet = (L: number): number => bestPlaces(L).gold;
 /** Revente de TOUT le butin d'une descente (la vente est la seule sortie d'un objet). */
 const salePerRun = memo((L) => {
   const d = bestDungeon(L);
@@ -101,7 +160,11 @@ function bossGoldPerDay(L: number): number {
  *  ouvre l'app matin et soir). Aucun salaire (les champions ne sont pas payés). Une récolte ne paie qu'un FILET d'or
  *  (30 % du coût) : l'épave, qui payait en or, est retirée (v0.999). */
 function convoyGoldPerDay(L: number, comptoir: number): number {
-  const poi = { level: L, distNorm: 0.6, type: 'well' } as Poi;
+  // ⚠️ Un puits de la DIFFICULTÉ des meilleurs lieux de la carte (v0.1153 : la cargaison la
+  // lit), plus « de ton niveau », qu'une vraie carte propose rarement.
+  const D = bestPlaceLevel(L);
+  const size = harvestGuardOf({ id: 'w', type: 'well', level: D })!.size;
+  const poi = { id: 'w', level: levelForDifficulty(D, size), distNorm: 0.6, type: 'well' } as Poi;
   const esc = [0, 1, 2].map((i) => refChampionAdv(L, i));
   const legH =
     caravanLegMin(
@@ -111,7 +174,7 @@ function convoyGoldPerDay(L: number, comptoir: number): number {
       travelTimeMult([{ typeId: 'outpost', level: comptoir, slot: 0, collectedAt: 0 }]),
     ) / 60;
   const trips = Math.min(3, 24 / (2 * legH));
-  const net = Math.round(goldCost('well', L) * 0.3);
+  const net = Math.round(goldCost('well', D) * 0.3);
   return Math.max(0, caravanSlots(comptoir) * trips * net);
 }
 /** Camps de faction, en PART du revenu de référence — la valeur MESURÉE par

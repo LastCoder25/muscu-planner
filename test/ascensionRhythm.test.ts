@@ -74,7 +74,7 @@ describe('💰 l’or des ascensions tient dans le puits', () => {
       expect(p).toBeGreaterThan(0.55);
       expect(p).toBeLessThan(0.9);
     }
-  });
+  }, 180_000); // ⚠️ le modèle de revenu échantillonne de vraies cartes (v0.1153)
   it('et elles COÛTENT : la part baisse face à un joueur qui n’en fait aucune', () => {
     for (const [, xpd] of PROFILS)
       expect(yearOfPlay(xpd, undefined, 10).part).toBeLessThan(yearOfPlay(xpd).part);

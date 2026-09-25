@@ -11,7 +11,7 @@ import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank'
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
-import { levelForDifficulty } from './poiDifficulty';
+import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
 import { formatDuration } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 
@@ -293,12 +293,9 @@ export interface Poi {
    *  30 % de temps en moins qu'un autre lieu au même endroit : le trajet ne se lisait plus
    *  sur la carte. Absent → le niveau du lieu (tous les autres POI, et les failles d'avant). */
   travelLevel?: number;
-  /** 🪙 Niveau sur lequel se calculent les RÉCOMPENSES et le COÛT (v0.1028). ⚠️ Posé depuis que
-   *  le niveau d'un lieu est tiré par RANG, comme une faille (entre Bronze et le rang du
-   *  joueur) : il dit la difficulté, le rang affiché et l'XP des champions. L'or, les
-   *  ressources, le butin et le coût, eux, gardent la fenêtre [joueur, +10] d'avant
-   *  (décision de l'utilisateur) — sans ça l'or de la carte chutait de 58 à 75 % (mesuré).
-   *  Absent → le niveau du lieu (failles, et les lieux d'avant). */
+  /** ⚠️ LEGACY (v0.1028 → v0.1153) : plus écrit ni lu. Les récompenses suivent désormais la
+   *  DIFFICULTÉ affichée (`poiDifficultyLevel`), plus une fenêtre tirée à part. Le champ reste
+   *  dans le type parce que les cartes sauvegardées le portent encore. */
   rewardLevel?: number;
   /** ⚔️ BANDE EN MARCHE uniquement — la faction héritée de sa faille, et son point de
    *  DÉPART. ⚠️ `from` est immuable : la marche s'interpole de là vers la ville, donc la
@@ -642,9 +639,10 @@ export const HARVEST = {
   manaPerLevel: 0.15,
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
-  /** Trajet (facteur de voyage) à partir duquel une archive rend une 2ᵉ clé : aller loin
-   *  paie plus, ici aussi. */
-  archiveFarKeyAt: 6,
+  /** Force des gardes (en ennemis) à partir de laquelle une archive rend une 2ᵉ clé : la
+   *  récompense suit la DIFFICULTÉ, plus la distance (v0.1153). Tailles 1 · 1,5 · 2 · 2,5 →
+   *  une archive sur deux, comme l'ancien seuil de trajet. */
+  archiveBigGuardAt: 2,
 } as const;
 
 export const EXPE = {
@@ -834,6 +832,28 @@ export const EXPE = {
   // contredit « l'énergie est un complément, jamais un substitut au sport »). On limite
   // le tf pris en compte ET on cape la valeur finale à ~1 run.
   mineEnergyTfCap: 2.5, // l'énergie ne profite pas des longs trajets comme le loot
+  // 🎯 LES RÉCOMPENSES SUIVENT LA DIFFICULTÉ, PLUS LA DISTANCE (v0.1153, demandé). Tout ce que
+  // `travelFactor` payait au trajet réel se paie désormais à ce trajet de RÉFÉRENCE, le même
+  // pour tous les lieux : aller loin ne coûte plus que du TEMPS.
+  // ⚠️ Le trajet de référence d'un lieu = celui d'un lieu de SA DIFFICULTÉ posé à cette
+  // distance : un lieu plus dur « vaut » une plus longue expédition. MESURÉ (goldSink) :
+  // 0,9 — la distance que visait l'ancien modèle du joueur qui optimise — reproduit le
+  // revenu d'avant à tous les niveaux. ⚠️ Un trajet FIXE a été mesuré puis écarté : à 9 h
+  // l'or gonflait de +58 % au niveau 10 et de 0 % au 70, à 5-7 h il baissait partout.
+  rewardDist: 0.9,
+  // 🪙 Échelle de l'or des MINES depuis qu'il suit la DIFFICULTÉ (v0.1153, choisi par
+  // l'utilisateur : « retrouver l'or actuel »). Une vraie carte propose surtout des lieux SOUS
+  // le rang du joueur (voulu) : payés à leur difficulté, les 2 meilleurs lieux d'une journée
+  // rendaient 2,1 à 3,7 fois moins d'or (mesuré, héros équipé + 1 champion, défaites
+  // comprises, niveaux 10 à 70). ⚠️ La MINE seule : sur un multiplicateur global, camps et
+  // convois devenaient trop généreux (+46 % d'or des camps au niveau 26, borne 30 %).
+  // MESURÉ (goldSink, modèle échantillonné sur de vraies cartes), part du plafond sur un an :
+  // ×2 → 77,8 / 68,1 / 61,7 % · ×2,3 → 79,9 / 70,0 / 63,3 % · ×2,4 → 80,7 / 70,6 / 64,0 % (les soins
+  // du héros passent sous ⅓ de journée au niveau 35). Avant : 81,1 / 71,8 / 66,2 %.
+  rewardGoldMult: 2.3,
+  /** 🌱 Niveau du joueur jusqu'auquel les lieux restent à sa portée (`earlySpawnLevel`). */
+  earlySpawnCapLevel: 10,
+  earlySpawnSpan: 2,
   mineEnergyMax: 60, // plafond dur par expédition (≈ 1 run)
   arenaMaxItems: 8, // garde-fou d'inventaire : une run très longue ne noie pas le sac
 } as const;
@@ -901,10 +921,92 @@ export function poiTravelLevel(p: Pick<Poi, 'level' | 'travelLevel'>): number {
   return p.travelLevel ?? p.level;
 }
 
-/** Le niveau sur lequel se calculent récompenses et coût d'un POI — ⚠️ SOURCE UNIQUE (cf.
- *  `Poi.rewardLevel`). La difficulté et l'XP des champions, elles, lisent `level`. */
-export function poiRewardLevel(p: Pick<Poi, 'level' | 'rewardLevel'>): number {
-  return p.rewardLevel ?? p.level;
+/**
+ * 🏅 LE NIVEAU DE DIFFICULTÉ D'UN LIEU — celui que son rang affiché dit.
+ *
+ * Camps, repaires et lieux de RÉCOLTE gardés : leur difficulté a deux facteurs (le niveau de
+ * leurs ennemis et leur nombre) — on rend le niveau ÉQUIVALENT, celui auquel une équipe
+ * pleine de référence pèserait autant.
+ *
+ * ⚠️ UNE FAILLE GARDE SON NIVEAU (v0.928) : son rang est FIXÉ à son apparition. Une bande en
+ * marche et l'arène gardent le leur : leur effectif est dit ailleurs.
+ * ⚠️ VIT ICI (et `poiRank` la ré-exporte) : les RÉCOMPENSES la lisent, et `poiRank` importe
+ * déjà ce module — la définir là-bas ferait un cycle.
+ */
+export function poiDifficultyLevel(poi: Pick<Poi, 'id' | 'type' | 'level'>): number {
+  const spec = poiForceOf(poi);
+  return spec ? difficultyLevel(poi.level, spec.size) : Math.max(1, poi.level);
+}
+
+/**
+ * 🌱 Le niveau de récompense d'une RÉCOLTE menée par le héros : la difficulté, mais au moins
+ * le niveau du joueur, plafonné à `EXPE.earlySpawnCapLevel` (10).
+ * ⚠️ POURQUOI : en début de partie l'échelle de difficulté est trop GROSSIÈRE — la force d'un
+ * groupe de gardes saute de la difficulté 1 à 7 d'un niveau d'ennemi au suivant, donc tout
+ * lieu à portée d'un joueur de niveau 2-3 est de difficulté 1. Mesuré sans ce plancher : l'or
+ * des deux meilleurs lieux au niveau 2 tombait de 989 à 310 par jour, trois fois moins.
+ * ⚠️ PLAFONNÉ, PAS COUPÉ : couper le plancher au niveau 10 faisait CHUTER l'or de 60 % d'un
+ * niveau au suivant (27 700 → 14 000 par jour, mesuré). Au-delà de la difficulté 10 l'échelle
+ * est fine et la difficulté seule décide ; un lieu plus facile paie comme la difficulté 10.
+ */
+export function heroRewardLevel(
+  poi: Pick<Poi, 'id' | 'type' | 'level'>,
+  playerLevel?: number,
+): number {
+  const d = poiRewardLevel(poi);
+  return playerLevel === undefined
+    ? d
+    : Math.max(d, Math.min(playerLevel, EXPE.earlySpawnCapLevel));
+}
+
+/** 🪙 Le niveau sur lequel se calculent récompenses et coût d'un POI — ⚠️ SOURCE UNIQUE.
+ *  ⚠️ C'EST LA DIFFICULTÉ AFFICHÉE (v0.1153, demandé : « les ressources proportionnelles à la
+ *  difficulté et pas à la distance »). Avant, une fenêtre [joueur, +10] tirée à part (v0.1028)
+ *  payait un lieu facile autant qu'un lieu dur — mesuré, les lieux SOUS le rang du joueur
+ *  rendaient 4 à 10 fois plus d'or que ceux à son rang (les durs échouant plus souvent). */
+export function poiRewardLevel(p: Pick<Poi, 'id' | 'type' | 'level'>): number {
+  return poiDifficultyLevel(p);
+}
+
+/**
+ * 🌱 DÉBUT DE PARTIE : avant `EXPE.earlySpawnCapLevel`, un lieu tiré AU-DESSUS du niveau du joueur
+ * est ramené dans [niveau − 2, niveau du joueur] (v0.1153, demandé). Le rang Bronze couvre les niveaux 1
+ * à 10 : un joueur de niveau 3 voyait surtout des gardes de niveau 7-8, et MESURÉ, un héros
+ * équipé + 1 champion perdait contre presque toutes ses mines — les lieux ne rapportaient
+ * rien au moment où l'or compte le plus.
+ * ⚠️ Un RE-CALAGE déterministe du tirage (modulo), jamais un tirage de plus : la carte de chacun
+ * reste reproductible, et au-delà du seuil rien ne change.
+ */
+export function earlySpawnLevel(tire: number, playerLevel: number): number {
+  const L = Math.max(1, playerLevel);
+  if (L >= EXPE.earlySpawnCapLevel || tire <= L) return tire;
+  // Dans [niveau − 2, niveau] : gagnable, et une récompense proche de ce que le joueur vaut.
+  // ⚠️ [1, niveau] a été mesuré puis écarté : une difficulté moyenne de la MOITIÉ du niveau
+  // rendait une mine gagnée ~5 fois moins payante qu'avant (212 or au niveau 3).
+  const lo = Math.max(1, L - EXPE.earlySpawnSpan);
+  return lo + ((tire - 1) % (L - lo + 1));
+}
+
+/** Le trajet de RÉFÉRENCE (aller-retour, en heures) d'un lieu de difficulté `level` — le même
+ *  quelle que soit sa distance réelle (v0.1153). */
+export function rewardTripHours(level: number): number {
+  return (2 * travelOneWayMin(Math.max(1, level), EXPE.rewardDist)) / 60;
+}
+
+/** Le facteur de voyage de l'OR d'un lieu de difficulté `level` : la distance ne paie plus,
+ *  la DIFFICULTÉ si (v0.1153). */
+export function rewardTravelFactor(level: number): number {
+  return travelFactor(rewardTripHours(level));
+}
+
+/** Le facteur de voyage des RESSOURCES (⚡ 🔮 💠 🗝️) : celui de `TRAVEL_REF_H`, où la courbe
+ *  vaut exactement l'ancienne valeur (`0,5 + h`).
+ *  ⚠️ DISTINCT DE L'OR, et mesuré : les passer au trajet de 9 h de l'or faisait déborder leurs
+ *  invariants — une visite de sanctuaire rendait plus qu'une tentative de boss, et la mine de
+ *  mana d'une faille ignorée rattrapait ce que rend sa fermeture. L'or, lui, se mesure contre
+ *  le puits des bâtiments (goldSink) ; les ressources ont chacune leur borne. */
+export function resourceTravelFactor(): number {
+  return travelFactor(TRAVEL_REF_H);
 }
 
 /**
@@ -1423,13 +1525,19 @@ function placePoiOfType(
   // sienne, sans migration). C’est le NIVEAU qui compense — donc un lieu à 1 ennemi aligne
   // un ennemi plus fort, et « peu de forts » ou « beaucoup de faibles » remplissent le même
   // rang. Exactement ce que le joueur lit.
-  const vise = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  const tire = forcedLevel ?? (type === 'arena' ? rewardRoll : riftLevelFor(rng, playerLevel, []));
+  const vise =
+    forcedLevel === undefined && type !== 'arena' ? earlySpawnLevel(tire, playerLevel) : tire;
   // ⚠️ Les gardes d’une récolte ont une RAMPE de début de partie qui lit le niveau : on
   // l’estime sur la difficulté visée. Au-delà du niveau 7 elle vaut 1, donc sans effet ; en
   // deçà le lieu sort un peu plus facile que sa cible — c’est la rampe d’apprentissage.
   const force = poiForceOf({ id, type, level: vise });
-  const level = force ? levelForDifficulty(vise, force.size) : vise;
-  const rewardLevel = forcedLevel === undefined && level !== rewardRoll ? rewardRoll : undefined;
+  let level = force ? levelForDifficulty(vise, force.size) : vise;
+  // ⚠️ JAMAIS AU-DESSUS DE LA CIBLE (v0.1153) : `levelForDifficulty` rend le premier niveau qui
+  // ATTEINT la cible, et en début de partie la force d’un groupe saute par paliers (rampe des
+  // gardes, qui lit le niveau RÉEL et non la cible) — mesuré, un lieu visé « difficulté 4 » sortait à 7 au niveau 5, donc imprenable.
+  // On redescend jusqu’à ne plus dépasser : plus facile que la cible, jamais plus dur.
+  while (force && level > 1 && poiDifficultyLevel({ id, type, level }) > vise) level--;
   // Le TRAJET, lui, reste lié à la distance : il se calcule sur le niveau que l'éloignement
   // justifie (`travelLevel`, v0.1012), sinon un lieu fort près de la ville mettrait autant
   // de temps qu'un lieu lointain — le trajet ne se lirait plus sur la carte.
@@ -1448,7 +1556,6 @@ function placePoiOfType(
     ...(type === 'lair' && ITEM_SETS.length ? { setId: pick(rng, ITEM_SETS).id } : {}),
     level,
     travelLevel,
-    ...(rewardLevel !== undefined ? { rewardLevel } : {}),
     x: pos.x,
     y: pos.y,
     distNorm: pos.distNorm,
@@ -2003,8 +2110,10 @@ const WIN_TEXT: Record<PoiType, string[]> = {
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */
-/** Ce que RAPPORTE un POI de récolte, hors rencontres de trajet. `tfH` = `travelFactor`
- *  du trajet (super-linéaire : aller loin paie plus que proportionnellement).
+/** Ce que RAPPORTE un POI de récolte, hors rencontres de trajet. `level` = son niveau de
+ *  DIFFICULTÉ (`poiRewardLevel`), `guardSize` = la force de ses gardes (archives : 2ᵉ clé).
+ *  ⚠️ La distance n'y entre plus (v0.1153) : le facteur de voyage est celui du trajet de
+ *  référence (`rewardTravelFactor`).
  *
  *  ⚠️ SOURCE UNIQUE : le héros ET les caravanes lisent cette table. Une copie aurait
  *  divergé au premier réglage — c${A}est exactement le piège des libellés de POI et du
@@ -2012,9 +2121,10 @@ const WIN_TEXT: Record<PoiType, string[]> = {
 export function harvestYield(
   type: PoiType,
   level: number,
-  tfH: number,
+  guardSize = 0,
 ): { energy: number; summonStones: number; keys: number; mana: number } {
   const L = Math.max(1, level);
+  const tfH = resourceTravelFactor();
   let energy = 0;
   let summonStones = 0;
   let keys = 0;
@@ -2043,7 +2153,7 @@ export function harvestYield(
     // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
     // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet
     // modeste, télégraphié, qui récompense le trajet — deux clés si l'on va loin.
-    keys = 1 + (tfH >= HARVEST.archiveFarKeyAt ? 1 : 0);
+    keys = 1 + (guardSize >= HARVEST.archiveBigGuardAt ? 1 : 0);
   }
   return { energy, summonStones, keys, mana };
 }
@@ -2066,9 +2176,11 @@ export function resolveOutcome(
   // qui versait de la monnaie de singe, ce que la v0.658 prétendait avoir corrigé. Elles
   // rendent désormais des CLÉS, qui n'avaient aucune source dédiée. Un test l'interdit.
   if (HARVEST_TYPES.has(poi.type) && poi.type !== 'mine') {
-    const rthH = (2 * travelOneWayMin(poiTravelLevel(poi), poi.distNorm)) / 60;
-    const tfH = travelFactor(rthH); // super-linéaire : aller loin paie PLUS que proportionnellement
-    const { energy, summonStones, keys, mana } = harvestYield(poi.type, poiRewardLevel(poi), tfH);
+    const { energy, summonStones, keys, mana } = harvestYield(
+      poi.type,
+      heroRewardLevel(poi, playerLevel),
+      harvestGuardOf(poi)?.size ?? 0,
+    );
     // Une récolte sans aléa n'est qu'un distributeur : les rencontres de trajet lui
     // rendent de la variance, et sont la SEULE voie par laquelle elle peut lâcher un objet.
     const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
@@ -2094,8 +2206,7 @@ export function resolveOutcome(
   // ── ARÈNE : gauntlet de survie par vagues (nuit) → RÉCOMPENSE GRASSE ∝ vagues. ──
   // Chère en or (puits) + trajet long, mais paie beaucoup en poussière/pierres/gear.
   if (poi.type === 'arena') {
-    const rthA = (2 * travelOneWayMin(poiTravelLevel(poi), poi.distNorm)) / 60;
-    const tfA = travelFactor(rthA);
+    const tfA = rewardTravelFactor(poiRewardLevel(poi)); // la distance ne paie plus (v0.1153)
     const waves = simulateArena(hero, poi.level, seed + 17);
     const good = waves >= 6; // « belle performance » (pour le ton du rapport / notif)
     // Or : on rend une part du coût (sink net) mais la vraie paie est en ressources.
@@ -2165,7 +2276,7 @@ export function resolveOutcome(
   // être envoyé »). Ce garde est la ceinture : aucun chemin ne peut la résoudre en silence.
   if (isRiftPoi(poi)) throw new Error('Une faille se referme par une incursion (rift.ts).');
   // Mine = récolte (pas de combat) ; les rencontres de trajet lui rendent de la variance.
-  const base = mineOutcome(rng, poi);
+  const base = mineOutcome(rng, poi, heroRewardLevel(poi, playerLevel));
   // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
   // maintenir deux fois la même règle.
   const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
@@ -2181,23 +2292,21 @@ export function resolveOutcome(
   };
 }
 
-/** Durée aller-retour en heures, et le facteur de temps historique `0,5 + h`. */
-function tripHours(poi: Poi): { rth: number; tf: number } {
-  const rth = (2 * travelOneWayMin(poiTravelLevel(poi), poi.distNorm)) / 60;
-  return { rth, tf: 0.5 + rth };
-}
-
 /** MINE : récolte d'or et d'énergie, sans combat (hors rencontres de trajet).
  *
  *  HAUL SCALÉ AU TEMPS DE TRAJET (aller-retour) : une expédition de plusieurs heures
  *  doit VALOIR le coup (avant : reward ∝ niveau seul → dérisoire vs un donjon actif).
  *  MINE = INVESTISSEMENT D'OR (+ temps réel) → doit rapporter nettement plus que le coût.
- *  Rendement = coût × (1,3 + `travelFactor(rth)`) : reine de l'or, et d'autant plus loin. */
-function mineOutcome(rng: () => number, poi: Poi): ExpeditionOutcome {
-  const { rth, tf } = tripHours(poi);
-  const cost = goldCost(poi.type, poiRewardLevel(poi));
-  // MINE = reine de l'or, et d'autant plus loin (coût × 1,3 + facteur de voyage).
-  const gold = Math.round(cost * (1.3 + travelFactor(rth)));
+ *  Rendement = coût × (1,3 + `rewardTravelFactor(difficulté)`) : reine de l'or. ⚠️ Le coût se calcule
+ *  sur la DIFFICULTÉ du lieu, et la distance ne paie plus (v0.1153). */
+function mineOutcome(rng: () => number, poi: Poi, L: number): ExpeditionOutcome {
+  // ⚠️ Trajet de RÉFÉRENCE de sa difficulté, pas le trajet réel (v0.1153).
+  const tf = 0.5 + rewardTripHours(L);
+  const cost = goldCost(poi.type, L);
+  // MINE = reine de l'or (coût × 1,3 + facteur de voyage de référence).
+  // ⚠️ `rewardGoldMult` ne touche QUE la mine (la reine de l'or) : sur un multiplicateur global,
+  // camps et convois devenaient trop généreux (+46 % d'or des camps au niveau 26, borne 30 %).
+  const gold = Math.round(cost * (1.3 + rewardTravelFactor(L)) * EXPE.rewardGoldMult);
   // ÉNERGIE : un complément borné du sport, jamais un substitut (ticket a0d16472).
   const energy = Math.min(
     EXPE.mineEnergyMax,

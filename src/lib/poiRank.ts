@@ -4,26 +4,11 @@
 // (`expedition.ts`) doit pouvoir dériver un niveau depuis une difficulté visée, or ce module
 // lit `expedition` pour connaître la taille d'une force. Les garder ensemble ferait un cycle.
 import { characterRank, type CharacterRank } from './characterRank';
-import { poiForceOf, type Poi } from './expedition';
-import { difficultyLevel } from './poiDifficulty';
+import { poiDifficultyLevel, type Poi } from './expedition';
 
-/**
- * 🏅 LE NIVEAU QUE LE RANG AFFICHÉ D'UN LIEU DOIT DIRE.
- *
- * Camps, repaires et lieux de RÉCOLTE gardés : leur difficulté a deux facteurs (le niveau de
- * leurs ennemis et leur nombre) — on rend le niveau ÉQUIVALENT, celui auquel une équipe
- * pleine de référence pèserait autant.
- *
- * ⚠️ UNE FAILLE GARDE SON NIVEAU, et c'est une décision explicite (v0.928, « on ne change
- * pas le rang comme on a dit au départ ») : son rang est FIXÉ à son apparition et ne monte
- * pas avec l'âge, alors que sa difficulté, elle, grossit chaque jour. Son effectif est
- * affiché à côté (`👾 7 / 12`), donc rien n'est caché. Une bande en marche et l'arène
- * gardent le leur pour la même raison : leur effectif est dit ailleurs.
- */
-export function poiDifficultyLevel(poi: Pick<Poi, 'id' | 'type' | 'level'>): number {
-  const spec = poiForceOf(poi);
-  return spec ? difficultyLevel(poi.level, spec.size) : Math.max(1, poi.level);
-}
+// 🏅 La définition vit dans `expedition.ts` (les récompenses la lisent) ; ré-exportée ici
+// pour les écrans qui la lisaient déjà.
+export { poiDifficultyLevel };
 
 /** 🏅 Le rang affiché d'un lieu. ⚠️ SOURCE UNIQUE : la pastille de la carte, la fiche ET les
  *  filtres de difficulté la lisent — trois définitions finiraient par se contredire, et

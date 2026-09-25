@@ -27,7 +27,6 @@ import {
   poiOffers,
   escortCombatant,
   ambushChance,
-  heroEquivalentFactor,
   isCaravanClaimable,
   pruneCaravans,
   CARAVAN_KEEP_CLAIMED,
@@ -110,6 +109,8 @@ import {
   type PoiType,
 } from '@/lib/expedition';
 import { poiDifficultyLevel } from '@/lib/poiRank';
+import { levelForDifficulty } from '@/lib/poiDifficulty';
+import { harvestGuardOf } from '@/lib/expedition';
 
 const poi = (over: Partial<Poi> = {}): Poi => ({
   id: 'p',
@@ -355,12 +356,16 @@ describe('⚠️ la cargaison se paie sur la durée qu’un HÉROS aurait mise',
       );
     }
   });
-  it('…et la paie est celle du trajet du héros', () => {
-    // `travelFactor` est SUPER-LINÉAIRE : payer sur le temps réel ferait de la vitesse
-    // (rôles 🧭) une PÉNALITÉ par voyage. La paie ne dépend que du lieu.
-    const p = poi();
-    const heroH = (2 * travelOneWayMin(p.level, p.distNorm)) / 60;
-    expect(heroEquivalentFactor(p)).toBeCloseTo(travelFactor(heroH), 6);
+  it('…et la paie ne dépend ni de la vitesse ni de la DISTANCE (v0.1153)', () => {
+    // Payer sur le temps réel ferait de la vitesse (rôles 🧭) une PÉNALITÉ par voyage ; et
+    // depuis la v0.1153 la récompense suit la DIFFICULTÉ du lieu, jamais son éloignement.
+    const esc = team(3, 40);
+    for (let s = 1; s <= 20; s++) {
+      const pres = resolveCaravan(poi({ level: 40, distNorm: 0.1 }), esc, s, NUS, aJour(esc));
+      const loin = resolveCaravan(poi({ level: 40, distNorm: 1 }), esc, s, NUS, aJour(esc));
+      expect(loin.gold).toBe(pres.gold);
+      expect(loin.energy).toBe(pres.energy);
+    }
   });
 });
 
@@ -379,7 +384,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     // servait de mesure, est retirée v0.998) : c'est une récolte pure, sans filet d'or qui
     // brouillerait la part.
     const p = poi({ type: 'well' });
-    const heros = harvestYield(p.type, p.level, heroEquivalentFactor(p)).energy;
+    const heros = harvestYield(p.type, poiDifficultyLevel(p), harvestGuardOf(p)?.size ?? 0).energy;
     // ⚠️ Une escorte SANS RÔLE : le sujet du test est `yieldShare`, pas la cargaison
     // qu'un 🐫 ajoute. Depuis que la référence est mixte, elle porte un rôle de haul —
     // le test mesurait donc les deux à la fois et est tombé pour la mauvaise raison.
@@ -393,7 +398,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     // ⚠️ Il faut FORCER un multiplicateur > 1, sinon le test passe même sans plafond :
     // une escorte 🐫 (cargaison) et des embuscades gagnées poussent `k` au-dessus de 1.
     const p = poi({ type: 'well', level: 90, distNorm: 1 });
-    const cap = harvestYield('well', 90, heroEquivalentFactor(p)).energy * CARAVAN.yieldShare;
+    const cap = harvestYield('well', poiDifficultyLevel(p)).energy * CARAVAN.yieldShare;
     const cargo = team(4, 90, 'haul');
     let vu = false;
     for (let s = 0; s < 200; s++) {
@@ -796,7 +801,7 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
     // On corrige la fraction sans desserrer l'invariant « complément, jamais substitut au
     // sport » : les multiplicateurs ne peuvent que RÉDUIRE l'énergie, jamais l'augmenter.
     const p = poi({ type: 'well', level: 70 });
-    const brut = harvestYield(p.type, p.level, heroEquivalentFactor(p)).energy * CARAVAN.yieldShare;
+    const brut = harvestYield(p.type, poiDifficultyLevel(p)).energy * CARAVAN.yieldShare;
     for (let seed = 1; seed <= 30; seed++)
       expect(
         resolveCaravan(p, team(3, 70), seed, NUS, aJour(team(3, 70))).energy,
@@ -1764,7 +1769,7 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
       { advGear: [] },
       aJour(escort),
     );
-    expect(o.gold).toBe(996); // v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
+    expect(o.gold).toBe(804); // v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
     expect(o.energy).toBe(30);
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et

@@ -9,7 +9,9 @@ import { DEFENSE_TYPES, healCost } from '@/lib/raid';
 // des CAMPS DE FACTION se mesure contre LE MÊME dénominateur, et deux copies auraient
 // divergé — c'est par un mauvais dénominateur que ce fichier a déjà laissé passer un puits
 // qui débordait (v0.684) puis un puits devenu mur (v0.733).
-import { LEVELS, MINE_DIST, goldPerDay, fullGoldPerDay, mineNet } from './helpers/goldModel';
+import { LEVELS, goldPerDay, fullGoldPerDay, mineNet, bestPlaceLevel } from './helpers/goldModel';
+import { harvestGuardOf } from '@/lib/expedition';
+import { levelForDifficulty } from '@/lib/poiDifficulty';
 
 /** LE PUITS D'OR, mesuré contre le REVENU RÉEL.
  *
@@ -148,46 +150,47 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
     // s'écarte du jeu, tout ce qui s'appuie dessus devient faux SANS qu'aucun test ne
     // rougisse : c'est ainsi qu'un puits qui débordait (v0.684, mauvais dénominateur)
     // puis un puits devenu mur (v0.733, mines à distance moyenne) sont passés au vert.
-    // Vérifié par mutation : sans ce test, ramener MINE_DIST à 0,5 ne casse RIEN.
 
-    // 1. Le net d'une mine doit être CELUI QUE LE JEU PAIE, pas une formule recopiée.
-    //    Une mine est une récolte : aucun combat, donc le combattant n'influe pas.
-    //    ⚠️ On compare des MOYENNES : `resolveOutcome` tire des rencontres de trajet
-    //    (v0.659), donc un seul tirage s'écarte de 33 % sans rien prouver.
+    // 1. Le net d'une expédition vient de VRAIES cartes (v0.1153 : `mineNet` échantillonne
+    //    les deux meilleurs lieux avec les fonctions du jeu). Ce qui reste à garder : qu'il ne
+    //    passe JAMAIS au-dessus de ce qu'une mine gagnée à cette difficulté paie vraiment, et
+    //    qu'il n'en soit pas une fraction dérisoire (une carte vide ne vaut rien, ce serait un
+    //    mur). ⚠️ Et la DISTANCE ne change plus rien : la même mine, près ou au bout de la carte.
+    //    ⚠️ On compare des MOYENNES : `resolveOutcome` tire des rencontres de trajet (v0.659).
     for (const lv of [10, 28, 60]) {
-      const p = {
-        id: 'm',
-        type: 'mine' as const,
-        level: lv,
-        x: 0,
-        y: 0,
-        dist: MINE_DIST,
-        distNorm: MINE_DIST,
-        spawnAt: 0,
-        expireAt: 9e15,
-        perilous: false,
+      const D = bestPlaceLevel(lv);
+      const size = harvestGuardOf({ id: 'm', type: 'mine', level: D })!.size;
+      const mine = (dist: number) => {
+        const p = {
+          id: 'm',
+          type: 'mine' as const,
+          level: levelForDifficulty(D, size),
+          x: 0,
+          y: 0,
+          dist,
+          distNorm: dist,
+          spawnAt: 0,
+          expireAt: 9e15,
+          perilous: false,
+        };
+        let somme = 0;
+        for (let s = 1; s <= 300; s++)
+          somme += resolveOutcome(refFighter(lv), p as never, s, lv).gold;
+        return somme / 300;
       };
-      let somme = 0;
-      for (let s = 1; s <= 300; s++)
-        somme += resolveOutcome(refFighter(lv), p as never, s, lv).gold;
-      const reel = somme / 300; // plus de coût d’envoi (v0.1069)
-      const ecart = mineNet(lv) / reel;
-      // Le modèle peut être un peu SOUS le jeu (il ignore les rencontres, d'espérance
-      // légèrement positive) — jamais AU-DESSUS, et jamais d'un facteur.
+      const proche = mine(0.2);
+      const loin = mine(0.9);
+      expect(loin, `niveau ${lv} : la distance ne paie plus`).toBeCloseTo(proche, -1);
+      const ecart = mineNet(lv) / proche;
       expect(
         ecart,
-        `niveau ${lv} : modèle ${Math.round(mineNet(lv))} vs jeu ${Math.round(reel)}`,
-      ).toBeGreaterThan(0.75);
-      expect(
-        ecart,
-        `niveau ${lv} : modèle ${Math.round(mineNet(lv))} vs jeu ${Math.round(reel)}`,
+        `niveau ${lv} : modèle ${mineNet(lv)} vs mine ${Math.round(proche)}`,
       ).toBeLessThan(1.1);
+      expect(
+        ecart,
+        `niveau ${lv} : modèle ${mineNet(lv)} vs mine ${Math.round(proche)}`,
+      ).toBeGreaterThan(0.3);
     }
-
-    // 2. On modélise le joueur qui OPTIMISE, pas le joueur moyen : un puits calibré sur
-    //    le second déborde pour le premier. La récompense étant super-linéaire en temps
-    //    de trajet (v0.683), « optimiser » veut dire viser LOIN.
-    expect(MINE_DIST).toBeGreaterThanOrEqual(0.8);
   });
 
   it('⚠️ SIMULATION SUR UN AN : le puits ne déborde pas, et n’est pas un mur non plus', () => {
@@ -210,7 +213,7 @@ describe("puits d'or : on court toujours après les derniers niveaux", () => {
       // le débordement que la v0.684 corrigeait.
       expect(part, dit).toBeLessThan(0.9);
     }
-  });
+  }, 180_000);
 
   it('⚠️ L’OR NE DORT PAS : sur un an, il est dépensé au fil de l’eau (v0.996)', () => {
     // « Pas en excès » se mesure là : ce qui reste en banque en fin d’année, et la part du

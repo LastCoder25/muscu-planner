@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { playerCombatant, mulberry32 } from '@/lib/combat';
 import {
   isQuotaPoi,
+  heroRewardLevel,
+  poiForceOf,
   poiRewardLevel,
   isRiftPoi,
   EXPE,
@@ -63,13 +65,13 @@ describe('expedition — éco & géométrie', () => {
 });
 
 describe('expedition — carte / monde', () => {
-  it('createMap : POI d’entrée, rang tiré, récompense dans la fenêtre, espacés', () => {
+  it('createMap : POI d’entrée, rang tiré, récompense = difficulté, espacés', () => {
     const m = createMap(123, 0, 10, OUT, 3);
     expect(m.pois.length).toBeGreaterThanOrEqual(1);
-    const w = spawnWindow(10);
     // 🏅 Depuis la v0.1028 TOUS les lieux tirent leur RANG, comme les failles
-    // (`riftLevelFor`) : entre le niveau 1 et le joueur, plus la place « au-dessus ». La
-    // RÉCOMPENSE, elle, garde la fenêtre (`poiRewardLevel`) — l'économie ne bouge pas.
+    // (`riftLevelFor`) : entre le niveau 1 et le joueur, plus la place « au-dessus ».
+    // 🎯 Depuis la v0.1153 la RÉCOMPENSE suit cette difficulté (`poiRewardLevel`), plus une
+    // fenêtre tirée à part.
     // ⚠️ RÉÉCRIT (v0.1108) : c’est la DIFFICULTÉ qui est bornée, plus le niveau des
     // ennemis. Depuis que le rang tiré est celui de la difficulté, le niveau en est
     // DÉRIVÉ — un lieu qui n’aligne qu’un ennemi lui donne un niveau plus élevé pour peser
@@ -77,8 +79,8 @@ describe('expedition — carte / monde', () => {
     for (const p of m.pois.filter(isQuotaPoi)) {
       expect(p.level).toBeGreaterThanOrEqual(1);
       expect(poiDifficultyLevel(p)).toBeLessThanOrEqual(10 + riftAboveSpan(10));
-      expect(poiRewardLevel(p)).toBeGreaterThanOrEqual(w.min);
-      expect(poiRewardLevel(p)).toBeLessThanOrEqual(w.max);
+      expect(poiRewardLevel(p)).toBe(poiDifficultyLevel(p));
+      expect(p.rewardLevel).toBeUndefined();
     }
     // …et une faille, elle, ne dépasse jamais l'écart « au-dessus » (v0.980).
     for (const p of m.pois.filter(isRiftPoi))
@@ -244,11 +246,17 @@ describe('expedition — résolution', () => {
     expect(() => resolveOutcome(strong, lair, 3)).toThrow();
     expect(() => startExpedition(strong, { ...lair, type: 'camp' }, 0, 3)).toThrow();
   });
-  it('haul scalé au TEMPS de trajet : un POI plus loin rend plus (même niveau)', () => {
+  it('🎯 la récolte suit la DIFFICULTÉ, jamais la distance (v0.1153)', () => {
+    // Demandé : « les ressources proportionnelles à la difficulté et pas à la distance ».
+    // Aller loin ne coûte plus que du TEMPS.
     const near: Poi = { ...mine, distNorm: 0.1 };
     const far: Poi = { ...mine, distNorm: 0.95 };
-    expect(resolveOutcome(strong, far, 2).gold).toBeGreaterThan(
-      resolveOutcome(strong, near, 2).gold,
+    expect(resolveOutcome(strong, far, 2).gold).toBe(resolveOutcome(strong, near, 2).gold);
+    // …et une mine plus DURE (même distance, niveau plus haut) rend plus.
+    const dure: Poi = { ...mine, level: mine.level + 20 };
+    expect(poiRewardLevel(dure)).toBeGreaterThan(poiRewardLevel(mine));
+    expect(resolveOutcome(strong, dure, 2).gold).toBeGreaterThan(
+      resolveOutcome(strong, mine, 2).gold,
     );
   });
   it('arène : renvoie un nombre de vagues, butin croissant avec les vagues tenues', () => {
@@ -684,5 +692,35 @@ describe('📬 le rapport de groupe et la boîte', () => {
     expect(m.claimAt).toBe(3);
     // ⚠️ Un camp ne rend AUCUNE ferraille : le rapport n'en porte pas.
     expect('scrap' in m).toBe(false);
+  });
+});
+
+describe('🌱 le début de partie reste jouable (v0.1153)', () => {
+  it('sous le niveau 10, aucun lieu n’apparaît plus DUR que le joueur', () => {
+    // ⚠️ La force d'un groupe de gardes saute par paliers en début de partie : sans le garde
+    // du spawn, un lieu visé « difficulté 4 » sortait à 7 au niveau 5, donc imprenable.
+    for (const L of [2, 3, 5, 8]) {
+      let checked = 0;
+      for (let seed = 1; seed <= 15; seed++) {
+        const map = advanceWorld(createMap(seed * 97, 0, L, L), 2 * 24 * 3600_000, L, L);
+        for (const p of map.pois) {
+          if (!poiForceOf(p) || p.type === 'arena') continue;
+          expect(
+            poiDifficultyLevel(p),
+            `niveau ${L} : ${p.type} niv ${p.level}`,
+          ).toBeLessThanOrEqual(L);
+          checked++;
+        }
+      }
+      expect(checked).toBeGreaterThan(20);
+    }
+  });
+  it('une récolte du héros paie au moins le niveau du joueur, plafonné à 10', () => {
+    const p = { id: 'x', type: 'mine' as const, level: 1 };
+    expect(heroRewardLevel(p, 3)).toBe(3);
+    expect(heroRewardLevel(p, 40)).toBe(EXPE.earlySpawnCapLevel);
+    expect(heroRewardLevel(p)).toBe(poiRewardLevel(p));
+    const dur = { id: 'x', type: 'mine' as const, level: 60 };
+    expect(heroRewardLevel(dur, 3)).toBe(poiRewardLevel(dur));
   });
 });

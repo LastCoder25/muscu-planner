@@ -24,6 +24,8 @@ import {
   POI_LABEL,
   isQuotaPoi,
   poiRewardLevel,
+  poiDifficultyLevel,
+  harvestGuardOf,
   isRiftPoi,
   HARVEST,
   EXPE,
@@ -393,20 +395,20 @@ describe('rythme de la carte', () => {
       rTrajet,
       `corrélation distance/niveau de trajet = ${rTrajet.toFixed(2)}`,
     ).toBeGreaterThan(0.95);
-    // 🪙 LA RÉCOMPENSE garde la fenêtre, UNIFORME (v0.1028) : la moyenne reste au milieu
-    // (l'économie, calibrée sur l'ancien tirage, ne bouge pas) et les deux bouts sont atteints.
-    const w = spawnWindow(26);
-    const moy = pts.reduce((a, p) => a + p.r, 0) / pts.length;
-    expect(moy).toBeGreaterThan(w.min + 3.5);
-    expect(moy).toBeLessThan(w.min + 6.5);
-    const proches = pts.filter((p) => p.d < 0.25);
+    // 🎯 LA RÉCOMPENSE suit la DIFFICULTÉ (v0.1153), donc elle non plus ne dépend pas de la
+    // distance : un lieu riche peut être près de la ville, un lieu pauvre au bout.
+    const rRecompense = pearson(
+      d,
+      pts.map((p) => p.r),
+    );
     expect(
-      proches.some((p) => p.r >= w.max - 1),
-      'un lieu fort près de la ville',
-    ).toBe(true);
+      Math.abs(rRecompense),
+      `corrélation distance/récompense = ${rRecompense.toFixed(2)}`,
+    ).toBeLessThan(0.15);
+    const hauts = [...pts].sort((a, b) => b.r - a.r).slice(0, Math.ceil(pts.length / 5));
     expect(
-      pts.some((p) => p.d > 0.75 && p.r <= w.min + 1),
-      'un lieu faible au bout',
+      hauts.some((p) => p.d < 0.25),
+      'un lieu riche près de la ville',
     ).toBe(true);
     // 🏅 LE NIVEAU, lui, est tiré par RANG comme une faille (v0.1028) : tous les rangs de
     // Bronze à celui du joueur sortent — c'est ce qui donne à des champions Bronze un lieu à
@@ -415,7 +417,7 @@ describe('rythme de la carte', () => {
     const rangs = new Set(pts.filter((p) => p.l <= 26).map((p) => characterRank(p.l).rankIndex));
     for (let i = 0; i <= top; i++) expect(rangs.has(i), `rang ${i} absent`).toBe(true);
     expect(
-      pts.some((p) => p.l < w.min),
+      pts.some((p) => p.l < spawnWindow(26).min),
       'des lieux SOUS la fenêtre',
     ).toBe(true);
   });
@@ -1208,12 +1210,21 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
     }
   });
 
-  it('les ARCHIVES rendent des CLÉS, et davantage quand on va loin', () => {
-    const at = (distNorm: number) => {
+  it('les ARCHIVES rendent des CLÉS, et davantage quand elles sont mieux GARDÉES (v0.1153)', () => {
+    // ⚠️ Avant : « davantage quand on va loin ». La récompense suit désormais la DIFFICULTÉ.
+    const idOf = (gros: boolean) => {
+      for (let i = 0; i < 200; i++) {
+        const id = `a${i}`;
+        const size = harvestGuardOf({ id, type: 'archive', level: 26 })!.size;
+        if (gros === size >= 2) return id;
+      }
+      throw new Error('aucun id');
+    };
+    const at = (id: string, distNorm: number) => {
       let total = 0;
       for (let s = 1; s <= 40; s++) {
         const poi = {
-          id: 'p',
+          id,
           type: 'archive' as PoiType,
           level: 26,
           x: 100,
@@ -1226,17 +1237,23 @@ describe('la carte ne paie JAMAIS en monnaie morte', () => {
       }
       return total / 40;
     };
-    const proche = at(0.1);
-    const loin = at(1);
-    expect(proche, `archive proche : ${proche.toFixed(2)} clé(s)`).toBeGreaterThanOrEqual(1);
-    expect(loin, `proche ${proche.toFixed(2)} vs loin ${loin.toFixed(2)}`).toBeGreaterThan(proche);
+    const peu = at(idOf(false), 0.5);
+    const bien = at(idOf(true), 0.5);
+    expect(peu, `archive peu gardée : ${peu.toFixed(2)} clé(s)`).toBeGreaterThanOrEqual(1);
+    expect(bien, `peu gardée ${peu.toFixed(2)} vs bien gardée ${bien.toFixed(2)}`).toBeGreaterThan(
+      peu,
+    );
+    // …et la distance n'y change rien.
+    expect(at(idOf(true), 1)).toBe(at(idOf(true), 0.1));
   });
 });
 
-describe('🪙 le RANG d’un lieu ne touche pas sa récompense (v0.1028)', () => {
-  // Décision de l'utilisateur : le rang tiré (comme une faille) décide de la difficulté, du
-  // rang affiché et de l'XP des champions ; or, ressources et coût gardent la fenêtre.
-  // Mesuré avant ce garde : récompense sur le rang = or de la carte −58 à −75 %.
+describe('🎯 la récompense suit la DIFFICULTÉ, jamais la distance (v0.1153)', () => {
+  // ⚠️ RENVERSE la v0.1028 (« le rang ne touche pas la récompense »), à la demande de
+  // l'utilisateur : « les ressources proportionnelles à la difficulté et pas à la distance ».
+  // Mesuré avant : les lieux SOUS le rang du joueur rendaient 4 à 10 fois plus d'or que ceux
+  // à son rang — une fenêtre tirée à part payait le facile autant que le dur, et le dur
+  // échouait plus souvent. L'or total est inchangé (goldSink : 81,1 / 71,8 / 66,2 %).
   const spawned: Poi[] = [];
   let map = createMap(4242, 0, 30, OUT);
   for (let t = 0; t <= 7 * 24 * HOUR; t += 3 * HOUR) {
@@ -1244,33 +1261,42 @@ describe('🪙 le RANG d’un lieu ne touche pas sa récompense (v0.1028)', () =
     for (const p of map.pois)
       if (isQuotaPoi(p) && !spawned.some((q) => q.id === p.id)) spawned.push(p);
   }
-  it('la plupart des lieux ont un niveau de rang ≠ leur niveau de récompense', () => {
-    expect(spawned.filter((p) => p.rewardLevel !== undefined).length).toBeGreaterThan(
-      spawned.length / 2,
-    );
+  it('aucun lieu ne tire plus de niveau de récompense à part', () => {
+    expect(spawned.length).toBeGreaterThan(10);
+    for (const p of spawned) {
+      expect(p.rewardLevel).toBeUndefined();
+      expect(poiRewardLevel(p)).toBe(poiDifficultyLevel(p));
+    }
   });
-  it('coût et récolte ne dépendent que du niveau de récompense', () => {
+  it('la distance ne change rien ; un lieu plus DUR paie plus', () => {
     let checked = 0;
     for (const [i, p] of spawned.entries()) {
-      if (p.rewardLevel === undefined || p.type === 'camp' || p.type === 'lair') continue;
-      const autreRang = { ...p, level: p.level === 1 ? 50 : 1 };
+      if (p.type === 'camp' || p.type === 'lair' || p.type === 'arena') continue;
       const a = resolveOutcome(hero, p, i + 1, 30);
-      const b = resolveOutcome(hero, autreRang, i + 1, 30);
-      expect(b.gold, `${p.type} or`).toBe(a.gold);
-      expect(b.energy, `${p.type} énergie`).toBe(a.energy);
-      expect(b.summonStones, `${p.type} pierres`).toBe(a.summonStones);
-      expect(b.keys ?? 0, `${p.type} clés`).toBe(a.keys ?? 0);
+      const loin = resolveOutcome(hero, { ...p, distNorm: p.distNorm < 0.5 ? 1 : 0.05 }, i + 1, 30);
+      expect(loin.gold, `${p.type} or`).toBe(a.gold);
+      expect(loin.energy, `${p.type} énergie`).toBe(a.energy);
+      expect(loin.summonStones, `${p.type} pierres`).toBe(a.summonStones);
+      expect(loin.key, `${p.type} clés`).toBe(a.key);
+      const dur = { ...p, level: p.level + 25 };
+      expect(poiRewardLevel(dur)).toBeGreaterThan(poiRewardLevel(p));
+      expect(goldCost(p.type, poiRewardLevel(dur))).toBeGreaterThan(
+        goldCost(p.type, poiRewardLevel(p)),
+      );
       checked++;
     }
     expect(checked).toBeGreaterThan(10);
   });
-  it('le butin d’un camp suit le niveau de récompense, pas le rang', () => {
-    const camps = spawned.filter((p) => (p.type === 'camp' || p.type === 'lair') && p.rewardLevel);
+  it('le butin d’un camp suit sa difficulté, pas sa distance', () => {
+    const camps = spawned.filter((p) => p.type === 'camp' || p.type === 'lair');
     expect(camps.length).toBeGreaterThan(3);
     for (const p of camps) {
-      const spec = campSpecOf(p);
-      expect(campGroupHaul({ ...p, level: p.level === 1 ? 50 : 1 }, spec)).toEqual(
+      const spec = campSpecOf(p)!;
+      expect(campGroupHaul({ ...p, distNorm: p.distNorm < 0.5 ? 1 : 0.05 }, spec)).toEqual(
         campGroupHaul(p, spec),
+      );
+      expect(campGroupHaul({ ...p, level: p.level + 25 }, spec).gold).toBeGreaterThan(
+        campGroupHaul(p, spec).gold,
       );
     }
   });

@@ -112,7 +112,7 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
     use: 'Entrer dans le Labyrinthe, seule source de familiers.',
     sources: [
       { emoji: '🚪', label: 'Porte du Labyrinthe', detail: 'bâtiment de la base, à récolter' },
-      { emoji: '📖', label: 'Archives de la carte', detail: '1, ou 2 si le trajet est long' },
+      { emoji: '📖', label: 'Archives de la carte', detail: '1, ou 2 si les gardes sont nombreux' },
       { emoji: '👑', label: 'Boss de palier', detail: 'garantie à la 1re victoire, puis parfois' },
       { emoji: '🏰', label: 'Donjons', detail: 'rarement' },
       { emoji: '🌀', label: 'Portail sans fin', detail: 'parfois' },
