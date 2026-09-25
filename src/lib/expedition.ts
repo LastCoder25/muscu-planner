@@ -638,6 +638,10 @@ export const HARVEST = {
   manaBase: 1,
   manaPerLevel: 0.15,
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
+  /** 🪙 Or d'une récolte hors mine, en part de son coût — le même pour le héros et pour une
+   *  équipe (`harvestGold`, v0.1159 ; avant : 0,35 et 0,3). Symbolique : ces lieux paient en
+   *  ressources. */
+  goldShare: 0.35,
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
   /** Force des gardes (en ennemis) à partir de laquelle une archive rend une 2ᵉ clé : la
    *  récompense suit la DIFFICULTÉ, plus la distance (v0.1153). Tailles 1 · 1,5 · 2 · 2,5 →
@@ -850,7 +854,15 @@ export const EXPE = {
   // MESURÉ (goldSink, modèle échantillonné sur de vraies cartes), part du plafond sur un an :
   // ×2 → 77,8 / 68,1 / 61,7 % · ×2,3 → 79,9 / 70,0 / 63,3 % · ×2,4 → 80,7 / 70,6 / 64,0 % (les soins
   // du héros passent sous ⅓ de journée au niveau 35). Avant : 81,1 / 71,8 / 66,2 %.
-  rewardGoldMult: 2.3,
+  // ⚠️ 2,3 → 2,0 en v0.1159 : une ÉQUIPE touche désormais l'or plein d'une mine (`harvestGold`,
+  // demandé : « héros ou non, l'or gagné est le même »). Les équipes prennent les mines que le
+  // héros laisse sur la carte (~4,5 mines apparaissent par jour, le héros en fait ~2) : à 2,3 le
+  // revenu complet montait de +4 à +10 % et la part du plafond passait à 83,0 / 72,5 / 65,5 %.
+  // Balayage (équipe payée sans son rôle 🐫, comme le héros) : ×2,1 → 81,3 / 71,0 / 64,2 % ·
+  // ×2,0 → 80,7 / 70,3 / 63,6 % (avant : 80,5 / 70,7 / 64,1), revenu complet de −4 à +1 %
+  // d'avant, marge inchangée (84,0 / 87,9 % à un et deux bâtiments de moins). Une mine seule
+  // paie ~13 % de moins ; c'est le nombre de mines exploitables qui compense.
+  rewardGoldMult: 2.0,
   /** 🌱 Niveau du joueur jusqu'auquel les lieux restent à sa portée (`earlySpawnLevel`). */
   earlySpawnCapLevel: 10,
   earlySpawnSpan: 2,
@@ -2184,7 +2196,7 @@ export function resolveOutcome(
     const k = tr.resMult;
     return {
       win: true,
-      gold: Math.round(cost * 0.35 * tr.goldMult), // symbolique : la paie est en ressources
+      gold: Math.round(harvestGold(poi, playerLevel) * tr.goldMult), // symbolique : la paie est en ressources
       // Le plafond s'applique APRÈS le bonus de trajet : « complément, jamais
       // substitut au sport » est un invariant, pas une valeur de base qu'un bon
       // voyage pourrait dépasser.
@@ -2273,7 +2285,7 @@ export function resolveOutcome(
   // être envoyé »). Ce garde est la ceinture : aucun chemin ne peut la résoudre en silence.
   if (isRiftPoi(poi)) throw new Error('Une faille se referme par une incursion (rift.ts).');
   // Mine = récolte (pas de combat) ; les rencontres de trajet lui rendent de la variance.
-  const base = mineOutcome(rng, poi, heroRewardLevel(poi, playerLevel));
+  const base = mineOutcome(rng, poi, heroRewardLevel(poi, playerLevel), playerLevel);
   // Rencontres de trajet — MÊME helper que les récoltes (aller ET retour), pour ne pas
   // maintenir deux fois la même règle.
   const tr = rollTravelEncounters(rng, hero, poi, seed, playerLevel);
@@ -2296,14 +2308,41 @@ export function resolveOutcome(
  *  MINE = INVESTISSEMENT D'OR (+ temps réel) → doit rapporter nettement plus que le coût.
  *  Rendement = coût × (1,3 + `rewardTravelFactor(difficulté)`) : reine de l'or. ⚠️ Le coût se calcule
  *  sur la DIFFICULTÉ du lieu, et la distance ne paie plus (v0.1153). */
-function mineOutcome(rng: () => number, poi: Poi, L: number): ExpeditionOutcome {
+/**
+ * 🪙 L'OR DE BASE D'UN LIEU DE RÉCOLTE — ⚠️ SOURCE UNIQUE, que le héros y aille ou non (v0.1159,
+ * demandé : « héros ou non, l'or gagné est le même »). Avant, une mine payait sa formule pleine
+ * au héros et 30 % de son coût à une équipe sans lui : ~90 fois moins pour le même lieu.
+ * L'expédition du héros (`mineOutcome`, les autres récoltes) et le convoi d'une équipe
+ * (`resolveCaravan`) l'appellent tous les deux ; seuls les aléas du VOYAGE diffèrent (rencontres
+ * de trajet du héros ; embuscades, rôle 🐫 et bâts d'une équipe).
+ * - MINE : la reine de l'or — coût × (1,3 + facteur de voyage de sa difficulté) ×
+ *   `rewardGoldMult`, au niveau `heroRewardLevel` (le plancher de début de partie vaut pour
+ *   tout le monde).
+ * - AUTRES RÉCOLTES : une part symbolique du coût (`HARVEST.goldShare`) — elles paient en
+ *   ressources.
+ * `playerLevel` indéfini = pas de plancher de début de partie (harnais de calibrage).
+ */
+export function harvestGold(
+  poi: Pick<Poi, 'id' | 'type' | 'level'>,
+  playerLevel: number | undefined,
+): number {
+  if (poi.type === 'mine') {
+    const L = heroRewardLevel(poi, playerLevel);
+    return Math.round(goldCost('mine', L) * (1.3 + rewardTravelFactor(L)) * EXPE.rewardGoldMult);
+  }
+  return Math.round(goldCost(poi.type, poiRewardLevel(poi)) * HARVEST.goldShare);
+}
+
+function mineOutcome(
+  rng: () => number,
+  poi: Poi,
+  L: number,
+  playerLevel: number | undefined,
+): ExpeditionOutcome {
   // ⚠️ Trajet de RÉFÉRENCE de sa difficulté, pas le trajet réel (v0.1153).
   const tf = 0.5 + rewardTripHours(L);
-  const cost = goldCost(poi.type, L);
-  // MINE = reine de l'or (coût × 1,3 + facteur de voyage de référence).
-  // ⚠️ `rewardGoldMult` ne touche QUE la mine (la reine de l'or) : sur un multiplicateur global,
-  // camps et convois devenaient trop généreux (+46 % d'or des camps au niveau 26, borne 30 %).
-  const gold = Math.round(cost * (1.3 + rewardTravelFactor(L)) * EXPE.rewardGoldMult);
+  // MINE = reine de l'or — la règle vit dans `harvestGold`, partagée avec les équipes.
+  const gold = harvestGold(poi, playerLevel);
   // ÉNERGIE : un complément borné du sport, jamais un substitut (ticket a0d16472).
   const energy = Math.min(
     EXPE.mineEnergyMax,

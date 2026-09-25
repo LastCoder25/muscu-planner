@@ -5,7 +5,7 @@
 // au premier réglage, et c'est précisément par un mauvais dénominateur que ce fichier a déjà
 // laissé passer un puits qui débordait (v0.684) puis un puits devenu mur (v0.733).
 import {
-  goldCost,
+  harvestGold,
   harvestGuardOf,
   createMap,
   advanceWorld,
@@ -78,9 +78,13 @@ const bestPlaces = memo((L) => {
   // eux — nu, le héros perdait toutes les mines du début de partie.
   const hero = gearedFighter(L);
   const ally = refChampionAdv(L, 0);
+  const team = [0, 1, 2].map((i) => refChampionAdv(L, i));
   let gold = 0;
   let diff = 0;
   let n = 0;
+  // 🐫 Les mines que le héros ne prend pas, jouées par une équipe de 3 champions de référence
+  // (v0.1159 : une équipe touche désormais l'or plein d'une mine) — une liste par journée.
+  const teamDays: number[][] = [];
   for (let seed = 1; seed <= 12; seed++) {
     let map = createMap(seed * 7919, 0, L, L);
     for (let d = 1; d <= 2; d++) {
@@ -89,6 +93,7 @@ const bestPlaces = memo((L) => {
         .filter((p) => HARVEST_TYPES.has(p.type))
         .map((p) => {
           let g = 0;
+          let t = 0;
           for (let s = 1; s <= 3; s++) {
             // ⚠️ Le VRAI chemin : un lieu de récolte est GARDÉ (v0.1043), le héros y va en
             // groupe et peut PERDRE — la défaite compte, elle ne rapporte rien.
@@ -102,12 +107,28 @@ const bestPlaces = memo((L) => {
               pantheonLevel: L,
             });
             g += o.gold;
+            if (p.type === 'mine')
+              t += resolveHarvestParty({
+                poi: p,
+                escort: team,
+                road: { advGear: [] },
+                hero: null,
+                seed: s * 31 + seed,
+                playerLevel: L,
+                pantheonLevel: L,
+              }).gold;
           }
-          return { g: g / 3, d: poiRewardLevel(p) };
+          return { g: g / 3, t: t / 3, mine: p.type === 'mine', d: poiRewardLevel(p) };
         })
-        .sort((a, b) => b.g - a.g)
-        .slice(0, 2);
-      for (const x of lieux) {
+        .sort((a, b) => b.g - a.g);
+      teamDays.push(
+        lieux
+          .slice(2)
+          .filter((x) => x.mine)
+          .map((x) => x.t)
+          .sort((a, b) => b - a),
+      );
+      for (const x of lieux.slice(0, 2)) {
         gold += x.g;
         diff += x.d;
         n++;
@@ -117,6 +138,7 @@ const bestPlaces = memo((L) => {
   return {
     gold: n ? Math.round(gold / n) : 0,
     level: n ? Math.round(diff / n) : Math.max(1, L),
+    teamDays,
   };
 });
 /** 🎯 La DIFFICULTÉ des deux meilleurs lieux qu'une vraie carte propose au niveau L. */
@@ -157,8 +179,11 @@ function bossGoldPerDay(L: number): number {
   return (stonesPerDay(L) / bossSummonCost(b.unlockLevel)) * 0.6 * b.gold;
 }
 /** Convois : chaque créneau fait un aller-retour de récolte au plus 3 fois par jour (on
- *  ouvre l'app matin et soir). Aucun salaire (les champions ne sont pas payés). Une récolte ne paie qu'un FILET d'or
- *  (30 % du coût) : l'épave, qui payait en or, est retirée (v0.999). */
+ *  ouvre l'app matin et soir). Aucun salaire (les champions ne sont pas payés).
+ *  🪙 Depuis la v0.1159, une équipe touche l'or PLEIN d'une mine (`harvestGold`, le même que
+ *  le héros) : les équipes prennent d'abord les MINES que le héros laisse sur la carte (vraies
+ *  cartes, défaites comprises), puis les créneaux restants vont sur un puits, qui ne paie
+ *  qu'une part symbolique de son coût. */
 function convoyGoldPerDay(L: number, comptoir: number): number {
   // ⚠️ Un puits de la DIFFICULTÉ des meilleurs lieux de la carte (v0.1153 : la cargaison la
   // lit), plus « de ton niveau », qu'une vraie carte propose rarement.
@@ -174,8 +199,18 @@ function convoyGoldPerDay(L: number, comptoir: number): number {
       travelTimeMult([{ typeId: 'outpost', level: comptoir, slot: 0, collectedAt: 0 }]),
     ) / 60;
   const trips = Math.min(3, 24 / (2 * legH));
-  const net = Math.round(goldCost('well', D) * 0.3);
-  return Math.max(0, caravanSlots(comptoir) * trips * net);
+  const cap = caravanSlots(comptoir) * trips;
+  const days = bestPlaces(L).teamDays;
+  let mines = 0;
+  let used = 0;
+  for (const day of days) {
+    const k = Math.min(cap, day.length);
+    mines += day.slice(0, Math.floor(k)).reduce((s, g) => s + g, 0);
+    used += Math.floor(k);
+  }
+  const perDay = days.length ? mines / days.length : 0;
+  const wells = Math.max(0, cap - (days.length ? used / days.length : 0));
+  return Math.max(0, perDay + wells * harvestGold(poi, L));
 }
 /** Camps de faction, en PART du revenu de référence — la valeur MESURÉE par
  *  `campEconomy.test` (+9 % au niveau 12, +16 à +19 % au 26, ~+17 % au-delà). Borne haute :

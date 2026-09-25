@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import {
+  caravanHaulMult,
   missionXpFor,
   partyAllies,
   refAdvGear,
@@ -12,8 +13,12 @@ import { campWinPct, fightCampForce } from '@/lib/camp';
 import {
   HARVEST_GUARD_RAMP,
   HARVEST_GUARD_SIZES,
+  HARVEST,
   HARVEST_TYPES,
+  goldCost,
+  harvestGold,
   harvestGuardOf,
+  poiRewardLevel,
   resolveOutcome,
   type Poi,
 } from '@/lib/expedition';
@@ -45,6 +50,91 @@ const team = (n: number, L = 26): Adventurer[] =>
 const road = { advGear: refAdvGear(26, 3) };
 const hero: PartyHero = { name: 'H', level: 26, combatant: refFighter(26) };
 
+describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1159)', () => {
+  // Avant, une mine payait sa formule pleine au héros et 30 % de son coût à une équipe :
+  // ~90 fois moins pour le même lieu. Une seule règle désormais (`harvestGold`) ; seuls les
+  // aléas du voyage diffèrent (rencontres du héros ; embuscades, rôles et bâts d'une équipe).
+  const moyenne = (p: Poi, avecHeros: boolean, L = 26) => {
+    let s = 0;
+    let n = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const o = resolveHarvestParty({
+        poi: p,
+        escort: avecHeros ? team(1, L) : team(3, L),
+        road: { advGear: [] },
+        hero: avecHeros ? { ...hero, level: L, combatant: refFighter(L) } : null,
+        seed,
+        playerLevel: L,
+        pantheonLevel: L,
+      });
+      if (!o.win && o.gold === 0) continue; // repoussés par les gardes : rien des deux côtés
+      s += o.gold;
+      n++;
+    }
+    return s / n;
+  };
+
+  it('une MINE rapporte autant à une équipe qu’au héros (aux aléas du voyage près)', () => {
+    for (const L of [12, 26, 60]) {
+      const p = poi('mine', { level: L });
+      const ratio = moyenne(p, false, L) / moyenne(p, true, L);
+      expect(ratio, `niveau ${L} : équipe/héros ${ratio.toFixed(2)}`).toBeGreaterThan(0.9);
+      expect(ratio, `niveau ${L} : équipe/héros ${ratio.toFixed(2)}`).toBeLessThan(1.15);
+    }
+  });
+
+  it('les deux chemins partent de la MÊME base : `harvestGold`', () => {
+    // Le héros : or de base × ses rencontres de trajet ; une équipe : × son voyage (`k`).
+    // Sur une route calme, l'équipe touche exactement la base — son rôle 🐫 de cargaison
+    // (présent dans l'équipe de référence) ne touche PAS l'or, comme avec le héros.
+    const p = poi('mine');
+    let calmes = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const c = resolveCaravan(p, team(3), seed, { advGear: [] }, 26, 26);
+      if (!c.events.every((e) => e.kind === 'calme')) continue;
+      calmes++;
+      expect(caravanHaulMult(team(3), [], 0)).toBeGreaterThan(1);
+      expect(c.gold).toBe(harvestGold(p, 26));
+    }
+    expect(calmes).toBeGreaterThan(0);
+  });
+
+  it('le plancher de début de partie vaut pour une équipe comme pour le héros', () => {
+    // Au niveau 5, une mine de difficulté 1 paie comme une difficulté 5 — au héros ET à une
+    // équipe. Oublier de passer le niveau du joueur au convoi referait diverger les deux.
+    const p = poi('mine', { level: 1 });
+    expect(poiRewardLevel(p)).toBeLessThan(5);
+    expect(harvestGold(p, 5)).toBeGreaterThan(harvestGold(p, undefined));
+    let vus = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const input = {
+        poi: p,
+        escort: team(3, 5),
+        road: { advGear: [] },
+        hero: null,
+        seed,
+        playerLevel: 5,
+        pantheonLevel: 5,
+      };
+      const o = resolveHarvestParty(input);
+      const c = resolveCaravan(p, input.escort, seed, input.road, 5, 5);
+      if (!o.win && o.gold === 0) continue;
+      vus++;
+      expect(o.gold).toBe(c.gold);
+    }
+    expect(vus).toBeGreaterThan(0);
+  });
+
+  it('hors mine, la même part symbolique du coût pour tout le monde', () => {
+    for (const t of ['well', 'shrine', 'archive'] as const) {
+      const p = poi(t);
+      expect(harvestGold(p, 26)).toBe(
+        Math.round(goldCost(t, poiRewardLevel(p)) * HARVEST.goldShare),
+      );
+    }
+  });
+});
+
 describe('🧺 une équipe sur un lieu de récolte', () => {
   it('SANS le héros, gardes abattus : c’est le convoi — même cargaison, même route, XP + gardes', () => {
     let vus = 0;
@@ -63,7 +153,7 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
         const g = fightCampForce({ ...input, spec: harvestGuardOf(p)! });
         if (!g.skirmish.win) continue;
         vus++;
-        const c = resolveCaravan(p, team(3), seed, road, 26);
+        const c = resolveCaravan(p, team(3), seed, road, 26, 26);
         const o = resolveHarvestParty(input);
         expect(o.gold, t).toBe(c.gold);
         expect(o.energy, t).toBe(c.energy);

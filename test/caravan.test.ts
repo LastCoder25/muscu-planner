@@ -1700,7 +1700,11 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
       );
       if (avec.events.some((e) => e.kind === 'bandits')) continue;
       vus++;
-      expect(avec.gold, `graine ${s}`).toBeGreaterThan(sans.gold);
+      // ⚠️ La cargaison se lit sur les PIERRES d'un sanctuaire, plus sur l'or : depuis la
+      // v0.1159 l'or d'une équipe est celui du héros (`harvestGold`), que la cargaison ne
+      // gonfle pas. Il doit donc rester ÉGAL entre les deux voyages.
+      expect(avec.summonStones, `graine ${s}`).toBeGreaterThan(sans.summonStones);
+      expect(avec.gold, `graine ${s}`).toBe(sans.gold);
     }
     expect(vus, 'aucun voyage sans embuscade : le test ne prouve rien').toBeGreaterThan(5);
   });
@@ -1769,7 +1773,7 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
       { advGear: [] },
       aJour(escort),
     );
-    expect(o.gold).toBe(804); // v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
+    expect(o.gold).toBe(938); // v0.1159 : part d’or hors mine unifiée à 0,35 (`HARVEST.goldShare`, 804 × 0,35 / 0,3). v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
     expect(o.energy).toBe(30);
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et

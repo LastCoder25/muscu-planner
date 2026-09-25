@@ -127,7 +127,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     };
     return { ...out, text: `${tag} ${out.text}`, party };
   }
-  const c = resolveCaravan(poi, escort, seed, road, input.pantheonLevel);
+  const c = resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel);
   const ambushes = c.events.filter((e) => e.kind === 'bandits');
   const kills = { ...g.kills };
   for (const [id, n] of Object.entries(c.kills ?? {})) kills[id] = (kills[id] ?? 0) + n;

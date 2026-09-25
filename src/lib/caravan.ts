@@ -5,7 +5,8 @@
 // joueur qui s'entraîne peu en manque par définition. Mais il a du TEMPS. Une caravane
 // consomme donc du temps réel et ZÉRO énergie — c'est le seul axe où il est à égalité.
 // Corollaire non négociable : **une caravane ne rapporte JAMAIS d'équipement**. Elle paie
-// en LOGISTIQUE (⚡ énergie plafonnée, 🔮 pierres, 🗝️ clés, un filet d'or),
+// en LOGISTIQUE (⚡ énergie plafonnée, 🔮 pierres, 🗝️ clés) et en or — le MÊME que le héros
+// sur le même lieu (`harvestGold`, v0.1159 : une mine paie son or plein à une équipe),
 // c'est-à-dire des devises qui débloquent les AUTRES systèmes au lieu de les remplacer.
 // « Le sport est le plafond » reste intact : ce n'est pas le butin qui monte, c'est
 // l'accès au jeu qui s'élargit.
@@ -55,9 +56,9 @@ import {
   PARTY_TARGETS,
   HARVEST_TYPES,
   harvestYield,
+  harvestGold,
   isRiftPoi,
   haulPills,
-  goldCost,
   harvestGuardOf,
   poiTravelLevel,
   travelOneWayMin,
@@ -1221,6 +1222,9 @@ export function resolveCaravan(
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number,
+  /** ⚠️ REQUIS (même indéfini) : le plancher de début de partie de l'or d'une mine
+   *  (`harvestGold`) — le MÊME que pour le héros, sinon l'or différerait selon qu'il y va. */
+  playerLevel: number | undefined,
 ): CaravanOutcome {
   // ⚠️ Plus aucun équipement de champion sur la route (v0.1012) : il ne vient QUE du tirage.
   // Le générateur dédié qui le tirait a disparu avec lui — il ne lisait rien du flux `rng`,
@@ -1329,7 +1333,12 @@ export function resolveCaravan(
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
     // substitut au sport » est un invariant, pas une base qu'un bon voyage dépasserait.
-    gold: Math.round(goldCost(poi.type, poiRewardLevel(poi)) * 0.3 * k),
+    // 🪙 L'or est celui du héros (`harvestGold`, v0.1159) : seuls les aléas de la route et les
+    // bâts 🧺 le modulent — exactement ce que le héros subit. ⚠️ PAS le rôle 🐫 ni les pièces
+    // de cargaison : avec le héros ils ne comptent pas, et les appliquer à l'or faisait gagner
+    // à une équipe 17 à 22 % de plus que le héros sur la même mine (mesuré). Ils gonflent les
+    // RESSOURCES, pas l'or.
+    gold: Math.round(harvestGold(poi, playerLevel) * mult * (1 + Math.max(0, fx.haul))),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
     // brute × `yieldShare` (0,5), donc il tombe sur un DEMI. Avec l'arrondi à
     // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur
@@ -1380,7 +1389,7 @@ export function startCaravan(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    outcome: resolveCaravan(poi, escort, seed, kit, pantheonLevel),
+    outcome: resolveCaravan(poi, escort, seed, kit, pantheonLevel, undefined),
     claimed: false,
   };
 }
