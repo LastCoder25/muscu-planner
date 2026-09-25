@@ -436,6 +436,7 @@
               :objective="profileStore.profile?.objective"
               :bodyweight="noEquipIds.has(leg.exercise_id)"
               :size="36"
+              :history="comboStore.list"
               @history="openHistory(leg)"
             />
             <!-- ⚠️ TOUCHER LA BARRE AJOUTE UNE SÉRIE : les boutons « ＋ 1 » et « ↩ » lui

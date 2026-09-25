@@ -94,6 +94,7 @@
           :objective="profileStore.profile?.objective"
           :bodyweight="noEquipIds.has(leg.exercise_id)"
           :fallback="slotEmoji(leg.slot)"
+          :history="combo.list"
           @history="openHistory(leg)"
         />
         <!-- Mode séries : segments par série ; mode reps : barre de progression simple.

@@ -1235,3 +1235,60 @@ export function comboExportText(c: ComboChallenge, today: string): string {
   }
   return L.join('\n');
 }
+
+// --- Conseil de charge par exo -----------------------------------------------
+// Une série se fait à 1 à 3 reps de l’échec : on part de ce principe, donc les reps
+// réalisées DISENT si la charge est bonne. Toucher le haut de la fourchette à 1-3 reps
+// de l’échec = on pourrait en faire au-delà → la charge est trop légère, on conseille de
+// monter. Rester sous le bas de la fourchette alors qu’on est déjà près de l’échec = trop
+// lourd. Entre les deux, la charge est la bonne : on vise une rep de plus.
+// ⚠️ On ne dit JAMAIS de combien monter : le pas dépend de l’exo (haltère, barre, machine,
+// lest). Le conseil se relit après chaque série et se corrige de lui-même.
+
+export type LoadCall = 'up' | 'hold' | 'down';
+export interface LegLoadAdvice {
+  /** Charge de référence (kg) — null au poids du corps sans lest. */
+  weight: number | null;
+  call: LoadCall;
+  /** Reps à viser à cette charge (seulement pour « hold »). */
+  reps: number;
+}
+
+/** Séries de référence : celles de ce 360, sinon celles du dernier 360 qui a fait cet exo. */
+function adviceSets(leg: ComboLeg, history: ComboChallenge[]): ComboSet[] {
+  const own = legSets(leg).filter((s) => s.reps > 0);
+  if (own.length) return own;
+  const past = [...history].sort((a, b) => (a.start_date < b.start_date ? 1 : -1));
+  for (const c of past) {
+    for (const l of c.legs) {
+      if (l === leg || l.exercise_id !== leg.exercise_id || legMode(l) === 'time') continue;
+      const s = legSets(l).filter((x) => x.reps > 0);
+      if (s.length) return s;
+    }
+  }
+  return [];
+}
+
+export function legLoadAdvice(
+  leg: ComboLeg,
+  history: ComboChallenge[],
+  range: { min: number; max: number },
+): LegLoadAdvice | null {
+  if (legMode(leg) === 'time') return null; // gainage : des secondes, pas de charge
+  const sets = adviceSets(leg, history);
+  const last = sets[sets.length - 1];
+  if (!last) return null; // jamais fait : rien à juger
+  const weight = last.weight && last.weight > 0 ? last.weight : null;
+  // Meilleure série à CETTE charge, le jour de la dernière : les suivantes baissent par
+  // fatigue, ce n’est pas la charge qui est trop lourde.
+  const best = Math.max(
+    ...sets
+      .filter(
+        (s) => s.date === last.date && (s.weight && s.weight > 0 ? s.weight : null) === weight,
+      )
+      .map((s) => s.reps),
+  );
+  if (best >= range.max) return { weight, call: 'up', reps: range.min };
+  if (best < range.min) return { weight, call: 'down', reps: range.min };
+  return { weight, call: 'hold', reps: Math.min(range.max, best + 1) };
+}

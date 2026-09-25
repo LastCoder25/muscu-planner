@@ -22,6 +22,10 @@
         @click="emit('history')"
       >
         <span class="lh-range">🎯 {{ range }}</span>
+        <!-- Conseil de charge, relu après chaque série (cf. legLoadAdvice). -->
+        <span v-if="load" class="lh-load" :class="load.call" :title="load.title">{{
+          load.text
+        }}</span>
         <span class="lh-count" :class="{ ok: legComplete(leg) }" :style="{ '--mc': color }">
           {{ legDone(leg) }}/{{ leg.target }} {{ legUnitLabel(leg) }}
           <span v-if="extra > 0" class="lh-extra">+{{ extra }}</span>
@@ -38,8 +42,10 @@ import {
   legComplete,
   legDone,
   legMode,
+  legLoadAdvice,
   legRepRange,
   legUnitLabel,
+  type ComboChallenge,
   type ComboLeg,
 } from '@/lib/combo';
 import { repRangeLabel } from '@/lib/repScheme';
@@ -54,14 +60,41 @@ const props = withDefaults(
     size?: number;
     /** Emoji affiché quand l'exo n'a pas d'illustration. */
     fallback?: string;
+    /** Défis 360 passés : le conseil de charge s'y rabat quand l'exo n'a pas encore de série. */
+    history?: ComboChallenge[];
   }>(),
-  { objective: null, bodyweight: false, size: 38, fallback: '💪' },
+  { objective: null, bodyweight: false, size: 38, fallback: '💪', history: () => [] },
 );
 const emit = defineEmits<{ history: [] }>();
 
 const range = computed(() =>
   repRangeLabel(legRepRange(props.leg, props.objective), legMode(props.leg) === 'time'),
 );
+/** Conseil de charge : on ne dit jamais de combien monter, le pas dépend de l'exo. */
+const load = computed(() => {
+  const a = legLoadAdvice(props.leg, props.history, legRepRange(props.leg, props.objective));
+  if (!a) return null;
+  const kg = a.weight != null ? `${String(a.weight).replace('.', ',')} kg` : null;
+  if (a.call === 'up')
+    return {
+      call: a.call,
+      text: kg ? `🏋️ ${kg} ↑ monte` : '🏋️ ↑ plus dur',
+      title: kg
+        ? 'Tu touches le haut de la fourchette : monte la charge'
+        : 'Tu touches le haut de la fourchette : ajoute du lest ou une variante plus dure',
+    };
+  if (a.call === 'down')
+    return {
+      call: a.call,
+      text: kg ? `🏋️ ${kg} ↓ allège` : '🏋️ ↓ plus facile',
+      title: 'Tu restes sous la fourchette : allège la charge',
+    };
+  return {
+    call: a.call,
+    text: kg ? `🏋️ ${kg} · ${a.reps}` : `🏋️ vise ${a.reps}`,
+    title: `Garde cette charge et vise ${a.reps} reps`,
+  };
+});
 const extra = computed(() => legDone(props.leg) - props.leg.target);
 /** Couleur du groupe musculaire, celle de l'Équilibre du corps : on relie l'exo à sa barre. */
 const color = computed(() => comboLegColor(props.leg));
@@ -139,6 +172,19 @@ const color = computed(() => comboLegColor(props.leg));
   font-weight: 600;
   color: var(--accent);
   white-space: nowrap;
+}
+.lh-load {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.lh-load.up {
+  color: var(--d1);
+}
+.lh-load.down {
+  color: var(--d3);
 }
 .lh-count {
   padding: 1px 8px;
