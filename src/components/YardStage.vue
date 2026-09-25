@@ -422,6 +422,9 @@ onUnmounted(() => {
 <style scoped>
 .yard {
   position: relative;
+  /* Un seul calque : sans ça, ses balistes, combattants et projectiles (z-index 5 à 60)
+     passaient au-dessus de l'écran de fin du siège, qui se lisait « en transparence ». */
+  isolation: isolate;
   width: 100%;
   height: 100%;
   overflow: hidden;
