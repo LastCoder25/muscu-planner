@@ -156,11 +156,6 @@ export const CARAVAN = {
   scoutMax: 0.4,
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
-  /** Paie par aventurier : socle × strate × niveau du POI^0,7. C'est un PUITS D'OR, mais
-   *  calibré pour valoir ~60 % de l'or rapporté — à 26, les salaires valaient 2,6× l'or
-   *  brut et le convoi était absurdement déficitaire. La caravane paie en RESSOURCES ;
-   *  l'or n'est qu'un filet, et les salaires ne doivent pas l'engloutir. */
-  wageBase: 6,
   /** ⚠️ PART DU RENDEMENT D'UNE VISITE DU HÉROS. Des marchands exploitent moins bien
    *  qu'un aventurier — mais ce n'est pas du réalisme, c'est un garde-fou mesuré : à part
    *  pleine, UNE caravane rendait plusieurs crans d'enceinte par jour (mesuré à l'époque de
@@ -214,8 +209,6 @@ export interface CaravanOutcome {
   /** 💠 Mana d'une mine de mana résiduel. ⚠️ ABSENT des convois d'avant (2026-09-21) : le
    *  convoi ne le rapportait PAS, alors qu'une mine de mana est le seul lieu qui en donne. */
   mana?: number;
-  /** Salaires versés à l'escorte — déduits à part, c'est une DÉPENSE assumée. */
-  wages: number;
   /** XP gagnée, PAR AVENTURIER (id → XP).
    *  ⚠️ C'était une MOYENNE : mesuré, un vétéran de niveau 30 passait de 1 à 11 XP sur une
    *  route triviale rien qu'en emmenant trois recrues — le rendement décroissant, qui
@@ -735,16 +728,6 @@ export function heroEquivalentFactor(poi: Poi): number {
 /** Le facteur de trajet d'un POI, à niveau et distance donnés (la cargaison). */
 function tripFactor(level: number, distNorm: number): number {
   return travelFactor((2 * travelOneWayMin(level, distNorm)) / 60);
-}
-
-/** Salaires d'une mission — un PUITS D'OR, et la contrepartie de la prestation. */
-export function caravanWages(escort: Adventurer[], poi: Poi): number {
-  return escort.reduce(
-    (sum, a) =>
-      sum +
-      Math.round(CARAVAN.wageBase * strataFor(a.level) * Math.max(1, poiRewardLevel(poi)) ** 0.7),
-    0,
-  );
 }
 
 /** 🎓 XP de MISSION d'un aventurier (v0.1014, refonte demandée par l'utilisateur : « on ne
@@ -1296,7 +1279,9 @@ export function resolveCaravan(
         won: r.win,
         slain: abattus,
         down: [...d.down],
-        text: r.win ? 'Une embuscade repoussée.' : 'Des bandits emportent une part de la cargaison.',
+        text: r.win
+          ? 'Une embuscade repoussée.'
+          : 'Des bandits emportent une part de la cargaison.',
       });
       // 🛡️ `slainByAlly` : jamais `d.killsBy`, qui mélange les deux sens sous la même clé
       // (cf. sa doc) — un id d'aventurier qui collisionnerait avec un id de troupe (`foe0`)
@@ -1344,7 +1329,6 @@ export function resolveCaravan(
     keys: raw.keys,
     mana: raw.mana * CARAVAN.yieldShare,
   };
-  const wages = caravanWages(escort, poi);
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
   const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel);
 
@@ -1363,7 +1347,6 @@ export function resolveCaravan(
     summonStones: Math.round(y.summonStones * k),
     keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus,
     mana: Math.round(y.mana * k),
-    wages,
     xp,
     kills,
     hurt,
@@ -1419,8 +1402,7 @@ export function isCaravanClaimable(c: Caravan, now: number): boolean {
  * - XP par aventurier (`outcome.xp`, calculée au départ), plafonnée par la Guilde ;
  * - 🤕 les blessés (`outcome.hurt`, règle `convoyHurt` : le premier tombé d'une embuscade
  *   PERDUE) partent à l'infirmerie pour `caravanHurtMs` (🩺 de l'escorte + Infirmerie) ;
- * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir) ;
- * - `wages` : ENTIER (colonne `gold` entière — cf. le bug de la cargaison décimale, v0.796).
+ * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir).
  *
  * ⚠️ UNE CONVALESCENCE NE SE RACCOURCIT JAMAIS : on prend le MAXIMUM de l'échéance en cours
  * et de la nouvelle. Le store écrasait `hurtUntil`, donc encaisser un convoi pouvait REMETTRE
@@ -1433,7 +1415,7 @@ export function caravanClaimRoster(
   van: Caravan,
   roster: readonly Adventurer[],
   ctx: { pantheonLevel: number; infirmaryLevel: number; now: number },
-): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
+): { adventurers: Adventurer[]; escort: Adventurer[] } {
   const o = van.outcome;
   const escort = van.escort
     .map((id) => roster.find((a) => a.id === id))
@@ -1453,7 +1435,7 @@ export function caravanClaimRoster(
       ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) }
       : up;
   });
-  return { adventurers, escort, wages: Math.max(0, Math.round(o.wages || 0)) };
+  return { adventurers, escort };
 }
 
 // ── 📜 RAPPORT DE CONVOI (v0.853 ; demandé par l’utilisateur : « les aventuriers concernés et
@@ -1490,9 +1472,8 @@ export interface CaravanReport {
   /** XP par aventurier et par heure de voyage — le chiffre qui compare un convoi long à
    *  un court, puisque c’est le temps que l’escorte passe immobilisée. */
   xpPerHour: number;
-  /** Cargaison BRUTE (les salaires sont une dépense à part, cf. `wages`). */
+  /** Cargaison. */
   pills: { emoji: string; n: number }[];
-  wages: number;
   events: CaravanEvent[];
 }
 
@@ -1539,7 +1520,6 @@ export function caravanReport(van: Caravan, roster: readonly Adventurer[]): Cara
       summonStones: ent(o.summonStones),
       key: ent(o.keys),
     }),
-    wages: ent(o.wages),
     events: o.events,
   };
 }

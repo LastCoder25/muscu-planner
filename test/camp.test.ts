@@ -477,7 +477,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect('scrap' in o).toBe(false);
     expect(o.summonStones).toBeGreaterThan(0);
     expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1012)
-    expect(o.party!.wages).toBeGreaterThan(0);
+    expect(o.party).not.toHaveProperty('wages'); // les champions ne touchent aucun salaire
   });
 
   it('SANS le héros, défaite : rien à ramener, et le socle d’XP tombe quand même', () => {
@@ -621,7 +621,6 @@ describe('📜 partyReport — ce qu’on lit dans la boîte', () => {
     expect(r.members.reduce((s, m) => s + m.kills, 0) + r.heroKills).toBe(r.slain);
     for (const m of r.members) expect(m.hurt).toBe(o.party!.hurt.includes(m.id));
     expect(r.factionLabel).toBe('Bandits');
-    expect(r.wages).toBe(Math.round(o.party!.wages));
   });
 
   it('⚠️ une DÉFAITE : les blessés sont bien marqués (le cas n’est pas vide)', () => {
@@ -890,7 +889,6 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
     ...resolveCamp(input({ escort: esc })).party!,
     xp: { adv_0: 50, adv_1: 70, adv_2: 90 },
     hurt: ['adv_1'],
-    wages: 123.6,
     ...over,
   });
   // ⏱️ `backAt` = le RETOUR du groupe, `now` = le clic « Encaisser ». Ici ils coïncident.
@@ -958,9 +956,8 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
     ]);
   });
 
-  it('⚠️ salaires ENTIERS (colonne gold entière), jamais négatifs', () => {
-    expect(partyClaimRoster(party(), roster, ctx).wages).toBe(124);
-    expect(partyClaimRoster(party({ wages: -5 }), roster, ctx).wages).toBe(0);
+  it('aucun salaire à l’encaissement : les champions ne sont pas payés', () => {
+    expect(partyClaimRoster(party(), roster, ctx)).not.toHaveProperty('wages');
   });
 });
 

@@ -25,7 +25,6 @@ import {
   caravanSlots,
   convoySlotsFree,
   poiOffers,
-  caravanWages,
   escortCombatant,
   ambushChance,
   heroEquivalentFactor,
@@ -449,12 +448,10 @@ describe('les rôles hors combat servent à quelque chose', () => {
   });
 });
 
-describe('salaires, XP et garde-fous', () => {
-  it('les salaires croissent avec l’escorte et la profondeur — c’est un puits d’or', () => {
-    expect(caravanWages(team(3), poi())).toBeGreaterThan(caravanWages(team(1), poi()));
-    expect(caravanWages(team(3), poi({ level: 40 }))).toBeGreaterThan(
-      caravanWages(team(3), poi({ level: 10 })),
-    );
+describe('XP et garde-fous', () => {
+  it('💸 aucun salaire : un convoi ne facture rien à son escorte', () => {
+    const o = resolveCaravan(poi({ level: 40 }), team(3), 1, NUS, aJour(team(3)));
+    expect(o).not.toHaveProperty('wages');
   });
   it('⚠️ l’XP a un RENDEMENT DÉCROISSANT sous la DIFFICULTÉ du lieu', () => {
     // Sinon on farme le lieu le plus facile à l’infini et le choix de destination meurt.
@@ -546,7 +543,6 @@ describe('🎁 caravanClaimRoster — ce que l’encaissement change au vivier',
         ...c.outcome,
         xp: { a0: 50, a1: 70, a2: 90 },
         hurt: ['a1'],
-        wages: 123.6,
         ...over,
       },
     };
@@ -621,9 +617,8 @@ describe('🎁 caravanClaimRoster — ce que l’encaissement change au vivier',
     ]);
   });
 
-  it('⚠️ salaires ENTIERS (colonne gold entière), jamais négatifs', () => {
-    expect(caravanClaimRoster(van(), roster, ctx).wages).toBe(124);
-    expect(caravanClaimRoster(van({ wages: -5 }), roster, ctx).wages).toBe(0);
+  it('aucun salaire à l’encaissement', () => {
+    expect(caravanClaimRoster(van(), roster, ctx)).not.toHaveProperty('wages');
   });
 });
 
@@ -785,7 +780,6 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
               ['energy', o.energy],
               ['summonStones', o.summonStones],
               ['keys', o.keys],
-              ['wages', o.wages],
             ] as [string, number][]) {
               expect(
                 Number.isInteger(v),
@@ -807,54 +801,6 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
       expect(
         resolveCaravan(p, team(3, 70), seed, NUS, aJour(team(3, 70))).energy,
       ).toBeLessThanOrEqual(Math.round(brut));
-  });
-});
-
-describe('💸 LES SALAIRES SONT UN PUITS, PAS UNE RANÇON', () => {
-  // ⚠️ CE GARDE-FOU MANQUAIT, et la calibration a dérivé DEUX FOIS sans que rien ne le
-  // dise — dans les deux sens. Les salaires valent `wageBase × strataFor(niveau) ×
-  // poi.level^0,7`, or `strataFor` lit `PROMO_LEVELS`, dont la cadence a changé en v0.795
-  // PUIS en v0.796. Un salaire indexé sur une table qu’on déplace pour une AUTRE raison
-  // se met à dire autre chose, en silence.
-  const HARVEST: PoiType[] = ['well', 'shrine', 'archive'];
-  const part = (n: number, L: number, types: PoiType[] = HARVEST) => {
-    const esc = team(n, L);
-    let brut = 0;
-    let sal = 0;
-    for (const type of types)
-      for (let seed = 1; seed <= 40; seed++) {
-        const p = poi({ type, level: L });
-        brut += resolveCaravan(p, esc, seed, NUS, aJour(esc)).gold;
-        sal += caravanWages(esc, p);
-      }
-    return sal / brut;
-  };
-
-  it('⚠️ un convoi n’est JAMAIS déficitaire en or, même pour un débutant', () => {
-    // Le défaut relevé en v0.795 : les salaires atteignaient **173 % de l’or brut** sous
-    // le niveau 20 — le convoi coûtait plus qu’il ne rapportait, et précisément pour le
-    // joueur peu sportif que cette boucle vise. Il a disparu de lui-même quand la cadence
-    // des promotions s’est étalée (v0.796) : `strataFor` vaut désormais 1 jusqu’au niveau 10
-    // au lieu de 3. **Personne ne l’a corrigé, donc rien ne garantissait qu’il ne revienne.**
-    // ⚠️ SEULEMENT LES ESCORTES ATTEIGNABLES : la Guilde plafonne le vivier au niveau du
-    // joueur (`engageCap`). Un premier jet balayait « 2 aventuriers au niveau 1 » et
-    // rougissait à 134 % — sur un état que personne ne peut avoir. Tester l’impossible
-    // donne un rouge aussi creux qu’un vert : mesuré sur l’enveloppe réelle, le pire cas
-    // vaut 73 % (niveau 2, deux aventuriers).
-    for (let L = 1; L <= 100; L += L < 20 ? 1 : 10)
-      for (let n = 1; n <= Math.min(engageCap(L), CARAVAN.escortMax); n++)
-        expect(part(n, L), `niveau ${L}, ${n} aventurier(s)`).toBeLessThan(0.8);
-    // ⚠️ ~2 s seul, mais il dépasse les 5 s par défaut sous la charge de la suite complète.
-  }, 30_000);
-
-  it('…mais ils restent un VRAI puits d’or à tout niveau', () => {
-    // L’autre bord, et il a dérivé aussi : la doc annonce « calé à ~60 % de l’or
-    // rapporté » (la valeur MESURÉE quand `wageBase` est passé de 26 à 6), on mesure
-    // aujourd’hui **15 à 29 %** pour l’escorte de référence. Un puits d’or qui se vide de
-    // 3× sans qu’aucune porte ne rougisse est exactement ce que ce test ferme.
-    // La borne basse n’entérine PAS la dérive — elle interdit qu’elle continue.
-    for (const L of [10, 20, 26, 40, 60, 100])
-      expect(part(3, L), `niveau ${L}`).toBeGreaterThan(0.1);
   });
 });
 
@@ -1582,13 +1528,12 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
     expect(r.members.map((m) => m.knockedDown)).toEqual([true, false, true]);
   });
 
-  it('la cargaison est arrondie comme à l’encaissement, les salaires restent à part', () => {
+  it('la cargaison est arrondie comme à l’encaissement', () => {
     const v = van();
-    const demi = { ...v, outcome: { ...v.outcome, energy: 55.5, gold: 100.4, wages: 30.6 } };
+    const demi = { ...v, outcome: { ...v.outcome, energy: 55.5, gold: 100.4 } };
     const r = caravanReport(demi, escort);
     expect(r.pills.find((p) => p.emoji === '⚡')!.n).toBe(56);
     expect(r.pills.find((p) => p.emoji === '🪙')!.n).toBe(100);
-    expect(r.wages).toBe(31);
   });
 
   it('l’historique ne montre que les convois encaissés, du plus récent au plus ancien', () => {
@@ -1823,12 +1768,11 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     expect(o.energy).toBe(30);
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et
-    // l'énergie apparaît. Tout le reste (clés, salaires, XP, blessé, journal) est inchangé au
+    // l'énergie apparaît. Tout le reste (clés, XP, blessé, journal) est inchangé au
     // chiffre près — c'est ce qui prouve que le flux aléatoire n'a pas fuité. Une seule valeur qui bouge dit « un réglage » ; toutes qui bougent disent
     // « le flux a fuité » — c'est cette distinction que le test existe pour rendre lisible.
     expect('scrap' in o).toBe(false);
     expect(o.keys).toBe(0);
-    expect(o.wages).toBe(951);
     // ⚠️ Les valeurs de CARGAISON ci-dessus sont celles d'avant le combat de groupe, au
     // chiffre près : le groupe n'est qu'une lecture du combat fondu, et `deriveSkirmish` ne
     // lit pas `rng`. Seules l'XP (socle + part des abattus) et le blessé (le PREMIER tombé

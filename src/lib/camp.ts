@@ -27,7 +27,6 @@ import {
 } from './skirmish';
 import {
   CARAVAN,
-  caravanWages,
   missionXpFor,
   HERO_UNIT_ID,
   partyAllies,
@@ -77,7 +76,7 @@ export const CAMP = {
   chiefWeight: 2,
   championWeight: 4,
   /** Butin SANS le héros, en part des sources existantes.
-   *  ⚠️ `groupGoldShare` MESURÉ DEUX FOIS. (1) L'or NET (or − salaires) d'un camp de bandits
+   *  ⚠️ `groupGoldShare` MESURÉ DEUX FOIS. (1) L'or d'un camp de bandits
    *  doit rester sous l'or moyen d'une MINE de même niveau et distance (40 graines,
    *  `campCalibration.test` E2) : à 0,6 le plus gros repaire en rendait 2,25 / 2,12 / 1,90 fois
    *  plus aux niveaux 20/26/40. (2) Surtout, le DÉBIT de camps en parallèle
@@ -355,7 +354,6 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     heroKills: g.heroKills,
     xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel),
     hurt: campHurt(d, escort),
-    wages: caravanWages(escort, poi),
     journal: g.journal,
   };
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;

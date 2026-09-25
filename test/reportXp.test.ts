@@ -23,7 +23,6 @@ const party = (xp: Record<string, number>): PartyResult =>
     heroKills: 0,
     xp,
     hurt: [],
-    wages: 0,
     journal: [],
   }) as unknown as PartyResult;
 

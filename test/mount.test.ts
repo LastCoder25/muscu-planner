@@ -412,7 +412,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       xp: { a1: 9 },
       hurt: [],
       advGear: [],
-      wages: 8,
       journal: [],
     };
     const msg = (party: typeof base & { rift?: unknown }) =>
@@ -483,7 +482,6 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       xp: { a1: 12 },
       hurt: [],
       advGear: [],
-      wages: 10,
       journal: [],
       rift: { level: 30, maxPv: 700, pvTrail: [640, 580, 520, 470, 400] },
     };
@@ -743,7 +741,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   it('CountUp se monte et affiche la valeur formatée', async () => {
     const { default: C } = await import('@/components/CountUp.vue');
     let out = '';
-    const err = await mountIt(C, { value: 1234, format: (n: number) => 'P' + Math.round(n) }, undefined, undefined, '/', (h) => (out = h));
+    const err = await mountIt(
+      C,
+      { value: 1234, format: (n: number) => 'P' + Math.round(n) },
+      undefined,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
     expect(err).toBeNull();
     expect(out).toContain('P1234');
   }, 30_000);
@@ -764,9 +769,23 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     const piece = { id: 'g1', name: 'Épée courte' };
     const cell = { slot: 'weapon', emoji: '🗡️', name: 'Arme', filled: true, piece };
     let out = '';
-    await mountIt(P, { ...base, gear: [cell], ascendGear: ['g1'] }, undefined, undefined, '/', (h) => (out = h));
+    await mountIt(
+      P,
+      { ...base, gear: [cell], ascendGear: ['g1'] },
+      undefined,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
     expect(out).toContain('Ascension : Épée courte');
-    await mountIt(P, { ...base, gear: [cell], ascendGear: [] }, undefined, undefined, '/', (h) => (out = h));
+    await mountIt(
+      P,
+      { ...base, gear: [cell], ascendGear: [] },
+      undefined,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
     expect(out).not.toContain('Ascension : Épée courte');
   }, 30_000);
   // ⚠️ AventurePage N'EST PAS ICI, et c'est une décision mesurée. Monté dans ce harnais,
@@ -1235,14 +1254,18 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
     };
     let out = '';
     const cmp = { verdict: 'better', other, before: 1200, after: 1260 };
-    expect(await mountIt(SetPieceCmp, { cmp }, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    expect(
+      await mountIt(SetPieceCmp, { cmp }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
     expect(out).toContain('Meilleure');
     expect(out).toContain('Hache · Carapace');
     expect(out).toContain('1200');
     expect(out).toContain('+60');
     // Hors set : rien du tout.
     let vide = '';
-    expect(await mountIt(SetPieceCmp, { cmp: null }, undefined, undefined, '/', (h) => (vide = h))).toBeNull();
+    expect(
+      await mountIt(SetPieceCmp, { cmp: null }, undefined, undefined, '/', (h) => (vide = h)),
+    ).toBeNull();
     expect(vide).not.toContain('spc');
   }, 30_000);
 });

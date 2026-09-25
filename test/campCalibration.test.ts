@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { simulateCombat, playerCombatant } from '@/lib/combat';
-import { caravanWages, refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
+import { refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
 import { fuseUnits, type SkirmishUnit } from '@/lib/skirmish';
 import { HERO_UNIT_ID, campFoe, campGroupHaul } from '@/lib/camp';
 import { CAMP_SIZES, resolveOutcome, type Poi } from '@/lib/expedition';
@@ -109,7 +109,7 @@ describe('🏕️ LA TAILLE D’UN CAMP SE LIT EN AVENTURIERS', { timeout: 120_0
 });
 
 describe('💰 le butin d’un camp de groupe ne détrône pas les sources dédiées', () => {
-  it('⚠️ E2 : l’or NET d’un camp de groupe reste sous celui d’une mine', () => {
+  it('⚠️ E2 : l’or d’un camp de groupe reste sous celui d’une mine', () => {
     for (const L of [20, 26, 40, 60, 100]) {
       const hero = playerCombatant('h', { puissance: 9e4, endurance: 9e4, agilite: 9e4 }, L);
       let mine = 0;
@@ -117,9 +117,7 @@ describe('💰 le butin d’un camp de groupe ne détrône pas les sources dédi
         mine += resolveOutcome(hero, { ...poiAt(L), type: 'mine' }, s, L).gold;
       mine /= 40;
       for (const s of [3, Math.max(...CAMP_SIZES.lair)]) {
-        const net =
-          campGroupHaul(poiAt(L), { faction: 'bandits', size: s }).gold -
-          caravanWages(team(s, L), poiAt(L));
+        const net = campGroupHaul(poiAt(L), { faction: 'bandits', size: s }).gold;
         expect(net, `niveau ${L}, taille ${s}`).toBeLessThanOrEqual(mine);
       }
     }

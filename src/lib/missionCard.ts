@@ -47,7 +47,6 @@ export interface MissionCard {
   win: boolean;
   verdict: string;
   gains: { emoji: string; n: number }[];
-  wages: number;
   loot: Omit<Item, 'id'>[];
   /** Objets partis au sac sans être décrits ici (l'arène en ramène beaucoup). */
   lootMore: number;
@@ -100,7 +99,6 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
     win: m.win,
     verdict: messageVerdict(m),
     gains: haulPills(m),
-    wages: p?.wages ?? 0,
     loot,
     lootMore: Math.max(0, (m.itemCount ?? loot.length) - loot.length),
     legacyItem: loot.length ? null : (m.itemName ?? null),
@@ -148,7 +146,6 @@ export function caravanCard(
     win: !lost,
     verdict: lost ? 'embuscade perdue' : 'rentré',
     gains: r.pills,
-    wages: r.wages,
     loot: [],
     lootMore: 0,
     legacyItem: null,
@@ -164,7 +161,10 @@ export function caravanCard(
       gone: x.gone,
     })),
     hero: false,
-    kills: r.totalKills > 0 ? `${plural(r.totalKills, 'bandit')} abattu${r.totalKills > 1 ? 's' : ''}` : null,
+    kills:
+      r.totalKills > 0
+        ? `${plural(r.totalKills, 'bandit')} abattu${r.totalKills > 1 ? 's' : ''}`
+        : null,
     totalXp: r.totalXp,
     story: van.outcome.text,
     road: r.events.map((e) => ({ text: e.text, slain: e.slain ?? 0 })),

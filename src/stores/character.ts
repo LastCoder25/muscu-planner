@@ -2034,13 +2034,12 @@ export const useCharacterStore = defineStore('character', () => {
     }));
     const inventory = drops.length ? [...cur.inventory, ...drops] : cur.inventory;
     // ⚔️ UN GROUPE DE CAMP : XP par aventurier, infirmerie des camps, pièces d'aventurier,
-    // dressage des compagnons, salaires. ⚠️ `m.party` ABSENT des rapports d'avant : rien à
+    // dressage des compagnons. ⚠️ `m.party` ABSENT des rapports d'avant : rien à
     // faire. ⚠️ Crédité UNE fois : `isClaimable` en tête + `claimed: true` dans la MÊME
     // écriture. ⚠️ Le héros et l'escorte ont été libérés au RETOUR, sans condition ; seul
     // le butin attendait ce geste.
     const party = m.party;
     let partyPatch: Record<string, unknown> = {};
-    let wages = 0;
     // ⭐ Ce que la mission a changé pour le GROUPE — étoiles, rang, « prêt pour l'ascension ».
     // Les convois l'annonçaient depuis la v0.794 ; les camps et les failles, jamais.
     let advProgress: AdvProgress[] = [];
@@ -2059,7 +2058,6 @@ export const useCharacterStore = defineStore('character', () => {
         // changement ne l'ont pas reçue et la reçoivent ici.
         xpGranted: !!m.xpGranted,
       });
-      wages = claim.wages;
       advProgress = advProgressOf(advList.value, claim.adventurers);
       const gearPatch = gearTrainedPatch(cur, advList.value, claim.adventurers);
       advTracks = gearAwareTracks(cur, advList.value, claim.adventurers, gearPatch);
@@ -2073,12 +2071,9 @@ export const useCharacterStore = defineStore('character', () => {
     claimedLocally.add(m.id);
     try {
       await persist(userId, {
-        // Les salaires de l'escorte sont déduits ICI, comme pour un convoi.
         // 🔩 LEGACY : un rapport déposé avant le retrait de la ferraille la rend en or.
-        gold: Math.max(
-          0,
-          cur.gold + ent(m.gold) + (party ? 0 : ent(m.scrap)) * SCRAP_TO_GOLD - wages,
-        ),
+        // ⚠️ Plus de salaires : un `wages` resté dans un rapport d'avant n'est plus déduit.
+        gold: cur.gold + ent(m.gold) + (party ? 0 : ent(m.scrap)) * SCRAP_TO_GOLD,
         login_energy: cur.login_energy + ent(m.energy), // ⚡ mine/source → énergie de jeu
         keys: cur.keys + ent(m.key),
         // ⚠️ DEVISES VIVANTES UNIQUEMENT. Le commentaire qui tenait ici affirmait qu'on ne
@@ -2811,11 +2806,11 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !van || !isCaravanClaimable(van, Date.now())) return null;
     const o = van.outcome;
     const before = advList.value;
-    // XP, blessés et salaires : la règle vit dans `caravanClaimRoster` (lib, testée), jumelle
+    // XP et blessés : la règle vit dans `caravanClaimRoster` (lib, testée), jumelle
     // de `partyClaimRoster`. ⚠️ C'est elle qui garantit qu'une convalescence n'est JAMAIS
     // raccourcie — le calcul écrit ici écrasait `hurtUntil` et remettait debout trop tôt un
     // aventurier déjà alité plus longtemps (siège perdu).
-    const { adventurers: advs, wages } = caravanClaimRoster(van, before, {
+    const { adventurers: advs } = caravanClaimRoster(van, before, {
       pantheonLevel: pantheonLevel.value,
       infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
       now: Date.now(),
@@ -2831,10 +2826,9 @@ export const useCharacterStore = defineStore('character', () => {
     const gearPatch = gearTrainedPatch(cur, before, advs);
     const tracks = gearAwareTracks(cur, before, advs, gearPatch);
     await persist(userId, {
-      // Les salaires sont déduits ICI, à l'encaissement : l'aventurier est payé au retour.
-      // (`wages` vient de `caravanClaimRoster`, déjà entier — comme la voie des groupes.)
       // 🔩 LEGACY : un convoi lancé avant le retrait de la ferraille la rend en or.
-      gold: Math.max(0, cur.gold + ent(o.gold) + ent(o.scrap ?? 0) * SCRAP_TO_GOLD - wages),
+      // ⚠️ Plus de salaires : un `wages` resté dans un convoi d'avant n'est plus déduit.
+      gold: cur.gold + ent(o.gold) + ent(o.scrap ?? 0) * SCRAP_TO_GOLD,
       login_energy: cur.login_energy + ent(o.energy),
       summon_stones: cur.summon_stones + ent(o.summonStones),
       keys: cur.keys + ent(o.keys),
@@ -2842,7 +2836,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...gearPatch,
       caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
     });
-    if (o.gold > o.wages) goldFx.gain(o.gold - o.wages);
+    if (o.gold > 0) goldFx.gain(ent(o.gold));
     return { events: advProgressOf(before, advs), tracks };
   }
 

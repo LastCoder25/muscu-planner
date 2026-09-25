@@ -169,8 +169,6 @@ export interface PartyResult {
   xp: Record<string, number>;
   /** Aventuriers envoyés à l'infirmerie (défaite : tous ceux qui sont tombés). */
   hurt: string[];
-  /** Salaires de l'escorte, déduits à l'encaissement. */
-  wages: number;
   /** 🩹 Trousse de soins emportée : multiplicateur de convalescence (< 1). Absent = aucune. */
   healMult?: number;
   journal: string[];

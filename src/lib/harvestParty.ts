@@ -10,24 +10,18 @@
 // de référence) : on la combat avec le MÊME choc que les camps (`fightCampForce`), ce qui
 // donne enfin un 🎯 % à un sanctuaire et de l'XP d'abattus aux champions partout.
 // - Défaite : RIEN n'est récolté, le socle d'XP de défaite, les tombés à l'infirmerie
-//   (`campHurt`), les salaires quand même.
+//   (`campHurt`).
 // - Victoire : la récolte telle qu'avant, plus la part des gardes abattus.
 //
 // ⚠️ ON NE RÉINVENTE RIEN, on DÉLÈGUE la récolte :
 // - SANS le héros : c'est le CONVOI d'avant (`resolveCaravan`) — embuscades à danger ABSOLU,
 //   calibrées sur un trio de référence (1 → 0 %, 3 → pari, 4 → quasi sûr), cargaison, blessés,
-//   salaires. Une équipe de 3 champions EST un convoi de 3 : les bandes restent vraies.
+//   Une équipe de 3 champions EST un convoi de 3 : les bandes restent vraies.
 // - AVEC le héros : c'est son EXPÉDITION (`resolveOutcome`) — la récolte pleine et les
-//   rencontres de trajet ; le champion qui l'accompagne apprend (XP) et touche son salaire.
+//   rencontres de trajet ; le champion qui l'accompagne apprend (XP).
 // ⚠️ Le héros SEUL y passe aussi par ce module (plus par `expeSend`) : sinon une expédition
 // solo contournait les gardes.
-import {
-  caravanWages,
-  missionXpFor,
-  resolveCaravan,
-  type EscortKit,
-  type PartyHero,
-} from './caravan';
+import { missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
 import { campHurt, fightCampForce } from './camp';
 import {
   harvestGuardOf,
@@ -82,7 +76,6 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     slain: g.slain,
     kills: g.kills,
     heroKills: g.heroKills,
-    wages: caravanWages(escort, poi),
   };
 
   if (!g.skirmish.win) {
@@ -149,7 +142,6 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     kills,
     xp: withShares(c.xp, g.shares),
     hurt: c.hurt,
-    wages: c.wages,
     journal: [...g.journal, ...c.events.map((e) => e.text)],
   };
   return {

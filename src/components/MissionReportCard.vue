@@ -101,7 +101,6 @@
         </button>
         <span v-if="card.lootMore > 0" class="more">+{{ card.lootMore }} au sac</span>
         <span v-if="card.legacyItem" class="more">🎁 {{ card.legacyItem }}</span>
-        <span v-if="card.wages" class="cost">🪙 −{{ fmt(card.wages) }} salaires</span>
         <span v-if="empty" class="none">Rien de récolté</span>
       </div>
       <button
@@ -254,11 +253,7 @@ const canReplay = computed(() => !!props.card.party && !!riftStageInputOf(props.
 const shownTeam = computed(() => props.card.team.slice(0, TEAM_SHOWN));
 const hiddenTeam = computed(() => Math.max(0, props.card.team.length - TEAM_SHOWN));
 const empty = computed(
-  () =>
-    !props.card.gains.length &&
-    !props.card.loot.length &&
-    !props.card.legacyItem &&
-    !props.card.wages,
+  () => !props.card.gains.length && !props.card.loot.length && !props.card.legacyItem,
 );
 /** La ligne unique d'un rapport encaissé : ses gains, puis l'XP. */
 const summary = computed(() => {
@@ -410,7 +405,6 @@ function fmtRate(n: number): string {
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
-.gains .cost,
 .gains .more {
   color: var(--dim);
   font-weight: 600;

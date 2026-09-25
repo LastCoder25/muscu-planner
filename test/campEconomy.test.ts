@@ -3,7 +3,6 @@ import { createMap, advanceWorld, campSpecOf, CAMP_TYPES, HARVEST_TYPES } from '
 import {
   caravanHurtMs,
   caravanLegMin,
-  caravanWages,
   convoySlotsFree,
   refAdvGear,
   refAdventurer,
@@ -70,7 +69,6 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
   let map = createMap(seed, 0, L, opts.comptoir);
   const trips: Trip[] = [];
   let gold = 0;
-  let wages = 0;
   let stones = 0;
   let keys = 0;
   let parties = 0;
@@ -91,7 +89,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
             win = campWinPct(c.p, c.spec!, partyAllies(esc, rd, null), 8);
           }
           const h = (2 * caravanLegMin(c.p, esc, 0, outpostMult(opts.comptoir))) / 60;
-          const net = campGroupHaul(c.p, c.spec!).gold - caravanWages(esc, c.p);
+          const net = campGroupHaul(c.p, c.spec!).gold;
           return { ...c, esc, win, score: (win * net) / h };
         })
         .filter((c) => c.win >= 0.5 && c.score > 0)
@@ -109,7 +107,6 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
         pantheonLevel: L,
       });
       gold += o.gold;
-      wages += o.party!.wages;
       stones += o.summonStones;
       keys += o.key;
       parties++;
@@ -135,7 +132,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
     }
   }
   return {
-    goldNet: (gold - wages) / opts.days,
+    goldNet: gold / opts.days,
     stones: stones / opts.days,
     keys: keys / opts.days,
     parties: parties / opts.days,
@@ -230,7 +227,7 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
     // 6,2 camps/jour et +12,3 % d’or AVEC le plafond, 8,0 et +13,9 % SANS — soit ×1,30 et
     // ×1,13. Le plafond reste le levier du NOMBRE de groupes ; sur l’OR il pèse moins parce
     // que, sans familier ni talent, les camps en plus au-delà du plafond demandent des groupes
-    // plus gros et leurs salaires mangent presque tout le butin. Borne ramenée de 1,15 à 1,08
+    // plus gros et leurs salaires (retirés depuis) mangeaient presque tout le butin. Borne ramenée de 1,15 à 1,08
     // pour cette raison mesurée — elle attrape toujours un plafond qui ne mordrait plus du tout.
     expect(sans.parties / cap.parties).toBeGreaterThan(1.25);
     expect(

@@ -31,7 +31,6 @@ const party = (over: Partial<PartyResult> = {}): PartyResult =>
     xp: { a1: 30, a2: 20 },
     hurt: ['a2'],
     advGear: [],
-    wages: 80,
     journal: ['Assaut', 'Victoire'],
     ...over,
   }) as PartyResult;
@@ -53,12 +52,11 @@ describe('📜 messageCard — un rapport de la boîte 📬', () => {
     expect(c.color).toBe(r.color);
   });
 
-  it('un groupe : UN verdict, les abattus, l’XP de chacun et les salaires', () => {
+  it('un groupe : UN verdict, les abattus, l’XP de chacun', () => {
     const c = messageCard(msg({ poiType: 'camp', party: party() }), []);
     expect(c.verdict).toBe('camp pris');
     expect(c.kills).toBe('5/6 abattus');
     expect(c.totalXp).toBe(50);
-    expect(c.wages).toBe(80);
     expect(c.hero).toBe(false);
     expect(c.team.map((m) => [m.id, m.xp, m.hurt])).toEqual([
       ['a1', 30, false],
@@ -77,7 +75,10 @@ describe('📜 messageCard — un rapport de la boîte 📬', () => {
   });
 
   it('un coffre n’a ni rang ni héros', () => {
-    const c = messageCard(msg({ chest: true, title: 'Coffre du Défi 360', poiType: undefined }), []);
+    const c = messageCard(
+      msg({ chest: true, title: 'Coffre du Défi 360', poiType: undefined }),
+      [],
+    );
     expect(c.rank).toBeNull();
     expect(c.hero).toBe(false);
     expect(c.title).toBe('Coffre du Défi 360');
@@ -86,7 +87,10 @@ describe('📜 messageCard — un rapport de la boîte 📬', () => {
 
   it('l’arène dit ses vagues, et le butin au-delà des objets décrits part « au sac »', () => {
     const item = { name: 'Lame', slot: 'weapon' } as never;
-    const c = messageCard(msg({ poiType: 'arena', waves: 14, items: [item, item], itemCount: 5 }), []);
+    const c = messageCard(
+      msg({ poiType: 'arena', waves: 14, items: [item, item], itemCount: 5 }),
+      [],
+    );
     expect(c.verdict).toBe('14 vagues tenues');
     expect(c.loot).toHaveLength(2);
     expect(c.lootMore).toBe(3);
@@ -113,7 +117,6 @@ describe('🐫 caravanCard — un convoi rentré', () => {
       energy: 30,
       summonStones: 0,
       keys: 0,
-      wages: 40,
       xp: { a1: 16, a2: 8 },
       kills: { a1: 2 },
       hurt: [],
@@ -135,7 +138,6 @@ describe('🐫 caravanCard — un convoi rentré', () => {
     const c = caravanCard(van([]), []);
     expect(c.travelMs).toBe(4 * H);
     expect(c.xpPerHour).toBe(24 / 2 / 4);
-    expect(c.wages).toBe(40);
   });
 
   it('seuls les champions nommés dans `stars` gagnent l’étoile', () => {

@@ -16,7 +16,6 @@ import {
 } from '@/lib/rift';
 import { EXPE, harvestYield, type Poi } from '@/lib/expedition';
 import {
-  caravanWages,
   missionXp,
   missionXpFor,
   missionXpSplit,
@@ -226,7 +225,7 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
   });
 });
 
-describe('🤕 l’infirmerie et les salaires', () => {
+describe('🤕 l’infirmerie', () => {
   it('⚠️ DÉFAITE → TOUT le groupe à l’infirmerie (le combattant fondu est mort)', () => {
     const esc = team(1, 26);
     const o = run({ escort: esc });
@@ -240,15 +239,11 @@ describe('🤕 l’infirmerie et les salaires', () => {
     expect(o.party!.hurt).toEqual([]);
   });
 
-  it('les salaires sont facturés à l’escorte, jamais au héros', () => {
+  it('aucun salaire : une incursion ne facture rien à son escorte', () => {
     const p = rift();
-    const esc = team(3, p.level);
-    expect(run({ poi: p, escort: esc, hero: heroFort(p.level) }).party!.wages).toBe(
-      caravanWages(esc, p),
-    );
-    expect(run({ poi: p, escort: [], hero: heroFort(p.level) }).party!.wages).toBe(
-      caravanWages([], p),
-    );
+    expect(
+      run({ poi: p, escort: team(3, p.level), hero: heroFort(p.level) }).party,
+    ).not.toHaveProperty('wages');
   });
 });
 

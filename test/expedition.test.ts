@@ -646,7 +646,6 @@ describe('📬 le rapport de groupe et la boîte', () => {
       xp: { a: 30 },
       hurt: [],
       advGear: [],
-      wages: 10,
       journal: ['x'],
     };
     const exp: ActiveExpedition = {

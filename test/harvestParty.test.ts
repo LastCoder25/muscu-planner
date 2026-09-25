@@ -72,7 +72,6 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
         for (const [id, v] of Object.entries(c.xp))
           expect(o.party!.xp[id]).toBe(v + Math.round(g.shares[id] ?? 0));
         expect(o.party!.hurt).toEqual(c.hurt);
-        expect(o.party!.wages).toBe(c.wages);
         expect(o.party!.hero).toBe(false);
       }
     expect(vus).toBeGreaterThan(6); // un trio de son niveau prend presque toujours les gardes
@@ -125,7 +124,6 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
     expect(o.energy).toBe(solo.energy);
     expect(o.party!.hero).toBe(true);
     expect(o.party!.xp.a0).toBeGreaterThan(0);
-    expect(o.party!.wages).toBeGreaterThan(0);
     expect(o.party!.hurt).toEqual([]);
   });
 });

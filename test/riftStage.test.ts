@@ -250,7 +250,6 @@ describe('ce qui distingue une incursion d’un camp', () => {
     xp: {},
     hurt: [],
     advGear: [],
-    wages: 0,
     journal: [],
     rift: { level: 26, maxPv: 900, pvTrail: [800, 700, 600, 500, 400, 300] },
     ...over,
@@ -471,7 +470,6 @@ function partyResult(): PartyResult {
     xp: {},
     hurt: [],
     advGear: [],
-    wages: 0,
     journal: [],
     rift: { level: 26, maxPv: 900, pvTrail: [800, 700, 600, 500, 400, 300] },
   };

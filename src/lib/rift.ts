@@ -32,7 +32,6 @@
 
 import { fuseUnits, skirmishXpShares, type SkirmishUnit } from './skirmish';
 import {
-  caravanWages,
   missionXpFor,
   partyAllies,
   refEscortUnits,
@@ -851,8 +850,7 @@ export function incursionFoesDown(run: RiftRun, bodies: readonly SkirmishUnit[])
  *   donc une règle qui n'existe pas. On honore son INTENTION (« comme sur un camp ») plutôt
  *   que sa lettre, ce qui évite d'inventer pour la seule faille une punition que ni les
  *   camps ni les expéditions n'appliquent. Ce que l'on paie déjà : le temps du héros, son
- *   exclusivité, le péage d'or et les salaires.
- * - **Salaires** à l'encaissement (`caravanWages`), comme un camp.
+ *   exclusivité. Les champions ne touchent aucun salaire.
  *
  * ⚠️ `kills` est VIDE (combat fondu : aucune attribution par aventurier n'est calculable) —
  * `MissionReportCard` masque déjà une colonne d'abattus à zéro.
@@ -886,7 +884,6 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
     heroKills: 0,
     xp,
     hurt: run.cleared ? [] : escort.map((a) => a.id),
-    wages: caravanWages(escort, poi),
     journal: run.journal,
     // ⚠️ De quoi REJOUER, jamais de quoi recalculer : la mise en scène lit ces nombres,
     // elle n'en produit aucun (règle fondatrice de `arenaStage` et `siegeStage`).
@@ -1116,7 +1113,6 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
     heroKills: 0,
     xp,
     hurt: run.win ? [] : escort.map((a) => a.id),
-    wages: caravanWages(escort, poi),
     journal,
   };
 

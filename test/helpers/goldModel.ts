@@ -9,7 +9,7 @@ import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 import { BOSSES, bossSummonCost } from '@/data/bosses';
 import { rollDrop, sellValue } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
-import { caravanSlots, caravanWages, caravanLegMin, refChampionAdv } from '@/lib/caravan';
+import { caravanSlots, caravanLegMin, refChampionAdv } from '@/lib/caravan';
 import { rollRaid } from '@/lib/raid';
 import { travelTimeMult } from '@/lib/buildings';
 import { comboChestReward } from '@/lib/comboChest';
@@ -98,7 +98,7 @@ function bossGoldPerDay(L: number): number {
   return (stonesPerDay(L) / bossSummonCost(b.unlockLevel)) * 0.6 * b.gold;
 }
 /** Convois : chaque créneau fait un aller-retour de récolte au plus 3 fois par jour (on
- *  ouvre l'app matin et soir), salaires déduits. Une récolte ne paie qu'un FILET d'or
+ *  ouvre l'app matin et soir). Aucun salaire (les champions ne sont pas payés). Une récolte ne paie qu'un FILET d'or
  *  (30 % du coût) : l'épave, qui payait en or, est retirée (v0.999). */
 function convoyGoldPerDay(L: number, comptoir: number): number {
   const poi = { level: L, distNorm: 0.6, type: 'well' } as Poi;
@@ -111,7 +111,7 @@ function convoyGoldPerDay(L: number, comptoir: number): number {
       travelTimeMult([{ typeId: 'outpost', level: comptoir, slot: 0, collectedAt: 0 }]),
     ) / 60;
   const trips = Math.min(3, 24 / (2 * legH));
-  const net = Math.round(goldCost('well', L) * 0.3) - caravanWages(esc, poi);
+  const net = Math.round(goldCost('well', L) * 0.3);
   return Math.max(0, caravanSlots(comptoir) * trips * net);
 }
 /** Camps de faction, en PART du revenu de référence — la valeur MESURÉE par

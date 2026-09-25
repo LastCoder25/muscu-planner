@@ -173,8 +173,8 @@ export interface PartyVoyage {
   seed: number;
 }
 
-/** Construit le voyage d'un groupe. ⚠️ AUCUN coût d'envoi (v0.1069) : l'escorte est payée
- *  en salaires à l'encaissement, le héros ne paie plus de péage.
+/** Construit le voyage d'un groupe. ⚠️ AUCUN coût d'envoi (v0.1069), et aucun salaire :
+ *  les champions ne sont pas payés.
  *  ⚠️ L'ISSUE EST PASSÉE, jamais calculée ici : c'est le seul chemin d'envoi (le store) qui
  *  choisit la résolution, au lieu que ce constructeur décide pour lui. */
 export function startParty(
@@ -277,7 +277,7 @@ export function settleParties(
  * - un rapport déjà marqué, ou sans groupe, ne verse rien ;
  * - rend les MÊMES références quand il n'y a rien à faire (le store n'écrit pas à vide) ;
  * - `granted` : les messages effectivement crédités, pour l'animation.
- * ⚠️ Blessures et salaires restent à l'ENCAISSEMENT (`partyClaimRoster`).
+ * ⚠️ Les blessures restent à l'ENCAISSEMENT (`partyClaimRoster`).
  */
 export function grantReportXp(
   box: ExpeditionMessage[],
@@ -308,8 +308,7 @@ export function grantReportXp(
  * - 🤕 les blessés du camp (`party.hurt`) partent à l'infirmerie pour la durée d'un convoi
  *   (`caravanHurtMs`, soigneurs de l'escorte et Infirmerie compris). ⚠️ Jamais RACCOURCIE :
  *   un aventurier déjà alité plus longtemps (siège perdu) garde son échéance ;
- * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir) ;
- * - `wages` : ENTIER (colonne `gold` entière — cf. le bug de la cargaison décimale, v0.796).
+ * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir).
  * ⚠️ Le HÉROS n'y figure jamais : ni XP (elle vient du sport), ni blessure.
  */
 export function partyClaimRoster(
@@ -327,7 +326,7 @@ export function partyClaimRoster(
      *  la verserait deux fois. */
     xpGranted: boolean;
   },
-): { adventurers: Adventurer[]; escort: Adventurer[]; wages: number } {
+): { adventurers: Adventurer[]; escort: Adventurer[] } {
   const escort = party.escort
     .map((id) => roster.find((a) => a.id === id))
     .filter((a): a is Adventurer => !!a);
@@ -348,7 +347,7 @@ export function partyClaimRoster(
       ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) }
       : up;
   });
-  return { adventurers, escort, wages: Math.max(0, Math.round(party.wages || 0)) };
+  return { adventurers, escort };
 }
 
 /**
@@ -400,7 +399,6 @@ export interface PartyReport {
   heroKills: number;
   members: PartyReportMember[];
   totalXp: number;
-  wages: number;
   journal: string[];
 }
 
@@ -441,7 +439,6 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
     heroKills: party.heroKills,
     members,
     totalXp: members.reduce((s, m) => s + m.xp, 0),
-    wages: Math.max(0, Math.round(party.wages)),
     journal: party.journal,
   };
 }

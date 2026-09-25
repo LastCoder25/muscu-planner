@@ -120,7 +120,14 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
         const escort = team(2, L);
         const p = poiAt(L, 'camp', `c${L}-${size}`);
         const plain = partyWinChance(p, escort, kit(L, 2), null, 0, 40)!;
-        const boosted = partyWinChance(p, escort, kit(L, 2, ['potion', 'pierre', 'fumigene']), null, 0, 40)!;
+        const boosted = partyWinChance(
+          p,
+          escort,
+          kit(L, 2, ['potion', 'pierre', 'fumigene']),
+          null,
+          0,
+          40,
+        )!;
         expect(boosted).toBeGreaterThanOrEqual(plain);
         if (boosted > plain) strictly = true;
       }
@@ -147,9 +154,18 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     let plain = 0;
     let boosted = 0;
     for (let seed = 1; seed <= 60; seed++) {
-      const base = { poi: poiAt(L), spec, escort, hero: null, seed, playerLevel: L, pantheonLevel: L };
+      const base = {
+        poi: poiAt(L),
+        spec,
+        escort,
+        hero: null,
+        seed,
+        playerLevel: L,
+        pantheonLevel: L,
+      };
       if (resolveCamp({ ...base, road: kit(L, 2) }).win) plain++;
-      if (resolveCamp({ ...base, road: kit(L, 2, ['potion', 'pierre', 'fumigene']) }).win) boosted++;
+      if (resolveCamp({ ...base, road: kit(L, 2, ['potion', 'pierre', 'fumigene']) }).win)
+        boosted++;
     }
     expect(boosted).toBeGreaterThan(plain);
   });
@@ -204,7 +220,15 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     const L = 26;
     const spec = { faction: 'bandits' as const, size: 10 };
     const poi = poiAt(L, 'lair');
-    const input = { poi, spec, escort: team(1, L), hero: null, seed: 3, playerLevel: L, pantheonLevel: L };
+    const input = {
+      poi,
+      spec,
+      escort: team(1, L),
+      hero: null,
+      seed: 3,
+      playerLevel: L,
+      pantheonLevel: L,
+    };
     const lost = resolveCamp({ ...input, road: kit(L, 1) });
     expect(lost.win).toBe(false);
     expect(lost.gold).toBe(0);
@@ -227,10 +251,15 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
       heroKills: 0,
       xp: { a0: 0 },
       hurt: ['a0'],
-      wages: 0,
       journal: [],
     };
-    const ctx = { pantheonLevel: 20, infirmaryLevel: 0, backAt: 1_000_000, now: 1_000_000, xpGranted: false };
+    const ctx = {
+      pantheonLevel: 20,
+      infirmaryLevel: 0,
+      backAt: 1_000_000,
+      now: 1_000_000,
+      xpGranted: false,
+    };
     const full = partyClaimRoster(party, escort, ctx).adventurers[0]!.hurtUntil!;
     const half = partyClaimRoster({ ...party, healMult: SUPPLY.healMult }, escort, ctx)
       .adventurers[0]!.hurtUntil!;
@@ -251,7 +280,9 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
 
   it('🗺️🧺 carte et bâts partagent le plafond de leur rôle', () => {
     const poi = poiAt(20, 'mine');
-    expect(ambushChance(poi, [], SUPPLY.scout)).toBeCloseTo(ambushChance(poi, []) * (1 - SUPPLY.scout));
+    expect(ambushChance(poi, [], SUPPLY.scout)).toBeCloseTo(
+      ambushChance(poi, []) * (1 - SUPPLY.scout),
+    );
     expect(ambushChance(poi, [], 5)).toBeCloseTo(ambushChance(poi, []) * (1 - CARAVAN.scoutMax));
     expect(caravanHaulMult([], [], SUPPLY.haul)).toBeCloseTo(1 + SUPPLY.haul);
     expect(caravanHaulMult([], [], 5)).toBeCloseTo(1 + CARAVAN.haulMax);
@@ -269,7 +300,12 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
 
 describe('🎒 ce qui ne sert à rien est dit, et refusé', () => {
   it('chaque consommable a un lieu où il sert', () => {
-    const t = (type: Poi['type'], fights = true, hero = false, escort = 2) => ({ type, fights, hero, escort });
+    const t = (type: Poi['type'], fights = true, hero = false, escort = 2) => ({
+      type,
+      fights,
+      hero,
+      escort,
+    });
     expect(supplyUselessWhy('lanterne', t('camp'))).not.toBeNull();
     expect(supplyUselessWhy('lanterne', t('rift'))).toBeNull();
     expect(supplyUselessWhy('bats', t('mine'))).toBeNull();
