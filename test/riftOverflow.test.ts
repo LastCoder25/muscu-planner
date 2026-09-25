@@ -17,6 +17,7 @@ import {
   emptyBase,
   markOverflow,
   rollRaid,
+  raidLevelWindow,
   groupCombatant,
   raidsEnabled,
   type BaseState,
@@ -160,7 +161,10 @@ describe('⚔️ l’armée d’une faille', () => {
         );
         expect(bronze.level).toBe(ordinaire.level);
         // Tous les niveaux restent dans la ligue du JOUEUR, jamais celle de la faille.
-        for (const g of bronze.groups) expect(g.level).toBeGreaterThanOrEqual(L);
+        // (fenêtre centrée depuis la v0.1150 : elle descend sous le joueur, jamais au niveau
+        // de la faille).
+        for (const g of bronze.groups)
+          expect(g.level).toBeGreaterThanOrEqual(raidLevelWindow(L).lo);
       }
     }
   });

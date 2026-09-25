@@ -4,6 +4,7 @@ import {
   rollRaid,
   raidSize,
   levelSpanFor,
+  raidLevelWindow,
   raidIntervalMs,
   scoutLeadMs,
   scoutClarity,
@@ -190,14 +191,47 @@ describe('composition de l’armée', () => {
     expect(levelSpanFor(90) / 90).toBeLessThan(levelSpanFor(26) / 26);
     // …et reste bornée : jamais une armée deux fois au-dessus du joueur.
     for (const L of [1, 12, 26, 60, 100]) expect(levelSpanFor(L)).toBeLessThan(L + 10);
+    // ⚠️ RÉÉCRIT (v0.1150) : la fenêtre est désormais CENTRÉE sur le joueur (demandé :
+    // « entre rang − marge et rang + marge, qu'on ne soit pas sur les dents »). Avant elle
+    // valait [niveau, niveau + span] : aucune armée n'était plus faible que le joueur.
     for (const L of [12, 26, 60]) {
-      for (let s = 1; s < 40; s++) {
+      const { lo, hi } = raidLevelWindow(L);
+      expect(L - lo, `niveau ${L} : fenêtre symétrique`).toBe(hi - L);
+      let dessous = 0;
+      let troupes = 0;
+      for (let s = 1; s < 400; s++) {
         const r = rollRaid(s * 977, L, 0, 0);
         for (const g of r.groups) {
-          expect(g.level).toBeGreaterThanOrEqual(L);
-          expect(g.level).toBeLessThanOrEqual(L + levelSpanFor(L));
+          expect(g.level).toBeGreaterThanOrEqual(lo);
+          expect(g.level).toBeLessThanOrEqual(hi);
+          if (!g.champion) {
+            troupes++;
+            if (g.level < L) dessous++;
+          }
         }
       }
+      // Centrée pour de vrai : une bonne part des troupes est PLUS FAIBLE que le joueur.
+      expect(dessous / troupes, `niveau ${L}`).toBeGreaterThan(0.3);
+    }
+  });
+
+  it('le tirage est CENTRÉ : les extrêmes de la fenêtre restent rares', () => {
+    for (const L of [26, 60]) {
+      const { lo, hi } = raidLevelWindow(L);
+      const m = hi - L;
+      let bords = 0;
+      let proches = 0;
+      let n = 0;
+      for (let s = 1; s < 400; s++)
+        for (const g of rollRaid(s * 977, L, 0, 0).groups) {
+          if (g.champion) continue;
+          n++;
+          if (Math.abs(g.level - L) <= m / 2) proches++;
+          if (g.level <= lo + m / 4 || g.level >= hi - m / 4) bords++;
+        }
+      // Triangulaire : ~75 % dans la moitié centrale, ~12 % dans les deux quarts extrêmes.
+      expect(proches / n, `niveau ${L}`).toBeGreaterThan(0.65);
+      expect(bords / n, `niveau ${L}`).toBeLessThan(0.2);
     }
   });
 
@@ -262,7 +296,7 @@ describe('silhouette de faction', () => {
     const emporte = Object.keys(FACTION_PROFILE).map((f) => {
       let somme = 0;
       let n = 0;
-      for (let i = 0; i < 900; i++) {
+      for (let i = 0; i < 3000; i++) {
         const raid = rollRaid(i * 7919 + 13, 26, 0, 0);
         if (raid.faction !== f) continue;
         n++;
@@ -282,8 +316,10 @@ describe('silhouette de faction', () => {
     // c'est cette mesure-ci qui porte la propriété, elle doit donc serrer d'autant plus
     // que l'autre desserre. Relâcher la tenue sans resserrer le rempart aurait été
     // renoncer à la garantie.
+    // ⚠️ 900 → 3 000 SIÈGES (v0.1150) : avec la fenêtre centrée, 900 sièges (~300 par
+    // faction) annonçaient 11,4 % d'écart — du BRUIT. Sur 3 000 : 5,1 %.
     expect((Math.max(...emporte) - Math.min(...emporte)) / moyen).toBeLessThan(0.1);
-  });
+  }, 120_000);
 
   it('… et le reste en FIN DE PARTIE, héros et vivier compris', () => {
     // ⚠️ AJOUTÉ (v0.1149). Le test ci-dessus ne mesure qu'au niveau 26, base nue : rien ne
@@ -557,7 +593,11 @@ describe('calibration du siège', () => {
     // Mesuré (1 200 sièges) : ~84 % au niveau 80, ~76 % au niveau 100 — on est loin du plafond.
     for (const L of [50, 80, 100]) {
       const plein = holdRate(L, L, true, 400, rosterOf(L));
-      expect(plein, `niveau ${L}, tout investi`).toBeLessThan(94);
+      // ⚠️ 94 → 99 (v0.1150), DÉCISION DE L'UTILISATEUR : « qu'on ne soit pas sur les dents à
+      // chaque attaque ». Avec la fenêtre centrée, une base pleinement investie tient 94-98 %
+      // (mesuré sur 400 : 95,5 / 98,0 / 94,3 aux niveaux 50 / 80 / 100). Le garde-fou garde
+      // son sens — elle n'est JAMAIS certaine — mais ne vise plus à la faire perdre souvent.
+      expect(plein, `niveau ${L}, tout investi`).toBeLessThan(99);
       // …mais ça reste largement payant : c'est un plafond, pas un nerf du vivier.
       expect(plein, `niveau ${L}, tout investi`).toBeGreaterThan(70);
     }
@@ -1539,8 +1579,11 @@ describe('📈 RENFORT DE L’ARMÉE ENTRE LES NIVEAUX 6 ET 26 (v0.829)', () => 
   });
   it('⚠️ LE DÉFAUT SIGNALÉ : avec 2 aventuriers, un siège des niveaux 8-16 n’est plus gagné d’avance', () => {
     // Mesuré avant : 99 / 95 / 91 / 86 % aux niveaux 8 / 10 / 12 / 16 ; après : 60 / 53 / 54 / 57.
+    // ⚠️ 80 → 90 (v0.1150) : fenêtre CENTRÉE (demandé : « pas sur les dents à chaque
+    // attaque »). Mesuré sur 400 : 86 / 66 / 76 / 69 %. Le niveau 8, où la fenêtre commence
+    // quatre niveaux SOUS le joueur, est le plus clément ; ce n'est toujours pas gagné d'avance.
     for (const L of [8, 10, 12, 16]) {
-      expect(holdRate(L, L, true, 200, rosterOf(L).slice(0, 2)), `niveau ${L}`).toBeLessThan(80);
+      expect(holdRate(L, L, true, 200, rosterOf(L).slice(0, 2)), `niveau ${L}`).toBeLessThan(90);
     }
   });
   it('…mais ce n’est pas un mur : le vivier complet y tient encore le plus souvent', () => {
@@ -1666,11 +1709,22 @@ describe('renseignement — du mystère, à tous les niveaux', () => {
   it('l’opacité est RELATIVE à la fenêtre : même position = même lecture à tout niveau', () => {
     // Armée au sommet de la fenêtre, tour à niveau, aucun aléa : le résultat ne doit pas
     // dépendre de l'échelle absolue des niveaux.
-    const auSommet = (L: number) => scoutClarity(L, L + levelSpanFor(L), L);
+    const auSommet = (L: number) => scoutClarity(L, raidLevelWindow(L).hi, L);
     expect(auSommet(20)).toBe(auSommet(100));
     expect(auSommet(12)).toBe(auSommet(40));
     // Et une armée à TON niveau se lit mieux qu'une armée au sommet.
     for (const L of [12, 40]) expect(scoutClarity(L, L, L)).toBeGreaterThan(auSommet(L));
+    // ⚠️ (v0.1150) Le SOMMET, c'est celui de la fenêtre CENTRÉE : une armée tout en haut est
+    // opaque au MAXIMUM, pas aux deux tiers comme si la fenêtre allait encore plus haut.
+    // Tour à 90 % : sans ça l'arrondi (2,5 → 3) masquait une opacité calée sur l'ANCIENNE
+    // fenêtre, plus haute que la vraie (mutation survivante).
+    for (const L of [20, 40, 100])
+      expect(scoutClarity(0.9 * L, raidLevelWindow(L).hi, L), `niveau ${L}`).toBe(
+        Math.round(RAID.clarityMax * (0.9 - RAID.scoutOpacity)),
+      );
+    // Et une armée PLUS FAIBLE que toi se lit comme une armée à ton niveau.
+    for (const L of [26, 60])
+      expect(scoutClarity(L, raidLevelWindow(L).lo, L)).toBe(scoutClarity(L, L, L));
   });
   it('l’aléa est déterministe par graine — même armée, même lecture', () => {
     // ⚠️ Deux appels ne suffisent PAS : l’aléa ne vaut que 0 ou 1 cran, donc un tirage
@@ -1688,7 +1742,7 @@ describe('renseignement — du mystère, à tous les niveaux', () => {
     // ⚠️ Le clamp final masque une part non bornée tant que l’opacité est faible : il faut
     // une armée en HAUT de fenêtre pour que la différence apparaisse.
     for (const L of [12, 26, 60]) {
-      const haut = L + levelSpanFor(L);
+      const haut = raidLevelWindow(L).hi;
       expect(scoutClarity(L * 8, haut, L)).toBe(scoutClarity(L, haut, L));
     }
   });

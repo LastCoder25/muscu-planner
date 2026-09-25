@@ -422,7 +422,7 @@ function garde(L: number, n = 6): GuardUnit[] {
 }
 /** Un siège qui PERCE : enceinte à moitié montée, garnison présente. */
 function breche(seed: number, L = 28) {
-  const lvl = Math.round(L * 0.6);
+  const lvl = Math.round(L * 0.5);
   const raid = rollRaid(seed, L, 0, 0);
   const report = resolveRaid(
     { defenses: defs(lvl, lvl), playerLevel: L, hero: hero(L), guard: garde(L) },

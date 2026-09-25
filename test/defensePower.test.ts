@@ -190,8 +190,12 @@ describe('la répartition par contributeur', () => {
     // ⚠️ Puis niveau **50 à 55 %** (compétences des champions au siège, `guardSiegeK` 0,8) :
     // au niveau 60 à 60 % la part du héros retombait à zéro. Balayé sur 6 niveaux × 5 parts :
     // tenue **0,50** · mur 0,50 · tourelles 0,50 · héros **0,25** · garnison 0,50.
-    const lvl = 50;
-    const defs = defAt(Math.round(lvl * 0.55));
+    // ⚠️ Puis niveau **40 à 40 %** (v0.1150, fenêtre de niveaux CENTRÉE : les armées sont
+    // plus faibles, à 55 % on tient déjà 0,83 et le héros retombe à zéro). Balayé sur 5
+    // niveaux × 7 parts : tenue **0,54** · mur 0,54 · tourelles 0,54 · héros **0,21** ·
+    // garnison 0,54.
+    const lvl = 40;
+    const defs = defAt(Math.round(lvl * 0.4));
     const b = defenseBreakdown(defs, lvl, refFighter(lvl), garde(lvl), NOW);
     const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
     expect(by.wall!.holdLoss).toBeGreaterThan(0);
@@ -242,7 +246,19 @@ describe('la répartition par contributeur', () => {
       // faisait qu’encaisser — on tenait sans lui. Depuis qu’il COUVRE ses tireurs, le
       // retirer les expose et la tenue baisse VRAIMENT. La muraille a enfin une part
       // mesurable à enceinte pleine, ce qui est exactement ce qu’un joueur attend d’elle.
-      expect(by.wall!.holdLoss).toBeGreaterThan(0);
+      // ⚠️ PUIS DE NOUVEAU 0 à enceinte pleine (v0.1150, fenêtre CENTRÉE : demandé « pas sur
+      // les dents ») — les armées sont plus faibles, et la muraille pleine n’est plus ce qui
+      // décide face à une armée type : c’est exactement le sens du titre de ce test. Elle
+      // COUVRE toujours ses tireurs, et ça se mesure dès qu’elle est incomplète.
+      const incomplete = defenseBreakdown(
+        defAt(Math.round(lvl * 0.6)),
+        lvl,
+        refFighter(lvl),
+        garde(lvl),
+        NOW,
+      );
+      const mur = incomplete.parts.find((p) => p.id === 'wall')!;
+      expect(mur.holdLoss, `niveau ${lvl}, muraille à 60 %`).toBeGreaterThan(0);
     }
   });
 
@@ -715,18 +731,25 @@ describe('⚖️ À PUISSANCE ÉGALE, UNE CHANCE SUR DEUX (v0.830)', () => {
       }
     }
   }
-  /** Le rapport qui sépare le mieux « on tient » de « on tombe », et l’erreur à ce seuil. */
+  /** Le rapport qui sépare le mieux « on tient » de « on tombe », et l’erreur à ce seuil.
+   *  ⚠️ LE MILIEU DU PLATEAU, plus son premier point (v0.1150). Plusieurs seuils donnent la
+   *  même erreur minimale — tout rapport entre deux sièges voisins sépare aussi bien — et
+   *  prendre le premier était arbitraire : avec la fenêtre centrée, le niveau 28 tombait
+   *  à 0,74 pour un plateau 0,74-0,79. Mesuré (milieu) : 1,09 · 0,77 · 0,85 · 0,93 aux
+   *  niveaux 12 / 28 / 60 / 90, global 0,94. */
   const seuil = (r: Row[]) => {
     let best = 0;
+    let last = 0;
     let err = Infinity;
     for (let t = 0.3; t < 4; t += 0.01) {
       const e = r.filter((x) => x.ratio >= t !== x.hold >= 0.5).length;
       if (e < err) {
         err = e;
         best = t;
-      }
+        last = t;
+      } else if (e === err) last = t;
     }
-    return { best, err: err / r.length };
+    return { best: (best + last) / 2, err: err / r.length };
   };
 
   it('l’équilibre tombe à parité, et le chiffre sépare vraiment les issues', () => {

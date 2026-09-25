@@ -450,6 +450,10 @@ export const RAID = {
   minRaidLevel: 2,
   spanFlat: 7,
   spanLate: 0.45,
+  /** Part de `levelSpanFor` qui fait la marge de la fenêtre CENTRÉE (cf. `raidLevelWindow`). */
+  windowShare: 0.75,
+  /** Le champion dépasse le haut de sa troupe de 1 à `championLead` niveaux (borné par la fenêtre). */
+  championLead: 4,
   // Effectif quasi PLAT sur toute la partie (6 au début → 12 au niveau 100). Il ne suit
   // volontairement pas le niveau : un champ de 100 cadavres qu'on ne peut pas dépouiller
   // serait frustrant, et l'effectif est aussi ce qui déséquilibre le siège (les dégâts
@@ -877,9 +881,34 @@ export function levelSpanFor(playerLevel: number): number {
   );
 }
 
-/** Tire une armée. Les niveaux se répartissent dans [niveau perso, +15] avec un biais
- *  BAS (rng², comme les POI de la carte) : le haut de la fourchette reste l'exception
- *  qu'on redoute, pas la norme qu'on subit. Les groupes arrivent du plus faible au plus
+/** Fenêtre de niveaux d'une armée : [niveau − marge, niveau + marge], CENTRÉE sur le joueur
+ *  (v0.1150 ; demandé par l'utilisateur : « entre rang − marge et rang + marge, qu'on ne soit
+ *  pas sur les dents à chaque attaque »). La marge vaut `RAID.windowShare` × `levelSpanFor`.
+ *  ⚠️ AVANT : [niveau, niveau + span], biaisée bas — AUCUNE armée n'était plus faible que le
+ *  joueur, donc chaque siège était au mieux une armée à sa hauteur. Le tirage est désormais
+ *  triangulaire (pic sur le niveau du joueur, extrêmes rares) : une armée sur deux est plus
+ *  faible que lui, et les plus fortes restent l'exception qu'on redoute.
+ *  Mesuré (300 sièges, héros = joueur de référence, vivier complet), part de la marge :
+ *
+ *  | part | base à niveau + tout | + héros seul | enceinte seule | 75 % + tout | 50 % + tout |
+ *  | ---- | ------------------- | ------------ | -------------- | ----------- | ----------- |
+ *  | 0,5  | 100 % partout        | 64-99        | 33-87          | 99-100      | 45-96       |
+ *  | **0,75** | **92-100**       | **45-90**    | **26-70**      | **83-98**   | **38-81**   |
+ *  | 1    | 86-100               | 35-87        | 22-53          | 68-100      | 33-72       |
+ *  | 1,25 | 71-100               | 29-60        | 20-45          | 54-77       | 31-57       |
+ *
+ *  À 0,5 plus rien n'est en jeu (l'enceinte seule tient 83-87 % en fin de partie). À 0,75,
+ *  une base complète ne perd presque plus, mais investir compte toujours (75 % → 50 % coûte
+ *  15 à 50 points) et l'armée la plus forte vaut encore environ une base complète. */
+export function raidLevelWindow(playerLevel: number): { lo: number; hi: number } {
+  const L = Math.max(1, playerLevel);
+  const m = Math.max(1, Math.round(levelSpanFor(L) * RAID.windowShare));
+  return { lo: Math.max(1, L - m), hi: L + m };
+}
+
+/** Tire une armée. Les niveaux se répartissent dans la fenêtre CENTRÉE sur le joueur
+ *  (`raidLevelWindow`, v0.1150) avec un tirage triangulaire : autour de son niveau le plus
+ *  souvent, les deux bords restent l'exception. Les groupes arrivent du plus faible au plus
  *  fort, le champion en dernier. */
 export function rollRaid(
   seed: number,
@@ -898,7 +927,6 @@ export function rollRaid(
   const nGroups = RAID.minGroups + Math.floor(rng() * (RAID.maxGroups - RAID.minGroups + 1));
   const total = raidSize(L, faction);
   const unitMult = FACTION_PROFILE[faction].unitMult;
-  const span = levelSpanFor(L);
   // ⚠️ Figé AU TIRAGE, sur le niveau du JOUEUR (les groupes sont plus hauts que lui) : une
   // armée en marche garde la force annoncée, et la Tour de guet l’estime telle quelle.
   //
@@ -911,15 +939,17 @@ export function rollRaid(
   // calibrés sur le joueur, comme toute armée.
   const threat = earlyThreatMult(L) * (overflow ? RAID.riftThreat : 1);
 
-  // Niveaux de troupe : biaisés bas, triés croissant.
+  // Niveaux de troupe : CENTRÉS sur le joueur (tirage triangulaire), triés croissant.
+  const { lo, hi } = raidLevelWindow(L);
   const levels: number[] = [];
   for (let i = 0; i < nGroups - 1; i++) {
-    levels.push(L + Math.min(span, Math.floor(rng() * rng() * (span + 1))));
+    const t = (rng() + rng()) / 2; // 0..1, pic au milieu
+    levels.push(Math.min(hi - 1, Math.max(lo, Math.round(lo + t * (hi - lo)))));
   }
   levels.sort((a, b) => a - b);
-  // Le champion prend le HAUT de la fourchette : toujours au-dessus de sa troupe.
+  // Le champion prend le HAUT de sa troupe : toujours au-dessus d'elle, jamais hors fenêtre.
   const topTroop = levels.length ? levels[levels.length - 1]! : L;
-  const championLevel = Math.min(L + span, topTroop + 1 + Math.floor(rng() * 4));
+  const championLevel = Math.min(hi, topTroop + 1 + Math.floor(rng() * RAID.championLead));
 
   // Effectifs : le champion est SEUL (c'est une élite) ; le reste se répartit.
   const groups: RaidGroup[] = [];
@@ -1031,7 +1061,7 @@ export function scoutClarity(
   // L’OPACITÉ : où l’armée se situe DANS la fenêtre de niveaux qui peut te viser.
   const gap = Math.max(0, raidLevel - L);
   const opacity =
-    RAID.clarityMax * RAID.scoutOpacity * Math.min(1, gap / Math.max(1, levelSpanFor(L)));
+    RAID.clarityMax * RAID.scoutOpacity * Math.min(1, gap / Math.max(1, raidLevelWindow(L).hi - L));
   const c = Math.round(base - opacity) - scoutNoise(raidSeed);
   return Math.min(RAID.clarityMax, Math.max(0, c));
 }
