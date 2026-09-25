@@ -89,7 +89,7 @@ export const MONSTER_ART: Readonly<Record<string, string>> = {
   // ── Gardiens de faille (v0.1108) — affichés par `RiftStage`. Descriptions et slugs
   //    prêts dans le script (`g_*`) ; à ajouter ICI une fois les fichiers générés (la table
   //    ne recense que ce qui existe) :
-  //    'Coupe-jarret (gardien)' g_coupe_jarret · 'Archer déserteur (gardien)' g_archer ·
+  //    'Archer déserteur (gardien)' g_archer ·
   //    'Brise-porte (gardien)' g_brise_porte · 'Mercenaire (gardien)' g_mercenaire ·
   //    'Chef de bande (gardien)' g_chef_bande · 'Loup famélique (gardien)' g_loup ·
   //    'Arachné des bois (gardien)' g_arachne · 'Sanglier enragé (gardien)' g_sanglier ·
@@ -97,6 +97,7 @@ export const MONSTER_ART: Readonly<Record<string, string>> = {
   //    'Revenant (gardien)' g_revenant · 'Spectre plaintif (gardien)' g_spectre ·
   //    'Ossuaire ambulant (gardien)' g_ossuaire · 'Nécromant (gardien)' g_necromant ·
   //    'Porte-linceul (gardien)' g_porte_linceul
+  'Coupe-jarret (gardien)': '/monsters/g_coupe_jarret.webp',
 };
 
 /**
