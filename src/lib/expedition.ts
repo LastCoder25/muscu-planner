@@ -1861,23 +1861,20 @@ export function travelPosition(
 }
 
 /**
- * Ce qu'une tuile de voyage affiche : le temps restant de l'ÉTAPE EN COURS, et son SENS.
- *
- * ⚠️ Le chiffre seul était ambigu (signalé par l'utilisateur : « c'est l'aller-retour, ou
- * juste le trajet en cours ? ») : à l'aller il compte jusqu'à l'arrivée sur le lieu, au
- * retour jusqu'à la ville — et rien ne disait lequel. La flèche le dit (→ aller, ↩ retour).
- * Le temps jusqu'au retour en ville, qui décide de la disponibilité des champions, part
- * dans `untilHome` (l'info-bulle) : dès l'aller, il inclut les deux jambes.
+ * Ce qu'une tuile de voyage affiche : le temps TOTAL restant avant le retour en ville,
+ * aller compris (demandé par l'utilisateur : « mets juste le temps total avant le
+ * retour »). C'est lui qui décide de la disponibilité des champions ; l'étape en cours
+ * (arrivée sur le lieu) ne vit plus que dans l'info-bulle (`untilHome`).
  */
 export function tripTimeLabel(
   pos: Pick<ReturnType<typeof travelPosition>, 'phase' | 'remainToObjectiveMs' | 'remainTotalMs'>,
 ): { time: string; untilHome: string } {
   if (pos.phase === 'done') return { time: 'rentré', untilHome: 'rentré en ville' };
-  const home = `retour en ville dans ${formatDuration(pos.remainTotalMs)}`;
-  if (pos.phase === 'return')
-    return { time: `↩ ${formatDuration(pos.remainTotalMs)}`, untilHome: home };
+  const total = formatDuration(pos.remainTotalMs);
+  const home = `retour en ville dans ${total}`;
+  if (pos.phase === 'return') return { time: total, untilHome: home };
   return {
-    time: `→ ${formatDuration(pos.remainToObjectiveMs)}`,
+    time: total,
     untilHome: `arrivée dans ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,
   };
 }

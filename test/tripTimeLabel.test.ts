@@ -8,24 +8,18 @@ const poi = { id: 'p', type: 'mine', x: 120, y: 80, level: 5 } as unknown as Poi
 const voyage = { poi, sentAt: 0, midAt: H, returnAt: 3 * H };
 
 describe('tripTimeLabel — ce que dit une tuile de voyage', () => {
-  it('à l’aller : le temps jusqu’à l’ARRIVÉE sur le lieu, marqué →', () => {
+  it('à l’aller : le temps TOTAL jusqu’au retour en ville, aller + retour compris', () => {
     const l = tripTimeLabel(travelPosition(voyage, 0.25 * H));
-    expect(l.time).toBe(`→ ${formatDuration(0.75 * H)}`);
-    // L'info-bulle dit aussi quand il rentre, aller + retour compris.
+    expect(l.time).toBe(formatDuration(2.75 * H));
+    // L'info-bulle garde l'arrivée sur le lieu.
+    expect(l.untilHome).toContain(formatDuration(0.75 * H));
     expect(l.untilHome).toContain(formatDuration(2.75 * H));
   });
 
-  it('au retour : le temps jusqu’à la VILLE, marqué ↩', () => {
+  it('au retour : le temps jusqu’à la VILLE', () => {
     const l = tripTimeLabel(travelPosition(voyage, 2 * H));
-    expect(l.time).toBe(`↩ ${formatDuration(H)}`);
+    expect(l.time).toBe(formatDuration(H));
     expect(l.untilHome).toContain(formatDuration(H));
-  });
-
-  it('les deux sens ne se lisent jamais pareil', () => {
-    const aller = tripTimeLabel(travelPosition(voyage, 0.5 * H)).time;
-    const retour = tripTimeLabel(travelPosition(voyage, 2.5 * H)).time;
-    expect(aller.startsWith('→')).toBe(true);
-    expect(retour.startsWith('↩')).toBe(true);
   });
 
   it('rentré', () => {
