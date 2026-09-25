@@ -1262,7 +1262,7 @@ onUnmounted(clearTimers);
   position: absolute;
   inset: 0;
   z-index: 4;
-  background: rgba(15, 12, 7, 0.92);
+  background: #0f0c07;
   display: flex;
   flex-direction: column;
   align-items: center;
