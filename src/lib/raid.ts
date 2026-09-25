@@ -675,6 +675,10 @@ export const RAID = {
   // plus centrée sur « ½ journée » que le test verrouille.
   healGoldK: 32,
   healGoldExp: 1.75,
+  // Soins d’un CHAMPION = cette part du tarif du héros (v0.1152, demandé). Mesuré : payer
+  // chaque blessé de mission au plein tarif coûtait 8 à 34 % du revenu de référence (0,16 à
+  // 0,51 blessé par mission, 4 à 16 missions/jour) — le tarif du héros vise UN blessé rare.
+  advHealShare: 0.25,
   // Réparations (cf. `repairMsFor`) : 30 min + 3 min par niveau, et RIEN ne les
   // raccourcit — la Fonderie est partie avec son second métier (demandé).
   repairBaseMs: 30 * 60_000,
@@ -1893,12 +1897,13 @@ export function advHurtMs(adv: Adventurer, now: number): number {
   return Math.max(0, (adv.hurtUntil ?? 0) - now);
 }
 
-/** Soins d’urgence d’un aventurier : AU MÊME TARIF que le héros (`healCost`, ∝ au repos
- *  restant et au niveau du joueur). Deux portes de sortie qui coûtent pareil se
- *  comprennent sans notice. 0 s’il n’y a rien à soigner. */
+/** Soins d’urgence d’un aventurier : le QUART du tarif du héros (`RAID.advHealShare`,
+ *  v0.1152), ∝ au repos restant et au niveau du joueur. ⚠️ Dérivé de `healCost`, jamais une
+ *  seconde échelle. Le tarif du héros vise UN blessé rare ; un vivier en compte plusieurs
+ *  par jour. 0 s’il n’y a rien à soigner. */
 export function advHealCost(adv: Adventurer, now: number, playerLevel: number): number {
   const ms = advHurtMs(adv, now);
-  return ms > 0 ? healCost(ms, playerLevel) : 0;
+  return ms > 0 ? Math.max(1, Math.ceil(healCost(ms, playerLevel) * RAID.advHealShare)) : 0;
 }
 
 /** Les aventuriers à l’infirmerie, le plus long repos d’abord. */

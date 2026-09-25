@@ -955,7 +955,7 @@
 
         <!-- 🏥 L’INFIRMERIE MONTRE SES BLESSÉS (demandé : « depuis l’infirmerie on voit les
              blessés et on peut payer en or pour les soigner »). Héros ET aventuriers —
-             blessés en défense ou en convoi —, au même tarif que le héros. -->
+             blessés en défense ou en convoi —, un champion au quart du tarif du héros. -->
         <div v-if="defSel.id === 'infirmary'" class="sh-garrison">
           <div class="sh-gtitle">🤕 Blessés — {{ patientCount }}</div>
           <p v-if="!patientCount" class="sh-gnote">
@@ -1858,7 +1858,7 @@ const healIn = computed(() =>
 const healPrice = computed(() =>
   healCost(woundRemainingMs(base.value, now.value), heroLevel.value),
 );
-/** Les aventuriers alités, avec leur prix de soins (même tarif que le héros). */
+/** Les aventuriers alités, avec leur prix de soins (le quart du tarif du héros). */
 const patients = computed(() =>
   woundedAdventurers(char.advList, now.value).map((a) => ({
     id: a.id,

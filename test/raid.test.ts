@@ -2378,11 +2378,14 @@ describe('🏥 infirmerie des aventuriers', () => {
     expect(siegeHurtIds({ held: false } as never)).toEqual([]);
   });
 
-  it('les soins d’un aventurier coûtent le tarif du héros, et rien s’il est sur pied', () => {
+  it('les soins d’un aventurier coûtent le QUART du tarif du héros, et rien s’il est sur pied', () => {
     const H = 3600_000;
     const adv = { ...rosterOf(10)[0]!, hurtUntil: 3 * H };
     expect(advHurtMs(adv, H)).toBe(2 * H);
-    expect(advHealCost(adv, H, 28)).toBe(healCost(2 * H, 28));
+    // ⚠️ Dérivé du tarif du héros ET de la constante, jamais un nombre écrit.
+    expect(advHealCost(adv, H, 28)).toBe(Math.ceil(healCost(2 * H, 28) * RAID.advHealShare));
+    expect(advHealCost(adv, H, 28)).toBeLessThan(healCost(2 * H, 28) / 3);
+    expect(advHealCost(adv, H, 28)).toBeGreaterThan(healCost(2 * H, 28) / 5);
     expect(advHealCost(adv, 3 * H, 28)).toBe(0);
     expect(advHealCost({ ...adv, hurtUntil: undefined }, 0, 28)).toBe(0);
   });
