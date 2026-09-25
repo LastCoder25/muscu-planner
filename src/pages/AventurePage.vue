@@ -154,30 +154,8 @@
             >
           </div>
         </div>
-        <!-- 🧭 QUI PEUT PARTIR (demandé) : le héros, les champions, les équipes. Remplace
-             l'ancien bandeau « ton héros est en expédition », qui ne disait que la moitié.
-             Toucher la ligne ouvre la carte, où l'on envoie. Mêmes règles que la carte
-             (`advAvailable`, `convoySlotsFree`) : jamais un chiffre que « Envoyer » dément. -->
-        <button
-          class="tb-dispo"
-          :title="dispoTitle"
-          aria-label="Disponibilités : héros, champions, équipes — ouvrir la carte d'expédition"
-          @click="openGame('/expedition-map')"
-        >
-          <span class="td-cell" :class="heroDispo.tone"
-            ><span class="tb-ico">🦸</span>{{ heroDispo.label }}</span
-          >
-          <span v-if="dispo.champTotal" class="td-cell" :class="{ none: !dispo.champFree }"
-            ><span class="tb-ico">🏅</span>{{ dispo.champFree }}/{{ dispo.champTotal }}</span
-          >
-          <span v-if="dispo.champHurt" class="td-cell hurt"
-            ><span class="tb-ico">⛑️</span>{{ dispo.champHurt }}</span
-          >
-          <span v-if="dispo.teamTotal" class="td-cell" :class="{ none: !dispo.teamFree }"
-            ><span class="tb-ico">🧭</span>{{ dispo.teamFree }}/{{ dispo.teamTotal }}</span
-          >
-          <span class="td-go">›</span>
-        </button>
+        <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->
+        <AvailabilityLine :now="expeNow" interactive @open="openGame('/expedition-map')" />
       </div>
 
       <div v-if="c.energy < 0" class="deficit-banner">
@@ -3071,8 +3049,7 @@ import { useEnergyHistory } from '@/composables/useEnergyHistory';
 import { useGameFx } from '@/composables/useGameFx';
 import { useAdvProgressFx } from '@/composables/useAdvProgressFx';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
-import { advAvailable, type AdvProgress, type AdvXpTrack } from '@/lib/adventurers';
-import { caravanSlots, convoySlotsFree } from '@/lib/caravan';
+import { type AdvProgress, type AdvXpTrack } from '@/lib/adventurers';
 import { useGamePanel } from '@/composables/useGamePanel';
 import { isWounded, woundRemainingMs, type RaidReport, defenseLevel } from '@/lib/raid';
 import { usePush } from '@/composables/usePush';
@@ -3080,6 +3057,7 @@ const BasePage = defineAsyncComponent(() => import('@/pages/BasePage.vue'));
 import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
+import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import SetPieceCmp from '@/components/SetPieceCmp.vue';
 import { splitStat, type StatParts } from '@/lib/statText';
@@ -3226,7 +3204,6 @@ import {
   type ExpeditionMessage,
   haulPills,
   messageLoot,
-  travelPosition,
   runArena,
   arenaEnergyCost,
   arenaRewards,
@@ -5455,50 +5432,6 @@ function expeBlocked(): boolean {
   return true;
 }
 const expeNow = ref(Date.now());
-const expeHero = computed(() =>
-  char.row?.expedition ? travelPosition(char.row.expedition, expeNow.value) : null,
-);
-/** 🦸 État du héros sur la ligne des disponibilités : le temps jusqu'au RETOUR en ville
- *  (c'est lui qui dit quand il redevient disponible, pas l'arrivée sur le lieu), ou sa
- *  convalescence. L'infirmerie passe devant : c'est elle qui le retient le plus longtemps. */
-const heroDispo = computed<{ label: string; tone: 'ok' | 'away' | 'hurt' }>(() => {
-  if (heroWounded.value) return { label: `⛑️ ${fmtExpeMs(heroHealIn.value)}`, tone: 'hurt' };
-  const h = expeHero.value;
-  if (h && h.phase !== 'done') return { label: fmtExpeMs(h.remainTotalMs), tone: 'away' };
-  return { label: 'dispo', tone: 'ok' };
-});
-/** 🏅 Champions libres / possédés, 🧭 équipes libres / créneaux de l'Avant-poste. */
-const dispo = computed(() => {
-  const advs = char.advList;
-  const teamTotal = caravanSlots(char.comptoirLevel);
-  const champHurt = advs.filter((a) => (a.hurtUntil ?? 0) > expeNow.value).length;
-  return {
-    champFree: advs.filter((a) => advAvailable(a, expeNow.value)).length,
-    // ⛑️ Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
-    champTotal: advs.length - champHurt,
-    champHurt,
-    teamFree: convoySlotsFree(
-      char.comptoirLevel,
-      [...char.caravanList, ...char.partyList],
-      expeNow.value,
-    ),
-    teamTotal,
-  };
-});
-const dispoTitle = computed(() => {
-  const d = dispo.value;
-  const parts = [
-    heroDispo.value.tone === 'ok'
-      ? 'Héros disponible'
-      : heroDispo.value.tone === 'hurt'
-        ? `Héros à l'infirmerie — de retour dans ${fmtExpeMs(heroHealIn.value)}`
-        : `Héros en expédition — de retour dans ${heroDispo.value.label}`,
-  ];
-  if (d.champHurt) parts.push(`${d.champHurt} champion(s) à l'infirmerie`);
-  if (d.champTotal) parts.push(`${d.champFree} champion(s) disponible(s) sur ${d.champTotal}`);
-  if (d.teamTotal) parts.push(`${d.teamFree} équipe(s) libre(s) sur ${d.teamTotal}`);
-  return parts.join(' · ');
-});
 /** 📬 Ce que la boîte montre : les 3 derniers, plus tout butin encore à prendre (la même
  *  règle que l'écriture — une boîte d'avant, plus pleine, se lit déjà taillée). */
 const inboxMessages = computed(() => keepMessages(char.row?.messages ?? [], MESSAGES_CAP));
@@ -10317,49 +10250,6 @@ button.pt-mini:active {
   font-weight: 800;
   display: grid;
   place-items: center;
-}
-/* 🧭 Ligne des disponibilités (héros · champions · équipes), sous le plateau de ressources.
-   Même gabarit que le plateau (pilule pleine largeur) pour se lire comme sa suite. */
-.tb-dispo {
-  flex: 1 0 100%;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-height: 34px;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.td-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-.td-cell.ok {
-  color: var(--d1, #7bc86c);
-}
-.td-cell.away {
-  color: #8fd0ff;
-}
-.td-cell.hurt {
-  color: var(--d4, #ff6a45);
-}
-.td-cell.none {
-  color: var(--dim);
-}
-.td-go {
-  margin-left: auto;
-  color: var(--dim);
-  font-size: 16px;
 }
 .inbox-list {
   overflow-y: auto;

@@ -11,6 +11,10 @@
          lignes de voyages en bas de l'écran). Le niveau, « En expédition » et l'or sont
          retirés : la tuile du héros, en bas, dit déjà qu'il voyage, et envoyer ne coûte
          plus d'or (v0.1069). -->
+    <!-- 🧭 QUI PEUT PARTIR (demandé : voir d'un coup d'œil les effectifs qu'on peut envoyer),
+         les champions détaillés par rang : c'est le rang qui décide du lieu à viser. -->
+    <div class="dispo-row"><AvailabilityLine :now="now" by-rank /></div>
+
     <div class="bar">
       <!-- 🎚️ Filtre de difficulté (par RANG, la langue de la carte). On garde les rangs
          MASQUÉS, pas les affichés : un rang nouveau apparaît visible par défaut. -->
@@ -776,6 +780,7 @@ import { useGameFx } from '@/composables/useGameFx';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
+import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
@@ -2640,6 +2645,10 @@ onUnmounted(() => {
   color: var(--text);
   cursor: pointer;
 }
+.dispo-row {
+  display: flex;
+  padding: 0 12px 6px;
+}
 .bar {
   display: flex;
   align-items: center;
@@ -2769,11 +2778,11 @@ onUnmounted(() => {
   scrollbar-width: none;
 }
 /* Des voyages en cours : la carte laisse la place à leurs DEUX premières lignes en bas
-   de l'écran (en-tête ~60 px, barre ~44, deux lignes de tuiles ~104, marges). Jamais plus
+   de l'écran (en-tête ~60 px, barre ~44, disponibilités ~40, deux lignes de tuiles ~104, marges). Jamais plus
    haute qu'avant (62vh). */
 .map-scroll.with-trips {
-  height: min(62vh, calc(100vh - 244px));
-  height: min(62vh, calc(100dvh - 244px));
+  height: min(62vh, calc(100vh - 284px));
+  height: min(62vh, calc(100dvh - 284px));
 }
 .map-scroll::-webkit-scrollbar {
   display: none;

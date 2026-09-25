@@ -126,6 +126,27 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('aria-pressed');
   }, 30_000);
 
+  // 🧭 v0.1154 : la ligne des disponibilités, partagée par l'Aventure et la carte. Sur la
+  // carte, les champions LIBRES se détaillent par rang (une pastille par rang représenté).
+  it('AvailabilityLine détaille les champions libres par rang', async () => {
+    const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        AvailabilityLine,
+        { now: 1, byRank: true },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    // 2 libres sur 3 (Marc est en convoi) ; tous Bronze → une seule pastille, « 2 ».
+    expect(out).toContain('2/3');
+    const pills = [...out.matchAll(/class="av-rank"[^>]*>.*?<\/span>(\d+)</g)].map((m) => m[1]);
+    expect(pills).toEqual(['2']);
+  }, 30_000);
+
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     let out = '';

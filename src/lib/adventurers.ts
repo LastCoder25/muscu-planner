@@ -1904,6 +1904,22 @@ export function advRank(adv: Adventurer): CharacterRank {
   };
 }
 
+/** Des aventuriers comptés PAR RANG (`advRank`, le rang affiché partout), du plus haut au
+ *  plus bas, seuls les rangs représentés. La carte s'en sert pour dire, d'un coup d'œil,
+ *  quels rangs peuvent partir — c'est ce qui décide d'un lieu. */
+export function countByRank(
+  advs: readonly Adventurer[],
+): { rankIndex: number; name: string; color: string; count: number }[] {
+  const by = new Map<number, { rankIndex: number; name: string; color: string; count: number }>();
+  for (const a of advs) {
+    const r = advRank(a);
+    const cur = by.get(r.rankIndex);
+    if (cur) cur.count++;
+    else by.set(r.rankIndex, { rankIndex: r.rankIndex, name: r.name, color: r.color, count: 1 });
+  }
+  return [...by.values()].sort((x, y) => y.rankIndex - x.rankIndex);
+}
+
 /** Un rang à sa PREMIÈRE étoile — ce qu'une ascension ouvre. */
 function rankAtStar1(rankIndex: number): CharacterRank {
   const t = CHARACTER_RANKS[rankIndex]!;
