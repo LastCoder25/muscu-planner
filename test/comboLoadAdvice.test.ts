@@ -117,6 +117,54 @@ describe('legLoadAdvice — charge conseillée d’un exo du 360', () => {
     expect(a).toEqual({ weight: null, assisted: true, call: 'hold', reps: 10 });
   });
 
+  it('tes 4 strictes après des séries assistées : on vise 5 strictes, pas 11', () => {
+    // Les séries réelles du 25/09 : élastique toute la semaine, puis 4 strictes.
+    const a = legLoadAdvice(
+      leg([{ ...s(10, null), assisted: true }, { ...s(10, null), assisted: true }, s(4, null)], {
+        assistable: true,
+      }),
+      [],
+      R,
+    );
+    expect(a).toEqual({ weight: null, assisted: false, call: 'hold', reps: 5, topUp: true });
+  });
+
+  it('des strictes sous la fourchette ne font JAMAIS conseiller de revenir à l’aide', () => {
+    const a = legLoadAdvice(leg([s(4, null), s(3, null), s(4, null)], { assistable: true }), [], R);
+    expect(a?.call).toBe('hold');
+    expect(a?.topUp).toBe(true);
+    expect(a?.reps).toBe(5);
+  });
+
+  it('une fois dans la fourchette, plus besoin de compléter à l’élastique', () => {
+    const a = legLoadAdvice(leg([s(8, null), s(9, null)], { assistable: true }), [], R);
+    expect(a?.topUp).toBeUndefined();
+  });
+
+  it('avec du lest, sous la fourchette reste « allège le lest »', () => {
+    const a = legLoadAdvice(leg([s(4, 10), s(5, 10)], { assistable: true }), [], R);
+    expect(a?.call).toBe('down');
+  });
+
+  it('assisté sous la fourchette : l’élastique est trop fin, on reprend plus d’aide', () => {
+    const a = legLoadAdvice(
+      leg(
+        [
+          { ...s(5, null), assisted: true },
+          { ...s(6, null), assisted: true },
+        ],
+        { assistable: true },
+      ),
+      [],
+      R,
+    );
+    expect(a).toEqual({ weight: null, assisted: true, call: 'down', reps: 8 });
+  });
+
+  it('un exo qu’on ne peut pas assister garde le verdict « plus facile »', () => {
+    expect(legLoadAdvice(leg([s(4, null), s(5, null)]), [], R)?.call).toBe('down');
+  });
+
   it('gainage (durée) : aucun conseil de charge', () => {
     expect(legLoadAdvice(leg([s(60, null)], { count_mode: 'time' }), [], R)).toBeNull();
   });

@@ -1266,6 +1266,9 @@ export interface LegLoadAdvice {
   call: LoadCall;
   /** Reps à viser à cette charge (pour « hold »), bas de fourchette sinon. */
   reps: number;
+  /** Séries STRICTES encore sous la fourchette : on garde les strictes et on complète le
+   *  volume à l’élastique — jamais « plus facile », ce serait défaire la progression. */
+  topUp?: boolean;
 }
 
 /** Séries de référence : celles de ce 360, sinon celles du dernier 360 qui a fait cet exo. */
@@ -1319,8 +1322,15 @@ export function legLoadAdvice(
   const base = { weight: loadOf(last), assisted: !!last.assisted };
   if (recent.filter((r) => r >= range.max).length >= LOAD_ADVICE.agree)
     return { ...base, call: 'up', reps: range.min };
+  // ⚠️ Tractions, dips… faits SANS aide ni lest sur un exo qu’on peut assister : être sous
+  // la fourchette n’y est pas « trop lourd », c’est le cap qu’on est en train de franchir.
+  // On vise une stricte de plus et on complète à l’élastique ; revenir à l’assistance
+  // pour TOUTES ses séries défairait exactement ce qu’on vient de gagner.
+  const best = Math.max(...recent);
+  if (leg.assistable && base.weight === null && !base.assisted && best < range.min)
+    return { ...base, call: 'hold', reps: best + 1, topUp: true };
   if (recent.filter((r) => r < range.min).length >= LOAD_ADVICE.agree)
     return { ...base, call: 'down', reps: range.min };
   // Ta meilleure série récente dit ce que tu fais frais ; les moins bonnes = fatigue passagère.
-  return { ...base, call: 'hold', reps: Math.min(range.max, Math.max(...recent) + 1) };
+  return { ...base, call: 'hold', reps: Math.min(range.max, best + 1) };
 }

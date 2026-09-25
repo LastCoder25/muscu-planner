@@ -94,6 +94,12 @@ const load = computed(() => {
         ? 'Tu restes sous la fourchette : prends un élastique plus épais'
         : 'Tu restes sous la fourchette : allège la charge',
     };
+  if (a.topUp)
+    return {
+      call: a.call,
+      text: `💪 vise ${a.reps} strictes · + élastique`,
+      title: `Bravo pour les strictes ! Vise ${a.reps} reps sans aide, puis complète ton volume avec l’élastique`,
+    };
   return {
     call: a.call,
     text: kg ? `🏋️ ${kg} · ${a.reps}` : `🏋️ vise ${a.reps}`,
