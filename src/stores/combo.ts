@@ -145,7 +145,7 @@ export const useComboStore = defineStore('combo', () => {
     const leg = c.legs.find((l) => l.exercise_id === exerciseId);
     if (!leg) return;
     if (!leg.sets) leg.sets = []; // migration : ancien format sans `sets`
-    leg.sets.push({ date, reps, weight: weight ?? null, assisted });
+    leg.sets.push({ date, reps, weight: weight ?? null, assisted, at: new Date().toISOString() });
     if (weight != null) leg.weight_kg = weight; // dernier poids → préremplissage
     // ⚠️ On SIGNALE la transition vers « terminé ». Le coffre de fin de 360 doit tomber à
     // l'instant même où le défi se boucle — or le store ne connaît ni le niveau du joueur

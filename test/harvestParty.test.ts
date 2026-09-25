@@ -50,7 +50,7 @@ const team = (n: number, L = 26): Adventurer[] =>
 const road = { advGear: refAdvGear(26, 3) };
 const hero: PartyHero = { name: 'H', level: 26, combatant: refFighter(26) };
 
-describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1159)', () => {
+describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1161)', () => {
   // Avant, une mine payait sa formule pleine au héros et 30 % de son coût à une équipe :
   // ~90 fois moins pour le même lieu. Une seule règle désormais (`harvestGold`) ; seuls les
   // aléas du voyage diffèrent (rencontres du héros ; embuscades, rôles et bâts d'une équipe).

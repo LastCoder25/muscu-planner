@@ -6,7 +6,7 @@
 // consomme donc du temps réel et ZÉRO énergie — c'est le seul axe où il est à égalité.
 // Corollaire non négociable : **une caravane ne rapporte JAMAIS d'équipement**. Elle paie
 // en LOGISTIQUE (⚡ énergie plafonnée, 🔮 pierres, 🗝️ clés) et en or — le MÊME que le héros
-// sur le même lieu (`harvestGold`, v0.1159 : une mine paie son or plein à une équipe),
+// sur le même lieu (`harvestGold`, v0.1161 : une mine paie son or plein à une équipe),
 // c'est-à-dire des devises qui débloquent les AUTRES systèmes au lieu de les remplacer.
 // « Le sport est le plafond » reste intact : ce n'est pas le butin qui monte, c'est
 // l'accès au jeu qui s'élargit.
@@ -1333,7 +1333,7 @@ export function resolveCaravan(
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
     // substitut au sport » est un invariant, pas une base qu'un bon voyage dépasserait.
-    // 🪙 L'or est celui du héros (`harvestGold`, v0.1159) : seuls les aléas de la route et les
+    // 🪙 L'or est celui du héros (`harvestGold`, v0.1161) : seuls les aléas de la route et les
     // bâts 🧺 le modulent — exactement ce que le héros subit. ⚠️ PAS le rôle 🐫 ni les pièces
     // de cargaison : avec le héros ils ne comptent pas, et les appliquer à l'or faisait gagner
     // à une équipe 17 à 22 % de plus que le héros sur la même mine (mesuré). Ils gonflent les

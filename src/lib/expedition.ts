@@ -639,7 +639,7 @@ export const HARVEST = {
   manaPerLevel: 0.15,
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
   /** 🪙 Or d'une récolte hors mine, en part de son coût — le même pour le héros et pour une
-   *  équipe (`harvestGold`, v0.1159 ; avant : 0,35 et 0,3). Symbolique : ces lieux paient en
+   *  équipe (`harvestGold`, v0.1161 ; avant : 0,35 et 0,3). Symbolique : ces lieux paient en
    *  ressources. */
   goldShare: 0.35,
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
@@ -854,7 +854,7 @@ export const EXPE = {
   // MESURÉ (goldSink, modèle échantillonné sur de vraies cartes), part du plafond sur un an :
   // ×2 → 77,8 / 68,1 / 61,7 % · ×2,3 → 79,9 / 70,0 / 63,3 % · ×2,4 → 80,7 / 70,6 / 64,0 % (les soins
   // du héros passent sous ⅓ de journée au niveau 35). Avant : 81,1 / 71,8 / 66,2 %.
-  // ⚠️ 2,3 → 2,0 en v0.1159 : une ÉQUIPE touche désormais l'or plein d'une mine (`harvestGold`,
+  // ⚠️ 2,3 → 2,0 en v0.1161 : une ÉQUIPE touche désormais l'or plein d'une mine (`harvestGold`,
   // demandé : « héros ou non, l'or gagné est le même »). Les équipes prennent les mines que le
   // héros laisse sur la carte (~4,5 mines apparaissent par jour, le héros en fait ~2) : à 2,3 le
   // revenu complet montait de +4 à +10 % et la part du plafond passait à 83,0 / 72,5 / 65,5 %.
@@ -2309,7 +2309,7 @@ export function resolveOutcome(
  *  Rendement = coût × (1,3 + `rewardTravelFactor(difficulté)`) : reine de l'or. ⚠️ Le coût se calcule
  *  sur la DIFFICULTÉ du lieu, et la distance ne paie plus (v0.1153). */
 /**
- * 🪙 L'OR DE BASE D'UN LIEU DE RÉCOLTE — ⚠️ SOURCE UNIQUE, que le héros y aille ou non (v0.1159,
+ * 🪙 L'OR DE BASE D'UN LIEU DE RÉCOLTE — ⚠️ SOURCE UNIQUE, que le héros y aille ou non (v0.1161,
  * demandé : « héros ou non, l'or gagné est le même »). Avant, une mine payait sa formule pleine
  * au héros et 30 % de son coût à une équipe sans lui : ~90 fois moins pour le même lieu.
  * L'expédition du héros (`mineOutcome`, les autres récoltes) et le convoi d'une équipe

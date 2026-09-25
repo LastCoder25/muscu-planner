@@ -83,7 +83,7 @@ const bestPlaces = memo((L) => {
   let diff = 0;
   let n = 0;
   // 🐫 Les mines que le héros ne prend pas, jouées par une équipe de 3 champions de référence
-  // (v0.1159 : une équipe touche désormais l'or plein d'une mine) — une liste par journée.
+  // (v0.1161 : une équipe touche désormais l'or plein d'une mine) — une liste par journée.
   const teamDays: number[][] = [];
   for (let seed = 1; seed <= 12; seed++) {
     let map = createMap(seed * 7919, 0, L, L);
@@ -180,7 +180,7 @@ function bossGoldPerDay(L: number): number {
 }
 /** Convois : chaque créneau fait un aller-retour de récolte au plus 3 fois par jour (on
  *  ouvre l'app matin et soir). Aucun salaire (les champions ne sont pas payés).
- *  🪙 Depuis la v0.1159, une équipe touche l'or PLEIN d'une mine (`harvestGold`, le même que
+ *  🪙 Depuis la v0.1161, une équipe touche l'or PLEIN d'une mine (`harvestGold`, le même que
  *  le héros) : les équipes prennent d'abord les MINES que le héros laisse sur la carte (vraies
  *  cartes, défaites comprises), puis les créneaux restants vont sur un puits, qui ne paie
  *  qu'une part symbolique de son coût. */

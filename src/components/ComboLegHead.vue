@@ -43,6 +43,7 @@ import {
   legDone,
   legMode,
   legLoadAdvice,
+  LOAD_ADVICE,
   legRepRange,
   legUnitLabel,
   type ComboChallenge,
@@ -78,21 +79,31 @@ const load = computed(() => {
   if (a.call === 'up')
     return {
       call: a.call,
-      text: kg ? `🏋️ ${kg} ↑ monte` : '🏋️ ↑ plus dur',
-      title: kg
-        ? 'Tu touches le haut de la fourchette : monte la charge'
-        : 'Tu touches le haut de la fourchette : ajoute du lest ou une variante plus dure',
+      text: a.assisted ? '🏋️ ↑ moins d’assistance' : kg ? `🏋️ ${kg} ↑ monte` : '🏋️ ↑ plus dur',
+      title: a.assisted
+        ? 'Tu touches le haut de la fourchette : prends un élastique plus fin, ou passe sans'
+        : kg
+          ? 'Tu touches le haut de la fourchette : monte la charge'
+          : 'Tu touches le haut de la fourchette : ajoute du lest ou une variante plus dure',
     };
   if (a.call === 'down')
     return {
       call: a.call,
-      text: kg ? `🏋️ ${kg} ↓ allège` : '🏋️ ↓ plus facile',
-      title: 'Tu restes sous la fourchette : allège la charge',
+      text: a.assisted ? '🏋️ ↓ plus d’assistance' : kg ? `🏋️ ${kg} ↓ allège` : '🏋️ ↓ plus facile',
+      title: a.assisted
+        ? 'Tu restes sous la fourchette : prends un élastique plus épais'
+        : 'Tu restes sous la fourchette : allège la charge',
+    };
+  if (a.topUp)
+    return {
+      call: a.call,
+      text: `💪 vise ${a.reps} strictes · + élastique`,
+      title: `Bravo pour les strictes ! Vise ${a.reps} reps sans aide, puis complète ton volume avec l’élastique`,
     };
   return {
     call: a.call,
     text: kg ? `🏋️ ${kg} · ${a.reps}` : `🏋️ vise ${a.reps}`,
-    title: `Garde cette charge et vise ${a.reps} reps`,
+    title: `Garde cette charge et vise ${a.reps} reps (conseil tiré de tes ${LOAD_ADVICE.window} dernières séries à cette charge)`,
   };
 });
 const extra = computed(() => legDone(props.leg) - props.leg.target);
