@@ -20,7 +20,7 @@
     >
     <!-- 🏅 PAR RANG (sur la carte) : ce qui décide d'un lieu, c'est le rang de ceux qui
          peuvent partir. Une pastille par rang possédé, nommée et à sa couleur : libres sur
-         le total de ce rang (blessés exclus, comptés à part). Sur leur propre ligne. -->
+         le total de ce rang (blessés exclus, comptés à part), sur la même ligne. -->
     <span v-if="byRank && rankRows.length" class="av-ranks">
       <span
         v-for="r in rankRows"
@@ -168,22 +168,21 @@ const title = computed(() => {
 .av-cell.none {
   color: var(--dim);
 }
-/* Par rang : la ligne passe à la ligne, les rangs occupent la leur (on ne les fait pas
-   défiler, ils sont la raison d'être de la ligne sur la carte). */
+/* Par rang (demandé : « tout sur la même ligne et centré ») : héros, infirmerie, rangs et
+   équipes forment UNE ligne centrée ; elle ne passe à la ligne, toujours centrée, que si
+   la largeur manque (téléphone plié, beaucoup de rangs). Jamais de défilement : les rangs
+   sont la raison d'être de la ligne sur la carte. */
 .av-line.ranked {
-  flex-wrap: wrap;
-  row-gap: 6px;
-  padding: 6px 12px;
-  border-radius: 14px;
-  overflow-x: visible;
-}
-.av-ranks {
-  order: 10;
-  flex: 1 0 100%;
-  display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
+  padding: 6px 8px;
+  border-radius: 14px;
+  overflow-x: visible;
+}
+/* Les pastilles deviennent des éléments de la ligne elle-même. */
+.av-ranks {
+  display: contents;
 }
 .av-rank b {
   font-size: 13px;
@@ -194,8 +193,8 @@ const title = computed(() => {
 .av-rank {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 7px 1px 5px;
+  gap: 3px;
+  padding: 1px 6px 1px 4px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--rk) 55%, transparent);
   background: color-mix(in srgb, var(--rk) 16%, transparent);
