@@ -97,7 +97,7 @@ const load = computed(() => {
   if (a.topUp)
     return {
       call: a.call,
-      text: `💪 vise ${a.reps} strictes · + élastique`,
+      text: `💪 ${a.reps} strictes + élastique`,
       title: `Bravo pour les strictes ! Vise ${a.reps} reps sans aide, puis complète ton volume avec l’élastique`,
     };
   return {
@@ -169,7 +169,11 @@ const color = computed(() => comboLegColor(props.leg));
   align-items: center;
   gap: 4px 8px;
   margin: -7px 0 -7px auto;
-  flex: none;
+  /* ⚠️ Jamais `flex: none` : la ligne se calerait sur son contenu et déborderait de
+     l'écran dès que le conseil de charge s'allonge (115 px de trop à 344 px, vu au banc).
+     Bornée à la largeur disponible, elle replie ses éléments. */
+  flex: 0 1 auto;
+  max-width: 100%;
   padding: 7px 0;
   min-width: 0;
   background: none;
@@ -188,8 +192,10 @@ const color = computed(() => comboLegColor(props.leg));
   font-size: 12px;
   font-weight: 600;
   color: var(--text);
-  white-space: nowrap;
   font-variant-numeric: tabular-nums;
+  /* Le conseil peut être long : il se replie au lieu de pousser la carte. */
+  min-width: 0;
+  text-align: right;
 }
 .lh-load.up {
   color: var(--d1);
