@@ -31,6 +31,15 @@
           {{ bossUnitLabel(b.family) }} sur 7 jours · réponds dans
           {{ fmtBossSpan(bossStartAt(b) - now) }}
         </div>
+        <div class="fb-inv-s">
+          🎁 Coffre ×{{ tierRewardMult(bossTier(b.tier)).toFixed(1) }} + trophée<template
+            v-if="bossTier(b.tier).tickets"
+          >
+            · 🎟️ {{ bossTier(b.tier).tickets }}</template
+          >
+          — si le boss tombe et que tu as fait la moitié de ta part
+        </div>
+        <div class="fb-inv-s">👥 {{ inviteGroup(b) }}</div>
         <div v-if="inviteBlock(b)" class="fb-inv-s warn">
           {{ bossErrorMessage(inviteBlock(b)!) }}
         </div>
@@ -611,6 +620,21 @@ const dayLabel = (ms: number) => {
 const pseudoOf = (userId: string) =>
   store.members.find((m) => m.userId === userId)?.pseudo ?? 'Un ami';
 const ownerPseudo = (b: FriendBoss) => pseudoOf(b.ownerId);
+/** Le groupe d'une invitation : le lanceur, qui a déjà rejoint, qui est encore invité.
+ *  Savoir avec qui on se bat fait partie de la décision (tous les membres du boss sont
+ *  lisibles par un invité : RLS « membres du boss »). */
+const inviteGroup = (b: FriendBoss) => {
+  const others = store.members.filter(
+    (m) => m.bossId === b.id && m.userId !== b.ownerId && m.userId !== uid.value,
+  );
+  const joined = others.filter((m) => m.status === 'accepted').map((m) => m.pseudo);
+  const waiting = others.filter((m) => m.status === 'invited').map((m) => m.pseudo);
+  const parts = [`${ownerPseudo(b)} (lanceur)`];
+  if (joined.length) parts.push(`${joined.join(', ')} ${joined.length > 1 ? 'ont' : 'a'} rejoint`);
+  if (waiting.length)
+    parts.push(`aussi invité${waiting.length > 1 ? 's' : ''} : ${waiting.join(', ')}`);
+  return parts.join(' · ');
+};
 const sharePct = (units: number) =>
   current.value
     ? Math.min(100, (units / bossShareUnits(current.value.family, current.value.tier)) * 100)
