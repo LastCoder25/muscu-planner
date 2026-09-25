@@ -34,7 +34,11 @@
         <div v-for="f in faces" :key="f.key" class="asc-face" :class="f.key">
           <div class="asc-frame" aria-hidden="true" />
           <div class="asc-pic">
-            <ChampionPortrait :champion-id="championId" large class="asc-img">
+            <!-- 🗡️ Une PIÈCE qui monte de rang : son illustration à la place du portrait. -->
+            <AdvGearArt v-if="gear" :model="gearModel" class="asc-img asc-gear">
+              <span class="asc-fallback">{{ emoji }}</span>
+            </AdvGearArt>
+            <ChampionPortrait v-else :champion-id="championId" large class="asc-img">
               <span class="asc-fallback">{{ emoji }}</span>
             </ChampionPortrait>
           </div>
@@ -56,6 +60,7 @@
       <span class="asc-arrow">➜</span>
       <b :style="{ color: to.color }">{{ to.name }} ★</b>
     </div>
+    <div v-if="note" class="asc-note">{{ note }}</div>
     <div v-if="mana > 0" class="asc-reward">
       <span class="asc-gem">💠</span>
       <b class="font-display">+{{ mana }}</b>
@@ -67,6 +72,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import AdvGearArt from '@/components/AdvGearArt.vue';
 import { STARS_PER_RANK, type RankTier } from '@/lib/characterRank';
 
 const props = defineProps<{
@@ -77,6 +83,12 @@ const props = defineProps<{
   /** Repli quand le champion n'a pas d'illustration (aventurier d'avant les champions). */
   emoji: string;
   mana: number;
+  /** 🗡️ Ascension d'une PIÈCE de champion : on montre l'objet, pas un portrait. */
+  gear?: boolean;
+  /** Modèle de la pièce (`advGearModelOf`) — absent ou sans image : le repli emoji. */
+  gearModel?: string | null;
+  /** Une ligne de plus sous les rangs (ce que la montée rapporte). */
+  note?: string;
 }>();
 
 /** Recto au maximum de l'ancien rang (c'est la condition d'ascension), verso au ★1. */
@@ -242,6 +254,20 @@ export const ASCENSION_SWAP_MS = FLIP_AT_MS + TURN_MS / 2;
   width: 100%;
   height: 100%;
   border-radius: 0;
+}
+/* L'objet se POSE sur le fond au lieu de remplir le cadre comme un portrait. */
+.asc-gear {
+  width: 78%;
+  height: 78%;
+  object-fit: contain;
+  border-radius: 12px;
+}
+.asc-note {
+  margin-top: 8px;
+  font-size: 14px;
+  text-align: center;
+  color: var(--text, #f3eee6);
+  animation: asc-up 0.5s ease-out calc(var(--swapEnd) + 0.4s) both;
 }
 .asc-fallback {
   font-size: 96px;

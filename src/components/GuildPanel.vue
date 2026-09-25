@@ -944,7 +944,6 @@ import {
   realGearTexts,
 } from '@/lib/champDisplay';
 import CountUp from '@/components/CountUp.vue';
-import { fxRarity } from '@/lib/items';
 import { useGameFx } from '@/composables/useGameFx';
 import AdventurerPortrait from '@/components/AdventurerPortrait.vue';
 import AdvGearArt from '@/components/AdvGearArt.vue';
@@ -1678,15 +1677,18 @@ function confirmAscendGear() {
     if (err) throw new Error(err);
     ascGearId.value = null;
     // Annoncé APRÈS l'écriture : une animation n'annonce jamais un gain qui n'a pas eu lieu.
+    // ⬆️ La MÊME scène que l'ascension d'un champion (carte qui se retourne, rang qui
+    // change de couleur), avec l'illustration de la pièce à la place du portrait.
     gameFx.celebrate({
-      kind: 'unlock',
+      kind: 'rankup',
       emoji: p.g.emoji,
-      title: `${p.g.name} → ${p.to.emoji} ${p.to.name}`,
+      title: p.g.name,
+      ranks: { from: CHARACTER_RANKS.indexOf(p.from), to: CHARACTER_RANKS.indexOf(p.to) },
+      gear: { model: advGearModelOf(p.g) },
       subtitle:
         p.powGain > 0
           ? `⚔️ ${fmtChampPow(p.powBefore, showK.value)} → ${fmtChampPow(p.powAfter, showK.value)} (+${fmtChampPow(p.powGain, showK.value)}) pour ${p.wearer}`
           : 'Ses stats montent d’un rang.',
-      rarity: fxRarity(p.g.rarity),
     });
   });
 }

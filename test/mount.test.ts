@@ -1053,6 +1053,30 @@ describe('⬆️ AscensionReveal — la scène d’ascension se monte', () => {
     expect(out).toContain('+33');
     expect(out).toContain('<img');
   }, 30_000);
+
+  it('une PIÈCE de champion : son illustration à la place du portrait, et la ligne de gain', async () => {
+    const AscensionReveal = (await import('@/components/AscensionReveal.vue')).default;
+    const { CHARACTER_RANKS } = await import('@/lib/characterRank');
+    const { advGearArt, ADV_GEAR_MODELS } = await import('@/data/advGearModels');
+    const model = ADV_GEAR_MODELS.find((m) => advGearArt(m.id))!;
+    let out = '';
+    const props = {
+      from: CHARACTER_RANKS[0],
+      to: CHARACTER_RANKS[1],
+      name: model.name,
+      emoji: '🗡️',
+      mana: 0,
+      gear: true,
+      gearModel: model.id,
+      note: '⚔️ 120 → 131 (+11) pour Orsène',
+    };
+    expect(
+      await mountIt(AscensionReveal, props, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain(advGearArt(model.id)!);
+    expect(out).toContain('(+11) pour Orsène');
+    expect(out).not.toContain('pierres de mana');
+  }, 30_000);
 });
 
 describe('📊 barre d’étoile au retour de mission', () => {

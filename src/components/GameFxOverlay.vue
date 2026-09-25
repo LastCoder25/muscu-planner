@@ -32,6 +32,9 @@
         :champion-id="cur.championId"
         :emoji="cur.emoji"
         :mana="cur.count ?? 0"
+        :gear="!!cur.gear"
+        :gear-model="cur.gear?.model ?? null"
+        :note="cur.gear ? cur.subtitle : undefined"
       />
       <div v-else class="fx-card" :style="{ '--fx-color': color }">
         <!-- Anneau + particules qui jaillissent (nombre/intensité selon rareté) -->

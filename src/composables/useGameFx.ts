@@ -36,6 +36,9 @@ export interface GameFx {
   ranks?: { from: number; to: number };
   /** Le champion mis en scène (`kind: 'rankup'`) : son portrait est au centre. */
   championId?: string | null;
+  /** 🗡️ Ascension d'une PIÈCE de champion (`kind: 'rankup'`) : son illustration au centre,
+   *  à la place du portrait. `subtitle` y devient la ligne sous les rangs. */
+  gear?: { model: string | null };
   /** DISCRET : bandeau en haut qui LAISSE PASSER LES TOUCHES, au lieu de l'overlay plein
    *  écran. Pour ce qui se répète (boss refarmé, drop, set renforcé) : enchaîner plusieurs
    *  overlays bloquait « Réattaquer » pendant des secondes. */
