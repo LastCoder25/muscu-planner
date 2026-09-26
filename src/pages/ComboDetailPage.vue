@@ -15,21 +15,8 @@
           <span class="hc-days">{{ daysLeftLabel }}</span>
         </div>
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
-        <!-- Barre = dégradé unique (bulletproof, pas d'empilement) : vert (actuel) → rose
-             (avancement THÉORIQUE = où l'on devrait en être) → piste. Le rose n'apparaît
-             que si l'on est en retard (théorique > actuel). Trait 🎯 par-dessus. -->
-        <div class="hc-bar" :style="barStyle">
-          <!-- ⚠️ Le TRAIT se cache à 100 % (il se confondrait avec le bout de la barre) ;
-               la zone ROSE et la ligne « en retard », elles, doivent RESTER le dernier
-               jour — c'est là que tout ce qui manque devient du retard. Un seul drapeau
-               servait aux trois, et il n'était juste que pour le trait. -->
-          <i
-            v-if="pace.showMark"
-            class="hc-ontime"
-            :style="{ left: onTimePct + '%' }"
-            :title="`Pour être dans les temps : ${onTimePct}%`"
-          />
-        </div>
+        <!-- Barre de 0 à 120 % en trois zones (secondaire / objectif / bonus). -->
+        <ComboProgressBar :combo="c" :pace="pace" />
         <div v-if="notStarted" class="not-started">
           <span>📅</span>
           <span
@@ -286,6 +273,7 @@ import {
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import ComboLegFilter, { type LegFilter } from '@/components/ComboLegFilter.vue';
+import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
@@ -386,15 +374,6 @@ const onTimePct = computed(() => pace.value.onTimePct);
 const showOnTime = computed(() => pace.value.showPace);
 const onTimeState = computed(() => pace.value.state);
 
-const barStyle = computed(() => {
-  // Un seul dégradé (aucun empilement) : vert (fait) → rose (le RETARD) → piste.
-  const { donePct: p, latePct, onTimePct } = pace.value;
-  const stops =
-    latePct > 0
-      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${onTimePct}%, var(--surface-2) ${onTimePct}% 100%`
-      : `var(--accent) 0 ${p}%, var(--surface-2) ${p}% 100%`;
-  return { background: `linear-gradient(to right, ${stops})` };
-});
 
 // Fourchette de reps conseillée d’un exo, telle qu’elle a été figée à la création du
 // défi. L’objectif du profil ne sert que de repli pour les 360 créés avant qu’elle existe.
@@ -733,40 +712,6 @@ onMounted(async () => {
   color: var(--dim);
   font-variant-numeric: tabular-nums;
   margin: 2px 0 8px;
-}
-.hc-bar {
-  position: relative;
-  height: 10px;
-  background: var(--surface-2);
-  border-radius: 6px;
-  overflow: hidden;
-  margin-top: 8px;
-}
-/* Graduation tous les 5 % (segmente la barre pour lire la position d'un coup d'œil). */
-.hc-bar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to right,
-    transparent 0,
-    transparent calc(5% - 1.5px),
-    rgba(0, 0, 0, 0.32) calc(5% - 1.5px),
-    rgba(0, 0, 0, 0.32) 5%
-  );
-}
-/* Repère « dans les temps » : trait vertical à la position théorique attendue. */
-.hc-ontime {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--text);
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
-  pointer-events: none;
-  z-index: 2;
 }
 .hc-pace {
   margin-top: 6px;

@@ -1337,3 +1337,26 @@ describe('🔎 Filtres du Défi 360 (ComboLegFilter)', () => {
     expect((seul.match(/disabled/g) ?? []).length).toBe(3);
   }, 30_000);
 });
+
+describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
+  it('se monte et peint les trois zones', async () => {
+    const { default: ComboProgressBar } = await import('@/components/ComboProgressBar.vue');
+    const { NO_PACE } = await import('@/lib/combo');
+    const leg = (name: string, faites: number) => ({
+      slot: 'push',
+      exercise_id: name,
+      exercise_name: name,
+      rep_weight: 1,
+      target: 10,
+      sets: Array.from({ length: faites }, () => ({ date: '2026-01-05', reps: 10 })),
+    });
+    const combo = { id: 'c', legs: [leg('A', 12), leg('B', 3)], status: 'active' };
+    let out = '';
+    expect(
+      await mountIt(ComboProgressBar, { combo, pace: NO_PACE }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    // Trois barres SÉPARÉES, chacune avec son remplissage.
+    for (const c of ['cpb-sec', 'cpb-obj', 'cpb-bonus']) expect(out).toContain(c);
+    expect((out.match(/cpb-fill/g) ?? []).length).toBe(3);
+  }, 30_000);
+});

@@ -612,6 +612,38 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
   };
 }
 
+/** 🎨 LA BARRE DU 360 PAR ZONE (demandé) : de 0 à 120 %, la part des séries de base (argent,
+ *  jusqu'à 80 %), de l'objectif (jaune, 80 → 100 %) et du bonus (vert, 100 → 120 %), SOMMÉES
+ *  sur tous les exos. Chaque exo apporte ce qu'il a fait dans chaque zone : on peut donc être
+ *  à 75 % du secondaire avec un peu de jaune et de vert, parce que certains exos sont allés
+ *  plus loin que d'autres.
+ *
+ *  Valeurs en % de la LARGEUR de la barre (qui représente 0..120 %). Un exo au-delà de 120 %
+ *  n'apporte rien de plus : la barre est pleine au maximal. ⚠️ Ce n'est PAS le % affiché en
+ *  gros (`comboProgressPct`), qui ne laisse pas les bonus d'un exo compenser le retard d'un
+ *  autre : la barre montre OÙ en est chaque zone, le chiffre dit si l'objectif est bouclé. */
+export const COMBO_BAR_SCALE = COMBO_TIER_MAX;
+/** Position (en % de la largeur) d'un avancement exprimé en % de l'objectif. */
+export function comboBarPos(pctOfObjective: number): number {
+  return Math.max(0, Math.min(100, pctOfObjective / COMBO_BAR_SCALE));
+}
+export function comboBarParts(c: ComboChallenge): { sec: number; obj: number; bonus: number } {
+  const n = c.legs.length;
+  if (!n) return { sec: 0, obj: 0, bonus: 0 };
+  let sec = 0,
+    obj = 0,
+    bonus = 0;
+  for (const l of c.legs) {
+    if (l.target <= 0) continue;
+    const f = Math.min(COMBO_TIER_MAX, legDone(l) / l.target);
+    sec += Math.min(f, COMBO_TIER_SECONDARY);
+    obj += Math.max(0, Math.min(f, 1) - COMBO_TIER_SECONDARY);
+    bonus += Math.max(0, f - 1);
+  }
+  const w = (x: number) => ((x / n) * 100) / COMBO_BAR_SCALE;
+  return { sec: w(sec), obj: w(obj), bonus: w(bonus) };
+}
+
 export function legBarGeometry(l: ComboLeg): {
   objPct: number;
   fillPct: number;

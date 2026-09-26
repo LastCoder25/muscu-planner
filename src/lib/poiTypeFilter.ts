@@ -1,4 +1,4 @@
-// poiTypeFilter.ts — 🗺️ LE FILTRE PAR TYPE DE LIEU de la carte d'expédition (v0.1172).
+// poiTypeFilter.ts — 🗺️ LE FILTRE PAR TYPE DE LIEU de la carte d'expédition (v0.1174).
 //
 // Généralise le filtre des failles (demandé : « rajouter chaque type de lieu comme on a mis
 // la faille ») : chaque type présent a sa puce, à TROIS états, un toucher passe au suivant —

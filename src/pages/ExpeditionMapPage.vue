@@ -42,7 +42,7 @@
 
     </div>
 
-    <!-- 🗺️ Filtre par TYPE de lieu (v0.1172, généralise celui des failles) : une puce par
+    <!-- 🗺️ Filtre par TYPE de lieu (v0.1174, généralise celui des failles) : une puce par
          type présent, à TROIS états (un toucher passe au suivant) — affiché · SEUL · masqué.
          Plusieurs types « seuls » se cumulent, et il se COMBINE aux rangs : le compte ne
          parle que des lieux des rangs affichés. Règle dans `lib/poiTypeFilter.ts`. -->

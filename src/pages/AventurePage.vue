@@ -7142,15 +7142,19 @@ onUnmounted(() => {
   background: #ffb23f;
   box-shadow: 0 0 0 3px rgba(255, 178, 63, 0.25);
 }
+/* Icône AU-DESSUS du libellé, largeur qui suit le contenu : en ligne à parts
+   égales, « Équipement » (le plus long) était coupé dès 344 px. */
 .seg-b {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  min-height: 48px;
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  padding: 9px 5px;
+  gap: 2px;
+  padding: 6px 4px;
   border: none;
   border-radius: 9px;
   background: transparent;
@@ -7158,8 +7162,14 @@ onUnmounted(() => {
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 12px;
+  line-height: 1.1;
   white-space: nowrap;
   cursor: pointer;
+}
+.seg-b .seg-dot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
 }
 .seg-b .q-icon {
   flex: none;
