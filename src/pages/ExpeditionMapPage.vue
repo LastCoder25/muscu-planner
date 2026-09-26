@@ -39,7 +39,6 @@
           <span class="rf-dot" />
         </button>
       </div>
-
     </div>
 
     <!-- 🗺️ Filtre par TYPE de lieu (v0.1174, généralise celui des failles) : une puce par
@@ -494,7 +493,22 @@
 
           <div class="pc-grid">
             <span
-              v-for="f in poiFacts"
+              v-for="f in factsInfo"
+              :key="f.label"
+              class="pc-fact"
+              :class="f.cls"
+              :title="f.title"
+            >
+              <span class="pc-fact-lab">{{ f.icon }} {{ f.label }}</span>
+              <span class="pc-fact-val">{{ f.value }}</span>
+            </span>
+          </div>
+          <!-- ⏱️🎯 TRAJET ET RÉUSSITE SUR UNE MÊME LIGNE (demandé) : ce sont les deux chiffres qu'on
+               compare d'un lieu à l'autre, ils ne doivent pas se séparer au gré du retour à la
+               ligne des autres pastilles. Libellés courts pour tenir côte à côte à 344 px. -->
+          <div v-if="factsGo.length" class="pc-go">
+            <span
+              v-for="f in factsGo"
               :key="f.label"
               class="pc-fact"
               :class="f.cls"
@@ -845,7 +859,14 @@ import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { PORTAL_VIEW } from '@/lib/riftPortal';
-import { cycleType, parseTypeFilter, typeMode, typeOptions, typeShown, type TypeFilter } from '@/lib/poiTypeFilter';
+import {
+  cycleType,
+  parseTypeFilter,
+  typeMode,
+  typeOptions,
+  typeShown,
+  type TypeFilter,
+} from '@/lib/poiTypeFilter';
 import {
   POI_EMO,
   POI_LABEL,
@@ -1206,7 +1227,10 @@ const LEGACY_RIFT_KEY = 'muscu:emap:rift-mode';
 function loadTypeFilter(): TypeFilter {
   try {
     const raw = localStorage.getItem(TYPE_FILTER_KEY);
-    return parseTypeFilter(raw ? (JSON.parse(raw) as unknown) : null, localStorage.getItem(LEGACY_RIFT_KEY));
+    return parseTypeFilter(
+      raw ? (JSON.parse(raw) as unknown) : null,
+      localStorage.getItem(LEGACY_RIFT_KEY),
+    );
   } catch {
     return { only: [], hidden: [] }; /* stockage indisponible : tout est affiché */
   }
@@ -2009,6 +2033,8 @@ const arenaWaves = computed(() => {
  * dynamiques suivent la composition de l'équipe (aller-retour et réussite).
  */
 interface PoiFact {
+  /** Trajet / réussite : rangés ensemble sur leur propre ligne. */
+  go?: true;
   icon: string;
   label: string;
   value: string;
@@ -2122,16 +2148,26 @@ const poiFacts = computed<PoiFact[]>(() => {
   if (offers.value.hero && !partyTarget.value) {
     out.push({
       icon: '⏱️',
-      label: 'Trajet héros',
+      label: 'Trajet',
       value: formatDurationMin(roundTripMin(p)),
+      go: true,
+      title: 'Aller-retour du héros',
     });
     if (p.type === 'arena')
-      out.push({ icon: '🌊', label: 'Vagues tenues', value: `~${arenaWaves.value}` });
+      out.push({
+        icon: '🌊',
+        label: 'Vagues',
+        value: `~${arenaWaves.value}`,
+        go: true,
+        title: 'Vagues tenues',
+      });
     else if (!HARVEST_TYPES.has(p.type))
       out.push({
         icon: '🎯',
-        label: 'Réussite héros',
+        label: 'Réussite',
         value: `${winPct.value} %`,
+        go: true,
+        title: 'Chance de réussite du héros seul',
         cls: winClass(winPct.value),
       });
   }
@@ -2139,29 +2175,37 @@ const poiFacts = computed<PoiFact[]>(() => {
   if (partyTarget.value) {
     out.push({
       icon: '⏱️',
-      label: 'Trajet équipe',
-      value: partySize.value ? formatDurationMin(partyMin.value) : 'compose ton équipe',
+      label: 'Trajet',
+      value: partySize.value ? formatDurationMin(partyMin.value) : '—',
       cls: partySize.value ? undefined : 'dim',
+      go: true,
+      title: partySize.value ? 'Aller-retour de l’équipe' : 'Compose ton équipe pour le connaître',
     });
     if (teamOnly.value || guard)
       out.push(
         partyWin.value === null
           ? {
               icon: '🎯',
-              label: rift ? 'Fermeture équipe' : 'Réussite équipe',
-              value: 'compose ton équipe',
+              label: rift ? 'Fermeture' : 'Réussite',
+              value: '—',
               cls: 'dim',
+              go: true,
+              title: 'Compose ton équipe pour la connaître',
             }
           : {
               icon: '🎯',
-              label: rift ? 'Fermeture équipe' : 'Réussite équipe',
+              label: rift ? 'Fermeture' : 'Réussite',
               value: `${partyWin.value} %`,
+              go: true,
+              title: rift ? 'Chance de refermer la faille' : 'Chance de réussite de l’équipe',
               cls: winClass(partyWin.value),
             },
       );
   }
   return out;
 });
+const factsInfo = computed(() => poiFacts.value.filter((f) => !f.go));
+const factsGo = computed(() => poiFacts.value.filter((f) => f.go));
 function winClass(pct: number): string {
   return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
 }
@@ -2441,6 +2485,16 @@ onUnmounted(() => {
   flex-wrap: wrap;
   gap: 5px;
   margin-top: 7px;
+}
+.pc-go {
+  display: flex;
+  gap: 5px;
+  margin-top: 5px;
+}
+.pc-go .pc-fact {
+  flex: 1 1 0;
+  min-width: 0;
+  justify-content: center;
 }
 .pc-fact {
   display: inline-flex;
