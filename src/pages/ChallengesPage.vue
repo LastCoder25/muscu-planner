@@ -383,18 +383,8 @@
                    travail dedans (l'XP est déjà comptée). -->
               <button class="c3-stop" :title="comboStop.ok" @click="confirmStopCombo">🗑</button>
             </div>
-            <!-- Dégradé unique : vert (actuel) → rose (théorique si en retard) → piste. -->
-            <div class="bar" :style="comboBarStyle">
-              <!-- ⚠️ Le TRAIT se cache à 100 % (il se confondrait avec le bout de la
-                   barre) ; la ZONE ROSE, elle, reste — le dernier jour, tout ce qui
-                   manque est du retard. -->
-              <i
-                v-if="pace.showMark"
-                class="c3-mark"
-                :style="{ left: comboOnTimePct + '%' }"
-                :title="`Pour être dans les temps : ${comboOnTimePct}%`"
-              />
-            </div>
+            <!-- Barre de 0 à 120 % en trois zones (secondaire / objectif / bonus). -->
+            <ComboProgressBar :combo="activeCombo" :pace="pace" thin />
           </div>
           <!-- 🏁 CLÔTURER À L'OBJECTIF (v0.964, demandé) : ici aussi, parce que c'est
                ici qu'on regarde son 360 — la leçon du 🗑, qui ne vivait que sur la
@@ -573,6 +563,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboLegFilter, { type LegFilter } from '@/components/ComboLegFilter.vue';
+import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
@@ -819,17 +810,7 @@ const comboWeek = computed(() =>
 const pace = computed(() =>
   activeCombo.value ? comboPace(activeCombo.value, logicalToday()) : NO_PACE,
 );
-const comboOnTimePct = computed(() => pace.value.onTimePct);
 
-const comboBarStyle = computed(() => {
-  // Un seul dégradé (aucun empilement) : vert (fait) → rose (le RETARD) → piste.
-  const { donePct: p, latePct, onTimePct } = pace.value;
-  const stops =
-    latePct > 0
-      ? `var(--accent) 0 ${p}%, #ff6a9c ${p}% ${onTimePct}%, var(--surface-2) ${onTimePct}% 100%`
-      : `var(--accent) 0 ${p}%, var(--surface-2) ${p}% 100%`;
-  return { background: `linear-gradient(to right, ${stops})` };
-});
 
 // Détail d'une série affiché DANS sa cellule jaune : « 12×15kg » (ou « 12 » au poids
 // du corps, « 12·a » si assisté). Vide si la série n'existe pas encore.
@@ -1941,39 +1922,6 @@ onMounted(async () => {
   border: 1px solid #5fd0e0;
   vertical-align: middle;
   margin-left: 5px;
-}
-.bar {
-  position: relative;
-  height: 8px;
-  background: var(--surface-2);
-  border-radius: 5px;
-  overflow: hidden;
-  margin: 9px 0 6px;
-}
-/* Graduation tous les 5 % (segmente la barre pour lire la position d'un coup d'œil). */
-.bar::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to right,
-    transparent 0,
-    transparent calc(5% - 1.5px),
-    rgba(0, 0, 0, 0.32) calc(5% - 1.5px),
-    rgba(0, 0, 0, 0.32) 5%
-  );
-}
-/* Repère « dans les temps » : trait vertical à la position théorique. */
-.c3-mark {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--text);
-  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
-  pointer-events: none;
 }
 /* Barre SEGMENTÉE : un segment par série (mode séries) ou par jour (reps/durée). */
 .seg-line {
