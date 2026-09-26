@@ -469,6 +469,14 @@ export function isClaimable(m: ExpeditionMessage, now: number): boolean {
   return m.claimed === false && now >= (m.claimAt ?? m.resolvedAt);
 }
 
+/** Le butin s'encaisse-t-il TOUT SEUL ? Oui pour un rapport d'expédition (héros ou groupe)
+ *  dès le retour en ville : on ne va plus le chercher dans la boîte 📬 (demandé par
+ *  l'utilisateur). ⚠️ Pas les COFFRES (Défi 360, boss entre amis) : leur ouverture est un
+ *  moment qu'on déclenche soi-même, et ils sont déjà là (aucun retour à attendre). */
+export function isAutoClaimable(m: ExpeditionMessage, now: number): boolean {
+  return !m.chest && isClaimable(m, now);
+}
+
 /** Taille de la boîte 📬 — UNE seule valeur pour tous ses écrivains. ⚠️ Elle valait 20 dans
  *  deux d'entre eux (`expeTick`, `expeSettle`) et 30 dans les six autres : la même boîte se
  *  taillait donc différemment selon l'écriture qui passait en dernier, et un rapport lu

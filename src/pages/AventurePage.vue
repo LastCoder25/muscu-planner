@@ -155,12 +155,7 @@
           </div>
         </div>
         <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->
-        <AvailabilityLine
-          :now="expeNow"
-          interactive
-          by-rank
-          @open="openGame('/expedition-map')"
-        />
+        <AvailabilityLine :now="expeNow" interactive by-rank @open="openGame('/expedition-map')" />
       </div>
 
       <div v-if="c.energy < 0" class="deficit-banner">
@@ -5617,30 +5612,23 @@ async function expeLifecycle() {
         type: msg.win ? 'positive' : 'warning',
         message: '📬 Nouveau rapport d’expédition.',
       });
-    // Le héros rentre : il redevient disponible tout de suite, mais son chargement
-    // ATTEND dans la boîte 📬 qu'on vienne le prendre (`doClaim`).
-    const settled = await char.expeSettle(uid, Date.now());
-    if (settled)
-      $q.notify({
-        type: 'positive',
-        message: '🎉 Héros rentré — son butin t’attend dans 📬.',
-      });
+    // Le héros rentre : il redevient disponible tout de suite.
+    await char.expeSettle(uid, Date.now());
     // ⚔️ Les groupes partis sans le héros vivent leur voyage ici aussi : rapport à l'arrivée
-    // sur le camp, retour en ville ; le butin attend dans la boîte 📬 (`expeClaim`).
+    // sur le camp, retour en ville.
     const partyMsgs = await char.partyTick(uid, Date.now());
     if (partyMsgs.length) {
-      $q.notify({
-        type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
-        // ⚠️ App fermée pendant le voyage : le rapport et le retour tombent dans le même tick —
-        // le butin n'« attendra » pas, il attend déjà. UNE définition de « prêt »
-        // (`isClaimable`) : la moitié DATE de la règle était recopiée ici.
-        message: partyMsgs.every((m) => isClaimable(m, Date.now()))
-          ? '📬 Ton groupe est rentré — son butin t’attend dans 📬.'
-          : '📬 Rapport de ton groupe — le butin t’attendra au retour.',
-      });
+      // Un rapport déposé AVANT le retour se dit ; un retour, c'est l'encaissement qui le dit.
+      if (!partyMsgs.every((m) => isClaimable(m, Date.now())))
+        $q.notify({
+          type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
+          message: '📬 Rapport de ton groupe — le butin arrivera avec lui.',
+        });
       // Un groupe en route a changé : l'échéance de son retour se réaligne.
       void syncPush(true);
     }
+    // 🎁 Au retour en ville, le butin s'encaisse tout seul (plus de « Récupérer » dans 📬).
+    for (const done of await char.expeAutoClaim(uid, Date.now())) announceClaim(done);
     await char.expeSyncMap(uid, Date.now(), c.value.level.level);
     await baseLifecycle();
   } finally {
@@ -5653,7 +5641,10 @@ async function doClaimMsg(m: ExpeditionMessage) {
   const uid = auth.user?.id;
   if (!uid) return;
   const done = await char.expeClaim(uid, m.id, Date.now());
-  if (!done) return;
+  if (done) announceClaim(done);
+}
+/** Ce qu'un encaissement annonce — manuel (coffre) ou automatique (retour d'expédition). */
+function announceClaim(done: NonNullable<Awaited<ReturnType<typeof char.expeClaim>>>) {
   advXpFx.show(done.advTracks);
   const haul = haulPills(done)
     .map((h) => `${h.emoji} +${h.n}`)
@@ -5674,7 +5665,10 @@ async function doClaimMsg(m: ExpeditionMessage) {
       rarity: 'legendary',
     });
   } else {
-    $q.notify({ type: 'positive', message: `🎁 Butin récupéré ! ${haul || '—'}` });
+    $q.notify({
+      type: done.win ? 'positive' : 'warning',
+      message: `🎉 ${messageTitle(done)} — de retour. Butin : ${haul || 'rien cette fois'}`,
+    });
   }
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
   const top = drops.slice().sort((a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity])[0];

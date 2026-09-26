@@ -7,6 +7,7 @@ import {
   TRAVEL_REF_H,
   TRAVEL_CAP_H,
   isClaimable,
+  isAutoClaimable,
   type ExpeditionMessage,
   haulPills,
   buildMessage,
@@ -912,6 +913,14 @@ describe('butin à RÉCUPÉRER (et pas deux fois)', () => {
   it('rien à prendre tant que le héros est sur la route du retour', () => {
     expect(isClaimable(msg(), 4999)).toBe(false); // rapport lu, héros pas rentré
     expect(isClaimable(msg(), 5000)).toBe(true);
+  });
+
+  it('🎁 un rapport d’expédition s’encaisse TOUT SEUL au retour — pas un coffre', () => {
+    expect(isAutoClaimable(msg(), 4999)).toBe(false); // pas encore rentré
+    expect(isAutoClaimable(msg(), 5000)).toBe(true);
+    expect(isAutoClaimable(msg({ claimed: true }), 9e9)).toBe(false);
+    // Le coffre (Défi 360, boss entre amis) s'ouvre à la main : c'est un moment.
+    expect(isAutoClaimable(msg({ chest: true }), 9e9)).toBe(false);
   });
 
   it('une fois encaissé, il ne l’est plus jamais', () => {
