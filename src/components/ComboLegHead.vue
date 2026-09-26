@@ -3,7 +3,8 @@
        UNE ligne quand le nom et l'avancement tiennent côte à côte, DEUX sinon : l'avancement
        passe alors dessous, collé à droite. Le nom n'est jamais tronqué pour lui faire de la
        place (avant, la pastille lui volait la moitié de la ligne et il partait sur deux ou
-       trois lignes). -->
+       trois lignes). Fourchette de reps, conseil de charge et séries restent TOUJOURS sur une
+       même ligne : le conseil de charge passe sur deux lignes dans sa case si besoin. -->
   <div class="lh">
     <div class="lh-thumb">
       <ExerciseDemo :exercise-id="leg.exercise_id" :name="leg.exercise_name" :size="size">
@@ -21,7 +22,9 @@
         :aria-label="`Séries faites : ${leg.exercise_name}`"
         @click="emit('history')"
       >
-        <span class="lh-range">🎯 {{ range }}</span>
+        <span class="lh-range" :title="`Fourchette conseillée : ${range}`"
+          >🎯 {{ rangeShort }}</span
+        >
         <!-- Conseil de charge, relu après chaque série (cf. legLoadAdvice). -->
         <span v-if="load" class="lh-load" :class="load.call" :title="load.title">{{
           load.text
@@ -71,6 +74,8 @@ const emit = defineEmits<{ history: [] }>();
 const range = computed(() =>
   repRangeLabel(legRepRange(props.leg, props.objective), legMode(props.leg) === 'time'),
 );
+/** Dans la rangée, « reps » est implicite : on garde la place pour le conseil de charge. */
+const rangeShort = computed(() => range.value.replace(/ reps$/, ''));
 /** Conseil de charge : on ne dit jamais de combien monter, le pas dépend de l'exo. */
 const load = computed(() => {
   const a = legLoadAdvice(props.leg, props.history, legRepRange(props.leg, props.objective));
@@ -164,14 +169,15 @@ const color = computed(() => comboLegColor(props.leg));
 }
 .lh-meta {
   display: flex;
-  flex-wrap: wrap;
+  /* Reps, charge et séries sur UNE ligne : rien ne se replie. */
+  flex-wrap: nowrap;
   justify-content: flex-end;
   align-items: center;
-  gap: 4px 8px;
+  gap: 5px;
   margin: -7px 0 -7px auto;
   /* ⚠️ Jamais `flex: none` : la ligne se calerait sur son contenu et déborderait de
      l'écran dès que le conseil de charge s'allonge (115 px de trop à 344 px, vu au banc).
-     Bornée à la largeur disponible, elle replie ses éléments. */
+     Bornée à la largeur disponible, c'est le conseil de charge qui se replie dans sa case. */
   flex: 0 1 auto;
   max-width: 100%;
   padding: 7px 0;
@@ -183,6 +189,7 @@ const color = computed(() => comboLegColor(props.leg));
   -webkit-tap-highlight-color: transparent;
 }
 .lh-range {
+  flex: none;
   font-size: 12px;
   font-weight: 600;
   color: var(--accent);
@@ -193,9 +200,13 @@ const color = computed(() => comboLegColor(props.leg));
   font-weight: 600;
   color: var(--text);
   font-variant-numeric: tabular-nums;
-  /* Le conseil peut être long : il se replie au lieu de pousser la carte. */
+  /* Le conseil peut être long : il passe sur deux lignes DANS sa case, entre la fourchette
+     et les séries, au lieu de pousser la carte ou de replier la rangée. Jamais tronqué :
+     c'est l'information qu'on vient lire (« 22,5 k… » ne dit plus rien). */
+  flex: 0 1 auto;
   min-width: 0;
-  text-align: right;
+  line-height: 1.2;
+  text-align: center;
 }
 .lh-load.up {
   color: var(--d1);
@@ -204,6 +215,7 @@ const color = computed(() => comboLegColor(props.leg));
   color: var(--d3);
 }
 .lh-count {
+  flex: none;
   padding: 1px 8px;
   border-radius: 999px;
   /* Le contour porte la couleur du groupe musculaire (Équilibre du corps). */
