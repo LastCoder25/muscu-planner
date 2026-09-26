@@ -37,7 +37,7 @@ export const RIFT_STAGE = {
   firstX: 0.12,
   lastX: 0.58,
   /**
-   * La faille, au FOND, et son gardien DEVANT elle (v0.1168, demandé) : on voit ce qu'il
+   * La faille, au FOND, et son gardien DEVANT elle (v0.1169, demandé) : on voit ce qu'il
    * garde pendant qu'on l'affronte, et la faille reste en vue pour sa surcharge puis son
    * explosion quand il tombe. Avant, le gardien attendait DERRIÈRE la porte.
    */

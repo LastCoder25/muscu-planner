@@ -443,7 +443,7 @@ function duelCam(): number {
 }
 
 /**
- * 💥 LA FAILLE CÈDE (v0.1168, demandé) — son gardien tombé, elle se SURCHARGE d'énergie,
+ * 💥 LA FAILLE CÈDE (v0.1169, demandé) — son gardien tombé, elle se SURCHARGE d'énergie,
  * puis EXPLOSE : un éclat part du portail et couvre tout l'écran, et c'est derrière lui
  * qu'on bascule sur le rapport. Seulement sur une faille refermée : une défaite garde son
  * écran de fin.

@@ -221,7 +221,7 @@ describe('la géométrie reste lisible', () => {
     }
   });
 
-  it('pose le gardien DEVANT la faille, après le dernier monstre (v0.1168)', () => {
+  it('pose le gardien DEVANT la faille, après le dernier monstre (v0.1169)', () => {
     const s = buildRiftStage(input({ population: RIFT.maxFoes, killed: RIFT.maxFoes }), 5);
     for (const f of s.foes) expect(f.x).toBeLessThan(s.doorX);
     const boss = s.foes.at(-1)!;
