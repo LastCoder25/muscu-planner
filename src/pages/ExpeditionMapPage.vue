@@ -484,13 +484,16 @@
             <button class="sh-x" aria-label="Fermer" @click="selected = null">✕</button>
           </div>
 
-          <div class="pc-reward">
-            <span class="pc-reward-lab">Récompense</span>
+          <!-- 📐 COMPACTE (demandé : « que le détail du lieu prenne moins de place ») : la
+               récompense tient sur une ligne, les caractéristiques sont des PASTILLES qui se
+               rangent à la suite au lieu d'une grille de cases à deux étages. -->
+          <div class="pc-reward" title="Récompense">
+            <span class="pc-reward-ico" aria-hidden="true">🎁</span>
             <span class="pc-reward-val">{{ poiRewardLabel(selected) }}</span>
           </div>
 
           <div class="pc-grid">
-            <div
+            <span
               v-for="f in poiFacts"
               :key="f.label"
               class="pc-fact"
@@ -499,7 +502,7 @@
             >
               <span class="pc-fact-lab">{{ f.icon }} {{ f.label }}</span>
               <span class="pc-fact-val">{{ f.value }}</span>
-            </div>
+            </span>
           </div>
 
           <!-- 🕳️ DEUX CAUSES, DEUX MESSAGES — « route dangereuse » est tirée au spawn : on la
@@ -516,13 +519,17 @@
             ⚠️ Route dangereuse — embuscades doublées, butin renforcé
           </div>
 
-          <p v-if="selectedRift" class="pc-note">
-            Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros. Les
-            monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille ajoute la
-            prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie. Laissée mûrir,
-            elle déborde : une partie de ses monstres s’embusque deux jours autour d’elle, le reste
-            marche sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
-          </p>
+          <!-- ⓘ L'explication d'une faille est REPLIÉE : elle faisait cinq lignes à chaque ouverture. -->
+          <details v-if="selectedRift" class="pc-more">
+            <summary>ⓘ Comment marche une faille</summary>
+            <p class="pc-note">
+              Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros.
+              Les monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille
+              ajoute la prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie.
+              Laissée mûrir, elle déborde : une partie de ses monstres s’embusque deux jours autour
+              d’elle, le reste marche sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
+            </p>
+          </details>
           <!-- 🧿 LE SCEAU DE BRÈCHE se pose ICI, sur la faille — il n'accompagne aucun voyage. -->
           <template v-if="selectedRift">
             <p v-if="selected.sealed" class="pc-note">
@@ -2340,8 +2347,8 @@ onUnmounted(() => {
 /* Contour appuyé (2 px, couleur du rang à 75 %) et marges latérales : collée au bord de
    l'écran et cerclée d'un trait pâle, la tuile se lisait mal comme un bloc (demandé). */
 .poi-card {
-  margin: 6px 10px 12px;
-  padding: 14px;
+  margin: 4px 10px 10px;
+  padding: 10px 12px;
   border-radius: 16px;
   border: 2px solid color-mix(in srgb, var(--rk) 75%, var(--line));
   background:
@@ -2356,19 +2363,19 @@ onUnmounted(() => {
 .pc-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .pc-rift {
   padding: 4px 0;
 }
 .pc-emo {
   flex: none;
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
-  font-size: 32px;
-  border-radius: 14px;
+  font-size: 26px;
+  border-radius: 12px;
   background: color-mix(in srgb, var(--rk) 22%, var(--bg));
   box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--rk) 60%, transparent);
 }
@@ -2377,7 +2384,7 @@ onUnmounted(() => {
   min-width: 0;
 }
 .pc-title {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 700;
   line-height: 1.15;
 }
@@ -2386,7 +2393,7 @@ onUnmounted(() => {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
-  margin-top: 4px;
+  margin-top: 2px;
 }
 .pc-lvl {
   font-size: 12px;
@@ -2406,56 +2413,60 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--rk) 14%, transparent);
   white-space: nowrap;
 }
-/* La récompense : c'est la question qu'on se pose en premier, elle a sa propre ligne. */
+/* La récompense : la question qu'on se pose en premier — une ligne, en tête. */
 .pc-reward {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 12px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 9px;
+  border-radius: 9px;
   background: color-mix(in srgb, var(--accent) 8%, var(--bg));
   border-left: 3px solid var(--accent);
 }
-.pc-reward-lab,
-.pc-fact-lab {
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--dim);
+.pc-reward-ico {
+  flex: none;
+  font-size: 13px;
 }
 .pc-reward-val {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
+  min-width: 0;
 }
-/* ⚠️ `minmax(0, 1fr)` : sans le minimum à zéro, une piste refuse de passer sous la taille
-   de son contenu et la grille déborde à 344 px. */
+/* Les caractéristiques en pastilles qui se rangent à la suite : « libellé  valeur » sur UNE
+   ligne. `max-width: 100%` + `flex-wrap` : une pastille trop longue passe à la ligne en
+   elle-même au lieu de faire déborder la fiche à 344 px. */
 .pc-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
 }
 .pc-fact {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  padding: 8px 10px;
-  border-radius: 10px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 5px;
+  max-width: 100%;
+  padding: 3px 9px;
+  border-radius: 999px;
   background: var(--bg);
   border: 1px solid var(--line);
 }
+.pc-fact-lab {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--dim);
+}
 .pc-fact-val {
   font-family: 'Oswald', sans-serif;
-  font-size: 16px;
+  font-size: 13.5px;
   font-weight: 600;
   overflow-wrap: anywhere;
 }
 .pc-fact.dim .pc-fact-val {
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: 11.5px;
   color: var(--dim);
 }
 .pc-fact.warn .pc-fact-val {
@@ -2471,8 +2482,8 @@ onUnmounted(() => {
   color: #ff6a45;
 }
 .pc-alert {
-  margin-top: 8px;
-  padding: 8px 10px;
+  margin-top: 7px;
+  padding: 6px 9px;
   border-radius: 10px;
   font-size: 12.5px;
   font-weight: 700;
@@ -2480,8 +2491,27 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--d3) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--d3) 50%, transparent);
 }
+.pc-more {
+  margin-top: 6px;
+}
+.pc-more > summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  cursor: pointer;
+  list-style: none;
+}
+.pc-more > summary::-webkit-details-marker {
+  display: none;
+}
+.pc-more .pc-note {
+  margin-top: 2px;
+}
 .pc-note {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   font-size: 11.5px;
   line-height: 1.45;
   color: var(--dim);
