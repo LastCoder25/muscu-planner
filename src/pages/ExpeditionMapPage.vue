@@ -466,8 +466,15 @@
               <div class="pc-title font-display">
                 {{ POI_LABEL[selected.type] }}
               </div>
+              <!-- 📐 SOUS LE NOM, EN UNE LIGNE (demandé) : QUI on affronte, COMBIEN, à quel niveau,
+                   et CE QU'ON Y GAGNE — plutôt que des pastilles « Faction », « Ennemis » et un
+                   bloc « Récompense » à part. -->
+              <div class="pc-sub">
+                <span v-if="poiSub.foe">{{ poiSub.foe }}</span>
+                <span>niv {{ selected.level }}</span>
+                <span class="pc-res">🎁 {{ poiSub.res }}</span>
+              </div>
               <div class="pc-tags">
-                <span class="pc-lvl">Ennemis niv {{ selected.level }}</span>
                 <span
                   class="sh-rank"
                   :title="
@@ -481,14 +488,6 @@
               </div>
             </div>
             <button class="sh-x" aria-label="Fermer" @click="selected = null">✕</button>
-          </div>
-
-          <!-- 📐 COMPACTE (demandé : « que le détail du lieu prenne moins de place ») : la
-               récompense tient sur une ligne, les caractéristiques sont des PASTILLES qui se
-               rangent à la suite au lieu d'une grille de cases à deux étages. -->
-          <div class="pc-reward" title="Récompense">
-            <span class="pc-reward-ico" aria-hidden="true">🎁</span>
-            <span class="pc-reward-val">{{ poiRewardLabel(selected) }}</span>
           </div>
 
           <div class="pc-grid">
@@ -841,7 +840,7 @@ import MissionReportCard from '@/components/MissionReportCard.vue';
 import { caravanCard, messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import { campBodyCount, campRewardLabel, FACTION_LOOT_LABEL, forceLootPreview } from '@/lib/camp';
+import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import { poiRank, poiRankCounts } from '@/lib/poiRank';
 import {
   PARTY_HERO_BLOCK_LABEL,
@@ -2047,24 +2046,9 @@ const poiFacts = computed<PoiFact[]>(() => {
   const out: PoiFact[] = [];
   const rift = selectedRift.value;
   const band = selectedWarband.value;
-  const camp = selectedCamp.value;
   const guard = selectedGuard.value;
-  // Ce qu'on affronte.
-  const faction = rift?.faction ?? band?.faction ?? camp?.faction ?? guard?.faction;
-  if (faction)
-    out.push({ icon: FACTION_EMOJI[faction], label: 'Faction', value: FACTION_LABEL[faction] });
-  // 👾 COMBIEN ils sont — pour un camp COMME pour les gardes d'un lieu de récolte.
-  // ⚠️ Les gardes ne l'affichaient pas (v0.1043) : deux lieux du même rang pouvaient donc
-  // aligner 2 ou 4 ennemis sans que rien ne le dise, et c'est ce qui a été signalé. Le
-  // NOMBRE seul ne dit pas la difficulté (le rang s'en charge) : il dit ce qu'on voit.
+  // 👾 Faction et nombre d'ennemis vivent sur la ligne sous le nom (`poiSub`).
   const force = selectedForce.value;
-  if (force)
-    out.push({
-      icon: '👾',
-      label: 'Ennemis',
-      value: String(campBodyCount(force.size)),
-      title: `Une force de ${force.size} champion${force.size > 1 ? 's' : ''} de référence du niveau du lieu`,
-    });
   // 💰 LE DÉTAIL DE L'OR ET DU BUTIN (v0.1166, demandé : « le détail ») — ce que portent les
   // ennemis (`forceLootPreview`, les MÊMES poids que la résolution) et, pour une mine, son filon
   // (`harvestGold`, la même fonction que la récolte). Versé en entier sur une victoire ; sur
@@ -2102,12 +2086,6 @@ const poiFacts = computed<PoiFact[]>(() => {
   }
   if (rift) {
     out.push({
-      icon: '👾',
-      label: 'Effectif',
-      value: `${rift.foes} / ${rift.maxFoes}`,
-      title: "L'effectif grossit avec l'âge de la faille, jusqu'au débordement",
-    });
-    out.push({
       icon: '⏳',
       label: 'Déborde dans',
       value: formatDuration(rift.overflowIn),
@@ -2131,12 +2109,6 @@ const poiFacts = computed<PoiFact[]>(() => {
       });
   }
   if (band) {
-    out.push({
-      icon: '👾',
-      label: 'Effectif',
-      value: String(band.size),
-      title: 'Ce qu’elle aligne — et ce que ta base affrontera',
-    });
     out.push({
       icon: '⏳',
       label: 'Disparaît dans',
@@ -2222,41 +2194,48 @@ const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? [
 const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
 const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
-// Ce que le POI rapporte VRAIMENT (crédité par expeCollect) : or, énergie (mines),
-// objets, clés. La poussière n'existe plus (refonte drops-only) → on ne l'annonce plus.
-/** Ce qu’un lieu rapporte, annoncé sur la carte AVANT l’envoi.
+/** Ce qu’un lieu rapporte, en quelques mots, sur la ligne sous son nom (le détail chiffré
+ *  vit dans les pastilles : filon, bourses, mana si refermée…).
  *  ⚠️ `Record<PoiType, …>` et non une chaîne de `if` avec un cas par défaut : c’est ce
  *  défaut-là qui a fait annoncer « pièce de set + pierres » pour une ÉPAVE (v0.680), puis
  *  pour une FAILLE et une MINE DE MANA. Ajouter un POI sans dire ce qu’il donne casse
  *  désormais la compilation, au lieu de mentir en silence. */
-const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
-  // 💰 Un lieu gardé rapporte AUSSI ce que portent ses gardes (v0.1166) — la fiche le chiffre.
-  mine: (p) => `Filon d'or 🪙 — et ${guardLoot(p)}`,
-  well: (p) => `Énergie ⚡ en quantité — et ${guardLoot(p)}`,
-  shrine: (p) => `Pierres d'invocation 🔮 — et ${guardLoot(p)}`,
-  archive: (p) => `Clés du Labyrinthe 🗝️ — et ${guardLoot(p)}`,
-  wreck: () => 'Épave (ancienne) — plus rien à démonter',
-  // 💠 Ce qu’une faille laisse en s’effondrant — une récolte, bien moins que la refermer.
-  mana_mine: (p) => `Mana 💠 résiduel — et ${guardLoot(p)}`,
-  // ⚔️ Camp / repaire : ce que rapporte le groupe AVEC ou SANS le héros, selon la faction
-  // (règle écrite à côté de `campGroupHaul`, testée contre lui). Jamais de ferraille.
+const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
+  mine: () => 'or 🪙',
+  well: () => 'énergie ⚡',
+  shrine: () => 'pierres d’invocation 🔮',
+  archive: () => 'clés 🗝️',
+  wreck: () => 'plus rien',
+  mana_mine: () => 'mana 💠',
+  // ⚔️ Camp / repaire : la ressource de SA faction + ses sceaux d'objet (`campRewardLabel`,
+  // écrit et testé à côté de la règle du butin).
   camp: (p) => campRewardLabel(p),
   lair: (p) => campRewardLabel(p),
-  arena: () => 'Survie par vagues 🌊 — objets + pierres 🔮 ∝ vagues',
-  // 🕳️ La faille ne paie QUE du mana — jamais d’objet, jamais une autre devise.
-  rift: () => 'Mana 💠 à chaque monstre abattu — prime du gardien si tu la refermes',
-  // ⚔️ L'interception n'enrichit pas : elle ÉVITE une perte. Le dire franchement, sinon on
-  // la lit comme une activité de farm et on est déçu du butin.
-  warband: () => 'Mana 💠 des monstres abattus — et le prochain siège NE sera pas renforcé',
+  arena: () => 'objets + pierres 🔮 selon les vagues',
+  rift: () => 'mana 💠',
+  warband: () => 'mana 💠 · siège non renforcé',
 };
-/** Ce que portent les gardes d'un lieu de récolte, selon leur faction. */
-function guardLoot(p: Poi): string {
-  const g = harvestGuardOf(p);
-  return g ? `les ${FACTION_LOOT_LABEL[g.faction]} de ses gardes` : 'rien de plus';
-}
-function poiRewardLabel(p: Poi): string {
-  return POI_REWARD[p.type](p);
-}
+/** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */
+const poiSub = computed(() => {
+  const p = selected.value;
+  if (!p) return { foe: '', res: '' };
+  const rift = selectedRift.value;
+  const band = selectedWarband.value;
+  const faction =
+    rift?.faction ?? band?.faction ?? selectedCamp.value?.faction ?? selectedGuard.value?.faction;
+  const force = selectedForce.value;
+  const count = rift
+    ? `${rift.foes}/${rift.maxFoes}`
+    : band
+      ? String(band.size)
+      : force
+        ? String(campBodyCount(force.size))
+        : '';
+  const foe = faction
+    ? `${FACTION_EMOJI[faction]} ${FACTION_LABEL[faction]}${count ? ` ×${count}` : ''}`
+    : '';
+  return { foe, res: POI_RESOURCE[p.type](p) };
+});
 
 const canSend = computed(
   () =>
@@ -2439,12 +2418,6 @@ onUnmounted(() => {
   gap: 4px 8px;
   margin-top: 2px;
 }
-.pc-lvl {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--dim);
-  white-space: nowrap;
-}
 /* 🏅 Le rang du lieu : la pastille prend la COULEUR DU RANG, posée en ligne (`--rk`) — une
    classe par rang n'aurait aucun sens ici, le rang est calculé. */
 .sh-rank {
@@ -2457,25 +2430,25 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--rk) 14%, transparent);
   white-space: nowrap;
 }
-/* La récompense : la question qu'on se pose en premier — une ligne, en tête. */
-.pc-reward {
+/* La ligne sous le nom : ennemis · niveau · ressource, séparés par un point médian. Elle se
+   replie proprement (flex-wrap) au lieu de déborder à 344 px. */
+.pc-sub {
   display: flex;
-  align-items: baseline;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 5px 9px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg));
-  border-left: 3px solid var(--accent);
+  flex-wrap: wrap;
+  gap: 0 6px;
+  margin-top: 1px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  line-height: 1.35;
 }
-.pc-reward-ico {
-  flex: none;
-  font-size: 13px;
+.pc-sub > span + span::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--line);
 }
-.pc-reward-val {
-  font-size: 13.5px;
-  font-weight: 700;
-  min-width: 0;
+.pc-res {
+  color: var(--text);
 }
 /* Les caractéristiques en pastilles qui se rangent à la suite : « libellé  valeur » sur UNE
    ligne. `max-width: 100%` + `flex-wrap` : une pastille trop longue passe à la ligne en
