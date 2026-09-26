@@ -1332,6 +1332,8 @@ describe('🔎 Filtres du Défi 360 (ComboLegFilter)', () => {
       '/',
       (h) => (seul = h),
     );
-    expect(seul).not.toContain('Bonus');
+    // Une étape vide reste affichée (c'est aussi la légende), mais inactive.
+    expect(seul).toContain('Bonus');
+    expect((seul.match(/disabled/g) ?? []).length).toBe(3);
   }, 30_000);
 });

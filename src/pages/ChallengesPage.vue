@@ -423,7 +423,6 @@
             />
           </div>
           <ComboLegFilter v-model="legFilter" :legs="activeComboLegs" />
-          <ComboTierLegend v-if="activeComboLegs.some((l) => legMode(l) === 'sets')" />
           <div
             v-for="leg in shownComboLegs"
             :key="leg.exercise_id"
@@ -573,7 +572,6 @@ defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
-import ComboTierLegend from '@/components/ComboTierLegend.vue';
 import ComboLegFilter, { type LegFilter } from '@/components/ComboLegFilter.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
@@ -1661,7 +1659,7 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
   color: var(--dim);
 }
-/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboTierLegend) :
+/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboLegFilter) :
    la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
 .seg.tier-secondary {
   border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
