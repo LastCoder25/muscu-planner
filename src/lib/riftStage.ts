@@ -36,9 +36,13 @@ export const RIFT_STAGE = {
   /** Le premier et le dernier monstre, en fraction de la largeur du terrain. */
   firstX: 0.12,
   lastX: 0.58,
-  /** La porte du gardien, et sa salle derrière. */
-  doorX: 0.7,
-  bossX: 0.86,
+  /**
+   * La faille, au FOND, et son gardien DEVANT elle (v0.1168, demandé) : on voit ce qu'il
+   * garde pendant qu'on l'affronte, et la faille reste en vue pour sa surcharge puis son
+   * explosion quand il tombe. Avant, le gardien attendait DERRIÈRE la porte.
+   */
+  doorX: 0.84,
+  bossX: 0.76,
   /**
    * L'axe de marche, en fraction de la hauteur. ⚠️ PAS le milieu de l'écran : les corps
    * sont POSÉS sur le sol, donc l'axe vit sous la ligne d'horizon. Le banc l'a montré —

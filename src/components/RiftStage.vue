@@ -21,9 +21,22 @@
         <!-- La porte du gardien : une faille dans la faille, dans la couleur de son RANG.
              Le feu couve tant qu'un monstre tient debout ; elle s'embrase à l'ouverture,
              et s'effondre sur elle-même quand le gardien tombe. -->
-        <div class="door" :class="{ open: doorOpen }" :style="{ left: stage.doorX * 100 + '%' }">
+        <div
+          class="door"
+          :class="{ open: doorOpen, overload: riftFx === 'overload', blown: riftFx === 'blown' }"
+          :style="{ left: stage.doorX * 100 + '%' }"
+        >
           <span class="door-burst" />
           <RiftPortal :color="rankColor" :open="doorOpen" :sealed="sealed" :seed="level" />
+          <!-- ⚡ La surcharge : l'énergie afflue vers le cœur de la faille avant qu'elle cède. -->
+          <template v-if="riftFx === 'overload'">
+            <span
+              v-for="k in CHARGE_BOLTS"
+              :key="'c' + k"
+              class="charge"
+              :style="{ '--a': (k / CHARGE_BOLTS) * 360 + 'deg', animationDelay: k * 0.07 + 's' }"
+            />
+          </template>
         </div>
 
         <!-- La salle : un autel, des braseros. Elle n'existe qu'au-delà de la porte. -->
@@ -139,6 +152,14 @@
 
     <div class="vig" :style="{ opacity: hitVig }" aria-hidden="true" />
     <div class="flash" :class="flash" aria-hidden="true" />
+    <!-- 💥 L'explosion de la faille : un éclat qui part du portail et COUVRE tout l'écran,
+         au-dessus du HUD — c'est derrière lui qu'on bascule sur le rapport. -->
+    <div
+      v-if="boom"
+      class="boom"
+      :style="{ '--bx': boomAt.x + '%', '--by': boomAt.y + '%' }"
+      aria-hidden="true"
+    />
     <!-- Bandes de cinéma : le duel contre le gardien est un moment à part. -->
     <div class="bars" :class="{ on: cinema }" aria-hidden="true">
       <span class="bar top" /><span class="bar bot" />
@@ -177,7 +198,9 @@
       </div>
     </transition>
 
-    <!-- L'écran de fin est un MOMENT du jeu : on n'émet `done` qu'au clic. -->
+    <!-- L'écran de fin est un MOMENT du jeu : on n'émet `done` qu'au clic. ⚠️ Sauf une
+         faille refermée : son explosion enchaîne SEULE sur le rapport (`explodeRift`) — on
+         ne voit cet écran que via « Passer », une défaite ou `prefers-reduced-motion`. -->
     <div v-if="ended" class="end">
       <div class="end-card">
         <div class="end-emo">{{ stage.cleared ? '🌀' : '💀' }}</div>
@@ -246,6 +269,11 @@ const MOTES = 12;
 const SLOW_DOOR = 760; // on laisse la porte s'ouvrir
 const SLOW_BOSS = 900; // le gardien mérite son temps
 const SLOW_FATAL = 1100; // et la chute aussi
+/** La faille se surcharge après la chute du gardien, puis explose. */
+const OVERLOAD_MS = 1700;
+/** L'éclat couvre l'écran ; on bascule sur le rapport quand il est opaque. */
+const BOOM_COVER_MS = 650;
+const CHARGE_BOLTS = 10;
 /** Durée de l'élan d'un membre vers sa cible, puis du retour à sa place. */
 const DASH_MS = 520;
 /** Un membre en attaque se poste juste devant sa cible, pas dessus. */
@@ -367,6 +395,11 @@ const BOSS_RIPOSTE_MS = 720;
 const BOSS_BREATH_MS = 180;
 const BOSS_FINALE = 2300;
 
+/** La faille après la chute du gardien : elle se surcharge, puis cède. */
+const riftFx = ref<'' | 'overload' | 'blown'>('');
+/** L'éclat plein écran de l'explosion. */
+const boom = ref(false);
+
 const pops = ref<{ id: number; x: number; y: number; text: string; kind: string }[]>([]);
 const slashes = ref<{ id: number; x: number; y: number }[]>([]);
 const sparks = ref<{ id: number; x: number; y: number; dx: number; dy: number }[]>([]);
@@ -397,6 +430,40 @@ const camPct = computed(() => {
   const min = -(1 - 1 / CAM_W) * 100; // au-delà, on verrait le vide à droite
   return Math.max(min, Math.min(0, want));
 });
+
+/** Où le portail se trouve À L'ÉCRAN (en %), pour que l'éclat de l'explosion parte de lui. */
+const boomAt = computed(() => ({
+  x: Math.max(0, Math.min(100, (props.stage.doorX + camPct.value / 100) * CAM_W * 100)),
+  y: 38,
+}));
+
+/** Le point de mire du duel : le groupe, le gardien ET la faille derrière lui. */
+function duelCam(): number {
+  return (heroX.value + props.stage.doorX) / 2;
+}
+
+/**
+ * 💥 LA FAILLE CÈDE (v0.1168, demandé) — son gardien tombé, elle se SURCHARGE d'énergie,
+ * puis EXPLOSE : un éclat part du portail et couvre tout l'écran, et c'est derrière lui
+ * qu'on bascule sur le rapport. Seulement sur une faille refermée : une défaite garde son
+ * écran de fin.
+ */
+function explodeRift(at: number): void {
+  later(() => {
+    riftFx.value = 'overload';
+    camX.value = duelCam();
+    say('overload', '⚡ La faille se surcharge', '');
+    shake.value = 'sh-m';
+  }, at);
+  later(() => (shake.value = 'sh-l'), at + OVERLOAD_MS * 0.6);
+  later(() => {
+    riftFx.value = 'blown';
+    banner.value = null;
+    cinema.value = false;
+    boom.value = true;
+  }, at + OVERLOAD_MS);
+  later(finish, at + OVERLOAD_MS + BOOM_COVER_MS);
+}
 
 /** Poussière de mana : figée par l'index, sinon elle sauterait à chaque rendu. */
 function moteStyle(m: number) {
@@ -440,9 +507,12 @@ function play(): void {
 
   if (b.kind === 'door') {
     doorOpen.value = true;
-    heroX.value = props.stage.doorX - 0.08;
-    camX.value = (props.stage.doorX + (props.stage.foes.at(-1)?.x ?? props.stage.doorX)) / 2;
-    say('door', '🚪 La porte s’ouvre', 'Le gardien attend');
+    // Le gardien se tient DEVANT la faille : le groupe s'arrête face à lui, et la caméra
+    // recule pour montrer les deux.
+    const guard = props.stage.foes.find((f) => f.boss);
+    heroX.value = guard ? standOff(guard) : props.stage.doorX - 0.2;
+    camX.value = duelCam();
+    say('door', '🌀 La faille s’embrase', 'Son gardien se dresse devant elle');
     cursor.value++;
     timer = setTimeout(play, reduce ? 0 : beatMs.value + SLOW_DOOR);
     return;
@@ -458,7 +528,7 @@ function play(): void {
   const strikers =
     b.striker < 0 ? props.cast.map((_, k) => k) : [Math.min(b.striker, props.cast.length - 1)];
   heroX.value = standOff(foe);
-  camX.value = foe.boss ? (heroX.value + foe.x) / 2 : heroX.value + 0.03;
+  camX.value = foe.boss ? duelCam() : heroX.value + 0.03;
   dashTo(strikers, foe, foe.boss, foe.boss ? 0.08 : DASH_GAP);
   if (b.kind === 'boss') say('boss', `${foe.emoji} ${foe.name}`, 'Le gardien de la faille');
 
@@ -505,6 +575,11 @@ function play(): void {
   );
 
   cursor.value++;
+  // Gardien tombé sans duel enregistré (rapport d'avant) : la faille explose aussi.
+  if (b.kind === 'boss' && b.down && props.stage.cleared) {
+    explodeRift(beatMs.value + 200);
+    return;
+  }
   const extra = b.fatal ? SLOW_FATAL : b.kind === 'boss' ? SLOW_BOSS : 0;
   timer = setTimeout(play, reduce ? 0 : beatMs.value + extra);
 }
@@ -611,7 +686,7 @@ function playBoss(b: (typeof beats.value)[number], foe: (typeof props.stage.foes
   const members = allMembers();
   targetIdx.value = b.foe;
   heroX.value = standOff(foe);
-  camX.value = (heroX.value + foe.x) / 2;
+  camX.value = duelCam();
   cinema.value = true;
 
   // 1. L'entrée.
@@ -664,11 +739,11 @@ function playBoss(b: (typeof beats.value)[number], foe: (typeof props.stage.foes
       later(() => (shake.value = ''), 500);
       bossPvShown.value = 0;
     }, t + 460);
-    later(() => {
-      sealed.value = true;
-      bossBar.value = null;
-      say('seal', '🌀 La faille se referme', '');
-    }, t + 1250);
+    later(() => (bossBar.value = null), t + 1100);
+    // Son gardien tombé, la faille se surcharge puis explose — et le rapport suit.
+    explodeRift(t + 1250);
+    cursor.value++;
+    return;
   } else {
     later(() => {
       pulse(bossFx, 'roar', 700);
@@ -723,6 +798,8 @@ function skip(): void {
   // Un gardien vaincu dans le duel reste dissous (cf. le dénouement).
   bossFx.value = duel && props.stage.cleared ? 'gone' : '';
   flash.value = '';
+  riftFx.value = '';
+  boom.value = false;
   cinema.value = false;
   bossDormant.value = false;
   if (duel) {
@@ -961,6 +1038,8 @@ onBeforeUnmount(() => {
   top: 26%;
   height: 46%;
   width: 26%;
+  /* Centrée sur la faille : l'autel et ses braseros l'encadrent. */
+  transform: translateX(-50%);
   z-index: 3;
   opacity: 0.25;
   transition: opacity 0.8s ease;
@@ -1600,6 +1679,107 @@ onBeforeUnmount(() => {
 }
 .banner.ban-seal .ban-main {
   color: var(--mana);
+}
+.banner.ban-overload .ban-main {
+  color: #fff6c8;
+  text-shadow: 0 0 14px var(--rift);
+}
+
+/* ⚡ LA SURCHARGE — le portail enfle, s'éclaire et tremble, l'énergie afflue vers son cœur. */
+.door.overload {
+  animation: riftOverload 1.7s cubic-bezier(0.5, 0, 0.9, 0.6) forwards;
+}
+@keyframes riftOverload {
+  0% {
+    transform: translateX(-50%) scale(1);
+    filter: drop-shadow(0 0 16px var(--rift)) brightness(1);
+  }
+  30% {
+    transform: translateX(-50%) scale(1.06) rotate(-0.6deg);
+  }
+  45% {
+    transform: translateX(-50%) scale(1.09) rotate(0.8deg);
+  }
+  60% {
+    transform: translateX(-50%) scale(1.14) rotate(-1deg);
+  }
+  75% {
+    transform: translateX(-50%) scale(1.2) rotate(1.2deg);
+  }
+  88% {
+    transform: translateX(-50%) scale(1.26) rotate(-1.4deg);
+  }
+  100% {
+    transform: translateX(-50%) scale(1.34);
+    filter: drop-shadow(0 0 40px #fff) drop-shadow(0 0 70px var(--rift)) brightness(2.4);
+  }
+}
+.charge {
+  position: absolute;
+  left: 50%;
+  top: 56%;
+  width: 3px;
+  height: 22%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, transparent, #fff, var(--rift));
+  box-shadow: 0 0 8px var(--rift);
+  transform-origin: 50% 0;
+  opacity: 0;
+  animation: chargeIn 0.55s ease-in infinite;
+}
+@keyframes chargeIn {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(140%) scaleY(0.6);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(0) scaleY(1);
+  }
+}
+/* Elle cède : le portail se dilate et s'efface dans l'éclat. */
+.door.blown {
+  animation: riftBlown 0.5s ease-out forwards;
+}
+@keyframes riftBlown {
+  from {
+    transform: translateX(-50%) scale(1.34);
+    filter: brightness(3);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(-50%) scale(2.6);
+    filter: brightness(4);
+    opacity: 0;
+  }
+}
+/* 💥 L'ÉCLAT — part du portail et couvre TOUT, HUD compris : le rapport s'ouvre derrière. */
+.boom {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at var(--bx) var(--by),
+    #fff 0%,
+    #fffbe8 30%,
+    color-mix(in srgb, var(--rift) 30%, #fff) 70%,
+    #fff 100%
+  );
+  animation: boomCover 0.55s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes boomCover {
+  0% {
+    clip-path: circle(0% at var(--bx) var(--by));
+    opacity: 0.9;
+  }
+  100% {
+    clip-path: circle(160% at var(--bx) var(--by));
+    opacity: 1;
+  }
 }
 
 .reduce .foe.boss,

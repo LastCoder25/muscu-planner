@@ -221,10 +221,12 @@ describe('la géométrie reste lisible', () => {
     }
   });
 
-  it('tient les monstres EN DEÇÀ de la porte et le gardien au-delà', () => {
+  it('pose le gardien DEVANT la faille, après le dernier monstre (v0.1168)', () => {
     const s = buildRiftStage(input({ population: RIFT.maxFoes, killed: RIFT.maxFoes }), 5);
-    for (const f of s.foes.filter((x) => !x.boss)) expect(f.x).toBeLessThan(s.doorX);
-    expect(s.foes.at(-1)!.x).toBeGreaterThan(s.doorX);
+    for (const f of s.foes) expect(f.x).toBeLessThan(s.doorX);
+    const boss = s.foes.at(-1)!;
+    expect(boss.boss).toBe(true);
+    for (const f of s.foes.filter((x) => !x.boss)) expect(f.x).toBeLessThan(boss.x);
     expect(s.doorX).toBe(RIFT_STAGE.doorX);
   });
 
