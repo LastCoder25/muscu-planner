@@ -23,9 +23,16 @@ import {
   roadUnits,
 } from '@/lib/caravan';
 import { campFoe, campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
-import { incursionWinPct, resolveIncursion } from '@/lib/rift';
+import { incursionWinPct, resolveIncursion, simulateIncursion } from '@/lib/rift';
+import { fuseUnits } from '@/lib/skirmish';
 import { partyWinChance } from '@/lib/partyForecast';
-import { partyClaimRoster, partyLegMin, suppliesBlocker, supplyTarget } from '@/lib/party';
+import {
+  partyClaimRoster,
+  partyFightSeed,
+  partyLegMin,
+  suppliesBlocker,
+  supplyTarget,
+} from '@/lib/party';
 import { haulPills, type PartyResult, type Poi } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 
@@ -193,17 +200,39 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     }
   });
 
+  it('🕯️ la lanterne compte AUSSI sur une faille JEUNE — elle touche le gardien (v0.1165)', () => {
+    // ⚠️ Signalé : « j'ai pris la lanterne, le % est resté à 78 % ». Presque toutes les
+    // défaites se jouent contre le GARDIEN ; ne toucher que les monstres donnait +0 à
+    // +1 point sur une faille de 2 jours. Mesuré ici : la lanterne doit se voir.
+    for (const L of [12, 26, 45]) {
+      const rift = { ...poiAt(L, 'rift', 'rift_1'), spawnedAt: 0 };
+      const now = 2 * 24 * 3600_000;
+      // Un groupe à la PEINE (force ×0,9) : c'est là que la question se pose.
+      const allies = partyAllies(team(3, L), kit(L, 3), null).map((u) => ({
+        ...u,
+        combatant: {
+          ...u.combatant,
+          pv: Math.round(u.combatant.pv * 0.9),
+          damage: Math.round(u.combatant.damage * 0.9),
+        },
+      }));
+      const sans = incursionWinPct(rift, allies, now, 200);
+      const avec = incursionWinPct(rift, allies, now, 200, SUPPLY.riftFoeMult, SUPPLY.riftBossMult);
+      expect(avec - sans, `niveau ${L}`).toBeGreaterThan(0.03);
+    }
+  });
+
   it('🕯️ la lanterne rend une faille plus facile à refermer', () => {
     const L = 26;
     const rift = { ...poiAt(L, 'rift', 'rift_1'), spawnedAt: 0 };
     const now = 6 * 24 * 3600_000;
     const allies = partyAllies(team(3, L), kit(L, 3), null);
-    expect(incursionWinPct(rift, allies, now, 40, SUPPLY.riftFoeMult)).toBeGreaterThan(
-      incursionWinPct(rift, allies, now, 40),
-    );
-    // …et c'est bien ce que lit le pronostic de la carte.
+    const withLantern = (n: number) =>
+      incursionWinPct(rift, allies, now, n, SUPPLY.riftFoeMult, SUPPLY.riftBossMult);
+    expect(withLantern(40)).toBeGreaterThan(incursionWinPct(rift, allies, now, 40));
+    // …et c'est bien ce que lit le pronostic de la carte (gardien compris).
     expect(partyWinChance(rift, team(3, L), kit(L, 3, ['lanterne']), null, now, 40)).toBe(
-      incursionWinPct(rift, allies, now, 40, SUPPLY.riftFoeMult),
+      withLantern(40),
     );
     // …et la VRAIE incursion aussi.
     let plain = 0;
@@ -211,7 +240,20 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     for (let seed = 1; seed <= 120; seed++) {
       const base = { poi: rift, escort: team(3, L), hero: null, seed, now, pantheonLevel: L };
       if (resolveIncursion({ ...base, road: kit(L, 3) }).win) plain++;
-      if (resolveIncursion({ ...base, road: kit(L, 3, ['lanterne']) }).win) lit++;
+      const won = resolveIncursion({ ...base, road: kit(L, 3, ['lanterne']) }).win;
+      if (won) lit++;
+      // ⚠️ La résolution applique les DEUX facteurs, gardien compris (v0.1165).
+      const group = fuseUnits(partyAllies(team(3, L), kit(L, 3, ['lanterne']), null), 'Groupe');
+      expect(won, `graine ${seed}`).toBe(
+        simulateIncursion(
+          group,
+          rift,
+          now,
+          partyFightSeed(seed),
+          SUPPLY.riftFoeMult,
+          SUPPLY.riftBossMult,
+        ).cleared,
+      );
     }
     expect(lit).toBeGreaterThan(plain);
   });

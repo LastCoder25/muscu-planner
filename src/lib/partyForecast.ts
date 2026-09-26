@@ -35,7 +35,8 @@ export function partyWinChance(
   const allies = partyAllies(escort, road, hero);
   if (!allies.length) return null;
   const fx = supplyFx(road.supplies);
-  if (isRiftPoi(poi)) return incursionWinPct(poi, allies, now, samples, fx.riftFoeMult);
+  if (isRiftPoi(poi))
+    return incursionWinPct(poi, allies, now, samples, fx.riftFoeMult, fx.riftBossMult);
   // ⚔️ L'interception prend l'escorte BRUTE : elle refond le groupe elle-même.
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.

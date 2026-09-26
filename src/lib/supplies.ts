@@ -71,8 +71,14 @@ export const SUPPLY = {
   pv: 0.1,
   /** 🪨 dégâts du groupe en plus. */
   dmg: 0.1,
-  /** 🕯️ force des monstres d'une faille (le gardien n'est pas touché). */
+  /** 🕯️ force des monstres d'une faille… */
   riftFoeMult: 0.85,
+  /** …et de son gardien (v0.1165, demandé : la lanterne ne changeait rien au % sur une
+   *  faille jeune). ⚠️ Mesuré : presque toutes les défaites se jouent contre le GARDIEN ; ne
+   *  toucher que les monstres donnait +0 à +1 point sur une faille de 2 jours, +0 à +6 à
+   *  5 jours — un objet payé pour rien. Moins fort que sur les monstres : le gardien reste
+   *  le verrou de la faille. */
+  riftBossMult: 0.9,
   /** 📯 part du butin d'un camp gardée malgré la défaite. */
   retreatShare: 0.5,
   /** 🧿 répit rendu à une faille. */
@@ -128,7 +134,7 @@ export const SUPPLIES: Record<SupplyId, SupplyDef> = {
   lanterne: {
     emoji: '🕯️',
     name: 'Lanterne de faille',
-    what: `Monstres d'une faille −${pct(1 - SUPPLY.riftFoeMult)} (le gardien n'est pas touché)`,
+    what: `Monstres d'une faille −${pct(1 - SUPPLY.riftFoeMult)}, gardien −${pct(1 - SUPPLY.riftBossMult)}`,
     voyage: true,
   },
   cor: {
@@ -202,6 +208,7 @@ export interface SupplyFx {
   pv: number;
   dmg: number;
   riftFoeMult: number;
+  riftBossMult: number;
   retreatShare: number;
 }
 
@@ -216,6 +223,7 @@ export function supplyFx(ids: readonly SupplyId[] | undefined): SupplyFx {
     pv: on.has('potion') ? SUPPLY.pv : 0,
     dmg: on.has('pierre') ? SUPPLY.dmg : 0,
     riftFoeMult: on.has('lanterne') ? SUPPLY.riftFoeMult : 1,
+    riftBossMult: on.has('lanterne') ? SUPPLY.riftBossMult : 1,
     retreatShare: on.has('cor') ? SUPPLY.retreatShare : 0,
   };
 }

@@ -653,6 +653,17 @@ function riftFighter(party: Combatant, pv: number): Combatant {
   return { ...party, pv, lifesteal: (party.lifesteal ?? 0) * RIFT_RUN.lifesteal };
 }
 
+/** Un adversaire de faille affaibli par la lanterne — PV et dégâts, le même facteur. */
+function weakened<T extends { pv: number; damage: number }>(c: T, mult: number): T {
+  return mult === 1
+    ? c
+    : {
+        ...c,
+        pv: Math.max(1, Math.round(c.pv * mult)),
+        damage: Math.max(1, Math.round(c.damage * mult)),
+      };
+}
+
 /**
  * Une incursion COMPLÈTE, sans retraite : tous les monstres présents, puis le gardien.
  *
@@ -668,8 +679,10 @@ export function simulateIncursion(
   rift: RiftLike,
   now: number,
   seed: number,
-  /** 🕯️ La lanterne de faille : force des monstres (le gardien n'est pas touché). */
+  /** 🕯️ La lanterne de faille : force des monstres… */
   foeMult = 1,
+  /** …et du gardien (v0.1165 : il décide presque toutes les défaites, cf. `SUPPLY`). */
+  bossMult = 1,
 ): RiftRun {
   const population = riftPopulation(rift, now);
   const faction = riftSpecOf(rift).faction;
@@ -683,15 +696,7 @@ export function simulateIncursion(
   let shield: number | undefined; // 🔰 une barrière de départ par incursion
 
   for (let i = 0; i < population; i++) {
-    const raw = riftFoe(rift.level, faction, i, false);
-    const foe =
-      foeMult === 1
-        ? raw
-        : {
-            ...raw,
-            pv: Math.max(1, Math.round(raw.pv * foeMult)),
-            damage: Math.max(1, Math.round(raw.damage * foeMult)),
-          };
+    const foe = weakened(riftFoe(rift.level, faction, i, false), foeMult);
     const rs = (seed * 131 + i * 7919) >>> 0 || 1;
     const res = simulateCombat(riftFighter(party, pv), foe, {
       seed: rs,
@@ -722,7 +727,7 @@ export function simulateIncursion(
   }
 
   journal.push('🚪 La porte du gardien s’ouvre.');
-  const boss = riftFoe(rift.level, faction, population, true);
+  const boss = weakened(riftFoe(rift.level, faction, population, true), bossMult);
   const res = simulateCombat(riftFighter(party, pv), boss, {
     seed: (seed * 7919 + 13) >>> 0 || 1,
     goldOnWin: 0,
@@ -859,12 +864,14 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
   const { poi, escort, hero, seed, now } = input;
   const allies = partyAllies(escort, input.road, hero);
   const group = fuseUnits(allies, 'Groupe');
+  const fx = supplyFx(input.road.supplies);
   const run = simulateIncursion(
     group,
     poi,
     now,
     partyFightSeed(seed),
-    supplyFx(input.road.supplies).riftFoeMult,
+    fx.riftFoeMult,
+    fx.riftBossMult,
   );
 
   const bodies = incursionBodies(poi, now);
@@ -930,15 +937,16 @@ export function incursionWinPct(
   allies: readonly SkirmishUnit[],
   now: number,
   samples: number,
-  /** 🕯️ La lanterne — le MÊME multiplicateur que la résolution (`resolveIncursion`). */
+  /** 🕯️ La lanterne — les MÊMES multiplicateurs que la résolution (`resolveIncursion`). */
   foeMult = 1,
+  bossMult = 1,
 ): number {
   if (!allies.length) return 0;
   const group = fuseUnits(allies, 'Groupe');
   const n = Math.max(1, samples);
   let w = 0;
   for (let s = 0; s < n; s++)
-    if (simulateIncursion(group, rift, now, partyForecastSeed(s), foeMult).cleared) w++;
+    if (simulateIncursion(group, rift, now, partyForecastSeed(s), foeMult, bossMult).cleared) w++;
   return w / n;
 }
 
