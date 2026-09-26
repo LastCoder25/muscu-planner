@@ -379,20 +379,19 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     expect(Object.keys(o)).not.toContain('item');
     expect(Object.keys(o)).not.toContain('items');
   });
-  it('elle rend une PART mesurée d’une visite du héros — elle complète, elle ne remplace pas', () => {
-    // ⚠️ Borne SERRÉE autour de `yieldShare` : un « simplement moins que le héros » laissait
-    // passer la suppression de la part (les multiplicateurs de rencontre suffisaient à
-    // rester sous la barre). ⚠️ Mesuré sur l'ÉNERGIE d'une source (la ferraille, qui
+  it('🧺 elle rend la MÊME récolte qu’une visite du héros (v0.1189, « aligne la récolte »)', () => {
+    // ⚠️ Borne SERRÉE autour de 1 : elle rendait la MOITIÉ (`yieldShare` 0,5, retiré en
+    // v0.1189) — une part réintroduite ferait tomber ce test. ⚠️ Mesuré sur l'ÉNERGIE d'une source (la ferraille, qui
     // servait de mesure, est retirée v0.998) : c'est une récolte pure, sans filet d'or qui
     // brouillerait la part.
     const p = poi({ type: 'well' });
     const heros = harvestYield(p.type, poiDifficultyLevel(p), harvestGuardOf(p)?.size ?? 0).energy;
-    // ⚠️ Une escorte SANS RÔLE : le sujet du test est `yieldShare`, pas la cargaison
+    // ⚠️ Une escorte SANS RÔLE : le sujet du test est la part de base, pas la cargaison
     // qu'un 🐫 ajoute. Depuis que la référence est mixte, elle porte un rôle de haul —
     // le test mesurait donc les deux à la fois et est tombé pour la mauvaise raison.
     const part = avgOf(p, team(3, 20, 'heal'), 'energy') / heros;
-    expect(part).toBeGreaterThan(CARAVAN.yieldShare * 0.75);
-    expect(part).toBeLessThan(CARAVAN.yieldShare * 1.25);
+    expect(part).toBeGreaterThan(0.75);
+    expect(part).toBeLessThan(1.25);
   });
   it('le plafond d’ÉNERGIE tient APRÈS les multiplicateurs', () => {
     // « complément, jamais substitut au sport » est un invariant, pas une base qu'un
@@ -400,7 +399,7 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     // ⚠️ Il faut FORCER un multiplicateur > 1, sinon le test passe même sans plafond :
     // une escorte 🐫 (cargaison) et des embuscades gagnées poussent `k` au-dessus de 1.
     const p = poi({ type: 'well', level: 90, distNorm: 1 });
-    const cap = harvestYield('well', poiDifficultyLevel(p)).energy * CARAVAN.yieldShare;
+    const cap = harvestYield('well', poiDifficultyLevel(p)).energy;
     const cargo = team(4, 90, 'haul');
     let vu = false;
     for (let s = 0; s < 200; s++) {
@@ -808,7 +807,7 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
     // On corrige la fraction sans desserrer l'invariant « complément, jamais substitut au
     // sport » : les multiplicateurs ne peuvent que RÉDUIRE l'énergie, jamais l'augmenter.
     const p = poi({ type: 'well', level: 70 });
-    const brut = harvestYield(p.type, poiDifficultyLevel(p)).energy * CARAVAN.yieldShare;
+    const brut = harvestYield(p.type, poiDifficultyLevel(p)).energy;
     for (let seed = 1; seed <= 30; seed++)
       expect(
         resolveCaravan(p, team(3, 70), seed, NUS, aJour(team(3, 70))).energy,
@@ -1802,7 +1801,7 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     );
     // ⚠️ v0.1166 : un puits n'a plus d'or à lui (l'or vient des bourses de ses gardes bandits).
     expect(o.gold).toBe(0); // avant : 938 — v0.1161 : part d’or hors mine unifiée à 0,35 (`HARVEST.goldShare`, 804 × 0,35 / 0,3). v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
-    expect(o.energy).toBe(30);
+    expect(o.energy).toBe(61); // v0.1189 : la même récolte que le héros (avant : 30, la moitié)
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et
     // l'énergie apparaît. Tout le reste (clés, XP, blessé, journal) est inchangé au

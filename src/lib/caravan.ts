@@ -64,7 +64,8 @@ import {
   travelOneWayMin,
   type Poi,
   routePerilous,
-  poiRewardLevel,
+  heroRewardLevel,
+  HARVEST,
 } from './expedition';
 import {
   advBankedLevel,
@@ -157,13 +158,6 @@ export const CARAVAN = {
   scoutMax: 0.4,
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
-  /** ⚠️ PART DU RENDEMENT D'UNE VISITE DU HÉROS. Des marchands exploitent moins bien
-   *  qu'un aventurier — mais ce n'est pas du réalisme, c'est un garde-fou mesuré : à part
-   *  pleine, UNE caravane rendait plusieurs crans d'enceinte par jour (mesuré à l'époque de
-   *  la ferraille). Avec 0,5 et un nombre de convois plafonné, les caravanes COMPLÈTENT la
-   *  visite du héros au lieu de la remplacer.
-   *  ⚠️ Ne pas monter sans re-mesurer les débits d'énergie et de pierres. */
-  yieldShare: 0.5,
   /** Un convoi de plus tous les N niveaux de Comptoir. ⚠️ Calé sur le vivier : la Guilde
    *  donne 1 aventurier tous les 2 niveaux, donc ~L/6 escortes de 3 au niveau L — le
    *  nombre de convois doit rester SOUS ce plafond humain, sinon on possède des convois
@@ -952,7 +946,7 @@ export function missionXpPreview(
 }
 
 /** Convois simultanés qu'autorise le Comptoir. ⚠️ SECOND garde-fou de l'inflation :
- *  le rendement par convoi est bridé (`yieldShare`), mais c'est le NOMBRE qui multiplie.
+ *  une équipe récolte ce que récolte le héros (v0.1189), c'est donc le NOMBRE qui multiplie.
  *  Un débutant en a un seul ; le plafond reste bas, et le niveau du Comptoir est lui-même
  *  plafonné par celui du joueur — donc par le sport. */
 export function caravanSlots(comptoirLevel: number): number {
@@ -1347,13 +1341,19 @@ export function resolveCaravan(
 
   const haul = caravanHaulMult(escort, kit.advGear, fx.haul);
   const k = mult * haul;
-  const raw = harvestYield(poi.type, poiRewardLevel(poi), harvestGuardOf(poi)?.size ?? 0);
-  const y = {
-    energy: raw.energy * CARAVAN.yieldShare,
-    summonStones: raw.summonStones * CARAVAN.yieldShare,
-    keys: raw.keys,
-    mana: raw.mana * CARAVAN.yieldShare,
-  };
+  // 🧺 LA MÊME RÉCOLTE QUE LE HÉROS (v0.1189, décision de l'utilisateur : « aligne la
+  // récolte »). Avant, une équipe sans héros ne rapportait que 50 % des ressources
+  // (`yieldShare`), sur un niveau sans le plancher de début de partie, et sans la clé
+  // occasionnelle des archives. Même niveau (`heroRewardLevel`), même table
+  // (`harvestYield`), même clé bonus : seuls les ALÉAS de la route diffèrent (embuscades
+  // d'un côté, rencontres de trajet de l'autre) — et le rôle 🐫, qui est un talent.
+  const y = harvestYield(
+    poi.type,
+    heroRewardLevel(poi, playerLevel),
+    harvestGuardOf(poi)?.size ?? 0,
+  );
+  // ⚠️ Tirée APRÈS la route : un tirage de plus avant aurait décalé toutes les rencontres.
+  const keyLuck = rng() < HARVEST.keyChance ? 1 : 0;
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
   const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel);
 
@@ -1367,7 +1367,7 @@ export function resolveCaravan(
     // RESSOURCES, pas l'or.
     gold: Math.round(harvestGold(poi, playerLevel) * mult * (1 + Math.max(0, fx.haul))),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
-    // brute × `yieldShare` (0,5), donc il tombe sur un DEMI. Avec l'arrondi à
+    // brute × l'ancien `yieldShare` (0,5), donc il tombait sur un DEMI. Avec l'arrondi à
     // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur
     // FRACTIONNAIRE qui gagnait — et `login_energy` est une colonne ENTIÈRE : la
     // sauvegarde partait en `invalid input syntax for type integer: "1234.5"`, la
@@ -1375,7 +1375,7 @@ export function resolveCaravan(
     // « Récupérer » sans qu'il ne se passe RIEN. Une cargaison était irrécupérable à vie.
     energy: Math.round(Math.min(y.energy, y.energy * k)),
     summonStones: Math.round(y.summonStones * k),
-    keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus,
+    keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus + keyLuck,
     mana: Math.round(y.mana * k),
     xp,
     kills,
