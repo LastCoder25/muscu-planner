@@ -253,6 +253,12 @@ export const HARVEST_GUARD_RAMP = { start: 0.4, perLevel: 0.1 };
  */
 export function harvestGuardOf(poi: Pick<Poi, 'id' | 'type' | 'level'>): CampSpec | null {
   if (!HARVEST_TYPES.has(poi.type)) return null;
+  // 💠 UNE MINE DE MANA N'A PAS DE GARDES (v0.1187, décision de l'utilisateur) : les monstres
+  // de sa faille sont PARTIS attaquer la base (c'est le débordement). Et c'est ce qui lui rend
+  // le rang de sa faille — gardée par 1 à 2,5 ennemis tirés au hasard, une mine laissée par
+  // une faille Or noir s'affichait (et payait) « Argent ★5 », puisque le rang affiché est la
+  // DIFFICULTÉ (`poiDifficultyLevel`). Sans gardes, difficulté = niveau de la faille.
+  if (poi.type === 'mana_mine') return null;
   const rng = mulberry32((hashId(poi.id) ^ 0x5851f42d) >>> 0 || 1);
   const faction = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
   const base = HARVEST_GUARD_SIZES[Math.floor(rng() * HARVEST_GUARD_SIZES.length)]!;

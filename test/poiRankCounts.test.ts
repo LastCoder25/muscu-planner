@@ -80,7 +80,8 @@ describe('poiRankCounts — les options du filtre de difficulté de la carte', (
     // rang de son niveau alors que ses gardes ne pèsent jamais une équipe pleine
     // (`HARVEST_GUARD_SIZES` s'arrête à 2,5). Son rang doit donc descendre.
     const L = 30;
-    for (const type of ['mine', 'well', 'shrine', 'archive', 'mana_mine'] as const) {
+    // 💠 La mine de mana n'a pas de gardes (v0.1187) : elle garde le rang de sa faille.
+    for (const type of ['mine', 'well', 'shrine', 'archive'] as const) {
       let vu = 0;
       for (let i = 0; i < 40; i++) {
         const id = 'h_' + i.toString(36);

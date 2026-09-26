@@ -6,6 +6,7 @@ import {
   partyAllies,
   refAdvGear,
   refChampionAdv,
+  refAdventurer,
   resolveCaravan,
   type PartyHero,
 } from '@/lib/caravan';
@@ -24,6 +25,8 @@ import {
 } from '@/lib/expedition';
 import { refFighter } from '@/lib/proceduralContent';
 import type { Adventurer } from '@/lib/adventurers';
+import { poiRank } from '@/lib/poiRank';
+import { characterRank } from '@/lib/characterRank';
 
 const poi = (type: Poi['type'], over: Partial<Poi> = {}): Poi => ({
   id: 'p_' + type,
@@ -265,10 +268,34 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
 });
 
 describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
-  it('tous les lieux de récolte sont gardés — et eux seuls', () => {
-    for (const t of HARVEST_TYPES) expect(harvestGuardOf(poi(t)), t).not.toBeNull();
+  it('les lieux de récolte sont gardés — sauf la mine de mana, et eux seuls', () => {
+    for (const t of HARVEST_TYPES)
+      if (t === 'mana_mine') expect(harvestGuardOf(poi(t)), t).toBeNull();
+      else expect(harvestGuardOf(poi(t)), t).not.toBeNull();
     for (const t of ['camp', 'lair', 'rift', 'arena'] as const)
       expect(harvestGuardOf(poi(t)), t).toBeNull();
+  });
+
+  it('💠 une mine de mana se récolte SANS combat : ses monstres sont partis vers la base', () => {
+    for (const hero of [false, true]) {
+      const o = resolveHarvestParty({
+        poi: poi('mana_mine', { level: 35 }),
+        escort: hero ? [] : [refAdventurer(35, 0)],
+        road: { advGear: [] },
+        hero: hero ? { name: 'Héros', level: 35, combatant: refFighter(35) } : null,
+        seed: 11,
+        playerLevel: 35,
+        pantheonLevel: 35,
+      });
+      expect(o.party!.foes).toBe(0);
+      expect(o.party!.hurt).toEqual([]);
+      expect(o.mana).toBeGreaterThan(0);
+    }
+  });
+
+  it('💠 et elle s’affiche au rang de sa faille', () => {
+    const p = poi('mana_mine', { level: 35 });
+    expect(poiRank(p).tier).toBe(characterRank(35).tier);
   });
 
   it('la force est celle d’un petit camp (1-2 champions), dérivée de l’id, déterministe', () => {

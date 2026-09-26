@@ -22,8 +22,9 @@
 // ⚠️ Le héros SEUL y passe aussi par ce module (plus par `expeSend`) : sinon une expédition
 // solo contournait les gardes.
 import { missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
-import { campHurt, fightCampForce, forceHaul, type BodyLoot } from './camp';
+import { campHurt, fightCampForce, forceHaul, type BodyLoot, type CampFight } from './camp';
 import {
+  HARVEST_TYPES,
   harvestGuardOf,
   resolveOutcome,
   type ExpeditionOutcome,
@@ -33,6 +34,17 @@ import {
 import { FACTION_EMOJI } from './raid';
 import { addSupplies, supplyFx } from './supplies';
 import type { Adventurer } from './adventurers';
+
+/** Le « combat » d'un lieu sans gardes : personne à abattre, victoire acquise. */
+const NO_GUARDS: CampFight = {
+  skirmish: { win: true } as CampFight['skirmish'],
+  foes: 0,
+  slain: 0,
+  kills: {},
+  heroKills: 0,
+  shares: {},
+  journal: [],
+};
 
 export interface HarvestPartyInput {
   poi: Poi;
@@ -68,23 +80,33 @@ function withShares(xp: Record<string, number>, shares: Record<string, number>) 
 
 export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome {
   const { poi, escort, road, hero, seed } = input;
+  if (!HARVEST_TYPES.has(poi.type))
+    throw new Error(`resolveHarvestParty : ${poi.type} n'est pas un lieu de récolte.`);
+  // 💠 Un lieu SANS gardes (la mine de mana : ses monstres sont partis vers la base) se
+  // récolte sans combat — on saute le choc, la récolte est celle d'une victoire.
   const spec = harvestGuardOf(poi);
-  if (!spec) throw new Error(`resolveHarvestParty : ${poi.type} n'est pas un lieu de récolte.`);
-  const g = fightCampForce({
-    poi,
-    spec,
-    escort,
-    road,
-    hero,
-    seed,
-    playerLevel: input.playerLevel,
-    pantheonLevel: input.pantheonLevel,
-  });
-  const tag = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`;
-  const loot = forceHaul({ poi, road, seed }, spec, g.skirmish);
+  const g: CampFight = spec
+    ? fightCampForce({
+        poi,
+        spec,
+        escort,
+        road,
+        hero,
+        seed,
+        playerLevel: input.playerLevel,
+        pantheonLevel: input.pantheonLevel,
+      })
+    : NO_GUARDS;
+  const won = spec ? g.skirmish.win : true;
+  const tag = spec
+    ? `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`
+    : '💠 Aucun garde — ses monstres sont partis vers ta base.';
+  const loot: BodyLoot = spec
+    ? forceHaul({ poi, road, seed }, spec, g.skirmish)
+    : { gold: 0, summonStones: 0, supplies: {} };
   const base = {
     hero: !!hero,
-    faction: spec.faction,
+    faction: spec?.faction ?? poi.faction ?? 'mortsvivants',
     escort: escort.map((a) => a.id),
     foes: g.foes,
     slain: g.slain,
@@ -92,7 +114,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     heroKills: g.heroKills,
   };
 
-  if (!g.skirmish.win) {
+  if (!won) {
     const party: PartyResult = {
       ...base,
       win: false,
