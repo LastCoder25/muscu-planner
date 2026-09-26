@@ -94,10 +94,13 @@ watch(
 .cpb.thin {
   margin: 4px 0 2px;
 }
-/* Toute la colonne (barre + libellé) est la cible : 44 px au doigt, la barre reste fine. */
+/* Toute la colonne (barre + libellé) est la cible : 44 px au doigt, la barre reste fine.
+   ⚠️ `min-width: max-content` : une barre ne descend JAMAIS sous la largeur de son libellé.
+   Proportionnées 80 · 20 · 20, les barres jaune et verte ne faisaient que ~45 px dans la
+   carte à 344 px, et « Objectif » était tronqué. C'est l'argent, le plus long, qui cède. */
 .cpb-hit {
   flex-basis: 0;
-  min-width: 0;
+  min-width: max-content;
   min-height: 44px;
   display: flex;
   flex-direction: column;
@@ -135,8 +138,6 @@ watch(
 .cpb-lab {
   font-size: 10.5px;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   text-align: left;
 }
 .cpb-lab b {
@@ -145,7 +146,6 @@ watch(
 }
 .cpb-hit.on .cpb-lab {
   color: var(--c);
-  font-weight: 600;
 }
 /* Chaque barre porte sa couleur en pâle (vide) et en plein (fait). */
 .cpb-sec {
