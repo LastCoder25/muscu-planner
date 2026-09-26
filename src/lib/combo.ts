@@ -502,12 +502,6 @@ export function legAllDone(l: ComboLeg): boolean {
  *  étape que sa barre contredit. Sur un petit objectif, le repère secondaire EST l'objectif :
  *  il n'y a pas de zone secondaire, l'exo commence directement en `principal`. */
 export type LegStage = 'secondary' | 'principal' | 'bonus' | 'done';
-export const LEG_STAGES: readonly { id: LegStage; label: string }[] = [
-  { id: 'secondary', label: 'Secondaire' },
-  { id: 'principal', label: 'Objectif' },
-  { id: 'bonus', label: 'Bonus' },
-  { id: 'done', label: 'Terminés' },
-];
 export function legStage(l: ComboLeg): LegStage {
   const t = legTier(l);
   if (t === 'max') return 'done';
@@ -630,7 +624,7 @@ export function comboPace(c: ComboChallenge, today: string): ComboPace {
  *  n'apporte rien de plus : la barre est pleine au maximal. ⚠️ Ce n'est PAS le % affiché en
  *  gros (`comboProgressPct`), qui ne laisse pas les bonus d'un exo compenser le retard d'un
  *  autre : la barre montre OÙ en est chaque zone, le chiffre dit si l'objectif est bouclé. */
-export const COMBO_BAR_SCALE = COMBO_TIER_MAX;
+const COMBO_BAR_SCALE = COMBO_TIER_MAX;
 /** Position (en % de la largeur) d'un avancement exprimé en % de l'objectif. */
 export function comboBarPos(pctOfObjective: number): number {
   return Math.max(0, Math.min(100, pctOfObjective / COMBO_BAR_SCALE));
@@ -671,6 +665,20 @@ export interface ComboBarSegment {
   late: number;
   mark: number | null;
 }
+/** 🔎 LES BARRES FILTRENT (demandé : toucher une barre plutôt qu'une rangée de filtres).
+ *  La barre d'un exo = la zone où il travaille : l'argent tant que ses séries de base ne sont
+ *  pas faites, le jaune tant que l'objectif n'est pas atteint, le vert ensuite — bonus en
+ *  cours ET terminés, puisque tous deux ont passé l'objectif. Lue sur `legStage`. */
+export type ComboBarZone = ComboBarSegment['id'];
+export type ComboLegFilter = 'all' | ComboBarZone;
+export function legBarZone(l: ComboLeg): ComboBarZone {
+  const st = legStage(l);
+  return st === 'secondary' ? 'sec' : st === 'principal' ? 'obj' : 'bonus';
+}
+export function filterLegsByZone<T extends ComboLeg>(legs: readonly T[], f: ComboLegFilter): T[] {
+  return f === 'all' ? [...legs] : legs.filter((l) => legBarZone(l) === f);
+}
+
 export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSegment[] {
   const p = comboBarParts(c);
   // En points d'objectif (0..80, 0..20, 0..20).

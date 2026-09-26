@@ -16,7 +16,7 @@
         </div>
         <div class="hc-week">📅 Semaine du {{ comboWeek }}</div>
         <!-- Barre de 0 à 120 % en trois zones (secondaire / objectif / bonus). -->
-        <ComboProgressBar :combo="c" :pace="pace" />
+        <ComboProgressBar v-model="legFilter" :combo="c" :pace="pace" />
         <div v-if="notStarted" class="not-started">
           <span>📅</span>
           <span
@@ -67,7 +67,6 @@
         />
       </div>
 
-      <ComboLegFilter v-model="legFilter" :legs="c.legs" />
       <div
         v-for="leg in shownLegs"
         :key="leg.exercise_id"
@@ -257,7 +256,8 @@ import {
   legComplete,
   legAllDone,
   legsDoneLast,
-  legStage,
+  filterLegsByZone,
+  type ComboLegFilter,
   legMode,
   legSets,
   legLastReps,
@@ -272,7 +272,6 @@ import {
   type ComboSet,
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
-import ComboLegFilter, { type LegFilter } from '@/components/ComboLegFilter.vue';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
@@ -324,13 +323,9 @@ const legsAtMax = computed(() => c.value?.legs.filter(legAllDone).length ?? 0);
 // que l'onglet 🎯 ; avant la v0.903 chaque écran triait autrement, et un tri par avancement
 // réordonnait la liste PENDANT la saisie). « Fini » = palier MAXIMAL, pas l'objectif.
 const orderedLegs = computed(() => legsDoneLast(c.value?.legs ?? []));
-// 🔎 Filtre par étape en cours (Secondaire / Objectif / Bonus / Terminés) — ne déplace rien.
-const legFilter = ref<LegFilter>('all');
-const shownLegs = computed(() =>
-  legFilter.value === 'all'
-    ? orderedLegs.value
-    : orderedLegs.value.filter((l) => legStage(l) === legFilter.value),
-);
+// 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
+const legFilter = ref<ComboLegFilter>('all');
+const shownLegs = computed(() => filterLegsByZone(orderedLegs.value, legFilter.value));
 
 function fmtDM(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -899,7 +894,7 @@ onMounted(async () => {
   white-space: nowrap;
   overflow: hidden;
 }
-/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboLegFilter) :
+/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboProgressBar) :
    la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
 .seg.tier-secondary {
   border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));

@@ -59,6 +59,8 @@ import {
   legStage,
   comboBarParts,
   comboBarSegments,
+  filterLegsByZone,
+  legBarZone,
   NO_PACE,
   comboBarPos,
   comboFinishPlan,
@@ -1457,6 +1459,29 @@ describe('🌸 LE ROSE = LE RETARD RÉEL, réparti dans l’argent puis le jaune
     const segs = comboBarSegments(c, pace(60, comboProgressPct(c)));
     expect(segs[0]!.mark).toBeCloseTo((60 / 80) * 100, 6);
     expect(segs[0]!.fill + segs[0]!.late).toBeCloseTo(segs[0]!.mark!, 6);
+  });
+});
+
+describe('🔎 TOUCHER UNE BARRE FILTRE LES EXOS DE SA ZONE', () => {
+  const ex = (name: string, faites: number): ComboLeg => ({
+    slot: 'push',
+    exercise_id: name,
+    exercise_name: name,
+    rep_weight: 1,
+    target: 10,
+    sets: Array.from({ length: faites }, () => set(10)),
+  });
+  it('argent avant les séries de base, jaune avant l’objectif, vert après (bonus ET terminés)', () => {
+    expect(legBarZone(ex('A', 7))).toBe('sec');
+    expect(legBarZone(ex('A', 8))).toBe('obj');
+    expect(legBarZone(ex('A', 10))).toBe('bonus');
+    expect(legBarZone(ex('A', 12))).toBe('bonus');
+  });
+  it('filtre sans réordonner ; « all » garde tout', () => {
+    const legs = [ex('A', 12), ex('B', 2), ex('C', 9), ex('D', 10)];
+    expect(filterLegsByZone(legs, 'bonus').map((l) => l.exercise_name)).toEqual(['A', 'D']);
+    expect(filterLegsByZone(legs, 'sec').map((l) => l.exercise_name)).toEqual(['B']);
+    expect(filterLegsByZone(legs, 'all')).toHaveLength(4);
   });
 });
 

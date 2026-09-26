@@ -1298,45 +1298,6 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
   }, 30_000);
 });
 
-describe('🔎 Filtres du Défi 360 (ComboLegFilter)', () => {
-  it('une pastille par étape non vide, avec son compte', async () => {
-    const { default: ComboLegFilter } = await import('@/components/ComboLegFilter.vue');
-    const leg = (name: string, faites: number) => ({
-      slot: 'push',
-      exercise_id: name,
-      exercise_name: name,
-      rep_weight: 1,
-      target: 10,
-      sets: Array.from({ length: faites }, () => ({ date: '2026-01-05', reps: 10 })),
-    });
-    let out = '';
-    const legs = [leg('A', 0), leg('B', 9), leg('C', 10), leg('D', 12)];
-    expect(
-      await mountIt(
-        ComboLegFilter,
-        { legs, modelValue: 'all' },
-        undefined,
-        undefined,
-        '/',
-        (h) => (out = h),
-      ),
-    ).toBeNull();
-    for (const l of ['Tous', 'Secondaire', 'Objectif', 'Bonus', 'Terminés'])
-      expect(out).toContain(l);
-    let seul = '';
-    await mountIt(
-      ComboLegFilter,
-      { legs: [leg('A', 0)], modelValue: 'all' },
-      undefined,
-      undefined,
-      '/',
-      (h) => (seul = h),
-    );
-    // Une étape vide reste affichée (c'est aussi la légende), mais inactive.
-    expect(seul).toContain('Bonus');
-    expect((seul.match(/disabled/g) ?? []).length).toBe(3);
-  }, 30_000);
-});
 
 describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
   it('se monte et peint les trois zones', async () => {
@@ -1355,6 +1316,10 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
     expect(
       await mountIt(ComboProgressBar, { combo, pace: NO_PACE }, undefined, undefined, '/', (h) => (out = h)),
     ).toBeNull();
+    // Les barres sont des boutons (elles filtrent), avec leur compte d’exos ; une zone vide
+    // (ici l’objectif : A au bonus, B au secondaire) n’est pas cliquable.
+    expect((out.match(/<button/g) ?? []).length).toBe(3);
+    expect((out.match(/disabled/g) ?? []).length).toBe(1);
     // Trois barres SÉPARÉES, chacune avec son remplissage.
     for (const c of ['cpb-sec', 'cpb-obj', 'cpb-bonus']) expect(out).toContain(c);
     expect((out.match(/cpb-fill/g) ?? []).length).toBe(3);

@@ -384,7 +384,7 @@
               <button class="c3-stop" :title="comboStop.ok" @click="confirmStopCombo">🗑</button>
             </div>
             <!-- Barre de 0 à 120 % en trois zones (secondaire / objectif / bonus). -->
-            <ComboProgressBar :combo="activeCombo" :pace="pace" thin />
+            <ComboProgressBar v-model="legFilter" :combo="activeCombo" :pace="pace" thin />
           </div>
           <!-- 🏁 CLÔTURER À L'OBJECTIF (v0.964, demandé) : ici aussi, parce que c'est
                ici qu'on regarde son 360 — la leçon du 🗑, qui ne vivait que sur la
@@ -412,7 +412,6 @@
               @click="exportCombo"
             />
           </div>
-          <ComboLegFilter v-model="legFilter" :legs="activeComboLegs" />
           <div
             v-for="leg in shownComboLegs"
             :key="leg.exercise_id"
@@ -562,7 +561,6 @@ defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
-import ComboLegFilter, { type LegFilter } from '@/components/ComboLegFilter.vue';
 import ComboProgressBar from '@/components/ComboProgressBar.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
@@ -601,7 +599,8 @@ import {
   legComplete,
   legAllDone,
   legsDoneLast,
-  legStage,
+  filterLegsByZone,
+  type ComboLegFilter,
   legTierMarks,
   legSegZone,
   legBarGeometry,
@@ -779,13 +778,9 @@ function segCount(l: ComboLeg): number {
 // défi ; avant la v0.903 cet onglet triait par RESTANT et la fiche par fraction faite, donc le
 // même défi ne listait pas ses exos dans le même ordre aux deux endroits).
 const activeComboLegs = computed(() => legsDoneLast(activeCombo.value?.legs ?? []));
-// 🔎 Filtre par étape en cours (Secondaire / Objectif / Bonus / Terminés) — ne déplace rien.
-const legFilter = ref<LegFilter>('all');
-const shownComboLegs = computed(() =>
-  legFilter.value === 'all'
-    ? activeComboLegs.value
-    : activeComboLegs.value.filter((l) => legStage(l) === legFilter.value),
-);
+// 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
+const legFilter = ref<ComboLegFilter>('all');
+const shownComboLegs = computed(() => filterLegsByZone(activeComboLegs.value, legFilter.value));
 const comboList = computed(() =>
   comboStore.list
     .filter((c) => c.status === comboTab.value)
@@ -1640,7 +1635,7 @@ onMounted(async () => {
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
   color: var(--dim);
 }
-/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboLegFilter) :
+/* PALIERS PAR COULEUR (remplace les pastilles Sec./Principal/Max, cf. ComboProgressBar) :
    la case dit quel palier elle fait avancer. Faite = pleine, à faire = liseré de la même teinte. */
 .seg.tier-secondary {
   border-color: color-mix(in srgb, var(--tier-sec) 55%, var(--line));
