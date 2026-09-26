@@ -358,7 +358,9 @@ export function riftAutoReplay(
   seen: ReadonlySet<string>,
   now: number,
 ): { play: ExpeditionMessage | null; seen: string[] } {
-  const rifts = messages.filter((m) => !!m.party?.rift);
+  // ⚔️ Une interception (`party.battle`) se rejoue aussi d'elle-même : même règle, même
+  // mémoire « déjà vu » — c'est le même dialogue qui la montre.
+  const rifts = messages.filter((m) => !!m.party?.rift || !!m.party?.battle);
   let play: ExpeditionMessage | null = null;
   for (const m of rifts) {
     if (seen.has(m.id) || now - m.resolvedAt > RIFT_AUTOPLAY_MAX_AGE_MS) continue;

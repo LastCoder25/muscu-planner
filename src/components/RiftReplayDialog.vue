@@ -14,12 +14,22 @@
         :cast="cast"
         @done="onDone"
       />
+      <!-- ⚔️ Une interception : la bataille rangée. -->
+      <WarbandStage
+        v-else-if="battle && replay"
+        :key="'w' + seq"
+        :stage="battle"
+        :faction="replay.faction"
+        :hero="hero"
+        :cast="cast"
+        @done="onDone"
+      />
     </div>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
-// 🕳️ Le rejeu d'une incursion, monté UNE fois pour toutes.
+// 🕳️ Le rejeu d'une incursion — ou ⚔️ d'une interception —, monté UNE fois pour toutes.
 //
 // ⚠️ Il existe parce que DEUX écrans mènent au même rapport (la boîte 📬 de l'Aventure et
 // la modale de collecte de la carte) : écrire le montage deux fois, c'est se garantir
@@ -31,6 +41,8 @@ import type { PartyResult } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 import { buildRiftStage, riftCast, riftStageInputOf } from '@/lib/riftStage';
 import RiftStage from '@/components/RiftStage.vue';
+import WarbandStage from '@/components/WarbandStage.vue';
+import { buildWarbandStage, warbandStageInputOf } from '@/lib/warbandStage';
 
 const props = defineProps<{
   /** Le rapport à rejouer. ⚠️ Le NIVEAU n'est pas passé à côté : il vit dans `party.rift`,
@@ -61,6 +73,16 @@ const stage = computed(() => {
   // à chaque ouverture. Une graine tirée de l'horloge ferait bouger le décor sans raison.
   const seed = (i.level * 131 + i.population * 17 + i.killed + 1) >>> 0;
   return buildRiftStage(i, seed);
+});
+
+/** ⚔️ Une interception (`party.battle`) se rejoue en bataille rangée — même dialogue, même
+ *  rejeu automatique, même « Voir le rapport » : un second montage divergerait. */
+const battle = computed(() => {
+  const r = props.replay;
+  const b = r ? warbandStageInputOf(r) : null;
+  if (!r || !b) return null;
+  const seed = (b.armyPv * 7 + b.maxPv * 3 + b.steps.length + 1) >>> 0;
+  return buildWarbandStage(b, r.win, r.escort.length + (r.hero ? 1 : 0), seed);
 });
 
 const hero = computed(() =>

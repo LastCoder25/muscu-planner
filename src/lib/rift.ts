@@ -1045,6 +1045,32 @@ export function interceptionMana(raid: Raid, army: Combatant, run: CombatResult)
   return riftMana(Math.round(effectif * part), raid.level);
 }
 
+/** Un groupe de la bande, tel que le rejeu le montre : qui, combien, et s'il tire. */
+export interface WarbandGroupSnap {
+  species: string;
+  emoji: string;
+  count: number;
+  champion?: boolean;
+  ranged?: boolean;
+}
+
+/**
+ * ⚔️ Ce qu'une interception laisse pour être rejouée en bataille rangée.
+ *
+ * ⚠️ Même règle que le duel du gardien (`RiftBossReplay`) : les temps sont le LOG du vrai
+ * combat résumé par `bossReplaySteps` (aucun dégât perdu, la fin est exactement celle du
+ * combat) ; les groupes sont ceux de `warbandArmy`, la seule autorité sur la bande. On
+ * n'y persiste que ~8 temps et quelques groupes : la boîte 📬 porte ce rapport.
+ */
+export interface WarbandBattle {
+  /** PV du groupe au premier coup. */
+  maxPv: number;
+  /** PV de la colonne affrontée (`warbandFoe`). */
+  armyPv: number;
+  groups: WarbandGroupSnap[];
+  steps: RiftBossStep[];
+}
+
 /** Ce qu'on envoie à la rencontre d'une bande. ⚠️ MÊME FORME qu'un camp ou une faille
  *  (toutes satisfont `PartyVoyage`), à `playerLevel` près — l'armée s'y calibre. */
 export interface InterceptionInput {
@@ -1122,6 +1148,18 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
     xp,
     hurt: run.win ? [] : escort.map((a) => a.id),
     journal,
+    battle: {
+      maxPv: group.pv,
+      armyPv: army.pv,
+      groups: raid.groups.map((g) => ({
+        species: g.species,
+        emoji: g.emoji,
+        count: g.count,
+        ...(g.champion ? { champion: true } : {}),
+        ...(g.kind === 'ranged' ? { ranged: true } : {}),
+      })),
+      steps: bossReplaySteps(run.log, RIFT_BOSS_STEPS),
+    },
   };
 
   const tag = `+${mana} 💠`;

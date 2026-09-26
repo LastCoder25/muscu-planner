@@ -151,3 +151,16 @@ export function monsterArt(name: string | null | undefined): string | null {
   if (!name || !Object.hasOwn(MONSTER_ART, name)) return null;
   return MONSTER_ART[name] ?? null;
 }
+
+/**
+ * L'illustration d'une ESPÈCE d'armée (bataille rangée d'une interception), ou `null`.
+ *
+ * ⚠️ Les espèces des factions (`factionRoster` : Coupe-jarret, Loup famélique…) n'ont été
+ * illustrées que sous leur forme de GARDIEN de faille (« Loup famélique (gardien) »). C'est
+ * la même créature : faute d'image propre, la troupe emprunte celle de son gardien plutôt
+ * que de retomber sur l'emoji. Une illustration dédiée, si elle apparaît, passe devant.
+ */
+export function speciesArt(name: string | null | undefined): string | null {
+  if (!name) return null;
+  return monsterArt(name) ?? monsterArt(`${name} (gardien)`);
+}

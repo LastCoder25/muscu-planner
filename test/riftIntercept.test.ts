@@ -301,3 +301,50 @@ describe('cohérence avec le siège', () => {
     expect(r.log.length).toBeGreaterThan(0);
   });
 });
+
+describe('⚔️ le rapport d’interception se REJOUE en bataille rangée', () => {
+  const p = () => bandeDe(carte([rift('r', 0, 30)]), T0 + LIFE + H);
+
+  it('inscrit la bande telle que `warbandArmy` la tire, et la fin EXACTE du combat', () => {
+    for (const [lvl, n, pl] of [
+      [60, 6, 4],
+      [3, 1, 80],
+    ] as const) {
+      const poi = p();
+      const o = resolveInterception({
+        poi,
+        escort: team(lvl, n),
+        road,
+        hero: null,
+        seed: 3,
+        playerLevel: pl,
+        pantheonLevel: n,
+      });
+      const b = o.party!.battle!;
+      const raid = warbandArmy(poi, pl);
+      expect(b.groups.map((g) => [g.species, g.count, !!g.champion])).toEqual(
+        raid.groups.map((g) => [g.species, g.count, !!g.champion]),
+      );
+      expect(b.steps.length).toBeGreaterThan(0);
+      const last = b.steps[b.steps.length - 1]!;
+      // Victoire : la colonne est à zéro ; défaite : le groupe l'est.
+      if (o.win) expect(last.bossPv).toBeLessThanOrEqual(0);
+      else expect(last.pv).toBeLessThanOrEqual(0);
+      expect(b.steps[0]!.pv).toBeLessThanOrEqual(b.maxPv);
+    }
+  });
+
+  it('le verdict dit « bande rompue », plus « camp pris »', async () => {
+    const { partyReport } = await import('@/lib/party');
+    const o = resolveInterception({
+      poi: p(),
+      escort: team(60, 6),
+      road,
+      hero: null,
+      seed: 3,
+      playerLevel: 4,
+      pantheonLevel: 6,
+    });
+    expect(partyReport(o.party!, []).verdict).toBe(o.win ? 'bande rompue' : 'la bande passe');
+  });
+});

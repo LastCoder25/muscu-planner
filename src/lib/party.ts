@@ -431,9 +431,13 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
       ? party.win
         ? 'faille refermée'
         : 'la faille tient'
-      : party.win
-        ? 'camp pris'
-        : 'repoussé',
+      : party.battle
+        ? party.win
+          ? 'bande rompue'
+          : 'la bande passe'
+        : party.win
+          ? 'camp pris'
+          : 'repoussé',
     slain: party.slain,
     foes: party.foes,
     heroKills: party.heroKills,

@@ -75,8 +75,8 @@
         v-if="canReplay"
         type="button"
         class="replay"
-        aria-label="Revoir l’incursion"
-        title="Revoir l’incursion"
+        :aria-label="replayLabel"
+        :title="replayLabel"
         @click="emit('replay')"
       >
         ▶
@@ -223,6 +223,7 @@ import { formatDuration } from '@/lib/duration';
 import { SLOT_LABEL, gradeLabel, itemEffectsText } from '@/lib/items';
 import { TEAM_SHOWN, missionWhen, type MissionCard } from '@/lib/missionCard';
 import { riftStageInputOf } from '@/lib/riftStage';
+import { warbandStageInputOf } from '@/lib/warbandStage';
 
 const props = withDefaults(
   defineProps<{
@@ -249,7 +250,14 @@ const isOpen = ref(!props.folded && props.state !== 'done');
 const seed = computed(() => seedOf(props.card.id));
 const when = computed(() => missionWhen(props.card.at, props.now));
 // ⚠️ MÊME SOURCE que le rejeu lui-même : le bouton ne peut pas apparaître sur un camp.
-const canReplay = computed(() => !!props.card.party && !!riftStageInputOf(props.card.party));
+const canReplay = computed(
+  () =>
+    !!props.card.party &&
+    (!!riftStageInputOf(props.card.party) || !!warbandStageInputOf(props.card.party)),
+);
+const replayLabel = computed(() =>
+  props.card.party?.battle ? 'Revoir la bataille' : 'Revoir l’incursion',
+);
 const shownTeam = computed(() => props.card.team.slice(0, TEAM_SHOWN));
 const hiddenTeam = computed(() => Math.max(0, props.card.team.length - TEAM_SHOWN));
 const empty = computed(

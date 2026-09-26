@@ -6,7 +6,7 @@
 //
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
-import type { RiftBossReplay } from './rift';
+import type { RiftBossReplay, WarbandBattle } from './rift';
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, ITEM_SETS, type Item } from './items';
@@ -192,6 +192,13 @@ export interface PartyResult {
      *  ouverte, ou d'un rapport d'avant la v0.998 : la scène retombe alors sur un seul coup. */
     boss?: RiftBossReplay;
   };
+  /**
+   * ⚔️ Ce qu'il faut pour REJOUER une interception en bataille rangée (`warbandStage.ts`).
+   * Même statut que `rift` : il INSCRIT le combat, il ne décide rien — et sa présence est
+   * ce qui dit « interception » (le verdict, le bouton de rejeu). Absent des rapports
+   * d'avant la v0.1185 : ils n'ont ni rejeu ni verdict propre.
+   */
+  battle?: WarbandBattle;
 }
 
 /** FNV-1a 32 bits : un id de POI → une graine. */

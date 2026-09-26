@@ -449,6 +449,23 @@ describe('le rejeu se lance tout seul', () => {
     expect(t.seen).toEqual([]);
   });
 
+  it('une INTERCEPTION se rejoue aussi d’elle-même (bataille rangée)', () => {
+    const inter: ExpeditionMessage = {
+      ...msg('w', NOW - 1000, false),
+      party: {
+        ...partyResult(),
+        rift: undefined,
+        battle: {
+          maxPv: 100,
+          armyPv: 200,
+          groups: [{ species: 'Revenant', emoji: '🧟', count: 5 }],
+          steps: [],
+        },
+      },
+    };
+    expect(riftAutoReplay([inter], new Set(), NOW).play?.id).toBe('w');
+  });
+
   it('un rapport trop ancien ne se relance pas — il reste dans 📬', () => {
     const vieux = NOW - RIFT_AUTOPLAY_MAX_AGE_MS - 1;
     const t = riftAutoReplay([msg('v', vieux)], new Set(), NOW);

@@ -364,6 +364,47 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(entres.size);
   }, 30_000);
 
+  it('⚔️ WarbandStage peint la colonne corps par corps, avec ses illustrations', async () => {
+    const { default: WarbandStage } = await import('@/components/WarbandStage.vue');
+    const { buildWarbandStage } = await import('@/lib/warbandStage');
+    const step = (pv: number, bossPv: number) => ({
+      dealt: 10,
+      taken: 5,
+      crit: false,
+      groupTurns: 1,
+      bossTurns: 1,
+      pv,
+      bossPv,
+    });
+    const stage = buildWarbandStage(
+      {
+        maxPv: 500,
+        armyPv: 900,
+        groups: [
+          { species: 'Loup famélique', emoji: '🐺', count: 18 },
+          { species: 'Arachné des bois', emoji: '🕷️', count: 9, ranged: true },
+          { species: 'Scorpion géant', emoji: '🦂', count: 1, champion: true },
+        ],
+        steps: [step(400, 500), step(300, 0)],
+      },
+      true,
+      2,
+      5,
+    );
+    let out = '';
+    const props = {
+      stage,
+      faction: 'betes',
+      hero: null,
+      cast: [{ kind: 'champion' as const, name: 'Léa', emoji: '⚔️', championId: null }],
+    };
+    expect(await mountIt(WarbandStage, props, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    // ⚠️ Sans cette lecture le test serait creux : on compte les corps, champion compris.
+    expect([...out.matchAll(/class="body[ "]/g)]).toHaveLength(stage.bodies.length);
+    expect(out).toContain('/monsters/g_loup.webp');
+    expect(out).toContain('28 en marche');
+  }, 30_000);
+
   it('🕳️ RiftStage peint les corps, le gardien et la barre du groupe', async () => {
     const { default: RiftStage } = await import('@/components/RiftStage.vue');
     const { buildRiftStage } = await import('@/lib/riftStage');
