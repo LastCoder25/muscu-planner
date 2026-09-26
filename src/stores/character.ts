@@ -1895,11 +1895,11 @@ export const useCharacterStore = defineStore('character', () => {
     const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
     // ⚔️ Une interception AVEC le héros vit ici, pas dans `partyTick` : elle ne levait
     // jamais le marquage (v0.1190).
-    const base = dispelWon(cur.base, [msg]);
+    const dw = dispelWon(cur.base, [msg]);
     await persist(userId, {
-      ...(base ? { base } : {}),
+      ...(dw.base ? { base: dw.base } : {}),
       expedition: { ...exp, reported: true },
-      messages: x.messages,
+      messages: dw.tag(x.messages),
       ...x.patch,
     });
     x.play();
@@ -1923,10 +1923,12 @@ export const useCharacterStore = defineStore('character', () => {
     // (`claimAt`) et ce tick redevenait encaissable (revue finale des camps — or, objets, XP
     // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
     const x = exp.reported ? null : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
-    const base = exp.reported ? null : dispelWon(cur.base, [msg]);
+    const dw = exp.reported ? null : dispelWon(cur.base, [msg]);
     await persist(userId, {
-      ...(base ? { base } : {}),
-      ...(x && x.messages !== cur.messages ? { messages: x.messages } : {}),
+      ...(dw?.base ? { base: dw.base } : {}),
+      ...(x && x.messages !== cur.messages
+        ? { messages: dw ? dw.tag(x.messages) : x.messages }
+        : {}),
       ...(x?.patch ?? {}),
       expedition: null,
     });
@@ -3040,12 +3042,29 @@ export const useCharacterStore = defineStore('character', () => {
   function dispelWon(
     base: BaseState | null,
     fresh: readonly ExpeditionMessage[],
-  ): BaseState | null {
-    if (!base) return null;
+  ): { base: BaseState | null; tag: (box: ExpeditionMessage[]) => ExpeditionMessage[] } {
+    const same = (box: ExpeditionMessage[]) => box;
+    if (!base) return { base: null, tag: same };
     let b = base;
+    const said = new Map<string, 'dispersed' | 'late'>();
     for (const m of fresh)
-      if (m.poiType === 'warband' && m.win) b = dispelOverflow(b, m.resolvedAt);
-    return b === base ? null : b;
+      if (m.poiType === 'warband' && m.win) {
+        const d = dispelOverflow(b, m.resolvedAt);
+        b = d.base;
+        if (d.dispel) said.set(m.id, d.dispel);
+      }
+    return {
+      base: b === base ? null : b,
+      // 🗼 Le rapport le DIT (v0.1191) : sans ça le bénéfice d'une interception ne se
+      // voyait nulle part.
+      tag: said.size
+        ? (box) =>
+            box.map((m) => {
+              const d = said.get(m.id);
+              return d && m.party ? { ...m, party: { ...m.party, dispel: d } } : m;
+            })
+        : same,
+    };
   }
 
   /** ⚔️ Cycle de vie des groupes partis SANS le héros : le rapport à l'arrivée sur le camp,
@@ -3066,9 +3085,11 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Le marquage SEUL : si l'armée est déjà tirée, elle garde la force que la Tour de
     // guet a annoncée (règle écrite sur `Raid.overflow` : figée au tirage). L'interception
     // agit sur le PROCHAIN siège, et l'écran le dit avant l'envoi.
-    const base = dispelWon(cur.base, t.fresh);
+    const dw = dispelWon(cur.base, t.fresh);
+    const base = dw.base;
     // 🎓 L'XP des champions tombe ICI, à l'arrivée du rapport — et l'animation avec.
-    const x = reportXp(cur, t.messages, t.fresh);
+    const x0 = reportXp(cur, t.messages, t.fresh);
+    const x = { ...x0, messages: dw.tag(x0.messages) };
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
     // enregistré entre-temps et rendre le butin encaissable deux fois.

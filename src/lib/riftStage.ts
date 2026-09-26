@@ -353,6 +353,33 @@ export const RIFT_AUTOPLAY_MAX_AGE_MS = 3 * 24 * 3600_000;
  * - Le rapport existe dès que le groupe est ARRIVÉ sur la faille (`settleParties` le dépose
  *   à ce moment-là) — c'est cet instant, pas le retour en ville, qui déclenche le rejeu.
  */
+/** ⏱️ Au-delà de ce retard, le rejeu dit QUAND la bataille a eu lieu. */
+export const REPLAY_LATE_MS = 10 * 60_000;
+
+/**
+ * ⏱️ L'HEURE D'UNE BATAILLE REJOUÉE EN RETARD (v0.1191 ; signalé par l'utilisateur : « juste
+ * après l'attaque mon héros était déjà de retour »). Le rejeu part à la première ouverture de
+ * l'app APRÈS la bataille — parfois des heures plus tard, quand le groupe est déjà rentré.
+ * Sans l'heure, on croit assister à une bataille qui vient d'avoir lieu.
+ * `null` quand le rejeu est à l'heure (moins de `REPLAY_LATE_MS`) : rien à dire.
+ * ⚠️ Heure LOCALE (c'est celle que le joueur a vécue), jour relatif au sien.
+ */
+export function replayWhenLabel(at: number, now: number): string | null {
+  if (!Number.isFinite(at) || now - at < REPLAY_LATE_MS) return null;
+  const d = new Date(at);
+  const n = new Date(now);
+  const hm = `${d.getHours()} h ${String(d.getMinutes()).padStart(2, '0')}`;
+  const day0 = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((day0(n) - day0(d)) / 86_400_000);
+  const jour =
+    days === 0
+      ? ''
+      : days === 1
+        ? 'hier '
+        : `le ${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')} `;
+  return `⏱️ Livrée ${jour}à ${hm}`;
+}
+
 export function riftAutoReplay(
   messages: readonly ExpeditionMessage[],
   seen: ReadonlySet<string>,

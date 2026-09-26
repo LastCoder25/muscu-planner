@@ -18,9 +18,10 @@ import { partyReport } from './party';
 import { caravanReport, type Caravan } from './caravan';
 import { feedWhen } from './friendFeed';
 import type { Adventurer } from './adventurers';
+import { DISPEL_TEXT } from './raid';
 import type { Item } from './items';
 
-export interface MissionCardMember {
+interface MissionCardMember {
   id: string;
   emoji: string;
   name: string;
@@ -116,7 +117,7 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
     hero: m.chest ? false : p ? p.hero : true,
     kills: p && p.foes > 0 ? `${p.slain}/${p.foes} abattus` : null,
     totalXp: p?.totalXp ?? 0,
-    story: m.text,
+    story: m.party?.dispel ? `${m.text} ${DISPEL_TEXT[m.party.dispel]}` : m.text,
     road: [],
     journal: p?.journal ?? [],
     travelMs: null,

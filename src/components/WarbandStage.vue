@@ -140,6 +140,9 @@
       </span>
     </div>
 
+    <!-- ⏱️ Rejeu en retard : l’heure de la bataille, au-dessus des barres (en haut elle
+         chevauchait la ligne d’effectifs à 344/390 px, mesuré au banc). -->
+    <div v-if="when" class="when">{{ when }}</div>
     <!-- Les deux camps : les VRAIS PV du combat, temps par temps. -->
     <div class="bars">
       <div class="bar ours">
@@ -214,6 +217,8 @@ const props = defineProps<{
   faction: RaidFaction;
   hero: { profile: 'puissant' | 'agile' | 'polyvalent'; equipped: Equipped } | null;
   cast: RiftCastMember[];
+  /** ⏱️ Heure de la bataille quand le rejeu arrive en retard (`replayWhenLabel`). */
+  when?: string | null;
 }>();
 const emit = defineEmits<{ done: [] }>();
 
@@ -1040,6 +1045,18 @@ onBeforeUnmount(clearAll);
   gap: 8px;
   padding: 10px 12px 0;
   z-index: 200;
+}
+.when {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 52px;
+  z-index: 200;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--accent);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
 }
 .hud-l {
   display: flex;

@@ -12,6 +12,7 @@
         :level="input.level"
         :hero="hero"
         :cast="cast"
+        :when="when"
         @done="onDone"
       />
       <!-- ⚔️ Une interception : la bataille rangée. -->
@@ -22,6 +23,7 @@
         :faction="replay.faction"
         :hero="hero"
         :cast="cast"
+        :when="when"
         @done="onDone"
       />
     </div>
@@ -39,7 +41,8 @@ import { computed, ref, watch } from 'vue';
 import type { Equipped } from '@/lib/items';
 import type { PartyResult } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
-import { buildRiftStage, riftCast, riftStageInputOf } from '@/lib/riftStage';
+import { buildRiftStage, replayWhenLabel, riftCast, riftStageInputOf } from '@/lib/riftStage';
+import { useCharacterStore } from '@/stores/character';
 import RiftStage from '@/components/RiftStage.vue';
 import WarbandStage from '@/components/WarbandStage.vue';
 import { buildWarbandStage, warbandStageInputOf } from '@/lib/warbandStage';
@@ -83,6 +86,18 @@ const battle = computed(() => {
   if (!r || !b) return null;
   const seed = (b.armyPv * 7 + b.maxPv * 3 + b.steps.length + 1) >>> 0;
   return buildWarbandStage(b, r.win, r.escort.length + (r.hero ? 1 : 0), seed);
+});
+
+/** ⏱️ L'heure de la bataille, si le rejeu arrive en retard (`replayWhenLabel`). ⚠️ Le
+ *  message se retrouve par la MÊME RÉFÉRENCE que `party` : tous les chemins (rejeu
+ *  automatique, boîte 📬, collecte de la carte) passent `message.party` tel quel — aucune
+ *  page n'a donc à transmettre une date de plus. Figée à l'ouverture. */
+const char = useCharacterStore();
+const when = computed(() => {
+  const r = props.replay;
+  if (!r) return null;
+  const m = char.row?.messages?.find((x) => x.party === r);
+  return m ? replayWhenLabel(m.resolvedAt, Date.now()) : null;
 });
 
 const hero = computed(() =>

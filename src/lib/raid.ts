@@ -3033,11 +3033,20 @@ export function markOverflow(base: BaseState, overflows: readonly RiftOverflow[]
  * Une armée vue AVANT la bataille garde sa force (« trop tard pour le renfort », figée au
  * tirage — c'est ce que la Tour avait annoncé).
  *
- * Rend la MÊME référence si rien ne change — l'appelant n'écrit pas à vide.
+ * Rend la MÊME référence si rien ne change — l'appelant n'écrit pas à vide. `dispel` dit
+ * ce que la victoire a changé, pour que le RAPPORT le dise (v0.1191 : sinon le bénéfice
+ * d'une interception ne se voyait nulle part) — `null` quand aucune armée n'était marquée.
  */
-export function dispelOverflow(base: BaseState, battleAt: number): BaseState {
+export function dispelOverflow(
+  base: BaseState,
+  battleAt: number,
+): { base: BaseState; dispel: Dispel | null } {
   let b = base;
-  if (b.overflow) b = { ...b, overflow: null };
+  let dispel: Dispel | null = null;
+  if (b.overflow) {
+    b = { ...b, overflow: null };
+    dispel = 'dispersed';
+  }
   const r = b.raid;
   if (r?.overflow && r.detectedAt >= battleAt) {
     const raid: Raid = {
@@ -3046,9 +3055,21 @@ export function dispelOverflow(base: BaseState, battleAt: number): BaseState {
     };
     delete raid.overflow;
     b = { ...b, raid };
+    dispel = 'dispersed';
+  } else if (r?.overflow) {
+    dispel = 'late';
   }
-  return b;
+  return { base: b, dispel };
 }
+
+/** Ce qu'une interception gagnée a changé au siège (`dispelOverflow`). */
+export type Dispel = 'dispersed' | 'late';
+
+/** 🗼 Ce que le rapport d'interception en dit — une seule phrase par issue. */
+export const DISPEL_TEXT: Record<Dispel, string> = {
+  dispersed: '🗼 L’armée de la faille est dispersée : le prochain siège ne sera pas renforcé.',
+  late: '🗼 Trop tard pour le siège déjà en approche : cette armée garde son renfort.',
+};
 
 /** Applique l'issue d'un siège : range le rapport, sème le champ de cadavres, planifie le
  *  suivant et pose les dégâts. Le VOL DU STOCK revient à l'appelant (lui seul touche aux

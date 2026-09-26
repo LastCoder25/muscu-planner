@@ -1056,7 +1056,7 @@ export function interceptionMana(raid: Raid, army: Combatant, run: CombatResult)
 }
 
 /** Un groupe de la bande, tel que le rejeu le montre : qui, combien, et s'il tire. */
-export interface WarbandGroupSnap {
+interface WarbandGroupSnap {
   species: string;
   emoji: string;
   count: number;

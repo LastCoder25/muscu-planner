@@ -1553,10 +1553,3 @@ export function caravanReport(van: Caravan, roster: readonly Adventurer[]): Cara
     events: o.events,
   };
 }
-
-/** Les convois déjà ENCAISSÉS, du plus récent au plus ancien (l’historique des rapports).
- *  ⚠️ `claimed === undefined` compte aussi : ce sont des convois crédités avant
- *  l’encaissement manuel, leur rapport existe. */
-export function claimedCaravans(list: readonly Caravan[]): Caravan[] {
-  return list.filter((c) => c.claimed !== false).sort((a, b) => b.returnAt - a.returnAt);
-}

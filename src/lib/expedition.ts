@@ -199,6 +199,9 @@ export interface PartyResult {
    * d'avant la v0.1185 : ils n'ont ni rejeu ni verdict propre.
    */
   battle?: WarbandBattle;
+  /** 🗼 Ce que la victoire a changé au siège, posé à l'ARRIVÉE du rapport (`dispelOverflow`).
+   *  Absent : pas une interception gagnée, ou aucune armée marquée. */
+  dispel?: 'dispersed' | 'late';
 }
 
 /** FNV-1a 32 bits : un id de POI → une graine. */
@@ -1094,10 +1097,9 @@ function distNormAt(d: number): number {
  * (`interceptLeg`) et par le dessin de la bande qui marche à la rencontre du groupe.
  * Sans `from` (pas une bande), le lieu ne bouge pas.
  */
-export function warbandAt<P extends Pick<Poi, 'x' | 'y' | 'distNorm' | 'from' | 'spawnedAt' | 'expiresAt'>>(
-  p: P,
-  t: number,
-): P {
+export function warbandAt<
+  P extends Pick<Poi, 'x' | 'y' | 'distNorm' | 'from' | 'spawnedAt' | 'expiresAt'>,
+>(p: P, t: number): P {
   if (!p.from) return p;
   const k = clamp01((t - p.spawnedAt) / Math.max(1, p.expiresAt - p.spawnedAt));
   const x = p.from.x + (EXPE.town.x - p.from.x) * k;

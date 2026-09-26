@@ -185,6 +185,9 @@
       </div>
     </transition>
 
+    <!-- ⏱️ Rejeu en retard : l’heure de la bataille, au-dessus des barres (en haut elle
+         chevauchait la ligne d’effectifs à 344/390 px, mesuré au banc). -->
+    <div v-if="when" class="when">{{ when }}</div>
     <div v-if="stage.hasPv" class="pvbar">
       <i class="ghost" :style="{ width: ghostPct + '%' }" />
       <i class="fill" :class="{ low: pvPct <= 30 }" :style="{ width: pvPct + '%' }" />
@@ -253,6 +256,8 @@ const props = defineProps<{
   hero: { profile: 'puissant' | 'agile' | 'polyvalent'; equipped: Equipped } | null;
   /** Le groupe, dans l'ordre de la formation (`riftCast`). */
   cast: RiftCastMember[];
+  /** ⏱️ Heure de la bataille quand le rejeu arrive en retard (`replayWhenLabel`). */
+  when?: string | null;
 }>();
 const emit = defineEmits<{ done: [] }>();
 
@@ -1309,6 +1314,18 @@ onBeforeUnmount(() => {
   gap: 8px;
   padding: 10px 12px;
   z-index: 80;
+}
+.when {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 38px;
+  z-index: 200;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--accent);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
 }
 .hud-l {
   display: flex;

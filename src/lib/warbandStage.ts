@@ -56,7 +56,7 @@ export const WARBAND_STAGE = {
 } as const;
 
 /** Un corps de la colonne. Coordonnées en fraction ([0,1]²). */
-export interface WarbandBody {
+interface WarbandBody {
   species: string;
   emoji: string;
   champion: boolean;
@@ -70,7 +70,7 @@ export interface WarbandBody {
   fallStep: number;
 }
 
-export interface WarbandStageStep extends RiftBossStep {
+interface WarbandStageStep extends RiftBossStep {
   /** Corps de la troupe tombés À LA FIN de ce temps (cumulé, jamais décroissant). */
   fallen: number;
   /** Le membre de notre ligne qui mène l'assaut sur ce temps. ⚠️ COSMÉTIQUE : le combat est

@@ -48,7 +48,6 @@ import {
   unitEffects,
   startCaravan,
   caravanReport,
-  claimedCaravans,
   caravanHaulMult,
   refAdvGear,
   type Caravan,
@@ -1565,17 +1564,6 @@ describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET CO
     const r = caravanReport(demi, escort);
     expect(r.pills.find((p) => p.emoji === '⚡')!.n).toBe(56);
     expect(r.pills.find((p) => p.emoji === '🪙')!.n).toBe(100);
-  });
-
-  it('l’historique ne montre que les convois encaissés, du plus récent au plus ancien', () => {
-    const v = van();
-    const list = [
-      { ...v, id: 'ancien', claimed: true, returnAt: 10 },
-      { ...v, id: 'enCours', claimed: false, returnAt: 99 },
-      { ...v, id: 'recent', claimed: true, returnAt: 50 },
-      { ...v, id: 'legacy', claimed: undefined, returnAt: 30 },
-    ];
-    expect(claimedCaravans(list).map((c) => c.id)).toEqual(['recent', 'legacy', 'ancien']);
   });
 });
 
