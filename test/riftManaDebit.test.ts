@@ -109,3 +109,37 @@ describe('le débit, niveau par niveau', () => {
     for (const l of [12, 30, 60, 100]) expect(moy(0, l, 'mines')).toBeGreaterThan(2);
   });
 });
+
+describe('⚔️ LAISSER DÉBORDER NE PAIE JAMAIS PLUS QUE FERMER (v0.1188)', () => {
+  it('fermer bat « intercepter la bande (gagné) + récolter la mine », à tous les rangs et toutes les factions', async () => {
+    const { warbandArmy, interceptionMana } = await import('@/lib/rift');
+    const { armyCombatant } = await import('@/lib/raid');
+    const { EXPE: E, harvestYield } = await import('@/lib/expedition');
+    for (const L of [3, 12, 25, 35, 55, 85, 100])
+      for (const faction of ['bandits', 'betes', 'mortsvivants'] as const) {
+        const w = {
+          id: 'r' + L + faction + '_war',
+          type: 'warband',
+          level: L,
+          faction,
+          from: { x: 150, y: 100 },
+          x: 150,
+          y: 100,
+          distNorm: 0.5,
+          spawnedAt: 0,
+          expiresAt: E.lifespanMs.warband,
+        } as const;
+        const raid = warbandArmy(w, L);
+        const brise = interceptionMana(raid, armyCombatant(raid), {
+          win: true,
+          rounds: 1,
+          gold: 0,
+          log: [],
+        });
+        const debordement = brise + harvestYield('mana_mine', L).mana;
+        expect(riftClearMana({ level: L }), 'niv ' + L + ' ' + faction).toBeGreaterThan(
+          1.5 * debordement,
+        );
+      }
+  });
+});

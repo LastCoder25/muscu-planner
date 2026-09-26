@@ -116,6 +116,16 @@ export const RIFT = {
    *  détrôner les failles comme source de mana. */
   siegeManaFoes: 2,
 
+  /** ⚔️ MANA D'UNE INTERCEPTION (v0.1188, mesuré ; relevé en répondant à l'utilisateur :
+   *  « fermer une faille rapidement doit rester plus rentable »). Une bande BRISÉE paie comme
+   *  CE nombre de monstres de faille de son niveau ; à moitié brisée, la moitié.
+   *  ⚠️ AVANT, elle payait AU CORPS — or l'effectif d'une armée est gonflé ×2,5 pour la mise
+   *  en scène (`RAID.massMult`, v0.720) : 43 à 78 corps. Mesuré, intercepter rapportait
+   *  **10 à 16 fois** ce que rapporte fermer la faille (Or noir : 1 056 💠 contre 84) — laisser
+   *  déborder devenait LA stratégie. Calé comme le siège, SOUS une faille refermée
+   *  (`manaFoesPaid` × prime du gardien = 5,25) : l'interception est un rattrapage. */
+  interceptManaFoes: 2,
+
   /** Ce que le BOSS ajoute, en part du mana des monstres — la prime de fermeture. */
   bossManaShare: 0.5,
 
@@ -1035,14 +1045,14 @@ function warbandBodies(raid: Raid): SkirmishUnit[] {
  * sur les PV restants de l'armée à la fin du combat, donc sur le combat RÉEL.
  *
  * ⚠️ **AUCUNE PRIME DE GARDIEN** (`bossManaShare`) : il n'y a pas de boss en rase
- * campagne. Fermer la faille reste nettement plus payant que l'intercepter — c'est ce qui
- * garde l'incursion première et l'interception au rang de session de rattrapage.
+ * campagne. ⚠️ **ET PAS AU CORPS** (`RIFT.interceptManaFoes`, v0.1188) : payée au corps,
+ * une armée gonflée ×2,5 pour la mise en scène rendait 10 à 16 fois ce que rend la fermeture.
+ * Fermer la faille reste nettement plus payant que l'intercepter (un test le verrouille).
  */
 export function interceptionMana(raid: Raid, army: Combatant, run: CombatResult): number {
   const reste = run.win ? 0 : (run.log[run.log.length - 1]?.monsterPv ?? army.pv);
   const part = Math.max(0, Math.min(1, 1 - reste / Math.max(1, army.pv)));
-  const effectif = raid.groups.reduce((s, g) => s + g.count, 0);
-  return riftMana(Math.round(effectif * part), raid.level);
+  return riftMana(RIFT.interceptManaFoes * part, raid.level);
 }
 
 /** Un groupe de la bande, tel que le rejeu le montre : qui, combien, et s'il tire. */
