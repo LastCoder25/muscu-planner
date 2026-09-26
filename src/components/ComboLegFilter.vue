@@ -21,7 +21,7 @@
       :aria-pressed="modelValue === s.id"
       @click="emit('update:modelValue', s.id)"
     >
-      <span class="clf-dot" />{{ s.label }} <b>{{ s.n }}</b>
+      <span class="clf-dot" /><span class="clf-l">{{ s.label }}</span> <b>{{ s.n }}</b>
     </button>
   </div>
 </template>
@@ -55,24 +55,29 @@ watch(
 </script>
 
 <style scoped lang="scss">
+/* ⚠️ GRILLE DE 3 COLONNES et non flex-wrap : 5 pastilles tiennent ainsi en DEUX lignes à
+   coup sûr (demandé), quelle que soit la longueur des comptes. Mesuré à 344 px : le flux
+   libre en prenait trois. */
 .clf {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
   margin: 4px 0 10px;
 }
 .clf-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0 4px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--text);
   font: inherit;
-  font-size: 12.5px;
+  font-size: 11.5px;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -87,9 +92,14 @@ watch(
 .clf-chip.on b {
   color: var(--text);
 }
+.clf-l {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .clf-dot {
-  width: 9px;
-  height: 9px;
+  flex: none;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--c);
 }
