@@ -3018,6 +3018,38 @@ export function markOverflow(base: BaseState, overflows: readonly RiftOverflow[]
   return best === (base.overflow ?? null) ? base : { ...base, overflow: best };
 }
 
+/**
+ * ⚔️ UNE INTERCEPTION GAGNÉE DISPERSE L'ARMÉE DE LA FAILLE (v0.1190 ; signalé par
+ * l'utilisateur : « la Tour de guet détecte toujours une armée qui arrive de la faille »).
+ *
+ * Deux effets, datés par l'HEURE DE LA BATAILLE (`battleAt`, le `resolvedAt` du rapport)
+ * et jamais par l'heure où l'app l'a appris :
+ * - le marquage en attente (`base.overflow`) est levé ;
+ * - si l'armée a déjà été tirée MAIS que la Tour ne l'a vue qu'APRÈS la bataille
+ *   (`detectedAt ≥ battleAt`), elle n'aurait jamais dû sortir de la faille : elle perd
+ *   son renfort ×`RAID.riftThreat` et sa marque. ⚠️ C'est le cas d'une app FERMÉE pendant
+ *   la bataille : au retour, le tick de base tirait le siège (en consommant le marquage)
+ *   avant que le rapport ne soit déposé — l'ordre des ticks décidait du siège.
+ * Une armée vue AVANT la bataille garde sa force (« trop tard pour le renfort », figée au
+ * tirage — c'est ce que la Tour avait annoncé).
+ *
+ * Rend la MÊME référence si rien ne change — l'appelant n'écrit pas à vide.
+ */
+export function dispelOverflow(base: BaseState, battleAt: number): BaseState {
+  let b = base;
+  if (b.overflow) b = { ...b, overflow: null };
+  const r = b.raid;
+  if (r?.overflow && r.detectedAt >= battleAt) {
+    const raid: Raid = {
+      ...r,
+      groups: r.groups.map((g) => ({ ...g, threat: (g.threat ?? 1) / RAID.riftThreat })),
+    };
+    delete raid.overflow;
+    b = { ...b, raid };
+  }
+  return b;
+}
+
 /** Applique l'issue d'un siège : range le rapport, sème le champ de cadavres, planifie le
  *  suivant et pose les dégâts. Le VOL DU STOCK revient à l'appelant (lui seul touche aux
  *  bâtiments de production) — on se contente de le signaler dans `damage`. */

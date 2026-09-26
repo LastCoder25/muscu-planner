@@ -121,6 +121,7 @@ import { combatPower, type Combatant } from '@/lib/combat';
 import {
   advanceBase,
   markOverflow,
+  dispelOverflow,
   applyRaidOutcome,
   resolveRaid,
   siegeHurtIds,
@@ -1892,7 +1893,11 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
     const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
+    // ⚔️ Une interception AVEC le héros vit ici, pas dans `partyTick` : elle ne levait
+    // jamais le marquage (v0.1190).
+    const base = dispelWon(cur.base, [msg]);
     await persist(userId, {
+      ...(base ? { base } : {}),
       expedition: { ...exp, reported: true },
       messages: x.messages,
       ...x.patch,
@@ -1918,7 +1923,9 @@ export const useCharacterStore = defineStore('character', () => {
     // (`claimAt`) et ce tick redevenait encaissable (revue finale des camps — or, objets, XP
     // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
     const x = exp.reported ? null : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
+    const base = exp.reported ? null : dispelWon(cur.base, [msg]);
     await persist(userId, {
+      ...(base ? { base } : {}),
       ...(x && x.messages !== cur.messages ? { messages: x.messages } : {}),
       ...(x?.patch ?? {}),
       expedition: null,
@@ -3026,6 +3033,21 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  /** ⚔️ La base après les rapports FRAIS : une interception gagnée disperse l'armée de
+   *  la faille (`dispelOverflow`, datée par la bataille). `null` = rien à écrire.
+   *  ⚠️ Appelée par les TROIS chemins qui déposent un rapport (groupe, héros à l'arrivée,
+   *  héros rentré app fermée) — le chemin du héros l'oubliait. */
+  function dispelWon(
+    base: BaseState | null,
+    fresh: readonly ExpeditionMessage[],
+  ): BaseState | null {
+    if (!base) return null;
+    let b = base;
+    for (const m of fresh)
+      if (m.poiType === 'warband' && m.win) b = dispelOverflow(b, m.resolvedAt);
+    return b === base ? null : b;
+  }
+
   /** ⚔️ Cycle de vie des groupes partis SANS le héros : le rapport à l'arrivée sur le camp,
    *  puis le groupe retiré au retour (ses aventuriers sont libérés par `busyUntil`). Le
    *  BUTIN reste à encaisser dans la boîte 📬 (`expeClaim`), comme toute expédition.
@@ -3044,10 +3066,9 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Le marquage SEUL : si l'armée est déjà tirée, elle garde la force que la Tour de
     // guet a annoncée (règle écrite sur `Raid.overflow` : figée au tirage). L'interception
     // agit sur le PROCHAIN siège, et l'écran le dit avant l'envoi.
-    const gagne = t.fresh.some((m) => m.poiType === 'warband' && m.win);
+    const base = dispelWon(cur.base, t.fresh);
     // 🎓 L'XP des champions tombe ICI, à l'arrivée du rapport — et l'animation avec.
     const x = reportXp(cur, t.messages, t.fresh);
-    const base = gagne && cur.base?.overflow ? { ...cur.base, overflow: null } : null;
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
     // enregistré entre-temps et rendre le butin encaissable deux fois.
