@@ -23,38 +23,44 @@
         advTitle(adv)?.emoji ?? '🧑'
       }}</ChampionPortrait></span
     >
-    <span class="ca-name">{{ adv.name }}</span>
-    <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable) plutôt que son rang, qui est déjà dit
+    <!-- 📐 EN LIGNE (demandé : « bcp de choses à défiler ») : le portrait à gauche garde sa
+         taille, les infos s'empilent à droite — la tuile passe de ~170 à ~80 px de haut. -->
+    <span class="ca-body">
+      <span class="ca-name">{{ adv.name }}</span>
+      <span class="ca-line">
+        <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable) plutôt que son rang, qui est déjà dit
          par les étoiles juste en dessous. C'est l'identité d'un champion, et elle ne se
          lisait nulle part hors du Codex (v0.959). Un aventurier LEGACY garde son rang :
          il n'a pas d'autre identité. -->
-    <span class="ca-rar" :style="{ color: rar.color }">{{ rar.label }}</span>
-    <span class="ca-rank" :style="{ color: rank.color }">{{ rankStarStr(rank.star) }}</span>
-    <!-- ✨ Son Éveil : jusqu'à +48 % de stats. On compose une escorte ici, et il ne se
+        <span class="ca-rar" :style="{ color: rar.color }">{{ rar.label }}</span>
+        <span class="ca-rank" :style="{ color: rank.color }">{{ rankStarStr(rank.star) }}</span>
+        <!-- ✨ Son Éveil : jusqu'à +48 % de stats. On compose une escorte ici, et il ne se
          lisait qu'au tirage et dans le Codex. Compact (deux tuiles par ligne) : la fiche
          de la Guilde donne le /6. -->
-    <span v-if="awaken" class="ca-awk">✨{{ awaken }}</span>
-    <!-- 🔮 CE QU'IL VA GAGNER ICI (demandé) : on choisissait une destination sans savoir que,
+        <span v-if="awaken" class="ca-awk">✨{{ awaken }}</span>
+      </span>
+      <!-- 🔮 CE QU'IL VA GAGNER ICI (demandé) : on choisissait une destination sans savoir que,
          selon elle, un champion apprend du simple au quadruple. ⚠️ ATTÉNUÉ quand le lieu est
          SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
          ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
-    <span v-if="xp && !reason" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
-      +{{ xp.xp }} XP<b v-if="xp.catchUp > 1">×{{ fmtMult(xp.catchUp) }}</b>
-    </span>
-    <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
+      <span v-if="xp && !reason" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
+        +{{ xp.xp }} XP<b v-if="xp.catchUp > 1">×{{ fmtMult(xp.catchUp) }}</b>
+      </span>
+      <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
          store, `advUnavailableReason`). -->
-    <span v-if="reason" class="ca-why">{{ reason }}</span>
-    <span v-else-if="badges.length" class="ca-skills">
-      <span
-        v-for="(b, i) in badges"
-        :key="i"
-        class="ca-skill"
-        :class="{ sig: !b.role }"
-        :title="b.what"
-        >{{ b.emoji }}<b v-if="b.level > 1">{{ b.level }}</b></span
-      >
+      <span v-if="reason" class="ca-why">{{ reason }}</span>
+      <span v-else-if="badges.length" class="ca-skills">
+        <span
+          v-for="(b, i) in badges"
+          :key="i"
+          class="ca-skill"
+          :class="{ sig: !b.role }"
+          :title="b.what"
+          >{{ b.emoji }}<b v-if="b.level > 1">{{ b.level }}</b></span
+        >
+      </span>
+      <span v-else class="ca-none">stat brute</span>
     </span>
-    <span v-else class="ca-none">stat brute</span>
   </button>
 </template>
 
@@ -109,11 +115,11 @@ const rar = computed(() => advGradeBadge(props.adv));
 <style scoped lang="scss">
 .car-adv {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 8px;
   min-width: 0;
-  padding: 10px 6px 9px;
+  padding: 7px 8px;
+  text-align: left;
   background: #1d1913;
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -136,8 +142,23 @@ const rar = computed(() => advGradeBadge(props.adv));
 }
 /* En GRAND (demandé) : deux tuiles par ligne, le portrait est ce qu'on reconnaît. */
 .ca-emo {
+  flex: none;
   font-size: 40px;
   line-height: 1;
+}
+.ca-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+}
+.ca-line {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  max-width: 100%;
 }
 .ca-name {
   font-size: 13px;
@@ -176,7 +197,6 @@ const rar = computed(() => advGradeBadge(props.adv));
 .ca-skills {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
   gap: 4px;
   line-height: 1;
 }
@@ -220,6 +240,5 @@ const rar = computed(() => advGradeBadge(props.adv));
   font-size: 11.5px;
   line-height: 1.1;
   color: var(--text);
-  text-align: center;
 }
 </style>

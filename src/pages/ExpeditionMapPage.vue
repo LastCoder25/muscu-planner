@@ -583,9 +583,11 @@
           <p v-else-if="riskHero && riskHero.covered" class="sh-ok">
             ✅ Une armée arrive, mais il sera rentré avant elle.
           </p>
-          <button class="sh-send" :disabled="!canSend" @click="send">
-            {{ sendLabel }}
-          </button>
+          <div class="send-bar">
+            <button class="sh-send" :disabled="!canSend" @click="send">
+              {{ sendLabel }}
+            </button>
+          </div>
         </template>
         <!-- 👥 UNE ÉQUIPE — 3 places, le héros en prend 2 (2026-09-21 : les équipes remplacent les
              convois). Elle part sur un camp, une faille, une armée ou un lieu de RÉCOLTE. ⚠️ UN SEUL bloc pour les deux : le choix du groupe,
@@ -598,45 +600,47 @@
           <!-- Le héros : une tuile comme les autres. ⚠️ Il n'y compte que pour
                HERO_PARTY_WORTH champions (v0.980) — l'écran le DIT, sinon on croirait
                emmener la puissance de sa fiche. Grisée avec la raison plutôt que cachée. -->
-          <button
-            type="button"
-            class="party-hero"
-            :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
-            :disabled="!!partyHeroBlock"
-            :aria-pressed="partyHeroOn"
-            @click="partyHero = !partyHero"
-          >
-            <span class="ph-emo">🧝</span>
-            <span class="ph-main">
-              <span class="ph-name">Ton héros</span>
-              <span class="ph-sub">{{
-                partyHeroBlock
-                  ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                  : 'vaut 2 champions au combat, ne prend pas d’XP'
-              }}</span>
-            </span>
-            <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
-          </button>
-          <button
-            v-if="char.advList.length"
-            class="car-auto"
-            :disabled="!freeStable.length"
-            @click="togglePartyAll"
-          >
-            {{
-              partyAllOn
-                ? 'Retirer tous les champions'
-                : `✨ Tout le vivier disponible (${partyAllIds.length})`
-            }}
-          </button>
+          <!-- 📐 Le héros et « tout le vivier » sur UNE ligne : deux boutons empilés
+               prenaient ~100 px pour deux gestes. -->
+          <div class="party-top">
+            <button
+              type="button"
+              class="party-hero"
+              :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
+              :disabled="!!partyHeroBlock"
+              :aria-pressed="partyHeroOn"
+              @click="partyHero = !partyHero"
+            >
+              <span class="ph-emo">🧝</span>
+              <span class="ph-main">
+                <span class="ph-name">Ton héros</span>
+                <span class="ph-sub">{{
+                  partyHeroBlock
+                    ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
+                    : 'vaut 2 champions · sans XP'
+                }}</span>
+              </span>
+              <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
+            </button>
+            <button
+              v-if="char.advList.length"
+              class="car-auto"
+              :disabled="!freeStable.length"
+              @click="togglePartyAll"
+            >
+              {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
+            </button>
+          </div>
           <!-- 🕳️ ⚠️ ON DIT LA LIMITE AVANT qu'on butte dessus : sans ça, des tuiles qui
                ne répondent plus se lisent comme une panne (leçon du gris de la carte). -->
           <!-- 👥 v0.1035 : plus de plafond de 3 — seulement celui du Panthéon. Ce que le nombre
                coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
-          <p class="car-cap">
-            👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions (Panthéon). L'XP du lieu se
-            partage entre les champions (le héros n’en prend pas) :
-            <b>XP ×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun.
+          <p
+            class="car-cap"
+            title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas)."
+          >
+            👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions · XP partagée
+            <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
@@ -665,8 +669,7 @@
                quadruple selon la destination). Affichée seulement s'il y a quelqu'un que ça
                concerne — sinon c'est du bruit. -->
           <p v-if="partyLowXp" class="car-xp-note">
-            📉 Atténué = ce lieu est <b>sous son niveau</b>, il y apprendra beaucoup moins. Un lieu
-            de son niveau ou plus paie plein tarif.
+            📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
           </p>
           <button
             v-if="char.advList.length && partyBlocked.length"
@@ -681,7 +684,9 @@
                 : `Voir les ${partyBlocked.length} indisponible${partyBlocked.length > 1 ? 's' : ''}`
             }}
           </button>
-          <p v-else class="sh-away">
+          <!-- ⚠️ Était un `v-else` du bouton des indisponibles : il s'affichait donc dès que
+               personne n'était indisponible, champions ou pas. -->
+          <p v-if="!char.advList.length" class="sh-away">
             🏅 Aucun champion : invoque-les au Panthéon de ta base pour attaquer sans le héros.
           </p>
           <!-- 🎒 RAVITAILLEMENT — un de chaque consommable, pris dans le stock. ⚠️ Ils entrent
@@ -692,9 +697,9 @@
               🎒 Ravitaillement
               <span class="sup-sub">un de chaque · le 🎯 % en tient compte</span>
             </div>
-            <div v-if="supplyRows.length" class="sup-grid">
+            <div v-if="supplyUseful.length" class="sup-grid">
               <button
-                v-for="r in supplyRows"
+                v-for="r in supplyUseful"
                 :key="r.id"
                 type="button"
                 class="sup"
@@ -712,25 +717,40 @@
                 <span class="sup-check">{{ r.on && !r.why ? '✓' : '＋' }}</span>
               </button>
             </div>
-            <p v-else class="sup-empty">
+            <p v-else-if="!supplyRows.length" class="sup-empty">
               Aucun consommable en stock — ils tombent en butin de voyage.
             </p>
+            <!-- 📐 Ce qui ne sert à rien ICI est replié (raison comprise) : une ligne au lieu
+                 d'une tuile grisée chacun. -->
+            <details v-if="supplyUseless.length" class="sup-useless">
+              <summary>
+                Inutiles ici :
+                <span v-for="r in supplyUseless" :key="r.id">{{ r.def.emoji }}×{{ r.n }}</span>
+              </summary>
+              <p v-for="r in supplyUseless" :key="r.id">
+                {{ r.def.emoji }} {{ r.def.name }} — {{ r.why }}
+              </p>
+            </details>
           </div>
-          <p v-if="selectedCamp" class="sh-note">
-            Sans le héros : de l’or (et des pierres chez les morts-vivants) — l’équipe prend un
-            créneau de l’Avant-poste. En cas de défaite, les champions tombés partent à l’infirmerie
-            ; le héros, lui, rentre sans butin.
-          </p>
-          <p v-else-if="!teamOnly" class="sh-note">
-            Des gardes tiennent le lieu : il faut les abattre pour récolter. Repoussée, l’équipe ne
-            ramène rien et les champions tombés partent à l’infirmerie. Sur la route, des bandits
-            peuvent tendre une embuscade — plus l’équipe est complète, mieux elle tient. Sans le
-            héros, elle prend un créneau de l’Avant-poste.
-          </p>
-          <p v-else class="sh-note">
-            Sans le héros, l’équipe prend un créneau de l’Avant-poste — et une faille ne rend que du
-            💠, jamais d’objet.
-          </p>
+          <!-- 📐 Les règles de l'expédition, repliées : trois lignes de texte à chaque ouverture. -->
+          <details class="sh-rules">
+            <summary>ⓘ Règles de cette expédition</summary>
+            <p v-if="selectedCamp" class="sh-note">
+              Sans le héros : de l’or (et des pierres chez les morts-vivants) — l’équipe prend un
+              créneau de l’Avant-poste. En cas de défaite, les champions tombés partent à
+              l’infirmerie ; le héros, lui, rentre sans butin.
+            </p>
+            <p v-else-if="!teamOnly" class="sh-note">
+              Des gardes tiennent le lieu : il faut les abattre pour récolter. Repoussée, l’équipe
+              ne ramène rien et les champions tombés partent à l’infirmerie. Sur la route, des
+              bandits peuvent tendre une embuscade — plus l’équipe est complète, mieux elle tient.
+              Sans le héros, elle prend un créneau de l’Avant-poste.
+            </p>
+            <p v-else class="sh-note">
+              Sans le héros, l’équipe prend un créneau de l’Avant-poste — et une faille ne rend que
+              du 💠, jamais d’objet.
+            </p>
+          </details>
           <p
             v-if="partyRisk && partyRisk.worsens"
             class="sh-risk"
@@ -753,9 +773,12 @@
             💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
             un lieu d’un rang plus bas.
           </p>
-          <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
-            {{ partySendLabel }}
-          </button>
+          <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
+          <div class="send-bar">
+            <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
+              {{ partySendLabel }}
+            </button>
+          </div>
         </template>
         <div v-if="!offers.hero && !partyTarget && heroHealIn > 0" class="sh-away">
           🤕 Ton héros est à l’infirmerie — de retour dans {{ formatDuration(heroHealIn) }}.
@@ -1509,6 +1532,8 @@ const supplyRows = computed(() => {
     why: t ? supplyUselessWhy(id, t) : null,
   }));
 });
+const supplyUseful = computed(() => supplyRows.value.filter((r) => !r.why));
+const supplyUseless = computed(() => supplyRows.value.filter((r) => !!r.why));
 /** ⚠️ Un consommable coché qui DEVIENT inutile (on retire le héros, par exemple) n'est plus
  *  emporté : on ne dépense pas un objet qui ne fait rien. */
 const activeSupplies = computed(() =>
@@ -2573,7 +2598,7 @@ onUnmounted(() => {
    elle propose, elle ne décide pas. */
 /* 🕳️ La limite d’une faille, dite AVANT qu’on butte dessus. */
 .car-cap {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font-size: 12px;
   line-height: 1.35;
   color: var(--dim);
@@ -2591,10 +2616,20 @@ onUnmounted(() => {
 .car-cap b {
   color: var(--text);
 }
+.party-top {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.party-top .party-hero {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
 .car-auto {
-  width: 100%;
+  flex: none;
   min-height: 44px;
-  margin-bottom: 8px;
+  padding: 0 12px;
   border: 1px dashed var(--line);
   border-radius: 10px;
   background: transparent;
@@ -2689,18 +2724,73 @@ onUnmounted(() => {
   font-size: 11.5px;
   color: var(--dim);
 }
+/* 📐 Une colonne (à deux, les effets se coupaient sur 5 lignes à 344 px), mais seuls les
+   consommables UTILES ici ont une tuile, et leur effet tient sur deux lignes au plus. */
 .sup-grid {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+}
+.sup-useless {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.sup-useless > summary {
+  min-height: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  cursor: pointer;
+  list-style: none;
+}
+.sup-useless > summary::-webkit-details-marker {
+  display: none;
+}
+.sup-useless p {
+  margin: 2px 0 0;
+  line-height: 1.35;
+}
+.sh-rules {
+  margin: 4px 0 6px;
+}
+.sh-rules > summary {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--dim);
+  cursor: pointer;
+  list-style: none;
+}
+.sh-rules > summary::-webkit-details-marker {
+  display: none;
+}
+/* 📌 Le bouton d'envoi reste en bas de l'écran pendant qu'on compose. Fond opaque : un
+   bouton grisé laisse sinon voir les tuiles qui défilent dessous. */
+.send-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  padding: 8px 0 10px;
+  background: linear-gradient(180deg, transparent, var(--bg) 30%);
+}
+/* Grisé mais OPAQUE : collant, un bouton à 40 % d'opacité laissait voir les tuiles dessous. */
+.send-bar .sh-send:disabled {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 30%, var(--surface));
+  color: var(--dim);
 }
 .sup {
   width: 100%;
+  min-width: 0;
   min-height: 44px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
+  gap: 7px;
+  padding: 6px 8px;
   background: #1d1913;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -2728,11 +2818,15 @@ onUnmounted(() => {
   flex-direction: column;
 }
 .sup-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 .sup-what {
-  font-size: 11.5px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 11px;
   color: var(--dim);
   line-height: 1.3;
 }
