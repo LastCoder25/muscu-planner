@@ -12,9 +12,6 @@ import { riftFoeIdentity } from '@/lib/rift';
 const NAMES = Object.keys(MONSTER_ART);
 const chemin = (url: string) => resolve(__dirname, '../public' + url);
 const DUNGEON_NAMES = new Set([...MONSTERS.map((m) => m.name), ...BOSSES.map((b) => b.name)]);
-// Le Labyrinthe est illustré au fil de la dotation gratuite quotidienne : ses noms sont
-// ADMIS dans la table, mais pas encore EXIGÉS (le test « tous illustrés » ne couvre que
-// les donjons et boss — l'étendre au Labyrinthe une fois ses 48 créatures générées).
 const LABY_NAMES = [...LABY_ROSTERS.flat(), ...LABY_GUARDIANS].map((f) => f.name);
 // Les gardiens de faille (v0.1108) : une espèce du roster de sa faction, en version élite.
 // Leurs noms viennent de `riftFoeIdentity` — la fonction du COMBAT —, jamais recopiés :
@@ -38,8 +35,8 @@ describe('🐉 LES ILLUSTRATIONS D’ENNEMIS (v0.1006)', () => {
     expect(inconnus, `noms qui ne désignent aucun ennemi : ${inconnus.join(', ')}`).toEqual([]);
   });
 
-  it('tous les monstres de donjon et tous les boss de palier sont illustrés', () => {
-    const sans = [...DUNGEON_NAMES].filter((n) => !NAMES.includes(n));
+  it('tous les ennemis sont illustrés — donjons, boss, Labyrinthe, gardiens de faille', () => {
+    const sans = [...ENEMY_NAMES].filter((n) => !NAMES.includes(n));
     expect(sans, `ennemis sans illustration : ${sans.join(', ')}`).toEqual([]);
   });
 

@@ -19,6 +19,11 @@ describe('🐉 LES ILLUSTRATIONS DES BOSS ENTRE AMIS (v0.1109)', () => {
     expect(inconnues).toEqual([]);
   });
 
+  it('chaque silhouette que le tirage peut rendre est illustrée', () => {
+    const sans = BOSS_EMOJIS.filter((e) => !KEYS.includes(e));
+    expect(sans, `silhouettes sans illustration : ${sans.join(' ')}`).toEqual([]);
+  });
+
   it('deux silhouettes ne partagent jamais la même image, et le poids reste tenable', () => {
     const fichiers = KEYS.map((k) => FRIEND_BOSS_ART[k]!);
     expect(new Set(fichiers).size).toBe(fichiers.length);

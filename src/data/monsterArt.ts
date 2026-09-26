@@ -86,18 +86,60 @@ export const MONSTER_ART: Readonly<Record<string, string>> = {
   'Varan mordant': '/monsters/l_varan.webp',
   'Alpha de la meute': '/monsters/l_alpha.webp',
   Squelette: '/monsters/l_squelette.webp',
-  // ── Gardiens de faille (v0.1108) — affichés par `RiftStage`. Descriptions et slugs
-  //    prêts dans le script (`g_*`) ; à ajouter ICI une fois les fichiers générés (la table
-  //    ne recense que ce qui existe) :
-  //    'Archer déserteur (gardien)' g_archer ·
-  //    'Brise-porte (gardien)' g_brise_porte · 'Mercenaire (gardien)' g_mercenaire ·
-  //    'Chef de bande (gardien)' g_chef_bande · 'Loup famélique (gardien)' g_loup ·
-  //    'Arachné des bois (gardien)' g_arachne · 'Sanglier enragé (gardien)' g_sanglier ·
-  //    'Ours des cavernes (gardien)' g_ours · 'Scorpion géant (gardien)' g_scorpion ·
-  //    'Revenant (gardien)' g_revenant · 'Spectre plaintif (gardien)' g_spectre ·
-  //    'Ossuaire ambulant (gardien)' g_ossuaire · 'Nécromant (gardien)' g_necromant ·
-  //    'Porte-linceul (gardien)' g_porte_linceul
+  // Les 37 suivants générés via Stable Horde (2026-09-26, Juggernaut XL).
+  'Goule affamée': '/monsters/l_goule.webp',
+  'Tisseuse d’os': '/monsters/l_tisseuse_os.webp',
+  Revenant: '/monsters/l_revenant.webp',
+  'Roi ossuaire': '/monsters/l_roi_ossuaire.webp',
+  'Rampant des abysses': '/monsters/l_rampant.webp',
+  Étreigneur: '/monsters/l_etreigneur.webp',
+  'Essaim grouillant': '/monsters/l_essaim.webp',
+  'Vase corrosive': '/monsters/l_vase.webp',
+  'Étreigneur des abysses': '/monsters/l_etreigneur_abysses.webp',
+  'Élémentaire de feu': '/monsters/l_elementaire_feu.webp',
+  Fulgur: '/monsters/l_fulgur.webp',
+  'Spectre glacial': '/monsters/l_spectre_glacial.webp',
+  'Colosse du gouffre': '/monsters/l_colosse_gouffre.webp',
+  Oni: '/monsters/l_oni.webp',
+  Diablotin: '/monsters/l_diablotin.webp',
+  'Sangsue d’ombre': '/monsters/l_sangsue.webp',
+  'Liche mineure': '/monsters/l_liche_mineure.webp',
+  'Seigneur oni': '/monsters/l_seigneur_oni.webp',
+  'Tengu du chaos': '/monsters/l_tengu.webp',
+  Wyverne: '/monsters/l_wyverne.webp',
+  'Œil du chaos': '/monsters/l_oeil_chaos.webp',
+  'Mère-couvée': '/monsters/l_mere_couvee.webp',
+  'Wyverne ancienne': '/monsters/l_wyverne_ancienne.webp',
+  'Séraphin déchu': '/monsters/l_seraphin.webp',
+  'Sentinelle astrale': '/monsters/l_sentinelle.webp',
+  Aberration: '/monsters/l_aberration.webp',
+  'Comète vivante': '/monsters/l_comete_vivante.webp',
+  'Veilleur astral': '/monsters/l_veilleur.webp',
+  'Dévoreur du néant': '/monsters/l_devoreur_neant.webp',
+  'Vide rampant': '/monsters/l_vide_rampant.webp',
+  'Horreur informe': '/monsters/l_horreur.webp',
+  'Fragment brisé': '/monsters/l_fragment.webp',
+  'Gueule du néant': '/monsters/l_gueule_neant.webp',
+  'Tyran déchu': '/monsters/l_tyran_dechu.webp',
+  Cataclysme: '/monsters/l_cataclysme.webp',
+  'Fléau final': '/monsters/l_fleau_final.webp',
+  'Tyran de l’infini': '/monsters/l_tyran_infini.webp',
+  // ── Gardiens de faille (v0.1108) — affichés par `RiftStage`.
   'Coupe-jarret (gardien)': '/monsters/g_coupe_jarret.webp',
+  'Archer déserteur (gardien)': '/monsters/g_archer.webp',
+  'Brise-porte (gardien)': '/monsters/g_brise_porte.webp',
+  'Mercenaire (gardien)': '/monsters/g_mercenaire.webp',
+  'Chef de bande (gardien)': '/monsters/g_chef_bande.webp',
+  'Loup famélique (gardien)': '/monsters/g_loup.webp',
+  'Arachné des bois (gardien)': '/monsters/g_arachne.webp',
+  'Sanglier enragé (gardien)': '/monsters/g_sanglier.webp',
+  'Ours des cavernes (gardien)': '/monsters/g_ours.webp',
+  'Scorpion géant (gardien)': '/monsters/g_scorpion.webp',
+  'Revenant (gardien)': '/monsters/g_revenant.webp',
+  'Spectre plaintif (gardien)': '/monsters/g_spectre.webp',
+  'Ossuaire ambulant (gardien)': '/monsters/g_ossuaire.webp',
+  'Nécromant (gardien)': '/monsters/g_necromant.webp',
+  'Porte-linceul (gardien)': '/monsters/g_porte_linceul.webp',
 };
 
 /**

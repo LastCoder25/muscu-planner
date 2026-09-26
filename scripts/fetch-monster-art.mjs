@@ -241,11 +241,27 @@ const FRAMING_FACE =
   'facing the viewer, symmetrical imposing pose, whole creature visible from head to feet, ' +
   'isolated on a plain flat pure white background, no ground, no scenery, no text';
 
-const seedFor = (slug) => seedOf('monster:' + slug) % 100000;
+/** Graine décalée pour un sujet raté (fond mal détouré, sujet hors cadre) : on la relance
+ *  avec `--force --only=slug` après l'avoir ajoutée ici, sans toucher aux autres. */
+const RESEED = { fb_kraken: 1, g_ours: 1, g_chef_bande: 1, l_tyran_infini: 1 };
+const seedFor = (slug) => (seedOf('monster:' + slug) + (RESEED[slug] ?? 0) * 7919) % 100000;
 
 /** Ceux que le modèle a dessinés regardant vers la DROITE — retournés à l'écriture.
  *  Rempli après relecture de la planche, jamais à l'aveugle. */
-const FLIP = new Set([]);
+const FLIP = new Set([
+  'g_archer',
+  'g_loup',
+  'g_sanglier',
+  'l_aberration',
+  'l_comete_vivante',
+  'l_etreigneur',
+  'l_goule',
+  'l_gueule_neant',
+  'l_rampant',
+  'l_sangsue',
+  'l_tisseuse_os',
+  'l_veilleur',
+]);
 
 /**
  * ⚠️ LE MODÈLE PAR DÉFAUT DU SERVICE PUBLIC NE SAIT PAS FAIRE DE CRÉATURES (mesuré le
@@ -269,7 +285,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const RAW_DIR = resolve(ROOT, '.monster-raw');
 
 const token = existsSync(TOKEN_FILE) ? readFileSync(TOKEN_FILE, 'utf8').trim() : '';
-if (!token && !REKEY) {
+if (!token && !REKEY && !process.argv.includes('--horde')) {
   console.error(`✖ clé absente : dépose-la dans ${TOKEN_FILE}`);
   process.exit(1);
 }
@@ -282,7 +298,83 @@ async function freeBalance() {
   return j.accountBalance?.tier ?? 0;
 }
 
+/**
+ * 🐎 REPLI STABLE HORDE (`--horde`, 2026-09-26) : la dotation gratuite Pollinations ne se
+ * recharge plus depuis le 21/09. Stable Horde est gratuit (clé anonyme), sans solde, mais
+ * en file d'attente (~2 à 10 min par image). **Juggernaut XL** retenu sur planche : profil
+ * net, fond blanc, trait anime (AlbedoBase : fond gris, pose de face ; les modèles d'anime
+ * purs déclenchent le filtre NSFW sur de simples guerriers). ⚠️ Le filtre NSFW reste ACTIF
+ * (`censor_nsfw`) : une image censurée est rejetée et retentée.
+ */
+const HORDE = process.argv.includes('--horde');
+const HORDE_API = 'https://stablehorde.net/api/v2';
+const HORDE_HEAD = {
+  apikey: '0000000000',
+  'Content-Type': 'application/json',
+  'Client-Agent': 'muscu-planner:1:alban',
+};
+const HORDE_NEG =
+  'text, watermark, cast shadow, ground, scenery, background, cropped, blurry, photo';
+const HORDE_PARALLEL = 3;
+
+async function hordeJson(url, init) {
+  for (let k = 0; k < 20; k++) {
+    try {
+      return await (await fetch(url, { headers: HORDE_HEAD, ...init })).json();
+    } catch {
+      await sleep(10000);
+    }
+  }
+  return null;
+}
+
+async function fetchHorde(prompt, seed) {
+  for (let essai = 0; essai < 3; essai++) {
+    const j = await hordeJson(`${HORDE_API}/generate/async`, {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: `${prompt} ### ${HORDE_NEG}`,
+        params: {
+          width: 832,
+          height: 832,
+          steps: 25,
+          cfg_scale: 6,
+          sampler_name: 'k_euler_a',
+          seed: String(seed + essai),
+          n: 1,
+        },
+        models: ['Juggernaut XL'],
+        nsfw: false,
+        censor_nsfw: true,
+        r2: true,
+      }),
+    });
+    if (!j?.id) {
+      console.log(`  … refus ${JSON.stringify(j)}`);
+      await sleep(30000);
+      continue;
+    }
+    let c;
+    do {
+      await sleep(10000);
+      c = await hordeJson(`${HORDE_API}/generate/check/${j.id}`);
+    } while (c && !c.done && !c.faulted && c.is_possible !== false);
+    if (!c?.done) continue;
+    const s = await hordeJson(`${HORDE_API}/generate/status/${j.id}`);
+    const g = s?.generations?.[0];
+    if (!g?.img || g.censored) {
+      console.log('  … image censurée, nouvel essai');
+      continue;
+    }
+    const buf = Buffer.from(await (await fetch(g.img)).arrayBuffer());
+    console.log(`  … servi par ${g.model} (${g.worker_name})`);
+    if (buf.length > 5000) return buf;
+  }
+  return null;
+}
+
 async function fetchImage(prompt, seed) {
+  if (HORDE) return fetchHorde(prompt, seed);
   const url =
     `https://gen.pollinations.ai/image/${encodeURIComponent(prompt)}` +
     `?model=${MODEL}&width=${GEN}&height=${GEN}&seed=${seed}&nologo=true`;
@@ -425,6 +517,7 @@ if (sansSujet.length) {
 mkdirSync(OUT, { recursive: true });
 mkdirSync(RAW_DIR, { recursive: true });
 let total = 0;
+const todo = [];
 for (const slug of slugs) {
   if (ONLY.length && !ONLY.includes(slug)) continue;
   const raw = resolve(RAW_DIR, `${slug}.jpg`);
@@ -438,22 +531,49 @@ for (const slug of slugs) {
     console.log(`· ${slug} — déjà là`);
     continue;
   }
-  const solde = await freeBalance();
-  if (solde < 0.01) {
-    console.error(`✖ dotation du jour épuisée (${solde}) — arrêt, rien de payant consommé`);
-    break;
-  }
-  const prompt = FRONT.has(slug)
-    ? `${STYLE_AVANT_FACE} ${SUBJECTS[slug]}, ${FRAMING_FACE}, ${STYLE_APRES}`
-    : `${STYLE_AVANT} ${SUBJECTS[slug]}, ${FRAMING}, ${STYLE_APRES}`;
+  todo.push(slug);
+}
+
+async function generate(slug, note) {
+  // ⚠️ Sur Juggernaut, un prompt qui OUVRE sur « anime key visual » rend des portraits
+  // d'anime génériques qui ignorent le sujet (vu sur la planche) : le sujet passe en tête.
+  const view = FRONT.has(slug)
+    ? 'full body front view, facing the viewer'
+    : 'full body side view, facing left';
+  const prompt = HORDE
+    ? `${SUBJECTS[slug]}, ${view}, whole creature visible head to feet, fantasy rpg monster art, ` +
+      'anime cel shading, bold black outlines, isolated on plain white background'
+    : FRONT.has(slug)
+      ? `${STYLE_AVANT_FACE} ${SUBJECTS[slug]}, ${FRAMING_FACE}, ${STYLE_APRES}`
+      : `${STYLE_AVANT} ${SUBJECTS[slug]}, ${FRAMING}, ${STYLE_APRES}`;
   const brut = await fetchImage(prompt, seedFor(slug));
   if (!brut) {
     console.error(`✖ ${slug} — échec`);
-    continue;
+    return;
   }
-  writeFileSync(raw, brut); // brut conservé hors dépôt : re-détourer sans regénérer
+  writeFileSync(resolve(RAW_DIR, `${slug}.jpg`), brut); // brut conservé hors dépôt
   const n = await write(slug, brut);
   total += n;
-  console.log(`✔ ${slug} — ${(n / 1024).toFixed(1)} Ko (solde ${solde.toFixed(3)})`);
+  console.log(`✔ ${slug} — ${(n / 1024).toFixed(1)} Ko${note}`);
+}
+
+if (HORDE) {
+  // Pas de solde : on garde HORDE_PARALLEL demandes en file, dans l'ordre des sujets.
+  let next = 0;
+  // Départs décalés : le service refuse plus de 2 demandes par seconde.
+  const worker = async (_, i) => {
+    await sleep(i * 3000);
+    while (next < todo.length) await generate(todo[next++], '');
+  };
+  await Promise.all(Array.from({ length: HORDE_PARALLEL }, worker));
+} else {
+  for (const slug of todo) {
+    const solde = await freeBalance();
+    if (solde < 0.01) {
+      console.error(`✖ dotation du jour épuisée (${solde}) — arrêt, rien de payant consommé`);
+      break;
+    }
+    await generate(slug, ` (solde ${solde.toFixed(3)})`);
+  }
 }
 console.log(`\nTotal écrit : ${(total / 1024).toFixed(0)} Ko`);

@@ -10,13 +10,20 @@
  * boss en haut, le groupe dessous.
  *
  * ⚠️ **LA TABLE NE RECENSE QUE CE QUI EXISTE** (patron de `monsterArt`) : un test vérifie que
- * chaque fichier est sur le disque. Une silhouette absente garde son emoji. À ajouter une fois
- * générés : 🐉 fb_dragon · 👹 fb_oni · 🦖 fb_tyran · 🐙 fb_kraken · 🦂 fb_scorpion ·
- * 🧌 fb_troll · 🐲 fb_long · 👾 fb_xeno.
+ * chaque fichier est sur le disque. Une silhouette absente garde son emoji.
  */
 import { bossEmoji } from '@/lib/friendBoss';
 
-export const FRIEND_BOSS_ART: Readonly<Record<string, string>> = {};
+export const FRIEND_BOSS_ART: Readonly<Record<string, string>> = {
+  '🐉': '/monsters/fb_dragon.webp',
+  '👹': '/monsters/fb_oni.webp',
+  '🦖': '/monsters/fb_tyran.webp',
+  '🐙': '/monsters/fb_kraken.webp',
+  '🦂': '/monsters/fb_scorpion.webp',
+  '🧌': '/monsters/fb_troll.webp',
+  '🐲': '/monsters/fb_long.webp',
+  '👾': '/monsters/fb_xeno.webp',
+};
 
 /** L'illustration d'un boss entre amis, ou `null` — l'appelant retombe sur l'emoji. */
 export function friendBossArt(bossId: string | null | undefined): string | null {
