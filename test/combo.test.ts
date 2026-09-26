@@ -57,6 +57,8 @@ import {
   legAllDone,
   legsDoneLast,
   legStage,
+  comboBarParts,
+  comboBarPos,
   comboFinishPlan,
   comboFinished,
 } from '@/lib/combo';
@@ -1357,6 +1359,42 @@ describe('📊 LE % SUIT L’OBJECTIF (séries jaunes), et le dépasse avec les 
   });
   it('au-delà du palier maximal, plus rien ne monte', () => {
     expect(comboProgressPct(combo([ex('A', 10, 20)]))).toBe(120);
+  });
+});
+
+describe('🎨 LA BARRE PAR ZONE : 0 → 120 %, argent / jaune / vert', () => {
+  const ex = (name: string, target: number, faites: number): ComboLeg => ({
+    slot: 'push',
+    exercise_id: name,
+    exercise_name: name,
+    rep_weight: 1,
+    target,
+    sets: Array.from({ length: faites }, () => set(10)),
+  });
+  const pct = (x: number) => (x * 100) / 1.2; // part d'objectif → % de la largeur
+  it('les zones sont à 80 % et 100 % de l’objectif sur une barre à 120 %', () => {
+    expect(comboBarPos(80)).toBeCloseTo(66.667, 2);
+    expect(comboBarPos(100)).toBeCloseTo(83.333, 2);
+    expect(comboBarPos(120)).toBe(100);
+    expect(comboBarPos(200)).toBe(100);
+  });
+  it('un exo seul remplit les zones dans l’ordre', () => {
+    const p = comboBarParts(combo([ex('A', 10, 9)])); // 90 % : 80 d'argent + 10 de jaune
+    expect(p.sec).toBeCloseTo(pct(0.8), 6);
+    expect(p.obj).toBeCloseTo(pct(0.1), 6);
+    expect(p.bonus).toBe(0);
+  });
+  it('on peut être sous 80 % en moyenne avec du jaune ET du vert (exos poussés plus loin)', () => {
+    // A : 12/10 (tout), B : 0/10 → argent (0,8 + 0)/2, jaune 0,2/2, vert 0,2/2.
+    const p = comboBarParts(combo([ex('A', 10, 12), ex('B', 10, 0)]));
+    expect(p.sec).toBeCloseTo(pct(0.4), 6);
+    expect(p.obj).toBeCloseTo(pct(0.1), 6);
+    expect(p.bonus).toBeCloseTo(pct(0.1), 6);
+  });
+  it('au-delà de 120 %, un exo n’apporte plus rien : la barre est pleine', () => {
+    const p = comboBarParts(combo([ex('A', 10, 30)]));
+    expect(p.sec + p.obj + p.bonus).toBeCloseTo(100, 6);
+    expect(p.bonus).toBeCloseTo(pct(0.2), 6);
   });
 });
 
