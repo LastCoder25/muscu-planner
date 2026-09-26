@@ -13,6 +13,7 @@ import type { ComboChestRecord } from './comboChest';
 import {
   repRangeFor,
   repRangeForExercise,
+  correctForExercise,
   prescribedReps,
   TIME_RANGE,
   type RepRange,
@@ -233,13 +234,20 @@ export function legLastAssisted(leg: ComboLeg): boolean {
  *  Ne renvoie JAMAIS null → aucun écran n’a de cas particulier à gérer. */
 export function legRepRange(leg: ComboLeg, objective?: Objective | null): RepRange {
   const time = legMode(leg) === 'time';
+  // Figée à la création, mais CORRIGÉE à la lecture pour les exos qui ont leur propre
+  // fourchette (burpees, pompes…) : la valeur figée par une version d’avant était fausse.
   if (leg.rep_min != null && leg.rep_max != null)
-    return {
-      min: leg.rep_min,
-      max: leg.rep_max,
-      rest: (time ? TIME_RANGE : repRangeFor(objective)).rest,
-    };
-  return repRangeForExercise(objective, { time, muscle_primary: leg.muscle_primary });
+    return time
+      ? { min: leg.rep_min, max: leg.rep_max, rest: TIME_RANGE.rest }
+      : correctForExercise(
+          { min: leg.rep_min, max: leg.rep_max, rest: repRangeFor(objective).rest },
+          leg.exercise_id,
+        );
+  return repRangeForExercise(objective, {
+    time,
+    muscle_primary: leg.muscle_primary,
+    id: leg.exercise_id,
+  });
 }
 
 /** Avancement global = MOYENNE des fractions de complétion par exo (mode-neutre :

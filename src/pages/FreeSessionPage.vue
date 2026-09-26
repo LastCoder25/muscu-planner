@@ -711,6 +711,7 @@ function adviceFor(e: ExerciseRow): SetAdvice {
   const range = repRangeForExercise(profileStore.profile?.objective, {
     time: e.unit === 'time',
     muscle_primary: e.muscle_primary,
+    id: e.id,
   });
   return setAdvice({
     instances: instancesOf(

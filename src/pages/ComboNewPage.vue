@@ -650,6 +650,7 @@ function slotRangeLabel(key: string): string {
   const r = repRangeForExercise(objective.value, {
     time,
     muscle_primary: e?.muscle_primary ?? null,
+    id: e?.id ?? null,
   });
   return repRangeLabel(r, time);
 }
@@ -812,6 +813,7 @@ async function createCombo() {
       const range = repRangeForExercise(objective.value, {
         time: isTime,
         muscle_primary: e.muscle_primary,
+        id: e.id,
       });
       legs.push({
         slot: slot.key,

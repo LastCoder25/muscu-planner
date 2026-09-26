@@ -204,14 +204,18 @@ function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
 function setsFromUnits(
   v: number,
   objective: Objective | null | undefined,
-  exo: { time: boolean; muscle_primary?: string | null },
+  exo: { time: boolean; muscle_primary?: string | null; id: string | null },
 ): number {
   return v / perSet(repRangeForExercise(objective, exo));
 }
 
 function challengeSets(c: Challenge, v: number, objective?: Objective | null): number {
   if (c.config.count_mode === 'sets') return v;
-  return setsFromUnits(v, objective, { time: c.unit === 'time', muscle_primary: c.muscle_primary });
+  return setsFromUnits(v, objective, {
+    time: c.unit === 'time',
+    muscle_primary: c.muscle_primary,
+    id: c.exercise_id,
+  });
 }
 
 /**
@@ -242,7 +246,11 @@ function bossItems(
       exerciseId: h.exerciseId,
       name: h.title,
       primary,
-      sets: setsFromUnits(h.total, objective, { time: h.unit === 's', muscle_primary: primary }),
+      sets: setsFromUnits(h.total, objective, {
+        time: h.unit === 's',
+        muscle_primary: primary,
+        id: h.exerciseId,
+      }),
       reps: h.unit === 'reps' ? h.total : 0,
     });
   }
