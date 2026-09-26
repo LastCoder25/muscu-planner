@@ -80,9 +80,10 @@
         />
       </div>
 
+      <ComboLegFilter v-model="legFilter" :legs="c.legs" />
       <ComboTierLegend v-if="c.legs.some((l) => legMode(l) === 'sets')" />
       <div
-        v-for="leg in orderedLegs"
+        v-for="leg in shownLegs"
         :key="leg.exercise_id"
         class="leg"
         :class="{ ok: legComplete(leg), done: legAllDone(leg) }"
@@ -270,6 +271,7 @@ import {
   legComplete,
   legAllDone,
   legsDoneLast,
+  legStage,
   legMode,
   legSets,
   legLastReps,
@@ -285,6 +287,7 @@ import {
 } from '@/lib/combo';
 import { comboSlot } from '@/data/combo';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
+import ComboLegFilter, { type LegFilter } from '@/components/ComboLegFilter.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import ComboSetHistory from '@/components/ComboSetHistory.vue';
 import ComboLegHead from '@/components/ComboLegHead.vue';
@@ -335,6 +338,13 @@ const legsAtMax = computed(() => c.value?.legs.filter(legAllDone).length ?? 0);
 // que l'onglet 🎯 ; avant la v0.903 chaque écran triait autrement, et un tri par avancement
 // réordonnait la liste PENDANT la saisie). « Fini » = palier MAXIMAL, pas l'objectif.
 const orderedLegs = computed(() => legsDoneLast(c.value?.legs ?? []));
+// 🔎 Filtre par étape en cours (Secondaire / Objectif / Bonus / Terminés) — ne déplace rien.
+const legFilter = ref<LegFilter>('all');
+const shownLegs = computed(() =>
+  legFilter.value === 'all'
+    ? orderedLegs.value
+    : orderedLegs.value.filter((l) => legStage(l) === legFilter.value),
+);
 
 function fmtDM(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);

@@ -248,9 +248,16 @@ export function legRepRange(leg: ComboLeg, objective?: Objective | null): RepRan
  *  défi incomplet ne s’affiche pas 100 %, un défi entamé ne s’affiche pas 0 %. */
 export function comboProgressPct(c: ComboChallenge): number {
   if (!c.legs.length) return 0;
+  // ⚠️ LE DÉNOMINATEUR EST L'OBJECTIF (les séries JAUNES), jamais le palier maximal : 100 %
+  // veut dire « objectif bouclé ». Tant qu'un exo n'y est pas, chacun est borné à 100 % —
+  // sinon les séries bonus d'un exo compenseraient le retard d'un autre. Une fois TOUS les
+  // objectifs atteints, les séries VERTES font dépasser 100 % (demandé), jusqu'au palier
+  // maximal de chaque exo : au-delà, rien ne se gagne.
+  const all = comboComplete(c);
   const frac = c.legs.reduce((a, l) => {
     if (l.target <= 0) return a;
-    return a + Math.min(1, legDone(l) / l.target);
+    const cap = all ? legTierMarks(l).max / l.target : 1;
+    return a + Math.min(cap, legDone(l) / l.target);
   }, 0);
   const exact = (frac / c.legs.length) * 100;
   const pct = Math.round(exact * 10) / 10;
@@ -475,6 +482,31 @@ export function legTierShare(l: ComboLeg): number {
  *  laisse la zone bonus ouverte. */
 export function legAllDone(l: ComboLeg): boolean {
   return legTier(l) === 'max';
+}
+
+/** 🔎 L'ÉTAPE EN COURS d'un exo — ce que les filtres du 360 regroupent (demandé : filtrer
+ *  plutôt que déplacer les exos). Étapes DISJOINTES, dans l'ordre des couleurs des cases :
+ *  - `secondary` : les séries de base (argent) ne sont pas toutes faites ;
+ *  - `principal` : il reste des séries JAUNES (objectif pas atteint) ;
+ *  - `bonus`     : objectif atteint, il reste des séries VERTES avant le maximal ;
+ *  - `done`      : palier maximal franchi (`legAllDone`).
+ *  Lue sur `legTier`, la même source que les couleurs : un exo n'est jamais rangé dans une
+ *  étape que sa barre contredit. Sur un petit objectif, le repère secondaire EST l'objectif :
+ *  il n'y a pas de zone secondaire, l'exo commence directement en `principal`. */
+export type LegStage = 'secondary' | 'principal' | 'bonus' | 'done';
+export const LEG_STAGES: readonly { id: LegStage; label: string }[] = [
+  { id: 'secondary', label: 'Secondaire' },
+  { id: 'principal', label: 'Objectif' },
+  { id: 'bonus', label: 'Bonus' },
+  { id: 'done', label: 'Terminés' },
+];
+export function legStage(l: ComboLeg): LegStage {
+  const t = legTier(l);
+  if (t === 'max') return 'done';
+  if (t === 'principal') return 'bonus';
+  if (t === 'secondary') return 'principal';
+  const m = legTierMarks(l);
+  return m.sec === m.principal ? 'principal' : 'secondary';
 }
 
 /** Repères AFFICHÉS des trois paliers d'un exo (nombre de séries/reps à atteindre).

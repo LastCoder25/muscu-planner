@@ -1297,3 +1297,41 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
     expect(vide).not.toContain('spc');
   }, 30_000);
 });
+
+describe('🔎 Filtres du Défi 360 (ComboLegFilter)', () => {
+  it('une pastille par étape non vide, avec son compte', async () => {
+    const { default: ComboLegFilter } = await import('@/components/ComboLegFilter.vue');
+    const leg = (name: string, faites: number) => ({
+      slot: 'push',
+      exercise_id: name,
+      exercise_name: name,
+      rep_weight: 1,
+      target: 10,
+      sets: Array.from({ length: faites }, () => ({ date: '2026-01-05', reps: 10 })),
+    });
+    let out = '';
+    const legs = [leg('A', 0), leg('B', 9), leg('C', 10), leg('D', 12)];
+    expect(
+      await mountIt(
+        ComboLegFilter,
+        { legs, modelValue: 'all' },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    for (const l of ['Tous', 'Secondaire', 'Objectif', 'Bonus', 'Terminés'])
+      expect(out).toContain(l);
+    let seul = '';
+    await mountIt(
+      ComboLegFilter,
+      { legs: [leg('A', 0)], modelValue: 'all' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (seul = h),
+    );
+    expect(seul).not.toContain('Bonus');
+  }, 30_000);
+});

@@ -422,9 +422,10 @@
               @click="exportCombo"
             />
           </div>
+          <ComboLegFilter v-model="legFilter" :legs="activeComboLegs" />
           <ComboTierLegend v-if="activeComboLegs.some((l) => legMode(l) === 'sets')" />
           <div
-            v-for="leg in activeComboLegs"
+            v-for="leg in shownComboLegs"
             :key="leg.exercise_id"
             class="combo-leg"
             :class="{ done: legAllDone(leg) }"
@@ -573,6 +574,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import ComboTierLegend from '@/components/ComboTierLegend.vue';
+import ComboLegFilter, { type LegFilter } from '@/components/ComboLegFilter.vue';
 import HoldGameLauncher from '@/components/HoldGameLauncher.vue';
 import ComboChestView from '@/components/ComboChestView.vue';
 import BodyBalance from '@/components/BodyBalance.vue';
@@ -610,6 +612,7 @@ import {
   legComplete,
   legAllDone,
   legsDoneLast,
+  legStage,
   legTierMarks,
   legSegZone,
   legBarGeometry,
@@ -787,6 +790,13 @@ function segCount(l: ComboLeg): number {
 // défi ; avant la v0.903 cet onglet triait par RESTANT et la fiche par fraction faite, donc le
 // même défi ne listait pas ses exos dans le même ordre aux deux endroits).
 const activeComboLegs = computed(() => legsDoneLast(activeCombo.value?.legs ?? []));
+// 🔎 Filtre par étape en cours (Secondaire / Objectif / Bonus / Terminés) — ne déplace rien.
+const legFilter = ref<LegFilter>('all');
+const shownComboLegs = computed(() =>
+  legFilter.value === 'all'
+    ? activeComboLegs.value
+    : activeComboLegs.value.filter((l) => legStage(l) === legFilter.value),
+);
 const comboList = computed(() =>
   comboStore.list
     .filter((c) => c.status === comboTab.value)

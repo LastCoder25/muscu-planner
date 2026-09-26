@@ -56,6 +56,7 @@ import {
   legsByName,
   legAllDone,
   legsDoneLast,
+  legStage,
   comboFinishPlan,
   comboFinished,
 } from '@/lib/combo';
@@ -1329,6 +1330,66 @@ describe('📑 les exos FINIS passent en bas de liste', () => {
     const copie = [...src];
     expect(legsDoneLast(src)).toHaveLength(2);
     expect(src).toEqual(copie);
+  });
+});
+
+describe('📊 LE % SUIT L’OBJECTIF (séries jaunes), et le dépasse avec les séries vertes', () => {
+  const ex = (name: string, target: number, faites: number): ComboLeg => ({
+    slot: 'push',
+    exercise_id: name,
+    exercise_name: name,
+    rep_weight: 1,
+    target,
+    sets: Array.from({ length: faites }, () => set(10)),
+  });
+  it('le dénominateur est l’objectif, pas le palier maximal', () => {
+    // 5 séries sur un objectif de 10 = 50 %, pas 5/12 = 41,7 %.
+    expect(comboProgressPct(combo([ex('A', 10, 5)]))).toBe(50);
+  });
+  it('tant qu’un exo n’est pas à l’objectif, les bonus d’un autre ne compensent pas', () => {
+    // A : 12/10 (bonus), B : 8/10 → (1 + 0,8)/2 = 90 %, jamais (1,2 + 0,8)/2 = 100 %.
+    expect(comboProgressPct(combo([ex('A', 10, 12), ex('B', 10, 8)]))).toBe(90);
+  });
+  it('tous les objectifs faits + des séries vertes → au-delà de 100 %', () => {
+    expect(comboProgressPct(combo([ex('A', 10, 10), ex('B', 10, 10)]))).toBe(100);
+    expect(comboProgressPct(combo([ex('A', 10, 11), ex('B', 10, 10)]))).toBe(105);
+    expect(comboProgressPct(combo([ex('A', 10, 12), ex('B', 10, 12)]))).toBe(120);
+  });
+  it('au-delà du palier maximal, plus rien ne monte', () => {
+    expect(comboProgressPct(combo([ex('A', 10, 20)]))).toBe(120);
+  });
+});
+
+describe('🔎 L’ÉTAPE EN COURS d’un exo (filtres du 360)', () => {
+  const ex = (target: number, faites: number): ComboLeg => ({
+    slot: 'push',
+    exercise_id: 'a',
+    exercise_name: 'A',
+    rep_weight: 1,
+    target,
+    sets: Array.from({ length: faites }, () => set(10)),
+  });
+  it('secondaire → objectif → bonus → terminé, aux repères des cases', () => {
+    // Objectif 10 : secondaire 8, maximal 12.
+    expect(legStage(ex(10, 0))).toBe('secondary');
+    expect(legStage(ex(10, 7))).toBe('secondary');
+    expect(legStage(ex(10, 8))).toBe('principal');
+    expect(legStage(ex(10, 9))).toBe('principal');
+    expect(legStage(ex(10, 10))).toBe('bonus');
+    expect(legStage(ex(10, 11))).toBe('bonus');
+    expect(legStage(ex(10, 12))).toBe('done');
+  });
+  it('petit objectif : pas de zone secondaire, on commence en « objectif »', () => {
+    expect(legStage(ex(3, 0))).toBe('principal');
+  });
+  it('chaque étape correspond à la couleur de la PROCHAINE case à faire', () => {
+    const zone = { secondary: 'secondary', principal: 'principal', bonus: 'max' } as const;
+    for (let t = 1; t <= 30; t++)
+      for (let n = 0; n <= Math.ceil(t * 1.2) + 1; n++) {
+        const st = legStage(ex(t, n));
+        if (st === 'done') expect(legAllDone(ex(t, n))).toBe(true);
+        else expect(legSegZone(ex(t, n), n + 1)).toBe(zone[st]);
+      }
   });
 });
 
