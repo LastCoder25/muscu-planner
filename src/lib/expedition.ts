@@ -1003,7 +1003,7 @@ export function poiRewardLevel(p: Pick<Poi, 'id' | 'type' | 'level'>): number {
  * ⚠️ Un RE-CALAGE déterministe du tirage (modulo), jamais un tirage de plus : la carte de chacun
  * reste reproductible, et au-delà du seuil rien ne change.
  */
-export function earlySpawnLevel(tire: number, playerLevel: number): number {
+function earlySpawnLevel(tire: number, playerLevel: number): number {
   const L = Math.max(1, playerLevel);
   if (L >= EXPE.earlySpawnCapLevel || tire <= L) return tire;
   // Dans [niveau − 2, niveau] : gagnable, et une récompense proche de ce que le joueur vaut.
@@ -1021,7 +1021,7 @@ export function rewardTripHours(level: number): number {
 
 /** Le facteur de voyage de l'OR d'un lieu de difficulté `level` : la distance ne paie plus,
  *  la DIFFICULTÉ si (v0.1153). */
-export function rewardTravelFactor(level: number): number {
+function rewardTravelFactor(level: number): number {
   return travelFactor(rewardTripHours(level));
 }
 
@@ -1031,7 +1031,7 @@ export function rewardTravelFactor(level: number): number {
  *  invariants — une visite de sanctuaire rendait plus qu'une tentative de boss, et la mine de
  *  mana d'une faille ignorée rattrapait ce que rend sa fermeture. L'or, lui, se mesure contre
  *  le puits des bâtiments (goldSink) ; les ressources ont chacune leur borne. */
-export function resourceTravelFactor(): number {
+function resourceTravelFactor(): number {
   return travelFactor(TRAVEL_REF_H);
 }
 

@@ -2211,7 +2211,7 @@ export function advAscendedRank(adv: Adventurer): number {
  *  sont les étalons de la route, des camps et des failles, donc l'ennemi monte avec eux et un
  *  champion À JOUR de ses ascensions retrouve exactement la difficulté d'avant (décision de
  *  l'utilisateur). Le bonus se voit contre un champion qui n'a pas encore franchi le cap. */
-export const ASCENSION_STAT_STEP = 0.05;
+const ASCENSION_STAT_STEP = 0.05;
 export function advAscensionMult(adv: Adventurer): number {
   if (!adv.championId) return 1;
   // ⚠️ COMPOSÉ, pas additif : additif, le saut d'une ascension fondait avec le rang (mesuré

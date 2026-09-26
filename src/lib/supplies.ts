@@ -159,7 +159,7 @@ function pct(x: number): string {
 export type SupplyStock = Partial<Record<SupplyId, number>>;
 
 const IS_ID = new Set<string>(SUPPLY_IDS);
-export const isSupplyId = (s: unknown): s is SupplyId => typeof s === 'string' && IS_ID.has(s);
+const isSupplyId = (s: unknown): s is SupplyId => typeof s === 'string' && IS_ID.has(s);
 
 /** Relit un stock venu du JSONB : ids inconnus écartés, comptes entiers et positifs. */
 export function normalizeSupplies(v: unknown): SupplyStock {

@@ -1392,7 +1392,7 @@ export function comboExportText(c: ComboChallenge, today: string): string {
 
 export const LOAD_ADVICE = { chainMin: 20, window: 3, agree: 2 } as const;
 
-export type LoadCall = 'up' | 'hold' | 'down';
+type LoadCall = 'up' | 'hold' | 'down';
 export interface LegLoadAdvice {
   /** Charge de référence (kg) — null au poids du corps sans lest. */
   weight: number | null;

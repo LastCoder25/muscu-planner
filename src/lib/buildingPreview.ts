@@ -27,7 +27,7 @@ import { caravanSlots, championOutpostMult } from './caravan';
 import { altarLuckBonus } from './items';
 
 /** Une pastille d'aperçu. `teams` = le nombre d'expéditions en parallèle (couleur à part). */
-export interface PreviewBit {
+interface PreviewBit {
   text: string;
   tone?: 'teams';
 }

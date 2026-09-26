@@ -19,7 +19,7 @@ export type ResourceId =
   | 'sealsGear'
   | 'tickets';
 
-export interface ResourceSource {
+interface ResourceSource {
   emoji: string;
   label: string;
   /** Précision courte (fréquence, condition). */
