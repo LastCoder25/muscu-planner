@@ -40,20 +40,37 @@
         </button>
       </div>
 
-      <!-- 🕳️ Filtre des failles, à TROIS états (un toucher passe au suivant) :
-           tout · failles SEULES · sans failles. Il se COMBINE aux rangs : une faille ne se
-           montre que si son rang est affiché, et le compte ne parle que de ces failles. -->
+    </div>
+
+    <!-- 🗺️ Filtre par TYPE de lieu (v0.1172, généralise celui des failles) : une puce par
+         type présent, à TROIS états (un toucher passe au suivant) — affiché · SEUL · masqué.
+         Plusieurs types « seuls » se cumulent, et il se COMBINE aux rangs : le compte ne
+         parle que des lieux des rangs affichés. Règle dans `lib/poiTypeFilter.ts`. -->
+    <div
+      v-if="typeChips.length > 1"
+      class="bar type-filter"
+      role="group"
+      aria-label="Filtrer les lieux par type"
+    >
       <button
-        v-if="riftTotal > 0"
+        v-for="o in typeChips"
+        :key="o.type"
         type="button"
-        class="rf-chip rift-chip"
-        :class="['rm-' + riftMode, { on: riftMode !== 'none' }]"
-        :aria-label="riftChipLabel"
-        :title="riftChipLabel"
-        @click="cycleRiftMode"
+        class="rf-chip type-chip"
+        :class="['rm-' + typeMode(typeFilter, o.type), { on: typeShown(typeFilter, o.type) }]"
+        :style="o.type === 'rift' ? { '--rk': '#b57bff' } : undefined"
+        :aria-pressed="typeShown(typeFilter, o.type)"
+        :aria-label="typeChipLabel(o)"
+        :title="typeChipLabel(o)"
+        @click="cycleTypeChip(o.type)"
       >
-        <span class="rift-emo"><RiftPortal color="#b57bff" :seed="7" still /></span>
-        <span class="rift-count">{{ riftMode === 'only' ? 'seules' : riftInRanks }}</span>
+        <span v-if="o.type === 'rift'" class="rift-emo"
+          ><RiftPortal color="#b57bff" :seed="7" still
+        /></span>
+        <span v-else class="type-emo">{{ POI_EMO[o.type] }}</span>
+        <span class="rift-count">{{
+          typeMode(typeFilter, o.type) === 'only' ? 'seul' : o.inRanks
+        }}</span>
       </button>
     </div>
 
@@ -821,6 +838,7 @@ import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { PORTAL_VIEW } from '@/lib/riftPortal';
+import { cycleType, parseTypeFilter, typeMode, typeOptions, typeShown, type TypeFilter } from '@/lib/poiTypeFilter';
 import {
   POI_EMO,
   POI_LABEL,
@@ -1174,45 +1192,38 @@ function toggleRank(r: number) {
  *  (un lieu est consommé au départ), et la barre de bord l'affiche quand même. */
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
-// ── 🕳️ Filtre des failles (mémorisé par appareil), combiné aux rangs ──
-type RiftMode = 'all' | 'only' | 'none';
-const RIFT_MODES: RiftMode[] = ['all', 'only', 'none'];
-const RIFT_FILTER_KEY = 'muscu:emap:rift-mode';
-function loadRiftMode(): RiftMode {
+// ── 🗺️ Filtre par type de lieu (mémorisé par appareil), combiné aux rangs ──
+// ⚠️ Remplace le filtre des failles seul : son réglage stocké est repris (`parseTypeFilter`).
+const TYPE_FILTER_KEY = 'muscu:emap:type-filter';
+const LEGACY_RIFT_KEY = 'muscu:emap:rift-mode';
+function loadTypeFilter(): TypeFilter {
   try {
-    const v = localStorage.getItem(RIFT_FILTER_KEY);
-    if (v && (RIFT_MODES as string[]).includes(v)) return v as RiftMode;
+    const raw = localStorage.getItem(TYPE_FILTER_KEY);
+    return parseTypeFilter(raw ? (JSON.parse(raw) as unknown) : null, localStorage.getItem(LEGACY_RIFT_KEY));
   } catch {
-    /* stockage indisponible : tout est affiché */
+    return { only: [], hidden: [] }; /* stockage indisponible : tout est affiché */
   }
-  return 'all';
 }
-const riftMode = ref<RiftMode>(loadRiftMode());
-function cycleRiftMode() {
-  riftMode.value = RIFT_MODES[(RIFT_MODES.indexOf(riftMode.value) + 1) % RIFT_MODES.length]!;
+const typeFilter = ref<TypeFilter>(loadTypeFilter());
+const rankShown = (p: Poi) => !hiddenRanks.value.has(rankOf(p).rankIndex);
+const typeChips = computed(() => typeOptions(pois.value, (p) => rankShown(p as Poi)));
+function cycleTypeChip(t: PoiType) {
+  typeFilter.value = cycleType(
+    typeFilter.value,
+    t,
+    typeChips.value.map((o) => o.type),
+  );
   try {
-    localStorage.setItem(RIFT_FILTER_KEY, riftMode.value);
+    localStorage.setItem(TYPE_FILTER_KEY, JSON.stringify(typeFilter.value));
   } catch {
     /* le filtre vaut pour la session */
   }
 }
-const rankShown = (p: Poi) => !hiddenRanks.value.has(rankOf(p).rankIndex);
-const riftTotal = computed(() => pois.value.filter(isRiftPoi).length);
-const riftInRanks = computed(() => pois.value.filter((p) => isRiftPoi(p) && rankShown(p)).length);
-const RIFT_MODE_LABEL: Record<RiftMode, string> = {
-  all: 'Tous les lieux',
-  only: 'Failles seules',
-  none: 'Failles masquées',
-};
-const riftChipLabel = computed(
-  () =>
-    `${RIFT_MODE_LABEL[riftMode.value]} · ${riftInRanks.value} faille${riftInRanks.value > 1 ? 's' : ''} dans les rangs affichés — toucher pour changer`,
-);
+const TYPE_MODE_LABEL = { all: 'affichés', only: 'seuls', none: 'masqués' } as const;
+const typeChipLabel = (o: { type: PoiType; inRanks: number }) =>
+  `${POI_LABEL[o.type]} : ${TYPE_MODE_LABEL[typeMode(typeFilter.value, o.type)]} · ${o.inRanks} dans les rangs affichés — toucher pour changer`;
 const shownPois = computed(() =>
-  pois.value.filter(
-    (p) =>
-      rankShown(p) && (riftMode.value === 'all' || (riftMode.value === 'only') === isRiftPoi(p)),
-  ),
+  pois.value.filter((p) => rankShown(p) && typeShown(typeFilter.value, p.type)),
 );
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
@@ -2803,13 +2814,26 @@ onUnmounted(() => {
   background: var(--rk);
   opacity: 1;
 }
-.rift-chip {
+/* 🗺️ La rangée des types : défile si elle déborde (344 px), centrée sinon. */
+.type-filter {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.type-filter::-webkit-scrollbar {
+  display: none;
+}
+.type-emo {
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0.45;
+}
+.type-chip {
+  --rk: var(--accent);
   width: auto;
   min-width: 36px;
   padding: 0 8px;
   gap: 3px;
   border-radius: 18px;
-  --rk: #b57bff;
 }
 .rift-emo {
   display: inline-block;
@@ -2822,7 +2846,8 @@ onUnmounted(() => {
   width: 10px;
   height: 16px;
 }
-.rift-chip.on .rift-emo {
+.type-chip.on .rift-emo,
+.type-chip.on .type-emo {
   opacity: 1;
 }
 .rift-count {
@@ -2830,11 +2855,11 @@ onUnmounted(() => {
   font-weight: 700;
   color: var(--dim);
 }
-.rift-chip.on .rift-count {
+.type-chip.on .rift-count {
   color: var(--text);
 }
-/* Failles SEULES : pastille pleine, le mode le plus fort se voit d'un coup d'œil. */
-.rift-chip.rm-only {
+/* Type SEUL : pastille pleine, le mode le plus fort se voit d'un coup d'œil. */
+.type-chip.rm-only {
   background: color-mix(in srgb, var(--rk) 34%, var(--surface));
   box-shadow: 0 0 6px color-mix(in srgb, var(--rk) 55%, transparent);
 }
@@ -2870,8 +2895,8 @@ onUnmounted(() => {
    de l'écran (en-tête ~60 px, barre ~44, disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
    haute qu'avant (62vh). */
 .map-scroll.with-trips {
-  height: min(62vh, calc(100vh - 316px));
-  height: min(62vh, calc(100dvh - 316px));
+  height: min(62vh, calc(100vh - 360px));
+  height: min(62vh, calc(100dvh - 360px));
 }
 .map-scroll::-webkit-scrollbar {
   display: none;
