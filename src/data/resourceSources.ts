@@ -51,7 +51,7 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
         detail: 'bonus de connexion, croît avec la série',
       },
       { emoji: '🔌', label: 'Dynamo tellurique', detail: 'bâtiment de la base, à récolter' },
-      { emoji: '💧', label: 'Sources et mines de la carte', detail: 'expéditions et équipes' },
+      { emoji: '💧', label: 'Sources de la carte', detail: 'expéditions et équipes' },
       { emoji: '🎯', label: 'Coffre du Défi 360', detail: 'Défi 360 bouclé dans les temps' },
     ],
   },

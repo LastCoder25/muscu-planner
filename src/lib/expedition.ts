@@ -375,7 +375,7 @@ export const routePerilous = (p: Pick<Poi, 'perilous' | 'riftPeril'>): boolean =
 export interface ExpeditionOutcome {
   win: boolean;
   gold: number; // crédité au RETOUR
-  energy: number; // ⚡ énergie de jeu (mines uniquement) → crédite login_energy
+  energy: number; // ⚡ énergie de jeu (puits) → crédite login_energy
   summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
   /** 💠 Pierres de mana — la monnaie du gacha de champions. ⚠️ Elle n'a pas encore de
    *  PUITS (le gacha n'existe pas) : elle s'ACCUMULE, et c'est l'ordre voulu
@@ -427,7 +427,7 @@ export interface ExpeditionMessage {
   win: boolean;
   text: string;
   gold: number;
-  energy: number; // ⚡ énergie gagnée (mines)
+  energy: number; // ⚡ énergie gagnée (puits)
   summonStones?: number; // 🔮
   /** 🔩 LEGACY : ferraille d'un rapport déposé avant son retrait (v0.998). Plus jamais
    *  écrite ; convertie en or à l'encaissement (`SCRAP_TO_GOLD`). */
@@ -835,11 +835,6 @@ export const EXPE = {
   },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
-  // ÉNERGIE des mines : BORNÉE (ticket a0d16472). Le facteur temps `tf` n'est pas
-  // plafonné (un trajet long × haut niveau donnait ~1300 ⚡ pour une seule expé, ce qui
-  // contredit « l'énergie est un complément, jamais un substitut au sport »). On limite
-  // le tf pris en compte ET on cape la valeur finale à ~1 run.
-  mineEnergyTfCap: 2.5, // l'énergie ne profite pas des longs trajets comme le loot
   // 🎯 LES RÉCOMPENSES SUIVENT LA DIFFICULTÉ, PLUS LA DISTANCE (v0.1153, demandé). Tout ce que
   // `travelFactor` payait au trajet réel se paie désormais à ce trajet de RÉFÉRENCE, le même
   // pour tous les lieux : aller loin ne coûte plus que du TEMPS.
@@ -870,7 +865,6 @@ export const EXPE = {
   /** 🌱 Niveau du joueur jusqu'auquel les lieux restent à sa portée (`earlySpawnLevel`). */
   earlySpawnCapLevel: 10,
   earlySpawnSpan: 2,
-  mineEnergyMax: 60, // plafond dur par expédition (≈ 1 run)
   arenaMaxItems: 8, // garde-fou d'inventaire : une run très longue ne noie pas le sac
 } as const;
 
@@ -2305,7 +2299,9 @@ export function resolveOutcome(
   };
 }
 
-/** MINE : récolte d'or et d'énergie, sans combat (hors rencontres de trajet).
+/** MINE : récolte d'OR, sans combat (hors rencontres de trajet). ⚠️ Plus d'énergie
+ *  (retirée à la demande de l'utilisateur) : la mine est la reine de l'or, l'énergie de la
+ *  carte vient du PUITS 💧 — deux lieux ne font pas le même métier.
  *
  *  HAUL SCALÉ AU TEMPS DE TRAJET (aller-retour) : une expédition de plusieurs heures
  *  doit VALOIR le coup (avant : reward ∝ niveau seul → dérisoire vs un donjon actif).
@@ -2344,19 +2340,13 @@ function mineOutcome(
   playerLevel: number | undefined,
 ): ExpeditionOutcome {
   // ⚠️ Trajet de RÉFÉRENCE de sa difficulté, pas le trajet réel (v0.1153).
-  const tf = 0.5 + rewardTripHours(L);
   // MINE = reine de l'or — la règle vit dans `harvestGold`, partagée avec les équipes.
   const gold = harvestGold(poi, playerLevel);
-  // ÉNERGIE : un complément borné du sport, jamais un substitut (ticket a0d16472).
-  const energy = Math.min(
-    EXPE.mineEnergyMax,
-    Math.round((4 + poiRewardLevel(poi) * 1.5) * Math.min(tf, EXPE.mineEnergyTfCap)),
-  );
   return {
     win: true,
     gold,
     mana: 0,
-    energy,
+    energy: 0,
     summonStones: 0,
     item: null,
     items: [],

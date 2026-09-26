@@ -2169,7 +2169,7 @@ const roundTripMin = (p: Poi) =>
  *  désormais la compilation, au lieu de mentir en silence. */
 const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
   // 💰 Un lieu gardé rapporte AUSSI ce que portent ses gardes (v0.1166) — la fiche le chiffre.
-  mine: (p) => `Filon d'or 🪙 + énergie ⚡ — et ${guardLoot(p)}`,
+  mine: (p) => `Filon d'or 🪙 — et ${guardLoot(p)}`,
   well: (p) => `Énergie ⚡ en quantité — et ${guardLoot(p)}`,
   shrine: (p) => `Pierres d'invocation 🔮 — et ${guardLoot(p)}`,
   archive: (p) => `Clés du Labyrinthe 🗝️ — et ${guardLoot(p)}`,

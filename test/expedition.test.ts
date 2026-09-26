@@ -228,17 +228,19 @@ describe('expedition — résolution', () => {
   it('mine : toujours réussie + gain NET d’or + énergie', () => {
     // ⚠️ RÉÉCRIT : ce test exigeait de la poussière ✨ et des parchemins d'enchant 📜 — il
     // verrouillait donc la PRODUCTION de deux devises qu'aucune fonction ne dépense plus.
-    // La mine paie en or et en énergie, point.
+    // La mine paie en or, point.
     const o = resolveOutcome(strong, mine, 1);
     expect(o.win).toBe(true);
     // Vrai gain net : la mine rend NETTEMENT plus que son coût (investissement + temps).
     expect(o.gold).toBeGreaterThan(goldCost('mine', mine.level) * 2);
-    expect(o.energy).toBeGreaterThan(0); // les mines rendent un peu d'énergie
   });
-  it('énergie de mine BORNÉE : jamais plus de mineEnergyMax même profonde/lointaine (ticket a0d16472)', () => {
-    const deepFar: Poi = { ...mine, level: 80, distNorm: 0.99 };
-    const o = resolveOutcome(strong, deepFar, 7);
-    expect(o.energy).toBeLessThanOrEqual(EXPE.mineEnergyMax);
+  it('une mine ne rend PAS d’énergie : c’est la reine de l’or, l’énergie vient du puits', () => {
+    for (const lv of [3, 30, 80]) {
+      for (const seed of [1, 7, 42]) {
+        const o = resolveOutcome(strong, { ...mine, level: lv, distNorm: 0.99 }, seed);
+        expect(o.energy).toBe(0);
+      }
+    }
   });
   it('⚠️ un CAMP ne se résout plus par resolveOutcome : son seul chemin est resolveCamp', () => {
     // `expeSend` refuse les camps, et une expédition d'avant porte son issue tirée au départ :

@@ -93,7 +93,7 @@ export function useEnergyHistory(nDays = 3) {
     const row = char.row;
     // Journal d'énergie (bonus de connexion, montées de niveau, Dynamo tellurique…).
     for (const e of row?.energy_log ?? []) push(e.date, e.emoji, e.label, e.amount);
-    // Expéditions (mines) : messages horodatés portant de l'énergie.
+    // Expéditions (puits) : messages horodatés portant de l'énergie.
     for (const m of row?.messages ?? []) {
       if (m.energy > 0) push(isoDay(new Date(m.resolvedAt)), '⛏️', 'Expédition (mine)', m.energy);
     }
