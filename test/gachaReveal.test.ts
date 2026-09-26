@@ -12,6 +12,7 @@ import {
   finalRank,
   singleSequenceMs,
   lotSequenceMs,
+  lotIgniteMs,
   apexMs,
   silhouetteMs,
   INVOKE,
@@ -231,7 +232,10 @@ describe('🎰 LE ×10 — dix orbes bleues qui s’allument', () => {
     expect(lotSequenceMs(p)).toBe(0);
   });
 
-  it('⚠️ JUSQU’AUX CARTES, UN ×10 TIENT SOUS 9 S — même avec deux S à double allumage', () => {
+  // ⚠️ Relevé de 9 à 15 s en v0.1164 (demandé : « trop rapide, il faut faire monter le
+  // suspense ») : le pire cas (deux S à double allumage + trois A) est rare, le cas courant
+  // est le lot sans or, borné ci-dessous par le BAS.
+  it('⚠️ JUSQU’AUX CARTES, UN ×10 TIENT SOUS 15 S — même avec deux S à double allumage', () => {
     const pire: RevealPlan = {
       items: ['S', 'S', 'A', 'A', 'A', 'B', 'B', 'B', 'B', 'B'].map((g) => ({
         cell: CELL[g as PullGrade],
@@ -239,7 +243,23 @@ describe('🎰 LE ×10 — dix orbes bleues qui s’allument', () => {
       })),
       reduced: false,
     };
-    expect(lotSequenceMs(pire)).toBeLessThan(9_000);
+    expect(lotSequenceMs(pire)).toBeLessThan(15_000);
+  });
+
+  it('⚠️ UN ×10 SANS OR NE SE « SAUTE » PAS : chaque orbe est scrutée, et ça dure', () => {
+    const plan = (grades: PullGrade[]): RevealPlan => ({
+      items: grades.map((g) => ({ cell: CELL[g], path: g === 'A' ? [0, 1] : [0] })),
+      reduced: false,
+    });
+    const tousB = plan(Array(10).fill('B') as PullGrade[]);
+    // Sans aucun allumage, la scrutation reste : dix orbes, dix battements.
+    // (sans la scrutation on retombait à ~3,8 s : « ça skip les boules internes »).
+    expect(lotSequenceMs(tousB)).toBeGreaterThanOrEqual(6_000);
+    // Un A allumé ajoute exactement son allumage (moins le retournement d'un B).
+    const unA = plan(['A', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B', 'B']);
+    expect(lotSequenceMs(unA) - lotSequenceMs(tousB)).toBe(lotIgniteMs(1) - INVOKE.lotFlipStagger);
+    // L'or se fait attendre plus longtemps que le violet.
+    expect(lotIgniteMs(2)).toBeGreaterThan(lotIgniteMs(1));
   });
 });
 

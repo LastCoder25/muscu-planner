@@ -744,9 +744,36 @@ export function championOutpostMult(heroMult: number): number {
  *  copie par lieu aurait divergé au premier réglage. */
 export function missionXp(adv: Adventurer, poi: Poi, won: boolean): number {
   const d = poiDifficultyLevel(poi);
-  const ratio = Math.max(0.15, Math.min(2, d / Math.max(1, adv.level)));
-  const issue = won ? 1 : CARAVAN.xpLossShare;
+  const L = Math.max(1, adv.level);
+  const ratio = Math.max(0.15, Math.min(2, d / L));
+  const issue = won ? dangerMult(L, d) : CARAVAN.xpLossShare;
   return Math.max(1, Math.round(trialXpBase(d) * Math.min(1, ratio) ** 1.5 * issue));
+}
+
+/** Niveaux par rang de l'échelle de prestige (10) — ⚠️ DÉRIVÉ, jamais écrit :
+ *  `rankStartLevel(1)` est le ★1 du rang suivant. */
+const LEVELS_PER_RANK = rankStartLevel(1) - 1;
+
+/**
+ * ⚔️ ON PAIE LE DANGER EN XP (v0.1164, décision de l'utilisateur : « oui, on paye le danger en
+ * xp »). Avant, un lieu au-dessus du champion ne rapportait que ce qu'il vaut pour tout le
+ * monde (le ratio était écrêté à 1) : un Bronze qui survivait à un lieu Or touchait
+ * exactement ce qu'y touche un Or. L'écart vers le HAUT ne comptait pas.
+ *
+ * Désormais chaque rang d'avance du lieu sur le champion ajoute `DANGER.perRank` (+50 %),
+ * compté en NIVEAUX (un rang = 10) donc continu, borné à `DANGER.max` (+100 %, deux rangs).
+ *
+ * ⚠️ **SEULEMENT SUR UNE VICTOIRE** : on paie le danger SURMONTÉ. Sur une défaite il ne
+ * s'applique pas — sinon envoyer des Bronze se faire battre sur de l'Or redeviendrait la
+ * voie la plus rapide (mesuré en v0.1104, fermé par le refus « perdu d'avance »).
+ * ⚠️ **BORNÉ**, parce qu'il se cumule avec la prime de rattrapage (`catchUpMult`) : les deux
+ * regardent un écart différent — le lieu pour celui-ci, le Panthéon pour l'autre.
+ */
+export const DANGER = { perRank: 0.5, max: 1 } as const;
+
+export function dangerMult(advLevel: number, placeLevel: number): number {
+  const gap = Math.max(0, placeLevel - Math.max(1, advLevel));
+  return 1 + Math.min(DANGER.max, (DANGER.perRank * gap) / LEVELS_PER_RANK);
 }
 
 /** 👥 LE PARTAGE DE L'XP D'UNE MISSION (v0.1038, décision de l'utilisateur : les équipes ne
@@ -786,7 +813,7 @@ export function missionXpSplit(escortCount: number): number {
 /** Le pas de la prime de rattrapage : UN RANG de retard (10 niveaux) double l'apprentissage.
  *  ⚠️ DÉRIVÉ de l'échelle de prestige, jamais écrit — `rankStartLevel(1)` est le ★1 du rang
  *  suivant, donc le niveau juste avant est le ★5 du premier rang. */
-const CATCH_UP_RANK = rankStartLevel(1) - 1;
+const CATCH_UP_RANK = LEVELS_PER_RANK;
 
 /**
  * 🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de RATTRAPAGE (v0.1097, mesurée ;

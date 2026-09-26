@@ -170,6 +170,8 @@ export function useInvokeSfx() {
   }
   const stamp = () => tone('sine', 110, 55, 0.2, 0.6);
   const tick = () => tone('square', 2400, 2400, 0.02, 0.03);
+  /** Battement de la scrutation du ×10 : un peu plus aigu à chaque orbe, la tension monte. */
+  const pulse = (i: number) => tone('sine', 170 + i * 28, 130 + i * 28, 0.14, 0.28);
   return {
     enabled,
     setEnabled,
@@ -182,5 +184,6 @@ export function useInvokeSfx() {
     chime,
     stamp,
     tick,
+    pulse,
   };
 }

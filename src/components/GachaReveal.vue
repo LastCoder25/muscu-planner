@@ -904,28 +904,44 @@ async function playLot() {
     );
     orbs.forEach(({ o }) => setTail(o, 0));
     await wait(INVOKE.lotApexMs, tok);
+    // Scrutation : chaque orbe a son moment, qu'elle s'allume ensuite ou non.
+    for (let i = 0; i < orbs.length; i++) {
+      orbs[i]!.o.querySelector('.ivk-o-body')?.animate(
+        [
+          { transform: 'scale(1)', filter: 'brightness(1)' },
+          { transform: 'scale(1.35)', filter: 'brightness(1.8)', offset: 0.4 },
+          { transform: 'scale(1)', filter: 'brightness(1)' },
+        ],
+        { duration: INVOKE.lotScanMs * 2, easing: 'ease-out' },
+      );
+      sfx.pulse(i);
+      vib(8);
+      await wait(INVOKE.lotScanMs, tok);
+    }
+    await wait(INVOKE.lotScanHoldMs, tok);
     // Les A puis les S s'allument un à un.
     for (const i of igniteOrder(plan)) {
       const it = plan.items[i]!;
       const o = orbs[i]!.o;
       for (let s = 1; s < it.path.length; s++) {
+        const g = it.path[s]!;
+        await wait(INVOKE.lotCrackPauseMs, tok);
         sfx.crack();
         vib(25);
-        await crackOrb(o, 280, tok);
-        const g = it.path[s]!;
+        await crackOrb(o, INVOKE.lotCrackMs, tok);
         o.style.setProperty('--c', rankColor(g));
         if (g === 2) {
           sfx.chime(3);
           vib([40, 30, 90]);
-          await flashOnce(0.75, 240, tok);
+          await flashOnce(0.75, INVOKE.lotFlashMsS, tok);
           shake(6, 260);
           color.value = rankColor(2);
         } else {
-          await flashOnce(0.3, 180, tok);
+          await flashOnce(0.3, INVOKE.lotFlashMsA, tok);
           if (best < 2) color.value = rankColor(1);
         }
         waveAt(o.querySelector('.ivk-o-body'));
-        await wait(g === 2 ? 180 : 100, tok);
+        await wait(g === 2 ? INVOKE.lotRestMsS : INVOKE.lotRestMsA, tok);
       }
     }
     // Chute lourde : chaque orbe tombe sur l'emplacement de sa carte.
