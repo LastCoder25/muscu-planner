@@ -404,12 +404,18 @@
       </div>
       <div v-if="focusCrew.haul.length" class="tc-haul">
         <span class="tc-haul-lab">Ramène</span>
-        <span v-for="p in focusCrew.haul" :key="p.emoji" class="tc-pill">{{ p.emoji }} {{ p.n }}</span>
+        <span v-for="p in focusCrew.haul" :key="p.emoji" class="tc-pill"
+          >{{ p.emoji }} {{ p.n }}</span
+        >
       </div>
       <div class="car-pick">
         <div v-if="focusCrew.hero" class="tc-hero">
           <div class="tc-hero-av">
-            <AventureAvatar :profile="character.profile" :equipped="char.row?.equipped ?? {}" no-companions />
+            <AventureAvatar
+              :profile="character.profile"
+              :equipped="char.row?.equipped ?? {}"
+              no-companions
+            />
           </div>
           <b>Ton héros</b>
         </div>
@@ -1687,7 +1693,13 @@ function expeHaul(o: {
   return objets > 0 ? [...pills, { emoji: '🎒', n: objets }] : pills;
 }
 /** Un convoi nomme ses clés `keys` là où une expédition dit `key`. */
-function caravanHaul(o: { gold: number; energy: number; summonStones: number; keys: number; mana?: number }) {
+function caravanHaul(o: {
+  gold: number;
+  energy: number;
+  summonStones: number;
+  keys: number;
+  mana?: number;
+}) {
   return expeHaul({ ...o, key: o.keys });
 }
 /** Les convois EN ROUTE, situés par la même interpolation que le héros
@@ -1914,20 +1926,17 @@ function openRiftReport() {
 }
 /** Le rapport ouvert attend-il d'être encaissé ? (sinon la modale n'est qu'un compte rendu) */
 const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.claimed === false);
-/** Le rapport du héros À ENCAISSER, s'il y en a un — UNE définition de « prêt » (`isClaimable`),
- *  suivie par l'horloge. Elle ouvre la modale dans les deux cas qui comptent : le héros
- *  rentre pendant qu'on regarde la carte, ou on arrive par la notification « ton héros
- *  est rentré » — l'action promise ne doit pas se chercher dans la boîte 📬. */
-const dueReport = computed(() => (char.row?.messages ?? []).find((m) => isClaimable(m, now.value)));
-watch(
-  dueReport,
-  (m) => {
-    if (!m || collectOpen.value) return;
-    lastOutcome.value = m;
-    collectOpen.value = true;
-  },
-  { immediate: true },
-);
+/** 🎁 Un retour d'expédition est ENCAISSÉ TOUT SEUL (`expeAutoClaim`, dans `lifecycle`) : la
+ *  modale s'ouvre alors en simple compte rendu de ce qui vient d'être crédité — dans les deux
+ *  cas qui comptent : le héros rentre pendant qu'on regarde la carte, ou on arrive par la
+ *  notification « ton héros est rentré ». */
+function showReturned(done: NonNullable<Awaited<ReturnType<typeof char.expeClaim>>>) {
+  advXpFx.show(done.advTracks);
+  celebrateTopDrop(done);
+  if (collectOpen.value) return;
+  lastOutcome.value = { ...done, claimed: true };
+  collectOpen.value = true;
+}
 
 // ── Filons de production (village autour de la ville) ──
 /** Un lieu est GRISÉ quand plus rien ne peut y être envoyé — jamais parce que le
@@ -2185,22 +2194,18 @@ async function lifecycle() {
         type: msg.win ? 'positive' : 'warning',
         message: `📬 ${msg.win ? 'Rapport : victoire' : 'Rapport : échec'} — le héros rentre.`,
       });
-    // Le héros rentre : il redevient disponible, mais son chargement reste à ENCAISSER
-    // (c'est `dueReport` qui ouvre la modale, pas ce tick).
+    // Le héros rentre : il redevient disponible.
     await char.expeSettle(uid, Date.now());
     // ⚔️ Les groupes partis sans le héros : rapport à l'arrivée, retour au bout du chemin.
-    // Le butin attend dans la boîte (c'est `dueReport` qui ouvre la modale au retour).
     const partyMsgs = await char.partyTick(uid, Date.now());
-    if (partyMsgs.length)
+    // Un rapport déposé AVANT le retour se dit ; un retour, c'est la modale qui le montre.
+    if (partyMsgs.length && !partyMsgs.every((m) => isClaimable(m, Date.now())))
       $q.notify({
         type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
-        // ⚠️ App fermée pendant le voyage : dépôt et retour dans le même tick. UNE définition
-        // de « prêt » (`isClaimable`, déjà lue par `dueReport`) : la moitié DATE de la règle
-        // était recopiée ici.
-        message: partyMsgs.every((m) => isClaimable(m, Date.now()))
-          ? '📬 Ton groupe est rentré — son butin t’attend.'
-          : '📬 Rapport de ton groupe — il rentre en ville.',
+        message: '📬 Rapport de ton groupe — il rentre en ville.',
       });
+    // 🎁 Au retour en ville, le butin s'encaisse tout seul.
+    for (const done of await char.expeAutoClaim(uid, Date.now())) showReturned(done);
     await char.expeSyncMap(uid, Date.now(), progressionLevel.value);
   } finally {
     busy = false;
@@ -2217,6 +2222,10 @@ async function doClaim() {
   collectOpen.value = false;
   if (!done) return;
   advXpFx.show(done.advTracks);
+  celebrateTopDrop(done);
+}
+/** Éclat du meilleur objet ramené, s'il est de rang primordial. */
+function celebrateTopDrop(done: ExpeditionMessage) {
   const drops = done.items && done.items.length ? done.items : done.item ? [done.item] : [];
   const rk = (r: string) => RARITY_RANK[r as keyof typeof RARITY_RANK] ?? 0;
   const top = drops.slice().sort((a, b) => rk(b.rarity) - rk(a.rarity))[0];

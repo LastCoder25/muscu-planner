@@ -90,6 +90,7 @@ import {
   dropSeenMessages,
   MESSAGES_CAP,
   isClaimable,
+  isAutoClaimable,
   messageTitle,
   createMap,
   advanceWorld,
@@ -2110,6 +2111,19 @@ export const useCharacterStore = defineStore('character', () => {
     useGameFx().celebrateTickets(ent(m.tickets), m.title ?? 'Coffre encaissé');
     return { ...m, advProgress, advTracks };
   }
+  /** 🎁 ENCAISSEMENT AUTOMATIQUE au retour : chaque rapport d'expédition (héros ou groupe)
+   *  dont le voyage est fini est encaissé, l'un après l'autre, par `expeClaim` — la SEULE
+   *  voie de crédit (idempotence, `claimedLocally`, entiers). Les coffres restent à ouvrir
+   *  à la main (`isAutoClaimable`). Rend ce qui a été encaissé, pour que l'écran l'annonce. */
+  async function expeAutoClaim(userId: string, now: number) {
+    const due = (row.value?.messages ?? []).filter((m) => isAutoClaimable(m, now));
+    const done: NonNullable<Awaited<ReturnType<typeof expeClaim>>>[] = [];
+    for (const m of due) {
+      const r = await expeClaim(userId, m.id, now);
+      if (r) done.push(r);
+    }
+    return done;
+  }
   /** 📬 Fermeture de la boîte : retire les messages vus, sauf un butin à prendre
    *  (`dropSeenMessages`). La boîte part de `boxWith` : un encaissement PARTI (pas encore
    *  relu du serveur) y est déjà `claimed`, donc retirable. */
@@ -3057,6 +3071,7 @@ export const useCharacterStore = defineStore('character', () => {
     grantComboChest,
     grantFriendBossChest,
     expeClaim,
+    expeAutoClaim,
     expeMarkRead,
     expeDropSeen,
     buildFilon,
