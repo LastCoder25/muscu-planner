@@ -4,8 +4,8 @@
        bonus (vert, 100 → 120 %). Chaque barre se remplit de ce que les exos ont fait dans SA
        zone, sommé sur tous les exos (`comboBarParts`) : le jaune peut avancer avant que
        l'argent soit plein, si certains exos sont allés plus loin. Les largeurs gardent les
-       proportions (80 · 20 · 20). Le rose dit le RETARD jusqu'au trait « dans les temps »,
-       dans chaque barre qu'il traverse. Une seule barre pour la fiche du 360 et l'onglet 🎯. -->
+       proportions (80 · 20 · 20). Le rose est le RETARD réel (points d'objectif), réparti dans
+       le vide de l'argent puis du jaune, jamais dans le bonus. Une seule barre pour la fiche du 360 et l'onglet 🎯. -->
   <div class="cpb" :class="{ thin }">
     <div
       v-for="z in zones"
@@ -28,37 +28,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { comboBarParts, comboBarPos, type ComboChallenge, type ComboPace } from '@/lib/combo';
+import { comboBarSegments, type ComboChallenge, type ComboPace } from '@/lib/combo';
 
 const props = defineProps<{ combo: ComboChallenge; pace: ComboPace; thin?: boolean }>();
 
-/** Limites des zones, en % d'une barre qui irait de 0 à 120 % de l'objectif. */
-const SEC = comboBarPos(80);
-const OBJ = comboBarPos(100);
-
-const zones = computed(() => {
-  const p = comboBarParts(props.combo);
-  const markPos = comboBarPos(props.pace.onTimePct);
-  const showMark = props.pace.showMark;
-  const late = props.pace.latePct > 0;
-  return [
-    { id: 'sec', from: 0, to: SEC, done: p.sec },
-    { id: 'obj', from: SEC, to: OBJ, done: p.obj },
-    { id: 'bonus', from: OBJ, to: 100, done: p.bonus },
-  ].map((z) => {
-    const len = z.to - z.from;
-    const fill = Math.min(100, (z.done / len) * 100);
-    // Jusqu'où on devrait en être DANS cette barre (0 si le trait est avant, 100 s'il est après).
-    const due = Math.max(0, Math.min(100, ((markPos - z.from) / len) * 100));
-    return {
-      id: z.id,
-      len,
-      fill,
-      late: late ? Math.max(0, due - fill) : 0,
-      mark: showMark && markPos > z.from && markPos < z.to ? due : null,
-    };
-  });
-});
+// Remplissage, retard et trait : la règle vit dans la lib (`comboBarSegments`), testée.
+const zones = computed(() => comboBarSegments(props.combo, props.pace));
 </script>
 
 <style scoped lang="scss">

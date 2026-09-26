@@ -58,6 +58,8 @@ import {
   legsDoneLast,
   legStage,
   comboBarParts,
+  comboBarSegments,
+  NO_PACE,
   comboBarPos,
   comboFinishPlan,
   comboFinished,
@@ -1395,6 +1397,61 @@ describe('🎨 LA BARRE PAR ZONE : 0 → 120 %, argent / jaune / vert', () => {
     const p = comboBarParts(combo([ex('A', 10, 30)]));
     expect(p.sec + p.obj + p.bonus).toBeCloseTo(100, 6);
     expect(p.bonus).toBeCloseTo(pct(0.2), 6);
+  });
+});
+
+describe('🌸 LE ROSE = LE RETARD RÉEL, réparti dans l’argent puis le jaune', () => {
+  const ex = (name: string, target: number, faites: number): ComboLeg => ({
+    slot: 'push',
+    exercise_id: name,
+    exercise_name: name,
+    rep_weight: 1,
+    target,
+    sets: Array.from({ length: faites }, () => set(10)),
+  });
+  const pace = (onTimePct: number, donePct: number) => ({
+    ...NO_PACE,
+    onTimePct,
+    donePct,
+    latePct: Math.max(0, onTimePct - donePct),
+    showMark: onTimePct > 0 && onTimePct < 100,
+  });
+  // Points de retard peints (la barre argent fait 80 points, les deux autres 20).
+  const latePts = (segs: ReturnType<typeof comboBarSegments>) =>
+    segs.reduce((a, z) => a + (z.late * z.len) / 100, 0);
+
+  it('le cas signalé : l’avance d’un exo dans le jaune réduit le rose de l’argent', () => {
+    // A 11/10, B 5/10 → fait 75 % de l’objectif ; attendu 86 % → 11 points de retard.
+    // Avant : tout le vide de l’argent (15 points) était rose.
+    const c = combo([ex('A', 10, 11), ex('B', 10, 5)]);
+    const segs = comboBarSegments(c, pace(86, comboProgressPct(c)));
+    expect(latePts(segs)).toBeCloseTo(11, 6);
+    expect(segs[0]!.late).toBeCloseTo((11 / 80) * 100, 6);
+    expect(segs[1]!.late).toBe(0);
+    // Le trait au bout du rose (dans l’argent), pas à 86 % dans le jaune.
+    expect(segs[0]!.mark).toBeCloseTo(((65 + 11) / 80) * 100, 6);
+    expect(segs[1]!.mark).toBeNull();
+  });
+  it('jamais de rose dans le bonus, et le reste passe dans le jaune', () => {
+    // 0/10 partout, attendu 95 % : 80 points dans l’argent, 15 dans le jaune.
+    const c = combo([ex('A', 10, 0)]);
+    const segs = comboBarSegments(c, pace(95, 0));
+    expect(segs[0]!.late).toBeCloseTo(100, 6);
+    expect(segs[1]!.late).toBeCloseTo(75, 6);
+    expect(segs[2]!.late).toBe(0);
+    expect(segs[1]!.mark).toBeCloseTo(75, 6); // le trait à 95 %, dans le jaune
+  });
+  it('dans les temps : aucun rose, le trait à l’avancement attendu', () => {
+    const c = combo([ex('A', 10, 9)]);
+    const segs = comboBarSegments(c, pace(50, comboProgressPct(c)));
+    expect(latePts(segs)).toBe(0);
+    expect(segs[0]!.mark).toBeCloseTo((50 / 80) * 100, 6);
+  });
+  it('en retard : le trait se pose au bout du rose', () => {
+    const c = combo([ex('A', 10, 4)]); // 40 %, attendu 60 %
+    const segs = comboBarSegments(c, pace(60, comboProgressPct(c)));
+    expect(segs[0]!.mark).toBeCloseTo((60 / 80) * 100, 6);
+    expect(segs[0]!.fill + segs[0]!.late).toBeCloseTo(segs[0]!.mark!, 6);
   });
 });
 

@@ -644,6 +644,61 @@ export function comboBarParts(c: ComboChallenge): { sec: number; obj: number; bo
   return { sec: w(sec), obj: w(obj), bonus: w(bonus) };
 }
 
+/** 🎨 LES TROIS BARRES DU 360 (secondaire · objectif · bonus), chacune en % de SA longueur.
+ *
+ *  ⚠️ LE ROSE = LE RETARD RÉEL, pas « ce qui reste à faire avant le trait » dans chaque barre.
+ *  Calculé barre par barre, il ignorait l'avance prise ailleurs : un exo déjà dans le jaune ne
+ *  réduisait pas le rose de l'argent, et le retard affiché dépassait le vrai (signalé : tout le
+ *  reste de l'argent en rose la veille de la fin). Le retard est celui de `comboPace` (points
+ *  d'objectif), et il se RÉPARTIT dans le vide de l'argent puis dans celui du jaune — jamais
+ *  dans le bonus : le retard porte sur le secondaire et l'objectif.
+ *
+ *  Le trait « dans les temps » se pose au bout du rose quand on est en retard (c'est là qu'on
+ *  devrait être), sinon à l'avancement attendu (`onTimePct`) sur l'échelle argent → jaune. */
+export interface ComboBarSegment {
+  id: 'sec' | 'obj' | 'bonus';
+  /** Longueur relative (80 · 20 · 20). */
+  len: number;
+  fill: number;
+  late: number;
+  mark: number | null;
+}
+export function comboBarSegments(c: ComboChallenge, pace: ComboPace): ComboBarSegment[] {
+  const p = comboBarParts(c);
+  // En points d'objectif (0..80, 0..20, 0..20).
+  const pts = (w: number) => w * COMBO_BAR_SCALE;
+  const secLen = COMBO_TIER_SECONDARY * 100;
+  const objLen = (1 - COMBO_TIER_SECONDARY) * 100;
+  const bonusLen = (COMBO_TIER_MAX - 1) * 100;
+  const done = { sec: pts(p.sec), obj: pts(p.obj), bonus: pts(p.bonus) };
+  let reste = Math.max(0, pace.latePct);
+  const lateSec = Math.min(reste, Math.max(0, secLen - done.sec));
+  reste -= lateSec;
+  const lateObj = Math.min(reste, Math.max(0, objLen - done.obj));
+  // Où poser le trait, en points d'objectif, et dans quelle barre.
+  let mark: { id: 'sec' | 'obj'; at: number } | null = null;
+  if (pace.showMark) {
+    // Rose arrêté dans l'argent : le trait à son bout (l'avance prise dans le jaune le
+    // décale avant l'attendu). Rose qui déborde dans le jaune : son bout tombe PILE sur
+    // l'attendu (argent plein + jaune fait + rose = attendu), la règle générale suffit.
+    if (lateSec > 0 && lateObj === 0) mark = { id: 'sec', at: done.sec + lateSec };
+    else if (pace.onTimePct <= secLen) mark = { id: 'sec', at: pace.onTimePct };
+    else mark = { id: 'obj', at: pace.onTimePct - secLen };
+  }
+  const seg = (id: 'sec' | 'obj' | 'bonus', len: number, d: number, late: number) => ({
+    id,
+    len,
+    fill: Math.min(100, (d / len) * 100),
+    late: (late / len) * 100,
+    mark: mark && mark.id === id && mark.at > 0 && mark.at < len ? (mark.at / len) * 100 : null,
+  });
+  return [
+    seg('sec', secLen, done.sec, lateSec),
+    seg('obj', objLen, done.obj, lateObj),
+    seg('bonus', bonusLen, done.bonus, 0),
+  ];
+}
+
 export function legBarGeometry(l: ComboLeg): {
   objPct: number;
   fillPct: number;
