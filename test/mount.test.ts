@@ -1298,7 +1298,6 @@ describe('🧩 SetPieceCmp — une pièce de set face à SA pièce du set', () =
   }, 30_000);
 });
 
-
 describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
   it('se monte et peint les trois zones', async () => {
     const { default: ComboProgressBar } = await import('@/components/ComboProgressBar.vue');
@@ -1314,7 +1313,14 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
     const combo = { id: 'c', legs: [leg('A', 12), leg('B', 3)], status: 'active' };
     let out = '';
     expect(
-      await mountIt(ComboProgressBar, { combo, pace: NO_PACE }, undefined, undefined, '/', (h) => (out = h)),
+      await mountIt(
+        ComboProgressBar,
+        { combo, pace: NO_PACE },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
     ).toBeNull();
     // Les barres sont des boutons (elles filtrent), avec leur compte d’exos ; une zone vide
     // (ici l’objectif : A au bonus, B au secondaire) n’est pas cliquable.
@@ -1323,5 +1329,8 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
     // Trois barres SÉPARÉES, chacune avec son remplissage.
     for (const c of ['cpb-sec', 'cpb-obj', 'cpb-bonus']) expect(out).toContain(c);
     expect((out.match(/cpb-fill/g) ?? []).length).toBe(3);
+    // 🔎 Et elles DISENT qu'elles filtrent — sans cette ligne, rien ne l'indiquait.
+    expect(out).toContain('cpb-hint');
+    expect(out).toContain('Touche une barre');
   }, 30_000);
 });

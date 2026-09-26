@@ -6,35 +6,46 @@
        🔎 Et ELLES FILTRENT (demandé, à la place d'une rangée de filtres) : toucher une barre
        ne garde que les exos qui travaillent dans sa zone, la retoucher réaffiche tout. Le
        libellé sous chaque barre sert à la fois de légende et de compte. -->
-  <div class="cpb" :class="{ thin, filtering: modelValue !== 'all' }">
-    <button
-      v-for="z in zones"
-      :key="z.id"
-      type="button"
-      class="cpb-hit"
-      :class="['cpb-' + z.id, { on: modelValue === z.id }]"
-      :style="{ flexGrow: z.len }"
-      :aria-pressed="modelValue === z.id"
-      :disabled="!counts[z.id]"
-      :title="`Afficher les exercices en ${LABEL[z.id].toLowerCase()}`"
-      @click="toggle(z.id)"
-    >
-      <span class="cpb-seg">
-        <span class="cpb-fill" :style="{ width: z.fill + '%' }" />
-        <span
-          v-if="z.late > 0"
-          class="cpb-late"
-          :style="{ left: z.fill + '%', width: z.late + '%' }"
-        />
-        <i
-          v-if="z.mark !== null"
-          class="cpb-mark"
-          :style="{ left: z.mark + '%' }"
-          :title="`Pour être dans les temps : ${pace.onTimePct}%`"
-        />
-      </span>
-      <span class="cpb-lab">{{ LABEL[z.id] }} <b>{{ counts[z.id] }}</b></span>
-    </button>
+  <div class="cpb-wrap" :class="{ thin }">
+    <div class="cpb" :class="{ thin, filtering: modelValue !== 'all' }">
+      <button
+        v-for="z in zones"
+        :key="z.id"
+        type="button"
+        class="cpb-hit"
+        :class="['cpb-' + z.id, { on: modelValue === z.id }]"
+        :style="{ flexGrow: z.len }"
+        :aria-pressed="modelValue === z.id"
+        :disabled="!counts[z.id]"
+        :title="`Afficher les exercices en ${LABEL[z.id].toLowerCase()}`"
+        @click="toggle(z.id)"
+      >
+        <span class="cpb-seg">
+          <span class="cpb-fill" :style="{ width: z.fill + '%' }" />
+          <span
+            v-if="z.late > 0"
+            class="cpb-late"
+            :style="{ left: z.fill + '%', width: z.late + '%' }"
+          />
+          <i
+            v-if="z.mark !== null"
+            class="cpb-mark"
+            :style="{ left: z.mark + '%' }"
+            :title="`Pour être dans les temps : ${pace.onTimePct}%`"
+          />
+        </span>
+        <span class="cpb-lab"
+          >{{ LABEL[z.id] }} <b>{{ counts[z.id] }}</b></span
+        >
+      </button>
+    </div>
+    <!-- 🔎 DISCRET MAIS CLAIR (demandé) : sans cette ligne, rien ne disait que les barres
+       sont des boutons. Elle change quand un filtre est actif, pour dire comment en sortir. -->
+    <p class="cpb-hint" aria-live="polite">
+      <q-icon name="filter_alt" size="12px" />
+      <template v-if="modelValue === 'all'">Touche une barre pour n’afficher que ses exos</template>
+      <template v-else>Filtre « {{ LABEL[modelValue] }} » · retouche-la pour tout voir</template>
+    </p>
   </div>
 </template>
 
@@ -86,6 +97,19 @@ watch(
 </script>
 
 <style scoped lang="scss">
+.cpb-hint {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.3;
+  color: var(--dim);
+  opacity: 0.85;
+}
+.cpb-wrap.thin .cpb-hint {
+  margin-bottom: 2px;
+}
 .cpb {
   display: flex;
   gap: 4px;
