@@ -208,6 +208,7 @@ import {
   grantReportXp,
   partyClaimRoster,
   partyLegMin,
+  interceptLeg,
   settleParties,
   startParty,
   type ActiveParty,
@@ -2927,12 +2928,17 @@ export const useCharacterStore = defineStore('character', () => {
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
     const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
-    const leg = partyLegMin(poi, escort, {
-      hero: !!hero,
-      travelMult: travelTimeMult(cur.buildings),
-      gearSpeed: advGearRoles(escort, road.advGear).speed,
-      supplies,
-    });
+    // ⚔️ Une bande en marche vient à notre rencontre : on va là où on la CROISERA
+    // (`interceptLeg`), et le voyage garde ce point — la carte y dessine le choc.
+    const meet = interceptLeg(poi, now, (p) =>
+      partyLegMin(p, escort, {
+        hero: !!hero,
+        travelMult: travelTimeMult(cur.buildings),
+        gearSpeed: advGearRoles(escort, road.advGear).speed,
+        supplies,
+      }),
+    );
+    const leg = meet.legMin;
     // ⚔️🕳️ LA DISPATCH VIT ICI, à l’UNIQUE chemin d’envoi : `startParty` ne choisit plus la
     // résolution, il REÇOIT l’issue. Un camp se résout par son combat de faction, une faille
     // par son incursion (attrition, gardien, mana). ⚠️ EXPLICITE, et non « camp sinon faille » :
@@ -2983,7 +2989,7 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
       supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };
-    const trip = startParty({ poi, hero, seed }, now, leg, withSupplies);
+    const trip = startParty({ poi: meet.poi, hero, seed }, now, leg, withSupplies);
     const busy = new Set(opts.escortIds);
     const map = cur.expedition_map
       ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }

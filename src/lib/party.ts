@@ -32,6 +32,7 @@ import {
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
+  warbandAt,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
 import { advTitle, grantAdvXp, type Adventurer } from './adventurers';
@@ -52,6 +53,45 @@ export function partyLegMin(
     ? caravanLegMin(poi, escort, opts.gearSpeed + speed, opts.travelMult)
     : 0;
   return Math.max(1, hero, advs);
+}
+
+/**
+ * ⚔️ LE POINT DE RENCONTRE d'une interception. Une bande en marche AVANCE vers la ville
+ * pendant que le groupe marche vers elle : on ne va pas là où on l'a vue, on va là où on
+ * la CROISERA. C'est le plus petit temps `τ` (minutes) tel que le trajet jusqu'à la
+ * position qu'elle aura à `now + τ` tienne en `τ` — les deux colonnes y arrivent ensemble.
+ *
+ * - `legOf` est la règle de trajet du voyage (`partyLegMin` et ses rôles, rations,
+ *   Avant-poste) : on ne la recopie pas, on la rejoue sur la position future.
+ * - Recherche dichotomique : le trajet ne fait que RACCOURCIR à mesure que la bande
+ *   approche, donc « on l'a rejointe » ne se dément plus une fois vrai.
+ * - Si elle atteint la ville avant qu'on la rejoigne, la rencontre a lieu au pied des murs.
+ * - Tout autre lieu est immobile : son trajet est inchangé.
+ *
+ * ⚠️ Le lieu rendu est la bande À LA RENCONTRE (même id, même faction, même force, `from`
+ * gardé) : c'est là que le groupe se rend et d'où il revient — le retour vaut l'aller.
+ */
+export function interceptLeg(
+  poi: Poi,
+  now: number,
+  legOf: (p: Poi) => number,
+): { poi: Poi; legMin: number } {
+  if (poi.type !== 'warband' || !poi.from) return { poi, legMin: legOf(poi) };
+  const at = (min: number) => warbandAt(poi, now + min * 60_000);
+  const joined = (min: number) => legOf(at(min)) <= min;
+  const end = Math.max(1, Math.ceil((poi.expiresAt - now) / 60_000));
+  if (!joined(end)) {
+    const walls = at(end);
+    return { poi: walls, legMin: legOf(walls) };
+  }
+  let lo = 1;
+  let hi = end;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (joined(mid)) hi = mid;
+    else lo = mid + 1;
+  }
+  return { poi: at(lo), legMin: lo };
 }
 
 /** 🎒 Ce que ce voyage offre aux consommables (`supplyUselessWhy`). ⚠️ Vit ICI et non dans

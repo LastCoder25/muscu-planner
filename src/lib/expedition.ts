@@ -1081,6 +1081,24 @@ function distNormAt(d: number): number {
   return Math.max(0, (d - EXPE.distMin) / (EXPE.distMax - EXPE.distMin));
 }
 
+/**
+ * ⚔️ Où se trouve une bande en marche à l'instant `t` — la SEULE formule de sa marche : en
+ * ligne droite de `from` (sa faille) vers la ville, sur toute sa durée de vie. Lue par
+ * `advanceWorld` (la carte), par le point de rencontre d'une interception
+ * (`interceptLeg`) et par le dessin de la bande qui marche à la rencontre du groupe.
+ * Sans `from` (pas une bande), le lieu ne bouge pas.
+ */
+export function warbandAt<P extends Pick<Poi, 'x' | 'y' | 'distNorm' | 'from' | 'spawnedAt' | 'expiresAt'>>(
+  p: P,
+  t: number,
+): P {
+  if (!p.from) return p;
+  const k = clamp01((t - p.spawnedAt) / Math.max(1, p.expiresAt - p.spawnedAt));
+  const x = p.from.x + (EXPE.town.x - p.from.x) * k;
+  const y = p.from.y + (EXPE.town.y - p.from.y) * k;
+  return { ...p, x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
+}
+
 /** Trajet ALLER (minutes) selon distance + niveau. Round-trip = 2×. */
 export function travelOneWayMin(level: number, distNorm: number): number {
   const base =
@@ -1789,13 +1807,8 @@ export function advanceWorld(
   // court — mais il reste moins de temps pour le faire.
   next.pois = next.pois.map((p) => {
     if (p.type !== 'warband' || !p.from) return p;
-    const t = clamp01((now - p.spawnedAt) / Math.max(1, p.expiresAt - p.spawnedAt));
-    const x = p.from.x + (EXPE.town.x - p.from.x) * t;
-    const y = p.from.y + (EXPE.town.y - p.from.y) * t;
-    if (x === p.x && y === p.y) return p;
-    const d = Math.hypot(x - EXPE.town.x, y - EXPE.town.y);
-    const distNorm = distNormAt(d);
-    return { ...p, x, y, distNorm };
+    const at = warbandAt(p, now);
+    return at.x === p.x && at.y === p.y ? p : at;
   });
   const irr = irradiatedPoiIds(next.pois, next.ambushes, now);
   next.pois = next.pois.map((p) => {

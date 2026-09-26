@@ -315,6 +315,16 @@
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
           </g>
 
+          <!-- ⚔️ La bande qu'on intercepte marche VERS le point de rencontre pendant que le
+               groupe y court : on voit les deux colonnes converger, et le choc s'annonce là
+               où elles se croiseront. -->
+          <g v-for="b in bandsOnMap" :key="'band' + b.id" class="band-march">
+            <line :x1="b.x" :y1="b.y" :x2="b.meetX" :y2="b.meetY" class="band-path" />
+            <circle :cx="b.meetX" :cy="b.meetY" r="6.5" class="clash-ring" />
+            <circle :cx="b.x" :cy="b.y" r="3.2" class="band-mark" />
+            <text :x="b.x" :y="b.y + 1.1" class="van-emo">{{ b.emo }}</text>
+          </g>
+
           <g v-if="active && hero">
             <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
@@ -872,6 +882,7 @@ import {
   partySendBlocker,
   partyHeroBlocker,
   partyLegMin,
+  interceptLeg,
   supplyTarget,
 } from '@/lib/party';
 import { partyWinChance } from '@/lib/partyForecast';
@@ -895,6 +906,7 @@ import {
   type ExpeditionMessage,
   EXPE,
   travelPosition,
+  warbandAt,
   tripTimeLabel,
   voyageProgress,
   poiCombatant,
@@ -1566,15 +1578,20 @@ const partyWin = computed(() => {
   return w === null ? null : Math.round(w * 100);
 });
 /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
+// ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
+// point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où
+// elle se trouve maintenant. Horloge grossière : la rencontre bouge à la minute, pas plus.
 const partyMin = computed(() =>
   selected.value && partySize.value
     ? 2 *
-      partyLegMin(selected.value, partyAdvs.value, {
-        hero: partyHeroOn.value,
-        travelMult: travelMult.value,
-        gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
-        supplies: activeSupplies.value,
-      })
+      interceptLeg(selected.value, coarseNow.value, (p) =>
+        partyLegMin(p, partyAdvs.value, {
+          hero: partyHeroOn.value,
+          travelMult: travelMult.value,
+          gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
+          supplies: activeSupplies.value,
+        }),
+      ).legMin
     : 0,
 );
 /** ⚠️ CE QUE LE DÉPART COÛTE face à l'armée qui arrive — mêmes règles que le convoi et le
@@ -1801,6 +1818,31 @@ const partiesOnMap = computed(() =>
       prog: voyageProgress(g, now.value),
     })),
 );
+/**
+ * ⚔️ LES BANDES QU'ON VA INTERCEPTER, en marche vers le point de rencontre. Le voyage garde
+ * la bande À LA RENCONTRE (`interceptLeg`) avec sa faille d'origine (`from`) : sa position
+ * du moment se relit donc par `warbandAt`, la formule de sa marche sur la carte. Les deux
+ * colonnes arrivent ensemble au point de rencontre (`midAt`) — là, la bataille a lieu.
+ */
+const bandsOnMap = computed(() => {
+  const voyages = [
+    ...(active.value ? [{ id: 'hero', v: active.value }] : []),
+    ...char.partyList.map((g) => ({ id: g.id, v: g })),
+  ];
+  return voyages
+    .filter(({ v }) => v.poi.type === 'warband' && !!v.poi.from && now.value < v.midAt)
+    .map(({ id, v }) => {
+      const at = warbandAt(v.poi, now.value);
+      return {
+        id,
+        x: at.x,
+        y: at.y,
+        meetX: v.poi.x,
+        meetY: v.poi.y,
+        emo: FACTION_EMOJI[v.poi.faction ?? 'bandits'],
+      };
+    });
+});
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
 const travelersOnMap = computed(() => [
   ...vansOnMap.value.map((v) => ({ ...v, emo: '🐫', kind: 'caravan' as const })),
@@ -3199,6 +3241,38 @@ onUnmounted(() => {
 }
 .van-target {
   opacity: 0.75;
+}
+/* ⚔️ La bande qu'on intercepte : rouge (elle menace la base), son chemin vers le point de
+   rencontre, et un anneau qui pulse là où les deux colonnes vont se heurter. */
+.band-mark {
+  fill: var(--surface);
+  stroke: var(--d4);
+  stroke-width: 0.9;
+}
+.band-path {
+  stroke: var(--d4);
+  stroke-width: 0.7;
+  stroke-dasharray: 1.4 1.2;
+  opacity: 0.8;
+}
+.clash-ring {
+  fill: none;
+  stroke: var(--d4);
+  stroke-width: 0.8;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: clashPulse 1.4s ease-in-out infinite;
+}
+@keyframes clashPulse {
+  50% {
+    transform: scale(1.35);
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .clash-ring {
+    animation: none;
+  }
 }
 .van-mark {
   fill: var(--surface);
