@@ -803,7 +803,7 @@ import MissionReportCard from '@/components/MissionReportCard.vue';
 import { caravanCard, messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import { campBodyCount, campRewardLabel } from '@/lib/camp';
+import { campBodyCount, campRewardLabel, FACTION_LOOT_LABEL, forceLootPreview } from '@/lib/camp';
 import { poiRank, poiRankCounts } from '@/lib/poiRank';
 import {
   PARTY_HERO_BLOCK_LABEL,
@@ -841,6 +841,7 @@ import {
   HARVEST_TYPES,
   campSpecOf,
   harvestGuardOf,
+  harvestGold,
   poiForceOf,
   isRiftPoi,
   isWarbandPoi,
@@ -2020,6 +2021,41 @@ const poiFacts = computed<PoiFact[]>(() => {
       value: String(campBodyCount(force.size)),
       title: `Une force de ${force.size} champion${force.size > 1 ? 's' : ''} de référence du niveau du lieu`,
     });
+  // 💰 LE DÉTAIL DE L'OR ET DU BUTIN (v0.1166, demandé : « le détail ») — ce que portent les
+  // ennemis (`forceLootPreview`, les MÊMES poids que la résolution) et, pour une mine, son filon
+  // (`harvestGold`, la même fonction que la récolte). Versé en entier sur une victoire ; sur
+  // une défaite, seulement ce que portaient les ennemis abattus.
+  if (p.type === 'mine')
+    out.push({
+      icon: '⛏️',
+      label: 'Filon',
+      value: `${harvestGold(p, partyHeroOn.value ? progressionLevel.value : heroLevel.value).toLocaleString('fr-FR')} 🪙`,
+      title: "L'or de la mine, selon son rang et ses étoiles — récolté si tu bats ses gardes",
+    });
+  if (force) {
+    const l = forceLootPreview(p, force);
+    if (l.gold)
+      out.push({
+        icon: '👛',
+        label: 'Bourses',
+        value: `${l.gold.toLocaleString('fr-FR')} 🪙`,
+        title: 'Ce que portent les bandits — plus pour un chef ou un champion',
+      });
+    if (l.summonStones)
+      out.push({
+        icon: '🔮',
+        label: 'Sur les ennemis',
+        value: `${l.summonStones} pierres`,
+        title: 'Ce que portent les morts-vivants — plus pour un chef ou un champion',
+      });
+    if (l.supplies)
+      out.push({
+        icon: '🎒',
+        label: 'Consommables',
+        value: `~${l.supplies.toFixed(1).replace('.', ',')}`,
+        title: 'Ce qu’on dépèce sur les bêtes abattues, en moyenne',
+      });
+  }
   if (rift) {
     out.push({
       icon: '👾',
@@ -2132,13 +2168,14 @@ const roundTripMin = (p: Poi) =>
  *  pour une FAILLE et une MINE DE MANA. Ajouter un POI sans dire ce qu’il donne casse
  *  désormais la compilation, au lieu de mentir en silence. */
 const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
-  mine: () => 'Or 🪙 + énergie ⚡ (récolte gardée)',
-  well: () => 'Énergie ⚡ en quantité (récolte gardée)',
-  shrine: () => "Pierres d'invocation 🔮 (récolte gardée)",
-  archive: () => 'Clés du Labyrinthe 🗝️ (récolte gardée)',
+  // 💰 Un lieu gardé rapporte AUSSI ce que portent ses gardes (v0.1166) — la fiche le chiffre.
+  mine: (p) => `Filon d'or 🪙 + énergie ⚡ — et ${guardLoot(p)}`,
+  well: (p) => `Énergie ⚡ en quantité — et ${guardLoot(p)}`,
+  shrine: (p) => `Pierres d'invocation 🔮 — et ${guardLoot(p)}`,
+  archive: (p) => `Clés du Labyrinthe 🗝️ — et ${guardLoot(p)}`,
   wreck: () => 'Épave (ancienne) — plus rien à démonter',
   // 💠 Ce qu’une faille laisse en s’effondrant — une récolte, bien moins que la refermer.
-  mana_mine: () => 'Mana 💠 résiduel (récolte gardée)',
+  mana_mine: (p) => `Mana 💠 résiduel — et ${guardLoot(p)}`,
   // ⚔️ Camp / repaire : ce que rapporte le groupe AVEC ou SANS le héros, selon la faction
   // (règle écrite à côté de `campGroupHaul`, testée contre lui). Jamais de ferraille.
   camp: (p) => campRewardLabel(p),
@@ -2150,6 +2187,11 @@ const POI_REWARD: Record<PoiType, (p: Poi) => string> = {
   // la lit comme une activité de farm et on est déçu du butin.
   warband: () => 'Mana 💠 des monstres abattus — et le prochain siège NE sera pas renforcé',
 };
+/** Ce que portent les gardes d'un lieu de récolte, selon leur faction. */
+function guardLoot(p: Poi): string {
+  const g = harvestGuardOf(p);
+  return g ? `les ${FACTION_LOOT_LABEL[g.faction]} de ses gardes` : 'rien de plus';
+}
 function poiRewardLabel(p: Poi): string {
   return POI_REWARD[p.type](p);
 }

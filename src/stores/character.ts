@@ -2980,7 +2980,8 @@ export const useCharacterStore = defineStore('character', () => {
     const withSupplies = {
       ...outcome,
       ...(outcome.party && healMult < 1 ? { party: { ...outcome.party, healMult } } : {}),
-      supplies: rollSupplyDrop(seed),
+      // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
+      supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };
     const trip = startParty({ poi, hero, seed }, now, leg, withSupplies);
     const busy = new Set(opts.escortIds);

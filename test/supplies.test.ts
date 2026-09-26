@@ -22,7 +22,7 @@ import {
   refChampionAdv,
   roadUnits,
 } from '@/lib/caravan';
-import { campFoe, campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
+import { campFoe, campWinPct, forceLootPreview, resolveCamp } from '@/lib/camp';
 import { incursionWinPct, resolveIncursion, simulateIncursion } from '@/lib/rift';
 import { fuseUnits } from '@/lib/skirmish';
 import { partyWinChance } from '@/lib/partyForecast';
@@ -273,11 +273,13 @@ describe('🎒 chaque effet agit, et par le chemin du combat', () => {
     };
     const lost = resolveCamp({ ...input, road: kit(L, 1) });
     expect(lost.win).toBe(false);
-    expect(lost.gold).toBe(0);
+    // v0.1166 : une défaite garde les bourses des bandits ABATTUS (ici presque aucun).
+    const full = forceLootPreview(poi, spec).gold;
+    expect(lost.gold).toBeLessThan(full * SUPPLY.retreatShare);
     const withCor = resolveCamp({ ...input, road: kit(L, 1, ['cor']) });
     expect(withCor.win).toBe(false);
-    expect(withCor.gold).toBe(Math.round(campGroupHaul(poi, spec).gold * SUPPLY.retreatShare));
-    expect(withCor.gold).toBeGreaterThan(0);
+    expect(withCor.gold).toBe(Math.max(lost.gold, Math.round(full * SUPPLY.retreatShare)));
+    expect(withCor.gold).toBeGreaterThan(lost.gold);
   });
 
   it('🩹 la trousse divise la convalescence', () => {

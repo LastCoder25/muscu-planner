@@ -34,7 +34,7 @@ import {
   type PartyHero,
   type EscortKit,
 } from './caravan';
-import { supplyFx } from './supplies';
+import { SUPPLY_IDS, supplyFx, type SupplyStock } from './supplies';
 import {
   campSpecOf,
   goldCost,
@@ -44,7 +44,6 @@ import {
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
-  poiRewardLevel,
 } from './expedition';
 import { partyFightSeed, partyForecastSeed } from './party';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
@@ -74,23 +73,6 @@ export const CAMP = {
    *  ⚠️ ENTIERS : `campBodies` les réalise en regroupant des parts égales de `troopOf`. */
   chiefWeight: 2,
   championWeight: 4,
-  /** Butin SANS le héros, en part des sources existantes.
-   *  ⚠️ `groupGoldShare` MESURÉ DEUX FOIS. (1) L'or d'un camp de bandits
-   *  doit rester sous l'or moyen d'une MINE de même niveau et distance (40 graines,
-   *  `campCalibration.test` E2) : à 0,6 le plus gros repaire en rendait 2,25 / 2,12 / 1,90 fois
-   *  plus aux niveaux 20/26/40. (2) Surtout, le DÉBIT de camps en parallèle
-   *  (`campEconomy.test`) : à 0,25 un joueur qui optimise ajoutait +24 à +26 % du revenu d'or
-   *  de référence, hors bande ; à 0,18 il ajoute **+9 % (niv. 12), +19 % (26), +20 % (60)**.
-   *  ⚠️ `stoneShare` MESURÉ de même : à 0,5 les pierres d'un jour de camps valaient jusqu'à
-   *  +105 % d'une journée de donjons (les pierres financent les BOSS, le donjon doit rester la
-   *  source) ; à 0,11 → +6 / +16 / +32 %. `banditGoldMult` inchangé (la faction module, elle ne
-   *  décide pas du débit). */
-  groupGoldShare: 0.18,
-  banditGoldMult: 1.5,
-  stoneShare: 0.11,
-  /** 🎯 Échelle du butin d'un camp depuis qu'il suit la DIFFICULTÉ (v0.1153) : la taille n'y
-   *  est plus un facteur à part (`poiRewardLevel` la compte déjà). Calibré (campEconomy). */
-  difficultyGoldK: 1,
   journalMax: 40,
 } as const;
 
@@ -198,6 +180,116 @@ export function campBodies(
   return [...bodies, chief];
 }
 
+/**
+ * 💰 CE QUE PORTENT LES ENNEMIS (v0.1166, conçu avec l'utilisateur : « de l'or selon les ennemis
+ * du lieu, une quantité par ennemi selon son niveau et s'il est élite ou pas » ; « pas d'or
+ * sur les monstres, par logique » ; « des consommables sur les bêtes, des pierres d'invocation
+ * sur les morts-vivants »).
+ *
+ * Chaque corps porte le butin de SA faction, pondéré par son POIDS (troupe ×1, chef ×2,
+ * champion de repaire ×4 — les poids du combat, jamais une seconde table) et indexé sur SON
+ * niveau (le niveau du lieu) :
+ * - 🗡️ **bandits** → une BOURSE d'or (`purseGold`) — les seuls à en porter ;
+ * - 💀 **morts-vivants** → des pierres d'invocation 🔮 ;
+ * - 🐺 **bêtes** → une chance de consommable 🎒 (on dépèce ce qu'on a abattu).
+ * ⚠️ Mêmes règles pour les gardes d'un lieu de récolte que pour un camp : un garde reste un
+ * ennemi, il porte ce que porte sa faction.
+ */
+export const LOOT = {
+  /** Bourse d'un bandit de troupe, en part du coût d'un camp de son niveau.
+   *  ⚠️ MESURÉ : un camp de bandits rend en bourses l'or qu'il rendait avant (cf. test). */
+  purseShare: 0.033,
+  /** Pierres d'un mort-vivant de troupe, en part d'une visite de sanctuaire de son niveau.
+   *  ⚠️ Un peu PLUS qu'avant : les morts-vivants ne donnent plus d'or. */
+  stoneShare: 0.024,
+  /** Chance qu'une bête de troupe laisse un consommable (× son poids, plafonné à 1). */
+  beastDrop: 0.2,
+} as const;
+
+/** Poids d'un corps : la troupe vaut 1, le meneur les poids du combat (`campBodies`). */
+function bodyWeight(poi: Pick<Poi, 'type'>, id: string): number {
+  if (id !== 'campChef') return 1;
+  return poi.type === 'lair' ? CAMP.championWeight : CAMP.chiefWeight;
+}
+
+/** 🪙 La bourse d'un bandit de TROUPE de niveau `level` (un meneur porte son poids en plus). */
+export function purseGold(level: number): number {
+  const L = Math.max(1, level);
+  return goldCost('camp', L) * (1 + rewardTripHours(L) * 0.1) * LOOT.purseShare;
+}
+
+/** 🔮 Les pierres d'un mort-vivant de TROUPE de niveau `level` (non arrondies). */
+function undeadStones(level: number): number {
+  return harvestYield('shrine', Math.max(1, level)).summonStones * LOOT.stoneShare;
+}
+
+/** Un entier stable par corps (`camp3` → 3, le meneur → 997). */
+function hashBody(id: string): number {
+  const m = /^camp([0-9]+)$/.exec(id);
+  return m ? Number(m[1]) : 997;
+}
+
+/** Ce que laissent des ennemis abattus. */
+export interface BodyLoot {
+  gold: number;
+  summonStones: number;
+  supplies: SupplyStock;
+}
+
+/** Les ids des corps d'une force (dans l'ordre de `campBodies`), sans la construire. */
+export function campBodyIds(spec: Pick<CampSpec, 'size'>): string[] {
+  const n = campTroopCount(spec.size);
+  return [...Array.from({ length: n }, (_, i) => `camp${i}`), 'campChef'];
+}
+
+/**
+ * 💰 LE BUTIN DES CORPS `ids` — somme de ce que chacun porte. Arrondi UNE fois, à la fin
+ * (des parts fractionnaires arrondies corps par corps gonfleraient le total).
+ * ⚠️ Les consommables des bêtes sont tirés sur un générateur À PART (`seed`, constante XOR
+ * propre) et PROPRE À CHAQUE CORPS : un corps donne la même chose qu'on ramasse toute la
+ * troupe ou seulement ceux qu'on a abattus, et le combat garde ses valeurs seedées.
+ */
+export function bodyLoot(
+  poi: Pick<Poi, 'type' | 'level'>,
+  spec: Pick<CampSpec, 'faction'>,
+  ids: readonly string[],
+  seed: number,
+): BodyLoot {
+  let gold = 0;
+  let stones = 0;
+  const supplies: SupplyStock = {};
+  for (const id of ids) {
+    const w = bodyWeight(poi, id);
+    const rng = mulberry32(((seed ^ 0x7c3d91a5) + hashBody(id) * 2654435761) >>> 0 || 1);
+    if (spec.faction === 'bandits') gold += purseGold(poi.level) * w;
+    else if (spec.faction === 'mortsvivants') stones += undeadStones(poi.level) * w;
+    else if (rng() < Math.min(1, LOOT.beastDrop * w)) {
+      const sid = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
+      supplies[sid] = (supplies[sid] ?? 0) + 1;
+    }
+  }
+  return { gold: Math.round(gold), summonStones: Math.round(stones), supplies };
+}
+
+/** 🏷️ Ce que portent TOUS les ennemis d'une force, en ESPÉRANCE (pour la fiche du lieu) :
+ *  or et pierres exacts, consommables en moyenne. Lit les MÊMES poids que `bodyLoot`. */
+export function forceLootPreview(
+  poi: Pick<Poi, 'type' | 'level'>,
+  spec: CampSpec,
+): { gold: number; summonStones: number; supplies: number } {
+  const ids = campBodyIds(spec);
+  const weight = ids.reduce((s, id) => s + bodyWeight(poi, id), 0);
+  return {
+    gold: spec.faction === 'bandits' ? Math.round(purseGold(poi.level) * weight) : 0,
+    summonStones:
+      spec.faction === 'mortsvivants' ? Math.round(undeadStones(poi.level) * weight) : 0,
+    supplies:
+      spec.faction === 'betes'
+        ? ids.reduce((s, id) => s + Math.min(1, LOOT.beastDrop * bodyWeight(poi, id)), 0)
+        : 0,
+  };
+}
+
 /** 🤕 INFIRMERIE DES CAMPS : une défaite envoie à l'infirmerie TOUS les aventuriers tombés.
  *  ⚠️ ≠ `convoyHurt` (un seul blessé) : un convoi subit une embuscade en chemin, un camp est
  *  l'épreuve qu'on est venu chercher — on en connaît la taille avant de partir. Une victoire
@@ -211,51 +303,23 @@ export function campHurt(
   return d.down.filter((id) => ids.has(id));
 }
 
-/** 💰 Le butin d'un camp pris SANS le héros — DÉRIVÉ des sources existantes, jamais une
- *  table à part : l'or d'un camp, les pierres une part du SANCTUAIRE. La FACTION module :
- *  les bandits paient plus d'or, les morts-vivants ajoutent des pierres. Or et pierres
- *  proportionnels à la taille ; déterministe (aucun tirage).
- *  ⚠️ JAMAIS DE FERRAILLE (cf. en tête de fichier).
- *  ⚠️ JAMAIS DE CLÉ (revue finale, arbitrage) : les clés nourrissent le Labyrinthe, dont la
- *  bande de 2 à 5 runs/jour est une décision récente (v0.794/v0.799). Les bêtes rendaient
- *  1-2 clés d'archives par camp quelle que soit la taille (+4 à +5 clés/jour mesurées).
- *  ⚠️ Depuis la v0.980 c'est AUSSI le butin d'un groupe AVEC le héros : il n'y compte plus
- *  que pour deux champions (`heroPartyCombatant`), rien ne justifie qu'il fasse tomber le
- *  butin d'une expédition solo. */
-export function campGroupHaul(poi: Poi, spec: CampSpec): { gold: number; summonStones: number } {
-  // 🪙 Récompense sur la DIFFICULTÉ du lieu (`poiRewardLevel`, v0.1153) — qui compte DÉJÀ le
-  // nombre d'ennemis : la taille n'est donc plus un facteur à part (elle serait comptée deux
-  // fois). ⚠️ La distance ne paie plus : trajet de RÉFÉRENCE de sa difficulté (`rewardTripHours`).
-  const L = Math.max(1, poiRewardLevel(poi));
-  const gold = Math.round(
-    goldCost('camp', L) *
-      (1 + rewardTripHours(L) * 0.1) *
-      CAMP.groupGoldShare *
-      CAMP.difficultyGoldK *
-      (spec.faction === 'bandits' ? CAMP.banditGoldMult : 1),
-  );
-  const summonStones =
-    spec.faction === 'mortsvivants'
-      ? Math.round(harvestYield('shrine', L).summonStones * CAMP.stoneShare * CAMP.difficultyGoldK)
-      : 0;
-  return { gold, summonStones };
-}
+/** Ce que laisse chaque faction, dit en toutes lettres (fiche d'un camp ou d'un lieu gardé). */
+export const FACTION_LOOT_LABEL: Record<CampSpec['faction'], string> = {
+  bandits: 'bourses d’or 🪙',
+  mortsvivants: 'pierres d’invocation 🔮',
+  betes: 'consommables 🎒',
+};
 
 /** 🏷️ Ce qu'un camp rapporte, annoncé sur la carte AVANT l'envoi.
- *  ⚠️ Écrit À CÔTÉ de la règle qu'il décrit (`campGroupHaul`), et testé contre elle : la
- *  faction module le butin (bandits → or en quantité, morts-vivants → or + pierres, bêtes
- *  → or). ⚠️ Jamais de ferraille, de clé, ni d'équipement de champion (il ne vient QUE du
- *  tirage, v0.1012).
+ *  ⚠️ Écrit À CÔTÉ de la règle qu'il décrit (`bodyLoot`), et testé contre elle : chaque
+ *  faction laisse SA ressource (v0.1166 : bandits → bourses d'or, morts-vivants → pierres,
+ *  bêtes → consommables). ⚠️ Jamais de ferraille, de clé, ni d'équipement de champion (il ne
+ *  vient QUE du tirage, v0.1012).
  *  ⚠️ UNE SEULE ligne depuis la v0.980 : le héros ne change plus le butin. */
 export function campRewardLabel(poi: Poi): string {
   const spec = campSpecOf(poi);
   if (!spec) return '';
-  const devise =
-    spec.faction === 'mortsvivants'
-      ? 'or 🪙 + pierres 🔮'
-      : spec.faction === 'bandits'
-        ? 'or 🪙 en quantité'
-        : 'or 🪙';
+  const devise = FACTION_LOOT_LABEL[spec.faction];
   // ⚜️ Camp et repaire laissent leurs sceaux d'objet (`mapGearSeals`) ; la chance ne s'annonce
   // que si elle n'est pas certaine.
   const sure = poi.type === 'lair' || CAMP_GEAR_SEAL_CHANCE >= 1;
@@ -359,15 +423,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
   };
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;
 
-  // 📯 Le cor de retraite : une défaite garde une PART du butin au lieu de rien.
-  const retreat = supplyFx(input.road.supplies).retreatShare;
-  const full = d.win || retreat > 0 ? campGroupHaul(poi, spec) : { gold: 0, summonStones: 0 };
-  const haul = d.win
-    ? full
-    : {
-        gold: Math.round(full.gold * retreat),
-        summonStones: Math.round(full.summonStones * retreat),
-      };
+  const haul = forceHaul(input, spec, d);
   // ⚜️ Un REPAIRE ou un CAMP pris laisse ses sceaux d'objet (camp : `CAMP_GEAR_SEAL_CHANCE`). ⚠️ Tirage
   // sur un générateur À PART : le combat et le butin gardent leurs valeurs seedées.
   const seals =
@@ -387,11 +443,42 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     mana: 0,
     item: null,
     items: [],
-    key: 0, // ⚠️ jamais de clé sans le héros (cf. `campGroupHaul`)
+    ...(Object.keys(haul.supplies).length ? { supplies: haul.supplies } : {}),
+    key: 0, // ⚠️ jamais de clé d'un camp
     reconBonus: 0,
     returnMult: 1,
     text: d.win ? `⚔️ Camp pris ! ${tag}` : `💀 Repoussés. ${tag}`,
     party,
+  };
+}
+
+/**
+ * 💰 CE QU'UNE FORCE LAISSE — camp comme gardes d'un lieu de récolte (`bodyLoot`).
+ * - Victoire : ce que portaient TOUS les ennemis.
+ * - Défaite : ce que portaient ceux qu'on a ABATTUS (décision de l'utilisateur) ; le 📯 cor de
+ *   retraite garantit au moins `retreatShare` du butin entier, devise par devise.
+ */
+export function forceHaul(
+  input: Pick<PartyInput, 'poi' | 'road' | 'seed'>,
+  spec: CampSpec,
+  d: Pick<SkirmishResult, 'win' | 'foesDown'>,
+): BodyLoot {
+  const all = campBodyIds(spec);
+  const full = bodyLoot(input.poi, spec, all, input.seed);
+  if (d.win) return full;
+  const down = new Set(d.foesDown);
+  const got = bodyLoot(
+    input.poi,
+    spec,
+    all.filter((id) => down.has(id)),
+    input.seed,
+  );
+  const retreat = supplyFx(input.road.supplies).retreatShare;
+  if (retreat <= 0) return got;
+  return {
+    gold: Math.max(got.gold, Math.round(full.gold * retreat)),
+    summonStones: Math.max(got.summonStones, Math.round(full.summonStones * retreat)),
+    supplies: got.supplies,
   };
 }
 

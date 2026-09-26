@@ -45,7 +45,7 @@ import {
   type PoiType,
 } from '@/lib/expedition';
 import { playerCombatant, mulberry32 } from '@/lib/combat';
-import { resolveCamp, campGroupHaul } from '@/lib/camp';
+import { resolveCamp, forceLootPreview } from '@/lib/camp';
 import { campSpecOf } from '@/lib/expedition';
 import { poiOffers } from '@/lib/caravan';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
@@ -1296,17 +1296,19 @@ describe('🎯 la récompense suit la DIFFICULTÉ, jamais la distance (v0.1153)'
     }
     expect(checked).toBeGreaterThan(10);
   });
-  it('le butin d’un camp suit sa difficulté, pas sa distance', () => {
+  it('le butin d’un camp suit le NIVEAU de ses ennemis, pas sa distance (v0.1166)', () => {
     const camps = spawned.filter((p) => p.type === 'camp' || p.type === 'lair');
     expect(camps.length).toBeGreaterThan(3);
     for (const p of camps) {
       const spec = campSpecOf(p)!;
-      expect(campGroupHaul({ ...p, distNorm: p.distNorm < 0.5 ? 1 : 0.05 }, spec)).toEqual(
-        campGroupHaul(p, spec),
+      expect(forceLootPreview({ ...p, distNorm: p.distNorm < 0.5 ? 1 : 0.05 }, spec)).toEqual(
+        forceLootPreview(p, spec),
       );
-      expect(campGroupHaul({ ...p, level: p.level + 25 }, spec).gold).toBeGreaterThan(
-        campGroupHaul(p, spec).gold,
-      );
+      // Chaque faction : sa ressource croît avec le niveau des ennemis.
+      const a = forceLootPreview(p, spec);
+      const b = forceLootPreview({ ...p, level: p.level + 25 }, spec);
+      expect(b.gold + b.summonStones).toBeGreaterThanOrEqual(a.gold + a.summonStones);
+      if (spec.faction === 'bandits') expect(b.gold).toBeGreaterThan(a.gold);
     }
   });
 });

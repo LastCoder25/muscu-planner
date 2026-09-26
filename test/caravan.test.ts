@@ -441,9 +441,9 @@ describe('les rôles hors combat servent à quelque chose', () => {
     expect(avec).toBeLessThan(sans);
   });
   it('un 🐫 grossit la cargaison', () => {
-    const p = poi();
-    // Sur l'OR d'une épave (v0.998) : l'énergie est plafonnée à la part de base, donc un
-    // 🐫 ne pourrait pas la faire grossir — l'or, si.
+    // Sur l'OR d'une MINE : depuis la v0.1166 un puits n'a plus d'or à lui (seules les bourses
+    // de ses gardes en ont, et elles ne passent pas par la cargaison).
+    const p = poi({ type: 'mine' });
     const sans = avgOf(p, team(2, 20, 'speed'), 'gold');
     const avec = avgOf(p, team(2, 20, 'haul'), 'gold');
     expect(avec).toBeGreaterThan(sans);
@@ -1800,7 +1800,8 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
       { advGear: [] },
       aJour(escort),
     );
-    expect(o.gold).toBe(938); // v0.1161 : part d’or hors mine unifiée à 0,35 (`HARVEST.goldShare`, 804 × 0,35 / 0,3). v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
+    // ⚠️ v0.1166 : un puits n'a plus d'or à lui (l'or vient des bourses de ses gardes bandits).
+    expect(o.gold).toBe(0); // avant : 938 — v0.1161 : part d’or hors mine unifiée à 0,35 (`HARVEST.goldShare`, 804 × 0,35 / 0,3). v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
     expect(o.energy).toBe(30);
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et

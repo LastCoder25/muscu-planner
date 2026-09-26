@@ -646,10 +646,6 @@ export const HARVEST = {
   manaBase: 1,
   manaPerLevel: 0.15,
   wellEnergyMax: 200, // ~5 runs de donjon : un complément net, pas une séance de sport
-  /** 🪙 Or d'une récolte hors mine, en part de son coût — le même pour le héros et pour une
-   *  équipe (`harvestGold`, v0.1161 ; avant : 0,35 et 0,3). Symbolique : ces lieux paient en
-   *  ressources. */
-  goldShare: 0.35,
   keyChance: 0.12, // clé de Labyrinthe en prime occasionnelle
   /** Force des gardes (en ennemis) à partir de laquelle une archive rend une 2ᵉ clé : la
    *  récompense suit la DIFFICULTÉ, plus la distance (v0.1153). Tailles 1 · 1,5 · 2 · 2,5 →
@@ -2323,11 +2319,11 @@ export function resolveOutcome(
  * L'expédition du héros (`mineOutcome`, les autres récoltes) et le convoi d'une équipe
  * (`resolveCaravan`) l'appellent tous les deux ; seuls les aléas du VOYAGE diffèrent (rencontres
  * de trajet du héros ; embuscades, rôle 🐫 et bâts d'une équipe).
- * - MINE : la reine de l'or — coût × (1,3 + facteur de voyage de sa difficulté) ×
- *   `rewardGoldMult`, au niveau `heroRewardLevel` (le plancher de début de partie vaut pour
- *   tout le monde).
- * - AUTRES RÉCOLTES : une part symbolique du coût (`HARVEST.goldShare`) — elles paient en
- *   ressources.
+ * - MINE : son FILON — coût × (1,3 + facteur de voyage de sa difficulté) × `rewardGoldMult`,
+ *   au niveau `heroRewardLevel` (le plancher de début de partie vaut pour tout le monde). Sa
+ *   difficulté EST son rang et ses étoiles affichés : le filon suit donc le rang (v0.1166).
+ * - AUTRES RÉCOLTES : aucun or (v0.1166). Leur or vient des BOURSES de leurs gardes bandits
+ *   (`forceHaul`, camp.ts), comme n'importe quel ennemi.
  * `playerLevel` indéfini = pas de plancher de début de partie (harnais de calibrage).
  */
 export function harvestGold(
@@ -2338,7 +2334,7 @@ export function harvestGold(
     const L = heroRewardLevel(poi, playerLevel);
     return Math.round(goldCost('mine', L) * (1.3 + rewardTravelFactor(L)) * EXPE.rewardGoldMult);
   }
-  return Math.round(goldCost(poi.type, poiRewardLevel(poi)) * HARVEST.goldShare);
+  return 0;
 }
 
 function mineOutcome(

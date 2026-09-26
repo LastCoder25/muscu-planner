@@ -4,7 +4,12 @@ import {
   CAMP,
   campBodies,
   campFoe,
-  campGroupHaul,
+  bodyLoot,
+  campBodyIds,
+  forceHaul,
+  forceLootPreview,
+  LOOT,
+  purseGold,
   campHurt,
   campRewardLabel,
   campWinPct,
@@ -452,13 +457,13 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     const o = resolveCamp(input({ hero: fort(20), spec }));
     expect(o.party!.hero).toBe(true);
     expect(o.party!.win).toBe(true);
-    expect(o.gold).toBe(campGroupHaul(poi(), spec).gold);
+    expect(o.gold).toBe(forceLootPreview(poi(), spec).gold);
     expect(o.item).toBeNull();
     expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1012)
     expect(o.party!.hurt).not.toContain(HERO_UNIT_ID);
   });
 
-  it('SANS le héros, victoire : or et pierres ; jamais d’objet du héros, de ferraille ni de pièce de champion', () => {
+  it('SANS le héros, victoire sur des morts-vivants : des pierres, AUCUN or ; jamais d’objet du héros, de ferraille ni de pièce de champion', () => {
     const L = 60;
     const inp = input({
       // ⚠️ Niveau 30, pas 5 : le butin suit la DIFFICULTÉ du lieu (v0.1153), et les pierres
@@ -474,7 +479,8 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party!.win).toBe(true);
     expect(o.items ?? []).toEqual([]);
     expect(o.item).toBeNull();
-    expect(o.gold).toBeGreaterThan(0);
+    // 💀 Pas d'or sur les morts-vivants (v0.1166 : « pas d'or sur les monstres, par logique »).
+    expect(o.gold).toBe(0);
     // ⚠️ Les camps ne donnent JAMAIS de ferraille (v0.856 / v0.890 : épave et Fonderie seules).
     expect('scrap' in o).toBe(false);
     expect(o.summonStones).toBeGreaterThan(0);
@@ -496,7 +502,7 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi, o.win));
   });
 
-  it('⚠️ SANS le héros : JAMAIS de clé, et le butin est exactement campGroupHaul ', () => {
+  it('⚠️ SANS le héros : JAMAIS de clé, et le butin est exactement ce que portaient les ennemis', () => {
     // Les clés nourrissent le Labyrinthe (bande 2-5 runs/jour, v0.794/v0.799) : un groupe de
     // camp n'en rend AUCUNE, quelle que soit la faction — les bêtes en rendaient 1-2 par camp.
     let victoires = 0;
@@ -515,9 +521,10 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
         expect(o.key, `${faction} graine ${s}`).toBe(0);
         if (!o.party!.win) continue;
         victoires++;
-        const h = campGroupHaul(inp.poi, inp.spec);
+        const h = bodyLoot(inp.poi, inp.spec, campBodyIds(inp.spec), inp.seed);
         expect(o.gold).toBe(h.gold);
         expect(o.summonStones).toBe(h.summonStones);
+        expect(o.supplies ?? {}).toEqual(h.supplies);
         expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1012)
       }
     expect(victoires, 'aucune victoire : le test ne prouve rien').toBeGreaterThan(0);
@@ -590,23 +597,69 @@ describe('🧭 trajet et départ d’un groupe', () => {
   });
 });
 
-describe('💰 butin de groupe : dérivé des sources existantes', () => {
-  it('pierres = part du sanctuaire, les bandits paient en or ; jamais de ferraille ni de clé', () => {
-    const p = poi({ level: 30 });
-    const tfH = travelFactor((2 * travelOneWayMin(30, 0.5)) / 60);
-    const k = 3 / CAMP.refGroup;
-    const b = campGroupHaul(p, { faction: 'betes', size: 3 });
-    expect(b.summonStones).toBe(0);
-    const m = campGroupHaul(p, { faction: 'mortsvivants', size: 3 });
-    expect(m.summonStones).toBe(
-      Math.round(harvestYield('shrine', 30, tfH).summonStones * CAMP.stoneShare * k),
-    );
-    const bd = campGroupHaul(p, { faction: 'bandits', size: 3 });
-    expect(bd.gold).toBeGreaterThan(m.gold);
-    expect(bd.gold / m.gold).toBeCloseTo(CAMP.banditGoldMult, 1);
-    for (const h of [b, m, bd]) {
+describe('💰 ce que portent les ennemis (v0.1166)', () => {
+  const p = poi({ level: 30 });
+  const ids = (size: number) => campBodyIds({ size });
+  it('chaque faction laisse SA ressource : bandits → or, morts-vivants → pierres, bêtes → consommables', () => {
+    const bd = bodyLoot(p, { faction: 'bandits' }, ids(3), 1);
+    expect(bd.gold).toBeGreaterThan(0);
+    expect(bd.summonStones).toBe(0);
+    expect(bd.supplies).toEqual({});
+    const m = bodyLoot(p, { faction: 'mortsvivants' }, ids(3), 1);
+    expect(m.gold).toBe(0);
+    expect(m.summonStones).toBeGreaterThan(0);
+    expect(m.supplies).toEqual({});
+    let conso = 0;
+    for (let s = 1; s <= 200; s++) {
+      const b = bodyLoot(p, { faction: 'betes' }, ids(3), s);
+      expect(b.gold + b.summonStones).toBe(0);
+      conso += Object.values(b.supplies).reduce((a, n) => a + (n ?? 0), 0);
+    }
+    // En moyenne ce qu'annonce la fiche (`forceLootPreview`).
+    expect(conso / 200).toBeCloseTo(forceLootPreview(p, { faction: 'betes', size: 3 }).supplies, 0);
+    for (const h of [bd, m]) {
       expect('scrap' in h).toBe(false);
       expect('key' in h).toBe(false);
+    }
+  });
+
+  it('la bourse suit le NIVEAU de l’ennemi, et un ÉLITE en porte plus (chef ×2, champion ×4)', () => {
+    expect(purseGold(60)).toBeGreaterThan(purseGold(30));
+    const troupe = bodyLoot(p, { faction: 'bandits' }, ['camp0'], 1).gold;
+    expect(troupe).toBe(Math.round(purseGold(30)));
+    const chef = bodyLoot(p, { faction: 'bandits' }, ['campChef'], 1).gold;
+    expect(chef).toBe(Math.round(purseGold(30) * CAMP.chiefWeight));
+    const champion = bodyLoot({ ...p, type: 'lair' }, { faction: 'bandits' }, ['campChef'], 1).gold;
+    expect(champion).toBe(Math.round(purseGold(30) * CAMP.championWeight));
+    // La fiche annonce EXACTEMENT ce que verse une victoire.
+    expect(forceLootPreview(p, { faction: 'bandits', size: 3 }).gold).toBe(
+      bodyLoot(p, { faction: 'bandits' }, ids(3), 7).gold,
+    );
+    expect(LOOT.beastDrop).toBeGreaterThan(0);
+  });
+
+  it('⚔️ défaite : seulement ce que portaient les ennemis ABATTUS — et un corps donne toujours la même chose', () => {
+    const spec = { faction: 'bandits' as const, size: 3 };
+    const all = ids(3);
+    const win = forceHaul({ poi: p, road: road(30, 3), seed: 5 }, spec, {
+      win: true,
+      foesDown: all,
+    });
+    const lost = forceHaul({ poi: p, road: road(30, 3), seed: 5 }, spec, {
+      win: false,
+      foesDown: ['camp0', 'camp2'],
+    });
+    expect(lost.gold).toBe(Math.round(purseGold(30) * 2));
+    expect(lost.gold).toBeLessThan(win.gold);
+    expect(
+      forceHaul({ poi: p, road: road(30, 3), seed: 5 }, spec, { win: false, foesDown: [] }).gold,
+    ).toBe(0);
+    // Bêtes : un corps abattu laisse la MÊME chose qu'on ramasse la troupe entière ou non.
+    for (let s = 1; s <= 50; s++) {
+      const full = bodyLoot(p, { faction: 'betes' }, all, s).supplies;
+      const one = bodyLoot(p, { faction: 'betes' }, ['camp1'], s).supplies;
+      for (const [k, n] of Object.entries(one))
+        expect(full[k as keyof typeof full] ?? 0).toBeGreaterThanOrEqual(n!);
     }
   });
 });
@@ -742,7 +795,7 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
       expect(PARTY_HERO_BLOCK_LABEL[k].length).toBeGreaterThan(0);
   });
 
-  it('⚠️ campRewardLabel annonce la devise que campGroupHaul verse vraiment — jamais de ferraille', () => {
+  it('⚠️ campRewardLabel annonce la ressource que les ennemis portent vraiment — jamais de ferraille', () => {
     const vus = new Set<string>();
     for (let i = 0; i < 400; i++)
       for (const type of ['camp', 'lair'] as const) {
@@ -752,8 +805,10 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
         const label = campRewardLabel(p);
         // ⚠️ UNE SEULE ligne depuis la v0.980 : le héros ne change plus le butin.
         expect(label, label).not.toContain('héros');
-        const haul = campGroupHaul(p, spec);
+        const haul = forceLootPreview(p, spec);
         expect(label.includes('🔮'), label).toBe(haul.summonStones > 0);
+        expect(label.includes('🪙'), label).toBe(haul.gold > 0);
+        expect(label.includes('🎒'), label).toBe(haul.supplies > 0);
         expect(label.includes('🗝️'), label).toBe(false);
         // ⚜️ Camp et repaire laissent des sceaux d'objet (`mapGearSeals`) : la carte le dit.
         expect(label, label).toContain('⚜️');

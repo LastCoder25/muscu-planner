@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { simulateCombat, playerCombatant } from '@/lib/combat';
 import { refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
 import { fuseUnits, type SkirmishUnit } from '@/lib/skirmish';
-import { HERO_UNIT_ID, campFoe, campGroupHaul } from '@/lib/camp';
+import { HERO_UNIT_ID, campFoe, forceLootPreview } from '@/lib/camp';
 import { CAMP_SIZES, resolveOutcome, type Poi } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
 import { gearedFighter } from './helpers/gearedFighter';
@@ -117,7 +117,7 @@ describe('💰 le butin d’un camp de groupe ne détrône pas les sources dédi
         mine += resolveOutcome(hero, { ...poiAt(L), type: 'mine' }, s, L).gold;
       mine /= 40;
       for (const s of [3, Math.max(...CAMP_SIZES.lair)]) {
-        const net = campGroupHaul(poiAt(L), { faction: 'bandits', size: s }).gold;
+        const net = forceLootPreview(poiAt(L), { faction: 'bandits', size: s }).gold;
         expect(net, `niveau ${L}, taille ${s}`).toBeLessThanOrEqual(mine);
       }
     }

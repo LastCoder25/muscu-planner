@@ -22,7 +22,7 @@
 // ⚠️ Le héros SEUL y passe aussi par ce module (plus par `expeSend`) : sinon une expédition
 // solo contournait les gardes.
 import { missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
-import { campHurt, fightCampForce } from './camp';
+import { campHurt, fightCampForce, forceHaul, type BodyLoot } from './camp';
 import {
   harvestGuardOf,
   resolveOutcome,
@@ -31,7 +31,7 @@ import {
   type Poi,
 } from './expedition';
 import { FACTION_EMOJI } from './raid';
-import { supplyFx } from './supplies';
+import { addSupplies, supplyFx } from './supplies';
 import type { Adventurer } from './adventurers';
 
 export interface HarvestPartyInput {
@@ -44,6 +44,19 @@ export interface HarvestPartyInput {
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number;
+}
+
+/** 💰 Ajoute à une récolte ce que portaient les gardes (`forceHaul` : bourses des bandits,
+ *  pierres des morts-vivants, consommables des bêtes). ⚠️ Pour une MINE, c'est EN PLUS de son
+ *  filon (décision de l'utilisateur : « si il y a des ennemis ils donnent leur ressource aussi »). */
+function withGuardLoot(out: ExpeditionOutcome, loot: BodyLoot): ExpeditionOutcome {
+  const supplies = addSupplies(out.supplies ?? {}, loot.supplies);
+  return {
+    ...out,
+    gold: out.gold + loot.gold,
+    summonStones: out.summonStones + loot.summonStones,
+    ...(Object.keys(supplies).length ? { supplies } : {}),
+  };
 }
 
 /** Ajoute la part des gardes abattus à l'XP de la récolte (arrondie comme `missionXpFor`). */
@@ -68,6 +81,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     pantheonLevel: input.pantheonLevel,
   });
   const tag = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`;
+  const loot = forceHaul({ poi, road, seed }, spec, g.skirmish);
   const base = {
     hero: !!hero,
     faction: spec.faction,
@@ -86,20 +100,24 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
       hurt: campHurt(g.skirmish, escort),
       journal: g.journal,
     };
-    return {
-      win: false,
-      gold: 0,
-      energy: 0,
-      summonStones: 0,
-      mana: 0,
-      item: null,
-      items: [],
-      key: 0,
-      reconBonus: 0,
-      returnMult: 1,
-      text: `💀 Repoussés par les gardes — rien n’a été récolté. ${tag}`,
-      party,
-    };
+    // ⚠️ Rien n'est récolté — mais les gardes ABATTUS laissent ce qu'ils portaient.
+    return withGuardLoot(
+      {
+        win: false,
+        gold: 0,
+        energy: 0,
+        summonStones: 0,
+        mana: 0,
+        item: null,
+        items: [],
+        key: 0,
+        reconBonus: 0,
+        returnMult: 1,
+        text: `💀 Repoussés par les gardes — rien n’a été récolté. ${tag}`,
+        party,
+      },
+      loot,
+    );
   }
 
   if (hero) {
@@ -125,7 +143,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
       hurt: [],
       journal: [...g.journal, out.text],
     };
-    return { ...out, text: `${tag} ${out.text}`, party };
+    return withGuardLoot({ ...out, text: `${tag} ${out.text}`, party }, loot);
   }
   const c = resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel);
   const ambushes = c.events.filter((e) => e.kind === 'bandits');
@@ -144,18 +162,21 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     hurt: c.hurt,
     journal: [...g.journal, ...c.events.map((e) => e.text)],
   };
-  return {
-    win: party.win,
-    gold: c.gold,
-    energy: c.energy,
-    summonStones: c.summonStones,
-    mana: c.mana ?? 0,
-    item: null,
-    items: [],
-    key: c.keys,
-    reconBonus: 0,
-    returnMult: 1,
-    text: `${tag} ${c.text}`,
-    party,
-  };
+  return withGuardLoot(
+    {
+      win: party.win,
+      gold: c.gold,
+      energy: c.energy,
+      summonStones: c.summonStones,
+      mana: c.mana ?? 0,
+      item: null,
+      items: [],
+      key: c.keys,
+      reconBonus: 0,
+      returnMult: 1,
+      text: `${tag} ${c.text}`,
+      party,
+    },
+    loot,
+  );
 }

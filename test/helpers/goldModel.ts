@@ -218,11 +218,14 @@ function convoyGoldPerDay(L: number, comptoir: number): number {
 // ⚠️ RE-MESURÉE en v0.1049 (carte agrandie par l'Avant-poste, champions à la moitié de sa
 // réduction) : +29 % au niveau 12, +21 % au 26, +23 % au 60. La valeur d'avant (+9/+16/+17)
 // datait d'avant la v0.1033 et n'avait jamais suivi.
+// ⚠️ RE-MESURÉE en v0.1166 (l'or d'un camp = les BOURSES de ses bandits ; morts-vivants et
+// bêtes n'en portent pas) : +7,5 % au niveau 12, +10,7 % au 26, +9,2 % au 60 (contre
+// +29/+21/+23 avant), mesuré par `campEconomy` en prenant TOUT camp gagnable.
 function campShare(L: number): number {
-  if (L <= 12) return 0.29;
-  if (L <= 26) return 0.29 - ((L - 12) / 14) * 0.08;
-  if (L <= 60) return 0.21 + ((L - 26) / 34) * 0.02;
-  return 0.23;
+  if (L <= 12) return 0.075;
+  if (L <= 26) return 0.075 + ((L - 12) / 14) * 0.032;
+  if (L <= 60) return 0.107 - ((L - 26) / 34) * 0.015;
+  return 0.092;
 }
 /** Or laissé par une armée repoussée (même barème que `lootCorpses`). */
 const siegeGold = memo((L) => {

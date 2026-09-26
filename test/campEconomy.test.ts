@@ -8,7 +8,7 @@ import {
   refAdventurer,
 } from '@/lib/caravan';
 import { engageCap, type Adventurer } from '@/lib/adventurers';
-import { campGroupHaul, campWinPct, resolveCamp } from '@/lib/camp';
+import { campWinPct, forceLootPreview, resolveCamp } from '@/lib/camp';
 import { partyAllies } from '@/lib/caravan';
 import { goldPerDay, stonesPerDay } from './helpers/goldModel';
 import { travelTimeMult } from '@/lib/buildings';
@@ -89,7 +89,12 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
             win = campWinPct(c.p, c.spec!, partyAllies(esc, rd, null), 8);
           }
           const h = (2 * caravanLegMin(c.p, esc, 0, outpostMult(opts.comptoir))) / 60;
-          const net = campGroupHaul(c.p, c.spec!).gold;
+          // ⚠️ v0.1166 : seuls les BANDITS portent de l'or. Choisir sur l'or ne ferait plus
+          // QUE des camps de bandits — alors qu'un joueur fait aussi morts-vivants (pierres)
+          // et bêtes (consommables, XP). Le pire cas pour l'or et le débit reste « prendre
+          // tout camp gagnable, le plus rentable en temps d'abord » ; l'or d'un camp de
+          // bandits le fait passer devant à chances égales.
+          const net = 1 + forceLootPreview(c.p, c.spec!).gold;
           return { ...c, esc, win, score: (win * net) / h };
         })
         .filter((c) => c.win >= 0.5 && c.score > 0)

@@ -9,7 +9,7 @@ import {
   resolveCaravan,
   type PartyHero,
 } from '@/lib/caravan';
-import { campWinPct, fightCampForce } from '@/lib/camp';
+import { campWinPct, fightCampForce, forceHaul, forceLootPreview } from '@/lib/camp';
 import {
   HARVEST_GUARD_RAMP,
   HARVEST_GUARD_SIZES,
@@ -125,13 +125,57 @@ describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1161)', (
     expect(vus).toBeGreaterThan(0);
   });
 
-  it('hors mine, la même part symbolique du coût pour tout le monde', () => {
-    for (const t of ['well', 'shrine', 'archive'] as const) {
-      const p = poi(t);
-      expect(harvestGold(p, 26)).toBe(
-        Math.round(goldCost(t, poiRewardLevel(p)) * HARVEST.goldShare),
-      );
+  it('hors mine, AUCUN or à soi (v0.1166) : l’or vient des bourses des gardes bandits', () => {
+    for (const t of ['well', 'shrine', 'archive', 'mana_mine'] as const)
+      expect(harvestGold(poi(t), 26)).toBe(0);
+    expect(harvestGold(poi('mine'), 26)).toBeGreaterThan(0);
+  });
+});
+
+describe('💰 les gardes laissent leur ressource, EN PLUS de la récolte (v0.1166)', () => {
+  it('une mine gardée par des bandits : filon + bourses ; par d’autres : filon seul en or', () => {
+    let bandits = 0;
+    let autres = 0;
+    for (let i = 0; i < 60; i++) {
+      const p = poi('mine', { id: `m${i}` });
+      const spec = harvestGuardOf(p)!;
+      const l = forceLootPreview(p, spec);
+      if (spec.faction === 'bandits') {
+        bandits++;
+        expect(l.gold).toBeGreaterThan(0);
+        // ⚠️ Le filon reste l'essentiel : une bourse, c'est ce qu'un ennemi a sur lui.
+        expect(harvestGold(p, 26)).toBeGreaterThan(l.gold * 5);
+      } else {
+        autres++;
+        expect(l.gold).toBe(0);
+      }
     }
+    expect(bandits * autres, 'les deux cas doivent être exercés').toBeGreaterThan(0);
+  });
+
+  it('défaite contre les gardes : rien n’est récolté, mais les abattus laissent ce qu’ils portaient', () => {
+    let vus = 0;
+    for (let i = 0; i < 80 && vus < 5; i++) {
+      const p = poi('well', { id: `w${i}`, level: 40 });
+      const spec = harvestGuardOf(p)!;
+      if (spec.faction !== 'bandits') continue;
+      const input = {
+        poi: p,
+        escort: team(1, 5),
+        road,
+        hero: null,
+        seed: i + 1,
+        playerLevel: 5,
+        pantheonLevel: 5,
+      };
+      const g = fightCampForce({ ...input, spec });
+      if (g.skirmish.win) continue;
+      vus++;
+      const o = resolveHarvestParty(input);
+      expect(o.energy).toBe(0);
+      expect(o.gold).toBe(forceHaul(input, spec, g.skirmish).gold);
+    }
+    expect(vus).toBeGreaterThan(0);
   });
 });
 
@@ -155,9 +199,11 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
         vus++;
         const c = resolveCaravan(p, team(3), seed, road, 26, 26);
         const o = resolveHarvestParty(input);
-        expect(o.gold, t).toBe(c.gold);
+        // 💰 + ce que portaient les gardes (v0.1166) — EN PLUS de la récolte, filon compris.
+        const loot = forceHaul(input, harvestGuardOf(p)!, g.skirmish);
+        expect(o.gold, t).toBe(c.gold + loot.gold);
         expect(o.energy, t).toBe(c.energy);
-        expect(o.summonStones, t).toBe(c.summonStones);
+        expect(o.summonStones, t).toBe(c.summonStones + loot.summonStones);
         expect(o.key, t).toBe(c.keys);
         for (const [id, v] of Object.entries(c.xp))
           expect(o.party!.xp[id]).toBe(v + Math.round(g.shares[id] ?? 0));
