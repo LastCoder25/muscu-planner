@@ -1,29 +1,28 @@
 <template>
-  <!-- 🎨 Barre d'avancement du Défi 360 de 0 à 120 %, en trois ZONES (demandé) : séries de
-       base (argent, jusqu'à 80 %), objectif (jaune, 80 → 100 %), bonus (vert, 100 → 120 %).
-       La piste montre les trois zones en pâle, séparées ; le plein montre la part faite dans
-       chacune, sommée sur tous les exos (`comboBarParts`). Le rose dit le RETARD jusqu'au
-       trait « dans les temps ». Une seule barre pour la fiche du 360 et l'onglet 🎯 : les deux
-       écrans en avaient chacun leur copie. -->
+  <!-- 🎨 Avancement du Défi 360 en TROIS BARRES SÉPARÉES (demandé : segmenter, pas de barre
+       continue) : séries de base (argent, jusqu'à 80 %), objectif (jaune, 80 → 100 %),
+       bonus (vert, 100 → 120 %). Chaque barre se remplit de ce que les exos ont fait dans SA
+       zone, sommé sur tous les exos (`comboBarParts`) : le jaune peut avancer avant que
+       l'argent soit plein, si certains exos sont allés plus loin. Les largeurs gardent les
+       proportions (80 · 20 · 20). Le rose dit le RETARD jusqu'au trait « dans les temps »,
+       dans chaque barre qu'il traverse. Une seule barre pour la fiche du 360 et l'onglet 🎯. -->
   <div class="cpb" :class="{ thin }">
-    <span class="cpb-z cpb-z-sec" :style="{ width: SEC + '%' }" />
-    <span class="cpb-z cpb-z-obj" :style="{ left: SEC + '%', width: OBJ - SEC + '%' }" />
-    <span class="cpb-z cpb-z-bonus" :style="{ left: OBJ + '%', width: 100 - OBJ + '%' }" />
-    <span class="cpb-f cpb-f-sec" :style="{ width: parts.sec + '%' }" />
-    <span class="cpb-f cpb-f-obj" :style="{ left: parts.sec + '%', width: parts.obj + '%' }" />
-    <span
-      class="cpb-f cpb-f-bonus"
-      :style="{ left: parts.sec + parts.obj + '%', width: parts.bonus + '%' }"
-    />
-    <span v-if="late > 0" class="cpb-f cpb-f-late" :style="{ left: fillEnd + '%', width: late + '%' }" />
-    <i class="cpb-sep" :style="{ left: SEC + '%' }" />
-    <i class="cpb-sep" :style="{ left: OBJ + '%' }" />
-    <i
-      v-if="pace.showMark"
-      class="cpb-mark"
-      :style="{ left: markPos + '%' }"
-      :title="`Pour être dans les temps : ${pace.onTimePct}%`"
-    />
+    <div
+      v-for="z in zones"
+      :key="z.id"
+      class="cpb-seg"
+      :class="'cpb-' + z.id"
+      :style="{ flexGrow: z.len }"
+    >
+      <span class="cpb-fill" :style="{ width: z.fill + '%' }" />
+      <span v-if="z.late > 0" class="cpb-late" :style="{ left: z.fill + '%', width: z.late + '%' }" />
+      <i
+        v-if="z.mark !== null"
+        class="cpb-mark"
+        :style="{ left: z.mark + '%' }"
+        :title="`Pour être dans les temps : ${pace.onTimePct}%`"
+      />
+    </div>
   </div>
 </template>
 
@@ -33,68 +32,81 @@ import { comboBarParts, comboBarPos, type ComboChallenge, type ComboPace } from 
 
 const props = defineProps<{ combo: ComboChallenge; pace: ComboPace; thin?: boolean }>();
 
-/** Limites des zones, en % de la largeur (80 % et 100 % de l'objectif sur une barre à 120). */
+/** Limites des zones, en % d'une barre qui irait de 0 à 120 % de l'objectif. */
 const SEC = comboBarPos(80);
 const OBJ = comboBarPos(100);
 
-const parts = computed(() => comboBarParts(props.combo));
-const fillEnd = computed(() => parts.value.sec + parts.value.obj + parts.value.bonus);
-const markPos = computed(() => comboBarPos(props.pace.onTimePct));
-// Le retard ne se peint que là où le plein n'est pas déjà arrivé.
-const late = computed(() => (props.pace.latePct > 0 ? Math.max(0, markPos.value - fillEnd.value) : 0));
+const zones = computed(() => {
+  const p = comboBarParts(props.combo);
+  const markPos = comboBarPos(props.pace.onTimePct);
+  const showMark = props.pace.showMark;
+  const late = props.pace.latePct > 0;
+  return [
+    { id: 'sec', from: 0, to: SEC, done: p.sec },
+    { id: 'obj', from: SEC, to: OBJ, done: p.obj },
+    { id: 'bonus', from: OBJ, to: 100, done: p.bonus },
+  ].map((z) => {
+    const len = z.to - z.from;
+    const fill = Math.min(100, (z.done / len) * 100);
+    // Jusqu'où on devrait en être DANS cette barre (0 si le trait est avant, 100 s'il est après).
+    const due = Math.max(0, Math.min(100, ((markPos - z.from) / len) * 100));
+    return {
+      id: z.id,
+      len,
+      fill,
+      late: late ? Math.max(0, due - fill) : 0,
+      mark: showMark && markPos > z.from && markPos < z.to ? due : null,
+    };
+  });
+});
 </script>
 
 <style scoped lang="scss">
 .cpb {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+.cpb-seg {
   position: relative;
+  flex-basis: 0;
+  min-width: 0;
   height: 10px;
   border-radius: 6px;
   overflow: hidden;
-  margin-top: 8px;
-  background: var(--surface-2);
 }
 .cpb.thin {
-  height: 8px;
-  border-radius: 5px;
   margin: 9px 0 6px;
 }
-.cpb-z,
-.cpb-f {
+.cpb.thin .cpb-seg {
+  height: 8px;
+  border-radius: 5px;
+}
+/* Chaque barre porte sa couleur en pâle (vide) et en plein (fait). */
+.cpb-sec {
+  --c: var(--tier-sec);
+  background: color-mix(in srgb, var(--tier-sec) 10%, var(--surface-2));
+}
+.cpb-obj {
+  --c: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2));
+}
+.cpb-bonus {
+  --c: var(--d1);
+  background: color-mix(in srgb, var(--d1) 14%, var(--surface-2));
+}
+.cpb-fill,
+.cpb-late {
   position: absolute;
   top: 0;
   bottom: 0;
   left: 0;
 }
-/* Piste : chaque zone en pâle, pour qu'on voie où commence le jaune et le vert. */
-.cpb-z-sec {
-  background: color-mix(in srgb, var(--tier-sec) 10%, var(--surface-2));
+.cpb-fill {
+  background: var(--c);
 }
-.cpb-z-obj {
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface-2));
-}
-.cpb-z-bonus {
-  background: color-mix(in srgb, var(--d1) 16%, var(--surface-2));
-}
-.cpb-f-sec {
-  background: var(--tier-sec);
-}
-.cpb-f-obj {
-  background: var(--accent);
-}
-.cpb-f-bonus {
-  background: var(--d1);
-}
-.cpb-f-late {
+.cpb-late {
   background: #ff6a9c;
-}
-.cpb-sep {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: var(--bg, #15120e);
-  pointer-events: none;
 }
 /* Repère « dans les temps ». */
 .cpb-mark {

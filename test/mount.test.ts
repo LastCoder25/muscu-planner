@@ -1355,6 +1355,8 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
     expect(
       await mountIt(ComboProgressBar, { combo, pace: NO_PACE }, undefined, undefined, '/', (h) => (out = h)),
     ).toBeNull();
-    for (const c of ['cpb-f-sec', 'cpb-f-obj', 'cpb-f-bonus']) expect(out).toContain(c);
+    // Trois barres SÉPARÉES, chacune avec son remplissage.
+    for (const c of ['cpb-sec', 'cpb-obj', 'cpb-bonus']) expect(out).toContain(c);
+    expect((out.match(/cpb-fill/g) ?? []).length).toBe(3);
   }, 30_000);
 });
