@@ -73,13 +73,28 @@ export const INVOKE = {
   silhouetteMsParRang: 250,
   /** Nom écrit lettre par lettre (par caractère). */
   typeMsParLettre: 34,
-  /** ×10 : décalage de lancer entre deux orbes, arrêt commun, fissure d'une orbe,
-   *  apparition des cartes, retournement d'un B. */
+  /** ×10 : décalage de lancer entre deux orbes, arrêt commun, apparition des cartes,
+   *  retournement d'un B.
+   *  ⚠️ **RALENTI ET SCRUTÉ (v0.1164, demandé : « trop rapide… quand il n'y a pas d'or j'ai
+   *  l'impression que ça skip les boules internes »).** Sans A ni S rien ne s'allumait : les
+   *  orbes montaient et retombaient aussitôt (~3,8 s), et l'allumage — le cœur du suspense —
+   *  n'existait pas. Désormais chaque orbe est SCRUTÉE à son tour (`lotScanMs`), qu'elle
+   *  s'allume ou non : on voit chacune avoir sa chance. */
   lotLaunchStagger: 45,
-  lotApexMs: 450,
-  lotCrackMs: 560,
-  lotLandMs: 520,
-  lotFlipStagger: 85,
+  lotApexMs: 700,
+  /** Scrutation : chaque orbe pulse à son tour, de gauche à droite. */
+  lotScanMs: 190,
+  /** Silence après la scrutation, avant le premier allumage (ou la chute). */
+  lotScanHoldMs: 450,
+  /** Un allumage : hésitation, fissure, éclair, puis repos — plus long vers l'or. */
+  lotCrackPauseMs: 150,
+  lotCrackMs: 380,
+  lotFlashMsA: 180,
+  lotFlashMsS: 240,
+  lotRestMsA: 220,
+  lotRestMsS: 450,
+  lotLandMs: 650,
+  lotFlipStagger: 150,
 } as const;
 
 /**
@@ -360,19 +375,34 @@ export function singleSequenceMs(plan: RevealPlan): number {
   );
 }
 
+/** Durée d'un allumage au ×10 vers le rang `g` (1 = A, 2 = S). ⚠️ Lue par l'écran ET par
+ *  `lotSequenceMs` : la durée annoncée est celle jouée. */
+export function lotIgniteMs(g: number): number {
+  return (
+    INVOKE.lotCrackPauseMs +
+    INVOKE.lotCrackMs +
+    (g >= 2 ? INVOKE.lotFlashMsS + INVOKE.lotRestMsS : INVOKE.lotFlashMsA + INVOKE.lotRestMsA)
+  );
+}
+
 /**
  * ⏱️ Durée d'un ×10 jusqu'aux cartes retournées (hors révélations au toucher, qui vont au
  * rythme du joueur).
  */
 export function lotSequenceMs(plan: RevealPlan): number {
   if (plan.reduced) return 0;
-  const cracks = plan.items.reduce((s, it) => s + (it.path.length - 1), 0);
+  const ignites = plan.items.reduce(
+    (s, it) => s + it.path.slice(1).reduce((t, g) => t + lotIgniteMs(g), 0),
+    0,
+  );
   const bees = plan.items.filter((it) => finalRank(it) === 0).length;
   return (
     INVOKE.riseMs +
     (plan.items.length - 1) * INVOKE.lotLaunchStagger +
     INVOKE.lotApexMs +
-    cracks * INVOKE.lotCrackMs +
+    plan.items.length * INVOKE.lotScanMs +
+    INVOKE.lotScanHoldMs +
+    ignites +
     INVOKE.windupMs +
     INVOKE.fallMs +
     INVOKE.lotLandMs +
