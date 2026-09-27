@@ -215,3 +215,96 @@ export function replaceSkill(
   copy[replaceIndex] = { id: drawn, level: 1 };
   return copy;
 }
+
+// ── 🎁 D'OÙ VIENNENT LES RUNES (étape 2) ─────────────────────────────────────────────────
+//
+// ⚠️ Toujours NON BRANCHÉ : ces fonctions disent quelle rune une source DONNE. Le crédit au
+// joueur arrivera avec les écrans, pour qu'aucune rune ne s'accumule sans usage possible.
+
+/** Réglages des sources. ⚠️ À MESURER à l'étape 3 (rythme de runes par joueur-type). */
+export const RUNE_SOURCES = {
+  /** Maturité (0..1) à partir de laquelle une faille d'un rang au-dessus paie en doré.
+   *  Mesuré 2026-09-27 : mûre, une faille +1 rang demande 5 à 8 champions de ton rang. */
+  riftMatureAt: 0.5,
+  /** Effort d'un Défi 360 (`chestEffortMult`, 0,7..1,5) à partir duquel il paie en bleu. */
+  comboBlueAt: 1.25,
+} as const;
+
+/**
+ * 🎲 Les chances de couleur d'une rune d'ASCENSION, selon le rang ATTEINT (index de
+ * `CHARACTER_RANKS` : 1 = Argent … 9 = Tout-puissant). Plus le rang est haut, plus la rune a
+ * de chances d'être haute. Chaque ligne somme à 1 (testé).
+ */
+const ASCENSION_ODDS: readonly (readonly [number, number, number, number])[] = [
+  [1, 0, 0, 0], // 0 — Bronze : on n'y « monte » pas, garde-fou
+  [0.8, 0.2, 0, 0], // 1 — Argent
+  [0.65, 0.3, 0.05, 0],
+  [0.5, 0.35, 0.13, 0.02],
+  [0.4, 0.35, 0.2, 0.05],
+  [0.3, 0.35, 0.27, 0.08],
+  [0.2, 0.33, 0.35, 0.12],
+  [0.12, 0.3, 0.4, 0.18],
+  [0.08, 0.25, 0.42, 0.25],
+  [0.05, 0.2, 0.45, 0.3], // 9 — Tout-puissant
+];
+
+export function ascensionRuneOdds(rankIndex: number): Record<RuneTier, number> {
+  const row = ASCENSION_ODDS[Math.max(0, Math.min(ASCENSION_ODDS.length - 1, rankIndex))]!;
+  return { green: row[0], blue: row[1], violet: row[2], gold: row[3] };
+}
+
+/** Tire la couleur d'une rune d'ascension (ou d'Éveil) au rang donné. */
+export function rollAscensionRune(rng: () => number, rankIndex: number): RuneTier {
+  const odds = ascensionRuneOdds(rankIndex);
+  let r = rng();
+  for (const t of RUNE_TIERS) {
+    r -= odds[t];
+    if (r < 0) return t;
+  }
+  // Arrondi flottant : la dernière couleur à probabilité non nulle.
+  return [...RUNE_TIERS].reverse().find((t) => odds[t] > 0)!;
+}
+
+/** ✨ ÉVEIL : une rune offerte par cran (décision de l'utilisateur), tirée aux chances d'une
+ *  ascension au RANG ACTUEL du champion — un doublon d'un champion haut placé vaut plus. */
+export function rollAwakenRune(rng: () => number, currentRankIndex: number): RuneTier {
+  return rollAscensionRune(rng, currentRankIndex);
+}
+
+/** 📖 Archives (lieu de récolte) : une rune verte, garantie. */
+export const ARCHIVE_RUNE: RuneTier = 'green';
+
+/**
+ * 🕳️ La rune d'une faille REFERMÉE, selon sa difficulté réelle (décision de l'utilisateur) :
+ * rang de la faille comparé au rang du joueur, en rangs de prestige.
+ * - en dessous → verte · ton rang → bleue ;
+ * - au-dessus : violette si elle est jeune, dorée si elle a mûri (`riftMatureAt`).
+ * ⚠️ Une incursion RATÉE ne donne rien : c'est à l'appelant de ne pas appeler.
+ */
+export function riftRune(
+  riftRankIndex: number,
+  playerRankIndex: number,
+  maturity: number,
+): RuneTier {
+  const gap = riftRankIndex - playerRankIndex;
+  if (gap < 0) return 'green';
+  if (gap === 0) return 'blue';
+  return maturity >= RUNE_SOURCES.riftMatureAt ? 'gold' : 'violet';
+}
+
+/** 🐉 Boss entre amis : la rune du coffre selon le cran de difficulté. ⚠️ L'Échauffement ne
+ *  paie rien — c'est le cran qu'on enchaînerait pour farmer (même règle que les tickets).
+ *  ⚠️ Couvre TOUS les crans de `BOSS_TIERS` (testé) : un cran ajouté sans rune rougit. */
+export const FRIEND_BOSS_RUNE: Record<string, RuneTier | null> = {
+  echauffement: null,
+  serieux: 'green',
+  costaud: 'blue',
+  brutal: 'violet',
+  inhumain: 'gold',
+};
+
+/** 🎯 Défi 360 bouclé dans les temps : verte, bleue s'il était intense
+ *  (`effortMult` = `chestEffortMult`, le facteur de son coffre). */
+export function comboRune(effortMult: number): RuneTier {
+  return effortMult >= RUNE_SOURCES.comboBlueAt ? 'blue' : 'green';
+}

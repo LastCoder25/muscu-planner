@@ -14,8 +14,18 @@ import {
   skillValue,
   skillsOfTier,
   type ChampSkill,
+  ARCHIVE_RUNE,
+  FRIEND_BOSS_RUNE,
+  RUNE_SOURCES,
+  ascensionRuneOdds,
+  comboRune,
+  riftRune,
+  rollAscensionRune,
+  rollAwakenRune,
 } from '@/lib/skillRunes';
 import { mulberry32 } from '@/lib/combat';
+import { BOSS_TIERS } from '@/lib/friendBoss';
+import { CHEST_MAX_MULT, CHEST_MIN_MULT } from '@/lib/comboChest';
 
 describe('🔮 le catalogue', () => {
   it('4 crans, chacun sa couleur et son nom', () => {
@@ -173,5 +183,77 @@ describe('🎟️ poser une rune', () => {
       { id: 'pv', level: 4 },
     ];
     expect(replaceSkill(skills, 'crit', null)).toEqual(skills);
+  });
+});
+
+describe('🎁 les sources de runes', () => {
+  it('les chances d’ascension somment à 1 à chaque rang, et montent avec le rang', () => {
+    for (let r = 0; r <= 9; r++) {
+      const o = ascensionRuneOdds(r);
+      expect(
+        RUNE_TIERS.reduce((s, t) => s + o[t], 0),
+        `rang ${r}`,
+      ).toBeCloseTo(1);
+    }
+    for (let r = 2; r <= 9; r++) {
+      const a = ascensionRuneOdds(r - 1);
+      const b = ascensionRuneOdds(r);
+      expect(b.gold + b.violet, `rang ${r}`).toBeGreaterThan(a.gold + a.violet);
+    }
+  });
+
+  it('passer Argent ne donne jamais de violet ni de doré ; le haut de l’échelle en donne', () => {
+    expect(ascensionRuneOdds(1).violet + ascensionRuneOdds(1).gold).toBe(0);
+    expect(ascensionRuneOdds(9).gold).toBeGreaterThan(0.2);
+  });
+
+  it('le tirage suit les chances', () => {
+    const rng = mulberry32(5);
+    const n = 20000;
+    const count: Record<string, number> = {};
+    for (let i = 0; i < n; i++) {
+      const t = rollAscensionRune(rng, 5);
+      count[t] = (count[t] ?? 0) + 1;
+    }
+    const o = ascensionRuneOdds(5);
+    for (const t of RUNE_TIERS) expect(count[t]! / n, t).toBeCloseTo(o[t], 1);
+  });
+
+  it('l’Éveil tire comme une ascension au rang actuel', () => {
+    for (const r of [1, 5, 9]) {
+      const a = mulberry32(r);
+      const b = mulberry32(r);
+      for (let i = 0; i < 50; i++) expect(rollAwakenRune(a, r)).toBe(rollAscensionRune(b, r));
+    }
+  });
+
+  it('les archives donnent une rune verte', () => {
+    expect(ARCHIVE_RUNE).toBe('green');
+  });
+
+  it('⚠️ faille : en dessous verte, ton rang bleue, au-dessus violette jeune et dorée mûre', () => {
+    expect(riftRune(2, 3, 1)).toBe('green');
+    expect(riftRune(3, 3, 1)).toBe('blue');
+    expect(riftRune(4, 3, 0)).toBe('violet');
+    expect(riftRune(4, 3, RUNE_SOURCES.riftMatureAt - 0.01)).toBe('violet');
+    expect(riftRune(4, 3, RUNE_SOURCES.riftMatureAt)).toBe('gold');
+  });
+
+  it('boss entre amis : chaque cran a sa rune, l’Échauffement aucune', () => {
+    for (const t of BOSS_TIERS) expect(t.id in FRIEND_BOSS_RUNE, t.id).toBe(true);
+    expect(FRIEND_BOSS_RUNE.echauffement).toBeNull();
+    expect(FRIEND_BOSS_RUNE.inhumain).toBe('gold');
+    // Plus le cran est dur, plus la rune est haute (jamais en recul).
+    const idx = BOSS_TIERS.map((t) => {
+      const r = FRIEND_BOSS_RUNE[t.id];
+      return r ? RUNE_TIERS.indexOf(r) : -1;
+    });
+    for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThanOrEqual(idx[i - 1]!);
+  });
+
+  it('Défi 360 : verte, bleue quand il est intense', () => {
+    expect(comboRune(CHEST_MIN_MULT)).toBe('green');
+    expect(comboRune(1)).toBe('green');
+    expect(comboRune(CHEST_MAX_MULT)).toBe('blue');
   });
 });
