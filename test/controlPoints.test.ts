@@ -189,8 +189,10 @@ describe('🏰 prise, production, reprise', () => {
     const sizes = new Set<number>();
     for (let i = 0; i < 40; i++)
       sizes.add(
-        retakeForce({ ...ctl(taken()), control: { ...ctl(taken()).control!, attackAt: i * 7777 } })
-          .size,
+        retakeForce(
+          { ...ctl(taken()), control: { ...ctl(taken()).control!, attackAt: i * 7777 } },
+          1,
+        ).size,
       );
     expect(sizes.size).toBeGreaterThan(2);
   });
@@ -360,7 +362,7 @@ describe('🏰 un point se prend à son niveau (signalé : une tour « légendai
     expect(r).toBeGreaterThan(0.45);
     expect(r).toBeLessThan(0.97);
     for (let t = 0; t < 30; t++) {
-      const f = retakeForce({ ...g, control: { ...g.control!, attackAt: t * 7919 } });
+      const f = retakeForce({ ...g, control: { ...g.control!, attackAt: t * 7919 } }, 1);
       expect(f.size).toBeLessThanOrEqual(Math.max(...CONTROL.sizes) / CONTROL.maxGarrison);
     }
   }, 60_000);

@@ -20,6 +20,8 @@
 import { mulberry32, seedOf } from './combat';
 import { advAscensionCap, advXpToNext, type Adventurer } from './adventurers';
 import { characterRank, rankStartLevel } from './characterRank';
+import { campWinPct } from './camp';
+import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { SUPPLY_IDS, type SupplyStock } from './supplies';
 import {
@@ -86,6 +88,12 @@ export const CONTROL = {
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
+  /** 🎲 SUSPENSE (demandé par l'utilisateur, 2026-09-27) : une garnison ne repousse JAMAIS
+   *  plus de cette part des attaques. Au-delà, l'ennemi envoie plus de monde (`retakeBoost`),
+   *  juste assez pour y redescendre : on a toujours une vraie chance de perdre le lieu. */
+  maxHold: 0.9,
+  /** Combats rejoués par taille de troupe pour estimer la tenue (graines de pronostic). */
+  holdSamples: 24,
 } as const;
 
 /** 🏰 Combien de champions un point garde en garnison (décision de l'utilisateur : le
@@ -273,13 +281,60 @@ export function holdControl(
   }));
 }
 
+/** 🛡️ La part des attaques qu'une garnison repousserait, moyennée sur les tailles de troupe
+ *  qu'une reprise peut tirer (`CONTROL.sizes` ramenées aux places du point), l'ennemi
+ *  renforcé de `boost`. ⚠️ Rejoue le VRAI combat (`campWinPct`, graines de pronostic) :
+ *  l'estimation et la bataille ne peuvent pas diverger. La faction n'y joue pas (iso-menace). */
+export function garrisonHoldChance(
+  p: Poi,
+  allies: readonly SkirmishUnit[],
+  boost = 1,
+  samples: number = CONTROL.holdSamples,
+): number {
+  if (!allies.length) return 0;
+  const seats = p.control ? seatsOf(p.control.kind) : CONTROL.maxGarrison;
+  let w = 0;
+  for (const size of CONTROL.sizes)
+    w += campWinPct(
+      p,
+      { faction: 'bandits', size: ((size * seats) / CONTROL.maxGarrison) * boost },
+      allies,
+      samples,
+    );
+  return w / CONTROL.sizes.length;
+}
+
+/** 🎲 De combien l'ennemi grossit sa troupe face à CETTE garnison : 1 tant qu'elle ne tient
+ *  pas plus de `CONTROL.maxHold` (le cas normal), sinon juste assez pour y redescendre.
+ *  ⚠️ Un champion faible n'est donc jamais pénalisé ; seul un choix « sans risque » l'est. */
+export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[]): number {
+  if (!allies.length || garrisonHoldChance(p, allies) <= CONTROL.maxHold) return 1;
+  let lo = 1;
+  let hi = 2;
+  while (garrisonHoldChance(p, allies, hi) > CONTROL.maxHold && hi < 256) {
+    lo = hi;
+    hi *= 2;
+  }
+  for (let i = 0; i < 10; i++) {
+    const mid = (lo + hi) / 2;
+    if (garrisonHoldChance(p, allies, mid) > CONTROL.maxHold) lo = mid;
+    else hi = mid;
+  }
+  return hi;
+}
+
+/** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`). */
+export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
+  return garrisonHoldChance(p, allies, retakeBoost(p, allies));
+}
+
 /** La troupe qui vient REPRENDRE le point — tirée sur l'instant de l'attaque. */
-export function retakeForce(p: Poi): Pick<ControlState, 'faction' | 'size'> {
+export function retakeForce(p: Poi, boost: number): Pick<ControlState, 'faction' | 'size'> {
   const f = enemyForce(p.id, (p.control?.attackAt ?? 0) % 1_000_003, CONTROL.sizes);
   // ⚔️ La troupe se mesure à la garnison qu'un point PEUT garder : un jardin (1 place) est
   // attaqué par une troupe à l'échelle d'un seul champion, sinon il tomberait à chaque fois.
   const seats = p.control ? seatsOf(p.control.kind) : CONTROL.maxGarrison;
-  return { ...f, size: (f.size * seats) / CONTROL.maxGarrison };
+  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost };
 }
 
 const shareOf = (n: number) =>

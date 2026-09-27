@@ -83,7 +83,9 @@
           <g class="hour-rings">
             <template v-for="ring in hourRings" :key="ring.hours">
               <circle :cx="TOWN.x" :cy="TOWN.y" :r="ring.r" class="hour-ring" />
-              <text :x="TOWN.x" :y="TOWN.y - ring.r - 0.8" class="hour-lab">{{ ring.hours }} h</text>
+              <text :x="TOWN.x" :y="TOWN.y - ring.r - 0.8" class="hour-lab">
+                {{ ring.hours }} h
+              </text>
             </template>
           </g>
 
@@ -487,8 +489,17 @@
               @click="toggleStay(a.id)"
             >
               {{ stayIds.includes(a.id) ? '🏰' : '↩' }} {{ a.name }}
+              <span v-if="stayHoldOf[a.id] !== undefined" class="stay-hold"
+                >🛡️ {{ stayHoldOf[a.id] }} %</span
+              >
             </button>
           </div>
+          <!-- 🛡️ Ce que la garnison choisie tiendra face aux reprises. ⚠️ Jamais plus de 90 % :
+               au-delà, l'ennemi envoie plus de monde (`retakeBoost`) — il reste du suspense. -->
+          <p v-if="stayHold !== null" class="car-cap stay-hold-line">
+            🛡️ Garnison : repousse environ <b>{{ stayHold }} %</b> des attaques
+            <span class="stay-hold-note">· jamais plus de 90 %, l’ennemi s’adapte</span>
+          </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
               v-for="a in freeSorted"
@@ -1998,7 +2009,12 @@ async function lifecycle() {
         message: '📬 Rapport de ton groupe — il rentre en ville.',
       });
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctlMsgs = await char.controlTick(uid, Date.now(), heroLevel.value, progress.activeDaysInLast(7));
+    const ctlMsgs = await char.controlTick(
+      uid,
+      Date.now(),
+      heroLevel.value,
+      progress.activeDaysInLast(7),
+    );
     if (ctlMsgs.length)
       $q.notify({
         type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',
@@ -2047,6 +2063,8 @@ function celebrateTopDrop(done: ExpeditionMessage) {
 // Écran de chargement thématique bref à l'ouverture de la carte (immersion).
 const {
   stayCap,
+  stayHold,
+  stayHoldOf,
   stayIds,
   stayChoice,
   toggleStay,
@@ -2191,6 +2209,18 @@ onUnmounted(() => {
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+}
+.stay-hold {
+  white-space: nowrap;
+  margin-left: 6px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
+}
+.stay-hold-line b {
+  color: var(--text);
+}
+.stay-hold-note {
+  color: var(--dim);
 }
 .stay-chip.on {
   border-color: var(--accent);

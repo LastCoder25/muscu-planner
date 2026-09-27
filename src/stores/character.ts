@@ -167,7 +167,7 @@ import {
   syncChampionName,
   type Adventurer,
 } from '@/lib/adventurers';
-import { convoySlotsFree, type EscortKit, type PartyHero } from '@/lib/caravan';
+import { convoySlotsFree, partyAllies, type EscortKit, type PartyHero } from '@/lib/caravan';
 import {
   advGearRoles,
   advGearSellValue,
@@ -234,6 +234,7 @@ import {
   loseControl,
   markAssault,
   retakeForce,
+  retakeBoost,
   reinforceBlocker,
   reinforceControl,
   releaseFromControl,
@@ -3272,14 +3273,17 @@ export const useCharacterStore = defineStore('character', () => {
       map = h.map;
       advs = h.advs;
       const escort = advs.filter((a) => ids.has(a.id));
-      const force = retakeForce(p);
+      // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
+      // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
+      const kit = escortKitOf(cur);
+      const force = retakeForce(p, retakeBoost(p, partyAllies(escort, kit, null)));
       const seed = (at ^ (p.level * 2654435761)) >>> 0 || 1;
       const o = escort.length
         ? resolveCamp({
             poi: p,
             spec: force,
             escort,
-            road: escortKitOf(cur),
+            road: kit,
             hero: null,
             seed,
             playerLevel,

@@ -20,7 +20,7 @@ import {
   supplyTarget,
 } from '@/lib/party';
 import { partyWinChance } from '@/lib/partyForecast';
-import { seatsOf } from '@/lib/controlPoints';
+import { garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
@@ -28,6 +28,7 @@ import { advUnavailableReason, sortByGradeThenRank, type Adventurer } from '@/li
 import {
   missionXpPreview,
   missionXpSplit,
+  partyAllies,
   SOLO_XP_MULT,
   type EscortKit,
   type MissionXpPreview,
@@ -399,6 +400,27 @@ export function useExpeditionParty(ctx: PartyCtx) {
     const picked = partyStay.value.filter((id) => ids.includes(id));
     return [...picked, ...ids.filter((id) => !picked.includes(id))].slice(0, stayCap.value);
   });
+  /** 🛡️ La part des attaques que la garnison CHOISIE repoussera — renfort ennemi compris,
+   *  donc jamais plus de `CONTROL.maxHold` (la même règle que la bataille). ⚠️ Sans horloge :
+   *  ne se recalcule qu'au changement de lieu ou de garnison, pas à chaque tick. */
+  const stayHold = computed(() => {
+    const p = selected.value;
+    if (!p || !stayCap.value) return null;
+    const ids = new Set(stayIds.value);
+    const g = partyAdvs.value.filter((a) => ids.has(a.id));
+    return g.length ? Math.round(garrisonHold(p, partyAllies(g, roadCtx.value, null)) * 100) : null;
+  });
+  /** 🌿 Un point à UNE place : la tenue de chaque candidat, pour choisir qui reste. */
+  const stayHoldOf = computed<Record<string, number>>(() => {
+    const p = selected.value;
+    if (!p || stayCap.value !== 1 || partyAdvs.value.length < 2) return {};
+    return Object.fromEntries(
+      partyAdvs.value.map((a) => [
+        a.id,
+        Math.round(garrisonHold(p, partyAllies([a], roadCtx.value, null)) * 100),
+      ]),
+    );
+  });
   /** Le choix n'a de sens que si l'équipe dépasse les places. */
   const stayChoice = computed(() => stayCap.value > 0 && partyAdvs.value.length > stayCap.value);
   function toggleStay(id: string) {
@@ -412,6 +434,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
 
   return {
     stayCap,
+    stayHold,
+    stayHoldOf,
     stayIds,
     stayChoice,
     toggleStay,
