@@ -332,6 +332,7 @@ export const RUNE_PLACE_OK: Record<PoiType, boolean> = {
   fallen: true,
   den: true,
   plunder: true,
+  vein: true,
   control: true,
 };
 
@@ -441,7 +442,12 @@ const REF_BUILD = {
 /** La politique du joueur de référence : si les emplacements sont pleins, il remplace la
  *  compétence du cran le plus bas quand la nouvelle est d'un cran strictement plus haut,
  *  sinon il refuse (la rune est perdue). */
-function giveRune(rng: () => number, sk: ChampSkill[], tier: RuneTier, slots: number): ChampSkill[] {
+function giveRune(
+  rng: () => number,
+  sk: ChampSkill[],
+  tier: RuneTier,
+  slots: number,
+): ChampSkill[] {
   const id = rollRuneSkill(rng, tier, sk);
   if (!id) return sk;
   const o = applyRuneSkill(sk, id, slots);
@@ -559,7 +565,10 @@ export function normalizeChampSkills(raw: unknown): ChampSkill[] {
     if (!s || !isSkill(s.id) || seen.has(s.id)) continue;
     seen.add(s.id);
     const lv = Math.floor(Number(s.level));
-    out.push({ id: s.id, level: Math.max(1, Math.min(SKILL_MAX_LEVEL, Number.isFinite(lv) ? lv : 1)) });
+    out.push({
+      id: s.id,
+      level: Math.max(1, Math.min(SKILL_MAX_LEVEL, Number.isFinite(lv) ? lv : 1)),
+    });
   }
   return out;
 }

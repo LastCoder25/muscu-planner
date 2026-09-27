@@ -719,6 +719,7 @@ import {
   ruinsSealKind,
   haulPills,
   type PartyResult,
+  veinDwellMs,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
@@ -761,6 +762,8 @@ import {
   trainingCapLevel,
   trainingStock,
   trainingXpPerHour,
+  forgeStock,
+  forgeXpPerHour,
   seatsOf,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
@@ -1376,12 +1379,16 @@ const controlProd = computed(() => {
       return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion · en attente ${trainingStock(p, now.value)} XP chacun`;
     case 'garden':
       return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${CONTROL.gardenHoursPerItem} h`;
+    case 'forge':
+      return `⚒️ +${Math.round(forgeXpPerHour(p))} XP/h par pièce portée · en attente ${forgeStock(p, now.value)} XP chacune`;
     case 'tower':
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
 });
 /** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
 const controlNote = computed(() => {
+  if (liveControl.value?.kind === 'forge')
+    return 'Les champions n’apprennent rien ici : seules leurs pièces portées progressent, jusqu’au ★5 de leur rang et au niveau de leur porteur. Utile quand un champion bute sur son plafond.';
   if (liveControl.value?.kind !== 'training') return '';
   const cap = trainingCapLevel(heroLevel.value);
   if (!cap)
@@ -1392,7 +1399,12 @@ const controlNote = computed(() => {
 const controlReady = computed(() => {
   const p = livePoi.value;
   if (!p) return false;
-  return controlGold.value > 0 || trainingStock(p, now.value) > 0 || gardenStock(p, now.value) > 0;
+  return (
+    controlGold.value > 0 ||
+    trainingStock(p, now.value) > 0 ||
+    forgeStock(p, now.value) > 0 ||
+    gardenStock(p, now.value) > 0
+  );
 });
 const controlCollectLabel = computed(() => {
   const p = livePoi.value;
@@ -1400,6 +1412,7 @@ const controlCollectLabel = computed(() => {
   if (!p || !k) return '';
   if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
   if (k === 'training') return `Faire progresser (${trainingStock(p, now.value)} XP chacun)`;
+  if (k === 'forge') return `Forger (${forgeStock(p, now.value)} XP par pièce)`;
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
 });
 const controlRate = computed(() =>
@@ -1794,6 +1807,16 @@ const poiFacts = computed<PoiFact[]>(() => {
       go: true,
       title: partySize.value ? 'Aller-retour de l’équipe' : 'Compose ton équipe pour le connaître',
     });
+    // 💎 Un filon : le temps d'extraction dépend du nombre de champions — c'est tout son choix.
+    if (p.type === 'vein') {
+      const n = Math.max(1, partyAdvs.value.length);
+      out.push({
+        icon: '⛏️',
+        label: 'Extraction',
+        value: formatDurationMin(veinDwellMs(n) / 60_000),
+        title: `Sur place : ${formatDurationMin(veinDwellMs(1) / 60_000)} seul, ${formatDurationMin(veinDwellMs(2) / 60_000)} à deux, ${formatDurationMin(veinDwellMs(3) / 60_000)} à trois — la réserve est la même`,
+      });
+    }
     // Sans équipe composée, au pas du HÉROS : on compare deux lieux d'un coup d'œil, avant de
     // choisir qui part. Le chiffre se recale sur l'équipe dès qu'elle est composée.
     if (partySize.value) pushRate(out, p, partyMin.value, partyHeroOn.value);
@@ -1907,6 +1930,7 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',
   plunder: () => 'beaucoup d’or 🪙',
+  vein: () => 'mana 💠 · 1 à 3 champions, plus vite à plusieurs',
   control: (p) =>
     p.control
       ? p.control.owner === 'player'

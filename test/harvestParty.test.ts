@@ -277,7 +277,9 @@ describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
   it('les lieux de récolte sont gardés — sauf la mine de mana, et eux seuls', () => {
     for (const t of HARVEST_TYPES)
       // 🏚️ Les ruines d'un héros tombé : personne ne les garde (2026-09-27).
-      if (t === 'mana_mine' || t === 'fallen') expect(harvestGuardOf(poi(t)), t).toBeNull();
+      // 💎 Le filon affleure : personne ne le garde non plus.
+      if (t === 'mana_mine' || t === 'fallen' || t === 'vein')
+        expect(harvestGuardOf(poi(t)), t).toBeNull();
       else expect(harvestGuardOf(poi(t)), t).not.toBeNull();
     for (const t of ['camp', 'lair', 'rift', 'arena'] as const)
       expect(harvestGuardOf(poi(t)), t).toBeNull();

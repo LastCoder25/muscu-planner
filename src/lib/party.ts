@@ -24,6 +24,7 @@ import {
   isWarbandPoi,
   poiForceOf,
   DEN_MAX_PARTY,
+  VEIN_MAX_CHAMPIONS,
   dwellMsFor,
   buildMessage,
   depositMessages,
@@ -140,6 +141,8 @@ export function partyCapFor(
   hero = false,
 ): number {
   const panth = Math.max(0, Math.floor(engage));
+  // 💎 Un filon : 3 champions au plus (le héros n'y va pas, cf. `partyHeroBlocker`).
+  if (poi?.type === 'vein') return Math.min(panth, VEIN_MAX_CHAMPIONS);
   if (poi?.type !== 'den') return panth;
   return Math.min(panth, Math.max(0, DEN_MAX_PARTY - (hero ? HERO_PARTY_WORTH : 0)));
 }
@@ -157,7 +160,9 @@ export type PartySendBlock =
   | 'denFull'
   | 'hopeless'
   | 'controlEmpty'
-  | 'controlHeld';
+  | 'controlHeld'
+  | 'veinHero'
+  | 'veinFull';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
@@ -177,6 +182,11 @@ export function partySendBlocker(
   if (poi.type === 'control') {
     if (poi.control?.owner !== 'enemy' || poi.control.assault) return 'controlHeld';
     if (escortCount <= 0) return 'controlEmpty';
+  }
+  // 💎 Un filon : 1 à 3 CHAMPIONS, jamais le héros (décision de l'utilisateur).
+  if (poi.type === 'vein') {
+    if (hero) return 'veinHero';
+    if (escortCount > VEIN_MAX_CHAMPIONS) return 'veinFull';
   }
   if (!hero && escortCount <= 0) return 'empty';
   if (!hero && slotsFree <= 0) return 'slots';
@@ -201,6 +211,8 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   denFull: 'une tanière n’accueille que 2 champions (ton héros en vaut 2)',
   controlEmpty: 'il faut au moins un champion pour occuper le point — le héros, lui, rentre',
   controlHeld: 'ce point n’est pas à prendre (déjà à toi, ou une équipe y marche)',
+  veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
+  veinFull: 'un filon n’accueille que 3 champions',
 };
 export function canSendParty(
   poi: Poi,
@@ -218,12 +230,16 @@ export function canSendParty(
  *  le héros est grisé au lieu de le cacher. Ordre : déjà parti, à l'infirmerie, sans
  *  Avant-poste. ⚠️ Plus de péage d'or (v0.1069, décision de l'utilisateur) : envoyer le
  *  héros ne coûte plus rien, en groupe comme seul. */
-export type PartyHeroBlock = 'expedition' | 'infirmary' | 'outpost';
+export type PartyHeroBlock = 'expedition' | 'infirmary' | 'outpost' | 'vein';
 export function partyHeroBlocker(ctx: {
   onExpedition: boolean;
   healMs: number;
   outpost: boolean;
+  /** Le lieu visé. ⚠️ REQUIS : un filon s'extrait par les CHAMPIONS seuls (décision de
+   *  l'utilisateur), et l'oublier y laisserait partir le héros. */
+  poi: Pick<Poi, 'type'> | null;
 }): PartyHeroBlock | null {
+  if (ctx.poi?.type === 'vein') return 'vein';
   if (ctx.onExpedition) return 'expedition';
   if (ctx.healMs > 0) return 'infirmary';
   if (!ctx.outpost) return 'outpost';
@@ -233,6 +249,7 @@ export const PARTY_HERO_BLOCK_LABEL: Record<PartyHeroBlock, string> = {
   expedition: '🧭 déjà en expédition',
   infirmary: '🤕 à l’infirmerie',
   outpost: '🧭 Avant-poste requis',
+  vein: '💎 un filon s’extrait par les champions seuls',
 };
 
 /** Ce que `startParty` a besoin de savoir d'un envoi, quelle que soit la cible. Les entrées
@@ -241,6 +258,10 @@ export interface PartyVoyage {
   poi: Poi;
   hero: PartyHero | null;
   seed: number;
+  /** Combien de CHAMPIONS partent (héros non compris) : un filon s'extrait d'autant plus
+   *  vite qu'ils sont nombreux (`dwellMsFor`). ⚠️ REQUIS : oublié, un filon prendrait 6 h
+   *  quelle que soit l'équipe. */
+  champions: number;
 }
 
 /** Construit le voyage d'un groupe. ⚠️ AUCUN coût d'envoi (v0.1069), et aucun salaire :
@@ -255,7 +276,7 @@ export function startParty(
 ): ActiveExpedition {
   const leg = Math.max(1, Math.round(legMin)) * 60_000;
   // 🔍 La fouille d'un héros tombé : on reste sur place, le rapport tombe à la fin.
-  const dwell = dwellMsFor(input.poi);
+  const dwell = dwellMsFor(input.poi, input.champions);
   return {
     poi: input.poi,
     sentAt: now,

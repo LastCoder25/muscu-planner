@@ -112,7 +112,11 @@ function withSiteLoot(out: ExpeditionOutcome, input: HarvestPartyInput): Expedit
  * « complément, jamais substitut au sport ». Tirée sur SON générateur, et seulement si
  * l'équipe porte la rune : sans elle, aucune issue seedée ne bouge.
  */
-export function withPlunder(out: ExpeditionOutcome, escort: readonly Adventurer[], seed: number): ExpeditionOutcome {
+export function withPlunder(
+  out: ExpeditionOutcome,
+  escort: readonly Adventurer[],
+  seed: number,
+): ExpeditionOutcome {
   const chance = teamRuneValue(escort, 'plunder');
   if (!out.win || chance <= 0) return out;
   if (mulberry32((seed ^ 0x51a7d3c1) >>> 0 || 1)() >= chance) return out;
@@ -154,7 +158,9 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
   const won = spec ? g.skirmish.win : true;
   const tag = spec
     ? `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`
-    : '💠 Aucun garde — ses monstres sont partis vers ta base.';
+    : poi.type === 'vein'
+      ? '💎 Aucun garde — le filon affleurait, il n’y avait qu’à creuser.'
+      : '💠 Aucun garde — ses monstres sont partis vers ta base.';
   const raw: BodyLoot = spec
     ? forceHaul({ poi, road, seed }, spec, g.skirmish)
     : { gold: 0, summonStones: 0, supplies: {} };

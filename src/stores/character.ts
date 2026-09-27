@@ -257,6 +257,7 @@ import {
   markAssault,
   retakeForce,
   retakeBoost,
+  forgeGear,
   reinforceBlocker,
   reinforceControl,
   releaseFromControl,
@@ -871,7 +872,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || cur.runes.comp >= RUNE_COMP_VERSION) return;
     const champs = (cur.adventurers ?? []).flatMap((a) => {
       const c = advChampion(a);
-      return c ? [{ id: a.id, grade: c.grade, ascended: a.ascended ?? 0, awaken: advAwaken(a) }] : [];
+      return c
+        ? [{ id: a.id, grade: c.grade, ascended: a.ascended ?? 0, awaken: advAwaken(a) }]
+        : [];
     });
     const tiers = compensationRunes(champs);
     const runes = { ...addRunes(cur.runes, tiers), comp: RUNE_COMP_VERSION };
@@ -2071,7 +2074,7 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
-    const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
+    const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg], advList.value);
     // ⚔️ Une interception AVEC le héros vit ici, pas dans `partyTick` : elle ne levait
     // jamais le marquage (v0.1190).
     const dw = dispelWon(cur.base, [msg]);
@@ -2114,7 +2117,9 @@ export const useCharacterStore = defineStore('character', () => {
     // `buildMessage(...)`, qui porte `claimed: false` : un butin encaissé entre le retour
     // (`claimAt`) et ce tick redevenait encaissable (revue finale des camps — or, objets, XP
     // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
-    const x = exp.reported ? null : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
+    const x = exp.reported
+      ? null
+      : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg], advList.value);
     const dw = exp.reported ? null : dispelWon(cur.base, [msg]);
     const ctl = x
       ? settleControlAssaults(
@@ -2700,8 +2705,16 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🎓 L'XP DES CHAMPIONS À L'ARRIVÉE D'UN RAPPORT (`grantReportXp`, lib) : la boîte
    *  marquée, le patch du vivier (pièces portées comprises) et l'animation à jouer APRÈS
    *  l'écriture — une animation n'annonce jamais un gain qui n'a pas eu lieu. */
-  function reportXp(cur: CharacterRow, box: ExpeditionMessage[], fresh: ExpeditionMessage[]) {
-    const g = grantReportXp(box, fresh, advList.value, pantheonLevel.value);
+  function reportXp(
+    cur: CharacterRow,
+    box: ExpeditionMessage[],
+    fresh: ExpeditionMessage[],
+    /** Le vivier sur lequel verser l'XP. ⚠️ REQUIS : la boucle des reprises lui passe le
+     *  vivier qui contient DÉJÀ la récolte du camp d'entraînement ; relu dans l'état, ce
+     *  vivier-là était ignoré et l'XP du camp se perdait dès que la garnison défendait. */
+    base: Adventurer[],
+  ) {
+    const g = grantReportXp(box, fresh, base, pantheonLevel.value);
     if (!g.granted.length) return { messages: box, patch: {}, play: () => {} };
     const gearPatch = gearTrainedPatch(cur, advList.value, g.adventurers);
     const tracks = gearAwareTracks(cur, advList.value, g.adventurers, gearPatch);
@@ -3131,6 +3144,7 @@ export const useCharacterStore = defineStore('character', () => {
           onExpedition: !!cur.expedition,
           healMs: woundRemainingMs(cur.base, now),
           outpost: expeditionsUnlocked(cur.buildings),
+          poi,
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
@@ -3226,7 +3240,12 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
       supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };
-    const trip = startParty({ poi: meet.poi, hero, seed }, now, leg, withSupplies);
+    const trip = startParty(
+      { poi: meet.poi, hero, seed, champions: escort.length },
+      now,
+      leg,
+      withSupplies,
+    );
     const busy = new Set(opts.escortIds);
     // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
     const map = cur.expedition_map
@@ -3324,7 +3343,7 @@ export const useCharacterStore = defineStore('character', () => {
     const dw = dispelWon(cur.base, t.fresh);
     const base = dw.base;
     // 🎓 L'XP des champions tombe ICI, à l'arrivée du rapport — et l'animation avec.
-    const x0 = reportXp(cur, t.messages, t.fresh);
+    const x0 = reportXp(cur, t.messages, t.fresh, advList.value);
     const x = { ...x0, messages: dw.tag(x0.messages) };
     // 🏰 Un point de contrôle PRIS : l'équipe y reste en garnison (postée, plus « en route »).
     const ctl = settleControlAssaults(
@@ -3403,15 +3422,18 @@ export const useCharacterStore = defineStore('character', () => {
     }
     let map = settled;
     let advs = advList.value;
+    const stock0 = cur.adv_gear?.stock ?? [];
+    let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
       // ⛏️🎯🌿 Ce que le point a produit jusqu'à l'attaque part AVANT le combat, même s'il
       // est perdu : on ne punit pas l'absence en confisquant ce qui était déjà sorti.
-      const h = harvestControlIn(map, advs, p.id, at, playerLevel);
+      const h = harvestControlIn(map, advs, gearStock, p.id, at, playerLevel);
       map = h.map;
       advs = h.advs;
+      gearStock = h.stock;
       const escort = advs.filter((a) => ids.has(a.id));
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
@@ -3473,8 +3495,10 @@ export const useCharacterStore = defineStore('character', () => {
       advs = advs.map((a) => (!held && a.posted === p.id ? { ...a, posted: undefined } : a));
     }
     const box = boxWith(cur, msgs, MESSAGES_CAP);
-    const x = reportXp(cur, box, msgs);
-    let roster = (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advs;
+    // ⚠️ `advs` et non l'état : il porte l'XP du camp d'entraînement récoltée avant l'attaque.
+    const x = reportXp(cur, box, msgs, advs);
+    const rosterXp = (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advs;
+    let roster = rosterXp;
     // Les postés libérés ET l'XP : on repart de l'XP versée et on retire les postes perdus.
     const freed = new Set(advs.filter((a) => !a.posted).map((a) => a.id));
     roster = roster.map((a) => (freed.has(a.id) ? { ...a, posted: undefined } : a));
@@ -3489,10 +3513,18 @@ export const useCharacterStore = defineStore('character', () => {
           now,
           xpGranted: true,
         }).adventurers;
+    // 🗡️ L'ÉQUIPEMENT, en UN seul calcul : ce que la forge a versé avant l'attaque, puis tout
+    // ce que les champions ont appris depuis l'état de départ — la récolte du camp ET l'XP
+    // du rapport. ⚠️ Sur le stock forgé : le patch du rapport, bâti sur l'ancien stock,
+    // effacerait la forge ; et sans rapport à verser, l'XP du camp n'apprenait rien aux pièces.
+    const gearNext = trainWornGear(advList.value, rosterXp, gearStock);
+    const forged =
+      gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {};
     await persist(userId, {
       expedition_map: map,
       messages: x.messages,
       ...x.patch,
+      ...forged,
       adventurers: roster,
     });
     x.play();
@@ -3507,13 +3539,23 @@ export const useCharacterStore = defineStore('character', () => {
   function harvestControlIn(
     map: ExpeditionMap,
     advs: Adventurer[],
+    stock: AdvGear[],
     id: string,
     at: number,
     heroLevel: number,
-  ): { map: ExpeditionMap; advs: Adventurer[]; gold: number; supplies: SupplyStock } {
+  ): {
+    map: ExpeditionMap;
+    advs: Adventurer[];
+    stock: AdvGear[];
+    gold: number;
+    supplies: SupplyStock;
+  } {
     const p = map.pois.find((x) => x.id === id);
     const c = collectControl(map, id, at, heroLevel);
-    if (!p?.control || c.xp <= 0) return { map: c.map, advs, gold: c.gold, supplies: c.supplies };
+    // ⚒️ La forge verse son XP aux PIÈCES portées par la garnison, pas aux champions.
+    const nextStock = p?.control ? forgeGear(stock, advs, p.control.garrison, c.gearXp) : stock;
+    if (!p?.control || c.xp <= 0)
+      return { map: c.map, advs, stock: nextStock, gold: c.gold, supplies: c.supplies };
     const ids = new Set(p.control.garrison);
     const next = advs.map((a) =>
       ids.has(a.id)
@@ -3524,7 +3566,7 @@ export const useCharacterStore = defineStore('character', () => {
           )
         : a,
     );
-    return { map: c.map, advs: next, gold: c.gold, supplies: c.supplies };
+    return { map: c.map, advs: next, stock: nextStock, gold: c.gold, supplies: c.supplies };
   }
 
   /** 🏰 Récolte ce qu'un point de contrôle tenu a produit (or, XP, consommables). */
@@ -3537,9 +3579,14 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return null;
     const before = advList.value;
-    const h = harvestControlIn(cur.expedition_map, before, id, now, playerLevel);
+    const stock0 = cur.adv_gear?.stock ?? [];
+    const h = harvestControlIn(cur.expedition_map, before, stock0, id, now, playerLevel);
     if (h.map === cur.expedition_map) return null;
-    const gearPatch = gearTrainedPatch(cur, before, h.advs);
+    // ⚒️ Forge (pièces seules) OU camp (champions, puis leurs pièces) : jamais les deux.
+    const gearPatch =
+      h.stock !== stock0
+        ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } }
+        : gearTrainedPatch(cur, before, h.advs);
     const tracks = gearAwareTracks(cur, before, h.advs, gearPatch);
     const nSup = Object.values(h.supplies).reduce((s, n) => s + (n ?? 0), 0);
     await persist(userId, {
@@ -3550,6 +3597,8 @@ export const useCharacterStore = defineStore('character', () => {
     });
     if (h.gold > 0) goldFx.gain(h.gold);
     if (h.advs !== before) useAdvXpFx().show(tracks, 'Camp d’entraînement');
+    else if (h.stock !== stock0)
+      useAdvXpFx().show(withGearTracks([], stock0, h.stock, h.advs), 'Forge de campagne');
     return { gold: h.gold, supplies: nSup };
   }
 
@@ -3564,7 +3613,8 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<void> {
     const cur = row.value;
     if (!cur?.expedition_map) return;
-    const h = harvestControlIn(cur.expedition_map, advList.value, id, now, playerLevel);
+    const stock0 = cur.adv_gear?.stock ?? [];
+    const h = harvestControlIn(cur.expedition_map, advList.value, stock0, id, now, playerLevel);
     const all = advList.value.filter((a) => a.posted === id).map((a) => a.id);
     await persist(userId, {
       expedition_map: releaseFromControl(h.map, id, all, now, playerLevel),
@@ -3573,6 +3623,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
+      ...(h.stock !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } } : {}),
     });
     if (h.gold > 0) goldFx.gain(h.gold);
   }

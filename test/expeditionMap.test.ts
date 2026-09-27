@@ -692,6 +692,7 @@ describe('difficulté des POI de combat', () => {
       'plunder',
       'ruins',
       'shrine',
+      'vein',
       'well',
     ]);
     expect(HARVEST_TYPES.has('lair')).toBe(false);
@@ -1046,7 +1047,8 @@ describe('🕳️ le RANG d’une faille', () => {
     }
     // Au dernier rang, plus de rang suivant : l'écart proportionnel, et jamais d'erreur.
     const top = mulberry32(3);
-    for (let i = 0; i < 500; i++) expect(riftLevelFor(top, 100, [], true)).toBeLessThanOrEqual(100 + riftAboveSpan(100));
+    for (let i = 0; i < 500; i++)
+      expect(riftLevelFor(top, 100, [], true)).toBeLessThanOrEqual(100 + riftAboveSpan(100));
   });
 
   it('⚠️ l’écart suit le NIVEAU, pas un rang : +25 % du niveau, au moins 1', () => {
