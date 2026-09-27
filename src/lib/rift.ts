@@ -571,27 +571,31 @@ export function bossReplaySteps(log: readonly CombatEvent[], max: number): RiftB
  * au rang 51-60 qu'il pèse le plus. Mesuré avant : mûre **0,92** au niveau 11, **0,84** au
  * 51 et au 60. Après : **0,67 à 0,73**. ⚠️ Le niveau 10 a désormais son propre point : sans
  * lui, l'interpolation 9 → 11 le laissait à 0,51 (une falaise entre deux paliers d'étalon).
+ *
+ * ⚠️ **RE-BISECTÉE (équipement de champion à l'échelle du héros, `ADV_GEAR.k` 0,1125 → 1)** :
+ * l'étalon porte des pièces 9 fois plus fortes. Niveaux 1-40 inchangés à ±0,02 ; 41-60 et
+ * 71-100 déplacés (le second affixe et les rangs hauts pèsent plus). Mûre 0,68 à 0,72 partout.
  */
 const RIFT_RELIEF: [number, number][] = [
   [1, 0.93],
-  [2, 0.92],
-  [8, 0.93],
+  [2, 0.93],
+  [8, 0.92],
   [9, 1.09],
   [10, 1.09],
-  [11, 1.18],
-  [12, 1.19],
-  [20, 1.19],
-  [21, 1.15],
-  [40, 1.11],
-  [41, 1.01],
-  [50, 1.02],
-  [51, 1.12],
-  [60, 1.13],
+  [11, 1.2],
+  [12, 1.2],
+  [20, 1.18],
+  [21, 1.14],
+  [40, 1.12],
+  [41, 1.1],
+  [50, 1.11],
+  [51, 0.98],
+  [60, 0.97],
   [61, 1.13],
   [70, 1.15],
-  [71, 0.98],
-  [90, 1],
-  [100, 1.03],
+  [71, 1.16],
+  [90, 1.15],
+  [100, 1.16],
 ];
 
 /** Force d'UN monstre de faille — absolue, calée sur le groupe de référence du niveau. */

@@ -21,7 +21,7 @@ import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 import { BOSSES, bossSummonCost } from '@/data/bosses';
 import { rollDrop, sellValue } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
-import { caravanSlots, caravanLegMin, refChampionAdv } from '@/lib/caravan';
+import { caravanSlots, caravanLegMin, refAdvGear, refChampionAdv } from '@/lib/caravan';
 import { rollRaid } from '@/lib/raid';
 import { travelTimeMult } from '@/lib/buildings';
 import { comboChestReward } from '@/lib/comboChest';
@@ -77,8 +77,18 @@ const bestPlaces = memo((L) => {
   // ⚠️ Un héros ÉQUIPÉ (le harnais partagé) + un champion : les gardes sont calibrés contre
   // eux — nu, le héros perdait toutes les mines du début de partie.
   const hero = gearedFighter(L);
-  const ally = refChampionAdv(L, 0);
-  const team = [0, 1, 2].map((i) => refChampionAdv(L, i));
+  // ⚔️ ÉQUIPÉS (2026-09-27) : depuis que l'équipement des champions vaut celui du héros
+  // (`ADV_GEAR.k` 1), un champion nu perd ses gardes — mesurer avec lui sous-estimait le revenu
+  // d'un joueur réel de ~10 % au niveau 60 et faisait dériver ce modèle du jeu.
+  const gearOf = (i: number) => ({
+    weapon: `refGear${i}weapon`,
+    armor: `refGear${i}armor`,
+    accessory: `refGear${i}accessory`,
+    relic: `refGear${i}relic`,
+  });
+  const ally = { ...refChampionAdv(L, 0), gear: gearOf(0) };
+  const team = [0, 1, 2].map((i) => ({ ...refChampionAdv(L, i), gear: gearOf(i) }));
+  const road = { advGear: refAdvGear(L, 3) };
   let gold = 0;
   let diff = 0;
   let n = 0;
@@ -100,7 +110,7 @@ const bestPlaces = memo((L) => {
             const o = resolveHarvestParty({
               poi: p,
               escort: [ally],
-              road: { advGear: [] },
+              road,
               hero: { name: 'H', level: L, combatant: hero },
               seed: s * 31 + seed,
               playerLevel: L,
@@ -111,7 +121,7 @@ const bestPlaces = memo((L) => {
               t += resolveHarvestParty({
                 poi: p,
                 escort: team,
-                road: { advGear: [] },
+                road,
                 hero: null,
                 seed: s * 31 + seed,
                 playerLevel: L,

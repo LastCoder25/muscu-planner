@@ -128,8 +128,11 @@ export const CARAVAN = {
    *  que la réduction, donc la morsure visait des PV que l’escorte dépassait de plus en
    *  plus à mesure que son agilité montait. */
   foeDmgPctPv: 0.275,
-  /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ). */
-  perilousMult: 1.35,
+  /** Route dangereuse (`Poi.perilous`, tirée au spawn donc annonçable AVANT le départ).
+   *  ⚠️ 1,35 → 1,4 quand l'équipement des champions est passé à l'échelle du héros
+   *  (`ADV_GEAR.k` 1) : un trio équipé gagnait 47 % des routes dangereuses au niveau 12.
+   *  Après (400 graines, niveaux 12/20/26/45/70/85) : 33/24/29/24/23/35 %. */
+  perilousMult: 1.4,
   /** Taille de la troupe d'une embuscade — calme / périlleuse (moteur de groupe, v0.864).
    *  ⚠️ Ce n'est PAS le danger : l'issue reste le combat fondu `roadFoe` (bandes intactes).
    *  C'est le nombre de CORPS entre lesquels ses PV sont répartis — donc combien d'abattus
