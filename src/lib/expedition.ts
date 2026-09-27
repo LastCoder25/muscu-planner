@@ -278,7 +278,7 @@ export const HARVEST_GUARD_RAMP = { start: 0.4, perLevel: 0.1 };
 /** 🏛️ Gardes des ruines anciennes : un cran au-dessus d'une mine (un sceau se mérite). Mesuré
  *  (camps) : 2 → deux champions 74-97 % · 2,5 → trois champions ~99 % · 3 → trois champions
  *  ~80 %. */
-export const RUINS_GUARD_SIZES: readonly number[] = [2, 2.5, 3];
+const RUINS_GUARD_SIZES: readonly number[] = [2, 2.5, 3];
 
 /**
  * 🔱⚜️ LES SCEAUX D'UNES RUINES ANCIENNES (2026-09-27, décision de l'utilisateur : « des ruines
