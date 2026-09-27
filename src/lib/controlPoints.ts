@@ -19,6 +19,7 @@
  */
 import { mulberry32, seedOf } from './combat';
 import { advAscensionCap, advXpToNext, type Adventurer } from './adventurers';
+import { grantAdvGearXp, wornGear, type AdvGear } from './advGear';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
 import type { SkirmishUnit } from './skirmish';
@@ -44,7 +45,7 @@ export const CONTROL = {
   /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
    *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
    *  de la ville (un quart de tour d'écart), et la mine, première, garde celle d'avant. */
-  kinds: ['mine', 'training', 'garden', 'tower'] as readonly ControlKind[],
+  kinds: ['mine', 'training', 'garden', 'tower', 'forge'] as readonly ControlKind[],
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -85,6 +86,13 @@ export const CONTROL = {
   /** 🌿 Jardin d'herboriste : UN jardinier (`CONTROL_SEATS.garden` = 1) cueille un
    *  consommable toutes les `gardenHoursPerItem` heures (2 par jour). */
   gardenHoursPerItem: 12,
+  /** ⚒️ Forge de campagne (2026-09-27, demandé) : chaque pièce PORTÉE par un champion posté
+   *  gagne l'XP d'une épreuve de son rang toutes les `forgeHoursPerTrial` heures — deux fois
+   *  le rythme du camp d'entraînement, parce que la forge n'apprend RIEN au champion : elle
+   *  sert quand il bute sur un plafond (ascension, Panthéon, rang du héros) et que ses pièces,
+   *  qui n'apprennent qu'à travers lui (`trainWornGear`), sont bloquées aussi. Plafonds de
+   *  la pièce inchangés : le ★5 de son rang et le niveau de son porteur. */
+  forgeHoursPerTrial: 1.5,
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
@@ -99,12 +107,22 @@ export const CONTROL = {
 /** 🏰 Combien de champions un point garde en garnison (décision de l'utilisateur : le
  *  jardin n'en garde qu'UN — on choisit à l'envoi qui reste, les autres rentrent). */
 const CONTROL_SEATS: Record<ControlKind, number> = {
+  forge: CONTROL_MAX_GARRISON,
   mine: CONTROL_MAX_GARRISON,
   training: CONTROL_MAX_GARRISON,
   garden: 1,
   tower: CONTROL_MAX_GARRISON,
 };
 export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
+/** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. La forge se glisse
+ *  ENTRE la mine et le camp d'entraînement : les quatre premiers gardent leur place. */
+const CONTROL_QUARTER: Record<ControlKind, number> = {
+  mine: 0,
+  training: 1,
+  garden: 2,
+  tower: 3,
+  forge: 0.5,
+};
 
 export const CONTROL_EMO = CONTROL_KIND_EMO;
 export const CONTROL_LABEL = CONTROL_KIND_LABEL;
@@ -114,6 +132,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   training: 'XP pour la garnison 🎓',
   garden: 'consommables 🎒',
   tower: 'trajets plus courts 🧭',
+  forge: 'XP pour l’équipement porté ⚒️',
 };
 
 export const controlIdOf = (kind: ControlKind): string => `ctl_${kind}`;
@@ -145,11 +164,12 @@ function controlLevel(id: string, retakes: number, playerLevel: number): number 
 
 /** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. */
 function controlSpot(map: ExpeditionMap, kind: ControlKind): Pick<Poi, 'x' | 'y' | 'distNorm'> {
-  // Un quart de tour entre deux points, à partir de l'angle de la MINE (tiré comme avant :
-  // une mine déjà posée ne bouge pas).
-  const i = CONTROL.kinds.indexOf(kind);
+  // Chaque point a son angle, en quarts de tour à partir de l'angle de la MINE (tiré comme
+  // avant : une mine déjà posée ne bouge pas). ⚠️ UNE TABLE, pas l'index dans `kinds` : un
+  // cinquième type divisait le tour en cinq, et le nouveau point tombait à 18° d'un point
+  // déjà posé (les points existants gardent leur place, elle n'est calculée qu'une fois).
   const rng = mulberry32((map.seed ^ seedOf('ctl:mine:0')) >>> 0 || 1);
-  const ang = rng() * Math.PI * 2 + (i * Math.PI * 2) / CONTROL.kinds.length;
+  const ang = rng() * Math.PI * 2 + (CONTROL_QUARTER[kind] * Math.PI) / 2;
   const d = EXPE.distMin + CONTROL.distFrac * (revealRadius(1) - EXPE.distMin);
   return {
     x: Math.round(EXPE.town.x + Math.cos(ang) * d),
@@ -355,6 +375,11 @@ export function trainingXpPerHour(p: Pick<Poi, 'level'>): number {
   return trialXpBase(p.level) / CONTROL.trainHoursPerTrial;
 }
 
+/** ⚒️ L'XP par heure de CHAQUE pièce portée par un champion posté à la forge. */
+export function forgeXpPerHour(p: Pick<Poi, 'level'>): number {
+  return trialXpBase(p.level) / CONTROL.forgeHoursPerTrial;
+}
+
 /** Ce qu'un point produit par heure, dans SON unité : or (mine), XP par champion (camp),
  *  consommables (jardin, fractionnaires). La tour ne produit rien. */
 function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
@@ -365,6 +390,8 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
       return n > 0 ? trainingXpPerHour(p) : 0;
     case 'garden':
       return n > 0 ? 1 / CONTROL.gardenHoursPerItem : 0;
+    case 'forge':
+      return n > 0 ? forgeXpPerHour(p) : 0;
     default:
       return 0;
   }
@@ -416,6 +443,35 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
   return Math.max(0, need);
 }
 
+/** ⚒️ L'XP accumulée PAR pièce portée à `now` (avant les plafonds de la pièce). */
+export function forgeStock(p: Poi, now: number): number {
+  return p.control?.kind === 'forge' ? Math.floor(stockUnits(p, now, 1)) : 0;
+}
+
+/**
+ * ⚒️ Verse l'XP de la forge aux pièces RÉELLEMENT portées (`wornGear`, la règle du combat)
+ * par les champions de la garnison. Chaque pièce garde ses plafonds (★5 de son rang, niveau
+ * de son porteur) : `grantAdvGearXp` conserve l'excédent. Rend le MÊME tableau si rien n'a
+ * bougé — le store n'écrit alors pas `adv_gear`.
+ */
+export function forgeGear(
+  stock: AdvGear[],
+  advs: Adventurer[],
+  garrison: readonly string[],
+  xp: number,
+): AdvGear[] {
+  if (xp <= 0 || !garrison.length) return stock;
+  const posted = advs.filter((a) => garrison.includes(a.id));
+  const worn = wornGear(posted, stock);
+  const next = new Map<string, AdvGear>();
+  for (const a of posted)
+    for (const g of worn.get(a.id) ?? []) {
+      const up = grantAdvGearXp(g, xp, a.level);
+      if (up !== g) next.set(g.id, up);
+    }
+  return next.size ? stock.map((g) => next.get(g.id) ?? g) : stock;
+}
+
 /** 🌿 Combien de consommables le jardin a cueillis à `now`. */
 export function gardenStock(p: Poi, now: number): number {
   return p.control?.kind === 'garden' ? Math.floor(stockUnits(p, now, 1) + 1e-9) : 0;
@@ -450,9 +506,9 @@ export function collectControl(
   id: string,
   now: number,
   playerLevel: number,
-): { map: ExpeditionMap; gold: number; xp: number; supplies: SupplyStock } {
+): { map: ExpeditionMap; gold: number; xp: number; gearXp: number; supplies: SupplyStock } {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, xp: 0, supplies: {} };
+  const none = { map, gold: 0, xp: 0, gearXp: 0, supplies: {} };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   const units = stockUnits(p, now, playerLevel);
@@ -478,6 +534,7 @@ export function collectControl(
     })),
     gold: c.kind === 'mine' ? whole : 0,
     xp: c.kind === 'training' ? whole : 0,
+    gearXp: c.kind === 'forge' ? whole : 0,
     supplies,
   };
 }

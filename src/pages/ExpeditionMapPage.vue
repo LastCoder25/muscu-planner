@@ -761,6 +761,8 @@ import {
   trainingCapLevel,
   trainingStock,
   trainingXpPerHour,
+  forgeStock,
+  forgeXpPerHour,
   seatsOf,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
@@ -1376,12 +1378,16 @@ const controlProd = computed(() => {
       return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion · en attente ${trainingStock(p, now.value)} XP chacun`;
     case 'garden':
       return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${CONTROL.gardenHoursPerItem} h`;
+    case 'forge':
+      return `⚒️ +${Math.round(forgeXpPerHour(p))} XP/h par pièce portée · en attente ${forgeStock(p, now.value)} XP chacune`;
     case 'tower':
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
 });
 /** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
 const controlNote = computed(() => {
+  if (liveControl.value?.kind === 'forge')
+    return 'Les champions n’apprennent rien ici : seules leurs pièces portées progressent, jusqu’au ★5 de leur rang et au niveau de leur porteur. Utile quand un champion bute sur son plafond.';
   if (liveControl.value?.kind !== 'training') return '';
   const cap = trainingCapLevel(heroLevel.value);
   if (!cap)
@@ -1392,7 +1398,12 @@ const controlNote = computed(() => {
 const controlReady = computed(() => {
   const p = livePoi.value;
   if (!p) return false;
-  return controlGold.value > 0 || trainingStock(p, now.value) > 0 || gardenStock(p, now.value) > 0;
+  return (
+    controlGold.value > 0 ||
+    trainingStock(p, now.value) > 0 ||
+    forgeStock(p, now.value) > 0 ||
+    gardenStock(p, now.value) > 0
+  );
 });
 const controlCollectLabel = computed(() => {
   const p = livePoi.value;
@@ -1400,6 +1411,7 @@ const controlCollectLabel = computed(() => {
   if (!p || !k) return '';
   if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
   if (k === 'training') return `Faire progresser (${trainingStock(p, now.value)} XP chacun)`;
+  if (k === 'forge') return `Forger (${forgeStock(p, now.value)} XP par pièce)`;
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
 });
 const controlRate = computed(() =>

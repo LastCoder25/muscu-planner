@@ -73,7 +73,7 @@ export type PoiType =
   | 'control';
 
 /** 🏰 Ce que produit un point de contrôle tenu. Étape 1 : la mine d'or. */
-export type ControlKind = 'mine' | 'training' | 'garden' | 'tower';
+export type ControlKind = 'mine' | 'training' | 'garden' | 'tower' | 'forge';
 /** 🏰 Une garnison : 1 à 3 champions (décision de l'utilisateur). */
 export const CONTROL_MAX_GARRISON = 3;
 /**
@@ -162,12 +162,14 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   training: 'Camp d’entraînement',
   garden: 'Jardin d’herboriste',
   tower: 'Tour de guet',
+  forge: 'Forge de campagne',
 };
 export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   mine: '⛏️',
   training: '🎯',
   garden: '🌿',
   tower: '🗼',
+  forge: '⚒️',
 };
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
 export function poiLabel(p: Pick<Poi, 'type' | 'control'>): string {
@@ -804,7 +806,10 @@ export function haulPills(o: {
     .map((p): { emoji: string; n: number } => ({ emoji: p.emoji, n: p.n }))
     .concat(supplies)
     .concat(
-      RUNE_TIERS.map((t) => ({ emoji: RUNE_INFO[t].emoji, n: (o.runes ?? []).filter((x) => x === t).length })).filter((p) => p.n > 0),
+      RUNE_TIERS.map((t) => ({
+        emoji: RUNE_INFO[t].emoji,
+        n: (o.runes ?? []).filter((x) => x === t).length,
+      })).filter((p) => p.n > 0),
     );
 }
 
@@ -1367,8 +1372,7 @@ function heroLegMinAt(d: number, playerLevel: number, travelMult: number): numbe
   const dn = distNormAt(d);
   const win = spawnWindow(playerLevel);
   const lvl = win.min + Math.min(1, dn) * (win.max - win.min);
-  const base =
-    EXPE.travelOneWayMinMin + (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * dn;
+  const base = EXPE.travelOneWayMinMin + (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * dn;
   return base * (1 + Math.max(0, lvl) * 0.02) * travelMult;
 }
 
@@ -1785,7 +1789,10 @@ export function riftLevelFor(
     // fois mûre. ⚠️ Au dernier rang, plus de rang suivant : l'ancien écart proportionnel.
     if (nextRankAbove && above < CHARACTER_RANKS.length) {
       const lo = rankStartLevel(above);
-      const hi = above + 1 < CHARACTER_RANKS.length ? rankStartLevel(above + 1) - 1 : lo + riftAboveSpan(playerLevel);
+      const hi =
+        above + 1 < CHARACTER_RANKS.length
+          ? rankStartLevel(above + 1) - 1
+          : lo + riftAboveSpan(playerLevel);
       return Math.max(playerLevel + 1, lo + Math.floor(rng() * Math.max(1, hi - lo + 1)));
     }
     return playerLevel + 1 + Math.floor(rng() * riftAboveSpan(playerLevel));

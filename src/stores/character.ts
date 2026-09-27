@@ -257,6 +257,7 @@ import {
   markAssault,
   retakeForce,
   retakeBoost,
+  forgeGear,
   reinforceBlocker,
   reinforceControl,
   releaseFromControl,
@@ -871,7 +872,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur || cur.runes.comp >= RUNE_COMP_VERSION) return;
     const champs = (cur.adventurers ?? []).flatMap((a) => {
       const c = advChampion(a);
-      return c ? [{ id: a.id, grade: c.grade, ascended: a.ascended ?? 0, awaken: advAwaken(a) }] : [];
+      return c
+        ? [{ id: a.id, grade: c.grade, ascended: a.ascended ?? 0, awaken: advAwaken(a) }]
+        : [];
     });
     const tiers = compensationRunes(champs);
     const runes = { ...addRunes(cur.runes, tiers), comp: RUNE_COMP_VERSION };
@@ -3403,15 +3406,18 @@ export const useCharacterStore = defineStore('character', () => {
     }
     let map = settled;
     let advs = advList.value;
+    const stock0 = cur.adv_gear?.stock ?? [];
+    let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
       // ⛏️🎯🌿 Ce que le point a produit jusqu'à l'attaque part AVANT le combat, même s'il
       // est perdu : on ne punit pas l'absence en confisquant ce qui était déjà sorti.
-      const h = harvestControlIn(map, advs, p.id, at, playerLevel);
+      const h = harvestControlIn(map, advs, gearStock, p.id, at, playerLevel);
       map = h.map;
       advs = h.advs;
+      gearStock = h.stock;
       const escort = advs.filter((a) => ids.has(a.id));
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
@@ -3489,10 +3495,27 @@ export const useCharacterStore = defineStore('character', () => {
           now,
           xpGranted: true,
         }).adventurers;
+    // ⚒️ Ce que la forge a versé AVANT l'attaque, puis ce que l'XP du rapport apprend aux pièces
+    // portées — sur le stock forgé, sinon le patch du rapport (bâti sur l'ancien stock)
+    // effacerait la forge.
+    const forged =
+      gearStock !== stock0
+        ? {
+            adv_gear: {
+              ...(cur.adv_gear ?? {}),
+              stock: trainWornGear(
+                advList.value,
+                (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+                gearStock,
+              ),
+            },
+          }
+        : {};
     await persist(userId, {
       expedition_map: map,
       messages: x.messages,
       ...x.patch,
+      ...forged,
       adventurers: roster,
     });
     x.play();
@@ -3507,13 +3530,23 @@ export const useCharacterStore = defineStore('character', () => {
   function harvestControlIn(
     map: ExpeditionMap,
     advs: Adventurer[],
+    stock: AdvGear[],
     id: string,
     at: number,
     heroLevel: number,
-  ): { map: ExpeditionMap; advs: Adventurer[]; gold: number; supplies: SupplyStock } {
+  ): {
+    map: ExpeditionMap;
+    advs: Adventurer[];
+    stock: AdvGear[];
+    gold: number;
+    supplies: SupplyStock;
+  } {
     const p = map.pois.find((x) => x.id === id);
     const c = collectControl(map, id, at, heroLevel);
-    if (!p?.control || c.xp <= 0) return { map: c.map, advs, gold: c.gold, supplies: c.supplies };
+    // ⚒️ La forge verse son XP aux PIÈCES portées par la garnison, pas aux champions.
+    const nextStock = p?.control ? forgeGear(stock, advs, p.control.garrison, c.gearXp) : stock;
+    if (!p?.control || c.xp <= 0)
+      return { map: c.map, advs, stock: nextStock, gold: c.gold, supplies: c.supplies };
     const ids = new Set(p.control.garrison);
     const next = advs.map((a) =>
       ids.has(a.id)
@@ -3524,7 +3557,7 @@ export const useCharacterStore = defineStore('character', () => {
           )
         : a,
     );
-    return { map: c.map, advs: next, gold: c.gold, supplies: c.supplies };
+    return { map: c.map, advs: next, stock: nextStock, gold: c.gold, supplies: c.supplies };
   }
 
   /** 🏰 Récolte ce qu'un point de contrôle tenu a produit (or, XP, consommables). */
@@ -3537,9 +3570,14 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return null;
     const before = advList.value;
-    const h = harvestControlIn(cur.expedition_map, before, id, now, playerLevel);
+    const stock0 = cur.adv_gear?.stock ?? [];
+    const h = harvestControlIn(cur.expedition_map, before, stock0, id, now, playerLevel);
     if (h.map === cur.expedition_map) return null;
-    const gearPatch = gearTrainedPatch(cur, before, h.advs);
+    // ⚒️ Forge (pièces seules) OU camp (champions, puis leurs pièces) : jamais les deux.
+    const gearPatch =
+      h.stock !== stock0
+        ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } }
+        : gearTrainedPatch(cur, before, h.advs);
     const tracks = gearAwareTracks(cur, before, h.advs, gearPatch);
     const nSup = Object.values(h.supplies).reduce((s, n) => s + (n ?? 0), 0);
     await persist(userId, {
@@ -3550,6 +3588,8 @@ export const useCharacterStore = defineStore('character', () => {
     });
     if (h.gold > 0) goldFx.gain(h.gold);
     if (h.advs !== before) useAdvXpFx().show(tracks, 'Camp d’entraînement');
+    else if (h.stock !== stock0)
+      useAdvXpFx().show(withGearTracks([], stock0, h.stock, h.advs), 'Forge de campagne');
     return { gold: h.gold, supplies: nSup };
   }
 
@@ -3564,7 +3604,8 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<void> {
     const cur = row.value;
     if (!cur?.expedition_map) return;
-    const h = harvestControlIn(cur.expedition_map, advList.value, id, now, playerLevel);
+    const stock0 = cur.adv_gear?.stock ?? [];
+    const h = harvestControlIn(cur.expedition_map, advList.value, stock0, id, now, playerLevel);
     const all = advList.value.filter((a) => a.posted === id).map((a) => a.id);
     await persist(userId, {
       expedition_map: releaseFromControl(h.map, id, all, now, playerLevel),
@@ -3573,6 +3614,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
+      ...(h.stock !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } } : {}),
     });
     if (h.gold > 0) goldFx.gain(h.gold);
   }
