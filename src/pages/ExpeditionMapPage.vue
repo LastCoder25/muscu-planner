@@ -105,7 +105,7 @@
               gradientUnits="userSpaceOnUse"
               :cx="TOWN.x"
               :cy="TOWN.y"
-              :r="reveal + FOG_SOFT"
+              :r="fogR + FOG_SOFT"
             >
               <stop :offset="fogInner" stop-color="#15120e" stop-opacity="0" />
               <stop offset="1" stop-color="#15120e" stop-opacity="0.9" />
@@ -119,7 +119,13 @@
             fill="url(#fog-edge)"
             class="fog"
           />
-          <circle :cx="TOWN.x" :cy="TOWN.y" :r="reveal" class="fog-rim" />
+          <circle
+            :cx="TOWN.x"
+            :cy="TOWN.y"
+            :r="fogR"
+            class="fog-rim"
+            :class="{ lifting: fogPlan }"
+          />
 
           <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
           <rect
@@ -221,7 +227,11 @@
             v-for="p in shownPois"
             :key="p.id"
             class="poi"
-            :class="{ sel: selected?.id === p.id, dim: dimmed(p) }"
+            :class="{
+              sel: selected?.id === p.id,
+              dim: dimmed(p),
+              veiled: fogPlan && underFog(p, TOWN, fogR),
+            }"
             :style="{ '--rk': rankOf(p).color }"
             @click="selectPoi(p)"
           >
@@ -842,6 +852,13 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import {
+  fogRevealPlan,
+  fogRadiusAt,
+  underFog,
+  revealedCount,
+  type FogRevealPlan,
+} from '@/lib/fogReveal';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -1051,7 +1068,79 @@ const V = MAP_VIEW;
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
 const reveal = computed(() => revealRadius(char.comptoirLevel));
 const FOG_SOFT = 10; // largeur du fondu du brouillard
-const fogInner = computed(() => Math.max(0, (reveal.value - 3) / (reveal.value + FOG_SOFT)));
+const fogInner = computed(() => Math.max(0, (fogR.value - 3) / (fogR.value + FOG_SOFT)));
+
+/** 🌫️ LE BROUILLARD SE LÈVE (v0.1199) : le rayon DESSINÉ (`fogR`) rejoue le recul de l'ancien
+ *  rayon vu au nouveau quand l'Avant-poste a monté ; les lieux découverts apparaissent au
+ *  passage du front. La règle vit dans `lib/fogReveal`. Le rayon vu est retenu par appareil
+ *  et par compte (localStorage, jamais bloquant). ⚠️ Le zoom de départ lit `reveal` (le vrai
+ *  rayon), pas `fogR` : on cadre sur ce qui va être découvert. */
+const fogR = ref(reveal.value);
+const fogPlan = ref<FogRevealPlan | null>(null);
+let fogRaf = 0;
+const fogKey = () => `muscu:fog:seen:${auth.user?.id ?? 'anon'}`;
+function readFogSeen(): number | null {
+  try {
+    const v = localStorage.getItem(fogKey());
+    return v == null ? null : Number(v);
+  } catch {
+    return null;
+  }
+}
+function writeFogSeen(r: number) {
+  try {
+    localStorage.setItem(fogKey(), String(r));
+  } catch {
+    /* stockage indisponible : on rejouera le recul, rien de grave */
+  }
+}
+function liftFog(from: number | null) {
+  cancelAnimationFrame(fogRaf);
+  clearTimeout(fogWait);
+  const to = reveal.value;
+  writeFogSeen(to);
+  const plan = fogRevealPlan(from, to);
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  if (!plan || reduced) {
+    fogPlan.value = null;
+    fogR.value = to;
+    return;
+  }
+  fogPlan.value = plan;
+  fogR.value = plan.from;
+  const start = () => {
+    const found = revealedCount(pois.value, TOWN, plan.from);
+    if (found > 0)
+      gameFx.celebrate({
+        kind: 'unlock',
+        emoji: '🌫️',
+        title: 'Le brouillard se lève',
+        subtitle: `${found} lieu${found > 1 ? 'x' : ''} découvert${found > 1 ? 's' : ''}`,
+        quiet: true,
+      });
+    const t0 = performance.now();
+    const step = (t: number) => {
+      fogR.value = fogRadiusAt(plan, t - t0);
+      if (t - t0 < plan.ms) fogRaf = requestAnimationFrame(step);
+      else fogPlan.value = null;
+    };
+    fogRaf = requestAnimationFrame(step);
+  };
+  // ⚠️ Pas sous l'écran de chargement : on en raterait le départ (vu au banc). L'ancien
+  // rayon reste posé en dessous, le recul part quand la carte se découvre.
+  if (booting.value) {
+    const stop = watch(booting, (b) => {
+      if (b) return;
+      stop();
+      fogWait = setTimeout(start, 250);
+    });
+  } else start();
+}
+let fogWait: ReturnType<typeof setTimeout> | undefined;
+// Monter l'Avant-poste pendant que la carte est ouverte (volet droit du cockpit).
+watch(reveal, (to, from) => {
+  if (to !== from) liftFog(fogR.value);
+});
 const hero = computed(() => (active.value ? travelPosition(active.value, now.value) : null));
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
@@ -1374,9 +1463,7 @@ const cap = computed(() => engageCap(char.pantheonLevel));
 const freeSorted = computed(() => sortByGradeThenRank(freeStable.value));
 /** Créneaux de convoi libres — ⚠️ UN SEUL pool avec les groupes partis SANS le héros
  *  (`convoySlotsFree`, même règle que le store). */
-const vansLeft = computed(() =>
-  convoySlotsFree(char.comptoirLevel, char.partyList, now.value),
-);
+const vansLeft = computed(() => convoySlotsFree(char.comptoirLevel, char.partyList, now.value));
 /** Temps de convalescence restant du héros (0 = disponible). ⚠️ Il manquait ici : la carte
  *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
 const heroHealIn = computed(() => woundRemainingMs(char.row?.base, now.value));
@@ -2306,6 +2393,7 @@ onMounted(async () => {
   mapPx.value = clampPx(Math.round((contW.value * V.size) / (2 * (reveal.value + 6))) + ZOOM_STEP);
   await nextTick();
   centerTown();
+  liftFog(readFogSeen());
   window.addEventListener('resize', measure);
   const el = scrollEl.value;
   el?.addEventListener('touchstart', onTouchStart, { passive: true });
@@ -2319,6 +2407,8 @@ onMounted(async () => {
 });
 onUnmounted(() => {
   if (timer) clearInterval(timer);
+  cancelAnimationFrame(fogRaf);
+  clearTimeout(fogWait);
   window.removeEventListener('resize', measure);
   const el = scrollEl.value;
   el?.removeEventListener('touchstart', onTouchStart);
@@ -3047,6 +3137,17 @@ onUnmounted(() => {
 .fog {
   pointer-events: none;
 }
+/* Pendant le recul, le liseré passe à l’accent : on suit le front des yeux. */
+.fog-rim.lifting {
+  stroke: var(--accent);
+  stroke-width: 1;
+  opacity: 0.9;
+}
+/* Un lieu que le front n’a pas encore atteint reste invisible, puis apparaît en fondu. */
+.poi.veiled {
+  opacity: 0;
+  pointer-events: none;
+}
 .fog-rim {
   fill: none;
   stroke: #e8dcc0;
@@ -3212,6 +3313,7 @@ onUnmounted(() => {
   }
 }
 .poi {
+  transition: opacity 0.35s ease-out;
   cursor: pointer;
 }
 /* 🕳️ L'auréole d'une EMBUSCADE (faille débordée, v0.1009) : on VOIT ce qu'elle salit, sans rien
