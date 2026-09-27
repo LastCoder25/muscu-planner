@@ -167,11 +167,7 @@ import {
   syncChampionName,
   type Adventurer,
 } from '@/lib/adventurers';
-import {
-  convoySlotsFree,
-  type EscortKit,
-  type PartyHero,
-} from '@/lib/caravan';
+import { convoySlotsFree, type EscortKit, type PartyHero } from '@/lib/caravan';
 import {
   advGearRoles,
   advGearSellValue,
@@ -2291,7 +2287,6 @@ export const useCharacterStore = defineStore('character', () => {
     const outings = outingsOf({
       expedition: cur.expedition,
       parties: partyList.value,
-      caravans: caravanList.value,
     });
     const home = heroHomeAt(outings, at);
     // Chaque champion se bat avec SES pièces (plus de compagnon ni de talent, v0.996).

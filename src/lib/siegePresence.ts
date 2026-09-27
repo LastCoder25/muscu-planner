@@ -63,13 +63,10 @@ export function advsHomeAt(
 }
 
 /** Tous les voyages connus du personnage, sous une seule forme.
- *  ⚠️ Un groupe AVEC le héros EST son expédition (`expedition`) ; les `parties` partent sans lui.
- *  Les convois ENCAISSÉS sont gardés : ce sont précisément eux qui racontent qui était
- *  dehors avant un tick tardif. */
+ *  ⚠️ Un groupe AVEC le héros EST son expédition (`expedition`) ; les `parties` partent sans lui. */
 export function outingsOf(s: {
   expedition: ActiveExpedition | null | undefined;
   parties: readonly ActiveExpedition[];
-  caravans: readonly { sentAt: number; returnAt: number; escort: readonly string[] }[];
 }): Outing[] {
   const out: Outing[] = [];
   if (s.expedition)
@@ -86,7 +83,5 @@ export function outingsOf(s: {
       escort: p.outcome.party?.escort ?? [],
       hero: false,
     });
-  for (const c of s.caravans)
-    out.push({ sentAt: c.sentAt, returnAt: c.returnAt, escort: c.escort, hero: false });
   return out;
 }

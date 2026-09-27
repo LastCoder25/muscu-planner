@@ -61,20 +61,18 @@ describe('outingsOf : tous les voyages, une seule forme', () => {
       outcome: escort ? { party: { escort } } : {},
     }) as unknown as ActiveExpedition;
 
-  it('l’expédition porte le héros (et son escorte), les groupes et convois non', () => {
+  it('l’expédition porte le héros (et son escorte), les groupes non', () => {
     const o = outingsOf({
       expedition: exp(1, 2, ['x']),
       parties: [exp(3, 4, ['y'])],
-      caravans: [{ sentAt: 5, returnAt: 6, escort: ['z'] }],
     });
     expect(o).toEqual([
       { sentAt: 1, returnAt: 2, escort: ['x'], hero: true },
       { sentAt: 3, returnAt: 4, escort: ['y'], hero: false },
-      { sentAt: 5, returnAt: 6, escort: ['z'], hero: false },
     ]);
   });
 
   it('une expédition solo n’a pas d’escorte', () => {
-    expect(outingsOf({ expedition: exp(1, 2), parties: [], caravans: [] })[0]!.escort).toEqual([]);
+    expect(outingsOf({ expedition: exp(1, 2), parties: [] })[0]!.escort).toEqual([]);
   });
 });
