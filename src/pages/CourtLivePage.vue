@@ -112,7 +112,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useTennisStore } from '@/stores/tennis';
 import { useProgress } from '@/composables/useProgress';
-import { useXpFx } from '@/composables/useXpFx';
+import { useXpFx, xpRing } from '@/composables/useXpFx';
 import {
   DRILL_CATEGORY_LABELS,
   DRILL_SHOT_LABELS,
@@ -229,22 +229,8 @@ async function finish() {
     live.clear();
     await nextTick();
     xpFx.show([
-      {
-        emoji: '🎾',
-        label: 'Tennis',
-        fromLevel: beforeT.level,
-        fromPct: beforeT.progressPct,
-        toLevel: progress.tennis.value.level,
-        toPct: progress.tennis.value.progressPct,
-      },
-      {
-        emoji: '🌍',
-        label: 'Global',
-        fromLevel: beforeG.level,
-        fromPct: beforeG.progressPct,
-        toLevel: progress.global.value.level,
-        toPct: progress.global.value.progressPct,
-      },
+      xpRing('tennis', '🎾', 'Tennis', beforeT, progress.tennis.value),
+      xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);
     await router.push(`/court/bilan/${log.id}`);
   } catch (e) {

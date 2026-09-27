@@ -250,7 +250,7 @@ import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
 import { useProfileStore } from '@/stores/profile';
 import SetLogDialog from '@/components/SetLogDialog.vue';
 import { useProgress } from '@/composables/useProgress';
-import { useXpFx } from '@/composables/useXpFx';
+import { useXpFx, xpRing } from '@/composables/useXpFx';
 
 const router = useRouter();
 const progress = useProgress();
@@ -513,22 +513,8 @@ async function commitWithXpFx() {
   if (!ok) return;
   await nextTick();
   xpFx.show([
-    {
-      emoji: '🏋️',
-      label: 'Muscu',
-      fromLevel: beforeM.level,
-      fromPct: beforeM.progressPct,
-      toLevel: progress.muscu.value.level,
-      toPct: progress.muscu.value.progressPct,
-    },
-    {
-      emoji: '🌍',
-      label: 'Global',
-      fromLevel: beforeG.level,
-      fromPct: beforeG.progressPct,
-      toLevel: progress.global.value.level,
-      toPct: progress.global.value.progressPct,
-    },
+    xpRing('muscu', '🏋️', 'Muscu', beforeM, progress.muscu.value),
+    xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
   ]);
 }
 function commitLogged() {
