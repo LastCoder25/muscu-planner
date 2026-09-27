@@ -67,6 +67,10 @@ export type PoiType =
   // 🏴‍☠️ CARAVANE PILLÉE (2026-09-27, demandé) : RARE et fugace, gardée par ses pillards
   // (toujours des bandits), elle rend BEAUCOUP d'or (`PLUNDER_GOLD_MULT` × une mine).
   | 'plunder'
+  // 💎 FILON ÉPHÉMÈRE (2026-09-27, demandé) : une veine de mana qui affleure un temps. On y
+  // envoie 1 à 3 CHAMPIONS (jamais le héros) qui restent sur place à extraire : sa réserve est
+  // FINIE, plus ils sont nombreux plus ils vont vite (`veinDwellMs`). Aucun garde.
+  | 'vein'
   // 🏰 POINT DE CONTRÔLE (2026-09-27, décision de l'utilisateur) : un lieu FIXE qu'on prend
   // à l'ennemi, où l'on poste 1 à 3 champions qui le font produire, et que l'ennemi vient
   // reprendre 1 à 3 jours plus tard (cf. `controlPoints.ts`). Son état vit dans `control`.
@@ -130,6 +134,7 @@ export const POI_LABEL: Record<PoiType, string> = {
   fallen: 'Ruines d’un héros tombé',
   den: 'Tanière',
   plunder: 'Caravane pillée',
+  vein: 'Filon éphémère',
   control: 'Point de contrôle',
 };
 
@@ -151,6 +156,7 @@ export const POI_EMO: Record<PoiType, string> = {
   fallen: '🏚️',
   den: '🐺',
   plunder: '🏴‍☠️',
+  vein: '💎',
   control: '🏰',
 };
 
@@ -190,6 +196,7 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'ruins',
   'fallen',
   'plunder',
+  'vein',
 ]);
 
 /** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
@@ -437,6 +444,8 @@ export function harvestGuardOf(poi: Pick<Poi, 'id' | 'type' | 'level'>): CampSpe
   if (poi.type === 'mana_mine') return null;
   // 🏚️ Les ruines d'un héros tombé : personne ne les garde, on y fouille.
   if (poi.type === 'fallen') return null;
+  // 💎 Le filon affleure : personne ne le garde, on l'extrait.
+  if (poi.type === 'vein') return null;
   const rng = mulberry32((hashId(poi.id) ^ 0x5851f42d) >>> 0 || 1);
   const drawn = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
   // 🏴‍☠️ Une caravane pillée l'est par des BANDITS (le tirage reste consommé : le flux ne décale pas).
@@ -864,6 +873,9 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
 // ── Constantes (tunables ; éco chiffrée affinée par simulation en phase 6) ──
 /** Réglages des POI de RÉCOLTE (devises vivantes). Premier calage : à ajuster à l'usage. */
 export const HARVEST = {
+  /** 💎 Réserve de mana d'un filon éphémère : base + par niveau (cf. `harvestYield`). */
+  veinManaBase: 9,
+  veinManaPerLevel: 1.25,
   /** 💠 Mine de mana résiduel. ⚠️ ÉCHELLE PROVISOIRE : les coûts du gacha n'existent pas
    *  encore, donc aucun de ces deux nombres ne peut être calibré aujourd'hui. Ce qui est
    *  vrai et testé, c'est le RATIO « fermer une faille > l'ignorer et ramasser sa mine »
@@ -1044,11 +1056,16 @@ export const EXPE = {
     // 🏴‍☠️ Fugace : les pillards filent avec le butin. 8 h (et une notification à
     // l'apparition) : de quoi la voir en ouvrant l'app deux fois par jour.
     plunder: 8 * 3600_000,
+    // 💎 Éphémère : une journée et demie pour le voir et y envoyer une équipe.
+    vein: 36 * 3600_000,
     // 🏰 Permanent : un point de contrôle ne disparaît jamais (fini, pas l'infini : JSON).
     control: 9e15,
   },
   /** 🏴‍☠️ Chance qu'un lieu d'économie qui apparaît soit une caravane pillée (une à la fois). */
   plunderChance: 0.022,
+  /** 💎 Chance qu'un camp ou un repaire qui apparaît soit un filon éphémère (un à la fois).
+   *  Mesuré (`vein.test`, 8 cartes × 14 jours) : ~0,3 filon par jour. */
+  veinChance: 0.12,
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
   // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
@@ -1082,6 +1099,8 @@ export const EXPE = {
     fallen: 30,
     den: 65,
     plunder: 22,
+    // 💎 Une récolte : aucun combat.
+    vein: 30,
     // 🏰 Un assaut de camp.
     control: 65,
   },
@@ -1704,6 +1723,16 @@ function spawnOne(
     mulberry32((map.seed ^ (map.spawnCount * 0x85ebca6b)) >>> 0 || 1)() < EXPE.plunderChance
   )
     type = 'plunder';
+  // 💎 FILON ÉPHÉMÈRE : même principe, un à la fois, générateur encore à part. ⚠️ À la place
+  // d'un CAMP ou d'un REPAIRE seulement : à la place d'une mine ou d'un sanctuaire, il
+  // retirait un lieu de récolte, et le creux de lieux propres sous le harcèlement des
+  // failles tombait à zéro (`riftHarass.test`).
+  if (
+    (type === 'camp' || type === 'lair') &&
+    !map.pois.some((p) => p.type === 'vein') &&
+    mulberry32((map.seed ^ (map.spawnCount * 0x27d4eb2f)) >>> 0 || 1)() < EXPE.veinChance
+  )
+    type = 'vein';
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   placePoiOfType(map, now, playerLevel, reach, type, rng, `poi_${map.seed}_${map.spawnCount}`);
@@ -2238,8 +2267,21 @@ export interface DenBattle {
  *  pas assez pour immobiliser l'équipe une demi-journée. */
 export const FALLEN_DWELL_MS = 60 * 60_000;
 /** Temps passé sur place selon le lieu (0 partout ailleurs). */
-export function dwellMsFor(poi: Pick<Poi, 'type'>): number {
+export function dwellMsFor(poi: Pick<Poi, 'type'>, champions: number): number {
+  if (poi.type === 'vein') return veinDwellMs(champions);
   return poi.type === 'fallen' ? FALLEN_DWELL_MS : 0;
+}
+
+/** 💎 L'extraction d'un filon pour 1 champion ; à plusieurs, elle se PARTAGE. */
+export const VEIN_DWELL_MS = 6 * 3600_000;
+/** 💎 Le filon ne garde que 3 champions à la fois (décision de l'utilisateur). */
+export const VEIN_MAX_CHAMPIONS = 3;
+/** 💎 Combien de temps l'équipe reste à extraire : 6 h seul, 3 h à deux, 2 h à trois. La
+ *  réserve est la même (`harvestYield`) : plus ils sont nombreux, plus ils vont vite, donc
+ *  plus tôt ils rentrent faire autre chose. */
+export function veinDwellMs(champions: number): number {
+  const n = Math.min(VEIN_MAX_CHAMPIONS, Math.max(1, Math.floor(champions)));
+  return Math.round(VEIN_DWELL_MS / n);
 }
 
 /** Avancement d’un voyage sur SA DURÉE TOTALE (aller + retour), et l’endroit où tombe
@@ -2522,6 +2564,7 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
   fallen: ['Les ruines s’étaient déjà écroulées sur son paquetage.'],
   den: ['La bête a eu le dessus. Retraite, les griffes aux trousses.'],
   plunder: ['Les pillards ont tenu : ils filent avec le butin de la caravane.'],
+  vein: ['Le filon s’était déjà refermé.'],
   control: ['La garnison ennemie a tenu : la mine reste à eux.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
@@ -2567,6 +2610,7 @@ const WIN_TEXT: Record<PoiType, string[]> = {
     '🏴‍☠️ Les pillards dispersés — l’or de la caravane est à toi.',
     '🏴‍☠️ Caravane reprise : les coffres sont pleins.',
   ],
+  vein: ['💎 Le filon est épuisé — les pierres de mana sont à toi.'],
   control: ['🏰 La mine est à toi — tes champions s’y installent.'],
 };
 
@@ -2610,6 +2654,11 @@ export function harvestYield(
       1,
       Math.round((HARVEST.manaBase + L * HARVEST.manaPerLevel) * (0.8 + tfH * 0.25)),
     );
+  } else if (type === 'vein') {
+    // 💎 La RÉSERVE du filon, extraite en entier quelle que soit l'équipe : le nombre de
+    // champions ne change que la DURÉE (`veinDwellMs`). Calée sur ~60 % d'une faille
+    // refermée du même niveau (`vein.test`) : la faille reste la source de pointe.
+    mana = Math.round(HARVEST.veinManaBase + L * HARVEST.veinManaPerLevel);
   } else if (type === 'archive') {
     // ARCHIVES → 🗝️ clés du Labyrinthe. Elles n'avaient aucune source dédiée (drops
     // rares + la Porte), et le Labyrinthe est la SEULE source de familiers : un robinet

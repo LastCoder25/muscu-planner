@@ -81,12 +81,7 @@ import {
   type AdvRole,
 } from './adventurers';
 import { rankStartLevel } from './characterRank';
-import {
-  SKILL_SLOTS,
-  referenceRuneBuild,
-  runeCombatEffects,
-  skillValue,
-} from './skillRunes';
+import { SKILL_SLOTS, referenceRuneBuild, runeCombatEffects, skillValue } from './skillRunes';
 import { REF_TEAM } from './poiDifficulty';
 import { poiDifficultyLevel } from './poiRank';
 import { boostCombatant, supplyFx, type SupplyId } from './supplies';
@@ -750,10 +745,7 @@ export function caravanLegMin(
   travelMult: number,
 ): number {
   const hero = travelOneWayMin(poiTravelLevel(poi), poi.distNorm);
-  const speed = Math.min(
-    CARAVAN.speedMax,
-    roleShare(escort, 'speed') + Math.max(0, gearSpeed),
-  );
+  const speed = Math.min(CARAVAN.speedMax, roleShare(escort, 'speed') + Math.max(0, gearSpeed));
   return Math.max(1, Math.round(hero * championOutpostMult(travelMult) * (1 - speed)));
 }
 
@@ -1082,7 +1074,13 @@ export function poiOffers(
     // lève toujours : deux verrous, une ceinture et des bretelles.
     // ⚓ Une ÉPAVE est un type retiré (v0.999) : rien ne peut plus y être envoyé.
     // 🏰 Un point de contrôle se prend EN GROUPE (le héros peut en être, mais n'y reste pas).
-    hero: !opts.heroAway && !isRiftPoi(poi) && poi.type !== 'wreck' && poi.type !== 'control',
+    // 💎 Un filon s'extrait par les champions seuls : pas d'expédition du héros.
+    hero:
+      !opts.heroAway &&
+      !isRiftPoi(poi) &&
+      poi.type !== 'wreck' &&
+      poi.type !== 'control' &&
+      poi.type !== 'vein',
     // 🚫 Plus de convoi (2026-09-21) : une ÉQUIPE part sur les lieux de récolte à sa place.
     // Le champ reste (ceux déjà en route s'encaissent), mais on n'en lance plus.
     caravan: false,
@@ -1129,10 +1127,7 @@ export function ambushChance(poi: Poi, escort: Adventurer[], extraScout = 0): nu
   const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
   // 🗺️ La carte de contrebandier s'ajoute aux éclaireurs SOUS LEUR plafond : elle comble un
   // trou, elle ne le dépasse pas.
-  const cut = Math.min(
-    CARAVAN.scoutMax,
-    roleShare(escort, 'scout') + Math.max(0, extraScout),
-  );
+  const cut = Math.min(CARAVAN.scoutMax, roleShare(escort, 'scout') + Math.max(0, extraScout));
   return base * (1 - cut);
 }
 
@@ -1297,9 +1292,7 @@ export function caravanHaulMult(escort: Adventurer[], stock: AdvGear[], extraHau
     1 +
     Math.min(
       CARAVAN.haulMax,
-      roleShare(escort, 'haul') +
-        advGearRoles(escort, stock).haul +
-        Math.max(0, extraHaul),
+      roleShare(escort, 'haul') + advGearRoles(escort, stock).haul + Math.max(0, extraHaul),
     )
   );
 }

@@ -719,6 +719,7 @@ import {
   ruinsSealKind,
   haulPills,
   type PartyResult,
+  veinDwellMs,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
@@ -1806,6 +1807,16 @@ const poiFacts = computed<PoiFact[]>(() => {
       go: true,
       title: partySize.value ? 'Aller-retour de l’équipe' : 'Compose ton équipe pour le connaître',
     });
+    // 💎 Un filon : le temps d'extraction dépend du nombre de champions — c'est tout son choix.
+    if (p.type === 'vein') {
+      const n = Math.max(1, partyAdvs.value.length);
+      out.push({
+        icon: '⛏️',
+        label: 'Extraction',
+        value: formatDurationMin(veinDwellMs(n) / 60_000),
+        title: `Sur place : ${formatDurationMin(veinDwellMs(1) / 60_000)} seul, ${formatDurationMin(veinDwellMs(2) / 60_000)} à deux, ${formatDurationMin(veinDwellMs(3) / 60_000)} à trois — la réserve est la même`,
+      });
+    }
     // Sans équipe composée, au pas du HÉROS : on compare deux lieux d'un coup d'œil, avant de
     // choisir qui part. Le chiffre se recale sur l'équipe dès qu'elle est composée.
     if (partySize.value) pushRate(out, p, partyMin.value, partyHeroOn.value);
@@ -1919,6 +1930,7 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',
   plunder: () => 'beaucoup d’or 🪙',
+  vein: () => 'mana 💠 · 1 à 3 champions, plus vite à plusieurs',
   control: (p) =>
     p.control
       ? p.control.owner === 'player'

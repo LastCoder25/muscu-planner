@@ -3134,6 +3134,7 @@ export const useCharacterStore = defineStore('character', () => {
           onExpedition: !!cur.expedition,
           healMs: woundRemainingMs(cur.base, now),
           outpost: expeditionsUnlocked(cur.buildings),
+          poi,
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
@@ -3229,7 +3230,12 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
       supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };
-    const trip = startParty({ poi: meet.poi, hero, seed }, now, leg, withSupplies);
+    const trip = startParty(
+      { poi: meet.poi, hero, seed, champions: escort.length },
+      now,
+      leg,
+      withSupplies,
+    );
     const busy = new Set(opts.escortIds);
     // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
     const map = cur.expedition_map
