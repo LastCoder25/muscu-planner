@@ -37,6 +37,16 @@ describe('poiHaulPreview : la récolte elle-même, jamais une seconde échelle',
       Math.round(plein * CARAVAN.energyShare),
     );
   });
+  it('un sanctuaire : pierres pleines avec le héros, à la part d’équipe sans lui (v0.1210)', () => {
+    const p = poi('shrine');
+    const force = poiForceOf(p);
+    const loot = force ? forceLootPreview(p, force).summonStones : 0;
+    const plein = harvestYield('shrine', heroRewardLevel(p, 30), force?.size ?? 0).summonStones;
+    expect(poiHaulPreview(p, { playerLevel: 30, heroGoes: true }).summonStones).toBe(plein + loot);
+    expect(poiHaulPreview(p, { playerLevel: 30, heroGoes: false }).summonStones).toBe(
+      Math.round(plein * CARAVAN.stonesShare) + Math.round(loot * CARAVAN.stonesShare),
+    );
+  });
   it('un sanctuaire rend des pierres, des archives des clés', () => {
     expect(
       poiHaulPreview(poi('shrine'), { playerLevel: 30, heroGoes: false }).summonStones,

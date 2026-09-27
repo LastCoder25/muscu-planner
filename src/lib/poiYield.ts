@@ -38,7 +38,8 @@ export function poiHaulPreview(
   opts: {
     /** Le niveau qui fixe la récolte (le même que l'envoi applique). */
     playerLevel: number;
-    /** ⚡ Une équipe SANS le héros ne ramène qu'une part de l'énergie (`CARAVAN.energyShare`). */
+    /** ⚡🔮 Une équipe SANS le héros ne ramène qu'une part de l'énergie et des pierres d'un
+     *  sanctuaire (`CARAVAN.energyShare`, `stonesShare`). */
     heroGoes: boolean;
   },
 ): PoiHaul {
@@ -50,7 +51,9 @@ export function poiHaulPreview(
   return {
     gold: harvestGold(poi, opts.playerLevel) + loot.gold,
     energy: opts.heroGoes ? y.energy : Math.round(y.energy * CARAVAN.energyShare),
-    summonStones: y.summonStones + loot.summonStones,
+    summonStones:
+      (opts.heroGoes ? y.summonStones : Math.round(y.summonStones * CARAVAN.stonesShare)) +
+      (opts.heroGoes ? loot.summonStones : Math.round(loot.summonStones * CARAVAN.stonesShare)),
     keys: y.keys,
     // 🕳️ Une faille : le mana si on la REFERME, gardien compris — le chiffre que la fiche annonce.
     mana: y.mana + (poi.type === 'rift' ? riftClearMana(poi) : 0),

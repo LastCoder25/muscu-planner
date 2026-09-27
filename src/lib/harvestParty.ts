@@ -21,7 +21,7 @@
 //   rencontres de trajet ; le champion qui l'accompagne apprend (XP).
 // ⚠️ Le héros SEUL y passe aussi par ce module (plus par `expeSend`) : sinon une expédition
 // solo contournait les gardes.
-import { missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
+import { CARAVAN, missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
 import { campHurt, fightCampForce, forceHaul, type BodyLoot, type CampFight } from './camp';
 import {
   HARVEST_TYPES,
@@ -101,9 +101,16 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
   const tag = spec
     ? `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} gardes abattus.`
     : '💠 Aucun garde — ses monstres sont partis vers ta base.';
-  const loot: BodyLoot = spec
+  const raw: BodyLoot = spec
     ? forceHaul({ poi, road, seed }, spec, g.skirmish)
     : { gold: 0, summonStones: 0, supplies: {} };
+  // 🔮 Sans le héros, les pierres des gardes passent à la PART d'équipe (v0.1210, décision de
+  // l'utilisateur) : récolte et gardes ensemble, sinon les gardes morts-vivants apportaient à
+  // eux seuls 8 à 33 % d'une journée de donjons (mesuré). Un camp garde ses pierres pleines :
+  // il a sa propre borne (`campEconomy`).
+  const loot: BodyLoot = hero
+    ? raw
+    : { ...raw, summonStones: Math.round(raw.summonStones * CARAVAN.stonesShare) };
   const base = {
     hero: !!hero,
     faction: spec?.faction ?? poi.faction ?? 'mortsvivants',

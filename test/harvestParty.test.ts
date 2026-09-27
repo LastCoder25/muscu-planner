@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import {
+  CARAVAN,
   caravanHaulMult,
   missionXpFor,
   partyAllies,
@@ -206,7 +207,10 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
         const loot = forceHaul(input, harvestGuardOf(p)!, g.skirmish);
         expect(o.gold, t).toBe(c.gold + loot.gold);
         expect(o.energy, t).toBe(c.energy);
-        expect(o.summonStones, t).toBe(c.summonStones + loot.summonStones);
+        // 🔮 v0.1210 : sans le héros, les pierres des gardes passent à la part d’équipe.
+        expect(o.summonStones, t).toBe(
+          c.summonStones + Math.round(loot.summonStones * CARAVAN.stonesShare),
+        );
         expect(o.key, t).toBe(c.keys);
         for (const [id, v] of Object.entries(c.xp))
           expect(o.party!.xp[id]).toBe(v + Math.round(g.shares[id] ?? 0));

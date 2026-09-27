@@ -388,10 +388,9 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     const part = avgOf(p, team(3, 20, 'heal'), 'energy') / heros;
     // ⚠️ La part est écrite (0,5) ET lue sur la constante : la mettre à 1 fait tomber ce test,
     // et la déplacer sans le dire aussi.
-    expect(CARAVAN.energyShare).toBe(0.5);
+    expect(CARAVAN.energyShare).toBe(0.2); // v0.1210 (v0.1201 : 0,5)
     expect(part / CARAVAN.energyShare).toBeGreaterThan(0.75);
     expect(part / CARAVAN.energyShare).toBeLessThan(1.25);
-    // 🔮 Les pierres d'un sanctuaire restent PLEINES (choix de l'utilisateur).
     const sh = poi({ type: 'shrine' });
     const pleines = harvestYield(
       sh.type,
@@ -401,8 +400,10 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     const esc = team(3, 20, 'heal');
     let tot = 0;
     for (let s = 1; s <= 200; s++) tot += resolveCaravan(sh, esc, s, NUS, aJour(esc)).summonStones;
-    expect(tot / 200 / pleines).toBeGreaterThan(0.75);
-    expect(tot / 200 / pleines).toBeLessThan(1.25);
+    // 🔮 v0.1210 : les pierres d’un sanctuaire passent elles aussi à la part d’équipe.
+    expect(CARAVAN.stonesShare).toBe(0.2);
+    expect(tot / 200 / pleines / CARAVAN.stonesShare).toBeGreaterThan(0.75);
+    expect(tot / 200 / pleines / CARAVAN.stonesShare).toBeLessThan(1.25);
   });
   it('le plafond d’ÉNERGIE tient APRÈS les multiplicateurs', () => {
     // « complément, jamais substitut au sport » est un invariant, pas une base qu'un
@@ -1415,7 +1416,9 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
   it('⚠️ c’est bien CE calcul que le convoi lit : la cargaison grossit', () => {
     // Sur les graines SANS embuscade, rien d'autre ne bouge entre les deux voyages (les
     // tirages de route ne dépendent pas de l'équipement) : seule la cargaison diffère.
-    const p = poi({ type: 'shrine', level: 40 });
+    // ⚠️ Sur une MINE DE MANA (v0.1210) : les pierres d'un sanctuaire sont passées à 20 % pour
+    // une équipe, si peu que le +30 % disparaissait dans l'arrondi. Le mana reste plein.
+    const p = poi({ type: 'mana_mine', level: 40 });
     let vus = 0;
     for (let s = 1; s <= 60; s++) {
       const avec = resolveCaravan(
@@ -1442,10 +1445,10 @@ describe('🗡️ ÉQUIPEMENT DES AVENTURIERS SUR LA ROUTE', () => {
       );
       if (avec.events.some((e) => e.kind === 'bandits')) continue;
       vus++;
-      // ⚠️ La cargaison se lit sur les PIERRES d'un sanctuaire, plus sur l'or : depuis la
+      // ⚠️ La cargaison se lit sur le MANA d'une mine de mana, plus sur l'or : depuis la
       // v0.1161 l'or d'une équipe est celui du héros (`harvestGold`), que la cargaison ne
       // gonfle pas. Il doit donc rester ÉGAL entre les deux voyages.
-      expect(avec.summonStones, `graine ${s}`).toBeGreaterThan(sans.summonStones);
+      expect(avec.mana, `graine ${s}`).toBeGreaterThan(sans.mana);
       expect(avec.gold, `graine ${s}`).toBe(sans.gold);
     }
     expect(vus, 'aucun voyage sans embuscade : le test ne prouve rien').toBeGreaterThan(5);
@@ -1517,7 +1520,7 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     );
     // ⚠️ v0.1166 : un puits n'a plus d'or à lui (l'or vient des bourses de ses gardes bandits).
     expect(o.gold).toBe(0); // avant : 938 — v0.1161 : part d’or hors mine unifiée à 0,35 (`HARVEST.goldShare`, 804 × 0,35 / 0,3). v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
-    expect(o.energy).toBe(30); // v0.1201 : la moitié de l'énergie du héros (v0.1189 : 61, part pleine)
+    expect(o.energy).toBe(12); // v0.1210 : 20 % de l'énergie du héros (v0.1201 : 30, v0.1189 : 61)
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et
     // l'énergie apparaît. Tout le reste (clés, XP, blessé, journal) est inchangé au

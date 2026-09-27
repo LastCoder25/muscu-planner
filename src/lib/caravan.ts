@@ -147,8 +147,17 @@ export const CARAVAN = {
    *  sur de vraies cartes (créneaux au complet, ≤ 3 allers-retours par jour, défaites comprises),
    *  l'énergie des équipes valait 1,7× (niv. 12), 4,3× (30), 11× (60) et 15× (100) celle d'une
    *  journée de sport — « complément, jamais substitut au sport » cassé dès le niveau 12. Or,
-   *  pierres d'invocation, mana et clés restent pleins (choix de l'utilisateur). */
-  energyShare: 0.5,
+   *  pierres d'invocation, mana et clés restent pleins (choix de l'utilisateur).
+   *  ⚠️ 0,5 → 0,2 en v0.1210 (décision de l'utilisateur après re-mesure, carte de la v0.1205) :
+   *  à 0,5 l'énergie valait encore 0,48 / 1,0 / 1,5 / 2,2× une journée de sport aux niveaux
+   *  12 / 30 / 60 / 100. À 0,2 elle reste sous le sport à tous les niveaux. */
+  energyShare: 0.2,
+  /** 🔮 PART DES PIERRES D'UN SANCTUAIRE QU'UNE ÉQUIPE SANS LE HÉROS RAMÈNE (v0.1210, décision
+   *  de l'utilisateur après mesure). Pleines, des équipes envoyées sur les sanctuaires rendaient
+   *  155 / 194 / 210 / 246 % d'une journée de donjons (niveaux 12 / 30 / 60 / 100) : le lien
+   *  donjon → pierres → boss se cassait. ⚠️ Seule la RÉCOLTE du sanctuaire est concernée : les
+   *  pierres que portent les gardes morts-vivants restent pleines, comme sur un camp. */
+  stonesShare: 0.2,
   haulPerRole: 0.12,
   haulMax: 0.4,
   /** Un 🩺 raccourcit les convalescences de l'équipe. */
@@ -1348,7 +1357,7 @@ export function resolveCaravan(
     // promesse était rejetée sans que rien ne l'attrape, et le joueur cliquait
     // « Récupérer » sans qu'il ne se passe RIEN. Une cargaison était irrécupérable à vie.
     energy: Math.round(Math.min(y.energy, y.energy * k) * CARAVAN.energyShare),
-    summonStones: Math.round(y.summonStones * k),
+    summonStones: Math.round(y.summonStones * k * CARAVAN.stonesShare),
     keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus + keyLuck,
     mana: Math.round(y.mana * k),
     xp,
