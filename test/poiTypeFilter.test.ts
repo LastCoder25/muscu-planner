@@ -4,6 +4,8 @@ import {
   EMPTY_TYPE_FILTER,
   TYPE_ORDER,
   cycleType,
+  effectiveTypeFilter,
+  filterSummary,
   parseTypeFilter,
   typeMode,
   typeOptions,
@@ -76,5 +78,51 @@ describe('le filtre par type de lieu', () => {
       { type: 'mine', total: 2, inRanks: 1 },
       { type: 'camp', total: 1, inRanks: 1 },
     ]);
+  });
+});
+
+describe('🎚️ le résumé des filtres repliés', () => {
+  const R = [0, 1, 2];
+  it('rien de filtré : tout affiché, pas actif', () => {
+    expect(filterSummary(R, new Set(), EMPTY_TYPE_FILTER, present)).toEqual({
+      active: false,
+      text: 'tout affiché',
+    });
+  });
+  it('rangs masqués et types seuls se lisent ensemble', () => {
+    const s = filterSummary(R, new Set([2]), { only: ['mine', 'rift'], hidden: [] }, present);
+    expect(s).toEqual({ active: true, text: '2/3 rangs · Mine, Faille seulement' });
+  });
+  it('« seuls » l’emporte : on ne compte pas les masqués derrière', () => {
+    expect(filterSummary(R, new Set(), { only: ['mine'], hidden: ['camp'] }, present).text).toBe(
+      'Mine seulement',
+    );
+    expect(filterSummary(R, new Set(), { only: [], hidden: ['camp'] }, present).text).toBe(
+      'sans Camp',
+    );
+  });
+  it('au-delà de deux types, un compte', () => {
+    const f = { only: ['mine', 'camp', 'rift'] as PoiType[], hidden: [] };
+    expect(filterSummary([0], new Set(), f, present).text).toBe('3 types seuls');
+  });
+  it('un rang ou un type mémorisé mais ABSENT de la carte ne filtre rien', () => {
+    const s = filterSummary(R, new Set([7]), { only: [], hidden: ['arena'] }, present);
+    expect(s).toEqual({ active: false, text: 'tout affiché' });
+  });
+});
+
+describe('🗺️ le filtre effectif (types présents aujourd’hui)', () => {
+  it('un type « seul » ABSENT ne masque plus toute la carte', () => {
+    const f = effectiveTypeFilter({ only: ['arena'], hidden: [] }, present);
+    expect(present.filter((t) => typeShown(f, t))).toEqual(present);
+    // …et le résumé le dit : rien n’est filtré.
+    expect(filterSummary([0], new Set(), { only: ['arena'], hidden: [] }, present).active).toBe(
+      false,
+    );
+  });
+  it('les types seuls présents restent seuls', () => {
+    const f = effectiveTypeFilter({ only: ['arena', 'mine'], hidden: ['camp'] }, present);
+    expect(f).toEqual({ only: ['mine'], hidden: ['camp'] });
+    expect(present.filter((t) => typeShown(f, t))).toEqual(['mine']);
   });
 });

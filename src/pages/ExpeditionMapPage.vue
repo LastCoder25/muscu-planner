@@ -20,9 +20,10 @@
       :rank-options="rankOptions"
       :hidden-ranks="hiddenRanks"
       :type-chips="typeChips"
-      :type-filter="typeFilter"
+      :type-filter="typeFilterShown"
       @toggle-rank="toggleRank"
       @cycle-type="cycleTypeChip"
+      @reset="resetFilters"
     />
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
@@ -1088,8 +1089,16 @@ const selected = ref<Poi | null>(null);
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
 // ── 🎚️🗺️ Filtres par rang et par type (mémorisés par appareil) ──
-const { hiddenRanks, rankOptions, toggleRank, typeFilter, typeChips, cycleTypeChip, shownPois } =
-  usePoiFilters(pois, (p) => rankOf(p).rankIndex);
+const {
+  hiddenRanks,
+  rankOptions,
+  toggleRank,
+  typeFilterShown,
+  typeChips,
+  cycleTypeChip,
+  resetFilters,
+  shownPois,
+} = usePoiFilters(pois, (p) => rankOf(p).rankIndex);
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
   const s = selected.value;
@@ -2440,11 +2449,11 @@ onUnmounted(() => {
   scrollbar-width: none;
 }
 /* Des voyages en cours : la carte laisse la place à leurs DEUX premières lignes en bas
-   de l'écran (en-tête ~60 px, barre ~44, disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
+   de l'écran (en-tête ~60 px, filtres repliés ~48 (v0.1239 ; dépliés ils poussent les voyages, le temps de régler), disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
    haute qu'avant (62vh). */
 .map-scroll.with-trips {
-  height: min(62vh, calc(100vh - 360px));
-  height: min(62vh, calc(100dvh - 360px));
+  height: min(62vh, calc(100vh - 320px));
+  height: min(62vh, calc(100dvh - 320px));
 }
 .map-scroll::-webkit-scrollbar {
   display: none;

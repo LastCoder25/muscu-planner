@@ -8,7 +8,7 @@
 // ⚠️ La règle vit ici et pas dans la page : la carte n'est vue par aucune porte (le smoke
 // ne l'ouvre pas), une règle écrite dans un `computed` n'y serait couverte par rien.
 
-import type { PoiType } from './expedition';
+import { POI_LABEL, type PoiType } from './expedition';
 
 export type TypeMode = 'all' | 'only' | 'none';
 
@@ -102,4 +102,43 @@ export function typeOptions(
     const of = pois.filter((p) => p.type === type);
     return { type, total: of.length, inRanks: of.filter(inRanks).length };
   }).filter((o) => o.total > 0);
+}
+
+/**
+ * 🎚️ Ce que dit la ligne REPLIÉE des filtres (v0.1239) : la carte ne doit jamais avoir l'air
+ * vide sans raison. `active` = un filtre retire réellement des lieux de la carte.
+ *
+ * ⚠️ On ne compte que ce qui existe sur la carte AUJOURD'HUI : un rang ou un type masqué
+ * (mémorisé par appareil) mais absent de la carte ne filtre rien — l'annoncer ferait croire à
+ * une carte filtrée.
+ */
+export function filterSummary(
+  ranks: readonly number[],
+  hiddenRanks: ReadonlySet<number>,
+  f: TypeFilter,
+  presentTypes: readonly PoiType[],
+): { active: boolean; text: string } {
+  const parts: string[] = [];
+  const rankOff = ranks.filter((r) => hiddenRanks.has(r)).length;
+  if (rankOff > 0) parts.push(`${ranks.length - rankOff}/${ranks.length} rangs`);
+  // On NOMME les types tant que c’est court (deux au plus) : « Mine seulement » dit plus que
+  // « 1 type seul ». Au-delà, un compte.
+  const only = presentTypes.filter((t) => f.only.includes(t));
+  const hidden = presentTypes.filter((t) => f.hidden.includes(t));
+  const names = (ts: PoiType[]) => ts.map((t) => POI_LABEL[t]).join(', ');
+  if (only.length > 0)
+    parts.push(only.length <= 2 ? `${names(only)} seulement` : `${only.length} types seuls`);
+  else if (hidden.length > 0)
+    parts.push(hidden.length <= 2 ? `sans ${names(hidden)}` : `${hidden.length} types masqués`);
+  return parts.length
+    ? { active: true, text: parts.join(' · ') }
+    : { active: false, text: 'tout affiché' };
+}
+
+/** Le filtre tel qu’il s’applique à la carte d’AUJOURD’HUI : un type « seul » mémorisé mais
+ *  absent de la carte est ignoré. ⚠️ Sans ça, un seul type seul absent (« mines seules » un jour
+ *  sans mine) masquait TOUTE la carte, puisque « seuls » l’emporte sur le reste. */
+export function effectiveTypeFilter(f: TypeFilter, present: readonly PoiType[]): TypeFilter {
+  const only = f.only.filter((t) => present.includes(t));
+  return only.length === f.only.length ? f : { only, hidden: f.hidden };
 }

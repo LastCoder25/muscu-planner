@@ -228,10 +228,47 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    // 2 rangs dont 1 masqué, 2 types dont un « seul ».
+    // REPLIÉE par défaut : le résumé dit ce qui est filtré, sans rendre le corps.
+    expect(out).toContain('class="filters active"');
+    expect(out).toContain('1/2 rangs · Mine seulement');
+    expect(out.match(/class="flt-dot off"/g)?.length).toBe(1);
+    expect(out).not.toContain('rf-chip');
+  }, 30_000);
+
+  it('🎚️ MapFilterBar dépliée : rangs nommés, types en tuiles qui écrivent leur état', async () => {
+    const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        MapFilterBar,
+        {
+          rankOptions: [
+            { rankIndex: 0, count: 2 },
+            { rankIndex: 1, count: 1 },
+          ],
+          hiddenRanks: new Set([1]),
+          typeChips: [
+            { type: 'mine', inRanks: 1 },
+            { type: 'archive', inRanks: 1 },
+            { type: 'rift', inRanks: 1 },
+          ],
+          typeFilter: { only: ['mine'], hidden: ['archive'] },
+          defaultOpen: true,
+        },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    // 2 rangs dont 1 masqué, nommés.
     expect(out.match(/class="rf-chip on"/g)?.length).toBe(1);
+    expect(out).toContain('Bronze');
+    // Mine « seul », archives masquées : les deux états sont ÉCRITS.
     expect(out).toContain('rm-only');
-    expect(out).toContain('seul');
+    expect(out).toContain('>seul<');
+    expect(out).toContain('>✕<');
+    expect(out).toContain('Tout afficher');
   }, 30_000);
 
   it('🗂️ PoiCard : la fiche d’un lieu — nom, rang, infos, trajet/réussite, sceau', async () => {
@@ -851,7 +888,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ),
     ).toBeNull();
     // Ouvert sur « Portées » : l'armure de Léa est là, l'épée libre non.
-    const [epee, cotte] = ['w1', 'r1'].map((id) => avecStock.adv_gear.stock.find((g) => g.id === id)!);
+    const [epee, cotte] = ['w1', 'r1'].map(
+      (id) => avecStock.adv_gear.stock.find((g) => g.id === id)!,
+    );
     expect(stockHtml).toMatch(/class="af-chip tone-busy on"/);
     expect(stockHtml).toContain(cotte!.name);
     expect(stockHtml).not.toContain(`>${epee!.name}<`);
@@ -1645,7 +1684,13 @@ describe('🕳️💥 le plateau du débordement se monte', () => {
     const { default: XpGainOverlay } = await import('@/components/XpGainOverlay.vue');
     const { useXpFx, xpRing } = await import('@/composables/useXpFx');
     useXpFx().show([
-      xpRing('muscu', '🏋️', 'Muscu', { level: 7, progressPct: 62, xp: 5000 }, { level: 8, progressPct: 35, xp: 5420 }),
+      xpRing(
+        'muscu',
+        '🏋️',
+        'Muscu',
+        { level: 7, progressPct: 62, xp: 5000 },
+        { level: 8, progressPct: 35, xp: 5420 },
+      ),
     ]);
     expect(
       await mountIt(XpGainOverlay, {}, undefined, undefined, '/', (out) => {
