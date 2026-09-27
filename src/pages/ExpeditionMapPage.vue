@@ -661,6 +661,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
+import { poiHaulPreview, hourlyRates, formatRates } from '@/lib/poiYield';
 import {
   fogRevealPlan,
   fogRadiusAt,
@@ -1564,6 +1565,7 @@ const poiFacts = computed<PoiFact[]>(() => {
       go: true,
       title: 'Aller-retour du héros',
     });
+    pushRate(out, p, roundTripMin(p), true);
     if (p.type === 'arena')
       out.push({
         icon: '🌊',
@@ -1592,6 +1594,10 @@ const poiFacts = computed<PoiFact[]>(() => {
       go: true,
       title: partySize.value ? 'Aller-retour de l’équipe' : 'Compose ton équipe pour le connaître',
     });
+    // Sans équipe composée, au pas du HÉROS : on compare deux lieux d'un coup d'œil, avant de
+    // choisir qui part. Le chiffre se recale sur l'équipe dès qu'elle est composée.
+    if (partySize.value) pushRate(out, p, partyMin.value, partyHeroOn.value);
+    else pushRate(out, p, roundTripMin(p), true, true);
     if (teamOnly.value || guard)
       out.push(
         partyWin.value === null
@@ -1615,6 +1621,23 @@ const poiFacts = computed<PoiFact[]>(() => {
   }
   return out;
 });
+/** ⏱️ Le RENDEMENT par heure d'aller-retour (v0.1207) : la récompense suit la difficulté, la
+ *  distance ne coûte que du temps — c'est donc ce chiffre qui départage deux lieux de même rang.
+ *  Le niveau est celui que la récolte applique (le même que la ligne « Filon »). */
+function pushRate(out: PoiFact[], p: Poi, minutes: number, heroGoes: boolean, estimate = false) {
+  const lvl = heroGoes ? progressionLevel.value : heroLevel.value;
+  const txt = formatRates(hourlyRates(poiHaulPreview(p, { playerLevel: lvl, heroGoes }), minutes));
+  if (!txt) return;
+  out.push({
+    icon: '💰',
+    label: 'Rendement',
+    value: estimate ? `≈ ${txt}` : txt,
+    // ⚠️ Pas sur la ligne trajet · réussite (faite pour deux chiffres) : à 344 px il y passait
+    // sur deux lignes (vu au banc). Rangé avec les informations du lieu.
+    title:
+      'Ce que ce lieu rapporte par heure d’aller-retour, s’il est pris (hors aléas de la route). À rang égal, un lieu proche rend plus.',
+  });
+}
 const factsInfo = computed(() => poiFacts.value.filter((f) => !f.go));
 const factsGo = computed(() => poiFacts.value.filter((f) => f.go));
 function winClass(pct: number): string {
