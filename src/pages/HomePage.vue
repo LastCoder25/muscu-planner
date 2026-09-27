@@ -426,7 +426,7 @@
               <span class="dh-name">{{ defis.combo.name }}</span>
               <!-- ⚠️ LE CHIFFRE QU'ON VIENT CHERCHER, EN GROS : il était en gris 11,5 px
                    SOUS le nom du défi, donc plus petit que son contexte. -->
-              <span class="dh-big font-display">{{ defis.combo.pct }}<small>%</small></span>
+              <span class="dh-big font-display">{{ fmtPct(defis.combo.pct) }}<small>%</small></span>
               <span class="dh-bar" aria-hidden="true"
                 ><i :style="{ width: Math.min(100, defis.combo.pct) + '%' }"
               /></span>
@@ -760,6 +760,7 @@ import { logicalToday } from '@/lib/challenges';
 import { defisSummary } from '@/lib/defisHome';
 import { QUEST_INFO, WEEKLY_QUESTS } from '@/lib/weeklyQuests';
 import { useWeeklyQuests } from '@/composables/useWeeklyQuests';
+import { fmtPct } from '@/lib/combo';
 import { useComboStore } from '@/stores/combo';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 

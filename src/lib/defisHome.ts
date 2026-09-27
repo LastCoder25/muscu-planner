@@ -63,7 +63,8 @@ export function defisSummary(
     combo: c
       ? {
           name: c.name,
-          pct: Math.round(comboProgressPct(c)),
+          // Brut : l'écran l'affiche avec fmtPct, comme les autres écrans du 360 (dixième, bornes justes).
+          pct: comboProgressPct(c),
           left: c.legs.filter((l) => !legAllDone(l)).length,
         }
       : null,
