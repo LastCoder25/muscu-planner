@@ -296,6 +296,8 @@ export interface CharacterRow {
    *  et non dans `gacha` : chaque tirage réécrit `gacha`, un oubli y effacerait les tickets. */
   gacha_tickets: number;
   seals: Seals; // 🔱 sceaux d'ascension (migr. 0083)
+  /** 🗓️ Lundi de la dernière semaine de quêtes récupérée (migr. 0093), ou null. */
+  quest_week: string | null;
   /** 🎒 Consommables d'expédition (migr. 0090) — gagnés en butin, emportés au départ. */
   supplies: SupplyStock;
   scrap: number; // 🔩 LEGACY (migr. 0060) : devise retirée (v0.998), convertie en or au chargement // journal d'énergie hors-sport horodaté (migr. 0057)
@@ -346,7 +348,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies, quest_week';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -472,6 +474,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.summon_stones !== 'number') r.summon_stones = 0; // colonne récente (migr. 0050)
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
+    if (typeof r.quest_week !== 'string') r.quest_week = null; // 🗓️ migr. 0093
     r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
     r.supplies = normalizeSupplies(r.supplies); // 🎒 migr. 0090
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
@@ -803,6 +806,31 @@ export const useCharacterStore = defineStore('character', () => {
     if (!data) return; // quelqu'un d'autre a déjà marqué la ligne : rien n'est dû
     row.value = normalizeRow(data);
     useGameFx().celebrateTickets(due, 'Bienvenue — offerts par ton Panthéon');
+  }
+
+  /** 🗓️ Récupère les tickets d'une semaine de quêtes bouclée. ⚠️ LA CONDITION VIT DANS LA
+   *  REQUÊTE (même patron que les tickets de bienvenue) : deux onglets qui lisent la ligne
+   *  « pas encore récupérée » en même temps ne créditent qu'une fois — le second ne met à
+   *  jour aucune ligne. Rend les tickets versés (0 si rien n'était dû). */
+  async function claimWeeklyQuests(userId: string, monday: string, tickets: number) {
+    const cur = row.value;
+    if (!cur || tickets <= 0 || cur.quest_week === monday) return 0;
+    const res = await supabase
+      .from('characters')
+      .update({
+        gacha_tickets: cur.gacha_tickets + tickets,
+        quest_week: monday,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .or(`quest_week.is.null,quest_week.neq.${monday}`)
+      .select(COLS)
+      .maybeSingle();
+    if (res.error) throw res.error;
+    if (!res.data) return 0;
+    row.value = normalizeRow(res.data);
+    useGameFx().celebrateTickets(tickets, 'Quêtes de la semaine bouclées');
+    return tickets;
   }
 
   async function persist(userId: string, patch: Record<string, unknown>) {
@@ -3088,6 +3116,7 @@ export const useCharacterStore = defineStore('character', () => {
 
   return {
     settleGearRefonte,
+    claimWeeklyQuests,
     row,
     loaded,
     fetchMine,

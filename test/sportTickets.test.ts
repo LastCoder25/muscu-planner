@@ -1,3 +1,4 @@
+import { WEEKLY_QUESTS } from '@/lib/weeklyQuests';
 import { describe, it, expect } from 'vitest';
 import { mulberry32 } from '@/lib/combat';
 import { GACHA, emptyPity, pullMany } from '@/lib/gacha';
@@ -151,7 +152,9 @@ describe('🎟️ payer un tirage', () => {
  */
 describe('📏 rythme du gacha avec les tickets', () => {
   const MANA_PER_DAY: Record<number, number> = { 12: 63, 30: 91, 60: 157 };
-  const REGULAR_TICKETS_PER_WEEK = comboTickets(1) + BOSS_TIERS[1]!.tickets + 1.5;
+  // + les quêtes de la semaine bouclées (v0.1209, 2 tickets).
+  const REGULAR_TICKETS_PER_WEEK =
+    comboTickets(1) + BOSS_TIERS[1]!.tickets + 1.5 + WEEKLY_QUESTS.tickets;
 
   function topsPerYear(pulls: number): number {
     let total = 0;

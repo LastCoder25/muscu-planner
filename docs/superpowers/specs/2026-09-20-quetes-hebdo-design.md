@@ -1,6 +1,6 @@
 # Quêtes hebdomadaires — étude de conception
 
-**État : ÉTUDE, rien n'est implémenté.** Demandée par l'utilisateur le 2026‑09‑20
+**État : TRANCHÉ ET LIVRÉ en v0.1209** (quête qui paie, 3 objectifs de SPORT le lundi, 2 tickets 🎟️ — cf. CLAUDE.md). Ce qui suit est l'étude d'origine. Demandée par l'utilisateur le 2026‑09‑20
 (« étudier la possibilité de mettre en place des quêtes chaque semaine »). Ce document dit
 ce que la mesure a trouvé, les deux conceptions possibles, et la question qui reste à
 trancher.

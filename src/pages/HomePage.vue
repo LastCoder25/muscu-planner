@@ -480,6 +480,37 @@
         </div>
       </div>
 
+      <!-- 🗓️ QUÊTES DE LA SEMAINE (v0.1209) : 3 objectifs de sport, tirés le lundi, calés sur
+           l'historique ; les trois bouclés → 2 tickets 🎟️. La règle vit en lib
+           (`weeklyQuests`), la carte ne fait que la peindre. -->
+      <div class="quests" :class="{ done: quests.board.value.complete }">
+        <div class="qs-head">
+          <span class="qs-t font-display">🗓️ Quêtes de la semaine</span>
+          <span class="qs-reward">🎟️ ×{{ WEEKLY_QUESTS.tickets }}</span>
+        </div>
+        <div v-for="q in quests.board.value.quests" :key="q.kind" class="qs-row" :class="{ ok: q.complete }">
+          <span class="qs-emo">{{ q.complete ? '✅' : QUEST_INFO[q.kind].emoji }}</span>
+          <span class="qs-main">
+            <span class="qs-label">{{ QUEST_INFO[q.kind].label(q.target) }}</span>
+            <span class="qs-bar"><i :style="{ width: Math.min(100, (q.done / q.target) * 100) + '%' }"></i></span>
+          </span>
+          <span class="qs-count">{{ Math.min(q.done, q.target) }}/{{ q.target }}</span>
+        </div>
+        <button
+          v-if="quests.board.value.claimable > 0"
+          class="qs-claim"
+          type="button"
+          :disabled="!quests.canClaim.value"
+          @click="quests.claim()"
+        >
+          🎟️ Récupérer {{ quests.board.value.claimable }} tickets
+        </button>
+        <div v-else-if="quests.board.value.claimed" class="qs-foot">
+          ✓ Semaine bouclée — nouvelles quêtes lundi
+        </div>
+        <div v-else class="qs-foot">Jusqu’à dimanche · rien n’est perdu si tu en rates une</div>
+      </div>
+
       <!-- 🐉 Boss entre amis : toujours visible, sous les défis (demandé par l’utilisateur).
            Sans rien en cours, la ligne invite à en lancer un. -->
       <button
@@ -727,6 +758,8 @@ import { LEADS, modelLabel, type Lead } from '@/lib/weatherReliability';
 import { useChallengesStore } from '@/stores/challenges';
 import { logicalToday } from '@/lib/challenges';
 import { defisSummary } from '@/lib/defisHome';
+import { QUEST_INFO, WEEKLY_QUESTS } from '@/lib/weeklyQuests';
+import { useWeeklyQuests } from '@/composables/useWeeklyQuests';
 import { useComboStore } from '@/stores/combo';
 import { SCHEMA_VERSION, type SessionLog } from '@/lib/types';
 
@@ -901,6 +934,7 @@ const hasFree = ref(false);
 
 // Boss entre amis : chargé en fond, silencieux (la carte n'apparaît que s'il y a du nouveau).
 const bossEntry = useFriendBossEntry();
+const quests = useWeeklyQuests(); // 🗓️ 3 objectifs de sport → 2 tickets
 onMounted(() => {
   void bossEntry.refresh().catch(() => undefined);
 });
@@ -2035,6 +2069,116 @@ async function saveAutre() {
    ⚠️ Elle doit se DISTINGUER des autres cartes de l'accueil, sinon elle n'est qu'une ligne
    de plus : d'où le liseré accent, le fond légèrement chauffé et la taille. C'est le seul
    bloc de l'accueil à porter l'accent en bordure — l'exception fait la hiérarchie. */
+.quests {
+  margin: 0 0 12px;
+  padding: 10px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.quests.done {
+  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+}
+.qs-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 6px;
+}
+.qs-t {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  letter-spacing: 0.03em;
+  color: var(--text);
+}
+.qs-reward {
+  flex: none;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.qs-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+.qs-row + .qs-row {
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.qs-emo {
+  flex: none;
+  width: 24px;
+  text-align: center;
+  font-size: 18px;
+}
+.qs-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.qs-label {
+  font-size: 13.5px;
+  color: var(--text);
+  overflow-wrap: break-word;
+}
+.qs-bar {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.qs-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.qs-row.ok .qs-bar i {
+  background: var(--d1);
+}
+.qs-row.ok .qs-label {
+  color: var(--dim);
+}
+.qs-count {
+  flex: none;
+  min-width: 42px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.qs-row.ok .qs-count {
+  color: var(--d1);
+}
+.qs-claim {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border: none;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 14.5px;
+  color: #1a1408;
+  background: var(--accent);
+  cursor: pointer;
+}
+.qs-claim:disabled {
+  opacity: 0.5;
+}
+.qs-foot {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
 .defis-hub {
   margin: 0 0 12px;
   padding: 10px 10px 12px;
