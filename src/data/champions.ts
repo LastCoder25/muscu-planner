@@ -640,6 +640,13 @@ const REF_PICKS: readonly (readonly [string, string, string])[] = [
 ];
 /** Les trois champions de référence de chaque RANG (index = `prestigeRankIndex`). */
 export const REF_CHAMPIONS_BY_RANK: readonly Champion[][] = REF_PICKS.map((ids) =>
-  ids.map((id) => ({ ...CHAMPION_BY_ID.get(id)!, id: `ref:${id}`, grade: 'S' as const })),
+  ids.map((id) => {
+    const c = CHAMPION_BY_ID.get(id)!;
+    // ⚠️ L'ÉTALON GARDE LE RÔLE D'AVANT : Anselme et Vesper sont passés 🩺 → 🎓 Mentor, mais
+    // un étalon Mentor gonflerait l'XP de référence et perdrait son soigneur — la calibration
+    // bougerait sans qu'on l'ait décidé.
+    const role = c.role === 'mentor' ? 'heal' : c.role;
+    return { ...c, role, id: `ref:${id}`, grade: 'S' as const };
+  }),
 );
 export const REF_CHAMPION_BY_ID = new Map(REF_CHAMPIONS_BY_RANK.flat().map((c) => [c.id, c]));

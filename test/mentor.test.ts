@@ -77,3 +77,13 @@ describe('🎓 le rôle Mentor', () => {
     expect(siegeXpFor([autre('b')], report).b).toBe(seul);
   });
 });
+
+describe('🎓 l’étalon des combats ne change pas', () => {
+  it('aucun champion de référence n’est Mentor (Anselme et Vesper y restent soigneurs)', async () => {
+    const { REF_CHAMPIONS_BY_RANK } = await import('@/data/champions');
+    const refs = REF_CHAMPIONS_BY_RANK.flat();
+    expect(refs.some((c) => c.role === 'mentor')).toBe(false);
+    expect(refs.find((c) => c.id === 'ref:anselme')!.role).toBe('heal');
+    expect(refs.find((c) => c.id === 'ref:ferrand')!.role).toBe('heal');
+  });
+});
