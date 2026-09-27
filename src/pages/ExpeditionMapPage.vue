@@ -358,10 +358,11 @@
                coûte, c'est l'XP : on le DIT avant l'envoi, avec le partage en cours. -->
           <p
             class="car-cap"
-            title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas)."
+            title="Le plafond vient du Panthéon. L'XP du lieu se partage entre les champions (le héros n'en prend pas). Sans le héros, ils apprennent 25 % de plus."
           >
             👥 <b>{{ partyAdvs.length }}/{{ partyMax }}</b> champions · XP partagée
             <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
+            <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile

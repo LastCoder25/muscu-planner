@@ -19,6 +19,7 @@ import {
   missionXp,
   missionXpFor,
   missionXpSplit,
+  SOLO_XP_MULT,
   CARAVAN,
   XP_TEAM_REF,
   partyAllies,
@@ -198,7 +199,7 @@ describe('🎓 l’XP d’une incursion : les aventuriers, et eux seuls', () => 
       ),
     });
     // ⚠️ 3 champions + le héros (compte pour 2) : 5 membres, le socle se partage (v0.1038).
-    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, 26));
+    expect(o.party!.xp).toEqual(missionXpFor(esc, p, o.win, shares, 26, true));
   });
 
   it('⚠️ le HÉROS ne prend AUCUNE part : les aventuriers partagent entre eux', () => {
@@ -545,17 +546,21 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
     expect(avec.adv_0! - six.adv_0!).toBe(40);
   });
 
-  it('⚠️ le HÉROS ne prend AUCUNE part du partage (v0.1109, demandé)', () => {
-    // Il comptait pour deux parts, perdues : sa présence coûtait de l'XP aux champions. Le
-    // partage ne CONNAÎT plus le héros — la garantie est dans la SIGNATURE : un paramètre
-    // « héros » qui reviendrait rouvrirait la porte, et c'est ça qu'on interdit.
+  it('⚠️ le HÉROS ne prend aucune part, et SANS lui ils apprennent plus (2026-09-27)', () => {
+    // ⚠️ RÉÉCRIT. v0.1109 : le héros ne dilue plus le partage (il ne prend aucune part) —
+    // c'est toujours vrai, le partage ne le connaît pas. Nouvelle demande : seuls, les
+    // champions tiennent le lieu eux-mêmes et apprennent plus (`SOLO_XP_MULT`).
     expect(missionXpSplit.length).toBe(1);
-    expect(missionXpFor.length).toBe(5);
-    // Trois champions touchent leur part entière, avec ou sans héros à leurs côtés.
     const p = rift({ level: 26 });
-    expect(missionXpFor(team(3, 26), p, true, {}, 26).adv_0!).toBe(
-      Math.round(missionXp(team(3, 26)[0]!, p, true)),
+    const socle = missionXp(team(3, 26)[0]!, p, true);
+    expect(missionXpFor(team(3, 26), p, true, {}, 26, true).adv_0!).toBe(Math.round(socle));
+    expect(missionXpFor(team(3, 26), p, true, {}, 26, false).adv_0!).toBe(
+      Math.round(socle * SOLO_XP_MULT),
     );
+    // ⚠️ La prime ne touche que le SOCLE : la part des abattus passe telle quelle.
+    const avec = missionXpFor(team(3, 26), p, true, { adv_0: 40 }, 26, false).adv_0!;
+    const sans = missionXpFor(team(3, 26), p, true, {}, 26, false).adv_0!;
+    expect(avec - sans).toBe(40);
   });
 });
 

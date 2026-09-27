@@ -153,7 +153,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     const party: PartyResult = {
       ...base,
       win: false,
-      xp: missionXpFor(escort, poi, false, g.shares, input.pantheonLevel),
+      xp: missionXpFor(escort, poi, false, g.shares, input.pantheonLevel, !!hero),
       hurt: campHurt(g.skirmish, escort),
       journal: g.journal,
     };
@@ -196,7 +196,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     const party: PartyResult = {
       ...base,
       win: true,
-      xp: missionXpFor(escort, poi, true, g.shares, input.pantheonLevel),
+      xp: missionXpFor(escort, poi, true, g.shares, input.pantheonLevel, !!hero),
       hurt: [],
       journal: [...g.journal, out.text],
     };
