@@ -26,7 +26,7 @@ import { isCardioTrackChallenge } from '@/data/cardio';
 import { seedOf } from './combat';
 
 export type QuestKind = 'active_days' | 'strength_days' | 'cardio_minutes' | 'variety';
-export type SportKind = 'muscu' | 'cardio' | 'tennis';
+type SportKind = 'muscu' | 'cardio' | 'tennis';
 
 export const WEEKLY_QUESTS = {
   /** Tickets 🎟️ d'une semaine entièrement bouclée (décision de l'utilisateur). */
@@ -181,7 +181,7 @@ export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) =
   variety: { emoji: '🎾', label: (t) => `${t} sports différents (muscu, cardio, tennis)` },
 };
 
-export interface WeeklyQuest {
+interface WeeklyQuest {
   kind: QuestKind;
   target: number;
   done: number;
