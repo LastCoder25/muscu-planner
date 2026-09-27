@@ -387,7 +387,10 @@ export function riftAutoReplay(
 ): { play: ExpeditionMessage | null; seen: string[] } {
   // ⚔️ Une interception (`party.battle`) se rejoue aussi d'elle-même : même règle, même
   // mémoire « déjà vu » — c'est le même dialogue qui la montre.
-  const rifts = messages.filter((m) => !!m.party?.rift || !!m.party?.battle);
+  // 🐺🏚️ La tanière et la fouille d'un héros tombé aussi (v0.1212) : même dialogue.
+  const rifts = messages.filter(
+    (m) => !!m.party?.rift || !!m.party?.battle || !!m.party?.den || !!m.party?.fallen,
+  );
   let play: ExpeditionMessage | null = null;
   for (const m of rifts) {
     if (seen.has(m.id) || now - m.resolvedAt > RIFT_AUTOPLAY_MAX_AGE_MS) continue;

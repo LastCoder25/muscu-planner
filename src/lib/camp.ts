@@ -40,11 +40,13 @@ import {
   harvestYield,
   rewardTripHours,
   type CampSpec,
+  type DenBattle,
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
 } from './expedition';
 import { partyFightSeed, partyForecastSeed } from './party';
+import { bossReplaySteps, RIFT_BOSS_STEPS } from './rift';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
 import { type Adventurer } from './adventurers';
 
@@ -351,6 +353,8 @@ export interface CampFight {
   /** Parts d'XP des abattus, par aventurier (`skirmishXpShares`). */
   shares: Record<string, number>;
   journal: string[];
+  /** 🐺 Le duel résumé (`bossReplaySteps`), pour le rejeu d'une tanière. */
+  replay: DenBattle;
 }
 
 /**
@@ -381,6 +385,13 @@ export function fightCampForce(input: PartyInput): CampFight {
     heroKills: hero ? (slainBy[HERO_UNIT_ID] ?? 0) : 0,
     shares: skirmishXpShares(escort, bodies, d),
     journal: campJournal(d, allies, bodies),
+    replay: {
+      name: bodies[bodies.length - 1]!.name,
+      emoji: bodies[bodies.length - 1]!.emoji,
+      maxPv: group.pv,
+      beastPv: foe.pv,
+      steps: bossReplaySteps(fight.log, RIFT_BOSS_STEPS),
+    },
   };
 }
 
@@ -417,6 +428,8 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel),
     hurt: campHurt(d, escort),
     journal: g.journal,
+    // 🐺 Une tanière se REJOUE (le duel contre la bête) : un camp, non.
+    ...(poi.type === 'den' ? { den: g.replay } : {}),
   };
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;
 

@@ -47,6 +47,7 @@ const NO_GUARDS: CampFight = {
   heroKills: 0,
   shares: {},
   journal: [],
+  replay: { name: '', emoji: '', maxPv: 0, beastPv: 0, steps: [] },
 };
 
 export interface HarvestPartyInput {
@@ -97,7 +98,12 @@ function withSiteLoot(out: ExpeditionOutcome, input: HarvestPartyInput): Expedit
     const id = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
     found[id] = (found[id] ?? 0) + 1;
   }
-  return { ...out, supplies: addSupplies(out.supplies ?? {}, found) };
+  return {
+    ...out,
+    supplies: addSupplies(out.supplies ?? {}, found),
+    // 🏚️ Ce que la fouille a trouvé, À PART de la route : le rejeu montre ces objets-là.
+    ...(out.party ? { party: { ...out.party, fallen: { supplies: found } } } : {}),
+  };
 }
 
 export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome {

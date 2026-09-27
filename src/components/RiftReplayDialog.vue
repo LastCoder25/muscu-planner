@@ -26,6 +26,27 @@
         :when="when"
         @done="onDone"
       />
+      <!-- 🐺 Une tanière : le duel contre la bête. -->
+      <DenStage
+        v-else-if="replay?.den"
+        :key="'d' + seq"
+        :battle="replay.den"
+        :win="replay.win"
+        :hero="hero"
+        :cast="cast"
+        :when="when"
+        @done="onDone"
+      />
+      <!-- 🏚️ La fouille d'un héros tombé : les trouvailles jaillissent des ruines. -->
+      <FallenStage
+        v-else-if="replay?.fallen"
+        :key="'f' + seq"
+        :supplies="replay.fallen.supplies"
+        :hero="hero"
+        :cast="cast"
+        :when="when"
+        @done="onDone"
+      />
     </div>
   </q-dialog>
 </template>
@@ -45,6 +66,8 @@ import { buildRiftStage, replayWhenLabel, riftCast, riftStageInputOf } from '@/l
 import { useCharacterStore } from '@/stores/character';
 import RiftStage from '@/components/RiftStage.vue';
 import WarbandStage from '@/components/WarbandStage.vue';
+import DenStage from '@/components/DenStage.vue';
+import FallenStage from '@/components/FallenStage.vue';
 import { buildWarbandStage, warbandStageInputOf } from '@/lib/warbandStage';
 
 const props = defineProps<{

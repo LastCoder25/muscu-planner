@@ -24,6 +24,7 @@ import {
   isWarbandPoi,
   poiForceOf,
   DEN_MAX_PARTY,
+  dwellMsFor,
   buildMessage,
   depositMessages,
   poiTravelLevel,
@@ -236,11 +237,14 @@ export function startParty(
   outcome: ExpeditionOutcome,
 ): ActiveExpedition {
   const leg = Math.max(1, Math.round(legMin)) * 60_000;
+  // 🔍 La fouille d'un héros tombé : on reste sur place, le rapport tombe à la fin.
+  const dwell = dwellMsFor(input.poi);
   return {
     poi: input.poi,
     sentAt: now,
-    midAt: now + leg,
-    returnAt: now + 2 * leg,
+    midAt: now + leg + dwell,
+    returnAt: now + 2 * leg + dwell,
+    ...(dwell ? { dwellMs: dwell } : {}),
     goldCost: 0,
     seed: input.seed >>> 0 || 1,
     outcome,

@@ -6,7 +6,7 @@
 //
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
-import type { RiftBossReplay, WarbandBattle } from './rift';
+import type { RiftBossReplay, RiftBossStep, WarbandBattle } from './rift';
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
 import { rollDrop, ITEM_SETS, type Item } from './items';
@@ -227,6 +227,12 @@ export interface PartyResult {
    * d'avant la v0.1185 : ils n'ont ni rejeu ni verdict propre.
    */
   battle?: WarbandBattle;
+  /** 🐺 Le duel d'une TANIÈRE, résumé pour son rejeu (`bossReplaySteps`) — de quoi REJOUER,
+   *  jamais de quoi recalculer. Absent des rapports d'avant la v0.1212. */
+  den?: DenBattle;
+  /** 🏚️ Ce que la fouille d'un héros tombé a rapporté (les consommables du LIEU, hors
+   *  trouvailles de la route), pour son rejeu. Absent si la fouille n'a pas eu lieu. */
+  fallen?: { supplies: SupplyStock };
   /** 🗼 Ce que la victoire a changé au siège, posé à l'ARRIVÉE du rapport (`dispelOverflow`).
    *  Absent : pas une interception gagnée, ou aucune armée marquée. */
   dispel?: 'dispersed' | 'late';
@@ -1980,6 +1986,28 @@ export interface Voyage {
   sentAt: number;
   midAt: number;
   returnAt: number;
+  /** 🔍 Temps passé SUR PLACE avant le rapport (`midAt`) : la fouille des ruines d'un héros
+   *  tombé. L'équipe arrive à `midAt − dwellMs`, fouille, puis le rapport tombe. */
+  dwellMs?: number;
+}
+
+/** 🐺 Le duel d'une tanière (cf. `PartyResult.den`). */
+export interface DenBattle {
+  name: string;
+  emoji: string;
+  /** PV du groupe fondu au premier coup, et de la bête. */
+  maxPv: number;
+  beastPv: number;
+  steps: RiftBossStep[];
+}
+
+/** 🔍 Combien de temps on fouille les ruines d'un héros tombé (2026-09-27, demandé : « on y
+ *  reste un certain temps »). Une heure : assez pour qu'on la sente sur la tuile de voyage,
+ *  pas assez pour immobiliser l'équipe une demi-journée. */
+export const FALLEN_DWELL_MS = 60 * 60_000;
+/** Temps passé sur place selon le lieu (0 partout ailleurs). */
+export function dwellMsFor(poi: Pick<Poi, 'type'>): number {
+  return poi.type === 'fallen' ? FALLEN_DWELL_MS : 0;
 }
 
 /** Avancement d’un voyage sur SA DURÉE TOTALE (aller + retour), et l’endroit où tombe
@@ -2005,12 +2033,16 @@ export function travelPosition(
   frac: number; // avancement de la phase courante (0..1)
   remainToObjectiveMs: number;
   remainTotalMs: number;
+  /** 🔍 Arrivé sur place, en train de fouiller (`Voyage.dwellMs`). */
+  searching?: boolean;
 } {
   const { town } = EXPE;
   const p = exp.poi;
   const remainTotalMs = Math.max(0, exp.returnAt - now);
+  // 🔍 L'arrivée sur place précède le rapport de la durée de la fouille.
+  const arriveAt = exp.midAt - Math.max(0, exp.dwellMs ?? 0);
   if (now < exp.midAt) {
-    const frac = clamp01((now - exp.sentAt) / Math.max(1, exp.midAt - exp.sentAt));
+    const frac = clamp01((now - exp.sentAt) / Math.max(1, arriveAt - exp.sentAt));
     return {
       x: town.x + (p.x - town.x) * frac,
       y: town.y + (p.y - town.y) * frac,
@@ -2018,6 +2050,7 @@ export function travelPosition(
       frac,
       remainToObjectiveMs: Math.max(0, exp.midAt - now),
       remainTotalMs,
+      searching: now >= arriveAt,
     };
   }
   if (now < exp.returnAt) {
@@ -2041,12 +2074,21 @@ export function travelPosition(
  * (arrivée sur le lieu) ne vit plus que dans l'info-bulle (`untilHome`).
  */
 export function tripTimeLabel(
-  pos: Pick<ReturnType<typeof travelPosition>, 'phase' | 'remainToObjectiveMs' | 'remainTotalMs'>,
+  pos: Pick<
+    ReturnType<typeof travelPosition>,
+    'phase' | 'remainToObjectiveMs' | 'remainTotalMs' | 'searching'
+  >,
 ): { time: string; untilHome: string } {
   if (pos.phase === 'done') return { time: 'rentré', untilHome: 'rentré en ville' };
   const total = formatDuration(pos.remainTotalMs);
   const home = `retour en ville dans ${total}`;
   if (pos.phase === 'return') return { time: total, untilHome: home };
+  // 🔍 Sur place, en train de fouiller : on le DIT, sinon l'équipe semble arrêtée.
+  if (pos.searching)
+    return {
+      time: `🔍 ${total}`,
+      untilHome: `fouille encore ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,
+    };
   return {
     time: total,
     untilHome: `arrivée dans ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,

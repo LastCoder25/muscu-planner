@@ -156,8 +156,26 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
 
   // 🗺️ v0.1202 : la carte d'expédition est découpée — ses trois morceaux se montent seuls.
   const MAP_POIS = [
-    { id: 'p1', type: 'mine', level: 3, x: 90, y: 90, distNorm: 0.3, spawnedAt: 0, expiresAt: 9e15 },
-    { id: 'p2', type: 'archive', level: 5, x: 110, y: 95, distNorm: 0.4, spawnedAt: 0, expiresAt: 9e15 },
+    {
+      id: 'p1',
+      type: 'mine',
+      level: 3,
+      x: 90,
+      y: 90,
+      distNorm: 0.3,
+      spawnedAt: 0,
+      expiresAt: 9e15,
+    },
+    {
+      id: 'p2',
+      type: 'archive',
+      level: 5,
+      x: 110,
+      y: 95,
+      distNorm: 0.4,
+      spawnedAt: 0,
+      expiresAt: 9e15,
+    },
   ];
   it('🗺️ MapPoiLayer dessine les lieux, la sélection et les lieux grisés', async () => {
     const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
@@ -551,7 +569,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       hero: null,
       cast: [{ kind: 'champion' as const, name: 'Léa', emoji: '⚔️', championId: null }],
     };
-    expect(await mountIt(WarbandStage, props, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    expect(
+      await mountIt(WarbandStage, props, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
     // ⚠️ Sans cette lecture le test serait creux : on compte les corps, champion compris.
     expect([...out.matchAll(/class="body[ "]/g)]).toHaveLength(stage.bodies.length);
     expect(out).toContain('/monsters/g_loup.webp');
@@ -1526,5 +1546,48 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
     // 🔎 Et elles DISENT qu'elles filtrent — sans cette ligne, rien ne l'indiquait.
     expect(out).toContain('cpb-hint');
     expect(out).toContain('Touche une barre');
+  }, 30_000);
+});
+
+describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () => {
+  const cast = [{ kind: 'champion' as const, name: 'Aurore', emoji: '⚔️', championId: null }];
+  it('🐺 DenStage : la bête et les deux barres', async () => {
+    const { default: DenStage } = await import('@/components/DenStage.vue');
+    let out = '';
+    const battle = {
+      name: 'Ours des cavernes',
+      emoji: '🐻',
+      maxPv: 100,
+      beastPv: 80,
+      steps: [{ dealt: 80, taken: 20, crit: true, groupTurns: 1, bossTurns: 1, pv: 80, bossPv: 0 }],
+    };
+    expect(
+      await mountIt(
+        DenStage,
+        { battle, win: true, hero: null, cast },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Ours des cavernes');
+    expect(out).toContain('Ton groupe');
+  }, 30_000);
+  it('🏚️ FallenStage : une tuile par trouvaille', async () => {
+    const { default: FallenStage } = await import('@/components/FallenStage.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        FallenStage,
+        { supplies: { potion: 2, rations: 1 }, hero: null, cast },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out.match(/class="find/g)?.length).toBe(3);
+    expect(out).toContain('Ruines d’un héros tombé');
   }, 30_000);
 });
