@@ -391,7 +391,12 @@ export const BUILD = {
   // en rapportaient. Le revenu baisse, le coefficient suit : 900 → 76,0 / 67,3 / 62,0 %,
   // la courbe de la v0.998 (76,8 / 68,5 / 63,4) à moins de 1,5 point, ~100 % de l’or
   // dépensé. (800 → 79,2 / 70,1 / 64,5 · 1000 → 73,2 / 64,8 / 59,7.)
-  upBase: 900, // upgrade L→L+1 (or) = round(upBase × L^upExp), cour ET enceinte
+  // ⚠️ 900 → 750 en v0.1205 : la carte ne se remplit plus d’archives et de sources au-delà de
+  // la référence, or leurs gardes bandits portaient une bourse et un joueur qui optimise
+  // choisissait parmi ~30 lieux au lieu de 16. Mesuré sur un an : à 900, 73,0 / 63,8 / 58,7 %
+  // du plafond ; à 750, 76,7 / 67,6 / 62,2 % — la courbe d’avant (76,0 / 67,3 / 62,0). 775
+  // laissait un cran de base à 32,8 jours de revenu au niveau 100 (borne 32).
+  upBase: 750, // upgrade L→L+1 (or) = round(upBase × L^upExp), cour ET enceinte
   // ⚠️ EXPOSANT CALÉ SUR LE REVENU, pas choisi « raide » (v0.657). Le passage 2 → 2,6
   // visait un puits d'or de fin de partie ; il a produit un MUR. Les revenus suivent
   // `L^1.6` (coût ET gain d'expédition), donc un coût en `L^2.6` diverge linéairement :

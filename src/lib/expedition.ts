@@ -1070,17 +1070,31 @@ export function revealRadius(outpostLevel: number): number {
 /** Nombre de lieux et de failles sur la carte révélée : PROPORTIONNEL À SA SURFACE, à la
  *  densité de l'anneau de référence (`poiRef` + `riftRef` sur 18 → 64). ⚠️ La part des
  *  failles garde celle de la référence, sans descendre sous `riftFloor` (l'accès au mana). */
-export function mapQuota(outpostLevel: number): { pois: number; rifts: number; econ: number } {
+export function mapQuota(outpostLevel: number): {
+  pois: number;
+  rifts: number;
+  econ: number;
+  extra: number;
+} {
   const R = revealRadius(outpostLevel);
   const ref = EXPE.poiRef + EXPE.riftRef;
   const n = Math.round((ref * annulusArea(R)) / REF_AREA);
   const rifts = Math.max(EXPE.riftFloor, Math.round((n * EXPE.riftRef) / ref));
-  const pois = Math.max(1, n - rifts);
+  // 🗺️ Les lieux ORDINAIRES s'arrêtent au nombre de la carte de référence (v0.1205, décision
+  // de l'utilisateur : « on n'a pas trop de lieux ? »). Au-delà, les terres révélées
+  // n'apportaient que du REMPLISSAGE — 40 lieux dont 12 archives à l'Avant-poste 32, 60 dont
+  // 18 archives et 20 sources au niveau 100. L'Avant-poste fait désormais aller PLUS LOIN,
+  // pas plus dense ; les FAILLES gardent leur croissance.
+  const pois = Math.max(1, Math.min(n - rifts, EXPE.poiRef));
   // 💰 Les lieux d'ÉCONOMIE (or et pierres) suivent la densité JUSQU'À la carte de référence,
   // puis restent à son nombre : cf. `ECON_TYPES`.
   const econShare = ECON_WEIGHT / SPAWN_TABLE.length;
-  const econ = Math.round(Math.min(pois, EXPE.poiRef) * econShare);
-  return { pois, rifts, econ };
+  const econ = Math.round(pois * econShare);
+  // 💧📖 Sources et archives : le reste. ⚠️ DEUX QUOTAS SÉPARÉS, et c'est ce qui garde l'or :
+  // un seul plafond total laissait le hasard des tirages remplir des places d'économie avec
+  // des sources — mesuré, moins de mines, le puits d'or devenait un mur (35 jours de revenu
+  // pour un cran au niveau 50). `spawnOne` bascule d'un groupe à l'autre quand l'un est plein.
+  return { pois, rifts, econ, extra: pois - econ };
 }
 
 /** Fenêtre DESSINÉE de la carte : le disque révélable au plus grand, plus une marge.
@@ -1314,8 +1328,8 @@ export function createMap(
     riftCount: 0,
     nextRiftAt: now,
   };
-  const econCap = mapQuota(outpostLevel).econ;
-  for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel, reach, econCap);
+  const q = mapQuota(outpostLevel);
+  for (let i = 0; i < seedPois; i++) spawnOne(map, now, playerLevel, reach, q.econ, q.extra);
   // 🕳️ On sème aussi le PLANCHER de failles : sans elles, une carte neuve n'aurait ni accès
   // au mana ni siège à venir jusqu'au premier `advanceWorld`.
   for (let i = 0; i < EXPE.riftFloor; i++) spawnRift(map, now, playerLevel, reach);
@@ -1363,6 +1377,10 @@ const ECON_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
 const ECON_WEIGHT = SPAWN_TABLE.filter((t) => ECON_TYPES.has(t)).length;
 /** Ce qu'un lieu d'économie devient quand leur quota est plein. */
 const EXTRA_TABLE = ['well', 'archive'] as const satisfies readonly PoiType[];
+const EXTRA_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(EXTRA_TABLE);
+/** …et ce qu'une source ou des archives deviennent quand LEUR quota est plein (même pondération
+ *  que `SPAWN_TABLE`). */
+const ECON_TABLE = SPAWN_TABLE.filter((t) => ECON_TYPES.has(t));
 
 function spawnOne(
   map: ExpeditionMap,
@@ -1370,6 +1388,7 @@ function spawnOne(
   playerLevel: number,
   reach: number,
   econCap: number,
+  extraCap: number,
 ): void {
   const rng = mulberry32((map.seed + map.spawnCount * 2654435761) >>> 0);
   map.spawnCount++;
@@ -1381,8 +1400,13 @@ function spawnOne(
   // 💰 Quota d'économie plein → une source ou des archives (cf. `ECON_TYPES`). ⚠️ Le tirage de
   // remplacement ne consomme le flux aléatoire QUE dans ce cas : sur une carte qui n'excède
   // pas la référence, rien ne change au bit près.
-  if (ECON_TYPES.has(type) && map.pois.filter((p) => ECON_TYPES.has(p.type)).length >= econCap)
-    type = pick(rng, EXTRA_TABLE);
+  const econN = map.pois.filter((p) => ECON_TYPES.has(p.type)).length;
+  const extraN = map.pois.filter((p) => EXTRA_TYPES.has(p.type)).length;
+  if (ECON_TYPES.has(type) && econN >= econCap) type = pick(rng, EXTRA_TABLE);
+  else if (EXTRA_TYPES.has(type) && extraN >= extraCap && econN < econCap)
+    // ⚠️ Générateur À PART : tiré sur `rng`, ce basculement décalait le PLACEMENT des lieux
+    // suivants (mesuré : une paire à 9,8 d'écart sur 20 cartes, contre 0).
+    type = pick(mulberry32((map.seed ^ (map.spawnCount * 0x9e3779b1)) >>> 0 || 1), ECON_TABLE);
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   placePoiOfType(map, now, playerLevel, reach, type, rng, `poi_${map.seed}_${map.spawnCount}`);
@@ -1787,14 +1811,14 @@ export function advanceWorld(
   // (jusqu'au cap), sinon la carte restait à 1 spawn/ouverture et se vidait.
   let guard = 0;
   while (now >= next.nextSpawnAt && quota() < cap.pois && guard++ < cap.pois) {
-    spawnOne(next, now, playerLevel, reach, cap.econ);
+    spawnOne(next, now, playerLevel, reach, cap.econ, cap.extra);
     const rng = mulberry32((next.seed + next.spawnCount * 40503) >>> 0);
     next.nextSpawnAt = next.nextSpawnAt + EXPE.spawnMinMs + Math.floor(rng() * EXPE.spawnJitterMs);
   }
   // PLANCHER : la carte ne descend jamais sous `poiFloor` activités → on complète
   // immédiatement (les activités de base sont toujours dispo ; la rareté/churn ne
   // joue qu'entre le plancher et le cap).
-  while (quota() < cap.pois) spawnOne(next, now, playerLevel, reach, cap.econ);
+  while (quota() < cap.pois) spawnOne(next, now, playerLevel, reach, cap.econ, cap.extra);
   if (next.nextSpawnAt <= now) next.nextSpawnAt = now + EXPE.spawnMinMs;
 
   // 🕳️ FAILLES : même mécanique, quota et horloge PROPRES. ⚠️ Le plancher garantit qu'il y

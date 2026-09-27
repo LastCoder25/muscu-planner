@@ -546,17 +546,30 @@ describe('rythme de la carte', () => {
     const q1 = mapQuota(1);
     expect(q1.pois + q1.rifts).toBe(7);
     expect(q1.rifts).toBe(EXPE.riftFloor);
+    // 🗺️ v0.1205 : au-delà de la carte de référence, seules les FAILLES se multiplient ; les
+    // lieux ordinaires restent à `poiRef` et s'espacent (plus de remplissage d'archives).
+    for (let L = 0; L <= 100; L++)
+      expect(mapQuota(L).pois, `lieux ordinaires, niveau ${L}`).toBeLessThanOrEqual(EXPE.poiRef);
     const q100 = mapQuota(100);
-    expect(q100.pois + q100.rifts).toBe(3 * (EXPE.poiRef + EXPE.riftRef));
+    expect(q100.pois).toBe(EXPE.poiRef);
+    expect(q100.rifts).toBeGreaterThan(mapQuota(OUT).rifts);
     // Sans Avant-poste : la carte du niveau 1, jamais une carte vide.
     expect(mapQuota(0)).toEqual(q1);
   });
 
-  it('💰 les lieux d’OR et de PIERRES restent au nombre de la référence : le surplus est source/archives (v0.1047)', () => {
+  it('💰 au-delà de la référence, ni l’économie ni le remplissage ne grandissent (v0.1205)', () => {
     // Sans cette règle, une carte 3× plus peuplée faisait +54 % d’or et +82 % de pierres au
     // niveau 60 (camps trouvés partout). Les terres en plus : failles, sources, archives.
     const ECON = new Set(['mine', 'camp', 'lair', 'arena', 'shrine']);
+    // ⚠️ v0.1205 (« on n’a pas trop de lieux ? ») : les sources et archives, qui absorbaient tout
+    // le surplus (jusqu’à 18 archives et 20 sources au niveau 100), restent elles aussi au nombre
+    // de la référence. Les lieux d’économie, eux, doivent rester PLEINS : c’est leur nombre qui
+    // fait l’or (un plafond total unique le laissait au hasard des tirages, et le puits d’or
+    // devenait un mur).
     expect(mapQuota(100).econ).toBe(mapQuota(OUT).econ);
+    expect(mapQuota(100).extra).toBe(mapQuota(OUT).extra);
+    let econTotal = 0;
+    let relevés = 0;
     for (let s = 1; s <= 6; s++) {
       let map = createMap(s * 211, 0, 80, 100);
       for (let t = 0; t <= 3 * 24 * HOUR; t += 6 * HOUR) {
@@ -564,12 +577,15 @@ describe('rythme de la carte', () => {
         const econ = map.pois.filter((p) => ECON.has(p.type)).length;
         // +1 : l’arène en double se rabat sur un camp (règle d’avant, antérieure au quota).
         expect(econ, `lieux d’économie, graine ${s}`).toBeLessThanOrEqual(mapQuota(100).econ + 1);
+        const extra = map.pois.filter((p) => p.type === 'well' || p.type === 'archive').length;
+        expect(extra, `sources et archives, graine ${s}`).toBeLessThanOrEqual(mapQuota(100).extra);
+        econTotal += econ;
+        relevés++;
       }
-      const q = map.pois.filter(isQuotaPoi);
-      expect(q.filter((p) => p.type === 'well' || p.type === 'archive').length).toBeGreaterThan(
-        q.length / 2,
-      );
     }
+    expect(econTotal / relevés, 'les lieux d’économie restent pleins').toBeGreaterThan(
+      mapQuota(100).econ - 1.5,
+    );
   });
 
   it('monter l’Avant-poste révèle AUSSITÔT de nouveaux lieux, sans en retirer', () => {
@@ -586,9 +602,13 @@ describe('rythme de la carte', () => {
           grand.pois.some((q) => q.id === p.id),
           p.id,
         ).toBe(true);
-    // Et les nouveaux ont des lieux AU-DELÀ de l'ancien rayon.
+    // Et la terre nouvellement révélée se peuple : depuis la v0.1205 le nombre de lieux ne
+    // grandit plus beaucoup, ce sont les RENOUVELLEMENTS qui y posent des lieux.
     const R5 = revealRadius(5);
-    const neufs = grand.pois.filter((p) => !avant.has(p.id));
+    let plusTard = grand;
+    for (let t = 3 * HOUR; t <= 3 * 24 * HOUR; t += 3 * HOUR)
+      plusTard = advanceWorld(plusTard, t, 30, 30);
+    const neufs = plusTard.pois.filter((p) => !avant.has(p.id));
     expect(
       neufs.some((p) => Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y) > R5),
       'des lieux dans la terre nouvellement révélée',
