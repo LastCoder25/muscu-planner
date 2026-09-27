@@ -1,33 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { CHAMPIONS, CHAMPION_BY_ID, championsOf, type Champion } from '@/data/champions';
-import {
-  ADV_ROLE_LABEL,
-  ADV_SIGNATURE_LABEL,
-  AWAKEN,
-  awakenLevel,
-  awakenMult,
-  awakenOverflow,
-  championSkillLevel,
-  type AdvRole,
-} from '@/lib/adventurers';
-
-/** Signatures attendues par lettre : A 1-2, S 2-3, X (ADAMANTIUM) 3. */
-const SIG_PAR_LETTRE = { A: [1, 2], S: [2, 3], X: [3, 3] } as const;
+import { AWAKEN, awakenLevel, awakenMult, awakenOverflow } from '@/lib/adventurers';
+import { SKILL_SLOTS } from '@/lib/skillRunes';
 
 describe('la grille du roster', () => {
-  it('34 champions : 16 S et 16 A, 2 ADAMANTIUM — un 🎓 Mentor par lettre, pris sur les soigneurs', () => {
+  it('34 champions : 16 S et 16 A, 2 ADAMANTIUM', () => {
     expect(CHAMPIONS).toHaveLength(34);
     expect(championsOf('X')).toHaveLength(2);
-    const attendu: Record<AdvRole, number> = { heal: 3, haul: 4, speed: 4, scout: 4, mentor: 1 };
-    for (const g of ['S', 'A'] as const) {
-      const pool = championsOf(g);
-      expect(pool, g).toHaveLength(16);
-      for (const role of Object.keys(attendu) as AdvRole[])
-        expect(
-          pool.filter((c) => c.role === role),
-          `${g} · ${role}`,
-        ).toHaveLength(attendu[role]);
-    }
+    expect(championsOf('S')).toHaveLength(16);
+    expect(championsOf('A')).toHaveLength(16);
   });
 
   it('ids et noms UNIQUES — l’id EST l’identité des doublons, donc de l’Éveil', () => {
@@ -36,33 +17,16 @@ describe('la grille du roster', () => {
     expect(CHAMPION_BY_ID.size).toBe(CHAMPIONS.length);
   });
 
-  it('le nombre de SIGNATURES suit la lettre (A 1-2, S 2-3, X 3)', () => {
-    for (const g of ['X', 'S', 'A'] as const) {
-      const [min, max] = SIG_PAR_LETTRE[g];
-      expect(championsOf(g).length, g).toBeGreaterThan(0);
-      for (const c of championsOf(g)) {
-        expect(c.skills.length, c.name).toBeGreaterThanOrEqual(min);
-        expect(c.skills.length, c.name).toBeLessThanOrEqual(max);
-      }
+  it('🔮 aucune compétence n’est écrite : la LETTRE ne dit que le nombre d’emplacements', () => {
+    // Les compétences viennent des RUNES posées par le joueur (skillRunes.ts).
+    for (const c of CHAMPIONS) {
+      expect(Object.keys(c).sort(), c.name).toEqual(
+        ['emoji', 'form', 'grade', 'id', 'lineage', 'name'].sort(),
+      );
+      expect(SKILL_SLOTS[c.grade]).toBeGreaterThan(0);
     }
-  });
-
-  it('⚠️ MÊME LA PLUS BASSE RARETÉ PORTE UNE SIGNATURE — dans un gacha, même un 1★ a un kit', () => {
-    expect(championsOf('A').length).toBeGreaterThan(0);
-    for (const c of championsOf('A')) expect(c.skills.length).toBeGreaterThan(0);
-  });
-
-  it('aucune signature en double chez un même champion', () => {
-    for (const c of CHAMPIONS) expect(new Set(c.skills).size, c.name).toBe(c.skills.length);
-  });
-
-  it('les signatures sont celles que le COMBAT sait déjà jouer — rien d’inventé', () => {
-    for (const c of CHAMPIONS)
-      for (const s of c.skills) expect(ADV_SIGNATURE_LABEL[s], `${c.name}: ${s}`).toBeTruthy();
-  });
-
-  it('les rôles sont ceux que les CARAVANES appliquent déjà', () => {
-    for (const c of CHAMPIONS) if (c.role) expect(ADV_ROLE_LABEL[c.role]).toBeTruthy();
+    expect(SKILL_SLOTS.X).toBeGreaterThan(SKILL_SLOTS.S);
+    expect(SKILL_SLOTS.S).toBeGreaterThan(SKILL_SLOTS.A);
   });
 });
 
@@ -131,44 +95,5 @@ describe('✨ l’Éveil', () => {
     // 5★ C0. Les deux bornes vivent dans `gacha.test.ts`, qui les compare aux VRAIS
     // budgets ; ici on ne garde que le garde-fou grossier.
     expect(awakenMult(AWAKEN.max)).toBeLessThan(1.6);
-  });
-
-  it('⚠️ CHAQUE CRAN ÉCRIT PORTE SUR UNE SIGNATURE QUE LE CHAMPION A VRAIMENT', () => {
-    // Offrir un niveau à une compétence qu'il ne possède pas ne se verrait nulle part.
-    for (const c of CHAMPIONS)
-      for (const a of c.awaken) expect(c.skills, `${c.name}: ${a.skill}`).toContain(a.skill);
-  });
-
-  it('1 ou 2 crans écrits par champion — le reste est le barème commun', () => {
-    for (const c of CHAMPIONS) {
-      expect(c.awaken.length, c.name).toBeGreaterThanOrEqual(1);
-      expect(c.awaken.length, c.name).toBeLessThanOrEqual(2);
-      for (const a of c.awaken) {
-        // ⚠️ `at: 0` = une compétence de niveau 2 DÈS LE TIRAGE — réservé à l'ADAMANTIUM.
-        expect(a.at, c.name).toBeGreaterThanOrEqual(c.grade === 'X' ? 0 : 1);
-        expect(a.at, c.name).toBeLessThanOrEqual(AWAKEN.max);
-      }
-      // Deux crans ne tombent jamais au même rang.
-      expect(new Set(c.awaken.map((a) => a.at)).size, c.name).toBe(c.awaken.length);
-    }
-  });
-
-  it('🖤 CHAQUE ADAMANTIUM A UNE COMPÉTENCE DE NIVEAU 2 DÈS LE TIRAGE', () => {
-    for (const c of championsOf('X'))
-      expect(Math.max(...c.skills.map((s) => championSkillLevel(c, s, 0))), c.name).toBe(2);
-    // …et ce privilège ne fuit pas vers les autres lettres.
-    for (const c of CHAMPIONS.filter((x) => x.grade !== 'X'))
-      for (const s of c.skills) expect(championSkillLevel(c, s, 0), c.name).toBe(1);
-  });
-
-  it('un cran écrit MONTE le niveau de sa signature, et seulement à partir de son rang', () => {
-    const c = CHAMPION_BY_ID.get('miren')!; // crit au cran 2, execute au cran 5
-    expect(championSkillLevel(c, 'crit_pct', 0)).toBe(1);
-    expect(championSkillLevel(c, 'crit_pct', 1)).toBe(1);
-    expect(championSkillLevel(c, 'crit_pct', 2)).toBe(2);
-    expect(championSkillLevel(c, 'execute_pct', 4)).toBe(1);
-    expect(championSkillLevel(c, 'execute_pct', 5)).toBe(2);
-    // Une signature qu'il n'a pas reste à zéro.
-    expect(championSkillLevel(c, 'thorns_pct', 6)).toBe(0);
   });
 });

@@ -61,8 +61,7 @@
           <span v-if="zoomed.awaken > 0" class="cc-zoom-awk">✨ Éveil {{ zoomed.awaken }}</span>
         </div>
         <ul class="cc-zoom-skills">
-          <li v-if="zoomed.champ.role">{{ ADV_ROLE_LABEL[zoomed.champ.role] }}</li>
-          <li v-for="k in zoomed.champ.skills" :key="k">{{ ADV_SIGNATURE_LABEL[k] ?? k }}</li>
+          <li>🔮 {{ SKILL_SLOTS[zoomed.champ.grade] }} emplacements de compétence — à remplir de runes</li>
         </ul>
       </q-card>
     </q-dialog>
@@ -74,7 +73,8 @@ import { computed, ref } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { championGroups } from '@/lib/codex';
 import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
-import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, type Adventurer } from '@/lib/adventurers';
+import { type Adventurer } from '@/lib/adventurers';
+import { SKILL_SLOTS } from '@/lib/skillRunes';
 
 const props = defineProps<{ advs: Adventurer[] }>();
 

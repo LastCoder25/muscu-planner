@@ -15,6 +15,7 @@
  * failles, sièges, puits d'or, débit de mana) avant d'être lues par le jeu.
  */
 
+import { mulberry32 } from './combat';
 import type { PoiType } from './expedition';
 import {
   effectAsAggregate,
@@ -409,4 +410,84 @@ export function runeCombatEffects(skills: readonly ChampSkill[]): AggregatedEffe
     return t ? [effectAsAggregate(t, skillValue(s.id, s.level))] : [];
   });
   return list.length ? mergeEffects(...list) : emptyEffects();
+}
+
+// ── 📏 LE BUILD MOYEN DES CHAMPIONS DE RÉFÉRENCE (étape 3) ───────────────────────────────
+//
+// Toute la calibration des combats (routes, camps, failles) se dimensionne sur des champions
+// de RÉFÉRENCE. Ils portent désormais le build de runes qu'un joueur régulier aurait à leur
+// rang, au rythme MESURÉ (§ 5 de la spec) : ~1 rune d'ascension par rang, plus
+// `REF_BUILD.extBase + REF_BUILD.extPerRank × rang` runes de lieux.
+
+export const REF_BUILD = {
+  /** Runes de LIEUX par champion et par rang (mesuré : ~0,8 au rang 1 → ~2,5 au rang 9). */
+  extBase: 0.7,
+  extPerRank: 0.2,
+  /** Mélange des difficultés des lieux faits : dessous / ton rang / au-dessus. */
+  gapBelow: 0.25,
+  gapAbove: 0.15,
+  /** Builds simulés pour trouver le build MÉDIAN. */
+  samples: 200,
+} as const;
+
+/** La politique du joueur de référence : si les emplacements sont pleins, il remplace la
+ *  compétence du cran le plus bas quand la nouvelle est d'un cran strictement plus haut,
+ *  sinon il refuse (la rune est perdue). */
+function giveRune(rng: () => number, sk: ChampSkill[], tier: RuneTier, slots: number): ChampSkill[] {
+  const id = rollRuneSkill(rng, tier, sk);
+  if (!id) return sk;
+  const o = applyRuneSkill(sk, id, slots);
+  if (o.kind !== 'full') return o.skills;
+  const rank = (s: ChampSkill) => RUNE_TIERS.indexOf(SKILLS[s.id].tier);
+  let worst = 0;
+  for (let i = 1; i < sk.length; i++) if (rank(sk[i]!) < rank(sk[worst]!)) worst = i;
+  return RUNE_TIERS.indexOf(tier) > rank(sk[worst]!) ? replaceSkill(sk, id, worst) : sk;
+}
+
+/** Un build simulé : les runes reçues du rang 0 au rang `rankIndex`. */
+function simulateBuild(rng: () => number, rankIndex: number, slots: number): ChampSkill[] {
+  let sk: ChampSkill[] = [];
+  for (let k = 0; k <= rankIndex; k++) {
+    if (k >= 1) sk = giveRune(rng, sk, rollAscensionRune(rng, k), slots);
+    let e = REF_BUILD.extBase + REF_BUILD.extPerRank * k;
+    while (e > 0) {
+      if (rng() < Math.min(1, e)) {
+        const x = rng();
+        const gap = x < REF_BUILD.gapBelow ? -1 : x < 1 - REF_BUILD.gapAbove ? 0 : 1;
+        const tier = pickTier(
+          rng,
+          placeRuneOdds({ place: 'camp', placeRankIndex: 3 + gap, playerRankIndex: 3 }),
+        );
+        sk = giveRune(rng, sk, tier, slots);
+      }
+      e -= 1;
+    }
+  }
+  return sk;
+}
+
+/** La « valeur de combat » d'un build : somme des valeurs de ses compétences de combat.
+ *  Sert seulement à choisir le build MÉDIAN. */
+function combatScore(sk: readonly ChampSkill[]): number {
+  return sk.reduce((n, s) => n + (SKILL_COMBAT_EFFECT[s.id] ? skillValue(s.id, s.level) : 0), 0);
+}
+
+const refBuildCache = new Map<string, ChampSkill[]>();
+
+/**
+ * Le build MÉDIAN d'un champion de référence au rang `rankIndex` (déterministe, mis en
+ * cache). `variant` distingue les trois champions d'une escorte de référence (graines
+ * différentes), pour qu'ils ne portent pas tous exactement la même chose.
+ */
+export function referenceRuneBuild(rankIndex: number, slots: number, variant = 0): ChampSkill[] {
+  const key = `${rankIndex}:${slots}:${variant}`;
+  const hit = refBuildCache.get(key);
+  if (hit) return hit.map((s) => ({ ...s }));
+  const rng = mulberry32(1 + rankIndex * 131 + slots * 17 + variant * 7919);
+  const builds = Array.from({ length: REF_BUILD.samples }, () =>
+    simulateBuild(rng, rankIndex, slots),
+  ).sort((a, b) => combatScore(a) - combatScore(b));
+  const med = builds[Math.floor(builds.length / 2)]!;
+  refBuildCache.set(key, med);
+  return med.map((s) => ({ ...s }));
 }

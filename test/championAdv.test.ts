@@ -21,7 +21,7 @@ import {
   advUnavailableReason,
   engageCap,
   advTitle,
-  championSkillLevel,
+  advRuneSkills,
   championStats,
   type Adventurer,
 } from '@/lib/adventurers';
@@ -93,22 +93,14 @@ describe('🏅 un champion à la place d’un aventurier', () => {
     expect(advRank(asAdv(primordial, 100)).rankIndex).toBe(RARITY_RANK.primordial);
   });
 
-  it('✨ SES SIGNATURES PORTENT LEUR NIVEAU D’ÉVEIL — sans système neuf', () => {
-    const c = CHAMPION_BY_ID.get('miren')!; // crit au cran 2, execute au cran 5
-    const niveauDe = (copies: number, s: string) =>
-      advSignatureLevels(asAdv(c, 60, copies)).find((x) => x.what === s)?.level ?? 0;
-    expect(niveauDe(1, 'crit_pct')).toBe(1);
-    expect(niveauDe(3, 'crit_pct')).toBe(2); // 3 copies = Éveil 2
-    expect(niveauDe(3, 'execute_pct')).toBe(1);
-    expect(niveauDe(6, 'execute_pct')).toBe(2); // 6 copies = Éveil 5
-    // …et le comptage d'occurrences reste la SEULE mécanique : le niveau se lit sur la liste.
-    for (const copies of [1, 4, 7]) {
-      const a = asAdv(c, 60, copies);
-      for (const s of c.skills)
-        expect(advSignatures(a).filter((x) => x === s)).toHaveLength(
-          championSkillLevel(c, s, advAwaken(a)),
-        );
-    }
+  it('🔮 SES COMPÉTENCES SONT SES RUNES — l’Éveil n’en écrit plus aucune', () => {
+    const c = CHAMPIONS[0]!;
+    // Un champion sans rune n'a aucune signature, quel que soit son Éveil.
+    for (const copies of [1, 4, 7]) expect(advSignatureLevels(asAdv(c, 60, copies))).toEqual([]);
+    // Une rune de combat posée devient une signature du niveau de la rune.
+    const a = { ...asAdv(c, 60), skills: [{ id: 'execute' as const, level: 3 }] };
+    expect(advSignatures(a)).toEqual([]);
+    expect(advRuneSkills(a)).toEqual([{ id: 'execute', level: 3 }]);
   });
 
   it('porte 0 ou 1 RÔLE de convoi — jamais une pile de rôles cumulés', () => {
@@ -175,20 +167,11 @@ describe('⚠️ LES DEUX TROUS QUE LA MUTATION A RÉVÉLÉS', () => {
     }
   });
 
-  it('⚠️ LA BRANCHE « SANS RÔLE » EST INATTEIGNABLE AUJOURD’HUI — deux règles se contredisent', () => {
-    // `Champion.role` est typé `AdvRole | null` et la v0.939 écrit que « `null` est un
-    // choix, pas un oubli ». Mais la GRILLE l'interdit : `champions.test.ts` exige 4 rôles
-    // DISTINCTS sur les 4 champions de chaque rareté, donc aucun `null` n'est possible.
-    // ⚠️ C'est pour ça que la mutation « il en porte un quand même » survivait — et c'est
-    // pour ça que mon premier test était CREUX : il fabriquait un champion hors registre,
-    // donc `advChampion` rendait `undefined` et l'on mesurait le repli sur le chemin, pas
-    // la branche. On épingle donc ce qui est VRAI et vérifiable : tout champion du roster
-    // porte exactement un rôle. La branche `null` reste une porte ouverte pour un roster
-    // élargi (la règle d'extension ajoute en HAUT, où une rareté peut dépasser 4 places).
-    for (const c of CHAMPIONS) {
-      expect(c.role, c.name).not.toBeNull();
-      expect(advRoles(asAdv(c, 60)), c.name).toEqual([c.role]);
-    }
+  it('🔮 un rôle de convoi vient d’une RUNE, répété selon son niveau', () => {
+    const c = CHAMPIONS[0]!;
+    expect(advRoles(asAdv(c, 60))).toEqual([]);
+    const a = { ...asAdv(c, 60), skills: [{ id: 'haul' as const, level: 2 }] };
+    expect(advRoles(a)).toEqual(['haul', 'haul']);
   });
 });
 
@@ -313,7 +296,7 @@ describe('🏅 LA LETTRE ET LE RANG — ce qu’on a TIRÉ, et ce qu’il peut P
 });
 
 describe('✨ ce que veut dire « Éveil » (awakenExplain)', () => {
-  const avecCrans = CHAMPIONS.find((c) => c.awaken.length > 0)!;
+  const avecCrans = CHAMPIONS[0]!;
 
   it('annonce le bonus ACTUEL et celui du prochain doublon, calculés par le barème', () => {
     const e = awakenExplain(asAdv(avecCrans, 10, 3));
@@ -322,14 +305,10 @@ describe('✨ ce que veut dire « Éveil » (awakenExplain)', () => {
     expect(e.intro).toContain('doublons');
   });
 
-  it('marque les crans écrits comme acquis ou à venir', () => {
-    const premier = Math.min(...avecCrans.awaken.map((s) => s.at));
-    const avant = awakenExplain(asAdv(avecCrans, 10, premier)); // Éveil premier−1
-    const apres = awakenExplain(asAdv(avecCrans, 10, premier + 1)); // Éveil premier
-    const ligne = (l: string[]) => l.find((x) => x.includes(`Éveil ${premier} :`))!;
-    expect(ligne(avant.lines).startsWith('🔒')).toBe(true);
-    expect(ligne(apres.lines).startsWith('✅')).toBe(true);
-    expect(avant.lines).toHaveLength(avecCrans.awaken.length + 2);
+  it('🔮 dit qu’un cran d’Éveil offre une rune de compétence', () => {
+    const e = awakenExplain(asAdv(avecCrans, 10, 2));
+    expect(e.lines.some((l) => l.includes('rune de compétence'))).toBe(true);
+    expect(e.lines).toHaveLength(3);
   });
 
   it('au maximum, dit que les doublons se convertissent', () => {

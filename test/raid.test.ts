@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import type { ChampSkill, SkillId } from '@/lib/skillRunes';
 import { buildingUpgradeCost } from '@/lib/buildings';
 import {
   rollRaid,
@@ -2257,8 +2258,9 @@ describe('🛡️ LE RENFORT DE SIÈGE D’UN DÉFENSEUR (v0.801, recalibré v0.
 
 describe('⚔️ LES COMPÉTENCES D’UN CHAMPION COMPTENT AU SIÈGE', () => {
   const nus = { now: 0, kennelLevel: 40, familiars: [], talents: [], advGear: [] };
-  const champ = (id: string, level = 40, copies = 1): Adventurer =>
+  const champ = (id: string, level = 40, copies = 1, skills: ChampSkill[] = []): Adventurer =>
     ({
+      skills,
       id: `c-${id}`,
       name: id,
       seed: 1,
@@ -2278,39 +2280,28 @@ describe('⚔️ LES COMPÉTENCES D’UN CHAMPION COMPTENT AU SIÈGE', () => {
       damage: Math.round(c.damage * (c.strikes ?? 1) * RAID.guardSiegeK),
     };
   };
-  const CONDITIONNELLES = [
-    'crit_pct',
-    'execute_pct',
-    'rage_pct',
-    'momentum_pct',
-    'lifesteal_pct',
-    'thorns_pct',
-  ];
+  // 🔮 Les compétences sont des RUNES posées sur le champion.
+  const CONDITIONNELLES: SkillId[] = ['crit', 'execute', 'rage', 'momentum', 'lifesteal', 'thorns'];
+  const S0 = CHAMPIONS[0]!.id;
 
   // ⚠️ LE DÉFAUT D'ORIGINE : critique, exécution, rage, élan, épines et vol de vie ne
-  // valaient RIEN au siège. Chaque champion qui en porte une doit défendre mieux avec.
-  it.each(
-    CHAMPIONS.filter((c) => c.skills.some((s) => CONDITIONNELLES.includes(s))).map((c) => c.id),
-  )('%s défend mieux avec ses compétences', (id) => {
-    const a = champ(id);
+  // valaient RIEN au siège. Un champion qui en porte une doit défendre mieux avec.
+  it.each(CONDITIONNELLES)('une rune %s fait mieux défendre', (sk) => {
+    const a = champ(S0, 40, 1, [{ id: sk, level: 3 }]);
     const [g] = guardUnits(40, [a], 99, nus);
     const s = sansComp(a);
     expect(g!.damage * g!.pv).toBeGreaterThan(s.damage * s.pv);
   });
 
   it('une compétence de SURVIE renforce les PV de l’unité, pas seulement ses dégâts', () => {
-    const tank = CHAMPIONS.filter((c) => c.skills.includes('max_pv_pct'));
-    expect(tank.length).toBeGreaterThan(0);
-    for (const c of tank) {
-      const a = champ(c.id);
-      const [g] = guardUnits(40, [a], 99, nus);
-      expect(g!.pv).toBeGreaterThan(sansComp(a).pv);
-    }
+    const a = champ(S0, 40, 1, [{ id: 'pv', level: 3 }]);
+    const [g] = guardUnits(40, [a], 99, nus);
+    expect(g!.pv).toBeGreaterThan(sansComp(a).pv);
   });
 
   it('les multiplicateurs sont ceux de l’arbitre du jeu (offenseOf / survivalOf)', () => {
-    for (const c of CHAMPIONS) {
-      const a = champ(c.id);
+    for (const sk of [...CONDITIONNELLES, 'pv', 'damage', 'reduction'] as SkillId[]) {
+      const a = champ(S0, 40, 1, [{ id: sk, level: 2 }]);
       const avec = escortCombatant([a], a.name);
       const sans = escortCombatant([a], a.name, {}, false);
       const k = skillMults(a);
@@ -2321,14 +2312,10 @@ describe('⚔️ LES COMPÉTENCES D’UN CHAMPION COMPTENT AU SIÈGE', () => {
     }
   });
 
-  it('l’Éveil d’une compétence se sent au siège', () => {
-    const c = CHAMPIONS.find((x) => x.awaken.length > 0)!;
-    const eveil = c.awaken.reduce((m, x) => Math.max(m, x.at), 0);
-    // On compare les MULTIPLICATEURS : les stats montent aussi avec l'Éveil, et c'est la
-    // compétence montée qu'on veut isoler.
-    const k0 = skillMults(champ(c.id, 40, 1));
-    const k1 = skillMults(champ(c.id, 40, 1 + eveil));
-    expect(k1.damage * k1.pv).toBeGreaterThan(k0.damage * k0.pv);
+  it('une rune montée de niveau se sent au siège', () => {
+    const k1 = skillMults(champ(S0, 40, 1, [{ id: 'execute', level: 1 }]));
+    const k4 = skillMults(champ(S0, 40, 1, [{ id: 'execute', level: 4 }]));
+    expect(k4.damage * k4.pv).toBeGreaterThan(k1.damage * k1.pv);
   });
 
   it('un aventurier SANS compétence n’a aucun multiplicateur', () => {
