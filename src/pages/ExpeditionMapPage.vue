@@ -297,7 +297,34 @@
         <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
              revient. Rien à envoyer : on récolte, ou on rappelle. -->
         <div v-if="liveControl?.owner === 'player'" class="ctl-panel">
-          <p class="ctl-line">🏰 <b>Tenue</b> par {{ controlGarrison.join(', ') || 'personne' }}</p>
+          <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
+               Toucher un champion le sélectionne pour le RAMENER. -->
+          <p class="ctl-line">
+            🏰 <b>Garnison {{ controlMembers.length }}/{{ CONTROL.maxGarrison }}</b>
+            <span class="ctl-dim"> · touche un champion pour le ramener</span>
+          </p>
+          <div class="car-pick">
+            <AdvPickTile
+              v-for="m in controlMembers"
+              :key="m.adv.id"
+              :adv="m.adv"
+              :on="ctlRecallSel.includes(m.adv.id)"
+              :reason="m.arriveIn > 0 ? `🧭 en route · ${formatDuration(m.arriveIn)}` : null"
+              @toggle="toggleRecall(m.adv.id)"
+            />
+          </div>
+          <button
+            v-if="ctlRecallSel.length"
+            type="button"
+            class="ctl-recall ctl-back"
+            :disabled="ctlBusy"
+            @click="releaseCtl"
+          >
+            ↩️ Ramener {{ ctlRecallSel.length }} champion{{ ctlRecallSel.length > 1 ? 's' : '' }}
+            <template v-if="ctlRecallSel.length >= controlMembers.length">
+              — la mine retourne à l’ennemi</template
+            >
+          </button>
           <p class="ctl-line">
             ⛏️ <b>{{ controlRate.toLocaleString('fr-FR') }}</b> 🪙/h · réserve
             <b>{{ controlGold.toLocaleString('fr-FR') }}</b> 🪙
@@ -312,8 +339,39 @@
               Récolter {{ controlGold.toLocaleString('fr-FR') }} 🪙
             </button>
           </div>
+          <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
+               puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
+          <template v-if="controlFree > 0">
+            <p class="ctl-line ctl-reinf">
+              ➕
+              <b
+                >{{ controlFree }} place{{ controlFree > 1 ? 's' : '' }} libre{{
+                  controlFree > 1 ? 's' : ''
+                }}</b
+              >
+              — envoie un renfort
+              <span v-if="ctlReinfSel.length" class="ctl-dim">
+                · arrivée dans {{ formatDurationMin(reinforceLegMin) }}</span
+              >
+            </p>
+            <div v-if="freeSorted.length" class="car-pick">
+              <AdvPickTile
+                v-for="a in freeSorted"
+                :key="a.id"
+                :adv="a"
+                :on="ctlReinfSel.includes(a.id)"
+                @toggle="toggleReinf(a.id)"
+              />
+            </div>
+            <p v-else class="ctl-line ctl-dim">Aucun champion disponible pour l’instant.</p>
+            <div v-if="ctlReinfSel.length" class="send-bar">
+              <button class="sh-send" :disabled="ctlBusy" @click="reinforceCtl">
+                ➕ Envoyer {{ ctlReinfSel.length }} en renfort
+              </button>
+            </div>
+          </template>
           <button type="button" class="ctl-recall" :disabled="ctlBusy" @click="recallCtl">
-            Rappeler la garnison — la mine retourne à l’ennemi
+            Rappeler toute la garnison — la mine retourne à l’ennemi
           </button>
         </div>
         <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur cette mine.</p>
@@ -576,7 +634,7 @@ import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import { poiRank } from '@/lib/poiRank';
-import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL } from '@/lib/party';
+import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL, partyLegMin } from '@/lib/party';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
@@ -641,7 +699,8 @@ import {
   sortByGradeThenRank,
 } from '@/lib/adventurers';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
-import { controlGoldPerHour, controlStock } from '@/lib/controlPoints';
+import { CONTROL, controlFreeSeats, controlGoldPerHour, controlStock } from '@/lib/controlPoints';
+import { advGearRoles } from '@/lib/advGear';
 import {
   RIFT,
   riftClearMana,
@@ -1156,10 +1215,79 @@ const livePoi = computed(() =>
     ? (char.row?.expedition_map?.pois.find((p) => p.id === selected.value!.id) ?? null)
     : null,
 );
-const controlGarrison = computed(() => {
-  const ids = new Set(liveControl.value?.garrison ?? []);
-  return char.advList.filter((a) => ids.has(a.id)).map((a) => a.name);
+/** 🏰 Qui occupe le point : la garnison (arrivée), puis les renforts en route. */
+const controlMembers = computed(() => {
+  const c = liveControl.value;
+  if (!c) return [];
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  const rows = [
+    ...c.garrison.map((id) => ({ id, arriveIn: 0 })),
+    ...(c.reinforcing ?? []).map((r) => ({ id: r.id, arriveIn: Math.max(0, r.at - now.value) })),
+  ];
+  return rows.flatMap((r) => {
+    const adv = byId.get(r.id);
+    return adv ? [{ adv, arriveIn: r.arriveIn }] : [];
+  });
 });
+const controlFree = computed(() => controlFreeSeats(liveControl.value));
+/** Les sélections de la fiche : qui ramener, qui envoyer en renfort. */
+const ctlRecallSel = ref<string[]>([]);
+const ctlReinfSel = ref<string[]>([]);
+watch(
+  () => selected.value?.id,
+  () => {
+    ctlRecallSel.value = [];
+    ctlReinfSel.value = [];
+  },
+);
+function toggleRecall(id: string) {
+  const s = ctlRecallSel.value;
+  ctlRecallSel.value = s.includes(id) ? s.filter((x) => x !== id) : [...s, id];
+}
+/** ⚠️ Jamais plus que les places libres : la tuile de trop ne répond pas. */
+function toggleReinf(id: string) {
+  const s = ctlReinfSel.value;
+  if (s.includes(id)) ctlReinfSel.value = s.filter((x) => x !== id);
+  else if (s.length < controlFree.value) ctlReinfSel.value = [...s, id];
+}
+/** Le trajet des renforts choisis — la MÊME règle que le store (`partyLegMin`). */
+const reinforceLegMin = computed(() => {
+  const p = livePoi.value;
+  const escort = char.advList.filter((a) => ctlReinfSel.value.includes(a.id));
+  if (!p || !escort.length) return 0;
+  return partyLegMin(p, escort, {
+    hero: false,
+    travelMult: travelMult.value,
+    gearSpeed: advGearRoles(escort, char.advGearStock).speed,
+  });
+});
+async function releaseCtl() {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  const ids = ctlRecallSel.value;
+  if (!uid || !p || !ids.length || ctlBusy.value) return;
+  if (ids.length >= controlMembers.value.length) return recallCtl();
+  ctlBusy.value = true;
+  try {
+    await char.releaseControlChampions(uid, p.id, ids, Date.now(), heroLevel.value);
+    ctlRecallSel.value = [];
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+async function reinforceCtl() {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || !ctlReinfSel.value.length || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.reinforceControlPoint(uid, p.id, ctlReinfSel.value, Date.now());
+    if (why) $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
+    else ctlReinfSel.value = [];
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 const controlRate = computed(() =>
   livePoi.value && liveControl.value
     ? Math.round(
@@ -2091,6 +2219,13 @@ onUnmounted(() => {
 }
 .ctl-warn {
   color: var(--d3, #ffb23f);
+}
+.ctl-reinf {
+  margin-top: 10px;
+}
+.ctl-back {
+  color: var(--text);
+  border-color: color-mix(in srgb, #b57bff 55%, var(--line));
 }
 .ctl-recall {
   width: 100%;

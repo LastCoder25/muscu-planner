@@ -98,6 +98,14 @@ export interface ControlState {
   retakes: number;
   /** Une équipe marche dessus : on ne l'attaque pas deux fois. */
   assault?: boolean;
+  /** 🏰 Renforts en ROUTE vers le point tenu : ils rejoignent la garnison à `at`. Ils
+   *  occupent déjà une place (jamais plus de 3 champions au total), mais ne produisent ni
+   *  ne combattent avant d'être arrivés. */
+  reinforcing?: { id: string; at: number }[];
+  /** ⛏️ L'or déjà sorti de terre quand l'effectif a changé (renfort arrivé, champion
+   *  ramené) : la réserve repart de là, au NOUVEAU débit — sans quoi le passé serait
+   *  recalculé au mauvais débit. */
+  banked?: number;
 }
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et

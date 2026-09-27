@@ -232,6 +232,11 @@ import {
   loseControl,
   markAssault,
   retakeForce,
+  reinforceBlocker,
+  reinforceControl,
+  releaseFromControl,
+  settleReinforcements,
+  REINFORCE_BLOCK_LABEL,
 } from '@/lib/controlPoints';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
@@ -3195,9 +3200,16 @@ export const useCharacterStore = defineStore('character', () => {
     playerLevel: number,
   ): Promise<ExpeditionMessage[]> {
     const cur = row.value;
-    const due = dueRetakes(cur?.expedition_map ?? null, now);
-    if (!cur || !due.length) return [];
-    let map = cur.expedition_map!;
+    if (!cur?.expedition_map) return [];
+    // 🏰 Les renforts ARRIVÉS rejoignent d'abord leur garnison (ceux arrivés avant l'attaque
+    // combattent avec elle, les autres non).
+    const settled = settleReinforcements(cur.expedition_map, now, playerLevel);
+    const due = dueRetakes(settled, now);
+    if (!due.length) {
+      if (settled !== cur.expedition_map) await persist(userId, { expedition_map: settled });
+      return [];
+    }
+    let map = settled;
     let advs = advList.value;
     const msgs: ExpeditionMessage[] = [];
     for (const p of due) {
@@ -3255,7 +3267,9 @@ export const useCharacterStore = defineStore('character', () => {
       msgs.push(msg);
       map = held ? holdControl(map, p.id, at) : loseControl(map, p.id, playerLevel);
       if (held) map = collectControl(map, p.id, at, playerLevel).map;
-      advs = advs.map((a) => (!held && ids.has(a.id) ? { ...a, posted: undefined } : a));
+      // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
+      // route (ils font demi-tour ; seule la garnison, qui a combattu, part à l'infirmerie).
+      advs = advs.map((a) => (!held && a.posted === p.id ? { ...a, posted: undefined } : a));
     }
     const box = boxWith(cur, msgs, MESSAGES_CAP);
     const x = reportXp(cur, box, msgs);
@@ -3319,6 +3333,64 @@ export const useCharacterStore = defineStore('character', () => {
     if (c.gold > 0) goldFx.gain(c.gold);
   }
 
+  /** 🏰 Ramène UNE PARTIE de la garnison (ou des renforts en route) : ils redeviennent
+   *  disponibles, l'or déjà produit reste en réserve. Ramener le DERNIER revient au rappel
+   *  complet (`recallControl`) : le point retourne à l'ennemi. */
+  async function releaseControlChampions(
+    userId: string,
+    id: string,
+    ids: readonly string[],
+    now: number,
+    playerLevel: number,
+  ): Promise<void> {
+    const cur = row.value;
+    if (!cur?.expedition_map || !ids.length) return;
+    const r = releaseFromControl(cur.expedition_map, id, ids, now, playerLevel);
+    if (r.emptied) return recallControl(userId, id, now, playerLevel);
+    const out = new Set(ids);
+    await persist(userId, {
+      expedition_map: r.map,
+      adventurers: advList.value.map((a) =>
+        out.has(a.id) && a.posted === id ? { ...a, posted: undefined } : a,
+      ),
+    });
+  }
+
+  /** 🏰 Envoie des champions en RENFORT sur un point tenu : ils prennent leur place tout de
+   *  suite, marchent (le trajet d'une équipe, sans le héros) et rejoignent la garnison à leur
+   *  arrivée. Rend la RAISON d'un refus, `null` si partis. */
+  async function reinforceControlPoint(
+    userId: string,
+    id: string,
+    ids: readonly string[],
+    now: number,
+  ): Promise<string | null> {
+    const cur = row.value;
+    const poi = cur?.expedition_map?.pois.find((p) => p.id === id);
+    if (!cur || !poi) return 'la carte n’est pas chargée';
+    if (new Set(ids).size !== ids.length) return 'un champion est choisi deux fois';
+    const block = reinforceBlocker(poi.control, ids.length);
+    if (block) return REINFORCE_BLOCK_LABEL[block];
+    const escort = ids
+      .map((x) => advList.value.find((a) => a.id === x))
+      .filter((a): a is Adventurer => !!a && advAvailable(a, now));
+    if (escort.length !== ids.length) return 'un champion choisi n’est plus disponible';
+    const leg = partyLegMin(poi, escort, {
+      hero: false,
+      travelMult: travelTimeMult(cur.buildings),
+      gearSpeed: advGearRoles(escort, escortKitOf(cur).advGear).speed,
+    });
+    const at = now + leg * 60_000;
+    const sent = new Set(ids);
+    await persist(userId, {
+      expedition_map: reinforceControl(cur.expedition_map!, id, ids, at),
+      adventurers: advList.value.map((a) =>
+        sent.has(a.id) ? { ...a, posted: id, busyUntil: at } : a,
+      ),
+    });
+    return null;
+  }
+
   return {
     settleGearRefonte,
     claimWeeklyQuests,
@@ -3378,6 +3450,8 @@ export const useCharacterStore = defineStore('character', () => {
     controlTick,
     collectControlGold,
     recallControl,
+    releaseControlChampions,
+    reinforceControlPoint,
     applyExpedition,
     equip,
     sellLoadout,

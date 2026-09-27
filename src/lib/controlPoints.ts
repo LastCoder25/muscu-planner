@@ -210,7 +210,12 @@ export function controlStock(p: Poi, now: number, playerLevel: number): number {
   if (!c || c.owner !== 'player' || c.collectedAt === undefined) return 0;
   const until = Math.min(now, c.attackAt ?? now);
   const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
-  return Math.floor((controlGoldPerHour(p, c.garrison.length, playerLevel) * ms) / 3600_000);
+  const rate = controlGoldPerHour(p, c.garrison.length, playerLevel);
+  // ⛏️ Ce qui était déjà sorti de terre quand l'effectif a changé (`banked`), plus ce que
+  // l'effectif ACTUEL a produit depuis — la réserve reste plafonnée à 24 h de production.
+  const banked = c.banked ?? 0;
+  const cap = Math.max(banked, (rate * CONTROL.storageMs) / 3600_000);
+  return Math.floor(Math.min(cap, banked + (rate * ms) / 3600_000));
 }
 
 /** ⛏️ Récolte : l'or part, la réserve repart de l'instant de la récolte. */
@@ -224,9 +229,118 @@ export function collectControl(
   const gold = p ? controlStock(p, now, playerLevel) : 0;
   if (!p || gold <= 0) return { map, gold: 0 };
   return {
-    map: withControl(map, id, (q) => ({ ...q, control: { ...q.control!, collectedAt: now } })),
+    map: withControl(map, id, (q) => ({
+      ...q,
+      control: { ...q.control!, collectedAt: now, banked: 0 },
+    })),
     gold,
   };
+}
+
+/** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
+ *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
+function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
+  return { ...p.control!, banked: controlStock(p, at, playerLevel), collectedAt: at };
+}
+
+/** 🏰 Les places OCCUPÉES d'un point : la garnison et les renforts en route. */
+export function controlSeats(c: ControlState | undefined | null): number {
+  return c ? c.garrison.length + (c.reinforcing?.length ?? 0) : 0;
+}
+/** 🏰 Places libres pour un renfort (0 si le point n'est pas à nous). */
+export function controlFreeSeats(c: ControlState | undefined | null): number {
+  if (!c || c.owner !== 'player') return 0;
+  return Math.max(0, CONTROL.maxGarrison - controlSeats(c));
+}
+
+/** 🏰 Pourquoi un renfort ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
+ *  raison, le store refuse avec elle. */
+export type ReinforceBlock = 'notHeld' | 'empty' | 'full';
+export function reinforceBlocker(
+  c: ControlState | undefined | null,
+  count: number,
+): ReinforceBlock | null {
+  if (!c || c.owner !== 'player') return 'notHeld';
+  if (count <= 0) return 'empty';
+  if (count > controlFreeSeats(c)) return 'full';
+  return null;
+}
+export const REINFORCE_BLOCK_LABEL: Record<ReinforceBlock, string> = {
+  notHeld: 'ce point n’est pas à toi',
+  empty: 'choisis au moins un champion',
+  full: 'plus assez de places : 3 champions au plus sur un point',
+};
+
+/** 🏰 Des renforts partent : ils prennent leur place tout de suite et rejoignent la
+ *  garnison à `at` (leur arrivée). */
+export function reinforceControl(
+  map: ExpeditionMap,
+  id: string,
+  ids: readonly string[],
+  at: number,
+): ExpeditionMap {
+  return withControl(map, id, (p) => ({
+    ...p,
+    control: {
+      ...p.control!,
+      reinforcing: [...(p.control!.reinforcing ?? []), ...ids.map((x) => ({ id: x, at }))],
+    },
+  }));
+}
+
+/** 🏰 Les renforts ARRIVÉS rejoignent la garnison. ⚠️ Seulement ceux arrivés AVANT la
+ *  prochaine attaque : une attaque due se résout d'abord avec la garnison qui était là, un
+ *  renfort encore en route ne combat pas. Rend la même carte si rien n'arrive. */
+export function settleReinforcements(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+): ExpeditionMap {
+  let out = map;
+  for (const p0 of map.pois) {
+    const c0 = p0.control;
+    if (c0?.owner !== 'player' || !c0.reinforcing?.length) continue;
+    const limit = Math.min(now, c0.attackAt ?? now);
+    const arrived = c0.reinforcing.filter((r) => r.at <= limit).sort((a, b) => a.at - b.at);
+    if (!arrived.length) continue;
+    let p = p0;
+    for (const r of arrived) {
+      const c = bankAt(p, r.at, playerLevel);
+      p = {
+        ...p,
+        control: {
+          ...c,
+          garrison: [...c.garrison, r.id].slice(0, CONTROL.maxGarrison),
+          reinforcing: (c.reinforcing ?? []).filter((x) => x.id !== r.id),
+        },
+      };
+    }
+    const done = p;
+    out = withControl(out, p0.id, () => done);
+  }
+  return out;
+}
+
+/** 🏰 Ramène des champions (garnison OU renforts en route). L'or déjà produit reste en
+ *  réserve. `emptied` : plus personne n'y est ni n'y va — le point retourne à l'ennemi
+ *  (c'est au store de le faire, réserve récoltée). */
+export function releaseFromControl(
+  map: ExpeditionMap,
+  id: string,
+  ids: readonly string[],
+  now: number,
+  playerLevel: number,
+): { map: ExpeditionMap; emptied: boolean } {
+  const out = new Set(ids);
+  let emptied = false;
+  const next = withControl(map, id, (p) => {
+    const c = bankAt(p, now, playerLevel);
+    const garrison = c.garrison.filter((x) => !out.has(x));
+    const reinforcing = (c.reinforcing ?? []).filter((r) => !out.has(r.id));
+    emptied = garrison.length + reinforcing.length === 0;
+    return { ...p, control: { ...c, garrison, reinforcing } };
+  });
+  return { map: next, emptied };
 }
 
 /** Les points tenus dont l'attaque est DUE à `now`, de la plus ancienne à la plus récente. */
