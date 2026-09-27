@@ -33,7 +33,7 @@ import {
 import { refFighter } from './proceduralContent';
 import { sinceEvent } from './sinceEvent';
 import { rollDrop, type AggregatedEffects, type Item } from './items';
-import { escortCombatant, escortGear, unitEffects, type EscortKit } from './caravan';
+import { escortCombatant, escortGear, mentorXpMult, unitEffects, type EscortKit } from './caravan';
 import { ADV_GEAR_SLOTS, canWearAdvGear, type AdvGear, type AdvGearSlot } from './advGear';
 import { beyondCap, buildingUpgradeCost } from './buildings';
 import {
@@ -2209,6 +2209,15 @@ export function siegeXp(adv: Adventurer, report: RaidReport): number {
   const base = RAID.xpBase + armyLevel * RAID.xpPerLevel;
   // Plancher à 1 : il s’est battu, il a appris quelque chose.
   return Math.max(1, Math.round(base * ratio ** 1.5 * (RAID.xpFloorShare + share)));
+}
+
+/** L'XP de chaque défenseur d'un siège, 🎓 Mentors compris — la MÊME règle qu'en mission
+ *  (`mentorXpMult`) : un Mentor au rempart fait apprendre tous ceux qui défendent avec lui. */
+export function siegeXpFor(defenders: Adventurer[], report: RaidReport): Record<string, number> {
+  const mult = mentorXpMult(defenders);
+  const out: Record<string, number> = {};
+  for (const a of defenders) out[a.id] = Math.max(1, Math.round(siegeXp(a, report) * mult));
+  return out;
 }
 
 /** Ce qu'un champion tire de ses pièces au rempart — la définition de la route. */

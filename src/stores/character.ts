@@ -127,7 +127,7 @@ import {
   siegeHurtIds,
   advHurtMs,
   advHealCost,
-  siegeXp,
+  siegeXpFor,
   guardUnits,
   rampartGuard,
   emptyBase,
@@ -2413,9 +2413,10 @@ export const useCharacterStore = defineStore('character', () => {
     if (defenders.length) {
       const ids = new Set(defenders.map((a) => a.id));
       const gains: Record<string, number> = {};
+      const siegeGains = siegeXpFor(defenders, report);
       patch.adventurers = advList.value.map((a) => {
         if (!ids.has(a.id)) return a;
-        const gain = siegeXp(a, report);
+        const gain = siegeGains[a.id] ?? 0;
         gains[a.id] = gain;
         const next = grantAdvXp(a, gain, pantheonLevel.value);
         return hurt.has(a.id)

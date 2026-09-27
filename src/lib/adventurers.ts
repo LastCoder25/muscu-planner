@@ -57,7 +57,7 @@ import { type CombatSkill } from './combat';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
-export type AdvRole = 'heal' | 'haul' | 'speed' | 'scout';
+export type AdvRole = 'heal' | 'haul' | 'speed' | 'scout' | 'mentor';
 
 /** Ce qu’un rôle fait CONCRÈTEMENT sur un convoi. ⚠️ Écrit ici, à côté du type, comme
  *  `ROLE_LABEL` pour la garnison : l’écran de promotion l’affiche, et c’est une des deux
@@ -73,6 +73,7 @@ const ADV_ROLE_INFO: Record<AdvRole, { emoji: string; what: string }> = {
   haul: { emoji: '🐫', what: 'Cargaison plus grosse' },
   speed: { emoji: '🧭', what: 'Trajets plus rapides' },
   scout: { emoji: '👁️', what: 'Repère les embuscades' },
+  mentor: { emoji: '🎓', what: 'L’équipe apprend plus vite' },
 };
 /** La phrase complète, DÉRIVÉE — deux tables auraient divergé au premier renommage. */
 export const ADV_ROLE_LABEL: Record<AdvRole, string> = Object.fromEntries(

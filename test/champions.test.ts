@@ -15,14 +15,18 @@ import {
 const SIG_PAR_LETTRE = { A: [1, 2], S: [2, 3], X: [3, 3] } as const;
 
 describe('la grille du roster', () => {
-  it('34 champions : 16 S et 16 A (chaque rôle quatre fois), 2 ADAMANTIUM', () => {
+  it('34 champions : 16 S et 16 A, 2 ADAMANTIUM — un 🎓 Mentor par lettre, pris sur les soigneurs', () => {
     expect(CHAMPIONS).toHaveLength(34);
     expect(championsOf('X')).toHaveLength(2);
+    const attendu: Record<AdvRole, number> = { heal: 3, haul: 4, speed: 4, scout: 4, mentor: 1 };
     for (const g of ['S', 'A'] as const) {
       const pool = championsOf(g);
       expect(pool, g).toHaveLength(16);
-      for (const role of ['heal', 'haul', 'speed', 'scout'] as AdvRole[])
-        expect(pool.filter((c) => c.role === role), `${g} · ${role}`).toHaveLength(4);
+      for (const role of Object.keys(attendu) as AdvRole[])
+        expect(
+          pool.filter((c) => c.role === role),
+          `${g} · ${role}`,
+        ).toHaveLength(attendu[role]);
     }
   });
 

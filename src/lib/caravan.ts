@@ -169,6 +169,12 @@ export const CARAVAN = {
    *  rôles restent comparables entre eux. */
   scoutPerRole: 0.12,
   scoutMax: 0.4,
+  /** 🎓 MENTOR (demandé par l'utilisateur : une compétence qui fait gagner de l'XP) : +15 %
+   *  d'XP pour TOUTE l'équipe par cran, plafond +30 %. Même forme que les autres rôles.
+   *  ⚠️ Il porte sur ce que chaque membre GAGNE (socle + abattus), jamais sur le plafond du
+   *  Panthéon : il accélère la montée, il ne la déplafonne pas. */
+  mentorPerRole: 0.15,
+  mentorMax: 0.3,
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
   /** Un convoi de plus tous les N niveaux de Comptoir. ⚠️ Calé sur le vivier : la Guilde
@@ -273,8 +279,7 @@ function offensePerRound(c: Combatant): number {
 /** Le niveau CUMULÉ d'un rôle sur l'escorte. ⚠️ La règle « deux fois la compétence = le
  *  niveau 2 » vit dans `adventurers.ts` : ici on ne fait que la lire, sinon l'écran et le
  *  calcul compteraient chacun à leur façon. */
-const countRole = (advs: Adventurer[], role: 'heal' | 'haul' | 'speed' | 'scout'): number =>
-  escortRoleLevel(advs, role);
+const countRole = (advs: Adventurer[], role: AdvRole): number => escortRoleLevel(advs, role);
 
 /** Effets apportés par les SIGNATURES de classe de l'escorte (strates hautes). */
 function escortEffects(advs: Adventurer[]): AggregatedEffects {
@@ -629,8 +634,8 @@ export function suggestEscort(
   if (!size) return [];
   // Une route dangereuse se prépare : éviter la rencontre vaut mieux que la gagner.
   const ordre: AdvRole[] = routePerilous(poi)
-    ? ['scout', 'haul', 'heal', 'speed']
-    : ['haul', 'speed', 'scout', 'heal'];
+    ? ['scout', 'haul', 'heal', 'speed', 'mentor']
+    : ['haul', 'speed', 'scout', 'heal', 'mentor'];
   const pool = [...available];
   const team: Adventurer[] = [];
   while (team.length < size && pool.length) {
@@ -856,6 +861,12 @@ const CATCH_UP_RANK = LEVELS_PER_RANK;
  * coûte 36. Elle reste donc le goulot dominant — « faire jouer ses champions » demeure ce qui
  * les monte, au lieu d'« attendre un sceau ».
  */
+/** 🎓 Le multiplicateur d'XP que les Mentors d'une équipe donnent à TOUS ses membres.
+ *  SOURCE UNIQUE des missions (`missionXpFor`) et du siège (`siegeXpFor`). */
+export function mentorXpMult(team: Adventurer[]): number {
+  return 1 + Math.min(CARAVAN.mentorMax, countRole(team, 'mentor') * CARAVAN.mentorPerRole);
+}
+
 export function catchUpMult(advLevel: number, pantheonLevel: number): number {
   const gap = Math.max(0, Math.max(1, pantheonLevel) - Math.max(1, advLevel));
   return 1 + gap / CATCH_UP_RANK;
@@ -882,16 +893,21 @@ export function missionXpFor(
   hero: boolean,
 ): Record<string, number> {
   const split = missionXpSplit(escort.length) * (hero ? 1 : SOLO_XP_MULT);
+  const mentor = mentorXpMult([...escort]);
   const xp: Record<string, number> = {};
   for (const a of escort) {
     // ⚠️ LE NIVEAU DE SA RÉSERVE, pour la prime ET pour le rendement décroissant : bloqué à
     // ★5, son niveau affiché ne bouge plus, et les deux liraient un retard qu'il n'a plus.
     const L = advBankedLevel(a, pantheonLevel);
-    xp[a.id] =
-      Math.max(
+    // 🎓 Le Mentor porte sur TOUT ce que le membre gagne (socle ET abattus).
+    xp[a.id] = Math.round(
+      (Math.max(
         1,
         Math.round(missionXp({ ...a, level: L }, poi, won) * split * catchUpMult(L, pantheonLevel)),
-      ) + Math.round(shares[a.id] ?? 0);
+      ) +
+        Math.round(shares[a.id] ?? 0)) *
+        mentor,
+    );
   }
   return xp;
 }
