@@ -223,6 +223,7 @@ import {
 import { resolveCamp } from '@/lib/camp';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
+import { overflowMessage } from '@/lib/overflowStage';
 import {
   GACHA,
   dailyFreeMana,
@@ -1852,6 +1853,9 @@ export const useCharacterStore = defineStore('character', () => {
     // `markOverflow` rend la MÊME référence quand il n'y a rien de plus récent à poser.
     const baseChanged = !!base && base !== cur.base;
     if (!mapChanged && !baseChanged) return;
+    // 💥 Le débordement se DIT (v0.1218) : un message par faille, dans la même écriture que
+    // la carte — son id vient de la faille, donc une resynchronisation ne le double pas.
+    const ovfMsgs = over.map((r) => overflowMessage(r, map, !!cur.base));
     // ⚠️ UNE SEULE ÉCRITURE pour les deux. Persister la carte sans le marquage ferait
     // disparaître la faille en laissant son armée nulle part ; persister le marquage sans
     // la carte la ferait redéborder au tick suivant. Le marquage est idempotent
@@ -1860,6 +1864,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       ...(mapChanged ? { expedition_map: map } : {}),
       ...(baseChanged ? { base } : {}),
+      ...(ovfMsgs.length ? { messages: boxWith(cur, ovfMsgs, MESSAGES_CAP) } : {}),
     });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).

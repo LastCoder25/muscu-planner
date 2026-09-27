@@ -1594,3 +1594,23 @@ describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () 
     expect(out).toContain('Ruines d’un héros tombé');
   }, 30_000);
 });
+
+describe('🕳️💥 le plateau du débordement se monte', () => {
+  it('OverflowStage : la faction, le compte à rebours et la ville', async () => {
+    const { default: OverflowStage } = await import('@/components/OverflowStage.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        OverflowStage,
+        { overflow: { faction: 'mortsvivants', level: 30, ambushed: 3, marching: true } },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Morts-vivants');
+    expect(out).toContain('avant débordement');
+    expect(out).toContain('class="city');
+  }, 30_000);
+});

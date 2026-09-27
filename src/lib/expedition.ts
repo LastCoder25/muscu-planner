@@ -509,6 +509,16 @@ export interface ActiveExpedition {
 }
 
 // Rapport déposé dans la boîte à messages 📬 à l'arrivée à l'objectif.
+/** 🕳️💥 Ce qu'un DÉBORDEMENT de faille laisse pour son rejeu (`overflowStage.ts`). */
+export interface OverflowReplay {
+  faction: RaidFaction;
+  level: number;
+  /** Lieux alentour harcelés par les embusqués pendant `ambushMs`. */
+  ambushed: number;
+  /** Une base existait : l'autre moitié marche sur elle (siège suivant renforcé). */
+  marching: boolean;
+}
+
 export interface ExpeditionMessage {
   id: string;
   /** ⚠️ OPTIONNEL depuis que la boîte porte AUSSI le coffre de Défi 360 (v0.715) : un
@@ -541,6 +551,7 @@ export interface ExpeditionMessage {
   key: number;
   waves?: number; // 'arena' : vagues tenues
   party?: PartyResult; // ⚔️ rapport d'un groupe de camp (absent des rapports d'avant)
+  overflow?: OverflowReplay; // 🕳️💥 une faille a débordé (rien à encaisser)
   /** 🎓 L'XP des champions a été versée À L'ARRIVÉE du rapport (`grantReportXp`), plus à
    *  l'encaissement. ⚠️ ABSENT des rapports déposés avant ce changement : leur XP est
    *  versée à l'encaissement, comme avant — sinon elle serait perdue. */

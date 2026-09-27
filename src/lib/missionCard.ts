@@ -18,6 +18,7 @@ import { feedWhen } from './friendFeed';
 import type { Adventurer } from './adventurers';
 import { DISPEL_TEXT } from './raid';
 import type { Item } from './items';
+import type { OverflowReplay } from './expedition';
 
 interface MissionCardMember {
   id: string;
@@ -64,6 +65,8 @@ export interface MissionCard {
   xpPerHour: number | null;
   /** Le résultat d'un groupe, pour le rejeu d'une incursion. */
   party: PartyResult | null;
+  /** Une faille qui a débordé, pour son rejeu. */
+  overflow: OverflowReplay | null;
   at: number;
 }
 
@@ -77,6 +80,7 @@ const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? 's' : ''}`;
 /** Le verdict, dans les mots du lieu. */
 function messageVerdict(m: ExpeditionMessage): string {
   if (m.chest) return 'coffre';
+  if (m.overflow) return 'débordée';
   if (m.waves !== undefined) return `${plural(m.waves, 'vague')} tenue${m.waves > 1 ? 's' : ''}`;
   if (m.party) return partyReport(m.party, []).verdict;
   return m.win ? 'réussie' : 'ratée';
@@ -121,6 +125,7 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
     travelMs: null,
     xpPerHour: null,
     party: m.party ?? null,
+    overflow: m.overflow ?? null,
     at: m.resolvedAt,
   };
 }

@@ -252,14 +252,16 @@ const when = computed(() => missionWhen(props.card.at, props.now));
 // ⚠️ MÊME SOURCE que le rejeu lui-même : le bouton ne peut pas apparaître sur un camp.
 const canReplay = computed(
   () =>
-    !!props.card.party &&
-    (!!riftStageInputOf(props.card.party) ||
-      !!warbandStageInputOf(props.card.party) ||
-      !!props.card.party.den ||
-      !!props.card.party.fallen),
+    !!props.card.overflow ||
+    (!!props.card.party &&
+      (!!riftStageInputOf(props.card.party) ||
+        !!warbandStageInputOf(props.card.party) ||
+        !!props.card.party.den ||
+        !!props.card.party.fallen)),
 );
 const replayLabel = computed(() => {
   const p = props.card.party;
+  if (props.card.overflow) return 'Revoir le débordement';
   if (p?.battle) return 'Revoir la bataille';
   if (p?.den) return 'Revoir le combat';
   if (p?.fallen) return 'Revoir la fouille';

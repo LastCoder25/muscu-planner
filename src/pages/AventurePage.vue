@@ -1780,7 +1780,7 @@
               :wait-label="`retour dans ${fmtExpeMs((m.claimAt ?? m.resolvedAt) - expeNow)}`"
               :claim-label="m.chest ? '🎁 Ouvrir' : '🎁 Prendre'"
               @claim="doClaimMsg(m)"
-              @replay="riftReplay = m.party ?? null"
+              @replay="m.overflow ? (ovfMsg = m) : (riftReplay = m.party ?? null)"
             />
           </div>
         </div>
@@ -2632,6 +2632,8 @@
       @report="openRiftReport"
       :hero-equipped="char.row?.equipped ?? {}"
     />
+    <!-- 🕳️💥 Rejeu d'un débordement de faille : elle se déchire, son armée sort, elle s'effondre. -->
+    <OverflowReplayDialog v-model="ovfMsg" @report="openOvfReport" />
 
     <!-- Rapport de combat (post-run) en MODALE : toutes les infos + réattaquer /
          inventaire / fermer -->
@@ -3077,6 +3079,8 @@ import { compactNumber } from '@/lib/compactNumber';
 import CombatStage from '@/components/CombatStage.vue';
 import ArenaStage from '@/components/ArenaStage.vue';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
+import OverflowReplayDialog from '@/components/OverflowReplayDialog.vue';
+import { useOverflowReplay } from '@/composables/useOverflowReplay';
 import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import { buildArenaStage, type StageWave } from '@/lib/arenaStage';
 import { MONSTERS, monsterArchetype } from '@/data/monsters';
@@ -4443,6 +4447,14 @@ const focusMsgId = ref<string | null>(null);
 function openRiftReport() {
   const id = riftAutoMsgId.value;
   if (!id) return; // lancé depuis un rapport déjà ouvert : fermer suffit
+  focusMsgId.value = id;
+  openInbox();
+}
+// 🕳️💥 Un débordement de faille se montre aussi tout seul — après les incursions.
+const { ovfMsg, ovfAutoId } = useOverflowReplay(computed(() => !!riftReplay.value));
+function openOvfReport() {
+  const id = ovfAutoId.value;
+  if (!id) return;
   focusMsgId.value = id;
   openInbox();
 }
