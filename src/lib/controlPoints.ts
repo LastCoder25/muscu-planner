@@ -322,25 +322,23 @@ export function settleReinforcements(
 }
 
 /** 🏰 Ramène des champions (garnison OU renforts en route). L'or déjà produit reste en
- *  réserve. `emptied` : plus personne n'y est ni n'y va — le point retourne à l'ennemi
- *  (c'est au store de le faire, réserve récoltée). */
+ *  réserve. ⚠️ Le point RESTE À NOUS, même vidé (décision de l'utilisateur) : sans garnison
+ *  il ne produit plus, et c'est la prochaine attaque ennemie, faute de défenseurs, qui le
+ *  reprend (`controlTick`) — d'ici là, on peut encore y envoyer des renforts. */
 export function releaseFromControl(
   map: ExpeditionMap,
   id: string,
   ids: readonly string[],
   now: number,
   playerLevel: number,
-): { map: ExpeditionMap; emptied: boolean } {
+): ExpeditionMap {
   const out = new Set(ids);
-  let emptied = false;
-  const next = withControl(map, id, (p) => {
+  return withControl(map, id, (p) => {
     const c = bankAt(p, now, playerLevel);
     const garrison = c.garrison.filter((x) => !out.has(x));
     const reinforcing = (c.reinforcing ?? []).filter((r) => !out.has(r.id));
-    emptied = garrison.length + reinforcing.length === 0;
     return { ...p, control: { ...c, garrison, reinforcing } };
   });
-  return { map: next, emptied };
 }
 
 /** Les points tenus dont l'attaque est DUE à `now`, de la plus ancienne à la plus récente. */

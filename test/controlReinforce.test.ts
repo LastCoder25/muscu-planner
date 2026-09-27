@@ -12,6 +12,7 @@ import {
   reinforceControl,
   releaseFromControl,
   settleReinforcements,
+  dueRetakes,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 
@@ -74,25 +75,40 @@ describe('🏰 renforts', () => {
   });
 });
 
-describe('🏰 ramener une partie de la garnison', () => {
+describe('🏰 ramener des champions', () => {
   it('ramène les choisis, garde les autres et l’or produit', () => {
     const m = held(['a', 'b', 'c']);
     const stock = controlStock(ctl(m), 6 * H, L);
     const r = releaseFromControl(m, ID, ['b'], 6 * H, L);
-    expect(r.emptied).toBe(false);
-    expect(ctl(r.map).control!.garrison).toEqual(['a', 'c']);
-    expect(controlStock(ctl(r.map), 6 * H, L)).toBe(stock);
-    expect(controlFreeSeats(ctl(r.map).control)).toBe(1); // la place se libère
+    expect(ctl(r).control!.garrison).toEqual(['a', 'c']);
+    expect(controlStock(ctl(r), 6 * H, L)).toBe(stock);
+    expect(controlFreeSeats(ctl(r).control)).toBe(1); // la place se libère
   });
   it('peut ramener un renfort encore en route', () => {
     const m = reinforceControl(held(['a']), ID, ['b'], 5 * H);
     const r = releaseFromControl(m, ID, ['b'], H, L);
-    expect(ctl(r.map).control!.reinforcing).toEqual([]);
-    expect(r.emptied).toBe(false);
+    expect(ctl(r).control!.reinforcing).toEqual([]);
+    expect(ctl(r).control!.garrison).toEqual(['a']);
   });
-  it('ramener le dernier vide le point (le store le rend à l’ennemi)', () => {
-    const m = reinforceControl(held(['a']), ID, ['b'], 5 * H);
-    expect(releaseFromControl(m, ID, ['a'], H, L).emptied).toBe(false);
-    expect(releaseFromControl(m, ID, ['a', 'b'], H, L).emptied).toBe(true);
+  it('vidé, le point RESTE à nous jusqu’à la prochaine attaque (décision de l’utilisateur)', () => {
+    const m = held(['a', 'b']);
+    const stock = controlStock(ctl(m), 6 * H, L);
+    const r = releaseFromControl(m, ID, ['a', 'b'], 6 * H, L);
+    const c = ctl(r).control!;
+    expect(c.owner).toBe('player');
+    expect(c.garrison).toEqual([]);
+    expect(c.attackAt).toBe(ctl(m).control!.attackAt); // l'attaque prévue reste prévue
+    // Sans garnison, il ne produit plus — mais l'or déjà sorti reste à récolter.
+    expect(controlStock(ctl(r), 30 * H, L)).toBe(stock);
+    // On peut encore y envoyer tout un renfort.
+    expect(controlFreeSeats(c)).toBe(CONTROL.maxGarrison);
+    // Et l'attaque le trouvera : c'est elle, sans défenseurs, qui le reprendra.
+    const due = {
+      ...r,
+      pois: r.pois.map((p) =>
+        p.id === ID ? { ...p, control: { ...p.control!, attackAt: 7 * H } } : p,
+      ),
+    };
+    expect(dueRetakes(due, 7 * H).map((p) => p.id)).toEqual([ID]);
   });
 });

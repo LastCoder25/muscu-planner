@@ -295,7 +295,7 @@
           @seal="doSeal"
         />
         <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
-             revient. Rien à envoyer : on récolte, ou on rappelle. -->
+             revient. On récolte, on ramène, on renforce. -->
         <div v-if="liveControl?.owner === 'player'" class="ctl-panel">
           <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
@@ -321,10 +321,13 @@
             @click="releaseCtl"
           >
             ↩️ Ramener {{ ctlRecallSel.length }} champion{{ ctlRecallSel.length > 1 ? 's' : '' }}
-            <template v-if="ctlRecallSel.length >= controlMembers.length">
-              — la mine retourne à l’ennemi</template
-            >
           </button>
+          <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
+               (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
+          <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
+            ⚠️ <b>Sans défense</b> : elle ne produit plus, et l’ennemi la reprendra à sa prochaine
+            attaque — sauf si un renfort arrive avant.
+          </p>
           <p class="ctl-line">
             ⛏️ <b>{{ controlRate.toLocaleString('fr-FR') }}</b> 🪙/h · réserve
             <b>{{ controlGold.toLocaleString('fr-FR') }}</b> 🪙
@@ -370,8 +373,14 @@
               </button>
             </div>
           </template>
-          <button type="button" class="ctl-recall" :disabled="ctlBusy" @click="recallCtl">
-            Rappeler toute la garnison — la mine retourne à l’ennemi
+          <button
+            v-if="controlMembers.length"
+            type="button"
+            class="ctl-recall"
+            :disabled="ctlBusy"
+            @click="recallCtl"
+          >
+            Rappeler toute la garnison
           </button>
         </div>
         <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur cette mine.</p>
@@ -1320,7 +1329,7 @@ async function recallCtl() {
       .dialog({
         title: 'Rappeler la garnison ?',
         message:
-          'La réserve est récoltée, tes champions rentrent — et la mine retourne à l’ennemi.',
+          'La réserve est récoltée et tes champions rentrent. La mine reste à toi, mais sans défense : l’ennemi la reprendra à sa prochaine attaque, sauf si un renfort arrive avant.',
         cancel: true,
       })
       .onOk(() => res(true))

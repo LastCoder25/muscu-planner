@@ -3261,7 +3261,9 @@ export const useCharacterStore = defineStore('character', () => {
         title: held ? '🏰 Attaque repoussée' : '🏰 Mine reprise par l’ennemi',
         text: held
           ? `${emo} Tes champions ont tenu la mine. Une nouvelle attaque se prépare.`
-          : `${emo} L’ennemi a repris la mine — ta garnison part à l’infirmerie.`,
+          : escort.length
+            ? `${emo} L’ennemi a repris la mine — ta garnison part à l’infirmerie.`
+            : `${emo} L’ennemi a repris la mine, laissée sans défense.`,
         ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
       };
       msgs.push(msg);
@@ -3314,8 +3316,9 @@ export const useCharacterStore = defineStore('character', () => {
     return c.gold;
   }
 
-  /** 🏰 Rappelle la garnison : la réserve est récoltée, le lieu revient à l'ennemi (rang
-   *  re-tiré) et les champions redeviennent disponibles. */
+  /** 🏰 Rappelle TOUTE la garnison (et les renforts en route) : la réserve est récoltée,
+   *  les champions redeviennent disponibles. ⚠️ Le lieu RESTE À NOUS, sans défense : c'est la
+   *  prochaine attaque ennemie qui le reprend (décision de l'utilisateur). */
   async function recallControl(
     userId: string,
     id: string,
@@ -3325,8 +3328,9 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map) return;
     const c = collectControl(cur.expedition_map, id, now, playerLevel);
+    const all = advList.value.filter((a) => a.posted === id).map((a) => a.id);
     await persist(userId, {
-      expedition_map: loseControl(c.map, id, playerLevel),
+      expedition_map: releaseFromControl(c.map, id, all, now, playerLevel),
       adventurers: advList.value.map((a) => (a.posted === id ? { ...a, posted: undefined } : a)),
       ...(c.gold > 0 ? { gold: cur.gold + c.gold } : {}),
     });
@@ -3334,8 +3338,8 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /** 🏰 Ramène UNE PARTIE de la garnison (ou des renforts en route) : ils redeviennent
-   *  disponibles, l'or déjà produit reste en réserve. Ramener le DERNIER revient au rappel
-   *  complet (`recallControl`) : le point retourne à l'ennemi. */
+   *  disponibles, l'or déjà produit reste en réserve. Même vidé, le point reste à nous
+   *  jusqu'à la prochaine attaque. */
   async function releaseControlChampions(
     userId: string,
     id: string,
@@ -3345,11 +3349,9 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<void> {
     const cur = row.value;
     if (!cur?.expedition_map || !ids.length) return;
-    const r = releaseFromControl(cur.expedition_map, id, ids, now, playerLevel);
-    if (r.emptied) return recallControl(userId, id, now, playerLevel);
     const out = new Set(ids);
     await persist(userId, {
-      expedition_map: r.map,
+      expedition_map: releaseFromControl(cur.expedition_map, id, ids, now, playerLevel),
       adventurers: advList.value.map((a) =>
         out.has(a.id) && a.posted === id ? { ...a, posted: undefined } : a,
       ),
