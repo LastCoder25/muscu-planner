@@ -176,8 +176,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
       why: t ? supplyUselessWhy(id, t) : null,
     }));
   });
-  const supplyUseful = computed(() => supplyRows.value.filter((r) => !r.why));
-  const supplyUseless = computed(() => supplyRows.value.filter((r) => !!r.why));
   /** ⚠️ Un consommable coché qui DEVIENT inutile (on retire le héros, par exemple) n'est plus
    *  emporté : on ne dépense pas un objet qui ne fait rien. */
   const activeSupplies = computed(() =>
@@ -384,8 +382,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyHeroOn,
     partySize,
     supplyRows,
-    supplyUseful,
-    supplyUseless,
     toggleSupply,
     partyWin,
     partyMin,
