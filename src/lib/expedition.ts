@@ -1351,6 +1351,41 @@ export function travelOneWayMin(level: number, distNorm: number): number {
   return Math.round(base * (1 + Math.max(0, level) * 0.02));
 }
 
+/** Trajet ALLER du héros (minutes) vers un point à la distance `d` de la ville : la MÊME règle
+ *  qu'un lieu posé là (niveau de trajet `travelLevel` de `placePoiOfType`, `travelOneWayMin`,
+ *  réduction de l'Avant-poste). Non arrondi : sert à placer les cercles d'heures. */
+function heroLegMinAt(d: number, playerLevel: number, travelMult: number): number {
+  const dn = distNormAt(d);
+  const win = spawnWindow(playerLevel);
+  const lvl = win.min + Math.min(1, dn) * (win.max - win.min);
+  const base =
+    EXPE.travelOneWayMinMin + (EXPE.travelOneWayMaxMin - EXPE.travelOneWayMinMin) * dn;
+  return base * (1 + Math.max(0, lvl) * 0.02) * travelMult;
+}
+
+/** ⏱️ CERCLES D'HEURES DE LA CARTE (v0.1238, demandé par l'utilisateur) : le rayon auquel
+ *  l'aller du héros franchit chaque heure pleine (1 h, 2 h…), jusqu'à `maxR`. Le trajet
+ *  croît avec la distance, donc chaque rayon se trouve par dichotomie sur la vraie règle. */
+export function travelHourRings(
+  playerLevel: number,
+  travelMult: number,
+  maxR: number,
+): { hours: number; r: number }[] {
+  const out: { hours: number; r: number }[] = [];
+  const at = (d: number) => heroLegMinAt(d, playerLevel, travelMult);
+  for (let h = 1; h < 48 && at(maxR) >= h * 60; h++) {
+    let lo = 0;
+    let hi = maxR;
+    for (let i = 0; i < 40; i++) {
+      const mid = (lo + hi) / 2;
+      if (at(mid) < h * 60) lo = mid;
+      else hi = mid;
+    }
+    out.push({ hours: h, r: Math.round(hi * 10) / 10 });
+  }
+  return out;
+}
+
 /** Adversaire d'un POI (Combatant) pour la résolution auto — scalé au niveau.
  *  Calibrage provisoire (affiné par simulation en phase 6). */
 export function poiCombatant(level: number, type: PoiType): Combatant {

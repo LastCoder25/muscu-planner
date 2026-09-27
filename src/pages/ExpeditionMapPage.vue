@@ -78,6 +78,13 @@
             class="fog-rim"
             :class="{ lifting: fogPlan }"
           />
+          <!-- ⏱️ Un cercle par heure de trajet aller du héros (v0.1238). -->
+          <g class="hour-rings">
+            <template v-for="ring in hourRings" :key="ring.hours">
+              <circle :cx="TOWN.x" :cy="TOWN.y" :r="ring.r" class="hour-ring" />
+              <text :x="TOWN.x" :y="TOWN.y - ring.r - 0.8" class="hour-lab">{{ ring.hours }} h</text>
+            </template>
+          </g>
 
           <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
           <rect
@@ -684,6 +691,7 @@ import {
   expeditionTerrain,
   MAP_VIEW,
   revealRadius,
+  travelHourRings,
   type Poi,
   type PoiType,
   HARVEST_TYPES,
@@ -847,6 +855,10 @@ const terrain = computed(() =>
 const V = MAP_VIEW;
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
 const reveal = computed(() => revealRadius(char.comptoirLevel));
+/** ⏱️ Rayons des heures pleines de trajet aller du héros, dans la zone révélée. */
+const hourRings = computed(() =>
+  travelHourRings(progressionLevel.value, travelMult.value, reveal.value),
+);
 const FOG_SOFT = 10; // largeur du fondu du brouillard
 const fogInner = computed(() => Math.max(0, (fogR.value - 3) / (fogR.value + FOG_SOFT)));
 
@@ -2497,6 +2509,21 @@ onUnmounted(() => {
   stroke: var(--accent);
   stroke-width: 1;
   opacity: 0.9;
+}
+.hour-ring {
+  fill: none;
+  stroke: #e8dcc0;
+  stroke-width: 0.45;
+  stroke-dasharray: 1 2.5;
+  opacity: 0.42;
+  pointer-events: none;
+}
+.hour-lab {
+  fill: #e8dcc0;
+  font-size: 2.6px;
+  text-anchor: middle;
+  opacity: 0.5;
+  pointer-events: none;
 }
 .fog-rim {
   fill: none;
