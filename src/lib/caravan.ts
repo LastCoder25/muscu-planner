@@ -142,6 +142,13 @@ export const CARAVAN = {
    *  parallèle, donc l'or et les pierres par jour : ne pas bouger sans relancer
    *  `campEconomy.test` et `goldSink.test`. */
   outpostShare: 0.5,
+  /** ⚡ PART DE L'ÉNERGIE D'UN PUITS QU'UNE ÉQUIPE SANS LE HÉROS RAMÈNE (v0.1201, décision de
+   *  l'utilisateur après mesure). La v0.1189 avait aligné toute la récolte sur le héros ; mesuré
+   *  sur de vraies cartes (créneaux au complet, ≤ 3 allers-retours par jour, défaites comprises),
+   *  l'énergie des équipes valait 1,7× (niv. 12), 4,3× (30), 11× (60) et 15× (100) celle d'une
+   *  journée de sport — « complément, jamais substitut au sport » cassé dès le niveau 12. Or,
+   *  pierres d'invocation, mana et clés restent pleins (choix de l'utilisateur). */
+  energyShare: 0.5,
   haulPerRole: 0.12,
   haulMax: 0.4,
   /** Un 🩺 raccourcit les convalescences de l'équipe. */
@@ -1340,7 +1347,7 @@ export function resolveCaravan(
     // sauvegarde partait en `invalid input syntax for type integer: "1234.5"`, la
     // promesse était rejetée sans que rien ne l'attrape, et le joueur cliquait
     // « Récupérer » sans qu'il ne se passe RIEN. Une cargaison était irrécupérable à vie.
-    energy: Math.round(Math.min(y.energy, y.energy * k)),
+    energy: Math.round(Math.min(y.energy, y.energy * k) * CARAVAN.energyShare),
     summonStones: Math.round(y.summonStones * k),
     keys: Math.round(y.keys * Math.min(1.2, k)) + keysBonus + keyLuck,
     mana: Math.round(y.mana * k),
@@ -1391,4 +1398,3 @@ export function startCaravan(
 // ── 📜 RAPPORT DE CONVOI (v0.853 ; demandé par l’utilisateur : « les aventuriers concernés et
 // leur gain d’XP, pour voir la différence entre un long convoi et un court, et rappeler le
 // temps de voyage ») ─────────────────────────────────────────────────────────────────────
-
