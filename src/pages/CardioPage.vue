@@ -184,7 +184,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCardioStore } from '@/stores/cardio';
 import { useChallengesStore } from '@/stores/challenges';
 import { useProgress } from '@/composables/useProgress';
-import { useXpFx } from '@/composables/useXpFx';
+import { useXpFx, xpRing } from '@/composables/useXpFx';
 import {
   CARDIO_ACTIVITIES,
   ACTIVITY_LABELS,
@@ -308,6 +308,10 @@ async function save() {
     const t = progress.sportTiles.value.find((x) => x.key === key);
     return t ? t.level : { level: 1, progressPct: 0 };
   }
+  /** L'XP cumulée d'une tuile (son niveau, lui, suit des minutes). */
+  function tileXp(key: string) {
+    return progress.sportTiles.value.find((x) => x.key === key)?.xp ?? 0;
+  }
 
   // Snapshot AVANT, pour l'animation de progression.
   // ⚠️ On prend le niveau de L'ACTIVITÉ (la tuile « Marche », « Course »…), PAS la piste
@@ -318,6 +322,7 @@ async function save() {
   // Une constante, pas un computed : on est dans une fonction, l'activité ne bougera plus.
   const tileKey = `cardio:${activity.value}`;
   const beforeT = tileLevel(tileKey);
+  const beforeXp = tileXp(tileKey);
   const beforeG = progress.global.value;
   try {
     const log: CardioLog = {
@@ -383,22 +388,16 @@ async function save() {
     await nextTick();
     const afterT = tileLevel(tileKey);
     xpFx.show([
-      {
-        emoji: ACTIVITY_EMOJI[activity.value] ?? '🏃',
-        label: ACTIVITY_LABELS[activity.value] ?? 'Cardio',
-        fromLevel: beforeT.level,
-        fromPct: beforeT.progressPct,
-        toLevel: afterT.level,
-        toPct: afterT.progressPct,
-      },
-      {
-        emoji: '🌍',
-        label: 'Global',
-        fromLevel: beforeG.level,
-        fromPct: beforeG.progressPct,
-        toLevel: progress.global.value.level,
-        toPct: progress.global.value.progressPct,
-      },
+      xpRing(
+        'cardio',
+        ACTIVITY_EMOJI[activity.value] ?? '🏃',
+        ACTIVITY_LABELS[activity.value] ?? 'Cardio',
+        beforeT,
+        afterT,
+        // Le niveau d'une tuile suit des MINUTES : le gain d'XP se lit sur l'XP de la tuile.
+        tileXp(tileKey) - beforeXp,
+      ),
+      xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);
     date.value = todayIso();
     distance.value = null;

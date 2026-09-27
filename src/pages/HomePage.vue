@@ -738,7 +738,7 @@ import { useLiveCourtStore } from '@/stores/liveCourt';
 import { useAuthStore } from '@/stores/auth';
 import { useProgress } from '@/composables/useProgress';
 import { useBossTokenAccrual } from '@/composables/useBossTokenAccrual';
-import { useXpFx } from '@/composables/useXpFx';
+import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useWeather, searchCities } from '@/composables/useWeather';
 import {
   placeLabel,
@@ -1187,16 +1187,7 @@ async function saveAutre() {
     $q.notify({ type: 'positive', message: 'Séance enregistrée — XP global + énergie 💪' });
     autreOpen.value = false;
     await nextTick();
-    xpFx.show([
-      {
-        emoji: '🌍',
-        label: 'Global',
-        fromLevel: beforeG.level,
-        fromPct: beforeG.progressPct,
-        toLevel: progress.global.value.level,
-        toPct: progress.global.value.progressPct,
-      },
-    ]);
+    xpFx.show([xpRing('global', '🌍', 'Global', beforeG, progress.global.value)]);
   } catch (e) {
     $q.notify({ type: 'negative', message: e instanceof Error ? e.message : 'Échec.' });
   } finally {

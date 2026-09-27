@@ -1620,4 +1620,19 @@ describe('🕳️💥 le plateau du débordement se monte', () => {
     expect(out).toContain('avant débordement');
     expect(out).toContain('class="city');
   }, 30_000);
+
+  it('✨ XpGainOverlay se monte et joue un anneau avec passage de niveau', async () => {
+    const { default: XpGainOverlay } = await import('@/components/XpGainOverlay.vue');
+    const { useXpFx, xpRing } = await import('@/composables/useXpFx');
+    useXpFx().show([
+      xpRing('muscu', '🏋️', 'Muscu', { level: 7, progressPct: 62, xp: 5000 }, { level: 8, progressPct: 35, xp: 5420 }),
+    ]);
+    expect(
+      await mountIt(XpGainOverlay, {}, undefined, undefined, '/', (out) => {
+        expect(out).toContain('Muscu');
+        expect(out).toContain('+');
+      }),
+    ).toBeNull();
+    useXpFx().dismiss();
+  }, 30_000);
 });

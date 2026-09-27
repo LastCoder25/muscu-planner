@@ -325,7 +325,7 @@ import { useLiveStore, type LiveSet, type LiveExercise } from '@/stores/live';
 import { useLogsStore } from '@/stores/logs';
 import { firstWorkIndex, isWorkSet, setOrdinal, workSets } from '@/lib/warmup';
 import { useProgress } from '@/composables/useProgress';
-import { useXpFx } from '@/composables/useXpFx';
+import { useXpFx, xpRing } from '@/composables/useXpFx';
 import SwapSheet from '@/components/SwapSheet.vue';
 
 const route = useRoute();
@@ -578,22 +578,14 @@ async function finish() {
     live.clear();
     await nextTick();
     xpFx.show([
-      {
-        emoji: isMuscu ? '🏋️' : '🤸',
-        label: isMuscu ? 'Muscu' : 'Prépa',
-        fromLevel: beforeA.level,
-        fromPct: beforeA.progressPct,
-        toLevel: (isMuscu ? progress.muscu.value : progress.tennis.value).level,
-        toPct: (isMuscu ? progress.muscu.value : progress.tennis.value).progressPct,
-      },
-      {
-        emoji: '🌍',
-        label: 'Global',
-        fromLevel: beforeG.level,
-        fromPct: beforeG.progressPct,
-        toLevel: progress.global.value.level,
-        toPct: progress.global.value.progressPct,
-      },
+      xpRing(
+        isMuscu ? 'muscu' : 'prepa',
+        isMuscu ? '🏋️' : '🤸',
+        isMuscu ? 'Muscu' : 'Prépa',
+        beforeA,
+        isMuscu ? progress.muscu.value : progress.tennis.value,
+      ),
+      xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);
     $q.notify({ type: 'positive', message: 'Séance enregistrée 💪' });
     await router.push(`/bilan/${log.id}`);

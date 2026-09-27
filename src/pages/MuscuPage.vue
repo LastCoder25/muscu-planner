@@ -200,7 +200,7 @@ defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { localDayIso } from '@/lib/localDay';
 import { useProgress } from '@/composables/useProgress';
-import { useXpFx } from '@/composables/useXpFx';
+import { useXpFx, xpRing } from '@/composables/useXpFx';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useLogsStore, type LogRow } from '@/stores/logs';
@@ -342,22 +342,8 @@ async function saveQuick() {
     });
     await nextTick();
     xpFx.show([
-      {
-        emoji: '🏋️',
-        label: 'Muscu',
-        fromLevel: beforeM.level,
-        fromPct: beforeM.progressPct,
-        toLevel: progress.muscu.value.level,
-        toPct: progress.muscu.value.progressPct,
-      },
-      {
-        emoji: '🌍',
-        label: 'Global',
-        fromLevel: beforeG.level,
-        fromPct: beforeG.progressPct,
-        toLevel: progress.global.value.level,
-        toPct: progress.global.value.progressPct,
-      },
+      xpRing('muscu', '🏋️', 'Muscu', beforeM, progress.muscu.value),
+      xpRing('global', '🌍', 'Global', beforeG, progress.global.value),
     ]);
     qDate.value = todayIso();
     qHours.value = 1;
