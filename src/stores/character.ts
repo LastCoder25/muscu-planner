@@ -2074,7 +2074,7 @@ export const useCharacterStore = defineStore('character', () => {
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
     const msg = buildMessage(exp);
-    const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
+    const x = reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg], advList.value);
     // ⚔️ Une interception AVEC le héros vit ici, pas dans `partyTick` : elle ne levait
     // jamais le marquage (v0.1190).
     const dw = dispelWon(cur.base, [msg]);
@@ -2117,7 +2117,9 @@ export const useCharacterStore = defineStore('character', () => {
     // `buildMessage(...)`, qui porte `claimed: false` : un butin encaissé entre le retour
     // (`claimAt`) et ce tick redevenait encaissable (revue finale des camps — or, objets, XP
     // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
-    const x = exp.reported ? null : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
+    const x = exp.reported
+      ? null
+      : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg], advList.value);
     const dw = exp.reported ? null : dispelWon(cur.base, [msg]);
     const ctl = x
       ? settleControlAssaults(
@@ -2703,8 +2705,16 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🎓 L'XP DES CHAMPIONS À L'ARRIVÉE D'UN RAPPORT (`grantReportXp`, lib) : la boîte
    *  marquée, le patch du vivier (pièces portées comprises) et l'animation à jouer APRÈS
    *  l'écriture — une animation n'annonce jamais un gain qui n'a pas eu lieu. */
-  function reportXp(cur: CharacterRow, box: ExpeditionMessage[], fresh: ExpeditionMessage[]) {
-    const g = grantReportXp(box, fresh, advList.value, pantheonLevel.value);
+  function reportXp(
+    cur: CharacterRow,
+    box: ExpeditionMessage[],
+    fresh: ExpeditionMessage[],
+    /** Le vivier sur lequel verser l'XP. ⚠️ REQUIS : la boucle des reprises lui passe le
+     *  vivier qui contient DÉJÀ la récolte du camp d'entraînement ; relu dans l'état, ce
+     *  vivier-là était ignoré et l'XP du camp se perdait dès que la garnison défendait. */
+    base: Adventurer[],
+  ) {
+    const g = grantReportXp(box, fresh, base, pantheonLevel.value);
     if (!g.granted.length) return { messages: box, patch: {}, play: () => {} };
     const gearPatch = gearTrainedPatch(cur, advList.value, g.adventurers);
     const tracks = gearAwareTracks(cur, advList.value, g.adventurers, gearPatch);
@@ -3333,7 +3343,7 @@ export const useCharacterStore = defineStore('character', () => {
     const dw = dispelWon(cur.base, t.fresh);
     const base = dw.base;
     // 🎓 L'XP des champions tombe ICI, à l'arrivée du rapport — et l'animation avec.
-    const x0 = reportXp(cur, t.messages, t.fresh);
+    const x0 = reportXp(cur, t.messages, t.fresh, advList.value);
     const x = { ...x0, messages: dw.tag(x0.messages) };
     // 🏰 Un point de contrôle PRIS : l'équipe y reste en garnison (postée, plus « en route »).
     const ctl = settleControlAssaults(
@@ -3485,8 +3495,10 @@ export const useCharacterStore = defineStore('character', () => {
       advs = advs.map((a) => (!held && a.posted === p.id ? { ...a, posted: undefined } : a));
     }
     const box = boxWith(cur, msgs, MESSAGES_CAP);
-    const x = reportXp(cur, box, msgs);
-    let roster = (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advs;
+    // ⚠️ `advs` et non l'état : il porte l'XP du camp d'entraînement récoltée avant l'attaque.
+    const x = reportXp(cur, box, msgs, advs);
+    const rosterXp = (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advs;
+    let roster = rosterXp;
     // Les postés libérés ET l'XP : on repart de l'XP versée et on retire les postes perdus.
     const freed = new Set(advs.filter((a) => !a.posted).map((a) => a.id));
     roster = roster.map((a) => (freed.has(a.id) ? { ...a, posted: undefined } : a));
@@ -3501,22 +3513,13 @@ export const useCharacterStore = defineStore('character', () => {
           now,
           xpGranted: true,
         }).adventurers;
-    // ⚒️ Ce que la forge a versé AVANT l'attaque, puis ce que l'XP du rapport apprend aux pièces
-    // portées — sur le stock forgé, sinon le patch du rapport (bâti sur l'ancien stock)
-    // effacerait la forge.
+    // 🗡️ L'ÉQUIPEMENT, en UN seul calcul : ce que la forge a versé avant l'attaque, puis tout
+    // ce que les champions ont appris depuis l'état de départ — la récolte du camp ET l'XP
+    // du rapport. ⚠️ Sur le stock forgé : le patch du rapport, bâti sur l'ancien stock,
+    // effacerait la forge ; et sans rapport à verser, l'XP du camp n'apprenait rien aux pièces.
+    const gearNext = trainWornGear(advList.value, rosterXp, gearStock);
     const forged =
-      gearStock !== stock0
-        ? {
-            adv_gear: {
-              ...(cur.adv_gear ?? {}),
-              stock: trainWornGear(
-                advList.value,
-                (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
-                gearStock,
-              ),
-            },
-          }
-        : {};
+      gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {};
     await persist(userId, {
       expedition_map: map,
       messages: x.messages,
