@@ -123,7 +123,7 @@ export const SKILLS: Record<SkillId, SkillDef> = {
     tier: 'gold',
     emoji: '✨',
     name: 'Second souffle',
-    what: 'survit à un coup fatal avec {v} % des PV',
+    what: 'le coup fatal perd {v} % de ses dégâts, une fois',
     base: 15,
   },
 };
@@ -487,7 +487,12 @@ export function referenceRuneBuild(rankIndex: number, slots: number, variant = 0
   const builds = Array.from({ length: REF_BUILD.samples }, () =>
     simulateBuild(rng, rankIndex, slots),
   ).sort((a, b) => combatScore(a) - combatScore(b));
-  const med = builds[Math.floor(builds.length / 2)]!;
+  // ⚠️ SANS LES DORÉES : ce sont des coups de chance (1 à 12 % des runes), et un seul
+  // Premier sang ou Second souffle chez un étalon déplaçait toute une bande de difficulté
+  // (mesuré : trio de référence sur route calme au niveau 70, 91 % → 99 %). L'étalon est le
+  // joueur MÉDIAN ; une dorée est un bonus au-dessus de lui. L'emplacement qu'elle prenait
+  // reste vide, exactement comme avant que les dorées n'agissent.
+  const med = builds[Math.floor(builds.length / 2)]!.filter((k) => SKILLS[k.id].tier !== 'gold');
   refBuildCache.set(key, med);
   return med.map((s) => ({ ...s }));
 }

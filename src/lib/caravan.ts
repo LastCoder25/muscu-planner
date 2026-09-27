@@ -359,7 +359,7 @@ export function escortCombatant(
     { puissance: 0, endurance: 0, agilite: 0 },
   );
   const level = advs.reduce((m, a) => Math.max(m, a.level), 1);
-  return playerWithGear(
+  const c = playerWithGear(
     name,
     stats,
     {},
@@ -370,6 +370,28 @@ export function escortCombatant(
     // dessus (hors refonte de l'équipement du héros, cf. `CHANCE_CURVES`).
     { legacyCaps: true },
   );
+  return skills ? withGoldenRunes(c, advs) : c;
+}
+
+/**
+ * 🔮 Les deux runes dorées de COMBAT, posées sur le combattant fondu d'une escorte.
+ * ⚡ Premier sang : la MOYENNE de l'équipe (un membre qui ouvre plus fort ne pèse que sa
+ * part des dégâts). ✨ Second souffle : le PLUS FORT porteur (un seul se relève pour tous,
+ * une fois — c'est ce que dit la compétence).
+ */
+function withGoldenRunes(c: Combatant, advs: Adventurer[]): Combatant {
+  if (!advs.length) return c;
+  let opening = 0;
+  let stand = 0;
+  for (const a of advs)
+    for (const k of advRuneSkills(a)) {
+      if (k.id === 'firstBlood') opening += skillValue(k.id, k.level) / 100;
+      if (k.id === 'secondWind') stand = Math.max(stand, skillValue(k.id, k.level) / 100);
+    }
+  const out = { ...c };
+  if (opening > 0) out.openingDmg = opening / advs.length;
+  if (stand > 0) out.lastStand = stand;
+  return out;
 }
 
 /** Multiplie tous les canaux d'un agrégat. ⚠️ Balayage des CLÉS de `emptyEffects()`, pas
@@ -1332,7 +1354,7 @@ export function resolveCaravan(
   const pairs = escortGear(escort, kit);
   const fx = supplyFx(kit.supplies);
   // 🧪🪨 Potion et pierre renforcent aussi l'escorte sur la ROUTE, pas seulement devant les gardes.
-  const guards = boostCombatant(
+  let guards = boostCombatant(
     escortCombatant(escort, 'Escorte', pairedEscortEffects(escort, pairs)),
     fx,
   );
@@ -1352,6 +1374,8 @@ export function resolveCaravan(
     if (roll < amb) {
       const legSeed = (seed + i * 7919) >>> 0;
       const r = simulateCombat(guards, { ...foe }, { seed: legSeed, goldOnWin: 0 });
+      // 🔮 ✨ Second souffle : une fois par MISSION, pas par embuscade.
+      if (r.lastStandUsed) guards = { ...guards, lastStand: 0 };
       group ??= { units: roadUnits(escort, pairs), troop: roadTroop(foe, poi) };
       // ⚠️ `deriveSkirmish` tire sur SON générateur (graine de la jambe) : `rng` n'est pas lu,
       // donc les rencontres suivantes et la cargaison restent celles du combat fondu.

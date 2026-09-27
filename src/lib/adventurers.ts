@@ -54,7 +54,7 @@ import {
 // documente qu'aucun runtime ne traverse — les signatures sont des `EffectType` et des
 // `CombatSkill` NOMMÉS là où ils vivent, jamais une seconde nomenclature.
 import { type CombatSkill } from './combat';
-import { SKILLS, type ChampSkill, type SkillId } from './skillRunes';
+import { SKILLS, skillValue, type ChampSkill, type SkillId } from './skillRunes';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -2074,6 +2074,16 @@ const SKILL_ROLE = Object.fromEntries(
 /** Les compétences de runes d'un aventurier (vide pour un legacy). */
 export function advRuneSkills(adv: Adventurer): ChampSkill[] {
   return advChampion(adv) ? (adv.skills ?? []) : [];
+}
+
+/** 🔮 La valeur (fraction) d'une compétence de rune dans une équipe : celle du MEILLEUR
+ *  porteur. ⚠️ Pour les runes qui agissent une fois pour tous (Pillard, Scelleur) : les
+ *  additionner ferait d'une équipe de trois pillards une cargaison garantie. */
+export function teamRuneValue(advs: readonly Adventurer[], id: SkillId): number {
+  let v = 0;
+  for (const a of advs)
+    for (const k of advRuneSkills(a)) if (k.id === id) v = Math.max(v, skillValue(k.id, k.level) / 100);
+  return v;
 }
 
 /** Le rôle qu'une compétence de rune porte, s'il y en a un. */
