@@ -2613,7 +2613,8 @@ function leftOf(at: number): string {
   top: 4px;
   right: 4px;
   max-width: 60%;
-  padding: 1px 6px;
+  padding: 0 5px;
+  font-size: 8px;
   border-radius: 999px;
   border: 1px solid currentColor;
   background: color-mix(in srgb, currentColor 16%, var(--surface));
