@@ -111,19 +111,32 @@
               :aria-label="'Nombre de ' + bossUnitLabel(current.family)"
             />
             <button class="fb-step" aria-label="Plus" @click="step(1)">＋</button>
-            <button class="fb-btn big" :disabled="busy || accepted <= 0" @click="doHit">
+            <button class="fb-btn big" :disabled="busy || split.accepted <= 0" @click="doHit">
               Frapper
             </button>
           </div>
           <div class="fb-hint">
-            <template v-if="accepted < amount">
-              Seulement <b>{{ accepted }}</b> compteront (≤ {{ perHit }} par saisie, et ce qu’il
-              reste de PV).
+            <template v-if="split.accepted < amount">
+              Seulement <b>{{ split.accepted }}</b> compteront (≤ {{ perHit }} par saisie).
             </template>
             <template v-else>
               ≤ {{ perHit }} {{ bossUnitLabel(current.family) }} par saisie · pas de plafond par
               jour
             </template>
+          </div>
+          <!-- 🤝 LA PART RÉSERVÉE, dite AVANT la frappe : sinon des reps qui n'entament pas le
+               boss se liraient comme un bug. Et on dit ce qu'elles rapportent quand même. -->
+          <div v-if="split.surplus > 0" class="fb-hint fb-surplus">
+            🤝 <b>{{ split.surplus }}</b> {{ bossUnitLabel(current.family) }} en
+            <b>surplus</b> :
+            <template v-if="reserved > 0"
+              >les derniers PV sont gardés pour {{ waitingNames }}, qui n’{{
+                waitingCount > 1 ? 'ont' : 'a'
+              }}
+              pas encore fait sa demi-part (jusqu’au dernier jour).</template
+            >
+            <template v-else>le boss n’a plus assez de PV.</template>
+            Elles comptent quand même : XP, et un coffre plus gros.
           </div>
         </div>
         <p v-else-if="phase === 'recruiting'" class="fb-hint">
@@ -150,7 +163,9 @@
         </div>
         <p class="fb-hint">
           La barre = ta part ({{ bossShareUnits(current.family, current.tier) }}), le trait = la
-          moitié à apporter pour le coffre.
+          moitié à apporter pour le coffre. Au-delà de ta part, chaque part en plus grossit ton
+          coffre (+{{ pct(FRIEND_BOSS_CHEST.surplusGoldPerShare) }} d’or et de pierres, jusqu’à
+          +{{ pct(FRIEND_BOSS_CHEST.surplusGoldMax) }}) et la chance de ton trophée.
         </p>
 
         <div v-if="hitDays.length" class="fb-sec-t">Frappes</div>
@@ -167,13 +182,14 @@
             <span class="mf-chev" :class="{ open: openDays.has(d.day) }">▸</span>
             <b>{{ dayLabel(d.at) }}</b>
             <span class="fb-day-tot">+{{ d.total }} {{ bossUnitLabel(current.family) }}</span>
-            <span class="fb-dim">−{{ fmtBossPv(bossDamage(d.total)) }} PV</span>
+            <span class="fb-dim">−{{ fmtBossPv(bossDamage(d.damage)) }} PV</span>
             <span v-if="d.hits.length > 1" class="fb-dim">· {{ d.hits.length }} frappes</span>
           </button>
           <div v-if="openDays.has(d.day)" class="fb-day-detail">
             <div v-for="h in d.hits" :key="h.id" class="fb-log">
               <b>{{ pseudoOf(h.userId) }}</b> +{{ h.units }} {{ bossUnitLabel(current.family) }}
-              <span class="fb-dim">(−{{ fmtBossPv(bossDamage(h.units)) }} PV)</span>
+              <span class="fb-dim">(−{{ fmtBossPv(bossDamage(hitDamageUnits(h))) }} PV)</span>
+              <span v-if="h.surplus" class="fb-dim">· 🤝 {{ h.surplus }} en surplus</span>
               <span class="fb-dim">· il y a {{ fmtBossSpan(now - h.createdAt) }}</span>
             </div>
           </div>
@@ -333,6 +349,16 @@
               🪙 +{{ victoryChest.gold }} · 🔮 +{{ victoryChest.stones
               }}<template v-if="victoryChest.tickets"> · 🎟️ +{{ victoryChest.tickets }}</template>
             </div>
+            <div v-if="victoryChest.surplus > 0" class="fb-dim">
+              🎁 {{ fmtParts(victoryChest.surplus) }} de plus que ta part : coffre +{{
+                pct(
+                  Math.min(
+                    FRIEND_BOSS_CHEST.surplusGoldMax,
+                    victoryChest.surplus * FRIEND_BOSS_CHEST.surplusGoldPerShare,
+                  ),
+                )
+              }}, trophée plus chanceux
+            </div>
             <div class="fb-dim">Trophée rangé dans ton sac à trophées</div>
           </div>
           <template v-else-if="chestOf(victory) !== 'none'">
@@ -413,7 +439,11 @@ import {
   bossShareUnits,
   bossTier,
   type BossTier,
-  acceptedUnits,
+  splitHit,
+  bossReservedUnits,
+  hitDamageUnits,
+  minShareUnits,
+  FRIEND_BOSS_CHEST,
   bossEndsAt,
   bossEmoji,
   bossFamily,
@@ -647,17 +677,38 @@ const perHit = computed(() =>
     ? Math.floor(bossShareUnits(current.value.family, current.value.tier) * FRIEND_BOSS.hitMaxShare)
     : 0,
 );
-/** Ce que le serveur retiendra : la même règle que `fboss_hit`. */
-const accepted = computed(() =>
+/** 🤝 Les reps gardées pour les amis qui n'ont pas encore fait leur demi-part — la règle
+ *  exacte de `fboss_hit` (`bossReservedUnits`). */
+const reserved = computed(() =>
+  current.value ? bossReservedUnits(current.value, store.members, uid.value, now.value) : 0,
+);
+/** Qui attend encore sa demi-part (nommé, pour que la réserve se comprenne). */
+const waiting = computed(() => {
+  const b = current.value;
+  if (!b) return [];
+  const half = minShareUnits(b.family, b.tier);
+  return store.members.filter(
+    (m) =>
+      m.bossId === b.id && m.status === 'accepted' && m.userId !== uid.value && m.units < half,
+  );
+});
+const waitingCount = computed(() => waiting.value.length);
+const waitingNames = computed(() => waiting.value.map((m) => m.pseudo).join(', '));
+/** Ce que le serveur retiendra, et ce qui en fera des dégâts : la même règle que `fboss_hit`. */
+const split = computed(() =>
   current.value
-    ? acceptedUnits(
+    ? splitHit(
         current.value.family,
         amount.value || 0,
         bossUnitsLeft(current.value),
+        reserved.value,
         current.value.tier,
       )
-    : 0,
+    : { accepted: 0, damage: 0, surplus: 0 },
 );
+const pct = (x: number) => `${Math.round(x * 100)} %`;
+const fmtParts = (x: number) =>
+  `${x.toLocaleString('fr-FR', { maximumFractionDigits: 1 })} part${x >= 2 ? 's' : ''}`;
 function step(d: number) {
   amount.value = Math.max(1, Math.floor((amount.value || 0) + d));
 }
@@ -667,7 +718,7 @@ async function doHit() {
   const before = hpLeft.value;
   busy.value = true;
   pinnedId.value = b.id;
-  let res: { accepted: number; defeated: boolean };
+  let res: { accepted: number; damage: number; surplus: number; defeated: boolean };
   try {
     res = await store.hit(b.id, amount.value);
   } catch (e) {
@@ -677,9 +728,15 @@ async function doHit() {
     return;
   }
   // La barre attend (hold) : c'est l'animation qui retire les PV, à l'impact.
-  const damage = bossDamage(res.accepted);
-  await stage.value?.play([{ id: `me-${Date.now()}`, userId: uid.value, damage }], before);
+  const damage = bossDamage(res.damage);
+  if (damage > 0)
+    await stage.value?.play([{ id: `me-${Date.now()}`, userId: uid.value, damage }], before);
   busy.value = false;
+  if (res.surplus > 0)
+    $q.notify({
+      type: 'info',
+      message: `🤝 ${res.surplus} en surplus — ils comptent pour ton XP et ton coffre.`,
+    });
   try {
     localStorage.setItem(SEEN_KEY(b.id), String(Date.now()));
   } catch {
@@ -828,7 +885,12 @@ async function doOpenChest(b: FriendBoss): Promise<ReturnType<typeof friendBossC
   busy.value = true;
   try {
     if (state === 'open') await store.claim(b.id);
-    const chest = friendBossChest(b, me, progress.global.value.level);
+    const chest = friendBossChest(
+      b,
+      me,
+      progress.global.value.level,
+      store.myMembership(b.id)?.units ?? 0,
+    );
     const now = Date.now();
     const msgId = await char.grantFriendBossChest(me, b.id, b.exerciseName, chest, now);
     if (msgId) await char.expeClaim(me, msgId, now);

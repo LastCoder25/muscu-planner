@@ -267,15 +267,15 @@ describe('🏆 TROPHÉE — le choix du joueur, hors de la puissance (v0.1145)',
 describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
   it('est le même pour un même boss et un même joueur, différent d’un joueur à l’autre', () => {
     const b = boss();
-    const a1 = friendBossChest(b, 'alice', 30);
-    const a2 = friendBossChest(b, 'alice', 30);
+    const a1 = friendBossChest(b, 'alice', 30, 0);
+    const a2 = friendBossChest(b, 'alice', 30, 0);
     expect(a2).toEqual(a1);
-    const others = ['bob', 'chloe', 'dan', 'eve'].map((u) => friendBossChest(b, u, 30).trophy);
+    const others = ['bob', 'chloe', 'dan', 'eve'].map((u) => friendBossChest(b, u, 30, 0).trophy);
     expect(others.some((t) => JSON.stringify(t) !== JSON.stringify(a1.trophy))).toBe(true);
   });
 
   it('paie comme deux boss de palier du niveau du joueur, sans bonus s’il meurt à la fin', () => {
-    const c = friendBossChest(boss(), 'u', 28);
+    const c = friendBossChest(boss(), 'u', 28, 0);
     expect(c.early).toBe(0);
     expect(c.gold).toBe(Math.round((bossGoldForLevel(28) * FRIEND_BOSS_CHEST.bosses) / 10) * 10);
     expect(c.stones).toBe(bossSummonCost(28) * FRIEND_BOSS_CHEST.bosses);
@@ -284,8 +284,8 @@ describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
   });
 
   it('tué tôt, il rapporte plus d’or, de pierres et de chance au trophée', () => {
-    const tard = friendBossChest(boss(), 'u', 40);
-    const tot = friendBossChest(boss({ defeatedAt: T0 + 2 * D }), 'u', 40);
+    const tard = friendBossChest(boss(), 'u', 40, 0);
+    const tot = friendBossChest(boss({ defeatedAt: T0 + 2 * D }), 'u', 40, 0);
     expect(tot.early).toBeCloseTo(5 / 7, 6);
     expect(tot.gold).toBeGreaterThan(tard.gold);
     expect(tot.stones).toBeGreaterThan(tard.stones);
@@ -299,6 +299,7 @@ describe('🎁 COFFRE DU BOSS ENTRE AMIS', () => {
           boss({ id: 'b' + i, defeatedAt: T0 + 7 * D * (1 - early) }),
           'u',
           40,
+          0,
         ).trophy;
         if (jetStar(t.roll) === 5) n++;
       }

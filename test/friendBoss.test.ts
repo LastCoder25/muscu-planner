@@ -28,7 +28,11 @@ import {
   bossLaunchBlocker,
   nextDeclareAt,
   type BossTokenState,
-  acceptedUnits,
+  splitHit,
+  bossReservedUnits,
+  surplusShares,
+  hitDamageUnits,
+  FRIEND_BOSS_CHEST,
   metMinShare,
   bossRepsXp,
   bossAgendaEntries,
@@ -323,13 +327,19 @@ describe('🐉 BOSS ENTRE AMIS — 🎫 jetons', () => {
 describe('🐉 BOSS ENTRE AMIS — saisies et récompense', () => {
   const share = FRIEND_BOSS.shareUnits.push;
 
-  it('une saisie est plafonnée : par saisie et aux PV restants', () => {
+  it('une saisie est plafonnée par saisie ; au-delà des PV, elle devient du SURPLUS (v0.1206)', () => {
     const perHit = Math.floor(share * FRIEND_BOSS.hitMaxShare);
     // Sous le plafond, tout passe (valeur dérivée : elle suit la part, pas un nombre écrit).
-    expect(acceptedUnits('push', perHit - 5, 9999)).toBe(perHit - 5);
-    expect(acceptedUnits('push', 9999, 9999)).toBe(perHit);
-    expect(acceptedUnits('push', 100, 7)).toBe(7);
-    expect(acceptedUnits('push', -5, 9999)).toBe(0);
+    expect(splitHit('push', perHit - 5, 9999, 0)).toEqual({
+      accepted: perHit - 5,
+      damage: perHit - 5,
+      surplus: 0,
+    });
+    expect(splitHit('push', 9999, 9999, 0).accepted).toBe(perHit);
+    // ⚠️ Plus de plafond aux PV restants : les reps au-delà de la mort du boss ne sont plus
+    // refusées, elles comptent en surplus (XP et coffre) — avant, on les perdait.
+    expect(splitHit('push', 100, 7, 0)).toEqual({ accepted: 100, damage: 7, surplus: 93 });
+    expect(splitHit('push', -5, 9999, 0)).toEqual({ accepted: 0, damage: 0, surplus: 0 });
   });
 
   it('la part minimale est un seuil inclusif', () => {
@@ -468,7 +478,8 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     // `fboss_hit` INSÈRE la frappe avant de mettre à jour les PV : un trigger `after
     // insert` lit donc `damage` d'avant. Vérifié en base : 20 reps sur 100 000 PV
     // annoncent « il reste 80 % », pas 100 %.
-    expect(lastDef('fboss_push_hit')).toContain('new.units::bigint * v_dpu');
+    // ⚠️ v0.1206 : les reps de DÉGÂTS seulement — le surplus n'entame rien.
+    expect(lastDef('fboss_push_hit')).toContain('(new.units - new.surplus)::bigint * v_dpu');
   });
 
   it('⚠️ un coup FATAL ne s’annonce pas comme une frappe (un seul message à cet instant)', () => {
@@ -520,8 +531,9 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     // Aucun historique n'entre dans la règle : la 20ᵉ saisie du jour passe comme la 1ʳᵉ.
     // ⚠️ L'arité (famille, demandé, restant, cran) est éprouvée ici : un 5ᵉ paramètre serait
     // le retour d'un historique de 24 h, précisément ce que la v0.892 a retiré.
-    expect(acceptedUnits).toHaveLength(4);
-    expect(acceptedUnits('push', 150, 9999)).toBe(150);
+    // La réserve (`reserved`) n'est PAS un historique : c'est la demi-part qui manque aux autres.
+    expect(splitHit).toHaveLength(5);
+    expect(splitHit('push', 150, 9999, 0).accepted).toBe(150);
   });
   it('mêmes plafonds que la DERNIÈRE définition de fboss_hit — et aucun plafond sur 24 h', () => {
     const hit = lastDef('fboss_hit');
@@ -541,7 +553,7 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
       'public.fboss_share_tier(family, tier) * public.fboss_damage_per_unit()',
     );
     const hit = lastDef('fboss_hit');
-    expect(hit).toContain('damage = damage + v_acc * v_dpu');
+    expect(hit).toContain('damage = damage + v_dmg * v_dpu');
     expect(hit).toContain('ceil((b.hp_total - b.damage)::numeric / v_dpu)::integer');
     // ⚠️ Délai explicite : ce test relit les MIGRATIONS sur disque (`lastDef`). Seul il tourne
     // en ~2 s, mais sous la charge de la suite complète il a dépassé les 5 s par défaut et
@@ -615,8 +627,8 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
     // PV du boss : une part par participant, au cran choisi.
     expect(bossHpTotal('push', 2, 'inhumain')).toBe(bossHpTotal('push', 2, 'serieux') * 5);
     // Plafond d'une saisie : 2,5 parts.
-    expect(acceptedUnits('push', 9999, 999_999, 'inhumain')).toBe(750);
-    expect(acceptedUnits('push', 9999, 999_999, 'echauffement')).toBe(75);
+    expect(splitHit('push', 9999, 999_999, 0, 'inhumain').accepted).toBe(750);
+    expect(splitHit('push', 9999, 999_999, 0, 'echauffement').accepted).toBe(75);
     // Part minimale du coffre : la moitié de la part du CRAN.
     expect(metMinShare('push', 150, 'inhumain')).toBe(true);
     expect(metMinShare('push', 149, 'inhumain')).toBe(false);
@@ -662,8 +674,8 @@ describe('🐉 BOSS ENTRE AMIS — la lib et le serveur disent la même chose', 
       defeatedAt: 7 * D,
       tier,
     });
-    const easy = friendBossChest(boss('serieux'), 'u1', 30);
-    const hard = friendBossChest(boss('inhumain'), 'u1', 30);
+    const easy = friendBossChest(boss('serieux'), 'u1', 30, 0);
+    const hard = friendBossChest(boss('inhumain'), 'u1', 30, 0);
     const volume = bossShareUnits('push', 'inhumain') / bossShareUnits('push', 'serieux');
     // L'or PAR REP monte : c'est ce que « de plus en plus intéressante » veut dire.
     expect(hard.gold / easy.gold).toBeGreaterThan(volume);
@@ -913,5 +925,126 @@ describe('🐉 les frappes groupées par jour', () => {
 
   it('une frappe à zéro ne crée pas de ligne', () => {
     expect(bossHitsByDay([hit('a', 0, J(15))], 'b1', dayKey)).toEqual([]);
+  });
+});
+
+// ── 🤝 LA PART RÉSERVÉE ET LE SURPLUS (v0.1206) ───────────────────────────────────────
+// Demandé par l'utilisateur : « pouvoir en faire plus sans empêcher le pote d'avoir sa
+// récompense ni le frustrer, mais que je sois récompensé quand même ».
+describe('🤝 BOSS ENTRE AMIS — la part réservée et le surplus', () => {
+  const half = Math.ceil(bossShareUnits('push') * FRIEND_BOSS.minShare); // 30
+  const started = boss({ startAt: T0 }); // démarré à T0, fin à T0 + 7 j
+  const mem = (userId: string, units: number, status: FriendBossMember['status'] = 'accepted') =>
+    ({ bossId: 'b1', userId, pseudo: userId, status, units, claimed: false }) as FriendBossMember;
+
+  it('garde pour chaque AUTRE membre accepté la demi-part qui lui manque', () => {
+    const members = [mem('me', 0), mem('ami', 10), mem('fini', 90), mem('invite', 0, 'invited')];
+    // L'ami a fait 10 sur 30 → 20 gardés ; « fini » a dépassé sa demi-part → rien ; un invité
+    // n'a pas rejoint → rien ; et JAMAIS sa propre part.
+    expect(bossReservedUnits(started, members, 'me', T0 + D)).toBe(half - 10);
+    expect(bossReservedUnits(started, members, 'ami', T0 + D)).toBe(half); // la mienne, vue par lui
+  });
+
+  it('⚠️ les réserves TOMBENT le dernier jour : un ami absent n’empêche pas la mort du boss', () => {
+    const members = [mem('me', 0), mem('ami', 0)];
+    expect(bossReservedUnits(started, members, 'me', T0 + 6 * D - 1)).toBe(half);
+    expect(bossReservedUnits(started, members, 'me', T0 + 6 * D)).toBe(0);
+    expect(FRIEND_BOSS.durationMs - FRIEND_BOSS.reserveReleaseMs).toBe(6 * D);
+  });
+
+  it('une saisie qui mord sur la réserve devient du SURPLUS — rien n’est refusé', () => {
+    // 120 reps de PV, 30 gardés pour l'ami : 150 demandées → 90 de dégâts, 60 de surplus.
+    expect(splitHit('push', 150, 120, 30)).toEqual({ accepted: 150, damage: 90, surplus: 60 });
+    // Tout est gardé : la frappe entière est du surplus, mais elle compte.
+    expect(splitHit('push', 50, 30, 30)).toEqual({ accepted: 50, damage: 0, surplus: 50 });
+  });
+
+  it('⚠️ le joueur rapide ne peut plus priver l’ami de sa demi-part (scénario complet)', () => {
+    // Deux joueurs, Sérieux : 120 reps de PV. Le rapide frappe au maximum, deux fois.
+    let left = 120;
+    let meUnits = 0;
+    for (let i = 0; i < 2; i++) {
+      const r = splitHit('push', 999, left, half);
+      left -= r.damage;
+      meUnits += r.accepted;
+    }
+    // Le boss reste vivant, avec exactement la demi-part de l'ami…
+    expect(left).toBe(half);
+    // …et le rapide a TOUT fait compter (surplus compris) : 300 reps.
+    expect(meUnits).toBe(300);
+    // L'ami fait sa demi-part : sa réserve ne le bloque pas lui-même, il abat le boss.
+    const ami = splitHit('push', half, left, 0);
+    expect(ami.damage).toBe(half);
+    expect(left - ami.damage).toBe(0);
+    expect(metMinShare('push', half)).toBe(true);
+  });
+
+  it('les frappes ne retirent que leurs reps de DÉGÂTS (animation, journal)', () => {
+    const h = (id: string, units: number, surplus: number): FriendBossHit => ({
+      id,
+      bossId: 'b1',
+      userId: 'ami',
+      units,
+      surplus,
+      createdAt: T0 + H,
+    });
+    expect(hitDamageUnits({ units: 50, surplus: 20 })).toBe(30);
+    expect(hitDamageUnits({ units: 50 })).toBe(50); // frappe d'avant la v0.1206
+    const r = strikesToReplay(
+      { id: 'b1', hpTotal: 120_000, damage: 30_000 },
+      [h('a', 50, 20), h('b', 40, 40)],
+      'me',
+      0,
+    );
+    // La frappe tout en surplus ne se rejoue pas : elle n'a rien entamé.
+    expect(r.strikes.map((s) => [s.id, s.damage])).toEqual([['a', 30_000]]);
+    const d = bossHitsByDay([h('a', 50, 20), h('b', 40, 40)], 'b1', () => 'j');
+    expect(d[0]!.total).toBe(90);
+    expect(d[0]!.damage).toBe(30);
+  });
+
+  it('🎁 le surplus grossit SON coffre, plafonné, et rend son trophée plus chanceux', () => {
+    const b = boss({ id: 'b1', startAt: T0, defeatedAt: T0 + 7 * D });
+    const share = bossShareUnits('push');
+    expect(surplusShares('push', share)).toBe(0);
+    expect(surplusShares('push', 3 * share)).toBe(2);
+    const base = friendBossChest(b, 'u', 30, share);
+    const plus1 = friendBossChest(b, 'u', 30, 2 * share);
+    const big = friendBossChest(b, 'u', 30, 50 * share);
+    expect(plus1.surplus).toBe(1);
+    expect(plus1.gold / base.gold).toBeCloseTo(1 + FRIEND_BOSS_CHEST.surplusGoldPerShare, 1);
+    // ⚠️ PLAFONNÉ : le coffre du cran le plus dur vaut déjà ~1 jour de revenu.
+    expect(big.gold / base.gold).toBeCloseTo(1 + FRIEND_BOSS_CHEST.surplusGoldMax, 1);
+    expect(big.stones).toBeGreaterThan(base.stones);
+    // Le trophée : plus d'étoiles en moyenne (chance), jamais un rang au-dessus du joueur.
+    let s0 = 0;
+    let s1 = 0;
+    for (let i = 0; i < 300; i++) {
+      const bi = boss({ id: 'b' + i, startAt: T0, defeatedAt: T0 + 7 * D });
+      s0 += friendBossChest(bi, 'u', 40, share).trophy.roll ?? 0;
+      s1 += friendBossChest(bi, 'u', 40, 50 * share).trophy.roll ?? 0;
+    }
+    expect(s1).toBeGreaterThan(s0);
+  });
+
+  it('⚠️ même règle que le serveur (dernière définition de fboss_hit, migr. 0092)', () => {
+    // Le texte ENTIER de la dernière définition (lastDef s'arrête avant certaines lignes).
+    const all = fs
+      .readdirSync('supabase/migrations')
+      .filter((f) => f.endsWith('.sql'))
+      .sort()
+      .map((f) => fs.readFileSync(`supabase/migrations/${f}`, 'utf8'))
+      .filter((t) => t.includes('create or replace function public.fboss_hit('));
+    const hit = all[all.length - 1]!;
+    // La réserve : la demi-part manquante des AUTRES membres acceptés…
+    expect(hit).toContain(`ceil(v_share * ${FRIEND_BOSS.minShare})::integer - m.units`);
+    expect(hit).toContain("m.status = 'accepted' and m.user_id <> v_uid");
+    // …jusqu'au dernier jour.
+    const days = (FRIEND_BOSS.durationMs - FRIEND_BOSS.reserveReleaseMs) / D;
+    expect(hit).toContain(`public.fboss_start(b) + interval '${days} days'`);
+    // Le surplus est enregistré, et plus rien n'est plafonné aux PV restants.
+    expect(hit).toContain('values (p_boss, v_uid, v_acc, v_acc - v_dmg)');
+    expect(hit).toContain('v_dmg := least(v_acc, greatest(0, v_left - v_reserved))');
+    expect(hit).toContain(`floor(v_share * ${FRIEND_BOSS.hitMaxShare})`);
   });
 });

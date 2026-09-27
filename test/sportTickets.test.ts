@@ -79,6 +79,7 @@ describe('🎟️ tickets du boss entre amis — selon le cran', () => {
         },
         'me',
         30,
+        0,
       );
       expect(chest.tickets).toBe(t.tickets);
     }

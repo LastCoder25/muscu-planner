@@ -82,6 +82,8 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
       bossId: r.boss_id,
       userId: r.user_id,
       units: r.units,
+      // 🤝 Reps sans dégâts (migr. 0092) ; absent sur une base pas encore migrée → 0.
+      surplus: r.surplus ?? 0,
       createdAt: Date.parse(r.created_at) || 0,
     }));
     loaded.value = true;
@@ -145,14 +147,21 @@ export const useFriendBossStore = defineStore('friendBoss', () => {
   async function hit(
     bossId: string,
     units: number,
-  ): Promise<{ accepted: number; defeated: boolean }> {
-    const res = await rpc<{ ok: boolean; accepted?: number; defeated?: boolean; reason?: string }>(
-      'fboss_hit',
-      { p_boss: bossId, p_units: Math.floor(units) },
-    );
+  ): Promise<{ accepted: number; damage: number; surplus: number; defeated: boolean }> {
+    const res = await rpc<{
+      ok: boolean;
+      accepted?: number;
+      damage?: number;
+      surplus?: number;
+      defeated?: boolean;
+      reason?: string;
+    }>('fboss_hit', { p_boss: bossId, p_units: Math.floor(units) });
     if (!res.ok) throw new FriendBossError(res.reason ?? '');
     await fetchMine();
-    return { accepted: res.accepted ?? 0, defeated: !!res.defeated };
+    const accepted = res.accepted ?? 0;
+    // ⚠️ Un serveur d'avant la 0092 ne renvoie pas `damage` : tout y faisait des dégâts.
+    const damage = res.damage ?? accepted;
+    return { accepted, damage, surplus: res.surplus ?? 0, defeated: !!res.defeated };
   }
 
   /** Dépose l'apparence de mon héros sur mes adhésions en cours (migr. 0072), pour que les

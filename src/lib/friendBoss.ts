@@ -99,6 +99,14 @@ export const FRIEND_BOSS = {
   /** La prime ne compte que les reps jusqu'à N parts : au-delà, les reps paient toujours
    *  leur XP, mais ne gonflent plus la prime. */
   bonusCapShares: 2,
+  /** 🤝 LA PART RÉSERVÉE (v0.1206 ; demandé par l'utilisateur : « pouvoir en faire plus sans
+   *  empêcher le pote d'avoir sa récompense ni le frustrer »). Tant qu'un ami accepté n'a pas
+   *  apporté sa demi-part, les derniers PV du boss lui sont GARDÉS : le joueur rapide ne peut
+   *  plus vider le boss avant lui. Ses reps au-delà ne sont pas perdues — elles comptent en
+   *  SURPLUS (XP et coffre), sans dégâts. ⚠️ Les réserves TOMBENT le dernier jour (choix de
+   *  l'utilisateur) : un ami qui ne joue pas du tout ne peut pas empêcher la mort du boss.
+   *  Doit rester égal à `fboss_hit` (migr. 0092 : `interval '6 days'`). */
+  reserveReleaseMs: 1 * DAY,
 } as const;
 
 /** 🎚️ LES CRANS DE DIFFICULTÉ (v0.904 ; demandés par l'utilisateur : « des crans avec des
@@ -265,9 +273,17 @@ export interface FriendBossHit {
   id: string;
   bossId: string;
   userId: string;
+  /** Toutes les reps de la saisie — elles paient toutes leur XP. */
   units: number;
+  /** 🤝 Celles qui n'ont PAS fait de dégâts (parts réservées aux amis, ou au-delà de la mort
+   *  du boss). Absent sur les frappes d'avant la v0.1206 : 0. */
+  surplus?: number;
   createdAt: number;
 }
+
+/** Reps d'une frappe qui ont vraiment entamé le boss. */
+export const hitDamageUnits = (h: Pick<FriendBossHit, 'units' | 'surplus'>): number =>
+  Math.max(0, h.units - (h.surplus ?? 0));
 
 const ms = (iso: string | null | undefined): number | null =>
   iso ? Date.parse(iso) || null : null;
@@ -495,7 +511,9 @@ export function strikesToReplay(
     .filter((h) => h.bossId === b.id && h.userId !== me && h.createdAt > since)
     .sort((x, y) => x.createdAt - y.createdAt)
     .slice(-max)
-    .map((h) => ({ id: h.id, userId: h.userId, damage: bossDamage(h.units) }));
+    .map((h) => ({ id: h.id, userId: h.userId, damage: bossDamage(hitDamageUnits(h)) }))
+    // Une frappe tout en surplus n'entame rien : pas de projectile à rejouer.
+    .filter((s) => s.damage > 0);
   const hpLeft = Math.max(0, b.hpTotal - b.damage);
   const replayed = fresh.reduce((a, s) => a + s.damage, 0);
   return { strikes: fresh, startHp: Math.min(b.hpTotal, hpLeft + replayed) };
@@ -647,17 +665,50 @@ export function bossLaunchBlocker(
   return null;
 }
 
-/** Ce qu'une saisie peut encore apporter, plafonds compris, en reps : le plafond d'une
- *  saisie et `unitsLeft`, les reps qui restent avant la mort du boss (`bossUnitsLeft`).
- *  ⚠️ Aucun plafond sur 24 h (v0.892). */
-export function acceptedUnits(
+/** Reps d'une demi-part (le minimum pour le coffre), arrondies au-dessus : c'est le plus
+ *  petit entier qui passe `metMinShare` (et le `v_units < part × 0,5` de `fboss_claim`). */
+export function minShareUnits(family: BossFamily, tier?: string | null): number {
+  return Math.ceil(bossShareUnits(family, tier) * FRIEND_BOSS.minShare);
+}
+
+/** 🤝 Reps GARDÉES pour les autres : la demi-part qui manque encore à chaque ami accepté.
+ *  Zéro le dernier jour (`reserveReleaseMs`). La règle exacte de `fboss_hit` (migr. 0092). */
+export function bossReservedUnits(
+  b: Pick<FriendBoss, 'id' | 'family' | 'tier' | 'createdAt' | 'startAt'>,
+  members: readonly Pick<FriendBossMember, 'bossId' | 'userId' | 'status' | 'units'>[],
+  userId: string,
+  now: number,
+): number {
+  if (now >= bossEndsAt(b) - FRIEND_BOSS.reserveReleaseMs) return 0;
+  const half = minShareUnits(b.family, b.tier);
+  return members
+    .filter((m) => m.bossId === b.id && m.status === 'accepted' && m.userId !== userId)
+    .reduce((s, m) => s + Math.max(0, half - m.units), 0);
+}
+
+/** Ce que devient une saisie, plafonds compris : `accepted` = les reps retenues (plafond
+ *  d'UNE saisie, 2,5 parts), dont `damage` entame le boss et `surplus` non — celles qui
+ *  mordraient sur les parts réservées aux amis (`reserved`) ou dépasseraient la mort du boss
+ *  (`unitsLeft`, cf. `bossUnitsLeft`). Le surplus paie son XP et grossit le coffre : rien
+ *  n'est perdu. ⚠️ Aucun plafond sur 24 h (v0.892). La règle exacte de `fboss_hit`. */
+export function splitHit(
   family: BossFamily,
   asked: number,
   unitsLeft: number,
+  reserved: number,
   tier?: string | null,
-): number {
+): { accepted: number; damage: number; surplus: number } {
   const perHit = Math.floor(bossShareUnits(family, tier) * FRIEND_BOSS.hitMaxShare);
-  return Math.max(0, Math.min(Math.floor(asked), perHit, Math.max(0, unitsLeft)));
+  const accepted = Math.max(0, Math.min(Math.floor(asked), perHit));
+  const free = Math.max(0, Math.max(0, unitsLeft) - Math.max(0, reserved));
+  const damage = Math.min(accepted, free);
+  return { accepted, damage, surplus: accepted - damage };
+}
+
+/** 🎁 Parts apportées AU-DELÀ de la sienne (0 si on n'a pas dépassé sa part). */
+export function surplusShares(family: BossFamily, units: number, tier?: string | null): number {
+  const share = bossShareUnits(family, tier);
+  return share > 0 ? Math.max(0, units - share) / share : 0;
 }
 
 /** A-t-on apporté sa part minimale ? */
@@ -686,7 +737,7 @@ export function bossHitsByDay(
   hits: readonly FriendBossHit[],
   bossId: string,
   dayKey: (ms: number) => string,
-): { day: string; at: number; total: number; hits: FriendBossHit[] }[] {
+): { day: string; at: number; total: number; damage: number; hits: FriendBossHit[] }[] {
   const byDay = new Map<string, FriendBossHit[]>();
   for (const h of hits) {
     if (h.bossId !== bossId || h.units <= 0) continue;
@@ -703,6 +754,8 @@ export function bossHitsByDay(
         // Le plus récent du jour : c'est lui qui date la ligne (« il y a 2 h »).
         at: sorted[0]!.createdAt,
         total: sorted.reduce((n, h) => n + h.units, 0),
+        /** Reps qui ont vraiment entamé le boss (le surplus n'en fait pas partie). */
+        damage: sorted.reduce((n, h) => n + hitDamageUnits(h), 0),
         hits: sorted,
       };
     })
@@ -820,6 +873,15 @@ export const FRIEND_BOSS_CHEST = {
   earlyMult: 1,
   /** Chance du trophée ajoutée par la part du combat restante. */
   earlyLuck: 0.5,
+  /** 🎁 LE SURPLUS PAIE (v0.1206 ; choix de l'utilisateur : « les deux, plus modestement »).
+   *  Chaque part apportée au-delà de la sienne ajoute de l'or et des pierres à SON coffre, et
+   *  de la chance à SON trophée — jamais rien pris aux autres. ⚠️ PLAFONNÉ : le coffre du cran
+   *  le plus dur vaut déjà ~1 jour de revenu (mesuré v0.904) ; +30 % au plus le garde sous
+   *  ~1,3 jour, et il faut deux parts de plus pour l'atteindre (600 pompes en Inhumain). */
+  surplusGoldPerShare: 0.15,
+  surplusGoldMax: 0.3,
+  surplusLuckPerShare: 0.1,
+  surplusLuckMax: 0.2,
 } as const;
 
 export interface FriendBossChest {
@@ -830,6 +892,8 @@ export interface FriendBossChest {
   /** 🎟️ Tickets d'invocation — ceux du cran (`BossTier.tickets`). ⚠️ Le « tué tôt » n'en
    *  ajoute pas : il paie déjà en or, en pierres et en chance du trophée. */
   tickets: number;
+  /** 🎁 Parts apportées au-delà de la sienne (0..) : ce qu'a rapporté d'en faire plus. */
+  surplus: number;
   trophy: Omit<Item, 'id'>;
 }
 
@@ -845,10 +909,23 @@ export function friendBossChest(
   >,
   userId: string,
   playerLevel: number,
+  /** ⚠️ REQUIS : SES reps sur ce boss (`FriendBossMember.units`) — c'est le surplus qui les
+   *  lit. Figées à la mort du boss (plus aucune frappe acceptée), donc le coffre reste le
+   *  même à la récupération. */
+  units: number,
 ): FriendBossChest {
   const level = Math.max(1, Math.floor(playerLevel));
   const early = earlyKillFraction(b);
   const tier = bossTier(b.tier);
+  const surplus = surplusShares(b.family, units, b.tier);
+  const surplusGold = Math.min(
+    FRIEND_BOSS_CHEST.surplusGoldMax,
+    surplus * FRIEND_BOSS_CHEST.surplusGoldPerShare,
+  );
+  const surplusLuck = Math.min(
+    FRIEND_BOSS_CHEST.surplusLuckMax,
+    surplus * FRIEND_BOSS_CHEST.surplusLuckPerShare,
+  );
   // ⚠️ SUPER-LINÉAIRE en difficulté (`rewardExp` 1,2) : c'est ce qui rend un boss dur plus
   // payant qu'une enfilade de faciles — mesuré, ×5,3 d'or par jour, et l'or PAR REP monte
   // de 38 % au cran le plus dur. Proportionnel (exposant 1), l'or par rep serait plat et
@@ -856,6 +933,7 @@ export function friendBossChest(
   const mult =
     FRIEND_BOSS_CHEST.bosses *
     (1 + early * FRIEND_BOSS_CHEST.earlyMult) *
+    (1 + surplusGold) *
     tier.mult ** FRIEND_BOSS.rewardExp;
   const rng = mulberry32(seedOf(`${b.id}:${userId}`));
   return {
@@ -863,13 +941,14 @@ export function friendBossChest(
     stones: Math.round(bossSummonCost(level) * mult),
     early,
     tickets: tier.tickets,
+    surplus,
     trophy: rollTrophy(rng, {
       title: b.exerciseName,
       level,
       // ⚠️ La chance du CRAN s'AJOUTE à celle du « tué tôt » : les deux disent « tu as fait
       // plus que le minimum ». Elle ne touche que les étoiles et le niveau d'objet — le rang
       // reste celui du joueur (v0.894), donc le sport demeure le plafond.
-      luck: early * FRIEND_BOSS_CHEST.earlyLuck + tier.luck,
+      luck: early * FRIEND_BOSS_CHEST.earlyLuck + tier.luck + surplusLuck,
     }),
   };
 }
