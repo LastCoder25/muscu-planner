@@ -2585,8 +2585,10 @@ function leftOf(at: number): string {
   cursor: pointer;
   text-align: center;
 }
+/* Illustration agrandie (demandé) : 20 → 48 px ; la case a la place depuis le 2 × 2. */
 .dg-emo {
-  font-size: 20px;
+  margin-top: 8px;
+  font-size: 48px;
   line-height: 1.1;
 }
 .dg-name {
@@ -2757,6 +2759,14 @@ function leftOf(at: number): string {
 }
 .dg-rsb {
   width: 28px;
+}
+/* Dans une case de la fiche : le RANG en haut à gauche (demandé), en face de la pastille
+   de rareté à droite. Sélecteur plus précis que le `position: relative` du composant. */
+.d-gear-slot .dg-rsb {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 26px;
 }
 /* ⚠️ COLLÉS EN BAS. Les tuiles d'une même rangée sont étirées à la même hauteur par la
    grille ; sans `margin-top: auto` la rangée de boutons suivait le texte, donc les icônes
