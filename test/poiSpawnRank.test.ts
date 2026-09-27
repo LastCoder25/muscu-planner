@@ -63,7 +63,7 @@ describe('le spawn tire un rang de DIFFICULTÉ', () => {
       const top = characterRank(PL).rankIndex;
       let auRang = 0;
       let total = 0;
-      for (let s = 1; s <= 6; s++)
+      for (let s = 1; s <= 20; s++)
         for (const p of lieux(PL, s * 977)) {
           total++;
           if (poiRank(p).rankIndex >= top) auRang++;
@@ -90,7 +90,7 @@ describe('le spawn tire un rang de DIFFICULTÉ', () => {
     // plus élevé. Sans la dérivation, les deux porteraient le même.
     const petits: number[] = [];
     const gros: number[] = [];
-    for (let s = 1; s <= 6; s++)
+    for (let s = 1; s <= 20; s++)
       for (const p of lieux(30, s * 977)) {
         const spec = campSpecOf(p) ?? harvestGuardOf(p)!;
         (spec.size <= 1.2 ? petits : spec.size >= 2.5 ? gros : []).push(p.level);

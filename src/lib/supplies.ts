@@ -258,6 +258,7 @@ const HARVESTS = new Set<PoiType>([
   'mana_mine',
   'ruins',
   'fallen',
+  'plunder',
 ]);
 /** Les lieux dont le butin n'est PAS une cargaison (sceaux, consommables trouvés sur place). */
 const NO_CARGO = new Set<PoiType>(['ruins', 'fallen']);

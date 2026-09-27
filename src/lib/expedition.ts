@@ -62,7 +62,10 @@ export type PoiType =
   // 🏚️ RUINES D'UN HÉROS TOMBÉ : on fouille sans combattre, on rapporte des consommables 🎒.
   | 'fallen'
   // 🐺 TANIÈRE : UNE bête seule et forte, deux champions au plus — beaucoup d'XP.
-  | 'den';
+  | 'den'
+  // 🏴‍☠️ CARAVANE PILLÉE (2026-09-27, demandé) : RARE et fugace, gardée par ses pillards
+  // (toujours des bandits), elle rend BEAUCOUP d'or (`PLUNDER_GOLD_MULT` × une mine).
+  | 'plunder';
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et
  *  ajouter un POI casse la compilation tant qu'on ne l'a pas nommé. La boîte à messages
@@ -84,6 +87,7 @@ export const POI_LABEL: Record<PoiType, string> = {
   ruins: 'Ruines anciennes',
   fallen: 'Ruines d’un héros tombé',
   den: 'Tanière',
+  plunder: 'Caravane pillée',
 };
 
 /** Emoji d'un point d'intérêt — la carte et le rapport de convoi lisent la MÊME table
@@ -103,6 +107,7 @@ export const POI_EMO: Record<PoiType, string> = {
   ruins: '🏛️',
   fallen: '🏚️',
   den: '🐺',
+  plunder: '🏴‍☠️',
 };
 
 /** POI de récolte : on ramasse et on rentre (comme la mine) — gardé depuis 2026-09-22 (`harvestGuardOf`). */
@@ -114,6 +119,7 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'mana_mine',
   'ruins',
   'fallen',
+  'plunder',
 ]);
 
 /** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
@@ -343,9 +349,12 @@ export function harvestGuardOf(poi: Pick<Poi, 'id' | 'type' | 'level'>): CampSpe
   // 🏚️ Les ruines d'un héros tombé : personne ne les garde, on y fouille.
   if (poi.type === 'fallen') return null;
   const rng = mulberry32((hashId(poi.id) ^ 0x5851f42d) >>> 0 || 1);
-  const faction = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
-  // 🏛️ Les ruines anciennes gardent des sceaux : leurs gardes sont plus nombreux.
-  const sizes = poi.type === 'ruins' ? RUINS_GUARD_SIZES : HARVEST_GUARD_SIZES;
+  const drawn = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
+  // 🏴‍☠️ Une caravane pillée l'est par des BANDITS (le tirage reste consommé : le flux ne décale pas).
+  const faction = poi.type === 'plunder' ? 'bandits' : drawn;
+  // 🏛️ Les ruines anciennes gardent des sceaux, la caravane son or : gardes plus nombreux.
+  const sizes =
+    poi.type === 'ruins' || poi.type === 'plunder' ? RUINS_GUARD_SIZES : HARVEST_GUARD_SIZES;
   const base = sizes[Math.floor(rng() * sizes.length)]!;
   const ramp = Math.min(
     1,
@@ -922,7 +931,11 @@ export const EXPE = {
     ruins: 20 * 3600_000,
     fallen: 16 * 3600_000,
     den: 14 * 3600_000,
+    // 🏴‍☠️ Fugace : les pillards filent avec le butin.
+    plunder: 5 * 3600_000,
   },
+  /** 🏴‍☠️ Chance qu'un lieu d'économie qui apparaît soit une caravane pillée (une à la fois). */
+  plunderChance: 0.022,
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
   // Coût = base × niveau^1.6 → VRAI puits d'or (2026‑08‑12). Repère : un donjon
@@ -955,6 +968,7 @@ export const EXPE = {
     ruins: 34,
     fallen: 30,
     den: 65,
+    plunder: 22,
   },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
@@ -1485,6 +1499,7 @@ const SPAWN_TABLE = [
  */
 const ECON_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'mine',
+  'plunder',
   'camp',
   'lair',
   'arena',
@@ -1532,6 +1547,14 @@ function spawnOne(
     // ⚠️ Générateur À PART : tiré sur `rng`, ce basculement décalait le PLACEMENT des lieux
     // suivants (mesuré : une paire à 9,8 d'écart sur 20 cartes, contre 0).
     type = pick(mulberry32((map.seed ^ (map.spawnCount * 0x9e3779b1)) >>> 0 || 1), ECON_TABLE);
+  // 🏴‍☠️ CARAVANE PILLÉE : RARE, une à la fois, à la place d'un lieu d'économie (c'est de l'or).
+  // ⚠️ Générateur À PART : sur `rng`, ce tirage décalerait le placement de tous les lieux.
+  if (
+    ECON_TYPES.has(type) &&
+    !map.pois.some((p) => p.type === 'plunder') &&
+    mulberry32((map.seed ^ (map.spawnCount * 0x85ebca6b)) >>> 0 || 1)() < EXPE.plunderChance
+  )
+    type = 'plunder';
   // UNE SEULE arène à la fois sur la carte (ticket 2d616665) → sinon on rabat sur camp.
   if (type === 'arena' && map.pois.some((p) => p.type === 'arena')) type = 'camp';
   placePoiOfType(map, now, playerLevel, reach, type, rng, `poi_${map.seed}_${map.spawnCount}`);
@@ -2303,6 +2326,7 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
   ruins: ['Les gardes des ruines ont tenu : les sceaux restent sous la pierre.'],
   fallen: ['Les ruines s’étaient déjà écroulées sur son paquetage.'],
   den: ['La bête a eu le dessus. Retraite, les griffes aux trousses.'],
+  plunder: ['Les pillards ont tenu : ils filent avec le butin de la caravane.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -2343,6 +2367,10 @@ const WIN_TEXT: Record<PoiType, string[]> = {
     '🏚️ Fouillé à la lueur d’une torche : de quoi repartir équipé.',
   ],
   den: ['🐺 La bête est tombée — une leçon que tes champions n’oublieront pas.'],
+  plunder: [
+    '🏴‍☠️ Les pillards dispersés — l’or de la caravane est à toi.',
+    '🏴‍☠️ Caravane reprise : les coffres sont pleins.',
+  ],
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */
@@ -2555,12 +2583,17 @@ export function harvestGold(
   poi: Pick<Poi, 'id' | 'type' | 'level'>,
   playerLevel: number | undefined,
 ): number {
-  if (poi.type === 'mine') {
+  if (poi.type === 'mine' || poi.type === 'plunder') {
     const L = heroRewardLevel(poi, playerLevel);
-    return Math.round(goldCost('mine', L) * (1.3 + rewardTravelFactor(L)) * EXPE.rewardGoldMult);
+    const vein = goldCost('mine', L) * (1.3 + rewardTravelFactor(L)) * EXPE.rewardGoldMult;
+    return Math.round(vein * (poi.type === 'plunder' ? PLUNDER_GOLD_MULT : 1));
   }
   return 0;
 }
+
+/** 🏴‍☠️ Une caravane pillée rend autant d'or que PLUSIEURS mines de même rang : elle est rare
+ *  (un tirage sur `SPAWN_TABLE.length`), fugace (5 h) et mieux gardée. */
+export const PLUNDER_GOLD_MULT = 2;
 
 function mineOutcome(
   rng: () => number,

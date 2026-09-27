@@ -85,6 +85,7 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
       { emoji: '👑', label: 'Boss de palier' },
       { emoji: '🪙', label: 'Vente', detail: 'objets, talents et familiers en trop' },
       { emoji: '🏕️', label: 'Mines et camps de la carte', detail: 'expéditions et équipes' },
+      { emoji: '🏴‍☠️', label: 'Caravane pillée', detail: 'rare, quelques heures, beaucoup d’or' },
       { emoji: '🏟️', label: 'Arène', detail: 'selon les vagues tenues' },
       { emoji: '🛡️', label: 'Sièges repoussés', detail: 'surtout les bandits' },
       { emoji: '🎯', label: 'Coffre du Défi 360' },

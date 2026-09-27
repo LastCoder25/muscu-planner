@@ -1569,6 +1569,7 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',
+  plunder: () => 'beaucoup d’or 🪙',
 };
 /** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */
 const poiSub = computed(() => {

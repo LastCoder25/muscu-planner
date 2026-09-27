@@ -30,6 +30,7 @@ export const TYPE_ORDER: readonly PoiType[] = [
   'mana_mine',
   'ruins',
   'fallen',
+  'plunder',
   'camp',
   'lair',
   'den',

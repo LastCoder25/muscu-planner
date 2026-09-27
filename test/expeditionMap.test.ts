@@ -689,6 +689,7 @@ describe('difficulté des POI de combat', () => {
       'fallen',
       'mana_mine',
       'mine',
+      'plunder',
       'ruins',
       'shrine',
       'well',
