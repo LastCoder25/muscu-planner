@@ -2525,7 +2525,9 @@ function leftOf(at: number): string {
 
 /* ── 🗡️ SES 3 EMPLACEMENTS D'ÉQUIPEMENT — sur la fiche ── */
 .d-gear {
-  display: flex;
+  /* 2 × 2 (demandé) : sur une ligne, quatre cases de ~75 px coupaient noms et stats. */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }

@@ -2403,6 +2403,16 @@ export function advSkillSlots(adv: Adventurer): number {
   return c ? SKILL_SLOTS[c.grade] : 0;
 }
 
+/** 🪬 Les emplacements de compétence d'un champion, pour une MINIATURE (portrait, tuile) :
+ *  ses compétences posées dans l'ordre, puis `null` pour chaque emplacement libre. Vide hors
+ *  champion. ⚠️ Jamais plus de cases que d'emplacements, sauf s'il en porte davantage (une
+ *  sauvegarde d'avant) : on ne cache pas une compétence qu'il a. */
+export function advSkillCells(adv: Adventurer): (ChampSkill | null)[] {
+  const skills = advRuneSkills(adv);
+  const n = Math.max(advSkillSlots(adv), skills.length);
+  return Array.from({ length: n }, (_, i) => skills[i] ?? null);
+}
+
 /** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche de poser cette rune sur ce champion. */
 export function runeUseBlocker(adv: Adventurer, tier: RuneTier, state: RuneState): RuneUseBlock | null {
   if (!advChampion(adv)) return 'notChampion';

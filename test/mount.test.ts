@@ -1068,6 +1068,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     };
     expect(await mountIt(P, base)).toBeNull();
     expect(await mountIt(P, { ...base, tone: 'busy', state: '🐫 en route · 2 h' })).toBeNull();
+    // 🪬 Les compétences en miniature : emoji + niveau, et les emplacements libres.
+    if (base.adv.championId) {
+      let mini = '';
+      await mountIt(P, { ...base, adv: { ...base.adv, skills: [{ id: 'speed', level: 3 }] } }, undefined, undefined, '/', (h) => (mini = h));
+      expect(mini).toContain('Vitesse · niveau 3');
+      expect(mini).toContain('Emplacement libre');
+    }
     // ⬆️ Une pièce PRÊTE a son bouton d'ascension sur le portrait (demandé : on ne pouvait
     // monter les pièces que depuis le stock) ; une pièce non listée n'en a pas.
     const piece = { id: 'g1', name: 'Épée courte' };

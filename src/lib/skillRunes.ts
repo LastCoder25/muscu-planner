@@ -133,6 +133,14 @@ export const SKILL_IDS = Object.keys(SKILLS) as SkillId[];
 /** Niveau maximum d'une compétence. */
 export const SKILL_MAX_LEVEL = 5;
 
+/** La teinte d'une couleur de rune — source unique des écrans (fiche, portraits). */
+export const RUNE_COLOR: Record<RuneTier, string> = {
+  green: '#7bc86c',
+  blue: '#5aa9ff',
+  violet: '#b98cff',
+  gold: '#ffb23f',
+};
+
 /** ⚠️ RENDEMENT DÉCROISSANT : multiplicateur de la valeur de base à chaque niveau. Chaque
  *  niveau apporte moins que le précédent (+0,7, +0,5, +0,3, +0,2) — cumuler reste un
  *  progrès sans jamais valoir une compétence d'un cran plus haut empilée à l'infini. */

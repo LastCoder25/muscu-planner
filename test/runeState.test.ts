@@ -12,7 +12,7 @@ import {
   skillsOfTier,
   type RuneState,
 } from '@/lib/skillRunes';
-import { runeUseBlocker, settlePendingRune, useRune, type Adventurer } from '@/lib/adventurers';
+import { advSkillCells, runeUseBlocker, settlePendingRune, useRune, type Adventurer } from '@/lib/adventurers';
 
 /** 💾 L'état des runes et la pose sur un champion. */
 
@@ -118,5 +118,16 @@ describe('🔮 poser une rune', () => {
   it('une décision ne vaut que pour le champion concerné', () => {
     const s: RuneState = { ...state(), pending: { advId: 'autre', tier: 'green', drawn: 'speed' } };
     expect(settlePendingRune(champ(), s, 0)).toBeNull();
+  });
+});
+
+describe('🪬 la miniature des compétences', () => {
+  it('ses compétences puis un null par emplacement libre', () => {
+    const a = champ({ skills: [{ id: 'haul', level: 2 }] });
+    expect(advSkillCells(a)).toEqual([{ id: 'haul', level: 2 }, null]);
+    expect(advSkillCells({ ...a, championId: undefined })).toEqual([]);
+    // Une sauvegarde qui en porte plus que ses emplacements : rien n'est caché.
+    const trop = champ({ skills: [{ id: 'haul', level: 1 }, { id: 'speed', level: 1 }, { id: 'care', level: 1 }] });
+    expect(advSkillCells(trop)).toHaveLength(3);
   });
 });
