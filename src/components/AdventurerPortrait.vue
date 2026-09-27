@@ -113,7 +113,11 @@
         :key="c.slot"
         type="button"
         class="apg-cell"
-        :class="{ empty: !c.filled, pending: c.pending, asc: !!c.piece && ascendGear?.includes(c.piece.id) }"
+        :class="{
+          empty: !c.filled,
+          pending: c.pending,
+          asc: !!c.piece && ascendGear?.includes(c.piece.id),
+        }"
         :style="c.color ? { '--gc': c.color } : {}"
         :title="c.title"
         :aria-label="c.title"
@@ -124,7 +128,9 @@
           ><AdvGearArt :model="c.model">{{ c.emoji }}</AdvGearArt></span
         >
         <span v-if="c.rank" class="apg-rk">{{ c.rank }}</span>
-        <span v-if="c.piece && ascendGear?.includes(c.piece.id)" class="apg-up" aria-hidden="true">⬆️</span>
+        <span v-if="c.piece && ascendGear?.includes(c.piece.id)" class="apg-up" aria-hidden="true"
+          >⬆️</span
+        >
         <span v-if="c.bar" class="apg-bar" :style="{ '--bc': c.bar.rank.color }"
           ><span :style="{ width: c.bar.pct + '%' }"
         /></span>
@@ -215,7 +221,7 @@ const props = defineProps<{
    *  ⚠️ Une PROP, plus une déduction faite sur la chaîne d'état : le portrait lisait
    *  `state.startsWith('✅')` pour savoir s'il était occupé — renommer le libellé aurait
    *  cassé le style en silence, et la même règle vivait alors à deux endroits. */
-  tone?: 'free' | 'busy' | 'hurt' | 'benched';
+  tone?: 'free' | 'busy' | 'hurt' | 'benched' | 'posted';
   disabled?: boolean;
   /** Les 4 emplacements d'équipement, dans l'ordre de la grille. */
   gear: AdvGearCell[];
@@ -318,6 +324,10 @@ function starTf(i: number): string {
 }
 .ap.tone-busy {
   --tone-c: var(--accent, #ffd23f);
+}
+.ap.tone-posted {
+  /* 🏰 Posté sur un point de contrôle : le violet des équipes sur la carte. */
+  --tone-c: #b57bff;
 }
 .ap.tone-hurt {
   --tone-c: var(--d4, #ff6a45);

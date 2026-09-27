@@ -294,6 +294,34 @@
           @close="selected = null"
           @seal="doSeal"
         />
+        <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
+             revient. Rien à envoyer : on récolte, ou on rappelle. -->
+        <div v-if="liveControl?.owner === 'player'" class="ctl-panel">
+          <p class="ctl-line">🏰 <b>Tenue</b> par {{ controlGarrison.join(', ') || 'personne' }}</p>
+          <p class="ctl-line">
+            ⛏️ <b>{{ controlRate.toLocaleString('fr-FR') }}</b> 🪙/h · réserve
+            <b>{{ controlGold.toLocaleString('fr-FR') }}</b> 🪙
+            <span class="ctl-dim">(24 h au plus)</span>
+          </p>
+          <p v-if="controlAttackIn > 0" class="ctl-line ctl-warn">
+            ⚔️ L’ennemi reviendra dans <b>{{ formatDuration(controlAttackIn) }}</b> — force inconnue
+            : ta garnison ne gagnera pas toujours.
+          </p>
+          <div class="send-bar">
+            <button class="sh-send" :disabled="controlGold <= 0 || ctlBusy" @click="collectCtl">
+              Récolter {{ controlGold.toLocaleString('fr-FR') }} 🪙
+            </button>
+          </div>
+          <button type="button" class="ctl-recall" :disabled="ctlBusy" @click="recallCtl">
+            Rappeler la garnison — la mine retourne à l’ennemi
+          </button>
+        </div>
+        <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur cette mine.</p>
+        <p v-else-if="liveControl" class="sh-note">
+          🏰 Prends-la avec 1 à 3 champions, sans le héros : ils y resteront en garnison et la
+          feront produire, jusqu’à ce que l’ennemi la reprenne (entre 1 et 3 jours). Chaque ennemi
+          abattu, à la prise comme en défense, leur rapporte de l’XP.
+        </p>
         <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
              se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
         <template v-if="offers.hero && !partyTarget">
@@ -613,6 +641,7 @@ import {
   sortByGradeThenRank,
 } from '@/lib/adventurers';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
+import { controlGoldPerHour, controlStock } from '@/lib/controlPoints';
 import {
   RIFT,
   riftClearMana,
@@ -1117,6 +1146,68 @@ const selectedWarband = computed(() => {
     utile: !!char.row?.base?.overflow,
   };
 });
+/** 🏰 L'état VIVANT du point de contrôle sélectionné (la sélection garde un instantané). */
+const liveControl = computed(() => {
+  const id = selected.value?.id;
+  return id ? (char.row?.expedition_map?.pois.find((p) => p.id === id)?.control ?? null) : null;
+});
+const livePoi = computed(() =>
+  selected.value
+    ? (char.row?.expedition_map?.pois.find((p) => p.id === selected.value!.id) ?? null)
+    : null,
+);
+const controlGarrison = computed(() => {
+  const ids = new Set(liveControl.value?.garrison ?? []);
+  return char.advList.filter((a) => ids.has(a.id)).map((a) => a.name);
+});
+const controlRate = computed(() =>
+  livePoi.value && liveControl.value
+    ? Math.round(
+        controlGoldPerHour(livePoi.value, liveControl.value.garrison.length, heroLevel.value),
+      )
+    : 0,
+);
+const controlGold = computed(() =>
+  livePoi.value ? controlStock(livePoi.value, now.value, heroLevel.value) : 0,
+);
+const controlAttackIn = computed(() => Math.max(0, (liveControl.value?.attackAt ?? 0) - now.value));
+const ctlBusy = ref(false);
+async function collectCtl() {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    await char.collectControlGold(uid, p.id, Date.now(), heroLevel.value);
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+async function recallCtl() {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  const ok = await new Promise<boolean>((res) =>
+    $q
+      .dialog({
+        title: 'Rappeler la garnison ?',
+        message:
+          'La réserve est récoltée, tes champions rentrent — et la mine retourne à l’ennemi.',
+        cancel: true,
+      })
+      .onOk(() => res(true))
+      .onCancel(() => res(false))
+      .onDismiss(() => res(false)),
+  );
+  if (!ok) return;
+  ctlBusy.value = true;
+  try {
+    await char.recallControl(uid, p.id, Date.now(), heroLevel.value);
+    selected.value = null;
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 /** Les lieux qui ne se prennent QU'EN équipe (camp, faille, armée). */
 const teamOnly = computed(
   () => !!selectedCamp.value || !!selectedRift.value || !!selectedWarband.value,
@@ -1310,6 +1401,8 @@ function dimmed(p: Poi): boolean {
   });
   // 👥 Un lieu reste ouvert tant que le HÉROS SEUL ou une ÉQUIPE peut y aller (2026-09-21 :
   // les équipes remplacent les convois). Même règle que le test « ce qui est GRISÉ ».
+  // 🏰 Un point de contrôle TENU se gère (récolte, rappel) : jamais grisé.
+  if (p.control?.owner === 'player') return false;
   return !o.hero && !o.party;
 }
 
@@ -1570,6 +1663,8 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',
   plunder: () => 'beaucoup d’or 🪙',
+  control: (p) =>
+    p.control?.owner === 'player' ? 'or 🪙 tant que tu la tiens' : 'à prendre · or 🪙 en continu',
 };
 /** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */
 const poiSub = computed(() => {
@@ -1664,6 +1759,15 @@ async function lifecycle() {
       $q.notify({
         type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
         message: '📬 Rapport de ton groupe — il rentre en ville.',
+      });
+    // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
+    const ctlMsgs = await char.controlTick(uid, Date.now(), heroLevel.value);
+    if (ctlMsgs.length)
+      $q.notify({
+        type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',
+        message: ctlMsgs.every((m) => m.win)
+          ? '🏰 Attaque repoussée sur ton point de contrôle.'
+          : '🏰 Un point de contrôle a été repris par l’ennemi.',
       });
     // 🎁 Au retour en ville, le butin s'encaisse tout seul.
     for (const done of await char.expeAutoClaim(uid, Date.now())) showReturned(done);
@@ -1967,6 +2071,37 @@ onUnmounted(() => {
   opacity: 1;
   background: color-mix(in srgb, var(--accent) 30%, var(--surface));
   color: var(--dim);
+}
+.ctl-panel {
+  margin: 0 0 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #b57bff 55%, var(--line));
+  background: color-mix(in srgb, #b57bff 8%, var(--surface));
+}
+.ctl-line {
+  margin: 0 0 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.ctl-dim {
+  color: var(--dim);
+  font-size: 11px;
+}
+.ctl-warn {
+  color: var(--d3, #ffb23f);
+}
+.ctl-recall {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-size: 12.5px;
+  cursor: pointer;
 }
 .sh-note {
   margin: 0 0 8px;

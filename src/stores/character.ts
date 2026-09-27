@@ -221,6 +221,18 @@ import {
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
+import { FACTION_EMOJI } from '@/lib/raid';
+import {
+  captureControl,
+  collectControl,
+  controlStock,
+  dueRetakes,
+  ensureControls,
+  holdControl,
+  loseControl,
+  markAssault,
+  retakeForce,
+} from '@/lib/controlPoints';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
 import { overflowMessage } from '@/lib/overflowStage';
@@ -1841,9 +1853,14 @@ export const useCharacterStore = defineStore('character', () => {
     const over = prev ? riftOverflows(prev, now) : [];
     // 🗺️ L'Avant-poste fixe la taille de la carte révélée et son nombre de lieux (v0.1047).
     const outpost = buildingLevel(cur.buildings, 'outpost');
-    const map: ExpeditionMap = prev
-      ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
-      : createMap(newSeed(now), now, level, outpost);
+    // 🏰 Les points de contrôle (fixes) se posent s'ils manquent — ils sont hors quota.
+    const map: ExpeditionMap = ensureControls(
+      prev
+        ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
+        : createMap(newSeed(now), now, level, outpost),
+      now,
+      level,
+    );
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
@@ -2949,6 +2966,7 @@ export const useCharacterStore = defineStore('character', () => {
           onExpedition: !!cur.expedition,
           healMs: woundRemainingMs(cur.base, now),
           outpost: expeditionsUnlocked(cur.buildings),
+          control: poi.type === 'control',
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
@@ -3008,16 +3026,26 @@ export const useCharacterStore = defineStore('character', () => {
     // 🩹 La trousse agit à l'ENCAISSEMENT (la convalescence part du retour) : elle voyage donc
     // dans le rapport. 🎒 Et un consommable peut tomber de tout voyage.
     const healMult = supplyFx(supplies).healMult;
+    // 🏰 L'assaut d'un point de contrôle se reconnaît au rapport (`controlId`) : c'est ce
+    // qui fera poster la garnison à l'arrivée.
+    const party =
+      outcome.party && poi.type === 'control'
+        ? { ...outcome.party, controlId: poi.id }
+        : outcome.party;
     const withSupplies = {
       ...outcome,
-      ...(outcome.party && healMult < 1 ? { party: { ...outcome.party, healMult } } : {}),
+      ...(party ? { party } : {}),
+      ...(party && healMult < 1 ? { party: { ...party, healMult } } : {}),
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
       supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };
     const trip = startParty({ poi: meet.poi, hero, seed }, now, leg, withSupplies);
     const busy = new Set(opts.escortIds);
+    // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
     const map = cur.expedition_map
-      ? { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
+      ? poi.type === 'control'
+        ? markAssault(cur.expedition_map, poi.id, true)
+        : { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
       : cur.expedition_map;
     await persist(userId, {
       expedition_map: map,
@@ -3106,19 +3134,189 @@ export const useCharacterStore = defineStore('character', () => {
     // 🎓 L'XP des champions tombe ICI, à l'arrivée du rapport — et l'animation avec.
     const x0 = reportXp(cur, t.messages, t.fresh);
     const x = { ...x0, messages: dw.tag(x0.messages) };
+    // 🏰 Un point de contrôle PRIS : l'équipe y reste en garnison (postée, plus « en route »).
+    const ctl = settleControlAssaults(
+      cur,
+      t.fresh,
+      (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+    );
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
     // enregistré entre-temps et rendre le butin encaissable deux fois.
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
+      ...(ctl ? { expedition_map: ctl.map } : {}),
       ...(x.messages !== cur.messages ? { messages: x.messages } : {}),
       // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
       //  ne fait que le confirmer.)
       ...x.patch,
+      ...(ctl ? { adventurers: ctl.adventurers } : {}),
     });
     x.play();
     return t.fresh;
+  }
+
+  /** 🏰 Les rapports frais d'un assaut de point de contrôle : pris → la garnison est postée
+   *  (et libérée de sa « route ») ; raté → l'assaut se lève. `null` si aucun. */
+  function settleControlAssaults(
+    cur: CharacterRow,
+    fresh: readonly ExpeditionMessage[],
+    roster: Adventurer[],
+  ): { map: ExpeditionMap; adventurers: Adventurer[] } | null {
+    let map = cur.expedition_map;
+    if (!map) return null;
+    let advs = roster;
+    let touched = false;
+    for (const m of fresh) {
+      const id = m.party?.controlId;
+      if (!id || m.party?.defense) continue;
+      touched = true;
+      if (m.win) {
+        const garrison = m.party!.escort;
+        map = captureControl(map, id, garrison, m.resolvedAt);
+        const g = new Set(garrison);
+        advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
+      } else map = markAssault(map, id, false);
+    }
+    return touched ? { map, adventurers: advs } : null;
+  }
+
+  /**
+   * 🏰 LES REPRISES ENNEMIES — à l'instant tiré (`attackAt`), que l'app soit ouverte ou non.
+   * La garnison livre le combat d'un camp contre une troupe de force ALÉATOIRE : repoussée,
+   * elle gagne son XP et une nouvelle attaque se prépare ; vainqueur, l'ennemi reprend le
+   * lieu (rang re-tiré) et la garnison part à l'infirmerie. Le rapport arrive dans la boîte
+   * 📬, avec l'animation d'XP. ⚠️ Rend les messages déposés (pour les notifier à l'écran).
+   */
+  async function controlTick(
+    userId: string,
+    now: number,
+    playerLevel: number,
+  ): Promise<ExpeditionMessage[]> {
+    const cur = row.value;
+    const due = dueRetakes(cur?.expedition_map ?? null, now);
+    if (!cur || !due.length) return [];
+    let map = cur.expedition_map!;
+    let advs = advList.value;
+    const msgs: ExpeditionMessage[] = [];
+    for (const p of due) {
+      const at = p.control!.attackAt!;
+      const ids = new Set(p.control!.garrison);
+      const escort = advs.filter((a) => ids.has(a.id));
+      const force = retakeForce(p);
+      const seed = (at ^ (p.level * 2654435761)) >>> 0 || 1;
+      const o = escort.length
+        ? resolveCamp({
+            poi: p,
+            spec: force,
+            escort,
+            road: escortKitOf(cur),
+            hero: null,
+            seed,
+            playerLevel,
+            pantheonLevel: pantheonLevel.value,
+          })
+        : null;
+      const held = !!o?.win;
+      // ⛏️ Ce que la mine a produit jusqu'à l'attaque part dans le rapport, même perdue : on
+      // ne punit pas l'absence en confisquant ce qui était déjà sorti de terre.
+      const stock = controlStock(p, at, playerLevel);
+      const emo = FACTION_EMOJI[force.faction];
+      const msg: ExpeditionMessage = {
+        ...buildMessage({
+          poi: p,
+          sentAt: at,
+          midAt: at,
+          returnAt: at,
+          seed,
+          outcome: {
+            ...(o ?? {
+              win: false,
+              gold: 0,
+              energy: 0,
+              summonStones: 0,
+              mana: 0,
+              item: null,
+              items: [],
+              key: 0,
+              text: '',
+            }),
+            gold: (o?.gold ?? 0) + stock,
+          },
+        } as ActiveExpedition),
+        id: `ctl_${p.id}_${at}`,
+        title: held ? '🏰 Attaque repoussée' : '🏰 Mine reprise par l’ennemi',
+        text: held
+          ? `${emo} Tes champions ont tenu la mine. Une nouvelle attaque se prépare.`
+          : `${emo} L’ennemi a repris la mine — ta garnison part à l’infirmerie.`,
+        ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
+      };
+      msgs.push(msg);
+      map = held ? holdControl(map, p.id, at) : loseControl(map, p.id, playerLevel);
+      if (held) map = collectControl(map, p.id, at, playerLevel).map;
+      advs = advs.map((a) => (!held && ids.has(a.id) ? { ...a, posted: undefined } : a));
+    }
+    const box = boxWith(cur, msgs, MESSAGES_CAP);
+    const x = reportXp(cur, box, msgs);
+    let roster = (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advs;
+    // Les postés libérés ET l'XP : on repart de l'XP versée et on retire les postes perdus.
+    const freed = new Set(advs.filter((a) => !a.posted).map((a) => a.id));
+    roster = roster.map((a) => (freed.has(a.id) ? { ...a, posted: undefined } : a));
+    // 🤕 La garnison vaincue part à l'infirmerie TOUT DE SUITE (datée de l'attaque) :
+    // l'encaissement refera le même calcul, et `Math.max` le rend idempotent.
+    for (const m of msgs)
+      if (m.party && !m.win)
+        roster = partyClaimRoster(m.party, roster, {
+          pantheonLevel: pantheonLevel.value,
+          infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
+          backAt: m.resolvedAt,
+          now,
+          xpGranted: true,
+        }).adventurers;
+    await persist(userId, {
+      expedition_map: map,
+      messages: x.messages,
+      ...x.patch,
+      adventurers: roster,
+    });
+    x.play();
+    return msgs;
+  }
+
+  /** ⛏️ Récolte l'or d'un point de contrôle tenu. Rend l'or récolté. */
+  async function collectControlGold(
+    userId: string,
+    id: string,
+    now: number,
+    playerLevel: number,
+  ): Promise<number> {
+    const cur = row.value;
+    if (!cur?.expedition_map) return 0;
+    const c = collectControl(cur.expedition_map, id, now, playerLevel);
+    if (c.gold <= 0) return 0;
+    await persist(userId, { expedition_map: c.map, gold: cur.gold + c.gold });
+    goldFx.gain(c.gold);
+    return c.gold;
+  }
+
+  /** 🏰 Rappelle la garnison : la réserve est récoltée, le lieu revient à l'ennemi (rang
+   *  re-tiré) et les champions redeviennent disponibles. */
+  async function recallControl(
+    userId: string,
+    id: string,
+    now: number,
+    playerLevel: number,
+  ): Promise<void> {
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const c = collectControl(cur.expedition_map, id, now, playerLevel);
+    await persist(userId, {
+      expedition_map: loseControl(c.map, id, playerLevel),
+      adventurers: advList.value.map((a) => (a.posted === id ? { ...a, posted: undefined } : a)),
+      ...(c.gold > 0 ? { gold: cur.gold + c.gold } : {}),
+    });
+    if (c.gold > 0) goldFx.gain(c.gold);
   }
 
   return {
@@ -3177,6 +3375,9 @@ export const useCharacterStore = defineStore('character', () => {
     partyList,
     sendParty,
     partyTick,
+    controlTick,
+    collectControlGold,
+    recallControl,
     applyExpedition,
     equip,
     sellLoadout,

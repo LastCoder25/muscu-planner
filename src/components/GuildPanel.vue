@@ -467,7 +467,9 @@
       <!-- ⚔️ La puissance, et ce que l'ÉQUIPEMENT y ajoute : sans l’écart, on ne sait pas si
            les pièces confiées servent à quelque chose. -->
       <div class="d-pow">
-        <span class="d-pow-val font-display">⚔️ <CountUp :value="powerOf(detailAdv)" :format="(n: number) => fmtChampPow(n, showK)" /></span>
+        <span class="d-pow-val font-display"
+          >⚔️ <CountUp :value="powerOf(detailAdv)" :format="(n: number) => fmtChampPow(n, showK)"
+        /></span>
         <span v-if="pairBonusOf(detailAdv) > 0" class="d-pow-gain">
           dont +{{ fmtChampPow(pairBonusOf(detailAdv), showK) }} grâce à son équipement
         </span>
@@ -496,13 +498,20 @@
         <div class="da-grid">
           <template v-for="r in detailAscent.rows" :key="r.key">
             <span class="da-lab">{{ r.emoji }} {{ r.label }}</span>
-            <span class="da-b">{{ r.key === 'pow' ? fmtChampPow(r.b, showK) : champStat(r.b, showK) }}</span>
+            <span class="da-b">{{
+              r.key === 'pow' ? fmtChampPow(r.b, showK) : champStat(r.b, showK)
+            }}</span>
             <span class="da-arrow">→</span>
             <span class="da-a" :class="{ up: r.a > r.b }">{{
               r.key === 'pow' ? fmtChampPow(r.a, showK) : champStat(r.a, showK)
             }}</span>
             <span class="da-d" :class="{ up: r.a > r.b }">{{
-              r.a > r.b ? '+' + (r.key === 'pow' ? fmtChampPow(r.a - r.b, showK) : champStat(r.a, showK) - champStat(r.b, showK)) : '='
+              r.a > r.b
+                ? '+' +
+                  (r.key === 'pow'
+                    ? fmtChampPow(r.a - r.b, showK)
+                    : champStat(r.a, showK) - champStat(r.b, showK))
+                : '='
             }}</span>
           </template>
         </div>
@@ -592,7 +601,9 @@
           @click="doAscendGear(x.piece)"
         >
           ⬆️ {{ x.piece.name }} → {{ x.rank.emoji }} {{ x.rank.name }}
-          <span class="d-gear-asc-cost">⚜️ {{ x.cost.seals }} · 🪙 {{ x.cost.gold.toLocaleString('fr-FR') }}</span>
+          <span class="d-gear-asc-cost"
+            >⚜️ {{ x.cost.seals }} · 🪙 {{ x.cost.gold.toLocaleString('fr-FR') }}</span
+          >
         </button>
       </div>
 
@@ -781,7 +792,9 @@
         <template v-if="gearInfoWearer"> · Porteur : {{ gearInfoWearer.name }}</template>
       </p>
       <p v-if="gearInfoWearer && (wornGain.get(gearInfoPiece.id) ?? 0) > 0" class="gi-power">
-        <span class="font-display">⚔️ +{{ fmtChampPow(wornGain.get(gearInfoPiece.id) ?? 0, showK) }}</span>
+        <span class="font-display"
+          >⚔️ +{{ fmtChampPow(wornGain.get(gearInfoPiece.id) ?? 0, showK) }}</span
+        >
         de puissance pour {{ gearInfoWearer.name }}
       </p>
       <!-- ⬆️ L'ascension, là où l'on touche la pièce (signalé : « je vois la flèche mais en
@@ -847,7 +860,9 @@
       </div>
       <div v-if="gearAscPreview.powGain > 0" class="ga-pow">
         <span class="ga-pow-lab">⚔️ {{ gearAscPreview.wearer }}</span>
-        <span class="font-display ga-pow-b">{{ fmtChampPow(gearAscPreview.powBefore, showK) }}</span>
+        <span class="font-display ga-pow-b">{{
+          fmtChampPow(gearAscPreview.powBefore, showK)
+        }}</span>
         <span class="da-arrow">→</span>
         <span class="font-display ga-pow-a">{{ fmtChampPow(gearAscPreview.powAfter, showK) }}</span>
         <span class="ga-pow-d font-display">+{{ fmtChampPow(gearAscPreview.powGain, showK) }}</span>
@@ -1127,7 +1142,9 @@ const detailGearAscents = computed(() =>
  *  ajoutent à un champion, à l'échelle d'affichage. Pour `forAdv` si donné (la candidate d'un
  *  sélecteur), sinon pour son PORTEUR, sinon pour un champion de référence de ton niveau.
  *  ⚠️ Le combattant NU de chacun est calculé une fois par changement du vivier. */
-const baseCombatants = computed(() => new Map(char.advList.map((a) => [a.id, escortCombatant([a], a.name)])));
+const baseCombatants = computed(
+  () => new Map(char.advList.map((a) => [a.id, escortCombatant([a], a.name)])),
+);
 const refBase = computed(() => {
   const a = refChampionAdv(Math.max(1, props.playerLevel ?? 1));
   return escortCombatant([a], a.name);
@@ -1212,7 +1229,9 @@ const gearInfoWearer = computed(() =>
 const gearInfoStatus = computed(() =>
   gearInfoPiece.value ? advGearStatus(gearInfoPiece.value, gearInfoWearer.value?.level) : '',
 );
-const gearInfoAscent = computed(() => (gearInfoPiece.value ? gearAscent(gearInfoPiece.value) : null));
+const gearInfoAscent = computed(() =>
+  gearInfoPiece.value ? gearAscent(gearInfoPiece.value) : null,
+);
 /** Toucher une case : une pièce portée ouvre SA feuille, une case vide le sélecteur. */
 function onGearCell(a: Adventurer, slot: AdvGearSlot) {
   const worn = (gearWorn.value.get(a.id) ?? []).find((g) => g.slot === slot);
@@ -1445,6 +1464,8 @@ function stateOf(a: Adventurer): string {
       return `🐫 en route · ${leftOf(busyOf(a))}`;
     case 'hurt':
       return `🛏️ à l’infirmerie · ${leftOf(hurtOf(a))}`;
+    case 'posted':
+      return '🏰 posté sur un point de contrôle';
     default:
       return '✅ disponible';
   }
@@ -1470,7 +1491,8 @@ watch(
   () => [char.advList, char.advGearStock] as const,
   ([advs, stock]) => {
     if (detailAdv.value) detailAdv.value = advs.find((x) => x.id === detailAdv.value!.id) ?? null;
-    if (stockEquip.value) stockEquip.value = stock.find((x) => x.id === stockEquip.value!.id) ?? null;
+    if (stockEquip.value)
+      stockEquip.value = stock.find((x) => x.id === stockEquip.value!.id) ?? null;
   },
 );
 /** ⬆️ L'ascension à proposer — seulement quand son XP BUTE sur la fin de son rang (★★★★★),
@@ -1652,7 +1674,10 @@ const gearAscPreview = computed(() => {
     ? adventurerGearPower(char.advList, wearer, g.slot, g.id, compCtx.value)
     : 0;
   const powAfter = wearer
-    ? adventurerGearPower(char.advList, wearer, g.slot, g.id, { ...compCtx.value, advGear: upStock })
+    ? adventurerGearPower(char.advList, wearer, g.slot, g.id, {
+        ...compCtx.value,
+        advGear: upStock,
+      })
     : 0;
   const tb = gearEffectTexts(g, wearer);
   const ta = gearEffectTexts(up, wearer);
@@ -2803,6 +2828,9 @@ function leftOf(at: number): string {
 }
 .af-chip.tone-hurt {
   --tone-c: var(--d4, #ff6a45);
+}
+.af-chip.tone-posted {
+  --tone-c: #b57bff;
 }
 .g-count-sub {
   color: var(--dim);

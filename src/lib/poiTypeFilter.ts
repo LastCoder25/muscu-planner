@@ -38,6 +38,8 @@ export const TYPE_ORDER: readonly PoiType[] = [
   'rift',
   'warband',
   'wreck',
+  // 🏰 Les points de contrôle.
+  'control',
 ];
 
 export function typeMode(f: TypeFilter, t: PoiType): TypeMode {

@@ -24,6 +24,7 @@ import {
   isWarbandPoi,
   poiForceOf,
   DEN_MAX_PARTY,
+  CONTROL_MAX_GARRISON,
   dwellMsFor,
   buildMessage,
   depositMessages,
@@ -140,6 +141,8 @@ export function partyCapFor(
   hero = false,
 ): number {
   const panth = Math.max(0, Math.floor(engage));
+  // 🏰 Un point de contrôle se prend à 3 champions au plus : ils y resteront en garnison.
+  if (poi?.type === 'control') return Math.min(panth, CONTROL_MAX_GARRISON);
   if (poi?.type !== 'den') return panth;
   return Math.min(panth, Math.max(0, DEN_MAX_PARTY - (hero ? HERO_PARTY_WORTH : 0)));
 }
@@ -149,7 +152,16 @@ export function partyCapFor(
  *  pool que les convois d'avant) : c'est ce qui borne le NOMBRE d'équipes en parallèle, donc
  *  l'or et les pierres par jour. L'équipe du héros n'en prend pas : il est sa propre limite.
  *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
-export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'denFull' | 'hopeless';
+export type PartySendBlock =
+  | 'notTarget'
+  | 'empty'
+  | 'slots'
+  | 'tooMany'
+  | 'denFull'
+  | 'hopeless'
+  | 'controlHero'
+  | 'controlFull'
+  | 'controlHeld';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
@@ -163,6 +175,13 @@ export function partySendBlocker(
   winChance: number | null,
 ): PartySendBlock | null {
   if (!PARTY_TARGETS.has(poi.type)) return 'notTarget';
+  // 🏰 Un point de contrôle se prend SANS le héros (l'équipe y reste en garnison), à 1-3
+  // champions, et seulement s'il est à l'ennemi et qu'aucune équipe n'y marche déjà.
+  if (poi.type === 'control') {
+    if (poi.control?.owner !== 'enemy' || poi.control.assault) return 'controlHeld';
+    if (hero) return 'controlHero';
+    if (escortCount > CONTROL_MAX_GARRISON) return 'controlFull';
+  }
   if (!hero && escortCount <= 0) return 'empty';
   if (!hero && slotsFree <= 0) return 'slots';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
@@ -184,6 +203,10 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   slots: 'tous les créneaux d’équipe de l’Avant-poste sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
   denFull: 'une tanière n’accueille que 2 champions (ton héros en vaut 2)',
+  controlHero:
+    'un point de contrôle se prend sans le héros : ce sont tes champions qui y resteront',
+  controlFull: 'un point de contrôle se prend à 3 champions au plus — ils y resteront en garnison',
+  controlHeld: 'ce point n’est pas à prendre (déjà à toi, ou une équipe y marche)',
 };
 export function canSendParty(
   poi: Poi,
@@ -201,12 +224,15 @@ export function canSendParty(
  *  le héros est grisé au lieu de le cacher. Ordre : déjà parti, à l'infirmerie, sans
  *  Avant-poste. ⚠️ Plus de péage d'or (v0.1069, décision de l'utilisateur) : envoyer le
  *  héros ne coûte plus rien, en groupe comme seul. */
-export type PartyHeroBlock = 'expedition' | 'infirmary' | 'outpost';
+export type PartyHeroBlock = 'expedition' | 'infirmary' | 'outpost' | 'control';
 export function partyHeroBlocker(ctx: {
   onExpedition: boolean;
   healMs: number;
   outpost: boolean;
+  /** 🏰 La cible est un point de contrôle : il se prend SANS le héros. ⚠️ REQUIS. */
+  control: boolean;
 }): PartyHeroBlock | null {
+  if (ctx.control) return 'control';
   if (ctx.onExpedition) return 'expedition';
   if (ctx.healMs > 0) return 'infirmary';
   if (!ctx.outpost) return 'outpost';
@@ -216,6 +242,7 @@ export const PARTY_HERO_BLOCK_LABEL: Record<PartyHeroBlock, string> = {
   expedition: '🧭 déjà en expédition',
   infirmary: '🤕 à l’infirmerie',
   outpost: '🧭 Avant-poste requis',
+  control: '🏰 sans le héros : tes champions y resteront',
 };
 
 /** Ce que `startParty` a besoin de savoir d'un envoi, quelle que soit la cible. Les entrées

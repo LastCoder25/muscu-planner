@@ -65,7 +65,40 @@ export type PoiType =
   | 'den'
   // 🏴‍☠️ CARAVANE PILLÉE (2026-09-27, demandé) : RARE et fugace, gardée par ses pillards
   // (toujours des bandits), elle rend BEAUCOUP d'or (`PLUNDER_GOLD_MULT` × une mine).
-  | 'plunder';
+  | 'plunder'
+  // 🏰 POINT DE CONTRÔLE (2026-09-27, décision de l'utilisateur) : un lieu FIXE qu'on prend
+  // à l'ennemi, où l'on poste 1 à 3 champions qui le font produire, et que l'ennemi vient
+  // reprendre 1 à 3 jours plus tard (cf. `controlPoints.ts`). Son état vit dans `control`.
+  | 'control';
+
+/** 🏰 Ce que produit un point de contrôle tenu. Étape 1 : la mine d'or. */
+export type ControlKind = 'mine';
+/** 🏰 Une garnison : 1 à 3 champions (décision de l'utilisateur). */
+export const CONTROL_MAX_GARRISON = 3;
+/**
+ * 🏰 L'état d'un point de contrôle. ⚠️ DANS le POI (JSONB de la carte) : il se sauvegarde
+ * avec elle, aucune migration. `owner` décide de tout — tenu par l'ennemi, on l'ATTAQUE ;
+ * tenu par nous, il PRODUIT jusqu'à la prochaine reprise (`attackAt`).
+ */
+export interface ControlState {
+  kind: ControlKind;
+  owner: 'enemy' | 'player';
+  /** La troupe ennemie (quand `owner === 'enemy'`) : faction et force, en champions de
+   *  référence — re-tirées à chaque reprise. */
+  faction: RaidFaction;
+  size: number;
+  /** Les champions postés (quand `owner === 'player'`). */
+  garrison: string[];
+  /** Pris à cet instant ; la production court depuis `collectedAt`. */
+  since?: number;
+  collectedAt?: number;
+  /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
+  attackAt?: number;
+  /** Nombre de fois où l'ennemi l'a repris : entre dans les graines de re-tirage. */
+  retakes: number;
+  /** Une équipe marche dessus : on ne l'attaque pas deux fois. */
+  assault?: boolean;
+}
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et
  *  ajouter un POI casse la compilation tant qu'on ne l'a pas nommé. La boîte à messages
@@ -88,6 +121,7 @@ export const POI_LABEL: Record<PoiType, string> = {
   fallen: 'Ruines d’un héros tombé',
   den: 'Tanière',
   plunder: 'Caravane pillée',
+  control: 'Mine fortifiée',
 };
 
 /** Emoji d'un point d'intérêt — la carte et le rapport de convoi lisent la MÊME table
@@ -108,6 +142,7 @@ export const POI_EMO: Record<PoiType, string> = {
   fallen: '🏚️',
   den: '🐺',
   plunder: '🏴‍☠️',
+  control: '🏰',
 };
 
 /** POI de récolte : on ramasse et on rentre (comme la mine) — gardé depuis 2026-09-22 (`harvestGuardOf`). */
@@ -124,7 +159,13 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
 
 /** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
  *  repaire = troupe plus grande + champion. */
-export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair', 'den']);
+export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
+  'camp',
+  'lair',
+  'den',
+  // 🏰 Un point de contrôle se prend comme un camp : son combat de faction (`campSpecOf`).
+  'control',
+]);
 /** 🎯 Les POI où part une ÉQUIPE (héros et/ou champions) — **tous les lieux sauf l'arène**
  *  depuis que les équipes remplacent les convois (2026-09-21) : camps, failles, armées en
  *  marche ET lieux de RÉCOLTE (`resolveHarvestParty`). L'arène reste au héros seul (sa
@@ -189,6 +230,10 @@ export interface CampSpec {
  *  faction : tous les lecteurs le traitent comme optionnel. */
 export interface PartyResult {
   hero: boolean;
+  /** 🏰 L'assaut d'un point de contrôle (`controlPoints.ts`) — ou sa DÉFENSE contre une
+   *  reprise ennemie (`defense`). Absent des autres rapports. */
+  controlId?: string;
+  defense?: boolean;
   faction: RaidFaction;
   /** Ids des aventuriers envoyés (le héros n'y figure pas). */
   escort: string[];
@@ -265,7 +310,13 @@ function hashId(s: string): number {
  * en a une aussi, sans migration ni normalisation. ⚠️ Ni la distance ni le niveau n'y
  * entrent : « de tout un peu partout » (seul le niveau suit la distance, règle v0.683).
  */
-export function campSpecOf(poi: Pick<Poi, 'id' | 'type'>): CampSpec | null {
+export function campSpecOf(poi: Pick<Poi, 'id' | 'type' | 'control'>): CampSpec | null {
+  // 🏰 Un point de contrôle tenu par l'ennemi : SA troupe (tirée à chaque reprise). Tenu par
+  // nous, il n'y a rien à attaquer.
+  if (poi.type === 'control')
+    return poi.control?.owner === 'enemy'
+      ? { faction: poi.control.faction, size: poi.control.size }
+      : null;
   if (poi.type !== 'camp' && poi.type !== 'lair' && poi.type !== 'den') return null;
   // 🐺 Une tanière abrite une BÊTE seule (`lone`) : pas de troupe, un seul corps à abattre.
   if (poi.type === 'den') return { faction: 'betes', size: CAMP_SIZES.den[0]!, lone: true };
@@ -410,6 +461,8 @@ export interface Poi {
    *  arriver. `x`/`y`/`distNorm`, eux, sont RECALCULÉS à chaque `advanceWorld`. */
   faction?: RaidFaction;
   from?: { x: number; y: number };
+  /** 🏰 Point de contrôle uniquement : son état (`controlPoints.ts`). */
+  control?: ControlState;
   setId?: string; // 'lair' uniquement : set ciblé
   level: number;
   x: number; // coord carte (0..100)
@@ -455,7 +508,13 @@ export interface RiftAmbush {
 // quota ; la mine résiduelle et la bande en marche sont ce qu'une faille LAISSE en
 // débordant. Les compter volerait une place à une mine, un camp ou une épave — or le débit
 // de la carte est mesuré (`campEconomy`, `goldSink`).
-const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>(['rift', 'mana_mine', 'warband']);
+const OUT_OF_QUOTA: ReadonlySet<PoiType> = new Set<PoiType>([
+  'rift',
+  'mana_mine',
+  'warband',
+  // 🏰 Fixe et permanent : il ne prend la place d'aucun lieu ordinaire.
+  'control',
+]);
 
 /** 🎲 PLUS AUCUN DÉGRADÉ DE DISTANCE (v0.1013). Le niveau d'un lieu est tiré au hasard dans
  *  la fenêtre (`placePoiOfType`), celui d'une faille par rang (`riftLevelFor`) : aucun des
@@ -934,6 +993,8 @@ export const EXPE = {
     // 🏴‍☠️ Fugace : les pillards filent avec le butin. 8 h (et une notification à
     // l'apparition) : de quoi la voir en ouvrant l'app deux fois par jour.
     plunder: 8 * 3600_000,
+    // 🏰 Permanent : un point de contrôle ne disparaît jamais (fini, pas l'infini : JSON).
+    control: 9e15,
   },
   /** 🏴‍☠️ Chance qu'un lieu d'économie qui apparaît soit une caravane pillée (une à la fois). */
   plunderChance: 0.022,
@@ -970,6 +1031,8 @@ export const EXPE = {
     fallen: 30,
     den: 65,
     plunder: 22,
+    // 🏰 Un assaut de camp.
+    control: 65,
   },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
@@ -1222,7 +1285,7 @@ export const MAP_VIEW = (() => {
 
 /** Distance normalisée d'un point à la ville : 0 à `distMin`, 1 à `distMax`, et AU-DELÀ
  *  sans plafond — c'est ce qui allonge le trajet vers les terres révélées plus tard. */
-function distNormAt(d: number): number {
+export function distNormAt(d: number): number {
   return Math.max(0, (d - EXPE.distMin) / (EXPE.distMax - EXPE.distMin));
 }
 
@@ -2356,6 +2419,7 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
   fallen: ['Les ruines s’étaient déjà écroulées sur son paquetage.'],
   den: ['La bête a eu le dessus. Retraite, les griffes aux trousses.'],
   plunder: ['Les pillards ont tenu : ils filent avec le butin de la caravane.'],
+  control: ['La garnison ennemie a tenu : la mine reste à eux.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -2400,6 +2464,7 @@ const WIN_TEXT: Record<PoiType, string[]> = {
     '🏴‍☠️ Les pillards dispersés — l’or de la caravane est à toi.',
     '🏴‍☠️ Caravane reprise : les coffres sont pleins.',
   ],
+  control: ['🏰 La mine est à toi — tes champions s’y installent.'],
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */

@@ -27,6 +27,27 @@
         <ellipse :cx="p.x" :cy="p.y" rx="4.4" ry="6.4" class="rift-hit" />
         <RiftPortal :color="rankOf(p).color" :seed="seedOf(p.id)" :box="riftMapBox(p.x, p.y)" />
       </template>
+      <!-- 🏰 UN POINT DE CONTRÔLE se dessine en FORT, et sa bannière dit qui le tient :
+           ROUGE à l'ennemi, VIOLET (la couleur de nos équipes) quand nos champions y sont.
+           Pointillé tant qu'une équipe y marche. -->
+      <template v-else-if="p.control">
+        <rect
+          :x="p.x - 5.2"
+          :y="p.y - 5.2"
+          width="10.4"
+          height="10.4"
+          rx="2"
+          class="ctl-bg"
+          :class="[p.control.owner, { assault: p.control.assault }]"
+        />
+        <text :x="p.x" :y="p.y + 1.6" class="poi-emo">{{ CONTROL_EMO[p.control.kind] }}</text>
+        <line :x1="p.x + 5.2" :y1="p.y - 5.2" :x2="p.x + 5.2" :y2="p.y - 10.4" class="ctl-mast" />
+        <path
+          :d="`M${p.x + 5.2},${p.y - 10.4} l4.2,1.3 l-4.2,1.3 z`"
+          class="ctl-flag"
+          :class="p.control.owner"
+        />
+      </template>
       <template v-else>
         <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
         <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
@@ -84,6 +105,7 @@
 import { computed } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { POI_EMO, isRiftPoi, type Poi } from '@/lib/expedition';
+import { CONTROL_EMO } from '@/lib/controlPoints';
 import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import { RIFT_MAP_ICON, riftMapBox } from '@/lib/riftPortal';
@@ -122,6 +144,34 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 .poi.veiled {
   opacity: 0;
   pointer-events: none;
+}
+/* 🏰 Point de contrôle : fond et bannière selon qui le tient. */
+.ctl-bg {
+  stroke-width: 1.2;
+}
+.ctl-bg.enemy {
+  fill: color-mix(in srgb, var(--d4, #ff6a45) 22%, var(--surface));
+  stroke: var(--d4, #ff6a45);
+}
+.ctl-bg.player {
+  fill: color-mix(in srgb, #b57bff 24%, var(--surface));
+  stroke: #b57bff;
+}
+.ctl-bg.assault {
+  stroke-dasharray: 1.6 1.2;
+}
+.poi.sel .ctl-bg {
+  stroke: var(--accent);
+}
+.ctl-mast {
+  stroke: var(--text);
+  stroke-width: 0.5;
+}
+.ctl-flag.enemy {
+  fill: var(--d4, #ff6a45);
+}
+.ctl-flag.player {
+  fill: #b57bff;
 }
 /* Contour dans la couleur du RANG du lieu (`--rk`, posé par lieu). */
 .poi-bg {

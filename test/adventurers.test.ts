@@ -475,6 +475,8 @@ describe('⚠️ LA DISPONIBILITÉ D’UN AVENTURIER — une seule source, trois
         // `championId` — un aventurier LEGACY n'est jamais mis au banc (il n'a pas de
         // Panthéon, et le priver de mission serait le punir d'avoir existé avant).
         { ...base(), championId: 'orsene' },
+        // 🏰 Posté sur un point de contrôle.
+        { ...base(), posted: 'ctl_mine' },
       ].map((a) => advStatus(a, at)),
     );
     expect([...vus].sort()).toEqual([...ADV_STATUSES].sort());

@@ -1325,6 +1325,9 @@ export interface Adventurer {
   busyUntil?: number;
   /** Blessé jusqu'à — ms epoch. Soigné plus vite par l'Infirmerie, comme le héros. */
   hurtUntil?: number;
+  /** 🏰 Posté sur ce point de contrôle (id du POI) : il y produit et le défend, et n'est
+   *  disponible pour rien d'autre tant qu'il y est. */
+  posted?: string;
   // ⚠️ Plus de COMPAGNON ni de TALENT (v0.996) : familiers et talents sont réservés au
   // HÉROS. Les champs `familiarId`/`talentId` des sauvegardes d'avant ne sont plus lus
   // (et sont retirés au chargement). Ce qu'ils apportaient est rendu par `CHAMPION_SOLO`.
@@ -2302,10 +2305,13 @@ export function grantAdvXp(adv: Adventurer, xp: number, pantheonLevel: number): 
  *  ⚠️ SOURCE UNIQUE de la disponibilité : `advAvailable` en DÉRIVE. Un écran qui dit
  *  POURQUOI quelqu'un est grisé ne peut donc jamais contredire le refus du store.
  *  Ordre : sur la route, puis à l'infirmerie (le premier qui s'applique). */
-export type AdvUnavailable = 'busy' | 'hurt';
+export type AdvUnavailable = 'busy' | 'hurt' | 'posted';
 export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailable | null {
   if ((adv.busyUntil ?? 0) > now) return 'busy';
   if ((adv.hurtUntil ?? 0) > now) return 'hurt';
+  // 🏰 Posté sur un point de contrôle : il y reste jusqu'à ce qu'on le rappelle ou qu'il
+  // en soit délogé.
+  if (adv.posted) return 'posted';
   // ⚠️ PLUS DE BANC ICI. Le plafond du Panthéon (`engageCap`) ne dit plus « ce champion
   // n'existe pas pour le jeu » mais « on n'en engage que N à la fois » : il s'applique à
   // l'ENGAGEMENT (taille d'un groupe, nombre de défenseurs au rempart), pas à la personne.
@@ -2314,6 +2320,7 @@ export function advUnavailableReason(adv: Adventurer, now: number): AdvUnavailab
 export const ADV_UNAVAILABLE_LABEL: Record<AdvUnavailable, string> = {
   busy: '🧭 en route',
   hurt: '🤕 infirmerie',
+  posted: '🏰 posté',
 };
 
 /** Disponible ? Ni en mission, ni à l'infirmerie. */
@@ -2335,9 +2342,10 @@ export function advStatus(adv: Adventurer, now: number): AdvStatus {
   return advUnavailableReason(adv, now) ?? 'free';
 }
 /** Les catégories dans l'ordre où on les propose : ce qui peut partir d'abord. */
-export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'hurt'];
+export const ADV_STATUSES: readonly AdvStatus[] = ['free', 'busy', 'posted', 'hurt'];
 export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
   free: '✅ disponibles',
   busy: '🧭 en expédition',
   hurt: '🛏️ infirmerie',
+  posted: '🏰 postés',
 };

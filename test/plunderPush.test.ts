@@ -47,6 +47,7 @@ describe('🔔 la prochaine caravane pillée', () => {
       watchtowerLevel: 0,
       activeDays7: 0,
       playerLevel: 30,
+      controls: [],
     };
     const plans = planPushes({ ...base, plunder: { id: 'poi_9', at: 5 * H } }, 0);
     const p = plans.find((x) => x.kind === 'plunder')!;

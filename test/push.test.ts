@@ -36,6 +36,8 @@ const ctx = (over: Partial<PushContext> = {}): PushContext => ({
   watchtowerLevel: 28,
   activeDays7: 4,
   playerLevel: 28,
+  plunder: null,
+  controls: [],
   ...over,
 });
 

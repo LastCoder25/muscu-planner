@@ -3028,6 +3028,7 @@
 </template>
 
 <script setup lang="ts">
+import { heldControls } from '@/lib/controlPoints';
 import {
   ref,
   computed,
@@ -5604,6 +5605,10 @@ async function syncPush(force = false) {
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
       activeDays7: activeDays7.value,
       playerLevel: c.value.level.level,
+      controls: heldControls(char.row.expedition_map ?? null).map((p) => ({
+        id: p.id,
+        attackAt: p.control!.attackAt ?? 0,
+      })),
       plunder: char.row.expedition_map
         ? nextPlunderSpawn(
             char.row.expedition_map,
@@ -5680,6 +5685,17 @@ async function expeLifecycle() {
           message: '📬 Rapport de ton groupe — le butin arrivera avec lui.',
         });
       // Un groupe en route a changé : l'échéance de son retour se réaligne.
+      void syncPush(true);
+    }
+    // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
+    const ctlMsgs = await char.controlTick(uid, Date.now(), c.value.level.level);
+    if (ctlMsgs.length) {
+      $q.notify({
+        type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',
+        message: ctlMsgs.every((m) => m.win)
+          ? '🏰 Attaque repoussée sur ton point de contrôle.'
+          : '🏰 Un point de contrôle a été repris par l’ennemi.',
+      });
       void syncPush(true);
     }
     // 🎁 Au retour en ville, le butin s'encaisse tout seul (plus de « Récupérer » dans 📬).

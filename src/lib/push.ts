@@ -12,9 +12,17 @@
 // faction ou l'effectif offrirait gratuitement ce qu'elle fait payer. Les messages sont
 // donc volontairement AVARES — ils annoncent qu'il se passe quelque chose, pas quoi.
 
+import { CONTROL } from './controlPoints';
 import { raidIntervalMs, raidsEnabled, scoutLeadMs, type BaseState } from './raid';
 
-type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'party_home' | 'plunder';
+type PushKind =
+  | 'siege'
+  | 'siege_done'
+  | 'hero_home'
+  | 'party_home'
+  | 'plunder'
+  | 'control_warn'
+  | 'control_attack';
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
  *  événement ne doit JAMAIS créer un doublon — l'app replanifie à chaque ouverture. */
@@ -46,6 +54,10 @@ export interface PushContext {
   playerLevel: number;
   /** 🏴‍☠️ La prochaine caravane pillée (`nextPlunderSpawn`), ou null. ⚠️ REQUIS. */
   plunder: { id: string; at: number } | null;
+  /** 🏰 Les points de contrôle TENUS et l'heure de leur prochaine attaque ennemie
+   *  (`heldControls`). ⚠️ REQUIS : les oublier, c'est apprendre la perte d'une mine en
+   *  rouvrant l'app. */
+  controls: { id: string; attackAt: number }[];
 }
 
 function heures(ms: number): string {
@@ -119,6 +131,29 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       // boîte le dit, la notification donne seulement envie de l'ouvrir.
       title: '⚔️ Ton groupe est rentré',
       body: 'Son rapport t’attend dans la boîte 📬.',
+      url: '/expedition-map',
+    });
+  }
+
+  // 🏰 LES POINTS DE CONTRÔLE : l'attaque se prévient, puis son issue se dit. ⚠️ Le
+  // message ne dit PAS l'issue : elle se joue à l'ouverture de l'app (le serveur ne rejoue
+  // pas les combats) — il invite à venir voir. La clé porte l'heure de l'attaque : une
+  // nouvelle attaque est un nouveau message, un siège repoussé efface l'ancien.
+  for (const c of ctx.controls) {
+    add({
+      kind: 'control_warn',
+      dedupe: `control_warn:${c.id}:${c.attackAt}`,
+      sendAt: c.attackAt - CONTROL.warnMs,
+      title: '🏰 L’ennemi marche sur ta mine',
+      body: `Une troupe vient reprendre ton point de contrôle dans ${heures(CONTROL.warnMs)}.`,
+      url: '/expedition-map',
+    });
+    add({
+      kind: 'control_attack',
+      dedupe: `control_attack:${c.id}:${c.attackAt}`,
+      sendAt: c.attackAt,
+      title: '🏰 Ta mine est attaquée',
+      body: 'Ta garnison se bat pour la tenir — viens voir le rapport.',
       url: '/expedition-map',
     });
   }
