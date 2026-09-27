@@ -94,6 +94,9 @@ interface RiftStageFoe {
   y: number;
   /** Ce corps est-il tombé au cours de l'incursion ? */
   down: boolean;
+  /** ❤️ Ses PV d'entrée et de fin de combat, s'il a été affronté ET que le rapport les
+   *  porte (`foeTrail`). Absent : la barre ne montre que sa chute, sans chiffre. */
+  life?: { maxPv: number; pv: number };
 }
 
 /** Une rencontre, placée dans le temps. */
@@ -132,6 +135,8 @@ export interface RiftStageInput {
   maxPv: number;
   /** PV après chaque rencontre. Vide pour un rapport d'avant la v0.977. */
   pvTrail: readonly number[];
+  /** La vie de chaque monstre affronté. Absent pour un rapport d'avant la v0.1216. */
+  foeTrail?: readonly { maxPv: number; pv: number }[];
   /** Membres entrés dans la faille, héros compris. Absent → un seul (le rejeu d'avant). */
   partySize?: number;
   /** Le duel contre le gardien, tour par tour. Absent → le gardien se joue en un coup. */
@@ -180,6 +185,7 @@ export function riftStageInputOf(party: PartyResult): RiftStageInput | null {
     cleared: party.win,
     maxPv: party.rift.maxPv,
     pvTrail: party.rift.pvTrail,
+    ...(party.rift.foeTrail ? { foeTrail: party.rift.foeTrail } : {}),
     // ⚠️ Lu dans le rapport, qui dit QUI est entré — jamais dans le vivier d'aujourd'hui.
     partySize: party.escort.length + (party.hero ? 1 : 0),
     ...(party.rift.boss ? { boss: party.rift.boss } : {}),
@@ -191,6 +197,12 @@ export function riftStageInputOf(party: PartyResult): RiftStageInput | null {
  *  le plateau sait placer — le combat, lui, compte tout le monde). */
 export function riftPartySize(input: Pick<RiftStageInput, 'partySize'>): number {
   return Math.max(1, Math.min(RIFT_STAGE.formation.length, Math.round(input.partySize ?? 1)));
+}
+
+/** La vie d'un monstre, bornée pour l'affichage — ou rien si le rapport ne la porte pas. */
+function lifeOf(t: { maxPv: number; pv: number } | undefined): { life?: RiftStageFoe['life'] } {
+  if (!t || !(t.maxPv > 0)) return {};
+  return { life: { maxPv: t.maxPv, pv: Math.max(0, Math.min(t.maxPv, t.pv)) } };
 }
 
 /** Où se tient le k-ième monstre sur l'axe de marche. */
@@ -237,6 +249,7 @@ export function buildRiftStage(input: RiftStageInput, seed: number): RiftStage {
       x: laneX(k, pop),
       y: laneY(k, rng),
       down: k < killed,
+      ...lifeOf(input.foeTrail?.[k]),
     });
   }
   // Le gardien est TOUJOURS sur le terrain, même si le groupe n'est jamais arrivé jusqu'à

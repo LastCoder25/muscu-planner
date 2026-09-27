@@ -216,6 +216,9 @@ export interface PartyResult {
     level: number;
     maxPv: number;
     pvTrail: number[];
+    /** La vie de chaque monstre affronté (cf. `RiftRun.foeTrail`). Absent d'un rapport
+     *  d'avant la v0.1216 : la barre de l'adversaire ne montre alors que sa chute. */
+    foeTrail?: { maxPv: number; pv: number }[];
     /** Le duel contre le gardien (`bossReplaySteps`). Absent si la porte ne s'est pas
      *  ouverte, ou d'un rapport d'avant la v0.998 : la scène retombe alors sur un seul coup. */
     boss?: RiftBossReplay;

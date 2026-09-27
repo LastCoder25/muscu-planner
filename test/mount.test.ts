@@ -605,7 +605,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // monterait tout aussi bien. On compte les corps, gardien compris.
     expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(stage.foes.length);
     expect(out).toContain('Faille niv 26');
-    expect(out).toContain('pvbar');
+    expect(out).toContain('lbar ours');
+    expect(out).toContain('Ton groupe');
     // 🌀 Deux portails (l'entrée et la porte du gardien), à la couleur du RANG de la faille.
     const { characterRank } = await import('@/lib/characterRank');
     const rk = characterRank(26).color.toLowerCase();

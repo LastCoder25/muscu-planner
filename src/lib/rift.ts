@@ -438,6 +438,12 @@ export interface RiftRun {
    * 3 messages (plus les butins à prendre).
    */
   pvTrail: number[];
+  /**
+   * ❤️ La vie de chaque MONSTRE affronté (gardien non compris), dans l'ordre : ses PV à
+   * l'entrée du combat et ce qu'il lui reste à la fin (0 s'il est tombé). Même statut que
+   * `pvTrail` : le rejeu en fait la barre de l'adversaire, sans rien recalculer.
+   */
+  foeTrail: { maxPv: number; pv: number }[];
   /** Le duel contre le gardien, résumé pour le rejeu — absent si la porte ne s'est pas
    *  ouverte. Même statut que `pvTrail` : il INSCRIT le combat, il ne décide rien. */
   boss?: RiftBossReplay;
@@ -683,6 +689,7 @@ export function simulateIncursion(
   // ⚠️ AUCUN CALCUL N'EN DÉPEND : on ne fait qu'inscrire ce que le combat a déjà décidé
   // (un test de non-régression l'exige — même issue, mêmes abattus, mêmes PV finaux).
   const pvTrail: number[] = [];
+  const foeTrail: { maxPv: number; pv: number }[] = [];
   let shield: number | undefined; // 🔰 une barrière de départ par incursion
 
   for (let i = 0; i < population; i++) {
@@ -696,6 +703,10 @@ export function simulateIncursion(
     });
     shield = res.shield ?? shield;
     if (res.log.length) pv = res.log.at(-1)!.playerPv;
+    foeTrail.push({
+      maxPv: foe.pv,
+      pv: res.win ? 0 : Math.max(0, res.log.at(-1)?.monsterPv ?? foe.pv),
+    });
     if (!res.win) {
       journal.push(`💀 ${foe.emoji} ${foe.name} a eu le dernier mot.`);
       pvTrail.push(0);
@@ -708,6 +719,7 @@ export function simulateIncursion(
         journal,
         maxPv,
         pvTrail,
+        foeTrail,
       };
     }
     killed++;
@@ -743,6 +755,7 @@ export function simulateIncursion(
     journal,
     maxPv,
     pvTrail,
+    foeTrail,
   };
 }
 
@@ -889,6 +902,7 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
       level: poi.level,
       maxPv: run.maxPv,
       pvTrail: run.pvTrail,
+      foeTrail: run.foeTrail,
       ...(run.boss ? { boss: run.boss } : {}),
     },
   };
