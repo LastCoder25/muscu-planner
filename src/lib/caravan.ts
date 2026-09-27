@@ -23,7 +23,6 @@ import {
   prestigeRankIndex,
   type AggregatedEffects,
 } from './items';
-import { sinceEvent } from './sinceEvent';
 import {
   simulateCombat,
   mulberry32,
@@ -58,7 +57,6 @@ import {
   harvestYield,
   harvestGold,
   isRiftPoi,
-  haulPills,
   harvestGuardOf,
   poiTravelLevel,
   travelOneWayMin,
@@ -75,7 +73,6 @@ import {
   advStats,
   advTitle,
   escortRoleLevel,
-  grantAdvXp,
   PROMO_LEVELS,
   type Adventurer,
   type AdvRole,
@@ -218,36 +215,6 @@ export interface CaravanOutcome {
   hurt: string[];
   events: CaravanEvent[];
   text: string;
-}
-
-/** Convois ENCAISSÉS qu’on garde en mémoire. Zéro serait tentant — rien ne les lit —
- *  mais un petit tampon évite qu’un encaissement en cours ne trouve plus sa ligne. */
-export const CARAVAN_KEEP_CLAIMED = 5;
-
-/**
- * Borne la liste de convois persistée.
- *
- * ⚠️ ELLE N’ÉTAIT JAMAIS PURGÉE : mesuré sur le compte réel, **35 convois stockés dont
- * 30 déjà encaissés**, et ça ne fait que grossir — la ligne `characters` porte déjà le
- * sac, les talents, les aventuriers et la carte. Rien ne lit un convoi encaissé
- * (`planPushes` les saute, l’écran n’affiche que les voyages en cours ou à récupérer).
- *
- * ⚠️ ON NE JETTE JAMAIS UN CONVOI NON ENCAISSÉ : il porte une cargaison, et elle ne se
- * périme pas. Seuls les encaissés sont taillés, les plus RÉCENTS d’abord.
- *
- * Appliquée au CHARGEMENT : les lignes existantes se soignent toutes seules, sans
- * migration — même politique que les POI périmés et les garnisons obsolètes.
- */
-export function pruneCaravans(list: Caravan[], keep = CARAVAN_KEEP_CLAIMED): Caravan[] {
-  const done = list.filter((v) => v.claimed);
-  if (done.length <= keep) return list;
-  const gardes = new Set(
-    [...done]
-      .sort((a, b) => b.returnAt - a.returnAt)
-      .slice(0, Math.max(0, keep))
-      .map((v) => v.id),
-  );
-  return list.filter((v) => !v.claimed || gardes.has(v.id));
 }
 
 export interface Caravan {
@@ -1421,135 +1388,7 @@ export function startCaravan(
   };
 }
 
-/** La cargaison est-elle récupérable ? Le convoi doit être RENTRÉ, et pas déjà encaissé.
- *  ⚠️ `claimed === undefined` = déjà crédité, jamais « à récupérer ». */
-export function isCaravanClaimable(c: Caravan, now: number): boolean {
-  return c.claimed === false && now >= c.returnAt;
-}
-
-/**
- * 🎁 Ce que l'ENCAISSEMENT d'un convoi change au vivier — PUR, jumeau de `partyClaimRoster`.
- * - XP par aventurier (`outcome.xp`, calculée au départ), plafonnée par la Guilde ;
- * - 🤕 les blessés (`outcome.hurt`, règle `convoyHurt` : le premier tombé d'une embuscade
- *   PERDUE) partent à l'infirmerie pour `caravanHurtMs` (🩺 de l'escorte + Infirmerie) ;
- * - `escort` : les membres encore dans le vivier (un renvoyé n'a plus rien à recevoir).
- *
- * ⚠️ UNE CONVALESCENCE NE SE RACCOURCIT JAMAIS : on prend le MAXIMUM de l'échéance en cours
- * et de la nouvelle. Le store écrasait `hurtUntil`, donc encaisser un convoi pouvait REMETTRE
- * DEBOUT plus tôt un aventurier déjà alité plus longtemps (siège perdu, v0.887) — alors que
- * `partyClaimRoster` respectait déjà la règle. Cette divergence est la raison d'être de cette
- * fonction : la règle vit désormais à UN seul endroit par voie, testée.
- * ⚠️ Le HÉROS n'y figure jamais : ni XP (elle vient du sport), ni blessure de convoi.
- */
-export function caravanClaimRoster(
-  van: Caravan,
-  roster: readonly Adventurer[],
-  ctx: { pantheonLevel: number; infirmaryLevel: number; now: number },
-): { adventurers: Adventurer[]; escort: Adventurer[] } {
-  const o = van.outcome;
-  const escort = van.escort
-    .map((id) => roster.find((a) => a.id === id))
-    .filter((a): a is Adventurer => !!a);
-  // ⏱️ DEPUIS LE RETOUR DU CONVOI, pas depuis le clic « Encaisser » : le blessé arrive à
-  // l'infirmerie quand le convoi rentre, et encaisser deux jours plus tard ne doit pas lui
-  // faire recommencer sa convalescence. C'était le même défaut que le siège, en PIRE — le
-  // décalage n'était pas borné par un tick mais par le moment où l'on pense à encaisser.
-  // ⚠️ `null` = elle est déjà écoulée : il est debout, on ne pose pas un état mort.
-  const hurtUntil = sinceEvent(van.returnAt, caravanHurtMs(escort, ctx.infirmaryLevel), ctx.now);
-  const hurt = new Set(o.hurt);
-  const adventurers = roster.map((a) => {
-    const gain = o.xp[a.id];
-    if (gain === undefined) return a;
-    const up = grantAdvXp(a, gain, ctx.pantheonLevel);
-    return hurtUntil && hurt.has(a.id)
-      ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) }
-      : up;
-  });
-  return { adventurers, escort };
-}
-
 // ── 📜 RAPPORT DE CONVOI (v0.853 ; demandé par l’utilisateur : « les aventuriers concernés et
 // leur gain d’XP, pour voir la différence entre un long convoi et un court, et rappeler le
 // temps de voyage ») ─────────────────────────────────────────────────────────────────────
 
-interface CaravanReportMember {
-  id: string;
-  name: string;
-  emoji: string;
-  xp: number;
-  /** Bandits abattus par LUI sur ce voyage. 0 pour un convoi d'avant le combat de groupe
-   *  (son `outcome` n'a pas de `kills` du tout). */
-  kills: number;
-  hurt: boolean;
-  /** Mis À TERRE dans une embuscade, gagnée OU perdue, sans partir à l'infirmerie. Sur une
-   *  embuscade perdue toute l'escorte tombe, mais seul le premier tombé est blessé
-   *  (`convoyHurt`) : les autres étaient eux aussi à terre, et le rapport doit le dire.
-   *  ⚠️ Mutuellement exclusif avec `hurt` : un membre blessé reste 🤕, on ne lui ajoute pas
-   *  ce second marqueur. Toujours `false` sur un convoi d'avant le combat de groupe (ses
-   *  events n'ont pas `down`). */
-  knockedDown: boolean;
-  /** Plus dans le vivier (renvoyé depuis) : on garde sa ligne, l’XP a bien été versée. */
-  gone: boolean;
-}
-export interface CaravanReport {
-  /** Durée TOTALE du voyage, aller et retour. */
-  travelMs: number;
-  members: CaravanReportMember[];
-  totalXp: number;
-  /** 0 pour un convoi lancé AVANT le combat de groupe (pas de `kills` dans son `outcome`) :
-   *  l'écran n'affiche alors pas de décompte qui mentirait. */
-  totalKills: number;
-  /** XP par aventurier et par heure de voyage — le chiffre qui compare un convoi long à
-   *  un court, puisque c’est le temps que l’escorte passe immobilisée. */
-  xpPerHour: number;
-  /** Cargaison. */
-  pills: { emoji: string; n: number }[];
-  events: CaravanEvent[];
-}
-
-/**
- * Ce qu’un convoi a rapporté, lisible après coup.
- *
- * ⚠️ Tout vient du convoi STOCKÉ (`outcome` tiré au départ), jamais d’un recalcul : le
- * rapport dit ce qui a été versé, pas ce que la formule du jour verserait. Les montants sont
- * arrondis comme à l’encaissement (des cargaisons anciennes portent des demis).
- */
-export function caravanReport(van: Caravan, roster: readonly Adventurer[]): CaravanReport {
-  const o = van.outcome;
-  const hurt = new Set(o.hurt);
-  // 🩹 À TERRE dans N'IMPORTE QUELLE embuscade (gagnée ou perdue) ; `hurt` l'emporte plus bas.
-  // ABSENT sur un convoi d'avant le combat de groupe (ses events n'ont pas `down`).
-  const knockedDown = new Set(o.events.flatMap((e) => e.down ?? []));
-  const members = van.escort.map((id): CaravanReportMember => {
-    const adv = roster.find((a) => a.id === id);
-    return {
-      id,
-      name: adv?.name ?? 'Champion parti',
-      emoji: (adv && advTitle(adv)?.emoji) || '⚔️',
-      xp: Math.max(0, Math.round(o.xp[id] ?? 0)),
-      kills: Math.max(0, Math.round(o.kills?.[id] ?? 0)),
-      hurt: hurt.has(id),
-      knockedDown: knockedDown.has(id) && !hurt.has(id),
-      gone: !adv,
-    };
-  });
-  const totalXp = members.reduce((n, m) => n + m.xp, 0);
-  const totalKills = members.reduce((n, m) => n + m.kills, 0);
-  const travelMs = Math.max(0, van.returnAt - van.sentAt);
-  const hours = travelMs / 3_600_000;
-  const ent = (n: number) => Math.max(0, Math.round(n || 0));
-  return {
-    travelMs,
-    members,
-    totalXp,
-    totalKills,
-    xpPerHour: members.length && hours > 0 ? totalXp / members.length / hours : 0,
-    pills: haulPills({
-      gold: ent(o.gold),
-      energy: ent(o.energy),
-      summonStones: ent(o.summonStones),
-      key: ent(o.keys),
-    }),
-    events: o.events,
-  };
-}

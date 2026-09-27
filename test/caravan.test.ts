@@ -21,7 +21,6 @@ import {
   missionXpSplit,
   missionXpPreview,
   canSendCaravan,
-  caravanClaimRoster,
   caravanHurtMs,
   caravanLegMin,
   caravanSlots,
@@ -29,9 +28,6 @@ import {
   poiOffers,
   escortCombatant,
   ambushChance,
-  isCaravanClaimable,
-  pruneCaravans,
-  CARAVAN_KEEP_CLAIMED,
   escortShare,
   suggestEscort,
   convoyHurt,
@@ -47,7 +43,6 @@ import {
   roadTroop,
   unitEffects,
   startCaravan,
-  caravanReport,
   caravanHaulMult,
   refAdvGear,
   type Caravan,
@@ -521,115 +516,6 @@ describe('le convoi lui-même', () => {
     expect(c.returnAt - c.midAt).toBe(c.midAt - c.sentAt);
     expect(c.escort).toHaveLength(3);
   });
-  it('⚠️ `claimed === undefined` = DÉJÀ crédité, jamais « à récupérer »', () => {
-    // Même règle que les rapports d'expédition : traiter l'absence de champ comme
-    // « non réclamé » offrirait une seconde fois le butin de chaque convoi passé.
-    const base = startCaravan('c1', poi(), team(3), 0, 7, NUS, 1, 20);
-    const later = base.returnAt + 1;
-    expect(isCaravanClaimable(base, later)).toBe(true);
-    expect(isCaravanClaimable({ ...base, claimed: true }, later)).toBe(false);
-    const legacy = { ...base } as Caravan;
-    delete legacy.claimed;
-    expect(isCaravanClaimable(legacy, later)).toBe(false);
-  });
-  it('rien ne se récupère avant le RETOUR en ville', () => {
-    const c = startCaravan('c1', poi(), team(3), 0, 7, NUS, 1, 20);
-    expect(isCaravanClaimable(c, c.midAt)).toBe(false);
-    expect(isCaravanClaimable(c, c.returnAt)).toBe(true);
-  });
-});
-
-describe('🎁 caravanClaimRoster — ce que l’encaissement change au vivier', () => {
-  const esc = team(3, 20);
-  const bystander: Adventurer = { ...refAdventurer(20, 0), id: 'a_reste' };
-  const roster = [...esc, bystander];
-  /** Un convoi rentré, dont l’XP et les blessés sont FORCÉS pour que le test porte sur la
-   *  règle d’encaissement et non sur un tirage d’embuscade. */
-  const van = (over: Partial<Caravan['outcome']> = {}): Caravan => {
-    const c = startCaravan('c1', poi(), esc, 0, 7, NUS, 1, aJour(esc));
-    return {
-      ...c,
-      outcome: {
-        ...c.outcome,
-        xp: { a0: 50, a1: 70, a2: 90 },
-        hurt: ['a1'],
-        ...over,
-      },
-    };
-  };
-  const ctx = { pantheonLevel: 30, infirmaryLevel: 4, now: 1_000_000 };
-
-  it('XP de chacun = grantAdvXp ; celui qui n’est pas parti est intact', () => {
-    const r = caravanClaimRoster(van(), roster, ctx);
-    esc.forEach((a, i) =>
-      expect(r.adventurers[i]).toMatchObject(
-        grantAdvXp(a, [50, 70, 90][i]!, ctx.pantheonLevel) as object,
-      ),
-    );
-    expect(r.adventurers[3]).toBe(bystander);
-  });
-
-  it('🤕 les blessés partent à l’infirmerie (durée d’un convoi), les autres non', () => {
-    const r = caravanClaimRoster(van(), roster, ctx);
-    // ⏱️ Depuis le RETOUR du convoi, pas depuis le clic.
-    expect(r.adventurers[1]!.hurtUntil).toBe(
-      van().returnAt + caravanHurtMs(esc, ctx.infirmaryLevel),
-    );
-    expect(r.adventurers[0]!.hurtUntil).toBeUndefined();
-    expect(r.adventurers[2]!.hurtUntil).toBeUndefined();
-  });
-
-  // ⏱️ DEPUIS LE RETOUR DU CONVOI, PAS DEPUIS LE CLIC (v0.1096). C'était le défaut de
-  // l'infirmerie du siège, sur une porte non fermée — et en pire : le décalage n'était pas
-  // borné par un tick mais par le moment où l'on pense à encaisser.
-  it('⏱️ encaisser deux jours plus tard ne fait pas recommencer la convalescence', () => {
-    const v = van();
-    // Encaisser une heure après le retour : la MÊME échéance qu’en encaissant aussitôt.
-    const tot = { ...ctx, now: v.returnAt };
-    const peu = { ...ctx, now: v.returnAt + 1 * 3600000 };
-    const a = caravanClaimRoster(v, roster, tot).adventurers[1]!.hurtUntil;
-    const b = caravanClaimRoster(v, roster, peu).adventurers[1]!.hurtUntil;
-    expect(b).toBe(a);
-    // …donc il lui reste une heure de MOINS, au lieu de tout recommencer.
-    expect(b! - peu.now).toBeLessThan(a! - tot.now);
-    // Et bien après, elle est écoulée : personne ne part à l’infirmerie.
-    const tard = { ...ctx, now: v.returnAt + 500 * 3600000 };
-    expect(caravanClaimRoster(v, roster, tard).adventurers[1]!.hurtUntil).toBeUndefined();
-  });
-
-  it('⚠️ une convalescence plus longue (siège perdu) n’est JAMAIS raccourcie', () => {
-    // C'est le défaut que cette fonction existe pour fermer : le store écrasait `hurtUntil`,
-    // donc encaisser un convoi remettait debout trop tôt un aventurier déjà alité. La voie
-    // des groupes (`partyClaimRoster`) respectait déjà la règle — deux voies, une règle.
-    const long = ctx.now + 100 * 3600_000;
-    const alite = roster.map((a) => (a.id === 'a1' ? { ...a, hurtUntil: long } : a));
-    expect(caravanClaimRoster(van(), alite, ctx).adventurers[1]!.hurtUntil).toBe(long);
-  });
-
-  it('…mais une convalescence plus COURTE est bien prolongée', () => {
-    // Le `max` ne doit pas non plus figer une échéance : un blessé qui sortait dans 10 min
-    // repart pour la durée pleine d'un convoi.
-    const court = ctx.now + 600_000;
-    const presque = roster.map((a) => (a.id === 'a1' ? { ...a, hurtUntil: court } : a));
-    expect(caravanClaimRoster(van(), presque, ctx).adventurers[1]!.hurtUntil).toBe(
-      van().returnAt + caravanHurtMs(esc, ctx.infirmaryLevel),
-    );
-  });
-
-  it('un aventurier renvoyé depuis : rien à lui verser, l’escorte ne compte que les présents', () => {
-    const r = caravanClaimRoster(van(), [esc[0]!, esc[2]!], ctx);
-    expect(r.escort.map((a) => a.id)).toEqual(['a0', 'a2']);
-    expect(r.adventurers).toHaveLength(2);
-    expect(caravanClaimRoster(van(), roster, ctx).escort.map((a) => a.id)).toEqual([
-      'a0',
-      'a1',
-      'a2',
-    ]);
-  });
-
-  it('aucun salaire à l’encaissement', () => {
-    expect(caravanClaimRoster(van(), roster, ctx)).not.toHaveProperty('wages');
-  });
 });
 
 describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
@@ -811,50 +697,6 @@ describe('🔢 CE QU’UNE CARGAISON REND TIENT DANS UNE COLONNE ENTIÈRE', () =
       expect(
         resolveCaravan(p, team(3, 70), seed, NUS, aJour(team(3, 70))).energy,
       ).toBeLessThanOrEqual(Math.round(brut));
-  });
-});
-
-describe('🧹 LA LISTE DE CONVOIS NE GROSSIT PAS SANS FIN', () => {
-  // ⚠️ Elle n’était JAMAIS purgée : mesuré sur le compte réel, **35 convois stockés dont
-  // 30 déjà encaissés**. La ligne `characters` porte déjà le sac, les talents, les
-  // aventuriers et la carte — un tableau qui ne fait que croître finit par peser.
-  const base = startCaravan('c0', poi({ level: 10 }), team(2, 10), 0, 7, NUS, 1, 10);
-  const lot = (n: number, claimed: boolean, from = 0) =>
-    Array.from({ length: n }, (_, i) => ({
-      ...base,
-      id: `${claimed ? 'done' : 'live'}${from + i}`,
-      claimed,
-      returnAt: from + i,
-    }));
-
-  it('⚠️ UN CONVOI NON ENCAISSÉ N’EST JAMAIS JETÉ — il porte une cargaison', () => {
-    // C’est la garantie qui compte : la cargaison ne se périme pas (même règle que les
-    // rapports d’expédition), donc une purge qui en perdrait un volerait le joueur.
-    const live = lot(40, false);
-    const gardes = pruneCaravans([...live, ...lot(40, true, 100)]);
-    for (const v of live)
-      expect(
-        gardes.some((g) => g.id === v.id),
-        v.id,
-      ).toBe(true);
-  });
-
-  it('la queue des ENCAISSÉS est bornée, et ce sont les plus RÉCENTS qui restent', () => {
-    const done = lot(30, true);
-    const gardes = pruneCaravans(done);
-    expect(gardes).toHaveLength(CARAVAN_KEEP_CLAIMED);
-    // returnAt croît avec l’indice → les derniers de la liste sont les plus récents.
-    expect(gardes.map((v) => v.id).sort()).toEqual(
-      done
-        .slice(-CARAVAN_KEEP_CLAIMED)
-        .map((v) => v.id)
-        .sort(),
-    );
-  });
-
-  it('une liste déjà courte ressort INTACTE — on ne réordonne rien pour rien', () => {
-    const l = [...lot(3, true), ...lot(2, false, 50)];
-    expect(pruneCaravans(l)).toBe(l);
   });
 });
 
@@ -1433,137 +1275,6 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
     expect(ambushChance(poiOf(true), beaucoup())).toBeGreaterThan(
       ambushChance(poiOf(false), sans()),
     );
-  });
-});
-
-describe('📜 LE RAPPORT DE CONVOI DIT QUI A VOYAGÉ, CE QU’IL A APPRIS ET COMBIEN DE TEMPS', () => {
-  const escort = team(3, 20);
-  const van = (over: Partial<Caravan> = {}): Caravan => ({
-    ...startCaravan('c1', poi({ level: 20 }), escort, 0, 11, NUS, 1, aJour(escort)),
-    ...over,
-  });
-
-  it('une ligne par aventurier de l’escorte, avec l’XP VERSÉE (celle du convoi stocké)', () => {
-    const v = van();
-    const r = caravanReport(v, escort);
-    expect(r.members.map((m) => m.id)).toEqual(v.escort);
-    for (const m of r.members) expect(m.xp).toBe(Math.round(v.outcome.xp[m.id] ?? 0));
-    expect(r.totalXp).toBe(r.members.reduce((n, m) => n + m.xp, 0));
-    expect(r.members[0]!.name).toBe(escort[0]!.name);
-  });
-
-  it('rappelle le temps de voyage ALLER ET RETOUR', () => {
-    const v = van();
-    expect(caravanReport(v, escort).travelMs).toBe(v.returnAt - v.sentAt);
-    expect(v.returnAt - v.sentAt).toBeGreaterThan(v.midAt - v.sentAt);
-  });
-
-  it('XP par aventurier et par heure : c’est ce qui compare un long convoi à un court', () => {
-    const v = van();
-    const court = { ...v, returnAt: v.sentAt + 2 * 3_600_000 };
-    const long = { ...v, returnAt: v.sentAt + 8 * 3_600_000 };
-    const rc = caravanReport(court, escort);
-    const rl = caravanReport(long, escort);
-    expect(rc.totalXp).toBe(rl.totalXp); // même XP stockée…
-    expect(rc.xpPerHour).toBeCloseTo(rc.totalXp / escort.length / 2, 6); // … par tête et par heure
-    expect(rl.xpPerHour).toBeCloseTo(rc.xpPerHour / 4, 6);
-  });
-
-  it('les blessés sont signalés, et un aventurier renvoyé depuis garde sa ligne', () => {
-    const v = van();
-    const blesse = { ...v, outcome: { ...v.outcome, hurt: [escort[1]!.id] } };
-    const r = caravanReport(blesse, [escort[0]!, escort[1]!]);
-    expect(r.members.map((m) => m.hurt)).toEqual([false, true, false]);
-    expect(r.members[2]!.gone).toBe(true);
-    expect(r.members[2]!.xp).toBe(Math.round(v.outcome.xp[escort[2]!.id] ?? 0));
-  });
-
-  it('🗡️ chaque aventurier affiche SES abattus', () => {
-    const v = van();
-    const kills = { [escort[0]!.id]: 2, [escort[1]!.id]: 0, [escort[2]!.id]: 1 };
-    const r = caravanReport({ ...v, outcome: { ...v.outcome, kills } }, escort);
-    expect(r.members.map((m) => m.kills)).toEqual([2, 0, 1]);
-    expect(r.totalKills).toBe(3);
-  });
-
-  it('⚠️ un convoi LANCÉ AVANT le combat de groupe se lit et s’encaisse toujours', () => {
-    // Son `outcome` a été figé au départ par l'ancien moteur : ni `kills` (par tête), ni
-    // `slain`/`down` (par embuscade). L'XP par tête (`xp`) et les blessés (`hurt`), que
-    // `claimCaravan` crédite, y sont déjà.
-    const v = van();
-    const outcome = { ...v.outcome };
-    delete (outcome as { kills?: unknown }).kills;
-    const legacy = {
-      ...v,
-      outcome: {
-        ...outcome,
-        events: outcome.events.map(({ slain: _s, down: _d, ...e }) => e),
-      },
-    };
-    const r = caravanReport(legacy, escort);
-    // Sans `hasKills` : l'écran lit `totalKills > 0`, qui vaut 0 ici — aucun décompte affiché.
-    expect(r.totalKills).toBe(0);
-    for (const e of r.events) {
-      expect(e.slain).toBeUndefined();
-      expect(e.down).toBeUndefined();
-    }
-    for (const m of r.members) {
-      expect(m.kills).toBe(0);
-      expect(m.knockedDown).toBe(false);
-      expect(m.xp).toBe(Math.round(v.outcome.xp[m.id] ?? 0));
-    }
-  });
-
-  it('🩹 à terre dans une embuscade GAGNÉE (relevé) — jamais confondu avec 🤕 blessé', () => {
-    const v = van();
-    const evGagnee = {
-      kind: 'bandits' as const,
-      won: true,
-      slain: 3,
-      down: [escort[0]!.id, escort[1]!.id],
-      text: 'Une embuscade repoussée.',
-    };
-    const r = caravanReport(
-      { ...v, outcome: { ...v.outcome, events: [evGagnee], hurt: [escort[1]!.id] } },
-      escort,
-    );
-    // escort[0] : à terre pendant la victoire, jamais blessé → la marque « à terre ».
-    expect(r.members[0]!.knockedDown).toBe(true);
-    expect(r.members[0]!.hurt).toBe(false);
-    // escort[1] : aussi tombé pendant CETTE victoire, mais blessé PAR AILLEURS → 🤕 seul,
-    // jamais les deux marques sur la même ligne.
-    expect(r.members[1]!.hurt).toBe(true);
-    expect(r.members[1]!.knockedDown).toBe(false);
-    // escort[2] : ni l'un ni l'autre.
-    expect(r.members[2]!.hurt).toBe(false);
-    expect(r.members[2]!.knockedDown).toBe(false);
-  });
-
-  it('🩹 une embuscade PERDUE : TOUS les tombés sont « à terre », seul le premier est 🤕', () => {
-    // Toute l'escorte tombe (clôture de la défaite) ; `convoyHurt` n'envoie que le premier à
-    // l'infirmerie. Les deux autres étaient à terre aussi : sans marque, le rapport le taisait.
-    const v = van();
-    const evPerdue = {
-      kind: 'bandits' as const,
-      won: false,
-      slain: 0,
-      down: [escort[1]!.id, escort[0]!.id, escort[2]!.id],
-      text: 'Des bandits emportent une part de la cargaison.',
-    };
-    const r = caravanReport(
-      { ...v, outcome: { ...v.outcome, events: [evPerdue], hurt: [escort[1]!.id] } },
-      escort,
-    );
-    expect(r.members.map((m) => m.hurt)).toEqual([false, true, false]);
-    expect(r.members.map((m) => m.knockedDown)).toEqual([true, false, true]);
-  });
-
-  it('la cargaison est arrondie comme à l’encaissement', () => {
-    const v = van();
-    const demi = { ...v, outcome: { ...v.outcome, energy: 55.5, gold: 100.4 } };
-    const r = caravanReport(demi, escort);
-    expect(r.pills.find((p) => p.emoji === '⚡')!.n).toBe(56);
-    expect(r.pills.find((p) => p.emoji === '🪙')!.n).toBe(100);
   });
 });
 

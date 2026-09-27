@@ -5553,7 +5553,6 @@ async function syncPush(force = false) {
     .sync(uid, {
       base: char.row.base ?? null,
       expedition: char.row.expedition ? { returnAt: char.row.expedition.returnAt } : null,
-      caravans: char.caravanList,
       // ⚔️ Les groupes partis SANS le héros (un groupe avec le héros est son expédition).
       parties: char.partyList.map((g) => ({ id: g.id, returnAt: g.returnAt })),
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),

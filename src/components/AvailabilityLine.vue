@@ -91,7 +91,7 @@ const d = computed(() => {
     champHurt,
     teamFree: convoySlotsFree(
       char.comptoirLevel,
-      [...char.caravanList, ...char.partyList],
+      char.partyList,
       props.now,
     ),
     teamTotal: caravanSlots(char.comptoirLevel),

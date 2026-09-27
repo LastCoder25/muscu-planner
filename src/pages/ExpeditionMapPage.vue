@@ -397,21 +397,19 @@
          Trois cartes empilées poussaient la carte hors de l'écran dès deux convois, et
          répétaient « total » et « escorte » dont on n'a pas besoin en un coup d'œil :
          il faut QUI voyage, VERS QUOI, et COMBIEN DE TEMPS. Le reste se lit sur la carte
-         ou dans le rapport. Disposée en TROIS COLONNES (jusqu'à 12 convois possibles). Toucher une tuile
-         allume un halo rouge sur elle et sur son lieu ; la retoucher les éteint.
-         ⚠️ Un convoi RENTRÉ reste dans la rangée, en tuile ACTIONNABLE : sa cargaison ne
-         se verse pas toute seule (même règle que les rapports d'expédition). -->
+         ou dans le rapport. Toucher une tuile allume un halo rouge sur elle et sur son lieu ;
+         la retoucher les éteint. (Les convois sont retirés : le butin d'une équipe attend
+         dans la boîte 📬, comme celui du héros.) -->
     <div v-if="trips.length" ref="tripsEl" class="trips">
       <button
         v-for="t in trips"
         :key="t.key"
         type="button"
         class="trip"
-        :class="[t.kind, { back: t.back, ready: t.claim, focus: focusTrip === t.key }]"
-        :disabled="t.claim ? busyCaravan : undefined"
+        :class="[t.kind, { back: t.back, focus: focusTrip === t.key }]"
         :title="t.title"
-        :aria-pressed="t.claim ? undefined : focusTrip === t.key"
-        @click="t.claim ? doClaimCaravan(t.claim) : toggleFocusTrip(t.key)"
+        :aria-pressed="focusTrip === t.key"
+        @click="toggleFocusTrip(t.key)"
       >
         <span class="tr-who">{{ t.who }}</span>
         <span v-if="isRiftPoi(t.poi)" class="tr-poi tr-rift">
@@ -835,18 +833,6 @@
          ouvre bien la GUILDE (avec sa feuille de promotion par-dessus), pas un bout
          de Guilde détaché : après avoir promu, on est déjà là où l'on gère son monde. -->
 
-    <!-- 🐫 Rapport à l'encaissement : il remplace la simple notification « Cargaison
-         récupérée », qui ne disait ni qui avait voyagé, ni ce qu'il avait appris. -->
-    <q-dialog :model-value="!!reportVan" @update:model-value="(v) => !v && (reportId = null)">
-      <q-card v-if="reportVan" class="van-card">
-        <div class="van-kicker">🐫 Convoi rentré · cargaison récupérée</div>
-        <MissionReportCard :card="caravanCard(reportVan, char.advList, reportStars)" :now="now" />
-        <div class="van-actions">
-          <q-btn flat no-caps label="Fermer" @click="reportId = null" />
-        </div>
-      </q-card>
-    </q-dialog>
-
     <div v-if="!active && !pois.length" class="empty">
       La carte se peuple avec le temps — de nouvelles activités apparaissent régulièrement. Reviens
       bientôt.
@@ -856,7 +842,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -870,7 +856,7 @@ import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
-import { caravanCard, messageCard } from '@/lib/missionCard';
+import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
@@ -962,7 +948,6 @@ import {
 } from '@/lib/rift';
 import {
   convoySlotsFree,
-  isCaravanClaimable,
   poiOffers,
   missionXpPreview,
   missionXpSplit,
@@ -973,7 +958,6 @@ import { advGearRoles } from '@/lib/advGear';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
-const route = useRoute();
 const { openPath } = useGamePanel();
 /**
  * 🏰 RETOUR = L'ÉCRAN DE LA BASE (demandé par l'utilisateur). On entre sur la carte par la
@@ -1391,7 +1375,7 @@ const freeSorted = computed(() => sortByGradeThenRank(freeStable.value));
 /** Créneaux de convoi libres — ⚠️ UN SEUL pool avec les groupes partis SANS le héros
  *  (`convoySlotsFree`, même règle que le store). */
 const vansLeft = computed(() =>
-  convoySlotsFree(char.comptoirLevel, [...char.caravanList, ...char.partyList], now.value),
+  convoySlotsFree(char.comptoirLevel, char.partyList, now.value),
 );
 /** Temps de convalescence restant du héros (0 = disponible). ⚠️ Il manquait ici : la carte
  *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
@@ -1645,7 +1629,7 @@ const canSendPartyNow = computed(
     // ⚠️ TOUJOURS attendre la progression : avant son chargement le niveau vaut 1, et le
     // tirage des pièces d'aventurier (figé au départ) serait plafonné au plus bas rang.
     progress.ready.value &&
-    !busyCaravan.value,
+    !busyParty.value,
 );
 /** 🗿 Combien de champions on peut engager — `partyCapFor` (le Panthéon), jamais une copie
  *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
@@ -1711,7 +1695,7 @@ async function doSendParty() {
   // coup pour choisir le message dirait toujours « camp ».
   const isRift = !!selectedRift.value;
   const isHarvest = !teamOnly.value;
-  busyCaravan.value = true;
+  busyParty.value = true;
   try {
     const refused = await char.sendParty(uid, poi, {
       hero: heroForParty.value,
@@ -1737,7 +1721,7 @@ async function doSendParty() {
           },
     );
   } finally {
-    busyCaravan.value = false;
+    busyParty.value = false;
   }
 }
 
@@ -1776,33 +1760,7 @@ function expeHaul(o: {
   const objets = o.items?.length ?? (o.item ? 1 : 0);
   return objets > 0 ? [...pills, { emoji: '🎒', n: objets }] : pills;
 }
-/** Un convoi nomme ses clés `keys` là où une expédition dit `key`. */
-function caravanHaul(o: {
-  gold: number;
-  energy: number;
-  summonStones: number;
-  keys: number;
-  mana?: number;
-}) {
-  return expeHaul({ ...o, key: o.keys });
-}
-/** Les convois EN ROUTE, situés par la même interpolation que le héros
- *  (`travelPosition`) : un convoi part, atteint son lieu, et revient — on doit le voir
- *  faire, sinon la seule trace d'une caravane est une carte « 🎁 Récupérer ». */
-const vansOnMap = computed(() =>
-  char.caravanList
-    .filter((c) => now.value < c.returnAt)
-    .map((c) => ({
-      id: c.id,
-      poi: c.poi,
-      escort: c.escort.length,
-      members: c.escort,
-      haul: caravanHaul(c.outcome),
-      at: travelPosition(c, now.value),
-      prog: voyageProgress(c, now.value),
-    })),
-);
-/** ⚔️ Les GROUPES partis sans le héros, situés comme les convois. ⚠️ Un groupe AVEC le
+/** ⚔️ Les GROUPES partis sans le héros, situés comme le héros (`travelPosition`). ⚠️ Un groupe AVEC le
  *  héros vit dans `expedition` : c'est le tracé du héros qui le montre. */
 const partiesOnMap = computed(() =>
   char.partyList
@@ -1845,14 +1803,11 @@ const bandsOnMap = computed(() => {
 });
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
 const travelersOnMap = computed(() => [
-  ...vansOnMap.value.map((v) => ({ ...v, emo: '🐫', kind: 'caravan' as const })),
   ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️', kind: 'party' as const })),
 ]);
-const busyCaravan = ref(false);
-/** Tout ce qui voyage, dans l'ordre où ça rentre : le héros puis les convois, les
- *  cargaisons à récupérer en TÊTE (c'est la seule ligne sur laquelle on peut agir).
- *  ⚠️ Une seule liste pour les trois états — en route, rentré, à encaisser — sinon la
- *  rangée se lirait comme trois rangées collées. */
+const busyParty = ref(false);
+/** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
+ *  lirait comme plusieurs rangées collées. */
 const trips = computed(() => {
   const out: {
     key: string;
@@ -1862,7 +1817,6 @@ const trips = computed(() => {
     time: string;
     pct: number;
     back: boolean;
-    claim?: string;
     title: string;
     /** Qui voyage : le héros, et les ids des champions (montrés quand on touche la tuile). */
     withHero: boolean;
@@ -1888,22 +1842,6 @@ const trips = computed(() => {
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
-  for (const v of vansOnMap.value) {
-    const back = v.at.phase === 'return';
-    out.push({
-      key: 'v' + v.id,
-      kind: 'van',
-      who: '🐫',
-      poi: v.poi,
-      time: tripTimeLabel(v.at).time,
-      pct: v.prog.overall * 100,
-      back,
-      withHero: false,
-      members: v.members,
-      haul: v.haul,
-      title: `Convoi — ${POI_LABEL[v.poi.type]} niv ${v.poi.level} · escorte ${v.escort} · ${tripTimeLabel(v.at).untilHome}`,
-    });
-  }
   for (const g of partiesOnMap.value) {
     const back = g.at.phase === 'return';
     out.push({
@@ -1920,29 +1858,11 @@ const trips = computed(() => {
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
     });
   }
-  for (const c of claimable.value) {
-    out.push({
-      key: 'c' + c.id,
-      kind: 'van',
-      who: '🐫',
-      poi: c.poi,
-      time: '🎁',
-      pct: 100,
-      back: true,
-      claim: c.id,
-      withHero: false,
-      members: c.escort,
-      haul: caravanHaul(c.outcome),
-      title: `Convoi rentré de ${POI_LABEL[c.poi.type]} — récupérer la cargaison`,
-    });
-  }
-  // Les cargaisons prêtes d'abord : c'est la seule tuile sur laquelle il y a à faire.
-  return out.sort((x, y) => Number(!!y.claim) - Number(!!x.claim));
+  return out;
 });
 /** 🔴 Le voyage qu'on a touché : sa tuile et son lieu sur la carte portent un halo ;
  *  retoucher la même tuile les éteint. Un voyage qui se termine emporte son halo
- *  (`focusPoi` ne le retrouve plus). La tuile d'une cargaison prête garde son geste :
- *  la toucher encaisse. */
+ *  (`focusPoi` ne le retrouve plus). */
 const focusTrip = ref<string | null>(null);
 const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.value)?.poi ?? null);
 /** 👥 Les membres du voyage touché (demandé : « quand je clique sur une expédition, voir les
@@ -1958,20 +1878,6 @@ const focusCrew = computed(() => {
 function toggleFocusTrip(key: string) {
   focusTrip.value = focusTrip.value === key ? null : key;
 }
-const claimable = computed(() => char.caravanList.filter((c) => isCaravanClaimable(c, now.value)));
-/** Aventurier dont la feuille de promotion doit s’ouvrir, et celui qui ATTEND que les
- *  éclats aient fini de jouer. ⚠️ L’overlay de célébration est au-dessus des modales :
- *  ouvrir la feuille tout de suite la cacherait derrière l’animation. */
-/** ⚠️ LA CARTE OCCUPE 62vh : la rangée des voyages vit SOUS elle, donc sur un téléphone
- *  une cargaison prête naît HORS ÉCRAN. Taper « 🐫 Un convoi est rentré » déposait bien
- *  sur la carte — mais pas devant ce qu’on venait y faire, et rien ne disait où c’était.
- *  Même remède que la feuille d’un lieu (v0.738) : on la RÉVÈLE.
- *
- *  ⚠️ On n’encaisse PAS à sa place — « la cargaison ne se verse pas toute seule » (règle
- *  des rapports d’expédition, v0.680). On amène devant le bouton, on ne l’appuie pas.
- *  ⚠️ Le paramètre est RETIRÉ après coup, sinon un retour arrière rejoue le saut
- *  (même patron que le `?tab=` de l’Aventure, v0.748).
- *  ⚠️ `immediate` : en cockpit l’écran peut être DÉJÀ monté quand la query change. */
 const tripsEl = ref<HTMLElement | null>(null);
 // La carte raccourcit quand des voyages sont en cours (.with-trips) : on remesure, sinon
 // les flèches de bord se calent sur l'ancienne hauteur.
@@ -1979,46 +1885,7 @@ watch(
   () => trips.value.length > 0,
   () => void nextTick(measure),
 );
-watch(
-  () => [route.query.claim, claimable.value.length] as const,
-  async ([flag, n]) => {
-    if (!flag || !n) return;
-    await nextTick();
-    tripsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    const rest = { ...route.query };
-    delete rest.claim;
-    void router.replace({ path: route.path, query: rest });
-  },
-  { immediate: true },
-);
 
-/** Rapport ouvert après un encaissement (id du convoi) et les aventuriers qui y ont gagné
- *  une étoile. Le convoi reste dans la liste, marqué encaissé : on le relit là. */
-const reportId = ref<string | null>(null);
-const reportStars = ref<string[]>([]);
-const reportVan = computed(() => char.caravanList.find((c) => c.id === reportId.value) ?? null);
-
-async function doClaimCaravan(id: string) {
-  const uid = auth.user?.id;
-  if (!uid || busyCaravan.value) return;
-  busyCaravan.value = true;
-  try {
-    // ⚠️ Une liste VIDE vaut « encaissé » (elle est truthy) ; c'est `null` qui dit l'échec.
-    const claimed = await char.claimCaravan(uid, id);
-    if (!claimed) return;
-    const { events, tracks } = claimed;
-    reportStars.value = events.filter((e) => e.to > e.from).map((e) => e.id);
-    reportId.value = id;
-    // ⚠️ LE NIVEAU D'UN AVENTURIER EST CACHÉ : sans cette annonce, une étoile gagnée en
-    // convoi ne se verrait qu'en rouvrant la Guilde pour y lire une barre. C'est le seul
-    // retour qu'il ait sur des semaines de voyages.
-    // 📊 La barre d’étoile de chaque membre, avant → après : elle porte aussi les étoiles et
-    // les rangs gagnés, donc elle remplace l’annonce seule (qui ne jouait rien entre deux).
-    advXpFx.show(tracks, 'Retour de convoi');
-  } finally {
-    busyCaravan.value = false;
-  }
-}
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
 /** 🕳️ Rapport d'incursion à rejouer (cf. `RiftReplayDialog`). */
@@ -3609,13 +3476,6 @@ onUnmounted(() => {
   .trip-focus-halo {
     animation: none;
   }
-}
-.trip.ready {
-  cursor: pointer;
-  background: color-mix(in srgb, #7bc86c 16%, var(--surface));
-}
-.trip.ready:disabled {
-  opacity: 0.6;
 }
 .sh-x {
   background: none;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { caravanCard, messageCard, missionWhen } from '@/lib/missionCard';
+import { messageCard, missionWhen } from '@/lib/missionCard';
 import { characterRank } from '@/lib/characterRank';
 import type { ExpeditionMessage, PartyResult, Poi } from '@/lib/expedition';
 import type { Caravan } from '@/lib/caravan';
@@ -100,49 +100,6 @@ describe('📜 messageCard — un rapport de la boîte 📬', () => {
     expect(messageCard(msg({ itemName: 'Vieux bouclier' }), []).legacyItem).toBe('Vieux bouclier');
     const item = { name: 'Lame', slot: 'weapon' } as never;
     expect(messageCard(msg({ itemName: 'x', item }), []).legacyItem).toBeNull();
-  });
-});
-
-describe('🐫 caravanCard — un convoi rentré', () => {
-  const poi = { id: 'p1', type: 'well', level: 12, distNorm: 0.5, x: 0, y: 0 } as Poi;
-  const van = (events: Caravan['outcome']['events']): Caravan => ({
-    id: 'v1',
-    poi,
-    escort: ['a1', 'a2'],
-    sentAt: 0,
-    midAt: 2 * H,
-    returnAt: 4 * H,
-    outcome: {
-      gold: 100,
-      energy: 30,
-      summonStones: 0,
-      keys: 0,
-      xp: { a1: 16, a2: 8 },
-      kills: { a1: 2 },
-      hurt: [],
-      events,
-      text: 'La route fut calme.',
-    },
-  });
-
-  it('une embuscade PERDUE rend le verdict rouge ; gagnée, le convoi est « rentré »', () => {
-    expect(caravanCard(van([{ kind: 'bandits', won: false, text: 'x' }]), []).win).toBe(false);
-    const ok = caravanCard(van([{ kind: 'bandits', won: true, slain: 2, text: 'Repoussés' }]), []);
-    expect(ok.win).toBe(true);
-    expect(ok.verdict).toBe('rentré');
-    expect(ok.road).toEqual([{ text: 'Repoussés', slain: 2 }]);
-    expect(ok.kills).toBe('2 bandits abattus');
-  });
-
-  it('le temps de voyage et l’XP par heure viennent du rapport de convoi', () => {
-    const c = caravanCard(van([]), []);
-    expect(c.travelMs).toBe(4 * H);
-    expect(c.xpPerHour).toBe(24 / 2 / 4);
-  });
-
-  it('seuls les champions nommés dans `stars` gagnent l’étoile', () => {
-    const c = caravanCard(van([]), [], ['a2']);
-    expect(c.team.map((m) => m.star)).toEqual([false, true]);
   });
 });
 

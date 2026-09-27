@@ -168,11 +168,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import {
-  caravanClaimRoster,
   convoySlotsFree,
-  isCaravanClaimable,
-  pruneCaravans,
-  type Caravan,
   type EscortKit,
   type PartyHero,
 } from '@/lib/caravan';
@@ -307,7 +303,6 @@ export interface CharacterRow {
   supplies: SupplyStock;
   scrap: number; // 🔩 LEGACY (migr. 0060) : devise retirée (v0.998), convertie en or au chargement // journal d'énergie hors-sport horodaté (migr. 0057)
   adventurers: Adventurer[] | null; // vivier de la Guilde (migr. 0061)
-  caravans: Caravan[] | null; // convois en route ou dont la cargaison attend (migr. 0061)
   adv_gear: AdvGearState | null; // équipement des aventuriers : stock + forge (migr. 0068)
   laby_stats: LabyStats; // Labyrinthe : runs lancés / nettoyés par palier (migr. 0073)
   boss_stats: RunStats; // Boss de palier : tentatives / victoires par boss (migr. 0085)
@@ -354,7 +349,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, caravans, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -378,7 +373,6 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Les convois ENCAISSÉS sont taillés au chargement : la liste ne se purgeait
     // jamais (35 convois mesurés sur un compte réel, dont 30 dépensés). Un non-encaissé
     // n'est JAMAIS jeté — il porte une cargaison.
-    r.caravans = pruneCaravans(arr<Caravan>(r.caravans));
     // Équipement des aventuriers (`adv_gear`, migr. 0068) : jsonb malformé/absent → stock
     // vide, entrées sans id/slot/effet écartées, forge incomplète remise à null. Même
     // politique que `adventurers`/`caravans` ci-dessus (jamais null après normalisation,
@@ -2792,7 +2786,6 @@ export const useCharacterStore = defineStore('character', () => {
   // rencontres et de la cargaison. Le store ne fait que persister et arbitrer ce que le
   // domaine ne peut pas savoir — l'or disponible, le niveau des bâtiments, l'horloge.
   const advList = computed<Adventurer[]>(() => row.value?.adventurers ?? []);
-  const caravanList = computed<Caravan[]>(() => row.value?.caravans ?? []);
   /** ⚔️ Groupes de camp partis SANS le héros (migr. 0077). Avec le héros, le voyage vit
    *  dans `expedition`. */
   const partyList = computed<ActiveParty[]>(() => row.value?.parties ?? []);
@@ -2809,60 +2802,6 @@ export const useCharacterStore = defineStore('character', () => {
   // `caravanSlots`, `convoySlotsFree` et `caravanLegMin`, et le renommer partout
   // n'apprendrait rien de plus.
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
-
-  /** Encaisse la cargaison d'un convoi rentré (devises, XP par aventurier, blessés) et rend
-   *  **ce que la mission a changé pour l’escorte** (`AdvProgress[]`), ou `null` si rien n’a
-   *  été encaissé.
-   *
-   *  ⚠️ `o.xp` contient DÉJÀ le socle de mission ET la part des bandits abattus, calculés au
-   *  départ (moteur de groupe) ; un convoi lancé avant la bascule porte l'XP de l'ancien
-   *  moteur dans le même champ — rien à distinguer ici.
-   *  ⚠️ `o.hurt` N'EST PAS « ceux qui sont tombés » : c'est la règle `convoyHurt`. Embuscade
-   *  GAGNÉE → personne (les tombés se relèvent) ; embuscade PERDUE → le PREMIER tombé seul.
-   *  ⚠️ Un booléen ne suffisait plus : le niveau d’un aventurier est CACHÉ, donc une
-   *  étoile gagnée en convoi ne se voyait qu’en rouvrant la Guilde. L’écran a besoin
-   *  du AVANT/APRÈS pour l’annoncer — et c’est la LIB qui compare, pas lui.
-   *  Rend `{ events, tracks }` (annonces d’étoile + barres avant/après) ; c’est `null`
-   *  qui dit l’échec. */
-  async function claimCaravan(userId: string, caravanId: string) {
-    const cur = row.value;
-    const van = caravanList.value.find((c) => c.id === caravanId);
-    if (!cur || !van || !isCaravanClaimable(van, Date.now())) return null;
-    const o = van.outcome;
-    const before = advList.value;
-    // XP et blessés : la règle vit dans `caravanClaimRoster` (lib, testée), jumelle
-    // de `partyClaimRoster`. ⚠️ C'est elle qui garantit qu'une convalescence n'est JAMAIS
-    // raccourcie — le calcul écrit ici écrasait `hurtUntil` et remettait debout trop tôt un
-    // aventurier déjà alité plus longtemps (siège perdu).
-    const { adventurers: advs } = caravanClaimRoster(van, before, {
-      pantheonLevel: pantheonLevel.value,
-      infirmaryLevel: defenseLevel(cur.base?.defenses ?? [], 'infirmary'),
-      now: Date.now(),
-    });
-    // ⚠️ ON ARRONDIT À L'ENCAISSEMENT, pas seulement à la production. Ces cinq colonnes
-    // sont des ENTIERS : une valeur décimale fait échouer la sauvegarde entière avec
-    // `invalid input syntax for type integer`, et l'écran ne montre RIEN. Corriger la
-    // formule ne suffit pas — les cargaisons DÉJÀ calculées portent la valeur fautive
-    // dans leur `outcome`, et elles resteraient irrécupérables à vie. On soigne donc à
-    // la lecture, comme les POI périmés et les garnisons obsolètes : le code se corrige,
-    // la donnée se répare toute seule au passage.
-    const ent = (n: number) => Math.max(0, Math.round(n || 0));
-    const gearPatch = gearTrainedPatch(cur, before, advs);
-    const tracks = gearAwareTracks(cur, before, advs, gearPatch);
-    await persist(userId, {
-      // 🔩 LEGACY : un convoi lancé avant le retrait de la ferraille la rend en or.
-      // ⚠️ Plus de salaires : un `wages` resté dans un convoi d'avant n'est plus déduit.
-      gold: cur.gold + ent(o.gold) + ent(o.scrap ?? 0) * SCRAP_TO_GOLD,
-      login_energy: cur.login_energy + ent(o.energy),
-      summon_stones: cur.summon_stones + ent(o.summonStones),
-      keys: cur.keys + ent(o.keys),
-      adventurers: advs,
-      ...gearPatch,
-      caravans: caravanList.value.map((c) => (c.id === caravanId ? { ...c, claimed: true } : c)),
-    });
-    if (o.gold > 0) goldFx.gain(ent(o.gold));
-    return { events: advProgressOf(before, advs), tracks };
-  }
 
   /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et
    *  autant d'aventuriers DISPONIBLES qu'on veut — ⚠️ aucun `escortMax` (seuls les convois
@@ -2918,7 +2857,7 @@ export const useCharacterStore = defineStore('character', () => {
       poi,
       escort.length,
       !!hero,
-      convoySlotsFree(comptoirLevel.value, [...caravanList.value, ...partyList.value], now),
+      convoySlotsFree(comptoirLevel.value, partyList.value, now),
       engageCap(pantheonLevel.value),
       // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
       // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
@@ -3152,12 +3091,10 @@ export const useCharacterStore = defineStore('character', () => {
     applyEndless,
     spendKey,
     advList,
-    caravanList,
     escortKit,
     advGearStock,
     pantheonLevel,
     comptoirLevel,
-    claimCaravan,
     sealRiftPoi,
     partyList,
     sendParty,

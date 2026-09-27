@@ -32,7 +32,6 @@ const base = (playerLevel: number, over: Partial<BaseState> = {}): BaseState => 
 const ctx = (over: Partial<PushContext> = {}): PushContext => ({
   base: base(28),
   expedition: null,
-  caravans: [],
   parties: [],
   watchtowerLevel: 28,
   activeDays7: 4,
@@ -144,7 +143,7 @@ describe('notifications push — ce qu’on programme', () => {
     const c = ctx({
       base: base(28, { nextRaidAt: NOW - 5 * H }),
       expedition: { returnAt: NOW - H },
-      caravans: [{ id: 'v1', returnAt: NOW - H }],
+      parties: [{ id: 'g1', returnAt: NOW - H }],
     });
     expect(planPushes(c, NOW)).toEqual([]);
   });
@@ -154,12 +153,12 @@ describe('notifications push — ce qu’on programme', () => {
     // ajouterait un doublon et le joueur recevrait N fois la même alerte.
     const c = ctx({
       expedition: { returnAt: NOW + 3 * H },
-      caravans: [{ id: 'v1', returnAt: NOW + 2 * H }],
+      parties: [{ id: 'g1', returnAt: NOW + 2 * H }],
     });
     const a = livePushKeys(planPushes(c, NOW));
     const b = livePushKeys(planPushes(c, NOW + 60_000));
     expect([...a].sort()).toEqual([...b].sort());
-    expect(a.size).toBe(4); // siège + assaut + héros + convoi, tous distincts
+    expect(a.size).toBe(4); // siège + assaut + héros + groupe, tous distincts
   });
 
   it('⚠️ un siège REPOUSSÉ change de clé — l’ancienne ligne doit mourir', () => {
@@ -171,57 +170,10 @@ describe('notifications push — ce qu’on programme', () => {
     expect([...t2].some((k) => t1.has(k) && k.startsWith('siege:'))).toBe(false);
   });
 
-  it('un convoi DÉJÀ récupéré ne notifie plus', () => {
-    const c = ctx({
-      caravans: [
-        { id: 'v1', returnAt: NOW + 2 * H, claimed: true },
-        { id: 'v2', returnAt: NOW + 2 * H },
-      ],
-    });
-    const convois = planPushes(c, NOW).filter((p) => p.kind === 'convoy_home');
-    expect(convois).toHaveLength(1);
-    expect(convois[0]!.dedupe).toBe('convoy:v2');
-  });
-
-  it('⚠️ le message de convoi mène à la CARGAISON, pas seulement à la carte', () => {
-    // Signalé : taper « 🐫 Un convoi est rentré » déposait sur la carte, mais la rangée
-    // des voyages vit SOUS une carte de 62vh — sur un téléphone, la cargaison prête
-    // naissait hors écran. Le drapeau dit à l’écran de la révéler.
-    const c = ctx({ caravans: [{ id: 'v1', returnAt: NOW + 2 * H }] });
-    const p = planPushes(c, NOW).find((x) => x.kind === 'convoy_home');
-    expect(p!.url).toContain('claim=');
-  });
-
-  it('⚠️ tous les convois partagent la MÊME url — sinon les alertes s’empilent', () => {
-    // Le service worker regroupe par `tag`, qui vaut l’url : mettre l’id du convoi dedans
-    // ferait sonner une notification PAR convoi rentré — trois après une nuit. C’est
-    // exactement ce que le regroupement existe pour éviter.
-    const c = ctx({
-      caravans: [
-        { id: 'v1', returnAt: NOW + 2 * H },
-        { id: 'v2', returnAt: NOW + 3 * H },
-        { id: 'v3', returnAt: NOW + 4 * H },
-      ],
-    });
-    const urls = new Set(
-      planPushes(c, NOW)
-        .filter((x) => x.kind === 'convoy_home')
-        .map((x) => x.url),
-    );
-    expect(urls.size).toBe(1);
-    // …et chacun garde SA clé d'idempotence : une seule bulle, trois lignes en base.
-    const keys = new Set(
-      planPushes(c, NOW)
-        .filter((x) => x.kind === 'convoy_home')
-        .map((x) => x.dedupe),
-    );
-    expect(keys.size).toBe(3);
-  });
-
   it('chaque message emmène quelque part', () => {
     const c = ctx({
       expedition: { returnAt: NOW + 3 * H },
-      caravans: [{ id: 'v1', returnAt: NOW + 2 * H }],
+      parties: [{ id: 'g1', returnAt: NOW + 2 * H }],
     });
     for (const p of planPushes(c, NOW)) {
       expect(p.url, p.kind).toMatch(/^\//);

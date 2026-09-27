@@ -3,19 +3,17 @@
 // Trois écrans montraient un rapport chacun à sa façon — la boîte 📬 de l'Aventure, la
 // fenêtre de retour sur la carte, le rapport de convoi — avec des redites (deux verdicts,
 // deux en-têtes de groupe). Ce module les ramène à UNE forme ; `MissionReportCard` la peint.
-// ⚠️ Aucun chiffre n'est recalculé : tout vient de `partyReport`, `caravanReport` et
+// ⚠️ Aucun chiffre n'est recalculé : tout vient de `partyReport` et
 // `haulPills`, les fonctions que ces écrans lisaient déjà.
 import { characterRank, rankStarStr } from './characterRank';
 import {
   POI_EMO,
-  POI_LABEL,
   haulPills,
   messageTitle,
   type ExpeditionMessage,
   type PartyResult,
 } from './expedition';
 import { partyReport } from './party';
-import { caravanReport, type Caravan } from './caravan';
 import { feedWhen } from './friendFeed';
 import type { Adventurer } from './adventurers';
 import { DISPEL_TEXT } from './raid';
@@ -124,56 +122,6 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
     xpPerHour: null,
     party: m.party ?? null,
     at: m.resolvedAt,
-  };
-}
-
-/** Un convoi rentré. `stars` = ids des champions qui ont gagné une étoile à l'encaissement. */
-export function caravanCard(
-  van: Caravan,
-  roster: readonly Adventurer[],
-  stars: readonly string[] = [],
-): MissionCard {
-  const r = caravanReport(van, roster);
-  const lost = van.outcome.events.some((e) => e.kind === 'bandits' && e.won === false);
-  const rk = rankLabel(van.poi.level);
-  const got = new Set(stars);
-  return {
-    id: van.id,
-    rift: van.poi.type === 'rift',
-    emoji: POI_EMO[van.poi.type],
-    color: rk.color,
-    title: `Convoi · ${POI_LABEL[van.poi.type]}`,
-    rank: rk.label,
-    win: !lost,
-    verdict: lost ? 'embuscade perdue' : 'rentré',
-    gains: r.pills,
-    loot: [],
-    lootMore: 0,
-    legacyItem: null,
-    team: r.members.map((x) => ({
-      id: x.id,
-      emoji: x.emoji,
-      name: x.name,
-      xp: x.xp,
-      kills: x.kills,
-      hurt: x.hurt,
-      down: x.knockedDown,
-      star: got.has(x.id),
-      gone: x.gone,
-    })),
-    hero: false,
-    kills:
-      r.totalKills > 0
-        ? `${plural(r.totalKills, 'bandit')} abattu${r.totalKills > 1 ? 's' : ''}`
-        : null,
-    totalXp: r.totalXp,
-    story: van.outcome.text,
-    road: r.events.map((e) => ({ text: e.text, slain: e.slain ?? 0 })),
-    journal: [],
-    travelMs: r.travelMs,
-    xpPerHour: r.xpPerHour,
-    party: null,
-    at: van.returnAt,
   };
 }
 

@@ -14,7 +14,7 @@
 
 import { raidIntervalMs, raidsEnabled, scoutLeadMs, type BaseState } from './raid';
 
-type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'convoy_home' | 'party_home';
+type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'party_home';
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
  *  événement ne doit JAMAIS créer un doublon — l'app replanifie à chaque ouverture. */
@@ -32,7 +32,6 @@ export interface PushContext {
   base: BaseState | null;
   /** Expédition du héros en cours (on ne lit que l'heure de retour). */
   expedition: { returnAt: number } | null;
-  caravans: { id: string; returnAt: number; claimed?: boolean }[];
   /** ⚔️ Groupes partis SANS le héros vers un camp (un groupe avec héros notifie par
    *  `expedition`). ⚠️ REQUIS : un groupe oublié rentrerait sans prévenir. */
   parties: { id: string; returnAt: number }[];
@@ -105,23 +104,6 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       title: '🧭 Ton héros est rentré',
       body: 'Sa cargaison t’attend — elle ne se périme pas, mais il peut repartir.',
       url: '/expedition-map',
-    });
-  }
-
-  for (const c of ctx.caravans) {
-    if (c.claimed) continue;
-    add({
-      kind: 'convoy_home',
-      dedupe: `convoy:${c.id}`,
-      sendAt: c.returnAt,
-      title: '🐫 Un convoi est rentré',
-      body: 'Sa cargaison attend d’être récupérée.',
-      // ⚠️ UN DRAPEAU, PAS L'ID DU CONVOI, et c'est délibéré : le service worker
-      // regroupe les notifications par `url` (`tag`), donc un id ferait empiler une
-      // alerte par convoi rentré — trois après une nuit. Le drapeau garde l'URL
-      // IDENTIQUE pour tous, donc une seule notification, et l'écran met la ou les
-      // cargaisons prêtes sous les yeux (elles sont déjà en tête de la rangée).
-      url: '/expedition-map?claim=1',
     });
   }
 
