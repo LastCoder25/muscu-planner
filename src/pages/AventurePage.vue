@@ -7607,7 +7607,7 @@ button.pt-mini:active {
   fill: var(--rank-c, var(--accent));
 }
 .pt-mini.pow .ptm-v {
-  fill: var(--accent);
+  fill: var(--rank-c, var(--accent));
   font-size: 15px;
 }
 /* Badge d'icône (LvL / ⚔️) CENTRÉ verticalement sur l'ÉPAISSEUR du trait de l'anneau
@@ -7626,9 +7626,13 @@ button.pt-mini:active {
   padding: 2px 6px;
   border: 1px solid color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
 }
-/* Puissance : encadrement accent (comme le liseré rang du LvL, mais à sa couleur). */
+/* Puissance : À LA COULEUR DU RANG, comme le niveau (demandé 2026-09-27) — chiffre, anneau
+   et cadre de l'icône. Les coins Voie et Rang gardent leur anneau accent. */
+.pt-mini.pow .ptm-track.full {
+  stroke: color-mix(in srgb, var(--rank-c, var(--accent)) 60%, var(--line));
+}
 .pt-mini.pow .ptm-ic {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  border-color: color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
 }
 /* Badge texte « LvL » : même gabarit que l'icône ⚔️ (taille alignée → homogène). */
 .ptm-ic.txt {
