@@ -12,7 +12,6 @@
 // faction ou l'effectif offrirait gratuitement ce qu'elle fait payer. Les messages sont
 // donc volontairement AVARES — ils annoncent qu'il se passe quelque chose, pas quoi.
 
-import { CONTROL } from './controlPoints';
 import { raidIntervalMs, raidsEnabled, scoutLeadMs, type BaseState } from './raid';
 
 type PushKind =
@@ -21,7 +20,6 @@ type PushKind =
   | 'hero_home'
   | 'party_home'
   | 'plunder'
-  | 'control_warn'
   | 'control_attack';
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
@@ -135,19 +133,12 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
     });
   }
 
-  // 🏰 LES POINTS DE CONTRÔLE : l'attaque se prévient, puis son issue se dit. ⚠️ Le
+  // 🏰 LES POINTS DE CONTRÔLE : l'attaque se dit AU MOMENT où elle a lieu, JAMAIS avant
+  // (v0.1239, décision de l'utilisateur : pas de préavis de reprise). ⚠️ Le
   // message ne dit PAS l'issue : elle se joue à l'ouverture de l'app (le serveur ne rejoue
   // pas les combats) — il invite à venir voir. La clé porte l'heure de l'attaque : une
   // nouvelle attaque est un nouveau message, un siège repoussé efface l'ancien.
   for (const c of ctx.controls) {
-    add({
-      kind: 'control_warn',
-      dedupe: `control_warn:${c.id}:${c.attackAt}`,
-      sendAt: c.attackAt - CONTROL.warnMs,
-      title: `🏰 L’ennemi marche sur : ${c.label}`,
-      body: `Une troupe vient reprendre ton point de contrôle dans ${heures(CONTROL.warnMs)}.`,
-      url: '/expedition-map',
-    });
     add({
       kind: 'control_attack',
       dedupe: `control_attack:${c.id}:${c.attackAt}`,

@@ -5686,17 +5686,17 @@ async function expeLifecycle() {
   if (!uid || expeBusy) return;
   expeBusy = true;
   try {
-    const msg = await char.expeTick(uid, Date.now());
+    const msg = await char.expeTick(uid, Date.now(), activeDays7.value);
     if (msg)
       $q.notify({
         type: msg.win ? 'positive' : 'warning',
         message: '📬 Nouveau rapport d’expédition.',
       });
     // Le héros rentre : il redevient disponible tout de suite.
-    await char.expeSettle(uid, Date.now());
+    await char.expeSettle(uid, Date.now(), activeDays7.value);
     // ⚔️ Les groupes partis sans le héros vivent leur voyage ici aussi : rapport à l'arrivée
     // sur le camp, retour en ville.
-    const partyMsgs = await char.partyTick(uid, Date.now());
+    const partyMsgs = await char.partyTick(uid, Date.now(), activeDays7.value);
     if (partyMsgs.length) {
       // Un rapport déposé AVANT le retour se dit ; un retour, c'est l'encaissement qui le dit.
       if (!partyMsgs.every((m) => isClaimable(m, Date.now())))
@@ -5708,7 +5708,7 @@ async function expeLifecycle() {
       void syncPush(true);
     }
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctlMsgs = await char.controlTick(uid, Date.now(), c.value.level.level);
+    const ctlMsgs = await char.controlTick(uid, Date.now(), c.value.level.level, activeDays7.value);
     if (ctlMsgs.length) {
       $q.notify({
         type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',

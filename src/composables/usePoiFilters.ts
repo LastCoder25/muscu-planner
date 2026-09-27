@@ -8,6 +8,7 @@ import { computed, ref, type Ref } from 'vue';
 import { poiRankCounts } from '@/lib/poiRank';
 import {
   cycleType,
+  effectiveTypeFilter,
   parseTypeFilter,
   typeOptions,
   typeShown,
@@ -78,9 +79,34 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     save(TYPE_FILTER_KEY, typeFilter.value);
   }
 
+  // Ce qui s’applique vraiment : les types « seuls » absents de la carte sont ignorés.
+  const typeFilterShown = computed(() =>
+    effectiveTypeFilter(
+      typeFilter.value,
+      typeChips.value.map((o) => o.type),
+    ),
+  );
   const shownPois = computed(() =>
-    pois.value.filter((p) => rankShown(p) && typeShown(typeFilter.value, p.type)),
+    pois.value.filter((p) => rankShown(p) && typeShown(typeFilterShown.value, p.type)),
   );
 
-  return { hiddenRanks, rankOptions, toggleRank, typeFilter, typeChips, cycleTypeChip, shownPois };
+  /** « Tout afficher » : rangs ET types d’un geste. */
+  function resetFilters() {
+    hiddenRanks.value = new Set();
+    typeFilter.value = { only: [], hidden: [] };
+    save(RANK_FILTER_KEY, []);
+    save(TYPE_FILTER_KEY, typeFilter.value);
+  }
+
+  return {
+    hiddenRanks,
+    rankOptions,
+    toggleRank,
+    typeFilter,
+    typeFilterShown,
+    typeChips,
+    cycleTypeChip,
+    resetFilters,
+    shownPois,
+  };
 }

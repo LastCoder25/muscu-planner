@@ -83,7 +83,7 @@ describe('🏰 les quatre points', () => {
   const held = (kind: string, garrison = ['a0', 'a1', 'a2']) => {
     const m = mapAt(11);
     const id = `ctl_${kind}`;
-    const t = captureControl(m, id, garrison, 0);
+    const t = captureControl(m, id, garrison, 0, 7);
     const p = t.pois.find((x) => x.id === id)!;
     return { map: t, id, p: { ...p, control: { ...p.control!, attackAt: 9e15 } } };
   };
@@ -127,7 +127,7 @@ describe('🏰 les quatre points', () => {
 });
 
 describe('🏰 prise, production, reprise', () => {
-  const taken = () => captureControl(mapAt(3), ID, ['a0', 'a1', 'a2', 'a3'], 0);
+  const taken = () => captureControl(mapAt(3), ID, ['a0', 'a1', 'a2', 'a3'], 0, 7);
   it('pris : la garnison (3 au plus) y reste, une attaque est tirée entre 1 et 3 jours', () => {
     const p = ctl(taken());
     expect(p.control!.owner).toBe('player');
@@ -135,13 +135,24 @@ describe('🏰 prise, production, reprise', () => {
     expect(p.control!.attackAt).toBeGreaterThanOrEqual(CONTROL.retakeMinMs);
     expect(p.control!.attackAt).toBeLessThanOrEqual(CONTROL.retakeMaxMs);
   });
-  it('les délais d’attaque couvrent vraiment 1 à 3 jours', () => {
-    const d = Array.from({ length: 200 }, (_, i) => retakeDelayMs(ID, i * 977));
-    expect(Math.min(...d)).toBeLessThan(30 * H);
-    expect(Math.max(...d)).toBeGreaterThan(66 * H);
+  it('les délais restent entre 1 et 3 jours, plus courts si le joueur est actif', () => {
+    const at = (a: number) => Array.from({ length: 300 }, (_, i) => retakeDelayMs(ID, i * 977, a));
+    const mean = (d: number[]) => d.reduce((x, y) => x + y, 0) / d.length;
+    for (const a of [0, 3, 7]) {
+      const d = at(a);
+      expect(Math.min(...d)).toBeGreaterThanOrEqual(CONTROL.retakeMinMs);
+      expect(Math.max(...d)).toBeLessThanOrEqual(CONTROL.retakeMaxMs);
+    }
+    // Très actif : autour d'un jour ; inactif : autour de trois.
+    expect(mean(at(7))).toBeLessThan(30 * H);
+    expect(mean(at(0))).toBeGreaterThan(60 * H);
+    expect(mean(at(7))).toBeLessThan(mean(at(3)));
+    expect(mean(at(3))).toBeLessThan(mean(at(0)));
+    // Et ce n'est pas un rendez-vous fixe : le tirage varie.
+    expect(new Set(at(7).map((x) => Math.round(x / H))).size).toBeGreaterThan(5);
   });
   it('produit de l’or, plafonné à 24 h, arrêté à l’attaque, plus avec plus de monde', () => {
-    const m = captureControl(mapAt(3), ID, ['a0', 'a1', 'a2'], 0);
+    const m = captureControl(mapAt(3), ID, ['a0', 'a1', 'a2'], 0, 7);
     const p = { ...ctl(m), control: { ...ctl(m).control!, attackAt: 9e15 } };
     expect(controlStock(p, 0, 30)).toBe(0);
     const s6 = controlStock(p, 6 * H, 30);
@@ -154,7 +165,7 @@ describe('🏰 prise, production, reprise', () => {
     expect(controlStock(ctl(mapAt(3)), 6 * H, 30)).toBe(0); // ennemi : rien
   });
   it('récolter vide la réserve', () => {
-    const m = captureControl(mapAt(3), ID, ['a0'], 0);
+    const m = captureControl(mapAt(3), ID, ['a0'], 0, 7);
     const c = collectControl(m, ID, 5 * H, 30);
     expect(c.gold).toBeGreaterThan(0);
     expect(controlStock(ctl(c.map), 5 * H, 30)).toBe(0);
@@ -164,9 +175,9 @@ describe('🏰 prise, production, reprise', () => {
     const at = ctl(m).control!.attackAt!;
     expect(dueRetakes(m, at - 1)).toHaveLength(0);
     expect(dueRetakes(m, at)).toHaveLength(1);
-    const again = ctl(holdControl(m, ID, at)).control!.attackAt!;
+    const again = ctl(holdControl(m, ID, at, 7)).control!.attackAt!;
     expect(again).toBeGreaterThanOrEqual(at + CONTROL.retakeMinMs);
-    expect(heldControls(holdControl(m, ID, at))).toHaveLength(1);
+    expect(heldControls(holdControl(m, ID, at, 7))).toHaveLength(1);
   });
   it('perdu : le lieu redevient ennemi, sa troupe et son compteur changent', () => {
     const p = ctl(loseControl(taken(), ID, 30));
@@ -220,7 +231,7 @@ describe('🏰 prise, production, reprise', () => {
 
 describe('🏰 qui peut partir, et comment', () => {
   const enemy = ctl(mapAt(5));
-  const owned = ctl(captureControl(mapAt(5), ID, ['a0'], 0));
+  const owned = ctl(captureControl(mapAt(5), ID, ['a0'], 0, 7));
   const opts = { heroAway: false, comptoirLevel: 0, advsAvailable: 3, slotsFree: 2 };
   it('se prend en groupe, jamais par le héros seul ; tenu, rien à envoyer', () => {
     expect(poiOffers(enemy, opts)).toMatchObject({ hero: false, party: true });
@@ -228,15 +239,21 @@ describe('🏰 qui peut partir, et comment', () => {
     const marching = ctl(markAssault(mapAt(5), ID, true));
     expect(poiOffers(marching, opts).party).toBe(false);
   });
-  it('1 à 3 champions, sans le héros', () => {
-    expect(partyCapFor(20, enemy, false)).toBe(3);
-    expect(partySendBlocker(enemy, 2, true, 2, 20, 0.5)).toBe('controlHero');
-    expect(partySendBlocker(enemy, 4, false, 2, 20, 0.5)).toBe('controlFull');
-    expect(partySendBlocker(enemy, 3, false, 2, 20, 0.5)).toBeNull();
+  it('autant de champions qu’on veut, héros compris — au moins un champion pour occuper', () => {
+    // Plus de plafond propre au point : celui du Panthéon seul.
+    expect(partyCapFor(20, enemy, false)).toBe(20);
+    expect(partyCapFor(20, enemy, true)).toBe(20);
+    expect(partySendBlocker(enemy, 8, false, 2, 20, 0.5)).toBeNull();
+    expect(partySendBlocker(enemy, 6, true, 2, 20, 0.5)).toBeNull();
+    expect(partySendBlocker(enemy, 21, false, 2, 20, 0.5)).toBe('tooMany');
+    // Le héros seul ne peut pas l'occuper : il rentre toujours.
+    expect(partySendBlocker(enemy, 0, true, 2, 20, 0.5)).toBe('controlEmpty');
     expect(partySendBlocker(owned, 1, false, 2, 20, 0.5)).toBe('controlHeld');
-    expect(partyHeroBlocker({ onExpedition: false, healMs: 0, outpost: true, control: true })).toBe(
-      'control',
-    );
+    expect(partyHeroBlocker({ onExpedition: false, healMs: 0, outpost: true })).toBeNull();
+  });
+  it('pris avec une grosse équipe : seuls les choisis restent, aux places du point', () => {
+    const m = captureControl(mapAt(3), ID, ['c', 'a', 'f', 'b'], 0, 7);
+    expect(ctl(m).control!.garrison).toEqual(['c', 'a', 'f']);
   });
   it('un champion posté n’est disponible pour rien d’autre', () => {
     const a = { ...refChampionAdv(30, 0), id: 'a0', posted: ID } as Adventurer;
@@ -255,14 +272,13 @@ describe('🔔 les notifications d’un point de contrôle', () => {
     playerLevel: 30,
     plunder: null,
   };
-  it('prévient avant l’attaque, puis à l’attaque — sans jamais dire l’issue', () => {
+  it('ne prévient JAMAIS avant l’attaque ; seule l’attaque se dit, sans son issue', () => {
     const plans = planPushes(
       { ...base, controls: [{ id: ID, attackAt: 10 * H, label: 'Mine fortifiée' }] },
       0,
     );
-    const warn = plans.find((p) => p.kind === 'control_warn')!;
     const atk = plans.find((p) => p.kind === 'control_attack')!;
-    expect(warn.sendAt).toBe(10 * H - CONTROL.warnMs);
+    expect(plans.filter((p) => p.sendAt < 10 * H)).toEqual([]);
     expect(atk.sendAt).toBe(10 * H);
     expect(atk.dedupe).toBe(`control_attack:${ID}:${10 * H}`);
     expect(`${atk.title} ${atk.body}`).not.toMatch(/reprise|repouss|perdu/i);
@@ -335,7 +351,7 @@ describe('🏰 un point se prend à son niveau (signalé : une tour « légendai
 
   it('🌿 le jardin ne garde QU’UN champion, et un seul le défend quand même', () => {
     expect(seatsOf('garden')).toBe(1);
-    const m = captureControl(mapAt(4, L), controlIdOf('garden'), ['a', 'b', 'c'], 0);
+    const m = captureControl(mapAt(4, L), controlIdOf('garden'), ['a', 'b', 'c'], 0, 7);
     const g = m.pois.find((q) => q.id === controlIdOf('garden'))!;
     expect(g.control!.garrison).toEqual(['a']);
     // La reprise se mesure aux places : un jardinier seul face aux troupes d'un jardin.

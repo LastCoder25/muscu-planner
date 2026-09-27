@@ -20,9 +20,10 @@
       :rank-options="rankOptions"
       :hidden-ranks="hiddenRanks"
       :type-chips="typeChips"
-      :type-filter="typeFilter"
+      :type-filter="typeFilterShown"
       @toggle-rank="toggleRank"
       @cycle-type="cycleTypeChip"
+      @reset="resetFilters"
     />
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
@@ -78,6 +79,13 @@
             class="fog-rim"
             :class="{ lifting: fogPlan }"
           />
+          <!-- ⏱️ Un cercle par heure de trajet aller du héros (v0.1238). -->
+          <g class="hour-rings">
+            <template v-for="ring in hourRings" :key="ring.hours">
+              <circle :cx="TOWN.x" :cy="TOWN.y" :r="ring.r" class="hour-ring" />
+              <text :x="TOWN.x" :y="TOWN.y - ring.r - 0.8" class="hour-lab">{{ ring.hours }} h</text>
+            </template>
+          </g>
 
           <!-- Cadre décoratif + boussole (visibles carte dézoomée) -->
           <rect
@@ -330,9 +338,11 @@
           </p>
           <p class="ctl-line">{{ controlProd }}</p>
           <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
-          <p v-if="controlAttackIn > 0" class="ctl-line ctl-warn">
-            ⚔️ L’ennemi reviendra dans <b>{{ formatDuration(controlAttackIn) }}</b> — force inconnue
-            : ta garnison ne gagnera pas toujours.
+          <!-- ⚠️ L'instant de la reprise n'est JAMAIS annoncé (v0.1239, décision de
+               l'utilisateur) : on sait seulement qu'elle viendra, plus tôt si l'on s'entraîne. -->
+          <p v-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
+            ⚔️ L’ennemi reviendra, sans prévenir — plus souvent si tu t’entraînes beaucoup. Force
+            inconnue : ta garnison ne gagnera pas toujours.
           </p>
           <div class="send-bar">
             <button
@@ -684,6 +694,7 @@ import {
   expeditionTerrain,
   MAP_VIEW,
   revealRadius,
+  travelHourRings,
   type Poi,
   type PoiType,
   HARVEST_TYPES,
@@ -847,6 +858,10 @@ const terrain = computed(() =>
 const V = MAP_VIEW;
 /** Rayon révélé par l'Avant-poste : le brouillard commence au-delà. */
 const reveal = computed(() => revealRadius(char.comptoirLevel));
+/** ⏱️ Rayons des heures pleines de trajet aller du héros, dans la zone révélée. */
+const hourRings = computed(() =>
+  travelHourRings(progressionLevel.value, travelMult.value, reveal.value),
+);
 const FOG_SOFT = 10; // largeur du fondu du brouillard
 const fogInner = computed(() => Math.max(0, (fogR.value - 3) / (fogR.value + FOG_SOFT)));
 
@@ -1076,8 +1091,16 @@ const selected = ref<Poi | null>(null);
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
 // ── 🎚️🗺️ Filtres par rang et par type (mémorisés par appareil) ──
-const { hiddenRanks, rankOptions, toggleRank, typeFilter, typeChips, cycleTypeChip, shownPois } =
-  usePoiFilters(pois, (p) => rankOf(p).rankIndex);
+const {
+  hiddenRanks,
+  rankOptions,
+  toggleRank,
+  typeFilterShown,
+  typeChips,
+  cycleTypeChip,
+  resetFilters,
+  shownPois,
+} = usePoiFilters(pois, (p) => rankOf(p).rankIndex);
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
   const s = selected.value;
@@ -1378,7 +1401,6 @@ const controlRate = computed(() =>
 const controlGold = computed(() =>
   livePoi.value ? controlStock(livePoi.value, now.value, heroLevel.value) : 0,
 );
-const controlAttackIn = computed(() => Math.max(0, (liveControl.value?.attackAt ?? 0) - now.value));
 const ctlBusy = ref(false);
 async function collectCtl() {
   const uid = auth.user?.id;
@@ -1959,16 +1981,16 @@ async function lifecycle() {
   try {
     // ⚠️ AVANT les retours : un voyage réglé efface la trace de qui était dehors.
     await settleDueSiege();
-    const msg = await char.expeTick(uid, Date.now());
+    const msg = await char.expeTick(uid, Date.now(), progress.activeDaysInLast(7));
     if (msg)
       $q.notify({
         type: msg.win ? 'positive' : 'warning',
         message: `📬 ${msg.win ? 'Rapport : victoire' : 'Rapport : échec'} — le héros rentre.`,
       });
     // Le héros rentre : il redevient disponible.
-    await char.expeSettle(uid, Date.now());
+    await char.expeSettle(uid, Date.now(), progress.activeDaysInLast(7));
     // ⚔️ Les groupes partis sans le héros : rapport à l'arrivée, retour au bout du chemin.
-    const partyMsgs = await char.partyTick(uid, Date.now());
+    const partyMsgs = await char.partyTick(uid, Date.now(), progress.activeDaysInLast(7));
     // Un rapport déposé AVANT le retour se dit ; un retour, c'est la modale qui le montre.
     if (partyMsgs.length && !partyMsgs.every((m) => isClaimable(m, Date.now())))
       $q.notify({
@@ -1976,7 +1998,7 @@ async function lifecycle() {
         message: '📬 Rapport de ton groupe — il rentre en ville.',
       });
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctlMsgs = await char.controlTick(uid, Date.now(), heroLevel.value);
+    const ctlMsgs = await char.controlTick(uid, Date.now(), heroLevel.value, progress.activeDaysInLast(7));
     if (ctlMsgs.length)
       $q.notify({
         type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',
@@ -2428,11 +2450,11 @@ onUnmounted(() => {
   scrollbar-width: none;
 }
 /* Des voyages en cours : la carte laisse la place à leurs DEUX premières lignes en bas
-   de l'écran (en-tête ~60 px, barre ~44, disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
+   de l'écran (en-tête ~60 px, filtres repliés ~48 (v0.1240 ; dépliés ils poussent les voyages, le temps de régler), disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
    haute qu'avant (62vh). */
 .map-scroll.with-trips {
-  height: min(62vh, calc(100vh - 360px));
-  height: min(62vh, calc(100dvh - 360px));
+  height: min(62vh, calc(100vh - 320px));
+  height: min(62vh, calc(100dvh - 320px));
 }
 .map-scroll::-webkit-scrollbar {
   display: none;
@@ -2497,6 +2519,21 @@ onUnmounted(() => {
   stroke: var(--accent);
   stroke-width: 1;
   opacity: 0.9;
+}
+.hour-ring {
+  fill: none;
+  stroke: #e8dcc0;
+  stroke-width: 0.45;
+  stroke-dasharray: 1 2.5;
+  opacity: 0.42;
+  pointer-events: none;
+}
+.hour-lab {
+  fill: #e8dcc0;
+  font-size: 2.6px;
+  text-anchor: middle;
+  opacity: 0.5;
+  pointer-events: none;
 }
 .fog-rim {
   fill: none;
