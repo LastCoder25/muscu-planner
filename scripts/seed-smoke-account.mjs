@@ -161,6 +161,18 @@ await rest(
 
 // Sans personnage, l'Aventure s'ouvre sur la création de pseudo et l'écran le plus dense du
 // projet reste invisible. Les monnaies sont là pour que ses panneaux ne soient pas vides.
+// 🗺️ LA CARTE D'EXPÉDITION VUE EN ENTIER (v0.1213) : un Avant-poste (sans lui la carte
+// n'envoie rien et ne montre aucune fiche), un Panthéon et deux champions (les tuiles d'équipe
+// de la fiche d'un lieu), et une expédition du héros EN COURS (la rangée des voyages). Ces
+// objets ont été GÉNÉRÉS par le code (`createMap`, `startExpedition`, `grantChampion`)
+// puis figés ; on les RE-DATE ici à l'instant du seed — un voyage figé à sa date de
+// génération serait rentré depuis longtemps. ⚠️ Le voyage dure ~5 h : passé ce délai il
+// devient un rapport à récupérer (toujours une tuile), relancer le seed le remet en route.
+// La carte elle-même n'est pas posée : l'app la crée à la première visite.
+const g = seed.game;
+const shift = Date.now() - g.genAt;
+const t = (ms) => ms + shift;
+const exp = g.expedition;
 await rest('characters', {
   user_id: uid,
   pseudo: 'SmokeUI',
@@ -169,6 +181,18 @@ await rest('characters', {
   keys: 3,
   summon_stones: 12,
   mana: 660,
+  buildings: g.buildings.map((b) => ({ ...b, collectedAt: t(b.collectedAt) })),
+  adventurers: g.adventurers,
+  expedition: {
+    ...exp,
+    sentAt: t(exp.sentAt),
+    midAt: t(exp.midAt),
+    returnAt: t(exp.returnAt),
+    reported: false,
+    poi: { ...exp.poi, spawnedAt: t(exp.poi.spawnedAt), expiresAt: t(exp.poi.expiresAt) },
+  },
+  expedition_map: null,
+  messages: [],
 });
 
 console.log(`✓ compte de smoke prêt — ${EMAIL}`);

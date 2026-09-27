@@ -12,7 +12,6 @@
 // demande nettement plus que trois aventuriers, et rien ne borne la taille du groupe.
 // ⚠️ AUCUNE FERRAILLE : elle ne vient plus que de l'épave et de la Fonderie (v0.856 : retirée
 // des cadavres de la base ; v0.890 : retirée du recyclage, « beaucoup trop de ferraille »).
-import { CAMP_GEAR_SEAL_CHANCE, mapGearSeals } from './ascension';
 import { mulberry32 } from './combat';
 import { forceShare } from './poiDifficulty';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
@@ -41,11 +40,13 @@ import {
   harvestYield,
   rewardTripHours,
   type CampSpec,
+  type DenBattle,
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
 } from './expedition';
 import { partyFightSeed, partyForecastSeed } from './party';
+import { bossReplaySteps, RIFT_BOSS_STEPS } from './rift';
 import { FACTION_EMOJI, FACTION_LABEL, factionRoster } from './raid';
 import { type Adventurer } from './adventurers';
 
@@ -83,7 +84,7 @@ export interface PartyInput {
   road: EscortKit;
   hero: PartyHero | null;
   seed: number;
-  /** ⚠️ REQUIS : le nombre de sceaux d'objet d'un camp ou d'un repaire suit le rang du joueur (`mapGearSeals`). */
+  /** Niveau du joueur (conservé pour les appelants ; un camp ne laisse plus de sceaux). */
   playerLevel: number;
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
@@ -117,8 +118,9 @@ export function campFoe(poi: Poi, spec: CampSpec, foeMult = 1): Combatant {
 /** ⚰️ LA TROUPE d'une force de taille `size`, meneur NON compris — ce que `campBodies`
  *  répartit. ⚠️ C'est ELLE la primitive : l'écran ajoute le meneur (`campBodyCount`), le
  *  moteur ne le retranche pas — on n'ajoute plus 1 pour le retirer aussitôt. */
-function campTroopCount(size: number): number {
-  return Math.max(1, Math.round(size));
+function campTroopCount(spec: Pick<CampSpec, 'size' | 'lone'>): number {
+  // 🐺 Une bête seule (tanière) : aucune troupe, le meneur porte toute la force.
+  return spec.lone ? 0 : Math.max(1, Math.round(spec.size));
 }
 
 /** 👾 COMBIEN d'ennemis une force de taille `size` aligne : la troupe, plus son meneur.
@@ -126,8 +128,8 @@ function campTroopCount(size: number): number {
  *  combat ne produit pas serait pire que de ne rien annoncer.
  *  ⚠️ Et ce nombre NE DIT PAS la difficulté — il arrondit, donc une force de 1,5 et une force
  *  de 2 alignent toutes deux 3 corps. C'est le RANG du lieu qui porte la difficulté. */
-export function campBodyCount(size: number): number {
-  return campTroopCount(size) + 1;
+export function campBodyCount(spec: Pick<CampSpec, 'size' | 'lone'>): number {
+  return campTroopCount(spec) + 1;
 }
 
 /**
@@ -157,7 +159,7 @@ export function campBodies(
   const roster = factionRoster(spec.faction);
   const troop = roster.slice(0, -1);
   const lead = roster[roster.length - 1]!;
-  const n = campTroopCount(spec.size);
+  const n = campTroopCount(spec);
   const leadW = poi.type === 'lair' ? CAMP.championWeight : CAMP.chiefWeight;
   const parts = troopOf(foe, {
     count: n + leadW,
@@ -237,8 +239,8 @@ export interface BodyLoot {
 }
 
 /** Les ids des corps d'une force (dans l'ordre de `campBodies`), sans la construire. */
-export function campBodyIds(spec: Pick<CampSpec, 'size'>): string[] {
-  const n = campTroopCount(spec.size);
+export function campBodyIds(spec: Pick<CampSpec, 'size' | 'lone'>): string[] {
+  const n = campTroopCount(spec);
   return [...Array.from({ length: n }, (_, i) => `camp${i}`), 'campChef'];
 }
 
@@ -319,13 +321,10 @@ const FACTION_LOOT_LABEL: Record<CampSpec['faction'], string> = {
 export function campRewardLabel(poi: Poi): string {
   const spec = campSpecOf(poi);
   if (!spec) return '';
+  // ⚠️ PLUS DE SCEAUX (2026-09-27, décision de l'utilisateur) : ils ne viennent plus que des
+  // RUINES ANCIENNES (`ruinsSeals`). Un camp rend l'XP et la ressource de sa faction.
   const devise = FACTION_LOOT_LABEL[spec.faction];
-  // ⚜️ Camp et repaire laissent leurs sceaux d'objet (`mapGearSeals`) ; la chance ne s'annonce
-  // que si elle n'est pas certaine.
-  const sure = poi.type === 'lair' || CAMP_GEAR_SEAL_CHANCE >= 1;
-  return sure
-    ? `${devise} + sceaux d’objet ⚜️`
-    : `${devise} + sceaux d’objet ⚜️ (${Math.round(CAMP_GEAR_SEAL_CHANCE * 100)} % de chance)`;
+  return poi.type === 'den' ? `beaucoup d’XP · ${devise}` : devise;
 }
 
 /** Le récit : qui abat qui, borné. */
@@ -354,6 +353,8 @@ export interface CampFight {
   /** Parts d'XP des abattus, par aventurier (`skirmishXpShares`). */
   shares: Record<string, number>;
   journal: string[];
+  /** 🐺 Le duel résumé (`bossReplaySteps`), pour le rejeu d'une tanière. */
+  replay: DenBattle;
 }
 
 /**
@@ -384,6 +385,13 @@ export function fightCampForce(input: PartyInput): CampFight {
     heroKills: hero ? (slainBy[HERO_UNIT_ID] ?? 0) : 0,
     shares: skirmishXpShares(escort, bodies, d),
     journal: campJournal(d, allies, bodies),
+    replay: {
+      name: bodies[bodies.length - 1]!.name,
+      emoji: bodies[bodies.length - 1]!.emoji,
+      maxPv: group.pv,
+      beastPv: foe.pv,
+      steps: bossReplaySteps(fight.log, RIFT_BOSS_STEPS),
+    },
   };
 }
 
@@ -420,23 +428,14 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel),
     hurt: campHurt(d, escort),
     journal: g.journal,
+    // 🐺 Une tanière se REJOUE (le duel contre la bête) : un camp, non.
+    ...(poi.type === 'den' ? { den: g.replay } : {}),
   };
   const tag = `${FACTION_EMOJI[spec.faction]} ${party.slain}/${party.foes} abattus.`;
 
   const haul = forceHaul(input, spec, d);
-  // ⚜️ Un REPAIRE ou un CAMP pris laisse ses sceaux d'objet (camp : `CAMP_GEAR_SEAL_CHANCE`). ⚠️ Tirage
-  // sur un générateur À PART : le combat et le butin gardent leurs valeurs seedées.
-  const seals =
-    d.win && (poi.type === 'lair' || poi.type === 'camp')
-      ? mapGearSeals(
-          poi.type,
-          mulberry32((input.seed ^ 0x2f6b9c1d) >>> 0 || 1)(),
-          input.playerLevel,
-        )
-      : null;
   return {
     win: d.win,
-    ...(seals ? { seals } : {}),
     gold: haul.gold,
     energy: 0,
     summonStones: haul.summonStones,

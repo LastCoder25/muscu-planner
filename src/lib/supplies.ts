@@ -249,8 +249,18 @@ export interface SupplyTarget {
   escort: number;
 }
 
-const CAMPS = new Set<PoiType>(['camp', 'lair']);
-const HARVESTS = new Set<PoiType>(['mine', 'well', 'shrine', 'archive', 'mana_mine']);
+const CAMPS = new Set<PoiType>(['camp', 'lair', 'den']);
+const HARVESTS = new Set<PoiType>([
+  'mine',
+  'well',
+  'shrine',
+  'archive',
+  'mana_mine',
+  'ruins',
+  'fallen',
+]);
+/** Les lieux dont le butin n'est PAS une cargaison (sceaux, consommables trouvés sur place). */
+const NO_CARGO = new Set<PoiType>(['ruins', 'fallen']);
 
 /**
  * Pourquoi ce consommable ne servirait à RIEN sur ce voyage — `null` s'il sert.
@@ -278,7 +288,11 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
           ? 'sans effet avec le héros'
           : null;
     case 'bats':
-      return harvest ? null : 'seulement sur un lieu de récolte';
+      return !harvest
+        ? 'seulement sur un lieu de récolte'
+        : NO_CARGO.has(t.type)
+          ? 'rien à charger ici'
+          : null;
     case 'lanterne':
       return t.type === 'rift' ? null : 'seulement dans une faille';
     case 'sceau':

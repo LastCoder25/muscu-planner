@@ -558,3 +558,15 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
     );
   });
 });
+
+describe('🕳️ une faille ne rend que du MANA (2026-09-27 : les sceaux viennent des ruines)', () => {
+  it('refermée ou non, jamais de sceau', () => {
+    let fermees = 0;
+    for (let seed = 1; seed <= 30; seed++) {
+      const o = run({ seed, escort: team(seed % 2 ? 5 : 1, 26), poi: rift({ level: 26 }) });
+      if (o.win) fermees++;
+      expect(o.seals, `graine ${seed}`).toBeUndefined();
+    }
+    expect(fermees, 'aucune faille refermée : le test ne prouve rien').toBeGreaterThan(0);
+  });
+});

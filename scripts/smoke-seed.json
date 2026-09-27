@@ -9,11 +9,19 @@
       "height_cm": 178,
       "weight_kg": 76
     },
-    "experience": { "level": "intermediaire", "training_months": 24 },
+    "experience": {
+      "level": "intermediaire",
+      "training_months": 24
+    },
     "objective": "hypertrophie",
-    "availability": { "sessions_per_week": 3, "session_duration_min": 60 },
+    "availability": {
+      "sessions_per_week": 3,
+      "session_duration_min": 60
+    },
     "equipment": "salle_complete",
-    "preferences": { "units": "kg" },
+    "preferences": {
+      "units": "kg"
+    },
     "available_equipment": [
       "barbell",
       "rack",
@@ -50,64 +58,118 @@
           "id": "ex_bench_barbell",
           "name": "Développé couché",
           "muscle_primary": "pectoraux",
-          "muscle_secondary": ["triceps", "deltoïde antérieur"],
+          "muscle_secondary": [
+            "triceps",
+            "deltoïde antérieur"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_deadlift",
           "name": "Soulevé de terre",
           "muscle_primary": "dos",
-          "muscle_secondary": ["ischio-jambiers", "fessiers", "lombaires"],
+          "muscle_secondary": [
+            "ischio-jambiers",
+            "fessiers",
+            "lombaires"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_shoulder_press_db",
           "name": "Développé épaules haltères",
           "muscle_primary": "épaules",
-          "muscle_secondary": ["triceps"],
+          "muscle_secondary": [
+            "triceps"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_hammer_curl",
           "name": "Curl marteau",
           "muscle_primary": "biceps",
-          "muscle_secondary": ["avant_bras"],
+          "muscle_secondary": [
+            "avant_bras"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_diamond_pushup",
           "name": "Pompes diamant",
           "muscle_primary": "triceps",
-          "muscle_secondary": ["pectoraux"],
+          "muscle_secondary": [
+            "pectoraux"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_squat_barbell",
           "name": "Squat barre",
           "muscle_primary": "quadriceps",
-          "muscle_secondary": ["fessiers", "ischio-jambiers"],
+          "muscle_secondary": [
+            "fessiers",
+            "ischio-jambiers"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_romanian_deadlift",
           "name": "Soulevé de terre roumain",
           "muscle_primary": "ischio-jambiers",
-          "muscle_secondary": ["fessiers", "dos"],
+          "muscle_secondary": [
+            "fessiers",
+            "dos"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_calf_raise",
@@ -116,7 +178,12 @@
           "muscle_secondary": [],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_hanging_leg_raise",
@@ -125,7 +192,12 @@
           "muscle_secondary": [],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         }
       ]
     },
@@ -145,28 +217,49 @@
           "id": "ex_pushup",
           "name": "Pompes",
           "muscle_primary": "pectoraux",
-          "muscle_secondary": ["triceps"],
+          "muscle_secondary": [
+            "triceps"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_lat_pulldown",
           "name": "Tirage vertical",
           "muscle_primary": "dos",
-          "muscle_secondary": ["biceps"],
+          "muscle_secondary": [
+            "biceps"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_face_pull",
           "name": "Face pull",
           "muscle_primary": "épaules",
-          "muscle_secondary": ["dos"],
+          "muscle_secondary": [
+            "dos"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_skullcrusher",
@@ -175,26 +268,46 @@
           "muscle_secondary": [],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_bw_lunge",
           "name": "Fentes",
           "muscle_primary": "quadriceps",
-          "muscle_secondary": ["fessiers", "ischio-jambiers"],
+          "muscle_secondary": [
+            "fessiers",
+            "ischio-jambiers"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          },
           "unilateral": true
         },
         {
           "id": "ex_glute_bridge",
           "name": "Pont fessier",
           "muscle_primary": "ischio-jambiers",
-          "muscle_secondary": ["fessiers"],
+          "muscle_secondary": [
+            "fessiers"
+          ],
           "progression": "linear",
           "rest_seconds": 90,
-          "target": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 }
+          "target": {
+            "sets": 4,
+            "reps_min": 8,
+            "reps_max": 12,
+            "load_kg": 0
+          }
         },
         {
           "id": "ex_plank",
@@ -229,108 +342,297 @@
           {
             "id": "ex_bench_barbell",
             "name": "Développé couché",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 40, "difficulty": 3 },
-              { "reps": 12, "load_kg": 40, "difficulty": 3 },
-              { "reps": 12, "load_kg": 40, "difficulty": 3 },
-              { "reps": 12, "load_kg": 40, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 40,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 40,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 40,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 40,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "pectoraux"
           },
           {
             "id": "ex_deadlift",
             "name": "Soulevé de terre",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 50, "difficulty": 3 },
-              { "reps": 12, "load_kg": 50, "difficulty": 3 },
-              { "reps": 12, "load_kg": 50, "difficulty": 3 },
-              { "reps": 12, "load_kg": 50, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "dos"
           },
           {
             "id": "ex_shoulder_press_db",
             "name": "Développé épaules haltères",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 60, "difficulty": 3 },
-              { "reps": 12, "load_kg": 60, "difficulty": 3 },
-              { "reps": 12, "load_kg": 60, "difficulty": 3 },
-              { "reps": 12, "load_kg": 60, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "épaules"
           },
           {
             "id": "ex_hammer_curl",
             "name": "Curl marteau",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 70, "difficulty": 3 },
-              { "reps": 12, "load_kg": 70, "difficulty": 3 },
-              { "reps": 12, "load_kg": 70, "difficulty": 3 },
-              { "reps": 12, "load_kg": 70, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "biceps"
           },
           {
             "id": "ex_diamond_pushup",
             "name": "Pompes diamant",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 80, "difficulty": 3 },
-              { "reps": 12, "load_kg": 80, "difficulty": 3 },
-              { "reps": 12, "load_kg": 80, "difficulty": 3 },
-              { "reps": 12, "load_kg": 80, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "triceps"
           },
           {
             "id": "ex_squat_barbell",
             "name": "Squat barre",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 90, "difficulty": 3 },
-              { "reps": 12, "load_kg": 90, "difficulty": 3 },
-              { "reps": 12, "load_kg": 90, "difficulty": 3 },
-              { "reps": 12, "load_kg": 90, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "quadriceps"
           },
           {
             "id": "ex_romanian_deadlift",
             "name": "Soulevé de terre roumain",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 100, "difficulty": 3 },
-              { "reps": 12, "load_kg": 100, "difficulty": 3 },
-              { "reps": 12, "load_kg": 100, "difficulty": 3 },
-              { "reps": 12, "load_kg": 100, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "ischio-jambiers"
           },
           {
             "id": "ex_calf_raise",
             "name": "Mollets debout",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 110, "difficulty": 3 },
-              { "reps": 12, "load_kg": 110, "difficulty": 3 },
-              { "reps": 12, "load_kg": 110, "difficulty": 3 },
-              { "reps": 12, "load_kg": 110, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "mollets"
           },
           {
             "id": "ex_hanging_leg_raise",
             "name": "Relevé de jambes suspendu",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 120, "difficulty": 3 },
-              { "reps": 12, "load_kg": 120, "difficulty": 3 },
-              { "reps": 12, "load_kg": 120, "difficulty": 3 },
-              { "reps": 12, "load_kg": 120, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "abdominaux"
           }
@@ -351,113 +653,399 @@
           {
             "id": "ex_bench_barbell",
             "name": "Développé couché",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 42.5, "difficulty": 3 },
-              { "reps": 12, "load_kg": 42.5, "difficulty": 3 },
-              { "reps": 12, "load_kg": 42.5, "difficulty": 3 },
-              { "reps": 12, "load_kg": 42.5, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 42.5,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 42.5,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 42.5,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 42.5,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "pectoraux"
           },
           {
             "id": "ex_deadlift",
             "name": "Soulevé de terre",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 50, "difficulty": 3 },
-              { "reps": 12, "load_kg": 50, "difficulty": 3 },
-              { "reps": 12, "load_kg": 50, "difficulty": 3 },
-              { "reps": 12, "load_kg": 50, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 50,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "dos"
           },
           {
             "id": "ex_shoulder_press_db",
             "name": "Développé épaules haltères",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 60, "difficulty": 3 },
-              { "reps": 12, "load_kg": 60, "difficulty": 3 },
-              { "reps": 12, "load_kg": 60, "difficulty": 3 },
-              { "reps": 12, "load_kg": 60, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 60,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "épaules"
           },
           {
             "id": "ex_hammer_curl",
             "name": "Curl marteau",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 70, "difficulty": 3 },
-              { "reps": 12, "load_kg": 70, "difficulty": 3 },
-              { "reps": 12, "load_kg": 70, "difficulty": 3 },
-              { "reps": 12, "load_kg": 70, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 70,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "biceps"
           },
           {
             "id": "ex_diamond_pushup",
             "name": "Pompes diamant",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 80, "difficulty": 3 },
-              { "reps": 12, "load_kg": 80, "difficulty": 3 },
-              { "reps": 12, "load_kg": 80, "difficulty": 3 },
-              { "reps": 12, "load_kg": 80, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 80,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "triceps"
           },
           {
             "id": "ex_squat_barbell",
             "name": "Squat barre",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 90, "difficulty": 3 },
-              { "reps": 12, "load_kg": 90, "difficulty": 3 },
-              { "reps": 12, "load_kg": 90, "difficulty": 3 },
-              { "reps": 12, "load_kg": 90, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 90,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "quadriceps"
           },
           {
             "id": "ex_romanian_deadlift",
             "name": "Soulevé de terre roumain",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 100, "difficulty": 3 },
-              { "reps": 12, "load_kg": 100, "difficulty": 3 },
-              { "reps": 12, "load_kg": 100, "difficulty": 3 },
-              { "reps": 12, "load_kg": 100, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 100,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "ischio-jambiers"
           },
           {
             "id": "ex_calf_raise",
             "name": "Mollets debout",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 110, "difficulty": 3 },
-              { "reps": 12, "load_kg": 110, "difficulty": 3 },
-              { "reps": 12, "load_kg": 110, "difficulty": 3 },
-              { "reps": 12, "load_kg": 110, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 110,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "mollets"
           },
           {
             "id": "ex_hanging_leg_raise",
             "name": "Relevé de jambes suspendu",
-            "planned": { "sets": 4, "reps_min": 8, "reps_max": 12, "load_kg": 0 },
+            "planned": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "load_kg": 0
+            },
             "performed": [
-              { "reps": 12, "load_kg": 120, "difficulty": 3 },
-              { "reps": 12, "load_kg": 120, "difficulty": 3 },
-              { "reps": 12, "load_kg": 120, "difficulty": 3 },
-              { "reps": 12, "load_kg": 120, "difficulty": 3 }
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              },
+              {
+                "reps": 12,
+                "load_kg": 120,
+                "difficulty": 3
+              }
             ],
             "muscle_primary": "abdominaux"
           }
         ]
       }
     }
-  ]
+  ],
+  "game": {
+    "genAt": 1790510400000,
+    "buildings": [
+      {
+        "typeId": "outpost",
+        "level": 4,
+        "slot": 0,
+        "collectedAt": 1790510400000
+      },
+      {
+        "typeId": "pantheon",
+        "level": 3,
+        "slot": 1,
+        "collectedAt": 1790510400000
+      }
+    ],
+    "expedition": {
+      "poi": {
+        "id": "poi_4242_2",
+        "type": "arena",
+        "level": 6,
+        "travelLevel": 12,
+        "x": 45,
+        "y": 98,
+        "distNorm": 0.8152111103512807,
+        "spawnedAt": 1790510400000,
+        "expiresAt": 1790683200000
+      },
+      "sentAt": 1790510400000,
+      "midAt": 1790519580000,
+      "returnAt": 1790528760000,
+      "goldCost": 0,
+      "seed": 777,
+      "outcome": {
+        "win": false,
+        "gold": 1598,
+        "mana": 0,
+        "energy": 0,
+        "summonStones": 5,
+        "item": {
+          "slot": "armor",
+          "name": "Harnois de bronze",
+          "emoji": "🥋",
+          "rarity": "commun",
+          "level": 1,
+          "baseLevel": 1,
+          "effect": {
+            "type": "dmg_reduction_pct",
+            "value": 7
+          },
+          "roll": 0.354691450856626
+        },
+        "items": [
+          {
+            "slot": "armor",
+            "name": "Harnois de bronze",
+            "emoji": "🥋",
+            "rarity": "commun",
+            "level": 1,
+            "baseLevel": 1,
+            "effect": {
+              "type": "dmg_reduction_pct",
+              "value": 7
+            },
+            "roll": 0.354691450856626
+          }
+        ],
+        "key": 0,
+        "reconBonus": 0,
+        "returnMult": 1,
+        "waves": 2,
+        "text": "🏟️ 2 vagues tenues !"
+      }
+    },
+    "adventurers": [
+      {
+        "id": "smoke-adv-0",
+        "name": "Orsène",
+        "seed": 11,
+        "path": [],
+        "championId": "orsene",
+        "copies": 1,
+        "level": 1,
+        "xp": 0
+      },
+      {
+        "id": "smoke-adv-1",
+        "name": "Balthus",
+        "seed": 12,
+        "path": [],
+        "championId": "boulin",
+        "copies": 1,
+        "level": 1,
+        "xp": 0
+      }
+    ]
+  }
 }

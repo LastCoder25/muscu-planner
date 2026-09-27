@@ -281,125 +281,19 @@
              coûte et ce qu'on risque, EN UN SEUL ENDROIT. En dessous, il ne reste que des
              ACTIONS (envoyer le héros, composer l'équipe). ⚠️ Aucune valeur n'est recalculée
              ici : la grille lit les MÊMES `computed` qu'avant (`poiFacts`). -->
-        <div class="poi-card" :style="{ '--rk': selectedRank.color }">
-          <div class="pc-head">
-            <span v-if="isRiftPoi(selected)" class="pc-emo pc-rift">
-              <RiftPortal :color="selectedRank.color" :seed="seedOf(selected.id)" />
-            </span>
-            <span v-else class="pc-emo">{{ POI_EMO[selected.type] }}</span>
-            <div class="pc-main">
-              <!-- 🏅 LE RANG À CÔTÉ DU NOM : la boule de la carte dit déjà la couleur, la fiche
-                   dit le rang en toutes lettres, étoiles comprises (`poiRank`). -->
-              <div class="pc-title font-display">
-                {{ POI_LABEL[selected.type] }}
-              </div>
-              <!-- 📐 SOUS LE NOM, EN UNE LIGNE (demandé) : QUI on affronte, COMBIEN, à quel niveau,
-                   et CE QU'ON Y GAGNE — plutôt que des pastilles « Faction », « Ennemis » et un
-                   bloc « Récompense » à part. -->
-              <div class="pc-sub">
-                <span v-if="poiSub.foe">{{ poiSub.foe }}</span>
-                <span>niv {{ selected.level }}</span>
-                <span class="pc-res">🎁 {{ poiSub.res }}</span>
-              </div>
-              <div class="pc-tags">
-                <span
-                  class="sh-rank"
-                  :title="
-                    selectedRift
-                      ? 'Rang de la faille — fixé à son apparition, il ne monte pas avec l’âge'
-                      : 'Difficulté du lieu — le niveau de ses ennemis ET leur nombre réunis'
-                  "
-                  >{{ selectedRank.emoji }} {{ selectedRank.name }}
-                  {{ rankStarStr(selectedRank.star) }}</span
-                >
-              </div>
-            </div>
-            <button class="sh-x" aria-label="Fermer" @click="selected = null">✕</button>
-          </div>
-
-          <div class="pc-grid">
-            <span
-              v-for="f in factsInfo"
-              :key="f.label"
-              class="pc-fact"
-              :class="f.cls"
-              :title="f.title"
-            >
-              <span class="pc-fact-lab">{{ f.icon }} {{ f.label }}</span>
-              <span class="pc-fact-val">{{ f.value }}</span>
-            </span>
-          </div>
-          <!-- ⏱️🎯 TRAJET ET RÉUSSITE SUR UNE MÊME LIGNE (demandé) : ce sont les deux chiffres qu'on
-               compare d'un lieu à l'autre, ils ne doivent pas se séparer au gré du retour à la
-               ligne des autres pastilles. Libellés courts pour tenir côte à côte à 344 px. -->
-          <div v-if="factsGo.length" class="pc-go">
-            <span
-              v-for="f in factsGo"
-              :key="f.label"
-              class="pc-fact"
-              :class="f.cls"
-              :title="f.title"
-            >
-              <span class="pc-fact-lab">{{ f.icon }} {{ f.label }}</span>
-              <span class="pc-fact-val">{{ f.value }}</span>
-            </span>
-          </div>
-
-          <!-- 🕳️ DEUX CAUSES, DEUX MESSAGES — « route dangereuse » est tirée au spawn : on la
-               subit, on choisit ailleurs. L'embuscade d'une faille (v0.1009) se PRÉVIENT —
-               refermer ses failles avant 7 jours — puis s'attend : elle dure deux jours. -->
-          <div v-if="selected.riftPeril" class="pc-alert">
-            🕳️ Monstres embusqués, sortis d'une faille — embuscades doublées<template
-              v-if="selectedAmbushLeft"
-            >
-              encore {{ formatDuration(selectedAmbushLeft) }}</template
-            >
-          </div>
-          <div v-else-if="selected.perilous" class="pc-alert">
-            ⚠️ Route dangereuse — embuscades doublées, butin renforcé
-          </div>
-
-          <!-- ⓘ L'explication d'une faille est REPLIÉE : elle faisait cinq lignes à chaque ouverture. -->
-          <details v-if="selectedRift" class="pc-more">
-            <summary>ⓘ Comment marche une faille</summary>
-            <p class="pc-note">
-              Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros.
-              Les monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille
-              ajoute la prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie.
-              Laissée mûrir, elle déborde : une partie de ses monstres s’embusque deux jours autour
-              d’elle, le reste marche sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
-            </p>
-          </details>
-          <!-- 🧿 LE SCEAU DE BRÈCHE se pose ICI, sur la faille — il n'accompagne aucun voyage. -->
-          <template v-if="selectedRift">
-            <p v-if="selected.sealed" class="pc-note">
-              🧿 Scellée : cette faille a déjà reçu son répit.
-            </p>
-            <button
-              v-else-if="sealStock > 0"
-              type="button"
-              class="sup-seal"
-              :disabled="busySeal"
-              @click="doSeal"
-            >
-              🧿 Poser un sceau de brèche — 24 h de répit ({{ sealStock }} en stock)
-            </button>
-          </template>
-          <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne est une PERTE ÉVITÉE, et on DIT quand ça
-               n'en évite plus aucune (renfort figé au tirage de l'armée, `Raid.overflow`). -->
-          <template v-if="selectedWarband">
-            <p v-if="selectedWarband.utile" class="pc-note">
-              ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points
-              de tenue. Le 💠 n'est qu'un lot de consolation. En cas de défaite, tout le groupe part
-              à l'infirmerie.
-            </p>
-            <p v-else class="pc-note warn">
-              ⚠️ <b>Trop tard pour le renfort</b> : leur armée est déjà annoncée à tes portes et
-              garde la force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du
-              💠.
-            </p>
-          </template>
-        </div>
+        <PoiCard
+          :poi="selected"
+          :rank="selectedRank"
+          :sub="poiSub"
+          :facts="poiFacts"
+          :ambush-left="selectedAmbushLeft"
+          :is-rift="!!selectedRift"
+          :warband="selectedWarband"
+          :seal-stock="sealStock"
+          :busy-seal="busySeal"
+          @close="selected = null"
+          @seal="doSeal"
+        />
         <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
              se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
         <template v-if="offers.hero && !partyTarget">
@@ -519,46 +413,8 @@
           <!-- 🎒 RAVITAILLEMENT — un de chaque consommable, pris dans le stock. ⚠️ Ils entrent
                dans le kit du groupe (`partyRoad`), donc le 🎯 % ci-dessus les voit comme le
                combat les verra. Ceux qui ne servent à rien ICI sont grisés AVEC la raison. -->
-          <div class="sup-block">
-            <div class="sup-title">
-              🎒 Ravitaillement
-              <span class="sup-sub">un de chaque · le 🎯 % en tient compte</span>
-            </div>
-            <div v-if="supplyUseful.length" class="sup-grid">
-              <button
-                v-for="r in supplyUseful"
-                :key="r.id"
-                type="button"
-                class="sup"
-                :class="{ on: r.on && !r.why, off: !!r.why }"
-                :disabled="!!r.why"
-                :aria-pressed="r.on && !r.why"
-                :title="`${r.def.name} — ${r.why ?? r.def.what}`"
-                @click="toggleSupply(r.id)"
-              >
-                <span class="sup-emo">{{ r.def.emoji }}</span>
-                <span class="sup-main">
-                  <span class="sup-name">{{ r.def.name }} ×{{ r.n }}</span>
-                  <span class="sup-what">{{ r.why ?? r.def.what }}</span>
-                </span>
-                <span class="sup-check">{{ r.on && !r.why ? '✓' : '＋' }}</span>
-              </button>
-            </div>
-            <p v-else-if="!supplyRows.length" class="sup-empty">
-              Aucun consommable en stock — ils tombent en butin de voyage.
-            </p>
-            <!-- 📐 Ce qui ne sert à rien ICI est replié (raison comprise) : une ligne au lieu
-                 d'une tuile grisée chacun. -->
-            <details v-if="supplyUseless.length" class="sup-useless">
-              <summary>
-                Inutiles ici :
-                <span v-for="r in supplyUseless" :key="r.id">{{ r.def.emoji }}×{{ r.n }}</span>
-              </summary>
-              <p v-for="r in supplyUseless" :key="r.id">
-                {{ r.def.emoji }} {{ r.def.name }} — {{ r.why }}
-              </p>
-            </details>
-          </div>
+          <!-- 🎒 Ravitaillement (cf. `SupplyPicker`) : le 🎯 % ci-dessus en tient compte. -->
+          <SupplyPicker :rows="supplyRows" @toggle="toggleSupply" />
           <!-- 📐 Les règles de l'expédition, repliées : trois lignes de texte à chaque ouverture. -->
           <details class="sh-rules">
             <summary>ⓘ Règles de cette expédition</summary>
@@ -718,6 +574,7 @@ import {
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
+  ruinsSealKind,
   haulPills,
   type PartyResult,
 } from '@/lib/expedition';
@@ -725,6 +582,9 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
+import PoiCard from '@/components/PoiCard.vue';
+import SupplyPicker from '@/components/SupplyPicker.vue';
+import { winClass, type PoiFact } from '@/lib/poiFacts';
 import { usePoiFilters } from '@/composables/usePoiFilters';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
@@ -745,7 +605,6 @@ import {
   engageCap,
   sortByGradeThenRank,
 } from '@/lib/adventurers';
-import { rankStarStr } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   RIFT,
@@ -1471,15 +1330,6 @@ const arenaWaves = computed(() => {
  * déjà présent (le même que l'envoi applique) — on ne fait que les RANGER. Deux valeurs
  * dynamiques suivent la composition de l'équipe (aller-retour et réussite).
  */
-interface PoiFact {
-  /** Trajet / réussite : rangés ensemble sur leur propre ligne. */
-  go?: true;
-  icon: string;
-  label: string;
-  value: string;
-  cls?: string;
-  title?: string;
-}
 const poiFacts = computed<PoiFact[]>(() => {
   const p = selected.value;
   if (!p) return [];
@@ -1638,11 +1488,6 @@ function pushRate(out: PoiFact[], p: Poi, minutes: number, heroGoes: boolean, es
       'Ce que ce lieu rapporte par heure d’aller-retour, s’il est pris (hors aléas de la route). À rang égal, un lieu proche rend plus.',
   });
 }
-const factsInfo = computed(() => poiFacts.value.filter((f) => !f.go));
-const factsGo = computed(() => poiFacts.value.filter((f) => f.go));
-function winClass(pct: number): string {
-  return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
-}
 /**
  * ⚠️ DES PROPS À IDENTITÉ STABLE pour `MapPoiLayer` : ces trois listes dépendent de `now`
  * (qui tique à la seconde), mais leur CONTENU ne change qu'à un départ, un retour ou au recul
@@ -1705,6 +1550,9 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   arena: () => 'objets + pierres 🔮 selon les vagues',
   rift: () => 'mana 💠',
   warband: () => 'mana 💠 · siège non renforcé',
+  ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),
+  fallen: () => 'consommables 🎒',
+  den: () => 'beaucoup d’XP · consommables 🎒',
 };
 /** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */
 const poiSub = computed(() => {
@@ -1720,7 +1568,7 @@ const poiSub = computed(() => {
     : band
       ? String(band.size)
       : force
-        ? String(campBodyCount(force.size))
+        ? String(campBodyCount(force))
         : '';
   const foe = faction
     ? `${FACTION_EMOJI[faction]} ${FACTION_LABEL[faction]}${count ? ` ×${count}` : ''}`
@@ -1849,8 +1697,6 @@ const {
   partyHeroOn,
   partySize,
   supplyRows,
-  supplyUseful,
-  supplyUseless,
   toggleSupply,
   partyWin,
   partyMin,
@@ -1938,186 +1784,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped lang="scss">
-/* ── 🗂️ LA FICHE DU LIEU — une grande tuile, teintée par le RANG du lieu (`--rk`) ── */
-/* Contour appuyé (2 px, couleur du rang à 75 %) et marges latérales : collée au bord de
-   l'écran et cerclée d'un trait pâle, la tuile se lisait mal comme un bloc (demandé). */
-.poi-card {
-  margin: 4px 10px 10px;
-  padding: 10px 12px;
-  border-radius: 16px;
-  border: 2px solid color-mix(in srgb, var(--rk) 75%, var(--line));
-  background:
-    radial-gradient(
-      120% 90% at 0% 0%,
-      color-mix(in srgb, var(--rk) 16%, transparent),
-      transparent 60%
-    ),
-    var(--surface);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-}
-.pc-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.pc-rift {
-  padding: 4px 0;
-}
-.pc-emo {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  display: grid;
-  place-items: center;
-  font-size: 26px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--rk) 22%, var(--bg));
-  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--rk) 60%, transparent);
-}
-.pc-main {
-  flex: 1;
-  min-width: 0;
-}
-.pc-title {
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.15;
-}
-.pc-tags {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px 8px;
-  margin-top: 2px;
-}
-/* 🏅 Le rang du lieu : la pastille prend la COULEUR DU RANG, posée en ligne (`--rk`) — une
-   classe par rang n'aurait aucun sens ici, le rang est calculé. */
-.sh-rank {
-  font-size: 11.5px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--rk);
-  color: var(--rk);
-  background: color-mix(in srgb, var(--rk) 14%, transparent);
-  white-space: nowrap;
-}
-/* La ligne sous le nom : ennemis · niveau · ressource, séparés par un point médian. Elle se
-   replie proprement (flex-wrap) au lieu de déborder à 344 px. */
-.pc-sub {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0 6px;
-  margin-top: 1px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dim);
-  line-height: 1.35;
-}
-.pc-sub > span + span::before {
-  content: '·';
-  margin-right: 6px;
-  color: var(--line);
-}
-.pc-res {
-  color: var(--text);
-}
-/* Les caractéristiques en pastilles qui se rangent à la suite : « libellé  valeur » sur UNE
-   ligne. `max-width: 100%` + `flex-wrap` : une pastille trop longue passe à la ligne en
-   elle-même au lieu de faire déborder la fiche à 344 px. */
-.pc-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 7px;
-}
-.pc-go {
-  display: flex;
-  gap: 5px;
-  margin-top: 5px;
-}
-.pc-go .pc-fact {
-  flex: 1 1 0;
-  min-width: 0;
-  justify-content: center;
-}
-.pc-fact {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0 5px;
-  max-width: 100%;
-  padding: 3px 9px;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-}
-.pc-fact-lab {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--dim);
-}
-.pc-fact-val {
-  font-family: 'Oswald', sans-serif;
-  font-size: 13.5px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-.pc-fact.dim .pc-fact-val {
-  font-family: inherit;
-  font-size: 11.5px;
-  color: var(--dim);
-}
-.pc-fact.warn .pc-fact-val {
-  color: var(--d3);
-}
-.pc-fact.wp-good .pc-fact-val {
-  color: #7bc86c;
-}
-.pc-fact.wp-mid .pc-fact-val {
-  color: #ffb23f;
-}
-.pc-fact.wp-bad .pc-fact-val {
-  color: #ff6a45;
-}
-.pc-alert {
-  margin-top: 7px;
-  padding: 6px 9px;
-  border-radius: 10px;
-  font-size: 12.5px;
-  font-weight: 700;
-  color: var(--d3);
-  background: color-mix(in srgb, var(--d3) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--d3) 50%, transparent);
-}
-.pc-more {
-  margin-top: 6px;
-}
-.pc-more > summary {
-  min-height: 32px;
-  display: flex;
-  align-items: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--dim);
-  cursor: pointer;
-  list-style: none;
-}
-.pc-more > summary::-webkit-details-marker {
-  display: none;
-}
-.pc-more .pc-note {
-  margin-top: 2px;
-}
-.pc-note {
-  margin: 8px 0 0;
-  font-size: 11.5px;
-  line-height: 1.45;
-  color: var(--dim);
-}
-.pc-note.warn {
-  color: var(--d3);
-}
 .sh-away {
   padding: 10px 12px;
   font-size: 13px;
@@ -2254,51 +1920,6 @@ onUnmounted(() => {
   font-weight: 800;
   color: var(--accent);
 }
-/* 🎒 Ravitaillement : même langage que la tuile du héros (coché = liseré accent, inutile ici
-   = pointillé et grisé, la raison écrite dessous). Une colonne : le nom ET l'effet doivent
-   se lire, sur 344 px deux colonnes les couperaient. */
-.sup-block {
-  margin: 10px 0;
-}
-.sup-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 6px;
-}
-.sup-sub {
-  font-weight: 400;
-  font-size: 11.5px;
-  color: var(--dim);
-}
-/* 📐 Une colonne (à deux, les effets se coupaient sur 5 lignes à 344 px), mais seuls les
-   consommables UTILES ici ont une tuile, et leur effet tient sur deux lignes au plus. */
-.sup-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.sup-useless {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--dim);
-}
-.sup-useless > summary {
-  min-height: 32px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 8px;
-  cursor: pointer;
-  list-style: none;
-}
-.sup-useless > summary::-webkit-details-marker {
-  display: none;
-}
-.sup-useless p {
-  margin: 2px 0 0;
-  line-height: 1.35;
-}
 .sh-rules {
   margin: 4px 0 6px;
 }
@@ -2329,79 +1950,6 @@ onUnmounted(() => {
   opacity: 1;
   background: color-mix(in srgb, var(--accent) 30%, var(--surface));
   color: var(--dim);
-}
-.sup {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 8px;
-  background: #1d1913;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-.sup.on {
-  border-color: var(--accent);
-  background: linear-gradient(90deg, rgba(255, 210, 63, 0.16), #1d1913 70%);
-}
-.sup.off {
-  cursor: default;
-  border-style: dashed;
-  opacity: 0.55;
-}
-.sup-emo {
-  font-size: 20px;
-  flex: none;
-}
-.sup-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.sup-name {
-  font-size: 12px;
-  font-weight: 700;
-}
-.sup-what {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-size: 11px;
-  color: var(--dim);
-  line-height: 1.3;
-}
-.sup-check {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--accent);
-}
-.sup-empty {
-  margin: 0;
-  font-size: 12px;
-  color: var(--dim);
-}
-.sup-seal {
-  width: 100%;
-  min-height: 44px;
-  margin-top: 8px;
-  border: 1px solid #b57bff;
-  border-radius: 10px;
-  background: rgba(181, 123, 255, 0.12);
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.sup-seal:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 .sh-note {
   margin: 0 0 8px;
@@ -2814,25 +2362,6 @@ onUnmounted(() => {
   .trip-focus-halo {
     animation: none;
   }
-}
-.sh-x {
-  background: none;
-  border: none;
-  color: var(--dim);
-  font-size: 18px;
-  cursor: pointer;
-}
-.wp-good {
-  color: #7bc86c;
-  border-color: #7bc86c;
-}
-.wp-mid {
-  color: #ffb23f;
-  border-color: #ffb23f;
-}
-.wp-bad {
-  color: #ff6a45;
-  border-color: #ff6a45;
 }
 /* ⚠️ AVERTISSEMENT, pas interdiction : partir malgré un siège est un ARBITRAGE (une
    cargaison contre un risque), pas une faute. D3 quand ça se dégrade, D4 quand la base

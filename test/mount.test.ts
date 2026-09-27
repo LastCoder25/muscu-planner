@@ -156,8 +156,26 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
 
   // 🗺️ v0.1202 : la carte d'expédition est découpée — ses trois morceaux se montent seuls.
   const MAP_POIS = [
-    { id: 'p1', type: 'mine', level: 3, x: 90, y: 90, distNorm: 0.3, spawnedAt: 0, expiresAt: 9e15 },
-    { id: 'p2', type: 'archive', level: 5, x: 110, y: 95, distNorm: 0.4, spawnedAt: 0, expiresAt: 9e15 },
+    {
+      id: 'p1',
+      type: 'mine',
+      level: 3,
+      x: 90,
+      y: 90,
+      distNorm: 0.3,
+      spawnedAt: 0,
+      expiresAt: 9e15,
+    },
+    {
+      id: 'p2',
+      type: 'archive',
+      level: 5,
+      x: 110,
+      y: 95,
+      distNorm: 0.4,
+      spawnedAt: 0,
+      expiresAt: 9e15,
+    },
   ];
   it('🗺️ MapPoiLayer dessine les lieux, la sélection et les lieux grisés', async () => {
     const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
@@ -214,6 +232,64 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out.match(/class="rf-chip on"/g)?.length).toBe(1);
     expect(out).toContain('rm-only');
     expect(out).toContain('seul');
+  }, 30_000);
+
+  it('🗂️ PoiCard : la fiche d’un lieu — nom, rang, infos, trajet/réussite, sceau', async () => {
+    const { default: PoiCard } = await import('@/components/PoiCard.vue');
+    const { poiRank } = await import('@/lib/poiRank');
+    const rift = { ...MAP_POIS[0], id: 'r1', type: 'rift' as const, riftPeril: false };
+    let out = '';
+    expect(
+      await mountIt(
+        PoiCard,
+        {
+          poi: rift,
+          rank: poiRank(rift),
+          sub: { foe: '🐺 Bêtes ×4/12', res: 'mana 💠' },
+          facts: [
+            { icon: '💠', label: 'Si refermée', value: '~120' },
+            { icon: '🎯', label: 'Fermeture', value: '72 %', go: true, cls: 'wp-good' },
+          ],
+          ambushLeft: 0,
+          isRift: true,
+          warband: null,
+          sealStock: 2,
+          busySeal: false,
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('🐺 Bêtes ×4/12');
+    expect(out).toContain('Si refermée');
+    // Trajet/réussite sur LEUR ligne, pas mélangés aux infos.
+    const go = out.indexOf('class="pc-go"');
+    expect(go).toBeGreaterThan(out.indexOf('Si refermée'));
+    expect(out.indexOf('Fermeture')).toBeGreaterThan(go);
+    expect(out).toContain('pc-fact wp-good');
+    expect(out).toContain('Comment marche une faille');
+    expect(out).toContain('Poser un sceau de brèche');
+  }, 30_000);
+
+  it('🎒 SupplyPicker : utiles en tuiles, inutiles repliés avec leur raison', async () => {
+    const { default: SupplyPicker } = await import('@/components/SupplyPicker.vue');
+    const { SUPPLIES } = await import('@/lib/supplies');
+    let out = '';
+    const rows = [
+      { id: 'rations' as const, def: SUPPLIES.rations, n: 2, on: true, why: null },
+      { id: 'lanterne' as const, def: SUPPLIES.lanterne, n: 1, on: false, why: 'pas une faille' },
+    ];
+    expect(
+      await mountIt(SupplyPicker, { rows }, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out.match(/class="sup on"/g)?.length).toBe(1);
+    expect(out).toContain('Inutiles ici');
+    expect(out).toContain('pas une faille');
+    let vide = '';
+    await mountIt(SupplyPicker, { rows: [] }, undefined, undefined, '/', (h) => (vide = h));
+    expect(vide).toContain('Aucun consommable en stock');
   }, 30_000);
 
   it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
@@ -493,7 +569,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       hero: null,
       cast: [{ kind: 'champion' as const, name: 'Léa', emoji: '⚔️', championId: null }],
     };
-    expect(await mountIt(WarbandStage, props, undefined, undefined, '/', (h) => (out = h))).toBeNull();
+    expect(
+      await mountIt(WarbandStage, props, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
     // ⚠️ Sans cette lecture le test serait creux : on compte les corps, champion compris.
     expect([...out.matchAll(/class="body[ "]/g)]).toHaveLength(stage.bodies.length);
     expect(out).toContain('/monsters/g_loup.webp');
@@ -527,7 +605,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // monterait tout aussi bien. On compte les corps, gardien compris.
     expect([...out.matchAll(/class="foe[^"]*"/g)]).toHaveLength(stage.foes.length);
     expect(out).toContain('Faille niv 26');
-    expect(out).toContain('pvbar');
+    expect(out).toContain('lbar ours');
+    expect(out).toContain('Ton groupe');
     // 🌀 Deux portails (l'entrée et la porte du gardien), à la couleur du RANG de la faille.
     const { characterRank } = await import('@/lib/characterRank');
     const rk = characterRank(26).color.toLowerCase();
@@ -1468,5 +1547,48 @@ describe('🎨 Barre du Défi 360 par zone (ComboProgressBar)', () => {
     // 🔎 Et elles DISENT qu'elles filtrent — sans cette ligne, rien ne l'indiquait.
     expect(out).toContain('cpb-hint');
     expect(out).toContain('Touche une barre');
+  }, 30_000);
+});
+
+describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () => {
+  const cast = [{ kind: 'champion' as const, name: 'Aurore', emoji: '⚔️', championId: null }];
+  it('🐺 DenStage : la bête et les deux barres', async () => {
+    const { default: DenStage } = await import('@/components/DenStage.vue');
+    let out = '';
+    const battle = {
+      name: 'Ours des cavernes',
+      emoji: '🐻',
+      maxPv: 100,
+      beastPv: 80,
+      steps: [{ dealt: 80, taken: 20, crit: true, groupTurns: 1, bossTurns: 1, pv: 80, bossPv: 0 }],
+    };
+    expect(
+      await mountIt(
+        DenStage,
+        { battle, win: true, hero: null, cast },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Ours des cavernes');
+    expect(out).toContain('Ton groupe');
+  }, 30_000);
+  it('🏚️ FallenStage : une tuile par trouvaille', async () => {
+    const { default: FallenStage } = await import('@/components/FallenStage.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        FallenStage,
+        { supplies: { potion: 2, rations: 1 }, hero: null, cast },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out.match(/class="find/g)?.length).toBe(3);
+    expect(out).toContain('Ruines d’un héros tombé');
   }, 30_000);
 });

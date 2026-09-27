@@ -77,7 +77,10 @@ describe('le spawn tire un rang de DIFFICULTÉ', () => {
     // L'autre moitié de la promesse (v0.1028) : un joueur avancé doit encore trouver du
     // Bronze où envoyer ses recrues.
     for (const PL of [30, 60]) {
-      const bas = lieux(PL, 4242).filter((p) => poiRank(p).rankIndex === 0);
+      // ⚠️ Plusieurs cartes : une seule en montre une vingtaine, trop peu pour une existence.
+      const bas = [4242, 4243, 4244, 4245]
+        .flatMap((s) => lieux(PL, s))
+        .filter((p) => poiRank(p).rankIndex === 0);
       expect(bas.length, `joueur ${PL}`).toBeGreaterThan(0);
     }
   });

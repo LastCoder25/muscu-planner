@@ -23,16 +23,19 @@
 // solo contournait les gardes.
 import { CARAVAN, missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
 import { campHurt, fightCampForce, forceHaul, type BodyLoot, type CampFight } from './camp';
+import { mulberry32 } from './combat';
 import {
   HARVEST_TYPES,
+  fallenSupplyCount,
   harvestGuardOf,
+  ruinsSeals,
   resolveOutcome,
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
 } from './expedition';
 import { FACTION_EMOJI } from './raid';
-import { addSupplies, supplyFx } from './supplies';
+import { addSupplies, supplyFx, SUPPLY_IDS, type SupplyStock } from './supplies';
 import type { Adventurer } from './adventurers';
 
 /** Le « combat » d'un lieu sans gardes : personne à abattre, victoire acquise. */
@@ -44,6 +47,7 @@ const NO_GUARDS: CampFight = {
   heroKills: 0,
   shares: {},
   journal: [],
+  replay: { name: '', emoji: '', maxPv: 0, beastPv: 0, steps: [] },
 };
 
 export interface HarvestPartyInput {
@@ -76,6 +80,30 @@ function withShares(xp: Record<string, number>, shares: Record<string, number>) 
   const out: Record<string, number> = { ...xp };
   for (const [id, v] of Object.entries(shares)) out[id] = (out[id] ?? 0) + Math.round(v);
   return out;
+}
+
+/**
+ * 🏛️🏚️ CE QUE LE LIEU LUI-MÊME REND, une fois atteint (victoire) : les sceaux des ruines
+ * anciennes (`ruinsSeals`), les consommables d'un héros tombé (`fallenSupplyCount`, tirés
+ * sur un générateur À PART pour ne rien décaler du combat ni de la route). Ajouté aux DEUX
+ * chemins (équipe seule, héros), qui ne connaissent pas ces lieux.
+ */
+function withSiteLoot(out: ExpeditionOutcome, input: HarvestPartyInput): ExpeditionOutcome {
+  const { poi } = input;
+  if (poi.type === 'ruins') return { ...out, seals: ruinsSeals(poi, input.playerLevel) };
+  if (poi.type !== 'fallen') return out;
+  const rng = mulberry32((input.seed ^ 0x61c88647) >>> 0 || 1);
+  const found: SupplyStock = {};
+  for (let i = 0; i < fallenSupplyCount(poi.level); i++) {
+    const id = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
+    found[id] = (found[id] ?? 0) + 1;
+  }
+  return {
+    ...out,
+    supplies: addSupplies(out.supplies ?? {}, found),
+    // 🏚️ Ce que la fouille a trouvé, À PART de la route : le rejeu montre ces objets-là.
+    ...(out.party ? { party: { ...out.party, fallen: { supplies: found } } } : {}),
+  };
 }
 
 export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome {
@@ -172,7 +200,7 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
       hurt: [],
       journal: [...g.journal, out.text],
     };
-    return withGuardLoot({ ...out, text: `${tag} ${out.text}`, party }, loot);
+    return withSiteLoot(withGuardLoot({ ...out, text: `${tag} ${out.text}`, party }, loot), input);
   }
   const c = resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel);
   const ambushes = c.events.filter((e) => e.kind === 'bandits');
@@ -191,21 +219,26 @@ export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome
     hurt: c.hurt,
     journal: [...g.journal, ...c.events.map((e) => e.text)],
   };
-  return withGuardLoot(
-    {
-      win: party.win,
-      gold: c.gold,
-      energy: c.energy,
-      summonStones: c.summonStones,
-      mana: c.mana ?? 0,
-      item: null,
-      items: [],
-      key: c.keys,
-      reconBonus: 0,
-      returnMult: 1,
-      text: `${tag} ${c.text}`,
-      party,
-    },
-    loot,
+  // ⚠️ Le lieu rend son butin dès que ses gardes sont tombés — une embuscade perdue sur la
+  // route n'y change rien (c'est la cargaison du trajet qui en pâtit).
+  return withSiteLoot(
+    withGuardLoot(
+      {
+        win: party.win,
+        gold: c.gold,
+        energy: c.energy,
+        summonStones: c.summonStones,
+        mana: c.mana ?? 0,
+        item: null,
+        items: [],
+        key: c.keys,
+        reconBonus: 0,
+        returnMult: 1,
+        text: `${tag} ${c.text}`,
+        party,
+      },
+      loot,
+    ),
+    input,
   );
 }

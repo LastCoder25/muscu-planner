@@ -72,7 +72,17 @@ const ECRANS = [
   { route: '/aventure', nom: 'aventure', onglets: ['Héros', 'Équipement', 'Explorer', 'Base'] },
   // 🗺️ La carte d'expédition (v0.1202) : l'écran le plus lourd du projet, découpé en
   // composants — il n'était visité par aucune porte.
-  { route: '/expedition-map', nom: 'carte' },
+  // ⚠️ Le compte de test a un Avant-poste, deux champions et une expédition en cours
+  // (seed v0.1213) : on OUVRE la fiche d'un lieu et l'équipe d'un voyage, les deux panneaux
+  // que le découpage de la carte a sortis en composants et qu'aucune porte ne voyait.
+  {
+    route: '/expedition-map',
+    nom: 'carte',
+    gestes: [
+      { nom: 'voyage', clic: '.trip', attendu: '.trip-crew' },
+      { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
+    ],
+  },
 ];
 
 function lireEnv() {
@@ -226,6 +236,29 @@ try {
             fullPage: true,
           });
           await verifier(page, width, `${e.nom}/${onglet}`, errors, av);
+        }
+        // 🗂️ Des gestes À FAIRE dans l'écran (la fiche d'un lieu, l'équipe d'un voyage) : un
+        // écran n'est vraiment vu que si ses panneaux s'ouvrent. ⚠️ Un élément introuvable
+        // ÉCHOUE, comme un onglet : sinon le parcours sauterait la fiche sans le dire.
+        for (const geste of e.gestes ?? []) {
+          const av = errors.length;
+          const cible = page.locator(geste.clic).first();
+          if (!(await cible.count())) {
+            fail.push(`${width}px ${e.nom} : « ${geste.nom} » introuvable (${geste.clic})`);
+            continue;
+          }
+          // ⚠️ PAS de clic forcé : l'écran de chargement du jeu s'efface en fondu PAR-DESSUS la
+          // carte — un clic forcé tombait dessus et ne faisait rien. Playwright attend ici que
+          // l'élément soit vraiment cliquable.
+          await cible.click({ timeout: 10000 });
+          await page.waitForTimeout(900);
+          if (!(await page.locator(geste.attendu).count()))
+            fail.push(`${width}px ${e.nom} : « ${geste.nom} » ne montre pas ${geste.attendu}`);
+          await page.screenshot({
+            path: path.join(OUT, `${e.nom}-${geste.nom}-${width}.png`),
+            fullPage: true,
+          });
+          await verifier(page, width, `${e.nom}/${geste.nom}`, errors, av);
         }
         console.log(`  ✓ ${e.nom} ${width}px — ${w}px`);
       }

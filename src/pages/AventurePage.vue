@@ -119,7 +119,7 @@
               :title="`Clés : ${char.row.keys.toLocaleString('fr-FR')} — entrer dans le Labyrinthe (archives de la carte, coffres, boss)`"
               ><span class="tb-ico">🗝️</span>{{ compactNumber(char.row.keys) }}</span
             >
-            <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions (failles) et objets (boss). Ils ne
+            <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions et objets, des RUINES ANCIENNES. Ils ne
                  servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle.
                  ⚠️ TOUJOURS affichés, même à zéro : une devise qui n'apparaît qu'une fois
                  obtenue ne dit ni qu'elle existe, ni qu'on peut aller la chercher. -->
@@ -129,7 +129,7 @@
               tabindex="0"
               @click="resInfo = 'sealsChamp'"
               @keyup.enter="resInfo = 'sealsChamp'"
-              :title="`Sceaux de champion — ascension d’un champion (gardiens de faille) : ${sealsChamp.detail || 'aucun pour l’instant'}`"
+              :title="`Sceaux de champion — ascension d’un champion (ruines anciennes) : ${sealsChamp.detail || 'aucun pour l’instant'}`"
               ><span class="tb-ico">🔱</span>{{ compactNumber(sealsChamp.total) }}</span
             >
             <span
@@ -138,7 +138,7 @@
               tabindex="0"
               @click="resInfo = 'sealsGear'"
               @keyup.enter="resInfo = 'sealsGear'"
-              :title="`Sceaux d’objet — ascension d’un objet de champion (repaires de la carte) : ${sealsGear.detail || 'aucun pour l’instant'}`"
+              :title="`Sceaux d’objet — ascension d’un objet de champion (ruines anciennes) : ${sealsGear.detail || 'aucun pour l’instant'}`"
               ><span class="tb-ico">⚜️</span>{{ compactNumber(sealsGear.total) }}</span
             >
             <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés même à zéro,
@@ -7607,7 +7607,7 @@ button.pt-mini:active {
   fill: var(--rank-c, var(--accent));
 }
 .pt-mini.pow .ptm-v {
-  fill: var(--accent);
+  fill: var(--rank-c, var(--accent));
   font-size: 15px;
 }
 /* Badge d'icône (LvL / ⚔️) CENTRÉ verticalement sur l'ÉPAISSEUR du trait de l'anneau
@@ -7626,9 +7626,13 @@ button.pt-mini:active {
   padding: 2px 6px;
   border: 1px solid color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
 }
-/* Puissance : encadrement accent (comme le liseré rang du LvL, mais à sa couleur). */
+/* Puissance : À LA COULEUR DU RANG, comme le niveau (demandé 2026-09-27) — chiffre, anneau
+   et cadre de l'icône. Les coins Voie et Rang gardent leur anneau accent. */
+.pt-mini.pow .ptm-track.full {
+  stroke: color-mix(in srgb, var(--rank-c, var(--accent)) 60%, var(--line));
+}
 .pt-mini.pow .ptm-ic {
-  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  border-color: color-mix(in srgb, var(--rank-c, var(--accent)) 60%, transparent);
 }
 /* Badge texte « LvL » : même gabarit que l'icône ⚔️ (taille alignée → homogène). */
 .ptm-ic.txt {

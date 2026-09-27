@@ -253,11 +253,18 @@ const when = computed(() => missionWhen(props.card.at, props.now));
 const canReplay = computed(
   () =>
     !!props.card.party &&
-    (!!riftStageInputOf(props.card.party) || !!warbandStageInputOf(props.card.party)),
+    (!!riftStageInputOf(props.card.party) ||
+      !!warbandStageInputOf(props.card.party) ||
+      !!props.card.party.den ||
+      !!props.card.party.fallen),
 );
-const replayLabel = computed(() =>
-  props.card.party?.battle ? 'Revoir la bataille' : 'Revoir l’incursion',
-);
+const replayLabel = computed(() => {
+  const p = props.card.party;
+  if (p?.battle) return 'Revoir la bataille';
+  if (p?.den) return 'Revoir le combat';
+  if (p?.fallen) return 'Revoir la fouille';
+  return 'Revoir l’incursion';
+});
 const shownTeam = computed(() => props.card.team.slice(0, TEAM_SHOWN));
 const hiddenTeam = computed(() => Math.max(0, props.card.team.length - TEAM_SHOWN));
 const empty = computed(

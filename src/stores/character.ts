@@ -2121,7 +2121,7 @@ export const useCharacterStore = defineStore('character', () => {
         ...(m.supplies && Object.keys(m.supplies).length
           ? { supplies: addSupplies(cur.supplies, m.supplies) }
           : {}),
-        // 🔱 sceaux du gardien d'une faille refermée (`riftSeals`).
+        // 🔱⚜️ sceaux des ruines anciennes (`ruinsSeals`).
         ...(m.seals && m.seals.n > 0
           ? { seals: addSeals(cur.seals, m.seals.kind, m.seals.rank, m.seals.n) }
           : {}),

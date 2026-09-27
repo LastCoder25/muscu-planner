@@ -174,24 +174,37 @@
       <q-btn flat dense no-caps class="skip" label="⏩ Passer" @click="skip" />
     </div>
 
-    <!-- La vie du gardien : les VRAIES valeurs du duel (stage.boss), temps par temps. -->
-    <transition name="bb">
-      <div v-if="bossBar" class="bossbar" :class="{ enraged }">
-        <div class="bb-name font-display">{{ bossBar.emoji }} {{ bossBar.name }}</div>
-        <div class="bb-track">
-          <i class="ghost" :style="{ width: bossGhost + '%' }" />
-          <i class="fill" :style="{ width: bossPct + '%' }" />
+    <!-- ⏱️ Rejeu en retard : l’heure de la bataille, au-dessus du panneau de vie. -->
+    <div v-if="when" class="when">{{ when }}</div>
+    <!-- ❤️ Le panneau de vie — le même que la tanière : ton groupe, et l'adversaire du moment
+         (le monstre affronté, puis le gardien). Les valeurs sont celles du rapport. -->
+    <div v-if="stage.hasPv || opp" class="life">
+      <div v-if="stage.hasPv" class="lbar ours">
+        <div class="lb-lab">
+          <span>Ton groupe</span><b>{{ fmt(pv) }}</b>
+        </div>
+        <div class="lb-track">
+          <i class="ghost" :style="{ width: ghostPct + '%' }" />
+          <i class="fill" :class="{ low: pvPct <= 30 }" :style="{ width: pvPct + '%' }" />
         </div>
       </div>
-    </transition>
-
-    <!-- ⏱️ Rejeu en retard : l’heure de la bataille, au-dessus des barres (en haut elle
-         chevauchait la ligne d’effectifs à 344/390 px, mesuré au banc). -->
-    <div v-if="when" class="when">{{ when }}</div>
-    <div v-if="stage.hasPv" class="pvbar">
-      <i class="ghost" :style="{ width: ghostPct + '%' }" />
-      <i class="fill" :class="{ low: pvPct <= 30 }" :style="{ width: pvPct + '%' }" />
-      <span class="pvtxt">{{ Math.round(pv) }} / {{ stage.maxPv }}</span>
+      <transition name="bb">
+        <div
+          v-if="opp"
+          :key="opp.key"
+          class="lbar theirs"
+          :class="{ boss: opp.boss, enraged: opp.boss && enraged }"
+        >
+          <div class="lb-lab">
+            <span>{{ opp.emoji }} {{ opp.name }}</span
+            ><b v-if="opp.pv !== null">{{ fmt(opp.pv) }}</b>
+          </div>
+          <div class="lb-track">
+            <i class="ghost" :style="{ width: opp.ghost + '%' }" />
+            <i class="fill" :style="{ width: opp.pct + '%' }" />
+          </div>
+        </div>
+      </transition>
     </div>
 
     <transition name="ban" mode="out-in">
@@ -383,6 +396,35 @@ const flash = ref('');
 const bossBar = ref<{ emoji: string; name: string } | null>(null);
 const bossPvShown = ref(props.stage.boss?.maxPv ?? 0);
 const bossGhost = ref(100);
+/** ❤️ Le monstre affronté en ce moment (hors gardien) — sa barre dans le panneau. */
+const foeBar = ref<{ idx: number; emoji: string; name: string } | null>(null);
+const foePct = ref(100);
+const foeGhost = ref(100);
+const foePv = ref<number | null>(null);
+/** L'adversaire du panneau : le gardien pendant le duel, sinon le monstre affronté. */
+const opp = computed(() => {
+  if (bossBar.value)
+    return {
+      key: 'boss',
+      boss: true,
+      ...bossBar.value,
+      pct: bossPct.value,
+      ghost: bossGhost.value,
+      pv: bossPvShown.value,
+    };
+  if (foeBar.value)
+    return {
+      key: 'f' + foeBar.value.idx,
+      boss: false,
+      emoji: foeBar.value.emoji,
+      name: foeBar.value.name,
+      pct: foePct.value,
+      ghost: foeGhost.value,
+      pv: foePv.value,
+    };
+  return null;
+});
+const fmt = (n: number) => Math.round(n).toLocaleString('fr-FR');
 const waves = ref<{ id: number; x: number; y: number; kind: string }[]>([]);
 const bossPct = computed(() => {
   const max = props.stage.boss?.maxPv ?? 0;
@@ -528,6 +570,13 @@ function play(): void {
   if (b.kind === 'boss' && props.stage.boss) return playBoss(b, foe);
 
   targetIdx.value = b.foe;
+  // ❤️ Sa barre entre dans le panneau, pleine — elle tombe au coup.
+  if (!foe.boss) {
+    foeBar.value = { idx: b.foe, emoji: foe.emoji, name: foe.name };
+    foePct.value = 100;
+    foeGhost.value = 100;
+    foePv.value = foe.life ? foe.life.maxPv : null;
+  }
   // Le groupe avance derrière sa cible ; celui dont c'est le tour fonce dessus. Le
   // gardien, on y va TOUS — l'éventail se referme sur lui.
   const strikers =
@@ -562,6 +611,12 @@ function play(): void {
         later(() => (wiped.value = true), reduce ? 0 : 420);
       }
 
+      // La barre du monstre : ce que le rapport dit qu'il lui reste (0 s'il tombe).
+      if (!foe.boss) {
+        foePct.value = foe.life ? (foe.life.pv / foe.life.maxPv) * 100 : b.down ? 0 : 100;
+        if (foe.life) foePv.value = foe.life.pv;
+        later(() => (foeGhost.value = foePct.value), 420);
+      }
       // La barre glisse VERS la valeur lue — l'arrivée est exacte, le chemin est du rendu.
       if (props.stage.hasPv) {
         const lost = Math.max(0, b.pvBefore - b.pvAfter);
@@ -704,6 +759,7 @@ function playBoss(b: (typeof beats.value)[number], foe: (typeof props.stage.foes
     wave(foe.x, foe.y, 'roar');
     shake.value = 'sh-l';
     later(() => (shake.value = ''), 420);
+    foeBar.value = null;
     bossBar.value = { emoji: foe.emoji, name: foe.name };
     say('boss', `${foe.emoji} ${foe.name}`, 'Le gardien de la faille');
   }, 1000);
@@ -814,6 +870,7 @@ function skip(): void {
   }
   sealed.value = props.stage.cleared;
   bossBar.value = null;
+  foeBar.value = null;
   cursor.value = beats.value.length;
   stop();
 }
@@ -1319,7 +1376,7 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 12px;
   right: 12px;
-  bottom: 38px;
+  bottom: calc(104px + env(safe-area-inset-bottom));
   z-index: 200;
   text-align: center;
   font-size: 11.5px;
@@ -1344,46 +1401,6 @@ onBeforeUnmount(() => {
   min-height: 44px;
   font-size: 12.5px;
   color: var(--dim);
-}
-
-.pvbar {
-  position: absolute;
-  left: 12px;
-  right: 12px;
-  bottom: 14px;
-  height: 16px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.5);
-  border: 1px solid var(--line);
-  overflow: hidden;
-  z-index: 80;
-}
-.pvbar i {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  display: block;
-}
-.pvbar .ghost {
-  background: rgba(255, 106, 69, 0.45);
-  transition: width 0.5s ease 0.15s;
-}
-.pvbar .fill {
-  background: var(--d1);
-  transition: width 0.35s ease;
-}
-.pvbar .fill.low {
-  background: var(--d4);
-}
-.pvtxt {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: 11px;
-  font-family: 'Oswald', sans-serif;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
 }
 
 .banner {
@@ -1639,46 +1656,71 @@ onBeforeUnmount(() => {
 }
 
 /* La vie du gardien : en haut, sous le HUD, à sa couleur. */
-.bossbar {
+.life {
   position: absolute;
-  left: 18px;
-  right: 18px;
-  top: 54px;
-  z-index: 82;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom));
   display: grid;
-  gap: 4px;
-  text-align: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: rgba(10, 8, 18, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
+  z-index: 80;
 }
-.bb-name {
-  font-size: 15px;
-  letter-spacing: 0.06em;
-  color: var(--d4);
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+.lb-lab {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 3px;
 }
-.bb-track {
+.lb-lab span {
+  opacity: 0.88;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lb-lab b {
+  font-family: 'Oswald', sans-serif;
+  font-weight: 600;
+}
+.lb-track {
   position: relative;
   height: 10px;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 106, 69, 0.55);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
   overflow: hidden;
 }
-.bb-track i {
+.lb-track i {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
   display: block;
-}
-.bb-track .ghost {
-  background: rgba(255, 235, 200, 0.55);
-  transition: width 0.6s ease 0.2s;
-}
-.bb-track .fill {
-  background: linear-gradient(90deg, #c2261a, var(--d4));
+  border-radius: 6px;
   transition: width 0.35s ease;
 }
-.bossbar.enraged .bb-track {
+.lb-track .ghost {
+  background: rgba(255, 255, 255, 0.35);
+  transition: width 0.9s ease 0.15s;
+}
+.ours .fill {
+  background: linear-gradient(90deg, #5aa84c, #9ad86c);
+}
+.ours .fill.low {
+  background: linear-gradient(90deg, #c8412b, #ff6a45);
+}
+.theirs .fill {
+  background: linear-gradient(90deg, #8a2d20, #d95b3d);
+}
+.theirs.boss .lb-lab span {
+  color: var(--d4);
+  font-weight: 600;
+}
+.theirs.enraged .lb-track {
   box-shadow: 0 0 12px rgba(255, 70, 40, 0.7);
 }
 .bb-enter-active,
@@ -1688,7 +1730,7 @@ onBeforeUnmount(() => {
 .bb-enter-from,
 .bb-leave-to {
   opacity: 0;
-  transform: translateY(-8px);
+  transform: translateY(6px);
 }
 .banner.ban-rage .ban-main,
 .banner.ban-fall .ban-main {

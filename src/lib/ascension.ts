@@ -12,7 +12,7 @@
  * CHAMPIONS (ici) et ceux des OBJETS (étape C). Distincts par décision de l'utilisateur.
  */
 import { buildingUpgradeCost } from './buildings';
-import { CHARACTER_RANKS, characterRank, rankStartLevel } from './characterRank';
+import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
 import { advGearAtRankCap, advGearNextRank, advGearRankCap, type AdvGear } from './advGear';
 import { RARITY_RANK, type Rarity } from './items';
 import { advAscensionCap, advNextAscension, type Adventurer } from './adventurers';
@@ -117,7 +117,7 @@ export const ASCENSION_BLOCK_LABEL: Record<AscensionBlock, string> = {
   top: 'Il est au sommet : plus aucun rang à ouvrir.',
   notReady: 'Il doit d’abord atteindre ★★★★★ dans son rang.',
   pantheon: 'Le Panthéon ne le laisse pas monter plus haut — améliore-le.',
-  seals: 'Il manque des sceaux de ce rang — referme des failles de ce rang.',
+  seals: 'Il manque des sceaux de ce rang — explore des ruines anciennes de ce rang.',
   gold: 'Il manque de l’or.',
 };
 
@@ -158,7 +158,7 @@ export const GEAR_ASCENSION_BLOCK_LABEL: Record<GearAscensionBlock, string> = {
   top: 'Elle est au sommet : plus aucun rang à ouvrir.',
   notReady: 'Elle doit d’abord atteindre ★★★★★ dans son rang, en combattant.',
   wearer: 'Aucun champion de sa lignée ne peut porter le rang suivant — fais monter le champion.',
-  seals: 'Il manque des sceaux d’objet — prends des camps et des repaires sur la carte.',
+  seals: 'Il manque des sceaux d’objet — explore des ruines anciennes sur la carte.',
   gold: 'Il manque de l’or.',
 };
 
@@ -179,33 +179,6 @@ export function advGearAscensionBlocker(
   if (ctx.gold < cost.gold) return 'gold';
   return null;
 }
-
-/** 🗡️ Les sceaux d'OBJET d'un lieu pris sur la carte (sans rang, v0.1138) : un REPAIRE en
- *  laisse `1 + rang du joueur` (Bronze 1, Argent 2, Or 3…), un CAMP autant (à chaque fois depuis
- *  la v0.1147, `CAMP_GEAR_SEAL_CHANCE`). `roll` ∈ [0, 1) vient d'un générateur À PART, pour ne décaler
- *  aucun autre tirage du combat.
- *  ⚠️ **MESURÉ** (joueur simulé du niveau 1, 3 rythmes de sport, 70 % des lieux pris, tous les
- *  champions engagés montés avec leurs 4 pièces) : sceaux amassés ÷ sceaux demandés à l'entrée
- *  de chaque rang = **1,1 à 1,5** (joueur régulier ou très actif), jusqu'à ~2 pour le joueur
- *  lent (qui passe plus de jours par rang). Avec 1 sceau fixe par lieu, le même rapport tombait
- *  de 1,2 à **0,23** : on ne rattrapait jamais. Il faut donc farmer, et ça suffit.
- *  ⚠️ **SUR LA CARTE, PLUS SUR LES BOSS DE PALIER (v0.1047, règle de l'utilisateur : « aucune
- *  ressource de champion à farmer dans la partie héros »).** Les deux familles de sceaux
- *  viennent désormais de la carte : 🔱 le gardien d'une faille, ⚜️ un repaire. Le héros, lui,
- *  peut profiter de tout ; ce sont les champions qui ne se nourrissent que de la carte. */
-export function mapGearSeals(
-  type: 'camp' | 'lair',
-  roll: number,
-  playerLevel: number,
-): SealDrop | null {
-  if (type === 'camp' && roll >= CAMP_GEAR_SEAL_CHANCE) return null;
-  const n = 1 + characterRank(Math.max(1, playerLevel)).rankIndex;
-  return { kind: 'gear', rank: GEAR_SEAL_KEY, n };
-}
-
-/** Chance qu'un camp pris laisse ses sceaux d'objet. ⚠️ 1 depuis la v0.1147 (demandé : « comme le
- *  repaire, à chaque fois ») — 0,5 avant. */
-export const CAMP_GEAR_SEAL_CHANCE = 1;
 
 /** 🔱 Ce que la barre de ressources dit d'une famille de sceaux : le TOTAL (la puce) et le
  *  détail PAR RANG (l'infobulle), du plus bas au plus haut. ⚠️ Un sceau ne sert qu'à SON rang :
