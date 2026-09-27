@@ -1874,7 +1874,15 @@ const focusCrew = computed(() => {
   if (!t) return null;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
-  return { hero: t.withHero, advs, gone: t.members.length - advs.length, poi: t.poi, haul: t.haul };
+  // Le butin est tiré au départ, mais on ne le montre qu'une fois le lieu atteint (retour) :
+  // à l'aller, l'annoncer révélerait l'issue d'un combat qui n'a pas encore eu lieu.
+  return {
+    hero: t.withHero,
+    advs,
+    gone: t.members.length - advs.length,
+    poi: t.poi,
+    haul: t.back ? t.haul : [],
+  };
 });
 function toggleFocusTrip(key: string) {
   focusTrip.value = focusTrip.value === key ? null : key;
