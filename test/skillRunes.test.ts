@@ -15,6 +15,8 @@ import {
   skillsOfTier,
   type ChampSkill,
   RUNE_PLACE,
+  SKILL_COMBAT_EFFECT,
+  runeCombatEffects,
   RUNE_PLACE_OK,
   ascensionRuneOdds,
   awakenRuneOdds,
@@ -294,5 +296,28 @@ describe('🎁 les sources de runes', () => {
     let drops = 0;
     for (let i = 0; i < n; i++) if (rollPlaceRune(rng, p)) drops++;
     expect(drops / n).toBeCloseTo(placeRuneChance(p), 2);
+  });
+});
+
+describe('⚔️ les compétences en combat', () => {
+  it('une compétence de combat donne son effet à la valeur de son niveau', () => {
+    const e = runeCombatEffects([{ id: 'pv', level: 3 }]);
+    expect(e.maxPvPct).toBeCloseTo(skillValue('pv', 3) / 100);
+  });
+
+  it('les compétences s’additionnent, les utilitaires ne touchent pas au combat', () => {
+    const e = runeCombatEffects([
+      { id: 'damage', level: 1 },
+      { id: 'crit', level: 2 },
+      { id: 'speed', level: 5 },
+    ]);
+    expect(e.damagePct).toBeCloseTo(skillValue('damage', 1) / 100);
+    expect(e.critAdd).toBeCloseTo(skillValue('crit', 2) / 100);
+    expect(runeCombatEffects([{ id: 'speed', level: 5 }])).toEqual(runeCombatEffects([]));
+  });
+
+  it('chaque compétence 🔵 et 🟣 a un effet de combat', () => {
+    for (const id of [...skillsOfTier('blue'), ...skillsOfTier('violet')])
+      if (id !== 'mentor') expect(SKILL_COMBAT_EFFECT[id], id).toBeDefined();
   });
 });

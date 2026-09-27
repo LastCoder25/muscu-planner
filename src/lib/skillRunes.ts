@@ -16,6 +16,13 @@
  */
 
 import type { PoiType } from './expedition';
+import {
+  effectAsAggregate,
+  emptyEffects,
+  mergeEffects,
+  type AggregatedEffects,
+  type EffectType,
+} from './items';
 
 /** Les 4 crans, du plus bas au plus haut. ⚠️ Désignés par une COULEUR : « Bronze/Or » sont
  *  les rangs, « B/A/S » les lettres du gacha, « ticket » les 🎟️ d'invocation. */
@@ -375,4 +382,31 @@ export function placeRuneOdds(p: PlaceRuneInput): Record<RuneTier, number> {
 export function rollPlaceRune(rng: () => number, p: PlaceRuneInput): RuneTier | null {
   if (rng() >= placeRuneChance(p)) return null;
   return pickTier(rng, placeRuneOdds(p));
+}
+
+// ── ⚔️ CE QU'UNE COMPÉTENCE FAIT EN COMBAT (étape 3) ─────────────────────────────────────
+
+/** Les compétences qui se traduisent en effet de combat, et lequel. ⚠️ Ce sont les effets
+ *  que `simulateCombat` sait déjà jouer (`EffectType`) : aucune mécanique nouvelle. Les rôles
+ *  de convoi (🟢, 🎓) et les dorées (Pillard, Scelleur, Premier sang, Second souffle) ont
+ *  leur propre câblage, hors de ce tableau. */
+export const SKILL_COMBAT_EFFECT: Partial<Record<SkillId, EffectType>> = {
+  pv: 'max_pv_pct',
+  damage: 'damage_pct',
+  reduction: 'dmg_reduction_pct',
+  crit: 'crit_pct',
+  lifesteal: 'lifesteal_pct',
+  thorns: 'thorns_pct',
+  execute: 'execute_pct',
+  rage: 'rage_pct',
+  momentum: 'momentum_pct',
+};
+
+/** Les effets de combat des compétences d'un champion (valeur au niveau porté). */
+export function runeCombatEffects(skills: readonly ChampSkill[]): AggregatedEffects {
+  const list = skills.flatMap((s) => {
+    const t = SKILL_COMBAT_EFFECT[s.id];
+    return t ? [effectAsAggregate(t, skillValue(s.id, s.level))] : [];
+  });
+  return list.length ? mergeEffects(...list) : emptyEffects();
 }

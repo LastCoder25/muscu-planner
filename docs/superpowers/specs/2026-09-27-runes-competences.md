@@ -197,6 +197,29 @@ Lecture : +1 rang demande 5 à 8 champions de ton rang, le doré exige en plus d
 
 ## 6. Ce que ça touche, et ce qui reste à trancher
 
+### Mesure d'équivalence (2026-09-27)
+
+Gain de puissance d'un champion de référence (`combatPowerRaw`, contre le même champion sans
+compétence) : signatures fixes d'aujourd'hui contre **build moyen de runes** simulé au rythme
+mesuré (§ 5), joueur qui ne remplace qu'une compétence d'un cran plus bas.
+
+| Rang | Signatures fixes | Runes |
+|---|---|---|
+| Bronze | ×1,04 | ×1,01 |
+| Argent | ×1,07 | ×1,02 |
+| Or | ×1,17 | ×1,05 |
+| Or noir | ×1,17 | ×1,08 |
+| Légendaire | ×1,17 | ×1,11 |
+| Demi-dieu | ×1,19 | ×1,14 |
+| Divin | ×1,21 | ×1,16 |
+| Divin céleste → Tout-puissant | ×1,15 | ×1,18 à ×1,20 |
+
+La fin est équivalente, le milieu plus faible (−10 % vers Or) : les premières runes sont
+surtout vertes, utilitaires. Un réglage uniforme ne corrige pas une différence de FORME.
+**Décision proposée** : barème inchangé, et les champions de référence portent le build moyen
+de leur rang — routes, camps et failles se dimensionnent sur eux, donc suivent d'eux-mêmes.
+
+
 - **Calibration des combats** : routes, camps, failles et sièges se mesurent contre des
   champions de référence (`REF_CHAMPIONS_BY_RANK`) aux compétences fixes. Il faut leur définir
   un **build moyen** (combien d'emplacements remplis, à quels niveaux, selon le rang) et
