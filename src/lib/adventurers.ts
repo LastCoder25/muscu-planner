@@ -54,7 +54,21 @@ import {
 // documente qu'aucun runtime ne traverse — les signatures sont des `EffectType` et des
 // `CombatSkill` NOMMÉS là où ils vivent, jamais une seconde nomenclature.
 import { type CombatSkill } from './combat';
-import { SKILLS, skillValue, type ChampSkill, type SkillId } from './skillRunes';
+import {
+  SKILLS,
+  SKILL_MAX_LEVEL,
+  SKILL_SLOTS,
+  applyRuneSkill,
+  canUseRune,
+  replaceSkill,
+  rollRuneSkill,
+  skillValue,
+  skillsOfTier,
+  type ChampSkill,
+  type RuneState,
+  type RuneTier,
+  type SkillId,
+} from './skillRunes';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -2369,3 +2383,75 @@ export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
   hurt: '🛏️ infirmerie',
   posted: '🏰 postés',
 };
+
+// ── 🔮 POSER UNE RUNE SUR UN CHAMPION ─────────────────────────────────────────────────────
+
+/** Pourquoi une rune ne peut pas être posée. */
+export type RuneUseBlock = 'notChampion' | 'noRune' | 'rank' | 'maxed' | 'pending';
+
+export const RUNE_USE_BLOCK_LABEL: Record<RuneUseBlock, string> = {
+  notChampion: 'seuls les champions portent des runes',
+  noRune: 'aucune rune de cette couleur en stock',
+  rank: 'son rang est trop bas pour cette couleur',
+  maxed: 'toutes les compétences de cette couleur sont déjà au maximum chez lui',
+  pending: 'une rune attend déjà ta décision',
+};
+
+/** Le nombre d'emplacements de compétence d'un aventurier (0 hors champion). */
+export function advSkillSlots(adv: Adventurer): number {
+  const c = advChampion(adv);
+  return c ? SKILL_SLOTS[c.grade] : 0;
+}
+
+/** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche de poser cette rune sur ce champion. */
+export function runeUseBlocker(adv: Adventurer, tier: RuneTier, state: RuneState): RuneUseBlock | null {
+  if (!advChampion(adv)) return 'notChampion';
+  if (state.pending) return 'pending';
+  if (state.stock[tier] < 1) return 'noRune';
+  if (!canUseRune(tier, advRank(adv).rankIndex)) return 'rank';
+  const skills = advRuneSkills(adv);
+  const maxed = skillsOfTier(tier).every(
+    (id) => (skills.find((s) => s.id === id)?.level ?? 0) >= SKILL_MAX_LEVEL,
+  );
+  return maxed ? 'maxed' : null;
+}
+
+export type RuneUseResult =
+  | { kind: 'blocked'; block: RuneUseBlock }
+  | { kind: 'stack' | 'new'; adv: Adventurer; state: RuneState; drawn: SkillId }
+  /** Tous les emplacements sont pris : la rune est CONSOMMÉE, la décision attend. */
+  | { kind: 'full'; adv: Adventurer; state: RuneState; drawn: SkillId };
+
+/** Pose une rune : la couleur est dépensée, une compétence du cran est tirée. */
+export function useRune(
+  adv: Adventurer,
+  tier: RuneTier,
+  state: RuneState,
+  rng: () => number,
+): RuneUseResult {
+  const block = runeUseBlocker(adv, tier, state);
+  if (block) return { kind: 'blocked', block };
+  const skills = advRuneSkills(adv);
+  const drawn = rollRuneSkill(rng, tier, skills)!;
+  const spent = { ...state, stock: { ...state.stock, [tier]: state.stock[tier] - 1 } };
+  const out = applyRuneSkill(skills, drawn, advSkillSlots(adv));
+  if (out.kind === 'full')
+    return { kind: 'full', adv, drawn, state: { ...spent, pending: { advId: adv.id, tier, drawn } } };
+  return { kind: out.kind, adv: { ...adv, skills: out.skills }, state: spent, drawn };
+}
+
+/**
+ * La décision sur une rune en attente : remplacer la compétence `index` (la nouvelle arrive
+ * au niveau 1) ou GARDER (`null`) — la rune est alors perdue, sans compensation (décision de
+ * l'utilisateur : refuser un remplacement, c'est de l'optimisation).
+ */
+export function settlePendingRune(
+  adv: Adventurer,
+  state: RuneState,
+  index: number | null,
+): { adv: Adventurer; state: RuneState } | null {
+  const p = state.pending;
+  if (!p || p.advId !== adv.id) return null;
+  const skills = replaceSkill(advRuneSkills(adv), p.drawn, index);
+  return { adv: { ...adv, skills }, state: { ...state, pending: null } };
+}

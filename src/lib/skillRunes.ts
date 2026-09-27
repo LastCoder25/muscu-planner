@@ -496,3 +496,95 @@ export function referenceRuneBuild(rankIndex: number, slots: number, variant = 0
   refBuildCache.set(key, med);
   return med.map((s) => ({ ...s }));
 }
+
+// ── 💾 L'ÉTAT DES RUNES D'UN JOUEUR (étape 4) ─────────────────────────────────────────────
+//
+// `characters.runes` (jsonb, migr. 0094). Le STOCK compte les runes non posées par couleur ;
+// `pending` garde une compétence TIRÉE qui attend la décision du joueur (tous les
+// emplacements pris, compétence nouvelle) — persistée, sinon un rechargement la relancerait.
+
+/** Une rune tirée qui attend « remplacer ou garder ». */
+export interface PendingRune {
+  advId: string;
+  tier: RuneTier;
+  drawn: SkillId;
+}
+
+export interface RuneState {
+  stock: Record<RuneTier, number>;
+  pending: PendingRune | null;
+  /** Version de la compensation versée aux champions d'avant les runes (0 = pas versée). */
+  comp: number;
+}
+
+/** Version courante de la compensation : on ne la verse qu'une fois. */
+export const RUNE_COMP_VERSION = 1;
+
+const isTier = (t: unknown): t is RuneTier => RUNE_TIERS.includes(t as RuneTier);
+const isSkill = (s: unknown): s is SkillId => typeof s === 'string' && s in SKILLS;
+
+/** Relecture DÉFENSIVE d'un JSONB : tout ce qui n'a pas la bonne forme est écarté. */
+export function normalizeRuneState(raw: unknown): RuneState {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const st = (r.stock && typeof r.stock === 'object' ? r.stock : {}) as Record<string, unknown>;
+  const stock = { green: 0, blue: 0, violet: 0, gold: 0 };
+  for (const t of RUNE_TIERS) {
+    const n = Number(st[t]);
+    stock[t] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  const p = r.pending as Record<string, unknown> | null | undefined;
+  const pending =
+    p && typeof p.advId === 'string' && isTier(p.tier) && isSkill(p.drawn)
+      ? { advId: p.advId, tier: p.tier, drawn: p.drawn }
+      : null;
+  const comp = Number(r.comp);
+  return { stock, pending, comp: Number.isFinite(comp) ? comp : 0 };
+}
+
+/** Relecture défensive des compétences d'un champion : ids inconnus, doublons et niveaux
+ *  hors bornes écartés ou ramenés dans [1, SKILL_MAX_LEVEL]. */
+export function normalizeChampSkills(raw: unknown): ChampSkill[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<SkillId>();
+  const out: ChampSkill[] = [];
+  for (const s of raw as { id?: unknown; level?: unknown }[]) {
+    if (!s || !isSkill(s.id) || seen.has(s.id)) continue;
+    seen.add(s.id);
+    const lv = Math.floor(Number(s.level));
+    out.push({ id: s.id, level: Math.max(1, Math.min(SKILL_MAX_LEVEL, Number.isFinite(lv) ? lv : 1)) });
+  }
+  return out;
+}
+
+/** Ajoute des runes au stock (rend un NOUVEL état). */
+export function addRunes(state: RuneState, tiers: readonly RuneTier[]): RuneState {
+  if (!tiers.length) return state;
+  const stock = { ...state.stock };
+  for (const t of tiers) stock[t] += 1;
+  return { ...state, stock };
+}
+
+/** Graine stable d'une chaîne (FNV-1a) — la compensation doit être la même à chaque essai. */
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0 || 1;
+}
+
+/**
+ * 🎁 LA COMPENSATION des champions d'avant les runes (décision de l'utilisateur) : chacun
+ * reçoit les runes qu'il aurait gagnées — une par rang d'ascension ouvert et une par cran
+ * d'Éveil passé, aux MÊMES chances que les sources. Graine = l'id du champion : rejouer la
+ * compensation donne exactement les mêmes couleurs. Elle va au STOCK, jamais posée d'office.
+ */
+export function compensationRunes(
+  champs: readonly { id: string; grade: 'A' | 'S' | 'X'; ascended: number; awaken: number }[],
+): RuneTier[] {
+  const out: RuneTier[] = [];
+  for (const c of champs) {
+    const rng = mulberry32(hashStr(`runes:${c.id}`));
+    for (let r = 1; r <= c.ascended; r++) out.push(rollAscensionRune(rng, r));
+    for (let s = 1; s <= c.awaken; s++) out.push(rollAwakenRune(rng, c.grade, s));
+  }
+  return out;
+}
