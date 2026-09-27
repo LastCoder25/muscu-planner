@@ -12,25 +12,38 @@
       <!-- ÉTAPE 1 — RÉGLAGES : on renforce TOUT le corps ; volume (+ variété) -->
       <template v-if="step === 'setup'">
         <p class="intro">
-          On renforce <b>tout le corps</b> sur 7 jours : choisis ton <b>volume</b>, on te propose le
-          nombre d'exercices et de séries. Tu fais tes séries <b>quand tu veux</b> dans la semaine.
+          On renforce <b>tout le corps</b> sur 7 jours. Tu fais tes séries <b>quand tu veux</b> dans
+          la semaine.
         </p>
-        <div class="vol-card">
-          <div class="vol-lbl">Ton niveau</div>
+
+        <!-- Une carte par réglage, titre numéroté : on relit son réglage de haut en bas
+             au lieu de six blocs empilés dans une seule carte. -->
+        <section class="set-card">
+          <div class="set-head">
+            <span class="set-num">1</span>
+            <span class="set-title">Ton niveau</span>
+          </div>
           <div class="opt-tiles">
             <button
               v-for="o in LEVEL_OPTS"
               :key="o.id"
               type="button"
-              class="opt-tile lvl-tile"
+              class="opt-tile"
               :class="{ on: level === o.id }"
               @click="level = o.id"
             >
+              <span class="ot-emo">{{ o.emoji }}</span>
               <span class="ot-lbl">{{ o.label }}</span>
+              <span class="ot-sub">{{ o.sub }}</span>
             </button>
           </div>
+        </section>
 
-          <div class="vol-lbl vl-mt">Zone du corps</div>
+        <section class="set-card">
+          <div class="set-head">
+            <span class="set-num">2</span>
+            <span class="set-title">Zone du corps</span>
+          </div>
           <div class="opt-tiles">
             <button
               v-for="o in ZONE_OPTS"
@@ -45,32 +58,45 @@
               <span class="ot-sub">{{ o.sub }}</span>
             </button>
           </div>
-          <div class="zone-hint">Blessé ou tu veux zapper une partie ? Choisis haut ou bas.</div>
+          <div class="set-hint">Blessé ou envie de zapper une partie ? Choisis haut ou bas.</div>
+        </section>
 
-          <div class="vol-lbl vl-mt">Ton objectif</div>
-          <div class="opt-tiles">
+        <section class="set-card">
+          <div class="set-head">
+            <span class="set-num">3</span>
+            <span class="set-title">Ton objectif</span>
+          </div>
+          <!-- 5 objectifs : en ligne ils tombaient à ~60 px de large sur un téléphone, les
+               libellés se coupaient en trois. Tuiles couchées, 1 colonne sur téléphone, 2 au-delà. -->
+          <div class="obj-grid">
             <button
               v-for="o in OBJ_OPTS"
               :key="o.id"
               type="button"
-              class="opt-tile"
+              class="obj-tile"
               :class="{ on: objective === o.id }"
               @click="objective = o.id"
             >
-              <span class="ot-emo">{{ o.emoji }}</span>
-              <span class="ot-lbl">{{ o.label }}</span>
-              <span class="ot-sub">{{ o.sub }}</span>
+              <span class="obj-emo">{{ o.emoji }}</span>
+              <span class="obj-txt">
+                <span class="ot-lbl">{{ o.label }}</span>
+                <span class="ot-sub">{{ o.sub }}</span>
+              </span>
             </button>
           </div>
-          <div class="zone-hint">
-            🎯 Séries visées : <b>{{ repRangeLabel(objRange) }}</b> — repos ~{{ objRange.rest }} s.
-            La fourchette est rappelée sur chaque exo pendant le défi.
+          <div class="chip-row">
+            <span class="info-chip on">🎯 {{ repRangeLabel(objRange) }}</span>
+            <span class="info-chip">⏱️ repos ~{{ objRange.rest }} s</span>
+            <span v-if="sportsHint" class="info-chip">🏃 allégé pour {{ sportsHint }}</span>
           </div>
-          <div v-if="sportsHint" class="zone-hint">
-            Adapté à tes sports ({{ sportsHint }}) : on allège les groupes déjà sollicités.
-          </div>
+          <div class="set-hint">La fourchette est rappelée sur chaque exo pendant le défi.</div>
+        </section>
 
-          <div class="vol-lbl vl-mt">Volume d'entraînement</div>
+        <section class="set-card">
+          <div class="set-head">
+            <span class="set-num">4</span>
+            <span class="set-title">Volume d'entraînement</span>
+          </div>
           <div class="opt-tiles">
             <button
               v-for="o in VOLUME_OPTS"
@@ -82,12 +108,15 @@
             >
               <span class="ot-emo">{{ o.emoji }}</span>
               <span class="ot-lbl">{{ o.label }}</span>
-              <span class="ot-sub">~{{ volSets(o.id) }} séries/groupe</span>
+              <span class="ot-num font-display">{{ volSets(o.id) }}</span>
+              <span class="ot-sub">séries</span>
             </button>
           </div>
 
+          <div class="set-hint">Séries par groupe musculaire et par semaine.</div>
+
           <template v-if="!isBeginner">
-            <div class="vol-lbl vl-mt">Variété d'exercices</div>
+            <div class="set-sub">Variété d'exercices</div>
             <div class="opt-tiles">
               <button
                 v-for="o in VARIETY_OPTS"
@@ -97,49 +126,62 @@
                 :class="{ on: variety === o.id }"
                 @click="variety = o.id"
               >
+                <span class="ot-dots" aria-hidden="true">
+                  <i v-for="n in 3" :key="n" :class="{ lit: n <= o.n }" />
+                </span>
                 <span class="ot-lbl">{{ o.label }}</span>
                 <span class="ot-sub">{{ o.sub }}</span>
               </button>
             </div>
           </template>
+        </section>
 
-          <!-- Départ : caler le 360 sur un lundi, ou attendre la fin du précédent.
-               Jamais dans le passé (les jours écoulés compteraient comme perdus). -->
-          <div class="start-block">
-            <div class="start-lbl">Départ</div>
-            <div class="start-row">
-              <button
-                v-for="o in startChoices"
-                :key="o.id"
-                class="opt-tile start-chip"
-                :class="{ on: startDate === o.date }"
-                type="button"
-                @click="pickStart(o.date)"
-              >
-                {{ o.label }}
-              </button>
-              <input
-                class="start-input"
-                type="date"
-                :value="startDate"
-                :min="today"
-                :max="startMax"
-                @change="pickStart(($event.target as HTMLInputElement).value)"
-              />
-            </div>
-            <div v-if="startDate !== today" class="start-note">
-              📅 Ce Défi 360 démarrera <b>{{ startTxt }}</b
-              >.
-            </div>
+        <!-- Départ : caler le 360 sur un lundi, ou attendre la fin du précédent.
+             Jamais dans le passé (les jours écoulés compteraient comme perdus). -->
+        <section class="set-card">
+          <div class="set-head">
+            <span class="set-num">5</span>
+            <span class="set-title">Départ</span>
           </div>
-
-          <div class="vol-summary">
-            🎯 <b>{{ activeCount }}</b> groupes musculaires ·
-            <b>~{{ suggestedTotalExos }}</b> exercices · <b>{{ totalSets }}</b> séries / semaine
+          <div class="start-row">
+            <button
+              v-for="o in startChoices"
+              :key="o.id"
+              class="opt-tile start-chip"
+              :class="{ on: startDate === o.date }"
+              type="button"
+              @click="pickStart(o.date)"
+            >
+              {{ o.label }}
+            </button>
+            <input
+              class="start-input"
+              type="date"
+              :value="startDate"
+              :min="today"
+              :max="startMax"
+              @change="pickStart(($event.target as HTMLInputElement).value)"
+            />
           </div>
-        </div>
+          <div v-if="startDate !== today" class="start-note">
+            📅 Ce Défi 360 démarrera <b>{{ startTxt }}</b
+            >.
+          </div>
+        </section>
         <div class="foot-bar cta-bar">
           <div class="cta-stack">
+            <!-- Le récap suit chaque réglage en direct, toujours sous les yeux. -->
+            <div class="sum-chips">
+              <span class="sum-chip"
+                ><b>{{ activeCount }}</b> groupes</span
+              >
+              <span class="sum-chip"
+                ><b>~{{ suggestedTotalExos }}</b> exos</span
+              >
+              <span class="sum-chip"
+                ><b>{{ totalSets }}</b> séries / sem.</span
+              >
+            </div>
             <q-btn
               class="foot-cta"
               color="primary"
@@ -458,10 +500,10 @@ const creating = ref(false);
 const level = ref<Level>('intermediaire');
 const favSet = computed(() => new Set(profileStore.profile?.favorite_exercises ?? []));
 
-const LEVEL_OPTS: { id: Level; label: string }[] = [
-  { id: 'debutant', label: 'Débutant' },
-  { id: 'intermediaire', label: 'Intermédiaire' },
-  { id: 'avance', label: 'Avancé' },
+const LEVEL_OPTS: { id: Level; emoji: string; label: string; sub: string }[] = [
+  { id: 'debutant', emoji: '🐣', label: 'Débutant', sub: 'je découvre' },
+  { id: 'intermediaire', emoji: '🧗', label: 'Intermédiaire', sub: 'je pratique' },
+  { id: 'avance', emoji: '🦾', label: 'Avancé', sub: 'des années' },
 ];
 
 const tileMedia = 104;
@@ -535,10 +577,10 @@ const VOLUME_OPTS: { id: ComboVolume; emoji: string; label: string }[] = [
   { id: 'moderate', emoji: '💪', label: 'Modéré' },
   { id: 'intense', emoji: '🔥', label: 'Intense' },
 ];
-const VARIETY_OPTS: { id: ComboVariety; label: string; sub: string }[] = [
-  { id: 'low', label: 'Peu', sub: "jusqu'à 1 exo/groupe" },
-  { id: 'med', label: 'Moyen', sub: "jusqu'à 2/groupe" },
-  { id: 'high', label: 'Beaucoup', sub: "jusqu'à 3/groupe" },
+const VARIETY_OPTS: { id: ComboVariety; n: number; label: string; sub: string }[] = [
+  { id: 'low', n: 1, label: 'Peu', sub: '1 exo / groupe' },
+  { id: 'med', n: 2, label: 'Moyen', sub: "jusqu'à 2" },
+  { id: 'high', n: 3, label: 'Beaucoup', sub: "jusqu'à 3" },
 ];
 // Séries/sem d'un groupe essentiel selon le volume choisi (affiché sur les tuiles).
 function volSets(v: ComboVolume): number {
@@ -880,15 +922,8 @@ onMounted(async () => {
   border-radius: 999px;
 }
 
-.start-block {
-  margin-top: 14px;
-}
-.start-lbl {
-  font-size: 12px;
-  color: var(--dim);
-  margin-bottom: 5px;
-}
 .start-row {
+  margin-top: 10px;
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -914,7 +949,7 @@ onMounted(async () => {
 .combo-new {
   background: var(--bg);
   min-height: 100vh;
-  padding: 0 16px 120px;
+  padding: 0 16px 170px;
 }
 .top {
   display: flex;
@@ -945,25 +980,157 @@ onMounted(async () => {
   line-height: 1.5;
   margin: 0 0 14px;
 }
-.vol-card {
+/* ── Réglages : une carte par réglage ── */
+.set-card {
   background: var(--surface);
-  border: 1px solid var(--accent);
+  border: 1px solid var(--line-soft);
   border-radius: 14px;
-  padding: 14px;
-  margin-bottom: 14px;
+  padding: 12px 12px 14px;
+  margin-bottom: 10px;
 }
-.vol-lbl {
-  font-size: 13px;
+.set-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.set-num {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--bg);
+  font-family: 'Oswald', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.set-title {
+  font-size: 14px;
+  font-weight: 700;
   color: var(--text);
+}
+.set-sub {
+  margin-top: 14px;
+  font-size: 12.5px;
   font-weight: 600;
+  color: var(--dim);
 }
-.vol-lbl.vl-mt {
-  margin-top: 16px;
-}
-.zone-hint {
+.set-hint {
   font-size: 11px;
   color: var(--dim);
-  margin-top: 6px;
+  margin-top: 8px;
+}
+.obj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+/* En 2 colonnes, le 5e objectif prend toute la largeur plutôt que de rester orphelin. */
+.obj-grid > .obj-tile:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+.obj-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 2px solid var(--line-soft);
+  background: var(--surface-2);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.obj-tile.on {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+.obj-tile.on .ot-sub {
+  color: var(--accent);
+}
+.obj-emo {
+  flex: 0 0 auto;
+  font-size: 22px;
+  line-height: 1;
+}
+.obj-txt {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.obj-txt .ot-sub {
+  text-align: left;
+}
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.info-chip {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+}
+.info-chip.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.ot-num {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+  margin-top: 2px;
+}
+.opt-tile.on .ot-num {
+  color: var(--accent);
+}
+.ot-dots {
+  display: flex;
+  gap: 4px;
+  height: 22px;
+  align-items: center;
+}
+.ot-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--line);
+}
+.ot-dots i.lit {
+  background: var(--text);
+}
+.opt-tile.on .ot-dots i.lit {
+  background: var(--accent);
+}
+.sum-chips {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sum-chip {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line-soft);
+  color: var(--dim);
+}
+.sum-chip b {
+  color: var(--accent);
+  font-family: 'Oswald', sans-serif;
+  font-size: 13.5px;
 }
 .opt-tiles {
   display: flex;
@@ -1001,16 +1168,6 @@ onMounted(async () => {
   text-align: center;
 }
 .opt-tile.on .ot-sub {
-  color: var(--accent);
-}
-.vol-summary {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line-soft);
-  font-size: 13px;
-  color: var(--text);
-}
-.vol-summary b {
   color: var(--accent);
 }
 
