@@ -931,8 +931,9 @@ export const EXPE = {
     ruins: 20 * 3600_000,
     fallen: 16 * 3600_000,
     den: 14 * 3600_000,
-    // 🏴‍☠️ Fugace : les pillards filent avec le butin.
-    plunder: 5 * 3600_000,
+    // 🏴‍☠️ Fugace : les pillards filent avec le butin. 8 h (et une notification à
+    // l'apparition) : de quoi la voir en ouvrant l'app deux fois par jour.
+    plunder: 8 * 3600_000,
   },
   /** 🏴‍☠️ Chance qu'un lieu d'économie qui apparaît soit une caravane pillée (une à la fois). */
   plunderChance: 0.022,
@@ -1843,6 +1844,34 @@ export function irradiatedPoiIds(
 
 export function riftOverflows(map: ExpeditionMap, now: number): Poi[] {
   return map.pois.filter((p) => isRiftPoi(p) && now >= p.spawnedAt + EXPE.lifespanMs.rift);
+}
+
+/**
+ * 🏴‍☠️ Quand apparaîtra la PROCHAINE caravane pillée ? — pour la notifier.
+ *
+ * ⚠️ La carte n'avance que quand l'app tourne, mais elle est DÉTERMINISTE : on la rejoue en
+ * avance, pas à pas, avec la fonction du jeu elle-même (`advanceWorld`). Les gestes du
+ * joueur (un lieu pris, qui laisse une place) changent l'avenir : l'app replanifie à chaque
+ * ouverture, et la notification périmée est effacée (`livePushKeys`). `null` si aucune
+ * n'apparaît dans l'horizon, ou si une est déjà sur la carte (on la voit déjà).
+ */
+export function nextPlunderSpawn(
+  map: ExpeditionMap,
+  now: number,
+  playerLevel: number,
+  outpostLevel: number,
+  protectedPoiId?: string,
+  horizonMs = 48 * 3600_000,
+): { id: string; at: number } | null {
+  if (map.pois.some((p) => p.type === 'plunder')) return null;
+  const STEP = 30 * 60_000;
+  let m = map;
+  for (let t = now + STEP; t <= now + horizonMs; t += STEP) {
+    m = advanceWorld(m, t, playerLevel, outpostLevel, protectedPoiId);
+    const p = m.pois.find((x) => x.type === 'plunder');
+    if (p) return { id: p.id, at: p.spawnedAt };
+  }
+  return null;
 }
 
 /** Fait avancer le monde jusqu'à `now` : expire les POI périmés (sauf la cible d'une

@@ -14,7 +14,7 @@
 
 import { raidIntervalMs, raidsEnabled, scoutLeadMs, type BaseState } from './raid';
 
-type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'party_home';
+type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'party_home' | 'plunder';
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
  *  événement ne doit JAMAIS créer un doublon — l'app replanifie à chaque ouverture. */
@@ -44,6 +44,8 @@ export interface PushContext {
    *  une enceinte de niveau 5 sur un compte niveau 28 pour « prête », et on programmerait
    *  des sièges qui n'auront jamais lieu. */
   playerLevel: number;
+  /** 🏴‍☠️ La prochaine caravane pillée (`nextPlunderSpawn`), ou null. ⚠️ REQUIS. */
+  plunder: { id: string; at: number } | null;
 }
 
 function heures(ms: number): string {
@@ -117,6 +119,19 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       // boîte le dit, la notification donne seulement envie de l'ouvrir.
       title: '⚔️ Ton groupe est rentré',
       body: 'Son rapport t’attend dans la boîte 📬.',
+      url: '/expedition-map',
+    });
+  }
+
+  if (ctx.plunder) {
+    add({
+      kind: 'plunder',
+      // Liée à l'id du lieu : replanifier ne la double pas, et elle s'efface si la carte
+      // change d'avis (un lieu pris laisse la place à un autre tirage).
+      dedupe: `plunder:${ctx.plunder.id}`,
+      sendAt: ctx.plunder.at,
+      title: '🏴‍☠️ Une caravane pillée',
+      body: 'Des pillards l’ont prise — son or est à qui ira le chercher, pendant quelques heures.',
       url: '/expedition-map',
     });
   }

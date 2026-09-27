@@ -48,7 +48,7 @@ describe('🏴‍☠️ la caravane pillée', () => {
   });
   it('jamais deux à la fois, et elle ne dure que quelques heures', () => {
     expect(twoAtOnce).toBe(0);
-    expect(EXPE.lifespanMs.plunder).toBeLessThanOrEqual(6 * H);
+    expect(EXPE.lifespanMs.plunder).toBeLessThanOrEqual(8 * H);
   });
   it('gardée par des bandits, plus nombreux que ceux d’une mine', () => {
     for (let k = 0; k < 20; k++) {

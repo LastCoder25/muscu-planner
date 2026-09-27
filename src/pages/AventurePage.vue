@@ -3184,7 +3184,12 @@ import {
   type FiledPiece,
 } from '@/lib/setFiling';
 import { unlocksAtLevel } from '@/lib/advUnlocks';
-import { labyrinthUnlocked, bossAltarBuilt, bossAltarRollFloor } from '@/lib/buildings';
+import {
+  labyrinthUnlocked,
+  bossAltarBuilt,
+  bossAltarRollFloor,
+  buildingLevel,
+} from '@/lib/buildings';
 import {
   REGIONS,
   currentRegion,
@@ -3213,6 +3218,7 @@ import {
   arenaRewards,
   ARENA_PLAY,
   type PartyResult,
+  nextPlunderSpawn,
 } from '@/lib/expedition';
 import { logicalToday } from '@/lib/challenges';
 
@@ -5598,6 +5604,15 @@ async function syncPush(force = false) {
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
       activeDays7: activeDays7.value,
       playerLevel: c.value.level.level,
+      plunder: char.row.expedition_map
+        ? nextPlunderSpawn(
+            char.row.expedition_map,
+            now,
+            c.value.level.level,
+            buildingLevel(char.row.buildings, 'outpost'),
+            char.row.expedition?.poi.id,
+          )
+        : null,
     })
     .catch((e) => console.error('push sync', e));
 }
