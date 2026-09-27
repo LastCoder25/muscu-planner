@@ -36,7 +36,7 @@ déjà employés ailleurs : les crans sont désignés par **une couleur**.
 Le garde-fou de rang reprend la règle du jeu « rareté ≤ rang » (équipement, familiers) : un
 champion fraîchement tiré ne devient pas un monstre en une rune.
 
-## 3. Le catalogue — 16 compétences, 4 par cran
+## 3. Le catalogue — 18 compétences
 
 **Chaque compétence appartient à UN SEUL cran** (décision de l'utilisateur) : la Vitesse
 n'existe qu'en vert. Utilitaire en bas, combat en haut.
@@ -45,13 +45,31 @@ n'existe qu'en vert. Utilitaire en bas, combat en haut.
 |---|---|
 | 🟢 Utilitaire | 🧭 Vitesse · 🩺 Soin · 🐫 Cargaison · 👁️ Repérage |
 | 🔵 Soutien | ❤️ PV · ⚔️ Dégâts · 🛡️ Réduction · 🎓 Mentor |
-| 🟣 Combat | 💥 Critique · 🩸 Vol de vie · 🌵 Épines · 🪓 Exécution |
-| 🟠 Sommet | 🔥 Rage · 🌀 Élan · 2 compétences uniques (à écrire) |
+| 🟣 Combat | 💥 Critique · 🩸 Vol de vie · 🌵 Épines · 🪓 Exécution · 🔥 Rage · 🌀 Élan |
+| 🟠 Sommet | 🧲 Pillard · 🕳️ Scelleur de failles · ⚡ Premier sang · ✨ Second souffle |
 
 Les effets réutilisent ce que le jeu sait déjà appliquer : les rôles de convoi (`CARAVAN.*`),
-les effets de combat (`EffectType`, joués par `simulateCombat`), le Mentor (v0.1223). Les deux
-compétences uniques doivent changer le combat ou le voyage (idées : « ignore la première
-embuscade du voyage », « un coup sur trois est critique ») — à écrire et à mesurer.
+les effets de combat (`EffectType`, joués par `simulateCombat`), le Mentor (v0.1223).
+
+Rage et Élan descendent en 🟣 (décision de l'utilisateur, 2026-09-27) pour laisser le cran doré
+aux 4 compétences uniques. Les crans n'ont donc pas tous la même taille (4 / 4 / 6 / 4).
+
+### Les 4 compétences dorées
+
+Elles se cumulent comme les autres jusqu'au niveau 5 — plus rare, donc à long terme.
+Valeurs indicatives, _à mesurer_ :
+
+| Compétence | Effet | Niv. 1 → Niv. 5 |
+|---|---|---|
+| 🧲 Pillard | chance, sur un lieu de récolte, de ramener une **seconde cargaison**, quelle que soit la ressource | 10 % → 30 % |
+| 🕳️ Scelleur de failles | **mana** en plus quand l'équipe referme une faille | +10 % → +40 % |
+| ⚡ Premier sang | **dégâts de l'équipe** au premier tour de chaque combat | +30 % → +100 % |
+| ✨ Second souffle | une fois par mission, l'équipe **survit à un coup fatal** avec une part de ses PV | 20 % → 40 % des PV |
+
+⚠️ Dans les camps et les failles l'équipe est FUSIONNÉE en un seul combattant : ces effets
+s'appliquent à l'équipe entière. Pillard et Scelleur touchent l'économie (or, ressources,
+mana → gacha) : leurs plafonds se fixent contre `goldSink`, `campEconomy` et
+`riftManaDebit`.
 
 ### Le cumul
 
@@ -93,11 +111,14 @@ Quand une rune est utilisée sur un champion :
 3. elle est **nouvelle** et tous les emplacements sont **pris** → le joueur choisit :
    - **remplacer** une compétence existante : la nouvelle arrive **au niveau 1**, l'ancienne
      et ses niveaux sont perdus ;
-   - **garder** ses compétences : la rune est **consommée** sans effet.
-     _À confirmer à l'implémentation — une variante « rune rendue » évite la frustration._
+   - **garder** ses compétences : la rune est **perdue**, sans compensation (décision de
+     l'utilisateur : refuser un remplacement, c'est de l'optimisation — la rendre serait trop
+     facile).
 
-⚠️ Cas limite : une compétence déjà au niveau 5 tirée à nouveau. Proposition : relancer le
-tirage dans le même cran (la rune ne se perd pas sur un plafond atteint).
+Une compétence déjà au **niveau 5** tirée à nouveau : le tirage est **relancé** dans le même
+cran (décision de l'utilisateur) — la rune ne se perd pas sur un plafond que le joueur ne
+choisit pas. Si toutes les compétences du cran sont au niveau 5, la rune ne peut pas être
+utilisée sur ce champion (l'écran le dit).
 
 ## 5. D'où viennent les runes
 
@@ -161,9 +182,9 @@ Lecture : +1 rang demande 5 à 8 champions de ton rang, le doré exige en plus d
 - **Composition des équipes** : les rôles n'étant plus garantis par le roster, un vivier peut
   manquer d'éclaireur ou de soigneur. Accepté (les runes 🟢 sont les plus fréquentes).
   `suggestEscort` (couverture de rôles) est à adapter.
-- **Champions déjà possédés** : leurs signatures et rôles disparaissent. _À trancher :_
-  compensation en runes (par exemple autant de runes que d'ascensions et de crans d'Éveil déjà
-  passés), ou conversion de leurs compétences actuelles en compétences tirables équivalentes.
+- **Champions déjà possédés** : leurs signatures et rôles disparaissent, **compensés en runes**
+  (décision de l'utilisateur) — autant de runes que d'ascensions et de crans d'Éveil déjà
+  passés, de la couleur que ces événements auraient donnée.
 - **Mentor** : livré en v0.1223 comme rôle fixe (Anselme, Vesper), il devient une compétence
   🔵 ; le champion de référence garde son rôle d'origine jusqu'à la refonte.
 - **Persistance** : `Adventurer` gagne ses compétences (JSONB `characters.adventurers`, aucune
