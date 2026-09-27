@@ -44,13 +44,8 @@ describe('level_config — le contrat ne promet que ce que le code tient', () =>
     // seule fois. Une exemption justifiée par une raison fausse est une exemption qu'on
     // finit par étendre — la moitié du travail d'un garde-fou est de dire le vrai.
     const META = ['schema_version', 'type', 'derived_from'];
-    // ⚠️ DETTE ASSUMÉE, et séparée des métadonnées EXPRÈS : `overridable` n'en est pas une.
-    // Il annonce « on peut écraser n'importe quel champ ensuite » et AUCUN code ne le
-    // permet — la même promesse non tenue que `ui_density` et `auto_deload`, en plus
-    // discret. Exempté parce qu'il sort du périmètre du retrait décidé, pas parce qu'il
-    // est légitime. À TRANCHER : le brancher (une surcharge de profil) ou le retirer.
-    const DETTE = ['overridable'];
-    const exempts = [...META, ...DETTE];
+    // `overridable` était exempté ici comme dette (promesse jamais tenue) : RETIRÉ en v0.1201.
+    const exempts = META;
     const orphelins = champs.filter(
       (c) => !exempts.includes(c) && !sources.some((s) => s.includes(c)),
     );
@@ -62,11 +57,12 @@ describe('level_config — le contrat ne promet que ce que le code tient', () =>
     ).toEqual([]);
   });
 
-  it('les deux champs retirés ne reviennent pas par la bande', () => {
+  it('les champs retirés ne reviennent pas par la bande', () => {
     for (const n of NIVEAUX) {
       const cfg = deriveLevelConfig(n) as Record<string, unknown>;
       expect(cfg.ui_density, n).toBeUndefined();
       expect(cfg.auto_deload, n).toBeUndefined();
+      expect(cfg.overridable, n).toBeUndefined();
     }
   });
 

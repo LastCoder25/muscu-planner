@@ -261,8 +261,7 @@ Le même contrat sert un grand débutant **et** un pratiquant de 15 ans. Tout le
   "default_progression": "double",
   "effort_signal": "rir_optional",
   "coach_history_depth": 2,
-  "program_mode": "assisted",
-  "overridable": true
+  "program_mode": "assisted"
 }
 ```
 

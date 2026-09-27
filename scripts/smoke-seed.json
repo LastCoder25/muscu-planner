@@ -28,7 +28,6 @@
     "schema_version": "1.0",
     "type": "level_config",
     "derived_from": "intermediaire",
-    "overridable": true,
     "default_progression": "double",
     "effort_signal": "rir_optional",
     "coach_history_depth": 2,

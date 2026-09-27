@@ -1,6 +1,7 @@
 // levelConfig.ts — couche d'adaptation par niveau (cf. contrat v1.0).
 // experience.level → level_config → comportement de toute l'app.
-// Dérivé mais surchargeable : on peut écraser n'importe quel champ ensuite.
+// Dérivé du niveau, sans surcharge : `overridable` a été retiré en v0.1201 (aucun code ne
+// permettait d'écraser un champ — la promesse n'était pas tenue).
 import type { Level, LevelConfig } from './types';
 import { SCHEMA_VERSION } from './types';
 
@@ -9,7 +10,6 @@ export function deriveLevelConfig(level: Level): LevelConfig {
     schema_version: SCHEMA_VERSION,
     type: 'level_config' as const,
     derived_from: level,
-    overridable: true,
   };
 
   switch (level) {
