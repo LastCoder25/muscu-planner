@@ -97,6 +97,8 @@ import {
   riftOverflows,
   startExpedition,
   buildMessage,
+  poiDifficultyLevel,
+  riftMaturityAt,
   type ActiveExpedition,
   type ExpeditionMap,
   type ExpeditionMessage,
@@ -117,7 +119,7 @@ import {
   buildingLevel,
   type BuildingTypeId,
 } from '@/lib/buildings';
-import { combatPower, type Combatant } from '@/lib/combat';
+import { combatPower, mulberry32, type Combatant } from '@/lib/combat';
 import {
   advanceBase,
   markOverflow,
@@ -165,8 +167,28 @@ import {
   advTitle,
   engageCap,
   syncChampionName,
+  advAwaken,
+  awakenLevel,
+  advChampion,
+  useRune,
+  settlePendingRune,
+  RUNE_USE_BLOCK_LABEL,
   type Adventurer,
 } from '@/lib/adventurers';
+import {
+  RUNE_COMP_VERSION,
+  RUNE_PLACE_OK,
+  addRunes,
+  compensationRunes,
+  normalizeChampSkills,
+  normalizeRuneState,
+  rollAscensionRune,
+  rollAwakenRune,
+  rollPlaceRune,
+  type RuneState,
+  type RuneTier,
+  type SkillId,
+} from '@/lib/skillRunes';
 import { convoySlotsFree, partyAllies, type EscortKit, type PartyHero } from '@/lib/caravan';
 import {
   advGearRoles,
@@ -273,7 +295,7 @@ import { levelUpTickets, pullPayment, buildTickets, welcomeTicketsDue } from '@/
 import type { LotItem } from '@/lib/gachaReveal';
 import { gearRefonteGifts } from '@/lib/gearMigration';
 import { useGameFx } from '@/composables/useGameFx';
-import { CHARACTER_RANKS } from '@/lib/characterRank';
+import { CHARACTER_RANKS, characterRank } from '@/lib/characterRank';
 import { useGoldFx } from '@/composables/useGoldFx';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 
@@ -320,6 +342,8 @@ export interface CharacterRow {
   seals: Seals; // 🔱 sceaux d'ascension (migr. 0083)
   /** 🗓️ Lundi de la dernière semaine de quêtes récupérée (migr. 0093), ou null. */
   quest_week: string | null;
+  /** 🔮 Runes de compétence (migr. 0094) : stock, décision en attente, compensation. */
+  runes: RuneState;
   /** 🎒 Consommables d'expédition (migr. 0090) — gagnés en butin, emportés au départ. */
   supplies: SupplyStock;
   scrap: number; // 🔩 LEGACY (migr. 0060) : devise retirée (v0.998), convertie en or au chargement // journal d'énergie hors-sport horodaté (migr. 0057)
@@ -370,7 +394,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies, quest_week';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies, quest_week, runes';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -388,6 +412,9 @@ export const useCharacterStore = defineStore('character', () => {
       const rest: Record<string, unknown> = { ...a };
       delete rest.familiarId;
       delete rest.talentId;
+      // 🔮 Les compétences de runes : relues défensivement (id inconnu, doublon, niveau hors
+      // bornes). Absentes = aucun champ, pas un tableau vide qu'on écrirait pour rien.
+      if (rest.skills !== undefined) rest.skills = normalizeChampSkills(rest.skills);
       // 🏷️ Les champions tirés avant le renommage du roster reprennent leur nom actuel.
       return syncChampionName(rest as unknown as Adventurer);
     });
@@ -498,6 +525,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
     if (typeof r.quest_week !== 'string') r.quest_week = null; // 🗓️ migr. 0093
+    r.runes = normalizeRuneState(r.runes); // 🔮 migr. 0094
     r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
     r.supplies = normalizeSupplies(r.supplies); // 🎒 migr. 0090
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
@@ -581,6 +609,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (row.value) await settleWipe(uid);
     if (row.value) await settleGachaReset(uid);
     if (row.value) await settleWelcomeTickets(uid);
+    if (row.value) await settleRuneCompensation(uid);
     return row.value;
   }
 
@@ -829,6 +858,93 @@ export const useCharacterStore = defineStore('character', () => {
     if (!data) return; // quelqu'un d'autre a déjà marqué la ligne : rien n'est dû
     row.value = normalizeRow(data);
     useGameFx().celebrateTickets(due, 'Bienvenue — offerts par ton Panthéon');
+  }
+
+  /**
+   * 🎁 LA COMPENSATION DES RUNES (décision de l'utilisateur) : les champions d'avant les runes
+   * reçoivent une rune par rang d'ascension ouvert et par cran d'Éveil passé, AU STOCK.
+   * ⚠️ UNE fois : la version est écrite dans la MÊME requête que les runes, avec la condition
+   * dans le filtre (deux onglets ne compensent pas deux fois).
+   */
+  async function settleRuneCompensation(userId: string) {
+    const cur = row.value;
+    if (!cur || cur.runes.comp >= RUNE_COMP_VERSION) return;
+    const champs = (cur.adventurers ?? []).flatMap((a) => {
+      const c = advChampion(a);
+      return c ? [{ id: a.id, grade: c.grade, ascended: a.ascended ?? 0, awaken: advAwaken(a) }] : [];
+    });
+    const tiers = compensationRunes(champs);
+    const runes = { ...addRunes(cur.runes, tiers), comp: RUNE_COMP_VERSION };
+    let data: CharacterRow | null = null;
+    try {
+      const res = await supabase
+        .from('characters')
+        .update({ runes, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .or(`runes->>comp.is.null,runes->>comp.lt.${RUNE_COMP_VERSION}`)
+        .select(COLS)
+        .maybeSingle();
+      if (res.error) return;
+      data = res.data;
+    } catch {
+      return;
+    }
+    if (!data) return;
+    row.value = normalizeRow(data);
+    if (tiers.length)
+      useGameFx().celebrate({
+        kind: 'unlock',
+        emoji: '🪬',
+        title: 'Les compétences deviennent des runes',
+        subtitle: `🪬 ${tiers.length} rune(s) offertes pour tes champions — pose-les depuis leur fiche`,
+        rarity: 'legendary',
+      });
+  }
+
+  /** 🔮 POSE une rune sur un champion. Rend la RAISON d'un refus, sinon ce qui s'est passé.
+   *  ⚠️ Le stock, le champion et la décision en attente partent dans la MÊME écriture : une
+   *  rune dépensée sans compétence posée serait une rune perdue. */
+  async function applyRune(
+    userId: string,
+    advId: string,
+    tier: RuneTier,
+  ): Promise<
+    { ok: false; reason: string } | { ok: true; kind: 'stack' | 'new' | 'full'; drawn: SkillId }
+  > {
+    const cur = row.value;
+    if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
+    const advs = cur.adventurers ?? [];
+    const adv = advs.find((a) => a.id === advId);
+    if (!adv) return { ok: false, reason: 'champion introuvable' };
+    const r = useRune(adv, tier, cur.runes, Math.random);
+    if (r.kind === 'blocked') return { ok: false, reason: RUNE_USE_BLOCK_LABEL[r.block] };
+    await persist(userId, {
+      runes: r.state,
+      adventurers: advs.map((a) => (a.id === advId ? r.adv : a)),
+    });
+    return { ok: true, kind: r.kind, drawn: r.drawn };
+  }
+
+  /** 🔮 La décision sur une rune en attente : remplacer la compétence `index`, ou garder
+   *  (`null` — la rune est perdue). */
+  async function resolveRune(userId: string, index: number | null): Promise<boolean> {
+    const cur = row.value;
+    const p = cur?.runes.pending;
+    if (!cur || !p) return false;
+    const advs = cur.adventurers ?? [];
+    const adv = advs.find((a) => a.id === p.advId);
+    // ⚠️ Un champion disparu depuis : la décision n'a plus d'objet, on la lève.
+    if (!adv) {
+      await persist(userId, { runes: { ...cur.runes, pending: null } });
+      return true;
+    }
+    const out = settlePendingRune(adv, cur.runes, index);
+    if (!out) return false;
+    await persist(userId, {
+      runes: out.state,
+      adventurers: advs.map((a) => (a.id === adv.id ? out.adv : a)),
+    });
+    return true;
   }
 
   /** 🗓️ Récupère les tickets d'une semaine de quêtes bouclée. ⚠️ LA CONDITION VIT DANS LA
@@ -1277,6 +1393,8 @@ export const useCharacterStore = defineStore('character', () => {
     const lot = pullMany(Math.random, cur.gacha, count);
     let advs = cur.adventurers ?? [];
     let manaBack = 0;
+    // 🔮 Chaque cran d'Éveil offre une rune, couleur selon la lettre et le cran.
+    const awakenRunes: RuneTier[] = [];
     const pieces: Omit<AdvGear, 'id'>[] = [];
     const results: LotItem[] = [];
     for (const r of lot.results) {
@@ -1286,6 +1404,10 @@ export const useCharacterStore = defineStore('character', () => {
         });
         advs = g.advs;
         manaBack += g.manaBack;
+        if (g.duplicate && !g.manaBack) {
+          const step = awakenLevel(g.copies);
+          if (step > 0) awakenRunes.push(rollAwakenRune(Math.random, r.champion.grade, step));
+        }
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
         const piece = gachaPiece(advs);
@@ -1308,6 +1430,7 @@ export const useCharacterStore = defineStore('character', () => {
       // `welcomed` et la bienvenue se re-versait au chargement suivant (v0.1083).
       gacha: nextGacha(cur.gacha, lot.pity, cur.gacha.pulls + count),
       ...(pieces.length ? { adv_gear: withAdvGear(cur, pieces) } : {}),
+      ...(awakenRunes.length ? { runes: addRunes(cur.runes, awakenRunes) } : {}),
     });
     return results;
   }
@@ -2183,6 +2306,7 @@ export const useCharacterStore = defineStore('character', () => {
         ...(m.seals && m.seals.n > 0
           ? { seals: addSeals(cur.seals, m.seals.kind, m.seals.rank, m.seals.n) }
           : {}),
+        ...(m.runes?.length ? { runes: addRunes(cur.runes, m.runes) } : {}),
         ...partyPatch,
         inventory,
         // Ce message (et tout autre encaissement en cours) passe à `claimed: true`.
@@ -2689,7 +2813,10 @@ export const useCharacterStore = defineStore('character', () => {
     const up = ascendAdventurer(adv, pantheonLevel.value);
     // 💠 La récompense part dans la MÊME écriture que le coût : jamais l'un sans l'autre.
     const mana = ascensionMana(next);
+    // 🔮 Une rune GARANTIE, couleur selon le rang atteint.
+    const rune = rollAscensionRune(Math.random, next);
     await persist(userId, {
+      runes: addRunes(cur.runes, [rune]),
       gold: cur.gold - cost.gold,
       mana: cur.mana + mana,
       seals: addSeals(cur.seals, 'champion', next, -cost.seals),
@@ -3079,8 +3206,21 @@ export const useCharacterStore = defineStore('character', () => {
               : {}),
           }
         : outcome.party;
+    // 🔮 Une rune de LIEU : seulement sur un lieu RÉUSSI, et seulement avec un champion (elles
+    // servent aux champions). Tirée au départ sur son propre générateur, comme tout le voyage.
+    // ⚠️ La maturité d'une faille se lit à l'ARRIVÉE : c'est là que le groupe y entre.
+    const placeRune =
+      outcome.win && escort.length && RUNE_PLACE_OK[poi.type]
+        ? rollPlaceRune(mulberry32((seed ^ 0x6b43a9b5) >>> 0 || 1), {
+            place: poi.type,
+            placeRankIndex: characterRank(poiDifficultyLevel(poi)).rankIndex,
+            playerRankIndex: characterRank(opts.playerLevel).rankIndex,
+            maturity: isRiftPoi(poi) ? riftMaturityAt(poi.spawnedAt, now + leg * 60000) : 0,
+          })
+        : null;
     const withSupplies = {
       ...outcome,
+      ...(placeRune ? { runes: [...(outcome.runes ?? []), placeRune] } : {}),
       ...(party ? { party } : {}),
       ...(party && healMult < 1 ? { party: { ...party, healMult } } : {}),
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
@@ -3496,6 +3636,8 @@ export const useCharacterStore = defineStore('character', () => {
   return {
     settleGearRefonte,
     claimWeeklyQuests,
+    applyRune,
+    resolveRune,
     row,
     loaded,
     fetchMine,

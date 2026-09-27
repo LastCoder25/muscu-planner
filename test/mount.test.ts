@@ -1068,6 +1068,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     };
     expect(await mountIt(P, base)).toBeNull();
     expect(await mountIt(P, { ...base, tone: 'busy', state: '🐫 en route · 2 h' })).toBeNull();
+    // 🪬 Les compétences en miniature : emoji + niveau, et les emplacements libres.
+    if (base.adv.championId) {
+      let mini = '';
+      await mountIt(P, { ...base, adv: { ...base.adv, skills: [{ id: 'speed', level: 3 }] } }, undefined, undefined, '/', (h) => (mini = h));
+      expect(mini).toContain('Vitesse · niveau 3');
+      expect(mini).toContain('Emplacement libre');
+    }
     // ⬆️ Une pièce PRÊTE a son bouton d'ascension sur le portrait (demandé : on ne pouvait
     // monter les pièces que depuis le stock) ; une pièce non listée n'en a pas.
     const piece = { id: 'g1', name: 'Épée courte' };
@@ -1701,3 +1708,28 @@ describe('🕳️💥 le plateau du débordement se monte', () => {
     useXpFx().dismiss();
   }, 30_000);
 });
+
+describe('🪬 SkillRunesPanel', () => {
+  it('rend les emplacements, le stock et la décision en attente', async () => {
+    const { default: SkillRunesPanel } = await import('@/components/SkillRunesPanel.vue');
+    const { CHAMPIONS } = await import('@/data/champions');
+    const c = CHAMPIONS.find((x) => x.grade === 'A')!;
+    const adv = { id: 'c1', name: c.name, seed: 1, path: [], level: 25, xp: 0, championId: c.id, copies: 1, skills: [{ id: 'speed', level: 2 }, { id: 'haul', level: 1 }] };
+    let out = '';
+    expect(
+      await mountIt(
+        SkillRunesPanel,
+        { adv, runes: { stock: { green: 2, blue: 0, violet: 1, gold: 0 }, pending: { advId: 'c1', tier: 'green', drawn: 'care' }, comp: 1 } },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Vitesse');
+    expect(out).toContain('Nv 2');
+    expect(out).toContain('Remplacer');
+    expect(out).toContain('Garder les siennes');
+  }, 30_000);
+});
+

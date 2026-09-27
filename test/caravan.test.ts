@@ -74,8 +74,8 @@ import {
   PROMO_LEVELS,
   type Adventurer,
   type AdvRole,
+  ROLE_SKILL,
 } from '@/lib/adventurers';
-import { CHAMPIONS } from '@/data/champions';
 import {
   TALENTS,
   talentTierFloor,
@@ -125,23 +125,16 @@ const poi = (over: Partial<Poi> = {}): Poi => ({
 const team = (
   n: number,
   level = 20,
-  // ⚠️ LE RÔLE, PLUS UN CHEMIN DE CLASSES (v0.952) : un champion a une IDENTITÉ, et son
-  // rôle est écrit dessus — un `path` ne décide plus de rien. ⚠️ Et il n'existe AUCUN
-  // champion SANS rôle (le roster en pose un par rôle à chaque rareté), donc « sans le
-  // rôle X » se mesure avec un champion qui en porte un AUTRE : c'est même plus propre,
-  // ça isole ce qu'on mesure au lieu de comparer à une escorte sans aucune compétence.
+  // 🔮 Forcer un rôle = poser SA rune (niveau 2) et RIEN d'autre : on isole ce qu'on
+  // mesure au lieu de le mêler au build de référence (qui porte déjà des rôles).
   role?: AdvRole,
   sansGear = false,
 ): Adventurer[] => {
-  // ⚠️ Forcer un rôle force un CHAMPION, donc une lignée qui n’est pas celle des pièces
-  // de référence du slot : on les retire plutôt que de les laisser être ignorées en
-  // silence par `wornGear` (ces tests-là mesurent le rôle, pas l’équipement).
-  const force = role ? CHAMPIONS.find((c) => c.role === role) : undefined;
-  const sansPieces = sansGear || !!force;
+  const sansPieces = sansGear;
   return Array.from({ length: n }, (_, i) => ({
     ...refChampionAdv(level, i),
     id: `a${i}`,
-    ...(force ? { championId: force.id, name: force.name } : {}),
+    ...(role ? { skills: [{ id: ROLE_SKILL[role], level: 2 }] } : {}),
     ...(sansPieces
       ? {}
       : {
@@ -453,12 +446,16 @@ describe('les rôles hors combat servent à quelque chose', () => {
     expect(avec).toBeLessThan(sans);
   });
   it('un 🐫 grossit la cargaison', () => {
-    // Sur l'OR d'une MINE : depuis la v0.1166 un puits n'a plus d'or à lui (seules les bourses
-    // de ses gardes en ont, et elles ne passent pas par la cargaison).
-    const p = poi({ type: 'mine' });
-    const sans = avgOf(p, team(2, 20, 'speed'), 'gold');
-    const avec = avgOf(p, team(2, 20, 'haul'), 'gold');
-    expect(avec).toBeGreaterThan(sans);
+    // ⚠️ Sur les RESSOURCES, jamais sur l'or (v0.1161 : l'or d'une équipe est celui du
+    // héros). Le test d'avant mesurait l'or d'une mine et ne passait que parce que les deux
+    // escortes étaient deux champions DIFFÉRENTS — il mesurait leurs stats, pas le rôle.
+    expect(caravanHaulMult(team(2, 20, 'haul'), [])).toBeGreaterThan(
+      caravanHaulMult(team(2, 20, 'speed'), []),
+    );
+    const p = poi({ type: 'mana_mine' });
+    const mana = (esc: Adventurer[]) =>
+      Array.from({ length: 200 }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS, aJour(esc)).mana).reduce((x, y) => x + y, 0);
+    expect(mana(team(2, 20, 'haul'))).toBeGreaterThan(mana(team(2, 20, 'speed')));
   });
   it('un 🩺 raccourcit les convalescences, et l’Infirmerie aussi', () => {
     const soigneur = team(2, 20, 'heal');

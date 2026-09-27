@@ -17,7 +17,8 @@ export type ResourceId =
   | 'keys'
   | 'sealsChamp'
   | 'sealsGear'
-  | 'tickets';
+  | 'tickets'
+  | 'runes';
 
 interface ResourceSource {
   emoji: string;
@@ -144,6 +145,20 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
         label: 'Ruines anciennes de la carte',
         detail: 'gardées — 9 × (1 + ton rang), une ruine sur deux',
       },
+    ],
+  },
+  runes: {
+    emoji: '🪬',
+    name: 'Runes de compétence',
+    use: 'Poser une compétence sur un champion, depuis sa fiche au Panthéon : une rune tire une compétence de sa couleur (🟢 🔵 🟣 🟠), et monte d’un niveau celle qu’il porte déjà.',
+    sources: [
+      {
+        emoji: '🗺️',
+        label: 'Lieux de la carte réussis avec un champion',
+        detail: 'une chance, plus forte sur un lieu au-dessus de ton rang, doublée sur une faille refermée',
+      },
+      { emoji: '⬆️', label: 'Ascension d’un champion', detail: 'une rune garantie' },
+      { emoji: '✨', label: 'Éveil d’un champion', detail: 'une rune par cran' },
     ],
   },
   tickets: {

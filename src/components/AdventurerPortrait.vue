@@ -137,6 +137,30 @@
       </button>
     </div>
 
+    <!-- 🪬 SES COMPÉTENCES EN MINIATURE (demandé) : l'emoji et le niveau de chacune, teintés
+         par la couleur de la rune ; un emplacement libre en pointillés. Toucher ouvre la
+         fiche, où l'on pose les runes. -->
+    <button
+      v-if="skills.length"
+      type="button"
+      class="ap-skills"
+      :aria-label="`Compétences de ${adv.name}`"
+      @click="emit('open')"
+    >
+      <span
+        v-for="(s, i) in skills"
+        :key="i"
+        class="aps-cell"
+        :class="{ empty: !s }"
+        :style="s ? { '--tc': RUNE_COLOR[SKILLS[s.id].tier] } : {}"
+        :title="s ? `${SKILLS[s.id].name} · niveau ${s.level}` : 'Emplacement libre'"
+      >
+        <template v-if="s"
+          >{{ SKILLS[s.id].emoji }}<b class="aps-lvl font-display">{{ s.level }}</b></template
+        >
+      </span>
+    </button>
+
     <!-- ⬆️ Les pièces dont l'ascension se paie TOUT DE SUITE : un bouton par pièce, sous la
          grille (une case ouvre le choix de la pièce — elle ne peut pas porter deux gestes). -->
     <div v-if="gearAscents.length" class="ap-gasc">
@@ -201,8 +225,10 @@ import {
   advRarity,
   advSubtitle,
   advTitle,
+  advSkillCells,
   type Adventurer,
 } from '@/lib/adventurers';
+import { RUNE_COLOR, SKILLS } from '@/lib/skillRunes';
 import type { AdvGearCell, AdvGearSlot, AdvLook } from '@/lib/advGear';
 import { rarityRank, type Equipped, type Item } from '@/lib/items';
 import { fmtPow } from '@/lib/combat';
@@ -242,6 +268,7 @@ const gearAscents = computed(() =>
 );
 
 const rank = computed(() => advRank(props.adv));
+const skills = computed(() => advSkillCells(props.adv));
 const awaken = computed(() => advAwaken(props.adv));
 const title = computed(() => advTitle(props.adv));
 // Le rang de la CLASSE (v0.833) : c’est lui qui borne son équipement, affiché en rang.
@@ -594,6 +621,49 @@ button.ap-mini {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.ap-skills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  max-width: 150px;
+  margin: 2px 0;
+  padding: 2px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.aps-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+  border: 1.5px solid var(--tc);
+  background: color-mix(in srgb, var(--tc) 16%, transparent);
+}
+.aps-cell.empty {
+  border: 1.5px dashed var(--line);
+  background: none;
+}
+.aps-lvl {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 2px;
+  border-radius: 7px;
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  color: var(--bg);
+  background: var(--tc);
 }
 .ap-name {
   background: none;

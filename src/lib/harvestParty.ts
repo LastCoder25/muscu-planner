@@ -36,7 +36,7 @@ import {
 } from './expedition';
 import { FACTION_EMOJI } from './raid';
 import { addSupplies, supplyFx, SUPPLY_IDS, type SupplyStock } from './supplies';
-import type { Adventurer } from './adventurers';
+import { teamRuneValue, type Adventurer } from './adventurers';
 
 /** Le « combat » d'un lieu sans gardes : personne à abattre, victoire acquise. */
 const NO_GUARDS: CampFight = {
@@ -106,7 +106,33 @@ function withSiteLoot(out: ExpeditionOutcome, input: HarvestPartyInput): Expedit
   };
 }
 
+/**
+ * 🔮 🧲 PILLARD (rune dorée) : une chance que la récolte rapporte une SECONDE cargaison —
+ * quelle que soit la ressource (or, pierres, mana, clés). ⚠️ Jamais l'ÉNERGIE : elle reste
+ * « complément, jamais substitut au sport ». Tirée sur SON générateur, et seulement si
+ * l'équipe porte la rune : sans elle, aucune issue seedée ne bouge.
+ */
+export function withPlunder(out: ExpeditionOutcome, escort: readonly Adventurer[], seed: number): ExpeditionOutcome {
+  const chance = teamRuneValue(escort, 'plunder');
+  if (!out.win || chance <= 0) return out;
+  if (mulberry32((seed ^ 0x51a7d3c1) >>> 0 || 1)() >= chance) return out;
+  const text = '🧲 Pillard : une seconde cargaison !';
+  return {
+    ...out,
+    gold: out.gold * 2,
+    summonStones: out.summonStones * 2,
+    mana: out.mana * 2,
+    key: out.key * 2,
+    text: `${out.text} ${text}`,
+    ...(out.party ? { party: { ...out.party, journal: [...out.party.journal, text] } } : {}),
+  };
+}
+
 export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome {
+  return withPlunder(resolveHarvest(input), input.escort, input.seed);
+}
+
+function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
   const { poi, escort, road, hero, seed } = input;
   if (!HARVEST_TYPES.has(poi.type))
     throw new Error(`resolveHarvestParty : ${poi.type} n'est pas un lieu de récolte.`);

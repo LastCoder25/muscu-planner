@@ -633,6 +633,16 @@
         <template v-else>✅ disponible</template>
       </div>
 
+      <!-- 🔮 LES COMPÉTENCES D'UN CHAMPION : des RUNES qu'on pose (plus rien d'écrit sur lui). -->
+      <SkillRunesPanel
+        v-if="detailAdv.championId"
+        :adv="detailAdv"
+        :runes="char.row?.runes ?? NO_RUNES"
+        :busy="busy"
+        @apply="(t: RuneTier) => doApplyRune(detailAdv!, t)"
+        @resolve="(i: number | null) => doResolveRune(detailAdv!, i)"
+      />
+
       <!-- ⚠️ LE PARCOURS est la vraie raison d'être de cette fiche : chaque promotion est
              un choix DÉFINITIF, et il n'existait aucun endroit pour relire la suite de
              choix qui a fait cet aventurier. -->
@@ -645,23 +655,32 @@
 
       <!-- ⚠️ Une compétence apprise DEUX FOIS n'est pas listée deux fois : elle monte
            d'un NIVEAU, et son effet suit. Répétée, elle se lisait comme un bug. -->
-      <div v-if="rolesOf(detailAdv).length" class="d-sec">🐫 En expédition</div>
-      <div v-if="rolesOf(detailAdv).length" class="d-perks">
+      <div v-if="!detailAdv.championId && rolesOf(detailAdv).length" class="d-sec">
+        🐫 En expédition
+      </div>
+      <div v-if="!detailAdv.championId && rolesOf(detailAdv).length" class="d-perks">
         <span v-for="s in rolesOf(detailAdv)" :key="s.what" class="d-perk">
           {{ ADV_ROLE_LABEL[s.what] }}
           <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
         </span>
       </div>
 
-      <div v-if="sigLabelsOf(detailAdv).length" class="d-sec">⚔️ Au combat</div>
-      <div v-if="sigLabelsOf(detailAdv).length" class="d-perks">
+      <div v-if="!detailAdv.championId && sigLabelsOf(detailAdv).length" class="d-sec">
+        ⚔️ Au combat
+      </div>
+      <div v-if="!detailAdv.championId && sigLabelsOf(detailAdv).length" class="d-perks">
         <span v-for="s in sigLabelsOf(detailAdv)" :key="s.label" class="d-perk sig">
           {{ s.label }}
           <b v-if="s.level > 1" class="d-lvl">Nv {{ s.level }}</b>
         </span>
       </div>
 
-      <p v-if="!rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length" class="g-note">
+      <p
+        v-if="
+          !detailAdv.championId && !rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length
+        "
+        class="g-note"
+      >
         Ni rôle d’expédition ni signature — de la stat brute.
       </p>
 
@@ -920,6 +939,8 @@ import { useQuasar } from 'quasar';
 import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
+import SkillRunesPanel from '@/components/SkillRunesPanel.vue';
+import { SKILLS, type RuneState, type RuneTier } from '@/lib/skillRunes';
 import {
   ADV_STARS,
   advGradeBadge,
@@ -1732,6 +1753,35 @@ function confirmAscendGear() {
     });
   });
 }
+const NO_RUNES: RuneState = {
+  stock: { green: 0, blue: 0, violet: 0, gold: 0 },
+  pending: null,
+  comp: 0,
+};
+/** 🔮 Poser une rune : la fiche se rafraîchit, et on DIT ce qui est tombé. */
+function doApplyRune(a: Adventurer, tier: RuneTier) {
+  void pair(async (uid) => {
+    const r = await char.applyRune(uid, a.id, tier);
+    if (!r.ok) throw new Error(r.reason);
+    detailAdv.value = char.advList.find((x) => x.id === a.id) ?? null;
+    const k = SKILLS[r.drawn];
+    $q.notify({
+      type: r.kind === 'full' ? 'warning' : 'positive',
+      message:
+        r.kind === 'stack'
+          ? `${k.emoji} ${k.name} monte d’un niveau.`
+          : r.kind === 'new'
+            ? `${k.emoji} ${a.name} apprend ${k.name}.`
+            : `${k.emoji} ${k.name} tirée — plus de place : à toi de choisir.`,
+    });
+  });
+}
+function doResolveRune(a: Adventurer, index: number | null) {
+  void pair(async (uid) => {
+    await char.resolveRune(uid, index);
+    detailAdv.value = char.advList.find((x) => x.id === a.id) ?? null;
+  });
+}
 function doAscend(a: Adventurer) {
   void pair(async (uid) => {
     const err = await char.ascendChampion(uid, a.id);
@@ -2475,7 +2525,9 @@ function leftOf(at: number): string {
 
 /* ── 🗡️ SES 3 EMPLACEMENTS D'ÉQUIPEMENT — sur la fiche ── */
 .d-gear {
-  display: flex;
+  /* 2 × 2 (demandé) : sur une ligne, quatre cases de ~75 px coupaient noms et stats. */
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 8px;
 }

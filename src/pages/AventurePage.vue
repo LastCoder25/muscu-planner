@@ -152,6 +152,24 @@
               title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
               ><span class="tb-ico">🎟️</span>{{ compactNumber(char.row.gacha_tickets) }}</span
             >
+            <!-- 🔮 Runes de compétence non posées (toutes couleurs ; le détail dans l'infobulle). -->
+            <span
+              class="tb-r clickable runes"
+              role="button"
+              tabindex="0"
+              @click="resInfo = 'runes'"
+              @keyup.enter="resInfo = 'runes'"
+              :title="`Runes de compétence — 🟢 ${char.row.runes.stock.green} · 🔵 ${char.row.runes.stock.blue} · 🟣 ${char.row.runes.stock.violet} · 🟠 ${char.row.runes.stock.gold}`"
+              ><span class="tb-ico">🪬</span
+              >{{
+                compactNumber(
+                  char.row.runes.stock.green +
+                    char.row.runes.stock.blue +
+                    char.row.runes.stock.violet +
+                    char.row.runes.stock.gold,
+                )
+              }}</span
+            >
           </div>
         </div>
         <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->

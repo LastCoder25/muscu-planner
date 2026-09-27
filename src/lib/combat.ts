@@ -110,6 +110,12 @@ export interface Combatant {
   initiative: number; // qui commence (plus haut = d'abord)
   dmgReduction?: number; // 0..1 : dégâts reçus réduits (Défense / armure)
   lifesteal?: number; // 0..1 : PV rendus = part des dégâts infligés (vol de vie)
+  /** 🔮 ⚡ Premier sang (rune dorée) : + part de dégâts au PREMIER tour du joueur. */
+  openingDmg?: number;
+  /** 🔮 ✨ Second souffle (rune dorée) : un coup fatal laisse cette part des PV max, UNE fois.
+   *  ⚠️ Une fois par MISSION : l'appelant qui enchaîne des combats le retire après usage
+   *  (`CombatResult.lastStandUsed`). Déterministe — aucun tirage. */
+  lastStand?: number;
   strikes?: number; // frappes moyennes par tour (Vitesse) ; défaut 1 (monstres)
   // Effets SIGNATURE (objets rares, joueur uniquement) — bonus de dégâts CONDITIONNELS.
   execute?: number; // + dégâts quand l'ENNEMI est bas (< executeThreshold PV)
@@ -376,6 +382,9 @@ export const COMBAT = {
   // qui l'atteint déjà par son vol de vie — c'est-à-dire tout build équipé passé le niveau 30.
   vampiricCapPct: 0.035,
   executeKillThreshold: 0.25, // Bourreau : exécute un ennemi sous 15 % PV
+  // 🔮 Runes dorées, telles que la PUISSANCE les compte (mesuré : cf. skillRunes.ts).
+  powerOpeningW: 0.25, // ⚡ Premier sang (mesuré : niveau 1 ≈ +4 à +13 % de dégâts)
+  powerLastStandW: 0.5, // ✨ Second souffle (mesuré : niveau 1 ≈ +7 % de PV, niveau 5 ≈ +22 %)
   secondWindThreshold: 0.3, // Second souffle : déclenche sous 30 % PV
   secondWindHealPct: 0.25, // Second souffle : soigne 25 % des PV max
   // Procs de SET (v0.701) — même famille : non-scalants, et AUCUN ne consomme de rng.
@@ -562,7 +571,8 @@ export function offenseOf(c: Combatant): number {
     (1 + specW(c, COMBAT.powerRiposteW, COMBAT.powerRiposteSpecW) * (c.riposte ?? 0)) *
     lifestealSizingFactor(c) *
     sig *
-    (1 + (c.specRules ? COMBAT.powerThornsSpecW : COMBAT.powerThornsW) * (c.thorns ?? 0)) // épines = offense conditionnelle (si frappé)
+    (1 + (c.specRules ? COMBAT.powerThornsSpecW : COMBAT.powerThornsW) * (c.thorns ?? 0)) * // épines = offense conditionnelle (si frappé)
+    (1 + COMBAT.powerOpeningW * (c.openingDmg ?? 0))
   );
 }
 
@@ -605,7 +615,8 @@ export function survivalOf(c: Combatant): number {
     ((c.pv / 100 / (1 - c.dodge) / (1 - (c.dmgReduction ?? 0))) *
       (1 + specW(c, COMBAT.powerShieldW, COMBAT.powerShieldSpecW) * (c.startShield ?? 0)) *
       (1 + COMBAT.powerCritResistW * (c.critResist ?? 0)) *
-      (1 + COMBAT.powerToughnessW * (c.toughness ?? 0))) /
+      (1 + COMBAT.powerToughnessW * (c.toughness ?? 0)) *
+      (1 + COMBAT.powerLastStandW * (c.lastStand ?? 0))) /
     (1 - COMBAT.powerBlockW * (1 - COMBAT.blockKeep) * (c.block ?? 0)) /
     (1 - Math.min(0.9, specW(c, COMBAT.powerParryW, COMBAT.powerParrySpecW) * (c.parry ?? 0)))
   );
@@ -792,6 +803,8 @@ export interface CombatResult {
   /** 🔰 Ce qui reste de la barrière de départ (PV), reporté au combat suivant d'une descente —
    *  seulement si le héros en porte une. */
   shield?: number;
+  /** 🔮 ✨ Le Second souffle d'une rune a servi pendant ce combat. */
+  lastStandUsed?: boolean;
 }
 
 /** Simule un combat auto tour par tour. `seed` rend le combat reproductible. */
@@ -827,6 +840,8 @@ export function simulateCombat(
   const rf = relic?.force ?? 0;
   let phoenixReady = has('phoenix') || rid === 'phenix';
   let secondWindReady = has('secondwind') || rid === 'second_souffle';
+  let lastStandReady = (player.lastStand ?? 0) > 0;
+  let lastStandUsed = false;
   // Procs de SET (v0.701). ⚠️ Tous DÉTERMINISTES : aucun n'appelle `rng`, sinon deux objets
   // de procs différents feraient diverger un combat seedé — et tous les rejeux animés avec.
   let livingArmorReady = has('living_armor'); // Cuirasse vivante : une barrière, une fois
@@ -1138,6 +1153,10 @@ export function simulateCombat(
         }
         // Œil du prédateur : ses premiers tours frappent aussi plus fort.
         if (eyeOpen) dmg = Math.round(dmg * COMBAT.predatorMult);
+        // ⚡ Premier sang : le premier tour du joueur frappe plus fort.
+        if (turn === 'player' && atk.openingDmg && pTurn === 1) {
+          dmg = Math.round(dmg * (1 + atk.openingDmg));
+        }
         // Charge : ouverture brutale, sur le(s) premier(s) tour(s).
         if (has('charge') && pTurn <= COMBAT.chargeTurns) {
           dmg = Math.round(dmg * COMBAT.chargeMult);
@@ -1446,7 +1465,11 @@ export function simulateCombat(
           mark('living_armor');
         }
         // Phénix : amortit le coup fatal, une fois.
+        // ⚠️ `fatalHandled` garde le Second souffle de relique EXCLUSIF du Phénix, comme avant :
+        // la rune n'a pas le droit de changer un combat qui ne la porte pas.
+        let fatalHandled = false;
         if (pPv <= 0 && phoenixReady) {
+          fatalHandled = true;
           // Le coup fatal est amorti : s'il reste mortel, on tombe quand même.
           const block =
             rid === 'phenix'
@@ -1455,7 +1478,17 @@ export function simulateCombat(
           pPv = Math.max(0, pBefore - Math.round(dmg * (1 - block)));
           phoenixReady = false;
           mark(rid === 'phenix' ? 'rp_phenix' : 'phoenix');
-        } else if (pPv > 0 && secondWindReady && pPv / maxPPv < COMBAT.secondWindThreshold) {
+        }
+        // ✨ Second souffle (rune) : le coup fatal est AMORTI de `lastStand`, une fois. S'il
+        // reste mortel, on tombe quand même. ⚠️ Pas « on se relève à v % » : mesuré, se
+        // relever valait autant à 20 qu'à 40 % (le combat se jouait sur le coup d'après), donc
+        // monter la rune n'aurait servi à rien — et un Second souffle niveau 1 valait +30 à
+        // +50 % de PV. Amortir suit la valeur, comme le Phénix.
+        if (pPv <= 0 && lastStandReady) {
+          pPv = Math.max(0, pBefore - Math.round(dmg * (1 - Math.min(0.9, player.lastStand ?? 0))));
+          lastStandReady = false;
+          lastStandUsed = true;
+        } else if (!fatalHandled && pPv > 0 && secondWindReady && pPv / maxPPv < COMBAT.secondWindThreshold) {
           // Second souffle : sous 30 % PV pour la 1re fois → soin.
           const heal =
             rid === 'second_souffle'
@@ -1535,6 +1568,7 @@ export function simulateCombat(
     gold: win ? opts.goldOnWin : 0,
     ...(relic ? { gauge: Math.round(gauge) } : {}),
     ...(player.startShield ? { shield: shieldLeft } : {}),
+    ...(lastStandUsed ? { lastStandUsed } : {}),
   };
 }
 

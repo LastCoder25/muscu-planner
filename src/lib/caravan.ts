@@ -67,8 +67,11 @@ import {
 } from './expedition';
 import {
   advBankedLevel,
+  advChampion,
   advRarity,
   advRoles,
+  advRuneSkills,
+  ROLE_SKILL,
   advSignatureLevels,
   advStats,
   advTitle,
@@ -78,6 +81,12 @@ import {
   type AdvRole,
 } from './adventurers';
 import { rankStartLevel } from './characterRank';
+import {
+  SKILL_SLOTS,
+  referenceRuneBuild,
+  runeCombatEffects,
+  skillValue,
+} from './skillRunes';
 import { REF_TEAM } from './poiDifficulty';
 import { poiDifficultyLevel } from './poiRank';
 import { boostCombatant, supplyFx, type SupplyId } from './supplies';
@@ -281,13 +290,44 @@ function offensePerRound(c: Combatant): number {
  *  calcul compteraient chacun à leur façon. */
 const countRole = (advs: Adventurer[], role: AdvRole): number => escortRoleLevel(advs, role);
 
+/** Le cran de rôle d'un aventurier LEGACY, en fraction — ce que valait un cran de rôle avant
+ *  les runes. ⚠️ Un champion lit le barème des runes (`skillValue`), jamais cette table. */
+const LEGACY_ROLE_SHARE: Record<AdvRole, number> = {
+  speed: CARAVAN.speedPerRole,
+  haul: CARAVAN.haulPerRole,
+  scout: CARAVAN.scoutPerRole,
+  heal: CARAVAN.carePerRole,
+  mentor: CARAVAN.mentorPerRole,
+};
+
+/**
+ * 🔮 CE QU'UN RÔLE VAUT SUR TOUTE UNE ESCORTE, en fraction (0,15 = 15 %), AVANT plafond.
+ * Un champion apporte la valeur de sa compétence de rune (`ROLE_SKILL` → `skillValue`), un
+ * aventurier legacy son ancien « cran × constante ». ⚠️ SOURCE UNIQUE des cinq rôles :
+ * vitesse, cargaison, repérage, soin et Mentor la lisent tous, sous leurs plafonds d'équipe.
+ */
+export function roleShare(advs: Adventurer[], role: AdvRole): number {
+  let v = 0;
+  for (const a of advs) {
+    if (advChampion(a)) {
+      const s = advRuneSkills(a).find((k) => k.id === ROLE_SKILL[role]);
+      if (s) v += skillValue(s.id, s.level) / 100;
+    } else v += countRole([a], role) * LEGACY_ROLE_SHARE[role];
+  }
+  return v;
+}
+
 /** Effets apportés par les SIGNATURES de classe de l'escorte (strates hautes). */
 function escortEffects(advs: Adventurer[]): AggregatedEffects {
   // ⚠️ L'effet SUIT LE NIVEAU de la signature : la porter deux fois vaut deux crans.
   // C'était déjà le cas — deux entrées identiques que `mergeEffects` additionnait — mais
   // c'était un effet de bord du cumul, pas une règle écrite. Valeur inchangée.
+  // 🔮 Un CHAMPION : ses compétences de runes (`runeCombatEffects`). Un LEGACY : ses
+  // signatures de classe, comme avant.
   const list = advs.flatMap((a) =>
-    advSignatureLevels(a).map((s) => effectAsAggregate(s.what, CARAVAN.signaturePct * s.level)),
+    advChampion(a)
+      ? [runeCombatEffects(advRuneSkills(a))]
+      : advSignatureLevels(a).map((s) => effectAsAggregate(s.what, CARAVAN.signaturePct * s.level)),
   );
   return list.length ? mergeEffects(...list) : emptyEffects();
 }
@@ -319,7 +359,7 @@ export function escortCombatant(
     { puissance: 0, endurance: 0, agilite: 0 },
   );
   const level = advs.reduce((m, a) => Math.max(m, a.level), 1);
-  return playerWithGear(
+  const c = playerWithGear(
     name,
     stats,
     {},
@@ -330,6 +370,28 @@ export function escortCombatant(
     // dessus (hors refonte de l'équipement du héros, cf. `CHANCE_CURVES`).
     { legacyCaps: true },
   );
+  return skills ? withGoldenRunes(c, advs) : c;
+}
+
+/**
+ * 🔮 Les deux runes dorées de COMBAT, posées sur le combattant fondu d'une escorte.
+ * ⚡ Premier sang : la MOYENNE de l'équipe (un membre qui ouvre plus fort ne pèse que sa
+ * part des dégâts). ✨ Second souffle : le PLUS FORT porteur (un seul se relève pour tous,
+ * une fois — c'est ce que dit la compétence).
+ */
+function withGoldenRunes(c: Combatant, advs: Adventurer[]): Combatant {
+  if (!advs.length) return c;
+  let opening = 0;
+  let stand = 0;
+  for (const a of advs)
+    for (const k of advRuneSkills(a)) {
+      if (k.id === 'firstBlood') opening += skillValue(k.id, k.level) / 100;
+      if (k.id === 'secondWind') stand = Math.max(stand, skillValue(k.id, k.level) / 100);
+    }
+  const out = { ...c };
+  if (opening > 0) out.openingDmg = opening / advs.length;
+  if (stand > 0) out.lastStand = stand;
+  return out;
 }
 
 /** Multiplie tous les canaux d'un agrégat. ⚠️ Balayage des CLÉS de `emptyEffects()`, pas
@@ -480,6 +542,10 @@ export function refChampionAdv(level: number, slot = 0): Adventurer {
     // ⚠️ SANS ÉVEIL, délibérément : l'Éveil se mérite, il doit rester un avantage,
     // pas une attente.
     copies: 1,
+    // 🔮 Le build MÉDIAN de runes d'un joueur régulier à ce rang (`referenceRuneBuild`).
+    // ⚠️ C'est lui qui dimensionne routes, camps et failles : un champion au build moyen
+    // garde donc la difficulté relative d'avant les runes.
+    skills: referenceRuneBuild(prestigeRankIndex(Math.max(1, level)), SKILL_SLOTS.S, slot),
   };
 }
 
@@ -686,7 +752,7 @@ export function caravanLegMin(
   const hero = travelOneWayMin(poiTravelLevel(poi), poi.distNorm);
   const speed = Math.min(
     CARAVAN.speedMax,
-    countRole(escort, 'speed') * CARAVAN.speedPerRole + Math.max(0, gearSpeed),
+    roleShare(escort, 'speed') + Math.max(0, gearSpeed),
   );
   return Math.max(1, Math.round(hero * championOutpostMult(travelMult) * (1 - speed)));
 }
@@ -864,7 +930,7 @@ const CATCH_UP_RANK = LEVELS_PER_RANK;
 /** 🎓 Le multiplicateur d'XP que les Mentors d'une équipe donnent à TOUS ses membres.
  *  SOURCE UNIQUE des missions (`missionXpFor`) et du siège (`siegeXpFor`). */
 export function mentorXpMult(team: Adventurer[]): number {
-  return 1 + Math.min(CARAVAN.mentorMax, countRole(team, 'mentor') * CARAVAN.mentorPerRole);
+  return 1 + Math.min(CARAVAN.mentorMax, roleShare(team, 'mentor'));
 }
 
 export function catchUpMult(advLevel: number, pantheonLevel: number): number {
@@ -1065,7 +1131,7 @@ export function ambushChance(poi: Poi, escort: Adventurer[], extraScout = 0): nu
   // trou, elle ne le dépasse pas.
   const cut = Math.min(
     CARAVAN.scoutMax,
-    countRole(escort, 'scout') * CARAVAN.scoutPerRole + Math.max(0, extraScout),
+    roleShare(escort, 'scout') + Math.max(0, extraScout),
   );
   return base * (1 - cut);
 }
@@ -1231,7 +1297,7 @@ export function caravanHaulMult(escort: Adventurer[], stock: AdvGear[], extraHau
     1 +
     Math.min(
       CARAVAN.haulMax,
-      countRole(escort, 'haul') * CARAVAN.haulPerRole +
+      roleShare(escort, 'haul') +
         advGearRoles(escort, stock).haul +
         Math.max(0, extraHaul),
     )
@@ -1289,7 +1355,7 @@ export function resolveCaravan(
   const pairs = escortGear(escort, kit);
   const fx = supplyFx(kit.supplies);
   // 🧪🪨 Potion et pierre renforcent aussi l'escorte sur la ROUTE, pas seulement devant les gardes.
-  const guards = boostCombatant(
+  let guards = boostCombatant(
     escortCombatant(escort, 'Escorte', pairedEscortEffects(escort, pairs)),
     fx,
   );
@@ -1309,6 +1375,8 @@ export function resolveCaravan(
     if (roll < amb) {
       const legSeed = (seed + i * 7919) >>> 0;
       const r = simulateCombat(guards, { ...foe }, { seed: legSeed, goldOnWin: 0 });
+      // 🔮 ✨ Second souffle : une fois par MISSION, pas par embuscade.
+      if (r.lastStandUsed) guards = { ...guards, lastStand: 0 };
       group ??= { units: roadUnits(escort, pairs), troop: roadTroop(foe, poi) };
       // ⚠️ `deriveSkirmish` tire sur SON générateur (graine de la jambe) : `rng` n'est pas lu,
       // donc les rencontres suivantes et la cargaison restent celles du combat fondu.
@@ -1414,7 +1482,7 @@ export function resolveCaravan(
 /** Durée de convalescence d'un blessé, raccourcie par les 🩺 de l'escorte ET par
  *  l'Infirmerie (le même bâtiment qui soigne le héros et les familiers). */
 export function caravanHurtMs(escort: Adventurer[], infirmaryLevel = 0): number {
-  const care = Math.min(0.6, countRole(escort, 'heal') * CARAVAN.carePerRole);
+  const care = Math.min(0.6, roleShare(escort, 'heal'));
   const inf = Math.max(0.25, 1 - Math.max(0, infirmaryLevel) * 0.05);
   return Math.round(CARAVAN.hurtMs * (1 - care) * inf);
 }

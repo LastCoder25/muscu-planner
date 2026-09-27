@@ -52,7 +52,7 @@ import {
 // graines : le pronostic ne rejoue jamais la bataille qui aura lieu. Aucun cycle — ce
 // module-là n'importe pas les failles.
 import { partyFightSeed, partyForecastSeed } from './party';
-import { type Adventurer } from './adventurers';
+import { teamRuneValue, type Adventurer } from './adventurers';
 import {
   offenseOf,
   seedOf,
@@ -573,25 +573,25 @@ export function bossReplaySteps(log: readonly CombatEvent[], max: number): RiftB
  * lui, l'interpolation 9 → 11 le laissait à 0,51 (une falaise entre deux paliers d'étalon).
  */
 const RIFT_RELIEF: [number, number][] = [
-  [1, 0.96],
-  [2, 0.94],
+  [1, 0.93],
+  [2, 0.92],
   [8, 0.93],
-  [9, 1.11],
-  [10, 1.12],
-  [11, 1.2],
+  [9, 1.09],
+  [10, 1.09],
+  [11, 1.18],
   [12, 1.19],
-  [20, 1.2],
-  [21, 0.96],
-  [40, 0.96],
-  [41, 0.99],
-  [50, 1.0],
-  [51, 1.11],
-  [60, 1.12],
-  [61, 1.11],
-  [70, 1.11],
-  [71, 1.13],
-  [90, 1.15],
-  [100, 1.14],
+  [20, 1.19],
+  [21, 1.15],
+  [40, 1.11],
+  [41, 1.01],
+  [50, 1.02],
+  [51, 1.12],
+  [60, 1.13],
+  [61, 1.13],
+  [70, 1.15],
+  [71, 0.98],
+  [90, 1],
+  [100, 1.03],
 ];
 
 /** Force d'UN monstre de faille — absolue, calée sur le groupe de référence du niveau. */
@@ -670,6 +670,9 @@ function weakened<T extends { pv: number; damage: number }>(c: T, mult: number):
  * ⚠️ `killed` compte les monstres tombés MÊME si le groupe meurt ensuite : c'est ce qui rend
  * vraie la règle « une incursion ratée paie quand même son mana ».
  */
+/** La ligne de journal d'un Second souffle (rune) qui a servi. */
+export const SECOND_WIND_LINE = '✨ Second souffle : un coup fatal amorti.';
+
 export function simulateIncursion(
   party: Combatant,
   rift: RiftLike,
@@ -691,17 +694,25 @@ export function simulateIncursion(
   const pvTrail: number[] = [];
   const foeTrail: { maxPv: number; pv: number }[] = [];
   let shield: number | undefined; // 🔰 une barrière de départ par incursion
+  // 🔮 ✨ Second souffle : une fois par MISSION — retiré dès qu'il a servi.
+  let fighter = party;
+  const spend = (used: boolean | undefined) => {
+    if (!used || !fighter.lastStand) return;
+    fighter = { ...fighter, lastStand: 0 };
+    journal.push(SECOND_WIND_LINE);
+  };
 
   for (let i = 0; i < population; i++) {
     const foe = weakened(riftFoe(rift.level, faction, i, false), foeMult);
     const rs = (seed * 131 + i * 7919) >>> 0 || 1;
-    const res = simulateCombat(riftFighter(party, pv), foe, {
+    const res = simulateCombat(riftFighter(fighter, pv), foe, {
       seed: rs,
       goldOnWin: 0,
       startPlayerPv: pv,
       ...(shield !== undefined ? { shield } : {}),
     });
     shield = res.shield ?? shield;
+    spend(res.lastStandUsed);
     if (res.log.length) pv = res.log.at(-1)!.playerPv;
     foeTrail.push({
       maxPv: foe.pv,
@@ -730,12 +741,13 @@ export function simulateIncursion(
 
   journal.push('🚪 La porte du gardien s’ouvre.');
   const boss = weakened(riftFoe(rift.level, faction, population, true), bossMult);
-  const res = simulateCombat(riftFighter(party, pv), boss, {
+  const res = simulateCombat(riftFighter(fighter, pv), boss, {
     seed: (seed * 7919 + 13) >>> 0 || 1,
     goldOnWin: 0,
     startPlayerPv: pv,
     ...(shield !== undefined ? { shield } : {}),
   });
+  spend(res.lastStandUsed);
   if (res.log.length) pv = res.log.at(-1)!.playerPv;
   journal.push(
     res.win ? `🏆 ${boss.name} tombe — la faille se referme.` : `💀 ${boss.name} tient.`,
@@ -883,7 +895,10 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
 
   // ⚠️ MANA SEUL (2026-09-27, décision de l'utilisateur) : plus de sceaux, ils viennent
   // des ruines anciennes (`ruinsSeals`).
-  const mana = incursionMana(run, poi.level);
+  // 🔮 🕳️ Scelleur de failles : une faille REFERMÉE rend plus de mana (le meilleur porteur).
+  const mana = Math.round(
+    incursionMana(run, poi.level) * (run.cleared ? 1 + teamRuneValue(escort, 'riftSealer') : 1),
+  );
   const party: PartyResult = {
     hero: !!hero,
     faction: riftSpecOf(poi).faction,

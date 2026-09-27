@@ -31,8 +31,6 @@
  * l'Éveil à l'endroit précis où il doit vivre.
  */
 
-import type { EffectType } from '@/lib/items';
-import type { AdvRole } from '@/lib/adventurers';
 import type { Lineage } from '@/lib/advGear';
 
 /** Un cran d'Éveil ÉCRIT : à la `n`-ième copie, telle signature gagne un niveau.
@@ -80,14 +78,6 @@ export const GRADE_COLOR: Record<PullGrade, string> = {
   B: '#6fa8ff',
 };
 
-interface AwakenStep {
-  /** Rang d'Éveil où ce cran tombe (1 = première copie en trop). */
-  at: number;
-  /** La signature qui gagne un niveau. ⚠️ DOIT figurer dans `skills` (testé) : offrir un
-   *  niveau à une compétence qu'il n'a pas ne se verrait nulle part. */
-  skill: EffectType;
-}
-
 export interface Champion {
   id: string;
   name: string;
@@ -103,17 +93,10 @@ export interface Champion {
   /** ⚠️ EXPLICITE, alors qu'elle se DÉDUISAIT de la classe racine du chemin : sans chemin,
    *  c'est elle qui décide de l'équipement. Une ligne, mais elle est porteuse. */
   lineage: Lineage;
-  /** 0 ou 1 rôle de convoi. ⚠️ `null` est un choix, pas un oubli : un champion peut n'être
-   *  qu'un combattant. */
-  role: AdvRole | null;
   /** Répartition du budget de rareté sur 💪 / ❤️ / ⚡. */
   form: { p: number; e: number; a: number };
-  /** 1 à 3 signatures, selon la rareté (1·1·2·2·2·3·3·3 — testé). */
-  skills: EffectType[];
-  /** 1 ou 2 crans écrits. Le reste de l'Éveil est un barème COMMUN (`gacha.ts`) : tout
-   *  écrire, ce serait 6 crans × 32 champions = 192 effets à équilibrer, dont chacun peut
-   *  casser le combat. */
-  awaken: AwakenStep[];
+  // 🔮 Plus de rôle, de signature ni de cran d’Éveil ÉCRITS (runes de compétence,
+  // 2026-09-27) : un champion porte ce que le joueur lui pose (`Adventurer.skills`).
 }
 
 const C = (
@@ -122,20 +105,14 @@ const C = (
   emoji: string,
   grade: ChampionGrade,
   lineage: Lineage,
-  role: AdvRole | null,
   form: [number, number, number],
-  skills: EffectType[],
-  awaken: AwakenStep[],
 ): Champion => ({
   id,
   name,
   emoji,
   grade,
   lineage,
-  role,
   form: { p: form[0], e: form[1], a: form[2] },
-  skills,
-  awaken,
 });
 
 /**
@@ -172,438 +149,59 @@ const C = (
  */
 export const CHAMPIONS: Champion[] = [
   // ── A (vague 1) — l'ENTRÉE. Petite par conception : c'est ici que les doublons pleuvent. ──
-  C(
-    'orsene',
-    'Orsène',
-    '🌿',
-    'A',
-    'mage',
-    'heal',
-    [1, 2, 1],
-    ['max_pv_pct'],
-    [{ at: 2, skill: 'max_pv_pct' }],
-  ),
-  C(
-    'boulin',
-    'Balthus',
-    '🧳',
-    'A',
-    'caravanier',
-    'haul',
-    [1, 3, 1],
-    ['thorns_pct'],
-    [{ at: 2, skill: 'thorns_pct' }],
-  ),
-  C(
-    'fila',
-    'Fila',
-    '👣',
-    'A',
-    'eclaireur',
-    'speed',
-    [1, 1, 3],
-    ['crit_pct'],
-    [{ at: 3, skill: 'crit_pct' }],
-  ),
-  C(
-    'teck',
-    'Argus',
-    '🔭',
-    'A',
-    'archer',
-    'scout',
-    [2, 1, 2],
-    ['damage_pct'],
-    [{ at: 2, skill: 'damage_pct' }],
-  ),
+  C('orsene', 'Orsène', '🌿', 'A', 'mage', [1, 2, 1]),
+  C('boulin', 'Balthus', '🧳', 'A', 'caravanier', [1, 3, 1]),
+  C('fila', 'Fila', '👣', 'A', 'eclaireur', [1, 1, 3]),
+  C('teck', 'Argus', '🔭', 'A', 'archer', [2, 1, 2]),
 
   // ── A (vague 2) ──
-  C(
-    'sauge',
-    'Sybille',
-    '🍵',
-    'A',
-    'caravanier',
-    'heal',
-    [1, 3, 1],
-    ['lifesteal_pct'],
-    [{ at: 2, skill: 'lifesteal_pct' }],
-  ),
-  C(
-    'gorm',
-    'Gorm',
-    '🪵',
-    'A',
-    'homme_armes',
-    'haul',
-    [2, 3, 1],
-    ['max_pv_pct'],
-    [{ at: 3, skill: 'max_pv_pct' }],
-  ),
-  C(
-    'sylve',
-    'Sylvane',
-    '🏹',
-    'A',
-    'archer',
-    'speed',
-    [2, 1, 3],
-    ['damage_pct'],
-    [{ at: 2, skill: 'damage_pct' }],
-  ),
-  C(
-    'vig',
-    'Selven',
-    '🌘',
-    'A',
-    'eclaireur',
-    'scout',
-    [1, 2, 3],
-    ['crit_pct'],
-    [{ at: 3, skill: 'crit_pct' }],
-  ),
+  C('sauge', 'Sybille', '🍵', 'A', 'caravanier', [1, 3, 1]),
+  C('gorm', 'Gorm', '🪵', 'A', 'homme_armes', [2, 3, 1]),
+  C('sylve', 'Sylvane', '🏹', 'A', 'archer', [2, 1, 3]),
+  C('vig', 'Selven', '🌘', 'A', 'eclaireur', [1, 2, 3]),
 
   // ── A (vague 3) — deux signatures à partir d'ici. ──
-  C(
-    'anselme',
-    'Anselme',
-    '📿',
-    'A',
-    'mage',
-    'mentor',
-    [1, 3, 2],
-    ['max_pv_pct', 'lifesteal_pct'],
-    [{ at: 2, skill: 'lifesteal_pct' }],
-  ),
-  C(
-    'barthe',
-    'Brontès',
-    '⚒️',
-    'A',
-    'guerrier',
-    'haul',
-    [3, 2, 1],
-    ['damage_pct', 'thorns_pct'],
-    [{ at: 3, skill: 'damage_pct' }],
-  ),
-  C(
-    'zephyrine',
-    'Zéphyrine',
-    '🍃',
-    'A',
-    'eclaireur',
-    'speed',
-    [1, 1, 4],
-    ['crit_pct', 'momentum_pct'],
-    [{ at: 2, skill: 'momentum_pct' }],
-  ),
-  C(
-    'verre',
-    'Cassiel',
-    '🔎',
-    'A',
-    'mage',
-    'scout',
-    [2, 2, 2],
-    ['crit_pct', 'damage_pct'],
-    [{ at: 3, skill: 'crit_pct' }],
-  ),
+  C('anselme', 'Anselme', '📿', 'A', 'mage', [1, 3, 2]),
+  C('barthe', 'Brontès', '⚒️', 'A', 'guerrier', [3, 2, 1]),
+  C('zephyrine', 'Zéphyrine', '🍃', 'A', 'eclaireur', [1, 1, 4]),
+  C('verre', 'Cassiel', '🔎', 'A', 'mage', [2, 2, 2]),
 
   // ── A (vague 4) ──
-  C(
-    'lysandre',
-    'Lysandra',
-    '💧',
-    'A',
-    'mage',
-    'heal',
-    [1, 4, 2],
-    ['lifesteal_pct', 'max_pv_pct'],
-    [
-      { at: 2, skill: 'lifesteal_pct' },
-      { at: 4, skill: 'max_pv_pct' },
-    ],
-  ),
-  C(
-    'tessa',
-    'Thessa',
-    '🐪',
-    'A',
-    'caravanier',
-    'haul',
-    [2, 3, 2],
-    ['max_pv_pct', 'thorns_pct'],
-    [{ at: 3, skill: 'thorns_pct' }],
-  ),
-  C(
-    'roan',
-    'Roän',
-    '🗡️',
-    'A',
-    'guerrier',
-    'speed',
-    [3, 2, 2],
-    ['damage_pct', 'momentum_pct'],
-    [{ at: 2, skill: 'momentum_pct' }],
-  ),
-  C(
-    'miren',
-    'Myrren',
-    '🤫',
-    'A',
-    'archer',
-    'scout',
-    [2, 1, 4],
-    ['crit_pct', 'execute_pct'],
-    [
-      { at: 2, skill: 'crit_pct' },
-      { at: 5, skill: 'execute_pct' },
-    ],
-  ),
+  C('lysandre', 'Lysandra', '💧', 'A', 'mage', [1, 4, 2]),
+  C('tessa', 'Thessa', '🐪', 'A', 'caravanier', [2, 3, 2]),
+  C('roan', 'Roän', '🗡️', 'A', 'guerrier', [3, 2, 2]),
+  C('miren', 'Myrren', '🤫', 'A', 'archer', [2, 1, 4]),
 
   // ── S (vague 1) ──
-  C(
-    'ferrand',
-    'Vesper',
-    '🕯️',
-    'S',
-    'caravanier',
-    'mentor',
-    [1, 4, 2],
-    ['lifesteal_pct', 'max_pv_pct'],
-    [{ at: 3, skill: 'lifesteal_pct' }],
-  ),
-  C(
-    'ursk',
-    'Ursk',
-    '🔨',
-    'S',
-    'homme_armes',
-    'haul',
-    [3, 4, 1],
-    ['thorns_pct', 'max_pv_pct'],
-    [
-      { at: 2, skill: 'thorns_pct' },
-      { at: 4, skill: 'max_pv_pct' },
-    ],
-  ),
-  C(
-    'nive',
-    'Nive',
-    '🏔️',
-    'S',
-    'eclaireur',
-    'speed',
-    [2, 2, 4],
-    ['momentum_pct', 'crit_pct'],
-    [{ at: 2, skill: 'momentum_pct' }],
-  ),
-  C(
-    'kaell',
-    'Kaell',
-    '❄️',
-    'S',
-    'guerrier',
-    'scout',
-    [4, 2, 2],
-    ['damage_pct', 'execute_pct'],
-    [{ at: 3, skill: 'execute_pct' }],
-  ),
+  C('ferrand', 'Vesper', '🕯️', 'S', 'caravanier', [1, 4, 2]),
+  C('ursk', 'Ursk', '🔨', 'S', 'homme_armes', [3, 4, 1]),
+  C('nive', 'Nive', '🏔️', 'S', 'eclaireur', [2, 2, 4]),
+  C('kaell', 'Kaell', '❄️', 'S', 'guerrier', [4, 2, 2]),
 
   // ── S (vague 2) — trois signatures à partir d'ici. ──
-  C(
-    'ombrelune',
-    'Ombrelune',
-    '🌙',
-    'S',
-    'mage',
-    'heal',
-    [2, 4, 2],
-    ['lifesteal_pct', 'max_pv_pct', 'rage_pct'],
-    [
-      { at: 2, skill: 'lifesteal_pct' },
-      { at: 4, skill: 'rage_pct' },
-    ],
-  ),
-  C(
-    'tarn',
-    'Tarn',
-    '🏯',
-    'S',
-    'guerrier',
-    'haul',
-    [3, 4, 1],
-    ['thorns_pct', 'max_pv_pct', 'rage_pct'],
-    [{ at: 3, skill: 'thorns_pct' }],
-  ),
-  C(
-    'ysolde',
-    'Ysolde',
-    '🪶',
-    'S',
-    'archer',
-    'speed',
-    [3, 1, 4],
-    ['damage_pct', 'crit_pct', 'momentum_pct'],
-    [
-      { at: 2, skill: 'crit_pct' },
-      { at: 5, skill: 'momentum_pct' },
-    ],
-  ),
-  C(
-    'corvin',
-    'Corvin',
-    '🐦‍⬛',
-    'S',
-    'eclaireur',
-    'scout',
-    [2, 2, 5],
-    ['crit_pct', 'execute_pct', 'momentum_pct'],
-    [{ at: 2, skill: 'execute_pct' }],
-  ),
+  C('ombrelune', 'Ombrelune', '🌙', 'S', 'mage', [2, 4, 2]),
+  C('tarn', 'Tarn', '🏯', 'S', 'guerrier', [3, 4, 1]),
+  C('ysolde', 'Ysolde', '🪶', 'S', 'archer', [3, 1, 4]),
+  C('corvin', 'Corvin', '🐦‍⬛', 'S', 'eclaireur', [2, 2, 5]),
 
   // ── S (vague 3) ──
-  C(
-    'brume',
-    'Morgane',
-    '🌫️',
-    'S',
-    'caravanier',
-    'heal',
-    [2, 5, 2],
-    ['lifesteal_pct', 'max_pv_pct', 'thorns_pct'],
-    [
-      { at: 2, skill: 'lifesteal_pct' },
-      { at: 4, skill: 'thorns_pct' },
-    ],
-  ),
-  C(
-    'molosse',
-    'Ormund',
-    '🐗',
-    'S',
-    'homme_armes',
-    'haul',
-    [3, 5, 1],
-    ['max_pv_pct', 'thorns_pct', 'rage_pct'],
-    [{ at: 3, skill: 'rage_pct' }],
-  ),
-  C(
-    'fulgur',
-    'Fulgur',
-    '🌩️',
-    'S',
-    'mage',
-    'speed',
-    [3, 2, 5],
-    ['momentum_pct', 'crit_pct', 'damage_pct'],
-    [
-      { at: 2, skill: 'momentum_pct' },
-      { at: 5, skill: 'damage_pct' },
-    ],
-  ),
-  C(
-    'nyx',
-    'Nyx',
-    '🕸️',
-    'S',
-    'archer',
-    'scout',
-    [3, 2, 5],
-    ['execute_pct', 'crit_pct', 'damage_pct'],
-    [{ at: 2, skill: 'execute_pct' }],
-  ),
+  C('brume', 'Morgane', '🌫️', 'S', 'caravanier', [2, 5, 2]),
+  C('molosse', 'Ormund', '🐗', 'S', 'homme_armes', [3, 5, 1]),
+  C('fulgur', 'Fulgur', '🌩️', 'S', 'mage', [3, 2, 5]),
+  C('nyx', 'Nyx', '🕸️', 'S', 'archer', [3, 2, 5]),
 
   // ── S (vague 4) — le sommet. ⚠️ On n'ajoute qu'en S, jamais en A. ──
-  C(
-    'aurore',
-    'Éos',
-    '🌅',
-    'S',
-    'mage',
-    'heal',
-    [3, 5, 3],
-    ['lifesteal_pct', 'max_pv_pct', 'rage_pct'],
-    [
-      { at: 2, skill: 'lifesteal_pct' },
-      { at: 4, skill: 'max_pv_pct' },
-    ],
-  ),
-  C(
-    'atlas',
-    'Atlas',
-    '🗻',
-    'S',
-    'homme_armes',
-    'haul',
-    [4, 6, 1],
-    ['thorns_pct', 'max_pv_pct', 'rage_pct'],
-    [
-      { at: 3, skill: 'thorns_pct' },
-      { at: 5, skill: 'rage_pct' },
-    ],
-  ),
-  C(
-    'ventcourt',
-    'Sirocco',
-    '🌪️',
-    'S',
-    'eclaireur',
-    'speed',
-    [3, 2, 6],
-    ['momentum_pct', 'crit_pct', 'execute_pct'],
-    [
-      { at: 2, skill: 'momentum_pct' },
-      { at: 4, skill: 'crit_pct' },
-    ],
-  ),
-  C(
-    'oeildumonde',
-    'Ouranos',
-    '🔱',
-    'S',
-    'guerrier',
-    'scout',
-    [5, 3, 3],
-    ['damage_pct', 'execute_pct', 'crit_pct'],
-    [
-      { at: 2, skill: 'damage_pct' },
-      { at: 5, skill: 'execute_pct' },
-    ],
-  ),
+  C('aurore', 'Éos', '🌅', 'S', 'mage', [3, 5, 3]),
+  C('atlas', 'Atlas', '🗻', 'S', 'homme_armes', [4, 6, 1]),
+  C('ventcourt', 'Sirocco', '🌪️', 'S', 'eclaireur', [3, 2, 6]),
+  C('oeildumonde', 'Ouranos', '🔱', 'S', 'guerrier', [5, 3, 3]),
 
   // ── X — ADAMANTIUM (2026-09-27, au-dessus du MYTHRIL). Deux seulement : c'est le jackpot,
   //    0,1 % par tirage. ⚠️ Chacun porte UNE COMPÉTENCE DE NIVEAU 2 DÈS LE TIRAGE : un cran
   //    d'Éveil à `at: 0` (aucun système neuf — `championSkillLevel` compte les crans
   //    `at <= éveil`). C'est ce qui les distingue d'un MYTHRIL au-delà du budget. ──
-  C(
-    'surtr',
-    'Surtr',
-    '🌋',
-    'X',
-    'guerrier',
-    'haul',
-    [6, 3, 2],
-    ['damage_pct', 'rage_pct', 'execute_pct'],
-    [
-      { at: 0, skill: 'damage_pct' },
-      { at: 4, skill: 'rage_pct' },
-    ],
-  ),
-  C(
-    'erebe',
-    'Érèbe',
-    '🕳️',
-    'X',
-    'mage',
-    'scout',
-    [3, 3, 5],
-    ['crit_pct', 'lifesteal_pct', 'momentum_pct'],
-    [
-      { at: 0, skill: 'crit_pct' },
-      { at: 4, skill: 'momentum_pct' },
-    ],
-  ),
+  C('surtr', 'Surtr', '🌋', 'X', 'guerrier', [6, 3, 2]),
+  C('erebe', 'Érèbe', '🕳️', 'X', 'mage', [3, 3, 5]),
 ];
 
 /** Index par id — une seule construction, lue par le tirage et par le Codex. */
@@ -642,11 +240,7 @@ const REF_PICKS: readonly (readonly [string, string, string])[] = [
 export const REF_CHAMPIONS_BY_RANK: readonly Champion[][] = REF_PICKS.map((ids) =>
   ids.map((id) => {
     const c = CHAMPION_BY_ID.get(id)!;
-    // ⚠️ L'ÉTALON GARDE LE RÔLE D'AVANT : Anselme et Vesper sont passés 🩺 → 🎓 Mentor, mais
-    // un étalon Mentor gonflerait l'XP de référence et perdrait son soigneur — la calibration
-    // bougerait sans qu'on l'ait décidé.
-    const role = c.role === 'mentor' ? 'heal' : c.role;
-    return { ...c, role, id: `ref:${id}`, grade: 'S' as const };
+    return { ...c, id: `ref:${id}`, grade: 'S' as const };
   }),
 );
 export const REF_CHAMPION_BY_ID = new Map(REF_CHAMPIONS_BY_RANK.flat().map((c) => [c.id, c]));

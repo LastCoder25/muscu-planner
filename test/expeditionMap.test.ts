@@ -1029,6 +1029,26 @@ describe('🕳️ le RANG d’une faille', () => {
     }
   });
 
+  it('🪬 une FAILLE « au-dessus » vise le RANG suivant entier — les autres lieux, non', () => {
+    // Décision de l'utilisateur (runes) : c'est la faille d'un rang au-dessus qui donne les
+    // runes violettes et dorées. Mesuré : 5 à 8 champions de ton rang la referment.
+    for (const L of [5, 12, 30, 45, 60, 85]) {
+      const rng = mulberry32(L * 7919 || 1);
+      const next = characterRank(L).rankIndex + 1;
+      let au = 0;
+      for (let i = 0; i < 4000; i++) {
+        const lv = riftLevelFor(rng, L, [], true);
+        if (lv <= L) continue;
+        au++;
+        expect(characterRank(lv).rankIndex, `niveau ${L} → faille ${lv}`).toBe(next);
+      }
+      expect(au, `niveau ${L} : aucune faille au-dessus`).toBeGreaterThan(0);
+    }
+    // Au dernier rang, plus de rang suivant : l'écart proportionnel, et jamais d'erreur.
+    const top = mulberry32(3);
+    for (let i = 0; i < 500; i++) expect(riftLevelFor(top, 100, [], true)).toBeLessThanOrEqual(100 + riftAboveSpan(100));
+  });
+
   it('⚠️ l’écart suit le NIVEAU, pas un rang : +25 % du niveau, au moins 1', () => {
     expect(riftAboveSpan(1)).toBe(1);
     expect(riftAboveSpan(12)).toBe(Math.round(12 * EXPE.riftAboveShare));

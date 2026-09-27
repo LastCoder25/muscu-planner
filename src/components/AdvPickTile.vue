@@ -55,7 +55,7 @@
           class="ca-skill"
           :class="{ sig: !b.role }"
           :title="b.what"
-          >{{ b.emoji }}<b v-if="b.level > 1">{{ b.level }}</b></span
+          >{{ b.emoji }}<b>{{ b.level }}</b></span
         >
       </span>
       <span v-else class="ca-none">stat brute</span>

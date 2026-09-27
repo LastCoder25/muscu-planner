@@ -57,7 +57,22 @@ aux 4 compétences uniques. Les crans n'ont donc pas tous la même taille (4 / 4
 ### Les 4 compétences dorées
 
 Elles se cumulent comme les autres jusqu'au niveau 5 — plus rare, donc à long terme.
-Valeurs indicatives, _à mesurer_ :
+✅ **Livré (v0.1242)** — ce qui a changé à la mesure :
+
+- ✨ **Second souffle AMORTIT le coup fatal** de {v} % (une fois par mission), il ne relève
+  plus « avec v % des PV ». Mesuré : se relever valait autant à 20 qu'à 40 % (le combat se
+  jouait sur le coup d'après), donc monter la rune n'aurait servi à rien — et le niveau 1
+  valait +30 à +50 % de PV. Amorti, il suit sa valeur : niveau 1 ≈ +7 % de PV, niveau 5 ≈ +22 %.
+- ⚡ Premier sang : niveau 1 ≈ +4 à +13 % de dégâts selon le niveau (un seul tour compte).
+- 🧲 Pillard : la chance vient du MEILLEUR porteur de l'équipe (jamais la somme), sur les
+  lieux de récolte ; il double or, pierres, mana et clés — **jamais l'énergie**.
+- 🕳️ Scelleur : le meilleur porteur, sur une faille REFERMÉE seulement.
+- ⚠️ **Les étalons ne portent AUCUNE dorée** : un seul Premier sang ou Second souffle chez un
+  champion de référence déplaçait une bande de difficulté (trio sur route calme au niveau 70,
+  91 % → 99 %). L'étalon est le joueur médian ; une dorée est un bonus au-dessus de lui.
+- La puissance les compte (`powerOpeningW` 0,25, `powerLastStandW` 0,5, mesurés).
+
+Valeurs de départ (le tableau d'origine) :
 
 | Compétence | Effet | Niv. 1 → Niv. 5 |
 |---|---|---|
@@ -192,8 +207,10 @@ facile (+1 rang haut, 5 champions : 83 % contre 36 %). Des champions **A** valen
 
 Lecture : +1 rang demande 5 à 8 champions de ton rang, le doré exige en plus de laisser mûrir.
 
-⚠️ **À re-mesurer** : une faille d'un rang au-dessus paie plus de mana que l'ancienne place
-« au-dessus » (+25 % max) — le débit de mana alimente le gacha (`riftManaDebit.test`).
+✅ **Livré (v0.1242)** : seules les FAILLES visent le rang suivant (`riftLevelFor(…, true)`) ;
+les autres lieux, qui tirent aussi leur rang par `riftLevelFor` depuis la v0.1028, gardent
+l'écart proportionnel (leur économie est calibrée dessus). `riftManaDebit` reste dans sa
+bande. Au dernier rang, l'écart proportionnel reprend.
 
 ## 6. Ce que ça touche, et ce qui reste à trancher
 
@@ -237,7 +254,14 @@ de leur rang — routes, camps et failles se dimensionnent sur eux, donc suivent
 - **Écrans** : réserve de runes (plateau de ressources), feuille « utiliser une rune » sur la
   fiche d'un champion, révélation du tirage, choix du remplacement.
 
-## 7. Étapes proposées
+## 7. Étapes proposées — ✅ toutes livrées en v0.1242
+
+Stockage : `characters.runes` (migr. 0094 : stock par couleur, décision en attente,
+version de compensation) ; les compétences posées vivent sur chaque champion
+(`adventurers[].skills`). Une rune de lieu est tirée au DÉPART (lieu réussi, au moins un
+champion, maturité de faille à l'ARRIVÉE) et créditée à l'ENCAISSEMENT. Compensation une fois,
+au stock, condition dans la requête. Écran : fiche du champion (`SkillRunesPanel`) et puce 🪬
+au plateau de ressources.
 
 1. Lib pure : catalogue, barème, cumul, emplacements, tirage, règle de remplacement (+ tests
    et mutations).

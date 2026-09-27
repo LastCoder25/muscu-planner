@@ -46,16 +46,25 @@ describe('🧍 la correction des petites forces', () => {
     }
   });
 
-  it('elle ne DURCIT jamais : aucune valeur au-dessus de 1', () => {
-    for (const r of SMALL_FORCE_RELIEF) expect(r).toBeLessThanOrEqual(1);
+  it('elle reste une CORRECTION, jamais un second réglage de difficulté (0,8 à 1,2)', () => {
+    // ⚠️ RÉÉCRIT (runes de compétence, 2026-09-27) : « elle ne durcit jamais » décrivait
+    // l'ancien étalon, où un champion seul était toujours plus faible qu'un tiers du trio.
+    // Avec le build de runes médian, il est un peu PLUS fort aux rangs Argent et Demi-dieu :
+    // la table re-bissectée y vaut 1,03 et 1,08.
+    for (const r of SMALL_FORCE_RELIEF) {
+      expect(r).toBeGreaterThan(0.8);
+      expect(r).toBeLessThan(1.2);
+    }
   });
 
   it('elle passe bien par la force du camp (PV et dégâts)', () => {
     const p = poiAt(95);
     const a = campFoe(p, { faction: 'bandits', size: 1 });
     const b = campFoe(p, { faction: 'bandits', size: 2 });
-    // Sans correction, la taille 2 vaudrait exactement le double de la taille 1.
-    expect(b.pv / a.pv).toBeGreaterThan(2.2);
+    // Sans correction, la taille 2 vaudrait exactement le double de la taille 1 : l'écart au
+    // double EST la correction (lue sur la table, jamais écrite ici).
+    expect(b.pv / a.pv).toBeCloseTo(2 / smallForceMult(95, 1), 1);
+    expect(smallForceMult(95, 1)).not.toBe(1);
   });
 
   it('un champion contre une force de taille 1 : même difficulté à TOUS les rangs (70-92 %)', () => {

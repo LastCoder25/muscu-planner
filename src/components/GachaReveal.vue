@@ -178,7 +178,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { CHAMPION_BY_ID, GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
-import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN, awakenLevel } from '@/lib/adventurers';
+import { AWAKEN, awakenLevel } from '@/lib/adventurers';
+import { SKILL_SLOTS } from '@/lib/skillRunes';
 import {
   INVOKE,
   RANK_GRADE,
@@ -315,15 +316,11 @@ const lotSummary = computed(() => {
   const neufs = (props.lot ?? []).filter((it) => it.champion && !it.duplicate).length;
   return `${n('S')} ${GRADE_LABEL.S} · ${n('A')} ${GRADE_LABEL.A} · ${n('B')} pièce${n('B') > 1 ? 's' : ''}${neufs ? ` · ${neufs} NOUVEAU` : ''}`;
 });
-/** ⚠️ Ce qui DISTINGUE un champion : son rôle de convoi et ses signatures (leçon v0.752). */
+/** 🔮 Ce qui distingue un champion depuis les runes : ses emplacements de compétence. */
 function metaOf(cell: RevealCell): string {
   const c = cell.championId ? CHAMPION_BY_ID.get(cell.championId) : null;
   if (!c) return 'Pièce d’équipement de champion — rangée dans ton stock';
-  const l = [
-    ...(c.role ? [ADV_ROLE_LABEL[c.role]] : []),
-    ...c.skills.map((s) => ADV_SIGNATURE_LABEL[s]).filter(Boolean),
-  ];
-  return l.length ? l.join(' · ') : 'combattant pur';
+  return `🪬 ${SKILL_SLOTS[c.grade]} emplacements de compétence`;
 }
 function tagOf(it: LotItem | null): Tag {
   if (!it || !it.champion) return { label: 'pièce', cls: 'piece' };

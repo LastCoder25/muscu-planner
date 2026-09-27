@@ -6,6 +6,7 @@
 //
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
+import { RUNE_INFO, RUNE_TIERS, type RuneTier } from './skillRunes';
 import type { RiftBossReplay, RiftBossStep, WarbandBattle } from './rift';
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
@@ -575,6 +576,8 @@ export const routePerilous = (p: Pick<Poi, 'perilous' | 'riftPeril'>): boolean =
 
 export interface ExpeditionOutcome {
   win: boolean;
+  /** 🔮 Runes de compétence tombées sur le lieu (réussi, avec au moins un champion). */
+  runes?: RuneTier[];
   gold: number; // crédité au RETOUR
   energy: number; // ⚡ énergie de jeu (puits) → crédite login_energy
   summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
@@ -646,6 +649,7 @@ export interface ExpeditionMessage {
   mana?: number; // 💠 pierres de mana (mine résiduelle d'une faille)
   seals?: SealDrop; // 🔱 sceaux d'ascension (gardien d'une faille refermée)
   supplies?: SupplyStock; // 🎒 consommables trouvés (crédités à l'encaissement)
+  runes?: RuneTier[]; // 🔮 runes de compétence (créditées au stock à l'encaissement)
   tickets?: number; // 🎟️ tickets d'invocation (coffres gagnés par le sport, v0.992)
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
@@ -778,6 +782,7 @@ export function haulPills(o: {
   tickets?: number;
   seals?: SealDrop;
   supplies?: SupplyStock;
+  runes?: readonly RuneTier[];
 }): { emoji: string; n: number }[] {
   // 🎒 Les consommables à la suite : un par type, dans l'ordre du catalogue.
   const supplies = SUPPLY_IDS.filter((id) => (o.supplies?.[id] ?? 0) > 0).map((id) => ({
@@ -797,7 +802,10 @@ export function haulPills(o: {
   )
     .filter((p) => p.n > 0)
     .map((p): { emoji: string; n: number } => ({ emoji: p.emoji, n: p.n }))
-    .concat(supplies);
+    .concat(supplies)
+    .concat(
+      RUNE_TIERS.map((t) => ({ emoji: RUNE_INFO[t].emoji, n: (o.runes ?? []).filter((x) => x === t).length })).filter((p) => p.n > 0),
+    );
 }
 
 /** L'objet à montrer dans un message de la boîte, et combien d'autres il porte.
@@ -832,6 +840,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     ...(o.mana ? { mana: o.mana } : {}),
     ...(o.seals ? { seals: o.seals } : {}),
     ...(o.supplies && Object.keys(o.supplies).length ? { supplies: o.supplies } : {}),
+    ...(o.runes?.length ? { runes: o.runes } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     // Les objets vivent DANS le message : c'est lui qui sera encaissé, donc c'est lui
@@ -1758,6 +1767,9 @@ export function riftLevelFor(
   playerLevel: number,
   /** NIVEAUX des failles DÉJÀ ouvertes. `[]` = aucune contrainte (tirage uniforme). */
   pris: readonly number[],
+  /** 🪬 Le créneau « au-dessus » vise le RANG suivant entier (failles seules). Les autres lieux
+   *  gardent l'ancien écart proportionnel : leur économie est calibrée dessus. */
+  nextRankAbove = false,
 ): number {
   const top = characterRank(playerLevel).rankIndex;
   const above = top + 1;
@@ -1766,7 +1778,18 @@ export function riftLevelFor(
   for (let i = 0; i <= above; i++) if (!taken.has(i)) libres.push(i);
   const pool = libres.length ? libres : Array.from({ length: above + 1 }, (_, i) => i);
   const r = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
-  if (r === above) return playerLevel + 1 + Math.floor(rng() * riftAboveSpan(playerLevel));
+  if (r === above) {
+    // 🪬 UN RANG AU-DESSUS (2026-09-27, décision de l'utilisateur, runes) : la faille « au-dessus »
+    // est tirée dans la tranche du rang SUIVANT — c'est elle qui donne les runes violettes et
+    // dorées (`placeRuneOdds`). Mesuré : 5 à 8 champions de ton rang la referment, 3 jamais une
+    // fois mûre. ⚠️ Au dernier rang, plus de rang suivant : l'ancien écart proportionnel.
+    if (nextRankAbove && above < CHARACTER_RANKS.length) {
+      const lo = rankStartLevel(above);
+      const hi = above + 1 < CHARACTER_RANKS.length ? rankStartLevel(above + 1) - 1 : lo + riftAboveSpan(playerLevel);
+      return Math.max(playerLevel + 1, lo + Math.floor(rng() * Math.max(1, hi - lo + 1)));
+    }
+    return playerLevel + 1 + Math.floor(rng() * riftAboveSpan(playerLevel));
+  }
   const lo = rankStartLevel(r);
   // Fin de la tranche du rang `r`, bornée par le niveau du joueur. ⚠️ Dérivée de
   // `rankStartLevel`, jamais écrite : l'échelle de prestige est la seule autorité.
@@ -1809,6 +1832,7 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number, reach: 
       rng,
       playerLevel,
       map.pois.filter(isRiftPoi).map((p) => p.level),
+      true,
     ),
   );
 }

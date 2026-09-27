@@ -68,6 +68,10 @@ const team = (n: number, level: number): Adventurer[] =>
       relic: `refGear${i}relic`,
     },
   }));
+/** Le même groupe SANS runes : pour les tests d'XP exacts, où un 🎓 Mentor tiré dans le
+ *  build de référence multiplierait l'XP et masquerait ce qu'on mesure (le partage). */
+const nu = (n: number, level: number): Adventurer[] =>
+  team(n, level).map((a) => ({ ...a, skills: [] }));
 const road = (level: number, n: number): EscortKit => ({
   talents: [],
   advGear: refAdvGear(level, n),
@@ -537,12 +541,12 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
 
   it('le socle d’un membre baisse quand l’équipe grossit, la part des abattus reste la sienne', () => {
     const p = rift({ level: 26 });
-    const trois = missionXpFor(team(3, 26), p, true, {}, 26);
-    const six = missionXpFor(team(6, 26), p, true, {}, 26);
+    const trois = missionXpFor(nu(3, 26), p, true, {}, 26);
+    const six = missionXpFor(nu(6, 26), p, true, {}, 26);
     expect(six.adv_0!).toBeLessThan(trois.adv_0!);
     expect(six.adv_0!).toBeCloseTo(trois.adv_0! / 2, -1);
     // Les abattus passent tels quels (déjà divisés entre les présents).
-    const avec = missionXpFor(team(6, 26), p, true, { adv_0: 40 }, 26);
+    const avec = missionXpFor(nu(6, 26), p, true, { adv_0: 40 }, 26);
     expect(avec.adv_0! - six.adv_0!).toBe(40);
   });
 
@@ -552,14 +556,14 @@ describe('🎓 plus il y a de membres, plus l’XP se partage (v0.1038)', () => 
     // champions tiennent le lieu eux-mêmes et apprennent plus (`SOLO_XP_MULT`).
     expect(missionXpSplit.length).toBe(1);
     const p = rift({ level: 26 });
-    const socle = missionXp(team(3, 26)[0]!, p, true);
-    expect(missionXpFor(team(3, 26), p, true, {}, 26, true).adv_0!).toBe(Math.round(socle));
-    expect(missionXpFor(team(3, 26), p, true, {}, 26, false).adv_0!).toBe(
+    const socle = missionXp(nu(3, 26)[0]!, p, true);
+    expect(missionXpFor(nu(3, 26), p, true, {}, 26, true).adv_0!).toBe(Math.round(socle));
+    expect(missionXpFor(nu(3, 26), p, true, {}, 26, false).adv_0!).toBe(
       Math.round(socle * SOLO_XP_MULT),
     );
     // ⚠️ La prime ne touche que le SOCLE : la part des abattus passe telle quelle.
-    const avec = missionXpFor(team(3, 26), p, true, { adv_0: 40 }, 26, false).adv_0!;
-    const sans = missionXpFor(team(3, 26), p, true, {}, 26, false).adv_0!;
+    const avec = missionXpFor(nu(3, 26), p, true, { adv_0: 40 }, 26, false).adv_0!;
+    const sans = missionXpFor(nu(3, 26), p, true, {}, 26, false).adv_0!;
     expect(avec - sans).toBe(40);
   });
 });

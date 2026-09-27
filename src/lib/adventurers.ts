@@ -54,6 +54,21 @@ import {
 // documente qu'aucun runtime ne traverse — les signatures sont des `EffectType` et des
 // `CombatSkill` NOMMÉS là où ils vivent, jamais une seconde nomenclature.
 import { type CombatSkill } from './combat';
+import {
+  SKILLS,
+  SKILL_MAX_LEVEL,
+  SKILL_SLOTS,
+  applyRuneSkill,
+  canUseRune,
+  replaceSkill,
+  rollRuneSkill,
+  skillValue,
+  skillsOfTier,
+  type ChampSkill,
+  type RuneState,
+  type RuneTier,
+  type SkillId,
+} from './skillRunes';
 
 /** Rôle HORS COMBAT d'une classe — le patron du chenil (faucon → renseignement,
  *  marmotte → butin) : toute la valeur d'une équipe ne passe pas par les dégâts. */
@@ -1328,6 +1343,10 @@ export interface Adventurer {
   /** 🏰 Posté sur ce point de contrôle (id du POI) : il y produit et le défend, et n'est
    *  disponible pour rien d'autre tant qu'il y est. */
   posted?: string;
+  /** 🔮 Ses COMPÉTENCES DE RUNES (spec 2026-09-27) : un champion n'a plus de signature ni de
+   *  rôle écrits, il porte ce que le joueur lui a posé. Absent = aucune (JSONB, aucune
+   *  migration). ⚠️ Lu par le combat (`escortEffects`), les convois (`roleShare`) et l'écran. */
+  skills?: ChampSkill[];
   // ⚠️ Plus de COMPAGNON ni de TALENT (v0.996) : familiers et talents sont réservés au
   // HÉROS. Les champs `familiarId`/`talentId` des sauvegardes d'avant ne sont plus lus
   // (et sont retirés au chargement). Ce qu'ils apportaient est rendu par `CHAMPION_SOLO`.
@@ -1390,12 +1409,9 @@ export function awakenExplain(adv: Adventurer): { title: string; intro: string; 
   }
   const lvl = advAwaken(adv);
   const lines = [`Actuellement : Éveil ${lvl}/${AWAKEN.max} — +${awakenPct(lvl)} % de stats.`];
-  for (const s of [...champ.awaken].sort((a, b) => a.at - b.at)) {
-    const sig = ADV_SIGNATURE_INFO[s.skill];
-    lines.push(
-      `${lvl >= s.at ? '✅' : '🔒'} Éveil ${s.at} : ${sig ? `${sig.emoji} ${sig.name}` : 'sa signature'} gagne un niveau.`,
-    );
-  }
+  // 🔮 Plus de cran ÉCRIT (une signature qui monte) : chaque cran offre une rune de
+  // compétence, de couleur tirée selon la lettre du champion et le cran (`awakenRuneOdds`).
+  lines.push('🔮 Chaque cran d’Éveil offre aussi une rune de compétence.');
   lines.push(
     lvl < AWAKEN.max
       ? `Prochain doublon : Éveil ${lvl + 1} → +${awakenPct(lvl + 1)} % de stats.`
@@ -1578,23 +1594,6 @@ export function awakenOverflow(copies: number): boolean {
 /** Multiplicateur de magnitude au rang d'Éveil `lvl`. */
 export function awakenMult(lvl: number): number {
   return 1 + AWAKEN.perStep * Math.max(0, Math.min(AWAKEN.max, lvl));
-}
-
-/**
- * ✨ Niveau d'une SIGNATURE, crans écrits compris.
- *
- * ⚠️ **AUCUN SYSTÈME NEUF** : `AdvSkill` porte déjà un niveau par répétition (v0.757 — une
- * compétence portée deux fois vaut niveau 2), et l'écran sait déjà l'afficher. Un cran
- * qualitatif, c'est **+1 niveau**, rien de plus.
- */
-export function championSkillLevel(
-  champ: { skills: readonly string[]; awaken: readonly { at: number; skill: string }[] },
-  skill: string,
-  awakenLvl: number,
-): number {
-  if (!champ.skills.includes(skill)) return 0;
-  const gagnes = champ.awaken.filter((a) => a.skill === skill && a.at <= awakenLvl).length;
-  return 1 + gagnes;
 }
 
 /**
@@ -2066,18 +2065,44 @@ export function advSubtitle(adv: Adventurer): string {
 
 /** Signatures portées par le chemin (les strates hautes en donnent une). */
 export function advSignatures(adv: Adventurer): EffectType[] {
-  const champ = advChampion(adv);
-  // ⚠️ ON RÉPÈTE CHAQUE SIGNATURE AUTANT DE FOIS QUE SON NIVEAU, et c'est ce qui fait que
-  // l'Éveil ne demande AUCUN système neuf : `levelsOf` compte déjà les occurrences (v0.757),
-  // donc `advSignatureLevels`, `advBadges` et tous les écrans en aval suivent sans une
-  // ligne de plus. Un cran d'Éveil qualitatif, c'est +1 occurrence.
-  if (champ) {
-    const lvl = advAwaken(adv);
-    return champ.skills.flatMap((s) =>
-      Array.from({ length: championSkillLevel(champ, s, lvl) }, () => s),
-    );
-  }
+  // 🔮 Un CHAMPION n'a plus de signature écrite : ses effets de combat viennent de ses
+  // compétences de runes (`runeCombatEffects`, lu par `escortEffects`). Seuls les
+  // aventuriers LEGACY (chemin de classes) en portent encore.
+  if (advChampion(adv)) return [];
   return adv.path.map((id) => advClass(id)?.signature).filter((s): s is EffectType => !!s);
+}
+
+/** 🔮 La compétence de rune qui porte chaque rôle de convoi. ⚠️ Exhaustif : un rôle ajouté
+ *  sans compétence ne compile pas. */
+export const ROLE_SKILL: Record<AdvRole, SkillId> = {
+  heal: 'care',
+  haul: 'haul',
+  speed: 'speed',
+  scout: 'scout',
+  mentor: 'mentor',
+};
+const SKILL_ROLE = Object.fromEntries(
+  Object.entries(ROLE_SKILL).map(([r, s]) => [s, r as AdvRole]),
+) as Partial<Record<SkillId, AdvRole>>;
+
+/** Les compétences de runes d'un aventurier (vide pour un legacy). */
+export function advRuneSkills(adv: Adventurer): ChampSkill[] {
+  return advChampion(adv) ? (adv.skills ?? []) : [];
+}
+
+/** 🔮 La valeur (fraction) d'une compétence de rune dans une équipe : celle du MEILLEUR
+ *  porteur. ⚠️ Pour les runes qui agissent une fois pour tous (Pillard, Scelleur) : les
+ *  additionner ferait d'une équipe de trois pillards une cargaison garantie. */
+export function teamRuneValue(advs: readonly Adventurer[], id: SkillId): number {
+  let v = 0;
+  for (const a of advs)
+    for (const k of advRuneSkills(a)) if (k.id === id) v = Math.max(v, skillValue(k.id, k.level) / 100);
+  return v;
+}
+
+/** Le rôle qu'une compétence de rune porte, s'il y en a un. */
+function roleOfSkill(id: SkillId): AdvRole | undefined {
+  return SKILL_ROLE[id];
 }
 
 /** Une COMPÉTENCE et son NIVEAU. */
@@ -2127,6 +2152,16 @@ export interface AdvBadge {
   role: boolean;
 }
 export function advBadges(adv: Adventurer): AdvBadge[] {
+  // 🔮 Un champion : ses compétences de runes, les rôles de convoi d'abord.
+  if (advChampion(adv)) {
+    const list = advRuneSkills(adv).map((s) => ({
+      emoji: SKILLS[s.id].emoji,
+      what: SKILLS[s.id].name,
+      level: s.level,
+      role: roleOfSkill(s.id) !== undefined,
+    }));
+    return [...list.filter((b) => b.role), ...list.filter((b) => !b.role)];
+  }
   const roles = advRoleLevels(adv).map((s) => ({
     ...ADV_ROLE_INFO[s.what],
     level: s.level,
@@ -2153,16 +2188,15 @@ export function escortRoleLevel(advs: Adventurer[], role: AdvRole): number {
 
 /** Rôles hors combat portés par le chemin (soin, cargaison, vitesse, éclaireur). */
 export function advRoles(adv: Adventurer): AdvRole[] {
-  // ⚠️ Un champion porte 0 ou 1 rôle — `null` est un choix du roster, pas un oubli : un
-  // champion peut n'être qu'un combattant.
-  // ⚠️ MAIS AUCUN CHAMPION N'EST DANS CE CAS AUJOURD'HUI, et deux règles se contredisent :
-  // le TYPE prévoit `null`, la GRILLE l'interdit (4 rôles distincts sur les 4 champions de
-  // chaque rareté, testé). La branche est donc inatteignable — elle n'est pas un garde
-  // dormant qu'on pourrait supprimer pour autant : sans elle, `[champ.role]` vaudrait
-  // `(AdvRole | null)[]` et ne compilerait pas. C'est une porte ouverte pour un roster
-  // élargi (la règle d'extension ajoute en HAUT, où une rareté peut dépasser 4 places).
-  const champ = advChampion(adv);
-  if (champ) return champ.role ? [champ.role] : [];
+  // 🔮 Un champion : les rôles que ses compétences de runes portent, répétés autant de fois
+  // que leur niveau (`levelsOf` en refait des niveaux pour l'écran). ⚠️ La VALEUR d'un rôle
+  // de rune ne se lit pas ici mais dans `roleShare` (caravan.ts) : elle suit le barème des
+  // runes, pas un « niveau × constante ».
+  if (advChampion(adv))
+    return advRuneSkills(adv).flatMap((s) => {
+      const r = roleOfSkill(s.id);
+      return r ? Array.from({ length: s.level }, () => r) : [];
+    });
   return adv.path.map((id) => advClass(id)?.role).filter((r): r is AdvRole => !!r);
 }
 
@@ -2349,3 +2383,85 @@ export const ADV_STATUS_LABEL: Record<AdvStatus, string> = {
   hurt: '🛏️ infirmerie',
   posted: '🏰 postés',
 };
+
+// ── 🔮 POSER UNE RUNE SUR UN CHAMPION ─────────────────────────────────────────────────────
+
+/** Pourquoi une rune ne peut pas être posée. */
+export type RuneUseBlock = 'notChampion' | 'noRune' | 'rank' | 'maxed' | 'pending';
+
+export const RUNE_USE_BLOCK_LABEL: Record<RuneUseBlock, string> = {
+  notChampion: 'seuls les champions portent des runes',
+  noRune: 'aucune rune de cette couleur en stock',
+  rank: 'son rang est trop bas pour cette couleur',
+  maxed: 'toutes les compétences de cette couleur sont déjà au maximum chez lui',
+  pending: 'une rune attend déjà ta décision',
+};
+
+/** Le nombre d'emplacements de compétence d'un aventurier (0 hors champion). */
+export function advSkillSlots(adv: Adventurer): number {
+  const c = advChampion(adv);
+  return c ? SKILL_SLOTS[c.grade] : 0;
+}
+
+/** 🪬 Les emplacements de compétence d'un champion, pour une MINIATURE (portrait, tuile) :
+ *  ses compétences posées dans l'ordre, puis `null` pour chaque emplacement libre. Vide hors
+ *  champion. ⚠️ Jamais plus de cases que d'emplacements, sauf s'il en porte davantage (une
+ *  sauvegarde d'avant) : on ne cache pas une compétence qu'il a. */
+export function advSkillCells(adv: Adventurer): (ChampSkill | null)[] {
+  const skills = advRuneSkills(adv);
+  const n = Math.max(advSkillSlots(adv), skills.length);
+  return Array.from({ length: n }, (_, i) => skills[i] ?? null);
+}
+
+/** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche de poser cette rune sur ce champion. */
+export function runeUseBlocker(adv: Adventurer, tier: RuneTier, state: RuneState): RuneUseBlock | null {
+  if (!advChampion(adv)) return 'notChampion';
+  if (state.pending) return 'pending';
+  if (state.stock[tier] < 1) return 'noRune';
+  if (!canUseRune(tier, advRank(adv).rankIndex)) return 'rank';
+  const skills = advRuneSkills(adv);
+  const maxed = skillsOfTier(tier).every(
+    (id) => (skills.find((s) => s.id === id)?.level ?? 0) >= SKILL_MAX_LEVEL,
+  );
+  return maxed ? 'maxed' : null;
+}
+
+export type RuneUseResult =
+  | { kind: 'blocked'; block: RuneUseBlock }
+  | { kind: 'stack' | 'new'; adv: Adventurer; state: RuneState; drawn: SkillId }
+  /** Tous les emplacements sont pris : la rune est CONSOMMÉE, la décision attend. */
+  | { kind: 'full'; adv: Adventurer; state: RuneState; drawn: SkillId };
+
+/** Pose une rune : la couleur est dépensée, une compétence du cran est tirée. */
+export function useRune(
+  adv: Adventurer,
+  tier: RuneTier,
+  state: RuneState,
+  rng: () => number,
+): RuneUseResult {
+  const block = runeUseBlocker(adv, tier, state);
+  if (block) return { kind: 'blocked', block };
+  const skills = advRuneSkills(adv);
+  const drawn = rollRuneSkill(rng, tier, skills)!;
+  const spent = { ...state, stock: { ...state.stock, [tier]: state.stock[tier] - 1 } };
+  const out = applyRuneSkill(skills, drawn, advSkillSlots(adv));
+  if (out.kind === 'full')
+    return { kind: 'full', adv, drawn, state: { ...spent, pending: { advId: adv.id, tier, drawn } } };
+  return { kind: out.kind, adv: { ...adv, skills: out.skills }, state: spent, drawn };
+}
+
+/**
+ * La décision sur une rune en attente : remplacer la compétence `index` (la nouvelle arrive
+ * au niveau 1) ou GARDER (`null`) — la rune est alors perdue, sans compensation (décision de
+ * l'utilisateur : refuser un remplacement, c'est de l'optimisation).
+ */
+export function settlePendingRune(
+  adv: Adventurer,
+  state: RuneState,
+  index: number | null,
+): { adv: Adventurer; state: RuneState } | null {
+  const p = state.pending;
+  if (!p || p.advId !== adv.id) return null;
+  const skills = replaceSkill(advRuneSkills(adv), p.drawn, index);
+  return { adv: { ...adv, skills }, state: { ...state, pending: null } };
+}

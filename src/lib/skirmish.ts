@@ -347,11 +347,20 @@ export function fuseUnits(units: readonly SkirmishUnit[], name: string): Combata
   const surv = units.reduce((s, u) => s + survivalOf(u.combatant), 0);
   const modelOff = Math.max(1e-9, offenseOf(model));
   const modelSurv = Math.max(1e-9, survivalOf(model));
+  // 🔮 Runes dorées : Premier sang pondéré par l'offense de chacun, Second souffle = le plus
+  // fort porteur (on ne recopie pas celui du seul modèle : il n'est peut-être pas porteur).
+  const opening = units.reduce((s, u) => s + offenseOf(u.combatant) * (u.combatant.openingDmg ?? 0), 0);
+  const stand = units.reduce((m, u) => Math.max(m, u.combatant.lastStand ?? 0), 0);
+  const rest: Combatant = { ...model };
+  delete rest.openingDmg;
+  delete rest.lastStand;
   return {
-    ...model,
+    ...rest,
     name,
     pv: Math.max(1, Math.round((model.pv * surv) / modelSurv)),
     damage: Math.max(1, Math.round((model.damage * off) / modelOff)),
+    ...(opening > 0 ? { openingDmg: opening / Math.max(1e-9, off) } : {}),
+    ...(stand > 0 ? { lastStand: stand } : {}),
   };
 }
 
