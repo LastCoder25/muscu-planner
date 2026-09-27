@@ -1767,6 +1767,9 @@ export function riftLevelFor(
   playerLevel: number,
   /** NIVEAUX des failles DÉJÀ ouvertes. `[]` = aucune contrainte (tirage uniforme). */
   pris: readonly number[],
+  /** 🪬 Le créneau « au-dessus » vise le RANG suivant entier (failles seules). Les autres lieux
+   *  gardent l'ancien écart proportionnel : leur économie est calibrée dessus. */
+  nextRankAbove = false,
 ): number {
   const top = characterRank(playerLevel).rankIndex;
   const above = top + 1;
@@ -1775,7 +1778,18 @@ export function riftLevelFor(
   for (let i = 0; i <= above; i++) if (!taken.has(i)) libres.push(i);
   const pool = libres.length ? libres : Array.from({ length: above + 1 }, (_, i) => i);
   const r = pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]!;
-  if (r === above) return playerLevel + 1 + Math.floor(rng() * riftAboveSpan(playerLevel));
+  if (r === above) {
+    // 🪬 UN RANG AU-DESSUS (2026-09-27, décision de l'utilisateur, runes) : la faille « au-dessus »
+    // est tirée dans la tranche du rang SUIVANT — c'est elle qui donne les runes violettes et
+    // dorées (`placeRuneOdds`). Mesuré : 5 à 8 champions de ton rang la referment, 3 jamais une
+    // fois mûre. ⚠️ Au dernier rang, plus de rang suivant : l'ancien écart proportionnel.
+    if (nextRankAbove && above < CHARACTER_RANKS.length) {
+      const lo = rankStartLevel(above);
+      const hi = above + 1 < CHARACTER_RANKS.length ? rankStartLevel(above + 1) - 1 : lo + riftAboveSpan(playerLevel);
+      return Math.max(playerLevel + 1, lo + Math.floor(rng() * Math.max(1, hi - lo + 1)));
+    }
+    return playerLevel + 1 + Math.floor(rng() * riftAboveSpan(playerLevel));
+  }
   const lo = rankStartLevel(r);
   // Fin de la tranche du rang `r`, bornée par le niveau du joueur. ⚠️ Dérivée de
   // `rankStartLevel`, jamais écrite : l'échelle de prestige est la seule autorité.
@@ -1818,6 +1832,7 @@ function spawnRift(map: ExpeditionMap, now: number, playerLevel: number, reach: 
       rng,
       playerLevel,
       map.pois.filter(isRiftPoi).map((p) => p.level),
+      true,
     ),
   );
 }

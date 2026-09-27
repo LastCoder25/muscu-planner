@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { characterRank, rankStartLevel } from '@/lib/characterRank';
 import { playerCombatant, mulberry32 } from '@/lib/combat';
 import {
   isQuotaPoi,
@@ -82,9 +83,10 @@ describe('expedition — carte / monde', () => {
       expect(poiRewardLevel(p)).toBe(poiDifficultyLevel(p));
       expect(p.rewardLevel).toBeUndefined();
     }
-    // …et une faille, elle, ne dépasse jamais l'écart « au-dessus » (v0.980).
+    // …et une faille, elle, ne dépasse jamais le RANG suivant (runes, 2026-09-27 ; avant :
+    // l'écart proportionnel de la v0.980).
     for (const p of m.pois.filter(isRiftPoi))
-      expect(p.level).toBeLessThanOrEqual(10 + riftAboveSpan(10));
+      expect(p.level).toBeLessThan(rankStartLevel(characterRank(10).rankIndex + 2));
     // Espacement mini entre paires.
     for (let i = 0; i < m.pois.length; i++)
       for (let j = i + 1; j < m.pois.length; j++) {
