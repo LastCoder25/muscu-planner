@@ -140,7 +140,9 @@ const input = (over: Partial<PartyInput> = {}): PartyInput => {
 const fort = (L: number) => ({
   name: 'Héros',
   level: L,
-  combatant: playerCombatant('Héros', { puissance: 5000, endurance: 5000, agilite: 5000 }, L),
+  // ⚠️ 20 000 et non 5 000 : l'étalon porte désormais un équipement à l'échelle du héros
+  // (`ADV_GEAR.k` 1), et un héros à 5 000 ne dépassait plus le plafond en survie au niveau 100.
+  combatant: playerCombatant('Héros', { puissance: 20000, endurance: 20000, agilite: 20000 }, L),
 });
 
 describe('🗡️ campFoe — danger ABSOLU, linéaire en taille, identique d’une faction à l’autre', () => {

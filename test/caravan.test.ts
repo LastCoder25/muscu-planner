@@ -300,26 +300,20 @@ describe('⚠️ le DANGER DE LA ROUTE est ABSOLU', () => {
     }
   });
 
-  it('⚠️ L’ÉQUIPEMENT EST UN BONUS, PAS UN PÉAGE — la référence porte ses pièces', () => {
-    // Un gain modeste. ⚠️ À `ADV_GEAR.k` = 1 un trio
-    // sans pièces tombait à 22-28 % de ses embuscades calmes dès le niveau 26 — la plupart
-    // des joueurs, équipés partiellement pendant des semaines, auraient payé l'absence
-    // d'équipement. Mesuré à 0,15 (2000 graines) : sans pièces 90/86/72/63/67/65 %, équipé
-    // 92/89/76/74/85/89 %.
-    const NIV = [12, 20, 26, 45, 70, 85];
-    for (const L of NIV) {
-      const sans = winPct(team(3, L, undefined, true), poi({ level: L }), 200);
-      expect(sans, `sans pièces, niveau ${L}`).toBeGreaterThanOrEqual(0.5);
-    }
-    // …mais un bonus RÉEL. ⚠️ RE-MESURÉ sur l’étalon en champions (3000 graines) : le gain
-    // vaut +9,3 points au niveau 12, +3,2 au 26, +5,5 au 45, +6,1 au 70 et +21,6 au 85.
-    // Le seuil de +10 points datait de l’étalon en aventuriers ; on borne donc sur ce qui
-    // est vrai — un gain qui ne peut pas être du bruit, à 600 tirages.
-    for (const L of [70, 85]) {
+  it('⚔️ L’ÉQUIPEMENT COMPTE COMME CELUI DU HÉROS — la référence porte ses pièces', () => {
+    // RENVERSÉ (2026-09-27, décision de l'utilisateur, option A) : « −1 % de dégâts n'a aucun
+    // intérêt ». `ADV_GEAR.k` passe de 0,1125 à 1 — une pièce de champion vaut celle du héros
+    // de même rang — et la route reste calibrée sur une escorte ÉQUIPÉE. L'équipement devient
+    // donc indispensable, comme pour le héros ; l'ancienne règle (« un bonus, pas un péage »)
+    // est abandonnée sciemment. Mesuré (400 graines, niveaux 12/26/45/70) : trio équipé
+    // 82/86/81/93 %, le même SANS pièces 21/27/23/11 %.
+    for (const L of [12, 26, 45, 70]) {
       const p = poi({ level: L });
-      const avec = winPct(team(3, L), p, 600);
-      const sans = winPct(team(3, L, undefined, true), p, 600);
-      expect(avec, `niveau ${L}`).toBeGreaterThan(sans + 0.04);
+      const avec = winPct(team(3, L), p, 300);
+      const sans = winPct(team(3, L, undefined, true), p, 300);
+      expect(avec, `équipé, niveau ${L}`).toBeGreaterThanOrEqual(0.7);
+      expect(sans, `sans pièces, niveau ${L}`).toBeLessThan(0.4);
+      expect(avec - sans, `écart, niveau ${L}`).toBeGreaterThan(0.4);
     }
   });
 
@@ -847,12 +841,14 @@ describe('🎓 L’XP SUIT LE NIVEAU DE L’ÉVENT, PAS LA DISTANCE (v0.1014)', 
     const d = poiDifficultyLevel(p);
     expect(d).toBeGreaterThan(25);
     const base = missionXp(refAdventurer(d), p, true);
+    // ⚠️ À un point près : `base` est ARRONDI, la prime s'applique à la valeur non arrondie.
+    const near = (x: number, v: number) => expect(Math.abs(x - Math.round(v))).toBeLessThanOrEqual(1);
     // Un rang (10 niveaux) d'avance : +50 %.
-    expect(missionXp(refAdventurer(d - 10), p, true)).toBe(Math.round(base * 1.5));
+    near(missionXp(refAdventurer(d - 10), p, true), base * 1.5);
     // Continu à l'intérieur d'un rang : 5 niveaux → +25 %.
-    expect(missionXp(refAdventurer(d - 5), p, true)).toBe(Math.round(base * 1.25));
+    near(missionXp(refAdventurer(d - 5), p, true), base * 1.25);
     // Borné à +100 % (deux rangs), même très loin dessous.
-    expect(missionXp(refAdventurer(1), p, true)).toBe(Math.round(base * (1 + DANGER.max)));
+    near(missionXp(refAdventurer(1), p, true), base * (1 + DANGER.max));
     // ⚠️ Pas sur une DÉFAITE : on paie le danger surmonté, pas la chute.
     expect(missionXp(refAdventurer(d - 10), p, false)).toBe(missionXp(refAdventurer(d), p, false));
     // Aucun danger à sa hauteur ou en dessous.
@@ -1545,14 +1541,20 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     // v0.1120 : +5 % de stats par rang ouvert, appliqué AUSSI à l'étalon — même graine, même
     // flux, mais la 2ᵉ embuscade bascule en défaite (issue d'un combat, pas une fuite de flux).
     // 2026-09-27 : un convoi part sans le héros, son socle porte `SOLO_XP_MULT` — 43 → 49.
-    expect(o.xp).toEqual({ ref0: 49, ref1: 49, ref2: 49 });
-    expect(o.kills).toEqual({ ref0: 1, ref1: 1, ref2: 2 });
+    // 2026-09-27 : l'équipement des champions vaut celui du héros (`ADV_GEAR.k` 1), donc
+    // l'équipe de référence (`REF_POWER`) est plus forte et le même lieu se lit à une
+    // DIFFICULTÉ plus basse — le socle d'XP suit, 49 → 41. L'escorte de ce test est NUE face à
+    // des bandits calés sur une escorte équipée, et la route dangereuse passe de ×1,35 à ×1,4 :
+    // elle abat un bandit de moins par embuscade (abattus 1/1/2 → 0/1/1). La CARGAISON, les
+    // blessés et l'ordre des chutes sont identiques — le flux aléatoire n'a pas fui.
+    expect(o.xp).toEqual({ ref0: 41, ref1: 41, ref2: 41 });
+    expect(o.kills).toEqual({ ref0: 0, ref1: 1, ref2: 1 });
     expect(o.hurt).toEqual(['ref1', 'ref0']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);
     expect(o.events[1]!.down).toEqual(['ref0', 'ref2', 'ref1']);
     expect(o.events.map((e) => [e.slain, e.down?.length])).toEqual([
-      [2, 3],
-      [2, 3],
+      [1, 3],
+      [1, 3],
       [undefined, undefined],
       [undefined, undefined],
     ]);

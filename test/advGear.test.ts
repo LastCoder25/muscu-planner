@@ -145,11 +145,12 @@ describe('🗡️ une pièce = un MODÈLE, sans jet (v0.1012)', () => {
   it('⚠️ la valeur est le PLANCHER du rang — ancrage : aucun jet ne s’y glisse', () => {
     // Comparer `advGearValue` à elle-même ne peut rien attraper (mutation « jet 0,3 » passée
     // au VERT). On ancre donc deux valeurs réelles, plancher du rang × `ADV_GEAR.k` :
-    // 10 PV × 0,9 × 0,1125 = 1,0 en commun, 10 × 1,63 × 0,1125 = 1,8 en rare. Un jet même
-    // moyen les ferait bouger. ⚠️ Si `ADV_GEAR.k` est recalibré, ces deux chiffres se mettent
-    // à jour AVEC lui — c'est leur métier de rougir.
-    expect(advGearValue('max_pv_pct', 'commun')).toBe(1);
-    expect(advGearValue('max_pv_pct', 'rare')).toBe(1.8);
+    // 10 PV × 0,9 × 1 = 9 en commun, 10 × 1,63 × 1 = 16,3 en rare (`ADV_GEAR.k` 1 depuis le
+    // 2026-09-27 : une pièce de champion vaut celle du héros ; avant, ×0,1125 → 1,0 et 1,8).
+    // Un jet même moyen les ferait bouger. ⚠️ Si `ADV_GEAR.k` est recalibré, ces deux
+    // chiffres se mettent à jour AVEC lui — c'est leur métier de rougir.
+    expect(advGearValue('max_pv_pct', 'commun')).toBe(9);
+    expect(advGearValue('max_pv_pct', 'rare')).toBe(16.3);
   });
   it('le tirage de lignée ne choisit que parmi le vivier (rien si vivier vide)', () => {
     const rng = mulberry32(5);

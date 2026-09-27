@@ -198,8 +198,16 @@ const ADV_GEAR = {
    *  semaines, auraient payé l'absence d'équipement. Même précédent que les familiers
    *  (un gain modeste). Mesuré sur 2000 graines, niveaux 12/20/26/45/70/85 : trio équipé
    *  calme 92/89/76/74/85/89 %, périlleux 26/27/35/25/29/34 % ; le même SANS pièces
-   *  90/86/72/63/67/65 % en calme. Ne pas remonter sans re-mesurer les deux. */
-  k: 0.1125,
+   *  90/86/72/63/67/65 % en calme. Ne pas remonter sans re-mesurer les deux.
+   *  ⚔️ PASSÉ À 1 (2026-09-27, décision de l'utilisateur : « −1 % de dégâts n'a aucun
+   *  intérêt, le héros est bien mieux équipé ») : une pièce de champion vaut désormais celle
+   *  du héros de même rang (Bronze B : −5,4 % de dégâts reçus, +7,2 % de dégâts, +9 % de PV ;
+   *  un jeu complet +38 % (niv. 12) à +83 % (niv. 70) de puissance, contre +4 à +14 %). La
+   *  route reste calibrée sur une escorte ÉQUIPÉE (option A) : l'équipement est INDISPENSABLE,
+   *  comme pour le héros. Mesuré (400 graines, niveaux 12/26/45/70) : trio équipé calme
+   *  82/86/81/93 %, le même SANS pièces 21/27/23/11 %. Recalés avec : `perilousMult`,
+   *  `REF_POWER`, `RIFT_RELIEF`, `SMALL_FORCE_RELIEF`, `CAMP.pvTurns`, `CONTROL.sizes`. */
+  k: 1,
   /** ⚠️ RANG À PARTIR DUQUEL UNE PIÈCE PORTE UN SECOND AFFIXE — le levier qui a réparé le
    *  bas de courbe (v0.900, MESURÉ ; signalé par l'utilisateur : « du stuff bronze qui donne
    *  +1,1 % de vie, sachant qu'ils en ont très peu de base — très bizarre »).

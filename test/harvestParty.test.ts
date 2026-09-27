@@ -65,7 +65,9 @@ describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1161)', (
       const o = resolveHarvestParty({
         poi: p,
         escort: avecHeros ? team(1, L) : team(3, L),
-        road: { advGear: [] },
+        // ⚠️ ÉQUIPÉE : une équipe nue perd ses embuscades depuis que les pièces valent celles du
+        // héros (`ADV_GEAR.k` 1) — on comparerait l'équipement, pas la règle d'or.
+        road: { advGear: refAdvGear(L, 3) },
         hero: avecHeros ? { ...hero, level: L, combatant: refFighter(L) } : null,
         seed,
         playerLevel: L,

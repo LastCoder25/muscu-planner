@@ -31,7 +31,9 @@ describe('🎲 une garnison ne repousse jamais plus de 90 % des reprises', () =>
   it('un champion bien au-dessus du lieu tenait presque tout : l’ennemi grossit pour y redescendre', () => {
     for (const L of [12, 30, 60]) {
       const p = gardenAt(L);
-      const strong = allies(L + 15, 2);
+      // ⚠️ +20 et non +15 : ce champion est NU, et depuis que l'équipement des champions vaut
+      // celui du héros (`ADV_GEAR.k` 1), un nu de +15 ne dépassait plus tout à fait 90 %.
+      const strong = allies(L + 20, 2);
       const raw = garrisonHoldChance(p, strong);
       // Le cas existe vraiment — sinon le test ne prouverait rien.
       expect(raw).toBeGreaterThan(CONTROL.maxHold);

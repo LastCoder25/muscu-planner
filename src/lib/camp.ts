@@ -65,9 +65,12 @@ export const CAMP = {
    *  ⚠️ L'ancien réglage (2,6 × 0,27) tombait à ~0,5-0,65 sur les gros repaires aux niveaux
    *  45/70 : des combats de ~6 tours laissaient trop de hasard (trois contre cinq gagnaient
    *  0,14). À 8 × 0,09 un combat dure ~17 tours, jamais le plafond (0 sur 300).
+   *  ⚠️ RE-MESURÉ À 7,25 (équipement de champion à l'échelle du héros, `ADV_GEAR.k` 1) : à 8 le
+   *  duo contre une taille 2 tombait à 0,63 au niveau 45. Après (200 combats) : taille 2
+   *  0,73-0,98, taille 3 0,85-1,00, un champion seul contre une taille 1 0,85-0,91.
    *  ⚠️ CES CHIFFRES SONT LES MÊMES QUE CEUX DE CLAUDE.md (revue finale) : ils divergeaient,
    *  et deux relevés contradictoires du même réglage finissent par en faire croire un faux. */
-  pvTurns: 8,
+  pvTurns: 7.25,
   /** Morsure ≈ part de la SURVIE du groupe de référence. ⚠️ MESURÉ, cf. `pvTurns`. */
   dmgPctPv: 0.09,
   /** Poids du chef (camp) et du champion (repaire) face à un corps de troupe.

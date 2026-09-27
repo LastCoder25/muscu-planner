@@ -221,7 +221,8 @@ describe('🏰 prise, production, reprise', () => {
         }
       return w / k;
     };
-    // Mesuré : 10 % / 58 % / 85 %. Chaque effectif a sa chance ET son risque.
+    // Mesuré : 23 % / 62 % / 86 % (troupes [1 · 1,5 · 2,5 · 4,5], équipement à l'échelle du
+    // héros). Chaque effectif a sa chance ET son risque.
     const [r1, r2, r3] = [rate(1), rate(2), rate(3)];
     expect(r1).toBeGreaterThan(0.02);
     expect(r1).toBeLessThan(0.25);

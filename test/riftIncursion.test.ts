@@ -337,7 +337,9 @@ describe('📐 la calibration MESURÉE tient sur le vrai chemin d’envoi', () =
     // (`partyAllies` → `fuseUnits` → `resolveIncursion`) reproduit la même bande — c'est ce
     // qui prouve que l'écran et la résolution parlent du groupe qu'on a calibré.
     for (const level of [12, 26, 45, 70, 100]) {
-      const p = part(level, 7, 3);
+      // ⚠️ 200 tirages et non 60 : à 60, le niveau 100 tombait à 0,55 par pur bruit (0,67 sur
+      // 400) une fois l'équipement des champions passé à l'échelle du héros.
+      const p = part(level, 7, 3, 200);
       expect(p, `niv ${level}`).toBeGreaterThan(0.55);
       expect(p, `niv ${level}`).toBeLessThan(0.9);
     }

@@ -60,8 +60,11 @@ export const CONTROL = {
    *  ⚠️ MESURÉE (`controlPoints.test`, niveau 30, 600 combats) : une garnison de 1, 2 ou 3
    *  champions de référence repousse **10 %, 58 % et 85 %** des attaques. Avec [1,5 → 3], 1
    *  champion ne tenait JAMAIS et 3 tenaient 94 % : poster un seul champion n'était pas un
-   *  pari, et en poster trois n'avait plus de risque. */
-  sizes: [1, 1.5, 2.5, 3.5] as readonly number[],
+   *  pari, et en poster trois n'avait plus de risque.
+   *  ⚠️ RE-MESURÉ quand l'équipement des champions est passé à l'échelle du héros
+   *  (`ADV_GEAR.k` 1) : avec [1 · 1,5 · 2,5 · 3,5], 3 champions tenaient 99 %. Le haut passe à
+   *  4,5 → **23 %, 62 % et 86 %** (600 combats, niveau 30). */
+  sizes: [1, 1.5, 2.5, 4.5] as readonly number[],
   /** ⚔️ La troupe qui TIENT un point à l'ennemi (celle qu'on attaque pour le prendre), en
    *  champions de référence. ⚠️ Jamais plus que ce qu'on peut envoyer : on ne prend un point
    *  qu'à 3 champions au plus, et une troupe de 3,5 (le haut des reprises) le rendait
