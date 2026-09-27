@@ -15,63 +15,15 @@
          les champions détaillés par rang : c'est le rang qui décide du lieu à viser. -->
     <div class="dispo-row"><AvailabilityLine :now="now" by-rank /></div>
 
-    <div class="bar">
-      <!-- 🎚️ Filtre de difficulté (par RANG, la langue de la carte). On garde les rangs
-         MASQUÉS, pas les affichés : un rang nouveau apparaît visible par défaut. -->
-      <div
-        v-if="rankOptions.length > 1"
-        class="rank-filter"
-        role="group"
-        aria-label="Filtrer les lieux par rang"
-      >
-        <button
-          v-for="o in rankOptions"
-          :key="o.rankIndex"
-          type="button"
-          class="rf-chip"
-          :class="{ on: !hiddenRanks.has(o.rankIndex) }"
-          :style="{ '--rk': CHARACTER_RANKS[o.rankIndex]!.color }"
-          :aria-pressed="!hiddenRanks.has(o.rankIndex)"
-          :aria-label="rankChipLabel(o)"
-          :title="rankChipLabel(o)"
-          @click="toggleRank(o.rankIndex)"
-        >
-          <span class="rf-dot" />
-        </button>
-      </div>
-    </div>
-
-    <!-- 🗺️ Filtre par TYPE de lieu (v0.1174, généralise celui des failles) : une puce par
-         type présent, à TROIS états (un toucher passe au suivant) — affiché · SEUL · masqué.
-         Plusieurs types « seuls » se cumulent, et il se COMBINE aux rangs : le compte ne
-         parle que des lieux des rangs affichés. Règle dans `lib/poiTypeFilter.ts`. -->
-    <div
-      v-if="typeChips.length > 1"
-      class="bar type-filter"
-      role="group"
-      aria-label="Filtrer les lieux par type"
-    >
-      <button
-        v-for="o in typeChips"
-        :key="o.type"
-        type="button"
-        class="rf-chip type-chip"
-        :class="['rm-' + typeMode(typeFilter, o.type), { on: typeShown(typeFilter, o.type) }]"
-        :style="o.type === 'rift' ? { '--rk': '#b57bff' } : undefined"
-        :aria-pressed="typeShown(typeFilter, o.type)"
-        :aria-label="typeChipLabel(o)"
-        :title="typeChipLabel(o)"
-        @click="cycleTypeChip(o.type)"
-      >
-        <span v-if="o.type === 'rift'" class="rift-emo"
-          ><RiftPortal color="#b57bff" :seed="7" still
-        /></span>
-        <span v-else class="type-emo">{{ POI_EMO[o.type] }}</span>
-        <span class="rift-count">{{
-          typeMode(typeFilter, o.type) === 'only' ? 'seul' : o.inRanks
-        }}</span>
-      </button>
-    </div>
+    <!-- 🎚️🗺️ Filtres par rang et par type (état + mémorisation : `usePoiFilters`). -->
+    <MapFilterBar
+      :rank-options="rankOptions"
+      :hidden-ranks="hiddenRanks"
+      :type-chips="typeChips"
+      :type-filter="typeFilter"
+      @toggle-rank="toggleRank"
+      @cycle-type="cycleTypeChip"
+    />
 
     <!-- Avant-poste requis pour envoyer des expéditions. Les emplacements vivent
          désormais sur l'écran « Ma base » (v0.664) → on y renvoie explicitement. -->
@@ -222,102 +174,17 @@
                est retiré de la carte au départ, il doit se retrouver quand même. -->
           <circle v-if="focusPoi" :cx="focusPoi.x" :cy="focusPoi.y" r="8" class="trip-focus-halo" />
 
-          <!-- POI -->
-          <g
-            v-for="p in shownPois"
-            :key="p.id"
-            class="poi"
-            :class="{
-              sel: selected?.id === p.id,
-              dim: dimmed(p),
-              veiled: fogPlan && underFog(p, TOWN, fogR),
-            }"
-            :style="{ '--rk': rankOf(p).color }"
-            @click="selectPoi(p)"
-          >
-            <!-- 🌀 Une faille se dessine comme dans son incursion : un portail ovale cerné de
-                 flammes, à la couleur de son rang — on la reconnaît d'un écran à l'autre.
-                 ⚠️ Une cible de clic TRANSPARENTE dessous : sans elle, seuls les traits
-                 peints du portail captaient le toucher (leçon des tourelles, v0.673). -->
-            <template v-if="isRiftPoi(p)">
-              <ellipse :cx="p.x" :cy="p.y" rx="4.4" ry="6.4" class="rift-hit" />
-              <RiftPortal
-                :color="rankOf(p).color"
-                :seed="seedOf(p.id)"
-                :box="{
-                  x: p.x - RIFT_ICON.w / 2,
-                  y: p.y - RIFT_ICON.dy,
-                  w: RIFT_ICON.w,
-                  h: RIFT_ICON.h,
-                }"
-              />
-            </template>
-            <template v-else>
-              <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
-              <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
-            </template>
-            <!-- 🏅 Le RANG du lieu, pas son niveau (demandé) : la boule du rang au-dessus et le
-                 contour dans sa couleur — on repère d'un coup d'œil les lieux du rang de ses
-                 champions, pour les y envoyer prendre de l'XP. ⚠️ Plus ses ÉTOILES : un rang
-                 couvre dix niveaux, et un lieu Bronze ★5 écrase des champions Bronze ★1
-                 (mesuré : 0 % de victoire). -->
-            <text :x="p.x" :y="p.y - (isRiftPoi(p) ? RIFT_ICON.dy + 0.5 : 5.4)" class="poi-rank">
-              {{ rankOf(p).emoji }}
-              <tspan class="poi-star">{{ rankOf(p).star }}★</tspan>
-            </text>
-          </g>
-
-          <!-- Objectif actif -->
-          <!-- 🌀 Une faille garde son PORTAIL même quand on y va ou qu'on en revient : la
-               pastille 🕳️ d'avant ne se reconnaissait plus d'un écran à l'autre. -->
-          <g v-if="active" class="poi target" :class="{ 'rift-target': isRiftPoi(active.poi) }">
-            <RiftPortal
-              v-if="isRiftPoi(active.poi)"
-              :color="rankOf(active.poi).color"
-              :seed="seedOf(active.poi.id)"
-              :box="{
-                x: active.poi.x - RIFT_ICON.w / 2,
-                y: active.poi.y - RIFT_ICON.dy,
-                w: RIFT_ICON.w,
-                h: RIFT_ICON.h,
-              }"
-            />
-            <template v-else>
-              <circle :cx="active.poi.x" :cy="active.poi.y" r="4.8" class="poi-bg" />
-              <text :x="active.poi.x" :y="active.poi.y + 1.4" class="poi-emo">
-                {{ POI_EMO[active.poi.type] }}
-              </text>
-            </template>
-          </g>
-
-          <!-- ⚠️ Destination d'un CONVOI. Le lieu est retiré de la carte au départ — il
-               est CONSOMMÉ, comme pour le héros, c'est ce qui fait que convois et héros
-               se disputent les mêmes endroits. Mais le héros, lui, garde sa cible
-               DESSINÉE : sans son équivalent ici, le tracé d'un convoi menait à du vide
-               et le puits semblait avoir été effacé. On le montre donc, marqué comme
-               occupé (liseré violet, sans compteur de niveau : il n'est plus à prendre). -->
-          <g
-            v-for="v in travelersOnMap"
-            :key="'vg' + v.id"
-            class="poi target van-target"
-            :class="[v.kind, { 'rift-target': isRiftPoi(v.poi) }]"
-          >
-            <RiftPortal
-              v-if="isRiftPoi(v.poi)"
-              :color="rankOf(v.poi).color"
-              :seed="seedOf(v.poi.id)"
-              :box="{
-                x: v.poi.x - RIFT_ICON.w / 2,
-                y: v.poi.y - RIFT_ICON.dy,
-                w: RIFT_ICON.w,
-                h: RIFT_ICON.h,
-              }"
-            />
-            <template v-else>
-              <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
-              <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ POI_EMO[v.poi.type] }}</text>
-            </template>
-          </g>
+          <!-- 🗺️ Les lieux (à prendre, cible du héros, cibles des équipes) : un composant à part
+               pour ne pas se re-diffuser à chaque seconde (cf. `MapPoiLayer`). -->
+          <MapPoiLayer
+            :pois="shownPois"
+            :selected-id="selected?.id ?? null"
+            :dimmed-key="dimmedKey"
+            :veiled-key="veiledKey"
+            :target="active?.poi ?? null"
+            :travel-targets="travelTargets"
+            @select="selectPoi"
+          />
 
           <!-- Héros -->
           <g v-for="v in travelersOnMap" :key="'vm' + v.id">
@@ -403,66 +270,8 @@
       </div>
     </div>
 
-    <!-- 🧭 LES VOYAGES EN COURS, en UNE rangée de tuiles (demande de l'utilisateur).
-         Trois cartes empilées poussaient la carte hors de l'écran dès deux convois, et
-         répétaient « total » et « escorte » dont on n'a pas besoin en un coup d'œil :
-         il faut QUI voyage, VERS QUOI, et COMBIEN DE TEMPS. Le reste se lit sur la carte
-         ou dans le rapport. Toucher une tuile allume un halo rouge sur elle et sur son lieu ;
-         la retoucher les éteint. (Les convois sont retirés : le butin d'une équipe attend
-         dans la boîte 📬, comme celui du héros.) -->
-    <div v-if="trips.length" ref="tripsEl" class="trips">
-      <button
-        v-for="t in trips"
-        :key="t.key"
-        type="button"
-        class="trip"
-        :class="[t.kind, { back: t.back, focus: focusTrip === t.key }]"
-        :title="t.title"
-        :aria-pressed="focusTrip === t.key"
-        @click="toggleFocusTrip(t.key)"
-      >
-        <span class="tr-who">{{ t.who }}</span>
-        <span v-if="isRiftPoi(t.poi)" class="tr-poi tr-rift">
-          <RiftPortal :color="rankOf(t.poi).color" :seed="seedOf(t.poi.id)" still />
-        </span>
-        <span v-else class="tr-poi">{{ POI_EMO[t.poi.type] }}</span>
-        <span class="tr-time">{{ t.time }}</span>
-        <i class="tr-bar" :style="{ width: t.pct + '%' }" />
-      </button>
-    </div>
-
-    <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
-    <div v-if="focusCrew" class="trip-crew">
-      <div class="tc-head">
-        👥 En route vers {{ POI_LABEL[focusCrew.poi.type] }} niv {{ focusCrew.poi.level }}
-      </div>
-      <div v-if="focusCrew.haul.length" class="tc-haul">
-        <span class="tc-haul-lab">Ramène</span>
-        <span v-for="p in focusCrew.haul" :key="p.emoji" class="tc-pill"
-          >{{ p.emoji }} {{ p.n }}</span
-        >
-      </div>
-      <div class="car-pick">
-        <div v-if="focusCrew.hero" class="tc-hero">
-          <div class="tc-hero-av">
-            <AventureAvatar
-              :profile="character.profile"
-              :equipped="char.row?.equipped ?? {}"
-              no-companions
-            />
-          </div>
-          <b>Ton héros</b>
-        </div>
-        <AdvPickTile v-for="a in focusCrew.advs" :key="a.id" :adv="a" :on="true" readonly />
-      </div>
-      <p v-if="!focusCrew.hero && !focusCrew.advs.length && !focusCrew.gone" class="tc-none">
-        Personne à bord.
-      </p>
-      <p v-if="focusCrew.gone" class="tc-none">
-        {{ focusCrew.gone }} champion{{ focusCrew.gone > 1 ? 's ne sont' : " n'est" }} plus dans ton
-        vivier.
-      </p>
-    </div>
+    <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
+    <TripsPanel v-model:focus="focusTrip" :trips="trips" :hero-profile="character.profile" />
 
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
@@ -875,34 +684,13 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import AventureAvatar from '@/components/AventureAvatar.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
-import { poiRank, poiRankCounts } from '@/lib/poiRank';
-import {
-  PARTY_HERO_BLOCK_LABEL,
-  PARTY_SEND_BLOCK_LABEL,
-  partyCapFor,
-  partySendBlocker,
-  partyHeroBlocker,
-  partyLegMin,
-  interceptLeg,
-  supplyTarget,
-} from '@/lib/party';
-import { partyWinChance } from '@/lib/partyForecast';
-import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
+import { poiRank } from '@/lib/poiRank';
+import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL } from '@/lib/party';
 import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
-import { PORTAL_VIEW } from '@/lib/riftPortal';
-import {
-  cycleType,
-  parseTypeFilter,
-  typeMode,
-  typeOptions,
-  typeShown,
-  type TypeFilter,
-} from '@/lib/poiTypeFilter';
 import {
   POI_EMO,
   POI_LABEL,
@@ -933,6 +721,11 @@ import {
   type PartyResult,
 } from '@/lib/expedition';
 import MapTerrain from '@/components/MapTerrain.vue';
+import MapPoiLayer from '@/components/MapPoiLayer.vue';
+import MapFilterBar from '@/components/MapFilterBar.vue';
+import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
+import { usePoiFilters } from '@/composables/usePoiFilters';
+import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
 import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
@@ -948,12 +741,10 @@ import {
 import {
   ADV_UNAVAILABLE_LABEL,
   advAvailable,
-  advUnavailableReason,
   engageCap,
   sortByGradeThenRank,
-  type Adventurer,
 } from '@/lib/adventurers';
-import { rankStarStr, CHARACTER_RANKS } from '@/lib/characterRank';
+import { rankStarStr } from '@/lib/characterRank';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   RIFT,
@@ -963,15 +754,7 @@ import {
   riftSpecOf,
   warbandArmy,
 } from '@/lib/rift';
-import {
-  convoySlotsFree,
-  poiOffers,
-  missionXpPreview,
-  missionXpSplit,
-  type MissionXpPreview,
-  type PartyHero,
-} from '@/lib/caravan';
-import { advGearRoles } from '@/lib/advGear';
+import { convoySlotsFree, poiOffers } from '@/lib/caravan';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -1288,38 +1071,6 @@ const edgeIndicators = computed(() => {
 
 const selected = ref<Poi | null>(null);
 
-// ── 🎚️ Filtre de difficulté par rang (mémorisé par appareil) ──
-const RANK_FILTER_KEY = 'muscu:emap:hidden-ranks';
-function loadHiddenRanks(): Set<number> {
-  try {
-    const raw = JSON.parse(localStorage.getItem(RANK_FILTER_KEY) ?? '[]') as unknown;
-    if (Array.isArray(raw)) return new Set(raw.filter((r): r is number => Number.isInteger(r)));
-  } catch {
-    /* stockage indisponible : tout est affiché */
-  }
-  return new Set();
-}
-const hiddenRanks = ref<Set<number>>(loadHiddenRanks());
-const rankOptions = computed(() => poiRankCounts(pois.value));
-// La puce n'affiche qu'une boule : son nom et son compte passent par l'étiquette.
-const rankChipLabel = (o: { rankIndex: number; count: number }) =>
-  `${CHARACTER_RANKS[o.rankIndex]?.name ?? ''} · ${o.count} lieu${o.count > 1 ? 'x' : ''}`;
-function toggleRank(r: number) {
-  const next = new Set(hiddenRanks.value);
-  if (next.has(r)) next.delete(r);
-  else {
-    // Jamais de carte vide : on ne masque pas le dernier rang encore affiché.
-    const visible = rankOptions.value.filter((o) => !next.has(o.rankIndex)).length;
-    if (visible <= 1) return;
-    next.add(r);
-  }
-  hiddenRanks.value = next;
-  try {
-    localStorage.setItem(RANK_FILTER_KEY, JSON.stringify([...next]));
-  } catch {
-    /* le filtre vaut pour la session */
-  }
-}
 /** 🏅 Le rang de CHAQUE lieu, calculé une fois par changement de carte.
  *  ⚠️ La carte se re-rend à la seconde (les convois avancent) et chaque tuile lit son rang
  *  quatre fois : sans ce mémo, c'est une bisection par lecture, ~65 fois par seconde.
@@ -1327,42 +1078,9 @@ function toggleRank(r: number) {
  *  (un lieu est consommé au départ), et la barre de bord l'affiche quand même. */
 const rankByPoi = computed(() => new Map(pois.value.map((p) => [p.id, poiRank(p)])));
 const rankOf = (p: Pick<Poi, 'id' | 'type' | 'level'>) => rankByPoi.value.get(p.id) ?? poiRank(p);
-// ── 🗺️ Filtre par type de lieu (mémorisé par appareil), combiné aux rangs ──
-// ⚠️ Remplace le filtre des failles seul : son réglage stocké est repris (`parseTypeFilter`).
-const TYPE_FILTER_KEY = 'muscu:emap:type-filter';
-const LEGACY_RIFT_KEY = 'muscu:emap:rift-mode';
-function loadTypeFilter(): TypeFilter {
-  try {
-    const raw = localStorage.getItem(TYPE_FILTER_KEY);
-    return parseTypeFilter(
-      raw ? (JSON.parse(raw) as unknown) : null,
-      localStorage.getItem(LEGACY_RIFT_KEY),
-    );
-  } catch {
-    return { only: [], hidden: [] }; /* stockage indisponible : tout est affiché */
-  }
-}
-const typeFilter = ref<TypeFilter>(loadTypeFilter());
-const rankShown = (p: Poi) => !hiddenRanks.value.has(rankOf(p).rankIndex);
-const typeChips = computed(() => typeOptions(pois.value, (p) => rankShown(p as Poi)));
-function cycleTypeChip(t: PoiType) {
-  typeFilter.value = cycleType(
-    typeFilter.value,
-    t,
-    typeChips.value.map((o) => o.type),
-  );
-  try {
-    localStorage.setItem(TYPE_FILTER_KEY, JSON.stringify(typeFilter.value));
-  } catch {
-    /* le filtre vaut pour la session */
-  }
-}
-const TYPE_MODE_LABEL = { all: 'affichés', only: 'seuls', none: 'masqués' } as const;
-const typeChipLabel = (o: { type: PoiType; inRanks: number }) =>
-  `${POI_LABEL[o.type]} : ${TYPE_MODE_LABEL[typeMode(typeFilter.value, o.type)]} · ${o.inRanks} dans les rangs affichés — toucher pour changer`;
-const shownPois = computed(() =>
-  pois.value.filter((p) => rankShown(p) && typeShown(typeFilter.value, p.type)),
-);
+// ── 🎚️🗺️ Filtres par rang et par type (mémorisés par appareil) ──
+const { hiddenRanks, rankOptions, toggleRank, typeFilter, typeChips, cycleTypeChip, shownPois } =
+  usePoiFilters(pois, (p) => rankOf(p).rankIndex);
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
   const s = selected.value;
@@ -1540,278 +1258,6 @@ const teamOnly = computed(
 const partyTarget = computed(
   () => teamOnly.value || (!!selected.value && HARVEST_TYPES.has(selected.value.type)),
 );
-const partyHero = ref(false);
-const partyEscort = ref<string[]>([]);
-watch(selected, () => {
-  partyHero.value = false;
-  partyEscort.value = [];
-});
-/** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
- *  sort du groupe de lui-même — le store le refuserait de toute façon). */
-const partyAdvs = computed(() => freeStable.value.filter((a) => partyEscort.value.includes(a.id)));
-/** Ceux qui ne peuvent PAS partir, avec la raison — même règle que le store
- *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
- *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
-/** ⚠️ Même principe que `freeKey` : une CHAÎNE (id + raison) calculée au tick, mais qui ne
- *  réveille la liste — donc le rendu des tuiles grisées — que si un aventurier change d'état.
- *  ⚠️ ET LA MÊME HORLOGE QUE `freeKey`, OBLIGATOIREMENT (`now`, pas `coarseNow`) : les deux
- *  listes PARTITIONNENT le vivier (`advAvailable` ⟺ `advUnavailableReason === null`) et sont
- *  rendues côte à côte dans `.car-pick`, keyées sur le même id. Sur deux horloges décalées, un
- *  aventurier dont l'échéance tombe en milieu de minute apparaîtrait DANS LES DEUX pendant
- *  jusqu'à une minute (tuile en double + clés dupliquées). Le coût du tick est ici une
- *  concaténation sur le vivier : c'est la chaîne, pas l'horloge, qui protège les dépendants. */
-const blockedKey = computed(() =>
-  char.advList.map((a) => `${a.id}:${advUnavailableReason(a, now.value) ?? ''}`).join('|'),
-);
-/** Champions indisponibles : masqués par défaut dans le choix d'une équipe (demandé). */
-const showBlocked = ref(false);
-const partyBlocked = computed(() => {
-  const why = new Map(
-    blockedKey.value.split('|').map((kv) => {
-      const cut = kv.lastIndexOf(':');
-      return [kv.slice(0, cut), kv.slice(cut + 1)] as const;
-    }),
-  );
-  return sortByGradeThenRank(char.advList).flatMap((a) => {
-    const w = why.get(a.id);
-    return w ? [{ adv: a, why: w as NonNullable<ReturnType<typeof advUnavailableReason>> }] : [];
-  });
-});
-/** Pourquoi le héros ne peut pas se joindre au groupe — la MÊME règle que le store. */
-const partyHeroBlock = computed(() =>
-  selected.value
-    ? partyHeroBlocker({
-        onExpedition: !!active.value,
-        healMs: heroHealIn.value,
-        outpost: outpostBuilt.value,
-      })
-    : null,
-);
-/** Le héros est-il VRAIMENT du groupe ? Le choix du joueur, tant que rien ne l'en empêche :
- *  un héros qu'on a coché puis qui part ailleurs ne doit pas fausser le pronostic. */
-const partyHeroOn = computed(() => partyHero.value && !partyHeroBlock.value);
-const heroForParty = computed<PartyHero | null>(() =>
-  partyHeroOn.value
-    ? { name: char.row?.pseudo ?? 'Toi', level: heroLevel.value, combatant: fighter.value }
-    : null,
-);
-const partySize = computed(() => partyAdvs.value.length + (partyHeroOn.value ? 1 : 0));
-/** 🎒 Les consommables choisis pour CE voyage — remis à zéro quand on change de lieu. */
-const chosenSupplies = ref<SupplyId[]>([]);
-watch(
-  () => selected.value?.id,
-  () => (chosenSupplies.value = []),
-);
-/** Le stock, tuile par tuile, et POURQUOI un consommable ne servirait à rien ici. */
-const supplyRows = computed(() => {
-  const p = selected.value;
-  const stock = char.row?.supplies ?? {};
-  const t = p ? supplyTarget(p, partyHeroOn.value, partyAdvs.value.length) : null;
-  return SUPPLY_IDS.filter((id) => SUPPLIES[id].voyage && (stock[id] ?? 0) > 0).map((id) => ({
-    id,
-    def: SUPPLIES[id],
-    n: stock[id]!,
-    on: chosenSupplies.value.includes(id),
-    why: t ? supplyUselessWhy(id, t) : null,
-  }));
-});
-const supplyUseful = computed(() => supplyRows.value.filter((r) => !r.why));
-const supplyUseless = computed(() => supplyRows.value.filter((r) => !!r.why));
-/** ⚠️ Un consommable coché qui DEVIENT inutile (on retire le héros, par exemple) n'est plus
- *  emporté : on ne dépense pas un objet qui ne fait rien. */
-const activeSupplies = computed(() =>
-  supplyRows.value.filter((r) => r.on && !r.why).map((r) => r.id),
-);
-function toggleSupply(id: SupplyId) {
-  chosenSupplies.value = chosenSupplies.value.includes(id)
-    ? chosenSupplies.value.filter((x) => x !== id)
-    : [...chosenSupplies.value, id];
-}
-/** Le kit du groupe AVEC ses consommables : c'est lui que lisent le 🎯 % et le trajet. */
-const partyRoad = computed(() => ({ ...roadCtx.value, supplies: activeSupplies.value }));
-/** 🎯 % de victoire — `partyWinChance`, LA MÊME dispatch que le store (qui s'en sert pour
- *  refuser un départ perdu d'avance) : l'écran en avait une copie, qui aurait dû apprendre
- *  les consommables séparément. Graines de pronostic, jamais celle du vrai combat.
- *  ⚠️ HORLOGE GROSSIÈRE (`coarseNow`) : l'effectif d'une faille dépend de l'instant, et une
- *  incursion enchaîne jusqu'à 13 combats — à 40 échantillons par seconde, ce serait ~520
- *  combats rejoués à chaque tick pour un effectif qui bouge sur SEPT JOURS. */
-const partyWin = computed(() => {
-  const p = selected.value;
-  if (!p || !partySize.value) return null;
-  const w = partyWinChance(
-    p,
-    partyAdvs.value,
-    partyRoad.value,
-    heroForParty.value,
-    coarseNow.value,
-    40,
-  );
-  return w === null ? null : Math.round(w * 100);
-});
-/** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
-// ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
-// point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où
-// elle se trouve maintenant. Horloge grossière : la rencontre bouge à la minute, pas plus.
-const partyMin = computed(() =>
-  selected.value && partySize.value
-    ? 2 *
-      interceptLeg(selected.value, coarseNow.value, (p) =>
-        partyLegMin(p, partyAdvs.value, {
-          hero: partyHeroOn.value,
-          travelMult: travelMult.value,
-          gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
-          supplies: activeSupplies.value,
-        }),
-      ).legMin
-    : 0,
-);
-/** ⚠️ CE QUE LE DÉPART COÛTE face à l'armée qui arrive — mêmes règles que le convoi et le
- *  héros (`departureRisk`) : le groupe quitte la base (et le héros avec lui s'il en est),
- *  et un groupe rentré AVANT l'assaut ne coûte rien. */
-const partyRisk = computed(() => {
-  const b = base.value;
-  const inc = incoming.value;
-  if (!b || !inc || !partyTarget.value || !partySize.value) return null;
-  const heroNow = heroDefendsNow.value;
-  const partants = new Set(partyAdvs.value.map((a) => a.id));
-  const restants = freeStable.value.filter((a) => !partants.has(a.id));
-  return departureRisk(
-    b.defenses,
-    heroLevel.value,
-    inc,
-    {
-      hero: heroNow,
-      guard: guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value),
-    },
-    {
-      hero: partyHeroOn.value ? null : heroNow,
-      guard: guardUnits(heroLevel.value, restants, cap.value, compCtx.value),
-    },
-    { backAt: coarseNow.value + partyMin.value * 60_000, raidAt: raidAt.value },
-  );
-});
-/** Pourquoi le groupe ne peut pas partir — la MÊME règle que le store (`partySendBlocker`) :
- *  sans le héros, un groupe prend un créneau de convoi. */
-const partySendBlock = computed(() =>
-  selected.value
-    ? partySendBlocker(
-        selected.value,
-        partyAdvs.value.length,
-        partyHeroOn.value,
-        vansLeft.value,
-        cap.value,
-        // 💀 Le 🎯 % DÉJÀ affiché juste au-dessus : on ne laisse pas partir un groupe qui
-        // ne peut pas gagner. ⚠️ Le MÊME nombre que le pronostic — deux estimations
-        // finiraient par dire « 0 % » d'un côté et laisser partir de l'autre.
-        partyWin.value === null ? null : partyWin.value / 100,
-      )
-    : null,
-);
-/** Sans le héros et plus aucun créneau : on le DIT avant même qu'on choisisse quelqu'un. */
-const partySlotsFull = computed(() => !partyHeroOn.value && vansLeft.value <= 0);
-const canSendPartyNow = computed(
-  () =>
-    !!selected.value &&
-    !partySendBlock.value &&
-    // ⚠️ TOUJOURS attendre la progression : avant son chargement le niveau vaut 1, et le
-    // tirage des pièces d'aventurier (figé au départ) serait plafonné au plus bas rang.
-    progress.ready.value &&
-    !busyParty.value,
-);
-/** 🗿 Combien de champions on peut engager — `partyCapFor` (le Panthéon), jamais une copie
- *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
-const partyMax = computed(() => partyCapFor(cap.value));
-/** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
-const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length));
-/** 🔮 Ce que CHAQUE champion gagnerait sur le lieu visé (demandé). ⚠️ La règle vit en lib
- *  (`missionXpPreview`), qui appelle `missionXpFor` — ce que le store verse vraiment :
- *  une seconde formule d'affichage finirait par annoncer une XP que l'encaissement dément. */
-const partyXp = computed<Record<string, MissionXpPreview>>(() =>
-  selected.value
-    ? missionXpPreview(char.advList, partyEscort.value, selected.value, char.pantheonLevel)
-    : {},
-);
-/** La note ne s'affiche que si un champion DISPONIBLE y perd : sinon c'est du bruit. */
-const partyLowXp = computed(() =>
-  freeStable.value.some((a) => partyXp.value[a.id]?.full === false),
-);
-/** Vrai quand on ne peut plus en cocher — pour le dire AVANT qu'on essaie. */
-const partyFull = computed(() => partyAdvs.value.length >= partyMax.value);
-/** Si le plafond baisse (Panthéon), on retire les derniers cochés plutôt que de laisser un
- *  envoi impossible à l'écran. */
-watch(partyMax, (max) => {
-  if (partyEscort.value.length > max) partyEscort.value = partyEscort.value.slice(0, max);
-});
-
-function togglePartyAdv(id: string) {
-  if (partyEscort.value.includes(id)) {
-    partyEscort.value = partyEscort.value.filter((x) => x !== id);
-    return;
-  }
-  // ⚠️ On REFUSE d'en ajouter un de trop plutôt que de laisser l'envoi échouer : un bouton
-  // qui se grise après coup ne dit pas lequel est en trop.
-  if (partyFull.value) return;
-  partyEscort.value = [...partyEscort.value, id];
-}
-/** ✨ Tout le vivier disponible d'un geste (et de nouveau pour tout retirer) : un repaire
- *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
-/** Ce que « tout le vivier » peut réellement prendre ici. */
-const partyAllIds = computed(() => freeSorted.value.slice(0, partyMax.value).map((a) => a.id));
-const partyAllOn = computed(
-  () => partyAllIds.value.length > 0 && partyAdvs.value.length === partyAllIds.value.length,
-);
-function togglePartyAll() {
-  // ⚠️ Bornée par le lieu : sur une faille, « tout le vivier » ne peut pas en envoyer dix.
-  partyEscort.value = partyAllOn.value ? [] : [...partyAllIds.value];
-}
-/** Le bouton dit OÙ l’on va : un camp se prend, une faille se referme. */
-const partySendLabel = computed(() => {
-  if (!partySize.value) return 'Choisis ton groupe';
-  // ⚠️ Le bouton DIT le refus, il ne se contente pas d'être gris.
-  if (partySendBlock.value === 'hopeless') return '💀 Perdu d’avance';
-  if (!teamOnly.value) return `🧺 Envoyer l’équipe (${partySize.value})`;
-  return selectedRift.value
-    ? `🌀 Entrer dans la faille (${partySize.value})`
-    : `⚔️ Attaquer le camp (${partySize.value})`;
-});
-async function doSendParty() {
-  const uid = auth.user?.id;
-  const poi = selected.value;
-  if (!uid || !poi || !canSendPartyNow.value) return;
-  await settleDueSiege();
-  // ⚠️ Retenu AVANT l’envoi : `selected` est remis à null au succès, donc le lire après
-  // coup pour choisir le message dirait toujours « camp ».
-  const isRift = !!selectedRift.value;
-  const isHarvest = !teamOnly.value;
-  busyParty.value = true;
-  try {
-    const refused = await char.sendParty(uid, poi, {
-      hero: heroForParty.value,
-      escortIds: partyAdvs.value.map((a) => a.id),
-      // AVEC le héros : le niveau que `expeSend` passait (progression en donjon) — son butin
-      // ne change pas. SANS lui : le niveau de SPORT, comme les convois (pièces d'aventurier).
-      playerLevel: partyHeroOn.value ? progressionLevel.value : heroLevel.value,
-      now: Date.now(),
-      supplies: activeSupplies.value,
-    });
-    if (!refused) selected.value = null;
-    // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
-    $q.notify(
-      refused
-        ? { type: 'negative', message: `Départ impossible : ${refused}.` }
-        : {
-            type: 'positive',
-            message: isHarvest
-              ? '🧺 L’équipe part en récolte.'
-              : isRift
-                ? '🌀 L’équipe s’enfonce dans la faille.'
-                : '⚔️ L’équipe marche sur le camp.',
-          },
-    );
-  } finally {
-    busyParty.value = false;
-  }
-}
 
 /** 🧿 Le sceau de brèche : combien il en reste, et le poser sur la faille ouverte. */
 const sealStock = computed(() => char.row?.supplies.sceau ?? 0);
@@ -1893,25 +1339,10 @@ const bandsOnMap = computed(() => {
 const travelersOnMap = computed(() => [
   ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️', kind: 'party' as const })),
 ]);
-const busyParty = ref(false);
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
  *  lirait comme plusieurs rangées collées. */
 const trips = computed(() => {
-  const out: {
-    key: string;
-    kind: 'hero' | 'van';
-    who: string;
-    poi: Poi;
-    time: string;
-    pct: number;
-    back: boolean;
-    title: string;
-    /** Qui voyage : le héros, et les ids des champions (montrés quand on touche la tuile). */
-    withHero: boolean;
-    members: string[];
-    /** Ce que le voyage ramènera (tiré au départ), montré au-dessus de l'équipe. */
-    haul: { emoji: string; n: number }[];
-  }[] = [];
+  const out: MapTrip[] = [];
   const a = active.value;
   const h = hero.value;
   if (a && h) {
@@ -1953,28 +1384,6 @@ const trips = computed(() => {
  *  (`focusPoi` ne le retrouve plus). */
 const focusTrip = ref<string | null>(null);
 const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.value)?.poi ?? null);
-/** 👥 Les membres du voyage touché (demandé : « quand je clique sur une expédition, voir les
- *  champions qui sont dedans »). Un champion renvoyé depuis n'est plus dans le vivier : il est
- *  compté à part plutôt que de faire tomber l'écran. */
-const focusCrew = computed(() => {
-  const t = trips.value.find((x) => x.key === focusTrip.value);
-  if (!t) return null;
-  const byId = new Map(char.advList.map((a) => [a.id, a]));
-  const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
-  // Le butin est tiré au départ, mais on ne le montre qu'une fois le lieu atteint (retour) :
-  // à l'aller, l'annoncer révélerait l'issue d'un combat qui n'a pas encore eu lieu.
-  return {
-    hero: t.withHero,
-    advs,
-    gone: t.members.length - advs.length,
-    poi: t.poi,
-    haul: t.back ? t.haul : [],
-  };
-});
-function toggleFocusTrip(key: string) {
-  focusTrip.value = focusTrip.value === key ? null : key;
-}
-const tripsEl = ref<HTMLElement | null>(null);
 // La carte raccourcit quand des voyages sont en cours (.with-trips) : on remesure, sinon
 // les flèches de bord se calent sur l'ancienne hauteur.
 watch(
@@ -2211,13 +1620,42 @@ const factsGo = computed(() => poiFacts.value.filter((f) => f.go));
 function winClass(pct: number): string {
   return pct >= 70 ? 'wp-good' : pct >= 35 ? 'wp-mid' : 'wp-bad';
 }
-/** Le portail d'une faille sur la carte, en unités de carte : un peu plus haut que la
- *  pastille d'un lieu (⌀ 9), les flammes comprises. `dy` = du haut du dessin au centre. */
-const RIFT_ICON = {
-  h: 14,
-  w: (14 * PORTAL_VIEW.w) / PORTAL_VIEW.h,
-  dy: (14 * PORTAL_VIEW.cy) / PORTAL_VIEW.h,
-};
+/**
+ * ⚠️ DES PROPS À IDENTITÉ STABLE pour `MapPoiLayer` : ces trois listes dépendent de `now`
+ * (qui tique à la seconde), mais leur CONTENU ne change qu'à un départ, un retour ou au recul
+ * du brouillard. En chaîne d'ids (primitive, comparée par valeur) ou via `stableBy` (même
+ * référence tant que la clé ne bouge pas), le calque des lieux ne se re-rend plus à chaque tick.
+ */
+function stableBy<T>(src: () => T, key: (v: T) => string) {
+  let lastKey: string | null = null;
+  let last: T;
+  return computed(() => {
+    const v = src();
+    const k = key(v);
+    if (k === lastKey) return last;
+    lastKey = k;
+    last = v;
+    return v;
+  });
+}
+const dimmedKey = computed(() =>
+  shownPois.value
+    .filter(dimmed)
+    .map((p) => p.id)
+    .join('|'),
+);
+const veiledKey = computed(() =>
+  fogPlan.value
+    ? shownPois.value
+        .filter((p) => underFog(p, TOWN, fogR.value))
+        .map((p) => p.id)
+        .join('|')
+    : '',
+);
+const travelTargets = stableBy(
+  () => travelersOnMap.value.map((v) => ({ id: v.id, poi: v.poi, kind: v.kind })),
+  (l) => l.map((v) => v.id).join('|'),
+);
 
 // Avant-poste : débloque les expéditions + réduit les trajets.
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
@@ -2378,6 +1816,62 @@ function celebrateTopDrop(done: ExpeditionMessage) {
 }
 
 // Écran de chargement thématique bref à l'ouverture de la carte (immersion).
+const {
+  partyHero,
+  partyEscort,
+  partyAdvs,
+  showBlocked,
+  partyBlocked,
+  partyHeroBlock,
+  partyHeroOn,
+  partySize,
+  supplyRows,
+  supplyUseful,
+  supplyUseless,
+  toggleSupply,
+  partyWin,
+  partyMin,
+  partyRisk,
+  partySendBlock,
+  partySlotsFull,
+  canSendPartyNow,
+  partyMax,
+  partyXpSplit,
+  partyXp,
+  partyLowXp,
+  togglePartyAdv,
+  partyAllIds,
+  partyAllOn,
+  togglePartyAll,
+  partySendLabel,
+  doSendParty,
+} = useExpeditionParty({
+  selected,
+  now,
+  coarseNow,
+  active,
+  heroLevel,
+  progressionLevel,
+  fighter,
+  heroHealIn,
+  outpostBuilt,
+  travelMult,
+  roadCtx,
+  compCtx,
+  base,
+  incoming,
+  raidAt,
+  heroDefendsNow,
+  freeStable,
+  freeSorted,
+  cap,
+  vansLeft,
+  partyTarget,
+  teamOnly,
+  selectedRift,
+  progressReady: progress.ready,
+  settleDueSiege,
+});
 const booting = ref(true);
 onMounted(async () => {
   setTimeout(() => (booting.value = false), 750);
@@ -2930,123 +2424,10 @@ onUnmounted(() => {
   display: flex;
   padding: 0 12px 6px;
 }
-.bar {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px 8px;
-}
-.rank-filter {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  gap: 5px;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.rank-filter::-webkit-scrollbar {
-  display: none;
-}
-/* Rangée CENTRÉE par des marges automatiques et non `justify-content: center` : si les
-   puces débordent (écran étroit, beaucoup de rangs), un centrage flex couperait la première
-   hors de portée du défilement ; les marges auto, elles, retombent à zéro. */
-.rf-chip:first-child {
-  margin-left: auto;
-}
-.rf-chip:last-child {
-  margin-right: auto;
-}
-/* Une pastille ronde (36 px, resserrée pour tenir sur la ligne de l’or) avec la boule du rang au centre. Affiché =
-   pastille cerclée de la couleur du rang, boule PLEINE ; masqué = pastille en pointillé,
-   boule réduite à un anneau estompé : l'état se lit sans dépendre de la couleur. */
-.rf-chip {
-  flex: none;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px dashed var(--line);
-  background: var(--surface);
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    background 0.15s;
-}
-.rf-chip.on {
-  border-style: solid;
-  border-color: var(--rk);
-  background: color-mix(in srgb, var(--rk) 14%, var(--surface));
-}
-.rf-dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--rk);
-  background: transparent;
-  opacity: 0.45;
-  transition:
-    background 0.15s,
-    opacity 0.15s;
-}
-.rf-chip.on .rf-dot {
-  background: var(--rk);
-  opacity: 1;
-}
-/* 🗺️ La rangée des types : défile si elle déborde (344 px), centrée sinon. */
-.type-filter {
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-.type-filter::-webkit-scrollbar {
-  display: none;
-}
-.type-emo {
-  font-size: 15px;
-  line-height: 1;
-  opacity: 0.45;
-}
-.type-chip {
-  --rk: var(--accent);
-  width: auto;
-  min-width: 36px;
-  padding: 0 8px;
-  gap: 3px;
-  border-radius: 18px;
-}
-.rift-emo {
-  display: inline-block;
-  width: 12px;
-  height: 19px;
-  opacity: 0.45;
-}
 .ei-rift {
   display: inline-block;
   width: 10px;
   height: 16px;
-}
-.type-chip.on .rift-emo,
-.type-chip.on .type-emo {
-  opacity: 1;
-}
-.rift-count {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--dim);
-}
-.type-chip.on .rift-count {
-  color: var(--text);
-}
-/* Type SEUL : pastille pleine, le mode le plus fort se voit d'un coup d'œil. */
-.type-chip.rm-only {
-  background: color-mix(in srgb, var(--rk) 34%, var(--surface));
-  box-shadow: 0 0 6px color-mix(in srgb, var(--rk) 55%, transparent);
-}
-.rf-chip:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
 }
 .outpost-hint {
   margin: 0 12px 10px;
@@ -3143,11 +2524,6 @@ onUnmounted(() => {
   stroke-width: 1;
   opacity: 0.9;
 }
-/* Un lieu que le front n’a pas encore atteint reste invisible, puis apparaît en fondu. */
-.poi.veiled {
-  opacity: 0;
-  pointer-events: none;
-}
 .fog-rim {
   fill: none;
   stroke: #e8dcc0;
@@ -3223,23 +2599,15 @@ onUnmounted(() => {
   stroke: #b57bff;
   filter: drop-shadow(0 0 1px rgba(181, 123, 255, 0.55));
 }
-.van-target .poi-bg {
-  stroke: #b57bff;
-  stroke-width: 0.8;
-}
 /* Groupes ⚔️ : même violet qu'un convoi, mais un motif TIRET-POINT sur la route et un liseré
    pointillé sur la cible et le marqueur — lisible sans la couleur ni l'emoji. */
 .trail.van.party {
   stroke-width: 1.2;
   stroke-dasharray: 4 1.4 0.8 1.4;
 }
-.van-target.party .poi-bg,
 .van-mark.party {
   stroke-width: 1;
   stroke-dasharray: 1.2 0.9;
-}
-.van-target {
-  opacity: 0.75;
 }
 /* ⚔️ La bande qu'on intercepte : rouge (elle menace la base), son chemin vers le point de
    rencontre, et un anneau qui pulse là où les deux colonnes vont se heurter. */
@@ -3312,10 +2680,6 @@ onUnmounted(() => {
     opacity: 0.85;
   }
 }
-.poi {
-  transition: opacity 0.35s ease-out;
-  cursor: pointer;
-}
 /* 🕳️ L'auréole d'une EMBUSCADE (faille débordée, v0.1009) : on VOIT ce qu'elle salit, sans rien
    sélectionner. ⚠️ `pointer-events: none` — elle couvre plusieurs POI, elle leur volerait
    leur clic. Teinte du DANGER (--d4), comme l'encart de la Tour de guet : les deux parlent
@@ -3327,50 +2691,6 @@ onUnmounted(() => {
   stroke-width: 0.5;
   stroke-dasharray: 2 2;
   pointer-events: none;
-}
-/* Contour dans la couleur du RANG du lieu (`--rk`, posé par lieu). */
-.poi-bg {
-  fill: var(--surface);
-  stroke: var(--rk, var(--line));
-  stroke-width: 1;
-}
-/* La cible de clic d'une faille : invisible, sauf sélectionnée (le liseré d'accent de
-   tous les lieux, autour de l'ovale). */
-.rift-hit {
-  fill: transparent;
-  stroke: none;
-}
-.poi.sel .rift-hit {
-  stroke: var(--accent);
-  stroke-width: 0.8;
-  stroke-dasharray: 1.4 0.9;
-}
-.poi.sel .poi-bg {
-  stroke: var(--accent);
-  stroke-width: 1.5;
-}
-.poi.dim {
-  opacity: 0.4;
-}
-.poi.target .poi-bg {
-  stroke: var(--accent);
-  stroke-width: 1.4;
-}
-.poi-emo {
-  font-size: 4px;
-  text-anchor: middle;
-}
-.poi-rank {
-  font-size: 3.2px;
-  text-anchor: middle;
-}
-.poi-star {
-  font-size: 2.6px;
-  font-weight: 800;
-  fill: var(--rk, var(--text));
-  paint-order: stroke;
-  stroke: var(--bg);
-  stroke-width: 0.5px;
 }
 .hero {
   fill: var(--accent);
@@ -3446,144 +2766,6 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 8px;
-}
-/* TROIS tuiles par ligne (demandé par l'utilisateur). En flex centré plutôt qu'en grille :
-   la dernière ligne, incomplète, se CENTRE toute seule quel que soit le reste (1 ou 2) —
-   laissée dans ses colonnes, elle se collait à gauche avec un trou, ce qui se lit comme un
-   élément manquant plutôt que comme la fin de la liste. */
-.trips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  padding: 2px 2px 6px;
-}
-.trip-crew {
-  margin: 0 2px 8px;
-  padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--surface);
-}
-.tc-head {
-  font-size: 13px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-.tc-haul {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.tc-haul-lab {
-  font-size: 12px;
-  color: var(--dim);
-}
-.tc-pill {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--line);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.tc-hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 4px;
-  min-height: 44px;
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  font-size: 13px;
-}
-.tc-hero-av {
-  width: 64px;
-  height: 64px;
-}
-.tc-none {
-  margin: 6px 0 0;
-  font-size: 12px;
-  color: var(--dim);
-}
-.trips > .trip {
-  /* border-box : sans lui padding et bordure s'ajoutaient au tiers, et il n'en tenait que deux. */
-  box-sizing: border-box;
-  flex: 0 0 calc((100% - 16px) / 3);
-}
-.trip {
-  position: relative;
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap; /* à trois par ligne, le temps passe SOUS les emojis : côte à côte il était coupé à 344 px */
-  align-items: center;
-  justify-content: center;
-  gap: 1px 4px;
-  min-height: 44px; /* cible tactile : la tuile « rentré » est un bouton */
-  padding: 7px 7px 9px;
-  border: 1px solid var(--accent);
-  border-radius: 12px;
-  background: var(--surface);
-  color: var(--text);
-  font: inherit;
-  overflow: hidden;
-}
-.trip.van {
-  border-color: #b57bff;
-}
-/* Au RETOUR la teinte change : on rentre, on ne va plus. */
-.trip.back {
-  border-color: #7bc86c;
-}
-.tr-who {
-  font-size: 17px;
-}
-.tr-poi {
-  font-size: 15px;
-}
-/* 🌀 La faille garde son portail sous la carte aussi, à la taille de l'emoji. */
-.tr-rift {
-  display: inline-block;
-  width: 11px;
-  height: 18px;
-}
-.tr-time {
-  flex-basis: 100%;
-  text-align: center;
-  white-space: nowrap;
-  font-size: 13px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-/* L'avancement du voyage, en sous-lignage : la même information que le temps, sans
-   une ligne de plus. ⚠️ `voyageProgress` (durée TOTALE) et non la fraction de phase,
-   qui repart à zéro au demi-tour et ferait RECULER la barre à mi-chemin. */
-.tr-bar {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  height: 3px;
-  background: var(--accent);
-  transition: width 0.6s linear;
-}
-.trip.van .tr-bar {
-  background: #b57bff;
-}
-.trip.back .tr-bar {
-  background: #7bc86c;
-}
-.trip {
-  cursor: pointer;
-}
-/* 🔴 La tuile touchée : le même rouge que le halo posé sur son lieu, pour qu'on relie les deux. */
-.trip.focus {
-  box-shadow:
-    0 0 0 2px #ff5d5d,
-    0 0 12px 2px rgb(255 93 93 / 55%);
 }
 .trip-focus-halo {
   fill: rgb(255 93 93 / 28%);

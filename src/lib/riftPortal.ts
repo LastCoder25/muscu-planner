@@ -10,6 +10,21 @@ import { mulberry32 } from './combat';
  *  (plus au-dessus qu'en dessous : le feu monte). */
 export const PORTAL_VIEW = { w: 100, h: 160, cx: 50, cy: 90, rx: 28, ry: 50 } as const;
 
+/** Le portail d'une faille sur la CARTE d'expédition, en unités de carte : un peu plus haut
+ *  que la pastille d'un lieu (⌀ 9), les flammes comprises. `dy` = du haut du dessin au centre. */
+export const RIFT_MAP_ICON = {
+  h: 14,
+  w: (14 * PORTAL_VIEW.w) / PORTAL_VIEW.h,
+  dy: (14 * PORTAL_VIEW.cy) / PORTAL_VIEW.h,
+} as const;
+/** La boîte du portail d'une faille dessinée au point (x, y) de la carte. */
+export const riftMapBox = (x: number, y: number) => ({
+  x: x - RIFT_MAP_ICON.w / 2,
+  y: y - RIFT_MAP_ICON.dy,
+  w: RIFT_MAP_ICON.w,
+  h: RIFT_MAP_ICON.h,
+});
+
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 /**

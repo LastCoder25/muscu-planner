@@ -154,6 +154,101 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('av-ico">🏅');
   }, 30_000);
 
+  // 🗺️ v0.1202 : la carte d'expédition est découpée — ses trois morceaux se montent seuls.
+  const MAP_POIS = [
+    { id: 'p1', type: 'mine', level: 3, x: 90, y: 90, distNorm: 0.3, spawnedAt: 0, expiresAt: 9e15 },
+    { id: 'p2', type: 'archive', level: 5, x: 110, y: 95, distNorm: 0.4, spawnedAt: 0, expiresAt: 9e15 },
+  ];
+  it('🗺️ MapPoiLayer dessine les lieux, la sélection et les lieux grisés', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        MapPoiLayer,
+        {
+          pois: MAP_POIS,
+          selectedId: 'p1',
+          dimmedKey: 'p2',
+          veiledKey: '',
+          target: null,
+          travelTargets: [{ id: 'g1', poi: { ...MAP_POIS[0], id: 'p9' }, kind: 'party' }],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    // Deux lieux à prendre + une cible d'équipe.
+    expect(out.match(/class="poi[ "]/g)?.length).toBe(3);
+    expect(out).toMatch(/class="poi sel"/);
+    expect(out).toMatch(/class="poi dim"/);
+    expect(out).toContain('van-target party');
+  }, 30_000);
+
+  it('🎚️ MapFilterBar montre une puce par rang et par type', async () => {
+    const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        MapFilterBar,
+        {
+          rankOptions: [
+            { rankIndex: 0, count: 2 },
+            { rankIndex: 1, count: 1 },
+          ],
+          hiddenRanks: new Set([1]),
+          typeChips: [
+            { type: 'mine', inRanks: 1 },
+            { type: 'archive', inRanks: 1 },
+          ],
+          typeFilter: { only: ['mine'], hidden: [] },
+        },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    // 2 rangs dont 1 masqué, 2 types dont un « seul ».
+    expect(out.match(/class="rf-chip on"/g)?.length).toBe(1);
+    expect(out).toContain('rm-only');
+    expect(out).toContain('seul');
+  }, 30_000);
+
+  it('🧭 TripsPanel : la rangée des voyages, et l’équipe du voyage touché', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    let out = '';
+    const trip = {
+      key: 'g1',
+      kind: 'van',
+      who: '⚔️',
+      poi: MAP_POIS[0],
+      time: '→ 1 h 20',
+      pct: 40,
+      back: false,
+      title: 'Groupe',
+      withHero: false,
+      members: ['a1', 'gone'],
+      haul: [{ emoji: '🪙', n: 50 }],
+    };
+    expect(
+      await mountIt(
+        TripsPanel,
+        { trips: [trip], focus: 'g1', heroProfile: 'polyvalent' },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('→ 1 h 20');
+    expect(out).toContain('Léa'); // l'équipe du voyage touché
+    expect(out).toContain('plus dans ton vivier'); // le champion renvoyé depuis
+    // ⚠️ À l'ALLER le butin n'est pas montré : il révélerait l'issue d'un combat à venir.
+    expect(out).not.toContain('Ramène');
+  }, 30_000);
+
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     let out = '';

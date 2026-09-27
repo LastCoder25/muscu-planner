@@ -70,6 +70,9 @@ const ECRANS = [
   // très différentes (fiche, grille d'équipement, carte des mondes, enceinte en SVG).
   // Les visiter séparément est tout l'intérêt d'un smoke connecté.
   { route: '/aventure', nom: 'aventure', onglets: ['Héros', 'Équipement', 'Explorer', 'Base'] },
+  // 🗺️ La carte d'expédition (v0.1202) : l'écran le plus lourd du projet, découpé en
+  // composants — il n'était visité par aucune porte.
+  { route: '/expedition-map', nom: 'carte' },
 ];
 
 function lireEnv() {
