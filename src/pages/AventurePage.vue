@@ -5472,6 +5472,34 @@ const siegeAdvProgress = ref<AdvProgress[]>([]);
 /** 📊 Les barres AVANT → APRÈS des défenseurs : elles portent déjà étoiles, rangs et
  *  « prêt pour l'ascension », donc elles REMPLACENT l'annonce quand il y a eu de l'XP. */
 const siegeAdvTracks = ref<AdvXpTrack[]>([]);
+/** 🏰 UN SIÈGE TRANCHÉ AILLEURS (la carte, v0.1184) se rejoue ici à la prochaine visite :
+ *  on découvre l'issue par l'animation, jamais par une notification. Mémoire par appareil
+ *  de l'identifiant du dernier siège rejoué ; au-delà de 3 jours on ne rejoue plus rien. */
+const SIEGE_SEEN_KEY = 'muscu:siege:seen';
+function markSiegeSeen(r: RaidReport) {
+  try {
+    localStorage.setItem(SIEGE_SEEN_KEY, r.raidId);
+  } catch {
+    /* stockage indisponible : on rejouera au pire une fois de plus */
+  }
+}
+watch(
+  () => char.row?.base?.lastReport ?? null,
+  (r) => {
+    if (!r || siegeReport.value || Date.now() - r.resolvedAt > 3 * 86_400_000) return;
+    let seen: string | null = null;
+    try {
+      seen = localStorage.getItem(SIEGE_SEEN_KEY);
+    } catch {
+      seen = null;
+    }
+    if (seen === r.raidId) return;
+    markSiegeSeen(r);
+    siegeReport.value = r;
+    tab.value = 'base';
+  },
+  { immediate: true },
+);
 // ⏸️ Aucune barre de rapport par-dessus le rejeu du siège : elle en révélerait l'issue.
 watch(siegeReport, (r) => advXpFx.hold('siege', !!r));
 function onSiegeSeen() {
@@ -5590,6 +5618,7 @@ async function baseLifecycle() {
       siegeAdvProgress.value = r.advProgress;
       siegeAdvTracks.value = r.advTracks;
       siegeReport.value = r.report;
+      markSiegeSeen(r.report);
       tab.value = 'base';
     }
     // Un tick a pu déplacer l’échéance du prochain siège → on réaligne.

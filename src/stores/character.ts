@@ -211,6 +211,7 @@ import {
   type ActiveParty,
 } from '@/lib/party';
 import { partyWinChance } from '@/lib/partyForecast';
+import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
   addSupplies,
   normalizeSupplies,
@@ -1908,7 +1909,7 @@ export const useCharacterStore = defineStore('character', () => {
   async function expeSettle(userId: string, now: number): Promise<ExpeditionMessage | null> {
     const cur = row.value;
     const exp = cur?.expedition;
-    if (!cur || !exp || now < exp.returnAt) return null;
+    if (!cur || !exp || settleClock(cur, now) < exp.returnAt) return null;
     // Le rapport a pu être déposé à l'arrivée sur l'objectif (`expeTick`) ; sinon (app
     // fermée tout du long) on le dépose maintenant. Dans les deux cas il porte le butin.
     const msg = buildMessage({ ...exp, reported: true });
@@ -2222,6 +2223,24 @@ export const useCharacterStore = defineStore('character', () => {
     return !cur.expedition;
   }
 
+  /** 🏰 L'HORLOGE DES RETOURS tant qu'un siège échu n'est pas tranché.
+   *  ⚠️ Un voyage rentré est EFFACÉ de l'état (expédition remise à null, groupe retiré).
+   *  S'il rentre APRÈS l'attaque mais que ce retour est réglé AVANT que le siège ne soit
+   *  tranché, plus rien ne dit qu'il était dehors : il serait compté comme défenseur. On
+   *  règle donc les retours à l'heure de l'attaque jusqu'au tick de base suivant — un
+   *  délai d'une seconde, puisque les deux écrans qui règlent les retours tranchent aussi
+   *  le siège. Si le tick de base a déjà tourné depuis l'attaque sans rien trancher (sièges
+   *  éteints entre-temps), on ne retient plus rien : le héros ne doit jamais rester bloqué. */
+  let lastBaseTickAt = 0;
+  function settleClock(cur: CharacterRow, now: number): number {
+    const r = cur.base?.raid;
+    if (!r || now < r.arrivesAt || lastBaseTickAt >= r.arrivesAt) return now;
+    return r.arrivesAt;
+  }
+  /** Un seul tick de base à la fois : la carte et l'Aventure (cockpit) tournent ensemble, et
+   *  deux ticks concurrents trancheraient le MÊME siège deux fois. */
+  let baseTickRunning = false;
+
   /** Tick de la base. Avance l'état, et RÉSOUT le siège s'il est à échéance — avec les
    *  défenses telles qu'elles sont À CET INSTANT : ce que tu as construit avant la
    *  deadline est ce qui se bat. Renvoie le rapport si une bataille vient d'avoir lieu. */
@@ -2237,7 +2256,26 @@ export const useCharacterStore = defineStore('character', () => {
     advProgress: AdvProgress[];
     advTracks: AdvXpTrack[];
   }> {
-    if (!row.value) return { detected: null, report: null, advProgress: [], advTracks: [] };
+    if (!row.value || baseTickRunning)
+      return { detected: null, report: null, advProgress: [], advTracks: [] };
+    baseTickRunning = true;
+    try {
+      return await baseTickInner(userId, now, ctx);
+    } finally {
+      baseTickRunning = false;
+      lastBaseTickAt = Math.max(lastBaseTickAt, now);
+    }
+  }
+  async function baseTickInner(
+    userId: string,
+    now: number,
+    ctx: { playerLevel: number; activeDays7: number; globalXp: number; hero: Combatant | null },
+  ): Promise<{
+    detected: Raid | null;
+    report: RaidReport | null;
+    advProgress: AdvProgress[];
+    advTracks: AdvXpTrack[];
+  }> {
     const cur = row.value;
     if (!cur) return { detected: null, report: null, advProgress: [], advTracks: [] };
     const t = advanceBase(baseOf(cur, now), ctx, now);
@@ -2246,7 +2284,16 @@ export const useCharacterStore = defineStore('character', () => {
       return { detected: t.detected, report: null, advProgress: [], advTracks: [] };
     }
 
-    const home = heroIsHome(cur);
+    // 🏰 QUI ÉTAIT LÀ À L'HEURE DE L'ATTAQUE — pas au moment du tick, qui peut venir des
+    // heures plus tard, après qu'on a renvoyé tout le monde (défaut constaté le 2026-09-27 :
+    // siège perdu « sans personne » alors que héros et champions étaient rentrés avant).
+    const at = t.dueRaid.arrivesAt;
+    const outings = outingsOf({
+      expedition: cur.expedition,
+      parties: partyList.value,
+      caravans: caravanList.value,
+    });
+    const home = heroHomeAt(outings, at);
     // Chaque champion se bat avec SES pièces (plus de compagnon ni de talent, v0.996).
     const cctx = escortKitOf(cur);
     // Les aventuriers DISPONIBLES défendent (ni en convoi, ni à l’infirmerie, ni en
@@ -2257,7 +2304,7 @@ export const useCharacterStore = defineStore('character', () => {
     // versée à `defenders` juste en dessous, et sans elle tout le vivier disponible
     // apprendrait d'une bataille que seuls quelques-uns ont livrée.
     const defenders = rampartGuard(
-      advList.value.filter((a) => advAvailable(a, now)),
+      advsHomeAt(advList.value, outings, at),
       engageCap(pantheonLevel.value),
       cctx,
     );
@@ -3015,7 +3062,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !partyList.value.length) return [];
     const box = boxWith(cur, [], MESSAGES_CAP);
-    const t = settleParties(partyList.value, box, now, MESSAGES_CAP);
+    const t = settleParties(partyList.value, box, settleClock(cur, now), MESSAGES_CAP);
     if (!t.changed) return [];
     // ⚔️ UNE INTERCEPTION GAGNÉE LÈVE LE MARQUAGE — ici, à l'instant où la bataille a lieu
     // (le rapport se dépose à l'arrivée sur l'objectif), et NON à l'encaissement : ce n'est

@@ -1691,6 +1691,7 @@ async function doSendParty() {
   const uid = auth.user?.id;
   const poi = selected.value;
   if (!uid || !poi || !canSendPartyNow.value) return;
+  await settleDueSiege();
   // ⚠️ Retenu AVANT l’envoi : `selected` est remis à null au succès, donc le lire après
   // coup pour choisir le message dirait toujours « camp ».
   const isRift = !!selectedRift.value;
@@ -2185,10 +2186,30 @@ const sendLabel = computed(() => {
   return 'Envoyer le héros';
 });
 
+/** 🏰 UN SIÈGE ÉCHU SE TRANCHE AUSSI ICI (défaut du 2026-09-27) : on arrive souvent sur la
+ *  carte directement (notification « héros rentré »), sans passer par l'Aventure qui tranchait
+ *  seule les sièges. On renvoyait alors tout le monde AVANT que le siège ne soit tranché, et
+ *  il se jouait sans défenseurs. On le tranche donc avant de régler les retours et avant tout
+ *  départ ; l'issue ne se dit pas ici (elle spoilerait le rejeu, qui s'ouvre sur la base). */
+async function settleDueSiege() {
+  const uid = auth.user?.id;
+  const raid = char.row?.base?.raid;
+  if (!uid || !raid || Date.now() < raid.arrivesAt || !progress.ready.value) return;
+  const r = await char.baseTick(uid, Date.now(), {
+    playerLevel: heroLevel.value,
+    activeDays7: progress.activeDaysInLast(7),
+    globalXp: progress.energyEarned.value,
+    hero: fighter.value,
+  });
+  if (r.report)
+    $q.notify({ type: 'info', message: '⚔️ L’assaut a eu lieu — revois-le sur ta base.' });
+}
+
 async function send() {
   const uid = auth.user?.id;
   const p = selected.value;
   if (!uid || !p || !canSend.value) return;
+  await settleDueSiege();
   try {
     await char.expeSend(uid, p, fighter.value, Date.now(), progressionLevel.value);
     selected.value = null;
@@ -2205,6 +2226,8 @@ async function lifecycle() {
   if (!uid || busy) return;
   busy = true;
   try {
+    // ⚠️ AVANT les retours : un voyage réglé efface la trace de qui était dehors.
+    await settleDueSiege();
     const msg = await char.expeTick(uid, Date.now());
     if (msg)
       $q.notify({
