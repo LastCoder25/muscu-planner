@@ -44,7 +44,7 @@ describe('level_config — le contrat ne promet que ce que le code tient', () =>
     // seule fois. Une exemption justifiée par une raison fausse est une exemption qu'on
     // finit par étendre — la moitié du travail d'un garde-fou est de dire le vrai.
     const META = ['schema_version', 'type', 'derived_from'];
-    // `overridable` était exempté ici comme dette (promesse jamais tenue) : RETIRÉ en v0.1201.
+    // `overridable` était exempté ici comme dette (promesse jamais tenue) : RETIRÉ en v0.1202.
     const exempts = META;
     const orphelins = champs.filter(
       (c) => !exempts.includes(c) && !sources.some((s) => s.includes(c)),

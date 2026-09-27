@@ -23,7 +23,7 @@ Le moteur déterministe et l'IA externe prennent la **même entrée** (`coach_re
 
 ## Couche d'adaptation par niveau (essentiel)
 
-`profile.experience.level` → `level_config` (`src/lib/levelConfig.ts`) → pilote progression, signal d'effort, profondeur d'historique, mode de création. C'est le point UNIQUE où un débutant (progression linéaire, note 1–4 seule, programme généré, UI guidée) et un avancé (double progression + RIR affiché, import libre, UI dense) divergent. **Jamais de code dupliqué par niveau** : on lit `level_config`. Dérivé du niveau, **sans surcharge** : `overridable` a été retiré en v0.1201 (aucun code ne permettait d'écraser un champ), comme `ui_density`/`auto_deload` en v0.1099.
+`profile.experience.level` → `level_config` (`src/lib/levelConfig.ts`) → pilote progression, signal d'effort, profondeur d'historique, mode de création. C'est le point UNIQUE où un débutant (progression linéaire, note 1–4 seule, programme généré, UI guidée) et un avancé (double progression + RIR affiché, import libre, UI dense) divergent. **Jamais de code dupliqué par niveau** : on lit `level_config`. Dérivé du niveau, **sans surcharge** : `overridable` a été retiré en v0.1202 (aucun code ne permettait d'écraser un champ), comme `ui_density`/`auto_deload` en v0.1099.
 
 ## Ce qui existe déjà
 

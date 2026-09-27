@@ -85,7 +85,7 @@ export interface LevelConfig {
   effort_signal: 'simple' | 'rir_optional' | 'rir';
   coach_history_depth: number;
   program_mode: 'guided' | 'assisted' | 'free';
-  // ⚠️ `overridable` a été RETIRÉ aussi (v0.1201) : il promettait qu'on pourrait écraser
+  // ⚠️ `overridable` a été RETIRÉ aussi (v0.1202) : il promettait qu'on pourrait écraser
   // n'importe quel champ, et aucun écran ni aucun code ne le permettait. Le niveau décide.
   // ⚠️ `ui_density` et `auto_deload` ont été RETIRÉS du contrat (v0.1099). Ils étaient
   // dérivés, écrits en base, et lus par PERSONNE : un débutant et un avancé voyaient
