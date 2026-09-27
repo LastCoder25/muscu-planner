@@ -47,9 +47,7 @@ import {
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
-  type SealDrop,
 } from './expedition';
-import { characterRank } from './characterRank';
 // ⚠️ `party.ts` porte la MISSION DE GROUPE (envoi, voyage, rapport) et la doctrine des
 // graines : le pronostic ne rejoue jamais la bataille qui aura lieu. Aucun cycle — ce
 // module-là n'importe pas les failles.
@@ -140,10 +138,6 @@ export const RIFT = {
    *  (~un tirage par jour) : mesuré 30/62/92 💠/j à 1/2/3 fermetures au niveau 30 avec la
    *  valeur de départ seule — un tirage tous les 4 jours, trop peu. */
   manaFoesPaid: 3.5,
-
-  /** 🔱 Maturité (0..1) AVANT laquelle le gardien laisse un SECOND sceau d'ascension :
-   *  refermer tôt paie double (v0.1047 ; avant, c'était l'attente qui payait). */
-  secondSealAt: 0.5,
 
   /** ⚠️ CE QUE LA MINE RÉSIDUELLE REND N'EST PAS DÉFINI ICI NON PLUS, et c'est un défaut
    *  que j'avais introduit : elle avait DEUX échelles — une part de ce que fermer paie
@@ -267,20 +261,6 @@ export function siegeMana(raid: Raid, report: Pick<RaidReport, 'log'>): number {
 export function riftClearMana(rift: Pick<RiftLike, 'level'>): number {
   const foes = riftMana(RIFT.manaFoesPaid, rift.level);
   return Math.round(foes * (1 + RIFT.bossManaShare));
-}
-
-/**
- * 🔱 Les sceaux d'ascension que laisse le GARDIEN d'une faille refermée (v0.1014) : sceaux de
- * CHAMPION, au rang de la faille. ⚠️ **2 si elle est refermée AVANT `RIFT.secondSealAt` de sa
- * maturité, 1 après** (v0.1047, inversé) : comme le mana, le sceau récompense la RAPIDITÉ —
- * avant, le second sceau payait l'attente, à contre-courant de l'urgence voulue.
- * ⚠️ `null` si la faille n'est pas refermée : c'est le gardien qui les porte, et une incursion
- * ratée ne l'abat pas.
- */
-export function riftSeals(rift: RiftLike, now: number, cleared: boolean): SealDrop | null {
-  if (!cleared) return null;
-  const rank = characterRank(Math.max(1, rift.level)).rankIndex;
-  return { kind: 'champion', rank, n: riftMaturity(rift, now) < RIFT.secondSealAt ? 2 : 1 };
 }
 
 /**
@@ -888,8 +868,9 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
   const shares = skirmishXpShares(escort, bodies, { foesDown: incursionFoesDown(run, bodies) });
   const xp = missionXpFor(escort, poi, run.cleared, shares, input.pantheonLevel);
 
+  // ⚠️ MANA SEUL (2026-09-27, décision de l'utilisateur) : plus de sceaux, ils viennent
+  // des ruines anciennes (`ruinsSeals`).
   const mana = incursionMana(run, poi.level);
-  const seals = riftSeals(poi, now, run.cleared);
   const party: PartyResult = {
     hero: !!hero,
     faction: riftSpecOf(poi).faction,
@@ -919,7 +900,6 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
     energy: 0,
     summonStones: 0,
     mana,
-    ...(seals ? { seals } : {}),
     item: null,
     items: [],
     key: 0,

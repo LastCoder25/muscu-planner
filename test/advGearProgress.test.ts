@@ -16,13 +16,12 @@ import {
   advGearAscensionBlocker,
   advGearAscensionCost,
   ascensionCost,
-  mapGearSeals,
   sealCount,
   GEAR_SEAL_KEY,
-  CAMP_GEAR_SEAL_CHANCE,
   emptySeals,
 } from '@/lib/ascension';
 import { RANK_ORDER } from '@/lib/items';
+import { RUINS_SEALS, ruinsSealKind, ruinsSeals } from '@/lib/expedition';
 
 const piece = (id: string, over: Partial<AdvGear> = {}): AdvGear => ({
   id,
@@ -189,14 +188,13 @@ describe('l’ascension d’une pièce', () => {
   });
 });
 
-describe('les sceaux d’objet de la carte (v0.1138 : sans rang, repaires ET camps)', () => {
-  it('un repaire en laisse toujours, 1 + rang du joueur', () => {
-    expect(mapGearSeals('lair', 0.99, 5)).toEqual({ kind: 'gear', rank: GEAR_SEAL_KEY, n: 1 });
-    expect(mapGearSeals('lair', 0.99, 15)?.n).toBe(2); // Argent
-    expect(mapGearSeals('lair', 0.99, 35)?.n).toBe(4); // Or noir
-  });
-  it('un camp, autant, à chaque fois — comme le repaire (v0.1147)', () => {
-    expect(CAMP_GEAR_SEAL_CHANCE).toBe(1);
-    for (const roll of [0, 0.5, 0.999]) expect(mapGearSeals('camp', roll, 35)?.n).toBe(4);
+describe('les sceaux d’objet de la carte (2026-09-27 : les ruines anciennes seules)', () => {
+  it('sans rang, et leur nombre suit le rang du JOUEUR', () => {
+    const id = Array.from({ length: 40 }, (_, i) => `r${i}`).find(
+      (i) => ruinsSealKind({ id: i }) === 'gear',
+    )!;
+    const at = (L: number) => ruinsSeals({ id, level: 5 }, L);
+    expect(at(5)).toEqual({ kind: 'gear', rank: GEAR_SEAL_KEY, n: RUINS_SEALS.gearPerRank });
+    expect(at(35).n).toBe(4 * RUINS_SEALS.gearPerRank); // Or noir
   });
 });

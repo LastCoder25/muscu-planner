@@ -55,7 +55,14 @@ export type PoiType =
   // ⚔️ BANDE EN MARCHE : l'armée d'une faille qui a débordé, en route vers la base. Le
   // SEUL POI qui BOUGE — sa position est recalculée à chaque tick. On l'intercepte pour
   // désarmer le renfort du prochain siège (cf. `rift.ts`).
-  | 'warband';
+  | 'warband'
+  // 🏛️ RUINES ANCIENNES (2026-09-27, décision de l'utilisateur) : la SEULE source de sceaux
+  // (🔱 de champion ou ⚜️ d'objet, selon la ruine). Gardées : un sceau se mérite.
+  | 'ruins'
+  // 🏚️ RUINES D'UN HÉROS TOMBÉ : on fouille sans combattre, on rapporte des consommables 🎒.
+  | 'fallen'
+  // 🐺 TANIÈRE : UNE bête seule et forte, deux champions au plus — beaucoup d'XP.
+  | 'den';
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et
  *  ajouter un POI casse la compilation tant qu'on ne l'a pas nommé. La boîte à messages
@@ -74,6 +81,9 @@ export const POI_LABEL: Record<PoiType, string> = {
   rift: 'Faille',
   mana_mine: 'Mine de mana résiduel',
   warband: 'Bande en marche',
+  ruins: 'Ruines anciennes',
+  fallen: 'Ruines d’un héros tombé',
+  den: 'Tanière',
 };
 
 /** Emoji d'un point d'intérêt — la carte et le rapport de convoi lisent la MÊME table
@@ -90,6 +100,9 @@ export const POI_EMO: Record<PoiType, string> = {
   rift: '🕳️',
   mana_mine: '💠',
   warband: '⚔️',
+  ruins: '🏛️',
+  fallen: '🏚️',
+  den: '🐺',
 };
 
 /** POI de récolte : on ramasse et on rentre (comme la mine) — gardé depuis 2026-09-22 (`harvestGuardOf`). */
@@ -99,11 +112,13 @@ export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
   'shrine',
   'archive',
   'mana_mine',
+  'ruins',
+  'fallen',
 ]);
 
 /** 🏕️ Les POI qu'on ATTAQUE en groupe (étape 3 des camps) : camp = troupe + chef,
  *  repaire = troupe plus grande + champion. */
-export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair']);
+export const CAMP_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(['camp', 'lair', 'den']);
 /** 🎯 Les POI où part une ÉQUIPE (héros et/ou champions) — **tous les lieux sauf l'arène**
  *  depuis que les équipes remplacent les convois (2026-09-21) : camps, failles, armées en
  *  marche ET lieux de RÉCOLTE (`resolveHarvestParty`). L'arène reste au héros seul (sa
@@ -140,14 +155,27 @@ export function riftFactionOf(id: string): RaidFaction {
  *  depuis que l'équipe compte 3 places (2026-09-21, décision de l'utilisateur ; c'était 2-4
  *  et 5-10) : un camp de 3 demande une équipe pleine, un repaire n'est jamais sous 2. La
  *  taille reste le gradateur, et l'or suit la taille (`campGroupHaul`). */
-export const CAMP_SIZES: { camp: readonly number[]; lair: readonly number[] } = {
+export const CAMP_SIZES: {
+  camp: readonly number[];
+  lair: readonly number[];
+  den: readonly number[];
+} = {
   camp: [1, 2],
   lair: [2, 3],
+  // 🐺 La tanière : UNE bête, de la force de deux champions de référence — et on n'y envoie
+  // que deux champions (`DEN_MAX_PARTY`). Mesuré (camps) : deux champions contre une force
+  // de 2 gagnent 74-97 %.
+  den: [2],
 };
+
+/** 🐺 Deux places au plus dans une tanière — le héros en prend deux (`HERO_PARTY_WORTH`). */
+export const DEN_MAX_PARTY = 2;
 
 export interface CampSpec {
   faction: RaidFaction;
   size: number;
+  /** 🐺 Une bête SEULE (tanière) : pas de troupe, le meneur est le seul corps. */
+  lone?: boolean;
 }
 
 /** ⚔️ Ce qu'un GROUPE a vécu sur un camp — porté par l'issue, recopié dans le rapport 📬 et
@@ -223,7 +251,9 @@ function hashId(s: string): number {
  * entrent : « de tout un peu partout » (seul le niveau suit la distance, règle v0.683).
  */
 export function campSpecOf(poi: Pick<Poi, 'id' | 'type'>): CampSpec | null {
-  if (poi.type !== 'camp' && poi.type !== 'lair') return null;
+  if (poi.type !== 'camp' && poi.type !== 'lair' && poi.type !== 'den') return null;
+  // 🐺 Une tanière abrite une BÊTE seule (`lone`) : pas de troupe, un seul corps à abattre.
+  if (poi.type === 'den') return { faction: 'betes', size: CAMP_SIZES.den[0]!, lone: true };
   const rng = mulberry32((hashId(poi.id) ^ 0x6d2b79f5) >>> 0 || 1);
   const faction = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
   const sizes = CAMP_SIZES[poi.type];
@@ -245,6 +275,45 @@ export const HARVEST_GUARD_SIZES: readonly number[] = [1, 1.5, 2, 2.5];
  *  débutant, et la moitié de ses lieux sont « au-dessus » (`riftLevelFor`). Avec : 61 à
  *  76 % des lieux pris seul aux niveaux 1-5, et rien ne change à partir du niveau 7. */
 export const HARVEST_GUARD_RAMP = { start: 0.4, perLevel: 0.1 };
+/** 🏛️ Gardes des ruines anciennes : un cran au-dessus d'une mine (un sceau se mérite). Mesuré
+ *  (camps) : 2 → deux champions 74-97 % · 2,5 → trois champions ~99 % · 3 → trois champions
+ *  ~80 %. */
+export const RUINS_GUARD_SIZES: readonly number[] = [2, 2.5, 3];
+
+/**
+ * 🔱⚜️ LES SCEAUX D'UNES RUINES ANCIENNES (2026-09-27, décision de l'utilisateur : « des ruines
+ * à explorer pour les sceaux, au lieu des lieux où on les trouve actuellement ») — elles sont
+ * désormais la SEULE source de sceaux : plus rien sur les failles (mana seul) ni les camps.
+ * La FAMILLE est dérivée de l'id (générateur séparé, comme les gardes) : une ruine sur deux
+ * garde des sceaux de champion, l'autre des sceaux d'objet — la carte l'annonce avant l'envoi.
+ * - 🔱 champion : `RUINS_SEALS.champion` sceaux au rang du LIEU (comme le gardien d'une faille) ;
+ * - ⚜️ objet : `RUINS_SEALS.gearPerRank` × (1 + rang du joueur) (sans rang, v0.1138).
+ * ⚠️ MESURÉ sur de vraies cartes (6 × 14 jours, niveaux 12/30/60) : 1,67 ruines par jour, une
+ * sur deux de chaque famille — contre 7,9 camps et repaires (qui rendaient 1 + rang sceaux
+ * d'objet chacun) et 1 à 2 failles (1,5 sceau de champion en moyenne). Les valeurs gardent
+ * ce débit (`ruinsSeals.test`) : les sceaux sont plus RARES à trouver, plus gros à la fois.
+ */
+export const RUINS_SEALS = { champion: 3, gearPerRank: 9 } as const;
+export function ruinsSealKind(poi: Pick<Poi, 'id'>): SealDrop['kind'] {
+  return mulberry32((hashId(poi.id) ^ 0x2545f491) >>> 0 || 1)() < 0.5 ? 'champion' : 'gear';
+}
+export function ruinsSeals(poi: Pick<Poi, 'id' | 'level'>, playerLevel: number): SealDrop {
+  if (ruinsSealKind(poi) === 'champion')
+    return {
+      kind: 'champion',
+      rank: characterRank(Math.max(1, poi.level)).rankIndex,
+      n: RUINS_SEALS.champion,
+    };
+  return {
+    kind: 'gear',
+    rank: 0,
+    n: RUINS_SEALS.gearPerRank * (1 + characterRank(Math.max(1, playerLevel)).rankIndex),
+  };
+}
+/** 🏚️ Combien de consommables rapporte la fouille d'un héros tombé : 2, +1 tous les 30 niveaux. */
+export function fallenSupplyCount(level: number): number {
+  return 2 + Math.floor(Math.max(1, level) / 30);
+}
 
 /**
  * 🛡️ Les gardes d'une mine, d'un puits, d'un sanctuaire, d'archives ou d'une mine de mana —
@@ -262,9 +331,13 @@ export function harvestGuardOf(poi: Pick<Poi, 'id' | 'type' | 'level'>): CampSpe
   // une faille Or noir s'affichait (et payait) « Argent ★5 », puisque le rang affiché est la
   // DIFFICULTÉ (`poiDifficultyLevel`). Sans gardes, difficulté = niveau de la faille.
   if (poi.type === 'mana_mine') return null;
+  // 🏚️ Les ruines d'un héros tombé : personne ne les garde, on y fouille.
+  if (poi.type === 'fallen') return null;
   const rng = mulberry32((hashId(poi.id) ^ 0x5851f42d) >>> 0 || 1);
   const faction = CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!;
-  const base = HARVEST_GUARD_SIZES[Math.floor(rng() * HARVEST_GUARD_SIZES.length)]!;
+  // 🏛️ Les ruines anciennes gardent des sceaux : leurs gardes sont plus nombreux.
+  const sizes = poi.type === 'ruins' ? RUINS_GUARD_SIZES : HARVEST_GUARD_SIZES;
+  const base = sizes[Math.floor(rng() * sizes.length)]!;
   const ramp = Math.min(
     1,
     HARVEST_GUARD_RAMP.start + HARVEST_GUARD_RAMP.perLevel * Math.max(0, poi.level - 1),
@@ -398,7 +471,7 @@ export interface ExpeditionOutcome {
    *  (failles → pierres de mana → gacha). À ne pas confondre avec une devise MORTE, dont
    *  le puits a été retiré — ici il arrive. */
   mana: number;
-  /** 🔱 Sceaux d'ascension — le gardien d'une faille refermée (`riftSeals`). Absent partout
+  /** 🔱⚜️ Sceaux — les RUINES ANCIENNES seules (`ruinsSeals`, 2026-09-27). Absent partout
    *  ailleurs. */
   seals?: SealDrop;
   /** 🎒 Consommable trouvé en route (`rollSupplyDrop`), crédité à l'encaissement. */
@@ -826,6 +899,9 @@ export const EXPE = {
     // 1 h 30 à 7 h. Quand elle expire, l'armée a rejoint la sienne — le marquage reste et
     // le prochain siège est renforcé.
     warband: 24 * 3600_000,
+    ruins: 20 * 3600_000,
+    fallen: 16 * 3600_000,
+    den: 14 * 3600_000,
   },
   travelOneWayMinMin: 8, // trajet aller (min) : 8 min (proche) → 150 min (loin) × niveau
   travelOneWayMaxMin: 150,
@@ -855,6 +931,10 @@ export const EXPE = {
     // péage d'or reste universel — mais l'interception ne PAIE presque rien, elle ÉVITE
     // une perte, donc on ne va pas au-delà.
     warband: 65,
+    // 🏛️🏚️ Ni or ni butin : un péage de récolte. 🐺 Tanière : un camp.
+    ruins: 34,
+    fallen: 30,
+    den: 65,
   },
   goldCostExp: 1.6,
   failRefund: 0.4, // échec : fraction de l'or remboursée (< coût → jamais un profit ; adouci 0,3→0,4 pour un pari raté moins punitif, ticket 86331df3)
@@ -1340,19 +1420,35 @@ export function createMap(
 
 // Fait apparaître 1 POI (déterministe via seed + spawnCount), placé espacé.
 /** Tirage des lieux ordinaires : la MOITIÉ sont des POI de RESSOURCES (v0.658). */
+// ⚠️ LES LIEUX D'ÉCONOMIE GARDENT LEUR PART (2/3), et entre eux leurs poids d'avant : les
+// ruines et la tanière (2026-09-27) prennent leur place parmi les lieux ORDINAIRES (sources,
+// archives) — l'or et les pierres de la carte, mesurés (`goldSink`, `campEconomy`), ne
+// bougent pas. Ce sont l'énergie des sources et les clés des archives qui cèdent la moitié.
 const SPAWN_TABLE = [
   'mine',
   'mine',
+  'mine',
+  'mine',
+  'camp',
+  'camp',
   'camp',
   'camp',
   'lair',
+  'lair',
   'arena',
-  'well',
-  'well',
+  'arena',
   'shrine',
   'shrine',
+  'shrine',
+  'shrine',
+  'well',
+  'well',
   'archive',
   'archive',
+  'ruins',
+  'ruins',
+  'fallen',
+  'den',
 ] as const satisfies readonly PoiType[];
 
 /**
@@ -1376,7 +1472,16 @@ const ECON_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
 ]);
 const ECON_WEIGHT = SPAWN_TABLE.filter((t) => ECON_TYPES.has(t)).length;
 /** Ce qu'un lieu d'économie devient quand leur quota est plein. */
-const EXTRA_TABLE = ['well', 'archive'] as const satisfies readonly PoiType[];
+const EXTRA_TABLE = [
+  'well',
+  'well',
+  'archive',
+  'archive',
+  'ruins',
+  'ruins',
+  'fallen',
+  'den',
+] as const satisfies readonly PoiType[];
 const EXTRA_TYPES: ReadonlySet<PoiType> = new Set<PoiType>(EXTRA_TABLE);
 /** …et ce qu'une source ou des archives deviennent quand LEUR quota est plein (même pondération
  *  que `SPAWN_TABLE`). */
@@ -1558,7 +1663,7 @@ function placePoiOfType(
   const clearance = (p: { x: number; y: number }) =>
     map.pois.length ? Math.min(...map.pois.map((q) => dist(q.x, q.y, p.x, p.y))) : Infinity;
   let best = clearance(pos);
-  for (let k = 0; k < 24 && best < EXPE.minDistPoi; k++) {
+  for (let k = 0; k < 48 && best < EXPE.minDistPoi; k++) {
     const cand = placePoi(rng, reach, minFrac, band);
     const gap = clearance(cand);
     if (gap > best) {
@@ -2139,6 +2244,9 @@ const FAIL_TEXT: Record<PoiType, string[]> = {
     'La bande a tenu bon. Elle poursuit sa marche vers ta base — prépare l’enceinte.',
     'Repli forcé : ils sont trop nombreux. Le siège sera rude.',
   ],
+  ruins: ['Les gardes des ruines ont tenu : les sceaux restent sous la pierre.'],
+  fallen: ['Les ruines s’étaient déjà écroulées sur son paquetage.'],
+  den: ['La bête a eu le dessus. Retraite, les griffes aux trousses.'],
 };
 const WIN_TEXT: Record<PoiType, string[]> = {
   lair: [
@@ -2173,6 +2281,12 @@ const WIN_TEXT: Record<PoiType, string[]> = {
     '⚔️ Bande dispersée ! L’armée de la faille ne renforcera pas le prochain siège.',
     '⚔️ Interceptée et mise en déroute — ta base respirera.',
   ],
+  ruins: ['🏛️ Ruines explorées — les sceaux sont à toi.', '🏛️ Sous l’autel effondré, des sceaux.'],
+  fallen: [
+    '🏚️ Le paquetage d’un héros oublié — des provisions encore bonnes.',
+    '🏚️ Fouillé à la lueur d’une torche : de quoi repartir équipé.',
+  ],
+  den: ['🐺 La bête est tombée — une leçon que tes champions n’oublieront pas.'],
 };
 
 /** Calcule l'issue d'une expédition (seedée). Le butin est crédité au RETOUR. */

@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import { mapGearSeals } from '@/lib/ascension';
 import {
   CAMP,
   campBodies,
@@ -109,33 +108,17 @@ const road = (level: number, n: number): EscortKit => ({
 });
 /** Les unités d'une escorte — la signature RÉELLE : `roadUnits(escort, escortGear(escort, road))`. */
 const units = (esc: Adventurer[], rd: EscortKit) => roadUnits(esc, escortGear(esc, rd));
-describe('⚜️ un REPAIRE pris laisse un sceau d’objet — un camp non (v0.1047)', () => {
-  it('repaire ou camp gagné : des sceaux d’objet à chaque fois ; défaite : aucun', () => {
-    let lairWon = 0;
-    let lairLost = 0;
-    let campSeal = 0;
-    let campNone = 0;
-    for (let s = 1; s <= 60; s++) {
-      const lair = resolveCamp(input({ seed: s, poi: poi({ type: 'lair' }), hero: fort(20) }));
-      if (lair.win) {
-        expect(lair.seals, `graine ${s}`).toEqual({ kind: 'gear', rank: 0, n: 2 }); // niveau 20 = Argent
-        lairWon++;
-      } else {
-        expect(lair.seals).toBeUndefined();
-        lairLost++;
+describe('⚜️ plus AUCUN sceau dans un camp ni un repaire (2026-09-27)', () => {
+  // Décision de l'utilisateur : les sceaux ne viennent plus que des RUINES ANCIENNES.
+  it('gagné ou perdu, jamais de sceau', () => {
+    let won = 0;
+    for (let s = 1; s <= 60; s++)
+      for (const type of ['camp', 'lair'] as const) {
+        const o = resolveCamp(input({ seed: s, poi: poi({ type }), hero: fort(20) }));
+        if (o.win) won++;
+        expect(o.seals, `${type} graine ${s}`).toBeUndefined();
       }
-      const camp = resolveCamp(input({ seed: s, hero: fort(20) }));
-      if (!camp.win) expect(camp.seals).toBeUndefined();
-      else if (camp.seals) {
-        expect(camp.seals).toEqual({ kind: 'gear', rank: 0, n: 2 });
-        campSeal++;
-      } else campNone++;
-    }
-    expect(lairWon, 'aucun repaire gagné : le test ne prouve rien').toBeGreaterThan(0);
-    // ⚜️ Comme le repaire (v0.1147) : un camp gagné laisse TOUJOURS ses sceaux.
-    expect(campSeal).toBeGreaterThan(10);
-    expect(campNone).toBe(0);
-    void lairLost;
+    expect(won, 'aucun camp gagné : le test ne prouve rien').toBeGreaterThan(10);
   });
 });
 
@@ -810,9 +793,9 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
         expect(label.includes('🪙'), label).toBe(haul.gold > 0);
         expect(label.includes('🎒'), label).toBe(haul.supplies > 0);
         expect(label.includes('🗝️'), label).toBe(false);
-        // ⚜️ Camp et repaire laissent des sceaux d'objet (`mapGearSeals`) : la carte le dit.
-        expect(label, label).toContain('⚜️');
-        expect(label.includes('%'), label).toBe(mapGearSeals(type, 0.99, 30) === null);
+        // ⚜️ Plus de sceaux dans un camp (2026-09-27) : ils viennent des ruines anciennes.
+        expect(label, label).not.toContain('⚜️');
+        expect(label, label).not.toContain('🔱');
         expect(label).not.toContain('🔩');
         expect(label).not.toContain('🧩');
         expect(label).not.toContain('pièce');
