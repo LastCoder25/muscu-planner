@@ -144,7 +144,11 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
   };
 }
 
-const NIV = [12, 26, 60];
+// ⚠️ Le niveau 90 est couvert depuis la v0.1200 : la fin de partie n’était vérifiée par aucun
+// test (une note l’annonçait à +34 % du revenu de référence). Re-mesuré : or +7,5 / +10,7 /
+// +9,2 / +12,3 / +11,5 / +10,6 % aux niveaux 12 / 26 / 60 / 75 / 90 / 100 — plat, depuis
+// que seuls les bandits portent de l’or (v0.1166). Pierres +12 à +20 %.
+const NIV = [12, 26, 60, 90];
 // ⚠️ HUIT graines, pas deux. Avec deux, la démonstration du plafond de créneaux (ligne
 // « sans plafond, on dépasse la bande ») se jouait à 5 % de sa borne : la moindre variation
 // de PLACEMENT des POI la faisait tomber — c'est arrivé en ajoutant 2 failles à la couronne,
@@ -165,7 +169,7 @@ function moyenne(L: number, opts: { days: number; comptoir: number; slotCap: boo
   return { goldNet: m('goldNet'), stones: m('stones'), keys: m('keys'), parties: m('parties') };
 }
 
-describe('💰 le débit des camps de faction ne double pas l’économie', { timeout: 30_000 }, () => {
+describe('💰 le débit des camps de faction ne double pas l’économie', { timeout: 120_000 }, () => {
   it('⚠️ or NET par jour ≤ un quart du revenu de référence, à tous les niveaux', () => {
     for (const L of NIV) {
       const r = moyenne(L, { days: 7, comptoir: L, slotCap: true });
