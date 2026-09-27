@@ -338,9 +338,11 @@
           </p>
           <p class="ctl-line">{{ controlProd }}</p>
           <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
-          <p v-if="controlAttackIn > 0" class="ctl-line ctl-warn">
-            ⚔️ L’ennemi reviendra dans <b>{{ formatDuration(controlAttackIn) }}</b> — force inconnue
-            : ta garnison ne gagnera pas toujours.
+          <!-- ⚠️ L'instant de la reprise n'est JAMAIS annoncé (v0.1239, décision de
+               l'utilisateur) : on sait seulement qu'elle viendra, plus tôt si l'on s'entraîne. -->
+          <p v-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
+            ⚔️ L’ennemi reviendra, sans prévenir — plus souvent si tu t’entraînes beaucoup. Force
+            inconnue : ta garnison ne gagnera pas toujours.
           </p>
           <div class="send-bar">
             <button
@@ -1399,7 +1401,6 @@ const controlRate = computed(() =>
 const controlGold = computed(() =>
   livePoi.value ? controlStock(livePoi.value, now.value, heroLevel.value) : 0,
 );
-const controlAttackIn = computed(() => Math.max(0, (liveControl.value?.attackAt ?? 0) - now.value));
 const ctlBusy = ref(false);
 async function collectCtl() {
   const uid = auth.user?.id;
@@ -1980,16 +1981,16 @@ async function lifecycle() {
   try {
     // ⚠️ AVANT les retours : un voyage réglé efface la trace de qui était dehors.
     await settleDueSiege();
-    const msg = await char.expeTick(uid, Date.now());
+    const msg = await char.expeTick(uid, Date.now(), progress.activeDaysInLast(7));
     if (msg)
       $q.notify({
         type: msg.win ? 'positive' : 'warning',
         message: `📬 ${msg.win ? 'Rapport : victoire' : 'Rapport : échec'} — le héros rentre.`,
       });
     // Le héros rentre : il redevient disponible.
-    await char.expeSettle(uid, Date.now());
+    await char.expeSettle(uid, Date.now(), progress.activeDaysInLast(7));
     // ⚔️ Les groupes partis sans le héros : rapport à l'arrivée, retour au bout du chemin.
-    const partyMsgs = await char.partyTick(uid, Date.now());
+    const partyMsgs = await char.partyTick(uid, Date.now(), progress.activeDaysInLast(7));
     // Un rapport déposé AVANT le retour se dit ; un retour, c'est la modale qui le montre.
     if (partyMsgs.length && !partyMsgs.every((m) => isClaimable(m, Date.now())))
       $q.notify({
@@ -1997,7 +1998,7 @@ async function lifecycle() {
         message: '📬 Rapport de ton groupe — il rentre en ville.',
       });
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctlMsgs = await char.controlTick(uid, Date.now(), heroLevel.value);
+    const ctlMsgs = await char.controlTick(uid, Date.now(), heroLevel.value, progress.activeDaysInLast(7));
     if (ctlMsgs.length)
       $q.notify({
         type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',

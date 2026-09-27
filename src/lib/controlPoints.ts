@@ -46,9 +46,14 @@ export const CONTROL = {
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
-  /** Délai avant une reprise ennemie : entre 1 et 3 jours (décision de l'utilisateur). */
+  /** Délai avant une reprise ennemie : entre 1 et 3 jours (décision de l'utilisateur), et
+   *  d'autant plus COURT que le joueur est actif (v0.1239, demandé : « plus souvent s'il joue
+   *  beaucoup »). La mesure est celle des sièges de la base (`activeDays7`) : 7 jours actifs
+   *  sur 7 → autour d'1 jour, aucun → autour de 3. */
   retakeMinMs: 24 * 3600_000,
   retakeMaxMs: 72 * 3600_000,
+  /** Écart aléatoire autour du délai visé (± cette part), toujours borné à [min, max]. */
+  retakeJitter: 0.25,
   /** Force de la troupe ennemie, en champions de référence : tirée à chaque attaque.
    *  ⚠️ MESURÉE (`controlPoints.test`, niveau 30, 600 combats) : une garnison de 1, 2 ou 3
    *  champions de référence repousse **10 %, 58 % et 85 %** des attaques. Avec [1,5 → 3], 1
@@ -71,8 +76,6 @@ export const CONTROL = {
   garrisonShare: [0, 0.5, 0.8, 1] as readonly number[],
   /** Réserve plafonnée : au-delà de 24 h sans récolte, la mine ne produit plus. */
   storageMs: 24 * 3600_000,
-  /** Préavis de la notification d'attaque. */
-  warnMs: 2 * 3600_000,
   /** 🎯 Camp d'entraînement : chaque champion posté gagne l'XP d'une épreuve de son rang
    *  (`trialXpBase`) toutes les `trainHoursPerTrial` heures — plafonné au ★5 du rang JUSTE
    *  EN DESSOUS du héros (décision de l'utilisateur, `trainingCapLevel`). */
@@ -196,10 +199,17 @@ export function ensureControls(
   return { ...map, pois: [...healed, ...add] };
 }
 
-/** Délai avant la prochaine attaque, TIRÉ entre 1 et 3 jours (graine : le lieu et l'instant). */
-export function retakeDelayMs(id: string, from: number): number {
+/** Délai avant la prochaine attaque (graine : le lieu et l'instant) : visé entre 3 jours
+ *  (aucun jour actif sur 7) et 1 jour (7 sur 7), ± `retakeJitter`, borné à [1 j, 3 j].
+ *  ⚠️ `activeDays7` est REQUIS : l'oublier ferait attaquer au rythme d'un inactif.
+ *  ⚠️ L'instant n'est JAMAIS annoncé au joueur (décision de l'utilisateur) : ni sur la fiche
+ *  du point, ni par une notification de préavis — seule l'attaque elle-même se dit. */
+export function retakeDelayMs(id: string, from: number, activeDays7: number): number {
   const r = mulberry32((seedOf(`${id}:atk:${from}`) ^ 0x2c1b3c6d) >>> 0 || 1)();
-  return CONTROL.retakeMinMs + r * (CONTROL.retakeMaxMs - CONTROL.retakeMinMs);
+  const act = Math.min(7, Math.max(0, activeDays7)) / 7;
+  const { retakeMinMs: lo, retakeMaxMs: hi, retakeJitter: j } = CONTROL;
+  const aim = hi - act * (hi - lo);
+  return Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * j)));
 }
 
 /** Remplace un point dans la carte. */
@@ -218,6 +228,7 @@ export function captureControl(
   id: string,
   garrison: readonly string[],
   at: number,
+  activeDays7: number,
 ): ExpeditionMap {
   return withControl(map, id, (p) => ({
     ...p,
@@ -227,7 +238,7 @@ export function captureControl(
       garrison: garrison.slice(0, seatsOf(p.control!.kind)),
       since: at,
       collectedAt: at,
-      attackAt: at + retakeDelayMs(id, at),
+      attackAt: at + retakeDelayMs(id, at, activeDays7),
       assault: false,
     },
   }));
@@ -250,10 +261,15 @@ export function loseControl(map: ExpeditionMap, id: string, playerLevel: number)
 }
 
 /** 🏰 Une attaque repoussée : la garnison reste, une nouvelle attaque se prépare. */
-export function holdControl(map: ExpeditionMap, id: string, at: number): ExpeditionMap {
+export function holdControl(
+  map: ExpeditionMap,
+  id: string,
+  at: number,
+  activeDays7: number,
+): ExpeditionMap {
   return withControl(map, id, (p) => ({
     ...p,
-    control: { ...p.control!, attackAt: at + retakeDelayMs(id, at) },
+    control: { ...p.control!, attackAt: at + retakeDelayMs(id, at, activeDays7) },
   }));
 }
 

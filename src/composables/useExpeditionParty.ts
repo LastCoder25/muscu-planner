@@ -152,7 +152,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
           onExpedition: !!active.value,
           healMs: heroHealIn.value,
           outpost: outpostBuilt.value,
-          control: selected.value.type === 'control',
         })
       : null,
   );
