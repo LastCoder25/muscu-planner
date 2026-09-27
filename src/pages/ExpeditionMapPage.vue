@@ -574,6 +574,7 @@ import {
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
+  ruinsSealKind,
   haulPills,
   type PartyResult,
 } from '@/lib/expedition';
@@ -1549,6 +1550,9 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   arena: () => 'objets + pierres 🔮 selon les vagues',
   rift: () => 'mana 💠',
   warband: () => 'mana 💠 · siège non renforcé',
+  ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),
+  fallen: () => 'consommables 🎒',
+  den: () => 'beaucoup d’XP · consommables 🎒',
 };
 /** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */
 const poiSub = computed(() => {
@@ -1564,7 +1568,7 @@ const poiSub = computed(() => {
     : band
       ? String(band.size)
       : force
-        ? String(campBodyCount(force.size))
+        ? String(campBodyCount(force))
         : '';
   const foe = faction
     ? `${FACTION_EMOJI[faction]} ${FACTION_LABEL[faction]}${count ? ` ×${count}` : ''}`

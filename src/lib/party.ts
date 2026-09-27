@@ -15,7 +15,7 @@
 //
 // ⚠️ Aucun cycle : ce module importe `expedition`, `caravan` et `adventurers` ; aucun des
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
-import { caravanHurtMs, caravanLegMin, type PartyHero } from './caravan';
+import { caravanHurtMs, caravanLegMin, HERO_PARTY_WORTH, type PartyHero } from './caravan';
 import { sinceEvent } from './sinceEvent';
 import { supplyFx, supplyUselessWhy, SUPPLIES, type SupplyId, type SupplyTarget } from './supplies';
 import {
@@ -23,6 +23,7 @@ import {
   isRiftPoi,
   isWarbandPoi,
   poiForceOf,
+  DEN_MAX_PARTY,
   buildMessage,
   depositMessages,
   poiTravelLevel,
@@ -130,8 +131,16 @@ export function suppliesBlocker(ids: readonly SupplyId[], t: SupplyTarget): stri
  */
 /** Le plafond de champions d'une équipe : celui du Panthéon (`engageCap`). ⚠️ Source unique —
  *  l'écran et le store l'appellent tous deux à travers `partySendBlocker`. */
-export function partyCapFor(engage: number): number {
-  return Math.max(0, Math.floor(engage));
+export function partyCapFor(
+  engage: number,
+  /** 🐺 Le lieu visé : une tanière n'accueille que `DEN_MAX_PARTY` places. */
+  poi?: Pick<Poi, 'type'> | null,
+  /** Le héros est du groupe : il prend `HERO_PARTY_WORTH` places dans une tanière. */
+  hero = false,
+): number {
+  const panth = Math.max(0, Math.floor(engage));
+  if (poi?.type !== 'den') return panth;
+  return Math.min(panth, Math.max(0, DEN_MAX_PARTY - (hero ? HERO_PARTY_WORTH : 0)));
 }
 
 /** Pourquoi une ÉQUIPE ne peut pas partir — `null` s'il le peut.
@@ -139,7 +148,7 @@ export function partyCapFor(engage: number): number {
  *  pool que les convois d'avant) : c'est ce qui borne le NOMBRE d'équipes en parallèle, donc
  *  l'or et les pierres par jour. L'équipe du héros n'en prend pas : il est sa propre limite.
  *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
-export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'hopeless';
+export type PartySendBlock = 'notTarget' | 'empty' | 'slots' | 'tooMany' | 'denFull' | 'hopeless';
 export function partySendBlocker(
   poi: Poi,
   escortCount: number,
@@ -157,6 +166,8 @@ export function partySendBlocker(
   if (!hero && slotsFree <= 0) return 'slots';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
   if (escortCount > partyCapFor(cap)) return 'tooMany';
+  // 🐺 LA TANIÈRE : deux places, le héros en prend deux.
+  if (escortCount > partyCapFor(cap, poi, hero)) return 'denFull';
   // 💀 PERDU D'AVANCE (demandé par l'utilisateur) : aucune victoire sur tout l'échantillon
   // de pronostic. ⚠️ Le seuil est le ZÉRO STRICT, et c'est délibéré — la mesure rejoue le
   // VRAI combat, donc « 0 sur 40 » veut dire qu'aucune graine n'a jamais vu ce groupe
@@ -171,6 +182,7 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   empty: 'l’équipe est vide',
   slots: 'tous les créneaux d’équipe de l’Avant-poste sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
+  denFull: 'une tanière n’accueille que 2 champions (ton héros en vaut 2)',
 };
 export function canSendParty(
   poi: Poi,

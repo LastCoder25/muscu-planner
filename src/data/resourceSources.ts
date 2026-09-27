@@ -127,9 +127,9 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
     use: 'Faire monter un champion au rang suivant (ascension). Un sceau ne sert qu’à son rang.',
     sources: [
       {
-        emoji: '🕳️',
-        label: 'Gardien d’une faille refermée',
-        detail: 'au rang de la faille — 2 si refermée tôt',
+        emoji: '🏛️',
+        label: 'Ruines anciennes de la carte',
+        detail: 'gardées — 3 sceaux au rang du lieu, une ruine sur deux',
       },
     ],
   },
@@ -138,8 +138,11 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
     name: 'Sceaux d’objet',
     use: 'Faire monter une pièce d’équipement de champion au rang suivant. Sans rang : il en faut autant que le rang visé (Argent 1, Or 2, Or noir 3…).',
     sources: [
-      { emoji: '👹', label: 'Repaires de la carte', detail: '1 + ton rang par victoire' },
-      { emoji: '⛺', label: 'Camps de la carte', detail: 'autant, 1 victoire sur 2' },
+      {
+        emoji: '🏛️',
+        label: 'Ruines anciennes de la carte',
+        detail: 'gardées — 9 × (1 + ton rang), une ruine sur deux',
+      },
     ],
   },
   tickets: {

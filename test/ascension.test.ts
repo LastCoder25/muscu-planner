@@ -27,8 +27,7 @@ import {
 } from '@/lib/adventurers';
 import { buildingUpgradeCost } from '@/lib/buildings';
 import { CHARACTER_RANKS, rankStartLevel } from '@/lib/characterRank';
-import { EXPE } from '@/lib/expedition';
-import { RIFT, riftSeals } from '@/lib/rift';
+import { ruinsSealKind, ruinsSeals } from '@/lib/expedition';
 import { CHAMPIONS } from '@/data/champions';
 import { RANK_ORDER } from '@/lib/items';
 
@@ -162,22 +161,12 @@ describe('ce qui bloque', () => {
   });
 });
 
-describe('les sceaux d’une faille refermée', () => {
-  const life = EXPE.lifespanMs.rift;
-  const rift = (level: number) => ({ id: 'r', level, spawnedAt: 0 });
-
-  it('rien si la faille n’est pas refermée', () => {
-    expect(riftSeals(rift(25), life, false)).toBeNull();
-  });
-
-  it('au rang de la faille, un de plus quand elle est refermée TÔT (v0.1047, inversé)', () => {
-    // Comme le mana : refermer vite paie, attendre ne paie plus.
-    expect(riftSeals(rift(25), 0, true)).toEqual({ kind: 'champion', rank: 2, n: 2 });
-    expect(riftSeals(rift(25), life * RIFT.secondSealAt, true)).toEqual({
-      kind: 'champion',
-      rank: 2,
-      n: 1,
-    });
+describe('les sceaux de champion des ruines anciennes (2026-09-27 : plus des failles)', () => {
+  it('au rang du LIEU, jamais du joueur', () => {
+    const id = Array.from({ length: 40 }, (_, i) => `r${i}`).find(
+      (i) => ruinsSealKind({ id: i }) === 'champion',
+    )!;
+    expect(ruinsSeals({ id, level: 25 }, 90)).toMatchObject({ kind: 'champion', rank: 2 });
   });
 });
 

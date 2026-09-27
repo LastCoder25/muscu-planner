@@ -682,7 +682,17 @@ describe('difficulté des POI de combat', () => {
     // 💠 `mana_mine` rejoint la famille en v0.924 : ce qu'une faille laisse en s'effondrant
     // se RÉCOLTE (et se récolte donc au convoi, sans énergie — c'est ce qui ouvre le mana au
     // joueur qui ne combat pas).
-    expect([...HARVEST_TYPES].sort()).toEqual(['archive', 'mana_mine', 'mine', 'shrine', 'well']);
+    // 🏛️🏚️ Les ruines (2026-09-27) : on y va, on en revient avec des sceaux ou des
+    // consommables — des récoltes (les anciennes étant gardées).
+    expect([...HARVEST_TYPES].sort()).toEqual([
+      'archive',
+      'fallen',
+      'mana_mine',
+      'mine',
+      'ruins',
+      'shrine',
+      'well',
+    ]);
     expect(HARVEST_TYPES.has('lair')).toBe(false);
     expect(HARVEST_TYPES.has('arena')).toBe(false);
     // ⚠️ UNE FAILLE N'EST PAS UNE RÉCOLTE : on s'y BAT, et on peut en ressortir sans avoir
@@ -1300,7 +1310,7 @@ describe('🎯 la récompense suit la DIFFICULTÉ, jamais la distance (v0.1153)'
   it('la distance ne change rien ; un lieu plus DUR paie plus', () => {
     let checked = 0;
     for (const [i, p] of spawned.entries()) {
-      if (p.type === 'camp' || p.type === 'lair' || p.type === 'arena') continue;
+      if (CAMP_TYPES.has(p.type) || p.type === 'arena') continue;
       const a = resolveOutcome(hero, p, i + 1, 30);
       const loin = resolveOutcome(hero, { ...p, distNorm: p.distNorm < 0.5 ? 1 : 0.05 }, i + 1, 30);
       expect(loin.gold, `${p.type} or`).toBe(a.gold);

@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { computeLevel } from '@/lib/levels';
 import { CHARACTER_RANKS, characterRank, rankStartLevel } from '@/lib/characterRank';
 import { ascensionCost } from '@/lib/ascension';
-import { RIFT } from '@/lib/rift';
+import { RUINS_SEALS } from '@/lib/expedition';
 import { mulberry32 } from '@/lib/combat';
 import { PROFILS, yearOfPlay } from './helpers/buildSim';
 
@@ -15,7 +15,12 @@ const LAST = CHARACTER_RANKS.length - 1;
 const capOf = (rank: number) => (rank >= LAST ? 100 : rankStartLevel(rank + 1) - 1);
 
 /** Part des jours où le trio de tête a 5 niveaux de retard ou plus sur le joueur. */
-function trioStuckShare(xpDay: number, riftsPerDay: number, seed: number): number {
+// 🏛️ Depuis le 2026-09-27, les sceaux de champion viennent des RUINES ANCIENNES (une ruine
+// sur deux), `RUINS_SEALS.champion` au rang du lieu. `ruinsPerDay` compte ces ruines-là, et
+// peut être fractionnaire (0,5 = une tous les deux jours). ⚠️ Les mesures d'avant parlaient
+// de failles (1,5 sceau en moyenne) : à 3 sceaux par ruine, 0,5 ruine/jour vaut une faille
+// par jour d'avant, 1 ruine/jour deux failles.
+function trioStuckShare(xpDay: number, ruinsPerDay: number, seed: number): number {
   const rng = mulberry32(seed);
   const seals: number[] = Array(CHARACTER_RANKS.length).fill(0);
   const ranks = [0, 0, 0, 0];
@@ -26,9 +31,8 @@ function trioStuckShare(xpDay: number, riftsPerDay: number, seed: number): numbe
     xp += xpDay;
     const L = Math.min(100, computeLevel(xp).level);
     const r = characterRank(L).rankIndex;
-    for (let i = 0; i < riftsPerDay; i++)
-      // Une faille sur deux est refermée avant la moitié de sa maturation (2 sceaux, v0.1047).
-      seals[Math.floor(rng() * (r + 1))]! += rng() < RIFT.secondSealAt ? 2 : 1;
+    const visits = Math.floor(ruinsPerDay) + (rng() < ruinsPerDay % 1 ? 1 : 0);
+    for (let i = 0; i < visits; i++) seals[Math.floor(rng() * (r + 1))]! += RUINS_SEALS.champion;
     for (let pass = 0; pass < 3; pass++)
       for (let i = 0; i < ranks.length; i++) {
         if (L <= capOf(ranks[i]!) || ranks[i]! >= r) continue;
@@ -50,20 +54,20 @@ const mean = (f: (s: number) => number) =>
   Array.from({ length: 20 }, (_, i) => f(i + 1)).reduce((a, b) => a + b, 0) / 20;
 
 describe('⬆️ les sceaux arrivent à temps pour le trio de tête', () => {
-  it('une faille par jour : le trio n’est bloqué que rarement', () => {
+  it('une ruine tous les deux jours : le trio n’est bloqué que rarement', () => {
     for (const [, xpd] of PROFILS)
-      expect(mean((s) => trioStuckShare(xpd, 1, s))).toBeLessThan(0.18);
+      expect(mean((s) => trioStuckShare(xpd, 0.5, s))).toBeLessThan(0.18);
   });
-  it('deux failles par jour : quasiment jamais', () => {
+  it('une ruine par jour : quasiment jamais', () => {
     for (const [, xpd] of PROFILS)
-      expect(mean((s) => trioStuckShare(xpd, 2, s))).toBeLessThan(0.04);
+      expect(mean((s) => trioStuckShare(xpd, 1, s))).toBeLessThan(0.04);
   });
-  it('mais l’ascension n’est pas une formalité : sans faille, le trio reste bloqué', () => {
+  it('mais l’ascension n’est pas une formalité : sans ruine, le trio reste bloqué', () => {
     expect(mean((s) => trioStuckShare(1066, 0, s))).toBeGreaterThan(0.5);
   });
-  it('…et un joueur très actif qui n’en ferme qu’une par jour sent le frein', () => {
+  it('…et un joueur très actif qui n’en prend qu’une tous les deux jours sent le frein', () => {
     // Mesuré : 14 % à 1 + ⌊rang/4⌋ ; un coût de 1 fixe tombait à 1 % (formalité).
-    expect(mean((s) => trioStuckShare(1066, 1, s))).toBeGreaterThan(0.05);
+    expect(mean((s) => trioStuckShare(1066, 0.5, s))).toBeGreaterThan(0.05);
   });
 });
 

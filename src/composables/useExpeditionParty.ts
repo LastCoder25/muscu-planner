@@ -109,7 +109,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
   });
   /** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
    *  sort du groupe de lui-même — le store le refuserait de toute façon). */
-  const partyAdvs = computed(() => freeStable.value.filter((a) => partyEscort.value.includes(a.id)));
+  const partyAdvs = computed(() =>
+    freeStable.value.filter((a) => partyEscort.value.includes(a.id)),
+  );
   /** Ceux qui ne peuvent PAS partir, avec la raison — même règle que le store
    *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
    *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
@@ -279,7 +281,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   );
   /** 🗿 Combien de champions on peut engager — `partyCapFor` (le Panthéon), jamais une copie
    *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
-  const partyMax = computed(() => partyCapFor(cap.value));
+  const partyMax = computed(() => partyCapFor(cap.value, selected.value, partyHeroOn.value));
   /** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
   const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length));
   /** 🔮 Ce que CHAQUE champion gagnerait sur le lieu visé (demandé). ⚠️ La règle vit en lib

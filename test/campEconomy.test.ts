@@ -92,7 +92,11 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
       const free = advs.filter((a) => (busy.get(a.id) ?? 0) <= t);
       const best = map.pois
         .map((p) => ({ p, spec: campSpecOf(p) }))
-        .filter((c) => CAMP_TYPES.has(c.p.type) && c.spec && c.spec.size <= free.length)
+        // 🐺 La tanière (2026-09-27) ne rend pas d'or : elle n'entre pas dans le débit mesuré ici.
+        .filter(
+          (c) =>
+            CAMP_TYPES.has(c.p.type) && c.p.type !== 'den' && c.spec && c.spec.size <= free.length,
+        )
         .map((c) => {
           let esc = free.slice(0, c.spec!.size);
           let win = campWinPct(c.p, c.spec!, partyAllies(esc, rd, null), 8);
