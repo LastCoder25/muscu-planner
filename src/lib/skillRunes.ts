@@ -419,7 +419,7 @@ export function runeCombatEffects(skills: readonly ChampSkill[]): AggregatedEffe
 // rang, au rythme MESURÉ (§ 5 de la spec) : ~1 rune d'ascension par rang, plus
 // `REF_BUILD.extBase + REF_BUILD.extPerRank × rang` runes de lieux.
 
-export const REF_BUILD = {
+const REF_BUILD = {
   /** Runes de LIEUX par champion et par rang (mesuré : ~0,8 au rang 1 → ~2,5 au rang 9). */
   extBase: 0.7,
   extPerRank: 0.2,
@@ -504,7 +504,7 @@ export function referenceRuneBuild(rankIndex: number, slots: number, variant = 0
 // emplacements pris, compétence nouvelle) — persistée, sinon un rechargement la relancerait.
 
 /** Une rune tirée qui attend « remplacer ou garder ». */
-export interface PendingRune {
+interface PendingRune {
   advId: string;
   tier: RuneTier;
   drawn: SkillId;

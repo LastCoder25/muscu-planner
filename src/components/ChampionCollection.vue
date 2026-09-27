@@ -61,7 +61,7 @@
           <span v-if="zoomed.awaken > 0" class="cc-zoom-awk">✨ Éveil {{ zoomed.awaken }}</span>
         </div>
         <ul class="cc-zoom-skills">
-          <li>🔮 {{ SKILL_SLOTS[zoomed.champ.grade] }} emplacements de compétence — à remplir de runes</li>
+          <li>🪬 {{ SKILL_SLOTS[zoomed.champ.grade] }} emplacements de compétence — à remplir de runes</li>
         </ul>
       </q-card>
     </q-dialog>

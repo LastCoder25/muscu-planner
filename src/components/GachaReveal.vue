@@ -320,7 +320,7 @@ const lotSummary = computed(() => {
 function metaOf(cell: RevealCell): string {
   const c = cell.championId ? CHAMPION_BY_ID.get(cell.championId) : null;
   if (!c) return 'Pièce d’équipement de champion — rangée dans ton stock';
-  return `🔮 ${SKILL_SLOTS[c.grade]} emplacements de compétence`;
+  return `🪬 ${SKILL_SLOTS[c.grade]} emplacements de compétence`;
 }
 function tagOf(it: LotItem | null): Tag {
   if (!it || !it.champion) return { label: 'pièce', cls: 'piece' };

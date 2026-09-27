@@ -2101,7 +2101,7 @@ export function teamRuneValue(advs: readonly Adventurer[], id: SkillId): number 
 }
 
 /** Le rôle qu'une compétence de rune porte, s'il y en a un. */
-export function roleOfSkill(id: SkillId): AdvRole | undefined {
+function roleOfSkill(id: SkillId): AdvRole | undefined {
   return SKILL_ROLE[id];
 }
 

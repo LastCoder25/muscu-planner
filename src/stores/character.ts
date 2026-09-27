@@ -893,9 +893,9 @@ export const useCharacterStore = defineStore('character', () => {
     if (tiers.length)
       useGameFx().celebrate({
         kind: 'unlock',
-        emoji: '🔮',
+        emoji: '🪬',
         title: 'Les compétences deviennent des runes',
-        subtitle: `${tiers.length} rune(s) offertes pour tes champions — pose-les depuis leur fiche`,
+        subtitle: `🪬 ${tiers.length} rune(s) offertes pour tes champions — pose-les depuis leur fiche`,
         rarity: 'legendary',
       });
   }

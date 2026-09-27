@@ -1656,3 +1656,28 @@ describe('🕳️💥 le plateau du débordement se monte', () => {
     useXpFx().dismiss();
   }, 30_000);
 });
+
+describe('🪬 SkillRunesPanel', () => {
+  it('rend les emplacements, le stock et la décision en attente', async () => {
+    const { default: SkillRunesPanel } = await import('@/components/SkillRunesPanel.vue');
+    const { CHAMPIONS } = await import('@/data/champions');
+    const c = CHAMPIONS.find((x) => x.grade === 'A')!;
+    const adv = { id: 'c1', name: c.name, seed: 1, path: [], level: 25, xp: 0, championId: c.id, copies: 1, skills: [{ id: 'speed', level: 2 }, { id: 'haul', level: 1 }] };
+    let out = '';
+    expect(
+      await mountIt(
+        SkillRunesPanel,
+        { adv, runes: { stock: { green: 2, blue: 0, violet: 1, gold: 0 }, pending: { advId: 'c1', tier: 'green', drawn: 'care' }, comp: 1 } },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Vitesse');
+    expect(out).toContain('Nv 2');
+    expect(out).toContain('Remplacer');
+    expect(out).toContain('Garder les siennes');
+  }, 30_000);
+});
+

@@ -351,7 +351,9 @@ export function fuseUnits(units: readonly SkirmishUnit[], name: string): Combata
   // fort porteur (on ne recopie pas celui du seul modèle : il n'est peut-être pas porteur).
   const opening = units.reduce((s, u) => s + offenseOf(u.combatant) * (u.combatant.openingDmg ?? 0), 0);
   const stand = units.reduce((m, u) => Math.max(m, u.combatant.lastStand ?? 0), 0);
-  const { openingDmg: _o, lastStand: _l, ...rest } = model;
+  const rest: Combatant = { ...model };
+  delete rest.openingDmg;
+  delete rest.lastStand;
   return {
     ...rest,
     name,
