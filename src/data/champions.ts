@@ -54,14 +54,14 @@ export const PULL_GRADES: readonly PullGrade[] = ['B', 'A', 'S', 'X'];
 export type GearGrade = Exclude<PullGrade, 'X'>;
 export const GEAR_GRADES: readonly GearGrade[] = ['B', 'A', 'S'];
 /**
- * 🏷️ LES NOMS DES RARETÉS (2026-09-27, décision de l'utilisateur) : **A = GOLD**,
+ * 🏷️ LES NOMS DES RARETÉS (2026-09-27, décision de l'utilisateur) : **B = SILVER**, **A = GOLD**,
  * **S = MYTHRIL**, **X = ADAMANTIUM**. ⚠️ **SEUL L'AFFICHAGE CHANGE** : les codes `'A'` /
  * `'S'` sont persistés (compteurs de pity, stock d'équipement, champions de référence) — les
  * renommer imposerait une migration de toutes les sauvegardes pour rien. Tout écran qui
  * montre une lettre passe par cette table, jamais par le code brut.
  */
 export const GRADE_LABEL: Record<PullGrade, string> = {
-  B: 'B',
+  B: 'SILVER',
   A: 'GOLD',
   S: 'MYTHRIL',
   X: 'ADAMANTIUM',

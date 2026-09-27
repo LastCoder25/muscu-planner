@@ -837,7 +837,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ),
     ).toBeNull();
     expect(stockHtml).toContain(avecStock.adv_gear.stock[0]!.name);
-    expect(stockHtml).toMatch(/class="adv-rname[^"]*">B</);
+    // Le séparateur dit le NOM de la rareté (B s'affiche SILVER), jamais le code brut.
+    const { GRADE_LABEL: GL } = await import('@/data/champions');
+    expect(stockHtml).toMatch(new RegExp(`class="adv-rname[^"]*">${GL.B}<`));
     // 📊 v0.1129 : la tuile porte le rang de la pièce et son avancement vers l'étoile
     // suivante (niveau 3 d'une Bronze = début de ★2, donc 0 %).
     expect(stockHtml).toContain('role="progressbar"');
