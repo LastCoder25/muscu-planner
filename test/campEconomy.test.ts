@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { createMap, advanceWorld, campSpecOf, CAMP_TYPES, HARVEST_TYPES } from '@/lib/expedition';
+import {
+  createMap,
+  advanceWorld,
+  campSpecOf,
+  CAMP_TYPES,
+  HARVEST_TYPES,
+  harvestGuardOf,
+} from '@/lib/expedition';
+import { resolveHarvestParty } from '@/lib/harvestParty';
 import {
   caravanHurtMs,
   caravanLegMin,
@@ -72,6 +80,10 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
   let stones = 0;
   let keys = 0;
   let parties = 0;
+  let harvests = 0;
+  let lost = 0;
+  let guardLost = 0;
+  const refused = new Set<string>();
   for (let t = 0; t <= opts.days * DAY; t += STEP) {
     map = advanceWorld(map, t, L, opts.comptoir);
     // ⚔️ D'abord les camps (le pire cas pour l'or : on leur donne tous les créneaux).
@@ -121,17 +133,56 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
       trips.push({ returnAt: back });
       map = { ...map, pois: map.pois.filter((p) => p.id !== best.p.id) };
     }
-    // Les créneaux restants partent en convois : ils prennent des aventuriers ET des lieux de
-    // récolte, donc ils font tourner la carte (plus de spawns, donc plus de camps).
+    // 🧺 Les créneaux restants partent RÉCOLTER : ils prennent des champions ET des lieux,
+    // donc ils font tourner la carte (plus de spawns, donc plus de camps).
+    // ⚠️ Depuis la v0.1043 un lieu de récolte est GARDÉ (`harvestGuardOf`) : on ne l'y prend
+    // plus pour rien. L'équipe part à 3 (le trio calibré pour les embuscades de la route),
+    // se RENFORCE jusqu'à une victoire probable comme pour un camp, et un lieu imprenable
+    // n'est pas tenté (le jeu refuse un départ perdu d'avance, v0.1104). Le combat est le
+    // VRAI (`resolveHarvestParty`) : une défaite blesse et immobilise, ce qui retire des
+    // champions aux camps — c'est ce que ce harnais ignorait jusqu'en v0.1203.
     for (;;) {
       if (convoySlotsFree(opts.comptoir, trips, t) <= 0) break;
       const free = advs.filter((a) => (busy.get(a.id) ?? 0) <= t);
       if (free.length < 3) break;
-      const target = map.pois.find((p) => HARVEST_TYPES.has(p.type));
-      if (!target) break;
-      const esc = free.slice(0, 3);
+      let pick: { p: (typeof map.pois)[number]; esc: Adventurer[] } | null = null;
+      for (const p of map.pois) {
+        if (!HARVEST_TYPES.has(p.type) || refused.has(p.id)) continue;
+        const spec = harvestGuardOf(p);
+        let esc = free.slice(0, 3);
+        if (spec) {
+          let win = campWinPct(p, spec, partyAllies(esc, rd, null), 8);
+          for (let k = 4; win < 0.7 && k <= free.length; k++) {
+            esc = free.slice(0, k);
+            win = campWinPct(p, spec, partyAllies(esc, rd, null), 8);
+          }
+          if (win < 0.5) {
+            // Imprenable avec ce qui est libre : on n'y revient que si le vivier se libère.
+            if (esc.length === advs.length) refused.add(p.id);
+            continue;
+          }
+        }
+        pick = { p, esc };
+        break;
+      }
+      if (!pick) break;
+      const { p: target, esc } = pick;
       const back = t + 2 * caravanLegMin(target, esc, 0, outpostMult(opts.comptoir)) * 60_000;
-      for (const a of esc) busy.set(a.id, back);
+      const o = resolveHarvestParty({
+        poi: target,
+        escort: esc,
+        road: rd,
+        hero: null,
+        seed: (t ^ (target.level * 2246822519)) >>> 0 || 1,
+        playerLevel: L,
+        pantheonLevel: L,
+      });
+      harvests++;
+      if (!o.win) lost++;
+      if (o.text.includes('Repoussés par les gardes')) guardLost++;
+      const hurt = new Set(o.party?.hurt ?? []);
+      const hurtMs = caravanHurtMs(esc, 0);
+      for (const a of esc) busy.set(a.id, back + (hurt.has(a.id) ? hurtMs : 0));
       trips.push({ returnAt: back });
       map = { ...map, pois: map.pois.filter((p) => p.id !== target.id) };
     }
@@ -141,6 +192,10 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
     stones: stones / opts.days,
     keys: keys / opts.days,
     parties: parties / opts.days,
+    harvests: harvests / opts.days,
+    lost: lost / opts.days,
+    guardLost: guardLost / opts.days,
+    skipped: refused.size / opts.days,
   };
 }
 
@@ -148,6 +203,9 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
 // test (une note l’annonçait à +34 % du revenu de référence). Re-mesuré : or +7,5 / +10,7 /
 // +9,2 / +12,3 / +11,5 / +10,6 % aux niveaux 12 / 26 / 60 / 75 / 90 / 100 — plat, depuis
 // que seuls les bandits portent de l’or (v0.1166). Pierres +12 à +20 %.
+// ⚠️ v0.1203 : les récoltes combattent enfin leurs gardes (`resolveHarvestParty`) — or des
+// camps +7,1 / +10,0 / +9,3 / +10,6 % aux niveaux 12 / 26 / 60 / 90 (contre +7,5 / +10,7 /
+// +9,2 / +11,5 quand une récolte était un aller-retour gratuit) : quasi rien ne bouge.
 const NIV = [12, 26, 60, 90];
 // ⚠️ HUIT graines, pas deux. Avec deux, la démonstration du plafond de créneaux (ligne
 // « sans plafond, on dépasse la bande ») se jouait à 5 % de sa borne : la moindre variation
@@ -166,11 +224,21 @@ const STONES_MAX = 0.5;
 function moyenne(L: number, opts: { days: number; comptoir: number; slotCap: boolean }) {
   const runs = SEEDS.map((s) => sim(L, s, opts));
   const m = (k: keyof (typeof runs)[0]) => runs.reduce((acc, r) => acc + r[k], 0) / runs.length;
-  return { goldNet: m('goldNet'), stones: m('stones'), keys: m('keys'), parties: m('parties') };
+  return {
+    goldNet: m('goldNet'),
+    stones: m('stones'),
+    keys: m('keys'),
+    parties: m('parties'),
+    harvests: m('harvests'),
+    lost: m('lost'),
+    guardLost: m('guardLost'),
+    skipped: m('skipped'),
+  };
 }
 
 describe('💰 le débit des camps de faction ne double pas l’économie', { timeout: 120_000 }, () => {
   it('⚠️ or NET par jour ≤ un quart du revenu de référence, à tous les niveaux', () => {
+    let guardFights = 0;
     for (const L of NIV) {
       const r = moyenne(L, { days: 7, comptoir: L, slotCap: true });
       const part = r.goldNet / goldPerDay(L);
@@ -187,7 +255,17 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
       // …et le camp reste un vrai gain : un butin dérisoire ferait passer ce test pour rien.
       expect(part, `niveau ${L} : +${(part * 100).toFixed(0)} % d’or`).toBeGreaterThan(0.03);
       expect(r.parties, `niveau ${L} : ${r.parties.toFixed(1)} camps/jour`).toBeGreaterThan(1.5);
+      // 🧺 Les récoltes tournent vraiment (elles renouvellent la carte, donc les camps).
+      // Mesuré v0.1203 : 3,0 / 6,0 / 13,8 / 17,8 par jour aux niveaux 12 / 26 / 60 / 90.
+      expect(r.harvests, `niveau ${L} : ${r.harvests.toFixed(1)} récoltes/jour`).toBeGreaterThan(
+        1.5,
+      );
+      guardFights += r.guardLost;
     }
+    // ⚠️ …et elles COMBATTENT leurs gardes : sans combat, aucune ne serait jamais repoussée.
+    // Mesuré : 0,30 / 0,29 / 0,45 / 1,36 repoussées par jour (3 à 10 % des récoltes, l'équipe
+    // partant à ≥ 70 % de chances). Les autres défaites viennent des embuscades de route.
+    expect(guardFights, 'aucune récolte repoussée par ses gardes').toBeGreaterThan(0);
   });
 
   it('⚠️ pierres d’invocation : au plus la moitié d’une journée de donjons', () => {
