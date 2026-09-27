@@ -27,6 +27,7 @@ import { advUnavailableReason, sortByGradeThenRank, type Adventurer } from '@/li
 import {
   missionXpPreview,
   missionXpSplit,
+  SOLO_XP_MULT,
   type EscortKit,
   type MissionXpPreview,
   type PartyHero,
@@ -283,13 +284,21 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
   const partyMax = computed(() => partyCapFor(cap.value, selected.value, partyHeroOn.value));
   /** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
-  const partyXpSplit = computed(() => missionXpSplit(partyAdvs.value.length));
+  const partyXpSplit = computed(
+    () => missionXpSplit(partyAdvs.value.length) * (partyHeroOn.value ? 1 : SOLO_XP_MULT),
+  );
   /** 🔮 Ce que CHAQUE champion gagnerait sur le lieu visé (demandé). ⚠️ La règle vit en lib
    *  (`missionXpPreview`), qui appelle `missionXpFor` — ce que le store verse vraiment :
    *  une seconde formule d'affichage finirait par annoncer une XP que l'encaissement dément. */
   const partyXp = computed<Record<string, MissionXpPreview>>(() =>
     selected.value
-      ? missionXpPreview(char.advList, partyEscort.value, selected.value, char.pantheonLevel)
+      ? missionXpPreview(
+          char.advList,
+          partyEscort.value,
+          selected.value,
+          char.pantheonLevel,
+          !!partyHeroOn.value,
+        )
       : {},
   );
   /** La note ne s'affiche que si un champion DISPONIBLE y perd : sinon c'est du bruit. */

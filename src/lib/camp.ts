@@ -425,7 +425,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     slain: g.slain,
     kills: g.kills,
     heroKills: g.heroKills,
-    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel),
+    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero),
     hurt: campHurt(d, escort),
     journal: g.journal,
     // 🐺 Une tanière se REJOUE (le duel contre la bête) : un camp, non.

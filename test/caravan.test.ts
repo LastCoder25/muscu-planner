@@ -19,6 +19,7 @@ import {
   DANGER,
   missionXpFor,
   missionXpSplit,
+  SOLO_XP_MULT,
   missionXpPreview,
   canSendCaravan,
   caravanHurtMs,
@@ -597,7 +598,8 @@ describe('⚠️ l’XP est versée PAR AVENTURIER, et toujours', () => {
       const won = !f.some((x) => x.won === false);
       for (const a of esc) {
         expect(o.xp[a.id]!).toBeGreaterThanOrEqual(missionXp(a, p, won));
-        if (!f.length) expect(o.xp[a.id]).toBe(missionXp(a, p, true));
+        // 🧭 Un convoi part sans le héros : son socle porte la prime `SOLO_XP_MULT`.
+        if (!f.length) expect(o.xp[a.id]).toBe(Math.round(missionXp(a, p, true) * SOLO_XP_MULT));
         if (abattus > 0) expect(o.xp[a.id]!).toBeGreaterThan(missionXp(a, p, won));
       }
       if (!f.length) sansCombat++;
@@ -1017,16 +1019,19 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     expect(missionXpPreview([b], [b.id], p33, 100)[b.id]!.full).toBe(true);
   });
 
-  it('🔮 le HÉROS ne dilue plus l’annonce, ni le versement (v0.1109)', () => {
-    // ⚠️ RÉÉCRIT. Il prenait deux parts de l'enveloppe ; il n'en prend plus aucune. L'annonce
-    // ne connaît donc plus le héros (signature), et elle reste ce que la mission verse.
-    expect(missionXpPreview.length).toBe(4);
+  it('🔮 l’annonce suit le versement, avec ou sans le héros (2026-09-27)', () => {
+    // ⚠️ RÉÉCRIT. v0.1109 : le héros ne prend plus de part. Depuis, SANS lui les champions
+    // apprennent plus (`SOLO_XP_MULT`) — l'annonce doit le dire, dans les deux cas.
     const a = champ(10, 'a')[0]!;
     const b2 = { ...champ(10, 'b')[0]!, id: 'b' };
     const eq = [a, b2];
     const ids = [a.id, b2.id];
-    expect(missionXpPreview(eq, ids, p, 100)[a.id]!.xp).toBe(
-      missionXpFor(eq, p, true, {}, 100)[a.id],
+    for (const hero of [true, false])
+      expect(missionXpPreview(eq, ids, p, 100, hero)[a.id]!.xp).toBe(
+        missionXpFor(eq, p, true, {}, 100, hero)[a.id],
+      );
+    expect(missionXpPreview(eq, ids, p, 100, false)[a.id]!.xp).toBeGreaterThan(
+      missionXpPreview(eq, ids, p, 100, true)[a.id]!.xp,
     );
   });
 
@@ -1039,10 +1044,10 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     const d = poiDifficultyLevel(p);
     expect(socle).toBe(Math.round(trialXpBase(d) * dangerMult(1, d)));
     expect(missionXp(vieux[0]!, p, true)).toBe(Math.round(trialXpBase(d)));
-    expect(missionXpFor(neuf, p, true, {}, 100).neuf).toBe(
+    expect(missionXpFor(neuf, p, true, {}, 100, true).neuf).toBe(
       Math.round(socle * missionXpSplit(1) * catchUpMult(1, 100)),
     );
-    expect(missionXpFor(vieux, p, true, {}, 100).vieux).toBe(
+    expect(missionXpFor(vieux, p, true, {}, 100, true).vieux).toBe(
       Math.round(missionXp(vieux[0]!, p, true) * missionXpSplit(1) * catchUpMult(d, 100)),
     );
     // ⚠️ La part des ABATTUS passe TELLE QUELLE : `SKIRMISH.carryMargin`, le garde-fou
@@ -1056,7 +1061,7 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     // Un champion au plafond du Panthéon n'a plus de retard à combler : le multiplicateur
     // ne doit pas annoncer un gain que `grantAdvXp` refuserait de convertir.
     const au = champ(40);
-    expect(missionXpFor(au, p, true, {}, 40).x).toBe(
+    expect(missionXpFor(au, p, true, {}, 40, true).x).toBe(
       Math.round(missionXp(au[0]!, p, true) * missionXpSplit(1)),
     );
     expect(missionXpFor(au, p, true, {}, 100).x!).toBeGreaterThan(missionXp(au[0]!, p, true));
@@ -1542,7 +1547,8 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     // que le témoin.
     // v0.1120 : +5 % de stats par rang ouvert, appliqué AUSSI à l'étalon — même graine, même
     // flux, mais la 2ᵉ embuscade bascule en défaite (issue d'un combat, pas une fuite de flux).
-    expect(o.xp).toEqual({ ref0: 43, ref1: 43, ref2: 43 });
+    // 2026-09-27 : un convoi part sans le héros, son socle porte `SOLO_XP_MULT` — 43 → 49.
+    expect(o.xp).toEqual({ ref0: 49, ref1: 49, ref2: 49 });
     expect(o.kills).toEqual({ ref0: 1, ref1: 1, ref2: 2 });
     expect(o.hurt).toEqual(['ref1', 'ref0']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);

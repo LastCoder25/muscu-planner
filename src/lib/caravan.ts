@@ -789,6 +789,15 @@ export const XP_TEAM_REF = REF_TEAM;
  * un champion en surnombre rapporte toujours moins qu'à `XP_TEAM_REF`. Il supprime une
  * punition, il n'ajoute pas de prime.
  */
+/**
+ * 🧭 SANS LE HÉROS, ILS APPRENNENT PLUS (2026-09-27, demandé par l'utilisateur : « que les
+ * champions gagnent plus d'XP s'ils sont seuls, sans le héros pour les aider »). Le héros
+ * porte le combat : avec lui, ses compagnons regardent faire. Seuls, ils tiennent le lieu
+ * eux-mêmes, et c'est ce qui forme. Multiplie le SOCLE de chaque champion (jamais la part
+ * des abattus, bornée par sa marge de portage). Les convois partent toujours sans lui.
+ */
+export const SOLO_XP_MULT = 1.25;
+
 export function missionXpSplit(escortCount: number): number {
   return Math.max(CARAVAN.xpLossShare, XP_TEAM_REF / Math.max(1, escortCount));
 }
@@ -869,8 +878,10 @@ export function missionXpFor(
   won: boolean,
   shares: Record<string, number>,
   pantheonLevel: number,
+  /** Le héros est du voyage. ⚠️ REQUIS : l'oublier donnerait la prime à tort, en silence. */
+  hero: boolean,
 ): Record<string, number> {
-  const split = missionXpSplit(escort.length);
+  const split = missionXpSplit(escort.length) * (hero ? 1 : SOLO_XP_MULT);
   const xp: Record<string, number> = {};
   for (const a of escort) {
     // ⚠️ LE NIVEAU DE SA RÉSERVE, pour la prime ET pour le rendement décroissant : bloqué à
@@ -917,17 +928,18 @@ export function missionXpPreview(
   escortIds: readonly string[],
   poi: Poi,
   pantheonLevel: number,
+  hero: boolean,
 ): Record<string, MissionXpPreview> {
   const escort = advs.filter((a) => escortIds.includes(a.id));
   // ⚠️ L'XP de l'escorte est la MÊME pour tous ses membres : on l'évalue une fois, au lieu
   //    d'une passe par champion (qui reboucle sur toute l'équipe et re-dérive la difficulté).
-  const dejaLa = missionXpFor(escort, poi, true, {}, pantheonLevel);
+  const dejaLa = missionXpFor(escort, poi, true, {}, pantheonLevel, hero);
   const d = poiDifficultyLevel(poi);
   const out: Record<string, MissionXpPreview> = {};
   for (const a of advs) {
     const xp = escortIds.includes(a.id)
       ? (dejaLa[a.id] ?? 0)
-      : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel)[a.id] ?? 0);
+      : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel, hero)[a.id] ?? 0);
     const L = advBankedLevel(a, pantheonLevel);
     out[a.id] = { xp, full: d >= L, catchUp: catchUpMult(L, pantheonLevel) };
   }
@@ -1344,7 +1356,8 @@ export function resolveCaravan(
   // ⚠️ Tirée APRÈS la route : un tirage de plus avant aurait décalé toutes les rencontres.
   const keyLuck = rng() < HARVEST.keyChance ? 1 : 0;
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
-  const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel);
+  // Un convoi part toujours sans le héros.
+  const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel, false);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
