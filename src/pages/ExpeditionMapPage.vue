@@ -485,7 +485,9 @@
           :now="now"
           claim-label="🎁 Récupérer le butin"
           @claim="doClaim"
-          @replay="riftReplay = lastOutcome.party ?? null"
+          @replay="
+            lastOutcome.overflow ? (ovfMsg = lastOutcome) : (riftReplay = lastOutcome.party ?? null)
+          "
         />
         <div class="van-actions">
           <q-btn flat no-caps label="Fermer" @click="collectOpen = false" />
@@ -501,6 +503,8 @@
       @report="openRiftReport"
       :hero-equipped="char.row?.equipped ?? {}"
     />
+    <!-- 🕳️💥 Rejeu d'un débordement de faille. -->
+    <OverflowReplayDialog v-model="ovfMsg" @report="openOvfReport" />
 
     <!-- ⚠️ LA GUILDE S'OUVRE ICI, au retour d'un convoi dont la mission vient de rendre
          une promotion possible. Le vivier se gère depuis son bâtiment (règle « un
@@ -590,6 +594,8 @@ import { usePoiFilters } from '@/composables/usePoiFilters';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
+import OverflowReplayDialog from '@/components/OverflowReplayDialog.vue';
+import { useOverflowReplay } from '@/composables/useOverflowReplay';
 import { useRiftAutoReplay } from '@/composables/useRiftAutoReplay';
 import {
   departureRisk,
@@ -1263,6 +1269,15 @@ function openRiftReport() {
   const id = riftAutoMsgId.value;
   const m = id ? (char.row?.messages ?? []).find((x) => x.id === id) : undefined;
   if (!m) return; // lancé depuis le rapport déjà ouvert : fermer suffit
+  lastOutcome.value = m;
+  collectOpen.value = true;
+}
+// 🕳️💥 Un débordement de faille se montre aussi tout seul — après les incursions.
+const { ovfMsg, ovfAutoId } = useOverflowReplay(computed(() => !!riftReplay.value));
+function openOvfReport() {
+  const id = ovfAutoId.value;
+  const m = id ? (char.row?.messages ?? []).find((x) => x.id === id) : undefined;
+  if (!m) return;
   lastOutcome.value = m;
   collectOpen.value = true;
 }
