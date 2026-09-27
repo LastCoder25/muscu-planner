@@ -47,21 +47,38 @@ const SUBJECTS = {
   // ── GUERRIER ──
   'guerrier-weapon-b': 'plain short iron sword with a leather wrapped grip, slightly nicked blade',
   'guerrier-weapon-a': 'finely crafted bastard sword, engraved steel blade, brass crossguard',
-  'guerrier-weapon-s': 'legendary holy longsword glowing with golden light, ornate winged hilt, radiant runes',
-  'guerrier-armor-b': 'dented iron breastplate with worn leather straps, empty, displayed on its own',
-  'guerrier-armor-a': 'polished blued steel cuirass with engraved trim, empty, displayed on its own',
-  'guerrier-armor-s': 'golden plate chestpiece with a roaring lion emblem, empty, displayed on its own, glowing aura',
+  'guerrier-weapon-s':
+    'legendary holy longsword glowing with golden light, ornate winged hilt, radiant runes',
+  'guerrier-armor-b':
+    'dented iron breastplate with worn leather straps, empty, displayed on its own',
+  'guerrier-armor-a':
+    'polished blued steel cuirass with engraved trim, empty, displayed on its own',
+  'guerrier-armor-s':
+    'golden plate chestpiece with a roaring lion emblem, empty, displayed on its own, glowing aura',
   'guerrier-accessory-b': 'pair of simple brown leather gauntlets',
   'guerrier-accessory-a': 'pair of steel gauntlets with spiked knuckles',
-  'guerrier-accessory-s': 'pair of massive titan gauntlets crackling with red energy, glowing runes',
+  'guerrier-accessory-s':
+    'pair of massive titan gauntlets crackling with red energy, glowing runes',
   'guerrier-relic-b': 'small round iron talisman on a cord',
   'guerrier-relic-a': 'veteran talisman, engraved silver medallion with a red gem',
-  'guerrier-relic-s': 'ancient ember heart relic, a glowing crystal heart wrapped in golden filigree, fiery aura',
+  'guerrier-relic-s':
+    'ancient ember heart relic, a glowing crystal heart wrapped in golden filigree, fiery aura',
 
   // ── ARCHER ──
+  // Arcs et carquois ciselé : pas d'image via Pollinations (une PERSONNE dessinée à chaque
+  // fois) ; tentés via Stable Horde (`--horde`), sujet en tête et « posé sur une table ».
+  'archer-weapon-b':
+    'a simple wooden hunting bow, curved D shape with a taut bowstring, standing vertical',
+  'archer-weapon-a':
+    'an elegant carved yew longbow, deep curved D shape with a taut bowstring and a silver grip, standing vertical',
+  'archer-weapon-s':
+    'a legendary elven recurve bow of white wood and silver leaves, curved D shape with a glowing blue bowstring, standing vertical',
+  'archer-accessory-a':
+    'an engraved leather quiver full of fletched arrows with brass fittings, lying on a table',
   'archer-armor-b': 'plain brown leather chest armor vest lying flat on a wooden table',
   'archer-armor-a': 'green studded leather armor vest, empty, laid flat',
-  'archer-armor-s': 'chest armor vest made of shimmering silver leaves lying flat on a table, green glow',
+  'archer-armor-s':
+    'chest armor vest made of shimmering silver leaves lying flat on a table, green glow',
   'archer-accessory-b': 'simple canvas quiver full of arrows lying on a wooden table',
   'archer-accessory-s': 'legendary endless quiver overflowing with glowing magical arrows',
   'archer-relic-b': 'single grey lucky feather tied with a string',
@@ -86,12 +103,15 @@ const SUBJECTS = {
   'homme_armes-weapon-b': 'wooden club reinforced with iron bands',
   'homme_armes-weapon-a': 'steel flanged mace with a leather grip',
   'homme_armes-weapon-s': 'huge steel warhammer with glowing orange runes lying on a stone table',
-  'homme_armes-armor-b': 'patched iron plate armor with mismatched pieces, empty, on a wooden armor stand',
+  'homme_armes-armor-b':
+    'patched iron plate armor with mismatched pieces, empty, on a wooden armor stand',
   'homme_armes-armor-a': 'sturdy steel plate armor, empty, on a wooden armor stand',
-  'homme_armes-armor-s': 'massive steel breastplate chestpiece with glowing blue runes lying on a stone table',
+  'homme_armes-armor-s':
+    'massive steel breastplate chestpiece with glowing blue runes lying on a stone table',
   'homme_armes-accessory-b': 'simple round wooden shield with an iron rim',
   'homme_armes-accessory-a': 'tall heraldic pavise shield with a painted crest',
-  'homme_armes-accessory-s': 'legendary titan aegis shield, golden, glowing with a protective light',
+  'homme_armes-accessory-s':
+    'legendary titan aegis shield, golden, glowing with a protective light',
   'homme_armes-relic-b': 'small wooden reliquary box',
   'homme_armes-relic-a': 'silver reliquary with engraved patterns',
   'homme_armes-relic-s': 'legendary saint reliquary of gold and crystal, holy glowing light',
@@ -101,7 +121,8 @@ const SUBJECTS = {
   'eclaireur-weapon-a': 'pair of crossed twin daggers with curved steel blades',
   'eclaireur-weapon-s': 'black dagger trailing dark mist, glowing purple edge',
   'eclaireur-armor-b': 'plain brown travel cloak neatly folded',
-  'eclaireur-armor-a': 'dark blue fabric cloak folded into a neat square with a silver clasp on top, on a table',
+  'eclaireur-armor-a':
+    'dark blue fabric cloak folded into a neat square with a silver clasp on top, on a table',
   'eclaireur-armor-s': 'translucent misty cloak neatly folded, dissolving into fog, glowing',
   'eclaireur-accessory-b': 'simple brass spyglass',
   'eclaireur-accessory-a': 'engraved brass spyglass with leather wrapping',
@@ -111,12 +132,19 @@ const SUBJECTS = {
   'eclaireur-relic-s': 'legendary compass of lost winds, floating needle, swirling glowing wind',
 
   // ── CARAVANIER ──
+  'caravanier-weapon-b': 'a simple wooden walking staff with a leather wrap, lying flat on a table',
+  'caravanier-weapon-a':
+    'a tall wooden walking staff with iron bands and a small brass bell tied near the top, standing vertical',
+  'caravanier-weapon-s':
+    'a legendary pilgrim staff of golden wood topped with a glowing compass star, lying flat on a table',
   'caravanier-armor-b': 'plain brown travel coat neatly folded',
   'caravanier-armor-a': 'merchant coat with brass buttons and a fur collar, neatly folded',
-  'caravanier-armor-s': 'travel coat patterned with glowing golden maps folded into a neat square on a table',
+  'caravanier-armor-s':
+    'travel coat patterned with glowing golden maps folded into a neat square on a table',
   'caravanier-accessory-b': 'simple canvas pack saddle bag',
   'caravanier-accessory-a': 'reinforced leather pack with metal buckles',
-  'caravanier-accessory-s': 'legendary bottomless magic bag glowing from inside, stars spilling out',
+  'caravanier-accessory-s':
+    'legendary bottomless magic bag glowing from inside, stars spilling out',
   'caravanier-relic-b': 'simple iron lantern with a candle',
   'caravanier-relic-a': 'ornate copper lantern with warm light',
   'caravanier-relic-s': 'legendary lantern of the stars, holding a tiny glowing galaxy',
@@ -128,6 +156,82 @@ const CROP = 560;
 /** 192 px : une pièce s'affiche en petit (case de portrait, tuile de stock). */
 const SIZE = 192;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * 🐎 STABLE HORDE (`--horde`, 2026-09-27) : Pollinations est bloqué (solde épuisé, ne se
+ * recharge plus). Même mode que `fetch-monster-art.mjs` : gratuit, clé anonyme, file
+ * d'attente, **Juggernaut XL**, filtre NSFW ACTIF, SUJET EN TÊTE du prompt (ouvrir sur un
+ * style fait ignorer le sujet). `--only=id,id` vise des modèles précis, y compris ceux de
+ * `ADV_GEAR_NO_ART` — à retirer de cette liste une fois l'image relue et validée.
+ */
+const HORDE = process.argv.includes('--horde');
+const ONLY = (process.argv.find((a) => a.startsWith('--only=')) ?? '')
+  .slice('--only='.length)
+  .split(',')
+  .filter(Boolean);
+const HORDE_API = 'https://stablehorde.net/api/v2';
+const HORDE_HEAD = {
+  apikey: '0000000000',
+  'Content-Type': 'application/json',
+  'Client-Agent': 'muscu-planner:1:alban',
+};
+const HORDE_NEG =
+  'person, character, woman, man, archer, hands, face, body, mannequin, text, watermark, frame';
+const hordeStyle = (sujet) =>
+  `${sujet}, still life, single object only, rpg game item icon art, cel shaded, clean bold ` +
+  'outlines, dark gradient background, centered, square composition';
+
+async function hordeJson(url, init) {
+  for (let k = 0; k < 20; k++) {
+    try {
+      return await (await fetch(url, { headers: HORDE_HEAD, ...init })).json();
+    } catch {
+      await sleep(10000);
+    }
+  }
+  return null;
+}
+
+async function fetchHorde(prompt, seed) {
+  for (let essai = 0; essai < 3; essai++) {
+    const j = await hordeJson(`${HORDE_API}/generate/async`, {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: `${prompt} ### ${HORDE_NEG}`,
+        params: {
+          width: GEN,
+          height: GEN,
+          steps: 25,
+          cfg_scale: 6,
+          sampler_name: 'k_euler_a',
+          seed: String(seed + essai),
+          n: 1,
+        },
+        models: ['Juggernaut XL'],
+        nsfw: false,
+        censor_nsfw: true,
+        r2: true,
+      }),
+    });
+    if (!j?.id) {
+      console.log(`  … refus ${JSON.stringify(j)}`);
+      await sleep(30000);
+      continue;
+    }
+    let c;
+    do {
+      await sleep(10000);
+      c = await hordeJson(`${HORDE_API}/generate/check/${j.id}`);
+    } while (c && !c.done && !c.faulted && c.is_possible !== false);
+    if (!c?.done) continue;
+    const s = await hordeJson(`${HORDE_API}/generate/status/${j.id}`);
+    const g = s?.generations?.[0];
+    if (!g?.img || g.censored) continue;
+    const buf = Buffer.from(await (await fetch(g.img)).arrayBuffer());
+    if (buf.length > 5000) return buf;
+  }
+  return null;
+}
 
 async function fetchArt(prompt, seed) {
   const url =
@@ -164,14 +268,15 @@ let faits = 0;
 // par deux sans tirer plus fort sur un même point du service.
 const ORDER = process.argv.includes('--reverse') ? [...ADV_GEAR_MODELS].reverse() : ADV_GEAR_MODELS;
 for (const m of ORDER) {
-  if (ADV_GEAR_NO_ART.has(m.id)) continue;
+  if (ONLY.length ? !ONLY.includes(m.id) : ADV_GEAR_NO_ART.has(m.id)) continue;
   const dest = resolve(OUT, `${m.id}.webp`);
   if (!FORCE && existsSync(dest)) {
     console.log(`· ${m.id} — déjà là`);
     continue;
   }
-  const prompt = style(SUBJECTS[m.id]);
-  const brut = await fetchArt(prompt, seedFor(m.id));
+  const brut = HORDE
+    ? await fetchHorde(hordeStyle(SUBJECTS[m.id]), seedFor(m.id))
+    : await fetchArt(style(SUBJECTS[m.id]), seedFor(m.id));
   if (!brut) {
     console.error(`✖ ${m.id} — échec après 8 tentatives`);
     continue;

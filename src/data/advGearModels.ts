@@ -103,20 +103,13 @@ const MODEL_IDS = new Set(ADV_GEAR_MODELS.map((m) => m.id));
 /**
  * Modèles SANS illustration : ils gardent l'emoji de leur emplacement (🏹, 🦯).
  * ⚠️ PAS D'ILLUSTRATION VAUT MIEUX QU'UNE ILLUSTRATION FAUSSE (même règle que les
- * exercices sans animation fidèle) : le générateur dessine systématiquement une PERSONNE qui
- * tient un arc ou un bâton — mesuré sur une dizaine de formulations (posé, debout, fiche de
- * concept, vue à plat). Un arc qui s'affiche en portrait d'archère se lirait comme un bug.
- * Exporté pour que le test exige qu'AUCUN fichier ne traîne pour eux.
+ * exercices sans animation fidèle). **Vide depuis v0.1197** : les 3 arcs, le carquois ciselé
+ * et les 3 bâtons de caravanier — que Pollinations dessinait toujours TENUS par une personne
+ * — ont été faits via Stable Horde (`fetch-advgear-art.mjs --horde`, sujet en tête, forme
+ * décrite : « D shape with a taut bowstring, standing vertical »). La liste reste pour le
+ * prochain modèle raté. Exporté pour que le test exige qu'AUCUN fichier ne traîne pour eux.
  */
-export const ADV_GEAR_NO_ART: ReadonlySet<string> = new Set([
-  'archer-weapon-b',
-  'archer-weapon-a',
-  'archer-weapon-s',
-  'archer-accessory-a',
-  'caravanier-weapon-b',
-  'caravanier-weapon-a',
-  'caravanier-weapon-s',
-]);
+export const ADV_GEAR_NO_ART: ReadonlySet<string> = new Set<string>([]);
 
 export function advGearArt(modelId: string | null | undefined): string | null {
   return modelId && MODEL_IDS.has(modelId) && !ADV_GEAR_NO_ART.has(modelId)
