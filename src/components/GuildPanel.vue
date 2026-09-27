@@ -221,6 +221,16 @@
               >
                 🗡️ Portées <span class="g-tab-n">{{ stockWorn.length }}</span>
               </button>
+              <!-- ⬆️ Les pièces à ★5 de leur rang : celles qu'on peut faire monter, et celles
+                   qui n'attendent plus que des sceaux ou de l'or (leur tuile dit lequel). -->
+              <button
+                type="button"
+                class="af-chip tone-asc"
+                :class="{ on: stockTab === 'asc' }"
+                @click="stockTab = 'asc'"
+              >
+                ⬆️ Ascension <span class="g-tab-n">{{ stockAsc.length }}</span>
+              </button>
             </div>
             <!-- 🗡️✨ LES DEUX GESTES DE MASSE (demandés). ⚠️ Chacun ANNONCE ce qu'il va faire
                  AVANT qu'on touche, et se grise en DISANT pourquoi quand il ne peut rien :
@@ -264,7 +274,9 @@
               {{
                 stockTab === 'free'
                   ? 'Tout ton stock est confié — aucune pièce n’attend preneur.'
-                  : 'Aucune pièce confiée pour l’instant : va les attribuer depuis « Disponibles ».'
+                  : stockTab === 'asc'
+                    ? 'Aucune pièce à ★5 : elles apprennent avec leur porteur, en mission.'
+                    : 'Aucune pièce confiée pour l’instant : va les attribuer depuis « Disponibles ».'
               }}
             </p>
             <!-- ⚠️ Ce qu'aucune ligne ne dirait : une pièce peut attendre sans que PERSONNE
@@ -1270,19 +1282,22 @@ watch(
  *  emplacement. */
 const stockSorted = computed(() => [...char.advGearStock].sort(compareAdvGear));
 /** Ce qu'on regarde dans le stock : ce qui attend preneur, ce qui est confié, ou `null`
- *  pour tout. ⚠️ « Disponibles » par DÉFAUT — c'est le seul où il y a à faire. */
-const stockTab = ref<'free' | 'worn' | null>('free');
+ *  pour tout, ou les pièces à ★5 (`'asc'`). « Portées » par DÉFAUT (demandé le 2026-09-27) :
+ *  c'est l'équipement de ses champions qu'on vient regarder. */
+const stockTab = ref<'free' | 'worn' | 'asc' | null>('worn');
 // ⚠️ LA PARTITION SUIT `ownerOf`, LE PRÉDICAT DÉJÀ EN PLACE DANS CET ÉCRAN (`Adventurer.gear`
 // brut), et pas `wornGear` (ce que le COMBAT retient). C'est lui qui décide déjà de la ligne
 // « portée par X » et du blocage de la vente : s'en écarter ferait tomber une pièce dans
 // « Disponibles » tout en l'y affichant « portée par X » avec son bouton vendre grisé.
 const stockWorn = computed(() => stockSorted.value.filter((g) => !!ownerOf(g)));
 const stockFree = computed(() => stockSorted.value.filter((g) => !ownerOf(g)));
-const stockShown = computed(() =>
-  stockTab.value === null
-    ? stockSorted.value
-    : (stockTab.value === 'worn' ? stockWorn : stockFree).value,
-);
+/** ⬆️ Les pièces à ★5 de leur rang, payables ou non — la MÊME condition que le bouton ⬆️
+ *  de la tuile (`gearAscent`), jamais une seconde règle. */
+const stockAsc = computed(() => stockSorted.value.filter((g) => gearAscent(g) != null));
+const stockShown = computed(() => {
+  if (stockTab.value === null) return stockSorted.value;
+  return { worn: stockWorn, free: stockFree, asc: stockAsc }[stockTab.value].value;
+});
 /** Ce qu'on affiche, rangé par lettre (S, A, B) — les mêmes séparateurs que le vivier. */
 const stockGroups = computed(() => groupGearByGrade(stockShown.value));
 /** Combien de pièces libres que PERSONNE ne peut porter (métier absent, ou classe trop
@@ -2825,6 +2840,9 @@ function leftOf(at: number): string {
 }
 .af-chip.tone-busy {
   --tone-c: var(--accent, #ffd23f);
+}
+.af-chip.tone-asc {
+  --tone-c: #5fe0d0;
 }
 .af-chip.tone-hurt {
   --tone-c: var(--d4, #ff6a45);

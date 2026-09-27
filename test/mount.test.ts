@@ -819,8 +819,22 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
             level: 3,
             effect: { type: 'damage_pct', value: 10 },
           },
+          // Une armure PORTÉE par Léa : le stock s'ouvre sur « Portées » (demandé le
+          // 2026-09-27), c'est elle que la feuille montre d'emblée.
+          {
+            id: 'r1',
+            lineage: 'guerrier',
+            slot: 'armor',
+            name: 'Cotte',
+            emoji: '🛡️',
+            rarity: 'commun',
+            roll: 0.5,
+            level: 3,
+            effect: { type: 'max_pv_pct', value: 10 },
+          },
         ],
       }),
+      adventurers: [{ ...ROW.adventurers[0]!, gear: { armor: 'r1' } }],
     };
     expect(await mountIt(GuildPanel, { open: true }, avecStock)).toBeNull();
     // Et la feuille d'équipement, qui rend les tuiles de pièces, rangées par lettre avec
@@ -836,7 +850,13 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         (h) => (stockHtml = h),
       ),
     ).toBeNull();
-    expect(stockHtml).toContain(avecStock.adv_gear.stock[0]!.name);
+    // Ouvert sur « Portées » : l'armure de Léa est là, l'épée libre non.
+    const [epee, cotte] = ['w1', 'r1'].map((id) => avecStock.adv_gear.stock.find((g) => g.id === id)!);
+    expect(stockHtml).toMatch(/class="af-chip tone-busy on"/);
+    expect(stockHtml).toContain(cotte!.name);
+    expect(stockHtml).not.toContain(`>${epee!.name}<`);
+    // Et le filtre des pièces à ★5, vide ici (niveau 3).
+    expect(stockHtml).toMatch(/⬆️ Ascension <span[^>]*>0</);
     // Le séparateur dit le NOM de la rareté (B s'affiche SILVER), jamais le code brut.
     const { GRADE_LABEL: GL } = await import('@/data/champions');
     expect(stockHtml).toMatch(new RegExp(`class="adv-rname[^"]*">${GL.B}<`));
