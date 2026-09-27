@@ -77,8 +77,12 @@
         <div v-if="oddsOpen" class="g-odds">
           <div v-for="r in odds.rates" :key="r.grade" class="go-row">
             <span class="go-rar" :style="{ color: GRADE_COLOR[r.grade] }">
-              {{ r.grade
-              }}{{ r.grade === 'B' ? ' · équipement (lettre B, A ou S)' : ' · champion' }}
+              {{ GRADE_LABEL[r.grade]
+              }}{{
+                r.grade === 'B'
+                  ? ` · équipement (${GRADE_LABEL.B}, ${GRADE_LABEL.A} ou ${GRADE_LABEL.S})`
+                  : ' · champion'
+              }}
             </span>
             <span class="go-bar" aria-hidden="true"
               ><i
@@ -90,12 +94,12 @@
             <span class="go-pct font-display">{{ fmtOdds(r.pct) }} %</span>
           </div>
           <p class="go-note">
-            🎁 Un tirage sur {{ odds.floorEvery }} est garanti <b>A</b> ou mieux. Prochain dans
-            <b>{{ odds.nextFloorIn }}</b> tirage{{ odds.nextFloorIn > 1 ? 's' : '' }}.
+            🎁 Un tirage sur {{ odds.floorEvery }} est garanti <b>{{ GRADE_LABEL.A }}</b> ou mieux.
+            Prochain dans <b>{{ odds.nextFloorIn }}</b> tirage{{ odds.nextFloorIn > 1 ? 's' : '' }}.
           </p>
           <p class="go-note">
-            👑 S : <b>{{ fmtOdds(odds.topPct) }} %</b> à ton prochain tirage, garanti dans
-            <b>{{ odds.nextTopIn }}</b
+            👑 {{ GRADE_LABEL.S }} : <b>{{ fmtOdds(odds.topPct) }} %</b> à ton prochain tirage,
+            garanti dans <b>{{ odds.nextTopIn }}</b
             >.
           </p>
         </div>
@@ -120,7 +124,7 @@ import {
 } from '@/lib/gachaReveal';
 import { GACHA, gachaOdds, multiPullCost } from '@/lib/gacha';
 import { pullPayment } from '@/lib/sportTickets';
-import { GRADE_COLOR } from '@/data/champions';
+import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 
 defineProps<{ open: boolean }>();
 const emit = defineEmits<{ close: [] }>();

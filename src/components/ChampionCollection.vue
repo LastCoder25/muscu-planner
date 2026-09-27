@@ -12,7 +12,7 @@
       :style="{ '--rk': GRADE_COLOR[g.grade] }"
     >
       <header class="cc-h">
-        <span class="cc-rar font-display">{{ g.grade }}</span>
+        <span class="cc-rar font-display">{{ GRADE_LABEL[g.grade] }}</span>
         <span class="cc-bar" aria-hidden="true"
           ><i :style="{ width: (g.owned / g.total) * 100 + '%' }"
         /></span>
@@ -57,7 +57,7 @@
         </div>
         <div class="cc-zoom-name font-display">{{ zoomed.champ.name }}</div>
         <div class="cc-zoom-meta">
-          <span class="cc-zoom-grade font-display">{{ zoomed.champ.grade }}</span>
+          <span class="cc-zoom-grade font-display">{{ GRADE_LABEL[zoomed.champ.grade] }}</span>
           <span v-if="zoomed.awaken > 0" class="cc-zoom-awk">✨ Éveil {{ zoomed.awaken }}</span>
         </div>
         <ul class="cc-zoom-skills">
@@ -73,7 +73,7 @@
 import { computed, ref } from 'vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { championGroups } from '@/lib/codex';
-import { GRADE_COLOR } from '@/data/champions';
+import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, type Adventurer } from '@/lib/adventurers';
 
 const props = defineProps<{ advs: Adventurer[] }>();

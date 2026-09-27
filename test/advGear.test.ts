@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { GRADE_COLOR, PULL_GRADES } from '@/data/champions';
+import { GRADE_COLOR, GRADE_LABEL, PULL_GRADES } from '@/data/champions';
 import { mulberry32 } from '@/lib/combat';
 import { RARITY_RANK, RANK_ORDER, itemLevelMult } from '@/lib/items';
 import { ADV_CLASSES, advAvatar, advRarity, type Adventurer } from '@/lib/adventurers';
@@ -551,7 +551,7 @@ describe('🎰 une pièce de champion se lit en LETTRE (B / A / S), comme les ch
     for (const g of PULL_GRADES) {
       const p = piece(g, { lineage: 'archer', slot: 'weapon', rarity: 'commun', grade: g });
       const c = advGearCells(a, [p])[0]!;
-      expect(c.rank).toBe(g);
+      expect(c.rank).toBe(GRADE_LABEL[g]);
       expect(c.rank).not.toContain('★');
       expect(c.color).toBe(GRADE_COLOR[g]);
       expect(c.model).toBe(`archer-weapon-${g.toLowerCase()}`);

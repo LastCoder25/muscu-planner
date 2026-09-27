@@ -85,7 +85,11 @@
                       ></ChampionPortrait
                     ></span
                   >
-                  <span class="ivk-front-l font-display">{{ c.grade }}</span>
+                  <span
+                    class="ivk-front-l font-display"
+                    :class="{ word: GRADE_LABEL[c.grade].length > 1 }"
+                    >{{ GRADE_LABEL[c.grade] }}</span
+                  >
                   <span class="ivk-front-n">{{ c.cell.name }}</span>
                   <span class="ivk-front-t" :class="tagOf(c.lot).cls">{{
                     tagOf(c.lot).label
@@ -101,7 +105,7 @@
               <div class="ivk-rays" :class="{ on: rv.col }"></div>
               <div ref="rim" class="ivk-rim"></div>
               <div ref="gradeEl" class="ivk-grade font-display" :class="'g-' + rv.item.cell.grade">
-                {{ rv.item.cell.grade }}
+                {{ GRADE_LABEL[rv.item.cell.grade] }}
               </div>
               <div class="ivk-portrait">
                 <span class="ivk-sil"
@@ -169,7 +173,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
-import { CHAMPION_BY_ID, GRADE_COLOR } from '@/data/champions';
+import { CHAMPION_BY_ID, GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 import { ADV_ROLE_LABEL, ADV_SIGNATURE_LABEL, AWAKEN, awakenLevel } from '@/lib/adventurers';
 import {
   INVOKE,
@@ -305,7 +309,7 @@ const verdictSub = computed(() => {
 const lotSummary = computed(() => {
   const n = (g: string) => items.value.filter((it) => it.cell.grade === g).length;
   const neufs = (props.lot ?? []).filter((it) => it.champion && !it.duplicate).length;
-  return `${n('S')} S · ${n('A')} A · ${n('B')} pièce${n('B') > 1 ? 's' : ''}${neufs ? ` · ${neufs} NOUVEAU` : ''}`;
+  return `${n('S')} ${GRADE_LABEL.S} · ${n('A')} ${GRADE_LABEL.A} · ${n('B')} pièce${n('B') > 1 ? 's' : ''}${neufs ? ` · ${neufs} NOUVEAU` : ''}`;
 });
 /** ⚠️ Ce qui DISTINGUE un champion : son rôle de convoi et ses signatures (leçon v0.752). */
 function metaOf(cell: RevealCell): string {
@@ -1866,6 +1870,12 @@ onBeforeUnmount(() => {
   text-shadow:
     0 0 6px var(--c),
     0 2px 0 #000;
+  /* Un NOM de rareté (GOLD, MYTHRIL…) au lieu d'une lettre : il doit tenir dans la
+     largeur de la carte, donc il suit sa largeur plutôt qu'un plancher de 20 px. */
+  &.word {
+    font-size: calc(var(--cw, 70px) * 0.14);
+    letter-spacing: 0.04em;
+  }
 }
 .ivk-front-n {
   font-size: max(9.5px, calc(var(--cw, 70px) * 0.12));

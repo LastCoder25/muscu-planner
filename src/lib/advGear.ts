@@ -22,7 +22,7 @@ import {
   type WeaponKind,
 } from './items';
 import { CHARACTER_RANKS, rankStarStr, rankStartLevel } from './characterRank';
-import { GRADE_COLOR, PULL_GRADES, type PullGrade } from '../data/champions';
+import { GRADE_COLOR, GRADE_LABEL, PULL_GRADES, type PullGrade } from '../data/champions';
 import { advGearModelId, advGearModelName } from '../data/advGearModels';
 import {
   advAvatar,
@@ -164,8 +164,8 @@ export const LINEAGE_GEAR: Record<Lineage, LineageGearDef> = {
 export const GEAR_GRADE_SHARE: Record<PullGrade, number> = { B: 1, A: 1.45, S: 1.45 ** 2 };
 
 /** 🎰 Ce que l'écran montre d'une pièce : sa LETTRE, dans sa couleur. Source unique. */
-export function advGearBadge(g: Pick<AdvGear, 'grade'>): { label: PullGrade; color: string } {
-  return { label: g.grade, color: GRADE_COLOR[g.grade] };
+export function advGearBadge(g: Pick<AdvGear, 'grade'>): { label: string; color: string } {
+  return { label: GRADE_LABEL[g.grade], color: GRADE_COLOR[g.grade] };
 }
 
 /** Le MODÈLE nommé d'une pièce (roster, `src/data/advGearModels.ts`) : son nom, son emoji

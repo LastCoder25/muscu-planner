@@ -142,7 +142,7 @@
             :style="{ '--c': GRADE_COLOR[g.grade] }"
           >
             <div class="adv-rhead">
-              <span class="adv-rname font-display">{{ g.grade }}</span>
+              <span class="adv-rname font-display">{{ GRADE_LABEL[g.grade] }}</span>
               <span class="adv-rn">{{ g.advs.length }}</span>
             </div>
             <div class="adv-grid">
@@ -285,7 +285,7 @@
               :style="{ '--c': GRADE_COLOR[gg.grade] }"
             >
               <div class="adv-rhead">
-                <span class="adv-rname font-display">{{ gg.grade }}</span>
+                <span class="adv-rname font-display">{{ GRADE_LABEL[gg.grade] }}</span>
                 <span class="adv-rn">{{ gg.gear.length }}</span>
               </div>
               <div class="gear-stock">
@@ -934,7 +934,7 @@ import {
   advSubtitle,
   engageCap,
 } from '@/lib/adventurers';
-import { GRADE_COLOR } from '@/data/champions';
+import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
 import {
   champShowK,

@@ -281,7 +281,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   it('🎰 GachaReveal se monte, et respecte prefers-reduced-motion', async () => {
     const { default: GachaReveal } = await import('@/components/GachaReveal.vue');
     const { buildReveal, cellOfChampion } = await import('@/lib/gachaReveal');
-    const { CHAMPIONS } = await import('@/data/champions');
+    const { CHAMPIONS, GRADE_LABEL } = await import('@/data/champions');
     const { mulberry32 } = await import('@/lib/combat');
     const champ = CHAMPIONS[0]!;
     const v = { duplicate: false, copies: 1, manaBack: 0, awaken: 0 };
@@ -888,7 +888,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
 
   it('📖 ChampionCollection se monte et compte par lettre', async () => {
     const { default: C } = await import('@/components/ChampionCollection.vue');
-    const { CHAMPIONS } = await import('@/data/champions');
+    const { CHAMPIONS, GRADE_LABEL } = await import('@/data/champions');
     const { championGroups } = await import('@/lib/codex');
     const advs = ROW.adventurers;
     let out = '';
@@ -896,7 +896,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // Un en-tête par lettre, et le compteur de chacun rendu à l'écran.
     expect(championGroups(advs).some((g) => g.owned > 0)).toBe(true);
     for (const g of championGroups(advs)) {
-      expect(out).toContain(`>${g.grade}<`);
+      expect(out).toContain(`>${GRADE_LABEL[g.grade]}<`);
       expect(out).toContain(g.owned + '/' + g.total);
     }
     expect(out.match(/class="cc-tile/g)?.length).toBe(CHAMPIONS.length);
@@ -1217,7 +1217,7 @@ describe('⬆️ AscensionReveal — la scène d’ascension se monte', () => {
   it('portrait du champion, rangs et récompense', async () => {
     const AscensionReveal = (await import('@/components/AscensionReveal.vue')).default;
     const { CHARACTER_RANKS } = await import('@/lib/characterRank');
-    const { CHAMPIONS } = await import('@/data/champions');
+    const { CHAMPIONS, GRADE_LABEL } = await import('@/data/champions');
     const c = CHAMPIONS[0]!;
     let out = '';
     const props = {

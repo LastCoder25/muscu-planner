@@ -47,8 +47,18 @@ export type ChampionGrade = 'S' | 'A';
 export type PullGrade = ChampionGrade | 'B';
 /** Du plus bas au plus haut. */
 export const PULL_GRADES: readonly PullGrade[] = ['B', 'A', 'S'];
-/** Couleurs du genre : bleu B, violet A, or S — la lueur qui précède la révélation. */
-export const GRADE_COLOR: Record<PullGrade, string> = { S: '#ffc94a', A: '#b57bff', B: '#6fa8ff' };
+/**
+ * 🏷️ LES NOMS DES RARETÉS (2026-09-27, décision de l'utilisateur) : **A = GOLD**,
+ * **S = MYTHRIL**. ⚠️ **SEUL L'AFFICHAGE CHANGE** : les codes `'A'` / `'S'` sont persistés
+ * (compteurs de pity, stock d'équipement, champions de référence) — les renommer imposerait
+ * une migration de toutes les sauvegardes pour rien. Tout écran qui montre une lettre passe
+ * par cette table, jamais par le code brut.
+ */
+export const GRADE_LABEL: Record<PullGrade, string> = { B: 'B', A: 'GOLD', S: 'MYTHRIL' };
+/** Les couleurs suivent les NOMS : acier pour le fond du tirage, or pour GOLD, argent-bleu
+ *  lumineux pour MYTHRIL (le mithril des légendes est un argent qui brille). C'est aussi la
+ *  lueur qui précède la révélation dans le cercle d'invocation. */
+export const GRADE_COLOR: Record<PullGrade, string> = { S: '#7fe3ff', A: '#ffc94a', B: '#8fa3b8' };
 
 interface AwakenStep {
   /** Rang d'Éveil où ce cran tombe (1 = première copie en trop). */

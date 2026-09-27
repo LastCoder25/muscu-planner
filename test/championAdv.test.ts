@@ -273,7 +273,7 @@ describe('🏅 LA LETTRE ET LE RANG — ce qu’on a TIRÉ, et ce qu’il peut P
     // niveau 1 reste un S (l'ancien plafonnement de l'étiquette rendait le jackpot invisible).
     const bas = asAdv(primordial, 1);
     expect(advGrade(bas)).toBe('S');
-    expect(advGradeBadge(bas).label).toBe('S');
+    expect(advGradeBadge(bas).label).toBe('MYTHRIL');
     expect(advRarity(bas)).toBe(RANK_ORDER[0]);
     expect(advGrade(asAdv(commun, 100))).toBe('A');
   });

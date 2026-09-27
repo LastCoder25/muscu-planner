@@ -38,6 +38,7 @@ import {
 import {
   CHAMPION_BY_ID,
   GRADE_COLOR,
+  GRADE_LABEL,
   REF_CHAMPION_BY_ID,
   type Champion,
   type ChampionGrade,
@@ -1475,7 +1476,7 @@ export function advGrade(adv: Adventurer): ChampionGrade | null {
  *  legacy sans lettre garde sa rareté de classe. */
 export function advGradeBadge(adv: Adventurer): { label: string; color: string } {
   const g = advGrade(adv);
-  if (g) return { label: g, color: GRADE_COLOR[g] };
+  if (g) return { label: GRADE_LABEL[g], color: GRADE_COLOR[g] };
   const r = advRarity(adv);
   return { label: RARITY_LABEL[r], color: RANK_COLOR[r] };
 }
