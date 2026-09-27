@@ -160,7 +160,7 @@
               @click="resInfo = 'runes'"
               @keyup.enter="resInfo = 'runes'"
               :title="`Runes de compétence — 🟢 ${char.row.runes.stock.green} · 🔵 ${char.row.runes.stock.blue} · 🟣 ${char.row.runes.stock.violet} · 🟠 ${char.row.runes.stock.gold}`"
-              ><span class="tb-ico">🪬</span
+              ><span class="tb-ico"><RuneIcon /></span
               >{{
                 compactNumber(
                   char.row.runes.stock.green +
@@ -3079,6 +3079,7 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import AvailabilityLine from '@/components/AvailabilityLine.vue';
+import RuneIcon from '@/components/RuneIcon.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import SetPieceCmp from '@/components/SetPieceCmp.vue';
 import { splitStat, type StatParts } from '@/lib/statText';

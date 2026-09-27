@@ -3425,6 +3425,7 @@ export const useCharacterStore = defineStore('character', () => {
     const stock0 = cur.adv_gear?.stock ?? [];
     let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
+    const runesIn: RuneTier[] = [];
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
@@ -3434,6 +3435,7 @@ export const useCharacterStore = defineStore('character', () => {
       map = h.map;
       advs = h.advs;
       gearStock = h.stock;
+      runesIn.push(...h.runes);
       const escort = advs.filter((a) => ids.has(a.id));
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
@@ -3525,6 +3527,8 @@ export const useCharacterStore = defineStore('character', () => {
       messages: x.messages,
       ...x.patch,
       ...forged,
+      // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
+      ...(runesIn.length ? { runes: addRunes(cur.runes, runesIn) } : {}),
       adventurers: roster,
     });
     x.play();
@@ -3549,13 +3553,21 @@ export const useCharacterStore = defineStore('character', () => {
     stock: AdvGear[];
     gold: number;
     supplies: SupplyStock;
+    runes: RuneTier[];
   } {
     const p = map.pois.find((x) => x.id === id);
     const c = collectControl(map, id, at, heroLevel);
     // ⚒️ La forge verse son XP aux PIÈCES portées par la garnison, pas aux champions.
     const nextStock = p?.control ? forgeGear(stock, advs, p.control.garrison, c.gearXp) : stock;
     if (!p?.control || c.xp <= 0)
-      return { map: c.map, advs, stock: nextStock, gold: c.gold, supplies: c.supplies };
+      return {
+        map: c.map,
+        advs,
+        stock: nextStock,
+        gold: c.gold,
+        supplies: c.supplies,
+        runes: c.runes,
+      };
     const ids = new Set(p.control.garrison);
     const next = advs.map((a) =>
       ids.has(a.id)
@@ -3566,7 +3578,14 @@ export const useCharacterStore = defineStore('character', () => {
           )
         : a,
     );
-    return { map: c.map, advs: next, stock: nextStock, gold: c.gold, supplies: c.supplies };
+    return {
+      map: c.map,
+      advs: next,
+      stock: nextStock,
+      gold: c.gold,
+      supplies: c.supplies,
+      runes: c.runes,
+    };
   }
 
   /** 🏰 Récolte ce qu'un point de contrôle tenu a produit (or, XP, consommables). */
@@ -3575,7 +3594,7 @@ export const useCharacterStore = defineStore('character', () => {
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<{ gold: number; supplies: number } | null> {
+  ): Promise<{ gold: number; supplies: number; runes: RuneTier[] } | null> {
     const cur = row.value;
     if (!cur?.expedition_map) return null;
     const before = advList.value;
@@ -3593,13 +3612,17 @@ export const useCharacterStore = defineStore('character', () => {
       expedition_map: h.map,
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
-      ...(h.advs !== before ? { adventurers: h.advs, ...gearPatch } : {}),
+      ...(h.runes.length ? { runes: addRunes(cur.runes, h.runes) } : {}),
+      // ⚠️ `gearPatch` TOUJOURS : la forge ne touche pas au vivier, seulement aux pièces — le
+      // réserver au cas « vivier changé » (v0.1249) ne sauvegardait jamais l'XP de la forge.
+      ...gearPatch,
+      ...(h.advs !== before ? { adventurers: h.advs } : {}),
     });
     if (h.gold > 0) goldFx.gain(h.gold);
     if (h.advs !== before) useAdvXpFx().show(tracks, 'Camp d’entraînement');
     else if (h.stock !== stock0)
       useAdvXpFx().show(withGearTracks([], stock0, h.stock, h.advs), 'Forge de campagne');
-    return { gold: h.gold, supplies: nSup };
+    return { gold: h.gold, supplies: nSup, runes: h.runes };
   }
 
   /** 🏰 Rappelle TOUTE la garnison (et les renforts en route) : la réserve est récoltée,
@@ -3623,7 +3646,11 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
-      ...(h.stock !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } } : {}),
+      ...(h.runes.length ? { runes: addRunes(cur.runes, h.runes) } : {}),
+      // 🗡️ Les pièces : celles de la forge, sinon ce que l'XP du camp leur a appris.
+      ...(h.stock !== stock0
+        ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } }
+        : gearTrainedPatch(cur, advList.value, h.advs)),
     });
     if (h.gold > 0) goldFx.gain(h.gold);
   }

@@ -672,6 +672,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
+import { RUNE_INFO } from '@/lib/skillRunes';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
@@ -764,6 +765,8 @@ import {
   trainingXpPerHour,
   forgeStock,
   forgeXpPerHour,
+  runeProgress,
+  runeStock,
   seatsOf,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
@@ -1379,6 +1382,10 @@ const controlProd = computed(() => {
       return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion · en attente ${trainingStock(p, now.value)} XP chacun`;
     case 'garden':
       return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${CONTROL.gardenHoursPerItem} h`;
+    case 'scriptorium':
+      return runeStock(p, now.value) > 0
+        ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
+        : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${CONTROL.runeHoursPerItem} h`;
     case 'forge':
       return `⚒️ +${Math.round(forgeXpPerHour(p))} XP/h par pièce portée · en attente ${forgeStock(p, now.value)} XP chacune`;
     case 'tower':
@@ -1387,6 +1394,8 @@ const controlProd = computed(() => {
 });
 /** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
 const controlNote = computed(() => {
+  if (liveControl.value?.kind === 'scriptorium')
+    return 'La couleur de la rune suit le rang du lieu face au tien : un Scriptorium de ton rang copie plus souvent des bleues et des violettes. Le copiste n’apprend rien.';
   if (liveControl.value?.kind === 'forge')
     return 'Les champions n’apprennent rien ici : seules leurs pièces portées progressent, jusqu’au ★5 de leur rang et au niveau de leur porteur. Utile quand un champion bute sur son plafond.';
   if (liveControl.value?.kind !== 'training') return '';
@@ -1403,6 +1412,7 @@ const controlReady = computed(() => {
     controlGold.value > 0 ||
     trainingStock(p, now.value) > 0 ||
     forgeStock(p, now.value) > 0 ||
+    runeStock(p, now.value) > 0 ||
     gardenStock(p, now.value) > 0
   );
 });
@@ -1413,6 +1423,7 @@ const controlCollectLabel = computed(() => {
   if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
   if (k === 'training') return `Faire progresser (${trainingStock(p, now.value)} XP chacun)`;
   if (k === 'forge') return `Forger (${forgeStock(p, now.value)} XP par pièce)`;
+  if (k === 'scriptorium') return 'Récupérer la rune';
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
 });
 const controlRate = computed(() =>
@@ -1432,7 +1443,15 @@ async function collectCtl() {
   if (!uid || !p || ctlBusy.value) return;
   ctlBusy.value = true;
   try {
-    await char.collectControlPoint(uid, p.id, Date.now(), heroLevel.value);
+    const got = await char.collectControlPoint(uid, p.id, Date.now(), heroLevel.value);
+    // 📜 Une rune recopiée s'annonce : c'est rare, et c'est le seul moment où on la voit.
+    for (const t of got?.runes ?? [])
+      gameFx.celebrate({
+        kind: 'unlock',
+        emoji: RUNE_INFO[t].emoji,
+        title: RUNE_INFO[t].label,
+        subtitle: 'Recopiée au Scriptorium · à poser depuis la fiche d’un champion',
+      });
   } finally {
     ctlBusy.value = false;
   }

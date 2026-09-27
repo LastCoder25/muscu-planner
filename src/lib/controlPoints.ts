@@ -20,6 +20,7 @@
 import { mulberry32, seedOf } from './combat';
 import { advAscensionCap, advXpToNext, type Adventurer } from './adventurers';
 import { grantAdvGearXp, wornGear, type AdvGear } from './advGear';
+import { pickTier, placeRuneOdds, type RuneTier } from './skillRunes';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
 import type { SkirmishUnit } from './skirmish';
@@ -45,7 +46,7 @@ export const CONTROL = {
   /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
    *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
    *  de la ville (un quart de tour d'écart), et la mine, première, garde celle d'avant. */
-  kinds: ['mine', 'training', 'garden', 'tower', 'forge'] as readonly ControlKind[],
+  kinds: ['mine', 'training', 'garden', 'tower', 'forge', 'scriptorium'] as readonly ControlKind[],
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -93,6 +94,13 @@ export const CONTROL = {
    *  qui n'apprennent qu'à travers lui (`trainWornGear`), sont bloquées aussi. Plafonds de
    *  la pièce inchangés : le ★5 de son rang et le niveau de son porteur. */
   forgeHoursPerTrial: 1.5,
+  /** 📜 Scriptorium (2026-09-27, demandé : « comme le jardin, mais pour les compétences ») :
+   *  UN copiste (`CONTROL_SEATS.scriptorium` = 1) recopie une RUNE de compétence toutes les
+   *  `runeHoursPerItem` heures. ⚠️ Les runes sont RARES : toutes sources confondues, un joueur
+   *  régulier en gagne 0,27 à 0,87 par jour (spec des runes). Une toutes les 48 h, tenue en
+   *  continu, en ajoute 0,5 — la couleur suit les chances des lieux (`placeRuneOdds`, rang du
+   *  point face au tien). Sa réserve tient UNE rune (une seule attend d'être ramassée). */
+  runeHoursPerItem: 48,
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
@@ -108,6 +116,7 @@ export const CONTROL = {
  *  jardin n'en garde qu'UN — on choisit à l'envoi qui reste, les autres rentrent). */
 const CONTROL_SEATS: Record<ControlKind, number> = {
   forge: CONTROL_MAX_GARRISON,
+  scriptorium: 1,
   mine: CONTROL_MAX_GARRISON,
   training: CONTROL_MAX_GARRISON,
   garden: 1,
@@ -122,6 +131,7 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   garden: 2,
   tower: 3,
   forge: 0.5,
+  scriptorium: 2.5,
 };
 
 export const CONTROL_EMO = CONTROL_KIND_EMO;
@@ -133,6 +143,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   garden: 'consommables 🎒',
   tower: 'trajets plus courts 🧭',
   forge: 'XP pour l’équipement porté ⚒️',
+  scriptorium: 'runes de compétence',
 };
 
 export const controlIdOf = (kind: ControlKind): string => `ctl_${kind}`;
@@ -392,6 +403,8 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
       return n > 0 ? 1 / CONTROL.gardenHoursPerItem : 0;
     case 'forge':
       return n > 0 ? forgeXpPerHour(p) : 0;
+    case 'scriptorium':
+      return n > 0 ? 1 / CONTROL.runeHoursPerItem : 0;
     default:
       return 0;
   }
@@ -406,10 +419,11 @@ function stockUnits(p: Poi, now: number, playerLevel: number): number {
   const c = p.control;
   if (!c || c.owner !== 'player' || c.collectedAt === undefined) return 0;
   const until = Math.min(now, c.attackAt ?? now);
-  const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
+  const storage = storageMsOf(c.kind);
+  const ms = Math.min(storage, Math.max(0, until - c.collectedAt));
   const rate = unitsPerHour(p, c.garrison.length, playerLevel);
   const banked = c.banked ?? 0;
-  const cap = Math.max(banked, (rate * CONTROL.storageMs) / 3600_000);
+  const cap = Math.max(banked, (rate * storage) / 3600_000);
   return Math.min(cap, banked + (rate * ms) / 3600_000);
 }
 
@@ -472,6 +486,23 @@ export function forgeGear(
   return next.size ? stock.map((g) => next.get(g.id) ?? g) : stock;
 }
 
+/** Combien de temps de production un point garde en réserve. 24 h partout, sauf au
+ *  Scriptorium : une rune y prend 48 h, et une réserve de 24 h l'empêchait de jamais finir. */
+function storageMsOf(kind: ControlKind): number {
+  return kind === 'scriptorium' ? CONTROL.runeHoursPerItem * 3600_000 : CONTROL.storageMs;
+}
+
+/** 📜 Combien de runes le Scriptorium a recopiées à `now` (0 ou 1). */
+export function runeStock(p: Poi, now: number): number {
+  return p.control?.kind === 'scriptorium' ? Math.floor(stockUnits(p, now, 1) + 1e-9) : 0;
+}
+/** 📜 Où en est la rune en cours de copie, de 0 à 1. */
+export function runeProgress(p: Poi, now: number): number {
+  if (p.control?.kind !== 'scriptorium') return 0;
+  const u = stockUnits(p, now, 1);
+  return u >= 1 ? 1 : u;
+}
+
 /** 🌿 Combien de consommables le jardin a cueillis à `now`. */
 export function gardenStock(p: Poi, now: number): number {
   return p.control?.kind === 'garden' ? Math.floor(stockUnits(p, now, 1) + 1e-9) : 0;
@@ -506,9 +537,16 @@ export function collectControl(
   id: string,
   now: number,
   playerLevel: number,
-): { map: ExpeditionMap; gold: number; xp: number; gearXp: number; supplies: SupplyStock } {
+): {
+  map: ExpeditionMap;
+  gold: number;
+  xp: number;
+  gearXp: number;
+  supplies: SupplyStock;
+  runes: RuneTier[];
+} {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, xp: 0, gearXp: 0, supplies: {} };
+  const none = { map, gold: 0, xp: 0, gearXp: 0, supplies: {}, runes: [] };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   const units = stockUnits(p, now, playerLevel);
@@ -521,6 +559,21 @@ export function collectControl(
       const s = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
       supplies[s] = (supplies[s] ?? 0) + 1;
     }
+  }
+  // 📜 La couleur de chaque rune recopiée : les chances d'une rune tombée sur un lieu, selon le
+  // rang du point face au tien (`placeRuneOdds`). Graine : la CARTE, le point et la dernière
+  // récolte — sans la carte, tous les joueurs recevaient la même suite de couleurs.
+  const runes: RuneTier[] = [];
+  if (c.kind === 'scriptorium') {
+    const rng = mulberry32(
+      (seedOf(`${map.seed}:${id}:rune:${c.collectedAt}`) ^ 0x1b873593) >>> 0 || 1,
+    );
+    const odds = placeRuneOdds({
+      place: 'control',
+      placeRankIndex: characterRank(Math.max(1, p.level)).rankIndex,
+      playerRankIndex: characterRank(Math.max(1, playerLevel)).rankIndex,
+    });
+    for (let i = 0; i < whole; i++) runes.push(pickTier(rng, odds));
   }
   const until = Math.min(now, c.attackAt ?? now);
   return {
@@ -536,6 +589,7 @@ export function collectControl(
     xp: c.kind === 'training' ? whole : 0,
     gearXp: c.kind === 'forge' ? whole : 0,
     supplies,
+    runes,
   };
 }
 

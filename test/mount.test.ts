@@ -1071,7 +1071,14 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // 🪬 Les compétences en miniature : emoji + niveau, et les emplacements libres.
     if (base.adv.championId) {
       let mini = '';
-      await mountIt(P, { ...base, adv: { ...base.adv, skills: [{ id: 'speed', level: 3 }] } }, undefined, undefined, '/', (h) => (mini = h));
+      await mountIt(
+        P,
+        { ...base, adv: { ...base.adv, skills: [{ id: 'speed', level: 3 }] } },
+        undefined,
+        undefined,
+        '/',
+        (h) => (mini = h),
+      );
       expect(mini).toContain('Vitesse · niveau 3');
       expect(mini).toContain('Emplacement libre');
     }
@@ -1714,12 +1721,32 @@ describe('🪬 SkillRunesPanel', () => {
     const { default: SkillRunesPanel } = await import('@/components/SkillRunesPanel.vue');
     const { CHAMPIONS } = await import('@/data/champions');
     const c = CHAMPIONS.find((x) => x.grade === 'A')!;
-    const adv = { id: 'c1', name: c.name, seed: 1, path: [], level: 25, xp: 0, championId: c.id, copies: 1, skills: [{ id: 'speed', level: 2 }, { id: 'haul', level: 1 }] };
+    const adv = {
+      id: 'c1',
+      name: c.name,
+      seed: 1,
+      path: [],
+      level: 25,
+      xp: 0,
+      championId: c.id,
+      copies: 1,
+      skills: [
+        { id: 'speed', level: 2 },
+        { id: 'haul', level: 1 },
+      ],
+    };
     let out = '';
     expect(
       await mountIt(
         SkillRunesPanel,
-        { adv, runes: { stock: { green: 2, blue: 0, violet: 1, gold: 0 }, pending: { advId: 'c1', tier: 'green', drawn: 'care' }, comp: 1 } },
+        {
+          adv,
+          runes: {
+            stock: { green: 2, blue: 0, violet: 1, gold: 0 },
+            pending: { advId: 'c1', tier: 'green', drawn: 'care' },
+            comp: 1,
+          },
+        },
         undefined,
         undefined,
         '/',
@@ -1730,6 +1757,28 @@ describe('🪬 SkillRunesPanel', () => {
     expect(out).toContain('Nv 2');
     expect(out).toContain('Remplacer');
     expect(out).toContain('Garder les siennes');
+    // 🪨 Une pierre par couleur dans le stock (plus des ronds d'emoji).
+    for (const t of ['green', 'blue', 'violet', 'gold']) expect(out).toContain('rune-icon t-' + t);
   }, 30_000);
 });
 
+describe('🪨 RuneIcon', () => {
+  it('une pierre par couleur et la variante « toutes », sans dégradé partagé sur la page', async () => {
+    const { default: RuneIcon } = await import('@/components/RuneIcon.vue');
+    const tiers = ['green', 'blue', 'violet', 'gold', null];
+    const page = {
+      render: () =>
+        h(
+          'div',
+          tiers.map((tier) => h(RuneIcon, { tier })),
+        ),
+    };
+    let out = '';
+    expect(await mountIt(page, {}, undefined, undefined, '/', (x) => (out = x))).toBeNull();
+    for (const t of tiers) expect(out).toContain(t ? 'rune-icon t-' + t : 'rune-icon all');
+    // Cinq icônes sur la même page : aucun dégradé ne doit porter l'id d'un autre.
+    const ids = [...out.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids.length).toBeGreaterThanOrEqual(5);
+    expect(new Set(ids).size).toBe(ids.length);
+  }, 30_000);
+});

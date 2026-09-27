@@ -19,7 +19,9 @@
           <span class="srp-main">
             <span class="srp-name">
               {{ SKILLS[s.id].name }}
-              <b class="srp-lvl">Nv {{ s.level }}{{ s.level >= SKILL_MAX_LEVEL ? ' · max' : '' }}</b>
+              <b class="srp-lvl"
+                >Nv {{ s.level }}{{ s.level >= SKILL_MAX_LEVEL ? ' · max' : '' }}</b
+              >
             </span>
             <span class="srp-what">{{ whatOf(s.id, s.level) }}</span>
           </span>
@@ -74,7 +76,7 @@
         :title="blockOf(t) ? RUNE_USE_BLOCK_LABEL[blockOf(t)!] : RUNE_INFO[t].label"
         @click="emit('apply', t)"
       >
-        <span class="srp-r-emo">{{ RUNE_INFO[t].emoji }}</span>
+        <RuneIcon class="srp-r-emo" :tier="t" size="26px" />
         <span class="srp-r-n font-display">{{ runes.stock[t] }}</span>
         <span class="srp-r-why">{{
           blockOf(t) === 'noRune'
@@ -116,6 +118,7 @@ import {
   type Adventurer,
 } from '@/lib/adventurers';
 import { CHARACTER_RANKS } from '@/lib/characterRank';
+import RuneIcon from '@/components/RuneIcon.vue';
 
 const props = defineProps<{ adv: Adventurer; runes: RuneState; busy?: boolean }>();
 const emit = defineEmits<{ apply: [tier: RuneTier]; resolve: [index: number | null] }>();
@@ -123,7 +126,10 @@ const emit = defineEmits<{ apply: [tier: RuneTier]; resolve: [index: number | nu
 const skills = computed(() => advRuneSkills(props.adv));
 const slots = computed(() => advSkillSlots(props.adv));
 const cells = computed(() =>
-  Array.from({ length: Math.max(slots.value, skills.value.length) }, (_, i) => skills.value[i] ?? null),
+  Array.from(
+    { length: Math.max(slots.value, skills.value.length) },
+    (_, i) => skills.value[i] ?? null,
+  ),
 );
 const pending = computed(() =>
   props.runes.pending?.advId === props.adv.id ? props.runes.pending : null,
@@ -273,7 +279,7 @@ function minRankName(t: RuneTier): string {
   cursor: default;
 }
 .srp-r-emo {
-  font-size: 18px;
+  display: block;
 }
 .srp-r-n {
   font-size: 18px;

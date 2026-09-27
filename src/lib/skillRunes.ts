@@ -252,7 +252,7 @@ function toOdds(row: Odds): Record<RuneTier, number> {
 }
 
 /** Tire une couleur dans une distribution. */
-function pickTier(rng: () => number, odds: Record<RuneTier, number>): RuneTier {
+export function pickTier(rng: () => number, odds: Record<RuneTier, number>): RuneTier {
   let r = rng();
   for (const t of RUNE_TIERS) {
     r -= odds[t];
