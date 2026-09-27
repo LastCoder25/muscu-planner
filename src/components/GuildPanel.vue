@@ -2568,6 +2568,7 @@ function leftOf(at: number): string {
   font-weight: 500;
 }
 .d-gear-slot {
+  position: relative;
   flex: 1;
   min-width: 0;
   display: flex;
@@ -2603,9 +2604,22 @@ function leftOf(at: number): string {
   max-width: 100%;
   text-align: center;
 }
+/* La rareté (lettre) en PASTILLE en haut à droite (demandé) : elle se lit d’un coup d’œil,
+   hors du texte de la case. */
 .dg-rk {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  max-width: 60%;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, currentColor 16%, var(--surface));
   font-weight: 700;
   letter-spacing: 0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .dg-stat {
   color: var(--dim);
