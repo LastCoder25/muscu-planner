@@ -266,6 +266,9 @@ export interface PartyResult {
    *  reprise ennemie (`defense`). Absent des autres rapports. */
   controlId?: string;
   defense?: boolean;
+  /** 🏰 Ceux qui RESTENT en garnison si le point est pris (choisis à l'envoi) ; les autres
+   *  rentrent. Absent = toute l'escorte (dans la limite des places du point). */
+  stay?: string[];
   faction: RaidFaction;
   /** Ids des aventuriers envoyés (le héros n'y figure pas). */
   escort: string[];

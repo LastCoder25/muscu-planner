@@ -55,6 +55,12 @@ export const CONTROL = {
    *  champion ne tenait JAMAIS et 3 tenaient 94 % : poster un seul champion n'était pas un
    *  pari, et en poster trois n'avait plus de risque. */
   sizes: [1, 1.5, 2.5, 3.5] as readonly number[],
+  /** ⚔️ La troupe qui TIENT un point à l'ennemi (celle qu'on attaque pour le prendre), en
+   *  champions de référence. ⚠️ Jamais plus que ce qu'on peut envoyer : on ne prend un point
+   *  qu'à 3 champions au plus, et une troupe de 3,5 (le haut des reprises) le rendait
+   *  imprenable — signalé par l'utilisateur sur une tour de guet affichée « légendaire ».
+   *  3 champions de référence prennent une troupe de 2,5 ~9 fois sur 10 (mesure des camps). */
+  captureSizes: [1, 1.5, 2, 2.5] as readonly number[],
   /** Une garnison : 1 à 3 champions. */
   maxGarrison: CONTROL_MAX_GARRISON,
   /** ⛏️ Une garnison complète produit l'or d'une mission de mine de son rang toutes les
@@ -71,13 +77,23 @@ export const CONTROL = {
    *  (`trialXpBase`) toutes les `trainHoursPerTrial` heures — plafonné au ★5 du rang JUSTE
    *  EN DESSOUS du héros (décision de l'utilisateur, `trainingCapLevel`). */
   trainHoursPerTrial: 3,
-  /** 🌿 Jardin d'herboriste : une garnison complète cueille un consommable toutes les
-   *  `gardenHoursPerItem` heures (3 par jour ; moins avec moins de monde). */
-  gardenHoursPerItem: 8,
+  /** 🌿 Jardin d'herboriste : UN jardinier (`CONTROL_SEATS.garden` = 1) cueille un
+   *  consommable toutes les `gardenHoursPerItem` heures (2 par jour). */
+  gardenHoursPerItem: 12,
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
 } as const;
+
+/** 🏰 Combien de champions un point garde en garnison (décision de l'utilisateur : le
+ *  jardin n'en garde qu'UN — on choisit à l'envoi qui reste, les autres rentrent). */
+const CONTROL_SEATS: Record<ControlKind, number> = {
+  mine: CONTROL_MAX_GARRISON,
+  training: CONTROL_MAX_GARRISON,
+  garden: 1,
+  tower: CONTROL_MAX_GARRISON,
+};
+export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
 
 export const CONTROL_EMO = CONTROL_KIND_EMO;
 export const CONTROL_LABEL = CONTROL_KIND_LABEL;
@@ -93,11 +109,15 @@ export const controlIdOf = (kind: ControlKind): string => `ctl_${kind}`;
 
 /** La troupe ennemie d'un point — faction et force, TIRÉES sur une graine qui change à
  *  chaque reprise (sinon on affronterait toujours la même). */
-function enemyForce(id: string, retakes: number): Pick<ControlState, 'faction' | 'size'> {
+function enemyForce(
+  id: string,
+  retakes: number,
+  sizes: readonly number[] = CONTROL.captureSizes,
+): Pick<ControlState, 'faction' | 'size'> {
   const rng = mulberry32((seedOf(`${id}:${retakes}`) ^ 0x4f1bbcdc) >>> 0 || 1);
   return {
     faction: CAMP_FACTIONS[Math.floor(rng() * CAMP_FACTIONS.length)]!,
-    size: CONTROL.sizes[Math.floor(rng() * CONTROL.sizes.length)]!,
+    size: sizes[Math.floor(rng() * sizes.length)]!,
   };
 }
 
@@ -105,7 +125,11 @@ function enemyForce(id: string, retakes: number): Pick<ControlState, 'faction' |
  *  rang du joueur, jamais lié à la distance. Re-tiré à chaque reprise. */
 function controlLevel(id: string, retakes: number, playerLevel: number): number {
   const rng = mulberry32((seedOf(`${id}:lv:${retakes}`) ^ 0x7a3d91c3) >>> 0 || 1);
-  return riftLevelFor(rng, playerLevel, []);
+  // ⚠️ JAMAIS AU-DESSUS DU JOUEUR : le tirage des failles garde une place « au-dessus », or un
+  // point FIXE tiré là restait hors d'atteinte jusqu'à ce qu'on le prenne — c'est-à-dire pour
+  // toujours. Marquer cette place « prise » (`pris` = un niveau au-dessus) l'écarte du tirage.
+  const pl = Math.max(1, playerLevel);
+  return Math.min(pl, riftLevelFor(rng, pl, [pl + 1]));
 }
 
 /** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. */
@@ -152,7 +176,24 @@ export function ensureControls(
       },
     });
   }
-  return add.length ? { ...map, pois: [...map.pois, ...add] } : map;
+  // 🩹 Les points ENNEMIS posés avant la règle (rang au-dessus du joueur, troupe de 3,5) sont
+  // re-tirés : sinon ils restaient imprenables. Idempotent — une fois soignés, ils passent.
+  const healed = map.pois.map((p) => {
+    const c = p.control;
+    if (!c || c.owner !== 'enemy') return p;
+    const tooHigh = p.level > Math.max(1, playerLevel);
+    const tooBig = c.size > Math.max(...CONTROL.captureSizes);
+    if (!tooHigh && !tooBig) return p;
+    const key = `${map.seed}:${p.id}`;
+    return {
+      ...p,
+      level: tooHigh ? controlLevel(key, c.retakes, playerLevel) : p.level,
+      control: tooBig ? { ...c, ...enemyForce(key, c.retakes) } : c,
+    };
+  });
+  const changed = healed.some((p, i) => p !== map.pois[i]);
+  if (!add.length && !changed) return map;
+  return { ...map, pois: [...healed, ...add] };
 }
 
 /** Délai avant la prochaine attaque, TIRÉ entre 1 et 3 jours (graine : le lieu et l'instant). */
@@ -183,7 +224,7 @@ export function captureControl(
     control: {
       ...p.control!,
       owner: 'player',
-      garrison: garrison.slice(0, CONTROL.maxGarrison),
+      garrison: garrison.slice(0, seatsOf(p.control!.kind)),
       since: at,
       collectedAt: at,
       attackAt: at + retakeDelayMs(id, at),
@@ -218,7 +259,11 @@ export function holdControl(map: ExpeditionMap, id: string, at: number): Expedit
 
 /** La troupe qui vient REPRENDRE le point — tirée sur l'instant de l'attaque. */
 export function retakeForce(p: Poi): Pick<ControlState, 'faction' | 'size'> {
-  return enemyForce(p.id, (p.control?.attackAt ?? 0) % 1_000_003);
+  const f = enemyForce(p.id, (p.control?.attackAt ?? 0) % 1_000_003, CONTROL.sizes);
+  // ⚔️ La troupe se mesure à la garnison qu'un point PEUT garder : un jardin (1 place) est
+  // attaqué par une troupe à l'échelle d'un seul champion, sinon il tomberait à chaque fois.
+  const seats = p.control ? seatsOf(p.control.kind) : CONTROL.maxGarrison;
+  return { ...f, size: (f.size * seats) / CONTROL.maxGarrison };
 }
 
 const shareOf = (n: number) =>
@@ -248,7 +293,7 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'training':
       return n > 0 ? trainingXpPerHour(p) : 0;
     case 'garden':
-      return shareOf(n) / CONTROL.gardenHoursPerItem;
+      return n > 0 ? 1 / CONTROL.gardenHoursPerItem : 0;
     default:
       return 0;
   }
@@ -379,7 +424,7 @@ export function controlSeats(c: ControlState | undefined | null): number {
 /** 🏰 Places libres pour un renfort (0 si le point n'est pas à nous). */
 export function controlFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
-  return Math.max(0, CONTROL.maxGarrison - controlSeats(c));
+  return Math.max(0, seatsOf(c.kind) - controlSeats(c));
 }
 
 /** 🏰 Pourquoi un renfort ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
@@ -397,7 +442,7 @@ export function reinforceBlocker(
 export const REINFORCE_BLOCK_LABEL: Record<ReinforceBlock, string> = {
   notHeld: 'ce point n’est pas à toi',
   empty: 'choisis au moins un champion',
-  full: 'plus assez de places : 3 champions au plus sur un point',
+  full: 'plus assez de places sur ce point',
 };
 
 /** 🏰 Des renforts partent : ils prennent leur place tout de suite et rejoignent la
@@ -439,7 +484,7 @@ export function settleReinforcements(
         ...p,
         control: {
           ...c,
-          garrison: [...c.garrison, r.id].slice(0, CONTROL.maxGarrison),
+          garrison: [...c.garrison, r.id].slice(0, seatsOf(c.kind)),
           reinforcing: (c.reinforcing ?? []).filter((x) => x.id !== r.id),
         },
       };

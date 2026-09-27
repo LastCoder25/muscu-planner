@@ -239,6 +239,7 @@ import {
   releaseFromControl,
   settleReinforcements,
   REINFORCE_BLOCK_LABEL,
+  seatsOf,
 } from '@/lib/controlPoints';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
@@ -2927,6 +2928,8 @@ export const useCharacterStore = defineStore('character', () => {
       now: number;
       /** 🎒 Les consommables emportés — un de chaque type, pris dans le stock au départ. */
       supplies?: SupplyId[];
+      /** 🏰 Point de contrôle : qui reste en garnison si on le prend (sinon l'escorte). */
+      stayIds?: string[];
     },
   ): Promise<string | null> {
     // ⚠️ Rend la RAISON d'un refus (null = parti) : un « départ impossible » générique laissait
@@ -3037,7 +3040,17 @@ export const useCharacterStore = defineStore('character', () => {
     // qui fera poster la garnison à l'arrivée.
     const party =
       outcome.party && poi.type === 'control'
-        ? { ...outcome.party, controlId: poi.id }
+        ? {
+            ...outcome.party,
+            controlId: poi.id,
+            ...(opts.stayIds && poi.control
+              ? {
+                  stay: opts.stayIds
+                    .filter((id) => opts.escortIds.includes(id))
+                    .slice(0, seatsOf(poi.control.kind)),
+                }
+              : {}),
+          }
         : outcome.party;
     const withSupplies = {
       ...outcome,
@@ -3180,9 +3193,11 @@ export const useCharacterStore = defineStore('character', () => {
       if (!id || m.party?.defense) continue;
       touched = true;
       if (m.win) {
-        const garrison = m.party!.escort;
-        map = captureControl(map, id, garrison, m.resolvedAt);
-        const g = new Set(garrison);
+        // 🏰 Ceux qu'on a choisis pour rester (sinon l'escorte), coupés aux places du point :
+        // on relit la garnison POSÉE, sinon un champion en trop serait « posté » hors garnison.
+        const stay = m.party!.stay?.length ? m.party!.stay : m.party!.escort;
+        map = captureControl(map, id, stay, m.resolvedAt);
+        const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
         advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
       } else map = markAssault(map, id, false);
     }

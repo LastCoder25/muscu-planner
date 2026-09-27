@@ -19,6 +19,7 @@ import {
   trainingCapLevel,
   trainingRoom,
   trainingStock,
+  seatsOf,
 } from '@/lib/controlPoints';
 import { advXpToNext } from '@/lib/adventurers';
 import { rankStartLevel } from '@/lib/characterRank';
@@ -102,16 +103,18 @@ describe('🏰 les quatre points', () => {
     expect(trainingStock(p, 6 * H)).toBeGreaterThan(0);
     expect(trainingStock(p, 24 * H)).toBe(trainingStock(p, 40 * H));
   });
-  it('🌿 le jardin cueille 3 consommables par jour à 3, 1 seul à 1 champion', () => {
-    expect(gardenStock(held('garden').p, 24 * H)).toBe(3);
-    expect(gardenStock(held('garden', ['a0']).p, 24 * H)).toBe(1);
+  it('🌿 le jardin garde UN jardinier, qui cueille 2 consommables par jour', () => {
+    // Trois envoyés, un seul reste : la production est la même.
+    expect(held('garden').p.control!.garrison).toHaveLength(1);
+    expect(gardenStock(held('garden').p, 24 * H)).toBe(2);
+    expect(gardenStock(held('garden', ['a0']).p, 24 * H)).toBe(2);
   });
   it('🌿 cueillir garde la fraction d’un consommable en cours', () => {
     const { map, id } = held('garden');
-    const c = collectControl(map, id, 10 * H, 30);
+    const c = collectControl(map, id, 15 * H, 30);
     expect(Object.values(c.supplies).reduce((s, n) => s + (n ?? 0), 0)).toBe(1);
     const cc = c.map.pois.find((x) => x.id === id)!.control!;
-    expect(cc.collectedAt).toBe(10 * H);
+    expect(cc.collectedAt).toBe(15 * H);
     expect(cc.banked).toBeCloseTo(0.25, 5);
   });
   it('🗼 la tour tenue raccourcit les trajets (×0,8 à 3), sans rien à récolter', () => {
@@ -269,4 +272,80 @@ describe('🔔 les notifications d’un point de contrôle', () => {
       planPushes({ ...base, controls: [{ id: ID, attackAt: H, label: 'Mine fortifiée' }] }, 2 * H),
     ).toEqual([]);
   });
+});
+
+describe('🏰 un point se prend à son niveau (signalé : une tour « légendaire » imprenable)', () => {
+  const L = 30;
+  const team = (n: number): Adventurer[] =>
+    Array.from({ length: n }, (_, i) => ({
+      ...refChampionAdv(L, i),
+      id: `a${i}`,
+      gear: {
+        weapon: `refGear${i}weapon`,
+        armor: `refGear${i}armor`,
+        accessory: `refGear${i}accessory`,
+        relic: `refGear${i}relic`,
+      },
+    }));
+  const winRate = (n: number, level: number, sizes: readonly number[]) => {
+    const esc = team(n);
+    const g = fuseUnits(roadUnits(esc, escortGear(esc, { advGear: refAdvGear(L, n) })), 'g');
+    let w = 0;
+    let k = 0;
+    for (const size of sizes)
+      for (let s = 0; s < 150; s++, k++) {
+        const f = campFoe({ ...ctl(mapAt(3, L)), level }, { faction: 'bandits', size });
+        if (simulateCombat(g, f, { seed: s * 211 + 7, goldOnWin: 0 }).win) w++;
+      }
+    return w / k;
+  };
+
+  it('jamais un niveau au-dessus du joueur, jamais une troupe plus grosse qu’une équipe', () => {
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8])
+      for (const lv of [3, 12, 30, 70]) {
+        const m = mapAt(seed, lv);
+        for (const q of m.pois.filter((x) => x.control)) {
+          expect(q.level).toBeLessThanOrEqual(lv);
+          expect(q.control!.size).toBeLessThanOrEqual(Math.max(...CONTROL.captureSizes));
+        }
+      }
+  });
+
+  it('🩹 un point posé avant la règle (trop haut, trop gros) est re-tiré au chargement', () => {
+    const m = mapAt(9, L);
+    const bad = {
+      ...m,
+      pois: m.pois.map((q) =>
+        q.control ? { ...q, level: L + 12, control: { ...q.control, size: 3.5 } } : q,
+      ),
+    };
+    const healed = ensureControls(bad, 0, L);
+    for (const q of healed.pois.filter((x) => x.control)) {
+      expect(q.level).toBeLessThanOrEqual(L);
+      expect(q.control!.size).toBeLessThanOrEqual(Math.max(...CONTROL.captureSizes));
+    }
+    // Idempotent : une carte saine ressort telle quelle.
+    expect(ensureControls(healed, 0, L)).toBe(healed);
+  });
+
+  it('⚔️ trois champions de ton niveau prennent le point le plus dur la plupart du temps', () => {
+    const top = Math.max(...CONTROL.captureSizes);
+    expect(winRate(3, L, [top])).toBeGreaterThan(0.7);
+  }, 60_000);
+
+  it('🌿 le jardin ne garde QU’UN champion, et un seul le défend quand même', () => {
+    expect(seatsOf('garden')).toBe(1);
+    const m = captureControl(mapAt(4, L), controlIdOf('garden'), ['a', 'b', 'c'], 0);
+    const g = m.pois.find((q) => q.id === controlIdOf('garden'))!;
+    expect(g.control!.garrison).toEqual(['a']);
+    // La reprise se mesure aux places : un jardinier seul face aux troupes d'un jardin.
+    const sizes = CONTROL.sizes.map((x) => (x * seatsOf('garden')) / CONTROL.maxGarrison);
+    const r = winRate(1, L, sizes);
+    expect(r).toBeGreaterThan(0.45);
+    expect(r).toBeLessThan(0.97);
+    for (let t = 0; t < 30; t++) {
+      const f = retakeForce({ ...g, control: { ...g.control!, attackAt: t * 7919 } });
+      expect(f.size).toBeLessThanOrEqual(Math.max(...CONTROL.sizes) / CONTROL.maxGarrison);
+    }
+  }, 60_000);
 });

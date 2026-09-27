@@ -20,6 +20,7 @@ import {
   supplyTarget,
 } from '@/lib/party';
 import { partyWinChance } from '@/lib/partyForecast';
+import { seatsOf } from '@/lib/controlPoints';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
@@ -104,9 +105,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
 
   const partyHero = ref(false);
   const partyEscort = ref<string[]>([]);
+  /** 🏰 Qui reste en garnison sur un point de contrôle (le choix le plus récent d'abord). */
+  const partyStay = ref<string[]>([]);
   watch(selected, () => {
     partyHero.value = false;
     partyEscort.value = [];
+    partyStay.value = [];
   });
   /** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
    *  sort du groupe de lui-même — le store le refuserait de toute façon). */
@@ -364,6 +368,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
         playerLevel: partyHeroOn.value ? progressionLevel.value : heroLevel.value,
         now: Date.now(),
         supplies: activeSupplies.value,
+        ...(stayCap.value ? { stayIds: stayIds.value } : {}),
       });
       if (!refused) selected.value = null;
       // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
@@ -384,7 +389,33 @@ export function useExpeditionParty(ctx: PartyCtx) {
     }
   }
 
+  /** Places du point visé (0 hors point de contrôle). */
+  const stayCap = computed(() => {
+    const c = selected.value?.control;
+    return c && c.owner === 'enemy' ? seatsOf(c.kind) : 0;
+  });
+  /** Ceux qui resteront : les choisis d'abord, complétés par l'ordre de l'équipe. */
+  const stayIds = computed(() => {
+    const ids = partyAdvs.value.map((a) => a.id);
+    const picked = partyStay.value.filter((id) => ids.includes(id));
+    return [...picked, ...ids.filter((id) => !picked.includes(id))].slice(0, stayCap.value);
+  });
+  /** Le choix n'a de sens que si l'équipe dépasse les places. */
+  const stayChoice = computed(() => stayCap.value > 0 && partyAdvs.value.length > stayCap.value);
+  function toggleStay(id: string) {
+    if (stayIds.value.includes(id)) {
+      partyStay.value = partyStay.value.filter((x) => x !== id);
+      // Retiré : il cède sa place au premier de l'équipe qui ne restait pas.
+      const next = partyAdvs.value.find((a) => a.id !== id && !stayIds.value.includes(a.id));
+      if (next) partyStay.value = [...stayIds.value.filter((x) => x !== id), next.id];
+    } else partyStay.value = [id, ...partyStay.value.filter((x) => x !== id)];
+  }
+
   return {
+    stayCap,
+    stayIds,
+    stayChoice,
+    toggleStay,
     partyHero,
     partyEscort,
     partyAdvs,

@@ -300,7 +300,7 @@
           <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
           <p class="ctl-line">
-            🏰 <b>Garnison {{ controlMembers.length }}/{{ CONTROL.maxGarrison }}</b>
+            🏰 <b>Garnison {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }}</b>
             <span class="ctl-dim"> · touche un champion pour le ramener</span>
           </p>
           <div class="car-pick">
@@ -387,10 +387,10 @@
         </div>
         <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur ce lieu.</p>
         <p v-else-if="liveControl" class="sh-note">
-          🏰 Prends-le avec 1 à 3 champions, sans le héros : ils y resteront en garnison ({{
-            CONTROL_YIELD[liveControl.kind]
-          }}), jusqu’à ce que l’ennemi le reprenne (entre 1 et 3 jours). Chaque ennemi abattu, à la
-          prise comme en défense, leur rapporte de l’XP.
+          🏰 Prends-le avec 1 à 3 champions, sans le héros :
+          {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
+          garnison ({{ CONTROL_YIELD[liveControl.kind] }}), jusqu’à ce que l’ennemi le reprenne
+          (entre 1 et 3 jours). Chaque ennemi abattu, à la prise comme en défense, rapporte de l’XP.
         </p>
         <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
              se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
@@ -462,6 +462,23 @@
             <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
             <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
           </p>
+          <div v-if="stayChoice" class="stay-pick">
+            <p class="car-cap">
+              🏰 <b>Qui reste ?</b> {{ stayIds.length }}/{{ stayCap }} en garnison · les autres
+              rentrent après la prise
+            </p>
+            <button
+              v-for="a in partyAdvs"
+              :key="a.id"
+              type="button"
+              class="stay-chip"
+              :class="{ on: stayIds.includes(a.id) }"
+              :aria-pressed="stayIds.includes(a.id)"
+              @click="toggleStay(a.id)"
+            >
+              {{ stayIds.includes(a.id) ? '🏰' : '↩' }} {{ a.name }}
+            </button>
+          </div>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
               v-for="a in freeSorted"
@@ -722,6 +739,7 @@ import {
   trainingCapLevel,
   trainingStock,
   trainingXpPerHour,
+  seatsOf,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
 import { advGearRoles } from '@/lib/advGear';
@@ -1323,7 +1341,7 @@ const controlProd = computed(() => {
     case 'training':
       return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion · en attente ${trainingStock(p, now.value)} XP chacun`;
     case 'garden':
-      return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${Math.round(CONTROL.gardenHoursPerItem / (CONTROL.garrisonShare[c.garrison.length] || 1))} h`;
+      return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${CONTROL.gardenHoursPerItem} h`;
     case 'tower':
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
@@ -2006,6 +2024,10 @@ function celebrateTopDrop(done: ExpeditionMessage) {
 
 // Écran de chargement thématique bref à l'ouverture de la carte (immersion).
 const {
+  stayCap,
+  stayIds,
+  stayChoice,
+  toggleStay,
   partyHero,
   partyEscort,
   partyAdvs,
@@ -2128,6 +2150,31 @@ onUnmounted(() => {
 /* Suggestion d'escorte : pleine largeur et 44 px (règle mobile), mais en secondaire —
    elle propose, elle ne décide pas. */
 /* 🕳️ La limite d’une faille, dite AVANT qu’on butte dessus. */
+.stay-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+.stay-pick .car-cap {
+  flex-basis: 100%;
+}
+.stay-chip {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--dim);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.stay-chip.on {
+  border-color: var(--accent);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
 .car-cap {
   margin: 0 0 6px;
   font-size: 12px;
