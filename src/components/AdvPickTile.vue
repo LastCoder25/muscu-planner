@@ -26,13 +26,13 @@
     <!-- 📐 EN LIGNE (demandé : « bcp de choses à défiler ») : le portrait à gauche garde sa
          taille, les infos s'empilent à droite — la tuile passe de ~170 à ~80 px de haut. -->
     <span class="ca-body">
-      <span class="ca-name">{{ adv.name }}</span>
+      <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable), en pastille à droite du nom (demandé) :
+         elle qualifie le nom, elle n'a pas besoin de sa propre place sur la ligne du rang. -->
+      <span class="ca-head">
+        <span class="ca-name">{{ adv.name }}</span>
+        <span class="ca-rar" :style="{ '--rc': rar.color }">{{ rar.label }}</span>
+      </span>
       <span class="ca-line">
-        <!-- 🏅 CE QU'IL EST (sa rareté TIRÉE, immuable) plutôt que son rang, qui est déjà dit
-         par les étoiles juste en dessous. C'est l'identité d'un champion, et elle ne se
-         lisait nulle part hors du Codex (v0.959). Un aventurier LEGACY garde son rang :
-         il n'a pas d'autre identité. -->
-        <span class="ca-rar" :style="{ color: rar.color }">{{ rar.label }}</span>
         <span class="ca-rank" :style="{ color: rank.color }">{{ rankStarStr(rank.star) }}</span>
         <!-- ✨ Son Éveil : jusqu'à +48 % de stats. On compose une escorte ici, et il ne se
          lisait qu'au tirage et dans le Codex. Compact (deux tuiles par ligne) : la fiche
@@ -160,24 +160,35 @@ const rar = computed(() => advGradeBadge(props.adv));
   gap: 5px;
   max-width: 100%;
 }
+/* Nom + pastille sur une ligne : c'est le NOM qui se tronque, jamais la pastille. */
+.ca-head {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  min-width: 0;
+}
 .ca-name {
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
-  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 /* La rareté de classe : mêmes mots et mêmes couleurs que la Guilde et que le butin. */
 .ca-rar {
-  font-size: 11px;
+  flex: none;
+  padding: 0 4px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--rc) 55%, transparent);
+  background: color-mix(in srgb, var(--rc) 16%, transparent);
+  color: var(--rc);
+  font-size: 9px;
   font-weight: 700;
-  line-height: 1.1;
+  line-height: 1.3;
   text-transform: capitalize;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 /* Les étoiles : le travail de terrain, dans la teinte de son rang. */
@@ -240,5 +251,16 @@ const rar = computed(() => advGradeBadge(props.adv));
   font-size: 11.5px;
   line-height: 1.1;
   color: var(--text);
+}
+/* Z Fold plié (~344 px) : la pastille prend ~20 px à côté du nom. On les reprend sur le
+   portrait et les marges plutôt que de tronquer le nom (mesuré au banc). */
+@media (max-width: 379px) {
+  .car-adv {
+    gap: 6px;
+    padding: 7px 6px;
+  }
+  .ca-emo {
+    font-size: 32px;
+  }
 }
 </style>
