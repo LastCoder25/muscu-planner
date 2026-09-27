@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { defisSummary } from '@/lib/defisHome';
 import type { Challenge } from '@/lib/challenges';
-import type { ComboChallenge } from '@/lib/combo';
+import { comboProgressPct, type ComboChallenge } from '@/lib/combo';
 
 const TODAY = '2026-09-20';
 
@@ -98,7 +98,8 @@ describe('🔥 CE QUE LA GRANDE TUILE ANNONCE', () => {
     // reste 3 exos — dont celui qui a bouclé son objectif.
     expect(s.combo?.left).toBe(3);
     expect(s.combo?.pct).toBeGreaterThan(0);
-    expect(Number.isInteger(s.combo?.pct)).toBe(true);
+    // Non arrondi : la tuile formate au dixième (fmtPct), comme la fiche du 360.
+    expect(s.combo?.pct).toBe(comboProgressPct(combo()));
   });
 
   it('⚠️ un 360 ABANDONNÉ ou hors période n’est plus « en cours »', () => {
