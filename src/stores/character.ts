@@ -223,9 +223,11 @@ import {
 import { resolveCamp } from '@/lib/camp';
 import { FACTION_EMOJI } from '@/lib/raid';
 import {
+  CONTROL_LABEL,
   captureControl,
   collectControl,
-  controlStock,
+  controlTravelMult,
+  trainingRoom,
   dueRetakes,
   ensureControls,
   holdControl,
@@ -1919,7 +1921,7 @@ export const useCharacterStore = defineStore('character', () => {
       poi,
       now,
       (now ^ (poi.level * 2654435761)) >>> 0 || 1,
-      travelTimeMult(cur.buildings),
+      travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
       level,
     );
     // 🎒 Un consommable peut tomber de TOUT voyage (« tout partout »), tiré sur sa graine.
@@ -2981,7 +2983,7 @@ export const useCharacterStore = defineStore('character', () => {
     const meet = interceptLeg(poi, now, (p) =>
       partyLegMin(p, escort, {
         hero: !!hero,
-        travelMult: travelTimeMult(cur.buildings),
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
         gearSpeed: advGearRoles(escort, road.advGear).speed,
         supplies,
       }),
@@ -3215,6 +3217,11 @@ export const useCharacterStore = defineStore('character', () => {
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
+      // ⛏️🎯🌿 Ce que le point a produit jusqu'à l'attaque part AVANT le combat, même s'il
+      // est perdu : on ne punit pas l'absence en confisquant ce qui était déjà sorti.
+      const h = harvestControlIn(map, advs, p.id, at, playerLevel);
+      map = h.map;
+      advs = h.advs;
       const escort = advs.filter((a) => ids.has(a.id));
       const force = retakeForce(p);
       const seed = (at ^ (p.level * 2654435761)) >>> 0 || 1;
@@ -3231,10 +3238,9 @@ export const useCharacterStore = defineStore('character', () => {
           })
         : null;
       const held = !!o?.win;
-      // ⛏️ Ce que la mine a produit jusqu'à l'attaque part dans le rapport, même perdue : on
-      // ne punit pas l'absence en confisquant ce qui était déjà sorti de terre.
-      const stock = controlStock(p, at, playerLevel);
+      const stock = h.gold;
       const emo = FACTION_EMOJI[force.faction];
+      const label = CONTROL_LABEL[p.control!.kind];
       const msg: ExpeditionMessage = {
         ...buildMessage({
           poi: p,
@@ -3255,20 +3261,20 @@ export const useCharacterStore = defineStore('character', () => {
               text: '',
             }),
             gold: (o?.gold ?? 0) + stock,
+            supplies: addSupplies(o?.supplies ?? {}, h.supplies),
           },
         } as ActiveExpedition),
         id: `ctl_${p.id}_${at}`,
-        title: held ? '🏰 Attaque repoussée' : '🏰 Mine reprise par l’ennemi',
+        title: held ? `🏰 ${label} : attaque repoussée` : `🏰 ${label} reprise par l’ennemi`,
         text: held
-          ? `${emo} Tes champions ont tenu la mine. Une nouvelle attaque se prépare.`
+          ? `${emo} Tes champions ont tenu. Une nouvelle attaque se prépare.`
           : escort.length
-            ? `${emo} L’ennemi a repris la mine — ta garnison part à l’infirmerie.`
-            : `${emo} L’ennemi a repris la mine, laissée sans défense.`,
+            ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.`
+            : `${emo} L’ennemi a repris le lieu, laissé sans défense.`,
         ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
       };
       msgs.push(msg);
       map = held ? holdControl(map, p.id, at) : loseControl(map, p.id, playerLevel);
-      if (held) map = collectControl(map, p.id, at, playerLevel).map;
       // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
       // route (ils font demi-tour ; seule la garnison, qui a combattu, part à l'infirmerie).
       advs = advs.map((a) => (!held && a.posted === p.id ? { ...a, posted: undefined } : a));
@@ -3300,20 +3306,58 @@ export const useCharacterStore = defineStore('character', () => {
     return msgs;
   }
 
-  /** ⛏️ Récolte l'or d'un point de contrôle tenu. Rend l'or récolté. */
-  async function collectControlGold(
+  /**
+   * 🏰 Ce qu'un point a produit, APPLIQUÉ au vivier : l'or et les consommables à créditer,
+   * et l'XP du camp d'entraînement déjà versée à la garnison — BORNÉE par `trainingRoom`
+   * (le ★5 du rang sous le héros). ⚠️ Pur vis-à-vis du store : rend la carte et le vivier.
+   */
+  function harvestControlIn(
+    map: ExpeditionMap,
+    advs: Adventurer[],
+    id: string,
+    at: number,
+    heroLevel: number,
+  ): { map: ExpeditionMap; advs: Adventurer[]; gold: number; supplies: SupplyStock } {
+    const p = map.pois.find((x) => x.id === id);
+    const c = collectControl(map, id, at, heroLevel);
+    if (!p?.control || c.xp <= 0) return { map: c.map, advs, gold: c.gold, supplies: c.supplies };
+    const ids = new Set(p.control.garrison);
+    const next = advs.map((a) =>
+      ids.has(a.id)
+        ? grantAdvXp(
+            a,
+            Math.min(c.xp, trainingRoom(a, heroLevel, pantheonLevel.value)),
+            pantheonLevel.value,
+          )
+        : a,
+    );
+    return { map: c.map, advs: next, gold: c.gold, supplies: c.supplies };
+  }
+
+  /** 🏰 Récolte ce qu'un point de contrôle tenu a produit (or, XP, consommables). */
+  async function collectControlPoint(
     userId: string,
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<number> {
+  ): Promise<{ gold: number; supplies: number } | null> {
     const cur = row.value;
-    if (!cur?.expedition_map) return 0;
-    const c = collectControl(cur.expedition_map, id, now, playerLevel);
-    if (c.gold <= 0) return 0;
-    await persist(userId, { expedition_map: c.map, gold: cur.gold + c.gold });
-    goldFx.gain(c.gold);
-    return c.gold;
+    if (!cur?.expedition_map) return null;
+    const before = advList.value;
+    const h = harvestControlIn(cur.expedition_map, before, id, now, playerLevel);
+    if (h.map === cur.expedition_map) return null;
+    const gearPatch = gearTrainedPatch(cur, before, h.advs);
+    const tracks = gearAwareTracks(cur, before, h.advs, gearPatch);
+    const nSup = Object.values(h.supplies).reduce((s, n) => s + (n ?? 0), 0);
+    await persist(userId, {
+      expedition_map: h.map,
+      ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
+      ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
+      ...(h.advs !== before ? { adventurers: h.advs, ...gearPatch } : {}),
+    });
+    if (h.gold > 0) goldFx.gain(h.gold);
+    if (h.advs !== before) useAdvXpFx().show(tracks, 'Camp d’entraînement');
+    return { gold: h.gold, supplies: nSup };
   }
 
   /** 🏰 Rappelle TOUTE la garnison (et les renforts en route) : la réserve est récoltée,
@@ -3327,14 +3371,17 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<void> {
     const cur = row.value;
     if (!cur?.expedition_map) return;
-    const c = collectControl(cur.expedition_map, id, now, playerLevel);
+    const h = harvestControlIn(cur.expedition_map, advList.value, id, now, playerLevel);
     const all = advList.value.filter((a) => a.posted === id).map((a) => a.id);
     await persist(userId, {
-      expedition_map: releaseFromControl(c.map, id, all, now, playerLevel),
-      adventurers: advList.value.map((a) => (a.posted === id ? { ...a, posted: undefined } : a)),
-      ...(c.gold > 0 ? { gold: cur.gold + c.gold } : {}),
+      expedition_map: releaseFromControl(h.map, id, all, now, playerLevel),
+      adventurers: h.advs.map((a) => (a.posted === id ? { ...a, posted: undefined } : a)),
+      ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
+      ...(Object.keys(h.supplies).length
+        ? { supplies: addSupplies(cur.supplies, h.supplies) }
+        : {}),
     });
-    if (c.gold > 0) goldFx.gain(c.gold);
+    if (h.gold > 0) goldFx.gain(h.gold);
   }
 
   /** 🏰 Ramène UNE PARTIE de la garnison (ou des renforts en route) : ils redeviennent
@@ -3379,7 +3426,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (escort.length !== ids.length) return 'un champion choisi n’est plus disponible';
     const leg = partyLegMin(poi, escort, {
       hero: false,
-      travelMult: travelTimeMult(cur.buildings),
+      travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
       gearSpeed: advGearRoles(escort, escortKitOf(cur).advGear).speed,
     });
     const at = now + leg * 60_000;
@@ -3450,7 +3497,7 @@ export const useCharacterStore = defineStore('character', () => {
     sendParty,
     partyTick,
     controlTick,
-    collectControlGold,
+    collectControlPoint,
     recallControl,
     releaseControlChampions,
     reinforceControlPoint,

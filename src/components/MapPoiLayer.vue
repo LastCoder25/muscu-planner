@@ -73,7 +73,7 @@
       />
       <template v-else>
         <circle :cx="target.x" :cy="target.y" r="4.8" class="poi-bg" />
-        <text :x="target.x" :y="target.y + 1.4" class="poi-emo">{{ POI_EMO[target.type] }}</text>
+        <text :x="target.x" :y="target.y + 1.4" class="poi-emo">{{ poiEmo(target) }}</text>
       </template>
     </g>
 
@@ -95,7 +95,7 @@
       />
       <template v-else>
         <circle :cx="v.poi.x" :cy="v.poi.y" r="4.8" class="poi-bg" />
-        <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ POI_EMO[v.poi.type] }}</text>
+        <text :x="v.poi.x" :y="v.poi.y + 1.4" class="poi-emo">{{ poiEmo(v.poi) }}</text>
       </template>
     </g>
   </g>
@@ -104,7 +104,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
-import { POI_EMO, isRiftPoi, type Poi } from '@/lib/expedition';
+import { POI_EMO, isRiftPoi, poiEmo, type Poi } from '@/lib/expedition';
 import { CONTROL_EMO } from '@/lib/controlPoints';
 import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';

@@ -14,7 +14,14 @@ import {
   markAssault,
   retakeDelayMs,
   retakeForce,
+  controlTravelMult,
+  gardenStock,
+  trainingCapLevel,
+  trainingRoom,
+  trainingStock,
 } from '@/lib/controlPoints';
+import { advXpToNext } from '@/lib/adventurers';
+import { rankStartLevel } from '@/lib/characterRank';
 import { EXPE, createMap, advanceWorld, revealRadius } from '@/lib/expedition';
 import { poiOffers, refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
 import { partyCapFor, partySendBlocker, partyHeroBlocker } from '@/lib/party';
@@ -53,6 +60,66 @@ describe('🏰 un point de contrôle est FIXE', () => {
     const lv = new Set<number>();
     for (let s = 1; s <= 40; s++) lv.add(ctl(mapAt(s * 131, 60)).level);
     expect(lv.size).toBeGreaterThan(5);
+  });
+});
+
+describe('🏰 les quatre points', () => {
+  it('mine, camp d’entraînement, jardin, tour : un de chaque, bien écartés, tous visibles', () => {
+    for (let s = 1; s <= 20; s++) {
+      const pts = mapAt(s * 977).pois.filter((p) => p.control);
+      expect(pts.map((p) => p.control!.kind).sort()).toEqual([...CONTROL.kinds].sort());
+      for (const p of pts)
+        expect(Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y)).toBeLessThanOrEqual(
+          revealRadius(1),
+        );
+      for (let i = 0; i < pts.length; i++)
+        for (let j = i + 1; j < pts.length; j++)
+          expect(Math.hypot(pts[i]!.x - pts[j]!.x, pts[i]!.y - pts[j]!.y)).toBeGreaterThan(
+            EXPE.minDistPoi,
+          );
+    }
+  });
+  const held = (kind: string, garrison = ['a0', 'a1', 'a2']) => {
+    const m = mapAt(11);
+    const id = `ctl_${kind}`;
+    const t = captureControl(m, id, garrison, 0);
+    const p = t.pois.find((x) => x.id === id)!;
+    return { map: t, id, p: { ...p, control: { ...p.control!, attackAt: 9e15 } } };
+  };
+  it('🎯 le camp plafonne au ★5 du rang juste sous le héros (rien pour un héros Bronze)', () => {
+    expect(trainingCapLevel(5)).toBe(0);
+    expect(trainingCapLevel(25)).toBe(rankStartLevel(2) - 1);
+    const adv = { ...refChampionAdv(30, 0), id: 'a0', level: rankStartLevel(2) - 3, xp: 0 };
+    const room = trainingRoom(adv, 25, 100);
+    expect(room).toBe(advXpToNext(adv.level) + advXpToNext(adv.level + 1));
+    expect(trainingRoom({ ...adv, level: rankStartLevel(2) - 1 }, 25, 100)).toBe(0);
+    expect(trainingRoom(adv, 5, 100)).toBe(0);
+    // Le Panthéon borne aussi.
+    expect(trainingRoom(adv, 25, adv.level)).toBe(0);
+  });
+  it('🎯 l’XP du camp s’accumule par champion, plafonnée à 24 h', () => {
+    const { p } = held('training');
+    expect(trainingStock(p, 6 * H)).toBeGreaterThan(0);
+    expect(trainingStock(p, 24 * H)).toBe(trainingStock(p, 40 * H));
+  });
+  it('🌿 le jardin cueille 3 consommables par jour à 3, 1 seul à 1 champion', () => {
+    expect(gardenStock(held('garden').p, 24 * H)).toBe(3);
+    expect(gardenStock(held('garden', ['a0']).p, 24 * H)).toBe(1);
+  });
+  it('🌿 cueillir garde la fraction d’un consommable en cours', () => {
+    const { map, id } = held('garden');
+    const c = collectControl(map, id, 10 * H, 30);
+    expect(Object.values(c.supplies).reduce((s, n) => s + (n ?? 0), 0)).toBe(1);
+    const cc = c.map.pois.find((x) => x.id === id)!.control!;
+    expect(cc.collectedAt).toBe(10 * H);
+    expect(cc.banked).toBeCloseTo(0.25, 5);
+  });
+  it('🗼 la tour tenue raccourcit les trajets (×0,8 à 3), sans rien à récolter', () => {
+    const { map, id } = held('tower');
+    expect(controlTravelMult(mapAt(11))).toBe(1);
+    expect(controlTravelMult(map)).toBeCloseTo(0.8, 5);
+    expect(controlTravelMult(held('tower', ['a0']).map)).toBeCloseTo(0.9, 5);
+    expect(collectControl(map, id, 12 * H, 30).map).toBe(map);
   });
 });
 
@@ -186,7 +253,10 @@ describe('🔔 les notifications d’un point de contrôle', () => {
     plunder: null,
   };
   it('prévient avant l’attaque, puis à l’attaque — sans jamais dire l’issue', () => {
-    const plans = planPushes({ ...base, controls: [{ id: ID, attackAt: 10 * H }] }, 0);
+    const plans = planPushes(
+      { ...base, controls: [{ id: ID, attackAt: 10 * H, label: 'Mine fortifiée' }] },
+      0,
+    );
     const warn = plans.find((p) => p.kind === 'control_warn')!;
     const atk = plans.find((p) => p.kind === 'control_attack')!;
     expect(warn.sendAt).toBe(10 * H - CONTROL.warnMs);
@@ -195,6 +265,8 @@ describe('🔔 les notifications d’un point de contrôle', () => {
     expect(`${atk.title} ${atk.body}`).not.toMatch(/reprise|repouss|perdu/i);
   });
   it('rien dans le passé', () => {
-    expect(planPushes({ ...base, controls: [{ id: ID, attackAt: H }] }, 2 * H)).toEqual([]);
+    expect(
+      planPushes({ ...base, controls: [{ id: ID, attackAt: H, label: 'Mine fortifiée' }] }, 2 * H),
+    ).toEqual([]);
   });
 });

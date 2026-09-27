@@ -18,9 +18,15 @@
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
 import { mulberry32, seedOf } from './combat';
+import { advAscensionCap, advXpToNext, type Adventurer } from './adventurers';
+import { characterRank, rankStartLevel } from './characterRank';
+import { trialXpBase } from './skirmish';
+import { SUPPLY_IDS, type SupplyStock } from './supplies';
 import {
   CAMP_FACTIONS,
   CONTROL_MAX_GARRISON,
+  CONTROL_KIND_EMO,
+  CONTROL_KIND_LABEL,
   EXPE,
   distNormAt,
   harvestGold,
@@ -33,8 +39,10 @@ import {
 } from './expedition';
 
 export const CONTROL = {
-  /** Les points de contrôle de la carte (étape 1 : la mine d'or). */
-  kinds: ['mine'] as readonly ControlKind[],
+  /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
+   *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
+   *  de la ville (un quart de tour d'écart), et la mine, première, garde celle d'avant. */
+  kinds: ['mine', 'training', 'garden', 'tower'] as readonly ControlKind[],
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -59,9 +67,27 @@ export const CONTROL = {
   storageMs: 24 * 3600_000,
   /** Préavis de la notification d'attaque. */
   warnMs: 2 * 3600_000,
+  /** 🎯 Camp d'entraînement : chaque champion posté gagne l'XP d'une épreuve de son rang
+   *  (`trialXpBase`) toutes les `trainHoursPerTrial` heures — plafonné au ★5 du rang JUSTE
+   *  EN DESSOUS du héros (décision de l'utilisateur, `trainingCapLevel`). */
+  trainHoursPerTrial: 3,
+  /** 🌿 Jardin d'herboriste : une garnison complète cueille un consommable toutes les
+   *  `gardenHoursPerItem` heures (3 par jour ; moins avec moins de monde). */
+  gardenHoursPerItem: 8,
+  /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
+   *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
+  towerCut: 0.2,
 } as const;
 
-export const CONTROL_EMO: Record<ControlKind, string> = { mine: '⛏️' };
+export const CONTROL_EMO = CONTROL_KIND_EMO;
+export const CONTROL_LABEL = CONTROL_KIND_LABEL;
+/** Ce qu'un point rapporte, en quelques mots. */
+export const CONTROL_YIELD: Record<ControlKind, string> = {
+  mine: 'or 🪙 en continu',
+  training: 'XP pour la garnison 🎓',
+  garden: 'consommables 🎒',
+  tower: 'trajets plus courts 🧭',
+};
 
 export const controlIdOf = (kind: ControlKind): string => `ctl_${kind}`;
 
@@ -84,9 +110,11 @@ function controlLevel(id: string, retakes: number, playerLevel: number): number 
 
 /** Où se pose un point : FIXE, dérivé de la graine de la carte et du type. */
 function controlSpot(map: ExpeditionMap, kind: ControlKind): Pick<Poi, 'x' | 'y' | 'distNorm'> {
+  // Un quart de tour entre deux points, à partir de l'angle de la MINE (tiré comme avant :
+  // une mine déjà posée ne bouge pas).
   const i = CONTROL.kinds.indexOf(kind);
-  const rng = mulberry32((map.seed ^ seedOf(`ctl:${kind}:${i}`)) >>> 0 || 1);
-  const ang = rng() * Math.PI * 2;
+  const rng = mulberry32((map.seed ^ seedOf('ctl:mine:0')) >>> 0 || 1);
+  const ang = rng() * Math.PI * 2 + (i * Math.PI * 2) / CONTROL.kinds.length;
   const d = EXPE.distMin + CONTROL.distFrac * (revealRadius(1) - EXPE.distMin);
   return {
     x: Math.round(EXPE.town.x + Math.cos(ang) * d),
@@ -193,54 +221,155 @@ export function retakeForce(p: Poi): Pick<ControlState, 'faction' | 'size'> {
   return enemyForce(p.id, (p.control?.attackAt ?? 0) % 1_000_003);
 }
 
+const shareOf = (n: number) =>
+  CONTROL.garrisonShare[Math.min(CONTROL.maxGarrison, Math.max(0, n))] ?? 0;
+
 /** ⛏️ L'or produit par heure pour une garnison de `n` champions. */
 export function controlGoldPerHour(
   p: Pick<Poi, 'id' | 'level'>,
   n: number,
   playerLevel: number,
 ): number {
-  const share = CONTROL.garrisonShare[Math.min(CONTROL.maxGarrison, Math.max(0, n))] ?? 0;
   const haul = harvestGold({ id: p.id, type: 'mine', level: p.level }, playerLevel);
-  return (haul * share) / CONTROL.mineHoursPerHaul;
+  return (haul * shareOf(n)) / CONTROL.mineHoursPerHaul;
 }
 
-/** ⛏️ L'or en réserve à `now` (plafonné à `storageMs` de production). 0 si non tenu. */
-export function controlStock(p: Poi, now: number, playerLevel: number): number {
+/** 🎯 L'XP par heure d'un champion posté au camp d'entraînement. */
+export function trainingXpPerHour(p: Pick<Poi, 'level'>): number {
+  return trialXpBase(p.level) / CONTROL.trainHoursPerTrial;
+}
+
+/** Ce qu'un point produit par heure, dans SON unité : or (mine), XP par champion (camp),
+ *  consommables (jardin, fractionnaires). La tour ne produit rien. */
+function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
+  switch (p.control?.kind) {
+    case 'mine':
+      return controlGoldPerHour(p, n, playerLevel);
+    case 'training':
+      return n > 0 ? trainingXpPerHour(p) : 0;
+    case 'garden':
+      return shareOf(n) / CONTROL.gardenHoursPerItem;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * La production en réserve à `now`, dans l'unité du point, NON arrondie : ce qui était
+ * mis de côté quand l'effectif a changé (`banked`), plus ce que l'effectif ACTUEL a produit
+ * depuis — plafonnée à 24 h de production, arrêtée à l'heure de l'attaque.
+ */
+function stockUnits(p: Poi, now: number, playerLevel: number): number {
   const c = p.control;
   if (!c || c.owner !== 'player' || c.collectedAt === undefined) return 0;
   const until = Math.min(now, c.attackAt ?? now);
   const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
-  const rate = controlGoldPerHour(p, c.garrison.length, playerLevel);
-  // ⛏️ Ce qui était déjà sorti de terre quand l'effectif a changé (`banked`), plus ce que
-  // l'effectif ACTUEL a produit depuis — la réserve reste plafonnée à 24 h de production.
+  const rate = unitsPerHour(p, c.garrison.length, playerLevel);
   const banked = c.banked ?? 0;
   const cap = Math.max(banked, (rate * CONTROL.storageMs) / 3600_000);
-  return Math.floor(Math.min(cap, banked + (rate * ms) / 3600_000));
+  return Math.min(cap, banked + (rate * ms) / 3600_000);
 }
 
-/** ⛏️ Récolte : l'or part, la réserve repart de l'instant de la récolte. */
+/** 🎯 L'XP accumulée PAR champion à `now` (avant plafond, cf. `trainingRoom`). */
+export function trainingStock(p: Poi, now: number): number {
+  return p.control?.kind === 'training' ? Math.floor(stockUnits(p, now, 1)) : 0;
+}
+/**
+ * 🎯 Jusqu'où le camp fait monter : le ★5 du rang JUSTE EN DESSOUS de celui du héros
+ * (décision de l'utilisateur). Un héros Bronze n'a pas de rang en dessous : le camp
+ * n'entraîne personne (0).
+ */
+export function trainingCapLevel(heroLevel: number): number {
+  const r = characterRank(Math.max(1, heroLevel)).rankIndex;
+  return r > 0 ? rankStartLevel(r) - 1 : 0;
+}
+/**
+ * 🎯 L'XP qu'un champion peut ENCORE recevoir du camp. ⚠️ On borne l'XP versée, pas
+ * seulement le niveau : `grantAdvXp` CONSERVE l'excédent au-delà de ses plafonds, et un
+ * surplus mis de côté ici passerait le plafond du camp à la prochaine ascension.
+ * Bornée aussi par le Panthéon et l'ascension (le plus bas gagne).
+ */
+export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: number): number {
+  const target = Math.min(
+    trainingCapLevel(heroLevel),
+    Math.max(1, pantheonLevel),
+    advAscensionCap(adv),
+  );
+  let need = -Math.max(0, adv.xp);
+  for (let l = adv.level; l < target; l++) need += advXpToNext(l);
+  return Math.max(0, need);
+}
+
+/** 🌿 Combien de consommables le jardin a cueillis à `now`. */
+export function gardenStock(p: Poi, now: number): number {
+  return p.control?.kind === 'garden' ? Math.floor(stockUnits(p, now, 1) + 1e-9) : 0;
+}
+
+/**
+ * 🗼 Le multiplicateur de trajet des TOURS DE GUET tenues : `1 − towerCut × part`. Il
+ * MULTIPLIE le trajet déjà réduit par l'Avant-poste (décision de l'utilisateur) — on ne
+ * l'ajoute pas à sa réduction, sinon les deux se plafonneraient ensemble.
+ */
+export function controlTravelMult(map: ExpeditionMap | null | undefined): number {
+  let m = 1;
+  for (const p of map?.pois ?? [])
+    if (p.control?.kind === 'tower' && p.control.owner === 'player')
+      m *= 1 - CONTROL.towerCut * shareOf(p.control.garrison.length);
+  return m;
+}
+
+/** ⛏️ L'or en réserve à `now` (plafonné à `storageMs` de production). 0 si non tenu. */
+export function controlStock(p: Poi, now: number, playerLevel: number): number {
+  return p.control?.kind === 'mine' ? Math.floor(stockUnits(p, now, playerLevel)) : 0;
+}
+
+/**
+ * Récolte : ce qu'un point a produit part (or, XP par champion, consommables), et la
+ * production repart. ⚠️ Au jardin, la FRACTION d'un consommable en cours reste en réserve
+ * (`banked`) : cueillir souvent ne fait rien perdre. `xp` = l'XP accumulée PAR champion,
+ * AVANT le plafond du camp (le store la borne, `trainingRoom`).
+ */
 export function collectControl(
   map: ExpeditionMap,
   id: string,
   now: number,
   playerLevel: number,
-): { map: ExpeditionMap; gold: number } {
+): { map: ExpeditionMap; gold: number; xp: number; supplies: SupplyStock } {
   const p = map.pois.find((x) => x.id === id);
-  const gold = p ? controlStock(p, now, playerLevel) : 0;
-  if (!p || gold <= 0) return { map, gold: 0 };
+  const none = { map, gold: 0, xp: 0, supplies: {} };
+  const c = p?.control;
+  if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
+  const units = stockUnits(p, now, playerLevel);
+  const whole = Math.floor(units + 1e-9);
+  if (whole <= 0) return none;
+  const supplies: SupplyStock = {};
+  if (c.kind === 'garden') {
+    const rng = mulberry32((seedOf(`${id}:${c.collectedAt}`) ^ 0x6a09e667) >>> 0 || 1);
+    for (let i = 0; i < whole; i++) {
+      const s = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
+      supplies[s] = (supplies[s] ?? 0) + 1;
+    }
+  }
+  const until = Math.min(now, c.attackAt ?? now);
   return {
     map: withControl(map, id, (q) => ({
       ...q,
-      control: { ...q.control!, collectedAt: now, banked: 0 },
+      control: {
+        ...q.control!,
+        collectedAt: until,
+        banked: c.kind === 'garden' ? Math.max(0, units - whole) : 0,
+      },
     })),
-    gold,
+    gold: c.kind === 'mine' ? whole : 0,
+    xp: c.kind === 'training' ? whole : 0,
+    supplies,
   };
 }
 
 /** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
  *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
 function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
-  return { ...p.control!, banked: controlStock(p, at, playerLevel), collectedAt: at };
+  return { ...p.control!, banked: stockUnits(p, at, playerLevel), collectedAt: at };
 }
 
 /** 🏰 Les places OCCUPÉES d'un point : la garnison et les renforts en route. */

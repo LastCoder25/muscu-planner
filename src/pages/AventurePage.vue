@@ -3220,6 +3220,7 @@ import {
   ARENA_PLAY,
   type PartyResult,
   nextPlunderSpawn,
+  poiLabel,
 } from '@/lib/expedition';
 import { logicalToday } from '@/lib/challenges';
 
@@ -5608,6 +5609,7 @@ async function syncPush(force = false) {
       controls: heldControls(char.row.expedition_map ?? null).map((p) => ({
         id: p.id,
         attackAt: p.control!.attackAt ?? 0,
+        label: poiLabel(p),
       })),
       plunder: char.row.expedition_map
         ? nextPlunderSpawn(

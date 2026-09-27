@@ -57,7 +57,7 @@ export interface PushContext {
   /** 🏰 Les points de contrôle TENUS et l'heure de leur prochaine attaque ennemie
    *  (`heldControls`). ⚠️ REQUIS : les oublier, c'est apprendre la perte d'une mine en
    *  rouvrant l'app. */
-  controls: { id: string; attackAt: number }[];
+  controls: { id: string; attackAt: number; label: string }[];
 }
 
 function heures(ms: number): string {
@@ -144,7 +144,7 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       kind: 'control_warn',
       dedupe: `control_warn:${c.id}:${c.attackAt}`,
       sendAt: c.attackAt - CONTROL.warnMs,
-      title: '🏰 L’ennemi marche sur ta mine',
+      title: `🏰 L’ennemi marche sur : ${c.label}`,
       body: `Une troupe vient reprendre ton point de contrôle dans ${heures(CONTROL.warnMs)}.`,
       url: '/expedition-map',
     });
@@ -152,7 +152,7 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       kind: 'control_attack',
       dedupe: `control_attack:${c.id}:${c.attackAt}`,
       sendAt: c.attackAt,
-      title: '🏰 Ta mine est attaquée',
+      title: `🏰 Attaque en cours : ${c.label}`,
       body: 'Ta garnison se bat pour la tenir — viens voir le rapport.',
       url: '/expedition-map',
     });
