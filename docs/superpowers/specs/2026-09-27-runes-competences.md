@@ -122,30 +122,52 @@ utilisée sur ce champion (l'écran le dit).
 
 ## 5. D'où viennent les runes
 
-### Sources de base
+_Révisé le 2026-09-27 (décisions de l'utilisateur) : garantie à l'ascension et à l'Éveil,
+partout ailleurs une CHANCE, uniquement sur les lieux de la carte._
 
-- **Ascension** (changement de rang du champion, Bronze → Argent, etc.) : **une rune** pour le
-  joueur, de couleur **tirée**. Plus le rang atteint est haut, meilleures sont les chances
-  (_table à écrire_ : passer Argent → surtout 🟢, un peu 🔵 ; passer Divin → surtout 🟣 et 🟠).
-- **Éveil** (doublon au tirage) : **une rune offerte** par cran, **en plus** du bonus de stats
-  de base existant (+8 % par cran, `AWAKEN.perStep`).
+### Garanties
 
-### Sources sur la carte et dans les événements
+- **Ascension** (changement de rang du champion) : une rune, couleur tirée selon le rang
+  ATTEINT (`ascensionRuneOdds` : Argent 80/20/0/0 % … Tout-puissant 5/20/45/30 %).
+- **Éveil** (doublon au tirage) : une rune par cran, **en plus** du bonus de stats existant
+  (+8 % par cran). Couleur tirée selon la **lettre** du champion et le **cran** atteint
+  (`awakenRuneOdds`, options B + C) : un X tire mieux qu'un S, un S mieux qu'un A, et le
+  6ᵉ cran mieux que le 1ᵉʳ.
 
-| Source | Rune |
-|---|---|
-| 📖 Archives (lieu de récolte) | 🟢 garantie |
-| 🕳️ Faille refermée, rang **inférieur** au tien | 🟢 |
-| 🕳️ Faille refermée, **ton rang** | 🔵 |
-| 🕳️ Faille refermée, **un rang au-dessus**, jeune | 🟣 |
-| 🕳️ Faille refermée, **un rang au-dessus**, mûre | 🟠 |
-| 🐉 Boss entre amis | selon le cran (Échauffement : aucune → Inhumain : 🟠) |
-| 🎯 Défi 360 bouclé dans les temps | 🟢 à 🔵 selon l'intensité |
+### Chance sur les lieux de la carte
 
-Une incursion **ratée** ne donne pas de rune (la faille n'est pas refermée).
+Un lieu **réussi** a une chance de lâcher une rune (`rollPlaceRune`) : camps, repaires,
+récoltes (mine, puits, sanctuaire, archives, mine de mana), failles refermées, bandes
+interceptées, ruines, tanières, caravanes pillées, points de contrôle. La liste est un
+`Record<PoiType, boolean>` exhaustif : un type de lieu ajouté sans décision ne compile pas.
 
-**Écartés** : les boss de palier (décision de l'utilisateur), les donjons (farmés sans fin, ils
-inonderaient les runes), les sièges (ils ne se provoquent pas, flux imprévisible).
+**Exclus** : l'arène (héros seul, les runes servent aux champions), l'épave (legacy), et tout
+ce qui n'est pas un lieu — sièges, donjons, boss de palier, Labyrinthe, boss entre amis,
+Défi 360.
+
+| Lieu, comparé à ton rang | Chance | Couleur (🟢 / 🔵 / 🟣 / 🟠) |
+|---|---|---|
+| en dessous | 2 % | 85 / 13 / 2 / 0 % |
+| ton rang | 5 % | 70 / 22 / 7 / 1 % |
+| au-dessus | 12 % | 45 / 33 / 18 / 4 % |
+| faille au-dessus, mûre (≥ mi-vie) | 24 % | 25 / 35 / 28 / 12 % |
+
+Une faille refermée compte **double** (treize combats et un gardien). Une mission ratée ne
+donne rien.
+
+**Mesuré** (carte simulée 30 jours, missions d'équipe au rythme des créneaux d'Avant-poste +
+2 missions du héros, 80 % de réussite, profil régulier 700 XP/jour, ascension comprise) :
+
+| Niveau | Missions / jour | Chance moyenne | Runes / jour | Runes / champion / rang |
+|---|---|---|---|---|
+| 15 | 6,4 | 4,3 % | 0,27 | 1,8 |
+| 35 | 11,2 | 3,5 % | 0,40 | 2,1 |
+| 65 | 20,8 | 3,5 % | 0,73 | 3,1 |
+| 95 | 28,0 | 3,1 % | 0,87 | 3,5 |
+
+Cible : ~3 runes par champion et par rang, soit un build S presque complet (≈ 13 runes sur
+15) vers le rang 5. ⚠️ Le rythme monte avec le niveau (les créneaux croissent plus vite que
+le vivier engagé) ; à surveiller à l'usage.
 
 ### La faille d'un rang au-dessus
 

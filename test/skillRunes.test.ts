@@ -14,18 +14,17 @@ import {
   skillValue,
   skillsOfTier,
   type ChampSkill,
-  ARCHIVE_RUNE,
-  FRIEND_BOSS_RUNE,
-  RUNE_SOURCES,
+  RUNE_PLACE,
+  RUNE_PLACE_OK,
   ascensionRuneOdds,
-  comboRune,
-  riftRune,
+  awakenRuneOdds,
+  placeRuneChance,
+  placeRuneOdds,
   rollAscensionRune,
   rollAwakenRune,
+  rollPlaceRune,
 } from '@/lib/skillRunes';
 import { mulberry32 } from '@/lib/combat';
-import { BOSS_TIERS } from '@/lib/friendBoss';
-import { CHEST_MAX_MULT, CHEST_MIN_MULT } from '@/lib/comboChest';
 
 describe('🔮 le catalogue', () => {
   it('4 crans, chacun sa couleur et son nom', () => {
@@ -187,22 +186,15 @@ describe('🎟️ poser une rune', () => {
 });
 
 describe('🎁 les sources de runes', () => {
-  it('les chances d’ascension somment à 1 à chaque rang, et montent avec le rang', () => {
-    for (let r = 0; r <= 9; r++) {
-      const o = ascensionRuneOdds(r);
-      expect(
-        RUNE_TIERS.reduce((s, t) => s + o[t], 0),
-        `rang ${r}`,
-      ).toBeCloseTo(1);
-    }
+  const sum = (o: Record<string, number>) => RUNE_TIERS.reduce((s, t) => s + o[t]!, 0);
+
+  it('ascension : les chances somment à 1 et montent avec le rang atteint', () => {
+    for (let r = 0; r <= 9; r++) expect(sum(ascensionRuneOdds(r)), `rang ${r}`).toBeCloseTo(1);
     for (let r = 2; r <= 9; r++) {
       const a = ascensionRuneOdds(r - 1);
       const b = ascensionRuneOdds(r);
       expect(b.gold + b.violet, `rang ${r}`).toBeGreaterThan(a.gold + a.violet);
     }
-  });
-
-  it('passer Argent ne donne jamais de violet ni de doré ; le haut de l’échelle en donne', () => {
     expect(ascensionRuneOdds(1).violet + ascensionRuneOdds(1).gold).toBe(0);
     expect(ascensionRuneOdds(9).gold).toBeGreaterThan(0.2);
   });
@@ -216,44 +208,91 @@ describe('🎁 les sources de runes', () => {
       count[t] = (count[t] ?? 0) + 1;
     }
     const o = ascensionRuneOdds(5);
-    for (const t of RUNE_TIERS) expect(count[t]! / n, t).toBeCloseTo(o[t], 1);
+    for (const t of RUNE_TIERS) expect((count[t] ?? 0) / n, t).toBeCloseTo(o[t], 1);
   });
 
-  it('l’Éveil tire comme une ascension au rang actuel', () => {
-    for (const r of [1, 5, 9]) {
-      const a = mulberry32(r);
-      const b = mulberry32(r);
-      for (let i = 0; i < 50; i++) expect(rollAwakenRune(a, r)).toBe(rollAscensionRune(b, r));
+  it('✨ Éveil : les chances somment à 1 à chaque cran, pour chaque lettre', () => {
+    for (const g of ['A', 'S', 'X'] as const)
+      for (let step = 1; step <= 6; step++) expect(sum(awakenRuneOdds(g, step))).toBeCloseTo(1);
+  });
+
+  it('✨ Éveil : un X tire mieux qu’un S, un S mieux qu’un A (option B)', () => {
+    const haut = (g: 'A' | 'S' | 'X') => awakenRuneOdds(g, 1).violet + awakenRuneOdds(g, 1).gold;
+    expect(haut('S')).toBeGreaterThan(haut('A'));
+    expect(haut('X')).toBeGreaterThan(haut('S'));
+  });
+
+  it('✨ Éveil : le 6ᵉ cran tire mieux que le 1ᵉʳ (option C)', () => {
+    for (const g of ['A', 'S', 'X'] as const) {
+      for (let step = 2; step <= 6; step++)
+        expect(awakenRuneOdds(g, step).gold, `${g} ${step}`).toBeGreaterThanOrEqual(
+          awakenRuneOdds(g, step - 1).gold,
+        );
+      expect(awakenRuneOdds(g, 6).green).toBeLessThan(awakenRuneOdds(g, 1).green);
     }
   });
 
-  it('les archives donnent une rune verte', () => {
-    expect(ARCHIVE_RUNE).toBe('green');
+  it('le tirage d’Éveil suit ses chances', () => {
+    const rng = mulberry32(9);
+    const n = 20000;
+    let gold = 0;
+    for (let i = 0; i < n; i++) if (rollAwakenRune(rng, 'X', 6) === 'gold') gold++;
+    expect(gold / n).toBeCloseTo(awakenRuneOdds('X', 6).gold, 1);
   });
 
-  it('⚠️ faille : en dessous verte, ton rang bleue, au-dessus violette jeune et dorée mûre', () => {
-    expect(riftRune(2, 3, 1)).toBe('green');
-    expect(riftRune(3, 3, 1)).toBe('blue');
-    expect(riftRune(4, 3, 0)).toBe('violet');
-    expect(riftRune(4, 3, RUNE_SOURCES.riftMatureAt - 0.01)).toBe('violet');
-    expect(riftRune(4, 3, RUNE_SOURCES.riftMatureAt)).toBe('gold');
+  it('⚠️ seuls les LIEUX de la carte donnent des runes — ni l’arène (héros seul), ni l’épave', () => {
+    expect(RUNE_PLACE_OK.arena).toBe(false);
+    expect(RUNE_PLACE_OK.wreck).toBe(false);
+    for (const p of ['camp', 'lair', 'mine', 'archive', 'rift', 'warband'] as const)
+      expect(RUNE_PLACE_OK[p], p).toBe(true);
+    const base = { placeRankIndex: 3, playerRankIndex: 3 };
+    expect(placeRuneChance({ ...base, place: 'arena' })).toBe(0);
+    expect(rollPlaceRune(mulberry32(1), { ...base, place: 'arena' })).toBeNull();
   });
 
-  it('boss entre amis : chaque cran a sa rune, l’Échauffement aucune', () => {
-    for (const t of BOSS_TIERS) expect(t.id in FRIEND_BOSS_RUNE, t.id).toBe(true);
-    expect(FRIEND_BOSS_RUNE.echauffement).toBeNull();
-    expect(FRIEND_BOSS_RUNE.inhumain).toBe('gold');
-    // Plus le cran est dur, plus la rune est haute (jamais en recul).
-    const idx = BOSS_TIERS.map((t) => {
-      const r = FRIEND_BOSS_RUNE[t.id];
-      return r ? RUNE_TIERS.indexOf(r) : -1;
-    });
-    for (let i = 1; i < idx.length; i++) expect(idx[i]).toBeGreaterThanOrEqual(idx[i - 1]!);
+  it('plus le lieu est dur, plus il lâche de runes', () => {
+    const at = (placeRankIndex: number) =>
+      placeRuneChance({ place: 'camp', placeRankIndex, playerRankIndex: 3 });
+    expect(at(2)).toBeLessThan(at(3));
+    expect(at(3)).toBeLessThan(at(4));
   });
 
-  it('Défi 360 : verte, bleue quand il est intense', () => {
-    expect(comboRune(CHEST_MIN_MULT)).toBe('green');
-    expect(comboRune(1)).toBe('green');
-    expect(comboRune(CHEST_MAX_MULT)).toBe('blue');
+  it('une faille refermée compte double', () => {
+    const p = { placeRankIndex: 3, playerRankIndex: 3 };
+    expect(placeRuneChance({ ...p, place: 'rift' })).toBeCloseTo(
+      placeRuneChance({ ...p, place: 'camp' }) * RUNE_PLACE.riftChanceMult,
+    );
+  });
+
+  it('⚠️ plus la couleur est haute, plus elle est rare — sur tous les lieux', () => {
+    for (const r of [2, 3, 4]) {
+      const o = placeRuneOdds({ place: 'camp', placeRankIndex: r, playerRankIndex: 3 });
+      expect(sum(o)).toBeCloseTo(1);
+      expect(o.green).toBeGreaterThan(o.blue);
+      expect(o.blue).toBeGreaterThan(o.violet);
+      expect(o.violet).toBeGreaterThanOrEqual(o.gold);
+    }
+  });
+
+  it('la couleur monte avec la difficulté, et la faille mûre au-dessus est la meilleure', () => {
+    const odds = (place: 'camp' | 'rift', r: number, maturity = 0) =>
+      placeRuneOdds({ place, placeRankIndex: r, playerRankIndex: 3, maturity });
+    expect(odds('camp', 3).gold).toBeGreaterThan(odds('camp', 2).gold);
+    expect(odds('camp', 4).gold).toBeGreaterThan(odds('camp', 3).gold);
+    const jeune = odds('rift', 4, 0);
+    const mure = odds('rift', 4, RUNE_PLACE.riftMatureAt);
+    expect(mure.gold).toBeGreaterThan(jeune.gold);
+    expect(odds('rift', 4, RUNE_PLACE.riftMatureAt - 0.01).gold).toBe(jeune.gold);
+    // La maturité ne compte QUE pour une faille : un camp « mûr » ne veut rien dire.
+    expect(odds('camp', 4, 1).gold).toBe(odds('camp', 4, 0).gold);
+  });
+
+  it('le tirage d’un lieu suit sa chance', () => {
+    const rng = mulberry32(21);
+    const p = { place: 'camp' as const, placeRankIndex: 4, playerRankIndex: 3 };
+    const n = 40000;
+    let drops = 0;
+    for (let i = 0; i < n; i++) if (rollPlaceRune(rng, p)) drops++;
+    expect(drops / n).toBeCloseTo(placeRuneChance(p), 2);
   });
 });

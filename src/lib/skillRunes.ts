@@ -15,6 +15,8 @@
  * failles, sièges, puits d'or, débit de mana) avant d'être lues par le jeu.
  */
 
+import type { PoiType } from './expedition';
+
 /** Les 4 crans, du plus bas au plus haut. ⚠️ Désignés par une COULEUR : « Bronze/Or » sont
  *  les rangs, « B/A/S » les lettres du gacha, « ticket » les 🎟️ d'invocation. */
 export type RuneTier = 'green' | 'blue' | 'violet' | 'gold';
@@ -216,26 +218,40 @@ export function replaceSkill(
   return copy;
 }
 
-// ── 🎁 D'OÙ VIENNENT LES RUNES (étape 2) ─────────────────────────────────────────────────
+// ── 🎁 D'OÙ VIENNENT LES RUNES (étape 2, révisée 2026-09-27) ────────────────────────────
 //
-// ⚠️ Toujours NON BRANCHÉ : ces fonctions disent quelle rune une source DONNE. Le crédit au
-// joueur arrivera avec les écrans, pour qu'aucune rune ne s'accumule sans usage possible.
+// Décisions de l'utilisateur : une rune GARANTIE à chaque ascension et à chaque cran d'Éveil ;
+// partout ailleurs, une CHANCE — mais UNIQUEMENT sur les LIEUX de la carte (camps, repaires,
+// récoltes, failles, bandes). Ni sièges, ni donjons, ni boss, ni Labyrinthe, ni défis. L'arène
+// n'en fait pas partie : elle se joue avec le héros seul, et les runes servent aux champions.
+//
+// ⚠️ Toujours NON BRANCHÉ : ces fonctions disent ce qu'une source DONNE. Le crédit au joueur
+// arrivera avec les écrans, pour qu'aucune rune ne s'accumule sans usage possible.
 
-/** Réglages des sources. ⚠️ À MESURER à l'étape 3 (rythme de runes par joueur-type). */
-export const RUNE_SOURCES = {
-  /** Maturité (0..1) à partir de laquelle une faille d'un rang au-dessus paie en doré.
-   *  Mesuré 2026-09-27 : mûre, une faille +1 rang demande 5 à 8 champions de ton rang. */
-  riftMatureAt: 0.5,
-  /** Effort d'un Défi 360 (`chestEffortMult`, 0,7..1,5) à partir duquel il paie en bleu. */
-  comboBlueAt: 1.25,
-} as const;
+/** Une distribution de couleurs : [vert, bleu, violet, doré], somme 1. */
+type Odds = readonly [number, number, number, number];
+
+function toOdds(row: Odds): Record<RuneTier, number> {
+  return { green: row[0], blue: row[1], violet: row[2], gold: row[3] };
+}
+
+/** Tire une couleur dans une distribution. */
+function pickTier(rng: () => number, odds: Record<RuneTier, number>): RuneTier {
+  let r = rng();
+  for (const t of RUNE_TIERS) {
+    r -= odds[t];
+    if (r < 0) return t;
+  }
+  // Arrondi flottant : la plus haute couleur à probabilité non nulle.
+  return [...RUNE_TIERS].reverse().find((t) => odds[t] > 0)!;
+}
 
 /**
- * 🎲 Les chances de couleur d'une rune d'ASCENSION, selon le rang ATTEINT (index de
- * `CHARACTER_RANKS` : 1 = Argent … 9 = Tout-puissant). Plus le rang est haut, plus la rune a
- * de chances d'être haute. Chaque ligne somme à 1 (testé).
+ * 🎲 ASCENSION : les chances de couleur selon le rang ATTEINT (index de `CHARACTER_RANKS` :
+ * 1 = Argent … 9 = Tout-puissant). Plus le rang est haut, plus la rune a de chances d'être
+ * haute. Chaque ligne somme à 1 (testé).
  */
-const ASCENSION_ODDS: readonly (readonly [number, number, number, number])[] = [
+const ASCENSION_ODDS: readonly Odds[] = [
   [1, 0, 0, 0], // 0 — Bronze : on n'y « monte » pas, garde-fou
   [0.8, 0.2, 0, 0], // 1 — Argent
   [0.65, 0.3, 0.05, 0],
@@ -249,62 +265,114 @@ const ASCENSION_ODDS: readonly (readonly [number, number, number, number])[] = [
 ];
 
 export function ascensionRuneOdds(rankIndex: number): Record<RuneTier, number> {
-  const row = ASCENSION_ODDS[Math.max(0, Math.min(ASCENSION_ODDS.length - 1, rankIndex))]!;
-  return { green: row[0], blue: row[1], violet: row[2], gold: row[3] };
+  return toOdds(ASCENSION_ODDS[Math.max(0, Math.min(ASCENSION_ODDS.length - 1, rankIndex))]!);
 }
 
-/** Tire la couleur d'une rune d'ascension (ou d'Éveil) au rang donné. */
 export function rollAscensionRune(rng: () => number, rankIndex: number): RuneTier {
-  const odds = ascensionRuneOdds(rankIndex);
-  let r = rng();
-  for (const t of RUNE_TIERS) {
-    r -= odds[t];
-    if (r < 0) return t;
-  }
-  // Arrondi flottant : la dernière couleur à probabilité non nulle.
-  return [...RUNE_TIERS].reverse().find((t) => odds[t] > 0)!;
+  return pickTier(rng, ascensionRuneOdds(rankIndex));
 }
-
-/** ✨ ÉVEIL : une rune offerte par cran (décision de l'utilisateur), tirée aux chances d'une
- *  ascension au RANG ACTUEL du champion — un doublon d'un champion haut placé vaut plus. */
-export function rollAwakenRune(rng: () => number, currentRankIndex: number): RuneTier {
-  return rollAscensionRune(rng, currentRankIndex);
-}
-
-/** 📖 Archives (lieu de récolte) : une rune verte, garantie. */
-export const ARCHIVE_RUNE: RuneTier = 'green';
 
 /**
- * 🕳️ La rune d'une faille REFERMÉE, selon sa difficulté réelle (décision de l'utilisateur) :
- * rang de la faille comparé au rang du joueur, en rangs de prestige.
- * - en dessous → verte · ton rang → bleue ;
- * - au-dessus : violette si elle est jeune, dorée si elle a mûri (`riftMatureAt`).
- * ⚠️ Une incursion RATÉE ne donne rien : c'est à l'appelant de ne pas appeler.
+ * ✨ ÉVEIL : une rune par cran, couleur tirée selon la LETTRE du champion et le CRAN atteint
+ * (décision de l'utilisateur, option B + C). L'Éveil est la part « gacha » du système : c'est
+ * la rareté du personnage et l'acharnement à le compléter qui paient, pas son niveau — déjà
+ * récompensé par l'ascension. Au cran 1 et au cran 6, deux distributions ; entre les deux, on
+ * INTERPOLE (une interpolation de distributions somme toujours à 1).
  */
-export function riftRune(
-  riftRankIndex: number,
-  playerRankIndex: number,
-  maturity: number,
-): RuneTier {
-  const gap = riftRankIndex - playerRankIndex;
-  if (gap < 0) return 'green';
-  if (gap === 0) return 'blue';
-  return maturity >= RUNE_SOURCES.riftMatureAt ? 'gold' : 'violet';
+const AWAKEN_ODDS: Record<'A' | 'S' | 'X', { first: Odds; last: Odds }> = {
+  A: { first: [0.75, 0.22, 0.03, 0], last: [0.45, 0.35, 0.17, 0.03] },
+  S: { first: [0.5, 0.33, 0.14, 0.03], last: [0.2, 0.35, 0.32, 0.13] },
+  X: { first: [0.3, 0.35, 0.26, 0.09], last: [0.1, 0.3, 0.38, 0.22] },
+};
+/** Cran d'Éveil maximum lu par l'interpolation (`AWAKEN.max` côté champions). */
+const AWAKEN_LAST_STEP = 6;
+
+export function awakenRuneOdds(grade: 'A' | 'S' | 'X', step: number): Record<RuneTier, number> {
+  const { first, last } = AWAKEN_ODDS[grade];
+  const t = (Math.max(1, Math.min(AWAKEN_LAST_STEP, step)) - 1) / (AWAKEN_LAST_STEP - 1);
+  return toOdds(first.map((v, i) => v + (last[i]! - v) * t) as unknown as Odds);
 }
 
-/** 🐉 Boss entre amis : la rune du coffre selon le cran de difficulté. ⚠️ L'Échauffement ne
- *  paie rien — c'est le cran qu'on enchaînerait pour farmer (même règle que les tickets).
- *  ⚠️ Couvre TOUS les crans de `BOSS_TIERS` (testé) : un cran ajouté sans rune rougit. */
-export const FRIEND_BOSS_RUNE: Record<string, RuneTier | null> = {
-  echauffement: null,
-  serieux: 'green',
-  costaud: 'blue',
-  brutal: 'violet',
-  inhumain: 'gold',
+export function rollAwakenRune(rng: () => number, grade: 'A' | 'S' | 'X', step: number): RuneTier {
+  return pickTier(rng, awakenRuneOdds(grade, step));
+}
+
+/** Les lieux de la carte qui peuvent lâcher une rune. ⚠️ EXHAUSTIF par construction : un
+ *  type de lieu ajouté sans dire s'il donne des runes ne compile pas. Exclus : l'arène (héros
+ *  seul, les runes servent aux champions) et l'épave (legacy, plus jamais générée). */
+export const RUNE_PLACE_OK: Record<PoiType, boolean> = {
+  mine: true,
+  camp: true,
+  lair: true,
+  arena: false,
+  well: true,
+  shrine: true,
+  archive: true,
+  wreck: false,
+  rift: true,
+  mana_mine: true,
+  warband: true,
+  ruins: true,
+  fallen: true,
+  den: true,
+  plunder: true,
+  control: true,
 };
 
-/** 🎯 Défi 360 bouclé dans les temps : verte, bleue s'il était intense
- *  (`effortMult` = `chestEffortMult`, le facteur de son coffre). */
-export function comboRune(effortMult: number): RuneTier {
-  return effortMult >= RUNE_SOURCES.comboBlueAt ? 'blue' : 'green';
+/** Où se situe le lieu par rapport au joueur, en rangs de prestige. */
+export type PlaceGap = 'below' | 'equal' | 'above';
+
+function placeGap(placeRankIndex: number, playerRankIndex: number): PlaceGap {
+  const d = placeRankIndex - playerRankIndex;
+  return d < 0 ? 'below' : d === 0 ? 'equal' : 'above';
+}
+
+/**
+ * Réglages des lieux. ⚠️ À MESURER (cible : ~0,7 rune par jour pour un joueur régulier, soit
+ * un build complet vers la moitié de la partie).
+ */
+export const RUNE_PLACE = {
+  /** Chance qu'un lieu RÉUSSI lâche une rune, selon sa difficulté. */
+  chance: { below: 0.02, equal: 0.05, above: 0.12 } as Record<PlaceGap, number>,
+  /** Une faille refermée vaut treize combats et un gardien : sa chance est multipliée. */
+  riftChanceMult: 2,
+  /** Maturité (0..1) à partir de laquelle une faille AU-DESSUS tire aux chances « mûre ». */
+  riftMatureAt: 0.5,
+} as const;
+
+/** La couleur d'une rune tombée sur un lieu : de base 70 / 22 / 7 / 1 %, décalée vers le haut
+ *  quand le lieu est dur. ⚠️ Plus la couleur est haute, plus elle est rare — partout. */
+const PLACE_ODDS: Record<PlaceGap | 'aboveMature', Odds> = {
+  below: [0.85, 0.13, 0.02, 0],
+  equal: [0.7, 0.22, 0.07, 0.01],
+  above: [0.45, 0.33, 0.18, 0.04],
+  aboveMature: [0.25, 0.35, 0.28, 0.12],
+};
+
+export interface PlaceRuneInput {
+  place: PoiType;
+  placeRankIndex: number;
+  playerRankIndex: number;
+  /** Maturité de la faille (0..1). Ignorée pour les autres lieux. */
+  maturity?: number;
+}
+
+export function placeRuneChance(p: PlaceRuneInput): number {
+  if (!RUNE_PLACE_OK[p.place]) return 0;
+  const base = RUNE_PLACE.chance[placeGap(p.placeRankIndex, p.playerRankIndex)];
+  return Math.min(1, base * (p.place === 'rift' ? RUNE_PLACE.riftChanceMult : 1));
+}
+
+export function placeRuneOdds(p: PlaceRuneInput): Record<RuneTier, number> {
+  const gap = placeGap(p.placeRankIndex, p.playerRankIndex);
+  const mature =
+    gap === 'above' && p.place === 'rift' && (p.maturity ?? 0) >= RUNE_PLACE.riftMatureAt;
+  return toOdds(PLACE_ODDS[mature ? 'aboveMature' : gap]);
+}
+
+/** Un lieu RÉUSSI : `null` s'il ne lâche rien, sinon la couleur de la rune. ⚠️ Une mission
+ *  ratée ne donne rien — c'est à l'appelant de ne pas appeler. */
+export function rollPlaceRune(rng: () => number, p: PlaceRuneInput): RuneTier | null {
+  if (rng() >= placeRuneChance(p)) return null;
+  return pickTier(rng, placeRuneOdds(p));
 }
