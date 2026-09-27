@@ -12,7 +12,7 @@
  */
 import { DUST } from '@/lib/gachaReveal';
 
-export type DustGrade = 'A' | 'S';
+export type DustGrade = 'A' | 'S' | 'X';
 
 export interface Grain {
   x: number;
@@ -146,7 +146,7 @@ export function makeSprites(colors: Record<DustGrade, string>): Sprites {
       }
     }),
   });
-  return { A: one(colors.A), S: one(colors.S) };
+  return { A: one(colors.A), S: one(colors.S), X: one(colors.X) };
 }
 
 /** Peint les grains (en mode additif : la poussière éclaire ce qu'elle recouvre). */

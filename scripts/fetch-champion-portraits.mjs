@@ -164,7 +164,85 @@ const SUBJECTS = {
     'a lithe wind spirit figure, body trailing into a whirlwind, translucent scarves, streaks of motion, teal storm tones',
   oeildumonde:
     'a divine warrior man, cosmic third eye on his forehead, starlit armour, golden aura, holding a trident, godlike presence',
+
+  // ── ADAMANTIUM (2026-09-27) — au-dessus du MYTHRIL : noir métallique et reflets rouges. ──
+  surtr:
+    'a colossal fire giant warrior man, 40 years old, huge muscular build, skin like black volcanic rock with glowing orange lava cracks, beard and hair made of flames, dark adamantium armour with crimson sheen, blazing aura of embers',
+  erebe:
+    'an ageless sorceress woman of primordial darkness, pale skin, long black hair drifting like smoke, glowing crimson eyes, hooded robe of living shadow studded with tiny stars, dark void aura with a red sheen',
 };
+
+/**
+ * 🐎 STABLE HORDE (`--horde`, 2026-09-27) : Pollinations est bloqué (solde épuisé, ne se
+ * recharge plus). Même mode que `fetch-monster-art.mjs` : gratuit, clé anonyme, file
+ * d'attente, **Juggernaut XL**, filtre NSFW ACTIF. `--only=id,id` vise des champions
+ * précis. ⚠️ Relire la planche À CÔTÉ des 32 portraits existants avant de garder : le
+ * modèle n'est pas celui d'origine, le style peut dériver.
+ */
+const HORDE = process.argv.includes('--horde');
+const ONLY = (process.argv.find((a) => a.startsWith('--only=')) ?? '')
+  .slice('--only='.length)
+  .split(',')
+  .filter(Boolean);
+const HORDE_API = 'https://stablehorde.net/api/v2';
+const HORDE_HEAD = {
+  apikey: '0000000000',
+  'Content-Type': 'application/json',
+  'Client-Agent': 'muscu-planner:1:alban',
+};
+const HORDE_NEG = 'text, watermark, signature, frame, photo, realistic, 3d render, blurry';
+
+async function hordeJson(url, init) {
+  for (let k = 0; k < 20; k++) {
+    try {
+      return await (await fetch(url, { headers: HORDE_HEAD, ...init })).json();
+    } catch {
+      await sleep(10000);
+    }
+  }
+  return null;
+}
+
+async function fetchHorde(prompt, seed) {
+  for (let essai = 0; essai < 3; essai++) {
+    const j = await hordeJson(`${HORDE_API}/generate/async`, {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: `${prompt} ### ${HORDE_NEG}`,
+        params: {
+          width: GEN,
+          height: GEN,
+          steps: 25,
+          cfg_scale: 6,
+          sampler_name: 'k_euler_a',
+          seed: String(seed + essai),
+          n: 1,
+        },
+        models: ['Juggernaut XL'],
+        nsfw: false,
+        censor_nsfw: true,
+        r2: true,
+      }),
+    });
+    if (!j?.id) {
+      console.log(`  … refus ${JSON.stringify(j)}`);
+      await sleep(30000);
+      continue;
+    }
+    let c;
+    do {
+      await sleep(10000);
+      c = await hordeJson(`${HORDE_API}/generate/check/${j.id}`);
+    } while (c && !c.done && !c.faulted && c.is_possible !== false);
+    if (!c?.done) continue;
+    const s = await hordeJson(`${HORDE_API}/generate/status/${j.id}`);
+    const g = s?.generations?.[0];
+    if (!g?.img || g.censored) continue;
+    const buf = Buffer.from(await (await fetch(g.img)).arrayBuffer());
+    if (buf.length > 5000) return buf;
+  }
+  return null;
+}
 
 /**
  * ⚠️ **LA GRAINE EST DÉRIVÉE DE L'ID** : elle ne change pas quand on retouche un sujet, donc
@@ -230,14 +308,24 @@ mkdirSync(OUT_LG, { recursive: true });
 let total = 0;
 let faits = 0;
 for (const c of CHAMPIONS) {
+  if (ONLY.length && !ONLY.includes(c.id)) continue;
   const dest = resolve(OUT, `${c.id}.webp`);
   const destLg = resolve(OUT_LG, `${c.id}.webp`);
   if (!FORCE && existsSync(dest) && existsSync(destLg)) {
     console.log(`· ${c.id} — déjà là`);
     continue;
   }
-  const prompt = `${STYLE_AVANT} ${SUBJECTS[c.id]}, ${STYLE_APRES}, ${FRAMING}, dark gradient background`;
-  const brut = await fetchPortrait(prompt, seedFor(c.id));
+  // ⚠️ Sur Juggernaut (Horde), ouvrir sur le style fait ignorer le sujet : il passe en tête.
+  const brut = HORDE
+    ? await fetchHorde(
+        `${SUBJECTS[c.id]}, anime key visual, 2D anime art style, flat cel shaded colors, ` +
+          `bold black outlines, ${STYLE_APRES}, ${FRAMING}, dark gradient background`,
+        seedFor(c.id),
+      )
+    : await fetchPortrait(
+        `${STYLE_AVANT} ${SUBJECTS[c.id]}, ${STYLE_APRES}, ${FRAMING}, dark gradient background`,
+        seedFor(c.id),
+      );
   if (!brut) {
     console.error(`✖ ${c.id} — échec après 8 tentatives`);
     continue;

@@ -154,9 +154,9 @@ describe('🗂️ la collection rangée par lettre', () => {
     xp: 0,
   });
 
-  it('un groupe par lettre, S en tête, et rien ne se perd', () => {
+  it('un groupe par lettre, ADAMANTIUM en tête, et rien ne se perd', () => {
     const g = championGroups([]);
-    expect(g.map((x) => x.grade)).toEqual(['S', 'A']);
+    expect(g.map((x) => x.grade)).toEqual(['X', 'S', 'A']);
     expect(g.reduce((n, x) => n + x.total, 0)).toBe(CHAMPIONS.length);
     for (const x of g) {
       expect(x.entries.length).toBe(x.total);

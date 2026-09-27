@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mulberry32 } from '@/lib/combat';
-import { PULL_GRADES } from '@/data/champions';
+import { GEAR_GRADES } from '@/data/champions';
 import {
   ADV_GEAR_MODELS,
   ADV_GEAR_NO_ART,
@@ -33,7 +33,7 @@ describe('🗡️ le roster de l’équipement des champions', () => {
     expect(new Set(ADV_GEAR_MODELS.map((m) => m.name)).size).toBe(ADV_GEAR_MODELS.length);
     for (const l of LINEAGES)
       for (const s of ADV_GEAR_SLOTS)
-        for (const g of PULL_GRADES)
+        for (const g of GEAR_GRADES)
           expect(
             ADV_GEAR_MODELS.some((m) => m.lineage === l && m.slot === s && m.grade === g),
           ).toBe(true);
@@ -100,7 +100,7 @@ describe('🎰 la lettre d’une pièce', () => {
   it('une lettre IMPOSÉE est respectée (un tirage B du gacha rend une pièce B)', () => {
     for (let s = 1; s <= 50; s++)
       expect(rollGachaPiece(mulberry32(s), [], { grade: 'B' }).grade).toBe('B');
-    for (const g of PULL_GRADES)
+    for (const g of GEAR_GRADES)
       expect(makeAdvGear({ lineage: 'archer', slot: 'weapon', rank: 'rare', grade: g }).grade).toBe(
         g,
       );

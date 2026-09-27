@@ -37,6 +37,7 @@ import {
   topRate,
   pullChampion,
   rollGearGrade,
+  apexRate,
   gachaOdds,
   pullMany,
   multiPullCost,
@@ -91,7 +92,7 @@ describe('le pity', () => {
     for (let seed = 1; seed <= 20; seed++) {
       let depuis = 0;
       for (const g of serie(600, seed * 131)) {
-        depuis = g === 'S' ? 0 : depuis + 1;
+        depuis = g === 'S' || g === 'X' ? 0 : depuis + 1; // X = « MYTHRIL ou mieux »
         expect(depuis).toBeLessThan(GACHA.hardPity);
       }
     }
@@ -138,15 +139,16 @@ describe('le pity', () => {
   it('DEUX compteurs indépendants : décrocher un A ne remet pas le grand pity à zéro', () => {
     const r = pullGrade(() => 0.01, { sinceTop: 40, sinceFloor: 3 });
     expect(r.grade).toBe('A');
-    expect(r.pity).toEqual({ sinceTop: 41, sinceFloor: 0 });
+    expect(r.pity).toEqual({ sinceTop: 41, sinceFloor: 0, sinceApex: 1 });
   });
 
   it('⚠️ UN S COMPTE COMME « A OU MIEUX » : il remet AUSSI le compteur du A à zéro', () => {
     // Sinon un S tombé au 9ᵉ tirage laisserait le 10ᵉ garanti A — deux gains d'affilée,
     // alors que la garantie dit « un A OU MIEUX tous les 10 ».
-    const r = pullGrade(() => 0, { sinceTop: 40, sinceFloor: 8 });
+    // 0,002 : au-dessus de la tranche de l'ADAMANTIUM (0,1 %), dans celle du S.
+    const r = pullGrade(() => 0.002, { sinceTop: 40, sinceFloor: 8 });
     expect(r.grade).toBe('S');
-    expect(r.pity).toEqual({ sinceTop: 0, sinceFloor: 0 });
+    expect(r.pity).toEqual({ sinceTop: 0, sinceFloor: 0, sinceApex: 1 });
   });
 
   it('est PUR : il ne mute pas l’état qu’on lui donne', () => {
@@ -167,7 +169,8 @@ describe('⚠️ LA CALIBRATION — elle tient au débit de mana des failles', (
   function sParAn(manaPerDay: number, runs = 12): number {
     const n = Math.round(pullsPerDay(manaPerDay) * 365);
     let tot = 0;
-    for (let s = 1; s <= runs; s++) tot += serie(n, s * 7919).filter((g) => g === 'S').length;
+    for (let s = 1; s <= runs; s++)
+      tot += serie(n, s * 7919).filter((g) => g === 'S' || g === 'X').length; // MYTHRIL ou mieux
     return tot / runs;
   }
 
@@ -573,5 +576,54 @@ describe('🎰 nextGacha — écrire l’état du gacha ne perd RIEN (v0.1083)',
       v: GACHA_VERSION,
       welcomed: true,
     });
+  });
+});
+
+describe('🖤 ADAMANTIUM — au-dessus du MYTHRIL (2026-09-27)', () => {
+  it('0,1 % au tirage de base, pris sur la part du B : les taux somment toujours à 1', () => {
+    expect(GACHA_RATES.X).toBe(0.001);
+    const tot = PULL_GRADES.reduce((n, g) => n + GACHA_RATES[g], 0);
+    expect(tot).toBeCloseTo(1, 12);
+  });
+
+  it('⚠️ GARANTI au 300ᵉ tirage — jamais plus de `apexPity` tirages sans un ADAMANTIUM', () => {
+    expect(apexRate(GACHA.apexPity - 2)).toBe(GACHA_RATES.X);
+    expect(apexRate(GACHA.apexPity - 1)).toBe(1);
+    for (let seed = 1; seed <= 6; seed++) {
+      let depuis = 0;
+      for (const g of serie(1200, seed * 613)) {
+        depuis = g === 'X' ? 0 : depuis + 1;
+        expect(depuis).toBeLessThan(GACHA.apexPity);
+      }
+    }
+  });
+
+  it('un ADAMANTIUM vaut « MYTHRIL OU MIEUX » : il vide les TROIS compteurs', () => {
+    const r = pullGrade(() => 0, { sinceTop: 50, sinceFloor: 7, sinceApex: 120 });
+    expect(r.grade).toBe('X');
+    expect(r.pity).toEqual({ sinceTop: 0, sinceFloor: 0, sinceApex: 0 });
+  });
+
+  it('⚠️ un MYTHRIL n’avance ni ne vide la garantie ADAMANTIUM', () => {
+    const r = pullGrade(() => 0.002, { sinceTop: 50, sinceFloor: 7, sinceApex: 120 });
+    expect(r.grade).toBe('S');
+    expect(r.pity.sinceApex).toBe(121);
+  });
+
+  it('un état sauvegardé AVANT l’ADAMANTIUM repart de 0, sans planter', () => {
+    const r = pullGrade(() => 0.5, { sinceTop: 3, sinceFloor: 2 });
+    expect(r.pity.sinceApex).toBe(1);
+    expect(gachaOdds({ sinceTop: 3, sinceFloor: 2 }).nextApexIn).toBe(GACHA.apexPity);
+  });
+
+  it('un tirage X donne un champion ADAMANTIUM', () => {
+    const r = pullChampion(() => 0, emptyPity());
+    expect(r.grade).toBe('X');
+    expect(r.champion?.grade).toBe('X');
+  });
+
+  it('⚠️ L’ÉQUIPEMENT ne tire JAMAIS d’ADAMANTIUM', () => {
+    const rng = mulberry32(3);
+    for (let i = 0; i < 20000; i++) expect(rollGearGrade(rng)).not.toBe('X');
   });
 });

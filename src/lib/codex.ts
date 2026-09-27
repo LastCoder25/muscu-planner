@@ -8,7 +8,7 @@ import { ITEM_SETS, SET_SLOTS, SET_SIZE, type Equipped, type Item, type ItemSet 
 import { CHAMPIONS, type Champion, type ChampionGrade } from '@/data/champions';
 
 /** Ordre des lettres de champion, du plus bas au plus haut (l'entrée, puis la collection). */
-const GRADE_ORDER: Record<ChampionGrade, number> = { A: 0, S: 1 };
+const GRADE_ORDER: Record<ChampionGrade, number> = { A: 0, S: 1, X: 2 };
 import { awakenLevel, type Adventurer } from './adventurers';
 
 /** Monstres « vaincus » = tous ceux des donjons NETTOYÉS (clear = tous tués). */

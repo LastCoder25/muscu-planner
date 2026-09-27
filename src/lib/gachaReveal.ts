@@ -38,10 +38,10 @@
 
 import type { Champion, PullGrade } from '@/data/champions';
 
-/** Rang d'une lettre dans la mise en scène : B 0, A 1, S 2. */
-export const GRADE_RANK: Record<PullGrade, number> = { B: 0, A: 1, S: 2 };
+/** Rang d'une lettre dans la mise en scène : B 0, A 1, S 2, X 3. */
+export const GRADE_RANK: Record<PullGrade, number> = { B: 0, A: 1, S: 2, X: 3 };
 /** L'inverse : la lettre d'un rang de présage. */
-export const RANK_GRADE: readonly PullGrade[] = ['B', 'A', 'S'];
+export const RANK_GRADE: readonly PullGrade[] = ['B', 'A', 'S', 'X'];
 
 /**
  * 🎚️ LE RYTHME — repris de la maquette validée. ⚠️ Tout est en millisecondes et vit ICI :
@@ -93,6 +93,9 @@ export const INVOKE = {
   lotFlashMsS: 240,
   lotRestMsA: 220,
   lotRestMsS: 450,
+  /** 🖤 ADAMANTIUM : l'allumage le plus long — c'est lui qu'on attend. */
+  lotFlashMsX: 380,
+  lotRestMsX: 800,
   lotLandMs: 650,
   lotFlipStagger: 150,
 } as const;
@@ -103,7 +106,16 @@ export const INVOKE = {
  * systématique : les dix orbes partent bleues, c'est l'allumage qui fait le suspense ;
  * `lotDoubleS` règle seulement si un S passe par le violet.
  */
-export const SURPRISE = { A: 0.3, S: 0.55, doubleS: 0.4, lotDoubleS: 0.6 } as const;
+export const SURPRISE = {
+  A: 0.3,
+  S: 0.55,
+  doubleS: 0.4,
+  lotDoubleS: 0.6,
+  /** 🖤 ADAMANTIUM (2026-09-27) : l'orbe part TOUJOURS masquée (jamais à sa vraie couleur).
+   *  Le plus souvent elle monte par paliers jusqu'au noir et rouge (`steps`) ; sinon elle se
+   *  fait passer pour un MYTHRIL et se brise d'un coup. */
+  steps: 0.7,
+} as const;
 
 /**
  * 🎰 UNE CASE — un champion (S/A) ou une pièce (B).
@@ -179,6 +191,10 @@ export const finalRank = (it: RevealItem): number => it.path[it.path.length - 1]
 function singlePath(rank: number, rng: () => number): number[] {
   if (rank === 0) return [0];
   if (rank === 1) return rng() < SURPRISE.A ? [0, 1] : [1];
+  if (rank === 3) {
+    if (rng() >= SURPRISE.steps) return [2, 3];
+    return rng() < 0.5 ? [0, 1, 2, 3] : [1, 2, 3];
+  }
   if (rng() >= SURPRISE.S) return [2];
   return rng() < SURPRISE.doubleS ? [0, 1, 2] : [rng() < 0.5 ? 0 : 1, 2];
 }
@@ -214,6 +230,7 @@ export function buildLotReveal(
     let path: number[];
     if (reduced || rank === 0) path = [rank];
     else if (rank === 1) path = [0, 1];
+    else if (rank === 3) path = rng() < SURPRISE.steps ? [0, 1, 2, 3] : [0, 2, 3];
     else path = rng() < SURPRISE.lotDoubleS ? [0, 1, 2] : [0, 2];
     return { cell: cellOf(it), path };
   });
@@ -258,11 +275,13 @@ export function bestRank(plan: RevealPlan): number {
  * ⚠️ `prefers-reduced-motion` → **aucun présage** : l'écran saute à l'état final, il n'y a
  * pas d'animation à teinter. C'est la lib qui le décide, pas un cas particulier de l'écran.
  */
-export const OMEN_STRENGTH: Record<'A' | 'S', number> = { A: 0.5, S: 1 };
+// ⚠️ ADAMANTIUM déborde de l'échelle (1,4) : sa pulsation noire et rouge doit se lire
+// AU-DELÀ de celle d'un MYTHRIL, jamais à égalité.
+export const OMEN_STRENGTH: Record<'A' | 'S' | 'X', number> = { A: 0.5, S: 1, X: 1.4 };
 
 export interface Omen {
   /** La meilleure lettre du tirage : elle donne la couleur. */
-  grade: 'A' | 'S';
+  grade: 'A' | 'S' | 'X';
   rank: number;
   /** 0..1 — l'intensité de l'ambiance : un S en met deux fois plus qu'un A. */
   strength: number;
@@ -272,7 +291,7 @@ export function omenOf(plan: RevealPlan): Omen | null {
   if (plan.reduced) return null;
   const rank = bestRank(plan);
   const grade = RANK_GRADE[rank];
-  if (grade !== 'A' && grade !== 'S') return null;
+  if (grade !== 'A' && grade !== 'S' && grade !== 'X') return null;
   return { grade, rank, strength: OMEN_STRENGTH[grade] };
 }
 
@@ -289,14 +308,24 @@ export function omenOf(plan: RevealPlan): Omen | null {
 export interface SigilTints {
   /** Les médaillons à motifs (le petit cercle n'en a pas : ses losanges les remplacent). */
   medals: PullGrade;
-  /** Les boules intérieures. */
+  /** Les boules intérieures (les lunes du grand cercle) : le MYTHRIL. */
   beads: PullGrade;
+  /** Les nœuds de l'étoile : l'ADAMANTIUM. ⚠️ Une famille À PART (2026-09-27, demandé : « voir
+   *  séparément les 3 couleurs en plus de la basique ») — avant, un ADAMANTIUM prenait la place
+   *  du MYTHRIL sur les lunes, et un ×10 qui contenait les deux n'en montrait qu'un. */
+  nodes: PullGrade;
+  /** 🖤 Un ADAMANTIUM est dans le tirage : le cercle passe au noir métallique. */
+  apex: boolean;
 }
 export function sigilTints(plan: RevealPlan | null): SigilTints {
   const ranks = plan?.items.map(finalRank) ?? [];
   return {
     medals: ranks.includes(GRADE_RANK.A) ? 'A' : 'B',
     beads: ranks.includes(GRADE_RANK.S) ? 'S' : 'B',
+    // 🖤 Un ADAMANTIUM rougit les nœuds de l'étoile ; le cercle entier passe au noir à la
+    // révélation, ce que le composant lit dans `apex`.
+    nodes: ranks.includes(GRADE_RANK.X) ? 'X' : 'B',
+    apex: ranks.includes(GRADE_RANK.X),
   };
 }
 
@@ -323,9 +352,11 @@ export interface DustStyle {
   /** Part des grains qui deviennent de grandes étoiles éclatantes. */
   flares: number;
 }
-export const DUST: Record<'A' | 'S', DustStyle> = {
+export const DUST: Record<'A' | 'S' | 'X', DustStyle> = {
   A: { rate: 22, life: [0.9, 1.6], size: [4.5, 8.5], stars: 0.3, twinkle: 7, flares: 0 },
   S: { rate: 46, life: [1, 1.9], size: [5, 10], stars: 0.4, twinkle: 11, flares: 0.06 },
+  // 🖤 ADAMANTIUM l'emporte sur l'or sur TOUS les axes (même règle que l'or sur le violet).
+  X: { rate: 72, life: [1.2, 2.3], size: [5.5, 11.5], stars: 0.5, twinkle: 14, flares: 0.14 },
 };
 
 /**
@@ -381,7 +412,11 @@ export function lotIgniteMs(g: number): number {
   return (
     INVOKE.lotCrackPauseMs +
     INVOKE.lotCrackMs +
-    (g >= 2 ? INVOKE.lotFlashMsS + INVOKE.lotRestMsS : INVOKE.lotFlashMsA + INVOKE.lotRestMsA)
+    (g >= 3
+      ? INVOKE.lotFlashMsX + INVOKE.lotRestMsX
+      : g >= 2
+        ? INVOKE.lotFlashMsS + INVOKE.lotRestMsS
+        : INVOKE.lotFlashMsA + INVOKE.lotRestMsA)
   );
 }
 

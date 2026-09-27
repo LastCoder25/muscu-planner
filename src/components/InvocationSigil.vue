@@ -21,7 +21,9 @@
         charging,
         'tint-o': tone.o !== 'B',
         'tint-i': tone.i !== 'B',
-        'rare-s': !big && rare === 'S',
+        'tint-n': tone.n !== 'B',
+        'rare-s': !big && (rare === 'S' || rare === 'X'),
+        apex: !!tints?.apex,
       },
     ]"
     :style="tintStyle"
@@ -66,7 +68,7 @@
           </radialGradient>
           <!-- ✨ Halos des boules colorées (v0.1113). ⚠️ Un dégradé lit la couleur là où il
                est DÉCLARÉ, pas là où on l'emploie : d'où un dégradé par teinte (A, S). -->
-          <radialGradient v-for="t in ['o', 'i', 'x']" :id="`${uid}-halo-${t}`" :key="t">
+          <radialGradient v-for="t in ['o', 'i', 'n', 'x']" :id="`${uid}-halo-${t}`" :key="t">
             <stop offset="0" :class="`ivs-st-${t}`" stop-opacity=".7" />
             <stop offset=".4" :class="`ivs-st-${t}`" stop-opacity=".32" />
             <stop offset="1" :class="`ivs-st-${t}`" stop-opacity="0" />
@@ -74,7 +76,7 @@
           <!-- 🔮 Les boules colorées sont des SPHÈRES (v0.1114) : un reflet en haut à gauche,
                la teinte, puis un bord sombre. -->
           <radialGradient
-            v-for="t in ['o', 'i', 'x']"
+            v-for="t in ['o', 'i', 'n', 'x']"
             :id="`${uid}-sph-${t}`"
             :key="'s' + t"
             cx=".5"
@@ -254,15 +256,28 @@
             :fill="`url(#${uid}-halo-i)`"
           />
         </template>
+        <!-- halos des nœuds ADAMANTIUM (grand cercle) -->
+        <template v-if="big">
+          <circle
+            v-for="(n, i) in nodes"
+            :key="'nx' + i"
+            data-lit="nx"
+            class="ivs-halo ivs-tone-n"
+            :cx="n.x"
+            :cy="n.y"
+            r="16"
+            :fill="`url(#${uid}-halo-n)`"
+          />
+        </template>
         <circle
           v-for="(n, i) in nodes"
           :key="'nd' + i"
           data-lit="nd"
           class="ivs-node"
-          :class="{ 'ivs-tone-i': !big }"
+          :class="big ? 'ivs-tone-n' : 'ivs-tone-i'"
           :cx="n.x"
           :cy="n.y"
-          :r="big ? 4 : 4.5"
+          :r="big ? (tone.n !== 'B' ? 6.5 : 4) : 4.5"
         />
       </svg>
 
@@ -380,23 +395,27 @@ const props = defineProps<{
  *  éléments ALLUMÉS (règle CSS `.on`) : avant la charge, rien ne se devine. */
 /** La lettre portée par chaque famille de boules. Un ×1 (petit cercle) n'a qu'UN résultat :
  *  toutes ses boules prennent donc la même couleur — bleu, violet OU or, jamais un mélange. */
-const tone = computed<{ o: PullGrade; i: PullGrade }>(() => {
+const tone = computed<{ o: PullGrade; i: PullGrade; n: PullGrade }>(() => {
   const medals = props.tints?.medals ?? 'B';
   const beads = props.tints?.beads ?? 'B';
-  if (props.variant === 'big') return { o: medals, i: beads };
+  const nodes = props.tints?.nodes ?? 'B';
+  if (props.variant === 'big') return { o: medals, i: beads, n: nodes };
   // Le ×1 part bleu : c'est la VAGUE qui y apporte la couleur du rang (`colorWave`).
-  return { o: 'B', i: 'B' };
+  return { o: 'B', i: 'B', n: 'B' };
 });
 /** La lettre du ×1 (son seul résultat) : bleu, violet OU or. */
 const rare = computed<PullGrade>(() => {
   const medals = props.tints?.medals ?? 'B';
   const beads = props.tints?.beads ?? 'B';
-  return beads !== 'B' ? beads : medals;
+  const nodes = props.tints?.nodes ?? 'B';
+  return nodes !== 'B' ? nodes : beads !== 'B' ? beads : medals;
 });
 const tintStyle = computed(() => ({
   '--ivs-b': GRADE_COLOR.B,
   '--ivs-o': GRADE_COLOR[tone.value.o],
   '--ivs-i': GRADE_COLOR[tone.value.i],
+  '--ivs-n': GRADE_COLOR[tone.value.n],
+  '--sph-n': `url(#${uid}-sph-n)`,
   '--sph-o': `url(#${uid}-sph-o)`,
   '--sph-i': `url(#${uid}-sph-i)`,
   '--ivs-x': GRADE_COLOR[rare.value],
@@ -530,7 +549,7 @@ interface DustBall {
   x: number;
   y: number;
   spin: { anim: Animation; zone: number } | null;
-  tone: 'o' | 'i';
+  tone: 'o' | 'i' | 'n';
 }
 let dustBalls: DustBall[] = [];
 let grains: Grain[] = [];
@@ -562,7 +581,7 @@ function dustSources(): DustSource[] {
   for (const b of dustBalls) {
     // Sur le ×1, une boule ne sème que si la vague l'a déjà colorée.
     const grade = big.value ? tone.value[b.tone] : b.el.classList.contains('wv') ? rare.value : 'B';
-    if (grade !== 'A' && grade !== 'S') continue;
+    if (grade !== 'A' && grade !== 'S' && grade !== 'X') continue;
     if (!b.el.classList.contains('on')) continue;
     const p = b.spin?.anim.effect?.getComputedTiming().progress ?? 0;
     const deg = (p ?? 0) * 360 * zoneDirection(b.spin?.zone ?? 0);
@@ -589,15 +608,15 @@ function stepDustFrame(dt: number, t: number) {
   const ctx = cv.getContext('2d');
   if (!ctx) return;
   ctx.clearRect(0, 0, cv.width, cv.height);
-  // Le violet du rang, additionné au bleu du cercle, s'y fond : sa poussière prend une teinte
-  // plus claire et plus rose, qui reste lisible sur le fond.
-  sprites ??= makeSprites({ A: '#e6a6ff', S: GRADE_COLOR.S });
+  // La couleur du rang, additionnée à l'acier du cercle, s'y fond : sa poussière prend une
+  // teinte plus claire, qui reste lisible sur le fond.
+  sprites ??= makeSprites({ A: '#ffe39a', S: '#f4f7fb', X: '#ff7a98' });
   drawDust(ctx, grains, sprites, t / 1000);
 }
 
 /** Recense les boules colorées une fois le cercle monté et ses calques animés. */
 function collectDustBalls(el: HTMLElement) {
-  dustBalls = [...el.querySelectorAll('[data-lit].ivs-tone-o, [data-lit].ivs-tone-i')]
+  dustBalls = [...el.querySelectorAll('[data-lit].ivs-tone-o, [data-lit].ivs-tone-i, [data-lit].ivs-tone-n')]
     .filter((e) => !e.classList.contains('ivs-halo'))
     .map((e) => {
       const shape = (
@@ -884,6 +903,9 @@ defineExpose({ el: root });
 .ivs-tone-i.on {
   --c: var(--ivs-i);
 }
+.ivs-tone-n.on {
+  --c: var(--ivs-n);
+}
 /* 🌊 La vague du ×1 recolore ce qu'elle recouvre. Déclarée APRÈS les teintes des boules :
    à spécificité égale, c'est elle qui l'emporte. */
 .ivs .wv {
@@ -892,6 +914,7 @@ defineExpose({ el: root });
 .ivs,
 .ivs-tone-o,
 .ivs-tone-i,
+.ivs-tone-n,
 .ivs .wv {
   --c-light: color-mix(in srgb, var(--c) 55%, #fff);
   --c-hot: color-mix(in srgb, var(--c) 35%, #fff);
@@ -909,6 +932,15 @@ defineExpose({ el: root });
 }
 .ivs-st-i {
   stop-color: var(--ivs-i);
+}
+.ivs-st-n {
+  stop-color: var(--ivs-n);
+}
+.ivs-st-n-hi {
+  stop-color: color-mix(in srgb, var(--ivs-n) 25%, #fff);
+}
+.ivs-st-n-lo {
+  stop-color: color-mix(in srgb, var(--ivs-n) 30%, #000);
 }
 .ivs-st-x {
   stop-color: var(--ivs-x);
@@ -956,7 +988,8 @@ defineExpose({ el: root });
 .ivs-tone-o.on .ivs-halo,
 .ivs-halo.ivs-tone-o.on,
 .ivs-tone-i.on .ivs-halo,
-.ivs-halo.ivs-tone-i.on {
+.ivs-halo.ivs-tone-i.on,
+.ivs.tint-n .ivs-halo.ivs-tone-n.on {
   opacity: 1;
 }
 /* 🔮 Les boules allumées deviennent des sphères (reflet, teinte, bord sombre). */
@@ -981,6 +1014,17 @@ defineExpose({ el: root });
 .ivs-moon.ivs-tone-i.on .ivs-moonb,
 .ivs-node.ivs-tone-i.on {
   fill: var(--sph-i);
+}
+/* 🥈 MYTHRIL : argent ET noir — les lunes se cerclent de noir, comme l'orbe à la révélation. */
+.ivs.tint-i .ivs-moon.ivs-tone-i.on .ivs-moonb {
+  stroke: #0b0c0f;
+  stroke-width: 1.8;
+}
+/* 🖤 ADAMANTIUM : les nœuds de l'étoile deviennent des sphères rouge sang cerclées de noir. */
+.ivs.tint-n .ivs-node.ivs-tone-n.on {
+  fill: var(--sph-n);
+  stroke: #0b0c0f;
+  stroke-width: 1.5;
 }
 /* 🌟 L'OR EST UNE EXCELLENTE NOUVELLE : son halo respire, en plus de semer deux fois plus
    de poussière. Le violet reste posé — plus rare, plus spectaculaire. */

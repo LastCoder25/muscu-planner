@@ -27,7 +27,13 @@
  * Ce module ne répond qu'à une question : **à quel rythme voit-on quoi ?**
  */
 
-import { championsOf, PULL_GRADES, type Champion, type PullGrade } from '@/data/champions';
+import {
+  championsOf,
+  PULL_GRADES,
+  type Champion,
+  type GearGrade,
+  type PullGrade,
+} from '@/data/champions';
 import { awakenOverflow, type Adventurer } from './adventurers';
 
 export const GACHA = {
@@ -95,6 +101,12 @@ export const GACHA = {
    *  une série de 30 B d'affilée est banale, et c'est ce qui fait décrocher un joueur qui
    *  n'a pas d'argent réel pour compenser. */
   minorPity: 10,
+
+  /** 🖤 ADAMANTIUM garanti au plus tard à ce tirage (2026-09-27, décision de l'utilisateur).
+   *  ⚠️ **Sans garantie, à 0,1 % un joueur peut ne jamais en voir un** : au rythme mesuré
+   *  (~1,5 tirage/jour), 300 tirages font environ un an — le pire cas, pas la norme.
+   *  Pas de rampe : c'est le jackpot, il ne se prévoit pas ; seul le bout est garanti. */
+  apexPity: 300,
 } as const;
 
 /**
@@ -106,27 +118,35 @@ export const GACHA = {
  * celui de Genshin (~1,6 %).
  */
 export const GACHA_RATES: Record<PullGrade, number> = {
+  // ⚠️ ADAMANTIUM (0,1 %) est pris sur la part du B : MYTHRIL et GOLD gardent le rythme
+  // mesuré, c'est le fond du tirage qui cède sa place au jackpot.
+  X: 0.001,
   S: 0.006,
   A: 0.051,
-  B: 0.943,
+  B: 0.942,
 };
 
 /** La lettre du sommet — celle que le grand pity garantit. */
 export const TOP_GRADE: PullGrade = 'S';
 /** La lettre garantie tous les `minorPity` tirages (ou mieux). */
 export const FLOOR_GRADE: PullGrade = 'A';
+/** 🖤 La lettre au-dessus du sommet — garantie tous les `apexPity` tirages. */
+export const APEX_GRADE: PullGrade = 'X';
 
-/** Ce que le tirage doit retenir entre deux pulls. ⚠️ DEUX compteurs, pas un : le pity
- *  majeur (S) et le mineur (A) se remplissent et se vident indépendamment — un seul
- *  compteur ferait remettre le grand pity à zéro chaque fois qu'on décroche un A. */
+/** Ce que le tirage doit retenir entre deux pulls. ⚠️ TROIS compteurs, pas un : chaque
+ *  garantie se remplit et se vide indépendamment — un seul compteur ferait remettre le
+ *  grand pity à zéro chaque fois qu'on décroche un A. */
 export interface PityState {
-  /** Tirages depuis le dernier S. */
+  /** Tirages depuis le dernier S (ou mieux). */
   sinceTop: number;
   /** Tirages depuis le dernier A ou mieux. */
   sinceFloor: number;
+  /** Tirages depuis le dernier ADAMANTIUM. ⚠️ Optionnel : les états sauvegardés avant
+   *  l'ADAMANTIUM ne l'ont pas — ils repartent de 0, jamais d'un compte inventé. */
+  sinceApex?: number;
 }
 
-export const emptyPity = (): PityState => ({ sinceTop: 0, sinceFloor: 0 });
+export const emptyPity = (): PityState => ({ sinceTop: 0, sinceFloor: 0, sinceApex: 0 });
 
 /** Ce que la LIGNE du joueur retient du tirage (migr. 0081) : le pity, plus un compteur
  *  d'affichage. ⚠️ La collection n'est pas ici — un champion EST un `Adventurer`. */
@@ -198,19 +218,32 @@ export function pullGrade(
   pity: PityState,
 ): { grade: PullGrade; pity: PityState } {
   const r = rng();
+  const apex = apexRate(pity.sinceApex ?? 0);
   const top = topRate(pity.sinceTop);
   let grade: PullGrade;
-  if (r < top) grade = 'S';
+  // ⚠️ L'ADAMANTIUM passe AVANT tout, garantie comprise : c'est « MYTHRIL OU MIEUX ».
+  if (r < apex) grade = 'X';
+  else if (r < apex + top) grade = 'S';
   else if (pity.sinceFloor + 1 >= GACHA.minorPity) grade = 'A';
-  else if (r < top + GACHA_RATES.A) grade = 'A';
+  else if (r < apex + top + GACHA_RATES.A) grade = 'A';
   else grade = 'B';
   return {
     grade,
     pity: {
-      sinceTop: grade === 'S' ? 0 : pity.sinceTop + 1,
+      // ⚠️ Un ADAMANTIUM vaut MIEUX qu'un MYTHRIL : il remet aussi SA garantie à zéro, et
+      // le plancher GOLD. L'inverse est faux — un MYTHRIL n'avance ni ne vide celle d'X.
+      sinceTop: grade === 'S' || grade === 'X' ? 0 : pity.sinceTop + 1,
       sinceFloor: grade === 'B' ? pity.sinceFloor + 1 : 0,
+      sinceApex: grade === 'X' ? 0 : (pity.sinceApex ?? 0) + 1,
     },
   };
+}
+
+/** Taux de l'ADAMANTIUM à ce tirage : le taux de base, ou 1 au tirage garanti. Pas de
+ *  rampe (cf. `GACHA.apexPity`). */
+export function apexRate(sinceApex: number): number {
+  const n = Math.max(0, sinceApex) + 1;
+  return n >= GACHA.apexPity ? 1 : GACHA_RATES[APEX_GRADE];
 }
 
 /**
@@ -228,6 +261,8 @@ export interface GachaOdds {
   topPct: number;
   /** Tirages restants avant le S garanti. */
   nextTopIn: number;
+  /** Tirages restants avant l'ADAMANTIUM garanti. */
+  nextApexIn: number;
 }
 
 export function gachaOdds(pity: PityState): GachaOdds {
@@ -237,6 +272,7 @@ export function gachaOdds(pity: PityState): GachaOdds {
     nextFloorIn: Math.max(1, GACHA.minorPity - pity.sinceFloor),
     topPct: topRate(pity.sinceTop) * 100,
     nextTopIn: Math.max(1, GACHA.hardPity - pity.sinceTop),
+    nextApexIn: Math.max(1, GACHA.apexPity - (pity.sinceApex ?? 0)),
   };
 }
 
@@ -296,7 +332,7 @@ export function pullChampion(rng: () => number, pity: PityState): PullResult & {
  * ⚠️ Aux taux de BASE (`GACHA_RATES` : ~94 % B, ~5 % A, ~0,6 % S), SANS pity : le pity est
  * celui des CHAMPIONS, il ne doit pas être entamé ni avancé par l'équipement.
  */
-export function rollGearGrade(rng: () => number): PullGrade {
+export function rollGearGrade(rng: () => number): GearGrade {
   const r = rng();
   if (r < GACHA_RATES.S) return 'S';
   if (r < GACHA_RATES.S + GACHA_RATES.A) return 'A';

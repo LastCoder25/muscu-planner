@@ -1514,7 +1514,9 @@ export const RARITY_BUDGET: number[] = RANK_ORDER.map((_, i) =>
  * (4★ C6 ≈ 5★ C0), mesuré en P0. À Éveil égal, le S gagne toujours ; et le niveau domine
  * la lettre (×11,5 sur la plage), donc un A investi bat un S nu.
  */
-export const GRADE_BUDGET: Record<ChampionGrade, number> = { S: 1, A: 1 / 1.45 };
+// ⚠️ **X (ADAMANTIUM) = 1,45** : le même pas qu'entre GOLD et MYTHRIL — un MYTHRIL à Éveil
+// complet vaut un ADAMANTIUM nu. S reste à 1 : l'étalon des combats ne bouge pas.
+export const GRADE_BUDGET: Record<ChampionGrade, number> = { X: 1.45, S: 1, A: 1 / 1.45 };
 
 /**
  * 🏅 Le budget de stats d'un champion : celui de son **RANG** (son niveau), × sa lettre.
@@ -1992,7 +1994,7 @@ export function groupByGrade(
   powerOf: (x: Adventurer) => number,
 ): { grade: ChampionGrade; advs: Adventurer[] }[] {
   const out: { grade: ChampionGrade; advs: Adventurer[] }[] = [];
-  for (const grade of ['S', 'A'] as const) {
+  for (const grade of ['X', 'S', 'A'] as const) {
     const list = advs.filter((a) => (advGrade(a) ?? 'A') === grade);
     if (list.length)
       out.push({ grade, advs: list.sort((x, y) => compareAdventurers(x, y, powerOf)) });

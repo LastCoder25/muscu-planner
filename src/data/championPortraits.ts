@@ -48,6 +48,7 @@
  */
 export const CHAMPION_PORTRAITS: Readonly<Record<string, string>> = {
   anselme: '/champions/anselme.webp',
+  erebe: '/champions/erebe.webp',
   atlas: '/champions/atlas.webp',
   aurore: '/champions/aurore.webp',
   barthe: '/champions/barthe.webp',
@@ -70,6 +71,7 @@ export const CHAMPION_PORTRAITS: Readonly<Record<string, string>> = {
   roan: '/champions/roan.webp',
   sauge: '/champions/sauge.webp',
   sylve: '/champions/sylve.webp',
+  surtr: '/champions/surtr.webp',
   tarn: '/champions/tarn.webp',
   teck: '/champions/teck.webp',
   tessa: '/champions/tessa.webp',

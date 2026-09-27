@@ -12,7 +12,7 @@
          variables HÉRITÉES — le sanctuaire garderait la teinte du tirage précédent. -->
     <div
       class="ivk"
-      :class="{ omened: !!omen }"
+      :class="{ omened: !!omen, apex: apexOn }"
       :style="{ '--c': color, '--omen': omenColor, '--omen-k': omen?.strength ?? 0 }"
     >
       <div class="ivk-top">
@@ -45,7 +45,7 @@
           <div v-if="phase === 'charge'" class="ivk-cost">
             <div class="ivk-cost-t font-display">Tirage ×{{ count }}</div>
             <div class="ivk-cost-s">
-              {{ isLot ? 'Dix orbes, dix trésors' : 'B, A ou S : le cercle te le dira' }}
+              {{ isLot ? 'Dix orbes, dix trésors' : 'Le cercle te dira ce qui t’attend' }}
             </div>
           </div>
 
@@ -104,7 +104,11 @@
             <div ref="pwrap" class="ivk-pwrap">
               <div class="ivk-rays" :class="{ on: rv.col }"></div>
               <div ref="rim" class="ivk-rim"></div>
-              <div ref="gradeEl" class="ivk-grade font-display" :class="'g-' + rv.item.cell.grade">
+              <div
+                ref="gradeEl"
+                class="ivk-grade font-display"
+                :class="['g-' + rv.item.cell.grade, { long: GRADE_LABEL[rv.item.cell.grade].length > 7 }]"
+              >
                 {{ GRADE_LABEL[rv.item.cell.grade] }}
               </div>
               <div class="ivk-portrait">
@@ -372,7 +376,10 @@ function tween(ms: number, fn: (k: number) => void, tok: number) {
   });
 }
 const rankColor = (r: number) => GRADE_COLOR[RANK_GRADE[r] ?? 'B'];
-const intensity = (r: number) => [0, 2, 3][r] ?? 0;
+const intensity = (r: number) => [0, 2, 3, 4][r] ?? 0;
+/** 🖤 Le cercle passe au NOIR dès que la couleur de l'ADAMANTIUM s'allume (fissure de l'orbe,
+ *  allumage au ×10, ou état final) — jamais avant : le présage seul ne dit que « mieux ». */
+const apexOn = computed(() => color.value === GRADE_COLOR.X);
 function vib(p: number | number[]) {
   try {
     navigator.vibrate?.(p);
@@ -407,10 +414,16 @@ function sigilCenter() {
   if (!s) return { x: r.width / 2, y: r.height * 0.6 };
   return { x: s.left - r.left + s.width / 2, y: s.top - r.top + s.height / 2 };
 }
+/** 🥈 Teinte d'un orbe. Le MYTHRIL est ARGENT ET NOIR : l'argent passe par `--c`, le noir par
+ *  la classe `mythril` (liseré et cœur sombres) — une seule couleur ne peut pas porter les deux. */
+function tintOrb(o: HTMLElement, c: string) {
+  o.style.setProperty('--c', c);
+  o.classList.toggle('mythril', c === GRADE_COLOR.S);
+}
 function makeOrb(c: string) {
   const o = document.createElement('div');
   o.className = 'ivk-orb';
-  o.style.setProperty('--c', c);
+  tintOrb(o, c);
   const at = sigilCenter();
   o.style.left = `${at.x}px`;
   o.style.top = `${at.y}px`;
@@ -586,6 +599,56 @@ function impact(rank: number) {
   const c = sigilCenter();
   burstWave(c.x, c.y, 1 + t);
   shake(4 + t * 4, 300 + t * 80);
+  if (rank >= 3) groundCrack();
+}
+/** 🖤 ADAMANTIUM : le sol se FEND sous l'impact — des failles rouges partent du cercle et
+ *  s'éteignent lentement. Posé à la main comme les autres éclats, retiré par `clearFx`. */
+function groundCrack() {
+  if (!shaker.value) return;
+  const NS = 'http://www.w3.org/2000/svg';
+  const c = sigilCenter();
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('class', 'ivk-rift');
+  svg.setAttribute('viewBox', '-200 -200 400 400');
+  svg.style.left = `${c.x}px`;
+  svg.style.top = `${c.y}px`;
+  const N = 9;
+  for (let i = 0; i < N; i++) {
+    const a0 = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+    let x = Math.cos(a0) * 40;
+    let y = Math.sin(a0) * 40 * 0.55;
+    let d = `M${x.toFixed(1)} ${y.toFixed(1)}`;
+    let a = a0;
+    for (let k = 0; k < 5; k++) {
+      a += (Math.random() - 0.5) * 0.7;
+      const len = 22 + Math.random() * 20;
+      x += Math.cos(a) * len;
+      y += Math.sin(a) * len * 0.55; // le sol est vu de biais
+      d += ` L${x.toFixed(1)} ${y.toFixed(1)}`;
+    }
+    const pa = document.createElementNS(NS, 'path');
+    pa.setAttribute('d', d);
+    pa.setAttribute('pathLength', '1');
+    pa.style.strokeDasharray = '1';
+    pa.style.strokeDashoffset = '1';
+    svg.appendChild(pa);
+    pa.animate([{ strokeDashoffset: 1 }, { strokeDashoffset: 0 }], {
+      duration: 420,
+      delay: i * 25,
+      easing: 'cubic-bezier(.2,.8,.3,1)',
+      fill: 'forwards',
+    });
+  }
+  shaker.value.appendChild(svg);
+  svg
+    .animate([{ opacity: 1 }, { opacity: 1, offset: 0.55 }, { opacity: 0 }], {
+      duration: 2600,
+      fill: 'forwards',
+    })
+    .finished.then(
+      () => svg.remove(),
+      () => svg.remove(),
+    );
 }
 function lightPillar(rank: number) {
   const c = sigilCenter();
@@ -645,7 +708,7 @@ function clearFx() {
   const sh = shaker.value;
   if (!sh) return;
   sh.querySelectorAll(
-    '.ivk-orb,.ivk-ember,.ivk-gem,.ivk-wave,.ivk-pillar,.ivk-spark,.ivk-fly',
+    '.ivk-orb,.ivk-ember,.ivk-gem,.ivk-wave,.ivk-pillar,.ivk-spark,.ivk-fly,.ivk-rift',
   ).forEach((n) => n.remove());
   for (const a of sh.getAnimations({ subtree: true })) {
     if (!(a instanceof CSSAnimation) && !(a instanceof CSSTransition)) a.cancel();
@@ -731,7 +794,7 @@ async function revealCenter(item: RevealItem, tag: Tag | null, tok: number, focu
   const sil = silhouetteMs(rank);
   await wait(sil * 0.4, tok);
   sfx.stamp();
-  vib(rank === 2 ? [40, 30, 80] : 25);
+  vib(rank >= 2 ? [40, 30, 80] : 25);
   await anim(
     gradeEl.value,
     [
@@ -813,16 +876,22 @@ async function playSingle() {
     await wait(apexMs(rank), tok);
     // La surprise vers le haut : l'orbe se fissure et change de couleur.
     for (let s = 1; s < item.path.length; s++) {
-      await wait(150, tok);
+      // 🖤 Vers l'ADAMANTIUM, l'orbe hésite plus longtemps et se brise plus fort.
+      const toApex = item.path[s] === 3;
+      await wait(toApex ? 380 : 150, tok);
       sfx.crack();
-      vib([30, 40, 60]);
-      await crackOrb(orb, 420, tok);
-      await flashOnce(0.85, 240, tok);
+      vib(toApex ? [60, 40, 120, 40, 160] : [30, 40, 60]);
+      await crackOrb(orb, toApex ? 620 : 420, tok);
+      await flashOnce(toApex ? 1 : 0.85, toApex ? 420 : 240, tok);
       color.value = rankColor(item.path[s]!);
-      orb.style.setProperty('--c', color.value);
+      tintOrb(orb, color.value);
       waveAt(orb.querySelector('.ivk-o-body'));
+      if (toApex) {
+        shake(10, 420);
+        sfx.chime(4);
+      }
       vib(80);
-      await wait(340, tok);
+      await wait(toApex ? 700 : 340, tok);
     }
     // Elle retombe lourdement : petite prise d'élan, puis chute qui accélère, sans traînée.
     await tween(
@@ -933,19 +1002,29 @@ async function playLot() {
         sfx.crack();
         vib(25);
         await crackOrb(o, INVOKE.lotCrackMs, tok);
-        o.style.setProperty('--c', rankColor(g));
-        if (g === 2) {
+        tintOrb(o, rankColor(g));
+        if (g === 3) {
+          // 🖤 ADAMANTIUM : le plus long, le plus fort — c'est lui qu'on attendait.
+          sfx.chime(4);
+          vib([60, 40, 120, 40, 160]);
+          await flashOnce(1, INVOKE.lotFlashMsX, tok);
+          shake(10, 420);
+          color.value = rankColor(3);
+        } else if (g === 2) {
           sfx.chime(3);
           vib([40, 30, 90]);
           await flashOnce(0.75, INVOKE.lotFlashMsS, tok);
           shake(6, 260);
-          color.value = rankColor(2);
+          if (best < 3) color.value = rankColor(2);
         } else {
           await flashOnce(0.3, INVOKE.lotFlashMsA, tok);
           if (best < 2) color.value = rankColor(1);
         }
         waveAt(o.querySelector('.ivk-o-body'));
-        await wait(g === 2 ? INVOKE.lotRestMsS : INVOKE.lotRestMsA, tok);
+        await wait(
+          g === 3 ? INVOKE.lotRestMsX : g === 2 ? INVOKE.lotRestMsS : INVOKE.lotRestMsA,
+          tok,
+        );
       }
     }
     // Chute lourde : chaque orbe tombe sur l'emplacement de sa carte.
@@ -1382,6 +1461,30 @@ onBeforeUnmount(() => {
     inset -6px -8px 16px color-mix(in srgb, var(--c) 40%, #000),
     inset 4px 4px 12px #fff6;
 }
+/* 🥈 MYTHRIL : argent brillant cerclé de noir, cœur sombre — le noir fait lire l'argent. */
+.ivk-orb.mythril {
+  .ivk-o-body {
+    background: radial-gradient(
+      circle at 36% 32%,
+      #fff 0 12%,
+      #e8eef5 30%,
+      #9aa4ae 55%,
+      #1a1d22 80%,
+      #000 100%
+    );
+    box-shadow:
+      0 0 0 2px #0b0c0f,
+      0 0 22px 5px #e8eef5,
+      inset -6px -8px 16px #000,
+      inset 4px 4px 12px #fffa;
+  }
+  .ivk-o-ring {
+    border-color: #0b0c0f;
+    box-shadow:
+      0 0 0 1px #e8eef5,
+      0 0 8px #e8eef5;
+  }
+}
 .ivk-o-swirl {
   position: absolute;
   inset: -20%;
@@ -1485,6 +1588,59 @@ onBeforeUnmount(() => {
   border: 3px solid var(--c);
   box-shadow: 0 0 20px var(--c);
   pointer-events: none;
+}
+/* 🖤 ADAMANTIUM — le sol se fend sous l'impact (posé par `groundCrack`). */
+.ivk-rift {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  margin: -200px 0 0 -200px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 1;
+  path {
+    fill: none;
+    stroke: #ff3d6e;
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0 4px #ff3d6e) drop-shadow(0 0 10px #ff1f4f);
+  }
+}
+/* 🖤 Le cercle passe au NOIR métallique, parcouru d'éclats rouges, dès que la couleur de
+   l'ADAMANTIUM s'allume. Le noir ne peut pas être une couleur de trait (illisible sur le
+   fond sombre) : c'est un voile qui éteint l'acier, et le rouge qui court dessus. */
+.ivk.apex {
+  .ivs {
+    filter: saturate(0.25) brightness(0.55) contrast(1.3);
+    animation: ivk-apex-veins 1.1s ease-in-out infinite alternate;
+  }
+  .ivk-stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      circle at 50% 55%,
+      transparent 30%,
+      color-mix(in srgb, #ff3d6e 16%, transparent) 55%,
+      #000c 100%
+    );
+  }
+}
+@keyframes ivk-apex-veins {
+  from {
+    filter: saturate(0.25) brightness(0.55) contrast(1.3) drop-shadow(0 0 2px #ff3d6e);
+  }
+  to {
+    filter: saturate(0.25) brightness(0.7) contrast(1.3) drop-shadow(0 0 9px #ff3d6e)
+      drop-shadow(0 0 22px #ff1f4f99);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ivk.apex .ivs {
+    animation: none;
+  }
 }
 .ivk-pillar {
   position: absolute;
@@ -1595,6 +1751,27 @@ onBeforeUnmount(() => {
     0 4px 0 #0008;
   &.g-B {
     font-size: 46px;
+  }
+  /* Un nom long (ADAMANTIUM) : il resterait sinon plus large que la carte. */
+  &.long {
+    font-size: 40px;
+  }
+  /* 🥈 MYTHRIL : lettrage argent, liseré noir épais. */
+  &.g-S {
+    -webkit-text-stroke: 2.5px #0b0c0f;
+    text-shadow:
+      0 0 3px #000,
+      0 0 18px #e8eef5,
+      0 4px 0 #000c;
+  }
+  /* 🖤 ADAMANTIUM : lettrage noir métallique, liseré et halo rouges. */
+  &.g-X {
+    color: #16090f;
+    -webkit-text-stroke: 1.5px #ff3d6e;
+    text-shadow:
+      0 0 14px #ff3d6e,
+      0 0 34px #ff1f4f,
+      0 4px 0 #0008;
   }
 }
 .ivk-portrait {
@@ -1826,6 +2003,12 @@ onBeforeUnmount(() => {
 }
 .ivk-card.hot .ivk-back {
   animation: ivk-hot 1s ease-in-out infinite alternate;
+}
+/* 🥈 MYTHRIL : le dos et la face se bordent de noir sous l'argent. */
+.ivk-card.g-S .ivk-back,
+.ivk-card.g-S .ivk-front {
+  outline: 2px solid #0b0c0f;
+  outline-offset: -4px;
 }
 .ivk-card.hot.g-S .ivk-back {
   animation-duration: 0.6s;

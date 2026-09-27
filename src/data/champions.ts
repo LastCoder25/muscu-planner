@@ -43,22 +43,42 @@ import type { Lineage } from '@/lib/advGear';
 /** 🎰 Les lettres du gacha (refonte 2026-09-21, décidée par l'utilisateur : « les étoiles
  *  sont déjà prises dans l'app »). **S** = le sommet, **A** = le petit gain garanti tous les
  *  10, **B** = le fond du tirage — jamais un champion (une pièce d'équipement de lignée). */
-export type ChampionGrade = 'S' | 'A';
+/** **X** = ADAMANTIUM (2026-09-27), au-dessus du S : un champion, jamais une pièce. */
+export type ChampionGrade = 'X' | 'S' | 'A';
 export type PullGrade = ChampionGrade | 'B';
 /** Du plus bas au plus haut. */
-export const PULL_GRADES: readonly PullGrade[] = ['B', 'A', 'S'];
+export const PULL_GRADES: readonly PullGrade[] = ['B', 'A', 'S', 'X'];
+/** 🗡️ Les lettres de l'ÉQUIPEMENT des champions. ⚠️ **Pas d'ADAMANTIUM** (décidé) : ce
+ *  serait 24 modèles et 24 illustrations de plus — ADAMANTIUM reste une rareté de champion.
+ *  Un type à part pour que le compilateur interdise une pièce X. */
+export type GearGrade = Exclude<PullGrade, 'X'>;
+export const GEAR_GRADES: readonly GearGrade[] = ['B', 'A', 'S'];
 /**
  * 🏷️ LES NOMS DES RARETÉS (2026-09-27, décision de l'utilisateur) : **A = GOLD**,
- * **S = MYTHRIL**. ⚠️ **SEUL L'AFFICHAGE CHANGE** : les codes `'A'` / `'S'` sont persistés
- * (compteurs de pity, stock d'équipement, champions de référence) — les renommer imposerait
- * une migration de toutes les sauvegardes pour rien. Tout écran qui montre une lettre passe
- * par cette table, jamais par le code brut.
+ * **S = MYTHRIL**, **X = ADAMANTIUM**. ⚠️ **SEUL L'AFFICHAGE CHANGE** : les codes `'A'` /
+ * `'S'` sont persistés (compteurs de pity, stock d'équipement, champions de référence) — les
+ * renommer imposerait une migration de toutes les sauvegardes pour rien. Tout écran qui
+ * montre une lettre passe par cette table, jamais par le code brut.
  */
-export const GRADE_LABEL: Record<PullGrade, string> = { B: 'B', A: 'GOLD', S: 'MYTHRIL' };
-/** Les couleurs suivent les NOMS : acier pour le fond du tirage, or pour GOLD, argent-bleu
- *  lumineux pour MYTHRIL (le mithril des légendes est un argent qui brille). C'est aussi la
- *  lueur qui précède la révélation dans le cercle d'invocation. */
-export const GRADE_COLOR: Record<PullGrade, string> = { S: '#7fe3ff', A: '#ffc94a', B: '#8fa3b8' };
+export const GRADE_LABEL: Record<PullGrade, string> = {
+  B: 'B',
+  A: 'GOLD',
+  S: 'MYTHRIL',
+  X: 'ADAMANTIUM',
+};
+/** Les couleurs suivent les NOMS : bleu pour le fond du tirage, or pour GOLD, ARGENT ET NOIR
+ *  pour MYTHRIL (2026-09-27, demandé : l’argent-bleu pâle se perdait parmi les orbes — le noir
+ *  vit dans le rendu, classe `mythril` de GachaReveal ; le B quitte l’acier pour que l’argent
+ *  ressorte), rouge sang pour
+ *  ADAMANTIUM (le reflet du métal noir le plus dur — le noir lui-même vit dans le cercle
+ *  d'invocation, une couleur de TEXTE noire serait illisible sur le fond sombre). C'est aussi
+ *  la lueur qui précède la révélation dans le cercle d'invocation. */
+export const GRADE_COLOR: Record<PullGrade, string> = {
+  X: '#ff3d6e',
+  S: '#e8eef5',
+  A: '#ffc94a',
+  B: '#6fa8ff',
+};
 
 interface AwakenStep {
   /** Rang d'Éveil où ce cran tombe (1 = première copie en trop). */
@@ -549,6 +569,39 @@ export const CHAMPIONS: Champion[] = [
     [
       { at: 2, skill: 'damage_pct' },
       { at: 5, skill: 'execute_pct' },
+    ],
+  ),
+
+  // ── X — ADAMANTIUM (2026-09-27, au-dessus du MYTHRIL). Deux seulement : c'est le jackpot,
+  //    0,1 % par tirage. ⚠️ Chacun porte UNE COMPÉTENCE DE NIVEAU 2 DÈS LE TIRAGE : un cran
+  //    d'Éveil à `at: 0` (aucun système neuf — `championSkillLevel` compte les crans
+  //    `at <= éveil`). C'est ce qui les distingue d'un MYTHRIL au-delà du budget. ──
+  C(
+    'surtr',
+    'Surtr',
+    '🌋',
+    'X',
+    'guerrier',
+    'haul',
+    [6, 3, 2],
+    ['damage_pct', 'rage_pct', 'execute_pct'],
+    [
+      { at: 0, skill: 'damage_pct' },
+      { at: 4, skill: 'rage_pct' },
+    ],
+  ),
+  C(
+    'erebe',
+    'Érèbe',
+    '🕳️',
+    'X',
+    'mage',
+    'scout',
+    [3, 3, 5],
+    ['crit_pct', 'lifesteal_pct', 'momentum_pct'],
+    [
+      { at: 0, skill: 'crit_pct' },
+      { at: 4, skill: 'momentum_pct' },
     ],
   ),
 ];

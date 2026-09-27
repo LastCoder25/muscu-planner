@@ -13,10 +13,10 @@
  * avec Node (type-stripping). Un import de valeur l'en empêcherait.
  */
 import type { AdvGearSlot, Lineage } from '@/lib/advGear';
-import type { PullGrade } from '@/data/champions';
+import type { GearGrade } from '@/data/champions';
 
 /** Ordre d'écriture des noms : B, puis A, puis S. */
-const GRADES_ASC: readonly PullGrade[] = ['B', 'A', 'S'];
+const GRADES_ASC: readonly GearGrade[] = ['B', 'A', 'S'];
 
 /**
  * Les noms, dans l'ordre B · A · S. ⚠️ Exhaustif par construction (`Record<Lineage, Record<
@@ -66,12 +66,12 @@ const ADV_GEAR_MODEL_NAMES: Record<
 };
 
 /** Id stable d'un modèle — aussi le nom de son fichier d'illustration. */
-export function advGearModelId(lineage: Lineage, slot: AdvGearSlot, grade: PullGrade): string {
+export function advGearModelId(lineage: Lineage, slot: AdvGearSlot, grade: GearGrade): string {
   return `${lineage}-${slot}-${grade.toLowerCase()}`;
 }
 
 /** Le nom du modèle d'une (lignée, emplacement, lettre). */
-export function advGearModelName(lineage: Lineage, slot: AdvGearSlot, grade: PullGrade): string {
+export function advGearModelName(lineage: Lineage, slot: AdvGearSlot, grade: GearGrade): string {
   return ADV_GEAR_MODEL_NAMES[lineage][slot][GRADES_ASC.indexOf(grade)]!;
 }
 
@@ -79,7 +79,7 @@ export interface AdvGearModelDef {
   id: string;
   lineage: Lineage;
   slot: AdvGearSlot;
-  grade: PullGrade;
+  grade: GearGrade;
   name: string;
 }
 

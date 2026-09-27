@@ -22,7 +22,7 @@ import {
   type WeaponKind,
 } from './items';
 import { CHARACTER_RANKS, rankStarStr, rankStartLevel } from './characterRank';
-import { GRADE_COLOR, GRADE_LABEL, PULL_GRADES, type PullGrade } from '../data/champions';
+import { GRADE_COLOR, GRADE_LABEL, GEAR_GRADES, type GearGrade } from '../data/champions';
 import { advGearModelId, advGearModelName } from '../data/advGearModels';
 import {
   advAvatar,
@@ -63,7 +63,7 @@ export interface AdvGear {
   rarity: Rarity;
   /** 🎰 La LETTRE (B / A / S), comme les champions — tirée, fixe à vie, et c'est ELLE que
    *  l'écran montre. Elle multiplie les stats de combat (`GEAR_GRADE_SHARE`). */
-  grade: PullGrade;
+  grade: GearGrade;
   /** ⚠️ PAS DE JET (v0.1012, décision de l'utilisateur) : seuls les objets du HÉROS en ont un.
    *  Deux exemplaires du même modèle sont IDENTIQUES — c'est ce qui donne un sens au doublon.
    *  Le niveau démarre à ★1 de son rang (`rankStartLevel`). */
@@ -161,7 +161,7 @@ export const LINEAGE_GEAR: Record<Lineage, LineageGearDef> = {
  * ⚠️ Elle ne multiplie QUE les stats de COMBAT : les rôles civils (trajet, cargaison) sont
  * des canaux d'économie déjà mesurés (`scrapEconomy`), une lettre ne doit pas les doper.
  */
-export const GEAR_GRADE_SHARE: Record<PullGrade, number> = { B: 1, A: 1.45, S: 1.45 ** 2 };
+export const GEAR_GRADE_SHARE: Record<GearGrade, number> = { B: 1, A: 1.45, S: 1.45 ** 2 };
 
 /** 🎰 Ce que l'écran montre d'une pièce : sa LETTRE, dans sa couleur. Source unique. */
 export function advGearBadge(g: Pick<AdvGear, 'grade'>): { label: string; color: string } {
@@ -173,7 +173,7 @@ export function advGearBadge(g: Pick<AdvGear, 'grade'>): { label: string; color:
 export function advGearModel(
   lineage: Lineage,
   slot: AdvGearSlot,
-  grade: PullGrade,
+  grade: GearGrade,
 ): { id: string; name: string; emoji: string } {
   return {
     id: advGearModelId(lineage, slot, grade),
@@ -274,7 +274,7 @@ export function advGearValue(
   t: EffectType,
   rank: Rarity,
   /** ⚠️ Défaut B = 1 : la lettre de l'étalon (`refAdvGear`). Le tirage la passe TOUJOURS. */
-  grade: PullGrade = 'B',
+  grade: GearGrade = 'B',
 ): number {
   return Math.max(
     0.1,
@@ -329,7 +329,7 @@ export function makeAdvGear(opts: {
   lineage: Lineage;
   slot: AdvGearSlot;
   rank: Rarity;
-  grade: PullGrade;
+  grade: GearGrade;
   /** Niveau de la pièce, borné à la tranche de son rang. Défaut : ★1. */
   level?: number;
 }): Omit<AdvGear, 'id'> {
@@ -374,7 +374,7 @@ export function makeAdvGear(opts: {
 export function rollGachaPiece(
   rng: () => number,
   advs: Adventurer[],
-  opts: { grade: PullGrade },
+  opts: { grade: GearGrade },
 ): Omit<AdvGear, 'id'> {
   const lineage = pickLineage(rng, advs) ?? LINEAGES[Math.floor(rng() * LINEAGES.length)]!;
   const slot = ADV_GEAR_SLOTS[Math.floor(rng() * ADV_GEAR_SLOTS.length)]!;
@@ -647,7 +647,7 @@ export interface AdvGearState {
  *  quelle : on ne jette pas un objet possédé. */
 function onModel<T extends Omit<AdvGear, 'id'>>(g: T): T {
   // ⚠️ Une pièce d'avant les lettres est un B (valeurs B = 1).
-  const grade: PullGrade = PULL_GRADES.includes(g.grade) ? g.grade : 'B';
+  const grade: GearGrade = GEAR_GRADES.includes(g.grade) ? g.grade : 'B';
   if (!advGearModelOf({ ...g, grade })) return g;
   const rank: Rarity = RANK_ORDER.includes(g.rarity) ? g.rarity : 'commun';
   const fresh = makeAdvGear({
@@ -1114,8 +1114,8 @@ export function compareAdvGear(a: AdvGear, b: AdvGear): number {
  *  (`compareAdvGear`) — le patron du vivier (`groupByGrade`). Un groupe vide n'apparaît pas. */
 export function groupGearByGrade(
   gear: readonly AdvGear[],
-): { grade: PullGrade; gear: AdvGear[] }[] {
-  const out: { grade: PullGrade; gear: AdvGear[] }[] = [];
+): { grade: GearGrade; gear: AdvGear[] }[] {
+  const out: { grade: GearGrade; gear: AdvGear[] }[] = [];
   for (const grade of ['S', 'A', 'B'] as const) {
     // ⚠️ Une pièce SANS lettre (enregistrée avant la v0.1001) se lit en B, comme partout :
     // sans ce repli elle DISPARAÎTRAIT du stock, qui l'annonce pourtant dans son compte.

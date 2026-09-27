@@ -11,12 +11,13 @@ import {
   type AdvRole,
 } from '@/lib/adventurers';
 
-/** Signatures attendues par lettre (refonte S/A) : A 1-2, S 2-3. */
-const SIG_PAR_LETTRE = { A: [1, 2], S: [2, 3] } as const;
+/** Signatures attendues par lettre : A 1-2, S 2-3, X (ADAMANTIUM) 3. */
+const SIG_PAR_LETTRE = { A: [1, 2], S: [2, 3], X: [3, 3] } as const;
 
 describe('la grille du roster', () => {
-  it('32 champions, 16 S et 16 A — chaque rôle quatre fois dans chaque lettre', () => {
-    expect(CHAMPIONS).toHaveLength(32);
+  it('34 champions : 16 S et 16 A (chaque rôle quatre fois), 2 ADAMANTIUM', () => {
+    expect(CHAMPIONS).toHaveLength(34);
+    expect(championsOf('X')).toHaveLength(2);
     for (const g of ['S', 'A'] as const) {
       const pool = championsOf(g);
       expect(pool, g).toHaveLength(16);
@@ -31,8 +32,8 @@ describe('la grille du roster', () => {
     expect(CHAMPION_BY_ID.size).toBe(CHAMPIONS.length);
   });
 
-  it('le nombre de SIGNATURES suit la lettre (A 1-2, S 2-3)', () => {
-    for (const g of ['S', 'A'] as const) {
+  it('le nombre de SIGNATURES suit la lettre (A 1-2, S 2-3, X 3)', () => {
+    for (const g of ['X', 'S', 'A'] as const) {
       const [min, max] = SIG_PAR_LETTRE[g];
       expect(championsOf(g).length, g).toBeGreaterThan(0);
       for (const c of championsOf(g)) {
@@ -139,12 +140,21 @@ describe('✨ l’Éveil', () => {
       expect(c.awaken.length, c.name).toBeGreaterThanOrEqual(1);
       expect(c.awaken.length, c.name).toBeLessThanOrEqual(2);
       for (const a of c.awaken) {
-        expect(a.at, c.name).toBeGreaterThanOrEqual(1);
+        // ⚠️ `at: 0` = une compétence de niveau 2 DÈS LE TIRAGE — réservé à l'ADAMANTIUM.
+        expect(a.at, c.name).toBeGreaterThanOrEqual(c.grade === 'X' ? 0 : 1);
         expect(a.at, c.name).toBeLessThanOrEqual(AWAKEN.max);
       }
       // Deux crans ne tombent jamais au même rang.
       expect(new Set(c.awaken.map((a) => a.at)).size, c.name).toBe(c.awaken.length);
     }
+  });
+
+  it('🖤 CHAQUE ADAMANTIUM A UNE COMPÉTENCE DE NIVEAU 2 DÈS LE TIRAGE', () => {
+    for (const c of championsOf('X'))
+      expect(Math.max(...c.skills.map((s) => championSkillLevel(c, s, 0))), c.name).toBe(2);
+    // …et ce privilège ne fuit pas vers les autres lettres.
+    for (const c of CHAMPIONS.filter((x) => x.grade !== 'X'))
+      for (const s of c.skills) expect(championSkillLevel(c, s, 0), c.name).toBe(1);
   });
 
   it('un cran écrit MONTE le niveau de sa signature, et seulement à partir de son rang', () => {

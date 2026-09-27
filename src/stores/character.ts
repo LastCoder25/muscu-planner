@@ -464,6 +464,7 @@ export const useCharacterStore = defineStore('character', () => {
     r.gacha = {
       sinceTop: Math.max(0, Math.floor(Number(g.sinceTop) || 0)),
       sinceFloor: Math.max(0, Math.floor(Number(g.sinceFloor) || 0)),
+      sinceApex: Math.max(0, Math.floor(Number(g.sinceApex) || 0)),
       pulls: Math.max(0, Math.floor(Number(g.pulls) || 0)),
       ...(g.v ? { v: Math.floor(Number(g.v)) } : {}),
       // 🎟️ ⚠️ LA MARQUE DES TICKETS DE BIENVENUE DOIT SURVIVRE À LA RELECTURE : sans cette
@@ -754,7 +755,7 @@ export const useCharacterStore = defineStore('character', () => {
         mana: cur.mana + mana,
         // Le RESET remet le pity à zéro — mais il ne perd pas ce qui n'est pas du pity
         // (la marque de bienvenue), sans quoi il rouvrirait la même boucle.
-        gacha: nextGacha(cur.gacha, { sinceTop: 0, sinceFloor: 0 }, 0),
+        gacha: nextGacha(cur.gacha, { sinceTop: 0, sinceFloor: 0, sinceApex: 0 }, 0),
       });
     } catch {
       return;

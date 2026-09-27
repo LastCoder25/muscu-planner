@@ -28,6 +28,7 @@ import {
   zoneSpins,
   zoneDirection,
   OMEN_STRENGTH,
+  DUST,
   type LotItem,
   type RevealCell,
   type RevealPlan,
@@ -37,14 +38,16 @@ import { mulberry32 } from '@/lib/combat';
 
 const champS = CHAMPIONS.find((c) => c.grade === 'S')!;
 const champA = CHAMPIONS.find((c) => c.grade === 'A')!;
+const champX = CHAMPIONS.find((c) => c.grade === 'X')!;
 const S = cellOfChampion(champS);
 const A = cellOfChampion(champA);
+const X = cellOfChampion(champX);
 const B: RevealCell = { grade: 'B', emoji: '🗡️', name: 'Épée', championId: null };
-const CELL: Record<PullGrade, RevealCell> = { B, A, S };
+const CELL: Record<PullGrade, RevealCell> = { B, A, S, X };
 
 const it0 = (g: PullGrade, extra: Partial<LotItem> = {}): LotItem => ({
   grade: g,
-  champion: g === 'S' ? champS : g === 'A' ? champA : null,
+  champion: g === 'X' ? champX : g === 'S' ? champS : g === 'A' ? champA : null,
   gear: g === 'B' ? { name: 'Épée', emoji: '🗡️' } : null,
   duplicate: false,
   copies: g === 'B' ? 0 : 1,
@@ -311,22 +314,22 @@ describe('🎨 LES COULEURS DU CERCLE — B partout, A sur les médaillons, S su
       mulberry32(3),
     );
   it('sans plan, tout reste B : on ne sait encore rien', () => {
-    expect(sigilTints(null)).toEqual({ medals: 'B', beads: 'B' });
+    expect(sigilTints(null)).toEqual({ medals: 'B', beads: 'B', nodes: 'B', apex: false });
   });
   it('un tirage sans A ni S laisse le cercle entièrement B', () => {
-    expect(sigilTints(lot(Array(10).fill('B')))).toEqual({ medals: 'B', beads: 'B' });
-    expect(sigilTints(buildReveal(B, mulberry32(1)))).toEqual({ medals: 'B', beads: 'B' });
+    expect(sigilTints(lot(Array(10).fill('B')))).toEqual({ medals: 'B', beads: 'B', nodes: 'B', apex: false });
+    expect(sigilTints(buildReveal(B, mulberry32(1)))).toEqual({ medals: 'B', beads: 'B', nodes: 'B', apex: false });
   });
   it('un A colore les médaillons, un S les boules intérieures — indépendamment', () => {
-    expect(sigilTints(buildReveal(A, mulberry32(1)))).toEqual({ medals: 'A', beads: 'B' });
-    expect(sigilTints(buildReveal(S, mulberry32(1)))).toEqual({ medals: 'B', beads: 'S' });
+    expect(sigilTints(buildReveal(A, mulberry32(1)))).toEqual({ medals: 'A', beads: 'B', nodes: 'B', apex: false });
+    expect(sigilTints(buildReveal(S, mulberry32(1)))).toEqual({ medals: 'B', beads: 'S', nodes: 'B', apex: false });
     const both: PullGrade[] = ['B', 'A', 'B', 'B', 'S', 'B', 'B', 'B', 'B', 'B'];
-    expect(sigilTints(lot(both))).toEqual({ medals: 'A', beads: 'S' });
+    expect(sigilTints(lot(both))).toEqual({ medals: 'A', beads: 'S', nodes: 'B', apex: false });
   });
   it('lu sur la VRAIE lettre, jamais sur le présage : un S masqué colore quand même', () => {
     for (let s = 1; s <= 200; s++) {
       const p = buildReveal(S, mulberry32(s));
-      expect(sigilTints(p)).toEqual({ medals: 'B', beads: 'S' });
+      expect(sigilTints(p)).toEqual({ medals: 'B', beads: 'S', nodes: 'B', apex: false });
     }
   });
 });
@@ -377,5 +380,71 @@ describe('🌊 la vague de couleur du ×1', () => {
     expect(s.band).toEqual([0, 1]);
     expect(s.fronts).toEqual([]);
     expect(inWave(0, s.band) && inWave(1, s.band)).toBe(true);
+  });
+});
+
+describe('🖤 ADAMANTIUM — la cérémonie la plus haute', () => {
+  it('le présage reste honnête : il finit sur ADAMANTIUM, ne descend jamais, et part MASQUÉ', () => {
+    for (let s = 1; s <= 400; s++) {
+      const p = buildReveal(X, mulberry32(s));
+      honest(p, ['X']);
+      // ⚠️ Jamais annoncé d'emblée : il part au plus au MYTHRIL, la montée finale se voit.
+      expect(p.items[0]!.path[0]!).toBeLessThan(GRADE_RANK.X);
+    }
+  });
+  it('au ×10 aussi : chaque ADAMANTIUM part bleu et finit rouge', () => {
+    for (let s = 1; s <= 200; s++) {
+      const grades: PullGrade[] = ['B', 'X', 'S', 'A', 'B', 'B', 'B', 'X', 'B', 'B'];
+      const p = buildLotReveal(grades.map((g) => it0(g)), mulberry32(s));
+      honest(p, grades);
+      p.items.forEach((it, i) => {
+        if (grades[i] === 'X') expect(it.path[0]).toBe(0);
+      });
+    }
+  });
+  it('au ×10, l’ADAMANTIUM s’allume en DERNIER — c’est lui qu’on attend', () => {
+    const grades: PullGrade[] = ['X', 'S', 'A', 'B'];
+    const order = igniteOrder(buildLotReveal(grades.map((g) => it0(g)), mulberry32(3)));
+    expect(order[order.length - 1]).toBe(0);
+    expect(lotIgniteMs(3)).toBeGreaterThan(lotIgniteMs(2));
+  });
+  it('sa séquence ×1 est la plus longue, mais reste bornée', () => {
+    const franc = (c: RevealCell, r: number): RevealPlan => ({
+      items: [{ cell: { ...c, name: 'Nom' }, path: [r] }],
+      reduced: false,
+    });
+    expect(singleSequenceMs(franc(X, 3))).toBeGreaterThan(singleSequenceMs(franc(S, 2)));
+    for (let s = 1; s <= 200; s++)
+      expect(singleSequenceMs(buildReveal(X, mulberry32(s)))).toBeLessThan(12_000);
+  });
+  it('le présage de scène le plus fort, et le cercle passe au noir', () => {
+    expect(OMEN_STRENGTH.X).toBeGreaterThan(OMEN_STRENGTH.S);
+    expect(omenOf(buildReveal(X, mulberry32(1)))!.grade).toBe('X');
+    expect(sigilTints(buildReveal(X, mulberry32(1)))).toEqual({
+      medals: 'B',
+      beads: 'B',
+      nodes: 'X',
+      apex: true,
+    });
+    expect(sigilTints(buildReveal(S, mulberry32(1))).apex).toBe(false);
+  });
+  it('les TROIS couleurs se voient ensemble : A, S et X ont chacun leur famille', () => {
+    const all: PullGrade[] = ['B', 'A', 'B', 'S', 'B', 'X', 'B', 'B', 'B', 'B'];
+    const plan = buildLotReveal(
+      all.map((g) => it0(g)),
+      mulberry32(3),
+    );
+    expect(sigilTints(plan)).toEqual({ medals: 'A', beads: 'S', nodes: 'X', apex: true });
+  });
+  it('sa poussière l’emporte sur celle du MYTHRIL sur TOUS les axes', () => {
+    const [x, s] = [DUST.X, DUST.S];
+    expect(x.rate).toBeGreaterThan(s.rate);
+    expect(x.life[0]).toBeGreaterThan(s.life[0]);
+    expect(x.life[1]).toBeGreaterThan(s.life[1]);
+    expect(x.size[0]).toBeGreaterThan(s.size[0]);
+    expect(x.size[1]).toBeGreaterThan(s.size[1]);
+    expect(x.stars).toBeGreaterThan(s.stars);
+    expect(x.twinkle).toBeGreaterThan(s.twinkle);
+    expect(x.flares).toBeGreaterThan(s.flares);
   });
 });

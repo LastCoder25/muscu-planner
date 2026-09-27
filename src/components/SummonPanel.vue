@@ -102,6 +102,11 @@
             garanti dans <b>{{ odds.nextTopIn }}</b
             >.
           </p>
+          <p class="go-note">
+            🖤 {{ GRADE_LABEL.X }} : garanti dans <b>{{ odds.nextApexIn }}</b> tirage{{
+              odds.nextApexIn > 1 ? 's' : ''
+            }}.
+          </p>
         </div>
       </template>
     </q-card>
@@ -122,7 +127,7 @@ import {
   type RevealPlan,
   type LotItem,
 } from '@/lib/gachaReveal';
-import { GACHA, gachaOdds, multiPullCost } from '@/lib/gacha';
+import { GACHA, emptyPity, gachaOdds, multiPullCost } from '@/lib/gacha';
 import { pullPayment } from '@/lib/sportTickets';
 import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 
@@ -164,7 +169,7 @@ const pulls = computed(() => Math.floor(mana.value / pullCost));
 /** 📊 Les chances, avec l'état RÉEL du pity : un panneau qui annoncerait des taux nus
  *  mentirait par omission — c'est la garantie qui explique ce qu'on tire. */
 const oddsOpen = ref(false);
-const odds = computed(() => gachaOdds(char.row?.gacha ?? { sinceTop: 0, sinceFloor: 0 }));
+const odds = computed(() => gachaOdds(char.row?.gacha ?? emptyPity()));
 /** Un taux à la française, décimale seulement si elle dit quelque chose. */
 const fmtOdds = (pct: number) =>
   (Math.round(pct * 10) / 10).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
