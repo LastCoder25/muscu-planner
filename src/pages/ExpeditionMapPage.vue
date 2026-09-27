@@ -2450,7 +2450,7 @@ onUnmounted(() => {
   scrollbar-width: none;
 }
 /* Des voyages en cours : la carte laisse la place à leurs DEUX premières lignes en bas
-   de l'écran (en-tête ~60 px, filtres repliés ~48 (v0.1239 ; dépliés ils poussent les voyages, le temps de régler), disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
+   de l'écran (en-tête ~60 px, filtres repliés ~48 (v0.1240 ; dépliés ils poussent les voyages, le temps de régler), disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
    haute qu'avant (62vh). */
 .map-scroll.with-trips {
   height: min(62vh, calc(100vh - 320px));

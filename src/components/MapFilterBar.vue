@@ -1,5 +1,5 @@
 <!--
-  🎚️🗺️ LES FILTRES DE LA CARTE D'EXPÉDITION — une tuile REPLIABLE (v0.1239 ; demandé :
+  🎚️🗺️ LES FILTRES DE LA CARTE D'EXPÉDITION — une tuile REPLIABLE (v0.1240 ; demandé :
   « pouvoir replier les filtres et optimiser leur affichage dans la tuile »). L'état et sa
   mémorisation vivent dans `usePoiFilters` ; ce composant les MONTRE.
 
