@@ -1591,4 +1591,11 @@ describe('🐺🏚️ les plateaux de la tanière et des ruines se montent', () 
     expect(out.match(/class="find/g)?.length).toBe(3);
     expect(out).toContain('Ruines d’un héros tombé');
   }, 30_000);
+
+  it('🎯 la séance générée du Défi 360 se monte (anneaux d’XP branchés au setup)', async () => {
+    // Éprouve le SETUP : useProgress et useXpFx instanciés, imports résolus. L'animation
+    // elle-même se joue après l'enregistrement des séries — hors de portée d'un montage.
+    const { default: ComboSessionPage } = await import('@/pages/ComboSessionPage.vue');
+    expect(await mountIt(ComboSessionPage, {})).toBeNull();
+  }, 30_000);
 });

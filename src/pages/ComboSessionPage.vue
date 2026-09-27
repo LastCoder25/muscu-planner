@@ -226,7 +226,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { backOr, backOrReplace } from '@/lib/nav';
 import { useQuasar } from 'quasar';
@@ -249,8 +249,12 @@ import { logicalToday } from '@/lib/challenges';
 import { repRangeLabel, prescribedReps } from '@/lib/repScheme';
 import { useProfileStore } from '@/stores/profile';
 import SetLogDialog from '@/components/SetLogDialog.vue';
+import { useProgress } from '@/composables/useProgress';
+import { useXpFx } from '@/composables/useXpFx';
 
 const router = useRouter();
+const progress = useProgress();
+const xpFx = useXpFx();
 const route = useRoute();
 const $q = useQuasar();
 const combo = useComboStore();
@@ -497,6 +501,36 @@ function toggleExoTimer(i: number) {
 }
 
 // Enregistre au défi toutes les séries validées localement (à la fin / au choix).
+// Enregistre les séries PUIS joue les anneaux d'XP (Muscu + Global), comme une séance
+// live : le Défi 360 remplit la piste Muscu, sa fin de séance doit le montrer. addSet est
+// optimiste (le store change tout de suite), donc l'« après » se lit au tick suivant.
+// Sans données de fond chargées, l'« avant » serait faux : on se tait plutôt que de mentir.
+async function commitWithXpFx() {
+  const ok = progress.ready.value;
+  const beforeM = progress.muscu.value;
+  const beforeG = progress.global.value;
+  commitLogged();
+  if (!ok) return;
+  await nextTick();
+  xpFx.show([
+    {
+      emoji: '🏋️',
+      label: 'Muscu',
+      fromLevel: beforeM.level,
+      fromPct: beforeM.progressPct,
+      toLevel: progress.muscu.value.level,
+      toPct: progress.muscu.value.progressPct,
+    },
+    {
+      emoji: '🌍',
+      label: 'Global',
+      fromLevel: beforeG.level,
+      fromPct: beforeG.progressPct,
+      toLevel: progress.global.value.level,
+      toPct: progress.global.value.progressPct,
+    },
+  ]);
+}
 function commitLogged() {
   const today = logicalToday();
   const entries = Object.entries(logged.value) as [
@@ -511,7 +545,7 @@ function commitLogged() {
 }
 function finish() {
   const n = validatedCount.value;
-  if (n > 0) commitLogged();
+  if (n > 0) void commitWithXpFx();
   $q.notify({ type: 'positive', message: `Séance terminée · ${n} série${n > 1 ? 's' : ''}` });
   backOrReplace(router, `/combo/${id}`);
 }
@@ -528,7 +562,7 @@ function cancel() {
     cancel: { label: 'Jeter', flat: true, color: 'negative' },
   })
     .onOk(() => {
-      commitLogged();
+      void commitWithXpFx();
       $q.notify({
         type: 'positive',
         message: `${n} série${n > 1 ? 's' : ''} conservée${n > 1 ? 's' : ''}`,
