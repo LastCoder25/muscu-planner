@@ -23,7 +23,7 @@
       <span v-if="isRiftPoi(t.poi)" class="tr-poi tr-rift">
         <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
       </span>
-      <span v-else class="tr-poi">{{ POI_EMO[t.poi.type] }}</span>
+      <span v-else class="tr-poi">{{ poiEmo(t.poi) }}</span>
       <span class="tr-time">{{ t.time }}</span>
       <i class="tr-bar" :style="{ width: t.pct + '%' }" />
     </button>
@@ -31,9 +31,7 @@
 
   <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
   <div v-if="crew" class="trip-crew">
-    <div class="tc-head">
-      👥 En route vers {{ POI_LABEL[crew.poi.type] }} niv {{ crew.poi.level }}
-    </div>
+    <div class="tc-head">👥 En route vers {{ poiLabel(crew.poi) }} niv {{ crew.poi.level }}</div>
     <div v-if="crew.haul.length" class="tc-haul">
       <span class="tc-haul-lab">Ramène</span>
       <span v-for="p in crew.haul" :key="p.emoji" class="tc-pill">{{ p.emoji }} {{ p.n }}</span>
@@ -41,7 +39,11 @@
     <div class="tc-pick">
       <div v-if="crew.hero" class="tc-hero">
         <div class="tc-hero-av">
-          <AventureAvatar :profile="heroProfile" :equipped="char.row?.equipped ?? {}" no-companions />
+          <AventureAvatar
+            :profile="heroProfile"
+            :equipped="char.row?.equipped ?? {}"
+            no-companions
+          />
         </div>
         <b>Ton héros</b>
       </div>
@@ -80,7 +82,7 @@ import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { useCharacterStore } from '@/stores/character';
-import { POI_EMO, POI_LABEL, isRiftPoi } from '@/lib/expedition';
+import { isRiftPoi, poiEmo, poiLabel } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import type { CharacterProfile } from '@/lib/character';

@@ -72,7 +72,7 @@ export type PoiType =
   | 'control';
 
 /** 🏰 Ce que produit un point de contrôle tenu. Étape 1 : la mine d'or. */
-export type ControlKind = 'mine';
+export type ControlKind = 'mine' | 'training' | 'garden' | 'tower';
 /** 🏰 Une garnison : 1 à 3 champions (décision de l'utilisateur). */
 export const CONTROL_MAX_GARRISON = 3;
 /**
@@ -129,7 +129,7 @@ export const POI_LABEL: Record<PoiType, string> = {
   fallen: 'Ruines d’un héros tombé',
   den: 'Tanière',
   plunder: 'Caravane pillée',
-  control: 'Mine fortifiée',
+  control: 'Point de contrôle',
 };
 
 /** Emoji d'un point d'intérêt — la carte et le rapport de convoi lisent la MÊME table
@@ -152,6 +152,30 @@ export const POI_EMO: Record<PoiType, string> = {
   plunder: '🏴‍☠️',
   control: '🏰',
 };
+
+/** 🏰 Nom et emoji d'un point de contrôle selon ce qu'il est. ⚠️ ICI et non dans
+ *  `controlPoints.ts` : ce module-là importe celui-ci, et le nom d'un lieu (`poiLabel`)
+ *  sert à la carte, à la fiche et aux rapports. */
+export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
+  mine: 'Mine fortifiée',
+  training: 'Camp d’entraînement',
+  garden: 'Jardin d’herboriste',
+  tower: 'Tour de guet',
+};
+export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
+  mine: '⛏️',
+  training: '🎯',
+  garden: '🌿',
+  tower: '🗼',
+};
+/** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
+export function poiLabel(p: Pick<Poi, 'type' | 'control'>): string {
+  return p.control ? CONTROL_KIND_LABEL[p.control.kind] : POI_LABEL[p.type];
+}
+/** L'emoji d'un lieu (idem). */
+export function poiEmo(p: Pick<Poi, 'type' | 'control'>): string {
+  return p.control ? CONTROL_KIND_EMO[p.control.kind] : POI_EMO[p.type];
+}
 
 /** POI de récolte : on ramasse et on rentre (comme la mine) — gardé depuis 2026-09-22 (`harvestGuardOf`). */
 export const HARVEST_TYPES: ReadonlySet<PoiType> = new Set<PoiType>([
@@ -793,6 +817,8 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
   return {
     id: `msg_${exp.poi.id}_${exp.sentAt}`,
     poiType: exp.poi.type,
+    // 🏰 Un point de contrôle a son nom propre (mine, camp, jardin, tour).
+    ...(exp.poi.control ? { title: poiLabel(exp.poi) } : {}),
     ...(exp.poi.setId ? { setId: exp.poi.setId } : {}),
     level: exp.poi.level,
     win: o.win,

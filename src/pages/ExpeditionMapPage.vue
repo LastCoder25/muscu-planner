@@ -325,21 +325,23 @@
           <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
           <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
-            ⚠️ <b>Sans défense</b> : elle ne produit plus, et l’ennemi la reprendra à sa prochaine
+            ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
             attaque — sauf si un renfort arrive avant.
           </p>
-          <p class="ctl-line">
-            ⛏️ <b>{{ controlRate.toLocaleString('fr-FR') }}</b> 🪙/h · réserve
-            <b>{{ controlGold.toLocaleString('fr-FR') }}</b> 🪙
-            <span class="ctl-dim">(24 h au plus)</span>
-          </p>
+          <p class="ctl-line">{{ controlProd }}</p>
+          <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
           <p v-if="controlAttackIn > 0" class="ctl-line ctl-warn">
             ⚔️ L’ennemi reviendra dans <b>{{ formatDuration(controlAttackIn) }}</b> — force inconnue
             : ta garnison ne gagnera pas toujours.
           </p>
           <div class="send-bar">
-            <button class="sh-send" :disabled="controlGold <= 0 || ctlBusy" @click="collectCtl">
-              Récolter {{ controlGold.toLocaleString('fr-FR') }} 🪙
+            <button
+              v-if="liveControl.kind !== 'tower'"
+              class="sh-send"
+              :disabled="!controlReady || ctlBusy"
+              @click="collectCtl"
+            >
+              {{ controlCollectLabel }}
             </button>
           </div>
           <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
@@ -383,11 +385,12 @@
             Rappeler toute la garnison
           </button>
         </div>
-        <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur cette mine.</p>
+        <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur ce lieu.</p>
         <p v-else-if="liveControl" class="sh-note">
-          🏰 Prends-la avec 1 à 3 champions, sans le héros : ils y resteront en garnison et la
-          feront produire, jusqu’à ce que l’ennemi la reprenne (entre 1 et 3 jours). Chaque ennemi
-          abattu, à la prise comme en défense, leur rapporte de l’XP.
+          🏰 Prends-le avec 1 à 3 champions, sans le héros : ils y resteront en garnison ({{
+            CONTROL_YIELD[liveControl.kind]
+          }}), jusqu’à ce que l’ennemi le reprenne (entre 1 et 3 jours). Chaque ennemi abattu, à la
+          prise comme en défense, leur rapporte de l’XP.
         </p>
         <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
              se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
@@ -708,7 +711,19 @@ import {
   sortByGradeThenRank,
 } from '@/lib/adventurers';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
-import { CONTROL, controlFreeSeats, controlGoldPerHour, controlStock } from '@/lib/controlPoints';
+import {
+  CONTROL,
+  CONTROL_YIELD,
+  controlFreeSeats,
+  controlGoldPerHour,
+  controlStock,
+  controlTravelMult,
+  gardenStock,
+  trainingCapLevel,
+  trainingStock,
+  trainingXpPerHour,
+} from '@/lib/controlPoints';
+import { characterRank } from '@/lib/characterRank';
 import { advGearRoles } from '@/lib/advGear';
 import {
   RIFT,
@@ -1297,6 +1312,44 @@ async function reinforceCtl() {
     ctlBusy.value = false;
   }
 }
+/** 🏰 Ce que le point produit, en une ligne, selon ce qu'il est. */
+const controlProd = computed(() => {
+  const p = livePoi.value;
+  const c = liveControl.value;
+  if (!p || !c) return '';
+  switch (c.kind) {
+    case 'mine':
+      return `⛏️ ${controlRate.value.toLocaleString('fr-FR')} 🪙/h · réserve ${controlGold.value.toLocaleString('fr-FR')} 🪙 (24 h au plus)`;
+    case 'training':
+      return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion · en attente ${trainingStock(p, now.value)} XP chacun`;
+    case 'garden':
+      return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${Math.round(CONTROL.gardenHoursPerItem / (CONTROL.garrisonShare[c.garrison.length] || 1))} h`;
+    case 'tower':
+      return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
+  }
+});
+/** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
+const controlNote = computed(() => {
+  if (liveControl.value?.kind !== 'training') return '';
+  const cap = trainingCapLevel(heroLevel.value);
+  if (!cap)
+    return '⚠️ Ton héros est Bronze : le camp n’entraîne que sous ton rang — monte d’abord.';
+  const r = characterRank(cap);
+  return `Plafond : ${r.emoji} ${r.name} ★5 (le rang juste sous le tien).`;
+});
+const controlReady = computed(() => {
+  const p = livePoi.value;
+  if (!p) return false;
+  return controlGold.value > 0 || trainingStock(p, now.value) > 0 || gardenStock(p, now.value) > 0;
+});
+const controlCollectLabel = computed(() => {
+  const p = livePoi.value;
+  const k = liveControl.value?.kind;
+  if (!p || !k) return '';
+  if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
+  if (k === 'training') return `Faire progresser (${trainingStock(p, now.value)} XP chacun)`;
+  return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
+});
 const controlRate = computed(() =>
   livePoi.value && liveControl.value
     ? Math.round(
@@ -1315,7 +1368,7 @@ async function collectCtl() {
   if (!uid || !p || ctlBusy.value) return;
   ctlBusy.value = true;
   try {
-    await char.collectControlGold(uid, p.id, Date.now(), heroLevel.value);
+    await char.collectControlPoint(uid, p.id, Date.now(), heroLevel.value);
   } finally {
     ctlBusy.value = false;
   }
@@ -1773,7 +1826,10 @@ const travelTargets = stableBy(
 
 // Avant-poste : débloque les expéditions + réduit les trajets.
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
-const travelMult = computed(() => travelTimeMult(char.row?.buildings ?? []));
+// 🗼 Les tours de guet tenues raccourcissent les trajets APRÈS l'Avant-poste.
+const travelMult = computed(
+  () => travelTimeMult(char.row?.buildings ?? []) * controlTravelMult(char.row?.expedition_map),
+);
 const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
 /** Ce qu’un lieu rapporte, en quelques mots, sur la ligne sous son nom (le détail chiffré
@@ -1801,7 +1857,11 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   den: () => 'beaucoup d’XP · consommables 🎒',
   plunder: () => 'beaucoup d’or 🪙',
   control: (p) =>
-    p.control?.owner === 'player' ? 'or 🪙 tant que tu la tiens' : 'à prendre · or 🪙 en continu',
+    p.control
+      ? p.control.owner === 'player'
+        ? `${CONTROL_YIELD[p.control.kind]} tant que tu le tiens`
+        : `à prendre · ${CONTROL_YIELD[p.control.kind]}`
+      : '',
 };
 /** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */
 const poiSub = computed(() => {

@@ -8,12 +8,12 @@
       <span v-if="isRiftPoi(poi)" class="pc-emo pc-rift">
         <RiftPortal :color="rank.color" :seed="seedOf(poi.id)" />
       </span>
-      <span v-else class="pc-emo">{{ POI_EMO[poi.type] }}</span>
+      <span v-else class="pc-emo">{{ poiEmo(poi) }}</span>
       <div class="pc-main">
         <!-- 🏅 LE RANG À CÔTÉ DU NOM : la boule de la carte dit déjà la couleur, la fiche
              dit le rang en toutes lettres, étoiles comprises (`poiRank`). -->
         <div class="pc-title font-display">
-          {{ POI_LABEL[poi.type] }}
+          {{ poiLabel(poi) }}
         </div>
         <!-- 📐 SOUS LE NOM, EN UNE LIGNE (demandé) : QUI on affronte, COMBIEN, à quel niveau,
              et CE QU'ON Y GAGNE — plutôt que des pastilles « Faction », « Ennemis » et un
@@ -31,8 +31,7 @@
                 ? 'Rang de la faille — fixé à son apparition, il ne monte pas avec l’âge'
                 : 'Difficulté du lieu — le niveau de ses ennemis ET leur nombre réunis'
             "
-            >{{ rank.emoji }} {{ rank.name }}
-            {{ rankStarStr(rank.star) }}</span
+            >{{ rank.emoji }} {{ rank.name }} {{ rankStarStr(rank.star) }}</span
           >
         </div>
       </div>
@@ -40,13 +39,7 @@
     </div>
 
     <div class="pc-grid">
-      <span
-        v-for="f in factsInfo"
-        :key="f.label"
-        class="pc-fact"
-        :class="f.cls"
-        :title="f.title"
-      >
+      <span v-for="f in factsInfo" :key="f.label" class="pc-fact" :class="f.cls" :title="f.title">
         <span class="pc-fact-lab">{{ f.icon }} {{ f.label }}</span>
         <span class="pc-fact-val">{{ f.value }}</span>
       </span>
@@ -55,13 +48,7 @@
          compare d'un lieu à l'autre, ils ne doivent pas se séparer au gré du retour à la
          ligne des autres pastilles. Libellés courts pour tenir côte à côte à 344 px. -->
     <div v-if="factsGo.length" class="pc-go">
-      <span
-        v-for="f in factsGo"
-        :key="f.label"
-        class="pc-fact"
-        :class="f.cls"
-        :title="f.title"
-      >
+      <span v-for="f in factsGo" :key="f.label" class="pc-fact" :class="f.cls" :title="f.title">
         <span class="pc-fact-lab">{{ f.icon }} {{ f.label }}</span>
         <span class="pc-fact-val">{{ f.value }}</span>
       </span>
@@ -71,9 +58,7 @@
          subit, on choisit ailleurs. L'embuscade d'une faille (v0.1009) se PRÉVIENT —
          refermer ses failles avant 7 jours — puis s'attend : elle dure deux jours. -->
     <div v-if="poi.riftPeril" class="pc-alert">
-      🕳️ Monstres embusqués, sortis d'une faille — embuscades doublées<template
-        v-if="ambushLeft"
-      >
+      🕳️ Monstres embusqués, sortis d'une faille — embuscades doublées<template v-if="ambushLeft">
         encore {{ formatDuration(ambushLeft) }}</template
       >
     </div>
@@ -85,18 +70,16 @@
     <details v-if="isRift" class="pc-more">
       <summary>ⓘ Comment marche une faille</summary>
       <p class="pc-note">
-        Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros.
-        Les monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille
-        ajoute la prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie.
-        Laissée mûrir, elle déborde : une partie de ses monstres s’embusque deux jours autour
-        d’elle, le reste marche sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
+        Y entrer est gratuit — ni mana ni énergie : ce qu’on paie, c’est le temps du héros. Les
+        monstres abattus rendent du 💠 même si l’incursion échoue ; refermer la faille ajoute la
+        prime du gardien. En cas de défaite, tout le groupe part à l’infirmerie. Laissée mûrir, elle
+        déborde : une partie de ses monstres s’embusque deux jours autour d’elle, le reste marche
+        sur ta base, et il ne reste qu’une petite 💠 mine résiduelle.
       </p>
     </details>
     <!-- 🧿 LE SCEAU DE BRÈCHE se pose ICI, sur la faille — il n'accompagne aucun voyage. -->
     <template v-if="isRift">
-      <p v-if="poi.sealed" class="pc-note">
-        🧿 Scellée : cette faille a déjà reçu son répit.
-      </p>
+      <p v-if="poi.sealed" class="pc-note">🧿 Scellée : cette faille a déjà reçu son répit.</p>
       <button
         v-else-if="sealStock > 0"
         type="button"
@@ -111,14 +94,13 @@
          n'en évite plus aucune (renfort figé au tirage de l'armée, `Raid.overflow`). -->
     <template v-if="warband">
       <p v-if="warband.utile" class="pc-note">
-        ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points
-        de tenue. Le 💠 n'est qu'un lot de consolation. En cas de défaite, tout le groupe part
-        à l'infirmerie.
+        ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points de
+        tenue. Le 💠 n'est qu'un lot de consolation. En cas de défaite, tout le groupe part à
+        l'infirmerie.
       </p>
       <p v-else class="pc-note warn">
-        ⚠️ <b>Trop tard pour le renfort</b> : leur armée est déjà annoncée à tes portes et
-        garde la force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du
-        💠.
+        ⚠️ <b>Trop tard pour le renfort</b> : leur armée est déjà annoncée à tes portes et garde la
+        force que la Tour de guet a montrée. L'intercepter ne rapportera plus que du 💠.
       </p>
     </template>
   </div>
@@ -128,7 +110,7 @@
 import { computed } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { seedOf } from '@/lib/combat';
-import { POI_EMO, POI_LABEL, isRiftPoi, type Poi } from '@/lib/expedition';
+import { isRiftPoi, poiEmo, poiLabel, type Poi } from '@/lib/expedition';
 import { rankStarStr } from '@/lib/characterRank';
 import { formatDuration } from '@/lib/duration';
 import type { PoiFact } from '@/lib/poiFacts';
