@@ -738,6 +738,13 @@ export const EXPE = {
   riftSpawnMinMs: 8 * 3600_000,
   riftSpawnJitterMs: 8 * 3600_000,
   perilousChance: 0.18, // ~1 POI sur 5 signalé « route dangereuse » avant l'envoi
+  /** ⚔️ PAS DE LA MARCHE d'une bande enregistrée sur la carte (v0.1194, mesuré). Recalculée
+   *  à la milliseconde, sa position changeait à CHAQUE tick : la carte était réécrite en base
+   *  toutes les secondes pendant ses 24 h de marche (600 écritures sur 600 s, contre 0 sans
+   *  bande). Par pas de 5 min elle avance d'~0,2 unité sur une carte de 200 — invisible —
+   *  et la carte n'est réécrite que 288 fois par jour. ⚠️ L'INTERCEPTION n'en dépend pas :
+   *  `interceptLeg` et le tracé du choc relisent `warbandAt` à l'instant exact. */
+  warbandStepMs: 5 * 60_000,
   // ⚠️ L'écart mini doit SUIVRE la densité. À 20 POI dans la couronne (rayon 18→64), un
   // écart de 20 occuperait 53 % de la surface : le placement aléatoire échouerait ses
   // 6 essais et les POI se poseraient les uns sur les autres. À 14, on retombe à 26 %.
@@ -1815,7 +1822,7 @@ export function advanceWorld(
   // court — mais il reste moins de temps pour le faire.
   next.pois = next.pois.map((p) => {
     if (p.type !== 'warband' || !p.from) return p;
-    const at = warbandAt(p, now);
+    const at = warbandAt(p, Math.floor(now / EXPE.warbandStepMs) * EXPE.warbandStepMs);
     return at.x === p.x && at.y === p.y ? p : at;
   });
   const irr = irradiatedPoiIds(next.pois, next.ambushes, now);

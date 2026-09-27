@@ -6,6 +6,7 @@ import {
   isWarbandPoi,
   PARTY_TARGETS,
   POI_LABEL,
+  warbandAt,
   type ExpeditionMap,
   type Poi,
 } from '@/lib/expedition';
@@ -125,6 +126,25 @@ describe('elle MARCHE vers la ville', () => {
     const haute = { ...bandeDe(carte([rift('r', 0, 40)]), dep + 1), level: 90 };
     const m = advanceWorld(carte([haute]), dep + EXPE.lifespanMs.warband - H, 5, OUT);
     expect(m.pois.filter(isWarbandPoi)).toHaveLength(1);
+  });
+
+  it('⚠️ LA CARTE NE CHANGE PAS À CHAQUE SECONDE pendant la marche (v0.1194)', () => {
+    // La carte est réécrite en base dès qu'elle diffère de la précédente (`expeSyncMap`
+    // compare par JSON). Recalculée à la milliseconde, la bande la faisait différer à
+    // CHAQUE tick : mesuré, 600 écritures sur 600 s pendant 24 h de marche.
+    const w = bandeDe(carte([rift('r', 0, 40)]), dep + 1);
+    let m = advanceWorld(carte([w]), dep + H, 20, OUT);
+    let writes = 0;
+    for (let s = 1; s <= 600; s++) {
+      const n = advanceWorld(m, dep + H + s * 1000, 20, OUT);
+      if (JSON.stringify(n) !== JSON.stringify(m)) writes++;
+      m = n;
+    }
+    expect(writes).toBeLessThanOrEqual(Math.ceil((600 * 1000) / EXPE.warbandStepMs) + 1);
+    // …et le pas reste invisible : jamais plus d'une unité de carte d'écart avec l'instant exact.
+    const stored = m.pois.find(isWarbandPoi)!;
+    const exact = warbandAt(stored, dep + H + 600_000);
+    expect(Math.hypot(exact.x - stored.x, exact.y - stored.y)).toBeLessThan(1);
   });
 
   it('elle DISPARAÎT à la fin de sa fenêtre : l’occasion est passée', () => {
