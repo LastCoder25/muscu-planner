@@ -16,25 +16,27 @@
           la semaine.
         </p>
 
-        <!-- Une carte par réglage, titre numéroté : on relit son réglage de haut en bas
-             au lieu de six blocs empilés dans une seule carte. -->
+        <!-- Une carte par réglage, titre numéroté ; les options une par ligne : en ligne,
+             sur téléphone, les tuiles tombaient à ~60-100 px et leurs libellés se coupaient. -->
         <section class="set-card">
           <div class="set-head">
             <span class="set-num">1</span>
             <span class="set-title">Ton niveau</span>
           </div>
-          <div class="opt-tiles">
+          <div class="opt-list">
             <button
               v-for="o in LEVEL_OPTS"
               :key="o.id"
               type="button"
-              class="opt-tile"
+              class="obj-tile"
               :class="{ on: level === o.id }"
               @click="level = o.id"
             >
-              <span class="ot-emo">{{ o.emoji }}</span>
-              <span class="ot-lbl">{{ o.label }}</span>
-              <span class="ot-sub">{{ o.sub }}</span>
+              <span class="obj-emo">{{ o.emoji }}</span>
+              <span class="obj-txt">
+                <span class="ot-lbl">{{ o.label }}</span>
+                <span class="ot-sub">{{ o.sub }}</span>
+              </span>
             </button>
           </div>
         </section>
@@ -44,18 +46,20 @@
             <span class="set-num">2</span>
             <span class="set-title">Zone du corps</span>
           </div>
-          <div class="opt-tiles">
+          <div class="opt-list">
             <button
               v-for="o in ZONE_OPTS"
               :key="o.id"
               type="button"
-              class="opt-tile"
+              class="obj-tile"
               :class="{ on: zone === o.id }"
               @click="zone = o.id"
             >
-              <span class="ot-emo">{{ o.emoji }}</span>
-              <span class="ot-lbl">{{ o.label }}</span>
-              <span class="ot-sub">{{ o.sub }}</span>
+              <span class="obj-emo">{{ o.emoji }}</span>
+              <span class="obj-txt">
+                <span class="ot-lbl">{{ o.label }}</span>
+                <span class="ot-sub">{{ o.sub }}</span>
+              </span>
             </button>
           </div>
           <div class="set-hint">Blessé ou envie de zapper une partie ? Choisis haut ou bas.</div>
@@ -66,9 +70,7 @@
             <span class="set-num">3</span>
             <span class="set-title">Ton objectif</span>
           </div>
-          <!-- 5 objectifs : en ligne ils tombaient à ~60 px de large sur un téléphone, les
-               libellés se coupaient en trois. Tuiles couchées, 1 colonne sur téléphone, 2 au-delà. -->
-          <div class="obj-grid">
+          <div class="opt-list">
             <button
               v-for="o in OBJ_OPTS"
               :key="o.id"
@@ -97,19 +99,22 @@
             <span class="set-num">4</span>
             <span class="set-title">Volume d'entraînement</span>
           </div>
-          <div class="opt-tiles">
+          <div class="opt-list">
             <button
               v-for="o in VOLUME_OPTS"
               :key="o.id"
               type="button"
-              class="opt-tile"
+              class="obj-tile"
               :class="{ on: volume === o.id }"
               @click="volume = o.id"
             >
-              <span class="ot-emo">{{ o.emoji }}</span>
-              <span class="ot-lbl">{{ o.label }}</span>
-              <span class="ot-num font-display">{{ volSets(o.id) }}</span>
-              <span class="ot-sub">séries</span>
+              <span class="obj-emo">{{ o.emoji }}</span>
+              <span class="obj-txt"
+                ><span class="ot-lbl">{{ o.label }}</span></span
+              >
+              <span class="obj-val"
+                ><b class="font-display">{{ volSets(o.id) }}</b> séries</span
+              >
             </button>
           </div>
 
@@ -117,20 +122,22 @@
 
           <template v-if="!isBeginner">
             <div class="set-sub">Variété d'exercices</div>
-            <div class="opt-tiles">
+            <div class="opt-list">
               <button
                 v-for="o in VARIETY_OPTS"
                 :key="o.id"
                 type="button"
-                class="opt-tile"
+                class="obj-tile"
                 :class="{ on: variety === o.id }"
                 @click="variety = o.id"
               >
-                <span class="ot-dots" aria-hidden="true">
+                <span class="obj-emo ot-dots" aria-hidden="true">
                   <i v-for="n in 3" :key="n" :class="{ lit: n <= o.n }" />
                 </span>
-                <span class="ot-lbl">{{ o.label }}</span>
-                <span class="ot-sub">{{ o.sub }}</span>
+                <span class="obj-txt">
+                  <span class="ot-lbl">{{ o.label }}</span>
+                  <span class="ot-sub">{{ o.sub }}</span>
+                </span>
               </button>
             </div>
           </template>
@@ -1022,22 +1029,18 @@ onMounted(async () => {
   color: var(--dim);
   margin-top: 8px;
 }
-.obj-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+.opt-list {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
   margin-top: 10px;
-}
-/* En 2 colonnes, le 5e objectif prend toute la largeur plutôt que de rester orphelin. */
-.obj-grid > .obj-tile:last-child:nth-child(odd) {
-  grid-column: 1 / -1;
 }
 .obj-tile {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-height: 56px;
-  padding: 8px 10px;
+  gap: 10px;
+  min-height: 52px;
+  padding: 7px 12px;
   border-radius: 12px;
   border: 2px solid var(--line-soft);
   background: var(--surface-2);
@@ -1053,11 +1056,13 @@ onMounted(async () => {
   color: var(--accent);
 }
 .obj-emo {
-  flex: 0 0 auto;
+  flex: 0 0 26px;
+  text-align: center;
   font-size: 22px;
   line-height: 1;
 }
 .obj-txt {
+  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1085,21 +1090,28 @@ onMounted(async () => {
   border-color: var(--accent);
   color: var(--accent);
 }
-.ot-num {
-  font-size: 22px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--text);
-  margin-top: 2px;
-}
-.opt-tile.on .ot-num {
-  color: var(--accent);
-}
 .ot-dots {
   display: flex;
-  gap: 4px;
-  height: 22px;
-  align-items: center;
+  gap: 3px;
+  width: 26px;
+  justify-content: center;
+}
+.obj-val {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.obj-val b {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+  margin-right: 2px;
+}
+.obj-tile.on .obj-val b {
+  color: var(--accent);
+}
+.obj-tile.on .ot-dots i.lit {
+  background: var(--accent);
 }
 .ot-dots i {
   width: 8px;
@@ -1109,9 +1121,6 @@ onMounted(async () => {
 }
 .ot-dots i.lit {
   background: var(--text);
-}
-.opt-tile.on .ot-dots i.lit {
-  background: var(--accent);
 }
 .sum-chips {
   display: flex;
