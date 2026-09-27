@@ -1937,7 +1937,12 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, { expedition: exp, expedition_map: map });
   }
   // À l'arrivée à l'objectif : dépose le rapport (une seule fois). Renvoie le message si nouveau.
-  async function expeTick(userId: string, now: number): Promise<ExpeditionMessage | null> {
+  /** ⚠️ `activeDays7` REQUIS : un point de contrôle pris AVEC le héros se règle ici. */
+  async function expeTick(
+    userId: string,
+    now: number,
+    activeDays7: number,
+  ): Promise<ExpeditionMessage | null> {
     const cur = row.value;
     const exp = cur?.expedition;
     if (!cur || !exp || now < exp.midAt || exp.reported) return null;
@@ -1946,11 +1951,20 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚔️ Une interception AVEC le héros vit ici, pas dans `partyTick` : elle ne levait
     // jamais le marquage (v0.1190).
     const dw = dispelWon(cur.base, [msg]);
+    // 🏰 Même piège pour un point de contrôle pris AVEC le héros (v0.1239) : sans cette
+    // ligne, sa garnison ne se posterait jamais.
+    const ctl = settleControlAssaults(
+      cur,
+      [msg],
+      (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+      activeDays7,
+    );
     await persist(userId, {
       ...(dw.base ? { base: dw.base } : {}),
       expedition: { ...exp, reported: true },
       messages: dw.tag(x.messages),
       ...x.patch,
+      ...(ctl ? { expedition_map: ctl.map, adventurers: ctl.adventurers } : {}),
     });
     x.play();
     return msg;
@@ -1961,7 +1975,11 @@ export const useCharacterStore = defineStore('character', () => {
    *  📬 (`expeClaim`). ⚠️ Le héros est libéré SANS condition : le bloquer jusqu'à ce qu'on
    *  vienne cliquer punirait l'absence, ce que le jeu ne fait jamais. Le butin, lui, ne se
    *  périme pas : il attend dans la boîte aussi longtemps qu'il faut. */
-  async function expeSettle(userId: string, now: number): Promise<ExpeditionMessage | null> {
+  async function expeSettle(
+    userId: string,
+    now: number,
+    activeDays7: number,
+  ): Promise<ExpeditionMessage | null> {
     const cur = row.value;
     const exp = cur?.expedition;
     if (!cur || !exp || settleClock(cur, now) < exp.returnAt) return null;
@@ -1974,12 +1992,21 @@ export const useCharacterStore = defineStore('character', () => {
     // d'escorte, pièces d'aventurier). Sinon, `depositMessages` n'ajoute que l'absent.
     const x = exp.reported ? null : reportXp(cur, boxWith(cur, [msg], MESSAGES_CAP), [msg]);
     const dw = exp.reported ? null : dispelWon(cur.base, [msg]);
+    const ctl = x
+      ? settleControlAssaults(
+          cur,
+          [msg],
+          (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+          activeDays7,
+        )
+      : null;
     await persist(userId, {
       ...(dw?.base ? { base: dw.base } : {}),
       ...(x && x.messages !== cur.messages
         ? { messages: dw ? dw.tag(x.messages) : x.messages }
         : {}),
       ...(x?.patch ?? {}),
+      ...(ctl ? { expedition_map: ctl.map, adventurers: ctl.adventurers } : {}),
       expedition: null,
     });
     x?.play();
@@ -2976,7 +3003,6 @@ export const useCharacterStore = defineStore('character', () => {
           onExpedition: !!cur.expedition,
           healMs: woundRemainingMs(cur.base, now),
           outpost: expeditionsUnlocked(cur.buildings),
-          control: poi.type === 'control',
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
@@ -3136,7 +3162,12 @@ export const useCharacterStore = defineStore('character', () => {
    *  BUTIN reste à encaisser dans la boîte 📬 (`expeClaim`), comme toute expédition.
    *  La règle vit dans `settleParties` (lib, testée). ⚠️ Une seule écriture, et seulement si
    *  quelque chose change : ce tick bat chaque seconde. Rend les messages nouvellement déposés. */
-  async function partyTick(userId: string, now: number): Promise<ExpeditionMessage[]> {
+  /** ⚠️ `activeDays7` REQUIS : il règle le délai de reprise d'un point de contrôle pris. */
+  async function partyTick(
+    userId: string,
+    now: number,
+    activeDays7: number,
+  ): Promise<ExpeditionMessage[]> {
     const cur = row.value;
     if (!cur || !partyList.value.length) return [];
     const box = boxWith(cur, [], MESSAGES_CAP);
@@ -3159,6 +3190,7 @@ export const useCharacterStore = defineStore('character', () => {
       cur,
       t.fresh,
       (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+      activeDays7,
     );
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
@@ -3183,6 +3215,7 @@ export const useCharacterStore = defineStore('character', () => {
     cur: CharacterRow,
     fresh: readonly ExpeditionMessage[],
     roster: Adventurer[],
+    activeDays7: number,
   ): { map: ExpeditionMap; adventurers: Adventurer[] } | null {
     let map = cur.expedition_map;
     if (!map) return null;
@@ -3196,7 +3229,7 @@ export const useCharacterStore = defineStore('character', () => {
         // 🏰 Ceux qu'on a choisis pour rester (sinon l'escorte), coupés aux places du point :
         // on relit la garnison POSÉE, sinon un champion en trop serait « posté » hors garnison.
         const stay = m.party!.stay?.length ? m.party!.stay : m.party!.escort;
-        map = captureControl(map, id, stay, m.resolvedAt);
+        map = captureControl(map, id, stay, m.resolvedAt, activeDays7);
         const g = new Set(map.pois.find((p) => p.id === id)?.control?.garrison ?? []);
         advs = advs.map((a) => (g.has(a.id) ? { ...a, posted: id, busyUntil: 0 } : a));
       } else map = markAssault(map, id, false);
@@ -3215,6 +3248,7 @@ export const useCharacterStore = defineStore('character', () => {
     userId: string,
     now: number,
     playerLevel: number,
+    activeDays7: number,
   ): Promise<ExpeditionMessage[]> {
     const cur = row.value;
     if (!cur?.expedition_map) return [];
@@ -3289,7 +3323,7 @@ export const useCharacterStore = defineStore('character', () => {
         ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
       };
       msgs.push(msg);
-      map = held ? holdControl(map, p.id, at) : loseControl(map, p.id, playerLevel);
+      map = held ? holdControl(map, p.id, at, activeDays7) : loseControl(map, p.id, playerLevel);
       // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
       // route (ils font demi-tour ; seule la garnison, qui a combattu, part à l'infirmerie).
       advs = advs.map((a) => (!held && a.posted === p.id ? { ...a, posted: undefined } : a));

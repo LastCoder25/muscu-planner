@@ -1015,7 +1015,7 @@ export function poiOffers(
     // (de l'or et de l'énergie pour rien, v0.926). Ce refus RESTE donc, et `resolveOutcome`
     // lève toujours : deux verrous, une ceinture et des bretelles.
     // ⚓ Une ÉPAVE est un type retiré (v0.999) : rien ne peut plus y être envoyé.
-    // 🏰 Un point de contrôle se prend EN GROUPE, sans le héros (sa garnison y reste).
+    // 🏰 Un point de contrôle se prend EN GROUPE (le héros peut en être, mais n'y reste pas).
     hero: !opts.heroAway && !isRiftPoi(poi) && poi.type !== 'wreck' && poi.type !== 'control',
     // 🚫 Plus de convoi (2026-09-21) : une ÉQUIPE part sur les lieux de récolte à sa place.
     // Le champ reste (ceux déjà en route s'encaissent), mais on n'en lance plus.
@@ -1026,12 +1026,13 @@ export function poiOffers(
     // décide à l'unique chemin d'envoi.
     party:
       PARTY_TARGETS.has(poi.type) &&
-      // 🏰 Sans le héros, donc il faut un champion et un créneau — et un point à prendre.
+      // 🏰 Il faut un point à prendre et au moins un champion pour l'occuper ; le créneau
+      // n'est exigé que sans le héros (v0.1239 : le héros peut mener l'assaut).
       (poi.type === 'control'
         ? poi.control?.owner === 'enemy' &&
           !poi.control.assault &&
           opts.advsAvailable > 0 &&
-          opts.slotsFree > 0
+          (!opts.heroAway || opts.slotsFree > 0)
         : !opts.heroAway || (opts.advsAvailable > 0 && opts.slotsFree > 0)),
   };
 }
