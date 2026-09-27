@@ -67,3 +67,17 @@ export function formatClock(sec: number): string {
   const s = Math.max(0, Math.floor(sec));
   return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : String(s);
 }
+
+/**
+ * ⏱️ Une durée SAISIE en heures + minutes, rendue en minutes (la seule unité stockée).
+ * Un champ vide compte pour 0 ; les deux vides (ou nuls) → `null`, « pas de durée », pour
+ * qu'une sortie sans durée ne s'enregistre pas avec 0 min. Les minutes au-delà de 59 sont
+ * acceptées telles quelles (95 min = 1 h 35) : on ne corrige pas ce que le joueur tape.
+ */
+export function hoursMinutesToMin(
+  h: number | null | undefined,
+  m: number | null | undefined,
+): number | null {
+  const total = Math.max(0, Number(h) || 0) * 60 + Math.max(0, Number(m) || 0);
+  return total > 0 ? Math.round(total) : null;
+}

@@ -48,7 +48,11 @@
       <div class="fields">
         <q-input v-model="date" type="date" filled label="Date" />
         <q-input v-model.number="distance" type="number" filled label="Distance (km)" step="0.1" />
-        <q-input v-model.number="duration" type="number" filled label="Durée (min)" />
+        <!-- ⏱️ Durée en heures + minutes : une sortie longue (rando, vélo) se saisit sans calcul. -->
+        <div class="fields-row">
+          <q-input v-model.number="durH" type="number" min="0" filled label="Durée" suffix="h" />
+          <q-input v-model.number="durM" type="number" min="0" filled label=" " suffix="min" />
+        </div>
         <q-input v-if="hasSteps" v-model.number="steps" type="number" filled label="Pas" />
         <q-input
           v-model.number="load"
@@ -178,6 +182,7 @@
 defineProps<{ embedded?: boolean }>();
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { localDayIso } from '@/lib/localDay';
+import { hoursMinutesToMin } from '@/lib/duration';
 import { useRouter, useRoute } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
@@ -233,7 +238,10 @@ const activity = ref<CardioActivity>(
 );
 const date = ref(todayIso());
 const distance = ref<number | null>(null);
-const duration = ref<number | null>(null);
+const durH = ref<number | null>(null);
+const durM = ref<number | null>(null);
+/** La durée en minutes (seule unité stockée), lue sur les deux champs. */
+const duration = computed(() => hoursMinutesToMin(durH.value, durM.value));
 const steps = ref<number | null>(null);
 const load = ref<number | null>(null);
 const dplus = ref<number | null>(null);
@@ -401,7 +409,8 @@ async function save() {
     ]);
     date.value = todayIso();
     distance.value = null;
-    duration.value = null;
+    durH.value = null;
+    durM.value = null;
     steps.value = null;
     load.value = null;
     dplus.value = null;

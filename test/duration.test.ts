@@ -98,3 +98,24 @@ describe('formatClock — le chrono de l’effort', () => {
     expect(formatClock(42.7)).toBe('42');
   });
 });
+
+describe('⏱️ saisie en heures + minutes', async () => {
+  const { hoursMinutesToMin } = await import('@/lib/duration');
+  it('additionne les heures et les minutes', () => {
+    expect(hoursMinutesToMin(1, 35)).toBe(95);
+    expect(hoursMinutesToMin(2, 0)).toBe(120);
+    expect(hoursMinutesToMin(0, 45)).toBe(45);
+  });
+  it('un champ vide compte pour 0', () => {
+    expect(hoursMinutesToMin(null, 30)).toBe(30);
+    expect(hoursMinutesToMin(1, null)).toBe(60);
+  });
+  it('rien de saisi = pas de durée, jamais 0 min', () => {
+    expect(hoursMinutesToMin(null, null)).toBeNull();
+    expect(hoursMinutesToMin(0, 0)).toBeNull();
+  });
+  it('des minutes au-delà de 59 sont gardées, un nombre négatif est ignoré', () => {
+    expect(hoursMinutesToMin(0, 95)).toBe(95);
+    expect(hoursMinutesToMin(-1, 20)).toBe(20);
+  });
+});
