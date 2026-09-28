@@ -275,11 +275,28 @@
 
       <!-- Zoom -->
       <div class="zoom-ctl">
+        <!-- 🗂️ Les points fixes, en liste (juste au-dessus du dézoom, demandé). La pastille dit
+             combien appellent : attaque imminente, sans défense, ou butin à récolter. -->
+        <button
+          class="zoom-b ctl-list-b"
+          aria-label="Points fixes"
+          title="Points fixes"
+          @click="ctlListOpen = true"
+        >
+          🏰<span v-if="ctlCalls" class="ctl-list-dot">{{ ctlCalls }}</span>
+        </button>
         <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
         <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
         <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
       </div>
     </div>
+
+    <ControlPointsSheet
+      v-model="ctlListOpen"
+      :rows="ctlRoster"
+      :advs="char.advList"
+      @open="openFromList"
+    />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
     <TripsPanel v-model:focus="focusTrip" :trips="trips" :hero-profile="character.profile" />
@@ -452,9 +469,7 @@
               <span class="ph-main">
                 <span class="ph-name">Ton héros</span>
                 <span class="ph-sub">{{
-                  partyHeroBlock
-                    ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                    : 'sans XP'
+                  partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : 'sans XP'
                 }}</span>
               </span>
               <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
@@ -732,6 +747,7 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
+import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
 import { winClass, type PoiFact } from '@/lib/poiFacts';
@@ -762,6 +778,7 @@ import {
   CONTROL,
   CONTROL_YIELD,
   controlFreeSeats,
+  controlRoster,
   controlGoldPerHour,
   controlStock,
   controlTravelMult,
@@ -1722,6 +1739,34 @@ function dimmed(p: Poi): boolean {
   return !o.hero && !o.party;
 }
 
+/** 🗂️ La liste des points fixes (icône au-dessus du dézoom). Les équipes en marche pour
+ *  prendre un point viennent des groupes (`partyList`) : elles restent en garnison à
+ *  l'arrivée (`midAt`). */
+const ctlListOpen = ref(false);
+const ctlRoster = computed(() =>
+  controlRoster(
+    char.row?.expedition_map,
+    char.partyList.map((g) => ({
+      poiId: g.poi.id,
+      midAt: g.midAt,
+      ids: g.outcome.party?.escort ?? [],
+    })),
+    coarseNow.value,
+    heroLevel.value,
+  ),
+);
+/** Combien de points appellent : attaque imminente, sans défense, butin à récolter. */
+const ctlCalls = computed(
+  () =>
+    ctlRoster.value.filter((r) => r.status === 'imminent' || r.status === 'empty' || r.ready)
+      .length,
+);
+function openFromList(p: Poi) {
+  ctlListOpen.value = false;
+  panToPoi(p);
+  selectPoi(p);
+}
+
 function selectPoi(p: Poi) {
   // ⚠️ On sélectionne MÊME si le héros est en expédition : un convoi part sans lui.
   // Ce qui est ouvert ou non se décide dans la feuille, via `poiOffers`.
@@ -2629,6 +2674,24 @@ onUnmounted(() => {
   cursor: pointer;
   display: grid;
   place-items: center;
+}
+.ctl-list-b {
+  position: relative;
+  font-size: 16px;
+}
+.ctl-list-dot {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
 }
 /* Décor de carte */
 /* Terrain : le sol vit dans MapTerrain.vue (mer, côte, prairie, reliefs). Ici ne

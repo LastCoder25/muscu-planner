@@ -81,6 +81,8 @@ const ECRANS = [
     gestes: [
       { nom: 'voyage', clic: '.trip', attendu: '.trip-crew' },
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
+      // 🗂️ La liste des points fixes (icône au-dessus du dézoom).
+      { nom: 'points-fixes', clic: '.ctl-list-b', attendu: '.cps-tile' },
     ],
   },
 ];
@@ -242,14 +244,34 @@ try {
         // ÉCHOUE, comme un onglet : sinon le parcours sauterait la fiche sans le dire.
         for (const geste of e.gestes ?? []) {
           const av = errors.length;
-          const cible = page.locator(geste.clic).first();
-          if (!(await cible.count())) {
+          const toutes = page.locator(geste.clic);
+          if (!(await toutes.count())) {
             fail.push(`${width}px ${e.nom} : « ${geste.nom} » introuvable (${geste.clic})`);
             continue;
           }
           // ⚠️ PAS de clic forcé : l'écran de chargement du jeu s'efface en fondu PAR-DESSUS la
           // carte — un clic forcé tombait dessus et ne faisait rien. Playwright attend ici que
-          // l'élément soit vraiment cliquable.
+          // l'élément soit vraiment cliquable. On attend d'abord que le fondu soit parti.
+          await page
+            .locator('.game-loader')
+            .waitFor({ state: 'detached', timeout: 10000 })
+            .catch(() => {});
+          // ⚠️ Le PREMIER lieu du DOM peut être sous les boutons de la carte (zoom, liste des
+          // points fixes) : on prend le premier qu'un doigt peut réellement toucher.
+          let cible = toutes.first();
+          const n = Math.min(await toutes.count(), 12);
+          for (let i = 0; i < n; i++) {
+            const c = toutes.nth(i);
+            if (
+              await c.click({ trial: true, timeout: 800 }).then(
+                () => true,
+                () => false,
+              )
+            ) {
+              cible = c;
+              break;
+            }
+          }
           await cible.click({ timeout: 10000 });
           await page.waitForTimeout(900);
           if (!(await page.locator(geste.attendu).count()))

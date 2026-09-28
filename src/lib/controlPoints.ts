@@ -776,3 +776,73 @@ export function dueRetakes(map: ExpeditionMap | null, now: number): Poi[] {
 export function heldControls(map: ExpeditionMap | null): Poi[] {
   return map ? map.pois.filter((p) => p.control?.owner === 'player') : [];
 }
+
+/**
+ * 🗂️ LA LISTE DE GESTION DES POINTS FIXES (2026-09-28, demandé : « une icône au-dessus du
+ * dézoom qui liste les lieux fixes pour les gérer »). Une ligne par point, dans l'ordre de
+ * `CONTROL.kinds`, avec QUI est dessus, QUI y va, et ce qui appelle une action.
+ * ⚠️ Rien n'est recalculé ici : l'état « à récolter » est la réponse de `collectControl`
+ * lui-même (il rend la même carte quand il n'y a rien), l'alerte est `attackImminent`.
+ * `assaults` = les équipes en marche pour PRENDRE un point (elles restent en garnison à
+ * l'arrivée, `midAt`).
+ */
+export type ControlRosterStatus = 'enemy' | 'assault' | 'held' | 'empty' | 'imminent';
+export interface ControlRosterRow {
+  poi: Poi;
+  kind: ControlKind;
+  status: ControlRosterStatus;
+  seats: number;
+  garrison: string[];
+  reinforcing: { id: string; inMs: number }[];
+  assault: { ids: string[]; inMs: number } | null;
+  /** Il y a quelque chose à récolter (jamais pour la tour de guet, qui ne stocke rien). */
+  ready: boolean;
+}
+export function controlRoster(
+  map: ExpeditionMap | null | undefined,
+  assaults: readonly { poiId: string; midAt: number; ids: readonly string[] }[],
+  now: number,
+  playerLevel: number,
+): ControlRosterRow[] {
+  if (!map) return [];
+  const order = (k: ControlKind) => CONTROL.kinds.indexOf(k);
+  return map.pois
+    .filter((p): p is Poi & { control: ControlState } => !!p.control)
+    .sort((a, b) => order(a.control.kind) - order(b.control.kind))
+    .map((p) => {
+      const c = p.control;
+      const held = c.owner === 'player';
+      const march = assaults
+        .filter((a) => a.poiId === p.id && now < a.midAt)
+        .sort((a, b) => a.midAt - b.midAt);
+      const assault =
+        !held && march.length
+          ? { ids: march.flatMap((a) => [...a.ids]), inMs: march[0]!.midAt - now }
+          : null;
+      const status: ControlRosterStatus = !held
+        ? assault || c.assault
+          ? 'assault'
+          : 'enemy'
+        : attackImminent(p, now)
+          ? 'imminent'
+          : c.garrison.length
+            ? 'held'
+            : 'empty';
+      return {
+        poi: p,
+        kind: c.kind,
+        status,
+        seats: seatsOf(c.kind),
+        garrison: held
+          ? [...c.garrison, ...(c.reinforcing ?? []).filter((r) => r.at <= now).map((r) => r.id)]
+          : [],
+        reinforcing: held
+          ? (c.reinforcing ?? [])
+              .filter((r) => r.at > now)
+              .map((r) => ({ id: r.id, inMs: r.at - now }))
+          : [],
+        assault,
+        ready: held && collectControl(map, p.id, now, playerLevel).map !== map,
+      };
+    });
+}
