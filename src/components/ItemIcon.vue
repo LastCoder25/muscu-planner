@@ -24,9 +24,10 @@ const props = withDefaults(
     item: Omit<Item, 'id'>;
     size?: number;
     showStars?: boolean;
-    /** Tuile NEUTRE (sans la couleur du rang) : là où le rang se lit déjà ailleurs sur la
-     *  ligne (barre et pastille de l'équipement porté). Un stuff full Or faisait sinon un
-     *  écran entièrement jaune, le jaune d'Or étant presque celui de l'accent. */
+    /** Tuile NEUTRE (fond et contour sans la couleur du rang) : là où le rang se lit déjà
+     *  ailleurs sur la ligne (barre et pastille de l'équipement porté). Un stuff full Or
+     *  faisait sinon un écran entièrement jaune. ⚠️ Le PICTOGRAMME, lui, garde la couleur
+     *  du rang (demandé par l'utilisateur) : un seul trait coloré, pas un aplat. */
     plain?: boolean;
   }>(),
   { size: 44, showStars: true, plain: false },
@@ -73,9 +74,6 @@ const frameStyle = computed(() => ({
   background: var(--surface-2, var(--surface));
   border-color: var(--line);
   box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 8%, transparent);
-}
-.item-icon.plain .ii-glyph {
-  color: var(--text);
 }
 .item-icon.plain .ii-jet {
   color: var(--dim);
