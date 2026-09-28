@@ -3641,7 +3641,7 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚒️ La forge verse son XP aux PIÈCES portées, pas aux champions — chacun la SIENNE,
     // selon le temps qu'il a passé sur place.
     const nextStock = forgeGear(stock, advs, c.gearXp);
-    if (!p?.control || c.xp <= 0)
+    if (!p?.control || !Object.keys(c.xpBy).length)
       return {
         map: c.map,
         advs,
@@ -3650,16 +3650,18 @@ export const useCharacterStore = defineStore('character', () => {
         supplies: c.supplies,
         runes: c.runes,
       };
-    const ids = new Set(p.control.garrison);
-    const next = advs.map((a) =>
-      ids.has(a.id)
+    // 🎯 Le camp : chacun reçoit SA réserve, selon le temps qu'il a passé sur place (un renfort
+    // arrivé tard n'a pas l'XP des autres) — un champion ramené reçoit ce qu'il avait gagné.
+    const next = advs.map((a) => {
+      const xp = c.xpBy[a.id] ?? 0;
+      return xp > 0
         ? grantAdvXp(
             a,
-            Math.min(c.xp, trainingRoom(a, heroLevel, pantheonLevel.value)),
+            Math.min(xp, trainingRoom(a, heroLevel, pantheonLevel.value)),
             pantheonLevel.value,
           )
-        : a,
-    );
+        : a;
+    });
     return {
       map: c.map,
       advs: next,

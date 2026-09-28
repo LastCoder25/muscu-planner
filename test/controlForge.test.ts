@@ -78,7 +78,7 @@ describe('⚒️ la forge de campagne', () => {
     expect(forgeStock(p, 6 * H)).toBe(Math.floor(forgeXpPerHour(p) * 6));
     const c = collectControl(m, FORGE, 6 * H, 30);
     for (const id of ['a0', 'a1', 'a2']) expect(c.gearXp[id]).toBe(forgeStock(p, 6 * H));
-    expect(c.xp).toBe(0);
+    expect(c.xpBy).toEqual({});
     expect(c.gold).toBe(0);
   });
 

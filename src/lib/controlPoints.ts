@@ -444,9 +444,10 @@ function stockUnits(p: Poi, now: number, playerLevel: number): number {
   return Math.min(cap, banked + (rate * ms) / 3600_000);
 }
 
-/** 🎯 L'XP accumulée PAR champion à `now` (avant plafond, cf. `trainingRoom`). */
+/** 🎯 L'XP la plus haute qu'un champion attend au camp (avant plafond, cf. `trainingRoom`),
+ *  arrondie — chacun a SA réserve (`trainingStockBy`). */
 export function trainingStock(p: Poi, now: number): number {
-  return p.control?.kind === 'training' ? Math.floor(stockUnits(p, now, 1)) : 0;
+  return maxStock(trainingStockBy(p, now));
 }
 /**
  * 🎯 Jusqu'où le camp fait monter : le ★5 du rang JUSTE EN DESSOUS de celui du héros
@@ -474,40 +475,62 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
   return Math.max(0, need);
 }
 
+/** Les lieux où CHAQUE champion a sa propre réserve d'XP (sa jauge). */
+export type PerChampKind = 'forge' | 'training';
+export const isPerChampKind = (k: ControlKind | undefined): k is PerChampKind =>
+  k === 'forge' || k === 'training';
+/** L'XP par heure d'un champion posté : au camp pour LUI, à la forge par pièce portée. */
+function perChampRate(p: Poi, kind: PerChampKind): number {
+  return kind === 'forge' ? forgeXpPerHour(p) : trainingXpPerHour(p);
+}
+
 /**
- * ⚒️ L'XP (par pièce) accumulée par CHAQUE champion à `now`, non arrondie. Chacun a sa
- * propre réserve (demandé : les champions n'arrivent pas en même temps) : elle part de ce
- * qu'il avait quand l'effectif a changé (`perXp`) et ne court que tant qu'il est EN
- * GARNISON — un renfort en route n'apprend rien, un champion ramené garde ce qu'il a gagné
- * jusqu'à la récolte. Plafonnée à 24 h de production, arrêtée à l'heure de l'attaque.
+ * ⚒️🎯 L'XP accumulée par CHAQUE champion à `now`, non arrondie — à la forge (par pièce
+ * portée) comme au camp d'entraînement (pour lui). Chacun a sa propre réserve (demandé : les
+ * champions n'arrivent pas en même temps — une valeur commune donnerait à un renfort arrivé
+ * tard l'XP de ceux qui étaient là avant lui) : elle part de ce qu'il avait quand l'effectif
+ * a changé (`perXp`) et ne court que tant qu'il est EN GARNISON — un renfort en route
+ * n'apprend rien, un champion ramené garde ce qu'il a gagné jusqu'à la récolte. Plafonnée à
+ * 24 h de production, arrêtée à l'heure de l'attaque. Les miliciens n'apprennent rien.
  */
-export function forgeStockBy(p: Poi, now: number): Record<string, number> {
+export function champStockBy(p: Poi, now: number): Record<string, number> {
   const c = p.control;
-  if (c?.kind !== 'forge' || c.owner !== 'player' || c.collectedAt === undefined) return {};
+  if (!c || !isPerChampKind(c.kind) || c.owner !== 'player' || c.collectedAt === undefined)
+    return {};
   const until = Math.min(now, c.attackAt ?? now);
   const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
-  const rate = forgeXpPerHour(p);
+  const rate = perChampRate(p, c.kind);
   const cap = (rate * CONTROL.storageMs) / 3600_000;
-  // Forge d'avant `perXp` : la réserve commune valait pour chaque champion posté.
+  // Lieu d'avant `perXp` : la réserve commune valait pour chaque champion posté.
   const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
   const out: Record<string, number> = { ...c.perXp };
   for (const id of c.garrison) {
+    if (isMilitiaId(id)) continue;
     const b = out[id] ?? legacy;
     out[id] = Math.min(Math.max(b, cap), b + (rate * ms) / 3600_000);
   }
   return out;
 }
+/** ⚒️ La réserve par champion à la forge (vide ailleurs). */
+export const forgeStockBy = (p: Poi, now: number): Record<string, number> =>
+  p.control?.kind === 'forge' ? champStockBy(p, now) : {};
+/** 🎯 La réserve par champion au camp d'entraînement (vide ailleurs). */
+export const trainingStockBy = (p: Poi, now: number): Record<string, number> =>
+  p.control?.kind === 'training' ? champStockBy(p, now) : {};
 
-/** ⚒️ L'XP la plus haute qu'un champion attend à la forge (par pièce), arrondie. */
-export function forgeStock(p: Poi, now: number): number {
-  const by = Object.values(forgeStockBy(p, now));
-  return by.length ? Math.floor(Math.max(...by) + 1e-9) : 0;
+/** La réserve la plus haute qu'un champion attend (forge ou camp), arrondie. */
+function maxStock(by: Record<string, number>): number {
+  const v = Object.values(by);
+  return v.length ? Math.floor(Math.max(...v) + 1e-9) : 0;
 }
+/** ⚒️ L'XP la plus haute qu'un champion attend à la forge (par pièce), arrondie. */
+export const forgeStock = (p: Poi, now: number): number => maxStock(forgeStockBy(p, now));
 
-/** ⚒️ Ce qu'une réserve de forge représente en HEURES passées sur place (≤ 24 h) : la jauge
- *  d'un champion se remplit à ce rythme. */
-export function forgeHoursOf(p: Pick<Poi, 'level'>, xp: number): number {
-  const rate = forgeXpPerHour(p);
+/** Ce qu'une réserve représente en HEURES passées sur place (≤ 24 h) : la jauge d'un
+ *  champion se remplit à ce rythme (forge ou camp). */
+export function champHoursOf(p: Poi, xp: number): number {
+  const k = p.control?.kind;
+  const rate = isPerChampKind(k) ? perChampRate(p, k) : 0;
   return rate > 0 ? xp / rate : 0;
 }
 
@@ -589,8 +612,8 @@ export function controlStock(p: Poi, now: number, playerLevel: number): number {
 /**
  * Récolte : ce qu'un point a produit part (or, XP par champion, consommables), et la
  * production repart. ⚠️ Au jardin, la FRACTION d'un consommable en cours reste en réserve
- * (`banked`) : cueillir souvent ne fait rien perdre. `xp` = l'XP accumulée PAR champion,
- * AVANT le plafond du camp (le store la borne, `trainingRoom`).
+ * (`banked`) : cueillir souvent ne fait rien perdre. `xpBy` = l'XP du camp PAR champion (id →
+ * XP), AVANT son plafond (le store la borne, `trainingRoom`) ; `gearXp` = celle de la forge.
  */
 export function collectControl(
   map: ExpeditionMap,
@@ -600,27 +623,27 @@ export function collectControl(
 ): {
   map: ExpeditionMap;
   gold: number;
-  xp: number;
+  xpBy: Record<string, number>;
   gearXp: Record<string, number>;
   supplies: SupplyStock;
   runes: RuneTier[];
 } {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, xp: 0, gearXp: {}, supplies: {}, runes: [] };
+  const none = { map, gold: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: [] };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
-  // ⚒️ La forge : chaque champion récolte SA réserve, et garde la fraction entamée (sauf
-  // un champion ramené depuis : ce qui lui reste ne compte plus).
-  if (c.kind === 'forge') {
-    const by = forgeStockBy(p, now);
-    const gearXp: Record<string, number> = {};
+  // ⚒️🎯 La forge et le camp : chaque champion récolte SA réserve, et garde la fraction
+  // entamée (sauf un champion ramené depuis : ce qui lui reste ne compte plus).
+  if (isPerChampKind(c.kind)) {
+    const by = champStockBy(p, now);
+    const got: Record<string, number> = {};
     const perXp: Record<string, number> = {};
     for (const [aid, v] of Object.entries(by)) {
       const w = Math.floor(v + 1e-9);
-      if (w > 0) gearXp[aid] = w;
+      if (w > 0) got[aid] = w;
       if (c.garrison.includes(aid) && v - w > 1e-9) perXp[aid] = v - w;
     }
-    if (!Object.keys(gearXp).length) return none;
+    if (!Object.keys(got).length) return none;
     const until = Math.min(now, c.attackAt ?? now);
     return {
       ...none,
@@ -628,7 +651,7 @@ export function collectControl(
         ...q,
         control: { ...q.control!, collectedAt: until, banked: 0, perXp },
       })),
-      gearXp,
+      ...(c.kind === 'forge' ? { gearXp: got } : { xpBy: got }),
     };
   }
   const units = stockUnits(p, now, playerLevel);
@@ -668,7 +691,7 @@ export function collectControl(
       },
     })),
     gold: c.kind === 'mine' ? whole : 0,
-    xp: c.kind === 'training' ? whole : 0,
+    xpBy: {},
     gearXp: {},
     supplies,
     runes,
@@ -695,6 +718,13 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
     const cut = CONTROL.towerCut * shareOf(c.garrison.length);
     return { text: `🧭 −${Math.round(cut * 100)} % trajets`, pct: null };
   }
+  // ⚒️🎯 Chacun sa réserve : on montre la plus avancée (celle qu'on voit monter en premier).
+  if (isPerChampKind(c.kind)) {
+    const top = Math.max(0, ...Object.values(champStockBy(p, now)));
+    const full = (perChampRate(p, c.kind) * CONTROL.storageMs) / 3600_000;
+    const emo = c.kind === 'forge' ? '⚒️' : '🎓';
+    return { text: `${emo} +${fmt(top)} XP`, pct: full > 0 ? Math.min(1, top / full) : 0 };
+  }
   const units = stockUnits(p, now, playerLevel);
   const rate = unitsPerHour(p, c.garrison.length, playerLevel);
   const cap = Math.max(c.banked ?? 0, (rate * storageMsOf(c.kind)) / 3600_000);
@@ -702,10 +732,6 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   switch (c.kind) {
     case 'mine':
       return { text: `🪙 ${fmt(units)}`, pct: fill };
-    case 'training':
-      return { text: `🎓 +${fmt(units)} XP`, pct: fill };
-    case 'forge':
-      return { text: `⚒️ +${fmt(units)} XP`, pct: fill };
     case 'garden': {
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
@@ -724,9 +750,9 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
 /** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
  *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
 function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
-  // ⚒️ À la forge, chacun met de côté SA réserve : le nouveau venu part de zéro.
-  if (p.control!.kind === 'forge')
-    return { ...p.control!, perXp: forgeStockBy(p, at), banked: 0, collectedAt: at };
+  // ⚒️🎯 À la forge et au camp, chacun met de côté SA réserve : le nouveau venu part de zéro.
+  if (isPerChampKind(p.control!.kind))
+    return { ...p.control!, perXp: champStockBy(p, at), banked: 0, collectedAt: at };
   return { ...p.control!, banked: stockUnits(p, at, playerLevel), collectedAt: at };
 }
 

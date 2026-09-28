@@ -861,9 +861,10 @@ import {
   trainingCapLevel,
   trainingStock,
   trainingXpPerHour,
-  forgeHoursOf,
+  champHoursOf,
+  champStockBy,
+  isPerChampKind,
   forgeStock,
-  forgeStockBy,
   forgeXpPerHour,
   runeProgress,
   runeHoursFor,
@@ -1531,7 +1532,7 @@ const controlProd = computed(() => {
     case 'mine':
       return `⛏️ ${controlRate.value.toLocaleString('fr-FR')} 🪙/h · réserve ${controlGold.value.toLocaleString('fr-FR')} 🪙 (24 h au plus)`;
     case 'training':
-      return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion · en attente ${trainingStock(p, now.value)} XP chacun`;
+      return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion, pour chacun selon son temps ici`;
     case 'garden':
       return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${CONTROL.gardenHoursPerItem} h`;
     case 'scriptorium':
@@ -1544,19 +1545,19 @@ const controlProd = computed(() => {
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
 });
-/** ⚒️ Une jauge par champion à la forge : l'XP (par pièce) qu'il attend, et le temps de
- *  présence qu'elle représente — pleine à 24 h. Un champion ramené garde sa ligne tant
- *  que sa réserve n'est pas récoltée. */
+/** ⚒️🎯 Une jauge par champion, à la forge (XP par pièce) comme au camp d'entraînement (XP
+ *  pour lui) : ce qu'il attend, et le temps de présence que ça représente — pleine à 24 h.
+ *  Un champion ramené garde sa ligne tant que sa réserve n'est pas récoltée. */
 const forgeGauges = computed(() => {
   const p = livePoi.value;
-  if (!p || p.control?.kind !== 'forge' || p.control.owner !== 'player') return [];
-  const by = forgeStockBy(p, now.value);
+  if (!p || !isPerChampKind(p.control?.kind) || p.control.owner !== 'player') return [];
+  const by = champStockBy(p, now.value);
   const names = new Map(char.advList.map((a) => [a.id, a.name]));
-  const full = forgeXpPerHour(p) * (CONTROL.storageMs / 3600_000);
+  const full = champHoursOf(p, 1) > 0 ? CONTROL.storageMs / 3600_000 / champHoursOf(p, 1) : 0;
   return Object.entries(by)
     .filter(([id, v]) => p.control!.garrison.includes(id) || v >= 1)
     .map(([id, v]) => {
-      const h = forgeHoursOf(p, v);
+      const h = champHoursOf(p, v);
       return {
         id,
         name: (p.control!.garrison.includes(id) ? '' : '↩ ') + (names.get(id) ?? '?'),
@@ -1577,7 +1578,7 @@ const controlNote = computed(() => {
   if (!cap)
     return '⚠️ Ton héros est Bronze : le camp n’entraîne que sous ton rang — monte d’abord.';
   const r = characterRank(cap);
-  return `Plafond : ${r.emoji} ${r.name} ★5 (le rang juste sous le tien).`;
+  return `Plafond : ${r.emoji} ${r.name} ★5 (le rang juste sous le tien). Chaque champion a sa jauge, pleine après 24 h sur place ; ↩ = ramené, sa part attend la récolte.`;
 });
 const controlReady = computed(() => {
   const p = livePoi.value;
@@ -1595,7 +1596,7 @@ const controlCollectLabel = computed(() => {
   const k = liveControl.value?.kind;
   if (!p || !k) return '';
   if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
-  if (k === 'training') return `Faire progresser (${trainingStock(p, now.value)} XP chacun)`;
+  if (k === 'training') return 'Faire progresser (chacun sa réserve)';
   if (k === 'forge') return 'Forger (chacun sa réserve)';
   if (k === 'scriptorium') return 'Récupérer la rune';
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
