@@ -96,9 +96,15 @@ describe('la Caserne : cadence et effectif', () => {
   });
   it('l’effectif monte d’un milicien tous les 3 niveaux, et vaut 0 sans Caserne', () => {
     expect(militiaCap(0)).toBe(0);
-    expect(militiaCap(1)).toBe(3);
-    expect(militiaCap(3)).toBe(4);
-    expect(militiaCap(30)).toBe(13);
+    expect(militiaCap(1)).toBe(5);
+    expect(militiaCap(3)).toBe(6);
+    expect(militiaCap(30)).toBe(15);
+  });
+  it('une garnison pleine (5) se forme en une demi-journée au plus, dès la Caserne 1', () => {
+    expect(militiaCap(1)).toBeGreaterThanOrEqual(MILITIA.perPoint);
+    expect(militiaIntervalH(1) * MILITIA.perPoint).toBeLessThanOrEqual(12.5);
+    expect(militiaIntervalH(10) * MILITIA.perPoint).toBeLessThanOrEqual(9.5);
+    expect(militiaIntervalH(30) * MILITIA.perPoint).toBeLessThanOrEqual(7);
   });
 });
 
@@ -118,8 +124,8 @@ describe('la production', () => {
     const step = militiaIntervalH(1) * H;
     const full = produceMilitia(emptyMilitia(0), 1, 0, step * 50);
     expect(full.home).toBe(militiaCap(1));
-    const out = takeMilitia(full, 3)!.state;
-    const next = produceMilitia(out, 1, 3, step * 50 + step * 0.5);
+    const out = takeMilitia(full, militiaCap(1))!.state;
+    const next = produceMilitia(out, 1, militiaCap(1), step * 50 + step * 0.5);
     expect(next.home).toBe(0);
   });
   it('rend le MÊME objet quand rien ne change (pas d’écriture à vide)', () => {

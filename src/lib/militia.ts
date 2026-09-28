@@ -34,13 +34,16 @@ export const MILITIA = {
    *  ET survie). ⚠️ MESURÉ (`militia.test`) : cf. la tenue d'un point par ses miliciens. */
   unitShare: 0.5,
   /** Cadence : un milicien toutes les `slowH` heures à neuf, jusqu'à `fastH` au mieux —
-   *  asymptotique, donc chaque niveau de Caserne l'accélère encore (aucun niveau mort). */
-  slowH: 8,
-  fastH: 2,
+   *  asymptotique, donc chaque niveau de Caserne l'accélère encore (aucun niveau mort).
+   *  v0.1275 (demandé : « un peu long de produire des miliciens qui partent par 5 ») : une
+   *  garnison pleine en ~12 h à la Caserne 1, ~9 h au niveau 10, ~6 h au 30 (était 8 h → 2 h). */
+  slowH: 2.5,
+  fastH: 0.5,
   /** Niveau de Caserne où la cadence a fait la moitié du chemin. */
   halfLevel: 20,
-  /** Plafond d'effectif : `capBase` + 1 tous les `capEvery` niveaux de Caserne. */
-  capBase: 3,
+  /** Plafond d'effectif : `capBase` + 1 tous les `capEvery` niveaux de Caserne. `capBase` vaut
+   *  une garnison pleine (`perPoint`) : dès la Caserne 1, on peut occuper un point à 5. */
+  capBase: 5,
   capEvery: 3,
   /** Garnison au plus sur UN point de contrôle, CHAMPIONS ET MILICIENS COMPRIS (demandé :
    *  « garnison de 5 max champions et miliciens compris »). Les champions gardent en plus
