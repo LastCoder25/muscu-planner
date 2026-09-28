@@ -1016,9 +1016,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         ...ROW.buildings,
         { typeId: 'outpost', level: 4, slot: 1, collectedAt: 0 },
         { typeId: 'energy_font', level: 3, slot: 2, collectedAt: 0 },
+        { typeId: 'barracks', level: 12, slot: 3, collectedAt: 0 },
       ],
       base: {
         seed: 7,
+        // 🛡️ Un milicien à la base, le suivant en cours : la Caserne montre son compte à rebours.
+        militia: { home: 1, producedAt: now - 600_000, seq: 1 },
         defenses: [
           { typeId: 'wall', level: 6 },
           { typeId: 'turret', level: 5, damaged: true },
@@ -1083,6 +1086,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       pads.some((t) => Math.abs(t.cx - 100) < 0.5 && Math.abs(t.cy - 116) < 0.5),
       'plus rien sous le centre',
     ).toBe(false);
+    // ⏳ La Caserne affiche le temps avant le prochain milicien (demandé : « je ne vois pas le
+    // temps restant avant le nouveau milicien sur le bâtiment »).
+    expect(out, 'la Caserne montre son compte à rebours').toMatch(
+      /class="yard-timer"[^>]*>\s*\d+ h/,
+    );
     // ⚠️ CE QUE CE TEST NE COUVRE PAS : l'affichage du BUTIN. Il vit dans l'écran de fin du
     // rejeu et dans la feuille de la Tour de guet — deux chemins qui demandent une
     // interaction (ouvrir une structure) ou un rejeu animé. Ce qui le garde, c'est

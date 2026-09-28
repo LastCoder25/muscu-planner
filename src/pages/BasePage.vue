@@ -436,6 +436,9 @@
             r="2.6"
             class="yard-ready"
           />
+          <text v-if="y.timer" :x="y.x" :y="y.y + y.half + 3.8" class="yard-timer">
+            {{ y.timer }}
+          </text>
           <rect
             v-if="y.todo"
             :x="y.x - y.half - 2"
@@ -1008,6 +1011,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { formatDuration } from '@/lib/duration';
+import { emptyMilitia, militiaCap, militiaOnMap, nextMilitiaMs } from '@/lib/militia';
 import { backOr } from '@/lib/nav';
 import { useQuasar } from 'quasar';
 import { useCharacterStore } from '@/stores/character';
@@ -1425,6 +1429,8 @@ interface YardCell {
   level: number;
   ready: boolean;
   damaged: boolean;
+  /** ⏳ Un compte à rebours sous la tuile (la Caserne : le prochain milicien). */
+  timer?: string;
   /** Quelque chose est À FAIRE ici (des corps à fouiller, des fossoyeurs rentrés). */
   todo?: boolean;
   /** Demi-côté DESSINÉ. ⚠️ Porté par la cellule et non global : le Panthéon trône au
@@ -1487,6 +1493,16 @@ const PANTHEON_HALF = 16;
 // la tuile : ce qu'on gagne à toucher est le même partout, et l'écart mesuré entre deux
 // tuiles voisines (7,8 au plus serré) l'absorbe sans chevauchement.
 const HIT_PAD = 1;
+/** 🛡️ Sous la Caserne (demandé : « je ne vois pas le temps restant avant le nouveau
+ *  milicien sur le bâtiment ») : le prochain milicien, ou « complet ». Mêmes fonctions que
+ *  la fiche de la Caserne (`VillagePlots`) : les deux ne peuvent pas se contredire. */
+function militiaTimer(level: number): string {
+  const s = char.row?.base?.militia ?? emptyMilitia(now.value);
+  const away = militiaOnMap(char.row?.expedition_map);
+  if (s.home + away >= militiaCap(level)) return 'complet';
+  const ms = nextMilitiaMs(s, level, away, now.value);
+  return ms > 0 ? formatDuration(ms) : '…';
+}
 const yard = computed<YardCell[]>(() => {
   const cells: YardCell[] = [];
   const bs = char.row?.buildings ?? [];
@@ -1519,6 +1535,7 @@ const yard = computed<YardCell[]>(() => {
       // verrait qu'en ouvrant sa fiche.
       todo: b?.typeId === 'pantheon' && ascensionsReady.value > 0,
       half: i === pantheonSlot ? PANTHEON_HALF : YARD_HALF,
+      ...(b?.typeId === 'barracks' ? { timer: militiaTimer(b.level) } : {}),
       onClick: () => (plotSlot.value = i),
     });
   }
@@ -2317,6 +2334,18 @@ function doHarvest() {
 }
 .yard-ready {
   fill: var(--accent, #ffd23f);
+}
+/* ⏳ Compte à rebours sous une tuile (Caserne) : petit, en clair sur la terre de la cour,
+   contour sombre pour rester lisible sur le pavé comme sur l'herbe. */
+.yard-timer {
+  font-size: 4.2px;
+  font-weight: 700;
+  text-anchor: middle;
+  fill: var(--text, #f3eee6);
+  paint-order: stroke;
+  stroke: #14110c;
+  stroke-width: 1.2px;
+  pointer-events: none;
 }
 /* Pastille de niveau, lisible sur n'importe quel fond */
 .lvl-badge circle {
