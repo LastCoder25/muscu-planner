@@ -1522,6 +1522,9 @@ describe('📊 barre d’étoile au retour de mission', () => {
     fx.dismiss();
     expect(out).toContain('Épée courte');
     expect(out).toContain('width: 25%');
+    // 🔨 Un langage de forge, distinct de la barre du champion (v0.1256.0).
+    expect(out).toContain('ax-bar forge');
+    expect(out).toContain('Ses pièces');
   });
 
   // ⬆️ v0.1119 : un champion « prêt pour l'ascension » au retour de mission se TOUCHE — la

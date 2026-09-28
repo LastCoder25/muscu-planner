@@ -49,6 +49,7 @@
                  niveau est caché comme le sien — sans cette barre, rien ne disait qu'elles
                  avaient avancé. Même animation que la sienne, un peu décalée. -->
             <div v-if="gear.length" class="ax-gear">
+              <div class="ax-gear-title">🔨 Ses pièces</div>
               <div
                 v-for="{ g, b: gb } in gear"
                 :key="g.id"
@@ -70,17 +71,17 @@
                       >{{ Math.round((rows[gb]?.width ?? 0) * 100) }} %</span
                     >
                   </div>
-                  <div class="ax-bar thin">
+                  <div class="ax-bar forge">
                     <div class="ax-fill" :style="fillStyle(gb)" />
-                    <div v-if="rows[gb]?.pop" class="ax-flash" />
+                    <div v-if="rows[gb]?.pop" class="ax-flash sparks" />
                   </div>
-                  <div v-if="rows[gb]?.pop === 'rank'" class="ax-note">
+                  <div v-if="rows[gb]?.pop === 'rank'" class="ax-note forge">
                     {{ seg(gb).rankEmoji }} Rang {{ seg(gb).rankName }} !
                   </div>
-                  <div v-else-if="rows[gb]?.pop === 'star'" class="ax-note">
-                    ⭐ Une étoile de plus
+                  <div v-else-if="rows[gb]?.pop === 'star'" class="ax-note forge">
+                    🔨 Une étoile de plus
                   </div>
-                  <div v-else-if="rows[gb]?.done && g.ascendReady" class="ax-note asc">
+                  <div v-else-if="rows[gb]?.done && g.ascendReady" class="ax-note forge asc">
                     ⬆️ ★★★★★ — prête pour l’ascension
                   </div>
                 </div>
@@ -424,7 +425,9 @@ onBeforeUnmount(clearTimers);
     color: var(--accent);
   }
 }
-/* 🗡️ Les pièces du champion, en dessous de sa barre : plus petites, même animation. */
+/* 🗡️ Les pièces du champion, en dessous de sa barre : même rythme d'animation, mais un
+   langage de FORGE pour ne pas se confondre avec lui (demandé par l'utilisateur) — liseré
+   latéral, pastille à six pans, barre carrée et hachurée, étincelles orangées. */
 .ax-gear {
   display: flex;
   flex-direction: column;
@@ -433,14 +436,24 @@ onBeforeUnmount(clearTimers);
   padding-top: 6px;
   border-top: 1px dashed var(--line);
 }
+.ax-gear-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
 .ax-g {
   display: flex;
   align-items: center;
   gap: 8px;
-  border-radius: 8px;
+  padding: 5px 7px;
+  border-radius: 3px;
+  border-left: 3px solid var(--rc);
+  background: color-mix(in srgb, var(--rc) 8%, var(--surface-2, #2b241b));
   transition: box-shadow 0.25s;
   &.pop {
-    box-shadow: 0 0 10px color-mix(in srgb, var(--rc) 45%, transparent);
+    box-shadow: 0 0 10px color-mix(in srgb, #ff9d4d 55%, transparent);
   }
 }
 .ax-g-emo {
@@ -451,9 +464,9 @@ onBeforeUnmount(clearTimers);
   align-items: center;
   justify-content: center;
   font-size: 18px;
-  border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--rc);
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  background: color-mix(in srgb, var(--rc) 35%, var(--surface, #211c16));
 }
 .ax-g-main {
   flex: 1;
@@ -474,8 +487,27 @@ onBeforeUnmount(clearTimers);
   color: var(--text);
   font-weight: 600;
 }
-.ax-bar.thin {
-  height: 6px;
+.ax-bar.forge {
+  height: 7px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--rc) 35%, transparent);
+  .ax-fill {
+    border-radius: 1px;
+    background: repeating-linear-gradient(
+      135deg,
+      var(--rc) 0 5px,
+      color-mix(in srgb, var(--rc) 55%, #000) 5px 8px
+    );
+  }
+}
+/* L'étincelle de la forge : orangée et rayée, là où le champion a un éclair blanc. */
+.ax-flash.sparks {
+  background: repeating-linear-gradient(90deg, #ffd23f 0 3px, #ff6a45 3px 6px);
+}
+.ax-note.forge {
+  font-size: 11px;
+  font-weight: 600;
+  font-style: italic;
 }
 .ax-tap {
   position: absolute;
