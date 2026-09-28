@@ -113,6 +113,11 @@ export const CONTROL = {
   maxHold: 0.9,
   /** Combats rejoués par taille de troupe pour estimer la tenue (graines de pronostic). */
   holdSamples: 24,
+  /** ⚔️ BATAILLE IMMINENTE (demandé par l'utilisateur, 2026-09-28) : dans cette fenêtre avant
+   *  la reprise, le point porte un avertissement sur la carte et sur sa fiche. ⚠️ Assouplit la
+   *  règle « sans préavis » de la v0.1239 SANS l'annuler : on dit « bientôt », jamais l'heure,
+   *  et seulement au dernier moment — de quoi envoyer un renfort proche, pas planifier. */
+  imminentMs: 2 * 3_600_000,
 } as const;
 
 /** 🏰 Combien de champions un point garde en garnison (décision de l'utilisateur : le
@@ -245,7 +250,9 @@ export function ensureControls(
  *  (aucun jour actif sur 7) et 1 jour (7 sur 7), ± `retakeJitter`, borné à [1 j, 3 j].
  *  ⚠️ `activeDays7` est REQUIS : l'oublier ferait attaquer au rythme d'un inactif.
  *  ⚠️ L'instant n'est JAMAIS annoncé au joueur (décision de l'utilisateur) : ni sur la fiche
- *  du point, ni par une notification de préavis — seule l'attaque elle-même se dit. */
+ *  du point, ni par une notification de préavis — seule l'attaque elle-même se dit. Seule
+ *  exception (2026-09-28) : `attackImminent`, qui prévient dans les `CONTROL.imminentMs`
+ *  dernières heures, sans jamais donner l'heure. */
 export function retakeDelayMs(id: string, from: number, activeDays7: number): number {
   const r = mulberry32((seedOf(`${id}:atk:${from}`) ^ 0x2c1b3c6d) >>> 0 || 1)();
   const act = Math.min(7, Math.max(0, activeDays7)) / 7;
@@ -698,6 +705,24 @@ export function releaseFromControl(
     const reinforcing = (c.reinforcing ?? []).filter((r) => !out.has(r.id));
     return { ...p, control: { ...c, garrison, reinforcing } };
   });
+}
+
+/** ⚔️ Une reprise approche : point tenu par nous, attaque dans moins de `CONTROL.imminentMs`
+ *  (ou déjà due, le temps que le tick la résolve). */
+export function attackImminent(p: Poi, now: number): boolean {
+  const c = p.control;
+  return (
+    c?.owner === 'player' && c.attackAt !== undefined && c.attackAt - now <= CONTROL.imminentMs
+  );
+}
+
+/** Les ids des points sous attaque imminente, joints par « | » — une CHAÎNE stable pour le
+ *  calque de la carte, qui ne se re-rend que si la liste change. */
+export function imminentControlKey(map: ExpeditionMap | null, now: number): string {
+  return (map?.pois ?? [])
+    .filter((p) => attackImminent(p, now))
+    .map((p) => p.id)
+    .join('|');
 }
 
 /** Les points tenus dont l'attaque est DUE à `now`, de la plus ancienne à la plus récente. */

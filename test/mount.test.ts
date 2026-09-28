@@ -188,6 +188,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
           selectedId: 'p1',
           dimmedKey: 'p2',
           veiledKey: '',
+          imminentKey: '',
           target: null,
           travelTargets: [{ id: 'g1', poi: { ...MAP_POIS[0], id: 'p9' }, kind: 'party' }],
         },
@@ -202,6 +203,37 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toMatch(/class="poi sel"/);
     expect(out).toMatch(/class="poi dim"/);
     expect(out).toContain('van-target party');
+  }, 30_000);
+  it('⚔️ MapPoiLayer signale un point de contrôle sous attaque imminente', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    const fort = {
+      ...MAP_POIS[0],
+      id: 'c1',
+      type: 'control',
+      control: { kind: 'mine', owner: 'player', garrison: [], collectedAt: 0 },
+    } as unknown as (typeof MAP_POIS)[number];
+    const render = async (key: string) => {
+      let out = '';
+      await mountIt(
+        MapPoiLayer,
+        {
+          pois: [fort],
+          selectedId: null,
+          dimmedKey: '',
+          veiledKey: '',
+          imminentKey: key,
+          target: null,
+          travelTargets: [],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      return out;
+    };
+    expect(await render('c1')).toContain('ctl-alert');
+    expect(await render('')).not.toContain('ctl-alert');
   }, 30_000);
 
   it('🎚️ MapFilterBar montre une puce par rang et par type', async () => {

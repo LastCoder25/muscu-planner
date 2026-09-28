@@ -191,6 +191,7 @@
             :selected-id="selected?.id ?? null"
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
+            :imminent-key="imminentKey"
             :target="active?.poi ?? null"
             :travel-targets="travelTargets"
             @select="selectPoi"
@@ -340,11 +341,16 @@
           </p>
           <p class="ctl-line">{{ controlProd }}</p>
           <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
-          <!-- ⚠️ L'instant de la reprise n'est JAMAIS annoncé (v0.1239, décision de
+          <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1253). -->
+          <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
+            ⚠️ <b>Bataille imminente</b> : une troupe ennemie marche sur ce lieu. Un renfort proche
+            peut encore arriver à temps.
+          </p>
+          <!-- ⚠️ Sinon l'instant de la reprise n'est PAS annoncé (v0.1239, décision de
                l'utilisateur) : on sait seulement qu'elle viendra, plus tôt si l'on s'entraîne. -->
-          <p v-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
-            ⚔️ L’ennemi reviendra, sans prévenir — plus souvent si tu t’entraînes beaucoup. Force
-            inconnue : ta garnison ne gagnera pas toujours.
+          <p v-else-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
+            ⚔️ L’ennemi reviendra, prévenu au dernier moment — plus souvent si tu t’entraînes
+            beaucoup. Force inconnue : ta garnison ne gagnera pas toujours.
           </p>
           <div class="send-bar">
             <button
@@ -768,6 +774,8 @@ import {
   runeProgress,
   runeStock,
   seatsOf,
+  attackImminent,
+  imminentControlKey,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
 import { advGearRoles } from '@/lib/advGear';
@@ -1139,6 +1147,10 @@ const incoming = computed(() => base.value?.raid ?? null);
  *  minute ; à la minute, c’est gratuit — et une minute de granularité ne change rien à
  *  « rentre-t-il avant l’assaut ? », qui se joue en heures. */
 const coarseNow = computed(() => Math.floor(now.value / 60_000) * 60_000);
+/** ⚔️ Les points sous attaque imminente, à la minute près (une chaîne stable pour la carte). */
+const imminentKey = computed(() =>
+  imminentControlKey(char.row?.expedition_map ?? null, coarseNow.value),
+);
 // 🕳️ Les auréoles d'EMBUSCADE — les monstres restés autour d'une faille qui a débordé
 // (v0.1009). ⚠️ Horloge GROSSIÈRE : une embuscade dure deux jours, la recalculer à la
 // seconde re-diffuserait ces cercles à chaque tick pour rien.
@@ -2430,6 +2442,9 @@ onUnmounted(() => {
 }
 .ctl-warn {
   color: var(--d3, #ffb23f);
+}
+.ctl-alert {
+  color: var(--d4, #ff6a45);
 }
 .ctl-reinf {
   margin-top: 10px;

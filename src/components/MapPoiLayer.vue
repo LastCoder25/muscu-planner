@@ -47,6 +47,11 @@
           class="ctl-flag"
           :class="p.control.owner"
         />
+        <!-- ⚔️ Bataille imminente : un petit avertissement au coin du fort, qui palpite. -->
+        <g v-if="imminent.has(p.id)" class="ctl-alert">
+          <circle :cx="p.x - 5.2" :cy="p.y - 5.2" r="2.9" />
+          <text :x="p.x - 5.2" :y="p.y - 4">!</text>
+        </g>
       </template>
       <template v-else>
         <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
@@ -118,6 +123,8 @@ const props = defineProps<{
   dimmedKey: string;
   /** Ids des lieux encore sous le brouillard qui recule, même forme que `dimmedKey`. */
   veiledKey: string;
+  /** Ids des points de contrôle sous attaque imminente, même forme que `dimmedKey`. */
+  imminentKey: string;
   /** La cible du héros en voyage. */
   target: Poi | null;
   /** Les cibles des équipes en route. */
@@ -128,6 +135,7 @@ const emit = defineEmits<{ select: [p: Poi] }>();
 const toSet = (k: string) => new Set(k ? k.split('|') : []);
 const dimmed = computed(() => toSet(props.dimmedKey));
 const veiled = computed(() => toSet(props.veiledKey));
+const imminent = computed(() => toSet(props.imminentKey));
 /** 🏅 Le rang de chaque lieu, une fois par changement de carte (sinon une bisection par
  *  lecture, quatre lectures par lieu). Repli sur le calcul direct pour une cible de voyage,
  *  qui n'est plus sur la carte. */
@@ -172,6 +180,37 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 }
 .ctl-flag.player {
   fill: #b57bff;
+}
+/* ⚔️ Bataille imminente : pastille rouge au coin du fort, lente pulsation (une menace qui
+   approche en heures, pas une alarme). Figée si l'on préfère moins de mouvement. */
+.ctl-alert circle {
+  fill: var(--d4, #ff6a45);
+  stroke: var(--bg);
+  stroke-width: 0.6;
+}
+.ctl-alert text {
+  fill: #fff;
+  font-size: 4.2px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+.ctl-alert {
+  animation: ctl-alert-pulse 2.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ctl-alert-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ctl-alert {
+    animation: none;
+  }
 }
 /* Contour dans la couleur du RANG du lieu (`--rk`, posé par lieu). */
 .poi-bg {
