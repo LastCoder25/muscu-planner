@@ -3741,7 +3741,7 @@ export const useCharacterStore = defineStore('character', () => {
     const at = now + leg * 60_000;
     const sent = new Set(ids);
     await persist(userId, {
-      expedition_map: reinforceControl(cur.expedition_map!, id, ids, at),
+      expedition_map: reinforceControl(cur.expedition_map!, id, ids, at, now),
       adventurers: advList.value.map((a) =>
         sent.has(a.id) ? { ...a, posted: id, busyUntil: at } : a,
       ),

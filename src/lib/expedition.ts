@@ -105,8 +105,9 @@ export interface ControlState {
   assault?: boolean;
   /** 🏰 Renforts en ROUTE vers le point tenu : ils rejoignent la garnison à `at`. Ils
    *  occupent déjà une place (jamais plus de 3 champions au total), mais ne produisent ni
-   *  ne combattent avant d'être arrivés. */
-  reinforcing?: { id: string; at: number }[];
+   *  ne combattent avant d'être arrivés. `from` = leur départ de la ville (absent sur les
+   *  renforts envoyés avant v0.1263) : c'est lui qui permet de les DESSINER en route. */
+  reinforcing?: { id: string; at: number; from?: number }[];
   /** ⛏️ L'or déjà sorti de terre quand l'effectif a changé (renfort arrivé, champion
    *  ramené) : la réserve repart de là, au NOUVEAU débit — sans quoi le passé serait
    *  recalculé au mauvais débit. */

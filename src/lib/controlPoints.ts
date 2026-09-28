@@ -644,14 +644,48 @@ export function reinforceControl(
   id: string,
   ids: readonly string[],
   at: number,
+  from?: number,
 ): ExpeditionMap {
   return withControl(map, id, (p) => ({
     ...p,
     control: {
       ...p.control!,
-      reinforcing: [...(p.control!.reinforcing ?? []), ...ids.map((x) => ({ id: x, at }))],
+      reinforcing: [
+        ...(p.control!.reinforcing ?? []),
+        ...ids.map((x) => (from === undefined ? { id: x, at } : { id: x, at, from })),
+      ],
     },
   }));
+}
+
+/** 🏰 Un envoi de renforts EN ROUTE, tel que la carte le dessine : un voyage ALLER SIMPLE
+ *  (ils restent sur le point, ils ne rentrent pas — d'où `returnAt` = `midAt`). Les
+ *  champions partis ensemble (même départ, même arrivée) forment UN convoi. ⚠️ Un renfort
+ *  sans `from` (envoyé avant qu'on le retienne) n'est pas dessiné : sans départ, on ne sait
+ *  pas où il en est. */
+export interface ReinforcementTrip {
+  key: string;
+  poi: Poi;
+  members: string[];
+  sentAt: number;
+  midAt: number;
+  returnAt: number;
+}
+export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now: number) {
+  const out = new Map<string, ReinforcementTrip>();
+  for (const p of map?.pois ?? []) {
+    const c = p.control;
+    if (c?.owner !== 'player') continue;
+    for (const r of c.reinforcing ?? []) {
+      if (r.from === undefined || now >= r.at) continue;
+      const key = `${p.id}@${r.from}>${r.at}`;
+      const t = out.get(key);
+      if (t) t.members.push(r.id);
+      else
+        out.set(key, { key, poi: p, members: [r.id], sentAt: r.from, midAt: r.at, returnAt: r.at });
+    }
+  }
+  return [...out.values()];
 }
 
 /** 🏰 Les renforts ARRIVÉS rejoignent la garnison. ⚠️ Seulement ceux arrivés AVANT la

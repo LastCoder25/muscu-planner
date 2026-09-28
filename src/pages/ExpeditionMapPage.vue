@@ -776,6 +776,7 @@ import {
   seatsOf,
   attackImminent,
   imminentControlKey,
+  reinforcementsEnRoute,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
 import { advGearRoles } from '@/lib/advGear';
@@ -1578,9 +1579,23 @@ const bandsOnMap = computed(() => {
       };
     });
 });
+/** 🛡️ Les RENFORTS en route vers un point tenu (demandé par l'utilisateur : « quand j'envoie
+ *  du renfort il faut que je le voie sur la carte »). Aller simple : ils restent sur le point,
+ *  donc ils disparaissent de la carte à leur arrivée — la garnison du point prend le relais. */
+const reinforcementsOnMap = computed(() =>
+  reinforcementsEnRoute(char.row?.expedition_map, now.value).map((r) => ({
+    id: 'r' + r.key,
+    poi: r.poi,
+    members: r.members,
+    at: travelPosition(r, now.value),
+    prog: voyageProgress(r, now.value),
+    arriveIn: r.midAt - now.value,
+  })),
+);
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
 const travelersOnMap = computed(() => [
   ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️', kind: 'party' as const })),
+  ...reinforcementsOnMap.value.map((r) => ({ ...r, emo: '🛡️', kind: 'reinf' as const })),
 ]);
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
  *  lirait comme plusieurs rangées collées. */
@@ -1618,6 +1633,22 @@ const trips = computed(() => {
       members: g.members,
       haul: g.haul,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
+    });
+  }
+  for (const r of reinforcementsOnMap.value) {
+    const n = r.members.length;
+    out.push({
+      key: r.id,
+      kind: 'van',
+      who: '🛡️',
+      poi: r.poi,
+      time: formatDuration(r.arriveIn),
+      pct: r.prog.overall * 100,
+      back: false,
+      withHero: false,
+      members: r.members,
+      haul: [],
+      title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${n} champion${n > 1 ? 's' : ''} · arrivée dans ${formatDuration(r.arriveIn)}`,
     });
   }
   return out;
@@ -1925,7 +1956,10 @@ const veiledKey = computed(() =>
     : '',
 );
 const travelTargets = stableBy(
-  () => travelersOnMap.value.map((v) => ({ id: v.id, poi: v.poi, kind: v.kind })),
+  () =>
+    travelersOnMap.value
+      .filter((v) => v.kind !== 'reinf') // le point tenu est déjà dessiné par MapPoiLayer
+      .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind })),
   (l) => l.map((v) => v.id).join('|'),
 );
 
@@ -2707,6 +2741,22 @@ onUnmounted(() => {
 .van-mark.party {
   stroke-width: 1;
   stroke-dasharray: 1.2 0.9;
+}
+/* Renforts 🛡️ : VERT (ils rejoignent un point qui est à nous), tiret long — un aller simple,
+   distinct du violet des équipes qui partent se battre et reviennent. */
+.trail.van.reinf {
+  stroke-width: 1.1;
+  stroke-dasharray: 3 1.6;
+}
+.trail.van.reinf.done {
+  stroke: rgba(123, 200, 108, 0.35);
+}
+.trail.van.reinf.todo {
+  stroke: #7bc86c;
+  filter: drop-shadow(0 0 1px rgba(123, 200, 108, 0.55));
+}
+.van-mark.reinf {
+  stroke: #7bc86c;
 }
 /* ⚔️ La bande qu'on intercepte : rouge (elle menace la base), son chemin vers le point de
    rencontre, et un anneau qui pulse là où les deux colonnes vont se heurter. */

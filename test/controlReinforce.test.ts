@@ -112,3 +112,29 @@ describe('🏰 ramener des champions', () => {
     expect(dueRetakes(due, 7 * H).map((p) => p.id)).toEqual([ID]);
   });
 });
+
+describe('🛡️ renforts dessinés sur la carte', () => {
+  it('un envoi en route est UN convoi aller simple, qui disparaît à l’arrivée', async () => {
+    const { reinforcementsEnRoute } = await import('@/lib/controlPoints');
+    const m = reinforceControl(held(['a']), ID, ['b', 'c'], 5 * H, 2 * H);
+    const r = reinforcementsEnRoute(m, 3 * H);
+    expect(r).toHaveLength(1);
+    expect(r[0]!.members).toEqual(['b', 'c']);
+    expect(r[0]!.sentAt).toBe(2 * H);
+    expect(r[0]!.midAt).toBe(5 * H);
+    expect(r[0]!.returnAt).toBe(5 * H);
+    expect(r[0]!.poi.id).toBe(ID);
+    expect(reinforcementsEnRoute(m, 5 * H)).toHaveLength(0);
+  });
+  it('deux envois distincts font deux convois', async () => {
+    const { reinforcementsEnRoute } = await import('@/lib/controlPoints');
+    const m1 = reinforceControl(held(['a']), ID, ['b'], 5 * H, 2 * H);
+    const m = reinforceControl(m1, ID, ['c'], 6 * H, 3 * H);
+    expect(reinforcementsEnRoute(m, 4 * H)).toHaveLength(2);
+  });
+  it('un renfort sans départ connu (ancien) n’est pas dessiné', async () => {
+    const { reinforcementsEnRoute } = await import('@/lib/controlPoints');
+    const m = reinforceControl(held(['a']), ID, ['b'], 5 * H);
+    expect(reinforcementsEnRoute(m, 3 * H)).toHaveLength(0);
+  });
+});
