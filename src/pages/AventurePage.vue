@@ -886,7 +886,7 @@
               title="Trophées — tes trophées de boss entre amis"
               @click="openTrophyBag()"
             >
-              🏆
+              🏆<span v-if="trophyBag.length" class="gi-badge">{{ trophyBag.length }}</span>
             </button>
             <!-- 🔮 Sac à reliques (demandé par l'utilisateur) : une relique porte un POUVOIR, elle
                  se choisit sur son effet, pas sur une puissance — elle a donc son propre sac. -->
