@@ -42,6 +42,10 @@
     <span v-if="d.teamTotal" class="av-cell" :class="{ none: !d.teamFree }"
       ><span class="av-ico">🧭</span>{{ d.teamFree }}/{{ d.teamTotal }}</span
     >
+    <!-- 🛡️ Les miliciens postés sur des places fortes (ou en route) / tous ceux qui existent. -->
+    <span v-if="mil.total" class="av-cell" :class="{ none: !mil.posted }"
+      ><span class="av-ico">{{ MILITIA_EMO }}</span>{{ mil.posted }}/{{ mil.total }}</span
+    >
     <span v-if="interactive" class="av-go">›</span>
   </component>
 </template>
@@ -54,6 +58,7 @@ import { caravanSlots, convoySlotsFree } from '@/lib/caravan';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
+import { MILITIA_EMO, militiaCount } from '@/lib/militia';
 
 const props = defineProps<{
   /** L'horloge de l'écran hôte (il en a déjà une, on ne double pas le tick). */
@@ -107,6 +112,9 @@ const rankRows = computed(() =>
   ),
 );
 
+/** 🛡️ Miliciens postés (ou en route vers une place forte) / effectif total. */
+const mil = computed(() => militiaCount(char.row?.base?.militia, char.row?.expedition_map));
+
 const title = computed(() => {
   const h = hero.value;
   const parts = [
@@ -121,6 +129,10 @@ const title = computed(() => {
     parts.push(`${d.value.champFree} champion(s) disponible(s) sur ${d.value.champTotal}`);
   if (d.value.teamTotal)
     parts.push(`${d.value.teamFree} équipe(s) libre(s) sur ${d.value.teamTotal}`);
+  if (mil.value.total)
+    parts.push(
+      `${mil.value.posted} milicien(s) posté(s) sur ${mil.value.total} (${mil.value.home} à la base)`,
+    );
   return parts.join(' · ');
 });
 </script>

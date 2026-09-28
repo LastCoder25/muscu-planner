@@ -4,6 +4,7 @@ import {
   emptyMilitia,
   isMilitiaId,
   militiaCap,
+  militiaCount,
   militiaIntervalH,
   militiaLost,
   militiaOfControl,
@@ -165,6 +166,13 @@ describe('envoyer, rappeler', () => {
     const map = { pois: [p, point(10, 'garden')] } as unknown as ExpeditionMap;
     expect(militiaOnMap(map)).toBe(2);
     expect(militiaOfControl(p.control)).toEqual(['mil:1', 'mil:2']);
+    // 🛡️ La ligne des disponibilités : postés (ou en route) / total, base comprise.
+    expect(militiaCount({ home: 3, producedAt: 0, seq: 5 }, map)).toEqual({
+      posted: 2,
+      home: 3,
+      total: 5,
+    });
+    expect(militiaCount(null, null)).toEqual({ posted: 0, home: 0, total: 0 });
   });
 });
 
