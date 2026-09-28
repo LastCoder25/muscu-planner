@@ -1892,7 +1892,10 @@ describe('🔀 FusionPanel', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    expect(out).toContain('Points fixes');
+    expect(out).toContain('Places fortes');
+    // Ce que chaque place rapporte vit en bout de ligne, visible sans déplier.
+    expect(out).toContain('cps-yield-end');
+    expect(out).toContain('or 🪙 en continu');
     expect(out).toContain('1/6 tenus');
     expect(out).toContain('🛡️ 1/3');
   }, 30_000);
