@@ -74,6 +74,26 @@ describe('🔮 le catalogue', () => {
     expect(new Set(voiePowers).size).toBe(VOIES.length); // un pouvoir différent par voie
     for (const p of RELIC_POWERS) expect(relicPowerText(relicItem(p.id))).toContain(p.name);
   });
+  it('le texte parle au joueur : pas de « volée » (jargon du moteur), déclencheur puis effet', () => {
+    for (const p of RELIC_POWERS) {
+      const t = relicPowerText(relicItem(p.id));
+      expect(t, p.id).not.toMatch(/volée/);
+      expect(t, p.id).toContain(' : ');
+    }
+  });
+  it('une relique Légendaire+ annonce son VRAI seuil de déclenchement (jauge plus rapide)', () => {
+    // Coup fatal : 20 par critique → 5 critiques ; × fastMult 1,25 → 4 critiques.
+    expect(relicPowerText(relicItem('coup_fatal', { rarity: 'commun' }))).toContain(
+      `Tous les ${Math.ceil(RELIC.full / RELIC.fatalCharge)} coups critiques`,
+    );
+    expect(relicPowerText(relicItem('coup_fatal', { rarity: 'legendaire' }))).toContain(
+      `Tous les ${Math.ceil(RELIC.full / (RELIC.fatalCharge * RELIC.fastMult))} coups critiques`,
+    );
+    // Carapace : 50 % des PV max encaissés → 40 % en Légendaire+.
+    expect(relicPowerText(relicItem('carapace', { rarity: 'legendaire' }))).toContain(
+      `${Math.round((RELIC.carapaceScale / RELIC.fastMult) * 100)} % de tes PV max`,
+    );
+  });
   it('une relique à pouvoir ne donne AUCUNE stat', () => {
     const a = aggregateEffects({
       relic: relicItem('brasier', { effect: { type: 'max_pv_pct', value: 50 } }),

@@ -473,109 +473,126 @@ export interface RelicPowerDef {
   emoji: string;
   /** La voie dont c'est le pouvoir (sa relique de set tombe des boss). */
   voie?: string;
-  /** Ce qui charge la jauge — en toutes lettres. */
-  charge: string;
+  /** Quand il se déclenche — en toutes lettres, seuil chiffré. `fast` = relique de rang
+   *  Légendaire+ (jauge × `RELIC.fastMult`) : le seuil affiché est alors le VRAI seuil. */
+  charge: (fast: boolean) => string;
   /** Ce qu'il fait, chiffré à la force de la relique. */
   effect: (force: number) => string;
 }
 const pctOf = (x: number) => `${Math.round(x * 100)} %`;
+/** Un nombre à une décimale, virgule française (« 1,5 »). */
+const dec1 = (x: number) => x.toFixed(1).replace('.', ',');
+/** ⚠️ « Une volée » (jargon du moteur) = les dégâts d'UN tour complet de tes attaques. On le
+ *  dit ainsi : c'est la seule unité qui se comprend sans notice, et elle suit ton build. */
+const turnsOf = (x: number) => `${dec1(x)}× les dégâts d’un tour de tes attaques`;
+/** Nombre d'actions pour remplir la jauge, dérivé du combat (bonus Légendaire+ compris). */
+const fills = (perAction: number, fast: boolean) =>
+  Math.ceil(RELIC.full / (perAction * (fast ? RELIC.fastMult : 1)));
+/** Une quantité à ACCUMULER pour remplir la jauge (bonus Légendaire+ compris). */
+const needed = (share: number, fast: boolean) => share / (fast ? RELIC.fastMult : 1);
 export const RELIC_POWERS: RelicPowerDef[] = [
   {
     id: 'brasier',
     name: 'Brasier',
     emoji: '🔥',
     voie: 'berserker',
-    charge: `se charge vite, dès que tu passes sous ${Math.round(RELIC.brasierThreshold * 100)} % de tes PV`,
+    charge: (fast) =>
+      `Sous ${pctOf(RELIC.brasierThreshold)} de tes PV, tous les ${fills(RELIC.brasierCharge, fast)} tours`,
     effect: (f) =>
-      `une frappe de ${(RELIC.brasierMult * f).toFixed(1)} volée, jusqu’à ×${1 + RELIC.brasierMissing} selon les PV qui te manquent`,
+      `une frappe bonus de ${turnsOf(RELIC.brasierMult * f)}, jusqu’à ×${1 + RELIC.brasierMissing} quand tu es presque à terre`,
   },
   {
     id: 'rempart',
     name: 'Rempart vengeur',
     emoji: '🛡️',
     voie: 'gardien',
-    charge: 'chaque parade',
-    effect: (f) => `une contre-attaque de ${(RELIC.rempartMult * f).toFixed(1)} volée`,
+    charge: () => 'Chaque fois que tu pares un coup',
+    effect: (f) => `une contre-attaque de ${turnsOf(RELIC.rempartMult * f)}`,
   },
   {
     id: 'coup_fatal',
     name: 'Coup fatal',
     emoji: '🎯',
     voie: 'assassin',
-    charge: 'chaque coup critique',
+    charge: (fast) => `Tous les ${fills(RELIC.fatalCharge, fast)} coups critiques`,
     effect: (f) =>
-      `le coup suivant est un critique ×${(1 + RELIC.fatalBonus * f).toFixed(2)} plus fort, inesquivable`,
+      `ton coup suivant est un critique ${dec1(1 + RELIC.fatalBonus * f)}× plus fort que d’habitude, impossible à esquiver`,
   },
   {
     id: 'festin',
     name: 'Festin',
     emoji: '🩸',
     voie: 'vampire',
-    charge: 'le soin perdu au plafond du vol de vie',
+    charge: (fast) =>
+      `Le soin de ton vol de vie perdu au-delà du maximum par tour est gardé ; dès qu’il atteint ${pctOf(needed(RELIC.festinScale, fast))} de tes PV max`,
     effect: (f) =>
-      `ce soin perdu revient en dégâts (×${f.toFixed(2)}, au plus ${pctOf(RELIC.stockCapPct * f)} des PV max de l’ennemi)`,
+      `il ressort d’un coup en dégâts (×${dec1(f)}, au plus ${pctOf(RELIC.stockCapPct * f)} des PV max de l’ennemi)`,
   },
   {
     id: 'tempete',
     name: 'Tempête',
     emoji: '🌀',
     voie: 'frenetique',
-    charge: `chaque tour une fois ton élan à ${RELIC.tempeteStacks}`,
-    effect: () => 'une rafale portée par ton élan (plus il est haut, plus elle frappe)',
+    charge: () => `À chaque tour, à partir de ton ${RELIC.tempeteStacks + 1}ᵉ`,
+    effect: () =>
+      'une rafale bonus qui grossit avec ton élan (presque rien sans stat d’élan)',
   },
   {
     id: 'riposte_parfaite',
     name: 'Riposte parfaite',
     emoji: '🤺',
     voie: 'duelliste',
-    charge: 'chaque parade ou riposte',
-    effect: (f) => `une riposte critique entière de ${f.toFixed(1)} volée`,
+    charge: () => 'Chaque fois que tu pares ou ripostes',
+    effect: (f) => `une riposte de ${turnsOf(f)}, entièrement en critique`,
   },
   {
     id: 'ronces',
     name: 'Éclat de ronces',
     emoji: '🌵',
     voie: 'epineux',
-    charge: 'chaque coup d’épines',
-    effect: (f) => `une explosion de ${(RELIC.roncesMult * f).toFixed(1)} volée`,
+    charge: () => 'Chaque fois que tes épines blessent l’ennemi',
+    effect: (f) => `une explosion de ${turnsOf(RELIC.roncesMult * f)}`,
   },
   {
     id: 'carapace',
     name: 'Carapace',
     emoji: '🐢',
     voie: 'colosse',
-    charge: 'les dégâts que tu encaisses',
-    effect: (f) => `une barrière de ${pctOf(RELIC.carapaceShield * f)} de tes PV max`,
+    charge: (fast) =>
+      `Chaque fois que tu encaisses ${pctOf(needed(RELIC.carapaceScale, fast))} de tes PV max`,
+    effect: (f) =>
+      `une barrière de ${pctOf(RELIC.carapaceShield * f)} de tes PV max, qui absorbe les coups suivants`,
   },
   {
     id: 'ouverture',
     name: 'Ouverture',
     emoji: '⚡',
-    charge: 'pleine au début de chaque combat, puis lentement',
-    effect: (f) =>
-      `une frappe de ${(RELIC.ouvertureMult * f).toFixed(1)} volée dès ton premier tour`,
+    charge: (fast) =>
+      `Au premier tour de chaque combat (puis ${fills(RELIC.ouvertureCharge, fast)} tours pour se recharger)`,
+    effect: (f) => `une frappe bonus de ${turnsOf(RELIC.ouvertureMult * f)}`,
   },
   {
     id: 'moisson',
     name: 'Moisson',
     emoji: '⚰️',
-    charge: `chaque monstre abattu, ou ${pctOf(RELIC.moissonHpShare)} des PV d’un ennemi arrachés`,
+    charge: (fast) =>
+      `Tous les ${fills(RELIC.moissonCharge, fast)} monstres abattus, ou dès que tu arraches ${pctOf(needed(RELIC.moissonHpShare, fast))} des PV d’un ennemi`,
     effect: (f) =>
-      `+${pctOf(RELIC.moissonBuff * f)} de dégâts pour le reste du combat (ou le suivant)`,
+      `+${pctOf(RELIC.moissonBuff * f)} de dégâts jusqu’à la fin du combat (ou pour tout le suivant)`,
   },
   {
     id: 'phenix',
     name: 'Phénix',
     emoji: '🐦‍🔥',
-    charge: 'sans jauge : le premier coup qui te tuerait',
+    charge: () => 'Une fois par combat, sur le coup qui devrait te tuer',
     effect: (f) =>
-      `ce coup perd ${pctOf(Math.min(RELIC.phenixMax, RELIC.phenixBlock * f))} de ses dégâts`,
+      `ce coup perd ${pctOf(Math.min(RELIC.phenixMax, RELIC.phenixBlock * f))} de ses dégâts (s’il reste mortel, tu tombes quand même)`,
   },
   {
     id: 'second_souffle',
     name: 'Second souffle',
     emoji: '💨',
-    charge: 'sans jauge : la première fois sous 30 % de PV',
+    charge: () => `Une fois par combat, quand tu passes sous ${pctOf(COMBAT.secondWindThreshold)} de tes PV`,
     effect: (f) =>
       `tu récupères ${pctOf(Math.min(RELIC.souffleMax, RELIC.souffleHeal * f))} de tes PV max`,
   },
@@ -613,8 +630,9 @@ export function relicCharge(it: Item | undefined): RelicCharge | undefined {
 export function relicPowerText(it: Omit<Item, 'id'>): string {
   const p = relicPowerOf(it.power);
   if (!p) return '';
-  const fast = RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK ? ' · jauge plus rapide' : '';
-  return `${p.emoji} ${p.name} — ${p.effect(relicForce(it))} (${p.charge}${fast})`;
+  // Le bonus Légendaire+ (jauge plus rapide) est déjà compté dans le seuil affiché.
+  const fast = RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK;
+  return `${p.emoji} ${p.name} — ${p.charge(fast)} : ${p.effect(relicForce(it))}.`;
 }
 // ─── 🏆 POUVOIRS DE TROPHÉE (sets spécialisés, spec § 5) ─────────────────────
 // Le trophée ne donne AUCUNE stat : il porte un POUVOIR dont la QUÊTE suit le geste d'une
