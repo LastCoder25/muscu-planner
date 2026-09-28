@@ -126,6 +126,17 @@ import {
 } from '@/lib/buildings';
 import { combatPower, mulberry32, type Combatant } from '@/lib/combat';
 import {
+  emptyMilitia,
+  militiaIn,
+  militiaLostLabel,
+  militiaOfControl,
+  militiaOnMap,
+  militiaUnits,
+  produceMilitia,
+  returnMilitia,
+  takeMilitia,
+} from '@/lib/militia';
+import {
   advanceBase,
   markOverflow,
   dispelOverflow,
@@ -194,7 +205,13 @@ import {
   type RuneTier,
   type SkillId,
 } from '@/lib/skillRunes';
-import { convoySlotsFree, partyAllies, type EscortKit, type PartyHero } from '@/lib/caravan';
+import {
+  caravanLegMin,
+  convoySlotsFree,
+  partyAllies,
+  type EscortKit,
+  type PartyHero,
+} from '@/lib/caravan';
 import {
   advGearRoles,
   advGearSellValue,
@@ -2529,6 +2546,17 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return { detected: null, report: null, advProgress: [], advTracks: [] };
     const t = advanceBase(baseOf(cur, now), ctx, now);
+    // 🛡️ La Caserne produit : l'horloge avance par pas entiers, donc l'état ne change qu'une
+    // fois par milicien (on n'écrit pas chaque seconde).
+    const barracks = buildingLevel(cur.buildings, 'barracks');
+    if (barracks > 0) {
+      const m0 = t.base.militia ?? emptyMilitia(now);
+      const m1 = produceMilitia(m0, barracks, militiaOnMap(cur.expedition_map), now);
+      if (m1 !== t.base.militia) {
+        t.base = { ...t.base, militia: m1 };
+        t.changed = true;
+      }
+    }
     if (!t.dueRaid) {
       if (t.changed) await persist(userId, { base: t.base });
       return { detected: t.detected, report: null, advProgress: [], advTracks: [] };
@@ -3464,6 +3492,7 @@ export const useCharacterStore = defineStore('character', () => {
     let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
     const runesIn: RuneTier[] = [];
+    let milHome = 0;
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
@@ -3475,23 +3504,27 @@ export const useCharacterStore = defineStore('character', () => {
       gearStock = h.stock;
       runesIn.push(...h.runes);
       const escort = advs.filter((a) => ids.has(a.id));
+      // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
+      const militia = militiaUnits(p.control!.garrison, playerLevel);
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
-      const force = retakeForce(p, retakeBoost(p, partyAllies(escort, kit, null)));
+      const force = retakeForce(p, retakeBoost(p, [...partyAllies(escort, kit, null), ...militia]));
       const seed = (at ^ (p.level * 2654435761)) >>> 0 || 1;
-      const o = escort.length
-        ? resolveCamp({
-            poi: p,
-            spec: force,
-            escort,
-            road: kit,
-            hero: null,
-            seed,
-            playerLevel,
-            pantheonLevel: pantheonLevel.value,
-          })
-        : null;
+      const o =
+        escort.length || militia.length
+          ? resolveCamp({
+              poi: p,
+              spec: force,
+              escort,
+              road: kit,
+              hero: null,
+              seed,
+              playerLevel,
+              pantheonLevel: pantheonLevel.value,
+              militia,
+            })
+          : null;
       const held = !!o?.win;
       const stock = h.gold;
       const emo = FACTION_EMOJI[force.faction];
@@ -3522,13 +3555,20 @@ export const useCharacterStore = defineStore('character', () => {
         id: `ctl_${p.id}_${at}`,
         title: held ? `🏰 ${label} : attaque repoussée` : `🏰 ${label} reprise par l’ennemi`,
         text: held
-          ? `${emo} Tes champions ont tenu. Une nouvelle attaque se prépare.`
+          ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)} Une nouvelle attaque se prépare.`
           : escort.length
-            ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.`
-            : `${emo} L’ennemi a repris le lieu, laissé sans défense.`,
+            ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}`
+            : militia.length
+              ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
+              : `${emo} L’ennemi a repris le lieu, laissé sans défense.`,
         ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
       };
       msgs.push(msg);
+      // 🛡️ Vaincu : les miliciens encore EN ROUTE vers le point font demi-tour (ceux de la
+      // garnison, eux, sont tombés). Tenu : les miliciens tombés sont retirés de la garnison.
+      if (!held) milHome += militiaIn((p.control!.reinforcing ?? []).map((r) => r.id)).length;
+      const dead = o?.party?.militiaLost ?? [];
+      if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
       map = held ? holdControl(map, p.id, at, activeDays7) : loseControl(map, p.id, playerLevel);
       // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
       // route (ils font demi-tour ; seule la garnison, qui a combattu, part à l'infirmerie).
@@ -3567,6 +3607,9 @@ export const useCharacterStore = defineStore('character', () => {
       ...forged,
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
       ...(runesIn.length ? { runes: addRunes(cur.runes, runesIn) } : {}),
+      ...(milHome > 0 && cur.base?.militia
+        ? { base: { ...cur.base, militia: returnMilitia(cur.base.militia, milHome) } }
+        : {}),
       adventurers: roster,
     });
     x.play();
@@ -3676,9 +3719,19 @@ export const useCharacterStore = defineStore('character', () => {
     if (!cur?.expedition_map) return;
     const stock0 = cur.adv_gear?.stock ?? [];
     const h = harvestControlIn(cur.expedition_map, advList.value, stock0, id, now, playerLevel);
-    const all = advList.value.filter((a) => a.posted === id).map((a) => a.id);
+    const mil = militiaOfControl(cur.expedition_map.pois.find((p) => p.id === id)?.control);
+    const all = [...advList.value.filter((a) => a.posted === id).map((a) => a.id), ...mil];
     await persist(userId, {
       expedition_map: releaseFromControl(h.map, id, all, now, playerLevel),
+      // 🛡️ Les miliciens rentrent à la base.
+      ...(mil.length && cur.base
+        ? {
+            base: {
+              ...cur.base,
+              militia: returnMilitia(cur.base.militia ?? emptyMilitia(now), mil.length),
+            },
+          }
+        : {}),
       adventurers: h.advs.map((a) => (a.posted === id ? { ...a, posted: undefined } : a)),
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(Object.keys(h.supplies).length
@@ -3706,12 +3759,56 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur?.expedition_map || !ids.length) return;
     const out = new Set(ids);
+    // 🛡️ Seulement les miliciens RÉELLEMENT sur ce point (un id inventé ne crée personne).
+    const onPoint = new Set(
+      militiaOfControl(cur.expedition_map.pois.find((p) => p.id === id)?.control),
+    );
+    const mil = ids.filter((x) => onPoint.has(x));
     await persist(userId, {
       expedition_map: releaseFromControl(cur.expedition_map, id, ids, now, playerLevel),
       adventurers: advList.value.map((a) =>
         out.has(a.id) && a.posted === id ? { ...a, posted: undefined } : a,
       ),
+      ...(mil.length && cur.base
+        ? {
+            base: {
+              ...cur.base,
+              militia: returnMilitia(cur.base.militia ?? emptyMilitia(now), mil.length),
+            },
+          }
+        : {}),
     });
+  }
+
+  /** 🛡️ Envoie `n` MILICIENS de la base sur un point tenu : ils prennent leur place tout de
+   *  suite et rejoignent la garnison à leur arrivée (trajet d'une équipe sans équipement).
+   *  Rend la RAISON d'un refus, `null` si partis. */
+  async function sendMilitiaToControl(
+    userId: string,
+    id: string,
+    n: number,
+    now: number,
+  ): Promise<string | null> {
+    const cur = row.value;
+    const poi = cur?.expedition_map?.pois.find((p) => p.id === id);
+    if (!cur?.base || !poi) return 'la carte n’est pas chargée';
+    const block = reinforceBlocker(poi.control, n);
+    if (block) return REINFORCE_BLOCK_LABEL[block];
+    const took = takeMilitia(cur.base.militia ?? emptyMilitia(now), n);
+    if (!took) return 'pas assez de miliciens à la base';
+    // Le trajet d'une équipe de champions sans rôle ni équipement de vitesse.
+    const leg = caravanLegMin(
+      poi,
+      [],
+      0,
+      travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+    );
+    const at = now + leg * 60_000;
+    await persist(userId, {
+      expedition_map: reinforceControl(cur.expedition_map!, id, took.ids, at, now),
+      base: { ...cur.base, militia: took.state },
+    });
+    return null;
   }
 
   /** 🏰 Envoie des champions en RENFORT sur un point tenu : ils prennent leur place tout de
@@ -3812,6 +3909,7 @@ export const useCharacterStore = defineStore('character', () => {
     recallControl,
     releaseControlChampions,
     reinforceControlPoint,
+    sendMilitiaToControl,
     applyExpedition,
     equip,
     sellLoadout,

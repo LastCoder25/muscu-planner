@@ -296,6 +296,9 @@ export interface PartyResult {
   xp: Record<string, number>;
   /** Aventuriers envoyés à l'infirmerie (défaite : tous ceux qui sont tombés). */
   hurt: string[];
+  /** 🛡️ Miliciens MORTS au combat (défaite : tous ceux engagés ; victoire : ceux tombés).
+   *  Absent = aucun milicien engagé. Ils ne vont pas à l'infirmerie : ils sont perdus. */
+  militiaLost?: string[];
   /** 🩹 Trousse de soins emportée : multiplicateur de convalescence (< 1). Absent = aucune. */
   healMult?: number;
   journal: string[];
