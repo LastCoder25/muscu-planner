@@ -27,6 +27,8 @@ interface MissionCardMember {
   xp: number;
   kills: number;
   hurt: boolean;
+  /** 🩹 Blessure légère (victoire serrée). */
+  lightHurt: boolean;
   /** Mis à terre mais relevé (convoi) : pas d'infirmerie. */
   down: boolean;
   /** Une étoile de plus à CET encaissement. */
@@ -112,6 +114,7 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
       xp: x.xp,
       kills: x.kills,
       hurt: x.hurt,
+      lightHurt: x.lightHurt,
       down: false,
       star: false,
       gone: x.gone,
