@@ -450,6 +450,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partySize,
     supplyRows,
     toggleSupply,
+    partyRoad,
     partyWin,
     partyMin,
     partyRisk,

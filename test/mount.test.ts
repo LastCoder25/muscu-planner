@@ -1869,4 +1869,31 @@ describe('🔀 FusionPanel', () => {
     expect(open).toContain('2/3');
     expect(open).toMatch(/Bronze[\s\S]*Argent/);
   }, 30_000);
+  it('🏰 ControlPointsSheet liste les points fixes, garnison comprise', async () => {
+    const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
+    const { captureControl, controlIdOf, controlRoster, ensureControls } =
+      await import('@/lib/controlPoints');
+    const { createMap } = await import('@/lib/expedition');
+    const map = captureControl(
+      ensureControls(createMap(3, 0, 30, 1), 0, 30),
+      controlIdOf('mine'),
+      ['a1'],
+      0,
+      7,
+    );
+    let out = '';
+    expect(
+      await mountIt(
+        ControlPointsSheet,
+        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30), advs: ROW.adventurers },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Points fixes');
+    expect(out).toContain('1/6 tenus');
+    expect(out).toContain('🛡️ 1/3');
+  }, 30_000);
 });

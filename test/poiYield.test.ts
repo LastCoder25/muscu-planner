@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { poiHaulPreview, hourlyRates, formatRates } from '@/lib/poiYield';
+import { poiHaulPreview, poiHaulBonus, formatHaul } from '@/lib/poiYield';
+import { refAdvGear, refChampionAdv, resolveCaravan } from '@/lib/caravan';
+import { SUPPLY, type SupplyId } from '@/lib/supplies';
+import type { Adventurer } from '@/lib/adventurers';
 import {
   harvestGold,
   harvestYield,
@@ -64,22 +67,91 @@ describe('une faille', () => {
   });
 });
 
-describe('hourlyRates : la distance ne coûte que du temps', () => {
-  const haul = { gold: 3000, energy: 0, summonStones: 4, keys: 1, mana: 0 };
-  it('divise par la durée en heures, sans les ressources nulles', () => {
-    const r = hourlyRates(haul, 120);
-    expect(r.map((x) => x.key)).toEqual(['gold', 'summonStones', 'keys']);
-    expect(r[0]!.perHour).toBe(1500);
-    expect(r[2]!.perHour).toBe(0.5);
+describe('formatHaul : la quantité, sans les ressources nulles (v0.1265)', () => {
+  it('liste ce qui rapporte, avec un préfixe au choix', () => {
+    const haul = { gold: 3000, energy: 0, summonStones: 4, keys: 1, mana: 0 };
+    const fr = (n: number) => n.toLocaleString('fr-FR');
+    expect(formatHaul(haul)).toBe(`${fr(3000)} 🪙 · 4 🔮 · 1 🗝️`);
+    expect(formatHaul(haul, '+')).toBe(`+${fr(3000)} 🪙 · +4 🔮 · +1 🗝️`);
+    expect(formatHaul({ gold: 0, energy: 0, summonStones: 0, keys: 0, mana: 0 })).toBe('');
   });
-  it('le même butin rend deux fois plus à mi-distance', () => {
-    expect(hourlyRates(haul, 60)[0]!.perHour).toBe(2 * hourlyRates(haul, 120)[0]!.perHour);
+});
+
+describe('poiHaulBonus : les bâts et les porteurs, à part (v0.1265)', () => {
+  const team = (n: number): Adventurer[] =>
+    Array.from({ length: n }, (_, i) => ({
+      ...refChampionAdv(26, i),
+      id: `a${i}`,
+      gear: {
+        weapon: `refGear${i}weapon`,
+        armor: `refGear${i}armor`,
+        accessory: `refGear${i}accessory`,
+        relic: `refGear${i}relic`,
+      },
+    }));
+  const advGear = refAdvGear(26, 3);
+  const zero = { gold: 0, energy: 0, summonStones: 0, keys: 0, mana: 0 };
+  const bats: SupplyId[] = ['bats'];
+
+  it('rien sans bâts ni porteurs, rien sur un lieu qui n’est pas une récolte', () => {
+    expect(
+      poiHaulBonus(poi('mine'), {
+        playerLevel: 30,
+        heroGoes: true,
+        escort: [],
+        kit: { advGear: [], supplies: [] },
+      }),
+    ).toEqual(zero);
+    expect(
+      poiHaulBonus(poi('camp'), {
+        playerLevel: 30,
+        heroGoes: true,
+        escort: [],
+        kit: { advGear: [], supplies: bats },
+      }),
+    ).toEqual(zero);
   });
-  it('rien sans trajet connu', () => {
-    expect(hourlyRates(haul, 0)).toEqual([]);
-    expect(hourlyRates(haul, NaN)).toEqual([]);
+
+  it('avec le héros, les bâts s’appliquent à la récolte', () => {
+    const p = poi('mine');
+    const g = harvestGold(p, 30);
+    const b = poiHaulBonus(p, {
+      playerLevel: 30,
+      heroGoes: true,
+      escort: team(3),
+      kit: { advGear, supplies: bats },
+    });
+    expect(b.gold).toBe(Math.round(g * (1 + SUPPLY.haul)) - g);
+    expect(b.gold).toBeGreaterThan(0);
   });
-  it('formatRates : entier au-delà de 10, une décimale en dessous', () => {
-    expect(formatRates(hourlyRates(haul, 120))).toBe('1 500 🪙/h · 2,0 🔮/h · 0,5 🗝️/h');
+
+  it('sans le héros : exactement ce que les bâts ajoutent au convoi (graines sans rencontre)', () => {
+    const p = poi('mana_mine', 'mm', 26);
+    const esc = team(3);
+    const avecKit = { advGear, supplies: bats };
+    const sansKit = { advGear, supplies: [] as SupplyId[] };
+    const opts = (kit: typeof avecKit) => ({ playerLevel: 26, heroGoes: false, escort: esc, kit });
+    let calmes = 0;
+    for (let seed = 1; seed <= 60; seed++) {
+      const avec = resolveCaravan(p, esc, seed, avecKit, 26, 26);
+      if (!avec.events.every((e) => e.kind === 'calme')) continue;
+      calmes++;
+      const sans = resolveCaravan(p, esc, seed, sansKit, 26, 26);
+      const dA = poiHaulBonus(p, opts(avecKit));
+      const dS = poiHaulBonus(p, opts(sansKit));
+      expect(avec.mana - sans.mana).toBe(dA.mana - dS.mana);
+      expect(avec.gold - sans.gold).toBe(dA.gold - dS.gold);
+    }
+    expect(calmes).toBeGreaterThan(0);
+  });
+
+  it('sans le héros, l’énergie ne dépasse jamais sa base', () => {
+    const b = poiHaulBonus(poi('well'), {
+      playerLevel: 30,
+      heroGoes: false,
+      escort: team(3),
+      kit: { advGear, supplies: bats },
+    });
+    expect(b.energy).toBe(0);
   });
 });

@@ -275,11 +275,28 @@
 
       <!-- Zoom -->
       <div class="zoom-ctl">
+        <!-- 🗂️ Les points fixes, en liste (juste au-dessus du dézoom, demandé). La pastille dit
+             combien appellent : attaque imminente, sans défense, ou butin à récolter. -->
+        <button
+          class="zoom-b ctl-list-b"
+          aria-label="Points fixes"
+          title="Points fixes"
+          @click="ctlListOpen = true"
+        >
+          🏰<span v-if="ctlCalls" class="ctl-list-dot">{{ ctlCalls }}</span>
+        </button>
         <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
         <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
         <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
       </div>
     </div>
+
+    <ControlPointsSheet
+      v-model="ctlListOpen"
+      :rows="ctlRoster"
+      :advs="char.advList"
+      @open="openFromList"
+    />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
     <TripsPanel v-model:focus="focusTrip" :trips="trips" :hero-profile="character.profile" />
@@ -452,9 +469,7 @@
               <span class="ph-main">
                 <span class="ph-name">Ton héros</span>
                 <span class="ph-sub">{{
-                  partyHeroBlock
-                    ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                    : 'sans XP'
+                  partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : 'sans XP'
                 }}</span>
               </span>
               <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
@@ -664,7 +679,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { poiHaulPreview, hourlyRates, formatRates } from '@/lib/poiYield';
+import { poiHaulPreview, poiHaulBonus, formatHaul } from '@/lib/poiYield';
 import {
   fogRevealPlan,
   fogRadiusAt,
@@ -732,6 +747,7 @@ import MapTerrain from '@/components/MapTerrain.vue';
 import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
+import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
 import { winClass, type PoiFact } from '@/lib/poiFacts';
@@ -762,6 +778,7 @@ import {
   CONTROL,
   CONTROL_YIELD,
   controlFreeSeats,
+  controlRoster,
   controlGoldPerHour,
   controlStock,
   controlTravelMult,
@@ -1722,6 +1739,34 @@ function dimmed(p: Poi): boolean {
   return !o.hero && !o.party;
 }
 
+/** 🗂️ La liste des points fixes (icône au-dessus du dézoom). Les équipes en marche pour
+ *  prendre un point viennent des groupes (`partyList`) : elles restent en garnison à
+ *  l'arrivée (`midAt`). */
+const ctlListOpen = ref(false);
+const ctlRoster = computed(() =>
+  controlRoster(
+    char.row?.expedition_map,
+    char.partyList.map((g) => ({
+      poiId: g.poi.id,
+      midAt: g.midAt,
+      ids: g.outcome.party?.escort ?? [],
+    })),
+    coarseNow.value,
+    heroLevel.value,
+  ),
+);
+/** Combien de points appellent : attaque imminente, sans défense, butin à récolter. */
+const ctlCalls = computed(
+  () =>
+    ctlRoster.value.filter((r) => r.status === 'imminent' || r.status === 'empty' || r.ready)
+      .length,
+);
+function openFromList(p: Poi) {
+  ctlListOpen.value = false;
+  panToPoi(p);
+  selectPoi(p);
+}
+
 function selectPoi(p: Poi) {
   // ⚠️ On sélectionne MÊME si le héros est en expédition : un convoi part sans lui.
   // Ce qui est ouvert ou non se décide dans la feuille, via `poiOffers`.
@@ -1764,33 +1809,14 @@ const poiFacts = computed<PoiFact[]>(() => {
   const guard = selectedGuard.value;
   // 👾 Faction et nombre d'ennemis vivent sur la ligne sous le nom (`poiSub`).
   const force = selectedForce.value;
-  // 💰 LE DÉTAIL DE L'OR ET DU BUTIN (v0.1166, demandé : « le détail ») — ce que portent les
-  // ennemis (`forceLootPreview`, les MÊMES poids que la résolution) et, pour une mine, son filon
-  // (`harvestGold`, la même fonction que la récolte). Versé en entier sur une victoire ; sur
-  // une défaite, seulement ce que portaient les ennemis abattus.
-  if (p.type === 'mine')
-    out.push({
-      icon: '⛏️',
-      label: 'Filon',
-      value: `${harvestGold(p, partyHeroOn.value ? progressionLevel.value : heroLevel.value).toLocaleString('fr-FR')} 🪙`,
-      title: "L'or de la mine, selon son rang et ses étoiles — récolté si tu bats ses gardes",
-    });
+  // 💰 CE QU'ON RAMÈNE, EN QUANTITÉ (v0.1265, demandé : « pas la production, juste la quantité
+  // récupérable ») — la récolte + ce que portent les gardes (`poiHaulPreview`, les MÊMES
+  // fonctions que la résolution). Le détail (filon, bourses) passe dans l'info-bulle. Ce
+  // qu'ajoutent les bâts 🧺 et les porteurs 🐫 s'affiche À PART (`poiHaulBonus`). Une faille
+  // l'annonce déjà (« Si refermée »).
+  if (!rift) pushHaul(out, p, force ?? null);
   if (force) {
     const l = forceLootPreview(p, force);
-    if (l.gold)
-      out.push({
-        icon: '👛',
-        label: 'Bourses',
-        value: `${l.gold.toLocaleString('fr-FR')} 🪙`,
-        title: 'Ce que portent les bandits — plus pour un chef ou un champion',
-      });
-    if (l.summonStones)
-      out.push({
-        icon: '🔮',
-        label: 'Sur les ennemis',
-        value: `${l.summonStones} pierres`,
-        title: 'Ce que portent les morts-vivants — plus pour un chef ou un champion',
-      });
     if (l.supplies)
       out.push({
         icon: '🎒',
@@ -1840,7 +1866,6 @@ const poiFacts = computed<PoiFact[]>(() => {
       go: true,
       title: 'Aller-retour du héros',
     });
-    pushRate(out, p, roundTripMin(p), true);
     if (p.type === 'arena')
       out.push({
         icon: '🌊',
@@ -1879,10 +1904,6 @@ const poiFacts = computed<PoiFact[]>(() => {
         title: `Sur place : ${formatDurationMin(veinDwellMs(1) / 60_000)} seul, ${formatDurationMin(veinDwellMs(2) / 60_000)} à deux, ${formatDurationMin(veinDwellMs(3) / 60_000)} à trois — la réserve est la même`,
       });
     }
-    // Sans équipe composée, au pas du HÉROS : on compare deux lieux d'un coup d'œil, avant de
-    // choisir qui part. Le chiffre se recale sur l'équipe dès qu'elle est composée.
-    if (partySize.value) pushRate(out, p, partyMin.value, partyHeroOn.value);
-    else pushRate(out, p, roundTripMin(p), true, true);
     if (teamOnly.value || guard)
       out.push(
         partyWin.value === null
@@ -1906,22 +1927,45 @@ const poiFacts = computed<PoiFact[]>(() => {
   }
   return out;
 });
-/** ⏱️ Le RENDEMENT par heure d'aller-retour (v0.1207) : la récompense suit la difficulté, la
- *  distance ne coûte que du temps — c'est donc ce chiffre qui départage deux lieux de même rang.
- *  Le niveau est celui que la récolte applique (le même que la ligne « Filon »). */
-function pushRate(out: PoiFact[], p: Poi, minutes: number, heroGoes: boolean, estimate = false) {
-  const lvl = heroGoes ? progressionLevel.value : heroLevel.value;
-  const txt = formatRates(hourlyRates(poiHaulPreview(p, { playerLevel: lvl, heroGoes }), minutes));
+/** 💰 La QUANTITÉ ramenée si le lieu est pris, puis le bonus à part. Sans équipe composée on
+ *  compte au pas du héros (on compare deux lieux avant de choisir qui part) ; le chiffre se
+ *  recale sur l'équipe dès qu'elle est composée. Le niveau est celui que la récolte applique. */
+function pushHaul(out: PoiFact[], p: Poi, force: Parameters<typeof forceLootPreview>[1] | null) {
+  const heroGoes = partyTarget.value && partySize.value ? partyHeroOn.value : true;
+  const playerLevel = heroGoes ? progressionLevel.value : heroLevel.value;
+  const base = poiHaulPreview(p, { playerLevel, heroGoes });
+  const txt = formatHaul(base);
   if (!txt) return;
+  const detail: string[] = [];
+  const filon = p.type === 'mine' ? harvestGold(p, playerLevel) : 0;
+  const bourses = force ? forceLootPreview(p, force).gold : 0;
+  if (filon && bourses)
+    detail.push(
+      `filon ${filon.toLocaleString('fr-FR')} 🪙 + bourses des gardes ${bourses.toLocaleString('fr-FR')} 🪙`,
+    );
   out.push({
     icon: '💰',
-    label: 'Rendement',
-    value: estimate ? `≈ ${txt}` : txt,
-    // ⚠️ Pas sur la ligne trajet · réussite (faite pour deux chiffres) : à 344 px il y passait
-    // sur deux lignes (vu au banc). Rangé avec les informations du lieu.
-    title:
-      'Ce que ce lieu rapporte par heure d’aller-retour, s’il est pris (hors aléas de la route). À rang égal, un lieu proche rend plus.',
+    label: 'À récupérer',
+    value: txt,
+    title: ['Ce que tu ramènes si le lieu est pris (hors aléas de la route)', ...detail].join(
+      ' — ',
+    ),
   });
+  if (!partyTarget.value) return;
+  const bonus = formatHaul(
+    poiHaulBonus(p, { playerLevel, heroGoes, escort: partyAdvs.value, kit: partyRoad.value }),
+    '+',
+  );
+  if (bonus)
+    out.push({
+      icon: '🎁',
+      label: 'Bonus',
+      value: bonus,
+      cls: 'wp-good',
+      title: heroGoes
+        ? 'Ajouté par les bâts 🧺'
+        : 'Ajouté par les bâts 🧺, les porteurs 🐫 et les pièces de cargaison',
+    });
 }
 /**
  * ⚠️ DES PROPS À IDENTITÉ STABLE pour `MapPoiLayer` : ces trois listes dépendent de `now`
@@ -2167,6 +2211,7 @@ const {
   partySize,
   supplyRows,
   toggleSupply,
+  partyRoad,
   partyWin,
   partyMin,
   partyRisk,
@@ -2629,6 +2674,24 @@ onUnmounted(() => {
   cursor: pointer;
   display: grid;
   place-items: center;
+}
+.ctl-list-b {
+  position: relative;
+  font-size: 16px;
+}
+.ctl-list-dot {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
 }
 /* Décor de carte */
 /* Terrain : le sol vit dans MapTerrain.vue (mer, côte, prairie, reliefs). Ici ne
