@@ -54,10 +54,18 @@
               <span v-if="r.ready" class="pill go">🎁 à récolter</span>
             </span>
           </span>
-          <span class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
+          <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
+          <span v-if="r.progress" class="cps-yield-end prog" :class="{ full: isFull(r) }">
+            <span>{{ r.progress.text }}</span>
+            <span v-if="r.progress.pct !== null" class="cps-gauge"
+              ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
+            /></span>
+          </span>
+          <span v-else class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
           <span class="cps-chev">{{ openId === r.poi.id ? '▾' : '▸' }}</span>
         </button>
         <div v-if="openId === r.poi.id" class="cps-body">
+          <p v-if="r.progress" class="cps-line dim">Rapporte : {{ CONTROL_YIELD[r.kind] }}</p>
           <template v-if="r.status === 'enemy' || r.status === 'assault'">
             <p class="cps-line">
               {{ FACTION_EMOJI[r.poi.control!.faction] }} Tenu par
@@ -176,6 +184,9 @@ const reinfOf = (r: ControlRosterRow) =>
     return adv ? [{ adv, inMs: x.inMs }] : [];
   });
 const rankOf = (r: ControlRosterRow) => poiRank(r.poi);
+/** Réserve pleine (or/XP) ou unité prête (consommable, rune) : la jauge passe à l'accent. */
+const isFull = (r: ControlRosterRow) =>
+  !!r.progress && r.progress.pct !== null && r.progress.pct >= 0.999;
 const fmtSize = (n: number) => String(n).replace('.', ',');
 </script>
 
@@ -309,6 +320,36 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   line-height: 1.25;
   color: var(--accent);
   font-weight: 600;
+}
+.cps-yield-end.prog {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-family: Oswald, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.cps-gauge {
+  display: block;
+  width: 56px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+.cps-gauge > span {
+  display: block;
+  height: 100%;
+  background: var(--d1);
+}
+/* Réserve pleine : la production s'arrête, c'est le moment de récolter. */
+.cps-yield-end.prog.full {
+  color: var(--accent);
+}
+.cps-yield-end.prog.full .cps-gauge > span {
+  background: var(--accent);
 }
 .cps-line {
   font-size: 13px;
