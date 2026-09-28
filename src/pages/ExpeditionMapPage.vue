@@ -279,8 +279,8 @@
              combien appellent : attaque imminente, sans défense, ou butin à récolter. -->
         <button
           class="zoom-b ctl-list-b"
-          aria-label="Points fixes"
-          title="Points fixes"
+          aria-label="Places fortes"
+          title="Places fortes"
           @click="ctlListOpen = true"
         >
           🏰<span v-if="ctlCalls" class="ctl-list-dot">{{ ctlCalls }}</span>

@@ -12,7 +12,7 @@
   >
     <div class="cps">
       <div class="cps-head">
-        <span class="cps-title">🏰 Points fixes</span>
+        <span class="cps-title">🏰 Places fortes</span>
         <span class="cps-sum">{{ heldCount }}/{{ rows.length }} tenus</span>
         <button
           type="button"
@@ -23,7 +23,7 @@
           ✕
         </button>
       </div>
-      <p v-if="!rows.length" class="cps-empty">Aucun point fixe sur ta carte pour l’instant.</p>
+      <p v-if="!rows.length" class="cps-empty">Aucune place forte sur ta carte pour l’instant.</p>
       <div
         v-for="r in rows"
         :key="r.poi.id"
@@ -54,10 +54,10 @@
               <span v-if="r.ready" class="pill go">🎁 à récolter</span>
             </span>
           </span>
+          <span class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
           <span class="cps-chev">{{ openId === r.poi.id ? '▾' : '▸' }}</span>
         </button>
         <div v-if="openId === r.poi.id" class="cps-body">
-          <p class="cps-yield">Rapporte : {{ CONTROL_YIELD[r.kind] }}</p>
           <template v-if="r.status === 'enemy' || r.status === 'assault'">
             <p class="cps-line">
               {{ FACTION_EMOJI[r.poi.control!.faction] }} Tenu par
@@ -301,12 +301,19 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
 .cps-body {
   padding: 0 10px 10px;
 }
-.cps-yield,
+.cps-yield-end {
+  flex: 0 1 34%;
+  max-width: 120px;
+  text-align: right;
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--accent);
+  font-weight: 600;
+}
 .cps-line {
   font-size: 13px;
   margin: 4px 0;
 }
-.cps-yield,
 .dim {
   color: var(--dim);
 }
