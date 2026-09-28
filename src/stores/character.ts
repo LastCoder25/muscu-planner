@@ -3792,7 +3792,7 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     const poi = cur?.expedition_map?.pois.find((p) => p.id === id);
     if (!cur?.base || !poi) return 'la carte n’est pas chargée';
-    const block = reinforceBlocker(poi.control, n);
+    const block = reinforceBlocker(poi.control, n, true);
     if (block) return REINFORCE_BLOCK_LABEL[block];
     const took = takeMilitia(cur.base.militia ?? emptyMilitia(now), n);
     if (!took) return 'pas assez de miliciens à la base';

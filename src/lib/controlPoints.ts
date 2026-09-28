@@ -23,6 +23,7 @@ import { grantAdvGearXp, wornGear, type AdvGear } from './advGear';
 import { pickTier, placeRuneOdds, type RuneTier } from './skillRunes';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
+import { MILITIA, isMilitiaId } from './militia';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { SUPPLY_IDS, type SupplyStock } from './supplies';
@@ -609,14 +610,26 @@ function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
   return { ...p.control!, banked: stockUnits(p, at, playerLevel), collectedAt: at };
 }
 
-/** 🏰 Les places OCCUPÉES d'un point : la garnison et les renforts en route. */
-export function controlSeats(c: ControlState | undefined | null): number {
-  return c ? c.garrison.length + (c.reinforcing?.length ?? 0) : 0;
+/** 🏰 Qui occupe un point, garnison ET renforts en route, séparés en champions et miliciens :
+ *  les deux n'ont pas les mêmes places (`seatsOf` contre `MILITIA.perPoint`). */
+function occupants(c: ControlState): { champs: number; militia: number } {
+  const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id)];
+  const militia = ids.filter(isMilitiaId).length;
+  return { champs: ids.length - militia, militia };
 }
-/** 🏰 Places libres pour un renfort (0 si le point n'est pas à nous). */
+/** 🏰 Les places de CHAMPION occupées d'un point : la garnison et les renforts en route. */
+export function controlSeats(c: ControlState | undefined | null): number {
+  return c ? occupants(c).champs : 0;
+}
+/** 🏰 Places de champion libres pour un renfort (0 si le point n'est pas à nous). */
 export function controlFreeSeats(c: ControlState | undefined | null): number {
   if (!c || c.owner !== 'player') return 0;
   return Math.max(0, seatsOf(c.kind) - controlSeats(c));
+}
+/** 🛡️ Places de MILICIEN libres (0 si le point n'est pas à nous). */
+export function militiaFreeSeats(c: ControlState | undefined | null): number {
+  if (!c || c.owner !== 'player') return 0;
+  return Math.max(0, MILITIA.perPoint - occupants(c).militia);
 }
 
 /** 🏰 Pourquoi un renfort ne peut pas partir. SOURCE UNIQUE : l'écran grise avec cette
@@ -625,10 +638,12 @@ export type ReinforceBlock = 'notHeld' | 'empty' | 'full';
 export function reinforceBlocker(
   c: ControlState | undefined | null,
   count: number,
+  /** Des miliciens (leurs places à eux), sinon des champions. */
+  militia = false,
 ): ReinforceBlock | null {
   if (!c || c.owner !== 'player') return 'notHeld';
   if (count <= 0) return 'empty';
-  if (count > controlFreeSeats(c)) return 'full';
+  if (count > (militia ? militiaFreeSeats(c) : controlFreeSeats(c))) return 'full';
   return null;
 }
 export const REINFORCE_BLOCK_LABEL: Record<ReinforceBlock, string> = {
@@ -688,6 +703,16 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
   return [...out.values()];
 }
 
+/** 🏰 Une garnison coupée à ses places : les champions à `seatsOf`, les miliciens à
+ *  `MILITIA.perPoint` — chacun dans les siennes, dans l'ordre d'arrivée. */
+function capGarrison(kind: ControlKind, ids: readonly string[]): string[] {
+  let champs = 0;
+  let mil = 0;
+  return ids.filter((id) =>
+    isMilitiaId(id) ? ++mil <= MILITIA.perPoint : ++champs <= seatsOf(kind),
+  );
+}
+
 /** 🏰 Les renforts ARRIVÉS rejoignent la garnison. ⚠️ Seulement ceux arrivés AVANT la
  *  prochaine attaque : une attaque due se résout d'abord avec la garnison qui était là, un
  *  renfort encore en route ne combat pas. Rend la même carte si rien n'arrive. */
@@ -710,7 +735,7 @@ export function settleReinforcements(
         ...p,
         control: {
           ...c,
-          garrison: [...c.garrison, r.id].slice(0, seatsOf(c.kind)),
+          garrison: capGarrison(c.kind, [...c.garrison, r.id]),
           reinforcing: (c.reinforcing ?? []).filter((x) => x.id !== r.id),
         },
       };

@@ -14,7 +14,14 @@ import {
   returnMilitia,
   takeMilitia,
 } from '@/lib/militia';
-import { garrisonHoldChance } from '@/lib/controlPoints';
+import {
+  controlFreeSeats,
+  garrisonHold,
+  garrisonHoldChance,
+  militiaFreeSeats,
+  reinforceBlocker,
+  settleReinforcements,
+} from '@/lib/controlPoints';
 import { refEscortUnits } from '@/lib/caravan';
 import { offenseOf, survivalOf } from '@/lib/combat';
 import type { ExpeditionMap, Poi } from '@/lib/expedition';
@@ -33,6 +40,43 @@ const point = (L: number, kind: 'mine' | 'garden' = 'mine'): Poi =>
     expiresAt: 0,
     control: { kind, owner: 'player', garrison: [], retakes: 0, faction: 'bandits', size: 1 },
   }) as unknown as Poi;
+
+describe('jusqu’à 5 miliciens par point, à part des champions', () => {
+  it('les places des champions et celles des miliciens ne se prennent pas l’une l’autre', () => {
+    const p = point(30, 'garden');
+    p.control!.garrison = ['adv_a', 'mil:1', 'mil:2'];
+    p.control!.reinforcing = [{ id: 'mil:3', at: 1 }];
+    expect(controlFreeSeats(p.control)).toBe(0);
+    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 3);
+    expect(reinforceBlocker(p.control, 2, true)).toBeNull();
+    expect(reinforceBlocker(p.control, MILITIA.perPoint - 2, true)).toBe('full');
+    expect(reinforceBlocker(p.control, 1)).toBe('full');
+  });
+  it('à l’arrivée, la garnison garde ses champions ET ses 5 miliciens, pas un de plus', () => {
+    const p = point(30);
+    p.control!.garrison = ['adv_a', 'adv_b', 'adv_c', 'mil:1', 'mil:2', 'mil:3', 'mil:4'];
+    p.control!.reinforcing = [
+      { id: 'mil:5', at: 1 },
+      { id: 'mil:6', at: 2 },
+      { id: 'adv_d', at: 3 },
+    ];
+    const map = { pois: [p] } as unknown as ExpeditionMap;
+    const g = settleReinforcements(map, 10, 30).pois[0]!.control!.garrison;
+    expect(g.filter(isMilitiaId)).toEqual(['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5']);
+    expect(g.filter((id) => !isMilitiaId(id))).toEqual(['adv_a', 'adv_b', 'adv_c']);
+  });
+  // ⚠️ MESURÉ (60 combats) : 5 miliciens tiennent mieux que 3 (ils valent 2,5 champions),
+  // mais la tenue reste plafonnée à `CONTROL.maxHold` : jamais un point sans risque.
+  it('5 miliciens tiennent mieux que 3, sans dépasser le plafond de suspense', () => {
+    for (const L of [10, 60]) {
+      const ids = (n: number) => Array.from({ length: n }, (_, i) => `mil:${i}`);
+      const trois = garrisonHoldChance(point(L), militiaUnits(ids(3), L), 1, 60);
+      const cinq = garrisonHoldChance(point(L), militiaUnits(ids(5), L), 1, 60);
+      expect(cinq).toBeGreaterThan(trois);
+      expect(garrisonHold(point(L, 'garden'), militiaUnits(ids(5), L))).toBeLessThanOrEqual(0.9);
+    }
+  });
+});
 
 describe('la Caserne : cadence et effectif', () => {
   it('chaque niveau accélère la production, sans jamais descendre sous le plancher', () => {

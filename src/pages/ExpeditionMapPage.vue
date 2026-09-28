@@ -328,7 +328,10 @@
           <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
           <p class="ctl-line">
-            🏰 <b>Garnison {{ controlCount }}/{{ seatsOf(liveControl.kind) }}</b>
+            🏰 <b>Garnison {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }}</b
+            ><span v-if="controlMilitia.length">
+              · {{ MILITIA_EMO }} {{ controlMilitia.length }}/{{ MILITIA.perPoint }}</span
+            >
             <span class="ctl-dim"> · touche un membre pour le ramener</span>
           </p>
           <div class="car-pick">
@@ -423,11 +426,15 @@
                 ➕ Envoyer {{ ctlReinfSel.length }} en renfort
               </button>
             </div>
-            <!-- 🛡️ OU DES MILICIENS (Caserne) : ils tiennent la place d'un champion et font
-                 tourner le lieu, mais n'apprennent rien et meurent s'ils tombent. -->
-            <div v-if="milHome > 0 || militiaBuilt" class="mil-send">
+          </template>
+          <!-- 🛡️ DES MILICIENS (Caserne) : jusqu'à 5 par point, sur des places À PART de celles
+               des champions. Ils font tourner le lieu, mais n'apprennent rien et meurent s'ils
+               tombent. -->
+          <template v-if="militiaBuilt || milHome > 0">
+            <div class="mil-send">
               <span class="mil-send-lab"
                 >{{ MILITIA_EMO }} Miliciens
+                <b>{{ controlMilitia.length }}/{{ MILITIA.perPoint }}</b>
                 <span class="ctl-dim">· {{ milHome }} à la base</span></span
               >
               <div class="mil-step">
@@ -830,6 +837,7 @@ import {
   CONTROL,
   CONTROL_YIELD,
   controlFreeSeats,
+  militiaFreeSeats,
   controlRoster,
   controlGoldPerHour,
   controlStock,
@@ -858,7 +866,7 @@ import {
   warbandArmy,
 } from '@/lib/rift';
 import { caravanLegMin, convoySlotsFree, poiOffers } from '@/lib/caravan';
-import { MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
+import { MILITIA, MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -1412,13 +1420,13 @@ const controlFree = computed(() => controlFreeSeats(liveControl.value));
  *  stepper de milice, dont le `watch` les lit dès le setup (zone morte temporelle sinon). */
 const ctlRecallSel = ref<string[]>([]);
 const ctlReinfSel = ref<string[]>([]);
-/** 🛡️ Combien de miliciens partent en renfort (stepper), borné par les places laissées par
- *  les champions choisis et par ceux qui attendent à la base. */
+/** 🛡️ Combien de miliciens partent en renfort (stepper), borné par leurs places à eux sur ce
+ *  point (`MILITIA.perPoint`, à part de celles des champions) et par ceux de la base. */
 const milHome = computed(() => char.row?.base?.militia?.home ?? 0);
 const militiaBuilt = computed(() => buildingLevel(char.row?.buildings ?? [], 'barracks') > 0);
 const milSend = ref(0);
 const milSendMax = computed(() =>
-  Math.max(0, Math.min(milHome.value, controlFree.value - ctlReinfSel.value.length)),
+  Math.max(0, Math.min(milHome.value, militiaFreeSeats(liveControl.value))),
 );
 watch(milSendMax, (m) => {
   if (milSend.value > m) milSend.value = m;
