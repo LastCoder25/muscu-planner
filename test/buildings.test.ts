@@ -3,6 +3,7 @@ import { sessionXp } from '@/lib/athlete';
 import { buildingPreview } from '@/lib/buildingPreview';
 import { CARAVAN, caravanSlots } from '@/lib/caravan';
 import { engageCap } from '@/lib/adventurers';
+import { militiaCap, militiaIntervalH } from '@/lib/militia';
 import {
   perLevelLabel,
   healBuildings,
@@ -69,7 +70,10 @@ describe('buildings — emplacements & coûts', () => {
     // (550 → 850, mesuré : la part du plafond serait montée à 94 %, hors bande).
     // Puis l'Entrepôt, retiré à son tour (chaque producteur porte sa réserve) : `upBase`
     // 850 → 1000, mesuré.
-    expect(BUILDING_TYPES.length).toBe(5);
+    // Puis la CASERNE (milice, 2026-09-28) : 6 types. Mesuré sur un an, la part du plafond
+    // passe de 80,9/71,0/65,3 % à 78,1/68,5/63,0 % (tranquille/régulier/très actif) — dans la
+    // bande 55-90 %, `upBase` inchangé.
+    expect(BUILDING_TYPES.length).toBe(6);
   });
   it('le CHOIX vit dans plotsForLevel, pas dans le mou : moins d’emplacements que de types déblocables', () => {
     // À bas niveau on a moins d'emplacements que de bâtiments déjà déblocables → on
@@ -188,9 +192,9 @@ describe('repackBuildingSlots : un filet legacy, jamais un repack inconditionnel
 });
 
 describe('buildings — registre (production passive)', () => {
-  it('roster complet : les 5 qui restent (Entrepôt retiré)', () => {
+  it('roster complet : les 5 d’avant (Entrepôt retiré) et la Caserne', () => {
     expect(BUILDING_TYPES.map((t) => t.id).sort()).toEqual(
-      ['boss_altar', 'energy_font', 'labyrinth_gate', 'outpost', 'pantheon'].sort(),
+      ['barracks', 'boss_altar', 'energy_font', 'labyrinth_gate', 'outpost', 'pantheon'].sort(),
     );
   });
 
@@ -484,6 +488,8 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     // 2 niveaux, le niveau maximal (`grantAdvXp`, plafonné au niveau du Panthéon) monte à
     // CHAQUE cran — il suffit qu'UN des deux bouge. (La forge est partie en v0.1012.)
     pantheon: (l) => engageCap(l) * 1_000_000 + l,
+    // Effectif (+1 tous les 3 niveaux) ET cadence (asymptotique, à CHAQUE niveau).
+    barracks: (l) => militiaCap(l) * 1_000_000 - militiaIntervalH(l),
   };
 
   it('chaque type de bâtiment déclare ce que son niveau change', () => {

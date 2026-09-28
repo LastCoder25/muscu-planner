@@ -16,6 +16,7 @@ import { mulberry32 } from './combat';
 import { forceShare } from './poiDifficulty';
 import { offenseOf, simulateCombat, survivalOf, type Combatant } from './combat';
 import {
+  closeWinDown,
   deriveSkirmish,
   fuseUnits,
   skirmishXpShares,
@@ -34,6 +35,7 @@ import {
   type EscortKit,
 } from './caravan';
 import { SUPPLY_IDS, supplyFx, type SupplyStock } from './supplies';
+import { militiaLost } from './militia';
 import {
   campSpecOf,
   goldCost,
@@ -92,6 +94,9 @@ export interface PartyInput {
   /** ⚠️ REQUIS : la référence de la prime de rattrapage (`catchUpMult`) — c'est le plafond
    *  que `grantAdvXp` applique, jamais le niveau du joueur. */
   pantheonLevel: number;
+  /** 🛡️ Des MILICIENS en plus des champions (`militiaUnits`) : ils combattent dans le
+   *  groupe fondu mais n'apprennent rien. Absent = aucun. */
+  militia?: readonly SkirmishUnit[];
 }
 
 /**
@@ -308,6 +313,16 @@ export function campHurt(
   return d.down.filter((id) => ids.has(id));
 }
 
+/** 🩹 Camp pris DE JUSTESSE : tous ceux qui sont tombés repartent avec une blessure légère
+ *  (même politique « tous les tombés » que la défaite, `closeWinDown`). */
+export function campLightHurt(
+  d: Pick<SkirmishResult, 'win' | 'down' | 'endShare'>,
+  escort: readonly { id: string }[],
+): string[] {
+  const ids = new Set(escort.map((a) => a.id));
+  return closeWinDown(d).filter((id) => ids.has(id));
+}
+
 /** Ce que laisse chaque faction, dit en toutes lettres (fiche d'un camp ou d'un lieu gardé). */
 const FACTION_LOOT_LABEL: Record<CampSpec['faction'], string> = {
   bandits: 'bourses d’or 🪙',
@@ -368,7 +383,7 @@ export interface CampFight {
  */
 export function fightCampForce(input: PartyInput): CampFight {
   const { poi, spec, escort, hero, seed } = input;
-  const allies = partyAllies(escort, input.road, hero);
+  const allies = [...partyAllies(escort, input.road, hero), ...(input.militia ?? [])];
   const foe = campFoe(poi, spec, supplyFx(input.road.supplies).guardMult);
   const bodies = campBodies(poi, spec, foe);
   const group = fuseUnits(allies, 'Groupe');
@@ -430,6 +445,15 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     heroKills: g.heroKills,
     xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero),
     hurt: campHurt(d, escort),
+    ...(input.militia?.length
+      ? {
+          militiaLost: militiaLost(
+            input.militia.map((u) => u.id),
+            d,
+          ),
+        }
+      : {}),
+    lightHurt: campLightHurt(d, escort),
     journal: g.journal,
     // 🐺 Une tanière se REJOUE (le duel contre la bête) : un camp, non.
     ...(poi.type === 'den' ? { den: g.replay } : {}),

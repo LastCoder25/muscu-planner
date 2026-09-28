@@ -656,6 +656,52 @@ export function collectControl(
   };
 }
 
+/**
+ * 📊 OÙ EN EST LA RÉCOLTE, en un mot et une jauge (2026-09-28, demandé : « l'avancement de la
+ * récolte en bout de ligne — rune le %, or le montant »). `text` = ce qui attend, dans l'unité
+ * du point ; `pct` (0..1) = la jauge : la réserve de 24 h pour ce qui s'accumule (or, XP), la
+ * PROCHAINE unité pour ce qui tombe à l'unité (consommable, rune). La tour ne stocke rien :
+ * elle dit sa réduction de trajet, sans jauge. ⚠️ Lit `stockUnits`, la même réserve que la
+ * récolte — l'étiquette ne peut pas annoncer autre chose que ce que « Récolter » verse.
+ */
+export interface ControlProgress {
+  text: string;
+  pct: number | null;
+}
+export function controlProgress(p: Poi, now: number, playerLevel: number): ControlProgress | null {
+  const c = p.control;
+  if (!c || c.owner !== 'player') return null;
+  const fmt = (n: number) => Math.floor(n + 1e-9).toLocaleString('fr-FR');
+  if (c.kind === 'tower') {
+    const cut = CONTROL.towerCut * shareOf(c.garrison.length);
+    return { text: `🧭 −${Math.round(cut * 100)} % trajets`, pct: null };
+  }
+  const units = stockUnits(p, now, playerLevel);
+  const rate = unitsPerHour(p, c.garrison.length, playerLevel);
+  const cap = Math.max(c.banked ?? 0, (rate * storageMsOf(c.kind)) / 3600_000);
+  const fill = cap > 0 ? Math.min(1, units / cap) : 0;
+  switch (c.kind) {
+    case 'mine':
+      return { text: `🪙 ${fmt(units)}`, pct: fill };
+    case 'training':
+      return { text: `🎓 +${fmt(units)} XP`, pct: fill };
+    case 'forge':
+      return { text: `⚒️ +${fmt(units)} XP`, pct: fill };
+    case 'garden': {
+      const whole = Math.floor(units + 1e-9);
+      const next = Math.max(0, units - whole);
+      const pct = `${Math.round(next * 100)} %`;
+      return { text: whole > 0 ? `🎒 ${whole} · ${pct}` : `🎒 ${pct}`, pct: next };
+    }
+    case 'scriptorium': {
+      const r = units >= 1 - 1e-9 ? 1 : units;
+      return { text: r >= 1 ? '📜 prête' : `📜 ${Math.round(r * 100)} %`, pct: r };
+    }
+    default:
+      return null;
+  }
+}
+
 /** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
  *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
 function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
@@ -853,6 +899,8 @@ export interface ControlRosterRow {
   assault: { ids: string[]; inMs: number } | null;
   /** Il y a quelque chose à récolter (jamais pour la tour de guet, qui ne stocke rien). */
   ready: boolean;
+  /** Où en est la récolte, pour le bout de ligne (null si le point n'est pas tenu). */
+  progress: ControlProgress | null;
 }
 export function controlRoster(
   map: ExpeditionMap | null | undefined,
@@ -899,6 +947,7 @@ export function controlRoster(
           : [],
         assault,
         ready: held && collectControl(map, p.id, now, playerLevel).map !== map,
+        progress: held ? controlProgress(p, now, playerLevel) : null,
       };
     });
 }

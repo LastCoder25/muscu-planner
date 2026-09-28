@@ -85,6 +85,23 @@
               Chaque niveau : {{ perLevelOf(selectedPlot.building) }}
             </span>
           </div>
+          <!-- 🛡️ LA MILICE : où ils sont, combien au plus, quand arrive le suivant. -->
+          <div v-if="militia" class="pm-ready pm-mil">
+            <span>
+              🛡️ <b>{{ militia.home }}</b> à la base
+              <span v-if="militia.away"> · {{ militia.away }} sur la carte</span>
+            </span>
+            <span class="pm-cap">
+              {{ militia.home + militia.away }} / {{ militia.cap }} ·
+              {{
+                militia.next ? `prochain dans ${formatDuration(militia.next)}` : 'effectif complet'
+              }}
+            </span>
+          </div>
+          <p v-if="militia" class="pm-mil-note">
+            Envoie-les depuis la fiche d’un point de contrôle que tu tiens : ils y remplacent tes
+            champions, mais n’attaquent pas. Un milicien tombé est perdu.
+          </p>
           <div v-if="produces(selectedPlot.building)" class="pm-ready">
             <span>
               En stock :
@@ -252,6 +269,8 @@ import {
   type BuildingTypeId,
 } from '@/lib/buildings';
 import { buildingPreview, nextMilestone, previewNote } from '@/lib/buildingPreview';
+import { emptyMilitia, militiaCap, militiaOnMap, nextMilitiaMs } from '@/lib/militia';
+import { formatDuration } from '@/lib/duration';
 
 const props = defineProps<{ heroLevel: number; now: number; slot: number | null }>();
 const emit = defineEmits<{
@@ -306,6 +325,19 @@ const selectedPlot = computed(() =>
     ? null
     : (plots.value.find((p) => p.slot === selectedSlot.value) ?? null),
 );
+/** 🛡️ L'état de la milice, quand la feuille ouverte est celle de la Caserne. */
+const militia = computed(() => {
+  const b = selectedPlot.value?.building;
+  if (b?.typeId !== 'barracks') return null;
+  const s = char.row?.base?.militia ?? emptyMilitia(props.now);
+  const away = militiaOnMap(char.row?.expedition_map);
+  return {
+    home: s.home,
+    away,
+    cap: militiaCap(b.level),
+    next: nextMilitiaMs(s, b.level, away, props.now),
+  };
+});
 /** 🛕 Le Panthéon a sa propre feuille : plein écran, trois grandes tuiles. */
 const isPantheon = computed(() => selectedPlot.value?.building?.typeId === 'pantheon');
 const mana = computed(() => char.row?.mana ?? 0);
@@ -752,6 +784,16 @@ function collectAll() {
   font-size: 13px;
 }
 .pm-cap {
+  color: var(--dim);
+}
+.pm-mil {
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
+.pm-mil-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--dim);
 }
 .pm-actions {

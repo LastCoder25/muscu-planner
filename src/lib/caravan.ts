@@ -38,6 +38,7 @@ import {
 // `slainByAlly` y vit aussi (mécanisme de groupe, partagé avec les camps). Aucun
 // cycle : `skirmish.ts` n'importe que `combat.ts`.
 import {
+  closeWinDown,
   deriveSkirmish,
   fuseUnits,
   skirmishXpShares,
@@ -242,6 +243,9 @@ export interface CaravanOutcome {
   /** Ids des aventuriers blessés (→ infirmerie) : selon `convoyHurt`, le premier tombé de
    *  chaque embuscade PERDUE (jamais ceux d'une embuscade gagnée, restés à terre). */
   hurt: string[];
+  /** 🩹 Blessés LÉGERS (convalescence courte) : le premier tombé d'une embuscade gagnée de
+   *  justesse (`convoyLightHurt`). Jamais dans `hurt`. Absent des convois d'avant. */
+  lightHurt?: string[];
   events: CaravanEvent[];
   text: string;
 }
@@ -1320,6 +1324,14 @@ export function convoyHurt(result: Pick<SkirmishResult, 'win' | 'down'>): string
   return first ? [first] : [];
 }
 
+/** 🩹 Embuscade GAGNÉE DE JUSTESSE : le premier tombé repart avec une blessure légère — la
+ *  même politique « un seul » que la défaite (`closeWinDown`, skirmish.ts). */
+export function convoyLightHurt(
+  result: Pick<SkirmishResult, 'win' | 'down' | 'endShare'>,
+): string[] {
+  return closeWinDown(result).slice(0, 1);
+}
+
 export function resolveCaravan(
   poi: Poi,
   escort: Adventurer[],
@@ -1340,6 +1352,7 @@ export function resolveCaravan(
   const rng = mulberry32(seed >>> 0 || 1);
   const events: CaravanEvent[] = [];
   const hurt: string[] = [];
+  const lightHurt: string[] = [];
   let mult = 1;
   let keysBonus = 0;
 
@@ -1401,6 +1414,7 @@ export function resolveCaravan(
       for (const a of escort) xpShare[a.id] = (xpShare[a.id] ?? 0) + (parts[a.id] ?? 0);
       // 🤕 Le journal dit qui est À TERRE ; la POLITIQUE d'infirmerie est celle du convoi.
       for (const id of convoyHurt(d)) if (!hurt.includes(id)) hurt.push(id);
+      for (const id of convoyLightHurt(d)) if (!lightHurt.includes(id)) lightHurt.push(id);
       if (r.win) {
         mult *= 1.12;
       } else {
@@ -1470,6 +1484,8 @@ export function resolveCaravan(
     xp,
     kills,
     hurt,
+    // ⚠️ Un blessé grave ne se double pas d'une blessure légère.
+    lightHurt: lightHurt.filter((id) => !hurt.includes(id)),
     events,
     text: events.map((e) => e.text).join(' '),
   };

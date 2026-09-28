@@ -279,8 +279,8 @@
              combien appellent : attaque imminente, sans défense, ou butin à récolter. -->
         <button
           class="zoom-b ctl-list-b"
-          aria-label="Points fixes"
-          title="Points fixes"
+          aria-label="Places fortes"
+          title="Places fortes"
           @click="ctlListOpen = true"
         >
           🏰<span v-if="ctlCalls" class="ctl-list-dot">{{ ctlCalls }}</span>
@@ -328,8 +328,8 @@
           <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
           <p class="ctl-line">
-            🏰 <b>Garnison {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }}</b>
-            <span class="ctl-dim"> · touche un champion pour le ramener</span>
+            🏰 <b>Garnison {{ controlCount }}/{{ seatsOf(liveControl.kind) }}</b>
+            <span class="ctl-dim"> · touche un membre pour le ramener</span>
           </p>
           <div class="car-pick">
             <AdvPickTile
@@ -340,6 +340,20 @@
               :reason="m.arriveIn > 0 ? `🧭 en route · ${formatDuration(m.arriveIn)}` : null"
               @toggle="toggleRecall(m.adv.id)"
             />
+            <!-- 🛡️ Les miliciens : anonymes, une tuile chacun, ramenables comme un champion. -->
+            <button
+              v-for="m in controlMilitia"
+              :key="m.id"
+              type="button"
+              class="mil-tile"
+              :class="{ on: ctlRecallSel.includes(m.id) }"
+              :aria-pressed="ctlRecallSel.includes(m.id)"
+              @click="toggleRecall(m.id)"
+            >
+              <span class="mil-emo">{{ MILITIA_EMO }}</span>
+              <span class="mil-name">{{ MILITIA_NAME }}</span>
+              <span v-if="m.arriveIn > 0" class="mil-sub">🧭 {{ formatDuration(m.arriveIn) }}</span>
+            </button>
           </div>
           <button
             v-if="ctlRecallSel.length"
@@ -348,7 +362,7 @@
             :disabled="ctlBusy"
             @click="releaseCtl"
           >
-            ↩️ Ramener {{ ctlRecallSel.length }} champion{{ ctlRecallSel.length > 1 ? 's' : '' }}
+            ↩️ Ramener {{ ctlRecallSel.length }} membre{{ ctlRecallSel.length > 1 ? 's' : '' }}
           </button>
           <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
@@ -418,9 +432,44 @@
                 ➕ Envoyer {{ ctlReinfSel.length }} en renfort
               </button>
             </div>
+            <!-- 🛡️ OU DES MILICIENS (Caserne) : ils tiennent la place d'un champion et font
+                 tourner le lieu, mais n'apprennent rien et meurent s'ils tombent. -->
+            <div v-if="milHome > 0 || militiaBuilt" class="mil-send">
+              <span class="mil-send-lab"
+                >{{ MILITIA_EMO }} Miliciens
+                <span class="ctl-dim">· {{ milHome }} à la base</span></span
+              >
+              <div class="mil-step">
+                <button
+                  type="button"
+                  class="mil-btn"
+                  :disabled="milSend <= 0"
+                  aria-label="Un milicien de moins"
+                  @click="milSend--"
+                >
+                  −
+                </button>
+                <b class="mil-n">{{ milSend }}</b>
+                <button
+                  type="button"
+                  class="mil-btn"
+                  :disabled="milSend >= milSendMax"
+                  aria-label="Un milicien de plus"
+                  @click="milSend++"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+            <div v-if="milSend > 0" class="send-bar">
+              <button class="sh-send" :disabled="ctlBusy" @click="sendMilitia">
+                {{ MILITIA_EMO }} Envoyer {{ milSend }} milicien{{ milSend > 1 ? 's' : '' }} ·
+                {{ formatDurationMin(militiaLegMin) }}
+              </button>
+            </div>
           </template>
           <button
-            v-if="controlMembers.length"
+            v-if="controlCount"
             type="button"
             class="ctl-recall"
             :disabled="ctlBusy"
@@ -435,6 +484,9 @@
           {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
           garnison ({{ CONTROL_YIELD[liveControl.kind] }}), jusqu’à ce que l’ennemi le reprenne
           (entre 1 et 3 jours). Chaque ennemi abattu, à la prise comme en défense, rapporte de l’XP.
+          <template v-if="militiaBuilt"
+            >Une fois pris, des miliciens de ta Caserne peuvent y remplacer tes champions.</template
+          >
         </p>
         <!-- 🧝 LE HÉROS SEUL : son expédition solo (partout sauf camps, failles et armées, qui
              se prennent en équipe). Sur un lieu de RÉCOLTE, l’équipe est proposée juste dessous. -->
@@ -716,7 +768,7 @@ import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import { poiRank } from '@/lib/poiRank';
 import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL, partyLegMin } from '@/lib/party';
-import { expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
+import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
@@ -816,7 +868,8 @@ import {
   riftSpecOf,
   warbandArmy,
 } from '@/lib/rift';
-import { convoySlotsFree, poiOffers } from '@/lib/caravan';
+import { caravanLegMin, convoySlotsFree, poiOffers } from '@/lib/caravan';
+import { MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -1352,15 +1405,58 @@ const controlMembers = computed(() => {
     return adv ? [{ adv, arriveIn: r.arriveIn }] : [];
   });
 });
+/** 🛡️ Les miliciens du point : postés, puis en route (ils ne sont pas des champions, donc
+ *  absents de `controlMembers`). */
+const controlMilitia = computed(() => {
+  const c = liveControl.value;
+  if (!c) return [];
+  return [
+    ...militiaIn(c.garrison).map((id) => ({ id, arriveIn: 0 })),
+    ...(c.reinforcing ?? [])
+      .filter((r) => isMilitiaId(r.id))
+      .map((r) => ({ id: r.id, arriveIn: Math.max(0, r.at - now.value) })),
+  ];
+});
+const controlCount = computed(() => controlMembers.value.length + controlMilitia.value.length);
 const controlFree = computed(() => controlFreeSeats(liveControl.value));
-/** Les sélections de la fiche : qui ramener, qui envoyer en renfort. */
+/** Les sélections de la fiche : qui ramener, qui envoyer en renfort. ⚠️ Déclarées AVANT le
+ *  stepper de milice, dont le `watch` les lit dès le setup (zone morte temporelle sinon). */
 const ctlRecallSel = ref<string[]>([]);
 const ctlReinfSel = ref<string[]>([]);
+/** 🛡️ Combien de miliciens partent en renfort (stepper), borné par les places laissées par
+ *  les champions choisis et par ceux qui attendent à la base. */
+const milHome = computed(() => char.row?.base?.militia?.home ?? 0);
+const militiaBuilt = computed(() => buildingLevel(char.row?.buildings ?? [], 'barracks') > 0);
+const milSend = ref(0);
+const milSendMax = computed(() =>
+  Math.max(0, Math.min(milHome.value, controlFree.value - ctlReinfSel.value.length)),
+);
+watch(milSendMax, (m) => {
+  if (milSend.value > m) milSend.value = m;
+});
+const militiaLegMin = computed(() => {
+  const p = livePoi.value;
+  return p ? caravanLegMin(p, [], 0, travelMult.value) : 0;
+});
+async function sendMilitia() {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || milSend.value <= 0 || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.sendMilitiaToControl(uid, p.id, milSend.value, Date.now());
+    if (why) $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
+    else milSend.value = 0;
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 watch(
   () => selected.value?.id,
   () => {
     ctlRecallSel.value = [];
     ctlReinfSel.value = [];
+    milSend.value = 0;
   },
 );
 function toggleRecall(id: string) {
@@ -1389,7 +1485,7 @@ async function releaseCtl() {
   const p = livePoi.value;
   const ids = ctlRecallSel.value;
   if (!uid || !p || !ids.length || ctlBusy.value) return;
-  if (ids.length >= controlMembers.value.length) return recallCtl();
+  if (ids.length >= controlCount.value) return recallCtl();
   ctlBusy.value = true;
   try {
     await char.releaseControlChampions(uid, p.id, ids, Date.now(), heroLevel.value);
@@ -2656,6 +2752,79 @@ onUnmounted(() => {
 .dispo-row {
   display: flex;
   padding: 0 12px 6px;
+}
+/* 🛡️ Un milicien dans la garnison : une tuile anonyme, sélectionnable pour le ramener. */
+.mil-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.mil-tile.on {
+  border: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+.mil-emo {
+  font-size: 22px;
+  line-height: 1;
+}
+.mil-name {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.mil-sub {
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.mil-send {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.mil-send-lab {
+  font-size: 13px;
+  min-width: 0;
+}
+.mil-step {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.mil-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, var(--surface));
+  color: var(--text);
+  font-size: 20px;
+  cursor: pointer;
+}
+.mil-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.mil-n {
+  min-width: 22px;
+  text-align: center;
+  font-family: Oswald, sans-serif;
+  font-size: 18px;
 }
 .ei-rift {
   display: inline-block;

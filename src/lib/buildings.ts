@@ -82,7 +82,8 @@ export type BuildingTypeId =
   | 'labyrinth_gate'
   | 'boss_altar'
   | 'energy_font'
-  | 'pantheon';
+  | 'pantheon'
+  | 'barracks';
 
 export interface BuildingType {
   id: BuildingTypeId;
@@ -280,6 +281,26 @@ export const BUILDING_TYPES: BuildingType[] = [
     unique: true,
     unlock: { activity: 'Les champions', where: 'sur ta base' },
     desc: 'Invoque tes champions et garde ta collection — tout ce que tu tires reste utilisable. Son niveau fixe jusqu’où ils peuvent monter, et combien agissent à la fois : la taille d’un groupe, l’escorte d’un convoi, les défenseurs du rempart.',
+  },
+  // UTILITAIRE UNIQUE : la CASERNE produit des MILICIENS (`militia.ts`), des défenseurs
+  // anonymes qui prennent la place des champions sur les points de contrôle déjà pris (ils
+  // n'attaquent pas ; la défense de la base viendra plus tard). Production GRATUITE et lente (décision de l'utilisateur) : c'est la montée de niveau
+  // qui coûte de l'or. DEUX leviers, vivants du niveau 1 au 100 : la CADENCE (asymptotique,
+  // chaque niveau l'accélère) et l'EFFECTIF maximal (+1 tous les 3 niveaux).
+  {
+    id: 'barracks',
+    label: 'Caserne de la milice',
+    emoji: '🛡️',
+    category: 'utility',
+    perLevelNote: 'miliciens produits un peu plus vite, +1 milicien au plus tous les 3 niveaux',
+    buildGold: 600,
+    unlockLevel: 3,
+    unique: true,
+    unlock: {
+      activity: 'La milice',
+      where: 'Sur la carte : envoie-les depuis la fiche d’un point de contrôle que tu tiens.',
+    },
+    desc: 'Forme des miliciens, un à un, gratuitement. Ils remplacent tes champions sur les points de contrôle déjà pris (ils font tourner le lieu, mais n’apprennent rien et n’attaquent pas). Un milicien tombé est perdu.',
   },
 ];
 

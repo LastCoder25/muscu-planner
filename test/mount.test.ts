@@ -1892,7 +1892,12 @@ describe('🔀 FusionPanel', () => {
         (h) => (out = h),
       ),
     ).toBeNull();
-    expect(out).toContain('Points fixes');
+    expect(out).toContain('Places fortes');
+    // Tenue : son avancement en bout de ligne (l’or en attente, et sa jauge).
+    expect(out).toMatch(/cps-yield-end prog[^>]*><span[^>]*>🪙 [0-9]/);
+    expect(out).toContain('cps-gauge');
+    // Ennemie : ce qu’elle rapporterait, à la même place.
+    expect(out).toContain('XP pour la garnison 🎓');
     expect(out).toContain('1/6 tenus');
     expect(out).toContain('🛡️ 1/3');
   }, 30_000);

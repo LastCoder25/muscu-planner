@@ -246,6 +246,10 @@ export interface BaseState {
    *  paie UNE fois, pas une fois par faille oubliée. Champ additif (JSONB) : absent sur
    *  toutes les bases d'avant, donc armée ordinaire. */
   overflow?: RiftOverflow | null;
+  /** 🛡️ La MILICE (`militia.ts`) : les miliciens restés à la base et l'horloge de la Caserne.
+   *  Champ additif (JSONB) : absent = aucun milicien. ⚠️ Type écrit ici, pas importé de
+   *  `militia.ts`, qui importe déjà ce module. */
+  militia?: { home: number; producedAt: number; seq: number } | null;
 }
 
 export interface RaidReport {

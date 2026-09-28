@@ -25,6 +25,7 @@ import {
 } from './buildings';
 import { caravanSlots, championOutpostMult } from './caravan';
 import { altarLuckBonus } from './items';
+import { militiaCap, militiaIntervalH } from './militia';
 
 /** Une pastille d'aperçu. `teams` = le nombre d'expéditions en parallèle (couleur à part). */
 interface PreviewBit {
@@ -78,6 +79,12 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
         .map((b) => b.text)
         .join(' · ');
     }
+    case 'barracks': {
+      const h = militiaIntervalH(level);
+      const hh = Math.floor(h);
+      const mm = Math.round((h - hh) * 60);
+      return `1 milicien / ${hh} h${mm ? ` ${String(mm).padStart(2, '0')}` : ''} · ${militiaCap(level)} au plus`;
+    }
     case 'labyrinth_gate':
       return withProd(`+${pct(labyrinthLuckBonus(one(typeId, level)))} de chance dans les coffres`);
     case 'boss_altar':
@@ -111,6 +118,7 @@ export function previewNote(typeId: BuildingTypeId): string | null {
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
 function isMilestone(typeId: BuildingTypeId, level: number): boolean {
   if (typeId === 'outpost') return caravanSlots(level) > caravanSlots(level - 1);
+  if (typeId === 'barracks') return militiaCap(level) > militiaCap(level - 1);
   return false;
 }
 
