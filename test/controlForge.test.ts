@@ -7,6 +7,10 @@ import {
   ensureControls,
   forgeGear,
   forgeStock,
+  forgeStockBy,
+  reinforceControl,
+  releaseFromControl,
+  settleReinforcements,
   forgeXpPerHour,
   garrisonHold,
   retakeBoost,
@@ -73,7 +77,7 @@ describe('⚒️ la forge de campagne', () => {
     expect(forgeXpPerHour(p)).toBeCloseTo(2 * trainingXpPerHour(p), 9);
     expect(forgeStock(p, 6 * H)).toBe(Math.floor(forgeXpPerHour(p) * 6));
     const c = collectControl(m, FORGE, 6 * H, 30);
-    expect(c.gearXp).toBe(forgeStock(p, 6 * H));
+    for (const id of ['a0', 'a1', 'a2']) expect(c.gearXp[id]).toBe(forgeStock(p, 6 * H));
     expect(c.xp).toBe(0);
     expect(c.gold).toBe(0);
   });
@@ -81,7 +85,7 @@ describe('⚒️ la forge de campagne', () => {
   it('seules les pièces PORTÉES par la garnison apprennent, jamais au-delà de leur porteur', () => {
     // Niveau 25 : la tranche du rang monte jusqu'à 30, donc c'est le PORTEUR qui plafonne.
     const { advs, stock } = team(25);
-    const out = forgeGear(stock, advs, ['a0'], 1e7);
+    const out = forgeGear(stock, advs, { a0: 1e7 });
     for (const g of out) {
       const before = stock.find((x) => x.id === g.id)!;
       const moved = g.level !== before.level || (g.xp ?? 0) !== (before.xp ?? 0);
@@ -89,8 +93,73 @@ describe('⚒️ la forge de campagne', () => {
       expect(g.level).toBeLessThanOrEqual(advs[0]!.level);
     }
     // Rien à verser → le même tableau (le store n'écrit pas à vide).
-    expect(forgeGear(stock, advs, ['a0'], 0)).toBe(stock);
-    expect(forgeGear(stock, advs, [], 500)).toBe(stock);
+    expect(forgeGear(stock, advs, { a0: 0 })).toBe(stock);
+    expect(forgeGear(stock, advs, {})).toBe(stock);
+  });
+
+  describe('⚒️ chaque champion a sa jauge, selon le temps passé sur place', () => {
+    const at = (m: ReturnType<typeof mapAt>, t: number) => settleReinforcements(m, t, 30);
+
+    it('un renfort arrivé plus tard gagne moins, et part de zéro', () => {
+      let m = captureControl(mapAt(30), FORGE, ['a0'], 0, 7);
+      m = reinforceControl(m, FORGE, ['a1'], 4 * H);
+      m = at(m, 5 * H);
+      const p = pt(m, FORGE);
+      const r = forgeXpPerHour(p);
+      const by = forgeStockBy(p, 10 * H);
+      expect(by.a0).toBeCloseTo(10 * r, 6);
+      expect(by.a1).toBeCloseTo(6 * r, 6);
+      const c = collectControl(m, FORGE, 10 * H, 30);
+      expect(c.gearXp.a0).toBe(Math.floor(10 * r + 1e-9));
+      expect(c.gearXp.a1).toBe(Math.floor(6 * r + 1e-9));
+    });
+
+    it('un renfort en route n’apprend rien', () => {
+      let m = captureControl(mapAt(30), FORGE, ['a0'], 0, 7);
+      m = reinforceControl(m, FORGE, ['a1'], 8 * H);
+      const by = forgeStockBy(pt(m, FORGE), 6 * H);
+      expect(by.a1).toBeUndefined();
+    });
+
+    it('un champion ramené garde ce qu’il a gagné, puis n’avance plus', () => {
+      let m = captureControl(mapAt(30), FORGE, ['a0', 'a1'], 0, 7);
+      m = releaseFromControl(m, FORGE, ['a1'], 3 * H, 30);
+      const p = pt(m, FORGE);
+      const r = forgeXpPerHour(p);
+      const by = forgeStockBy(p, 9 * H);
+      expect(by.a1).toBeCloseTo(3 * r, 6);
+      expect(by.a0).toBeCloseTo(9 * r, 6);
+      const c = collectControl(m, FORGE, 9 * H, 30);
+      expect(c.gearXp.a1).toBe(Math.floor(3 * r + 1e-9));
+      // La récolte vide sa ligne : il ne réapparaît plus.
+      expect(forgeStockBy(pt(c.map, FORGE), 12 * H).a1).toBeUndefined();
+    });
+
+    it('la fraction entamée reste acquise d’une récolte à l’autre', () => {
+      const m = captureControl(mapAt(30), FORGE, ['a0'], 0, 7);
+      const p0 = pt(m, FORGE);
+      const r = forgeXpPerHour(p0);
+      const t = (2.5 / r) * H; // 2,5 XP
+      const c1 = collectControl(m, FORGE, t, 30);
+      expect(c1.gearXp.a0).toBe(2);
+      const c2 = collectControl(c1.map, FORGE, t + (0.5 / r) * H, 30);
+      expect(c2.gearXp.a0).toBe(1);
+    });
+
+    it('une forge d’avant (réserve commune) vaut pour chaque champion posté', () => {
+      const m = captureControl(mapAt(30), FORGE, ['a0', 'a1'], 0, 7);
+      const p = pt(m, FORGE);
+      const legacy = { ...p, control: { ...p.control!, banked: 40 } };
+      const by = forgeStockBy(legacy, 0);
+      expect(by.a0).toBe(40);
+      expect(by.a1).toBe(40);
+    });
+
+    it('chaque jauge plafonne à 24 h de présence', () => {
+      const m = captureControl(mapAt(30), FORGE, ['a0'], 0, 7);
+      const p = pt(m, FORGE);
+      expect(forgeStockBy(p, 40 * H).a0).toBeCloseTo(24 * forgeXpPerHour(p), 6);
+    });
   });
 });
 

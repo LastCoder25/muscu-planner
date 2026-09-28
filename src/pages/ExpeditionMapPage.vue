@@ -374,6 +374,15 @@
             attaque — sauf si un renfort arrive avant.
           </p>
           <p class="ctl-line">{{ controlProd }}</p>
+          <!-- ⚒️ LA JAUGE DE CHAQUE CHAMPION (demandé) : ils n'arrivent pas en même temps, donc
+               chacun a sa propre réserve — elle se remplit en 24 h de présence. -->
+          <div v-if="forgeGauges.length" class="forge-gauges">
+            <div v-for="g in forgeGauges" :key="g.id" class="forge-g">
+              <span class="forge-g-name">{{ g.name }}</span>
+              <span class="forge-g-bar"><i :style="{ width: g.pct + '%' }" /></span>
+              <span class="forge-g-val">{{ g.xp }} XP · {{ g.time }}</span>
+            </div>
+          </div>
           <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
           <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1254). -->
           <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
@@ -846,7 +855,9 @@ import {
   trainingCapLevel,
   trainingStock,
   trainingXpPerHour,
+  forgeHoursOf,
   forgeStock,
+  forgeStockBy,
   forgeXpPerHour,
   runeProgress,
   runeStock,
@@ -1521,17 +1532,39 @@ const controlProd = computed(() => {
         ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
         : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${CONTROL.runeHoursPerItem} h`;
     case 'forge':
-      return `⚒️ +${Math.round(forgeXpPerHour(p))} XP/h par pièce portée · en attente ${forgeStock(p, now.value)} XP chacune`;
+      return `⚒️ +${Math.round(forgeXpPerHour(p))} XP/h par pièce portée, pour chaque champion selon son temps ici`;
     case 'tower':
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
+});
+/** ⚒️ Une jauge par champion à la forge : l'XP (par pièce) qu'il attend, et le temps de
+ *  présence qu'elle représente — pleine à 24 h. Un champion ramené garde sa ligne tant
+ *  que sa réserve n'est pas récoltée. */
+const forgeGauges = computed(() => {
+  const p = livePoi.value;
+  if (!p || p.control?.kind !== 'forge' || p.control.owner !== 'player') return [];
+  const by = forgeStockBy(p, now.value);
+  const names = new Map(char.advList.map((a) => [a.id, a.name]));
+  const full = forgeXpPerHour(p) * (CONTROL.storageMs / 3600_000);
+  return Object.entries(by)
+    .filter(([id, v]) => p.control!.garrison.includes(id) || v >= 1)
+    .map(([id, v]) => {
+      const h = forgeHoursOf(p, v);
+      return {
+        id,
+        name: (p.control!.garrison.includes(id) ? '' : '↩ ') + (names.get(id) ?? '?'),
+        xp: Math.floor(v + 1e-9).toLocaleString('fr-FR'),
+        pct: full > 0 ? Math.min(100, (v / full) * 100) : 0,
+        time: h >= 1 ? `${Math.floor(h)} h` : `${Math.floor(h * 60)} min`,
+      };
+    });
 });
 /** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
 const controlNote = computed(() => {
   if (liveControl.value?.kind === 'scriptorium')
     return 'La couleur de la rune suit le rang du lieu face au tien : un Scriptorium de ton rang copie plus souvent des bleues et des violettes. Le copiste n’apprend rien.';
   if (liveControl.value?.kind === 'forge')
-    return 'Les champions n’apprennent rien ici : seules leurs pièces portées progressent, jusqu’au ★5 de leur rang et au niveau de leur porteur. Utile quand un champion bute sur son plafond.';
+    return 'Les champions n’apprennent rien ici : seules leurs pièces portées progressent, jusqu’au ★5 de leur rang et au niveau de leur porteur. Utile quand un champion bute sur son plafond. Chaque champion a sa jauge, pleine après 24 h sur place ; ↩ = ramené, sa part attend la récolte.';
   if (liveControl.value?.kind !== 'training') return '';
   const cap = trainingCapLevel(heroLevel.value);
   if (!cap)
@@ -1556,7 +1589,7 @@ const controlCollectLabel = computed(() => {
   if (!p || !k) return '';
   if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
   if (k === 'training') return `Faire progresser (${trainingStock(p, now.value)} XP chacun)`;
-  if (k === 'forge') return `Forger (${forgeStock(p, now.value)} XP par pièce)`;
+  if (k === 'forge') return 'Forger (chacun sa réserve)';
   if (k === 'scriptorium') return 'Récupérer la rune';
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
 });
@@ -2618,6 +2651,43 @@ onUnmounted(() => {
   font-size: 12.5px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+.forge-gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 8px;
+}
+.forge-g {
+  display: grid;
+  grid-template-columns: minmax(0, 6.5em) minmax(0, 1fr) 8.5em;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.forge-g-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.forge-g-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+}
+.forge-g-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent, #ffd23f);
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+.forge-g-val {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--dim, #9a8f7e);
 }
 .ctl-dim {
   color: var(--dim);

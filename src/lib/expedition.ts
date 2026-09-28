@@ -112,6 +112,11 @@ export interface ControlState {
    *  ramené) : la réserve repart de là, au NOUVEAU débit — sans quoi le passé serait
    *  recalculé au mauvais débit. */
   banked?: number;
+  /** ⚒️ À la forge, l'XP (par pièce) déjà gagnée par CHAQUE champion quand l'effectif a
+   *  changé. Chacun a sa propre réserve : un champion arrivé depuis une heure ne touche pas
+   *  ce qu'un autre a gagné en vingt. Absente sur les forges d'avant : `banked` y vaut
+   *  alors pour chaque champion de la garnison. */
+  perXp?: Record<string, number>;
 }
 
 /** Nom d'un POI. ⚠️ `Record<PoiType, …>` : TypeScript exige donc une entrée par type, et

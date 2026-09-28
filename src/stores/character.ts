@@ -3638,8 +3638,9 @@ export const useCharacterStore = defineStore('character', () => {
   } {
     const p = map.pois.find((x) => x.id === id);
     const c = collectControl(map, id, at, heroLevel);
-    // ⚒️ La forge verse son XP aux PIÈCES portées par la garnison, pas aux champions.
-    const nextStock = p?.control ? forgeGear(stock, advs, p.control.garrison, c.gearXp) : stock;
+    // ⚒️ La forge verse son XP aux PIÈCES portées, pas aux champions — chacun la SIENNE,
+    // selon le temps qu'il a passé sur place.
+    const nextStock = forgeGear(stock, advs, c.gearXp);
     if (!p?.control || c.xp <= 0)
       return {
         map: c.map,
