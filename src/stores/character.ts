@@ -46,6 +46,7 @@ import {
   voieSetRoster,
   setSellLot,
   familiarSurplus,
+  relicSurplus,
 } from '@/lib/items';
 import {
   fileSetPieces,
@@ -1307,34 +1308,36 @@ export const useCharacterStore = defineStore('character', () => {
   // magnitude est 100 % définie par le grade au drop, plus d'axe +N. Talents/familiers
   // gardent l'infusion de grade.)
 
-  /** 🪙 VENTE AUTOMATIQUE des talents et familiers en trop : par catégorie, seuls le
-   *  MEILLEUR et celui qu'on PORTE restent (règle dans `familiarSurplus` / `talentSurplus`,
-   *  testée). Une seule écriture pour tout le lot ; rien à vendre → aucune écriture.
+  /** 🪙 VENTE AUTOMATIQUE des talents, familiers et reliques en trop : par catégorie, seuls
+   *  le MEILLEUR et celui qu'on PORTE restent (règles `familiarSurplus` / `relicSurplus` /
+   *  `talentSurplus`, testées). Une seule écriture pour tout le lot ; rien à vendre → aucune écriture.
    *  Rend l'or gagné et le nombre de pièces cédées (pour l'annonce). */
   async function sellSurplusCompanions(
     userId: string,
-  ): Promise<{ gold: number; familiars: number; talents: number }> {
-    const none = { gold: 0, familiars: 0, talents: 0 };
+  ): Promise<{ gold: number; familiars: number; talents: number; relics: number }> {
+    const none = { gold: 0, familiars: 0, talents: 0, relics: 0 };
     const cur = row.value;
     if (!cur) return none;
     const famIds = new Set(familiarSurplus(cur.equipped[FAMILIAR_SLOT], cur.inventory));
+    const relIds = new Set(relicSurplus(cur.equipped.relic, cur.inventory));
     const talIds = new Set(talentSurplus(cur.talents));
-    if (!famIds.size && !talIds.size) return none;
-    const fams = cur.inventory.filter((i) => famIds.has(i.id));
+    if (!famIds.size && !relIds.size && !talIds.size) return none;
+    const gone = (id: string) => famIds.has(id) || relIds.has(id);
+    const items = cur.inventory.filter((i) => gone(i.id));
     const tals = cur.talents.filter((t) => talIds.has(t.id));
     const gold =
-      fams.reduce((s, i) => s + sellValue(i), 0) +
+      items.reduce((s, i) => s + sellValue(i), 0) +
       tals.reduce(
         (s, t) => s + sellValueOf(talentRank(talentTier(t.xp)), talentRollOf(t), t.level ?? 1),
         0,
       );
     await persist(userId, {
       gold: cur.gold + gold,
-      ...(fams.length ? { inventory: cur.inventory.filter((i) => !famIds.has(i.id)) } : {}),
+      ...(items.length ? { inventory: cur.inventory.filter((i) => !gone(i.id)) } : {}),
       ...(tals.length ? { talents: cur.talents.filter((t) => !talIds.has(t.id)) } : {}),
     });
     goldFx.gain(gold);
-    return { gold, familiars: fams.length, talents: tals.length };
+    return { gold, familiars: famIds.size, talents: tals.length, relics: relIds.size };
   }
 
   // Récompense de connexion du jour (une fois par jour logique). Renvoie le gain

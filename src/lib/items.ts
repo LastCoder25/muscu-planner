@@ -2478,6 +2478,34 @@ export function familiarSurplus(
 }
 
 /**
+ * 🔮 LES RELIQUES EN TROP — même règle que `familiarSurplus` (demandé par l'utilisateur :
+ * « dans les reliques, ne garder que la meilleure de chaque type et vendre les autres »).
+ *
+ * Le TYPE d'une relique est son POUVOIR (elle ne porte aucune stat). On garde, par pouvoir,
+ * la plus forte — la jauge rapide (Légendaire+) d'abord, puis la FORCE (`relicForce`, la
+ * valeur même que le combat lit) — et celle qu'on PORTE, même moins bonne.
+ * ⚠️ Jamais rendus : un 🔒, une relique sans pouvoir connu (ce qu'on ne sait pas évaluer ne
+ * part pas).
+ */
+export function relicSurplus(
+  equipped: Item | null | undefined,
+  inventory: readonly Item[],
+): string[] {
+  const isRelic = (it: Item) => it.slot === 'relic' && !!relicPowerOf(it.power);
+  const fast = (it: Item) => (RARITY_RANK[it.rarity] >= LEGENDARY_MIN_RANK ? 1 : 0);
+  const better = (a: Item, b: Item) => fast(a) - fast(b) || relicForce(a) - relicForce(b);
+  const best = new Map<string, Item>();
+  for (const r of [...(equipped ? [equipped] : []), ...inventory]) {
+    if (!isRelic(r)) continue;
+    const cur = best.get(r.power!);
+    if (!cur || better(r, cur) > 0) best.set(r.power!, r);
+  }
+  return inventory
+    .filter((r) => isRelic(r) && !r.locked && best.get(r.power!)?.id !== r.id)
+    .map((r) => r.id);
+}
+
+/**
  * Range une collection en GROUPES d’exemplaires identiques (même talent, même race de
  * familier), chaque groupe du meilleur au pire, les groupes eux-mêmes ordonnés par leur
  * meilleur exemplaire (v0.862 ; demandé par l’utilisateur : « qu’on voie tous les talents

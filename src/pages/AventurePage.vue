@@ -922,7 +922,8 @@
               </template>
               <div v-else class="slot-vide">
                 Emplacement vide<template v-if="bagCountForSlot(slot) > 0">
-                  · <b
+                  ·
+                  <b
                     >{{ bagCountForSlot(slot) }}
                     {{ slot === 'relic' ? 'en réserve 🔮' : 'au sac' }}</b
                   ></template
@@ -5915,8 +5916,7 @@ function setInvFilter(f: ItemSlot | 'all') {
 // → sinon le badge « Sac » comptait un familier fantôme (ticket e3d61676).
 const bagCount = computed(
   () =>
-    (char.row?.inventory ?? []).filter((i) => !isFamiliar(i) && !isTrophy(i) && !isRelic(i))
-      .length,
+    (char.row?.inventory ?? []).filter((i) => !isFamiliar(i) && !isTrophy(i) && !isRelic(i)).length,
 );
 
 // ── Loadouts (sets d'équipement rangés) — 1 par VOIE (8 slots) ──
@@ -6543,7 +6543,8 @@ watch(
 );
 // 🪙 VENTE AUTOMATIQUE DES TALENTS ET FAMILIERS EN TROP (demandé par l'utilisateur : « ne
 // garder que le meilleur de chaque catégorie et vendre les autres automatiquement ; le seul
-// doublon est celui équipé »). La règle vit dans `familiarSurplus` / `talentSurplus`.
+// doublon est celui équipé »), puis des RELIQUES par pouvoir. Règles : `familiarSurplus` /
+// `talentSurplus` / `relicSurplus`.
 // ⚠️ Jamais pendant un combat ni tant que son rapport est ouvert : le butin s'y affiche avec
 // ses boutons, un familier ne doit pas disparaître sous le doigt de celui qui l'équipe.
 let sellingSurplus = false;
@@ -6553,7 +6554,7 @@ async function autoSellSurplus() {
   sellingSurplus = true;
   try {
     const r = await char.sellSurplusCompanions(uid);
-    const n = r.familiars + r.talents;
+    const n = r.familiars + r.talents + r.relics;
     if (n)
       gameFx.celebrate({
         quiet: true,
@@ -6564,6 +6565,7 @@ async function autoSellSurplus() {
           [
             r.talents ? `${r.talents} talent${r.talents > 1 ? 's' : ''}` : '',
             r.familiars ? `${r.familiars} familier${r.familiars > 1 ? 's' : ''}` : '',
+            r.relics ? `${r.relics} relique${r.relics > 1 ? 's' : ''}` : '',
           ]
             .filter(Boolean)
             .join(' · ') + ' — tu gardes le meilleur de chaque',
