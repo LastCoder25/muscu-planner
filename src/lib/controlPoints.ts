@@ -99,12 +99,15 @@ export const CONTROL = {
    *  la pièce inchangés : le ★5 de son rang et le niveau de son porteur. */
   forgeHoursPerTrial: 1.5,
   /** 📜 Scriptorium (2026-09-27, demandé : « comme le jardin, mais pour les compétences ») :
-   *  UN copiste (`CONTROL_SEATS.scriptorium` = 1) recopie une RUNE de compétence toutes les
-   *  `runeHoursPerItem` heures. ⚠️ Les runes sont RARES : toutes sources confondues, un joueur
-   *  régulier en gagne 0,27 à 0,87 par jour (spec des runes). Une toutes les 48 h, tenue en
-   *  continu, en ajoute 0,5 — la couleur suit les chances des lieux (`placeRuneOdds`, rang du
-   *  point face au tien). Sa réserve tient UNE rune (une seule attend d'être ramassée). */
-  runeHoursPerItem: 48,
+   *  recopie une RUNE de compétence. Depuis le 2026-09-28 (demandé : « comme les autres lieux
+   *  fixes »), il garde jusqu'à 3 copistes et produit selon l'effectif (`garrisonShare`) : une
+   *  rune toutes les `runeHoursPerItem` heures À PLEIN — 3 copistes 24 h, 2 → 30 h, 1 → 48 h
+   *  (le rythme d'avant, inchangé pour qui n'en poste qu'un). ⚠️ Les runes sont RARES : toutes
+   *  sources confondues, un joueur régulier en gagne 0,27 à 0,87 par jour (spec des runes) ;
+   *  tenu plein en continu, le Scriptorium en ajoute 1 par jour (choix de l'utilisateur). La
+   *  couleur suit les chances des lieux (`placeRuneOdds`, rang du point face au tien). Sa
+   *  réserve tient UNE rune (une seule attend d'être ramassée), quel que soit l'effectif. */
+  runeHoursPerItem: 24,
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
@@ -125,7 +128,7 @@ export const CONTROL = {
  *  jardin n'en garde qu'UN — on choisit à l'envoi qui reste, les autres rentrent). */
 const CONTROL_SEATS: Record<ControlKind, number> = {
   forge: CONTROL_MAX_GARRISON,
-  scriptorium: 1,
+  scriptorium: CONTROL_MAX_GARRISON,
   mine: CONTROL_MAX_GARRISON,
   training: CONTROL_MAX_GARRISON,
   garden: 1,
@@ -415,7 +418,7 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'forge':
       return n > 0 ? forgeXpPerHour(p) : 0;
     case 'scriptorium':
-      return n > 0 ? 1 / CONTROL.runeHoursPerItem : 0;
+      return shareOf(n) / CONTROL.runeHoursPerItem;
     default:
       return 0;
   }
@@ -434,7 +437,10 @@ function stockUnits(p: Poi, now: number, playerLevel: number): number {
   const ms = Math.min(storage, Math.max(0, until - c.collectedAt));
   const rate = unitsPerHour(p, c.garrison.length, playerLevel);
   const banked = c.banked ?? 0;
-  const cap = Math.max(banked, (rate * storage) / 3600_000);
+  const cap =
+    c.kind === 'scriptorium'
+      ? Math.max(banked, RUNE_RESERVE)
+      : Math.max(banked, (rate * storage) / 3600_000);
   return Math.min(cap, banked + (rate * ms) / 3600_000);
 }
 
@@ -529,9 +535,21 @@ export function forgeGear(
 }
 
 /** Combien de temps de production un point garde en réserve. 24 h partout, sauf au
- *  Scriptorium : une rune y prend 48 h, et une réserve de 24 h l'empêchait de jamais finir. */
+ *  Scriptorium : le temps d'une rune avec UN SEUL copiste (48 h) — une réserve plus courte
+ *  l'empêchait de jamais finir. Sa réserve est en plus plafonnée à UNE rune (`RUNE_RESERVE`,
+ *  dans `stockUnits`) : trois copistes n'en empilent pas deux. */
 function storageMsOf(kind: ControlKind): number {
-  return kind === 'scriptorium' ? CONTROL.runeHoursPerItem * 3600_000 : CONTROL.storageMs;
+  return kind === 'scriptorium'
+    ? (CONTROL.runeHoursPerItem / shareOf(1)) * 3600_000
+    : CONTROL.storageMs;
+}
+/** 📜 Une seule rune attend d'être ramassée, quel que soit l'effectif. */
+const RUNE_RESERVE = 1;
+/** 📜 Le temps d'une rune pour `n` copistes (48 h à 1, 30 h à 2, 24 h à 3) — `null` sans
+ *  copiste, qui ne produit rien. Même part que la production (`unitsPerHour`). */
+export function runeHoursFor(n: number): number | null {
+  const s = shareOf(n);
+  return s > 0 ? CONTROL.runeHoursPerItem / s : null;
 }
 
 /** 📜 Combien de runes le Scriptorium a recopiées à `now` (0 ou 1). */
