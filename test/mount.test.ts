@@ -406,6 +406,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // le second nombre est DÉRIVÉ de `engageCap`, jamais une copie de sa formule.
     expect(out).toContain(String(ROW.adventurers.length));
     expect(out).toContain(`${engageCap(3)} engagés à la fois`);
+    // 🔮 Le stock de runes se voit AVANT d'ouvrir un champion : une pastille par couleur.
+    expect(out).toContain('Runes à poser');
+    expect(out.match(/class="rs-pill/g)?.length).toBe(4);
     // 🏅 …et la rareté TIRÉE de chaque champion se LIT (v0.959) : elle ne vivait qu'en
     // teinte et en `title`, donc invisible sur un téléphone, qui n'a pas de survol.
     // ⚠️ ON LIT LA PASTILLE ELLE-MÊME, pas « le mot est quelque part dans la page » : une

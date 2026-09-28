@@ -103,6 +103,49 @@
               </button>
             </div>
           </div>
+          <!-- 🔮 LES RUNES EN STOCK, AVANT DE CHOISIR (demandé : « voir les runes qu'on a
+               avant de sélectionner un champion »). Elles se posent depuis la fiche d'un
+               champion ; sans ce rappel, il fallait en ouvrir une pour découvrir son stock.
+               Le rang minimal des couleurs rares est dit ici : c'est lui qui décide QUI
+               peut les recevoir. -->
+          <div v-if="roster.length" class="rune-stock">
+            <div class="rs-head">
+              <span class="rs-t font-display">🔮 Runes à poser</span>
+              <span class="rs-n">{{ runeTotal }}</span>
+            </div>
+            <div class="rs-row">
+              <span
+                v-for="t in RUNE_TIERS"
+                :key="t"
+                class="rs-pill"
+                :class="{ empty: !runeState.stock[t] }"
+                :style="{ '--tc': RUNE_COLOR[t] }"
+                :title="
+                  RUNE_INFO[t].minRank
+                    ? `${RUNE_INFO[t].label} — champion ${runeMinRank(t)} ou plus`
+                    : RUNE_INFO[t].label
+                "
+              >
+                <RuneIcon :tier="t" size="20px" />
+                <b class="font-display">{{ runeState.stock[t] }}</b>
+              </span>
+            </div>
+            <button
+              v-if="pendingRuneAdv"
+              type="button"
+              class="rs-pending"
+              @click="detailAdv = pendingRuneAdv"
+            >
+              Une rune attend ta décision sur <b>{{ pendingRuneAdv.name }}</b> ›
+            </button>
+            <div v-else class="rs-note">
+              {{
+                runeTotal
+                  ? `Touche un champion pour lui poser une rune. 🟣 dès le rang ${runeMinRank('violet')}, 🟠 dès le rang ${runeMinRank('gold')}.`
+                  : 'Aucune rune pour l’instant : elles tombent des lieux de la carte, des ascensions et de l’Éveil.'
+              }}
+            </div>
+          </div>
           <!-- ── Le vivier ── -->
           <div v-if="!roster.length" class="g-empty">
             Personne encore. Invoque ton premier champion — il partira en expédition pour toi.
@@ -676,9 +719,7 @@
       </div>
 
       <p
-        v-if="
-          !detailAdv.championId && !rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length
-        "
+        v-if="!detailAdv.championId && !rolesOf(detailAdv).length && !sigLabelsOf(detailAdv).length"
         class="g-note"
       >
         Ni rôle d’expédition ni signature — de la stat brute.
@@ -940,7 +981,15 @@ import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import SkillRunesPanel from '@/components/SkillRunesPanel.vue';
-import { SKILLS, type RuneState, type RuneTier } from '@/lib/skillRunes';
+import RuneIcon from '@/components/RuneIcon.vue';
+import {
+  RUNE_COLOR,
+  RUNE_INFO,
+  RUNE_TIERS,
+  SKILLS,
+  type RuneState,
+  type RuneTier,
+} from '@/lib/skillRunes';
 import {
   ADV_STARS,
   advGradeBadge,
@@ -1758,6 +1807,16 @@ const NO_RUNES: RuneState = {
   pending: null,
   comp: 0,
 };
+/** 🔮 Le stock affiché en tête du vivier, et le champion dont une rune attend une décision. */
+const runeState = computed(() => char.row?.runes ?? NO_RUNES);
+const runeTotal = computed(() => RUNE_TIERS.reduce((n, t) => n + runeState.value.stock[t], 0));
+const pendingRuneAdv = computed(() => {
+  const id = runeState.value.pending?.advId;
+  return id ? (roster.value.find((a) => a.id === id) ?? null) : null;
+});
+function runeMinRank(t: RuneTier): string {
+  return CHARACTER_RANKS[RUNE_INFO[t].minRank]?.name ?? '';
+}
 /** 🔮 Poser une rune : la fiche se rafraîchit, et on DIT ce qui est tombé. */
 function doApplyRune(a: Adventurer, tier: RuneTier) {
   void pair(async (uid) => {
@@ -2332,6 +2391,66 @@ function leftOf(at: number): string {
   opacity: 0.62;
 }
 /* ⬆️ Le vert « gain » de l'anneau du Panthéon sur la Base : même signal, on le suit. */
+.rune-stock {
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.rs-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.rs-t {
+  font-size: 14px;
+}
+.rs-n {
+  color: var(--dim);
+  font-size: 13px;
+}
+.rs-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+.rs-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--tc) 55%, var(--line));
+  background: color-mix(in srgb, var(--tc) 14%, var(--surface));
+  white-space: nowrap;
+}
+.rs-pill b {
+  font-size: 16px;
+}
+.rs-pill.empty {
+  opacity: 0.45;
+}
+.rs-note {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--dim);
+}
+.rs-pending {
+  margin-top: 8px;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
 .asc-banner {
   margin: 8px 0 12px;
   padding: 10px 12px;
