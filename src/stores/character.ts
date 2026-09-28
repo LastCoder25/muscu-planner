@@ -283,6 +283,8 @@ import {
   reinforceBlocker,
   reinforceControl,
   releaseFromControl,
+  sendHomeFromControl,
+  settleReturns,
   settleReinforcements,
   REINFORCE_BLOCK_LABEL,
   seatsOf,
@@ -997,13 +999,38 @@ export const useCharacterStore = defineStore('character', () => {
     return tickets;
   }
 
+  // ⚠️ ÉCRITURES EN VOL (2026-09-28, un milicien envoyé sur un point a disparu) : `persist`
+  // n'est PAS optimiste, donc tant qu'une écriture est en route `row.value` est PÉRIMÉ. Un
+  // tick de fond qui calcule sur cet état et écrit ensuite ÉCRASE la colonne entière (carte,
+  // base) avec l'état d'avant : l'envoi est perdu, mais le milicien a déjà quitté la base.
+  // Les ticks passent donc leur tour tant qu'une écriture vole (`persistTick`) ; les gestes
+  // du joueur attendent qu'elles aient atterri avant de lire l'état (`writesSettled`).
+  const inFlight = new Set<Promise<unknown>>();
+  async function writesSettled(): Promise<void> {
+    while (inFlight.size) await Promise.allSettled([...inFlight]);
+  }
+  /** Un tick peut écrire ce qu'il a calculé sur `snap` : rien ne vole, et l'état n'a pas
+   *  changé depuis sa lecture. Sinon il passe son tour (il recalculera au suivant). */
+  function tickMayWrite(snap: CharacterRow): boolean {
+    return inFlight.size === 0 && row.value === snap;
+  }
   async function persist(userId: string, patch: Record<string, unknown>) {
-    const { data, error } = await supabase
-      .from('characters')
-      .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('user_id', userId)
-      .select(COLS)
-      .single();
+    const req = Promise.resolve(
+      supabase
+        .from('characters')
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq('user_id', userId)
+        .select(COLS)
+        .single(),
+    );
+    inFlight.add(req);
+    let res: Awaited<typeof req>;
+    try {
+      res = await req;
+    } finally {
+      inFlight.delete(req);
+    }
+    const { data, error } = res;
     if (error) throw error;
     // NORMALISE comme fetchMine (migration rangs/enchant/roll) : sans ça, la ligne relue
     // après un write repartait BRUTE → valeurs (rang/qualité/puissance) potentiellement
@@ -2060,6 +2087,7 @@ export const useCharacterStore = defineStore('character', () => {
     // `markOverflow` rend la MÊME référence quand il n'y a rien de plus récent à poser.
     const baseChanged = !!base && base !== cur.base;
     if (!mapChanged && !baseChanged) return;
+    if (!tickMayWrite(cur)) return;
     // 💥 Le débordement se DIT (v0.1218) : un message par faille, dans la même écriture que
     // la carte — son id vient de la faille, donc une resynchronisation ne le double pas.
     const ovfMsgs = over.map((r) => overflowMessage(r, map, !!cur.base));
@@ -2558,7 +2586,7 @@ export const useCharacterStore = defineStore('character', () => {
       }
     }
     if (!t.dueRaid) {
-      if (t.changed) await persist(userId, { base: t.base });
+      if (t.changed && tickMayWrite(cur)) await persist(userId, { base: t.base });
       return { detected: t.detected, report: null, advProgress: [], advTracks: [] };
     }
 
@@ -3478,12 +3506,20 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<ExpeditionMessage[]> {
     const cur = row.value;
     if (!cur?.expedition_map) return [];
+    // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
+    // reprises) se fera au tick suivant, sur l'état relu.
+    const home = settleHome(cur, now);
+    if (home) {
+      if (tickMayWrite(cur)) await persist(userId, home);
+      return [];
+    }
     // 🏰 Les renforts ARRIVÉS rejoignent d'abord leur garnison (ceux arrivés avant l'attaque
     // combattent avec elle, les autres non).
     const settled = settleReinforcements(cur.expedition_map, now, playerLevel);
     const due = dueRetakes(settled, now);
     if (!due.length) {
-      if (settled !== cur.expedition_map) await persist(userId, { expedition_map: settled });
+      if (settled !== cur.expedition_map && tickMayWrite(cur))
+        await persist(userId, { expedition_map: settled });
       return [];
     }
     let map = settled;
@@ -3600,6 +3636,9 @@ export const useCharacterStore = defineStore('character', () => {
     const gearNext = trainWornGear(advList.value, rosterXp, gearStock);
     const forged =
       gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {};
+    // Calculé sur un état qu'une écriture en vol a peut-être changé : on rejouera au tick
+    // suivant (la reprise est déterministe, rien n'est perdu à attendre une seconde).
+    if (!tickMayWrite(cur)) return [];
     await persist(userId, {
       expedition_map: map,
       messages: x.messages,
@@ -3679,6 +3718,7 @@ export const useCharacterStore = defineStore('character', () => {
     now: number,
     playerLevel: number,
   ): Promise<{ gold: number; supplies: number; runes: RuneTier[] } | null> {
+    await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map) return null;
     const before = advList.value;
@@ -3718,24 +3758,21 @@ export const useCharacterStore = defineStore('character', () => {
     now: number,
     playerLevel: number,
   ): Promise<void> {
+    await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map) return;
     const stock0 = cur.adv_gear?.stock ?? [];
     const h = harvestControlIn(cur.expedition_map, advList.value, stock0, id, now, playerLevel);
     const mil = militiaOfControl(cur.expedition_map.pois.find((p) => p.id === id)?.control);
-    const all = [...advList.value.filter((a) => a.posted === id).map((a) => a.id), ...mil];
+    const champs = advList.value.filter((a) => a.posted === id).map((a) => a.id);
+    const home = walkHome(cur, id, champs, mil, now);
     await persist(userId, {
-      expedition_map: releaseFromControl(h.map, id, all, now, playerLevel),
-      // 🛡️ Les miliciens rentrent à la base.
-      ...(mil.length && cur.base
-        ? {
-            base: {
-              ...cur.base,
-              militia: returnMilitia(cur.base.militia ?? emptyMilitia(now), mil.length),
-            },
-          }
-        : {}),
-      adventurers: h.advs.map((a) => (a.posted === id ? { ...a, posted: undefined } : a)),
+      // 🏠 Tous rentrent À PIED : on les voit revenir sur la carte, les miliciens rejoignent
+      // la base à leur arrivée (`settleReturns`), les champions restent occupés jusque-là.
+      expedition_map: home.map(releaseFromControl(h.map, id, [...champs, ...mil], now, playerLevel)),
+      adventurers: h.advs.map((a) =>
+        a.posted === id ? { ...a, posted: undefined, busyUntil: home.advAt } : a,
+      ),
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
@@ -3759,6 +3796,7 @@ export const useCharacterStore = defineStore('character', () => {
     now: number,
     playerLevel: number,
   ): Promise<void> {
+    await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map || !ids.length) return;
     const out = new Set(ids);
@@ -3767,20 +3805,68 @@ export const useCharacterStore = defineStore('character', () => {
       militiaOfControl(cur.expedition_map.pois.find((p) => p.id === id)?.control),
     );
     const mil = ids.filter((x) => onPoint.has(x));
+    const champs = advList.value.filter((a) => out.has(a.id) && a.posted === id).map((a) => a.id);
+    const home = walkHome(cur, id, champs, mil, now);
     await persist(userId, {
-      expedition_map: releaseFromControl(cur.expedition_map, id, ids, now, playerLevel),
+      expedition_map: home.map(releaseFromControl(cur.expedition_map, id, ids, now, playerLevel)),
       adventurers: advList.value.map((a) =>
-        out.has(a.id) && a.posted === id ? { ...a, posted: undefined } : a,
+        out.has(a.id) && a.posted === id
+          ? { ...a, posted: undefined, busyUntil: home.advAt }
+          : a,
       ),
-      ...(mil.length && cur.base
+    });
+  }
+
+  /** 🏠 Le trajet de RETOUR d'un point vers la base : les champions au pas de leur équipe
+   *  (comme à l'aller, `partyLegMin`), les miliciens au pas d'une équipe sans rôle. Rend
+   *  l'heure d'arrivée des champions et de quoi noter les deux trajets sur la carte. */
+  function walkHome(
+    cur: CharacterRow,
+    id: string,
+    champs: readonly string[],
+    mil: readonly string[],
+    now: number,
+  ): { advAt: number; map: (m: ExpeditionMap) => ExpeditionMap } {
+    const poi = cur.expedition_map?.pois.find((p) => p.id === id);
+    if (!poi) return { advAt: now, map: (m) => m };
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map);
+    const escort = champs
+      .map((x) => advList.value.find((a) => a.id === x))
+      .filter((a): a is Adventurer => !!a);
+    const advAt = escort.length
+      ? now +
+        partyLegMin(poi, escort, {
+          hero: false,
+          travelMult: mult,
+          gearSpeed: advGearRoles(escort, escortKitOf(cur).advGear).speed,
+        }) *
+          60_000
+      : now;
+    const milAt = now + caravanLegMin(poi, [], 0, mult) * 60_000;
+    return {
+      advAt,
+      map: (m) =>
+        sendHomeFromControl(sendHomeFromControl(m, id, champs, now, advAt), id, mil, now, milAt),
+    };
+  }
+
+  /** 🏠 Les retours arrivés quittent la carte ; les miliciens rentrés rejoignent la base.
+   *  Appelé par `controlTick`, avant les reprises. */
+  function settleHome(cur: CharacterRow, now: number): Record<string, unknown> | null {
+    if (!cur.expedition_map) return null;
+    const r = settleReturns(cur.expedition_map, now);
+    if (r.map === cur.expedition_map) return null;
+    return {
+      expedition_map: r.map,
+      ...(r.militiaHome && cur.base
         ? {
             base: {
               ...cur.base,
-              militia: returnMilitia(cur.base.militia ?? emptyMilitia(now), mil.length),
+              militia: returnMilitia(cur.base.militia ?? emptyMilitia(now), r.militiaHome),
             },
           }
         : {}),
-    });
+    };
   }
 
   /** 🛡️ Envoie `n` MILICIENS de la base sur un point tenu : ils prennent leur place tout de
@@ -3792,6 +3878,7 @@ export const useCharacterStore = defineStore('character', () => {
     n: number,
     now: number,
   ): Promise<string | null> {
+    await writesSettled();
     const cur = row.value;
     const poi = cur?.expedition_map?.pois.find((p) => p.id === id);
     if (!cur?.base || !poi) return 'la carte n’est pas chargée';
@@ -3823,6 +3910,7 @@ export const useCharacterStore = defineStore('character', () => {
     ids: readonly string[],
     now: number,
   ): Promise<string | null> {
+    await writesSettled();
     const cur = row.value;
     const poi = cur?.expedition_map?.pois.find((p) => p.id === id);
     if (!cur || !poi) return 'la carte n’est pas chargée';

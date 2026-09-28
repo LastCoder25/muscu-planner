@@ -48,8 +48,14 @@
         <b>Ton héros</b>
       </div>
       <AdvPickTile v-for="a in crew.advs" :key="a.id" :adv="a" :on="true" readonly />
+      <div v-if="crew.militia" class="tc-hero tc-mil">
+        <div class="tc-mil-emo">{{ MILITIA_EMO }}</div>
+        <b>{{ crew.militia }} milicien{{ crew.militia > 1 ? 's' : '' }}</b>
+      </div>
     </div>
-    <p v-if="!crew.hero && !crew.advs.length && !crew.gone" class="tc-none">Personne à bord.</p>
+    <p v-if="!crew.hero && !crew.advs.length && !crew.militia && !crew.gone" class="tc-none">
+      Personne à bord.
+    </p>
     <p v-if="crew.gone" class="tc-none">
       {{ crew.gone }} champion{{ crew.gone > 1 ? 's ne sont' : " n'est" }} plus dans ton vivier.
     </p>
@@ -87,6 +93,7 @@ import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import type { CharacterProfile } from '@/lib/character';
 import type { Adventurer } from '@/lib/adventurers';
+import { MILITIA_EMO, militiaIn } from '@/lib/militia';
 
 const props = defineProps<{
   trips: MapTrip[];
@@ -104,12 +111,16 @@ const crew = computed(() => {
   if (!t) return null;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
+  // 🛡️ Les miliciens sont anonymes, hors du vivier : comptés à part (sans ça ils passaient
+  // pour des champions « qui ne sont plus dans ton vivier »).
+  const militia = militiaIn(t.members).length;
   // Le butin est tiré au départ, mais on ne le montre qu'une fois le lieu atteint (retour) :
   // à l'aller, l'annoncer révélerait l'issue d'un combat qui n'a pas encore eu lieu.
   return {
     hero: t.withHero,
     advs,
-    gone: t.members.length - advs.length,
+    militia,
+    gone: t.members.length - advs.length - militia,
     poi: t.poi,
     haul: t.back ? t.haul : [],
   };
@@ -181,6 +192,15 @@ const crew = computed(() => {
 .tc-hero-av {
   width: 64px;
   height: 64px;
+}
+/* 🛡️ Les miliciens : anonymes, un seul encart avec leur nombre (bordure neutre : ce n'est pas
+   le héros). */
+.tc-mil {
+  border-color: var(--line);
+}
+.tc-mil-emo {
+  font-size: 30px;
+  line-height: 64px;
 }
 .tc-none {
   margin: 6px 0 0;
