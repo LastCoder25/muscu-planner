@@ -323,6 +323,33 @@ export function attackerLevel(seed: number, p: Poi, playerLevel: number): number
   return controlLevel(`${seed}:${p.id}@${c?.attackAt ?? 0}`, (c?.retakes ?? 0) + 1, playerLevel);
 }
 
+/** 🔙 Le point tombe à `at` pendant que des renforts marchent vers lui : ils ne combattent
+ *  pas (`settleReinforcements` s'arrête à l'heure de l'attaque) et font DEMI-TOUR à cet
+ *  instant, pour un retour aussi long que le chemin déjà parcouru. ⚠️ Un renfort parti
+ *  APRÈS `at` (le tick n'avait pas encore résolu l'attaque) rentre aussitôt, jamais avant
+ *  son départ ; un renfort sans heure de départ connue (envoyé avant qu'on la retienne)
+ *  est rentré tout de suite. Ceux déjà arrivés à `at` ont combattu : pas de demi-tour. */
+export function turnBackReinforcements(
+  c: ControlState,
+  at: number,
+): { id: string; from: number; at: number }[] {
+  return (c.reinforcing ?? [])
+    .filter((r) => r.at > at)
+    .map((r) => {
+      const from = r.from ?? at;
+      const turn = Math.max(at, from);
+      return { id: r.id, from: turn, at: turn + (turn - from) };
+    });
+}
+
+/** 🔙 La ligne du rapport de chute, vide s'il n'y avait personne en route. */
+export function turnBackLabel(n: number): string {
+  if (n <= 0) return '';
+  return n > 1
+    ? ` 🔙 ${n} renforts en route font demi-tour.`
+    : ' 🔙 1 renfort en route fait demi-tour.';
+}
+
 /** 🏰 Perdu (reprise ennemie ou abandon) : le lieu redevient ennemi, troupe re-tirée. Repris
  *  par une attaque, il prend le rang et la bannière des assaillants (`won`) ; abandonné, un
  *  rang re-tiré. */
@@ -330,11 +357,14 @@ export function loseControl(
   map: ExpeditionMap,
   id: string,
   playerLevel: number,
+  /** L'heure de la chute : les renforts encore en route font demi-tour à cet instant. */
+  at: number,
   won?: { level: number; faction: ControlState['faction'] },
 ): ExpeditionMap {
   return withControl(map, id, (p) => {
     const retakes = p.control!.retakes + 1;
     const force = enemyForce(`${map.seed}:${id}`, retakes);
+    const returning = [...(p.control!.returning ?? []), ...turnBackReinforcements(p.control!, at)];
     const next: ControlState = {
       kind: p.control!.kind,
       owner: 'enemy',
@@ -344,7 +374,8 @@ export function loseControl(
       ...(won ? { faction: won.faction } : {}),
       // 🏠 Ceux déjà sur le chemin du retour ne sont plus là : le lieu tombe sans eux, ils
       // finissent leur trajet (sinon un milicien en route vers la base disparaîtrait).
-      ...(p.control!.returning?.length ? { returning: p.control!.returning } : {}),
+      // 🔙 Les renforts encore en route les rejoignent : ils font demi-tour.
+      ...(returning.length ? { returning } : {}),
     };
     const level = won?.level ?? controlLevel(`${map.seed}:${id}`, retakes, playerLevel);
     return { ...p, level, control: next };

@@ -83,7 +83,7 @@ describe('🏠 le retour d’un point de contrôle se voit sur la carte', () => 
     expect(settleReturns(m, 2000).map).toBe(m);
   });
   it('un point repris par l’ennemi ne fait pas disparaître ceux qui rentrent', () => {
-    const m = loseControl(recall(mapOf(point()), 1000, 5000, 7000), 'ctl_mine', 20);
+    const m = loseControl(recall(mapOf(point()), 1000, 5000, 7000), 'ctl_mine', 20, 7000);
     expect(m.pois[0]!.control!.owner).toBe('enemy');
     expect(returnsEnRoute(m, 2000).length).toBe(2);
     expect(settleReturns(m, 8000).militiaHome).toBe(1);

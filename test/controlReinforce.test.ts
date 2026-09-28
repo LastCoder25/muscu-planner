@@ -14,6 +14,11 @@ import {
   settleReinforcements,
   dueRetakes,
   seatsOf,
+  turnBackReinforcements,
+  turnBackLabel,
+  loseControl,
+  returnsEnRoute,
+  settleReturns,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 
@@ -137,5 +142,64 @@ describe('🛡️ renforts dessinés sur la carte', () => {
     const { reinforcementsEnRoute } = await import('@/lib/controlPoints');
     const m = reinforceControl(held(['a']), ID, ['b'], 5 * H);
     expect(reinforcementsEnRoute(m, 3 * H)).toHaveLength(0);
+  });
+});
+
+describe('🔙 le point tombe pendant qu’un renfort est en route', () => {
+  /** Tenu par `a`, renfort `b` parti à 1 h pour arriver à 5 h, attaque à 3 h. */
+  const setup = () => {
+    const m0 = reinforceControl(held(['a']), ID, ['b', 'mil:x'], 5 * H, 1 * H);
+    return {
+      ...m0,
+      pois: m0.pois.map((p) =>
+        p.id === ID ? { ...p, control: { ...p.control!, attackAt: 3 * H } } : p,
+      ),
+    };
+  };
+  it('le renfort fait demi-tour : il rentre en refaisant le chemin déjà parcouru', () => {
+    expect(turnBackReinforcements(ctl(setup()).control!, 3 * H)).toEqual([
+      { id: 'b', from: 3 * H, at: 5 * H },
+      { id: 'mil:x', from: 3 * H, at: 5 * H },
+    ]);
+  });
+  it('un renfort déjà arrivé à l’heure de l’attaque ne fait pas demi-tour (il a combattu)', () => {
+    const c = ctl(setup()).control!;
+    expect(turnBackReinforcements(c, 5 * H)).toEqual([]);
+  });
+  it('sans heure de départ connue, il est rentré tout de suite', () => {
+    const m = reinforceControl(held(['a']), ID, ['b'], 5 * H);
+    expect(turnBackReinforcements(ctl(m).control!, 3 * H)).toEqual([
+      { id: 'b', from: 3 * H, at: 3 * H },
+    ]);
+  });
+  it('parti APRÈS l’heure de l’attaque, il rentre aussitôt, jamais avant son départ', () => {
+    const m = reinforceControl(held(['a']), ID, ['b'], 9 * H, 4 * H);
+    expect(turnBackReinforcements(ctl(m).control!, 3 * H)).toEqual([
+      { id: 'b', from: 4 * H, at: 4 * H },
+    ]);
+  });
+  it('le point perdu garde leur trajet retour : on les voit rentrer sur la carte', () => {
+    const lost = loseControl(setup(), ID, L, 3 * H);
+    const c = ctl(lost).control!;
+    expect(c.owner).toBe('enemy');
+    expect(c.reinforcing).toBeUndefined();
+    expect(c.returning).toEqual([
+      { id: 'b', from: 3 * H, at: 5 * H },
+      { id: 'mil:x', from: 3 * H, at: 5 * H },
+    ]);
+    expect(returnsEnRoute(lost, 4 * H).flatMap((t) => t.members)).toEqual(['b', 'mil:x']);
+  });
+  it('le milicien rejoint la base à son retour, pas avant', () => {
+    const lost = loseControl(setup(), ID, L, 3 * H);
+    expect(settleReturns(lost, 4 * H).militiaHome).toBe(0);
+    expect(settleReturns(lost, 5 * H).militiaHome).toBe(1);
+  });
+});
+
+describe('🔙 le rapport de chute', () => {
+  it('ne dit rien sans renfort en route, et accorde le nombre', () => {
+    expect(turnBackLabel(0)).toBe('');
+    expect(turnBackLabel(1)).toBe(' 🔙 1 renfort en route fait demi-tour.');
+    expect(turnBackLabel(3)).toBe(' 🔙 3 renforts en route font demi-tour.');
   });
 });

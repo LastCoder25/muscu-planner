@@ -127,7 +127,6 @@ import {
 import { combatPower, mulberry32, type Combatant } from '@/lib/combat';
 import {
   emptyMilitia,
-  militiaIn,
   militiaLostLabel,
   militiaOfControl,
   militiaOnMap,
@@ -287,6 +286,8 @@ import {
   sendHomeFromControl,
   settleReturns,
   settleReinforcements,
+  turnBackLabel,
+  turnBackReinforcements,
   REINFORCE_BLOCK_LABEL,
   seatsOf,
   campXpFor,
@@ -3530,7 +3531,6 @@ export const useCharacterStore = defineStore('character', () => {
     let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
     const runesIn: RuneTier[] = [];
-    let milHome = 0;
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
@@ -3570,6 +3570,8 @@ export const useCharacterStore = defineStore('character', () => {
             })
           : null;
       const held = !!o?.win;
+      // 🔙 Perdu : les renforts encore en route font demi-tour (ni combat ni infirmerie).
+      const back = held ? [] : turnBackReinforcements(p.control!, at);
       const stock = h.gold;
       const emo = FACTION_EMOJI[force.faction];
       const label = CONTROL_LABEL[p.control!.kind];
@@ -3598,27 +3600,39 @@ export const useCharacterStore = defineStore('character', () => {
         } as ActiveExpedition),
         id: `ctl_${p.id}_${at}`,
         title: held ? `🏰 ${label} : attaque repoussée` : `🏰 ${label} reprise par l’ennemi`,
-        text: held
-          ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)} Une nouvelle attaque se prépare.`
-          : escort.length
-            ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}`
-            : militia.length
-              ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
-              : `${emo} L’ennemi a repris le lieu, laissé sans défense.`,
+        text:
+          (held
+            ? `${emo} Ta garnison a tenu.${militiaLostLabel(o?.party?.militiaLost)} Une nouvelle attaque se prépare.`
+            : escort.length
+              ? `${emo} L’ennemi a repris le lieu — ta garnison part à l’infirmerie.${militiaLostLabel(o?.party?.militiaLost)}`
+              : militia.length
+                ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
+                : `${emo} L’ennemi a repris le lieu, laissé sans défense.`) +
+          turnBackLabel(back.length),
         ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
       };
       msgs.push(msg);
-      // 🛡️ Vaincu : les miliciens encore EN ROUTE vers le point font demi-tour (ceux de la
-      // garnison, eux, sont tombés). Tenu : les miliciens tombés sont retirés de la garnison.
-      if (!held) milHome += militiaIn((p.control!.reinforcing ?? []).map((r) => r.id)).length;
+      // 🛡️ Tenu : les miliciens tombés sont retirés de la garnison. Vaincu : ceux encore EN
+      // ROUTE font demi-tour avec les champions (`loseControl` note leur trajet retour, et
+      // `settleReturns` les rend à la base à leur arrivée — plus en un instant).
       const dead = o?.party?.militiaLost ?? [];
       if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
       map = held
         ? holdControl(map, p.id, at, activeDays7)
-        : loseControl(map, p.id, playerLevel, { level: foe.level, faction: force.faction });
+        : loseControl(map, p.id, playerLevel, at, { level: foe.level, faction: force.faction });
       // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
-      // route (ils font demi-tour ; seule la garnison, qui a combattu, part à l'infirmerie).
-      advs = advs.map((a) => (!held && a.posted === p.id ? { ...a, posted: undefined } : a));
+      // route. Seule la garnison, qui a combattu, part à l'infirmerie ; les renforts restent
+      // occupés jusqu'à leur retour (le chemin déjà parcouru, refait dans l'autre sens).
+      const backAt = new Map(back.map((r) => [r.id, r.at]));
+      advs = advs.map((a) =>
+        !held && a.posted === p.id
+          ? {
+              ...a,
+              posted: undefined,
+              ...(backAt.has(a.id) ? { busyUntil: backAt.get(a.id)! } : {}),
+            }
+          : a,
+      );
     }
     const box = boxWith(cur, msgs, MESSAGES_CAP);
     // ⚠️ `advs` et non l'état : il porte l'XP du camp d'entraînement récoltée avant l'attaque.
@@ -3656,9 +3670,6 @@ export const useCharacterStore = defineStore('character', () => {
       ...forged,
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
       ...(runesIn.length ? { runes: addRunes(cur.runes, runesIn) } : {}),
-      ...(milHome > 0 && cur.base?.militia
-        ? { base: { ...cur.base, militia: returnMilitia(cur.base.militia, milHome) } }
-        : {}),
       adventurers: roster,
     });
     x.play();

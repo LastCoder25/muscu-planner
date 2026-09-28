@@ -59,13 +59,16 @@ describe('🏳️ une place tenue est neutre, le rang appartient aux assaillants
   });
 
   it('délogé, le lieu prend le rang et la bannière de ceux qui l’ont repris', () => {
-    const m = loseControl(mapOf(point(20)), 'ctl_mine', 60, { level: 12, faction: 'mortsvivants' });
+    const m = loseControl(mapOf(point(20)), 'ctl_mine', 60, 0, {
+      level: 12,
+      faction: 'mortsvivants',
+    });
     const p = m.pois[0]!;
     expect(p.level).toBe(12);
     expect(p.control!.faction).toBe('mortsvivants');
     expect(p.control!.owner).toBe('enemy');
     // Abandonné (sans bataille) : un rang re-tiré, jamais au-dessus du joueur.
-    const a = loseControl(mapOf(point(20)), 'ctl_mine', 60).pois[0]!;
+    const a = loseControl(mapOf(point(20)), 'ctl_mine', 60, 0).pois[0]!;
     expect(a.level).toBeLessThanOrEqual(60);
   });
 });
