@@ -1119,8 +1119,8 @@
                   <div class="ii-head">
                     <ItemIcon :item="it" :size="40" />
                     <div class="ii-name">{{ it.name }}</div>
-                    <!-- 🏆 Un trophée ne se compare pas en puissance : c'est le choix du joueur. -->
-                    <span v-if="!isTrophy(it)" class="ii-verdict" :class="powerVerdict(it).cls">{{
+                    <!-- 🏆🔮 Trophée et relique ne se comparent pas en puissance : ce sont des pouvoirs. -->
+                    <span v-if="!noPowerCmp(it)" class="ii-verdict" :class="powerVerdict(it).cls">{{
                       powerVerdict(it).label
                     }}</span>
                   </div>
@@ -1185,7 +1185,7 @@
                     </div>
                   </div>
                   <!-- PUISSANCE si équipé (rang + qualité) vs l'objet équipé du même slot. -->
-                  <div v-if="!isTrophy(it)" class="ii-cmp2">
+                  <div v-if="!noPowerCmp(it)" class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
                     <span
                       class="ii-cmp2-chip"
@@ -2599,7 +2599,7 @@
                     rarityVerdict(cand.item).label
                   }}</span>
                 </div>
-                <div v-if="!setDropCmp(cand.item)" class="pow-cmp">
+                <div v-if="!setDropCmp(cand.item) && !noPowerCmp(cand.item)" class="pow-cmp">
                   ⚔️ vs ton meilleur build {{ fmtPow(refPower) }} →
                   <b :class="powerIfEquip(cand.item) >= refPower ? 'up' : 'down'"
                     >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
@@ -2808,7 +2808,7 @@
                     <span class="rarity-verdict up">slot libre</span>
                   </div>
                   <!-- Puissance si équipé (rang + qualité) vs l'objet équipé du même slot. -->
-                  <div class="ii-cmp2">
+                  <div v-if="!noPowerCmp(d)" class="ii-cmp2">
                     <span class="ii-cmp2-ic">⚔️</span>
                     <span class="ii-cmp2-chip" :class="powerIfEquip(d) >= refPower ? 'up' : 'down'">
                       <b>{{ fmtDelta(refPower, powerIfEquip(d)) }}</b
@@ -2904,7 +2904,7 @@
                     <div v-if="rewardCmpEquipped(cand.item)" class="drop-cmp rc-cmp">
                       Équipé : {{ rewardCmpEquipped(cand.item) }}
                     </div>
-                    <div v-if="!setDropCmp(cand.item)" class="pow-cmp">
+                    <div v-if="!setDropCmp(cand.item) && !noPowerCmp(cand.item)" class="pow-cmp">
                       ⚔️ vs ton meilleur build {{ fmtPow(refPower) }} →
                       <b :class="powerIfEquip(cand.item) >= refPower ? 'up' : 'down'"
                         >{{ fmtPow(powerIfEquip(cand.item)) }} ({{
@@ -5786,6 +5786,9 @@ const invFilter = ref<ItemSlot | 'all'>('all');
 // entre amis — ils ont leur VITRINE (sous la grille) et leur propre sac (bouton 🏆), et
 // « Tout vendre » ne doit jamais les fondre avec le bric-à-brac.
 const isTrophy = (i: Item) => i.slot === TROPHY_SLOT;
+// Trophée (pouvoir à quête) et relique (pouvoir à jauge) ne portent que des POUVOIRS : un
+// chiffre de puissance les résume mal, on laisse le joueur choisir sur leur effet.
+const noPowerCmp = (i: Item) => isTrophy(i) || i.slot === 'relic';
 const equippedTrophy = computed<Item | null>(() => char.row?.equipped[TROPHY_SLOT] ?? null);
 const trophyBag = computed<Item[]>(() =>
   (char.row?.inventory ?? [])
