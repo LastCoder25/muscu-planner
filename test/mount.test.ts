@@ -1995,6 +1995,7 @@ describe('🔀 FusionPanel', () => {
     // Ennemie : ce qu’elle rapporterait, à la même place.
     expect(out).toContain('XP pour la garnison 🎓');
     expect(out).toContain('1/6 tenus');
-    expect(out).toContain('🛡️ 1/3');
+    // Une mine prend 5 personnes depuis le 2026-09-28 (`seatsOf`).
+    expect(out).toContain('🛡️ 1/5');
   }, 30_000);
 });
