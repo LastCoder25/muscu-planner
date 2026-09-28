@@ -535,7 +535,9 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
           : 'la bande passe'
         : party.win
           ? 'camp pris'
-          : 'repoussé',
+          : party.roadLost
+            ? 'pris, embuscade perdue'
+            : 'repoussé',
     slain: party.slain,
     foes: party.foes,
     heroKills: party.heroKills,

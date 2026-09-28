@@ -1,6 +1,7 @@
 import { campWinPct } from './camp';
-import { partyAllies, type EscortKit, type PartyHero } from './caravan';
-import { isRiftPoi, isWarbandPoi, poiForceOf, type Poi } from './expedition';
+import { partyAllies, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
+import { HARVEST_TYPES, isRiftPoi, isWarbandPoi, poiForceOf, type Poi } from './expedition';
+import { partyForecastSeed } from './party';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
 import { supplyFx } from './supplies';
@@ -31,6 +32,10 @@ export function partyWinChance(
   hero: PartyHero | null,
   now: number,
   samples = 40,
+  /** 🛣️ Compter la ROUTE d'une récolte sans héros (défaut). `false` = les gardes seuls :
+   *  c'est ce que lit le refus « perdu d'avance » — une route dangereuse coûte une part de la
+   *  cargaison, elle ne rend jamais un lieu imprenable. */
+  withRoad = true,
 ): number | null {
   const allies = partyAllies(escort, road, hero);
   if (!allies.length) return null;
@@ -41,5 +46,33 @@ export function partyWinChance(
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.
   const spec = poiForceOf(poi);
-  return spec ? campWinPct(poi, spec, allies, samples, fx.guardMult) : null;
+  const guards = spec ? campWinPct(poi, spec, allies, samples, fx.guardMult) : null;
+  // 🛣️ UNE RÉCOLTE SANS LE HÉROS VOYAGE COMME UN CONVOI (`resolveHarvestParty`) : sa
+  // « réussite » = les gardes abattus ET aucune embuscade PERDUE sur la route. Ne compter que
+  // les gardes annonçait 100 % à deux champions pour ~65 % de rapports gagnés (11-17 % sur
+  // une route dangereuse) — mesuré, v0.1283. Les deux combats sont indépendants (générateurs
+  // séparés) : on multiplie.
+  if (!withRoad || hero || !escort.length || !HARVEST_TYPES.has(poi.type)) return guards;
+  return (guards ?? 1) * roadClearChance(poi, escort, road, samples);
+}
+
+/**
+ * 🛣️ La part des voyages qui ne perdent AUCUNE embuscade — le VRAI trajet (`resolveCaravan`),
+ * rejoué sur les graines de PRONOSTIC (impaires). ⚠️ La graine du départ d'un groupe est
+ * toujours PAIRE (store `sendParty`) : on ne rejoue jamais la route qui aura lieu.
+ * Le Panthéon et le niveau du joueur ne jouent que sur l'XP et l'or, jamais sur l'issue.
+ */
+export function roadClearChance(
+  poi: Poi,
+  escort: Adventurer[],
+  road: EscortKit,
+  samples = 40,
+): number {
+  const n = Math.max(1, samples);
+  let clear = 0;
+  for (let s = 0; s < n; s++) {
+    const o = resolveCaravan(poi, escort, partyForecastSeed(s), road, 1, undefined);
+    if (!o.events.some((e) => e.kind === 'bandits' && !e.won)) clear++;
+  }
+  return clear / n;
 }

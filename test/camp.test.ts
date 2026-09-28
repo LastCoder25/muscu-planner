@@ -337,7 +337,11 @@ describe('💀 on ne part pas perdu d’avance', () => {
     expect(spec).not.toBeNull();
     const esc = team(3, L);
     const rd = road(L, 3);
-    expect(partyWinChance(p, esc, rd, null, 0, 40)).toBe(campWinPct(p, spec, units(esc, rd), 40));
+    // Le refus lit les GARDES seuls (`withRoad` faux) : le combat des gardes, au chiffre près.
+    const guards = campWinPct(p, spec, units(esc, rd), 40);
+    expect(partyWinChance(p, esc, rd, null, 0, 40, false)).toBe(guards);
+    // Le % affiché y ajoute la ROUTE (v0.1284) : jamais plus que les gardes seuls.
+    expect(partyWinChance(p, esc, rd, null, 0, 40)!).toBeLessThanOrEqual(guards);
   });
 
   it('🎯 sans personne, il n’y a rien à simuler', () => {

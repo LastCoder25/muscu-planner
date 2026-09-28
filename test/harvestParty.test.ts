@@ -28,6 +28,8 @@ import { refFighter } from '@/lib/proceduralContent';
 import type { Adventurer } from '@/lib/adventurers';
 import { poiRank } from '@/lib/poiRank';
 import { characterRank } from '@/lib/characterRank';
+import { partyWinChance } from '@/lib/partyForecast';
+import { partyReport } from '@/lib/party';
 
 const poi = (type: Poi['type'], over: Partial<Poi> = {}): Poi => ({
   id: 'p_' + type,
@@ -405,5 +407,70 @@ describe('🛡️ les gardes d’un lieu de récolte (2026-09-22)', () => {
     const pc = (n: number) => campWinPct(p, spec, partyAllies(team(n), road, null), 60);
     expect(pc(1)).toBeLessThan(0.2);
     expect(pc(3)).toBeGreaterThan(0.9);
+  });
+});
+
+describe('🎯 le % d’une récolte compte la ROUTE (v0.1284)', () => {
+  // Signalé : « je mets assez de champions pour approcher 100 % et pas mal d'attaques sont
+  // repoussées ». Le % ne comptait que les gardes ; le rapport perd aussi sur une embuscade.
+  const realRate = (p: Poi, esc: Adventurer[]) => {
+    const rd = { advGear: refAdvGear(26, esc.length) };
+    let w = 0;
+    const N = 400;
+    for (let s = 1; s <= N; s++)
+      if (
+        resolveHarvestParty({
+          poi: p,
+          escort: esc,
+          road: rd,
+          hero: null,
+          seed: s * 2,
+          playerLevel: 26,
+          pantheonLevel: 100,
+        }).win
+      )
+        w++;
+    return w / N;
+  };
+  for (const perilous of [false, true])
+    for (const n of [2, 3, 4])
+      it(`${perilous ? 'route dangereuse' : 'route calme'}, ${n} champions : annoncé ≈ réel`, () => {
+        const p = poi('well', { perilous });
+        const esc = team(n);
+        const f = partyWinChance(p, esc, { advGear: refAdvGear(26, n) }, null, 0)!;
+        expect(Math.abs(f - realRate(p, esc))).toBeLessThan(0.12);
+      }, 60_000);
+
+  it('le refus « perdu d’avance » ne lit que les gardes', () => {
+    const p = poi('well', { perilous: true });
+    const esc = team(2);
+    const rd = { advGear: refAdvGear(26, 2) };
+    const all = partyWinChance(p, esc, rd, null, 0)!;
+    const guards = partyWinChance(p, esc, rd, null, 0, 40, false)!;
+    expect(guards).toBeGreaterThan(all);
+    expect(guards).toBeGreaterThan(0.9);
+  });
+
+  it('gardes tombés mais embuscade perdue : le verdict ne dit plus « repoussé »', () => {
+    const p = poi('well', { perilous: true });
+    const esc = team(2);
+    let seen = false;
+    for (let s = 2; s < 400 && !seen; s += 2) {
+      const o = resolveHarvestParty({
+        poi: p,
+        escort: esc,
+        road: { advGear: refAdvGear(26, 2) },
+        hero: null,
+        seed: s,
+        playerLevel: 26,
+        pantheonLevel: 100,
+      });
+      if (!o.text.includes('Repoussés') && !o.win) {
+        seen = true;
+        expect(o.party!.roadLost).toBe(true);
+        expect(partyReport(o.party!, []).verdict).not.toBe('repoussé');
+      }
+    }
+    expect(seen, 'aucun cas trouvé : le test ne prouve rien').toBe(true);
   });
 });

@@ -346,6 +346,10 @@ export interface PartyResult {
    * d'avant la v0.1185 : ils n'ont ni rejeu ni verdict propre.
    */
   battle?: WarbandBattle;
+  /** 🛣️ Récolte sans héros : les gardes sont TOMBÉS (le lieu a rendu son butin), mais une
+   *  embuscade a été perdue sur la route. `win` reste faux (règle de l'XP du convoi) ; le
+   *  verdict, lui, ne dit plus « repoussé ». Absent des rapports d'avant la v0.1283. */
+  roadLost?: true;
   /** 🐺 Le duel d'une TANIÈRE, résumé pour son rejeu (`bossReplaySteps`) — de quoi REJOUER,
    *  jamais de quoi recalculer. Absent des rapports d'avant la v0.1212. */
   den?: DenBattle;

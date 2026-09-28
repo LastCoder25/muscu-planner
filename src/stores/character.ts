@@ -3230,7 +3230,7 @@ export const useCharacterStore = defineStore('character', () => {
       // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
       // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
       // dessous — un lieu ne peut pas se pronostiquer autrement qu’il ne se résout.
-      partyWinChance(poi, escort, road, hero, now),
+      partyWinChance(poi, escort, road, hero, now, 40, false),
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
@@ -3244,7 +3244,10 @@ export const useCharacterStore = defineStore('character', () => {
         })
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
-    const seed = (now ^ (poi.level * 2654435761)) >>> 0 || 1;
+    // ⚠️ PAIRE : les graines du pronostic sont impaires (`partyForecastSeed`), et une récolte
+    // rejoue sa ROUTE sur la graine du départ elle-même (`resolveCaravan`) — le % affiché ne
+    // doit jamais rejouer le trajet qui aura lieu.
+    const seed = ((now ^ (poi.level * 2654435761)) & ~1) >>> 0 || 2;
     // ⚔️ Une bande en marche vient à notre rencontre : on va là où on la CROISERA
     // (`interceptLeg`), et le voyage garde ce point — la carte y dessine le choc.
     const meet = interceptLeg(poi, now, (p) =>

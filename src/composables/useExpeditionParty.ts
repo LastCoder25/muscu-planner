@@ -216,6 +216,21 @@ export function useExpeditionParty(ctx: PartyCtx) {
     );
     return w === null ? null : Math.round(w * 100);
   });
+  /** 💀 Le refus « perdu d'avance » : les GARDES seuls (la route coûte de la cargaison, elle
+   *  ne rend pas un lieu imprenable) — le même nombre que le store. */
+  const partyGuardWin = computed(() => {
+    const p = selected.value;
+    if (!p || !partySize.value) return null;
+    return partyWinChance(
+      p,
+      partyAdvs.value,
+      partyRoad.value,
+      heroForParty.value,
+      coarseNow.value,
+      40,
+      false,
+    );
+  });
   /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
   // point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où
@@ -271,7 +286,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
           // 💀 Le 🎯 % DÉJÀ affiché juste au-dessus : on ne laisse pas partir un groupe qui
           // ne peut pas gagner. ⚠️ Le MÊME nombre que le pronostic — deux estimations
           // finiraient par dire « 0 % » d'un côté et laisser partir de l'autre.
-          partyWin.value === null ? null : partyWin.value / 100,
+          partyGuardWin.value,
         )
       : null,
   );

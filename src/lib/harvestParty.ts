@@ -252,6 +252,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     // ⚠️ La « victoire » d'une récolte = les gardes abattus ET aucune embuscade PERDUE : la
     // même règle que l'XP du convoi (`missionXpFor(…, !lost, …)`).
     win: !ambushes.some((e) => e.won === false),
+    ...(ambushes.some((e) => e.won === false) ? { roadLost: true as const } : {}),
     foes: g.foes + roadSlain,
     slain: g.slain + roadSlain,
     kills,
