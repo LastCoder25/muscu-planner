@@ -1820,3 +1820,53 @@ describe('🪨 RuneIcon', () => {
     expect(new Set(ids).size).toBe(ids.length);
   }, 30_000);
 });
+
+describe('🔀 FusionPanel', () => {
+  it('fermé : un bouton ; ouvert : les pastilles par rareté et la barre de sélection', async () => {
+    const { default: FusionPanel } = await import('@/components/FusionPanel.vue');
+    let closed = '';
+    expect(
+      await mountIt(
+        FusionPanel,
+        {
+          noun: 'talents',
+          active: false,
+          counts: [],
+          selected: 0,
+          rank: null,
+          to: null,
+          busy: false,
+        },
+        undefined,
+        undefined,
+        '/',
+        (x) => (closed = x),
+      ),
+    ).toBeNull();
+    expect(closed).toContain('Fusionner des talents');
+    let open = '';
+    expect(
+      await mountIt(
+        FusionPanel,
+        {
+          noun: 'familiers',
+          active: true,
+          counts: [
+            { rank: 'commun', rows: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], to: 'inhabituel' },
+          ],
+          selected: 2,
+          rank: 'commun',
+          to: 'inhabituel',
+          busy: false,
+        },
+        undefined,
+        undefined,
+        '/',
+        (x) => (open = x),
+      ),
+    ).toBeNull();
+    expect(open).toContain('fz-chip');
+    expect(open).toContain('2/3');
+    expect(open).toMatch(/Bronze[\s\S]*Argent/);
+  }, 30_000);
+});

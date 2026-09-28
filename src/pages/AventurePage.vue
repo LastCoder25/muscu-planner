@@ -537,8 +537,8 @@
             </div>
             <div class="sec-hint">
               Les talents <b>droppent à un grade</b> (rang + qualité) fixé au drop. Tu en équipes
-              <b>un seul</b>, dès le niveau {{ TALENT_SLOT_LEVEL }} (change quand tu veux) ; vends
-              les surplus pour de l'or.
+              <b>un seul</b>, dès le niveau {{ TALENT_SLOT_LEVEL }} (change quand tu veux) ;
+              fusionne les doublons (3 de la même rareté → 1 au-dessus).
             </div>
 
             <div v-if="!char.row.talents.length" class="talents-empty">
@@ -587,9 +587,23 @@
             >
               🪄 Équiper les talents conseillés
             </button>
-            <!-- Plus de vente des doublons (v0.862) : les aventuriers emploient ce que le
-                 héros ne porte pas. Les exemplaires identiques sont RANGÉS ensemble, du
-                 meilleur au pire, sous un titre « ×N ». -->
+            <!-- 🔀 FUSION (remplace la vente auto des doublons) : 3 de la même rareté → 1 au-dessus. -->
+            <FusionPanel
+              v-if="char.row.talents.length >= FUSION_SIZE"
+              noun="talents"
+              :active="fuseMode === 'talent'"
+              :counts="fuseCounts"
+              :selected="fuseSel.length"
+              :rank="fuseRank"
+              :to="fuseRank ? fusionResultRank(fuseRank, c.level.level) : null"
+              :busy="fusing"
+              @start="startFuse('talent')"
+              @stop="stopFuse"
+              @pick="pickFuseRank"
+              @fuse="doFuse"
+            />
+            <!-- Les exemplaires identiques sont RANGÉS ensemble, du meilleur au pire, sous
+                 un titre « ×N ». -->
             <div v-if="char.row.talents.length" class="talents-grid">
               <template v-for="t in talentsView" :key="t.id">
                 <!-- ⚠️ REPLIÉ PAR DÉFAUT (demande de l'utilisateur) : on voit un TYPE par
@@ -609,13 +623,24 @@
                   }}</span>
                 </button>
                 <div
-                  v-if="groupRowVisible(t, openGroups, t.equipped)"
+                  v-if="fuseMode === 'talent' || groupRowVisible(t, openGroups, t.equipped)"
                   class="tal-card"
                   :class="[
                     'p-' + t.rarity,
-                    { eq: t.equipped, reco: recommendedTalentIds.has(t.id) },
+                    {
+                      eq: t.equipped,
+                      reco: recommendedTalentIds.has(t.id),
+                      fusing: fuseMode === 'talent',
+                      fsel: fuseMode === 'talent' && fuseSel.includes(t.id),
+                      fdim: fuseMode === 'talent' && !!fuseWhy(t),
+                    },
                   ]"
                   :style="{ '--rk': rarityRank(t.rarity).color }"
+                  :role="fuseMode === 'talent' ? 'button' : undefined"
+                  :tabindex="fuseMode === 'talent' ? 0 : undefined"
+                  :title="fuseMode === 'talent' ? fuseWhy(t) || 'Toucher pour choisir' : undefined"
+                  @click="fuseMode === 'talent' && toggleFuse(t)"
+                  @keydown.enter="fuseMode === 'talent' && toggleFuse(t)"
                 >
                   <div class="tal-icon">
                     <button
@@ -661,7 +686,10 @@
                       >
                     </span>
                   </div>
-                  <div class="tal-actions">
+                  <div v-if="fuseMode === 'talent'" class="fz-mark">
+                    {{ fuseSel.includes(t.id) ? '✓' : fuseWhy(t) }}
+                  </div>
+                  <div v-else class="tal-actions">
                     <!-- Équiper : emplacement libre (rien à remplacer). -->
                     <button
                       v-if="!t.equipped && !talReplaceId(t.id) && canEquipMore"
@@ -706,8 +734,8 @@
             </div>
             <div class="sec-hint">
               Un compagnon (bonus de race + effet <b>✦ signature</b> pour les rares). Les familiers
-              <b>droppent à un grade</b> fixé au drop ; équipe-en un ; vends les surplus pour de
-              l'or.
+              <b>droppent à un grade</b> fixé au drop ; équipe-en un ; fusionne les doublons (3 de
+              la même rareté → 1 au-dessus).
             </div>
 
             <div v-if="!allFamiliars.length" class="talents-empty">
@@ -720,8 +748,21 @@
             >
               🪄 Équiper le familier conseillé
             </button>
-            <!-- Plus de vente des doublons (v0.862) : les aventuriers les emploient. Les
-                 familiers d'une même race sont RANGÉS ensemble, du meilleur au pire. -->
+            <FusionPanel
+              v-if="allFamiliars.length >= FUSION_SIZE"
+              noun="familiers"
+              :active="fuseMode === 'familiar'"
+              :counts="fuseCounts"
+              :selected="fuseSel.length"
+              :rank="fuseRank"
+              :to="fuseRank ? fusionResultRank(fuseRank, c.level.level) : null"
+              :busy="fusing"
+              @start="startFuse('familiar')"
+              @stop="stopFuse"
+              @pick="pickFuseRank"
+              @fuse="doFuse"
+            />
+            <!-- Les familiers d'une même race sont RANGÉS ensemble, du meilleur au pire. -->
             <div v-if="allFamiliars.length" class="talents-grid">
               <template v-for="f in allFamiliars" :key="f.id">
                 <button
@@ -738,13 +779,26 @@
                   }}</span>
                 </button>
                 <div
-                  v-if="groupRowVisible(f, openGroups, f.equipped)"
+                  v-if="fuseMode === 'familiar' || groupRowVisible(f, openGroups, f.equipped)"
                   class="tal-card"
                   :class="[
                     'p-' + f.rarity,
-                    { eq: f.equipped, reco: recommendedFamiliarId === f.id },
+                    {
+                      eq: f.equipped,
+                      reco: recommendedFamiliarId === f.id,
+                      fusing: fuseMode === 'familiar',
+                      fsel: fuseMode === 'familiar' && fuseSel.includes(f.id),
+                      fdim: fuseMode === 'familiar' && !!fuseWhy(f),
+                    },
                   ]"
                   :style="{ '--rk': rarityRank(f.rarity).color }"
+                  :role="fuseMode === 'familiar' ? 'button' : undefined"
+                  :tabindex="fuseMode === 'familiar' ? 0 : undefined"
+                  :title="
+                    fuseMode === 'familiar' ? fuseWhy(f) || 'Toucher pour choisir' : undefined
+                  "
+                  @click="fuseMode === 'familiar' && toggleFuse(f)"
+                  @keydown.enter="fuseMode === 'familiar' && toggleFuse(f)"
                 >
                   <ItemIcon :item="f" :size="40" role="img" :aria-label="f.name" />
                   <div class="tal-body">
@@ -772,7 +826,10 @@
                       }}{{ fmtPow(Math.abs(famDeltaMap.get(f.id)!)) }}
                     </span>
                   </div>
-                  <div class="tal-actions">
+                  <div v-if="fuseMode === 'familiar'" class="fz-mark">
+                    {{ fuseSel.includes(f.id) ? '✓' : fuseWhy(f) }}
+                  </div>
+                  <div v-else class="tal-actions">
                     <button v-if="f.equipped" class="tal-b" @click="doUnequipFamiliar()">
                       Retirer
                     </button>
@@ -3109,6 +3166,7 @@ import AventureAvatar from '@/components/AventureAvatar.vue';
 import AvailabilityLine from '@/components/AvailabilityLine.vue';
 import RuneIcon from '@/components/RuneIcon.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
+import FusionPanel from '@/components/FusionPanel.vue';
 import SetPieceCmp from '@/components/SetPieceCmp.vue';
 import { splitStat, type StatParts } from '@/lib/statText';
 import MissionReportCard from '@/components/MissionReportCard.vue';
@@ -3203,8 +3261,10 @@ import {
   type Equipped,
   type AggregatedEffects,
   type RewardCandidate,
+  type Rarity,
   bestGearLoadout,
 } from '@/lib/items';
+import { FUSION_SIZE, fusionResultRank } from '@/lib/companionFusion';
 import {
   talentsEarned,
   pickBestTalents,
@@ -3416,6 +3476,9 @@ const betterFilterSlot = ref<ItemSlot | null>(null);
 const persoSub = ref<'perso'>('perso');
 const talentsOpen = ref(false);
 const familiarsOpen = ref(false);
+watch([talentsOpen, familiarsOpen], ([t, f]) => {
+  if ((fuseMode.value === 'talent' && !t) || (fuseMode.value === 'familiar' && !f)) stopFuse();
+});
 const ranksOpen = ref(false);
 // Stats de combat (base → équipé) : modale ouverte depuis le perso ou sa puissance.
 const combatOpen = ref(false);
@@ -6208,6 +6271,108 @@ function doEquipFamiliar(itemId: string) {
 function doUnequipFamiliar() {
   withUid((uid) => char.unequip(uid, FAMILIAR_SLOT), 'Impossible de déséquiper.');
 }
+// ── 🔀 FUSION : 3 talents ou familiers de la MÊME rareté → 1 de la rareté au-dessus, d'un type
+// au hasard, plafonnée au rang du joueur (règles dans `companionFusion.ts`, testées). Remplace
+// la vente automatique des doublons (demandé par l'utilisateur : « on les garde tous pour
+// pouvoir les fusionner, pas de fusion auto »). C'est un GESTE : on entre en mode fusion, on
+// touche 3 cartes, on confirme.
+type FuseKind = 'talent' | 'familiar';
+type FuseRow = { id: string; rarity: Rarity; equipped: boolean; locked?: boolean | undefined };
+const fuseMode = ref<FuseKind | null>(null);
+const fuseSel = ref<string[]>([]);
+const fusing = ref(false);
+function fuseRows(kind: FuseKind): FuseRow[] {
+  return kind === 'talent' ? talentsView.value : allFamiliars.value;
+}
+/** Rareté imposée par la sélection en cours (celle du premier choisi). */
+const fuseRank = computed<Rarity | null>(() => {
+  if (!fuseMode.value || !fuseSel.value.length) return null;
+  return fuseRows(fuseMode.value).find((r) => r.id === fuseSel.value[0])?.rarity ?? null;
+});
+/** Pourquoi une carte ne peut pas entrer dans la fusion ('' = elle le peut). */
+function fuseWhy(r: FuseRow): string {
+  if (r.equipped) return 'porté';
+  if (r.locked) return '🔒';
+  if (!fusionResultRank(r.rarity, c.value.level.level)) return 'au-dessus de ton rang';
+  if (fuseRank.value && r.rarity !== fuseRank.value && !fuseSel.value.includes(r.id))
+    return 'autre rareté';
+  return '';
+}
+/** Par rareté : combien d'exemplaires fusionnables, et ce qu'ils donnent (pastilles). */
+const fuseCounts = computed(() => {
+  if (!fuseMode.value) return [];
+  const lvl = c.value.level.level;
+  const by = new Map<Rarity, FuseRow[]>();
+  for (const r of fuseRows(fuseMode.value)) {
+    if (r.equipped || r.locked || !fusionResultRank(r.rarity, lvl)) continue;
+    const g = by.get(r.rarity);
+    if (g) g.push(r);
+    else by.set(r.rarity, [r]);
+  }
+  return RANK_ORDER.filter((rk) => (by.get(rk)?.length ?? 0) >= FUSION_SIZE).map((rk) => ({
+    rank: rk,
+    rows: by.get(rk)!,
+    to: fusionResultRank(rk, lvl)!,
+  }));
+});
+function startFuse(kind: FuseKind) {
+  fuseMode.value = kind;
+  fuseSel.value = [];
+}
+function stopFuse() {
+  fuseMode.value = null;
+  fuseSel.value = [];
+}
+function toggleFuse(r: FuseRow) {
+  if (fuseSel.value.includes(r.id)) {
+    fuseSel.value = fuseSel.value.filter((id) => id !== r.id);
+    return;
+  }
+  if (fuseWhy(r) || fuseSel.value.length >= FUSION_SIZE) return;
+  fuseSel.value = [...fuseSel.value, r.id];
+}
+/** Pastille d'une rareté : pré-sélectionne les 3 DERNIERS de la liste (les moins bons, la
+ *  liste étant rangée du meilleur au pire). Le joueur peut ensuite ajuster. */
+function pickFuseRank(rows: { id: string }[]) {
+  fuseSel.value = rows.slice(-FUSION_SIZE).map((r) => r.id);
+}
+function doFuse() {
+  const kind = fuseMode.value;
+  if (!kind || fuseSel.value.length !== FUSION_SIZE || fusing.value) return;
+  const ids = [...fuseSel.value];
+  const lvl = c.value.level.level;
+  withUid(async (uid) => {
+    fusing.value = true;
+    try {
+      if (kind === 'familiar') {
+        const f = await char.fuseFamiliarsFromBag(uid, ids, lvl);
+        if (!f) throw new Error('refus');
+        gameFx.celebrate({
+          kind: 'drop',
+          emoji: f.emoji,
+          title: `Fusion : ${f.name}`,
+          subtitle: gradeLabel(f),
+          rarity: fxRarity(f.rarity),
+        });
+      } else {
+        const t = await char.fuseTalentsFromBag(uid, ids, lvl);
+        if (!t) throw new Error('refus');
+        const def = talentByCode(t.code);
+        const rk = talentRank(tierOf(t));
+        gameFx.celebrate({
+          kind: 'drop',
+          emoji: def?.icon ?? '✨',
+          title: `Fusion : ${def?.name ?? 'Talent'}`,
+          subtitle: gradeLabel({ rarity: rk, roll: talentRollOf(t) }),
+          rarity: fxRarity(rk),
+        });
+      }
+      fuseSel.value = [];
+    } finally {
+      fusing.value = false;
+    }
+  }, 'Fusion impossible.');
+}
 /** Titre d'un groupe de familiers identiques : la race (emoji + nom), repli sur le nom. */
 function famSpeciesLabel(f: Item): string {
   const sp = f.species ? familiarSpecies(f.species) : undefined;
@@ -6541,34 +6706,24 @@ watch(
   () => void autoFileSetPieces(),
   { immediate: true },
 );
-// 🪙 VENTE AUTOMATIQUE DES TALENTS ET FAMILIERS EN TROP (demandé par l'utilisateur : « ne
-// garder que le meilleur de chaque catégorie et vendre les autres automatiquement ; le seul
-// doublon est celui équipé »), puis des RELIQUES par pouvoir. Règles : `familiarSurplus` /
-// `talentSurplus` / `relicSurplus`.
+// 🔮 VENTE AUTOMATIQUE DES RELIQUES EN TROP (par pouvoir, règle `relicSurplus`). Les talents
+// et familiers ne se vendent plus d'office : ils se fusionnent (🔀, cf. `companionFusion.ts`).
 // ⚠️ Jamais pendant un combat ni tant que son rapport est ouvert : le butin s'y affiche avec
-// ses boutons, un familier ne doit pas disparaître sous le doigt de celui qui l'équipe.
+// ses boutons, une relique ne doit pas disparaître sous le doigt de celui qui l'équipe.
 let sellingSurplus = false;
 async function autoSellSurplus() {
   const uid = auth.user?.id;
   if (!uid || !char.row || sellingSurplus || busy.value || reportOpen.value) return;
   sellingSurplus = true;
   try {
-    const r = await char.sellSurplusCompanions(uid);
-    const n = r.familiars + r.talents + r.relics;
-    if (n)
+    const r = await char.sellSurplusRelics(uid);
+    if (r.relics)
       gameFx.celebrate({
         quiet: true,
         kind: 'drop',
         emoji: '🪙',
-        title: `${n} doublon${n > 1 ? 's' : ''} vendu${n > 1 ? 's' : ''} +${fmtPow(r.gold)} 🪙`,
-        subtitle:
-          [
-            r.talents ? `${r.talents} talent${r.talents > 1 ? 's' : ''}` : '',
-            r.familiars ? `${r.familiars} familier${r.familiars > 1 ? 's' : ''}` : '',
-            r.relics ? `${r.relics} relique${r.relics > 1 ? 's' : ''}` : '',
-          ]
-            .filter(Boolean)
-            .join(' · ') + ' — tu gardes le meilleur de chaque',
+        title: `${r.relics} relique${r.relics > 1 ? 's' : ''} vendue${r.relics > 1 ? 's' : ''} +${fmtPow(r.gold)} 🪙`,
+        subtitle: 'tu gardes la meilleure de chaque pouvoir',
       });
   } catch {
     // Rien de perdu : le prochain passage réessaie.
@@ -6577,7 +6732,7 @@ async function autoSellSurplus() {
   }
 }
 watch(
-  () => [char.row?.inventory, char.row?.talents, char.row?.equipped, busy.value, reportOpen.value],
+  () => [char.row?.inventory, char.row?.equipped, busy.value, reportOpen.value],
   () => void autoSellSurplus(),
   { immediate: true },
 );
@@ -7919,6 +8074,30 @@ button.pt-mini:active {
 }
 /* Talent ÉQUIPÉ : nettement plus visible — liseré + fond accent (voltage) et léger halo,
    pour le distinguer d'un coup d'œil des talents en réserve. */
+.tal-card.fusing {
+  cursor: pointer;
+}
+.tal-card.fsel {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+.tal-card.fdim {
+  opacity: 0.45;
+  cursor: default;
+}
+.fz-mark {
+  min-width: 44px;
+  align-self: center;
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.tal-card.fsel .fz-mark {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+}
 .tal-card.eq {
   background: color-mix(in srgb, var(--accent) 12%, var(--surface));
   border-color: color-mix(in srgb, var(--accent) 50%, transparent);

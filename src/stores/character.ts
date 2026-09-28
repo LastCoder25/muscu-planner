@@ -45,7 +45,6 @@ import {
   type PendingReward,
   voieSetRoster,
   setSellLot,
-  familiarSurplus,
   relicSurplus,
 } from '@/lib/items';
 import {
@@ -68,9 +67,14 @@ import {
   talentTier,
   talentRank,
   talentRollOf,
-  talentSurplus,
   type TalentInstance,
 } from '@/lib/talents';
+import {
+  familiarFusionBlock,
+  fuseFamiliars,
+  fuseTalents,
+  talentFusionBlock,
+} from '@/lib/companionFusion';
 import { VOIES } from '@/lib/voies';
 import {
   keysAfterPaying,
@@ -1308,36 +1312,67 @@ export const useCharacterStore = defineStore('character', () => {
   // magnitude est 100 % définie par le grade au drop, plus d'axe +N. Talents/familiers
   // gardent l'infusion de grade.)
 
-  /** 🪙 VENTE AUTOMATIQUE des talents, familiers et reliques en trop : par catégorie, seuls
-   *  le MEILLEUR et celui qu'on PORTE restent (règles `familiarSurplus` / `relicSurplus` /
-   *  `talentSurplus`, testées). Une seule écriture pour tout le lot ; rien à vendre → aucune écriture.
-   *  Rend l'or gagné et le nombre de pièces cédées (pour l'annonce). */
-  async function sellSurplusCompanions(
-    userId: string,
-  ): Promise<{ gold: number; familiars: number; talents: number; relics: number }> {
-    const none = { gold: 0, familiars: 0, talents: 0, relics: 0 };
+  /** 🔮 VENTE AUTOMATIQUE des reliques en trop : par pouvoir, seules la MEILLEURE et celle
+   *  qu'on PORTE restent (règle `relicSurplus`, testée). Les talents et familiers, eux, ne se
+   *  vendent plus d'office : ils se FUSIONNENT (`fuseFamiliarsFromBag` / `fuseTalentsFromBag`).
+   *  Une seule écriture pour tout le lot ; rien à vendre → aucune écriture. */
+  async function sellSurplusRelics(userId: string): Promise<{ gold: number; relics: number }> {
     const cur = row.value;
-    if (!cur) return none;
-    const famIds = new Set(familiarSurplus(cur.equipped[FAMILIAR_SLOT], cur.inventory));
+    if (!cur) return { gold: 0, relics: 0 };
     const relIds = new Set(relicSurplus(cur.equipped.relic, cur.inventory));
-    const talIds = new Set(talentSurplus(cur.talents));
-    if (!famIds.size && !relIds.size && !talIds.size) return none;
-    const gone = (id: string) => famIds.has(id) || relIds.has(id);
-    const items = cur.inventory.filter((i) => gone(i.id));
-    const tals = cur.talents.filter((t) => talIds.has(t.id));
-    const gold =
-      items.reduce((s, i) => s + sellValue(i), 0) +
-      tals.reduce(
-        (s, t) => s + sellValueOf(talentRank(talentTier(t.xp)), talentRollOf(t), t.level ?? 1),
-        0,
-      );
+    if (!relIds.size) return { gold: 0, relics: 0 };
+    const gold = cur.inventory
+      .filter((i) => relIds.has(i.id))
+      .reduce((s, i) => s + sellValue(i), 0);
     await persist(userId, {
       gold: cur.gold + gold,
-      ...(items.length ? { inventory: cur.inventory.filter((i) => !gone(i.id)) } : {}),
-      ...(tals.length ? { talents: cur.talents.filter((t) => !talIds.has(t.id)) } : {}),
+      inventory: cur.inventory.filter((i) => !relIds.has(i.id)),
     });
     goldFx.gain(gold);
-    return { gold, familiars: famIds.size, talents: tals.length, relics: relIds.size };
+    return { gold, relics: relIds.size };
+  }
+
+  /** 🔀 FUSION de trois FAMILIERS du sac de même rareté → un familier d'une race au hasard,
+   *  de la rareté juste au-dessus, plafonnée au rang du joueur (règles dans
+   *  `companionFusion.ts`, testées). Remplace la vente automatique des doublons.
+   *  ⚠️ Refusé ici, au STORE : l'écran peut ne pas proposer l'impossible, il ne peut pas le
+   *  garantir. Rend le familier obtenu, ou `null`. */
+  async function fuseFamiliarsFromBag(
+    userId: string,
+    itemIds: string[],
+    playerLevel: number,
+  ): Promise<Item | null> {
+    const cur = row.value;
+    if (!cur) return null;
+    const fams = itemIds
+      .map((id) => cur.inventory.find((i) => i.id === id))
+      .filter((i): i is Item => !!i);
+    if (fams.length !== itemIds.length || familiarFusionBlock(fams, playerLevel)) return null;
+    const made: Item = {
+      ...fuseFamiliars(Math.random, fams, playerLevel),
+      id: crypto.randomUUID(),
+    };
+    const gone = new Set(itemIds);
+    await persist(userId, { inventory: [...cur.inventory.filter((i) => !gone.has(i.id)), made] });
+    return made;
+  }
+
+  /** 🔀 FUSION de trois TALENTS non équipés de même rareté (même règle que les familiers). */
+  async function fuseTalentsFromBag(
+    userId: string,
+    talentIds: string[],
+    playerLevel: number,
+  ): Promise<TalentInstance | null> {
+    const cur = row.value;
+    if (!cur) return null;
+    const tals = talentIds
+      .map((id) => cur.talents.find((t) => t.id === id))
+      .filter((t): t is TalentInstance => !!t);
+    if (tals.length !== talentIds.length || talentFusionBlock(tals, playerLevel)) return null;
+    const made = fuseTalents(Math.random, tals, playerLevel, `tal_${crypto.randomUUID()}`);
+    const gone = new Set(talentIds);
+    await persist(userId, { talents: [...cur.talents.filter((t) => !gone.has(t.id)), made] });
+    return made;
   }
 
   // Récompense de connexion du jour (une fois par jour logique). Renvoie le gain
@@ -3796,7 +3831,9 @@ export const useCharacterStore = defineStore('character', () => {
     sellTalent,
     sellFamiliar,
     sellFamiliars,
-    sellSurplusCompanions,
+    sellSurplusRelics,
+    fuseFamiliarsFromBag,
+    fuseTalentsFromBag,
     sellItem,
     sellMany,
     toggleLock,
