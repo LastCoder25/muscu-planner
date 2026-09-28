@@ -328,9 +328,11 @@
           <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
           <p class="ctl-line">
-            🏰 <b>Garnison {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }}</b
-            ><span v-if="controlMilitia.length">
-              · {{ MILITIA_EMO }} {{ controlMilitia.length }}/{{ MILITIA.perPoint }}</span
+            🏰 <b>Garnison {{ controlCount }}/{{ MILITIA.perPoint }}</b>
+            <span class="ctl-dim">
+              · {{ controlMembers.length }}/{{ seatsOf(liveControl.kind) }} champion{{
+                seatsOf(liveControl.kind) > 1 ? 's' : ''
+              }}</span
             >
             <span class="ctl-dim"> · touche un membre pour le ramener</span>
           </p>
@@ -436,15 +438,19 @@
               </button>
             </div>
           </template>
-          <!-- 🛡️ DES MILICIENS (Caserne) : jusqu'à 5 par point, sur des places À PART de celles
-               des champions. Ils font tourner le lieu, mais n'apprennent rien et meurent s'ils
+          <!-- 🛡️ DES MILICIENS (Caserne) : ils complètent la garnison jusqu'à 5, champions
+               compris. Ils font tourner le lieu, mais n'apprennent rien et meurent s'ils
                tombent. -->
           <template v-if="militiaBuilt || milHome > 0">
             <div class="mil-send">
               <span class="mil-send-lab"
                 >{{ MILITIA_EMO }} Miliciens
-                <b>{{ controlMilitia.length }}/{{ MILITIA.perPoint }}</b>
-                <span class="ctl-dim">· {{ milHome }} à la base</span></span
+                <span class="ctl-dim"
+                  >· {{ milHome }} à la base · {{ militiaFreeSeats(liveControl) }} place{{
+                    militiaFreeSeats(liveControl) > 1 ? 's' : ''
+                  }}
+                  libre{{ militiaFreeSeats(liveControl) > 1 ? 's' : '' }}</span
+                ></span
               >
               <div class="mil-step">
                 <button
@@ -1432,7 +1438,7 @@ const controlFree = computed(() => controlFreeSeats(liveControl.value));
 const ctlRecallSel = ref<string[]>([]);
 const ctlReinfSel = ref<string[]>([]);
 /** 🛡️ Combien de miliciens partent en renfort (stepper), borné par leurs places à eux sur ce
- *  point (`MILITIA.perPoint`, à part de celles des champions) et par ceux de la base. */
+ *  point (ce qui reste de la garnison de 5, champions compris) et par ceux de la base. */
 const milHome = computed(() => char.row?.base?.militia?.home ?? 0);
 const militiaBuilt = computed(() => buildingLevel(char.row?.buildings ?? [], 'barracks') > 0);
 const milSend = ref(0);

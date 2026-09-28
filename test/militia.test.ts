@@ -41,29 +41,38 @@ const point = (L: number, kind: 'mine' | 'garden' = 'mine'): Poi =>
     control: { kind, owner: 'player', garrison: [], retakes: 0, faction: 'bandits', size: 1 },
   }) as unknown as Poi;
 
-describe('jusqu’à 5 miliciens par point, à part des champions', () => {
-  it('les places des champions et celles des miliciens ne se prennent pas l’une l’autre', () => {
-    const p = point(30, 'garden');
-    p.control!.garrison = ['adv_a', 'mil:1', 'mil:2'];
-    p.control!.reinforcing = [{ id: 'mil:3', at: 1 }];
+describe('une garnison de 5 au plus, champions et miliciens compris', () => {
+  it('les miliciens prennent ce qui reste des 5, champions compris', () => {
+    const p = point(30);
+    p.control!.garrison = ['adv_a', 'adv_b', 'mil:1'];
+    p.control!.reinforcing = [{ id: 'mil:2', at: 1 }];
+    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 4);
+    expect(reinforceBlocker(p.control, 1, true)).toBeNull();
+    expect(reinforceBlocker(p.control, 2, true)).toBe('full');
+  });
+  it('un champion n’a pas de place quand la garnison est pleine, même sous sa limite', () => {
+    const p = point(30);
+    p.control!.garrison = ['adv_a', 'mil:1', 'mil:2', 'mil:3', 'mil:4'];
     expect(controlFreeSeats(p.control)).toBe(0);
-    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 3);
-    expect(reinforceBlocker(p.control, 2, true)).toBeNull();
-    expect(reinforceBlocker(p.control, MILITIA.perPoint - 2, true)).toBe('full');
     expect(reinforceBlocker(p.control, 1)).toBe('full');
   });
-  it('à l’arrivée, la garnison garde ses champions ET ses 5 miliciens, pas un de plus', () => {
+  it('les champions gardent aussi la limite du point (1 place au jardin)', () => {
+    const p = point(30, 'garden');
+    p.control!.garrison = ['adv_a'];
+    expect(controlFreeSeats(p.control)).toBe(0);
+    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 1);
+  });
+  it('à l’arrivée des renforts, la garnison est coupée à 5 dans l’ordre d’arrivée', () => {
     const p = point(30);
-    p.control!.garrison = ['adv_a', 'adv_b', 'adv_c', 'mil:1', 'mil:2', 'mil:3', 'mil:4'];
+    p.control!.garrison = ['adv_a', 'adv_b', 'mil:1'];
     p.control!.reinforcing = [
-      { id: 'mil:5', at: 1 },
-      { id: 'mil:6', at: 2 },
-      { id: 'adv_d', at: 3 },
+      { id: 'mil:2', at: 1 },
+      { id: 'adv_c', at: 2 },
+      { id: 'mil:3', at: 3 },
     ];
     const map = { pois: [p] } as unknown as ExpeditionMap;
     const g = settleReinforcements(map, 10, 30).pois[0]!.control!.garrison;
-    expect(g.filter(isMilitiaId)).toEqual(['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5']);
-    expect(g.filter((id) => !isMilitiaId(id))).toEqual(['adv_a', 'adv_b', 'adv_c']);
+    expect(g).toEqual(['adv_a', 'adv_b', 'mil:1', 'mil:2', 'adv_c']);
   });
   // ⚠️ MESURÉ (60 combats) : 5 miliciens tiennent mieux que 3 (ils valent 2,5 champions),
   // mais la tenue reste plafonnée à `CONTROL.maxHold` : jamais un point sans risque.

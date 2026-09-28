@@ -42,10 +42,11 @@ export const MILITIA = {
   /** Plafond d'effectif : `capBase` + 1 tous les `capEvery` niveaux de Caserne. */
   capBase: 3,
   capEvery: 3,
-  /** Miliciens au plus sur UN point de contrôle (demandé : « jusqu'à 5 »). ⚠️ Des places À
-   *  PART de celles des champions (`seatsOf`) : un point garde ses 1 ou 3 champions ET
-   *  jusqu'à 5 miliciens. La production du lieu reste plafonnée à celle d'une garnison
-   *  pleine (`CONTROL.garrisonShare`), et la tenue par `CONTROL.maxHold`. */
+  /** Garnison au plus sur UN point de contrôle, CHAMPIONS ET MILICIENS COMPRIS (demandé :
+   *  « garnison de 5 max champions et miliciens compris »). Les champions gardent en plus
+   *  leur propre limite (`seatsOf`, 1 ou 3) à l'intérieur de ces 5. La production du lieu
+   *  reste plafonnée à celle d'une garnison pleine (`CONTROL.garrisonShare`), et la tenue
+   *  par `CONTROL.maxHold`. */
   perPoint: 5,
 } as const;
 // ⚠️ PAS ENCORE AU REMPART (décision de l'utilisateur : « on verra après pour les défenses de
