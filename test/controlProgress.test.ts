@@ -7,10 +7,12 @@ import {
   controlProgress,
   controlStock,
   ensureControls,
+  runeHoursFor,
   runeProgress,
   trainingStock,
 } from '@/lib/controlPoints';
 import { createMap, type ControlKind, type Poi } from '@/lib/expedition';
+import { formatDuration } from '@/lib/duration';
 
 const H = 3600_000;
 const L = 30;
@@ -39,11 +41,13 @@ describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
     expect(controlProgress(p, 5 * H, L)!.text).toBe(`🎓 +${trainingStock(p, 5 * H)} XP`);
   });
 
-  it('📜 le Scriptorium dit le % de la rune, puis « prête »', () => {
+  it('📜 le Scriptorium dit le % de la rune ET le temps restant, puis « prête »', () => {
     const p = held('scriptorium');
     const half = (CONTROL.runeHoursPerItem / 2) * H;
+    const r = runeProgress(p, half);
+    const left = formatDuration((1 - r) * runeHoursFor(p.control!.garrison.length)! * H);
     expect(controlProgress(p, half, L)).toEqual({
-      text: `📜 ${Math.round(runeProgress(p, half) * 100)} %`,
+      text: `📜 ${Math.round(r * 100)} % · ${left}`,
       pct: runeProgress(p, half),
     });
     expect(controlProgress(p, CONTROL.runeHoursPerItem * H, L)).toEqual({
@@ -52,10 +56,17 @@ describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
     });
   });
 
-  it('🌿 le jardin dit ce qui est cueilli ET où en est le suivant', () => {
+  it('🌿 le jardin dit ce qui est cueilli, où en est le suivant ET dans combien de temps', () => {
     const p = held('garden');
     const t = 1.5 * CONTROL.gardenHoursPerItem * H;
-    expect(controlProgress(p, t, L)).toEqual({ text: '🎒 1 · 50 %', pct: 0.5 });
+    const left = formatDuration(0.5 * CONTROL.gardenHoursPerItem * H);
+    expect(controlProgress(p, t, L)).toEqual({ text: `🎒 1 · 50 % · ${left}`, pct: 0.5 });
+  });
+
+  it('⏳ sans personne pour produire, pas de temps restant (il ne viendrait jamais)', () => {
+    const p = held('garden');
+    const vide = { ...p, control: { ...p.control!, garrison: [] } };
+    expect(controlProgress(vide, 0, L)!.text).toBe('🎒 0 %');
   });
 
   it('🗼 la tour ne stocke rien : elle dit sa réduction de trajet, sans jauge', () => {

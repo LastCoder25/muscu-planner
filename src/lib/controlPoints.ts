@@ -17,6 +17,7 @@
  *
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
+import { formatDuration } from './duration';
 import { mulberry32, seedOf } from './combat';
 import { advAscensionCap, advXpToNext, type Adventurer } from './adventurers';
 import { grantAdvGearXp, wornGear, type AdvGear } from './advGear';
@@ -713,6 +714,10 @@ export interface ControlProgress {
   text: string;
   pct: number | null;
 }
+/** ⏳ Le temps pour produire `units` au débit `rate` (unités/h) ; `null` sans production. */
+function leftFor(units: number, rate: number): string | null {
+  return rate > 0 ? formatDuration((units / rate) * 3600_000) : null;
+}
 export function controlProgress(p: Poi, now: number, playerLevel: number): ControlProgress | null {
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
@@ -738,12 +743,19 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
     case 'garden': {
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
-      const pct = `${Math.round(next * 100)} %`;
+      // ⏳ Le temps restant avant le prochain (demandé : « le temps restant en plus du % »),
+      // au débit de la garnison actuelle — rien si la réserve est pleine ou sans jardinier.
+      const left = fill < 1 ? leftFor(1 - next, rate) : null;
+      const pct = `${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`;
       return { text: whole > 0 ? `🎒 ${whole} · ${pct}` : `🎒 ${pct}`, pct: next };
     }
     case 'scriptorium': {
       const r = units >= 1 - 1e-9 ? 1 : units;
-      return { text: r >= 1 ? '📜 prête' : `📜 ${Math.round(r * 100)} %`, pct: r };
+      const left = r < 1 ? leftFor(1 - r, rate) : null;
+      return {
+        text: r >= 1 ? '📜 prête' : `📜 ${Math.round(r * 100)} %${left ? ` · ${left}` : ''}`,
+        pct: r,
+      };
     }
     default:
       return null;
