@@ -1012,22 +1012,17 @@ import {
 } from '@/lib/adventurers';
 import { CHARACTER_RANKS, characterRank, rankStarStr } from '@/lib/characterRank';
 import {
-  advGearAscensionBlocker,
-  advGearAscensionCost,
   GEAR_ASCENSION_BLOCK_LABEL,
   ASCENSION_BLOCK_LABEL,
-  ascensionBlocker,
-  ascensionCost,
+  championAscentOffer,
   emptySeals,
+  gearAscentOffer,
   readyAscensionIds,
-  sealCount,
 } from '@/lib/ascension';
 import {
   AWAKEN,
-  advAscensionCap,
   ascendAdventurer,
   advAwaken,
-  advNextAscension,
   advSubtitle,
   engageCap,
 } from '@/lib/adventurers';
@@ -1068,9 +1063,7 @@ import {
   advGearAwakenPlan,
   awakenAllAdvGear,
   countAssignedGear,
-  advGearAtRankCap,
   advGearNextRank,
-  advGearRankCap,
   type AdvGear,
   type AdvGearCell,
   type AdvGearSlot,
@@ -1583,20 +1576,13 @@ watch(
 /** ⬆️ L'ascension à proposer — seulement quand son XP BUTE sur la fin de son rang (★★★★★),
  *  sinon le bloc serait une promesse lointaine qui encombre la fiche. */
 function ascentOf(a: Adventurer) {
-  const next = advNextAscension(a);
-  if (next == null || a.level < advAscensionCap(a)) return null;
-  const cost = ascensionCost(next);
-  const seals = char.row?.seals ?? emptySeals();
-  return {
-    rank: CHARACTER_RANKS[next]!,
-    cost,
-    have: sealCount(seals, 'champion', next),
-    block: ascensionBlocker(a, {
-      pantheonLevel: pantheonLevel.value,
-      seals,
-      gold: char.row?.gold ?? 0,
-    }),
-  };
+  // ⚠️ La même offre que le bouton de l'animation de progression (`championAscentOffer`).
+  const o = championAscentOffer(a, {
+    pantheonLevel: pantheonLevel.value,
+    seals: char.row?.seals ?? emptySeals(),
+    gold: char.row?.gold ?? 0,
+  });
+  return o ? { rank: CHARACTER_RANKS[o.next]!, cost: o.cost, have: o.have, block: o.block } : null;
 }
 /** ⬆️ CE QUE L'ASCENSION CHANGE, avant → après (demandé : « montrer le changement de stat »).
  *  ⚠️ L'« après » est calculé par `ascendAdventurer` — la fonction que le store applique —
@@ -1636,24 +1622,22 @@ const detailAscent = computed(() => {
 /** ⬆️ L'ascension d'une PIÈCE — même patron que celle d'un champion. `null` tant qu'elle
  *  n'est pas à ★5 : un bouton qui promettrait une échéance lointaine encombrerait la tuile. */
 function gearAscent(g: AdvGear) {
-  const next = advGearNextRank(g);
-  if (next == null || !advGearAtRankCap(g)) return null;
-  const cost = advGearAscensionCost(next);
-  const seals = char.row?.seals ?? emptySeals();
-  const block = advGearAscensionBlocker(g, {
-    rankCap: advGearRankCap(g, char.advList, char.advGearStock),
-    seals,
+  const o = gearAscentOffer(g, {
+    advs: char.advList,
+    stock: char.advGearStock,
+    seals: char.row?.seals ?? emptySeals(),
     gold: char.row?.gold ?? 0,
   });
-  const rank = CHARACTER_RANKS[next]!;
-  const price = `⚜️ ${sealCount(seals, 'gear', next)}/${cost.seals} · 🪙 ${cost.gold.toLocaleString('fr-FR')}`;
+  if (!o) return null;
+  const rank = CHARACTER_RANKS[o.next]!;
+  const price = `⚜️ ${o.have}/${o.cost.seals} · 🪙 ${o.cost.gold.toLocaleString('fr-FR')}`;
   return {
     rank,
-    cost,
-    block,
-    have: sealCount(seals, 'gear', next),
-    title: block
-      ? `Ascension vers ${rank.name} — ${GEAR_ASCENSION_BLOCK_LABEL[block]} (${price})`
+    cost: o.cost,
+    block: o.block,
+    have: o.have,
+    title: o.why
+      ? `Ascension vers ${rank.name} — ${o.why} (${price})`
       : `Ascension vers ${rank.name} (${price})`,
   };
 }

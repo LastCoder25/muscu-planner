@@ -43,8 +43,20 @@
               ⭐ Une étoile de plus !
             </div>
             <div v-else-if="rows[b]?.done && t.ascendReady" class="ax-note asc">
-              ⬆️ ★★★★★ — prêt pour l’ascension · <b>toucher pour y aller ›</b>
+              ⬆️ ★★★★★ — prêt pour l’ascension
             </div>
+            <!-- ⬆️ L'ASCENSION, PROPOSÉE ICI (2026-09-28, demandé : « si une place forte fait
+                 atteindre le moment de l'ascension, l'afficher et proposer de l'effectuer,
+                 champion et équipements »). Même règle que le Panthéon (`*AscentOffer`). -->
+            <AscendOfferButton
+              v-if="rows[b]?.done && t.ascendReady"
+              :offer="champOffer(t.id)"
+              :done="ascended.has(t.id)"
+              :err="errs[t.id] ?? null"
+              :busy="busy"
+              @go="doChamp(t.id)"
+              @more="goAscend(t.id)"
+            />
             <!-- 🗡️ SES PIÈCES PORTÉES (v0.1129, demandé) : elles apprennent avec lui, et leur
                  niveau est caché comme le sien — sans cette barre, rien ne disait qu'elles
                  avaient avancé. Même animation que la sienne, un peu décalée. -->
@@ -84,6 +96,16 @@
                   <div v-else-if="rows[gb]?.done && g.ascendReady" class="ax-note forge asc">
                     ⬆️ ★★★★★ — prête pour l’ascension
                   </div>
+                  <AscendOfferButton
+                    v-if="rows[gb]?.done && g.ascendReady"
+                    :offer="gearOffer(g.id)"
+                    :done="ascended.has(g.id)"
+                    :err="errs[g.id] ?? null"
+                    :busy="busy"
+                    gear
+                    @go="doGear(g.id)"
+                    @more="goAscend(t.id)"
+                  />
                 </div>
               </div>
             </div>
@@ -99,6 +121,10 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import ChampionPortrait from './ChampionPortrait.vue';
 import AdvGearArt from './AdvGearArt.vue';
+import AscendOfferButton from './AscendOfferButton.vue';
+import { championAscentOffer, emptySeals, gearAscentOffer } from '@/lib/ascension';
+import { useCharacterStore } from '@/stores/character';
+import { useAuthStore } from '@/stores/auth';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { rankStarStr } from '@/lib/characterRank';
 import type { AdvXpSegment, AdvXpTrack } from '@/lib/adventurers';
@@ -210,10 +236,21 @@ function play(b: number, k: number) {
   }, dur);
 }
 
+/** ⬆️ État des boutons d’ascension — déclaré AVANT le `watch` immédiat qui le remet à zéro
+ *  (sinon zone morte temporelle au montage, le défaut de la v0.910). */
+const char = useCharacterStore();
+const auth = useAuthStore();
+const ascended = ref(new Set<string>());
+const errs = ref<Record<string, string>>({});
+const busy = ref(false);
+
 watch(
   ev,
   (e) => {
     clearTimers();
+    // Une nouvelle animation repart sans les ascensions ni les refus de la précédente.
+    ascended.value = new Set();
+    errs.value = {};
     if (!e) {
       rows.value = [];
       return;
@@ -252,13 +289,42 @@ function goAscend(advId: string) {
   dismiss();
   openPath(router, '/aventure?tab=base');
 }
-/** Une ligne prête intercepte le toucher ; les autres le laissent passer au fond (passer/fermer). */
+/** Une ligne prête intercepte le toucher ; les autres le laissent passer au fond (passer/fermer).
+ *  Le bouton d'ascension, lui, arrête le toucher (`@click.stop`) : il agit sur place. */
 function rowClick(e: Event, i: number) {
   const t = ev.value?.tracks[i];
   if (!t || !ascendable(i)) return;
   e.stopPropagation();
   goAscend(t.id);
 }
+/** ⬆️ Les offres d'ascension, lues sur l'état APRÈS la mission (l'overlay s'ouvre après
+ *  l'écriture). ⚠️ Même règle que le Panthéon et le store (`championAscentOffer` /
+ *  `gearAscentOffer`) : le bouton ne promet jamais ce que l'écriture refuserait. */
+const ctxOf = () => ({ seals: char.row?.seals ?? emptySeals(), gold: char.row?.gold ?? 0 });
+function champOffer(id: string) {
+  const a = char.advList.find((x) => x.id === id);
+  return a ? championAscentOffer(a, { ...ctxOf(), pantheonLevel: char.pantheonLevel }) : null;
+}
+function gearOffer(id: string) {
+  const g = char.advGearStock.find((x) => x.id === id);
+  return g
+    ? gearAscentOffer(g, { ...ctxOf(), advs: char.advList, stock: char.advGearStock })
+    : null;
+}
+async function run(id: string, act: (uid: string) => Promise<string | null>) {
+  const uid = auth.user?.id;
+  if (!uid || busy.value) return;
+  busy.value = true;
+  try {
+    const err = await act(uid);
+    if (err) errs.value = { ...errs.value, [id]: err };
+    else ascended.value = new Set([...ascended.value, id]);
+  } finally {
+    busy.value = false;
+  }
+}
+const doChamp = (id: string) => run(id, (uid) => char.ascendChampion(uid, id));
+const doGear = (id: string) => run(id, (uid) => char.ascendGear(uid, id));
 
 /** Premier toucher : on saute à la fin. Second : on ferme. */
 function tap() {

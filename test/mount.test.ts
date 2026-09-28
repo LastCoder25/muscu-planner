@@ -1452,6 +1452,65 @@ describe('⬆️ AscensionReveal — la scène d’ascension se monte', () => {
 });
 
 describe('📊 barre d’étoile au retour de mission', () => {
+  // ⬆️ 2026-09-28 : l'ascension se propose dans l'animation (place forte comprise).
+  it('AscendOfferButton : rang visé et prix, raison d’un refus, ascension faite', async () => {
+    const AscendOfferButton = (await import('@/components/AscendOfferButton.vue')).default;
+    const offer = { next: 1, cost: { gold: 1200, seals: 1 }, have: 1, block: null, why: null };
+    const html = async (props: Record<string, unknown>) => {
+      let out = '';
+      const base = { offer, done: false, err: null, busy: false };
+      expect(
+        await mountIt(AscendOfferButton, { ...base, ...props }, undefined, undefined, '/', (h) => {
+          out = h;
+        }),
+      ).toBeNull();
+      return out;
+    };
+    const ok = await html({});
+    expect(ok).toContain('Ascension → ⚪');
+    expect(ok).toContain('Argent');
+    expect(ok).toContain('🔱 1/1');
+    expect(ok).not.toContain('disabled');
+    const no = await html({ offer: { ...offer, block: 'gold', why: 'Il manque de l’or.' } });
+    expect(no).toContain('disabled');
+    expect(no).toContain('Il manque de l’or.');
+    expect(no).toContain('Voir au Panthéon');
+    expect(await html({ gear: true })).toContain('⚜️ 1/1');
+    expect(await html({ done: true })).toContain('Ascension faite');
+  });
+
+  it('AdvXpGainOverlay propose l’ascension d’un champion arrivé à ★★★★★', async () => {
+    const { useAdvXpFx } = await import('@/composables/useAdvXpFx');
+    const AdvXpGainOverlay = (await import('@/components/AdvXpGainOverlay.vue')).default;
+    const seg = { from: 0.4, to: 1, starUp: false, rankUp: false, star: 5 };
+    const s = { ...seg, rankEmoji: '🟤', rankName: 'Bronze', rankColor: '#b87333' };
+    const mm = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q })) as typeof window.matchMedia;
+    const fx = useAdvXpFx();
+    fx.show([
+      { id: 'pret', name: 'Orsène', xp: 50, ascendReady: true, segments: [s] },
+      { id: 'a1', name: 'Léa', xp: 20, ascendReady: false, segments: [s] },
+    ]);
+    const row = {
+      ...ROW,
+      gold: 1e9,
+      seals: { champion: { 1: 5 }, gear: {} },
+      adventurers: [
+        { id: 'pret', name: 'Orsène', seed: 3, path: ['guerrier'], level: 10, xp: 0 },
+        // Léa est AUSSI à ★★★★★, mais n'y arrive pas par cette mission : pas de bouton.
+        ...ROW.adventurers.map((x) => (x.id === 'a1' ? { ...x, level: 10 } : x)),
+      ],
+    };
+    let out = '';
+    expect(await mountIt(AdvXpGainOverlay, {}, row, undefined, '/', (h) => (out = h))).toBeNull();
+    fx.dismiss();
+    window.matchMedia = mm;
+    // Un seul bouton : celui du champion prêt, jamais celui de Léa.
+    expect(out.match(/class="aob-b"/g) ?? []).toHaveLength(1);
+    expect(out).toContain('Ascension → ⚪');
+    expect(out).toContain('🔱 5/1');
+  });
+
   it('AdvXpGainOverlay se monte et part de l’avancement AVANT', async () => {
     const { advXpTracks } = await import('@/lib/adventurers');
     const { useAdvXpFx } = await import('@/composables/useAdvXpFx');

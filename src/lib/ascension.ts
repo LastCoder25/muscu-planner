@@ -236,3 +236,59 @@ export function readyAscensionIds(
       gear.add(g.id);
   return { champions, gear };
 }
+
+// ── ⬆️ L'OFFRE D'ASCENSION, prête à afficher (2026-09-28) ─────────────────────────────────
+
+/**
+ * ⬆️ Ce qu'une ascension coûterait MAINTENANT, et pourquoi elle serait refusée — pour un
+ * bouton hors du Panthéon (demandé : « si une place forte fait atteindre le moment de
+ * l'ascension, l'afficher et proposer de l'effectuer, champion et équipements »). `null`
+ * tant qu'il n'est pas à ★5 ou qu'il est au sommet : un bouton n'a de sens qu'au moment où
+ * la question se pose. ⚠️ Le refus est `ascensionBlocker` / `advGearAscensionBlocker`, la
+ * règle du store : le bouton ne promet jamais ce que l'écriture refuserait.
+ */
+export interface AscentOffer<B extends string = string> {
+  /** Le rang visé (index de `CHARACTER_RANKS`). */
+  next: number;
+  cost: { gold: number; seals: number };
+  /** Les sceaux possédés pour ce rang (d'objet : le stock unique). */
+  have: number;
+  /** Pourquoi c'est refusé (le code de la règle) — `null` si c'est payable tout de suite. */
+  block: B | null;
+  /** La même raison, en français, pour qui n'a pas la table de libellés sous la main. */
+  why: string | null;
+}
+export function championAscentOffer(
+  adv: Adventurer,
+  ctx: { pantheonLevel: number; seals: Seals; gold: number },
+): AscentOffer<AscensionBlock> | null {
+  const next = advNextAscension(adv);
+  if (next == null || adv.level < advAscensionCap(adv)) return null;
+  const b = ascensionBlocker(adv, ctx);
+  return {
+    next,
+    cost: ascensionCost(next),
+    have: sealCount(ctx.seals, 'champion', next),
+    block: b,
+    why: b ? ASCENSION_BLOCK_LABEL[b] : null,
+  };
+}
+export function gearAscentOffer(
+  g: AdvGear,
+  ctx: { advs: readonly Adventurer[]; stock: readonly AdvGear[]; seals: Seals; gold: number },
+): AscentOffer<GearAscensionBlock> | null {
+  const next = advGearNextRank(g);
+  if (next == null || !advGearAtRankCap(g)) return null;
+  const b = advGearAscensionBlocker(g, {
+    rankCap: advGearRankCap(g, [...ctx.advs], [...ctx.stock]),
+    seals: ctx.seals,
+    gold: ctx.gold,
+  });
+  return {
+    next,
+    cost: advGearAscensionCost(next),
+    have: sealCount(ctx.seals, 'gear', next),
+    block: b,
+    why: b ? GEAR_ASCENSION_BLOCK_LABEL[b] : null,
+  };
+}
