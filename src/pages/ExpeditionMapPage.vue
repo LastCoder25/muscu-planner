@@ -341,7 +341,7 @@
           </p>
           <p class="ctl-line">{{ controlProd }}</p>
           <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
-          <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1253). -->
+          <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1254). -->
           <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
             ⚠️ <b>Bataille imminente</b> : une troupe ennemie marche sur ce lieu. Un renfort proche
             peut encore arriver à temps.
