@@ -5,6 +5,7 @@ import {
   collectControl,
   controlIdOf,
   ensureControls,
+  runeHoursFor,
   runeProgress,
   runeStock,
   seatsOf,
@@ -20,23 +21,41 @@ const held = (seed = 3, L = 30): ExpeditionMap =>
 const pt = (m: ExpeditionMap) => m.pois.find((p) => p.id === ID)!;
 
 describe('📜 le Scriptorium', () => {
-  it('un point fixe à UNE place, comme le jardin', () => {
-    expect(seatsOf('scriptorium')).toBe(1);
-    // L'équipe qui le prend peut être plus nombreuse : un seul copiste reste.
-    expect(pt(held()).control!.garrison).toEqual(['a']);
+  // 2026-09-28 (demandé : « comme les autres lieux fixes ») : jusqu'à 3 copistes, et la
+  // copie va plus ou moins vite selon l'effectif.
+  it('trois places, comme les autres lieux fixes (hors jardin)', () => {
+    expect(seatsOf('scriptorium')).toBe(seatsOf('mine'));
+    expect(seatsOf('scriptorium')).toBe(3);
+    expect(pt(held()).control!.garrison).toEqual(['a', 'b', 'c']);
   });
 
-  it('une rune toutes les 48 h, et une seule attend d’être ramassée', () => {
+  /** La copie à `h` heures avec `garrison` copistes, sans reprise ennemie. */
+  const at = (garrison: string[], h: number) => {
     const p = pt(held());
-    const at = (h: number) => {
-      // L'attaque ennemie arrête la production : on la repousse pour mesurer la copie seule.
-      const q = { ...p, control: { ...p.control!, attackAt: 1e15 } };
-      return { n: runeStock(q, h * H), prog: runeProgress(q, h * H) };
-    };
-    expect(at(24)).toEqual({ n: 0, prog: 0.5 });
-    expect(at(CONTROL.runeHoursPerItem).n).toBe(1);
-    // ⚠️ La réserve ne tient qu'une rune : sans la ramasser, la suivante ne commence pas.
-    expect(at(10 * CONTROL.runeHoursPerItem).n).toBe(1);
+    const q = { ...p, control: { ...p.control!, garrison, attackAt: 1e15 } };
+    return { n: runeStock(q, h * H), prog: runeProgress(q, h * H) };
+  };
+
+  it('une rune en 24 h à trois copistes, 30 h à deux, 48 h à un seul', () => {
+    expect(CONTROL.runeHoursPerItem).toBe(24);
+    expect(runeHoursFor(3)).toBe(24);
+    expect(runeHoursFor(2)).toBe(30);
+    expect(runeHoursFor(1)).toBe(48);
+    expect(runeHoursFor(0)).toBeNull();
+    expect(at(['a', 'b', 'c'], 12)).toEqual({ n: 0, prog: 0.5 });
+    expect(at(['a', 'b', 'c'], 24).n).toBe(1);
+    expect(at(['a', 'b'], 29).n).toBe(0);
+    expect(at(['a', 'b'], 30).n).toBe(1);
+    // Un seul copiste : le rythme d'avant, inchangé.
+    expect(at(['a'], 24)).toEqual({ n: 0, prog: 0.5 });
+    expect(at(['a'], 48).n).toBe(1);
+    expect(at([], 100).prog).toBe(0);
+  });
+
+  it('une seule rune attend d’être ramassée, quel que soit l’effectif', () => {
+    // ⚠️ Sans la ramasser, la suivante ne commence pas — même à trois copistes.
+    expect(at(['a', 'b', 'c'], 10 * 24)).toEqual({ n: 1, prog: 1 });
+    expect(at(['a'], 10 * 48)).toEqual({ n: 1, prog: 1 });
   });
 
   it('ramasser rend la rune, à la couleur que permet le rang du lieu', () => {

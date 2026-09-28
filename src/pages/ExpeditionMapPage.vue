@@ -866,6 +866,7 @@ import {
   forgeStockBy,
   forgeXpPerHour,
   runeProgress,
+  runeHoursFor,
   runeStock,
   seatsOf,
   attackImminent,
@@ -1536,7 +1537,7 @@ const controlProd = computed(() => {
     case 'scriptorium':
       return runeStock(p, now.value) > 0
         ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
-        : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${CONTROL.runeHoursPerItem} h`;
+        : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${runeHoursFor(c.garrison.length) ?? '—'} h (${c.garrison.length}/3 copistes, 24 h à 3)`;
     case 'forge':
       return `⚒️ +${Math.round(forgeXpPerHour(p))} XP/h par pièce portée, pour chaque champion selon son temps ici`;
     case 'tower':
