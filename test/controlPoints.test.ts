@@ -197,7 +197,7 @@ describe('🏰 prise, production, reprise', () => {
     expect(heldControls(holdControl(m, ID, at, 7))).toHaveLength(1);
   });
   it('perdu : le lieu redevient ennemi, sa troupe et son compteur changent', () => {
-    const p = ctl(loseControl(taken(), ID, 30));
+    const p = ctl(loseControl(taken(), ID, 30, 0));
     expect(p.control!.owner).toBe('enemy');
     expect(p.control!.garrison).toEqual([]);
     expect(p.control!.retakes).toBe(1);
