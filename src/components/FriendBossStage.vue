@@ -88,7 +88,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch, type ComponentPublicInstance } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
-import { BOSS_SHOT_MS, bossCry, fmtBossPv, strikeShots, type BossStrike } from '@/lib/friendBoss';
+import {
+  BOSS_CRY_MEMORY,
+  BOSS_SHOT_MS,
+  bossCry,
+  fmtBossPv,
+  strikeShots,
+  type BossStrike,
+} from '@/lib/friendBoss';
 import { lookEquipped, type HeroLook } from '@/lib/heroLook';
 
 export interface StageAlly {
@@ -167,6 +174,8 @@ const cry = ref<{ key: number; text: string } | null>(null);
 /** Temps pendant lequel le cri reste affiché après l'impact du dernier projectile. */
 const CRY_LINGER_MS = 700;
 let cryTimer: ReturnType<typeof setTimeout> | null = null;
+/** Les derniers cris affichés : une série de reps ne répète pas ceux des précédentes. */
+let recentCries: string[] = [];
 function clearCry() {
   if (cryTimer) clearTimeout(cryTimer);
   cryTimer = null;
@@ -221,8 +230,9 @@ async function strike(s: BossStrike, token: number) {
   if (cryTimer) clearTimeout(cryTimer);
   cry.value = {
     key: ++seq,
-    text: bossCry(s.damage, shownHp.value, props.hpTotal, Math.random(), cry.value?.text),
+    text: bossCry(s.damage, shownHp.value, props.hpTotal, Math.random(), recentCries),
   };
+  recentCries = [...recentCries, cry.value.text].slice(-BOSS_CRY_MEMORY);
   for (const dmg of shots) {
     if (!alive || skipped) return;
     strikerId.value = null;
@@ -332,8 +342,11 @@ defineExpose({ play, die });
   flex-direction: column;
   align-items: center;
 }
+/* margin-top : l'illustration dépasse du médaillon de ~20 px (la tête), plus le balancement ;
+   sans cette marge elle était coupée par le haut de la carte (overflow: hidden). */
 .fbs-boss {
   position: relative;
+  margin-top: 24px;
   width: 116px;
   height: 116px;
   border-radius: 50%;
@@ -488,13 +501,13 @@ defineExpose({ play, die });
   pointer-events: none;
   animation: fbs-pop 1.1s ease-out forwards;
 }
-/* Bulle du cri, accrochée en haut à gauche du boss (le chiffre des dégâts est au centre). */
+/* Bulle du cri, accrochée au bord gauche du médaillon (le chiffre des dégâts est au centre) :
+   son coin droit touche le boss, elle ne file plus vers le bord de l'écran. */
 .fbs-cry {
   position: absolute;
-  top: 2px;
-  left: 50%;
-  margin-left: -150px;
-  max-width: 120px;
+  top: 20px;
+  right: calc(50% + 44px);
+  max-width: 96px;
   padding: 5px 10px;
   border-radius: 14px 14px 4px 14px;
   background: var(--text);
