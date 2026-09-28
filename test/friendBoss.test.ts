@@ -16,6 +16,7 @@ import {
   strikesToReplay,
   strikeShots,
   bossCry,
+  BOSS_CRY_MEMORY,
   BOSS_CRIES,
   BOSS_HEAVY_SHARE,
   BOSS_SHOT_MS,
@@ -191,6 +192,19 @@ describe('🐉 BOSS ENTRE AMIS — démarrage et fin', () => {
     for (const prev of BOSS_CRIES.light)
       for (let r = 0; r < 1; r += 0.05)
         expect(bossCry(1_000, 80_000, 100_000, r, prev)).not.toBe(prev);
+  });
+
+  it('une série ne répète aucun des derniers cris affichés', () => {
+    const recent: string[] = [];
+    for (let k = 0; k < 60; k++) {
+      const c = bossCry(1_000, 80_000, 100_000, k % 2 ? 0 : 0.999, recent);
+      expect(recent.slice(-BOSS_CRY_MEMORY)).not.toContain(c);
+      recent.push(c);
+    }
+    // Registre court (dernier souffle) : on évite au moins le précédent, jamais de blocage.
+    const death = bossCry(1_000, 1_000, 100_000, 0.5, [...BOSS_CRIES.death]);
+    expect(BOSS_CRIES.death).toContain(death);
+    expect(death).not.toBe(BOSS_CRIES.death.at(-1));
   });
 
   it('1000 dégâts par rep, et le NOMBRE DE REPS pour abattre le boss ne change pas', () => {

@@ -459,7 +459,20 @@ export function strikeShots(damage: number): number[] {
 
 /** Les cris du boss, du plus léger au dernier souffle. Une frappe = UN cri. */
 export const BOSS_CRIES = {
-  light: ['Aïe !', 'Grrr…', 'Ouch !', 'Hmpf !', 'Ça pique…', 'Argh !', 'Hé !', 'Grmbl…'],
+  light: [
+    'Aïe !',
+    'Grrr…',
+    'Ouch !',
+    'Hmpf !',
+    'Ça pique…',
+    'Argh !',
+    'Hé !',
+    'Grmbl…',
+    'Même pas mal !',
+    'Tss…',
+    'Encore ?!',
+    'Rhaaa…',
+  ],
   heavy: [
     'AAARGH !',
     'Ça fait mal !!',
@@ -475,15 +488,19 @@ export const BOSS_CRIES = {
 /** Part des PV du boss à partir de laquelle une frappe arrache un GRAND cri. */
 export const BOSS_HEAVY_SHARE = 0.1;
 
+/** Nombre de cris récents qu'une frappe évite de répéter (une série de reps = une frappe). */
+export const BOSS_CRY_MEMORY = 4;
+
 /** Le cri d'une frappe : un dernier souffle si elle l'abat, un grand cri si elle retire au
- *  moins `BOSS_HEAVY_SHARE` de ses PV, sinon un petit — tiré au hasard (`rng` ∈ [0, 1)),
- *  jamais le même que le cri précédent quand le registre en offre un autre. */
+ *  moins `BOSS_HEAVY_SHARE` de ses PV, sinon un petit — tiré au hasard (`rng` ∈ [0, 1)).
+ *  `recent` = les derniers cris affichés (le plus récent en dernier) : on en évite les
+ *  `BOSS_CRY_MEMORY` derniers, au moins le précédent quand le registre est trop court. */
 export function bossCry(
   damage: number,
   hpBefore: number,
   hpTotal: number,
   rng: number,
-  previous?: string | null,
+  recent?: string | readonly string[] | null,
 ): string {
   const pool =
     damage >= hpBefore && hpBefore > 0
@@ -491,7 +508,9 @@ export function bossCry(
       : damage >= hpTotal * BOSS_HEAVY_SHARE
         ? BOSS_CRIES.heavy
         : BOSS_CRIES.light;
-  const choices = pool.length > 1 ? pool.filter((c) => c !== previous) : pool;
+  const past = recent == null ? [] : typeof recent === 'string' ? [recent] : recent;
+  const avoid = past.slice(-Math.min(BOSS_CRY_MEMORY, pool.length - 1));
+  const choices = avoid.length ? pool.filter((c) => !avoid.includes(c)) : pool;
   const r = Math.min(0.999999, Math.max(0, rng));
   return choices[Math.floor(r * choices.length)]!;
 }
