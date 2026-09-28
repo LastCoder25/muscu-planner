@@ -13,6 +13,7 @@ import {
   releaseFromControl,
   settleReinforcements,
   dueRetakes,
+  seatsOf,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 
@@ -35,9 +36,9 @@ describe('🏰 renforts', () => {
   it('les places libres comptent la garnison ET les renforts en route', () => {
     const m = reinforceControl(held(['a']), ID, ['b'], 2 * H);
     expect(controlSeats(ctl(m).control)).toBe(2);
-    expect(controlFreeSeats(ctl(m).control)).toBe(CONTROL.maxGarrison - 2);
-    expect(reinforceBlocker(ctl(m).control, 1)).toBeNull();
-    expect(reinforceBlocker(ctl(m).control, 2)).toBe('full');
+    expect(controlFreeSeats(ctl(m).control)).toBe(seatsOf('mine') - 2);
+    expect(reinforceBlocker(ctl(m).control, seatsOf('mine') - 2)).toBeNull();
+    expect(reinforceBlocker(ctl(m).control, seatsOf('mine') - 1)).toBe('full');
     expect(reinforceBlocker(ctl(m).control, 0)).toBe('empty');
   });
   it('un point ennemi ne reçoit aucun renfort', () => {
@@ -82,7 +83,7 @@ describe('🏰 ramener des champions', () => {
     const r = releaseFromControl(m, ID, ['b'], 6 * H, L);
     expect(ctl(r).control!.garrison).toEqual(['a', 'c']);
     expect(controlStock(ctl(r), 6 * H, L)).toBe(stock);
-    expect(controlFreeSeats(ctl(r).control)).toBe(1); // la place se libère
+    expect(controlFreeSeats(ctl(r).control)).toBe(seatsOf('mine') - 2); // la place se libère
   });
   it('peut ramener un renfort encore en route', () => {
     const m = reinforceControl(held(['a']), ID, ['b'], 5 * H);
@@ -101,7 +102,7 @@ describe('🏰 ramener des champions', () => {
     // Sans garnison, il ne produit plus — mais l'or déjà sorti reste à récolter.
     expect(controlStock(ctl(r), 30 * H, L)).toBe(stock);
     // On peut encore y envoyer tout un renfort.
-    expect(controlFreeSeats(c)).toBe(CONTROL.maxGarrison);
+    expect(controlFreeSeats(c)).toBe(seatsOf('mine'));
     // Et l'attaque le trouvera : c'est elle, sans défenseurs, qui le reprendra.
     const due = {
       ...r,

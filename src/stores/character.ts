@@ -288,6 +288,7 @@ import {
   settleReinforcements,
   REINFORCE_BLOCK_LABEL,
   seatsOf,
+  campXpFor,
 } from '@/lib/controlPoints';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
@@ -3692,7 +3693,9 @@ export const useCharacterStore = defineStore('character', () => {
     // 🎯 Le camp : chacun reçoit SA réserve, selon le temps qu'il a passé sur place (un renfort
     // arrivé tard n'a pas l'XP des autres) — un champion ramené reçoit ce qu'il avait gagné.
     const next = advs.map((a) => {
-      const xp = c.xpBy[a.id] ?? 0;
+      // 🎯 Avec la prime de rattrapage des missions (`campXpFor`) : sans elle, le camp ne
+      // valait rien pour les champions en retard, les seuls qu'il accueille.
+      const xp = campXpFor(a, c.xpBy[a.id] ?? 0, pantheonLevel.value);
       return xp > 0
         ? grantAdvXp(
             a,

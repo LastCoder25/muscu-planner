@@ -57,11 +57,11 @@ describe('une garnison de 5 au plus, champions et miliciens compris', () => {
     expect(controlFreeSeats(p.control)).toBe(0);
     expect(reinforceBlocker(p.control, 1)).toBe('full');
   });
-  it('les champions gardent aussi la limite du point (1 place au jardin)', () => {
-    const p = point(30, 'garden');
-    p.control!.garrison = ['adv_a'];
+  it('les champions gardent aussi la limite du point (3 au camp d’entraînement)', () => {
+    const p = point(30, 'training' as 'mine');
+    p.control!.garrison = ['adv_a', 'adv_b', 'adv_c'];
     expect(controlFreeSeats(p.control)).toBe(0);
-    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 1);
+    expect(militiaFreeSeats(p.control)).toBe(MILITIA.perPoint - 3);
   });
   it('à l’arrivée des renforts, la garnison est coupée à 5 dans l’ordre d’arrivée', () => {
     const p = point(30);
@@ -203,11 +203,17 @@ describe('le combat', () => {
       expect(ch - mil).toBeGreaterThan(0.15);
     }
   });
-  it('un seul milicien tient un point à une place (jardin) comme trois en tiennent trois', () => {
+  it('au jardin comme ailleurs, plus de miliciens tiennent mieux (5 places partout)', () => {
     for (const L of [10, 60]) {
-      const one = garrisonHoldChance(point(L, 'garden'), militiaUnits(['mil:1'], L), 1, 60);
-      expect(one).toBeGreaterThan(0.3);
-      expect(one).toBeLessThan(0.65);
+      const n = (k: number) =>
+        garrisonHoldChance(
+          point(L, 'garden'),
+          militiaUnits(['mil:1', 'mil:2', 'mil:3', 'mil:4', 'mil:5'].slice(0, k), L),
+          1,
+          60,
+        );
+      expect(n(5)).toBeGreaterThan(n(3));
+      expect(n(3)).toBeGreaterThan(n(1));
     }
   });
 });

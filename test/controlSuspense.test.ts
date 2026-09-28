@@ -24,8 +24,12 @@ const gardenAt = (L: number): Poi => {
   const p = m.pois.find((q) => q.id === controlIdOf('garden'))!;
   return { ...p, level: L };
 };
-const allies = (level: number, orient = 0) =>
-  partyAllies([{ ...refChampionAdv(level, orient), id: 'a0' }], { advGear: [] }, null);
+const allies = (level: number, orient = 0, n = 1) =>
+  partyAllies(
+    Array.from({ length: n }, (_, i) => ({ ...refChampionAdv(level, orient + i), id: `a${i}` })),
+    { advGear: [] },
+    null,
+  );
 
 describe('🎲 une garnison ne repousse jamais plus de 90 % des reprises', () => {
   it('un champion bien au-dessus du lieu tenait presque tout : l’ennemi grossit pour y redescendre', () => {
@@ -33,7 +37,9 @@ describe('🎲 une garnison ne repousse jamais plus de 90 % des reprises', () =>
       const p = gardenAt(L);
       // ⚠️ +20 et non +15 : ce champion est NU, et depuis que l'équipement des champions vaut
       // celui du héros (`ADV_GEAR.k` 1), un nu de +15 ne dépassait plus tout à fait 90 %.
-      const strong = allies(L + 20, 2);
+      // Trois champions : depuis que le jardin prend 5 places, l'ennemi s'y cale sur une
+      // garnison de 3 (et non plus de 1) — un seul, même fort, n'y dépasse plus 90 %.
+      const strong = allies(L + 20, 2, 3);
       const raw = garrisonHoldChance(p, strong);
       // Le cas existe vraiment — sinon le test ne prouverait rien.
       expect(raw).toBeGreaterThan(CONTROL.maxHold);

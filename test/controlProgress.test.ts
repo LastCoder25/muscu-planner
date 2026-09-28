@@ -57,7 +57,9 @@ describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
   });
 
   it('🌿 le jardin dit ce qui est cueilli, où en est le suivant ET dans combien de temps', () => {
-    const p = held('garden');
+    // Un seul jardinier : un consommable toutes les 12 h.
+    const g = held('garden');
+    const p = { ...g, control: { ...g.control!, garrison: ['a'] } };
     const t = 1.5 * CONTROL.gardenHoursPerItem * H;
     const left = formatDuration(0.5 * CONTROL.gardenHoursPerItem * H);
     expect(controlProgress(p, t, L)).toEqual({ text: `🎒 1 · 50 % · ${left}`, pct: 0.5 });

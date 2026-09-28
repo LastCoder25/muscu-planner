@@ -47,7 +47,7 @@ export const MILITIA = {
   capEvery: 3,
   /** Garnison au plus sur UN point de contrôle, CHAMPIONS ET MILICIENS COMPRIS (demandé :
    *  « garnison de 5 max champions et miliciens compris »). Les champions gardent en plus
-   *  leur propre limite (`seatsOf`, 1 ou 3) à l'intérieur de ces 5. La production du lieu
+   *  leur propre limite (`seatsOf` : 5, ou 3 au camp et à la forge) à l'intérieur de ces 5. La production du lieu
    *  reste plafonnée à celle d'une garnison pleine (`CONTROL.garrisonShare`), et la tenue
    *  par `CONTROL.maxHold`. */
   perPoint: 5,

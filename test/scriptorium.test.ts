@@ -23,9 +23,9 @@ const pt = (m: ExpeditionMap) => m.pois.find((p) => p.id === ID)!;
 describe('📜 le Scriptorium', () => {
   // 2026-09-28 (demandé : « comme les autres lieux fixes ») : jusqu'à 3 copistes, et la
   // copie va plus ou moins vite selon l'effectif.
-  it('trois places, comme les autres lieux fixes (hors jardin)', () => {
+  it('cinq places, comme les autres lieux qui produisent pour le joueur', () => {
     expect(seatsOf('scriptorium')).toBe(seatsOf('mine'));
-    expect(seatsOf('scriptorium')).toBe(3);
+    expect(seatsOf('scriptorium')).toBe(5);
     expect(pt(held()).control!.garrison).toEqual(['a', 'b', 'c']);
   });
 

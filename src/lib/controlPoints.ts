@@ -19,7 +19,8 @@
  */
 import { formatDuration } from './duration';
 import { mulberry32, seedOf } from './combat';
-import { advAscensionCap, advXpToNext, type Adventurer } from './adventurers';
+import { advAscensionCap, advBankedLevel, advXpToNext, type Adventurer } from './adventurers';
+import { catchUpMult } from './caravan';
 import { grantAdvGearXp, wornGear, type AdvGear } from './advGear';
 import { pickTier, placeRuneOdds, type RuneTier } from './skillRunes';
 import { characterRank, rankStartLevel } from './characterRank';
@@ -75,22 +76,28 @@ export const CONTROL = {
    *  imprenable — signalé par l'utilisateur sur une tour de guet affichée « légendaire ».
    *  3 champions de référence prennent une troupe de 2,5 ~9 fois sur 10 (mesure des camps). */
   captureSizes: [1, 1.5, 2, 2.5] as readonly number[],
-  /** Une garnison : 1 à 3 champions. */
+  /** La garnison de RÉFÉRENCE (3) : celle sur laquelle l'ennemi se cale, et les places du
+   *  camp et de la forge. Les lieux qui produisent pour le joueur en prennent 5 (`seatsOf`). */
   maxGarrison: CONTROL_MAX_GARRISON,
   /** ⛏️ Une garnison complète produit l'or d'une mission de mine de son rang toutes les
    *  `mineHoursPerHaul` heures. ⚠️ Ces champions ne font pas de missions pendant ce temps :
    *  le débit est calé pour valoir à peu près ce qu'ils auraient ramené en allant et venant. */
   mineHoursPerHaul: 8,
-  /** Part de production selon l'effectif posté (index = nombre de champions). */
-  garrisonShare: [0, 0.5, 0.8, 1] as readonly number[],
+  /** Part de production selon l'effectif posté (index = nombre de présents, champions ET
+   *  miliciens). ⚠️ 2026-09-28 (demandé : « chaque lieu qui produit ou a un effet doit
+   *  s'améliorer selon le nombre en garnison, jusqu'à 5 ») : elle monte jusqu'à 5, à
+   *  rendement décroissant — 1 → 3 inchangé (0,5 · 0,8 · 1), puis +0,15 par présent. Chaque
+   *  personne ajoutée rapporte, jamais autant que la précédente. */
+  garrisonShare: [0, 0.5, 0.8, 1, 1.15, 1.3] as readonly number[],
   /** Réserve plafonnée : au-delà de 24 h sans récolte, la mine ne produit plus. */
   storageMs: 24 * 3600_000,
   /** 🎯 Camp d'entraînement : chaque champion posté gagne l'XP d'une épreuve de son rang
    *  (`trialXpBase`) toutes les `trainHoursPerTrial` heures — plafonné au ★5 du rang JUSTE
    *  EN DESSOUS du héros (décision de l'utilisateur, `trainingCapLevel`). */
   trainHoursPerTrial: 3,
-  /** 🌿 Jardin d'herboriste : UN jardinier (`CONTROL_SEATS.garden` = 1) cueille un
-   *  consommable toutes les `gardenHoursPerItem` heures (2 par jour). */
+  /** 🌿 Jardin d'herboriste : un jardinier cueille un consommable toutes les
+   *  `gardenHoursPerItem` heures (2 par jour) ; plus de monde, plus vite (`garrisonShare`,
+   *  jusqu'à ×2,6 à cinq). */
   gardenHoursPerItem: 12,
   /** ⚒️ Forge de campagne (2026-09-27, demandé) : chaque pièce PORTÉE par un champion posté
    *  gagne l'XP d'une épreuve de son rang toutes les `forgeHoursPerTrial` heures — deux fois
@@ -101,7 +108,7 @@ export const CONTROL = {
   forgeHoursPerTrial: 1.5,
   /** 📜 Scriptorium (2026-09-27, demandé : « comme le jardin, mais pour les compétences ») :
    *  recopie une RUNE de compétence. Depuis le 2026-09-28 (demandé : « comme les autres lieux
-   *  fixes »), il garde jusqu'à 3 copistes et produit selon l'effectif (`garrisonShare`) : une
+   *  fixes »), il garde jusqu'à 5 copistes (3 avant le 2026-09-28) et produit selon l'effectif (`garrisonShare`) : une
    *  rune toutes les `runeHoursPerItem` heures À PLEIN — 3 copistes 24 h, 2 → 30 h, 1 → 48 h
    *  (le rythme d'avant, inchangé pour qui n'en poste qu'un). ⚠️ Les runes sont RARES : toutes
    *  sources confondues, un joueur régulier en gagne 0,27 à 0,87 par jour (spec des runes) ;
@@ -127,13 +134,19 @@ export const CONTROL = {
 
 /** 🏰 Combien de champions un point garde en garnison (décision de l'utilisateur : le
  *  jardin n'en garde qu'UN — on choisit à l'envoi qui reste, les autres rentrent). */
+// ⚠️ 2026-09-28 (demandé : « les autres peuvent avoir jusqu'à 5 en garnison, champion et/ou
+// miliciens ») : les lieux qui PRODUISENT pour le joueur (or, consommables, runes) ou ont un
+// EFFET (la tour) prennent 5 champions — la garnison entière (`MILITIA.perPoint`). Le camp et
+// la forge, qui produisent de l'XP PAR champion, gardent 3 champions : chacun y apprend pour
+// lui, sa place ne profite pas aux autres.
+const PRODUCER_SEATS = MILITIA.perPoint;
 const CONTROL_SEATS: Record<ControlKind, number> = {
   forge: CONTROL_MAX_GARRISON,
-  scriptorium: CONTROL_MAX_GARRISON,
-  mine: CONTROL_MAX_GARRISON,
+  scriptorium: PRODUCER_SEATS,
+  mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
-  garden: 1,
-  tower: CONTROL_MAX_GARRISON,
+  garden: PRODUCER_SEATS,
+  tower: PRODUCER_SEATS,
 };
 export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
 /** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. La forge se glisse
@@ -341,7 +354,12 @@ export function garrisonHoldChance(
   samples: number = CONTROL.holdSamples,
 ): number {
   if (!allies.length) return 0;
-  const seats = p.control ? seatsOf(p.control.kind) : CONTROL.maxGarrison;
+  // ⚠️ Calée sur une garnison de RÉFÉRENCE (3 au plus) : poster 4 ou 5 personnes renforce la
+  // garnison, l'ennemi ne grossit pas pour autant (au-delà de 90 % de tenue, `retakeBoost` s'en
+  // charge).
+  const seats = p.control
+    ? Math.min(seatsOf(p.control.kind), CONTROL.maxGarrison)
+    : CONTROL.maxGarrison;
   let w = 0;
   for (const size of CONTROL.sizes)
     w += campWinPct(
@@ -382,12 +400,17 @@ export function retakeForce(p: Poi, boost: number): Pick<ControlState, 'faction'
   const f = enemyForce(p.id, (p.control?.attackAt ?? 0) % 1_000_003, CONTROL.sizes);
   // ⚔️ La troupe se mesure à la garnison qu'un point PEUT garder : un jardin (1 place) est
   // attaqué par une troupe à l'échelle d'un seul champion, sinon il tomberait à chaque fois.
-  const seats = p.control ? seatsOf(p.control.kind) : CONTROL.maxGarrison;
+  // ⚠️ Calée sur une garnison de RÉFÉRENCE (3 au plus) : poster 4 ou 5 personnes renforce la
+  // garnison, l'ennemi ne grossit pas pour autant (au-delà de 90 % de tenue, `retakeBoost` s'en
+  // charge).
+  const seats = p.control
+    ? Math.min(seatsOf(p.control.kind), CONTROL.maxGarrison)
+    : CONTROL.maxGarrison;
   return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost };
 }
 
 const shareOf = (n: number) =>
-  CONTROL.garrisonShare[Math.min(CONTROL.maxGarrison, Math.max(0, n))] ?? 0;
+  CONTROL.garrisonShare[Math.min(CONTROL.garrisonShare.length - 1, Math.max(0, n))] ?? 0;
 
 /** ⛏️ L'or produit par heure pour une garnison de `n` champions. */
 export function controlGoldPerHour(
@@ -399,9 +422,22 @@ export function controlGoldPerHour(
   return (haul * shareOf(n)) / CONTROL.mineHoursPerHaul;
 }
 
-/** 🎯 L'XP par heure d'un champion posté au camp d'entraînement. */
+/** 🎯 L'XP par heure d'un champion posté au camp d'entraînement (avant son rattrapage). */
 export function trainingXpPerHour(p: Pick<Poi, 'level'>): number {
   return trialXpBase(p.level) / CONTROL.trainHoursPerTrial;
+}
+
+/**
+ * 🎯 L'XP que le camp VERSE à un champion : sa réserve × la prime de RATTRAPAGE des missions
+ * (`catchUpMult`, sur le niveau de sa réserve comme `missionXpFor`).
+ * ⚠️ 2026-09-28, MESURÉ (demandé : « les producteurs d'XP doivent être rentables ») : sans
+ * elle le camp ne valait rien pour ceux qu'il vise — il plafonne au ★5 du rang sous le héros,
+ * donc il n'accueille que des champions EN RETARD, et une mission leur rapporte jusqu'à ×3 par
+ * le rattrapage. Joueur 30, champion 20 : 18 XP/h au camp contre 31 à 105 en mission ; avec
+ * la prime, 36 XP/h, 24 h sur 24 sans aller-retour. Un champion à jour n'y gagne rien de plus.
+ */
+export function campXpFor(adv: Adventurer, xp: number, pantheonLevel: number): number {
+  return Math.round(xp * catchUpMult(advBankedLevel(adv, pantheonLevel), pantheonLevel));
 }
 
 /** ⚒️ L'XP par heure de CHAQUE pièce portée par un champion posté à la forge. */
@@ -418,7 +454,8 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'training':
       return n > 0 ? trainingXpPerHour(p) : 0;
     case 'garden':
-      return n > 0 ? 1 / CONTROL.gardenHoursPerItem : 0;
+      // Un jardinier : un consommable toutes les 12 h, comme avant ; plus de monde, plus vite.
+      return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
     case 'forge':
       return n > 0 ? forgeXpPerHour(p) : 0;
     case 'scriptorium':
@@ -773,7 +810,7 @@ function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
 
 /** 🏰 Qui occupe un point, garnison ET renforts en route, séparés en champions et miliciens.
  *  Deux limites : la garnison ENTIÈRE ne dépasse pas `MILITIA.perPoint` (5), et les champions
- *  ne dépassent pas les places du point (`seatsOf`, 1 ou 3). */
+ *  ne dépassent pas les places du point (`seatsOf` : 5, ou 3 au camp et à la forge). */
 function occupants(c: ControlState): { champs: number; militia: number } {
   const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id)];
   const militia = ids.filter(isMilitiaId).length;

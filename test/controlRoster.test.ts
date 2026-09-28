@@ -7,6 +7,7 @@ import {
   controlRoster,
   ensureControls,
   reinforceControl,
+  seatsOf,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 
@@ -52,7 +53,7 @@ describe('🗂️ controlRoster', () => {
     expect(r.status).toBe('held');
     expect(r.garrison).toEqual(['a']);
     expect(r.reinforcing).toEqual([{ id: 'b', inMs: 2 * H }]);
-    expect(r.seats).toBe(CONTROL.maxGarrison);
+    expect(r.seats).toBe(seatsOf('mine'));
     // Arrivé mais pas encore réglé par le tick : compté dans la garnison, plus en route.
     const later = row(controlRoster(m, [], 5 * H, L), MINE);
     expect(later.garrison).toEqual(['a', 'b']);
