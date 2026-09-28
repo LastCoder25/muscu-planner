@@ -24,8 +24,32 @@
         </button>
       </div>
       <p v-if="!rows.length" class="cps-empty">Aucune place forte sur ta carte pour l’instant.</p>
+      <!-- 🔎 Filtres par statut (demandé : « tenu, pas tenu, vide »), avec leur nombre. Une
+           catégorie vide n'est pas proposée : une pastille « 0 » n'apprend rien. -->
+      <div v-if="filterChips.length > 1" class="cps-filters" role="group" aria-label="Filtrer">
+        <button
+          type="button"
+          class="cps-chip"
+          :class="{ on: activeFilter === null }"
+          :aria-pressed="activeFilter === null"
+          @click="filter = null"
+        >
+          Toutes · {{ rows.length }}
+        </button>
+        <button
+          v-for="c in filterChips"
+          :key="c.id"
+          type="button"
+          class="cps-chip"
+          :class="['f-' + c.id, { on: activeFilter === c.id }]"
+          :aria-pressed="activeFilter === c.id"
+          @click="filter = activeFilter === c.id ? null : c.id"
+        >
+          {{ CONTROL_FILTER_LABEL[c.id] }} · {{ c.n }}
+        </button>
+      </div>
       <div
-        v-for="r in rows"
+        v-for="r in shownRows"
         :key="r.poi.id"
         class="cps-tile"
         :class="['st-' + r.status, { open: openId === r.poi.id }]"
@@ -137,6 +161,10 @@ import {
   CONTROL_EMO,
   CONTROL_LABEL,
   CONTROL_YIELD,
+  CONTROL_FILTERS,
+  CONTROL_FILTER_LABEL,
+  controlFilterOf,
+  type ControlFilter,
   type ControlRosterRow,
   type ControlRosterStatus,
 } from '@/lib/controlPoints';
@@ -167,6 +195,22 @@ const ACTION: Record<ControlRosterStatus, string> = {
   imminent: '➕ Renforcer',
 };
 
+/** 🔎 Le filtre choisi (`null` = toutes). S'il se vide (on vient de reprendre la dernière
+ *  place « pas tenue »), la liste retombe sur toutes : sinon elle paraîtrait vide. */
+const filter = ref<ControlFilter | null>(null);
+const filterChips = computed(() =>
+  CONTROL_FILTERS.map((id) => ({
+    id,
+    n: props.rows.filter((r) => controlFilterOf(r.status) === id).length,
+  })).filter((c) => c.n > 0),
+);
+const activeFilter = computed(() =>
+  filterChips.value.some((c) => c.id === filter.value) ? filter.value : null,
+);
+const shownRows = computed(() => {
+  const f = activeFilter.value;
+  return f ? props.rows.filter((r) => controlFilterOf(r.status) === f) : props.rows;
+});
 const openId = ref<string | null>(null);
 const toggle = (id: string) => (openId.value = openId.value === id ? null : id);
 const heldCount = computed(
@@ -224,6 +268,27 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   color: var(--text);
   font-size: 18px;
   cursor: pointer;
+}
+.cps-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.cps-chip {
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.cps-chip.on {
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
 }
 .cps-empty {
   color: var(--dim);

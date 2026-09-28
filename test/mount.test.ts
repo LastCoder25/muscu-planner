@@ -1997,5 +1997,9 @@ describe('🔀 FusionPanel', () => {
     expect(out).toContain('1/6 tenus');
     // Une mine prend 5 personnes depuis le 2026-09-28 (`seatsOf`).
     expect(out).toContain('🛡️ 1/5');
+    // 🔎 Les filtres par statut, avec leur nombre (une tenue, cinq ennemies ; aucune vide).
+    expect(out).toContain('🏰 Tenues · 1');
+    expect(out).toContain('☠️ Pas tenues · 5');
+    expect(out).not.toContain('⚠️ Vides');
   }, 30_000);
 });
