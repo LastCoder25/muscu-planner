@@ -296,6 +296,9 @@ export interface PartyResult {
   xp: Record<string, number>;
   /** Aventuriers envoyés à l'infirmerie (défaite : tous ceux qui sont tombés). */
   hurt: string[];
+  /** 🩹 Blessés LÉGERS d'une victoire serrée (convalescence courte, `LIGHT_HURT`). Absent
+   *  des rapports d'avant et des missions sans combat de groupe (failles, interceptions). */
+  lightHurt?: string[];
   /** 🩹 Trousse de soins emportée : multiplicateur de convalescence (< 1). Absent = aucune. */
   healMult?: number;
   journal: string[];

@@ -17,6 +17,7 @@
 // trois ne l'importe. `camp.ts` et `rift.ts` l'importent tous les deux.
 import { caravanHurtMs, caravanLegMin, HERO_PARTY_WORTH, type PartyHero } from './caravan';
 import { sinceEvent } from './sinceEvent';
+import { LIGHT_HURT } from './skirmish';
 import { supplyFx, supplyUselessWhy, SUPPLIES, type SupplyId, type SupplyTarget } from './supplies';
 import {
   PARTY_TARGETS,
@@ -427,19 +428,18 @@ export function partyClaimRoster(
   // ⏱️ DEPUIS LE RETOUR DU GROUPE, pas depuis le clic « Encaisser » — même règle que les
   // convois et que le siège. `null` = déjà écoulée, personne ne part à l'infirmerie.
   // 🩹 La trousse de soins emportée divise la convalescence (`healMult`, posé au départ).
-  const hurtUntil = sinceEvent(
-    ctx.backAt,
-    caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1),
-    ctx.now,
-  );
+  const fullMs = caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1);
+  const hurtUntil = sinceEvent(ctx.backAt, fullMs, ctx.now);
+  // 🩹 Victoire serrée : une convalescence COURTE (`LIGHT_HURT.msShare`), mêmes soigneurs.
+  const lightUntil = sinceEvent(ctx.backAt, fullMs * LIGHT_HURT.msShare, ctx.now);
   const hurt = new Set(party.hurt);
+  const light = new Set((party.lightHurt ?? []).filter((id) => !hurt.has(id)));
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
     if (gain === undefined) return a;
     const up = ctx.xpGranted ? a : grantAdvXp(a, gain, ctx.pantheonLevel);
-    return hurtUntil && hurt.has(a.id)
-      ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, hurtUntil) }
-      : up;
+    const until = hurt.has(a.id) ? hurtUntil : light.has(a.id) ? lightUntil : null;
+    return until ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, until) } : up;
   });
   return { adventurers, escort };
 }
@@ -472,6 +472,8 @@ interface PartyReportMember {
   xp: number;
   kills: number;
   hurt: boolean;
+  /** 🩹 Blessé LÉGER : victoire serrée, convalescence courte. */
+  lightHurt: boolean;
   /** Plus dans le vivier : sa ligne reste, l'XP a bien été versée. */
   gone: boolean;
   /** Son identité de champion (portrait), `null` pour un aventurier d'avant les champions
@@ -502,6 +504,7 @@ export interface PartyReport {
  *  Un aventurier renvoyé depuis garde sa ligne (son XP a bien été versée). */
 export function partyReport(party: PartyResult, roster: readonly Adventurer[]): PartyReport {
   const hurt = new Set(party.hurt);
+  const light = new Set(party.lightHurt ?? []);
   const members = party.escort.map((id): PartyReportMember => {
     const adv = roster.find((a) => a.id === id);
     return {
@@ -511,6 +514,7 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
       xp: Math.max(0, Math.round(party.xp[id] ?? 0)),
       kills: Math.max(0, Math.round(party.kills[id] ?? 0)),
       hurt: hurt.has(id),
+      lightHurt: !hurt.has(id) && light.has(id),
       gone: !adv,
       championId: adv?.championId ?? null,
     };

@@ -77,6 +77,35 @@ export interface SkirmishResult {
   allyCuts: number[];
   /** Bornes cumulées des corps ennemis, dans l'ordre de la troupe. */
   foeCuts: number[];
+  /** Part des PV du groupe qui RESTE à la fin du combat (0..1). Sert à reconnaître une
+   *  victoire SERRÉE (`closeWinDown`). */
+  endShare: number;
+}
+
+/**
+ * 🩹 LA VICTOIRE SERRÉE (demandé par l'utilisateur : « il n'y a jamais de blessé même en cas
+ * de victoire ? » → les deux options : victoire serrée ET blessure légère).
+ *
+ * Une victoire qui laisse le groupe sous `closeShare` de ses PV n'est pas gratuite : ceux qui
+ * sont tombés partent à l'infirmerie pour une convalescence COURTE (`msShare` de la normale).
+ * Une victoire nette, elle, reste sans blessé. ⚠️ La POLITIQUE (qui, parmi les tombés) reste
+ * celle de chaque mission : un convoi n'en blesse qu'un, un camp tous ceux qui sont tombés.
+ */
+export const LIGHT_HURT = {
+  /** Sous cette part de PV restants à la fin, la victoire est serrée.
+   *  ⚠️ MESURÉ (trio de référence, 800 convois ; camps de la bonne taille, 400 combats) :
+   *  convois calmes avec un blessé (grave OU léger) 7,5 / 19,5 / 12,9 % aux niveaux 12/26/70
+   *  (graves seuls 3,9 / 6,5 / 2,4 %) ; routes périlleuses quasi inchangées (72-77 %) ; camps
+   *  gagnés avec un blessé léger ~30 % jusqu'au niveau 26, 2-6 % au niveau 70. À 0,35 les
+   *  camps du début montaient à 54-72 % ; à 0,5 les convois calmes à 17-21 %. */
+  closeShare: 0.25,
+  /** Durée d'une blessure légère, en part de la convalescence normale. */
+  msShare: 0.25,
+} as const;
+
+/** Les alliés tombés d'une victoire SERRÉE (vide sur une défaite ou une victoire nette). */
+export function closeWinDown(d: Pick<SkirmishResult, 'win' | 'down' | 'endShare'>): string[] {
+  return d.win && d.endShare < LIGHT_HURT.closeShare ? [...d.down] : [];
 }
 
 /** Le combat FONDU dont on lit le groupe. Générique : route, camp, tout ce qui se résout en
@@ -250,6 +279,10 @@ export function deriveSkirmish(
     front: front.map((a) => a.id),
     allyCuts,
     foeCuts,
+    endShare:
+      fight.allyPv > 0
+        ? Math.max(0, (fight.log.at(-1)?.playerPv ?? fight.allyPv) / fight.allyPv)
+        : 1,
   };
 }
 
@@ -349,7 +382,10 @@ export function fuseUnits(units: readonly SkirmishUnit[], name: string): Combata
   const modelSurv = Math.max(1e-9, survivalOf(model));
   // 🔮 Runes dorées : Premier sang pondéré par l'offense de chacun, Second souffle = le plus
   // fort porteur (on ne recopie pas celui du seul modèle : il n'est peut-être pas porteur).
-  const opening = units.reduce((s, u) => s + offenseOf(u.combatant) * (u.combatant.openingDmg ?? 0), 0);
+  const opening = units.reduce(
+    (s, u) => s + offenseOf(u.combatant) * (u.combatant.openingDmg ?? 0),
+    0,
+  );
   const stand = units.reduce((m, u) => Math.max(m, u.combatant.lastStand ?? 0), 0);
   const rest: Combatant = { ...model };
   delete rest.openingDmg;

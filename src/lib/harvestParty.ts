@@ -22,7 +22,14 @@
 // ⚠️ Le héros SEUL y passe aussi par ce module (plus par `expeSend`) : sinon une expédition
 // solo contournait les gardes.
 import { CARAVAN, missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
-import { campHurt, fightCampForce, forceHaul, type BodyLoot, type CampFight } from './camp';
+import {
+  campHurt,
+  campLightHurt,
+  fightCampForce,
+  forceHaul,
+  type BodyLoot,
+  type CampFight,
+} from './camp';
 import { mulberry32 } from './combat';
 import {
   HARVEST_TYPES,
@@ -230,6 +237,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
       win: true,
       xp: missionXpFor(escort, poi, true, g.shares, input.pantheonLevel, !!hero),
       hurt: [],
+      lightHurt: spec ? campLightHurt(g.skirmish, escort) : [],
       journal: [...g.journal, out.text],
     };
     return withSiteLoot(withGuardLoot({ ...out, text: `${tag} ${out.text}`, party }, loot), input);
@@ -249,6 +257,10 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     kills,
     xp: withShares(c.xp, g.shares),
     hurt: c.hurt,
+    // 🩹 Gardes pris de justesse OU embuscade gagnée de justesse — jamais un blessé grave.
+    lightHurt: [
+      ...new Set([...(spec ? campLightHurt(g.skirmish, escort) : []), ...(c.lightHurt ?? [])]),
+    ].filter((id) => !c.hurt.includes(id)),
     journal: [...g.journal, ...c.events.map((e) => e.text)],
   };
   // ⚠️ Le lieu rend son butin dès que ses gardes sont tombés — une embuscade perdue sur la

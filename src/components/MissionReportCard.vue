@@ -122,7 +122,8 @@
         <span v-if="card.hero || i > 0" class="sep">·</span>
         <span class="mem" :class="{ gone: m.gone }">
           {{ m.emoji }} {{ m.name }} <b class="xp">+{{ m.xp }}</b
-          ><template v-if="m.star"> ⭐</template><template v-if="m.hurt"> 🤕</template>
+          ><template v-if="m.star"> ⭐</template><template v-if="m.hurt"> 🤕</template
+          ><template v-else-if="m.lightHurt"> 🩹</template>
         </span>
       </template>
       <template v-if="hiddenTeam > 0">
@@ -195,6 +196,11 @@
             <span class="t-tags">
               <span v-if="m.star" title="Une étoile de plus">⭐</span>
               <span v-if="m.hurt" title="Blessé : à l’infirmerie">🤕</span>
+              <span
+                v-else-if="m.lightHurt"
+                title="Victoire serrée : blessure légère, courte convalescence"
+                >🩹</span
+              >
               <span v-else-if="m.down" class="t-down" title="À terre, relevé : pas d’infirmerie"
                 >à terre</span
               >
