@@ -467,30 +467,61 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
   return Math.max(0, need);
 }
 
-/** ⚒️ L'XP accumulée PAR pièce portée à `now` (avant les plafonds de la pièce). */
+/**
+ * ⚒️ L'XP (par pièce) accumulée par CHAQUE champion à `now`, non arrondie. Chacun a sa
+ * propre réserve (demandé : les champions n'arrivent pas en même temps) : elle part de ce
+ * qu'il avait quand l'effectif a changé (`perXp`) et ne court que tant qu'il est EN
+ * GARNISON — un renfort en route n'apprend rien, un champion ramené garde ce qu'il a gagné
+ * jusqu'à la récolte. Plafonnée à 24 h de production, arrêtée à l'heure de l'attaque.
+ */
+export function forgeStockBy(p: Poi, now: number): Record<string, number> {
+  const c = p.control;
+  if (c?.kind !== 'forge' || c.owner !== 'player' || c.collectedAt === undefined) return {};
+  const until = Math.min(now, c.attackAt ?? now);
+  const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
+  const rate = forgeXpPerHour(p);
+  const cap = (rate * CONTROL.storageMs) / 3600_000;
+  // Forge d'avant `perXp` : la réserve commune valait pour chaque champion posté.
+  const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
+  const out: Record<string, number> = { ...c.perXp };
+  for (const id of c.garrison) {
+    const b = out[id] ?? legacy;
+    out[id] = Math.min(Math.max(b, cap), b + (rate * ms) / 3600_000);
+  }
+  return out;
+}
+
+/** ⚒️ L'XP la plus haute qu'un champion attend à la forge (par pièce), arrondie. */
 export function forgeStock(p: Poi, now: number): number {
-  return p.control?.kind === 'forge' ? Math.floor(stockUnits(p, now, 1)) : 0;
+  const by = Object.values(forgeStockBy(p, now));
+  return by.length ? Math.floor(Math.max(...by) + 1e-9) : 0;
+}
+
+/** ⚒️ Ce qu'une réserve de forge représente en HEURES passées sur place (≤ 24 h) : la jauge
+ *  d'un champion se remplit à ce rythme. */
+export function forgeHoursOf(p: Pick<Poi, 'level'>, xp: number): number {
+  const rate = forgeXpPerHour(p);
+  return rate > 0 ? xp / rate : 0;
 }
 
 /**
- * ⚒️ Verse l'XP de la forge aux pièces RÉELLEMENT portées (`wornGear`, la règle du combat)
- * par les champions de la garnison. Chaque pièce garde ses plafonds (★5 de son rang, niveau
- * de son porteur) : `grantAdvGearXp` conserve l'excédent. Rend le MÊME tableau si rien n'a
- * bougé — le store n'écrit alors pas `adv_gear`.
+ * ⚒️ Verse l'XP de la forge aux pièces RÉELLEMENT portées (`wornGear`, la règle du combat),
+ * CHAQUE champion la sienne (`xpBy`, id → XP par pièce). Chaque pièce garde ses plafonds
+ * (★5 de son rang, niveau de son porteur) : `grantAdvGearXp` conserve l'excédent. Rend le
+ * MÊME tableau si rien n'a bougé — le store n'écrit alors pas `adv_gear`.
  */
 export function forgeGear(
   stock: AdvGear[],
   advs: Adventurer[],
-  garrison: readonly string[],
-  xp: number,
+  xpBy: Readonly<Record<string, number>>,
 ): AdvGear[] {
-  if (xp <= 0 || !garrison.length) return stock;
-  const posted = advs.filter((a) => garrison.includes(a.id));
+  const posted = advs.filter((a) => (xpBy[a.id] ?? 0) > 0);
+  if (!posted.length) return stock;
   const worn = wornGear(posted, stock);
   const next = new Map<string, AdvGear>();
   for (const a of posted)
     for (const g of worn.get(a.id) ?? []) {
-      const up = grantAdvGearXp(g, xp, a.level);
+      const up = grantAdvGearXp(g, xpBy[a.id]!, a.level);
       if (up !== g) next.set(g.id, up);
     }
   return next.size ? stock.map((g) => next.get(g.id) ?? g) : stock;
@@ -551,14 +582,36 @@ export function collectControl(
   map: ExpeditionMap;
   gold: number;
   xp: number;
-  gearXp: number;
+  gearXp: Record<string, number>;
   supplies: SupplyStock;
   runes: RuneTier[];
 } {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, xp: 0, gearXp: 0, supplies: {}, runes: [] };
+  const none = { map, gold: 0, xp: 0, gearXp: {}, supplies: {}, runes: [] };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
+  // ⚒️ La forge : chaque champion récolte SA réserve, et garde la fraction entamée (sauf
+  // un champion ramené depuis : ce qui lui reste ne compte plus).
+  if (c.kind === 'forge') {
+    const by = forgeStockBy(p, now);
+    const gearXp: Record<string, number> = {};
+    const perXp: Record<string, number> = {};
+    for (const [aid, v] of Object.entries(by)) {
+      const w = Math.floor(v + 1e-9);
+      if (w > 0) gearXp[aid] = w;
+      if (c.garrison.includes(aid) && v - w > 1e-9) perXp[aid] = v - w;
+    }
+    if (!Object.keys(gearXp).length) return none;
+    const until = Math.min(now, c.attackAt ?? now);
+    return {
+      ...none,
+      map: withControl(map, id, (q) => ({
+        ...q,
+        control: { ...q.control!, collectedAt: until, banked: 0, perXp },
+      })),
+      gearXp,
+    };
+  }
   const units = stockUnits(p, now, playerLevel);
   const whole = Math.floor(units + 1e-9);
   if (whole <= 0) return none;
@@ -597,7 +650,7 @@ export function collectControl(
     })),
     gold: c.kind === 'mine' ? whole : 0,
     xp: c.kind === 'training' ? whole : 0,
-    gearXp: c.kind === 'forge' ? whole : 0,
+    gearXp: {},
     supplies,
     runes,
   };
@@ -606,6 +659,9 @@ export function collectControl(
 /** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
  *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
 function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
+  // ⚒️ À la forge, chacun met de côté SA réserve : le nouveau venu part de zéro.
+  if (p.control!.kind === 'forge')
+    return { ...p.control!, perXp: forgeStockBy(p, at), banked: 0, collectedAt: at };
   return { ...p.control!, banked: stockUnits(p, at, playerLevel), collectedAt: at };
 }
 
