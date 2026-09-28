@@ -155,6 +155,8 @@ export function militiaOnMap(map: ExpeditionMap | null | undefined): number {
     if (!c) continue;
     n += militiaIn(c.garrison).length;
     n += militiaIn((c.reinforcing ?? []).map((r) => r.id)).length;
+    // 🏠 Ceux qui RENTRENT d'un point : pas encore à la base, mais toujours de l'effectif.
+    n += militiaIn((c.returning ?? []).map((r) => r.id)).length;
   }
   return n;
 }

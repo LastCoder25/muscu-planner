@@ -872,6 +872,7 @@ import {
   attackImminent,
   imminentControlKey,
   reinforcementsEnRoute,
+  returnsEnRoute,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
 import { advGearRoles } from '@/lib/advGear';
@@ -1459,9 +1460,16 @@ async function sendMilitia() {
   if (!uid || !p || milSend.value <= 0 || ctlBusy.value) return;
   ctlBusy.value = true;
   try {
-    const why = await char.sendMilitiaToControl(uid, p.id, milSend.value, Date.now());
+    const n = milSend.value;
+    const why = await char.sendMilitiaToControl(uid, p.id, n, Date.now());
     if (why) $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
-    else milSend.value = 0;
+    else {
+      milSend.value = 0;
+      $q.notify({
+        type: 'positive',
+        message: `🛡️ ${n} milicien${n > 1 ? 's' : ''} en route — arrivée dans ${formatDurationMin(militiaLegMin.value)}`,
+      });
+    }
   } finally {
     ctlBusy.value = false;
   }
@@ -1753,10 +1761,23 @@ const reinforcementsOnMap = computed(() =>
     arriveIn: r.midAt - now.value,
   })),
 );
+/** 🏠 Les champions et miliciens RAMENÉS d'un point, sur le chemin de la base (demandé :
+ *  « qu'ils se voient sur la carte »). Retour simple : le trajet part du point. */
+const returnsOnMap = computed(() =>
+  returnsEnRoute(char.row?.expedition_map, now.value).map((r) => ({
+    id: 'h' + r.key,
+    poi: r.poi,
+    members: r.members,
+    at: travelPosition(r, now.value),
+    pct: voyageProgress(r, now.value).overall * 100,
+    arriveIn: r.returnAt - now.value,
+  })),
+);
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
 const travelersOnMap = computed(() => [
   ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️', kind: 'party' as const })),
   ...reinforcementsOnMap.value.map((r) => ({ ...r, emo: '🛡️', kind: 'reinf' as const })),
+  ...returnsOnMap.value.map((r) => ({ ...r, emo: '🏠', kind: 'reinf' as const })),
 ]);
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
  *  lirait comme plusieurs rangées collées. */
@@ -1797,7 +1818,7 @@ const trips = computed(() => {
     });
   }
   for (const r of reinforcementsOnMap.value) {
-    const n = r.members.length;
+    const who = crewLabel(r.members);
     out.push({
       key: r.id,
       kind: 'van',
@@ -1809,11 +1830,37 @@ const trips = computed(() => {
       withHero: false,
       members: r.members,
       haul: [],
-      title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${n} champion${n > 1 ? 's' : ''} · arrivée dans ${formatDuration(r.arriveIn)}`,
+      title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${who} · arrivée dans ${formatDuration(r.arriveIn)}`,
+    });
+  }
+  for (const r of returnsOnMap.value) {
+    out.push({
+      key: r.id,
+      kind: 'van',
+      who: '🏠',
+      poi: r.poi,
+      time: `↩ ${formatDuration(r.arriveIn)}`,
+      pct: r.pct,
+      back: true,
+      withHero: false,
+      members: r.members,
+      haul: [],
+      title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatDuration(r.arriveIn)}`,
     });
   }
   return out;
 });
+/** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
+function crewLabel(members: readonly string[]): string {
+  const nMil = militiaIn(members).length;
+  const nAdv = members.length - nMil;
+  return [
+    nAdv ? `${nAdv} champion${nAdv > 1 ? 's' : ''}` : '',
+    nMil ? `${nMil} milicien${nMil > 1 ? 's' : ''}` : '',
+  ]
+    .filter(Boolean)
+    .join(' + ');
+}
 /** 🔴 Le voyage qu'on a touché : sa tuile et son lieu sur la carte portent un halo ;
  *  retoucher la même tuile les éteint. Un voyage qui se termine emporte son halo
  *  (`focusPoi` ne le retrouve plus). */

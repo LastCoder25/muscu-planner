@@ -108,6 +108,12 @@ export interface ControlState {
    *  ne combattent avant d'être arrivés. `from` = leur départ de la ville (absent sur les
    *  renforts envoyés avant v0.1263) : c'est lui qui permet de les DESSINER en route. */
   reinforcing?: { id: string; at: number; from?: number }[];
+  /** 🏠 Champions et miliciens RAMENÉS, en route vers la base : partis du point à `from`,
+   *  rentrés à `at` (2026-09-28, demandé : « qu'ils se voient sur la carte »). Ils ne
+   *  comptent plus dans la garnison ; un champion reste occupé jusqu'à `at` (`busyUntil`),
+   *  un milicien rejoint la base à `at`. Rangés sur le POINT, pas sur la carte : le point est
+   *  fixe, alors que `advanceWorld` reconstruit la carte champ par champ. */
+  returning?: { id: string; from: number; at: number }[];
   /** ⛏️ L'or déjà sorti de terre quand l'effectif a changé (renfort arrivé, champion
    *  ramené) : la réserve repart de là, au NOUVEAU débit — sans quoi le passé serait
    *  recalculé au mauvais débit. */

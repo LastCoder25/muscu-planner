@@ -308,6 +308,9 @@ export function loseControl(map: ExpeditionMap, id: string, playerLevel: number)
       garrison: [],
       retakes,
       ...enemyForce(`${map.seed}:${id}`, retakes),
+      // 🏠 Ceux déjà sur le chemin du retour ne sont plus là : le lieu tombe sans eux, ils
+      // finissent leur trajet (sinon un milicien en route vers la base disparaîtrait).
+      ...(p.control!.returning?.length ? { returning: p.control!.returning } : {}),
     };
     return { ...p, level: controlLevel(`${map.seed}:${id}`, retakes, playerLevel), control: next };
   });
@@ -828,6 +831,78 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
     }
   }
   return [...out.values()];
+}
+
+/** 🏠 Des champions ou miliciens RAMENÉS d'un point partent vers la base : on les dessine
+ *  sur la carte jusqu'à `at`. ⚠️ Ils doivent déjà être sortis de la garnison et des renforts
+ *  (`releaseFromControl`) : ceci ne fait que noter le trajet. */
+export function sendHomeFromControl(
+  map: ExpeditionMap,
+  id: string,
+  ids: readonly string[],
+  from: number,
+  at: number,
+): ExpeditionMap {
+  if (!ids.length) return map;
+  return withControl(map, id, (p) => ({
+    ...p,
+    control: {
+      ...p.control!,
+      returning: [...(p.control!.returning ?? []), ...ids.map((x) => ({ id: x, from, at }))],
+    },
+  }));
+}
+
+/** 🏠 Les retours EN ROUTE, tels que la carte les dessine : un voyage réduit à sa phase
+ *  RETOUR (le point → la ville), d'où `sentAt` = `midAt` = le départ du point. Ceux partis
+ *  ensemble forment UN trajet. */
+export function returnsEnRoute(
+  map: ExpeditionMap | null | undefined,
+  now: number,
+): ReinforcementTrip[] {
+  const out = new Map<string, ReinforcementTrip>();
+  for (const p of map?.pois ?? []) {
+    for (const r of p.control?.returning ?? []) {
+      if (now >= r.at) continue;
+      const key = `${p.id}<${r.from}>${r.at}`;
+      const t = out.get(key);
+      if (t) t.members.push(r.id);
+      else
+        out.set(key, {
+          key,
+          poi: p,
+          members: [r.id],
+          sentAt: r.from,
+          midAt: r.from,
+          returnAt: r.at,
+        });
+    }
+  }
+  return [...out.values()];
+}
+
+/** 🏠 Les retours ARRIVÉS quittent la carte ; rend les miliciens rentrés (à remettre à la
+ *  base). Rend la MÊME carte si personne n'est arrivé (le store n'écrit pas à vide). */
+export function settleReturns(
+  map: ExpeditionMap,
+  now: number,
+): { map: ExpeditionMap; militiaHome: number } {
+  let out = map;
+  let militiaHome = 0;
+  for (const p of map.pois) {
+    const back = (p.control?.returning ?? []).filter((r) => r.at <= now);
+    if (!back.length) continue;
+    militiaHome += back.filter((r) => isMilitiaId(r.id)).length;
+    out = withControl(out, p.id, (q) => {
+      const rest = (q.control!.returning ?? []).filter((r) => r.at > now);
+      const c = { ...q.control! };
+      // Clé ABSENTE quand plus personne ne rentre (la carte se compare par JSON).
+      if (rest.length) c.returning = rest;
+      else delete c.returning;
+      return { ...q, control: c };
+    });
+  }
+  return { map: out, militiaHome };
 }
 
 /** 🏰 Une garnison coupée à ses places, dans l'ordre d'arrivée : 5 au plus en tout
