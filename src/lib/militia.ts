@@ -161,6 +161,19 @@ export function militiaOnMap(map: ExpeditionMap | null | undefined): number {
   return n;
 }
 
+/** 🛡️ L'effectif de la milice, pour la ligne des disponibilités (2026-09-28, demandé :
+ *  « le nombre de miliciens stationnés / total ») : `posted` = postés sur une place forte ou
+ *  en route vers elle (`militiaOnMap`), `total` = tous ceux qui existent, base comprise — la
+ *  même somme que la Caserne compare à son plafond. */
+export function militiaCount(
+  s: MilitiaState | null | undefined,
+  map: ExpeditionMap | null | undefined,
+): { posted: number; home: number; total: number } {
+  const posted = militiaOnMap(map);
+  const home = s?.home ?? 0;
+  return { posted, home, total: posted + home };
+}
+
 const unitCache = new Map<number, Combatant>();
 
 /**

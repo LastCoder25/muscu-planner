@@ -152,6 +152,35 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('class="av-medal"');
     expect(out).toContain('aria-label="Bronze : 2 disponible(s) sur 3"');
     expect(out).not.toContain('av-ico">🏅');
+    // Sans milice, pas de pastille 🛡️ (une pastille 0/0 n'apprend rien).
+    expect(out).not.toContain('av-ico">🛡️');
+  }, 30_000);
+
+  // 🛡️ 2026-09-28 : les miliciens postés sur des places fortes / tous ceux qui existent.
+  it('AvailabilityLine compte les miliciens postés sur le total', async () => {
+    const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
+    const control = {
+      kind: 'mine',
+      owner: 'player',
+      garrison: ['mil:1', 'mil:2', 'a1'],
+      reinforcing: [{ id: 'mil:3', at: 9e15 }],
+      retakes: 0,
+      faction: 'bandits',
+      size: 1,
+    };
+    const poi = { id: 'ctl_mine', type: 'control', level: 5, x: 0, y: 0, distNorm: 0.5 };
+    const row = {
+      ...ROW,
+      base: { militia: { home: 4, producedAt: 0, seq: 9 } },
+      expedition_map: { pois: [{ ...poi, spawnedAt: 0, expiresAt: 9e15, control }] },
+    };
+    let out = '';
+    expect(
+      await mountIt(AvailabilityLine, { now: 1 }, row, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    // 3 hors de la base (2 postés + 1 en route) sur 7 (4 à la base).
+    expect(out).toMatch(/av-ico">🛡️<\/span>3\/7/);
+    expect(out).toContain('3 milicien(s) posté(s) sur 7 (4 à la base)');
   }, 30_000);
 
   // 🗺️ v0.1202 : la carte d'expédition est découpée — ses trois morceaux se montent seuls.
