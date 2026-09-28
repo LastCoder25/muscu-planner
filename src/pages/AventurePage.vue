@@ -831,6 +831,16 @@
             >
               🏆
             </button>
+            <!-- 🔮 Sac à reliques (demandé par l'utilisateur) : une relique porte un POUVOIR, elle
+                 se choisit sur son effet, pas sur une puissance — elle a donc son propre sac. -->
+            <button
+              v-if="relicBag.length"
+              class="gi-b"
+              title="Reliques — tes reliques en réserve"
+              @click="openRelicBag()"
+            >
+              🔮<span class="gi-badge">{{ relicBag.length }}</span>
+            </button>
             <button
               class="gi-b"
               :title="
@@ -912,7 +922,10 @@
               </template>
               <div v-else class="slot-vide">
                 Emplacement vide<template v-if="bagCountForSlot(slot) > 0">
-                  · <b>{{ bagCountForSlot(slot) }} au sac</b></template
+                  · <b
+                    >{{ bagCountForSlot(slot) }}
+                    {{ slot === 'relic' ? 'en réserve 🔮' : 'au sac' }}</b
+                  ></template
                 >
               </div>
             </div>
@@ -1047,6 +1060,9 @@
                 <template v-if="bagMode === 'trophies'"
                   >🏆 Trophées ({{ trophyBag.length }})</template
                 >
+                <template v-else-if="bagMode === 'relics'"
+                  >🔮 Reliques ({{ relicBag.length }})</template
+                >
                 <template v-else>🎒 Sac ({{ bagCount }})</template>
               </div>
               <button class="shop-x" aria-label="Fermer" @click="bagOpen = false">✕</button>
@@ -1057,9 +1073,17 @@
             <div v-if="optimizing" class="bag-ranking">
               ⏳ Classement en cours — je compare ton sac à ton meilleur build possible…
             </div>
-            <template v-if="bagMode === 'trophies' ? trophyBag.length : bagCount">
+            <template
+              v-if="
+                bagMode === 'trophies'
+                  ? trophyBag.length
+                  : bagMode === 'relics'
+                    ? relicBag.length
+                    : bagCount
+              "
+            >
               <!-- Bannière du filtre « mieux au sac » (posé via le badge d'un item équipé). -->
-              <div v-if="betterFilterSlot && bagMode === 'items'" class="better-banner">
+              <div v-if="betterFilterSlot && bagMode !== 'trophies'" class="better-banner">
                 🔼 Meilleurs si équipés pour <b>{{ SLOT_LABEL[betterFilterSlot] }}</b>
                 <button class="bb-clear" @click="setInvFilter('all')">Tout voir ✕</button>
               </div>
@@ -1073,7 +1097,7 @@
                   Tous
                 </button>
                 <button
-                  v-for="slot in SLOTS"
+                  v-for="slot in BAG_SLOTS"
                   :key="slot"
                   class="if-chip"
                   :class="{ on: invFilter === slot && !betterFilterSlot }"
@@ -1088,7 +1112,7 @@
                quoi jeter demandait un calcul de 3 s et ralentissait l'ouverture du Sac. Le
                tri se fait au 🔒. Épargnés : familiers, porté, et les pièces que le 🪄
                retient si l'optimum est déjà connu. Respecte le filtre type. -->
-              <div v-if="bagMode === 'items' && belowCount > 0" class="bulk">
+              <div v-if="bagMode !== 'trophies' && belowCount > 0" class="bulk">
                 <span class="bulk-lbl"
                   >{{ belowCount }} objet{{ belowCount > 1 ? 's' : '' }} à vendre
                   <span class="bulk-note"
@@ -1229,6 +1253,9 @@
                 </div>
               </div>
             </template>
+            <div v-else-if="bagMode === 'relics'" class="empty-inv">
+              Aucune relique en réserve. Elles tombent des donjons et des boss 🔮
+            </div>
             <div v-else-if="bagMode === 'trophies'" class="empty-inv">
               Aucun trophée en réserve — ton trophée est exposé. Abats un boss entre amis pour en
               gagner d’autres 🐉
@@ -5800,7 +5827,24 @@ const trophyBag = computed<Item[]>(() =>
 const ownsTrophy = computed(() => !!equippedTrophy.value || trophyBag.value.length > 0);
 /** Ce que la modale du sac montre : le butin, ou les trophées. Un seul rendu de carte
  *  d'objet pour les deux — deux copies de ce bloc divergeraient. */
-const bagMode = ref<'items' | 'trophies'>('items');
+const bagMode = ref<'items' | 'trophies' | 'relics'>('items');
+// 🔮 RELIQUES : leur propre sac (bouton 🔮), hors du sac du butin — une relique porte un
+// pouvoir à jauge, elle se choisit sur son effet (demandé par l'utilisateur).
+const isRelic = (i: Item) => i.slot === 'relic';
+/** Les emplacements filtrables dans le sac du butin : tous sauf la relique. */
+const BAG_SLOTS = SLOTS.filter((s) => s !== 'relic');
+const relicBag = computed<Item[]>(() =>
+  (char.row?.inventory ?? [])
+    .filter(isRelic)
+    .sort(
+      (a, b) => RARITY_RANK[b.rarity] - RARITY_RANK[a.rarity] || rollJet(b.roll) - rollJet(a.roll),
+    ),
+);
+function openRelicBag(betterOnly = false) {
+  betterFilterSlot.value = betterOnly ? 'relic' : null;
+  bagMode.value = 'relics';
+  bagOpen.value = true;
+}
 function openTrophyBag() {
   betterFilterSlot.value = null;
   bagMode.value = 'trophies';
@@ -5812,7 +5856,14 @@ function bagCountForSlot(slot: ItemSlot): number {
 // (Filtre par SET retiré du sac — les pièces de set vivent dans « Mes sets », plus au sac.)
 const filteredInventory = computed<Item[]>(() => {
   if (bagMode.value === 'trophies') return trophyBag.value;
-  const inv = (char.row?.inventory ?? []).filter((i) => !isFamiliar(i) && !isTrophy(i));
+  if (bagMode.value === 'relics') {
+    if (betterFilterSlot.value !== 'relic') return relicBag.value;
+    const ids = new Set(betterInBagForSlot('relic').map((i) => i.id));
+    return relicBag.value.filter((i) => ids.has(i.id));
+  }
+  const inv = (char.row?.inventory ?? []).filter(
+    (i) => !isFamiliar(i) && !isTrophy(i) && !isRelic(i),
+  );
   const bf = betterFilterSlot.value;
   let list: Item[];
   if (bf) {
@@ -5849,6 +5900,7 @@ function betterInBagCount(slot: ItemSlot): number {
 }
 // Clic sur le badge d'un item équipé → ouvre le Sac (modale) filtré sur ses upgrades.
 function showBetterForSlot(slot: ItemSlot) {
+  if (slot === 'relic') return openRelicBag(true);
   bagMode.value = 'items';
   betterFilterSlot.value = slot;
   invFilter.value = slot;
@@ -5862,7 +5914,9 @@ function setInvFilter(f: ItemSlot | 'all') {
 // Nb d'objets RÉELLEMENT dans le Sac = hors familiers (rangés dans leur propre section)
 // → sinon le badge « Sac » comptait un familier fantôme (ticket e3d61676).
 const bagCount = computed(
-  () => (char.row?.inventory ?? []).filter((i) => !isFamiliar(i) && !isTrophy(i)).length,
+  () =>
+    (char.row?.inventory ?? []).filter((i) => !isFamiliar(i) && !isTrophy(i) && !isRelic(i))
+      .length,
 );
 
 // ── Loadouts (sets d'équipement rangés) — 1 par VOIE (8 slots) ──
@@ -6637,7 +6691,7 @@ function doSellSpares(setIndex?: number) {
 // Nettoyage en masse : objets du sac moins rares que l'équipé du même slot.
 // Slot ciblé par le nettoyage en masse = le filtre du sac actif (sinon tous).
 const bulkSlot = computed<ItemSlot | undefined>(() =>
-  invFilter.value === 'all' ? undefined : invFilter.value,
+  bagMode.value !== 'items' || invFilter.value === 'all' ? undefined : invFilter.value,
 );
 // Objets du sac qui N'AMÉLIORENT PAS ta puissance si équipés → candidats à la casse/vente
 // en masse. Puissance FIXE (grade + enchant) → comparaison directe « si équipé ». Slot vide
@@ -6655,6 +6709,8 @@ const powerLossItems = computed<Item[]>(() => {
   return r.inventory.filter((it) => {
     if (it.locked) return false;
     if (isFamiliar(it) || isTrophy(it)) return false;
+    // 🔮 Le sac des reliques vend ses reliques, celui du butin ne les touche jamais.
+    if (isRelic(it) !== (bagMode.value === 'relics')) return false;
     if (bulkSlot.value && it.slot !== bulkSlot.value) return false;
     return !(optimum.value && inOptimum(it));
   });
@@ -6666,7 +6722,11 @@ const belowGold = computed(() =>
 );
 // Libellé du périmètre (« du sac » ou « [type] ») pour être explicite.
 const bulkScope = computed(() =>
-  bulkSlot.value ? SLOT_LABEL[bulkSlot.value].toLowerCase() : 'ton sac',
+  bagMode.value === 'relics'
+    ? 'tes reliques'
+    : bulkSlot.value
+      ? SLOT_LABEL[bulkSlot.value].toLowerCase()
+      : 'ton sac',
 );
 function doSellBelow() {
   const ids = powerLossItems.value.filter(canSell).map((i) => i.id);
