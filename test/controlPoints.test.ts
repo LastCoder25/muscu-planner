@@ -100,8 +100,8 @@ describe('🏰 les quatre points', () => {
   });
   it('🎯 l’XP du camp s’accumule par champion, plafonnée à 24 h', () => {
     const { p } = held('training');
-    expect(trainingStock(p, 6 * H)).toBeGreaterThan(0);
-    expect(trainingStock(p, 24 * H)).toBe(trainingStock(p, 40 * H));
+    expect(trainingStock(p, 6 * H, 30)).toBeGreaterThan(0);
+    expect(trainingStock(p, 24 * H, 30)).toBe(trainingStock(p, 40 * H, 30));
   });
   it('🌿 le jardin cueille 2 consommables par jour à un jardinier, plus vite à plusieurs', () => {
     expect(gardenStock(held('garden', ['a0']).p, 24 * H)).toBe(2);

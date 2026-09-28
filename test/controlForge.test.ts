@@ -74,10 +74,10 @@ describe('⚒️ la forge de campagne', () => {
   it('elle accumule de l’XP par pièce, deux fois plus vite que le camp n’en donne aux champions', () => {
     const m = captureControl(mapAt(30), FORGE, ['a0', 'a1', 'a2'], 0, 7);
     const p = pt(m, FORGE);
-    expect(forgeXpPerHour(p)).toBeCloseTo(2 * trainingXpPerHour(p), 9);
-    expect(forgeStock(p, 6 * H)).toBe(Math.floor(forgeXpPerHour(p) * 6));
+    expect(forgeXpPerHour(30)).toBeCloseTo(2 * trainingXpPerHour(30), 9);
+    expect(forgeStock(p, 6 * H, 30)).toBe(Math.floor(forgeXpPerHour(30) * 6));
     const c = collectControl(m, FORGE, 6 * H, 30);
-    for (const id of ['a0', 'a1', 'a2']) expect(c.gearXp[id]).toBe(forgeStock(p, 6 * H));
+    for (const id of ['a0', 'a1', 'a2']) expect(c.gearXp[id]).toBe(forgeStock(p, 6 * H, 30));
     expect(c.xpBy).toEqual({});
     expect(c.gold).toBe(0);
   });
@@ -105,8 +105,8 @@ describe('⚒️ la forge de campagne', () => {
       m = reinforceControl(m, FORGE, ['a1'], 4 * H);
       m = at(m, 5 * H);
       const p = pt(m, FORGE);
-      const r = forgeXpPerHour(p);
-      const by = forgeStockBy(p, 10 * H);
+      const r = forgeXpPerHour(30);
+      const by = forgeStockBy(p, 10 * H, 30);
       expect(by.a0).toBeCloseTo(10 * r, 6);
       expect(by.a1).toBeCloseTo(6 * r, 6);
       const c = collectControl(m, FORGE, 10 * H, 30);
@@ -117,7 +117,7 @@ describe('⚒️ la forge de campagne', () => {
     it('un renfort en route n’apprend rien', () => {
       let m = captureControl(mapAt(30), FORGE, ['a0'], 0, 7);
       m = reinforceControl(m, FORGE, ['a1'], 8 * H);
-      const by = forgeStockBy(pt(m, FORGE), 6 * H);
+      const by = forgeStockBy(pt(m, FORGE), 6 * H, 30);
       expect(by.a1).toBeUndefined();
     });
 
@@ -125,20 +125,20 @@ describe('⚒️ la forge de campagne', () => {
       let m = captureControl(mapAt(30), FORGE, ['a0', 'a1'], 0, 7);
       m = releaseFromControl(m, FORGE, ['a1'], 3 * H, 30);
       const p = pt(m, FORGE);
-      const r = forgeXpPerHour(p);
-      const by = forgeStockBy(p, 9 * H);
+      const r = forgeXpPerHour(30);
+      const by = forgeStockBy(p, 9 * H, 30);
       expect(by.a1).toBeCloseTo(3 * r, 6);
       expect(by.a0).toBeCloseTo(9 * r, 6);
       const c = collectControl(m, FORGE, 9 * H, 30);
       expect(c.gearXp.a1).toBe(Math.floor(3 * r + 1e-9));
       // La récolte vide sa ligne : il ne réapparaît plus.
-      expect(forgeStockBy(pt(c.map, FORGE), 12 * H).a1).toBeUndefined();
+      expect(forgeStockBy(pt(c.map, FORGE), 12 * H, 30).a1).toBeUndefined();
     });
 
     it('la fraction entamée reste acquise d’une récolte à l’autre', () => {
       const m = captureControl(mapAt(30), FORGE, ['a0'], 0, 7);
       const p0 = pt(m, FORGE);
-      const r = forgeXpPerHour(p0);
+      const r = forgeXpPerHour(30);
       const t = (2.5 / r) * H; // 2,5 XP
       const c1 = collectControl(m, FORGE, t, 30);
       expect(c1.gearXp.a0).toBe(2);
@@ -150,7 +150,7 @@ describe('⚒️ la forge de campagne', () => {
       const m = captureControl(mapAt(30), FORGE, ['a0', 'a1'], 0, 7);
       const p = pt(m, FORGE);
       const legacy = { ...p, control: { ...p.control!, banked: 40 } };
-      const by = forgeStockBy(legacy, 0);
+      const by = forgeStockBy(legacy, 0, 30);
       expect(by.a0).toBe(40);
       expect(by.a1).toBe(40);
     });
@@ -158,7 +158,7 @@ describe('⚒️ la forge de campagne', () => {
     it('chaque jauge plafonne à 24 h de présence', () => {
       const m = captureControl(mapAt(30), FORGE, ['a0'], 0, 7);
       const p = pt(m, FORGE);
-      expect(forgeStockBy(p, 40 * H).a0).toBeCloseTo(24 * forgeXpPerHour(p), 6);
+      expect(forgeStockBy(p, 40 * H, 30).a0).toBeCloseTo(24 * forgeXpPerHour(30), 6);
     });
   });
 });

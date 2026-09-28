@@ -1540,7 +1540,7 @@ const controlProd = computed(() => {
     case 'mine':
       return `⛏️ ${controlRate.value.toLocaleString('fr-FR')} 🪙/h · réserve ${controlGold.value.toLocaleString('fr-FR')} 🪙 (24 h au plus)`;
     case 'training':
-      return `🎯 +${Math.round(trainingXpPerHour(p))} XP/h par champion, pour chacun selon son temps ici`;
+      return `🎯 +${Math.round(trainingXpPerHour(heroLevel.value))} XP/h par champion, pour chacun selon son temps ici`;
     case 'garden':
       return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${CONTROL.gardenHoursPerItem} h`;
     case 'scriptorium':
@@ -1548,7 +1548,7 @@ const controlProd = computed(() => {
         ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
         : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${runeHoursFor(c.garrison.length) ?? '—'} h (${c.garrison.length}/3 copistes, 24 h à 3)`;
     case 'forge':
-      return `⚒️ +${Math.round(forgeXpPerHour(p))} XP/h par pièce portée, pour chaque champion selon son temps ici`;
+      return `⚒️ +${Math.round(forgeXpPerHour(heroLevel.value))} XP/h par pièce portée, pour chaque champion selon son temps ici`;
     case 'tower':
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
@@ -1559,13 +1559,16 @@ const controlProd = computed(() => {
 const forgeGauges = computed(() => {
   const p = livePoi.value;
   if (!p || !isPerChampKind(p.control?.kind) || p.control.owner !== 'player') return [];
-  const by = champStockBy(p, now.value);
+  const by = champStockBy(p, now.value, heroLevel.value);
   const names = new Map(char.advList.map((a) => [a.id, a.name]));
-  const full = champHoursOf(p, 1) > 0 ? CONTROL.storageMs / 3600_000 / champHoursOf(p, 1) : 0;
+  const full =
+    champHoursOf(p, 1, heroLevel.value) > 0
+      ? CONTROL.storageMs / 3600_000 / champHoursOf(p, 1, heroLevel.value)
+      : 0;
   return Object.entries(by)
     .filter(([id, v]) => p.control!.garrison.includes(id) || v >= 1)
     .map(([id, v]) => {
-      const h = champHoursOf(p, v);
+      const h = champHoursOf(p, v, heroLevel.value);
       return {
         id,
         name: (p.control!.garrison.includes(id) ? '' : '↩ ') + (names.get(id) ?? '?'),
@@ -1593,8 +1596,8 @@ const controlReady = computed(() => {
   if (!p) return false;
   return (
     controlGold.value > 0 ||
-    trainingStock(p, now.value) > 0 ||
-    forgeStock(p, now.value) > 0 ||
+    trainingStock(p, now.value, heroLevel.value) > 0 ||
+    forgeStock(p, now.value, heroLevel.value) > 0 ||
     runeStock(p, now.value) > 0 ||
     gardenStock(p, now.value) > 0
   );

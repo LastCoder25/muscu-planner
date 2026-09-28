@@ -38,7 +38,7 @@ describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
 
   it('🎓 le camp dit l’XP en attente par champion', () => {
     const p = held('training');
-    expect(controlProgress(p, 5 * H, L)!.text).toBe(`🎓 +${trainingStock(p, 5 * H)} XP`);
+    expect(controlProgress(p, 5 * H, L)!.text).toBe(`🎓 +${trainingStock(p, 5 * H, 30)} XP`);
   });
 
   it('📜 le Scriptorium dit le % de la rune ET le temps restant, puis « prête »', () => {

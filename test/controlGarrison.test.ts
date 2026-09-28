@@ -2,25 +2,21 @@
 // lieu fixe qui produit ou a un autre effet doit être amélioré selon le nombre en garnison,
 // sauf les producteurs d'XP — mais il faut qu'ils soient rentables »).
 import { describe, expect, it } from 'vitest';
-import {
-  CONTROL,
-  campXpFor,
-  runeHoursFor,
-  seatsOf,
-  trainingXpPerHour,
-} from '@/lib/controlPoints';
+import { CONTROL, campXpFor, runeHoursFor, seatsOf, trainingXpPerHour } from '@/lib/controlPoints';
 import { catchUpMult, refChampionAdv } from '@/lib/caravan';
 import { trialXpBase } from '@/lib/skirmish';
 import type { Adventurer } from '@/lib/adventurers';
 
-const champ = (level: number) => ({ ...refChampionAdv(level, 0), id: 'a', level, xp: 0 }) as Adventurer;
+const champ = (level: number) =>
+  ({ ...refChampionAdv(level, 0), id: 'a', level, xp: 0 }) as Adventurer;
 
 describe('🏰 la production grandit avec la garnison, jusqu’à 5', () => {
   it('chaque présent de plus rapporte, toujours moins que le précédent', () => {
     const s = CONTROL.garrisonShare;
     expect(s).toHaveLength(6);
     for (let n = 1; n < s.length; n++) expect(s[n]!).toBeGreaterThan(s[n - 1]!);
-    for (let n = 2; n < s.length; n++) expect(s[n]! - s[n - 1]!).toBeLessThanOrEqual(s[n - 1]! - s[n - 2]! + 1e-9);
+    for (let n = 2; n < s.length; n++)
+      expect(s[n]! - s[n - 1]!).toBeLessThanOrEqual(s[n - 1]! - s[n - 2]! + 1e-9);
     // 1 → 3 inchangé : un joueur qui en postait 3 ne perd rien.
     expect(s.slice(0, 4)).toEqual([0, 0.5, 0.8, 1]);
   });
@@ -48,7 +44,7 @@ describe('🎯 le camp est rentable pour ceux qu’il accueille', () => {
     // Mesuré : mission à mi-distance (≈ 3,4 h d'aller-retour) au niveau 30 pour un champion
     // 20 : 48 XP/h en enchaînant sans temps mort, soit ~2 missions (~330 XP) par jour pour un
     // joueur qui passe matin et soir. Le camp, lui, tourne sans pause.
-    const perDay = campXpFor(champ(20), trainingXpPerHour({ level: 30 }) * 24, 30);
+    const perDay = campXpFor(champ(20), trainingXpPerHour(30) * 24, 30);
     expect(perDay).toBeGreaterThan(2 * trialXpBase(30) * catchUpMult(20, 30));
   });
 });

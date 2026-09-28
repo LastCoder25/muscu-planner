@@ -58,12 +58,11 @@ describe('📜 le Scriptorium', () => {
     expect(at(['a'], 10 * 48)).toEqual({ n: 1, prog: 1 });
   });
 
-  it('ramasser rend la rune, à la couleur que permet le rang du lieu', () => {
+  it('ramasser rend la rune, à la couleur que permet le rang du HÉROS (un point tenu est neutre)', () => {
     const counts: Record<RuneTier, number> = { green: 0, blue: 0, violet: 0, gold: 0 };
     let odds: Record<RuneTier, number> | null = null;
     for (let seed = 1; seed <= 400; seed++) {
       const m0 = held(seed);
-      const p = pt(m0);
       const m = {
         ...m0,
         pois: m0.pois.map((q) =>
@@ -75,10 +74,10 @@ describe('📜 le Scriptorium', () => {
       counts[c.runes[0]!]++;
       odds = placeRuneOdds({
         place: 'control',
-        placeRankIndex: characterRank(p.level).rankIndex,
+        placeRankIndex: characterRank(30).rankIndex,
         playerRankIndex: characterRank(30).rankIndex,
       });
-      // Une couleur que CE rang ne donne jamais ne sort jamais (rang du point, carte par carte).
+      // Une couleur que CE rang ne donne jamais ne sort jamais (point tenu = rang du héros).
       expect(odds[c.runes[0]!]).toBeGreaterThan(0);
     }
     // Les couleurs rares le restent : il y a plus de vertes que de dorées.

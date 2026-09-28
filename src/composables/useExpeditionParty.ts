@@ -401,6 +401,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
     const picked = partyStay.value.filter((id) => ids.includes(id));
     return [...picked, ...ids.filter((id) => !picked.includes(id))].slice(0, stayCap.value);
   });
+  /** 🎲 Le pronostic se juge contre les assaillants les plus forts possibles (tirés entre Bronze
+   *  et le rang du héros) : la tenue affichée est un PLANCHER, jamais une promesse. */
+  const heldAt = (p: Poi): Poi => ({ ...p, level: Math.max(1, heroLevel.value) });
   /** 🛡️ La part des attaques que la garnison CHOISIE repoussera — renfort ennemi compris,
    *  donc jamais plus de `CONTROL.maxHold` (la même règle que la bataille). ⚠️ Sans horloge :
    *  ne se recalcule qu'au changement de lieu ou de garnison, pas à chaque tick. */
@@ -409,7 +412,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
     if (!p || !stayCap.value) return null;
     const ids = new Set(stayIds.value);
     const g = partyAdvs.value.filter((a) => ids.has(a.id));
-    return g.length ? Math.round(garrisonHold(p, partyAllies(g, roadCtx.value, null)) * 100) : null;
+    return g.length
+      ? Math.round(garrisonHold(heldAt(p), partyAllies(g, roadCtx.value, null)) * 100)
+      : null;
   });
   /** 🌿 Un point à UNE place : la tenue de chaque candidat, pour choisir qui reste. */
   const stayHoldOf = computed<Record<string, number>>(() => {
@@ -418,7 +423,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     return Object.fromEntries(
       partyAdvs.value.map((a) => [
         a.id,
-        Math.round(garrisonHold(p, partyAllies([a], roadCtx.value, null)) * 100),
+        Math.round(garrisonHold(heldAt(p), partyAllies([a], roadCtx.value, null)) * 100),
       ]),
     );
   });

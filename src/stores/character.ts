@@ -276,6 +276,7 @@ import {
   ensureControls,
   holdControl,
   loseControl,
+  attackerLevel,
   markAssault,
   retakeForce,
   retakeBoost,
@@ -3533,6 +3534,9 @@ export const useCharacterStore = defineStore('character', () => {
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
+      // 🎲 Les assaillants ont LEUR rang, tiré à chaque attaque ; s'ils l'emportent, le lieu
+      // le garde (un point tenu, lui, est neutre : il produit au niveau du héros).
+      const foe = { ...p, level: attackerLevel(map.seed, p, playerLevel) };
       // ⛏️🎯🌿 Ce que le point a produit jusqu'à l'attaque part AVANT le combat, même s'il
       // est perdu : on ne punit pas l'absence en confisquant ce qui était déjà sorti.
       const h = harvestControlIn(map, advs, gearStock, p.id, at, playerLevel);
@@ -3546,12 +3550,15 @@ export const useCharacterStore = defineStore('character', () => {
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
-      const force = retakeForce(p, retakeBoost(p, [...partyAllies(escort, kit, null), ...militia]));
-      const seed = (at ^ (p.level * 2654435761)) >>> 0 || 1;
+      const force = retakeForce(
+        foe,
+        retakeBoost(foe, [...partyAllies(escort, kit, null), ...militia]),
+      );
+      const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
       const o =
         escort.length || militia.length
           ? resolveCamp({
-              poi: p,
+              poi: foe,
               spec: force,
               escort,
               road: kit,
@@ -3568,7 +3575,7 @@ export const useCharacterStore = defineStore('character', () => {
       const label = CONTROL_LABEL[p.control!.kind];
       const msg: ExpeditionMessage = {
         ...buildMessage({
-          poi: p,
+          poi: foe,
           sentAt: at,
           midAt: at,
           returnAt: at,
@@ -3606,7 +3613,9 @@ export const useCharacterStore = defineStore('character', () => {
       if (!held) milHome += militiaIn((p.control!.reinforcing ?? []).map((r) => r.id)).length;
       const dead = o?.party?.militiaLost ?? [];
       if (held && dead.length) map = releaseFromControl(map, p.id, dead, at, playerLevel);
-      map = held ? holdControl(map, p.id, at, activeDays7) : loseControl(map, p.id, playerLevel);
+      map = held
+        ? holdControl(map, p.id, at, activeDays7)
+        : loseControl(map, p.id, playerLevel, { level: foe.level, faction: force.faction });
       // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
       // route (ils font demi-tour ; seule la garnison, qui a combattu, part à l'infirmerie).
       advs = advs.map((a) => (!held && a.posted === p.id ? { ...a, posted: undefined } : a));
@@ -3772,7 +3781,9 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       // 🏠 Tous rentrent À PIED : on les voit revenir sur la carte, les miliciens rejoignent
       // la base à leur arrivée (`settleReturns`), les champions restent occupés jusque-là.
-      expedition_map: home.map(releaseFromControl(h.map, id, [...champs, ...mil], now, playerLevel)),
+      expedition_map: home.map(
+        releaseFromControl(h.map, id, [...champs, ...mil], now, playerLevel),
+      ),
       adventurers: h.advs.map((a) =>
         a.posted === id ? { ...a, posted: undefined, busyUntil: home.advAt } : a,
       ),
@@ -3813,9 +3824,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: home.map(releaseFromControl(cur.expedition_map, id, ids, now, playerLevel)),
       adventurers: advList.value.map((a) =>
-        out.has(a.id) && a.posted === id
-          ? { ...a, posted: undefined, busyUntil: home.advAt }
-          : a,
+        out.has(a.id) && a.posted === id ? { ...a, posted: undefined, busyUntil: home.advAt } : a,
       ),
     });
   }

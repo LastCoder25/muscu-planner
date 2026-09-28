@@ -16,7 +16,7 @@
       :key="p.id"
       class="poi"
       :class="{ sel: selectedId === p.id, dim: dimmed.has(p.id), veiled: veiled.has(p.id) }"
-      :style="{ '--rk': rankOf(p).color }"
+      :style="{ '--rk': isHeldControl(p) ? HELD_COLOR : rankOf(p).color }"
       @click="emit('select', p)"
     >
       <!-- 🌀 Une faille se dessine comme dans son incursion : un portail ovale cerné de
@@ -61,7 +61,12 @@
            sa couleur — on repère d'un coup d'œil les lieux du rang de ses champions. ⚠️ Plus
            ses ÉTOILES : un rang couvre dix niveaux, et un lieu Bronze ★5 écrase des champions
            Bronze ★1 (mesuré : 0 % de victoire). -->
-      <text :x="p.x" :y="p.y - (isRiftPoi(p) ? RIFT_MAP_ICON.dy + 0.5 : 5.4)" class="poi-rank">
+      <text
+        v-if="!isHeldControl(p)"
+        :x="p.x"
+        :y="p.y - (isRiftPoi(p) ? RIFT_MAP_ICON.dy + 0.5 : 5.4)"
+        class="poi-rank"
+      >
         {{ rankOf(p).emoji }}
         <tspan class="poi-star">{{ rankOf(p).star }}★</tspan>
       </text>
@@ -110,7 +115,7 @@
 import { computed } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { POI_EMO, isRiftPoi, poiEmo, type Poi } from '@/lib/expedition';
-import { CONTROL_EMO } from '@/lib/controlPoints';
+import { CONTROL_EMO, HELD_COLOR, isHeldControl } from '@/lib/controlPoints';
 import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import { RIFT_MAP_ICON, riftMapBox } from '@/lib/riftPortal';

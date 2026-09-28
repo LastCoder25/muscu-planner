@@ -3,7 +3,7 @@
        du choix des membres ») : ce qui s'y trouve, ce que ça rapporte, ce que ça coûte et ce qu'on
        risque, EN UN SEUL ENDROIT. ⚠️ Composant d'AFFICHAGE : aucune valeur n'est calculée ici,
        la page lui passe les MÊMES `computed` que l'envoi applique (`poiFacts`, `poiSub`). -->
-  <div class="poi-card" :style="{ '--rk': rank.color }">
+  <div class="poi-card" :style="{ '--rk': held ? HELD_COLOR : rank.color }">
     <div class="pc-head">
       <span v-if="isRiftPoi(poi)" class="pc-emo pc-rift">
         <RiftPortal :color="rank.color" :seed="seedOf(poi.id)" />
@@ -20,11 +20,12 @@
              bloc « Récompense » à part. -->
         <div class="pc-sub">
           <span v-if="sub.foe">{{ sub.foe }}</span>
-          <span>niv {{ poi.level }}</span>
+          <span v-if="!held">niv {{ poi.level }}</span>
           <span class="pc-res">🎁 {{ sub.res }}</span>
         </div>
         <div class="pc-tags">
           <span
+            v-if="!held"
             class="sh-rank"
             :title="
               isRift
@@ -115,6 +116,7 @@ import { rankStarStr } from '@/lib/characterRank';
 import { formatDuration } from '@/lib/duration';
 import type { PoiFact } from '@/lib/poiFacts';
 import type { poiRank } from '@/lib/poiRank';
+import { HELD_COLOR, isHeldControl } from '@/lib/controlPoints';
 
 const props = defineProps<{
   poi: Poi;
@@ -130,6 +132,8 @@ const props = defineProps<{
   sealStock: number;
   busySeal: boolean;
 }>();
+// 🏳️ Tenu : neutre — pas de rang, pas de niveau (il produit au niveau du héros).
+const held = computed(() => isHeldControl(props.poi));
 const emit = defineEmits<{ close: []; seal: [] }>();
 
 // ⏱️🎯 Trajet et réussite vivent sur leur propre ligne (`go`) : les deux chiffres qu'on compare.

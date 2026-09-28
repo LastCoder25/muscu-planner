@@ -2001,5 +2001,7 @@ describe('🔀 FusionPanel', () => {
     expect(out).toContain('🏰 Tenues · 1');
     expect(out).toContain('☠️ Pas tenues · 5');
     expect(out).not.toContain('⚠️ Vides');
+    // 🏳️ La place TENUE est neutre : pas de pastille de rang (les cinq ennemies gardent la leur).
+    expect(out.match(/class="pill rk"/g)?.length).toBe(5);
   }, 30_000);
 });

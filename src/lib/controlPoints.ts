@@ -311,22 +311,43 @@ export function captureControl(
   }));
 }
 
-/** 🏰 Perdu (reprise ennemie ou abandon) : le lieu redevient ennemi, rang et troupe
- *  re-tirés. */
-export function loseControl(map: ExpeditionMap, id: string, playerLevel: number): ExpeditionMap {
+/**
+ * 🎲 Le niveau (donc le rang) des ASSAILLANTS de l'attaque qui vient sur un point tenu —
+ * tiré à CHAQUE attaque, entre Bronze et le rang du joueur (décision de l'utilisateur,
+ * 2026-09-28 : « quand on se fait déloger, le lieu change de rang selon les assaillants »).
+ * Graine : la carte, le point et l'instant de l'attaque — une attaque repoussée n'annonce
+ * pas le rang de la suivante. ⚠️ Jamais affiché avant la bataille : seule l'attaque le dit.
+ */
+export function attackerLevel(seed: number, p: Poi, playerLevel: number): number {
+  const c = p.control;
+  return controlLevel(`${seed}:${p.id}@${c?.attackAt ?? 0}`, (c?.retakes ?? 0) + 1, playerLevel);
+}
+
+/** 🏰 Perdu (reprise ennemie ou abandon) : le lieu redevient ennemi, troupe re-tirée. Repris
+ *  par une attaque, il prend le rang et la bannière des assaillants (`won`) ; abandonné, un
+ *  rang re-tiré. */
+export function loseControl(
+  map: ExpeditionMap,
+  id: string,
+  playerLevel: number,
+  won?: { level: number; faction: ControlState['faction'] },
+): ExpeditionMap {
   return withControl(map, id, (p) => {
     const retakes = p.control!.retakes + 1;
+    const force = enemyForce(`${map.seed}:${id}`, retakes);
     const next: ControlState = {
       kind: p.control!.kind,
       owner: 'enemy',
       garrison: [],
       retakes,
-      ...enemyForce(`${map.seed}:${id}`, retakes),
+      ...force,
+      ...(won ? { faction: won.faction } : {}),
       // 🏠 Ceux déjà sur le chemin du retour ne sont plus là : le lieu tombe sans eux, ils
       // finissent leur trajet (sinon un milicien en route vers la base disparaîtrait).
       ...(p.control!.returning?.length ? { returning: p.control!.returning } : {}),
     };
-    return { ...p, level: controlLevel(`${map.seed}:${id}`, retakes, playerLevel), control: next };
+    const level = won?.level ?? controlLevel(`${map.seed}:${id}`, retakes, playerLevel);
+    return { ...p, level, control: next };
   });
 }
 
@@ -413,18 +434,17 @@ const shareOf = (n: number) =>
   CONTROL.garrisonShare[Math.min(CONTROL.garrisonShare.length - 1, Math.max(0, n))] ?? 0;
 
 /** ⛏️ L'or produit par heure pour une garnison de `n` champions. */
-export function controlGoldPerHour(
-  p: Pick<Poi, 'id' | 'level'>,
-  n: number,
-  playerLevel: number,
-): number {
-  const haul = harvestGold({ id: p.id, type: 'mine', level: p.level }, playerLevel);
+export function controlGoldPerHour(p: Pick<Poi, 'id'>, n: number, playerLevel: number): number {
+  const haul = harvestGold(
+    { id: p.id, type: 'mine', level: Math.max(1, playerLevel) },
+    playerLevel,
+  );
   return (haul * shareOf(n)) / CONTROL.mineHoursPerHaul;
 }
 
 /** 🎯 L'XP par heure d'un champion posté au camp d'entraînement (avant son rattrapage). */
-export function trainingXpPerHour(p: Pick<Poi, 'level'>): number {
-  return trialXpBase(p.level) / CONTROL.trainHoursPerTrial;
+export function trainingXpPerHour(playerLevel: number): number {
+  return trialXpBase(Math.max(1, playerLevel)) / CONTROL.trainHoursPerTrial;
 }
 
 /**
@@ -441,8 +461,8 @@ export function campXpFor(adv: Adventurer, xp: number, pantheonLevel: number): n
 }
 
 /** ⚒️ L'XP par heure de CHAQUE pièce portée par un champion posté à la forge. */
-export function forgeXpPerHour(p: Pick<Poi, 'level'>): number {
-  return trialXpBase(p.level) / CONTROL.forgeHoursPerTrial;
+export function forgeXpPerHour(playerLevel: number): number {
+  return trialXpBase(Math.max(1, playerLevel)) / CONTROL.forgeHoursPerTrial;
 }
 
 /** Ce qu'un point produit par heure, dans SON unité : or (mine), XP par champion (camp),
@@ -452,12 +472,12 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'mine':
       return controlGoldPerHour(p, n, playerLevel);
     case 'training':
-      return n > 0 ? trainingXpPerHour(p) : 0;
+      return n > 0 ? trainingXpPerHour(playerLevel) : 0;
     case 'garden':
       // Un jardinier : un consommable toutes les 12 h, comme avant ; plus de monde, plus vite.
       return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
     case 'forge':
-      return n > 0 ? forgeXpPerHour(p) : 0;
+      return n > 0 ? forgeXpPerHour(playerLevel) : 0;
     case 'scriptorium':
       return shareOf(n) / CONTROL.runeHoursPerItem;
     default:
@@ -487,8 +507,8 @@ function stockUnits(p: Poi, now: number, playerLevel: number): number {
 
 /** 🎯 L'XP la plus haute qu'un champion attend au camp (avant plafond, cf. `trainingRoom`),
  *  arrondie — chacun a SA réserve (`trainingStockBy`). */
-export function trainingStock(p: Poi, now: number): number {
-  return maxStock(trainingStockBy(p, now));
+export function trainingStock(p: Poi, now: number, playerLevel: number): number {
+  return maxStock(trainingStockBy(p, now, playerLevel));
 }
 /**
  * 🎯 Jusqu'où le camp fait monter : le ★5 du rang JUSTE EN DESSOUS de celui du héros
@@ -521,8 +541,8 @@ export type PerChampKind = 'forge' | 'training';
 export const isPerChampKind = (k: ControlKind | undefined): k is PerChampKind =>
   k === 'forge' || k === 'training';
 /** L'XP par heure d'un champion posté : au camp pour LUI, à la forge par pièce portée. */
-function perChampRate(p: Poi, kind: PerChampKind): number {
-  return kind === 'forge' ? forgeXpPerHour(p) : trainingXpPerHour(p);
+function perChampRate(kind: PerChampKind, playerLevel: number): number {
+  return kind === 'forge' ? forgeXpPerHour(playerLevel) : trainingXpPerHour(playerLevel);
 }
 
 /**
@@ -534,13 +554,13 @@ function perChampRate(p: Poi, kind: PerChampKind): number {
  * n'apprend rien, un champion ramené garde ce qu'il a gagné jusqu'à la récolte. Plafonnée à
  * 24 h de production, arrêtée à l'heure de l'attaque. Les miliciens n'apprennent rien.
  */
-export function champStockBy(p: Poi, now: number): Record<string, number> {
+export function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, number> {
   const c = p.control;
   if (!c || !isPerChampKind(c.kind) || c.owner !== 'player' || c.collectedAt === undefined)
     return {};
   const until = Math.min(now, c.attackAt ?? now);
   const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
-  const rate = perChampRate(p, c.kind);
+  const rate = perChampRate(c.kind, playerLevel);
   const cap = (rate * CONTROL.storageMs) / 3600_000;
   // Lieu d'avant `perXp` : la réserve commune valait pour chaque champion posté.
   const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
@@ -553,11 +573,15 @@ export function champStockBy(p: Poi, now: number): Record<string, number> {
   return out;
 }
 /** ⚒️ La réserve par champion à la forge (vide ailleurs). */
-export const forgeStockBy = (p: Poi, now: number): Record<string, number> =>
-  p.control?.kind === 'forge' ? champStockBy(p, now) : {};
+export const forgeStockBy = (p: Poi, now: number, playerLevel: number): Record<string, number> =>
+  p.control?.kind === 'forge' ? champStockBy(p, now, playerLevel) : {};
 /** 🎯 La réserve par champion au camp d'entraînement (vide ailleurs). */
-export const trainingStockBy = (p: Poi, now: number): Record<string, number> =>
-  p.control?.kind === 'training' ? champStockBy(p, now) : {};
+export const trainingStockBy = (
+  p: Poi,
+  now: number,
+  playerLevel: number,
+): Record<string, number> =>
+  p.control?.kind === 'training' ? champStockBy(p, now, playerLevel) : {};
 
 /** La réserve la plus haute qu'un champion attend (forge ou camp), arrondie. */
 function maxStock(by: Record<string, number>): number {
@@ -565,13 +589,14 @@ function maxStock(by: Record<string, number>): number {
   return v.length ? Math.floor(Math.max(...v) + 1e-9) : 0;
 }
 /** ⚒️ L'XP la plus haute qu'un champion attend à la forge (par pièce), arrondie. */
-export const forgeStock = (p: Poi, now: number): number => maxStock(forgeStockBy(p, now));
+export const forgeStock = (p: Poi, now: number, playerLevel: number): number =>
+  maxStock(forgeStockBy(p, now, playerLevel));
 
 /** Ce qu'une réserve représente en HEURES passées sur place (≤ 24 h) : la jauge d'un
  *  champion se remplit à ce rythme (forge ou camp). */
-export function champHoursOf(p: Poi, xp: number): number {
+export function champHoursOf(p: Poi, xp: number, playerLevel: number): number {
   const k = p.control?.kind;
-  const rate = isPerChampKind(k) ? perChampRate(p, k) : 0;
+  const rate = isPerChampKind(k) ? perChampRate(k, playerLevel) : 0;
   return rate > 0 ? xp / rate : 0;
 }
 
@@ -676,7 +701,7 @@ export function collectControl(
   // ⚒️🎯 La forge et le camp : chaque champion récolte SA réserve, et garde la fraction
   // entamée (sauf un champion ramené depuis : ce qui lui reste ne compte plus).
   if (isPerChampKind(c.kind)) {
-    const by = champStockBy(p, now);
+    const by = champStockBy(p, now, playerLevel);
     const got: Record<string, number> = {};
     const perXp: Record<string, number> = {};
     for (const [aid, v] of Object.entries(by)) {
@@ -716,7 +741,7 @@ export function collectControl(
     );
     const odds = placeRuneOdds({
       place: 'control',
-      placeRankIndex: characterRank(Math.max(1, p.level)).rankIndex,
+      placeRankIndex: characterRank(Math.max(1, playerLevel)).rankIndex,
       playerRankIndex: characterRank(Math.max(1, playerLevel)).rankIndex,
     });
     for (let i = 0; i < whole; i++) runes.push(pickTier(rng, odds));
@@ -765,8 +790,8 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   }
   // ⚒️🎯 Chacun sa réserve : on montre la plus avancée (celle qu'on voit monter en premier).
   if (isPerChampKind(c.kind)) {
-    const top = Math.max(0, ...Object.values(champStockBy(p, now)));
-    const full = (perChampRate(p, c.kind) * CONTROL.storageMs) / 3600_000;
+    const top = Math.max(0, ...Object.values(champStockBy(p, now, playerLevel)));
+    const full = (perChampRate(c.kind, playerLevel) * CONTROL.storageMs) / 3600_000;
     const emo = c.kind === 'forge' ? '⚒️' : '🎓';
     return { text: `${emo} +${fmt(top)} XP`, pct: full > 0 ? Math.min(1, top / full) : 0 };
   }
@@ -804,7 +829,7 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
 function bankAt(p: Poi, at: number, playerLevel: number): ControlState {
   // ⚒️🎯 À la forge et au camp, chacun met de côté SA réserve : le nouveau venu part de zéro.
   if (isPerChampKind(p.control!.kind))
-    return { ...p.control!, perXp: champStockBy(p, at), banked: 0, collectedAt: at };
+    return { ...p.control!, perXp: champStockBy(p, at, playerLevel), banked: 0, collectedAt: at };
   return { ...p.control!, banked: stockUnits(p, at, playerLevel), collectedAt: at };
 }
 
@@ -1170,3 +1195,12 @@ export function controlRoster(
       };
     });
 }
+
+/**
+ * 🏳️ Un point TENU est NEUTRE (décision de l'utilisateur, 2026-09-28 : « seule la tenue par
+ * nous fait que c'est neutre ») : il n'affiche pas de rang et produit au niveau du héros. Le
+ * rang n'appartient qu'aux ENNEMIS — ceux qui le défendent, puis ceux qui le reprennent.
+ */
+export const isHeldControl = (p: Pick<Poi, 'control'>): boolean => p.control?.owner === 'player';
+/** 🏳️ La couleur d'un point tenu : ni celle d'un rang, ni l'accent. */
+export const HELD_COLOR = '#9a8f7e';

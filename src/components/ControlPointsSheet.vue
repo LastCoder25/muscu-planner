@@ -53,7 +53,7 @@
         :key="r.poi.id"
         class="cps-tile"
         :class="['st-' + r.status, { open: openId === r.poi.id }]"
-        :style="{ '--rk': rankOf(r).color }"
+        :style="{ '--rk': isHeldControl(r.poi) ? HELD_COLOR : rankOf(r).color }"
       >
         <button
           type="button"
@@ -65,7 +65,7 @@
           <span class="cps-main">
             <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
             <span class="cps-pills">
-              <span class="pill rk"
+              <span v-if="!isHeldControl(r.poi)" class="pill rk"
                 >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
               >
               <span class="pill st">{{ STATUS[r.status] }}</span>
@@ -164,6 +164,8 @@ import {
   CONTROL_FILTERS,
   CONTROL_FILTER_LABEL,
   controlFilterOf,
+  HELD_COLOR,
+  isHeldControl,
   type ControlFilter,
   type ControlRosterRow,
   type ControlRosterStatus,
