@@ -8,6 +8,7 @@ import {
   ensureControls,
   reinforceControl,
   seatsOf,
+  controlFilterOf,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 
@@ -77,5 +78,15 @@ describe('🗂️ controlRoster', () => {
     expect(row(rows, TOWER).ready).toBe(false);
     // Un point ennemi n'a jamais rien à récolter.
     expect(row(controlRoster(base(), [], 20 * H, L), MINE).ready).toBe(false);
+  });
+});
+
+describe('🔎 les filtres de la liste', () => {
+  it('tenue = à nous avec du monde (attaque imminente comprise), vide = à nous sans personne', () => {
+    expect(controlFilterOf('held')).toBe('held');
+    expect(controlFilterOf('imminent')).toBe('held');
+    expect(controlFilterOf('empty')).toBe('empty');
+    expect(controlFilterOf('enemy')).toBe('notHeld');
+    expect(controlFilterOf('assault')).toBe('notHeld');
   });
 });

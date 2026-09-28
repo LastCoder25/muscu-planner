@@ -1093,6 +1093,21 @@ export function heldControls(map: ExpeditionMap | null): Poi[] {
  * l'arrivée, `midAt`).
  */
 export type ControlRosterStatus = 'enemy' | 'assault' | 'held' | 'empty' | 'imminent';
+/** 🔎 Les filtres de la liste des places fortes (2026-09-28, demandé : « tenu, pas tenu,
+ *  vide »). ⚠️ Dérivés du statut, jamais une seconde règle : une place « attaque imminente »
+ *  est TENUE (on y a du monde), une place sous notre assaut n'est PAS TENUE. Vide = à nous,
+ *  mais sans personne dedans. */
+export type ControlFilter = 'held' | 'notHeld' | 'empty';
+export const CONTROL_FILTERS: readonly ControlFilter[] = ['held', 'notHeld', 'empty'];
+export const CONTROL_FILTER_LABEL: Record<ControlFilter, string> = {
+  held: '🏰 Tenues',
+  notHeld: '☠️ Pas tenues',
+  empty: '⚠️ Vides',
+};
+export function controlFilterOf(status: ControlRosterStatus): ControlFilter {
+  if (status === 'enemy' || status === 'assault') return 'notHeld';
+  return status === 'empty' ? 'empty' : 'held';
+}
 export interface ControlRosterRow {
   poi: Poi;
   kind: ControlKind;
