@@ -434,9 +434,9 @@
              et dit POURQUOI quelqu’un ne peut pas venir. -->
         <template v-if="partyTarget">
           <div v-if="offers.hero && !partyTarget" class="car-sep">ou bien — une équipe</div>
-          <!-- Le héros : une tuile comme les autres. ⚠️ Il n'y compte que pour
-               HERO_PARTY_WORTH champions (v0.980) — l'écran le DIT, sinon on croirait
-               emmener la puissance de sa fiche. Grisée avec la raison plutôt que cachée. -->
+          <!-- Le héros : une tuile comme les autres. Il est plafonné à HERO_PARTY_WORTH
+               champions au combat (v0.980), mais l'écran ne le dit plus (décision de
+               l'utilisateur, v0.1263) : seul « sans XP » reste. Grisée avec la raison plutôt que cachée. -->
           <!-- 📐 Le héros et « tout le vivier » sur UNE ligne : deux boutons empilés
                prenaient ~100 px pour deux gestes. -->
           <div class="party-top">
@@ -454,7 +454,7 @@
                 <span class="ph-sub">{{
                   partyHeroBlock
                     ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                    : 'vaut 2 champions · sans XP'
+                    : 'sans XP'
                 }}</span>
               </span>
               <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
