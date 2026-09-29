@@ -2389,6 +2389,33 @@ export function voyageDrawnEnd(exp: Voyage, now: number): { x: number; y: number
   return exp.turnBack !== undefined && now >= exp.midAt ? voyageTarget(exp) : exp.poi;
 }
 
+/**
+ * 🔙 LE VOYAGE TEL QUE LE JOUEUR LE VOIT (signalé : « sur l'attaque de la mine par les
+ * champions, un temps de trajet restant pas cohérent avec la distance »). Une embuscade perdue
+ * à l'aller est tirée AU DÉPART : le voyage stocké s'arrête déjà à `turnBack` du chemin
+ * (`midAt` = l'embuscade). Le montrer tel quel annonçait un aller 3 fois trop court pour la
+ * distance ET trahissait l'issue — le tracé la cachait déjà (`voyageDrawnEnd`), pas le
+ * compteur ni le marqueur. Tant que `midAt` n'est pas passé, on montre le voyage COMPLET
+ * (même règle que `recallWindow`) ; à `midAt` le marqueur est pile au point de demi-tour,
+ * donc il ne saute pas, et c'est le temps restant qui fond d'un coup : l'issue se révèle.
+ * ⚠️ Seulement AVANT `midAt` : un rappel volontaire pose `midAt = now`, il n'est jamais gommé.
+ */
+export function shownVoyage<
+  V extends { sentAt?: number; midAt: number; returnAt: number; turnBack?: number; dwellMs?: number },
+>(v: V, now: number): V {
+  const tb = v.turnBack;
+  if (tb === undefined || tb <= 0 || v.sentAt === undefined || now >= v.midAt) return v;
+  const s = v.sentAt;
+  const dwell = Math.max(0, v.dwellMs ?? 0);
+  const out = {
+    ...v,
+    midAt: s + (v.midAt - dwell - s) / tb + dwell,
+    returnAt: s + (v.returnAt - dwell - s) / tb + dwell,
+  };
+  delete out.turnBack;
+  return out;
+}
+
 /** 🐺 Le duel d'une tanière (cf. `PartyResult.den`). */
 export interface DenBattle {
   name: string;
@@ -2425,7 +2452,8 @@ export function veinDwellMs(champions: number): number {
  *  l’objectif. ⚠️ Distinct de `travelPosition().frac`, qui n’avance que DANS la phase
  *  courante et repart donc à zéro au demi-tour : une barre pilotée par lui reculerait
  *  en plein milieu du trajet, ce qui se lit comme un bug. */
-export function voyageProgress(v: Voyage, now: number): { overall: number; mid: number } {
+export function voyageProgress(voyage: Voyage, now: number): { overall: number; mid: number } {
+  const v = shownVoyage(voyage, now);
   const total = Math.max(1, v.returnAt - v.sentAt);
   return {
     overall: clamp01((now - v.sentAt) / total),
@@ -2435,7 +2463,7 @@ export function voyageProgress(v: Voyage, now: number): { overall: number; mid: 
 
 /** Position d'un voyageur (héros OU convoi) à l'instant `now`. */
 export function travelPosition(
-  exp: Voyage,
+  voyage: Voyage,
   now: number,
 ): {
   x: number;
@@ -2447,6 +2475,8 @@ export function travelPosition(
   /** 🔍 Arrivé sur place, en train de fouiller (`Voyage.dwellMs`). */
   searching?: boolean;
 } {
+  // 🔙 Un demi-tour forcé encore à venir ne se voit pas (`shownVoyage`).
+  const exp = shownVoyage(voyage, now);
   // 🏰 Un voyage parti d'un point fixe part de lui ET y revient (sortie, transfert).
   const town = exp.origin ?? EXPE.town;
   // 🔙 Un demi-tour s'arrête en chemin : on marche vers ce point, pas vers le lieu.
@@ -2548,9 +2578,11 @@ export function tripTimeLabel(
  * tirée au départ. `detail` le dit en toutes lettres (panneau de l'équipe).
  */
 export function tripLegs(
-  v: Pick<ActiveExpedition, 'midAt' | 'returnAt' | 'returnLegs'>,
+  voyage: Pick<ActiveExpedition, 'midAt' | 'returnAt' | 'returnLegs'> &
+    Partial<Pick<ActiveExpedition, 'sentAt' | 'turnBack' | 'dwellMs'>>,
   now: number,
 ): { go: string | null; back: string; detail: string } | null {
+  const v = shownVoyage(voyage, now);
   if (now >= v.returnAt) return null;
   if (now >= v.midAt) {
     const back = formatDuration(v.returnAt - now);
