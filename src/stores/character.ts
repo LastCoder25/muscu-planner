@@ -2744,7 +2744,14 @@ export const useCharacterStore = defineStore('character', () => {
         defenses: t.base.defenses,
         playerLevel: ctx.playerLevel,
         hero: home ? ctx.hero : null,
-        guard: guardUnits(ctx.playerLevel, defenders, engageCap(pantheonLevel.value), cctx),
+        // 🛡️ Les miliciens PRÉSENTS à la base défendent aussi (ceux postés sur la carte non).
+        guard: guardUnits(
+          ctx.playerLevel,
+          defenders,
+          engageCap(pantheonLevel.value),
+          cctx,
+          t.base.militia?.home ?? 0,
+        ),
       },
       t.dueRaid,
       home,
@@ -2786,8 +2793,14 @@ export const useCharacterStore = defineStore('character', () => {
     // vient de rendre, pas dans un second `persist`.
     // ⚠️ TOUJOURS réécrit, `null` compris : `applyRaidOutcome` recopie la base, donc un
     // siège sans butin gardait le relevé du PRÉCÉDENT et l'affichait comme le sien.
+    // 💀 Les miliciens tombés MEURENT (pas d'infirmerie pour la milice) : ils sortent de
+    // l'effectif, et la Caserne les remplacera à son rythme.
+    const milLost = report.militiaLost ?? 0;
     patch.base = {
       ...nb,
+      ...(milLost > 0 && nb.militia
+        ? { militia: { ...nb.militia, home: Math.max(0, nb.militia.home - milLost) } }
+        : {}),
       lastLoot:
         loot || mana > 0
           ? {

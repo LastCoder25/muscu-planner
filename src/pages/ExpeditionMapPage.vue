@@ -1742,7 +1742,7 @@ const riskHero = computed(() => {
   if (!b || !inc || !offerHero.value || selectedCamp.value) return null;
   const heroNow = char.row && char.heroIsHome(char.row) ? fighter.value : null;
   if (!heroNow) return null;
-  const g = guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value);
+  const g = guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value, milHome.value);
   return departureRisk(
     b.defenses,
     heroLevel.value,

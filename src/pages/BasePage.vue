@@ -1768,13 +1768,26 @@ const guardAdvs = computed(() =>
   ),
 );
 const guardNow = computed(() =>
-  guardUnits(heroLevel.value, guardAdvs.value, engageCap(char.pantheonLevel), compCtx.value),
+  guardUnits(
+    heroLevel.value,
+    guardAdvs.value,
+    engageCap(char.pantheonLevel),
+    compCtx.value,
+    char.row?.base?.militia?.home ?? 0,
+  ),
 );
 /** LA GARNISON AU COMPLET : tout le vivier, blessés compris — ils rentreront. C’est un
  *  PLAFOND, pas une prévision, et c’est précisément ce qu’on abandonne en envoyant
  *  quelqu’un ailleurs. */
 const guardFull = computed(() =>
-  guardUnits(heroLevel.value, char.advList, engageCap(char.pantheonLevel), compCtx.value),
+  guardUnits(
+    heroLevel.value,
+    char.advList,
+    engageCap(char.pantheonLevel),
+    compCtx.value,
+    // Au complet : les miliciens postés sur la carte rentreraient eux aussi.
+    (char.row?.base?.militia?.home ?? 0) + militiaOnMap(char.row?.expedition_map),
+  ),
 );
 /** ⚠️ LE PANNEAU SE MESURE UNE FOIS PAR MINUTE, pas à chaque seconde. Le Monte-Carlo
  *  coûte ~66 ms (5 ablations), et la garnison ne dépend de `now` que par les disponibilités
