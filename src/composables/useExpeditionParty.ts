@@ -19,7 +19,7 @@ import {
   interceptLeg,
   supplyTarget,
 } from '@/lib/party';
-import { partyWinChance } from '@/lib/partyForecast';
+import { partyRoadOdds, partyWinChance } from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
 import { COMBINED_BLOCK_LABEL, combinedBlocker } from '@/lib/combinedAttack';
@@ -319,6 +319,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
       false,
     );
   });
+  /** 🛣️ La route à part des gardes (`partyRoadOdds`), `null` quand elle ne se joue pas. */
+  const partyRoute = computed(() => {
+    const p = selected.value;
+    if (!p || !partySize.value) return null;
+    return partyRoadOdds(p, partyAdvs.value, partyRoad.value, heroForParty.value, 40);
+  });
   /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
   // point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où
@@ -385,6 +391,28 @@ export function useExpeditionParty(ctx: PartyCtx) {
   });
   /** Aller-retour de l'équipe (minutes). */
   const partyMin = computed(() => 2 * partyLeg.value);
+  /** 🏰 Assaut d'un point fixe PRIS : seuls le héros et les champions en trop rentrent, à LEUR
+   *  pas — la MÊME règle que le store (`returnLegs.won`). 0 si personne ne rentre. Une attaque
+   *  combinée garde le retour de toute l'équipe. */
+  const partyWonLeg = computed(() => {
+    if (!selected.value || !partySize.value || !stayCap.value || combined.value)
+      return partyLeg.value;
+    const stay = new Set(stayIds.value);
+    const back = partyAdvs.value.filter((a) => !stay.has(a.id));
+    if (!back.length && !partyHeroOn.value) return 0;
+    const legOf = (p: Poi) =>
+      partyLegMin(p, back, {
+        hero: partyHeroOn.value,
+        travelMult: travelMult.value,
+        gearSpeed: advGearRoles(back, roadCtx.value.advGear).speed,
+        supplies: activeSupplies.value,
+      });
+    const o = originPoi.value;
+    return Math.min(
+      partyLeg.value,
+      o ? legFromSpot(selected.value, o, legOf) : legOf(selected.value),
+    );
+  });
   /** ⚠️ CE QUE LE DÉPART COÛTE face à l'armée qui arrive — mêmes règles que le convoi et le
    *  héros (`departureRisk`) : le groupe quitte la base (et le héros avec lui s'il en est),
    *  et un groupe rentré AVANT l'assaut ne coûte rien. */
@@ -641,7 +669,10 @@ export function useExpeditionParty(ctx: PartyCtx) {
     toggleSupply,
     partyRoad,
     partyWin,
+    partyGuardWin,
+    partyRoute,
     partyLeg,
+    partyWonLeg,
     partyMin,
     partyRisk,
     partySendBlock,

@@ -287,19 +287,60 @@ export function startParty(
   legMin: number,
   outcome: ExpeditionOutcome,
 ): ActiveExpedition {
-  const leg = Math.max(1, Math.round(legMin)) * 60_000;
+  const f = outcome.turnBack;
+  // 🔙 Demi-tour : l'aller s'arrête en chemin, le retour dure autant que le chemin fait.
+  const leg = Math.max(1, Math.round(legMin)) * 60_000 * (f ?? 1);
   // 🔍 La fouille d'un héros tombé : on reste sur place, le rapport tombe à la fin.
-  const dwell = dwellMsFor(input.poi, input.champions);
+  const dwell = f === undefined ? dwellMsFor(input.poi, input.champions) : 0;
   return {
     poi: input.poi,
     sentAt: now,
     midAt: now + leg + dwell,
     returnAt: now + 2 * leg + dwell,
     ...(dwell ? { dwellMs: dwell } : {}),
+    ...(f !== undefined ? { turnBack: f } : {}),
     goldCost: 0,
     seed: input.seed >>> 0 || 1,
     outcome,
   };
+}
+
+/** 🏰 Qui RESTE en garnison si l'assaut prend le point : les choisis (sinon l'escorte),
+ *  coupés aux places — la MÊME règle que le rapport (`stay`) et `captureControl`. */
+export function assaultStayers(
+  escortIds: readonly string[],
+  stayIds: readonly string[] | undefined,
+  seats: number,
+): string[] {
+  const picked = stayIds?.filter((id) => escortIds.includes(id)) ?? [];
+  return (picked.length ? picked : [...escortIds]).slice(0, Math.max(0, seats));
+}
+
+/** 🏰 Un assaut de point fixe GAGNÉ : le retour passe à celui de ceux qui rentrent
+ *  (`returnLegs.won`, 0 = personne). Rend la MÊME référence sinon (perdu, ou pas un assaut). */
+export function shortenWonReturn<T extends ActiveExpedition>(v: T): T {
+  if (!v.returnLegs || !v.outcome.win) return v;
+  const returnAt = v.midAt + Math.max(0, Math.round(v.returnLegs.won)) * 60_000;
+  return returnAt < v.returnAt ? { ...v, returnAt } : v;
+}
+
+/** Les champions encore en route du voyage (retour prévu à `oldAt`) rentrent désormais à
+ *  `newAt`. Ceux déjà postés (`busyUntil` 0) ne bougent pas. Même référence si rien. */
+export function rescheduleReturners(
+  advs: Adventurer[],
+  ids: readonly string[],
+  oldAt: number,
+  newAt: number,
+): Adventurer[] {
+  if (oldAt === newAt) return advs;
+  const set = new Set(ids);
+  let changed = false;
+  const out = advs.map((a) => {
+    if (!set.has(a.id) || a.busyUntil !== oldAt) return a;
+    changed = true;
+    return { ...a, busyUntil: newAt };
+  });
+  return changed ? out : advs;
 }
 
 /** Un groupe parti SANS le héros (colonne `characters.parties`, migr. 0077). ⚠️ Un groupe
@@ -365,7 +406,8 @@ export function settleParties(
         box = next;
         fresh.push(msg);
       }
-      q = { ...p, reported: true };
+      // 🏰 Assaut pris : ceux qui ne restent pas rentrent à leur propre pas.
+      q = shortenWonReturn({ ...p, reported: true });
       changed = true;
     }
     if (now >= q.returnAt) {
@@ -548,9 +590,11 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
           : 'la bande passe'
         : party.win
           ? 'camp pris'
-          : party.roadLost
-            ? 'pris, embuscade perdue'
-            : 'repoussé',
+          : party.turnedBack
+            ? 'demi-tour en chemin'
+            : party.roadLost
+              ? 'pris, embuscade perdue'
+              : 'repoussé',
     slain: party.slain,
     foes: party.foes,
     heroKills: party.heroKills,

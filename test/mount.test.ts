@@ -133,6 +133,30 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('aria-pressed');
   }, 30_000);
 
+  // 🔮🏆 v0.1305 : une relique et un trophée montrent l'illustration de LEUR pouvoir ; une
+  // arme garde son icône (aucune image devinée pour un autre emplacement).
+  it('ItemIcon illustre le pouvoir d’une relique et d’un trophée', async () => {
+    const { default: ItemIcon } = await import('@/components/ItemIcon.vue');
+    const rendu = async (item: Record<string, unknown>) => {
+      let out = '';
+      expect(await mountIt(ItemIcon, { item }, ROW, undefined, '/', (h) => (out = h))).toBeNull();
+      return out;
+    };
+    const base = { name: 'x', rarity: 'commun', level: 1, roll: 0.5 };
+    expect(await rendu({ ...base, slot: 'relic', power: 'brasier' })).toContain(
+      'src="/powers/relic-brasier.webp"',
+    );
+    expect(await rendu({ ...base, slot: 'trophy', power: 'achever' })).toContain(
+      'src="/powers/trophy-achever.webp"',
+    );
+    const arme = await rendu({
+      ...base,
+      slot: 'weapon',
+      effect: { type: 'damage_pct', value: 5 },
+    });
+    expect(arme).not.toContain('/powers/');
+  }, 30_000);
+
   // 🧭 v0.1154 : la ligne des disponibilités, partagée par l'Aventure et la carte. Sur la
   // carte, les champions LIBRES se détaillent par rang (une pastille par rang représenté).
   it('AvailabilityLine détaille les champions libres par rang', async () => {
@@ -160,7 +184,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('aria-label="Bronze : 2 disponible(s) sur 3"');
     expect(out).not.toContain('av-ico">🏅');
     // Sans milice, pas de pastille 🛡️ (une pastille 0/0 n'apprend rien).
-    expect(out).not.toContain('av-ico">🛡️');
+    expect(out).not.toContain('mil-portrait');
   }, 30_000);
 
   // 🛡️ 2026-09-28 : les miliciens postés sur des places fortes / tous ceux qui existent.
@@ -186,7 +210,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       await mountIt(AvailabilityLine, { now: 1 }, row, undefined, '/', (h) => (out = h)),
     ).toBeNull();
     // 3 hors de la base (2 postés + 1 en route) sur 7 (4 à la base).
-    expect(out).toMatch(/av-ico">🛡️<\/span>3\/7/);
+    // Le milicien a désormais son portrait (l'emoji 🛡️ n'est plus que le repli).
+    expect(out).toMatch(/av-ico">(<!--[^]*?-->)?<img[^>]*mil-portrait[^>]*><\/span>3\/7/);
     expect(out).toContain('3 milicien(s) posté(s) sur 7 (4 à la base)');
   }, 30_000);
 

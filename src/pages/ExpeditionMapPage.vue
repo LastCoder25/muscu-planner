@@ -148,8 +148,8 @@
              lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
           <template v-for="v in travelersOnMap" :key="'vt' + v.id">
             <line
-              :x1="v.poi.x"
-              :y1="v.poi.y"
+              :x1="lineEnd(v).x"
+              :y1="lineEnd(v).y"
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
@@ -372,7 +372,7 @@
               :aria-pressed="ctlRecallSel.includes(m.id)"
               @click="toggleRecall(m.id)"
             >
-              <span class="mil-emo">{{ MILITIA_EMO }}</span>
+              <span class="mil-emo"><MilitiaPortrait /></span>
               <span class="mil-name">{{ MILITIA_NAME }}</span>
               <span v-if="m.arriveIn > 0" class="mil-sub">🧭 {{ formatDuration(m.arriveIn) }}</span>
             </button>
@@ -907,8 +907,10 @@ import {
   EXPE,
   travelPosition,
   mapTravelPoint,
+  voyageTarget,
   warbandAt,
   tripTimeLabel,
+  tripLegs,
   voyageProgress,
   poiCombatant,
   simulateArena,
@@ -941,7 +943,12 @@ import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
-import { controlReturnNote as returnNote, winClass, type PoiFact } from '@/lib/poiFacts';
+import {
+  controlReturnNote as returnNote,
+  controlReturnValue,
+  winClass,
+  type PoiFact,
+} from '@/lib/poiFacts';
 import { usePoiFilters } from '@/composables/usePoiFilters';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
@@ -1013,6 +1020,7 @@ import {
   transferSourcesFor,
 } from '@/lib/controlRoutes';
 import { MILITIA, MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -1193,6 +1201,10 @@ function drawnAt(v: Parameters<typeof travelPosition>[0]) {
   return { ...at, ...mapTravelPoint(at, v.poi, v.origin) };
 }
 const hero = computed(() => (active.value ? drawnAt(active.value) : null));
+/** Le bout du tracé d'un voyageur : le lieu, ou le point de demi-tour. */
+function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
+  return v.end ?? v.poi;
+}
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
 );
@@ -1933,8 +1945,11 @@ const partiesOnMap = computed(() =>
       hero: !!g.outcome.party?.hero,
       haul: expeHaul(g.outcome),
       origin: g.origin,
+      // 🔙 Un demi-tour n'a jamais atteint le lieu : son tracé s'arrête là où il a rebroussé.
+      end: g.turnBack !== undefined ? voyageTarget(g) : undefined,
       at: drawnAt(g),
       prog: voyageProgress(g, now.value),
+      legs: tripLegs(g, now.value),
     })),
 );
 /**
@@ -2038,6 +2053,7 @@ const trips = computed(() => {
       withHero: true,
       members: a.outcome.party?.escort ?? [],
       haul: expeHaul(a.outcome),
+      legs: tripLegs(a, now.value),
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
@@ -2054,6 +2070,7 @@ const trips = computed(() => {
       withHero: g.hero,
       members: g.members,
       haul: g.haul,
+      legs: g.legs,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
     });
   }
@@ -2515,6 +2532,9 @@ const poiFacts = computed<PoiFact[]>(() => {
           label: 'Retour',
           go: true,
           ...leg(partyLeg.value, controlReturnNote.value ?? ''),
+          ...(partySize.value
+            ? { value: controlReturnValue(partyLeg.value, partyWonLeg.value) }
+            : {}),
         },
       );
     else
@@ -2534,7 +2554,41 @@ const poiFacts = computed<PoiFact[]>(() => {
         title: `Sur place : ${formatDurationMin(veinDwellMs(1) / 60_000)} seul, ${formatDurationMin(veinDwellMs(2) / 60_000)} à deux, ${formatDurationMin(veinDwellMs(3) / 60_000)} à trois — la réserve est la même`,
       });
     }
-    if (teamOnly.value || guard)
+    // 🛣️ Une équipe SANS le héros sur un lieu de récolte : les gardes et la route à part
+    // (2026-09-29, décision de l'utilisateur) — un seul % mêlait deux risques qui ne se
+    // paient pas pareil. Aller perdu = demi-tour sans rien, retour perdu = une part du butin.
+    const route = partyRoute.value;
+    if (route) {
+      const gw = partyGuardWin.value;
+      if (guard)
+        out.push({
+          icon: '🎯',
+          label: 'Gardes',
+          value: gw === null ? '—' : `${Math.round(gw * 100)} %`,
+          go: true,
+          title: 'Chance d’abattre les gardes du lieu, une fois arrivé',
+          cls: gw === null ? 'dim' : winClass(Math.round(gw * 100)),
+        });
+      const clear = Math.round(route.clear * 100);
+      const back = Math.round(route.turnBack * 100);
+      out.push({
+        icon: '🛣️',
+        label: p.perilous || p.riftPeril ? 'Route dangereuse' : 'Route',
+        value: `${clear} % sûre`,
+        go: true,
+        title: `${clear} % des trajets sans embuscade perdue · ${back} % font demi-tour à l’aller (lieu jamais atteint, blessés à l’infirmerie) · au retour, une embuscade perdue coûte une part du butin. Plus de champions, mieux la route tient.`,
+        cls: winClass(clear),
+      });
+      if (back > 0)
+        out.push({
+          icon: '🔙',
+          label: 'Demi-tour',
+          value: `${back} %`,
+          title:
+            'Embuscade perdue à l’aller : l’équipe rentre avec ses blessés, sans atteindre le lieu',
+          cls: winClass(100 - back),
+        });
+    } else if (teamOnly.value || guard)
       out.push(
         partyWin.value === null
           ? {
@@ -2884,7 +2938,10 @@ const {
   toggleSupply,
   partyRoad,
   partyWin,
+  partyGuardWin,
+  partyRoute,
   partyLeg,
+  partyWonLeg,
   partyMin,
   partyRisk,
   partySendBlock,
@@ -2929,7 +2986,13 @@ const {
 /** 🏰 Qui rentre d'un assaut sur un point fixe, et en combien de temps (`controlReturnNote`). */
 const controlReturnNote = computed(() =>
   selected.value?.control?.owner === 'enemy' && partyTarget.value && partySize.value
-    ? returnNote(partyLeg.value, partyHeroOn.value, partyAdvs.value.length, stayCap.value)
+    ? returnNote(
+        partyLeg.value,
+        partyWonLeg.value,
+        partyHeroOn.value,
+        partyAdvs.value.length,
+        stayCap.value,
+      )
     : null,
 );
 const booting = ref(true);
@@ -3414,7 +3477,8 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
 }
 .mil-emo {
-  font-size: 22px;
+  display: inline-flex;
+  font-size: 28px;
   line-height: 1;
 }
 .mil-name {

@@ -247,6 +247,9 @@ import {
   grantReportXp,
   partyClaimRoster,
   partyLegMin,
+  assaultStayers,
+  shortenWonReturn,
+  rescheduleReturners,
   interceptLeg,
   settleParties,
   startParty,
@@ -2201,12 +2204,23 @@ export const useCharacterStore = defineStore('character', () => {
       (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
       activeDays7,
     );
+    // 🏰 Assaut pris : le héros (et les champions en trop) rentrent à leur propre pas.
+    const exp2 = shortenWonReturn({ ...exp, reported: true });
+    const advs0 =
+      ctl?.adventurers ?? (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value;
+    const advs1 = rescheduleReturners(
+      advs0,
+      exp.outcome.party?.escort ?? [],
+      exp.returnAt,
+      exp2.returnAt,
+    );
     await persist(userId, {
       ...(dw.base ? { base: dw.base } : {}),
-      expedition: { ...exp, reported: true },
+      expedition: exp2,
       messages: dw.tag(x.messages),
       ...x.patch,
       ...(ctl ? { expedition_map: ctl.map, adventurers: ctl.adventurers } : {}),
+      ...(advs1 !== advs0 ? { adventurers: advs1 } : {}),
     });
     x.play();
     return msg;
@@ -3324,9 +3338,28 @@ export const useCharacterStore = defineStore('character', () => {
       leg,
       withSupplies,
     );
-    const trip = origin
-      ? { ...trip0, origin: { x: origin.x, y: origin.y }, homeId: origin.id }
+    // 🏰 Assaut d'un point fixe : si on le prend, seuls le héros et les champions en trop
+    // rentrent — à LEUR pas, souvent plus vif que celui de toute l'équipe. `returnAt` garde
+    // le retour de la défaite jusqu'à l'arrivée (`shortenWonReturn`).
+    const seats = poi.type === 'control' && poi.control ? seatsOf(poi.control.kind) : 0;
+    const stayers = new Set(seats ? assaultStayers(opts.escortIds, opts.stayIds, seats) : []);
+    const back = escort.filter((a) => !stayers.has(a.id));
+    const backLeg = (p: Poi) =>
+      partyLegMin(p, back, {
+        hero: !!hero,
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+        gearSpeed: advGearRoles(back, road.advGear).speed,
+        supplies,
+      });
+    let wonLeg = 0;
+    if (seats && (back.length || hero))
+      wonLeg = origin ? legFromSpot(meet.poi, origin, backLeg) : backLeg(meet.poi);
+    const trip1 = seats
+      ? { ...trip0, returnLegs: { won: Math.min(wonLeg, leg), lost: leg } }
       : trip0;
+    const trip = origin
+      ? { ...trip1, origin: { x: origin.x, y: origin.y }, homeId: origin.id }
+      : trip1;
     const busy = new Set(opts.escortIds);
     // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
     const map0 = targetTaken(cur.expedition_map, poi);
@@ -3852,6 +3885,20 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
     // enregistré entre-temps et rendre le butin encaissable deux fois.
+    // 🏰 Assaut pris : ceux qui rentrent (champions en trop) suivent le retour raccourci.
+    const advsBase =
+      ctl?.adventurers ?? (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value;
+    let advsBack = advsBase;
+    for (const p of partyList.value) {
+      const q = t.parties.find((r) => r.id === p.id);
+      if (q && q.returnAt !== p.returnAt)
+        advsBack = rescheduleReturners(
+          advsBack,
+          q.outcome.party?.escort ?? [],
+          p.returnAt,
+          q.returnAt,
+        );
+    }
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
@@ -3861,6 +3908,7 @@ export const useCharacterStore = defineStore('character', () => {
       //  ne fait que le confirmer.)
       ...x.patch,
       ...(ctl ? { adventurers: ctl.adventurers } : {}),
+      ...(advsBack !== advsBase ? { adventurers: advsBack } : {}),
     });
     x.play();
     return t.fresh;

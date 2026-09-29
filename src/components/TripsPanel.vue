@@ -25,6 +25,10 @@
       </span>
       <span v-else class="tr-poi">{{ poiEmo(t.poi) }}</span>
       <span class="tr-time">{{ t.time }}</span>
+      <template v-if="t.legs">
+        <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
+        <span class="tr-legs">↩ {{ t.legs.back }}</span>
+      </template>
       <i class="tr-bar" :style="{ width: t.pct + '%' }" />
     </button>
   </div>
@@ -32,6 +36,7 @@
   <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
   <div v-if="crew" class="trip-crew">
     <div class="tc-head">👥 En route vers {{ poiLabel(crew.poi) }} niv {{ crew.poi.level }}</div>
+    <p v-if="crew.legs" class="tc-legs">⏱️ {{ crew.legs }}</p>
     <div v-if="crew.haul.length" class="tc-haul">
       <span class="tc-haul-lab">Ramène</span>
       <span v-for="p in crew.haul" :key="p.emoji" class="tc-pill">{{ p.emoji }} {{ p.n }}</span>
@@ -49,7 +54,7 @@
       </div>
       <AdvPickTile v-for="a in crew.advs" :key="a.id" :adv="a" :on="true" readonly />
       <div v-if="crew.militia" class="tc-hero tc-mil">
-        <div class="tc-mil-emo">{{ MILITIA_EMO }}</div>
+        <div class="tc-mil-emo"><MilitiaPortrait /></div>
         <b>{{ crew.militia }} milicien{{ crew.militia > 1 ? 's' : '' }}</b>
       </div>
     </div>
@@ -79,6 +84,8 @@ export interface MapTrip {
   members: string[];
   /** Ce que le voyage ramènera (tiré au départ), montré au-dessus de l'équipe. */
   haul: { emoji: string; n: number }[];
+  /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
+  legs?: { go: string | null; back: string; detail: string } | null;
 }
 </script>
 
@@ -93,7 +100,8 @@ import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import type { CharacterProfile } from '@/lib/character';
 import type { Adventurer } from '@/lib/adventurers';
-import { MILITIA_EMO, militiaIn } from '@/lib/militia';
+import { militiaIn } from '@/lib/militia';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{
   trips: MapTrip[];
@@ -123,6 +131,7 @@ const crew = computed(() => {
     gone: t.members.length - advs.length - militia,
     poi: t.poi,
     haul: t.back ? t.haul : [],
+    legs: t.legs?.detail ?? null,
   };
 });
 </script>
@@ -199,8 +208,12 @@ const crew = computed(() => {
   border-color: var(--line);
 }
 .tc-mil-emo {
-  font-size: 30px;
-  line-height: 64px;
+  /* Le portrait (ou l'emoji de repli) à la taille de l'avatar du héros voisin. */
+  font-size: 48px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .tc-none {
   margin: 6px 0 0;
@@ -248,6 +261,21 @@ const crew = computed(() => {
   display: inline-block;
   width: 11px;
   height: 18px;
+}
+.tr-legs {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.tc-legs {
+  margin: 2px 0 6px;
+  font-size: 12px;
+  color: var(--dim);
 }
 .tr-time {
   flex-basis: 100%;

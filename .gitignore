@@ -40,3 +40,4 @@ vapid.json
 .push-cron-secret
 /.monster-raw
 /.pollinations-token
+/.power-raw
