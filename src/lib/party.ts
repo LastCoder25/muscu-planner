@@ -30,6 +30,8 @@ import {
   depositMessages,
   poiTravelLevel,
   travelOneWayMin,
+  travelPosition,
+  EXPE,
   type ActiveExpedition,
   type ExpeditionMessage,
   type ExpeditionOutcome,
@@ -348,6 +350,94 @@ export function rescheduleReturners(
     return { ...a, busyUntil: newAt };
   });
   return changed ? out : advs;
+}
+
+/**
+ * 🏥 QUI RENTRE À LA BASE au lieu de reprendre son poste (2026-09-29, décision de
+ * l'utilisateur : « rapatrier les blessés à la base quel que soit le point de départ »).
+ * Sur une SORTIE d'un point fixe (`homeId`, attaque combinée comprise) : les BLESSÉS
+ * (`hurt` et `lightHurt`) — et TOUT LE MONDE si le point n'est plus à nous (on ne marche
+ * pas vers un lieu perdu). `members` = ceux de CE voyage (le store les connaît par leur
+ * `busyUntil`). Un voyage parti de la base rentre déjà à la base : rien à faire.
+ */
+export function baseWalkers(
+  p: Pick<ActiveExpedition, 'homeId' | 'outcome'>,
+  members: readonly string[],
+  homeHeld: boolean,
+): string[] {
+  if (!p.homeId || !members.length) return [];
+  if (!homeHeld) return [...members];
+  const party = p.outcome.party;
+  const sick = new Set([...(party?.hurt ?? []), ...(party?.lightHurt ?? [])]);
+  return members.filter((id) => sick.has(id));
+}
+
+/**
+ * 🏥 Le trajet DIRECT vers la base de ceux qui quittent un voyage à `at` : il part de là où
+ * ils sont (le lieu de mission à l'arrivée, ou le chemin du retour si leur point tombe en
+ * route) et va à la ville. Sa durée = `legMs` (le trajet lieu → ville à leur pas) au
+ * prorata de la distance qui reste. ⚠️ C'est un voyage de RETOUR pur (`sentAt` = `midAt`
+ * = `at`) : il ne dépose aucun rapport (`wingOf`), ne prend aucun créneau, et ne porte
+ * aucun butin — le rapport du groupe l'a déjà.
+ */
+export function walkToBase(
+  p: ActiveParty,
+  ids: readonly string[],
+  at: number,
+  legMs: number,
+): ActiveParty {
+  const town = EXPE.town;
+  const from = at <= p.midAt ? { x: p.poi.x, y: p.poi.y } : travelPosition(p, at);
+  const full = Math.hypot(p.poi.x - town.x, p.poi.y - town.y);
+  const left = Math.hypot(from.x - town.x, from.y - town.y);
+  const share = full > 0 ? Math.min(1, left / full) : 1;
+  const party = p.outcome.party;
+  return {
+    id: `${p.id}~base@${at}`,
+    poi: { ...p.poi, x: from.x, y: from.y },
+    sentAt: at,
+    midAt: at,
+    returnAt: at + Math.max(60_000, Math.round(legMs * share)),
+    goldCost: 0,
+    seed: p.seed,
+    reported: true,
+    baseSplit: true,
+    wingOf: p.id,
+    outcome: {
+      ...p.outcome,
+      gold: 0,
+      energy: 0,
+      summonStones: 0,
+      mana: 0,
+      key: 0,
+      item: null,
+      items: [],
+      supplies: undefined,
+      seals: undefined,
+      runes: undefined,
+      ...(party ? { party: { ...party, escort: [...ids] } } : {}),
+    },
+  };
+}
+
+/** 🏥 Le voyage d'origine, SANS ceux partis à la base : ils ne sont plus dessinés avec lui,
+ *  ni comptés dehors jusqu'à son retour. `null` si PERSONNE de ce voyage ne reste
+ *  (`remaining` : ses membres qui reprennent leur poste — ⚠️ l'escorte d'un groupe d'attaque
+ *  combinée liste TOUS les groupes, on ne peut pas le lire sur elle). */
+export function withoutWalkers(
+  p: ActiveParty,
+  ids: readonly string[],
+  remaining: number,
+): ActiveParty | null {
+  if (remaining <= 0) return null;
+  const party = p.outcome.party;
+  const out = new Set(ids);
+  const escort = (party?.escort ?? []).filter((id) => !out.has(id));
+  return {
+    ...p,
+    baseSplit: true,
+    ...(party ? { outcome: { ...p.outcome, party: { ...party, escort } } } : {}),
+  };
 }
 
 /** Un groupe parti SANS le héros (colonne `characters.parties`, migr. 0077). ⚠️ Un groupe

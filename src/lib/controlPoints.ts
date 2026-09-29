@@ -350,6 +350,15 @@ export function turnBackLabel(n: number): string {
     : ' 🔙 1 renfort en route fait demi-tour.';
 }
 
+/** 🔙 La ligne du rapport de chute pour les SORTIES sur le chemin du retour, qui rentrent
+ *  à la base au lieu du point perdu. Vide s'il n'y en avait pas. */
+export function sortieHomeLabel(n: number): string {
+  if (n <= 0) return '';
+  return n > 1
+    ? ` 🏠 ${n} champions en sortie rentrent à la base.`
+    : ' 🏠 1 champion en sortie rentre à la base.';
+}
+
 /** 🏰 Perdu (reprise ennemie ou abandon) : le lieu redevient ennemi, troupe re-tirée. Repris
  *  par une attaque, il prend le rang et la bannière des assaillants (`won`) ; abandonné, un
  *  rang re-tiré. */

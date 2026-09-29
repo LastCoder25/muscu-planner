@@ -657,6 +657,9 @@ export interface ActiveExpedition {
   homeId?: string;
   /** 🔙 Demi-tour sur une embuscade perdue à l'aller (cf. `Voyage.turnBack`). */
   turnBack?: number;
+  /** 🏥 Le voyage a déjà été réparti à l'arrivée (`splitToBase`, party.ts) : ceux qui
+   *  rentrent à la base en sont partis. Posé une fois, pour ne pas répartir deux fois. */
+  baseSplit?: true;
   /** ⚔️🧭 Un groupe-COMPAGNON d'une attaque combinée : il voyage (tracé, retour) mais ne
    *  dépose AUCUN rapport — c'est le groupe principal qui porte le combat. */
   wingOf?: string;
