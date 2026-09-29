@@ -412,6 +412,61 @@ export function pendingFieldHits(
   return out.sort((a, b) => a.at - b.at);
 }
 
+/** 🗺️ Ce que la carte dessine pour une armée en campagne : sa TRAJECTOIRE jusqu'au lieu
+ *  attaqué (arrêtée au bord de sa cible), la flèche au bout, et l'anneau sur la cible. */
+export interface ArmyPath {
+  id: string;
+  kind: FieldArmyTag['kind'];
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  /** La pointe de flèche (chemin SVG) posée à l'arrivée du trait. */
+  arrow: string;
+  /** La cible (ville ou point fixe) : centre et rayon de l'anneau d'alerte. */
+  tx: number;
+  ty: number;
+  tr: number;
+}
+
+/** Rayon autour de la cible où le trait s'arrête : la ville (enceinte dessinée) est plus
+ *  large qu'un point fixe. */
+export const ARMY_PATH = { baseR: 10, pointR: 9, arrow: 2.2 } as const;
+
+/** 🗺️ La trajectoire d'une armée en campagne, de là où elle est jusqu'à ce qu'elle attaque —
+ *  lue sur la MÊME marche que la carte (`to`, la ville par défaut). `null` si ce n'est pas une
+ *  armée en campagne, ou si elle est déjà au contact. */
+export function armyTrajectory(p: Poi): ArmyPath | null {
+  if (!isFieldArmyPoi(p) || !p.army) return null;
+  const to = p.to ?? EXPE.town;
+  const r = p.army.kind === 'siege' ? ARMY_PATH.baseR : ARMY_PATH.pointR;
+  const dx = to.x - p.x;
+  const dy = to.y - p.y;
+  const d = Math.hypot(dx, dy);
+  if (d <= r) return null;
+  const ux = dx / d;
+  const uy = dy / d;
+  const x2 = to.x - ux * r;
+  const y2 = to.y - uy * r;
+  const a = ARMY_PATH.arrow;
+  const bx = x2 - ux * a;
+  const by = y2 - uy * a;
+  const f = (n: number) => Math.round(n * 100) / 100;
+  const arrow = `M${f(x2)},${f(y2)} L${f(bx - uy * a * 0.6)},${f(by + ux * a * 0.6)} L${f(bx + uy * a * 0.6)},${f(by - ux * a * 0.6)} Z`;
+  return {
+    id: p.id,
+    kind: p.army.kind,
+    x1: p.x,
+    y1: p.y,
+    x2,
+    y2,
+    arrow,
+    tx: to.x,
+    ty: to.y,
+    tr: r - 1,
+  };
+}
+
 /** La part de la troupe de reprise qui arrive vraiment (ce que les chocs n'ont pas abattu). */
 export function retakeRemaining(p: Pick<Poi, 'control'>): number {
   return 1 - clamp01(p.control?.retakeCut ?? 0);
