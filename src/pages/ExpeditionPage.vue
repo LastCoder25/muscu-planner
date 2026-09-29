@@ -368,6 +368,18 @@
                   width="24"
                   height="24"
                 />
+                <!-- Salle de combat déjà passée : la créature affrontée, grisée (vaincue ou
+                     non, elle ne bouge plus). Repli sur l'emoji sans illustration. -->
+                <image
+                  v-else-if="foeArtOf(r)"
+                  :href="foeArtOf(r)!"
+                  :x="cx(r) - SIZE / 2 + 3"
+                  :y="cy(r) - SIZE / 2 + 3"
+                  :width="SIZE - 6"
+                  :height="SIZE - 6"
+                  class="room-foe"
+                  preserveAspectRatio="xMidYMax meet"
+                />
                 <text v-else :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
               </template>
               <template v-else>
@@ -1183,9 +1195,17 @@ function roomSeed(id: number): number {
 }
 const depthOf = () => labyDepth(run.value.floor, run.value.floors);
 
+// Créature d'une salle (roster du palier + archétype), seedée → la MÊME au combat, dans le
+// pronostic de l'auto et sur la carte une fois la salle passée.
+function foeOf(id: number, isBoss: boolean): LabyFoe {
+  return pickLabyFoe(mulberry32((roomSeed(id) ^ 0x2f6b) >>> 0), labyTierIndex.value, isBoss);
+}
+function foeArtOf(r: Room): string | null {
+  if (r.type !== 'monster' && r.type !== 'boss') return null;
+  return monsterArt(foeOf(r.id, r.type === 'boss').name);
+}
 function fightRoom(id: number, isBoss: boolean) {
-  // Créature de la salle (roster du palier + archétype), seedée → rejouable.
-  const foe = pickLabyFoe(mulberry32((roomSeed(id) ^ 0x2f6b) >>> 0), labyTierIndex.value, isBoss);
+  const foe = foeOf(id, isBoss);
   const monster = makeMonster(isBoss, depthOf(), foe);
   const goldWin = Math.round((6 + 3 * heroLevel.value) * (isBoss ? 4 : 1));
   stageStartPv.value = run.value.pv; // PV AVANT le combat (barre part de là, pas du max)
@@ -1591,11 +1611,7 @@ const AUTO_SAFE_PV = 0.28;
 function bossWinnableNow(): boolean {
   const bossRoom = floor.value.rooms.find((r) => r.type === 'boss');
   if (!bossRoom) return false; // étage intermédiaire (pas de boss) → non concerné
-  const foe = pickLabyFoe(
-    mulberry32((roomSeed(bossRoom.id) ^ 0x2f6b) >>> 0),
-    labyTierIndex.value,
-    true,
-  );
+  const foe = foeOf(bossRoom.id, true);
   const monster = makeMonster(true, depthOf(), foe);
   const combatFighter: Combatant = labyrinthFighter(fighter.value, run.value.pv);
   return simulateCombat(combatFighter, monster, {
@@ -2396,6 +2412,10 @@ function returnToLobby() {
 }
 .room-flash {
   fill: transparent;
+}
+.room-foe {
+  opacity: 0.6;
+  filter: grayscale(0.7) drop-shadow(0 1px 1px #000);
 }
 .door {
   fill: #050403;
