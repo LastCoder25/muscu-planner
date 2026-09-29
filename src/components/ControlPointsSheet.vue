@@ -1,10 +1,9 @@
 <template>
   <!-- 🗂️ LES POINTS FIXES, EN UNE LISTE (2026-09-28, demandé : « une icône au-dessus du
        dézoom qui liste les lieux fixes pour en faire la gestion »). Une tuile par point :
-       son rang, qui le tient, ce qui appelle une action. Toucher une tuile la déplie : qui
-       est dessus, qui y va. Les ACTIONS (attaquer, renforcer, ramener, récolter) restent
-       celles de la fiche du lieu — « Gérer » l'ouvre : deux écrans qui font la même chose
-       finiraient par se contredire. -->
+       son rang, qui le tient, ce qui appelle une action. Toucher une tuile ouvre la fiche du
+       lieu : les ACTIONS (attaquer, renforcer, ramener, récolter) restent les siennes — deux
+       écrans qui font la même chose finiraient par se contredire. -->
   <q-dialog
     :model-value="modelValue"
     position="bottom"
@@ -48,141 +47,73 @@
           {{ CONTROL_FILTER_LABEL[c.id] }} · {{ c.n }}
         </button>
       </div>
-      <div
+      <!-- 👆 Toucher une tuile ouvre DIRECTEMENT la gestion du lieu (demandé) : elle ne se
+           déplie plus. Ce qu'on y lisait (faction, assaut, renforts, garnison en détail) vit
+           sur la fiche du lieu, qui porte aussi les actions — un seul endroit. -->
+      <button
         v-for="r in shownRows"
         :key="r.poi.id"
-        class="cps-tile"
-        :class="['st-' + r.status, { open: openId === r.poi.id }]"
+        type="button"
+        class="cps-tile cps-row"
+        :class="'st-' + r.status"
         :style="{ '--rk': isHeldControl(r.poi) ? HELD_COLOR : rankOf(r).color }"
+        :aria-label="`${CONTROL_LABEL[r.kind]} — ouvrir la gestion`"
+        @click="emit('open', r.poi)"
       >
-        <button
-          type="button"
-          class="cps-row"
-          :aria-expanded="openId === r.poi.id"
-          @click="toggle(r.poi.id)"
+        <span class="cps-emo">{{ CONTROL_EMO[r.kind] }}</span>
+        <span class="cps-main">
+          <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
+          <span v-if="!isHeldControl(r.poi) || r.reinforcing.length" class="cps-pills">
+            <span v-if="!isHeldControl(r.poi)" class="pill rk"
+              >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
+            >
+            <span v-if="r.reinforcing.length" class="pill"
+              >🧭 +{{ r.reinforcing.length }} en route</span
+            >
+          </span>
+        </span>
+        <!-- 🏷️ Le statut en haut à droite (demandé), au-dessus de ce que le lieu rapporte. -->
+        <span class="cps-end">
+          <span class="pill st">{{ STATUS[r.status] }}</span>
+          <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
+          <span v-if="r.progress" class="cps-yield-end prog" :class="{ full: isFull(r) }">
+            <span>{{ r.progress.text }}</span>
+            <span v-if="r.progress.pct !== null" class="cps-gauge"
+              ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
+            /></span>
+          </span>
+          <span v-else class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
+        </span>
+        <!-- 🖼️ La GARNISON, dans sa pastille (demandé : « pour distinguer cette partie-là ») :
+             une case par place (1 à N), remplie d'une miniature par champion ou milicien
+             posté, numérotée si libre — elle remplace la pastille « 🛡️ 2/5 ». Sur SA propre
+             rangée : dans la colonne du nom, les cases rétrécissaient selon la largeur du texte
+             de droite (signalé sur la tour de guet, sans jauge). -->
+        <span
+          v-if="r.status !== 'enemy' && r.status !== 'assault'"
+          class="cps-minis"
+          :aria-label="`Garnison ${r.garrison.length} sur ${r.seats}`"
         >
-          <span class="cps-emo">{{ CONTROL_EMO[r.kind] }}</span>
-          <span class="cps-main">
-            <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
-            <span v-if="!isHeldControl(r.poi) || r.reinforcing.length" class="cps-pills">
-              <span v-if="!isHeldControl(r.poi)" class="pill rk"
-                >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
-              >
-              <span v-if="r.reinforcing.length" class="pill"
-                >🧭 +{{ r.reinforcing.length }} en route</span
-              >
-            </span>
-          </span>
-          <!-- 🏷️ Le statut en haut à droite (demandé), au-dessus de ce que le lieu rapporte. -->
-          <span class="cps-end">
-            <span class="pill st">{{ STATUS[r.status] }}</span>
-            <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
-            <span v-if="r.progress" class="cps-yield-end prog" :class="{ full: isFull(r) }">
-              <span>{{ r.progress.text }}</span>
-              <span v-if="r.progress.pct !== null" class="cps-gauge"
-                ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
-              /></span>
-            </span>
-            <span v-else class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
-          </span>
-          <!-- 🖼️ Qui tient la place, d'un coup d'œil (demandé) : une case par place (1 à N),
-               remplie d'une miniature par champion ou milicien posté, numérotée si libre.
-               Elle remplace la pastille « 🛡️ 2/5 » : les cases disent la même chose.
-               Sur SA propre rangée, sous le nom et le statut : dans la colonne du nom, les cases
-               rétrécissaient selon la largeur du texte de droite, donc n'avaient pas la même
-               taille d'un lieu à l'autre (signalé sur la tour de guet, sans jauge). -->
-          <span v-if="r.status !== 'enemy' && r.status !== 'assault'" class="cps-minis">
-            <template v-for="(s, i) in slotsOf(r)" :key="i">
-              <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
-                ><ChampionPortrait :champion-id="s.adv.championId">{{
-                  advTitle(s.adv)?.emoji ?? '🧑'
-                }}</ChampionPortrait></span
-              >
-              <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
-                MILITIA_EMO
-              }}</span>
-              <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
-            </template>
-          </span>
-          <span class="cps-chev">{{ openId === r.poi.id ? '▾' : '▸' }}</span>
-        </button>
-        <div v-if="openId === r.poi.id" class="cps-body">
-          <p v-if="r.progress" class="cps-line dim">Rapporte : {{ CONTROL_YIELD[r.kind] }}</p>
-          <template v-if="r.status === 'enemy' || r.status === 'assault'">
-            <p class="cps-line">
-              {{ FACTION_EMOJI[r.poi.control!.faction] }} Tenu par
-              {{ FACTION_LABEL[r.poi.control!.faction] }} · force ≈
-              {{ fmtSize(r.poi.control!.size) }} champion{{ r.poi.control!.size > 1 ? 's' : '' }}
-            </p>
-            <template v-if="r.assault">
-              <p class="cps-sec">
-                ⚔️ Équipe d’assaut · arrivée dans {{ formatDuration(r.assault.inMs) }}
-              </p>
-              <div class="cps-advs">
-                <AdvPickTile
-                  v-for="a in advsOf(r.assault.ids)"
-                  :key="a.id"
-                  :adv="a"
-                  :on="false"
-                  readonly
-                />
-              </div>
-            </template>
+          <template v-for="(s, i) in slotsOf(r)" :key="i">
+            <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
+              ><ChampionPortrait :champion-id="s.adv.championId">{{
+                advTitle(s.adv)?.emoji ?? '🧑'
+              }}</ChampionPortrait></span
+            >
+            <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
+              MILITIA_EMO
+            }}</span>
+            <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
           </template>
-          <template v-else>
-            <p v-if="r.status === 'imminent'" class="cps-line alert">
-              ⚠️ Bataille imminente — un renfort proche peut encore arriver à temps.
-            </p>
-            <p v-if="r.status === 'empty'" class="cps-line warn">
-              ⚠️ Sans défense : il ne produit plus, et l’ennemi le reprendra à sa prochaine attaque.
-            </p>
-            <p class="cps-sec">🛡️ En garnison</p>
-            <div v-if="r.garrison.length" class="cps-advs">
-              <AdvPickTile
-                v-for="a in advsOf(r.garrison)"
-                :key="a.id"
-                :adv="a"
-                :on="false"
-                readonly
-              />
-              <!-- 🛡️ Les miliciens : anonymes, une tuile chacun (comme sur la carte). -->
-              <div v-for="id in milOf(r.garrison)" :key="id" class="mil-tile">
-                <span class="mil-emo">{{ MILITIA_EMO }}</span>
-                <span class="mil-name">{{ MILITIA_NAME }}</span>
-              </div>
-            </div>
-            <p v-else class="cps-line dim">Personne.</p>
-            <template v-if="r.reinforcing.length">
-              <p class="cps-sec">🧭 En route (renfort)</p>
-              <div class="cps-advs">
-                <AdvPickTile
-                  v-for="x in reinfOf(r)"
-                  :key="x.adv.id"
-                  :adv="x.adv"
-                  :on="false"
-                  readonly
-                  :reason="`arrivée dans ${formatDuration(x.inMs)}`"
-                />
-                <div v-for="x in milReinfOf(r)" :key="x.id" class="mil-tile">
-                  <span class="mil-emo">{{ MILITIA_EMO }}</span>
-                  <span class="mil-name">{{ MILITIA_NAME }}</span>
-                  <span class="mil-sub">🧭 {{ formatDuration(x.inMs) }}</span>
-                </div>
-              </div>
-            </template>
-          </template>
-          <button type="button" class="cps-go" @click="emit('open', r.poi)">
-            {{ ACTION[r.status] }}
-          </button>
-        </div>
-      </div>
+        </span>
+        <span class="cps-chev" aria-hidden="true">›</span>
+      </button>
     </div>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import AdvPickTile from '@/components/AdvPickTile.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
@@ -199,11 +130,9 @@ import {
   type ControlRosterRow,
   type ControlRosterStatus,
 } from '@/lib/controlPoints';
-import { formatDuration } from '@/lib/duration';
 import { MILITIA_EMO, MILITIA_NAME, isMilitiaId } from '@/lib/militia';
 import type { Poi } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
-import { FACTION_EMOJI, FACTION_LABEL } from '@/lib/raid';
 
 const props = defineProps<{
   modelValue: boolean;
@@ -218,13 +147,6 @@ const STATUS: Record<ControlRosterStatus, string> = {
   held: '🏰 tenu',
   empty: '⚠️ sans défense',
   imminent: '⚠️ attaque imminente',
-};
-const ACTION: Record<ControlRosterStatus, string> = {
-  enemy: '⚔️ Attaquer',
-  assault: '🗺️ Voir sur la carte',
-  held: '🏰 Gérer · récolter, renforcer, ramener',
-  empty: '➕ Envoyer des renforts',
-  imminent: '➕ Renforcer',
 };
 
 /** 🔎 Le filtre choisi (`null` = toutes). S'il se vide (on vient de reprendre la dernière
@@ -243,8 +165,6 @@ const shownRows = computed(() => {
   const f = activeFilter.value;
   return f ? props.rows.filter((r) => controlFilterOf(r.status) === f) : props.rows;
 });
-const openId = ref<string | null>(null);
-const toggle = (id: string) => (openId.value = openId.value === id ? null : id);
 const heldCount = computed(
   () => props.rows.filter((r) => r.status !== 'enemy' && r.status !== 'assault').length,
 );
@@ -256,7 +176,6 @@ const advsOf = (ids: readonly string[]) =>
   });
 /** 🛡️ Les miliciens d'une garnison : ils n'existent pas dans le vivier (`advsOf` les ignore). */
 const milOf = (ids: readonly string[]) => ids.filter(isMilitiaId);
-const milReinfOf = (r: ControlRosterRow) => r.reinforcing.filter((x) => isMilitiaId(x.id));
 type Slot = { kind: 'adv'; adv: Adventurer } | { kind: 'mil' } | { kind: 'free' };
 /** Les cases de la ligne : champions, puis miliciens, puis places libres, jusqu'à `seats`. */
 const slotsOf = (r: ControlRosterRow): Slot[] => {
@@ -267,16 +186,10 @@ const slotsOf = (r: ControlRosterRow): Slot[] => {
   const free = Math.max(0, r.seats - filled.length);
   return [...filled, ...Array.from({ length: free }, () => ({ kind: 'free' as const }))];
 };
-const reinfOf = (r: ControlRosterRow) =>
-  r.reinforcing.flatMap((x) => {
-    const adv = byId.value.get(x.id);
-    return adv ? [{ adv, inMs: x.inMs }] : [];
-  });
 const rankOf = (r: ControlRosterRow) => poiRank(r.poi);
 /** Réserve pleine (or/XP) ou unité prête (consommable, rune) : la jauge passe à l'accent. */
 const isFull = (r: ControlRosterRow) =>
   !!r.progress && r.progress.pct !== null && r.progress.pct >= 0.999;
-const fmtSize = (n: number) => String(n).replace('.', ',');
 </script>
 
 <style scoped>
@@ -339,6 +252,7 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   color: var(--dim);
 }
 .cps-tile {
+  font: inherit;
   border: 1px solid var(--line);
   border-left: 4px solid var(--rk);
   border-radius: 12px;
@@ -360,8 +274,6 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   width: 100%;
   min-height: 56px;
   padding: 8px 10px;
-  border: 0;
-  background: transparent;
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -418,10 +330,17 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
 .cps-minis {
   grid-column: 2 / 4;
   grid-row: 2;
+  justify-self: start;
   display: flex;
   flex-wrap: nowrap;
+  align-items: center;
   gap: 4px;
   min-width: 0;
+  max-width: 100%;
+  padding: 3px 5px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--rk) 45%, var(--line));
+  background: color-mix(in srgb, var(--rk) 8%, var(--surface));
 }
 .mini {
   display: grid;
@@ -452,9 +371,6 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   color: var(--dim);
   grid-column: 4;
   grid-row: 1 / span 2;
-}
-.cps-body {
-  padding: 0 10px 10px;
 }
 /* Colonne de droite : le statut EN HAUT, ce que le lieu rapporte dessous. */
 .cps-end {
@@ -504,62 +420,5 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
 }
 .cps-yield-end.prog.full .cps-gauge > span {
   background: var(--accent);
-}
-.cps-line {
-  font-size: 13px;
-  margin: 4px 0;
-}
-.dim {
-  color: var(--dim);
-}
-.warn,
-.alert {
-  color: var(--d4);
-}
-.cps-sec {
-  font-size: 12.5px;
-  font-weight: 700;
-  margin: 10px 0 6px;
-}
-.cps-advs {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-.mil-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  min-height: 64px;
-  padding: 6px 4px;
-  border-radius: 12px;
-  border: 1px dashed var(--line);
-  background: var(--surface);
-  color: var(--text);
-}
-.mil-emo {
-  font-size: 22px;
-  line-height: 1;
-}
-.mil-name {
-  font-size: 11.5px;
-  font-weight: 600;
-}
-.mil-sub {
-  font-size: 10.5px;
-  color: var(--dim);
-}
-.cps-go {
-  margin-top: 10px;
-  width: 100%;
-  min-height: 44px;
-  border-radius: 10px;
-  border: 0;
-  background: var(--accent);
-  color: #15120e;
-  font-weight: 700;
-  cursor: pointer;
 }
 </style>

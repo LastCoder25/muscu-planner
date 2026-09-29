@@ -2016,8 +2016,9 @@ describe('🔀 FusionPanel', () => {
     expect(out.match(/class="pill rk"/g)?.length).toBe(5);
   }, 30_000);
 
-  it('🛡️ la garnison dépliée montre aussi les MILICIENS (et ceux en route)', async () => {
+  it('🛡️ la garnison montre les MILICIENS, et toucher un lieu ouvre sa gestion', async () => {
     // Signalé : « dans la liste de garnison des lieux fixes on ne voit pas les miliciens ».
+    // Puis (demandé) : toucher un lieu ouvre DIRECTEMENT sa gestion — la tuile ne se déplie plus.
     const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
     const { captureControl, controlIdOf, controlRoster, ensureControls } =
       await import('@/lib/controlPoints');
@@ -2042,24 +2043,31 @@ describe('🔀 FusionPanel', () => {
       ),
     };
     let out = '';
+    const opened: string[] = [];
     expect(
       await mountIt(
         ControlPointsSheet,
-        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30), advs: ROW.adventurers },
+        {
+          modelValue: true,
+          rows: controlRoster(map, [], 3600_000, 30),
+          advs: ROW.adventurers,
+          onOpen: (p: { id: string }) => opened.push(p.id),
+        },
         ROW,
         undefined,
         '/',
         (h) => (out = h),
-        (host) => host.querySelector<HTMLElement>('.cps-row')?.click(),
+        (host) => host.querySelector<HTMLElement>('.st-held')?.click(),
       ),
     ).toBeNull();
-    expect(out).toContain('En garnison');
-    expect(out.match(/class="mil-tile"/g)?.length).toBe(3);
-    expect(out).toContain('Milicien');
-    // 🖼️ Sur la ligne (sans déplier) : une miniature par champion posté, une par milicien
-    // posté — ceux en route n'en ont pas.
+    expect(opened).toEqual([id]);
+    expect(out).not.toContain('cps-body');
+    // 🖼️ La garnison, dans sa pastille : une miniature par champion posté, une par milicien
+    // posté — ceux en route n'en ont pas (ils sont comptés dans « 🧭 +1 en route »).
+    expect(out).toContain('Garnison 3 sur 5');
     expect(out.match(/class="mini"/g)?.length).toBe(1);
     expect(out.match(/class="mini mil"/g)?.length).toBe(2);
+    expect(out).toContain('🧭 +1 en route');
     // Retiré (demandé) : il fallait de toute façon ouvrir le lieu pour récolter.
     expect(out).not.toContain('à récolter');
   }, 30_000);
