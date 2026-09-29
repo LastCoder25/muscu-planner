@@ -142,6 +142,16 @@ describe('🗓️ quêtes de la semaine — ce qui compte', () => {
     );
     expect(questEntries(s).map((e) => e.kind)).toEqual(['other', 'tennis', 'muscu']);
   });
+  it('⚠️ un « autre sport » nommé Tennis est du tennis ; le tennis de table non', () => {
+    const s = empty();
+    s.sessions.push(
+      { performed_at: at(MON), payload: { discipline: 'autre_sport', name: 'Tennis' } },
+      { performed_at: at(addDays(MON, 1)), payload: { discipline: 'autre_sport', name: 'Tennis de table' } },
+      { performed_at: at(addDays(MON, 2)), payload: { discipline: 'autre_sport', name: ' tennis ' } },
+    );
+    expect(questEntries(s).map((e) => e.kind)).toEqual(['tennis', 'other', 'tennis']);
+    expect(quest(s, 'tennis_days', addDays(MON, 6)).done).toBe(2);
+  });
   it('la régularité compte les deux moitiés de la semaine', () => {
     const s = empty();
     s.sessions.push({ performed_at: at(MON) });

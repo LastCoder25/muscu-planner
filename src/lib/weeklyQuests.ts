@@ -78,7 +78,10 @@ export const WEEKLY_QUESTS = {
 export interface QuestSources {
   /** `session_logs` : muscu, séance libre, prépa physique, autre sport. La discipline dit
    *  laquelle (absente = musculation). */
-  sessions: { performed_at?: string | null; payload?: { discipline?: string | null } | null }[];
+  sessions: {
+    performed_at?: string | null;
+    payload?: { discipline?: string | null; name?: string | null } | null;
+  }[];
   /** Sorties cardio (miroirs compris : ils reflètent une vraie sortie de défi). */
   cardio: { performed_at?: string | null; payload?: { duration_min?: number | null } | null }[];
   /** Séances sur le court. */
@@ -108,9 +111,19 @@ const dayOf = (iso: string | null | undefined): string | null =>
 
 /** ⚠️ Une séance n'est pas toujours de la muscu : la prépa physique est du TENNIS (son hub
  *  est la page Tennis, son XP va à la piste Tennis) et un « autre sport » (yoga…) n'est pas
- *  une séance de force. Avant, les deux comptaient comme un jour de muscu. */
-function sessionKind(discipline: string | null | undefined): SportKind {
-  if (discipline === 'autre_sport') return 'other';
+ *  une séance de force. Avant, les deux comptaient comme un jour de muscu.
+ *
+ *  ⚠️ UN « AUTRE SPORT » NOMMÉ « TENNIS » EST DU TENNIS (v0.1364, signalé par l'utilisateur :
+ *  « j'ai fait 2 séances de tennis aujourd'hui ») : c'est la façon la plus simple de noter
+ *  une partie, et 39 de ses séances sont saisies ainsi — la quête tennis les ignorait. Le nom
+ *  vient de la liste fixe des sports (`SPORT_BENEFIT`) : égalité exacte, pour que « Tennis de
+ *  table » reste un autre sport. */
+function sessionKind(
+  discipline: string | null | undefined,
+  name: string | null | undefined,
+): SportKind {
+  if (discipline === 'autre_sport')
+    return name?.trim().toLowerCase() === 'tennis' ? 'tennis' : 'other';
   if (discipline === 'prepa_physique') return 'tennis';
   return 'muscu';
 }
@@ -122,7 +135,7 @@ export function questEntries(src: QuestSources): QuestEntry[] {
     const d = dayOf(iso);
     if (d) out.push({ day: d, kind, minutes });
   };
-  for (const r of src.sessions) push(r.performed_at, sessionKind(r.payload?.discipline));
+  for (const r of src.sessions) push(r.performed_at, sessionKind(r.payload?.discipline, r.payload?.name));
   for (const r of src.cardio)
     push(r.performed_at, 'cardio', Math.max(0, Number(r.payload?.duration_min) || 0));
   for (const r of src.tennis) push(r.performed_at, 'tennis');
@@ -288,7 +301,7 @@ export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) =
   cardio_minutes: { emoji: '🏃', label: (t) => `${t} min de sortie cardio` },
   tennis_days: {
     emoji: '🎾',
-    label: (t) => `Tennis ${t} jour${t > 1 ? 's' : ''} (court ou prépa physique)`,
+    label: (t) => `Tennis ${t} jour${t > 1 ? 's' : ''} (partie, court ou prépa)`,
   },
   variety: { emoji: '🔀', label: (t) => `${t} sports différents cette semaine` },
   // ⚠️ Les jours sont écrits : « début / fin de semaine » laissait deviner où passe la coupure.
