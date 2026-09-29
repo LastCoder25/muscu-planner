@@ -51,13 +51,11 @@ export const MILITIA = {
    *  reste plafonnée à celle d'une garnison pleine (`CONTROL.garrisonShare`), et la tenue
    *  par `CONTROL.maxHold`. */
   perPoint: 5,
+  /** 🏰 AU REMPART (2026-09-30, demandé : « les miliciens présents défendent aussi la base ») :
+   *  ce que vaut un milicien de la base dans un siège, en part d'un milicien de carte (lu par
+   *  `militiaGuard`, `raid.ts`). ⚠️ MESURÉ, cf. `militiaSiege.test`. */
+  siegeShare: 0.5,
 } as const;
-// ⚠️ PAS ENCORE AU REMPART (décision de l'utilisateur : « on verra après pour les défenses de
-// la base »). Mesuré pour ce jour-là (150 sièges, enceinte à niveau, milice au complet restée
-// à la base) : à pleine valeur, une enceinte SANS défenseurs passait de 29 % à 83 % de tenue
-// au niveau 12 — la milice devenait le rempart. À la moitié de sa valeur : 29 → 60 % au
-// niveau 12, 72 → 83 % au 30, 70 → 82 % au 100, et +0 à +1 point quand le héros et les
-// champions défendent déjà.
 
 /** Préfixe des ids de miliciens dans une garnison — jamais celui d'un champion (`adv_…`). */
 export const MILITIA_PREFIX = 'mil:';

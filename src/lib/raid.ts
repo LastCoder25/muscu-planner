@@ -37,6 +37,14 @@ import { escortCombatant, escortGear, mentorXpMult, unitEffects, type EscortKit 
 import { ADV_GEAR_SLOTS, canWearAdvGear, type AdvGear, type AdvGearSlot } from './advGear';
 import { beyondCap, buildingUpgradeCost } from './buildings';
 import {
+  MILITIA,
+  MILITIA_EMO,
+  MILITIA_NAME,
+  MILITIA_PREFIX,
+  militiaCombatant,
+  militiaLost,
+} from './militia';
+import {
   advAscendedRank,
   advStats,
   advTitle,
@@ -286,6 +294,9 @@ export interface RaidReport {
   /** Les AVENTURIERS à terre en fin de siège (ni balistes, ni héros). Optionnel : les
    *  rapports d’avant ne l’ont pas, et n’envoient donc personne à l’infirmerie. */
   wounded?: string[];
+  /** 🛡️ Miliciens de la base MORTS au combat (défaite : tous ceux engagés ; victoire : ceux
+   *  tombés — la règle de `militiaLost`). Optionnel : absent = aucun. */
+  militiaLost?: number;
 }
 
 /** Un défenseur tel que le rejeu doit le montrer — l’identité, pas les chiffres. */
@@ -685,7 +696,10 @@ export const RAID = {
   // ⚠️ 32 → 34 en v0.1299 : les porteurs 🐫 comptant désormais avec le héros, le revenu d’une
   // mine monte de ~8 % aux niveaux 12-26 et le niveau 15 passait sous la borne (0,33
   // journée). À 34 il revient à 0,35, le plus cher (niveau 5) reste à 0,62.
-  healGoldK: 34,
+  // ⚠️ 34 → 37 au retrait du CONTRETEMPS (il coupait une cargaison en deux une fois sur ~10) :
+  // le revenu d’une mine remonte, et le niveau 15 retombait à 0,33 journée. Mesuré à 37 :
+  // 0,36 (niveau 15) à 0,64 (niveau 5), dans la bande 0,35-0,7.
+  healGoldK: 37,
   healGoldExp: 1.75,
   // Soins d’un CHAMPION = cette part du tarif du héros (v0.1152, demandé). Mesuré : payer
   // chaque blessé de mission au plein tarif coûtait 8 à 34 % du revenu de référence (0,16 à
@@ -2174,6 +2188,9 @@ export interface GuardUnit {
   pv: number;
   damage: number;
   ranged: boolean;
+  /** 🛡️ Un MILICIEN de la base (pas un champion) : il ne va pas à l'infirmerie, il meurt
+   *  (`militiaLost`), et il n'apprend rien. */
+  militia?: boolean;
 }
 
 /**
@@ -2417,7 +2434,8 @@ export function guardUnits(
   playerLevel: number,
   advs: Adventurer[],
   cap: number,
-  ctx?: EscortKit,
+  ctx: EscortKit | undefined,
+  militia: number,
 ): GuardUnit[] {
   // ⬆️ Le bonus d'ascension est ramené à l'étalon du NIVEAU DU JOUEUR : l'armée ne connaît
   // que le héros (`refFighter`), pas les champions de référence, donc sans ça le +5 %/rang
@@ -2429,7 +2447,7 @@ export function guardUnits(
     a.championId ? { ...a, ascended: Math.max(0, advAscendedRank(a) - pRank) } : a,
   );
   const pairs = ctx ? escortGear(retenus, ctx) : new Map<string, AdvGear[]>();
-  return retenus.map((a) => {
+  const champs = retenus.map((a) => {
     // ⚠️ `escortCombatant` NU (sans compétences ni équipement), et on replie ensuite :
     // une unité de siège n'a que PV et dégâts, tout le reste doit être PORTÉ par eux.
     const one = escortCombatant([a], a.name, {}, false);
@@ -2450,6 +2468,38 @@ export function guardUnits(
       ...f,
     };
   });
+  return [...champs, ...militiaGuard(playerLevel, militia)];
+}
+
+/**
+ * 🛡️ LES MILICIENS PRÉSENTS À LA BASE défendent aussi (demandé par l'utilisateur, 2026-09-30 :
+ * « en cas d'attaque, les miliciens présents défendent aussi la base »).
+ *
+ * ⚠️ `militia` est REQUIS dans `guardUnits` (même raison que `cap`) : le pronostic, le panneau
+ * de forces et la bataille passent tous par là — un appelant qui l'oublierait annoncerait une
+ * base sans milice pendant que le combat en aligne une.
+ *
+ * ⚠️ HORS du plafond du Panthéon (`engageCap`) : il borne les CHAMPIONS engagés ; la milice a
+ * le sien, l'effectif de la Caserne. Ils tiennent la COUR (hommes d'armes, sans abri) : c'est
+ * la brèche qu'une milice garde. Leur valeur au rempart = `MILITIA.siegeShare` d'un milicien
+ * de carte (cf. là-bas, mesuré), repliée comme celle d'un champion (`guardSiegeK`).
+ */
+export function militiaGuard(playerLevel: number, n: number): GuardUnit[] {
+  const count = Math.max(0, Math.floor(Number(n) || 0));
+  if (!count) return [];
+  const c = militiaCombatant(playerLevel);
+  const k = MILITIA.siegeShare * RAID.guardSiegeK;
+  const pv = Math.max(1, Math.round(c.pv * k));
+  const damage = Math.max(1, Math.round(c.damage * (c.strikes ?? 1) * k));
+  return Array.from({ length: count }, (_, i) => ({
+    id: `${MILITIA_PREFIX}base:${i + 1}`,
+    name: MILITIA_NAME,
+    emoji: MILITIA_EMO,
+    pv,
+    damage,
+    ranged: false,
+    militia: true,
+  }));
 }
 
 /**
@@ -2477,6 +2527,7 @@ export function resolveRaid(
   const att = siegeAttackers(raid);
   const def = siegeDefenders(input.defenses, input.playerLevel, input.hero, input.guard ?? []);
   const r = simulateSiege(att, def, wall, raid.seed);
+  const milIds = (input.guard ?? []).filter((g) => g.militia).map((g) => g.id);
 
   // ⚠️ « Groupes repoussés » se DÉDUIT des corps tombés, il ne se re-simule pas : le
   // moteur nomme chaque mort, on n'a qu'à les rattacher à leur groupe. L'écran parle
@@ -2522,7 +2573,14 @@ export function resolveRaid(
       })),
     // ⚠️ Seuls les AVENTURIERS : une baliste à terre n’a pas de lit, et le héros a sa
     // propre convalescence (`base.wound`).
-    wounded: r.wounded.filter((id) => def.find((d) => d.id === id)?.origin === 'adventurer'),
+    // ⚠️ Pas les MILICIENS non plus : un milicien ne se soigne pas, il meurt (ci-dessous).
+    wounded: r.wounded.filter(
+      (id) => !milIds.includes(id) && def.find((d) => d.id === id)?.origin === 'adventurer',
+    ),
+    // 🛡️ La règle de la milice, la MÊME que sur un point de contrôle (`militiaLost`).
+    ...(milIds.length
+      ? { militiaLost: militiaLost(milIds, { win: r.held, down: r.wounded }).length }
+      : {}),
   };
 }
 

@@ -108,6 +108,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const $q = useQuasar();
   const auth = useAuthStore();
   const char = useCharacterStore();
+  /** 🛡️ Les miliciens à la base : ils défendent en cas de siège (compter les mêmes que le combat). */
+  const milHome = computed(() => char.row?.base?.militia?.home ?? 0);
   const busyParty = ref(false);
 
   const partyHero = ref(false);
@@ -604,11 +606,11 @@ export function useExpeditionParty(ctx: PartyCtx) {
       inc,
       {
         hero: heroNow,
-        guard: guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value),
+        guard: guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value, milHome.value),
       },
       {
         hero: partyHeroOn.value ? null : heroNow,
-        guard: guardUnits(heroLevel.value, restants, cap.value, compCtx.value),
+        guard: guardUnits(heroLevel.value, restants, cap.value, compCtx.value, milHome.value),
       },
       { backAt: coarseNow.value + partyMin.value * 60_000, raidAt: raidAt.value },
     );

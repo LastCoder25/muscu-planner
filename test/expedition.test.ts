@@ -288,7 +288,7 @@ describe('expedition — résolution', () => {
   });
 
   it('startExpedition : l’ALLER est fixe, le RETOUR peut être écourté, coût cohérent', () => {
-    // Une rencontre de trajet (passage découvert / contretemps) raccourcit la jambe
+    // Une rencontre de trajet (passage découvert) raccourcit la jambe
     // retour — jamais l'aller, sinon le héros n'aurait pas atteint l'objectif et le
     // rapport déposé à `midAt` n'aurait aucun sens.
     for (const seed of [42, 7, 1234, 99, 5150]) {

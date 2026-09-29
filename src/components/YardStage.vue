@@ -71,6 +71,11 @@
       <div v-else-if="portraits[d.id]" class="champ">
         <ChampionPortrait :champion-id="portraits[d.id]!">{{ d.emoji }}</ChampionPortrait>
       </div>
+      <!-- 🛡️ Un milicien : son portrait debout ; tombé, il MEURT (💀), il ne se soigne pas. -->
+      <span v-else-if="isMilitiaId(d.id)" class="emo">
+        <template v-if="state.wounded.has(d.id)">💀</template>
+        <MilitiaPortrait v-else />
+      </span>
       <span v-else class="emo">{{ state.wounded.has(d.id) ? '🤕' : d.emoji }}</span>
       <div v-if="d.id === 'hero' && d.maxPv" class="hp">
         <i :class="{ low: heroPvPct < 0.3 }" :style="{ width: heroPvPct * 100 + '%' }" />
@@ -107,6 +112,8 @@
 import { computed, onUnmounted, ref, watch } from 'vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
+import { isMilitiaId } from '@/lib/militia';
 import { beatTiming, type SiegeBeat, type SiegeBody, type SiegeStage } from '@/lib/siegeStage';
 import {
   YARD_SCENE,
