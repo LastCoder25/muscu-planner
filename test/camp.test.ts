@@ -287,34 +287,13 @@ describe('🎲 graines — le pronostic ne rejoue JAMAIS le vrai combat', () => 
   });
 });
 
-describe('💀 on ne part pas perdu d’avance', () => {
-  // Demandé par l’utilisateur : « empêche juste d’envoyer une expédition qui a 0 % de
-  // victoire ». Mesuré avant : un Bronze ★1 contre un lieu de niveau 40 perd 200 fois sur
-  // 200, part à l’infirmerie, et encaisse quand même près de trois niveaux d’XP.
+describe('🎯 un 0 % de victoire ne bloque PAS le départ', () => {
+  // Retiré (demandé par l’utilisateur) : on attaque aussi une armée pour l’AFFAIBLIR, et un
+  // échec paie ce qu’il a abattu. Le pronostic informe, il ne refuse plus.
 
-  it('0 % de victoire : le départ est REFUSÉ, avec sa raison', () => {
-    expect(partySendBlocker(poi(), 3, false, 99, 0)).toBe('hopeless');
-    expect(canSendParty(poi(), 3, false, 99, 0)).toBe(false);
-  });
-
-  it('la moindre chance suffit : on garde le droit de parier', () => {
-    // ⚠️ Le seuil est le ZÉRO STRICT. Un plancher (« moins de 5 % ») interdirait des paris
-    // que le joueur a le droit de prendre ; à zéro il n’y a pas de pari, seulement une
-    // certitude — et c’est la seule chose qu’on lui retire.
-    for (const c of [0.001, 0.02, 0.5, 1])
-      expect(partySendBlocker(poi(), 3, false, 99, c), `chance ${c}`).toBe(null);
-  });
-
-  it('⚠️ `null` ne vaut PAS zéro — une récolte sans gardes reste possible', () => {
-    // Les confondre interdirait d’aller chercher de l’eau à un puits.
-    expect(partySendBlocker(poi(), 3, false, 99, null)).toBe(null);
-  });
-
-  it('les autres refus passent AVANT : on dit la cause la plus proche', () => {
-    // Un groupe vide n’a pas de pronostic à donner ; lui répondre « perdu d’avance »
-    // enverrait chercher des champions plus forts au lieu d’en choisir.
-    expect(partySendBlocker(poi(), 0, false, 99, 0)).toBe('empty');
-    expect(partySendBlocker(poi({ type: 'wreck' }), 3, false, 99, 0)).toBe('notTarget');
+  it('0 % de victoire : le départ reste permis', () => {
+    expect(partySendBlocker(poi(), 3, false, 99)).toBe(null);
+    expect(canSendParty(poi(), 3, false, 99)).toBe(true);
   });
 
   it('🎯 la chance vient de la MÊME dispatch que la résolution', () => {
@@ -348,14 +327,11 @@ describe('💀 on ne part pas perdu d’avance', () => {
     expect(partyWinChance(poi(), [], road(30, 0), null, 0, 40)).toBe(null);
   });
 
-  it('💀 un Bronze ★1 sur un lieu très au-dessus est bien à 0 % — donc refusé', () => {
-    // Le cas qui a motivé la demande.
+  it('💀 un Bronze ★1 sur un lieu très au-dessus est bien à 0 % — et peut quand même partir', () => {
     const p = poi({ level: 40, type: 'lair' });
-    const bleu = team(1, 1);
-    const rd = road(1, 1);
-    const c = partyWinChance(p, bleu, rd, null, 0, 40);
+    const c = partyWinChance(p, team(1, 1), road(1, 1), null, 0, 40);
     expect(c).toBe(0);
-    expect(partySendBlocker(p, 1, false, 99, c)).toBe('hopeless');
+    expect(partySendBlocker(p, 1, false, 99)).toBe(null);
   });
 });
 
@@ -369,10 +345,10 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     // Panthéon ne mordait pas et « douze partent » passait pour une raison qui n'était pas
     // la bonne. `test/` est hors typecheck — c'est l'ajout d'un 6ᵉ paramètre qui l'a montré.
     // 🎯 `null` = rien à combattre : le pronostic ne bloque pas ce que ce test mesure.
-    expect(canSendParty(poi(), 12, false, 99, null)).toBe(true);
-    expect(canSendParty(poi(), 0, true, 99, null)).toBe(true);
-    expect(canSendParty(poi(), 0, false, 99, null)).toBe(false);
-    expect(canSendParty(poi({ type: 'wreck' }), 3, false, 99, null)).toBe(false);
+    expect(canSendParty(poi(), 12, false, 99)).toBe(true);
+    expect(canSendParty(poi(), 0, true, 99)).toBe(true);
+    expect(canSendParty(poi(), 0, false, 99)).toBe(false);
+    expect(canSendParty(poi({ type: 'wreck' }), 3, false, 99)).toBe(false);
     const L = 30;
     const spec = { faction: 'bandits' as const, size: 10 };
     const p = poi({ level: L, type: 'lair' });

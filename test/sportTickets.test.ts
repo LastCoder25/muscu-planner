@@ -154,7 +154,7 @@ describe('🎟️ payer un tirage', () => {
  */
 describe('📏 rythme du gacha avec les tickets', () => {
   const MANA_PER_DAY: Record<number, number> = { 12: 63, 30: 91, 60: 157 };
-  // + les quêtes de la semaine au PALIER MAXIMAL (v0.1359, 3 tickets) : le pire cas.
+  // + les quêtes de la semaine au PALIER MAXIMAL (v0.1361, 3 tickets) : le pire cas.
   const REGULAR_TICKETS_PER_WEEK =
     comboTickets(1) + BOSS_TIERS[1]!.tickets + 1.5 + WEEKLY_QUESTS.tiers[WEEKLY_QUESTS.tiers.length - 1]!.tickets;
 

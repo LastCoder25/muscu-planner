@@ -1009,16 +1009,9 @@
           <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
             ✅ Une armée arrive, mais ils seront rentrés avant elle.
           </p>
-          <!-- 💀 ON DIT POURQUOI (demandé : « empêche d'envoyer une expédition à 0 % ») :
-               un bouton qui se grise en silence se lit comme une panne, et le joueur ne
-               saurait pas quoi changer. La parade est donc écrite avec le refus. -->
-          <p v-if="partySendBlock === 'hopeless'" class="sh-risk">
-            💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
-            un lieu d’un rang plus bas.
-          </p>
-          <!-- ⚠️ TOUS les autres refus sont dits aussi (signalé : « le bouton est grisé » sans
+          <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
                raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
-          <p v-else-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
+          <p v-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
             ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
           </p>
           <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>

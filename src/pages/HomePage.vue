@@ -480,7 +480,7 @@
         </div>
       </div>
 
-      <!-- 🗓️ QUÊTES DE LA SEMAINE (v0.1359) : tous les objectifs, calés sur l'historique, ceux
+      <!-- 🗓️ QUÊTES DE LA SEMAINE (v0.1361) : tous les objectifs, calés sur l'historique, ceux
            de tes sports en tête ; tu fais ceux que tu veux, chaque palier d'objectifs atteints
            paie ses tickets 🎟️. La règle vit en lib (`weeklyQuests`), la carte ne fait que la
            peindre. -->

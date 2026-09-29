@@ -18,7 +18,7 @@
 // vient une fois par semaine. Elles ne dépendent que du passé, donc elles ne bougent pas
 // pendant la semaine — et rien n'est à stocker.
 //
-// 🎟️ PALIERS : TOUS LES OBJECTIFS, TU FAIS CE QUE TU VEUX (v0.1359 ; demandé par l'utilisateur :
+// 🎟️ PALIERS : TOUS LES OBJECTIFS, TU FAIS CE QUE TU VEUX (v0.1361 ; demandé par l'utilisateur :
 // « faire plus d'objectifs et on fait ce qu'on veut avec des paliers de récompenses »). Plus
 // de tirage : les six objectifs sont affichés (ceux de tes sports en tête), et chaque palier
 // d'objectifs atteints paie. Ça règle aussi « choisir son objectif » sans rien à verrouiller —
