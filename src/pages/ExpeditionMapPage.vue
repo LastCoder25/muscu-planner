@@ -5004,9 +5004,14 @@ onUnmounted(() => {
    le détail : le rempart est donc la surface CLAIRE (pierre) et la cour la surface
    sombre. L'inverse — mur sombre bordé de clair, comme sur l'écran Base où il fait dix
    fois cette taille — se lisait ici comme un trou dans la prairie. */
+/* ⚠️ Aucun contour de focus du navigateur (signalé : un cadre blanc restait autour de la
+   ville en refermant sa fiche) ; au clavier, c'est le rempart qui passe à l'accent. */
 .town {
   cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
+.town:focus,
 .town:focus-visible {
   outline: none;
 }
