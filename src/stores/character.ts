@@ -1,6 +1,7 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { localDayIso } from '@/lib/localDay';
+import { parseQuestMark, questMark } from '@/lib/weeklyQuests';
 import {
   advanceBossTokens,
   chestMark,
@@ -1038,28 +1039,31 @@ export const useCharacterStore = defineStore('character', () => {
     return true;
   }
 
-  /** 🗓️ Récupère les tickets d'une semaine de quêtes bouclée. ⚠️ LA CONDITION VIT DANS LA
-   *  REQUÊTE (même patron que les tickets de bienvenue) : deux onglets qui lisent la ligne
-   *  « pas encore récupérée » en même temps ne créditent qu'une fois — le second ne met à
+  /** 🗓️ Récupère les tickets des paliers atteints (`earned`, au total de la semaine) moins ceux
+   *  déjà pris — relus sur la marque STOCKÉE, jamais sur ce que l'écran croit. ⚠️ LA CONDITION
+   *  VIT DANS LA REQUÊTE (même patron que les tickets de bienvenue) : la marque doit être
+   *  encore celle qu'on a lue, sinon un autre onglet vient de récupérer et le second ne met à
    *  jour aucune ligne. Rend les tickets versés (0 si rien n'était dû). */
-  async function claimWeeklyQuests(userId: string, monday: string, tickets: number) {
+  async function claimWeeklyQuests(userId: string, monday: string, earned: number) {
     const cur = row.value;
-    if (!cur || tickets <= 0 || cur.quest_week === monday) return 0;
+    if (!cur) return 0;
+    const tickets = earned - parseQuestMark(cur.quest_week, monday);
+    if (tickets <= 0) return 0;
     const res = await supabase
       .from('characters')
       .update({
         gacha_tickets: cur.gacha_tickets + tickets,
-        quest_week: monday,
+        quest_week: questMark(monday, earned),
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
-      .or(`quest_week.is.null,quest_week.neq.${monday}`)
+      .or(cur.quest_week ? `quest_week.eq.${cur.quest_week}` : 'quest_week.is.null')
       .select(COLS)
       .maybeSingle();
     if (res.error) throw res.error;
     if (!res.data) return 0;
     row.value = normalizeRow(res.data);
-    useGameFx().celebrateTickets(tickets, 'Quêtes de la semaine bouclées');
+    useGameFx().celebrateTickets(tickets, 'Palier de quêtes atteint');
     return tickets;
   }
 

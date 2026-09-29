@@ -480,15 +480,40 @@
         </div>
       </div>
 
-      <!-- 🗓️ QUÊTES DE LA SEMAINE (v0.1209) : 3 objectifs de sport, tirés le lundi, calés sur
-           l'historique ; les trois bouclés → 2 tickets 🎟️. La règle vit en lib
-           (`weeklyQuests`), la carte ne fait que la peindre. -->
+      <!-- 🗓️ QUÊTES DE LA SEMAINE (v0.1359) : tous les objectifs, calés sur l'historique, ceux
+           de tes sports en tête ; tu fais ceux que tu veux, chaque palier d'objectifs atteints
+           paie ses tickets 🎟️. La règle vit en lib (`weeklyQuests`), la carte ne fait que la
+           peindre. -->
       <div class="quests" :class="{ done: quests.board.value.complete }">
         <div class="qs-head">
           <span class="qs-t font-display">🗓️ Quêtes de la semaine</span>
-          <span class="qs-reward">🎟️ ×{{ WEEKLY_QUESTS.tickets }}</span>
+          <span class="qs-reward">
+            {{ quests.board.value.doneCount }}/{{ quests.board.value.quests.length }}
+          </span>
         </div>
-        <div v-for="q in quests.board.value.quests" :key="q.kind" class="qs-row" :class="{ ok: q.complete }">
+        <div class="qs-tiers">
+          <span
+            v-for="t in quests.board.value.tiers"
+            :key="t.at"
+            class="qs-tier"
+            :class="{
+              on: t.reached,
+              got: t.tickets <= quests.board.value.claimedTickets,
+            }"
+          >
+            {{ t.tickets <= quests.board.value.claimedTickets ? '✓' : t.at }} obj. → 🎟️{{ t.tickets }}
+          </span>
+        </div>
+        <div
+          v-for="(q, i) in quests.board.value.quests"
+          :key="q.kind"
+          class="qs-row"
+          :class="{
+            ok: q.complete,
+            extra: !q.mine,
+            'extra-first': !q.mine && (i === 0 || quests.board.value.quests[i - 1]!.mine),
+          }"
+        >
           <span class="qs-emo">{{ q.complete ? '✅' : QUEST_INFO[q.kind].emoji }}</span>
           <span class="qs-main">
             <span class="qs-label">{{ QUEST_INFO[q.kind].label(q.target) }}</span>
@@ -503,12 +528,14 @@
           :disabled="!quests.canClaim.value"
           @click="quests.claim()"
         >
-          🎟️ Récupérer {{ quests.board.value.claimable }} tickets
+          🎟️ Récupérer {{ quests.board.value.claimable }} ticket{{
+            quests.board.value.claimable > 1 ? 's' : ''
+          }}
         </button>
-        <div v-else-if="quests.board.value.claimed" class="qs-foot">
-          ✓ Semaine bouclée — nouvelles quêtes lundi
+        <div v-else-if="quests.board.value.complete" class="qs-foot">
+          ✓ Tous les paliers pris — nouvelles quêtes lundi
         </div>
-        <div v-else class="qs-foot">Jusqu’à dimanche · rien n’est perdu si tu en rates une</div>
+        <div v-else class="qs-foot">Fais ceux que tu veux, jusqu’à dimanche</div>
       </div>
 
       <!-- 🐉 Boss entre amis : toujours visible, sous les défis (demandé par l’utilisateur).
@@ -758,7 +785,7 @@ import { LEADS, modelLabel, type Lead } from '@/lib/weatherReliability';
 import { useChallengesStore } from '@/stores/challenges';
 import { logicalToday } from '@/lib/challenges';
 import { defisSummary } from '@/lib/defisHome';
-import { QUEST_INFO, WEEKLY_QUESTS } from '@/lib/weeklyQuests';
+import { QUEST_INFO } from '@/lib/weeklyQuests';
 import { useWeeklyQuests } from '@/composables/useWeeklyQuests';
 import { fmtPct } from '@/lib/combo';
 import { useComboStore } from '@/stores/combo';
@@ -2094,11 +2121,46 @@ async function saveAutre() {
   border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
+.qs-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 4px;
+}
+.qs-tier {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--dim);
+  border: 1px dashed var(--line);
+}
+/* Palier atteint, tickets à prendre : l'accent (il y a à faire). */
+.qs-tier.on {
+  color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+/* Déjà récupéré : le vert du gain, plus rien à faire. */
+.qs-tier.got {
+  color: var(--d1);
+  border: 1px solid color-mix(in srgb, var(--d1) 50%, transparent);
+  background: color-mix(in srgb, var(--d1) 10%, transparent);
+}
 .qs-row {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 7px 0;
+}
+/* Objectifs hors de tes sports : proposés pour varier, en retrait. */
+.qs-row.extra {
+  opacity: 0.72;
+}
+.qs-row.extra-first {
+  margin-top: 4px;
+  border-top: 1px dashed var(--line);
 }
 .qs-row + .qs-row {
   border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
