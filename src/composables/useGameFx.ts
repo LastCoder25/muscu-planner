@@ -9,6 +9,9 @@ import { ref } from 'vue';
 // ⚠️ Type SEUL (zéro runtime) : l'échelle d'intensité se dérive des raretés du jeu,
 // et une seconde déclaration de la même union serait la porte ouverte à la divergence.
 import type { FxRarity } from '@/lib/items';
+import { harvestPieces, harvestRarity, harvestTitle, type HaulPiece } from '@/lib/harvestFx';
+import type { SupplyStock } from '@/lib/supplies';
+import type { RuneTier } from '@/lib/skillRunes';
 
 type GameFxKind =
   | 'drop'
@@ -18,6 +21,7 @@ type GameFxKind =
   | 'building'
   | 'chest' // coffre de fin de Défi 360 : couvercle qui s'ouvre, butin qui jaillit
   | 'tickets' // tickets d'invocation distribués un par un en éventail (`count`)
+  | 'harvest' // récolte d'une place forte : consommables et runes jaillissent d'un panier
   | 'rankup' // ascension d'un champion : le médaillon passe de la couleur d'un rang à l'autre
   | 'generic';
 
@@ -31,6 +35,8 @@ export interface GameFx {
   rarity?: FxRarity;
   /** Nombre d'objets à distribuer (`kind: 'tickets'`) : un ticket dessiné par unité. */
   count?: number;
+  /** Les pièces d'une récolte (`kind: 'harvest'`), une par sorte, avec leur nombre. */
+  pieces?: HaulPiece[];
   /** Rangs (index de `CHARACTER_RANKS`) d'un changement de rang (`kind: 'rankup'`) :
    *  l'overlay en tire les couleurs et les emblèmes, jamais une seconde table. */
   ranks?: { from: number; to: number };
@@ -91,5 +97,24 @@ export function useGameFx() {
       rarity: 'legendary', // or : la couleur des tickets
     });
   }
-  return { queue, toasts, celebrate, celebrateTickets, dismiss, dismissToast };
+  /** 🧺 RÉCOLTE D'UNE PLACE FORTE — consommables et runes (demandé par l'utilisateur).
+   *  Une seule animation pour tout ce qui sort, rien si la récolte n'a rendu ni l'un ni
+   *  l'autre (l'or a déjà la sienne). */
+  function celebrateHarvest(
+    supplies: SupplyStock | undefined,
+    runes: readonly RuneTier[] | undefined,
+    subtitle: string,
+  ): void {
+    const pieces = harvestPieces(supplies, runes);
+    if (!pieces.length) return;
+    celebrate({
+      kind: 'harvest',
+      emoji: '🧺',
+      pieces,
+      title: harvestTitle(pieces),
+      subtitle,
+      rarity: harvestRarity(pieces),
+    });
+  }
+  return { queue, toasts, celebrate, celebrateTickets, celebrateHarvest, dismiss, dismissToast };
 }

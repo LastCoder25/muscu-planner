@@ -73,6 +73,25 @@
             >×{{ cur.count }}</span
           >
         </div>
+        <!-- 🧺 RÉCOLTE : chaque pièce jaillit du panier à son tour et retombe à sa place —
+             les consommables en emoji, les runes en pierre dessinée (`RuneIcon`), la plus
+             rare en dernier. -->
+        <div v-else-if="cur.kind === 'harvest'" class="fx-harvest" aria-hidden="true">
+          <div class="fx-hv-grid" :style="{ '--cols': harvestCols }">
+            <span
+              v-for="(p, i) in harvestPieces"
+              :key="p.key"
+              class="fx-hv"
+              :class="{ rune: !!p.rune }"
+              :style="harvestStyle(i, p.color)"
+            >
+              <RuneIcon v-if="p.rune" :tier="p.rune" size="40px" />
+              <span v-else class="fx-hv-emo">{{ p.emoji }}</span>
+              <span v-if="p.count > 1" class="fx-hv-n font-display">×{{ p.count }}</span>
+            </span>
+          </div>
+          <span class="fx-hv-basket">🧺</span>
+        </div>
         <div v-else class="fx-emoji">{{ cur.emoji }}</div>
         <div class="fx-title font-display">{{ cur.title }}</div>
         <div v-if="cur.subtitle" class="fx-sub">{{ cur.subtitle }}</div>
@@ -87,6 +106,7 @@ import { computed, watch, onBeforeUnmount } from 'vue';
 import { useGameFx } from '@/composables/useGameFx';
 import { CHARACTER_RANKS } from '@/lib/characterRank';
 import AscensionReveal, { ASCENSION_SWAP_MS } from '@/components/AscensionReveal.vue';
+import RuneIcon from '@/components/RuneIcon.vue';
 
 const { queue, toasts, dismiss, dismissToast } = useGameFx();
 const cur = computed(() => queue.value[0] ?? null);
@@ -135,6 +155,30 @@ const ticketCount = computed(() =>
   Math.max(0, Math.min(TICKETS_DRAWN_MAX, Math.round(cur.value?.count ?? 0))),
 );
 
+/** 🧺 Récolte : les pièces sortent du panier une à une (`HARVEST_DEAL_MS` d'écart). */
+const HARVEST_DEAL_MS = 240;
+const HARVEST_CELL = 70; // pas de la grille (case + écart), pour partir du panier
+const harvestPieces = computed(() =>
+  cur.value?.kind === 'harvest' ? (cur.value.pieces ?? []) : [],
+);
+const harvestCols = computed(() => Math.max(1, Math.min(4, harvestPieces.value.length)));
+/** Chaque pièce part du panier, centré sous la grille : son décalage de départ est l'écart
+ *  entre sa case et le panier. */
+function harvestStyle(i: number, color: string): Record<string, string> {
+  const n = harvestPieces.value.length;
+  const cols = harvestCols.value;
+  const rows = Math.ceil(n / cols);
+  const row = Math.floor(i / cols);
+  const inRow = Math.min(cols, n - row * cols);
+  const col = i % cols;
+  return {
+    '--i': String(i),
+    '--hc': color,
+    '--dx': ((inRow - 1) / 2 - col) * HARVEST_CELL + 'px',
+    '--dy': (rows - row) * HARVEST_CELL + 'px',
+  };
+}
+
 // Auto-dismiss : plus long pour les raretés hautes (on savoure le divin).
 let timer: ReturnType<typeof setTimeout> | undefined;
 watch(
@@ -147,9 +191,11 @@ watch(
     const deal =
       fx.kind === 'tickets'
         ? ticketCount.value * TICKET_DEAL_MS + 900
-        : fx.kind === 'rankup'
-          ? ASCENSION_SWAP_MS + 2600
-          : 0;
+        : fx.kind === 'harvest'
+          ? (fx.pieces?.length ?? 0) * HARVEST_DEAL_MS + 1400
+          : fx.kind === 'rankup'
+            ? ASCENSION_SWAP_MS + 2600
+            : 0;
     const ms = reduced ? 1100 : 1600 + tier.value * 350 + deal;
     timer = setTimeout(dismiss, ms);
   },
@@ -454,6 +500,92 @@ onBeforeUnmount(() => {
   text-shadow: 0 2px 10px color-mix(in srgb, var(--fx-color, #ffd23f) 45%, transparent);
   animation: fx-pop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) calc(var(--n) * 90ms + 0.1s) both;
 }
+/* ── Récolte : les pièces jaillissent du panier ───────────────────────────
+   Chaque pièce part du panier (--dx, --dy), monte en arc au-dessus de sa case puis s'y
+   pose, à son tour (--i × 240 ms). Son halo prend sa couleur (--hc) : une rune dorée
+   brille, une ration reste sobre. Le nombre (×n) tombe après la pièce. */
+.fx-harvest {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.fx-hv-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols), 60px);
+  justify-content: center;
+  gap: 10px;
+}
+.fx-hv {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--hc) 38%, transparent) 0%,
+    transparent 70%
+  );
+  animation: fx-harvest-fly 0.62s cubic-bezier(0.25, 1.1, 0.45, 1) calc(var(--i) * 240ms + 0.25s)
+    both;
+}
+.fx-hv.rune {
+  filter: drop-shadow(0 0 10px var(--hc));
+}
+.fx-hv-emo {
+  font-size: 36px;
+  line-height: 1;
+}
+.fx-hv-n {
+  position: absolute;
+  right: -4px;
+  bottom: -2px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text, #f3eee6);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+  animation: fx-pop 0.35s cubic-bezier(0.2, 1.5, 0.4, 1) calc(var(--i) * 240ms + 0.8s) both;
+}
+.fx-hv-basket {
+  font-size: 46px;
+  line-height: 1;
+  margin-top: 4px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+  animation: fx-basket 0.5s ease-out both;
+}
+@keyframes fx-harvest-fly {
+  0% {
+    opacity: 0;
+    transform: translate(var(--dx), var(--dy)) scale(0.2);
+  }
+  15% {
+    opacity: 1;
+  }
+  55% {
+    transform: translate(calc(var(--dx) * 0.35), calc(var(--dy) * 0.3 - 34px)) scale(1.18);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1);
+  }
+}
+@keyframes fx-basket {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.6);
+  }
+  60% {
+    transform: translateY(-4px) scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
 .fx-emoji {
   font-size: 84px;
   line-height: 1;
@@ -534,6 +666,12 @@ onBeforeUnmount(() => {
     animation: none;
   }
   .fx-tk-total {
+    animation: none;
+  }
+  /* Récolte : les pièces directement à leur place. */
+  .fx-hv,
+  .fx-hv-n,
+  .fx-hv-basket {
     animation: none;
   }
 }

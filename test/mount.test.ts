@@ -2054,3 +2054,26 @@ describe('🔀 FusionPanel', () => {
     expect(out).toContain('Milicien');
   }, 30_000);
 });
+
+describe('🧺 GameFxOverlay — récolte', () => {
+  it('les consommables et les runes sortent du panier, avec leur nombre', async () => {
+    const { default: GameFxOverlay } = await import('@/components/GameFxOverlay.vue');
+    const { useGameFx } = await import('@/composables/useGameFx');
+    const fx = useGameFx();
+    fx.queue.value = [];
+    fx.celebrateHarvest({ potion: 2 }, ['gold'], 'Scriptorium');
+    let out = '';
+    expect(
+      await mountIt(GameFxOverlay, {}, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain('fx-harvest');
+    expect(out.match(/class="fx-hv(?: rune)?"/g)?.length).toBe(2);
+    expect(out).toContain('×2');
+    expect(out).toContain('rune-icon');
+    expect(out).toContain('+1 rune · +2 consommables');
+    fx.queue.value = [];
+    // Rien récolté : aucune animation.
+    fx.celebrateHarvest({}, [], 'Jardin');
+    expect(fx.queue.value.length).toBe(0);
+  }, 30_000);
+});

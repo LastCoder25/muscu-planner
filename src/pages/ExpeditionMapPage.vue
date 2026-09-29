@@ -767,7 +767,8 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
-import { RUNE_INFO } from '@/lib/skillRunes';
+import type { RuneTier } from '@/lib/skillRunes';
+import type { SupplyStock } from '@/lib/supplies';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
@@ -850,6 +851,7 @@ import {
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   CONTROL,
+  CONTROL_LABEL,
   CONTROL_YIELD,
   controlFreeSeats,
   militiaFreeSeats,
@@ -1630,17 +1632,22 @@ async function collectCtl() {
   ctlBusy.value = true;
   try {
     const got = await char.collectControlPoint(uid, p.id, Date.now(), heroLevel.value);
-    // 📜 Une rune recopiée s'annonce : c'est rare, et c'est le seul moment où on la voit.
-    for (const t of got?.runes ?? [])
-      gameFx.celebrate({
-        kind: 'unlock',
-        emoji: RUNE_INFO[t].emoji,
-        title: RUNE_INFO[t].label,
-        subtitle: 'Recopiée au Scriptorium · à poser depuis la fiche d’un champion',
-      });
+    // 🧺 Consommables et runes jaillissent du panier (l'or a son propre éclat).
+    if (got) celebrateHarvest(p, got);
   } finally {
     ctlBusy.value = false;
   }
+}
+/** 🧺 L'animation de récolte d'une place forte. Une rune dit où la poser : c'est le seul
+ *  moment où on la voit. */
+function celebrateHarvest(p: Poi, got: { supplies: SupplyStock; runes: RuneTier[] }) {
+  const kind = p.control?.kind;
+  const where = kind ? CONTROL_LABEL[kind] : 'Place forte';
+  gameFx.celebrateHarvest(
+    got.supplies,
+    got.runes,
+    got.runes.length ? `${where} · runes à poser depuis la fiche d’un champion` : where,
+  );
 }
 async function recallCtl() {
   const uid = auth.user?.id;
@@ -1661,7 +1668,8 @@ async function recallCtl() {
   if (!ok) return;
   ctlBusy.value = true;
   try {
-    await char.recallControl(uid, p.id, Date.now(), heroLevel.value);
+    const got = await char.recallControl(uid, p.id, Date.now(), heroLevel.value);
+    if (got) celebrateHarvest(p, got);
     selected.value = null;
   } finally {
     ctlBusy.value = false;
