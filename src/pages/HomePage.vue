@@ -403,11 +403,20 @@
            jamais dire LESQUELS ni ce qui appelle aujourd'hui.
            ⚠️ DEUX CIBLES DISTINCTES : le 360 et les challenges ne mènent pas au même
            endroit, et les fondre en un seul bouton obligerait à choisir pour le joueur. -->
-      <div class="defis-hub">
-        <div class="dh-head">
+      <!-- Pliable, REPLIÉE par défaut (demandé) : repliée, l'en-tête garde le résumé de ce
+           qui compte (avancement du 360, défis à faire aujourd'hui). -->
+      <div class="defis-hub" :class="{ folded: !defisOpen }">
+        <button
+          class="dh-head fold-head"
+          type="button"
+          :aria-expanded="defisOpen"
+          @click="defisOpen = !defisOpen"
+        >
           <span class="dh-t font-display">🔥 Mes défis</span>
-        </div>
-        <div class="dh-cols">
+          <span v-if="!defisOpen" class="fold-sum">{{ defisFoldSummary }}</span>
+          <span class="fold-chev" aria-hidden="true">{{ defisOpen ? '▾' : '▸' }}</span>
+        </button>
+        <div v-if="defisOpen" class="dh-cols">
           <!-- ⚠️ CHAQUE COLONNE EST UNE CARTE-BOUTON, et elle le DIT : chevron, fond qui
                répond au doigt, liseré d'accent quand il y a à faire. Sans ça les deux
                blocs se lisaient comme des panneaux d'information — on ne savait pas qu'on
@@ -483,19 +492,37 @@
       <!-- 🗓️ QUÊTES DE LA SEMAINE (v0.1209) : 3 objectifs de sport, tirés le lundi, calés sur
            l'historique ; les trois bouclés → 2 tickets 🎟️. La règle vit en lib
            (`weeklyQuests`), la carte ne fait que la peindre. -->
-      <div class="quests" :class="{ done: quests.board.value.complete }">
-        <div class="qs-head">
+      <div class="quests" :class="{ done: quests.board.value.complete, folded: !questsOpen }">
+        <button
+          class="qs-head fold-head"
+          type="button"
+          :aria-expanded="questsOpen"
+          @click="questsOpen = !questsOpen"
+        >
           <span class="qs-t font-display">🗓️ Quêtes de la semaine</span>
-          <span class="qs-reward">🎟️ ×{{ WEEKLY_QUESTS.tickets }}</span>
-        </div>
-        <div v-for="q in quests.board.value.quests" :key="q.kind" class="qs-row" :class="{ ok: q.complete }">
-          <span class="qs-emo">{{ q.complete ? '✅' : QUEST_INFO[q.kind].emoji }}</span>
-          <span class="qs-main">
-            <span class="qs-label">{{ QUEST_INFO[q.kind].label(q.target) }}</span>
-            <span class="qs-bar"><i :style="{ width: Math.min(100, (q.done / q.target) * 100) + '%' }"></i></span>
-          </span>
-          <span class="qs-count">{{ Math.min(q.done, q.target) }}/{{ q.target }}</span>
-        </div>
+          <span v-if="!questsOpen" class="fold-sum"
+            >{{ questsDone }}/{{ quests.board.value.quests.length }}</span
+          >
+          <span v-if="questsOpen" class="qs-reward">🎟️ ×{{ WEEKLY_QUESTS.tickets }}</span>
+          <span class="fold-chev" aria-hidden="true">{{ questsOpen ? '▾' : '▸' }}</span>
+        </button>
+        <template v-if="questsOpen">
+          <div
+            v-for="q in quests.board.value.quests"
+            :key="q.kind"
+            class="qs-row"
+            :class="{ ok: q.complete }"
+          >
+            <span class="qs-emo">{{ q.complete ? '✅' : QUEST_INFO[q.kind].emoji }}</span>
+            <span class="qs-main">
+              <span class="qs-label">{{ QUEST_INFO[q.kind].label(q.target) }}</span>
+              <span class="qs-bar"
+                ><i :style="{ width: Math.min(100, (q.done / q.target) * 100) + '%' }"></i
+              ></span>
+            </span>
+            <span class="qs-count">{{ Math.min(q.done, q.target) }}/{{ q.target }}</span>
+          </div>
+        </template>
         <button
           v-if="quests.board.value.claimable > 0"
           class="qs-claim"
@@ -505,10 +532,12 @@
         >
           🎟️ Récupérer {{ quests.board.value.claimable }} tickets
         </button>
-        <div v-else-if="quests.board.value.claimed" class="qs-foot">
+        <div v-else-if="questsOpen && quests.board.value.claimed" class="qs-foot">
           ✓ Semaine bouclée — nouvelles quêtes lundi
         </div>
-        <div v-else class="qs-foot">Jusqu’à dimanche · rien n’est perdu si tu en rates une</div>
+        <div v-else-if="questsOpen" class="qs-foot">
+          Jusqu’à dimanche · rien n’est perdu si tu en rates une
+        </div>
       </div>
 
       <!-- 🐉 Boss entre amis : toujours visible, sous les défis (demandé par l’utilisateur).
@@ -936,6 +965,19 @@ const hasFree = ref(false);
 // Boss entre amis : chargé en fond, silencieux (la carte n'apparaît que s'il y a du nouveau).
 const bossEntry = useFriendBossEntry();
 const quests = useWeeklyQuests(); // 🗓️ 3 objectifs de sport → 2 tickets
+// Défis et quêtes : tuiles pliables, REPLIÉES à chaque ouverture (demandé).
+const defisOpen = ref(false);
+const questsOpen = ref(false);
+const questsDone = computed(() => quests.board.value.quests.filter((q) => q.complete).length);
+/** Ce que l'en-tête replié des défis dit encore : l'avancement du 360, ce qui reste à faire. */
+const defisFoldSummary = computed(() => {
+  const d = defis.value;
+  const parts: string[] = [];
+  if (d.combo) parts.push(`360 ${fmtPct(d.combo.pct)} %`);
+  if (d.dueToday) parts.push(`${d.dueToday} à faire`);
+  else if (d.active) parts.push('✓ du jour');
+  return parts.join(' · ') || 'rien en cours';
+});
 onMounted(() => {
   void bossEntry.refresh().catch(() => undefined);
 });
@@ -2061,6 +2103,52 @@ async function saveAutre() {
    ⚠️ Elle doit se DISTINGUER des autres cartes de l'accueil, sinon elle n'est qu'une ligne
    de plus : d'où le liseré accent, le fond légèrement chauffé et la taille. C'est le seul
    bloc de l'accueil à porter l'accent en bordure — l'exception fait la hiérarchie. */
+/* En-tête pliable (défis, quêtes) : un vrai bouton, cible tactile ≥ 44 px. */
+.fold-head {
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  align-items: center;
+}
+.fold-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+.fold-sum {
+  flex: none;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--dim);
+}
+.fold-chev {
+  flex: none;
+  width: 18px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--dim);
+}
+.defis-hub .fold-head,
+.quests .fold-head {
+  align-items: center;
+}
+.folded .fold-head {
+  padding-bottom: 0;
+}
+.fold-head .dh-t {
+  flex: 1;
+  min-width: 0;
+}
 .quests {
   margin: 0 0 12px;
   padding: 10px 12px 12px;
