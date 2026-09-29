@@ -682,8 +682,8 @@ export interface ExpeditionOutcome {
   items?: Omit<Item, 'id'>[]; // ARÈNE : plusieurs objets (1 par palier de vagues) ; `item` = le 1er
   key: number; // clé de Labyrinthe (consolation rare)
   reconBonus: number; // +fraction de réussite au prochain essai (échec)
-  /** Multiplicateur sur la jambe RETOUR (1 = normal). Un passage découvert ou un
-   *  contretemps ramènent le héros plus tôt — le seul effet qui joue sur le TEMPS. */
+  /** Multiplicateur sur la jambe RETOUR (1 = normal). Un passage découvert ramène
+   *  le héros plus tôt — le seul effet qui joue sur le TEMPS. */
   returnMult: number;
   /** 🔙 Embuscade perdue à l'ALLER : l'équipe fait demi-tour avec ses blessés, sans avoir
    *  atteint le lieu. Part du trajet aller parcourue au moment du demi-tour (0..1) : le
@@ -2676,15 +2676,16 @@ export const TRAVEL = {
   cacheChance: 0.05, // trouvaille pacifique (pas de combat)
   merchantChance: 0.05, // marchand errant : troque ton or contre des vivres
   shortcutChance: 0.04, // passage découvert : retour raccourci, sans perte
-  setbackChance: 0.05, // contretemps : demi-cargaison, mais retour bien plus tôt
+  // ⛈️ Le CONTRETEMPS est RETIRÉ (décision de l'utilisateur) : tiré sur un seul trajet, il
+  // coupait la cargaison ENTIÈRE en deux — la moitié d'une mine perdue sur un tirage à 5 %,
+  // et un « retour anticipé » même quand l'orage tombait à l'aller. Sa part de probabilité
+  // retombe dans « rien ne se passe ».
   winMult: 1.2, // butin renforcé si l'embuscade est repoussée
   loseMult: 0.7, // butin écorné si elle est subie
   cacheMult: 1.15,
   merchantGoldMult: 0.55, // il achète ton or…
   merchantResMult: 1.4, // …et paie en ressources (puits d'or supplémentaire)
   shortcutReturnMult: 0.7, // jambe RETOUR raccourcie
-  setbackReturnMult: 0.5,
-  setbackHaulMult: 0.5, // on rentre vite, mais à moitié chargé
   // Route dangereuse (télégraphiée au départ) : deux fois plus d'embuscades, et une
   // récompense doublée quand on les repousse → le choix du POI redevient un arbitrage.
   perilAmbushMult: 2,
@@ -2713,7 +2714,7 @@ export function ambushCombatant(hero: Combatant, level: number): Combatant {
 }
 
 export type TravelLeg = 'out' | 'back';
-type TravelKind = 'ambush' | 'cache' | 'merchant' | 'shortcut' | 'setback';
+type TravelKind = 'ambush' | 'cache' | 'merchant' | 'shortcut';
 export interface TravelEncounter {
   leg: TravelLeg;
   kind: TravelKind;
@@ -2809,18 +2810,11 @@ export function rollTravelEncounters(
       goldMult *= TRAVEL.merchantGoldMult;
       resMult *= TRAVEL.merchantResMult;
       text += ` 🧺 Marchand errant croisé ${LEG_FR[leg]} — de l'or troqué contre des vivres.`;
-    } else if (roll < (acc += TRAVEL.shortcutChance)) {
+    } else if (roll < acc + TRAVEL.shortcutChance) {
       // Passage découvert : pur gain de TEMPS, sans contrepartie.
       encounters.push({ leg, kind: 'shortcut', won: true });
       returnMult *= TRAVEL.shortcutReturnMult;
       text += ` 🧭 Passage découvert ${LEG_FR[leg]} — le retour sera plus court.`;
-    } else if (roll < acc + TRAVEL.setbackChance) {
-      // Contretemps : on écourte le voyage. Moitié moins de cargaison, mais le héros
-      // est de nouveau disponible bien plus tôt — un mal pour un bien quand on enchaîne.
-      encounters.push({ leg, kind: 'setback', won: false });
-      both(TRAVEL.setbackHaulMult);
-      returnMult *= TRAVEL.setbackReturnMult;
-      text += ` ⛈️ Contretemps ${LEG_FR[leg]} — demi-cargaison, mais retour anticipé.`;
     }
   });
 

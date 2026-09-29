@@ -685,7 +685,10 @@ export const RAID = {
   // ⚠️ 32 → 34 en v0.1299 : les porteurs 🐫 comptant désormais avec le héros, le revenu d’une
   // mine monte de ~8 % aux niveaux 12-26 et le niveau 15 passait sous la borne (0,33
   // journée). À 34 il revient à 0,35, le plus cher (niveau 5) reste à 0,62.
-  healGoldK: 34,
+  // ⚠️ 34 → 37 au retrait du CONTRETEMPS (il coupait une cargaison en deux une fois sur ~10) :
+  // le revenu d’une mine remonte, et le niveau 15 retombait à 0,33 journée. Mesuré à 37 :
+  // 0,36 (niveau 15) à 0,64 (niveau 5), dans la bande 0,35-0,7.
+  healGoldK: 37,
   healGoldExp: 1.75,
   // Soins d’un CHAMPION = cette part du tarif du héros (v0.1152, demandé). Mesuré : payer
   // chaque blessé de mission au plein tarif coûtait 8 à 34 % du revenu de référence (0,16 à

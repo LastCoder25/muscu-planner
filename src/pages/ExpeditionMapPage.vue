@@ -1721,7 +1721,7 @@ const compCtx = roadCtx;
  *  heures face à un siège dans huit (signalé par l’utilisateur). La règle elle-même vit
  *  dans `departureRisk` — ici on ne fait que fournir les deux horodatages.
  *  ⚠️ On compare avec la durée ANNONCÉE, qui est un MAJORANT : les rencontres de route ne
- *  peuvent que raccourcir le retour (`TRAVEL.shortcutReturnMult`/`setbackReturnMult` ≤ 1,
+ *  peuvent que raccourcir le retour (`TRAVEL.shortcutReturnMult` ≤ 1,
  *  verrouillé par un test) — donc taire l’alerte ne peut jamais taire un vrai danger. */
 const raidAt = computed(() => incoming.value?.arrivesAt ?? 0);
 /** Le héros défendra-t-il au moment de l’assaut ? ⚠️ Un héros DEHORS qui rentre AVANT
