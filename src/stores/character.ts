@@ -265,7 +265,6 @@ import {
   RECALL_BLOCK_LABEL,
   type RecallTarget,
 } from '@/lib/party';
-import { partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
   heroOutInAttack,
@@ -3368,10 +3367,6 @@ export const useCharacterStore = defineStore('character', () => {
       escort.length,
       !!hero,
       engageCap(pantheonLevel.value),
-      // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
-      // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
-      // dessous — un lieu ne peut pas se pronostiquer autrement qu’il ne se résout.
-      partyWinChance(poi, escort, road, hero, now, 40, false),
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
@@ -3695,14 +3690,8 @@ export const useCharacterStore = defineStore('character', () => {
     const stockAfter = takeSupplies(cur.supplies, supplies);
     if (!stockAfter) return 'un consommable choisi n’est plus en stock';
     const road = { ...escortKitOf(cur), supplies };
-    // ⚠️ Le plafond du Panthéon et le pronostic portent sur l'attaque ENTIÈRE.
-    const sendBlock = partySendBlocker(
-      poi,
-      all.length,
-      !!hero,
-      engageCap(pantheonLevel.value),
-      partyWinChance(poi, all, road, hero, now, 40, false),
-    );
+    // ⚠️ Le plafond du Panthéon porte sur l'attaque ENTIÈRE.
+    const sendBlock = partySendBlocker(poi, all.length, !!hero, engageCap(pantheonLevel.value));
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     const heroBlock = hero
       ? partyHeroBlocker({
