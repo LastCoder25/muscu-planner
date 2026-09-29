@@ -21,7 +21,14 @@
 //   rencontres de trajet ; le champion qui l'accompagne apprend (XP).
 // ⚠️ Le héros SEUL y passe aussi par ce module (plus par `expeSend`) : sinon une expédition
 // solo contournait les gardes.
-import { CARAVAN, missionXpFor, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
+import {
+  CARAVAN,
+  caravanHaulMult,
+  missionXpFor,
+  resolveCaravan,
+  type EscortKit,
+  type PartyHero,
+} from './caravan';
 import {
   campHurt,
   campLightHurt,
@@ -218,16 +225,21 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
 
   if (hero) {
     const raw = resolveOutcome(hero.combatant, poi, seed, input.playerLevel);
-    // 🧺 Les bâts : avec le héros, la cargaison vient de SON expédition — le +20 % s'y applique
-    // directement (le plafond du rôle 🐫 ne concerne que les champions).
-    const k = 1 + supplyFx(road.supplies).haul;
+    // 🧺🐫 La cargaison avec le héros (v0.1299, décision de l'utilisateur : « les porteurs
+    // comptent aussi quand le héros est là ») : les bâts ET les porteurs 🐫 / pièces de
+    // cargaison des champions, sous le MÊME plafond qu'une équipe (`caravanHaulMult`).
+    // ⚠️ L'ÉNERGIE ne suit que les bâts, comme avant : « complément, jamais substitut au
+    // sport » — une équipe sans le héros ne dépasse déjà jamais sa base d'énergie.
+    const bats = supplyFx(road.supplies).haul;
+    const k = caravanHaulMult(escort, road.advGear, bats);
+    const kEnergy = 1 + Math.max(0, bats);
     const out =
       k === 1
         ? raw
         : {
             ...raw,
             gold: Math.round(raw.gold * k),
-            energy: Math.round(raw.energy * k),
+            energy: Math.round(raw.energy * kEnergy),
             summonStones: Math.round(raw.summonStones * k),
             mana: Math.round(raw.mana * k),
             key: Math.round(raw.key * k),

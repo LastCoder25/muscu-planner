@@ -71,9 +71,9 @@ export function poiHaulPreview(
  * le bonus à part.
  *
  * ⚠️ LES MÊMES RÈGLES QUE LA RÉSOLUTION (`harvestParty` avec le héros, `resolveCaravan` sans
- * lui) : avec le héros, seuls les bâts 🧺 comptent et s'appliquent à TOUT ; sans lui, les rôles
- * 🐫 et les pièces de cargaison s'ajoutent sous un plafond (`caravanHaulMult`), or compris ;
- * l'énergie reste plafonnée à sa base et les clés à ×1,2. Seule la récolte en
+ * lui) : bâts 🧺, rôles 🐫 et pièces de cargaison s'ajoutent sous un plafond
+ * (`caravanHaulMult`), or compris. Avec le héros l'énergie ne suit que les bâts ; sans lui elle
+ * reste plafonnée à sa base, et les clés à ×1,2. Seule la récolte en
  * profite — pas les bourses des gardes. Hors aléas de la route.
  */
 export function poiHaulBonus(
@@ -94,17 +94,19 @@ export function poiHaulBonus(
     poiForceOf(poi)?.size ?? 0,
   );
   const gold = harvestGold(poi, opts.playerLevel);
+  const k = caravanHaulMult(opts.escort, opts.kit.advGear, bats);
   if (opts.heroGoes) {
-    const up = (v: number) => Math.round(v * (1 + bats)) - v;
+    // 🐫 Avec le héros aussi (v0.1299) : porteurs + bâts sous le plafond ; l'énergie, elle, ne
+    // suit que les bâts (`harvestParty`).
+    const up = (v: number, m: number) => Math.round(v * m) - v;
     return {
-      gold: up(gold),
-      energy: up(y.energy),
-      summonStones: up(y.summonStones),
-      keys: up(y.keys),
-      mana: up(y.mana),
+      gold: up(gold, k),
+      energy: up(y.energy, 1 + bats),
+      summonStones: up(y.summonStones, k),
+      keys: up(y.keys, k),
+      mana: up(y.mana, k),
     };
   }
-  const k = caravanHaulMult(opts.escort, opts.kit.advGear, bats);
   return {
     // 🪙 L'or suit la cargaison comme le reste (renversement v0.1297 de la v0.1161).
     gold: Math.round(gold * k) - gold,
@@ -124,8 +126,8 @@ export function poiHaulBonus(
  * les effectifs en question »). `total` = `base` + `poiHaulBonus` — aucune règle de plus.
  *
  * ⚠️ `idleHaul` : l'équipe porte une compétence de cargaison 🐫 (rôle ou pièce) qui ne change
- * RIEN ici. C'est la règle, pas un oubli — avec le héros seuls les bâts comptent, et sans lui
- * l'énergie d'une équipe reste plafonnée à sa base (une source ne bouge donc pas). On le DIT, sinon « ramène plus » sur la tuile se lit comme une promesse que
+ * RIEN ici. C'est la règle, pas un oubli — l'énergie ne suit jamais les porteurs (avec le
+ * héros seuls les bâts la gonflent ; sans lui elle reste plafonnée à sa base). On le DIT, sinon « ramène plus » sur la tuile se lit comme une promesse que
  * la fiche trahit en silence. Mesuré en comparant le bonus avec et sans l'escorte.
  */
 export function poiTeamHaul(

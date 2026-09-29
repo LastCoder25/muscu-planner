@@ -87,8 +87,10 @@ describe('🪙 héros ou non, l’or d’une récolte part de la même base (v0.
     // mine : on retire leur part (`caravanHaulMult`) pour comparer la BASE — elle reste la même.
     for (const L of [12, 26, 60]) {
       const p = poi('mine', { level: L });
+      // v0.1299 : le champion qui accompagne le héros porte aussi — sa part est retirée de même.
       const porteurs = caravanHaulMult(team(3, L), refAdvGear(L, 3), 0);
-      const ratio = moyenne(p, false, L) / porteurs / moyenne(p, true, L);
+      const porteurHeros = caravanHaulMult(team(1, L), refAdvGear(L, 3), 0);
+      const ratio = moyenne(p, false, L) / porteurs / (moyenne(p, true, L) / porteurHeros);
       expect(ratio, `niveau ${L} : équipe/héros ${ratio.toFixed(2)}`).toBeGreaterThan(0.9);
       expect(ratio, `niveau ${L} : équipe/héros ${ratio.toFixed(2)}`).toBeLessThan(1.15);
     }
@@ -258,7 +260,7 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
     expect(perdu).toBe(true);
   });
 
-  it('AVEC le héros : son expédition, et le champion qui l’accompagne apprend', () => {
+  it('AVEC le héros : son expédition × la cargaison de ses champions, et le champion apprend', () => {
     const p = poi('mine');
     const o = resolveHarvestParty({
       poi: p,
@@ -270,11 +272,28 @@ describe('🧺 une équipe sur un lieu de récolte', () => {
       pantheonLevel: 26,
     });
     const solo = resolveOutcome(hero.combatant, p, 9, 26);
-    expect(o.gold).toBe(solo.gold);
+    // v0.1299 : les porteurs 🐫 du champion comptent avec le héros — pas sur l'énergie.
+    const k = caravanHaulMult(team(1), road.advGear, 0);
+    expect(k).toBeGreaterThan(1);
+    expect(o.gold).toBe(Math.round(solo.gold * k));
     expect(o.energy).toBe(solo.energy);
     expect(o.party!.hero).toBe(true);
     expect(o.party!.xp.a0).toBeGreaterThan(0);
     expect(o.party!.hurt).toEqual([]);
+  });
+
+  it('AVEC le héros : l’énergie d’une source ne suit PAS les porteurs 🐫 (v0.1299)', () => {
+    const p = poi('well');
+    expect(caravanHaulMult(team(1), road.advGear, 0)).toBeGreaterThan(1);
+    let vues = 0;
+    for (let seed = 1; seed <= 20; seed++) {
+      const o = resolveHarvestParty({ poi: p, escort: team(1), road, hero, seed, playerLevel: 26, pantheonLevel: 26 });
+      if (!o.win) continue;
+      const solo = resolveOutcome(hero.combatant, p, seed, 26);
+      if (solo.energy > 0) vues++;
+      expect(o.energy).toBe(solo.energy);
+    }
+    expect(vues).toBeGreaterThan(0);
   });
 });
 

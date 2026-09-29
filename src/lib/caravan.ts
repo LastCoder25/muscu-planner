@@ -1469,7 +1469,7 @@ export function resolveCaravan(
     // ASSUMÉ de la v0.1161 (décision de l'utilisateur : « une mine est affectée par la
     // compétence de convoi qui ramène plus ») : une équipe de porteurs gagne désormais plus
     // d'or que le héros seul sur la même mine — c'est le prix de la compétence. Avec le héros
-    // le rôle ne compte toujours pas (seuls les bâts, `harvestParty`).
+    // le même plafond s'applique (`harvestParty`, v0.1299).
     gold: Math.round(harvestGold(poi, playerLevel) * mult * haul),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
     // brute × l'ancien `yieldShare` (0,5), donc il tombait sur un DEMI. Avec l'arrondi à

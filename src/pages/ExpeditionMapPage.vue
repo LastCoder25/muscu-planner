@@ -2321,7 +2321,7 @@ function pushHaul(out: PoiFact[], p: Poi, force: Parameters<typeof forceLootPrev
       label: 'Avec cette équipe',
       value: totalTxt,
       cls: 'wp-good',
-      title: `${heroGoes ? 'Bâts 🧺 compris' : 'Bâts 🧺, porteurs 🐫 et pièces de cargaison compris'} — ${formatHaul(team.bonus, '+')}`,
+      title: `Bâts 🧺, porteurs 🐫 et pièces de cargaison compris — ${formatHaul(team.bonus, '+')}`,
     });
   // 🐫 Une compétence de cargaison présente qui ne change RIEN ici : on le dit, sinon « ramène
   // plus » sur la tuile du champion se lit comme une promesse trahie en silence.
@@ -2332,7 +2332,7 @@ function pushHaul(out: PoiFact[], p: Poi, force: Parameters<typeof forceLootPrev
       value: 'sans effet ici',
       cls: 'dim',
       title: heroGoes
-        ? 'Avec le héros, seuls les bâts 🧺 augmentent la récolte'
+        ? 'L’énergie ne suit que les bâts 🧺, jamais les porteurs'
         : 'L’énergie ramenée par une équipe ne dépasse jamais sa base : les porteurs n’y ajoutent rien',
     });
 }

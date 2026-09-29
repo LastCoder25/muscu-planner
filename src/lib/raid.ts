@@ -677,7 +677,10 @@ export const RAID = {
   // la demi-journée visée. Balayé sur 4 exposants × 6 coefficients : 32/1,75 rend
   // 0,62 / 0,58 / 0,43 / 0,41 / 0,47 journée aux niveaux 2/10/28/60/100 — la bande la
   // plus centrée sur « ½ journée » que le test verrouille.
-  healGoldK: 32,
+  // ⚠️ 32 → 34 en v0.1299 : les porteurs 🐫 comptant désormais avec le héros, le revenu d’une
+  // mine monte de ~8 % aux niveaux 12-26 et le niveau 15 passait sous la borne (0,33
+  // journée). À 34 il revient à 0,35, le plus cher (niveau 5) reste à 0,62.
+  healGoldK: 34,
   healGoldExp: 1.75,
   // Soins d’un CHAMPION = cette part du tarif du héros (v0.1152, demandé). Mesuré : payer
   // chaque blessé de mission au plein tarif coûtait 8 à 34 % du revenu de référence (0,16 à

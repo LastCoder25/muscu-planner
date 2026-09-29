@@ -112,7 +112,7 @@ describe('poiHaulBonus : les bâts et les porteurs, à part (v0.1265)', () => {
     ).toEqual(zero);
   });
 
-  it('avec le héros, les bâts s’appliquent à la récolte', () => {
+  it('avec le héros, bâts ET porteurs 🐫 s’appliquent à la récolte, sous un plafond (v0.1299)', () => {
     const p = poi('mine');
     const g = harvestGold(p, 30);
     const b = poiHaulBonus(p, {
@@ -121,8 +121,9 @@ describe('poiHaulBonus : les bâts et les porteurs, à part (v0.1265)', () => {
       escort: team(3),
       kit: { advGear, supplies: bats },
     });
-    expect(b.gold).toBe(Math.round(g * (1 + SUPPLY.haul)) - g);
-    expect(b.gold).toBeGreaterThan(0);
+    const k = caravanHaulMult(team(3), advGear, SUPPLY.haul);
+    expect(k).toBeGreaterThan(1 + SUPPLY.haul); // les porteurs comptent en plus des bâts
+    expect(b.gold).toBe(Math.round(g * k) - g);
   });
 
   it('sans le héros : exactement ce que les bâts ajoutent au convoi (graines sans rencontre)', () => {
@@ -208,8 +209,16 @@ describe('poiTeamHaul : la récolte de base et celle de cette équipe', () => {
     expect(r.idleHaul).toBe(true);
   });
 
-  it('avec le héros, le rôle 🐫 ne compte pas — et on le dit', () => {
-    expect(poiTeamHaul(poi('mana_mine', 'mm', 26), opts(porteur, true)).idleHaul).toBe(true);
+  it('avec le héros, le porteur 🐫 ramène plus aussi (v0.1299)', () => {
+    const r = poiTeamHaul(poi('mana_mine', 'mm', 26), opts(porteur, true));
+    expect(r.total.mana).toBeGreaterThan(r.base.mana);
+    expect(r.idleHaul).toBe(false);
+  });
+
+  it('avec le héros, une source : l’énergie ne suit pas les porteurs — et on le dit', () => {
+    const r = poiTeamHaul(poi('well', 'w', 26), opts(porteur, true));
+    expect(r.total).toEqual(r.base);
+    expect(r.idleHaul).toBe(true);
   });
 
   it('personne ne porte la cargaison : rien à signaler', () => {
