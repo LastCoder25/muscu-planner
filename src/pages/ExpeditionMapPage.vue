@@ -125,8 +125,8 @@
           <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
           <template v-if="active && hero">
             <line
-              :x1="active.poi.x"
-              :y1="active.poi.y"
+              :x1="heroEnd.x"
+              :y1="heroEnd.y"
               :x2="hero.x"
               :y2="hero.y"
               class="trail"
@@ -216,7 +216,19 @@
           />
 
           <!-- Héros -->
-          <g v-for="v in travelersOnMap" :key="'vm' + v.id">
+          <!-- 🔙 Une troupe encore en route se touche pour la faire rebrousser chemin : une cible
+               élargie (transparente) sous le marqueur, qui est trop petit pour un doigt. -->
+          <g v-for="v in travelersOnMap" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
+            <circle
+              v-if="v.recall"
+              :cx="v.at.x"
+              :cy="v.at.y"
+              r="7"
+              class="recall-hit"
+              role="button"
+              :aria-label="`Faire demi-tour : ${v.recallLabel}`"
+              @click.stop="askRecall(v.recall, v.recallLabel, v.recallBackMs)"
+            />
             <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" :class="v.kind" />
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
           </g>
@@ -231,7 +243,17 @@
             <text :x="b.x" :y="b.y + 1.1" class="van-emo">{{ b.emo }}</text>
           </g>
 
-          <g v-if="active && hero">
+          <g v-if="active && hero" :class="{ recallable: heroRecallable }">
+            <circle
+              v-if="heroRecallable"
+              :cx="hero.x"
+              :cy="hero.y"
+              r="7"
+              class="recall-hit"
+              role="button"
+              aria-label="Faire demi-tour : ton héros"
+              @click.stop="askRecall({ kind: 'hero' }, 'Ton héros', now - active.sentAt)"
+            />
             <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
           </g>
@@ -954,6 +976,8 @@ import {
   partyLegMin,
   denForce,
   tripCrew,
+  recallBlocker,
+  type RecallTarget,
 } from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
@@ -1272,6 +1296,15 @@ function drawnAt(v: Parameters<typeof travelPosition>[0]) {
   return { ...at, ...mapTravelPoint(at, v.poi, v.origin) };
 }
 const hero = computed(() => (active.value ? drawnAt(active.value) : null));
+/** 🔙 Le bout du tracé du héros : le lieu, ou le point où il a fait demi-tour. */
+const heroEnd = computed(() => {
+  const a = active.value;
+  return a && a.turnBack !== undefined ? voyageTarget(a) : (a?.poi ?? TOWN);
+});
+/** 🔙 Le héros encore en chemin vers son lieu peut rebrousser chemin. */
+const heroRecallable = computed(
+  () => !!active.value && !recallBlocker(active.value, now.value),
+);
 /** Le bout du tracé d'un voyageur : le lieu, ou le point de demi-tour. */
 function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
   return v.end ?? v.poi;
@@ -2047,6 +2080,8 @@ const partiesOnMap = computed(() =>
     .map((g) => ({
       id: g.id,
       poi: g.poi,
+      recallable: !recallBlocker(g, now.value),
+      sentAt: g.sentAt,
       escort: tripCrew(g).length,
       members: tripCrew(g),
       hero: !!g.outcome.party?.hero,
@@ -2095,6 +2130,8 @@ const bandsOnMap = computed(() => {
 const reinforcementsOnMap = computed(() =>
   reinforcementsEnRoute(char.row?.expedition_map, now.value).map((r) => ({
     id: 'r' + r.key,
+    pointId: r.poi.id,
+    sentAt: r.sentAt,
     poi: r.poi,
     members: r.members,
     origin: r.origin,
@@ -2109,6 +2146,8 @@ const returnsOnMap = computed(() =>
   returnsEnRoute(char.row?.expedition_map, now.value).map((r) => ({
     id: 'h' + r.key,
     poi: r.poi,
+    // 🔙 Un renfort qui a rebroussé chemin revient de là où il a tourné.
+    end: r.turnBack !== undefined ? voyageTarget(r) : undefined,
     members: r.members,
     // Un retour rentre toujours à la ville : son tracé part d'elle.
     origin: undefined as { x: number; y: number } | undefined,
@@ -2142,10 +2181,38 @@ const travelersOnMap = computed(() => [
     ...w,
     emo: w.waiting ? '⏳' : '⚔️',
     kind: 'party' as const,
+    recall: undefined as RecallTarget | undefined,
+    recallLabel: '',
+    recallBackMs: 0,
   })),
-  ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️', kind: 'party' as const })),
-  ...reinforcementsOnMap.value.map((r) => ({ ...r, emo: '🛡️', kind: 'reinf' as const })),
-  ...returnsOnMap.value.map((r) => ({ ...r, emo: '🏠', kind: 'reinf' as const })),
+  ...partiesOnMap.value.map((g) => ({
+    ...g,
+    emo: '⚔️',
+    kind: 'party' as const,
+    recall: g.recallable ? { kind: 'party' as const, id: g.id } : undefined,
+    recallLabel: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
+    recallBackMs: now.value - g.sentAt,
+  })),
+  // 🔙 Seuls les renforts partis de la base peuvent rebrousser chemin (un transfert devrait
+  // rentrer sur son point d'origine, `recallReinforcements`).
+  ...reinforcementsOnMap.value.map((r) => ({
+    ...r,
+    emo: '🛡️',
+    kind: 'reinf' as const,
+    recall: !r.origin
+      ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members }
+      : undefined,
+    recallLabel: `Les renforts (${r.members.length})`,
+    recallBackMs: now.value - r.sentAt,
+  })),
+  ...returnsOnMap.value.map((r) => ({
+    ...r,
+    emo: '🏠',
+    kind: 'reinf' as const,
+    recall: undefined as RecallTarget | undefined,
+    recallLabel: '',
+    recallBackMs: 0,
+  })),
 ]);
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
  *  lirait comme plusieurs rangées collées. */
@@ -2441,6 +2508,26 @@ async function quickTransfer(fromId: string, memberId: string) {
   } finally {
     ctlBusy.value = false;
   }
+}
+/**
+ * 🔙 FAIRE DEMI-TOUR (demandé : « en cliquant dessus »). On confirme d'abord : le lieu ne sera
+ * pas atteint, et l'écran dit combien de temps prendra le retour (le chemin déjà fait).
+ */
+function askRecall(target: RecallTarget | undefined, label: string, backMs: number) {
+  if (!target) return;
+  $q.dialog({
+    title: '🔙 Faire demi-tour ?',
+    message: `${label} rebrousse chemin et rentre dans ${formatDuration(Math.max(0, backMs))}. Le lieu n’est pas atteint : rien n’est gagné, rien n’est perdu.`,
+    cancel: { label: 'Continuer la route', flat: true },
+    ok: { label: 'Faire demi-tour', color: 'primary', textColor: 'dark', unelevated: true },
+  }).onOk(() => {
+    const uid = auth.user?.id;
+    if (!uid) return;
+    void char.recallTrip(uid, target, Date.now()).then((why) => {
+      if (why) $q.notify({ type: 'warning', message: why });
+      else $q.notify({ type: 'positive', message: `🔙 ${label} fait demi-tour.` });
+    });
+  });
 }
 async function quickChampion(advId: string) {
   const uid = auth.user?.id;
@@ -4053,6 +4140,14 @@ onUnmounted(() => {
   fill: var(--surface);
   stroke: #b57bff;
   stroke-width: 0.8;
+}
+.recall-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+.recallable .van-mark,
+.recallable .hero {
+  stroke-dasharray: 1.2 0.8;
 }
 .van-emo {
   font-size: 3px;

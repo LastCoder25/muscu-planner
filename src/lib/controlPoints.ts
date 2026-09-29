@@ -994,6 +994,8 @@ export interface ReinforcementTrip {
   returnAt: number;
   /** 🏰 Parti d'un autre point fixe (transfert) : le trajet se dessine depuis lui. */
   origin?: { x: number; y: number };
+  /** 🔙 Un renfort qui a fait demi-tour en chemin : le retour part de là où il a tourné. */
+  turnBack?: number;
 }
 export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now: number) {
   const out = new Map<string, ReinforcementTrip>();
@@ -1021,6 +1023,50 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
     }
   }
   return [...out.values()];
+}
+
+/**
+ * 🔙 DES RENFORTS EN ROUTE REBROUSSENT CHEMIN (2026-09-29, demandé : « faire demi-tour à une
+ * troupe à nous en cliquant dessus »). Ils quittent les renforts du point et rentrent à la
+ * base par le même chemin, en autant de temps qu'ils en ont déjà mis (`turnBack` = la part du
+ * chemin faite, pour que la carte les dessine depuis là où ils ont tourné).
+ * ⚠️ Seulement les renforts partis de la BASE et dessinés (`from` connu) : un TRANSFERT
+ * (`via`) devrait rentrer sur son point d'origine, et sans départ connu on ne sait pas où ils
+ * en sont. Rend `null` si aucun des `ids` ne peut faire demi-tour.
+ */
+export function recallReinforcements(
+  map: ExpeditionMap,
+  pointId: string,
+  ids: readonly string[],
+  now: number,
+): { map: ExpeditionMap; back: { id: string; at: number }[] } | null {
+  const c = map.pois.find((p) => p.id === pointId)?.control;
+  const want = new Set(ids);
+  const turning = (c?.reinforcing ?? []).filter(
+    (r) => want.has(r.id) && r.from !== undefined && !r.via && now < r.at,
+  );
+  if (!turning.length) return null;
+  const gone = new Set(turning.map((r) => r.id));
+  const back = turning.map((r) => {
+    const from = Math.min(now, r.from!);
+    const done = now - from;
+    return {
+      id: r.id,
+      from: now,
+      at: now + done,
+      turnBack: Math.min(1, done / Math.max(1, r.at - from)),
+    };
+  });
+  return {
+    map: withControl(map, pointId, (p) => {
+      const reinforcing = (p.control!.reinforcing ?? []).filter((r) => !gone.has(r.id));
+      const ctl = { ...p.control!, returning: [...(p.control!.returning ?? []), ...back] };
+      if (reinforcing.length) ctl.reinforcing = reinforcing;
+      else delete ctl.reinforcing;
+      return { ...p, control: ctl };
+    }),
+    back: back.map((b) => ({ id: b.id, at: b.at })),
+  };
 }
 
 /** 🏠 Des champions ou miliciens RAMENÉS d'un point partent vers la base : on les dessine
@@ -1065,6 +1111,7 @@ export function returnsEnRoute(
           sentAt: r.from,
           midAt: r.from,
           returnAt: r.at,
+          ...(r.turnBack !== undefined ? { turnBack: r.turnBack } : {}),
         });
     }
   }
