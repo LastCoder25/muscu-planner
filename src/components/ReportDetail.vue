@@ -16,21 +16,38 @@
       <h4>
         <span class="rd-h-ico">{{ sec.icon }}</span> {{ sec.title }}
         <span v-if="sec.count" class="rd-cnt">{{ sec.count }}</span>
+        <span v-if="sec.aside" class="rd-aside">{{ sec.aside }}</span>
       </h4>
+      <!-- Ce que l'écran ajoute à une section (les ressources du butin), sous son titre. -->
+      <slot :name="sec.id" />
       <p v-if="sec.layout === 'text'" class="rd-text">{{ sec.text }}</p>
       <div v-else-if="sec.layout === 'chips'" class="rd-chips">
         <span v-for="(r, i) in sec.rows" :key="i" class="rd-chip" :class="r.tone">{{
           r.title
         }}</span>
       </div>
-      <component :is="sec.layout === 'steps' ? 'ol' : 'ul'" v-else class="rd-rows">
-        <li v-for="(r, i) in sec.rows" :key="i" class="rd-row" :class="{ muted: r.muted }">
-          <span v-if="sec.layout === 'list' && (r.item || r.icon)" class="rd-ico">
+      <component
+        :is="sec.layout === 'steps' ? 'ol' : 'ul'"
+        v-else-if="sec.rows.length"
+        class="rd-rows"
+      >
+        <li
+          v-for="(r, i) in sec.rows"
+          :key="i"
+          class="rd-row"
+          :class="[{ muted: r.muted }, sec.layout === 'log' && r.tone && `t-${r.tone}`]"
+        >
+          <span
+            v-if="(sec.layout === 'list' || sec.layout === 'log') && (r.item || r.icon)"
+            class="rd-ico"
+          >
             <ItemIcon v-if="r.item" :item="r.item" :size="32" />
             <template v-else>{{ r.icon }}</template>
           </span>
           <span class="rd-main">
-            <span class="rd-title" :class="!r.value && r.tone">{{ r.title }}</span>
+            <span class="rd-title" :class="sec.layout !== 'log' && !r.value && r.tone">{{
+              r.title
+            }}</span>
             <span v-if="r.sub" class="rd-sub">{{ r.sub }}</span>
             <span v-if="r.note" class="rd-note">{{ r.note }}</span>
           </span>
@@ -217,6 +234,46 @@ defineProps<{ detail: ReportDetail }>();
   bottom: -5px;
   width: 1px;
   background: var(--line);
+}
+/* Le résumé d'une section, poussé à droite de son titre. */
+.rd-aside {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* Le journal de combat : une ligne par coup décisif, un liseré qui dit qui a eu le
+   dessus — vert quand un ennemi tombe, rouge quand c'est l'un des nôtres. */
+.log .rd-rows {
+  gap: 3px;
+}
+.log .rd-row {
+  padding: 4px 8px 4px 6px;
+  gap: 6px;
+  border-left: 3px solid var(--line);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+.log .rd-ico {
+  width: 20px;
+  font-size: 14px;
+}
+.log .rd-title {
+  font-weight: 500;
+  font-size: 12px;
+}
+.log .rd-row.t-win {
+  border-left-color: var(--d1);
+}
+.log .rd-row.t-lose {
+  border-left-color: var(--d4);
+}
+.log .rd-row.t-dim .rd-title {
+  color: var(--dim);
 }
 /* Les pastilles : un butin en devises tient sur une ligne. */
 .rd-chips {

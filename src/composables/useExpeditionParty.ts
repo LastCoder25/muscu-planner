@@ -20,7 +20,7 @@ import {
   meetAll,
   supplyTarget,
 } from '@/lib/party';
-import { partyRoadOdds, partyWinChance } from '@/lib/partyForecast';
+import { partyRoadOdds, partyWinChance, winGain, type GainTeam } from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
 import { COMBINED_BLOCK_LABEL, byReach, combinedBlocker, wingOriginId } from '@/lib/combinedAttack';
@@ -293,6 +293,78 @@ export function useExpeditionParty(ctx: PartyCtx) {
     );
     return w === null ? null : Math.round(w * 100);
   });
+  /** 🎯➕ CE QUE CHAQUE MEMBRE APPORTE à la réussite, en points (`winGain`), par rapport à
+   *  l'équipe COCHÉE : un champion non coché s'y ajoute, un coché en est retiré. Clé `hero`
+   *  pour le héros.
+   *  ⚠️ CALCULÉ PAR MORCEAUX, jamais d'un bloc : un 🎯 % coûte jusqu'à ~25 ms (mesuré, une mine
+   *  ou une faille), deux par tuile, et un vivier en compte des dizaines — d'un bloc, l'écran
+   *  se figerait plus d'une seconde à chaque case cochée. On rend la main entre deux tuiles,
+   *  les chiffres apparaissent au fil de l'eau, et un nouveau changement d'équipe annule le
+   *  calcul en cours (`gainRun`). Horloge grossière, comme le 🎯 %. */
+  const partyGain = ref<Record<string, number | null>>({});
+  const heroCandidate = computed<PartyHero | null>(() =>
+    partyHeroBlock.value
+      ? null
+      : { name: char.row?.pseudo ?? 'Toi', level: heroLevel.value, combatant: fighter.value },
+  );
+  const gainKey = computed(() => {
+    const p = selected.value;
+    if (!p || !partyTarget.value) return '';
+    return [
+      p.id,
+      [...partyEscort.value].sort().join(','),
+      partyHeroOn.value,
+      !!heroCandidate.value,
+      activeSupplies.value.join(','),
+      partyPoolSorted.value.map((a) => a.id).join(','),
+      coarseNow.value,
+    ].join('|');
+  });
+  let gainRun = 0;
+  watch(
+    gainKey,
+    async (key) => {
+      const run = ++gainRun;
+      partyGain.value = {};
+      const p = selected.value;
+      if (!key || !p) return;
+      const cur: GainTeam = { escort: partyAdvs.value, hero: heroForParty.value };
+      const road = partyRoad.value;
+      const now = coarseNow.value;
+      const jobs: [string, () => number | null][] = [];
+      const hero = heroCandidate.value;
+      if (hero)
+        jobs.push([
+          'hero',
+          () =>
+            partyHeroOn.value
+              ? winGain(p, cur, { escort: cur.escort, hero: null }, road, now)
+              : winGain(p, { escort: cur.escort, hero }, cur, road, now),
+        ]);
+      for (const a of partyPoolSorted.value) {
+        const inTeam = cur.escort.some((x) => x.id === a.id);
+        jobs.push([
+          a.id,
+          () =>
+            inTeam
+              ? winGain(
+                  p,
+                  cur,
+                  { escort: cur.escort.filter((x) => x.id !== a.id), hero: cur.hero },
+                  road,
+                  now,
+                )
+              : winGain(p, { escort: [...cur.escort, a], hero: cur.hero }, cur, road, now),
+        ]);
+      }
+      for (const [id, job] of jobs) {
+        await new Promise((r) => setTimeout(r, 0));
+        if (run !== gainRun) return;
+        partyGain.value = { ...partyGain.value, [id]: job() };
+      }
+    },
+    { immediate: true },
+  );
   /** 💀 Le refus « perdu d'avance » : les GARDES seuls (la route coûte de la cargaison, elle
    *  ne rend pas un lieu imprenable) — le même nombre que le store. */
   const partyGuardWin = computed(() => {
@@ -730,6 +802,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   }
 
   return {
+    partyGain,
     combined,
     wingPlan,
     combinedBlock,

@@ -58,6 +58,7 @@ import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
 import { militiaCount } from '@/lib/militia';
 import { buildingLevel } from '@/lib/buildings';
+import { heroAttackReturnAt } from '@/lib/combinedAttack';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{
@@ -82,6 +83,10 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
   const h = exp ? travelPosition(exp, props.now) : null;
   if (h && h.phase !== 'done')
     return { label: formatDuration(h.remainTotalMs), tone: 'away', healMs };
+  // ⚔️ Engagé dans une attaque combinée (réservé en attente, ou parti) : il n'est pas libre.
+  const attackBack = heroAttackReturnAt(char.attackList);
+  if (attackBack !== null && attackBack > props.now)
+    return { label: `⚔️ ${formatDuration(attackBack - props.now)}`, tone: 'away', healMs };
   return { label: 'dispo', tone: 'ok', healMs };
 });
 
@@ -122,7 +127,9 @@ const title = computed(() => {
       ? 'Héros disponible'
       : h.tone === 'hurt'
         ? `Héros à l'infirmerie — de retour dans ${formatDuration(h.healMs)}`
-        : `Héros en expédition — de retour dans ${h.label}`,
+        : h.label.startsWith('⚔️')
+          ? `Héros engagé dans une attaque combinée — libre dans ${h.label.slice(3)}`
+          : `Héros en expédition — de retour dans ${h.label}`,
   ];
   if (d.value.champHurt) parts.push(`${d.value.champHurt} champion(s) à l'infirmerie`);
   if (d.value.champTotal)

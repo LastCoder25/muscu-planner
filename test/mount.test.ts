@@ -189,6 +189,62 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).not.toContain('mil-portrait');
   }, 30_000);
 
+  // 🐞 Signalé : « ça me met le héros dispo alors qu'il est en attaque combinée ».
+  it('AvailabilityLine : un héros engagé dans une attaque combinée n’est pas « dispo »', async () => {
+    const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
+    const wing = {
+      originId: null,
+      members: [],
+      hero: true,
+      legMin: 30,
+      departAt: 5_000_000,
+      returnAt: 9_000_000,
+      state: 'waiting',
+    };
+    const attacks = [
+      {
+        id: 'atk',
+        poi: { id: 'cp', type: 'camp', level: 5, x: 0, y: 0, distNorm: 0.5 },
+        seed: 1,
+        createdAt: 0,
+        arriveAt: 6_000_000,
+        midAt: 7_000_000,
+        playerLevel: 5,
+        supplies: [],
+        wings: [wing, { ...wing, originId: 'pt1', hero: false, members: ['a1'] }],
+      },
+    ];
+    let out = '';
+    expect(
+      await mountIt(
+        AvailabilityLine,
+        { now: 1 },
+        { ...ROW, attacks },
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    // La case du héros, pas « disponible(s) » des champions dans l'infobulle.
+    expect(out).toMatch(/🦸<\/span>⚔️/);
+    expect(out).not.toMatch(/🦸<\/span>dispo/);
+  }, 30_000);
+
+  // 🎯 Demandé : l'apport de chaque membre à la réussite, sur sa tuile.
+  it('AdvPickTile affiche ce qu’il apporte à la réussite', async () => {
+    const { default: AdvPickTile } = await import('@/components/AdvPickTile.vue');
+    const adv = ROW.adventurers[0];
+    const rendu = async (gain: number | null) => {
+      let out = '';
+      await mountIt(AdvPickTile, { adv, on: false, gain }, ROW, undefined, '/', (h) => (out = h));
+      return out;
+    };
+    expect(await rendu(12)).toContain('🎯 +12 %');
+    expect(await rendu(0)).toMatch(/ca-gain zero[^>]*>🎯 0 %/);
+    expect(await rendu(-5)).toMatch(/ca-gain neg[^>]*>🎯 −5 %/);
+    expect(await rendu(null)).not.toContain('ca-gain');
+  }, 30_000);
+
   // 🛡️ 2026-09-28 : les miliciens postés sur des places fortes / tous ceux qui existent.
   it('AvailabilityLine compte les miliciens postés sur le total', async () => {
     const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');

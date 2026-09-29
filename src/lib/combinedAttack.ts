@@ -228,6 +228,25 @@ export function heroInAttack(attacks: readonly CombinedAttack[] | null | undefin
   );
 }
 
+/** 🦸 Quand le héros rentre d'une attaque combinée où il est engagé (réservé en attente, ou
+ *  parti), `null` s'il n'en est d'aucune. ⚠️ Signalé : la ligne des disponibilités le disait
+ *  « dispo » pendant une attaque combinée — elle ne lisait que l'expédition solo. */
+export function heroAttackReturnAt(
+  attacks: readonly CombinedAttack[] | null | undefined,
+): number | null {
+  let at: number | null = null;
+  for (const a of attacks ?? [])
+    for (const w of a.wings)
+      if ((w.state === 'waiting' && w.hero) || (w.state === 'gone' && w.heroGone))
+        at = Math.max(at ?? 0, w.returnAt);
+  return at;
+}
+/** 🏰 Le héros est-il PARTI dans une attaque combinée ? Un groupe qui ATTEND son départ est
+ *  encore chez lui (il défend) : seul un départ effectif le retire de la base. */
+export function heroOutInAttack(attacks: readonly CombinedAttack[] | null | undefined): boolean {
+  return (attacks ?? []).some((a) => a.wings.some((w) => w.state === 'gone' && !!w.heroGone));
+}
+
 /** Relit la colonne `attacks` : un jsonb malformé ne doit jamais faire planter la page. */
 export function normalizeAttacks(v: unknown): CombinedAttack[] {
   if (!Array.isArray(v)) return [];

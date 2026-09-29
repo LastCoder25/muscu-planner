@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { missionDetail, siegeDetail } from '@/lib/reportDetail';
+import {
+  missionDetail,
+  missionMain,
+  siegeDetail,
+  splitJournal,
+  storyExtra,
+} from '@/lib/reportDetail';
 import { messageCard, type MissionCard } from '@/lib/missionCard';
 import type { ExpeditionMessage, PartyResult } from '@/lib/expedition';
 import type { Adventurer } from '@/lib/adventurers';
@@ -40,32 +46,33 @@ const adv = (id: string, name: string) =>
 const section = (d: ReturnType<typeof missionDetail>, id: string) =>
   d.sections.find((s) => s.id === id);
 
-describe('📋 missionDetail — le détail d’un rapport de mission, au modèle commun', () => {
+describe('📋 missionMain — le corps visible : butin, puis équipe', () => {
   const card = messageCard(msg({ party: party() }), [adv('a1', 'Léa'), adv('a2', 'Bran')]);
-  const d = missionDetail(card);
+  const d = missionMain(card);
 
-  it('range le récit, l’équipe et le journal, dans cet ordre', () => {
-    expect(d.sections.map((s) => s.id)).toEqual(['story', 'team', 'journal']);
+  it('le butin d’abord, l’équipe ensuite — et rien d’autre', () => {
+    expect(d.sections.map((s) => s.id)).toEqual(['loot', 'team']);
+    expect(d.stats).toEqual([]);
   });
 
-  it('une ligne d’équipe : nom, abattus en sous-titre, XP à droite, blessure en marque', () => {
+  it('le butin s’affiche même sans objet : ses ressources se dessinent au-dessus', () => {
+    const loot = section(d, 'loot')!;
+    expect(loot.keep).toBe(true);
+    expect(loot.rows).toEqual([]);
+  });
+
+  it('l’équipe porte le total en résumé : abattus et XP, une seule fois', () => {
+    expect(section(d, 'team')!.aside).toBe('⚔️ 5/6 · +50 XP');
+  });
+
+  it('une ligne d’équipe : nom, abattus et état en sous-titre, XP à droite, marque', () => {
     const team = section(d, 'team')!;
-    expect(team.count).toBe(2);
     const lea = team.rows.find((r) => r.title === 'Léa')!;
     expect(lea.value).toBe('+30 XP');
-    expect(lea.sub).toContain('3 abattus');
+    expect(lea.sub).toBe('⚔️ 3 abattus');
     const bran = team.rows.find((r) => r.title === 'Bran')!;
-    expect(bran.sub).toBeUndefined();
+    expect(bran.sub).toBe('à l’infirmerie');
     expect(bran.tags?.map((t) => t.icon)).toEqual(['🤕']);
-  });
-
-  it('les chiffres clés reprennent les abattus et l’XP du rapport, sans recalcul', () => {
-    expect(d.stats.map((s) => s.val)).toEqual(['5/6', '+50']);
-  });
-
-  it('une section vide n’apparaît pas', () => {
-    expect(section(d, 'loot')).toBeUndefined();
-    expect(section(d, 'road')).toBeUndefined();
   });
 
   it('le butin décrit chaque objet, et compte ce qui est parti au sac sans être décrit', () => {
@@ -74,17 +81,80 @@ describe('📋 missionDetail — le détail d’un rapport de mission, au modèl
       loot: [{ name: 'Lame', slot: 'weapon', rarity: 'rare', level: 20 } as never],
       lootMore: 2,
     };
-    const loot = section(missionDetail(c), 'loot')!;
-    expect(loot.count).toBe(3);
+    const loot = section(missionMain(c), 'loot')!;
     expect(loot.rows[0]!.item).toBeDefined();
     expect(loot.rows[1]!.title).toBe('+2 objets au sac');
   });
 
-  it('le héros figure dans l’équipe quand il était du voyage avec des champions', () => {
-    const c: MissionCard = { ...card, hero: true };
-    const team = section(missionDetail(c), 'team')!;
-    expect(team.rows[0]!.title).toBe('Héros');
-    expect(team.count).toBe(3);
+  it('le héros ouvre l’équipe quand il était du voyage — même seul', () => {
+    const team = section(missionMain({ ...card, hero: true, team: [] }), 'team')!;
+    expect(team.rows.map((r) => r.title)).toEqual(['Héros']);
+  });
+});
+
+describe('📜 missionDetail — le déroulé replié : récit, combat, route', () => {
+  const journal = [
+    '🧝 Last abat 🗡️ Coupe-jarret',
+    '👺 Chef de bande met à terre 🌿 Orsène',
+    'Une embuscade repoussée.',
+    'Route tranquille.',
+    'Route tranquille.',
+  ];
+  const card = messageCard(
+    msg({
+      text: '🗡️ 3/3 gardes abattus. Une embuscade repoussée. Route tranquille. Route tranquille.',
+      party: party({ journal }),
+    }),
+    [adv('a1', 'Léa')],
+  );
+  const d = missionDetail(card);
+
+  it('le combat et la route se séparent ; un récit qui répète le journal se tait', () => {
+    expect(d.sections.map((s) => s.id)).toEqual(['combat', 'road']);
+  });
+
+  it('une ligne de combat : l’icône de celui qui frappe, teintée selon qui tombe', () => {
+    const [win, lose] = section(d, 'combat')!.rows;
+    expect(win).toMatchObject({ icon: '🧝', title: 'Last abat 🗡️ Coupe-jarret', tone: 'win' });
+    expect(lose).toMatchObject({ icon: '👺', tone: 'lose' });
+  });
+
+  it('deux lignes de route identiques à la suite n’en font qu’une, comptée', () => {
+    const road = section(d, 'road')!.rows;
+    expect(road.map((r) => [r.title, r.value])).toEqual([
+      ['Une embuscade repoussée.', undefined],
+      ['Route tranquille.', '×2'],
+    ]);
+  });
+
+  it('une incursion n’a pas de route : tout son journal est du combat', () => {
+    const j = ['⚔️ 🧟 Revenant abattu.', '🚪 La porte s’ouvre.', '💀 Le gardien tient.'];
+    const s = splitJournal(j, true);
+    expect(s.events).toEqual([]);
+    expect(s.combat.map((r) => r.tone)).toEqual(['win', 'dim', 'lose']);
+  });
+
+  it('sans journal, le récit est tout ce qu’on a : il s’affiche', () => {
+    const solo = messageCard(msg({ text: 'Le camp est tombé.' }), []);
+    expect(section(missionDetail(solo), 'story')!.text).toBe('Le camp est tombé.');
+  });
+});
+
+describe('📖 storyExtra — ce que le récit dit de plus que le journal', () => {
+  it('répète le journal et le compte des abattus : rien à ajouter', () => {
+    expect(storyExtra('⚔️ Camp pris ! 🐺 3/3 abattus.', ['🧝 Last abat 🐺 Loup'])).toBeNull();
+  });
+
+  it('répète le verdict et le butin (« · +54 💠 ») : rien à ajouter', () => {
+    const t = '🌀 Faille refermée — le gardien est tombé. 2/2 abattus · +54 💠';
+    expect(storyExtra(t, [], 'faille refermée')).toBeNull();
+  });
+
+  it('dit ce que le journal ne dit pas : on le garde, sans les redites', () => {
+    const t = '💠 Aucun garde — ses monstres sont partis vers ta base. Route tranquille.';
+    expect(storyExtra(t, ['Route tranquille.'])).toBe(
+      '💠 Aucun garde — ses monstres sont partis vers ta base.',
+    );
   });
 });
 

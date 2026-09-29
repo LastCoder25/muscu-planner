@@ -48,7 +48,7 @@ interface ReportRow {
 
 /** `list` : lignes alignées · `timeline` : une frise, un point par étape · `steps` : un
  *  journal numéroté · `chips` : des pastilles (un butin en devises) · `text` : un récit. */
-type ReportLayout = 'list' | 'timeline' | 'steps' | 'chips' | 'text';
+type ReportLayout = 'list' | 'timeline' | 'steps' | 'chips' | 'text' | 'log';
 
 interface ReportSection {
   id: string;
@@ -59,6 +59,10 @@ interface ReportSection {
   layout: ReportLayout;
   rows: ReportRow[];
   text?: string;
+  /** Un résumé court à droite du titre (« ⚔️ 3/3 · +120 XP »). */
+  aside?: string;
+  /** Affichée même vide : son contenu vient d'ailleurs (les ressources du butin). */
+  keep?: boolean;
 }
 
 export interface ReportDetail {
@@ -72,25 +76,99 @@ const fmtRate = (n: number) =>
 const plural = (n: number, w: string) => `${n} ${w}${n > 1 ? 's' : ''}`;
 
 /** Ne garde que les sections qui ont quelque chose à dire. */
-const filled = (s: ReportSection) => (s.layout === 'text' ? !!s.text : s.rows.length > 0);
+const filled = (s: ReportSection) =>
+  !!s.keep || (s.layout === 'text' ? !!s.text : s.rows.length > 0);
 
-/** Le détail d'un rapport de mission (boîte 📬, fenêtre de retour de la carte). */
-export function missionDetail(c: MissionCard): ReportDetail {
-  const stats: ReportStat[] = [];
-  if (c.travelMs) stats.push({ label: 'de voyage', val: formatDuration(c.travelMs) });
-  if (c.xpPerHour)
-    stats.push({ label: 'XP/h par champion', val: `≈ ${fmtRate(c.xpPerHour)}`, tone: 'acc' });
-  if (c.kills) stats.push({ label: 'abattus', val: c.kills.replace(/ abattus$/, '') });
-  if (c.totalXp) stats.push({ label: 'XP au total', val: `+${fmt(c.totalXp)}`, tone: 'xp' });
+/** Une ligne de journal « X abat Y » / « X met à terre Y » (`campJournal`). */
+const KILL_LINE = /^(\S+)\s+(.+?)\s+(abat|met à terre)\s+(.+)$/u;
+/** Une ligne qui commence par son pictogramme (« 🏆 … », « Route tranquille. » n'en a pas). */
+const TAGGED = /^(\p{Extended_Pictographic}️?)\s+(.+)$/u;
 
+/** Une ligne de combat, rangée : l'icône de celui qui frappe, le reste en titre, la teinte
+ *  dit qui a eu le dessus (un ennemi abattu en vert, un des nôtres à terre en rouge). */
+function combatRow(line: string): ReportRow {
+  const k = KILL_LINE.exec(line);
+  if (k) {
+    const [, emo, who, verb, target] = k;
+    return {
+      icon: emo!,
+      title: `${who} ${verb} ${target}`,
+      tone: verb === 'abat' ? 'win' : 'lose',
+    };
+  }
+  const t = TAGGED.exec(line);
+  const icon = t ? t[1]! : '•';
+  const title = t ? t[2]! : line;
+  let tone: ReportTone = 'dim';
+  if (icon.startsWith('💀')) tone = 'lose';
+  else if (icon.startsWith('🏆') || /abattu/u.test(title)) tone = 'win';
+  return { icon, title, tone };
+}
+
+/** Des lignes identiques (une « Route tranquille » par trajet) deviennent UNE ligne avec
+ *  « ×2 » à droite, à la place de leur première apparition. */
+function merged(lines: readonly string[]): ReportRow[] {
+  const counts = new Map<string, number>();
+  for (const l of lines) counts.set(l, (counts.get(l) ?? 0) + 1);
+  return [...counts].map(([l, n]) => {
+    const t = TAGGED.exec(l);
+    return {
+      icon: t ? t[1]! : '•',
+      title: t ? t[2]! : l,
+      tone: 'dim' as const,
+      ...(n > 1 ? { value: `×${n}` } : {}),
+    };
+  });
+}
+
+/** Le journal coupé en deux : ce qui s'est passé au COMBAT, et en ROUTE. Une incursion ou
+ *  une bataille rangée n'a pas de route : tout y est combat. */
+export function splitJournal(
+  journal: readonly string[],
+  allCombat: boolean,
+): { combat: ReportRow[]; events: ReportRow[] } {
+  if (allCombat) return { combat: journal.map(combatRow), events: [] };
+  const combat: string[] = [];
+  const events: string[] = [];
+  for (const l of journal) (KILL_LINE.test(l) || l.startsWith('… et ') ? combat : events).push(l);
+  return { combat: combat.map(combatRow), events: merged(events) };
+}
+
+/** Ce que le récit dit DE PLUS que le journal, le verdict et le butin. Il les répète
+ *  souvent (« Faille refermée — … 2/2 abattus · +54 💠 ») : ce qui reste est tu s'il n'a
+ *  plus rien à dire. */
+export function storyExtra(text: string, journal: readonly string[], verdict = ''): string | null {
+  let rest = text;
+  for (const l of journal) if (l) rest = rest.split(l).join(' ');
+  rest = rest
+    .replace(/\d+\/\d+\s+(gardes\s+)?abattus\.?/gu, ' ')
+    .replace(/·\s*\+[\d\s]+\S*/gu, ' ');
+  const v = verdict.toLowerCase();
+  rest = rest
+    .split(/(?<=[.!?])\s+/u)
+    .filter((s) => !(v && s.toLowerCase().includes(v)))
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return rest.replace(/[^\p{L}]/gu, '').length >= STORY_MIN_LETTERS ? rest : null;
+}
+/** En dessous, il ne reste que le verdict (« ⚔️ Camp pris ! 🐺 ») : déjà dit en tête. */
+const STORY_MIN_LETTERS = 14;
+
+/** Le CORPS d'un rapport de mission, toujours visible : ce qu'il rapporte, qui y était. */
+export function missionMain(c: MissionCard): ReportDetail {
+  const teamBits: string[] = [];
+  if (c.kills) teamBits.push(`⚔️ ${c.kills.replace(/ abattus$/, '')}`);
+  if (c.totalXp) teamBits.push(`+${fmt(c.totalXp)} XP`);
   const sections: ReportSection[] = [
-    { id: 'story', icon: '📖', title: 'Récit', layout: 'text', rows: [], text: c.story },
     {
       id: 'loot',
       icon: '🎁',
       title: 'Butin',
-      count: c.loot.length + c.lootMore,
       layout: 'list',
+      // ⚠️ Affiché même sans objet : les ressources, elles, se dessinent au-dessus des
+      // lignes (`HaulPills`, qui dit ce qu'est chaque ressource au toucher).
+      keep: true,
       rows: [
         ...c.loot.map((it) => ({
           icon: '🎁',
@@ -102,30 +180,18 @@ export function missionDetail(c: MissionCard): ReportDetail {
         ...(c.lootMore > 0
           ? [{ icon: '🎒', title: `+${plural(c.lootMore, 'objet')} au sac`, tone: 'dim' as const }]
           : []),
+        ...(c.legacyItem ? [{ icon: '🎁', title: c.legacyItem }] : []),
       ],
-    },
-    {
-      id: 'road',
-      icon: '🛣️',
-      title: 'Route',
-      count: c.road.length,
-      layout: 'timeline',
-      rows: c.road.map((e) => ({
-        icon: '•',
-        title: e.text,
-        value: e.slain ? `⚔️ ${e.slain}` : undefined,
-        tone: 'dim' as const,
-      })),
     },
     {
       id: 'team',
       icon: '🧭',
       title: 'Équipe',
-      count: c.team.length + (c.hero ? 1 : 0),
+      aside: teamBits.join(' · ') || undefined,
       layout: 'list',
       rows: [
-        ...(c.hero && c.team.length
-          ? [{ icon: '🧝', title: 'Héros', sub: 'son XP vient du sport' }]
+        ...(c.hero
+          ? [{ icon: '🧝', title: 'Héros', sub: 'son XP vient du sport', tone: 'dim' as const }]
           : []),
         ...c.team.map((m) => {
           const tags: ReportTag[] = [];
@@ -134,8 +200,10 @@ export function missionDetail(c: MissionCard): ReportDetail {
           else if (m.lightHurt)
             tags.push({ icon: '🩹', title: 'Victoire serrée : courte convalescence' });
           const bits: string[] = [];
-          if (m.kills) bits.push(`⚔️ ${m.kills} abattu${m.kills > 1 ? 's' : ''}`);
-          if (m.down && !m.hurt && !m.lightHurt) bits.push('à terre, relevé');
+          if (m.kills) bits.push(`⚔️ ${plural(m.kills, 'abattu')}`);
+          if (m.hurt) bits.push('à l’infirmerie');
+          else if (m.lightHurt) bits.push('légèrement blessé');
+          else if (m.down) bits.push('à terre, relevé');
           if (m.gone) bits.push('parti depuis');
           return {
             icon: m.emoji,
@@ -149,13 +217,42 @@ export function missionDetail(c: MissionCard): ReportDetail {
         }),
       ],
     },
+  ];
+  return { stats: [], sections: sections.filter(filled) };
+}
+
+/** Le DÉTAIL d'un rapport de mission, replié : le récit, le combat, la route. */
+export function missionDetail(c: MissionCard): ReportDetail {
+  const stats: ReportStat[] = [];
+  if (c.travelMs) stats.push({ label: 'de voyage', val: formatDuration(c.travelMs) });
+  if (c.xpPerHour)
+    stats.push({ label: 'XP/h par champion', val: `≈ ${fmtRate(c.xpPerHour)}`, tone: 'acc' });
+  const { combat, events } = splitJournal(c.journal, !!(c.party?.rift || c.party?.battle));
+  const story = c.journal.length ? storyExtra(c.story, c.journal, c.verdict) : c.story || null;
+  const sections: ReportSection[] = [
+    { id: 'story', icon: '📖', title: 'Récit', layout: 'text', rows: [], text: story ?? undefined },
     {
-      id: 'journal',
-      icon: '📜',
-      title: 'Journal',
-      count: c.journal.length,
-      layout: 'steps',
-      rows: c.journal.map((l) => ({ icon: '', title: l })),
+      id: 'combat',
+      icon: '⚔️',
+      title: 'Combat',
+      count: combat.length,
+      layout: 'log',
+      rows: combat,
+    },
+    {
+      id: 'road',
+      icon: '🛣️',
+      title: 'Route',
+      layout: 'timeline',
+      rows: [
+        ...c.road.map((e) => ({
+          icon: '•',
+          title: e.text,
+          value: e.slain ? `⚔️ ${e.slain}` : undefined,
+          tone: 'dim' as const,
+        })),
+        ...events,
+      ],
     },
   ];
   return { stats, sections: sections.filter(filled) };

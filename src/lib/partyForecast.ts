@@ -113,3 +113,40 @@ function roadClearChance(poi: Poi, escort: Adventurer[], road: EscortKit, sample
   }
   return clear / n;
 }
+
+/** Une équipe pour `winGain` : ses champions et, s'il en est, le héros. */
+export interface GainTeam {
+  escort: Adventurer[];
+  hero: PartyHero | null;
+}
+/**
+ * 🎯➕ CE QU'UN MEMBRE APPORTE À LA RÉUSSITE, en points de % (demandé par l'utilisateur :
+ * « sur chaque tuile, le +% qu'il apporte sur le lieu sélectionné, en tenant compte des
+ * autres sélectionnés »). C'est la réussite AVEC lui moins la réussite SANS lui, l'équipe
+ * cochée restant la même : un champion NON coché s'ajoute à l'équipe, un champion COCHÉ en
+ * est retiré. L'apport dépend donc de qui est déjà là — un cinquième champion sur un lieu
+ * déjà gagné à 100 % n'apporte rien.
+ *
+ * ⚠️ `partyWinChance` des deux côtés, jamais une formule à part : l'apport doit se lire comme
+ * la différence entre deux 🎯 % que l'écran pourrait afficher. Les graines de pronostic sont
+ * les mêmes des deux côtés, donc l'écart ne mesure pas du bruit mais le membre.
+ * Une équipe VIDE vaut 0 % (elle ne part pas). `null` quand rien ne se combat sur ce lieu
+ * (le côté qui a du monde ne se simule pas) : il n'y a alors aucun apport à annoncer.
+ */
+export function winGain(
+  poi: Poi,
+  withMember: GainTeam,
+  withoutMember: GainTeam,
+  road: EscortKit,
+  now: number,
+  samples = 20,
+): number | null {
+  const empty = (t: GainTeam) => !t.escort.length && !t.hero;
+  const pct = (t: GainTeam) =>
+    empty(t) ? null : partyWinChance(poi, t.escort, road, t.hero, now, samples);
+  const a = pct(withMember);
+  const b = pct(withoutMember);
+  // Rien ne se simule du côté qui a du monde : pas d'apport à annoncer (pas « 0 % »).
+  if ((a === null && !empty(withMember)) || (b === null && !empty(withoutMember))) return null;
+  return Math.round(((a ?? 0) - (b ?? 0)) * 100);
+}

@@ -8,7 +8,9 @@ import {
   BASE_WING_ID,
   wingOriginId,
   combinedBlocker,
+  heroAttackReturnAt,
   heroInAttack,
+  heroOutInAttack,
   normalizeAttacks,
   planWings,
   wingDeparture,
@@ -248,6 +250,20 @@ describe('état et présence', () => {
     expect(heroInAttack([attack([{ hero: true }])])).toBe(true);
     expect(heroInAttack([attack([{ hero: true, state: 'gone', heroGone: false }])])).toBe(false);
     expect(heroInAttack(null)).toBe(false);
+  });
+  // 🐞 Signalé : « ça me met le héros dispo alors qu'il est en attaque combinée ».
+  it('le héros rentre d’une attaque à son heure de retour — en attente comme parti', () => {
+    const w = (over: object) => attack([{ hero: true, returnAt: 140 * MIN, ...over }]);
+    expect(heroAttackReturnAt([w({})])).toBe(140 * MIN);
+    expect(heroAttackReturnAt([w({ state: 'gone', heroGone: true })])).toBe(140 * MIN);
+    expect(heroAttackReturnAt([w({ state: 'gone', heroGone: false })])).toBeNull();
+    expect(heroAttackReturnAt([attack([{ hero: false }])])).toBeNull();
+    expect(heroAttackReturnAt(null)).toBeNull();
+  });
+  it('seul un héros PARTI quitte la base : en attente, il défend encore', () => {
+    expect(heroOutInAttack([attack([{ hero: true }])])).toBe(false);
+    expect(heroOutInAttack([attack([{ hero: true, state: 'gone', heroGone: true }])])).toBe(true);
+    expect(heroOutInAttack(null)).toBe(false);
   });
 });
 
