@@ -69,31 +69,25 @@
                 >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
               >
               <span class="pill st">{{ STATUS[r.status] }}</span>
-              <span v-if="r.status !== 'enemy' && r.status !== 'assault'" class="pill">
-                🛡️ {{ r.garrison.length }}/{{ r.seats }}
-              </span>
               <span v-if="r.reinforcing.length" class="pill"
                 >🧭 +{{ r.reinforcing.length }} en route</span
               >
             </span>
-            <!-- 🖼️ Qui tient la place, d'un coup d'œil (demandé) : une miniature par champion
-                 posté, une par milicien. Visible sans déplier la tuile. -->
-            <span
-              v-if="r.status !== 'enemy' && r.status !== 'assault' && r.garrison.length"
-              class="cps-minis"
-            >
-              <span v-for="a in advsOf(r.garrison)" :key="a.id" class="mini" :title="a.name"
-                ><ChampionPortrait :champion-id="a.championId">{{
-                  advTitle(a)?.emoji ?? '🧑'
-                }}</ChampionPortrait></span
-              >
-              <span
-                v-for="id in milOf(r.garrison)"
-                :key="id"
-                class="mini mil"
-                :title="MILITIA_NAME"
-                >{{ MILITIA_EMO }}</span
-              >
+            <!-- 🖼️ Qui tient la place, d'un coup d'œil (demandé) : une case par place (1 à N),
+                 remplie d'une miniature par champion ou milicien posté, numérotée si libre.
+                 Elle remplace la pastille « 🛡️ 2/5 » : les cases disent la même chose. -->
+            <span v-if="r.status !== 'enemy' && r.status !== 'assault'" class="cps-minis">
+              <template v-for="(s, i) in slotsOf(r)" :key="i">
+                <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
+                  ><ChampionPortrait :champion-id="s.adv.championId">{{
+                    advTitle(s.adv)?.emoji ?? '🧑'
+                  }}</ChampionPortrait></span
+                >
+                <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
+                  MILITIA_EMO
+                }}</span>
+                <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
+              </template>
             </span>
           </span>
           <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
@@ -257,6 +251,16 @@ const advsOf = (ids: readonly string[]) =>
 /** 🛡️ Les miliciens d'une garnison : ils n'existent pas dans le vivier (`advsOf` les ignore). */
 const milOf = (ids: readonly string[]) => ids.filter(isMilitiaId);
 const milReinfOf = (r: ControlRosterRow) => r.reinforcing.filter((x) => isMilitiaId(x.id));
+type Slot = { kind: 'adv'; adv: Adventurer } | { kind: 'mil' } | { kind: 'free' };
+/** Les cases de la ligne : champions, puis miliciens, puis places libres, jusqu'à `seats`. */
+const slotsOf = (r: ControlRosterRow): Slot[] => {
+  const filled: Slot[] = [
+    ...advsOf(r.garrison).map((adv) => ({ kind: 'adv' as const, adv })),
+    ...milOf(r.garrison).map(() => ({ kind: 'mil' as const })),
+  ];
+  const free = Math.max(0, r.seats - filled.length);
+  return [...filled, ...Array.from({ length: free }, () => ({ kind: 'free' as const }))];
+};
 const reinfOf = (r: ControlRosterRow) =>
   r.reinforcing.flatMap((x) => {
     const adv = byId.value.get(x.id);
@@ -400,25 +404,38 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   color: var(--d4);
   border-color: color-mix(in srgb, var(--d4) 50%, transparent);
 }
+/* Toutes les places sur UNE ligne (demandé) : les cases rétrécissent plutôt que de passer
+   à la ligne — à 344 px la colonne ne laisse qu'environ 120 px pour 5 cases. */
 .cps-minis {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  flex-wrap: nowrap;
+  gap: 3px;
+  min-width: 0;
 }
 .mini {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  font-size: 24px;
+  flex: 0 1 28px;
+  min-width: 0;
+  aspect-ratio: 1;
+  font-size: 17px;
   line-height: 1;
   border-radius: 7px;
   background: var(--surface);
   border: 1px solid var(--line);
   overflow: hidden;
 }
-.mini.mil {
-  font-size: 17px;
+/* Le portrait remplit sa case, quelle que soit sa taille. */
+.mini :deep(.cp) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+.mini.free {
+  font-family: Oswald, sans-serif;
+  font-size: 12px;
+  color: var(--dim);
+  background: transparent;
   border-style: dashed;
 }
 .cps-chev {

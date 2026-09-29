@@ -2002,8 +2002,12 @@ describe('🔀 FusionPanel', () => {
     // Ennemie : ce qu’elle rapporterait, à la même place.
     expect(out).toContain('XP pour la garnison 🎓');
     expect(out).toContain('1/6 tenus');
-    // Une mine prend 5 personnes depuis le 2026-09-28 (`seatsOf`).
-    expect(out).toContain('🛡️ 1/5');
+    // Une mine prend 5 personnes depuis le 2026-09-28 (`seatsOf`) : 5 cases, 1 occupée,
+    // 4 libres numérotées — elles remplacent la pastille « 🛡️ 1/5 ».
+    expect(out).not.toContain('🛡️ 1/5');
+    expect(out.match(/class="mini"/g)?.length).toBe(1);
+    expect(out.match(/class="mini free"/g)?.length).toBe(4);
+    expect(out).toMatch(/Place 5 libre/);
     // 🔎 Les filtres par statut, avec leur nombre (une tenue, cinq ennemies ; aucune vide).
     expect(out).toContain('🏰 Tenues · 1');
     expect(out).toContain('☠️ Pas tenues · 5');
