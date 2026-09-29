@@ -4,16 +4,18 @@
        son rang, qui le tient, ce qui appelle une action. Toucher une tuile ouvre la fiche du
        lieu : les ACTIONS (attaquer, renforcer, ramener, récolter) restent les siennes — deux
        écrans qui font la même chose finiraient par se contredire. -->
-  <q-dialog
+  <!-- 🗂️ `inline` : posée DANS la page, sous la carte, dépliée par sa tuile (2026-09-29). -->
+  <SheetShell
     :model-value="modelValue"
-    position="bottom"
+    :inline="inline"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="cps">
+    <div class="cps" :class="{ inline }">
       <div class="cps-head">
         <span class="cps-title">🏰 Places fortes</span>
         <span class="cps-sum">{{ heldCount }}/{{ rows.length }} tenus</span>
         <button
+          v-if="!inline"
           type="button"
           class="cps-x"
           aria-label="Fermer"
@@ -135,11 +137,12 @@
         <span class="cps-chev" aria-hidden="true">›</span>
       </div>
     </div>
-  </q-dialog>
+  </SheetShell>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import SheetShell from '@/components/SheetShell.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
@@ -169,6 +172,8 @@ const props = defineProps<{
    *  prendre) : leurs cases libres deviennent des boutons. Calculé par la page, avec la
    *  règle du store (`controlFreeSeats` / `militiaFreeSeats`). */
   reinforceable?: readonly string[];
+  /** Posée dans la page (sous la carte) plutôt qu'en dialogue. */
+  inline?: boolean;
 }>();
 const emit = defineEmits<{
   'update:modelValue': [boolean];
@@ -235,6 +240,16 @@ const isFull = (r: ControlRosterRow) =>
 </script>
 
 <style scoped>
+.cps.inline {
+  width: auto;
+  box-sizing: border-box;
+  max-width: none;
+  max-height: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  margin: 0 8px 8px;
+}
 .cps {
   width: 100%;
   max-width: 560px;

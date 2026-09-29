@@ -35,7 +35,6 @@ export function useWeeklyQuests() {
         bossHits: friendBoss.myHits,
       },
       logicalToday(),
-      auth.user?.id ?? '',
       char.row?.quest_week ?? null,
     ),
   );
@@ -49,7 +48,7 @@ export function useWeeklyQuests() {
     if (!uid || !canClaim.value) return 0;
     claiming.value = true;
     try {
-      return await char.claimWeeklyQuests(uid, board.value.monday, board.value.claimable);
+      return await char.claimWeeklyQuests(uid, board.value.monday, board.value.earned);
     } finally {
       claiming.value = false;
     }

@@ -5821,7 +5821,9 @@ async function expeLifecycle() {
     // défend plus son point).
     await attackStep(uid);
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctlMsgs = await char.controlTick(uid, Date.now(), c.value.level.level, activeDays7.value);
+    const ctl = await char.controlTick(uid, Date.now(), c.value.level.level, activeDays7.value);
+    for (const message of ctl.notices) $q.notify({ type: 'positive', message });
+    const ctlMsgs = ctl.attacks;
     if (ctlMsgs.length) {
       $q.notify({
         type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',

@@ -627,10 +627,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
             partyAdvs.value.length,
             partyHeroOn.value,
             cap.value,
-            // 💀 Le 🎯 % DÉJÀ affiché juste au-dessus : on ne laisse pas partir un groupe qui
-            // ne peut pas gagner. ⚠️ Le MÊME nombre que le pronostic — deux estimations
-            // finiraient par dire « 0 % » d'un côté et laisser partir de l'autre.
-            partyGuardWin.value,
           )
       : null,
   );
@@ -704,7 +700,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partySendLabel = computed(() => {
     if (!partySize.value) return 'Choisis ton groupe';
     // ⚠️ Le bouton DIT le refus, il ne se contente pas d'être gris.
-    if (partySendBlock.value === 'hopeless') return '💀 Perdu d’avance';
     if (partySendBlock.value === 'tooLate') return '⏱️ Trop tard';
     if (!teamOnly.value) return `🧺 Envoyer l’équipe (${partySize.value})`;
     return selectedRift.value

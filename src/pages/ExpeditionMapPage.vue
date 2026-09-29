@@ -41,7 +41,6 @@
       <div
         ref="scrollEl"
         class="map-scroll"
-        :class="{ 'with-trips': trips.length }"
         @scroll="onScroll"
       >
         <svg
@@ -196,6 +195,15 @@
                duquel on parle. Posé aux coordonnées que porte le voyage — le lieu d'un convoi
                est retiré de la carte au départ, il doit se retrouver quand même. -->
           <circle v-if="focusPoi" :cx="focusPoi.x" :cy="focusPoi.y" r="8" class="trip-focus-halo" />
+          <!-- ⚔️ L'armée touchée dans la liste des attaques (demandé : « une aura pour la trouver
+               sur la carte ») : relue à chaque tick, elle suit l'armée qui marche. -->
+          <circle
+            v-if="focusArmyPoi"
+            :cx="focusArmyPoi.x"
+            :cy="focusArmyPoi.y"
+            r="9"
+            class="trip-focus-halo army-focus-halo"
+          />
 
           <!-- 🗺️ Les lieux (à prendre, cible du héros, cibles des équipes) : un composant à part
                pour ne pas se re-diffuser à chaque seconde (cf. `MapPoiLayer`). -->
@@ -344,27 +352,6 @@
 
       <!-- Zoom -->
       <div class="zoom-ctl">
-        <!-- 🗂️ LES LISTES, à gauche du zoom sur la même ligne (demandé) : les points fixes
-             (la pastille dit combien appellent : attaque imminente, sans défense, butin) et
-             les attaques en cours (la pastille dit combien d'armées marchent). -->
-        <div class="list-row">
-          <button
-            class="zoom-b ctl-list-b"
-            aria-label="Places fortes"
-            title="Places fortes"
-            @click="ctlListOpen = true"
-          >
-            🏰<span v-if="ctlCalls" class="ctl-list-dot">{{ ctlCalls }}</span>
-          </button>
-          <button
-            class="zoom-b ctl-list-b"
-            aria-label="Attaques en cours"
-            title="Attaques en cours"
-            @click="attacksOpen = true"
-          >
-            ⚔️<span v-if="attacks.length" class="ctl-list-dot att-dot">{{ attacks.length }}</span>
-          </button>
-        </div>
         <div class="zoom-col">
           <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
           <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
@@ -373,9 +360,38 @@
       </div>
     </div>
 
-    <AttacksSheet v-model="attacksOpen" :rows="attacks" @open="openFromList" />
+    <!-- 🗂️ TROIS TUILES SOUS LA CARTE (2026-09-29, demandé : « les lieux fixes et les attaques
+         ennemies dans des tuiles, avec une tuile expéditions, et au clic ça déplie la partie
+         correspondante »). Une seule partie ouverte à la fois ; retoucher sa tuile la replie.
+         La pastille dit ce qui appelle : voyages en cours, points qui appellent, armées. -->
+    <div class="map-tabs" role="tablist">
+      <button
+        v-for="t in mapTabs"
+        :key="t.id"
+        type="button"
+        role="tab"
+        class="map-tab"
+        :class="[t.id, { on: mapPanel === t.id }]"
+        :aria-selected="mapPanel === t.id"
+        @click="mapPanel = mapPanel === t.id ? null : t.id"
+      >
+        <span class="mt-emo">{{ t.emo }}</span>
+        <span class="mt-lab">{{ t.label }}</span>
+        <span v-if="t.n" class="mt-dot">{{ t.n }}</span>
+        <span class="mt-chev" aria-hidden="true">{{ mapPanel === t.id ? '▾' : '▸' }}</span>
+      </button>
+    </div>
+    <AttacksSheet
+      v-if="mapPanel === 'attacks'"
+      :model-value="true"
+      inline
+      :rows="attacks"
+      @open="openAttack"
+    />
     <ControlPointsSheet
-      v-model="ctlListOpen"
+      v-if="mapPanel === 'ctl'"
+      :model-value="true"
+      inline
       :rows="ctlRoster"
       :advs="char.advList"
       :reinforceable="reinforceable"
@@ -413,7 +429,11 @@
     />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
+    <p v-if="mapPanel === 'trips' && !trips.length" class="map-tab-empty">
+      Aucune expédition en cours : touche un lieu de la carte pour envoyer une équipe.
+    </p>
     <TripsPanel
+      v-if="mapPanel === 'trips'"
       v-model:focus="focusTrip"
       :trips="trips"
       :hero-profile="character.profile"
@@ -1009,16 +1029,9 @@
           <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
             ✅ Une armée arrive, mais ils seront rentrés avant elle.
           </p>
-          <!-- 💀 ON DIT POURQUOI (demandé : « empêche d'envoyer une expédition à 0 % ») :
-               un bouton qui se grise en silence se lit comme une panne, et le joueur ne
-               saurait pas quoi changer. La parade est donc écrite avec le refus. -->
-          <p v-if="partySendBlock === 'hopeless'" class="sh-risk">
-            💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
-            un lieu d’un rang plus bas.
-          </p>
-          <!-- ⚠️ TOUS les autres refus sont dits aussi (signalé : « le bouton est grisé » sans
+          <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
                raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
-          <p v-else-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
+          <p v-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
             ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
           </p>
           <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>
@@ -2743,12 +2756,6 @@ function crewLabel(members: readonly string[]): string {
  *  (`focusPoi` ne le retrouve plus). */
 const focusTrip = ref<string | null>(null);
 const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.value)?.poi ?? null);
-// La carte raccourcit quand des voyages sont en cours (.with-trips) : on remesure, sinon
-// les flèches de bord se calent sur l'ancienne hauteur.
-watch(
-  () => trips.value.length > 0,
-  () => void nextTick(measure),
-);
 
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
@@ -2806,14 +2813,25 @@ function dimmed(p: Poi): boolean {
   return !o.hero && !o.party;
 }
 
-/** 🗂️ La liste des points fixes (icône au-dessus du dézoom). Les équipes en marche pour
- *  prendre un point viennent des groupes (`partyList`) : elles restent en garnison à
- *  l'arrivée (`midAt`). */
-const ctlListOpen = ref(false);
-/** ⚔️ Les attaques en cours (icône à côté de celle des points fixes). Horloge grossière :
- *  la liste ne change qu'à l'apparition ou l'arrivée d'une armée. */
-const attacksOpen = ref(false);
+/** 🗂️ La partie dépliée sous la carte (une seule à la fois ; `null` = tout replié). Les
+ *  équipes en marche pour prendre un point viennent des groupes (`partyList`) : elles
+ *  restent en garnison à l'arrivée (`midAt`). */
+type MapPanel = 'trips' | 'ctl' | 'attacks';
+const mapPanel = ref<MapPanel | null>(null);
+/** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
+ *  l'arrivée d'une armée. */
 const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
+/** ⚔️ L'armée entourée d'une aura (touchée dans la liste) ; elle s'éteint si l'armée n'est
+ *  plus sur la carte. */
+const focusArmy = ref<string | null>(null);
+const focusArmyPoi = computed(() =>
+  focusArmy.value ? (pois.value.find((p) => p.id === focusArmy.value) ?? null) : null,
+);
+const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number }[]>(() => [
+  { id: 'trips', emo: '🧭', label: 'Expéditions', n: trips.value.length },
+  { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value },
+  { id: 'attacks', emo: '⚔️', label: 'Attaques', n: attacks.value.length },
+]);
 const ctlRoster = computed(() =>
   controlRoster(
     char.row?.expedition_map,
@@ -3166,13 +3184,21 @@ async function sendFromBase(id: string, champIds: string[], militia: number) {
   }
 }
 
+/** ⚔️ Toucher une attaque dans la liste = la toucher sur la carte, plus une aura pour la
+ *  retrouver (demandé). */
+function openAttack(p: Poi) {
+  openFromList(p);
+  focusArmy.value = p.id;
+}
 function openFromList(p: Poi) {
-  ctlListOpen.value = false;
+  mapPanel.value = null;
   panToPoi(p);
   selectPoi(p);
 }
 
 function selectPoi(p: Poi) {
+  // L'aura d'une armée ne suit que tant qu'on la regarde.
+  if (p.id !== focusArmy.value) focusArmy.value = null;
   // ⚠️ On sélectionne MÊME si le héros est en expédition : un convoi part sans lui.
   // Ce qui est ouvert ou non se décide dans la feuille, via `poiOffers`.
   selected.value = p;
@@ -3676,12 +3702,14 @@ async function lifecycle() {
         });
     }
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
-    const ctlMsgs = await char.controlTick(
+    const ctl = await char.controlTick(
       uid,
       Date.now(),
       heroLevel.value,
       progress.activeDaysInLast(7),
     );
+    for (const message of ctl.notices) $q.notify({ type: 'positive', message });
+    const ctlMsgs = ctl.attacks;
     if (ctlMsgs.length)
       $q.notify({
         type: ctlMsgs.every((m) => m.win) ? 'positive' : 'warning',
@@ -4620,12 +4648,80 @@ onUnmounted(() => {
   background: #d7d0bd;
   scrollbar-width: none;
 }
-/* Des voyages en cours : la carte laisse la place à leurs DEUX premières lignes en bas
-   de l'écran (en-tête ~60 px, filtres repliés ~48 (v0.1240 ; dépliés ils poussent les voyages, le temps de régler), disponibilités ~72 (rangs compris), deux lignes de tuiles ~104, marges). Jamais plus
-   haute qu'avant (62vh). */
-.map-scroll.with-trips {
-  height: min(62vh, calc(100vh - 320px));
-  height: min(62vh, calc(100dvh - 320px));
+/* La carte laisse toujours voir, en bas de l'écran, la rangée des trois tuiles (en-tête ~60 px,
+   filtres repliés ~48, disponibilités ~72, tuiles ~64, marges). Jamais plus haute qu'avant (62vh). */
+.map-scroll {
+  height: min(62vh, calc(100vh - 280px));
+  height: min(62vh, calc(100dvh - 280px));
+}
+/* 🗂️ Les trois tuiles sous la carte : une ligne, trois colonnes égales, cibles ≥ 44 px. */
+.map-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 8px;
+}
+.map-tab {
+  position: relative;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 6px 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.map-tab.on {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.mt-emo {
+  font-size: 17px;
+  line-height: 1;
+}
+.mt-lab {
+  max-width: 100%;
+  white-space: nowrap;
+  line-height: 1.1;
+}
+.mt-chev {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  color: var(--dim);
+  font-size: 10px;
+}
+.mt-dot {
+  position: absolute;
+  top: -6px;
+  right: -4px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #15120e;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 18px;
+}
+.map-tab.attacks .mt-dot {
+  background: var(--d4);
+  color: #fff;
+}
+.map-tab-empty {
+  margin: 0 4px 8px;
+  color: var(--dim);
+  font-size: 12px;
+  text-align: center;
 }
 .map-scroll::-webkit-scrollbar {
   display: none;
@@ -4671,14 +4767,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
 }
-.list-row {
-  display: flex;
-  gap: 6px;
-}
-.att-dot {
-  background: var(--d4);
-  color: #fff;
-}
 .zoom-b {
   width: 34px;
   height: 34px;
@@ -4691,24 +4779,6 @@ onUnmounted(() => {
   cursor: pointer;
   display: grid;
   place-items: center;
-}
-.ctl-list-b {
-  position: relative;
-  font-size: 16px;
-}
-.ctl-list-dot {
-  position: absolute;
-  top: -5px;
-  right: -5px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #15120e;
-  font-size: 10px;
-  font-weight: 800;
-  line-height: 16px;
 }
 /* Décor de carte */
 /* Terrain : le sol vit dans MapTerrain.vue (mer, côte, prairie, reliefs). Ici ne
@@ -5078,6 +5148,10 @@ onUnmounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 8px;
+}
+.trip-focus-halo.army-focus-halo {
+  fill: rgb(255 93 93 / 18%);
+  stroke-width: 1.6;
 }
 .trip-focus-halo {
   fill: rgb(255 93 93 / 28%);

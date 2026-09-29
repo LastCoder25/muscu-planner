@@ -4,18 +4,20 @@
        campagne repérée : qui marche, sur quoi, et dans combien de temps elle frappe. Toucher
        une tuile centre la carte sur l'armée et ouvre sa fiche — c'est là qu'on l'attaque ou
        qu'on renforce, un seul endroit. -->
-  <q-dialog
+  <!-- 🗂️ `inline` : posée DANS la page, sous la carte, dépliée par sa tuile (2026-09-29). -->
+  <SheetShell
     :model-value="modelValue"
-    position="bottom"
+    :inline="inline"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="ats">
+    <div class="ats" :class="{ inline }">
       <div class="ats-head">
         <span class="ats-title">⚔️ Attaques en cours</span>
         <span class="ats-sum"
           >{{ rows.length }} armée{{ rows.length > 1 ? 's' : '' }} en marche</span
         >
         <button
+          v-if="!inline"
           type="button"
           class="ats-x"
           aria-label="Fermer"
@@ -55,7 +57,7 @@
         </span>
       </button>
     </div>
-  </q-dialog>
+  </SheetShell>
 </template>
 
 <script setup lang="ts">
@@ -65,7 +67,9 @@ import { FACTION_EMOJI, FACTION_LABEL } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
 import type { ActiveAttack } from '@/lib/fieldArmy';
 
-defineProps<{ modelValue: boolean; rows: ActiveAttack[] }>();
+import SheetShell from '@/components/SheetShell.vue';
+
+defineProps<{ modelValue: boolean; rows: ActiveAttack[]; inline?: boolean }>();
 const emit = defineEmits<{ 'update:modelValue': [boolean]; open: [Poi] }>();
 
 /** Moins d'une heure : la tuile passe au rouge. */
@@ -75,6 +79,16 @@ const fmtSize = (n: number) => (Math.round(n * 10) / 10).toLocaleString('fr-FR')
 </script>
 
 <style scoped>
+.ats.inline {
+  width: auto;
+  box-sizing: border-box;
+  max-width: none;
+  max-height: none;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px;
+  margin: 0 8px 8px;
+}
 .ats {
   width: 100%;
   max-width: 560px;

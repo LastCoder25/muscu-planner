@@ -79,12 +79,15 @@ const ECRANS = [
     route: '/expedition-map',
     nom: 'carte',
     gestes: [
+      // 🗂️ Sous la carte, trois tuiles qui déplient leur partie (v0.1354) : les voyages
+      // d'abord, puis l'équipe de l'un d'eux.
+      { nom: 'expeditions', clic: '.map-tab.trips', attendu: '.trips' },
       { nom: 'voyage', clic: '.trip', attendu: '.trip-crew' },
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
-      // 🗂️ La liste des points fixes (icône au-dessus du dézoom).
-      { nom: 'points-fixes', clic: '.ctl-list-b', attendu: '.cps-tile' },
-      // 🏠 La base, comme un lieu fixe : toucher la ville montre qui y est. ⚠️ On FERME
-      // d'abord la liste des points fixes (un dialogue), sinon il recouvre la carte.
+      // 🗂️ Les points fixes et les attaques, dépliés par leur tuile.
+      { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },
+      { nom: 'attaques', clic: '.map-tab.attacks', attendu: '.ats.inline' },
+      // 🏠 La base, comme un lieu fixe : toucher la ville montre qui y est.
       { nom: 'base', clic: '.town', attendu: '.bgs', escape: true },
     ],
   },

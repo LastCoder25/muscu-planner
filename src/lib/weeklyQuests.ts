@@ -1,8 +1,8 @@
 // 🗓️ QUÊTES DE LA SEMAINE (v0.1209 ; décisions de l'utilisateur, 2026-09-27 : « quête qui
 // paie », « 3 objectifs chaque lundi », « objectifs de SPORT seulement », « 2 tickets »).
 //
-// Trois objectifs de sport, tirés chaque lundi (jour logique, bascule à 4 h), valables
-// jusqu'au dimanche. Les trois bouclés → **2 tickets d'invocation 🎟️**. Ce qui n'est pas fait
+// Des objectifs de sport renouvelés chaque lundi (jour logique, bascule à 4 h), valables
+// jusqu'au dimanche, payés en **tickets d'invocation 🎟️** par paliers. Ce qui n'est pas fait
 // est perdu, sans pénalité : il n'y a rien à rattraper, la semaine suivante repart à zéro.
 //
 // ⚠️ OBJECTIFS DE SPORT SEULEMENT, et c'est ce qui garde la règle des tickets intacte : ils
@@ -18,22 +18,26 @@
 // vient une fois par semaine. Elles ne dépendent que du passé, donc elles ne bougent pas
 // pendant la semaine — et rien n'est à stocker.
 //
+// 🎟️ PALIERS : TOUS LES OBJECTIFS, TU FAIS CE QUE TU VEUX (v0.1361 ; demandé par l'utilisateur :
+// « faire plus d'objectifs et on fait ce qu'on veut avec des paliers de récompenses »). Plus
+// de tirage : les six objectifs sont affichés (ceux de tes sports en tête), et chaque palier
+// d'objectifs atteints paie. Ça règle aussi « choisir son objectif » sans rien à verrouiller —
+// un choix fait le dimanche aurait pris l'objectif déjà atteint. Le paragraphe suivant (le
+// tirage selon ta pratique) ne décrit plus que l'ORDRE et la marque « tes sports ».
+//
 // ⚠️ LES QUÊTES SUIVENT CE QUE TU PRATIQUES (v0.1357 ; demandé par l'utilisateur : « adapter
 // les quêtes à l'activité sportive de l'utilisateur »). Le tirage était aveugle : un joueur
 // 100 % muscu recevait « 30 min de sortie cardio » ou « 2 sports différents », c'est-à-dire
 // un objectif hors de sa pratique, donc une semaine impossible à boucler sans changer de
-// sport. Désormais on ne tire que parmi les quêtes de TES pratiques (`practicedKinds`, sur
-// les mêmes 4 semaines que les cibles, donc stable toute la semaine) ; la variété n'est
-// proposée qu'à qui pratique DÉJÀ deux sports ; et quand il manque de quoi remplir, une quête
-// de RÉGULARITÉ (une moitié de semaine après l'autre) convient à n'importe quelle pratique.
-// Sans historique (joueur neuf), on garde la découverte d'avant (muscu, cardio, variété).
+// sport. Depuis les paliers, TES pratiques (`practicedKinds`, sur les mêmes 4 semaines que les
+// cibles, donc stable toute la semaine) décident de l'ORDRE et de la marque « tes sports » ;
+// la RÉGULARITÉ (une moitié de semaine après l'autre) vaut pour n'importe quelle pratique.
 //
 // Module pur : les dates sont des chaînes `YYYY-MM-DD` comparées en chaînes, l'aujourd'hui est
 // PASSÉ par l'appelant (leçon `activityDays.ts`).
 
 import { legSets, type ComboChallenge } from './combo';
 import { isCardioTrackChallenge } from '@/data/cardio';
-import { seedOf } from './combat';
 
 export type QuestKind =
   | 'active_days'
@@ -47,8 +51,16 @@ export type QuestKind =
 type SportKind = 'muscu' | 'cardio' | 'tennis' | 'other';
 
 export const WEEKLY_QUESTS = {
-  /** Tickets 🎟️ d'une semaine entièrement bouclée (décision de l'utilisateur). */
-  tickets: 2,
+  /** 🎟️ Paliers : autant d'objectifs atteints → autant de tickets AU TOTAL (pas en plus).
+   *  3 objectifs rendent les 2 tickets d'avant ; le dernier palier demande de sortir de sa
+   *  routine, et paie un ticket de plus. */
+  tiers: [
+    { at: 2, tickets: 1 },
+    { at: 3, tickets: 2 },
+    { at: 5, tickets: 3 },
+  ],
+  /** Tickets déjà pris par une marque d'avant les paliers (un lundi seul = semaine payée). */
+  legacyClaimed: 2,
   /** Semaines d'historique qui calent les cibles. */
   historyWeeks: 4,
   /** Minutes de sortie : cible = moyenne × cette marge, bornée. */
@@ -238,21 +250,33 @@ export function questTargets(entries: QuestEntry[], monday: string): Record<Ques
   };
 }
 
-/** Les quêtes qu'on peut te tirer, selon ce que tu pratiques. ⚠️ Jamais une quête d'un sport
- *  que tu ne fais pas : elle rendrait la semaine impossible à boucler. */
-function questPool(practiced: Set<SportKind>): QuestKind[] {
-  // Joueur neuf : rien à suivre encore — la découverte d'avant (cibles au plancher).
-  if (practiced.size === 0) return ['strength_days', 'cardio_minutes', 'variety'];
-  const pool: QuestKind[] = [];
-  if (practiced.has('muscu')) pool.push('strength_days');
-  if (practiced.has('cardio')) pool.push('cardio_minutes');
-  if (practiced.has('tennis')) pool.push('tennis_days');
-  if (practiced.size >= 2) pool.push('variety');
-  // Une seule pratique suivie : la régularité comble, elle vaut pour tout sport.
-  if (pool.length < 2) pool.push('regularity');
-  // Seulement « autre sport » (aucune quête dédiée) : on lui propose d'en découvrir un second.
-  if (pool.length < 2) pool.push('variety');
-  return pool;
+/** Ordre d'affichage : « jours actifs » en tête (le cœur de la semaine), puis les objectifs
+ *  de TES pratiques, puis les autres — proposés, jamais imposés (paliers). */
+const PRACTICE_OF: Partial<Record<QuestKind, SportKind>> = {
+  strength_days: 'muscu',
+  cardio_minutes: 'cardio',
+  tennis_days: 'tennis',
+};
+const ALL_KINDS: QuestKind[] = [
+  'active_days',
+  'strength_days',
+  'cardio_minutes',
+  'tennis_days',
+  'regularity',
+  'variety',
+];
+function questOrder(practiced: Set<SportKind>): QuestKind[] {
+  const [first, ...rest] = ALL_KINDS;
+  const mine = (k: QuestKind) => isMine(k, practiced);
+  return [first!, ...rest.filter(mine), ...rest.filter((k) => !mine(k))];
+}
+
+/** Objectif d'un de TES sports ? Régularité et variété n'appartiennent à aucun sport : la
+ *  régularité vaut pour tous, la variété pour qui en pratique déjà deux. */
+function isMine(k: QuestKind, practiced: Set<SportKind>): boolean {
+  if (k === 'active_days' || k === 'regularity') return true;
+  if (k === 'variety') return practiced.size >= 2;
+  return practiced.has(PRACTICE_OF[k]!);
 }
 
 export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) => string }> = {
@@ -267,7 +291,7 @@ export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) =
     label: (t) => `Tennis ${t} jour${t > 1 ? 's' : ''} (court ou prépa physique)`,
   },
   variety: { emoji: '🔀', label: (t) => `${t} sports différents cette semaine` },
-  regularity: { emoji: '🗓️', label: () => 'Bouge en début ET en fin de semaine' },
+  regularity: { emoji: '🔁', label: () => 'Bouge en début ET en fin de semaine' },
 };
 
 interface WeeklyQuest {
@@ -275,32 +299,53 @@ interface WeeklyQuest {
   target: number;
   done: number;
   complete: boolean;
+  /** Objectif d'un de TES sports (sinon : proposé, pour qui veut varier). */
+  mine: boolean;
 }
 
 export interface WeeklyQuestBoard {
   monday: string;
   sunday: string;
   quests: WeeklyQuest[];
-  complete: boolean;
-  /** Tickets à récupérer maintenant (0 si déjà récupérés ou semaine pas bouclée). */
+  /** Objectifs atteints. */
+  doneCount: number;
+  /** Les paliers, avec leur état. */
+  tiers: { at: number; tickets: number; reached: boolean }[];
+  /** Tickets gagnés par les paliers atteints / déjà récupérés / à récupérer maintenant. */
+  earned: number;
+  claimedTickets: number;
   claimable: number;
-  claimed: boolean;
+  /** Tous les paliers atteints et récupérés : rien de plus cette semaine. */
+  complete: boolean;
 }
 
-/** Les 3 quêtes de la semaine de `today`. « Jours actifs » est toujours là (c'est le cœur de
- *  la semaine) ; les deux autres sont tirées sur la graine joueur + lundi — la même toute la
- *  semaine, différente d'un joueur à l'autre. `claimedWeek` = lundi de la dernière semaine
- *  récupérée. */
+/** 🎟️ La marque stockée (`characters.quest_week`) : le lundi de la semaine, suivi du nombre de
+ *  tickets déjà récupérés (`2026-09-28:1`). ⚠️ Un lundi SEUL vient d'avant les paliers : il
+ *  voulait dire « les 2 tickets de la semaine sont pris » — on le relit comme tel, sinon une
+ *  semaine déjà payée paierait une seconde fois. */
+export function parseQuestMark(mark: string | null, monday: string): number {
+  if (!mark) return 0;
+  const [week, n] = mark.split(':');
+  if (week !== monday) return 0;
+  if (n === undefined) return WEEKLY_QUESTS.legacyClaimed;
+  const v = Number(n);
+  return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0;
+}
+export const questMark = (monday: string, tickets: number) => `${monday}:${tickets}`;
+
+/** Les objectifs de la semaine de `today` : TOUS, et tu fais ceux que tu veux. Chaque palier
+ *  d'objectifs atteints (`WEEKLY_QUESTS.tiers`) paie ses tickets, récupérables au fil de la
+ *  semaine. `mark` = la marque stockée (cf. `parseQuestMark`). */
 export function weeklyQuests(
   src: QuestSources,
   today: string,
-  userId: string,
-  claimedWeek: string | null,
+  mark: string | null,
 ): WeeklyQuestBoard {
   const entries = questEntries(src);
   const monday = weekStart(today);
   const targets = questTargets(entries, monday);
   const now = weekStats(entries, monday);
+  const practiced = practicedKinds(entries, monday);
   const doneOf: Record<QuestKind, number> = {
     active_days: now.activeDays,
     strength_days: now.strengthDays,
@@ -309,29 +354,33 @@ export function weeklyQuests(
     variety: now.kinds,
     regularity: now.halves,
   };
-  // Deux quêtes tirées parmi TES pratiques, sur la graine joueur + lundi (la même toute la
-  // semaine). Un tirage sans remise, pas une exclusion : le vivier peut dépasser 3.
-  const pool = questPool(practicedKinds(entries, monday));
-  let seed = seedOf(`${userId}|${monday}`);
-  const picked: QuestKind[] = [];
-  while (picked.length < 2 && pool.length) {
-    picked.push(pool.splice(seed % pool.length, 1)[0]!);
-    seed = Math.floor(seed / 7) + 1;
-  }
-  const kinds: QuestKind[] = ['active_days', ...picked];
-  const quests = kinds.map((kind) => {
+  const quests = questOrder(practiced).map((kind) => {
     const target = targets[kind];
     const done = doneOf[kind];
-    return { kind, target, done, complete: done >= target };
+    return {
+      kind,
+      target,
+      done,
+      complete: done >= target,
+      mine: isMine(kind, practiced),
+    };
   });
-  const complete = quests.every((q) => q.complete);
-  const claimed = claimedWeek === monday;
+  const doneCount = quests.filter((q) => q.complete).length;
+  const tiers = WEEKLY_QUESTS.tiers.map((t) => ({ ...t, reached: doneCount >= t.at }));
+  const earned = tiers.reduce((best, t) => (t.reached ? Math.max(best, t.tickets) : best), 0);
+  const claimedTickets = parseQuestMark(mark, monday);
+  const claimable = Math.max(0, earned - claimedTickets);
+  const top = WEEKLY_QUESTS.tiers[WEEKLY_QUESTS.tiers.length - 1]!.tickets;
   return {
     monday,
     sunday: addDays(monday, 6),
     quests,
-    complete,
-    claimed,
-    claimable: complete && !claimed ? WEEKLY_QUESTS.tickets : 0,
+    doneCount,
+    tiers,
+    earned,
+    claimedTickets,
+    claimable,
+    complete: claimedTickets >= top,
   };
 }
+

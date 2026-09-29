@@ -1,6 +1,7 @@
 // Store character — personnage RPG (Phase 1 : pseudo unique). Accès Supabase centralisé.
 import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { localDayIso } from '@/lib/localDay';
+import { parseQuestMark, questMark } from '@/lib/weeklyQuests';
 import {
   advanceBossTokens,
   chestMark,
@@ -111,6 +112,7 @@ import {
   type ExpeditionMessage,
   type ExpeditionOutcome,
   type Poi,
+  restoreUnvanquished,
 } from '@/lib/expedition';
 import {
   buildingType,
@@ -264,7 +266,6 @@ import {
   RECALL_BLOCK_LABEL,
   type RecallTarget,
 } from '@/lib/party';
-import { partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
   heroOutInAttack,
@@ -300,6 +301,7 @@ import {
   autoCollectable,
   newAscensions,
   controlLootMessage,
+  controlNoticeText,
   ascensionMessage,
   controlTravelMult,
   controlDetectBoost,
@@ -1038,28 +1040,31 @@ export const useCharacterStore = defineStore('character', () => {
     return true;
   }
 
-  /** 🗓️ Récupère les tickets d'une semaine de quêtes bouclée. ⚠️ LA CONDITION VIT DANS LA
-   *  REQUÊTE (même patron que les tickets de bienvenue) : deux onglets qui lisent la ligne
-   *  « pas encore récupérée » en même temps ne créditent qu'une fois — le second ne met à
+  /** 🗓️ Récupère les tickets des paliers atteints (`earned`, au total de la semaine) moins ceux
+   *  déjà pris — relus sur la marque STOCKÉE, jamais sur ce que l'écran croit. ⚠️ LA CONDITION
+   *  VIT DANS LA REQUÊTE (même patron que les tickets de bienvenue) : la marque doit être
+   *  encore celle qu'on a lue, sinon un autre onglet vient de récupérer et le second ne met à
    *  jour aucune ligne. Rend les tickets versés (0 si rien n'était dû). */
-  async function claimWeeklyQuests(userId: string, monday: string, tickets: number) {
+  async function claimWeeklyQuests(userId: string, monday: string, earned: number) {
     const cur = row.value;
-    if (!cur || tickets <= 0 || cur.quest_week === monday) return 0;
+    if (!cur) return 0;
+    const tickets = earned - parseQuestMark(cur.quest_week, monday);
+    if (tickets <= 0) return 0;
     const res = await supabase
       .from('characters')
       .update({
         gacha_tickets: cur.gacha_tickets + tickets,
-        quest_week: monday,
+        quest_week: questMark(monday, earned),
         updated_at: new Date().toISOString(),
       })
       .eq('user_id', userId)
-      .or(`quest_week.is.null,quest_week.neq.${monday}`)
+      .or(cur.quest_week ? `quest_week.eq.${cur.quest_week}` : 'quest_week.is.null')
       .select(COLS)
       .maybeSingle();
     if (res.error) throw res.error;
     if (!res.data) return 0;
     row.value = normalizeRow(res.data);
-    useGameFx().celebrateTickets(tickets, 'Quêtes de la semaine bouclées');
+    useGameFx().celebrateTickets(tickets, 'Palier de quêtes atteint');
     return tickets;
   }
 
@@ -2314,13 +2319,17 @@ export const useCharacterStore = defineStore('character', () => {
           activeDays7,
         )
       : null;
+    // 🗺️ Un lieu que le héros n'a pas terrassé revient sur la carte (`restoreUnvanquished`).
+    const map0 = ctl ? ctl.map : cur.expedition_map;
+    const map = restoreUnvanquished(map0, [exp], partyList.value, now);
     await persist(userId, {
       ...(dw?.base ? { base: dw.base } : {}),
       ...(x && x.messages !== cur.messages
         ? { messages: dw ? dw.tag(x.messages) : x.messages }
         : {}),
       ...(x?.patch ?? {}),
-      ...(ctl ? { expedition_map: ctl.map, adventurers: ctl.adventurers } : {}),
+      ...(ctl ? { adventurers: ctl.adventurers } : {}),
+      ...(ctl || map !== map0 ? { expedition_map: map } : {}),
       expedition: null,
     });
     x?.play();
@@ -3363,10 +3372,6 @@ export const useCharacterStore = defineStore('character', () => {
       escort.length,
       !!hero,
       engageCap(pantheonLevel.value),
-      // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
-      // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
-      // dessous — un lieu ne peut pas se pronostiquer autrement qu’il ne se résout.
-      partyWinChance(poi, escort, road, hero, now, 40, false),
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
@@ -3690,14 +3695,8 @@ export const useCharacterStore = defineStore('character', () => {
     const stockAfter = takeSupplies(cur.supplies, supplies);
     if (!stockAfter) return 'un consommable choisi n’est plus en stock';
     const road = { ...escortKitOf(cur), supplies };
-    // ⚠️ Le plafond du Panthéon et le pronostic portent sur l'attaque ENTIÈRE.
-    const sendBlock = partySendBlocker(
-      poi,
-      all.length,
-      !!hero,
-      engageCap(pantheonLevel.value),
-      partyWinChance(poi, all, road, hero, now, 40, false),
-    );
+    // ⚠️ Le plafond du Panthéon porte sur l'attaque ENTIÈRE.
+    const sendBlock = partySendBlocker(poi, all.length, !!hero, engageCap(pantheonLevel.value));
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     const heroBlock = hero
       ? partyHeroBlocker({
@@ -4080,10 +4079,20 @@ export const useCharacterStore = defineStore('character', () => {
       if (q && q.returnAt !== p.returnAt)
         advsBack = rescheduleReturners(advsBack, tripCrew(q), p.returnAt, q.returnAt);
     }
+    // 🗺️ Un lieu qu'une équipe rentrée n'a pas terrassé revient sur la carte — sauf si un
+    // autre voyage le vise encore (`restoreUnvanquished`).
+    const mapBase = ctl?.map ?? cur.expedition_map;
+    const ended = partyList.value.filter((p) => !t.parties.some((q) => q.id === p.id));
+    const mapOut = restoreUnvanquished(
+      mapBase,
+      ended,
+      [...t.parties, ...(cur.expedition ? [cur.expedition] : [])],
+      clock,
+    );
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
-      ...(ctl?.map ? { expedition_map: ctl.map } : {}),
+      ...(ctl?.map || mapOut !== mapBase ? { expedition_map: mapOut } : {}),
       ...(x.messages !== cur.messages ? { messages: x.messages } : {}),
       // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
       //  ne fait que le confirmer.)
@@ -4287,16 +4296,17 @@ export const useCharacterStore = defineStore('character', () => {
     now: number,
     playerLevel: number,
     activeDays7: number,
-  ): Promise<ExpeditionMessage[]> {
+  ): Promise<{ attacks: ExpeditionMessage[]; notices: string[] }> {
+    const none = { attacks: [], notices: [] };
     const cur = row.value;
-    if (!cur?.expedition_map) return [];
+    if (!cur?.expedition_map) return none;
     knownActiveDays7 = activeDays7;
     // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
     // reprises) se fera au tick suivant, sur l'état relu.
     const home = settleHome(cur, now);
     if (home) {
       if (tickMayWrite(cur)) await persist(userId, home);
-      return [];
+      return none;
     }
     // 🏰 Les renforts ARRIVÉS rejoignent d'abord leur garnison (ceux arrivés avant l'attaque
     // combattent avec elle, les autres non).
@@ -4320,11 +4330,10 @@ export const useCharacterStore = defineStore('character', () => {
     if (!due.length) {
       if (settled !== cur.expedition_map) {
         if (tickMayWrite(cur)) await persist(userId, { expedition_map: settled });
-        return [];
+        return none;
       }
       // 🏰 Rien d'autre à régler : ce que les points tenus ont produit est versé tout seul.
-      await autoCollectControls(userId, now, playerLevel);
-      return [];
+      return { attacks: [], notices: await autoCollectControls(userId, now, playerLevel) };
     }
     let map = settled;
     let advs = advList.value;
@@ -4489,7 +4498,7 @@ export const useCharacterStore = defineStore('character', () => {
       gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {};
     // Calculé sur un état qu'une écriture en vol a peut-être changé : on rejouera au tick
     // suivant (la reprise est déterministe, rien n'est perdu à attendre une seconde).
-    if (!tickMayWrite(cur)) return [];
+    if (!tickMayWrite(cur)) return none;
     await persist(userId, {
       expedition_map: map,
       messages: x.messages,
@@ -4501,7 +4510,7 @@ export const useCharacterStore = defineStore('character', () => {
       adventurers: roster,
     });
     x.play();
-    return msgs;
+    return { attacks: msgs, notices: [] };
   }
 
   /**
@@ -4573,11 +4582,15 @@ export const useCharacterStore = defineStore('character', () => {
    * sauf ce qui mérite qu'on le sache : un consommable, une rune, ou un champion (ou une de
    * ses pièces) qui devient prêt pour l'ascension — un bandeau ET un rapport dans la boîte.
    */
-  async function autoCollectControls(userId: string, now: number, playerLevel: number) {
+  async function autoCollectControls(
+    userId: string,
+    now: number,
+    playerLevel: number,
+  ): Promise<string[]> {
     const cur = row.value;
-    if (!cur?.expedition_map) return;
+    if (!cur?.expedition_map) return [];
     const points = autoCollectable(cur.expedition_map, now);
-    if (!points.length) return;
+    if (!points.length) return [];
     const before = advList.value;
     const stock0 = cur.adv_gear?.stock ?? [];
     let map = cur.expedition_map;
@@ -4601,7 +4614,7 @@ export const useCharacterStore = defineStore('character', () => {
       const m = controlLootMessage(p, now, h.supplies, h.runes);
       if (m) msgs.push(m);
     }
-    if (map === cur.expedition_map) return;
+    if (map === cur.expedition_map) return [];
     const gearNext = trainWornGear(before, advs, stock);
     const found = newAscensions(before, advs, stock0, gearNext);
     const owners = new Map<string, string>();
@@ -4609,7 +4622,7 @@ export const useCharacterStore = defineStore('character', () => {
       for (const g of list) owners.set(g.id, advs.find((a) => a.id === aid)?.name ?? '');
     const asc = ascensionMessage(now, found, owners);
     if (asc) msgs.push(asc);
-    if (!tickMayWrite(cur)) return;
+    if (!tickMayWrite(cur)) return [];
     const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
     await persist(userId, {
       expedition_map: map,
@@ -4621,17 +4634,8 @@ export const useCharacterStore = defineStore('character', () => {
       ...(advs !== before ? { adventurers: advs } : {}),
       ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
     });
-    const fx = useGameFx();
-    for (const m of msgs)
-      fx.celebrate({
-        kind: 'generic',
-        emoji: m.id.startsWith('ascend_') ? '🌟' : m.runes?.length ? '📜' : '🎒',
-        title: m.title ?? 'Place forte',
-        subtitle: m.id.startsWith('ascend_')
-          ? 'L’ascension se fait au Panthéon'
-          : 'Rapport dans ta boîte 📬',
-        quiet: true,
-      });
+    // 🔔 L'écran les notifie comme les attaques (`$q.notify`), pas le store.
+    return msgs.map(controlNoticeText);
   }
 
   /** 🏰 Récolte ce qu'un point de contrôle tenu a produit (or, XP, consommables). */

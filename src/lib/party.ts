@@ -215,7 +215,6 @@ export type PartySendBlock =
   | 'tooLate'
   | 'empty'
   | 'tooMany'
-  | 'hopeless'
   | 'controlEmpty'
   | 'controlHeld'
   | 'veinHero'
@@ -225,11 +224,6 @@ export function partySendBlocker(
   escortCount: number,
   hero: boolean,
   cap: number,
-  /** 🎯 Chance de revenir vainqueur (`partyWinChance`), `null` quand il n'y a RIEN à
-   *  combattre (récolte sans gardes) ou rien à simuler. ⚠️ REQUIS : un paramètre qu'on peut
-   *  oublier finit par l'être, et l'omettre rouvrirait en silence le départ perdu d'avance.
-   *  ⚠️ `null` ne vaut PAS zéro — le confondre interdirait la récolte. */
-  winChance: number | null,
 ): PartySendBlock | null {
   if (!PARTY_TARGETS.has(poi.type)) return 'notTarget';
   // 🏰 Un point de contrôle s'attaque avec AUTANT de champions qu'on veut, héros compris
@@ -247,17 +241,13 @@ export function partySendBlocker(
   if (!hero && escortCount <= 0) return 'empty';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
   if (escortCount > partyCapFor(cap)) return 'tooMany';
-  // 💀 PERDU D'AVANCE (demandé par l'utilisateur) : aucune victoire sur tout l'échantillon
-  // de pronostic. ⚠️ Le seuil est le ZÉRO STRICT, et c'est délibéré — la mesure rejoue le
-  // VRAI combat, donc « 0 sur 40 » veut dire qu'aucune graine n'a jamais vu ce groupe
-  // revenir. Y mettre un plancher (« moins de 5 % ») interdirait des paris que le joueur a
-  // le droit de prendre ; ici il n'y a pas de pari, seulement une certitude.
-  if (winChance !== null && winChance <= 0) return 'hopeless';
+  // ⚠️ AUCUN refus sur le 🎯 % (« perdu d'avance », retiré à la demande de l'utilisateur) :
+  // on attaque aussi une armée en marche pour l'AFFAIBLIR, et un échec paie ce qu'il a
+  // abattu — un 0 % de victoire n'est donc pas un départ inutile. Le % informe, il ne refuse plus.
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   tooLate: 'trop tard — l’armée atteindra sa cible avant ton équipe',
-  hopeless: 'perdu d’avance — aucun d’eux n’en reviendrait vainqueur',
   notTarget: 'on n’envoie pas d’équipe sur ce lieu',
   empty: 'l’équipe est vide',
   tooMany: 'trop de champions pour ton Panthéon',
@@ -271,9 +261,8 @@ export function canSendParty(
   escortCount: number,
   hero: boolean,
   cap: number,
-  winChance: number | null,
 ): boolean {
-  return partySendBlocker(poi, escortCount, hero, cap, winChance) === null;
+  return partySendBlocker(poi, escortCount, hero, cap) === null;
 }
 
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.
