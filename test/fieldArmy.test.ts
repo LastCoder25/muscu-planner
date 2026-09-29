@@ -10,6 +10,7 @@ import {
   pendingFieldHits,
   resolveFieldArmy,
   retakeArmyPoi,
+  seenRadius,
   siegeArmyPoi,
   syncFieldArmies,
   thinGroups,
@@ -338,5 +339,19 @@ describe('🧭 meetAll — le point de rencontre commun', () => {
   it('injoignable : la rencontre se ferait sous les murs', () => {
     const p = siegeArmyPoi(raid, 200, T0, 30)!;
     expect(meetAll(p, T0, [() => 10_000]).joined).toBe(false);
+  });
+});
+
+describe('🗼 le rayon de détection dessiné sur la carte', () => {
+  it('le rayon VU : la détection, bornée juste sous la zone révélée, jamais négatif', () => {
+    expect(seenRadius(40, 90)).toBe(40);
+    expect(seenRadius(120, 90)).toBe(89);
+    expect(seenRadius(-5, 90)).toBe(0);
+  });
+
+  it('une armée n’apparaît jamais au-delà du rayon que la carte dessine', () => {
+    const detect = detectRadius(8 * 3_600_000);
+    expect(detect).toBeCloseTo(8 * FIELD_ARMY.speedPerHour, 9);
+    expect(seenRadius(detect, 60)).toBeLessThan(60);
   });
 });

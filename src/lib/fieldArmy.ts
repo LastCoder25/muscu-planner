@@ -76,8 +76,9 @@ export function detectRadius(leadMs: number): number {
   return (FIELD_ARMY.speedPerHour * Math.max(0, leadMs)) / H;
 }
 
-/** Le rayon où l'on VOIT vraiment : la détection, dans la zone révélée. */
-function seenRadius(detectR: number, reach: number): number {
+/** Le rayon où l'on VOIT vraiment : la détection, dans la zone révélée. ⚠️ Source unique :
+ *  les armées n'apparaissent qu'en deçà, et le cercle dessiné sur la carte le lit aussi. */
+export function seenRadius(detectR: number, reach: number): number {
   return Math.max(0, Math.min(detectR, reach - 1));
 }
 

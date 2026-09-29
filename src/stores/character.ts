@@ -4826,6 +4826,7 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   return {
+    detectRadiusOf,
     transferControlGarrison,
     settleGearRefonte,
     claimWeeklyQuests,
