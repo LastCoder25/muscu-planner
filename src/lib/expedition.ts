@@ -2452,6 +2452,26 @@ export function veinDwellMs(champions: number): number {
  *  l’objectif. ⚠️ Distinct de `travelPosition().frac`, qui n’avance que DANS la phase
  *  courante et repart donc à zéro au demi-tour : une barre pilotée par lui reculerait
  *  en plein milieu du trajet, ce qui se lit comme un bug. */
+/**
+ * 💀 LE LIEU EST-IL TERRASSÉ ? (demandé : « griser les lieux et armées ennemies terrassés ;
+ * on les efface une fois ceux qui l'ont terrassé revenus à leur base »). Vrai dès que le
+ * groupe a ATTEINT le lieu (`midAt`, le rapport est tombé) et l'a emporté. ⚠️ Un demi-tour
+ * (`turnBack`, porté par le voyage ou par l'issue) n'a jamais atteint le lieu : rien n'y est
+ * terrassé. L'effacement n'a rien à faire ici : le lieu cesse d'être dessiné quand le voyage
+ * se termine (`returnAt`).
+ */
+export function voyageVanquished(
+  v: {
+    midAt: number;
+    turnBack?: number;
+    outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack'>;
+  },
+  now: number,
+): boolean {
+  if (v.turnBack !== undefined || v.outcome.turnBack !== undefined) return false;
+  return now >= v.midAt && v.outcome.win;
+}
+
 export function voyageProgress(voyage: Voyage, now: number): { overall: number; mid: number } {
   const v = shownVoyage(voyage, now);
   const total = Math.max(1, v.returnAt - v.sentAt);
