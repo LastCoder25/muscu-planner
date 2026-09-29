@@ -18,6 +18,16 @@
 // vient une fois par semaine. Elles ne dépendent que du passé, donc elles ne bougent pas
 // pendant la semaine — et rien n'est à stocker.
 //
+// ⚠️ LES QUÊTES SUIVENT CE QUE TU PRATIQUES (v0.1357 ; demandé par l'utilisateur : « adapter
+// les quêtes à l'activité sportive de l'utilisateur »). Le tirage était aveugle : un joueur
+// 100 % muscu recevait « 30 min de sortie cardio » ou « 2 sports différents », c'est-à-dire
+// un objectif hors de sa pratique, donc une semaine impossible à boucler sans changer de
+// sport. Désormais on ne tire que parmi les quêtes de TES pratiques (`practicedKinds`, sur
+// les mêmes 4 semaines que les cibles, donc stable toute la semaine) ; la variété n'est
+// proposée qu'à qui pratique DÉJÀ deux sports ; et quand il manque de quoi remplir, une quête
+// de RÉGULARITÉ (une moitié de semaine après l'autre) convient à n'importe quelle pratique.
+// Sans historique (joueur neuf), on garde la découverte d'avant (muscu, cardio, variété).
+//
 // Module pur : les dates sont des chaînes `YYYY-MM-DD` comparées en chaînes, l'aujourd'hui est
 // PASSÉ par l'appelant (leçon `activityDays.ts`).
 
@@ -25,8 +35,16 @@ import { legSets, type ComboChallenge } from './combo';
 import { isCardioTrackChallenge } from '@/data/cardio';
 import { seedOf } from './combat';
 
-export type QuestKind = 'active_days' | 'strength_days' | 'cardio_minutes' | 'variety';
-type SportKind = 'muscu' | 'cardio' | 'tennis';
+export type QuestKind =
+  | 'active_days'
+  | 'strength_days'
+  | 'cardio_minutes'
+  | 'tennis_days'
+  | 'variety'
+  | 'regularity';
+/** `other` = « autre sport » (yoga, escalade…) : il rend actif et compte pour la variété, mais
+ *  ce n'est pas de la muscu. */
+type SportKind = 'muscu' | 'cardio' | 'tennis' | 'other';
 
 export const WEEKLY_QUESTS = {
   /** Tickets 🎟️ d'une semaine entièrement bouclée (décision de l'utilisateur). */
@@ -37,13 +55,18 @@ export const WEEKLY_QUESTS = {
   cardioPush: 1.15,
   cardioMin: 30,
   cardioMax: 300,
+  /** Une pratique est « la tienne » à partir de ce nombre de jours sur les 4 semaines
+   *  d'historique (≈ un jour toutes les deux semaines) : une sortie isolée il y a un mois ne
+   *  suffit pas à t'imposer une quête de ce sport. */
+  practiceMinDays: 2,
 } as const;
 
 /** Tout ce qui témoigne d'une pratique, avec ce qu'il faut pour la CLASSER. Même famille que
  *  `ActivitySources` (chaque champ requis : oublier une source ne compile pas). */
 export interface QuestSources {
-  /** `session_logs` : muscu, séance libre, prépa physique. */
-  sessions: { performed_at?: string | null }[];
+  /** `session_logs` : muscu, séance libre, prépa physique, autre sport. La discipline dit
+   *  laquelle (absente = musculation). */
+  sessions: { performed_at?: string | null; payload?: { discipline?: string | null } | null }[];
   /** Sorties cardio (miroirs compris : ils reflètent une vraie sortie de défi). */
   cardio: { performed_at?: string | null; payload?: { duration_min?: number | null } | null }[];
   /** Séances sur le court. */
@@ -71,6 +94,15 @@ export interface QuestEntry {
 const dayOf = (iso: string | null | undefined): string | null =>
   iso && iso.length >= 10 ? iso.slice(0, 10) : null;
 
+/** ⚠️ Une séance n'est pas toujours de la muscu : la prépa physique est du TENNIS (son hub
+ *  est la page Tennis, son XP va à la piste Tennis) et un « autre sport » (yoga…) n'est pas
+ *  une séance de force. Avant, les deux comptaient comme un jour de muscu. */
+function sessionKind(discipline: string | null | undefined): SportKind {
+  if (discipline === 'autre_sport') return 'other';
+  if (discipline === 'prepa_physique') return 'tennis';
+  return 'muscu';
+}
+
 /** Toutes les pratiques, datées et classées. */
 export function questEntries(src: QuestSources): QuestEntry[] {
   const out: QuestEntry[] = [];
@@ -78,7 +110,7 @@ export function questEntries(src: QuestSources): QuestEntry[] {
     const d = dayOf(iso);
     if (d) out.push({ day: d, kind, minutes });
   };
-  for (const r of src.sessions) push(r.performed_at, 'muscu');
+  for (const r of src.sessions) push(r.performed_at, sessionKind(r.payload?.discipline));
   for (const r of src.cardio)
     push(r.performed_at, 'cardio', Math.max(0, Number(r.payload?.duration_min) || 0));
   for (const r of src.tennis) push(r.performed_at, 'tennis');
@@ -114,30 +146,58 @@ export function weekStart(day: string): string {
 interface WeekStats {
   activeDays: number;
   strengthDays: number;
+  tennisDays: number;
   cardioMinutes: number;
   kinds: number;
+  /** Moitiés de semaine actives : lundi-mercredi, puis jeudi-dimanche (0 à 2). */
+  halves: number;
 }
 
 /** Ce qu'une semaine [monday, monday+6] a produit. */
 function weekStats(entries: QuestEntry[], monday: string): WeekStats {
   const end = addDays(monday, 6);
+  const secondHalf = addDays(monday, 3);
   const active = new Set<string>();
   const strength = new Set<string>();
+  const tennis = new Set<string>();
   const kinds = new Set<SportKind>();
+  const halves = new Set<number>();
   let minutes = 0;
   for (const e of entries) {
     if (e.day < monday || e.day > end) continue;
     active.add(e.day);
     kinds.add(e.kind);
+    halves.add(e.day < secondHalf ? 0 : 1);
     if (e.kind === 'muscu') strength.add(e.day);
+    if (e.kind === 'tennis') tennis.add(e.day);
     minutes += e.minutes;
   }
   return {
     activeDays: active.size,
     strengthDays: strength.size,
+    tennisDays: tennis.size,
     cardioMinutes: Math.round(minutes),
     kinds: kinds.size,
+    halves: halves.size,
   };
+}
+
+/** Les pratiques qui sont les tiennes : présentes au moins `practiceMinDays` jours sur les
+ *  semaines d'historique (la semaine en cours n'y entre pas — le tirage ne bouge pas en
+ *  route). Le cardio compte ses jours de sortie, pas ses minutes. */
+function practicedKinds(entries: QuestEntry[], monday: string): Set<SportKind> {
+  const from = addDays(monday, -7 * WEEKLY_QUESTS.historyWeeks);
+  const days: Record<SportKind, Set<string>> = {
+    muscu: new Set(),
+    cardio: new Set(),
+    tennis: new Set(),
+    other: new Set(),
+  };
+  for (const e of entries) if (e.day >= from && e.day < monday) days[e.kind].add(e.day);
+  const out = new Set<SportKind>();
+  for (const k of Object.keys(days) as SportKind[])
+    if (days[k].size >= WEEKLY_QUESTS.practiceMinDays) out.add(k);
+  return out;
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x));
@@ -148,15 +208,18 @@ export function questTargets(entries: QuestEntry[], monday: string): Record<Ques
   let a = 0;
   let s = 0;
   let c = 0;
+  let t = 0;
   for (let w = 1; w <= n; w++) {
     const st = weekStats(entries, addDays(monday, -7 * w));
     a += st.activeDays;
     s += st.strengthDays;
     c += st.cardioMinutes;
+    t += st.tennisDays;
   }
   a /= n;
   s /= n;
   c /= n;
+  t /= n;
   return {
     // Un cran au-dessus de sa moyenne tant qu'elle est modeste ; pas plus de 6 (un jour de repos).
     active_days: clamp(Math.round(a) + (a < 4 ? 1 : 0), 2, 6),
@@ -166,9 +229,30 @@ export function questTargets(entries: QuestEntry[], monday: string): Record<Ques
       WEEKLY_QUESTS.cardioMin,
       WEEKLY_QUESTS.cardioMax,
     ),
-    // Deux pratiques différentes (muscu, cardio, tennis) : la découverte, côté sport.
+    // Tennis (court + prépa physique) : même règle que la muscu, sur un rythme plus lent.
+    tennis_days: clamp(Math.round(t) + (t < 2 ? 1 : 0), 1, 3),
+    // Deux pratiques différentes : la découverte, côté sport.
     variety: 2,
+    // Les deux moitiés de la semaine : l'objectif de régularité, valable pour tout sport.
+    regularity: 2,
   };
+}
+
+/** Les quêtes qu'on peut te tirer, selon ce que tu pratiques. ⚠️ Jamais une quête d'un sport
+ *  que tu ne fais pas : elle rendrait la semaine impossible à boucler. */
+function questPool(practiced: Set<SportKind>): QuestKind[] {
+  // Joueur neuf : rien à suivre encore — la découverte d'avant (cibles au plancher).
+  if (practiced.size === 0) return ['strength_days', 'cardio_minutes', 'variety'];
+  const pool: QuestKind[] = [];
+  if (practiced.has('muscu')) pool.push('strength_days');
+  if (practiced.has('cardio')) pool.push('cardio_minutes');
+  if (practiced.has('tennis')) pool.push('tennis_days');
+  if (practiced.size >= 2) pool.push('variety');
+  // Une seule pratique suivie : la régularité comble, elle vaut pour tout sport.
+  if (pool.length < 2) pool.push('regularity');
+  // Seulement « autre sport » (aucune quête dédiée) : on lui propose d'en découvrir un second.
+  if (pool.length < 2) pool.push('variety');
+  return pool;
 }
 
 export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) => string }> = {
@@ -178,7 +262,12 @@ export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) =
     label: (t) => `Muscu ${t} jour${t > 1 ? 's' : ''} (séance, défi ou 360)`,
   },
   cardio_minutes: { emoji: '🏃', label: (t) => `${t} min de sortie cardio` },
-  variety: { emoji: '🎾', label: (t) => `${t} sports différents (muscu, cardio, tennis)` },
+  tennis_days: {
+    emoji: '🎾',
+    label: (t) => `Tennis ${t} jour${t > 1 ? 's' : ''} (court ou prépa physique)`,
+  },
+  variety: { emoji: '🔀', label: (t) => `${t} sports différents cette semaine` },
+  regularity: { emoji: '🗓️', label: () => 'Bouge en début ET en fin de semaine' },
 };
 
 interface WeeklyQuest {
@@ -216,11 +305,20 @@ export function weeklyQuests(
     active_days: now.activeDays,
     strength_days: now.strengthDays,
     cardio_minutes: now.cardioMinutes,
+    tennis_days: now.tennisDays,
     variety: now.kinds,
+    regularity: now.halves,
   };
-  const pool: QuestKind[] = ['strength_days', 'cardio_minutes', 'variety'];
-  const skip = seedOf(`${userId}|${monday}`) % pool.length;
-  const kinds: QuestKind[] = ['active_days', ...pool.filter((_, i) => i !== skip)];
+  // Deux quêtes tirées parmi TES pratiques, sur la graine joueur + lundi (la même toute la
+  // semaine). Un tirage sans remise, pas une exclusion : le vivier peut dépasser 3.
+  const pool = questPool(practicedKinds(entries, monday));
+  let seed = seedOf(`${userId}|${monday}`);
+  const picked: QuestKind[] = [];
+  while (picked.length < 2 && pool.length) {
+    picked.push(pool.splice(seed % pool.length, 1)[0]!);
+    seed = Math.floor(seed / 7) + 1;
+  }
+  const kinds: QuestKind[] = ['active_days', ...picked];
   const quests = kinds.map((kind) => {
     const target = targets[kind];
     const done = doneOf[kind];
