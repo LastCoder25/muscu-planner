@@ -250,6 +250,9 @@ import {
   assaultStayers,
   shortenWonReturn,
   rescheduleReturners,
+  baseWalkers,
+  walkToBase,
+  withoutWalkers,
   interceptLeg,
   settleParties,
   startParty,
@@ -306,6 +309,7 @@ import {
   settleReturns,
   settleReinforcements,
   turnBackLabel,
+  sortieHomeLabel,
   turnBackReinforcements,
   REINFORCE_BLOCK_LABEL,
   seatsOf,
@@ -3851,8 +3855,22 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur || !partyList.value.length) return [];
     const box = boxWith(cur, [], MESSAGES_CAP);
-    const t = settleParties(partyList.value, box, settleClock(cur, now), MESSAGES_CAP);
+    const clock = settleClock(cur, now);
+    const t0 = settleParties(partyList.value, box, clock, MESSAGES_CAP);
+    // 🏥 À l'arrivée d'une SORTIE (point fixe, attaque combinée comprise) : les blessés — et
+    // tout le monde si le point est perdu — partent DIRECTEMENT à la base (`splitSorties`).
+    // ⚠️ APRÈS `settleParties` : le rapport est déjà bâti sur l'escorte complète (XP,
+    // blessures) ; on ne retouche que le voyage. Les voyages rentrés dans ce même tick y
+    // passent aussi, pour que leurs blessés ne soient pas renvoyés du point.
+    const gone = partyList.value
+      .filter((p) => !t0.parties.some((q) => q.id === p.id))
+      .map((p) => ({ ...p, reported: true as const }));
+    const sp = splitSorties(cur, [...t0.parties, ...gone], advList.value, clock);
+    const t = sp.changed
+      ? { ...t0, parties: sp.list.filter((p) => clock < p.returnAt), changed: true }
+      : t0;
     if (!t.changed) return [];
+    const splitGone = sp.changed ? sp.list.filter((p) => clock >= p.returnAt) : gone;
     // ⚔️ UNE INTERCEPTION GAGNÉE LÈVE LE MARQUAGE — ici, à l'instant où la bataille a lieu
     // (le rapport se dépose à l'arrivée sur l'objectif), et NON à l'encaissement : ce n'est
     // pas du butin, c'est une perte évitée. L'adosser au clic ferait perdre le bénéfice
@@ -3863,31 +3881,32 @@ export const useCharacterStore = defineStore('character', () => {
     const dw = dispelWon(cur.base, t.fresh);
     const base = dw.base;
     // 🎓 L'XP des champions tombe ICI, à l'arrivée du rapport — et l'animation avec.
-    const x0 = reportXp(cur, t.messages, t.fresh, advList.value);
+    const x0 = reportXp(cur, t.messages, t.fresh, sp.advs);
     const x = { ...x0, messages: dw.tag(x0.messages) };
     // 🏰 Un point de contrôle PRIS : l'équipe y reste en garnison (postée, plus « en route »).
     const ctl0 = settleControlAssaults(
       cur,
       t.fresh,
-      (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+      (x.patch as { adventurers?: Adventurer[] }).adventurers ?? sp.advs,
       activeDays7,
     );
-    // 🏰 Les SORTIES rentrées reprennent leur poste sur leur point (`rejoinHome`).
+    // 🏰 Les SORTIES rentrées reprennent leur poste sur leur point (`rejoinHome`). Ceux
+    // partis à la base (`splitSorties`) n'en font plus partie.
     const ctl = sortiesHome(
       cur,
-      partyList.value.filter((p) => !t.parties.some((q) => q.id === p.id)),
+      splitGone,
       ctl0 ?? {
         map: cur.expedition_map,
-        adventurers: (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+        adventurers: (x.patch as { adventurers?: Adventurer[] }).adventurers ?? sp.advs,
       },
-      !!ctl0,
+      !!ctl0 || sp.changed,
     );
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
     // enregistré entre-temps et rendre le butin encaissable deux fois.
     // 🏰 Assaut pris : ceux qui rentrent (champions en trop) suivent le retour raccourci.
     const advsBase =
-      ctl?.adventurers ?? (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value;
+      ctl?.adventurers ?? (x.patch as { adventurers?: Adventurer[] }).adventurers ?? sp.advs;
     let advsBack = advsBase;
     for (const p of partyList.value) {
       const q = t.parties.find((r) => r.id === p.id);
@@ -3912,6 +3931,111 @@ export const useCharacterStore = defineStore('character', () => {
     });
     x.play();
     return t.fresh;
+  }
+
+  /**
+   * 🏥 RÉPARTIT les sorties arrivées sur leur lieu (`homeId`, jamais encore réparties) :
+   * `baseWalkers` dit qui rentre à la base (blessés, ou tous si le point est perdu),
+   * `walkToBase` trace leur trajet direct depuis le lieu, `withoutWalkers` retire ces
+   * champions du voyage d'origine. Leur `busyUntil` passe à leur arrivée à la base.
+   * ⚠️ Les membres d'un voyage sont ceux dont `busyUntil` vaut son retour : l'escorte d'un
+   * groupe d'attaque combinée liste TOUS les groupes.
+   */
+  function splitSorties(
+    cur: CharacterRow,
+    list: readonly ActiveParty[],
+    advs: Adventurer[],
+    now: number,
+  ): { list: ActiveParty[]; advs: Adventurer[]; changed: boolean } {
+    const map = cur.expedition_map;
+    const out: ActiveParty[] = [];
+    let roster = advs;
+    let changed = false;
+    for (const p of list) {
+      if (!p.homeId || p.baseSplit || now < p.midAt) {
+        out.push(p);
+        continue;
+      }
+      changed = true;
+      const members = voyageMembers(p, roster);
+      const homeHeld = map?.pois.find((q) => q.id === p.homeId)?.control?.owner === 'player';
+      const walkers = baseWalkers(p, members, homeHeld);
+      if (!walkers.length) {
+        out.push({ ...p, baseSplit: true });
+        continue;
+      }
+      const walk = walkToBase(p, walkers, p.midAt, legToBaseMs(cur, p, walkers, roster));
+      const rest = withoutWalkers(p, walkers, members.length - walkers.length);
+      if (rest) out.push(rest);
+      out.push(walk);
+      const set = new Set(walkers);
+      roster = roster.map((a) => (set.has(a.id) ? { ...a, busyUntil: walk.returnAt } : a));
+    }
+    return { list: out, advs: roster, changed };
+  }
+
+  /** Les champions d'UN voyage : ceux dont le retour est le sien (l'escorte d'un groupe
+   *  d'attaque combinée liste tous les groupes), ni postés entre-temps. */
+  function voyageMembers(p: ActiveParty, roster: readonly Adventurer[]): string[] {
+    return (p.outcome.party?.escort ?? []).filter((id) => {
+      const a = roster.find((x) => x.id === id);
+      return !!a && !a.posted && (a.busyUntil ?? 0) === p.returnAt;
+    });
+  }
+
+  /** Le trajet lieu de mission → ville de ces champions, à leur pas (la règle d'un groupe). */
+  function legToBaseMs(
+    cur: CharacterRow,
+    p: ActiveParty,
+    ids: readonly string[],
+    roster: readonly Adventurer[],
+  ): number {
+    const esc = ids
+      .map((id) => roster.find((a) => a.id === id))
+      .filter((a): a is Adventurer => !!a);
+    return (
+      partyLegMin(p.poi, esc, {
+        hero: false,
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+        gearSpeed: advGearRoles(esc, escortKitOf(cur).advGear).speed,
+      }) * 60_000
+    );
+  }
+
+  /**
+   * 🔙 Un point TOMBE à `at` alors qu'une de ses sorties est déjà sur le chemin du RETOUR :
+   * elle ne marche pas vers un lieu perdu, elle rentre à la base depuis là où elle est
+   * (2026-09-29, préconisation validée — même règle que les renforts en route, qui font
+   * demi-tour). Une sortie encore à l'aller est répartie à son arrivée (`splitSorties` voit
+   * le point perdu). Rend le nombre de champions rerouté.
+   */
+  function rerouteSorties(
+    cur: CharacterRow,
+    list: readonly ActiveParty[],
+    advs: Adventurer[],
+    pointId: string,
+    at: number,
+  ): { list: ActiveParty[]; advs: Adventurer[]; n: number } {
+    let roster = advs;
+    let n = 0;
+    const out: ActiveParty[] = [];
+    for (const q of list) {
+      if (q.homeId !== pointId || at < q.midAt || at >= q.returnAt) {
+        out.push(q);
+        continue;
+      }
+      const members = voyageMembers(q, roster);
+      if (!members.length) {
+        out.push(q);
+        continue;
+      }
+      const walk = walkToBase(q, members, at, legToBaseMs(cur, q, members, roster));
+      out.push(walk);
+      n += members.length;
+      const set = new Set(members);
+      roster = roster.map((a) => (set.has(a.id) ? { ...a, busyUntil: walk.returnAt } : a));
+    }
+    return n ? { list: out, advs: roster, n } : { list: [...list], advs, n };
   }
 
   /**
@@ -4026,6 +4150,9 @@ export const useCharacterStore = defineStore('character', () => {
     let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
     const runesIn: RuneTier[] = [];
+    // 🔙 Les sorties en retour vers un point qui tombe rentrent à la base (`rerouteSorties`).
+    let parties: ActiveParty[] = [...partyList.value];
+    let partiesMoved = false;
     for (const p of due) {
       const at = p.control!.attackAt!;
       const ids = new Set(p.control!.garrison);
@@ -4067,6 +4194,12 @@ export const useCharacterStore = defineStore('character', () => {
       const held = !!o?.win;
       // 🔙 Perdu : les renforts encore en route font demi-tour (ni combat ni infirmerie).
       const back = held ? [] : turnBackReinforcements(p.control!, at);
+      const rr = held ? null : rerouteSorties(cur, parties, advs, p.id, at);
+      if (rr?.n) {
+        parties = rr.list;
+        advs = rr.advs;
+        partiesMoved = true;
+      }
       const stock = h.gold;
       const emo = FACTION_EMOJI[force.faction];
       const label = CONTROL_LABEL[p.control!.kind];
@@ -4103,7 +4236,8 @@ export const useCharacterStore = defineStore('character', () => {
               : militia.length
                 ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
                 : `${emo} L’ennemi a repris le lieu, laissé sans défense.`) +
-          turnBackLabel(back.length),
+          turnBackLabel(back.length) +
+          sortieHomeLabel(rr?.n ?? 0),
         ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
       };
       msgs.push(msg);
@@ -4163,6 +4297,7 @@ export const useCharacterStore = defineStore('character', () => {
       messages: x.messages,
       ...x.patch,
       ...forged,
+      ...(partiesMoved ? { parties } : {}),
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
       ...(runesIn.length ? { runes: addRunes(cur.runes, runesIn) } : {}),
       adventurers: roster,
