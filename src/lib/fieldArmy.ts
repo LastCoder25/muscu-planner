@@ -489,3 +489,41 @@ export function retakeRemaining(p: Pick<Poi, 'control'>): number {
 function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
+
+/** ⚔️ Une attaque en cours, telle que la liste des attaques la montre. */
+export interface ActiveAttack {
+  /** L'armée elle-même (un lieu de la carte : la toucher ouvre sa fiche). */
+  army: Poi;
+  kind: FieldArmyTag['kind'];
+  /** Le point fixe visé par une reprise ; `null` pour un siège (la base). */
+  target: Poi | null;
+  /** Temps avant l'attaque (ms, ≥ 0). */
+  inMs: number;
+  /** Sa force en rase campagne, en champions de référence. */
+  size: number;
+  faction: FieldArmyTag['faction'];
+}
+
+/**
+ * ⚔️ LES ATTAQUES VISIBLES EN COURS (2026-09-29, demandé : « comme la liste des lieux fixes,
+ * une icône qui référence les attaques visibles en cours »). Les armées en campagne que la
+ * carte DESSINE — donc déjà repérées par la Tour de guet : on ne liste jamais ce que le
+ * brouillard cache. La plus proche de frapper d'abord.
+ */
+export function activeAttacks(pois: readonly Poi[], now: number): ActiveAttack[] {
+  const byId = new Map(pois.map((p) => [p.id, p]));
+  return pois
+    .filter((p) => isFieldArmyPoi(p) && !!p.army && p.army.at > now)
+    .map((p) => {
+      const a = p.army!;
+      return {
+        army: p,
+        kind: a.kind,
+        target: a.kind === 'retake' ? (byId.get(a.targetId) ?? null) : null,
+        inMs: a.at - now,
+        size: a.size,
+        faction: a.faction,
+      };
+    })
+    .sort((x, y) => x.inMs - y.inMs);
+}

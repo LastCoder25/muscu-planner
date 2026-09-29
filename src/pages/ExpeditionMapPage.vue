@@ -339,22 +339,36 @@
 
       <!-- Zoom -->
       <div class="zoom-ctl">
-        <!-- 🗂️ Les points fixes, en liste (juste au-dessus du dézoom, demandé). La pastille dit
-             combien appellent : attaque imminente, sans défense, ou butin à récolter. -->
-        <button
-          class="zoom-b ctl-list-b"
-          aria-label="Places fortes"
-          title="Places fortes"
-          @click="ctlListOpen = true"
-        >
-          🏰<span v-if="ctlCalls" class="ctl-list-dot">{{ ctlCalls }}</span>
-        </button>
-        <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
-        <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
-        <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
+        <!-- 🗂️ LES LISTES, à gauche du zoom sur la même ligne (demandé) : les points fixes
+             (la pastille dit combien appellent : attaque imminente, sans défense, butin) et
+             les attaques en cours (la pastille dit combien d'armées marchent). -->
+        <div class="list-row">
+          <button
+            class="zoom-b ctl-list-b"
+            aria-label="Places fortes"
+            title="Places fortes"
+            @click="ctlListOpen = true"
+          >
+            🏰<span v-if="ctlCalls" class="ctl-list-dot">{{ ctlCalls }}</span>
+          </button>
+          <button
+            class="zoom-b ctl-list-b"
+            aria-label="Attaques en cours"
+            title="Attaques en cours"
+            @click="attacksOpen = true"
+          >
+            ⚔️<span v-if="attacks.length" class="ctl-list-dot att-dot">{{ attacks.length }}</span>
+          </button>
+        </div>
+        <div class="zoom-col">
+          <button class="zoom-b" aria-label="Dézoomer" @click="zoom(-1)">−</button>
+          <button class="zoom-b" aria-label="Recentrer" @click="centerTown">⌂</button>
+          <button class="zoom-b" aria-label="Zoomer" @click="zoom(1)">+</button>
+        </div>
       </div>
     </div>
 
+    <AttacksSheet v-model="attacksOpen" :rows="attacks" @open="openFromList" />
     <ControlPointsSheet
       v-model="ctlListOpen"
       :rows="ctlRoster"
@@ -1127,6 +1141,7 @@ import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
 import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import {
   FIELD_ARMY,
+  activeAttacks,
   armyTrajectory,
   fieldArmySpec,
   seenRadius,
@@ -1190,6 +1205,7 @@ import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
+import AttacksSheet from '@/components/AttacksSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
@@ -2842,6 +2858,10 @@ function dimmed(p: Poi): boolean {
  *  prendre un point viennent des groupes (`partyList`) : elles restent en garnison à
  *  l'arrivée (`midAt`). */
 const ctlListOpen = ref(false);
+/** ⚔️ Les attaques en cours (icône à côté de celle des points fixes). Horloge grossière :
+ *  la liste ne change qu'à l'apparition ou l'arrivée d'une armée. */
+const attacksOpen = ref(false);
+const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
 const ctlRoster = computed(() =>
   controlRoster(
     char.row?.expedition_map,
@@ -4684,9 +4704,22 @@ onUnmounted(() => {
   right: 8px;
   bottom: 8px;
   display: flex;
-  flex-direction: column;
+  align-items: flex-end;
   gap: 6px;
   z-index: 3;
+}
+.zoom-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.list-row {
+  display: flex;
+  gap: 6px;
+}
+.att-dot {
+  background: var(--d4);
+  color: #fff;
 }
 .zoom-b {
   width: 34px;

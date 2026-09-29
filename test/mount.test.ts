@@ -2475,4 +2475,46 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('À la base dans 10 min');
     expect(out).toContain('1 h 00 plus tôt');
   }, 30_000);
+
+  it('⚔️ AttacksSheet liste les armées en marche, et dit quand rien n’approche', async () => {
+    const { default: AttacksSheet } = await import('@/components/AttacksSheet.vue');
+    const army = {
+      id: 'a',
+      type: 'warband',
+      level: 20,
+      x: 50,
+      y: 50,
+      distNorm: 0.5,
+      spawnedAt: 0,
+      expiresAt: 9e15,
+      army: { kind: 'siege', targetId: 'r', at: 1, faction: 'bandits', size: 3 },
+    };
+    let out = '';
+    await mountIt(
+      AttacksSheet,
+      {
+        modelValue: true,
+        rows: [
+          { army, kind: 'siege', target: null, inMs: 40 * 60_000, size: 3, faction: 'bandits' },
+        ],
+      },
+      undefined,
+      undefined,
+      '/',
+      (h) => (out = h),
+    );
+    expect(out).toContain('Siège de ta base');
+    expect(out).toContain('40 min');
+    expect(out).toContain('soon');
+    let empty = '';
+    await mountIt(
+      AttacksSheet,
+      { modelValue: true, rows: [] },
+      undefined,
+      undefined,
+      '/',
+      (h) => (empty = h),
+    );
+    expect(empty).toContain('Aucune armée repérée');
+  }, 30_000);
 });
