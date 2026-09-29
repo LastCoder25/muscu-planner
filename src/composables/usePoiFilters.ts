@@ -23,6 +23,17 @@ const RANK_FILTER_KEY = 'muscu:emap:hidden-ranks';
 // ⚠️ Remplace le filtre des failles seul : son réglage stocké est repris (`parseTypeFilter`).
 const TYPE_FILTER_KEY = 'muscu:emap:type-filter';
 const LEGACY_RIFT_KEY = 'muscu:emap:rift-mode';
+// 🚶 Les déplacements de troupes masqués (demandé : « rajoute un filtre pour les déplacements
+// de troupes »). Absent = affichés.
+const TROOPS_KEY = 'muscu:emap:hide-troops';
+
+function loadTroopsHidden(): boolean {
+  try {
+    return localStorage.getItem(TROOPS_KEY) === '1';
+  } catch {
+    return false; /* stockage indisponible : tout est affiché */
+  }
+}
 
 function loadHiddenRanks(): Set<number> {
   try {
@@ -95,8 +106,21 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     pois.value.filter((p) => rankShown(p) && typeShown(typeFilterShown.value, filterKeyOf(p))),
   );
 
-  /** « Tout afficher » : rangs ET types d’un geste. */
+  /** 🚶 Les tracés et marqueurs des voyages en cours (héros, équipes, renforts, retours,
+   *  attaques, colonnes d'interception). La liste des voyages sous la carte reste. */
+  const troopsHidden = ref(loadTroopsHidden());
+  function toggleTroops() {
+    troopsHidden.value = !troopsHidden.value;
+    try {
+      localStorage.setItem(TROOPS_KEY, troopsHidden.value ? '1' : '0');
+    } catch {
+      /* le filtre vaut pour la session */
+    }
+  }
+
+  /** « Tout afficher » : rangs, types ET déplacements d’un geste. */
   function resetFilters() {
+    if (troopsHidden.value) toggleTroops();
     hiddenRanks.value = new Set();
     typeFilter.value = { only: [], hidden: [] };
     save(RANK_FILTER_KEY, []);
@@ -113,5 +137,7 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     cycleTypeChip,
     resetFilters,
     shownPois,
+    troopsHidden,
+    toggleTroops,
   };
 }

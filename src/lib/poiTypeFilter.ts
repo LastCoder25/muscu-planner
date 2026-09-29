@@ -137,6 +137,8 @@ export function filterSummary(
   hiddenRanks: ReadonlySet<number>,
   f: TypeFilter,
   presentTypes: readonly FilterKey[],
+  /** 🚶 Les déplacements de troupes masqués (`troopsHidden`) — seulement s'il y en a en cours. */
+  troopsHidden = false,
 ): { active: boolean; text: string } {
   const parts: string[] = [];
   const rankOff = ranks.filter((r) => hiddenRanks.has(r)).length;
@@ -150,6 +152,7 @@ export function filterSummary(
     parts.push(only.length <= 2 ? `${names(only)} seulement` : `${only.length} types seuls`);
   else if (hidden.length > 0)
     parts.push(hidden.length <= 2 ? `sans ${names(hidden)}` : `${hidden.length} types masqués`);
+  if (troopsHidden) parts.push('sans déplacements');
   return parts.length
     ? { active: true, text: parts.join(' · ') }
     : { active: false, text: 'tout affiché' };

@@ -149,6 +149,13 @@ describe('🗺️ le filtre effectif (types présents aujourd’hui)', () => {
       false,
     );
   });
+  // 🚶 Demandé : « rajoute un filtre pour les déplacements de troupes ». Masqués, le résumé
+  // replié le DIT — sinon des voyages en cours invisibles se liraient comme une carte vide.
+  it('des déplacements masqués se lisent dans le résumé', () => {
+    const s = filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, true);
+    expect(s).toEqual({ active: true, text: 'sans déplacements' });
+    expect(filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, false).active).toBe(false);
+  });
   it('les types seuls présents restent seuls', () => {
     const f = effectiveTypeFilter({ only: ['arena', 'mine'], hidden: ['camp'] }, present);
     expect(f).toEqual({ only: ['mine'], hidden: ['camp'] });

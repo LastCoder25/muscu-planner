@@ -461,6 +461,41 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Tout afficher');
   }, 30_000);
 
+  it('🚶 MapFilterBar : la tuile des déplacements de troupes', async () => {
+    const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
+    const base = {
+      rankOptions: [{ rankIndex: 0, count: 2 }],
+      hiddenRanks: new Set<number>(),
+      typeChips: [{ type: 'mine' as const, inRanks: 2 }],
+      typeFilter: { only: [], hidden: [] },
+      defaultOpen: true,
+    };
+    const render = async (extra: object) => {
+      let out = '';
+      expect(
+        await mountIt(
+          MapFilterBar,
+          { ...base, ...extra },
+          undefined,
+          undefined,
+          '/',
+          (h) => (out = h),
+        ),
+      ).toBeNull();
+      return out;
+    };
+    // Des voyages en cours : la barre s'affiche même sans rien d'autre à filtrer, avec leur compte.
+    const shown = await render({ troops: 3, troopsHidden: false });
+    expect(shown).toContain('Déplacements de troupes');
+    expect(shown).toMatch(/class="tc-state">3</);
+    // Masqués : l'état est écrit, et le résumé l'annonce.
+    const hidden = await render({ troops: 3, troopsHidden: true });
+    expect(hidden).toContain('rm-none');
+    expect(hidden).toContain('sans déplacements');
+    // Aucun voyage : pas de tuile (elle ne filtrerait rien).
+    expect(await render({ troops: 0 })).not.toContain('Déplacements de troupes');
+  }, 30_000);
+
   it('🗂️ PoiCard : la fiche d’un lieu — nom, rang, infos, trajet/réussite, sceau', async () => {
     const { default: PoiCard } = await import('@/components/PoiCard.vue');
     const { poiRank } = await import('@/lib/poiRank');

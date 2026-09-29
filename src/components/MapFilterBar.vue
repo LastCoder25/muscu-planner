@@ -88,6 +88,26 @@
         </div>
       </section>
 
+      <!-- 🚶 LES DÉPLACEMENTS DE TES TROUPES (demandé) : affichés ou masqués, un toucher. Les
+           voyages restent listés sous la carte ; seuls leurs tracés et marqueurs disparaissent. -->
+      <section v-if="troops > 0" class="flt-sec">
+        <div class="flt-lab">Sur la carte</div>
+        <div class="type-filter">
+          <button
+            type="button"
+            class="type-chip"
+            :class="troopsHidden ? 'rm-none' : 'on'"
+            :aria-pressed="!troopsHidden"
+            :aria-label="`Déplacements de troupes : ${troopsHidden ? 'masqués' : 'affichés'} · ${troops} en cours — toucher pour changer`"
+            @click="emit('toggle-troops')"
+          >
+            <span class="type-emo">🚶</span>
+            <span class="tc-name">Déplacements de troupes</span>
+            <span class="tc-state">{{ troopsHidden ? '✕' : troops }}</span>
+          </button>
+        </div>
+      </section>
+
       <button v-if="summary.active" type="button" class="flt-reset" @click="emit('reset')">
         Tout afficher
       </button>
@@ -114,23 +134,32 @@ const props = defineProps<{
   hiddenRanks: Set<number>;
   typeChips: { type: FilterKey; inRanks: number }[];
   typeFilter: TypeFilter;
+  /** 🚶 Combien de voyages sont en cours, et s'ils sont masqués sur la carte. */
+  troops?: number;
+  troopsHidden?: boolean;
   /** Dépliée d’emblée — la porte de montage s’en sert pour rendre aussi le corps. */
   defaultOpen?: boolean;
 }>();
 const emit = defineEmits<{
   'toggle-rank': [r: number];
   'cycle-type': [t: FilterKey];
+  'toggle-troops': [];
   reset: [];
 }>();
 
 const open = ref(props.defaultOpen ?? false);
-const hasAny = computed(() => props.rankOptions.length > 1 || props.typeChips.length > 1);
+const troops = computed(() => props.troops ?? 0);
+const hasAny = computed(
+  () => props.rankOptions.length > 1 || props.typeChips.length > 1 || troops.value > 0,
+);
 const summary = computed(() =>
   filterSummary(
     props.rankOptions.map((o) => o.rankIndex),
     props.hiddenRanks,
     props.typeFilter,
     props.typeChips.map((o) => o.type),
+    // Masqués alors qu'il n'y a rien en route : ça ne retire rien, on ne l'annonce pas.
+    !!props.troopsHidden && troops.value > 0,
   ),
 );
 

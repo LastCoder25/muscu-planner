@@ -22,7 +22,10 @@
       :type-chips="typeChips"
       :type-filter="typeFilterShown"
       @toggle-rank="toggleRank"
+      :troops="troopCount"
+      :troops-hidden="troopsHidden"
       @cycle-type="cycleTypeChip"
+      @toggle-troops="toggleTroops"
       @reset="resetFilters"
     />
 
@@ -123,7 +126,7 @@
           </g>
 
           <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
-          <template v-if="active && hero">
+          <template v-if="active && hero && !troopsHidden">
             <line
               :x1="heroEnd.x"
               :y1="heroEnd.y"
@@ -156,7 +159,7 @@
              violet et en pointillés — la couleur seule ne suffit pas à distinguer deux routes.
              ⚠️ Un groupe (⚔️) a son PROPRE motif (tiret-point) : même violet qu'un convoi, sans
              lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
-          <template v-for="v in travelersOnMap" :key="'vt' + v.id">
+          <template v-for="v in shownTravelers" :key="'vt' + v.id">
             <line
               :x1="lineEnd(v).x"
               :y1="lineEnd(v).y"
@@ -218,7 +221,7 @@
           <!-- Héros -->
           <!-- 🔙 Une troupe encore en route se touche pour la faire rebrousser chemin : une cible
                élargie (transparente) sous le marqueur, qui est trop petit pour un doigt. -->
-          <g v-for="v in travelersOnMap" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
+          <g v-for="v in shownTravelers" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
             <circle
               v-if="v.recall"
               :cx="v.at.x"
@@ -236,14 +239,14 @@
           <!-- ⚔️ La bande qu'on intercepte marche VERS le point de rencontre pendant que le
                groupe y court : on voit les deux colonnes converger, et le choc s'annonce là
                où elles se croiseront. -->
-          <g v-for="b in bandsOnMap" :key="'band' + b.id" class="band-march">
+          <g v-for="b in shownBands" :key="'band' + b.id" class="band-march">
             <line :x1="b.x" :y1="b.y" :x2="b.meetX" :y2="b.meetY" class="band-path" />
             <circle :cx="b.meetX" :cy="b.meetY" r="6.5" class="clash-ring" />
             <circle :cx="b.x" :cy="b.y" r="3.2" class="band-mark" />
             <text :x="b.x" :y="b.y + 1.1" class="van-emo">{{ b.emo }}</text>
           </g>
 
-          <g v-if="active && hero" :class="{ recallable: heroRecallable }">
+          <g v-if="active && hero && !troopsHidden" :class="{ recallable: heroRecallable }">
             <circle
               v-if="heroRecallable"
               :cx="hero.x"
@@ -1636,6 +1639,8 @@ const {
   cycleTypeChip,
   resetFilters,
   shownPois,
+  troopsHidden,
+  toggleTroops,
 } = usePoiFilters(pois, (p) => rankOf(p).rankIndex);
 /** ⚔️🗼 Les trajectoires des armées en campagne visibles (filtres compris). */
 const armyPaths = computed(() =>
@@ -2597,6 +2602,14 @@ const travelersOnMap = computed(() => [
     recallInfo: null as RecallInfo | null,
   })),
 ]);
+/** 🚶 Le filtre « Déplacements de troupes » : masqués, les voyages ne se dessinent plus sur la
+ *  carte (tracés, marqueurs, colonnes d'interception) — ils restent dans la liste dessous. */
+const shownTravelers = computed(() => (troopsHidden.value ? [] : travelersOnMap.value));
+const shownBands = computed(() => (troopsHidden.value ? [] : bandsOnMap.value));
+/** Combien de déplacements la tuile annonce : le héros en route, plus chaque groupe. */
+const troopCount = computed(
+  () => (active.value && hero.value ? 1 : 0) + travelersOnMap.value.length,
+);
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
  *  lirait comme plusieurs rangées collées. */
 const trips = computed(() => {
