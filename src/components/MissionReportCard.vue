@@ -65,12 +65,19 @@
         <!-- Le rang passe SOUS le nom : sur une ligne, à 344 px, il écrasait le lieu. -->
         <span class="nm-col">
           <span class="name font-display">{{ card.title }}</span>
-          <span v-if="card.rank" class="rank" :style="{ color: card.color }">{{ card.rank }}</span>
+          <!-- Sous le nom : le verdict, le rang du lieu, quand. Il se replie sur deux lignes
+               plutôt que d'écraser le nom (à 344 px, un verdict long recouvrait la date). -->
+          <span class="meta">
+            <span class="verdict" :class="card.win ? 'win' : 'lose'">
+              {{ card.win ? '✓' : '✗' }} {{ card.verdict }}
+            </span>
+            <span v-if="card.rank" class="rank" :style="{ color: card.color }">{{
+              card.rank
+            }}</span>
+            <span class="when">{{ when }}</span>
+          </span>
         </span>
       </div>
-      <span class="verdict" :class="card.win ? 'win' : 'lose'">
-        {{ card.win ? '✓' : '✗' }} {{ card.verdict }}
-      </span>
       <button
         v-if="canReplay"
         type="button"
@@ -81,93 +88,55 @@
       >
         ▶
       </button>
-      <span v-else class="when">{{ when }}</span>
     </div>
 
-    <!-- 2 · ce que ça rapporte, ce que ça coûte, et le geste -->
-    <div class="l2">
-      <div class="gains">
+    <!-- 2 · le corps, toujours visible : ce que ça rapporte, puis qui y était — chacun dans
+         son encart titré (`missionMain`, au modèle commun des rapports). -->
+    <ReportDetail :detail="main">
+      <template #loot>
         <!-- ❓ Toucher une ressource dit ce que c'est (`HaulPills`, partagé). -->
-        <HaulPills :pills="card.gains" sign="+" />
-        <button
-          v-for="(it, i) in card.loot"
-          :key="'lt' + i"
-          type="button"
-          class="loot"
-          :aria-label="it.name"
-          :title="it.name"
-          @click="expanded = true"
-        >
-          <ItemIcon :item="it" :size="24" :show-stars="false" />
-        </button>
-        <span v-if="card.lootMore > 0" class="more">+{{ card.lootMore }} au sac</span>
-        <span v-if="card.legacyItem" class="more">🎁 {{ card.legacyItem }}</span>
+        <div v-if="card.gains.length" class="gains">
+          <HaulPills :pills="card.gains" sign="+" />
+        </div>
         <span v-if="empty" class="none">Rien de récolté</span>
-      </div>
-      <button
-        v-if="state === 'claim'"
-        type="button"
-        class="take"
-        :disabled="busy"
-        @click="emit('claim')"
-      >
-        {{ claimLabel }}
-      </button>
-      <span v-else-if="state === 'wait' && waitLabel" class="wait">🧭 {{ waitLabel }}</span>
-    </div>
-
-    <!-- 3 · qui y était -->
-    <div v-if="card.team.length || card.hero" class="l3">
-      <span v-if="card.hero" class="mem">🧝 Héros</span>
-      <template v-for="(m, i) in shownTeam" :key="m.id">
-        <span v-if="card.hero || i > 0" class="sep">·</span>
-        <span class="mem" :class="{ gone: m.gone }">
-          {{ m.emoji }} {{ m.name }} <b class="xp">+{{ m.xp }}</b
-          ><template v-if="m.star"> ⭐</template><template v-if="m.hurt"> 🤕</template
-          ><template v-else-if="m.lightHurt"> 🩹</template>
-        </span>
       </template>
-      <template v-if="hiddenTeam > 0">
-        <span class="sep">·</span>
-        <span class="more">+{{ hiddenTeam }} autre{{ hiddenTeam > 1 ? 's' : '' }}</span>
-      </template>
-    </div>
+    </ReportDetail>
 
-    <div class="l4">
-      <span class="facts">
-        <template v-if="card.kills"
-          >⚔️ <b>{{ card.kills }}</b></template
-        >
-        <template v-if="card.kills && card.totalXp"> · </template>
-        <b v-if="card.totalXp" class="xp">+{{ card.totalXp }} XP</b>
-        <template v-if="canReplay"> · {{ when }}</template>
-      </span>
+    <!-- 3 · le geste -->
+    <button
+      v-if="state === 'claim'"
+      type="button"
+      class="take"
+      :disabled="busy"
+      @click="emit('claim')"
+    >
+      {{ claimLabel }}
+    </button>
+    <span v-else-if="state === 'wait' && waitLabel" class="wait">🧭 {{ waitLabel }}</span>
+
+    <!-- 4 · replié : le récit, le combat coup par coup, la route. -->
+    <template v-if="detail.sections.length || detail.stats.length">
       <button
         type="button"
         class="more-btn"
         :aria-expanded="expanded"
         @click="expanded = !expanded"
       >
-        Détails <span class="chev">›</span>
+        <span>{{ expanded ? 'Masquer le déroulé' : 'Voir le déroulé' }}</span>
+        <span class="chev">›</span>
       </button>
-    </div>
-
-    <!-- Replié par défaut : le détail suit le MODÈLE COMMUN des rapports (`reportDetail`) —
-         chiffres clés, puis récit, butin, route, équipe, journal, chacun dans son encart. -->
-    <div v-if="expanded" class="details">
-      <ReportDetail :detail="detail" />
-    </div>
+      <ReportDetail v-if="expanded" :detail="detail" />
+    </template>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
-import ItemIcon from '@/components/ItemIcon.vue';
 import { seedOf } from '@/lib/combat';
 import ReportDetail from '@/components/ReportDetail.vue';
-import { missionDetail } from '@/lib/reportDetail';
-import { TEAM_SHOWN, missionWhen, type MissionCard } from '@/lib/missionCard';
+import { missionDetail, missionMain } from '@/lib/reportDetail';
+import { missionWhen, type MissionCard } from '@/lib/missionCard';
 import { riftStageInputOf } from '@/lib/riftStage';
 import HaulPills from '@/components/HaulPills.vue';
 import { warbandStageInputOf } from '@/lib/warbandStage';
@@ -214,8 +183,6 @@ const replayLabel = computed(() => {
   if (p?.fallen) return 'Revoir la fouille';
   return 'Revoir l’incursion';
 });
-const shownTeam = computed(() => props.card.team.slice(0, TEAM_SHOWN));
-const hiddenTeam = computed(() => Math.max(0, props.card.team.length - TEAM_SHOWN));
 const empty = computed(
   () => !props.card.gains.length && !props.card.loot.length && !props.card.legacyItem,
 );
@@ -227,6 +194,7 @@ const summary = computed(() => {
   return parts.join(' · ') || props.card.verdict;
 });
 
+const main = computed(() => missionMain(props.card));
 const detail = computed(() => missionDetail(props.card));
 
 function fmt(n: number): string {
@@ -244,9 +212,9 @@ function fmt(n: number): string {
   border: 1px solid var(--line);
   border-left: 4px solid var(--mrc-c);
   border-radius: 12px;
-  padding: 10px 12px;
+  padding: 12px;
   display: grid;
-  gap: 6px;
+  gap: 10px;
   text-align: left;
   color: var(--text);
   min-width: 0;
@@ -266,9 +234,7 @@ function fmt(n: number): string {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
   border-left-color: var(--accent);
 }
-.l1,
-.l2,
-.l4 {
+.l1 {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -277,25 +243,25 @@ function fmt(n: number): string {
 .where {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   flex: 1;
 }
 .ico {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  font-size: 17px;
+  font-size: 22px;
   line-height: 1;
 }
 .ico.rift {
-  width: 14px;
+  width: 18px;
 }
 .name {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 16px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -304,19 +270,28 @@ function fmt(n: number): string {
 .nm-col {
   display: grid;
   min-width: 0;
-  line-height: 1.2;
+  line-height: 1.25;
+}
+/* Sous le nom : le verdict, le rang du lieu, puis quand — sur deux lignes s'il le faut. */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px 8px;
+  min-width: 0;
+  margin-top: 3px;
+  font-size: 11.5px;
+  white-space: nowrap;
 }
 .rank {
   flex: none;
-  font-size: 11.5px;
   font-weight: 600;
-  white-space: nowrap;
 }
 .verdict {
   flex: none;
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 3px 9px;
   border-radius: 999px;
   white-space: nowrap;
 }
@@ -336,53 +311,39 @@ function fmt(n: number): string {
 }
 .replay {
   flex: none;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: transparent;
   color: #b57bff;
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
 }
+/* Les ressources du butin, sous le titre de l'encart. */
 .gains {
-  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
-  flex: 1;
-  min-width: 0;
+  gap: 6px 10px;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
-.gains .more {
+.none {
   color: var(--dim);
-  font-weight: 600;
-}
-.gains .none {
-  color: var(--dim);
-  font-weight: 500;
-}
-.loot {
-  padding: 0;
-  border: 0;
-  background: none;
-  cursor: pointer;
-  line-height: 0;
+  font-size: 12.5px;
 }
 .take {
-  flex: none;
-  min-height: 44px;
+  width: 100%;
+  min-height: 46px;
   padding: 0 14px;
   border: 0;
   border-radius: 10px;
   background: var(--accent);
   color: #15120e;
   font-weight: 700;
-  font-size: 13px;
-  white-space: nowrap;
+  font-size: 14px;
   cursor: pointer;
 }
 .take:disabled {
@@ -390,52 +351,25 @@ function fmt(n: number): string {
   cursor: default;
 }
 .wait {
-  flex: none;
-  font-size: 11.5px;
-  color: var(--dim);
-  white-space: nowrap;
-}
-.l3 {
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-.sep {
-  color: var(--line);
-  margin: 0 4px;
-}
-.mem.gone {
-  color: var(--dim);
-}
-.xp {
-  color: var(--d1);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-.more {
-  color: var(--dim);
-}
-.l4 {
-  justify-content: space-between;
   font-size: 12px;
   color: var(--dim);
+  text-align: center;
 }
-.l4 b {
-  color: var(--text);
-  font-weight: 600;
-}
-.l4 b.xp {
-  color: var(--d1);
-}
+/* Déplier le déroulé : toute la largeur, pour le doigt. */
 .more-btn {
-  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
   background: none;
-  border: 0;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
   color: var(--accent);
   font-weight: 600;
-  font-size: 12.5px;
+  font-size: 13px;
   cursor: pointer;
-  min-height: 32px;
-  padding: 0 2px;
 }
 .chev {
   display: inline-block;
@@ -443,14 +377,6 @@ function fmt(n: number): string {
 }
 .mrc.open .chev {
   transform: rotate(90deg);
-}
-.details {
-  display: grid;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-  margin-top: 2px;
-  font-size: 12.5px;
 }
 /* Replié : une TUILE d'une ligne, qu'on touche pour ouvrir. */
 .mrc.folded {

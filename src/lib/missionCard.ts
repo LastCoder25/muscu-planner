@@ -133,9 +133,6 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
   };
 }
 
-/** Combien de champions la ligne de l'équipe nomme avant « +N autres ». */
-export const TEAM_SHOWN = 4;
-
 /** « il y a 2 h » — la lecture du fil d'activité des amis (`feedWhen`), pas une copie. */
 export function missionWhen(at: number, now: number): string {
   return feedWhen(new Date(at).toISOString(), new Date(now).toISOString()) || "à l'instant";
