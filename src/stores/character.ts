@@ -3743,7 +3743,7 @@ export const useCharacterStore = defineStore('character', () => {
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<{ gold: number; supplies: number; runes: RuneTier[] } | null> {
+  ): Promise<{ gold: number; supplies: SupplyStock; runes: RuneTier[] } | null> {
     await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map) return null;
@@ -3772,7 +3772,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (h.advs !== before) useAdvXpFx().show(tracks, 'Camp d’entraînement');
     else if (h.stock !== stock0)
       useAdvXpFx().show(withGearTracks([], stock0, h.stock, h.advs), 'Forge de campagne');
-    return { gold: h.gold, supplies: nSup, runes: h.runes };
+    return { gold: h.gold, supplies: h.supplies, runes: h.runes };
   }
 
   /** 🏰 Rappelle TOUTE la garnison (et les renforts en route) : la réserve est récoltée,
@@ -3783,10 +3783,10 @@ export const useCharacterStore = defineStore('character', () => {
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<void> {
+  ): Promise<{ supplies: SupplyStock; runes: RuneTier[] } | null> {
     await writesSettled();
     const cur = row.value;
-    if (!cur?.expedition_map) return;
+    if (!cur?.expedition_map) return null;
     const stock0 = cur.adv_gear?.stock ?? [];
     const h = harvestControlIn(cur.expedition_map, advList.value, stock0, id, now, playerLevel);
     const mil = militiaOfControl(cur.expedition_map.pois.find((p) => p.id === id)?.control);
@@ -3812,6 +3812,8 @@ export const useCharacterStore = defineStore('character', () => {
         : gearTrainedPatch(cur, advList.value, h.advs)),
     });
     if (h.gold > 0) goldFx.gain(h.gold);
+    // 🧺 Ce qui a été récolté en partant, pour l'animation (comme `collectControlPoint`).
+    return { supplies: h.supplies, runes: h.runes };
   }
 
   /** 🏰 Ramène UNE PARTIE de la garnison (ou des renforts en route) : ils redeviennent
