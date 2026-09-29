@@ -957,6 +957,168 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   }
 }
 
+/**
+ * 🧺 LA TUILE DE PRODUCTION d'un point tenu (2026-09-29, demandé : « améliorer l'affichage des
+ * ressources et temps de récolte des lieux fixes — celui de la rune, l'info est perdue au
+ * milieu de tout le détail »). Une seule ligne de texte mêlait ce qui attend, le temps restant
+ * et le débit ; la tuile les sépare, du plus important au moins important :
+ * - `value` : ce qui attend, en gros (« 412 🪙 », « Prête », « 63 % ») ;
+ * - `what` : de quoi il s'agit, en un mot ;
+ * - `pct` + `gauge` : la jauge et ce qu'elle dit du TEMPS (« prête dans 5 h 10 », « réserve
+ *   pleine dans 7 h ») — c'est l'information qui décide quand revenir ;
+ * - `rate` : le débit et l'effectif, en petit.
+ * ⚠️ Lit `stockUnits`/`unitsPerHour`, la même réserve que la récolte et que `controlProgress` :
+ * la tuile ne peut pas annoncer autre chose que ce que « Récolter » verse.
+ */
+export interface ControlYieldCard {
+  emoji: string;
+  value: string;
+  what: string;
+  pct: number | null;
+  gauge: string | null;
+  rate: string | null;
+  /** Quelque chose attend d'être récolté. */
+  ready: boolean;
+  /** Réserve pleine : le point ne produit plus tant qu'on ne récolte pas. */
+  full: boolean;
+}
+
+const WORKER: Record<ControlKind, [string, string]> = {
+  mine: ['mineur', 'mineurs'],
+  training: ['champion', 'champions'],
+  garden: ['jardinier', 'jardiniers'],
+  tower: ['guetteur', 'guetteurs'],
+  scriptorium: ['copiste', 'copistes'],
+  mana: ['gardien', 'gardiens'],
+};
+
+export function controlYieldCard(
+  p: Poi,
+  now: number,
+  playerLevel: number,
+): ControlYieldCard | null {
+  const c = p.control;
+  if (!c || c.owner !== 'player') return null;
+  const n = c.garrison.length;
+  const seats = seatsOf(c.kind);
+  const [one, many] = WORKER[c.kind];
+  const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
+  const fmt = (x: number) => Math.floor(x + 1e-9).toLocaleString('fr-FR');
+  const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
+  if (c.kind === 'tower') {
+    const cut = CONTROL.towerCut * shareOf(n);
+    const det = CONTROL.towerDetect * shareOf(n);
+    return {
+      emoji: '🧭',
+      value: `−${Math.round(cut * 100)} %`,
+      what: 'sur les trajets de toutes tes expéditions',
+      pct: null,
+      gauge: idle,
+      rate: `👁️ +${Math.round(det * 100)} % de détection · ${crew}`,
+      ready: false,
+      full: false,
+    };
+  }
+  if (isPerChampKind(c.kind)) {
+    const top = Math.max(0, ...Object.values(champStockBy(p, now, playerLevel)));
+    const perH = trainingXpPerHour(playerLevel);
+    const full = (perH * CONTROL.storageMs) / 3600_000;
+    const pct = full > 0 ? Math.min(1, top / full) : 0;
+    const left = pct < 1 && n > 0 ? leftFor(full - top, perH) : null;
+    return {
+      emoji: '🎓',
+      value: `+${fmt(top)} XP`,
+      what: 'pour le champion le plus avancé',
+      pct,
+      gauge:
+        idle ??
+        (pct >= 1
+          ? 'Réserve pleine — fais-les progresser'
+          : left
+            ? `Réserve pleine dans ${left}`
+            : null),
+      rate: `+${Math.round(perH)} XP/h par champion · ⚒️ +${Math.round(campGearXpPerHour(playerLevel))} XP/h par pièce · ${crew}`,
+      ready: top >= 1,
+      full: pct >= 1,
+    };
+  }
+  const units = stockUnits(p, now, playerLevel);
+  const rate = unitsPerHour(p, n, playerLevel);
+  const cap = Math.max(c.banked ?? 0, (rate * storageMsOf(c.kind)) / 3600_000);
+  const fill = cap > 0 ? Math.min(1, units / cap) : 0;
+  switch (c.kind) {
+    case 'mine':
+    case 'mana': {
+      const mine = c.kind === 'mine';
+      const unit = mine ? '🪙' : '💠';
+      const left = fill < 1 ? leftFor(cap - units, rate) : null;
+      return {
+        emoji: mine ? '⛏️' : '⛲',
+        value: `${fmt(units)} ${unit}`,
+        what: mine ? 'd’or en réserve' : 'pierres de mana en réserve',
+        pct: fill,
+        gauge:
+          idle ??
+          (fill >= 1
+            ? 'Réserve pleine : plus rien ne s’ajoute, récolte'
+            : left
+              ? `Réserve pleine dans ${left}`
+              : null),
+        rate: mine
+          ? `+${Math.round(rate).toLocaleString('fr-FR')} 🪙/h · ${crew}`
+          : `+${Math.round(rate * 24)} 💠/jour · ${crew}`,
+        ready: Math.floor(units + 1e-9) > 0,
+        full: fill >= 1,
+      };
+    }
+    case 'garden': {
+      const whole = Math.floor(units + 1e-9);
+      const next = Math.max(0, units - whole);
+      const left = fill < 1 ? leftFor(1 - next, rate) : null;
+      const every = gardenHoursFor(n);
+      return {
+        emoji: '🌿',
+        value: whole > 0 ? `${whole} 🎒` : `${Math.round(next * 100)} %`,
+        what: whole > 0 ? `consommable${whole > 1 ? 's' : ''} prêt${whole > 1 ? 's' : ''}` : 'du prochain consommable',
+        pct: fill >= 1 ? 1 : next,
+        gauge:
+          idle ??
+          (fill >= 1
+            ? 'Réserve pleine : cueille pour que ça reprenne'
+            : left
+              ? `Prochain dans ${left}`
+              : null),
+        rate: every ? `1 toutes les ${formatDuration(every * 3600_000)} · ${crew}` : crew,
+        ready: whole > 0,
+        full: fill >= 1,
+      };
+    }
+    case 'scriptorium': {
+      const r = units >= 1 - 1e-9 ? 1 : units;
+      const left = r < 1 ? leftFor(1 - r, rate) : null;
+      const every = runeHoursFor(n);
+      const best = runeHoursFor(seats);
+      return {
+        emoji: '📜',
+        value: r >= 1 ? 'Prête' : `${Math.round(r * 100)} %`,
+        what: r >= 1 ? 'une rune t’attend' : 'de la rune en cours de copie',
+        pct: r,
+        gauge:
+          idle ??
+          (r >= 1 ? 'Récupère-la : la copie suivante ne commence qu’après' : left ? `Prête dans ${left}` : null),
+        rate:
+          (every ? `1 rune toutes les ${formatDuration(every * 3600_000)} · ` : '') +
+          crew +
+          (best && n < seats ? ` (${formatDuration(best * 3600_000)} au complet)` : ''),
+        ready: r >= 1,
+        full: r >= 1,
+      };
+    }
+    default:
+      return null;
+  }
+}
+
 /** ⛏️ L'effectif va changer : on met de côté ce qui est déjà produit (au débit d'AVANT),
  *  et la production repart de `at` au nouveau débit. Rien n'est crédité ni perdu. */
 function bankAt(p: Poi, at: number, playerLevel: number): ControlState {

@@ -383,6 +383,42 @@
         <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
              revient. On récolte, on ramène, on renforce. -->
         <div v-if="liveControl?.owner === 'player'" class="ctl-panel">
+          <!-- 🧺 LA PRODUCTION EN TÊTE (demandé : « l’info de la rune est perdue au milieu de
+               tout le détail ») : ce qui attend en gros, la jauge et le TEMPS avant la suite,
+               le débit en petit, et le bouton de récolte juste dessous (`controlYieldCard`). -->
+          <div v-if="yieldCard" class="yield-card" :class="{ ready: yieldCard.ready, full: yieldCard.full }">
+            <div class="yield-head">
+              <span class="yield-emo">{{ yieldCard.emoji }}</span>
+              <span class="yield-main">
+                <b class="yield-value">{{ yieldCard.value }}</b>
+                <span class="yield-what">{{ yieldCard.what }}</span>
+              </span>
+            </div>
+            <div v-if="yieldCard.pct !== null" class="yield-bar">
+              <i :style="{ width: Math.round(yieldCard.pct * 100) + '%' }" />
+            </div>
+            <p v-if="yieldCard.gauge" class="yield-gauge">
+              {{ yieldCard.full ? '✅' : '⏳' }} {{ yieldCard.gauge }}
+            </p>
+            <!-- ⚒️ LA JAUGE DE CHAQUE CHAMPION (demandé) : ils n'arrivent pas en même temps, donc
+                 chacun a sa propre réserve — elle se remplit en 24 h de présence. -->
+            <div v-if="forgeGauges.length" class="forge-gauges">
+              <div v-for="g in forgeGauges" :key="g.id" class="forge-g">
+                <span class="forge-g-name">{{ g.name }}</span>
+                <span class="forge-g-bar"><i :style="{ width: g.pct + '%' }" /></span>
+                <span class="forge-g-val">{{ g.xp }} XP · {{ g.time }}</span>
+              </div>
+            </div>
+            <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
+            <button
+              v-if="liveControl.kind !== 'tower'"
+              class="sh-send yield-take"
+              :disabled="!controlReady || ctlBusy"
+              @click="collectCtl"
+            >
+              {{ controlCollectLabel }}
+            </button>
+          </div>
           <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
           <p class="ctl-line">
@@ -459,16 +495,6 @@
             ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
             attaque — sauf si un renfort arrive avant.
           </p>
-          <p class="ctl-line">{{ controlProd }}</p>
-          <!-- ⚒️ LA JAUGE DE CHAQUE CHAMPION (demandé) : ils n'arrivent pas en même temps, donc
-               chacun a sa propre réserve — elle se remplit en 24 h de présence. -->
-          <div v-if="forgeGauges.length" class="forge-gauges">
-            <div v-for="g in forgeGauges" :key="g.id" class="forge-g">
-              <span class="forge-g-name">{{ g.name }}</span>
-              <span class="forge-g-bar"><i :style="{ width: g.pct + '%' }" /></span>
-              <span class="forge-g-val">{{ g.xp }} XP · {{ g.time }}</span>
-            </div>
-          </div>
           <p v-if="controlNote" class="ctl-line ctl-dim">{{ controlNote }}</p>
           <!-- ⚔️ Dans les dernières heures seulement, on prévient — jamais l'heure (v0.1254). -->
           <p v-if="livePoi && attackImminent(livePoi, coarseNow)" class="ctl-line ctl-alert">
@@ -495,16 +521,6 @@
               tard</span
             >
           </p>
-          <div class="send-bar">
-            <button
-              v-if="liveControl.kind !== 'tower'"
-              class="sh-send"
-              :disabled="!controlReady || ctlBusy"
-              @click="collectCtl"
-            >
-              {{ controlCollectLabel }}
-            </button>
-          </div>
           <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
                puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
           <template v-if="controlFree > 0">
@@ -1089,22 +1105,16 @@ import {
   controlFreeSeats,
   militiaFreeSeats,
   controlRoster,
-  controlGoldPerHour,
-  controlManaPerHour,
   controlManaStock,
   controlStock,
   controlTravelMult,
   gardenStock,
+  controlYieldCard,
   trainingCapLevel,
   trainingStock,
-  trainingXpPerHour,
   champHoursOf,
   champStockBy,
   isPerChampKind,
-  campGearXpPerHour,
-  runeProgress,
-  runeHoursFor,
-  gardenHoursFor,
   runeStock,
   seatsOf,
   attackImminent,
@@ -1958,31 +1968,10 @@ async function reinforceCtl() {
     ctlBusy.value = false;
   }
 }
-/** ⏳ Un temps de production en heures, lisible (« 18 h 28 », pas « 18,4615… h ») ; « — »
- *  sans production. */
-const hoursLabel = (h: number | null) => (h === null ? '—' : formatDuration(h * 3600_000));
-/** 🏰 Ce que le point produit, en une ligne, selon ce qu'il est. */
-const controlProd = computed(() => {
-  const p = livePoi.value;
-  const c = liveControl.value;
-  if (!p || !c) return '';
-  switch (c.kind) {
-    case 'mine':
-      return `⛏️ ${controlRate.value.toLocaleString('fr-FR')} 🪙/h · réserve ${controlGold.value.toLocaleString('fr-FR')} 🪙 (24 h au plus)`;
-    case 'training':
-      return `🎯 +${Math.round(trainingXpPerHour(heroLevel.value))} XP/h par champion · ⚒️ +${Math.round(campGearXpPerHour(heroLevel.value))} XP/h par pièce portée, pour chacun selon son temps ici`;
-    case 'garden':
-      return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${hoursLabel(gardenHoursFor(c.garrison.length))}`;
-    case 'scriptorium':
-      return runeStock(p, now.value) > 0
-        ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
-        : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${hoursLabel(runeHoursFor(c.garrison.length))} (${c.garrison.length}/${seatsOf('scriptorium')} copistes, ${hoursLabel(runeHoursFor(seatsOf('scriptorium')))} au complet)`;
-    case 'mana':
-      return `⛲ +${Math.round(controlManaPerHour(c.garrison.length, heroLevel.value) * 24)} 💠/jour · réserve ${controlManaStock(p, now.value, heroLevel.value)} 💠 (24 h au plus)`;
-    case 'tower':
-      return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
-  }
-});
+/** 🧺 La tuile de production du point tenu (`controlYieldCard`, la lib). */
+const yieldCard = computed(() =>
+  livePoi.value ? controlYieldCard(livePoi.value, now.value, heroLevel.value) : null,
+);
 /** 🎯 Une jauge par champion au camp d'entraînement : ce qu'il attend, et le temps de présence que ça représente — pleine à 24 h.
  *  Un champion ramené garde sa ligne tant que sa réserve n'est pas récoltée. */
 const forgeGauges = computed(() => {
@@ -2039,13 +2028,6 @@ const controlCollectLabel = computed(() => {
   if (k === 'mana') return `Récolter ${controlManaStock(p, now.value, heroLevel.value)} 💠`;
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
 });
-const controlRate = computed(() =>
-  livePoi.value && liveControl.value
-    ? Math.round(
-        controlGoldPerHour(livePoi.value, liveControl.value.garrison.length, heroLevel.value),
-      )
-    : 0,
-);
 const controlGold = computed(() =>
   livePoi.value ? controlStock(livePoi.value, now.value, heroLevel.value) : 0,
 );
@@ -3744,6 +3726,75 @@ onUnmounted(() => {
   font-size: 12.5px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+.yield-card {
+  margin: 0 0 12px;
+  padding: 10px 12px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.yield-card.ready {
+  border-color: var(--d1, #7bc86c);
+}
+.yield-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.yield-emo {
+  font-size: 28px;
+  line-height: 1;
+}
+.yield-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.yield-value {
+  font-family: 'Oswald', sans-serif;
+  font-size: 24px;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.yield-card.ready .yield-value {
+  color: var(--d1, #7bc86c);
+}
+.yield-what {
+  font-size: 12px;
+  color: var(--dim);
+}
+.yield-bar {
+  height: 8px;
+  margin: 10px 0 0;
+  border-radius: 4px;
+  background: var(--surface-2, rgba(255, 255, 255, 0.08));
+  overflow: hidden;
+}
+.yield-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--accent, #ffd23f);
+  transition: width 0.4s ease;
+}
+.yield-card.full .yield-bar i {
+  background: var(--d1, #7bc86c);
+}
+.yield-gauge {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.yield-rate {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--dim);
+  overflow-wrap: anywhere;
+}
+.yield-take {
+  width: 100%;
+  margin-top: 10px;
 }
 .forge-gauges {
   display: flex;
