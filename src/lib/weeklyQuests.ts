@@ -291,7 +291,11 @@ export const QUEST_INFO: Record<QuestKind, { emoji: string; label: (t: number) =
     label: (t) => `Tennis ${t} jour${t > 1 ? 's' : ''} (court ou prépa physique)`,
   },
   variety: { emoji: '🔀', label: (t) => `${t} sports différents cette semaine` },
-  regularity: { emoji: '🔁', label: () => 'Bouge en début ET en fin de semaine' },
+  // ⚠️ Les jours sont écrits : « début / fin de semaine » laissait deviner où passe la coupure.
+  regularity: {
+    emoji: '🔁',
+    label: () => '1 jour de sport du lundi au mercredi, et 1 du jeudi au dimanche',
+  },
 };
 
 interface WeeklyQuest {
@@ -383,4 +387,3 @@ export function weeklyQuests(
     complete: claimedTickets >= top,
   };
 }
-
