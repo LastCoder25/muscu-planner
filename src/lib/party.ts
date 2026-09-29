@@ -344,7 +344,8 @@ export function settleParties(
   let changed = false;
   for (const p of parties) {
     let q = p;
-    if (now >= p.midAt && !p.reported) {
+    // ⚔️🧭 Un compagnon d'attaque combinée ne rapporte rien : le groupe principal le fait.
+    if (now >= p.midAt && !p.reported && !p.wingOf) {
       const msg = buildMessage(p);
       // ⚠️ `depositMessages` : jamais un doublon, jamais un encaissement dégradé.
       const next = depositMessages(box, [msg], cap);

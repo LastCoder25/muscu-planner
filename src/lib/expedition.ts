@@ -652,6 +652,9 @@ export interface ActiveExpedition {
    *  de la ville. `origin` sert au dessin (`travelPosition`), `homeId` au retour en garnison. */
   origin?: { x: number; y: number };
   homeId?: string;
+  /** ⚔️🧭 Un groupe-COMPAGNON d'une attaque combinée : il voyage (tracé, retour) mais ne
+   *  dépose AUCUN rapport — c'est le groupe principal qui porte le combat. */
+  wingOf?: string;
 }
 
 // Rapport déposé dans la boîte à messages 📬 à l'arrivée à l'objectif.

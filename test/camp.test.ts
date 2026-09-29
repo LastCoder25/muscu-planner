@@ -883,6 +883,15 @@ describe('📬 settleParties — un groupe parti sans le héros : rapport à l�
     expect(again.messages).toHaveLength(1);
   });
 
+  it('⚔️🧭 un groupe-compagnon d’attaque combinée ne dépose AUCUN rapport (le groupe principal le fait)', () => {
+    const p = { ...trip('a', 0), wingOf: 'atk1' };
+    const r = settleParties([p], [], p.midAt, 30);
+    expect(r.fresh).toEqual([]);
+    expect(r.messages).toEqual([]);
+    // Il rentre quand même : retiré à son retour.
+    expect(settleParties([p], [], p.returnAt, 30).parties).toEqual([]);
+  });
+
   it('⚠️ un rapport déjà présent (même id) n’est jamais dupliqué', () => {
     const p = trip('a', 0);
     const r = settleParties([p], [buildMessage(p)], p.midAt, 30);

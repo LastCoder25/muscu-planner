@@ -19,6 +19,7 @@
  */
 import { advAvailable, type Adventurer } from '@/lib/adventurers';
 import type { ActiveExpedition } from '@/lib/expedition';
+import { attackOutings, type CombinedAttack } from '@/lib/combinedAttack';
 
 /** Un voyage, réduit à ce qui dit QUI était dehors et QUAND. */
 export interface Outing {
@@ -67,8 +68,12 @@ export function advsHomeAt(
 export function outingsOf(s: {
   expedition: ActiveExpedition | null | undefined;
   parties: readonly ActiveExpedition[];
+  /** ⚔️🧭 Les attaques combinées en préparation : un groupe qui attend est À LA MAISON
+   *  jusqu'à son départ (il défend), puis dehors. ⚠️ REQUIS : oublié, un groupe parti
+   *  serait compté présent au siège. */
+  attacks: readonly CombinedAttack[];
 }): Outing[] {
-  const out: Outing[] = [];
+  const out: Outing[] = [...attackOutings(s.attacks)];
   if (s.expedition)
     out.push({
       sentAt: s.expedition.sentAt,
