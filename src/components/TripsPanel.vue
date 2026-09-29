@@ -39,7 +39,8 @@
     <p v-if="crew.legs" class="tc-legs">⏱️ {{ crew.legs }}</p>
     <div v-if="crew.haul.length" class="tc-haul">
       <span class="tc-haul-lab">Ramène</span>
-      <span v-for="p in crew.haul" :key="p.emoji" class="tc-pill">{{ p.emoji }} {{ p.n }}</span>
+      <!-- ❓ Toucher une ressource dit ce que c'est, comme dans les rapports (`HaulPills`). -->
+      <HaulPills :pills="crew.haul" variant="chip" />
     </div>
     <div class="tc-pick">
       <div v-if="crew.hero" class="tc-hero">
@@ -68,7 +69,7 @@
 </template>
 
 <script lang="ts">
-import type { Poi } from '@/lib/expedition';
+import type { HaulPill, Poi } from '@/lib/expedition';
 /** Un voyage en cours, tel que la rangée le montre. */
 export interface MapTrip {
   key: string;
@@ -83,7 +84,7 @@ export interface MapTrip {
   withHero: boolean;
   members: string[];
   /** Ce que le voyage ramènera (tiré au départ), montré au-dessus de l'équipe. */
-  haul: { emoji: string; n: number }[];
+  haul: HaulPill[];
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
   legs?: { go: string | null; back: string; detail: string } | null;
 }
@@ -102,6 +103,7 @@ import type { CharacterProfile } from '@/lib/character';
 import type { Adventurer } from '@/lib/adventurers';
 import { militiaIn } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
+import HaulPills from '@/components/HaulPills.vue';
 
 const props = defineProps<{
   trips: MapTrip[];
@@ -161,6 +163,7 @@ const crew = computed(() => {
   margin-bottom: 8px;
 }
 .tc-haul {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -170,14 +173,6 @@ const crew = computed(() => {
 .tc-haul-lab {
   font-size: 12px;
   color: var(--dim);
-}
-.tc-pill {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--surface-2, rgba(255, 255, 255, 0.06));
-  border: 1px solid var(--line);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
 }
 /* Deux membres par ligne, comme le choix d'une équipe. */
 .tc-pick {

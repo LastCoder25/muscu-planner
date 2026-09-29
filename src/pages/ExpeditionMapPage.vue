@@ -521,7 +521,10 @@
             <p v-else class="ctl-line ctl-dim">Aucun milicien à la base pour l’instant.</p>
             <div v-if="milSend > 0" class="send-bar">
               <button class="sh-send" :disabled="ctlBusy" @click="sendMilitia">
-                <span class="mil-inline"><MilitiaPortrait /></span> Envoyer {{ milSend }} milicien{{ milSend > 1 ? 's' : '' }} ·
+                <span class="mil-inline"><MilitiaPortrait /></span> Envoyer {{ milSend }} milicien{{
+                  milSend > 1 ? 's' : ''
+                }}
+                ·
                 {{ formatDurationMin(militiaLegMin) }}
               </button>
             </div>
@@ -948,6 +951,7 @@ import {
   isClaimable,
   ruinsSealKind,
   haulPills,
+  type HaulPill,
   type PartyResult,
   veinDwellMs,
 } from '@/lib/expedition';
@@ -1943,10 +1947,20 @@ function expeHaul(o: {
   mana?: number;
   item?: unknown;
   items?: unknown[];
-}): { emoji: string; n: number }[] {
+}): HaulPill[] {
   const pills = haulPills(o);
   const objets = o.items?.length ?? (o.item ? 1 : 0);
-  return objets > 0 ? [...pills, { emoji: '🎒', n: objets }] : pills;
+  return objets > 0
+    ? [
+        ...pills,
+        {
+          emoji: '🎒',
+          n: objets,
+          name: `Objet${objets > 1 ? 's' : ''} du héros`,
+          what: 'Rangé au sac au retour : à équiper, vendre ou recycler.',
+        },
+      ]
+    : pills;
 }
 /** ⚔️ Les GROUPES partis sans le héros, situés comme le héros (`travelPosition`). ⚠️ Un groupe AVEC le
  *  héros vit dans `expedition` : c'est le tracé du héros qui le montre. */

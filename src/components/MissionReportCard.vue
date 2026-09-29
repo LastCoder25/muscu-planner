@@ -87,23 +87,8 @@
     <!-- 2 · ce que ça rapporte, ce que ça coûte, et le geste -->
     <div class="l2">
       <div class="gains">
-        <!-- ❓ Toucher une ressource dit ce que c'est (demandé) : une bulle, pas un survol —
-             un téléphone n'en a pas. -->
-        <span v-for="g in card.gains" :key="g.emoji" class="gain-wrap">
-          <button
-            type="button"
-            class="gain"
-            :aria-expanded="tipOf === g.emoji"
-            :aria-label="`${g.name} : +${fmt(g.n)}`"
-            @click.stop="tipOf = tipOf === g.emoji ? null : g.emoji"
-          >
-            {{ g.emoji }} +{{ fmt(g.n) }}
-          </button>
-          <span v-if="tipOf === g.emoji" class="gain-tip" role="tooltip">
-            <b>{{ g.emoji }} {{ g.name }}</b>
-            <span v-if="useOf(g)">{{ useOf(g) }}</span>
-          </span>
-        </span>
+        <!-- ❓ Toucher une ressource dit ce que c'est (`HaulPills`, partagé). -->
+        <HaulPills :pills="card.gains" sign="+" />
         <button
           v-for="(it, i) in card.loot"
           :key="'lt' + i"
@@ -237,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { seedOf } from '@/lib/combat';
@@ -245,21 +230,8 @@ import { formatDuration } from '@/lib/duration';
 import { SLOT_LABEL, gradeLabel, itemEffectsText } from '@/lib/items';
 import { TEAM_SHOWN, missionWhen, type MissionCard } from '@/lib/missionCard';
 import { riftStageInputOf } from '@/lib/riftStage';
-import { RESOURCE_SOURCES } from '@/data/resourceSources';
-import type { HaulPill } from '@/lib/expedition';
+import HaulPills from '@/components/HaulPills.vue';
 import { warbandStageInputOf } from '@/lib/warbandStage';
-
-/** À quoi sert une ressource : le consommable le dit lui-même, les devises du plateau
- *  reprennent la fiche « d'où elle vient » (une seule description par devise). */
-const USE_BY_EMOJI = new Map(Object.values(RESOURCE_SOURCES).map((r) => [r.emoji, r.use]));
-const useOf = (g: HaulPill) => g.what ?? USE_BY_EMOJI.get(g.emoji) ?? '';
-/** ❓ La ressource dont la bulle est ouverte ; un toucher ailleurs la referme. */
-const tipOf = ref<string | null>(null);
-const closeTip = () => (tipOf.value = null);
-watch(tipOf, (v) =>
-  v ? window.addEventListener('click', closeTip) : window.removeEventListener('click', closeTip),
-);
-onBeforeUnmount(() => window.removeEventListener('click', closeTip));
 
 const props = withDefaults(
   defineProps<{
@@ -458,43 +430,6 @@ function fmtRate(n: number): string {
   font-weight: 700;
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-}
-.gain {
-  padding: 2px 4px;
-  margin: -2px -4px;
-  min-height: 28px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-.gain:hover,
-.gain:focus-visible {
-  background: color-mix(in srgb, var(--text) 10%, transparent);
-}
-/* La bulle s'ancre sur la LIGNE des gains, pas sur la ressource : ancrée sur une
-   ressource à droite, elle sortait de l'écran à 344 px. */
-.gain-tip {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
-  z-index: 5;
-  width: max-content;
-  max-width: 100%;
-  background: var(--surface-2, var(--surface));
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  color: var(--text);
-  font-weight: 500;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px;
-  font-size: 12.5px;
-  line-height: 1.3;
 }
 .gains .more {
   color: var(--dim);

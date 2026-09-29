@@ -453,6 +453,20 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('plus dans ton vivier'); // le champion renvoyé depuis
     // ⚠️ À l'ALLER le butin n'est pas montré : il révélerait l'issue d'un combat à venir.
     expect(out).not.toContain('Ramène');
+    // ❓ Au RETOUR, ce qu'on ramène se touche et se lit, comme dans les rapports (demandé).
+    let tip = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [{ ...trip, back: true }], focus: 'g1', heroProfile: 'polyvalent' },
+      ROW,
+      undefined,
+      '/',
+      (h) => (tip = h),
+      (host) => host.querySelector<HTMLElement>('.tc-haul .hp')?.click(),
+    );
+    expect(tip).toContain('Ramène');
+    expect(tip).toContain('🪙 Or');
+    expect(tip).toContain('Construire et améliorer les bâtiments');
   }, 30_000);
 
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
@@ -831,7 +845,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
         undefined,
         '/',
         (h) => (tip = h),
-        (host) => host.querySelector<HTMLElement>('.gain')?.click(),
+        (host) => host.querySelector<HTMLElement>('.hp')?.click(),
       ),
     ).toBeNull();
     expect(tip).toContain('🪙 Or');
