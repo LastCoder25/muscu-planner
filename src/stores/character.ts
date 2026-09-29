@@ -248,6 +248,7 @@ import {
   partyClaimRoster,
   partyLegMin,
   assaultStayers,
+  tripCrew,
   shortenWonReturn,
   rescheduleReturners,
   interceptLeg,
@@ -2208,12 +2209,7 @@ export const useCharacterStore = defineStore('character', () => {
     const exp2 = shortenWonReturn({ ...exp, reported: true });
     const advs0 =
       ctl?.adventurers ?? (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value;
-    const advs1 = rescheduleReturners(
-      advs0,
-      exp.outcome.party?.escort ?? [],
-      exp.returnAt,
-      exp2.returnAt,
-    );
+    const advs1 = rescheduleReturners(advs0, tripCrew(exp), exp.returnAt, exp2.returnAt);
     await persist(userId, {
       ...(dw.base ? { base: dw.base } : {}),
       expedition: exp2,
@@ -3508,6 +3504,43 @@ export const useCharacterStore = defineStore('character', () => {
    * le TOTAL, un créneau de l'Avant-poste, pronostic « perdu d'avance », consommables).
    * Rend la RAISON d'un refus, `null` si l'attaque est lancée.
    */
+  /** 🏰 Qui reste en garnison si l'assaut prend le point (`assaultStayers`), `null` si ce
+   *  n'est pas un assaut de point fixe. */
+  function assaultStayOf(
+    poi: Poi,
+    ids: readonly string[],
+    stayIds: readonly string[] | undefined,
+  ): Set<string> | null {
+    if (poi.type !== 'control' || !poi.control) return null;
+    return new Set(assaultStayers(ids, stayIds, seatsOf(poi.control.kind)));
+  }
+
+  /** ⚔️🧭 Le retour d'UN groupe d'une attaque combinée si le point est pris : ses membres qui
+   *  ne restent pas (et son héros), à LEUR pas, jusqu'à CHEZ LUI. 0 si personne ne rentre ;
+   *  jamais plus long que son trajet d'origine (`legMin`, figé à l'envoi). */
+  function wingWonLeg(
+    cur: CharacterRow,
+    poi: Poi,
+    origin: Poi | null,
+    escort: Adventurer[],
+    hero: boolean,
+    stay: Set<string>,
+    supplies: SupplyId[],
+    legMin: number,
+  ): number {
+    const back = escort.filter((a) => !stay.has(a.id));
+    if (!back.length && !hero) return 0;
+    const road = escortKitOf(cur);
+    const legOf = (p: Poi) =>
+      partyLegMin(p, back, {
+        hero,
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+        gearSpeed: advGearRoles(back, road.advGear).speed,
+        supplies,
+      });
+    return Math.min(legMin, origin ? legFromSpot(poi, origin, legOf) : legOf(poi));
+  }
+
   async function sendCombinedAttack(
     userId: string,
     poi: Poi,
@@ -3601,6 +3634,18 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       dwellMsFor(poi, all.length),
     );
+    // 🏰 Assaut d'un point fixe : le retour de chaque groupe si le point est pris (estimé ici
+    // pour l'affichage, recalculé au lancement avec ceux qui sont vraiment partis).
+    const stay = assaultStayOf(
+      poi,
+      all.map((a) => a.id),
+      opts.stayIds,
+    );
+    if (stay)
+      plan.wings.forEach((w, i) => {
+        const g = groups[i]!;
+        w.wonLegMin = wingWonLeg(cur, poi, g.origin, g.escort, w.hero, stay, supplies, w.legMin);
+      });
     const seed = ((now ^ (poi.level * 2654435761)) & ~1) >>> 0 || 2;
     const attack: CombinedAttack = {
       id: `atk_${now.toString(36)}`,
@@ -3756,8 +3801,22 @@ export const useCharacterStore = defineStore('character', () => {
         goneWings.find((w) => w.heroGone) ??
         goneWings.find((w) => w.originId === null) ??
         goneWings[0]!;
+      const stay = assaultStayOf(a.poi, who.ids, a.stayIds);
       for (const w of goneWings) {
         const origin = w.originId ? map?.pois.find((p) => p.id === w.originId) : null;
+        const crew = w.gone ?? [];
+        const wonLeg = stay
+          ? wingWonLeg(
+              cur,
+              a.poi,
+              origin ?? null,
+              escort.filter((x) => crew.includes(x.id)),
+              !!w.heroGone,
+              stay,
+              a.supplies,
+              w.legMin,
+            )
+          : null;
         const trip = {
           poi: a.poi,
           sentAt: w.departAt,
@@ -3769,6 +3828,8 @@ export const useCharacterStore = defineStore('character', () => {
           outcome,
           ...(origin ? { origin: { x: origin.x, y: origin.y }, homeId: origin.id } : {}),
           ...(w === main ? {} : { wingOf: a.id }),
+          crew,
+          ...(wonLeg !== null ? { returnLegs: { won: wonLeg, lost: w.legMin } } : {}),
         };
         if (w === main && w.heroGone) expedition = trip;
         else parties = [...parties, { ...trip, id: `party_${a.id}_${w.originId ?? 'base'}` }];
@@ -3892,12 +3953,7 @@ export const useCharacterStore = defineStore('character', () => {
     for (const p of partyList.value) {
       const q = t.parties.find((r) => r.id === p.id);
       if (q && q.returnAt !== p.returnAt)
-        advsBack = rescheduleReturners(
-          advsBack,
-          q.outcome.party?.escort ?? [],
-          p.returnAt,
-          q.returnAt,
-        );
+        advsBack = rescheduleReturners(advsBack, tripCrew(q), p.returnAt, q.returnAt);
     }
     await persist(userId, {
       parties: t.parties,

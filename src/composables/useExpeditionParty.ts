@@ -346,6 +346,25 @@ export function useExpeditionParty(ctx: PartyCtx) {
           gearSpeed: advGearRoles(members, roadCtx.value.advGear).speed,
           supplies: activeSupplies.value,
         });
+      const legMin = origin ? legFromSpot(target, origin.poi, legOf) : legOf(target);
+      // 🏰 Assaut d'un point fixe : pris, SES membres qui ne restent pas (et son héros)
+      // rentrent chez lui à leur pas — la MÊME règle que le store (`wingWonLeg`).
+      let wonMin = legMin;
+      if (stayCap.value) {
+        const stay = new Set(stayIds.value);
+        const back = members.filter((a) => !stay.has(a.id));
+        const backOf = (p: Poi) =>
+          partyLegMin(p, back, {
+            hero,
+            travelMult: travelMult.value,
+            gearSpeed: advGearRoles(back, roadCtx.value.advGear).speed,
+            supplies: activeSupplies.value,
+          });
+        wonMin =
+          back.length || hero
+            ? Math.min(legMin, origin ? legFromSpot(target, origin.poi, backOf) : backOf(target))
+            : 0;
+      }
       return {
         id,
         emo: origin?.emo ?? '🏰',
@@ -353,7 +372,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
         n: members.length + (hero ? 1 : 0),
         ids: members.map((a) => a.id),
         hero,
-        legMin: origin ? legFromSpot(target, origin.poi, legOf) : legOf(target),
+        legMin,
+        wonMin,
       };
     });
     const longest = Math.max(1, ...rows.map((r) => r.legMin));

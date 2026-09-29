@@ -316,6 +316,13 @@ export function assaultStayers(
   return (picked.length ? picked : [...escortIds]).slice(0, Math.max(0, seats));
 }
 
+/** Les champions d'UN voyage : son groupe (`crew`) pour un groupe d'attaque combinée, sinon
+ *  l'escorte du rapport. ⚠️ Le rapport d'une attaque combinée est PARTAGÉ par tous ses groupes :
+ *  lire son escorte ferait montrer (et rentrer) tout le monde sur chaque tuile. */
+export function tripCrew(v: Pick<ActiveExpedition, 'crew' | 'outcome'>): string[] {
+  return v.crew ?? v.outcome.party?.escort ?? [];
+}
+
 /** 🏰 Un assaut de point fixe GAGNÉ : le retour passe à celui de ceux qui rentrent
  *  (`returnLegs.won`, 0 = personne). Rend la MÊME référence sinon (perdu, ou pas un assaut). */
 export function shortenWonReturn<T extends ActiveExpedition>(v: T): T {
@@ -407,6 +414,12 @@ export function settleParties(
         fresh.push(msg);
       }
       // 🏰 Assaut pris : ceux qui ne restent pas rentrent à leur propre pas.
+      q = shortenWonReturn({ ...p, reported: true });
+      changed = true;
+    }
+    // ⚔️🧭 Un groupe-compagnon d'attaque combinée ne rapporte rien, mais il arrive lui aussi :
+    // point pris, SES membres qui ne restent pas rentrent à leur pas (0 → plus personne).
+    if (now >= p.midAt && !p.reported && p.wingOf) {
       q = shortenWonReturn({ ...p, reported: true });
       changed = true;
     }
