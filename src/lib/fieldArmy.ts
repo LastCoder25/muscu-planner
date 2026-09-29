@@ -14,7 +14,8 @@
  *   l'armée : le siège ou la reprise arrive amputé d'autant (`applyFieldHit*`). La battre
  *   entièrement ANNULE l'attaque.
  * - **Défaite** : les tombés vont à l'infirmerie (`campHurt`), mais tout le monde rentre avec
- *   le mana 💠 des ennemis abattus (demandé).
+ *   le butin des ennemis abattus : la ressource de leur faction, ou du mana 💠 si l'armée sort
+ *   d'une faille (seules les armées de faille en donnent).
  * - Le sort du choc est tiré à l'ENVOI (graine fixée), appliqué à l'heure du CHOC — jamais
  *   après l'arrivée de l'armée : un choc qui tomberait trop tard ne change rien.
  *
@@ -43,7 +44,7 @@ import {
 } from './raid';
 import { BATTLE } from './siegeBattle';
 import { attackerLevel, retakeForce } from './controlPoints';
-import { campHurt, campLightHurt, fightCampForce, type PartyInput } from './camp';
+import { campHurt, campLightHurt, fightCampForce, forceHaul, type PartyInput } from './camp';
 import { missionXpFor } from './caravan';
 import { RIFT, riftMana } from './rift';
 
@@ -139,7 +140,14 @@ export function siegeArmyPoi(
     // champion (au-dessus du joueur), aucune équipe n'en abattait rien.
     Math.max(1, playerLevel),
     playerLevel,
-    { kind: 'siege', targetId: raid.id, at: raid.arrivesAt, faction: raid.faction, size },
+    {
+      kind: 'siege',
+      targetId: raid.id,
+      at: raid.arrivesAt,
+      faction: raid.faction,
+      size,
+      ...(raid.overflow ? { rift: true as const } : {}),
+    },
     now,
   );
 }
@@ -252,7 +260,11 @@ export function resolveFieldArmy(input: Omit<PartyInput, 'spec'>): ExpeditionOut
   const g = fightCampForce({ ...input, spec });
   const d = g.skirmish;
   const part = d.win ? 1 : g.foes ? g.slain / g.foes : 0;
-  const mana = fieldArmyMana(spec.size, part, poi.level);
+  // ⚠️ SEULES LES ARMÉES DE FAILLE DONNENT DU MANA (décision de l'utilisateur) : les autres
+  // laissent ce que portent leurs abattus, selon la faction — la MÊME règle qu'un camp
+  // (`forceHaul` : tout si battue, les abattus sinon).
+  const mana = tag.rift ? fieldArmyMana(spec.size, part, poi.level) : 0;
+  const haul = tag.rift ? null : forceHaul(input, spec, d);
   const hit: FieldHit = {
     kind: tag.kind,
     targetId: tag.targetId,
@@ -286,15 +298,16 @@ export function resolveFieldArmy(input: Omit<PartyInput, 'spec'>): ExpeditionOut
     },
   };
   const target = tag.kind === 'siege' ? 'ta base' : 'le point';
-  const tag2 = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} abattus · +${mana} 💠`;
+  const tag2 = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} abattus${mana ? ` · +${mana} 💠` : ''}`;
   return {
     win: d.win,
-    gold: 0,
+    gold: haul?.gold ?? 0,
     energy: 0,
-    summonStones: 0,
+    summonStones: haul?.summonStones ?? 0,
     mana,
     item: null,
     items: [],
+    ...(haul && Object.keys(haul.supplies).length ? { supplies: haul.supplies } : {}),
     key: 0,
     reconBonus: 0,
     returnMult: 1,

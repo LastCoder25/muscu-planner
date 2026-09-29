@@ -939,7 +939,7 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
+import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import {
   FIELD_ARMY,
   armyTrajectory,
@@ -954,6 +954,7 @@ import {
   partyLegMin,
   denForce,
   tripCrew,
+  partyCarriesHero,
 } from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
@@ -2061,7 +2062,7 @@ const partiesOnMap = computed(() =>
       poi: g.poi,
       escort: tripCrew(g).length,
       members: tripCrew(g),
-      hero: !!g.outcome.party?.hero,
+      hero: partyCarriesHero(g),
       haul: expeHaul(g.outcome),
       origin: g.origin,
       // 🔙 Un demi-tour n'a jamais atteint le lieu : son tracé s'arrête là où il a rebroussé.
@@ -2872,8 +2873,11 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   lair: (p) => campRewardLabel(p),
   arena: () => 'objets + pierres 🔮 selon les vagues',
   rift: () => 'mana 💠',
+  // ⚠️ Seules les armées de FAILLE rendent du mana ; les autres, le butin de leur faction.
   warband: (p) =>
-    p.army ? 'mana 💠 · chaque ennemi abattu n’attaquera pas' : 'mana 💠 · siège non renforcé',
+    p.army
+      ? `${p.army.rift ? 'mana 💠' : FACTION_LOOT_LABEL[p.army.faction]} · chaque ennemi abattu n’attaquera pas`
+      : 'mana 💠 · siège non renforcé',
   ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',
