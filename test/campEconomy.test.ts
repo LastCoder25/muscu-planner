@@ -11,7 +11,6 @@ import { resolveHarvestParty } from '@/lib/harvestParty';
 import {
   caravanHurtMs,
   caravanLegMin,
-  convoySlotsFree,
   refAdvGear,
   refAdventurer,
 } from '@/lib/caravan';
@@ -36,8 +35,9 @@ const outpostMult = (level: number) =>
  * soit +58 % du revenu d'or de référence au niveau 26, et ~+4,6 clés/jour (hors de la bande
  * de 2 à 5 runs de Labyrinthe par jour, v0.799).
  *
- * Deux garde-fous en sont sortis : un groupe sans le héros prend un CRÉNEAU DE CONVOI
- * (`convoySlotsFree`, un seul pool), et un camp ne rend AUCUNE clé. Ce test encode le
+ * Un garde-fou en est sorti : un camp ne rend AUCUNE clé. (Le plafond de créneaux de
+ * l’Avant-poste est RETIRÉ, demandé : seul le vivier borne le nombre d’équipes — et les
+ * bornes ci-dessous tiennent sans lui.) Ce test encode le
  * résultat pour qu'il ne dérive plus en silence.
  *
  * ⚠️ LA SIMULATION EST CELLE D'UN JOUEUR QUI OPTIMISE : carte réelle (`createMap` /
@@ -68,9 +68,7 @@ function road(L: number, n: number) {
 interface Trip {
   returnAt: number;
 }
-/** `slotCap` : la règle livrée (un pool partagé avec les convois) ou son absence — c'est ce
- *  qui permet de MESURER ce que le plafond change, au lieu de l'affirmer. */
-function sim(L: number, seed: number, opts: { days: number; comptoir: number; slotCap: boolean }) {
+function sim(L: number, seed: number, opts: { days: number; comptoir: number }) {
   const advs = roster(L, engageCap(L));
   const rd = road(L, advs.length);
   const busy = new Map<string, number>();
@@ -86,9 +84,8 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
   const refused = new Set<string>();
   for (let t = 0; t <= opts.days * DAY; t += STEP) {
     map = advanceWorld(map, t, L, opts.comptoir);
-    // ⚔️ D'abord les camps (le pire cas pour l'or : on leur donne tous les créneaux).
+    // ⚔️ D'abord les camps (le pire cas pour l'or : on leur donne tout le vivier).
     for (;;) {
-      if (opts.slotCap && convoySlotsFree(opts.comptoir, trips, t) <= 0) break;
       const free = advs.filter((a) => (busy.get(a.id) ?? 0) <= t);
       const best = map.pois
         .map((p) => ({ p, spec: campSpecOf(p) }))
@@ -137,7 +134,7 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
       trips.push({ returnAt: back });
       map = { ...map, pois: map.pois.filter((p) => p.id !== best.p.id) };
     }
-    // 🧺 Les créneaux restants partent RÉCOLTER : ils prennent des champions ET des lieux,
+    // 🧺 Les champions restants partent RÉCOLTER : ils prennent des champions ET des lieux,
     // donc ils font tourner la carte (plus de spawns, donc plus de camps).
     // ⚠️ Depuis la v0.1043 un lieu de récolte est GARDÉ (`harvestGuardOf`) : on ne l'y prend
     // plus pour rien. L'équipe part à 3 (le trio calibré pour les embuscades de la route),
@@ -146,7 +143,6 @@ function sim(L: number, seed: number, opts: { days: number; comptoir: number; sl
     // VRAI (`resolveHarvestParty`) : une défaite blesse et immobilise, ce qui retire des
     // champions aux camps — c'est ce que ce harnais ignorait jusqu'en v0.1203.
     for (;;) {
-      if (convoySlotsFree(opts.comptoir, trips, t) <= 0) break;
       const free = advs.filter((a) => (busy.get(a.id) ?? 0) <= t);
       if (free.length < 3) break;
       let pick: { p: (typeof map.pois)[number]; esc: Adventurer[] } | null = null;
@@ -225,7 +221,7 @@ const GOLD_MAX = 0.3;
 /** Part de la production de pierres d'une journée de donjons. */
 const STONES_MAX = 0.5;
 
-function moyenne(L: number, opts: { days: number; comptoir: number; slotCap: boolean }) {
+function moyenne(L: number, opts: { days: number; comptoir: number }) {
   const runs = SEEDS.map((s) => sim(L, s, opts));
   const m = (k: keyof (typeof runs)[0]) => runs.reduce((acc, r) => acc + r[k], 0) / runs.length;
   return {
@@ -244,7 +240,7 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
   it('⚠️ or NET par jour ≤ un quart du revenu de référence, à tous les niveaux', () => {
     let guardFights = 0;
     for (const L of NIV) {
-      const r = moyenne(L, { days: 7, comptoir: L, slotCap: true });
+      const r = moyenne(L, { days: 7, comptoir: L });
       const part = r.goldNet / goldPerDay(L);
       // Mesuré : +9 % (niv. 12), +16 % (26), +17 % (60). Au-delà, le puits d'or recalibré en
       // v0.733 (55-90 % du plafond sur un an) ne tient plus — c'est la raison du plafond de
@@ -274,7 +270,7 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
 
   it('⚠️ pierres d’invocation : au plus la moitié d’une journée de donjons', () => {
     for (const L of NIV) {
-      const r = moyenne(L, { days: 7, comptoir: L, slotCap: true });
+      const r = moyenne(L, { days: 7, comptoir: L });
       const part = r.stones / stonesPerDay(L);
       // Les pierres financent les BOSS : le donjon doit rester la source. Mesuré : +6 / +16 /
       // +27 % aux niveaux 12 / 26 / 60 — mesuré +5 / +16 / +27 en v0.929, contre
@@ -287,49 +283,7 @@ describe('💰 le débit des camps de faction ne double pas l’économie', { ti
 
   it('⚠️ AUCUNE clé : le Labyrinthe garde sa bande de 2 à 5 runs/jour (v0.799)', () => {
     for (const L of NIV) {
-      expect(moyenne(L, { days: 7, comptoir: L, slotCap: true }).keys, `niveau ${L}`).toBe(0);
+      expect(moyenne(L, { days: 7, comptoir: L }).keys, `niveau ${L}`).toBe(0);
     }
-  });
-
-  it('⚠️ le PLAFOND DE CRÉNEAUX mord vraiment : un gros vivier sur un petit Comptoir', () => {
-    // Le vivier croît avec le niveau (`engageCap`), les créneaux avec le COMPTOIR : c'est
-    // exactement le cas où un joueur pourrait lancer des groupes par dizaines.
-    const cap = moyenne(60, { days: 7, comptoir: 9, slotCap: true });
-    const sans = moyenne(60, { days: 7, comptoir: 9, slotCap: false });
-    expect(
-      cap.parties,
-      `${cap.parties.toFixed(1)} vs ${sans.parties.toFixed(1)} camps/j`,
-    ).toBeLessThan(sans.parties);
-    expect(cap.goldNet).toBeLessThan(sans.goldNet);
-    //
-    // ⚠️ CE TEST A CHANGÉ DE FORMULATION EN v0.929, ET LA RAISON COMPTE. Il affirmait « sans
-    // plafond, on DÉPASSE la bande » (mesuré 25 % pour une bande à 25) — ce n’est plus vrai :
-    // retirer 4 POI ordinaires de la couronne pour loger 6 failles a fait tomber le débit
-    // sans plafond à **20,9 %**, sous la bande. Le plafond n’est donc plus le SEUL garde-fou
-    // du débit d’or ; il reste le plus gros levier, et c’est CE QUE ce test épingle désormais.
-    // ⚠️ Il l’épingle en ÉCART SUBSTANTIEL, pas en « strictement inférieur » : la version
-    // d’avant se jouait à 5 % de sa borne et tombait à la moindre variation de PLACEMENT des
-    // POI — une borne qu’un bruit d’échantillonnage franchit ne verrouille rien.
-    //
-    // Mesuré (8 graines, niveau 60, Comptoir 9) : 5,8 camps/jour et +15,8 % d’or AVEC le
-    // plafond, contre 8,3 et +20,9 % sans — soit ×1,43 et ×1,32.
-    //
-    // ⚠️ RE-MESURÉ EN v0.1005 (champions sans compagnons, fusionné sur la base sans épave) :
-    // 6,2 camps/jour et +12,3 % d’or AVEC le plafond, 8,0 et +13,9 % SANS — soit ×1,30 et
-    // ×1,13. Le plafond reste le levier du NOMBRE de groupes ; sur l’OR il pèse moins parce
-    // que, sans familier ni talent, les camps en plus au-delà du plafond demandent des groupes
-    // plus gros et leurs salaires (retirés depuis) mangeaient presque tout le butin. Borne ramenée de 1,15 à 1,08
-    // pour cette raison mesurée — elle attrape toujours un plafond qui ne mordrait plus du tout.
-    expect(sans.parties / cap.parties).toBeGreaterThan(1.25);
-    expect(
-      sans.goldNet / cap.goldNet,
-      `or ${((cap.goldNet / goldPerDay(60)) * 100).toFixed(1)} % avec, ${(
-        (sans.goldNet / goldPerDay(60)) *
-        100
-      ).toFixed(1)} % sans`,
-    ).toBeGreaterThan(1.08);
-    // …et même sans plafond on reste sous la bande, ce qui n’était pas le cas à 20 POI
-    // ordinaires : le garde-fou a désormais de la marge devant lui.
-    expect(sans.goldNet / goldPerDay(60)).toBeLessThanOrEqual(GOLD_MAX);
   });
 });

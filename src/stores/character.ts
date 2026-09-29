@@ -208,7 +208,6 @@ import {
 } from '@/lib/skillRunes';
 import {
   caravanLegMin,
-  convoySlotsFree,
   partyAllies,
   type EscortKit,
   type PartyHero,
@@ -270,7 +269,6 @@ import {
   heroInAttack,
   normalizeAttacks,
   planWings,
-  slotTrips,
   wingDeparture,
   type CombinedAttack,
 } from '@/lib/combinedAttack';
@@ -3193,9 +3191,6 @@ export const useCharacterStore = defineStore('character', () => {
   const attackList = computed<CombinedAttack[]>(() => row.value?.attacks ?? []);
   /** 🧝 Le héros est engagé ailleurs : en expédition, ou réservé pour une attaque combinée. */
   const heroEngaged = computed(() => !!row.value?.expedition || heroInAttack(attackList.value));
-  /** 🧭 Ce qui occupe un créneau de l'Avant-poste (`slotTrips`) : UNE place par attaque
-   *  combinée, jamais par groupe. À passer à `convoySlotsFree` partout. */
-  const slotTripList = computed(() => slotTrips(partyList.value, attackList.value));
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
   /** 🛕 Le niveau du PANTHÉON — un seul bâtiment depuis la fusion (v0.949), donc un seul
@@ -3204,10 +3199,9 @@ export const useCharacterStore = defineStore('character', () => {
    *  champion (`grantAdvXp`) — c'est le « le sport fixe le plafond » de cette boucle. */
   const pantheonLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'pantheon'));
   // ⚠️ L'AVANT-POSTE, depuis qu'il a absorbé le Comptoir de caravanes : un seul bâtiment
-  // règle tout le VOYAGE — trajet du héros, vitesse ET nombre des convois.
-  // Le nom du binding reste `comptoirLevel` : c’est le paramètre que lisent
-  // `caravanSlots`, `convoySlotsFree` et `caravanLegMin`, et le renommer partout
-  // n'apprendrait rien de plus.
+  // règle tout le VOYAGE — trajet du héros et des équipes.
+  // Le nom du binding reste `comptoirLevel` : c’est le paramètre que lit
+  // `caravanLegMin`, et le renommer partout n'apprendrait rien de plus.
   const comptoirLevel = computed(() => buildingLevel(row.value?.buildings ?? [], 'outpost'));
 
   /** ⚔️🕳️ Envoie un GROUPE sur un camp de faction OU dans une faille : le héros (oui/non) et
@@ -3269,8 +3263,8 @@ export const useCharacterStore = defineStore('character', () => {
       );
     if (escort.length !== opts.escortIds.length)
       return 'un champion du groupe n’est plus disponible';
-    // ⚠️ Groupe vide, ou SANS le héros alors que tous les créneaux de convoi sont pris : la
-    // MÊME règle que l'écran (`partySendBlocker`), un seul pool avec les convois.
+    // ⚠️ Groupe vide, trop nombreux ou perdu d'avance : la MÊME règle que l'écran
+    // (`partySendBlocker`).
     // 🗡️ Ce que le groupe emmène — il faut le connaître AVANT le refus, puisque le
     // pronostic se joue avec l'équipement réellement porté.
     // 🎒 Les consommables : utiles sur CE voyage, et bien en stock. ⚠️ Vérifiés AVANT tout :
@@ -3285,7 +3279,6 @@ export const useCharacterStore = defineStore('character', () => {
       poi,
       escort.length,
       !!hero,
-      convoySlotsFree(comptoirLevel.value, slotTripList.value, now),
       engageCap(pantheonLevel.value),
       // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
       // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
@@ -3505,7 +3498,7 @@ export const useCharacterStore = defineStore('character', () => {
    * sont RÉSERVÉS (`busyUntil` = leur retour prévu) mais restent chez eux — une garnison
    * continue de produire et de se défendre, la base garde ses défenseurs. Les départs et le
    * combat se règlent dans `attackTick`. Mêmes règles qu'une équipe (plafond du Panthéon sur
-   * le TOTAL, un créneau de l'Avant-poste, pronostic « perdu d'avance », consommables).
+   * le TOTAL, pronostic « perdu d'avance », consommables).
    * Rend la RAISON d'un refus, `null` si l'attaque est lancée.
    */
   /** 🏰 Qui reste en garnison si l'assaut prend le point (`assaultStayers`), `null` si ce
@@ -3597,12 +3590,11 @@ export const useCharacterStore = defineStore('character', () => {
     const stockAfter = takeSupplies(cur.supplies, supplies);
     if (!stockAfter) return 'un consommable choisi n’est plus en stock';
     const road = { ...escortKitOf(cur), supplies };
-    // ⚠️ Le plafond du Panthéon, le créneau et le pronostic portent sur l'attaque ENTIÈRE.
+    // ⚠️ Le plafond du Panthéon et le pronostic portent sur l'attaque ENTIÈRE.
     const sendBlock = partySendBlocker(
       poi,
       all.length,
       !!hero,
-      convoySlotsFree(comptoirLevel.value, slotTripList.value, now),
       engageCap(pantheonLevel.value),
       partyWinChance(poi, all, road, hero, now, 40, false),
     );
@@ -4763,7 +4755,6 @@ export const useCharacterStore = defineStore('character', () => {
     partyList,
     attackList,
     heroEngaged,
-    slotTripList,
     sendCombinedAttack,
     attackTick,
     sendParty,

@@ -145,7 +145,7 @@ describe('POI de récolte', () => {
     // Et rien ne peut plus y être envoyé : ni le héros, ni un convoi, ni un groupe.
     const w = { ...m.pois[0]!, type: 'wreck' as const };
     expect(
-      poiOffers(w, { heroAway: false, comptoirLevel: 9, advsAvailable: 3, slotsFree: 2 }),
+      poiOffers(w, { heroAway: false, comptoirLevel: 9, advsAvailable: 3 }),
     ).toEqual({
       hero: false,
       caravan: false,

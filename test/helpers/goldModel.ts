@@ -21,7 +21,8 @@ import { DUNGEONS, dungeonGold, dungeonSummonStones } from '@/data/dungeons';
 import { BOSSES, bossSummonCost } from '@/data/bosses';
 import { rollDrop, sellValue } from '@/lib/items';
 import { mulberry32 } from '@/lib/combat';
-import { caravanSlots, caravanLegMin, refAdvGear, refChampionAdv } from '@/lib/caravan';
+import { caravanLegMin, refAdvGear, refChampionAdv } from '@/lib/caravan';
+import { engageCap } from '@/lib/adventurers';
 import { rollRaid } from '@/lib/raid';
 import { travelTimeMult } from '@/lib/buildings';
 import { comboChestReward } from '@/lib/comboChest';
@@ -209,7 +210,8 @@ function convoyGoldPerDay(L: number, comptoir: number): number {
       travelTimeMult([{ typeId: 'outpost', level: comptoir, slot: 0, collectedAt: 0 }]),
     ) / 60;
   const trips = Math.min(3, 24 / (2 * legH));
-  const cap = caravanSlots(comptoir) * trips;
+  // 🧭 Plus de créneaux d'Avant-poste : autant d'équipes de 3 que le vivier en arme.
+  const cap = Math.max(1, Math.floor(engageCap(L) / 3)) * trips;
   const days = bestPlaces(L).teamDays;
   let mines = 0;
   let used = 0;

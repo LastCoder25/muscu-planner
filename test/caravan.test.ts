@@ -24,8 +24,6 @@ import {
   canSendCaravan,
   caravanHurtMs,
   caravanLegMin,
-  caravanSlots,
-  convoySlotsFree,
   poiOffers,
   escortCombatant,
   ambushChance,
@@ -511,18 +509,6 @@ describe('XP et garde-fous', () => {
     // ⚠️ Le niveau de RÉCOMPENSE n’y entre plus : il paie l’or, pas l’apprentissage.
     const riche = { ...poi({ level: 5 }), rewardLevel: 40 };
     expect(missionXp(a5, riche, true)).toBe(missionXp(a5, p5, true));
-  });
-  it('⚠️ le nombre de convois monte SANS FIN mais reste bridé par le vivier', () => {
-    // Le plafond dur (4) a sauté avec la règle « aucun niveau mort » : un Comptoir de
-    // niveau 100 doit apporter quelque chose. Ce qui empêche l'inflation n'est donc plus
-    // un cap, mais deux freins qui, eux, ne cèdent jamais : le nombre d'aventuriers
-    // recrutables (cf. `buildings.test`) et la LENTEUR du convoi, asymptotique.
-    expect(caravanSlots(0)).toBe(1);
-    expect(caravanSlots(1)).toBe(1);
-    expect(caravanSlots(999)).toBeGreaterThan(caravanSlots(100));
-    // Un cran de Comptoir coûte cher : il ne doit jamais offrir un convoi de plus.
-    for (let l = 1; l <= 200; l++)
-      expect(caravanSlots(l) - caravanSlots(l - 1)).toBeLessThanOrEqual(1);
   });
 });
 
@@ -1154,8 +1140,8 @@ describe('👥 une ÉQUIPE part SANS le héros — elle remplace le convoi (2026
   // partait, plus rien ne pouvait partir. Une équipe de champions est la voie PARALLÈLE —
   // sa raison d'être est de jouer quand le héros ne peut pas.
   const recolte = poi({ type: 'well' });
-  const offre = (p: Poi, heroAway: boolean, advsAvailable: number, slotsFree = 1) =>
-    poiOffers(p, { heroAway, comptoirLevel: 3, advsAvailable, slotsFree });
+  const offre = (p: Poi, heroAway: boolean, advsAvailable: number) =>
+    poiOffers(p, { heroAway, comptoirLevel: 3, advsAvailable });
 
   it('🚫 on ne lance plus de convoi, nulle part', () => {
     for (const t of ['well', 'mine', 'shrine', 'archive', 'mana_mine', 'camp', 'rift'] as const)
@@ -1178,7 +1164,7 @@ describe('👥 une ÉQUIPE part SANS le héros — elle remplace le convoi (2026
   it('🕳️ une FAILLE s’attaque en équipe — jamais en expédition solo', () => {
     // ⚠️ `hero` (l'expédition SOLO) reste refusé : c'est le verrou qui empêche
     // `resolveOutcome` de traiter la faille comme une MINE D'OR (v0.926).
-    const o = offre(poi({ type: 'rift' }), false, 4, 4);
+    const o = offre(poi({ type: 'rift' }), false, 4);
     expect(o.hero).toBe(false);
     expect(o.party).toBe(true);
   });
@@ -1196,30 +1182,18 @@ describe('👥 une ÉQUIPE part SANS le héros — elle remplace le convoi (2026
     expect(offre(poi({ type: 'lair' }), true, 1).party).toBe(true);
   });
 
-  it('⚠️ UN SEUL POOL : sans le héros, une équipe exige un créneau libre de l’Avant-poste', () => {
+  it('🧭 PLUS DE CRÉNEAUX : sans le héros, une équipe part dès qu’un champion est libre', () => {
     const camp = poi({ type: 'camp' });
-    expect(offre(camp, true, 5, 0).party).toBe(false);
-    expect(offre(recolte, true, 5, 0).party).toBe(false);
-    // …mais le héros, lui, n'en prend pas : il est sa propre limite.
-    expect(offre(camp, false, 5, 0).party).toBe(true);
-  });
-
-  it('⚠️ convoySlotsFree : convois d’avant ET équipes sans le héros se partagent les créneaux', () => {
-    const now = 1000;
-    const enRoute = { returnAt: now + 1 };
-    const rentre = { returnAt: now };
-    const slots = caravanSlots(18); // 3
-    expect(convoySlotsFree(18, [], now)).toBe(slots);
-    expect(convoySlotsFree(18, [enRoute, enRoute], now)).toBe(slots - 2);
-    expect(convoySlotsFree(18, [enRoute, rentre], now)).toBe(slots - 1);
-    expect(convoySlotsFree(0, [enRoute, enRoute, enRoute], now)).toBe(0);
+    expect(offre(camp, true, 1).party).toBe(true);
+    expect(offre(recolte, true, 1).party).toBe(true);
+    expect(offre(camp, true, 0).party).toBe(false);
   });
 });
 
 describe('⚠️ ce qui est GRISÉ sur la carte', () => {
   // Le gris doit dire « rien ne peut y aller », jamais « le héros est occupé ».
   const gris = (p: Poi, heroAway: boolean, advsAvailable: number) => {
-    const o = poiOffers(p, { heroAway, comptoirLevel: 3, advsAvailable, slotsFree: 1 });
+    const o = poiOffers(p, { heroAway, comptoirLevel: 3, advsAvailable });
     return !o.hero && !o.party;
   };
 

@@ -67,7 +67,7 @@ describe('💎 le filon éphémère', () => {
 
   it('1 à 3 champions, jamais le héros', () => {
     const p = vein();
-    const send = (n: number, hero = false) => partySendBlocker(p, n, hero, 3, 20, null);
+    const send = (n: number, hero = false) => partySendBlocker(p, n, hero, 20, null);
     expect(send(1)).toBeNull();
     expect(send(3)).toBeNull();
     expect(send(4)).toBe('veinFull');
@@ -82,8 +82,7 @@ describe('💎 le filon éphémère', () => {
     const offers = poiOffers(p, {
       heroAway: false,
       comptoirLevel: 0,
-      advsAvailable: 2,
-      slotsFree: 1,
+      advsAvailable: 2,
     });
     expect(offers.hero).toBe(false);
     expect(offers.party).toBe(true);

@@ -252,7 +252,7 @@ describe('🏰 prise, production, reprise', () => {
 describe('🏰 qui peut partir, et comment', () => {
   const enemy = ctl(mapAt(5));
   const owned = ctl(captureControl(mapAt(5), ID, ['a0'], 0, 7));
-  const opts = { heroAway: false, comptoirLevel: 0, advsAvailable: 3, slotsFree: 2 };
+  const opts = { heroAway: false, comptoirLevel: 0, advsAvailable: 3 };
   it('se prend en groupe, jamais par le héros seul ; tenu, rien à envoyer', () => {
     expect(poiOffers(enemy, opts)).toMatchObject({ hero: false, party: true });
     expect(poiOffers(owned, opts)).toMatchObject({ hero: false, party: false });
@@ -263,12 +263,12 @@ describe('🏰 qui peut partir, et comment', () => {
     // Plus de plafond propre au point : celui du Panthéon seul.
     expect(partyCapFor(20, enemy, false)).toBe(20);
     expect(partyCapFor(20, enemy, true)).toBe(20);
-    expect(partySendBlocker(enemy, 8, false, 2, 20, 0.5)).toBeNull();
-    expect(partySendBlocker(enemy, 6, true, 2, 20, 0.5)).toBeNull();
-    expect(partySendBlocker(enemy, 21, false, 2, 20, 0.5)).toBe('tooMany');
+    expect(partySendBlocker(enemy, 8, false, 20, 0.5)).toBeNull();
+    expect(partySendBlocker(enemy, 6, true, 20, 0.5)).toBeNull();
+    expect(partySendBlocker(enemy, 21, false, 20, 0.5)).toBe('tooMany');
     // Le héros seul ne peut pas l'occuper : il rentre toujours.
-    expect(partySendBlocker(enemy, 0, true, 2, 20, 0.5)).toBe('controlEmpty');
-    expect(partySendBlocker(owned, 1, false, 2, 20, 0.5)).toBe('controlHeld');
+    expect(partySendBlocker(enemy, 0, true, 20, 0.5)).toBe('controlEmpty');
+    expect(partySendBlocker(owned, 1, false, 20, 0.5)).toBe('controlHeld');
     expect(partyHeroBlocker({ onExpedition: false, healMs: 0, outpost: true })).toBeNull();
   });
   it('pris avec une grosse équipe : seuls les choisis restent, aux places du point', () => {

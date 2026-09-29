@@ -167,14 +167,11 @@ export function denForce<S extends { size: number }>(
 }
 
 /** Pourquoi une ÉQUIPE ne peut pas partir — `null` s'il le peut.
- *  ⚠️ Une équipe SANS le héros prend un CRÉNEAU de l'Avant-poste (`convoySlotsFree`, le même
- *  pool que les convois d'avant) : c'est ce qui borne le NOMBRE d'équipes en parallèle, donc
- *  l'or et les pierres par jour. L'équipe du héros n'en prend pas : il est sa propre limite.
- *  SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
+ *  🧭 Plus de créneaux d'Avant-poste (limite retirée, demandé) : le NOMBRE d'équipes en
+ *  parallèle n'est borné que par le vivier disponible. SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
 export type PartySendBlock =
   | 'notTarget'
   | 'empty'
-  | 'slots'
   | 'tooMany'
   | 'hopeless'
   | 'controlEmpty'
@@ -185,7 +182,6 @@ export function partySendBlocker(
   poi: Poi,
   escortCount: number,
   hero: boolean,
-  slotsFree: number,
   cap: number,
   /** 🎯 Chance de revenir vainqueur (`partyWinChance`), `null` quand il n'y a RIEN à
    *  combattre (récolte sans gardes) ou rien à simuler. ⚠️ REQUIS : un paramètre qu'on peut
@@ -207,7 +203,6 @@ export function partySendBlocker(
     if (escortCount > VEIN_MAX_CHAMPIONS) return 'veinFull';
   }
   if (!hero && escortCount <= 0) return 'empty';
-  if (!hero && slotsFree <= 0) return 'slots';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
   if (escortCount > partyCapFor(cap)) return 'tooMany';
   // 💀 PERDU D'AVANCE (demandé par l'utilisateur) : aucune victoire sur tout l'échantillon
@@ -222,7 +217,6 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   hopeless: 'perdu d’avance — aucun d’eux n’en reviendrait vainqueur',
   notTarget: 'on n’envoie pas d’équipe sur ce lieu',
   empty: 'l’équipe est vide',
-  slots: 'tous les créneaux d’équipe de l’Avant-poste sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
   controlEmpty: 'il faut au moins un champion pour occuper le point — le héros, lui, rentre',
   controlHeld: 'ce point n’est pas à prendre (déjà à toi, ou une équipe y marche)',
@@ -233,11 +227,10 @@ export function canSendParty(
   poi: Poi,
   escortCount: number,
   hero: boolean,
-  slotsFree: number,
   cap: number,
   winChance: number | null,
 ): boolean {
-  return partySendBlocker(poi, escortCount, hero, slotsFree, cap, winChance) === null;
+  return partySendBlocker(poi, escortCount, hero, cap, winChance) === null;
 }
 
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.
@@ -377,7 +370,7 @@ export function baseWalkers(
  * ils sont (le lieu de mission à l'arrivée, ou le chemin du retour si leur point tombe en
  * route) et va à la ville. Sa durée = `legMs` (le trajet lieu → ville à leur pas) au
  * prorata de la distance qui reste. ⚠️ C'est un voyage de RETOUR pur (`sentAt` = `midAt`
- * = `at`) : il ne dépose aucun rapport (`wingOf`), ne prend aucun créneau, et ne porte
+ * = `at`) : il ne dépose aucun rapport (`wingOf`) et ne porte
  * aucun butin — le rapport du groupe l'a déjà.
  */
 export function walkToBase(

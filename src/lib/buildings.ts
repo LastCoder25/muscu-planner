@@ -125,15 +125,15 @@ export const BUILDING_TYPES: BuildingType[] = [
   // le VOYAGE, l'un pour le héros et l'autre pour les convois, et on montait l'un sans
   // comprendre pourquoi l'autre ne suivait pas.
   //
-  // ⚠️ TROIS LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
+  // ⚠️ DEUX LEVIERS, et c'est ce qui le garde vivant du niveau 1 au 100 (règle v0.731) :
   // le TRAJET du héros (`travelTimeMult`, asymptotique ; les champions en ont la moitié, v0.1049), la TAILLE DE LA
   // CARTE révélée et son nombre de lieux (`revealRadius` / `mapQuota`, qui grandissent à
-  // chaque cran — v0.1047), et le NOMBRE d'équipes en parallèle (`caravanSlots`, un PALIER
-  // tous les 9 niveaux).
+  // chaque cran — v0.1047). ⚠️ Le NOMBRE d'équipes en parallèle n'est plus borné (limite
+  // retirée, demandé) : seul le vivier disponible le limite.
   {
     id: 'outpost',
     perLevelNote:
-      'carte plus grande avec plus de lieux, trajets plus courts à chaque niveau (héros ; champions à moitié), +1 équipe en parallèle tous les 9 niveaux',
+      'carte plus grande avec plus de lieux, trajets plus courts à chaque niveau (héros ; champions à moitié)',
     label: 'Avant-poste d’expédition',
     emoji: '🧭',
     category: 'utility',
@@ -149,7 +149,7 @@ export const BUILDING_TYPES: BuildingType[] = [
       where:
         'Ici, sur la carte : envoie ton héros explorer, ou une équipe de champions à ta place.',
     },
-    desc: 'Débloque les expéditions. Chaque niveau repousse le brouillard (la carte s’agrandit et se peuple de nouveaux lieux et failles), raccourcit les trajets du héros et des champions, et ajoute une équipe en parallèle tous les 9 niveaux.',
+    desc: 'Débloque les expéditions. Chaque niveau repousse le brouillard (la carte s’agrandit et se peuple de nouveaux lieux et failles), et raccourcit les trajets du héros et des champions.',
   },
   // Utilitaire UNIQUE : la PORTE DU LABYRINTHE débloque le Labyrinthe (donjon à
   // étages, source unique des familiers). Chaque niveau AMÉLIORE la qualité du butin
@@ -247,9 +247,8 @@ export const BUILDING_TYPES: BuildingType[] = [
   // ⚠️ IL RESTE PORTEUR, et c'est MESURÉ : `guardUnits` fait défendre tout le vivier qu'on
   // lui passe, et un groupe envoyé sur un camp n'a AUCUN maximum. Tenue d'un siège,
   // enceinte à niveau, sans héros — **11 % à 0 champion, 65 % à 5, 95 % à 10, 100 % à 20**
-  // au niveau 12. ⚠️ Et **les convois n'y changent rien** : ils bornent le nombre de
-  // CONVOIS (`caravanSlots`) et la taille d'une escorte (`escortMax`), pas la défense ni
-  // les camps.
+  // au niveau 12. ⚠️ Et **les convois n'y changent rien** : ils bornent la taille d'une
+  // escorte (`escortMax`), pas la défense ni les camps.
   //
   // ⚠️ AUCUNE REMISE sur le prix d'un tirage, aussi tentant que ce soit : c'est mot pour
   // mot la remise de l'Autel des boss, RETIRÉE en v0.799 parce qu'elle coupait de moitié
