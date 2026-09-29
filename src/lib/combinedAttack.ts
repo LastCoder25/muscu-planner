@@ -36,6 +36,11 @@ export interface AttackWing {
   /** Ceux qui sont VRAIMENT partis (une fois `gone`). */
   gone?: string[];
   heroGone?: boolean;
+  /** 🏰 Assaut d'un point fixe : le retour de CE groupe si le point est pris (minutes) —
+   *  seuls son héros et ses champions qui ne restent pas en garnison rentrent, à LEUR pas ;
+   *  0 si personne. Estimé à l'envoi (affichage), recalculé au lancement avec ceux qui
+   *  sont vraiment partis. Absent hors assaut : le retour est `legMin`. */
+  wonLegMin?: number;
 }
 
 export interface CombinedAttack {
@@ -252,6 +257,7 @@ export function attackWingVoyages(
     returnAt: number;
     dwellMs: number;
     origin?: { x: number; y: number };
+    returnLegs?: { won: number; lost: number };
   };
 }[] {
   const out = [];
@@ -271,6 +277,9 @@ export function attackWingVoyages(
           midAt: a.midAt,
           returnAt: w.returnAt,
           dwellMs: Math.max(0, a.midAt - a.arriveAt),
+          ...(w.wonLegMin !== undefined
+            ? { returnLegs: { won: w.wonLegMin, lost: w.legMin } }
+            : {}),
           ...(home ? { origin: { x: home.x, y: home.y } } : {}),
         },
       });

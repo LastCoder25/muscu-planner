@@ -663,6 +663,10 @@ export interface ActiveExpedition {
   /** ⚔️🧭 Un groupe-COMPAGNON d'une attaque combinée : il voyage (tracé, retour) mais ne
    *  dépose AUCUN rapport — c'est le groupe principal qui porte le combat. */
   wingOf?: string;
+  /** ⚔️🧭 Les champions de CE voyage, quand il n'est qu'un groupe d'une attaque combinée :
+   *  le rapport (`outcome.party.escort`) est partagé par tous les groupes et les liste tous.
+   *  Absent pour une équipe ordinaire (son escorte EST le voyage) — `tripCrew`. */
+  crew?: string[];
   /** 🏰 ASSAUT d'un point fixe : le retour (minutes) selon l'issue. `lost` = tout le monde
    *  rentre, au pas de toute l'équipe ; `won` = seuls le héros et les champions en trop
    *  rentrent, à LEUR pas (0 si personne ne rentre). `returnAt` vaut d'abord `lost`, et n'est
