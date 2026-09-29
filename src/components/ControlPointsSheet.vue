@@ -75,7 +75,25 @@
               <span v-if="r.reinforcing.length" class="pill"
                 >🧭 +{{ r.reinforcing.length }} en route</span
               >
-              <span v-if="r.ready" class="pill go">🎁 à récolter</span>
+            </span>
+            <!-- 🖼️ Qui tient la place, d'un coup d'œil (demandé) : une miniature par champion
+                 posté, une par milicien. Visible sans déplier la tuile. -->
+            <span
+              v-if="r.status !== 'enemy' && r.status !== 'assault' && r.garrison.length"
+              class="cps-minis"
+            >
+              <span v-for="a in advsOf(r.garrison)" :key="a.id" class="mini" :title="a.name"
+                ><ChampionPortrait :champion-id="a.championId">{{
+                  advTitle(a)?.emoji ?? '🧑'
+                }}</ChampionPortrait></span
+              >
+              <span
+                v-for="id in milOf(r.garrison)"
+                :key="id"
+                class="mini mil"
+                :title="MILITIA_NAME"
+                >{{ MILITIA_EMO }}</span
+              >
             </span>
           </span>
           <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
@@ -165,7 +183,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import type { Adventurer } from '@/lib/adventurers';
+import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { rankStarStr } from '@/lib/characterRank';
 import {
   CONTROL_EMO,
@@ -381,11 +400,26 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   color: var(--d4);
   border-color: color-mix(in srgb, var(--d4) 50%, transparent);
 }
-.pill.go {
-  background: var(--accent);
-  color: #15120e;
-  border-color: var(--accent);
-  font-weight: 700;
+.cps-minis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mini {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  font-size: 24px;
+  line-height: 1;
+  border-radius: 7px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.mini.mil {
+  font-size: 17px;
+  border-style: dashed;
 }
 .cps-chev {
   color: var(--dim);

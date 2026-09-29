@@ -2052,6 +2052,12 @@ describe('🔀 FusionPanel', () => {
     expect(out).toContain('En garnison');
     expect(out.match(/class="mil-tile"/g)?.length).toBe(3);
     expect(out).toContain('Milicien');
+    // 🖼️ Sur la ligne (sans déplier) : une miniature par champion posté, une par milicien
+    // posté — ceux en route n'en ont pas.
+    expect(out.match(/class="mini"/g)?.length).toBe(1);
+    expect(out.match(/class="mini mil"/g)?.length).toBe(2);
+    // Retiré (demandé) : il fallait de toute façon ouvrir le lieu pour récolter.
+    expect(out).not.toContain('à récolter');
   }, 30_000);
 });
 
