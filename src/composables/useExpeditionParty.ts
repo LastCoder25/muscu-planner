@@ -29,7 +29,7 @@ import {
   type GainTeam,
 } from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
-import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
+import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
 import { COMBINED_BLOCK_LABEL, byReach, combinedBlocker, wingOriginId } from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
@@ -121,21 +121,14 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyEscort.value = [];
     partyStay.value = [];
   });
-  /** Un champion de garnison prêt à sortir : ni en route vers le point, ni blessé. */
-  const readyAt = (a: Adventurer, t: number) => (a.hurtUntil ?? 0) <= t && (a.busyUntil ?? 0) <= t;
   /** ⚠️ Une CHAÎNE (point → ids prêts) recalculée au tick, qui ne réveille les listes que si
-   *  quelqu'un change d'état — même principe que `freeKey` de la page. */
-  const garrisonKey = computed(() => {
-    const map = char.row?.expedition_map;
-    return (map?.pois ?? [])
-      .filter((p) => p.control?.owner === 'player')
-      .map((p) => {
-        const ids = garrisonChampionIds(map, p.id);
-        const ready = char.advList.filter((a) => ids.includes(a.id) && readyAt(a, now.value));
-        return `${p.id}=${ready.map((a) => a.id).join(',')}`;
-      })
-      .join('|');
-  });
+   *  quelqu'un change d'état — même principe que `freeKey` de la page. « Prêt à sortir » est
+   *  la règle de la lib (`readyGarrisons`), partagée avec le grisage de la carte. */
+  const garrisonKey = computed(() =>
+    [...readyGarrisons(char.row?.expedition_map, char.advList, now.value)]
+      .map(([id, ready]) => `${id}=${ready.map((a) => a.id).join(',')}`)
+      .join('|'),
+  );
   const readyByPoint = computed(() => {
     const out = new Map<string, Adventurer[]>();
     for (const part of garrisonKey.value ? garrisonKey.value.split('|') : []) {
