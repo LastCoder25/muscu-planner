@@ -680,6 +680,7 @@
             <b>×{{ partyXpSplit.toFixed(2).replace('.', ',') }}</b> chacun
             <span v-if="!partyHeroOn"> · 🧭 seuls, ils apprennent plus</span>
           </p>
+          <p v-if="controlReturnNote" class="car-cap">↩️ {{ controlReturnNote }}</p>
           <div v-if="stayChoice" class="stay-pick">
             <p class="car-cap">
               🏰 <b>Qui reste ?</b> {{ stayIds.length }}/{{ stayCap }} en garnison · les autres
@@ -940,7 +941,7 @@ import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
-import { winClass, type PoiFact } from '@/lib/poiFacts';
+import { controlReturnNote as returnNote, winClass, type PoiFact } from '@/lib/poiFacts';
 import { usePoiFilters } from '@/composables/usePoiFilters';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
@@ -2484,14 +2485,34 @@ const poiFacts = computed<PoiFact[]>(() => {
   }
   // L'équipe.
   if (partyTarget.value) {
-    out.push({
-      icon: '⏱️',
-      label: 'Trajet',
-      value: partySize.value ? formatDurationMin(partyMin.value) : '—',
-      cls: partySize.value ? undefined : 'dim',
-      go: true,
-      title: partySize.value ? 'Aller-retour de l’équipe' : 'Compose ton équipe pour le connaître',
-    });
+    const leg = (min: number, title: string) =>
+      partySize.value
+        ? { value: formatDurationMin(min), title }
+        : { value: '—', cls: 'dim', title: 'Compose ton équipe pour le connaître' };
+    // 🏰 Un point fixe : si l'équipe le prend, elle y RESTE — un aller-retour ne dirait rien.
+    // Le retour ne concerne que ceux qui rentrent (`controlReturnNote`).
+    if (p.type === 'control')
+      out.push(
+        {
+          icon: '🚶',
+          label: 'Aller',
+          go: true,
+          ...leg(partyLeg.value, 'Temps pour atteindre le point'),
+        },
+        {
+          icon: '↩️',
+          label: 'Retour',
+          go: true,
+          ...leg(partyLeg.value, controlReturnNote.value ?? ''),
+        },
+      );
+    else
+      out.push({
+        icon: '⏱️',
+        label: 'Trajet',
+        go: true,
+        ...leg(partyMin.value, 'Aller-retour de l’équipe'),
+      });
     // 💎 Un filon : le temps d'extraction dépend du nombre de champions — c'est tout son choix.
     if (p.type === 'vein') {
       const n = Math.max(1, partyAdvs.value.length);
@@ -2852,6 +2873,7 @@ const {
   toggleSupply,
   partyRoad,
   partyWin,
+  partyLeg,
   partyMin,
   partyRisk,
   partySendBlock,
@@ -2893,6 +2915,12 @@ const {
   progressReady: progress.ready,
   settleDueSiege,
 });
+/** 🏰 Qui rentre d'un assaut sur un point fixe, et en combien de temps (`controlReturnNote`). */
+const controlReturnNote = computed(() =>
+  selected.value?.control?.owner === 'enemy' && partyTarget.value && partySize.value
+    ? returnNote(partyLeg.value, partyHeroOn.value, partyAdvs.value.length, stayCap.value)
+    : null,
+);
 const booting = ref(true);
 onMounted(async () => {
   setTimeout(() => (booting.value = false), 750);

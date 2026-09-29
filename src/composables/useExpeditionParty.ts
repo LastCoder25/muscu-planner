@@ -362,10 +362,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
     );
     return b ? COMBINED_BLOCK_LABEL[b] : null;
   });
-  const partyMin = computed(() => {
+  /** Trajet ALLER de l'équipe (minutes). Le retour vaut l'aller : c'est la règle du store
+   *  (`startParty` : `returnAt = midAt + leg`). ⚔️🧭 Attaque combinée : l'aller commun, celui
+   *  du groupe le plus lointain, qui est aussi le dernier à rentrer. */
+  const partyLeg = computed(() => {
     if (!selected.value || !partySize.value) return 0;
-    // ⚔️🧭 Attaque combinée : aller commun (le plus long), puis retour du plus lointain.
-    if (combined.value) return 2 * Math.max(1, ...wingPlan.value.map((w) => w.legMin));
+    if (combined.value) return Math.max(1, ...wingPlan.value.map((w) => w.legMin));
     const legOf = (p: Poi) =>
       partyLegMin(p, partyAdvs.value, {
         hero: partyHeroOn.value,
@@ -375,12 +377,14 @@ export function useExpeditionParty(ctx: PartyCtx) {
       });
     const o = originPoi.value;
     // 🏰 Une sortie part de son point (même règle que le store, `legFromSpot`).
-    return (
-      2 *
-      interceptLeg(selected.value, coarseNow.value, o ? (p) => legFromSpot(p, o, legOf) : legOf)
-        .legMin
-    );
+    return interceptLeg(
+      selected.value,
+      coarseNow.value,
+      o ? (p) => legFromSpot(p, o, legOf) : legOf,
+    ).legMin;
   });
+  /** Aller-retour de l'équipe (minutes). */
+  const partyMin = computed(() => 2 * partyLeg.value);
   /** ⚠️ CE QUE LE DÉPART COÛTE face à l'armée qui arrive — mêmes règles que le convoi et le
    *  héros (`departureRisk`) : le groupe quitte la base (et le héros avec lui s'il en est),
    *  et un groupe rentré AVANT l'assaut ne coûte rien. */
@@ -637,6 +641,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     toggleSupply,
     partyRoad,
     partyWin,
+    partyLeg,
     partyMin,
     partyRisk,
     partySendBlock,
