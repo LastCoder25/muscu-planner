@@ -639,7 +639,7 @@
           <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
                puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
           <div ref="reinfAnchor" />
-          <template v-if="controlFree > 0">
+          <template v-if="reinfOpen && controlFree > 0">
             <p class="ctl-line ctl-reinf">
               ➕
               <b
@@ -672,7 +672,7 @@
           <!-- 🛡️ DES MILICIENS (Caserne) : ils complètent la garnison jusqu'à 5, champions
                compris. Ils font tourner le lieu, mais n'apprennent rien et meurent s'ils
                tombent. -->
-          <template v-if="militiaBuilt || milHome > 0">
+          <template v-if="reinfOpen && (militiaBuilt || milHome > 0)">
             <div class="mil-send">
               <span class="mil-send-lab"
                 ><span class="mil-inline"><MilitiaPortrait /></span> Miliciens
@@ -1913,8 +1913,13 @@ const garrisonSlots = computed(() =>
   })),
 );
 const reinfAnchor = ref<HTMLElement | null>(null);
+/** ➕ Les candidats au renfort (champions et miliciens disponibles) restent CACHÉS tant que le
+ *  joueur n'a pas touché une case vide de la garnison (demandé) : la fiche d'un point tenu se
+ *  lit d'abord comme ce qu'il produit et qui le tient, pas comme une liste de recrues. */
+const reinfOpen = ref(false);
 function goReinforce() {
-  reinfAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  reinfOpen.value = true;
+  void nextTick(() => reinfAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 /** Les sélections de la fiche : qui ramener, qui envoyer en renfort. ⚠️ Déclarées AVANT le
  *  stepper de milice, dont le `watch` les lit dès le setup (zone morte temporelle sinon). */
@@ -1965,6 +1970,7 @@ watch(
     ctlRecallSel.value = [];
     ctlReinfSel.value = [];
     milSend.value = 0;
+    reinfOpen.value = false;
   },
 );
 function toggleRecall(id: string) {
