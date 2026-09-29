@@ -21,6 +21,10 @@
         {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion ·
         {{ milFree }} au total · un toucher l’envoie
       </p>
+      <!-- 🛡️ La tenue À L'ATTAQUE, et ce que chaque renfort y ajoute (arrivée comprise). -->
+      <p v-if="hold" class="qr-hold">
+        🛡️ Repousse aujourd’hui environ <b>{{ hold.pct }} %</b> des assauts
+      </p>
       <!-- 🛡️ Le milicien d'abord : c'est le renfort qu'on a le plus souvent sous la main, et il
            ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
       <button
@@ -34,7 +38,8 @@
         <span class="qr-mil-main">
           <span class="qr-mil-name">Un {{ MILITIA_NAME.toLowerCase() }}</span>
           <span class="qr-mil-sub"
-            >{{ milHome }} à la base · 🧭 {{ formatDurationMin(militiaMin) }}</span
+            >{{ milHome }} à la base · 🧭 {{ formatDurationMin(militiaMin)
+            }}<template v-if="hold"> · 🎯 {{ sign(hold.mil) }} %</template></span
           >
         </span>
       </button>
@@ -46,6 +51,7 @@
             :key="a.id"
             :adv="a"
             :on="false"
+            :gain="hold?.champ[a.id] ?? null"
             :reason="busy ? '…' : null"
             @toggle="emit('champion', a.id)"
           />
@@ -79,7 +85,12 @@
               >
               <span class="qr-mem-main">
                 <span class="qr-mem-name">{{ m.adv ? m.adv.name : MILITIA_NAME }}</span>
-                <span class="qr-mem-sub">🧭 {{ formatDurationMin(m.min) }}</span>
+                <span class="qr-mem-sub"
+                  >🧭 {{ formatDurationMin(m.min)
+                  }}<template v-if="hold && hold.trans[m.id] !== undefined">
+                    · 🎯 {{ sign(hold.trans[m.id]!) }} %</template
+                  ></span
+                >
               </span>
             </button>
           </div>
@@ -116,7 +127,16 @@ defineProps<{
     members: { id: string; adv: Adventurer | null; min: number }[];
   }[];
   busy: boolean;
+  /** 🎯 La tenue à l'attaque (%) et ce que chaque renfort y ajoute, en points. */
+  hold: {
+    pct: number;
+    mil: number;
+    champ: Record<string, number>;
+    trans: Record<string, number>;
+  } | null;
 }>();
+/** « +12 », « −3 », « 0 » : un écart se lit avec son signe. */
+const sign = (n: number) => (n > 0 ? `+${n}` : n < 0 ? `−${-n}` : '0');
 const emit = defineEmits<{
   close: [];
   champion: [string];
@@ -134,6 +154,11 @@ const emit = defineEmits<{
   background: var(--surface);
   border-radius: 16px 16px 0 0;
   padding: 12px 12px 20px;
+}
+.qr-hold {
+  margin: 4px 0 8px;
+  font-size: 12.5px;
+  color: var(--d1, #7bc86c);
 }
 .qr-head {
   display: flex;

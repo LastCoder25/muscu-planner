@@ -2274,6 +2274,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
             },
           ],
           busy: false,
+          hold: { pct: 62, mil: 4, champ: { [ROW.adventurers[0].id]: 11 }, trans: { a2: -3 } },
           onChampion: (a: string) => champs.push(a),
           onMilitia: () => mil++,
           onTransfer: (from: string, id: string) => moved.push(from + ':' + id),
@@ -2298,6 +2299,11 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     expect(out).toContain('Forge');
     expect(out.match(/class="qr-mem"/g)?.length).toBe(2);
     expect(moved).toEqual(['forge:mil:9']);
+    // 🛡️ La tenue à l'attaque et ce que chaque renfort y ajoute.
+    expect(out).toContain('62 %');
+    expect(out).toContain('🎯 +4 %');
+    expect(out).toContain('🎯 +11 %');
+    expect(out).toContain('🎯 −3 %');
   }, 30_000);
 });
 

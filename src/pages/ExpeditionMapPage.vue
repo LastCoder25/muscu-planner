@@ -326,6 +326,7 @@
       :mil-home="milHome"
       :militia-min="quickMilitiaMin"
       :sources="quickSources"
+      :hold="quickHold"
       :busy="ctlBusy"
       @close="quickId = null"
       @champion="quickChampion"
@@ -458,6 +459,20 @@
             ⚔️ L’ennemi reviendra, prévenu au dernier moment — plus souvent si tu t’entraînes
             beaucoup. Force inconnue : ta garnison ne gagnera pas toujours.
           </p>
+          <!-- 🛡️ LA TENUE À L'ATTAQUE (demandé) : jugée sur ceux qui seront LÀ — garnison et
+               renforts arrivés avant l'assaut (`defendersAtAttack`), contre l'ennemi le plus fort
+               possible. L'heure restant secrète hors de la fenêtre imminente, les renforts en
+               route y comptent tous. -->
+          <p v-if="defenseNow" class="ctl-line ctl-hold">
+            🛡️ À l’attaque : <b>{{ defenseNow.count }}</b> défenseur{{
+              defenseNow.count > 1 ? 's' : ''
+            }}
+            · repousse environ <b>{{ defenseNow.pct }} %</b> des assauts
+            <span v-if="defenseNow.late" class="ctl-dim">
+              · {{ defenseNow.late }} renfort{{ defenseNow.late > 1 ? 's' : '' }} arrivera trop
+              tard</span
+            >
+          </p>
           <div class="send-bar">
             <button
               v-if="liveControl.kind !== 'tower'"
@@ -489,6 +504,7 @@
                 :key="a.id"
                 :adv="a"
                 :on="ctlReinfSel.includes(a.id)"
+                :gain="reinfGain[a.id] ?? null"
                 @toggle="toggleReinf(a.id)"
               />
             </div>
@@ -547,6 +563,14 @@
               </button>
             </div>
           </template>
+          <!-- 🎯 Le % AVEC le renfort choisi (champions ET miliciens), arrivée comprise. -->
+          <p v-if="defenseWithSel && defenseNow" class="ctl-line ctl-hold">
+            🛡️ Avec ce renfort : repousse environ <b>{{ defenseWithSel.pct }} %</b>
+            <span class="ctl-dim">(au lieu de {{ defenseNow.pct }} %)</span>
+            <span v-if="defenseWithSel.late > defenseNow.late" class="ctl-warn-inline">
+              · il arrivera trop tard</span
+            >
+          </p>
           <button
             v-if="controlCount"
             type="button"
@@ -1060,7 +1084,10 @@ import {
   runeStock,
   seatsOf,
   attackImminent,
+  controlDefenseHold,
+  defendersAtAttack,
   imminentControlKey,
+  knownAttackAt,
   reinforcementsEnRoute,
   returnsEnRoute,
 } from '@/lib/controlPoints';
@@ -1081,7 +1108,7 @@ import {
   transferBlocker,
   transferSourcesFor,
 } from '@/lib/controlRoutes';
-import { MILITIA, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
+import { MILITIA, MILITIA_NAME, MILITIA_PREFIX, isMilitiaId, militiaIn } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{ embedded?: boolean }>();
@@ -1747,6 +1774,60 @@ const reinforceLegMin = computed(() => {
     gearSpeed: advGearRoles(escort, char.advGearStock).speed,
   });
 });
+/** 🛡️ La tenue d'un point tenu À L'HEURE DE L'ATTAQUE, avec d'éventuels renforts `extra`
+ *  (arrivée en ms) — `defendersAtAttack` puis `controlDefenseHold`, la règle de la bataille.
+ *  ⚠️ Sur l'horloge GROSSIÈRE : une simulation par appel, pas une par seconde. */
+function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
+  const c = p?.control;
+  if (!p || !c || c.owner !== 'player') return null;
+  const at = knownAttackAt(p, coarseNow.value);
+  const { present, late } = defendersAtAttack(c, at, extra);
+  const hold = controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
+  return { pct: Math.round(hold * 100), count: present.length, late: late.length };
+}
+/** Les renforts `ids` (champions) partent ensemble : ils arrivent au pas du plus lent,
+ *  comme au départ réel (`partyLegMin`). Les miliciens choisis suivent à leur pas. */
+function reinfExtra(p: Poi, ids: readonly string[]) {
+  const t = coarseNow.value;
+  const escort = char.advList.filter((a) => ids.includes(a.id));
+  const leg = escort.length
+    ? partyLegMin(p, escort, {
+        hero: false,
+        travelMult: travelMult.value,
+        gearSpeed: advGearRoles(escort, char.advGearStock).speed,
+      })
+    : 0;
+  return [
+    ...escort.map((a) => ({ id: a.id, at: t + leg * 60_000 })),
+    ...Array.from({ length: milSend.value }, (_, i) => ({
+      id: `${MILITIA_PREFIX}new${i}`,
+      at: t + militiaLegMin.value * 60_000,
+    })),
+  ];
+}
+const defenseNow = computed(() => defenseOf(livePoi.value));
+const defenseWithSel = computed(() => {
+  const p = livePoi.value;
+  if (!p || (!ctlReinfSel.value.length && milSend.value <= 0)) return null;
+  return defenseOf(p, reinfExtra(p, ctlReinfSel.value));
+});
+/** 🎯 Ce que chaque champion change à la tenue : coché, ce qu'on perdrait sans lui ; non
+ *  coché, ce qu'on gagnerait en l'ajoutant (le langage de `AdvPickTile`). */
+const reinfGain = computed<Record<string, number>>(() => {
+  const p = livePoi.value;
+  if (!p || controlFree.value <= 0) return {};
+  const sel = ctlReinfSel.value;
+  const base = defenseOf(p, reinfExtra(p, sel))?.pct ?? 0;
+  const out: Record<string, number> = {};
+  for (const a of freeSorted.value) {
+    const on = sel.includes(a.id);
+    if (!on && sel.length >= controlFree.value) continue;
+    const other =
+      defenseOf(p, reinfExtra(p, on ? sel.filter((x) => x !== a.id) : [...sel, a.id]))?.pct ?? 0;
+    out[a.id] = on ? base - other : other - base;
+  }
+  return out;
+});
 /** ⇄ Les autres points TENUS vers lesquels transférer la sélection : le trajet (la règle du
  *  store — `legFromSpot`, champions à leur pas, miliciens au pas d'une équipe sans rôle, le
  *  plus lent des deux) et la raison d'un refus (`transferBlocker`). */
@@ -2371,6 +2452,34 @@ const quickPoi = computed(
 const quickMilitiaMin = computed(() =>
   quickPoi.value ? caravanLegMin(quickPoi.value, [], 0, travelMult.value) : 0,
 );
+/** 🎯 Le renfort direct annonce la tenue du point À L'ATTAQUE, et ce que chaque renfort y
+ *  ajouterait (son arrivée comprise : un renfort trop lent n'ajoute rien). */
+const quickHold = computed(() => {
+  const p = quickPoi.value;
+  const base = defenseOf(p);
+  if (!p || !base) return null;
+  const t = coarseNow.value;
+  const gainOf = (id: string, min: number) =>
+    (defenseOf(p, [{ id, at: t + min * 60_000 }])?.pct ?? 0) - base.pct;
+  const champ: Record<string, number> = {};
+  for (const a of freeSorted.value)
+    champ[a.id] = gainOf(
+      a.id,
+      partyLegMin(p, [a], {
+        hero: false,
+        travelMult: travelMult.value,
+        gearSpeed: advGearRoles([a], char.advGearStock).speed,
+      }),
+    );
+  const trans: Record<string, number> = {};
+  for (const s of quickSources.value) for (const m of s.members) trans[m.id] = gainOf(m.id, m.min);
+  return {
+    pct: base.pct,
+    mil: gainOf(`${MILITIA_PREFIX}new0`, quickMilitiaMin.value),
+    champ,
+    trans,
+  };
+});
 /** ⇄ Les membres des AUTRES points tenus qui peuvent venir, avec leur trajet depuis leur
  *  point — la règle et le trajet du store (`transferBlocker`, `legFromSpot`). */
 const quickSources = computed(() => {
@@ -3589,6 +3698,12 @@ onUnmounted(() => {
 }
 .ctl-alert {
   color: var(--d4, #ff6a45);
+}
+.ctl-hold {
+  color: var(--d1, #7bc86c);
+}
+.ctl-warn-inline {
+  color: var(--d3, #ffb23f);
 }
 .ctl-reinf {
   margin-top: 10px;

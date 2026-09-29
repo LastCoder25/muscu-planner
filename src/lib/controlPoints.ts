@@ -20,12 +20,12 @@
 import { formatDuration } from './duration';
 import { mulberry32, seedOf } from './combat';
 import { advAscensionCap, advBankedLevel, advXpToNext, type Adventurer } from './adventurers';
-import { catchUpMult } from './caravan';
+import { catchUpMult, partyAllies, type EscortKit } from './caravan';
 import { grantAdvGearXp, wornGear, type AdvGear } from './advGear';
 import { pickTier, placeRuneOdds, type RuneTier } from './skillRunes';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
-import { MILITIA, isMilitiaId } from './militia';
+import { MILITIA, isMilitiaId, militiaUnits } from './militia';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
@@ -471,6 +471,46 @@ export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[]): number {
 /** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`). */
 export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
   return garrisonHoldChance(p, allies, retakeBoost(p, allies));
+}
+
+/** ⏰ L'heure de l'attaque, telle que le joueur la CONNAÎT : seulement dans les dernières
+ *  heures (`attackImminent`). Avant, elle reste secrète (v0.1239) — on compte alors tous les
+ *  renforts en route comme arrivés, sinon un renfort « en retard » trahirait l'heure. */
+export function knownAttackAt(p: Poi, now: number): number | null {
+  return attackImminent(p, now) ? (p.control!.attackAt ?? null) : null;
+}
+
+/** 🛡️ Qui DÉFENDRA le point : la garnison, puis les renforts (en route, ou `extra` qu'on
+ *  s'apprête à envoyer) arrivés AU PLUS TARD à l'attaque — la règle de
+ *  `settleReinforcements`, qui s'arrête à `attackAt`. `late` = ceux qui arriveront après. */
+export function defendersAtAttack(
+  c: ControlState,
+  attackAt: number | null,
+  extra: readonly { id: string; at: number }[] = [],
+): { present: string[]; late: string[] } {
+  const present = [...c.garrison];
+  const late: string[] = [];
+  for (const r of [...(c.reinforcing ?? []), ...extra]) {
+    if (attackAt === null || r.at <= attackAt) present.push(r.id);
+    else late.push(r.id);
+  }
+  return { present, late };
+}
+
+/** 🎯 La part des attaques que ces défenseurs repousseront — champions (avec compagnons et
+ *  pièces) ET miliciens, contre l'ennemi le plus fort possible (niveau du héros : un
+ *  PLANCHER, jamais une promesse), renfort ennemi compris (`garrisonHold`). */
+export function controlDefenseHold(
+  p: Poi,
+  ids: readonly string[],
+  advs: readonly Adventurer[],
+  kit: EscortKit,
+  playerLevel: number,
+): number {
+  const set = new Set(ids);
+  const champs = advs.filter((a) => set.has(a.id));
+  const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
+  return garrisonHold({ ...p, level: Math.max(1, playerLevel) }, allies);
 }
 
 /** La troupe qui vient REPRENDRE le point — tirée sur l'instant de l'attaque. */
