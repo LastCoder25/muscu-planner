@@ -184,16 +184,33 @@ describe('⚔️ resolveFieldArmy — un camp, dont les abattus quittent l’arm
     expect(h).toMatchObject({ kind: 'siege', targetId: raid.id, at: arrive });
     expect(h.part).toBeCloseTo(o.win ? 1 : o.party!.slain / o.party!.foes, 9);
   });
-  it('⚠️ même vaincus, ils rentrent avec le 💠 des abattus', () => {
+  it('⚠️ même vaincus, ils rentrent avec le BUTIN DE LA FACTION des abattus — pas de 💠', () => {
     let seen = 0;
     for (let s = 1; s <= 40; s++) {
       const o = resolveFieldArmy(input(2, s));
       if (o.win || !o.party!.slain) continue;
       seen++;
-      expect(o.mana).toBeGreaterThan(0);
+      expect(o.mana).toBe(0);
+      const loot =
+        o.gold + o.summonStones + Object.values(o.supplies ?? {}).reduce((a, b) => a + b, 0);
+      if (raid.faction !== 'betes') expect(loot).toBeGreaterThan(0);
       expect(o.party!.hurt.length).toBeGreaterThan(0);
     }
     expect(seen, 'aucune défaite avec des abattus : le test ne prouve rien').toBeGreaterThan(0);
+  });
+  it('🕳️ une armée sortie d’une FAILLE rend du 💠, et pas le butin de faction', () => {
+    const riftRaid = { ...raid, overflow: { faction: raid.faction, level: 30, at: 0 } };
+    const rp = siegeArmyPoi(riftRaid, 200, arrive - H, 30)!;
+    expect(rp.army!.rift).toBe(true);
+    let seen = 0;
+    for (let s = 1; s <= 40; s++) {
+      const o = resolveFieldArmy({ ...input(2, s), poi: rp });
+      if (!o.party!.slain) continue;
+      seen++;
+      expect(o.mana).toBeGreaterThan(0);
+      expect(o.gold + o.summonStones).toBe(0);
+    }
+    expect(seen).toBeGreaterThan(0);
   });
   it('💠 au prorata de ce qui tombe, toute l’armée = une défense entière', () => {
     expect(fieldArmyMana(6, 0, 30)).toBe(0);

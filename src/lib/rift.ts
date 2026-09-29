@@ -243,6 +243,9 @@ export function riftMana(foes: number, level: number): number {
  * payer au corps ferait des bêtes la faction la plus rentable.
  */
 export function siegeMana(raid: Raid, report: Pick<RaidReport, 'log'>): number {
+  // ⚠️ SEULES LES ARMÉES DE FAILLE DONNENT DU MANA (2026-09-29, décision de l'utilisateur) :
+  // une armée ordinaire laisse le butin de sa faction (`lootCorpses`), pas du 💠.
+  if (!raid.overflow) return 0;
   const att = siegeAttackers(raid);
   const total = att.reduce((a, u) => a + u.pv, 0);
   if (total <= 0) return 0;

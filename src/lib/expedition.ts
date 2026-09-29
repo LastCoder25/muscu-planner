@@ -253,6 +253,9 @@ export interface FieldArmyTag {
   faction: RaidFaction;
   /** Sa force en RASE CAMPAGNE, en champions de référence (`campFoe`) — ce qu'il en reste. */
   size: number;
+  /** 🕳️ Elle sort d'une FAILLE (siège né d'un débordement) : seule une armée de faille rend
+   *  du mana 💠 ; les autres laissent le butin de leur faction. */
+  rift?: true;
 }
 /** ⚔️🗼 Ce qu'une attaque en rase campagne a fait à l'armée — porté par le rapport, appliqué au
  *  siège (ou à la reprise) à l'heure du choc (`applyFieldHit`). */

@@ -929,7 +929,7 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
+import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import { armyTrajectory, fieldArmySpec, type ArmyPath } from '@/lib/fieldArmy';
 import { poiRank } from '@/lib/poiRank';
 import {
@@ -1926,7 +1926,13 @@ function celebrateHarvest(
   const where = kind ? CONTROL_LABEL[kind] : 'Place forte';
   // ⛲ Le mana a son bandeau discret (il ne se pose pas dans le panier des consommables).
   if (got.mana)
-    gameFx.celebrate({ kind: 'generic', emoji: '💠', title: `+${got.mana} pierres de mana`, subtitle: where, quiet: true });
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '💠',
+      title: `+${got.mana} pierres de mana`,
+      subtitle: where,
+      quiet: true,
+    });
   gameFx.celebrateHarvest(
     got.supplies,
     got.runes,
@@ -2834,8 +2840,11 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   lair: (p) => campRewardLabel(p),
   arena: () => 'objets + pierres 🔮 selon les vagues',
   rift: () => 'mana 💠',
+  // ⚠️ Seules les armées de FAILLE rendent du mana ; les autres, le butin de leur faction.
   warband: (p) =>
-    p.army ? 'mana 💠 · chaque ennemi abattu n’attaquera pas' : 'mana 💠 · siège non renforcé',
+    p.army
+      ? `${p.army.rift ? 'mana 💠' : FACTION_LOOT_LABEL[p.army.faction]} · chaque ennemi abattu n’attaquera pas`
+      : 'mana 💠 · siège non renforcé',
   ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',

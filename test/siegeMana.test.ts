@@ -6,10 +6,18 @@ import { RIFT, riftClearMana, riftMana, siegeMana } from '@/lib/rift';
 const logOf = (ids: string[]) => ({
   log: ids.map((to) => ({ round: 1, kind: 'down' as const, to })),
 });
-const raidAt = (L: number, s = 7) => rollRaid(s * 7919, L, 0, 0);
+// 🕳️ Seules les armées de FAILLE donnent du mana : ces raids-là en sortent (mêmes groupes).
+const raidAt = (L: number, s = 7): Raid => {
+  const r = rollRaid(s * 7919, L, 0, 0);
+  return { ...r, overflow: { faction: r.faction, level: L, at: 0 } };
+};
 const ids = (r: Raid) => siegeAttackers(r).map((u) => u.id);
 
 describe('💠 le mana d’un siège de la base', () => {
+  it('⚠️ une armée ORDINAIRE (hors faille) ne donne aucun mana, même toute abattue', () => {
+    const r = rollRaid(7 * 7919, 30, 0, 0);
+    expect(siegeMana(r, logOf(ids(r)))).toBe(0);
+  });
   it('aucun monstre abattu, aucun mana', () => {
     expect(siegeMana(raidAt(30), logOf([]))).toBe(0);
   });

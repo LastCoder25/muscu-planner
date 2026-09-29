@@ -324,7 +324,7 @@ export function campLightHurt(
 }
 
 /** Ce que laisse chaque faction, dit en toutes lettres (fiche d'un camp ou d'un lieu gardé). */
-const FACTION_LOOT_LABEL: Record<CampSpec['faction'], string> = {
+export const FACTION_LOOT_LABEL: Record<CampSpec['faction'], string> = {
   bandits: 'bourses d’or 🪙',
   mortsvivants: 'pierres d’invocation 🔮',
   betes: 'consommables 🎒',
