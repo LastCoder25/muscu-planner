@@ -53,7 +53,6 @@ describe('🏰 la production grandit avec la garnison, jusqu’à 5', () => {
   });
   it('les lieux qui forment chaque champion gardent 3 places', () => {
     expect(seatsOf('training')).toBe(3);
-    expect(seatsOf('forge')).toBe(3);
   });
 });
 

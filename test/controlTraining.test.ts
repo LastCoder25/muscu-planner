@@ -37,7 +37,8 @@ describe('🎯 camp d’entraînement : chaque champion a sa barre d’XP', () =
     const c = collectControl(m, CAMP, 10 * H, 30);
     expect(c.xpBy.a0).toBe(Math.floor(10 * r + 1e-9));
     expect(c.xpBy.a1).toBe(Math.floor(6 * r + 1e-9));
-    expect(c.gearXp).toEqual({});
+    // ⚒️ Leurs pièces portées reçoivent le double (la forge est fondue dans le camp).
+    expect(c.gearXp).toEqual({ a0: 2 * c.xpBy.a0!, a1: 2 * c.xpBy.a1! });
   });
 
   it('un renfort en route n’apprend rien', () => {

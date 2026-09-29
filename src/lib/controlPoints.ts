@@ -49,7 +49,7 @@ export const CONTROL = {
   /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
    *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
    *  de la ville (un quart de tour d'écart), et la mine, première, garde celle d'avant. */
-  kinds: ['mine', 'training', 'garden', 'tower', 'forge', 'scriptorium'] as readonly ControlKind[],
+  kinds: ['mine', 'training', 'garden', 'tower', 'scriptorium'] as readonly ControlKind[],
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -77,7 +77,7 @@ export const CONTROL = {
    *  3 champions de référence prennent une troupe de 2,5 ~9 fois sur 10 (mesure des camps). */
   captureSizes: [1, 1.5, 2, 2.5] as readonly number[],
   /** La garnison de RÉFÉRENCE (3) : celle sur laquelle l'ennemi se cale, et les places du
-   *  camp et de la forge. Les lieux qui produisent pour le joueur en prennent 5 (`seatsOf`). */
+   *  camp d'entraînement. Les lieux qui produisent pour le joueur en prennent 5 (`seatsOf`). */
   maxGarrison: CONTROL_MAX_GARRISON,
   /** ⛏️ Une garnison complète produit l'or d'une mission de mine de son rang toutes les
    *  `mineHoursPerHaul` heures. ⚠️ Ces champions ne font pas de missions pendant ce temps :
@@ -95,17 +95,19 @@ export const CONTROL = {
    *  (`trialXpBase`) toutes les `trainHoursPerTrial` heures — plafonné au ★5 du rang JUSTE
    *  EN DESSOUS du héros (décision de l'utilisateur, `trainingCapLevel`). */
   trainHoursPerTrial: 3,
+  /** ⚒️ Le camp entraîne AUSSI l'équipement (2026-09-29, demandé : « fusionne le lieu d'XP de
+   *  champion et celui d'équipement, vire le second ») : chaque pièce PORTÉE par un champion
+   *  posté reçoit sa réserve × ce facteur, EN PLUS de ce qu'elle apprend à travers son porteur
+   *  (`trainWornGear`). 2 = le rythme de l'ancienne Forge de campagne (une épreuve toutes les
+   *  1,5 h, le double du camp) — la fusion ne ralentit jamais les pièces.
+   *  ⚠️ Versé MÊME quand le champion bute sur son plafond (`trainingRoom`, ascension,
+   *  Panthéon) : c'était la raison d'être de la forge, ses pièces continuent d'apprendre.
+   *  Plafonds de la pièce inchangés : le ★5 de son rang et le niveau de son porteur. */
+  gearXpMult: 2,
   /** 🌿 Jardin d'herboriste : un jardinier cueille un consommable toutes les
    *  `gardenHoursPerItem` heures (2 par jour) ; plus de monde, plus vite (`garrisonShare`,
    *  jusqu'à ×2,6 à cinq). */
   gardenHoursPerItem: 12,
-  /** ⚒️ Forge de campagne (2026-09-27, demandé) : chaque pièce PORTÉE par un champion posté
-   *  gagne l'XP d'une épreuve de son rang toutes les `forgeHoursPerTrial` heures — deux fois
-   *  le rythme du camp d'entraînement, parce que la forge n'apprend RIEN au champion : elle
-   *  sert quand il bute sur un plafond (ascension, Panthéon, rang du héros) et que ses pièces,
-   *  qui n'apprennent qu'à travers lui (`trainWornGear`), sont bloquées aussi. Plafonds de
-   *  la pièce inchangés : le ★5 de son rang et le niveau de son porteur. */
-  forgeHoursPerTrial: 1.5,
   /** 📜 Scriptorium (2026-09-27, demandé : « comme le jardin, mais pour les compétences ») :
    *  recopie une RUNE de compétence. Depuis le 2026-09-28 (demandé : « comme les autres lieux
    *  fixes »), il garde jusqu'à 5 copistes (3 avant le 2026-09-28) et produit selon l'effectif (`garrisonShare`) : une
@@ -136,12 +138,11 @@ export const CONTROL = {
  *  jardin n'en garde qu'UN — on choisit à l'envoi qui reste, les autres rentrent). */
 // ⚠️ 2026-09-28 (demandé : « les autres peuvent avoir jusqu'à 5 en garnison, champion et/ou
 // miliciens ») : les lieux qui PRODUISENT pour le joueur (or, consommables, runes) ou ont un
-// EFFET (la tour) prennent 5 champions — la garnison entière (`MILITIA.perPoint`). Le camp et
-// la forge, qui produisent de l'XP PAR champion, gardent 3 champions : chacun y apprend pour
-// lui, sa place ne profite pas aux autres.
+// EFFET (la tour) prennent 5 champions — la garnison entière (`MILITIA.perPoint`). Le camp,
+// qui produit de l'XP PAR champion, garde 3 champions : chacun y apprend pour lui, sa place
+// ne profite pas aux autres.
 const PRODUCER_SEATS = MILITIA.perPoint;
 const CONTROL_SEATS: Record<ControlKind, number> = {
-  forge: CONTROL_MAX_GARRISON,
   scriptorium: PRODUCER_SEATS,
   mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
@@ -149,14 +150,14 @@ const CONTROL_SEATS: Record<ControlKind, number> = {
   tower: PRODUCER_SEATS,
 };
 export const seatsOf = (kind: ControlKind): number => CONTROL_SEATS[kind];
-/** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. La forge se glisse
- *  ENTRE la mine et le camp d'entraînement : les quatre premiers gardent leur place. */
+/** 🧭 L'angle de chaque point autour de la ville, en quarts de tour. Les quatre premiers
+ *  gardent leur place ; la demi-place entre la mine et le camp est libre depuis le retrait de
+ *  la Forge de campagne (2026-09-29). */
 const CONTROL_QUARTER: Record<ControlKind, number> = {
   mine: 0,
   training: 1,
   garden: 2,
   tower: 3,
-  forge: 0.5,
   scriptorium: 2.5,
 };
 
@@ -165,10 +166,9 @@ export const CONTROL_LABEL = CONTROL_KIND_LABEL;
 /** Ce qu'un point rapporte, en quelques mots. */
 export const CONTROL_YIELD: Record<ControlKind, string> = {
   mine: 'or 🪙 en continu',
-  training: 'XP pour la garnison 🎓',
+  training: 'XP pour la garnison 🎓 et son équipement ⚒️',
   garden: 'consommables 🎒',
   tower: 'trajets plus courts 🧭',
-  forge: 'XP pour l’équipement porté ⚒️',
   scriptorium: 'runes de compétence',
 };
 
@@ -259,9 +259,13 @@ export function ensureControls(
       control: tooBig ? { ...c, ...enemyForce(key, c.retakes) } : c,
     };
   });
-  const changed = healed.some((p, i) => p !== map.pois[i]);
+  // 🗑️ Un point d'un type RETIRÉ (la Forge de campagne, fondue dans le camp le 2026-09-29)
+  // quitte la carte. ⚠️ Sa garnison est libérée d'elle-même : la disponibilité d'un champion
+  // se DÉDUIT de la carte. Vérifié en base avant le retrait : aucun joueur n'en tenait une.
+  const kept = healed.filter((p) => !p.control || CONTROL.kinds.includes(p.control.kind));
+  const changed = kept.length !== map.pois.length || kept.some((p, i) => p !== map.pois[i]);
   if (!add.length && !changed) return map;
-  return { ...map, pois: [...healed, ...add] };
+  return { ...map, pois: [...kept, ...add] };
 }
 
 /** Délai avant la prochaine attaque (graine : le lieu et l'instant) : visé entre 3 jours
@@ -500,9 +504,9 @@ export function campXpFor(adv: Adventurer, xp: number, pantheonLevel: number): n
   return Math.round(xp * catchUpMult(advBankedLevel(adv, pantheonLevel), pantheonLevel));
 }
 
-/** ⚒️ L'XP par heure de CHAQUE pièce portée par un champion posté à la forge. */
-export function forgeXpPerHour(playerLevel: number): number {
-  return trialXpBase(Math.max(1, playerLevel)) / CONTROL.forgeHoursPerTrial;
+/** ⚒️ L'XP par heure de CHAQUE pièce portée par un champion posté au camp. */
+export function campGearXpPerHour(playerLevel: number): number {
+  return trainingXpPerHour(playerLevel) * CONTROL.gearXpMult;
 }
 
 /** Ce qu'un point produit par heure, dans SON unité : or (mine), XP par champion (camp),
@@ -516,8 +520,6 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
     case 'garden':
       // Un jardinier : un consommable toutes les 12 h, comme avant ; plus de monde, plus vite.
       return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
-    case 'forge':
-      return n > 0 ? forgeXpPerHour(playerLevel) : 0;
     case 'scriptorium':
       return shareOf(n) / CONTROL.runeHoursPerItem;
     default:
@@ -576,18 +578,12 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
   return Math.max(0, need);
 }
 
-/** Les lieux où CHAQUE champion a sa propre réserve d'XP (sa jauge). */
-export type PerChampKind = 'forge' | 'training';
-export const isPerChampKind = (k: ControlKind | undefined): k is PerChampKind =>
-  k === 'forge' || k === 'training';
-/** L'XP par heure d'un champion posté : au camp pour LUI, à la forge par pièce portée. */
-function perChampRate(kind: PerChampKind, playerLevel: number): number {
-  return kind === 'forge' ? forgeXpPerHour(playerLevel) : trainingXpPerHour(playerLevel);
-}
+/** Le lieu où CHAQUE champion a sa propre réserve d'XP (sa jauge) : le camp. */
+export const isPerChampKind = (k: ControlKind | undefined): k is 'training' => k === 'training';
 
 /**
- * ⚒️🎯 L'XP accumulée par CHAQUE champion à `now`, non arrondie — à la forge (par pièce
- * portée) comme au camp d'entraînement (pour lui). Chacun a sa propre réserve (demandé : les
+ * 🎯 L'XP accumulée par CHAQUE champion au camp à `now`, non arrondie (ses pièces portées
+ * en reçoivent `CONTROL.gearXpMult` fois autant à la récolte). Chacun a sa propre réserve (demandé : les
  * champions n'arrivent pas en même temps — une valeur commune donnerait à un renfort arrivé
  * tard l'XP de ceux qui étaient là avant lui) : elle part de ce qu'il avait quand l'effectif
  * a changé (`perXp`) et ne court que tant qu'il est EN GARNISON — un renfort en route
@@ -600,7 +596,7 @@ export function champStockBy(p: Poi, now: number, playerLevel: number): Record<s
     return {};
   const until = Math.min(now, c.attackAt ?? now);
   const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
-  const rate = perChampRate(c.kind, playerLevel);
+  const rate = trainingXpPerHour(playerLevel);
   const cap = (rate * CONTROL.storageMs) / 3600_000;
   // Lieu d'avant `perXp` : la réserve commune valait pour chaque champion posté.
   const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
@@ -612,9 +608,6 @@ export function champStockBy(p: Poi, now: number, playerLevel: number): Record<s
   }
   return out;
 }
-/** ⚒️ La réserve par champion à la forge (vide ailleurs). */
-export const forgeStockBy = (p: Poi, now: number, playerLevel: number): Record<string, number> =>
-  p.control?.kind === 'forge' ? champStockBy(p, now, playerLevel) : {};
 /** 🎯 La réserve par champion au camp d'entraînement (vide ailleurs). */
 export const trainingStockBy = (
   p: Poi,
@@ -623,30 +616,25 @@ export const trainingStockBy = (
 ): Record<string, number> =>
   p.control?.kind === 'training' ? champStockBy(p, now, playerLevel) : {};
 
-/** La réserve la plus haute qu'un champion attend (forge ou camp), arrondie. */
+/** La réserve la plus haute qu'un champion attend au camp, arrondie. */
 function maxStock(by: Record<string, number>): number {
   const v = Object.values(by);
   return v.length ? Math.floor(Math.max(...v) + 1e-9) : 0;
 }
-/** ⚒️ L'XP la plus haute qu'un champion attend à la forge (par pièce), arrondie. */
-export const forgeStock = (p: Poi, now: number, playerLevel: number): number =>
-  maxStock(forgeStockBy(p, now, playerLevel));
-
 /** Ce qu'une réserve représente en HEURES passées sur place (≤ 24 h) : la jauge d'un
- *  champion se remplit à ce rythme (forge ou camp). */
+ *  champion se remplit à ce rythme. */
 export function champHoursOf(p: Poi, xp: number, playerLevel: number): number {
-  const k = p.control?.kind;
-  const rate = isPerChampKind(k) ? perChampRate(k, playerLevel) : 0;
+  const rate = isPerChampKind(p.control?.kind) ? trainingXpPerHour(playerLevel) : 0;
   return rate > 0 ? xp / rate : 0;
 }
 
 /**
- * ⚒️ Verse l'XP de la forge aux pièces RÉELLEMENT portées (`wornGear`, la règle du combat),
+ * ⚒️ Verse l'XP d'équipement du camp aux pièces RÉELLEMENT portées (`wornGear`, la règle du combat),
  * CHAQUE champion la sienne (`xpBy`, id → XP par pièce). Chaque pièce garde ses plafonds
  * (★5 de son rang, niveau de son porteur) : `grantAdvGearXp` conserve l'excédent. Rend le
  * MÊME tableau si rien n'a bougé — le store n'écrit alors pas `adv_gear`.
  */
-export function forgeGear(
+export function campGear(
   stock: AdvGear[],
   advs: Adventurer[],
   xpBy: Readonly<Record<string, number>>,
@@ -726,7 +714,8 @@ export function controlStock(p: Poi, now: number, playerLevel: number): number {
  * Récolte : ce qu'un point a produit part (or, XP par champion, consommables), et la
  * production repart. ⚠️ Au jardin, la FRACTION d'un consommable en cours reste en réserve
  * (`banked`) : cueillir souvent ne fait rien perdre. `xpBy` = l'XP du camp PAR champion (id →
- * XP), AVANT son plafond (le store la borne, `trainingRoom`) ; `gearXp` = celle de la forge.
+ * XP), AVANT son plafond (le store la borne, `trainingRoom`) ; `gearXp` = celle de leurs
+ * pièces portées (`CONTROL.gearXpMult` fois autant, jamais bornée par le champion).
  */
 export function collectControl(
   map: ExpeditionMap,
@@ -745,7 +734,7 @@ export function collectControl(
   const none = { map, gold: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: [] };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
-  // ⚒️🎯 La forge et le camp : chaque champion récolte SA réserve, et garde la fraction
+  // 🎯⚒️ Le camp : chaque champion récolte SA réserve (et ses pièces le double), et garde la fraction
   // entamée (sauf un champion ramené depuis : ce qui lui reste ne compte plus).
   if (isPerChampKind(c.kind)) {
     const by = champStockBy(p, now, playerLevel);
@@ -764,7 +753,10 @@ export function collectControl(
         ...q,
         control: { ...q.control!, collectedAt: until, banked: 0, perXp },
       })),
-      ...(c.kind === 'forge' ? { gearXp: got } : { xpBy: got }),
+      xpBy: got,
+      gearXp: Object.fromEntries(
+        Object.entries(got).map(([aid, v]) => [aid, Math.round(v * CONTROL.gearXpMult)]),
+      ),
     };
   }
   const units = stockUnits(p, now, playerLevel);
@@ -835,12 +827,11 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
     const cut = CONTROL.towerCut * shareOf(c.garrison.length);
     return { text: `🧭 −${Math.round(cut * 100)} % trajets`, pct: null };
   }
-  // ⚒️🎯 Chacun sa réserve : on montre la plus avancée (celle qu'on voit monter en premier).
+  // 🎯 Chacun sa réserve : on montre la plus avancée (celle qu'on voit monter en premier).
   if (isPerChampKind(c.kind)) {
     const top = Math.max(0, ...Object.values(champStockBy(p, now, playerLevel)));
-    const full = (perChampRate(c.kind, playerLevel) * CONTROL.storageMs) / 3600_000;
-    const emo = c.kind === 'forge' ? '⚒️' : '🎓';
-    return { text: `${emo} +${fmt(top)} XP`, pct: full > 0 ? Math.min(1, top / full) : 0 };
+    const full = (trainingXpPerHour(playerLevel) * CONTROL.storageMs) / 3600_000;
+    return { text: `🎓 +${fmt(top)} XP`, pct: full > 0 ? Math.min(1, top / full) : 0 };
   }
   const units = stockUnits(p, now, playerLevel);
   const rate = unitsPerHour(p, c.garrison.length, playerLevel);

@@ -32,18 +32,18 @@ import { partyLegMin } from '@/lib/party';
 const H = 3600_000;
 const L = 30;
 const MINE = controlIdOf('mine');
-const FORGE = controlIdOf('forge');
+const CAMP = controlIdOf('training');
 const GARDEN = controlIdOf('garden');
 const pt = (m: ExpeditionMap, id: string) => m.pois.find((p) => p.id === id)!;
 const far = (m: ExpeditionMap) => ({
   ...m,
   pois: m.pois.map((p) => (p.control ? { ...p, control: { ...p.control, attackAt: 9e15 } } : p)),
 });
-/** La mine tenue par `mine`, la forge par `forge` (un tableau vide = point ennemi). */
-const world = (mine: string[], forge: string[] = []) => {
+/** La mine tenue par `mine`, le camp par `camp` (un tableau vide = point ennemi). */
+const world = (mine: string[], camp: string[] = []) => {
   let m = ensureControls(createMap(3, 0, L, 1), 0, L);
   if (mine.length) m = captureControl(m, MINE, mine, 0, 7);
-  if (forge.length) m = captureControl(m, FORGE, forge, 0, 7);
+  if (camp.length) m = captureControl(m, CAMP, camp, 0, 7);
   return far(m);
 };
 const leg = (p: Poi) => partyLegMin(p, [], { hero: true, travelMult: 1, gearSpeed: 0 });
@@ -59,11 +59,11 @@ describe('🧭 trajet depuis un point fixe', () => {
   it('deux points voisins : la ligne directe, bien plus courte que le détour par la ville', () => {
     const m = world(['a']);
     const mine = pt(m, MINE);
-    const forge = pt(m, FORGE);
-    const direct = leg(fromSpot(forge, mine));
-    const viaTown = leg(mine) + leg(forge);
+    const camp = pt(m, CAMP);
+    const direct = leg(fromSpot(camp, mine));
+    const viaTown = leg(mine) + leg(camp);
     expect(direct).toBeLessThan(viaTown);
-    expect(legFromSpot(forge, mine, leg)).toBe(direct);
+    expect(legFromSpot(camp, mine, leg)).toBe(direct);
   });
   it('deux points opposés : jamais plus long que le détour par la ville', () => {
     const m = world(['a']);
@@ -77,39 +77,39 @@ describe('🧭 trajet depuis un point fixe', () => {
 
 describe('⇄ transfert entre deux points', () => {
   it('refusé si l’un des deux points n’est pas à toi, ou si c’est le même', () => {
-    expect(transferBlocker(world(['a']), MINE, FORGE, ['a'])).toBe('notHeld');
+    expect(transferBlocker(world(['a']), MINE, CAMP, ['a'])).toBe('notHeld');
     expect(transferBlocker(world(['a'], ['b']), MINE, MINE, ['a'])).toBe('same');
-    expect(transferBlocker(world(['a'], ['b']), MINE, FORGE, [])).toBe('empty');
+    expect(transferBlocker(world(['a'], ['b']), MINE, CAMP, [])).toBe('empty');
   });
   it('seuls les membres ARRIVÉS du point de départ peuvent partir', () => {
     const m = world(['a'], ['b']);
-    expect(transferBlocker(m, MINE, FORGE, ['z'])).toBe('notHere');
-    expect(transferBlocker(m, MINE, FORGE, ['a', 'a'])).toBe('notHere');
-    expect(transferBlocker(m, MINE, FORGE, ['a'])).toBeNull();
+    expect(transferBlocker(m, MINE, CAMP, ['z'])).toBe('notHere');
+    expect(transferBlocker(m, MINE, CAMP, ['a', 'a'])).toBe('notHere');
+    expect(transferBlocker(m, MINE, CAMP, ['a'])).toBeNull();
   });
   it('refusé quand le point d’arrivée n’a plus de place de champion', () => {
-    const full = Array.from({ length: seatsOf('forge') }, (_, i) => `f${i}`);
-    expect(transferBlocker(world(['a'], full), MINE, FORGE, ['a'])).toBe('full');
+    const full = Array.from({ length: seatsOf('training') }, (_, i) => `f${i}`);
+    expect(transferBlocker(world(['a'], full), MINE, CAMP, ['a'])).toBe('full');
   });
   it('le transfert libère la place de départ et occupe celle d’arrivée tout de suite', () => {
     const m = transferGarrison(world(['a', 'c'], ['b']), {
       fromId: MINE,
-      toId: FORGE,
+      toId: CAMP,
       now: H,
       playerLevel: L,
       champs: { ids: ['a'], at: 3 * H },
       militia: { ids: [], at: H },
     });
     expect(pt(m, MINE).control!.garrison).toEqual(['c']);
-    expect(pt(m, FORGE).control!.reinforcing).toEqual([{ id: 'a', at: 3 * H, from: H, via: MINE }]);
+    expect(pt(m, CAMP).control!.reinforcing).toEqual([{ id: 'a', at: 3 * H, from: H, via: MINE }]);
     // Il rejoint la garnison à son arrivée, comme un renfort de la base.
-    expect(pt(settleReinforcements(m, 3 * H, L), FORGE).control!.garrison).toEqual(['b', 'a']);
+    expect(pt(settleReinforcements(m, 3 * H, L), CAMP).control!.garrison).toEqual(['b', 'a']);
   });
   it('en route, le trajet se dessine DEPUIS le point de départ', () => {
     const m0 = world(['a'], ['b']);
     const m = transferGarrison(m0, {
       fromId: MINE,
-      toId: FORGE,
+      toId: CAMP,
       now: 0,
       playerLevel: L,
       champs: { ids: ['a'], at: 2 * H },
@@ -118,14 +118,14 @@ describe('⇄ transfert entre deux points', () => {
     const [trip] = reinforcementsEnRoute(m, H);
     const mine = pt(m0, MINE);
     expect(trip!.origin).toEqual({ x: mine.x, y: mine.y });
-    // Au départ, il est sur la mine ; à mi-chemin, entre la mine et la forge.
+    // Au départ, il est sur la mine ; à mi-chemin, entre la mine et le camp.
     expect(travelPosition(trip!, 0)).toMatchObject({ x: mine.x, y: mine.y });
-    const forge = pt(m0, FORGE);
+    const camp = pt(m0, CAMP);
     const mid = travelPosition(trip!, H);
-    expect(mid.x).toBeCloseTo((mine.x + forge.x) / 2, 6);
-    expect(mid.y).toBeCloseTo((mine.y + forge.y) / 2, 6);
+    expect(mid.x).toBeCloseTo((mine.x + camp.x) / 2, 6);
+    expect(mid.y).toBeCloseTo((mine.y + camp.y) / 2, 6);
     // Dessiné : il part du BORD du point de départ, pas de celui de la ville.
-    const drawn = mapTravelPoint(travelPosition(trip!, 0), forge, trip!.origin);
+    const drawn = mapTravelPoint(travelPosition(trip!, 0), camp, trip!.origin);
     expect(Math.hypot(drawn.x - mine.x, drawn.y - mine.y)).toBeCloseTo(MAP_RIM.poi, 6);
   });
 });
@@ -168,21 +168,21 @@ describe('⇄ transferSourcesFor : qui peut venir d’un autre point (2026-09-29
   it('propose la garnison arrivée des AUTRES points tenus, pas celle du point visé', () => {
     const m = world(['a', 'mil:1'], ['b']);
     const src = transferSourcesFor(m, MINE);
-    expect(src).toEqual([{ fromId: FORGE, ids: ['b'] }]);
-    expect(transferSourcesFor(m, FORGE)).toEqual([{ fromId: MINE, ids: ['a', 'mil:1'] }]);
+    expect(src).toEqual([{ fromId: CAMP, ids: ['b'] }]);
+    expect(transferSourcesFor(m, CAMP)).toEqual([{ fromId: MINE, ids: ['a', 'mil:1'] }]);
   });
   it('un renfort encore en route vers son point n’en repart pas', () => {
     const m = world(['a'], ['b']);
-    const forge = pt(m, FORGE);
+    const camp = pt(m, CAMP);
     const withRoute = {
       ...m,
       pois: m.pois.map((p) =>
-        p.id === FORGE
-          ? { ...p, control: { ...forge.control!, reinforcing: [{ id: 'c', from: 0, at: 9e15 }] } }
+        p.id === CAMP
+          ? { ...p, control: { ...camp.control!, reinforcing: [{ id: 'c', from: 0, at: 9e15 }] } }
           : p,
       ),
     };
-    expect(transferSourcesFor(withRoute, MINE)).toEqual([{ fromId: FORGE, ids: ['b'] }]);
+    expect(transferSourcesFor(withRoute, MINE)).toEqual([{ fromId: CAMP, ids: ['b'] }]);
   });
   it('point visé plein : personne ne peut venir', () => {
     const full = Array.from({ length: seatsOf('mine') }, (_, i) => `x${i}`);

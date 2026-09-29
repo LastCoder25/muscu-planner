@@ -77,7 +77,7 @@ export type PoiType =
   | 'control';
 
 /** 🏰 Ce que produit un point de contrôle tenu. Étape 1 : la mine d'or. */
-export type ControlKind = 'mine' | 'training' | 'garden' | 'tower' | 'forge' | 'scriptorium';
+export type ControlKind = 'mine' | 'training' | 'garden' | 'tower' | 'scriptorium';
 /** 🏰 Une garnison : 1 à 3 champions (décision de l'utilisateur). */
 export const CONTROL_MAX_GARRISON = 3;
 /**
@@ -119,9 +119,9 @@ export interface ControlState {
    *  ramené) : la réserve repart de là, au NOUVEAU débit — sans quoi le passé serait
    *  recalculé au mauvais débit. */
   banked?: number;
-  /** ⚒️ À la forge, l'XP (par pièce) déjà gagnée par CHAQUE champion quand l'effectif a
+  /** 🎯 Au camp d'entraînement, l'XP déjà gagnée par CHAQUE champion quand l'effectif a
    *  changé. Chacun a sa propre réserve : un champion arrivé depuis une heure ne touche pas
-   *  ce qu'un autre a gagné en vingt. Absente sur les forges d'avant : `banked` y vaut
+   *  ce qu'un autre a gagné en vingt. Absente sur les camps d'avant : `banked` y vaut
    *  alors pour chaque champion de la garnison. */
   perXp?: Record<string, number>;
 }
@@ -181,7 +181,6 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   training: 'Camp d’entraînement',
   garden: 'Jardin d’herboriste',
   tower: 'Tour de guet',
-  forge: 'Forge de campagne',
   scriptorium: 'Scriptorium',
 };
 export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
@@ -189,7 +188,6 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   training: '🎯',
   garden: '🌿',
   tower: '🗼',
-  forge: '⚒️',
   scriptorium: '📜',
 };
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */

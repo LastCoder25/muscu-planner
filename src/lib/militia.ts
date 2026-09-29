@@ -8,7 +8,7 @@
  * - **Il remplace un champion** (décision de l'utilisateur) : sur un point de contrôle, un
  *   milicien occupe une PLACE comme un champion et fait tourner le lieu (or de la mine,
  *   cueillette, copie, tour de guet). Ce qu'il ne fait PAS : apprendre. Le camp d'entraînement
- *   et la forge n'ont rien à enseigner à un milicien — ils ne produisent que pour les champions.
+ *   n'a rien à enseigner à un milicien — il ne forme que les champions et leur équipement.
  * - **Il MEURT au lieu d'aller à l'infirmerie** : c'est ce qui rend la production limitée
  *   intéressante — on DÉPENSE des miliciens. Défaite : tous ceux engagés tombent ; victoire :
  *   ceux tombés pendant le combat (les champions, eux, se relèvent).
