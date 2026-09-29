@@ -79,6 +79,16 @@
             class="fog-rim"
             :class="{ lifting: fogPlan }"
           />
+          <!-- 🗼 LE RAYON DE DÉTECTION DE LA BASE (demandé) : là où les armées qui marchent sur
+               ta base ou sur un point fixe deviennent visibles — la distance qu'elles
+               parcourent pendant le préavis de la Tour de guet. Dessiné au rayon RÉELLEMENT vu
+               (`seenRadius`, borné par la zone révélée), la même règle que les armées. -->
+          <g v-if="detectRing" class="detect">
+            <circle :cx="TOWN.x" :cy="TOWN.y" :r="detectRing.r" class="detect-ring" />
+            <text :x="TOWN.x" :y="TOWN.y + detectRing.r + 3.4" class="detect-lab">
+              🗼 Détection · {{ detectRing.label }}
+            </text>
+          </g>
           <!-- ⏱️ Un cercle par heure de trajet aller du héros (v0.1238). -->
           <g class="hour-rings">
             <template v-for="ring in hourRings" :key="ring.hours">
@@ -930,7 +940,13 @@ import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
-import { armyTrajectory, fieldArmySpec, type ArmyPath } from '@/lib/fieldArmy';
+import {
+  FIELD_ARMY,
+  armyTrajectory,
+  fieldArmySpec,
+  seenRadius,
+  type ArmyPath,
+} from '@/lib/fieldArmy';
 import { poiRank } from '@/lib/poiRank';
 import {
   PARTY_HERO_BLOCK_LABEL,
@@ -1165,6 +1181,16 @@ const reveal = computed(() => revealRadius(char.comptoirLevel));
 const hourRings = computed(() =>
   travelHourRings(progressionLevel.value, travelMult.value, reveal.value),
 );
+/** 🗼 Le cercle de détection : rayon vu (borné par la zone révélée) et son libellé. Rien
+ *  tant que la Tour ne voit pas plus loin que la ville elle-même. */
+const detectRing = computed(() => {
+  const full = char.detectRadiusOf(char.row?.base);
+  const r = seenRadius(full, reveal.value);
+  if (r < 14) return null;
+  const hours = full / FIELD_ARMY.speedPerHour;
+  const lead = hours >= 1 ? `${Math.floor(hours)} h ${String(Math.round((hours % 1) * 60)).padStart(2, '0')}` : `${Math.round(hours * 60)} min`;
+  return { r, label: r < full - 0.5 ? `${lead} de préavis · limitée par l’Avant-poste` : `${lead} de préavis` };
+});
 const FOG_SOFT = 10; // largeur du fondu du brouillard
 const fogInner = computed(() => Math.max(0, (fogR.value - 3) / (fogR.value + FOG_SOFT)));
 
@@ -3833,6 +3859,25 @@ onUnmounted(() => {
   stroke: var(--accent);
   stroke-width: 1;
   opacity: 0.9;
+}
+/* 🗼 Le rayon de détection : corail en tirets longs, pour ne pas se confondre avec les
+   heures de trajet (pointillés crème) ni le bord du brouillard. */
+.detect-ring {
+  fill: #ff8a65;
+  fill-opacity: 0.04;
+  stroke: #ff8a65;
+  stroke-width: 0.6;
+  stroke-dasharray: 4 2;
+  opacity: 0.75;
+  pointer-events: none;
+}
+.detect-lab {
+  fill: #ff8a65;
+  font-size: 2.8px;
+  font-weight: 700;
+  text-anchor: middle;
+  opacity: 0.85;
+  pointer-events: none;
 }
 .hour-ring {
   fill: none;
