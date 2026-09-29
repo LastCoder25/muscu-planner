@@ -66,8 +66,11 @@ export function planWings(
   inputs: readonly { originId: string | null; members: string[]; hero: boolean; legMin: number }[],
   now: number,
   dwellMs: number,
+  /** ⚔️🧭 Cible en MARCHE : la minute de rencontre commune (`meetAll`), qui peut dépasser le
+   *  plus long trajet (il faut que l'armée soit venue jusque-là). */
+  meetInMin = 0,
 ): { arriveAt: number; midAt: number; wings: AttackWing[] } {
-  const longest = Math.max(1, ...inputs.map((w) => w.legMin));
+  const longest = Math.max(1, meetInMin, ...inputs.map((w) => w.legMin));
   const arriveAt = now + longest * 60_000;
   const midAt = arriveAt + Math.max(0, dwellMs);
   return {
@@ -111,20 +114,18 @@ export const BASE_WING_ID = 'base';
 export const wingOriginId = (id: string): string | null => (id === BASE_WING_ID ? null : id);
 
 /** Pourquoi une attaque combinée ne peut pas partir (hors règles d'une équipe ordinaire). */
-export type CombinedBlock = 'fewWings' | 'twice' | 'heroFar' | 'emptyWing' | 'moving';
+export type CombinedBlock = 'fewWings' | 'twice' | 'heroFar' | 'emptyWing';
 export const COMBINED_BLOCK_LABEL: Record<CombinedBlock, string> = {
   fewWings: 'une attaque combinée part d’au moins deux endroits',
   twice: 'un même point de départ ou un même champion est choisi deux fois',
   heroFar: 'le héros part de la base',
   emptyWing: 'chaque point de départ doit envoyer quelqu’un',
-  moving: 'une armée en marche ne s’attaque pas en coordonné',
 };
 export function combinedBlocker(
   poi: Pick<Poi, 'type'>,
   wings: readonly { originId: string | null; members: readonly string[]; hero: boolean }[],
 ): CombinedBlock | null {
   if (wings.length < MIN_WINGS) return 'fewWings';
-  if (poi.type === 'warband') return 'moving';
   const origins = wings.map((w) => w.originId ?? '');
   const ids = wings.flatMap((w) => w.members);
   if (new Set(origins).size !== origins.length || new Set(ids).size !== ids.length) return 'twice';

@@ -17,6 +17,7 @@ import {
   partyLegMin,
   partySendBlocker,
   interceptLeg,
+  meetAll,
   supplyTarget,
 } from '@/lib/party';
 import { partyRoadOdds, partyWinChance } from '@/lib/partyForecast';
@@ -37,7 +38,7 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import type { Combatant } from '@/lib/combat';
-import type { Poi } from '@/lib/expedition';
+import { isFieldArmyPoi, type Poi } from '@/lib/expedition';
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
 
@@ -363,6 +364,32 @@ export function useExpeditionParty(ctx: PartyCtx) {
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
   // point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où
   // elle se trouve maintenant. Horloge grossière : la rencontre bouge à la minute, pas plus.
+  /** ⚔️🧭 Les trajets de chaque groupe prévu, pour le point de rencontre sur une armée en
+   *  marche (`meetAll`, la MÊME règle que le store). */
+  const wingLegFns = computed(() =>
+    partyOrigins.value.map((id) => {
+      const members = partyAdvs.value.filter((a) => originOfAdv(a.id) === id);
+      const hero = id === 'base' && partyHeroOn.value;
+      const origin = id === 'base' ? null : (pointOrigins.value.find((o) => o.id === id) ?? null);
+      const legOf = (p: Poi) =>
+        partyLegMin(p, members, {
+          hero,
+          travelMult: travelMult.value,
+          gearSpeed: advGearRoles(members, roadCtx.value.advGear).speed,
+          supplies: activeSupplies.value,
+        });
+      return (p: Poi) => (origin ? legFromSpot(p, origin.poi, legOf) : legOf(p));
+    }),
+  );
+  /** ⚔️🧭 Cible en marche : où et quand TOUS la rejoignent. `null` hors attaque combinée
+   *  sur une armée en marche. */
+  const meetInfo = computed(() => {
+    const target = selected.value;
+    if (!target || !combined.value || target.type !== 'warband') return null;
+    return meetAll(target, coarseNow.value, wingLegFns.value);
+  });
+  const meetPoi = computed(() => meetInfo.value?.poi ?? null);
+  const meetMin = computed(() => meetInfo.value?.min ?? 0);
   /** ⚔️🧭 Les groupes d'une attaque combinée, chacun à SON pas depuis chez lui — la MÊME règle
    *  que le store (`partyLegMin`, `legFromSpot`). Arrivée commune = le plus long ; chacun part
    *  à « arrivée − son trajet ». Vide hors attaque combinée. */
@@ -380,7 +407,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
           gearSpeed: advGearRoles(members, roadCtx.value.advGear).speed,
           supplies: activeSupplies.value,
         });
-      const legMin = origin ? legFromSpot(target, origin.poi, legOf) : legOf(target);
+      const legAt = (p: Poi) => (origin ? legFromSpot(p, origin.poi, legOf) : legOf(p));
+      const legMin = legAt(meetPoi.value ?? target);
       // 🏰 Assaut d'un point fixe : pris, SES membres qui ne restent pas (et son héros)
       // rentrent chez lui à leur pas — la MÊME règle que le store (`wingWonLeg`).
       let wonMin = legMin;
@@ -410,7 +438,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
         wonMin,
       };
     });
-    const longest = Math.max(1, ...rows.map((r) => r.legMin));
+    const longest = Math.max(1, meetMin.value, ...rows.map((r) => r.legMin));
     // Du groupe le plus proche au plus lointain, comme les tuiles de départ.
     return byReach(rows.map((r) => ({ ...r, departInMin: longest - r.legMin })));
   });
@@ -421,7 +449,16 @@ export function useExpeditionParty(ctx: PartyCtx) {
       selected.value,
       wingPlan.value.map((w) => ({ originId: wingOriginId(w.id), members: w.ids, hero: w.hero })),
     );
-    return b ? COMBINED_BLOCK_LABEL[b] : null;
+    if (b) return COMBINED_BLOCK_LABEL[b];
+    // ⚔️🗼 La MÊME garde que le store : tous doivent rejoindre l'armée avant qu'elle n'arrive.
+    const m = meetInfo.value;
+    if (
+      m &&
+      isFieldArmyPoi(selected.value) &&
+      (!m.joined || coarseNow.value + m.min * 60_000 >= selected.value.expiresAt)
+    )
+      return 'trop tard : l’armée atteindra sa cible avant que tous la rejoignent';
+    return null;
   });
   /** Trajet ALLER de l'équipe (minutes). Le retour vaut l'aller : c'est la règle du store
    *  (`startParty` : `returnAt = midAt + leg`). ⚔️🧭 Attaque combinée : l'aller commun, celui

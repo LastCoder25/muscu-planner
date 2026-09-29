@@ -99,6 +99,31 @@ export function interceptLeg(
   return { poi: at(lo), legMin: lo };
 }
 
+/**
+ * ⚔️🧭 LE POINT DE RENCONTRE D'UNE ATTAQUE COMBINÉE sur une armée en marche : la PREMIÈRE
+ * minute où TOUS les groupes peuvent être là où elle sera (chacun à son pas, depuis chez
+ * lui). Chacun partira à « rencontre − son trajet » (`planWings`). Sur un lieu fixe, c'est le
+ * plus long trajet, comme avant. `joined` faux : l'armée arrive avant qu'ils puissent tous la
+ * rejoindre — la rencontre se ferait sous les murs, à l'arrivée.
+ * ⚠️ Balayage minute par minute plutôt qu'une dichotomie : une armée qui marche sur la ville
+ * peut s'ÉLOIGNER d'un point fixe, donc « tous sont là » n'est pas monotone dans le temps.
+ */
+export function meetAll(
+  poi: Poi,
+  now: number,
+  legOfs: readonly ((p: Poi) => number)[],
+): { poi: Poi; min: number; joined: boolean } {
+  if (poi.type !== 'warband' || !poi.from)
+    return { poi, min: Math.max(1, ...legOfs.map((f) => f(poi))), joined: true };
+  const end = Math.max(1, Math.ceil((poi.expiresAt - now) / 60_000));
+  for (let m = 1; m <= end; m++) {
+    const at = warbandAt(poi, now + m * 60_000);
+    if (legOfs.every((f) => f(at) <= m)) return { poi: at, min: m, joined: true };
+  }
+  const walls = warbandAt(poi, now + end * 60_000);
+  return { poi: walls, min: Math.max(end, ...legOfs.map((f) => f(walls))), joined: false };
+}
+
 /** 🎒 Ce que ce voyage offre aux consommables (`supplyUselessWhy`). ⚠️ Vit ICI et non dans
  *  `supplies.ts` : il lit `poiForceOf`, et `expedition.ts` importe déjà `supplies.ts`. */
 export function supplyTarget(poi: Poi, hero: boolean, escort: number): SupplyTarget {

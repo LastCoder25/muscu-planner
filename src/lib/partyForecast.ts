@@ -1,10 +1,18 @@
 import { campWinPct } from './camp';
 import { partyAllies, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
-import { HARVEST_TYPES, isRiftPoi, isWarbandPoi, poiForceOf, type Poi } from './expedition';
+import {
+  HARVEST_TYPES,
+  isFieldArmyPoi,
+  isRiftPoi,
+  isWarbandPoi,
+  poiForceOf,
+  type Poi,
+} from './expedition';
 import { denForce, partyForecastSeed } from './party';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
 import { supplyFx } from './supplies';
+import { fieldArmySpec } from './fieldArmy';
 
 /**
  * 🎯 LA CHANCE QU'UN GROUPE REVIENNE VAINQUEUR, pour les QUATRE natures de lieu.
@@ -42,6 +50,10 @@ export function partyWinChance(
   const fx = supplyFx(road.supplies);
   if (isRiftPoi(poi))
     return incursionWinPct(poi, allies, now, samples, fx.riftFoeMult, fx.riftBossMult);
+  // ⚔️🗼 Une armée en campagne se bat comme un camp de SA force de campagne — la MÊME spec
+  // que la résolution (`fieldArmySpec`, `resolveFieldArmy`).
+  const army = isFieldArmyPoi(poi) ? fieldArmySpec(poi) : null;
+  if (army) return campWinPct(poi, army, allies, samples, fx.guardMult);
   // ⚔️ L'interception prend l'escorte BRUTE : elle refond le groupe elle-même.
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.

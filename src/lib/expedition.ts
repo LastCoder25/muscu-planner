@@ -103,6 +103,10 @@ export interface ControlState {
   retakes: number;
   /** Une équipe marche dessus : on ne l'attaque pas deux fois. */
   assault?: boolean;
+  /** ⚔️🗼 La part de la troupe de REPRISE déjà abattue en rase campagne (`fieldArmy.ts`),
+   *  et les chocs qui l'ont faite (jamais appliqués deux fois). Effacés à la reprise. */
+  retakeCut?: number;
+  fieldHits?: string[];
   /** 🏰 Renforts en ROUTE vers le point tenu : ils rejoignent la garnison à `at`. Ils
    *  occupent déjà une place (jamais plus de 3 champions au total), mais ne produisent ni
    *  ne combattent avant d'être arrivés. `from` = leur départ de la ville (absent sur les
@@ -236,6 +240,32 @@ export const PARTY_TARGETS: ReadonlySet<PoiType> = new Set<PoiType>([
   'warband',
   ...HARVEST_TYPES,
 ]);
+/** ⚔️🗼 Ce qui fait d'une « bande en marche » une ARMÉE EN CAMPAGNE (`fieldArmy.ts`). */
+export interface FieldArmyTag {
+  /** Le siège de la base, ou la reprise d'un point fixe. */
+  kind: 'siege' | 'retake';
+  /** L'id du raid (siège) ou du point fixe (reprise). */
+  targetId: string;
+  /** L'heure de l'attaque visée (arrivée du raid, `attackAt` de la reprise). */
+  at: number;
+  faction: RaidFaction;
+  /** Sa force en RASE CAMPAGNE, en champions de référence (`campFoe`) — ce qu'il en reste. */
+  size: number;
+}
+/** ⚔️🗼 Ce qu'une attaque en rase campagne a fait à l'armée — porté par le rapport, appliqué au
+ *  siège (ou à la reprise) à l'heure du choc (`applyFieldHit`). */
+export interface FieldHit {
+  kind: FieldArmyTag['kind'];
+  targetId: string;
+  at: number;
+  /** Part de l'armée ABATTUE sur ce choc (0..1 ; 1 = armée battue, l'attaque est annulée). */
+  part: number;
+  /** Identité du choc : une même attaque ne s'applique jamais deux fois. */
+  hitId: string;
+}
+/** ⚔️🗼 Une armée qui marche sur la base ou sur un point fixe. */
+export const isFieldArmyPoi = (p: Pick<Poi, 'type' | 'army'>): boolean =>
+  p.type === 'warband' && !!p.army;
 /** ⚔️ L'armée d'une faille qui a débordé, en route vers la base. */
 export const isWarbandPoi = (p: Pick<Poi, 'type'>): boolean => p.type === 'warband';
 export const CAMP_FACTIONS: readonly RaidFaction[] = ['bandits', 'betes', 'mortsvivants'];
@@ -288,6 +318,8 @@ export interface PartyResult {
    *  reprise ennemie (`defense`). Absent des autres rapports. */
   controlId?: string;
   defense?: boolean;
+  /** ⚔️🗼 Une attaque contre une ARMÉE EN CAMPAGNE (`fieldArmy.ts`) : ce qu'elle a abattu. */
+  fieldHit?: FieldHit;
   /** 🏰 Ceux qui RESTENT en garnison si le point est pris (choisis à l'envoi) ; les autres
    *  rentrent. Absent = toute l'escorte (dans la limite des places du point). */
   stay?: string[];
@@ -532,6 +564,13 @@ export interface Poi {
    *  arriver. `x`/`y`/`distNorm`, eux, sont RECALCULÉS à chaque `advanceWorld`. */
   faction?: RaidFaction;
   from?: { x: number; y: number };
+  /** ⚔️ Où la marche S'ARRÊTE : la ville par défaut (bande de faille, armée de siège), le
+   *  point fixe qu'elle vient reprendre pour une reprise (`fieldArmy.ts`). */
+  to?: { x: number; y: number };
+  /** ⚔️🗼 ARMÉE EN CAMPAGNE (`fieldArmy.ts`) : l'armée d'un siège de la base ou d'une
+   *  reprise de point fixe, repérée dans le rayon de détection, qu'on peut attaquer avant
+   *  qu'elle n'arrive. Absent = bande de faille ordinaire. */
+  army?: FieldArmyTag;
   /** 🏰 Point de contrôle uniquement : son état (`controlPoints.ts`). */
   control?: ControlState;
   setId?: string; // 'lair' uniquement : set ciblé
@@ -1424,12 +1463,13 @@ export function distNormAt(d: number): number {
  * Sans `from` (pas une bande), le lieu ne bouge pas.
  */
 export function warbandAt<
-  P extends Pick<Poi, 'x' | 'y' | 'distNorm' | 'from' | 'spawnedAt' | 'expiresAt'>,
+  P extends Pick<Poi, 'x' | 'y' | 'distNorm' | 'from' | 'to' | 'spawnedAt' | 'expiresAt'>,
 >(p: P, t: number): P {
   if (!p.from) return p;
   const k = clamp01((t - p.spawnedAt) / Math.max(1, p.expiresAt - p.spawnedAt));
-  const x = p.from.x + (EXPE.town.x - p.from.x) * k;
-  const y = p.from.y + (EXPE.town.y - p.from.y) * k;
+  const to = p.to ?? EXPE.town;
+  const x = p.from.x + (to.x - p.from.x) * k;
+  const y = p.from.y + (to.y - p.from.y) * k;
   return { ...p, x, y, distNorm: distNormAt(Math.hypot(x - EXPE.town.x, y - EXPE.town.y)) };
 }
 

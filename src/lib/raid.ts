@@ -115,6 +115,11 @@ export interface Raid {
    *  marche — elle garde la force que la Tour de guet a annoncée. Fermer agit sur la
    *  SUITE (« ferme-la avant la prochaine »). Absente = armée ordinaire. */
   overflow?: RiftOverflow;
+  /** ⚔️🗼 La part de l'armée déjà abattue en RASE CAMPAGNE avant d'arriver (`fieldArmy.ts`)
+   *  — les effectifs de `groups` en sont déjà amputés ; elle sert à dire ce qu'il reste de
+   *  sa force de campagne. Et les chocs appliqués (jamais deux fois). */
+  fieldCut?: number;
+  fieldHits?: string[];
 }
 
 export type DefenseId = 'wall' | 'turret' | 'watchtower' | 'infirmary';

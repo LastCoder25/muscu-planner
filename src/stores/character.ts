@@ -90,6 +90,8 @@ import {
   HARVEST_TYPES,
   isRiftPoi,
   isWarbandPoi,
+  isFieldArmyPoi,
+  revealRadius,
   campSpecOf,
   depositMessages,
   MESSAGES_CAP,
@@ -142,6 +144,9 @@ import {
   markOverflow,
   dispelOverflow,
   applyRaidOutcome,
+  raidIntervalMs,
+  scoutLeadMs,
+  scoutLevel,
   resolveRaid,
   siegeHurtIds,
   advHurtMs,
@@ -254,6 +259,7 @@ import {
   walkToBase,
   withoutWalkers,
   interceptLeg,
+  meetAll,
   settleParties,
   startParty,
   type ActiveParty,
@@ -293,6 +299,7 @@ import {
   controlTravelMult,
   trainingRoom,
   dueRetakes,
+  retakeDelayMs,
   ensureControls,
   holdControl,
   loseControl,
@@ -324,6 +331,15 @@ import {
   transferGarrison,
 } from '@/lib/controlRoutes';
 import { resolveHarvestParty } from '@/lib/harvestParty';
+import {
+  applyFieldHitToBase,
+  applyFieldHitToMap,
+  detectRadius,
+  pendingFieldHits,
+  resolveFieldArmy,
+  retakeRemaining,
+  syncFieldArmies,
+} from '@/lib/fieldArmy';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
 import { overflowMessage } from '@/lib/overflowStage';
 import {
@@ -2096,6 +2112,22 @@ export const useCharacterStore = defineStore('character', () => {
     return (now ^ 0x9e3779b9) >>> 0 || 1;
   }
   // Assure la carte (crée si absente) et l'avance jusqu'à `now`. Persiste si changé.
+  /** 🗼 Dernière activité sportive connue (jours actifs sur 7), relevée par les ticks qui la
+   *  reçoivent : la synchro de la carte ne la reçoit pas, et le préavis de la Tour n'en dépend
+   *  qu'à la marge (il est borné par l'intervalle entre deux sièges). */
+  let knownActiveDays7 = 7;
+  /** 🗼 Le rayon de détection de la base : ce qu'une armée parcourt pendant le préavis de la
+   *  Tour de guet — la MÊME règle que la détection des sièges (`advanceBase`). */
+  function detectRadiusOf(base: BaseState | null | undefined): number {
+    const defenses = base?.defenses ?? [];
+    return detectRadius(scoutLeadMs(scoutLevel(defenses), raidIntervalMs(knownActiveDays7)));
+  }
+  /** ⚔️🗼 Les voyages dont l'issue est tirée (groupes, héros) : les chocs contre les armées en
+   *  campagne s'y lisent (`pendingFieldHits`). */
+  function fieldVoyages(cur: CharacterRow): { midAt: number; outcome: ExpeditionOutcome }[] {
+    return [...partyList.value, ...(cur.expedition ? [cur.expedition] : [])];
+  }
+
   async function expeSyncMap(userId: string, now: number, level: number) {
     const cur = row.value;
     if (!cur) return;
@@ -2107,13 +2139,22 @@ export const useCharacterStore = defineStore('character', () => {
     // 🗺️ L'Avant-poste fixe la taille de la carte révélée et son nombre de lieux (v0.1047).
     const outpost = buildingLevel(cur.buildings, 'outpost');
     // 🏰 Les points de contrôle (fixes) se posent s'ils manquent — ils sont hors quota.
-    const map: ExpeditionMap = ensureControls(
+    const map0: ExpeditionMap = ensureControls(
       prev
         ? advanceWorld(prev, now, level, outpost, cur.expedition?.poi.id)
         : createMap(newSeed(now), now, level, outpost),
       now,
       level,
     );
+    // ⚔️🗼 Les armées qui marchent sur la base ou sur un point fixe, VISIBLES dans le rayon de
+    // détection de la Tour de guet (`fieldArmy.ts`).
+    const map = syncFieldArmies(map0, {
+      raid: cur.base?.raid ?? null,
+      detectR: detectRadiusOf(cur.base),
+      reach: revealRadius(outpost),
+      now,
+      playerLevel: level,
+    });
     // ⚠️ ON NE MARQUE QU'UNE BASE QUI EXISTE. Sans enceinte, personne ne vient assiéger
     // (`raidsEnabled`) et `advanceBase` effacerait le marquage au tick suivant : en créer
     // une ici pour la marquer aussitôt serait une base née d'un effet de bord, avec une
@@ -2606,7 +2647,25 @@ export const useCharacterStore = defineStore('character', () => {
   }> {
     const cur = row.value;
     if (!cur) return { detected: null, report: null, advProgress: [], advTracks: [] };
+    knownActiveDays7 = ctx.activeDays7;
     const t = advanceBase(baseOf(cur, now), ctx, now);
+    // ⚔️🗼 LES CHOCS EN RASE CAMPAGNE PASSENT AVANT LE SIÈGE : une équipe qui a croisé l'armée
+    // l'a amputée (ou battue) à l'heure du choc. Lus sur les VOYAGES (l'issue y est tirée), pas
+    // sur les rapports déposés : l'ordre des ticks ne doit pas décider s'ils comptent.
+    // Idempotents (`fieldHits`) : rejoués à chaque tick, appliqués une fois.
+    const r0 = t.base.raid;
+    if (r0) {
+      for (const { hit, at } of pendingFieldHits(fieldVoyages(cur), 'siege', r0.id)) {
+        if (at > now) continue;
+        const a = applyFieldHitToBase(t.base, hit, at, at + raidIntervalMs(ctx.activeDays7));
+        if (a.effect) {
+          t.base = a.base;
+          t.changed = true;
+        }
+      }
+      if (t.base.raid !== r0)
+        t.dueRaid = t.base.raid && now >= t.base.raid.arrivesAt ? t.base.raid : null;
+    }
     // 🛡️ La Caserne produit : l'horloge avance par pas entiers, donc l'état ne change qu'une
     // fois par milicien (on n'écrit pas chaque seconde).
     const barracks = buildingLevel(cur.buildings, 'barracks');
@@ -3313,6 +3372,10 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 Une sortie part de son point : même règle de trajet, distance mesurée depuis lui.
     const meet = interceptLeg(poi, now, origin ? (p) => legFromSpot(p, origin, legOf) : legOf);
     const leg = meet.legMin;
+    // ⚔️🗼 On ne croise pas une armée qui sera arrivée avant nous : le choc tomberait après
+    // l'attaque, il ne changerait rien.
+    if (isFieldArmyPoi(poi) && now + leg * 60_000 >= poi.expiresAt)
+      return 'trop tard : l’armée atteindra sa cible avant ton équipe';
     const withSupplies = partyOutcomeFor({
       poi,
       escort,
@@ -3381,6 +3444,9 @@ export const useCharacterStore = defineStore('character', () => {
    *  cours », tout autre lieu quitte la carte. */
   function targetTaken(map: ExpeditionMap | null, poi: Poi): ExpeditionMap | null {
     if (!map) return map;
+    // ⚔️🗼 Une armée en campagne continue sa marche : d'autres équipes peuvent encore la
+    // croiser. Elle quitte la carte à son arrivée (`syncFieldArmies`).
+    if (isFieldArmyPoi(poi)) return map;
     return poi.type === 'control'
       ? markAssault(map, poi.id, true)
       : { ...map, pois: map.pois.filter((p) => p.id !== poi.id) };
@@ -3416,6 +3482,16 @@ export const useCharacterStore = defineStore('character', () => {
     const spec = baseSpec ? denForce(poi, baseSpec, escort.length, !!hero) : null;
     const outcome = isRiftPoi(poi)
       ? resolveIncursion({ poi, escort, road, hero, seed, now, pantheonLevel: pantheonLevel.value })
+      : isFieldArmyPoi(poi)
+        ? resolveFieldArmy({
+            poi,
+            escort,
+            road,
+            hero,
+            seed,
+            playerLevel: opts.playerLevel,
+            pantheonLevel: pantheonLevel.value,
+          })
       : isWarbandPoi(poi)
         ? resolveInterception({
             poi,
@@ -3610,25 +3686,37 @@ export const useCharacterStore = defineStore('character', () => {
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
     // Le trajet de chaque groupe, à SON pas, depuis chez lui (Tour de guet comprise).
     const mult = travelTimeMult(cur.buildings) * controlTravelMult(map);
-    const plan = planWings(
-      groups.map((g) => {
-        const withHero = !!hero && g.originId === null;
-        const legOf = (p: Poi) =>
-          partyLegMin(p, g.escort, {
-            hero: withHero,
-            travelMult: mult,
-            gearSpeed: advGearRoles(g.escort, road.advGear).speed,
-            supplies,
-          });
-        return {
-          originId: g.originId,
-          members: g.escort.map((a) => a.id),
+    const legs = groups.map((g) => {
+      const withHero = !!hero && g.originId === null;
+      const legOf = (p: Poi) =>
+        partyLegMin(p, g.escort, {
           hero: withHero,
-          legMin: g.origin ? legFromSpot(poi, g.origin, legOf) : legOf(poi),
-        };
-      }),
+          travelMult: mult,
+          gearSpeed: advGearRoles(g.escort, road.advGear).speed,
+          supplies,
+        });
+      const origin = g.origin;
+      return { g, withHero, at: origin ? (p: Poi) => legFromSpot(p, origin, legOf) : legOf };
+    });
+    // ⚔️🧭 Une armée en MARCHE : tous la rejoignent au même point (`meetAll`), là où elle sera.
+    const meet = meetAll(
+      poi,
+      now,
+      legs.map((l) => l.at),
+    );
+    if (isFieldArmyPoi(poi) && (!meet.joined || now + meet.min * 60_000 >= poi.expiresAt))
+      return 'trop tard : l’armée atteindra sa cible avant que tous la rejoignent';
+    const target = meet.poi;
+    const plan = planWings(
+      legs.map((l) => ({
+        originId: l.g.originId,
+        members: l.g.escort.map((a) => a.id),
+        hero: l.withHero,
+        legMin: l.at(target),
+      })),
       now,
       dwellMsFor(poi, all.length),
+      meet.min,
     );
     // 🏰 Assaut d'un point fixe : le retour de chaque groupe si le point est pris (estimé ici
     // pour l'affichage, recalculé au lancement avec ceux qui sont vraiment partis).
@@ -3645,7 +3733,7 @@ export const useCharacterStore = defineStore('character', () => {
     const seed = ((now ^ (poi.level * 2654435761)) & ~1) >>> 0 || 2;
     const attack: CombinedAttack = {
       id: `atk_${now.toString(36)}`,
-      poi,
+      poi: target,
       seed,
       createdAt: now,
       arriveAt: plan.arriveAt,
@@ -3875,7 +3963,9 @@ export const useCharacterStore = defineStore('character', () => {
     let b = base;
     const said = new Map<string, 'dispersed' | 'late'>();
     for (const m of fresh)
-      if (m.poiType === 'warband' && m.win) {
+      // ⚔️🗼 Une ARMÉE EN CAMPAGNE battue n'est pas une bande de faille : elle ne disperse
+      // pas le débordement (son effet passe par `applyFieldHit*`).
+      if (m.poiType === 'warband' && m.win && !m.party?.fieldHit) {
         const d = dispelOverflow(b, m.resolvedAt);
         b = d.base;
         if (d.dispel) said.set(m.id, d.dispel);
@@ -4176,6 +4266,7 @@ export const useCharacterStore = defineStore('character', () => {
   ): Promise<ExpeditionMessage[]> {
     const cur = row.value;
     if (!cur?.expedition_map) return [];
+    knownActiveDays7 = activeDays7;
     // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
     // reprises) se fera au tick suivant, sur l'état relu.
     const home = settleHome(cur, now);
@@ -4185,7 +4276,22 @@ export const useCharacterStore = defineStore('character', () => {
     }
     // 🏰 Les renforts ARRIVÉS rejoignent d'abord leur garnison (ceux arrivés avant l'attaque
     // combattent avec elle, les autres non).
-    const settled = settleReinforcements(cur.expedition_map, now, playerLevel);
+    const settled0 = settleReinforcements(cur.expedition_map, now, playerLevel);
+    // ⚔️🗼 Les chocs en rase campagne contre les armées de REPRISE, AVANT les reprises : une
+    // armée amputée arrive amputée, une armée battue n'arrive pas (la reprise est repoussée).
+    let settled = settled0;
+    for (const p of settled0.pois) {
+      if (p.control?.owner !== 'player' || p.control.attackAt === undefined) continue;
+      for (const { hit, at } of pendingFieldHits(fieldVoyages(cur), 'retake', p.id)) {
+        if (at > now) continue;
+        settled = applyFieldHitToMap(
+          settled,
+          hit,
+          at,
+          at + retakeDelayMs(p.id, at, activeDays7),
+        ).map;
+      }
+    }
     const due = dueRetakes(settled, now);
     if (!due.length) {
       if (settled !== cur.expedition_map && tickMayWrite(cur))
@@ -4220,10 +4326,12 @@ export const useCharacterStore = defineStore('character', () => {
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
-      const force = retakeForce(
+      const force0 = retakeForce(
         foe,
         retakeBoost(foe, [...partyAllies(escort, kit, null), ...militia]),
       );
+      // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas.
+      const force = { ...force0, size: force0.size * retakeRemaining(p) };
       const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
       const o =
         escort.length || militia.length
@@ -4297,6 +4405,18 @@ export const useCharacterStore = defineStore('character', () => {
       map = held
         ? holdControl(map, p.id, at, activeDays7)
         : loseControl(map, p.id, playerLevel, at, { level: foe.level, faction: force.faction });
+      // ⚔️🗼 L'armée est passée : ses pertes en campagne ne valent que pour elle.
+      map = {
+        ...map,
+        pois: map.pois.map((q) => {
+          if (q.id !== p.id || !q.control) return q;
+          if (q.control.retakeCut === undefined && q.control.fieldHits === undefined) return q;
+          const control = { ...q.control };
+          delete control.retakeCut;
+          delete control.fieldHits;
+          return { ...q, control };
+        }),
+      };
       // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
       // route. Seule la garnison, qui a combattu, part à l'infirmerie ; les renforts restent
       // occupés jusqu'à leur retour (le chemin déjà parcouru, refait dans l'autre sens).
