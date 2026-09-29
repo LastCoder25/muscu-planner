@@ -127,7 +127,6 @@
         <span class="apg-emo"
           ><AdvGearArt :model="c.model">{{ c.emoji }}</AdvGearArt></span
         >
-        <span v-if="c.rank" class="apg-rk">{{ c.rank }}</span>
         <span v-if="c.piece && ascendGear?.includes(c.piece.id)" class="apg-up" aria-hidden="true"
           >⬆️</span
         >
@@ -611,16 +610,6 @@ button.ap-mini {
 .apg-emo {
   font-size: 17px;
   line-height: 1.1;
-}
-.apg-rk {
-  max-width: 100%;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 1.1;
-  color: var(--gc);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .ap-skills {
   display: flex;

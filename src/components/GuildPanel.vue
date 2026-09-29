@@ -628,7 +628,6 @@
           <span class="dg-name" :style="s.color ? { color: s.color } : {}">{{ s.name }}</span>
           <!-- Rang (même lecture que familiers et talents) et stat principale : on voit
                ce qu'il porte d'un coup d'œil, sans ouvrir le sélecteur (v0.865). -->
-          <span v-if="s.rank" class="dg-rk" :style="{ color: s.color }">{{ s.rank }}</span>
           <RankStarBadge v-if="s.piece" class="dg-rsb" v-bind="advGearRankStar(s.piece)" />
           <span v-if="s.stat" class="dg-stat">{{ s.stat }}</span>
           <GearStarBar v-if="s.piece" class="dg-bar" :g="s.piece" thin />
@@ -2680,30 +2679,11 @@ function leftOf(at: number): string {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.dg-rk,
 .dg-stat {
   font-size: 9.5px;
   line-height: 1.2;
   max-width: 100%;
   text-align: center;
-}
-/* La rareté (lettre) en PASTILLE en haut à droite (demandé) : elle se lit d’un coup d’œil,
-   hors du texte de la case. */
-.dg-rk {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  max-width: 60%;
-  padding: 0 5px;
-  font-size: 8px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  background: color-mix(in srgb, currentColor 16%, var(--surface));
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .dg-stat {
   color: var(--dim);
