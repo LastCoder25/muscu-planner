@@ -117,6 +117,42 @@ export function poiHaulBonus(
   };
 }
 
+/**
+ * 🧮 LA RÉCOLTE DE BASE ET CELLE DE CETTE ÉQUIPE, côte à côte (demandé par l'utilisateur :
+ * « si une compétence impacte le gain, il faut voir la récolte de base et celle récupérée avec
+ * les effectifs en question »). `total` = `base` + `poiHaulBonus` — aucune règle de plus.
+ *
+ * ⚠️ `idleHaul` : l'équipe porte une compétence de cargaison 🐫 (rôle ou pièce) qui ne change
+ * RIEN ici. C'est la règle, pas un oubli — avec le héros seuls les bâts comptent, et sans lui
+ * le rôle ne gonfle que les RESSOURCES, jamais l'or (`resolveCaravan`, v0.1161) : une mine ne
+ * bouge donc pas. On le DIT, sinon « ramène plus » sur la tuile se lit comme une promesse que
+ * la fiche trahit en silence. Mesuré en comparant le bonus avec et sans l'escorte.
+ */
+export function poiTeamHaul(
+  poi: Pick<Poi, 'id' | 'type' | 'level'>,
+  opts: {
+    playerLevel: number;
+    heroGoes: boolean;
+    escort: Adventurer[];
+    kit: Pick<EscortKit, 'advGear' | 'supplies'>;
+  },
+): { base: PoiHaul; bonus: PoiHaul; total: PoiHaul; idleHaul: boolean } {
+  const base = poiHaulPreview(poi, opts);
+  const bonus = poiHaulBonus(poi, opts);
+  const total = { ...base };
+  for (const k of Object.keys(base) as (keyof PoiHaul)[]) total[k] = base[k] + bonus[k];
+  const carries = caravanHaulMult(opts.escort, opts.kit.advGear, 0) > 1;
+  const idleHaul =
+    carries &&
+    HARVEST_TYPES.has(poi.type) &&
+    sameHaul(bonus, poiHaulBonus(poi, { ...opts, escort: [] }));
+  return { base, bonus, total, idleHaul };
+}
+
+function sameHaul(a: PoiHaul, b: PoiHaul): boolean {
+  return (Object.keys(a) as (keyof PoiHaul)[]).every((k) => a[k] === b[k]);
+}
+
 /** « 300 🪙 · 2 🔮 » (préfixe au choix) : seulement les ressources non nulles, vide sinon. */
 export function formatHaul(haul: PoiHaul, prefix = ''): string {
   return (Object.keys(RATE_EMOJI) as (keyof PoiHaul)[])

@@ -755,7 +755,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
-import { poiHaulPreview, poiHaulBonus, formatHaul } from '@/lib/poiYield';
+import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import {
   fogRevealPlan,
   fogRadiusAt,
@@ -2032,7 +2032,8 @@ const poiFacts = computed<PoiFact[]>(() => {
   // 💰 CE QU'ON RAMÈNE, EN QUANTITÉ (v0.1265, demandé : « pas la production, juste la quantité
   // récupérable ») — la récolte + ce que portent les gardes (`poiHaulPreview`, les MÊMES
   // fonctions que la résolution). Le détail (filon, bourses) passe dans l'info-bulle. Ce
-  // qu'ajoutent les bâts 🧺 et les porteurs 🐫 s'affiche À PART (`poiHaulBonus`). Une faille
+  // qu'ajoute l'équipe (bâts 🧺, porteurs 🐫) : la base, puis « avec cette équipe »
+  // (`poiTeamHaul`). Une faille
   // l'annonce déjà (« Si refermée »).
   if (!rift) pushHaul(out, p, force ?? null);
   if (force) {
@@ -2163,28 +2164,42 @@ function pushHaul(out: PoiFact[], p: Poi, force: Parameters<typeof forceLootPrev
     detail.push(
       `filon ${filon.toLocaleString('fr-FR')} 🪙 + bourses des gardes ${bourses.toLocaleString('fr-FR')} 🪙`,
     );
+  // 🧮 Équipe composée : la base PUIS ce que CETTE équipe ramène (demandé : « voir la récolte
+  // de base et celle récupérée avec les effectifs en question »). `poiTeamHaul` = base + le
+  // bonus des bâts/porteurs, les règles de la résolution — aucune de plus ici.
+  const team =
+    partyTarget.value && partySize.value
+      ? poiTeamHaul(p, { playerLevel, heroGoes, escort: partyAdvs.value, kit: partyRoad.value })
+      : null;
+  const totalTxt = team ? formatHaul(team.total) : '';
+  const boosted = !!team && totalTxt !== txt;
   out.push({
     icon: '💰',
-    label: 'À récupérer',
+    label: boosted ? 'Récolte de base' : 'À récupérer',
     value: txt,
     title: ['Ce que tu ramènes si le lieu est pris (hors aléas de la route)', ...detail].join(
       ' — ',
     ),
   });
-  if (!partyTarget.value) return;
-  const bonus = formatHaul(
-    poiHaulBonus(p, { playerLevel, heroGoes, escort: partyAdvs.value, kit: partyRoad.value }),
-    '+',
-  );
-  if (bonus)
+  if (boosted)
     out.push({
-      icon: '🎁',
-      label: 'Bonus',
-      value: bonus,
+      icon: '🎒',
+      label: 'Avec cette équipe',
+      value: totalTxt,
       cls: 'wp-good',
+      title: `${heroGoes ? 'Bâts 🧺 compris' : 'Bâts 🧺, porteurs 🐫 et pièces de cargaison compris'} — ${formatHaul(team.bonus, '+')}`,
+    });
+  // 🐫 Une compétence de cargaison présente qui ne change RIEN ici : on le dit, sinon « ramène
+  // plus » sur la tuile du champion se lit comme une promesse trahie en silence.
+  if (team?.idleHaul)
+    out.push({
+      icon: '🐫',
+      label: 'Porteurs',
+      value: 'sans effet ici',
+      cls: 'dim',
       title: heroGoes
-        ? 'Ajouté par les bâts 🧺'
-        : 'Ajouté par les bâts 🧺, les porteurs 🐫 et les pièces de cargaison',
+        ? 'Avec le héros, seuls les bâts 🧺 augmentent la récolte'
+        : 'Les porteurs gonflent les ressources (énergie, pierres, clés, mana), pas l’or d’une mine',
     });
 }
 /**
