@@ -21,7 +21,13 @@ import {
   meetAll,
   supplyTarget,
 } from '@/lib/party';
-import { partyRoadOdds, partyWinChance, winGain, type GainTeam } from '@/lib/partyForecast';
+import {
+  FORECAST_SAMPLES,
+  partyRoadOdds,
+  partyWinChance,
+  winGain,
+  type GainTeam,
+} from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
 import { COMBINED_BLOCK_LABEL, byReach, combinedBlocker, wingOriginId } from '@/lib/combinedAttack';
@@ -290,7 +296,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
       partyRoad.value,
       heroForParty.value,
       coarseNow.value,
-      40,
+      FORECAST_SAMPLES,
     );
     return w === null ? null : Math.round(w * 100);
   });
@@ -377,7 +383,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
       partyRoad.value,
       heroForParty.value,
       coarseNow.value,
-      40,
+      FORECAST_SAMPLES,
       false,
     );
   });
@@ -385,7 +391,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partyRoute = computed(() => {
     const p = selected.value;
     if (!p || !partySize.value) return null;
-    return partyRoadOdds(p, partyAdvs.value, partyRoad.value, heroForParty.value, 40);
+    return partyRoadOdds(p, partyAdvs.value, partyRoad.value, heroForParty.value, FORECAST_SAMPLES);
   });
   /** 🧭 Trajet ALLER (minutes) vers la cible depuis un lieu de départ (`null` = la base),
    *  pour un groupe donné — la MÊME règle que le store (`partyLegMin`, `legFromSpot`). */

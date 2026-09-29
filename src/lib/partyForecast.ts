@@ -33,13 +33,18 @@ import { fieldArmySpec } from './fieldArmy';
  * ⚠️ Ce module vit À PART : `camp.ts` et `rift.ts` importent `party.ts`, donc la règle ne
  * pouvait pas y descendre sans cycle.
  */
+/** 🎯 Combien de combats simulés pour un 🎯 % affiché. ⚠️ UNE seule valeur pour le % de
+ *  l'équipe ET l'apport de chaque membre (`winGain`) : avec 20 d'un côté et 40 de l'autre,
+ *  le héros annonçait « +45 % » quand le % de l'équipe passait de 0 à 53 % (signalé). */
+export const FORECAST_SAMPLES = 40;
+
 export function partyWinChance(
   poi: Poi,
   escort: Adventurer[],
   road: EscortKit,
   hero: PartyHero | null,
   now: number,
-  samples = 40,
+  samples = FORECAST_SAMPLES,
   /** 🛣️ Compter la ROUTE d'une récolte sans héros (défaut). `false` = les gardes seuls :
    *  c'est ce que lit le refus « perdu d'avance » — une route dangereuse coûte une part de la
    *  cargaison, elle ne rend jamais un lieu imprenable. */
@@ -139,7 +144,7 @@ export function winGain(
   withoutMember: GainTeam,
   road: EscortKit,
   now: number,
-  samples = 20,
+  samples = FORECAST_SAMPLES,
 ): number | null {
   const empty = (t: GainTeam) => !t.escort.length && !t.hero;
   const pct = (t: GainTeam) =>
@@ -148,5 +153,6 @@ export function winGain(
   const b = pct(withoutMember);
   // Rien ne se simule du côté qui a du monde : pas d'apport à annoncer (pas « 0 % »).
   if ((a === null && !empty(withMember)) || (b === null && !empty(withoutMember))) return null;
-  return Math.round(((a ?? 0) - (b ?? 0)) * 100);
+  // Chaque côté arrondi COMME L'ÉCRAN l'affiche : l'apport est l'écart entre deux % lisibles.
+  return Math.round((a ?? 0) * 100) - Math.round((b ?? 0) * 100);
 }
