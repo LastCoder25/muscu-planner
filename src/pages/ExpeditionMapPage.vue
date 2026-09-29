@@ -457,6 +457,20 @@
               <span class="mil-name">{{ MILITIA_NAME }}</span>
               <span v-if="m.arriveIn > 0" class="mil-sub">🧭 {{ formatDuration(m.arriveIn) }}</span>
             </button>
+            <!-- ➕ LES PLACES VIDES (demandé : « les 5 slots ») : la garnison se lit comme 5
+                 cases, pleines ou non. Toucher une case vide amène au renfort. Au-delà des
+                 places de champion, une case ne prend qu'un milicien (`controlFree`). -->
+            <button
+              v-for="slot in garrisonSlots"
+              :key="'slot' + slot.i"
+              type="button"
+              class="slot-tile"
+              :aria-label="slot.label"
+              @click="goReinforce"
+            >
+              <span class="slot-plus">＋</span>
+              <span class="slot-name">{{ slot.label }}</span>
+            </button>
           </div>
           <button
             v-if="ctlRecallSel.length"
@@ -527,6 +541,7 @@
           </p>
           <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
                puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
+          <div ref="reinfAnchor" />
           <template v-if="controlFree > 0">
             <p class="ctl-line ctl-reinf">
               ➕
@@ -1785,6 +1800,18 @@ const recallSelLabel = computed(() => {
 });
 const controlCount = computed(() => controlMembers.value.length + controlMilitia.value.length);
 const controlFree = computed(() => controlFreeSeats(liveControl.value));
+/** ➕ Les cases vides de la garnison de 5 : les premières prennent un champion, les
+ *  suivantes (au-delà des places de champion du lieu) seulement un milicien. */
+const garrisonSlots = computed(() =>
+  Array.from({ length: militiaFreeSeats(liveControl.value) }, (_, i) => ({
+    i,
+    label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
+  })),
+);
+const reinfAnchor = ref<HTMLElement | null>(null);
+function goReinforce() {
+  reinfAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 /** Les sélections de la fiche : qui ramener, qui envoyer en renfort. ⚠️ Déclarées AVANT le
  *  stepper de milice, dont le `watch` les lit dès le setup (zone morte temporelle sinon). */
 const ctlRecallSel = ref<string[]>([]);
@@ -4028,6 +4055,28 @@ onUnmounted(() => {
   padding: 0 12px 6px;
 }
 /* 🛡️ Un milicien dans la garnison : une tuile anonyme, sélectionnable pour le ramener. */
+.slot-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  font: inherit;
+}
+.slot-plus {
+  font-size: 22px;
+  line-height: 1;
+}
+.slot-name {
+  font-size: 11px;
+}
 .mil-tile {
   display: flex;
   flex-direction: column;

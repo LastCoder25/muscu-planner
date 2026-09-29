@@ -31,7 +31,7 @@ const champ = (i: number, level = 30): Adventurer => ({
 const road: EscortKit = { talents: [], advGear: refAdvGear(30, 3) };
 const team = (n: number) => Array.from({ length: n }, (_, i) => champ(i));
 const pct = (e: Adventurer[]) =>
-  Math.round((partyWinChance(poi(), e, road, null, 0, 20) ?? 0) * 100);
+  Math.round((partyWinChance(poi(), e, road, null, 0) ?? 0) * 100);
 
 describe('winGain — ce qu’un membre apporte à la réussite', () => {
   it('c’est la différence de deux 🎯 %, avec la même fonction que l’écran', () => {
@@ -43,9 +43,28 @@ describe('winGain — ce qu’un membre apporte à la réussite', () => {
       road,
       0,
     );
-    const avec = partyWinChance(poi(), [...e, champ(2)], road, null, 0, 20)!;
-    const sans = partyWinChance(poi(), e, road, null, 0, 20)!;
-    expect(g).toBe(Math.round((avec - sans) * 100));
+    expect(g).toBe(pct([...e, champ(2)]) - pct(e));
+  });
+
+  // ⚠️ Signalé : le héros annonçait « +45 % » quand le 🎯 % de l'équipe passait de 0 à 53 % —
+  // l'apport simulait 20 combats, le % affiché 40. On balaie plusieurs lieux et équipes : l'apport
+  // doit TOUJOURS se lire comme la différence des deux % affichés.
+  it('l’apport annoncé = le % affiché avec lui moins le % affiché sans lui, partout', () => {
+    for (const level of [20, 30, 40])
+      for (const type of ['lair', 'camp'] as const)
+        for (let n = 0; n <= 3; n++) {
+          const p = poi({ level, type, id: `cp_${type}_${level}` });
+          const shown = (e: Adventurer[]) =>
+            e.length ? Math.round((partyWinChance(p, e, road, null, 0) ?? 0) * 100) : 0;
+          const g = winGain(
+            p,
+            { escort: [...team(n), champ(n)], hero: null },
+            { escort: team(n), hero: null },
+            road,
+            0,
+          );
+          expect(g).toBe(shown([...team(n), champ(n)]) - shown(team(n)));
+        }
   });
 
   it('⚠️ il dépend de qui est déjà coché : seul, un champion n’apporte pas ce qu’il apporte en renfort', () => {

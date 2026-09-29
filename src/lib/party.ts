@@ -124,6 +124,22 @@ export function meetAll(
   return { poi: walls, min: Math.max(end, ...legOfs.map((f) => f(walls))), joined: false };
 }
 
+/**
+ * ⚔️⏱️ TROP TARD POUR L'INTERCEPTER : une armée en marche (bande sortie d'une faille OU armée
+ * de campagne) qui atteindra sa cible avant que l'équipe la rejoigne. Le choc tomberait
+ * après l'attaque — il ne changerait rien, donc on ne part pas. `legMin` est l'aller rendu
+ * par `interceptLeg` (ou la minute commune de `meetAll`) : quand la rencontre n'a pas lieu,
+ * il vaut déjà le trajet jusqu'aux murs, donc au-delà de l'arrivée de l'armée.
+ * ⚠️ SOURCE UNIQUE : l'écran (bouton grisé et sa raison) et le store (refus) la lisent.
+ */
+export function interceptTooLate(
+  poi: Pick<Poi, 'type' | 'expiresAt'>,
+  now: number,
+  legMin: number,
+): boolean {
+  return isWarbandPoi(poi) && now + legMin * 60_000 >= poi.expiresAt;
+}
+
 /** 🎒 Ce que ce voyage offre aux consommables (`supplyUselessWhy`). ⚠️ Vit ICI et non dans
  *  `supplies.ts` : il lit `poiForceOf`, et `expedition.ts` importe déjà `supplies.ts`. */
 export function supplyTarget(poi: Poi, hero: boolean, escort: number): SupplyTarget {
@@ -196,6 +212,7 @@ export function denForce<S extends { size: number }>(
  *  parallèle n'est borné que par le vivier disponible. SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
 export type PartySendBlock =
   | 'notTarget'
+  | 'tooLate'
   | 'empty'
   | 'tooMany'
   | 'hopeless'
@@ -239,6 +256,7 @@ export function partySendBlocker(
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
+  tooLate: 'trop tard — l’armée atteindra sa cible avant ton équipe',
   hopeless: 'perdu d’avance — aucun d’eux n’en reviendrait vainqueur',
   notTarget: 'on n’envoie pas d’équipe sur ce lieu',
   empty: 'l’équipe est vide',

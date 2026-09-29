@@ -254,6 +254,7 @@ import {
   walkToBase,
   withoutWalkers,
   interceptLeg,
+  interceptTooLate,
   meetAll,
   settleParties,
   startParty,
@@ -3387,9 +3388,9 @@ export const useCharacterStore = defineStore('character', () => {
     const meet = interceptLeg(poi, now, origin ? (p) => legFromSpot(p, origin, legOf) : legOf);
     const leg = meet.legMin;
     // ⚔️🗼 On ne croise pas une armée qui sera arrivée avant nous : le choc tomberait après
-    // l'attaque, il ne changerait rien.
-    if (isFieldArmyPoi(poi) && now + leg * 60_000 >= poi.expiresAt)
-      return 'trop tard : l’armée atteindra sa cible avant ton équipe';
+    // l'attaque, il ne changerait rien. ⚠️ TOUTE bande en marche, pas seulement les armées de
+    // campagne : une bande de faille arrivée aux murs a déjà renforcé le siège.
+    if (interceptTooLate(poi, now, leg)) return PARTY_SEND_BLOCK_LABEL.tooLate;
     const withSupplies = partyOutcomeFor({
       poi,
       escort,
@@ -3718,7 +3719,7 @@ export const useCharacterStore = defineStore('character', () => {
       now,
       legs.map((l) => l.at),
     );
-    if (isFieldArmyPoi(poi) && (!meet.joined || now + meet.min * 60_000 >= poi.expiresAt))
+    if ((isWarbandPoi(poi) && !meet.joined) || interceptTooLate(poi, now, meet.min))
       return 'trop tard : l’armée atteindra sa cible avant que tous la rejoignent';
     const target = meet.poi;
     const plan = planWings(

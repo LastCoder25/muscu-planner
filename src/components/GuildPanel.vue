@@ -379,15 +379,12 @@
                      par mot — illisible. -->
                   <div class="gear-stock-body">
                     <GearStarBar :g="g" />
-                    <!-- 🎰 La LETTRE (B / A / S), comme les champions — plus le rang +
-                         étoiles du héros (demandé). -->
+                    <!-- 🎰 La rareté ne s'ÉCRIT plus sur la tuile (demandé) : elle se lit à la
+                         COULEUR du nom. -->
                     <!-- ⚠️ Deux éléments FLEX plutôt qu'un « · » entre deux textes : en
                          colonne étroite la lignée passe à la ligne et le séparateur restait
                          orphelin en bout de ligne précédente. -->
                     <span class="d-pair-sub gear-meta">
-                      <span class="d-rk" :style="{ '--rk': advGearBadge(g).color }">{{
-                        advGearBadge(g).label
-                      }}</span>
                       <span>{{ lineageLabel(g.lineage) }}</span>
                       <!-- ⚠️ Le PORTEUR rejoint la ligne de méta (et non la sienne) : une
                            ligne de moins par tuile, sans rien perdre — le cadre jaune dit
