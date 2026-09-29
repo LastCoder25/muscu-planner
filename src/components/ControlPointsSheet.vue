@@ -72,22 +72,6 @@
                 >🧭 +{{ r.reinforcing.length }} en route</span
               >
             </span>
-            <!-- 🖼️ Qui tient la place, d'un coup d'œil (demandé) : une case par place (1 à N),
-                 remplie d'une miniature par champion ou milicien posté, numérotée si libre.
-                 Elle remplace la pastille « 🛡️ 2/5 » : les cases disent la même chose. -->
-            <span v-if="r.status !== 'enemy' && r.status !== 'assault'" class="cps-minis">
-              <template v-for="(s, i) in slotsOf(r)" :key="i">
-                <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
-                  ><ChampionPortrait :champion-id="s.adv.championId">{{
-                    advTitle(s.adv)?.emoji ?? '🧑'
-                  }}</ChampionPortrait></span
-                >
-                <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
-                  MILITIA_EMO
-                }}</span>
-                <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
-              </template>
-            </span>
           </span>
           <!-- 🏷️ Le statut en haut à droite (demandé), au-dessus de ce que le lieu rapporte. -->
           <span class="cps-end">
@@ -100,6 +84,25 @@
               /></span>
             </span>
             <span v-else class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
+          </span>
+          <!-- 🖼️ Qui tient la place, d'un coup d'œil (demandé) : une case par place (1 à N),
+               remplie d'une miniature par champion ou milicien posté, numérotée si libre.
+               Elle remplace la pastille « 🛡️ 2/5 » : les cases disent la même chose.
+               Sur SA propre rangée, sous le nom et le statut : dans la colonne du nom, les cases
+               rétrécissaient selon la largeur du texte de droite, donc n'avaient pas la même
+               taille d'un lieu à l'autre (signalé sur la tour de guet, sans jauge). -->
+          <span v-if="r.status !== 'enemy' && r.status !== 'assault'" class="cps-minis">
+            <template v-for="(s, i) in slotsOf(r)" :key="i">
+              <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
+                ><ChampionPortrait :champion-id="s.adv.championId">{{
+                  advTitle(s.adv)?.emoji ?? '🧑'
+                }}</ChampionPortrait></span
+              >
+              <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
+                MILITIA_EMO
+              }}</span>
+              <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
+            </template>
           </span>
           <span class="cps-chev">{{ openId === r.poi.id ? '▾' : '▸' }}</span>
         </button>
@@ -349,9 +352,11 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   border-left-color: var(--rk);
 }
 .cps-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 6px;
   width: 100%;
   min-height: 56px;
   padding: 8px 10px;
@@ -363,10 +368,11 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
 }
 .cps-emo {
   font-size: 26px;
-  flex: 0 0 auto;
+  grid-row: 1 / span 2;
 }
 .cps-main {
-  flex: 1;
+  align-self: start;
+  padding-top: 2px;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -407,20 +413,21 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   color: var(--d4);
   border-color: color-mix(in srgb, var(--d4) 50%, transparent);
 }
-/* Toutes les places sur UNE ligne (demandé) : les cases rétrécissent plutôt que de passer
-   à la ligne — à 344 px la colonne ne laisse qu'environ 120 px pour 5 cases. */
+/* Toutes les places sur UNE ligne (demandé), à taille FIXE : la rangée a toute la largeur
+   de la tuile (colonnes du nom et du statut), 5 cases de 28 px y tiennent dès 344 px. */
 .cps-minis {
+  grid-column: 2 / 4;
+  grid-row: 2;
   display: flex;
   flex-wrap: nowrap;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 .mini {
   display: grid;
   place-items: center;
-  flex: 0 1 28px;
-  min-width: 0;
-  aspect-ratio: 1;
+  flex: 0 0 28px;
+  height: 28px;
   font-size: 17px;
   line-height: 1;
   border-radius: 7px;
@@ -443,14 +450,16 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
 }
 .cps-chev {
   color: var(--dim);
+  grid-column: 4;
+  grid-row: 1 / span 2;
 }
 .cps-body {
   padding: 0 10px 10px;
 }
 /* Colonne de droite : le statut EN HAUT, ce que le lieu rapporte dessous. */
 .cps-end {
-  flex: 0 0 auto;
-  max-width: 48%;
+  grid-column: 3;
+  grid-row: 1;
   min-width: 0;
   align-self: flex-start;
   display: flex;
