@@ -60,9 +60,16 @@
         :aria-label="`${CONTROL_LABEL[r.kind]} — ouvrir la gestion`"
         @click="emit('open', r.poi)"
       >
-        <span class="cps-emo">{{ CONTROL_EMO[r.kind] }}</span>
-        <span class="cps-main">
-          <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
+        <!-- 📐 Rangée 1 : icône, nom et statut sur la MÊME ligne médiane — l'icône n'est plus
+             centrée sur toute la tuile (elle décrochait du titre dès que la colonne de droite
+             grandissait). Le statut reste en haut à droite (demandé). -->
+        <span class="cps-emo" aria-hidden="true">{{ CONTROL_EMO[r.kind] }}</span>
+        <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
+        <span class="pill st">{{ STATUS[r.status] }}</span>
+        <!-- 🧾 Rangée 2 : rang/renforts, garnison, puis ce que le lieu rapporte, calé à droite.
+             UNE rangée (qui démarre sous l'icône) et ne passe à la ligne que si la place
+             manque — une rangée par bloc laissait un grand vide à gauche du rendement. -->
+        <span class="cps-foot">
           <span v-if="!isHeldControl(r.poi) || r.reinforcing.length" class="cps-pills">
             <span v-if="!isHeldControl(r.poi)" class="pill rk"
               >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
@@ -71,40 +78,36 @@
               >🧭 +{{ r.reinforcing.length }} en route</span
             >
           </span>
-        </span>
-        <!-- 🏷️ Le statut en haut à droite (demandé), au-dessus de ce que le lieu rapporte. -->
-        <span class="cps-end">
-          <span class="pill st">{{ STATUS[r.status] }}</span>
+          <!-- 🖼️ La GARNISON, dans sa pastille (demandé : « pour distinguer cette partie-là ») :
+               une case par place (1 à N), remplie d'une miniature par champion ou milicien
+               posté, numérotée si libre — elle remplace la pastille « 🛡️ 2/5 ». Cases à taille
+               FIXE (elles rétrécissaient selon la largeur du texte voisin, signalé sur la tour
+               de guet). -->
+          <span
+            v-if="r.status !== 'enemy' && r.status !== 'assault'"
+            class="cps-minis"
+            :aria-label="`Garnison ${r.garrison.length} sur ${r.seats}`"
+          >
+            <template v-for="(s, i) in slotsOf(r)" :key="i">
+              <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
+                ><ChampionPortrait :champion-id="s.adv.championId">{{
+                  advTitle(s.adv)?.emoji ?? '🧑'
+                }}</ChampionPortrait></span
+              >
+              <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
+                MILITIA_EMO
+              }}</span>
+              <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
+            </template>
+          </span>
           <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
-          <span v-if="r.progress" class="cps-yield-end prog" :class="{ full: isFull(r) }">
+          <span v-if="r.progress" class="cps-yield prog" :class="{ full: isFull(r) }">
             <span>{{ r.progress.text }}</span>
             <span v-if="r.progress.pct !== null" class="cps-gauge"
               ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
             /></span>
           </span>
-          <span v-else class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
-        </span>
-        <!-- 🖼️ La GARNISON, dans sa pastille (demandé : « pour distinguer cette partie-là ») :
-             une case par place (1 à N), remplie d'une miniature par champion ou milicien
-             posté, numérotée si libre — elle remplace la pastille « 🛡️ 2/5 ». Sur SA propre
-             rangée : dans la colonne du nom, les cases rétrécissaient selon la largeur du texte
-             de droite (signalé sur la tour de guet, sans jauge). -->
-        <span
-          v-if="r.status !== 'enemy' && r.status !== 'assault'"
-          class="cps-minis"
-          :aria-label="`Garnison ${r.garrison.length} sur ${r.seats}`"
-        >
-          <template v-for="(s, i) in slotsOf(r)" :key="i">
-            <span v-if="s.kind === 'adv'" class="mini" :title="s.adv.name"
-              ><ChampionPortrait :champion-id="s.adv.championId">{{
-                advTitle(s.adv)?.emoji ?? '🧑'
-              }}</ChampionPortrait></span
-            >
-            <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
-              MILITIA_EMO
-            }}</span>
-            <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
-          </template>
+          <span v-else class="cps-yield">{{ CONTROL_YIELD[r.kind] }}</span>
         </span>
         <span class="cps-chev" aria-hidden="true">›</span>
       </button>
@@ -265,35 +268,64 @@ const isFull = (r: ControlRosterRow) =>
   border-color: var(--d4);
   border-left-color: var(--rk);
 }
+/* 📐 Deux rangées : la 1re aligne icône, nom et statut sur une même ligne médiane (la case de
+   l'icône donne sa hauteur à la rangée) ; la 2e, sous toute la largeur, porte rang/renforts,
+   garnison et rendement. Le chevron se centre sur toute la tuile. */
 .cps-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: 36px minmax(0, 1fr) auto 10px;
+  grid-template-areas:
+    'emo name st chev'
+    'foot foot foot chev';
   align-items: center;
   column-gap: 10px;
-  row-gap: 6px;
+  row-gap: 8px;
   width: 100%;
   min-height: 56px;
-  padding: 8px 10px;
+  padding: 10px 10px 10px 8px;
   color: var(--text);
   text-align: left;
   cursor: pointer;
 }
 .cps-emo {
-  font-size: 26px;
-  grid-row: 1 / span 2;
-}
-.cps-main {
-  align-self: start;
-  padding-top: 2px;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  grid-area: emo;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--rk) 14%, transparent);
 }
 .cps-name {
+  grid-area: name;
+  min-width: 0;
   font-weight: 700;
+  line-height: 1.2;
+  /* Deux lignes au plus : elles tiennent dans la hauteur de l'icône (36 px), le nom reste
+     centré sur elle au lieu d'être coupé à 344 px (« Scriptorium des… »). */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.pill.st {
+  grid-area: st;
+  justify-self: end;
+}
+.cps-foot {
+  grid-area: foot;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
 }
 .cps-pills {
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -325,12 +357,9 @@ const isFull = (r: ControlRosterRow) =>
   color: var(--d4);
   border-color: color-mix(in srgb, var(--d4) 50%, transparent);
 }
-/* Toutes les places sur UNE ligne (demandé), à taille FIXE : la rangée a toute la largeur
-   de la tuile (colonnes du nom et du statut), 5 cases de 28 px y tiennent dès 344 px. */
+/* Toutes les places sur UNE ligne (demandé), à taille FIXE : la rangée du bas démarre sous
+   l'icône, 5 cases de 28 px et le rendement y tiennent côte à côte dès 344 px (mesuré). */
 .cps-minis {
-  grid-column: 2 / 4;
-  grid-row: 2;
-  justify-self: start;
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
@@ -369,21 +398,12 @@ const isFull = (r: ControlRosterRow) =>
 }
 .cps-chev {
   color: var(--dim);
-  grid-column: 4;
-  grid-row: 1 / span 2;
+  grid-area: 1 / 4 / -1 / 5;
+  text-align: center;
 }
-/* Colonne de droite : le statut EN HAUT, ce que le lieu rapporte dessous. */
-.cps-end {
-  grid-column: 3;
-  grid-row: 1;
-  min-width: 0;
-  align-self: flex-start;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-}
-.cps-yield-end {
+/* Ce que le lieu rapporte : poussé à droite, sous le statut. */
+.cps-yield {
+  margin-left: auto;
   max-width: 120px;
   text-align: right;
   font-size: 11.5px;
@@ -391,7 +411,7 @@ const isFull = (r: ControlRosterRow) =>
   color: var(--accent);
   font-weight: 600;
 }
-.cps-yield-end.prog {
+.cps-yield.prog {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -415,10 +435,10 @@ const isFull = (r: ControlRosterRow) =>
   background: var(--d1);
 }
 /* Réserve pleine : la production s'arrête, c'est le moment de récolter. */
-.cps-yield-end.prog.full {
+.cps-yield.prog.full {
   color: var(--accent);
 }
-.cps-yield-end.prog.full .cps-gauge > span {
+.cps-yield.prog.full .cps-gauge > span {
   background: var(--accent);
 }
 </style>
