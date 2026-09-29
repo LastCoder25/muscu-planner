@@ -116,7 +116,8 @@ export const CONTROL = {
    *  (le rythme d'avant, inchangé pour qui n'en poste qu'un). ⚠️ Les runes sont RARES : toutes
    *  sources confondues, un joueur régulier en gagne 0,27 à 0,87 par jour (spec des runes) ;
    *  tenu plein en continu, le Scriptorium en ajoute 1 par jour (choix de l'utilisateur). La
-   *  couleur suit les chances des lieux (`placeRuneOdds`, rang du point face au tien). Sa
+   *  couleur suit les chances d'un lieu À TON RANG (`placeRuneOdds`, cas `equal`) : tenu, le
+   *  point est neutre, son rang caché n'y entre pas. Sa
    *  réserve tient UNE rune (une seule attend d'être ramassée), quel que soit l'effectif. */
   runeHoursPerItem: 24,
   /** ⛲ Source de mana (2026-09-29, demandé) : une garnison de 3 produit par jour la MOITIÉ du
@@ -862,8 +863,9 @@ export function collectControl(
       supplies[s] = (supplies[s] ?? 0) + 1;
     }
   }
-  // 📜 La couleur de chaque rune recopiée : les chances d'une rune tombée sur un lieu, selon le
-  // rang du point face au tien (`placeRuneOdds`). Graine : la CARTE, le point et la dernière
+  // 📜 La couleur de chaque rune recopiée : les chances d'une rune tombée sur un lieu À TON
+  // RANG (`placeRuneOdds`, ton rang des deux côtés — tenu, le point est neutre, son rang caché
+  // n'y entre pas). Graine : la CARTE, le point et la dernière
   // récolte — sans la carte, tous les joueurs recevaient la même suite de couleurs.
   const runes: RuneTier[] = [];
   if (c.kind === 'scriptorium') {
