@@ -6,7 +6,14 @@
        On en choisit, puis un lieu tenu où les envoyer en renfort. ⚠️ Aucune règle ici : les
        places viennent de `baseSendBlocker` (la lib), le départ du store — l'écran ne fait que
        les montrer. -->
-  <q-dialog :model-value="modelValue" position="bottom" @update:model-value="close">
+  <!-- `no-refocus` : à la fermeture, le focus ne revient pas sur la ville (il y laissait un
+       cadre visible). -->
+  <q-dialog
+    :model-value="modelValue"
+    position="bottom"
+    no-refocus
+    @update:model-value="close"
+  >
     <div class="bgs">
       <div class="bgs-head">
         <span class="bgs-title">🏠 Ta base</span>
