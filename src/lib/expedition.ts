@@ -348,6 +348,8 @@ export interface PartyResult {
    *  embuscade a été perdue sur la route. `win` reste faux (règle de l'XP du convoi) ; le
    *  verdict, lui, ne dit plus « repoussé ». Absent des rapports d'avant la v0.1283. */
   roadLost?: true;
+  /** 🔙 Embuscade perdue à l'aller : demi-tour, lieu jamais atteint (ni gardes, ni récolte). */
+  turnedBack?: true;
   /** 🐺 Le duel d'une TANIÈRE, résumé pour son rejeu (`bossReplaySteps`) — de quoi REJOUER,
    *  jamais de quoi recalculer. Absent des rapports d'avant la v0.1212. */
   den?: DenBattle;
@@ -631,6 +633,10 @@ export interface ExpeditionOutcome {
   /** Multiplicateur sur la jambe RETOUR (1 = normal). Un passage découvert ou un
    *  contretemps ramènent le héros plus tôt — le seul effet qui joue sur le TEMPS. */
   returnMult: number;
+  /** 🔙 Embuscade perdue à l'ALLER : l'équipe fait demi-tour avec ses blessés, sans avoir
+   *  atteint le lieu. Part du trajet aller parcourue au moment du demi-tour (0..1) : le
+   *  rapport tombe à cet instant et le retour dure autant que le chemin fait. */
+  turnBack?: number;
   waves?: number; // 'arena' uniquement : nombre de vagues tenues
   party?: PartyResult; // ⚔️ camp de faction attaqué en groupe
   text: string; // texte du rapport
@@ -649,6 +655,8 @@ export interface ActiveExpedition {
    *  de la ville. `origin` sert au dessin (`travelPosition`), `homeId` au retour en garnison. */
   origin?: { x: number; y: number };
   homeId?: string;
+  /** 🔙 Demi-tour sur une embuscade perdue à l'aller (cf. `Voyage.turnBack`). */
+  turnBack?: number;
   /** ⚔️🧭 Un groupe-COMPAGNON d'une attaque combinée : il voyage (tracé, retour) mais ne
    *  dépose AUCUN rapport — c'est le groupe principal qui porte le combat. */
   wingOf?: string;
@@ -2289,6 +2297,17 @@ export interface Voyage {
   /** 🏰 D'où part le voyage, et où il revient : un point fixe (sortie, transfert). Absent =
    *  la ville. */
   origin?: { x: number; y: number };
+  /** 🔙 Demi-tour (`ExpeditionOutcome.turnBack`) : le voyage s'arrête à cette part du chemin
+   *  aller au lieu d'atteindre le lieu. Absent = trajet complet. */
+  turnBack?: number;
+}
+
+/** 🔙 Le point où l'équipe fait demi-tour : sur le chemin aller, à `turnBack` du départ. */
+export function voyageTarget(exp: Voyage): { x: number; y: number } {
+  const o = exp.origin ?? EXPE.town;
+  const f = exp.turnBack;
+  if (f === undefined) return exp.poi;
+  return { x: o.x + (exp.poi.x - o.x) * f, y: o.y + (exp.poi.y - o.y) * f };
 }
 
 /** 🐺 Le duel d'une tanière (cf. `PartyResult.den`). */
@@ -2351,7 +2370,8 @@ export function travelPosition(
 } {
   // 🏰 Un voyage parti d'un point fixe part de lui ET y revient (sortie, transfert).
   const town = exp.origin ?? EXPE.town;
-  const p = exp.poi;
+  // 🔙 Un demi-tour s'arrête en chemin : on marche vers ce point, pas vers le lieu.
+  const p = voyageTarget(exp);
   const remainTotalMs = Math.max(0, exp.returnAt - now);
   // 🔍 L'arrivée sur place précède le rapport de la durée de la fouille.
   const arriveAt = exp.midAt - Math.max(0, exp.dwellMs ?? 0);

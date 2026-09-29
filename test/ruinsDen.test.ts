@@ -101,7 +101,8 @@ describe('🏛️ les ruines anciennes : la seule source de sceaux', () => {
         playerLevel: 26,
         pantheonLevel: 26,
       });
-      const guardsDown = out.party!.slain === out.party!.foes;
+      // 🔙 Un demi-tour n'atteint pas les ruines : il compte comme une défaite.
+      const guardsDown = !out.party!.turnedBack && out.party!.slain === out.party!.foes;
       if (guardsDown) {
         won++;
         expect(out.seals).toEqual(ruinsSeals(p, 26));

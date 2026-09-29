@@ -19,7 +19,7 @@ import {
   interceptLeg,
   supplyTarget,
 } from '@/lib/party';
-import { partyWinChance } from '@/lib/partyForecast';
+import { partyRoadOdds, partyWinChance } from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
 import { COMBINED_BLOCK_LABEL, combinedBlocker } from '@/lib/combinedAttack';
@@ -318,6 +318,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
       40,
       false,
     );
+  });
+  /** 🛣️ La route à part des gardes (`partyRoadOdds`), `null` quand elle ne se joue pas. */
+  const partyRoute = computed(() => {
+    const p = selected.value;
+    if (!p || !partySize.value) return null;
+    return partyRoadOdds(p, partyAdvs.value, partyRoad.value, heroForParty.value, 40);
   });
   /** Aller-retour : le groupe va au pas de son marcheur le plus lent (`partyLegMin`). */
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
@@ -641,6 +647,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
     toggleSupply,
     partyRoad,
     partyWin,
+    partyGuardWin,
+    partyRoute,
     partyLeg,
     partyMin,
     partyRisk,

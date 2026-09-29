@@ -59,6 +59,34 @@ export function partyWinChance(
 }
 
 /**
+ * 🛣️ LA ROUTE, À PART DES GARDES (2026-09-29, décision de l'utilisateur) : un seul % mêlait
+ * les deux et trompait — une archive Argent ★1 affichait 7 % pour un champion Or ★1 qui y
+ * bat les gardes 85 fois sur 100 ; c'est la route dangereuse qui coûtait. Rend `null` quand
+ * le trajet ne se joue pas (héros du groupe, lieu hors récolte, équipe vide).
+ * - `clear` : aucune embuscade perdue ;
+ * - `turnBack` : embuscade perdue à l'ALLER — demi-tour, le lieu n'est pas atteint.
+ * ⚠️ Le VRAI trajet (`resolveCaravan`), sur les graines de PRONOSTIC — comme `roadClearChance`.
+ */
+export function partyRoadOdds(
+  poi: Poi,
+  escort: Adventurer[],
+  road: EscortKit,
+  hero: PartyHero | null,
+  samples = 40,
+): { clear: number; turnBack: number } | null {
+  if (hero || !escort.length || !HARVEST_TYPES.has(poi.type)) return null;
+  const n = Math.max(1, samples);
+  let clear = 0;
+  let back = 0;
+  for (let s = 0; s < n; s++) {
+    const o = resolveCaravan(poi, escort, partyForecastSeed(s), road, 1, undefined);
+    if (o.turnBack !== undefined) back++;
+    if (!o.events.some((e) => e.kind === 'bandits' && !e.won)) clear++;
+  }
+  return { clear: clear / n, turnBack: back / n };
+}
+
+/**
  * 🛣️ La part des voyages qui ne perdent AUCUNE embuscade — le VRAI trajet (`resolveCaravan`),
  * rejoué sur les graines de PRONOSTIC (impaires). ⚠️ La graine du départ d'un groupe est
  * toujours PAIRE (store `sendParty`) : on ne rejoue jamais la route qui aura lieu.

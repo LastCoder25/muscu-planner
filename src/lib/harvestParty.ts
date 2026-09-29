@@ -26,6 +26,7 @@ import {
   caravanHaulMult,
   missionXpFor,
   resolveCaravan,
+  type CaravanOutcome,
   type EscortKit,
   type PartyHero,
 } from './caravan';
@@ -146,6 +147,48 @@ export function withPlunder(
   };
 }
 
+/** 🔙 L'issue d'un demi-tour : le lieu n'est jamais atteint. Échec, XP de la route, blessés
+ *  de la route, aucun butin. */
+function turnedBack(
+  input: HarvestPartyInput,
+  c: CaravanOutcome,
+  spec: ReturnType<typeof harvestGuardOf>,
+): ExpeditionOutcome {
+  const ambushes = c.events.filter((e) => e.kind === 'bandits');
+  const slain = ambushes.reduce((s, e) => s + (e.slain ?? 0), 0);
+  const party: PartyResult = {
+    hero: false,
+    faction: spec?.faction ?? input.poi.faction ?? 'mortsvivants',
+    escort: input.escort.map((a) => a.id),
+    foes: slain,
+    slain,
+    kills: { ...(c.kills ?? {}) },
+    heroKills: 0,
+    win: false,
+    roadLost: true,
+    turnedBack: true,
+    xp: c.xp,
+    hurt: c.hurt,
+    lightHurt: c.lightHurt ?? [],
+    journal: c.events.map((e) => e.text),
+  };
+  return {
+    win: false,
+    gold: 0,
+    energy: 0,
+    summonStones: 0,
+    mana: 0,
+    item: null,
+    items: [],
+    key: 0,
+    reconBonus: 0,
+    returnMult: 1,
+    turnBack: c.turnBack,
+    text: c.text,
+    party,
+  };
+}
+
 export function resolveHarvestParty(input: HarvestPartyInput): ExpeditionOutcome {
   return withPlunder(resolveHarvest(input), input.escort, input.seed);
 }
@@ -157,6 +200,14 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
   // 💠 Un lieu SANS gardes (la mine de mana : ses monstres sont partis vers la base) se
   // récolte sans combat — on saute le choc, la récolte est celle d'une victoire.
   const spec = harvestGuardOf(poi);
+  // 🔙 Sans le héros, l'équipe voyage comme un convoi : une embuscade perdue à l'ALLER la fait
+  // rentrer avant d'atteindre le lieu — ni gardes, ni récolte, les blessés à l'infirmerie.
+  // ⚠️ Le convoi tire sur SON générateur (graine du départ) : l'appeler plus tôt ne change rien
+  // à son issue, ni à celle des gardes.
+  const road0 = hero
+    ? null
+    : resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel);
+  if (road0?.turnBack !== undefined) return turnedBack(input, road0, spec);
   const g: CampFight = spec
     ? fightCampForce({
         poi,
@@ -254,7 +305,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     };
     return withSiteLoot(withGuardLoot({ ...out, text: `${tag} ${out.text}`, party }, loot), input);
   }
-  const c = resolveCaravan(poi, escort, seed, road, input.pantheonLevel, input.playerLevel);
+  const c = road0!;
   const ambushes = c.events.filter((e) => e.kind === 'bandits');
   const kills = { ...g.kills };
   for (const [id, n] of Object.entries(c.kills ?? {})) kills[id] = (kills[id] ?? 0) + n;

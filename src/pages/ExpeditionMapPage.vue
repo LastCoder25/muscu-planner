@@ -148,8 +148,8 @@
              lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
           <template v-for="v in travelersOnMap" :key="'vt' + v.id">
             <line
-              :x1="v.poi.x"
-              :y1="v.poi.y"
+              :x1="lineEnd(v).x"
+              :y1="lineEnd(v).y"
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
@@ -907,6 +907,7 @@ import {
   EXPE,
   travelPosition,
   mapTravelPoint,
+  voyageTarget,
   warbandAt,
   tripTimeLabel,
   voyageProgress,
@@ -1193,6 +1194,10 @@ function drawnAt(v: Parameters<typeof travelPosition>[0]) {
   return { ...at, ...mapTravelPoint(at, v.poi, v.origin) };
 }
 const hero = computed(() => (active.value ? drawnAt(active.value) : null));
+/** Le bout du tracé d'un voyageur : le lieu, ou le point de demi-tour. */
+function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
+  return v.end ?? v.poi;
+}
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
 );
@@ -1933,6 +1938,8 @@ const partiesOnMap = computed(() =>
       hero: !!g.outcome.party?.hero,
       haul: expeHaul(g.outcome),
       origin: g.origin,
+      // 🔙 Un demi-tour n'a jamais atteint le lieu : son tracé s'arrête là où il a rebroussé.
+      end: g.turnBack !== undefined ? voyageTarget(g) : undefined,
       at: drawnAt(g),
       prog: voyageProgress(g, now.value),
     })),
@@ -2534,7 +2541,41 @@ const poiFacts = computed<PoiFact[]>(() => {
         title: `Sur place : ${formatDurationMin(veinDwellMs(1) / 60_000)} seul, ${formatDurationMin(veinDwellMs(2) / 60_000)} à deux, ${formatDurationMin(veinDwellMs(3) / 60_000)} à trois — la réserve est la même`,
       });
     }
-    if (teamOnly.value || guard)
+    // 🛣️ Une équipe SANS le héros sur un lieu de récolte : les gardes et la route à part
+    // (2026-09-29, décision de l'utilisateur) — un seul % mêlait deux risques qui ne se
+    // paient pas pareil. Aller perdu = demi-tour sans rien, retour perdu = une part du butin.
+    const route = partyRoute.value;
+    if (route) {
+      const gw = partyGuardWin.value;
+      if (guard)
+        out.push({
+          icon: '🎯',
+          label: 'Gardes',
+          value: gw === null ? '—' : `${Math.round(gw * 100)} %`,
+          go: true,
+          title: 'Chance d’abattre les gardes du lieu, une fois arrivé',
+          cls: gw === null ? 'dim' : winClass(Math.round(gw * 100)),
+        });
+      const clear = Math.round(route.clear * 100);
+      const back = Math.round(route.turnBack * 100);
+      out.push({
+        icon: '🛣️',
+        label: p.perilous || p.riftPeril ? 'Route dangereuse' : 'Route',
+        value: `${clear} % sûre`,
+        go: true,
+        title: `${clear} % des trajets sans embuscade perdue · ${back} % font demi-tour à l’aller (lieu jamais atteint, blessés à l’infirmerie) · au retour, une embuscade perdue coûte une part du butin. Plus de champions, mieux la route tient.`,
+        cls: winClass(clear),
+      });
+      if (back > 0)
+        out.push({
+          icon: '🔙',
+          label: 'Demi-tour',
+          value: `${back} %`,
+          title:
+            'Embuscade perdue à l’aller : l’équipe rentre avec ses blessés, sans atteindre le lieu',
+          cls: winClass(100 - back),
+        });
+    } else if (teamOnly.value || guard)
       out.push(
         partyWin.value === null
           ? {
@@ -2884,6 +2925,8 @@ const {
   toggleSupply,
   partyRoad,
   partyWin,
+  partyGuardWin,
+  partyRoute,
   partyLeg,
   partyMin,
   partyRisk,
