@@ -73,7 +73,7 @@ describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
 
   it('🗼 la tour ne stocke rien : elle dit sa réduction de trajet, sans jauge', () => {
     expect(controlProgress(held('tower'), 10 * H, L)).toEqual({
-      text: `🧭 −${Math.round(CONTROL.towerCut * 100)} % trajets`,
+      text: `🧭 −${Math.round(CONTROL.towerCut * 100)} % trajets · 👁️ +${Math.round(CONTROL.towerDetect * 100)} % détection`,
       pct: null,
     });
   });

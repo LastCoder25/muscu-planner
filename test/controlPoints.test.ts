@@ -15,6 +15,7 @@ import {
   retakeDelayMs,
   retakeForce,
   controlTravelMult,
+  controlDetectBoost,
   gardenStock,
   trainingCapLevel,
   trainingRoom,
@@ -129,6 +130,19 @@ describe('🏰 les quatre points', () => {
       controlTravelMult(map),
     );
     expect(collectControl(map, id, 12 * H, 30).map).toBe(map);
+  });
+  it('🗼 la tour tenue allonge la détection de la base selon sa garnison', () => {
+    expect(controlDetectBoost(mapAt(11))).toBe(0);
+    expect(controlDetectBoost(null)).toBe(0);
+    expect(controlDetectBoost(held('tower').map)).toBeCloseTo(CONTROL.towerDetect, 5);
+    expect(controlDetectBoost(held('tower', ['a0']).map)).toBeCloseTo(CONTROL.towerDetect * 0.5, 5);
+    const five = ['a0', 'a1', 'a2', 'a3', 'a4'];
+    const par = (n: number) => controlDetectBoost(held('tower', five.slice(0, n)).map);
+    // Chaque présent de plus voit plus loin — jusqu'à la garnison entière.
+    for (let n = 2; n <= 5; n++) expect(par(n)).toBeGreaterThan(par(n - 1));
+    expect(par(5)).toBeCloseTo(CONTROL.towerDetect * 1.3, 5);
+    // Une autre sorte de point tenu ne voit rien de plus.
+    expect(controlDetectBoost(held('mine').map)).toBe(0);
   });
 });
 

@@ -3131,7 +3131,7 @@
 </template>
 
 <script setup lang="ts">
-import { heldControls } from '@/lib/controlPoints';
+import { controlDetectBoost, heldControls } from '@/lib/controlPoints';
 import {
   ref,
   computed,
@@ -5711,6 +5711,7 @@ async function syncPush(force = false) {
       // ⚔️ Les groupes partis SANS le héros (un groupe avec le héros est son expédition).
       parties: char.partyList.map((g) => ({ id: g.id, returnAt: g.returnAt })),
       watchtowerLevel: defenseLevel(char.row.base?.defenses ?? [], 'watchtower'),
+      towerBoost: controlDetectBoost(char.row.expedition_map),
       activeDays7: activeDays7.value,
       playerLevel: c.value.level.level,
       controls: heldControls(char.row.expedition_map ?? null).map((p) => ({

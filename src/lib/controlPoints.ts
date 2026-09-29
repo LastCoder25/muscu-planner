@@ -130,6 +130,12 @@ export const CONTROL = {
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
+  /** 🗼 Tour de guet (2026-09-29, demandé : « remettre de la détection, qui booste celle de
+   *  la base selon le nombre en garnison ») : tenue par 3 champions, elle allonge le PRÉAVIS
+   *  de la base de 50 % (×0,5/0,8/1/1,15/1,3 de cette part pour 1 à 5, `garrisonShare`),
+   *  donc son rayon de détection. Cumul ADDITIF entre tours, toujours borné par le plafond
+   *  de part d'intervalle (`RAID.scoutLeadIntervalCap`) : jamais « toujours prévenu ». */
+  towerDetect: 0.5,
   /** 🎲 SUSPENSE (demandé par l'utilisateur, 2026-09-27) : une garnison ne repousse JAMAIS
    *  plus de cette part des attaques. Au-delà, l'ennemi envoie plus de monde (`retakeBoost`),
    *  juste assez pour y redescendre : on a toujours une vraie chance de perdre le lieu. */
@@ -767,6 +773,19 @@ export function controlTravelMult(map: ExpeditionMap | null | undefined): number
   return m;
 }
 
+/**
+ * 🗼 Le bonus de DÉTECTION des Tours de guet tenues : `towerDetect × part` de la garnison,
+ * additionné entre tours. Il allonge le préavis de la base (`baseLeadMs`), donc le moment où
+ * un siège est repéré ET le rayon où les armées deviennent visibles sur la carte.
+ */
+export function controlDetectBoost(map: ExpeditionMap | null | undefined): number {
+  let b = 0;
+  for (const p of map?.pois ?? [])
+    if (p.control?.kind === 'tower' && p.control.owner === 'player')
+      b += CONTROL.towerDetect * shareOf(p.control.garrison.length);
+  return b;
+}
+
 /** ⛲ Les pierres de mana en réserve à `now` (24 h de production au plus). 0 si non tenu. */
 export function controlManaStock(p: Poi, now: number, playerLevel: number): number {
   return p.control?.kind === 'mana' ? Math.floor(stockUnits(p, now, playerLevel) + 1e-9) : 0;
@@ -895,7 +914,11 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   const fmt = (n: number) => Math.floor(n + 1e-9).toLocaleString('fr-FR');
   if (c.kind === 'tower') {
     const cut = CONTROL.towerCut * shareOf(c.garrison.length);
-    return { text: `🧭 −${Math.round(cut * 100)} % trajets`, pct: null };
+    const det = CONTROL.towerDetect * shareOf(c.garrison.length);
+    return {
+      text: `🧭 −${Math.round(cut * 100)} % trajets · 👁️ +${Math.round(det * 100)} % détection`,
+      pct: null,
+    };
   }
   // 🎯 Chacun sa réserve : on montre la plus avancée (celle qu'on voit monter en premier).
   if (isPerChampKind(c.kind)) {
@@ -1034,6 +1057,8 @@ export interface ReinforcementTrip {
   returnAt: number;
   /** 🏰 Parti d'un autre point fixe (transfert) : le trajet se dessine depuis lui. */
   origin?: { x: number; y: number };
+  /** 🔙 Un renfort qui a fait demi-tour en chemin : le retour part de là où il a tourné. */
+  turnBack?: number;
 }
 export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now: number) {
   const out = new Map<string, ReinforcementTrip>();
@@ -1061,6 +1086,50 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
     }
   }
   return [...out.values()];
+}
+
+/**
+ * 🔙 DES RENFORTS EN ROUTE REBROUSSENT CHEMIN (2026-09-29, demandé : « faire demi-tour à une
+ * troupe à nous en cliquant dessus »). Ils quittent les renforts du point et rentrent à la
+ * base par le même chemin, en autant de temps qu'ils en ont déjà mis (`turnBack` = la part du
+ * chemin faite, pour que la carte les dessine depuis là où ils ont tourné).
+ * ⚠️ Seulement les renforts partis de la BASE et dessinés (`from` connu) : un TRANSFERT
+ * (`via`) devrait rentrer sur son point d'origine, et sans départ connu on ne sait pas où ils
+ * en sont. Rend `null` si aucun des `ids` ne peut faire demi-tour.
+ */
+export function recallReinforcements(
+  map: ExpeditionMap,
+  pointId: string,
+  ids: readonly string[],
+  now: number,
+): { map: ExpeditionMap; back: { id: string; at: number }[] } | null {
+  const c = map.pois.find((p) => p.id === pointId)?.control;
+  const want = new Set(ids);
+  const turning = (c?.reinforcing ?? []).filter(
+    (r) => want.has(r.id) && r.from !== undefined && !r.via && now < r.at,
+  );
+  if (!turning.length) return null;
+  const gone = new Set(turning.map((r) => r.id));
+  const back = turning.map((r) => {
+    const from = Math.min(now, r.from!);
+    const done = now - from;
+    return {
+      id: r.id,
+      from: now,
+      at: now + done,
+      turnBack: Math.min(1, done / Math.max(1, r.at - from)),
+    };
+  });
+  return {
+    map: withControl(map, pointId, (p) => {
+      const reinforcing = (p.control!.reinforcing ?? []).filter((r) => !gone.has(r.id));
+      const ctl = { ...p.control!, returning: [...(p.control!.returning ?? []), ...back] };
+      if (reinforcing.length) ctl.reinforcing = reinforcing;
+      else delete ctl.reinforcing;
+      return { ...p, control: ctl };
+    }),
+    back: back.map((b) => ({ id: b.id, at: b.at })),
+  };
 }
 
 /** 🏠 Des champions ou miliciens RAMENÉS d'un point partent vers la base : on les dessine
@@ -1105,6 +1174,7 @@ export function returnsEnRoute(
           sentAt: r.from,
           midAt: r.from,
           returnAt: r.at,
+          ...(r.turnBack !== undefined ? { turnBack: r.turnBack } : {}),
         });
     }
   }

@@ -1236,3 +1236,19 @@ export function challengeXpBreakdown(c: Challenge): { reps: number; bonus: numbe
   const bonus = Math.round(bonusXp * XP_MULT);
   return { reps, bonus, total: reps + bonus };
 }
+
+/** Jour où la PRIME de complétion d'un défi est tombée (YYYY-MM-DD), ou null si le défi
+ *  n'en verse pas. Cumulé : le jour où le total a été atteint ; sinon le dernier jour
+ *  travaillé. Sert à dater la prime dans l'historique d'énergie, qui ne la montrait nulle
+ *  part (seul l'effort jour par jour y figurait). */
+export function challengeBonusDate(c: Challenge): string | null {
+  if (challengeXpBreakdown(c).bonus <= 0) return null;
+  const worked = c.progress.filter((p) => p.done > 0);
+  if (c.format === 'cumulative') {
+    const day = cumulativeCompletionDay(c);
+    const hit = worked.find((p) => p.day === day);
+    if (hit) return hit.date;
+  }
+  const dates = worked.map((p) => p.date).sort();
+  return dates.length ? dates[dates.length - 1]! : null;
+}

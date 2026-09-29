@@ -21,6 +21,7 @@ import {
   challengeValueUnit,
   challengeUnitLabel,
   effortPaidByOutings,
+  challengeBonusDate,
   type Challenge,
   type ChallengeConfig,
 } from '@/lib/challenges';
@@ -913,5 +914,45 @@ describe('🏷️ l’unité affichée : une seule définition', () => {
       const paid = effortPaidByOutings(ch('time', id));
       expect(challengeValueUnit('time', id) === 'min', id).toBe(paid);
     }
+  });
+});
+
+describe('challengeBonusDate (prime dans l’historique d’énergie)', () => {
+  const pd = (day: number, date: string, done: number) => ({
+    day,
+    date,
+    target: 0,
+    done,
+    elapsed_sec: 0,
+    completed: false,
+  });
+  const cumul = (progress: ReturnType<typeof pd>[], status: Challenge['status'] = 'done') =>
+    challenge({
+      unit: 'distance',
+      format: 'cumulative',
+      duration_days: 10,
+      daily_targets: Array(10).fill(0),
+      config: cfg({ total: 20 }),
+      progress,
+      status,
+    });
+
+  it('cumulé : datée du jour où le total est atteint, pas du dernier jour travaillé', () => {
+    const c = cumul([pd(0, '2026-01-05', 12), pd(2, '2026-01-07', 10), pd(4, '2026-01-09', 5)]);
+    expect(challengeXpBreakdown(c).bonus).toBeGreaterThan(0);
+    expect(challengeBonusDate(c)).toBe('2026-01-07');
+  });
+
+  it('défi par jour : datée du dernier jour travaillé', () => {
+    const c = challenge({
+      status: 'done',
+      progress: [pd(0, '2026-01-05', 10), pd(2, '2026-01-07', 10), pd(1, '2026-01-06', 10)],
+    });
+    expect(challengeXpBreakdown(c).bonus).toBeGreaterThan(0);
+    expect(challengeBonusDate(c)).toBe('2026-01-07');
+  });
+
+  it('pas de prime, pas de date', () => {
+    expect(challengeBonusDate(cumul([pd(0, '2026-01-05', 3)], 'active'))).toBeNull();
   });
 });

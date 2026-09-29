@@ -1055,9 +1055,23 @@ export function scoutLevel(defenses: DefenseStructure[]): number {
  *  l’entraînement quotidien) → durée calibrée sur 100 niveaux (v0.802, demande de
  *  l’utilisateur). Le garde-fou de la part survit en plafond (`scoutLeadIntervalCap`). */
 export function scoutLeadMs(watchtowerLevel: number, intervalMs: number): number {
+  return baseLeadMs(watchtowerLevel, intervalMs, 0);
+}
+
+/** ⏱️🗼 Le préavis RÉEL de la base : celui de sa Tour de guet, allongé par les Tours de guet
+ *  tenues sur la carte (`controlDetectBoost`, part de la garnison). ⚠️ SOURCE UNIQUE de la
+ *  détection d'un siège, de sa notification et du rayon de la carte : trois copies
+ *  diraient trois préavis. Le plafond de part d'intervalle s'applique APRÈS le bonus —
+ *  jamais « toujours prévenu », quelles que soient les tours tenues. */
+export function baseLeadMs(
+  watchtowerLevel: number,
+  intervalMs: number,
+  towerBoost: number,
+): number {
   const t = Math.min(1, Math.max(0, watchtowerLevel) / RAID.scoutLeadMaxLevel);
   const { scoutLeadMinMs: lo, scoutLeadMaxMs: hi } = RAID;
-  const lead = lo + (hi - lo) * Math.pow(t, RAID.scoutLeadExp);
+  const lead =
+    (lo + (hi - lo) * Math.pow(t, RAID.scoutLeadExp)) * (1 + Math.max(0, towerBoost || 0));
   return Math.round(Math.min(lead, Math.max(0, intervalMs) * RAID.scoutLeadIntervalCap));
 }
 
@@ -2932,7 +2946,13 @@ export interface BaseTickResult {
  *  là et ce que vaut la garnison ; il le signale via `dueRaid`. */
 export function advanceBase(
   base: BaseState,
-  ctx: { playerLevel: number; activeDays7: number; globalXp: number },
+  ctx: {
+    playerLevel: number;
+    activeDays7: number;
+    globalXp: number;
+    /** 🗼 Bonus de détection des Tours de guet tenues (`controlDetectBoost`). */
+    towerBoost: number;
+  },
   now: number,
 ): BaseTickResult {
   let b: BaseState = { ...base };
@@ -2997,7 +3017,7 @@ export function advanceBase(
   }
 
   // Détection : le raid se matérialise quand la Tour le voit venir.
-  const lead = scoutLeadMs(scoutLevel(b.defenses), raidIntervalMs(ctx.activeDays7));
+  const lead = baseLeadMs(scoutLevel(b.defenses), raidIntervalMs(ctx.activeDays7), ctx.towerBoost);
   if (!b.raid && now >= b.nextRaidAt - lead) {
     const seed = (b.seed + Math.floor(b.nextRaidAt / 60_000)) >>> 0 || 1;
     // 🕳️ Le débordement en attente est CONSOMMÉ ici : l'armée qui se met en marche est
