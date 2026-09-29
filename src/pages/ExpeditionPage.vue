@@ -208,21 +208,62 @@
           <svg
             :viewBox="`${-MAP_PAD} ${-MAP_PAD} ${cols * CELL + 2 * MAP_PAD} ${rows * CELL + 2 * MAP_PAD}`"
             class="map"
-            :style="{ '--amb': ambianceColor }"
           >
-            <!-- Teinte d'ambiance du palier (rang G→SSS) -->
+            <!-- Décor du palier (lot 5) : sol dallé, murs, couloirs creusés, et le NOIR partout
+                 où l'on n'a rien vu. Les couleurs viennent de la palette du palier. -->
+            <defs>
+              <pattern :id="PAT_ID" width="11" height="11" patternUnits="userSpaceOnUse">
+                <rect width="11" height="11" :fill="theme.floor" />
+                <path
+                  d="M0 0.5H11M0.5 0V11M0 6H5.5M6 6V11"
+                  :stroke="theme.joint"
+                  stroke-width="1"
+                  fill="none"
+                />
+              </pattern>
+              <radialGradient :id="DARK_ID">
+                <stop offset="0" stop-color="#000" />
+                <stop offset="0.6" stop-color="#000" />
+                <stop offset="1" stop-color="#000" stop-opacity="0" />
+              </radialGradient>
+              <mask
+                :id="FOG_ID"
+                maskUnits="userSpaceOnUse"
+                :x="-MAP_PAD"
+                :y="-MAP_PAD"
+                :width="cols * CELL + 2 * MAP_PAD"
+                :height="rows * CELL + 2 * MAP_PAD"
+              >
+                <rect
+                  :x="-MAP_PAD"
+                  :y="-MAP_PAD"
+                  :width="cols * CELL + 2 * MAP_PAD"
+                  :height="rows * CELL + 2 * MAP_PAD"
+                  fill="#fff"
+                />
+                <circle
+                  v-for="l in lights"
+                  :key="'l' + l.id"
+                  :cx="l.x"
+                  :cy="l.y"
+                  :r="l.r"
+                  :fill="`url(#${DARK_ID})`"
+                />
+              </mask>
+            </defs>
             <rect
               :x="-MAP_PAD"
               :y="-MAP_PAD"
               :width="cols * CELL + 2 * MAP_PAD"
               :height="rows * CELL + 2 * MAP_PAD"
-              class="map-amb"
+              class="map-rock"
             />
-            <!-- Couloirs = passages carvés (large sous-couche + trait) -->
+            <!-- Couloirs creusés : le mur (large) puis le sol (étroit) par-dessus. -->
             <line
               v-for="c in corridors"
-              :key="'f' + c.k"
-              class="corridor-floor"
+              :key="'w' + c.k"
+              class="corr-wall"
+              :stroke="theme.wall"
               :x1="c.x1"
               :y1="c.y1"
               :x2="c.x2"
@@ -231,14 +272,15 @@
             <line
               v-for="c in corridors"
               :key="c.k"
-              class="corridor"
+              class="corr-floor"
+              :stroke="theme.corridor"
               :x1="c.x1"
               :y1="c.y1"
               :x2="c.x2"
               :y2="c.y2"
             />
             <g
-              v-for="r in floor.rooms"
+              v-for="r in visibleRooms"
               :key="r.id"
               :class="[
                 'room',
@@ -251,29 +293,106 @@
               ]"
               @click="autoMode || onRoomClick(r.id)"
             >
-              <circle :cx="cx(r)" :cy="cy(r)" :r="SIZE / 2" class="room-bg" />
-              <!-- Torches : salle visitée = éclairée (2 flammes qui vacillent) -->
-              <template v-if="roomLit(r)">
-                <path
-                  class="torch"
-                  :d="`M${cx(r) - SIZE / 2 - 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
-                />
-                <path
-                  class="torch t2"
-                  :d="`M${cx(r) + SIZE / 2 + 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
-                />
-              </template>
-              <template v-if="r.id === run.current" />
-              <ChestIcon
-                v-else-if="isVisitedChest(r)"
-                :color="chestColorOf(r.id)"
-                :x="cx(r) - 12"
-                :y="cy(r) - 12"
-                width="24"
-                height="24"
+              <!-- Cible de toucher : toute la case, même pour une porte étroite. -->
+              <rect
+                :x="cx(r) - SIZE / 2"
+                :y="cy(r) - SIZE / 2"
+                :width="SIZE"
+                :height="SIZE"
+                class="room-hit"
               />
-              <text v-else :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
+              <template v-if="run.visited.includes(r.id)">
+                <!-- Salle connue : murs, sol dallé, arête éclairée en haut. -->
+                <rect
+                  :x="cx(r) - SIZE / 2 - 4"
+                  :y="cy(r) - SIZE / 2 - 4"
+                  :width="SIZE + 8"
+                  :height="SIZE + 8"
+                  rx="6"
+                  :fill="theme.wall"
+                />
+                <rect
+                  :x="cx(r) - SIZE / 2"
+                  :y="cy(r) - SIZE / 2"
+                  :width="SIZE"
+                  :height="SIZE"
+                  rx="3"
+                  :fill="`url(#${PAT_ID})`"
+                />
+                <rect
+                  :x="cx(r) - SIZE / 2 - 4"
+                  :y="cy(r) - SIZE / 2 - 4"
+                  :width="SIZE + 8"
+                  height="3.5"
+                  rx="1.75"
+                  :fill="theme.wallTop"
+                  opacity="0.6"
+                />
+                <rect
+                  :x="cx(r) - SIZE / 2"
+                  :y="cy(r) - SIZE / 2"
+                  :width="SIZE"
+                  :height="SIZE"
+                  rx="3"
+                  class="room-flash"
+                />
+                <rect
+                  :x="cx(r) - SIZE / 2 - 2"
+                  :y="cy(r) - SIZE / 2 - 2"
+                  :width="SIZE + 4"
+                  :height="SIZE + 4"
+                  rx="5"
+                  class="room-edge"
+                />
+                <!-- Torches aux deux coins hauts de la salle. -->
+                <circle
+                  class="torch"
+                  :cx="cx(r) - SIZE / 2 - 1"
+                  :cy="cy(r) - SIZE / 2 - 1"
+                  r="2.6"
+                  :fill="theme.light"
+                />
+                <circle
+                  class="torch t2"
+                  :cx="cx(r) + SIZE / 2 + 1"
+                  :cy="cy(r) - SIZE / 2 - 1"
+                  r="2.6"
+                  :fill="theme.light"
+                />
+                <template v-if="r.id === run.current" />
+                <ChestIcon
+                  v-else-if="isVisitedChest(r)"
+                  :color="chestColorOf(r.id)"
+                  :x="cx(r) - 12"
+                  :y="cy(r) - 12"
+                  width="24"
+                  height="24"
+                />
+                <text v-else :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
+              </template>
+              <template v-else>
+                <!-- Salle seulement VUE au bout d'un couloir : une porte, et rien derrière. -->
+                <rect
+                  :x="cx(r) - 12"
+                  :y="cy(r) - 15"
+                  width="24"
+                  height="30"
+                  rx="12"
+                  class="door"
+                  :stroke="theme.wallTop"
+                />
+                <text :x="cx(r)" :y="cy(r) + 1" class="room-emo door-q">?</text>
+              </template>
             </g>
+            <!-- Le noir : tout ce que la lumière des salles n'atteint pas. -->
+            <rect
+              :x="-MAP_PAD"
+              :y="-MAP_PAD"
+              :width="cols * CELL + 2 * MAP_PAD"
+              :height="rows * CELL + 2 * MAP_PAD"
+              class="map-fog"
+              :mask="`url(#${FOG_ID})`"
+            />
             <!-- Effet de la salle qu'on vient d'ouvrir : anneau + texte qui monte (coffre, piège,
                salle secrète). Remplace la modale qui s'ouvrait à chaque salle. -->
             <g
@@ -638,6 +757,7 @@ import ChestIcon from '@/components/ChestIcon.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import { floorPips, labyGuardian, barrierLabel } from '@/lib/labyrinthView';
+import { labyTheme, roomLightRadius } from '@/lib/labyrinthScene';
 import { monsterArt } from '@/data/monsterArt';
 
 const props = defineProps<{ embedded?: boolean }>();
@@ -1004,9 +1124,23 @@ function chestColorOf(id: number): string {
 // des PV max du joueur (⇒ attrition réelle). Deeper = plus dur (push-your-luck).
 // Index de rang du palier courant (0=G … 9=SSS) → thème du roster de monstres.
 const labyTierIndex = computed(() => tierIndexOfLaby(selectedLaby.value ?? LABYRINTHS[0]!));
-// Teinte d'ambiance de l'étage = couleur du RANG du palier (G→SSS) → chaque palier a
-// son atmosphère de fond sur la carte.
-const ambianceColor = computed(() => RANK_COLOR[selectedLaby.value?.rank ?? 'commun']);
+// Décor du palier (lot 5) : sa palette, et la lumière que chaque salle vue répand.
+const theme = computed(() => labyTheme(selectedLaby.value));
+const visibleRooms = computed(() =>
+  floor.value.rooms.filter((r) => isVisible(floor.value, run.value, r.id)),
+);
+const lights = computed(() =>
+  visibleRooms.value.map((r) => ({
+    id: r.id,
+    x: cx(r),
+    y: cy(r),
+    r: roomLightRadius(CELL, run.value.visited.includes(r.id)),
+  })),
+);
+// Identifiants SVG propres à la page (le cockpit peut monter l'écran à côté d'autres cartes).
+const PAT_ID = 'laby-tiles';
+const DARK_ID = 'laby-dark';
+const FOG_ID = 'laby-fog';
 
 // ── Affichage (barre d'état, héros sur la carte, tuiles de l'accueil) ──
 const pips = computed(() => floorPips(run.value.floor, run.value.floors));
@@ -1031,10 +1165,6 @@ const artFailed = ref(new Set<string>());
 function guardianArt(l: Labyrinth): string | null {
   const g = labyGuardian(l);
   return artFailed.value.has(g.name) ? null : monsterArt(g.name);
-}
-// Torches : les salles VISITÉES sont « éclairées » (2 flammes) ; le reste est sombre.
-function roomLit(r: Room): boolean {
-  return run.value.visited.includes(r.id) && isVisible(floor.value, run.value, r.id);
 }
 
 // Niveau de calibration ABSOLU du palier = son niveau conseillé (comme les donjons).
@@ -2176,8 +2306,16 @@ function returnToLobby() {
 .room.fx-trap {
   animation: room-shake 0.45s ease-in-out;
 }
-.room.fx-trap .room-bg {
-  fill: color-mix(in srgb, var(--d4) 35%, var(--surface));
+.room.fx-trap .room-flash {
+  animation: room-flash 0.6s ease-out;
+}
+@keyframes room-flash {
+  from {
+    fill: rgba(255, 106, 69, 0.55);
+  }
+  to {
+    fill: transparent;
+  }
 }
 @keyframes room-pop {
   40% {
@@ -2215,29 +2353,78 @@ function returnToLobby() {
     animation: none;
   }
 }
-/* Teinte d'ambiance du palier (couleur du rang), douce, en fond de carte. */
-.map-amb {
-  fill: var(--amb, #9a8f7e);
-  opacity: 0.1;
+/* Décor du palier : roche, couloirs creusés, salles dallées, noir hors de la lumière. */
+.map-rock {
+  fill: #0b0907;
 }
-/* Couloirs = passages carvés : large sous-couche « sol » teintée + trait plus clair. */
-.corridor-floor {
-  stroke: color-mix(in srgb, var(--amb, #9a8f7e) 30%, #000);
-  stroke-width: 9;
-  stroke-linecap: round;
-  opacity: 0.55;
+.corr-wall {
+  stroke-width: 20;
 }
-.corridor {
-  stroke: color-mix(in srgb, var(--amb, #9a8f7e) 35%, var(--line));
-  stroke-width: 4;
-  stroke-linecap: round;
+.corr-floor {
+  stroke-width: 12;
 }
-/* Torches des salles éclairées (visitées) : petites flammes qui vacillent. */
+.map-fog {
+  fill: #050403;
+  opacity: 0.92;
+  pointer-events: none;
+}
+.room {
+  cursor: default;
+}
+.room-hit {
+  fill: transparent;
+}
+.room .room-emo {
+  text-anchor: middle;
+  dominant-baseline: central;
+  font-size: 20px;
+  fill: var(--text);
+}
+.room-edge {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 2.5;
+}
+.room.current .room-edge {
+  stroke: var(--accent);
+}
+.room.vault .room-edge {
+  stroke: #ffd23f;
+}
+.room.current.vault .room-edge {
+  stroke: var(--accent);
+}
+.room-flash {
+  fill: transparent;
+}
+.door {
+  fill: #050403;
+  stroke-width: 1.3;
+  stroke-dasharray: 3 3;
+}
+.room .door-q {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  fill: var(--dim);
+}
+.room.frontier.open {
+  cursor: pointer;
+}
+.room.frontier.open .door {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: none;
+}
+.room.frontier.open .door-q {
+  fill: var(--accent);
+}
+.room.frontier.open:hover .door {
+  fill: color-mix(in srgb, var(--accent) 14%, #050403);
+}
+/* Torches des salles connues : petites flammes qui vacillent. */
 .torch {
-  fill: #ffb23f;
-  filter: drop-shadow(0 0 1.4px #ff8a2f);
-  transform-box: fill-box;
-  transform-origin: center bottom;
+  filter: drop-shadow(0 0 2px currentColor);
   animation: torch-flicker 0.9s ease-in-out infinite;
 }
 .torch.t2 {
@@ -2246,70 +2433,16 @@ function returnToLobby() {
 @keyframes torch-flicker {
   0%,
   100% {
-    opacity: 0.85;
-    transform: scaleY(1);
+    opacity: 0.75;
   }
   50% {
     opacity: 1;
-    transform: scaleY(1.18);
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .torch {
     animation: none;
   }
-}
-.room {
-  cursor: default;
-}
-.room .room-bg {
-  fill: var(--surface-2);
-  stroke: var(--line);
-  stroke-width: 2;
-}
-.room .room-emo {
-  text-anchor: middle;
-  dominant-baseline: central;
-  font-size: 22px;
-  fill: var(--text);
-}
-.room.hidden .room-bg {
-  fill: transparent;
-  stroke: transparent;
-}
-.room.visited .room-bg {
-  fill: var(--surface-2);
-  stroke: var(--line);
-}
-.room.current .room-bg {
-  fill: color-mix(in srgb, var(--accent) 22%, var(--surface));
-  stroke: var(--accent);
-  stroke-width: 3;
-}
-/* Salle secrète découverte : liseré doré (elle reste « ? » tant qu'on n'y est pas entré). */
-.room.vault .room-bg {
-  fill: color-mix(in srgb, #ffd23f 20%, var(--surface));
-  stroke: #ffd23f;
-  stroke-width: 2.5;
-}
-.room.frontier .room-bg {
-  fill: var(--surface);
-  stroke: var(--dim);
-  stroke-dasharray: 4 4;
-}
-.room.frontier .room-emo {
-  fill: var(--dim);
-  font-weight: 700;
-}
-.room.frontier.open {
-  cursor: pointer;
-}
-.room.frontier.open .room-bg {
-  stroke: var(--accent);
-  stroke-dasharray: 5 3;
-}
-.room.frontier.open .room-emo {
-  fill: var(--accent);
 }
 .event {
   margin-top: 12px;
