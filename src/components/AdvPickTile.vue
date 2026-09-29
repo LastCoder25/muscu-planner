@@ -96,15 +96,20 @@ const props = defineProps<{
   xp?: MissionXpPreview | null;
   /** 🎯 Ce qu'il apporte à la réussite sur le lieu visé, en points (`winGain`). */
   gain?: number | null;
+  /** L'explication du chiffre 🎯, quand elle n'est pas celle d'une équipe à cocher (ex. la
+   *  tenue d'un point fixe sans ce membre). */
+  gainTitle?: string | null;
   /** Lecture seule : on MONTRE qui voyage, sans rien proposer de cocher. */
   readonly?: boolean;
 }>();
 /** Un multiplicateur se lit « ×2 » ou « ×2,5 », jamais « ×2.50 ». */
 const fmtMult = (m: number) => (Math.round(m * 10) / 10).toString().replace('.', ',');
-const gainWhy = computed(() =>
-  props.on
-    ? 'Ce que l’équipe perdrait en réussite sans lui.'
-    : 'Ce qu’il ajouterait en réussite à l’équipe cochée.',
+const gainWhy = computed(
+  () =>
+    props.gainTitle ??
+    (props.on
+      ? 'Ce que l’équipe perdrait en réussite sans lui.'
+      : 'Ce qu’il ajouterait en réussite à l’équipe cochée.'),
 );
 const xpWhy = computed(() => {
   const x = props.xp;

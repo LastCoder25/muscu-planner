@@ -386,7 +386,11 @@
           <!-- 🧺 LA PRODUCTION EN TÊTE (demandé : « l’info de la rune est perdue au milieu de
                tout le détail ») : ce qui attend en gros, la jauge et le TEMPS avant la suite,
                le débit en petit, et le bouton de récolte juste dessous (`controlYieldCard`). -->
-          <div v-if="yieldCard" class="yield-card" :class="{ ready: yieldCard.ready, full: yieldCard.full }">
+          <div
+            v-if="yieldCard"
+            class="yield-card"
+            :class="{ ready: yieldCard.ready, full: yieldCard.full }"
+          >
             <div class="yield-head">
               <span class="yield-emo">{{ yieldCard.emoji }}</span>
               <span class="yield-main">
@@ -428,8 +432,9 @@
                 seatsOf(liveControl.kind) > 1 ? 's' : ''
               }}</span
             >
-            <span class="ctl-dim"> · touche un membre pour le ramener</span>
+            <span class="ctl-dim"> · touche un membre pour le ramener ou le remplacer</span>
           </p>
+          <!-- 🎯 Sous chaque occupant : ce que la tenue perdrait sans lui (`occupantLoss`). -->
           <div class="car-pick">
             <AdvPickTile
               v-for="m in controlMembers"
@@ -437,6 +442,8 @@
               :adv="m.adv"
               :on="ctlRecallSel.includes(m.adv.id)"
               :reason="m.arriveIn > 0 ? `🧭 en route · ${formatDuration(m.arriveIn)}` : null"
+              :gain="occupantLoss[m.adv.id] ? -occupantLoss[m.adv.id]!.loss : null"
+              :gain-title="lossTitle(m.adv.id)"
               @toggle="toggleRecall(m.adv.id)"
             />
             <!-- 🛡️ Les miliciens : anonymes, une tuile chacun, ramenables comme un champion. -->
@@ -452,6 +459,13 @@
               <span class="mil-emo"><MilitiaPortrait /></span>
               <span class="mil-name">{{ MILITIA_NAME }}</span>
               <span v-if="m.arriveIn > 0" class="mil-sub">🧭 {{ formatDuration(m.arriveIn) }}</span>
+              <span
+                v-else-if="occupantLoss[m.id]"
+                class="mil-loss"
+                :class="{ zero: occupantLoss[m.id]!.loss === 0 }"
+                :title="lossTitle(m.id) ?? ''"
+                >🎯 −{{ occupantLoss[m.id]!.loss }} %</span
+              >
             </button>
             <!-- ➕ LES PLACES VIDES (demandé : « les 5 slots ») : la garnison se lit comme 5
                  cases, pleines ou non. Toucher une case vide amène au renfort. Au-delà des
@@ -477,6 +491,47 @@
           >
             ↩️ Ramener {{ ctlRecallSel.length }} membre{{ ctlRecallSel.length > 1 ? 's' : '' }}
           </button>
+          <!-- ⇄ REMPLACER (demandé) : UN membre coché peut échanger sa place avec quelqu'un de
+               la base ou d'un autre point. Chaque ligne dit la tenue APRÈS l'échange, le
+               trajet, et ce que devient l'autre point. Le remplacé part prendre la place du
+               remplaçant (`swapGarrison`). -->
+          <div v-if="swapOut && swapCandidates.length" class="swap">
+            <p class="car-cap">
+              ⇄ <b>ou remplacer {{ swapOut.name }}</b>
+              <span v-if="swapOut.loss" class="ctl-dim"
+                >(apporte {{ swapOut.loss.loss }} % de tenue)</span
+              >
+              par :
+            </p>
+            <div class="swap-list">
+              <button
+                v-for="r in swapCandidates"
+                :key="r.key"
+                type="button"
+                class="swap-row"
+                :disabled="!!r.why || ctlBusy"
+                :title="r.why ?? ''"
+                @click="swapCtl(r)"
+              >
+                <span class="swap-who">
+                  <span class="swap-name">{{ r.adv ? '🗡️' : '🛡️' }} {{ r.name }}</span>
+                  <span class="swap-sub">{{
+                    r.why ?? `${r.where} · 🧭 ${formatDurationMin(r.min)}`
+                  }}</span>
+                  <span v-if="r.other" class="swap-sub"
+                    >là-bas : {{ r.other.before }} → {{ r.other.after }} %</span
+                  >
+                </span>
+                <span v-if="!r.why" class="swap-res">
+                  <b>{{ r.pct }} %</b>
+                  <span class="swap-delta" :class="{ up: r.delta > 0, down: r.delta < 0 }"
+                    >{{ r.delta > 0 ? '+' : r.delta < 0 ? '−' : '='
+                    }}{{ r.delta ? Math.abs(r.delta) : '' }}</span
+                  >
+                </span>
+              </button>
+            </div>
+          </div>
           <!-- ⇄ TRANSFERT (2026-09-29, demandé) : la sélection part directement renforcer un
                AUTRE point tenu, comme un renfort parti de la base. Une tuile par point, grisée
                AVEC la raison (`transferBlocker`, la règle du store). -->
@@ -1110,6 +1165,7 @@ import {
   advAvailable,
   engageCap,
   sortByGradeThenRank,
+  type Adventurer,
 } from '@/lib/adventurers';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
@@ -1152,8 +1208,11 @@ import {
 } from '@/lib/rift';
 import { caravanLegMin, poiOffers } from '@/lib/caravan';
 import {
+  SWAP_BLOCK_LABEL,
+  SWAP_MILITIA_FROM_BASE,
   TRANSFER_BLOCK_LABEL,
   legFromSpot,
+  swapBlocker,
   transferBlocker,
   transferSourcesFor,
 } from '@/lib/controlRoutes';
@@ -1361,9 +1420,7 @@ const heroEnd = computed(() => {
   return a && a.turnBack !== undefined ? voyageTarget(a) : (a?.poi ?? TOWN);
 });
 /** 🔙 Le héros encore en chemin vers son lieu peut rebrousser chemin. */
-const heroRecallable = computed(
-  () => !!active.value && !recallBlocker(active.value, now.value),
-);
+const heroRecallable = computed(() => !!active.value && !recallBlocker(active.value, now.value));
 /** Le bout du tracé d'un voyageur : le lieu, ou le point de demi-tour. */
 function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
   return v.end ?? v.poi;
@@ -1904,6 +1961,185 @@ const reinfGain = computed<Record<string, number>>(() => {
   }
   return out;
 });
+/** 🛡️ La tenue d'un point si `remove` n'y étaient plus et `extra` arrivaient — la règle de
+ *  `defenseOf`, sur une garnison retouchée (ce que fera l'échange). */
+function holdAfter(p: Poi, remove: readonly string[], extra: { id: string; at: number }[]) {
+  const c = p.control!;
+  const gone = new Set(remove);
+  const c2 = {
+    ...c,
+    garrison: c.garrison.filter((x) => !gone.has(x)),
+    reinforcing: (c.reinforcing ?? []).filter((r) => !gone.has(r.id)),
+  };
+  return defenseOf({ ...p, control: c2 }, extra)?.pct ?? 0;
+}
+/** 🛡️ CE QUE CHAQUE OCCUPANT APPORTE (demandé) : la tenue sans lui. Sur les membres ARRIVÉS
+ *  (les seuls qu'on peut échanger). Rend la perte en points et la tenue sans lui. */
+const occupantLoss = computed<Record<string, { loss: number; without: number }>>(() => {
+  const p = livePoi.value;
+  const base = defenseNow.value?.pct;
+  if (!p?.control || p.control.owner !== 'player' || base === undefined) return {};
+  const out: Record<string, { loss: number; without: number }> = {};
+  for (const id of p.control.garrison) {
+    const without = holdAfter(p, [id], []);
+    out[id] = { loss: base - without, without };
+  }
+  return out;
+});
+const lossTitle = (id: string) => {
+  const l = occupantLoss.value[id];
+  return l
+    ? `Sans lui, la tenue tombe à ${l.without} % (au lieu de ${defenseNow.value?.pct} %).`
+    : null;
+};
+/** Le trajet (minutes) d'un membre depuis la ville vers `p` — champion au pas de son équipe,
+ *  milicien au pas d'une équipe sans rôle (la règle du store). */
+function legOfMember(adv: Adventurer | null | undefined) {
+  return (p: Poi) =>
+    adv
+      ? partyLegMin(p, [adv], {
+          hero: false,
+          travelMult: travelMult.value,
+          gearSpeed: advGearRoles([adv], char.advGearStock).speed,
+        })
+      : caravanLegMin(p, [], 0, travelMult.value);
+}
+/** ⇄ Le membre à remplacer : UN seul coché, arrivé sur le point. */
+const swapOut = computed(() => {
+  const p = livePoi.value;
+  const sel = ctlRecallSel.value;
+  if (!p?.control || sel.length !== 1 || !p.control.garrison.includes(sel[0]!)) return null;
+  const id = sel[0]!;
+  const adv = isMilitiaId(id) ? null : (char.advList.find((a) => a.id === id) ?? null);
+  return { id, adv, name: adv ? adv.name : MILITIA_NAME, loss: occupantLoss.value[id] ?? null };
+});
+/**
+ * ⇄ LES REMPLAÇANTS (demandé) : champions et miliciens de la base, membres des autres points
+ * tenus. Chacun avec la tenue du point APRÈS l'échange, son trajet, et — venant d'un autre
+ * point — ce que ce point-là deviendra. Grisés avec la raison (`swapBlocker`, la règle du
+ * store) ; triés par tenue obtenue.
+ */
+const swapCandidates = computed(() => {
+  const p = livePoi.value;
+  const out = swapOut.value;
+  const map = char.row?.expedition_map;
+  if (!p || !out || !map) return [];
+  const t = coarseNow.value;
+  const now0 = defenseNow.value?.pct ?? 0;
+  type Row = {
+    key: string;
+    inId: string;
+    fromId: string | null;
+    adv: Adventurer | null;
+    name: string;
+    where: string;
+    min: number;
+    pct: number;
+    delta: number;
+    other: { label: string; before: number; after: number } | null;
+    why: string | null;
+  };
+  const rows: Row[] = [];
+  const outLeg = legOfMember(out.adv);
+  const push = (r: Omit<Row, 'pct' | 'delta'>, arriveId: string) => {
+    const pct = r.why ? now0 : holdAfter(p, [out.id], [{ id: arriveId, at: t + r.min * 60_000 }]);
+    rows.push({ ...r, pct, delta: pct - now0 });
+  };
+  // 🏠 La base : champions disponibles, puis un milicien de la Caserne.
+  for (const a of freeSorted.value) {
+    const why = swapBlocker(map, p.id, out.id, a.id, null);
+    push(
+      {
+        key: a.id,
+        inId: a.id,
+        fromId: null,
+        adv: a,
+        name: a.name,
+        where: 'base',
+        min: legOfMember(a)(p),
+        other: null,
+        why: why ? SWAP_BLOCK_LABEL[why] : null,
+      },
+      a.id,
+    );
+  }
+  if (milHome.value > 0) {
+    const why = swapBlocker(map, p.id, out.id, SWAP_MILITIA_FROM_BASE, null);
+    push(
+      {
+        key: 'mil-base',
+        inId: SWAP_MILITIA_FROM_BASE,
+        fromId: null,
+        adv: null,
+        name: MILITIA_NAME,
+        where: 'base',
+        min: legOfMember(null)(p),
+        other: null,
+        why: why ? SWAP_BLOCK_LABEL[why] : null,
+      },
+      `${MILITIA_PREFIX}new0`,
+    );
+  }
+  // 🏰 Les autres points tenus : chaque membre arrivé.
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  for (const q of map.pois) {
+    if (q.id === p.id || q.control?.owner !== 'player') continue;
+    const label = CONTROL_LABEL[q.control.kind];
+    const before = defenseOf(q)?.pct ?? 0;
+    for (const id of q.control.garrison) {
+      const adv = isMilitiaId(id) ? null : (byId.get(id) ?? null);
+      if (!isMilitiaId(id) && !adv) continue;
+      const why = swapBlocker(map, p.id, out.id, id, q.id);
+      const min = legFromSpot(p, q, legOfMember(adv));
+      const back = legFromSpot(q, p, outLeg);
+      push(
+        {
+          key: `${q.id}:${id}`,
+          inId: id,
+          fromId: q.id,
+          adv,
+          name: adv ? adv.name : MILITIA_NAME,
+          where: `${CONTROL_EMO[q.control.kind]} ${label}`,
+          min,
+          other: why
+            ? null
+            : { label, before, after: holdAfter(q, [id], [{ id: out.id, at: t + back * 60_000 }]) },
+          why: why ? SWAP_BLOCK_LABEL[why] : null,
+        },
+        id,
+      );
+    }
+  }
+  return rows.sort((a, b) => Number(!!a.why) - Number(!!b.why) || b.pct - a.pct);
+});
+async function swapCtl(r: { inId: string; fromId: string | null; name: string; min: number }) {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  const out = swapOut.value;
+  if (!uid || !p || !out || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.swapControlMember(
+      uid,
+      p.id,
+      out.id,
+      r.inId,
+      r.fromId,
+      Date.now(),
+      heroLevel.value,
+    );
+    if (why) $q.notify({ type: 'warning', message: `Échange impossible : ${why}` });
+    else {
+      ctlRecallSel.value = [];
+      $q.notify({
+        type: 'positive',
+        message: `⇄ ${r.name} remplace ${out.name} — arrivée dans ${formatDurationMin(r.min)}`,
+      });
+    }
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 /** ⇄ Les autres points TENUS vers lesquels transférer la sélection : le trajet (la règle du
  *  store — `legFromSpot`, champions à leur pas, miliciens au pas d'une équipe sans rôle, le
  *  plus lent des deux) et la raison d'un refus (`transferBlocker`). */
@@ -2302,9 +2538,7 @@ const travelersOnMap = computed(() => [
     ...r,
     emo: '🛡️',
     kind: 'reinf' as const,
-    recall: !r.origin
-      ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members }
-      : undefined,
+    recall: !r.origin ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members } : undefined,
     recallLabel: `Les renforts (${r.members.length})`,
     recallBackMs: now.value - r.sentAt,
   })),
@@ -3992,6 +4226,79 @@ onUnmounted(() => {
 .mil-sub {
   font-size: 10.5px;
   color: var(--dim);
+}
+/* 🎯 Ce qu'un milicien posté apporte à la tenue : la teinte de la perte d'`AdvPickTile`. */
+.mil-loss {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--d4);
+}
+.mil-loss.zero {
+  color: var(--dim);
+}
+/* ⇄ Les remplaçants : une ligne chacun, la tenue obtenue à droite. */
+.swap {
+  margin: 8px 0;
+}
+.swap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.swap-row {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.swap-row:disabled {
+  cursor: default;
+  border-style: dashed;
+  opacity: 0.6;
+}
+.swap-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.swap-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.swap-sub {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.3;
+}
+.swap-res {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: Oswald, sans-serif;
+}
+.swap-res b {
+  font-size: 17px;
+}
+.swap-delta {
+  font-size: 12px;
+  color: var(--dim);
+}
+.swap-delta.up {
+  color: var(--d1);
+}
+.swap-delta.down {
+  color: var(--d4);
 }
 .mil-send {
   display: flex;

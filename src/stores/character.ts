@@ -326,10 +326,14 @@ import {
 } from '@/lib/controlPoints';
 import {
   SORTIE_BLOCK_LABEL,
+  SWAP_BLOCK_LABEL,
+  SWAP_MILITIA_FROM_BASE,
   TRANSFER_BLOCK_LABEL,
   legFromSpot,
   rejoinHome,
   sortieBlocker,
+  swapBlocker,
+  swapGarrison,
   transferBlocker,
   transferGarrison,
 } from '@/lib/controlRoutes';
@@ -4900,7 +4904,88 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  /**
+   * ⇄ ÉCHANGE (2026-09-29, demandé) : `outId`, arrivé sur `pointId`, et `inId` échangent leur
+   * place — `inId` vient de la base (`fromId` absent ; `SWAP_MILITIA_FROM_BASE` = un milicien
+   * de la Caserne) ou d'un autre point tenu `fromId`. Chacun marche à son pas vers la place de
+   * l'autre (`swapGarrison`). Rend la RAISON d'un refus, `null` si partis.
+   */
+  async function swapControlMember(
+    userId: string,
+    pointId: string,
+    outId: string,
+    inId: string,
+    fromId: string | null,
+    now: number,
+    playerLevel: number,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return 'la carte n’est pas chargée';
+    const point = map.pois.find((p) => p.id === pointId);
+    const from = fromId ? map.pois.find((p) => p.id === fromId) : null;
+    if (!point || (fromId && !from)) return 'la carte n’est pas chargée';
+    // 🛡️ Un milicien de la base : il n'a pas encore d'id, il en reçoit un en partant.
+    let militia = cur.base?.militia ?? emptyMilitia(now);
+    let incoming = inId;
+    let tookMil = false;
+    if (!fromId && inId === SWAP_MILITIA_FROM_BASE) {
+      const took = takeMilitia(militia, 1);
+      if (!took) return 'pas de milicien à la base';
+      militia = took.state;
+      tookMil = true;
+      incoming = took.ids[0]!;
+    }
+    const block = swapBlocker(map, pointId, outId, incoming, fromId);
+    if (block) return SWAP_BLOCK_LABEL[block];
+    const byId = new Map(advList.value.map((a) => [a.id, a]));
+    const outAdv = isMilitiaId(outId) ? null : byId.get(outId);
+    const inAdv = isMilitiaId(incoming) ? null : byId.get(incoming);
+    if (!isMilitiaId(outId) && outAdv?.posted !== pointId)
+      return 'le membre remplacé n’est plus là';
+    if (inAdv && (fromId ? inAdv.posted !== fromId : !advAvailable(inAdv, now)))
+      return 'le remplaçant n’est plus disponible';
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map);
+    const legOf = (adv: Adventurer | null | undefined) => (p: Poi) =>
+      adv
+        ? partyLegMin(p, [adv], {
+            hero: false,
+            travelMult: mult,
+            gearSpeed: advGearRoles([adv], escortKitOf(cur).advGear).speed,
+          })
+        : caravanLegMin(p, [], 0, mult);
+    // Chacun part vers la place de l'autre : le point de départ de l'un est l'arrivée de l'autre.
+    const outMin = from ? legFromSpot(from, point, legOf(outAdv)) : legOf(outAdv)(point);
+    const inMin = from ? legFromSpot(point, from, legOf(inAdv)) : legOf(inAdv)(point);
+    const outAt = now + outMin * 60_000;
+    const inAt = now + inMin * 60_000;
+    await persist(userId, {
+      expedition_map: swapGarrison(map, {
+        pointId,
+        outId,
+        outAt,
+        inId: incoming,
+        inAt,
+        now,
+        playerLevel,
+        fromId,
+      }),
+      adventurers: advList.value.map((a) => {
+        if (a.id === outId) {
+          if (fromId) return { ...a, posted: fromId, busyUntil: outAt };
+          return { ...a, posted: undefined, busyUntil: outAt };
+        }
+        if (a.id === incoming) return { ...a, posted: pointId, busyUntil: inAt };
+        return a;
+      }),
+      ...(tookMil && cur.base ? { base: { ...cur.base, militia } } : {}),
+    });
+    return null;
+  }
+
   return {
+    swapControlMember,
     detectRadiusOf,
     transferControlGarrison,
     settleGearRefonte,

@@ -16,13 +16,15 @@
  *
  * ⚠️ PUR : toutes les fonctions rendent un nouvel état, le store écrit.
  */
-import { distNormAt, type ExpeditionMap, type Poi } from './expedition';
-import { isMilitiaId } from './militia';
+import { distNormAt, type ControlState, type ExpeditionMap, type Poi } from './expedition';
+import { isMilitiaId, MILITIA } from './militia';
 import {
   controlFreeSeats,
   militiaFreeSeats,
   reinforceControl,
   releaseFromControl,
+  seatsOf,
+  sendHomeFromControl,
 } from './controlPoints';
 
 type Spot = Pick<Poi, 'x' | 'y'>;
@@ -91,15 +93,17 @@ export function transferSourcesFor(
   toId: string,
 ): { fromId: string; ids: string[] }[] {
   if (!map) return [];
-  return map.pois
-    // ⚠️ Pas de pré-filtre « autre point, tenu » : `transferBlocker` refuse déjà le même point,
-    // un point ennemi et un renfort pas encore arrivé — un second filtre serait dormant.
-    .filter((p) => !!p.control)
-    .map((p) => ({
-      fromId: p.id,
-      ids: p.control!.garrison.filter((id) => !transferBlocker(map, p.id, toId, [id])),
-    }))
-    .filter((s) => s.ids.length > 0);
+  return (
+    map.pois
+      // ⚠️ Pas de pré-filtre « autre point, tenu » : `transferBlocker` refuse déjà le même point,
+      // un point ennemi et un renfort pas encore arrivé — un second filtre serait dormant.
+      .filter((p) => !!p.control)
+      .map((p) => ({
+        fromId: p.id,
+        ids: p.control!.garrison.filter((id) => !transferBlocker(map, p.id, toId, [id])),
+      }))
+      .filter((s) => s.ids.length > 0)
+  );
 }
 
 /**
@@ -132,6 +136,82 @@ export function transferGarrison(
   if (opts.militia.ids.length)
     m = reinforceControl(m, toId, opts.militia.ids, opts.militia.at, now, fromId);
   return m;
+}
+
+/**
+ * ⇄ L'ÉCHANGE (2026-09-29, demandé : « le remplacé et le remplaçant échangent leur place dans
+ * leur lieu respectif, après temps de trajet ») : `outId`, ARRIVÉ sur `pointId`, part prendre
+ * la place de `inId` là où celui-ci se trouve — la BASE (`fromId` absent : il y rentre, et
+ * `inId` vient de la base) ou un AUTRE point tenu `fromId` (les deux se croisent, chacun
+ * rejoint la garnison de l'autre à son arrivée). Chacun occupe tout de suite la place qu'il va
+ * prendre, comme un renfort. SOURCE UNIQUE : l'écran grise avec cette raison, le store refuse.
+ */
+export type SwapBlock = 'notHeld' | 'notHere' | 'same' | 'full';
+/** Le remplaçant « un milicien de la base » : il n'a pas encore d'id, il en reçoit un au départ. */
+export const SWAP_MILITIA_FROM_BASE = 'mil:base';
+export const SWAP_BLOCK_LABEL: Record<SwapBlock, string> = {
+  notHeld: 'les deux points doivent être à toi',
+  notHere: 'seuls les membres arrivés sur un point peuvent être échangés',
+  same: 'ils sont déjà sur le même point',
+  full: 'plus assez de places après l’échange',
+};
+
+/** Les places d'un point une fois `out` parti et `add` arrivé : 5 au plus en tout, et les
+ *  champions dans la limite du point (`seatsOf`) — la règle de `capGarrison`. */
+function seatsOkAfter(c: ControlState, out: string, add: string): boolean {
+  const ids = [...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id)].filter((x) => x !== out);
+  ids.push(add);
+  const champs = ids.filter((x) => !isMilitiaId(x)).length;
+  return ids.length <= MILITIA.perPoint && champs <= seatsOf(c.kind);
+}
+
+export function swapBlocker(
+  map: ExpeditionMap,
+  pointId: string,
+  outId: string,
+  inId: string,
+  fromId?: string | null,
+): SwapBlock | null {
+  const p = held(map, pointId);
+  if (!p) return 'notHeld';
+  const c = p.control!;
+  if (!c.garrison.includes(outId)) return 'notHere';
+  if (fromId) {
+    if (fromId === pointId) return 'same';
+    const q = held(map, fromId);
+    if (!q) return 'notHeld';
+    if (!q.control!.garrison.includes(inId)) return 'notHere';
+    if (!seatsOkAfter(q.control!, inId, outId)) return 'full';
+  } else if ([...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id)].includes(inId)) {
+    // Depuis la base : un membre déjà posté (ou en route) sur ce point n'est pas « à la base ».
+    return 'same';
+  }
+  return seatsOkAfter(c, outId, inId) ? null : 'full';
+}
+
+/** ⇄ L'échange sur la carte. `outAt`/`inAt` = l'arrivée de chacun à destination. */
+export function swapGarrison(
+  map: ExpeditionMap,
+  opts: {
+    pointId: string;
+    outId: string;
+    outAt: number;
+    inId: string;
+    inAt: number;
+    now: number;
+    playerLevel: number;
+    fromId?: string | null;
+  },
+): ExpeditionMap {
+  const { pointId, outId, inId, now, playerLevel, fromId } = opts;
+  let m = releaseFromControl(map, pointId, [outId], now, playerLevel);
+  if (fromId) {
+    m = releaseFromControl(m, fromId, [inId], now, playerLevel);
+    m = reinforceControl(m, fromId, [outId], opts.outAt, now, pointId);
+    return reinforceControl(m, pointId, [inId], opts.inAt, now, fromId);
+  }
+  m = sendHomeFromControl(m, pointId, [outId], now, opts.outAt);
+  return reinforceControl(m, pointId, [inId], opts.inAt, now);
 }
 
 /** ⚔️ Pourquoi une sortie ne peut pas partir d'un point. */
