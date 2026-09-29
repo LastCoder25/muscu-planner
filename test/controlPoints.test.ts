@@ -28,7 +28,7 @@ import { EXPE, createMap, advanceWorld, revealRadius } from '@/lib/expedition';
 import { poiOffers, refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
 import { partyCapFor, partySendBlocker, partyHeroBlocker } from '@/lib/party';
 import { advUnavailableReason, type Adventurer } from '@/lib/adventurers';
-import { planPushes } from '@/lib/push';
+import { CONTROL_WARN_MS, planPushes } from '@/lib/push';
 import { fuseUnits } from '@/lib/skirmish';
 import { campFoe } from '@/lib/camp';
 import { simulateCombat } from '@/lib/combat';
@@ -313,16 +313,29 @@ describe('🔔 les notifications d’un point de contrôle', () => {
     playerLevel: 30,
     plunder: null,
   };
-  it('ne prévient JAMAIS avant l’attaque ; seule l’attaque se dit, sans son issue', () => {
+  it('prévient 10 min avant l’attaque, puis dit l’attaque, jamais son issue', () => {
     const plans = planPushes(
       { ...base, controls: [{ id: ID, attackAt: 10 * H, label: 'Mine fortifiée' }] },
       0,
     );
     const atk = plans.find((p) => p.kind === 'control_attack')!;
-    expect(plans.filter((p) => p.sendAt < 10 * H)).toEqual([]);
+    const warn = plans.find((p) => p.kind === 'control_warn')!;
+    // Seul le rappel part avant l'attaque, et pas plus tôt que 10 min.
+    expect(plans.filter((p) => p.sendAt < 10 * H)).toEqual([warn]);
+    expect(warn.sendAt).toBe(10 * H - CONTROL_WARN_MS);
+    expect(CONTROL_WARN_MS).toBe(10 * 60_000);
+    expect(warn.dedupe).toBe(`control_warn:${ID}:${10 * H}`);
+    expect(`${warn.title} ${warn.body}`).not.toMatch(/reprise|repouss|perdu/i);
     expect(atk.sendAt).toBe(10 * H);
     expect(atk.dedupe).toBe(`control_attack:${ID}:${10 * H}`);
     expect(`${atk.title} ${atk.body}`).not.toMatch(/reprise|repouss|perdu/i);
+  });
+  it('à moins de 10 min de l’attaque, le rappel ne part plus (passé), l’attaque si', () => {
+    const plans = planPushes(
+      { ...base, controls: [{ id: ID, attackAt: 10 * H, label: 'Mine fortifiée' }] },
+      10 * H - 5 * 60_000,
+    );
+    expect(plans.map((p) => p.kind)).toEqual(['control_attack']);
   });
   it('rien dans le passé', () => {
     expect(

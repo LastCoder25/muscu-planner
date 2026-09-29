@@ -14,7 +14,18 @@
 
 import { baseLeadMs, raidIntervalMs, raidsEnabled, type BaseState } from './raid';
 
-type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'party_home' | 'plunder' | 'control_attack';
+type PushKind =
+  | 'siege'
+  | 'siege_done'
+  | 'hero_home'
+  | 'party_home'
+  | 'plunder'
+  | 'control_warn'
+  | 'control_attack';
+
+/** 🏰 Le rappel avant l'attaque d'un point tenu (2026-09-29, demandé par l'utilisateur) :
+ *  10 min — de quoi ouvrir l'app et envoyer un renfort proche, pas de quoi planifier. */
+export const CONTROL_WARN_MS = 10 * 60_000;
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
  *  événement ne doit JAMAIS créer un doublon — l'app replanifie à chaque ouverture. */
@@ -129,12 +140,22 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
     });
   }
 
-  // 🏰 LES POINTS DE CONTRÔLE : l'attaque se dit AU MOMENT où elle a lieu, JAMAIS avant
-  // (v0.1239, décision de l'utilisateur : pas de préavis de reprise). ⚠️ Le
+  // 🏰 LES POINTS DE CONTRÔLE : un rappel `CONTROL_WARN_MS` avant l'attaque (demandé le
+  // 2026-09-29 ; il assouplit le « jamais avant » de la v0.1239 comme l'avertissement
+  // « bataille imminente » de la fiche), puis l'attaque au moment où elle a lieu. ⚠️ Le
   // message ne dit PAS l'issue : elle se joue à l'ouverture de l'app (le serveur ne rejoue
   // pas les combats) — il invite à venir voir. La clé porte l'heure de l'attaque : une
   // nouvelle attaque est un nouveau message, un siège repoussé efface l'ancien.
   for (const c of ctx.controls) {
+    // Même clé d'heure que l'attaque : une attaque repoussée efface aussi son rappel.
+    add({
+      kind: 'control_warn',
+      dedupe: `control_warn:${c.id}:${c.attackAt}`,
+      sendAt: c.attackAt - CONTROL_WARN_MS,
+      title: `⚠️ Attaque imminente : ${c.label}`,
+      body: 'Des ennemis arrivent dans 10 min — envoie un renfort si tu peux.',
+      url: '/expedition-map',
+    });
     add({
       kind: 'control_attack',
       dedupe: `control_attack:${c.id}:${c.attackAt}`,
