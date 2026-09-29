@@ -62,7 +62,7 @@ export function partyWinChance(
  * toujours PAIRE (store `sendParty`) : on ne rejoue jamais la route qui aura lieu.
  * Le Panthéon et le niveau du joueur ne jouent que sur l'XP et l'or, jamais sur l'issue.
  */
-export function roadClearChance(
+function roadClearChance(
   poi: Poi,
   escort: Adventurer[],
   road: EscortKit,

@@ -732,9 +732,11 @@ export function isAutoClaimable(m: ExpeditionMessage, now: number): boolean {
  *  deux d'entre eux (`expeTick`, `expeSettle`) et 30 dans les six autres : la même boîte se
  *  taillait donc différemment selon l'écriture qui passait en dernier, et un rapport lu
  *  pouvait disparaître plus tôt sans raison.
- *  📬 3 depuis la v0.1127 (demandé) : on ne garde que les 3 derniers rapports — PLUS tout
- *  rapport dont la récompense n'a pas été prise, jamais supprimé (`keepMessages`). */
-export const MESSAGES_CAP = 3;
+ *  📬 30 de nouveau depuis la v0.1287 (demandé : « on garde l'historique des rapports de combat
+ *  finalement ») — la v0.1127 l'avait descendue à 3 et la v0.1128 supprimait les messages vus à
+ *  la fermeture. PLUS tout rapport dont la récompense n'a pas été prise, jamais supprimé
+ *  (`keepMessages`). */
+export const MESSAGES_CAP = 30;
 
 /** Taille la boîte 📬 SANS jamais jeter un butin à récupérer. ⚠️ Un `slice` brut pouvait
  *  pousser dehors un rapport non encaissé — et avec lui l'XP d'un groupe entier.
@@ -744,21 +746,6 @@ export const MESSAGES_CAP = 3;
  *  qu'elle montrait, elle ne fait que sauver ce qu'elle aurait perdu. */
 export function keepMessages(list: ExpeditionMessage[], cap: number): ExpeditionMessage[] {
   return list.filter((m, i) => i < cap || m.claimed === false);
-}
-
-/** 📬 À la FERMETURE de la boîte : les messages VUS (`seen` = ceux qu'elle affichait) sont
- *  supprimés — SAUF ceux dont la récompense reste à prendre (`claimed === false`, héros
- *  encore en route compris : le butin ne se périme pas). Un message arrivé pendant qu'elle
- *  était ouverte mais pas encore affiché n'est pas `seen`, il reste.
- *  ⚠️ Supprimer un rapport encaissé ne peut pas le faire revenir encaissable : un rapport
- *  n'est DÉPOSÉ qu'une fois (drapeau `reported` de l'expédition et du groupe).
- *  Rien à retirer → la MÊME référence (le store n'écrit pas à vide). */
-export function dropSeenMessages(
-  list: ExpeditionMessage[],
-  seen: ReadonlySet<string>,
-): ExpeditionMessage[] {
-  const out = list.filter((m) => !seen.has(m.id) || m.claimed === false);
-  return out.length === list.length ? list : out;
 }
 
 /**

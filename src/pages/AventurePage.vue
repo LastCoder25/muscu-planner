@@ -5562,7 +5562,7 @@ function expeBlocked(): boolean {
   return true;
 }
 const expeNow = ref(Date.now());
-/** 📬 Ce que la boîte montre : les 3 derniers, plus tout butin encore à prendre (la même
+/** 📬 Ce que la boîte montre : les `MESSAGES_CAP` derniers, plus tout butin encore à prendre (la même
  *  règle que l'écriture — une boîte d'avant, plus pleine, se lit déjà taillée). */
 const inboxMessages = computed(() => keepMessages(char.row?.messages ?? [], MESSAGES_CAP));
 const unreadMessages = computed(
@@ -5574,14 +5574,10 @@ function openInbox() {
   const uid = auth.user?.id;
   if (uid) void char.expeMarkRead(uid);
 }
-/** 📬 En fermant, les messages VUS sont supprimés — sauf un butin à prendre. « Vu » = ce
- *  que la boîte affichait à l'instant de la fermeture. */
+/** 📬 Fermer ne supprime rien (v0.1287) : la boîte garde l'historique des rapports. */
 function closeInbox() {
   inboxOpen.value = false;
   focusMsgId.value = null;
-  const uid = auth.user?.id;
-  const seen = new Set(inboxMessages.value.map((m) => m.id));
-  if (uid) void char.expeDropSeen(uid, seen);
 }
 // ── DÉFENSE DE LA BASE ──
 // Le siège se résout par HORLOGE, comme les expéditions : le tick d'une seconde suffit,

@@ -92,7 +92,6 @@ import {
   isWarbandPoi,
   campSpecOf,
   depositMessages,
-  dropSeenMessages,
   MESSAGES_CAP,
   isClaimable,
   isAutoClaimable,
@@ -2427,17 +2426,6 @@ export const useCharacterStore = defineStore('character', () => {
     }
     return done;
   }
-  /** 📬 Fermeture de la boîte : retire les messages vus, sauf un butin à prendre
-   *  (`dropSeenMessages`). La boîte part de `boxWith` : un encaissement PARTI (pas encore
-   *  relu du serveur) y est déjà `claimed`, donc retirable. */
-  async function expeDropSeen(userId: string, seen: ReadonlySet<string>) {
-    const cur = row.value;
-    if (!cur || !seen.size) return;
-    const box = boxWith(cur, [], MESSAGES_CAP);
-    const next = dropSeenMessages(box, seen);
-    if (next === cur.messages) return;
-    await persist(userId, { messages: next });
-  }
   async function expeMarkRead(userId: string) {
     const cur = row.value;
     if (!cur || !cur.messages.some((m) => !m.read)) return;
@@ -3983,7 +3971,6 @@ export const useCharacterStore = defineStore('character', () => {
     expeClaim,
     expeAutoClaim,
     expeMarkRead,
-    expeDropSeen,
     buildFilon,
     upgradeFilon,
     collectFilons,
