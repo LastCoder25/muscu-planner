@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { poiHaulPreview, poiHaulBonus, formatHaul } from '@/lib/poiYield';
+import { poiHaulPreview, poiHaulBonus, poiTeamHaul, formatHaul } from '@/lib/poiYield';
 import { refAdvGear, refChampionAdv, resolveCaravan } from '@/lib/caravan';
 import { SUPPLY, type SupplyId } from '@/lib/supplies';
 import type { Adventurer } from '@/lib/adventurers';
@@ -153,5 +153,62 @@ describe('poiHaulBonus : les bâts et les porteurs, à part (v0.1265)', () => {
       kit: { advGear, supplies: bats },
     });
     expect(b.energy).toBe(0);
+  });
+});
+
+describe('poiTeamHaul : la récolte de base et celle de cette équipe', () => {
+  const adv = (i: number): Adventurer => ({
+    ...refChampionAdv(26, i),
+    id: `t${i}`,
+    gear: {
+      weapon: `refGear${i}weapon`,
+      armor: `refGear${i}armor`,
+      accessory: `refGear${i}accessory`,
+      relic: `refGear${i}relic`,
+    },
+  });
+  const advGear = refAdvGear(26, 3);
+  const porteur = [adv(0)]; // porte la cargaison 🐫
+  const sansRole = [adv(2)]; // ne la porte pas
+  const opts = (escort: Adventurer[], heroGoes = false, supplies: SupplyId[] = []) => ({
+    playerLevel: 26,
+    heroGoes,
+    escort,
+    kit: { advGear, supplies },
+  });
+
+  it('le total = la base + le bonus, champ par champ', () => {
+    const p = poi('mana_mine', 'mm', 26);
+    const o = opts(porteur, false, ['bats']);
+    const { base, total } = poiTeamHaul(p, o);
+    const b = poiHaulBonus(p, o);
+    expect(base).toEqual(poiHaulPreview(p, o));
+    for (const k of Object.keys(base) as (keyof typeof base)[])
+      expect(total[k]).toBe(base[k] + b[k]);
+  });
+
+  it('une mine de mana : le porteur 🐫 ramène plus, et il n’est pas « inutile »', () => {
+    const r = poiTeamHaul(poi('mana_mine', 'mm', 26), opts(porteur));
+    expect(r.total.mana).toBeGreaterThan(r.base.mana);
+    expect(r.idleHaul).toBe(false);
+  });
+
+  it('une mine d’or : le porteur 🐫 ne change pas l’or — et on le dit', () => {
+    const r = poiTeamHaul(poi('mine'), opts(porteur));
+    expect(r.total.gold).toBe(r.base.gold);
+    expect(r.idleHaul).toBe(true);
+  });
+
+  it('avec le héros, le rôle 🐫 ne compte pas — et on le dit', () => {
+    expect(poiTeamHaul(poi('mana_mine', 'mm', 26), opts(porteur, true)).idleHaul).toBe(true);
+  });
+
+  it('personne ne porte la cargaison : rien à signaler', () => {
+    expect(poiTeamHaul(poi('mine'), opts(sansRole)).idleHaul).toBe(false);
+    expect(poiTeamHaul(poi('mine'), opts([])).idleHaul).toBe(false);
+  });
+
+  it('un lieu de combat n’a pas de récolte à gonfler : rien à signaler', () => {
+    expect(poiTeamHaul(poi('camp'), opts(porteur)).idleHaul).toBe(false);
   });
 });
