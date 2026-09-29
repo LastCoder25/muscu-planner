@@ -131,8 +131,36 @@ describe('🔙 le demi-tour des renforts', () => {
     expect(recallReinforcements(held(), ID, ['r1'], 40 * M)).toBeNull();
     const m = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), ID, ['g'], 0, 7);
     expect(recallReinforcements(reinforceControl(m, ID, ['r'], 40 * M), ID, ['r'], 5 * M)).toBeNull();
-    const via = reinforceControl(m, ID, ['r'], 40 * M, 0, 'autre');
-    expect(recallReinforcements(via, ID, ['r'], 5 * M)).toBeNull();
     expect(recallReinforcements(held(), ID, ['inconnu'], 5 * M)).toBeNull();
+  });
+  it('⇄ un transfert fait demi-tour vers son point d’origine, une seule fois', async () => {
+    const { MILITIA_PREFIX } = await import('@/lib/militia');
+    const { reinforcementsEnRoute, settleReinforcements } = await import('@/lib/controlPoints');
+    const mil = MILITIA_PREFIX + '7';
+    const SRC = controlIdOf('garden');
+    let m = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), ID, ['g'], 0, 7);
+    m = captureControl(m, SRC, ['h'], 0, 7);
+    const sent = reinforceControl(m, ID, [mil], 40 * M, 0, SRC);
+    const r = recallReinforcements(sent, ID, [mil], 10 * M)!;
+    expect(r.back).toEqual([{ id: mil, at: 20 * M, to: SRC }]);
+    expect(r.map.pois.find((p) => p.id === ID)!.control!.reinforcing).toBeUndefined();
+    const [t] = reinforcementsEnRoute(r.map, 12 * M);
+    expect(t!.poi.id).toBe(SRC);
+    expect(t!.turned).toBe(true);
+    // Il repart d'un quart du chemin, pas du point visé.
+    const src = m.pois.find((p) => p.id === SRC)!;
+    const dst = m.pois.find((p) => p.id === ID)!;
+    expect(t!.origin!.x).toBeCloseTo(src.x + (dst.x - src.x) * 0.25);
+    // Pas de second demi-tour, et il rejoint la garnison d'origine à l'arrivée.
+    expect(recallReinforcements(r.map, SRC, [mil], 12 * M)).toBeNull();
+    const done = settleReinforcements(r.map, 20 * M, 30);
+    expect(done.pois.find((p) => p.id === SRC)!.control!.garrison).toContain(mil);
+  });
+  it('⇄ un transfert dont le point d’origine est perdu rentre à la base', () => {
+    const m = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), ID, ['g'], 0, 7);
+    const via = reinforceControl(m, ID, ['r'], 40 * M, 0, 'autre');
+    const r = recallReinforcements(via, ID, ['r'], 10 * M)!;
+    expect(r.back).toEqual([{ id: 'r', at: 20 * M }]);
+    expect(r.map.pois.find((p) => p.id === ID)!.control!.returning).toHaveLength(1);
   });
 });

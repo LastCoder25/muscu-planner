@@ -112,7 +112,15 @@ export interface ControlState {
    *  ne combattent avant d'être arrivés. `from` = leur départ de la ville (absent sur les
    *  renforts envoyés avant v0.1263) : c'est lui qui permet de les DESSINER en route.
    *  `via` = le point fixe d'où ils viennent (TRANSFERT, 2026-09-29) ; absent = la ville. */
-  reinforcing?: { id: string; at: number; from?: number; via?: string }[];
+  reinforcing?: {
+    id: string;
+    at: number;
+    from?: number;
+    via?: string;
+    /** 🔙 Un TRANSFERT qui a fait demi-tour : il repart de là où il a tourné (dessin), et ne
+     *  peut plus rebrousser chemin une seconde fois. */
+    turnAt?: { x: number; y: number };
+  }[];
   /** 🏠 Champions et miliciens RAMENÉS, en route vers la base : partis du point à `from`,
    *  rentrés à `at` (2026-09-28, demandé : « qu'ils se voient sur la carte »). Ils ne
    *  comptent plus dans la garnison ; un champion reste occupé jusqu'à `at` (`busyUntil`),

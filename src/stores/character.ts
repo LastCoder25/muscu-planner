@@ -308,6 +308,7 @@ import {
   attackerLevel,
   markAssault,
   recallReinforcements,
+  canTurnBack,
   retakeForce,
   retakeBoost,
   campGear,
@@ -4638,6 +4639,20 @@ export const useCharacterStore = defineStore('character', () => {
   /** 🏰 Ramène UNE PARTIE de la garnison (ou des renforts en route) : ils redeviennent
    *  disponibles, l'or déjà produit reste en réserve. Même vidé, le point reste à nous
    *  jusqu'à la prochaine attaque. */
+  /** 🔙 Les champions d'un demi-tour de renforts : occupés jusqu'à leur arrivée, puis
+   *  postés sur leur point d'origine (`to`, un transfert) ou libres à la base. */
+  function turnedBack(back: readonly { id: string; at: number; to?: string }[]): Adventurer[] {
+    const by = new Map(back.map((b) => [b.id, b]));
+    return advList.value.map((a) => {
+      const b = by.get(a.id);
+      if (!b) return a;
+      const next = { ...a, busyUntil: b.at };
+      if (b.to) next.posted = b.to;
+      else delete next.posted;
+      return next;
+    });
+  }
+
   async function releaseControlChampions(
     userId: string,
     id: string,
@@ -4654,25 +4669,16 @@ export const useCharacterStore = defineStore('character', () => {
     // (`recallReinforcements`) : ils rentrent en autant de temps qu'ils ont marché.
     const ctl = cur.expedition_map.pois.find((p) => p.id === id)?.control;
     const moving = new Set(
-      (ctl?.reinforcing ?? [])
-        .filter((r) => r.from !== undefined && !r.via && now < r.at)
-        .map((r) => r.id),
+      (ctl?.reinforcing ?? []).filter((r) => canTurnBack(r, now)).map((r) => r.id),
     );
     const turning = ids.filter((x) => moving.has(x));
     const turned = turning.length
       ? recallReinforcements(cur.expedition_map, id, turning, now)
       : null;
     if (turned) {
-      const at = new Map(turned.back.map((b) => [b.id, b.at]));
       await persist(userId, {
         expedition_map: turned.map,
-        adventurers: advList.value.map((a) => {
-          const t = at.get(a.id);
-          if (t === undefined) return a;
-          const next = { ...a, busyUntil: t };
-          delete next.posted;
-          return next;
-        }),
+        adventurers: turnedBack(turned.back),
       });
       const rest = ids.filter((x) => !moving.has(x));
       if (rest.length) await releaseControlChampions(userId, id, rest, now, playerLevel);
@@ -4842,16 +4848,9 @@ export const useCharacterStore = defineStore('character', () => {
       if (!cur.expedition_map) return 'la carte n’est pas chargée';
       const r = recallReinforcements(cur.expedition_map, target.pointId, target.ids, now);
       if (!r) return 'ces renforts ne peuvent plus faire demi-tour';
-      const at = new Map(r.back.map((b) => [b.id, b.at]));
       await persist(userId, {
         expedition_map: r.map,
-        adventurers: advList.value.map((a) => {
-          const t = at.get(a.id);
-          if (t === undefined) return a;
-          const next = { ...a, busyUntil: t };
-          delete next.posted;
-          return next;
-        }),
+        adventurers: turnedBack(r.back),
       });
       return null;
     }

@@ -72,7 +72,9 @@
         <button type="button" class="rc-tile back" :disabled="busy" @click="emit('confirm')">
           <span class="t-ico">🔙</span>
           <b>Demi-tour</b>
-          <span class="t-line">À la base dans {{ fmt(preview.backMs) }}</span>
+          <span class="t-line"
+            >{{ ask.homeName ?? 'À la base' }} dans {{ fmt(preview.backMs) }}</span
+          >
           <span v-if="saved > 0" class="t-line gain">{{ fmt(saved) }} plus tôt</span>
           <span v-else class="t-line dim">Le chemin déjà fait</span>
         </button>
@@ -105,6 +107,8 @@ export interface RecallAsk {
   emo: string;
   poi: Poi;
   hero: boolean;
+  /** Où l'on rentre en faisant demi-tour : la base, ou le point de départ d'un transfert. */
+  homeName?: string;
 }
 
 const props = defineProps<{

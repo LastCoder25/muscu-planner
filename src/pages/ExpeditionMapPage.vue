@@ -2294,6 +2294,7 @@ const reinforcementsOnMap = computed(() =>
     poi: r.poi,
     members: r.members,
     origin: r.origin,
+    recallable: !r.turned,
     at: drawnAt(r),
     prog: voyageProgress(r, now.value),
     arriveAt: r.midAt,
@@ -2369,7 +2370,9 @@ const travelersOnMap = computed(() => [
     ...r,
     emo: '🛡️',
     kind: 'reinf' as const,
-    recall: !r.origin ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members } : undefined,
+    recall: r.recallable
+      ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members }
+      : undefined,
     recallLabel: `Les renforts (${r.members.length})`,
     recallInfo: {
       kind: 'reinf',
@@ -2380,6 +2383,7 @@ const travelersOnMap = computed(() => [
       members: r.members,
       sentAt: r.sentAt,
       arriveAt: r.arriveAt,
+      ...(r.origin ? { homeName: 'Au point de départ' } : {}),
     } as RecallInfo,
   })),
   ...returnsOnMap.value.map((r) => ({

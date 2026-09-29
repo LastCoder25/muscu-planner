@@ -1084,7 +1084,10 @@ export function controlYieldCard(
       return {
         emoji: '🌿',
         value: whole > 0 ? `${whole} 🎒` : `${Math.round(next * 100)} %`,
-        what: whole > 0 ? `consommable${whole > 1 ? 's' : ''} prêt${whole > 1 ? 's' : ''}` : 'du prochain consommable',
+        what:
+          whole > 0
+            ? `consommable${whole > 1 ? 's' : ''} prêt${whole > 1 ? 's' : ''}`
+            : 'du prochain consommable',
         pct: fill >= 1 ? 1 : next,
         gauge:
           idle ??
@@ -1110,7 +1113,11 @@ export function controlYieldCard(
         pct: r,
         gauge:
           idle ??
-          (r >= 1 ? 'Récupère-la : la copie suivante ne commence qu’après' : left ? `Prête dans ${left}` : null),
+          (r >= 1
+            ? 'Récupère-la : la copie suivante ne commence qu’après'
+            : left
+              ? `Prête dans ${left}`
+              : null),
         rate:
           (every ? `1 rune toutes les ${formatDuration(every * 3600_000)} · ` : '') +
           crew +
@@ -1226,6 +1233,8 @@ export interface ReinforcementTrip {
   origin?: { x: number; y: number };
   /** 🔙 Un renfort qui a fait demi-tour en chemin : le retour part de là où il a tourné. */
   turnBack?: number;
+  /** 🔙 Un transfert déjà revenu d'un demi-tour : il ne rebrousse pas une seconde fois. */
+  turned?: boolean;
 }
 export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now: number) {
   const out = new Map<string, ReinforcementTrip>();
@@ -1240,7 +1249,8 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
         t.members.push(r.id);
         continue;
       }
-      const src = r.via ? map!.pois.find((q) => q.id === r.via) : undefined;
+      const via = r.via ? map!.pois.find((q) => q.id === r.via) : undefined;
+      const src = r.turnAt ?? via;
       out.set(key, {
         key,
         poi: p,
@@ -1249,6 +1259,7 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
         midAt: r.at,
         returnAt: r.at,
         ...(src ? { origin: { x: src.x, y: src.y } } : {}),
+        ...(r.turnAt ? { turned: true } : {}),
       });
     }
   }
@@ -1269,13 +1280,62 @@ export function recallReinforcements(
   pointId: string,
   ids: readonly string[],
   now: number,
-): { map: ExpeditionMap; back: { id: string; at: number }[] } | null {
-  const c = map.pois.find((p) => p.id === pointId)?.control;
+): { map: ExpeditionMap; back: { id: string; at: number; to?: string }[] } | null {
+  const target = map.pois.find((p) => p.id === pointId);
+  const c = target?.control;
   const want = new Set(ids);
-  const turning = (c?.reinforcing ?? []).filter(
-    (r) => want.has(r.id) && r.from !== undefined && !r.via && now < r.at,
-  );
-  if (!turning.length) return null;
+  const all = (c?.reinforcing ?? []).filter((r) => want.has(r.id) && canTurnBack(r, now));
+  if (!all.length) return null;
+  // ⇄🔙 UN TRANSFERT REPART SUR SON POINT D'ORIGINE (2026-09-29, demandé : « pouvoir faire
+  // demi-tour aux miliciens aussi » — les siens étaient en transfert). Il redevient un
+  // renfort de ce point, parti de là où il a tourné. Si ce point n'est plus à nous, ou n'a
+  // plus la place, il rentre à la BASE comme un renfort parti de la ville.
+  const viaId = all.find((r) => r.via)?.via;
+  const origin = viaId ? map.pois.find((p) => p.id === viaId) : undefined;
+  const moving = all.filter((r) => r.via && r.via === viaId);
+  const nMil = moving.filter((r) => isMilitiaId(r.id)).length;
+  const nChamp = moving.length - nMil;
+  const room =
+    !!origin?.control &&
+    origin.control.owner === 'player' &&
+    controlFreeSeats(origin.control) >= nChamp &&
+    militiaFreeSeats(origin.control) >= moving.length;
+  const toOrigin = room && target ? moving : [];
+  const toOriginIds = new Set(toOrigin.map((r) => r.id));
+  const turning = all.filter((r) => !toOriginIds.has(r.id));
+  let out = map;
+  const backOrigin = toOrigin.map((r) => {
+    const from = Math.min(now, r.from!);
+    const done = now - from;
+    const f = Math.min(1, done / Math.max(1, r.at - from));
+    return {
+      id: r.id,
+      from: now,
+      at: now + done,
+      via: pointId,
+      turnAt: {
+        x: origin!.x + (target!.x - origin!.x) * f,
+        y: origin!.y + (target!.y - origin!.y) * f,
+      },
+    };
+  });
+  if (backOrigin.length) {
+    out = withControl(out, origin!.id, (p) => ({
+      ...p,
+      control: { ...p.control!, reinforcing: [...(p.control!.reinforcing ?? []), ...backOrigin] },
+    }));
+    const gone0 = toOriginIds;
+    out = withControl(out, pointId, (p) => {
+      const reinforcing = (p.control!.reinforcing ?? []).filter((r) => !gone0.has(r.id));
+      const ctl = { ...p.control! };
+      if (reinforcing.length) ctl.reinforcing = reinforcing;
+      else delete ctl.reinforcing;
+      return { ...p, control: ctl };
+    });
+  }
+  const backTo = backOrigin.map((b) => ({ id: b.id, at: b.at, to: origin!.id }));
+  if (!turning.length) return { map: out, back: backTo };
+  map = out;
   const gone = new Set(turning.map((r) => r.id));
   const back = turning.map((r) => {
     const from = Math.min(now, r.from!);
@@ -1295,8 +1355,18 @@ export function recallReinforcements(
       else delete ctl.reinforcing;
       return { ...p, control: ctl };
     }),
-    back: back.map((b) => ({ id: b.id, at: b.at })),
+    back: [...backTo, ...back.map((b) => ({ id: b.id, at: b.at }))],
   };
+}
+
+/** 🔙 Un renfort peut-il rebrousser chemin ? Encore en route, parti à une heure connue, et
+ *  pas déjà revenu d'un demi-tour (`turnAt`). ⚠️ Source unique : la carte, la fiche du point
+ *  et le store la lisent. */
+export function canTurnBack(
+  r: { at: number; from?: number; turnAt?: unknown },
+  now: number,
+): boolean {
+  return r.from !== undefined && !r.turnAt && now < r.at;
 }
 
 /** 🏠 Des champions ou miliciens RAMENÉS d'un point partent vers la base : on les dessine
