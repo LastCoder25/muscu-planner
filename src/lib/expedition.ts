@@ -2372,6 +2372,33 @@ export function travelPosition(
   return { x: town.x, y: town.y, phase: 'done', frac: 1, remainToObjectiveMs: 0, remainTotalMs: 0 };
 }
 
+/** Rayons DESSINÉS aux deux bouts d'un trajet sur la carte : la ville (terre battue,
+ *  12,5, plus la moitié d'un marqueur) et un lieu (son disque, 4,8). */
+export const MAP_RIM = { town: 14, poi: 5 } as const;
+
+/**
+ * 🗺️ Où DESSINER un voyageur : `travelPosition` interpole de CENTRE à CENTRE, or la ville
+ * est dessinée par-dessus les marqueurs sur un rayon de 12,5. Sur un lieu proche (~30 unités),
+ * un voyageur restait donc CACHÉ sous la ville près de la moitié du trajet, puis collé à son
+ * enceinte (signalé : « il reste 30 min et il est toujours à la sortie de la base »). On
+ * répartit le même avancement entre le BORD de la ville et le bord du lieu. Affichage seul :
+ * les temps et le calcul du voyage ne bougent pas.
+ */
+export function mapTravelPoint(
+  pos: { x: number; y: number },
+  poi: { x: number; y: number },
+): { x: number; y: number } {
+  const { town } = EXPE;
+  const dx = poi.x - town.x;
+  const dy = poi.y - town.y;
+  const D = Math.hypot(dx, dy);
+  const span = D - MAP_RIM.town - MAP_RIM.poi;
+  if (span <= 0) return { x: pos.x, y: pos.y };
+  const t = clamp01(Math.hypot(pos.x - town.x, pos.y - town.y) / D);
+  const r = MAP_RIM.town + t * span;
+  return { x: town.x + (dx / D) * r, y: town.y + (dy / D) * r };
+}
+
 /**
  * Ce qu'une tuile de voyage affiche : le temps TOTAL restant avant le retour en ville,
  * aller compris (demandé par l'utilisateur : « mets juste le temps total avant le

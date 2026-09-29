@@ -452,28 +452,30 @@
                   libre{{ militiaFreeSeats(liveControl) > 1 ? 's' : '' }}</span
                 ></span
               >
-              <div class="mil-step">
-                <button
-                  type="button"
-                  class="mil-btn"
-                  :disabled="milSend <= 0"
-                  aria-label="Un milicien de moins"
-                  @click="milSend--"
-                >
-                  −
-                </button>
-                <b class="mil-n">{{ milSend }}</b>
-                <button
-                  type="button"
-                  class="mil-btn"
-                  :disabled="milSend >= milSendMax"
-                  aria-label="Un milicien de plus"
-                  @click="milSend++"
-                >
-                  +
-                </button>
-              </div>
             </div>
+            <!-- 🛡️ Une tuile par milicien de la base, comme les champions au-dessus (demandé :
+                 « voir les icônes des miliciens au lieu de saisir un chiffre »). Ils sont
+                 anonymes : toucher la N-ième en choisit N, la retoucher en retire une. Au-delà
+                 des places libres, la tuile est grisée et le dit. -->
+            <div v-if="milHome > 0" class="mil-pick">
+              <button
+                v-for="i in milHome"
+                :key="'mil' + i"
+                type="button"
+                class="mil-tile"
+                :class="{ on: i <= milSend, off: i > milSendMax }"
+                :disabled="i > milSendMax"
+                :aria-pressed="i <= milSend"
+                :title="
+                  i > milSendMax ? 'plus de place pour un milicien sur ce lieu' : MILITIA_NAME
+                "
+                @click="pickMilitia(i)"
+              >
+                <span class="mil-tile-emo">{{ MILITIA_EMO }}</span>
+                <span class="mil-tile-n">{{ i }}</span>
+              </button>
+            </div>
+            <p v-else class="ctl-line ctl-dim">Aucun milicien à la base pour l’instant.</p>
             <div v-if="milSend > 0" class="send-bar">
               <button class="sh-send" :disabled="ctlBusy" @click="sendMilitia">
                 {{ MILITIA_EMO }} Envoyer {{ milSend }} milicien{{ milSend > 1 ? 's' : '' }} ·
@@ -792,6 +794,7 @@ import {
   type ExpeditionMessage,
   EXPE,
   travelPosition,
+  mapTravelPoint,
   warbandAt,
   tripTimeLabel,
   voyageProgress,
@@ -1063,7 +1066,13 @@ let fogWait: ReturnType<typeof setTimeout> | undefined;
 watch(reveal, (to, from) => {
   if (to !== from) liftFog(fogR.value);
 });
-const hero = computed(() => (active.value ? travelPosition(active.value, now.value) : null));
+/** Position DESSINÉE (bord de la ville → bord du lieu, `mapTravelPoint`) ; les compteurs
+ *  restent ceux de `travelPosition`. */
+function drawnAt(v: Parameters<typeof travelPosition>[0]) {
+  const at = travelPosition(v, now.value);
+  return { ...at, ...mapTravelPoint(at, v.poi) };
+}
+const hero = computed(() => (active.value ? drawnAt(active.value) : null));
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
 );
@@ -1451,6 +1460,10 @@ const milSend = ref(0);
 const milSendMax = computed(() =>
   Math.max(0, Math.min(milHome.value, militiaFreeSeats(liveControl.value))),
 );
+/** Toucher la N-ième tuile en choisit N ; retoucher la dernière choisie en retire une. */
+function pickMilitia(i: number) {
+  milSend.value = i === milSend.value ? i - 1 : Math.min(i, milSendMax.value);
+}
 watch(milSendMax, (m) => {
   if (milSend.value > m) milSend.value = m;
 });
@@ -1735,7 +1748,7 @@ const partiesOnMap = computed(() =>
       members: g.outcome.party?.escort ?? [],
       hero: !!g.outcome.party?.hero,
       haul: expeHaul(g.outcome),
-      at: travelPosition(g, now.value),
+      at: drawnAt(g),
       prog: voyageProgress(g, now.value),
     })),
 );
@@ -1772,7 +1785,7 @@ const reinforcementsOnMap = computed(() =>
     id: 'r' + r.key,
     poi: r.poi,
     members: r.members,
-    at: travelPosition(r, now.value),
+    at: drawnAt(r),
     prog: voyageProgress(r, now.value),
     arriveIn: r.midAt - now.value,
   })),
@@ -1784,7 +1797,7 @@ const returnsOnMap = computed(() =>
     id: 'h' + r.key,
     poi: r.poi,
     members: r.members,
-    at: travelPosition(r, now.value),
+    at: drawnAt(r),
     pct: voyageProgress(r, now.value).overall * 100,
     arriveIn: r.returnAt - now.value,
   })),
@@ -2878,31 +2891,43 @@ onUnmounted(() => {
   font-size: 13px;
   min-width: 0;
 }
-.mil-step {
+.mil-pick {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 8px 0;
+}
+.mil-tile {
+  position: relative;
+  min-height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #1d1913;
+  color: var(--text);
+  cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
+  justify-content: center;
 }
-.mil-btn {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface-2, var(--surface));
-  color: var(--text);
-  font-size: 20px;
-  cursor: pointer;
+.mil-tile.on {
+  border-color: var(--accent);
+  background: linear-gradient(180deg, rgba(255, 210, 63, 0.16), #1d1913 65%);
 }
-.mil-btn:disabled {
-  opacity: 0.4;
+.mil-tile.off {
+  border-style: dashed;
+  opacity: 0.45;
   cursor: default;
 }
-.mil-n {
-  min-width: 22px;
-  text-align: center;
-  font-family: Oswald, sans-serif;
-  font-size: 18px;
+.mil-tile-emo {
+  font-size: 24px;
+  line-height: 1;
+}
+.mil-tile-n {
+  position: absolute;
+  top: 2px;
+  right: 5px;
+  font-size: 9px;
+  color: var(--dim);
 }
 .ei-rift {
   display: inline-block;
