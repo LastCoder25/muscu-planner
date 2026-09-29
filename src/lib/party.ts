@@ -819,3 +819,39 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
     journal: party.journal,
   };
 }
+
+/**
+ * 🔙 CE QUE L'ÉCRAN DE DEMI-TOUR MONTRE (demandé : « un truc plus design avec le détail »).
+ * Le chemin déjà fait, ce qui reste jusqu'au lieu, et les deux retours comparés : on rentre
+ * en autant de temps qu'on a marché (`recallVoyage`, `recallReinforcements`) — ou, si l'on
+ * continue, à `returnAt` (absent pour des renforts : ils restent sur le point).
+ * ⚠️ `backMs` suit la règle du demi-tour lui-même : un aperçu qui la recalculerait autrement
+ * annoncerait un retour que le voyage ne fera pas.
+ */
+export interface RecallPreview {
+  /** Déjà marché (ms). */
+  walkedMs: number;
+  /** Encore à marcher jusqu'au lieu (ms). */
+  toGoMs: number;
+  /** Part du chemin aller faite (0..1). */
+  frac: number;
+  /** Retour à la base si l'on fait demi-tour (ms). */
+  backMs: number;
+  /** Retour à la base si l'on continue (ms), `null` si l'on reste sur place. */
+  homeIfContinueMs: number | null;
+}
+
+export function recallPreview(
+  v: { sentAt: number; arriveAt: number; returnAt?: number },
+  now: number,
+): RecallPreview {
+  const walkedMs = Math.max(0, now - v.sentAt);
+  const leg = Math.max(1, v.arriveAt - v.sentAt);
+  return {
+    walkedMs,
+    toGoMs: Math.max(0, v.arriveAt - now),
+    frac: Math.min(1, walkedMs / leg),
+    backMs: walkedMs,
+    homeIfContinueMs: v.returnAt === undefined ? null : Math.max(0, v.returnAt - now),
+  };
+}

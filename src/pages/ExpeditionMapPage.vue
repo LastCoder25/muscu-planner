@@ -227,7 +227,7 @@
               class="recall-hit"
               role="button"
               :aria-label="`Faire demi-tour : ${v.recallLabel}`"
-              @click.stop="askRecall(v.recall, v.recallLabel, v.recallBackMs)"
+              @click.stop="askRecall(v.recall, v.recallInfo)"
             />
             <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" :class="v.kind" />
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
@@ -252,7 +252,7 @@
               class="recall-hit"
               role="button"
               aria-label="Faire demi-tour : ton héros"
-              @click.stop="askRecall({ kind: 'hero' }, 'Ton héros', now - active.sentAt)"
+              @click.stop="askRecall({ kind: 'hero' }, heroRecallInfo)"
             />
             <circle :cx="hero.x" :cy="hero.y" r="3.4" class="hero" />
             <text :x="hero.x" :y="hero.y + 1.2" class="hero-emo">🧝</text>
@@ -357,7 +357,13 @@
     />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
-    <TripsPanel v-model:focus="focusTrip" :trips="trips" :hero-profile="character.profile" />
+    <TripsPanel
+      v-model:focus="focusTrip"
+      :trips="trips"
+      :hero-profile="character.profile"
+      :recallable="recallableTrips"
+      @recall="recallTripByKey"
+    />
 
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
@@ -489,7 +495,7 @@
             :disabled="ctlBusy"
             @click="releaseCtl"
           >
-            ↩️ Ramener {{ ctlRecallSel.length }} membre{{ ctlRecallSel.length > 1 ? 's' : '' }}
+            {{ recallSelLabel }}
           </button>
           <!-- ⇄ REMPLACER (demandé) : UN membre coché peut échanger sa place avec quelqu'un de
                la base ou d'un autre point. Chaque ligne dit la tenue APRÈS l'échange, le
@@ -998,6 +1004,15 @@
     <!-- Emplacement de filon (construire / récolter / améliorer) — MODALE centrée
          (clic-dehors ou croix pour fermer ; plus de scroll en bas de page). -->
     <!-- Modale de collecte au retour -->
+    <RecallSheet
+      v-model="recallOpen"
+      :ask="recallAsk?.info ?? null"
+      :preview="recallPrev"
+      :crew="recallCrew"
+      :militia="recallMilitia"
+      :busy="recallBusy"
+      @confirm="confirmRecall"
+    />
     <q-dialog v-model="collectOpen">
       <q-card v-if="lastOutcome" class="van-card">
         <div class="van-kicker">📬 Retour de mission</div>
@@ -1071,6 +1086,7 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
 import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import {
   FIELD_ARMY,
@@ -1087,6 +1103,7 @@ import {
   denForce,
   tripCrew,
   recallBlocker,
+  recallPreview,
   type RecallTarget,
   partyCarriesHero,
 } from '@/lib/party';
@@ -1163,6 +1180,7 @@ import {
 import {
   ADV_UNAVAILABLE_LABEL,
   advAvailable,
+  advTitle,
   engageCap,
   sortByGradeThenRank,
   type Adventurer,
@@ -1821,6 +1839,26 @@ const controlMilitia = computed(() => {
       .map((r) => ({ id: r.id, arriveIn: Math.max(0, r.at - now.value) })),
   ];
 });
+/** 🔙 Les membres du point encore EN ROUTE : les « ramener », c'est les faire rebrousser chemin. */
+const ctlMoving = computed(
+  () =>
+    new Set(
+      [
+        ...controlMembers.value.map((m) => ({ id: m.adv.id, arriveIn: m.arriveIn })),
+        ...controlMilitia.value,
+      ]
+        .filter((m) => m.arriveIn > 0)
+        .map((m) => m.id),
+    ),
+);
+/** Le bouton dit ce qu'il fera : ceux en route font DEMI-TOUR, les autres sont ramenés. */
+const recallSelLabel = computed(() => {
+  const moving = ctlMoving.value;
+  const n = ctlRecallSel.value.length;
+  const t = ctlRecallSel.value.filter((x) => moving.has(x)).length;
+  if (t === n) return `🔙 Demi-tour : ${n} renfort${n > 1 ? 's' : ''}`;
+  return `↩️ Ramener ${n} membre${n > 1 ? 's' : ''}${t ? ` (dont ${t} en demi-tour)` : ''}`;
+});
 const controlCount = computed(() => controlMembers.value.length + controlMilitia.value.length);
 const controlFree = computed(() => controlFreeSeats(liveControl.value));
 /** ➕ Les cases vides de la garnison de 5 : les premières prennent un champion, les
@@ -2209,14 +2247,28 @@ async function releaseCtl() {
   const p = livePoi.value;
   const ids = ctlRecallSel.value;
   if (!uid || !p || !ids.length || ctlBusy.value) return;
-  if (ids.length >= controlCount.value) return recallCtl();
+  // 🔙 Ceux encore EN ROUTE font demi-tour (le store les fait rebrousser chemin, en autant de
+  // temps qu'ils ont marché) ; « tout rappeler » ne regarde que ceux déjà SUR le point.
+  const moving = ctlMoving.value;
+  const turning = ids.filter((x) => moving.has(x));
+  const onPoint = ids.filter((x) => !moving.has(x));
+  const wholeGarrison = onPoint.length > 0 && onPoint.length >= controlCount.value - moving.size;
   ctlBusy.value = true;
   try {
-    await char.releaseControlChampions(uid, p.id, ids, Date.now(), heroLevel.value);
+    if (turning.length) {
+      await char.releaseControlChampions(uid, p.id, turning, Date.now(), heroLevel.value);
+      $q.notify({
+        type: 'positive',
+        message: `🔙 ${turning.length} renfort${turning.length > 1 ? 's font' : ' fait'} demi-tour.`,
+      });
+    }
+    if (onPoint.length && !wholeGarrison)
+      await char.releaseControlChampions(uid, p.id, onPoint, Date.now(), heroLevel.value);
     ctlRecallSel.value = [];
   } finally {
     ctlBusy.value = false;
   }
+  if (wholeGarrison) await recallCtl();
 }
 async function reinforceCtl() {
   const uid = auth.user?.id;
@@ -2421,6 +2473,8 @@ const partiesOnMap = computed(() =>
       poi: g.poi,
       recallable: !recallBlocker(g, now.value),
       sentAt: g.sentAt,
+      arriveAt: g.midAt - Math.max(0, g.dwellMs ?? 0),
+      returnAt: g.returnAt,
       escort: tripCrew(g).length,
       members: tripCrew(g),
       hero: partyCarriesHero(g),
@@ -2476,6 +2530,7 @@ const reinforcementsOnMap = computed(() =>
     origin: r.origin,
     at: drawnAt(r),
     prog: voyageProgress(r, now.value),
+    arriveAt: r.midAt,
     arriveIn: r.midAt - now.value,
   })),
 );
@@ -2522,7 +2577,7 @@ const travelersOnMap = computed(() => [
     kind: 'party' as const,
     recall: undefined as RecallTarget | undefined,
     recallLabel: '',
-    recallBackMs: 0,
+    recallInfo: null as RecallInfo | null,
   })),
   ...partiesOnMap.value.map((g) => ({
     ...g,
@@ -2530,7 +2585,17 @@ const travelersOnMap = computed(() => [
     kind: 'party' as const,
     recall: g.recallable ? { kind: 'party' as const, id: g.id } : undefined,
     recallLabel: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
-    recallBackMs: now.value - g.sentAt,
+    recallInfo: {
+      kind: 'party',
+      label: `L’équipe (${g.escort} champion${g.escort > 1 ? 's' : ''})`,
+      emo: '⚔️',
+      poi: g.poi,
+      hero: g.hero,
+      members: g.members,
+      sentAt: g.sentAt,
+      arriveAt: g.arriveAt,
+      returnAt: g.returnAt,
+    } as RecallInfo,
   })),
   // 🔙 Seuls les renforts partis de la base peuvent rebrousser chemin (un transfert devrait
   // rentrer sur son point d'origine, `recallReinforcements`).
@@ -2540,7 +2605,16 @@ const travelersOnMap = computed(() => [
     kind: 'reinf' as const,
     recall: !r.origin ? { kind: 'reinf' as const, pointId: r.pointId, ids: r.members } : undefined,
     recallLabel: `Les renforts (${r.members.length})`,
-    recallBackMs: now.value - r.sentAt,
+    recallInfo: {
+      kind: 'reinf',
+      label: `Les renforts (${r.members.length})`,
+      emo: '🛡️',
+      poi: r.poi,
+      hero: false,
+      members: r.members,
+      sentAt: r.sentAt,
+      arriveAt: r.arriveAt,
+    } as RecallInfo,
   })),
   ...returnsOnMap.value.map((r) => ({
     ...r,
@@ -2548,7 +2622,7 @@ const travelersOnMap = computed(() => [
     kind: 'reinf' as const,
     recall: undefined as RecallTarget | undefined,
     recallLabel: '',
-    recallBackMs: 0,
+    recallInfo: null as RecallInfo | null,
   })),
 ]);
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
@@ -2875,24 +2949,91 @@ async function quickTransfer(fromId: string, memberId: string) {
   }
 }
 /**
- * 🔙 FAIRE DEMI-TOUR (demandé : « en cliquant dessus »). On confirme d'abord : le lieu ne sera
- * pas atteint, et l'écran dit combien de temps prendra le retour (le chemin déjà fait).
+ * 🔙 FAIRE DEMI-TOUR (demandé : « en cliquant dessus », puis « plus design avec le détail »).
+ * Toucher une troupe ouvre `RecallSheet` : le chemin dessiné, qui rentre, et les deux
+ * options comparées. Le détail est relu chaque seconde — la troupe avance pendant qu'on hésite.
  */
-function askRecall(target: RecallTarget | undefined, label: string, backMs: number) {
-  if (!target) return;
-  $q.dialog({
-    title: '🔙 Faire demi-tour ?',
-    message: `${label} rebrousse chemin et rentre dans ${formatDuration(Math.max(0, backMs))}. Le lieu n’est pas atteint : rien n’est gagné, rien n’est perdu.`,
-    cancel: { label: 'Continuer la route', flat: true },
-    ok: { label: 'Faire demi-tour', color: 'primary', textColor: 'dark', unelevated: true },
-  }).onOk(() => {
-    const uid = auth.user?.id;
-    if (!uid) return;
-    void char.recallTrip(uid, target, Date.now()).then((why) => {
-      if (why) $q.notify({ type: 'warning', message: why });
-      else $q.notify({ type: 'positive', message: `🔙 ${label} fait demi-tour.` });
-    });
-  });
+interface RecallInfo extends RecallAsk {
+  members: readonly string[];
+  sentAt: number;
+  arriveAt: number;
+  returnAt?: number;
+}
+const heroRecallInfo = computed<RecallInfo | null>(() => {
+  const a = active.value;
+  return a
+    ? {
+        kind: 'hero',
+        label: 'Ton héros',
+        emo: '🧝',
+        poi: a.poi,
+        hero: true,
+        members: tripCrew(a),
+        sentAt: a.sentAt,
+        arriveAt: a.midAt - Math.max(0, a.dwellMs ?? 0),
+        returnAt: a.returnAt,
+      }
+    : null;
+});
+const recallAsk = ref<{ target: RecallTarget; info: RecallInfo } | null>(null);
+const recallOpen = computed({
+  get: () => !!recallAsk.value,
+  set: (v: boolean) => {
+    if (!v) recallAsk.value = null;
+  },
+});
+const recallBusy = ref(false);
+const recallPrev = computed(() =>
+  recallAsk.value ? recallPreview(recallAsk.value.info, now.value) : null,
+);
+const recallCrew = computed(() =>
+  (recallAsk.value?.info.members ?? [])
+    .map((id) => char.advList.find((a) => a.id === id))
+    .filter((a): a is NonNullable<typeof a> => !!a)
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      championId: a.championId ?? null,
+      emoji: advTitle(a)?.emoji ?? '🧑',
+    })),
+);
+const recallMilitia = computed(() => militiaIn(recallAsk.value?.info.members ?? []).length);
+/** 🔙 Les tuiles de voyage (`TripsPanel`) qui peuvent faire demi-tour, par leur clé. Les
+ *  clés des tuiles et des marqueurs de la carte diffèrent d'un préfixe (`g` pour une équipe). */
+function tripRecall(key: string) {
+  if (key === 'hero')
+    return heroRecallable.value
+      ? { target: { kind: 'hero' } as RecallTarget, info: heroRecallInfo.value }
+      : null;
+  const v = travelersOnMap.value.find(
+    (x) => x.recall && (x.kind === 'party' ? 'g' + x.id === key : x.id === key),
+  );
+  return v ? { target: v.recall!, info: v.recallInfo } : null;
+}
+const recallableTrips = computed(
+  () => new Set(trips.value.map((t) => t.key).filter((k) => !!tripRecall(k))),
+);
+function recallTripByKey(key: string) {
+  const r = tripRecall(key);
+  if (r) askRecall(r.target, r.info);
+}
+function askRecall(target: RecallTarget | undefined, info: RecallInfo | null) {
+  if (!target || !info) return;
+  recallAsk.value = { target, info };
+}
+async function confirmRecall() {
+  const ask = recallAsk.value;
+  const uid = auth.user?.id;
+  if (!ask || !uid || recallBusy.value) return;
+  recallBusy.value = true;
+  try {
+    const why = await char.recallTrip(uid, ask.target, Date.now());
+    if (why) $q.notify({ type: 'warning', message: why });
+    else $q.notify({ type: 'positive', message: `🔙 ${ask.info.label} fait demi-tour.` });
+    recallAsk.value = null;
+  } finally {
+    recallBusy.value = false;
+  }
 }
 async function quickChampion(advId: string) {
   const uid = auth.user?.id;

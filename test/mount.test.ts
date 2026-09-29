@@ -511,6 +511,18 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('plus dans ton vivier'); // le champion renvoyé depuis
     // ⚠️ À l'ALLER le butin n'est pas montré : il révélerait l'issue d'un combat à venir.
     expect(out).not.toContain('Ramène');
+    // 🔙 Sans `recallable`, pas de bouton ; avec, la tuile propose le demi-tour.
+    expect(out).not.toContain('Faire demi-tour');
+    let rc = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [trip], focus: 'g1', heroProfile: 'polyvalent', recallable: new Set(['g1']) },
+      ROW,
+      undefined,
+      '/',
+      (h) => (rc = h),
+    );
+    expect(rc).toContain('Faire demi-tour');
     // ❓ Au RETOUR, ce qu'on ramène se touche et se lit, comme dans les rapports (demandé).
     let tip = '';
     await mountIt(
@@ -2379,5 +2391,49 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('Archer');
     expect(out).toContain('×4');
     expect(out).toContain('+90 🪙');
+  }, 30_000);
+  it('🔙 RecallSheet : le chemin, qui rentre, et les deux choix chiffrés', async () => {
+    const { default: RecallSheet } = await import('@/components/RecallSheet.vue');
+    const { recallPreview } = await import('@/lib/party');
+    let out = '';
+    await mountIt(
+      RecallSheet,
+      {
+        modelValue: true,
+        ask: {
+          kind: 'party',
+          label: 'L’équipe (2 champions)',
+          emo: '⚔️',
+          poi: {
+            id: 'p',
+            type: 'mine',
+            level: 22,
+            x: 1,
+            y: 1,
+            distNorm: 0.5,
+            spawnedAt: 0,
+            expiresAt: 9e15,
+          },
+          hero: true,
+        },
+        preview: recallPreview(
+          { sentAt: 0, arriveAt: 40 * 60_000, returnAt: 80 * 60_000 },
+          10 * 60_000,
+        ),
+        crew: [{ id: 'a', name: 'Orsène', emoji: '🗡️' }],
+        militia: 1,
+      },
+      undefined,
+      undefined,
+      '/',
+      (hh) => (out = hh),
+    );
+    expect(out).toContain('Faire demi-tour ?');
+    expect(out).toContain('left: 25%');
+    expect(out).toContain('Orsène');
+    expect(out).toContain('1 milicien');
+    // Continuer : arrivée dans 30 min, base dans 70 ; demi-tour : base dans 10 → 60 min plus tôt.
+    expect(out).toContain('À la base dans 10 min');
+    expect(out).toContain('1 h 00 plus tôt');
   }, 30_000);
 });

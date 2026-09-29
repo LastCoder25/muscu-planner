@@ -117,6 +117,16 @@ describe('🔙 le demi-tour des renforts', () => {
     const c = r.map.pois.find((p) => p.id === ID)!.control!;
     expect(c.reinforcing).toBeUndefined();
   });
+  it('🛡️ un milicien en route fait demi-tour et rejoint la base à son retour', async () => {
+    const { MILITIA_PREFIX } = await import('@/lib/militia');
+    const { settleReturns } = await import('@/lib/controlPoints');
+    const mil = MILITIA_PREFIX + '1';
+    const m = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), ID, ['g'], 0, 7);
+    const r = recallReinforcements(reinforceControl(m, ID, [mil], 40 * M, 0), ID, [mil], 10 * M)!;
+    expect(r.back).toEqual([{ id: mil, at: 20 * M }]);
+    expect(settleReturns(r.map, 19 * M).militiaHome).toBe(0);
+    expect(settleReturns(r.map, 20 * M).militiaHome).toBe(1);
+  });
   it('arrivés, sans départ connu, ou en transfert : impossible', () => {
     expect(recallReinforcements(held(), ID, ['r1'], 40 * M)).toBeNull();
     const m = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), ID, ['g'], 0, 7);
