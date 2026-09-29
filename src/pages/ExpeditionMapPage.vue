@@ -954,6 +954,7 @@ import {
   partyLegMin,
   denForce,
   tripCrew,
+  partyCarriesHero,
 } from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
@@ -2055,7 +2056,7 @@ const partiesOnMap = computed(() =>
       poi: g.poi,
       escort: tripCrew(g).length,
       members: tripCrew(g),
-      hero: !!g.outcome.party?.hero,
+      hero: partyCarriesHero(g),
       haul: expeHaul(g.outcome),
       origin: g.origin,
       // 🔙 Un demi-tour n'a jamais atteint le lieu : son tracé s'arrête là où il a rebroussé.
