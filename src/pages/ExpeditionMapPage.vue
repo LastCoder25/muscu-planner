@@ -186,6 +186,14 @@
 
           <!-- 🗺️ Les lieux (à prendre, cible du héros, cibles des équipes) : un composant à part
                pour ne pas se re-diffuser à chaque seconde (cf. `MapPoiLayer`). -->
+          <!-- ⚔️🗼 LES ARMÉES EN CAMPAGNE ET CE QU'ELLES VISENT (demandé) : la trajectoire en
+               tirets rouges jusqu'à la base ou au point fixe attaqué, une flèche au bout, et un
+               anneau qui palpite sur la cible. Sous les lieux : on clique toujours l'armée. -->
+          <g v-for="a in armyPaths" :key="'ap' + a.id" class="army-path" :class="a.kind">
+            <line :x1="a.x1" :y1="a.y1" :x2="a.x2" :y2="a.y2" class="army-line" />
+            <path :d="a.arrow" class="army-arrow" />
+            <circle :cx="a.tx" :cy="a.ty" :r="a.tr" class="army-target" />
+          </g>
           <MapPoiLayer
             :pois="shownPois"
             :selected-id="selected?.id ?? null"
@@ -922,7 +930,7 @@ import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
-import { fieldArmySpec } from '@/lib/fieldArmy';
+import { armyTrajectory, fieldArmySpec, type ArmyPath } from '@/lib/fieldArmy';
 import { poiRank } from '@/lib/poiRank';
 import {
   PARTY_HERO_BLOCK_LABEL,
@@ -1406,6 +1414,10 @@ const {
   resetFilters,
   shownPois,
 } = usePoiFilters(pois, (p) => rankOf(p).rankIndex);
+/** ⚔️🗼 Les trajectoires des armées en campagne visibles (filtres compris). */
+const armyPaths = computed(() =>
+  shownPois.value.map(armyTrajectory).filter((a): a is ArmyPath => !!a),
+);
 // Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
 watch(shownPois, (list) => {
   const s = selected.value;
@@ -3935,6 +3947,37 @@ onUnmounted(() => {
   fill: var(--surface);
   stroke: var(--d4);
   stroke-width: 0.9;
+}
+.army-line {
+  stroke: var(--d4);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 1.3;
+  opacity: 0.85;
+  animation: armyMarch 1.2s linear infinite;
+}
+.army-arrow {
+  fill: var(--d4);
+  opacity: 0.9;
+}
+.army-target {
+  fill: none;
+  stroke: var(--d4);
+  stroke-width: 0.9;
+  stroke-dasharray: 1.2 1;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: clashPulse 1.6s ease-in-out infinite;
+}
+@keyframes armyMarch {
+  to {
+    stroke-dashoffset: -3.3;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .army-line,
+  .army-target {
+    animation: none;
+  }
 }
 .band-path {
   stroke: var(--d4);

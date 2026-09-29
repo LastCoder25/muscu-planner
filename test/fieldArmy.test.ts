@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   FIELD_ARMY,
+  ARMY_PATH,
+  armyTrajectory,
   applyFieldHitToBase,
   applyFieldHitToMap,
   detectRadius,
@@ -285,6 +287,33 @@ describe('📬 pendingFieldHits', () => {
     ];
     expect(pendingFieldHits(v, 'siege', 'r').map((x) => x.at)).toEqual([2, 5]);
     expect(pendingFieldHits(v, 'retake', 'r')).toEqual([]);
+  });
+});
+
+describe('🗺️ armyTrajectory — la ligne jusqu’au lieu attaqué', () => {
+  const arrive = T0 + 6 * H;
+  const raid = raidAt(arrive, 4 * H);
+  it('siège : de l’armée vers la ville, arrêtée au bord de l’enceinte, anneau sur la ville', () => {
+    const p = siegeArmyPoi(raid, 200, arrive - 3 * H, 30)!;
+    const a = armyTrajectory(p)!;
+    expect([a.x1, a.y1]).toEqual([p.x, p.y]);
+    expect([a.tx, a.ty]).toEqual([EXPE.town.x, EXPE.town.y]);
+    expect(dist({ x: a.x2, y: a.y2 }, EXPE.town)).toBeCloseTo(ARMY_PATH.baseR, 6);
+    // alignée : le bout du trait est sur le segment armée → ville
+    const t = (a.x2 - a.x1) / (EXPE.town.x - a.x1);
+    expect(a.y1 + t * (EXPE.town.y - a.y1)).toBeCloseTo(a.y2, 6);
+  });
+  it('reprise : vers le POINT FIXE, pas vers la ville', () => {
+    const at = T0 + 10 * H;
+    const p = retakeArmyPoi(controlPoi({}, at), 42, 80, 200, at - 3 * H, 30)!;
+    const a = armyTrajectory(p)!;
+    expect([a.tx, a.ty]).toEqual([EXPE.town.x + 30, EXPE.town.y]);
+    expect(dist({ x: a.x2, y: a.y2 }, { x: a.tx, y: a.ty })).toBeCloseTo(ARMY_PATH.pointR, 6);
+  });
+  it('rien pour un lieu ordinaire, ni une armée déjà au contact', () => {
+    expect(armyTrajectory(controlPoi())).toBeNull();
+    const p = siegeArmyPoi(raid, 200, arrive - H / 60, 30)!;
+    expect(armyTrajectory({ ...p, x: EXPE.town.x + 1, y: EXPE.town.y })).toBeNull();
   });
 });
 
