@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   recallBlocker,
   recallVoyage,
+  recallWindow,
   settleParties,
   startParty,
   type ActiveParty,
@@ -15,7 +16,13 @@ import {
   reinforceControl,
   returnsEnRoute,
 } from '@/lib/controlPoints';
-import { createMap, travelPosition, voyageTarget, type Poi } from '@/lib/expedition';
+import {
+  createMap,
+  travelPosition,
+  voyageDrawnEnd,
+  voyageTarget,
+  type Poi,
+} from '@/lib/expedition';
 
 const M = 60_000;
 const poi = (over: Partial<Poi> = {}): Poi => ({
@@ -89,9 +96,28 @@ describe('🔙 le demi-tour d’une équipe', () => {
   it('pas deux fois, et jamais un groupe d’une attaque combinée', () => {
     const once = recallVoyage(trip(), 10 * M)!;
     expect(recallBlocker(once, 12 * M)).toBe('turned');
-    expect(recallBlocker(trip({ turnBack: 0.5 }), 5 * M)).toBe('turned');
+    // Une embuscade perdue à l'aller (tirée au départ) : refusée seulement une fois atteinte.
+    expect(recallBlocker(trip({ turnBack: 0.5, midAt: 20 * M }), 5 * M)).toBeNull();
+    expect(recallBlocker(trip({ turnBack: 0.5, midAt: 20 * M }), 25 * M)).toBe('turned');
     expect(recallBlocker(trip({ wingOf: 'x' }), 5 * M)).toBe('combined');
     expect(recallBlocker(trip({ crew: ['a'] }), 5 * M)).toBe('combined');
+  });
+});
+
+describe('🔙 une embuscade perdue à l’aller ne se trahit pas', () => {
+  // Aller complet 40 min ; l'embuscade tombe au quart (turnBack 0,25 → midAt 10 min).
+  const doomed = () => trip({ turnBack: 0.25, midAt: 10 * M, returnAt: 20 * M });
+  it('on peut encore faire demi-tour avant l’embuscade, depuis là où l’équipe se trouve', () => {
+    const v = recallVoyage(doomed(), 5 * M)!;
+    expect(v.turnBack).toBeCloseTo(0.125);
+    expect(v.returnAt).toBe(10 * M);
+  });
+  it('l’écran voit le trajet complet, pas l’embuscade', () => {
+    expect(recallWindow(doomed())).toEqual({ sentAt: 0, arriveAt: 40 * M, returnAt: 80 * M });
+  });
+  it('le tracé va jusqu’au lieu, et ne s’arrête au demi-tour qu’une fois atteint', () => {
+    expect(voyageDrawnEnd(doomed(), 5 * M)).toEqual(poi());
+    expect(voyageDrawnEnd(doomed(), 12 * M)).toEqual(voyageTarget(doomed()));
   });
 });
 

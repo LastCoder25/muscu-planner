@@ -1140,6 +1140,7 @@ import {
   denForce,
   tripCrew,
   recallBlocker,
+  recallWindow,
   recallPreview,
   type RecallTarget,
   partyCarriesHero,
@@ -1155,7 +1156,7 @@ import {
   EXPE,
   travelPosition,
   mapTravelPoint,
-  voyageTarget,
+  voyageDrawnEnd,
   warbandAt,
   tripTimeLabel,
   tripLegs,
@@ -1473,7 +1474,7 @@ const hero = computed(() => (active.value ? drawnAt(active.value) : null));
 /** 🔙 Le bout du tracé du héros : le lieu, ou le point où il a fait demi-tour. */
 const heroEnd = computed(() => {
   const a = active.value;
-  return a && a.turnBack !== undefined ? voyageTarget(a) : (a?.poi ?? TOWN);
+  return a ? voyageDrawnEnd(a, now.value) : TOWN;
 });
 /** 🔙 Le héros encore en chemin vers son lieu peut rebrousser chemin. */
 const heroRecallable = computed(() => !!active.value && !recallBlocker(active.value, now.value));
@@ -2510,16 +2511,14 @@ const partiesOnMap = computed(() =>
       id: g.id,
       poi: g.poi,
       recallable: !recallBlocker(g, now.value),
-      sentAt: g.sentAt,
-      arriveAt: g.midAt - Math.max(0, g.dwellMs ?? 0),
-      returnAt: g.returnAt,
+      ...recallWindow(g),
       escort: tripCrew(g).length,
       members: tripCrew(g),
       hero: partyCarriesHero(g),
       haul: expeHaul(g.outcome),
       origin: g.origin,
       // 🔙 Un demi-tour n'a jamais atteint le lieu : son tracé s'arrête là où il a rebroussé.
-      end: g.turnBack !== undefined ? voyageTarget(g) : undefined,
+      end: voyageDrawnEnd(g, now.value),
       at: drawnAt(g),
       prog: voyageProgress(g, now.value),
       legs: tripLegs(g, now.value),
@@ -2580,7 +2579,7 @@ const returnsOnMap = computed(() =>
     id: 'h' + r.key,
     poi: r.poi,
     // 🔙 Un renfort qui a rebroussé chemin revient de là où il a tourné.
-    end: r.turnBack !== undefined ? voyageTarget(r) : undefined,
+    end: voyageDrawnEnd(r, now.value),
     members: r.members,
     // Un retour rentre toujours à la ville : son tracé part d'elle.
     origin: undefined as { x: number; y: number } | undefined,
@@ -3011,9 +3010,7 @@ const heroRecallInfo = computed<RecallInfo | null>(() => {
         poi: a.poi,
         hero: true,
         members: tripCrew(a),
-        sentAt: a.sentAt,
-        arriveAt: a.midAt - Math.max(0, a.dwellMs ?? 0),
-        returnAt: a.returnAt,
+        ...recallWindow(a),
       }
     : null;
 });

@@ -432,14 +432,37 @@ export const RECALL_BLOCK_LABEL: Record<RecallBlock, string> = {
 
 type Recallable = Pick<
   ActiveExpedition,
-  'sentAt' | 'midAt' | 'dwellMs' | 'reported' | 'turnBack' | 'wingOf' | 'crew'
+  'sentAt' | 'midAt' | 'dwellMs' | 'reported' | 'turnBack' | 'wingOf' | 'crew' | 'recalled'
 >;
 
+/**
+ * ⚠️ UN DEMI-TOUR FORCÉ N'EST PAS ENCORE ARRIVÉ (signalé : « j'ai envoyé une équipe mais je
+ * n'ai pas le demi-tour possible »). Une embuscade perdue à l'aller est tirée au DÉPART
+ * (`turnBack`, `midAt` = l'instant où elle frappe) : tant qu'on n'y est pas, l'équipe marche
+ * encore vers le lieu et peut rebrousser chemin — la refuser trahissait l'issue.
+ */
 export function recallBlocker(v: Recallable, now: number): RecallBlock | null {
   if (v.wingOf || v.crew) return 'combined';
-  if (v.turnBack !== undefined) return 'turned';
-  if (v.reported || now >= v.midAt - Math.max(0, v.dwellMs ?? 0)) return 'arrived';
+  if (v.recalled) return 'turned';
+  if (v.reported || now >= v.midAt - Math.max(0, v.dwellMs ?? 0))
+    return v.turnBack !== undefined ? 'turned' : 'arrived';
   return null;
+}
+
+/** 🔙 Le voyage tel que le JOUEUR le voit : un demi-tour forcé à venir est gommé (arrivée au
+ *  lieu, retour complet), sans quoi l'écran de demi-tour annoncerait l'embuscade. */
+export function recallWindow(v: Recallable & { returnAt: number }): {
+  sentAt: number;
+  arriveAt: number;
+  returnAt: number;
+} {
+  const tb = v.turnBack ?? 1;
+  const arrive = v.midAt - Math.max(0, v.dwellMs ?? 0);
+  return {
+    sentAt: v.sentAt,
+    arriveAt: v.sentAt + (arrive - v.sentAt) / tb,
+    returnAt: v.sentAt + (v.returnAt - v.sentAt) / tb,
+  };
 }
 
 /** Le voyage rappelé à `now`, ou `null` s'il ne peut pas l'être. ⚠️ Le retour dure le
@@ -448,7 +471,9 @@ export function recallVoyage<T extends ActiveExpedition>(v: T, now: number): T |
   if (recallBlocker(v, now)) return null;
   const arriveAt = v.midAt - Math.max(0, v.dwellMs ?? 0);
   const done = Math.max(0, now - v.sentAt);
-  const f = Math.min(1, done / Math.max(1, arriveAt - v.sentAt));
+  // Un demi-tour forcé à venir raccourcissait déjà l'aller : la part faite se rapporte au
+  // chemin COMPLET, pour que le tracé parte bien de là où l'équipe se trouve.
+  const f = Math.min(1, done / Math.max(1, arriveAt - v.sentAt)) * (v.turnBack ?? 1);
   const party = v.outcome.party;
   const out = {
     ...v,

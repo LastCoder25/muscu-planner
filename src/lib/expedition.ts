@@ -2381,6 +2381,14 @@ export function voyageTarget(exp: Voyage): { x: number; y: number } {
   return { x: o.x + (exp.poi.x - o.x) * f, y: o.y + (exp.poi.y - o.y) * f };
 }
 
+/** 🗺️ Le bout du TRACÉ d'un voyage : le lieu, tant que le demi-tour n'a pas eu lieu.
+ *  ⚠️ Une embuscade perdue à l'aller est tirée AU DÉPART (`turnBack`) : dessiner le tracé
+ *  jusqu'au point de demi-tour avant qu'elle arrive trahirait l'issue (signalé : « ni le
+ *  tracé »). Le point de demi-tour ne se montre qu'une fois atteint (`midAt`). */
+export function voyageDrawnEnd(exp: Voyage, now: number): { x: number; y: number } {
+  return exp.turnBack !== undefined && now >= exp.midAt ? voyageTarget(exp) : exp.poi;
+}
+
 /** 🐺 Le duel d'une tanière (cf. `PartyResult.den`). */
 export interface DenBattle {
   name: string;
