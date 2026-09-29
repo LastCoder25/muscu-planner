@@ -364,7 +364,7 @@
          ennemies dans des tuiles, avec une tuile expéditions, et au clic ça déplie la partie
          correspondante »). Une seule partie ouverte à la fois ; retoucher sa tuile la replie.
          La pastille dit ce qui appelle : voyages en cours, points qui appellent, armées. -->
-    <div class="map-tabs" role="tablist">
+    <div ref="tabsEl" class="map-tabs" role="tablist">
       <button
         v-for="t in mapTabs"
         :key="t.id"
@@ -373,7 +373,7 @@
         class="map-tab"
         :class="[t.id, { on: mapPanel === t.id }]"
         :aria-selected="mapPanel === t.id"
-        @click="mapPanel = mapPanel === t.id ? null : t.id"
+        @click="toggleMapPanel(t.id)"
       >
         <span class="mt-emo">{{ t.emo }}</span>
         <span class="mt-lab">{{ t.label }}</span>
@@ -2818,6 +2818,17 @@ function dimmed(p: Poi): boolean {
  *  restent en garnison à l'arrivée (`midAt`). */
 type MapPanel = 'trips' | 'ctl' | 'attacks';
 const mapPanel = ref<MapPanel | null>(null);
+/** 📜 Toucher une tuile REMONTE la rangée en haut de l'écran (demandé : « remonter la tuile le
+ *  plus haut possible selon ce qu'il y a dessous, en la voyant en entier »). `block: 'start'`
+ *  la cale en haut ; s'il n'y a pas assez de contenu dessous, le navigateur s'arrête au bas de
+ *  la page et la rangée reste entière à l'écran. Après le rendu du panneau déplié, sinon la
+ *  page n'a pas encore la hauteur qui permet de remonter. `scrollIntoView` suit aussi le
+ *  volet droit du cockpit, qui est son propre conteneur de défilement. */
+const tabsEl = ref<HTMLElement | null>(null);
+function toggleMapPanel(id: MapPanel) {
+  mapPanel.value = mapPanel.value === id ? null : id;
+  void nextTick(() => tabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
 const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
@@ -4656,6 +4667,7 @@ onUnmounted(() => {
 }
 /* 🗂️ Les trois tuiles sous la carte : une ligne, trois colonnes égales, cibles ≥ 44 px. */
 .map-tabs {
+  scroll-margin-top: 8px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
