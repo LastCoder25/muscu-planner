@@ -895,7 +895,7 @@ import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import { poiRank } from '@/lib/poiRank';
-import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL, partyLegMin } from '@/lib/party';
+import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL, partyLegMin, denForce } from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
@@ -2414,6 +2414,17 @@ const poiFacts = computed<PoiFact[]>(() => {
   // (`poiTeamHaul`). Une faille
   // l'annonce déjà (« Si refermée »).
   if (!rift) pushHaul(out, p, force ?? null);
+  // 🐺 La bête d'une tanière prend la force du groupe choisi (`denForce`, la même que le combat).
+  if (force && p.type === 'den') {
+    const n = denForce(p, force, partyAdvs.value.length, partyHeroOn.value).size;
+    out.push({
+      icon: '🐺',
+      label: 'Force de la bête',
+      value: `≈ ${n} champions`,
+      title:
+        'Elle grandit avec ton équipe : autant de champions que tu en envoies (le héros en vaut 2), 2 au moins',
+    });
+  }
   if (force) {
     const l = forceLootPreview(p, force);
     if (l.supplies)

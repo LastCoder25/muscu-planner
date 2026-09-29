@@ -266,14 +266,11 @@ export const CAMP_SIZES: {
 } = {
   camp: [1, 2],
   lair: [2, 3],
-  // 🐺 La tanière : UNE bête, de la force de deux champions de référence — et on n'y envoie
-  // que deux champions (`DEN_MAX_PARTY`). Mesuré (camps) : deux champions contre une force
-  // de 2 gagnent 74-97 %.
+  // 🐺 La tanière : UNE bête, de la force de deux champions de référence AU MOINS. Elle
+  // grossit à la taille du groupe envoyé (`denForce`, party.ts) : c'est la force AFFICHÉE
+  // et celle d'un duo.
   den: [2],
 };
-
-/** 🐺 Deux places au plus dans une tanière — le héros en prend deux (`HERO_PARTY_WORTH`). */
-export const DEN_MAX_PARTY = 2;
 
 export interface CampSpec {
   faction: RaidFaction;

@@ -237,6 +237,7 @@ import {
 } from '@/lib/advGear';
 import {
   partySendBlocker,
+  denForce,
   suppliesBlocker,
   supplyTarget,
   PARTY_SEND_BLOCK_LABEL,
@@ -3384,7 +3385,9 @@ export const useCharacterStore = defineStore('character', () => {
       stayIds: a.stayIds,
       escortIds: escort.map((x) => x.id),
     };
-    const spec = campSpecOf(poi);
+    // 🐺 Une tanière : la bête prend la force du groupe envoyé (`denForce`).
+    const baseSpec = campSpecOf(poi);
+    const spec = baseSpec ? denForce(poi, baseSpec, escort.length, !!hero) : null;
     const outcome = isRiftPoi(poi)
       ? resolveIncursion({ poi, escort, road, hero, seed, now, pantheonLevel: pantheonLevel.value })
       : isWarbandPoi(poi)
