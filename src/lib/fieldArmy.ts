@@ -33,7 +33,14 @@ import {
   type PartyResult,
   type Poi,
 } from './expedition';
-import { raidFirstSector, FACTION_EMOJI, type BaseState, type Raid, type RaidGroup } from './raid';
+import {
+  raidFirstSector,
+  FACTION_EMOJI,
+  FACTION_LABEL,
+  type BaseState,
+  type Raid,
+  type RaidGroup,
+} from './raid';
 import { BATTLE } from './siegeBattle';
 import { attackerLevel, retakeForce } from './controlPoints';
 import { campHurt, campLightHurt, fightCampForce, type PartyInput } from './camp';
@@ -266,6 +273,16 @@ export function resolveFieldArmy(input: Omit<PartyInput, 'spec'>): ExpeditionOut
     lightHurt: campLightHurt(d, escort),
     journal: g.journal,
     fieldHit: hit,
+    // 🎬 Rejouée en bataille rangée, comme l'interception d'une bande (`warbandStage.ts`) :
+    // les temps sont le LOG du vrai combat (`fightCampForce`), résumé sans rien perdre.
+    battle: {
+      maxPv: g.replay.maxPv,
+      armyPv: g.replay.beastPv,
+      groups: [
+        { species: FACTION_LABEL[spec.faction], emoji: FACTION_EMOJI[spec.faction], count: g.foes },
+      ],
+      steps: g.replay.steps,
+    },
   };
   const target = tag.kind === 'siege' ? 'ta base' : 'le point';
   const tag2 = `${FACTION_EMOJI[spec.faction]} ${g.slain}/${g.foes} abattus · +${mana} 💠`;

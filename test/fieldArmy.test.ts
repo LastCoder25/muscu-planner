@@ -141,7 +141,13 @@ describe('⚔️ l’armée d’une reprise : vue SEULEMENT dans le rayon de dé
 describe('🗺️ syncFieldArmies', () => {
   const arrive = T0 + 6 * H;
   const raid = raidAt(arrive, 4 * H);
-  const ctx = (now: number, r = raid) => ({ raid: r, detectR: 50, reach: 200, now, playerLevel: 30 });
+  const ctx = (now: number, r = raid) => ({
+    raid: r,
+    detectR: 50,
+    reach: 200,
+    now,
+    playerLevel: 30,
+  });
   it('pose les armées vues, rend la même carte quand rien ne change, les retire ensuite', () => {
     const m0 = map([controlPoi({}, arrive)]);
     const m1 = syncFieldArmies(m0, ctx(arrive - H));
@@ -269,7 +275,9 @@ describe('🏰 applyFieldHitToMap', () => {
 describe('📬 pendingFieldHits', () => {
   it('lit les chocs d’une armée sur les voyages, du plus tôt au plus tard', () => {
     const o = (targetId: string, part: number) =>
-      ({ party: { fieldHit: { kind: 'siege', targetId, at: 0, part, hitId: `${part}` } } }) as never;
+      ({
+        party: { fieldHit: { kind: 'siege', targetId, at: 0, part, hitId: `${part}` } },
+      }) as never;
     const v = [
       { midAt: 5, outcome: o('r', 0.2) },
       { midAt: 2, outcome: o('r', 0.1) },

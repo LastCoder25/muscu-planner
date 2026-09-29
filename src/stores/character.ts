@@ -211,12 +211,7 @@ import {
   type RuneTier,
   type SkillId,
 } from '@/lib/skillRunes';
-import {
-  caravanLegMin,
-  partyAllies,
-  type EscortKit,
-  type PartyHero,
-} from '@/lib/caravan';
+import { caravanLegMin, partyAllies, type EscortKit, type PartyHero } from '@/lib/caravan';
 import {
   advGearRoles,
   advGearSellValue,
@@ -3492,20 +3487,9 @@ export const useCharacterStore = defineStore('character', () => {
             playerLevel: opts.playerLevel,
             pantheonLevel: pantheonLevel.value,
           })
-      : isWarbandPoi(poi)
-        ? resolveInterception({
-            poi,
-            escort,
-            road,
-            hero,
-            seed,
-            playerLevel: opts.playerLevel,
-            pantheonLevel: pantheonLevel.value,
-          })
-        : spec
-          ? resolveCamp({
+        : isWarbandPoi(poi)
+          ? resolveInterception({
               poi,
-              spec,
               escort,
               road,
               hero,
@@ -3513,9 +3497,10 @@ export const useCharacterStore = defineStore('character', () => {
               playerLevel: opts.playerLevel,
               pantheonLevel: pantheonLevel.value,
             })
-          : HARVEST_TYPES.has(poi.type)
-            ? resolveHarvestParty({
+          : spec
+            ? resolveCamp({
                 poi,
+                spec,
                 escort,
                 road,
                 hero,
@@ -3523,7 +3508,17 @@ export const useCharacterStore = defineStore('character', () => {
                 playerLevel: opts.playerLevel,
                 pantheonLevel: pantheonLevel.value,
               })
-            : null;
+            : HARVEST_TYPES.has(poi.type)
+              ? resolveHarvestParty({
+                  poi,
+                  escort,
+                  road,
+                  hero,
+                  seed,
+                  playerLevel: opts.playerLevel,
+                  pantheonLevel: pantheonLevel.value,
+                })
+              : null;
     if (!outcome) return null;
     // 🩹 La trousse agit à l'ENCAISSEMENT (la convalescence part du retour) : elle voyage donc
     // dans le rapport. 🎒 Et un consommable peut tomber de tout voyage.

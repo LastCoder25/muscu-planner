@@ -2014,23 +2014,24 @@ const bandsOnMap = computed(() => {
     ...(active.value ? [{ id: 'hero', v: active.value }] : []),
     ...char.partyList.map((g) => ({ id: g.id, v: g })),
   ];
-  return voyages
-    // ⚔️🗼 Une armée EN CAMPAGNE reste sur la carte (elle continue sa marche) : pas de doublon.
-    .filter(
-      ({ v }) =>
-        v.poi.type === 'warband' && !!v.poi.from && !v.poi.army && now.value < v.midAt,
-    )
-    .map(({ id, v }) => {
-      const at = warbandAt(v.poi, now.value);
-      return {
-        id,
-        x: at.x,
-        y: at.y,
-        meetX: v.poi.x,
-        meetY: v.poi.y,
-        emo: FACTION_EMOJI[v.poi.faction ?? 'bandits'],
-      };
-    });
+  return (
+    voyages
+      // ⚔️🗼 Une armée EN CAMPAGNE reste sur la carte (elle continue sa marche) : pas de doublon.
+      .filter(
+        ({ v }) => v.poi.type === 'warband' && !!v.poi.from && !v.poi.army && now.value < v.midAt,
+      )
+      .map(({ id, v }) => {
+        const at = warbandAt(v.poi, now.value);
+        return {
+          id,
+          x: at.x,
+          y: at.y,
+          meetX: v.poi.x,
+          meetY: v.poi.y,
+          emo: FACTION_EMOJI[v.poi.faction ?? 'bandits'],
+        };
+      })
+  );
 });
 /** 🛡️ Les RENFORTS en route vers un point tenu (demandé par l'utilisateur : « quand j'envoie
  *  du renfort il faut que je le voie sur la carte »). Aller simple : ils restent sur le point,

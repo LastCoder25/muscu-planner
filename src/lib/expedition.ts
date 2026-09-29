@@ -941,7 +941,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     id: `msg_${exp.poi.id}_${exp.sentAt}`,
     poiType: exp.poi.type,
     // 🏰 Un point de contrôle a son nom propre (mine, camp, jardin, tour).
-    ...(exp.poi.control ? { title: poiLabel(exp.poi) } : {}),
+    ...(exp.poi.control || exp.poi.army ? { title: poiLabel(exp.poi) } : {}),
     ...(exp.poi.setId ? { setId: exp.poi.setId } : {}),
     level: exp.poi.level,
     win: o.win,

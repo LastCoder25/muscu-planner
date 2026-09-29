@@ -95,11 +95,11 @@
          n'en évite plus aucune (renfort figé au tirage de l'armée, `Raid.overflow`). -->
     <template v-if="warband?.army">
       <p class="pc-note">
-        ⚔️ Elle marche sur <b>{{ warband.target }}</b>. Chaque ennemi abattu
-        <b>n'arrivera pas</b> ; la battre entièrement <b>annule l'attaque</b>. Même vaincus, tes
-        champions rentrent avec le 💠 des ennemis abattus — les tombés passent par l'infirmerie.
-        Elle est trop forte pour une seule équipe : attaque-la en combiné depuis la base et tes
-        points fixes.
+        ⚔️ Elle marche sur <b>{{ warband.target }}</b
+        >. Chaque ennemi abattu <b>n'arrivera pas</b> ; la battre entièrement
+        <b>annule l'attaque</b>. Même vaincus, tes champions rentrent avec le 💠 des ennemis abattus
+        — les tombés passent par l'infirmerie. Elle est trop forte pour une seule équipe :
+        attaque-la en combiné depuis la base et tes points fixes.
       </p>
     </template>
     <template v-else-if="warband">
