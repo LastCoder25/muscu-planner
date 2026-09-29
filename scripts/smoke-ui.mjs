@@ -85,6 +85,9 @@ const ECRANS = [
       { nom: 'points-fixes', clic: '.ctl-list-b', attendu: '.cps-tile' },
     ],
   },
+  // 🌀 L'accueil du Labyrinthe en tuiles (v0.1305). ⚠️ On ne LANCE pas de palier : ça
+  // dépenserait les clés du compte de test à chaque passage, et la porte finirait par échouer.
+  { route: '/expedition', nom: 'labyrinthe' },
 ];
 
 function lireEnv() {

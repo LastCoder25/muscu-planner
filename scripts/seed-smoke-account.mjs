@@ -169,6 +169,8 @@ await rest(
 // génération serait rentré depuis longtemps. ⚠️ Le voyage dure ~5 h : passé ce délai il
 // devient un rapport à récupérer (toujours une tuile), relancer le seed le remet en route.
 // La carte elle-même n'est pas posée : l'app la crée à la première visite.
+// 🌀 LE LABYRINTHE (v0.1305) : une Porte du Labyrinthe et le premier palier nettoyé, pour que
+// l'accueil montre des tuiles dans leurs trois états (nettoyé, ouvert, verrouillé).
 const g = seed.game;
 const shift = Date.now() - g.genAt;
 const t = (ms) => ms + shift;
@@ -179,6 +181,7 @@ await rest('characters', {
   gold: 90000,
   scrap: 400,
   keys: 3,
+  cleared_dungeons: ['laby:novice'],
   summon_stones: 12,
   mana: 660,
   buildings: g.buildings.map((b) => ({ ...b, collectedAt: t(b.collectedAt) })),
