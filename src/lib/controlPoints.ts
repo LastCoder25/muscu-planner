@@ -130,6 +130,12 @@ export const CONTROL = {
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
+  /** 🗼 Tour de guet (2026-09-29, demandé : « remettre de la détection, qui booste celle de
+   *  la base selon le nombre en garnison ») : tenue par 3 champions, elle allonge le PRÉAVIS
+   *  de la base de 50 % (×0,5/0,8/1/1,15/1,3 de cette part pour 1 à 5, `garrisonShare`),
+   *  donc son rayon de détection. Cumul ADDITIF entre tours, toujours borné par le plafond
+   *  de part d'intervalle (`RAID.scoutLeadIntervalCap`) : jamais « toujours prévenu ». */
+  towerDetect: 0.5,
   /** 🎲 SUSPENSE (demandé par l'utilisateur, 2026-09-27) : une garnison ne repousse JAMAIS
    *  plus de cette part des attaques. Au-delà, l'ennemi envoie plus de monde (`retakeBoost`),
    *  juste assez pour y redescendre : on a toujours une vraie chance de perdre le lieu. */
@@ -727,6 +733,19 @@ export function controlTravelMult(map: ExpeditionMap | null | undefined): number
   return m;
 }
 
+/**
+ * 🗼 Le bonus de DÉTECTION des Tours de guet tenues : `towerDetect × part` de la garnison,
+ * additionné entre tours. Il allonge le préavis de la base (`baseLeadMs`), donc le moment où
+ * un siège est repéré ET le rayon où les armées deviennent visibles sur la carte.
+ */
+export function controlDetectBoost(map: ExpeditionMap | null | undefined): number {
+  let b = 0;
+  for (const p of map?.pois ?? [])
+    if (p.control?.kind === 'tower' && p.control.owner === 'player')
+      b += CONTROL.towerDetect * shareOf(p.control.garrison.length);
+  return b;
+}
+
 /** ⛲ Les pierres de mana en réserve à `now` (24 h de production au plus). 0 si non tenu. */
 export function controlManaStock(p: Poi, now: number, playerLevel: number): number {
   return p.control?.kind === 'mana' ? Math.floor(stockUnits(p, now, playerLevel) + 1e-9) : 0;
@@ -855,7 +874,11 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   const fmt = (n: number) => Math.floor(n + 1e-9).toLocaleString('fr-FR');
   if (c.kind === 'tower') {
     const cut = CONTROL.towerCut * shareOf(c.garrison.length);
-    return { text: `🧭 −${Math.round(cut * 100)} % trajets`, pct: null };
+    const det = CONTROL.towerDetect * shareOf(c.garrison.length);
+    return {
+      text: `🧭 −${Math.round(cut * 100)} % trajets · 👁️ +${Math.round(det * 100)} % détection`,
+      pct: null,
+    };
   }
   // 🎯 Chacun sa réserve : on montre la plus avancée (celle qu'on voit monter en premier).
   if (isPerChampKind(c.kind)) {

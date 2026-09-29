@@ -12,15 +12,9 @@
 // faction ou l'effectif offrirait gratuitement ce qu'elle fait payer. Les messages sont
 // donc volontairement AVARES — ils annoncent qu'il se passe quelque chose, pas quoi.
 
-import { raidIntervalMs, raidsEnabled, scoutLeadMs, type BaseState } from './raid';
+import { baseLeadMs, raidIntervalMs, raidsEnabled, type BaseState } from './raid';
 
-type PushKind =
-  | 'siege'
-  | 'siege_done'
-  | 'hero_home'
-  | 'party_home'
-  | 'plunder'
-  | 'control_attack';
+type PushKind = 'siege' | 'siege_done' | 'hero_home' | 'party_home' | 'plunder' | 'control_attack';
 
 /** Un message programmé. `dedupe` est la clé d'idempotence : replanifier le même
  *  événement ne doit JAMAIS créer un doublon — l'app replanifie à chaque ouverture. */
@@ -43,6 +37,8 @@ export interface PushContext {
   parties: { id: string; returnAt: number }[];
   /** Niveau de la Tour de guet : il achète le PRÉAVIS, donc l'heure du message. */
   watchtowerLevel: number;
+  /** 🗼 Bonus de détection des Tours de guet tenues sur la carte (`controlDetectBoost`). */
+  towerBoost: number;
   /** Jours d'entraînement sur 7 — un siège n'arrive qu'à un joueur actif. */
   activeDays7: number;
   /** ⚠️ EXPLICITE, jamais deviné depuis l'enceinte. `defenseReadiness` compare les
@@ -85,7 +81,7 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
   if (b && raidsEnabled(b, ctx.activeDays7, ctx.playerLevel)) {
     // ⚠️ Le préavis est une PART de l’intervalle : sans lui, on programmerait la
     // détection à une heure qui ne correspond à aucun rythme.
-    const lead = scoutLeadMs(ctx.watchtowerLevel, raidIntervalMs(ctx.activeDays7));
+    const lead = baseLeadMs(ctx.watchtowerLevel, raidIntervalMs(ctx.activeDays7), ctx.towerBoost);
     const detecte = b.nextRaidAt - lead;
     // Le raid n'existe pas encore comme objet — il naît à la détection, quand l'app
     // tourne. On ne connaît donc QUE son heure, et c'est très bien : le message reste

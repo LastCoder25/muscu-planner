@@ -8,6 +8,7 @@ import {
   raidLevelWindow,
   raidIntervalMs,
   scoutLeadMs,
+  baseLeadMs,
   scoutClarity,
   scoutReport,
   baseCombatant,
@@ -788,6 +789,21 @@ describe('cycle de vie', () => {
     for (let d = 1; d <= 21; d++) b = advanceBase(b, ctx, d * 24 * H).base;
     const back = advanceBase(b, { ...ctx, activeDays7: 5 }, 22 * 24 * H);
     expect(back.dueRaid).toBeNull(); // rien n'a pu s'accumuler
+  });
+
+  it('🗼 les tours tenues sur la carte avancent la détection (préavis allongé, toujours plafonné)', () => {
+    const iv = raidIntervalMs(7);
+    expect(baseLeadMs(6, iv, 0)).toBe(scoutLeadMs(6, iv));
+    expect(Math.abs(baseLeadMs(6, iv, 0.5) - scoutLeadMs(6, iv) * 1.5)).toBeLessThan(2);
+    // Le plafond de part d'intervalle s'applique APRÈS le bonus : jamais « toujours prévenu ».
+    expect(baseLeadMs(100, iv, 10)).toBe(Math.round(iv * RAID.scoutLeadIntervalCap));
+    const b = base(0);
+    b.nextRaidAt = 20 * H;
+    const ctx = { playerLevel: 26, activeDays7: 7, globalXp: 0, towerBoost: 0 };
+    const lead = scoutLeadMs(6, iv);
+    const t = b.nextRaidAt - Math.round(lead * 1.25);
+    expect(advanceBase(b, ctx, t).detected).toBeNull();
+    expect(advanceBase(b, { ...ctx, towerBoost: 0.5 }, t).detected).not.toBeNull();
   });
 
   it('détecte le raid AVANT son arrivée, puis le signale à résoudre', () => {

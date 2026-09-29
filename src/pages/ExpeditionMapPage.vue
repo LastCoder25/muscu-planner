@@ -1184,12 +1184,18 @@ const hourRings = computed(() =>
 /** 🗼 Le cercle de détection : rayon vu (borné par la zone révélée) et son libellé. Rien
  *  tant que la Tour ne voit pas plus loin que la ville elle-même. */
 const detectRing = computed(() => {
-  const full = char.detectRadiusOf(char.row?.base);
+  const full = char.detectRadiusOf(char.row?.base, char.row?.expedition_map);
   const r = seenRadius(full, reveal.value);
   if (r < 14) return null;
   const hours = full / FIELD_ARMY.speedPerHour;
-  const lead = hours >= 1 ? `${Math.floor(hours)} h ${String(Math.round((hours % 1) * 60)).padStart(2, '0')}` : `${Math.round(hours * 60)} min`;
-  return { r, label: r < full - 0.5 ? `${lead} de préavis · limitée par l’Avant-poste` : `${lead} de préavis` };
+  const lead =
+    hours >= 1
+      ? `${Math.floor(hours)} h ${String(Math.round((hours % 1) * 60)).padStart(2, '0')}`
+      : `${Math.round(hours * 60)} min`;
+  return {
+    r,
+    label: r < full - 0.5 ? `${lead} de préavis · limitée par l’Avant-poste` : `${lead} de préavis`,
+  };
 });
 const FOG_SOFT = 10; // largeur du fondu du brouillard
 const fogInner = computed(() => Math.max(0, (fogR.value - 3) / (fogR.value + FOG_SOFT)));
@@ -1952,7 +1958,13 @@ function celebrateHarvest(
   const where = kind ? CONTROL_LABEL[kind] : 'Place forte';
   // ⛲ Le mana a son bandeau discret (il ne se pose pas dans le panier des consommables).
   if (got.mana)
-    gameFx.celebrate({ kind: 'generic', emoji: '💠', title: `+${got.mana} pierres de mana`, subtitle: where, quiet: true });
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '💠',
+      title: `+${got.mana} pierres de mana`,
+      subtitle: where,
+      quiet: true,
+    });
   gameFx.celebrateHarvest(
     got.supplies,
     got.runes,

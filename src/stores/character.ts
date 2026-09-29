@@ -145,7 +145,7 @@ import {
   dispelOverflow,
   applyRaidOutcome,
   raidIntervalMs,
-  scoutLeadMs,
+  baseLeadMs,
   scoutLevel,
   resolveRaid,
   siegeHurtIds,
@@ -293,6 +293,7 @@ import {
   captureControl,
   collectControl,
   controlTravelMult,
+  controlDetectBoost,
   trainingRoom,
   dueRetakes,
   retakeDelayMs,
@@ -2114,9 +2115,14 @@ export const useCharacterStore = defineStore('character', () => {
   let knownActiveDays7 = 7;
   /** 🗼 Le rayon de détection de la base : ce qu'une armée parcourt pendant le préavis de la
    *  Tour de guet — la MÊME règle que la détection des sièges (`advanceBase`). */
-  function detectRadiusOf(base: BaseState | null | undefined): number {
+  function detectRadiusOf(
+    base: BaseState | null | undefined,
+    map: ExpeditionMap | null | undefined,
+  ): number {
     const defenses = base?.defenses ?? [];
-    return detectRadius(scoutLeadMs(scoutLevel(defenses), raidIntervalMs(knownActiveDays7)));
+    return detectRadius(
+      baseLeadMs(scoutLevel(defenses), raidIntervalMs(knownActiveDays7), controlDetectBoost(map)),
+    );
   }
   /** ⚔️🗼 Les voyages dont l'issue est tirée (groupes, héros) : les chocs contre les armées en
    *  campagne s'y lisent (`pendingFieldHits`). */
@@ -2146,7 +2152,7 @@ export const useCharacterStore = defineStore('character', () => {
     // détection de la Tour de guet (`fieldArmy.ts`).
     const map = syncFieldArmies(map0, {
       raid: cur.base?.raid ?? null,
-      detectR: detectRadiusOf(cur.base),
+      detectR: detectRadiusOf(cur.base, map0),
       reach: revealRadius(outpost),
       now,
       playerLevel: level,
@@ -2647,7 +2653,11 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return { detected: null, report: null, advProgress: [], advTracks: [] };
     knownActiveDays7 = ctx.activeDays7;
-    const t = advanceBase(baseOf(cur, now), ctx, now);
+    const t = advanceBase(
+      baseOf(cur, now),
+      { ...ctx, towerBoost: controlDetectBoost(cur.expedition_map) },
+      now,
+    );
     // ⚔️🗼 LES CHOCS EN RASE CAMPAGNE PASSENT AVANT LE SIÈGE : une équipe qui a croisé l'armée
     // l'a amputée (ou battue) à l'heure du choc. Lus sur les VOYAGES (l'issue y est tirée), pas
     // sur les rapports déposés : l'ordre des ticks ne doit pas décider s'ils comptent.

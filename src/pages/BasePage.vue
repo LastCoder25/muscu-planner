@@ -1030,7 +1030,7 @@ import {
   type BuildResource,
 } from '@/lib/buildings';
 import {
-  scoutLeadMs,
+  baseLeadMs,
   DEFENSE_TYPES,
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -1074,6 +1074,7 @@ import {
   type RaidReport,
   type ScoutReport,
 } from '@/lib/raid';
+import { controlDetectBoost } from '@/lib/controlPoints';
 import { usePush, pushSupported, type PushFail } from '@/composables/usePush';
 import { fmtPow, type Combatant } from '@/lib/combat';
 import { mulberry32 } from '@/lib/combat';
@@ -1857,9 +1858,17 @@ const arriveIn = computed(() => (raid.value ? fmtDelay(raid.value.arrivesAt - no
  *  qu'une armée soit repérée. `nextRaidIn` (le compte à rebours vers l'assaut) a été
  *  retiré : il rendait gratuit ce que ce bâtiment fait payer. */
 const scoutLeadLabel = computed(() => {
-  const ms = scoutLeadMs(scoutLevel(defenses.value), raidIntervalMs(progress.activeDaysInLast(7)));
+  const boost = controlDetectBoost(char.row?.expedition_map);
+  const ms = baseLeadMs(
+    scoutLevel(defenses.value),
+    raidIntervalMs(progress.activeDaysInLast(7)),
+    boost,
+  );
   const m = Math.round(ms / 60000);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) : ''}`;
+  const txt = m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) : ''}`;
+  // 🗼 On DIT d'où vient le surplus : sinon monter une Tour de la carte allonge un chiffre
+  // sans que rien n'explique pourquoi.
+  return boost > 0 ? `${txt} (🗼 +${Math.round(boost * 100)} % par les tours de la carte)` : txt;
 });
 const freezeIn = computed(() => (freeze.value ? fmtDelay(freeze.value.until - now.value) : ''));
 const healIn = computed(() =>
