@@ -111,6 +111,7 @@ import {
   type ExpeditionMessage,
   type ExpeditionOutcome,
   type Poi,
+  restoreUnvanquished,
 } from '@/lib/expedition';
 import {
   buildingType,
@@ -2314,13 +2315,17 @@ export const useCharacterStore = defineStore('character', () => {
           activeDays7,
         )
       : null;
+    // 🗺️ Un lieu que le héros n'a pas terrassé revient sur la carte (`restoreUnvanquished`).
+    const map0 = ctl ? ctl.map : cur.expedition_map;
+    const map = restoreUnvanquished(map0, [exp], partyList.value, now);
     await persist(userId, {
       ...(dw?.base ? { base: dw.base } : {}),
       ...(x && x.messages !== cur.messages
         ? { messages: dw ? dw.tag(x.messages) : x.messages }
         : {}),
       ...(x?.patch ?? {}),
-      ...(ctl ? { expedition_map: ctl.map, adventurers: ctl.adventurers } : {}),
+      ...(ctl ? { adventurers: ctl.adventurers } : {}),
+      ...(ctl || map !== map0 ? { expedition_map: map } : {}),
       expedition: null,
     });
     x?.play();
@@ -4080,10 +4085,20 @@ export const useCharacterStore = defineStore('character', () => {
       if (q && q.returnAt !== p.returnAt)
         advsBack = rescheduleReturners(advsBack, tripCrew(q), p.returnAt, q.returnAt);
     }
+    // 🗺️ Un lieu qu'une équipe rentrée n'a pas terrassé revient sur la carte — sauf si un
+    // autre voyage le vise encore (`restoreUnvanquished`).
+    const mapBase = ctl?.map ?? cur.expedition_map;
+    const ended = partyList.value.filter((p) => !t.parties.some((q) => q.id === p.id));
+    const mapOut = restoreUnvanquished(
+      mapBase,
+      ended,
+      [...t.parties, ...(cur.expedition ? [cur.expedition] : [])],
+      clock,
+    );
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
-      ...(ctl?.map ? { expedition_map: ctl.map } : {}),
+      ...(ctl?.map || mapOut !== mapBase ? { expedition_map: mapOut } : {}),
       ...(x.messages !== cur.messages ? { messages: x.messages } : {}),
       // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
       //  ne fait que le confirmer.)
