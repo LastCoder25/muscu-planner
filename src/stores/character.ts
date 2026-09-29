@@ -4647,6 +4647,36 @@ export const useCharacterStore = defineStore('character', () => {
     await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map || !ids.length) return;
+    // 🔙 CEUX ENCORE EN ROUTE FONT DEMI-TOUR (2026-09-29, signalé : « le demi-tour sur les
+    // miliciens ») : sans ça, un milicien ramené avant d'arriver était renvoyé DEPUIS le point,
+    // pour tout le trajet, comme s'il y était déjà. Même règle que le demi-tour de la carte
+    // (`recallReinforcements`) : ils rentrent en autant de temps qu'ils ont marché.
+    const ctl = cur.expedition_map.pois.find((p) => p.id === id)?.control;
+    const moving = new Set(
+      (ctl?.reinforcing ?? [])
+        .filter((r) => r.from !== undefined && !r.via && now < r.at)
+        .map((r) => r.id),
+    );
+    const turning = ids.filter((x) => moving.has(x));
+    const turned = turning.length
+      ? recallReinforcements(cur.expedition_map, id, turning, now)
+      : null;
+    if (turned) {
+      const at = new Map(turned.back.map((b) => [b.id, b.at]));
+      await persist(userId, {
+        expedition_map: turned.map,
+        adventurers: advList.value.map((a) => {
+          const t = at.get(a.id);
+          if (t === undefined) return a;
+          const next = { ...a, busyUntil: t };
+          delete next.posted;
+          return next;
+        }),
+      });
+      const rest = ids.filter((x) => !moving.has(x));
+      if (rest.length) await releaseControlChampions(userId, id, rest, now, playerLevel);
+      return;
+    }
     const out = new Set(ids);
     // 🛡️ Seulement les miliciens RÉELLEMENT sur ce point (un id inventé ne crée personne).
     const onPoint = new Set(
