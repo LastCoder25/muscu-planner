@@ -20,10 +20,12 @@
       @click="emit('update:focus', focus === t.key ? null : t.key)"
     >
       <span class="tr-who">{{ t.who }}</span>
-      <span v-if="isRiftPoi(t.poi)" class="tr-poi tr-rift">
-        <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
+      <span class="tr-poi">
+        <span v-if="isRiftPoi(t.poi)" class="tr-rift">
+          <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
+        </span>
+        <template v-else>{{ poiEmo(t.poi) }}</template>
       </span>
-      <span v-else class="tr-poi">{{ poiEmo(t.poi) }}</span>
       <span class="tr-time">{{ t.time }}</span>
       <template v-if="t.legs">
         <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
@@ -292,14 +294,32 @@ const crew = computed(() => {
 .tr-who {
   font-size: 17px;
 }
+/* 🎯 L'objectif du voyage, en encart dans le coin haut-droit : collé au bord EXTÉRIEUR
+   de la tuile (top/right 0), seuls ses côtés intérieurs sont tracés, dans la couleur
+   de la tuile (`inherit` suit aller / convoi / retour). */
 .tr-poi {
-  font-size: 15px;
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  border-left: 1px solid;
+  border-bottom: 1px solid;
+  border-color: inherit;
+  border-bottom-left-radius: 8px;
+  background: color-mix(in srgb, var(--surface-2, #2a241c) 70%, var(--surface));
+  pointer-events: none;
 }
 /* 🌀 La faille garde son portail sous la carte aussi, à la taille de l'emoji. */
 .tr-rift {
   display: inline-block;
-  width: 11px;
-  height: 18px;
+  width: 10px;
+  height: 16px;
 }
 .tr-legs {
   flex-basis: 100%;
