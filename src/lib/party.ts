@@ -343,6 +343,17 @@ export function tripCrew(v: Pick<ActiveExpedition, 'crew' | 'outcome'>): string[
   return v.crew ?? v.outcome.party?.escort ?? [];
 }
 
+/** 🦸 Le héros voyage-t-il avec CE groupe ? ⚠️ Signalé : « deux retours d'attaque combinée,
+ *  le héros dans les deux ». Le rapport d'une attaque combinée est partagé : il dit que le
+ *  héros a combattu, pas avec QUEL groupe il rentre. Le groupe du héros vit dans
+ *  `expedition` ; un groupe d'attaque combinée (`crew`) ou son compagnon (`wingOf`) rangé
+ *  dans `parties` ne le porte donc jamais. */
+export function partyCarriesHero(
+  v: Pick<ActiveExpedition, 'crew' | 'wingOf' | 'outcome'>,
+): boolean {
+  return !v.crew && !v.wingOf && !!v.outcome.party?.hero;
+}
+
 /** 🏰 Un assaut de point fixe GAGNÉ : le retour passe à celui de ceux qui rentrent
  *  (`returnLegs.won`, 0 = personne). Rend la MÊME référence sinon (perdu, ou pas un assaut). */
 export function shortenWonReturn<T extends ActiveExpedition>(v: T): T {
