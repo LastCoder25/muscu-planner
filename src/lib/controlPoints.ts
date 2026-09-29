@@ -28,6 +28,7 @@ import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId } from './militia';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
+import { riftClearMana } from './rift';
 import { SUPPLY_IDS, type SupplyStock } from './supplies';
 import {
   CAMP_FACTIONS,
@@ -49,7 +50,7 @@ export const CONTROL = {
   /** Les points de contrôle de la carte : ⛏️ mine d'or · 🎯 camp d'entraînement · 🌿 jardin
    *  d'herboriste · 🗼 tour de guet. ⚠️ L'ORDRE compte : il fixe la place de chacun autour
    *  de la ville (un quart de tour d'écart), et la mine, première, garde celle d'avant. */
-  kinds: ['mine', 'training', 'garden', 'tower', 'scriptorium'] as readonly ControlKind[],
+  kinds: ['mine', 'training', 'garden', 'tower', 'scriptorium', 'mana'] as readonly ControlKind[],
   /** Où ils se posent : cette fraction du rayon révélé SANS Avant-poste — visible dès le
    *  début, quel que soit l'Avant-poste. */
   distFrac: 0.62,
@@ -118,6 +119,14 @@ export const CONTROL = {
    *  couleur suit les chances des lieux (`placeRuneOdds`, rang du point face au tien). Sa
    *  réserve tient UNE rune (une seule attend d'être ramassée), quel que soit l'effectif. */
   runeHoursPerItem: 24,
+  /** ⛲ Source de mana (2026-09-29, demandé) : une garnison de 3 produit par jour la MOITIÉ du
+   *  mana d'une faille refermée de ton niveau (`riftClearMana`), 5 personnes ×1,3. ⚠️ DÉRIVÉ du
+   *  mana d'une faille, jamais écrit : si les failles bougent, la Source suit.
+   *  ⚠️ MESURÉ (`controlMana.test`) : 11 · 18 · 37 · 69 · 111 💠/jour aux niveaux 5 · 12 · 30 ·
+   *  60 · 100 à trois, soit ~+14 % de tirages au niveau 30 pour qui ferme deux failles par jour
+   *  (et prend son tirage offert). Un COMPLÉMENT, comme le Scriptorium : les failles restent la
+   *  source principale du mana, et le seul puits du mana est le gacha. */
+  manaSourceShare: 0.5,
   /** 🗼 Tour de guet : tenue par une garnison complète, elle raccourcit les trajets de 20 %
    *  (moins avec moins de monde), APRÈS l'Avant-poste — elle multiplie le trajet déjà réduit. */
   towerCut: 0.2,
@@ -144,6 +153,7 @@ export const CONTROL = {
 const PRODUCER_SEATS = MILITIA.perPoint;
 const CONTROL_SEATS: Record<ControlKind, number> = {
   scriptorium: PRODUCER_SEATS,
+  mana: PRODUCER_SEATS,
   mine: PRODUCER_SEATS,
   training: CONTROL_MAX_GARRISON,
   garden: PRODUCER_SEATS,
@@ -159,6 +169,8 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   garden: 2,
   tower: 3,
   scriptorium: 2.5,
+  // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
+  mana: 0.5,
 };
 
 export const CONTROL_EMO = CONTROL_KIND_EMO;
@@ -170,6 +182,7 @@ export const CONTROL_YIELD: Record<ControlKind, string> = {
   garden: 'consommables 🎒',
   tower: 'trajets plus courts 🧭',
   scriptorium: 'runes de compétence',
+  mana: 'pierres de mana 💠 en continu',
 };
 
 export const controlIdOf = (kind: ControlKind): string => `ctl_${kind}`;
@@ -486,6 +499,13 @@ export function controlGoldPerHour(p: Pick<Poi, 'id'>, n: number, playerLevel: n
   return (haul * shareOf(n)) / CONTROL.mineHoursPerHaul;
 }
 
+/** ⛲ Les pierres de mana produites par heure pour une garnison de `n` (champions ET
+ *  miliciens), au niveau du joueur. Une garnison de 3 : la moitié d'une faille par jour. */
+export function controlManaPerHour(n: number, playerLevel: number): number {
+  const perDay = riftClearMana({ level: Math.max(1, playerLevel) }) * CONTROL.manaSourceShare;
+  return (perDay * shareOf(n)) / 24;
+}
+
 /** 🎯 L'XP par heure d'un champion posté au camp d'entraînement (avant son rattrapage). */
 export function trainingXpPerHour(playerLevel: number): number {
   return trialXpBase(Math.max(1, playerLevel)) / CONTROL.trainHoursPerTrial;
@@ -522,6 +542,8 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
       return shareOf(n) / shareOf(1) / CONTROL.gardenHoursPerItem;
     case 'scriptorium':
       return shareOf(n) / CONTROL.runeHoursPerItem;
+    case 'mana':
+      return controlManaPerHour(n, playerLevel);
     default:
       return 0;
   }
@@ -705,6 +727,11 @@ export function controlTravelMult(map: ExpeditionMap | null | undefined): number
   return m;
 }
 
+/** ⛲ Les pierres de mana en réserve à `now` (24 h de production au plus). 0 si non tenu. */
+export function controlManaStock(p: Poi, now: number, playerLevel: number): number {
+  return p.control?.kind === 'mana' ? Math.floor(stockUnits(p, now, playerLevel) + 1e-9) : 0;
+}
+
 /** ⛏️ L'or en réserve à `now` (plafonné à `storageMs` de production). 0 si non tenu. */
 export function controlStock(p: Poi, now: number, playerLevel: number): number {
   return p.control?.kind === 'mine' ? Math.floor(stockUnits(p, now, playerLevel)) : 0;
@@ -725,13 +752,14 @@ export function collectControl(
 ): {
   map: ExpeditionMap;
   gold: number;
+  mana: number;
   xpBy: Record<string, number>;
   gearXp: Record<string, number>;
   supplies: SupplyStock;
   runes: RuneTier[];
 } {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: [] };
+  const none = { map, gold: 0, mana: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: [] };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   // 🎯⚒️ Le camp : chaque champion récolte SA réserve (et ses pièces le double), et garde la fraction
@@ -792,10 +820,12 @@ export function collectControl(
       control: {
         ...q.control!,
         collectedAt: until,
-        banked: c.kind === 'garden' ? Math.max(0, units - whole) : 0,
+        // 🌿⛲ La fraction entamée (un consommable, une pierre de mana) reste acquise.
+        banked: c.kind === 'garden' || c.kind === 'mana' ? Math.max(0, units - whole) : 0,
       },
     })),
     gold: c.kind === 'mine' ? whole : 0,
+    mana: c.kind === 'mana' ? whole : 0,
     xpBy: {},
     gearXp: {},
     supplies,
@@ -840,6 +870,8 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   switch (c.kind) {
     case 'mine':
       return { text: `🪙 ${fmt(units)}`, pct: fill };
+    case 'mana':
+      return { text: `💠 ${fmt(units)}`, pct: fill };
     case 'garden': {
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);

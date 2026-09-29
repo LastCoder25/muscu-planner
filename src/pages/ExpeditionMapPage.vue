@@ -1017,6 +1017,8 @@ import {
   militiaFreeSeats,
   controlRoster,
   controlGoldPerHour,
+  controlManaPerHour,
+  controlManaStock,
   controlStock,
   controlTravelMult,
   gardenStock,
@@ -1816,6 +1818,8 @@ const controlProd = computed(() => {
       return runeStock(p, now.value) > 0
         ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
         : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${hoursLabel(runeHoursFor(c.garrison.length))} (${c.garrison.length}/${seatsOf('scriptorium')} copistes, ${hoursLabel(runeHoursFor(seatsOf('scriptorium')))} au complet)`;
+    case 'mana':
+      return `⛲ +${Math.round(controlManaPerHour(c.garrison.length, heroLevel.value) * 24)} 💠/jour · réserve ${controlManaStock(p, now.value, heroLevel.value)} 💠 (24 h au plus)`;
     case 'tower':
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
@@ -1861,6 +1865,7 @@ const controlReady = computed(() => {
   return (
     controlGold.value > 0 ||
     trainingStock(p, now.value, heroLevel.value) > 0 ||
+    controlManaStock(p, now.value, heroLevel.value) > 0 ||
     runeStock(p, now.value) > 0 ||
     gardenStock(p, now.value) > 0
   );
@@ -1872,6 +1877,7 @@ const controlCollectLabel = computed(() => {
   if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
   if (k === 'training') return 'Faire progresser (chacun sa réserve)';
   if (k === 'scriptorium') return 'Récupérer la rune';
+  if (k === 'mana') return `Récolter ${controlManaStock(p, now.value, heroLevel.value)} 💠`;
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
 });
 const controlRate = computed(() =>
@@ -1900,9 +1906,15 @@ async function collectCtl() {
 }
 /** 🧺 L'animation de récolte d'une place forte. Une rune dit où la poser : c'est le seul
  *  moment où on la voit. */
-function celebrateHarvest(p: Poi, got: { supplies: SupplyStock; runes: RuneTier[] }) {
+function celebrateHarvest(
+  p: Poi,
+  got: { mana?: number; supplies: SupplyStock; runes: RuneTier[] },
+) {
   const kind = p.control?.kind;
   const where = kind ? CONTROL_LABEL[kind] : 'Place forte';
+  // ⛲ Le mana a son bandeau discret (il ne se pose pas dans le panier des consommables).
+  if (got.mana)
+    gameFx.celebrate({ kind: 'generic', emoji: '💠', title: `+${got.mana} pierres de mana`, subtitle: where, quiet: true });
   gameFx.celebrateHarvest(
     got.supplies,
     got.runes,

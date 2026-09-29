@@ -4378,6 +4378,8 @@ export const useCharacterStore = defineStore('character', () => {
               text: '',
             }),
             gold: (o?.gold ?? 0) + stock,
+            // ⛲ Le mana produit avant l'attaque part avec le rapport, comme l'or de la mine.
+            mana: (o?.mana ?? 0) + h.mana,
             supplies: addSupplies(o?.supplies ?? {}, h.supplies),
           },
         } as ActiveExpedition),
@@ -4490,6 +4492,7 @@ export const useCharacterStore = defineStore('character', () => {
     advs: Adventurer[];
     stock: AdvGear[];
     gold: number;
+    mana: number;
     supplies: SupplyStock;
     runes: RuneTier[];
   } {
@@ -4504,6 +4507,7 @@ export const useCharacterStore = defineStore('character', () => {
         advs,
         stock: nextStock,
         gold: c.gold,
+        mana: c.mana,
         supplies: c.supplies,
         runes: c.runes,
       };
@@ -4526,6 +4530,7 @@ export const useCharacterStore = defineStore('character', () => {
       advs: next,
       stock: nextStock,
       gold: c.gold,
+      mana: c.mana,
       supplies: c.supplies,
       runes: c.runes,
     };
@@ -4537,7 +4542,7 @@ export const useCharacterStore = defineStore('character', () => {
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<{ gold: number; supplies: SupplyStock; runes: RuneTier[] } | null> {
+  ): Promise<{ gold: number; mana: number; supplies: SupplyStock; runes: RuneTier[] } | null> {
     await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map) return null;
@@ -4555,6 +4560,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       expedition_map: h.map,
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
+      ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
       ...(h.runes.length ? { runes: addRunes(cur.runes, h.runes) } : {}),
       // ⚠️ `gearPatch` TOUJOURS : un champion au plafond ne bouge pas, ses pièces si — le
@@ -4567,7 +4573,7 @@ export const useCharacterStore = defineStore('character', () => {
     // Champions au plafond : seules leurs pièces ont appris, on les montre quand même.
     else if (gearNext !== stock0)
       useAdvXpFx().show(withGearTracks([], stock0, gearNext, h.advs), 'Camp d’entraînement');
-    return { gold: h.gold, supplies: h.supplies, runes: h.runes };
+    return { gold: h.gold, mana: h.mana, supplies: h.supplies, runes: h.runes };
   }
 
   /** 🏰 Rappelle TOUTE la garnison (et les renforts en route) : la réserve est récoltée,
@@ -4578,7 +4584,7 @@ export const useCharacterStore = defineStore('character', () => {
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<{ supplies: SupplyStock; runes: RuneTier[] } | null> {
+  ): Promise<{ mana: number; supplies: SupplyStock; runes: RuneTier[] } | null> {
     await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map) return null;
@@ -4597,6 +4603,7 @@ export const useCharacterStore = defineStore('character', () => {
         a.posted === id ? { ...a, posted: undefined, busyUntil: home.advAt } : a,
       ),
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
+      ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
@@ -4609,7 +4616,7 @@ export const useCharacterStore = defineStore('character', () => {
     });
     if (h.gold > 0) goldFx.gain(h.gold);
     // 🧺 Ce qui a été récolté en partant, pour l'animation (comme `collectControlPoint`).
-    return { supplies: h.supplies, runes: h.runes };
+    return { mana: h.mana, supplies: h.supplies, runes: h.runes };
   }
 
   /** 🏰 Ramène UNE PARTIE de la garnison (ou des renforts en route) : ils redeviennent

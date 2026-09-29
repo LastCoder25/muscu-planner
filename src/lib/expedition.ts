@@ -77,7 +77,7 @@ export type PoiType =
   | 'control';
 
 /** 🏰 Ce que produit un point de contrôle tenu. Étape 1 : la mine d'or. */
-export type ControlKind = 'mine' | 'training' | 'garden' | 'tower' | 'scriptorium';
+export type ControlKind = 'mine' | 'training' | 'garden' | 'tower' | 'scriptorium' | 'mana';
 /** 🏰 Une garnison : 1 à 3 champions (décision de l'utilisateur). */
 export const CONTROL_MAX_GARRISON = 3;
 /**
@@ -186,6 +186,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   garden: 'Jardin d’herboriste',
   tower: 'Tour de guet',
   scriptorium: 'Scriptorium',
+  mana: 'Source de mana',
 };
 export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   mine: '⛏️',
@@ -193,6 +194,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   garden: '🌿',
   tower: '🗼',
   scriptorium: '📜',
+  mana: '⛲',
 };
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
 export function poiLabel(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {

@@ -2113,7 +2113,7 @@ describe('🔀 FusionPanel', () => {
     expect(out).toContain('cps-gauge');
     // Ennemie : ce qu’elle rapporterait, à la même place.
     expect(out).toContain('XP pour la garnison 🎓');
-    expect(out).toContain('1/5 tenus');
+    expect(out).toContain('1/6 tenus');
     // Une mine prend 5 personnes depuis le 2026-09-28 (`seatsOf`) : 5 cases, 1 occupée,
     // 4 libres numérotées — elles remplacent la pastille « 🛡️ 1/5 ».
     expect(out).not.toContain('🛡️ 1/5');
@@ -2122,10 +2122,10 @@ describe('🔀 FusionPanel', () => {
     expect(out).toMatch(/Place 5 libre/);
     // 🔎 Les filtres par statut, avec leur nombre (une tenue, cinq ennemies ; aucune vide).
     expect(out).toContain('🏰 Tenues · 1');
-    expect(out).toContain('☠️ Pas tenues · 4');
+    expect(out).toContain('☠️ Pas tenues · 5');
     expect(out).not.toContain('⚠️ Vides');
-    // 🏳️ La place TENUE est neutre : pas de pastille de rang (les quatre ennemies gardent la leur).
-    expect(out.match(/class="pill rk"/g)?.length).toBe(4);
+    // 🏳️ La place TENUE est neutre : pas de pastille de rang (les cinq ennemies gardent la leur).
+    expect(out.match(/class="pill rk"/g)?.length).toBe(5);
   }, 30_000);
 
   it('🛡️ la garnison montre les MILICIENS, et toucher un lieu ouvre sa gestion', async () => {

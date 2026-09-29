@@ -73,6 +73,7 @@ export const RESOURCE_SOURCES: Record<ResourceId, ResourceInfo> = {
         label: 'Mines de mana résiduel',
         detail: 'laissées par une faille qui a débordé',
       },
+      { emoji: '⛲', label: 'Source de mana', detail: 'point fixe de la carte, en continu' },
       { emoji: '🎁', label: 'Récompense du jour', detail: 'un tirage offert chaque jour' },
       { emoji: '🎰', label: 'Copie en trop au tirage', detail: 'convertie en mana' },
     ],
