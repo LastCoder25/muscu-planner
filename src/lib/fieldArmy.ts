@@ -14,7 +14,8 @@
  *   l'armée : le siège ou la reprise arrive amputé d'autant (`applyFieldHit*`). La battre
  *   entièrement ANNULE l'attaque.
  * - **Défaite** : les tombés vont à l'infirmerie (`campHurt`), mais tout le monde rentre avec
- *   le mana 💠 des ennemis abattus (demandé).
+ *   le butin des ennemis abattus : la ressource de leur faction, ou du mana 💠 si l'armée sort
+ *   d'une faille (seules les armées de faille en donnent).
  * - Le sort du choc est tiré à l'ENVOI (graine fixée), appliqué à l'heure du CHOC — jamais
  *   après l'arrivée de l'armée : un choc qui tomberait trop tard ne change rien.
  *
