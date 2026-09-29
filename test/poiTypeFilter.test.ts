@@ -9,6 +9,9 @@ import {
   effectiveTypeFilter,
   filterKeyOf,
   filterSummary,
+  mapPoisFor,
+  nextTroopMode,
+  parseTroopMode,
   type FilterKey,
   parseTypeFilter,
   typeMode,
@@ -151,10 +154,34 @@ describe('🗺️ le filtre effectif (types présents aujourd’hui)', () => {
   });
   // 🚶 Demandé : « rajoute un filtre pour les déplacements de troupes ». Masqués, le résumé
   // replié le DIT — sinon des voyages en cours invisibles se liraient comme une carte vide.
-  it('des déplacements masqués se lisent dans le résumé', () => {
-    const s = filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, true);
+  it('des déplacements masqués ou seuls se lisent dans le résumé', () => {
+    const s = filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, 'none');
     expect(s).toEqual({ active: true, text: 'sans déplacements' });
-    expect(filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, false).active).toBe(false);
+    expect(filterSummary([0], new Set(), EMPTY_TYPE_FILTER, present, 'all').active).toBe(false);
+    // « Seuls » l'emporte : aucun lieu n'est dessiné, rangs et types ne comptent plus.
+    expect(filterSummary([0, 1], new Set([1]), EMPTY_TYPE_FILTER, present, 'only')).toEqual({
+      active: true,
+      text: 'déplacements seulement',
+    });
+  });
+
+  // 🚶 Demandé : « il manque l'option “seul” pour celle-là ».
+  it('les déplacements ont trois états, comme un type de lieu', () => {
+    expect(nextTroopMode('all')).toBe('only');
+    expect(nextTroopMode('only')).toBe('none');
+    expect(nextTroopMode('none')).toBe('all');
+    // L'ancien réglage (booléen de la v0.1355) se relit.
+    expect(parseTroopMode('1')).toBe('none');
+    expect(parseTroopMode('0')).toBe('all');
+    expect(parseTroopMode(null)).toBe('all');
+    expect(parseTroopMode('only')).toBe('only');
+  });
+  it('déplacements seuls : la carte ne garde que les lieux où ils se rendent', () => {
+    const all = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    const shown = [all[0]!, all[1]!];
+    expect(mapPoisFor('only', shown, all, new Set(['c']))).toEqual([{ id: 'c' }]);
+    expect(mapPoisFor('all', shown, all, new Set(['c']))).toBe(shown);
+    expect(mapPoisFor('none', shown, all, new Set(['c']))).toBe(shown);
   });
   it('les types seuls présents restent seuls', () => {
     const f = effectiveTypeFilter({ only: ['arena', 'mine'], hidden: ['camp'] }, present);

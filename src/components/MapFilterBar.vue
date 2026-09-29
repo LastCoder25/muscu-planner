@@ -96,14 +96,16 @@
           <button
             type="button"
             class="type-chip"
-            :class="troopsHidden ? 'rm-none' : 'on'"
-            :aria-pressed="!troopsHidden"
-            :aria-label="`Déplacements de troupes : ${troopsHidden ? 'masqués' : 'affichés'} · ${troops} en cours — toucher pour changer`"
-            @click="emit('toggle-troops')"
+            :class="['rm-' + troopMode, { on: troopMode !== 'none' }]"
+            :aria-pressed="troopMode !== 'none'"
+            :aria-label="`Déplacements de troupes : ${TYPE_MODE_LABEL[troopMode]} · ${troops} en cours — toucher pour changer`"
+            @click="emit('cycle-troops')"
           >
             <span class="type-emo">🚶</span>
             <span class="tc-name">Déplacements de troupes</span>
-            <span class="tc-state">{{ troopsHidden ? '✕' : troops }}</span>
+            <span class="tc-state">{{
+              troopMode === 'only' ? 'seul' : troopMode === 'none' ? '✕' : troops
+            }}</span>
           </button>
         </div>
       </section>
@@ -127,6 +129,7 @@ import {
   typeShown,
   type FilterKey,
   type TypeFilter,
+  type TypeMode,
 } from '@/lib/poiTypeFilter';
 
 const props = defineProps<{
@@ -136,19 +139,20 @@ const props = defineProps<{
   typeFilter: TypeFilter;
   /** 🚶 Combien de voyages sont en cours, et s'ils sont masqués sur la carte. */
   troops?: number;
-  troopsHidden?: boolean;
+  troopMode?: TypeMode;
   /** Dépliée d’emblée — la porte de montage s’en sert pour rendre aussi le corps. */
   defaultOpen?: boolean;
 }>();
 const emit = defineEmits<{
   'toggle-rank': [r: number];
   'cycle-type': [t: FilterKey];
-  'toggle-troops': [];
+  'cycle-troops': [];
   reset: [];
 }>();
 
 const open = ref(props.defaultOpen ?? false);
 const troops = computed(() => props.troops ?? 0);
+const troopMode = computed<TypeMode>(() => props.troopMode ?? 'all');
 const hasAny = computed(
   () => props.rankOptions.length > 1 || props.typeChips.length > 1 || troops.value > 0,
 );
@@ -159,7 +163,7 @@ const summary = computed(() =>
     props.typeFilter,
     props.typeChips.map((o) => o.type),
     // Masqués alors qu'il n'y a rien en route : ça ne retire rien, on ne l'annonce pas.
-    !!props.troopsHidden && troops.value > 0,
+    troops.value > 0 ? troopMode.value : 'all',
   ),
 );
 

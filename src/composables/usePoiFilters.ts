@@ -11,11 +11,14 @@ import {
   cycleType,
   effectiveTypeFilter,
   filterKeyOf,
+  nextTroopMode,
+  parseTroopMode,
   parseTypeFilter,
   typeOptions,
   typeShown,
   type FilterKey,
   type TypeFilter,
+  type TypeMode,
 } from '@/lib/poiTypeFilter';
 import type { Poi } from '@/lib/expedition';
 
@@ -23,15 +26,14 @@ const RANK_FILTER_KEY = 'muscu:emap:hidden-ranks';
 // ⚠️ Remplace le filtre des failles seul : son réglage stocké est repris (`parseTypeFilter`).
 const TYPE_FILTER_KEY = 'muscu:emap:type-filter';
 const LEGACY_RIFT_KEY = 'muscu:emap:rift-mode';
-// 🚶 Les déplacements de troupes masqués (demandé : « rajoute un filtre pour les déplacements
-// de troupes »). Absent = affichés.
+// 🚶 Le mode des déplacements de troupes (affichés · seuls · masqués). Absent = affichés.
 const TROOPS_KEY = 'muscu:emap:hide-troops';
 
-function loadTroopsHidden(): boolean {
+function loadTroopMode(): TypeMode {
   try {
-    return localStorage.getItem(TROOPS_KEY) === '1';
+    return parseTroopMode(localStorage.getItem(TROOPS_KEY));
   } catch {
-    return false; /* stockage indisponible : tout est affiché */
+    return 'all'; /* stockage indisponible : tout est affiché */
   }
 }
 
@@ -108,19 +110,21 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
 
   /** 🚶 Les tracés et marqueurs des voyages en cours (héros, équipes, renforts, retours,
    *  attaques, colonnes d'interception). La liste des voyages sous la carte reste. */
-  const troopsHidden = ref(loadTroopsHidden());
-  function toggleTroops() {
-    troopsHidden.value = !troopsHidden.value;
+  const troopMode = ref<TypeMode>(loadTroopMode());
+  const troopsHidden = computed(() => troopMode.value === 'none');
+  function setTroopMode(m: TypeMode) {
+    troopMode.value = m;
     try {
-      localStorage.setItem(TROOPS_KEY, troopsHidden.value ? '1' : '0');
+      localStorage.setItem(TROOPS_KEY, m);
     } catch {
       /* le filtre vaut pour la session */
     }
   }
+  const cycleTroops = () => setTroopMode(nextTroopMode(troopMode.value));
 
   /** « Tout afficher » : rangs, types ET déplacements d’un geste. */
   function resetFilters() {
-    if (troopsHidden.value) toggleTroops();
+    if (troopMode.value !== 'all') setTroopMode('all');
     hiddenRanks.value = new Set();
     typeFilter.value = { only: [], hidden: [] };
     save(RANK_FILTER_KEY, []);
@@ -137,7 +141,8 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     cycleTypeChip,
     resetFilters,
     shownPois,
+    troopMode,
     troopsHidden,
-    toggleTroops,
+    cycleTroops,
   };
 }

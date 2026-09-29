@@ -485,11 +485,16 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       return out;
     };
     // Des voyages en cours : la barre s'affiche même sans rien d'autre à filtrer, avec leur compte.
-    const shown = await render({ troops: 3, troopsHidden: false });
+    const shown = await render({ troops: 3, troopMode: 'all' });
     expect(shown).toContain('Déplacements de troupes');
     expect(shown).toMatch(/class="tc-state">3</);
+    // Seuls : l'état est ÉCRIT, comme pour un type de lieu.
+    const only = await render({ troops: 3, troopMode: 'only' });
+    expect(only).toContain('rm-only');
+    expect(only).toMatch(/class="tc-state">seul</);
+    expect(only).toContain('déplacements seulement');
     // Masqués : l'état est écrit, et le résumé l'annonce.
-    const hidden = await render({ troops: 3, troopsHidden: true });
+    const hidden = await render({ troops: 3, troopMode: 'none' });
     expect(hidden).toContain('rm-none');
     expect(hidden).toContain('sans déplacements');
     // Aucun voyage : pas de tuile (elle ne filtrerait rien).
@@ -611,6 +616,62 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(tip).toContain('Ramène');
     expect(tip).toContain('🪙 Or');
     expect(tip).toContain('Construire et améliorer les bâtiments');
+  }, 30_000);
+
+  // 👥 Signalé : « quand je clique sur une tuile d'expédition il faut faire défiler l'écran
+  // pour voir les membres ». L'équipe naît sous la carte : elle doit être AMENÉE à l'écran.
+  it('🧭 TripsPanel : toucher une tuile amène l’équipe à l’écran', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
+    const { reactive } = await import('vue');
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const { useCharacterStore } = await import('@/stores/character');
+    (useCharacterStore() as unknown as { row: unknown }).row = ROW;
+    const scrolled: Element[] = [];
+    const proto = HTMLElement.prototype as unknown as { scrollIntoView: () => void };
+    const before = proto.scrollIntoView;
+    proto.scrollIntoView = function (this: Element) {
+      scrolled.push(this);
+    };
+    const state = reactive({
+      trips: [
+        {
+          key: 'g1',
+          kind: 'van',
+          who: '⚔️',
+          poi: MAP_POIS[0],
+          time: '1 h',
+          pct: 10,
+          back: false,
+          title: 'Groupe',
+          withHero: false,
+          members: ['a1'],
+          haul: [],
+        },
+      ],
+      focus: null as string | null,
+      heroProfile: 'polyvalent',
+      'onUpdate:focus': (k: string | null) => (state.focus = k),
+    });
+    const app = createApp({ render: () => h(TripsPanel, state) });
+    app.use(pinia);
+    app.config.warnHandler = () => {};
+    const host = document.createElement('div');
+    try {
+      app.mount(host);
+      await nextTick();
+      expect(scrolled).toHaveLength(0); // rien au montage
+      host.querySelector<HTMLElement>('.trip')!.click();
+      for (let i = 0; i < 4; i++) await nextTick();
+      expect(scrolled.map((e) => e.className)).toEqual(['trip-crew']);
+      // Retoucher la tuile referme l'équipe : on ne fait rien défiler.
+      host.querySelector<HTMLElement>('.trip')!.click();
+      for (let i = 0; i < 4; i++) await nextTick();
+      expect(scrolled).toHaveLength(1);
+    } finally {
+      app.unmount();
+      proto.scrollIntoView = before;
+    }
   }, 30_000);
 
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {

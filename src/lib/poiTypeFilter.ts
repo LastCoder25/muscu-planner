@@ -137,9 +137,11 @@ export function filterSummary(
   hiddenRanks: ReadonlySet<number>,
   f: TypeFilter,
   presentTypes: readonly FilterKey[],
-  /** 🚶 Les déplacements de troupes masqués (`troopsHidden`) — seulement s'il y en a en cours. */
-  troopsHidden = false,
+  /** 🚶 Le mode des déplacements de troupes — `'all'` quand il n'y en a aucun en cours. */
+  troops: TypeMode = 'all',
 ): { active: boolean; text: string } {
+  // « Seuls » l'emporte sur tout : aucun lieu n'est dessiné, rangs et types ne comptent plus.
+  if (troops === 'only') return { active: true, text: 'déplacements seulement' };
   const parts: string[] = [];
   const rankOff = ranks.filter((r) => hiddenRanks.has(r)).length;
   if (rankOff > 0) parts.push(`${ranks.length - rankOff}/${ranks.length} rangs`);
@@ -152,7 +154,7 @@ export function filterSummary(
     parts.push(only.length <= 2 ? `${names(only)} seulement` : `${only.length} types seuls`);
   else if (hidden.length > 0)
     parts.push(hidden.length <= 2 ? `sans ${names(hidden)}` : `${hidden.length} types masqués`);
-  if (troopsHidden) parts.push('sans déplacements');
+  if (troops === 'none') parts.push('sans déplacements');
   return parts.length
     ? { active: true, text: parts.join(' · ') }
     : { active: false, text: 'tout affiché' };
@@ -164,4 +166,31 @@ export function filterSummary(
 export function effectiveTypeFilter(f: TypeFilter, present: readonly FilterKey[]): TypeFilter {
   const only = f.only.filter((t) => present.includes(t));
   return only.length === f.only.length ? f : { only, hidden: f.hidden };
+}
+
+/**
+ * 🚶 LE FILTRE DES DÉPLACEMENTS DE TROUPES — à trois états comme un type de lieu (demandé :
+ * « il manque l'option “seul” pour celle-là ») : affichés → SEULS → masqués → affichés.
+ * « Seuls » : la carte ne dessine plus que tes voyages en cours et les lieux où ils vont.
+ */
+export function nextTroopMode(m: TypeMode): TypeMode {
+  return m === 'all' ? 'only' : m === 'only' ? 'none' : 'all';
+}
+
+/** Relit le mode stocké. ⚠️ Reprend l'ancien booléen (`'1'` = masqués) de la v0.1355. */
+export function parseTroopMode(raw: string | null): TypeMode {
+  if (raw === 'only' || raw === 'none' || raw === 'all') return raw;
+  return raw === '1' ? 'none' : 'all';
+}
+
+/** Les lieux que la carte dessine selon le mode des déplacements : en « seuls », uniquement
+ *  ceux où un voyage se rend (`troopPoiIds` — un point tenu qu'on renforce, par exemple ; les
+ *  cibles consommées au départ sont dessinées à part). Sinon, les lieux des filtres. */
+export function mapPoisFor<P extends { id: string }>(
+  mode: TypeMode,
+  shown: P[],
+  all: readonly P[],
+  troopPoiIds: ReadonlySet<string>,
+): P[] {
+  return mode === 'only' ? all.filter((p) => troopPoiIds.has(p.id)) : shown;
 }

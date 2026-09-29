@@ -23,9 +23,9 @@
       :type-filter="typeFilterShown"
       @toggle-rank="toggleRank"
       :troops="troopCount"
-      :troops-hidden="troopsHidden"
+      :troop-mode="troopMode"
       @cycle-type="cycleTypeChip"
-      @toggle-troops="toggleTroops"
+      @cycle-troops="cycleTroops"
       @reset="resetFilters"
     />
 
@@ -208,7 +208,7 @@
             <circle :cx="a.tx" :cy="a.ty" :r="a.tr" class="army-target" />
           </g>
           <MapPoiLayer
-            :pois="shownPois"
+            :pois="mapPois"
             :selected-id="selected?.id ?? null"
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
@@ -1204,6 +1204,7 @@ import {
   type PoiFact,
 } from '@/lib/poiFacts';
 import { usePoiFilters } from '@/composables/usePoiFilters';
+import { mapPoisFor } from '@/lib/poiTypeFilter';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
@@ -1597,7 +1598,7 @@ const edgeIndicators = computed(() => {
   const cw = contW.value;
   const ch = contH.value;
   const m = 22;
-  const src = [...shownPois.value, ...(active.value ? [active.value.poi] : [])];
+  const src = [...mapPois.value, ...(active.value ? [active.value.poi] : [])];
   const out: { id: string; poi: Poi; x: number; y: number; deg: number }[] = [];
   for (const p of src) {
     const px = ((p.x - V.min) / V.size) * mapPx.value - scrollX.value;
@@ -1639,19 +1640,21 @@ const {
   cycleTypeChip,
   resetFilters,
   shownPois,
+  troopMode,
   troopsHidden,
-  toggleTroops,
+  cycleTroops,
 } = usePoiFilters(pois, (p) => rankOf(p).rankIndex);
+/** 🚶 Les lieux où se rendent tes voyages en cours (renforts vers un point tenu, retours…) :
+ *  ce qui reste dessiné quand les déplacements sont « seuls ». */
+const troopPoiIds = computed(() => new Set(travelersOnMap.value.map((v) => v.poi.id)));
+/** Les lieux que la carte dessine (filtres ET mode des déplacements, `mapPoisFor`). */
+const mapPois = computed(() =>
+  mapPoisFor(troopMode.value, shownPois.value, pois.value, troopPoiIds.value),
+);
 /** ⚔️🗼 Les trajectoires des armées en campagne visibles (filtres compris). */
 const armyPaths = computed(() =>
-  shownPois.value.map(armyTrajectory).filter((a): a is ArmyPath => !!a),
+  mapPois.value.map(armyTrajectory).filter((a): a is ArmyPath => !!a),
 );
-// Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
-watch(shownPois, (list) => {
-  const s = selected.value;
-  if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
-    selected.value = null;
-});
 const sheetEl = ref<HTMLElement | null>(null);
 
 /** ⚠️ CE QUE LE DÉPART COÛTE, face à l'armée qui arrive (demandé par l'utilisateur :
@@ -2610,6 +2613,14 @@ const shownBands = computed(() => (troopsHidden.value ? [] : bandsOnMap.value));
 const troopCount = computed(
   () => (active.value && hero.value ? 1 : 0) + travelersOnMap.value.length,
 );
+// Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte. ⚠️ APRÈS
+// `travelersOnMap` : le watch lit `mapPois` dès le setup, qui lit `travelersOnMap` (zone
+// morte temporelle sinon — le défaut de la v0.910).
+watch(mapPois, (list) => {
+  const s = selected.value;
+  if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
+    selected.value = null;
+});
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
  *  lirait comme plusieurs rangées collées. */
 const trips = computed(() => {
@@ -3465,14 +3476,14 @@ function stableBy<T>(src: () => T, key: (v: T) => string) {
   });
 }
 const dimmedKey = computed(() =>
-  shownPois.value
+  mapPois.value
     .filter(dimmed)
     .map((p) => p.id)
     .join('|'),
 );
 const veiledKey = computed(() =>
   fogPlan.value
-    ? shownPois.value
+    ? mapPois.value
         .filter((p) => underFog(p, TOWN, fogR.value))
         .map((p) => p.id)
         .join('|')
