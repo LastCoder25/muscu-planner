@@ -80,6 +80,29 @@ export function transferBlocker(
 }
 
 /**
+ * ⇄ QUI PEUT VENIR D'UN AUTRE POINT renforcer `toId` (2026-09-29, demandé : « faire venir un
+ * champion ou milicien d'un autre lieu fixe » depuis la case libre de la liste). Par point
+ * tenu, les membres ARRIVÉS dont le départ SEUL passe `transferBlocker` — la règle du store,
+ * donc l'écran ne propose jamais un transfert qu'il refuserait. Les points sans candidat
+ * sont omis.
+ */
+export function transferSourcesFor(
+  map: ExpeditionMap | null | undefined,
+  toId: string,
+): { fromId: string; ids: string[] }[] {
+  if (!map) return [];
+  return map.pois
+    // ⚠️ Pas de pré-filtre « autre point, tenu » : `transferBlocker` refuse déjà le même point,
+    // un point ennemi et un renfort pas encore arrivé — un second filtre serait dormant.
+    .filter((p) => !!p.control)
+    .map((p) => ({
+      fromId: p.id,
+      ids: p.control!.garrison.filter((id) => !transferBlocker(map, p.id, toId, [id])),
+    }))
+    .filter((s) => s.ids.length > 0);
+}
+
+/**
  * 🏰 Le transfert : les partants quittent le point de départ (sa production garde ce qui est
  * déjà produit, `releaseFromControl`) et marchent vers le point d'arrivée, où ils prennent
  * leur place tout de suite. Champions et miliciens ont chacun leur heure d'arrivée (ils ne

@@ -2150,6 +2150,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     const { id, map } = await held();
     const poi = map.pois.find((p) => p.id === id)!;
     const champs: string[] = [];
+    const moved: string[] = [];
     let mil = 0;
     let out = '';
     expect(
@@ -2162,9 +2163,21 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
           milFree: 4,
           milHome: 2,
           militiaMin: 45,
+          sources: [
+            {
+              fromId: 'forge',
+              emo: '⚒️',
+              label: 'Forge',
+              members: [
+                { id: 'a2', adv: ROW.adventurers[1], min: 30 },
+                { id: 'mil:9', adv: null, min: 50 },
+              ],
+            },
+          ],
           busy: false,
           onChampion: (a: string) => champs.push(a),
           onMilitia: () => mil++,
+          onTransfer: (from: string, id: string) => moved.push(from + ':' + id),
         },
         ROW,
         undefined,
@@ -2173,6 +2186,7 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
         (host) => {
           host.querySelector<HTMLElement>('.qr-mil')?.click();
           host.querySelector<HTMLElement>('.qr-pick button')?.click();
+          host.querySelectorAll<HTMLElement>('.qr-mem')[1]?.click();
         },
       ),
     ).toBeNull();
@@ -2180,6 +2194,11 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
     expect(out).toContain('2 à la base');
     expect(mil).toBe(1);
     expect(champs).toEqual([ROW.adventurers[0].id]);
+    // ⇄ Depuis un autre lieu : le lieu, ses membres, et un toucher lance le transfert.
+    expect(out).toContain('Depuis un autre lieu');
+    expect(out).toContain('Forge');
+    expect(out.match(/class="qr-mem"/g)?.length).toBe(2);
+    expect(moved).toEqual(['forge:mil:9']);
   }, 30_000);
 });
 

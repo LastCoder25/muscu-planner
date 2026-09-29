@@ -307,10 +307,12 @@
       :mil-free="militiaFreeSeats(quickPoi?.control)"
       :mil-home="milHome"
       :militia-min="quickMilitiaMin"
+      :sources="quickSources"
       :busy="ctlBusy"
       @close="quickId = null"
       @champion="quickChampion"
       @militia="quickMilitia"
+      @transfer="quickTransfer"
     />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
@@ -973,7 +975,12 @@ import {
   warbandArmy,
 } from '@/lib/rift';
 import { caravanLegMin, convoySlotsFree, poiOffers } from '@/lib/caravan';
-import { TRANSFER_BLOCK_LABEL, legFromSpot, transferBlocker } from '@/lib/controlRoutes';
+import {
+  TRANSFER_BLOCK_LABEL,
+  legFromSpot,
+  transferBlocker,
+  transferSourcesFor,
+} from '@/lib/controlRoutes';
 import { MILITIA, MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
 
 const props = defineProps<{ embedded?: boolean }>();
@@ -2140,7 +2147,9 @@ const reinforceable = computed(() =>
     .filter(
       (r) =>
         (controlFreeSeats(r.poi.control) > 0 && freeSorted.value.length > 0) ||
-        (militiaFreeSeats(r.poi.control) > 0 && milHome.value > 0),
+        (militiaFreeSeats(r.poi.control) > 0 && milHome.value > 0) ||
+        // ⇄ Ou quelqu'un d'un AUTRE point tenu (la règle du transfert, `transferBlocker`).
+        transferSourcesFor(char.row?.expedition_map, r.poi.id).length > 0,
     )
     .map((r) => r.poi.id),
 );
@@ -2152,6 +2161,84 @@ const quickPoi = computed(
 const quickMilitiaMin = computed(() =>
   quickPoi.value ? caravanLegMin(quickPoi.value, [], 0, travelMult.value) : 0,
 );
+/** ⇄ Les membres des AUTRES points tenus qui peuvent venir, avec leur trajet depuis leur
+ *  point — la règle et le trajet du store (`transferBlocker`, `legFromSpot`). */
+const quickSources = computed(() => {
+  const to = quickPoi.value;
+  const map = char.row?.expedition_map;
+  if (!to || !map) return [];
+  const byId = new Map(char.advList.map((a) => [a.id, a]));
+  return transferSourcesFor(map, to.id).flatMap((s) => {
+    const from = map.pois.find((p) => p.id === s.fromId);
+    if (!from?.control) return [];
+    type Member = { id: string; adv: (typeof char.advList)[number] | null; min: number };
+    const members = s.ids.flatMap((id): Member[] => {
+      if (isMilitiaId(id))
+        return [
+          {
+            id,
+            adv: null,
+            min: legFromSpot(to, from, (q) => caravanLegMin(q, [], 0, travelMult.value)),
+          },
+        ];
+      const adv = byId.get(id);
+      if (!adv) return [];
+      return [
+        {
+          id,
+          adv,
+          min: legFromSpot(to, from, (q) =>
+            partyLegMin(q, [adv], {
+              hero: false,
+              travelMult: travelMult.value,
+              gearSpeed: advGearRoles([adv], char.advGearStock).speed,
+            }),
+          ),
+        },
+      ];
+    });
+    return members.length
+      ? [
+          {
+            fromId: from.id,
+            emo: CONTROL_EMO[from.control.kind],
+            label: CONTROL_LABEL[from.control.kind],
+            members,
+          },
+        ]
+      : [];
+  });
+});
+async function quickTransfer(fromId: string, memberId: string) {
+  const uid = auth.user?.id;
+  const to = quickPoi.value;
+  const src = quickSources.value.find((s) => s.fromId === fromId);
+  const m = src?.members.find((x) => x.id === memberId);
+  if (!uid || !to || !src || !m || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.transferControlGarrison(
+      uid,
+      fromId,
+      to.id,
+      [memberId],
+      Date.now(),
+      heroLevel.value,
+    );
+    if (why) {
+      $q.notify({ type: 'warning', message: `Transfert impossible : ${why}` });
+      return;
+    }
+    const who = m.adv ? m.adv.name : 'Un milicien';
+    $q.notify({
+      type: 'positive',
+      message: `⇄ ${who} quitte ${src.label} — arrivée dans ${formatDurationMin(m.min)}`,
+    });
+    quickId.value = null;
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 async function quickChampion(advId: string) {
   const uid = auth.user?.id;
   const p = quickPoi.value;

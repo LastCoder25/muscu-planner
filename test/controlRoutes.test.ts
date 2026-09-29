@@ -16,6 +16,7 @@ import {
   sortieBlocker,
   transferBlocker,
   transferGarrison,
+  transferSourcesFor,
 } from '@/lib/controlRoutes';
 import {
   EXPE,
@@ -160,5 +161,37 @@ describe('⚔️ sortie depuis un point', () => {
     const r = rejoinHome(world(full), MINE, ['a', 'b'], 5 * H);
     expect(r.back).toEqual(['a']);
     expect(r.out).toEqual(['b']);
+  });
+});
+
+describe('⇄ transferSourcesFor : qui peut venir d’un autre point (2026-09-29)', () => {
+  it('propose la garnison arrivée des AUTRES points tenus, pas celle du point visé', () => {
+    const m = world(['a', 'mil:1'], ['b']);
+    const src = transferSourcesFor(m, MINE);
+    expect(src).toEqual([{ fromId: FORGE, ids: ['b'] }]);
+    expect(transferSourcesFor(m, FORGE)).toEqual([{ fromId: MINE, ids: ['a', 'mil:1'] }]);
+  });
+  it('un renfort encore en route vers son point n’en repart pas', () => {
+    const m = world(['a'], ['b']);
+    const forge = pt(m, FORGE);
+    const withRoute = {
+      ...m,
+      pois: m.pois.map((p) =>
+        p.id === FORGE
+          ? { ...p, control: { ...forge.control!, reinforcing: [{ id: 'c', from: 0, at: 9e15 }] } }
+          : p,
+      ),
+    };
+    expect(transferSourcesFor(withRoute, MINE)).toEqual([{ fromId: FORGE, ids: ['b'] }]);
+  });
+  it('point visé plein : personne ne peut venir', () => {
+    const full = Array.from({ length: seatsOf('mine') }, (_, i) => `x${i}`);
+    const m = world(full, ['b']);
+    expect(transferSourcesFor(m, MINE)).toEqual([]);
+  });
+  it('point visé pas à nous : personne', () => {
+    const m = world([], ['b']);
+    expect(transferSourcesFor(m, MINE)).toEqual([]);
+    expect(transferSourcesFor(null, MINE)).toEqual([]);
   });
 });

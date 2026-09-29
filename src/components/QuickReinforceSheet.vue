@@ -55,13 +55,44 @@
       <p v-else class="qr-none">
         Plus de place de champion ici : seuls des miliciens peuvent encore la compléter.
       </p>
+      <!-- ⇄ DEPUIS UN AUTRE LIEU (demandé : « faire venir un champion ou milicien d'un autre
+           lieu fixe »). Seuls ceux dont le transfert passe (`transferSourcesFor`) ; un toucher
+           le fait partir directement de son point, sans repasser par la base. -->
+      <template v-if="sources.length">
+        <p class="qr-cap">⇄ Depuis un autre lieu</p>
+        <div v-for="s in sources" :key="s.fromId" class="qr-src">
+          <p class="qr-src-name">{{ s.emo }} {{ s.label }}</p>
+          <div class="qr-pick">
+            <button
+              v-for="m in s.members"
+              :key="m.id"
+              type="button"
+              class="qr-mem"
+              :disabled="busy"
+              @click="emit('transfer', s.fromId, m.id)"
+            >
+              <span class="qr-mem-emo"
+                ><ChampionPortrait v-if="m.adv" :champion-id="m.adv.championId">{{
+                  advTitle(m.adv)?.emoji ?? '🧑'
+                }}</ChampionPortrait
+                ><template v-else>{{ MILITIA_EMO }}</template></span
+              >
+              <span class="qr-mem-main">
+                <span class="qr-mem-name">{{ m.adv ? m.adv.name : MILITIA_NAME }}</span>
+                <span class="qr-mem-sub">🧭 {{ formatDurationMin(m.min) }}</span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </template>
     </div>
   </q-dialog>
 </template>
 
 <script setup lang="ts">
 import AdvPickTile from '@/components/AdvPickTile.vue';
-import type { Adventurer } from '@/lib/adventurers';
+import ChampionPortrait from '@/components/ChampionPortrait.vue';
+import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { CONTROL_EMO, CONTROL_LABEL } from '@/lib/controlPoints';
 import type { Poi } from '@/lib/expedition';
 import { MILITIA_EMO, MILITIA_NAME } from '@/lib/militia';
@@ -76,9 +107,21 @@ defineProps<{
   milFree: number;
   milHome: number;
   militiaMin: number;
+  /** ⇄ Les autres points tenus et ceux qui peuvent en venir (avec leur trajet). */
+  sources: {
+    fromId: string;
+    emo: string;
+    label: string;
+    members: { id: string; adv: Adventurer | null; min: number }[];
+  }[];
   busy: boolean;
 }>();
-const emit = defineEmits<{ close: []; champion: [string]; militia: [] }>();
+const emit = defineEmits<{
+  close: [];
+  champion: [string];
+  militia: [];
+  transfer: [string, string];
+}>();
 </script>
 
 <style scoped>
@@ -126,6 +169,67 @@ const emit = defineEmits<{ close: []; champion: [string]; militia: [] }>();
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+.qr-src {
+  margin-bottom: 10px;
+}
+.qr-src-name {
+  margin: 0 0 6px;
+  color: var(--dim);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+.qr-mem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2, var(--bg));
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.qr-mem:disabled {
+  opacity: 0.5;
+}
+.qr-mem-emo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  overflow: hidden;
+  font-size: 22px;
+}
+.qr-mem-emo :deep(.cp) {
+  width: 100%;
+  height: 100%;
+}
+.qr-mem-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.qr-mem-name {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.2;
+  /* Deux lignes : « Orsène le Baumier » était coupé à 344 px. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.qr-mem-sub {
+  color: var(--dim);
+  font-size: 12px;
 }
 .qr-none {
   color: var(--dim);
