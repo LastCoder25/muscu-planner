@@ -2078,13 +2078,108 @@ describe('🔀 FusionPanel', () => {
     expect(opened).toEqual([id]);
     expect(out).not.toContain('cps-body');
     // 🖼️ La garnison, dans sa pastille : une miniature par champion posté, une par milicien
-    // posté — ceux en route n'en ont pas (ils sont comptés dans « 🧭 +1 en route »).
+    // posté, et une case 🧭 par renfort en route (2026-09-29 : laissée « libre », elle
+    // invitait à en envoyer un second) — lui aussi compté dans « 🧭 +1 en route ».
     expect(out).toContain('Garnison 3 sur 5');
     expect(out.match(/class="mini"/g)?.length).toBe(1);
     expect(out.match(/class="mini mil"/g)?.length).toBe(2);
+    expect(out.match(/class="mini route"/g)?.length).toBe(1);
+    expect(out.match(/class="mini free"/g)?.length).toBe(1);
     expect(out).toContain('🧭 +1 en route');
     // Retiré (demandé) : il fallait de toute façon ouvrir le lieu pour récolter.
     expect(out).not.toContain('à récolter');
+  }, 30_000);
+});
+
+describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
+  const held = async () => {
+    const { captureControl, controlIdOf, controlRoster, ensureControls } =
+      await import('@/lib/controlPoints');
+    const { createMap } = await import('@/lib/expedition');
+    const id = controlIdOf('mine');
+    const map = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), id, ['a1'], 0, 7);
+    return { id, map, rows: controlRoster(map, [], 3600_000, 30) };
+  };
+  it('une place libre devient un bouton qui ENVOIE, sans ouvrir la gestion du lieu', async () => {
+    const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
+    const { id, rows } = await held();
+    const opened: string[] = [];
+    const reinf: string[] = [];
+    let out = '';
+    expect(
+      await mountIt(
+        ControlPointsSheet,
+        {
+          modelValue: true,
+          rows,
+          advs: ROW.adventurers,
+          reinforceable: [id],
+          onOpen: (p: { id: string }) => opened.push(p.id),
+          onReinforce: (p: { id: string }) => reinf.push(p.id),
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => host.querySelector<HTMLElement>('.mini.free.go')?.click(),
+      ),
+    ).toBeNull();
+    expect(out.match(/class="mini free go"/g)?.length).toBe(4);
+    expect(reinf).toEqual([id]);
+    expect(opened).toEqual([]);
+  }, 30_000);
+  it('sans renfort possible, les places libres restent de simples cases numérotées', async () => {
+    const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
+    const { rows } = await held();
+    let out = '';
+    expect(
+      await mountIt(
+        ControlPointsSheet,
+        { modelValue: true, rows, advs: ROW.adventurers, reinforceable: [] },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).not.toContain('mini free go');
+    expect(out).toMatch(/Place 5 libre/);
+  }, 30_000);
+  it('le sélecteur propose le milicien et les champions, et un toucher envoie', async () => {
+    const { default: QuickReinforceSheet } = await import('@/components/QuickReinforceSheet.vue');
+    const { id, map } = await held();
+    const poi = map.pois.find((p) => p.id === id)!;
+    const champs: string[] = [];
+    let mil = 0;
+    let out = '';
+    expect(
+      await mountIt(
+        QuickReinforceSheet,
+        {
+          poi,
+          champs: ROW.adventurers,
+          champFree: 4,
+          milFree: 4,
+          milHome: 2,
+          militiaMin: 45,
+          busy: false,
+          onChampion: (a: string) => champs.push(a),
+          onMilitia: () => mil++,
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => {
+          host.querySelector<HTMLElement>('.qr-mil')?.click();
+          host.querySelector<HTMLElement>('.qr-pick button')?.click();
+        },
+      ),
+    ).toBeNull();
+    expect(out).toContain('Renfort');
+    expect(out).toContain('2 à la base');
+    expect(mil).toBe(1);
+    expect(champs).toEqual([ROW.adventurers[0].id]);
   }, 30_000);
 });
 

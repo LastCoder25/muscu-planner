@@ -295,7 +295,22 @@
       v-model="ctlListOpen"
       :rows="ctlRoster"
       :advs="char.advList"
+      :reinforceable="reinforceable"
       @open="openFromList"
+      @reinforce="(p) => (quickId = p.id)"
+    />
+    <!-- ➕ Renfort direct depuis une case libre de la liste (cf. `QuickReinforceSheet`). -->
+    <QuickReinforceSheet
+      :poi="quickPoi"
+      :champs="freeSorted"
+      :champ-free="controlFreeSeats(quickPoi?.control)"
+      :mil-free="militiaFreeSeats(quickPoi?.control)"
+      :mil-home="milHome"
+      :militia-min="quickMilitiaMin"
+      :busy="ctlBusy"
+      @close="quickId = null"
+      @champion="quickChampion"
+      @militia="quickMilitia"
     />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
@@ -890,6 +905,7 @@ import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
+import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
 import { winClass, type PoiFact } from '@/lib/poiFacts';
@@ -2115,6 +2131,74 @@ const ctlCalls = computed(
     ctlRoster.value.filter((r) => r.status === 'imminent' || r.status === 'empty' || r.ready)
       .length,
 );
+/** ➕ LE RENFORT DIRECT depuis la liste (demandé : « cliquer sur un slot libre et envoyer un
+ *  renfort sans aller dans la gestion du lieu »). Un point l'accepte s'il a une place ET
+ *  quelqu'un pour la prendre — les MÊMES règles que la fiche (`controlFreeSeats` pour un
+ *  champion, `militiaFreeSeats` pour un milicien). */
+const reinforceable = computed(() =>
+  ctlRoster.value
+    .filter(
+      (r) =>
+        (controlFreeSeats(r.poi.control) > 0 && freeSorted.value.length > 0) ||
+        (militiaFreeSeats(r.poi.control) > 0 && milHome.value > 0),
+    )
+    .map((r) => r.poi.id),
+);
+/** Le point visé, relu sur la carte à chaque rendu : ses places changent dès qu'un renfort part. */
+const quickId = ref<string | null>(null);
+const quickPoi = computed(
+  () => char.row?.expedition_map?.pois.find((p) => p.id === quickId.value) ?? null,
+);
+const quickMilitiaMin = computed(() =>
+  quickPoi.value ? caravanLegMin(quickPoi.value, [], 0, travelMult.value) : 0,
+);
+async function quickChampion(advId: string) {
+  const uid = auth.user?.id;
+  const p = quickPoi.value;
+  const a = char.advList.find((x) => x.id === advId);
+  if (!uid || !p || !a || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.reinforceControlPoint(uid, p.id, [advId], Date.now());
+    if (why) {
+      $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
+      return;
+    }
+    const min = partyLegMin(p, [a], {
+      hero: false,
+      travelMult: travelMult.value,
+      gearSpeed: advGearRoles([a], char.advGearStock).speed,
+    });
+    $q.notify({
+      type: 'positive',
+      message: `🧭 ${a.name} en route — arrivée dans ${formatDurationMin(min)}`,
+    });
+    quickId.value = null;
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+async function quickMilitia() {
+  const uid = auth.user?.id;
+  const p = quickPoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.sendMilitiaToControl(uid, p.id, 1, Date.now());
+    if (why) {
+      $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
+      return;
+    }
+    $q.notify({
+      type: 'positive',
+      message: `🛡️ Un milicien en route — arrivée dans ${formatDurationMin(quickMilitiaMin.value)}`,
+    });
+    quickId.value = null;
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+
 function openFromList(p: Poi) {
   ctlListOpen.value = false;
   panToPoi(p);

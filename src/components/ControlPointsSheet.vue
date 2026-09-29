@@ -49,16 +49,21 @@
       </div>
       <!-- 👆 Toucher une tuile ouvre DIRECTEMENT la gestion du lieu (demandé) : elle ne se
            déplie plus. Ce qu'on y lisait (faction, assaut, renforts, garnison en détail) vit
-           sur la fiche du lieu, qui porte aussi les actions — un seul endroit. -->
-      <button
+           sur la fiche du lieu, qui porte aussi les actions — un seul endroit.
+           ⚠️ Une `div` au rôle de bouton, plus un `<button>` : une case libre de la garnison
+           EST un bouton (renfort direct), et un bouton ne peut pas en contenir un autre. -->
+      <div
         v-for="r in shownRows"
         :key="r.poi.id"
-        type="button"
+        role="button"
+        tabindex="0"
         class="cps-tile cps-row"
         :class="'st-' + r.status"
         :style="{ '--rk': isHeldControl(r.poi) ? HELD_COLOR : rankOf(r).color }"
         :aria-label="`${CONTROL_LABEL[r.kind]} — ouvrir la gestion`"
         @click="emit('open', r.poi)"
+        @keydown.enter.self.prevent="emit('open', r.poi)"
+        @keydown.space.self.prevent="emit('open', r.poi)"
       >
         <!-- 📐 Rangée 1 : icône, nom et statut sur la MÊME ligne médiane — l'icône n'est plus
              centrée sur toute la tuile (elle décrochait du titre dès que la colonne de droite
@@ -97,6 +102,24 @@
               <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
                 MILITIA_EMO
               }}</span>
+              <!-- 🧭 Un renfort en route occupe déjà sa place : la montrer libre inviterait à
+                   en envoyer un second. -->
+              <span v-else-if="s.kind === 'route'" class="mini route" title="Renfort en route"
+                >🧭</span
+              >
+              <!-- ➕ Une place libre ENVOIE un renfort, sans passer par la gestion du lieu
+                   (demandé). Grisée si personne ne peut partir (ni champion ni milicien). -->
+              <button
+                v-else-if="canReinforce(r)"
+                type="button"
+                class="mini free go"
+                :title="`Place ${i + 1} libre — envoyer un renfort`"
+                :aria-label="`Envoyer un renfort : ${CONTROL_LABEL[r.kind]}, place ${i + 1}`"
+                @click.stop="emit('reinforce', r.poi)"
+                @keydown.stop
+              >
+                ＋
+              </button>
               <span v-else class="mini free" :title="`Place ${i + 1} libre`">{{ i + 1 }}</span>
             </template>
           </span>
@@ -110,7 +133,7 @@
           <span v-else class="cps-yield">{{ CONTROL_YIELD[r.kind] }}</span>
         </span>
         <span class="cps-chev" aria-hidden="true">›</span>
-      </button>
+      </div>
     </div>
   </q-dialog>
 </template>
@@ -141,8 +164,17 @@ const props = defineProps<{
   modelValue: boolean;
   rows: ControlRosterRow[];
   advs: readonly Adventurer[];
+  /** Les points où un renfort peut partir MAINTENANT (une place et quelqu'un pour la
+   *  prendre) : leurs cases libres deviennent des boutons. Calculé par la page, avec la
+   *  règle du store (`controlFreeSeats` / `militiaFreeSeats`). */
+  reinforceable?: readonly string[];
 }>();
-const emit = defineEmits<{ 'update:modelValue': [boolean]; open: [Poi] }>();
+const emit = defineEmits<{
+  'update:modelValue': [boolean];
+  open: [Poi];
+  reinforce: [Poi];
+}>();
+const canReinforce = (r: ControlRosterRow) => !!props.reinforceable?.includes(r.poi.id);
 
 const STATUS: Record<ControlRosterStatus, string> = {
   enemy: '☠️ ennemi',
@@ -179,12 +211,18 @@ const advsOf = (ids: readonly string[]) =>
   });
 /** 🛡️ Les miliciens d'une garnison : ils n'existent pas dans le vivier (`advsOf` les ignore). */
 const milOf = (ids: readonly string[]) => ids.filter(isMilitiaId);
-type Slot = { kind: 'adv'; adv: Adventurer } | { kind: 'mil' } | { kind: 'free' };
-/** Les cases de la ligne : champions, puis miliciens, puis places libres, jusqu'à `seats`. */
+type Slot =
+  | { kind: 'adv'; adv: Adventurer }
+  | { kind: 'mil' }
+  | { kind: 'route' }
+  | { kind: 'free' };
+/** Les cases de la ligne : champions, miliciens, renforts en route, puis places libres,
+ *  jusqu'à `seats`. */
 const slotsOf = (r: ControlRosterRow): Slot[] => {
   const filled: Slot[] = [
     ...advsOf(r.garrison).map((adv) => ({ kind: 'adv' as const, adv })),
     ...milOf(r.garrison).map(() => ({ kind: 'mil' as const })),
+    ...r.reinforcing.map(() => ({ kind: 'route' as const })),
   ];
   const free = Math.max(0, r.seats - filled.length);
   return [...filled, ...Array.from({ length: free }, () => ({ kind: 'free' as const }))];
@@ -394,6 +432,30 @@ const isFull = (r: ControlRosterRow) =>
   font-size: 12px;
   color: var(--dim);
   background: transparent;
+  border-style: dashed;
+}
+/* ➕ Une place libre qui envoie un renfort : l'accent, et une cible plus large que la case
+   (un halo transparent), la case elle-même restant de 28 px pour tenir 5 sur une ligne. */
+.mini.free.go {
+  position: relative;
+  padding: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  cursor: pointer;
+}
+.mini.free.go::after {
+  content: '';
+  position: absolute;
+  inset: -8px -2px;
+}
+.mini.free.go:active {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.mini.route {
+  font-size: 14px;
+  opacity: 0.75;
   border-style: dashed;
 }
 .cps-chev {

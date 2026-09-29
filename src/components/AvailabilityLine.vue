@@ -42,9 +42,11 @@
     <span v-if="d.teamTotal" class="av-cell" :class="{ none: !d.teamFree }"
       ><span class="av-ico">🧭</span>{{ d.teamFree }}/{{ d.teamTotal }}</span
     >
-    <!-- 🛡️ Les miliciens postés sur des places fortes (ou en route) / tous ceux qui existent. -->
-    <span v-if="mil.total" class="av-cell" :class="{ none: !mil.posted }"
-      ><span class="av-ico">{{ MILITIA_EMO }}</span>{{ mil.posted }}/{{ mil.total }}</span
+    <!-- 🛡️ Les miliciens postés sur des places fortes (ou en route) / tous ceux qui existent,
+         puis le plafond de la Caserne (demandé : « assignés, total, et ce que je peux avoir »). -->
+    <span v-if="mil.total || mil.cap" class="av-cell" :class="{ none: !mil.posted }"
+      ><span class="av-ico">{{ MILITIA_EMO }}</span>{{ mil.posted }}/{{ mil.total
+      }}<span class="av-cap">·max {{ mil.cap }}</span></span
     >
     <span v-if="interactive" class="av-go">›</span>
   </component>
@@ -59,6 +61,7 @@ import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
 import { MILITIA_EMO, militiaCount } from '@/lib/militia';
+import { buildingLevel } from '@/lib/buildings';
 
 const props = defineProps<{
   /** L'horloge de l'écran hôte (il en a déjà une, on ne double pas le tick). */
@@ -113,7 +116,13 @@ const rankRows = computed(() =>
 );
 
 /** 🛡️ Miliciens postés (ou en route vers une place forte) / effectif total. */
-const mil = computed(() => militiaCount(char.row?.base?.militia, char.row?.expedition_map));
+const mil = computed(() =>
+  militiaCount(
+    char.row?.base?.militia,
+    char.row?.expedition_map,
+    buildingLevel(char.row?.buildings ?? [], 'barracks'),
+  ),
+);
 
 const title = computed(() => {
   const h = hero.value;
@@ -131,7 +140,7 @@ const title = computed(() => {
     parts.push(`${d.value.teamFree} équipe(s) libre(s) sur ${d.value.teamTotal}`);
   if (mil.value.total)
     parts.push(
-      `${mil.value.posted} milicien(s) posté(s) sur ${mil.value.total} (${mil.value.home} à la base)`,
+      `${mil.value.posted} milicien(s) posté(s) sur ${mil.value.total} (${mil.value.home} à la base) — ${mil.value.cap} au plus avec ta Caserne`,
     );
   return parts.join(' · ');
 });
@@ -184,6 +193,13 @@ const title = computed(() => {
   color: var(--d4, #ff6a45);
 }
 .av-cell.none {
+  color: var(--dim);
+}
+/* Le plafond de la Caserne, en retrait : c'est un repère, pas un effectif. */
+.av-cap {
+  margin-left: 2px;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--dim);
 }
 /* Par rang (demandé : « tout sur la même ligne et centré ») : héros, infirmerie, rangs et

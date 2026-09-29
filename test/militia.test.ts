@@ -166,13 +166,15 @@ describe('envoyer, rappeler', () => {
     const map = { pois: [p, point(10, 'garden')] } as unknown as ExpeditionMap;
     expect(militiaOnMap(map)).toBe(2);
     expect(militiaOfControl(p.control)).toEqual(['mil:1', 'mil:2']);
-    // 🛡️ La ligne des disponibilités : postés (ou en route) / total, base comprise.
-    expect(militiaCount({ home: 3, producedAt: 0, seq: 5 }, map)).toEqual({
+    // 🛡️ La ligne des disponibilités : postés (ou en route) / total, base comprise / plafond.
+    expect(militiaCount({ home: 3, producedAt: 0, seq: 5 }, map, 6)).toEqual({
       posted: 2,
       home: 3,
       total: 5,
+      cap: militiaCap(6),
     });
-    expect(militiaCount(null, null)).toEqual({ posted: 0, home: 0, total: 0 });
+    expect(militiaCap(6)).toBe(MILITIA.capBase + 2);
+    expect(militiaCount(null, null, 0)).toEqual({ posted: 0, home: 0, total: 0, cap: 0 });
   });
 });
 
