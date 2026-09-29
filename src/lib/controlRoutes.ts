@@ -243,6 +243,39 @@ export function garrisonChampionIds(map: ExpeditionMap | null | undefined, id: s
   return p.control.garrison.filter((x) => !isMilitiaId(x));
 }
 
+/** 🏰 Les champions de garnison PRÊTS À SORTIR, point par point (tenus seulement) : ni en
+ *  route vers leur point, ni blessés. ⚠️ SOURCE UNIQUE de l'écran d'envoi (`partyPool`) ET du
+ *  grisage de la carte : la carte grisait un lieu faute de champion libre à la BASE, alors
+ *  qu'une sortie depuis un point fixe pouvait l'attaquer (signalé par l'utilisateur). */
+export function readyGarrisons<A extends { id: string; hurtUntil?: number; busyUntil?: number }>(
+  map: ExpeditionMap | null | undefined,
+  advs: readonly A[],
+  now: number,
+): Map<string, A[]> {
+  const out = new Map<string, A[]>();
+  for (const p of map?.pois ?? []) {
+    if (p.control?.owner !== 'player') continue;
+    const ids = new Set(garrisonChampionIds(map, p.id));
+    const ready = advs.filter(
+      (a) => ids.has(a.id) && (a.hurtUntil ?? 0) <= now && (a.busyUntil ?? 0) <= now,
+    );
+    if (ready.length) out.set(p.id, ready);
+  }
+  return out;
+}
+
+/** 👥 Combien de champions peuvent partir vers `poiId` : ceux libres à la base, plus les
+ *  garnisons prêtes des AUTRES points tenus (on ne sort pas d'un point pour l'attaquer). */
+export function championsAbleToGo(
+  freeAtBase: number,
+  ready: ReadonlyMap<string, readonly unknown[]>,
+  poiId: string,
+): number {
+  let n = freeAtBase;
+  for (const [id, list] of ready) if (id !== poiId) n += list.length;
+  return n;
+}
+
 /**
  * 🏠 Une sortie RENTRE à son point à `at` : ceux qui ont encore une place y reprennent leur
  * poste (ils rejoignent la garnison comme un renfort arrivé — une attaque déjà due se résout

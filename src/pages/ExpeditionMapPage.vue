@@ -1279,7 +1279,9 @@ import {
   SWAP_BLOCK_LABEL,
   SWAP_MILITIA_FROM_BASE,
   TRANSFER_BLOCK_LABEL,
+  championsAbleToGo,
   legFromSpot,
+  readyGarrisons,
   swapBlocker,
   transferBlocker,
   transferSourcesFor,
@@ -1753,6 +1755,10 @@ const riskHero = computed(() => {
   );
 });
 const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
+/** 🏰 Les garnisons prêtes à sortir, point par point (grisage de la carte). */
+const readyGarrisonMap = computed(() =>
+  readyGarrisons(char.row?.expedition_map, char.advList, now.value),
+);
 /** ⚠️ Le MÊME vivier disponible, mais STABLE d'une seconde à l'autre : `freeAdvs` rend un
  *  nouveau tableau à chaque tick, et tout ce qui en dépend (pronostics de siège ~13 ms, % de
  *  victoire d'un camp) se recalculerait 60 fois par minute pour le même résultat. La clé est
@@ -2804,7 +2810,10 @@ function dimmed(p: Poi): boolean {
   const o = poiOffers(p, {
     heroAway: heroUnavailable.value,
     comptoirLevel: char.comptoirLevel,
-    advsAvailable: freeAdvs.value.length,
+    // ⚠️ Les champions libres à la base ET ceux prêts à sortir d'un point fixe : ne compter
+    // que la base grisait des lieux qu'une garnison pouvait attaquer (signalé). Même règle
+    // que l'écran d'envoi (`readyGarrisons`).
+    advsAvailable: championsAbleToGo(freeAdvs.value.length, readyGarrisonMap.value, p.id),
   });
   // 👥 Un lieu reste ouvert tant que le HÉROS SEUL ou une ÉQUIPE peut y aller (2026-09-21 :
   // les équipes remplacent les convois). Même règle que le test « ce qui est GRISÉ ».
