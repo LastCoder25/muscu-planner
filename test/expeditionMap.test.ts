@@ -48,6 +48,7 @@ import { playerCombatant, mulberry32 } from '@/lib/combat';
 import { resolveCamp, forceLootPreview } from '@/lib/camp';
 import { campSpecOf } from '@/lib/expedition';
 import { poiOffers } from '@/lib/caravan';
+import { SUPPLIES } from '@/lib/supplies';
 // 🗺️ Avant-poste 7 = l'ancienne carte fixe (rayon 64, 16 lieux + 6 failles) : ces tests
 // éprouvent la MÉCANIQUE de la carte, pas sa taille (cf. `revealRadius`, v0.1047).
 const OUT = 7;
@@ -210,7 +211,9 @@ describe('POI de récolte', () => {
   it('💠 le mana figure dans les pastilles de butin (sinon la boîte l’affiche vide)', () => {
     // C'est le défaut exact de la v0.680 : la boîte listait ses devises à la main, et une
     // épave affichait un butin VIDE. `haulPills` est la source unique des deux écrans.
-    expect(haulPills({ mana: 12 })).toEqual([{ emoji: '💠', n: 12 }]);
+    expect(haulPills({ mana: 12 }).map(({ emoji, n }) => ({ emoji, n }))).toEqual([
+      { emoji: '💠', n: 12 },
+    ]);
     expect(haulPills({ mana: 0 })).toEqual([]);
   });
 
@@ -878,23 +881,53 @@ describe('butin affiché — source unique des deux écrans', () => {
     // main (or / énergie / clé) et n'ont pas suivi l'ajout des POI de RÉCOLTE (v0.658).
     // Une épave ne montrait donc RIEN. ⚠️ Elle paie en OR depuis la v0.998, et la
     // ferraille n'a plus de pastille : une devise retirée ne s'affiche plus.
-    expect(haulPills({ gold: 87 })).toEqual([{ emoji: '🪙', n: 87 }]);
+    expect(haulPills({ gold: 87 }).map(({ emoji, n }) => ({ emoji, n }))).toEqual([
+      { emoji: '🪙', n: 87 },
+    ]);
     expect(haulPills({ scrap: 87 } as never)).toEqual([]);
-    expect(haulPills({ summonStones: 6 })).toEqual([{ emoji: '🔮', n: 6 }]);
+    expect(haulPills({ summonStones: 6 }).map(({ emoji, n }) => ({ emoji, n }))).toEqual([
+      { emoji: '🔮', n: 6 },
+    ]);
     // ⚠️ RÉÉCRIT : ce test exigeait que les pastilles AFFICHENT fragments et encre — il
     // verrouillait donc la promesse faite au joueur d'une monnaie qu'il ne peut pas
     // dépenser. `haulPills` ne connaît plus ces devises.
-    expect(haulPills({ summonStones: 6, key: 2 })).toEqual([
+    expect(haulPills({ summonStones: 6, key: 2 }).map(({ emoji, n }) => ({ emoji, n }))).toEqual([
       { emoji: '🔮', n: 6 },
       { emoji: '🗝️', n: 2 },
     ]);
   });
   it('n’affiche que ce qui a VRAIMENT été gagné, dans un ordre stable', () => {
-    expect(haulPills({ gold: 0, energy: 12, key: 1 })).toEqual([
+    expect(
+      haulPills({ gold: 0, energy: 12, key: 1 }).map(({ emoji, n }) => ({ emoji, n })),
+    ).toEqual([
       { emoji: '⚡', n: 12 },
       { emoji: '🗝️', n: 1 },
     ]);
     expect(haulPills({})).toEqual([]);
+    // ❓ Chaque pastille dit ce qu'elle est : un rapport l'affiche au toucher (demandé).
+    const all = haulPills({
+      gold: 1,
+      energy: 1,
+      summonStones: 1,
+      key: 1,
+      mana: 1,
+      tickets: 1,
+      seals: { kind: 'gear', rank: 1, n: 1 },
+      supplies: { potion: 1 },
+      runes: ['green'],
+    });
+    expect(all.map((p) => p.name)).toEqual([
+      'Or',
+      'Énergie',
+      'Pierres d’invocation',
+      'Clés du Labyrinthe',
+      'Pierres de mana',
+      'Tickets d’invocation',
+      'Sceaux d’objet',
+      SUPPLIES.potion.name,
+      'Rune verte',
+    ]);
+    expect(all.find((p) => p.emoji === SUPPLIES.potion.emoji)?.what).toBe(SUPPLIES.potion.what);
   });
 
   it('⚠️ un objet porté seulement par `items` (coffre du boss entre amis) s’affiche', () => {

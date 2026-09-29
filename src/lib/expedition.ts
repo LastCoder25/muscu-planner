@@ -795,6 +795,14 @@ export function depositMessages(
  *  les deux avaient été oubliées lors de l'ajout des POI de RÉCOLTE (v0.658) — une épave
  *  affichait donc un butin VIDE.
  *  Ajouter une devise ici la fait apparaître partout. */
+export interface HaulPill {
+  emoji: string;
+  n: number;
+  /** Ce que c'est, en clair — dit au toucher dans un rapport (demandé). */
+  name: string;
+  /** À quoi ça sert, quand la ressource le dit elle-même (consommables). */
+  what?: string;
+}
 export function haulPills(o: {
   gold?: number;
   energy?: number;
@@ -805,31 +813,43 @@ export function haulPills(o: {
   seals?: SealDrop;
   supplies?: SupplyStock;
   runes?: readonly RuneTier[];
-}): { emoji: string; n: number }[] {
+}): HaulPill[] {
   // 🎒 Les consommables à la suite : un par type, dans l'ordre du catalogue.
-  const supplies = SUPPLY_IDS.filter((id) => (o.supplies?.[id] ?? 0) > 0).map((id) => ({
-    emoji: SUPPLIES[id].emoji,
-    n: o.supplies![id]!,
-  }));
+  const supplies = SUPPLY_IDS.filter((id) => (o.supplies?.[id] ?? 0) > 0).map(
+    (id): HaulPill => ({
+      emoji: SUPPLIES[id].emoji,
+      n: o.supplies![id]!,
+      name: SUPPLIES[id].name,
+      what: SUPPLIES[id].what,
+    }),
+  );
+  const gear = o.seals?.kind === 'gear';
   return (
     [
-      { emoji: '🪙', n: o.gold ?? 0 },
-      { emoji: '⚡', n: o.energy ?? 0 },
-      { emoji: '🔮', n: o.summonStones ?? 0 },
-      { emoji: '🗝️', n: o.key ?? 0 },
-      { emoji: '💠', n: o.mana ?? 0 },
-      { emoji: '🎟️', n: o.tickets ?? 0 },
-      { emoji: o.seals?.kind === 'gear' ? '⚜️' : '🔱', n: o.seals?.n ?? 0 },
+      { emoji: '🪙', n: o.gold ?? 0, name: 'Or' },
+      { emoji: '⚡', n: o.energy ?? 0, name: 'Énergie' },
+      { emoji: '🔮', n: o.summonStones ?? 0, name: 'Pierres d’invocation' },
+      { emoji: '🗝️', n: o.key ?? 0, name: 'Clés du Labyrinthe' },
+      { emoji: '💠', n: o.mana ?? 0, name: 'Pierres de mana' },
+      { emoji: '🎟️', n: o.tickets ?? 0, name: 'Tickets d’invocation' },
+      {
+        emoji: gear ? '⚜️' : '🔱',
+        n: o.seals?.n ?? 0,
+        name: gear ? 'Sceaux d’objet' : 'Sceaux de champion',
+      },
     ] as const
   )
     .filter((p) => p.n > 0)
-    .map((p): { emoji: string; n: number } => ({ emoji: p.emoji, n: p.n }))
+    .map((p): HaulPill => ({ emoji: p.emoji, n: p.n, name: p.name }))
     .concat(supplies)
     .concat(
-      RUNE_TIERS.map((t) => ({
-        emoji: RUNE_INFO[t].emoji,
-        n: (o.runes ?? []).filter((x) => x === t).length,
-      })).filter((p) => p.n > 0),
+      RUNE_TIERS.map(
+        (t): HaulPill => ({
+          emoji: RUNE_INFO[t].emoji,
+          n: (o.runes ?? []).filter((x) => x === t).length,
+          name: RUNE_INFO[t].label,
+        }),
+      ).filter((p) => p.n > 0),
     );
 }
 

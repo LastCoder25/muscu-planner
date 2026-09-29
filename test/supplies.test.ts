@@ -103,7 +103,9 @@ describe('🎒 le butin : tout partout', () => {
     expect(seen.size).toBe(SUPPLY_IDS.length);
   });
   it('se voit dans les pastilles de butin', () => {
-    expect(haulPills({ supplies: { potion: 1 } })).toContainEqual({ emoji: '🧪', n: 1 });
+    expect(
+      haulPills({ supplies: { potion: 1 } }).map(({ emoji, n }) => ({ emoji, n })),
+    ).toContainEqual({ emoji: '🧪', n: 1 });
   });
 });
 

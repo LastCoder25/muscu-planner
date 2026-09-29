@@ -18,7 +18,7 @@ import { feedWhen } from './friendFeed';
 import type { Adventurer } from './adventurers';
 import { DISPEL_TEXT } from './raid';
 import type { Item } from './items';
-import type { OverflowReplay } from './expedition';
+import type { HaulPill, OverflowReplay } from './expedition';
 
 interface MissionCardMember {
   id: string;
@@ -48,7 +48,7 @@ export interface MissionCard {
   rank: string | null;
   win: boolean;
   verdict: string;
-  gains: { emoji: string; n: number }[];
+  gains: HaulPill[];
   loot: Omit<Item, 'id'>[];
   /** Objets partis au sac sans être décrits ici (l'arène en ramène beaucoup). */
   lootMore: number;

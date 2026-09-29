@@ -796,6 +796,21 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ).toBeNull();
       return html;
     };
+    // ❓ Toucher une ressource dit ce que c'est (demandé), dans une bulle.
+    let tip = '';
+    expect(
+      await mountIt(
+        MissionReportCard,
+        { card: msg(base), state: 'claim', now: Date.now() },
+        undefined,
+        undefined,
+        '/',
+        (h) => (tip = h),
+        (host) => host.querySelector<HTMLElement>('.gain')?.click(),
+      ),
+    ).toBeNull();
+    expect(tip).toContain('🪙 Or');
+    expect(tip).toContain('Construire et améliorer les bâtiments');
     // Un CAMP : pas de rejeu, le verbe d'un camp, le bouton d'encaissement.
     const camp = await render(msg(base), 'claim');
     expect(camp).not.toContain('class="replay"');

@@ -137,7 +137,9 @@ describe('🎟️ payer un tirage', () => {
   });
 
   it('les tickets s’affichent dans le butin d’un coffre', () => {
-    expect(haulPills({ gold: 5, tickets: 3 })).toContainEqual({ emoji: '🎟️', n: 3 });
+    expect(haulPills({ gold: 5, tickets: 3 }).map(({ emoji, n }) => ({ emoji, n }))).toContainEqual(
+      { emoji: '🎟️', n: 3 },
+    );
     expect(haulPills({ gold: 5 }).some((p) => p.emoji === '🎟️')).toBe(false);
   });
 });
