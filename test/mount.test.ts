@@ -2516,5 +2516,18 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       (h) => (empty = h),
     );
     expect(empty).toContain('Aucune armée repérée');
+    // Posée sous la carte (`inline`) : pas de dialogue, pas de bouton de fermeture.
+    let inl = '';
+    await mountIt(
+      AttacksSheet,
+      { modelValue: true, rows: [], inline: true },
+      undefined,
+      undefined,
+      '/',
+      (h) => (inl = h),
+    );
+    expect(inl).toContain('ats inline');
+    expect(inl).toContain('Aucune armée repérée');
+    expect(inl).not.toContain('Fermer');
   }, 30_000);
 });

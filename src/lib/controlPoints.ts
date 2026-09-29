@@ -103,8 +103,6 @@ export const CONTROL = {
    *  rendement décroissant — 1 → 3 inchangé (0,5 · 0,8 · 1), puis +0,15 par présent. Chaque
    *  personne ajoutée rapporte, jamais autant que la précédente. */
   garrisonShare: [0, 0.5, 0.8, 1, 1.15, 1.3] as readonly number[],
-  /** Réserve plafonnée : au-delà de 24 h sans récolte, la mine ne produit plus. */
-  storageMs: 24 * 3600_000,
   /** 🎯 Camp d'entraînement : chaque champion posté gagne l'XP d'une épreuve de son rang
    *  (`trialXpBase`) toutes les `trainHoursPerTrial` heures — plafonné au ★5 du rang JUSTE
    *  EN DESSOUS du héros (décision de l'utilisateur, `trainingCapLevel`). */
@@ -612,21 +610,17 @@ function unitsPerHour(p: Poi, n: number, playerLevel: number): number {
 /**
  * La production en réserve à `now`, dans l'unité du point, NON arrondie : ce qui était
  * mis de côté quand l'effectif a changé (`banked`), plus ce que l'effectif ACTUEL a produit
- * depuis — plafonnée à 24 h de production, arrêtée à l'heure de l'attaque.
+ * depuis — arrêtée à l'heure de l'attaque. ⚠️ SANS PLAFOND (2026-09-29, demandé : « supprime
+ * le plafond de 24 h ») : la production est versée toute seule (`autoCollectControls`), donc
+ * une absence ne doit rien coûter — tout ce qui a été produit pendant arrive au retour.
  */
 function stockUnits(p: Poi, now: number, playerLevel: number): number {
   const c = p.control;
   if (!c || c.owner !== 'player' || c.collectedAt === undefined) return 0;
   const until = Math.min(now, c.attackAt ?? now);
-  const storage = storageMsOf(c.kind);
-  const ms = Math.min(storage, Math.max(0, until - c.collectedAt));
+  const ms = Math.max(0, until - c.collectedAt);
   const rate = unitsPerHour(p, c.garrison.length, playerLevel);
-  const banked = c.banked ?? 0;
-  const cap =
-    c.kind === 'scriptorium'
-      ? Math.max(banked, RUNE_RESERVE)
-      : Math.max(banked, (rate * storage) / 3600_000);
-  return Math.min(cap, banked + (rate * ms) / 3600_000);
+  return (c.banked ?? 0) + (rate * ms) / 3600_000;
 }
 
 /** 🎯 L'XP la plus haute qu'un champion attend au camp (avant plafond, cf. `trainingRoom`),
@@ -674,24 +668,24 @@ const isPerChampKind = (k: ControlKind | undefined): k is 'training' => k === 't
  * champions n'arrivent pas en même temps — une valeur commune donnerait à un renfort arrivé
  * tard l'XP de ceux qui étaient là avant lui) : elle part de ce qu'il avait quand l'effectif
  * a changé (`perXp`) et ne court que tant qu'il est EN GARNISON — un renfort en route
- * n'apprend rien, un champion ramené garde ce qu'il a gagné jusqu'à la récolte. Plafonnée à
- * 24 h de production, arrêtée à l'heure de l'attaque. Les miliciens n'apprennent rien.
+ * n'apprend rien, un champion ramené garde ce qu'il a gagné jusqu'à la récolte. Elle court
+ * sans plafond de temps, arrêtée à l'heure de l'attaque. Les miliciens n'apprennent rien.
  */
 function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, number> {
   const c = p.control;
   if (!c || !isPerChampKind(c.kind) || c.owner !== 'player' || c.collectedAt === undefined)
     return {};
   const until = Math.min(now, c.attackAt ?? now);
-  const ms = Math.min(CONTROL.storageMs, Math.max(0, until - c.collectedAt));
+  const ms = Math.max(0, until - c.collectedAt);
   const rate = trainingXpPerHour(playerLevel);
-  const cap = (rate * CONTROL.storageMs) / 3600_000;
   // Lieu d'avant `perXp` : la réserve commune valait pour chaque champion posté.
   const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
   const out: Record<string, number> = { ...c.perXp };
   for (const id of c.garrison) {
     if (isMilitiaId(id)) continue;
     const b = out[id] ?? legacy;
-    out[id] = Math.min(Math.max(b, cap), b + (rate * ms) / 3600_000);
+    // ⚠️ Sans plafond de temps (2026-09-29) : c'est `trainingRoom` qui borne ce qu'il reçoit.
+    out[id] = b + (rate * ms) / 3600_000;
   }
   return out;
 }
@@ -732,17 +726,6 @@ export function campGear(
   return next.size ? stock.map((g) => next.get(g.id) ?? g) : stock;
 }
 
-/** Combien de temps de production un point garde en réserve. 24 h partout, sauf au
- *  Scriptorium : le temps d'une rune avec UN SEUL copiste (48 h) — une réserve plus courte
- *  l'empêchait de jamais finir. Sa réserve est en plus plafonnée à UNE rune (`RUNE_RESERVE`,
- *  dans `stockUnits`) : trois copistes n'en empilent pas deux. */
-function storageMsOf(kind: ControlKind): number {
-  return kind === 'scriptorium'
-    ? (CONTROL.runeHoursPerItem / shareOf(1)) * 3600_000
-    : CONTROL.storageMs;
-}
-/** 📜 Une seule rune attend d'être ramassée, quel que soit l'effectif. */
-const RUNE_RESERVE = 1;
 /** 📜 Le temps d'une rune pour `n` copistes (48 h à 1, 30 h à 2, 24 h à 3, ~18 h 28 à 5) —
  *  `null` sans copiste, qui ne produit rien. Même part que la production (`unitsPerHour`). */
 export function runeHoursFor(n: number): number | null {
@@ -799,12 +782,12 @@ export function controlDetectBoost(map: ExpeditionMap | null | undefined): numbe
   return b;
 }
 
-/** ⛲ Les pierres de mana en réserve à `now` (24 h de production au plus). 0 si non tenu. */
+/** ⛲ Les pierres de mana en réserve à `now`. 0 si non tenu. */
 export function controlManaStock(p: Poi, now: number, playerLevel: number): number {
   return p.control?.kind === 'mana' ? Math.floor(stockUnits(p, now, playerLevel) + 1e-9) : 0;
 }
 
-/** ⛏️ L'or en réserve à `now` (plafonné à `storageMs` de production). 0 si non tenu. */
+/** ⛏️ L'or en réserve à `now`. 0 si non tenu. */
 export function controlStock(p: Poi, now: number, playerLevel: number): number {
   return p.control?.kind === 'mine' ? Math.floor(stockUnits(p, now, playerLevel)) : 0;
 }
@@ -911,7 +894,7 @@ export function collectControl(
 /**
  * 📊 OÙ EN EST LA RÉCOLTE, en un mot et une jauge (2026-09-28, demandé : « l'avancement de la
  * récolte en bout de ligne — rune le %, or le montant »). `text` = ce qui attend, dans l'unité
- * du point ; `pct` (0..1) = la jauge : la réserve de 24 h pour ce qui s'accumule (or, XP), la
+ * du point ; `pct` (0..1) = la jauge : rien pour ce qui est versé au fil de l'eau (or, XP), la
  * PROCHAINE unité pour ce qui tombe à l'unité (consommable, rune). La tour ne stocke rien :
  * elle dit sa réduction de trajet, sans jauge. ⚠️ Lit `stockUnits`, la même réserve que la
  * récolte — l'étiquette ne peut pas annoncer autre chose que ce que « Récolter » verse.
@@ -943,15 +926,13 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   if (c.kind === 'mana') return { text: `💠 +${per(perH * 24)}/j`, pct: null };
   const units = stockUnits(p, now, playerLevel);
   const rate = perH;
-  const cap = Math.max(c.banked ?? 0, (rate * storageMsOf(c.kind)) / 3600_000);
-  const fill = cap > 0 ? Math.min(1, units / cap) : 0;
   switch (c.kind) {
     case 'garden': {
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
       // ⏳ Le temps restant avant le prochain (demandé : « le temps restant en plus du % »),
-      // au débit de la garnison actuelle — rien si la réserve est pleine ou sans jardinier.
-      const left = fill < 1 ? leftFor(1 - next, rate) : null;
+      // au débit de la garnison actuelle — rien sans jardinier.
+      const left = leftFor(1 - next, rate);
       const pct = `${Math.round(next * 100)} %${left ? ` · ${left}` : ''}`;
       return { text: whole > 0 ? `🎒 ${whole} · ${pct}` : `🎒 ${pct}`, pct: next };
     }
@@ -1045,8 +1026,6 @@ export function controlYieldCard(
   }
   const units = stockUnits(p, now, playerLevel);
   const rate = unitsPerHour(p, n, playerLevel);
-  const cap = Math.max(c.banked ?? 0, (rate * storageMsOf(c.kind)) / 3600_000);
-  const fill = cap > 0 ? Math.min(1, units / cap) : 0;
   switch (c.kind) {
     case 'mine':
     case 'mana': {
@@ -1068,7 +1047,7 @@ export function controlYieldCard(
     case 'garden': {
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
-      const left = fill < 1 ? leftFor(1 - next, rate) : null;
+      const left = leftFor(1 - next, rate);
       const every = gardenHoursFor(n);
       return {
         emoji: '🌿',
@@ -1077,17 +1056,13 @@ export function controlYieldCard(
           whole > 0
             ? `consommable${whole > 1 ? 's' : ''} prêt${whole > 1 ? 's' : ''}`
             : 'du prochain consommable',
-        pct: fill >= 1 ? 1 : next,
+        pct: next,
         gauge:
           idle ??
-          (fill >= 1
-            ? 'Réserve pleine : cueille pour que ça reprenne'
-            : left
-              ? `Prochain dans ${left}`
-              : null),
+          (left ? `Prochain dans ${left}` : null),
         rate: every ? `1 toutes les ${formatDuration(every * 3600_000)} · ${crew}` : crew,
         ready: whole > 0,
-        full: fill >= 1,
+        full: false,
       };
     }
     case 'scriptorium': {
@@ -1656,8 +1631,8 @@ export const HELD_COLOR = '#9a8f7e';
  * passages du cycle de vie de la carte : l'or et le mana au joueur, l'XP aux champions et à
  * leurs pièces, les consommables et les runes au stock. Un passage par minute au plus et par
  * point : l'or n'a pas besoin d'arriver à la seconde, et chaque passage est une écriture.
- * La tour de guet ne produit rien. ⚠️ Hors de l'app, la production court toujours (24 h au
- * plus, `CONTROL.storageMs`) et arrive d'un coup à la prochaine ouverture.
+ * La tour de guet ne produit rien. ⚠️ Hors de l'app, la production court toujours, SANS
+ * plafond (2026-09-29), et arrive d'un coup à la prochaine ouverture.
  */
 export const AUTO_COLLECT_MS = 60_000;
 export function autoCollectable(map: ExpeditionMap | null | undefined, now: number): Poi[] {
@@ -1728,6 +1703,18 @@ export function controlLootMessage(
 }
 
 /** 📬 Le rapport « prêt pour l'ascension » (champion ou pièce) né au camp d'entraînement. */
+/**
+ * 🔔 Le texte de la notification d'un rapport de place forte (2026-09-29, demandé : « pour les
+ * notif fais comme celles déjà présentes ») — une ligne `$q.notify`, comme les attaques
+ * repoussées ou reprises. Une seule définition : la carte et l'Aventure disent la même chose.
+ */
+export function controlNoticeText(m: ExpeditionMessage): string {
+  const title = m.title ?? '🏰 Place forte';
+  return m.id.startsWith('ascend_')
+    ? `${title} — l’ascension se fait au Panthéon.`
+    : `${title} — rapport dans ta boîte 📬`;
+}
+
 export function ascensionMessage(
   at: number,
   found: { champs: readonly Adventurer[]; gear: readonly AdvGear[] },

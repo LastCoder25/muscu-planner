@@ -52,10 +52,11 @@ describe('📜 le Scriptorium', () => {
     expect(at([], 100).prog).toBe(0);
   });
 
-  it('une seule rune attend d’être ramassée, quel que soit l’effectif', () => {
-    // ⚠️ Sans la ramasser, la suivante ne commence pas — même à trois copistes.
-    expect(at(['a', 'b', 'c'], 10 * 24)).toEqual({ n: 1, prog: 1 });
-    expect(at(['a'], 10 * 48)).toEqual({ n: 1, prog: 1 });
+  it('sans plafond : dix jours d’absence rendent dix jours de copie', () => {
+    // ⚠️ 2026-09-29 (demandé : « supprime le plafond de 24 h ») : les runes ne s’arrêtent
+    // plus à une seule en attente — tout ce qui a été copié arrive au retour.
+    expect(at(['a', 'b', 'c'], 10 * 24).n).toBe(10);
+    expect(at(['a'], 10 * 48).n).toBe(10);
   });
 
   it('ramasser rend la rune, à la couleur que permet le rang du HÉROS (un point tenu est neutre)', () => {

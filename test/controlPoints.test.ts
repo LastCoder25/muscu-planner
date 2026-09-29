@@ -106,10 +106,10 @@ describe('🏰 les quatre points', () => {
     expect(advAscensionReady(grantAdvXp(adv, room, 100))).toBe(true);
     expect(advAscensionReady(grantAdvXp(adv, room - 1, 100))).toBe(false);
   });
-  it('🎯 l’XP du camp s’accumule par champion, plafonnée à 24 h', () => {
+  it('🎯 l’XP du camp s’accumule par champion, sans plafond de temps', () => {
     const { p } = held('training');
     expect(trainingStock(p, 6 * H, 30)).toBeGreaterThan(0);
-    expect(trainingStock(p, 24 * H, 30)).toBe(trainingStock(p, 40 * H, 30));
+    expect(trainingStock(p, 40 * H, 30)).toBeGreaterThan(trainingStock(p, 24 * H, 30));
   });
   it('🌿 le jardin cueille 2 consommables par jour à un jardinier, plus vite à plusieurs', () => {
     expect(gardenStock(held('garden', ['a0']).p, 24 * H)).toBe(2);
@@ -178,13 +178,14 @@ describe('🏰 prise, production, reprise', () => {
     // Et ce n'est pas un rendez-vous fixe : le tirage varie.
     expect(new Set(at(7).map((x) => Math.round(x / H))).size).toBeGreaterThan(5);
   });
-  it('produit de l’or, plafonné à 24 h, arrêté à l’attaque, plus avec plus de monde', () => {
+  it('produit de l’or, sans plafond de temps, arrêté à l’attaque, plus avec plus de monde', () => {
     const m = captureControl(mapAt(3), ID, ['a0', 'a1', 'a2'], 0, 7);
     const p = { ...ctl(m), control: { ...ctl(m).control!, attackAt: 9e15 } };
     expect(controlStock(p, 0, 30)).toBe(0);
     const s6 = controlStock(p, 6 * H, 30);
     expect(s6).toBeGreaterThan(0);
-    expect(controlStock(p, 24 * H, 30)).toBe(controlStock(p, 40 * H, 30));
+    // Sans plafond (2026-09-29) : 72 h rendent trois fois 24 h (à l'arrondi près).
+    expect(Math.abs(controlStock(p, 72 * H, 30) - 3 * controlStock(p, 24 * H, 30))).toBeLessThanOrEqual(3);
     const solo = { ...p, control: { ...p.control, garrison: ['a0'] } };
     expect(controlStock(solo, 6 * H, 30)).toBeLessThan(s6);
     // Jusqu'à 5 : chaque présent de plus rapporte, toujours moins que le précédent.

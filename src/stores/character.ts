@@ -300,6 +300,7 @@ import {
   autoCollectable,
   newAscensions,
   controlLootMessage,
+  controlNoticeText,
   ascensionMessage,
   controlTravelMult,
   controlDetectBoost,
@@ -4287,16 +4288,17 @@ export const useCharacterStore = defineStore('character', () => {
     now: number,
     playerLevel: number,
     activeDays7: number,
-  ): Promise<ExpeditionMessage[]> {
+  ): Promise<{ attacks: ExpeditionMessage[]; notices: string[] }> {
+    const none = { attacks: [], notices: [] };
     const cur = row.value;
-    if (!cur?.expedition_map) return [];
+    if (!cur?.expedition_map) return none;
     knownActiveDays7 = activeDays7;
     // 🏠 Les retours ARRIVÉS d'abord, dans leur propre écriture : la suite (renforts,
     // reprises) se fera au tick suivant, sur l'état relu.
     const home = settleHome(cur, now);
     if (home) {
       if (tickMayWrite(cur)) await persist(userId, home);
-      return [];
+      return none;
     }
     // 🏰 Les renforts ARRIVÉS rejoignent d'abord leur garnison (ceux arrivés avant l'attaque
     // combattent avec elle, les autres non).
@@ -4320,11 +4322,10 @@ export const useCharacterStore = defineStore('character', () => {
     if (!due.length) {
       if (settled !== cur.expedition_map) {
         if (tickMayWrite(cur)) await persist(userId, { expedition_map: settled });
-        return [];
+        return none;
       }
       // 🏰 Rien d'autre à régler : ce que les points tenus ont produit est versé tout seul.
-      await autoCollectControls(userId, now, playerLevel);
-      return [];
+      return { attacks: [], notices: await autoCollectControls(userId, now, playerLevel) };
     }
     let map = settled;
     let advs = advList.value;
@@ -4489,7 +4490,7 @@ export const useCharacterStore = defineStore('character', () => {
       gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {};
     // Calculé sur un état qu'une écriture en vol a peut-être changé : on rejouera au tick
     // suivant (la reprise est déterministe, rien n'est perdu à attendre une seconde).
-    if (!tickMayWrite(cur)) return [];
+    if (!tickMayWrite(cur)) return none;
     await persist(userId, {
       expedition_map: map,
       messages: x.messages,
@@ -4501,7 +4502,7 @@ export const useCharacterStore = defineStore('character', () => {
       adventurers: roster,
     });
     x.play();
-    return msgs;
+    return { attacks: msgs, notices: [] };
   }
 
   /**
@@ -4573,11 +4574,15 @@ export const useCharacterStore = defineStore('character', () => {
    * sauf ce qui mérite qu'on le sache : un consommable, une rune, ou un champion (ou une de
    * ses pièces) qui devient prêt pour l'ascension — un bandeau ET un rapport dans la boîte.
    */
-  async function autoCollectControls(userId: string, now: number, playerLevel: number) {
+  async function autoCollectControls(
+    userId: string,
+    now: number,
+    playerLevel: number,
+  ): Promise<string[]> {
     const cur = row.value;
-    if (!cur?.expedition_map) return;
+    if (!cur?.expedition_map) return [];
     const points = autoCollectable(cur.expedition_map, now);
-    if (!points.length) return;
+    if (!points.length) return [];
     const before = advList.value;
     const stock0 = cur.adv_gear?.stock ?? [];
     let map = cur.expedition_map;
@@ -4601,7 +4606,7 @@ export const useCharacterStore = defineStore('character', () => {
       const m = controlLootMessage(p, now, h.supplies, h.runes);
       if (m) msgs.push(m);
     }
-    if (map === cur.expedition_map) return;
+    if (map === cur.expedition_map) return [];
     const gearNext = trainWornGear(before, advs, stock);
     const found = newAscensions(before, advs, stock0, gearNext);
     const owners = new Map<string, string>();
@@ -4609,7 +4614,7 @@ export const useCharacterStore = defineStore('character', () => {
       for (const g of list) owners.set(g.id, advs.find((a) => a.id === aid)?.name ?? '');
     const asc = ascensionMessage(now, found, owners);
     if (asc) msgs.push(asc);
-    if (!tickMayWrite(cur)) return;
+    if (!tickMayWrite(cur)) return [];
     const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
     await persist(userId, {
       expedition_map: map,
@@ -4621,17 +4626,8 @@ export const useCharacterStore = defineStore('character', () => {
       ...(advs !== before ? { adventurers: advs } : {}),
       ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
     });
-    const fx = useGameFx();
-    for (const m of msgs)
-      fx.celebrate({
-        kind: 'generic',
-        emoji: m.id.startsWith('ascend_') ? '🌟' : m.runes?.length ? '📜' : '🎒',
-        title: m.title ?? 'Place forte',
-        subtitle: m.id.startsWith('ascend_')
-          ? 'L’ascension se fait au Panthéon'
-          : 'Rapport dans ta boîte 📬',
-        quiet: true,
-      });
+    // 🔔 L'écran les notifie comme les attaques (`$q.notify`), pas le store.
+    return msgs.map(controlNoticeText);
   }
 
   /** 🏰 Récolte ce qu'un point de contrôle tenu a produit (or, XP, consommables). */
