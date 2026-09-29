@@ -302,6 +302,44 @@ export function startParty(
   };
 }
 
+/** 🏰 Qui RESTE en garnison si l'assaut prend le point : les choisis (sinon l'escorte),
+ *  coupés aux places — la MÊME règle que le rapport (`stay`) et `captureControl`. */
+export function assaultStayers(
+  escortIds: readonly string[],
+  stayIds: readonly string[] | undefined,
+  seats: number,
+): string[] {
+  const picked = stayIds?.filter((id) => escortIds.includes(id)) ?? [];
+  return (picked.length ? picked : [...escortIds]).slice(0, Math.max(0, seats));
+}
+
+/** 🏰 Un assaut de point fixe GAGNÉ : le retour passe à celui de ceux qui rentrent
+ *  (`returnLegs.won`, 0 = personne). Rend la MÊME référence sinon (perdu, ou pas un assaut). */
+export function shortenWonReturn<T extends ActiveExpedition>(v: T): T {
+  if (!v.returnLegs || !v.outcome.win) return v;
+  const returnAt = v.midAt + Math.max(0, Math.round(v.returnLegs.won)) * 60_000;
+  return returnAt < v.returnAt ? { ...v, returnAt } : v;
+}
+
+/** Les champions encore en route du voyage (retour prévu à `oldAt`) rentrent désormais à
+ *  `newAt`. Ceux déjà postés (`busyUntil` 0) ne bougent pas. Même référence si rien. */
+export function rescheduleReturners(
+  advs: Adventurer[],
+  ids: readonly string[],
+  oldAt: number,
+  newAt: number,
+): Adventurer[] {
+  if (oldAt === newAt) return advs;
+  const set = new Set(ids);
+  let changed = false;
+  const out = advs.map((a) => {
+    if (!set.has(a.id) || a.busyUntil !== oldAt) return a;
+    changed = true;
+    return { ...a, busyUntil: newAt };
+  });
+  return changed ? out : advs;
+}
+
 /** Un groupe parti SANS le héros (colonne `characters.parties`, migr. 0077). ⚠️ Un groupe
  *  AVEC le héros vit dans `expedition`, comme toute expédition héros : un seul voyage héros
  *  à la fois. L'`id` distingue plusieurs groupes en route. */
@@ -365,7 +403,8 @@ export function settleParties(
         box = next;
         fresh.push(msg);
       }
-      q = { ...p, reported: true };
+      // 🏰 Assaut pris : ceux qui ne restent pas rentrent à leur propre pas.
+      q = shortenWonReturn({ ...p, reported: true });
       changed = true;
     }
     if (now >= q.returnAt) {

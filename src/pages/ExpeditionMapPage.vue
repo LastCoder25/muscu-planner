@@ -909,6 +909,7 @@ import {
   mapTravelPoint,
   warbandAt,
   tripTimeLabel,
+  tripLegs,
   voyageProgress,
   poiCombatant,
   simulateArena,
@@ -941,7 +942,12 @@ import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
-import { controlReturnNote as returnNote, winClass, type PoiFact } from '@/lib/poiFacts';
+import {
+  controlReturnNote as returnNote,
+  controlReturnValue,
+  winClass,
+  type PoiFact,
+} from '@/lib/poiFacts';
 import { usePoiFilters } from '@/composables/usePoiFilters';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
@@ -1936,6 +1942,7 @@ const partiesOnMap = computed(() =>
       origin: g.origin,
       at: drawnAt(g),
       prog: voyageProgress(g, now.value),
+      legs: tripLegs(g, now.value),
     })),
 );
 /**
@@ -2039,6 +2046,7 @@ const trips = computed(() => {
       withHero: true,
       members: a.outcome.party?.escort ?? [],
       haul: expeHaul(a.outcome),
+      legs: tripLegs(a, now.value),
       title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
@@ -2055,6 +2063,7 @@ const trips = computed(() => {
       withHero: g.hero,
       members: g.members,
       haul: g.haul,
+      legs: g.legs,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
     });
   }
@@ -2516,6 +2525,9 @@ const poiFacts = computed<PoiFact[]>(() => {
           label: 'Retour',
           go: true,
           ...leg(partyLeg.value, controlReturnNote.value ?? ''),
+          ...(partySize.value
+            ? { value: controlReturnValue(partyLeg.value, partyWonLeg.value) }
+            : {}),
         },
       );
     else
@@ -2886,6 +2898,7 @@ const {
   partyRoad,
   partyWin,
   partyLeg,
+  partyWonLeg,
   partyMin,
   partyRisk,
   partySendBlock,
@@ -2930,7 +2943,13 @@ const {
 /** 🏰 Qui rentre d'un assaut sur un point fixe, et en combien de temps (`controlReturnNote`). */
 const controlReturnNote = computed(() =>
   selected.value?.control?.owner === 'enemy' && partyTarget.value && partySize.value
-    ? returnNote(partyLeg.value, partyHeroOn.value, partyAdvs.value.length, stayCap.value)
+    ? returnNote(
+        partyLeg.value,
+        partyWonLeg.value,
+        partyHeroOn.value,
+        partyAdvs.value.length,
+        stayCap.value,
+      )
     : null,
 );
 const booting = ref(true);
