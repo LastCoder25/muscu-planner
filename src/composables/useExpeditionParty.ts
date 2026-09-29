@@ -22,7 +22,7 @@ import {
 import { partyRoadOdds, partyWinChance } from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
-import { COMBINED_BLOCK_LABEL, byReach, combinedBlocker } from '@/lib/combinedAttack';
+import { COMBINED_BLOCK_LABEL, byReach, combinedBlocker, wingOriginId } from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
@@ -419,7 +419,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     if (!combined.value || !selected.value) return null;
     const b = combinedBlocker(
       selected.value,
-      wingPlan.value.map((w) => ({ originId: w.id, members: w.ids, hero: w.hero })),
+      wingPlan.value.map((w) => ({ originId: wingOriginId(w.id), members: w.ids, hero: w.hero })),
     );
     return b ? COMBINED_BLOCK_LABEL[b] : null;
   });
@@ -603,7 +603,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
       const refused = combined.value
         ? await char.sendCombinedAttack(uid, poi, {
             wings: wingPlan.value.map((w) => ({
-              originId: w.id === 'base' ? null : w.id,
+              originId: wingOriginId(w.id),
               escortIds: w.ids,
               hero: w.hero ? heroForParty.value : null,
             })),

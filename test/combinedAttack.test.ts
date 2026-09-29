@@ -5,6 +5,8 @@ import {
   attackParticipants,
   attackSettled,
   attackWingVoyages,
+  BASE_WING_ID,
+  wingOriginId,
   combinedBlocker,
   heroInAttack,
   normalizeAttacks,
@@ -84,6 +86,26 @@ describe('combinedBlocker', () => {
   it('chaque départ envoie quelqu’un', () => {
     expect(combinedBlocker(target, [w(null, [], true), w('p', [])])).toBe('emptyWing');
     expect(combinedBlocker(target, [w(null, [], true), w('p', ['b'])])).toBeNull();
+  });
+  // 🐞 Signalé : « le bouton est grisé » sur une attaque combinée avec le héros. L'écran
+  // nomme la base « base » dans son plan ; la règle attend `null`. `wingOriginId` est la
+  // SEULE traduction, lue par la vérification ET l'envoi.
+  it('le plan de l’écran (« base » + un point) avec le héros peut partir', () => {
+    expect(wingOriginId(BASE_WING_ID)).toBeNull();
+    expect(wingOriginId('pt1')).toBe('pt1');
+    const plan = [
+      { id: BASE_WING_ID, ids: ['a'], hero: true },
+      { id: 'pt1', ids: ['c1'], hero: false },
+    ];
+    const wings = plan.map((p) => w(wingOriginId(p.id), p.ids, p.hero));
+    expect(combinedBlocker(target, wings)).toBeNull();
+    // Sans la traduction, c'était le défaut : le héros « partait » d'un point nommé « base ».
+    expect(
+      combinedBlocker(
+        target,
+        plan.map((p) => w(p.id, p.ids, p.hero)),
+      ),
+    ).toBe('heroFar');
   });
 });
 

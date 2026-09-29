@@ -102,6 +102,14 @@ export function byReach<T extends { id: string; legMin: number }>(rows: readonly
     .map((x) => x.r);
 }
 
+/** Le groupe de la BASE, tel que l'écran le nomme dans son plan. */
+export const BASE_WING_ID = 'base';
+/** 🧭 L'origine d'un groupe pour les règles et le store : la base n'est PAS un point fixe,
+ *  elle vaut `null`. ⚠️ SOURCE UNIQUE de cette traduction — l'écran la faisait pour l'envoi
+ *  mais pas pour la vérification : dès que le héros était de l'attaque, `combinedBlocker`
+ *  croyait qu'il partait d'un point (« le héros part de la base ») et grisait le bouton. */
+export const wingOriginId = (id: string): string | null => (id === BASE_WING_ID ? null : id);
+
 /** Pourquoi une attaque combinée ne peut pas partir (hors règles d'une équipe ordinaire). */
 export type CombinedBlock = 'fewWings' | 'twice' | 'heroFar' | 'emptyWing' | 'moving';
 export const COMBINED_BLOCK_LABEL: Record<CombinedBlock, string> = {

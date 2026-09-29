@@ -778,17 +778,15 @@
           <details class="sh-rules">
             <summary>ⓘ Règles de cette expédition</summary>
             <p v-if="selectedCamp" class="sh-note">
-              Sans le héros : de l’or (et des pierres chez les morts-vivants). En cas de défaite, les champions tombés partent à
-              l’infirmerie ; le héros, lui, rentre sans butin.
+              Sans le héros : de l’or (et des pierres chez les morts-vivants). En cas de défaite,
+              les champions tombés partent à l’infirmerie ; le héros, lui, rentre sans butin.
             </p>
             <p v-else-if="!teamOnly" class="sh-note">
               Des gardes tiennent le lieu : il faut les abattre pour récolter. Repoussée, l’équipe
               ne ramène rien et les champions tombés partent à l’infirmerie. Sur la route, des
               bandits peuvent tendre une embuscade — plus l’équipe est complète, mieux elle tient.
             </p>
-            <p v-else class="sh-note">
-              Une faille ne rend que du 💠, jamais d’objet.
-            </p>
+            <p v-else class="sh-note">Une faille ne rend que du 💠, jamais d’objet.</p>
           </details>
           <p
             v-if="partyRisk && partyRisk.worsens"
@@ -808,7 +806,15 @@
             💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
             un lieu d’un rang plus bas.
           </p>
+          <!-- ⚠️ TOUS les autres refus sont dits aussi (signalé : « le bouton est grisé » sans
+               raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
+          <p v-else-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
+            ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
+          </p>
           <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>
+          <p v-else-if="partySize && !progress.ready.value" class="sh-away">
+            ⏳ Chargement de ta progression…
+          </p>
           <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
           <div class="send-bar">
             <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
