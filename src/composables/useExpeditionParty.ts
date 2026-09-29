@@ -375,7 +375,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   );
   /** 🗿 Combien de champions on peut engager — `partyCapFor` (le Panthéon), jamais une copie
    *  de la règle : l'écran doit empêcher exactement ce que le store refuse. */
-  const partyMax = computed(() => partyCapFor(cap.value, selected.value, partyHeroOn.value));
+  const partyMax = computed(() => partyCapFor(cap.value, selected.value));
   /** 👥 Le partage d'XP de l'équipe cochée — `missionXpSplit`, la règle du moteur. */
   const partyXpSplit = computed(
     () => missionXpSplit(partyAdvs.value.length) * (partyHeroOn.value ? 1 : SOLO_XP_MULT),

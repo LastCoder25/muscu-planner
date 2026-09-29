@@ -235,6 +235,7 @@ import {
 } from '@/lib/advGear';
 import {
   partySendBlocker,
+  denForce,
   suppliesBlocker,
   supplyTarget,
   PARTY_SEND_BLOCK_LABEL,
@@ -3283,7 +3284,9 @@ export const useCharacterStore = defineStore('character', () => {
     // par son incursion (attrition, gardien, mana). ⚠️ EXPLICITE, et non « camp sinon faille » :
     // le jour où `PARTY_TARGETS` accueille un troisième type, il sera REFUSÉ ici au lieu
     // d’être résolu en silence comme une incursion.
-    const spec = campSpecOf(poi);
+    // 🐺 Une tanière : la bête prend la force du groupe envoyé (`denForce`).
+    const baseSpec = campSpecOf(poi);
+    const spec = baseSpec ? denForce(poi, baseSpec, escort.length, !!hero) : null;
     const outcome = isRiftPoi(poi)
       ? resolveIncursion({ poi, escort, road, hero, seed, now, pantheonLevel: pantheonLevel.value })
       : isWarbandPoi(poi)

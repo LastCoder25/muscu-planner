@@ -6,11 +6,13 @@
 import { describe, expect, it } from 'vitest';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveCamp } from '@/lib/camp';
-import { campBodyCount } from '@/lib/camp';
+import { campBodyCount, campWinPct } from '@/lib/camp';
 import { poiDifficultyLevel } from '@/lib/expedition';
 import {
   CARAVAN,
   DEN_XP_MULT,
+  HERO_PARTY_WORTH,
+  partyAllies,
   missionXp,
   refAdvGear,
   refChampionAdv,
@@ -27,7 +29,8 @@ import {
   ruinsSeals,
   type Poi,
 } from '@/lib/expedition';
-import { partyCapFor, partySendBlocker } from '@/lib/party';
+import { denForce, partyCapFor, partySendBlocker } from '@/lib/party';
+import { partyWinChance } from '@/lib/partyForecast';
 import { characterRank } from '@/lib/characterRank';
 import { refFighter } from '@/lib/proceduralContent';
 import type { Adventurer } from '@/lib/adventurers';
@@ -227,16 +230,41 @@ describe('🐺 la tanière', () => {
     });
     expect(out.party!.foes).toBe(1);
   });
-  it('deux places au plus — le héros en prend deux', () => {
+  it('plus de plafond propre : seul le Panthéon borne le groupe', () => {
     const p = poi('den');
-    expect(partyCapFor(10, p)).toBe(2);
-    expect(partyCapFor(10, p, true)).toBe(0);
-    expect(partyCapFor(10, poi('camp'))).toBe(10);
-    expect(partySendBlocker(p, 3, false, 5, 10, 0.5)).toBe('denFull');
-    expect(partySendBlocker(p, 1, true, 5, 10, 0.5)).toBe('denFull');
-    expect(partySendBlocker(p, 2, false, 5, 10, 0.5)).toBeNull();
-    expect(partySendBlocker(p, 0, true, 5, 10, 0.5)).toBeNull();
+    expect(partyCapFor(10, p)).toBe(10);
+    expect(partySendBlocker(p, 5, false, 5, 10, 0.5)).toBeNull();
+    expect(partySendBlocker(p, 3, true, 5, 10, 0.5)).toBeNull();
+    expect(partySendBlocker(p, 11, false, 5, 10, 0.5)).toBe('tooMany');
   });
+  it('la bête grossit à la taille du groupe — le héros compte pour deux, 2 au moins', () => {
+    const p = poi('den');
+    const base = campSpecOf(p)!;
+    expect(denForce(p, base, 1, false).size).toBe(2);
+    expect(denForce(p, base, 2, false).size).toBe(2);
+    expect(denForce(p, base, 5, false).size).toBe(5);
+    expect(denForce(p, base, 3, true).size).toBe(3 + HERO_PARTY_WORTH);
+    // Un camp ne grossit pas : sa force vient de son id.
+    const c = poi('camp');
+    const cs = campSpecOf(c)!;
+    expect(denForce(c, cs, 8, true)).toBe(cs);
+  });
+  it('envoyer plus de monde ne gagne pas le duel d’avance', () => {
+    // Mesuré (v0.1302) : bête FIXE → 89-100 % dès 3 champions ; bête qui grossit → 73-100 %
+    // à toute taille, comme un duo. Le groupe se renforce, la bête aussi.
+    const p = poi('den', { id: 'den_x', level: 45 });
+    const base = campSpecOf(p)!;
+    const allies = (n: number) => partyAllies(team(n, 45), { advGear: refAdvGear(45, n) }, null);
+    const duo = campWinPct(p, denForce(p, base, 2, false), allies(2), 120);
+    const six = campWinPct(p, denForce(p, base, 6, false), allies(6), 120);
+    const sixFixed = campWinPct(p, base, allies(6), 120);
+    expect(sixFixed).toBeGreaterThan(0.97);
+    expect(six).toBeLessThan(0.95);
+    expect(Math.abs(six - duo)).toBeLessThan(0.3);
+    // Le % AFFICHÉ (partyWinChance) affronte la MÊME bête que le combat.
+    const shown = partyWinChance(p, team(6, 45), { advGear: refAdvGear(45, 6) }, null, 0, 120);
+    expect(shown!).toBeLessThan(0.95);
+  }, 60000);
   it('beaucoup d’XP — sur une victoire seulement', () => {
     // Champion au niveau de la tanière : ni prime de danger ni rendement décroissant. Une
     // victoire vaut alors DEN_XP_MULT fois le socle, une défaite sa part (sans le multiplicateur).

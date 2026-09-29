@@ -24,7 +24,6 @@ import {
   isRiftPoi,
   isWarbandPoi,
   poiForceOf,
-  DEN_MAX_PARTY,
   VEIN_MAX_CHAMPIONS,
   dwellMsFor,
   buildMessage,
@@ -136,16 +135,33 @@ export function suppliesBlocker(ids: readonly SupplyId[], t: SupplyTarget): stri
  *  l'écran et le store l'appellent tous deux à travers `partySendBlocker`. */
 export function partyCapFor(
   engage: number,
-  /** 🐺 Le lieu visé : une tanière n'accueille que `DEN_MAX_PARTY` places. */
+  /** Le lieu visé : un filon plafonne à `VEIN_MAX_CHAMPIONS`. */
   poi?: Pick<Poi, 'type'> | null,
-  /** Le héros est du groupe : il prend `HERO_PARTY_WORTH` places dans une tanière. */
-  hero = false,
 ): number {
   const panth = Math.max(0, Math.floor(engage));
   // 💎 Un filon : 3 champions au plus (le héros n'y va pas, cf. `partyHeroBlocker`).
   if (poi?.type === 'vein') return Math.min(panth, VEIN_MAX_CHAMPIONS);
-  if (poi?.type !== 'den') return panth;
-  return Math.min(panth, Math.max(0, DEN_MAX_PARTY - (hero ? HERO_PARTY_WORTH : 0)));
+  return panth;
+}
+
+/**
+ * 🐺 LA BÊTE D'UNE TANIÈRE GROSSIT AVEC LE GROUPE (2026-09-29, décision de l'utilisateur :
+ * plus de plafond de 2 places). Sa force vaut le poids du groupe envoyé — un champion compte 1,
+ * le héros `HERO_PARTY_WORTH` —, jamais moins que sa force de base (2). Envoyer plus de monde
+ * ne rend donc pas le duel gagné d'avance : il reste disputé à toute taille, et l'XP ×3 se
+ * partage au-delà de 3 membres (`missionXpSplit`).
+ * ⚠️ SOURCE UNIQUE du combat (store) et du pronostic (`partyWinChance`) : l'un sans l'autre,
+ * l'écran annoncerait un % contre une bête que le combat ne fait pas affronter.
+ */
+export function denForce<S extends { size: number }>(
+  poi: Pick<Poi, 'type'>,
+  spec: S,
+  champions: number,
+  hero: boolean,
+): S {
+  if (poi.type !== 'den') return spec;
+  const weight = Math.max(0, champions) + (hero ? HERO_PARTY_WORTH : 0);
+  return weight > spec.size ? { ...spec, size: weight } : spec;
 }
 
 /** Pourquoi une ÉQUIPE ne peut pas partir — `null` s'il le peut.
@@ -158,7 +174,6 @@ export type PartySendBlock =
   | 'empty'
   | 'slots'
   | 'tooMany'
-  | 'denFull'
   | 'hopeless'
   | 'controlEmpty'
   | 'controlHeld'
@@ -193,8 +208,6 @@ export function partySendBlocker(
   if (!hero && slotsFree <= 0) return 'slots';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
   if (escortCount > partyCapFor(cap)) return 'tooMany';
-  // 🐺 LA TANIÈRE : deux places, le héros en prend deux.
-  if (escortCount > partyCapFor(cap, poi, hero)) return 'denFull';
   // 💀 PERDU D'AVANCE (demandé par l'utilisateur) : aucune victoire sur tout l'échantillon
   // de pronostic. ⚠️ Le seuil est le ZÉRO STRICT, et c'est délibéré — la mesure rejoue le
   // VRAI combat, donc « 0 sur 40 » veut dire qu'aucune graine n'a jamais vu ce groupe
@@ -209,7 +222,6 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   empty: 'l’équipe est vide',
   slots: 'tous les créneaux d’équipe de l’Avant-poste sont pris',
   tooMany: 'trop de champions pour ton Panthéon',
-  denFull: 'une tanière n’accueille que 2 champions (ton héros en vaut 2)',
   controlEmpty: 'il faut au moins un champion pour occuper le point — le héros, lui, rentre',
   controlHeld: 'ce point n’est pas à prendre (déjà à toi, ou une équipe y marche)',
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',

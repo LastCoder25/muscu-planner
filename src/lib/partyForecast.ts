@@ -1,7 +1,7 @@
 import { campWinPct } from './camp';
 import { partyAllies, resolveCaravan, type EscortKit, type PartyHero } from './caravan';
 import { HARVEST_TYPES, isRiftPoi, isWarbandPoi, poiForceOf, type Poi } from './expedition';
-import { partyForecastSeed } from './party';
+import { denForce, partyForecastSeed } from './party';
 import { estimateInterception, incursionWinPct } from './rift';
 import type { Adventurer } from './adventurers';
 import { supplyFx } from './supplies';
@@ -45,7 +45,9 @@ export function partyWinChance(
   // ⚔️ L'interception prend l'escorte BRUTE : elle refond le groupe elle-même.
   if (isWarbandPoi(poi)) return estimateInterception(poi, escort, road, hero, samples);
   // 🛡️ Un lieu de récolte GARDÉ se bat comme un petit camp — même estimateur.
-  const spec = poiForceOf(poi);
+  // 🐺 Une tanière : la bête a la force du groupe (`denForce`), comme au combat.
+  const base = poiForceOf(poi);
+  const spec = base ? denForce(poi, base, escort.length, !!hero) : null;
   const guards = spec ? campWinPct(poi, spec, allies, samples, fx.guardMult) : null;
   // 🛣️ UNE RÉCOLTE SANS LE HÉROS VOYAGE COMME UN CONVOI (`resolveHarvestParty`) : sa
   // « réussite » = les gardes abattus ET aucune embuscade PERDUE sur la route. Ne compter que
@@ -62,12 +64,7 @@ export function partyWinChance(
  * toujours PAIRE (store `sendParty`) : on ne rejoue jamais la route qui aura lieu.
  * Le Panthéon et le niveau du joueur ne jouent que sur l'XP et l'or, jamais sur l'issue.
  */
-function roadClearChance(
-  poi: Poi,
-  escort: Adventurer[],
-  road: EscortKit,
-  samples = 40,
-): number {
+function roadClearChance(poi: Poi, escort: Adventurer[], road: EscortKit, samples = 40): number {
   const n = Math.max(1, samples);
   let clear = 0;
   for (let s = 0; s < n; s++) {
