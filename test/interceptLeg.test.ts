@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { interceptLeg } from '@/lib/party';
+import { interceptLeg, interceptTooLate, meetAll } from '@/lib/party';
 import { EXPE, travelOneWayMin, warbandAt, type Poi } from '@/lib/expedition';
 
 const T0 = 1_700_000_000_000;
@@ -71,5 +71,34 @@ describe('⚔️ interceptLeg — on va là où on CROISERA la bande', () => {
     const r = interceptLeg(camp, T0, leg);
     expect(r.poi).toBe(camp);
     expect(r.legMin).toBe(leg(camp));
+  });
+});
+
+describe('⚔️⏱️ interceptTooLate — on ne part pas croiser une armée déjà arrivée', () => {
+  const slow = (p: Poi) => leg(p) * 50; // une équipe qui n'arrivera jamais à temps
+  it('bande de faille (sans armée de campagne) : trop tard si on ne la croise pas avant son arrivée', () => {
+    const now = T0 + 20 * H; // 4 h avant qu'elle atteigne la ville
+    const b = warbandAt(band(), now);
+    expect(b.army).toBeUndefined();
+    const r = interceptLeg(b, now, slow);
+    expect(interceptTooLate(b, now, r.legMin)).toBe(true);
+  });
+  it('à temps : la rencontre a lieu avant son arrivée, on peut partir', () => {
+    const now = T0 + 2 * H;
+    const b = warbandAt(band(), now);
+    const r = interceptLeg(b, now, leg);
+    expect(now + r.legMin * 60_000).toBeLessThan(b.expiresAt);
+    expect(interceptTooLate(b, now, r.legMin)).toBe(false);
+  });
+  it('attaque combinée : trop tard si tous ne la rejoignent pas avant son arrivée', () => {
+    const now = T0 + 20 * H;
+    const b = warbandAt(band(), now);
+    const m = meetAll(b, now, [leg, slow]);
+    expect(m.joined).toBe(false);
+    expect(interceptTooLate(b, now, m.min)).toBe(true);
+  });
+  it('un lieu IMMOBILE n’est jamais « trop tard », même s’il expire avant l’arrivée', () => {
+    const camp: Poi = { ...band(), id: 'c1', type: 'camp', from: undefined };
+    expect(interceptTooLate(camp, camp.expiresAt, 60)).toBe(false);
   });
 });

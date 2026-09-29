@@ -17,6 +17,7 @@ import {
   partyLegMin,
   partySendBlocker,
   interceptLeg,
+  interceptTooLate,
   meetAll,
   supplyTarget,
 } from '@/lib/party';
@@ -38,7 +39,7 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import type { Combatant } from '@/lib/combat';
-import { isFieldArmyPoi, type Poi } from '@/lib/expedition';
+import { isWarbandPoi, type Poi } from '@/lib/expedition';
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
 
@@ -526,8 +527,8 @@ export function useExpeditionParty(ctx: PartyCtx) {
     const m = meetInfo.value;
     if (
       m &&
-      isFieldArmyPoi(selected.value) &&
-      (!m.joined || coarseNow.value + m.min * 60_000 >= selected.value.expiresAt)
+      ((isWarbandPoi(selected.value) && !m.joined) ||
+        interceptTooLate(selected.value, coarseNow.value, m.min))
     )
       return 'trop tard : l’armée atteindra sa cible avant que tous la rejoignent';
     return null;
@@ -609,16 +610,22 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** Pourquoi le groupe ne peut pas partir — la MÊME règle que le store (`partySendBlocker`). */
   const partySendBlock = computed(() =>
     selected.value
-      ? partySendBlocker(
-          selected.value,
-          partyAdvs.value.length,
-          partyHeroOn.value,
-          cap.value,
-          // 💀 Le 🎯 % DÉJÀ affiché juste au-dessus : on ne laisse pas partir un groupe qui
-          // ne peut pas gagner. ⚠️ Le MÊME nombre que le pronostic — deux estimations
-          // finiraient par dire « 0 % » d'un côté et laisser partir de l'autre.
-          partyGuardWin.value,
-        )
+      ? // ⚔️⏱️ Une armée en marche qu'on n'interceptera pas avant son arrivée : la MÊME règle
+        // que le store (`interceptTooLate`), sur l'aller annoncé juste au-dessus.
+        !combined.value &&
+        partySize.value > 0 &&
+        interceptTooLate(selected.value, coarseNow.value, partyLeg.value)
+        ? ('tooLate' as const)
+        : partySendBlocker(
+            selected.value,
+            partyAdvs.value.length,
+            partyHeroOn.value,
+            cap.value,
+            // 💀 Le 🎯 % DÉJÀ affiché juste au-dessus : on ne laisse pas partir un groupe qui
+            // ne peut pas gagner. ⚠️ Le MÊME nombre que le pronostic — deux estimations
+            // finiraient par dire « 0 % » d'un côté et laisser partir de l'autre.
+            partyGuardWin.value,
+          )
       : null,
   );
   const canSendPartyNow = computed(
@@ -692,6 +699,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     if (!partySize.value) return 'Choisis ton groupe';
     // ⚠️ Le bouton DIT le refus, il ne se contente pas d'être gris.
     if (partySendBlock.value === 'hopeless') return '💀 Perdu d’avance';
+    if (partySendBlock.value === 'tooLate') return '⏱️ Trop tard';
     if (!teamOnly.value) return `🧺 Envoyer l’équipe (${partySize.value})`;
     return selectedRift.value
       ? `🌀 Entrer dans la faille (${partySize.value})`
