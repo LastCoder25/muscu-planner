@@ -22,7 +22,7 @@ import { siegeDetail } from '@/lib/reportDetail';
 import { createApp, h, nextTick, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
-import { advGradeBadge, engageCap } from '@/lib/adventurers';
+import { advGradeBadge, advXpToNext, engageCap } from '@/lib/adventurers';
 
 /** Monte un composant pour de vrai et rend l'erreur de setup s'il y en a une. */
 async function mountIt(
@@ -1652,7 +1652,7 @@ describe('📊 barre d’étoile au retour de mission', () => {
       gold: 1e9,
       seals: { champion: { 1: 5 }, gear: {} },
       adventurers: [
-        { id: 'pret', name: 'Orsène', seed: 3, path: ['guerrier'], level: 10, xp: 0 },
+        { id: 'pret', name: 'Orsène', seed: 3, path: ['guerrier'], level: 10, xp: advXpToNext(10) },
         // Léa est AUSSI à ★★★★★, mais n'y arrive pas par cette mission : pas de bouton.
         ...ROW.adventurers.map((x) => (x.id === 'a1' ? { ...x, level: 10 } : x)),
       ],

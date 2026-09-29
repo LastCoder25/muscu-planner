@@ -12,7 +12,7 @@ import {
   gearAscentOffer,
 } from '@/lib/ascension';
 import { advGearRankCap, makeAdvGear, type AdvGear } from '@/lib/advGear';
-import type { Adventurer } from '@/lib/adventurers';
+import { advXpToNext, type Adventurer } from '@/lib/adventurers';
 
 // ⬆️ L'offre d'ascension proposée dans l'animation de progression (2026-09-28) : elle doit
 // dire EXACTEMENT ce que le store appliquerait — même refus, même coût.
@@ -26,6 +26,8 @@ const adv = (level: number, path = ['guerrier'], gear?: Adventurer['gear']): Adv
   xp: 0,
   ...(gear ? { gear } : {}),
 });
+/** Au plafond ET ★5 plein. */
+const pret = (): Adventurer => ({ ...adv(10), xp: advXpToNext(10) });
 const piece = (level: number): AdvGear => ({
   id: 'p',
   ...makeAdvGear({ lineage: 'guerrier', slot: 'weapon', rank: 'commun', grade: 'B' }),
@@ -38,10 +40,11 @@ describe('⬆️ l’offre d’ascension d’un champion', () => {
 
   it('rien avant ★★★★★ : pas de bouton à une échéance lointaine', () => {
     expect(championAscentOffer(adv(9), ctx)).toBeNull();
+    expect(championAscentOffer(adv(10), ctx)).toBeNull(); // plafond atteint, ★5 à moitié
   });
 
   it('à ★★★★★ : le rang visé, le coût du store, les sceaux possédés', () => {
-    const o = championAscentOffer(adv(10), ctx)!;
+    const o = championAscentOffer(pret(), ctx)!;
     expect(o.next).toBe(1);
     expect(o.cost).toEqual(ascensionCost(1));
     expect(o.have).toBe(5);
@@ -55,8 +58,8 @@ describe('⬆️ l’offre d’ascension d’un champion', () => {
       { ...ctx, seals: emptySeals() },
       { ...ctx, pantheonLevel: 10 },
     ]) {
-      const o = championAscentOffer(adv(10), c)!;
-      const b = ascensionBlocker(adv(10), c)!;
+      const o = championAscentOffer(pret(), c)!;
+      const b = ascensionBlocker(pret(), c)!;
       expect(o.block).toBe(b);
       expect(o.why).toBe(ASCENSION_BLOCK_LABEL[b]);
     }

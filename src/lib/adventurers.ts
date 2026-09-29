@@ -1723,7 +1723,7 @@ export function advProgressOf(
     // ⚠️ Le ★5 tombe AVANT le blocage (niveau 9 puis 10) : buter sur le plafond ne change
     // donc plus d'étoile, et une annonce lue sur les seules étoiles le taisait.
     const ascendReady =
-      advNextAscension(a) != null && a.level >= advAscensionCap(a) && b.level < advAscensionCap(a);
+      advAscensionReady(a) && !advAscensionReady(b);
     if (ap.tier <= av.tier && !ascendReady) continue;
     out.push({
       id: a.id,
@@ -1848,7 +1848,7 @@ export function advXpTracks(
       advRankProgress(a),
     );
     const ascendReady =
-      advNextAscension(a) != null && a.level >= advAscensionCap(a) && b.level < advAscensionCap(a);
+      advAscensionReady(a) && !advAscensionReady(b);
     out.push({
       id: a.id,
       name: a.name,
@@ -2272,6 +2272,18 @@ export function ascensionRankAt(level: number): number {
 export function advAscensionCap(adv: Adventurer): number {
   const r = advAscendedRank(adv);
   return r >= CHARACTER_RANKS.length - 1 ? ADV_MAX_LEVEL : rankStartLevel(r + 1) - 1;
+}
+
+/** Prêt pour l'ascension : son ★5 est PLEIN — il a atteint le plafond du rang ouvert (niveau
+ *  10, 20, …) ET terminé l'XP de ce niveau. ⚠️ Le ★5 couvre DEUX niveaux (9 et 10) : juger sur
+ *  le seul niveau déclarait « prêt » un champion dont la barre ★5 n'était qu'à moitié
+ *  (signalé : Brontès, niveau 20 avec 19 XP). SOURCE UNIQUE : l'annonce, la Guilde, le
+ *  bouton et le refus du store lisent tous cette règle. */
+export function advAscensionReady(adv: Adventurer): boolean {
+  const cap = advAscensionCap(adv);
+  return (
+    advNextAscension(adv) != null && adv.level >= cap && Math.max(0, adv.xp) >= advXpToNext(cap)
+  );
 }
 
 /** Le rang que la PROCHAINE ascension ouvrirait, ou `null` s'il n'y en a plus. */

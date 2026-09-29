@@ -22,7 +22,7 @@ import {
   trainingStock,
   seatsOf,
 } from '@/lib/controlPoints';
-import { advXpToNext } from '@/lib/adventurers';
+import { advAscensionReady, advXpToNext, grantAdvXp } from '@/lib/adventurers';
 import { rankStartLevel } from '@/lib/characterRank';
 import { EXPE, createMap, advanceWorld, revealRadius } from '@/lib/expedition';
 import { poiOffers, refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
@@ -98,6 +98,13 @@ describe('🏰 les quatre points', () => {
     expect(trainingRoom(adv, 5, 100)).toBe(0);
     // Le Panthéon borne aussi.
     expect(trainingRoom(adv, 25, adv.level)).toBe(0);
+  });
+  it('🎯 bloqué par son ascension, le camp laisse REMPLIR son ★5 — et pas une goutte de plus', () => {
+    const adv = { ...refChampionAdv(9, 0), id: 'a1', level: 9, xp: 0, ascended: 0 };
+    const room = trainingRoom(adv, 25, 100);
+    expect(room).toBe(advXpToNext(9) + advXpToNext(10));
+    expect(advAscensionReady(grantAdvXp(adv, room, 100))).toBe(true);
+    expect(advAscensionReady(grantAdvXp(adv, room - 1, 100))).toBe(false);
   });
   it('🎯 l’XP du camp s’accumule par champion, plafonnée à 24 h', () => {
     const { p } = held('training');

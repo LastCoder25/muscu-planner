@@ -643,6 +643,11 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
   );
   let need = -Math.max(0, adv.xp);
   for (let l = adv.level; l < target; l++) need += advXpToNext(l);
+  // Plafond d'ascension atteint et plus bas que les autres : il faut aussi REMPLIR son ★5
+  // (l'XP du niveau plafond) pour être prêt, cf. `advAscensionReady`.
+  const asc = advAscensionCap(adv);
+  if (target === asc && asc < Math.min(trainingCapLevel(heroLevel), Math.max(1, pantheonLevel)))
+    need += advXpToNext(asc);
   return Math.max(0, need);
 }
 

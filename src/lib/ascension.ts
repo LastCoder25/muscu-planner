@@ -15,7 +15,7 @@ import { buildingUpgradeCost } from './buildings';
 import { CHARACTER_RANKS, rankStartLevel } from './characterRank';
 import { advGearAtRankCap, advGearNextRank, advGearRankCap, type AdvGear } from './advGear';
 import { RARITY_RANK, type Rarity } from './items';
-import { advAscensionCap, advNextAscension, type Adventurer } from './adventurers';
+import { advAscensionReady, advNextAscension, type Adventurer } from './adventurers';
 import type { SealDrop } from './expedition';
 import { GACHA } from './gacha';
 
@@ -131,7 +131,7 @@ export function ascensionBlocker(
 ): AscensionBlock | null {
   const next = advNextAscension(adv);
   if (next == null) return 'top';
-  if (adv.level < advAscensionCap(adv)) return 'notReady';
+  if (!advAscensionReady(adv)) return 'notReady';
   // ⚠️ Ouvrir un rang que le Panthéon ne laisse pas atteindre ne servirait à rien : le
   // niveau resterait bloqué, et les sceaux seraient dépensés pour rien.
   if (rankStartLevel(next) > ctx.pantheonLevel) return 'pantheon';
@@ -263,7 +263,7 @@ export function championAscentOffer(
   ctx: { pantheonLevel: number; seals: Seals; gold: number },
 ): AscentOffer<AscensionBlock> | null {
   const next = advNextAscension(adv);
-  if (next == null || adv.level < advAscensionCap(adv)) return null;
+  if (next == null || !advAscensionReady(adv)) return null;
   const b = ascensionBlocker(adv, ctx);
   return {
     next,

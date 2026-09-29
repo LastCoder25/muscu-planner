@@ -41,6 +41,9 @@ const adv = (level: number, ascended?: number, xp = 0): Adventurer => ({
   ...(ascended != null ? { ascended } : {}),
 });
 
+/** Au plafond ET ★5 plein : l’XP du niveau plafond est terminée. */
+const pret = (): Adventurer => adv(10, 0, advXpToNext(10));
+
 describe('le plafond d’ascension', () => {
   it('sans ascension, le rang ouvert est celui du niveau actuel — aucun champion ne régresse', () => {
     for (const L of [1, 10, 11, 20, 35, 99]) {
@@ -128,27 +131,32 @@ describe('ce qui bloque', () => {
   const ctx = { pantheonLevel: 100, seals: plenty(), gold: 1e12 };
 
   it('permis quand tout y est', () => {
-    expect(ascensionBlocker(adv(10, 0), ctx)).toBeNull();
+    expect(ascensionBlocker(pret(), ctx)).toBeNull();
   });
 
   it('pas avant ★★★★★', () => {
     expect(ascensionBlocker(adv(9, 0), ctx)).toBe('notReady');
   });
 
+  it('au plafond mais ★5 à moitié : pas encore (signalé : Brontès, niveau 20 avec 19 XP)', () => {
+    expect(ascensionBlocker(adv(10, 0), ctx)).toBe('notReady');
+    expect(ascensionBlocker(adv(10, 0, advXpToNext(10) - 1), ctx)).toBe('notReady');
+  });
+
   it('pas au-delà de ce que le Panthéon laisse atteindre', () => {
-    expect(ascensionBlocker(adv(10, 0), { ...ctx, pantheonLevel: 10 })).toBe('pantheon');
-    expect(ascensionBlocker(adv(10, 0), { ...ctx, pantheonLevel: 11 })).toBeNull();
+    expect(ascensionBlocker(pret(), { ...ctx, pantheonLevel: 10 })).toBe('pantheon');
+    expect(ascensionBlocker(pret(), { ...ctx, pantheonLevel: 11 })).toBeNull();
   });
 
   it('les sceaux doivent être DU RANG visé', () => {
     const wrong = addSeals(emptySeals(), 'champion', 2, 99);
-    expect(ascensionBlocker(adv(10, 0), { ...ctx, seals: wrong })).toBe('seals');
+    expect(ascensionBlocker(pret(), { ...ctx, seals: wrong })).toBe('seals');
     const gear = addSeals(emptySeals(), 'gear', 1, 99);
-    expect(ascensionBlocker(adv(10, 0), { ...ctx, seals: gear })).toBe('seals');
+    expect(ascensionBlocker(pret(), { ...ctx, seals: gear })).toBe('seals');
   });
 
   it('l’or', () => {
-    expect(ascensionBlocker(adv(10, 0), { ...ctx, gold: 0 })).toBe('gold');
+    expect(ascensionBlocker(pret(), { ...ctx, gold: 0 })).toBe('gold');
   });
 
   it('au sommet', () => {
@@ -199,15 +207,15 @@ describe('⬆️ on SAIT qu’un champion attend son ascension', () => {
   it('la Base compte les ascensions PAYABLES, avec les mêmes refus que les boutons', () => {
     const seals = addSeals(emptySeals(), 'champion', 1, 5);
     const ctx = { pantheonLevel: 100, seals, gold: 1e12 };
-    expect(readyAscensions([adv(10, 0), adv(5, 0)], [], ctx)).toBe(1);
-    expect(readyAscensions([adv(10, 0)], [], { ...ctx, gold: 0 })).toBe(0);
-    expect(readyAscensions([adv(10, 0)], [], { ...ctx, seals: emptySeals() })).toBe(0);
+    expect(readyAscensions([pret(), adv(5, 0)], [], ctx)).toBe(1);
+    expect(readyAscensions([pret()], [], { ...ctx, gold: 0 })).toBe(0);
+    expect(readyAscensions([pret()], [], { ...ctx, seals: emptySeals() })).toBe(0);
   });
 
   it('le Panthéon montre QUI peut monter — les mêmes que la pastille compte', () => {
     const seals = addSeals(emptySeals(), 'champion', 1, 5);
     const ctx = { pantheonLevel: 100, seals, gold: 1e12 };
-    const ready = { ...adv(10, 0), id: 'pret' };
+    const ready = { ...pret(), id: 'pret' };
     const early = { ...adv(5, 0), id: 'tot' };
     const ids = readyAscensionIds([ready, early], [], ctx);
     expect([...ids.champions]).toEqual(['pret']);
