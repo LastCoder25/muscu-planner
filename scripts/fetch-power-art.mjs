@@ -57,11 +57,14 @@ const style = (sujet) =>
 
 /** 🛡️ Le MILICIEN n'est pas un objet : son portrait suit le style des champions (buste,
  *  fond sombre). ⚠️ Sur Juggernaut (Horde), le sujet passe en tête, sinon il est ignoré. */
+// ⚠️ LE CADRAGE PASSE EN TÊTE : placé après le sujet (premier jet), Horde dessinait le
+// milicien EN PIED, lance à la main — les objets tenus appellent le corps entier. Le sujet
+// ne cite donc plus d'arme, et le buste ouvre le prompt, comme les champions (visage serré).
 const portraitStyle = (sujet) =>
-  `${sujet}, anime key visual, 2D anime art style, flat cel shaded colors, bold black outlines, ` +
-  'drawn in flat anime cel shading, not photorealistic, official character art for a japanese ' +
-  'fantasy rpg, head and shoulders portrait, headroom above the head, centered, ' +
-  'looking at viewer, dark gradient background';
+  `close-up head and shoulders portrait of ${sujet}, face filling the frame, looking at viewer, ` +
+  'anime key visual, 2D anime art style, flat cel shaded colors, bold black outlines, ' +
+  'not photorealistic, official character portrait for a japanese fantasy rpg, ' +
+  'dark gradient background';
 const PORTRAITS = new Set(['milicien']);
 
 /** Slug (nom du fichier) → l'objet qu'on voit. La RELIQUE est un artefact qui porte le
@@ -114,8 +117,8 @@ const SUBJECTS = {
 
   // ── LE MILICIEN (portrait) ──
   milicien:
-    'a young village militiaman in a dented iron kettle helmet and a padded gambeson, holding a ' +
-    'wooden spear, a round wooden shield on his back, determined and a little nervous, ' +
+    'a young village militiaman wearing a dented iron kettle helmet and a padded gambeson ' +
+    'with a leather strap across the chest, short stubble, determined and a little nervous, ' +
     'ordinary face, simple commoner, not a hero',
 };
 
@@ -136,7 +139,9 @@ if (!client && !REKEY && !HORDE) {
   console.error('✖ clé absente : dépose-la dans .pollinations-token (ou passe --horde)');
   process.exit(1);
 }
-const seedFor = (slug) => seedOf('power:' + slug) % 100000;
+// `--seed=N` décale la graine : tirer plusieurs candidats puis garder le meilleur.
+const SEED_SHIFT = Number((process.argv.find((a) => a.startsWith('--seed=')) ?? '--seed=0').slice(7));
+const seedFor = (slug) => (seedOf('power:' + slug) + SEED_SHIFT) % 100000;
 
 async function write(slug, brut) {
   const out = await sharp(brut)
