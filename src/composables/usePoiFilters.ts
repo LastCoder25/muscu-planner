@@ -6,6 +6,7 @@
 // défaut. La règle des types (affiché · seul · masqué) vit dans `lib/poiTypeFilter.ts`.
 import { computed, ref, type Ref } from 'vue';
 import { poiRankCounts } from '@/lib/poiRank';
+import { isHeldControl } from '@/lib/controlPoints';
 import {
   cycleType,
   effectiveTypeFilter,
@@ -52,7 +53,9 @@ function save(key: string, v: unknown) {
 /** `rankIndexOf` : le rang d'un lieu — celui que la page a déjà mis en cache. */
 export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number) {
   const hiddenRanks = ref<Set<number>>(loadHiddenRanks());
-  const rankOptions = computed(() => poiRankCounts(pois.value));
+  // 🏰 Un lieu fixe TENU n'a plus de rang (couleur neutre, rang masqué) : il ne compte dans
+  // aucune pastille de rang, et aucun filtre de rang ne le cache (le filtre de type, oui).
+  const rankOptions = computed(() => poiRankCounts(pois.value.filter((p) => !isHeldControl(p))));
   function toggleRank(r: number) {
     const next = new Set(hiddenRanks.value);
     if (next.has(r)) next.delete(r);
@@ -67,7 +70,7 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
   }
 
   const typeFilter = ref<TypeFilter>(loadTypeFilter());
-  const rankShown = (p: Poi) => !hiddenRanks.value.has(rankIndexOf(p));
+  const rankShown = (p: Poi) => isHeldControl(p) || !hiddenRanks.value.has(rankIndexOf(p));
   // Le compte d'une puce de type ne parle que des lieux des rangs affichés.
   const typeChips = computed(() => typeOptions(pois.value, (p) => rankShown(p as Poi)));
   function cycleTypeChip(t: PoiType) {
