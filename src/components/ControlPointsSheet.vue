@@ -127,6 +127,11 @@
                 :on="false"
                 readonly
               />
+              <!-- 🛡️ Les miliciens : anonymes, une tuile chacun (comme sur la carte). -->
+              <div v-for="id in milOf(r.garrison)" :key="id" class="mil-tile">
+                <span class="mil-emo">{{ MILITIA_EMO }}</span>
+                <span class="mil-name">{{ MILITIA_NAME }}</span>
+              </div>
             </div>
             <p v-else class="cps-line dim">Personne.</p>
             <template v-if="r.reinforcing.length">
@@ -140,6 +145,11 @@
                   readonly
                   :reason="`arrivée dans ${formatDuration(x.inMs)}`"
                 />
+                <div v-for="x in milReinfOf(r)" :key="x.id" class="mil-tile">
+                  <span class="mil-emo">{{ MILITIA_EMO }}</span>
+                  <span class="mil-name">{{ MILITIA_NAME }}</span>
+                  <span class="mil-sub">🧭 {{ formatDuration(x.inMs) }}</span>
+                </div>
               </div>
             </template>
           </template>
@@ -171,6 +181,7 @@ import {
   type ControlRosterStatus,
 } from '@/lib/controlPoints';
 import { formatDuration } from '@/lib/duration';
+import { MILITIA_EMO, MILITIA_NAME, isMilitiaId } from '@/lib/militia';
 import type { Poi } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 import { FACTION_EMOJI, FACTION_LABEL } from '@/lib/raid';
@@ -224,6 +235,9 @@ const advsOf = (ids: readonly string[]) =>
     const a = byId.value.get(id);
     return a ? [a] : [];
   });
+/** 🛡️ Les miliciens d'une garnison : ils n'existent pas dans le vivier (`advsOf` les ignore). */
+const milOf = (ids: readonly string[]) => ids.filter(isMilitiaId);
+const milReinfOf = (r: ControlRosterRow) => r.reinforcing.filter((x) => isMilitiaId(x.id));
 const reinfOf = (r: ControlRosterRow) =>
   r.reinforcing.flatMap((x) => {
     const adv = byId.value.get(x.id);
@@ -438,6 +452,31 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
+}
+.mil-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 64px;
+  padding: 6px 4px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+.mil-emo {
+  font-size: 22px;
+  line-height: 1;
+}
+.mil-name {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.mil-sub {
+  font-size: 10.5px;
+  color: var(--dim);
 }
 .cps-go {
   margin-top: 10px;

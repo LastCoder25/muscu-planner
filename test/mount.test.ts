@@ -35,6 +35,9 @@ async function mountIt(
   /** Reçoit le HTML rendu — ⚠️ c'est la seule façon de voir qu'un fixture périmé fait
    *  rendre un ÉTAT VIDE : sans ça, le montage reste vert et le test devient creux. */
   html?: (out: string) => void,
+  /** Un geste avant la lecture du HTML (déplier une ligne, par exemple) : ce qui ne se rend
+   *  qu'après un clic resterait sinon invisible au test. */
+  act?: (host: HTMLElement) => void,
 ) {
   const pinia = createPinia();
   setActivePinia(pinia);
@@ -65,6 +68,10 @@ async function mountIt(
   // ⚠️ Un tour de rendu : ce qu'un écran pose dans `onMounted` (un rejeu qui saute à son
   // état final, par exemple) n'est peint qu'au flush suivant.
   await nextTick();
+  if (act) {
+    act(host);
+    await nextTick();
+  }
   html?.(host.innerHTML);
   // ⚠️ ON DÉMONTE, et ce n'est pas de l'hygiène : `HoldGame` est le premier composant du
   // projet à installer une boucle 60 Hz, qui sans ça tournerait jusqu'à la fin du fichier
@@ -2003,5 +2010,47 @@ describe('🔀 FusionPanel', () => {
     expect(out).not.toContain('⚠️ Vides');
     // 🏳️ La place TENUE est neutre : pas de pastille de rang (les cinq ennemies gardent la leur).
     expect(out.match(/class="pill rk"/g)?.length).toBe(5);
+  }, 30_000);
+
+  it('🛡️ la garnison dépliée montre aussi les MILICIENS (et ceux en route)', async () => {
+    // Signalé : « dans la liste de garnison des lieux fixes on ne voit pas les miliciens ».
+    const { default: ControlPointsSheet } = await import('@/components/ControlPointsSheet.vue');
+    const { captureControl, controlIdOf, controlRoster, ensureControls } =
+      await import('@/lib/controlPoints');
+    const { createMap } = await import('@/lib/expedition');
+    const id = controlIdOf('mine');
+    const base = captureControl(
+      ensureControls(createMap(3, 0, 30, 1), 0, 30),
+      id,
+      ['a1', 'mil:1', 'mil:2'],
+      0,
+      7,
+    );
+    const map = {
+      ...base,
+      pois: base.pois.map((p) =>
+        p.id === id
+          ? {
+              ...p,
+              control: { ...p.control!, reinforcing: [{ id: 'mil:3', from: 0, at: 7200_000 }] },
+            }
+          : p,
+      ),
+    };
+    let out = '';
+    expect(
+      await mountIt(
+        ControlPointsSheet,
+        { modelValue: true, rows: controlRoster(map, [], 3600_000, 30), advs: ROW.adventurers },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => host.querySelector<HTMLElement>('.cps-row')?.click(),
+      ),
+    ).toBeNull();
+    expect(out).toContain('En garnison');
+    expect(out.match(/class="mil-tile"/g)?.length).toBe(3);
+    expect(out).toContain('Milicien');
   }, 30_000);
 });
