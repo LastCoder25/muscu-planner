@@ -584,37 +584,9 @@
                ensemble (le plan s'affiche dessous). -->
           <div v-if="originOptions.length" class="origin-pick">
             <p class="car-cap">
-              🧭 <b>Départ</b> · coche plusieurs lieux pour une attaque combinée
+              🧭 Choisis tes champions dans chaque lieu, du plus proche au plus loin · plusieurs
+              lieux = une attaque combinée
             </p>
-            <div class="xfer-grid">
-              <button
-                type="button"
-                class="xfer-tile"
-                :class="{ on: baseOn }"
-                :aria-pressed="baseOn"
-                @click="toggleOrigin('base')"
-              >
-                <span class="xfer-emo">🏰</span>
-                <span class="xfer-main"><span class="xfer-name">Base</span></span>
-              </button>
-              <button
-                v-for="o in originOptions"
-                :key="o.id"
-                type="button"
-                class="xfer-tile"
-                :class="{ on: partyOrigins.includes(o.id) }"
-                :aria-pressed="partyOrigins.includes(o.id)"
-                @click="toggleOrigin(o.id)"
-              >
-                <span class="xfer-emo">{{ o.emo }}</span>
-                <span class="xfer-main">
-                  <span class="xfer-name">{{ o.label }}</span>
-                  <span class="xfer-sub"
-                    >{{ o.n }} champion{{ o.n > 1 ? 's' : '' }} prêt{{ o.n > 1 ? 's' : '' }}</span
-                  >
-                </span>
-              </button>
-            </div>
             <!-- ⚔️🧭 LE PLAN : qui part d'où, et QUAND, pour que tous arrivent ensemble. Un groupe
                  qui attend reste chez lui (il produit, il défend) — s'il est battu avant de
                  partir, il ne vient pas. -->
@@ -654,8 +626,8 @@
             <button
               type="button"
               class="party-hero"
-              :class="{ on: partyHeroOn, off: !!partyHeroBlock || !baseOn }"
-              :disabled="!!partyHeroBlock || !baseOn"
+              :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
+              :disabled="!!partyHeroBlock"
               :aria-pressed="partyHeroOn"
               @click="partyHero = !partyHero"
             >
@@ -663,10 +635,10 @@
               <span class="ph-main">
                 <span class="ph-name">Ton héros</span>
                 <span class="ph-sub">{{
-                  !baseOn
-                    ? 'il part de la base'
-                    : partyHeroBlock
-                      ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
+                  partyHeroBlock
+                    ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
+                    : originOptions.length
+                      ? 'part de la base · sans XP'
                       : 'sans XP'
                 }}</span>
               </span>
@@ -720,7 +692,37 @@
             🛡️ Garnison : repousse environ <b>{{ stayHold }} %</b> des attaques
             <span class="stay-hold-note">· jamais plus de 90 %, l’ennemi s’adapte</span>
           </p>
-          <div v-if="char.advList.length" class="car-pick">
+          <!-- 🧭 PAR LIEU (demandé) : dès qu'un point fixe est coché, les champions se rangent
+               sous le lieu d'où ils partiraient, du plus proche de la cible au plus loin. -->
+          <div v-if="partyGroups.length" class="car-pick">
+            <template v-for="g in partyGroups" :key="g.id">
+              <div class="pool-head">
+                <span class="pool-emo">{{ g.emo }}</span>
+                <span class="pool-name">{{ g.label }}</span>
+                <span class="pool-leg">à {{ formatDurationMin(g.legMin) }}</span>
+                <span class="pool-n">{{ g.advs.length }} 🗡️</span>
+              </div>
+              <AdvPickTile
+                v-for="a in g.advs"
+                :key="a.id"
+                :adv="a"
+                :on="partyEscort.includes(a.id)"
+                :xp="partyXp[a.id]"
+                @toggle="togglePartyAdv(a.id)"
+              />
+              <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
+            </template>
+            <template v-if="showBlocked">
+              <AdvPickTile
+                v-for="b in partyBlocked"
+                :key="b.adv.id"
+                :adv="b.adv"
+                :on="false"
+                :reason="ADV_UNAVAILABLE_LABEL[b.why]"
+              />
+            </template>
+          </div>
+          <div v-else-if="char.advList.length" class="car-pick">
             <AdvPickTile
               v-for="a in partyPoolSorted"
               :key="a.id"
@@ -732,7 +734,7 @@
             <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
                  de la grille pour des tuiles qu'on ne peut pas toucher. Le bouton dit combien il
                  y en a, et pourquoi chacun est indisponible reste écrit sur sa tuile. -->
-            <template v-if="showBlocked && baseOn">
+            <template v-if="showBlocked">
               <AdvPickTile
                 v-for="b in partyBlocked"
                 :key="b.adv.id"
@@ -750,7 +752,7 @@
             📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
           </p>
           <button
-            v-if="char.advList.length && partyBlocked.length && baseOn"
+            v-if="char.advList.length && partyBlocked.length"
             type="button"
             class="car-blocked-toggle"
             :aria-expanded="showBlocked"
@@ -2955,13 +2957,11 @@ const {
   stayIds,
   stayChoice,
   toggleStay,
-  partyOrigins,
-  toggleOrigin,
-  baseOn,
   combined,
   wingPlan,
   combinedBlock,
   originOptions,
+  partyGroups,
   partyPoolSorted,
   partyHero,
   partyEscort,
@@ -3294,6 +3294,41 @@ onUnmounted(() => {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 8px;
+}
+/* 🧭 En-tête d'un lieu de départ dans la liste des champions (pleine largeur de la grille). */
+.pool-head {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 13px;
+}
+.pool-emo {
+  font-size: 16px;
+}
+.pool-name {
+  font-weight: 700;
+  color: var(--text);
+}
+.pool-leg {
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.pool-n {
+  margin-left: auto;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.pool-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
 }
 .car-blocked-toggle {
   width: 100%;

@@ -85,6 +85,23 @@ export function planWings(
   };
 }
 
+/**
+ * 🧭 Les lieux de départ, du plus PROCHE de la cible au plus loin (trajet aller, minutes) —
+ * l'ordre dans lequel l'écran les montre : tuiles de départ, champions par lieu, plan.
+ * À trajet égal, la base d'abord (c'est de là que part le héros), puis l'ordre reçu.
+ */
+export function byReach<T extends { id: string; legMin: number }>(rows: readonly T[]): T[] {
+  return rows
+    .map((r, i) => ({ r, i }))
+    .sort(
+      (a, b) =>
+        a.r.legMin - b.r.legMin ||
+        Number(b.r.id === 'base') - Number(a.r.id === 'base') ||
+        a.i - b.i,
+    )
+    .map((x) => x.r);
+}
+
 /** Pourquoi une attaque combinée ne peut pas partir (hors règles d'une équipe ordinaire). */
 export type CombinedBlock = 'fewWings' | 'twice' | 'heroFar' | 'emptyWing' | 'moving';
 export const COMBINED_BLOCK_LABEL: Record<CombinedBlock, string> = {
