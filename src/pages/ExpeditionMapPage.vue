@@ -954,6 +954,7 @@ import {
   partyLegMin,
   denForce,
   tripCrew,
+  partyCarriesHero,
 } from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
@@ -1952,7 +1953,13 @@ function celebrateHarvest(
   const where = kind ? CONTROL_LABEL[kind] : 'Place forte';
   // ⛲ Le mana a son bandeau discret (il ne se pose pas dans le panier des consommables).
   if (got.mana)
-    gameFx.celebrate({ kind: 'generic', emoji: '💠', title: `+${got.mana} pierres de mana`, subtitle: where, quiet: true });
+    gameFx.celebrate({
+      kind: 'generic',
+      emoji: '💠',
+      title: `+${got.mana} pierres de mana`,
+      subtitle: where,
+      quiet: true,
+    });
   gameFx.celebrateHarvest(
     got.supplies,
     got.runes,
@@ -2049,7 +2056,7 @@ const partiesOnMap = computed(() =>
       poi: g.poi,
       escort: tripCrew(g).length,
       members: tripCrew(g),
-      hero: !!g.outcome.party?.hero,
+      hero: partyCarriesHero(g),
       haul: expeHaul(g.outcome),
       origin: g.origin,
       // 🔙 Un demi-tour n'a jamais atteint le lieu : son tracé s'arrête là où il a rebroussé.
