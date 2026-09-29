@@ -17,6 +17,8 @@
 // ne s'exécute jamais et le défaut reste invisible. Un seul aventurier suffit.
 import { describe, it, expect } from 'vitest';
 import { makeBoss } from './helpers/friendBoss';
+import ReportDetail from '@/components/ReportDetail.vue';
+import { siegeDetail } from '@/lib/reportDetail';
 import { createApp, h, nextTick, type Component } from 'vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { createRouter, createMemoryHistory } from 'vue-router';
@@ -2287,5 +2289,33 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out.toLowerCase()).toContain(RUNE_COLOR.gold.toLowerCase());
     expect(out).toContain(`Nyx apprend ${SKILLS[gold].name}`);
     fx.queue.value = [];
+  }, 30_000);
+  // 📋 Le détail d'un siège se peint au MODÈLE COMMUN des rapports.
+  it('ReportDetail peint les chiffres clés et les sections d’un siège', async () => {
+    let out = '';
+    const d = siegeDetail(
+      {
+        raidId: 'r',
+        faction: 'bandits',
+        level: 20,
+        held: true,
+        defeated: 2,
+        total: 2,
+        finalPv: 800,
+        maxPv: 1000,
+        heroHome: false,
+        log: [],
+        breached: false,
+        resolvedAt: 0,
+        groups: [{ species: 'Archer', emoji: '🏹', count: 4, level: 18, kind: 'ranged' }],
+      } as never,
+      { corpses: 4, gold: 90, keys: 1, summonStones: 0, items: 0 },
+    );
+    await mountIt(ReportDetail, { detail: d }, undefined, undefined, '/', (hh) => (out = hh));
+    expect(out).toContain('groupes repoussés');
+    expect(out).toContain('80 %');
+    expect(out).toContain('Archer');
+    expect(out).toContain('×4');
+    expect(out).toContain('+90 🪙');
   }, 30_000);
 });

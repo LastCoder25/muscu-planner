@@ -152,71 +152,10 @@
       </button>
     </div>
 
-    <!-- Replié par défaut : chiffres clés, récit, butin, route, équipe, journal — chacun
-         dans son encart titré, pour qu'on trouve ce qu'on cherche sans tout lire. -->
+    <!-- Replié par défaut : le détail suit le MODÈLE COMMUN des rapports (`reportDetail`) —
+         chiffres clés, puis récit, butin, route, équipe, journal, chacun dans son encart. -->
     <div v-if="expanded" class="details">
-      <div v-if="stats.length" class="stats">
-        <div v-for="s in stats" :key="s.label" class="stat">
-          <span class="st-val" :class="s.cls">{{ s.val }}</span>
-          <span class="st-lab">{{ s.label }}</span>
-        </div>
-      </div>
-      <p v-if="card.story" class="story">{{ card.story }}</p>
-      <section v-if="card.loot.length" class="sec">
-        <h4>
-          🎁 Butin <span class="cnt">{{ card.loot.length }}</span>
-        </h4>
-        <div v-for="(it, i) in card.loot" :key="'ld' + i" class="loot-row">
-          <ItemIcon :item="it" :size="32" />
-          <div class="loot-main">
-            <div class="loot-name">{{ it.name }}<span v-if="it.setId"> 🧩</span></div>
-            <div class="loot-sub">{{ gradeLabel(it) }} · {{ SLOT_LABEL[it.slot] }}</div>
-            <div class="loot-eff">{{ itemEffectsText(it) }}</div>
-          </div>
-        </div>
-      </section>
-      <section v-if="card.road.length" class="sec">
-        <h4>
-          🛣️ Route <span class="cnt">{{ card.road.length }}</span>
-        </h4>
-        <ul class="road">
-          <li v-for="(e, i) in card.road" :key="i">
-            <span class="r-txt">{{ e.text }}</span>
-            <span v-if="e.slain" class="slain">⚔️ {{ e.slain }}</span>
-          </li>
-        </ul>
-      </section>
-      <section v-if="card.team.length" class="sec">
-        <h4>
-          🧭 Équipe <span class="cnt">{{ card.team.length }}</span>
-        </h4>
-        <ul class="team">
-          <li v-for="m in card.team" :key="m.id" :class="{ gone: m.gone }">
-            <span class="t-emo">{{ m.emoji }}</span>
-            <span class="t-name">{{ m.name }}</span>
-            <span class="t-tags">
-              <span v-if="m.star" title="Une étoile de plus">⭐</span>
-              <span v-if="m.hurt" title="Blessé : à l’infirmerie">🤕</span>
-              <span
-                v-else-if="m.lightHurt"
-                title="Victoire serrée : blessure légère, courte convalescence"
-                >🩹</span
-              >
-              <span v-else-if="m.down" class="t-down" title="À terre, relevé : pas d’infirmerie"
-                >à terre</span
-              >
-            </span>
-            <span class="t-kills">{{ m.kills ? `⚔️ ${m.kills}` : '' }}</span>
-            <b class="xp t-xp">+{{ m.xp }}</b>
-          </li>
-        </ul>
-      </section>
-      <section v-if="card.journal.length" class="sec">
-        <h4>📜 Journal</h4>
-        <ol class="journal">
-          <li v-for="(l, i) in card.journal" :key="i">{{ l }}</li>
-        </ol>
-      </section>
+      <ReportDetail :detail="detail" />
     </div>
   </div>
 </template>
@@ -226,8 +165,8 @@ import { computed, ref } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import { seedOf } from '@/lib/combat';
-import { formatDuration } from '@/lib/duration';
-import { SLOT_LABEL, gradeLabel, itemEffectsText } from '@/lib/items';
+import ReportDetail from '@/components/ReportDetail.vue';
+import { missionDetail } from '@/lib/reportDetail';
 import { TEAM_SHOWN, missionWhen, type MissionCard } from '@/lib/missionCard';
 import { riftStageInputOf } from '@/lib/riftStage';
 import HaulPills from '@/components/HaulPills.vue';
@@ -288,23 +227,10 @@ const summary = computed(() => {
   return parts.join(' · ') || props.card.verdict;
 });
 
-/** Les chiffres clés du détail, en tête : voyage, rendement, combat, XP. */
-const stats = computed(() => {
-  const c = props.card;
-  const out: { label: string; val: string; cls?: string }[] = [];
-  if (c.travelMs) out.push({ label: 'de voyage', val: formatDuration(c.travelMs) });
-  if (c.xpPerHour)
-    out.push({ label: 'XP/h par champion', val: `≈ ${fmtRate(c.xpPerHour)}`, cls: 'acc' });
-  if (c.kills) out.push({ label: 'abattus', val: c.kills });
-  if (c.totalXp) out.push({ label: 'XP au total', val: `+${fmt(c.totalXp)}`, cls: 'xp' });
-  return out;
-});
+const detail = computed(() => missionDetail(props.card));
 
 function fmt(n: number): string {
   return Math.round(n).toLocaleString('fr-FR');
-}
-function fmtRate(n: number): string {
-  return (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10).toLocaleString('fr-FR');
 }
 </script>
 
@@ -525,185 +451,6 @@ function fmtRate(n: number): string {
   padding-top: 10px;
   margin-top: 2px;
   font-size: 12.5px;
-}
-/* Chiffres clés : une grille de petites cases, valeur en gros, libellé dessous. */
-.stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-}
-.stat {
-  display: grid;
-  gap: 1px;
-  padding: 7px 9px;
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--bg) 45%, var(--surface-2));
-  min-width: 0;
-}
-.st-val {
-  font-family: 'Oswald', sans-serif;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.2;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.st-val.xp {
-  color: var(--d1);
-}
-.st-val.acc {
-  color: var(--accent);
-}
-.st-lab {
-  font-size: 10.5px;
-  color: var(--dim);
-  line-height: 1.25;
-}
-.story {
-  margin: 0;
-  padding: 6px 10px;
-  border-left: 2px solid var(--line);
-  color: var(--dim);
-  font-style: italic;
-  line-height: 1.45;
-}
-/* Un encart par sujet : titre en capitales, contenu dessous. */
-.sec {
-  display: grid;
-  gap: 6px;
-  padding: 8px 10px 9px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg) 45%, var(--surface-2));
-}
-.sec h4 {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--dim);
-}
-.cnt {
-  font-size: 10.5px;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  color: var(--text);
-  letter-spacing: 0;
-}
-.loot-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.loot-row + .loot-row {
-  padding-top: 6px;
-  border-top: 1px solid var(--line-soft);
-}
-.loot-main {
-  min-width: 0;
-}
-.loot-name {
-  font-weight: 700;
-}
-.loot-sub,
-.loot-eff {
-  font-size: 11.5px;
-  color: var(--dim);
-}
-.road,
-.team {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-}
-/* La route : une frise, un point par rencontre. */
-.road li {
-  position: relative;
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  padding: 3px 0 3px 16px;
-  line-height: 1.4;
-}
-.road li::before {
-  content: '';
-  position: absolute;
-  left: 3px;
-  top: 9px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--dim);
-}
-.road li:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  left: 5.5px;
-  top: 16px;
-  bottom: -5px;
-  width: 1px;
-  background: var(--line);
-}
-.r-txt {
-  flex: 1;
-  min-width: 0;
-}
-.slain {
-  flex: none;
-  color: var(--dim);
-  font-size: 11.5px;
-}
-/* L'équipe : un tableau aligné — nom, marques, abattus, XP à droite. */
-.team li {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto 44px 44px;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 0;
-}
-.team li + li {
-  border-top: 1px solid var(--line-soft);
-}
-.team li.gone {
-  color: var(--dim);
-}
-.t-emo {
-  text-align: center;
-}
-.t-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.t-tags {
-  display: flex;
-  gap: 3px;
-  align-items: center;
-}
-.t-down,
-.t-kills {
-  color: var(--dim);
-  font-size: 11.5px;
-}
-.t-kills,
-.t-xp {
-  text-align: right;
-  white-space: nowrap;
-}
-.journal {
-  margin: 0;
-  padding-left: 18px;
-  display: grid;
-  gap: 3px;
-  color: var(--dim);
-  font-size: 11.5px;
-  line-height: 1.4;
 }
 /* Replié : une TUILE d'une ligne, qu'on touche pour ouvrir. */
 .mrc.folded {

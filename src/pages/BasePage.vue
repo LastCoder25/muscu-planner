@@ -934,20 +934,10 @@
                   : '💥 Dernier siège — enceinte forcée'
               }}
             </div>
-            <p>
-              {{ FACTION_EMOJI[lastReport.faction] }} {{ FACTION_LABEL[lastReport.faction] }} ·
-              {{ lastReport.defeated }}/{{ lastReport.total }} groupes repoussés ·
-              {{ lastReport.heroHome ? 'héros présent' : 'héros absent' }}
-            </p>
-            <!-- 🦴 LE BUTIN DES CORPS EST DANS LE RAPPORT (demandé) : il est crédité à
-                 la résolution, il n’y a plus de fouille à venir chercher. Les corps ne
-                 restent quelques heures que pour montrer la bataille. -->
-            <div v-if="lastLootPills.length" class="scav-back">
-              <div class="scav-title">🎒 Ramassé sur les corps</div>
-              <div class="scav-pills">
-                <span v-for="(b, i) in lastLootPills" :key="i" class="scav-pill">{{ b }}</span>
-              </div>
-            </div>
+            <!-- 📋 Le compte rendu suit le MODÈLE COMMUN des rapports (`reportDetail`) :
+                 chiffres clés, armée, défenseurs, et le butin ramassé sur les corps — crédité
+                 à la résolution, il n’y a plus de fouille à venir chercher. -->
+            <ReportDetail :detail="siegeReportDetail!" class="siege-rd" />
             <button class="cta ghost" @click="replaySiege">▶ Revoir l’assaut</button>
           </div>
         </template>
@@ -1026,6 +1016,8 @@ import { advAvailable, advRarity, advTitle, engageCap } from '@/lib/adventurers'
 import { championPortrait } from '@/data/championPortraits';
 import { RANK_COLOR } from '@/lib/items';
 import SiegeStage from '@/components/SiegeStage.vue';
+import ReportDetail from '@/components/ReportDetail.vue';
+import { siegeDetail } from '@/lib/reportDetail';
 import {
   BUILD,
   buildingAccrued,
@@ -1163,6 +1155,9 @@ const raid = computed(() => base.value?.raid ?? null);
 const field = computed(() => base.value?.field ?? null);
 const freeze = computed(() => base.value?.freeze ?? null);
 const lastReport = computed(() => base.value?.lastReport ?? null);
+const siegeReportDetail = computed(() =>
+  lastReport.value ? siegeDetail(lastReport.value, base.value?.lastLoot) : null,
+);
 // 🔔 Notifications. ⚠️ Sur iOS, le push n'existe QUE si l'app a été ajoutée à l'écran
 // d'accueil — d'où le message explicite plutôt qu'un bouton qui ne ferait rien.
 const pushOk = pushSupported();
@@ -3357,6 +3352,9 @@ function doHarvest() {
 .fam-role {
   font-size: 12px;
   color: var(--dim);
+}
+.siege-rd {
+  margin: 6px 0 8px;
 }
 .scav-back {
   margin-top: 8px;
