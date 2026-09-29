@@ -81,8 +81,8 @@
             <span v-if="o.type === 'rift'" class="rift-emo"
               ><RiftPortal color="#b57bff" :seed="7" still
             /></span>
-            <span v-else class="type-emo">{{ POI_EMO[o.type] }}</span>
-            <span class="tc-name">{{ POI_LABEL[o.type] }}</span>
+            <span v-else class="type-emo">{{ FILTER_EMO[o.type] }}</span>
+            <span class="tc-name">{{ FILTER_LABEL[o.type] }}</span>
             <span class="tc-state">{{ stateText(o) }}</span>
           </button>
         </div>
@@ -99,20 +99,27 @@
 import { computed, ref } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import { CHARACTER_RANKS } from '@/lib/characterRank';
-import { POI_EMO, POI_LABEL, type PoiType } from '@/lib/expedition';
-import { filterSummary, typeMode, typeShown, type TypeFilter } from '@/lib/poiTypeFilter';
+import {
+  FILTER_EMO,
+  FILTER_LABEL,
+  filterSummary,
+  typeMode,
+  typeShown,
+  type FilterKey,
+  type TypeFilter,
+} from '@/lib/poiTypeFilter';
 
 const props = defineProps<{
   rankOptions: { rankIndex: number; count: number }[];
   hiddenRanks: Set<number>;
-  typeChips: { type: PoiType; inRanks: number }[];
+  typeChips: { type: FilterKey; inRanks: number }[];
   typeFilter: TypeFilter;
   /** Dépliée d’emblée — la porte de montage s’en sert pour rendre aussi le corps. */
   defaultOpen?: boolean;
 }>();
 const emit = defineEmits<{
   'toggle-rank': [r: number];
-  'cycle-type': [t: PoiType];
+  'cycle-type': [t: FilterKey];
   reset: [];
 }>();
 
@@ -131,7 +138,7 @@ const rkColor = (i: number) => CHARACTER_RANKS[i]?.color ?? '#9a8f7e';
 const rkName = (i: number) => CHARACTER_RANKS[i]?.name ?? '';
 /** Ce qu'une tuile de type dit d'elle-même : son compte quand elle est affichée, son état
  *  sinon — « seul » et « masqué » doivent se LIRE, pas se deviner à une teinte. */
-function stateText(o: { type: PoiType; inRanks: number }) {
+function stateText(o: { type: FilterKey; inRanks: number }) {
   const m = typeMode(props.typeFilter, o.type);
   if (m === 'only') return 'seul';
   // Masqué : un ✕ — le nom est déjà barré et la tuile en pointillé. Écrit en entier, « masqué »
@@ -140,8 +147,8 @@ function stateText(o: { type: PoiType; inRanks: number }) {
   return String(o.inRanks);
 }
 const TYPE_MODE_LABEL = { all: 'affichés', only: 'seuls', none: 'masqués' } as const;
-const typeChipLabel = (o: { type: PoiType; inRanks: number }) =>
-  `${POI_LABEL[o.type]} : ${TYPE_MODE_LABEL[typeMode(props.typeFilter, o.type)]} · ${o.inRanks} dans les rangs affichés — toucher pour changer`;
+const typeChipLabel = (o: { type: FilterKey; inRanks: number }) =>
+  `${FILTER_LABEL[o.type]} : ${TYPE_MODE_LABEL[typeMode(props.typeFilter, o.type)]} · ${o.inRanks} dans les rangs affichés — toucher pour changer`;
 </script>
 
 <style scoped lang="scss">

@@ -10,12 +10,14 @@ import { isHeldControl } from '@/lib/controlPoints';
 import {
   cycleType,
   effectiveTypeFilter,
+  filterKeyOf,
   parseTypeFilter,
   typeOptions,
   typeShown,
+  type FilterKey,
   type TypeFilter,
 } from '@/lib/poiTypeFilter';
-import type { Poi, PoiType } from '@/lib/expedition';
+import type { Poi } from '@/lib/expedition';
 
 const RANK_FILTER_KEY = 'muscu:emap:hidden-ranks';
 // ⚠️ Remplace le filtre des failles seul : son réglage stocké est repris (`parseTypeFilter`).
@@ -72,8 +74,8 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
   const typeFilter = ref<TypeFilter>(loadTypeFilter());
   const rankShown = (p: Poi) => isHeldControl(p) || !hiddenRanks.value.has(rankIndexOf(p));
   // Le compte d'une puce de type ne parle que des lieux des rangs affichés.
-  const typeChips = computed(() => typeOptions(pois.value, (p) => rankShown(p as Poi)));
-  function cycleTypeChip(t: PoiType) {
+  const typeChips = computed(() => typeOptions(pois.value, rankShown));
+  function cycleTypeChip(t: FilterKey) {
     typeFilter.value = cycleType(
       typeFilter.value,
       t,
@@ -90,7 +92,7 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     ),
   );
   const shownPois = computed(() =>
-    pois.value.filter((p) => rankShown(p) && typeShown(typeFilterShown.value, p.type)),
+    pois.value.filter((p) => rankShown(p) && typeShown(typeFilterShown.value, filterKeyOf(p))),
   );
 
   /** « Tout afficher » : rangs ET types d’un geste. */

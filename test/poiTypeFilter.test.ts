@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { POI_LABEL, type PoiType } from '../src/lib/expedition';
 import {
   EMPTY_TYPE_FILTER,
+  FILTER_EMO,
+  FILTER_LABEL,
   TYPE_ORDER,
   cycleType,
   effectiveTypeFilter,
+  filterKeyOf,
   filterSummary,
+  type FilterKey,
   parseTypeFilter,
   typeMode,
   typeOptions,
@@ -15,9 +19,34 @@ import {
 const present: PoiType[] = ['mine', 'camp', 'rift'];
 
 describe('le filtre par type de lieu', () => {
-  it('connaît TOUS les types de lieu, une seule fois', () => {
-    expect([...TYPE_ORDER].sort()).toEqual((Object.keys(POI_LABEL) as PoiType[]).sort());
+  it('connaît TOUS les types de lieu, plus les armées ennemies, une seule fois', () => {
+    expect([...TYPE_ORDER].sort()).toEqual(
+      [...(Object.keys(POI_LABEL) as FilterKey[]), 'army' as const].sort(),
+    );
     expect(new Set(TYPE_ORDER).size).toBe(TYPE_ORDER.length);
+  });
+
+  // 🪖 Demandé : « dans les filtres de la carte rajoute les armées ennemies ». Une armée est un
+  // lieu `warband` marqué `army` : elle a SA tuile, distincte des bandes issues des failles.
+  it('les armées ennemies ont leur propre tuile, séparée des bandes des failles', () => {
+    const army = { type: 'warband' as const, army: { kind: 'siege' as const } };
+    const band = { type: 'warband' as const };
+    expect(filterKeyOf(army as never)).toBe('army');
+    expect(filterKeyOf(band)).toBe('warband');
+    const opts = typeOptions([army, army, band] as never[], () => true);
+    expect(opts.find((o) => o.type === 'army')?.total).toBe(2);
+    expect(opts.find((o) => o.type === 'warband')?.total).toBe(1);
+    expect(FILTER_LABEL.army).toBe('Armées ennemies');
+    expect(FILTER_EMO.army).toBe('🪖');
+    // Masquer les armées laisse les bandes des failles, et « armées seules » l'inverse.
+    const f = cycleType(cycleType(EMPTY_TYPE_FILTER, 'army', ['army', 'warband']), 'army', [
+      'army',
+      'warband',
+    ]);
+    expect(typeShown(f, 'army')).toBe(false);
+    expect(typeShown(f, 'warband')).toBe(true);
+    // Un réglage stocké avec les armées se relit.
+    expect(parseTypeFilter({ only: [], hidden: ['army'] }).hidden).toEqual(['army']);
   });
 
   it('un toucher passe de affiché à seul, puis masqué, puis affiché', () => {
