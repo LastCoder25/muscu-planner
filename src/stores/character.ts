@@ -126,6 +126,7 @@ import {
 import { combatPower, mulberry32, type Combatant } from '@/lib/combat';
 import {
   emptyMilitia,
+  isMilitiaId,
   militiaLostLabel,
   militiaOfControl,
   militiaOnMap,
@@ -291,6 +292,15 @@ import {
   seatsOf,
   campXpFor,
 } from '@/lib/controlPoints';
+import {
+  SORTIE_BLOCK_LABEL,
+  TRANSFER_BLOCK_LABEL,
+  legFromSpot,
+  rejoinHome,
+  sortieBlocker,
+  transferBlocker,
+  transferGarrison,
+} from '@/lib/controlRoutes';
 import { resolveHarvestParty } from '@/lib/harvestParty';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
 import { overflowMessage } from '@/lib/overflowStage';
@@ -3183,6 +3193,8 @@ export const useCharacterStore = defineStore('character', () => {
       supplies?: SupplyId[];
       /** 🏰 Point de contrôle : qui reste en garnison si on le prend (sinon l'escorte). */
       stayIds?: string[];
+      /** 🏰 SORTIE : l'équipe part de ce point fixe tenu (sa garnison) et y revient. */
+      fromControlId?: string;
     },
   ): Promise<string | null> {
     // ⚠️ Rend la RAISON d'un refus (null = parti) : un « départ impossible » générique laissait
@@ -3193,9 +3205,26 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚠️ Un id répété ferait partir deux fois le même aventurier.
     if (new Set(opts.escortIds).size !== opts.escortIds.length)
       return 'un champion est choisi deux fois';
+    // 🏰 SORTIE d'un point fixe : l'équipe vient de SA garnison (arrivée), sans le héros —
+    // lui part toujours de la base. La règle vit en lib (`sortieBlocker`), l'écran la lit.
+    const origin = opts.fromControlId
+      ? (cur.expedition_map?.pois.find((p) => p.id === opts.fromControlId) ?? null)
+      : null;
+    if (opts.fromControlId) {
+      if (!origin || !cur.expedition_map) return 'la carte n’est pas chargée';
+      if (hero) return 'le héros part de la base, pas d’un point fixe';
+      const block = sortieBlocker(cur.expedition_map, origin.id, opts.escortIds);
+      if (block) return SORTIE_BLOCK_LABEL[block];
+    }
     const escort = opts.escortIds
       .map((id) => advList.value.find((a) => a.id === id))
-      .filter((a): a is Adventurer => !!a && advAvailable(a, now));
+      .filter(
+        (a): a is Adventurer =>
+          !!a &&
+          (origin
+            ? a.posted === origin.id && (a.hurtUntil ?? 0) <= now && (a.busyUntil ?? 0) <= now
+            : advAvailable(a, now)),
+      );
     if (escort.length !== opts.escortIds.length)
       return 'un champion du groupe n’est plus disponible';
     // ⚠️ Groupe vide, ou SANS le héros alors que tous les créneaux de convoi sont pris : la
@@ -3239,14 +3268,15 @@ export const useCharacterStore = defineStore('character', () => {
     const seed = ((now ^ (poi.level * 2654435761)) & ~1) >>> 0 || 2;
     // ⚔️ Une bande en marche vient à notre rencontre : on va là où on la CROISERA
     // (`interceptLeg`), et le voyage garde ce point — la carte y dessine le choc.
-    const meet = interceptLeg(poi, now, (p) =>
+    const legOf = (p: Poi) =>
       partyLegMin(p, escort, {
         hero: !!hero,
         travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
         gearSpeed: advGearRoles(escort, road.advGear).speed,
         supplies,
-      }),
-    );
+      });
+    // 🏰 Une sortie part de son point : même règle de trajet, distance mesurée depuis lui.
+    const meet = interceptLeg(poi, now, origin ? (p) => legFromSpot(p, origin, legOf) : legOf);
     const leg = meet.legMin;
     // ⚔️🕳️ LA DISPATCH VIT ICI, à l’UNIQUE chemin d’envoi : `startParty` ne choisit plus la
     // résolution, il REÇOIT l’issue. Un camp se résout par son combat de faction, une faille
@@ -3328,24 +3358,35 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
       supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };
-    const trip = startParty(
+    const trip0 = startParty(
       { poi: meet.poi, hero, seed, champions: escort.length },
       now,
       leg,
       withSupplies,
     );
+    const trip = origin
+      ? { ...trip0, origin: { x: origin.x, y: origin.y }, homeId: origin.id }
+      : trip0;
     const busy = new Set(opts.escortIds);
     // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
-    const map = cur.expedition_map
+    const map0 = cur.expedition_map
       ? poi.type === 'control'
         ? markAssault(cur.expedition_map, poi.id, true)
         : { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
       : cur.expedition_map;
+    // 🏰 Une sortie quitte la garnison de son point (ce qui est produit reste en réserve) :
+    // le point produit moins et se défend moins bien tant qu'elle est dehors.
+    const map =
+      origin && map0
+        ? releaseFromControl(map0, origin.id, opts.escortIds, now, opts.playerLevel)
+        : map0;
     await persist(userId, {
       expedition_map: map,
       ...(supplies.length ? { supplies: stockAfter } : {}),
       adventurers: advList.value.map((a) =>
-        busy.has(a.id) ? { ...a, busyUntil: trip.returnAt } : a,
+        busy.has(a.id)
+          ? { ...a, busyUntil: trip.returnAt, ...(origin ? { posted: undefined } : {}) }
+          : a,
       ),
       ...(hero
         ? { expedition: trip }
@@ -3434,11 +3475,21 @@ export const useCharacterStore = defineStore('character', () => {
     const x0 = reportXp(cur, t.messages, t.fresh, advList.value);
     const x = { ...x0, messages: dw.tag(x0.messages) };
     // 🏰 Un point de contrôle PRIS : l'équipe y reste en garnison (postée, plus « en route »).
-    const ctl = settleControlAssaults(
+    const ctl0 = settleControlAssaults(
       cur,
       t.fresh,
       (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
       activeDays7,
+    );
+    // 🏰 Les SORTIES rentrées reprennent leur poste sur leur point (`rejoinHome`).
+    const ctl = sortiesHome(
+      cur,
+      partyList.value.filter((p) => !t.parties.some((q) => q.id === p.id)),
+      ctl0 ?? {
+        map: cur.expedition_map,
+        adventurers: (x.patch as { adventurers?: Adventurer[] }).adventurers ?? advList.value,
+      },
+      !!ctl0,
     );
     // ⚠️ `messages` seulement si la boîte a changé (`settleParties` rend la même référence
     // sinon) : au retour seul, réécrire la boîte de ce tick pourrait écraser un encaissement
@@ -3446,7 +3497,7 @@ export const useCharacterStore = defineStore('character', () => {
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
-      ...(ctl ? { expedition_map: ctl.map } : {}),
+      ...(ctl?.map ? { expedition_map: ctl.map } : {}),
       ...(x.messages !== cur.messages ? { messages: x.messages } : {}),
       // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
       //  ne fait que le confirmer.)
@@ -3455,6 +3506,53 @@ export const useCharacterStore = defineStore('character', () => {
     });
     x.play();
     return t.fresh;
+  }
+
+  /**
+   * 🏰 Les SORTIES rentrées (`homeId`) : les champions valides reprennent leur poste sur leur
+   * point s'il est encore à nous et a de la place (`rejoinHome`) ; les autres — blessés,
+   * point perdu ou plein — rentrent À PIED à la base (dessinés sur la carte). Un champion
+   * resté en garnison sur un point pris, ou reparti ailleurs entre-temps, n'est pas touché.
+   * `null` si aucune sortie n'est rentrée et que rien d'autre n'a changé.
+   */
+  function sortiesHome(
+    cur: CharacterRow,
+    returned: readonly ActiveParty[],
+    state: { map: ExpeditionMap | null; adventurers: Adventurer[] },
+    touched: boolean,
+  ): { map: ExpeditionMap | null; adventurers: Adventurer[] } | null {
+    let map = state.map;
+    let advs = state.adventurers;
+    let any = touched;
+    for (const p of returned) {
+      if (!p.homeId || !map || !p.outcome.party) continue;
+      const party = p.outcome.party;
+      const sick = new Set([...party.hurt, ...(party.lightHurt ?? [])]);
+      const mine = advs.filter(
+        (a) => party.escort.includes(a.id) && !a.posted && (a.busyUntil ?? 0) === p.returnAt,
+      );
+      if (!mine.length) continue;
+      any = true;
+      const r = rejoinHome(
+        map,
+        p.homeId,
+        mine.filter((a) => !sick.has(a.id)).map((a) => a.id),
+        p.returnAt,
+      );
+      map = r.map;
+      const back = new Set(r.back);
+      const walkers = mine.filter((a) => !back.has(a.id)).map((a) => a.id);
+      const home = walkHome({ ...cur, expedition_map: map }, p.homeId, walkers, [], p.returnAt);
+      map = home.map(map);
+      advs = advs.map((a) =>
+        back.has(a.id)
+          ? { ...a, posted: p.homeId }
+          : walkers.includes(a.id)
+            ? { ...a, busyUntil: home.advAt }
+            : a,
+      );
+    }
+    return any ? { map, adventurers: advs } : null;
   }
 
   /** 🏰 Les rapports frais d'un assaut de point de contrôle : pris → la garnison est postée
@@ -3953,7 +4051,65 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  /**
+   * 🏰🧭 TRANSFERT d'un point fixe à un autre (2026-09-29, demandé) : des membres ARRIVÉS de
+   * la garnison de `fromId` marchent vers `toId`, comme un renfort parti de la base — ils y
+   * prennent leur place tout de suite, y arrivent à leur pas (champions au pas de leur équipe,
+   * miliciens au pas d'une équipe sans rôle), et la Tour de guet s'applique. Le trajet est le
+   * plus court entre la ligne directe et le détour par la ville (`legFromSpot`).
+   * Rend la RAISON d'un refus, `null` si partis.
+   */
+  async function transferControlGarrison(
+    userId: string,
+    fromId: string,
+    toId: string,
+    ids: readonly string[],
+    now: number,
+    playerLevel: number,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    const map = cur?.expedition_map;
+    if (!cur || !map) return 'la carte n’est pas chargée';
+    const block = transferBlocker(map, fromId, toId, ids);
+    if (block) return TRANSFER_BLOCK_LABEL[block];
+    const from = map.pois.find((p) => p.id === fromId)!;
+    const to = map.pois.find((p) => p.id === toId)!;
+    const mil = ids.filter((x) => isMilitiaId(x));
+    const champs = advList.value.filter((a) => ids.includes(a.id) && a.posted === fromId);
+    if (champs.length + mil.length !== ids.length) return 'un membre choisi n’est plus là';
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map);
+    const advAt = champs.length
+      ? now +
+        legFromSpot(to, from, (p) =>
+          partyLegMin(p, champs, {
+            hero: false,
+            travelMult: mult,
+            gearSpeed: advGearRoles(champs, escortKitOf(cur).advGear).speed,
+          }),
+        ) *
+          60_000
+      : now;
+    const milAt = now + legFromSpot(to, from, (p) => caravanLegMin(p, [], 0, mult)) * 60_000;
+    const moved = new Set(champs.map((a) => a.id));
+    await persist(userId, {
+      expedition_map: transferGarrison(map, {
+        fromId,
+        toId,
+        now,
+        playerLevel,
+        champs: { ids: [...moved], at: advAt },
+        militia: { ids: mil, at: milAt },
+      }),
+      adventurers: advList.value.map((a) =>
+        moved.has(a.id) ? { ...a, posted: toId, busyUntil: advAt } : a,
+      ),
+    });
+    return null;
+  }
+
   return {
+    transferControlGarrison,
     settleGearRefonte,
     claimWeeklyQuests,
     applyRune,

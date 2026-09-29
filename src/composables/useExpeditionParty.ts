@@ -20,7 +20,8 @@ import {
   supplyTarget,
 } from '@/lib/party';
 import { partyWinChance } from '@/lib/partyForecast';
-import { garrisonHold, seatsOf } from '@/lib/controlPoints';
+import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
+import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
@@ -108,16 +109,82 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partyEscort = ref<string[]>([]);
   /** 🏰 Qui reste en garnison sur un point de contrôle (le choix le plus récent d'abord). */
   const partyStay = ref<string[]>([]);
+  /** 🏰 SORTIE (2026-09-29) : d'où part l'équipe — `null` = la base, sinon un point fixe
+   *  tenu dont la garnison fournit les champions (et où ils reviendront). */
+  const partyOrigin = ref<string | null>(null);
   watch(selected, () => {
     partyHero.value = false;
     partyEscort.value = [];
     partyStay.value = [];
+    partyOrigin.value = null;
   });
+  watch(partyOrigin, () => {
+    partyEscort.value = [];
+    partyStay.value = [];
+  });
+  /** Un champion de garnison prêt à sortir : ni en route vers le point, ni blessé. */
+  const readyAt = (a: Adventurer, t: number) => (a.hurtUntil ?? 0) <= t && (a.busyUntil ?? 0) <= t;
+  /** ⚠️ Une CHAÎNE (point → ids prêts) recalculée au tick, qui ne réveille les listes que si
+   *  quelqu'un change d'état — même principe que `freeKey` de la page. */
+  const garrisonKey = computed(() => {
+    const map = char.row?.expedition_map;
+    return (map?.pois ?? [])
+      .filter((p) => p.control?.owner === 'player')
+      .map((p) => {
+        const ids = garrisonChampionIds(map, p.id);
+        const ready = char.advList.filter((a) => ids.includes(a.id) && readyAt(a, now.value));
+        return `${p.id}=${ready.map((a) => a.id).join(',')}`;
+      })
+      .join('|');
+  });
+  const readyByPoint = computed(() => {
+    const out = new Map<string, Adventurer[]>();
+    for (const part of garrisonKey.value ? garrisonKey.value.split('|') : []) {
+      const [id, list] = part.split('=');
+      const ids = list ? list.split(',') : [];
+      out.set(
+        id!,
+        char.advList.filter((a) => ids.includes(a.id)),
+      );
+    }
+    return out;
+  });
+  /** 🏰 Les points d'où une sortie peut partir : tenus, avec au moins un champion prêt, et
+   *  jamais le lieu visé lui-même. */
+  const originOptions = computed(() => {
+    const map = char.row?.expedition_map;
+    const sel = selected.value?.id;
+    return (map?.pois ?? []).flatMap((p) => {
+      const ready = readyByPoint.value.get(p.id) ?? [];
+      if (p.id === sel || p.control?.owner !== 'player' || !ready.length) return [];
+      return [
+        {
+          id: p.id,
+          poi: p,
+          emo: CONTROL_EMO[p.control.kind],
+          label: CONTROL_LABEL[p.control.kind],
+          n: ready.length,
+        },
+      ];
+    });
+  });
+  const originPoi = computed(
+    () => originOptions.value.find((o) => o.id === partyOrigin.value)?.poi ?? null,
+  );
+  // Le point choisi n'offre plus personne (tous repartis, point perdu) : retour à la base.
+  watch(originPoi, (p) => {
+    if (!p && partyOrigin.value) partyOrigin.value = null;
+  });
+  /** Qui peut partir : le vivier de la base, ou la garnison prête du point choisi. */
+  const partyPool = computed(() =>
+    originPoi.value ? (readyByPoint.value.get(originPoi.value.id) ?? []) : freeStable.value,
+  );
+  const partyPoolSorted = computed(() =>
+    originPoi.value ? sortByGradeThenRank(partyPool.value) : freeSorted.value,
+  );
   /** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
    *  sort du groupe de lui-même — le store le refuserait de toute façon). */
-  const partyAdvs = computed(() =>
-    freeStable.value.filter((a) => partyEscort.value.includes(a.id)),
-  );
+  const partyAdvs = computed(() => partyPool.value.filter((a) => partyEscort.value.includes(a.id)));
   /** Ceux qui ne peuvent PAS partir, avec la raison — même règle que le store
    *  (`advUnavailableReason`, dont `advAvailable` dérive). On les montre grisés plutôt que de
    *  les cacher : un aventurier qui disparaît de la liste se lit comme un aventurier perdu. */
@@ -159,7 +226,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   );
   /** Le héros est-il VRAIMENT du groupe ? Le choix du joueur, tant que rien ne l'en empêche :
    *  un héros qu'on a coché puis qui part ailleurs ne doit pas fausser le pronostic. */
-  const partyHeroOn = computed(() => partyHero.value && !partyHeroBlock.value);
+  const partyHeroOn = computed(() => partyHero.value && !partyHeroBlock.value && !originPoi.value);
   const heroForParty = computed<PartyHero | null>(() =>
     partyHeroOn.value
       ? { name: char.row?.pseudo ?? 'Toi', level: heroLevel.value, combatant: fighter.value }
@@ -235,26 +302,31 @@ export function useExpeditionParty(ctx: PartyCtx) {
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
   // point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où
   // elle se trouve maintenant. Horloge grossière : la rencontre bouge à la minute, pas plus.
-  const partyMin = computed(() =>
-    selected.value && partySize.value
-      ? 2 *
-        interceptLeg(selected.value, coarseNow.value, (p) =>
-          partyLegMin(p, partyAdvs.value, {
-            hero: partyHeroOn.value,
-            travelMult: travelMult.value,
-            gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
-            supplies: activeSupplies.value,
-          }),
-        ).legMin
-      : 0,
-  );
+  const partyMin = computed(() => {
+    if (!selected.value || !partySize.value) return 0;
+    const legOf = (p: Poi) =>
+      partyLegMin(p, partyAdvs.value, {
+        hero: partyHeroOn.value,
+        travelMult: travelMult.value,
+        gearSpeed: advGearRoles(partyAdvs.value, roadCtx.value.advGear).speed,
+        supplies: activeSupplies.value,
+      });
+    const o = originPoi.value;
+    // 🏰 Une sortie part de son point (même règle que le store, `legFromSpot`).
+    return (
+      2 *
+      interceptLeg(selected.value, coarseNow.value, o ? (p) => legFromSpot(p, o, legOf) : legOf)
+        .legMin
+    );
+  });
   /** ⚠️ CE QUE LE DÉPART COÛTE face à l'armée qui arrive — mêmes règles que le convoi et le
    *  héros (`departureRisk`) : le groupe quitte la base (et le héros avec lui s'il en est),
    *  et un groupe rentré AVANT l'assaut ne coûte rien. */
   const partyRisk = computed(() => {
     const b = base.value;
     const inc = incoming.value;
-    if (!b || !inc || !partyTarget.value || !partySize.value) return null;
+    // 🏰 Une sortie ne vide pas la base : ses champions étaient déjà dehors, sur leur point.
+    if (!b || !inc || !partyTarget.value || !partySize.value || originPoi.value) return null;
     const heroNow = heroDefendsNow.value;
     const partants = new Set(partyAdvs.value.map((a) => a.id));
     const restants = freeStable.value.filter((a) => !partants.has(a.id));
@@ -324,7 +396,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   );
   /** La note ne s'affiche que si un champion DISPONIBLE y perd : sinon c'est du bruit. */
   const partyLowXp = computed(() =>
-    freeStable.value.some((a) => partyXp.value[a.id]?.full === false),
+    partyPool.value.some((a) => partyXp.value[a.id]?.full === false),
   );
   /** Vrai quand on ne peut plus en cocher — pour le dire AVANT qu'on essaie. */
   const partyFull = computed(() => partyAdvs.value.length >= partyMax.value);
@@ -347,7 +419,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** ✨ Tout le vivier disponible d'un geste (et de nouveau pour tout retirer) : un repaire
    *  de taille 10 demande dix aventuriers, dix toucher de suite serait une corvée. */
   /** Ce que « tout le vivier » peut réellement prendre ici. */
-  const partyAllIds = computed(() => freeSorted.value.slice(0, partyMax.value).map((a) => a.id));
+  const partyAllIds = computed(() =>
+    partyPoolSorted.value.slice(0, partyMax.value).map((a) => a.id),
+  );
   const partyAllOn = computed(
     () => partyAllIds.value.length > 0 && partyAdvs.value.length === partyAllIds.value.length,
   );
@@ -385,6 +459,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
         now: Date.now(),
         supplies: activeSupplies.value,
         ...(stayCap.value ? { stayIds: stayIds.value } : {}),
+        ...(originPoi.value ? { fromControlId: originPoi.value.id } : {}),
       });
       if (!refused) selected.value = null;
       // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
@@ -454,6 +529,10 @@ export function useExpeditionParty(ctx: PartyCtx) {
   }
 
   return {
+    partyOrigin,
+    originOptions,
+    originPoi,
+    partyPoolSorted,
     stayCap,
     stayHold,
     stayHoldOf,

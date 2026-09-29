@@ -928,6 +928,8 @@ export function reinforceControl(
   ids: readonly string[],
   at: number,
   from?: number,
+  /** 🏰 TRANSFERT : le point fixe d'où ils partent (absent = la ville). */
+  via?: string,
 ): ExpeditionMap {
   return withControl(map, id, (p) => ({
     ...p,
@@ -935,7 +937,12 @@ export function reinforceControl(
       ...p.control!,
       reinforcing: [
         ...(p.control!.reinforcing ?? []),
-        ...ids.map((x) => (from === undefined ? { id: x, at } : { id: x, at, from })),
+        ...ids.map((x) => ({
+          id: x,
+          at,
+          ...(from === undefined ? {} : { from }),
+          ...(via ? { via } : {}),
+        })),
       ],
     },
   }));
@@ -953,6 +960,8 @@ export interface ReinforcementTrip {
   sentAt: number;
   midAt: number;
   returnAt: number;
+  /** 🏰 Parti d'un autre point fixe (transfert) : le trajet se dessine depuis lui. */
+  origin?: { x: number; y: number };
 }
 export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now: number) {
   const out = new Map<string, ReinforcementTrip>();
@@ -961,11 +970,22 @@ export function reinforcementsEnRoute(map: ExpeditionMap | null | undefined, now
     if (c?.owner !== 'player') continue;
     for (const r of c.reinforcing ?? []) {
       if (r.from === undefined || now >= r.at) continue;
-      const key = `${p.id}@${r.from}>${r.at}`;
+      const key = `${p.id}@${r.from}>${r.at}${r.via ? '<' + r.via : ''}`;
       const t = out.get(key);
-      if (t) t.members.push(r.id);
-      else
-        out.set(key, { key, poi: p, members: [r.id], sentAt: r.from, midAt: r.at, returnAt: r.at });
+      if (t) {
+        t.members.push(r.id);
+        continue;
+      }
+      const src = r.via ? map!.pois.find((q) => q.id === r.via) : undefined;
+      out.set(key, {
+        key,
+        poi: p,
+        members: [r.id],
+        sentAt: r.from,
+        midAt: r.at,
+        returnAt: r.at,
+        ...(src ? { origin: { x: src.x, y: src.y } } : {}),
+      });
     }
   }
   return [...out.values()];

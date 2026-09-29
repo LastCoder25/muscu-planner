@@ -156,8 +156,8 @@
               :class="[v.at.phase === 'return' ? 'done' : 'todo', v.kind]"
             />
             <line
-              :x1="TOWN.x"
-              :y1="TOWN.y"
+              :x1="v.origin?.x ?? TOWN.x"
+              :y1="v.origin?.y ?? TOWN.y"
               :x2="v.at.x"
               :y2="v.at.y"
               class="trail van"
@@ -369,6 +369,32 @@
           >
             ↩️ Ramener {{ ctlRecallSel.length }} membre{{ ctlRecallSel.length > 1 ? 's' : '' }}
           </button>
+          <!-- ⇄ TRANSFERT (2026-09-29, demandé) : la sélection part directement renforcer un
+               AUTRE point tenu, comme un renfort parti de la base. Une tuile par point, grisée
+               AVEC la raison (`transferBlocker`, la règle du store). -->
+          <div v-if="transferTargets.length" class="xfer">
+            <p class="car-cap">⇄ <b>ou transférer</b> vers un autre point :</p>
+            <div class="xfer-grid">
+              <button
+                v-for="t in transferTargets"
+                :key="t.id"
+                type="button"
+                class="xfer-tile"
+                :disabled="!!t.why || ctlBusy"
+                :title="t.why ?? ''"
+                @click="transferCtl(t.id)"
+              >
+                <span class="xfer-emo">{{ t.emo }}</span>
+                <span class="xfer-main">
+                  <span class="xfer-name">{{ t.label }}</span>
+                  <span class="xfer-sub">{{
+                    t.why ??
+                    `🧭 ${formatDurationMin(t.min)} · ${t.free} place${t.free > 1 ? 's' : ''}`
+                  }}</span>
+                </span>
+              </button>
+            </div>
+          </div>
           <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
           <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
@@ -532,12 +558,46 @@
                l'utilisateur, v0.1263) : seul « sans XP » reste. Grisée avec la raison plutôt que cachée. -->
           <!-- 📐 Le héros et « tout le vivier » sur UNE ligne : deux boutons empilés
                prenaient ~100 px pour deux gestes. -->
+          <!-- 🏰 SORTIE (2026-09-29, demandé) : l'équipe peut partir d'un point fixe tenu — sa
+               garnison y fournit les champions, et ils y reviennent. -->
+          <div v-if="originOptions.length" class="origin-pick">
+            <p class="car-cap">🧭 <b>Départ</b> · depuis un point, l’équipe y revient</p>
+            <div class="xfer-grid">
+              <button
+                type="button"
+                class="xfer-tile"
+                :class="{ on: !originPoi }"
+                :aria-pressed="!originPoi"
+                @click="partyOrigin = null"
+              >
+                <span class="xfer-emo">🏰</span>
+                <span class="xfer-main"><span class="xfer-name">Base</span></span>
+              </button>
+              <button
+                v-for="o in originOptions"
+                :key="o.id"
+                type="button"
+                class="xfer-tile"
+                :class="{ on: originPoi?.id === o.id }"
+                :aria-pressed="originPoi?.id === o.id"
+                @click="partyOrigin = o.id"
+              >
+                <span class="xfer-emo">{{ o.emo }}</span>
+                <span class="xfer-main">
+                  <span class="xfer-name">{{ o.label }}</span>
+                  <span class="xfer-sub"
+                    >{{ o.n }} champion{{ o.n > 1 ? 's' : '' }} prêt{{ o.n > 1 ? 's' : '' }}</span
+                  >
+                </span>
+              </button>
+            </div>
+          </div>
           <div class="party-top">
             <button
               type="button"
               class="party-hero"
-              :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
-              :disabled="!!partyHeroBlock"
+              :class="{ on: partyHeroOn, off: !!partyHeroBlock || !!originPoi }"
+              :disabled="!!partyHeroBlock || !!originPoi"
               :aria-pressed="partyHeroOn"
               @click="partyHero = !partyHero"
             >
@@ -545,7 +605,11 @@
               <span class="ph-main">
                 <span class="ph-name">Ton héros</span>
                 <span class="ph-sub">{{
-                  partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : 'sans XP'
+                  originPoi
+                    ? 'il part de la base'
+                    : partyHeroBlock
+                      ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
+                      : 'sans XP'
                 }}</span>
               </span>
               <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
@@ -553,7 +617,7 @@
             <button
               v-if="char.advList.length"
               class="car-auto"
-              :disabled="!freeStable.length"
+              :disabled="!partyPoolSorted.length"
               @click="togglePartyAll"
             >
               {{ partyAllOn ? 'Retirer tous' : `✨ Tous (${partyAllIds.length})` }}
@@ -599,7 +663,7 @@
           </p>
           <div v-if="char.advList.length" class="car-pick">
             <AdvPickTile
-              v-for="a in freeSorted"
+              v-for="a in partyPoolSorted"
               :key="a.id"
               :adv="a"
               :on="partyEscort.includes(a.id)"
@@ -609,7 +673,7 @@
             <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
                  de la grille pour des tuiles qu'on ne peut pas toucher. Le bouton dit combien il
                  y en a, et pourquoi chacun est indisponible reste écrit sur sa tuile. -->
-            <template v-if="showBlocked">
+            <template v-if="showBlocked && !originPoi">
               <AdvPickTile
                 v-for="b in partyBlocked"
                 :key="b.adv.id"
@@ -627,7 +691,7 @@
             📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
           </p>
           <button
-            v-if="char.advList.length && partyBlocked.length"
+            v-if="char.advList.length && partyBlocked.length && !originPoi"
             type="button"
             class="car-blocked-toggle"
             :aria-expanded="showBlocked"
@@ -854,6 +918,7 @@ import {
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
   CONTROL,
+  CONTROL_EMO,
   CONTROL_LABEL,
   CONTROL_YIELD,
   controlFreeSeats,
@@ -892,6 +957,7 @@ import {
   warbandArmy,
 } from '@/lib/rift';
 import { caravanLegMin, convoySlotsFree, poiOffers } from '@/lib/caravan';
+import { TRANSFER_BLOCK_LABEL, legFromSpot, transferBlocker } from '@/lib/controlRoutes';
 import { MILITIA, MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
 
 const props = defineProps<{ embedded?: boolean }>();
@@ -1070,7 +1136,7 @@ watch(reveal, (to, from) => {
  *  restent ceux de `travelPosition`. */
 function drawnAt(v: Parameters<typeof travelPosition>[0]) {
   const at = travelPosition(v, now.value);
-  return { ...at, ...mapTravelPoint(at, v.poi) };
+  return { ...at, ...mapTravelPoint(at, v.poi, v.origin) };
 }
 const hero = computed(() => (active.value ? drawnAt(active.value) : null));
 const heroProg = computed(() =>
@@ -1520,6 +1586,70 @@ const reinforceLegMin = computed(() => {
     gearSpeed: advGearRoles(escort, char.advGearStock).speed,
   });
 });
+/** ⇄ Les autres points TENUS vers lesquels transférer la sélection : le trajet (la règle du
+ *  store — `legFromSpot`, champions à leur pas, miliciens au pas d'une équipe sans rôle, le
+ *  plus lent des deux) et la raison d'un refus (`transferBlocker`). */
+const transferTargets = computed(() => {
+  const map = char.row?.expedition_map;
+  const from = livePoi.value;
+  const ids = ctlRecallSel.value;
+  if (!map || !from || !ids.length || from.control?.owner !== 'player') return [];
+  const champs = char.advList.filter((a) => ids.includes(a.id));
+  const hasMil = ids.some((id) => isMilitiaId(id));
+  return map.pois
+    .filter((p) => p.id !== from.id && p.control?.owner === 'player')
+    .map((p) => {
+      const why = transferBlocker(map, from.id, p.id, ids);
+      const champMin = champs.length
+        ? legFromSpot(p, from, (q) =>
+            partyLegMin(q, champs, {
+              hero: false,
+              travelMult: travelMult.value,
+              gearSpeed: advGearRoles(champs, char.advGearStock).speed,
+            }),
+          )
+        : 0;
+      const milMin = hasMil
+        ? legFromSpot(p, from, (q) => caravanLegMin(q, [], 0, travelMult.value))
+        : 0;
+      return {
+        id: p.id,
+        emo: CONTROL_EMO[p.control!.kind],
+        label: CONTROL_LABEL[p.control!.kind],
+        free: militiaFreeSeats(p.control),
+        min: Math.max(champMin, milMin),
+        why: why ? TRANSFER_BLOCK_LABEL[why] : null,
+      };
+    });
+});
+async function transferCtl(toId: string) {
+  const uid = auth.user?.id;
+  const from = livePoi.value;
+  const ids = ctlRecallSel.value;
+  const t = transferTargets.value.find((x) => x.id === toId);
+  if (!uid || !from || !ids.length || !t || ctlBusy.value) return;
+  ctlBusy.value = true;
+  try {
+    const why = await char.transferControlGarrison(
+      uid,
+      from.id,
+      toId,
+      ids,
+      Date.now(),
+      heroLevel.value,
+    );
+    if (why) $q.notify({ type: 'warning', message: `Transfert impossible : ${why}` });
+    else {
+      ctlRecallSel.value = [];
+      $q.notify({
+        type: 'positive',
+        message: `⇄ En route vers ${t.label} — arrivée dans ${formatDurationMin(t.min)}`,
+      });
+    }
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 async function releaseCtl() {
   const uid = auth.user?.id;
   const p = livePoi.value;
@@ -1748,6 +1878,7 @@ const partiesOnMap = computed(() =>
       members: g.outcome.party?.escort ?? [],
       hero: !!g.outcome.party?.hero,
       haul: expeHaul(g.outcome),
+      origin: g.origin,
       at: drawnAt(g),
       prog: voyageProgress(g, now.value),
     })),
@@ -1785,6 +1916,7 @@ const reinforcementsOnMap = computed(() =>
     id: 'r' + r.key,
     poi: r.poi,
     members: r.members,
+    origin: r.origin,
     at: drawnAt(r),
     prog: voyageProgress(r, now.value),
     arriveIn: r.midAt - now.value,
@@ -1797,6 +1929,8 @@ const returnsOnMap = computed(() =>
     id: 'h' + r.key,
     poi: r.poi,
     members: r.members,
+    // Un retour rentre toujours à la ville : son tracé part d'elle.
+    origin: undefined as { x: number; y: number } | undefined,
     at: drawnAt(r),
     pct: voyageProgress(r, now.value).overall * 100,
     arriveIn: r.returnAt - now.value,
@@ -2436,6 +2570,10 @@ const {
   stayIds,
   stayChoice,
   toggleStay,
+  partyOrigin,
+  originOptions,
+  originPoi,
+  partyPoolSorted,
   partyHero,
   partyEscort,
   partyAdvs,
@@ -2614,6 +2752,59 @@ onUnmounted(() => {
 }
 .car-cap b {
   color: var(--text);
+}
+/* 🏰 Tuiles de départ d'une équipe et de destination d'un transfert. */
+.origin-pick,
+.xfer {
+  margin: 8px 0;
+}
+.xfer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: 6px;
+}
+.xfer-tile {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  min-width: 0;
+}
+.xfer-tile.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+}
+.xfer-tile:disabled {
+  cursor: default;
+  border-style: dashed;
+  opacity: 0.6;
+}
+.xfer-emo {
+  font-size: 20px;
+  flex: none;
+}
+.xfer-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.xfer-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.xfer-sub {
+  font-size: 11px;
+  color: var(--dim);
+  line-height: 1.3;
 }
 .party-top {
   display: flex;

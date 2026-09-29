@@ -106,8 +106,9 @@ export interface ControlState {
   /** 🏰 Renforts en ROUTE vers le point tenu : ils rejoignent la garnison à `at`. Ils
    *  occupent déjà une place (jamais plus de 3 champions au total), mais ne produisent ni
    *  ne combattent avant d'être arrivés. `from` = leur départ de la ville (absent sur les
-   *  renforts envoyés avant v0.1263) : c'est lui qui permet de les DESSINER en route. */
-  reinforcing?: { id: string; at: number; from?: number }[];
+   *  renforts envoyés avant v0.1263) : c'est lui qui permet de les DESSINER en route.
+   *  `via` = le point fixe d'où ils viennent (TRANSFERT, 2026-09-29) ; absent = la ville. */
+  reinforcing?: { id: string; at: number; from?: number; via?: string }[];
   /** 🏠 Champions et miliciens RAMENÉS, en route vers la base : partis du point à `from`,
    *  rentrés à `at` (2026-09-28, demandé : « qu'ils se voient sur la carte »). Ils ne
    *  comptent plus dans la garnison ; un champion reste occupé jusqu'à `at` (`busyUntil`),
@@ -647,6 +648,10 @@ export interface ActiveExpedition {
   seed: number;
   outcome: ExpeditionOutcome; // calculé au DÉPART, révélé/crédité aux timestamps
   reported?: boolean; // le rapport a-t-il déjà été déposé dans la boîte (à midAt) ?
+  /** 🏰 SORTIE d'un point fixe (2026-09-29) : l'équipe part de ce point et y REVIENT au lieu
+   *  de la ville. `origin` sert au dessin (`travelPosition`), `homeId` au retour en garnison. */
+  origin?: { x: number; y: number };
+  homeId?: string;
 }
 
 // Rapport déposé dans la boîte à messages 📬 à l'arrivée à l'objectif.
@@ -2281,6 +2286,9 @@ export interface Voyage {
   /** 🔍 Temps passé SUR PLACE avant le rapport (`midAt`) : la fouille des ruines d'un héros
    *  tombé. L'équipe arrive à `midAt − dwellMs`, fouille, puis le rapport tombe. */
   dwellMs?: number;
+  /** 🏰 D'où part le voyage, et où il revient : un point fixe (sortie, transfert). Absent =
+   *  la ville. */
+  origin?: { x: number; y: number };
 }
 
 /** 🐺 Le duel d'une tanière (cf. `PartyResult.den`). */
@@ -2341,7 +2349,8 @@ export function travelPosition(
   /** 🔍 Arrivé sur place, en train de fouiller (`Voyage.dwellMs`). */
   searching?: boolean;
 } {
-  const { town } = EXPE;
+  // 🏰 Un voyage parti d'un point fixe part de lui ET y revient (sortie, transfert).
+  const town = exp.origin ?? EXPE.town;
   const p = exp.poi;
   const remainTotalMs = Math.max(0, exp.returnAt - now);
   // 🔍 L'arrivée sur place précède le rapport de la durée de la fouille.
@@ -2387,15 +2396,18 @@ export const MAP_RIM = { town: 14, poi: 5 } as const;
 export function mapTravelPoint(
   pos: { x: number; y: number },
   poi: { x: number; y: number },
+  /** 🏰 Un voyage parti d'un point fixe (sortie, transfert) : il part du BORD de ce point. */
+  origin?: { x: number; y: number },
 ): { x: number; y: number } {
-  const { town } = EXPE;
+  const town = origin ?? EXPE.town;
+  const rimFrom = origin ? MAP_RIM.poi : MAP_RIM.town;
   const dx = poi.x - town.x;
   const dy = poi.y - town.y;
   const D = Math.hypot(dx, dy);
-  const span = D - MAP_RIM.town - MAP_RIM.poi;
+  const span = D - rimFrom - MAP_RIM.poi;
   if (span <= 0) return { x: pos.x, y: pos.y };
   const t = clamp01(Math.hypot(pos.x - town.x, pos.y - town.y) / D);
-  const r = MAP_RIM.town + t * span;
+  const r = rimFrom + t * span;
   return { x: town.x + (dx / D) * r, y: town.y + (dy / D) * r };
 }
 
