@@ -641,6 +641,18 @@
                       ? 'part de la base · sans XP'
                       : 'sans XP'
                 }}</span>
+                <span
+                  v-if="partyGain.hero != null"
+                  class="ph-gain"
+                  :class="{ zero: partyGain.hero === 0, neg: partyGain.hero < 0 }"
+                  :title="
+                    partyHeroOn
+                      ? 'Ce que l’équipe perdrait en réussite sans lui.'
+                      : 'Ce qu’il ajouterait en réussite à l’équipe cochée.'
+                  "
+                  >🎯 {{ partyGain.hero > 0 ? '+' : partyGain.hero < 0 ? '−' : ''
+                  }}{{ Math.abs(partyGain.hero) }} %</span
+                >
               </span>
               <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
             </button>
@@ -708,6 +720,7 @@
                 :adv="a"
                 :on="partyEscort.includes(a.id)"
                 :xp="partyXp[a.id]"
+                :gain="partyGain[a.id]"
                 @toggle="togglePartyAdv(a.id)"
               />
               <p v-if="!g.advs.length" class="pool-empty">Personne de prêt ici.</p>
@@ -729,6 +742,7 @@
               :adv="a"
               :on="partyEscort.includes(a.id)"
               :xp="partyXp[a.id]"
+              :gain="partyGain[a.id]"
               @toggle="togglePartyAdv(a.id)"
             />
             <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
@@ -2945,6 +2959,7 @@ function celebrateTopDrop(done: ExpeditionMessage) {
 
 // Écran de chargement thématique bref à l'ouverture de la carte (immersion).
 const {
+  partyGain,
   stayCap,
   stayHold,
   stayHoldOf,
@@ -3370,6 +3385,18 @@ onUnmounted(() => {
 .ph-name {
   font-size: 13px;
   font-weight: 700;
+}
+.ph-gain {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--d1, #7bc86c);
+}
+.ph-gain.zero {
+  color: var(--dim);
+  font-weight: 600;
+}
+.ph-gain.neg {
+  color: var(--d3, #ffb23f);
 }
 .ph-sub {
   font-size: 11.5px;

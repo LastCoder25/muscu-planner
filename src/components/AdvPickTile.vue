@@ -42,8 +42,19 @@
          selon elle, un champion apprend du simple au quadruple. ⚠️ ATTÉNUÉ quand le lieu est
          SOUS son niveau — c'est là que l'apprentissage chute, et c'est la règle que personne
          ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
-      <span v-if="xp && !reason" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
-        +{{ xp.xp }} XP<b v-if="xp.catchUp > 1">×{{ fmtMult(xp.catchUp) }}</b>
+      <span v-if="(xp || gain != null) && !reason" class="ca-row">
+        <span v-if="xp" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
+          +{{ xp.xp }} XP<b v-if="xp.catchUp > 1">×{{ fmtMult(xp.catchUp) }}</b>
+        </span>
+        <!-- 🎯 CE QU'IL APPORTE À LA RÉUSSITE, par rapport à l'équipe cochée (demandé) : coché,
+             ce qu'on perdrait en le retirant ; non coché, ce qu'on gagnerait en l'ajoutant. -->
+        <span
+          v-if="gain != null"
+          class="ca-gain"
+          :class="{ zero: gain === 0, neg: gain < 0 }"
+          :title="gainWhy"
+          >🎯 {{ gain > 0 ? '+' : gain < 0 ? '−' : '' }}{{ Math.abs(gain) }} %</span
+        >
       </span>
       <!-- Indisponible : on DIT pourquoi au lieu de cacher la tuile (la règle est celle du
          store, `advUnavailableReason`). -->
@@ -83,11 +94,18 @@ const props = defineProps<{
   reason?: string | null;
   /** Ce qu'il gagnerait sur le lieu visé (absent = on ne vise rien, ex. la Guilde). */
   xp?: MissionXpPreview | null;
+  /** 🎯 Ce qu'il apporte à la réussite sur le lieu visé, en points (`winGain`). */
+  gain?: number | null;
   /** Lecture seule : on MONTRE qui voyage, sans rien proposer de cocher. */
   readonly?: boolean;
 }>();
 /** Un multiplicateur se lit « ×2 » ou « ×2,5 », jamais « ×2.50 ». */
 const fmtMult = (m: number) => (Math.round(m * 10) / 10).toString().replace('.', ',');
+const gainWhy = computed(() =>
+  props.on
+    ? 'Ce que l’équipe perdrait en réussite sans lui.'
+    : 'Ce qu’il ajouterait en réussite à l’équipe cochée.',
+);
 const xpWhy = computed(() => {
   const x = props.xp;
   if (!x) return '';
@@ -224,6 +242,27 @@ const rar = computed(() => advGradeBadge(props.adv));
 }
 /* L'XP à gagner : c'est le chiffre qui décide d'une destination, il se lit avant les
    compétences. Accent = plein tarif ; atténué = le lieu est sous son niveau. */
+.ca-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+/* 🎯 L'apport à la réussite : vert s'il aide, gris s'il n'y change rien, orange s'il nuit. */
+.ca-gain {
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--d1, #7bc86c);
+  white-space: nowrap;
+}
+.ca-gain.zero {
+  color: var(--dim);
+  font-weight: 600;
+}
+.ca-gain.neg {
+  color: var(--d3, #ffb23f);
+}
 .ca-xp {
   font-size: 12px;
   font-weight: 700;

@@ -206,12 +206,7 @@ import {
   type RuneTier,
   type SkillId,
 } from '@/lib/skillRunes';
-import {
-  caravanLegMin,
-  partyAllies,
-  type EscortKit,
-  type PartyHero,
-} from '@/lib/caravan';
+import { caravanLegMin, partyAllies, type EscortKit, type PartyHero } from '@/lib/caravan';
 import {
   advGearRoles,
   advGearSellValue,
@@ -261,6 +256,7 @@ import {
 import { partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
+  heroOutInAttack,
   COMBINED_BLOCK_LABEL,
   attackNoShows,
   attackParticipants,
@@ -2547,8 +2543,11 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** Le héros défend-il ? Il n'est là que s'il n'est pas parti en expédition. C'est le
    *  seul coût de sa présence : rester, c'est renoncer au revenu d'une expédition. */
+  // ⚠️ PARTI dans une attaque combinée, il n'est plus là non plus (un groupe qui ATTEND son
+  // départ, si : il défend). Le panneau de défense le comptait présent — la résolution du
+  // siège, elle, lisait déjà les attaques (`outingsOf`).
   function heroIsHome(cur: CharacterRow): boolean {
-    return !cur.expedition;
+    return !cur.expedition && !heroOutInAttack(attackList.value);
   }
 
   /** 🏰 L'HORLOGE DES RETOURS tant qu'un siège échu n'est pas tranché.
