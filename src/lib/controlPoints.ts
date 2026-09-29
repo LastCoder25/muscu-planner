@@ -665,11 +665,18 @@ function storageMsOf(kind: ControlKind): number {
 }
 /** 📜 Une seule rune attend d'être ramassée, quel que soit l'effectif. */
 const RUNE_RESERVE = 1;
-/** 📜 Le temps d'une rune pour `n` copistes (48 h à 1, 30 h à 2, 24 h à 3) — `null` sans
- *  copiste, qui ne produit rien. Même part que la production (`unitsPerHour`). */
+/** 📜 Le temps d'une rune pour `n` copistes (48 h à 1, 30 h à 2, 24 h à 3, ~18 h 28 à 5) —
+ *  `null` sans copiste, qui ne produit rien. Même part que la production (`unitsPerHour`). */
 export function runeHoursFor(n: number): number | null {
   const s = shareOf(n);
   return s > 0 ? CONTROL.runeHoursPerItem / s : null;
+}
+/** 🌿 Le temps d'un consommable pour `n` jardiniers (12 h à 1, plus vite à plusieurs) —
+ *  `null` sans jardinier. Même part que la production (`unitsPerHour`) : l'affichage disait
+ *  « 1 toutes les 12 h » quel que soit l'effectif. */
+export function gardenHoursFor(n: number): number | null {
+  const s = shareOf(n);
+  return s > 0 ? (CONTROL.gardenHoursPerItem * shareOf(1)) / s : null;
 }
 
 /** 📜 Combien de runes le Scriptorium a recopiées à `now` (0 ou 1). */

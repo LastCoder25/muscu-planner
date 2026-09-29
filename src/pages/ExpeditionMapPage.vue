@@ -870,6 +870,7 @@ import {
   forgeXpPerHour,
   runeProgress,
   runeHoursFor,
+  gardenHoursFor,
   runeStock,
   seatsOf,
   attackImminent,
@@ -1533,6 +1534,9 @@ async function reinforceCtl() {
     ctlBusy.value = false;
   }
 }
+/** ⏳ Un temps de production en heures, lisible (« 18 h 28 », pas « 18,4615… h ») ; « — »
+ *  sans production. */
+const hoursLabel = (h: number | null) => (h === null ? '—' : formatDuration(h * 3600_000));
 /** 🏰 Ce que le point produit, en une ligne, selon ce qu'il est. */
 const controlProd = computed(() => {
   const p = livePoi.value;
@@ -1544,11 +1548,11 @@ const controlProd = computed(() => {
     case 'training':
       return `🎯 +${Math.round(trainingXpPerHour(heroLevel.value))} XP/h par champion, pour chacun selon son temps ici`;
     case 'garden':
-      return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${CONTROL.gardenHoursPerItem} h`;
+      return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${hoursLabel(gardenHoursFor(c.garrison.length))}`;
     case 'scriptorium':
       return runeStock(p, now.value) > 0
         ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
-        : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${runeHoursFor(c.garrison.length) ?? '—'} h (${c.garrison.length}/3 copistes, 24 h à 3)`;
+        : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${hoursLabel(runeHoursFor(c.garrison.length))} (${c.garrison.length}/${seatsOf('scriptorium')} copistes, ${hoursLabel(runeHoursFor(seatsOf('scriptorium')))} au complet)`;
     case 'forge':
       return `⚒️ +${Math.round(forgeXpPerHour(heroLevel.value))} XP/h par pièce portée, pour chaque champion selon son temps ici`;
     case 'tower':

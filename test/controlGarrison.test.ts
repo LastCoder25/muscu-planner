@@ -2,7 +2,19 @@
 // lieu fixe qui produit ou a un autre effet doit être amélioré selon le nombre en garnison,
 // sauf les producteurs d'XP — mais il faut qu'ils soient rentables »).
 import { describe, expect, it } from 'vitest';
-import { CONTROL, campXpFor, runeHoursFor, seatsOf, trainingXpPerHour } from '@/lib/controlPoints';
+import {
+  CONTROL,
+  campXpFor,
+  captureControl,
+  controlIdOf,
+  ensureControls,
+  gardenHoursFor,
+  gardenStock,
+  runeHoursFor,
+  seatsOf,
+  trainingXpPerHour,
+} from '@/lib/controlPoints';
+import { createMap } from '@/lib/expedition';
 import { catchUpMult, refChampionAdv } from '@/lib/caravan';
 import { trialXpBase } from '@/lib/skirmish';
 import type { Adventurer } from '@/lib/adventurers';
@@ -24,6 +36,20 @@ describe('🏰 la production grandit avec la garnison, jusqu’à 5', () => {
     expect(runeHoursFor(5)!).toBeLessThan(runeHoursFor(4)!);
     expect(runeHoursFor(4)!).toBeLessThan(runeHoursFor(3)!);
     expect(runeHoursFor(3)).toBe(CONTROL.runeHoursPerItem);
+  });
+  it('🌿 le temps annoncé d’un consommable est celui que le jardin met VRAIMENT', () => {
+    // Signalé : l'écran disait « 1 toutes les 12 h » quel que soit l'effectif.
+    const id = controlIdOf('garden');
+    for (const n of [1, 3, 5]) {
+      const ids = Array.from({ length: n }, (_, i) => `a${i}`);
+      const map = captureControl(ensureControls(createMap(3, 0, 30, 1), 0, 30), id, ids, 0, 7);
+      const poi = map.pois.find((p) => p.id === id)!;
+      const h = gardenHoursFor(n)!;
+      expect(gardenStock(poi, h * 3600_000 * 0.99)).toBe(0);
+      expect(gardenStock(poi, h * 3600_000 * 1.01)).toBe(1);
+    }
+    expect(gardenHoursFor(1)).toBe(CONTROL.gardenHoursPerItem);
+    expect(gardenHoursFor(0)).toBeNull();
   });
   it('les lieux qui forment chaque champion gardent 3 places', () => {
     expect(seatsOf('training')).toBe(3);
