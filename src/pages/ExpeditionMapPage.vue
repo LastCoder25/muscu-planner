@@ -212,8 +212,10 @@
             :selected-id="selected?.id ?? null"
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
+            :down-key="downKey"
             :imminent-key="imminentKey"
             :target="active?.poi ?? null"
+            :target-down="heroTargetDown"
             :travel-targets="travelTargets"
             @select="selectPoi"
           />
@@ -1163,6 +1165,7 @@ import {
   tripTimeLabel,
   tripLegs,
   voyageProgress,
+  voyageVanquished,
   poiCombatant,
   simulateArena,
   poiTravelLevel,
@@ -1476,6 +1479,8 @@ const heroRecallable = computed(() => !!active.value && !recallBlocker(active.va
 function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
   return v.end ?? v.poi;
 }
+/** 💀 La cible du héros, terrassée : grisée jusqu'à son retour (`voyageVanquished`). */
+const heroTargetDown = computed(() => !!active.value && voyageVanquished(active.value, now.value));
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
 );
@@ -2458,6 +2463,8 @@ const partiesOnMap = computed(() =>
       at: drawnAt(g),
       prog: voyageProgress(g, now.value),
       legs: tripLegs(g, now.value),
+      // 💀 Le lieu est terrassé dès le rapport : on le grise jusqu'au retour.
+      down: voyageVanquished(g, now.value),
     })),
 );
 /**
@@ -3470,6 +3477,14 @@ const dimmedKey = computed(() =>
     .map((p) => p.id)
     .join('|'),
 );
+/** 💀 Les lieux terrassés ENCORE sur la carte : une armée en campagne n'est pas retirée au
+ *  départ (elle continue sa marche) — elle se grise elle aussi, jusqu'au retour des vainqueurs. */
+const downKey = computed(() =>
+  [
+    ...(heroTargetDown.value && active.value ? [active.value.poi.id] : []),
+    ...travelTargets.value.filter((v) => v.down).map((v) => v.poi.id),
+  ].join('|'),
+);
 const veiledKey = computed(() =>
   fogPlan.value
     ? shownPois.value
@@ -3482,8 +3497,8 @@ const travelTargets = stableBy(
   () =>
     travelersOnMap.value
       .filter((v) => v.kind !== 'reinf') // le point tenu est déjà dessiné par MapPoiLayer
-      .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind })),
-  (l) => l.map((v) => v.id).join('|'),
+      .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind, down: 'down' in v && v.down })),
+  (l) => l.map((v) => v.id + (v.down ? '†' : '')).join('|'),
 );
 
 // Avant-poste : débloque les expéditions + réduit les trajets.
