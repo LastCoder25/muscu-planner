@@ -5543,7 +5543,8 @@ function withUid(fn: (uid: string) => Promise<unknown>, errMsg: string) {
 }
 
 // ── Mode idle « Expédition » : gel des autres modes + cycle de vie + messagerie ──
-const onExpedition = computed(() => !!char.row?.expedition);
+// ⚔️🧭 Réservé pour une attaque combinée, le héros est engagé lui aussi.
+const onExpedition = computed(() => char.heroEngaged);
 /** Le héros est-il indisponible ? Deux causes, un seul garde — tous les modes de jeu
  *  passent déjà par lui, la convalescence s'y greffe donc sans toucher un call site. */
 function expeBlocked(): boolean {
@@ -5768,6 +5769,26 @@ async function baseLifecycle() {
   }
 }
 
+/** ⚔️🧭 Les départs d'une attaque combinée, et ce qu'on en dit. */
+async function attackStep(uid: string) {
+  if (!char.attackList.length) return;
+  const r = await char.attackTick(uid, Date.now(), {
+    name: char.row?.pseudo ?? 'Toi',
+    level: c.value.level.level,
+    combatant: fighter.value,
+  });
+  if (r.dropped)
+    $q.notify({
+      type: 'warning',
+      message: `⚔️ ${r.dropped} membre${r.dropped > 1 ? 's' : ''} de ton attaque combinée n’${r.dropped > 1 ? 'ont' : 'a'} pas pu partir.`,
+    });
+  if (r.cancelled)
+    $q.notify({
+      type: 'warning',
+      message: '⚔️ Attaque combinée annulée : personne n’a pu partir.',
+    });
+}
+
 let expeBusy = false;
 async function expeLifecycle() {
   const uid = auth.user?.id;
@@ -5795,6 +5816,9 @@ async function expeLifecycle() {
       // Un groupe en route a changé : l'échéance de son retour se réaligne.
       void syncPush(true);
     }
+    // ⚔️🧭 Les départs des attaques combinées (avant les reprises : un groupe parti ne
+    // défend plus son point).
+    await attackStep(uid);
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
     const ctlMsgs = await char.controlTick(uid, Date.now(), c.value.level.level, activeDays7.value);
     if (ctlMsgs.length) {

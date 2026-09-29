@@ -22,6 +22,7 @@ import {
 import { partyWinChance } from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { garrisonChampionIds, legFromSpot } from '@/lib/controlRoutes';
+import { COMBINED_BLOCK_LABEL, combinedBlocker } from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
 import { departureRisk, guardUnits, type BaseState, type Raid } from '@/lib/raid';
@@ -36,7 +37,7 @@ import {
   type PartyHero,
 } from '@/lib/caravan';
 import type { Combatant } from '@/lib/combat';
-import type { ActiveExpedition, Poi } from '@/lib/expedition';
+import type { Poi } from '@/lib/expedition';
 
 type R<T> = Readonly<Ref<T>> | ComputedRef<T>;
 
@@ -46,7 +47,6 @@ export interface PartyCtx {
   now: R<number>;
   /** Horloge à la minute : les pronostics coûteux ne se recalculent pas à chaque seconde. */
   coarseNow: R<number>;
-  active: R<ActiveExpedition | null>;
   heroLevel: R<number>;
   progressionLevel: R<number>;
   fighter: R<Combatant>;
@@ -77,7 +77,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
     selected,
     now,
     coarseNow,
-    active,
     heroLevel,
     progressionLevel,
     fighter,
@@ -109,19 +108,24 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partyEscort = ref<string[]>([]);
   /** 🏰 Qui reste en garnison sur un point de contrôle (le choix le plus récent d'abord). */
   const partyStay = ref<string[]>([]);
-  /** 🏰 SORTIE (2026-09-29) : d'où part l'équipe — `null` = la base, sinon un point fixe
-   *  tenu dont la garnison fournit les champions (et où ils reviendront). */
-  const partyOrigin = ref<string | null>(null);
+  /** 🏰 D'où part l'équipe (2026-09-29) : `'base'` et/ou des points fixes tenus. UN seul
+   *  point = une sortie (elle y revient) ; PLUSIEURS départs = une ATTAQUE COMBINÉE, chaque
+   *  groupe part à son heure pour que tous arrivent ensemble. */
+  const partyOrigins = ref<string[]>(['base']);
   watch(selected, () => {
     partyHero.value = false;
     partyEscort.value = [];
     partyStay.value = [];
-    partyOrigin.value = null;
+    partyOrigins.value = ['base'];
   });
-  watch(partyOrigin, () => {
-    partyEscort.value = [];
-    partyStay.value = [];
-  });
+  /** Coche ou décoche un départ ; il en reste toujours un. */
+  function toggleOrigin(id: string) {
+    const s = partyOrigins.value;
+    if (s.includes(id)) {
+      if (s.length > 1) partyOrigins.value = s.filter((x) => x !== id);
+    } else partyOrigins.value = [...s, id];
+  }
+  const baseOn = computed(() => partyOrigins.value.includes('base'));
   /** Un champion de garnison prêt à sortir : ni en route vers le point, ni blessé. */
   const readyAt = (a: Adventurer, t: number) => (a.hurtUntil ?? 0) <= t && (a.busyUntil ?? 0) <= t;
   /** ⚠️ Une CHAÎNE (point → ids prêts) recalculée au tick, qui ne réveille les listes que si
@@ -168,20 +172,37 @@ export function useExpeditionParty(ctx: PartyCtx) {
       ];
     });
   });
-  const originPoi = computed(
-    () => originOptions.value.find((o) => o.id === partyOrigin.value)?.poi ?? null,
+  /** Les points de départ cochés (hors base). */
+  const pointOrigins = computed(() =>
+    originOptions.value.filter((o) => partyOrigins.value.includes(o.id)),
   );
-  // Le point choisi n'offre plus personne (tous repartis, point perdu) : retour à la base.
-  watch(originPoi, (p) => {
-    if (!p && partyOrigin.value) partyOrigin.value = null;
+  /** UN seul point, sans la base : une sortie ordinaire (`fromControlId`). */
+  const originPoi = computed(() =>
+    !baseOn.value && pointOrigins.value.length === 1 ? pointOrigins.value[0]!.poi : null,
+  );
+  /** ⚔️🧭 Plusieurs départs : une attaque combinée. */
+  const combined = computed(() => partyOrigins.value.length > 1);
+  // Un point coché qui n'offre plus personne (tous repartis, point perdu) est décoché.
+  watch(originOptions, (opts) => {
+    const ok = new Set(['base', ...opts.map((o) => o.id)]);
+    const keep = partyOrigins.value.filter((id) => ok.has(id));
+    if (keep.length !== partyOrigins.value.length)
+      partyOrigins.value = keep.length ? keep : ['base'];
   });
-  /** Qui peut partir : le vivier de la base, ou la garnison prête du point choisi. */
-  const partyPool = computed(() =>
-    originPoi.value ? (readyByPoint.value.get(originPoi.value.id) ?? []) : freeStable.value,
-  );
+  /** Qui peut partir : le vivier de la base (si cochée) et la garnison prête des points cochés. */
+  const partyPool = computed(() => [
+    ...(baseOn.value ? freeStable.value : []),
+    ...pointOrigins.value.flatMap((o) => readyByPoint.value.get(o.id) ?? []),
+  ]);
   const partyPoolSorted = computed(() =>
-    originPoi.value ? sortByGradeThenRank(partyPool.value) : freeSorted.value,
+    baseOn.value && !pointOrigins.value.length
+      ? freeSorted.value
+      : sortByGradeThenRank(partyPool.value),
   );
+  /** D'où part chaque champion : sa garnison, sinon la base. */
+  const originOfAdv = (id: string): string =>
+    pointOrigins.value.find((o) => (readyByPoint.value.get(o.id) ?? []).some((a) => a.id === id))
+      ?.id ?? 'base';
   /** Les aventuriers retenus ET toujours disponibles (un aventurier parti en convoi entre-temps
    *  sort du groupe de lui-même — le store le refuserait de toute façon). */
   const partyAdvs = computed(() => partyPool.value.filter((a) => partyEscort.value.includes(a.id)));
@@ -217,7 +238,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partyHeroBlock = computed(() =>
     selected.value
       ? partyHeroBlocker({
-          onExpedition: !!active.value,
+          onExpedition: char.heroEngaged,
           healMs: heroHealIn.value,
           outpost: outpostBuilt.value,
           poi: selected.value,
@@ -226,7 +247,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   );
   /** Le héros est-il VRAIMENT du groupe ? Le choix du joueur, tant que rien ne l'en empêche :
    *  un héros qu'on a coché puis qui part ailleurs ne doit pas fausser le pronostic. */
-  const partyHeroOn = computed(() => partyHero.value && !partyHeroBlock.value && !originPoi.value);
+  const partyHeroOn = computed(() => partyHero.value && !partyHeroBlock.value && baseOn.value);
   const heroForParty = computed<PartyHero | null>(() =>
     partyHeroOn.value
       ? { name: char.row?.pseudo ?? 'Toi', level: heroLevel.value, combatant: fighter.value }
@@ -302,8 +323,49 @@ export function useExpeditionParty(ctx: PartyCtx) {
   // ⚔️ Une bande en marche vient à notre rencontre : le trajet annoncé est celui jusqu'au
   // point où on la CROISERA (`interceptLeg`, la même règle que l'envoi), pas jusqu'à là où
   // elle se trouve maintenant. Horloge grossière : la rencontre bouge à la minute, pas plus.
+  /** ⚔️🧭 Les groupes d'une attaque combinée, chacun à SON pas depuis chez lui — la MÊME règle
+   *  que le store (`partyLegMin`, `legFromSpot`). Arrivée commune = le plus long ; chacun part
+   *  à « arrivée − son trajet ». Vide hors attaque combinée. */
+  const wingPlan = computed(() => {
+    const target = selected.value;
+    if (!target || !combined.value) return [];
+    const rows = partyOrigins.value.map((id) => {
+      const members = partyAdvs.value.filter((a) => originOfAdv(a.id) === id);
+      const hero = id === 'base' && partyHeroOn.value;
+      const origin = id === 'base' ? null : (pointOrigins.value.find((o) => o.id === id) ?? null);
+      const legOf = (p: Poi) =>
+        partyLegMin(p, members, {
+          hero,
+          travelMult: travelMult.value,
+          gearSpeed: advGearRoles(members, roadCtx.value.advGear).speed,
+          supplies: activeSupplies.value,
+        });
+      return {
+        id,
+        emo: origin?.emo ?? '🏰',
+        label: origin?.label ?? 'Base',
+        n: members.length + (hero ? 1 : 0),
+        ids: members.map((a) => a.id),
+        hero,
+        legMin: origin ? legFromSpot(target, origin.poi, legOf) : legOf(target),
+      };
+    });
+    const longest = Math.max(1, ...rows.map((r) => r.legMin));
+    return rows.map((r) => ({ ...r, departInMin: longest - r.legMin }));
+  });
+  /** Pourquoi l'attaque combinée ne peut pas partir (hors règles d'une équipe). */
+  const combinedBlock = computed(() => {
+    if (!combined.value || !selected.value) return null;
+    const b = combinedBlocker(
+      selected.value,
+      wingPlan.value.map((w) => ({ originId: w.id, members: w.ids, hero: w.hero })),
+    );
+    return b ? COMBINED_BLOCK_LABEL[b] : null;
+  });
   const partyMin = computed(() => {
     if (!selected.value || !partySize.value) return 0;
+    // ⚔️🧭 Attaque combinée : aller commun (le plus long), puis retour du plus lointain.
+    if (combined.value) return 2 * Math.max(1, ...wingPlan.value.map((w) => w.legMin));
     const legOf = (p: Poi) =>
       partyLegMin(p, partyAdvs.value, {
         hero: partyHeroOn.value,
@@ -326,9 +388,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
     const b = base.value;
     const inc = incoming.value;
     // 🏰 Une sortie ne vide pas la base : ses champions étaient déjà dehors, sur leur point.
-    if (!b || !inc || !partyTarget.value || !partySize.value || originPoi.value) return null;
+    if (!b || !inc || !partyTarget.value || !partySize.value || !baseOn.value) return null;
     const heroNow = heroDefendsNow.value;
-    const partants = new Set(partyAdvs.value.map((a) => a.id));
+    // Seuls ceux de la BASE la quittent (les autres étaient déjà sur leur point).
+    const partants = new Set(
+      partyAdvs.value.filter((a) => originOfAdv(a.id) === 'base').map((a) => a.id),
+    );
     const restants = freeStable.value.filter((a) => !partants.has(a.id));
     return departureRisk(
       b.defenses,
@@ -368,6 +433,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
     () =>
       !!selected.value &&
       !partySendBlock.value &&
+      !combinedBlock.value &&
       // ⚠️ TOUJOURS attendre la progression : avant son chargement le niveau vaut 1, et le
       // tirage des pièces d'aventurier (figé au départ) serait plafonné au plus bas rang.
       progressReady.value &&
@@ -448,19 +514,32 @@ export function useExpeditionParty(ctx: PartyCtx) {
     // coup pour choisir le message dirait toujours « camp ».
     const isRift = !!selectedRift.value;
     const isHarvest = !teamOnly.value;
+    const isCombined = combined.value;
     busyParty.value = true;
     try {
-      const refused = await char.sendParty(uid, poi, {
-        hero: heroForParty.value,
-        escortIds: partyAdvs.value.map((a) => a.id),
-        // AVEC le héros : le niveau que `expeSend` passait (progression en donjon) — son butin
-        // ne change pas. SANS lui : le niveau de SPORT, comme les convois (pièces d'aventurier).
-        playerLevel: partyHeroOn.value ? progressionLevel.value : heroLevel.value,
-        now: Date.now(),
-        supplies: activeSupplies.value,
-        ...(stayCap.value ? { stayIds: stayIds.value } : {}),
-        ...(originPoi.value ? { fromControlId: originPoi.value.id } : {}),
-      });
+      const refused = combined.value
+        ? await char.sendCombinedAttack(uid, poi, {
+            wings: wingPlan.value.map((w) => ({
+              originId: w.id === 'base' ? null : w.id,
+              escortIds: w.ids,
+              hero: w.hero ? heroForParty.value : null,
+            })),
+            playerLevel: partyHeroOn.value ? progressionLevel.value : heroLevel.value,
+            now: Date.now(),
+            supplies: activeSupplies.value,
+            ...(stayCap.value ? { stayIds: stayIds.value } : {}),
+          })
+        : await char.sendParty(uid, poi, {
+            hero: heroForParty.value,
+            escortIds: partyAdvs.value.map((a) => a.id),
+            // AVEC le héros : le niveau que `expeSend` passait (progression en donjon) — son butin
+            // ne change pas. SANS lui : le niveau de SPORT, comme les convois (pièces d'aventurier).
+            playerLevel: partyHeroOn.value ? progressionLevel.value : heroLevel.value,
+            now: Date.now(),
+            supplies: activeSupplies.value,
+            ...(stayCap.value ? { stayIds: stayIds.value } : {}),
+            ...(originPoi.value ? { fromControlId: originPoi.value.id } : {}),
+          });
       if (!refused) selected.value = null;
       // ⚠️ La RAISON du refus vient du store : un message générique laissait deviner qui bloquait.
       $q.notify(
@@ -468,11 +547,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
           ? { type: 'negative', message: `Départ impossible : ${refused}.` }
           : {
               type: 'positive',
-              message: isHarvest
-                ? '🧺 L’équipe part en récolte.'
-                : isRift
-                  ? '🌀 L’équipe s’enfonce dans la faille.'
-                  : '⚔️ L’équipe marche sur le camp.',
+              message: isCombined
+                ? '⚔️🧭 Attaque combinée lancée : chaque groupe partira à son heure.'
+                : isHarvest
+                  ? '🧺 L’équipe part en récolte.'
+                  : isRift
+                    ? '🌀 L’équipe s’enfonce dans la faille.'
+                    : '⚔️ L’équipe marche sur le camp.',
             },
       );
     } finally {
@@ -529,7 +610,12 @@ export function useExpeditionParty(ctx: PartyCtx) {
   }
 
   return {
-    partyOrigin,
+    partyOrigins,
+    toggleOrigin,
+    baseOn,
+    combined,
+    wingPlan,
+    combinedBlock,
     originOptions,
     originPoi,
     partyPoolSorted,

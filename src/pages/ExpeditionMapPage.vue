@@ -576,16 +576,20 @@
           <!-- 📐 Le héros et « tout le vivier » sur UNE ligne : deux boutons empilés
                prenaient ~100 px pour deux gestes. -->
           <!-- 🏰 SORTIE (2026-09-29, demandé) : l'équipe peut partir d'un point fixe tenu — sa
-               garnison y fournit les champions, et ils y reviennent. -->
+               garnison y fournit les champions, et ils y reviennent. ⚔️🧭 PLUSIEURS départs
+               cochés = une ATTAQUE COMBINÉE : chaque groupe part à son heure pour arriver
+               ensemble (le plan s'affiche dessous). -->
           <div v-if="originOptions.length" class="origin-pick">
-            <p class="car-cap">🧭 <b>Départ</b> · depuis un point, l’équipe y revient</p>
+            <p class="car-cap">
+              🧭 <b>Départ</b> · coche plusieurs lieux pour une attaque combinée
+            </p>
             <div class="xfer-grid">
               <button
                 type="button"
                 class="xfer-tile"
-                :class="{ on: !originPoi }"
-                :aria-pressed="!originPoi"
-                @click="partyOrigin = null"
+                :class="{ on: baseOn }"
+                :aria-pressed="baseOn"
+                @click="toggleOrigin('base')"
               >
                 <span class="xfer-emo">🏰</span>
                 <span class="xfer-main"><span class="xfer-name">Base</span></span>
@@ -595,9 +599,9 @@
                 :key="o.id"
                 type="button"
                 class="xfer-tile"
-                :class="{ on: originPoi?.id === o.id }"
-                :aria-pressed="originPoi?.id === o.id"
-                @click="partyOrigin = o.id"
+                :class="{ on: partyOrigins.includes(o.id) }"
+                :aria-pressed="partyOrigins.includes(o.id)"
+                @click="toggleOrigin(o.id)"
               >
                 <span class="xfer-emo">{{ o.emo }}</span>
                 <span class="xfer-main">
@@ -608,13 +612,37 @@
                 </span>
               </button>
             </div>
+            <!-- ⚔️🧭 LE PLAN : qui part d'où, et QUAND, pour que tous arrivent ensemble. Un groupe
+                 qui attend reste chez lui (il produit, il défend) — s'il est battu avant de
+                 partir, il ne vient pas. -->
+            <div v-if="combined && partySize" class="wing-plan">
+              <p class="car-cap">
+                ⚔️ <b>Attaque combinée</b> · tous arrivent dans
+                <b>{{ formatDurationMin(Math.max(...wingPlan.map((w) => w.legMin))) }}</b>
+              </p>
+              <div v-for="w in wingPlan" :key="w.id" class="wing-row" :class="{ empty: !w.n }">
+                <span class="wing-emo">{{ w.emo }}</span>
+                <span class="wing-name">{{ w.label }}</span>
+                <span class="wing-n">{{ w.n }} 🗡️</span>
+                <span class="wing-when">{{
+                  !w.n
+                    ? 'personne'
+                    : w.departInMin <= 0
+                      ? 'part maintenant'
+                      : `part dans ${formatDurationMin(w.departInMin)}`
+                }}</span>
+              </div>
+              <p class="car-cap">
+                Un groupe battu avant son départ (siège, reprise de son point) ne vient pas.
+              </p>
+            </div>
           </div>
           <div class="party-top">
             <button
               type="button"
               class="party-hero"
-              :class="{ on: partyHeroOn, off: !!partyHeroBlock || !!originPoi }"
-              :disabled="!!partyHeroBlock || !!originPoi"
+              :class="{ on: partyHeroOn, off: !!partyHeroBlock || !baseOn }"
+              :disabled="!!partyHeroBlock || !baseOn"
               :aria-pressed="partyHeroOn"
               @click="partyHero = !partyHero"
             >
@@ -622,7 +650,7 @@
               <span class="ph-main">
                 <span class="ph-name">Ton héros</span>
                 <span class="ph-sub">{{
-                  originPoi
+                  !baseOn
                     ? 'il part de la base'
                     : partyHeroBlock
                       ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
@@ -690,7 +718,7 @@
             <!-- ⚠️ LES INDISPONIBLES SONT MASQUÉS PAR DÉFAUT (demandé) : ils prenaient la moitié
                  de la grille pour des tuiles qu'on ne peut pas toucher. Le bouton dit combien il
                  y en a, et pourquoi chacun est indisponible reste écrit sur sa tuile. -->
-            <template v-if="showBlocked && !originPoi">
+            <template v-if="showBlocked && baseOn">
               <AdvPickTile
                 v-for="b in partyBlocked"
                 :key="b.adv.id"
@@ -708,7 +736,7 @@
             📉 XP atténuée = lieu <b>sous son niveau</b> : il y apprend beaucoup moins.
           </p>
           <button
-            v-if="char.advList.length && partyBlocked.length && !originPoi"
+            v-if="char.advList.length && partyBlocked.length && baseOn"
             type="button"
             class="car-blocked-toggle"
             :aria-expanded="showBlocked"
@@ -771,6 +799,7 @@
             💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
             un lieu d’un rang plus bas.
           </p>
+          <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>
           <!-- 📌 COLLANT en bas de l'écran : on ne défile plus jusqu'au bout pour envoyer. -->
           <div class="send-bar">
             <button class="sh-send car-send" :disabled="!canSendPartyNow" @click="doSendParty">
@@ -837,6 +866,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { poiHaulPreview, poiTeamHaul, formatHaul } from '@/lib/poiYield';
+import { attackWingVoyages } from '@/lib/combinedAttack';
 import {
   fogRevealPlan,
   fogRadiusAt,
@@ -1430,12 +1460,12 @@ const cap = computed(() => engageCap(char.pantheonLevel));
 const freeSorted = computed(() => sortByGradeThenRank(freeStable.value));
 /** Créneaux de convoi libres — ⚠️ UN SEUL pool avec les groupes partis SANS le héros
  *  (`convoySlotsFree`, même règle que le store). */
-const vansLeft = computed(() => convoySlotsFree(char.comptoirLevel, char.partyList, now.value));
+const vansLeft = computed(() => convoySlotsFree(char.comptoirLevel, char.slotTripList, now.value));
 /** Temps de convalescence restant du héros (0 = disponible). ⚠️ Il manquait ici : la carte
  *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
 const heroHealIn = computed(() => woundRemainingMs(char.row?.base, now.value));
 /** Le héros ne peut pas partir : il est sur la route, OU à l'infirmerie. */
-const heroUnavailable = computed(() => !!active.value || heroHealIn.value > 0);
+const heroUnavailable = computed(() => char.heroEngaged || heroHealIn.value > 0);
 /** Ce que ce lieu accepte MAINTENANT — la regle vit dans `caravan.ts`, pas dans un v-if.
  *  Le panneau etait entierement garde par « le heros est disponible », donc un convoi
  *  devenait impossible des que le heros partait : exactement quand on en a besoin. */
@@ -1959,8 +1989,31 @@ const returnsOnMap = computed(() =>
     arriveIn: r.returnAt - now.value,
   })),
 );
+/** ⚔️🧭 Les groupes d'une attaque combinée en préparation : chez eux tant qu'ils attendent
+ *  (⏳), puis en route — tous arrivent ensemble. */
+const attacksOnMap = computed(() =>
+  attackWingVoyages(char.attackList, char.row?.expedition_map)
+    .filter((w) => now.value < w.voyage.returnAt)
+    .map((w) => ({
+      id: 'a' + w.key,
+      poi: w.voyage.poi,
+      members: w.members,
+      hero: w.hero,
+      waiting: w.waiting && now.value < w.voyage.sentAt,
+      origin: w.voyage.origin,
+      at: drawnAt(w.voyage),
+      prog: voyageProgress(w.voyage, now.value),
+      departIn: w.voyage.sentAt - now.value,
+      arriveIn: w.voyage.midAt - (w.voyage.dwellMs ?? 0) - now.value,
+    })),
+);
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
 const travelersOnMap = computed(() => [
+  ...attacksOnMap.value.map((w) => ({
+    ...w,
+    emo: w.waiting ? '⏳' : '⚔️',
+    kind: 'party' as const,
+  })),
   ...partiesOnMap.value.map((g) => ({ ...g, emo: '⚔️', kind: 'party' as const })),
   ...reinforcementsOnMap.value.map((r) => ({ ...r, emo: '🛡️', kind: 'reinf' as const })),
   ...returnsOnMap.value.map((r) => ({ ...r, emo: '🏠', kind: 'reinf' as const })),
@@ -2001,6 +2054,25 @@ const trips = computed(() => {
       members: g.members,
       haul: g.haul,
       title: `Groupe — ${POI_LABEL[g.poi.type]} niv ${g.poi.level} · ${g.escort} champion${g.escort > 1 ? 's' : ''} · ${tripTimeLabel(g.at).untilHome}`,
+    });
+  }
+  for (const w of attacksOnMap.value) {
+    out.push({
+      key: w.id,
+      kind: 'van',
+      who: w.waiting ? '⏳' : '⚔️',
+      poi: w.poi,
+      time: w.waiting
+        ? `⏳ ${formatDuration(w.departIn)}`
+        : formatDuration(Math.max(0, w.arriveIn)),
+      pct: w.prog.overall * 100,
+      back: false,
+      withHero: w.hero,
+      members: w.members,
+      haul: [],
+      title: w.waiting
+        ? `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · part dans ${formatDuration(w.departIn)}`
+        : `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · arrivée dans ${formatDuration(Math.max(0, w.arriveIn))}`,
     });
   }
   for (const r of reinforcementsOnMap.value) {
@@ -2692,6 +2764,25 @@ async function lifecycle() {
         type: partyMsgs.some((m) => m.win) ? 'positive' : 'warning',
         message: '📬 Rapport de ton groupe — il rentre en ville.',
       });
+    // ⚔️🧭 Les départs des attaques combinées (avant les reprises : un groupe parti ne
+    // défend plus son point).
+    if (char.attackList.length) {
+      const r = await char.attackTick(uid, Date.now(), {
+        name: char.row?.pseudo ?? 'Toi',
+        level: heroLevel.value,
+        combatant: fighter.value,
+      });
+      if (r.dropped)
+        $q.notify({
+          type: 'warning',
+          message: `⚔️ ${r.dropped} membre${r.dropped > 1 ? 's' : ''} de ton attaque combinée n’${r.dropped > 1 ? 'ont' : 'a'} pas pu partir.`,
+        });
+      if (r.cancelled)
+        $q.notify({
+          type: 'warning',
+          message: '⚔️ Attaque combinée annulée : personne n’a pu partir.',
+        });
+    }
     // 🏰 Les reprises ennemies des points de contrôle, à leur heure.
     const ctlMsgs = await char.controlTick(
       uid,
@@ -2752,9 +2843,13 @@ const {
   stayIds,
   stayChoice,
   toggleStay,
-  partyOrigin,
+  partyOrigins,
+  toggleOrigin,
+  baseOn,
+  combined,
+  wingPlan,
+  combinedBlock,
   originOptions,
-  originPoi,
   partyPoolSorted,
   partyHero,
   partyEscort,
@@ -2787,7 +2882,6 @@ const {
   selected,
   now,
   coarseNow,
-  active,
   heroLevel,
   progressionLevel,
   fighter,
@@ -2934,6 +3028,45 @@ onUnmounted(() => {
 }
 .car-cap b {
   color: var(--text);
+}
+/* ⚔️🧭 Le plan d'une attaque combinée : une ligne par groupe. */
+.wing-plan {
+  margin-top: 8px;
+}
+.wing-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 10px;
+  margin-bottom: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 13px;
+}
+.wing-row.empty {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.wing-emo {
+  font-size: 18px;
+  flex: none;
+}
+.wing-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.wing-n {
+  flex: none;
+  color: var(--dim);
+}
+.wing-when {
+  flex: none;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
 }
 /* 🏰 Tuiles de départ d'une équipe et de destination d'un transfert. */
 .origin-pick,

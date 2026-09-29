@@ -250,7 +250,7 @@ describe('🐺 la tanière', () => {
     expect(denForce(c, cs, 8, true)).toBe(cs);
   });
   it('envoyer plus de monde ne gagne pas le duel d’avance', () => {
-    // Mesuré (v0.1302) : bête FIXE → 89-100 % dès 3 champions ; bête qui grossit → 73-100 %
+    // Mesuré (v0.1303) : bête FIXE → 89-100 % dès 3 champions ; bête qui grossit → 73-100 %
     // à toute taille, comme un duo. Le groupe se renforce, la bête aussi.
     const p = poi('den', { id: 'den_x', level: 45 });
     const base = campSpecOf(p)!;

@@ -97,11 +97,7 @@ const d = computed(() => {
     // ⛑️ Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
     champTotal: advs.length - champHurt,
     champHurt,
-    teamFree: convoySlotsFree(
-      char.comptoirLevel,
-      char.partyList,
-      props.now,
-    ),
+    teamFree: convoySlotsFree(char.comptoirLevel, char.slotTripList, props.now),
     teamTotal: caravanSlots(char.comptoirLevel),
   };
 });

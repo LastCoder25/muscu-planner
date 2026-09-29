@@ -103,9 +103,11 @@ import {
   buildMessage,
   poiDifficultyLevel,
   riftMaturityAt,
+  dwellMsFor,
   type ActiveExpedition,
   type ExpeditionMap,
   type ExpeditionMessage,
+  type ExpeditionOutcome,
   type Poi,
 } from '@/lib/expedition';
 import {
@@ -253,6 +255,19 @@ import {
 import { partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
+  COMBINED_BLOCK_LABEL,
+  attackNoShows,
+  attackParticipants,
+  attackSettled,
+  combinedBlocker,
+  heroInAttack,
+  normalizeAttacks,
+  planWings,
+  slotTrips,
+  wingDeparture,
+  type CombinedAttack,
+} from '@/lib/combinedAttack';
+import {
   addSupplies,
   normalizeSupplies,
   rollSupplyDrop,
@@ -395,6 +410,7 @@ export interface CharacterRow {
   boss_tokens: number;
   boss_token_state: BossTokenState | null;
   parties: ActiveParty[] | null; // ⚔️ groupes de camp partis SANS le héros (migr. 0077)
+  attacks: CombinedAttack[] | null; // ⚔️🧭 attaques combinées en préparation (migr. 0095)
   /** ⚙️ Version de l'équipement (migr. 0088) : sous `GEAR_VERSION`, la ligne reçoit une fois
    *  les cadeaux de la refonte à 7 emplacements (`gearRefonteGifts`). */
   gear_version: number;
@@ -432,7 +448,7 @@ export const useCharacterStore = defineStore('character', () => {
   const goldFx = useGoldFx(); // petite animation « + or » à chaque vente
 
   const COLS =
-    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, gacha, gacha_tickets, seals, gear_version, supplies, quest_week, runes';
+    'user_id, pseudo, gold, energy_spent, equipped, inventory, talents, cleared_dungeons, defeated_bosses, login_streak, login_grace_used, last_login_date, login_energy, reward_level, endless_best, pending_reward, keys, summon_stones, expedition, expedition_map, messages, buildings, set_pieces_seen, loadouts, voie, energy_log, base, scrap, mana, adventurers, adv_gear, laby_stats, boss_stats, dungeon_stats, boss_tokens, boss_token_state, parties, attacks, gacha, gacha_tickets, seals, gear_version, supplies, quest_week, runes';
 
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
@@ -472,6 +488,7 @@ export const useCharacterStore = defineStore('character', () => {
     // ⚔️ Groupes de camp (migr. 0077) : absent/malformé → [] ; une entrée incomplète est
     // écartée (`buildMessage` la lirait à chaque tick).
     r.parties = normalizeParties(r.parties);
+    r.attacks = normalizeAttacks(r.attacks);
     // Rangs (2026‑08‑18) : objets sauvegardés aux ANCIENNES raretés → nouveaux rangs.
     // ⚙️ Refonte à 7 emplacements (étape 8) : chaque objet est converti APRÈS les anciennes
     // migrations (idempotent, cf. `migrateGearItem`) — ses valeurs sont recalculées au
@@ -2120,6 +2137,8 @@ export const useCharacterStore = defineStore('character', () => {
     const cur = row.value;
     if (!cur) return;
     if (cur.expedition) throw new Error('Une expédition est déjà en cours.');
+    if (heroInAttack(cur.attacks))
+      throw new Error('Ton héros est réservé pour une attaque combinée.');
     // ⚔️🕳️ Un camp ET une faille s'attaquent en GROUPE (`sendParty`) : même le héros seul y
     // passe, pour que l'issue soit le combat de faction ou l'incursion, et jamais l'ancien
     // gardien — ni, pour une faille, la MINE D’OR dans laquelle `resolveOutcome` la faisait
@@ -2599,6 +2618,7 @@ export const useCharacterStore = defineStore('character', () => {
     const outings = outingsOf({
       expedition: cur.expedition,
       parties: partyList.value,
+      attacks: attackList.value,
     });
     const home = heroHomeAt(outings, at);
     // Chaque champion se bat avec SES pièces (plus de compagnon ni de talent, v0.996).
@@ -3155,6 +3175,13 @@ export const useCharacterStore = defineStore('character', () => {
   /** ⚔️ Groupes de camp partis SANS le héros (migr. 0077). Avec le héros, le voyage vit
    *  dans `expedition`. */
   const partyList = computed<ActiveParty[]>(() => row.value?.parties ?? []);
+  /** ⚔️🧭 Les attaques combinées en préparation (certains groupes attendent leur départ). */
+  const attackList = computed<CombinedAttack[]>(() => row.value?.attacks ?? []);
+  /** 🧝 Le héros est engagé ailleurs : en expédition, ou réservé pour une attaque combinée. */
+  const heroEngaged = computed(() => !!row.value?.expedition || heroInAttack(attackList.value));
+  /** 🧭 Ce qui occupe un créneau de l'Avant-poste (`slotTrips`) : UNE place par attaque
+   *  combinée, jamais par groupe. À passer à `convoySlotsFree` partout. */
+  const slotTripList = computed(() => slotTrips(partyList.value, attackList.value));
   /** 🗡️ Le STOCK d'équipement des aventuriers (migr. 0068) — séparé du sac du héros. */
   const advGearStock = computed<AdvGear[]>(() => row.value?.adv_gear?.stock ?? []);
   /** 🛕 Le niveau du PANTHÉON — un seul bâtiment depuis la fusion (v0.949), donc un seul
@@ -3244,7 +3271,7 @@ export const useCharacterStore = defineStore('character', () => {
       poi,
       escort.length,
       !!hero,
-      convoySlotsFree(comptoirLevel.value, partyList.value, now),
+      convoySlotsFree(comptoirLevel.value, slotTripList.value, now),
       engageCap(pantheonLevel.value),
       // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
       // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
@@ -3256,7 +3283,7 @@ export const useCharacterStore = defineStore('character', () => {
     // (déjà parti, infirmerie, Avant-poste, or) — `partyHeroBlocker`, une seule définition.
     const heroBlock = hero
       ? partyHeroBlocker({
-          onExpedition: !!cur.expedition,
+          onExpedition: heroEngaged.value,
           healMs: woundRemainingMs(cur.base, now),
           outpost: expeditionsUnlocked(cur.buildings),
           poi,
@@ -3279,11 +3306,85 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 Une sortie part de son point : même règle de trajet, distance mesurée depuis lui.
     const meet = interceptLeg(poi, now, origin ? (p) => legFromSpot(p, origin, legOf) : legOf);
     const leg = meet.legMin;
-    // ⚔️🕳️ LA DISPATCH VIT ICI, à l’UNIQUE chemin d’envoi : `startParty` ne choisit plus la
-    // résolution, il REÇOIT l’issue. Un camp se résout par son combat de faction, une faille
-    // par son incursion (attrition, gardien, mana). ⚠️ EXPLICITE, et non « camp sinon faille » :
-    // le jour où `PARTY_TARGETS` accueille un troisième type, il sera REFUSÉ ici au lieu
-    // d’être résolu en silence comme une incursion.
+    const withSupplies = partyOutcomeFor({
+      poi,
+      escort,
+      road,
+      hero,
+      seed,
+      now,
+      arriveAt: now + leg * 60000,
+      playerLevel: opts.playerLevel,
+      stayIds: opts.stayIds,
+    });
+    if (!withSupplies) return PARTY_SEND_BLOCK_LABEL.notTarget;
+    const trip0 = startParty(
+      { poi: meet.poi, hero, seed, champions: escort.length },
+      now,
+      leg,
+      withSupplies,
+    );
+    const trip = origin
+      ? { ...trip0, origin: { x: origin.x, y: origin.y }, homeId: origin.id }
+      : trip0;
+    const busy = new Set(opts.escortIds);
+    // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
+    const map0 = targetTaken(cur.expedition_map, poi);
+    // 🏰 Une sortie quitte la garnison de son point (ce qui est produit reste en réserve) :
+    // le point produit moins et se défend moins bien tant qu'elle est dehors.
+    const map =
+      origin && map0
+        ? releaseFromControl(map0, origin.id, opts.escortIds, now, opts.playerLevel)
+        : map0;
+    await persist(userId, {
+      expedition_map: map,
+      ...(supplies.length ? { supplies: stockAfter } : {}),
+      adventurers: advList.value.map((a) =>
+        busy.has(a.id)
+          ? { ...a, busyUntil: trip.returnAt, ...(origin ? { posted: undefined } : {}) }
+          : a,
+      ),
+      ...(hero
+        ? { expedition: trip }
+        : { parties: [...partyList.value, { ...trip, id: `party_${now.toString(36)}` }] }),
+    });
+    return null;
+  }
+
+  /** 🗺️ Le lieu visé est PRIS dès l'envoi : un point de contrôle (fixe) est marqué « assaut en
+   *  cours », tout autre lieu quitte la carte. */
+  function targetTaken(map: ExpeditionMap | null, poi: Poi): ExpeditionMap | null {
+    if (!map) return map;
+    return poi.type === 'control'
+      ? markAssault(map, poi.id, true)
+      : { ...map, pois: map.pois.filter((p) => p.id !== poi.id) };
+  }
+
+  /**
+   * ⚔️🕳️ L'ISSUE D'UNE ÉQUIPE sur un lieu — LA DISPATCH, partagée par l'envoi ordinaire et
+   * l'attaque combinée (qui la tire quand le dernier groupe est parti). Un camp se résout par
+   * son combat de faction, une faille par son incursion (attrition, gardien, mana).
+   * ⚠️ EXPLICITE, et non « camp sinon faille » : un type inconnu rend `null` (refus).
+   */
+  function partyOutcomeFor(a: {
+    poi: Poi;
+    escort: Adventurer[];
+    road: EscortKit;
+    hero: PartyHero | null;
+    seed: number;
+    now: number;
+    /** L'arrivée sur le lieu : la maturité d'une faille se lit là. */
+    arriveAt: number;
+    playerLevel: number;
+    stayIds?: string[];
+  }): ExpeditionOutcome | null {
+    const { poi, escort, road, hero, seed, now } = a;
+    const supplies = road.supplies ?? [];
+    const opts = {
+      playerLevel: a.playerLevel,
+      stayIds: a.stayIds,
+      escortIds: escort.map((x) => x.id),
+    };
     // 🐺 Une tanière : la bête prend la force du groupe envoyé (`denForce`).
     const baseSpec = campSpecOf(poi);
     const spec = baseSpec ? denForce(poi, baseSpec, escort.length, !!hero) : null;
@@ -3321,7 +3422,7 @@ export const useCharacterStore = defineStore('character', () => {
                 pantheonLevel: pantheonLevel.value,
               })
             : null;
-    if (!outcome) return PARTY_SEND_BLOCK_LABEL.notTarget;
+    if (!outcome) return null;
     // 🩹 La trousse agit à l'ENCAISSEMENT (la convalescence part du retour) : elle voyage donc
     // dans le rapport. 🎒 Et un consommable peut tomber de tout voyage.
     const healMult = supplyFx(supplies).healMult;
@@ -3350,7 +3451,7 @@ export const useCharacterStore = defineStore('character', () => {
             place: poi.type,
             placeRankIndex: characterRank(poiDifficultyLevel(poi)).rankIndex,
             playerRankIndex: characterRank(opts.playerLevel).rankIndex,
-            maturity: isRiftPoi(poi) ? riftMaturityAt(poi.spawnedAt, now + leg * 60000) : 0,
+            maturity: isRiftPoi(poi) ? riftMaturityAt(poi.spawnedAt, a.arriveAt) : 0,
           })
         : null;
     const withSupplies = {
@@ -3361,41 +3462,295 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
       supplies: addSupplies(outcome.supplies ?? {}, rollSupplyDrop(seed)),
     };
-    const trip0 = startParty(
-      { poi: meet.poi, hero, seed, champions: escort.length },
-      now,
-      leg,
-      withSupplies,
+    return withSupplies;
+  }
+
+  /**
+   * ⚔️🧭 L'ATTAQUE COMBINÉE (2026-09-29) : plusieurs groupes — la base (héros compris) et des
+   * points fixes tenus — frappent le même lieu en partant chacun à son heure pour ARRIVER
+   * ENSEMBLE (`planWings`). Rien ne part encore, sauf le groupe le plus lent : les autres
+   * sont RÉSERVÉS (`busyUntil` = leur retour prévu) mais restent chez eux — une garnison
+   * continue de produire et de se défendre, la base garde ses défenseurs. Les départs et le
+   * combat se règlent dans `attackTick`. Mêmes règles qu'une équipe (plafond du Panthéon sur
+   * le TOTAL, un créneau de l'Avant-poste, pronostic « perdu d'avance », consommables).
+   * Rend la RAISON d'un refus, `null` si l'attaque est lancée.
+   */
+  async function sendCombinedAttack(
+    userId: string,
+    poi: Poi,
+    opts: {
+      wings: { originId: string | null; escortIds: string[]; hero: PartyHero | null }[];
+      playerLevel: number;
+      now: number;
+      supplies?: SupplyId[];
+      stayIds?: string[];
+    },
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur?.expedition_map) return 'la carte n’est pas chargée';
+    const { now } = opts;
+    const shape = opts.wings.map((w) => ({
+      originId: w.originId,
+      members: w.escortIds,
+      hero: !!w.hero,
+    }));
+    const cblock = combinedBlocker(poi, shape);
+    if (cblock) return COMBINED_BLOCK_LABEL[cblock];
+    const map = cur.expedition_map;
+    // Chaque groupe : ses champions, prêts à partir de CHEZ LUI.
+    const groups: { originId: string | null; origin: Poi | null; escort: Adventurer[] }[] = [];
+    for (const w of opts.wings) {
+      const origin = w.originId ? (map.pois.find((p) => p.id === w.originId) ?? null) : null;
+      if (w.originId) {
+        if (!origin) return 'un point de départ n’existe plus';
+        const b = sortieBlocker(map, w.originId, w.escortIds);
+        if (b) return SORTIE_BLOCK_LABEL[b];
+      }
+      const escort = w.escortIds
+        .map((id) => advList.value.find((a) => a.id === id))
+        .filter(
+          (a): a is Adventurer =>
+            !!a &&
+            (origin
+              ? a.posted === origin.id && (a.hurtUntil ?? 0) <= now && (a.busyUntil ?? 0) <= now
+              : advAvailable(a, now)),
+        );
+      if (escort.length !== w.escortIds.length) return 'un champion choisi n’est plus disponible';
+      groups.push({ originId: w.originId, origin, escort });
+    }
+    const hero = opts.wings.find((w) => w.hero)?.hero ?? null;
+    const all = groups.flatMap((g) => g.escort);
+    const supplies = opts.supplies ?? [];
+    const supplyBlock = suppliesBlocker(supplies, supplyTarget(poi, !!hero, all.length));
+    if (supplyBlock) return supplyBlock;
+    const stockAfter = takeSupplies(cur.supplies, supplies);
+    if (!stockAfter) return 'un consommable choisi n’est plus en stock';
+    const road = { ...escortKitOf(cur), supplies };
+    // ⚠️ Le plafond du Panthéon, le créneau et le pronostic portent sur l'attaque ENTIÈRE.
+    const sendBlock = partySendBlocker(
+      poi,
+      all.length,
+      !!hero,
+      convoySlotsFree(comptoirLevel.value, slotTripList.value, now),
+      engageCap(pantheonLevel.value),
+      partyWinChance(poi, all, road, hero, now, 40, false),
     );
-    const trip = origin
-      ? { ...trip0, origin: { x: origin.x, y: origin.y }, homeId: origin.id }
-      : trip0;
-    const busy = new Set(opts.escortIds);
-    // 🏰 Un point de contrôle est FIXE : il reste sur la carte, marqué « assaut en cours ».
-    const map0 = cur.expedition_map
-      ? poi.type === 'control'
-        ? markAssault(cur.expedition_map, poi.id, true)
-        : { ...cur.expedition_map, pois: cur.expedition_map.pois.filter((p) => p.id !== poi.id) }
-      : cur.expedition_map;
-    // 🏰 Une sortie quitte la garnison de son point (ce qui est produit reste en réserve) :
-    // le point produit moins et se défend moins bien tant qu'elle est dehors.
-    const map =
-      origin && map0
-        ? releaseFromControl(map0, origin.id, opts.escortIds, now, opts.playerLevel)
-        : map0;
+    if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
+    const heroBlock = hero
+      ? partyHeroBlocker({
+          onExpedition: heroEngaged.value,
+          healMs: woundRemainingMs(cur.base, now),
+          outpost: expeditionsUnlocked(cur.buildings),
+          poi,
+        })
+      : null;
+    if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
+    // Le trajet de chaque groupe, à SON pas, depuis chez lui (Tour de guet comprise).
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map);
+    const plan = planWings(
+      groups.map((g) => {
+        const withHero = !!hero && g.originId === null;
+        const legOf = (p: Poi) =>
+          partyLegMin(p, g.escort, {
+            hero: withHero,
+            travelMult: mult,
+            gearSpeed: advGearRoles(g.escort, road.advGear).speed,
+            supplies,
+          });
+        return {
+          originId: g.originId,
+          members: g.escort.map((a) => a.id),
+          hero: withHero,
+          legMin: g.origin ? legFromSpot(poi, g.origin, legOf) : legOf(poi),
+        };
+      }),
+      now,
+      dwellMsFor(poi, all.length),
+    );
+    const seed = ((now ^ (poi.level * 2654435761)) & ~1) >>> 0 || 2;
+    const attack: CombinedAttack = {
+      id: `atk_${now.toString(36)}`,
+      poi,
+      seed,
+      createdAt: now,
+      arriveAt: plan.arriveAt,
+      midAt: plan.midAt,
+      playerLevel: opts.playerLevel,
+      supplies,
+      ...(opts.stayIds?.length ? { stayIds: opts.stayIds } : {}),
+      wings: plan.wings,
+    };
+    // Réservés : jusqu'à leur retour prévu. Ils restent chez eux jusqu'à leur départ.
+    const returnOf = new Map(plan.wings.flatMap((w) => w.members.map((id) => [id, w.returnAt])));
     await persist(userId, {
-      expedition_map: map,
+      expedition_map: targetTaken(map, poi),
+      attacks: [...attackList.value, attack],
       ...(supplies.length ? { supplies: stockAfter } : {}),
       adventurers: advList.value.map((a) =>
-        busy.has(a.id)
-          ? { ...a, busyUntil: trip.returnAt, ...(origin ? { posted: undefined } : {}) }
-          : a,
+        returnOf.has(a.id) ? { ...a, busyUntil: returnOf.get(a.id)! } : a,
       ),
-      ...(hero
-        ? { expedition: trip }
-        : { parties: [...partyList.value, { ...trip, id: `party_${now.toString(36)}` }] }),
     });
     return null;
+  }
+
+  /**
+   * ⚔️🧭 Les départs des attaques combinées, à leur heure (`wingDeparture`). Un groupe dont
+   * la base ou le point a été battu entre-temps part SANS les blessés, ou pas du tout. Quand
+   * le dernier groupe est parti, le combat se tire avec ceux qui sont VRAIMENT partis, et
+   * l'attaque devient des voyages ordinaires : le groupe PRINCIPAL (celui du héros, sinon de
+   * la base, sinon le premier) porte le rapport ; les autres sont ses compagnons (`wingOf`),
+   * qui rentrent chacun chez eux. Personne n'est parti : l'attaque est annulée (le lieu et les
+   * consommables sont rendus). ⚠️ À appeler APRÈS le siège, AVANT les reprises des points.
+   * Rend ce qui s'est passé, pour l'écran.
+   */
+  async function attackTick(
+    userId: string,
+    now: number,
+    hero: PartyHero | null,
+  ): Promise<{ launched: number; cancelled: number; dropped: number }> {
+    const none = { launched: 0, cancelled: 0, dropped: 0 };
+    const cur = row.value;
+    if (!cur || !attackList.value.length) return none;
+    let map = cur.expedition_map;
+    let advs = advList.value;
+    let parties = partyList.value;
+    let expedition = cur.expedition;
+    let stock = cur.supplies;
+    const keep: CombinedAttack[] = [];
+    let changed = false;
+    const out = { ...none };
+    const raidAt = cur.base?.raid?.arrivesAt ?? null;
+    for (const a0 of attackList.value) {
+      let a = a0;
+      for (let i = 0; i < a.wings.length; i++) {
+        const w = a.wings[i]!;
+        const d = wingDeparture(w, {
+          now,
+          map,
+          advs,
+          raidAt,
+          heroWoundedAt: (t) => woundRemainingMs(cur.base, t) > 0,
+        });
+        if (!d || d === 'wait') continue;
+        changed = true;
+        const went = new Set(d.members);
+        const lost = w.members.filter((id) => !went.has(id)).length + (w.hero && !d.hero ? 1 : 0);
+        out.dropped += lost;
+        // Les absents ne sont plus réservés (seulement si la réservation est toujours la nôtre).
+        advs = advs.map((x) =>
+          w.members.includes(x.id) && !went.has(x.id) && x.busyUntil === w.returnAt
+            ? { ...x, busyUntil: undefined }
+            : x,
+        );
+        if (w.originId && map && d.members.length) {
+          map = releaseFromControl(map, w.originId, d.members, w.departAt, a.playerLevel);
+          advs = advs.map((x) => (went.has(x.id) ? { ...x, posted: undefined } : x));
+        }
+        const gone = d.members.length > 0 || d.hero;
+        const wings = [...a.wings];
+        wings[i] = gone
+          ? { ...w, state: 'gone', gone: d.members, heroGone: d.hero }
+          : { ...w, state: 'dropped' };
+        a = { ...a, wings };
+      }
+      if (!attackSettled(a)) {
+        keep.push(a);
+        continue;
+      }
+      changed = true;
+      const who = attackParticipants(a);
+      if (!who.ids.length && !who.hero) {
+        // Personne n'est venu : le lieu redevient libre, les consommables reviennent.
+        out.cancelled++;
+        if (map)
+          map =
+            a.poi.type === 'control'
+              ? markAssault(map, a.poi.id, false)
+              : a.poi.expiresAt > now && !map.pois.some((p) => p.id === a.poi.id)
+                ? { ...map, pois: [...map.pois, a.poi] }
+                : map;
+        stock = addSupplies(stock, Object.fromEntries(a.supplies.map((id) => [id, 1])));
+        continue;
+      }
+      // Le héros part : il faut son combattant (la page le fournit) — sinon on attend.
+      if (who.hero && !hero) {
+        keep.push(a);
+        continue;
+      }
+      const escort = who.ids
+        .map((id) => advs.find((x) => x.id === id))
+        .filter((x): x is Adventurer => !!x);
+      const road = { ...escortKitOf(cur), supplies: a.supplies };
+      const outcome0 = partyOutcomeFor({
+        poi: a.poi,
+        escort,
+        road,
+        hero: who.hero ? hero : null,
+        seed: a.seed,
+        now: a.arriveAt,
+        arriveAt: a.arriveAt,
+        playerLevel: a.playerLevel,
+        stayIds: a.stayIds,
+      });
+      if (!outcome0) {
+        out.cancelled++;
+        if (map && a.poi.type === 'control') map = markAssault(map, a.poi.id, false);
+        advs = advs.map((x) => (who.ids.includes(x.id) ? { ...x, busyUntil: undefined } : x));
+        continue;
+      }
+      // 📜 Le rapport dit qui n'a pas pu venir.
+      const miss = attackNoShows(a);
+      const names = miss.ids
+        .map((id) => advList.value.find((x) => x.id === id)?.name ?? '?')
+        .concat(miss.hero ? ['ton héros'] : []);
+      const outcome =
+        names.length && outcome0.party
+          ? {
+              ...outcome0,
+              party: {
+                ...outcome0.party,
+                journal: [
+                  `⚠️ Battus avant de partir, ils n'ont pas rejoint l'attaque : ${names.join(', ')}.`,
+                  ...outcome0.party.journal,
+                ],
+              },
+            }
+          : outcome0;
+      out.launched++;
+      const goneWings = a.wings.filter((w) => w.state === 'gone');
+      const main =
+        goneWings.find((w) => w.heroGone) ??
+        goneWings.find((w) => w.originId === null) ??
+        goneWings[0]!;
+      for (const w of goneWings) {
+        const origin = w.originId ? map?.pois.find((p) => p.id === w.originId) : null;
+        const trip = {
+          poi: a.poi,
+          sentAt: w.departAt,
+          midAt: a.midAt,
+          returnAt: w.returnAt,
+          ...(a.midAt > a.arriveAt ? { dwellMs: a.midAt - a.arriveAt } : {}),
+          goldCost: 0,
+          seed: a.seed,
+          outcome,
+          ...(origin ? { origin: { x: origin.x, y: origin.y }, homeId: origin.id } : {}),
+          ...(w === main ? {} : { wingOf: a.id }),
+        };
+        if (w === main && w.heroGone) expedition = trip;
+        else parties = [...parties, { ...trip, id: `party_${a.id}_${w.originId ?? 'base'}` }];
+      }
+    }
+    if (!changed) return none;
+    await persist(userId, {
+      attacks: keep,
+      adventurers: advs,
+      ...(map !== cur.expedition_map ? { expedition_map: map } : {}),
+      ...(parties !== partyList.value ? { parties } : {}),
+      ...(expedition !== cur.expedition ? { expedition } : {}),
+      ...(stock !== cur.supplies ? { supplies: stock } : {}),
+    });
+    return out;
   }
 
   /** 🧿 Pose un sceau de brèche sur une faille : 24 h de répit (`sealRift`). Rend la RAISON
@@ -4167,6 +4522,11 @@ export const useCharacterStore = defineStore('character', () => {
     comptoirLevel,
     sealRiftPoi,
     partyList,
+    attackList,
+    heroEngaged,
+    slotTripList,
+    sendCombinedAttack,
+    attackTick,
     sendParty,
     partyTick,
     controlTick,

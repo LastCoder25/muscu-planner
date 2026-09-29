@@ -65,6 +65,7 @@ describe('outingsOf : tous les voyages, une seule forme', () => {
     const o = outingsOf({
       expedition: exp(1, 2, ['x']),
       parties: [exp(3, 4, ['y'])],
+      attacks: [],
     });
     expect(o).toEqual([
       { sentAt: 1, returnAt: 2, escort: ['x'], hero: true },
@@ -73,6 +74,6 @@ describe('outingsOf : tous les voyages, une seule forme', () => {
   });
 
   it('une expédition solo n’a pas d’escorte', () => {
-    expect(outingsOf({ expedition: exp(1, 2), parties: [] })[0]!.escort).toEqual([]);
+    expect(outingsOf({ expedition: exp(1, 2), parties: [], attacks: [] })[0]!.escort).toEqual([]);
   });
 });
