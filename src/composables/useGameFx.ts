@@ -11,8 +11,7 @@ import { ref } from 'vue';
 import type { FxRarity } from '@/lib/items';
 import { harvestPieces, harvestRarity, harvestTitle, type HaulPiece } from '@/lib/harvestFx';
 import type { SupplyStock } from '@/lib/supplies';
-import type { RuneTier, SkillId } from '@/lib/skillRunes';
-import { runeApplyFx, type RuneFxKind } from '@/lib/runeFx';
+import type { RuneTier } from '@/lib/skillRunes';
 
 type GameFxKind =
   | 'drop'
@@ -23,7 +22,6 @@ type GameFxKind =
   | 'chest' // coffre de fin de Défi 360 : couvercle qui s'ouvre, butin qui jaillit
   | 'tickets' // tickets d'invocation distribués un par un en éventail (`count`)
   | 'harvest' // récolte d'une place forte : consommables et runes jaillissent d'un panier
-  | 'rune' // rune posée sur un champion : la pierre se brise, la compétence en sort
   | 'rankup' // ascension d'un champion : le médaillon passe de la couleur d'un rang à l'autre
   | 'generic';
 
@@ -39,8 +37,6 @@ export interface GameFx {
   count?: number;
   /** Les pièces d'une récolte (`kind: 'harvest'`), une par sorte, avec leur nombre. */
   pieces?: HaulPiece[];
-  /** Couleur de la compétence tirée (`kind: 'rune'`) : teinte ET intensité de la scène. */
-  rune?: RuneTier;
   /** Rangs (index de `CHARACTER_RANKS`) d'un changement de rang (`kind: 'rankup'`) :
    *  l'overlay en tire les couleurs et les emblèmes, jamais une seconde table. */
   ranks?: { from: number; to: number };
@@ -120,20 +116,5 @@ export function useGameFx() {
       rarity: harvestRarity(pieces),
     });
   }
-  /** 🔮 RUNE POSÉE SUR UN CHAMPION : la pierre de la couleur tirée se brise et la compétence
-   *  en sort. La couleur et l'intensité suivent la rareté de la compétence (`runeApplyFx`). */
-  function celebrateRune(kind: RuneFxKind, drawn: SkillId, advName: string, level: number): void {
-    const r = runeApplyFx(kind, drawn, advName, level);
-    celebrate({ kind: 'rune', emoji: r.emoji, title: r.title, subtitle: r.subtitle, rune: r.tier });
-  }
-  return {
-    queue,
-    toasts,
-    celebrate,
-    celebrateTickets,
-    celebrateHarvest,
-    celebrateRune,
-    dismiss,
-    dismissToast,
-  };
+  return { queue, toasts, celebrate, celebrateTickets, celebrateHarvest, dismiss, dismissToast };
 }

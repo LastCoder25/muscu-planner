@@ -2249,27 +2249,3 @@ describe('🧺 GameFxOverlay — récolte', () => {
     expect(fx.queue.value.length).toBe(0);
   }, 30_000);
 });
-
-describe('🔮 GameFxOverlay — rune posée', () => {
-  it('la pierre de la couleur de la compétence se brise, la compétence en sort', async () => {
-    const { default: GameFxOverlay } = await import('@/components/GameFxOverlay.vue');
-    const { useGameFx } = await import('@/composables/useGameFx');
-    const { SKILLS, RUNE_COLOR } = await import('@/lib/skillRunes');
-    const fx = useGameFx();
-    const gold = (Object.keys(SKILLS) as (keyof typeof SKILLS)[]).find(
-      (id) => SKILLS[id].tier === 'gold',
-    )!;
-    fx.queue.value = [];
-    fx.celebrateRune('new', gold, 'Nyx', 1);
-    let out = '';
-    expect(
-      await mountIt(GameFxOverlay, {}, undefined, undefined, '/', (h) => (out = h)),
-    ).toBeNull();
-    expect(out).toContain('fx-rune');
-    expect(out).toContain('rune-icon');
-    expect(out).toContain('fx-rn-rays'); // une dorée a ses rayons
-    expect(out.toLowerCase()).toContain(RUNE_COLOR.gold.toLowerCase());
-    expect(out).toContain(`Nyx apprend ${SKILLS[gold].name}`);
-    fx.queue.value = [];
-  }, 30_000);
-});

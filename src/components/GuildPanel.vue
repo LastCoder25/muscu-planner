@@ -982,7 +982,14 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import SkillRunesPanel from '@/components/SkillRunesPanel.vue';
 import RuneIcon from '@/components/RuneIcon.vue';
-import { RUNE_COLOR, RUNE_INFO, RUNE_TIERS, type RuneState, type RuneTier } from '@/lib/skillRunes';
+import {
+  RUNE_COLOR,
+  RUNE_INFO,
+  RUNE_TIERS,
+  SKILLS,
+  type RuneState,
+  type RuneTier,
+} from '@/lib/skillRunes';
 import {
   ADV_STARS,
   advGradeBadge,
@@ -1012,7 +1019,13 @@ import {
   gearAscentOffer,
   readyAscensionIds,
 } from '@/lib/ascension';
-import { AWAKEN, ascendAdventurer, advAwaken, advSubtitle, engageCap } from '@/lib/adventurers';
+import {
+  AWAKEN,
+  ascendAdventurer,
+  advAwaken,
+  advSubtitle,
+  engageCap,
+} from '@/lib/adventurers';
 import { GRADE_COLOR, GRADE_LABEL } from '@/data/champions';
 import { adventurerPowers, adventurerGearPower, autoAdvGear } from '@/lib/raid';
 import {
@@ -1794,10 +1807,16 @@ function doApplyRune(a: Adventurer, tier: RuneTier) {
     const r = await char.applyRune(uid, a.id, tier);
     if (!r.ok) throw new Error(r.reason);
     detailAdv.value = char.advList.find((x) => x.id === a.id) ?? null;
-    // 🔮 La pierre se brise dans la couleur de la compétence tirée (plus elle est rare, plus
-    // ça éclate) — une seule annonce, plus de notification en double.
-    const level = detailAdv.value?.skills?.find((s) => s.id === r.drawn)?.level ?? 1;
-    gameFx.celebrateRune(r.kind, r.drawn, a.name, level);
+    const k = SKILLS[r.drawn];
+    $q.notify({
+      type: r.kind === 'full' ? 'warning' : 'positive',
+      message:
+        r.kind === 'stack'
+          ? `${k.emoji} ${k.name} monte d’un niveau.`
+          : r.kind === 'new'
+            ? `${k.emoji} ${a.name} apprend ${k.name}.`
+            : `${k.emoji} ${k.name} tirée — plus de place : à toi de choisir.`,
+    });
   });
 }
 function doResolveRune(a: Adventurer, index: number | null) {

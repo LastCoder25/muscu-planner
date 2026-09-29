@@ -631,6 +631,16 @@
                       ? 'part maintenant'
                       : `part dans ${formatDurationMin(w.departInMin)}`
                 }}</span>
+                <span
+                  v-if="w.n"
+                  class="wing-back"
+                  :title="
+                    w.wonMin < w.legMin
+                      ? 'Retour chez lui : si le point est pris / si l’assaut échoue'
+                      : 'Retour chez lui'
+                  "
+                  >↩ {{ controlReturnValue(w.legMin, w.wonMin) }}</span
+                >
               </div>
               <p class="car-cap">
                 Un groupe battu avant son départ (siège, reprise de son point) ne vient pas.
@@ -895,7 +905,13 @@ import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import { poiRank } from '@/lib/poiRank';
-import { PARTY_HERO_BLOCK_LABEL, PARTY_SEND_BLOCK_LABEL, partyLegMin, denForce } from '@/lib/party';
+import {
+  PARTY_HERO_BLOCK_LABEL,
+  PARTY_SEND_BLOCK_LABEL,
+  partyLegMin,
+  denForce,
+  tripCrew,
+} from '@/lib/party';
 import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildings';
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
@@ -1940,8 +1956,8 @@ const partiesOnMap = computed(() =>
     .map((g) => ({
       id: g.id,
       poi: g.poi,
-      escort: g.outcome.party?.escort.length ?? 0,
-      members: g.outcome.party?.escort ?? [],
+      escort: tripCrew(g).length,
+      members: tripCrew(g),
       hero: !!g.outcome.party?.hero,
       haul: expeHaul(g.outcome),
       origin: g.origin,
@@ -2021,6 +2037,7 @@ const attacksOnMap = computed(() =>
       prog: voyageProgress(w.voyage, now.value),
       departIn: w.voyage.sentAt - now.value,
       arriveIn: w.voyage.midAt - (w.voyage.dwellMs ?? 0) - now.value,
+      legs: tripLegs(w.voyage, now.value),
     })),
 );
 /** Tout ce qui voyage sans le héros, pour la carte : même tracé, l'emoji dit qui. */
@@ -2051,10 +2068,10 @@ const trips = computed(() => {
       pct: heroProg.value.overall * 100,
       back,
       withHero: true,
-      members: a.outcome.party?.escort ?? [],
+      members: tripCrew(a),
       haul: expeHaul(a.outcome),
       legs: tripLegs(a, now.value),
-      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${a.outcome.party?.escort.length ? ` · avec ${a.outcome.party.escort.length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
+      title: `Ton héros — ${POI_LABEL[a.poi.type]} niv ${a.poi.level}${tripCrew(a).length ? ` · avec ${tripCrew(a).length} champion(s)` : ''} · ${tripTimeLabel(h).untilHome}`,
     });
   }
   for (const g of partiesOnMap.value) {
@@ -2088,6 +2105,7 @@ const trips = computed(() => {
       withHero: w.hero,
       members: w.members,
       haul: [],
+      legs: w.legs,
       title: w.waiting
         ? `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · part dans ${formatDuration(w.departIn)}`
         : `Attaque combinée — ${POI_LABEL[w.poi.type]} niv ${w.poi.level} · arrivée dans ${formatDuration(Math.max(0, w.arriveIn))}`,
@@ -2216,7 +2234,7 @@ const ctlRoster = computed(() =>
     char.partyList.map((g) => ({
       poiId: g.poi.id,
       midAt: g.midAt,
-      ids: g.outcome.party?.escort ?? [],
+      ids: tripCrew(g),
     })),
     coarseNow.value,
     heroLevel.value,
@@ -2533,7 +2551,12 @@ const poiFacts = computed<PoiFact[]>(() => {
           go: true,
           ...leg(partyLeg.value, controlReturnNote.value ?? ''),
           ...(partySize.value
-            ? { value: controlReturnValue(partyLeg.value, partyWonLeg.value) }
+            ? combined.value
+              ? {
+                  value: 'par groupe',
+                  title: 'Chaque groupe rentre chez lui, avec son propre temps — voir le plan',
+                }
+              : { value: controlReturnValue(partyLeg.value, partyWonLeg.value) }
             : {}),
         },
       );
@@ -2985,7 +3008,10 @@ const {
 });
 /** 🏰 Qui rentre d'un assaut sur un point fixe, et en combien de temps (`controlReturnNote`). */
 const controlReturnNote = computed(() =>
-  selected.value?.control?.owner === 'enemy' && partyTarget.value && partySize.value
+  selected.value?.control?.owner === 'enemy' &&
+  partyTarget.value &&
+  partySize.value &&
+  !combined.value
     ? returnNote(
         partyLeg.value,
         partyWonLeg.value,
@@ -3126,8 +3152,9 @@ onUnmounted(() => {
 }
 .wing-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 2px 8px;
   min-height: 32px;
   padding: 4px 10px;
   margin-bottom: 4px;
@@ -3145,7 +3172,7 @@ onUnmounted(() => {
   flex: none;
 }
 .wing-name {
-  flex: 1;
+  flex: 1 1 6.5em; /* sinon le retour écrase le nom au lieu de passer à la ligne */
   min-width: 0;
   overflow-wrap: anywhere;
   font-weight: 600;
@@ -3157,6 +3184,15 @@ onUnmounted(() => {
 .wing-when {
   flex: none;
   color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+/* Le retour de CE groupe chez lui : poussé à droite, et sur sa propre ligne s’il manque de place. */
+.wing-back {
+  flex: none;
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 12px;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 /* 🏰 Tuiles de départ d'une équipe et de destination d'un transfert. */
