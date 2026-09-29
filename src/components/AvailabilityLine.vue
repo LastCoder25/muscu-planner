@@ -45,7 +45,7 @@
     <!-- 🛡️ Les miliciens postés sur des places fortes (ou en route) / tous ceux qui existent,
          puis le plafond de la Caserne (demandé : « assignés, total, et ce que je peux avoir »). -->
     <span v-if="mil.total || mil.cap" class="av-cell" :class="{ none: !mil.posted }"
-      ><span class="av-ico">{{ MILITIA_EMO }}</span>{{ mil.posted }}/{{ mil.total
+      ><span class="av-ico"><MilitiaPortrait /></span>{{ mil.posted }}/{{ mil.total
       }}<span class="av-cap">·max {{ mil.cap }}</span></span
     >
     <span v-if="interactive" class="av-go">›</span>
@@ -60,8 +60,9 @@ import { caravanSlots, convoySlotsFree } from '@/lib/caravan';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
-import { MILITIA_EMO, militiaCount } from '@/lib/militia';
+import { militiaCount } from '@/lib/militia';
 import { buildingLevel } from '@/lib/buildings';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{
   /** L'horloge de l'écran hôte (il en a déjà une, on ne double pas le tick). */
@@ -176,6 +177,7 @@ const title = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 .av-ico {
+  display: inline-flex;
   font-size: 14px;
   line-height: 1;
 }

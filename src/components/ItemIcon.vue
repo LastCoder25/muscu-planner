@@ -3,6 +3,15 @@
        dans un cadre « gemme » teinté par le RANG, avec ★ de qualité et 🧩 set. -->
   <div class="item-icon" :class="{ fam: isFamiliar, plain }" :style="frameStyle">
     <span v-if="isFamiliar" class="ii-emoji" aria-hidden="true">{{ item.emoji }}</span>
+    <!-- 🔮🏆 Relique et trophée : l'illustration de leur POUVOIR, sur le cadre du rang. -->
+    <img
+      v-else-if="art"
+      class="ii-art"
+      :src="art"
+      alt=""
+      decoding="async"
+      @error="brokenArt = art"
+    />
     <q-icon v-else :name="icon" class="ii-glyph" :size="glyphSize + 'px'" />
 
     <span v-if="setId" class="ii-badge set" title="Pièce de set">🧩</span>
@@ -14,9 +23,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { RANK_COLOR, jetStar, FAMILIAR_SLOT, type Item } from '@/lib/items';
 import { itemIconName } from '@/data/itemIcons';
+import { powerArt } from '@/data/powerArt';
 
 // `id` non requis : on affiche aussi des objets « sans id » (butin d'un message d'expédition).
 const props = withDefaults(
@@ -36,6 +46,13 @@ const props = withDefaults(
 const rankColor = computed(() => RANK_COLOR[props.item.rarity]);
 const isFamiliar = computed(() => props.item.slot === FAMILIAR_SLOT);
 const icon = computed(() => itemIconName(props.item));
+/** ⚠️ On retient le CHEMIN qui a échoué, pas un booléen : une liste recycle ses nœuds, un
+ *  échec ne doit pas priver de leur image les objets suivants (patron d'AdvGearArt). */
+const brokenArt = ref<string | null>(null);
+const art = computed(() => {
+  const a = powerArt(props.item.slot, props.item.power);
+  return a && a !== brokenArt.value ? a : null;
+});
 // La qualité se lit en ÉTOILES, familier compris (v0.907) : une seule lecture dans tout le
 // jeu. Le jet en % est retiré partout (v0.896 pour les objets).
 const star = computed(() => jetStar(props.item.roll));
@@ -82,6 +99,14 @@ const frameStyle = computed(() => ({
 .ii-glyph {
   color: color-mix(in srgb, var(--rk) 74%, #fff);
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
+}
+/* Fond anthracite de l'illustration : il se fond dans la tuile, dont le LISERÉ garde la
+   couleur du rang. */
+.ii-art {
+  width: 86%;
+  height: 86%;
+  object-fit: cover;
+  border-radius: 18%;
 }
 .ii-emoji {
   font-size: 62%;

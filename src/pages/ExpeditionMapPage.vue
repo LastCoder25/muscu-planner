@@ -372,7 +372,7 @@
               :aria-pressed="ctlRecallSel.includes(m.id)"
               @click="toggleRecall(m.id)"
             >
-              <span class="mil-emo">{{ MILITIA_EMO }}</span>
+              <span class="mil-emo"><MilitiaPortrait /></span>
               <span class="mil-name">{{ MILITIA_NAME }}</span>
               <span v-if="m.arriveIn > 0" class="mil-sub">🧭 {{ formatDuration(m.arriveIn) }}</span>
             </button>
@@ -1013,6 +1013,7 @@ import {
   transferSourcesFor,
 } from '@/lib/controlRoutes';
 import { MILITIA, MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
@@ -3414,7 +3415,8 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--accent) 14%, var(--surface));
 }
 .mil-emo {
-  font-size: 22px;
+  display: inline-flex;
+  font-size: 28px;
   line-height: 1;
 }
 .mil-name {

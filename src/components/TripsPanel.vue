@@ -49,7 +49,7 @@
       </div>
       <AdvPickTile v-for="a in crew.advs" :key="a.id" :adv="a" :on="true" readonly />
       <div v-if="crew.militia" class="tc-hero tc-mil">
-        <div class="tc-mil-emo">{{ MILITIA_EMO }}</div>
+        <div class="tc-mil-emo"><MilitiaPortrait /></div>
         <b>{{ crew.militia }} milicien{{ crew.militia > 1 ? 's' : '' }}</b>
       </div>
     </div>
@@ -93,7 +93,8 @@ import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
 import type { CharacterProfile } from '@/lib/character';
 import type { Adventurer } from '@/lib/adventurers';
-import { MILITIA_EMO, militiaIn } from '@/lib/militia';
+import { militiaIn } from '@/lib/militia';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{
   trips: MapTrip[];
@@ -199,8 +200,12 @@ const crew = computed(() => {
   border-color: var(--line);
 }
 .tc-mil-emo {
-  font-size: 30px;
-  line-height: 64px;
+  /* Le portrait (ou l'emoji de repli) à la taille de l'avatar du héros voisin. */
+  font-size: 48px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .tc-none {
   margin: 6px 0 0;
