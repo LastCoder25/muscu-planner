@@ -34,7 +34,6 @@ import {
   ambushCombatant,
   rollTravelEncounters,
   startExpedition,
-  TRAVEL,
   revealRadius,
   travelOneWayMin,
   mapQuota,
@@ -788,11 +787,11 @@ describe('rencontres de trajet', () => {
 });
 
 describe('rencontres qui jouent sur le TEMPS', () => {
-  it('un passage ou un contretemps RACCOURCIT le retour, jamais l’aller', () => {
+  it('un passage découvert RACCOURCIT le retour, jamais l’aller', () => {
     let vuCourt = false;
     for (let s = 1; s < 400; s++) {
       const r = rollTravelEncounters(mulberry32(s), hero, poi('well'), s, 26);
-      const temps = r.encounters.filter((e) => e.kind === 'shortcut' || e.kind === 'setback');
+      const temps = r.encounters.filter((e) => e.kind === 'shortcut');
       if (!temps.length) {
         expect(r.returnMult).toBe(1);
       } else {
@@ -820,13 +819,15 @@ describe('rencontres qui jouent sur le TEMPS', () => {
     expect(vuDecale, 'aucune expédition écourtée sur 300 tirages').toBe(true);
   });
 
-  it('un contretemps coûte la moitié de la cargaison — le temps se paie', () => {
-    for (let s = 1; s < 400; s++) {
-      const r = rollTravelEncounters(mulberry32(s), hero, poi('shrine'), s, 26);
-      if (r.encounters.length === 1 && r.encounters[0]!.kind === 'setback') {
-        expect(r.resMult).toBeCloseTo(TRAVEL.setbackHaulMult, 5);
-        expect(r.returnMult).toBeCloseTo(TRAVEL.setbackReturnMult, 5);
-        return;
+  it('⛈️ plus de contretemps : aucune rencontre ne coupe la cargaison en deux', () => {
+    // Retiré (décision de l'utilisateur) : tiré sur UN trajet, il divisait par deux le butin
+    // ENTIER — la moitié d'une mine de niveau 40 perdue sur un tirage à 5 %.
+    for (let s = 1; s < 2000; s++) {
+      const r = rollTravelEncounters(mulberry32(s), hero, poi('mine'), s, 26);
+      expect(r.text).not.toContain('Contretemps');
+      // Hors embuscade subie (×0,7), la CARGAISON ne baisse jamais (le marchand échange de l’or).
+      if (!r.encounters.some((e) => e.kind === 'ambush')) {
+        expect(r.resMult).toBeGreaterThanOrEqual(1);
       }
     }
   });

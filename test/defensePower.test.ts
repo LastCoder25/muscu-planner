@@ -613,7 +613,6 @@ describe('🚪 CE QUE COÛTE UN DÉPART, face à l’armée qui arrive', () => {
     // à temps pourrait arriver après la bataille — et l’alerte aurait été tue à tort.
     // Ajouter un jour un « retard » (`returnMult` > 1) oblige à revoir `departureRisk`.
     expect(TRAVEL.shortcutReturnMult).toBeLessThanOrEqual(1);
-    expect(TRAVEL.setbackReturnMult).toBeLessThanOrEqual(1);
   });
 
   it('sans armée en vue, aucun départ n’est risqué', () => {
