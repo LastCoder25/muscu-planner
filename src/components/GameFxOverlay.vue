@@ -22,7 +22,16 @@
   </div>
   <transition name="fx-fade">
     <div v-if="cur" :key="cur.id" class="fx-overlay" :class="'tier-' + tier" @click="dismiss">
-      <div class="fx-flash" v-if="tier >= 3 && cur.kind !== 'rankup'" />
+      <!-- Une rune n'éclaire qu'au BRIS de la pierre, pas à son apparition. -->
+      <div
+        class="fx-flash"
+        v-if="tier >= 3 && cur.kind !== 'rankup'"
+        :style="
+          isRune
+            ? { '--fx-color': color, animationDelay: '1s', animationFillMode: 'forwards' }
+            : undefined
+        "
+      />
       <!-- ASCENSION : une scène à part entière (portrait du champion), pas la carte générique. -->
       <AscensionReveal
         v-if="cur.kind === 'rankup' && rankFx"
@@ -36,11 +45,11 @@
         :gear-model="cur.gear?.model ?? null"
         :note="cur.gear ? cur.subtitle : undefined"
       />
-      <div v-else class="fx-card" :style="{ '--fx-color': color }">
+      <div v-else class="fx-card" :class="{ 'rune-card': isRune }" :style="{ '--fx-color': color }">
         <!-- Anneau + particules qui jaillissent (nombre/intensité selon rareté) -->
-        <div class="fx-ring" />
+        <div v-if="!isRune" class="fx-ring" />
         <span
-          v-for="p in particles"
+          v-for="p in isRune ? 0 : particles"
           :key="p"
           class="fx-particle"
           :style="{ '--a': (p / particles) * 360 + 'deg', '--d': (p % 3) * 0.05 + 's' }"
@@ -92,6 +101,25 @@
           </div>
           <span class="fx-hv-basket">🧺</span>
         </div>
+        <!-- 🔮 RUNE POSÉE : la pierre tombe, se charge, se brise en éclats de sa couleur, et
+             la compétence en sort. Plus la compétence est rare, plus ça éclate : rayons dès la
+             violette, éclair pour la dorée (`RUNE_FX_INTENSITY`). -->
+        <div v-else-if="isRune && cur.rune" class="fx-rune" aria-hidden="true">
+          <span v-if="tier >= 2" class="fx-rn-rays" />
+          <span class="fx-rn-glow" />
+          <span class="fx-ring" />
+          <span class="fx-rn-stone"><RuneIcon :tier="cur.rune" size="76px" /></span>
+          <span
+            v-for="p in shards"
+            :key="p"
+            class="fx-rn-shard"
+            :style="{
+              '--a': (p / shards) * 360 + (p % 2) * 11 + 'deg',
+              '--r': 90 + (p % 4) * 22 + 'px',
+            }"
+          />
+          <span class="fx-rn-skill">{{ cur.emoji }}</span>
+        </div>
         <div v-else class="fx-emoji">{{ cur.emoji }}</div>
         <div class="fx-title font-display">{{ cur.title }}</div>
         <div v-if="cur.subtitle" class="fx-sub">{{ cur.subtitle }}</div>
@@ -107,6 +135,8 @@ import { useGameFx } from '@/composables/useGameFx';
 import { CHARACTER_RANKS } from '@/lib/characterRank';
 import AscensionReveal, { ASCENSION_SWAP_MS } from '@/components/AscensionReveal.vue';
 import RuneIcon from '@/components/RuneIcon.vue';
+import { RUNE_FX_INTENSITY } from '@/lib/runeFx';
+import { RUNE_COLOR } from '@/lib/skillRunes';
 
 const { queue, toasts, dismiss, dismissToast } = useGameFx();
 const cur = computed(() => queue.value[0] ?? null);
@@ -127,7 +157,10 @@ const rankFx = computed(() => {
   return from && to ? { from, to } : null;
 });
 /** Une ascension haute éclate plus fort : l'intensité suit le rang atteint. */
+/** 🔮 Une rune posée : sa couleur de compétence décide de la teinte et de l'intensité. */
+const isRune = computed(() => cur.value?.kind === 'rune' && !!cur.value.rune);
 const tier = computed(() => {
+  if (isRune.value) return RUNE_FX_INTENSITY[cur.value!.rune!];
   if (rankFx.value) {
     const t = cur.value!.ranks!.to;
     return t >= 7 ? 4 : t >= 4 ? 3 : 2;
@@ -135,11 +168,13 @@ const tier = computed(() => {
   return cur.value?.rarity ? (RARITY_TIER[cur.value.rarity] ?? 2) : 2;
 });
 const color = computed(() =>
-  rankFx.value
-    ? rankFx.value.to.color
-    : cur.value?.rarity
-      ? (RARITY_COLOR[cur.value.rarity] ?? '#ffd23f')
-      : '#ffd23f',
+  isRune.value
+    ? RUNE_COLOR[cur.value!.rune!]
+    : rankFx.value
+      ? rankFx.value.to.color
+      : cur.value?.rarity
+        ? (RARITY_COLOR[cur.value.rarity] ?? '#ffd23f')
+        : '#ffd23f',
 );
 
 const reduced =
@@ -147,6 +182,10 @@ const reduced =
 // Particules : plus la rareté est haute, plus il y en a (divin = explosion). 0 si
 // mouvement réduit.
 const particles = computed(() => (reduced ? 0 : 6 + tier.value * 6));
+/** Éclats de la rune brisée : 6 pour une verte, 21 pour une dorée. */
+const shards = computed(() => (reduced ? 0 : 6 + tier.value * 5));
+/** Durée de la scène de rune avant que le titre ne se lise (chute + charge + bris). */
+const RUNE_SCENE_MS = 1150;
 /** Tickets DESSINÉS : un par unité, plafonnés pour que l'éventail reste lisible sur un
  *  téléphone (le total affiché, lui, dit le vrai nombre). */
 const TICKETS_DRAWN_MAX = 12;
@@ -195,7 +234,9 @@ watch(
           ? (fx.pieces?.length ?? 0) * HARVEST_DEAL_MS + 1400
           : fx.kind === 'rankup'
             ? ASCENSION_SWAP_MS + 2600
-            : 0;
+            : fx.kind === 'rune'
+              ? RUNE_SCENE_MS + 900
+              : 0;
     const ms = reduced ? 1100 : 1600 + tier.value * 350 + deal;
     timer = setTimeout(dismiss, ms);
   },
@@ -602,6 +643,149 @@ onBeforeUnmount(() => {
     opacity: 1;
   }
 }
+/* ── 🔮 Rune posée ────────────────────────────────────────────────────────
+   0 → 0,45 s : la pierre tombe · 0,45 → 1 s : elle se charge et tremble ·
+   1 s : elle éclate, la compétence en sort. Anneau et texte attendent le bris. */
+.fx-rune {
+  position: relative;
+  width: 150px;
+  height: 130px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.fx-rn-stone {
+  position: absolute;
+  animation: rn-stone 1.05s cubic-bezier(0.3, 0.9, 0.4, 1) both;
+}
+@keyframes rn-stone {
+  0% {
+    transform: translateY(-90px) scale(0.6);
+    opacity: 0;
+  }
+  40% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  55% {
+    transform: translate(-2px, 0) rotate(-4deg) scale(1.02);
+  }
+  65% {
+    transform: translate(2px, 0) rotate(4deg) scale(1.05);
+  }
+  75% {
+    transform: translate(-3px, 0) rotate(-5deg) scale(1.08);
+    filter: brightness(1.4) drop-shadow(0 0 10px var(--fx-color));
+  }
+  88% {
+    transform: translate(3px, 0) rotate(5deg) scale(1.12);
+    filter: brightness(1.9) drop-shadow(0 0 18px var(--fx-color));
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    filter: brightness(3) drop-shadow(0 0 26px var(--fx-color));
+    opacity: 0;
+  }
+}
+.fx-rn-glow {
+  position: absolute;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--fx-color), transparent 65%);
+  opacity: 0;
+  animation: rn-glow 1.6s ease-out 0.4s both;
+}
+@keyframes rn-glow {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  40% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+}
+.fx-rn-rays {
+  position: absolute;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(
+    from 0deg,
+    color-mix(in srgb, var(--fx-color) 45%, transparent) 0deg 8deg,
+    transparent 8deg 24deg
+  );
+  mask: radial-gradient(circle, #000 20%, transparent 68%);
+  opacity: 0;
+  animation:
+    rn-rays-in 0.5s ease-out 1s both,
+    rn-spin 9s linear 1s infinite;
+}
+@keyframes rn-rays-in {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes rn-spin {
+  to {
+    rotate: 360deg;
+  }
+}
+.fx-rn-shard {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 9px;
+  height: 13px;
+  margin: -6px -4px;
+  background: var(--fx-color);
+  clip-path: polygon(50% 0, 100% 40%, 60% 100%, 0 70%);
+  opacity: 0;
+  transform: rotate(var(--a)) translateY(0);
+  animation: rn-shard 0.8s ease-out 1s both;
+}
+@keyframes rn-shard {
+  0% {
+    opacity: 1;
+    transform: rotate(var(--a)) translateY(0) rotate(0);
+  }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(calc(-1 * var(--r))) rotate(220deg) scale(0.5);
+  }
+}
+.fx-rn-skill {
+  position: relative;
+  font-size: 72px;
+  line-height: 1;
+  filter: drop-shadow(0 0 16px var(--fx-color));
+  animation: rn-skill 0.6s cubic-bezier(0.2, 1.6, 0.4, 1) 1s both;
+}
+@keyframes rn-skill {
+  0% {
+    transform: scale(0.1) rotate(-20deg);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+.rune-card .fx-ring {
+  animation-delay: 1s;
+}
+.rune-card .fx-title {
+  animation-delay: 1.15s;
+}
+.rune-card .fx-sub {
+  animation-delay: 1.25s;
+}
 .fx-title {
   font-size: 26px;
   font-weight: 800;
@@ -667,6 +851,16 @@ onBeforeUnmount(() => {
   }
   .fx-tk-total {
     animation: none;
+  }
+  /* Rune : la compétence directement, sans pierre ni éclats. */
+  .fx-rn-stone {
+    display: none;
+  }
+  .fx-rn-glow,
+  .fx-rn-rays,
+  .fx-rn-skill {
+    animation: none;
+    opacity: 1;
   }
   /* Récolte : les pièces directement à leur place. */
   .fx-hv,
