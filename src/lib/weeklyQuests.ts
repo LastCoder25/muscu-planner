@@ -18,7 +18,7 @@
 // vient une fois par semaine. Elles ne dépendent que du passé, donc elles ne bougent pas
 // pendant la semaine — et rien n'est à stocker.
 //
-// ⚠️ LES QUÊTES SUIVENT CE QUE TU PRATIQUES (v0.1356 ; demandé par l'utilisateur : « adapter
+// ⚠️ LES QUÊTES SUIVENT CE QUE TU PRATIQUES (v0.1357 ; demandé par l'utilisateur : « adapter
 // les quêtes à l'activité sportive de l'utilisateur »). Le tirage était aveugle : un joueur
 // 100 % muscu recevait « 30 min de sortie cardio » ou « 2 sports différents », c'est-à-dire
 // un objectif hors de sa pratique, donc une semaine impossible à boucler sans changer de
