@@ -2199,7 +2199,7 @@ function pushHaul(out: PoiFact[], p: Poi, force: Parameters<typeof forceLootPrev
       cls: 'dim',
       title: heroGoes
         ? 'Avec le héros, seuls les bâts 🧺 augmentent la récolte'
-        : 'Les porteurs gonflent les ressources (énergie, pierres, clés, mana), pas l’or d’une mine',
+        : 'L’énergie ramenée par une équipe ne dépasse jamais sa base : les porteurs n’y ajoutent rien',
     });
 }
 /**

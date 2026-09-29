@@ -56,7 +56,7 @@ const team = (n: number, L = 26): Adventurer[] =>
 const road = { advGear: refAdvGear(26, 3) };
 const hero: PartyHero = { name: 'H', level: 26, combatant: refFighter(26) };
 
-describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1161)', () => {
+describe('🪙 héros ou non, l’or d’une récolte part de la même base (v0.1161)', () => {
   // Avant, une mine payait sa formule pleine au héros et 30 % de son coût à une équipe :
   // ~90 fois moins pour le même lieu. Une seule règle désormais (`harvestGold`) ; seuls les
   // aléas du voyage diffèrent (rencontres du héros ; embuscades, rôles et bâts d'une équipe).
@@ -82,10 +82,13 @@ describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1161)', (
     return s / n;
   };
 
-  it('une MINE rapporte autant à une équipe qu’au héros (aux aléas du voyage près)', () => {
+  it('une MINE rapporte autant à une équipe qu’au héros, AVANT ses porteurs 🐫 (v0.1297)', () => {
+    // ⚠️ Depuis la v0.1297 (décision de l'utilisateur) les porteurs 🐫 augmentent l'or d'une
+    // mine : on retire leur part (`caravanHaulMult`) pour comparer la BASE — elle reste la même.
     for (const L of [12, 26, 60]) {
       const p = poi('mine', { level: L });
-      const ratio = moyenne(p, false, L) / moyenne(p, true, L);
+      const porteurs = caravanHaulMult(team(3, L), refAdvGear(L, 3), 0);
+      const ratio = moyenne(p, false, L) / porteurs / moyenne(p, true, L);
       expect(ratio, `niveau ${L} : équipe/héros ${ratio.toFixed(2)}`).toBeGreaterThan(0.9);
       expect(ratio, `niveau ${L} : équipe/héros ${ratio.toFixed(2)}`).toBeLessThan(1.15);
     }
@@ -93,8 +96,8 @@ describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1161)', (
 
   it('les deux chemins partent de la MÊME base : `harvestGold`', () => {
     // Le héros : or de base × ses rencontres de trajet ; une équipe : × son voyage (`k`).
-    // Sur une route calme, l'équipe touche exactement la base — son rôle 🐫 de cargaison
-    // (présent dans l'équipe de référence) ne touche PAS l'or, comme avec le héros.
+    // Sur une route calme, l'équipe touche la base × sa cargaison 🐫 (v0.1297 : les porteurs
+    // augmentent l'or d'une mine ; avant, ils n'y touchaient pas).
     const p = poi('mine');
     let calmes = 0;
     for (let seed = 1; seed <= 40; seed++) {
@@ -102,7 +105,7 @@ describe('🪙 héros ou non, l’or d’une récolte est le même (v0.1161)', (
       if (!c.events.every((e) => e.kind === 'calme')) continue;
       calmes++;
       expect(caravanHaulMult(team(3), [], 0)).toBeGreaterThan(1);
-      expect(c.gold).toBe(harvestGold(p, 26));
+      expect(c.gold).toBe(Math.round(harvestGold(p, 26) * caravanHaulMult(team(3), [], 0)));
     }
     expect(calmes).toBeGreaterThan(0);
   });

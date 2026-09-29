@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { poiHaulPreview, poiHaulBonus, poiTeamHaul, formatHaul } from '@/lib/poiYield';
-import { refAdvGear, refChampionAdv, resolveCaravan } from '@/lib/caravan';
+import { caravanHaulMult, refAdvGear, refChampionAdv, resolveCaravan } from '@/lib/caravan';
 import { SUPPLY, type SupplyId } from '@/lib/supplies';
 import type { Adventurer } from '@/lib/adventurers';
 import {
@@ -193,9 +193,18 @@ describe('poiTeamHaul : la récolte de base et celle de cette équipe', () => {
     expect(r.idleHaul).toBe(false);
   });
 
-  it('une mine d’or : le porteur 🐫 ne change pas l’or — et on le dit', () => {
+  it('une mine d’or : le porteur 🐫 ramène plus d’or (v0.1297)', () => {
     const r = poiTeamHaul(poi('mine'), opts(porteur));
-    expect(r.total.gold).toBe(r.base.gold);
+    expect(r.total.gold).toBe(
+      Math.round(harvestGold(poi('mine'), 26) * caravanHaulMult(porteur, advGear, 0)),
+    );
+    expect(r.total.gold).toBeGreaterThan(r.base.gold);
+    expect(r.idleHaul).toBe(false);
+  });
+
+  it('une source sans le héros : l’énergie d’une équipe est plafonnée — le porteur est dit inutile', () => {
+    const r = poiTeamHaul(poi('well', 'w', 26), opts(porteur));
+    expect(r.total).toEqual(r.base);
     expect(r.idleHaul).toBe(true);
   });
 

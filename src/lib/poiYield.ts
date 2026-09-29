@@ -72,8 +72,8 @@ export function poiHaulPreview(
  *
  * ⚠️ LES MÊMES RÈGLES QUE LA RÉSOLUTION (`harvestParty` avec le héros, `resolveCaravan` sans
  * lui) : avec le héros, seuls les bâts 🧺 comptent et s'appliquent à TOUT ; sans lui, les rôles
- * 🐫 et les pièces de cargaison s'ajoutent sous un plafond (`caravanHaulMult`), l'or ne suit
- * que les bâts, l'énergie reste plafonnée à sa base et les clés à ×1,2. Seule la récolte en
+ * 🐫 et les pièces de cargaison s'ajoutent sous un plafond (`caravanHaulMult`), or compris ;
+ * l'énergie reste plafonnée à sa base et les clés à ×1,2. Seule la récolte en
  * profite — pas les bourses des gardes. Hors aléas de la route.
  */
 export function poiHaulBonus(
@@ -106,7 +106,8 @@ export function poiHaulBonus(
   }
   const k = caravanHaulMult(opts.escort, opts.kit.advGear, bats);
   return {
-    gold: Math.round(gold * (1 + bats)) - gold,
+    // 🪙 L'or suit la cargaison comme le reste (renversement v0.1297 de la v0.1161).
+    gold: Math.round(gold * k) - gold,
     // ⚡ `min(e, e × k)` dans la résolution : l'énergie d'une équipe ne dépasse jamais sa base.
     energy: 0,
     summonStones:
@@ -124,8 +125,7 @@ export function poiHaulBonus(
  *
  * ⚠️ `idleHaul` : l'équipe porte une compétence de cargaison 🐫 (rôle ou pièce) qui ne change
  * RIEN ici. C'est la règle, pas un oubli — avec le héros seuls les bâts comptent, et sans lui
- * le rôle ne gonfle que les RESSOURCES, jamais l'or (`resolveCaravan`, v0.1161) : une mine ne
- * bouge donc pas. On le DIT, sinon « ramène plus » sur la tuile se lit comme une promesse que
+ * l'énergie d'une équipe reste plafonnée à sa base (une source ne bouge donc pas). On le DIT, sinon « ramène plus » sur la tuile se lit comme une promesse que
  * la fiche trahit en silence. Mesuré en comparant le bonus avec et sans l'escorte.
  */
 export function poiTeamHaul(

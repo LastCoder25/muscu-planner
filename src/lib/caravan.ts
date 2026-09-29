@@ -1464,12 +1464,13 @@ export function resolveCaravan(
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais
     // substitut au sport » est un invariant, pas une base qu'un bon voyage dépasserait.
-    // 🪙 L'or est celui du héros (`harvestGold`, v0.1161) : seuls les aléas de la route et les
-    // bâts 🧺 le modulent — exactement ce que le héros subit. ⚠️ PAS le rôle 🐫 ni les pièces
-    // de cargaison : avec le héros ils ne comptent pas, et les appliquer à l'or faisait gagner
-    // à une équipe 17 à 22 % de plus que le héros sur la même mine (mesuré). Ils gonflent les
-    // RESSOURCES, pas l'or.
-    gold: Math.round(harvestGold(poi, playerLevel) * mult * (1 + Math.max(0, fx.haul))),
+    // 🪙 L'or part de celui du héros (`harvestGold`, v0.1161), puis suit la CARGAISON (`haul` :
+    // rôles 🐫, pièces de cargaison et bâts 🧺, sous `CARAVAN.haulMax`). ⚠️ RENVERSEMENT
+    // ASSUMÉ de la v0.1161 (décision de l'utilisateur : « une mine est affectée par la
+    // compétence de convoi qui ramène plus ») : une équipe de porteurs gagne désormais plus
+    // d'or que le héros seul sur la même mine — c'est le prix de la compétence. Avec le héros
+    // le rôle ne compte toujours pas (seuls les bâts, `harvestParty`).
+    gold: Math.round(harvestGold(poi, playerLevel) * mult * haul),
     // ⚠️ L'ARRONDI EN DERNIER, et ce n'est pas cosmétique : `y.energy` vaut la part
     // brute × l'ancien `yieldShare` (0,5), donc il tombait sur un DEMI. Avec l'arrondi à
     // l'intérieur du `min`, dès que les multiplicateurs valaient ≥ 1 c'était la valeur
