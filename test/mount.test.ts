@@ -2108,6 +2108,8 @@ describe('🔀 FusionPanel', () => {
     expect(out).toContain('Garnison 3 sur 5');
     expect(out.match(/class="mini"/g)?.length).toBe(1);
     expect(out.match(/class="mini mil"/g)?.length).toBe(2);
+    // Chaque milicien porte son portrait (l’emoji 🛡️ n’est plus que le repli).
+    expect(out.match(/class="mil-portrait"/g)?.length).toBe(2);
     expect(out.match(/class="mini route"/g)?.length).toBe(1);
     expect(out.match(/class="mini free"/g)?.length).toBe(1);
     expect(out).toContain('🧭 +1 en route');

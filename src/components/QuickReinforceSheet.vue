@@ -30,7 +30,7 @@
         :disabled="busy"
         @click="emit('militia')"
       >
-        <span class="qr-mil-emo">{{ MILITIA_EMO }}</span>
+        <span class="qr-mil-emo"><MilitiaPortrait /></span>
         <span class="qr-mil-main">
           <span class="qr-mil-name">Un {{ MILITIA_NAME.toLowerCase() }}</span>
           <span class="qr-mil-sub"
@@ -75,7 +75,7 @@
                 ><ChampionPortrait v-if="m.adv" :champion-id="m.adv.championId">{{
                   advTitle(m.adv)?.emoji ?? '🧑'
                 }}</ChampionPortrait
-                ><template v-else>{{ MILITIA_EMO }}</template></span
+                ><MilitiaPortrait v-else /></span
               >
               <span class="qr-mem-main">
                 <span class="qr-mem-name">{{ m.adv ? m.adv.name : MILITIA_NAME }}</span>
@@ -95,7 +95,8 @@ import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { CONTROL_EMO, CONTROL_LABEL } from '@/lib/controlPoints';
 import type { Poi } from '@/lib/expedition';
-import { MILITIA_EMO, MILITIA_NAME } from '@/lib/militia';
+import { MILITIA_NAME } from '@/lib/militia';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { formatDurationMin } from '@/lib/duration';
 
 defineProps<{
@@ -210,6 +211,11 @@ const emit = defineEmits<{
 .qr-mem-emo :deep(.cp) {
   width: 100%;
   height: 100%;
+}
+.qr-mem-emo :deep(.mil-portrait) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
 }
 .qr-mem-main {
   display: flex;

@@ -99,9 +99,9 @@
                   advTitle(s.adv)?.emoji ?? '🧑'
                 }}</ChampionPortrait></span
               >
-              <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME">{{
-                MILITIA_EMO
-              }}</span>
+              <span v-else-if="s.kind === 'mil'" class="mini mil" :title="MILITIA_NAME"
+                ><MilitiaPortrait
+              /></span>
               <!-- 🧭 Un renfort en route occupe déjà sa place : la montrer libre inviterait à
                    en envoyer un second. -->
               <span v-else-if="s.kind === 'route'" class="mini route" title="Renfort en route"
@@ -156,7 +156,8 @@ import {
   type ControlRosterRow,
   type ControlRosterStatus,
 } from '@/lib/controlPoints';
-import { MILITIA_EMO, MILITIA_NAME, isMilitiaId } from '@/lib/militia';
+import { MILITIA_NAME, isMilitiaId } from '@/lib/militia';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import type { Poi } from '@/lib/expedition';
 import { poiRank } from '@/lib/poiRank';
 
@@ -423,6 +424,11 @@ const isFull = (r: ControlRosterRow) =>
 }
 /* Le portrait remplit sa case, quelle que soit sa taille. */
 .mini :deep(.cp) {
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+.mini :deep(.mil-portrait) {
   width: 100%;
   height: 100%;
   border-radius: 0;

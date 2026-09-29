@@ -487,7 +487,7 @@
           <template v-if="militiaBuilt || milHome > 0">
             <div class="mil-send">
               <span class="mil-send-lab"
-                >{{ MILITIA_EMO }} Miliciens
+                ><span class="mil-inline"><MilitiaPortrait /></span> Miliciens
                 <span class="ctl-dim"
                   >· {{ milHome }} à la base · {{ militiaFreeSeats(liveControl) }} place{{
                     militiaFreeSeats(liveControl) > 1 ? 's' : ''
@@ -514,14 +514,14 @@
                 "
                 @click="pickMilitia(i)"
               >
-                <span class="mil-tile-emo">{{ MILITIA_EMO }}</span>
+                <span class="mil-tile-emo"><MilitiaPortrait /></span>
                 <span class="mil-tile-n">{{ i }}</span>
               </button>
             </div>
             <p v-else class="ctl-line ctl-dim">Aucun milicien à la base pour l’instant.</p>
             <div v-if="milSend > 0" class="send-bar">
               <button class="sh-send" :disabled="ctlBusy" @click="sendMilitia">
-                {{ MILITIA_EMO }} Envoyer {{ milSend }} milicien{{ milSend > 1 ? 's' : '' }} ·
+                <span class="mil-inline"><MilitiaPortrait /></span> Envoyer {{ milSend }} milicien{{ milSend > 1 ? 's' : '' }} ·
                 {{ formatDurationMin(militiaLegMin) }}
               </button>
             </div>
@@ -1035,7 +1035,7 @@ import {
   transferBlocker,
   transferSourcesFor,
 } from '@/lib/controlRoutes';
-import { MILITIA, MILITIA_EMO, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
+import { MILITIA, MILITIA_NAME, isMilitiaId, militiaIn } from '@/lib/militia';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{ embedded?: boolean }>();
@@ -3566,6 +3566,11 @@ onUnmounted(() => {
   border-style: dashed;
   opacity: 0.45;
   cursor: default;
+}
+/* Le portrait du milicien au fil du texte, à la place de l'emoji 🛡️. */
+.mil-inline {
+  display: inline-flex;
+  vertical-align: -0.2em;
 }
 .mil-tile-emo {
   font-size: 24px;

@@ -88,7 +88,7 @@
           <!-- 🛡️ LA MILICE : où ils sont, combien au plus, quand arrive le suivant. -->
           <div v-if="militia" class="pm-ready pm-mil">
             <span>
-              🛡️ <b>{{ militia.home }}</b> à la base
+              <span class="mil-inline"><MilitiaPortrait /></span> <b>{{ militia.home }}</b> à la base
               <span v-if="militia.away"> · {{ militia.away }} sur la carte</span>
             </span>
             <span class="pm-cap">
@@ -236,6 +236,7 @@ import { computed, ref } from 'vue';
 import { useCharacterStore } from '@/stores/character';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
+import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import { engageCap } from '@/lib/adventurers';
 import { championOutpostMult } from '@/lib/caravan';
 import { altarLuckBonus } from '@/lib/items';
@@ -785,6 +786,10 @@ function collectAll() {
 }
 .pm-cap {
   color: var(--dim);
+}
+.mil-inline {
+  display: inline-flex;
+  vertical-align: -0.2em;
 }
 .pm-mil {
   flex-wrap: wrap;
