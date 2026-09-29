@@ -240,8 +240,16 @@ describe('la répartition par contributeur', () => {
       const b = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), garde(lvl), NOW);
       const by = Object.fromEntries(b.parts.map((p) => [p.id, p]));
       expect(b.hold).toBeGreaterThan(0.8);
-      // Les tourelles portent la tenue ENTIÈRE : les retirer la ramène à zéro.
-      expect(by.turret!.holdLoss).toBeCloseTo(b.hold, 10);
+      // ⚠️ RÉÉCRIT (v0.1370, la garnison porte un tiers de la défense). « Sans les tourelles
+      // on ne tient RIEN » était vrai tant que la garnison ne pesait rien ; désormais le
+      // vivier complet tient encore une partie des sièges sans elles — c'est exactement ce
+      // qu'on voulait (« que les champions aient un intérêt dans la défense »). Ce qui reste
+      // vrai, et plus fort : les tourelles restent le PLUS GROS contributeur, et une enceinte
+      // SANS GARNISON ne tient rien sans elles.
+      expect(by.turret!.holdLoss).toBeGreaterThan(0);
+      expect(by.turret!.power).toBeGreaterThan(by.garrison!.power);
+      const nue = defenseBreakdown(defAt(lvl), lvl, refFighter(lvl), [], NOW);
+      expect(nue.parts.find((p) => p.id === 'turret')!.holdLoss).toBeCloseTo(nue.hold, 10);
       // ⚠️ RÉÉCRIT, et c’est une BONNE nouvelle : le mur valait `0` ici parce qu’il ne
       // faisait qu’encaisser — on tenait sans lui. Depuis qu’il COUVRE ses tireurs, le
       // retirer les expose et la tenue baisse VRAIMENT. La muraille a enfin une part

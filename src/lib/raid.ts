@@ -33,7 +33,14 @@ import {
 import { refFighter } from './proceduralContent';
 import { sinceEvent } from './sinceEvent';
 import { rollDrop, type AggregatedEffects, type Item } from './items';
-import { escortCombatant, escortGear, mentorXpMult, unitEffects, type EscortKit } from './caravan';
+import {
+  escortCombatant,
+  escortGear,
+  mentorXpMult,
+  refChampionAdv,
+  unitEffects,
+  type EscortKit,
+} from './caravan';
 import { ADV_GEAR_SLOTS, canWearAdvGear, type AdvGear, type AdvGearSlot } from './advGear';
 import { beyondCap, buildingUpgradeCost } from './buildings';
 import {
@@ -525,6 +532,35 @@ export const RAID = {
    *  100, enceinte 50/75/100 %, héros ou non ; de −6 à +7) — les compétences DIFFÉRENCIENT
    *  les champions, elles ne rendent pas les sièges plus faciles en moyenne. */
   guardSiegeK: 0.8,
+  /** 🛡️⚔️ LA GARNISON PORTE UN TIERS DE LA DÉFENSE (v0.1370, demandé par l'utilisateur :
+   *  « il faudrait que les miliciens et les champions aient un intérêt dans la défense », part
+   *  choisie : un tiers). Mesuré avant : au niveau 90, UNE baliste frappait 25 fois plus fort
+   *  que 5 champions au niveau du héros — l'enceinte se calibre sur `refFighter` (~L³ en
+   *  dégâts), un champion sur ses propres stats (~L). Au-delà du niveau ~30, la garnison ne
+   *  changeait plus la tenue d'un point.
+   *  ⚠️ D'où une UNITÉ DE RÉFÉRENCE au rempart (`guardRefUnit`), calée sur l'ENCEINTE du
+   *  niveau du joueur : une garnison complète (`guardRefUnits` équivalents-champions) y vaut
+   *  `garrisonPart` / (1 − `garrisonPart`) de l'enceinte en PV comme en dégâts, soit un tiers
+   *  de la défense. Un champion y vaut cette unité × SA force rapportée à celle d'un champion
+   *  de référence au niveau du héros : compétences, équipement, éveil et RETARD comptent. */
+  garrisonPart: 1 / 3,
+  /** Effectif de référence d'une garnison « au complet », en équivalents-champions (un
+   *  milicien compte `MILITIA.siegeShare`). ⚠️ Au-delà, rendement décroissant : sans lui,
+   *  51 champions au niveau 100 rendraient la base imprenable (le runaway relevé en v0.779). */
+  guardRefUnits: 8,
+  /** 🧱 CE QUI RESTE À L'ENCEINTE (muraille + balistes). ⚠️ MESURÉ, cf. `garrisonShare.test` :
+   *  baissée pour que la difficulté d'un siège ne bouge pas quand la garnison est au complet
+   *  — c'est la garnison qui compense, pas un cadeau. */
+  enceinteK: 0.75,
+  /** 🌱 La baisse de l'enceinte ne mord qu'APRÈS l'apprentissage : pleine jusqu'au niveau
+   *  `enceinteFrom`, puis linéaire jusqu'à `enceinteK` au niveau `enceinteTo`. Un débutant n'a pas
+   *  encore de garnison (Panthéon et Caserne tout juste posés) : lui retirer un quart de son
+   *  enceinte faisait tomber son premier siège de 93 % à 10 % de tenue (mesuré). */
+  enceinteFrom: 10,
+  enceinteTo: 26,
+  /** Rendement décroissant au-delà de `guardRefUnits` : la garnison vaut
+   *  référence × (effectif / référence)^`guardSoftExp`. */
+  guardSoftExp: 0.3,
   /** 📈 RENFORT DE L’ARMÉE ENTRE LES NIVEAUX 6 ET 26 (v0.829, mesuré ; demandé par
    *  l’utilisateur : « durcir un peu la défense avant le niveau 16, l’apprentissage jusqu’au
    *  niveau 5 max »). Multiplie PV ET dégâts de l’armée : 1 jusqu’au niveau `learnUntil`,
@@ -1974,7 +2010,13 @@ export function siegeWallOf(defenses: DefenseStructure[], playerLevel: number): 
     wl > 0
       ? Math.max(
           1,
-          Math.round(refFighter(L).pv * RAID.wallPvK * share * defenseEfficiency(defenses, 'wall')),
+          Math.round(
+            refFighter(L).pv *
+              RAID.wallPvK *
+              enceinteShareAt(L) *
+              share *
+              defenseEfficiency(defenses, 'wall'),
+          ),
         )
       : 1;
   return { pv, maxPv: pv };
@@ -2024,8 +2066,14 @@ export function siegeDefenders(
   const n = turretCount(tl);
   if (n > 0) {
     const dmg =
-      (refOff * RAID.turretDmgK * n * share(tl) * defenseEfficiency(defenses, 'turret')) / n;
-    const pv = Math.max(1, Math.round(ref.pv * RAID.turretPvK * share(tl)));
+      (refOff *
+        RAID.turretDmgK *
+        enceinteShareAt(L) *
+        n *
+        share(tl) *
+        defenseEfficiency(defenses, 'turret')) /
+      n;
+    const pv = Math.max(1, Math.round(ref.pv * RAID.turretPvK * enceinteShareAt(L) * share(tl)));
     for (let i = 0; i < n; i++) {
       out.push({
         id: `t${i}`,
@@ -2447,28 +2495,119 @@ export function guardUnits(
     a.championId ? { ...a, ascended: Math.max(0, advAscendedRank(a) - pRank) } : a,
   );
   const pairs = ctx ? escortGear(retenus, ctx) : new Map<string, AdvGear[]>();
+  const unit = guardRefUnit(playerLevel);
+  const ref = refChampionRaw(playerLevel);
+  const g = guardBlend(playerLevel);
+  // Jamais moins que ses propres stats : la bascule ne fait que monter.
+  const blend = (old: number, calé: number) => old + g * Math.max(0, calé - old);
   const champs = retenus.map((a) => {
-    // ⚠️ `escortCombatant` NU (sans compétences ni équipement), et on replie ensuite :
-    // une unité de siège n'a que PV et dégâts, tout le reste doit être PORTÉ par eux.
-    const one = escortCombatant([a], a.name, {}, false);
-    const k = skillMults(a);
+    const raw = rawChampionUnit(a, pairs.get(a.id));
     const st = advStats(a);
-    const fx = pairEffects(pairs.get(a.id));
-    const f = foldBonus(
-      one.pv * RAID.guardSiegeK * k.pv,
-      one.damage * (one.strikes ?? 1) * RAID.guardSiegeK * k.damage,
-      fx,
-    );
     return {
       id: a.id,
       name: a.name,
       // L’emoji de SA classe : c’est lui qu’on reconnaît au rempart pendant le rejeu.
       emoji: advTitle(a)?.emoji ?? '⚔️',
       ranged: st.agilite > st.puissance && st.agilite > st.endurance,
-      ...f,
+      // ⚖️ SA FORCE RAPPORTÉE à celle d'un champion de référence au niveau du héros, canal par
+      // canal : au niveau du héros il vaut l'unité de référence, en retard il vaut moins.
+      // ⚠️ La bascule suit la MÊME rampe que l'enceinte (`guardBlend`) : jusqu'au niveau
+      // `enceinteFrom`, le modèle d'avant exactement (ses propres stats, `raw`) — un vivier y
+      // pesait déjà ~un tiers, et ajouter l'unité par-dessus rendait le siège gagné d'avance
+      // (mesuré : 2 aventuriers au niveau 8, 94,5 % de tenue).
+      pv: blend(raw.pv, unit.pv * (raw.pv / ref.pv)),
+      damage: blend(raw.damage, unit.damage * (raw.damage / ref.damage)),
     };
   });
-  return [...champs, ...militiaGuard(playerLevel, militia)];
+  return guardSoftCap([...champs, ...militiaGuard(playerLevel, militia)], unit);
+}
+
+/** Un champion en unité de siège, dans l'échelle de SES stats (avant rapport à l'enceinte).
+ *  ⚠️ `escortCombatant` NU (sans compétences ni équipement), et on replie ensuite : une unité
+ *  de siège n'a que PV et dégâts, tout le reste doit être PORTÉ par eux. */
+function rawChampionUnit(
+  a: Adventurer,
+  gear: AdvGear[] | undefined,
+): { pv: number; damage: number } {
+  const one = escortCombatant([a], a.name, {}, false);
+  const k = skillMults(a);
+  return foldBonus(
+    one.pv * RAID.guardSiegeK * k.pv,
+    one.damage * (one.strikes ?? 1) * RAID.guardSiegeK * k.damage,
+    pairEffects(gear),
+  );
+}
+
+const refRawCache = new Map<number, { pv: number; damage: number }>();
+/** Le champion de RÉFÉRENCE du niveau du héros (moyenne des trois orientations de
+ *  `refChampionAdv`, sans équipement), dans la même échelle que `rawChampionUnit`. */
+function refChampionRaw(playerLevel: number): { pv: number; damage: number } {
+  const L = Math.max(1, Math.round(playerLevel));
+  const hit = refRawCache.get(L);
+  if (hit) return hit;
+  // ⚠️ `ascended: 0`, COMME `guardUnits` le fait à tout champion à jour : sans ça la référence
+  // gardait +5 %/rang d'ascension que le champion réel perd, et un champion parfaitement à
+  // jour ne valait que ~0,8 unité (mesuré au niveau 40 : ×1,2).
+  const us = [0, 1, 2].map((i) =>
+    rawChampionUnit({ ...refChampionAdv(L, i), ascended: 0 }, undefined),
+  );
+  const v = {
+    pv: Math.max(1e-9, us.reduce((n, u) => n + u.pv, 0) / us.length),
+    damage: Math.max(1e-9, us.reduce((n, u) => n + u.damage, 0) / us.length),
+  };
+  refRawCache.set(L, v);
+  return v;
+}
+
+/** Ce que vaut l'enceinte au niveau `L`, en part de son calibrage d'origine (cf.
+ *  `RAID.enceinteK`, `enceinteFrom`, `enceinteTo`). */
+export function enceinteShareAt(L: number): number {
+  const { enceinteK: k, enceinteFrom: a, enceinteTo: b } = RAID;
+  if (L <= a) return 1;
+  if (L >= b) return k;
+  return 1 - (1 - k) * ((L - a) / (b - a));
+}
+
+/** 0 → 1 : où en est la bascule de la garnison vers l'unité calée sur l'enceinte. ⚠️ DÉRIVÉE
+ *  de `enceinteShareAt` : l'enceinte baisse exactement quand la garnison prend le relais,
+ *  jamais l'un sans l'autre. */
+function guardBlend(L: number): number {
+  const k = RAID.enceinteK;
+  return k >= 1 ? 1 : (1 - enceinteShareAt(L)) / (1 - k);
+}
+
+/** 🛡️ L'UNITÉ DE RÉFÉRENCE AU REMPART : ce que vaut UN champion de référence au niveau du
+ *  héros. Une garnison complète (`RAID.guardRefUnits`) en vaut `garrisonPart` / (1 −
+ *  `garrisonPart`) de l'enceinte PLEINE du niveau du joueur, en PV (muraille + balistes) comme
+ *  en dégâts (balistes) — soit la part choisie de la défense. ⚠️ Calée sur l'enceinte du
+ *  NIVEAU DU JOUEUR, pas sur celle bâtie : sinon laisser son mur en retard rendrait aussi sa
+ *  garnison plus faible, et la garnison grandirait avec le mortier au lieu du vivier. */
+export function guardRefUnit(playerLevel: number): { pv: number; damage: number } {
+  const L = Math.max(1, playerLevel);
+  const ref = refFighter(L);
+  const k =
+    (enceinteShareAt(L) * (RAID.garrisonPart / (1 - RAID.garrisonPart))) / RAID.guardRefUnits;
+  return {
+    pv: ref.pv * (RAID.wallPvK + TURRET_SLOTS * RAID.turretPvK) * k,
+    damage: offensePerRound(ref) * RAID.turretDmgK * TURRET_SLOTS * k,
+  };
+}
+
+/** Au-delà de l'effectif de référence, RENDEMENT DÉCROISSANT : la garnison totale vaut
+ *  référence × (effectif / référence)^`guardSoftExp` au lieu de l'effectif, en équivalents-champions (un champion au
+ *  niveau du héros = 1). Toutes les unités sont réduites du même facteur : l'ordre et la
+ *  forme du vivier ne changent pas. */
+function guardSoftCap(units: GuardUnit[], L: { pv: number; damage: number }): GuardUnit[] {
+  const ref = RAID.guardRefUnits;
+  if (!units.length) return units;
+  const eq = units.reduce((n, u) => n + Math.sqrt((u.pv / L.pv) * (u.damage / L.damage)), 0);
+  // total visé = ref × (eq/ref)^exp, donc chaque unité × (eq/ref)^(exp − 1).
+  const s = eq > ref ? Math.pow(eq / ref, RAID.guardSoftExp - 1) : 1;
+  return units.map((u) => ({
+    ...u,
+    pv: Math.max(1, Math.round(u.pv * s)),
+    damage: Math.max(1, Math.round(u.damage * s)),
+  }));
 }
 
 /**
@@ -2481,16 +2620,26 @@ export function guardUnits(
  *
  * ⚠️ HORS du plafond du Panthéon (`engageCap`) : il borne les CHAMPIONS engagés ; la milice a
  * le sien, l'effectif de la Caserne. Ils tiennent la COUR (hommes d'armes, sans abri) : c'est
- * la brèche qu'une milice garde. Leur valeur au rempart = `MILITIA.siegeShare` d'un milicien
- * de carte (cf. là-bas, mesuré), repliée comme celle d'un champion (`guardSiegeK`).
+ * la brèche qu'une milice garde. Leur valeur au rempart = `MILITIA.siegeShare` d'un champion
+ * de RÉFÉRENCE au niveau du héros (`guardRefUnit`, v0.1370 ; choix de l'utilisateur : la
+ * moitié). ⚠️ Plus une part d'un milicien de CARTE : calé là-dessus, il suivait ses stats (~L)
+ * et restait marginal face à l'enceinte (~L³), comme les champions.
  */
 export function militiaGuard(playerLevel: number, n: number): GuardUnit[] {
   const count = Math.max(0, Math.floor(Number(n) || 0));
   if (!count) return [];
+  const u = guardRefUnit(playerLevel);
+  // ⚠️ Même bascule que les champions (`guardBlend`) : jusqu'au niveau `enceinteFrom`, l'ancien
+  // milicien de rempart (la moitié d'un milicien de carte) ; jamais moins ensuite.
   const c = militiaCombatant(playerLevel);
-  const k = MILITIA.siegeShare * RAID.guardSiegeK;
-  const pv = Math.max(1, Math.round(c.pv * k));
-  const damage = Math.max(1, Math.round(c.damage * (c.strikes ?? 1) * k));
+  const old = MILITIA.siegeShare * RAID.guardSiegeK;
+  const g = guardBlend(playerLevel);
+  const blend = (o: number, calé: number) => o + g * Math.max(0, calé - o);
+  const pv = Math.max(1, Math.round(blend(c.pv * old, u.pv * MILITIA.siegeShare)));
+  const damage = Math.max(
+    1,
+    Math.round(blend(c.damage * (c.strikes ?? 1) * old, u.damage * MILITIA.siegeShare)),
+  );
   return Array.from({ length: count }, (_, i) => ({
     id: `${MILITIA_PREFIX}base:${i + 1}`,
     name: MILITIA_NAME,

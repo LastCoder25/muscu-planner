@@ -2249,26 +2249,41 @@ describe('🛡️ LE RENFORT DE SIÈGE D’UN DÉFENSEUR (v0.801, recalibré v0.
     // ⚠️ `ascended: 0` : au siège le bonus d'ascension est ramené à l'étalon du niveau du
     // joueur (l'armée ne connaît que le héros) — la route, elle, le garde. On compare donc au
     // même champion SANS rang ouvert, ce que `guardUnits` lui fait valoir ici.
-    const adv = { ...refChampionAdv(40, 0), ascended: 0 };
-    const [g] = guardUnits(40, [adv], 99, {
-      now: 0,
-      kennelLevel: 40,
-      familiars: [],
-      talents: [],
-      advGear: [],
-    });
-    // ⚠️ RÉÉCRIT (compétences au siège) : la base est désormais le combattant SANS ses
-    // compétences, multiplié par ce qu’elles ajoutent (`skillMults`). Ce qui reste vrai :
-    // le renfort s’applique aux DEUX canaux, sans quoi un défenseur serait plus solide
-    // mais pas plus mordant, ou l’inverse.
-    const nu = escortCombatant([adv], adv.name, {}, false);
-    const k = skillMults(adv);
+    // ⚠️ RÉÉCRIT (v0.1370, la garnison porte un tiers de la défense). Cette égalité n'est plus
+    // vraie qu'AVANT la bascule (`RAID.enceinteFrom`) : au-delà, l'unité est calée sur
+    // l'enceinte du niveau du joueur (`guardRefUnit`) et ne descend JAMAIS sous cette valeur.
+    const unit = (L: number) => {
+      const adv = { ...refChampionAdv(L, 0), ascended: 0 };
+      const [g] = guardUnits(L, [adv], 99, {
+        now: 0,
+        kennelLevel: L,
+        familiars: [],
+        talents: [],
+        advGear: [],
+      });
+      // ⚠️ RÉÉCRIT (compétences au siège) : la base est le combattant SANS ses compétences,
+      // multiplié par ce qu’elles ajoutent (`skillMults`). Ce qui reste vrai : le renfort
+      // s’applique aux DEUX canaux, sans quoi un défenseur serait plus solide mais pas plus
+      // mordant, ou l’inverse.
+      const nu = escortCombatant([adv], adv.name, {}, false);
+      const k = skillMults(adv);
+      return {
+        g: g!,
+        pv: Math.max(1, Math.round(nu.pv * RAID.guardSiegeK * k.pv)),
+        damage: Math.max(
+          1,
+          Math.round(nu.damage * (nu.strikes ?? 1) * RAID.guardSiegeK * k.damage),
+        ),
+      };
+    };
     // ⚠️ On n’épingle PLUS un sens (« > 1 ») : c’est un réglage, et il a déjà traversé 1.
     expect(RAID.guardSiegeK).not.toBe(1);
-    expect(g!.pv).toBe(Math.max(1, Math.round(nu.pv * RAID.guardSiegeK * k.pv)));
-    expect(g!.damage).toBe(
-      Math.max(1, Math.round(nu.damage * (nu.strikes ?? 1) * RAID.guardSiegeK * k.damage)),
-    );
+    const tot = unit(RAID.enceinteFrom);
+    expect(tot.g.pv).toBe(tot.pv);
+    expect(tot.g.damage).toBe(tot.damage);
+    const tard = unit(60);
+    expect(tard.g.pv).toBeGreaterThan(tard.pv);
+    expect(tard.g.damage).toBeGreaterThan(tard.damage);
   });
 });
 

@@ -52,8 +52,10 @@ export const MILITIA = {
    *  par `CONTROL.maxHold`. */
   perPoint: 5,
   /** 🏰 AU REMPART (2026-09-30, demandé : « les miliciens présents défendent aussi la base ») :
-   *  ce que vaut un milicien de la base dans un siège, en part d'un milicien de carte (lu par
-   *  `militiaGuard`, `raid.ts`). ⚠️ MESURÉ, cf. `militiaSiege.test`. */
+   *  ce que vaut un milicien de la base dans un siège, en part d'un CHAMPION DE RÉFÉRENCE au
+   *  niveau du héros (lu par `militiaGuard`, `raid.ts` ; v0.1370, choix de l'utilisateur :
+   *  « la moitié »). Il compte aussi pour cette part dans l'effectif de référence de la
+   *  garnison (`RAID.guardRefUnits`). */
   siegeShare: 0.5,
 } as const;
 

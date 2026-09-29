@@ -1,6 +1,7 @@
 // 🛡️ LES MILICIENS DE LA BASE DÉFENDENT AUSSI (2026-09-30, demandé par l'utilisateur).
 import { describe, it, expect } from 'vitest';
 import {
+  RAID,
   guardUnits,
   militiaGuard,
   resolveRaid,
@@ -77,12 +78,18 @@ describe('🛡️ la milice au rempart', () => {
   // 29 → 68 % au niveau 12, 72 → 84 % au 30, 74 → 82 % au 60, 70 → 83 % au 100. À une valeur
   // double (1), la milice devenait le rempart à elle seule (88-94 %) ; avec héros et champions
   // présents, elle ne change presque rien (déjà 95-100 %).
+  // ⚠️ RÉÉCRIT (v0.1370, la garnison porte un tiers de la défense — demandé : « que les
+  // miliciens et les champions aient un intérêt dans la défense »). Le plafond était « < 90 % »
+  // quand la milice pesait peu ; mesuré depuis (200 sièges, enceinte pleine, SANS héros) : sans
+  // milice 26/38/37/35 %, Caserne pleine 71/91/89/91 % aux niveaux 12/30/50/80. Ce qui reste
+  // vrai, et qu'on épingle : la milice pèse NETTEMENT (+30 points une fois la bascule faite),
+  // et une base sans héros ni champion n'est JAMAIS certaine.
   it('une enceinte seule tient nettement mieux avec sa milice, sans devenir imprenable', () => {
     for (const L of [12, 30]) {
       const without = siege(L, 1, 0, 80).hold;
       const withMil = siege(L, 1, militiaCap(L), 80).hold;
-      expect(withMil).toBeGreaterThan(without + 8);
-      expect(withMil).toBeLessThan(90);
+      expect(withMil).toBeGreaterThan(without + (L >= RAID.enceinteTo ? 30 : 8));
+      expect(withMil).toBeLessThan(97);
     }
   }, 120_000);
 
