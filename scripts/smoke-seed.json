@@ -58,10 +58,7 @@
           "id": "ex_bench_barbell",
           "name": "Développé couché",
           "muscle_primary": "pectoraux",
-          "muscle_secondary": [
-            "triceps",
-            "deltoïde antérieur"
-          ],
+          "muscle_secondary": ["triceps", "deltoïde antérieur"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -75,11 +72,7 @@
           "id": "ex_deadlift",
           "name": "Soulevé de terre",
           "muscle_primary": "dos",
-          "muscle_secondary": [
-            "ischio-jambiers",
-            "fessiers",
-            "lombaires"
-          ],
+          "muscle_secondary": ["ischio-jambiers", "fessiers", "lombaires"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -93,9 +86,7 @@
           "id": "ex_shoulder_press_db",
           "name": "Développé épaules haltères",
           "muscle_primary": "épaules",
-          "muscle_secondary": [
-            "triceps"
-          ],
+          "muscle_secondary": ["triceps"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -109,9 +100,7 @@
           "id": "ex_hammer_curl",
           "name": "Curl marteau",
           "muscle_primary": "biceps",
-          "muscle_secondary": [
-            "avant_bras"
-          ],
+          "muscle_secondary": ["avant_bras"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -125,9 +114,7 @@
           "id": "ex_diamond_pushup",
           "name": "Pompes diamant",
           "muscle_primary": "triceps",
-          "muscle_secondary": [
-            "pectoraux"
-          ],
+          "muscle_secondary": ["pectoraux"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -141,10 +128,7 @@
           "id": "ex_squat_barbell",
           "name": "Squat barre",
           "muscle_primary": "quadriceps",
-          "muscle_secondary": [
-            "fessiers",
-            "ischio-jambiers"
-          ],
+          "muscle_secondary": ["fessiers", "ischio-jambiers"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -158,10 +142,7 @@
           "id": "ex_romanian_deadlift",
           "name": "Soulevé de terre roumain",
           "muscle_primary": "ischio-jambiers",
-          "muscle_secondary": [
-            "fessiers",
-            "dos"
-          ],
+          "muscle_secondary": ["fessiers", "dos"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -217,9 +198,7 @@
           "id": "ex_pushup",
           "name": "Pompes",
           "muscle_primary": "pectoraux",
-          "muscle_secondary": [
-            "triceps"
-          ],
+          "muscle_secondary": ["triceps"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -233,9 +212,7 @@
           "id": "ex_lat_pulldown",
           "name": "Tirage vertical",
           "muscle_primary": "dos",
-          "muscle_secondary": [
-            "biceps"
-          ],
+          "muscle_secondary": ["biceps"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -249,9 +226,7 @@
           "id": "ex_face_pull",
           "name": "Face pull",
           "muscle_primary": "épaules",
-          "muscle_secondary": [
-            "dos"
-          ],
+          "muscle_secondary": ["dos"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -279,10 +254,7 @@
           "id": "ex_bw_lunge",
           "name": "Fentes",
           "muscle_primary": "quadriceps",
-          "muscle_secondary": [
-            "fessiers",
-            "ischio-jambiers"
-          ],
+          "muscle_secondary": ["fessiers", "ischio-jambiers"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -297,9 +269,7 @@
           "id": "ex_glute_bridge",
           "name": "Pont fessier",
           "muscle_primary": "ischio-jambiers",
-          "muscle_secondary": [
-            "fessiers"
-          ],
+          "muscle_secondary": ["fessiers"],
           "progression": "linear",
           "rest_seconds": 90,
           "target": {
@@ -964,6 +934,12 @@
         "typeId": "pantheon",
         "level": 3,
         "slot": 1,
+        "collectedAt": 1790510400000
+      },
+      {
+        "typeId": "labyrinth_gate",
+        "level": 3,
+        "slot": 2,
         "collectedAt": 1790510400000
       }
     ],

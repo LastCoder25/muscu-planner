@@ -7,119 +7,169 @@
       <div class="iconbtn" />
     </header>
 
-    <!-- LOBBY : lancer un palier (coûte 1 à 4 clés selon sa profondeur) -->
+    <!-- LOBBY : un palier = une tuile (son gardien en image, le prix en clés, les infos en
+         pastilles). Les règles longues vivent dans un volet replié. -->
     <div v-if="phase === 'lobby'" class="lobby">
-      <div class="lobby-emo">🗝️</div>
-      <div class="lobby-keys">
-        <b>{{ keys }}</b> clé{{ keys > 1 ? 's' : '' }}
-      </div>
-      <p class="lobby-txt">
-        Un donjon à <b>étages</b> à explorer : salles, coffres, pièges, boss. Tes
-        <b>PV se reportent</b> entre les salles — c'est l'attrition qui te met en danger. À la mort
-        tu <b>perds les objets trouvés</b> et une part des gains (or et ressources) qui
-        <b>grandit avec la profondeur du palier</b>. La <b>retraite</b> banque tout le ramassé.
-      </p>
-      <p class="lobby-txt dim">Les clés 🗝️ tombent sur les donjons, les boss et le portail.</p>
-      <p v-if="!labyUnlocked" class="lobby-txt dim">
-        🔒 Construis la <b>🚪 Porte du Labyrinthe</b> sur la carte d'expédition pour le débloquer.
-      </p>
-      <p v-else-if="labyLuck > 0" class="lobby-txt dim">
-        🚪 Porte niv.{{ gateLevel }} : butin des coffres +{{ Math.round(labyLuck * 100) }} %.
-      </p>
-
-      <!-- Ladder : paliers de plus en plus profonds, débloqués en chaîne. -->
-      <div v-if="labyUnlocked" class="laby-list">
-        <div
-          v-for="t in tiers"
-          :key="t.laby.id"
-          class="laby-tier"
-          :class="{ locked: !t.unlocked, cleared: t.cleared }"
+      <div class="lobby-head">
+        <span class="lh-keys" title="Tes clés du Labyrinthe"
+          >🗝️ <b>{{ keys }}</b> clé{{ keys > 1 ? 's' : '' }}</span
         >
-          <span class="lt-emo">{{ t.unlocked ? t.laby.emoji : '🔒' }}</span>
-          <div class="lt-main">
-            <div class="lt-name font-display">
-              {{ t.laby.name }}
-              <span v-if="t.cleared" class="lt-badge">✓</span>
+        <span v-if="labyUnlocked && labyLuck > 0" class="lh-gate"
+          >🚪 Porte niv.{{ gateLevel }} · coffres +{{ Math.round(labyLuck * 100) }} %</span
+        >
+      </div>
+      <p v-if="!labyUnlocked" class="lobby-lock">
+        🔒 Construis la <b>🚪 Porte du Labyrinthe</b> sur ta base pour le débloquer.
+      </p>
+      <details class="lobby-rules">
+        <summary>Comment ça marche</summary>
+        <p>
+          Un donjon à <b>étages</b> : salles, coffres, pièges, et un gardien au fond. Tes
+          <b>PV se reportent</b> d'une salle à l'autre — c'est l'usure qui te met en danger. À la
+          mort tu <b>perds les objets trouvés</b> et une part de l'or, qui grandit avec la
+          profondeur. La <b>retraite</b> (départ ou escalier) garde tout le ramassé.
+        </p>
+        <p class="dim">Les clés 🗝️ tombent sur les donjons, les boss et les archives.</p>
+      </details>
+
+      <!-- Paliers de plus en plus profonds, débloqués en chaîne. -->
+      <div v-if="labyUnlocked" class="laby-grid">
+        <article
+          v-for="(t, ti) in shownTiers"
+          :key="t.laby.id"
+          class="laby-tile"
+          :class="{ locked: !t.unlocked, cleared: t.cleared }"
+          :style="{ '--tier': RANK_COLOR[t.laby.rank] }"
+        >
+          <div class="lt-art">
+            <img
+              v-if="t.unlocked && guardianArt(t.laby)"
+              :src="guardianArt(t.laby)!"
+              :alt="labyGuardian(t.laby).name"
+              class="lt-img"
+              loading="lazy"
+              @error="artFailed.add(labyGuardian(t.laby).name)"
+            />
+            <span v-else class="lt-art-emo">{{
+              t.unlocked ? labyGuardian(t.laby).emoji : '🔒'
+            }}</span>
+            <span class="lt-cost" :class="{ short: keys < labyKeyCost(t.laby.id) }"
+              >{{ labyKeyCost(t.laby.id) }} 🗝️</span
+            >
+            <span v-if="t.cleared" class="lt-done" title="Palier nettoyé">✓</span>
+          </div>
+          <div class="lt-body">
+            <div class="lt-name font-display">{{ t.laby.name }}</div>
+            <div v-if="t.unlocked" class="lt-guard">
+              {{ t.laby.emoji }} {{ labyGuardian(t.laby).name }}
             </div>
-            <div class="lt-meta">
-              Niv {{ t.laby.recoLevel }} · {{ t.laby.floors }} étages ·
+            <div class="lt-pills">
+              <span>Niv {{ t.laby.recoLevel }}</span>
+              <span>{{ t.laby.floors }} étages</span>
               <span
-                v-if="t.unlocked"
+                v-if="t.unlocked && t.success !== null"
                 class="lt-pow"
                 :class="t.success === null ? 'none' : pctClass(t.success)"
-                title="Tes runs nettoyés sur ce palier, parmi ceux que tu as lancés"
-                >🎯
-                {{
+                :title="
                   t.success === null
-                    ? 'jamais tenté'
-                    : `${t.success} % réussis (${t.runs} run${t.runs > 1 ? 's' : ''})`
-                }}</span
+                    ? 'Jamais tenté'
+                    : `Tes runs nettoyés sur ce palier : ${t.success} % sur ${t.runs}`
+                "
+                >🎯 {{ t.success === null ? '—' : t.success + ' %' }}</span
               >
-              ·
-              <span class="lt-fam"
-                >🐾 familier
-                <b :style="{ color: rankColorOf(t.laby) }">{{ famRankName(t.laby) }}</b></span
+              <span class="lt-fam" title="Rang du familier garanti au bout"
+                >🐾 <b :style="{ color: rankColorOf(t.laby) }">{{ famRankName(t.laby) }}</b></span
               >
-              · <span class="lt-death">💀 garde {{ t.deathKeep }}%</span>
+              <span class="lt-death" title="Part de l'or gardée si tu tombes"
+                >💀 {{ t.deathKeep }} %</span
+              >
             </div>
             <div v-if="!t.unlocked" class="lt-lock">
-              🔒 Nettoie «
-              {{ LABYRINTHS[LABYRINTHS.findIndex((l) => l.id === t.laby.id) - 1]?.name }} » d’abord
+              Nettoie « {{ tiers[ti - 1]?.laby.name }} » d’abord
+            </div>
+            <div v-else class="lt-actions">
+              <button
+                type="button"
+                class="lt-go"
+                :disabled="keys < labyKeyCost(t.laby.id)"
+                @click="start(t.laby)"
+              >
+                {{
+                  keys >= labyKeyCost(t.laby.id)
+                    ? 'Lancer'
+                    : `Il manque ${labyKeyCost(t.laby.id) - keys} 🗝️`
+                }}
+              </button>
+              <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul).
+                   Admin (mon compte) : disponible dès qu'un palier est débloqué. -->
+              <button
+                v-if="t.cleared || auth.isAdmin"
+                type="button"
+                class="lt-go auto"
+                :disabled="keys < labyKeyCost(t.laby.id)"
+                title="Le run se joue tout seul, en accéléré — tu n’as plus rien à regarder"
+                @click="startAuto(t.laby)"
+              >
+                ⚡ Auto ×{{ SPEED_STEPS[SPEED_STEPS.length - 1] }}
+              </button>
             </div>
           </div>
-          <div v-if="t.unlocked" class="lt-actions">
-            <button
-              type="button"
-              class="lt-go"
-              :disabled="keys < labyKeyCost(t.laby.id)"
-              @click="start(t.laby)"
-            >
-              {{
-                keys >= labyKeyCost(t.laby.id)
-                  ? `Lancer −${labyKeyCost(t.laby.id)} 🗝️`
-                  : `${labyKeyCost(t.laby.id)} 🗝️ requises`
-              }}
-            </button>
-            <!-- Auto : réservé aux paliers DÉJÀ nettoyés (le run se joue tout seul).
-                 Admin (mon compte) : disponible dès qu'un palier est débloqué. -->
-            <button
-              v-if="t.cleared || auth.isAdmin"
-              type="button"
-              class="lt-go auto"
-              :disabled="keys < labyKeyCost(t.laby.id)"
-              title="Le run se joue tout seul, en accéléré — tu n’as plus rien à regarder"
-              @click="startAuto(t.laby)"
-            >
-              ⚡ Auto ×{{ SPEED_STEPS[SPEED_STEPS.length - 1] }}
-            </button>
-          </div>
-        </div>
+        </article>
       </div>
+      <button
+        v-if="labyUnlocked && hiddenTiers"
+        type="button"
+        class="lobby-more"
+        @click="showAllTiers = !showAllTiers"
+      >
+        {{
+          showAllTiers
+            ? 'Masquer les paliers verrouillés'
+            : `Voir les ${hiddenTiers} paliers plus profonds`
+        }}
+      </button>
     </div>
 
     <!-- RUNNING : exploration -->
     <template v-else>
-      <div class="hud">
-        <div class="hud-floor">
-          Étage <b>{{ run.floor + 1 }}</b> / {{ run.floors }}
+      <!-- Barre d'état d'une descente : étages, PV, et ce qui compte pendant l'usure (jauge de
+           relique, barrière de départ) — ils ne se voyaient qu'en combat. -->
+      <div class="run-hud">
+        <div class="rh-top">
+          <div class="rh-pips" :aria-label="`Étage ${run.floor + 1} sur ${run.floors}`">
+            <span v-for="(p, i) in pips" :key="i" class="rh-pip" :class="p" />
+          </div>
+          <span class="rh-floor"
+            >Étage <b>{{ run.floor + 1 }}</b
+            >/{{ run.floors }}</span
+          >
+          <span class="rh-pv">❤️ {{ displayedPv }}/{{ run.maxPv }}</span>
         </div>
-        <div class="hud-pv">
-          <div class="pv-bar"><div class="pv-fill" :style="{ width: pvPct + '%' }" /></div>
-          <span class="pv-txt">❤️ {{ displayedPv }}/{{ run.maxPv }}</span>
+        <div class="pv-bar">
+          <div class="pv-fill" :class="{ low: pvPct < 30 }" :style="{ width: pvPct + '%' }" />
         </div>
-      </div>
-
-      <div class="bag">
-        <span class="bag-chip">🪙 {{ gold }}</span>
-        <button
-          type="button"
-          class="bag-chip bag-chip-btn"
-          :disabled="!loot.length"
-          title="Voir le butin ramassé"
-          @click="lootOpen = true"
-        >
-          🎒 {{ loot.length }}
-        </button>
+        <div class="rh-chips">
+          <span
+            v-if="relicPower"
+            class="bag-chip relic"
+            :title="relicPower.name + ' — jauge de la relique, reportée d’un combat à l’autre'"
+            >{{ relicPower.emoji }} {{ relicGauge }} %</span
+          >
+          <span v-if="barrierText" class="bag-chip" title="Barrière de départ : une par descente"
+            >🔰 {{ barrierText }}</span
+          >
+          <span class="bag-chip">🪙 {{ gold }}</span>
+          <button
+            type="button"
+            class="bag-chip bag-chip-btn"
+            :class="{ bump: lootBump }"
+            :disabled="!loot.length"
+            title="Voir le butin ramassé"
+            @click="lootOpen = true"
+          >
+            🎒 {{ loot.length }}
+          </button>
+        </div>
       </div>
 
       <!-- Contrôles AUTO flottants (téléportés au body → TOUJOURS au-dessus des modales de
@@ -152,72 +202,131 @@
       </Teleport>
 
       <div class="map-wrap">
-        <!-- Marge : les salles sont décalées aléatoirement (aspect organique) → padding
+        <div class="map-stage">
+          <!-- Marge : les salles sont décalées aléatoirement (aspect organique) → padding
              pour ne pas rogner celles des bords. -->
-        <svg
-          :viewBox="`${-MAP_PAD} ${-MAP_PAD} ${cols * CELL + 2 * MAP_PAD} ${rows * CELL + 2 * MAP_PAD}`"
-          class="map"
-          :style="{ '--amb': ambianceColor }"
-        >
-          <!-- Teinte d'ambiance du palier (rang G→SSS) -->
-          <rect
-            :x="-MAP_PAD"
-            :y="-MAP_PAD"
-            :width="cols * CELL + 2 * MAP_PAD"
-            :height="rows * CELL + 2 * MAP_PAD"
-            class="map-amb"
-          />
-          <!-- Couloirs = passages carvés (large sous-couche + trait) -->
-          <line
-            v-for="c in corridors"
-            :key="'f' + c.k"
-            class="corridor-floor"
-            :x1="c.x1"
-            :y1="c.y1"
-            :x2="c.x2"
-            :y2="c.y2"
-          />
-          <line
-            v-for="c in corridors"
-            :key="c.k"
-            class="corridor"
-            :x1="c.x1"
-            :y1="c.y1"
-            :x2="c.x2"
-            :y2="c.y2"
-          />
-          <g
-            v-for="r in floor.rooms"
-            :key="r.id"
-            :class="['room', roomClass(r.id), { auto: autoMode }]"
-            @click="autoMode || onRoomClick(r.id)"
+          <svg
+            :viewBox="`${-MAP_PAD} ${-MAP_PAD} ${cols * CELL + 2 * MAP_PAD} ${rows * CELL + 2 * MAP_PAD}`"
+            class="map"
+            :style="{ '--amb': ambianceColor }"
           >
-            <circle :cx="cx(r)" :cy="cy(r)" :r="SIZE / 2" class="room-bg" />
-            <!-- Torches : salle visitée = éclairée (2 flammes qui vacillent) -->
-            <template v-if="roomLit(r)">
-              <path
-                class="torch"
-                :d="`M${cx(r) - SIZE / 2 - 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
-              />
-              <path
-                class="torch t2"
-                :d="`M${cx(r) + SIZE / 2 + 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
-              />
-            </template>
-            <ChestIcon
-              v-if="isVisitedChest(r)"
-              :color="chestColorOf(r.id)"
-              :x="cx(r) - 12"
-              :y="cy(r) - 12"
-              width="24"
-              height="24"
+            <!-- Teinte d'ambiance du palier (rang G→SSS) -->
+            <rect
+              :x="-MAP_PAD"
+              :y="-MAP_PAD"
+              :width="cols * CELL + 2 * MAP_PAD"
+              :height="rows * CELL + 2 * MAP_PAD"
+              class="map-amb"
             />
-            <text v-else :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
-          </g>
-        </svg>
+            <!-- Couloirs = passages carvés (large sous-couche + trait) -->
+            <line
+              v-for="c in corridors"
+              :key="'f' + c.k"
+              class="corridor-floor"
+              :x1="c.x1"
+              :y1="c.y1"
+              :x2="c.x2"
+              :y2="c.y2"
+            />
+            <line
+              v-for="c in corridors"
+              :key="c.k"
+              class="corridor"
+              :x1="c.x1"
+              :y1="c.y1"
+              :x2="c.x2"
+              :y2="c.y2"
+            />
+            <g
+              v-for="r in floor.rooms"
+              :key="r.id"
+              :class="[
+                'room',
+                roomClass(r.id),
+                {
+                  auto: autoMode,
+                  'fx-chest': roomPulse?.id === r.id && roomPulse.kind !== 'trap',
+                  'fx-trap': roomPulse?.id === r.id && roomPulse.kind === 'trap',
+                },
+              ]"
+              @click="autoMode || onRoomClick(r.id)"
+            >
+              <circle :cx="cx(r)" :cy="cy(r)" :r="SIZE / 2" class="room-bg" />
+              <!-- Torches : salle visitée = éclairée (2 flammes qui vacillent) -->
+              <template v-if="roomLit(r)">
+                <path
+                  class="torch"
+                  :d="`M${cx(r) - SIZE / 2 - 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
+                />
+                <path
+                  class="torch t2"
+                  :d="`M${cx(r) + SIZE / 2 + 1} ${cy(r) - 5} q -1.7 -2.4 0 -4.8 q 1.7 2.4 0 4.8 Z`"
+                />
+              </template>
+              <template v-if="r.id === run.current" />
+              <ChestIcon
+                v-else-if="isVisitedChest(r)"
+                :color="chestColorOf(r.id)"
+                :x="cx(r) - 12"
+                :y="cy(r) - 12"
+                width="24"
+                height="24"
+              />
+              <text v-else :x="cx(r)" :y="cy(r) + 1" class="room-emo">{{ roomGlyph(r) }}</text>
+            </g>
+            <!-- Effet de la salle qu'on vient d'ouvrir : anneau + texte qui monte (coffre, piège,
+               salle secrète). Remplace la modale qui s'ouvrait à chaque salle. -->
+            <g
+              v-if="roomPulse"
+              :key="'pulse' + roomPulse.n"
+              class="pulse"
+              :class="roomPulse.kind"
+              :style="{ '--pulse-ms': pulseMs + 'ms' }"
+            >
+              <circle
+                :cx="cx(floor.rooms[roomPulse.id]!)"
+                :cy="cy(floor.rooms[roomPulse.id]!)"
+                :r="SIZE / 2 + 2"
+                class="pulse-ring"
+              />
+              <text
+                :x="cx(floor.rooms[roomPulse.id]!)"
+                :y="cy(floor.rooms[roomPulse.id]!) - SIZE / 2 - 4"
+                class="pulse-txt"
+              >
+                {{ roomPulse.text }}
+              </text>
+            </g>
+          </svg>
+          <!-- Le héros, posé dans la salle où il se trouve. Il glisse d'une salle à l'autre
+             (y compris quand il retraverse le connu, pas à pas). -->
+          <div
+            class="hero-tok"
+            :class="{ hurt: pvPct < 30 }"
+            :style="{
+              left: heroPos.left + '%',
+              top: heroPos.top + '%',
+              width: heroPos.width + '%',
+              '--walk-ms': walkMs + 'ms',
+            }"
+            aria-hidden="true"
+          >
+            <span class="ht-glow" />
+            <AventureAvatar :profile="playerProfile" :equipped="playerEquipped" no-companions />
+          </div>
+        </div>
       </div>
 
-      <div v-if="lastEvent" class="event" :class="lastEvent.kind">{{ lastEvent.text }}</div>
+      <button
+        v-if="lastEvent?.item"
+        type="button"
+        class="event event-btn"
+        :class="lastEvent.kind"
+        @click="detailItem = lastEvent.item"
+      >
+        {{ lastEvent.text }} <span class="ev-more">voir ›</span>
+      </button>
+      <div v-else-if="lastEvent" class="event" :class="lastEvent.kind">{{ lastEvent.text }}</div>
 
       <div class="actions">
         <q-btn
@@ -281,55 +390,9 @@
           </template>
         </template>
 
-        <template v-else-if="roomFx?.kind === 'chest'">
-          <div class="chest-anim">
-            <ChestIcon :color="roomFx.grade?.color ?? '#c8813f'" class="chest-big" />
-          </div>
-          <div v-if="roomFx.grade" class="chest-grade" :style="{ color: roomFx.grade.color }">
-            Coffre {{ roomFx.grade.label }}
-          </div>
-          <!-- Détail complet de l'objet gagné -->
-          <div v-if="roomFx.item" class="fx-loot-card" :class="'r-' + roomFx.item.rarity">
-            <ItemIcon :item="roomFx.item" :size="56" class="fl-icon" />
-            <div class="fl-name">{{ roomFx.item.name }}</div>
-            <div class="fl-meta">
-              {{ gradeLabel(roomFx.item) }} · {{ SLOT_LABEL[roomFx.item.slot] }} · niv
-              {{ roomFx.item.level }}
-            </div>
-            <div class="fl-eff">✦ {{ effectLabel(roomFx.item.effect, roomFx.item.level) }}</div>
-            <div v-if="roomFx.item.setId" class="fl-set">🧩 Pièce de set</div>
-          </div>
-          <div v-else class="fx-result neutral">Coffre vide…</div>
-          <q-btn
-            class="fx-cta"
-            color="primary"
-            text-color="dark"
-            no-caps
-            unelevated
-            :label="roomFx.item ? 'Récupérer' : 'Continuer'"
-            @click="closeFx"
-          />
-        </template>
-
         <template v-else-if="roomFx?.kind === 'descend'">
           <div class="descend-anim">🪜</div>
           <div class="fx-result good">Étage {{ run.floor + 1 }} / {{ run.floors }}</div>
-        </template>
-
-        <template v-else-if="roomFx?.kind === 'trap'">
-          <div class="trap-anim">{{ roomFx.trap?.emoji ?? '⚠️' }}</div>
-          <div class="fx-result bad">
-            {{ roomFx.trap?.label ?? 'Piège' }} !{{ roomFx.dmg ? ` −${roomFx.dmg} PV` : '' }}
-          </div>
-          <q-btn
-            class="fx-cta"
-            color="primary"
-            text-color="dark"
-            no-caps
-            unelevated
-            label="Continuer"
-            @click="closeFx"
-          />
         </template>
       </q-card>
     </q-dialog>
@@ -546,6 +609,7 @@ import {
   SLOT_LABEL,
   RANK_ORDER,
   familiarRankRef,
+  relicPowerOf,
   type Item,
 } from '@/lib/items';
 import { rollActivityFamiliar } from '@/data/familiars';
@@ -572,6 +636,9 @@ import CombatStage from '@/components/CombatStage.vue';
 import GameLoader from '@/components/GameLoader.vue';
 import ChestIcon from '@/components/ChestIcon.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
+import AventureAvatar from '@/components/AventureAvatar.vue';
+import { floorPips, labyGuardian, barrierLabel } from '@/lib/labyrinthView';
+import { monsterArt } from '@/data/monsterArt';
 
 const props = defineProps<{ embedded?: boolean }>();
 const route = useRoute();
@@ -642,6 +709,17 @@ const tiers = computed(() =>
     runs: char.row?.laby_stats?.[l.id]?.runs ?? 0,
   })),
 );
+// L'accueil montre les paliers ouverts et LE prochain à ouvrir ; les suivants se déplient
+// (huit tuiles verrouillées identiques noyaient celles qu'on peut jouer).
+const showAllTiers = ref(false);
+const firstLocked = computed(() => {
+  const i = tiers.value.findIndex((t) => !t.unlocked);
+  return i < 0 ? tiers.value.length : i;
+});
+const shownTiers = computed(() =>
+  showAllTiers.value ? tiers.value : tiers.value.slice(0, firstLocked.value + 1),
+);
+const hiddenTiers = computed(() => Math.max(0, tiers.value.length - firstLocked.value - 1));
 // Palier en cours d'exploration (choisi dans le lobby).
 const selectedLaby = ref<Labyrinth | null>(null);
 
@@ -763,7 +841,8 @@ const dungeon = ref<Floor[]>(generateDungeon(seed.value, floorsWanted.value));
 const run = ref<RunState>(
   startRun(floorsWanted.value, dungeon.value[0]!, Math.max(60, fighter.value.pv)),
 );
-const lastEvent = ref<{ kind: string; text: string } | null>(null);
+// Bandeau sous la carte. `item` : le butin d'un coffre, qui s'ouvre au toucher.
+const lastEvent = ref<{ kind: string; text: string; item?: Item } | null>(null);
 const over = ref(false);
 // Butin cumulé du run (Phase 3b : affiché ; persistance/récompense = Phase 3c).
 const gold = ref(0);
@@ -787,14 +866,32 @@ type StageFight = {
   archetype?: string;
   log: CombatEvent[];
 };
-const roomFx = ref<{
-  kind: 'combat' | 'chest' | 'trap' | 'descend';
-  win?: boolean;
-  item?: Item | null;
-  grade?: ChestGrade;
-  dmg?: number;
-  trap?: LabyTrap;
+// Seuls le COMBAT (son rejeu) et la DESCENTE ouvrent un overlay ; coffres, pièges et salles
+// secrètes se jouent sur la carte (`roomPulse`) — une modale par salle, en auto ×20, c'était
+// une modale toutes les quelques dizaines de millisecondes.
+const roomFx = ref<{ kind: 'combat' | 'descend'; win?: boolean } | null>(null);
+// Effet posé sur la salle qu'on vient d'ouvrir : anneau + texte qui monte.
+const roomPulse = ref<{
+  id: number;
+  kind: 'chest' | 'trap' | 'vault';
+  text: string;
+  n: number;
 } | null>(null);
+let pulseSeq = 0;
+let pulseTimer: ReturnType<typeof setTimeout> | undefined;
+// Durée de l'effet, raccourcie avec la vitesse de l'auto (jamais sous 250 ms : on doit le voir).
+const pulseMs = computed(() => Math.max(250, Math.round(1100 / autoSpeed.value)));
+function pulse(id: number, kind: 'chest' | 'trap' | 'vault', text: string) {
+  roomPulse.value = { id, kind, text, n: ++pulseSeq };
+  if (pulseTimer) clearTimeout(pulseTimer);
+  pulseTimer = setTimeout(() => (roomPulse.value = null), pulseMs.value);
+}
+// Le 🎒 bondit quand un objet y entre.
+const lootBump = ref(false);
+function bumpLoot() {
+  lootBump.value = false;
+  requestAnimationFrame(() => (lootBump.value = true));
+}
 const stageFights = ref<StageFight[]>([]);
 const stageStartPv = ref(0); // PV du joueur AU DÉBUT du combat animé (attrition)
 const relicGauge = ref(0); // 🔮 jauge de relique, reportée d'un combat à l'autre du run
@@ -910,6 +1007,31 @@ const labyTierIndex = computed(() => tierIndexOfLaby(selectedLaby.value ?? LABYR
 // Teinte d'ambiance de l'étage = couleur du RANG du palier (G→SSS) → chaque palier a
 // son atmosphère de fond sur la carte.
 const ambianceColor = computed(() => RANK_COLOR[selectedLaby.value?.rank ?? 'commun']);
+
+// ── Affichage (barre d'état, héros sur la carte, tuiles de l'accueil) ──
+const pips = computed(() => floorPips(run.value.floor, run.value.floors));
+const relicPower = computed(() => relicPowerOf(char.row?.equipped?.relic?.power));
+const barrierText = computed(() => barrierLabel(fighter.value.startShield ?? 0, barrierLeft.value));
+// Position du héros en % de la carte (le viewBox a une marge MAP_PAD de chaque côté).
+const heroPos = computed(() => {
+  const r = currentRoom.value;
+  const w = cols.value * CELL + 2 * MAP_PAD;
+  const h = rows.value * CELL + 2 * MAP_PAD;
+  return {
+    left: ((cx(r) + MAP_PAD) / w) * 100,
+    top: ((cy(r) + MAP_PAD) / h) * 100,
+    width: ((SIZE * 0.95) / w) * 100,
+  };
+});
+// Le pas du héros suit celui du déplacement automatique (et la vitesse de l'auto).
+const walkMs = computed(() => Math.round(WALK_STEP_MS / autoSpeed.value));
+// Illustration du gardien d'un palier, ou null (repli sur son emoji). Un fichier qui ne
+// charge pas retombe aussi sur l'emoji.
+const artFailed = ref(new Set<string>());
+function guardianArt(l: Labyrinth): string | null {
+  const g = labyGuardian(l);
+  return artFailed.value.has(g.name) ? null : monsterArt(g.name);
+}
 // Torches : les salles VISITÉES sont « éclairées » (2 flammes) ; le reste est sombre.
 function roomLit(r: Room): boolean {
   return run.value.visited.includes(r.id) && isVisible(floor.value, run.value, r.id);
@@ -1023,8 +1145,10 @@ function openChest(id: number) {
   lastEvent.value = {
     kind: 'good',
     text: `${grade.emoji} Coffre ${grade.label}${bits ? ' — ' + bits : ' ouvert'} !`,
+    ...(item ? { item } : {}),
   };
-  roomFx.value = { kind: 'chest', item, grade };
+  if (item) bumpLoot();
+  pulse(id, 'chest', item ? gradeLabel(item) : 'vide');
 }
 // Piège de la salle (seed séparé) : type varié (pointes/gaz/flammes = dégâts modulés ;
 // trappe = vol d'or ; toile = vol de poussière). Déterministe → même icône à l'affichage.
@@ -1037,7 +1161,9 @@ function springTrap(id: number) {
     const dmg = labyrinthTrapDamage(fighter.value.pv, trap.mult);
     run.value = applyDamage(run.value, dmg); // mort gérée à la fermeture (closeFx)
     lastEvent.value = { kind: 'bad', text: `${trap.emoji} ${trap.label} ! −${dmg} PV` };
-    roomFx.value = { kind: 'trap', trap, dmg };
+    pulse(id, 'trap', `−${dmg} PV`);
+    // Piège fatal : on laisse l'effet se voir, puis la fin de run.
+    if (run.value.status === 'dead') setTimeout(() => void endRun('dead'), pulseMs.value);
   } else {
     const isGold = trap.kind === 'gold';
     const pool = isGold ? gold : dust;
@@ -1055,7 +1181,7 @@ function springTrap(id: number) {
             ? `${trap.emoji} ${trap.label} ! butin dérobé`
             : `${trap.emoji} ${trap.label} — rien à voler !`,
     };
-    roomFx.value = { kind: 'trap', trap };
+    pulse(id, 'trap', loss && isGold ? `−${loss} 🪙` : trap.label);
   }
 }
 // SALLE SECRÈTE : gros butin GARANTI — un objet de HAUT rang (plusieurs tirages, on garde
@@ -1092,7 +1218,11 @@ function openVault(id: number) {
     subtitle: item ? `${item.name} · ${gradeLabel(item)}` : 'Coffre au trésor',
     rarity: item ? fxRarity(item.rarity) : 'legendary',
   });
-  roomFx.value = { kind: 'chest', item };
+  if (item) {
+    lastEvent.value = { ...lastEvent.value, item };
+    bumpLoot();
+  }
+  pulse(id, 'vault', '💎');
 }
 // Ferme l'overlay de salle ; si le combat a été fatal, on bascule sur la fin de run.
 function closeFx() {
@@ -1455,6 +1585,7 @@ async function startAuto(tier: Labyrinth) {
 onBeforeUnmount(() => {
   stopAuto();
   stopWalk();
+  if (pulseTimer) clearTimeout(pulseTimer);
   window.removeEventListener('beforeunload', beforeUnload);
 });
 
@@ -1555,136 +1686,228 @@ function returnToLobby() {
   font-size: 18px;
   font-weight: 700;
 }
-/* Lobby */
+/* Accueil : en-tête (clés), règles repliées, grille de tuiles de paliers. */
 .lobby {
-  text-align: center;
-  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 16px;
 }
-.lobby-emo {
-  font-size: 52px;
+.lobby-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
-.lobby-keys {
-  font-size: 15px;
+.lh-keys,
+.lh-gate {
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
   color: var(--dim);
-  margin-top: 4px;
 }
-.lobby-keys b {
-  color: var(--accent);
-  font-size: 22px;
-}
-.lobby-txt {
-  font-size: 13.5px;
+.lh-keys {
   color: var(--text);
-  line-height: 1.55;
-  max-width: 460px;
-  margin: 14px auto 0;
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
 }
-.lobby-txt.dim {
+.lh-keys b {
+  color: var(--accent);
+  font-family: var(--font-display);
+  font-size: 15px;
+}
+.lobby-lock {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.lobby-rules {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.lobby-rules summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  color: var(--dim);
+}
+.lobby-rules p {
+  margin: 0 0 10px;
+}
+.lobby-rules p.dim {
   color: var(--dim);
   font-size: 12.5px;
 }
-/* Le libellé (avec le nombre de clés) peut être long → il s'enroule proprement au
-   lieu de déborder sous le bouton (hauteur auto). */
-.lobby-cta :deep(.q-btn__content) {
-  white-space: normal;
-  line-height: 1.25;
+/* Une tuile par palier : 2 colonnes sur téléphone, plus au-delà. */
+.laby-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
 }
-/* Ladder : liste des paliers de Labyrinthe. */
-.laby-list {
+.lobby-more {
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--dim);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+.laby-tile {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  max-width: 420px;
-  margin-top: 16px;
-}
-.laby-tier {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--accent);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--tier) 35%, var(--line));
   background: var(--surface);
-  color: inherit;
-}
-.laby-tier.locked {
-  border-left-color: var(--line);
-  opacity: 0.6;
-}
-.laby-tier.cleared {
-  border-left-color: var(--d1);
-}
-.lt-emo {
-  font-size: 24px;
-  flex: 0 0 auto;
-}
-.lt-main {
-  flex: 1 1 auto;
+  overflow: hidden;
   min-width: 0;
+}
+.laby-tile.cleared {
+  border-color: color-mix(in srgb, var(--d1) 55%, var(--line));
+}
+.laby-tile.locked {
+  opacity: 0.55;
+  border-color: var(--line);
+}
+.lt-art {
+  position: relative;
+  height: 96px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(
+      circle at 50% 68%,
+      color-mix(in srgb, var(--tier) 45%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(180deg, #0f0c09, color-mix(in srgb, var(--tier) 18%, #0f0c09));
+}
+.laby-tile.locked .lt-art {
+  background: linear-gradient(180deg, #0f0c09, #1a1612);
+}
+.lt-img {
+  height: 88px;
+  width: auto;
+  max-width: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 6px rgba(255, 244, 220, 0.25));
+}
+.lt-art-emo {
+  font-size: 44px;
+  line-height: 1;
+}
+.lt-cost {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+}
+.lt-cost.short {
+  color: var(--d3);
+}
+.lt-done {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 800;
+  background: var(--d1);
+  color: #10200c;
+}
+.lt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 9px 10px 10px;
+  flex: 1;
 }
 .lt-name {
   font-size: 14px;
   font-weight: 700;
+  line-height: 1.15;
   color: var(--text);
 }
-.lt-badge {
-  color: var(--d1);
-}
-.lt-meta {
+.lt-guard {
   font-size: 11.5px;
   color: var(--dim);
-  margin-top: 1px;
+  line-height: 1.3;
 }
-.lt-fam {
-  color: color-mix(in srgb, var(--accent) 70%, var(--dim));
+.lt-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
-.lt-pow {
+.lt-pills > span {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--dim);
   font-variant-numeric: tabular-nums;
-  color: var(--dim);
+  white-space: nowrap;
 }
-.lt-pow.ok {
-  color: color-mix(in srgb, #7bc86c 78%, var(--dim));
+.lt-pills .lt-pow.ok {
+  color: color-mix(in srgb, #7bc86c 85%, var(--dim));
 }
-.lt-pow.mid {
-  color: color-mix(in srgb, #ffb23f 78%, var(--dim));
+.lt-pills .lt-pow.mid {
+  color: color-mix(in srgb, #ffb23f 85%, var(--dim));
 }
-.lt-pow.none {
-  color: var(--dim);
+.lt-pills .lt-pow.bad {
+  color: color-mix(in srgb, #ff6a45 80%, var(--dim));
 }
-.lt-pow.bad {
+.lt-pills .lt-death {
   color: color-mix(in srgb, #ff6a45 70%, var(--dim));
-}
-.lt-death {
-  color: color-mix(in srgb, #ff6a45 60%, var(--dim));
 }
 .lt-lock {
   font-size: 11px;
   color: var(--dim);
-  margin-top: 2px;
+  margin-top: auto;
 }
 .lt-actions {
-  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  margin-top: auto;
 }
 .lt-go {
+  min-height: 40px;
   border: 1px solid var(--accent);
-  background: transparent;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--accent);
   border-radius: 9px;
-  padding: 6px 10px;
+  padding: 6px 8px;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
-  white-space: nowrap;
+  font-size: 12.5px;
   cursor: pointer;
 }
 .lt-go.auto {
+  background: transparent;
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
   color: color-mix(in srgb, var(--accent) 80%, var(--text));
 }
@@ -1747,30 +1970,55 @@ function returnToLobby() {
 .room.auto {
   cursor: default;
 }
-.hud {
+/* Barre d'état d'une descente. */
+.run-hud {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.rh-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 10px;
 }
-.hud-floor {
-  font-size: 13px;
+.rh-pips {
+  display: flex;
+  gap: 4px;
+}
+.rh-pip {
+  width: 18px;
+  height: 7px;
+  border-radius: 3px;
+  background: var(--line);
+}
+.rh-pip.done {
+  background: var(--dim);
+}
+.rh-pip.cur {
+  background: var(--accent);
+}
+.rh-floor {
+  font-size: 12.5px;
   color: var(--dim);
 }
-.hud-floor b {
+.rh-floor b {
   color: var(--text);
-  font-size: 15px;
+  font-size: 14px;
 }
-.hud-pv {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex: 1;
-  max-width: 240px;
+.rh-pv {
+  margin-left: auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .pv-bar {
-  flex: 1;
   height: 8px;
   border-radius: 4px;
   background: var(--surface-3, var(--line));
@@ -1782,27 +2030,31 @@ function returnToLobby() {
   border-radius: 4px;
   transition: width 0.3s;
 }
-.pv-txt {
-  font-size: 12px;
-  color: var(--text);
-  white-space: nowrap;
+.pv-fill.low {
+  background: var(--d4);
 }
-.bag {
+.rh-chips {
   display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .bag-chip {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--text);
-  background: var(--surface-2);
+  background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 3px 10px;
+  font-variant-numeric: tabular-nums;
+}
+.bag-chip.relic {
+  border-color: #8f6bff;
+  color: #c6b4ff;
 }
 .bag-chip-btn {
   cursor: pointer;
+  margin-left: auto;
 }
 .bag-chip-btn:not(:disabled):hover {
   border-color: var(--primary);
@@ -1811,16 +2063,157 @@ function returnToLobby() {
   opacity: 0.55;
   cursor: default;
 }
+.bag-chip-btn.bump {
+  animation: bag-bump 0.45s ease-out;
+}
+@keyframes bag-bump {
+  40% {
+    transform: scale(1.25);
+    border-color: var(--accent);
+  }
+}
 .map-wrap {
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 12px;
 }
+.map-stage {
+  position: relative;
+}
 .map {
   width: 100%;
   height: auto;
   display: block;
+}
+/* Le héros sur la carte : il glisse d'une salle à l'autre au rythme de ses pas. */
+.hero-tok {
+  position: absolute;
+  aspect-ratio: 120 / 148;
+  transform: translate(-50%, -58%);
+  transition:
+    left var(--walk-ms, 190ms) ease-in-out,
+    top var(--walk-ms, 190ms) ease-in-out;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+.ht-glow {
+  position: absolute;
+  inset: 20% -30% -10%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 196, 107, 0.4), transparent 65%);
+  z-index: -1;
+}
+.hero-tok.hurt .ht-glow {
+  background: radial-gradient(circle, rgba(255, 106, 69, 0.45), transparent 65%);
+}
+/* Effet de la salle qu'on vient d'ouvrir. */
+.pulse {
+  pointer-events: none;
+}
+.pulse-ring {
+  fill: none;
+  stroke: var(--d1);
+  stroke-width: 3;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: pulse-ring var(--pulse-ms, 1100ms) ease-out forwards;
+}
+.pulse.trap .pulse-ring {
+  stroke: var(--d4);
+}
+.pulse.vault .pulse-ring {
+  stroke: #ffd23f;
+}
+.pulse-txt {
+  text-anchor: middle;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  fill: var(--d1);
+  paint-order: stroke;
+  stroke: #0b0907;
+  stroke-width: 3px;
+  animation: pulse-txt var(--pulse-ms, 1100ms) ease-out forwards;
+}
+.pulse.trap .pulse-txt {
+  fill: var(--d4);
+}
+.pulse.vault .pulse-txt {
+  fill: #ffd23f;
+}
+@keyframes pulse-ring {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.6);
+  }
+}
+@keyframes pulse-txt {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  20% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+}
+.room.fx-chest,
+.room.fx-trap {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.room.fx-chest {
+  animation: room-pop 0.5s ease-out;
+}
+.room.fx-trap {
+  animation: room-shake 0.45s ease-in-out;
+}
+.room.fx-trap .room-bg {
+  fill: color-mix(in srgb, var(--d4) 35%, var(--surface));
+}
+@keyframes room-pop {
+  40% {
+    transform: scale(1.15);
+  }
+}
+@keyframes room-shake {
+  20% {
+    transform: translateX(-4px);
+  }
+  40% {
+    transform: translateX(4px);
+  }
+  60% {
+    transform: translateX(-3px);
+  }
+  80% {
+    transform: translateX(3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-tok {
+    transition: none;
+  }
+  .room.fx-chest,
+  .room.fx-trap,
+  .bag-chip-btn.bump {
+    animation: none;
+  }
+  .pulse-ring {
+    animation: none;
+    opacity: 0;
+  }
+  .pulse-txt {
+    animation: none;
+  }
 }
 /* Teinte d'ambiance du palier (couleur du rang), douce, en fond de carte. */
 .map-amb {
@@ -1926,6 +2319,21 @@ function returnToLobby() {
   font-weight: 600;
   text-align: center;
 }
+.event-btn {
+  display: block;
+  width: 100%;
+  border: none;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+.ev-more {
+  font-size: 12px;
+  opacity: 0.8;
+  margin-left: 4px;
+}
 .event.bad {
   background: color-mix(in srgb, var(--d4) 20%, transparent);
   color: var(--d4);
@@ -1995,42 +2403,6 @@ function returnToLobby() {
   height: 48px;
   border-radius: 12px;
   font-weight: 700;
-}
-/* Coffre : rebond + ouverture */
-.chest-anim {
-  font-size: 76px;
-  animation: chest-open 0.9s ease-out;
-  transform-origin: bottom center;
-}
-.chest-big {
-  width: 84px;
-  height: 84px;
-  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
-}
-.chest-grade {
-  font-weight: 800;
-  font-size: 18px;
-  margin-top: 2px;
-  letter-spacing: 0.02em;
-}
-@keyframes chest-open {
-  0% {
-    transform: scale(0.5) rotate(0);
-    opacity: 0;
-  }
-  40% {
-    transform: scale(1.1) rotate(-6deg);
-    opacity: 1;
-  }
-  55% {
-    transform: scale(1) rotate(6deg);
-  }
-  70% {
-    transform: scale(1.15) rotate(-3deg);
-  }
-  100% {
-    transform: scale(1) rotate(0);
-  }
 }
 /* Carte détaillée de l'objet gagné (coffre) */
 .fx-loot-card {
@@ -2133,29 +2505,6 @@ function returnToLobby() {
   100% {
     transform: scale(1);
     opacity: 1;
-  }
-}
-/* Piège : secousse + flash rouge */
-.trap-anim {
-  font-size: 76px;
-  animation: trap-shake 0.5s ease-in-out;
-}
-@keyframes trap-shake {
-  0%,
-  100% {
-    transform: translateX(0);
-  }
-  20% {
-    transform: translateX(-8px) rotate(-5deg);
-  }
-  40% {
-    transform: translateX(8px) rotate(5deg);
-  }
-  60% {
-    transform: translateX(-6px);
-  }
-  80% {
-    transform: translateX(6px);
   }
 }
 .over-card {

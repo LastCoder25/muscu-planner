@@ -199,7 +199,7 @@ export const CARAVAN = {
   lossKeep: 0.55,
 } as const;
 
-type CaravanEventKind = 'bandits' | 'cache' | 'detour' | 'calme';
+type CaravanEventKind = 'bandits' | 'cache' | 'detour' | 'calme' | 'demitour';
 
 interface CaravanEvent {
   kind: CaravanEventKind;
@@ -248,6 +248,9 @@ export interface CaravanOutcome {
   lightHurt?: string[];
   events: CaravanEvent[];
   text: string;
+  /** 🔙 Embuscade perdue à l'ALLER : part du chemin aller faite au demi-tour (0..1). Le
+   *  convoi n'atteint pas le lieu — aucune cargaison. Absent = le lieu a été atteint. */
+  turnBack?: number;
 }
 
 export interface Caravan {
@@ -261,6 +264,8 @@ export interface Caravan {
   /** Retour en ville : c'est là seulement que la cargaison se récupère. */
   returnAt: number;
   outcome: CaravanOutcome;
+  /** 🔙 Demi-tour (copie de `outcome.turnBack`, lue par `travelPosition`). */
+  turnBack?: number;
   /** ⚠️ `undefined` = butin DÉJÀ crédité (convois écrits avant l'encaissement manuel),
    *  jamais « à récupérer » — même règle que les rapports d'expédition. */
   claimed?: boolean;
@@ -1379,6 +1384,11 @@ export function resolveCaravan(
   const legs = routePerilous(poi) ? 4 : 2;
   const base = routePerilous(poi) ? AMBUSH_BASE.perilous : AMBUSH_BASE.calme;
   const amb = ambushChance(poi, escort, fx.scout);
+  // 🔙 Les jambes de la première moitié sont l'ALLER. Une embuscade perdue là fait faire
+  // DEMI-TOUR (2026-09-29, décision de l'utilisateur : « le groupe fait demi-tour avec les
+  // blessés ») : on n'atteint pas le lieu. Au retour, elle ne coûte qu'une part de cargaison.
+  const outLegs = legs / 2;
+  let turnBack: number | undefined;
   for (let i = 0; i < legs; i++) {
     const roll = rng();
     if (roll < amb) {
@@ -1403,7 +1413,9 @@ export function resolveCaravan(
         down: [...d.down],
         text: r.win
           ? 'Une embuscade repoussée.'
-          : 'Des bandits emportent une part de la cargaison.',
+          : i < outLegs
+            ? 'Une embuscade à l’aller tourne mal.'
+            : 'Des bandits emportent une part de la cargaison.',
       });
       // 🛡️ `slainByAlly` : jamais `d.killsBy`, qui mélange les deux sens sous la même clé
       // (cf. sa doc) — un id d'aventurier qui collisionnerait avec un id de troupe (`foe0`)
@@ -1420,6 +1432,15 @@ export function resolveCaravan(
       } else {
         lost = true;
         mult *= CARAVAN.lossKeep;
+        if (i < outLegs) {
+          // Les rencontres de l'aller se répartissent régulièrement sur le chemin.
+          turnBack = (i + 1) / (outLegs + 1);
+          events.push({
+            kind: 'demitour',
+            text: '🔙 Demi-tour : l’équipe rentre avec ses blessés, sans atteindre le lieu.',
+          });
+          break;
+        }
         // ⚠️ TIRAGE CONSERVÉ, résultat ignoré : il désignait l'ancienne victime au hasard,
         // remplacée par le PREMIER tombé (`convoyHurt`). Les rencontres des jambes suivantes
         // se tirent APRÈS lui sur `rng` : le retirer décalerait leur tirage et la cargaison,
@@ -1442,6 +1463,23 @@ export function resolveCaravan(
     }
   }
 
+  if (turnBack !== undefined) {
+    // Aucun lieu atteint : aucune cargaison. L'XP est celle d'un échec, plus les abattus.
+    return {
+      gold: 0,
+      energy: 0,
+      summonStones: 0,
+      keys: 0,
+      mana: 0,
+      xp: missionXpFor(escort, poi, false, xpShare, pantheonLevel, false),
+      kills,
+      hurt,
+      lightHurt: lightHurt.filter((id) => !hurt.includes(id)),
+      events,
+      text: events.map((e) => e.text).join(' '),
+      turnBack,
+    };
+  }
   const haul = caravanHaulMult(escort, kit.advGear, fx.haul);
   const k = mult * haul;
   // 🧺 LA MÊME RÉCOLTE QUE LE HÉROS (v0.1189, décision de l'utilisateur : « aligne la
@@ -1514,8 +1552,11 @@ export function startCaravan(
    *  c'est le Panthéon de CE moment — comme le reste du rapport, annoncé puis tenu. */
   pantheonLevel: number,
 ): Caravan {
-  const leg =
+  const full =
     caravanLegMin(poi, escort, advGearRoles(escort, kit.advGear).speed, travelMult) * 60_000;
+  const outcome = resolveCaravan(poi, escort, seed, kit, pantheonLevel, undefined);
+  // 🔙 Un demi-tour raccourcit l'aller ET le retour à la part du chemin faite.
+  const leg = full * (outcome.turnBack ?? 1);
   return {
     id,
     poi,
@@ -1523,7 +1564,8 @@ export function startCaravan(
     sentAt: now,
     midAt: now + leg,
     returnAt: now + 2 * leg,
-    outcome: resolveCaravan(poi, escort, seed, kit, pantheonLevel, undefined),
+    outcome,
+    ...(outcome.turnBack !== undefined ? { turnBack: outcome.turnBack } : {}),
     claimed: false,
   };
 }

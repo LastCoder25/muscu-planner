@@ -373,7 +373,13 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
     // ⚠️ Une escorte SANS RÔLE : le sujet du test est la part de base, pas la cargaison
     // qu'un 🐫 ajoute. Depuis que la référence est mixte, elle porte un rôle de haul —
     // le test mesurait donc les deux à la fois et est tombé pour la mauvaise raison.
-    const part = avgOf(p, team(3, 20, 'heal'), 'energy') / heros;
+    // 🔙 Sur les trajets qui ATTEIGNENT le lieu : un demi-tour ne récolte rien, et c'est la
+    // part de la récolte qu'on mesure ici, pas le risque de la route.
+    const esc0 = team(3, 20, 'heal');
+    const arrived = Array.from({ length: 200 }, (_, i) =>
+      resolveCaravan(p, esc0, i * 7919 + 3, NUS, aJour(esc0)),
+    ).filter((o) => o.turnBack === undefined);
+    const part = arrived.reduce((s, o) => s + o.energy, 0) / arrived.length / heros;
     // ⚠️ La part est écrite (0,5) ET lue sur la constante : la mettre à 1 fait tomber ce test,
     // et la déplacer sans le dire aussi.
     expect(CARAVAN.energyShare).toBe(0.2); // v0.1210 (v0.1201 : 0,5)
@@ -386,8 +392,11 @@ describe('⚠️ ce qu’une caravane rapporte — et ce qu’elle ne rapportera
       harvestGuardOf(sh)?.size ?? 0,
     ).summonStones;
     const esc = team(3, 20, 'heal');
-    let tot = 0;
-    for (let s = 1; s <= 200; s++) tot += resolveCaravan(sh, esc, s, NUS, aJour(esc)).summonStones;
+    // 🔙 Même règle : sur les trajets qui atteignent le sanctuaire.
+    const reach = Array.from({ length: 200 }, (_, i) =>
+      resolveCaravan(sh, esc, i + 1, NUS, aJour(esc)),
+    ).filter((o) => o.turnBack === undefined);
+    const tot = (reach.reduce((t, o) => t + o.summonStones, 0) / reach.length) * 200;
     // 🔮 v0.1210 : les pierres d’un sanctuaire passent elles aussi à la part d’équipe.
     expect(CARAVAN.stonesShare).toBe(0.2);
     expect(tot / 200 / pleines / CARAVAN.stonesShare).toBeGreaterThan(0.75);
@@ -448,7 +457,10 @@ describe('les rôles hors combat servent à quelque chose', () => {
     );
     const p = poi({ type: 'mana_mine' });
     const mana = (esc: Adventurer[]) =>
-      Array.from({ length: 200 }, (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS, aJour(esc)).mana).reduce((x, y) => x + y, 0);
+      Array.from(
+        { length: 200 },
+        (_, i) => resolveCaravan(p, esc, i * 7919 + 3, NUS, aJour(esc)).mana,
+      ).reduce((x, y) => x + y, 0);
     expect(mana(team(2, 20, 'haul'))).toBeGreaterThan(mana(team(2, 20, 'speed')));
   });
   it('un 🩺 raccourcit les convalescences, et l’Infirmerie aussi', () => {
@@ -842,7 +854,8 @@ describe('🎓 L’XP SUIT LE NIVEAU DE L’ÉVENT, PAS LA DISTANCE (v0.1014)', 
     expect(d).toBeGreaterThan(25);
     const base = missionXp(refAdventurer(d), p, true);
     // ⚠️ À un point près : `base` est ARRONDI, la prime s'applique à la valeur non arrondie.
-    const near = (x: number, v: number) => expect(Math.abs(x - Math.round(v))).toBeLessThanOrEqual(1);
+    const near = (x: number, v: number) =>
+      expect(Math.abs(x - Math.round(v))).toBeLessThanOrEqual(1);
     // Un rang (10 niveaux) d'avance : +50 %.
     near(missionXp(refAdventurer(d - 10), p, true), base * 1.5);
     // Continu à l'intérieur d'un rang : 5 niveaux → +25 %.
@@ -1099,7 +1112,12 @@ describe('⚠️ un convoi VOYAGE comme le héros', () => {
   // Le convoi est situé sur la carte par la MÊME fonction que le héros
   // (`travelPosition`) : deux copies de cette interpolation divergeraient à la
   // première retouche — c'est le piège des libellés de POI, déjà rencontré deux fois.
-  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, 7, NUS, 1, 20);
+  // Une graine dont le trajet ATTEINT le lieu (un demi-tour est testé à part).
+  const vanSeed = [7, 8, 9, 10, 11, 12, 13].find(
+    (s) =>
+      startCaravan('v', poi({ x: 60, y: 20 }), team(3), 0, s, NUS, 1, 20).turnBack === undefined,
+  )!;
+  const van = startCaravan('v1', poi({ x: 60, y: 20 }), team(3), 0, vanSeed, NUS, 1, 20);
 
   it('part de la ville, atteint son lieu, et en revient', () => {
     expect(travelPosition(van, van.sentAt)).toMatchObject({ ...EXPE.town, phase: 'outbound' });
@@ -1270,21 +1288,26 @@ describe('👁️ L’ÉCLAIREUR ÉVITE LES EMBUSCADES (v0.759)', () => {
   it('⚠️ il RÉDUIT LE RISQUE, il ne FABRIQUE PAS de butin', () => {
     // La bande libérée doit revenir à la route CALME, jamais à la cache — sinon
     // l’éclaireur serait une machine à loot et son libellé mentirait.
+    // 🔙 Rapporté aux JAMBES réellement parcourues : un demi-tour arrête la route, donc
+    // l'escorte qui perd plus souvent à l'aller parcourt moins de jambes (et croise moins de
+    // caches) — compter en absolu ferait passer l'éclaireur pour un fabricant de caches.
     const compte = (team: Adventurer[]) => {
       let cache = 0;
       let amb = 0;
+      let legs = 0;
       for (let i = 1; i <= 3000; i++) {
         const o = resolveCaravan(poiOf(false), team, i * 7919, NUS, aJour(team));
         cache += o.events.filter((e) => e.kind === 'cache').length;
         amb += o.events.filter((e) => e.kind === 'bandits').length;
+        legs += o.events.length - (o.turnBack !== undefined ? 1 : 0);
       }
-      return { cache, amb };
+      return { cache: cache / legs, amb: amb / legs };
     };
     const nu = compte(sans());
     const eclaire = compte(beaucoup());
     expect(eclaire.amb).toBeLessThan(nu.amb);
     // Les caches ne DOIVENT PAS augmenter (tolérance de bruit d’échantillonnage).
-    expect(eclaire.cache).toBeLessThanOrEqual(Math.round(nu.cache * 1.05));
+    expect(eclaire.cache).toBeLessThanOrEqual(nu.cache * 1.05);
   });
 
   it('une route dangereuse reste plus risquée, éclaireurs ou pas', () => {
@@ -1518,7 +1541,9 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     );
     // ⚠️ v0.1166 : un puits n'a plus d'or à lui (l'or vient des bourses de ses gardes bandits).
     expect(o.gold).toBe(0); // avant : 938 — v0.1161 : part d’or hors mine unifiée à 0,35 (`HARVEST.goldShare`, 804 × 0,35 / 0,3). v0.1153 : l’or suit la DIFFICULTÉ du lieu (996 à son niveau brut). v0.1120 : 2ᵉ embuscade perdue (bonus d’'ascension), cf. plus bas. Une SOURCE depuis que l’épave est retirée (v0.999) : 1758 × 30/26, le coût d’un puits
-    expect(o.energy).toBe(12); // v0.1210 : 20 % de l'énergie du héros (v0.1201 : 30, v0.1189 : 61)
+    // 🔙 2026-09-29 : la 1re embuscade (ALLER) est perdue → demi-tour, rien de récolté (avant : 12).
+    expect(o.turnBack).toBeCloseTo(1 / 3, 6);
+    expect(o.energy).toBe(0); // avant le demi-tour : 12 — v0.1210 : 20 % de l'énergie du héros (v0.1201 : 30, v0.1189 : 61)
     expect(o.summonStones).toBe(0);
     // ⚠️ Le lieu est une SOURCE depuis le retrait de l'épave (v0.999) : l'or suit son coût et
     // l'énergie apparaît. Tout le reste (clés, XP, blessé, journal) est inchangé au
@@ -1547,19 +1572,19 @@ describe('🚫 plus aucun équipement de champion sur la route (v0.1012)', () =>
     // des bandits calés sur une escorte équipée, et la route dangereuse passe de ×1,35 à ×1,4 :
     // elle abat un bandit de moins par embuscade (abattus 1/1/2 → 0/1/1). La CARGAISON, les
     // blessés et l'ordre des chutes sont identiques — le flux aléatoire n'a pas fui.
-    expect(o.xp).toEqual({ ref0: 41, ref1: 41, ref2: 41 });
-    expect(o.kills).toEqual({ ref0: 0, ref1: 1, ref2: 1 });
-    expect(o.hurt).toEqual(['ref1', 'ref0']);
+    // 🔙 2026-09-29 : demi-tour dès la 1re embuscade — la route s'arrête là. La 1re jambe est
+    // IDENTIQUE à avant (mêmes chutes, même blessé) : le flux n'a pas fui, la route est
+    // simplement plus courte. XP 41 → 36 (une embuscade abattue de moins).
+    expect(o.xp).toEqual({ ref0: 36, ref1: 36, ref2: 36 });
+    expect(o.kills).toEqual({ ref0: 0, ref1: 0, ref2: 1 });
+    expect(o.hurt).toEqual(['ref1']);
     expect(o.events[0]!.down).toEqual(['ref1', 'ref2', 'ref0']);
-    expect(o.events[1]!.down).toEqual(['ref0', 'ref2', 'ref1']);
     expect(o.events.map((e) => [e.slain, e.down?.length])).toEqual([
       [1, 3],
-      [1, 3],
-      [undefined, undefined],
       [undefined, undefined],
     ]);
-    expect(o.events.map((e) => e.kind)).toEqual(['bandits', 'bandits', 'calme', 'calme']);
-    expect(o.events.map((e) => e.won)).toEqual([false, false, undefined, undefined]);
+    expect(o.events.map((e) => e.kind)).toEqual(['bandits', 'demitour']);
+    expect(o.events.map((e) => e.won)).toEqual([false, undefined]);
   });
 });
 

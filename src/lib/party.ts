@@ -287,15 +287,18 @@ export function startParty(
   legMin: number,
   outcome: ExpeditionOutcome,
 ): ActiveExpedition {
-  const leg = Math.max(1, Math.round(legMin)) * 60_000;
+  const f = outcome.turnBack;
+  // 🔙 Demi-tour : l'aller s'arrête en chemin, le retour dure autant que le chemin fait.
+  const leg = Math.max(1, Math.round(legMin)) * 60_000 * (f ?? 1);
   // 🔍 La fouille d'un héros tombé : on reste sur place, le rapport tombe à la fin.
-  const dwell = dwellMsFor(input.poi, input.champions);
+  const dwell = f === undefined ? dwellMsFor(input.poi, input.champions) : 0;
   return {
     poi: input.poi,
     sentAt: now,
     midAt: now + leg + dwell,
     returnAt: now + 2 * leg + dwell,
     ...(dwell ? { dwellMs: dwell } : {}),
+    ...(f !== undefined ? { turnBack: f } : {}),
     goldCost: 0,
     seed: input.seed >>> 0 || 1,
     outcome,
@@ -587,9 +590,11 @@ export function partyReport(party: PartyResult, roster: readonly Adventurer[]): 
           : 'la bande passe'
         : party.win
           ? 'camp pris'
-          : party.roadLost
-            ? 'pris, embuscade perdue'
-            : 'repoussé',
+          : party.turnedBack
+            ? 'demi-tour en chemin'
+            : party.roadLost
+              ? 'pris, embuscade perdue'
+              : 'repoussé',
     slain: party.slain,
     foes: party.foes,
     heroKills: party.heroKills,
