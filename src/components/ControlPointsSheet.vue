@@ -64,11 +64,10 @@
           <span class="cps-emo">{{ CONTROL_EMO[r.kind] }}</span>
           <span class="cps-main">
             <span class="cps-name">{{ CONTROL_LABEL[r.kind] }}</span>
-            <span class="cps-pills">
+            <span v-if="!isHeldControl(r.poi) || r.reinforcing.length" class="cps-pills">
               <span v-if="!isHeldControl(r.poi)" class="pill rk"
                 >{{ rankOf(r).emoji }} {{ rankOf(r).name }} {{ rankStarStr(rankOf(r).star) }}</span
               >
-              <span class="pill st">{{ STATUS[r.status] }}</span>
               <span v-if="r.reinforcing.length" class="pill"
                 >🧭 +{{ r.reinforcing.length }} en route</span
               >
@@ -90,14 +89,18 @@
               </template>
             </span>
           </span>
-          <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
-          <span v-if="r.progress" class="cps-yield-end prog" :class="{ full: isFull(r) }">
-            <span>{{ r.progress.text }}</span>
-            <span v-if="r.progress.pct !== null" class="cps-gauge"
-              ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
-            /></span>
+          <!-- 🏷️ Le statut en haut à droite (demandé), au-dessus de ce que le lieu rapporte. -->
+          <span class="cps-end">
+            <span class="pill st">{{ STATUS[r.status] }}</span>
+            <!-- 📊 Tenu : où en est la récolte (or, XP, %…). Pas tenu : ce qu'il rapporterait. -->
+            <span v-if="r.progress" class="cps-yield-end prog" :class="{ full: isFull(r) }">
+              <span>{{ r.progress.text }}</span>
+              <span v-if="r.progress.pct !== null" class="cps-gauge"
+                ><span :style="{ width: Math.round(r.progress.pct * 100) + '%' }"
+              /></span>
+            </span>
+            <span v-else class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
           </span>
-          <span v-else class="cps-yield-end">{{ CONTROL_YIELD[r.kind] }}</span>
           <span class="cps-chev">{{ openId === r.poi.id ? '▾' : '▸' }}</span>
         </button>
         <div v-if="openId === r.poi.id" class="cps-body">
@@ -444,8 +447,18 @@ const fmtSize = (n: number) => String(n).replace('.', ',');
 .cps-body {
   padding: 0 10px 10px;
 }
+/* Colonne de droite : le statut EN HAUT, ce que le lieu rapporte dessous. */
+.cps-end {
+  flex: 0 0 auto;
+  max-width: 48%;
+  min-width: 0;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
 .cps-yield-end {
-  flex: 0 1 34%;
   max-width: 120px;
   text-align: right;
   font-size: 11.5px;
