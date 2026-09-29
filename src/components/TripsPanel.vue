@@ -65,6 +65,16 @@
     <p v-if="crew.gone" class="tc-none">
       {{ crew.gone }} champion{{ crew.gone > 1 ? 's ne sont' : " n'est" }} plus dans ton vivier.
     </p>
+    <!-- 🔙 FAIRE DEMI-TOUR depuis la tuile (demandé) : même feuille que sur la carte, la page
+         décide de ce qui peut rebrousser chemin (`recallable`). -->
+    <button
+      v-if="crew.recallable"
+      type="button"
+      class="tc-recall"
+      @click="emit('recall', crew.key)"
+    >
+      🔙 Faire demi-tour
+    </button>
   </div>
 </template>
 
@@ -109,8 +119,10 @@ const props = defineProps<{
   trips: MapTrip[];
   focus: string | null;
   heroProfile: CharacterProfile;
+  /** 🔙 Les voyages (par `key`) qui peuvent encore faire demi-tour. */
+  recallable?: ReadonlySet<string>;
 }>();
-const emit = defineEmits<{ 'update:focus': [key: string | null] }>();
+const emit = defineEmits<{ 'update:focus': [key: string | null]; recall: [key: string] }>();
 const char = useCharacterStore();
 
 /** 👥 Les membres du voyage touché (demandé : « quand je clique sur une expédition, voir les
@@ -127,6 +139,8 @@ const crew = computed(() => {
   // Le butin est tiré au départ, mais on ne le montre qu'une fois le lieu atteint (retour) :
   // à l'aller, l'annoncer révélerait l'issue d'un combat qui n'a pas encore eu lieu.
   return {
+    key: t.key,
+    recallable: !!props.recallable?.has(t.key),
     hero: t.withHero,
     advs,
     militia,
@@ -209,6 +223,21 @@ const crew = computed(() => {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.tc-recall {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+}
+.tc-recall:active {
+  transform: scale(0.98);
 }
 .tc-none {
   margin: 6px 0 0;

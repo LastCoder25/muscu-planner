@@ -511,6 +511,18 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('plus dans ton vivier'); // le champion renvoyé depuis
     // ⚠️ À l'ALLER le butin n'est pas montré : il révélerait l'issue d'un combat à venir.
     expect(out).not.toContain('Ramène');
+    // 🔙 Sans `recallable`, pas de bouton ; avec, la tuile propose le demi-tour.
+    expect(out).not.toContain('Faire demi-tour');
+    let rc = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [trip], focus: 'g1', heroProfile: 'polyvalent', recallable: new Set(['g1']) },
+      ROW,
+      undefined,
+      '/',
+      (h) => (rc = h),
+    );
+    expect(rc).toContain('Faire demi-tour');
     // ❓ Au RETOUR, ce qu'on ramène se touche et se lit, comme dans les rapports (demandé).
     let tip = '';
     await mountIt(

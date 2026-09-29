@@ -357,7 +357,13 @@
     />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
-    <TripsPanel v-model:focus="focusTrip" :trips="trips" :hero-profile="character.profile" />
+    <TripsPanel
+      v-model:focus="focusTrip"
+      :trips="trips"
+      :hero-profile="character.profile"
+      :recallable="recallableTrips"
+      @recall="recallTripByKey"
+    />
 
     <!-- Panneau POI sélectionné -->
     <transition name="sheet">
@@ -2758,6 +2764,25 @@ const recallCrew = computed(() =>
     })),
 );
 const recallMilitia = computed(() => militiaIn(recallAsk.value?.info.members ?? []).length);
+/** 🔙 Les tuiles de voyage (`TripsPanel`) qui peuvent faire demi-tour, par leur clé. Les
+ *  clés des tuiles et des marqueurs de la carte diffèrent d'un préfixe (`g` pour une équipe). */
+function tripRecall(key: string) {
+  if (key === 'hero')
+    return heroRecallable.value
+      ? { target: { kind: 'hero' } as RecallTarget, info: heroRecallInfo.value }
+      : null;
+  const v = travelersOnMap.value.find(
+    (x) => x.recall && (x.kind === 'party' ? 'g' + x.id === key : x.id === key),
+  );
+  return v ? { target: v.recall!, info: v.recallInfo } : null;
+}
+const recallableTrips = computed(
+  () => new Set(trips.value.map((t) => t.key).filter((k) => !!tripRecall(k))),
+);
+function recallTripByKey(key: string) {
+  const r = tripRecall(key);
+  if (r) askRecall(r.target, r.info);
+}
 function askRecall(target: RecallTarget | undefined, info: RecallInfo | null) {
   if (!target || !info) return;
   recallAsk.value = { target, info };
