@@ -131,7 +131,6 @@
                   v-for="b in r.bits"
                   :key="b.text"
                   class="pp-bit"
-                  :class="{ teams: b.tone === 'teams' }"
                   >{{ b.text }}</span
                 >
               </span>
@@ -145,7 +144,6 @@
                   v-for="b in milestone.bits"
                   :key="b.text"
                   class="pp-bit"
-                  :class="{ teams: b.tone === 'teams' }"
                   >{{ b.text }}</span
                 >
               </span>
@@ -648,17 +646,6 @@ function collectAll() {
 }
 .pm-prev-r.step .pp-bit {
   color: var(--accent);
-}
-/* Le nombre d'expéditions en parallèle, dans le violet des voyages de groupe sur la carte :
-   c'est la ligne qui dit combien d'équipes on peut envoyer à la fois. */
-.pp-bit.teams,
-.pm-prev-r.step .pp-bit.teams {
-  color: #b57bff;
-  border-color: color-mix(in srgb, #b57bff 55%, transparent);
-  background: color-mix(in srgb, #b57bff 12%, transparent);
-}
-.pm-prev-r.step .pp-bit.teams {
-  font-weight: 700;
 }
 .pp-tag {
   font-size: 10px;

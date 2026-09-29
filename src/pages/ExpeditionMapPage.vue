@@ -776,19 +776,16 @@
           <details class="sh-rules">
             <summary>ⓘ Règles de cette expédition</summary>
             <p v-if="selectedCamp" class="sh-note">
-              Sans le héros : de l’or (et des pierres chez les morts-vivants) — l’équipe prend un
-              créneau de l’Avant-poste. En cas de défaite, les champions tombés partent à
+              Sans le héros : de l’or (et des pierres chez les morts-vivants). En cas de défaite, les champions tombés partent à
               l’infirmerie ; le héros, lui, rentre sans butin.
             </p>
             <p v-else-if="!teamOnly" class="sh-note">
               Des gardes tiennent le lieu : il faut les abattre pour récolter. Repoussée, l’équipe
               ne ramène rien et les champions tombés partent à l’infirmerie. Sur la route, des
               bandits peuvent tendre une embuscade — plus l’équipe est complète, mieux elle tient.
-              Sans le héros, elle prend un créneau de l’Avant-poste.
             </p>
             <p v-else class="sh-note">
-              Sans le héros, l’équipe prend un créneau de l’Avant-poste — et une faille ne rend que
-              du 💠, jamais d’objet.
+              Une faille ne rend que du 💠, jamais d’objet.
             </p>
           </details>
           <p
@@ -801,10 +798,6 @@
           </p>
           <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
             ✅ Une armée arrive, mais ils seront rentrés avant elle.
-          </p>
-          <p v-if="partySlotsFull" class="sh-risk">
-            🐫 {{ PARTY_SEND_BLOCK_LABEL.slots }} : sans le héros, une équipe en prend un. Emmène
-            ton héros, ou attends le retour d’une équipe.
           </p>
           <!-- 💀 ON DIT POURQUOI (demandé : « empêche d'envoyer une expédition à 0 % ») :
                un bouton qui se grise en silence se lit comme une panne, et le joueur ne
@@ -1032,7 +1025,7 @@ import {
   riftSpecOf,
   warbandArmy,
 } from '@/lib/rift';
-import { caravanLegMin, convoySlotsFree, poiOffers } from '@/lib/caravan';
+import { caravanLegMin, poiOffers } from '@/lib/caravan';
 import {
   TRANSFER_BLOCK_LABEL,
   legFromSpot,
@@ -1491,9 +1484,6 @@ const cap = computed(() => engageCap(char.pantheonLevel));
 /** 🎯 Les champions libres, dans l’ordre d’affichage (lettre puis rang). ⚠️ Pour l’ÉCRAN et
  *  « Tout le vivier » seulement : `freeStable` garde l’ordre du vivier pour le reste. */
 const freeSorted = computed(() => sortByGradeThenRank(freeStable.value));
-/** Créneaux de convoi libres — ⚠️ UN SEUL pool avec les groupes partis SANS le héros
- *  (`convoySlotsFree`, même règle que le store). */
-const vansLeft = computed(() => convoySlotsFree(char.comptoirLevel, char.slotTripList, now.value));
 /** Temps de convalescence restant du héros (0 = disponible). ⚠️ Il manquait ici : la carte
  *  laissait repartir un héros blessé, seul l'écran Aventure le bloquait. */
 const heroHealIn = computed(() => woundRemainingMs(char.row?.base, now.value));
@@ -1508,7 +1498,6 @@ const offers = computed(() =>
         heroAway: heroUnavailable.value,
         comptoirLevel: char.comptoirLevel,
         advsAvailable: freeAdvs.value.length,
-        slotsFree: vansLeft.value,
       })
     : { hero: false, caravan: false, party: false },
 );
@@ -2229,7 +2218,6 @@ function dimmed(p: Poi): boolean {
     heroAway: heroUnavailable.value,
     comptoirLevel: char.comptoirLevel,
     advsAvailable: freeAdvs.value.length,
-    slotsFree: vansLeft.value,
   });
   // 👥 Un lieu reste ouvert tant que le HÉROS SEUL ou une ÉQUIPE peut y aller (2026-09-21 :
   // les équipes remplacent les convois). Même règle que le test « ce qui est GRISÉ ».
@@ -2982,7 +2970,6 @@ const {
   partyMin,
   partyRisk,
   partySendBlock,
-  partySlotsFull,
   canSendPartyNow,
   partyMax,
   partyXpSplit,
@@ -3013,7 +3000,6 @@ const {
   freeStable,
   freeSorted,
   cap,
-  vansLeft,
   partyTarget,
   teamOnly,
   selectedRift,

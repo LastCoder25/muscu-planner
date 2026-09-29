@@ -1,8 +1,8 @@
 <template>
-  <!-- 🧭 QUI PEUT PARTIR : le héros, les champions, les équipes. Une seule ligne, partagée
+  <!-- 🧭 QUI PEUT PARTIR : le héros et les champions. Une seule ligne, partagée
        par l'Aventure (où elle ouvre la carte) et par la carte elle-même (où l'on envoie) :
        deux copies finiraient par annoncer deux effectifs différents. Mêmes règles que
-       l'envoi (`advAvailable`, `convoySlotsFree`) : jamais un chiffre que « Envoyer » dément. -->
+       l'envoi (`advAvailable`) : jamais un chiffre que « Envoyer » dément. -->
   <component
     :is="interactive ? 'button' : 'div'"
     class="av-line"
@@ -39,9 +39,6 @@
         >/{{ r.total }}</span
       >
     </span>
-    <span v-if="d.teamTotal" class="av-cell" :class="{ none: !d.teamFree }"
-      ><span class="av-ico">🧭</span>{{ d.teamFree }}/{{ d.teamTotal }}</span
-    >
     <!-- 🛡️ Les miliciens postés sur des places fortes (ou en route) / tous ceux qui existent,
          puis le plafond de la Caserne (demandé : « assignés, total, et ce que je peux avoir »). -->
     <span v-if="mil.total || mil.cap" class="av-cell" :class="{ none: !mil.posted }"
@@ -56,7 +53,6 @@
 import { computed } from 'vue';
 import { useCharacterStore } from '@/stores/character';
 import { advAvailable, rankAvailability } from '@/lib/adventurers';
-import { caravanSlots, convoySlotsFree } from '@/lib/caravan';
 import { travelPosition } from '@/lib/expedition';
 import { isWounded, woundRemainingMs } from '@/lib/raid';
 import { formatDuration } from '@/lib/duration';
@@ -89,7 +85,7 @@ const hero = computed<{ label: string; tone: 'ok' | 'away' | 'hurt'; healMs: num
   return { label: 'dispo', tone: 'ok', healMs };
 });
 
-/** 🏅 Champions libres / possédés (hors blessés), 🧭 équipes libres / créneaux. */
+/** 🏅 Champions libres / possédés (hors blessés). */
 const d = computed(() => {
   const advs = char.advList;
   const champHurt = advs.filter((a) => (a.hurtUntil ?? 0) > props.now).length;
@@ -98,8 +94,6 @@ const d = computed(() => {
     // ⛑️ Les blessés sortent du total : ils ne peuvent pas partir, on les compte à part.
     champTotal: advs.length - champHurt,
     champHurt,
-    teamFree: convoySlotsFree(char.comptoirLevel, char.slotTripList, props.now),
-    teamTotal: caravanSlots(char.comptoirLevel),
   };
 });
 
@@ -133,8 +127,6 @@ const title = computed(() => {
   if (d.value.champHurt) parts.push(`${d.value.champHurt} champion(s) à l'infirmerie`);
   if (d.value.champTotal)
     parts.push(`${d.value.champFree} champion(s) disponible(s) sur ${d.value.champTotal}`);
-  if (d.value.teamTotal)
-    parts.push(`${d.value.teamFree} équipe(s) libre(s) sur ${d.value.teamTotal}`);
   if (mil.value.total)
     parts.push(
       `${mil.value.posted} milicien(s) posté(s) sur ${mil.value.total} (${mil.value.home} à la base) — ${mil.value.cap} au plus avec ta Caserne`,

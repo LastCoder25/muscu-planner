@@ -234,9 +234,9 @@ describe('🐺 la tanière', () => {
   it('plus de plafond propre : seul le Panthéon borne le groupe', () => {
     const p = poi('den');
     expect(partyCapFor(10, p)).toBe(10);
-    expect(partySendBlocker(p, 5, false, 5, 10, 0.5)).toBeNull();
-    expect(partySendBlocker(p, 3, true, 5, 10, 0.5)).toBeNull();
-    expect(partySendBlocker(p, 11, false, 5, 10, 0.5)).toBe('tooMany');
+    expect(partySendBlocker(p, 5, false, 10, 0.5)).toBeNull();
+    expect(partySendBlocker(p, 3, true, 10, 0.5)).toBeNull();
+    expect(partySendBlocker(p, 11, false, 10, 0.5)).toBe('tooMany');
   });
   it('la bête grossit à la taille du groupe — le héros compte pour deux, 2 au moins', () => {
     const p = poi('den');

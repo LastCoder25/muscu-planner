@@ -62,7 +62,6 @@ export interface PartyCtx {
   freeStable: R<Adventurer[]>;
   freeSorted: R<Adventurer[]>;
   cap: R<number>;
-  vansLeft: R<number>;
   partyTarget: R<boolean>;
   teamOnly: R<boolean>;
   selectedRift: R<unknown>;
@@ -92,7 +91,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
     freeStable,
     freeSorted,
     cap,
-    vansLeft,
     partyTarget,
     teamOnly,
     selectedRift,
@@ -462,15 +460,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
       { backAt: coarseNow.value + partyMin.value * 60_000, raidAt: raidAt.value },
     );
   });
-  /** Pourquoi le groupe ne peut pas partir — la MÊME règle que le store (`partySendBlocker`) :
-   *  sans le héros, un groupe prend un créneau de convoi. */
+  /** Pourquoi le groupe ne peut pas partir — la MÊME règle que le store (`partySendBlocker`). */
   const partySendBlock = computed(() =>
     selected.value
       ? partySendBlocker(
           selected.value,
           partyAdvs.value.length,
           partyHeroOn.value,
-          vansLeft.value,
           cap.value,
           // 💀 Le 🎯 % DÉJÀ affiché juste au-dessus : on ne laisse pas partir un groupe qui
           // ne peut pas gagner. ⚠️ Le MÊME nombre que le pronostic — deux estimations
@@ -479,8 +475,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
         )
       : null,
   );
-  /** Sans le héros et plus aucun créneau : on le DIT avant même qu'on choisisse quelqu'un. */
-  const partySlotsFull = computed(() => !partyHeroOn.value && vansLeft.value <= 0);
   const canSendPartyNow = computed(
     () =>
       !!selected.value &&
@@ -696,7 +690,6 @@ export function useExpeditionParty(ctx: PartyCtx) {
     partyMin,
     partyRisk,
     partySendBlock,
-    partySlotsFull,
     canSendPartyNow,
     partyMax,
     partyXpSplit,

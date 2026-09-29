@@ -455,17 +455,17 @@ describe('👥 une équipe n’est bornée que par le Panthéon (v0.1038)', () =
   it('⚠️ le plafond est celui du Panthéon, plus 3', () => {
     for (const engage of [2, 3, 16, 51]) expect(partyCapFor(engage)).toBe(engage);
     for (const p of [camp(), rift(), mine()]) {
-      expect(partySendBlocker(p, 16, false, 5, 16), p.type).toBeNull();
-      expect(partySendBlocker(p, 17, false, 5, 16), p.type).toBe('tooMany');
+      expect(partySendBlocker(p, 16, false, 16), p.type).toBeNull();
+      expect(partySendBlocker(p, 17, false, 16), p.type).toBe('tooMany');
     }
   });
 
   it('le héros ne prend plus de place : il s’ajoute à autant de champions que permis', () => {
-    expect(partySendBlocker(rift(), 0, true, 5, 51)).toBeNull();
-    expect(partySendBlocker(rift(), 5, true, 5, 51)).toBeNull();
+    expect(partySendBlocker(rift(), 0, true, 51)).toBeNull();
+    expect(partySendBlocker(rift(), 5, true, 51)).toBeNull();
     // L'équipe du héros ne prend pas de créneau de l'Avant-poste.
-    expect(partySendBlocker(mine(), 1, true, 0, 51)).toBeNull();
-    expect(partySendBlocker(mine(), 1, false, 0, 51)).toBe('slots');
+    expect(partySendBlocker(mine(), 1, true, 51)).toBeNull();
+    expect(partySendBlocker(mine(), 1, false, 51)).toBeNull();
   });
 });
 

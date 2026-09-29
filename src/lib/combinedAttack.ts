@@ -202,23 +202,6 @@ export function heroInAttack(attacks: readonly CombinedAttack[] | null | undefin
   );
 }
 
-/**
- * 🧭 Les voyages qui occupent un créneau de l'Avant-poste : les groupes ordinaires (sauf les
- * groupes-compagnons d'une attaque combinée, `wingOf`), plus UNE place par attaque combinée
- * encore en préparation — sauf si le héros en est (une équipe avec lui n'en prend pas).
- */
-export function slotTrips(
-  parties: readonly { returnAt: number; wingOf?: string }[],
-  attacks: readonly CombinedAttack[] | null | undefined,
-): { returnAt: number }[] {
-  return [
-    ...parties.filter((p) => !p.wingOf),
-    ...(attacks ?? [])
-      .filter((a) => !a.wings.some((w) => w.hero))
-      .map((a) => ({ returnAt: Math.max(...a.wings.map((w) => w.returnAt)) })),
-  ];
-}
-
 /** Relit la colonne `attacks` : un jsonb malformé ne doit jamais faire planter la page. */
 export function normalizeAttacks(v: unknown): CombinedAttack[] {
   if (!Array.isArray(v)) return [];

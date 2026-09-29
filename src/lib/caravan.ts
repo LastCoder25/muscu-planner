@@ -185,12 +185,6 @@ export const CARAVAN = {
   mentorMax: 0.3,
   /** Repos d'un aventurier blessé. */
   hurtMs: 6 * 3600_000,
-  /** Un convoi de plus tous les N niveaux de Comptoir. ⚠️ Calé sur le vivier : la Guilde
-   *  donne 1 aventurier tous les 2 niveaux, donc ~L/6 escortes de 3 au niveau L — le
-   *  nombre de convois doit rester SOUS ce plafond humain, sinon on possède des convois
-   *  qu'on ne peut pas armer. À 1 tous les 9 niveaux : 12 convois au niveau 100 pour
-   *  17 escortes possibles. */
-  slotEvery: 9,
   /** 🎓 Part du SOCLE d'XP versée sur une DÉFAITE (v0.1014, demandé par l'utilisateur :
    *  « xp de défaite différente de celle de victoire »). On apprend en perdant — une défaite
    *  coûte déjà la cargaison ou le butin, et l'infirmerie —, mais moins qu'en gagnant. */
@@ -923,8 +917,8 @@ const CATCH_UP_RANK = LEVELS_PER_RANK;
  * ascensions faisait gagner 41 à 69 % de missions (mesuré, v0.1126).
  *
  * ⚠️ **AUCUN FARM POSSIBLE** : elle s'éteint exactement quand il rattrape, et garder un
- * champion bas ne paie rien (il est faible, perd ses missions — `xpLossShare` — et occupe un
- * créneau). Le sport reste le plafond : `grantAdvXp` cape toujours au Panthéon.
+ * champion bas ne paie rien (il est faible, perd ses missions — `xpLossShare` — et occupe une
+ * place dans l’équipe). Le sport reste le plafond : `grantAdvXp` cape toujours au Panthéon.
  *
  * ⚠️ **ON NE DÉPLACE PAS LE GOULOT VERS L'ATTENTE.** Mesuré à part, réunir les sceaux d'un
  * champion neuf coûte **14 jours** à P=100 (2 failles/jour) : l'XP en coûtait 114, elle en
@@ -1032,31 +1026,10 @@ export function missionXpPreview(
   return out;
 }
 
-/** Convois simultanés qu'autorise le Comptoir. ⚠️ SECOND garde-fou de l'inflation :
- *  une équipe récolte ce que récolte le héros (v0.1189), c'est donc le NOMBRE qui multiplie.
- *  Un débutant en a un seul ; le plafond reste bas, et le niveau du Comptoir est lui-même
- *  plafonné par celui du joueur — donc par le sport. */
-export function caravanSlots(comptoirLevel: number): number {
-  return Math.max(1, 1 + Math.floor(Math.max(0, comptoirLevel) / CARAVAN.slotEvery));
-}
-
-/** 🐫⚔️ Créneaux de convoi ENCORE LIBRES — UN SEUL pool pour les convois ET les groupes
- *  partis SANS le héros (revue finale des camps, arbitrage).
- *  ⚠️ Sans ce partage, rien ne bornait les groupes : seul le vivier les limitait, et une
- *  sonde « tous les camps pris » mesurait ~7-8 camps/jour, soit +58 % du revenu d'or de
- *  référence au niveau 26. Un groupe AVEC le héros n'y figure pas : le héros est à lui seul
- *  sa limite (un voyage à la fois).
- *  `trips` : tout ce qui porte un `returnAt` — convois et groupes sans le héros ; un voyage
- *  est en cours tant que `now < returnAt` (même règle que l'écran et `sendCaravan`). */
-export function convoySlotsFree(
-  comptoirLevel: number,
-  trips: readonly { returnAt: number }[],
-  now: number,
-): number {
-  const busy = trips.filter((t) => now < t.returnAt).length;
-  return Math.max(0, caravanSlots(comptoirLevel) - busy);
-}
-
+/** 🧭 PLUS AUCUNE LIMITE D'ÉQUIPES EN PARALLÈLE (demandé : « enlever la limite
+ *  d'expéditions »). Le plafond de créneaux de l'Avant-poste (1 + niveau/9) est RETIRÉ : le
+ *  nombre d'équipes n'est plus borné que par le VIVIER disponible (un champion n'est qu'à
+ *  un endroit) et par le plafond d'engagement du Panthéon sur chaque équipe. */
 /** Une caravane peut-elle partir vers ce POI ? Récolte uniquement, escorte non vide. */
 /** Ce qu'on peut encore lancer vers ce lieu, selon qui est disponible.
  *
@@ -1070,13 +1043,12 @@ export function convoySlotsFree(
  *  fois, il est physiquement parti.
  *
  *  ⚔️ `party` (étape 3 des camps) : un camp ou un repaire s'attaque en GROUPE — le héros,
- *  ou au moins un aventurier disponible ET un créneau de convoi libre (`convoySlotsFree` :
- *  un groupe sans le héros prend un créneau, comme un convoi). ⚠️ `advsAvailable` et
- *  `slotsFree` sont REQUIS : un appelant qui les oublierait fermerait (ou ouvrirait) les
- *  camps en silence dès que le héros part. */
+ *  ou au moins un aventurier disponible (plus aucun plafond de créneaux). ⚠️ `advsAvailable`
+ *  est REQUIS : un appelant qui l'oublierait fermerait (ou ouvrirait) les camps en silence
+ *  dès que le héros part. */
 export function poiOffers(
   poi: Poi,
-  opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number; slotsFree: number },
+  opts: { heroAway: boolean; comptoirLevel: number; advsAvailable: number },
 ): { hero: boolean; caravan: boolean; party: boolean } {
   return {
     // ⚠️ `hero` = l'EXPÉDITION SOLO, et une faille n'en est pas une : on y entre EN GROUPE
@@ -1097,19 +1069,15 @@ export function poiOffers(
     // Le champ reste (ceux déjà en route s'encaissent), mais on n'en lance plus.
     caravan: false,
     // ⚔️ Un CAMP — ET UNE FAILLE — s'attaquent en GROUPE : le héros (sa propre limite), ou
-    // au moins un aventurier disponible avec un créneau de convoi libre. `PARTY_TARGETS` est
+    // au moins un aventurier disponible. `PARTY_TARGETS` est
     // la source unique de « on y envoie un groupe » ; ce que ça résout (camp ou incursion) se
     // décide à l'unique chemin d'envoi.
     party:
       PARTY_TARGETS.has(poi.type) &&
-      // 🏰 Il faut un point à prendre et au moins un champion pour l'occuper ; le créneau
-      // n'est exigé que sans le héros (v0.1239 : le héros peut mener l'assaut).
+      // 🏰 Il faut un point à prendre et au moins un champion pour l'occuper.
       (poi.type === 'control'
-        ? poi.control?.owner === 'enemy' &&
-          !poi.control.assault &&
-          opts.advsAvailable > 0 &&
-          (!opts.heroAway || opts.slotsFree > 0)
-        : !opts.heroAway || (opts.advsAvailable > 0 && opts.slotsFree > 0)),
+        ? poi.control?.owner === 'enemy' && !poi.control.assault && opts.advsAvailable > 0
+        : !opts.heroAway || opts.advsAvailable > 0),
   };
 }
 

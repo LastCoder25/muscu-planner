@@ -23,14 +23,13 @@ import {
   type Building,
   type BuildingTypeId,
 } from './buildings';
-import { caravanSlots, championOutpostMult } from './caravan';
+import { championOutpostMult } from './caravan';
 import { altarLuckBonus } from './items';
 import { militiaCap, militiaIntervalH } from './militia';
 
-/** Une pastille d'aperçu. `teams` = le nombre d'expéditions en parallèle (couleur à part). */
+/** Une pastille d'aperçu. */
 interface PreviewBit {
   text: string;
-  tone?: 'teams';
 }
 
 export interface LevelPreview {
@@ -101,12 +100,10 @@ function textAt(typeId: BuildingTypeId, level: number): string | null {
 
 /** Les bonus de l'Avant-poste à un niveau, un par pastille (demandé : « un par ligne »). */
 function outpostBits(level: number): PreviewBit[] {
-  const n = caravanSlots(level);
   const hero = travelTimeMult(one('outpost', level));
   return [
     { text: `−${pct(1 - hero)} de trajet (héros)` },
     { text: `−${pct(1 - championOutpostMult(hero))} de trajet (champions)` },
-    { text: `${n} équipe${n > 1 ? 's' : ''} en parallèle`, tone: 'teams' },
   ];
 }
 
@@ -117,7 +114,6 @@ export function previewNote(typeId: BuildingTypeId): string | null {
 
 /** Un niveau marque-t-il un PALIER (un saut, pas une continuation) ? */
 function isMilestone(typeId: BuildingTypeId, level: number): boolean {
-  if (typeId === 'outpost') return caravanSlots(level) > caravanSlots(level - 1);
   if (typeId === 'barracks') return militiaCap(level) > militiaCap(level - 1);
   return false;
 }

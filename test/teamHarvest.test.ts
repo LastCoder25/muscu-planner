@@ -14,7 +14,6 @@ import { createMap, advanceWorld, HARVEST_TYPES, harvestGuardOf } from '@/lib/ex
 import {
   caravanHurtMs,
   caravanLegMin,
-  convoySlotsFree,
   refAdvGear,
   refAdventurer,
   partyAllies,
@@ -59,7 +58,6 @@ function sim(L: number, seed: number, days: number, first: 'well' | 'shrine') {
       const t = d * DAY + h * HOUR;
       map = advanceWorld(map, t, L, L);
       for (;;) {
-        if (convoySlotsFree(L, trips, t) <= 0) break;
         const free = advs.filter((a) => (busy.get(a.id) ?? 0) <= t);
         if (free.length < 3) break;
         // Sources d'abord (l'énergie), puis sanctuaires (pierres), puis le reste.

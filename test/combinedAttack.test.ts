@@ -9,7 +9,6 @@ import {
   heroInAttack,
   normalizeAttacks,
   planWings,
-  slotTrips,
   wingDeparture,
   type AttackWing,
   type CombinedAttack,
@@ -225,19 +224,6 @@ describe('état et présence', () => {
     expect(heroInAttack([attack([{ hero: true }])])).toBe(true);
     expect(heroInAttack([attack([{ hero: true, state: 'gone', heroGone: false }])])).toBe(false);
     expect(heroInAttack(null)).toBe(false);
-  });
-});
-
-describe("slotTrips — un seul créneau d'Avant-poste", () => {
-  it('une attaque sans héros prend UNE place, ses groupes-compagnons aucune', () => {
-    const slots = slotTrips(
-      [{ returnAt: 5 }, { returnAt: 9, wingOf: 'atk1' }],
-      [attack([{ returnAt: 140 * MIN }, { returnAt: 160 * MIN }])],
-    );
-    expect(slots).toEqual([{ returnAt: 5 }, { returnAt: 160 * MIN }]);
-  });
-  it('une attaque avec le héros n’en prend pas', () => {
-    expect(slotTrips([], [attack([{ hero: true }, {}])])).toEqual([]);
   });
 });
 

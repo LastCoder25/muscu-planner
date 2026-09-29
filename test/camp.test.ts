@@ -293,8 +293,8 @@ describe('💀 on ne part pas perdu d’avance', () => {
   // 200, part à l’infirmerie, et encaisse quand même près de trois niveaux d’XP.
 
   it('0 % de victoire : le départ est REFUSÉ, avec sa raison', () => {
-    expect(partySendBlocker(poi(), 3, false, 1, 99, 0)).toBe('hopeless');
-    expect(canSendParty(poi(), 3, false, 1, 99, 0)).toBe(false);
+    expect(partySendBlocker(poi(), 3, false, 99, 0)).toBe('hopeless');
+    expect(canSendParty(poi(), 3, false, 99, 0)).toBe(false);
   });
 
   it('la moindre chance suffit : on garde le droit de parier', () => {
@@ -302,19 +302,19 @@ describe('💀 on ne part pas perdu d’avance', () => {
     // que le joueur a le droit de prendre ; à zéro il n’y a pas de pari, seulement une
     // certitude — et c’est la seule chose qu’on lui retire.
     for (const c of [0.001, 0.02, 0.5, 1])
-      expect(partySendBlocker(poi(), 3, false, 1, 99, c), `chance ${c}`).toBe(null);
+      expect(partySendBlocker(poi(), 3, false, 99, c), `chance ${c}`).toBe(null);
   });
 
   it('⚠️ `null` ne vaut PAS zéro — une récolte sans gardes reste possible', () => {
     // Les confondre interdirait d’aller chercher de l’eau à un puits.
-    expect(partySendBlocker(poi(), 3, false, 1, 99, null)).toBe(null);
+    expect(partySendBlocker(poi(), 3, false, 99, null)).toBe(null);
   });
 
   it('les autres refus passent AVANT : on dit la cause la plus proche', () => {
     // Un groupe vide n’a pas de pronostic à donner ; lui répondre « perdu d’avance »
     // enverrait chercher des champions plus forts au lieu d’en choisir.
-    expect(partySendBlocker(poi(), 0, false, 1, 99, 0)).toBe('empty');
-    expect(partySendBlocker(poi({ type: 'wreck' }), 3, false, 1, 99, 0)).toBe('notTarget');
+    expect(partySendBlocker(poi(), 0, false, 99, 0)).toBe('empty');
+    expect(partySendBlocker(poi({ type: 'wreck' }), 3, false, 99, 0)).toBe('notTarget');
   });
 
   it('🎯 la chance vient de la MÊME dispatch que la résolution', () => {
@@ -355,7 +355,7 @@ describe('💀 on ne part pas perdu d’avance', () => {
     const rd = road(1, 1);
     const c = partyWinChance(p, bleu, rd, null, 0, 40);
     expect(c).toBe(0);
-    expect(partySendBlocker(p, 1, false, 1, 99, c)).toBe('hopeless');
+    expect(partySendBlocker(p, 1, false, 99, c)).toBe('hopeless');
   });
 });
 
@@ -369,10 +369,10 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     // Panthéon ne mordait pas et « douze partent » passait pour une raison qui n'était pas
     // la bonne. `test/` est hors typecheck — c'est l'ajout d'un 6ᵉ paramètre qui l'a montré.
     // 🎯 `null` = rien à combattre : le pronostic ne bloque pas ce que ce test mesure.
-    expect(canSendParty(poi(), 12, false, 1, 99, null)).toBe(true);
-    expect(canSendParty(poi(), 0, true, 0, 99, null)).toBe(true);
-    expect(canSendParty(poi(), 0, false, 1, 99, null)).toBe(false);
-    expect(canSendParty(poi({ type: 'wreck' }), 3, false, 1, 99, null)).toBe(false);
+    expect(canSendParty(poi(), 12, false, 99, null)).toBe(true);
+    expect(canSendParty(poi(), 0, true, 99, null)).toBe(true);
+    expect(canSendParty(poi(), 0, false, 99, null)).toBe(false);
+    expect(canSendParty(poi({ type: 'wreck' }), 3, false, 99, null)).toBe(false);
     const L = 30;
     const spec = { faction: 'bandits' as const, size: 10 };
     const p = poi({ level: L, type: 'lair' });
@@ -746,33 +746,32 @@ describe('🖥️ ce que l’écran lit — la MÊME règle que la résolution e
     expect(partyAllies(inp.escort, inp.road, null)).toHaveLength(3);
   });
 
-  it('⚠️ partySendBlocker : sans le héros, une équipe prend un CRÉNEAU de l’Avant-poste', () => {
-    // Revue finale : sans ce partage, rien ne bornait le nombre de groupes en parallèle.
-    expect(partySendBlocker(poi(), 3, false, 1, 9)).toBeNull();
-    expect(partySendBlocker(poi(), 3, false, 0, 9)).toBe('slots');
-    // Le héros est à lui seul sa limite : il ne prend pas de créneau, même avec un champion.
-    expect(partySendBlocker(poi(), 1, true, 0, 9)).toBeNull();
-    expect(partySendBlocker(poi(), 0, true, 0, 9)).toBeNull();
-    expect(partySendBlocker(poi(), 0, false, 0, 9)).toBe('empty');
-    expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 5, 9)).toBe('notTarget');
+  it('🧭 partySendBlocker : PLUS AUCUNE limite d’équipes en parallèle (limite retirée)', () => {
+    // Une équipe sans le héros part tant qu’elle a au moins un champion : le nombre d’équipes
+    // n’est plus borné que par le vivier disponible.
+    expect(partySendBlocker(poi(), 3, false, 9)).toBeNull();
+    expect(partySendBlocker(poi(), 1, true, 9)).toBeNull();
+    expect(partySendBlocker(poi(), 0, true, 9)).toBeNull();
+    expect(partySendBlocker(poi(), 0, false, 9)).toBe('empty');
+    expect(partySendBlocker(poi({ type: 'wreck' }), 3, true, 9)).toBe('notTarget');
     // ⚠️ UNE FAILLE EST UNE CIBLE DE GROUPE depuis que l’incursion existe : la porte
     // lit `PARTY_TARGETS`, pas `CAMP_TYPES` (le détail de la résolution vit ailleurs).
-    expect(partySendBlocker(poi({ type: 'rift' }), 1, true, 5, 9)).toBeNull();
-    expect(canSendParty(poi(), 3, false, 0, 9)).toBe(false);
-    for (const k of ['notTarget', 'empty', 'slots', 'tooMany'] as const)
+    expect(partySendBlocker(poi({ type: 'rift' }), 1, true, 9)).toBeNull();
+    expect(canSendParty(poi(), 3, false, 9)).toBe(true);
+    for (const k of ['notTarget', 'empty', 'tooMany'] as const)
       expect(PARTY_SEND_BLOCK_LABEL[k].length).toBeGreaterThan(0);
-    expect(PARTY_SEND_BLOCK_LABEL.slots).toContain('créneaux d’équipe');
+    expect(Object.keys(PARTY_SEND_BLOCK_LABEL)).not.toContain('slots');
   });
 
   it('🗿 LE PLAFOND DU PANTHÉON BORNE LA TAILLE DU GROUPE — même avec le héros', () => {
     // ⚠️ C'est le SEUL endroit du jeu où l'effectif entier pourrait partir d'un coup : un
     // groupe n'a pas d'`escortMax`. Sans ce garde, la collection deviendrait décisive et
     // le plafond du Panthéon ne voudrait plus rien dire (v0.958).
-    expect(partySendBlocker(poi(), 3, false, 5, 3)).toBeNull();
-    expect(partySendBlocker(poi(), 4, false, 5, 3)).toBe('tooMany');
+    expect(partySendBlocker(poi(), 3, false, 3)).toBeNull();
+    expect(partySendBlocker(poi(), 4, false, 3)).toBe('tooMany');
     // ⚠️ Le héros n'exempte pas : il s'ajoute au groupe, il ne le remplace pas.
-    expect(partySendBlocker(poi(), 4, true, 5, 3)).toBe('tooMany');
-    expect(canSendParty(poi(), 4, false, 5, 3)).toBe(false);
+    expect(partySendBlocker(poi(), 4, true, 3)).toBe('tooMany');
+    expect(canSendParty(poi(), 4, false, 3)).toBe(false);
   });
 
   it('partyHeroBlocker : expédition, infirmerie, Avant-poste — dans cet ordre, sinon libre', () => {

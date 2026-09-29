@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { sessionXp } from '@/lib/athlete';
 import { buildingPreview } from '@/lib/buildingPreview';
-import { CARAVAN, caravanSlots } from '@/lib/caravan';
+import { CARAVAN } from '@/lib/caravan';
 import { engageCap } from '@/lib/adventurers';
 import { militiaCap, militiaIntervalH } from '@/lib/militia';
 import {
@@ -528,24 +528,7 @@ describe('⚠️ AUCUN NIVEAU MORT, DE 0 À 100', () => {
     // jamais en silence — celui-ci est voulu, mesuré et documenté.
   });
 
-  it('⚠️ chaque convoi peut être ESCORTÉ, et par une vraie ÉQUIPE une fois lancé', () => {
-    // La contrainte posée : le nombre de convois doit rester cohérent avec le vivier.
-    // Posséder des convois qu'on ne peut pas escorter ne serait pas une récompense.
-    // Mesuré, aventuriers PAR CONVOI : 1,00 au niveau 1 · 2,50 au 9 · 3,33 au 18 ·
-    // 3,83 au 45 · 4,50 au 70 · 4,25 au 100 — de l'escorte solitaire du débutant à
-    // l'équipe complète (CARAVAN.escortMax = 4), avec de quoi faire tourner les blessés.
-    for (let l = 1; l <= 100; l++) {
-      expect(
-        engageCap(l),
-        `niveau ${l} : plus de convois que d'aventuriers`,
-      ).toBeGreaterThanOrEqual(caravanSlots(l));
-    }
-    for (let l = 18; l <= 100; l++) {
-      expect(engageCap(l) / caravanSlots(l), `niveau ${l}`).toBeGreaterThanOrEqual(3);
-    }
-    // Et le vivier finit par couvrir une escorte PLEINE sur chaque convoi.
-    expect(engageCap(100)).toBeGreaterThanOrEqual(caravanSlots(100) * CARAVAN.escortMax);
-  });
+
 });
 
 describe('🗝️ LA PORTE DU LABYRINTHE EST UN COMPLÉMENT, PAS LA SOURCE', () => {
