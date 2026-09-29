@@ -197,11 +197,13 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   scriptorium: '📜',
 };
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
-export function poiLabel(p: Pick<Poi, 'type' | 'control'>): string {
+export function poiLabel(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
+  if (p.army) return p.army.kind === 'siege' ? 'Armée sur ta base' : 'Armée de reprise';
   return p.control ? CONTROL_KIND_LABEL[p.control.kind] : POI_LABEL[p.type];
 }
 /** L'emoji d'un lieu (idem). */
-export function poiEmo(p: Pick<Poi, 'type' | 'control'>): string {
+export function poiEmo(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {
+  if (p.army) return '🪖';
   return p.control ? CONTROL_KIND_EMO[p.control.kind] : POI_EMO[p.type];
 }
 

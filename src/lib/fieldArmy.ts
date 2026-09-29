@@ -40,20 +40,23 @@ import { campHurt, campLightHurt, fightCampForce, type PartyInput } from './camp
 import { missionXpFor } from './caravan';
 import { RIFT, riftMana } from './rift';
 
+/** Force de l'armée d'un SIÈGE en rase campagne, en champions de référence. ⚠️ MESURÉE
+ *  (champions de référence du niveau du joueur, 60 combats) : un camp de taille N se prend à
+ *  ~N champions — à 6, trois champions n'en abattaient que ~37 % et six la battaient à coup
+ *  sûr. À 8 : on l'ampute seul, on la BAT en attaque combinée (base + points fixes). */
+const SIEGE_SIZE = 8;
+
 export const FIELD_ARMY = {
   /** Vitesse de marche d'une armée, en unités de carte par heure. Elle fait du préavis de la
    *  Tour un RAYON : 30 min sans Tour → 5 unités, niveau 10 → 35, niveau 30 → 57, niveau 100
    *  → 100. Les points fixes sont à ~32 unités de la ville : une Tour vers le niveau 10 voit
    *  arriver les reprises. */
   speedPerHour: 10,
-  /** Force de l'armée d'un SIÈGE en rase campagne, en champions de référence (un camp de
-   *  taille N se prend à ~N champions). Plus que ce qu'une seule équipe aligne : on
-   *  l'ampute seul, on la BAT en attaque combinée (base + points fixes). */
-  siegeSize: 6,
+  siegeSize: SIEGE_SIZE,
   /** 💠 Mana par champion de référence abattu — calé pour qu'abattre TOUTE l'armée d'un
    *  siège rapporte ce que rapporte la défense qui la repousse entièrement
    *  (`RIFT.siegeManaFoes`). */
-  manaFoesPerSize: RIFT.siegeManaFoes / 6,
+  manaFoesPerSize: RIFT.siegeManaFoes / SIEGE_SIZE,
   /** Plancher de la force affichée/affrontée : une armée amputée reste une armée. */
   minSize: 0.25,
 } as const;
@@ -123,7 +126,10 @@ export function siegeArmyPoi(
     EXPE.town,
     spawnedAt,
     raid.arrivesAt,
-    raid.level,
+    // ⚠️ Le NIVEAU DU JOUEUR, pas celui du champion du raid : l'armée est calibrée sur lui
+    // (`rollRaid`), et `campFoe` se dimensionne sur le niveau du lieu — au niveau du
+    // champion (au-dessus du joueur), aucune équipe n'en abattait rien.
+    Math.max(1, playerLevel),
     playerLevel,
     { kind: 'siege', targetId: raid.id, at: raid.arrivesAt, faction: raid.faction, size },
     now,
@@ -144,7 +150,9 @@ export function retakeArmyPoi(
   if (!c || c.owner !== 'player' || c.attackAt === undefined || now >= c.attackAt) return null;
   const d = Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
   const vis = seenRadius(detectR, reach);
-  if (d <= 0 || d >= vis) return null;
+  if (d <= 0) return null;
+  // Hors du rayon (`d ≥ vis`) la marche visible est ≤ 0 : `spawnedAt ≥ attackAt > now`, donc
+  // elle n'apparaît jamais — c'est la règle « vue seulement dans le rayon », sans garde à part.
   const march = vis - d;
   const spawnedAt = c.attackAt - (march / FIELD_ARMY.speedPerHour) * H;
   if (now < spawnedAt) return null;

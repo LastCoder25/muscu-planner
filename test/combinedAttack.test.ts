@@ -74,7 +74,9 @@ describe('combinedBlocker', () => {
     expect(combinedBlocker(target, [w(null, ['a'])])).toBe('fewWings');
   });
   it('une armée en marche ne se coordonne pas', () => {
-    expect(combinedBlocker({ type: 'warband' }, [w(null, ['a']), w('p', ['b'])])).toBe('moving');
+    // ⚔️🧭 Depuis les armées en campagne, une cible en MARCHE se coordonne : la rencontre
+    // commune se calcule (`meetAll`).
+    expect(combinedBlocker({ type: 'warband' }, [w(null, ['a']), w('p', ['b'])])).toBeNull();
   });
   it('ni départ ni champion en double', () => {
     expect(combinedBlocker(target, [w('p', ['a']), w('p', ['b'])])).toBe('twice');

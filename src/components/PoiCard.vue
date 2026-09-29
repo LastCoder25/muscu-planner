@@ -93,7 +93,16 @@
     </template>
     <!-- ⚔️ BANDE EN MARCHE : ce qu'on y gagne est une PERTE ÉVITÉE, et on DIT quand ça
          n'en évite plus aucune (renfort figé au tirage de l'armée, `Raid.overflow`). -->
-    <template v-if="warband">
+    <template v-if="warband?.army">
+      <p class="pc-note">
+        ⚔️ Elle marche sur <b>{{ warband.target }}</b>. Chaque ennemi abattu
+        <b>n'arrivera pas</b> ; la battre entièrement <b>annule l'attaque</b>. Même vaincus, tes
+        champions rentrent avec le 💠 des ennemis abattus — les tombés passent par l'infirmerie.
+        Elle est trop forte pour une seule équipe : attaque-la en combiné depuis la base et tes
+        points fixes.
+      </p>
+    </template>
+    <template v-else-if="warband">
       <p v-if="warband.utile" class="pc-note">
         ⚔️ La disperser <b>évite le renfort ×1,3</b> du prochain siège — soit 30 à 40 points de
         tenue. Le 💠 n'est qu'un lot de consolation. En cas de défaite, tout le groupe part à
@@ -127,8 +136,10 @@ const props = defineProps<{
   /** Temps restant d'une embuscade de faille autour du lieu (ms), 0 sinon. */
   ambushLeft: number;
   isRift: boolean;
-  /** Une bande en marche : `utile` = l'intercepter évite encore le renfort du siège. */
-  warband: { utile: boolean } | null;
+  /** Une bande en marche : `utile` = l'intercepter évite encore le renfort du siège.
+   *  `army` = une armée EN CAMPAGNE (siège de la base ou reprise d'un point fixe), `target`
+   *  = ce qu'elle vient attaquer. */
+  warband: { utile: boolean; army?: 'siege' | 'retake'; target?: string } | null;
   sealStock: number;
   busySeal: boolean;
 }>();

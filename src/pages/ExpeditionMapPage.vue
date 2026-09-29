@@ -908,6 +908,7 @@ import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import { campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
+import { fieldArmySpec } from '@/lib/fieldArmy';
 import { poiRank } from '@/lib/poiRank';
 import {
   PARTY_HERO_BLOCK_LABEL,
@@ -1549,6 +1550,29 @@ const selectedRift = computed(() => {
 const selectedWarband = computed(() => {
   const p = selected.value;
   if (!p || !isWarbandPoi(p)) return null;
+  // ⚔️🗼 Une ARMÉE EN CAMPAGNE (siège ou reprise) : son effectif est celui du siège (ou de la
+  // troupe de reprise) — pas une bande de faille tirée à part.
+  if (p.army) {
+    const raid = char.row?.base?.raid;
+    const spec = fieldArmySpec(p);
+    const pt =
+      p.army.kind === 'retake'
+        ? char.row?.expedition_map?.pois.find((q) => q.id === p.army!.targetId)
+        : null;
+    return {
+      faction: p.army.faction,
+      size:
+        p.army.kind === 'siege' && raid?.id === p.army.targetId
+          ? raid.groups.reduce((s, g) => s + g.count, 0)
+          : spec
+            ? campBodyCount(spec)
+            : 0,
+      gone: p.expiresAt - now.value,
+      utile: true,
+      army: p.army.kind,
+      target: pt?.control ? CONTROL_LABEL[pt.control.kind] : 'ta base',
+    };
+  }
   const army = warbandArmy(p, progress.global.value.level);
   return {
     faction: army.faction,
@@ -1991,7 +2015,11 @@ const bandsOnMap = computed(() => {
     ...char.partyList.map((g) => ({ id: g.id, v: g })),
   ];
   return voyages
-    .filter(({ v }) => v.poi.type === 'warband' && !!v.poi.from && now.value < v.midAt)
+    // ⚔️🗼 Une armée EN CAMPAGNE reste sur la carte (elle continue sa marche) : pas de doublon.
+    .filter(
+      ({ v }) =>
+        v.poi.type === 'warband' && !!v.poi.from && !v.poi.army && now.value < v.midAt,
+    )
     .map(({ id, v }) => {
       const at = warbandAt(v.poi, now.value);
       return {
@@ -2505,12 +2533,22 @@ const poiFacts = computed<PoiFact[]>(() => {
       });
   }
   if (band) {
-    out.push({
-      icon: '⏳',
-      label: 'Disparaît dans',
-      value: formatDuration(band.gone),
-      title: 'Passé ce délai elle a rejoint son armée : plus rien à intercepter',
-    });
+    out.push(
+      'army' in band
+        ? {
+            icon: '⏳',
+            label: 'Arrive dans',
+            value: formatDuration(band.gone),
+            cls: 'warn',
+            title: `Elle attaquera ${band.target} à son arrivée : il faut la croiser avant`,
+          }
+        : {
+            icon: '⏳',
+            label: 'Disparaît dans',
+            value: formatDuration(band.gone),
+            title: 'Passé ce délai elle a rejoint son armée : plus rien à intercepter',
+          },
+    );
   }
   // Le héros seul.
   if (offers.value.hero && !partyTarget.value) {
@@ -2765,7 +2803,8 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
   lair: (p) => campRewardLabel(p),
   arena: () => 'objets + pierres 🔮 selon les vagues',
   rift: () => 'mana 💠',
-  warband: () => 'mana 💠 · siège non renforcé',
+  warband: (p) =>
+    p.army ? 'mana 💠 · chaque ennemi abattu n’attaquera pas' : 'mana 💠 · siège non renforcé',
   ruins: (p) => (ruinsSealKind(p) === 'champion' ? 'sceaux de champion 🔱' : 'sceaux d’objet ⚜️'),
   fallen: () => 'consommables 🎒',
   den: () => 'beaucoup d’XP · consommables 🎒',

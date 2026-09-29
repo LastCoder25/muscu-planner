@@ -53,9 +53,10 @@
           <text :x="p.x - 5.2" :y="p.y - 4">!</text>
         </g>
       </template>
+      <!-- ⚔️🗼 Une ARMÉE EN CAMPAGNE (siège, reprise) : un liseré rouge — elle marche sur nous. -->
       <template v-else>
-        <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" />
-        <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ POI_EMO[p.type] }}</text>
+        <circle :cx="p.x" :cy="p.y" r="4.5" class="poi-bg" :class="{ 'poi-army': p.army }" />
+        <text :x="p.x" :y="p.y + 1.4" class="poi-emo">{{ poiEmo(p) }}</text>
       </template>
       <!-- 🏅 Le RANG du lieu, pas son niveau : la boule du rang au-dessus et le contour dans
            sa couleur — on repère d'un coup d'œil les lieux du rang de ses champions. ⚠️ Plus
@@ -114,7 +115,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
-import { POI_EMO, isRiftPoi, poiEmo, type Poi } from '@/lib/expedition';
+import { isRiftPoi, poiEmo, type Poi } from '@/lib/expedition';
 import { CONTROL_EMO, HELD_COLOR, isHeldControl } from '@/lib/controlPoints';
 import { poiRank } from '@/lib/poiRank';
 import { seedOf } from '@/lib/combat';
@@ -233,6 +234,10 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
   stroke: var(--accent);
   stroke-width: 0.8;
   stroke-dasharray: 1.4 0.9;
+}
+.poi-bg.poi-army {
+  stroke: var(--d4);
+  stroke-width: 1.1;
 }
 .poi.sel .poi-bg {
   stroke: var(--accent);
