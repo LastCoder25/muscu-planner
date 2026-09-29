@@ -168,17 +168,26 @@
              quand elle est SOUS le niveau du joueur ET que l'or de l'amélioration est là (v0.1059 : sans les fonds, la flèche promettait une amélioration refusée) — la seule structure sans pastille
              était précisément celle qui active les sièges. -->
         <g v-if="wallLevel" class="lvl-badge wall-lvl" :class="{ upgrade: canUpgrade('wall') }">
-          <circle :cx="100 - APOTHEM" cy="100" r="5.4" />
-          <text :x="100 - APOTHEM" y="102">{{ wallLevel }}</text>
-          <text v-if="canUpgrade('wall')" :x="100 - APOTHEM + 6.4" y="95.6" class="lvl-up">↑</text>
+          <circle :cx="100 - APOTHEM" cy="100" :r="lvlR(wallLevel, 5.4)" />
+          <text :x="100 - APOTHEM" y="102" :style="lvlFont(wallLevel)">{{ wallLevel }}</text>
+          <text
+            v-if="canUpgrade('wall')"
+            :x="100 - APOTHEM + lvlR(wallLevel, 5.4) + 1"
+            y="95.6"
+            class="lvl-up"
+          >
+            ↑
+          </text>
         </g>
         <!-- Pastille de niveau des tourelles, sur la 1re tour -->
         <g v-if="turretsBuilt" class="lvl-badge" :class="{ upgrade: canUpgrade('turret') }">
-          <circle :cx="octagon[0]!.x + 7" :cy="octagon[0]!.y - 8" r="5" />
-          <text :x="octagon[0]!.x + 7" :y="octagon[0]!.y - 6.2">{{ turretLevel }}</text>
+          <circle :cx="octagon[0]!.x + 7" :cy="octagon[0]!.y - 8" :r="lvlR(turretLevel, 5)" />
+          <text :x="octagon[0]!.x + 7" :y="octagon[0]!.y - 6.2" :style="lvlFont(turretLevel)">
+            {{ turretLevel }}
+          </text>
           <text
             v-if="canUpgrade('turret')"
-            :x="octagon[0]!.x + 13.4"
+            :x="octagon[0]!.x + 8 + lvlR(turretLevel, 5)"
             :y="octagon[0]!.y - 12.4"
             class="lvl-up"
           >
@@ -237,8 +246,8 @@
             />
             <circle cx="100" :cy="WALL_TOP" r="3.4" class="watch-eye" />
             <g class="lvl-badge">
-              <circle cx="112" :cy="WALL_TOP - 8" r="5" />
-              <text x="112" :y="WALL_TOP - 6.2">{{ watchLevel }}</text>
+              <circle cx="112" :cy="WALL_TOP - 8" :r="lvlR(watchLevel, 5)" />
+              <text x="112" :y="WALL_TOP - 6.2" :style="lvlFont(watchLevel)">{{ watchLevel }}</text>
             </g>
           </template>
           <rect v-else x="91" :y="WALL_TOP - 12" width="18" height="30" rx="2" class="slot-empty" />
@@ -426,8 +435,10 @@
             {{ y.locked ? '🔒' : '＋' }}
           </text>
           <g v-if="y.built" class="lvl-badge">
-            <circle :cx="y.x + y.half - 1.5" :cy="y.y - y.half + 1.5" r="4.6" />
-            <text :x="y.x + y.half - 1.5" :y="y.y - y.half + 3.1">{{ y.level }}</text>
+            <circle :cx="y.x + y.half - 1.5" :cy="y.y - y.half + 1.5" :r="lvlR(y.level, 4.6)" />
+            <text :x="y.x + y.half - 1.5" :y="y.y - y.half + 3.1" :style="lvlFont(y.level)">
+              {{ y.level }}
+            </text>
           </g>
           <circle
             v-if="y.ready"
@@ -1913,6 +1924,16 @@ const recentLoot = computed(() => {
 });
 
 // ── Structures ──
+/** Pastille de niveau : le cercle s'élargit avec le nombre de chiffres (jusqu'à 100) pour
+ *  que son contour ne morde jamais le nombre — un chiffre de 7 px gras fait ~4,2 unités. */
+function lvlR(level: number, base: number): number {
+  const digits = String(Math.max(0, Math.floor(level))).length;
+  return base + Math.max(0, digits - 1) * 1.6;
+}
+/** Trois chiffres : police un peu resserrée, pour garder une pastille compacte. */
+function lvlFont(level: number): Record<string, string> | undefined {
+  return level >= 100 ? { fontSize: '6.2px' } : undefined;
+}
 function lvlOf(id: DefenseId): number {
   return defenseLevel(defenses.value, id);
 }
