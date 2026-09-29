@@ -534,6 +534,16 @@
              pouvait pas savoir ce qu'on abandonnait en faisant partir quelqu'un.
              ⚠️ Affiché SEULEMENT si l'écart est réel — annoncer « −0 » à un joueur dont
              tout le monde est à la maison serait du bruit. -->
+          <!-- ⚔️ CE QUE LES CHAMPIONS PRÉSENTS APPORTENT (demandé par l'utilisateur : « sur la
+             base les champions présents ne sont pas pris en compte »). Ils l'étaient, mais la
+             seule trace était une TENUE qui restait à 0 — ils pèsent peu face aux balistes, et
+             une probabilité qui sature les rendait invisibles. La PUISSANCE ne sature pas :
+             c'est la part mesurée par ablation (`defenseBreakdown`), jamais recalculée. -->
+          <p v-if="garrisonPart" class="f-champs">
+            ⚔️ Tes {{ guardAdvs.length }} champion{{ guardAdvs.length > 1 ? 's' : '' }}
+            présent{{ guardAdvs.length > 1 ? 's' : '' }} :
+            <b>+{{ fmtPow(garrisonPart.power) }}</b> de puissance
+          </p>
           <p v-if="forcesGap > 0" class="f-gap">
             🚪 Des tiens sont dehors : <b>−{{ fmtPow(forcesGap) }}</b> de puissance — au complet, tu
             vaudrais <b>{{ fmtPow(forcesFull) }}</b
@@ -576,15 +586,24 @@
             @click="togglePartsOpen"
           >
             <span>{{ partsOpen ? '▾' : '▸' }} Ce que je perdrais sans…</span>
-            <span v-if="partsOpen" class="fh-cols"><i>🛡️ tenir</i><i>⚔️ tuer</i></span>
           </button>
           <div v-if="partsOpen" class="f-parts">
+            <!-- En-têtes DANS le tableau, alignés sur les colonnes : dans le bouton, trois
+                 intitulés faisaient passer « Ce que je perdrais sans… » sur trois lignes à
+                 344 px. -->
+            <div class="f-part f-part-h" aria-hidden="true">
+              <span class="dp-lab" />
+              <span class="dp-pow">puiss.</span>
+              <span class="dp-def">🛡️ tenir</span>
+              <span class="dp-atk">⚔️ tuer</span>
+            </div>
             <div v-for="p in forces.parts" :key="p.id" class="f-part" :class="{ off: !p.active }">
               <span class="dp-emo">{{ p.emoji }}</span>
               <span class="dp-lab">{{ p.label }}</span>
               <!-- ⚠️ Ces valeurs ne s'ADDITIONNENT pas au total : les canaux se multiplient
                  (la garnison amplifie des PV que le mur fournit). C'est « ce qu'on
                  perdrait sans lui », rien de plus. -->
+              <span class="dp-pow">{{ p.active && p.power ? '+' + fmtPow(p.power) : '—' }}</span>
               <span class="dp-def">{{ p.active && p.def ? fmtPow(p.def) : '—' }}</span>
               <span class="dp-atk">{{ p.active && p.atk ? fmtPow(p.atk) : '—' }}</span>
             </div>
@@ -1802,6 +1821,10 @@ const forces = computed(() =>
     guardNow.value,
     coarseNow.value,
   ),
+);
+/** La ligne des champions : présente seulement s'il y a des champions à la base. */
+const garrisonPart = computed(() =>
+  guardAdvs.value.length ? (forces.value.parts.find((p) => p.id === 'garrison') ?? null) : null,
 );
 /** En pourcentage, la seule forme lisible : « 72 % » plutôt que « 0,72 ». */
 const holdPct = (h: number) => `${Math.round(h * 100)} %`;
@@ -3043,7 +3066,7 @@ function doHarvest() {
 .f-parts-h {
   margin-top: 12px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
@@ -3057,16 +3080,6 @@ function doHarvest() {
   color: var(--dim);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-.fh-cols {
-  display: flex;
-  flex: none;
-  gap: 8px; /* le même que `.f-part`, sinon l'en-tête ⚔️ est décalé de 8 px */
-}
-.fh-cols > i {
-  width: 58px;
-  text-align: right;
-  font-style: normal;
 }
 /* Le pronostic, dans les couleurs de l'effort (d1 → d4) : vert on tient, rouge ça cède. */
 .f-odds {
@@ -3124,6 +3137,14 @@ function doHarvest() {
 .dp-emo {
   font-size: 14px;
 }
+.f-part-h > span {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dim);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
 /* ⚠️ `flex: 1`, PAS une largeur fixe : les colonnes chiffrées sont déjà à largeur
    fixe, donc le libellé prend ce qui reste et toutes les lignes s'alignent quand même —
    sans qu'un libellé plus long (« Bonus familiers ») déborde ou force à re-mesurer une
@@ -3134,18 +3155,30 @@ function doHarvest() {
   min-width: 0;
   color: var(--dim);
 }
+.dp-pow,
 .dp-def,
 .dp-atk {
   flex: none;
-  width: 58px;
+  width: 52px;
   text-align: right;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
-/* Deux métiers, deux couleurs : ce qui TIENT et ce qui TUE. */
+/* Deux métiers, deux couleurs : ce qui TIENT et ce qui TUE ; la puissance, en texte. */
+.dp-pow {
+  color: var(--text);
+  margin-left: auto;
+}
 .dp-def {
   color: var(--d1);
-  margin-left: auto;
+}
+.f-champs {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--dim);
+}
+.f-champs b {
+  color: var(--text);
 }
 .dp-atk {
   color: var(--d3);
