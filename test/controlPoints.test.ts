@@ -378,7 +378,7 @@ describe('🏰 un point se prend à son niveau (signalé : une tour « légendai
 
   it('🏰 5 places là où l’on produit ou agit pour le joueur, 3 là où chacun apprend pour lui', () => {
     for (const k of ['mine', 'garden', 'tower', 'scriptorium'] as const) expect(seatsOf(k)).toBe(5);
-    for (const k of ['training', 'forge'] as const) expect(seatsOf(k)).toBe(3);
+    expect(seatsOf('training')).toBe(3);
   });
 
   it('⚔️ l’ennemi se cale sur une garnison de 3 : en poster 5 ne le fait pas grossir', () => {

@@ -303,7 +303,7 @@ import {
   markAssault,
   retakeForce,
   retakeBoost,
-  forgeGear,
+  campGear,
   reinforceBlocker,
   reinforceControl,
   releaseFromControl,
@@ -4449,10 +4449,10 @@ export const useCharacterStore = defineStore('character', () => {
           now,
           xpGranted: true,
         }).adventurers;
-    // 🗡️ L'ÉQUIPEMENT, en UN seul calcul : ce que la forge a versé avant l'attaque, puis tout
+    // 🗡️ L'ÉQUIPEMENT, en UN seul calcul : le bonus du camp versé avant l'attaque, puis tout
     // ce que les champions ont appris depuis l'état de départ — la récolte du camp ET l'XP
-    // du rapport. ⚠️ Sur le stock forgé : le patch du rapport, bâti sur l'ancien stock,
-    // effacerait la forge ; et sans rapport à verser, l'XP du camp n'apprenait rien aux pièces.
+    // du rapport. ⚠️ Sur le stock déjà entraîné : le patch du rapport, bâti sur l'ancien
+    // stock, effacerait le bonus du camp.
     const gearNext = trainWornGear(advList.value, rosterXp, gearStock);
     const forged =
       gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {};
@@ -4495,9 +4495,9 @@ export const useCharacterStore = defineStore('character', () => {
   } {
     const p = map.pois.find((x) => x.id === id);
     const c = collectControl(map, id, at, heroLevel);
-    // ⚒️ La forge verse son XP aux PIÈCES portées, pas aux champions — chacun la SIENNE,
-    // selon le temps qu'il a passé sur place.
-    const nextStock = forgeGear(stock, advs, c.gearXp);
+    // ⚒️ Le camp verse AUSSI son XP aux PIÈCES portées — chacun la SIENNE, selon le temps
+    // qu'il a passé sur place, même quand le champion bute sur son plafond.
+    const nextStock = campGear(stock, advs, c.gearXp);
     if (!p?.control || !Object.keys(c.xpBy).length)
       return {
         map: c.map,
@@ -4545,11 +4545,11 @@ export const useCharacterStore = defineStore('character', () => {
     const stock0 = cur.adv_gear?.stock ?? [];
     const h = harvestControlIn(cur.expedition_map, before, stock0, id, now, playerLevel);
     if (h.map === cur.expedition_map) return null;
-    // ⚒️ Forge (pièces seules) OU camp (champions, puis leurs pièces) : jamais les deux.
+    // ⚒️ Les pièces : le bonus du camp (`campGear`, déjà dans `h.stock`), PUIS ce que l'XP de
+    // leur porteur leur apprend — dans cet ordre, sur le stock déjà entraîné.
+    const gearNext = trainWornGear(before, h.advs, h.stock);
     const gearPatch =
-      h.stock !== stock0
-        ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } }
-        : gearTrainedPatch(cur, before, h.advs);
+      gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {};
     const tracks = gearAwareTracks(cur, before, h.advs, gearPatch);
     const nSup = Object.values(h.supplies).reduce((s, n) => s + (n ?? 0), 0);
     await persist(userId, {
@@ -4557,15 +4557,16 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
       ...(h.runes.length ? { runes: addRunes(cur.runes, h.runes) } : {}),
-      // ⚠️ `gearPatch` TOUJOURS : la forge ne touche pas au vivier, seulement aux pièces — le
-      // réserver au cas « vivier changé » (v0.1249) ne sauvegardait jamais l'XP de la forge.
+      // ⚠️ `gearPatch` TOUJOURS : un champion au plafond ne bouge pas, ses pièces si — le
+      // réserver au cas « vivier changé » (v0.1249) ne sauvegardait jamais leur XP.
       ...gearPatch,
       ...(h.advs !== before ? { adventurers: h.advs } : {}),
     });
     if (h.gold > 0) goldFx.gain(h.gold);
     if (h.advs !== before) useAdvXpFx().show(tracks, 'Camp d’entraînement');
-    else if (h.stock !== stock0)
-      useAdvXpFx().show(withGearTracks([], stock0, h.stock, h.advs), 'Forge de campagne');
+    // Champions au plafond : seules leurs pièces ont appris, on les montre quand même.
+    else if (gearNext !== stock0)
+      useAdvXpFx().show(withGearTracks([], stock0, gearNext, h.advs), 'Camp d’entraînement');
     return { gold: h.gold, supplies: h.supplies, runes: h.runes };
   }
 
@@ -4600,10 +4601,11 @@ export const useCharacterStore = defineStore('character', () => {
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
       ...(h.runes.length ? { runes: addRunes(cur.runes, h.runes) } : {}),
-      // 🗡️ Les pièces : celles de la forge, sinon ce que l'XP du camp leur a appris.
-      ...(h.stock !== stock0
-        ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: h.stock } }
-        : gearTrainedPatch(cur, advList.value, h.advs)),
+      // 🗡️ Les pièces : le bonus du camp, puis ce que l'XP de leur porteur leur a appris.
+      ...(() => {
+        const next = trainWornGear(advList.value, h.advs, h.stock);
+        return next !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: next } } : {};
+      })(),
     });
     if (h.gold > 0) goldFx.gain(h.gold);
     // 🧺 Ce qui a été récolté en partant, pour l'animation (comme `collectControlPoint`).

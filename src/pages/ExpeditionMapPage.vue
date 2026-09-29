@@ -1026,8 +1026,7 @@ import {
   champHoursOf,
   champStockBy,
   isPerChampKind,
-  forgeStock,
-  forgeXpPerHour,
+  campGearXpPerHour,
   runeProgress,
   runeHoursFor,
   gardenHoursFor,
@@ -1810,21 +1809,18 @@ const controlProd = computed(() => {
     case 'mine':
       return `⛏️ ${controlRate.value.toLocaleString('fr-FR')} 🪙/h · réserve ${controlGold.value.toLocaleString('fr-FR')} 🪙 (24 h au plus)`;
     case 'training':
-      return `🎯 +${Math.round(trainingXpPerHour(heroLevel.value))} XP/h par champion, pour chacun selon son temps ici`;
+      return `🎯 +${Math.round(trainingXpPerHour(heroLevel.value))} XP/h par champion · ⚒️ +${Math.round(campGearXpPerHour(heroLevel.value))} XP/h par pièce portée, pour chacun selon son temps ici`;
     case 'garden':
       return `🌿 ${gardenStock(p, now.value)} consommable(s) cueilli(s) · 1 toutes les ${hoursLabel(gardenHoursFor(c.garrison.length))}`;
     case 'scriptorium':
       return runeStock(p, now.value) > 0
         ? '📜 Une rune t’attend — récupère-la pour que la copie suivante commence'
         : `📜 Rune en cours de copie : ${Math.round(runeProgress(p, now.value) * 100)} % · 1 toutes les ${hoursLabel(runeHoursFor(c.garrison.length))} (${c.garrison.length}/${seatsOf('scriptorium')} copistes, ${hoursLabel(runeHoursFor(seatsOf('scriptorium')))} au complet)`;
-    case 'forge':
-      return `⚒️ +${Math.round(forgeXpPerHour(heroLevel.value))} XP/h par pièce portée, pour chaque champion selon son temps ici`;
     case 'tower':
       return `🗼 Trajets de toutes tes expéditions × ${controlTravelMult(char.row?.expedition_map).toFixed(2).replace('.', ',')}, après l’Avant-poste`;
   }
 });
-/** ⚒️🎯 Une jauge par champion, à la forge (XP par pièce) comme au camp d'entraînement (XP
- *  pour lui) : ce qu'il attend, et le temps de présence que ça représente — pleine à 24 h.
+/** 🎯 Une jauge par champion au camp d'entraînement : ce qu'il attend, et le temps de présence que ça représente — pleine à 24 h.
  *  Un champion ramené garde sa ligne tant que sa réserve n'est pas récoltée. */
 const forgeGauges = computed(() => {
   const p = livePoi.value;
@@ -1852,14 +1848,12 @@ const forgeGauges = computed(() => {
 const controlNote = computed(() => {
   if (liveControl.value?.kind === 'scriptorium')
     return 'La couleur de la rune suit le rang du lieu face au tien : un Scriptorium de ton rang copie plus souvent des bleues et des violettes. Le copiste n’apprend rien.';
-  if (liveControl.value?.kind === 'forge')
-    return 'Les champions n’apprennent rien ici : seules leurs pièces portées progressent, jusqu’au ★5 de leur rang et au niveau de leur porteur. Utile quand un champion bute sur son plafond. Chaque champion a sa jauge, pleine après 24 h sur place ; ↩ = ramené, sa part attend la récolte.';
   if (liveControl.value?.kind !== 'training') return '';
   const cap = trainingCapLevel(heroLevel.value);
   if (!cap)
     return '⚠️ Ton héros est Bronze : le camp n’entraîne que sous ton rang — monte d’abord.';
   const r = characterRank(cap);
-  return `Plafond : ${r.emoji} ${r.name} ★5 (le rang juste sous le tien). Chaque champion a sa jauge, pleine après 24 h sur place ; ↩ = ramené, sa part attend la récolte.`;
+  return `Plafond : ${r.emoji} ${r.name} ★5 (le rang juste sous le tien). Leurs pièces portées apprennent deux fois plus vite, même quand le champion a atteint le plafond (jusqu’au ★5 de leur rang et au niveau de leur porteur). Chaque champion a sa jauge, pleine après 24 h sur place ; ↩ = ramené, sa part attend la récolte.`;
 });
 const controlReady = computed(() => {
   const p = livePoi.value;
@@ -1867,7 +1861,6 @@ const controlReady = computed(() => {
   return (
     controlGold.value > 0 ||
     trainingStock(p, now.value, heroLevel.value) > 0 ||
-    forgeStock(p, now.value, heroLevel.value) > 0 ||
     runeStock(p, now.value) > 0 ||
     gardenStock(p, now.value) > 0
   );
@@ -1878,7 +1871,6 @@ const controlCollectLabel = computed(() => {
   if (!p || !k) return '';
   if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
   if (k === 'training') return 'Faire progresser (chacun sa réserve)';
-  if (k === 'forge') return 'Forger (chacun sa réserve)';
   if (k === 'scriptorium') return 'Récupérer la rune';
   return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
 });
