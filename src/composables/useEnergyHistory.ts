@@ -6,7 +6,7 @@ import { useChallengesStore } from '@/stores/challenges';
 import { useComboStore } from '@/stores/combo';
 import { useCharacterStore } from '@/stores/character';
 import { sessionXp, otherSportXp, cardioSessionXp } from '@/lib/athlete';
-import { challengeDayXp } from '@/lib/challenges';
+import { challengeBonusDate, challengeDayXp, challengeXpBreakdown } from '@/lib/challenges';
 import { comboXpByDay } from '@/lib/combo';
 import { ACTIVITY_LABELS, isCardioOutingChallenge } from '@/data/cardio';
 
@@ -74,6 +74,11 @@ export function useEnergyHistory(nDays = 3) {
     }
     // Défis (hors vraies sorties cardio, déjà couvertes ci-dessus), jour par jour.
     for (const c of challenges.list) {
+      // La PRIME de fin vaut pour TOUS les défis, sorties cardio comprises : leur effort
+      // est payé par le journal Cardio, mais la prime, elle, n'est comptée que par le défi.
+      const bonusDay = challengeBonusDate(c);
+      if (bonusDay)
+        push(bonusDay, '🏅', `${c.exercise_name} — prime de fin`, challengeXpBreakdown(c).bonus);
       if (isCardioOutingChallenge(c)) continue;
       for (const p of c.progress) {
         if (p.done > 0) push(p.date, '🏆', c.exercise_name, challengeDayXp(c, p));

@@ -382,6 +382,74 @@ export function rescheduleReturners(
 }
 
 /**
+ * 🔙 LE DEMI-TOUR DEMANDÉ (2026-09-29, demandé : « faire faire demi-tour à une troupe à nous
+ * en cliquant dessus »). Une équipe encore en route vers son lieu rebrousse chemin : elle
+ * revient par le même chemin, en autant de temps qu'elle en a mis pour arriver là.
+ *
+ * ⚠️ RIEN N'EST GAGNÉ NI PERDU : l'issue a été tirée au départ, mais le lieu n'est jamais
+ * atteint — aucun rapport (`reported` posé d'office, donc ni XP, ni butin, ni blessé), et les
+ * blessures de l'issue sont effacées pour que le retour d'une sortie ne renvoie personne à
+ * la base (`splitSorties`, `sortiesHome`).
+ *
+ * Refusé (`recallBlocker`) :
+ * - `arrived` : l'équipe est sur place (ou le rapport est tombé) — trop tard ;
+ * - `turned` : elle rebrousse déjà chemin (embuscade perdue à l'aller, ou déjà rappelée) ;
+ * - `combined` : un groupe d'une attaque combinée — les autres groupes marchent au même
+ *   rendez-vous, le rappeler seul changerait l'issue commune tirée au départ.
+ */
+export type RecallBlock = 'arrived' | 'turned' | 'combined';
+
+/** 🔙 Ce qu'on peut faire rebrousser chemin sur la carte : le voyage du héros, une équipe,
+ *  ou des renforts en route vers un point fixe (`recallReinforcements`). */
+export type RecallTarget =
+  | { kind: 'hero' }
+  | { kind: 'party'; id: string }
+  | { kind: 'reinf'; pointId: string; ids: readonly string[] };
+
+export const RECALL_BLOCK_LABEL: Record<RecallBlock, string> = {
+  arrived: 'elle est déjà arrivée',
+  turned: 'elle rebrousse déjà chemin',
+  combined: 'elle fait partie d’une attaque combinée',
+};
+
+type Recallable = Pick<
+  ActiveExpedition,
+  'sentAt' | 'midAt' | 'dwellMs' | 'reported' | 'turnBack' | 'wingOf' | 'crew'
+>;
+
+export function recallBlocker(v: Recallable, now: number): RecallBlock | null {
+  if (v.wingOf || v.crew) return 'combined';
+  if (v.turnBack !== undefined) return 'turned';
+  if (v.reported || now >= v.midAt - Math.max(0, v.dwellMs ?? 0)) return 'arrived';
+  return null;
+}
+
+/** Le voyage rappelé à `now`, ou `null` s'il ne peut pas l'être. ⚠️ Le retour dure le
+ *  chemin déjà fait (un départ différé compte à partir de `sentAt`). */
+export function recallVoyage<T extends ActiveExpedition>(v: T, now: number): T | null {
+  if (recallBlocker(v, now)) return null;
+  const arriveAt = v.midAt - Math.max(0, v.dwellMs ?? 0);
+  const done = Math.max(0, now - v.sentAt);
+  const f = Math.min(1, done / Math.max(1, arriveAt - v.sentAt));
+  const party = v.outcome.party;
+  const out = {
+    ...v,
+    midAt: now,
+    returnAt: now + done,
+    turnBack: f,
+    reported: true,
+    recalled: true,
+    baseSplit: true,
+    outcome: party
+      ? { ...v.outcome, party: { ...party, hurt: [], lightHurt: [] } }
+      : v.outcome,
+  };
+  delete out.dwellMs;
+  delete out.returnLegs;
+  return out;
+}
+
+/**
  * 🏥 QUI RENTRE À LA BASE au lieu de reprendre son poste (2026-09-29, décision de
  * l'utilisateur : « rapatrier les blessés à la base quel que soit le point de départ »).
  * Sur une SORTIE d'un point fixe (`homeId`, attaque combinée comprise) : les BLESSÉS

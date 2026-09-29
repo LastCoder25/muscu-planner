@@ -118,7 +118,7 @@ export interface ControlState {
    *  comptent plus dans la garnison ; un champion reste occupé jusqu'à `at` (`busyUntil`),
    *  un milicien rejoint la base à `at`. Rangés sur le POINT, pas sur la carte : le point est
    *  fixe, alors que `advanceWorld` reconstruit la carte champ par champ. */
-  returning?: { id: string; from: number; at: number }[];
+  returning?: { id: string; from: number; at: number; turnBack?: number }[];
   /** ⛏️ L'or déjà sorti de terre quand l'effectif a changé (renfort arrivé, champion
    *  ramené) : la réserve repart de là, au NOUVEAU débit — sans quoi le passé serait
    *  recalculé au mauvais débit. */
@@ -695,12 +695,17 @@ export interface ActiveExpedition {
   seed: number;
   outcome: ExpeditionOutcome; // calculé au DÉPART, révélé/crédité aux timestamps
   reported?: boolean; // le rapport a-t-il déjà été déposé dans la boîte (à midAt) ?
+  /** 🔍 Temps de fouille sur place avant le rapport (cf. `Voyage.dwellMs`). */
+  dwellMs?: number;
   /** 🏰 SORTIE d'un point fixe (2026-09-29) : l'équipe part de ce point et y REVIENT au lieu
    *  de la ville. `origin` sert au dessin (`travelPosition`), `homeId` au retour en garnison. */
   origin?: { x: number; y: number };
   homeId?: string;
   /** 🔙 Demi-tour sur une embuscade perdue à l'aller (cf. `Voyage.turnBack`). */
   turnBack?: number;
+  /** 🔙 Demi-tour DEMANDÉ par le joueur en chemin (`recallVoyage`, party.ts) : le lieu
+   *  n'est jamais atteint, aucun rapport n'est déposé, rien n'est gagné ni perdu. */
+  recalled?: true;
   /** 🏥 Le voyage a déjà été réparti à l'arrivée (`splitToBase`, party.ts) : ceux qui
    *  rentrent à la base en sont partis. Posé une fois, pour ne pas répartir deux fois. */
   baseSplit?: true;

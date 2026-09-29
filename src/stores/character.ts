@@ -258,6 +258,10 @@ import {
   settleParties,
   startParty,
   type ActiveParty,
+  recallBlocker,
+  recallVoyage,
+  RECALL_BLOCK_LABEL,
+  type RecallTarget,
 } from '@/lib/party';
 import { partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
@@ -302,6 +306,7 @@ import {
   loseControl,
   attackerLevel,
   markAssault,
+  recallReinforcements,
   retakeForce,
   retakeBoost,
   campGear,
@@ -4778,6 +4783,65 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  /** 🔙 Le lieu visé par un voyage rappelé redevient disponible : il avait été retiré de la
+   *  carte au départ (`targetTaken`). Un point fixe perd son marquage d'assaut ; une armée
+   *  en campagne n'avait jamais quitté la carte ; un lieu expiré entre-temps ne revient pas. */
+  function targetBack(map: ExpeditionMap | null, poi: Poi, now: number): ExpeditionMap | null {
+    if (!map || isFieldArmyPoi(poi)) return map;
+    if (poi.type === 'control') return markAssault(map, poi.id, false);
+    if (poi.expiresAt <= now || map.pois.some((p) => p.id === poi.id)) return map;
+    return { ...map, pois: [...map.pois, poi] };
+  }
+
+  /**
+   * 🔙 FAIRE DEMI-TOUR (2026-09-29, demandé : « faire faire demi-tour à une troupe à nous en
+   * cliquant dessus »). Le voyage rebrousse chemin et revient en autant de temps qu'il a mis
+   * à venir ; rien n'est gagné ni perdu (`recallVoyage`). Les champions rentrent au nouveau
+   * retour, le lieu visé redevient disponible. Rend la RAISON d'un refus, `null` si c'est fait.
+   */
+  async function recallTrip(
+    userId: string,
+    target: RecallTarget,
+    now: number,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return 'personnage non chargé';
+    if (target.kind === 'reinf') {
+      if (!cur.expedition_map) return 'la carte n’est pas chargée';
+      const r = recallReinforcements(cur.expedition_map, target.pointId, target.ids, now);
+      if (!r) return 'ces renforts ne peuvent plus faire demi-tour';
+      const at = new Map(r.back.map((b) => [b.id, b.at]));
+      await persist(userId, {
+        expedition_map: r.map,
+        adventurers: advList.value.map((a) => {
+          const t = at.get(a.id);
+          if (t === undefined) return a;
+          const next = { ...a, busyUntil: t };
+          delete next.posted;
+          return next;
+        }),
+      });
+      return null;
+    }
+    const v =
+      target.kind === 'hero' ? cur.expedition : partyList.value.find((p) => p.id === target.id);
+    if (!v) return 'ce voyage est déjà terminé';
+    const block = recallBlocker(v, now);
+    if (block) return `Demi-tour impossible : ${RECALL_BLOCK_LABEL[block]}.`;
+    const back = recallVoyage(v, now)!;
+    const advs = rescheduleReturners(advList.value, tripCrew(v), v.returnAt, back.returnAt);
+    const map = targetBack(cur.expedition_map, v.poi, now);
+    await persist(userId, {
+      ...(target.kind === 'hero'
+        ? { expedition: back }
+        : { parties: partyList.value.map((p) => (p.id === target.id ? back : p)) }),
+      ...(map !== cur.expedition_map ? { expedition_map: map } : {}),
+      ...(advs !== advList.value ? { adventurers: advs } : {}),
+    });
+    return null;
+  }
+
   /**
    * 🏰🧭 TRANSFERT d'un point fixe à un autre (2026-09-29, demandé) : des membres ARRIVÉS de
    * la garnison de `fromId` marchent vers `toId`, comme un renfort parti de la base — ils y
@@ -4903,6 +4967,7 @@ export const useCharacterStore = defineStore('character', () => {
     recallControl,
     releaseControlChampions,
     reinforceControlPoint,
+    recallTrip,
     sendMilitiaToControl,
     applyExpedition,
     equip,
