@@ -20,12 +20,14 @@ export function winClass(pct: number): string {
 
 /**
  * 🏰 QUI RENTRE d'un assaut sur un point fixe. Pris, le point garde ceux qu'on y poste : ne
- * rentrent que le héros et les champions EN PLUS des places. Raté, tout le monde rentre. Le
- * retour dure autant que l'aller (règle du store : `returnAt = midAt + leg`).
+ * rentrent que le héros et les champions EN PLUS des places, à LEUR pas (`wonMin`, souvent
+ * plus court : le héros seul marche plus vite que l'équipe). Raté, tout le monde rentre, au
+ * pas de toute l'équipe (`lostMin`, la durée de l'aller) — règle du store (`returnLegs`).
  * `champions` = champions envoyés, `seats` = places en garnison qu'ils peuvent occuper.
  */
 export function controlReturnNote(
-  legMin: number,
+  lostMin: number,
+  wonMin: number,
   hero: boolean,
   champions: number,
   seats: number,
@@ -38,7 +40,14 @@ export function controlReturnNote(
     .filter(Boolean)
     .join(' et ');
   const won = who
-    ? `pris, ${who} rentre${(hero ? 1 : 0) + extra > 1 ? 'nt' : ''}`
+    ? `pris, ${who} rentre${(hero ? 1 : 0) + extra > 1 ? 'nt' : ''} en ${formatDurationMin(wonMin)}`
     : 'pris, tous y restent';
-  return `Retour en ${formatDurationMin(legMin)} : tout le monde si l'assaut échoue · ${won}`;
+  return `Retour : tout le monde en ${formatDurationMin(lostMin)} si l'assaut échoue · ${won}`;
+}
+
+/** La valeur de la pastille « ↩️ Retour » d'un assaut : « pris / raté » quand ils diffèrent
+ *  (« — » si personne ne rentre après une prise), sinon la seule durée. */
+export function controlReturnValue(lostMin: number, wonMin: number): string {
+  if (wonMin >= lostMin) return formatDurationMin(lostMin);
+  return `${wonMin > 0 ? formatDurationMin(wonMin) : '—'} / ${formatDurationMin(lostMin)}`;
 }

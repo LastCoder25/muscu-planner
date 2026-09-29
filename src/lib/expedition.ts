@@ -13,7 +13,7 @@ import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } 
 import { rollDrop, ITEM_SETS, type Item } from './items';
 import type { RaidFaction } from './raid';
 import { difficultyLevel, levelForDifficulty } from './poiDifficulty';
-import { formatDuration } from './duration';
+import { formatDuration, formatDurationMin } from './duration';
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
 
 /** 🔱 Des sceaux d'ascension tombés quelque part : leur famille (champion / objet), leur
@@ -660,6 +660,12 @@ export interface ActiveExpedition {
   /** ⚔️🧭 Un groupe-COMPAGNON d'une attaque combinée : il voyage (tracé, retour) mais ne
    *  dépose AUCUN rapport — c'est le groupe principal qui porte le combat. */
   wingOf?: string;
+  /** 🏰 ASSAUT d'un point fixe : le retour (minutes) selon l'issue. `lost` = tout le monde
+   *  rentre, au pas de toute l'équipe ; `won` = seuls le héros et les champions en trop
+   *  rentrent, à LEUR pas (0 si personne ne rentre). `returnAt` vaut d'abord `lost`, et n'est
+   *  raccourci qu'à l'arrivée (`shortenWonReturn`) — sinon la durée affichée trahirait
+   *  l'issue avant le combat. */
+  returnLegs?: { won: number; lost: number };
 }
 
 // Rapport déposé dans la boîte à messages 📬 à l'arrivée à l'objectif.
@@ -2457,6 +2463,43 @@ export function tripTimeLabel(
     time: total,
     untilHome: `arrivée dans ${formatDuration(pos.remainToObjectiveMs)} · ${home}`,
   };
+}
+
+/**
+ * 🚶↩️ L'ALLER et le RETOUR d'un voyage en cours, pour sa tuile (demandé : « voir les deux
+ * durées sur les tuiles des expéditions en cours »). `go` = temps restant jusqu'au lieu (null
+ * une fois arrivé), `back` = durée du retour.
+ * 🏰 Un ASSAUT de point fixe a deux retours tant qu'il n'est pas arrivé : pris, seuls le héros
+ * et les champions en trop rentrent, à leur pas (`returnLegs.won`, « — » si personne) ; raté,
+ * tout le monde (`lost`). On montre LES DEUX : n'en montrer qu'un trahirait l'issue, déjà
+ * tirée au départ. `detail` le dit en toutes lettres (panneau de l'équipe).
+ */
+export function tripLegs(
+  v: Pick<ActiveExpedition, 'midAt' | 'returnAt' | 'returnLegs'>,
+  now: number,
+): { go: string | null; back: string; detail: string } | null {
+  if (now >= v.returnAt) return null;
+  if (now >= v.midAt) {
+    const back = formatDuration(v.returnAt - now);
+    return { go: null, back, detail: `Sur le retour : encore ${back}` };
+  }
+  const go = formatDuration(v.midAt - now);
+  const legs = v.returnLegs;
+  if (legs && legs.won < legs.lost) {
+    const lost = formatDurationMin(legs.lost);
+    const won = legs.won > 0 ? formatDurationMin(legs.won) : '—';
+    return {
+      go,
+      back: `${won}/${lost}`,
+      detail: `Arrivée dans ${go} · retour : ${
+        legs.won > 0
+          ? `${won} si le point est pris (le héros et les champions en trop)`
+          : 'personne si le point est pris (tous restent en garnison)'
+      }, ${lost} si l'assaut échoue (tout le monde)`,
+    };
+  }
+  const back = formatDuration(v.returnAt - v.midAt);
+  return { go, back, detail: `Arrivée dans ${go} · retour en ${back}` };
 }
 
 /** Réglages des rencontres de TRAJET (aller / retour). */
