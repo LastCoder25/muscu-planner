@@ -201,3 +201,94 @@ describe('🗓️ quêtes de la semaine — le tableau et la récompense', () =>
     expect(b.claimable).toBe(0);
   });
 });
+
+describe('🗓️ quêtes de la semaine — elles suivent TA pratique', () => {
+  /** Les deux quêtes tirées, sur plusieurs joueurs (le tirage dépend de la graine). */
+  const drawn = (s: QuestSources) => {
+    const all = new Set<string>();
+    for (let i = 0; i < 40; i++)
+      for (const q of weeklyQuests(s, MON, 'j' + i, null).quests.slice(1)) all.add(q.kind);
+    return all;
+  };
+  const tennisHistory = (days: number): QuestSources => {
+    const s = empty();
+    for (let w = 1; w <= 4; w++)
+      for (let d = 0; d < days; d++) s.tennis.push({ performed_at: at(addDays(MON, -7 * w + d)) });
+    return s;
+  };
+
+  it('100 % muscu : jamais de cardio ni de variété imposés', () => {
+    expect(drawn(history(3, 0))).toEqual(new Set(['strength_days', 'regularity']));
+  });
+  it('100 % cardio : jamais de quête muscu', () => {
+    expect(drawn(history(0, 90))).toEqual(new Set(['cardio_minutes', 'regularity']));
+  });
+  it('100 % tennis : une quête tennis, jamais muscu ni cardio', () => {
+    const d = drawn(tennisHistory(2));
+    expect(d).toEqual(new Set(['tennis_days', 'regularity']));
+  });
+  it('muscu + cardio : leurs deux quêtes et la variété, rien d’autre', () => {
+    expect(drawn(history(3, 60))).toEqual(new Set(['strength_days', 'cardio_minutes', 'variety']));
+  });
+  it('joueur neuf : la découverte d’avant', () => {
+    expect(drawn(empty())).toEqual(new Set(['strength_days', 'cardio_minutes', 'variety']));
+  });
+  it('une sortie isolée ne suffit pas à faire du cardio « ta » pratique', () => {
+    const s = history(3, 0);
+    s.cardio.push({ performed_at: at(addDays(MON, -20)), payload: { duration_min: 30 } });
+    expect(drawn(s).has('cardio_minutes')).toBe(false);
+  });
+  it('⚠️ le tirage ne bouge pas en route : la semaine en cours n’y entre pas', () => {
+    const s = history(3, 0);
+    const before = weeklyQuests(s, MON, 'u', null).quests.map((q) => q.kind);
+    for (let d = 0; d < 5; d++)
+      s.cardio.push({ performed_at: at(addDays(MON, d)), payload: { duration_min: 40 } });
+    expect(weeklyQuests(s, addDays(MON, 5), 'u', null).quests.map((q) => q.kind)).toEqual(before);
+  });
+  it('toujours 3 quêtes distinctes, quelle que soit la pratique', () => {
+    const cases = [empty(), history(3, 0), history(0, 90), history(3, 60), tennisHistory(2)];
+    const other = empty();
+    for (let w = 1; w <= 4; w++)
+      other.sessions.push({
+        performed_at: at(addDays(MON, -7 * w)),
+        payload: { discipline: 'autre_sport' },
+      });
+    cases.push(other);
+    for (const s of cases)
+      for (let i = 0; i < 10; i++) {
+        const k = weeklyQuests(s, MON, 'x' + i, null).quests.map((q) => q.kind);
+        expect(k).toHaveLength(3);
+        expect(new Set(k).size).toBe(3);
+      }
+  });
+  it('« autre sport » et prépa physique ne sont pas des jours de muscu', () => {
+    const s = empty();
+    s.sessions.push(
+      { performed_at: at(MON), payload: { discipline: 'autre_sport' } },
+      { performed_at: at(addDays(MON, 1)), payload: { discipline: 'prepa_physique' } },
+      { performed_at: at(addDays(MON, 2)), payload: { discipline: 'musculation' } },
+    );
+    expect(questEntries(s).map((e) => e.kind)).toEqual(['other', 'tennis', 'muscu']);
+  });
+  it('la régularité compte les deux moitiés de la semaine', () => {
+    const s = history(3, 0);
+    s.sessions.push({ performed_at: at(MON) });
+    const reg = () => {
+      for (let i = 0; i < 40; i++) {
+        const q = weeklyQuests(s, addDays(MON, 6), 'r' + i, null).quests.find(
+          (x) => x.kind === 'regularity',
+        );
+        if (q) return q;
+      }
+      throw new Error('régularité jamais tirée');
+    };
+    expect(reg().done).toBe(1);
+    s.sessions.push({ performed_at: at(addDays(MON, 3)) });
+    expect(reg().done).toBe(2);
+    expect(reg().complete).toBe(true);
+  });
+  it('la cible tennis suit l’historique', () => {
+    expect(questTargets(questEntries(tennisHistory(1)), MON).tennis_days).toBe(2);
+    expect(questTargets(questEntries(tennisHistory(3)), MON).tennis_days).toBe(3);
+  });
+});

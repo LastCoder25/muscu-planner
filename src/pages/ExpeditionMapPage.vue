@@ -22,7 +22,10 @@
       :type-chips="typeChips"
       :type-filter="typeFilterShown"
       @toggle-rank="toggleRank"
+      :troops="troopCount"
+      :troop-mode="troopMode"
       @cycle-type="cycleTypeChip"
+      @cycle-troops="cycleTroops"
       @reset="resetFilters"
     />
 
@@ -122,7 +125,7 @@
           </g>
 
           <!-- Trajet du héros (aller/retour, noir=parcouru, bleu=restant) -->
-          <template v-if="active && hero">
+          <template v-if="active && hero && !troopsHidden">
             <line
               :x1="heroEnd.x"
               :y1="heroEnd.y"
@@ -155,7 +158,7 @@
              violet et en pointillés — la couleur seule ne suffit pas à distinguer deux routes.
              ⚠️ Un groupe (⚔️) a son PROPRE motif (tiret-point) : même violet qu'un convoi, sans
              lui les deux routes ne se distinguaient que par un glyphe de 3 unités. -->
-          <template v-for="v in travelersOnMap" :key="'vt' + v.id">
+          <template v-for="v in shownTravelers" :key="'vt' + v.id">
             <line
               :x1="lineEnd(v).x"
               :y1="lineEnd(v).y"
@@ -213,12 +216,14 @@
             <circle :cx="a.tx" :cy="a.ty" :r="a.tr" class="army-target" />
           </g>
           <MapPoiLayer
-            :pois="shownPois"
+            :pois="mapPois"
             :selected-id="selected?.id ?? null"
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
+            :down-key="downKey"
             :imminent-key="imminentKey"
             :target="active?.poi ?? null"
+            :target-down="heroTargetDown"
             :travel-targets="travelTargets"
             @select="selectPoi"
           />
@@ -226,7 +231,7 @@
           <!-- Héros -->
           <!-- 🔙 Une troupe encore en route se touche pour la faire rebrousser chemin : une cible
                élargie (transparente) sous le marqueur, qui est trop petit pour un doigt. -->
-          <g v-for="v in travelersOnMap" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
+          <g v-for="v in shownTravelers" :key="'vm' + v.id" :class="{ recallable: !!v.recall }">
             <circle
               v-if="v.recall"
               :cx="v.at.x"
@@ -244,14 +249,14 @@
           <!-- ⚔️ La bande qu'on intercepte marche VERS le point de rencontre pendant que le
                groupe y court : on voit les deux colonnes converger, et le choc s'annonce là
                où elles se croiseront. -->
-          <g v-for="b in bandsOnMap" :key="'band' + b.id" class="band-march">
+          <g v-for="b in shownBands" :key="'band' + b.id" class="band-march">
             <line :x1="b.x" :y1="b.y" :x2="b.meetX" :y2="b.meetY" class="band-path" />
             <circle :cx="b.meetX" :cy="b.meetY" r="6.5" class="clash-ring" />
             <circle :cx="b.x" :cy="b.y" r="3.2" class="band-mark" />
             <text :x="b.x" :y="b.y + 1.1" class="van-emo">{{ b.emo }}</text>
           </g>
 
-          <g v-if="active && hero" :class="{ recallable: heroRecallable }">
+          <g v-if="active && hero && !troopsHidden" :class="{ recallable: heroRecallable }">
             <circle
               v-if="heroRecallable"
               :cx="hero.x"
@@ -654,7 +659,7 @@
           <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
                puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
           <div ref="reinfAnchor" />
-          <template v-if="controlFree > 0">
+          <template v-if="reinfOpen && controlFree > 0">
             <p class="ctl-line ctl-reinf">
               ➕
               <b
@@ -687,7 +692,7 @@
           <!-- 🛡️ DES MILICIENS (Caserne) : ils complètent la garnison jusqu'à 5, champions
                compris. Ils font tourner le lieu, mais n'apprennent rien et meurent s'ils
                tombent. -->
-          <template v-if="militiaBuilt || milHome > 0">
+          <template v-if="reinfOpen && (militiaBuilt || milHome > 0)">
             <div class="mil-send">
               <span class="mil-send-lab"
                 ><span class="mil-inline"><MilitiaPortrait /></span> Miliciens
@@ -1024,16 +1029,9 @@
           <p v-else-if="partyRisk && partyRisk.covered" class="sh-ok">
             ✅ Une armée arrive, mais ils seront rentrés avant elle.
           </p>
-          <!-- 💀 ON DIT POURQUOI (demandé : « empêche d'envoyer une expédition à 0 % ») :
-               un bouton qui se grise en silence se lit comme une panne, et le joueur ne
-               saurait pas quoi changer. La parade est donc écrite avec le refus. -->
-          <p v-if="partySendBlock === 'hopeless'" class="sh-risk">
-            💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
-            un lieu d’un rang plus bas.
-          </p>
-          <!-- ⚠️ TOUS les autres refus sont dits aussi (signalé : « le bouton est grisé » sans
+          <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
                raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
-          <p v-else-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
+          <p v-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
             ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
           </p>
           <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>
@@ -1180,6 +1178,7 @@ import {
   tripTimeLabel,
   tripLegs,
   voyageProgress,
+  voyageVanquished,
   poiCombatant,
   simulateArena,
   poiTravelLevel,
@@ -1221,6 +1220,7 @@ import {
   type PoiFact,
 } from '@/lib/poiFacts';
 import { usePoiFilters } from '@/composables/usePoiFilters';
+import { mapPoisFor } from '@/lib/poiTypeFilter';
 import { useExpeditionParty } from '@/composables/useExpeditionParty';
 import { pinchStart, pinchUpdate, type PinchStart } from '@/lib/pinchZoom';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
@@ -1493,6 +1493,8 @@ const heroRecallable = computed(() => !!active.value && !recallBlocker(active.va
 function lineEnd(v: { poi: Poi; end?: { x: number; y: number } }) {
   return v.end ?? v.poi;
 }
+/** 💀 La cible du héros, terrassée : grisée jusqu'à son retour (`voyageVanquished`). */
+const heroTargetDown = computed(() => !!active.value && voyageVanquished(active.value, now.value));
 const heroProg = computed(() =>
   active.value ? voyageProgress(active.value, now.value) : { overall: 0, mid: 0.5 },
 );
@@ -1614,7 +1616,7 @@ const edgeIndicators = computed(() => {
   const cw = contW.value;
   const ch = contH.value;
   const m = 22;
-  const src = [...shownPois.value, ...(active.value ? [active.value.poi] : [])];
+  const src = [...mapPois.value, ...(active.value ? [active.value.poi] : [])];
   const out: { id: string; poi: Poi; x: number; y: number; deg: number }[] = [];
   for (const p of src) {
     const px = ((p.x - V.min) / V.size) * mapPx.value - scrollX.value;
@@ -1656,17 +1658,21 @@ const {
   cycleTypeChip,
   resetFilters,
   shownPois,
+  troopMode,
+  troopsHidden,
+  cycleTroops,
 } = usePoiFilters(pois, (p) => rankOf(p).rankIndex);
+/** 🚶 Les lieux où se rendent tes voyages en cours (renforts vers un point tenu, retours…) :
+ *  ce qui reste dessiné quand les déplacements sont « seuls ». */
+const troopPoiIds = computed(() => new Set(travelersOnMap.value.map((v) => v.poi.id)));
+/** Les lieux que la carte dessine (filtres ET mode des déplacements, `mapPoisFor`). */
+const mapPois = computed(() =>
+  mapPoisFor(troopMode.value, shownPois.value, pois.value, troopPoiIds.value),
+);
 /** ⚔️🗼 Les trajectoires des armées en campagne visibles (filtres compris). */
 const armyPaths = computed(() =>
-  shownPois.value.map(armyTrajectory).filter((a): a is ArmyPath => !!a),
+  mapPois.value.map(armyTrajectory).filter((a): a is ArmyPath => !!a),
 );
-// Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte.
-watch(shownPois, (list) => {
-  const s = selected.value;
-  if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
-    selected.value = null;
-});
 const sheetEl = ref<HTMLElement | null>(null);
 
 /** ⚠️ CE QUE LE DÉPART COÛTE, face à l'armée qui arrive (demandé par l'utilisateur :
@@ -1920,8 +1926,13 @@ const garrisonSlots = computed(() =>
   })),
 );
 const reinfAnchor = ref<HTMLElement | null>(null);
+/** ➕ Les candidats au renfort (champions et miliciens disponibles) restent CACHÉS tant que le
+ *  joueur n'a pas touché une case vide de la garnison (demandé) : la fiche d'un point tenu se
+ *  lit d'abord comme ce qu'il produit et qui le tient, pas comme une liste de recrues. */
+const reinfOpen = ref(false);
 function goReinforce() {
-  reinfAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  reinfOpen.value = true;
+  void nextTick(() => reinfAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 /** Les sélections de la fiche : qui ramener, qui envoyer en renfort. ⚠️ Déclarées AVANT le
  *  stepper de milice, dont le `watch` les lit dès le setup (zone morte temporelle sinon). */
@@ -1972,6 +1983,7 @@ watch(
     ctlRecallSel.value = [];
     ctlReinfSel.value = [];
     milSend.value = 0;
+    reinfOpen.value = false;
   },
 );
 function toggleRecall(id: string) {
@@ -2473,6 +2485,8 @@ const partiesOnMap = computed(() =>
       at: drawnAt(g),
       prog: voyageProgress(g, now.value),
       legs: tripLegs(g, now.value),
+      // 💀 Le lieu est terrassé dès le rapport : on le grise jusqu'au retour.
+      down: voyageVanquished(g, now.value),
     })),
 );
 /**
@@ -2617,6 +2631,22 @@ const travelersOnMap = computed(() => [
     recallInfo: null as RecallInfo | null,
   })),
 ]);
+/** 🚶 Le filtre « Déplacements de troupes » : masqués, les voyages ne se dessinent plus sur la
+ *  carte (tracés, marqueurs, colonnes d'interception) — ils restent dans la liste dessous. */
+const shownTravelers = computed(() => (troopsHidden.value ? [] : travelersOnMap.value));
+const shownBands = computed(() => (troopsHidden.value ? [] : bandsOnMap.value));
+/** Combien de déplacements la tuile annonce : le héros en route, plus chaque groupe. */
+const troopCount = computed(
+  () => (active.value && hero.value ? 1 : 0) + travelersOnMap.value.length,
+);
+// Un lieu sélectionné que le filtre masque ne garde pas sa feuille ouverte. ⚠️ APRÈS
+// `travelersOnMap` : le watch lit `mapPois` dès le setup, qui lit `travelersOnMap` (zone
+// morte temporelle sinon — le défaut de la v0.910).
+watch(mapPois, (list) => {
+  const s = selected.value;
+  if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
+    selected.value = null;
+});
 /** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
  *  lirait comme plusieurs rangées collées. */
 const trips = computed(() => {
@@ -3485,14 +3515,22 @@ function stableBy<T>(src: () => T, key: (v: T) => string) {
   });
 }
 const dimmedKey = computed(() =>
-  shownPois.value
+  mapPois.value
     .filter(dimmed)
     .map((p) => p.id)
     .join('|'),
 );
+/** 💀 Les lieux terrassés ENCORE sur la carte : une armée en campagne n'est pas retirée au
+ *  départ (elle continue sa marche) — elle se grise elle aussi, jusqu'au retour des vainqueurs. */
+const downKey = computed(() =>
+  [
+    ...(heroTargetDown.value && active.value ? [active.value.poi.id] : []),
+    ...travelTargets.value.filter((v) => v.down).map((v) => v.poi.id),
+  ].join('|'),
+);
 const veiledKey = computed(() =>
   fogPlan.value
-    ? shownPois.value
+    ? mapPois.value
         .filter((p) => underFog(p, TOWN, fogR.value))
         .map((p) => p.id)
         .join('|')
@@ -3502,8 +3540,8 @@ const travelTargets = stableBy(
   () =>
     travelersOnMap.value
       .filter((v) => v.kind !== 'reinf') // le point tenu est déjà dessiné par MapPoiLayer
-      .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind })),
-  (l) => l.map((v) => v.id).join('|'),
+      .map((v) => ({ id: v.id, poi: v.poi, kind: v.kind, down: 'down' in v && v.down })),
+  (l) => l.map((v) => v.id + (v.down ? '†' : '')).join('|'),
 );
 
 // Avant-poste : débloque les expéditions + réduit les trajets.

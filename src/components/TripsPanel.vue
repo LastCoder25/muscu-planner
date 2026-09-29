@@ -34,7 +34,7 @@
   </div>
 
   <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
-  <div v-if="crew" class="trip-crew">
+  <div v-if="crew" ref="crewEl" class="trip-crew">
     <div class="tc-head">👥 En route vers {{ poiLabel(crew.poi) }} niv {{ crew.poi.level }}</div>
     <p v-if="crew.legs" class="tc-legs">⏱️ {{ crew.legs }}</p>
     <div v-if="crew.haul.length" class="tc-haul">
@@ -101,7 +101,7 @@ export interface MapTrip {
 </script>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -124,6 +124,21 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ 'update:focus': [key: string | null]; recall: [key: string] }>();
 const char = useCharacterStore();
+
+/** 👥 L'équipe naît SOUS la carte et la rangée de tuiles : sur un téléphone elle était hors de
+ *  l'écran, il fallait faire défiler pour la voir (signalé). On la RÉVÈLE au toucher d'une
+ *  tuile — même remède que la fiche d'un lieu (v0.738). `nearest` : rien ne bouge si elle
+ *  est déjà visible. */
+const crewEl = ref<HTMLElement | null>(null);
+watch(
+  () => props.focus,
+  async (key) => {
+    if (!key) return;
+    await nextTick();
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    crewEl.value?.scrollIntoView?.({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+  },
+);
 
 /** 👥 Les membres du voyage touché (demandé : « quand je clique sur une expédition, voir les
  *  champions qui sont dedans »). Un champion renvoyé depuis n'est plus dans le vivier : il est

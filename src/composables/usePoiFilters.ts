@@ -10,17 +10,32 @@ import { isHeldControl } from '@/lib/controlPoints';
 import {
   cycleType,
   effectiveTypeFilter,
+  filterKeyOf,
+  nextTroopMode,
+  parseTroopMode,
   parseTypeFilter,
   typeOptions,
   typeShown,
+  type FilterKey,
   type TypeFilter,
+  type TypeMode,
 } from '@/lib/poiTypeFilter';
-import type { Poi, PoiType } from '@/lib/expedition';
+import type { Poi } from '@/lib/expedition';
 
 const RANK_FILTER_KEY = 'muscu:emap:hidden-ranks';
 // ⚠️ Remplace le filtre des failles seul : son réglage stocké est repris (`parseTypeFilter`).
 const TYPE_FILTER_KEY = 'muscu:emap:type-filter';
 const LEGACY_RIFT_KEY = 'muscu:emap:rift-mode';
+// 🚶 Le mode des déplacements de troupes (affichés · seuls · masqués). Absent = affichés.
+const TROOPS_KEY = 'muscu:emap:hide-troops';
+
+function loadTroopMode(): TypeMode {
+  try {
+    return parseTroopMode(localStorage.getItem(TROOPS_KEY));
+  } catch {
+    return 'all'; /* stockage indisponible : tout est affiché */
+  }
+}
 
 function loadHiddenRanks(): Set<number> {
   try {
@@ -72,8 +87,8 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
   const typeFilter = ref<TypeFilter>(loadTypeFilter());
   const rankShown = (p: Poi) => isHeldControl(p) || !hiddenRanks.value.has(rankIndexOf(p));
   // Le compte d'une puce de type ne parle que des lieux des rangs affichés.
-  const typeChips = computed(() => typeOptions(pois.value, (p) => rankShown(p as Poi)));
-  function cycleTypeChip(t: PoiType) {
+  const typeChips = computed(() => typeOptions(pois.value, rankShown));
+  function cycleTypeChip(t: FilterKey) {
     typeFilter.value = cycleType(
       typeFilter.value,
       t,
@@ -90,11 +105,26 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     ),
   );
   const shownPois = computed(() =>
-    pois.value.filter((p) => rankShown(p) && typeShown(typeFilterShown.value, p.type)),
+    pois.value.filter((p) => rankShown(p) && typeShown(typeFilterShown.value, filterKeyOf(p))),
   );
 
-  /** « Tout afficher » : rangs ET types d’un geste. */
+  /** 🚶 Les tracés et marqueurs des voyages en cours (héros, équipes, renforts, retours,
+   *  attaques, colonnes d'interception). La liste des voyages sous la carte reste. */
+  const troopMode = ref<TypeMode>(loadTroopMode());
+  const troopsHidden = computed(() => troopMode.value === 'none');
+  function setTroopMode(m: TypeMode) {
+    troopMode.value = m;
+    try {
+      localStorage.setItem(TROOPS_KEY, m);
+    } catch {
+      /* le filtre vaut pour la session */
+    }
+  }
+  const cycleTroops = () => setTroopMode(nextTroopMode(troopMode.value));
+
+  /** « Tout afficher » : rangs, types ET déplacements d’un geste. */
   function resetFilters() {
+    if (troopMode.value !== 'all') setTroopMode('all');
     hiddenRanks.value = new Set();
     typeFilter.value = { only: [], hidden: [] };
     save(RANK_FILTER_KEY, []);
@@ -111,5 +141,8 @@ export function usePoiFilters(pois: Ref<Poi[]>, rankIndexOf: (p: Poi) => number)
     cycleTypeChip,
     resetFilters,
     shownPois,
+    troopMode,
+    troopsHidden,
+    cycleTroops,
   };
 }

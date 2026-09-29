@@ -111,6 +111,7 @@ import {
   type ExpeditionMessage,
   type ExpeditionOutcome,
   type Poi,
+  restoreUnvanquished,
 } from '@/lib/expedition';
 import {
   buildingType,
@@ -264,7 +265,6 @@ import {
   RECALL_BLOCK_LABEL,
   type RecallTarget,
 } from '@/lib/party';
-import { partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
   heroOutInAttack,
@@ -2315,13 +2315,17 @@ export const useCharacterStore = defineStore('character', () => {
           activeDays7,
         )
       : null;
+    // 🗺️ Un lieu que le héros n'a pas terrassé revient sur la carte (`restoreUnvanquished`).
+    const map0 = ctl ? ctl.map : cur.expedition_map;
+    const map = restoreUnvanquished(map0, [exp], partyList.value, now);
     await persist(userId, {
       ...(dw?.base ? { base: dw.base } : {}),
       ...(x && x.messages !== cur.messages
         ? { messages: dw ? dw.tag(x.messages) : x.messages }
         : {}),
       ...(x?.patch ?? {}),
-      ...(ctl ? { expedition_map: ctl.map, adventurers: ctl.adventurers } : {}),
+      ...(ctl ? { adventurers: ctl.adventurers } : {}),
+      ...(ctl || map !== map0 ? { expedition_map: map } : {}),
       expedition: null,
     });
     x?.play();
@@ -3364,10 +3368,6 @@ export const useCharacterStore = defineStore('character', () => {
       escort.length,
       !!hero,
       engageCap(pantheonLevel.value),
-      // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le
-      // GARANTIR. ⚠️ `partyWinChance` est la MÊME dispatch que la résolution juste en
-      // dessous — un lieu ne peut pas se pronostiquer autrement qu’il ne se résout.
-      partyWinChance(poi, escort, road, hero, now, 40, false),
     );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
@@ -3691,14 +3691,8 @@ export const useCharacterStore = defineStore('character', () => {
     const stockAfter = takeSupplies(cur.supplies, supplies);
     if (!stockAfter) return 'un consommable choisi n’est plus en stock';
     const road = { ...escortKitOf(cur), supplies };
-    // ⚠️ Le plafond du Panthéon et le pronostic portent sur l'attaque ENTIÈRE.
-    const sendBlock = partySendBlocker(
-      poi,
-      all.length,
-      !!hero,
-      engageCap(pantheonLevel.value),
-      partyWinChance(poi, all, road, hero, now, 40, false),
-    );
+    // ⚠️ Le plafond du Panthéon porte sur l'attaque ENTIÈRE.
+    const sendBlock = partySendBlocker(poi, all.length, !!hero, engageCap(pantheonLevel.value));
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     const heroBlock = hero
       ? partyHeroBlocker({
@@ -4081,10 +4075,20 @@ export const useCharacterStore = defineStore('character', () => {
       if (q && q.returnAt !== p.returnAt)
         advsBack = rescheduleReturners(advsBack, tripCrew(q), p.returnAt, q.returnAt);
     }
+    // 🗺️ Un lieu qu'une équipe rentrée n'a pas terrassé revient sur la carte — sauf si un
+    // autre voyage le vise encore (`restoreUnvanquished`).
+    const mapBase = ctl?.map ?? cur.expedition_map;
+    const ended = partyList.value.filter((p) => !t.parties.some((q) => q.id === p.id));
+    const mapOut = restoreUnvanquished(
+      mapBase,
+      ended,
+      [...t.parties, ...(cur.expedition ? [cur.expedition] : [])],
+      clock,
+    );
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
-      ...(ctl?.map ? { expedition_map: ctl.map } : {}),
+      ...(ctl?.map || mapOut !== mapBase ? { expedition_map: mapOut } : {}),
       ...(x.messages !== cur.messages ? { messages: x.messages } : {}),
       // (`box` diffère de `cur.messages` si un encaissement en cours y est marqué : l'écrire
       //  ne fait que le confirmer.)

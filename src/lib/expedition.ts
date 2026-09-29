@@ -2452,6 +2452,64 @@ export function veinDwellMs(champions: number): number {
  *  l’objectif. ⚠️ Distinct de `travelPosition().frac`, qui n’avance que DANS la phase
  *  courante et repart donc à zéro au demi-tour : une barre pilotée par lui reculerait
  *  en plein milieu du trajet, ce qui se lit comme un bug. */
+/**
+ * 💀 LE LIEU EST-IL TERRASSÉ ? (demandé : « griser les lieux et armées ennemies terrassés ;
+ * on les efface une fois ceux qui l'ont terrassé revenus à leur base »). Vrai dès que le
+ * groupe a ATTEINT le lieu (`midAt`, le rapport est tombé) et l'a emporté. ⚠️ Un demi-tour
+ * (`turnBack`, porté par le voyage ou par l'issue) n'a jamais atteint le lieu : rien n'y est
+ * terrassé. L'effacement n'a rien à faire ici : le lieu cesse d'être dessiné quand le voyage
+ * se termine (`returnAt`).
+ */
+export function voyageVanquished(
+  v: {
+    midAt: number;
+    turnBack?: number;
+    outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack'>;
+  },
+  now: number,
+): boolean {
+  if (v.turnBack !== undefined || v.outcome.turnBack !== undefined) return false;
+  return now >= v.midAt && v.outcome.win;
+}
+
+/**
+ * 🗺️ LE LIEU N'EST EFFACÉ QUE S'IL A ÉTÉ TERRASSÉ (demandé : « on ne fait disparaître le lieu
+ * ou l'armée que s'il a été abattu, sinon il reste sur la carte normalement »). Un lieu visé
+ * quitte la carte au DÉPART (`targetTaken`) ; à la fin d'un voyage qui ne l'a pas emporté
+ * (défaite, demi-tour forcé sur la route), il y revient tel quel. Rend la MÊME carte quand
+ * rien ne change.
+ * ⚠️ Pas tant qu'un AUTRE voyage le vise encore (`stillAway`, attaque combinée) : il serait
+ * dessiné deux fois, et c'est le dernier arrivé qui tranche.
+ * ⚠️ Ni une armée en campagne (jamais retirée), ni un point fixe (marqué, pas retiré), ni
+ * l'arène (on ne l'abat pas : on y tient des vagues, elle se consomme). Un lieu expiré
+ * entre-temps ne revient pas — même règle que le rappel (`targetBack`).
+ */
+export function restoreUnvanquished(
+  map: ExpeditionMap | null,
+  ended: readonly {
+    poi: Poi;
+    midAt: number;
+    returnAt: number;
+    turnBack?: number;
+    outcome: Pick<ExpeditionOutcome, 'win' | 'turnBack'>;
+  }[],
+  stillAway: readonly { poi: Pick<Poi, 'id'> }[],
+  now: number,
+): ExpeditionMap | null {
+  if (!map) return map;
+  const away = new Set(stillAway.map((v) => v.poi.id));
+  const back: Poi[] = [];
+  for (const v of ended) {
+    const p = v.poi;
+    if (isFieldArmyPoi(p) || p.type === 'control' || p.type === 'arena') continue;
+    if (voyageVanquished(v, Math.max(now, v.returnAt))) continue;
+    if (away.has(p.id) || p.expiresAt <= now) continue;
+    if (map.pois.some((q) => q.id === p.id) || back.some((q) => q.id === p.id)) continue;
+    back.push(p);
+  }
+  return back.length ? { ...map, pois: [...map.pois, ...back] } : map;
+}
+
 export function voyageProgress(voyage: Voyage, now: number): { overall: number; mid: number } {
   const v = shownVoyage(voyage, now);
   const total = Math.max(1, v.returnAt - v.sentAt);
