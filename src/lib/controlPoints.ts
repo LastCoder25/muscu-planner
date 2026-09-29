@@ -19,9 +19,21 @@
  */
 import { formatDuration } from './duration';
 import { mulberry32, seedOf } from './combat';
-import { advAscensionCap, advBankedLevel, advXpToNext, type Adventurer } from './adventurers';
+import {
+  advAscensionCap,
+  advAscensionReady,
+  advBankedLevel,
+  advXpToNext,
+  type Adventurer,
+} from './adventurers';
 import { catchUpMult, partyAllies, type EscortKit } from './caravan';
-import { grantAdvGearXp, wornGear, type AdvGear } from './advGear';
+import {
+  advGearAtRankCap,
+  advGearNextRank,
+  grantAdvGearXp,
+  wornGear,
+  type AdvGear,
+} from './advGear';
 import { pickTier, placeRuneOdds, type RuneTier } from './skillRunes';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
@@ -43,6 +55,7 @@ import {
   type ControlKind,
   type ControlState,
   type ExpeditionMap,
+  type ExpeditionMessage,
   type Poi,
 } from './expedition';
 
@@ -653,7 +666,7 @@ export function trainingRoom(adv: Adventurer, heroLevel: number, pantheonLevel: 
 }
 
 /** Le lieu où CHAQUE champion a sa propre réserve d'XP (sa jauge) : le camp. */
-export const isPerChampKind = (k: ControlKind | undefined): k is 'training' => k === 'training';
+const isPerChampKind = (k: ControlKind | undefined): k is 'training' => k === 'training';
 
 /**
  * 🎯 L'XP accumulée par CHAQUE champion au camp à `now`, non arrondie (ses pièces portées
@@ -664,7 +677,7 @@ export const isPerChampKind = (k: ControlKind | undefined): k is 'training' => k
  * n'apprend rien, un champion ramené garde ce qu'il a gagné jusqu'à la récolte. Plafonnée à
  * 24 h de production, arrêtée à l'heure de l'attaque. Les miliciens n'apprennent rien.
  */
-export function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, number> {
+function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, number> {
   const c = p.control;
   if (!c || !isPerChampKind(c.kind) || c.owner !== 'player' || c.collectedAt === undefined)
     return {};
@@ -694,12 +707,6 @@ export const trainingStockBy = (
 function maxStock(by: Record<string, number>): number {
   const v = Object.values(by);
   return v.length ? Math.floor(Math.max(...v) + 1e-9) : 0;
-}
-/** Ce qu'une réserve représente en HEURES passées sur place (≤ 24 h) : la jauge d'un
- *  champion se remplit à ce rythme. */
-export function champHoursOf(p: Poi, xp: number, playerLevel: number): number {
-  const rate = isPerChampKind(p.control?.kind) ? trainingXpPerHour(playerLevel) : 0;
-  return rate > 0 ? xp / rate : 0;
 }
 
 /**
@@ -886,8 +893,10 @@ export function collectControl(
       control: {
         ...q.control!,
         collectedAt: until,
-        // 🌿⛲ La fraction entamée (un consommable, une pierre de mana) reste acquise.
-        banked: c.kind === 'garden' || c.kind === 'mana' ? Math.max(0, units - whole) : 0,
+        // 🌿⛲⛏️ La fraction entamée reste acquise (une pièce d'or, un consommable, une pierre
+        // de mana) : la récolte est AUTOMATIQUE et fréquente (`autoCollectable`), sans ce
+        // report chaque passage jetterait une fraction.
+        banked: Math.max(0, units - whole),
       },
     })),
     gold: c.kind === 'mine' ? whole : 0,
@@ -918,7 +927,6 @@ function leftFor(units: number, rate: number): string | null {
 export function controlProgress(p: Poi, now: number, playerLevel: number): ControlProgress | null {
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
-  const fmt = (n: number) => Math.floor(n + 1e-9).toLocaleString('fr-FR');
   if (c.kind === 'tower') {
     const cut = CONTROL.towerCut * shareOf(c.garrison.length);
     const det = CONTROL.towerDetect * shareOf(c.garrison.length);
@@ -927,21 +935,17 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
       pct: null,
     };
   }
-  // 🎯 Chacun sa réserve : on montre la plus avancée (celle qu'on voit monter en premier).
-  if (isPerChampKind(c.kind)) {
-    const top = Math.max(0, ...Object.values(champStockBy(p, now, playerLevel)));
-    const full = (trainingXpPerHour(playerLevel) * CONTROL.storageMs) / 3600_000;
-    return { text: `🎓 +${fmt(top)} XP`, pct: full > 0 ? Math.min(1, top / full) : 0 };
-  }
+  // 🎓⛏️⛲ Versé directement (2026-09-29) : on dit le débit, il n'y a plus de jauge.
+  const perH = unitsPerHour(p, c.garrison.length, playerLevel);
+  const per = (x: number) => Math.round(x).toLocaleString('fr-FR');
+  if (isPerChampKind(c.kind)) return { text: `🎓 +${per(perH)} XP/h`, pct: null };
+  if (c.kind === 'mine') return { text: `🪙 +${per(perH)}/h`, pct: null };
+  if (c.kind === 'mana') return { text: `💠 +${per(perH * 24)}/j`, pct: null };
   const units = stockUnits(p, now, playerLevel);
-  const rate = unitsPerHour(p, c.garrison.length, playerLevel);
+  const rate = perH;
   const cap = Math.max(c.banked ?? 0, (rate * storageMsOf(c.kind)) / 3600_000);
   const fill = cap > 0 ? Math.min(1, units / cap) : 0;
   switch (c.kind) {
-    case 'mine':
-      return { text: `🪙 ${fmt(units)}`, pct: fill };
-    case 'mana':
-      return { text: `💠 ${fmt(units)}`, pct: fill };
     case 'garden': {
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
@@ -1010,7 +1014,6 @@ export function controlYieldCard(
   const seats = seatsOf(c.kind);
   const [one, many] = WORKER[c.kind];
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
-  const fmt = (x: number) => Math.floor(x + 1e-9).toLocaleString('fr-FR');
   const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
   if (c.kind === 'tower') {
     const cut = CONTROL.towerCut * shareOf(n);
@@ -1026,27 +1029,18 @@ export function controlYieldCard(
       full: false,
     };
   }
+  // 🎓 Plus de réserve (2026-09-29) : l'XP arrive directement aux champions (`AUTO_COLLECT_MS`).
   if (isPerChampKind(c.kind)) {
-    const top = Math.max(0, ...Object.values(champStockBy(p, now, playerLevel)));
     const perH = trainingXpPerHour(playerLevel);
-    const full = (perH * CONTROL.storageMs) / 3600_000;
-    const pct = full > 0 ? Math.min(1, top / full) : 0;
-    const left = pct < 1 && n > 0 ? leftFor(full - top, perH) : null;
     return {
       emoji: '🎓',
-      value: `+${fmt(top)} XP`,
-      what: 'pour le champion le plus avancé',
-      pct,
-      gauge:
-        idle ??
-        (pct >= 1
-          ? 'Réserve pleine — fais-les progresser'
-          : left
-            ? `Réserve pleine dans ${left}`
-            : null),
-      rate: `+${Math.round(perH)} XP/h par champion · ⚒️ +${Math.round(campGearXpPerHour(playerLevel))} XP/h par pièce · ${crew}`,
-      ready: top >= 1,
-      full: pct >= 1,
+      value: `+${Math.round(perH).toLocaleString('fr-FR')} XP/h`,
+      what: 'par champion, versée directement',
+      pct: null,
+      gauge: idle,
+      rate: `⚒️ +${Math.round(campGearXpPerHour(playerLevel))} XP/h par pièce portée · ${crew}`,
+      ready: false,
+      full: false,
     };
   }
   const units = stockUnits(p, now, playerLevel);
@@ -1056,26 +1050,19 @@ export function controlYieldCard(
   switch (c.kind) {
     case 'mine':
     case 'mana': {
+      // ⛏️⛲ Plus de réserve (2026-09-29) : versé directement au joueur.
       const mine = c.kind === 'mine';
-      const unit = mine ? '🪙' : '💠';
-      const left = fill < 1 ? leftFor(cap - units, rate) : null;
       return {
         emoji: mine ? '⛏️' : '⛲',
-        value: `${fmt(units)} ${unit}`,
-        what: mine ? 'd’or en réserve' : 'pierres de mana en réserve',
-        pct: fill,
-        gauge:
-          idle ??
-          (fill >= 1
-            ? 'Réserve pleine : plus rien ne s’ajoute, récolte'
-            : left
-              ? `Réserve pleine dans ${left}`
-              : null),
-        rate: mine
-          ? `+${Math.round(rate).toLocaleString('fr-FR')} 🪙/h · ${crew}`
-          : `+${Math.round(rate * 24)} 💠/jour · ${crew}`,
-        ready: Math.floor(units + 1e-9) > 0,
-        full: fill >= 1,
+        value: mine
+          ? `+${Math.round(rate).toLocaleString('fr-FR')} 🪙/h`
+          : `+${Math.round(rate * 24)} 💠/jour`,
+        what: mine ? 'd’or, versé directement' : 'pierres de mana, versées directement',
+        pct: null,
+        gauge: idle,
+        rate: crew,
+        ready: false,
+        full: false,
       };
     }
     case 'garden': {
@@ -1601,8 +1588,6 @@ export interface ControlRosterRow {
   garrison: string[];
   reinforcing: { id: string; inMs: number }[];
   assault: { ids: string[]; inMs: number } | null;
-  /** Il y a quelque chose à récolter (jamais pour la tour de guet, qui ne stocke rien). */
-  ready: boolean;
   /** Où en est la récolte, pour le bout de ligne (null si le point n'est pas tenu). */
   progress: ControlProgress | null;
 }
@@ -1650,7 +1635,6 @@ export function controlRoster(
               .map((r) => ({ id: r.id, inMs: r.at - now }))
           : [],
         assault,
-        ready: held && collectControl(map, p.id, now, playerLevel).map !== map,
         progress: held ? controlProgress(p, now, playerLevel) : null,
       };
     });
@@ -1664,3 +1648,107 @@ export function controlRoster(
 export const isHeldControl = (p: Pick<Poi, 'control'>): boolean => p.control?.owner === 'player';
 /** 🏳️ La couleur d'un point tenu : ni celle d'un rang, ni l'accent. */
 export const HELD_COLOR = '#9a8f7e';
+
+/**
+ * 🏰 PLUS DE RÉSERVE À RÉCOLTER (2026-09-29, demandé : « faire directement une augmentation de
+ * l'or du joueur quand la garnison en produit, et pareil pour l'XP, les champions en garnison
+ * augmentent directement »). Ce qu'un point tenu produit est VERSÉ tout seul, au fil des
+ * passages du cycle de vie de la carte : l'or et le mana au joueur, l'XP aux champions et à
+ * leurs pièces, les consommables et les runes au stock. Un passage par minute au plus et par
+ * point : l'or n'a pas besoin d'arriver à la seconde, et chaque passage est une écriture.
+ * La tour de guet ne produit rien. ⚠️ Hors de l'app, la production court toujours (24 h au
+ * plus, `CONTROL.storageMs`) et arrive d'un coup à la prochaine ouverture.
+ */
+export const AUTO_COLLECT_MS = 60_000;
+export function autoCollectable(map: ExpeditionMap | null | undefined, now: number): Poi[] {
+  return (map?.pois ?? []).filter((p) => {
+    const c = p.control;
+    return (
+      !!c &&
+      c.owner === 'player' &&
+      c.kind !== 'tower' &&
+      c.collectedAt !== undefined &&
+      now - c.collectedAt >= AUTO_COLLECT_MS
+    );
+  });
+}
+
+/** 🌟 Ce qui VIENT de devenir prêt pour l'ascension : un champion (son ★5 plein) ou une pièce
+ *  (au ★5 de son rang, avec un rang au-dessus). Comparé AVANT / APRÈS : ce qui l'était déjà
+ *  n'est pas annoncé à nouveau. */
+export function newAscensions(
+  before: readonly Adventurer[],
+  after: readonly Adventurer[],
+  stockBefore: readonly AdvGear[],
+  stockAfter: readonly AdvGear[],
+): { champs: Adventurer[]; gear: AdvGear[] } {
+  const was = new Set(before.filter(advAscensionReady).map((a) => a.id));
+  const gearReady = (g: AdvGear) => advGearAtRankCap(g) && advGearNextRank(g) != null;
+  const gearWas = new Set(stockBefore.filter(gearReady).map((g) => g.id));
+  return {
+    champs: after.filter((a) => advAscensionReady(a) && !was.has(a.id)),
+    gear: stockAfter.filter((g) => gearReady(g) && !gearWas.has(g.id)),
+  };
+}
+
+/** 📬 Le rapport d'un lieu fixe qui a produit un consommable ou une rune. ⚠️ DÉJÀ CRÉDITÉ
+ *  (`claimed` absent) : il se lit, il ne se récupère pas. */
+export function controlLootMessage(
+  p: Poi,
+  at: number,
+  supplies: SupplyStock,
+  runes: readonly RuneTier[],
+): ExpeditionMessage | null {
+  const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
+  if (!nSup && !runes.length) return null;
+  const kind = p.control?.kind;
+  const label = kind ? CONTROL_LABEL[kind] : 'Place forte';
+  const what = [
+    nSup ? `${nSup} consommable${nSup > 1 ? 's' : ''}` : '',
+    runes.length ? `${runes.length} rune${runes.length > 1 ? 's' : ''}` : '',
+  ]
+    .filter(Boolean)
+    .join(' et ');
+  return {
+    id: `ctlloot_${p.id}_${at}`,
+    title: `${kind ? CONTROL_EMO[kind] : '🏰'} ${label} : ${what}`,
+    level: p.level,
+    win: true,
+    text: runes.length
+      ? `Ta garnison a produit ${what}, rangé${nSup + runes.length > 1 ? 's' : ''} dans ton stock. Les runes se posent depuis la fiche d’un champion.`
+      : `Ta garnison a produit ${what}, rangé${nSup > 1 ? 's' : ''} dans ton stock.`,
+    gold: 0,
+    energy: 0,
+    key: 0,
+    ...(nSup ? { supplies } : {}),
+    ...(runes.length ? { runes: [...runes] } : {}),
+    resolvedAt: at,
+    read: false,
+  };
+}
+
+/** 📬 Le rapport « prêt pour l'ascension » (champion ou pièce) né au camp d'entraînement. */
+export function ascensionMessage(
+  at: number,
+  found: { champs: readonly Adventurer[]; gear: readonly AdvGear[] },
+  owners: ReadonlyMap<string, string>,
+): ExpeditionMessage | null {
+  const lines = [
+    ...found.champs.map((a) => `🌟 ${a.name}`),
+    ...found.gear.map((g) => `⚒️ ${g.name}${owners.get(g.id) ? ` (${owners.get(g.id)})` : ''}`),
+  ];
+  if (!lines.length) return null;
+  const one = lines.length === 1;
+  return {
+    id: `ascend_${at}_${[...found.champs.map((a) => a.id), ...found.gear.map((g) => g.id)].join('.')}`,
+    title: one ? '🌟 Prêt pour l’ascension' : `🌟 ${lines.length} prêts pour l’ascension`,
+    level: 1,
+    win: true,
+    text: `${lines.join(' · ')} — ${one ? 'il bute' : 'ils butent'} sur le ★5 de ${one ? 'son' : 'leur'} rang : l’ascension se fait au Panthéon.`,
+    gold: 0,
+    energy: 0,
+    key: 0,
+    resolvedAt: at,
+    read: false,
+  };
+}

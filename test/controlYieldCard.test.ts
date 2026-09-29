@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   captureControl,
   controlIdOf,
-  controlManaStock,
-  controlStock,
+  controlGoldPerHour,
+  controlManaPerHour,
   controlYieldCard,
   ensureControls,
   gardenHoursFor,
@@ -44,21 +44,22 @@ describe('🧺 la tuile de production', () => {
     expect(c.full).toBe(true);
     expect(c.gauge).toMatch(/copie suivante/);
   });
-  it('⛏️ la mine : le MÊME or que la récolte, et le temps avant la réserve pleine', () => {
+  it('⛏️ la mine : son débit, versé directement — ni réserve, ni jauge, rien à récolter', () => {
     const p = held('mine');
-    const c = controlYieldCard(p, 6 * H, L)!;
-    expect(c.value).toBe(`${controlStock(p, 6 * H, L).toLocaleString('fr-FR')} 🪙`);
-    expect(c.pct).toBeCloseTo(0.25, 2);
-    expect(c.gauge).toBe(`Réserve pleine dans ${formatDuration(18 * H)}`);
-    const full = controlYieldCard(p, 30 * H, L)!;
-    expect(full.full).toBe(true);
-    expect(full.gauge).toMatch(/Réserve pleine :/);
+    const c = controlYieldCard(p, 30 * H, L)!;
+    expect(c.value).toBe(
+      `+${Math.round(controlGoldPerHour(p, 3, L)).toLocaleString('fr-FR')} 🪙/h`,
+    );
+    expect(c.what).toMatch(/directement/);
+    expect(c.pct).toBeNull();
+    expect(c.ready).toBe(false);
+    expect(c.full).toBe(false);
   });
-  it('⛲ la source : le mana en réserve, le même que la récolte', () => {
+  it('⛲ la source : son débit du jour, versé directement', () => {
     const p = held('mana');
     const c = controlYieldCard(p, 12 * H, L)!;
-    expect(c.value).toBe(`${controlManaStock(p, 12 * H, L)} 💠`);
-    expect(c.ready).toBe(true);
+    expect(c.value).toBe(`+${Math.round(controlManaPerHour(3, L) * 24)} 💠/jour`);
+    expect(c.ready).toBe(false);
   });
   it('🌿 le jardin : le nombre prêt, sinon le % du prochain et son temps', () => {
     const p = held('garden');

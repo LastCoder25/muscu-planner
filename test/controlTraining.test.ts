@@ -81,12 +81,9 @@ describe('🎯 camp d’entraînement : chaque champion a sa barre d’XP', () =
     const r = trainingXpPerHour(30);
     expect(trainingStockBy(p, 60 * H, 30).a0).toBeCloseTo(24 * r, 6);
     expect(trainingStock(p, 18 * H, 30)).toBe(Math.floor(18 * r + 1e-9));
+    // Le bout de ligne dit le débit par champion : l'XP arrive directement (plus de jauge).
     const pr = controlProgress(p, 18 * H, 30)!;
-    expect(pr.text).toBe(`🎓 +${Math.floor(18 * r + 1e-9).toLocaleString('fr-FR')} XP`);
-    expect(pr.pct).toBeCloseTo(18 / 24, 6);
-    // La plus avancée, pas la première de la liste : a0 ramené tôt, a1 reste.
-    let n = captureControl(mapAt(30), CAMP, ['a0', 'a1'], 0, 7);
-    n = releaseFromControl(n, CAMP, ['a0'], 1 * H, 30);
-    expect(controlProgress(pt(n), 10 * H, 30)!.pct).toBeCloseTo(10 / 24, 6);
+    expect(pr.text).toBe(`🎓 +${Math.round(r).toLocaleString('fr-FR')} XP/h`);
+    expect(pr.pct).toBeNull();
   });
 });

@@ -91,7 +91,11 @@ describe('⛲ la Source de mana', () => {
     const p = pt(held(30, 3), SRC);
     const full = Math.floor(controlManaPerHour(3, 30) * 24 + 1e-9);
     expect(controlManaStock(p, 40 * H, 30)).toBe(full);
-    expect(controlProgress(p, 40 * H, 30)).toEqual({ text: `💠 ${full}`, pct: 1 });
+    // Plus de jauge de réserve (versé directement) : le bout de ligne dit le débit du jour.
+    expect(controlProgress(p, 40 * H, 30)).toEqual({
+      text: `💠 +${Math.round(controlManaPerHour(3, 30) * 24)}/j`,
+      pct: null,
+    });
   });
 
   it('les autres points ne rendent jamais de mana', () => {

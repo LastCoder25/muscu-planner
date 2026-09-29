@@ -4,7 +4,9 @@ import {
   captureControl,
   collectControl,
   controlIdOf,
+  controlGoldPerHour,
   controlProgress,
+  trainingXpPerHour,
   controlStock,
   ensureControls,
   runeHoursFor,
@@ -25,20 +27,20 @@ const held = (kind: ControlKind): Poi => {
 };
 
 describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
-  it('⛏️ la mine dit l’or en attente — le MÊME chiffre que la récolte', () => {
+  it('⛏️ la mine dit son DÉBIT : l’or est versé directement, plus de réserve à récolter', () => {
     const p = held('mine');
-    const pr = controlProgress(p, 6 * H, L)!;
-    const gold = controlStock(p, 6 * H, L);
-    expect(gold).toBeGreaterThan(0);
-    expect(pr.text).toBe(`🪙 ${gold.toLocaleString('fr-FR')}`);
-    // 6 h sur une réserve de 24 h.
-    expect(pr.pct).toBeCloseTo(0.25, 2);
-    expect(controlProgress(p, 48 * H, L)!.pct).toBe(1);
+    const perH = Math.round(controlGoldPerHour(p, 3, L));
+    expect(controlProgress(p, 6 * H, L)).toEqual({
+      text: `🪙 +${perH.toLocaleString('fr-FR')}/h`,
+      pct: null,
+    });
   });
 
-  it('🎓 le camp dit l’XP en attente par champion', () => {
+  it('🎓 le camp dit l’XP versée par heure à chaque champion', () => {
     const p = held('training');
-    expect(controlProgress(p, 5 * H, L)!.text).toBe(`🎓 +${trainingStock(p, 5 * H, 30)} XP`);
+    expect(controlProgress(p, 5 * H, L)!.text).toBe(
+      `🎓 +${Math.round(trainingXpPerHour(30))} XP/h`,
+    );
   });
 
   it('📜 le Scriptorium dit le % de la rune ET le temps restant, puis « prête »', () => {
@@ -78,12 +80,8 @@ describe('📊 l’avancement d’une place forte, en bout de ligne', () => {
     });
   });
 
-  it('récolter remet la jauge à zéro, et un point ennemi n’a pas d’avancement', () => {
+  it('un point ennemi n’a pas d’avancement', () => {
     const p = held('mine');
-    const map = createMap(3, 0, L, 1);
-    const withP = { ...map, pois: [...map.pois, p] };
-    const after = collectControl(withP, p.id, 6 * H, L).map.pois.find((q) => q.id === p.id)!;
-    expect(controlProgress(after, 6 * H, L)!.pct).toBe(0);
     expect(controlProgress({ ...p, control: { ...p.control!, owner: 'enemy' } }, 6 * H, L)).toBe(
       null,
     );

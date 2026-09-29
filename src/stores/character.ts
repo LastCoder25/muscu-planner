@@ -297,6 +297,10 @@ import {
   CONTROL_LABEL,
   captureControl,
   collectControl,
+  autoCollectable,
+  newAscensions,
+  controlLootMessage,
+  ascensionMessage,
   controlTravelMult,
   controlDetectBoost,
   trainingRoom,
@@ -4314,8 +4318,12 @@ export const useCharacterStore = defineStore('character', () => {
     }
     const due = dueRetakes(settled, now);
     if (!due.length) {
-      if (settled !== cur.expedition_map && tickMayWrite(cur))
-        await persist(userId, { expedition_map: settled });
+      if (settled !== cur.expedition_map) {
+        if (tickMayWrite(cur)) await persist(userId, { expedition_map: settled });
+        return [];
+      }
+      // 🏰 Rien d'autre à régler : ce que les points tenus ont produit est versé tout seul.
+      await autoCollectControls(userId, now, playerLevel);
       return [];
     }
     let map = settled;
@@ -4555,6 +4563,75 @@ export const useCharacterStore = defineStore('character', () => {
       supplies: c.supplies,
       runes: c.runes,
     };
+  }
+
+  /**
+   * 🏰 LA PRODUCTION DES POINTS TENUS EST VERSÉE TOUTE SEULE (2026-09-29, demandé : plus de
+   * réserve à récolter). Un passage par point et par minute au plus (`autoCollectable`) :
+   * l'or et le mana au joueur, l'XP aux champions de la garnison et à leurs pièces, les
+   * consommables et les runes au stock — en UNE écriture pour tous les points. Silencieux,
+   * sauf ce qui mérite qu'on le sache : un consommable, une rune, ou un champion (ou une de
+   * ses pièces) qui devient prêt pour l'ascension — un bandeau ET un rapport dans la boîte.
+   */
+  async function autoCollectControls(userId: string, now: number, playerLevel: number) {
+    const cur = row.value;
+    if (!cur?.expedition_map) return;
+    const points = autoCollectable(cur.expedition_map, now);
+    if (!points.length) return;
+    const before = advList.value;
+    const stock0 = cur.adv_gear?.stock ?? [];
+    let map = cur.expedition_map;
+    let advs = before;
+    let stock = stock0;
+    let gold = 0;
+    let mana = 0;
+    let supplies: SupplyStock = {};
+    const runes: RuneTier[] = [];
+    const msgs: ExpeditionMessage[] = [];
+    for (const p of points) {
+      const h = harvestControlIn(map, advs, stock, p.id, now, playerLevel);
+      if (h.map === map) continue;
+      map = h.map;
+      advs = h.advs;
+      stock = h.stock;
+      gold += h.gold;
+      mana += h.mana;
+      supplies = addSupplies(supplies, h.supplies);
+      runes.push(...h.runes);
+      const m = controlLootMessage(p, now, h.supplies, h.runes);
+      if (m) msgs.push(m);
+    }
+    if (map === cur.expedition_map) return;
+    const gearNext = trainWornGear(before, advs, stock);
+    const found = newAscensions(before, advs, stock0, gearNext);
+    const owners = new Map<string, string>();
+    for (const [aid, list] of wornGear(advs, gearNext))
+      for (const g of list) owners.set(g.id, advs.find((a) => a.id === aid)?.name ?? '');
+    const asc = ascensionMessage(now, found, owners);
+    if (asc) msgs.push(asc);
+    if (!tickMayWrite(cur)) return;
+    const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
+    await persist(userId, {
+      expedition_map: map,
+      ...(gold > 0 ? { gold: cur.gold + gold } : {}),
+      ...(mana > 0 ? { mana: cur.mana + mana } : {}),
+      ...(nSup ? { supplies: addSupplies(cur.supplies, supplies) } : {}),
+      ...(runes.length ? { runes: addRunes(cur.runes, runes) } : {}),
+      ...(gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {}),
+      ...(advs !== before ? { adventurers: advs } : {}),
+      ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
+    });
+    const fx = useGameFx();
+    for (const m of msgs)
+      fx.celebrate({
+        kind: 'generic',
+        emoji: m.id.startsWith('ascend_') ? '🌟' : m.runes?.length ? '📜' : '🎒',
+        title: m.title ?? 'Place forte',
+        subtitle: m.id.startsWith('ascend_')
+          ? 'L’ascension se fait au Panthéon'
+          : 'Rapport dans ta boîte 📬',
+        quiet: true,
+      });
   }
 
   /** 🏰 Récolte ce qu'un point de contrôle tenu a produit (or, XP, consommables). */

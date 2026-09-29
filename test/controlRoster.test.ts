@@ -68,16 +68,12 @@ describe('🗂️ controlRoster', () => {
     expect(row(controlRoster(m, [], H, L), MINE).status).toBe('imminent');
   });
 
-  it('« à récolter » suit collectControl ; la tour ne stocke rien', () => {
+  it('plus rien « à récolter » : la ligne n’appelle plus pour une réserve (versé directement)', () => {
     let m = captureControl(base(), MINE, ['a', 'b', 'c'], 0, 7);
-    m = setAttack(captureControl(m, TOWER, ['d'], 0, 7), MINE, 9e15);
-    m = setAttack(m, TOWER, 9e15);
-    expect(row(controlRoster(m, [], 0, L), MINE).ready).toBe(false);
-    const rows = controlRoster(m, [], 20 * H, L);
-    expect(row(rows, MINE).ready).toBe(true);
-    expect(row(rows, TOWER).ready).toBe(false);
-    // Un point ennemi n'a jamais rien à récolter.
-    expect(row(controlRoster(base(), [], 20 * H, L), MINE).ready).toBe(false);
+    m = setAttack(m, MINE, 9e15);
+    const r = row(controlRoster(m, [], 20 * H, L), MINE);
+    expect('ready' in r).toBe(false);
+    expect(r.progress!.pct).toBeNull();
   });
 });
 

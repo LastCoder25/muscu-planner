@@ -438,11 +438,12 @@
           @seal="doSeal"
         />
         <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
-             revient. On récolte, on ramène, on renforce. -->
+             revient. On ramène, on renforce ; la production arrive toute seule. -->
         <div v-if="liveControl?.owner === 'player'" class="ctl-panel">
           <!-- 🧺 LA PRODUCTION EN TÊTE (demandé : « l’info de la rune est perdue au milieu de
                tout le détail ») : ce qui attend en gros, la jauge et le TEMPS avant la suite,
-               le débit en petit, et le bouton de récolte juste dessous (`controlYieldCard`). -->
+               le débit en petit (`controlYieldCard`). Plus de bouton de récolte (2026-09-29) : ce qu'il
+               produit est versé tout seul (`autoCollectControls`). -->
           <div
             v-if="yieldCard"
             class="yield-card"
@@ -461,24 +462,7 @@
             <p v-if="yieldCard.gauge" class="yield-gauge">
               {{ yieldCard.full ? '✅' : '⏳' }} {{ yieldCard.gauge }}
             </p>
-            <!-- ⚒️ LA JAUGE DE CHAQUE CHAMPION (demandé) : ils n'arrivent pas en même temps, donc
-                 chacun a sa propre réserve — elle se remplit en 24 h de présence. -->
-            <div v-if="forgeGauges.length" class="forge-gauges">
-              <div v-for="g in forgeGauges" :key="g.id" class="forge-g">
-                <span class="forge-g-name">{{ g.name }}</span>
-                <span class="forge-g-bar"><i :style="{ width: g.pct + '%' }" /></span>
-                <span class="forge-g-val">{{ g.xp }} XP · {{ g.time }}</span>
-              </div>
-            </div>
             <p v-if="yieldCard.rate" class="yield-rate">{{ yieldCard.rate }}</p>
-            <button
-              v-if="liveControl.kind !== 'tower'"
-              class="sh-send yield-take"
-              :disabled="!controlReady || ctlBusy"
-              @click="collectCtl"
-            >
-              {{ controlCollectLabel }}
-            </button>
           </div>
           <!-- 🏰 QUI L'OCCUPE (demandé) : la garnison et les renforts en route, en tuiles.
                Toucher un champion le sélectionne pour le RAMENER. -->
@@ -1242,24 +1226,15 @@ import {
 } from '@/lib/adventurers';
 import { formatDuration, formatDurationMin } from '@/lib/duration';
 import {
-  CONTROL,
   CONTROL_EMO,
   CONTROL_LABEL,
   CONTROL_YIELD,
   controlFreeSeats,
   militiaFreeSeats,
   controlRoster,
-  controlManaStock,
-  controlStock,
   controlTravelMult,
-  gardenStock,
   controlYieldCard,
   trainingCapLevel,
-  trainingStock,
-  champHoursOf,
-  champStockBy,
-  isPerChampKind,
-  runeStock,
   seatsOf,
   attackImminent,
   controlDefenseHold,
@@ -2342,30 +2317,6 @@ async function reinforceCtl() {
 const yieldCard = computed(() =>
   livePoi.value ? controlYieldCard(livePoi.value, now.value, heroLevel.value) : null,
 );
-/** 🎯 Une jauge par champion au camp d'entraînement : ce qu'il attend, et le temps de présence que ça représente — pleine à 24 h.
- *  Un champion ramené garde sa ligne tant que sa réserve n'est pas récoltée. */
-const forgeGauges = computed(() => {
-  const p = livePoi.value;
-  if (!p || !isPerChampKind(p.control?.kind) || p.control.owner !== 'player') return [];
-  const by = champStockBy(p, now.value, heroLevel.value);
-  const names = new Map(char.advList.map((a) => [a.id, a.name]));
-  const full =
-    champHoursOf(p, 1, heroLevel.value) > 0
-      ? CONTROL.storageMs / 3600_000 / champHoursOf(p, 1, heroLevel.value)
-      : 0;
-  return Object.entries(by)
-    .filter(([id, v]) => p.control!.garrison.includes(id) || v >= 1)
-    .map(([id, v]) => {
-      const h = champHoursOf(p, v, heroLevel.value);
-      return {
-        id,
-        name: (p.control!.garrison.includes(id) ? '' : '↩ ') + (names.get(id) ?? '?'),
-        xp: Math.floor(v + 1e-9).toLocaleString('fr-FR'),
-        pct: full > 0 ? Math.min(100, (v / full) * 100) : 0,
-        time: h >= 1 ? `${Math.floor(h)} h` : `${Math.floor(h * 60)} min`,
-      };
-    });
-});
 /** 🎯 Le plafond du camp, dit AVANT qu'on s'étonne que personne ne monte plus. */
 const controlNote = computed(() => {
   if (liveControl.value?.kind === 'scriptorium')
@@ -2375,46 +2326,10 @@ const controlNote = computed(() => {
   if (!cap)
     return '⚠️ Ton héros est Bronze : le camp n’entraîne que sous ton rang — monte d’abord.';
   const r = characterRank(cap);
-  return `Plafond : ${r.emoji} ${r.name} ★5 (le rang juste sous le tien). Leurs pièces portées apprennent deux fois plus vite, même quand le champion a atteint le plafond (jusqu’au ★5 de leur rang et au niveau de leur porteur). Chaque champion a sa jauge, pleine après 24 h sur place ; ↩ = ramené, sa part attend la récolte.`;
+  return `Plafond : ${r.emoji} ${r.name} ★5 (le rang juste sous le tien). Leurs pièces portées apprennent deux fois plus vite, même quand le champion a atteint le plafond (jusqu’au ★5 de leur rang et au niveau de leur porteur). L’XP leur arrive directement, sans rien à récolter ; un rapport te prévient quand l’un d’eux (ou une de ses pièces) est prêt pour l’ascension.`;
 });
-const controlReady = computed(() => {
-  const p = livePoi.value;
-  if (!p) return false;
-  return (
-    controlGold.value > 0 ||
-    trainingStock(p, now.value, heroLevel.value) > 0 ||
-    controlManaStock(p, now.value, heroLevel.value) > 0 ||
-    runeStock(p, now.value) > 0 ||
-    gardenStock(p, now.value) > 0
-  );
-});
-const controlCollectLabel = computed(() => {
-  const p = livePoi.value;
-  const k = liveControl.value?.kind;
-  if (!p || !k) return '';
-  if (k === 'mine') return `Récolter ${controlGold.value.toLocaleString('fr-FR')} 🪙`;
-  if (k === 'training') return 'Faire progresser (chacun sa réserve)';
-  if (k === 'scriptorium') return 'Récupérer la rune';
-  if (k === 'mana') return `Récolter ${controlManaStock(p, now.value, heroLevel.value)} 💠`;
-  return `Cueillir ${gardenStock(p, now.value)} consommable(s)`;
-});
-const controlGold = computed(() =>
-  livePoi.value ? controlStock(livePoi.value, now.value, heroLevel.value) : 0,
-);
+
 const ctlBusy = ref(false);
-async function collectCtl() {
-  const uid = auth.user?.id;
-  const p = livePoi.value;
-  if (!uid || !p || ctlBusy.value) return;
-  ctlBusy.value = true;
-  try {
-    const got = await char.collectControlPoint(uid, p.id, Date.now(), heroLevel.value);
-    // 🧺 Consommables et runes jaillissent du panier (l'or a son propre éclat).
-    if (got) celebrateHarvest(p, got);
-  } finally {
-    ctlBusy.value = false;
-  }
-}
 /** 🧺 L'animation de récolte d'une place forte. Une rune dit où la poser : c'est le seul
  *  moment où on la voit. */
 function celebrateHarvest(
@@ -2447,7 +2362,7 @@ async function recallCtl() {
       .dialog({
         title: 'Rappeler la garnison ?',
         message:
-          'La réserve est récoltée et tes champions rentrent. La mine reste à toi, mais sans défense : l’ennemi la reprendra à sa prochaine attaque, sauf si un renfort arrive avant.',
+          'Tes champions rentrent. La mine reste à toi, mais sans défense : l’ennemi la reprendra à sa prochaine attaque, sauf si un renfort arrive avant.',
         cancel: true,
       })
       .onOk(() => res(true))
@@ -2876,9 +2791,7 @@ const ctlRoster = computed(() =>
 );
 /** Combien de points appellent : attaque imminente, sans défense, butin à récolter. */
 const ctlCalls = computed(
-  () =>
-    ctlRoster.value.filter((r) => r.status === 'imminent' || r.status === 'empty' || r.ready)
-      .length,
+  () => ctlRoster.value.filter((r) => r.status === 'imminent' || r.status === 'empty').length,
 );
 /** ➕ LE RENFORT DIRECT depuis la liste (demandé : « cliquer sur un slot libre et envoyer un
  *  renfort sans aller dans la gestion du lieu »). Un point l'accepte s'il a une place ET

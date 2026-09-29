@@ -2159,9 +2159,9 @@ describe('🔀 FusionPanel', () => {
       ),
     ).toBeNull();
     expect(out).toContain('Places fortes');
-    // Tenue : son avancement en bout de ligne (l’or en attente, et sa jauge).
-    expect(out).toMatch(/cps-yield prog[^>]*><span[^>]*>🪙 [0-9]/);
-    expect(out).toContain('cps-gauge');
+    // Tenue : son débit en bout de ligne (l’or est versé directement, plus de jauge).
+    expect(out).toMatch(/cps-yield prog[^>]*><span[^>]*>🪙 \+[0-9]/);
+    expect(out).not.toContain('cps-gauge');
     // Ennemie : ce qu’elle rapporterait, à la même place.
     expect(out).toContain('XP pour la garnison 🎓');
     expect(out).toContain('1/6 tenus');
