@@ -83,6 +83,9 @@ const ECRANS = [
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
       // 🗂️ La liste des points fixes (icône au-dessus du dézoom).
       { nom: 'points-fixes', clic: '.ctl-list-b', attendu: '.cps-tile' },
+      // 🏠 La base, comme un lieu fixe : toucher la ville montre qui y est. ⚠️ On FERME
+      // d'abord la liste des points fixes (un dialogue), sinon il recouvre la carte.
+      { nom: 'base', clic: '.town', attendu: '.bgs', escape: true },
     ],
   },
   // 🌀 L'accueil du Labyrinthe en tuiles (v0.1305). ⚠️ On ne LANCE pas de palier : ça
@@ -247,6 +250,10 @@ try {
         // ÉCHOUE, comme un onglet : sinon le parcours sauterait la fiche sans le dire.
         for (const geste of e.gestes ?? []) {
           const av = errors.length;
+          if (geste.escape) {
+            await page.keyboard.press('Escape');
+            await page.waitForTimeout(400);
+          }
           const toutes = page.locator(geste.clic);
           if (!(await toutes.count())) {
             fail.push(`${width}px ${e.nom} : « ${geste.nom} » introuvable (${geste.clic})`);

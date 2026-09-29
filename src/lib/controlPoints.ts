@@ -1189,6 +1189,27 @@ export const REINFORCE_BLOCK_LABEL: Record<ReinforceBlock, string> = {
   full: 'plus assez de places sur ce point',
 };
 
+/** 🏠 UN DÉPART DEPUIS LA BASE (2026-09-29, demandé : « la base cliquable pour voir les
+ *  effectifs, et les envoyer ailleurs comme depuis les lieux fixes ») : des champions ET des
+ *  miliciens vers le même point tenu. ⚠️ Les deux se disputent la garnison de 5 : les
+ *  champions prennent leurs places d'abord (celles qui leur sont réservées), les miliciens
+ *  ce qui RESTE ensuite — sinon l'écran proposerait un envoi que le second appel du store
+ *  refuserait, la moitié du renfort déjà partie. Rend `null` si tout peut partir. */
+export function baseSendBlocker(
+  c: ControlState | undefined | null,
+  champs: number,
+  militia: number,
+): ReinforceBlock | null {
+  if (!c || c.owner !== 'player') return 'notHeld';
+  if (champs <= 0 && militia <= 0) return 'empty';
+  if (champs > 0) {
+    const b = reinforceBlocker(c, champs);
+    if (b) return b;
+  }
+  if (militia > 0 && militia > militiaFreeSeats(c) - Math.max(0, champs)) return 'full';
+  return null;
+}
+
 /** 🏰 Des renforts partent : ils prennent leur place tout de suite et rejoignent la
  *  garnison à `at` (leur arrivée). */
 export function reinforceControl(

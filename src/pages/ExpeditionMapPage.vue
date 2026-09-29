@@ -260,8 +260,18 @@
 
           <!-- Ville (centre) : la MÊME enceinte que l'écran Base, en miniature — terre
                battue, octogone, tourelles aux sommets, corps de garde au nord, porte au
-               sud et son chemin. On reconnaît sa base depuis la carte. -->
-          <g class="town">
+               sud et son chemin. On reconnaît sa base depuis la carte.
+               🏠 CLIQUABLE (2026-09-29, demandé) : comme un lieu fixe, elle montre qui s'y
+               trouve (héros, champions, miliciens) et permet de les envoyer ailleurs. -->
+          <g
+            class="town"
+            role="button"
+            tabindex="0"
+            :aria-label="`Ta base — ${baseChamps.length} champion(s) présent(s)`"
+            @click="baseOpen = true"
+            @keydown.enter.prevent="baseOpen = true"
+            @keydown.space.prevent="baseOpen = true"
+          >
             <circle :cx="TOWN.x" :cy="TOWN.y" r="12.5" class="town-earth" />
             <circle :cx="TOWN.x" :cy="TOWN.y" r="10.5" class="town-glow" />
             <path :d="townRoad" class="town-road" />
@@ -294,6 +304,20 @@
               rx="0.8"
               class="town-gate"
             />
+            <!-- ⚔️ Combien de champions attendent à la base : la ville se lit comme un lieu tenu. -->
+            <g v-if="baseChamps.length" class="town-count">
+              <rect
+                :x="TOWN.x + 5.4"
+                :y="TOWN.y - 12.6"
+                width="8.2"
+                height="4.4"
+                rx="2.2"
+                class="town-count-bg"
+              />
+              <text :x="TOWN.x + 9.5" :y="TOWN.y - 9.5" class="town-count-t">
+                ⚔️{{ baseChamps.length }}
+              </text>
+            </g>
           </g>
         </svg>
       </div>
@@ -338,6 +362,19 @@
       :reinforceable="reinforceable"
       @open="openFromList"
       @reinforce="(p) => (quickId = p.id)"
+    />
+    <!-- 🏠 La base, comme un lieu fixe : qui y est, et où les envoyer. -->
+    <BaseGarrisonSheet
+      v-model="baseOpen"
+      :champs="baseChamps"
+      :away="char.advList.length - baseChamps.length"
+      :mil-home="milHome"
+      :hero-home="!heroUnavailable"
+      :hero-status="heroBaseStatus"
+      :targets="baseTargets"
+      :leg-min="baseLegMin"
+      :busy="ctlBusy"
+      @send="sendFromBase"
     />
     <!-- ➕ Renfort direct depuis une case libre de la liste (cf. `QuickReinforceSheet`). -->
     <QuickReinforceSheet
@@ -1152,6 +1189,7 @@ import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
+import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
 import SupplyPicker from '@/components/SupplyPicker.vue';
@@ -3086,6 +3124,81 @@ async function quickMilitia() {
   }
 }
 
+// ── 🏠 LA BASE, COMME UN LIEU FIXE (`BaseGarrisonSheet`) ──
+const baseOpen = ref(false);
+/** Les champions À LA BASE : ceux qui peuvent partir (`freeSorted`, la règle de l'envoi). */
+const baseChamps = computed(() => freeSorted.value);
+const heroBaseStatus = computed(() => {
+  if (heroHealIn.value > 0) return `🤕 à l’infirmerie · encore ${formatDuration(heroHealIn.value)}`;
+  if (char.heroEngaged) return '🧭 en expédition';
+  return '✅ à la base — il part depuis la fiche d’un lieu';
+});
+/** Les lieux fixes TENUS, où l'on peut envoyer du monde. */
+const baseTargets = computed(() =>
+  (char.row?.expedition_map?.pois ?? [])
+    .filter((p) => p.control?.owner === 'player')
+    .map((p) => ({
+      id: p.id,
+      emo: CONTROL_EMO[p.control!.kind],
+      label: CONTROL_LABEL[p.control!.kind],
+      control: p.control!,
+    })),
+);
+/** Le trajet d'un départ de la base — les MÊMES règles que le store : les champions au pas
+ *  d'une équipe sans le héros (`partyLegMin`), les miliciens à celui d'une équipe sans rôle ;
+ *  on annonce le plus lent des deux. */
+function baseLegMin(id: string, champIds: readonly string[], militia: number): number {
+  const p = char.row?.expedition_map?.pois.find((q) => q.id === id);
+  if (!p) return 0;
+  const escort = char.advList.filter((a) => champIds.includes(a.id));
+  const champMin = escort.length
+    ? partyLegMin(p, escort, {
+        hero: false,
+        travelMult: travelMult.value,
+        gearSpeed: advGearRoles(escort, char.advGearStock).speed,
+      })
+    : 0;
+  const milMin = militia > 0 ? caravanLegMin(p, [], 0, travelMult.value) : 0;
+  return Math.max(champMin, milMin);
+}
+async function sendFromBase(id: string, champIds: string[], militia: number) {
+  const uid = auth.user?.id;
+  if (!uid || ctlBusy.value) return;
+  const label = baseTargets.value.find((t) => t.id === id)?.label ?? 'ce lieu';
+  const min = baseLegMin(id, champIds, militia);
+  ctlBusy.value = true;
+  try {
+    // Les champions d'abord : ils prennent leurs places réservées, les miliciens ce qui reste
+    // (`baseSendBlocker`, la règle que l'écran a déjà appliquée).
+    if (champIds.length) {
+      const why = await char.reinforceControlPoint(uid, id, champIds, Date.now());
+      if (why) {
+        $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
+        return;
+      }
+    }
+    if (militia > 0) {
+      const why = await char.sendMilitiaToControl(uid, id, militia, Date.now());
+      if (why) {
+        $q.notify({
+          type: 'warning',
+          message: champIds.length
+            ? `Champions partis, mais pas les miliciens : ${why}`
+            : `Renfort impossible : ${why}`,
+        });
+        return;
+      }
+    }
+    baseOpen.value = false;
+    $q.notify({
+      type: 'positive',
+      message: `⇄ En route vers ${label} — arrivée dans ${formatDurationMin(min)}`,
+    });
+  } finally {
+    ctlBusy.value = false;
+  }
+}
+
 function openFromList(p: Poi) {
   ctlListOpen.value = false;
   panToPoi(p);
@@ -4891,6 +5004,26 @@ onUnmounted(() => {
    le détail : le rempart est donc la surface CLAIRE (pierre) et la cour la surface
    sombre. L'inverse — mur sombre bordé de clair, comme sur l'écran Base où il fait dix
    fois cette taille — se lisait ici comme un trou dans la prairie. */
+.town {
+  cursor: pointer;
+}
+.town:focus-visible {
+  outline: none;
+}
+.town:focus-visible .town-wall {
+  stroke: var(--accent);
+}
+.town-count-bg {
+  fill: #15120e;
+  stroke: var(--d1);
+  stroke-width: 0.4;
+}
+.town-count-t {
+  fill: #f3eee6;
+  font-size: 2.9px;
+  font-weight: 700;
+  text-anchor: middle;
+}
 .town-earth {
   fill: #5a4730;
   opacity: 0.9;

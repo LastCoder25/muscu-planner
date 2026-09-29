@@ -114,6 +114,45 @@ const ROW = {
 };
 
 describe('🚪 montage des écrans (erreurs de setup)', () => {
+  // 🏠 La base comme un lieu fixe : qui y est, et une sélection qui propose les lieux tenus.
+  it('BaseGarrisonSheet montre la base et propose d’envoyer la sélection', async () => {
+    const { default: BaseGarrisonSheet } = await import('@/components/BaseGarrisonSheet.vue');
+    let out = '';
+    const control = {
+      kind: 'mine',
+      owner: 'player',
+      garrison: [],
+      retakes: 0,
+      faction: 'bandits',
+      size: 1,
+    };
+    expect(
+      await mountIt(
+        BaseGarrisonSheet,
+        {
+          modelValue: true,
+          champs: [ROW.adventurers[0]],
+          away: 2,
+          milHome: 2,
+          heroHome: true,
+          heroStatus: '✅ à la base',
+          targets: [{ id: 'm1', emo: '⛏️', label: 'Mine d’or', control }],
+          legMin: () => 42,
+          busy: false,
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+        (host) => host.querySelector<HTMLElement>('.bgs-mil-tile')?.click(),
+      ),
+    ).toBeNull();
+    expect(out).toContain('Ta base');
+    expect(out).toContain('2 ailleurs');
+    expect(out).toContain('Envoyer en renfort');
+    expect(out).toContain('Mine d’or');
+  });
+
   // 👥 v0.1108 : toucher un voyage montre son équipe en tuiles LECTURE SEULE — ni case
   // cochée, ni cible au clavier (elles ne proposent rien).
   it('AdvPickTile en lecture seule ne se présente pas comme un choix', async () => {
