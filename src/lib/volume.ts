@@ -1,7 +1,7 @@
 // volume.ts — répartition des séries par groupe musculaire (pur).
 // Pour une séance planifiée (prévu) et pour un bilan (prévu vs réalisé).
 import type { Session, SessionLog, LoggedExercise } from './types';
-import { legSets, setOrigin, type ComboChallenge } from './combo';
+import { legSets, setOrigin, setWork, type ComboChallenge } from './combo';
 import type { Challenge } from './challenges';
 import { isCardioChallengeExercise } from '@/data/cardio';
 import { localDayIso } from './localDay';
@@ -137,10 +137,12 @@ export function comboLogEntries(combos: ComboChallenge[]): LogEntry[] {
           };
           exos.set(o.exercise_id, ex);
         }
+        // Ce qui a VRAIMENT été fait (une série convertie à la bascule garde ses valeurs).
+        const w = setWork(leg, s);
         ex.performed.push({
           set: ex.performed.length + 1,
-          load_kg: s.weight ?? 0,
-          reps: s.reps ?? 0,
+          load_kg: w.weight ?? 0,
+          reps: w.reps ?? 0,
           difficulty: 2,
         });
       }

@@ -10,6 +10,7 @@ import {
   removeSetAt,
   updateSetAt,
   transferComboLeg,
+  type ComboTransferPlan,
   type ComboTransferTarget,
   type ComboChallenge,
   type ComboLeg,
@@ -233,10 +234,15 @@ export const useComboStore = defineStore('combo', () => {
    *  Le refus vit dans la lib (comboTransferBlocker) et se rejoue ici : l'écran peut ne
    *  pas proposer l'impossible, il ne peut pas le garantir. Le statut se recalcule (la
    *  cible peut repasser sous son objectif, ou l'atteindre). Lève si c'est refusé. */
-  async function transferLeg(id: string, fromId: string, to: ComboTransferTarget) {
+  async function transferLeg(
+    id: string,
+    fromId: string,
+    to: ComboTransferTarget,
+    plan?: ComboTransferPlan,
+  ) {
     const c = list.value.find((x) => x.id === id);
     if (!c) return;
-    const legs = transferComboLeg(c, fromId, to);
+    const legs = transferComboLeg(c, fromId, to, plan);
     const next = { ...c, legs };
     refreshStatus(next);
     await persistLegs(id, legs, next.status);

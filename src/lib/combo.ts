@@ -44,6 +44,18 @@ export interface ComboSetOrigin {
   /** Charge mémorisée de l'exo d'origine : une série sans charge propre la reprenait pour
    *  le tonnage (`s.weight ?? leg.weight_kg`). La garder rend l'XP identique au bit près. */
   weight_kg?: number | null;
+  /** Ce qui a VRAIMENT été fait, quand la série a été convertie à la bascule (reps, charge
+   *  et assistance de l'exo d'origine). La série, elle, porte les valeurs de l'exo cible :
+   *  c'est ce qui compte pour l'avancement et ce qui s'affiche dans son suivi (12 dips
+   *  deviennent 5 reps de développé couché). Absente = série basculée avant la conversion
+   *  (v0.1386) : ses valeurs sont alors celles de l'exo d'origine. */
+  done?: ComboSetWork;
+}
+/** Reps (ou secondes), charge et assistance d'une série. */
+export interface ComboSetWork {
+  reps: number;
+  weight?: number | null;
+  assisted?: boolean;
 }
 // Ancien format (reps cumulées/jour) — lu pour migration des défis existants.
 interface ComboLegEntry {
@@ -142,9 +154,42 @@ export function setOrigin(leg: ComboLeg, s: ComboSet): ComboSetOrigin {
     }
   );
 }
+/** Ce qui a VRAIMENT été fait pendant une série : ses valeurs, ou celles d'origine si elle
+ *  a été convertie à la bascule. Source unique de l'XP, du tonnage, des statistiques et de
+ *  l'agenda — l'avancement, lui, lit la série telle qu'elle est posée sur l'exo. */
+export function setWork(leg: ComboLeg, s: ComboSet): ComboSetWork {
+  return setOrigin(leg, s).done ?? s;
+}
 /** Charge d'une série pour le tonnage (repli sur la charge mémorisée de SON exo). */
 export function setLoad(leg: ComboLeg, s: ComboSet): number {
-  return s.weight ?? setOrigin(leg, s).weight_kg ?? 0;
+  return setWork(leg, s).weight ?? setOrigin(leg, s).weight_kg ?? 0;
+}
+/** XP « reps » d'une série (pré-XP_MULT), sur ce qui a VRAIMENT été fait : reps × poids de
+ *  rep de son exo d'origine × assistance. */
+export function setRepXp(leg: ComboLeg, s: ComboSet): number {
+  const w = setWork(leg, s);
+  return (w.reps || 0) * REP_XP * setOrigin(leg, s).rep_weight * assistMult(w.assisted);
+}
+/** Tonnage d'une série (reps × charge), sur ce qui a vraiment été fait. */
+export function setTonnage(leg: ComboLeg, s: ComboSet): number {
+  return (setWork(leg, s).reps || 0) * setLoad(leg, s);
+}
+/** Part de travail réel par unité comptée : 12 dips posés comme 5 reps de développé couché
+ *  valent 12/5. 1 pour une série qui n'a pas été convertie. */
+function workRatio(leg: ComboLeg, s: ComboSet): number {
+  const w = setWork(leg, s).reps || 0;
+  return s.reps > 0 ? w / s.reps : 1;
+}
+/** « ↪ Dips · 12 reps · 20 kg » : l'exo et les vraies valeurs d'une série basculée.
+ *  `null` pour une série faite sur l'exo qui la porte. */
+export function setOriginLabel(leg: ComboLeg, s: ComboSet): string | null {
+  if (!s.origin) return null;
+  const w = setWork(leg, s);
+  const unit = legMode(leg) === 'time' ? 's' : 'reps';
+  let t = `${s.origin.exercise_name} · ${w.reps} ${unit}`;
+  if (w.weight) t += ` · ${w.weight} kg`;
+  if (w.assisted) t += ' · assisté';
+  return t;
 }
 /** Séries faites sur l'exo lui-même (sans celles basculées d'un autre) : c'est elles qui
  *  préremplissent la série suivante et nourrissent le conseil de charge — 40 kg de
@@ -473,11 +518,7 @@ export function comboOverachievement(c: ComboChallenge): {
     // « done » dans l'unité du mode : nb de séries ('sets') ou total de reps ('reps').
     const done = legDone(l);
     if (l.target > 0 && done > l.target) {
-      const legRepXp = sets.reduce(
-        (s, st) =>
-          s + (st.reps || 0) * REP_XP * setOrigin(l, st).rep_weight * assistMult(st.assisted),
-        0,
-      );
+      const legRepXp = sets.reduce((s, st) => s + setRepXp(l, st), 0);
       extraXp += (legRepXp * (done - l.target)) / done; // part de l'effort au-delà de l'objectif
       legsOver++;
     }
@@ -777,13 +818,15 @@ function legPlannedEffort(l: ComboLeg): number {
     for (const s of sets) {
       if (left <= 0) break;
       const take = Math.min(s.reps || 0, left);
-      effort += take * w(s);
+      // Une série convertie compte dans l'unité de la cible, mais son effort est celui qu'elle
+      // a vraiment coûté (12 dips posés comme 5 reps valent 12 dips).
+      effort += take * workRatio(l, s) * w(s);
       left -= take;
     }
     return effort;
   }
   const counted = l.target > 0 ? sets.slice(0, l.target) : sets;
-  const done = counted.reduce((a, s) => a + (s.reps || COMBO_PLAN_REPS) * w(s), 0);
+  const done = counted.reduce((a, s) => a + (setWork(l, s).reps || COMBO_PLAN_REPS) * w(s), 0);
   const missing = Math.max(0, l.target - counted.length);
   return done + missing * COMBO_PLAN_REPS * (l.rep_weight ?? 1);
 }
@@ -851,16 +894,27 @@ export const COMBO_SET_MIN = 3.5;
 export function comboCountedSets(c: ComboChallenge): number {
   let n = 0;
   for (const l of c.legs) {
-    const byCount = legMode(l) !== 'sets'; // reps ou durée → convertit en « séries » équivalentes
-    const done = byCount ? Math.ceil(legReps(l) / COMBO_PLAN_REPS) : legSetsDone(l);
+    if (legMode(l) !== 'sets') {
+      // Reps ou durée → « séries » équivalentes, plafonnées au palier maximal. Le plafond se
+      // lit dans l'unité de la cible, le crédit sur le travail réel (série convertie comprise).
+      let left = l.target > 0 ? l.target * COMBO_TIER_MAX : Infinity;
+      let work = 0;
+      for (const s of legSets(l)) {
+        if (left <= 0) break;
+        const take = Math.min(s.reps || 0, left);
+        work += take * workRatio(l, s);
+        left -= take;
+      }
+      n += Math.ceil(work / COMBO_PLAN_REPS - 1e-9);
+      continue;
+    }
+    const done = legSetsDone(l);
     // Plafond du crédit-durée = palier MAXIMAL (120 %), et non plus l'objectif. Une
     // série faite en plus est du VRAI travail (même exécution, même repos) : la couper
     // du terme de durée la ramenait à ~1/6 d'une série normale. Le garde-fou contre le
     // farm de séries vides demeure — il se déplace au sommet de la zone récompensée,
     // au-delà de laquelle seules les reps brutes comptent encore.
-    const cap = byCount
-      ? Math.ceil((l.target * COMBO_TIER_MAX) / COMBO_PLAN_REPS)
-      : legTierMarks(l).max;
+    const cap = legTierMarks(l).max;
     n += l.target > 0 ? Math.min(done, cap) : done;
   }
   return n;
@@ -933,8 +987,8 @@ export function comboXpBreakdown(c: ComboChallenge): {
   let tonnage = 0;
   for (const l of c.legs) {
     for (const s of legSets(l)) {
-      reps += (s.reps || 0) * REP_XP * setOrigin(l, s).rep_weight * assistMult(s.assisted);
-      tonnage += (s.reps || 0) * setLoad(l, s);
+      reps += setRepXp(l, s);
+      tonnage += setTonnage(l, s);
     }
   }
   // Prime à paliers, dont on ISOLE le premium du palier maximal (part au-delà du
@@ -963,8 +1017,8 @@ export function comboXpPoints(combos: ComboChallenge[]): number {
     let tonnage = 0;
     for (const l of c.legs) {
       for (const s of legSets(l)) {
-        reps += (s.reps || 0) * REP_XP * setOrigin(l, s).rep_weight * assistMult(s.assisted);
-        tonnage += (s.reps || 0) * setLoad(l, s);
+        reps += setRepXp(l, s);
+        tonnage += setTonnage(l, s);
       }
     }
     const duration = comboImpliedMinutes(c) * MUSCU_MIN_XP;
@@ -1408,13 +1462,17 @@ export function comboExportText(c: ComboChallenge, today: string): string {
       const detail =
         legMode(leg) === 'time'
           ? sets
-              .map((s) => (s.origin ? `${s.reps}s (${s.origin.exercise_name})` : `${s.reps}s`))
+              .map((s) => {
+                const o = setOriginLabel(leg, s);
+                return o ? `${s.reps}s (↪ ${o})` : `${s.reps}s`;
+              })
               .join(', ')
           : sets
               .map((s) => {
                 const b = s.weight ? `${s.reps}×${s.weight}kg` : `${s.reps}`;
                 const a = s.assisted ? `${b}·a` : b;
-                return s.origin ? `${a} (${s.origin.exercise_name})` : a;
+                const o = setOriginLabel(leg, s);
+                return o ? `${a} (↪ ${o})` : a;
               })
               .join(', ');
       L.push(`   séries : ${detail}`);
@@ -1621,19 +1679,97 @@ function chrono(sets: ComboSet[]): ComboSet[] {
   );
 }
 
+/** 🔁 CE QUE DEVIENNENT LES SÉRIES À LA BASCULE (demandé par l'utilisateur). 12 dips ne font
+ *  pas 12 reps de développé couché : chaque série basculée prend des valeurs de l'exo cible,
+ *  que le joueur corrige avant de valider, et garde ses vraies valeurs dans son origine
+ *  (`done`) pour l'XP, le tonnage et les statistiques.
+ *
+ *  Valeurs proposées : celles de la DERNIÈRE série de la cible (reps, charge, assistance),
+ *  sinon le milieu de sa fourchette conseillée, sans charge ni assistance. En mode reps ou
+ *  durée, l'objectif suit la même règle : 60 reps à ~10 par série font 6 séries, donc
+ *  6 × les reps proposées. En mode séries, l'objectif ne change pas (une série reste une
+ *  série). Chaque valeur reste corrigeable. */
+export interface ComboTransferPlan {
+  /** Une entrée par série de l'exo quitté, dans l'ordre de `legSets`. */
+  sets: ComboSetWork[];
+  /** Objectif ajouté à la cible, dans son unité. */
+  target: number;
+}
+
+const midOf = (min: number, max: number) => Math.max(1, Math.round((min + max) / 2));
+
+/** Les valeurs proposées à la bascule (cf. `ComboTransferPlan`). Lève si c'est bloqué. */
+export function comboTransferPlan(
+  c: ComboChallenge,
+  fromId: string,
+  to: ComboTransferTarget,
+  objective?: Objective | null,
+): ComboTransferPlan {
+  const block = comboTransferBlocker(c, fromId, to);
+  if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
+  const from = c.legs.find((l) => l.exercise_id === fromId)!;
+  let base: ComboSetWork;
+  if ('leg' in to) {
+    const dest = c.legs.find((l) => l.exercise_id === to.leg)!;
+    const last = legSets(dest).at(-1);
+    const range = legRepRange(dest, objective);
+    base = last
+      ? {
+          reps: last.reps,
+          weight: last.weight ?? null,
+          assisted: !!dest.assistable && !!last.assisted,
+        }
+      : { reps: midOf(range.min, range.max), weight: dest.weight_kg ?? null, assisted: false };
+  } else {
+    base = { reps: midOf(to.exercise.rep_min, to.exercise.rep_max), weight: null, assisted: false };
+  }
+  let target = from.target;
+  if (legMode(from) !== 'sets' && from.target > 0) {
+    const r = legRepRange(from, objective);
+    target = Math.max(1, Math.round((from.target / midOf(r.min, r.max)) * base.reps));
+  }
+  return { sets: legSets(from).map(() => ({ ...base })), target };
+}
+
 /** Les exos du défi après la bascule. L'exo quitté disparaît ; la cible porte son objectif
- *  en plus du sien et toutes ses séries, marquées de leur origine. Lève si c'est bloqué. */
+ *  en plus du sien et toutes ses séries, converties selon `plan` (par défaut les valeurs
+ *  proposées) et marquées de leur origine. Lève si c'est bloqué. */
 export function transferComboLeg(
   c: ComboChallenge,
   fromId: string,
   to: ComboTransferTarget,
+  plan: ComboTransferPlan = comboTransferPlan(c, fromId, to),
 ): ComboLeg[] {
   const block = comboTransferBlocker(c, fromId, to);
   if (block) throw new Error(COMBO_TRANSFER_BLOCK_LABEL[block]);
   const from = c.legs.find((l) => l.exercise_id === fromId)!;
-  // Une série déjà basculée (bascule en chaîne) garde sa VRAIE origine : setOrigin la rend
-  // telle quelle au lieu de l'exo quitté.
-  const moved = legSets(from).map((s) => ({ ...s, origin: setOrigin(from, s) }));
+  const fromSets = legSets(from);
+  if (plan.sets.length !== fromSets.length)
+    throw new Error('Les séries à basculer ne correspondent plus : rouvre le changement d’exo.');
+  const assistable =
+    'leg' in to
+      ? !!c.legs.find((l) => l.exercise_id === to.leg)?.assistable
+      : to.exercise.assistable;
+  const moved = fromSets.map((s, i): ComboSet => {
+    // Une série déjà basculée (bascule en chaîne) garde sa VRAIE origine et ses vraies
+    // valeurs ; une série faite ici les fige avant d'être convertie.
+    const o = setOrigin(from, s);
+    const done: ComboSetWork = o.done ?? {
+      reps: s.reps,
+      weight: s.weight ?? null,
+      assisted: !!s.assisted,
+    };
+    const p = plan.sets[i]!;
+    const weight = p.weight != null && Number.isFinite(p.weight) && p.weight > 0 ? p.weight : null;
+    return {
+      ...s,
+      reps: Math.max(0, Math.round(p.reps || 0)),
+      weight,
+      assisted: assistable && !!p.assisted,
+      origin: { ...o, done },
+    };
+  });
+  const addTarget = Math.max(0, Math.round(plan.target));
 
   if ('leg' in to) {
     return c.legs
@@ -1642,7 +1778,7 @@ export function transferComboLeg(
         if (l.exercise_id !== to.leg) return l;
         const next: ComboLeg = {
           ...l,
-          target: l.target + from.target,
+          target: l.target + addTarget,
           sets: chrono([...legSets(l), ...moved]),
         };
         delete next.progress; // ancien format : déjà converti par legSets
@@ -1659,7 +1795,7 @@ export function transferComboLeg(
     exercise_name: e.exercise_name,
     muscle_primary: e.muscle_primary ?? null,
     rep_weight: e.rep_weight,
-    target: from.target,
+    target: addTarget,
     count_mode: from.count_mode ?? 'sets',
     weight_kg: null,
     assistable: e.assistable,

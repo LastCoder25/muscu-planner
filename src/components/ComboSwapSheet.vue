@@ -8,82 +8,210 @@
         <div class="sw-title">⇄ Changer « {{ leg.exercise_name }} »</div>
         <q-btn flat round dense icon="close" aria-label="Fermer" @click="close" />
       </div>
-      <p class="sw-note">
-        <template v-if="doneCount">
-          Tes {{ doneCount }} {{ unitWord }} déjà faites et ton objectif de {{ leg.target }}
-          passent sur l'exo choisi. Elles gardent la valeur de l'exo sur lequel tu les as faites.
-        </template>
-        <template v-else>
-          Ton objectif de {{ leg.target }} {{ unitWord }} passe sur l'exo choisi.
-        </template>
-      </p>
-
-      <div v-if="inCombo.length" class="sw-grp">Déjà dans ton défi</div>
-      <div v-if="inCombo.length" class="sw-grid">
-        <button
-          v-for="l in inCombo"
-          :key="l.exercise_id"
-          type="button"
-          class="sw-tile"
-          :disabled="busy"
-          @click="pick({ leg: l.exercise_id }, l.exercise_name)"
-        >
-          <div class="sw-media">
-            <ExerciseAnim
-              v-if="hasAnim(l.exercise_id)"
-              :exercise-id="l.exercise_id"
-              :size="72"
-              :title="l.exercise_name"
-            />
-            <img
-              v-else-if="exImg(l.exercise_id)"
-              :src="exImg(l.exercise_id)"
-              :alt="l.exercise_name"
-              loading="lazy"
-            />
-            <q-icon v-else name="fitness_center" size="24px" />
+      <!-- 🔁 Correction des séries basculées : chacune prend des valeurs de l'exo cible
+           (dernière série, sinon milieu de sa fourchette), corrigeables une par une. -->
+      <template v-if="pending && plan">
+        <p class="sw-note">
+          Vers <b>{{ pending.name }}</b
+          >. Chaque série prend des valeurs de cet exo : corrige-les si besoin. Ton XP reste celle
+          de ce que tu as vraiment fait.
+        </p>
+        <div v-if="plan.sets.length > 1" class="sw-row sw-all">
+          <div class="sw-row-from">Toutes les séries</div>
+          <div class="sw-row-ctl">
+            <div class="sw-step">
+              <q-btn
+                flat
+                round
+                dense
+                icon="remove"
+                aria-label="Moins"
+                @click="stepAll('reps', -1)"
+              />
+              <span class="sw-val">{{ unitShort }}</span>
+              <q-btn flat round dense icon="add" aria-label="Plus" @click="stepAll('reps', 1)" />
+            </div>
+            <div v-if="!isTime" class="sw-step">
+              <q-btn
+                flat
+                round
+                dense
+                icon="remove"
+                aria-label="Moins lourd"
+                @click="stepAll('weight', -1)"
+              />
+              <span class="sw-val">kg</span>
+              <q-btn
+                flat
+                round
+                dense
+                icon="add"
+                aria-label="Plus lourd"
+                @click="stepAll('weight', 1)"
+              />
+            </div>
           </div>
-          <div class="sw-name">{{ l.exercise_name }}</div>
-          <div v-if="groupOf(l.slot)" class="sw-grp-tag">{{ groupOf(l.slot) }}</div>
-          <div class="sw-sub">
-            {{ legDone(l) }}/{{ l.target }} → {{ legDone(l) + doneCount }}/{{
-              l.target + leg.target
-            }}
+        </div>
+        <div v-for="(p, i) in plan.sets" :key="i" class="sw-row">
+          <div class="sw-row-from">
+            <span class="sw-row-n">{{ i + 1 }}</span>
+            {{ fromLabel(i) }}
           </div>
-        </button>
-      </div>
-
-      <div class="sw-grp">
-        {{ inCombo.length ? 'Ou un autre exo du groupe' : 'Un autre exo du groupe' }}
-      </div>
-      <div v-if="loading" class="sw-empty">Chargement…</div>
-      <div v-else-if="!fresh.length" class="sw-empty">
-        Aucun autre exo de ce groupe n'est disponible (déjà pris par un défi, ou compté autrement).
-      </div>
-      <div v-else class="sw-grid">
-        <button
-          v-for="e in fresh"
-          :key="e.id"
-          type="button"
-          class="sw-tile"
-          :disabled="busy"
-          @click="pick({ exercise: newExercise(e) }, e.name)"
-        >
-          <div class="sw-media">
-            <ExerciseAnim v-if="hasAnim(e.id)" :exercise-id="e.id" :size="72" :title="e.name" />
-            <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
-            <q-icon v-else name="fitness_center" size="24px" />
-            <span
-              v-if="isNoEquipmentExercise(e.equipment_required, e.tags)"
-              class="sw-bw"
-              title="Poids du corps (aucun matériel)"
-              >🤸</span
+          <div class="sw-row-ctl">
+            <div class="sw-step">
+              <q-btn flat round dense icon="remove" aria-label="Moins" @click="stepReps(p, -1)" />
+              <span class="sw-val"
+                ><b>{{ p.reps }}</b
+                ><small>{{ unitShort }}</small></span
+              >
+              <q-btn flat round dense icon="add" aria-label="Plus" @click="stepReps(p, 1)" />
+            </div>
+            <div v-if="!isTime" class="sw-step">
+              <q-btn
+                flat
+                round
+                dense
+                icon="remove"
+                aria-label="Moins lourd"
+                @click="stepWeight(p, -1)"
+              />
+              <span class="sw-val"
+                ><b>{{ p.weight ? fmtKg(p.weight) : '—' }}</b
+                ><small>kg</small></span
+              >
+              <q-btn
+                flat
+                round
+                dense
+                icon="add"
+                aria-label="Plus lourd"
+                @click="stepWeight(p, 1)"
+              />
+            </div>
+            <button
+              v-if="destAssistable"
+              type="button"
+              class="sw-asst"
+              :class="{ on: p.assisted }"
+              :aria-pressed="!!p.assisted"
+              @click="p.assisted = !p.assisted"
             >
+              assisté
+            </button>
           </div>
-          <div class="sw-name">{{ e.name }}</div>
-          <div v-if="groupOf(slotOf(e))" class="sw-grp-tag">{{ groupOf(slotOf(e)) }}</div>
-        </button>
-      </div>
+        </div>
+        <div v-if="!isSets" class="sw-row sw-target">
+          <div class="sw-row-from">
+            Objectif de {{ leg.target }} {{ unitWord }} de {{ leg.exercise_name }} → à ajouter sur
+            {{ pending.name }}
+          </div>
+          <div class="sw-row-ctl">
+            <div class="sw-step">
+              <q-btn flat round dense icon="remove" aria-label="Moins" @click="stepTarget(-1)" />
+              <span class="sw-val"
+                ><b>{{ plan.target }}</b
+                ><small>{{ unitShort }}</small></span
+              >
+              <q-btn flat round dense icon="add" aria-label="Plus" @click="stepTarget(1)" />
+            </div>
+          </div>
+        </div>
+        <p v-if="pending.warn" class="sw-note sw-warn">{{ pending.warn }}</p>
+        <p class="sw-note">
+          {{ leg.exercise_name }} quitte le défi. On ne peut pas revenir en arrière.
+        </p>
+        <div class="sw-actions">
+          <q-btn flat no-caps label="‹ Retour" :disabled="busy" @click="cancelPending" />
+          <q-btn
+            unelevated
+            no-caps
+            color="primary"
+            text-color="dark"
+            label="Changer"
+            :loading="busy"
+            @click="confirmPending"
+          />
+        </div>
+      </template>
+      <template v-else>
+        <p class="sw-note">
+          <template v-if="doneCount">
+            Tes {{ doneCount }} {{ unitWord }} déjà faites et ton objectif de {{ leg.target }}
+            passent sur l'exo choisi. Elles gardent la valeur de l'exo sur lequel tu les as faites.
+          </template>
+          <template v-else>
+            Ton objectif de {{ leg.target }} {{ unitWord }} passe sur l'exo choisi.
+          </template>
+        </p>
+
+        <div v-if="inCombo.length" class="sw-grp">Déjà dans ton défi</div>
+        <div v-if="inCombo.length" class="sw-grid">
+          <button
+            v-for="l in inCombo"
+            :key="l.exercise_id"
+            type="button"
+            class="sw-tile"
+            :disabled="busy"
+            @click="pick({ leg: l.exercise_id }, l.exercise_name)"
+          >
+            <div class="sw-media">
+              <ExerciseAnim
+                v-if="hasAnim(l.exercise_id)"
+                :exercise-id="l.exercise_id"
+                :size="72"
+                :title="l.exercise_name"
+              />
+              <img
+                v-else-if="exImg(l.exercise_id)"
+                :src="exImg(l.exercise_id)"
+                :alt="l.exercise_name"
+                loading="lazy"
+              />
+              <q-icon v-else name="fitness_center" size="24px" />
+            </div>
+            <div class="sw-name">{{ l.exercise_name }}</div>
+            <div v-if="groupOf(l.slot)" class="sw-grp-tag">{{ groupOf(l.slot) }}</div>
+            <div class="sw-sub">
+              {{ legDone(l) }}/{{ l.target }} → {{ legDone(l) + doneCount }}/{{
+                l.target + leg.target
+              }}
+            </div>
+          </button>
+        </div>
+
+        <div class="sw-grp">
+          {{ inCombo.length ? 'Ou un autre exo du groupe' : 'Un autre exo du groupe' }}
+        </div>
+        <div v-if="loading" class="sw-empty">Chargement…</div>
+        <div v-else-if="!fresh.length" class="sw-empty">
+          Aucun autre exo de ce groupe n'est disponible (déjà pris par un défi, ou compté
+          autrement).
+        </div>
+        <div v-else class="sw-grid">
+          <button
+            v-for="e in fresh"
+            :key="e.id"
+            type="button"
+            class="sw-tile"
+            :disabled="busy"
+            @click="pick({ exercise: newExercise(e) }, e.name)"
+          >
+            <div class="sw-media">
+              <ExerciseAnim v-if="hasAnim(e.id)" :exercise-id="e.id" :size="72" :title="e.name" />
+              <img v-else-if="exImg(e.id)" :src="exImg(e.id)" :alt="e.name" loading="lazy" />
+              <q-icon v-else name="fitness_center" size="24px" />
+              <span
+                v-if="isNoEquipmentExercise(e.equipment_required, e.tags)"
+                class="sw-bw"
+                title="Poids du corps (aucun matériel)"
+                >🤸</span
+              >
+            </div>
+            <div class="sw-name">{{ e.name }}</div>
+            <div v-if="groupOf(slotOf(e))" class="sw-grp-tag">{{ groupOf(slotOf(e)) }}</div>
+          </button>
+        </div>
+      </template>
     </q-card>
   </q-dialog>
 </template>
@@ -97,13 +225,17 @@ import { comboSlot } from '@/data/combo';
 import { variantFamilyKey } from '@/data/combo';
 import {
   comboTransferBlocker,
+  comboTransferPlan,
   legDone,
+  legSets,
   legMode,
   COMBO_TRANSFER_BLOCK_LABEL,
   transferSlotFor,
   type ComboChallenge,
   type ComboLeg,
   type ComboNewExercise,
+  type ComboSetWork,
+  type ComboTransferPlan,
   type ComboTransferTarget,
 } from '@/lib/combo';
 import { repRangeForExercise, DEFAULT_OBJECTIVE } from '@/lib/repScheme';
@@ -242,35 +374,88 @@ function pick(to: ComboTransferTarget, name: string) {
     $q.notify({ type: 'warning', message: COMBO_TRANSFER_BLOCK_LABEL[block] });
     return;
   }
-  const n = doneCount.value;
-  let msg = n
-    ? `Tes ${n} ${unitWord.value} de ${l.exercise_name} passent sur ${name}, avec ton objectif de ${l.target}.`
-    : `Ton objectif de ${l.target} ${unitWord.value} passe sur ${name}.`;
-  if ('leg' in to) {
-    const d = cc.legs.find((x) => x.exercise_id === to.leg)!;
-    msg += ` ${name} : ${legDone(d)}/${d.target} → ${legDone(d) + n}/${d.target + l.target}.`;
-  }
   // Squat ↔ Charnière : le volume change de muscle, on le dit avant de valider.
   const toSlot =
     'leg' in to ? cc.legs.find((x) => x.exercise_id === to.leg)?.slot : slotOf(to.exercise);
   const fromG = comboSlot(l.slot);
   const toG = toSlot ? comboSlot(toSlot) : undefined;
-  if (fromG && toG && fromG.key !== toG.key)
-    msg += ` Le volume passe du groupe ${fromG.label} (${fromG.muscles.join(', ')}) au groupe ${toG.label} (${toG.muscles.join(', ')}).`;
-  msg += ` ${l.exercise_name} quitte le défi. On ne peut pas revenir en arrière.`;
-  $q.dialog({
-    title: `⇄ ${l.exercise_name} → ${name}`,
-    message: msg,
-    cancel: { label: 'Annuler', flat: true, noCaps: true },
-    ok: { label: 'Changer', color: 'primary', textColor: 'dark', noCaps: true, unelevated: true },
-    persistent: false,
-  }).onOk(() => void apply(cc.id, l.exercise_id, to, name));
+  const warn =
+    fromG && toG && fromG.key !== toG.key
+      ? `Le volume passe du groupe ${fromG.label} (${fromG.muscles.join(', ')}) au groupe ${toG.label} (${toG.muscles.join(', ')}).`
+      : null;
+  plan.value = comboTransferPlan(cc, l.exercise_id, to, profile.profile?.objective ?? null);
+  pending.value = { to, name, warn };
 }
 
-async function apply(id: string, fromId: string, to: ComboTransferTarget, name: string) {
+// ── Correction avant bascule ──────────────────────────────────────────────
+const pending = ref<{ to: ComboTransferTarget; name: string; warn: string | null } | null>(null);
+const plan = ref<ComboTransferPlan | null>(null);
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (!open) cancelPending();
+  },
+);
+const isTime = computed(() => !!leg.value && legMode(leg.value) === 'time');
+const isSets = computed(() => !leg.value || legMode(leg.value) === 'sets');
+const unitShort = computed(() => (isTime.value ? 's' : 'reps'));
+const destAssistable = computed(() => {
+  const p = pending.value;
+  if (!p) return false;
+  if ('leg' in p.to) {
+    const id = p.to.leg;
+    return !!c.value?.legs.find((x) => x.exercise_id === id)?.assistable;
+  }
+  return p.to.exercise.assistable;
+});
+const KG_STEP = 2.5;
+const fmtKg = (w: number) => String(Math.round(w * 10) / 10).replace('.', ',');
+function stepReps(p: ComboSetWork, d: number) {
+  p.reps = Math.max(1, (p.reps || 0) + d * (isTime.value ? 5 : 1));
+}
+function stepWeight(p: ComboSetWork, d: number) {
+  const w = Math.max(0, (p.weight ?? 0) + d * KG_STEP);
+  p.weight = w > 0 ? w : null;
+}
+function stepAll(what: 'reps' | 'weight', d: number) {
+  for (const p of plan.value?.sets ?? []) (what === 'reps' ? stepReps : stepWeight)(p, d);
+}
+function stepTarget(d: number) {
+  if (plan.value) plan.value.target = Math.max(1, plan.value.target + d * (isTime.value ? 5 : 1));
+}
+/** « Dips · 12 reps · 20 kg » : ce qu'était la série i avant la bascule. */
+function fromLabel(i: number): string {
+  const l = leg.value;
+  const st = l ? legSets(l)[i] : undefined;
+  if (!l || !st) return '';
+  const w = st.origin?.done ?? st;
+  let t = `${st.origin?.exercise_name ?? l.exercise_name} · ${w.reps} ${unitShort.value}`;
+  if (w.weight) t += ` · ${fmtKg(w.weight)} kg`;
+  if (w.assisted) t += ' · assisté';
+  return t;
+}
+function cancelPending() {
+  pending.value = null;
+  plan.value = null;
+}
+function confirmPending() {
+  const p = pending.value;
+  const cc = c.value;
+  const l = leg.value;
+  if (!p || !plan.value || !cc || !l) return;
+  void apply(cc.id, l.exercise_id, p.to, p.name, plan.value);
+}
+
+async function apply(
+  id: string,
+  fromId: string,
+  to: ComboTransferTarget,
+  name: string,
+  chosen: ComboTransferPlan,
+) {
   busy.value = true;
   try {
-    await combo.transferLeg(id, fromId, to);
+    await combo.transferLeg(id, fromId, to, chosen);
     emit('done', name);
     close();
   } catch (e) {
@@ -286,7 +471,7 @@ async function apply(id: string, fromId: string, to: ComboTransferTarget, name: 
   width: min(520px, 94vw);
   max-height: 86vh;
   overflow: auto;
-  padding: 14px 14px 18px;
+  padding: 14px 10px 18px;
   background: var(--surface);
 }
 .sw-head {
@@ -377,6 +562,88 @@ async function apply(id: string, fromId: string, to: ComboTransferTarget, name: 
   font-size: 12px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
+}
+.sw-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+}
+.sw-all {
+  border-top: none;
+}
+.sw-target {
+  border-top: 2px solid var(--line);
+}
+.sw-row-from {
+  font-size: 12.5px;
+  color: var(--dim);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.sw-row-n {
+  display: inline-block;
+  min-width: 18px;
+  font-weight: 700;
+  color: var(--text);
+}
+.sw-row-ctl {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 4px;
+}
+.sw-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  background: var(--bg);
+  border-radius: 12px;
+}
+.sw-step :deep(.q-btn) {
+  min-width: 44px;
+  min-height: 44px;
+}
+.sw-val {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 40px;
+  line-height: 1.05;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.sw-val b {
+  font-family: 'Oswald', sans-serif;
+  font-size: 17px;
+}
+.sw-val small {
+  font-size: 10px;
+  color: var(--dim);
+}
+.sw-asst {
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--line);
+  background: var(--bg);
+  color: var(--dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sw-asst.on {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.sw-warn {
+  color: var(--d3);
+}
+.sw-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 .sw-empty {
   font-size: 13px;

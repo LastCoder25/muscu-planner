@@ -2989,6 +2989,57 @@ describe('⇄ ComboSwapSheet — changer d’exo en cours de Défi 360', () => {
     expect(out).toContain('Dips');
     expect(out).toContain('3/6 → 5/12');
   }, 30_000);
+
+  it('choisir une cible ouvre la correction des séries basculées', async () => {
+    const { default: ComboSwapSheet } = await import('@/components/ComboSwapSheet.vue');
+    const leg = (id: string, name: string, reps: number[], weight: number | null) => ({
+      slot: 'push',
+      exercise_id: id,
+      exercise_name: name,
+      muscle_primary: 'pectoraux',
+      rep_weight: 1,
+      target: 6,
+      count_mode: 'sets',
+      rep_min: 8,
+      rep_max: 12,
+      sets: reps.map((r) => ({ date: '2099-01-05', reps: r, weight })),
+    });
+    let out = '';
+    const err = await mountIt(
+      ComboSwapSheet,
+      { modelValue: true, comboId: 'c1', exerciseId: 'ex_bench_barbell' },
+      undefined,
+      async () => {
+        const { useComboStore } = await import('@/stores/combo');
+        const { useChallengesStore } = await import('@/stores/challenges');
+        const { useLibraryStore } = await import('@/stores/library');
+        useComboStore().list = [
+          {
+            id: 'c1',
+            name: '360',
+            start_date: '2099-01-05',
+            duration_days: 7,
+            status: 'active',
+            legs: [
+              leg('ex_bench_barbell', 'Développé couché', [6, 5], 60),
+              leg('ex_dips', 'Dips', [12, 11], null),
+            ],
+          },
+        ] as never;
+        useChallengesStore().list = [{ status: 'done', exercise_id: 'x' }] as never;
+        useLibraryStore().fetchAll = () => Promise.resolve([]);
+      },
+      '/',
+      (h) => (out = h),
+      (host) => (host.querySelector('button.sw-tile') as HTMLButtonElement).click(),
+    );
+    expect(err).toBeNull();
+    expect(out).toContain('Toutes les séries');
+    // La vraie série, puis la valeur proposée : la dernière série de dips (11 reps).
+    expect(out).toContain('Développé couché · 6 reps · 60 kg');
+    expect(out).toMatch(/<b[^>]*>11<\/b><small[^>]*>reps/);
+    expect(out).toContain('quitte le défi');
+  }, 30_000);
 });
 
 describe('⇄ ComboLegHead — le bouton « changer d’exo »', () => {

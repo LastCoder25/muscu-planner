@@ -458,8 +458,8 @@
                   ]"
                   :aria-label="n <= legDone(leg) ? `Corriger la série ${n}` : undefined"
                   :title="
-                    legSets(leg)[n - 1]?.origin
-                      ? `Faite en ${legSets(leg)[n - 1]!.origin!.exercise_name}`
+                    legSets(leg)[n - 1] && setOriginLabel(leg, legSets(leg)[n - 1]!)
+                      ? `Faite en ${setOriginLabel(leg, legSets(leg)[n - 1]!)}`
                       : undefined
                   "
                   @click.stop="onSeg(leg, n)"
@@ -627,6 +627,7 @@ import {
   legLastWeight,
   legLastAssisted,
   legSets,
+  setOriginLabel,
   legRepRange,
   comboStopPlan,
   comboFinishPlan,
