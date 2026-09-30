@@ -1008,7 +1008,7 @@
                dans le kit du groupe (`partyRoad`), donc le 🎯 % ci-dessus les voit comme le
                combat les verra. Ceux qui ne servent à rien ICI sont grisés AVEC la raison. -->
             <!-- 🎒 Ravitaillement (cf. `SupplyPicker`) : le 🎯 % ci-dessus en tient compte. -->
-            <SupplyPicker :rows="supplyRows" @toggle="toggleSupply" />
+            <SupplyPicker :key="selected?.id" :rows="supplyRows" @toggle="toggleSupply" />
             <!-- 📐 Les règles de l'expédition, repliées : trois lignes de texte à chaque ouverture. -->
             <details class="sh-rules">
               <summary>ⓘ Règles de cette expédition</summary>
