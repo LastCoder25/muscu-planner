@@ -1293,6 +1293,18 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(camp).not.toContain('class="replay"');
     expect(camp).toContain('camp pris');
     expect(camp).toContain('class="take"');
+    // 🧭 Un blessé sorti d'un point fixe : le rapport dit d'où il venait et où le renvoyer.
+    const back = await render(
+      msg({
+        ...base,
+        hero: false,
+        hurt: ['a1'],
+        from: { a1: { id: 'ctl', label: 'Mine fortifiée' } },
+      } as never),
+      'claim',
+    );
+    expect(back).toContain('Mine fortifiée →');
+    expect(back).toContain('à renvoyer vers Mine fortifiée');
     // Une INCURSION : le rejeu, et le verbe de la faille.
     const rift = { ...base, rift: { level: 26, maxPv: 800, pvTrail: [700, 600, 500, 420, 300] } };
     const faille = await render(msg(rift), 'none');

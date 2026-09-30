@@ -35,6 +35,17 @@ interface MissionCardMember {
   /** Une étoile de plus à CET encaissement. */
   star: boolean;
   gone: boolean;
+  /** 🧭 Le point fixe d'où il est parti (son nom à l'envoi) ; null = la base, ou départ
+   *  inconnu (rapport d'avant — `MissionCard.route` est alors null). */
+  from: string | null;
+}
+
+/** 🧭 D'où le groupe est parti et où il allait. `mixed` : une attaque combinée partie de
+ *  plusieurs endroits — chaque champion dit alors le sien. */
+export interface MissionRoute {
+  from: string;
+  to: string;
+  mixed: boolean;
 }
 
 export interface MissionCard {
@@ -56,6 +67,9 @@ export interface MissionCard {
   /** Ancien message : un nom d'objet seul. */
   legacyItem: string | null;
   team: MissionCardMember[];
+  /** 🧭 Départ et arrivée d'un groupe ; null si inconnus (rapport d'avant, défense d'un point
+   *  fixe — elle n'a ni départ ni arrivée, elle se joue sur place). */
+  route: MissionRoute | null;
   /** Le héros était du voyage (expédition solo, ou dans le groupe). */
   hero: boolean;
   /** « 11/12 abattus » — null quand il n'y a pas eu de combat à compter. */
@@ -89,6 +103,17 @@ function messageVerdict(m: ExpeditionMessage): string {
   return m.win ? 'réussie' : 'ratée';
 }
 
+/** 🧭 Départ et arrivée d'un groupe (`PartyResult.from`). ⚠️ Rien sans `from` : un rapport
+ *  d'avant ne sait pas d'où son groupe est parti, et dire « la base » serait un mensonge. */
+export function missionRoute(m: ExpeditionMessage): MissionRoute | null {
+  const party = m.party;
+  if (!party?.from || party.defense) return null;
+  const from = party.from;
+  const labels = new Set(party.escort.map((id) => from[id]?.label ?? 'Base'));
+  if (party.hero) labels.add('Base');
+  return { from: [...labels].join(' · '), to: messageTitle(m), mixed: labels.size > 1 };
+}
+
 /** Un rapport de la boîte 📬 (expédition du héros, groupe, arène, coffre). */
 export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[]): MissionCard {
   const p = m.party ? partyReport(m.party, roster) : null;
@@ -119,7 +144,9 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
       down: false,
       star: false,
       gone: x.gone,
+      from: m.party?.from?.[x.id]?.label ?? null,
     })),
+    route: missionRoute(m),
     hero: m.chest ? false : p ? p.hero : true,
     kills: p && p.foes > 0 ? `${p.slain}/${p.foes} abattus` : null,
     totalXp: p?.totalXp ?? 0,

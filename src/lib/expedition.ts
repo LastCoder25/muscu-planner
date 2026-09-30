@@ -380,6 +380,14 @@ export interface PartyResult {
   /** 🏰 Ceux qui RESTENT en garnison si le point est pris (choisis à l'envoi) ; les autres
    *  rentrent. Absent = toute l'escorte (dans la limite des places du point). */
   stay?: string[];
+  /**
+   * 🧭 D'OÙ EST PARTI CHAQUE CHAMPION (demandé : « savoir où le renvoyer une fois guéri ») :
+   * id → le point fixe tenu d'où il est sorti, et son nom À L'ENVOI (le point peut tomber
+   * ou changer de rang depuis). Un id absent = parti de la base. ⚠️ PRÉSENT, même vide, sur
+   * tout groupe envoyé depuis la v0.1395 : absent = rapport d'avant, départ INCONNU — on ne
+   * dit alors rien plutôt que d'annoncer « la base » à tort.
+   */
+  from?: Record<string, { id: string; label: string }>;
   faction: RaidFaction;
   /** Ids des aventuriers envoyés (le héros n'y figure pas). */
   escort: string[];

@@ -262,6 +262,8 @@ import {
   meetAll,
   settleParties,
   startParty,
+  partyOrigins,
+  withOrigins,
   type ActiveParty,
   recallBlocker,
   recallVoyage,
@@ -3491,7 +3493,8 @@ export const useCharacterStore = defineStore('character', () => {
       { poi: meet.poi, hero, seed, champions: escort.length },
       now,
       leg,
-      withSupplies,
+      // 🧭 Le rapport dira d'où chacun est parti : où le renvoyer une fois guéri.
+      withOrigins(withSupplies, partyOrigins([{ ids: opts.escortIds, origin }])),
     );
     // 🏰 Assaut d'un point fixe : si on le prend, seuls le héros et les champions en trop
     // rentrent — à LEUR pas, souvent plus vif que celui de toute l'équipe. `returnAt` garde
@@ -3983,6 +3986,13 @@ export const useCharacterStore = defineStore('character', () => {
           : outcome0;
       out.launched++;
       const goneWings = a.wings.filter((w) => w.state === 'gone');
+      // 🧭 Chaque groupe a SON départ : le rapport le dit pour chacun de ses champions.
+      const fromOf = partyOrigins(
+        goneWings.map((w) => ({
+          ids: w.gone ?? [],
+          origin: w.originId ? (map?.pois.find((p) => p.id === w.originId) ?? null) : null,
+        })),
+      );
       const main =
         goneWings.find((w) => w.heroGone) ??
         goneWings.find((w) => w.originId === null) ??
@@ -4011,7 +4021,7 @@ export const useCharacterStore = defineStore('character', () => {
           ...(a.midAt > a.arriveAt ? { dwellMs: a.midAt - a.arriveAt } : {}),
           goldCost: 0,
           seed: a.seed,
-          outcome,
+          outcome: withOrigins(outcome, fromOf),
           ...(origin ? { origin: { x: origin.x, y: origin.y }, homeId: origin.id } : {}),
           ...(w === main ? {} : { wingOf: a.id }),
           crew,

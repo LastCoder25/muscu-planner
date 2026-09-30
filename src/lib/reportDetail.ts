@@ -156,6 +156,12 @@ export function storyExtra(text: string, journal: readonly string[], verdict = '
 const STORY_MIN_LETTERS = 14;
 
 /** Le CORPS d'un rapport de mission, toujours visible : ce qu'il rapporte, qui y était. */
+/** 🧭 Où renvoyer un blessé une fois guéri : son point fixe, ou rien s'il vient de la base
+ *  (il y est déjà). */
+function backTo(from: string | null): string {
+  return from ? `à renvoyer vers ${from}` : 'parti de la base';
+}
+
 export function missionMain(c: MissionCard): ReportDetail {
   const teamBits: string[] = [];
   if (c.kills) teamBits.push(`⚔️ ${c.kills.replace(/ abattus$/, '')}`);
@@ -190,20 +196,44 @@ export function missionMain(c: MissionCard): ReportDetail {
       aside: teamBits.join(' · ') || undefined,
       layout: 'list',
       rows: [
+        // 🧭 D'où le groupe est parti et où il allait (demandé : « savoir où le renvoyer
+        // une fois guéri »).
+        ...(c.route
+          ? [
+              {
+                icon: '🧭',
+                title: `${c.route.from} → ${c.route.to}`,
+                sub: 'départ → arrivée',
+                tone: 'dim' as const,
+              },
+            ]
+          : []),
         ...(c.hero
           ? [{ icon: '🧝', title: 'Héros', sub: 'son XP vient du sport', tone: 'dim' as const }]
           : []),
         ...c.team.map((m) => {
           const tags: ReportTag[] = [];
+          // 🏥 Un blessé sorti d'un point fixe rentre soigné à la BASE : le rapport dit où il
+          // tenait garnison, pour l'y renvoyer.
+          const sendBack = c.route && (m.hurt || m.lightHurt) ? backTo(m.from) : null;
           if (m.star) tags.push({ icon: '⭐', title: 'Une étoile de plus' });
-          if (m.hurt) tags.push({ icon: '🤕', title: 'Blessé : à l’infirmerie' });
+          if (m.hurt)
+            tags.push({
+              icon: '🤕',
+              title: `Blessé : à l’infirmerie${sendBack ? `, puis ${sendBack}` : ''}`,
+            });
           else if (m.lightHurt)
-            tags.push({ icon: '🩹', title: 'Victoire serrée : courte convalescence' });
+            tags.push({
+              icon: '🩹',
+              title: `Victoire serrée : courte convalescence${sendBack ? `, puis ${sendBack}` : ''}`,
+            });
           const bits: string[] = [];
           if (m.kills) bits.push(`⚔️ ${plural(m.kills, 'abattu')}`);
           if (m.hurt) bits.push('à l’infirmerie');
           else if (m.lightHurt) bits.push('légèrement blessé');
           else if (m.down) bits.push('à terre, relevé');
+          if (sendBack) bits.push(sendBack);
+          else if (c.route?.mixed) bits.push(`depuis ${m.from ?? 'la base'}`);
           if (m.gone) bits.push('parti depuis');
           return {
             icon: m.emoji,
