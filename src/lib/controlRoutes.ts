@@ -21,7 +21,9 @@ import { isMilitiaId, MILITIA } from './militia';
 import {
   controlFreeSeats,
   freeAway,
+  holdAway,
   militiaFreeSeats,
+  pruneAway,
   reinforceControl,
   releaseFromControl,
   seatsOf,
@@ -330,4 +332,39 @@ export function sortieAwayKeeper(
         (v.crew ?? v.outcome.party?.escort ?? []).includes(advId),
     );
   };
+}
+
+type AwayVoyage = Parameters<typeof sortieAwayKeeper>[0][number];
+type AwayWing = Parameters<typeof sortieAwayKeeper>[1][number];
+type AwayAdv = Parameters<typeof sortieAwayKeeper>[2][number];
+
+/**
+ * ⚔️🏰 ACCORDE les places gardées à la réalité des voyages : retire celles dont le sortant ne
+ * revient plus (`pruneAway`), et en DONNE une à tout sortant en route vers son point qui n'en
+ * a pas — une sortie partie avant la règle (signalé : « je ne vois pas les places gardées »,
+ * une attaque combinée partie du camp d'entraînement juste avant la mise à jour). ⚠️ Seulement
+ * s'il reste une place libre : on ne déloge jamais quelqu'un arrivé entre-temps. Rend la MÊME
+ * carte si rien ne change (le store n'écrit pas à vide).
+ */
+export function syncAway(
+  map: ExpeditionMap,
+  voyages: readonly AwayVoyage[],
+  wings: readonly AwayWing[],
+  advs: readonly AwayAdv[],
+): ExpeditionMap {
+  const keep = sortieAwayKeeper(voyages, wings, advs);
+  let out = pruneAway(map, keep);
+  for (const v of voyages) {
+    if (!v.homeId) continue;
+    const p = held(out, v.homeId);
+    if (!p) continue;
+    const c = p.control!;
+    const there = new Set([...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id), ...(c.away ?? [])]);
+    const miss = (v.crew ?? v.outcome.party?.escort ?? []).filter(
+      (id) => !there.has(id) && keep(v.homeId!, id),
+    );
+    const add = miss.slice(0, controlFreeSeats(c));
+    if (add.length) out = holdAway(out, v.homeId, add);
+  }
+  return out;
 }

@@ -337,7 +337,6 @@ import {
   releaseFromControl,
   sortieLeaves,
   freeAway,
-  pruneAway,
   sendHomeFromControl,
   settleReturns,
   settleReinforcements,
@@ -355,7 +354,7 @@ import {
   TRANSFER_BLOCK_LABEL,
   legFromSpot,
   rejoinHome,
-  sortieAwayKeeper,
+  syncAway,
   sortieBlocker,
   swapBlocker,
   swapGarrison,
@@ -4083,9 +4082,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (!partyList.value.length) {
       // ⚔️🏰 Plus aucun groupe dehors : une place encore gardée n'a plus personne à attendre
       // (voyage du héros rentré, ancienne sortie). On ne l'écrit que si elle change.
-      const m = cur.expedition_map;
-      const pruned = m && pruneAway(m, awayKeeper(cur, [], advList.value));
-      if (pruned && pruned !== m) await persist(userId, { expedition_map: pruned });
+      await persistAwaySync(userId, cur, []);
       return [];
     }
     const box = boxWith(cur, [], MESSAGES_CAP);
@@ -4103,7 +4100,12 @@ export const useCharacterStore = defineStore('character', () => {
     const t = sp.changed
       ? { ...t0, parties: sp.list.filter((p) => clock < p.returnAt), changed: true }
       : t0;
-    if (!t.changed) return [];
+    if (!t.changed) {
+      // ⚔️🏰 Rien d'autre ne bouge : on accorde quand même les places gardées aux voyages (une
+      // sortie partie avant la règle reprend la sienne dès qu'elle est libre).
+      await persistAwaySync(userId, cur, partyList.value);
+      return [];
+    }
     const splitGone = sp.changed ? sp.list.filter((p) => clock >= p.returnAt) : gone;
     // ⚔️ UNE INTERCEPTION GAGNÉE LÈVE LE MARQUAGE — ici, à l'instant où la bataille a lieu
     // (le rapport se dépose à l'arrivée sur l'objectif), et NON à l'encaissement : ce n'est
@@ -4157,7 +4159,7 @@ export const useCharacterStore = defineStore('character', () => {
     );
     // ⚔️🏰 Une place gardée n'appartient qu'à qui revient VRAIMENT sur son point : les blessés
     // renvoyés à la base (`splitSorties`) ou postés ailleurs par la mission la libèrent.
-    const mapOut = mapRestored && pruneAway(mapRestored, awayKeeper(cur, t.parties, advsBack));
+    const mapOut = mapRestored && syncAwayOf(cur, mapRestored, t.parties, advsBack);
     await persist(userId, {
       parties: t.parties,
       ...(base ? { base } : {}),
@@ -4175,16 +4177,30 @@ export const useCharacterStore = defineStore('character', () => {
 
   /** ⚔️🏰 La règle des places gardées (`sortieAwayKeeper`) sur l'état courant : les voyages
    *  (groupes + expédition du héros) et les groupes d'attaque combinée déjà partis. */
-  function awayKeeper(
+  function syncAwayOf(
     cur: CharacterRow,
+    map: ExpeditionMap,
     parties: readonly ActiveParty[],
     advs: readonly Adventurer[],
-  ): (pointId: string, advId: string) => boolean {
-    return sortieAwayKeeper(
+  ): ExpeditionMap {
+    return syncAway(
+      map,
       [...parties, ...(cur.expedition ? [cur.expedition] : [])],
       attackList.value.flatMap((a) => a.wings),
       advs,
     );
+  }
+  /** ⚔️🏰 `syncAwayOf` sur la carte courante, écrite seulement si elle change (ce tick bat
+   *  chaque seconde). */
+  async function persistAwaySync(
+    userId: string,
+    cur: CharacterRow,
+    parties: readonly ActiveParty[],
+  ): Promise<void> {
+    const m = cur.expedition_map;
+    if (!m) return;
+    const synced = syncAwayOf(cur, m, parties, advList.value);
+    if (synced !== m) await persist(userId, { expedition_map: synced });
   }
 
   /**
