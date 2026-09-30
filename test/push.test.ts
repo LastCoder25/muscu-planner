@@ -86,7 +86,7 @@ describe('notifications push — ce qu’on programme', () => {
     const p = plans.find((x) => x.kind === 'party_home');
     expect(p?.dedupe).toBe('party:party_x');
     expect(p?.sendAt).toBe(NOW + 2 * H);
-    expect(p?.url).toBe('/expedition-map');
+    expect(p?.url).toBe('/expedition-map?report=1');
     for (const f of Object.values(FACTION_LABEL)) expect(`${p?.title} ${p?.body}`).not.toContain(f);
     // Aucun chiffre : ni effectif, ni niveau, ni abattus.
     expect(`${p?.title} ${p?.body}`).not.toMatch(/\d/);

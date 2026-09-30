@@ -122,7 +122,7 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       sendAt: ctx.expedition.returnAt,
       title: '🧭 Ton héros est rentré',
       body: 'Sa cargaison t’attend — elle ne se périme pas, mais il peut repartir.',
-      url: '/expedition-map',
+      url: '/expedition-map?report=1',
     });
   }
 
@@ -136,7 +136,7 @@ export function planPushes(ctx: PushContext, now: number): PushPlan[] {
       // boîte le dit, la notification donne seulement envie de l'ouvrir.
       title: '⚔️ Ton groupe est rentré',
       body: 'Son rapport t’attend dans la boîte 📬.',
-      url: '/expedition-map',
+      url: '/expedition-map?report=1',
     });
   }
 

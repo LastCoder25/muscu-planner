@@ -1139,7 +1139,7 @@ import {
   revealedCount,
   type FogRevealPlan,
 } from '@/lib/fogReveal';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
@@ -1321,6 +1321,7 @@ import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 
 const props = defineProps<{ embedded?: boolean }>();
 const router = useRouter();
+const route = useRoute();
 const { openPath } = useGamePanel();
 /**
  * 🏰 RETOUR = L'ÉCRAN DE LA BASE (demandé par l'utilisateur). On entre sur la carte par la
@@ -2903,6 +2904,28 @@ function showReturned(done: NonNullable<Awaited<ReturnType<typeof char.expeClaim
   lastOutcome.value = { ...done, claimed: true };
   collectOpen.value = true;
 }
+/** 🔔 Tap sur « ton héros / ton groupe est rentré » (`?report=1`). ⚠️ Sans ce drapeau, être
+ *  DÉJÀ sur la carte ne faisait rien : l'URL ne changeait pas, et un rapport déjà vu puis
+ *  fermé ne se rouvrait pas. On ouvre le rapport encore à prendre, sinon le plus récent,
+ *  puis on retire le drapeau (un retour arrière ne le rejoue pas, un second tap le repose). */
+watch(
+  () => [route.query.report, char.row?.messages?.length ?? -1] as const,
+  ([flag]) => {
+    if (!flag || !char.row) return;
+    const msgs = (char.row.messages ?? []).filter((m) => !m.chest);
+    const m =
+      msgs.find((x) => isClaimable(x, Date.now())) ??
+      [...msgs].sort((a, b) => b.resolvedAt - a.resolvedAt)[0];
+    if (m) {
+      lastOutcome.value = m;
+      collectOpen.value = true;
+    }
+    const rest = { ...route.query };
+    delete rest.report;
+    void router.replace({ path: route.path, query: rest });
+  },
+  { immediate: true },
+);
 
 // ── Filons de production (village autour de la ville) ──
 /** Un lieu est GRISÉ quand plus rien ne peut y être envoyé — jamais parce que le
