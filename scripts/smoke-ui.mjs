@@ -79,14 +79,14 @@ const ECRANS = [
     route: '/expedition-map',
     nom: 'carte',
     gestes: [
-      // 🗂️ Sous la carte, trois tuiles qui déplient leur partie (v0.1354) : les voyages
+      // 🗂️ Sous la carte, deux tuiles qui déplient leur partie : voyages et attaques (filtre
+      // au-dessus des tuiles), puis les places fortes. Les voyages
       // d'abord, puis l'équipe de l'un d'eux.
-      { nom: 'expeditions', clic: '.map-tab.trips', attendu: '.trips' },
+      { nom: 'expeditions', clic: '.map-tab.trips', attendu: '.tr-filter' },
       { nom: 'voyage', clic: '.trip', attendu: '.trip-crew' },
       { nom: 'fiche', clic: '.poi:not(.dim)', attendu: '.poi-card' },
-      // 🗂️ Les points fixes et les attaques, dépliés par leur tuile.
+      // 🗂️ Les places fortes, dépliées par leur tuile.
       { nom: 'points-fixes', clic: '.map-tab.ctl', attendu: '.cps-tile' },
-      { nom: 'attaques', clic: '.map-tab.attacks', attendu: '.ats.inline' },
       // 🏠 La base, comme un lieu fixe : toucher la ville montre qui y est.
       { nom: 'base', clic: '.town', attendu: '.bgs', escape: true },
     ],

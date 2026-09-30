@@ -8,9 +8,26 @@
   (la page le dessine, d'où le `v-model:focus`) ; la retoucher les éteint.
 -->
 <template>
+  <!-- 🧭⚔️ FILTRE (demandé) : voyages et armées ennemies partagent la rangée ; on choisit ce
+       qu'on regarde. Une catégorie vide est grisée, et un filtre qui se vide retombe sur
+       « Tout » (`effectiveTripFilter`). -->
+  <div v-if="trips.length || attacks?.length" class="tr-filter" role="group" aria-label="Filtrer">
+    <button
+      v-for="o in filterOpts"
+      :key="o.id"
+      type="button"
+      class="trf"
+      :class="[o.id, { on: shown === o.id }]"
+      :aria-pressed="shown === o.id"
+      :disabled="o.n === 0"
+      @click="filter = o.id"
+    >
+      {{ o.label }} <b v-if="o.id !== 'all'">{{ o.n }}</b>
+    </button>
+  </div>
   <div v-if="trips.length || attacks?.length" class="trips">
     <button
-      v-for="t in trips"
+      v-for="t in shownTrips"
       :key="t.key"
       type="button"
       class="trip"
@@ -54,7 +71,7 @@
          (🏰 la base), le temps avant la frappe, la tenue de ta défense, et sa marche en
          sous-lignage. Toucher la tuile ouvre l'armée sur la carte. -->
     <button
-      v-for="r in attacks ?? []"
+      v-for="r in shownAttacks"
       :key="'atk' + r.army.id"
       type="button"
       class="trip attack"
@@ -172,6 +189,7 @@ export interface MapTrip {
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
+import { effectiveTripFilter, type TripFilter } from '@/lib/tripFilter';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -251,6 +269,19 @@ const crewBoosts = computed(() => {
 });
 const char = useCharacterStore();
 
+/** 🧭⚔️ Le filtre voyages / attaques (cf. `effectiveTripFilter`). */
+const filter = ref<TripFilter>('all');
+const shown = computed(() =>
+  effectiveTripFilter(filter.value, props.trips.length, props.attacks?.length ?? 0),
+);
+const filterOpts = computed<{ id: TripFilter; label: string; n: number }[]>(() => [
+  { id: 'all', label: 'Tout', n: props.trips.length + (props.attacks?.length ?? 0) },
+  { id: 'trips', label: '🧭 Expéditions', n: props.trips.length },
+  { id: 'attacks', label: '⚔️ Attaques', n: props.attacks?.length ?? 0 },
+]);
+const shownTrips = computed(() => (shown.value === 'attacks' ? [] : props.trips));
+const shownAttacks = computed(() => (shown.value === 'trips' ? [] : (props.attacks ?? [])));
+
 /** 👥 L'équipe naît SOUS la carte et la rangée de tuiles : sur un téléphone elle était hors de
  *  l'écran, il fallait faire défiler pour la voir (signalé). On la RÉVÈLE au toucher d'une
  *  tuile — même remède que la fiche d'un lieu (v0.738). `nearest` : rien ne bouge si elle
@@ -289,7 +320,7 @@ function facesOf(t: MapTrip) {
  *  champions qui sont dedans »). Un champion renvoyé depuis n'est plus dans le vivier : il est
  *  compté à part plutôt que de faire tomber l'écran. */
 const crew = computed(() => {
-  const t = props.trips.find((x) => x.key === props.focus);
+  const t = shownTrips.value.find((x) => x.key === props.focus);
   if (!t) return null;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
@@ -317,6 +348,46 @@ const crew = computed(() => {
    la dernière ligne, incomplète, se CENTRE toute seule quel que soit le reste (1 ou 2) —
    laissée dans ses colonnes, elle se collait à gauche avec un trou, ce qui se lit comme un
    élément manquant plutôt que comme la fin de la liste. */
+.tr-filter {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 2px 8px;
+}
+.trf {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  b {
+    margin-left: 2px;
+    color: var(--dim);
+  }
+  &.on {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+    b {
+      color: var(--accent);
+    }
+  }
+  &.attacks.on {
+    border-color: var(--d4);
+    background: color-mix(in srgb, var(--d4) 18%, var(--surface));
+    b {
+      color: var(--d4);
+    }
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
 .trips {
   display: flex;
   flex-wrap: wrap;

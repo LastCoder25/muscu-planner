@@ -359,7 +359,7 @@
         type="button"
         role="tab"
         class="map-tab"
-        :class="[t.id, { on: mapPanel === t.id }]"
+        :class="[t.id, { on: mapPanel === t.id, alert: t.alert }]"
         :aria-selected="mapPanel === t.id"
         @click="toggleMapPanel(t.id)"
       >
@@ -369,14 +369,6 @@
         <span class="mt-chev" aria-hidden="true">{{ mapPanel === t.id ? '▾' : '▸' }}</span>
       </button>
     </div>
-    <AttacksSheet
-      v-if="mapPanel === 'attacks'"
-      :model-value="true"
-      inline
-      :rows="attacks"
-      :holds="attackHolds"
-      @open="openAttack"
-    />
     <ControlPointsSheet
       v-if="mapPanel === 'ctl'"
       :model-value="true"
@@ -419,7 +411,8 @@
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
     <p v-if="mapPanel === 'trips' && !trips.length && !attacks.length" class="map-tab-empty">
-      Aucune expédition en cours : touche un lieu de la carte pour envoyer une équipe.
+      Aucune expédition en cours ni armée en marche : touche un lieu de la carte pour envoyer une
+      équipe.
     </p>
     <TripsPanel
       v-if="mapPanel === 'trips'"
@@ -1239,7 +1232,6 @@ import MapPoiLayer from '@/components/MapPoiLayer.vue';
 import MapFilterBar from '@/components/MapFilterBar.vue';
 import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
-import AttacksSheet from '@/components/AttacksSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
 import PoiCard from '@/components/PoiCard.vue';
@@ -2965,7 +2957,7 @@ function dimmed(p: Poi): boolean {
 /** 🗂️ La partie dépliée sous la carte (une seule à la fois ; `null` = tout replié). Les
  *  équipes en marche pour prendre un point viennent des groupes (`partyList`) : elles
  *  restent en garnison à l'arrivée (`midAt`). */
-type MapPanel = 'trips' | 'ctl' | 'attacks';
+type MapPanel = 'trips' | 'ctl';
 const mapPanel = ref<MapPanel | null>(null);
 /** 📜 Toucher une tuile REMONTE la rangée en haut de l'écran (demandé : « remonter la tuile le
  *  plus haut possible selon ce qu'il y a dessous, en la voyant en entier »). `block: 'start'`
@@ -3031,11 +3023,21 @@ const focusArmy = ref<string | null>(null);
 const focusArmyPoi = computed(() =>
   focusArmy.value ? (pois.value.find((p) => p.id === focusArmy.value) ?? null) : null,
 );
-const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number }[]>(() => [
-  { id: 'trips', emo: '🧭', label: 'Expéditions', n: trips.value.length },
-  { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value },
-  { id: 'attacks', emo: '⚔️', label: 'Attaques', n: attacks.value.length },
-]);
+/** 🧭⚔️ Voyages et attaques ennemies partagent UNE tuile (demandé : « fusionne la tuile
+ *  expéditions et attaques ») ; le filtre vit dans `TripsPanel`. La pastille passe au rouge
+ *  dès qu'une armée marche. */
+const mapTabs = computed<{ id: MapPanel; emo: string; label: string; n: number; alert: boolean }[]>(
+  () => [
+    {
+      id: 'trips',
+      emo: '🧭',
+      label: 'Expéditions',
+      n: trips.value.length + attacks.value.length,
+      alert: attacks.value.length > 0,
+    },
+    { id: 'ctl', emo: '🏰', label: 'Places fortes', n: ctlCalls.value, alert: false },
+  ],
+);
 const ctlRoster = computed(() =>
   controlRoster(
     char.row?.expedition_map,
@@ -4958,7 +4960,7 @@ onUnmounted(() => {
   font-weight: 800;
   line-height: 18px;
 }
-.map-tab.attacks .mt-dot {
+.map-tab.alert .mt-dot {
   background: var(--d4);
   color: #fff;
 }
