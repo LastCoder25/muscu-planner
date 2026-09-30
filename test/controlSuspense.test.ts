@@ -22,7 +22,9 @@ const gardenAt = (L: number): Poi => {
     7,
   );
   const p = m.pois.find((q) => q.id === controlIdOf('garden'))!;
-  return { ...p, level: L };
+  // ⚔️ Attaque fixée à 24 h : le cran (ancienneté) à l’attaque en dépend, et son échéance suit
+  // désormais l’utilisation de la carte.
+  return { ...p, level: L, control: { ...p.control!, attackAt: 24 * 3_600_000 } };
 };
 const allies = (level: number, orient = 0, n = 1) =>
   partyAllies(

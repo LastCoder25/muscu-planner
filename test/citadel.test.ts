@@ -21,6 +21,7 @@ import {
   citadelPalier,
   citadelSize,
   citadelTargets,
+  raidDelayMs,
   controlIdOf,
   ensureControls,
   holdControl,
@@ -35,6 +36,7 @@ import {
   createMap,
   EXPE,
   revealRadius,
+  recordDeparture,
   type ExpeditionMap,
 } from '@/lib/expedition';
 import { partySendBlocker } from '@/lib/party';
@@ -46,6 +48,16 @@ const base = (L = 30, outpost = 100): ExpeditionMap =>
   ensureControls(createMap(5, 0, L, 1), 0, L, outpost);
 const cits = (m: ExpeditionMap) => m.pois.filter((p) => p.control?.kind === 'citadel');
 const byId = (m: ExpeditionMap, id: string) => m.pois.find((p) => p.id === id)!;
+const withAttack = (m: ExpeditionMap, id: string, attackAt: number | undefined): ExpeditionMap => ({
+  ...m,
+  pois: m.pois.map((p) => {
+    if (p.id !== id) return p;
+    const c = { ...p.control! };
+    if (attackAt === undefined) delete c.attackAt;
+    else c.attackAt = attackAt;
+    return { ...p, control: c };
+  }),
+});
 /** La citadelle qui attaque la mine au niveau 30. */
 const MINE_CIT = citadelIdFor(base(30).pois, 'mine')!;
 const dist = (p: { x: number; y: number }) => Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
@@ -342,38 +354,119 @@ describe('🏯 l’annonce de la découverte', () => {
   });
 });
 
-// 🌫️ « Si je la vois, elle me voit » (décision de l'utilisateur, 2026-09-30) : une citadelle
-// cachée n'attaque pas les points qu'elle vise ; ils restent en paix jusqu'à sa découverte.
-describe('🌫️ une citadelle cachée n’attaque pas', () => {
+// 🌫️ Tous les lieux fixes sont attaqués (décision de l'utilisateur, 2026-09-30, qui remplace
+// « si je la vois, elle me voit ») : une citadelle cachée attaque son secteur 2× moins souvent,
+// et les citadelles découvertes lancent des raids partout.
+describe('🌫️ une citadelle cachée attaque aussi, moins souvent', () => {
   const id = controlIdOf('mine');
-  it('prendre un point sous une citadelle cachée ne programme aucune attaque', () => {
+  it('prendre un point sous une citadelle cachée programme une attaque, plus lointaine', () => {
     const m = captureControl(base(30, 1), id, ['a0'], 0, 7);
     expect(attackerHidden(m.pois, 'mine')).toBe(true);
-    expect(byId(m, id).control!.attackAt).toBeUndefined();
+    const at = byId(m, id).control!.attackAt!;
+    expect(at).toBeGreaterThanOrEqual(CITADEL.hiddenSlow * CONTROL.retakeMinMs);
+    expect(at).toBeLessThanOrEqual(CITADEL.hiddenSlow * CONTROL.retakeMaxMs);
   });
-  it('une échéance d’avant est retirée tant que la citadelle reste cachée, et jamais due', () => {
-    const held = captureControl(base(30, 100), id, ['a0'], 0, 7);
-    const stale = {
-      ...held,
-      pois: held.pois.map((p) =>
-        p.control?.kind === 'citadel'
-          ? { ...p, control: { ...p.control, discoveredAt: undefined } }
+  it('une attaque retirée par l’ancienne règle revient, et finit par être due', () => {
+    const held = captureControl(base(30, 1), id, ['a0'], 0, 7);
+    const stale = withAttack(held, id, undefined);
+    const synced = ensureControls(stale, D, 30, 1);
+    const at = byId(synced, id).control!.attackAt!;
+    expect(at).toBeGreaterThan(D);
+    expect(dueRetakes(synced, at).map((p) => p.id)).toContain(id);
+    // Stable : un second passage ne la déplace pas.
+    expect(byId(ensureControls(synced, D + H, 30, 1), id).control!.attackAt).toBe(at);
+  });
+});
+
+describe('⚔️ les raids des citadelles découvertes', () => {
+  const id = controlIdOf('mine');
+  const heldAll = (outpost = 100) => {
+    let m = base(30, outpost);
+    for (const k of CONTROL.kinds) m = captureControl(m, controlIdOf(k), ['a0'], 0, 7);
+    // Attaques propres très lointaines : seules les raids peuvent les avancer.
+    for (const k of CONTROL.kinds) m = withAttack(m, controlIdOf(k), 1e15);
+    return m;
+  };
+  const dueRaid = (m: ExpeditionMap, i: number, at: number): ExpeditionMap => ({
+    ...m,
+    pois: m.pois.map((p) =>
+      p.id === citadelIdOf(i) ? { ...p, control: { ...p.control!, raidAt: at } } : p,
+    ),
+  });
+  it('une citadelle découverte programme ses raids, une cachée non', () => {
+    const m = ensureControls(heldAll(), D, 30, 100);
+    for (const p of cits(m)) expect(p.control!.raidAt).toBeGreaterThan(D);
+    const hidden = ensureControls(heldAll(1), D, 30, 1);
+    const still = cits(hidden).filter((c) => c.control!.discoveredAt === undefined);
+    expect(still.length).toBeGreaterThan(0);
+    for (const p of still) expect(p.control!.raidAt).toBeUndefined();
+  });
+  it('un raid ne RETARDE jamais une attaque déjà plus proche', () => {
+    const m0 = ensureControls(heldAll(), 0, 30, 100);
+    let m = m0;
+    for (const k of CONTROL.kinds) m = withAttack(m, controlIdOf(k), 2 * H);
+    const after = ensureControls(dueRaid(m, 0, 5 * H), 5 * H, 30, 100);
+    for (const k of CONTROL.kinds)
+      expect(byId(after, controlIdOf(k)).control!.attackAt).toBe(2 * H);
+  });
+  it('une citadelle en trêve ne raide pas', () => {
+    const razed = razeCitadel(ensureControls(heldAll(), 0, 30, 100), citadelIdOf(0), 0);
+    for (let s = 1; s <= 10; s++) {
+      const m = ensureControls(dueRaid(razed, 0, s * H), s * H, 30, 100);
+      expect(m.pois.filter((p) => p.control?.attackAt === s * H)).toHaveLength(0);
+    }
+  });
+  it('un raid dû avance l’attaque d’un lieu tenu, n’importe où sur la carte', () => {
+    const targets = new Set<string>();
+    for (let s = 1; s <= 20; s++) {
+      const m0 = ensureControls(heldAll(), 0, 30, 100);
+      const m1 = {
+        ...m0,
+        pois: m0.pois.map((p) =>
+          p.id === citadelIdOf(0) ? { ...p, control: { ...p.control!, raidAt: s * H } } : p,
+        ),
+      };
+      const m2 = ensureControls(m1, s * H, 30, 100);
+      const hit = m2.pois.filter((p) => p.control?.attackAt === s * H);
+      expect(hit).toHaveLength(1);
+      targets.add(hit[0]!.control!.kind);
+    }
+    // « Partout » : pas seulement les points de son secteur.
+    const own = citadelTargets(base(30, 100).pois, 0);
+    expect([...targets].some((k) => !own.includes(k))).toBe(true);
+  });
+  it('plus on utilise la carte, plus les raids sont fréquents', () => {
+    let busy = heldAll();
+    for (let i = 0; i < 30; i++) busy = recordDeparture(busy, i * 5 * H);
+    const t = 6 * D;
+    const quiet = ensureControls(heldAll(), t, 30, 100);
+    const hot = ensureControls(busy, t, 30, 100);
+    const gap = (m: ExpeditionMap) =>
+      cits(m).reduce((s, p) => s + (p.control!.raidAt ?? 0) - t, 0) / cits(m).length;
+    expect(gap(hot)).toBeLessThan(gap(quiet));
+    expect(raidDelayMs('x', 0, 1)).toBeLessThanOrEqual(CITADEL.raidMinMs * 1.25);
+    expect(raidDelayMs('x', 0, 0)).toBeGreaterThanOrEqual(CITADEL.raidMaxMs * 0.75);
+  });
+  it('pendant sa trêve elle ne raide pas, et la trêve d’un lieu le protège', () => {
+    const m0 = ensureControls(heldAll(), 0, 30, 100);
+    const razed = razeCitadel(m0, citadelIdOf(0), 0);
+    const protectedKinds = citadelTargets(razed.pois, 0);
+    const raided = {
+      ...razed,
+      pois: razed.pois.map((p) =>
+        p.control?.kind === 'citadel' && p.id !== citadelIdOf(0)
+          ? { ...p, control: { ...p.control, raidAt: H } }
           : p,
       ),
     };
-    expect(dueRetakes(stale, 10 * D)).toHaveLength(0);
-    const synced = ensureControls(stale, D, 30, 1);
-    expect(byId(synced, id).control!.attackAt).toBeUndefined();
+    for (let s = 0; s < 10; s++) {
+      const m = ensureControls({ ...raided, pois: raided.pois.map((p) => p) }, H + s, 30, 100);
+      for (const k of protectedKinds)
+        expect(byId(m, controlIdOf(k)).control!.attackAt!).toBeGreaterThanOrEqual(CITADEL.truceMs);
+    }
   });
-  it('découverte, elle attaque à partir de maintenant, au rythme habituel', () => {
-    const quiet = ensureControls(captureControl(base(30, 1), id, ['a0'], 0, 7), 0, 30, 1);
-    const t = 10 * D;
-    const found = ensureControls(quiet, t, 30, 100);
-    const at = byId(found, id).control!.attackAt!;
-    expect(attackerHidden(found.pois, 'mine')).toBe(false);
-    expect(at).toBeGreaterThanOrEqual(t + CONTROL.retakeMinMs);
-    expect(at).toBeLessThanOrEqual(t + CONTROL.retakeMaxMs);
-    // Stable : un second passage ne la déplace pas.
-    expect(byId(ensureControls(found, t + H, 30, 100), id).control!.attackAt).toBe(at);
+  it('sans raid dû, aucune attaque n’est avancée', () => {
+    const m = ensureControls(heldAll(), 0, 30, 100);
+    expect(byId(m, id).control!.attackAt).toBe(1e15);
   });
 });

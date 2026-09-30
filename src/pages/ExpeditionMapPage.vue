@@ -651,12 +651,7 @@
             </div>
             <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
-            <!-- 🌫️ Sa citadelle est cachée : personne n'attaque ce point (v0.1388). -->
-            <p v-if="ctlHidden" class="ctl-line ctl-dim">
-              🌫️ <b>Sa citadelle est encore cachée</b> : tant que tu ne la vois pas, elle ne te voit
-              pas — personne n’attaque ce point. Agrandir la carte (Avant-poste) la découvrira.
-            </p>
-            <p v-else-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
+            <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
               ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
               attaque — sauf si un renfort arrive avant.
             </p>
@@ -668,15 +663,19 @@
             </p>
             <!-- ⚠️ Sinon l'instant de la reprise n'est PAS annoncé (v0.1239, décision de
                l'utilisateur) : on sait seulement qu'elle viendra, plus tôt si l'on s'entraîne. -->
-            <p v-else-if="liveControl.owner === 'player' && !ctlHidden" class="ctl-line ctl-warn">
-              ⚔️ L’ennemi reviendra, prévenu au dernier moment — plus souvent si tu t’entraînes
-              beaucoup. Force inconnue : ta garnison ne gagnera pas toujours.
+            <p v-else-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
+              ⚔️ L’ennemi reviendra, prévenu au dernier moment — plus souvent si tu utilises
+              beaucoup la carte, et les citadelles découvertes lancent des raids n’importe où.
+              <template v-if="ctlHidden">
+                Sa citadelle est encore cachée : elle attaque 2× moins souvent.</template
+              >
+              Force inconnue : ta garnison ne gagnera pas toujours.
             </p>
             <!-- 🛡️ LA TENUE À L'ATTAQUE (demandé) : jugée sur ceux qui seront LÀ — garnison et
                renforts arrivés avant l'assaut (`defendersAtAttack`), contre l'ennemi le plus fort
                possible. L'heure restant secrète hors de la fenêtre imminente, les renforts en
                route y comptent tous. -->
-            <p v-if="defenseNow && !ctlHidden" class="ctl-line ctl-hold">
+            <p v-if="defenseNow" class="ctl-line ctl-hold">
               🛡️ À l’attaque : <b>{{ defenseNow.count }}</b> défenseur{{
                 defenseNow.count > 1 ? 's' : ''
               }}
@@ -794,12 +793,11 @@
           <p v-else-if="liveControl" class="sh-note">
             🏰 Prends-le avec 1 à 3 champions, sans le héros :
             {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
-            garnison ({{ CONTROL_YIELD[liveControl.kind] }}),
-            <template v-if="ctlHidden"
-              >en paix tant que sa citadelle reste cachée dans le brouillard.</template
-            >
-            <template v-else>jusqu’à ce que l’ennemi le reprenne (entre 1 et 3 jours).</template>
-            Chaque ennemi abattu, à la prise comme en défense, rapporte de l’XP.
+            garnison ({{ CONTROL_YIELD[liveControl.kind] }}), jusqu’à ce que l’ennemi le reprenne
+            (entre 1 et 3 jours, plus souvent si tu utilises beaucoup la carte<template
+              v-if="ctlHidden"
+              >, 2× moins si sa citadelle reste cachée</template
+            >). Chaque ennemi abattu, à la prise comme en défense, rapporte de l’XP.
             <template v-if="militiaBuilt"
               >Une fois pris, des miliciens de ta Caserne peuvent y remplacer tes
               champions.</template
@@ -1959,7 +1957,8 @@ const garrisonKey = computed(() =>
     .filter((s) => !s.endsWith(':'))
     .join('|'),
 );
-/** 🌫️ La citadelle qui attaque le point sélectionné est encore cachée : personne ne l'attaque. */
+/** 🌫️ La citadelle du secteur du point sélectionné est encore cachée : elle l'attaque quand
+ *  même, 2× moins souvent. */
 const ctlHidden = computed(() => {
   const c = liveControl.value;
   const pois = char.row?.expedition_map?.pois;
