@@ -60,117 +60,11 @@
           </button>
         </div>
         <!-- ⚡ et 💠 sur la ligne du pseudo, tout à droite : ce sont les deux devises
-             qu'on consulte le plus (jouer, invoquer). Le reste du plateau passe dessous. -->
-        <div class="tb-tray tb-main">
-          <span
-            class="tb-r energy clickable"
-            :class="{ deficit: c.energy < 0 }"
-            role="button"
-            tabindex="0"
-            :title="`Énergie : ${c.energy.toLocaleString('fr-FR')} — appuie pour voir l'historique des 3 derniers jours (gagnée en faisant du sport)`"
-            @click="energyHistOpen = true"
-            @keyup.enter="energyHistOpen = true"
-            ><span class="tb-ico">⚡</span>{{ compactNumber(c.energy) }}</span
-          >
-          <!-- Les pierres de mana sont la monnaie du GACHA : elles décident si l'on peut invoquer. -->
-          <span
-            class="tb-r clickable mana"
-            role="button"
-            tabindex="0"
-            @click="resInfo = 'mana'"
-            @keyup.enter="resInfo = 'mana'"
-            :title="`Pierres de mana : ${char.row.mana.toLocaleString('fr-FR')} — invoquer un champion (failles refermées, mines de mana)`"
-            ><span class="tb-ico">💠</span>{{ compactNumber(char.row.mana) }}</span
-          >
-        </div>
+             qu'on consulte le plus (jouer, invoquer). Le reste du plateau passe dessous.
+             Le plateau est un composant partagé avec la carte (`ResourceTray`). -->
+        <ResourceTray part="main" :energy="c.energy" interactive @pick="pickResource" />
         <div class="tb-right">
-          <!-- Plateau des autres ressources. Une seule bordure = groupe lisible au lieu de
-               puces éparses. Chaque ressource a une infobulle expliquant ce qu'elle fait monter. -->
-          <div class="tb-tray">
-            <!-- Boutique retirée pour le moment (ticket dc7c746d) : la puce or est un simple indicateur. -->
-            <span
-              class="tb-r clickable gold"
-              role="button"
-              tabindex="0"
-              @click="resInfo = 'gold'"
-              @keyup.enter="resInfo = 'gold'"
-              :title="`Or : ${char.row.gold.toLocaleString('fr-FR')} — expéditions et construction des bâtiments`"
-              ><span class="tb-ico">🪙</span>{{ compactNumber(char.row.gold) }}</span
-            >
-            <span
-              class="tb-r clickable summon"
-              role="button"
-              tabindex="0"
-              @click="resInfo = 'summon'"
-              @keyup.enter="resInfo = 'summon'"
-              :title="`Pierres d’invocation : ${char.row.summon_stones.toLocaleString('fr-FR')} — tenter un boss de palier (gagnées en nettoyant des donjons)`"
-              ><span class="tb-ico">🔮</span>{{ compactNumber(char.row.summon_stones) }}</span
-            >
-            <!-- ⚠️ Les CLÉS 🗝️ manquaient au plateau alors qu'elles gardent le
-                 Labyrinthe — seule source de familiers — et qu'elles se gagnent sur
-                 plusieurs écrans (archives, coffres, boss). Une devise qu'on dépense
-                 sans jamais voir sa réserve force à aller la chercher ailleurs. -->
-            <span
-              class="tb-r clickable keys"
-              role="button"
-              tabindex="0"
-              @click="resInfo = 'keys'"
-              @keyup.enter="resInfo = 'keys'"
-              :title="`Clés : ${char.row.keys.toLocaleString('fr-FR')} — entrer dans le Labyrinthe (archives de la carte, coffres, boss)`"
-              ><span class="tb-ico">🗝️</span>{{ compactNumber(char.row.keys) }}</span
-            >
-            <!-- 🔱 SCEAUX D'ASCENSION (v0.1018) : champions et objets, des RUINES ANCIENNES. Ils ne
-                 servent qu'à LEUR rang, d'où le détail par rang dans l'infobulle.
-                 ⚠️ TOUJOURS affichés, même à zéro : une devise qui n'apparaît qu'une fois
-                 obtenue ne dit ni qu'elle existe, ni qu'on peut aller la chercher. -->
-            <span
-              class="tb-r clickable seals"
-              role="button"
-              tabindex="0"
-              @click="resInfo = 'sealsChamp'"
-              @keyup.enter="resInfo = 'sealsChamp'"
-              :title="`Sceaux de champion — ascension d’un champion (ruines anciennes) : ${sealsChamp.detail || 'aucun pour l’instant'}`"
-              ><span class="tb-ico">🔱</span>{{ compactNumber(sealsChamp.total) }}</span
-            >
-            <span
-              class="tb-r clickable seals seals-gear"
-              role="button"
-              tabindex="0"
-              @click="resInfo = 'sealsGear'"
-              @keyup.enter="resInfo = 'sealsGear'"
-              :title="`Sceaux d’objet — ascension d’un objet de champion (ruines anciennes) : ${sealsGear.detail || 'aucun pour l’instant'}`"
-              ><span class="tb-ico">⚜️</span>{{ compactNumber(sealsGear.total) }}</span
-            >
-            <!-- 🎟️ Tickets d'invocation, gagnés au SPORT (v0.992). Affichés même à zéro,
-                 comme toutes les devises du plateau. -->
-            <span
-              class="tb-r clickable tickets"
-              role="button"
-              tabindex="0"
-              @click="resInfo = 'tickets'"
-              @keyup.enter="resInfo = 'tickets'"
-              title="Tickets d'invocation — gagnés au sport (Défi 360, boss entre amis, niveau)"
-              ><span class="tb-ico">🎟️</span>{{ compactNumber(char.row.gacha_tickets) }}</span
-            >
-            <!-- 🔮 Runes de compétence non posées (toutes couleurs ; le détail dans l'infobulle). -->
-            <span
-              class="tb-r clickable runes"
-              role="button"
-              tabindex="0"
-              @click="resInfo = 'runes'"
-              @keyup.enter="resInfo = 'runes'"
-              :title="`Runes de compétence — 🟢 ${char.row.runes.stock.green} · 🔵 ${char.row.runes.stock.blue} · 🟣 ${char.row.runes.stock.violet} · 🟠 ${char.row.runes.stock.gold}`"
-              ><span class="tb-ico"><RuneIcon /></span
-              >{{
-                compactNumber(
-                  char.row.runes.stock.green +
-                    char.row.runes.stock.blue +
-                    char.row.runes.stock.violet +
-                    char.row.runes.stock.gold,
-                )
-              }}</span
-            >
-          </div>
+          <ResourceTray part="rest" :energy="c.energy" interactive @pick="pickResource" />
         </div>
         <!-- 🧭 QUI PEUT PARTIR : la même ligne que sur la carte ; ici, la toucher l'ouvre. -->
         <AvailabilityLine :now="expeNow" interactive by-rank @open="openGame('/expedition-map')" />
@@ -3164,7 +3058,7 @@ import { characterRank, CHARACTER_RANKS } from '@/lib/characterRank';
 import { computeCharacter, isValidPseudo } from '@/lib/character';
 import AventureAvatar from '@/components/AventureAvatar.vue';
 import AvailabilityLine from '@/components/AvailabilityLine.vue';
-import RuneIcon from '@/components/RuneIcon.vue';
+import ResourceTray from '@/components/ResourceTray.vue';
 import ItemIcon from '@/components/ItemIcon.vue';
 import FusionPanel from '@/components/FusionPanel.vue';
 import SetPieceCmp from '@/components/SetPieceCmp.vue';
@@ -3181,7 +3075,6 @@ import {
   type CombatEvent,
   type Combatant,
 } from '@/lib/combat';
-import { compactNumber } from '@/lib/compactNumber';
 import CombatStage from '@/components/CombatStage.vue';
 import ArenaStage from '@/components/ArenaStage.vue';
 import RiftReplayDialog from '@/components/RiftReplayDialog.vue';
@@ -3312,7 +3205,6 @@ import { bestiary, setCollection, codexSummary } from '@/lib/codex';
 import { monsterArt } from '@/data/monsterArt';
 import ChampionCollection from '@/components/ChampionCollection.vue';
 import { dailyFreeMana } from '@/lib/gacha';
-import { emptySeals, sealsSummary } from '@/lib/ascension';
 import {
   messageTitle,
   isClaimable,
@@ -3907,8 +3799,11 @@ type RegionReveal = { id: string; emoji: string; name: string; blurb: string; co
 /** 💠 Ce que le bonus de connexion verse en plus de l’énergie — DÉRIVÉ du prix d’un
  *  tirage, jamais un second nombre écrit ici. */
 const freeMana = dailyFreeMana();
-const sealsChamp = computed(() => sealsSummary(char.row?.seals ?? emptySeals(), 'champion'));
-const sealsGear = computed(() => sealsSummary(char.row?.seals ?? emptySeals(), 'gear'));
+/** 💰 Une puce du plateau touchée : l'énergie ouvre son historique, le reste sa fiche. */
+function pickResource(id: ResourceId) {
+  if (id === 'energy') energyHistOpen.value = true;
+  else resInfo.value = id;
+}
 const pendingRegionReveal = ref<RegionReveal | null>(null);
 async function claimLogin() {
   const uid = auth.user?.id;
@@ -7113,14 +7008,6 @@ onUnmounted(() => {
 .tb-name {
   min-width: 0;
 }
-/* ⚠️ `.tb-tray.tb-main` et non `.tb-main` : `.tb-tray` (plus bas) pose `width: 100%` pour que
-   le plateau du dessous tienne sur UNE ligne — sans cette spécificité la pastille ⚡ 💠
-   prenait toute la largeur et passait SOUS le pseudo. */
-.tb-tray.tb-main {
-  flex: 0 0 auto;
-  width: auto;
-  overflow: visible;
-}
 /* Ligne 2 : le reste du plateau, pleine largeur, calé à droite. */
 .tb-right {
   flex-basis: 100%;
@@ -7151,101 +7038,6 @@ onUnmounted(() => {
 .tb-right {
   flex: 1 0 100%;
   min-width: 0;
-}
-.tb-tray {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: nowrap;
-  gap: 8px;
-  width: 100%;
-  overflow-x: auto;
-  scrollbar-width: none;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 4px 12px;
-}
-.tb-tray::-webkit-scrollbar {
-  display: none;
-}
-/* Écrans étroits : un cran plus serré pour que les 8 devises tiennent sans défiler. */
-@media (max-width: 420px) {
-  .tb-tray {
-    gap: 4px;
-    padding: 4px 8px;
-  }
-  .tb-tray .tb-r {
-    font-size: 12px;
-  }
-}
-/* ⚠️ L'icône vit dans une BOÎTE FIXE : les emojis n'ont pas tous la même hauteur ni la
-   même ligne de base selon la police du téléphone (⚜️ et 🔱 décrochaient de la rangée).
-   Centrer une boîte carrée aligne toutes les puces, quelle que soit la police. */
-.tb-r {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  line-height: 1;
-}
-.tb-ico {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.25em;
-  height: 1.25em;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.tb-r {
-  font-size: 13px;
-  font-weight: 700;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  color: var(--text);
-}
-.tb-r.energy {
-  color: #8fd0ff;
-}
-.tb-r.gold {
-  color: var(--accent);
-}
-.tb-r.stones {
-  color: #4ec6d6;
-}
-.tb-r.frag {
-  color: #6dd28f;
-}
-.tb-r.parch {
-  color: #d8b46a;
-}
-.tb-r.summon {
-  color: #e08bd8;
-}
-.tb-r.keys {
-  color: #d9c48a;
-}
-/* 💠 Le violet du mana, celui des tracés de convoi et de l’invocation. */
-.tb-r.mana {
-  color: #b57bff;
-}
-.tb-r.tickets {
-  color: var(--accent);
-}
-.tb-r.seals {
-  color: #7fd4c1;
-}
-.tb-r.seals-gear {
-  color: #e0b36a;
-}
-.tb-r.energy.deficit {
-  color: var(--d4, #ff6a45);
-}
-/* Puce ⚡ cliquable → historique d'énergie (léger repère : souligné pointillé + curseur). */
-.tb-r.clickable {
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
 }
 /* Composition du solde (en tête de la modale énergie). */
 .enh-bal {

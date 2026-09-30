@@ -23,16 +23,16 @@ describe('d’où vient chaque ressource', () => {
 
   // Câblage : chaque puce du plateau ouvre SA fiche, et aucune fiche n'est orpheline.
   // L'énergie montre ses sources dans sa propre fenêtre (historique).
+  // ⚠️ Le plateau vit dans `ResourceTray` (partagé avec la carte, 2026-09-30) : chaque puce y
+  // porte son id, et l'Aventure ouvre la fiche de l'id touché.
   it('chaque ressource du plateau est cliquable', () => {
+    const tray = readFileSync('src/components/ResourceTray.vue', 'utf8');
+    const chips = new Set([...tray.matchAll(/^\s+id: '(\w+)',\r?$/gm)].map((m) => m[1]));
+    for (const id of ids) expect(chips.has(id), id).toBe(true);
+    for (const id of chips) expect(ids).toContain(id);
     const sfc = readFileSync('src/pages/AventurePage.vue', 'utf8');
-    const opened = new Set([...sfc.matchAll(/@click="resInfo = '(\w+)'"/g)].map((m) => m[1]));
-    for (const id of ids) {
-      if (id === 'energy') {
-        expect(sfc).toContain('RESOURCE_SOURCES.energy.sources');
-        continue;
-      }
-      expect(opened.has(id), id).toBe(true);
-    }
-    for (const id of opened) expect(ids).toContain(id);
+    expect(sfc).toContain('interactive @pick="pickResource"');
+    expect(sfc).toContain('else resInfo.value = id;');
+    expect(sfc).toContain('RESOURCE_SOURCES.energy.sources');
   });
 });

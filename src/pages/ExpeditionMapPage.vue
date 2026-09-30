@@ -13,6 +13,9 @@
          plus d'or (v0.1069). -->
     <!-- 🧭 QUI PEUT PARTIR (demandé : voir d'un coup d'œil les effectifs qu'on peut envoyer),
          les champions détaillés par rang : c'est le rang qui décide du lieu à viser. -->
+    <!-- 💰 LES RESSOURCES, au-dessus des effectifs (demandé : « comme ailleurs ») — le même
+         plateau que l'Aventure (`ResourceTray`), ici en simple indicateur. -->
+    <div class="res-row"><ResourceTray :energy="character.energy" /></div>
     <div class="dispo-row"><AvailabilityLine :now="now" by-rank /></div>
 
     <!-- 🎚️🗺️ Filtres par rang et par type (état + mémorisation : `usePoiFilters`). -->
@@ -1164,6 +1167,7 @@ import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { useGamePanel } from '@/composables/useGamePanel';
 import GameLoader from '@/components/GameLoader.vue';
 import AvailabilityLine from '@/components/AvailabilityLine.vue';
+import ResourceTray from '@/components/ResourceTray.vue';
 import { computeCharacter } from '@/lib/character';
 import { DUNGEONS } from '@/data/dungeons';
 import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
@@ -4707,6 +4711,10 @@ onUnmounted(() => {
   color: var(--text);
   cursor: pointer;
 }
+.res-row {
+  display: flex;
+  padding: 0 12px 6px;
+}
 .dispo-row {
   display: flex;
   padding: 0 12px 6px;
@@ -4933,10 +4941,10 @@ onUnmounted(() => {
   scrollbar-width: none;
 }
 /* La carte laisse toujours voir, en bas de l'écran, la rangée des trois tuiles (en-tête ~60 px,
-   filtres repliés ~48, disponibilités ~72, tuiles ~64, marges). Jamais plus haute qu'avant (62vh). */
+   ressources ~34, filtres repliés ~48, disponibilités ~72, tuiles ~64, marges). Jamais plus haute qu'avant (62vh). */
 .map-scroll {
-  height: min(62vh, calc(100vh - 280px));
-  height: min(62vh, calc(100dvh - 280px));
+  height: min(62vh, calc(100vh - 314px));
+  height: min(62vh, calc(100dvh - 314px));
 }
 /* 🗂️ Les trois tuiles sous la carte : une ligne, trois colonnes égales, cibles ≥ 44 px. */
 .map-tabs {
