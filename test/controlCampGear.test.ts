@@ -27,7 +27,7 @@ import type { AdvGear } from '@/lib/advGear';
 
 const H = 3600_000;
 const CAMP = controlIdOf('training');
-const mapAt = (L: number) => ensureControls(createMap(3, 0, L, 1), 0, L);
+const mapAt = (L: number) => ensureControls(createMap(3, 0, L, 1), 0, L, 100);
 const pt = (m: ReturnType<typeof mapAt>, id: string) => m.pois.find((p) => p.id === id)!;
 
 /** Trois champions de référence, chacun avec ses quatre pièces portées. */

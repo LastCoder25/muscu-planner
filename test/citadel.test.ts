@@ -6,6 +6,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   CITADEL,
+  attackerHidden,
+  dueRetakes,
   CONTROL,
   captureControl,
   citadelIdFor,
@@ -337,5 +339,41 @@ describe('🏯 l’annonce de la découverte', () => {
     expect(fx.title).toBe('Citadelle découverte !');
     expect(fx.subtitle).toMatch(/Mine fortifiée/);
     expect(citadelDiscoveryFx(m, [citadelIdOf(0), citadelIdOf(1)]).title).toMatch(/^2 citadelles/);
+  });
+});
+
+// 🌫️ « Si je la vois, elle me voit » (décision de l'utilisateur, 2026-09-30) : une citadelle
+// cachée n'attaque pas les points qu'elle vise ; ils restent en paix jusqu'à sa découverte.
+describe('🌫️ une citadelle cachée n’attaque pas', () => {
+  const id = controlIdOf('mine');
+  it('prendre un point sous une citadelle cachée ne programme aucune attaque', () => {
+    const m = captureControl(base(30, 1), id, ['a0'], 0, 7);
+    expect(attackerHidden(m.pois, 'mine')).toBe(true);
+    expect(byId(m, id).control!.attackAt).toBeUndefined();
+  });
+  it('une échéance d’avant est retirée tant que la citadelle reste cachée, et jamais due', () => {
+    const held = captureControl(base(30, 100), id, ['a0'], 0, 7);
+    const stale = {
+      ...held,
+      pois: held.pois.map((p) =>
+        p.control?.kind === 'citadel'
+          ? { ...p, control: { ...p.control, discoveredAt: undefined } }
+          : p,
+      ),
+    };
+    expect(dueRetakes(stale, 10 * D)).toHaveLength(0);
+    const synced = ensureControls(stale, D, 30, 1);
+    expect(byId(synced, id).control!.attackAt).toBeUndefined();
+  });
+  it('découverte, elle attaque à partir de maintenant, au rythme habituel', () => {
+    const quiet = ensureControls(captureControl(base(30, 1), id, ['a0'], 0, 7), 0, 30, 1);
+    const t = 10 * D;
+    const found = ensureControls(quiet, t, 30, 100);
+    const at = byId(found, id).control!.attackAt!;
+    expect(attackerHidden(found.pois, 'mine')).toBe(false);
+    expect(at).toBeGreaterThanOrEqual(t + CONTROL.retakeMinMs);
+    expect(at).toBeLessThanOrEqual(t + CONTROL.retakeMaxMs);
+    // Stable : un second passage ne la déplace pas.
+    expect(byId(ensureControls(found, t + H, 30, 100), id).control!.attackAt).toBe(at);
   });
 });

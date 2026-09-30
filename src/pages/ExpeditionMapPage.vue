@@ -648,7 +648,12 @@
             </div>
             <!-- ⚠️ SANS DÉFENSE : la mine reste à nous, mais la prochaine attaque la reprendra
                (décision de l'utilisateur) — sauf si un renfort arrive avant. -->
-            <p v-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
+            <!-- 🌫️ Sa citadelle est cachée : personne n'attaque ce point (v0.1388). -->
+            <p v-if="ctlHidden" class="ctl-line ctl-dim">
+              🌫️ <b>Sa citadelle est encore cachée</b> : tant que tu ne la vois pas, elle ne te voit
+              pas — personne n’attaque ce point. Agrandir la carte (Avant-poste) la découvrira.
+            </p>
+            <p v-else-if="!liveControl.garrison.length" class="ctl-line ctl-warn">
               ⚠️ <b>Sans défense</b> : il ne produit plus, et l’ennemi le reprendra à sa prochaine
               attaque — sauf si un renfort arrive avant.
             </p>
@@ -660,7 +665,7 @@
             </p>
             <!-- ⚠️ Sinon l'instant de la reprise n'est PAS annoncé (v0.1239, décision de
                l'utilisateur) : on sait seulement qu'elle viendra, plus tôt si l'on s'entraîne. -->
-            <p v-else-if="liveControl.owner === 'player'" class="ctl-line ctl-warn">
+            <p v-else-if="liveControl.owner === 'player' && !ctlHidden" class="ctl-line ctl-warn">
               ⚔️ L’ennemi reviendra, prévenu au dernier moment — plus souvent si tu t’entraînes
               beaucoup. Force inconnue : ta garnison ne gagnera pas toujours.
             </p>
@@ -668,7 +673,7 @@
                renforts arrivés avant l'assaut (`defendersAtAttack`), contre l'ennemi le plus fort
                possible. L'heure restant secrète hors de la fenêtre imminente, les renforts en
                route y comptent tous. -->
-            <p v-if="defenseNow" class="ctl-line ctl-hold">
+            <p v-if="defenseNow && !ctlHidden" class="ctl-line ctl-hold">
               🛡️ À l’attaque : <b>{{ defenseNow.count }}</b> défenseur{{
                 defenseNow.count > 1 ? 's' : ''
               }}
@@ -786,9 +791,12 @@
           <p v-else-if="liveControl" class="sh-note">
             🏰 Prends-le avec 1 à 3 champions, sans le héros :
             {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
-            garnison ({{ CONTROL_YIELD[liveControl.kind] }}), jusqu’à ce que l’ennemi le reprenne
-            (entre 1 et 3 jours). Chaque ennemi abattu, à la prise comme en défense, rapporte de
-            l’XP.
+            garnison ({{ CONTROL_YIELD[liveControl.kind] }}),
+            <template v-if="ctlHidden"
+              >en paix tant que sa citadelle reste cachée dans le brouillard.</template
+            >
+            <template v-else>jusqu’à ce que l’ennemi le reprenne (entre 1 et 3 jours).</template>
+            Chaque ennemi abattu, à la prise comme en défense, rapporte de l’XP.
             <template v-if="militiaBuilt"
               >Une fois pris, des miliciens de ta Caserne peuvent y remplacer tes
               champions.</template
@@ -1292,6 +1300,7 @@ import {
   trainingCapLevel,
   seatsOf,
   attackImminent,
+  attackerHidden,
   controlDefenseHold,
   defendersAtAttack,
   imminentControlKey,
@@ -1945,6 +1954,12 @@ const garrisonKey = computed(() =>
     .filter((s) => !s.endsWith(':'))
     .join('|'),
 );
+/** 🌫️ La citadelle qui attaque le point sélectionné est encore cachée : personne ne l'attaque. */
+const ctlHidden = computed(() => {
+  const c = liveControl.value;
+  const pois = char.row?.expedition_map?.pois;
+  return !!c && !!pois && c.kind !== 'citadel' && attackerHidden(pois, c.kind);
+});
 const livePoi = computed(() =>
   selected.value
     ? (char.row?.expedition_map?.pois.find((p) => p.id === selected.value!.id) ?? null)

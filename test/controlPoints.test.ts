@@ -37,7 +37,7 @@ import { simulateCombat } from '@/lib/combat';
 
 const H = 3600_000;
 const ID = controlIdOf('mine');
-const mapAt = (seed: number, L = 30) => ensureControls(createMap(seed, 0, L, 1), 0, L);
+const mapAt = (seed: number, L = 30) => ensureControls(createMap(seed, 0, L, 1), 0, L, 100);
 const ctl = (m: ReturnType<typeof mapAt>) => m.pois.find((p) => p.id === ID)!;
 
 describe('🏰 un point de contrôle est FIXE', () => {

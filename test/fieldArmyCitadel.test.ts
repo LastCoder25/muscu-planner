@@ -84,7 +84,7 @@ describe('🏯 l’armée part de sa citadelle', () => {
 
 describe('🏯 sur la carte, chaque reprise part de la citadelle de son quart', () => {
   it('la trajectoire passe par la citadelle qui attaque le point', () => {
-    const m0 = ensureControls(createMap(5, 0, 30, 1), 0, 30);
+    const m0 = ensureControls(createMap(5, 0, 30, 1), 0, 30, 100);
     const m1 = captureControl(m0, controlIdOf('mine'), ['a0'], 0, 7);
     const mine = m1.pois.find((q) => q.id === controlIdOf('mine'))!;
     const cit = m1.pois.find((q) => q.id === citadelIdFor(m1.pois, 'mine'))!;
