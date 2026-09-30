@@ -616,7 +616,7 @@ import {
   legDone,
   legComplete,
   legAllDone,
-  legsDoneLast,
+  legsByGroup,
   filterLegsByZone,
   type ComboLegFilter,
   legTierMarks,
@@ -803,10 +803,11 @@ function bar(l: ComboLeg): { objPct: number; fillPct: number; overPct: number } 
 function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
 }
-// Ordre ALPHABÉTIQUE, les exos FINIS en bas (`legsDoneLast` — la MÊME règle que la fiche du
-// défi ; avant la v0.903 cet onglet triait par RESTANT et la fiche par fraction faite, donc le
-// même défi ne listait pas ses exos dans le même ordre aux deux endroits).
-const activeComboLegs = computed(() => legsDoneLast(activeCombo.value?.legs ?? []));
+// Ordre d'affichage : par GROUPE MUSCULAIRE (l'ordre des emplacements du 360), puis
+// alphabétique dans un groupe (`legsByGroup` — la MÊME règle sur la fiche, l'onglet 🎯 et la
+// préparation de séance). Un exo fini reste à sa place, grisé : les filtres de zone servent à
+// isoler ce qui reste (v0.1390, remplace le renvoi en bas de liste de la v0.921).
+const activeComboLegs = computed(() => legsByGroup(activeCombo.value?.legs ?? []));
 // 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
 const legFilter = ref<ComboLegFilter>('all');
 const shownComboLegs = computed(() => filterLegsByZone(activeComboLegs.value, legFilter.value));

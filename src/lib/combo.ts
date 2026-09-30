@@ -8,7 +8,7 @@ import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 // faites s'il a été commencé, comme pour les challenges »).
 import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
-import { comboSlot, swapSlotsOf, variantFamilyKey } from '@/data/combo';
+import { COMBO_SLOTS, comboSlot, swapSlotsOf, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
 import {
@@ -193,44 +193,36 @@ export function legMode(leg: ComboLeg): ComboCountMode {
   return leg.count_mode ?? 'sets';
 }
 
-/** 🔤 L'ORDRE D'AFFICHAGE DES EXOS D'UN DÉFI 360 : ALPHABÉTIQUE (demandé par l'utilisateur).
+/** 📑 L'ORDRE D'AFFICHAGE DES EXOS D'UN DÉFI 360 : PAR GROUPE MUSCULAIRE (demandé par
+ *  l'utilisateur), dans l'ordre des emplacements (`COMBO_SLOTS` : Poussée, Tirage, Squat,
+ *  Charnière, Gainage, Bras, Épaules & mollets), puis ALPHABÉTIQUE dans chaque groupe.
+ *  Un emplacement inconnu (360 ancien) passe en dernier.
  *
- *  ⚠️ CE QU'IL REMPLACE, ET POURQUOI C'EST MIEUX : chaque écran triait « les plus proches
- *  de la complétude en haut, les terminés en bas » — donc **la liste se réordonnait pendant
- *  qu'on saisissait ses séries**, et on perdait sa place au milieu d'une séance. Un ordre
- *  alphabétique est STABLE : l'exo qu'on cherche est toujours au même endroit.
- *
- *  ⚠️ ET LES DEUX ÉCRANS TRIAIENT DIFFÉREMMENT (la fiche par fraction faite, l'onglet 🎯 par
- *  restant) : le même défi ne listait pas ses exos dans le même ordre à deux endroits.
+ *  ⚠️ L'ORDRE EST STABLE : il ne dépend PAS de l'avancement. Avant la v0.903 les écrans
+ *  triaient par avancement, donc la liste se réordonnait PENDANT la saisie et on perdait sa
+ *  place au milieu d'une séance. Pour la même raison, un exo fini ne descend plus en bas
+ *  (retiré à la demande de l'utilisateur : les filtres par zone font ce travail) — il reste
+ *  à sa place, grisé.
  *
  *  ⚠️ NE RÉORDONNE JAMAIS `legs` — la copie est délibérée. La séance générée indexe les
  *  emplacements (`buildComboSessionFromCounts` reçoit un `counts` par exo, le runner
  *  numérote les séries) : trier la source déplacerait ce que le joueur a coché.
  *
  *  `localeCompare` en français : les accents se rangent comme on les lit, et `numeric`
- *  met « Pompes 2 » après « Pompes » plutôt qu'après « Pompes 10 ». */
-export function legsByName<T extends { exercise_name: string }>(legs: readonly T[]): T[] {
-  return [...legs].sort((a, b) =>
-    a.exercise_name.localeCompare(b.exercise_name, 'fr', { numeric: true, sensitivity: 'base' }),
+ *  met « Pompes 2 » avant « Pompes 10 ». Source unique des trois écrans (fiche du 360,
+ *  onglet 🎯, préparation de séance). */
+export function legsByGroup<T extends { exercise_name: string; slot: string }>(
+  legs: readonly T[],
+): T[] {
+  const rank = (slot: string) => {
+    const i = COMBO_SLOTS.findIndex((s) => s.key === slot);
+    return i < 0 ? COMBO_SLOTS.length : i;
+  };
+  return [...legs].sort(
+    (a, b) =>
+      rank(a.slot) - rank(b.slot) ||
+      a.exercise_name.localeCompare(b.exercise_name, 'fr', { numeric: true, sensitivity: 'base' }),
   );
-}
-
-/** 📑 L'ORDRE D'UN 360 EN COURS : les exos FINIS passent en bas (demandé par l'utilisateur).
- *
- *  ⚠️ « FINI » = LE PALIER MAXIMAL, jamais l'objectif. La zone bonus jusqu'à 120 % est rendue
- *  visible exprès (cases pointillées, marge hachurée — v0.646/0.647) et une série en plus y
- *  vaut autant qu'une série normale : reléguer à 100 % éteindrait précisément les séries qu'on
- *  veut encore voir faire. D'où `legAllDone`, et pas `legComplete`.
- *
- *  ⚠️ ELLE APPELLE `legsByName` : l'alphabet reste la SEULE règle de tri, appliquée au sein de
- *  chaque groupe. En réécrire une seconde ici ferait deux ordres pour la même liste — le défaut
- *  que la v0.903 venait de fermer.
- *
- *  ⚠️ Ça réordonne une liste rendue stable POUR sa stabilité (v0.903), et c'est acceptable
- *  parce qu'un exo ne bouge QU'UNE FOIS, au franchissement du maximal — pas à chaque série. */
-export function legsDoneLast(legs: readonly ComboLeg[]): ComboLeg[] {
-  const byName = legsByName(legs);
-  return [...byName.filter((l) => !legAllDone(l)), ...byName.filter(legAllDone)];
 }
 /** Libellé de l'unité de l'objectif (séries / reps / sec) selon le mode.
  *
@@ -528,8 +520,8 @@ export function legTierShare(l: ComboLeg): number {
 /** Tout est fait sur cet exo : il a franchi son palier MAXIMAL, il n'y a plus rien à y gagner.
  *
  *  Prédicat NOMMÉ pour que les écrans n'écrivent pas chacun `legTier(l) === 'max'` : c'est ce
- *  seuil-là qui décide du grisage ET du renvoi en bas de liste (`legsDoneLast`), et les deux
- *  doivent dire la même chose. À ne pas confondre avec `legComplete` (l'OBJECTIF, 100 %), qui
+ *  seuil-là qui décide du grisage (fiche du 360 et onglet 🎯), les deux écrans doivent dire
+ *  la même chose. L'exo reste à sa place dans la liste (`legsByGroup`). À ne pas confondre avec `legComplete` (l'OBJECTIF, 100 %), qui
  *  laisse la zone bonus ouverte. */
 export function legAllDone(l: ComboLeg): boolean {
   return legTier(l) === 'max';

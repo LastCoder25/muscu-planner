@@ -53,9 +53,8 @@ import {
   comboChestEligible,
   comboCompleteInTime,
   comboEndDate,
-  legsByName,
+  legsByGroup,
   legAllDone,
-  legsDoneLast,
   legStage,
   comboBarParts,
   comboBarSegments,
@@ -1253,93 +1252,56 @@ describe('🔀 ordre des séries d’une séance (v0.861)', () => {
   });
 });
 
-describe('🔤 l’ordre d’affichage des exos : ALPHABÉTIQUE', () => {
-  const leg = (exercise_name: string) => ({ exercise_name }) as never;
-  const noms = (x: readonly { exercise_name: string }[]) =>
-    legsByName(x).map((l) => l.exercise_name);
-
-  it('trie par nom, et NE TOUCHE PAS la source', () => {
-    // ⚠️ La copie est délibérée : la séance générée indexe les emplacements
-    // (`buildComboSessionFromCounts` reçoit un `counts` par exo), donc trier `legs` en place
-    // déplacerait ce que le joueur a coché.
-    const src = [leg('Tractions'), leg('Développé couché'), leg('Squat')];
-    const copie = [...src];
-    expect(noms(src)).toEqual(['Développé couché', 'Squat', 'Tractions']);
-    expect(src).toEqual(copie);
-  });
-
-  it('⚠️ L’ORDRE EST STABLE : il ne dépend PAS de l’avancement', () => {
-    // C'est tout l'intérêt du changement. Les deux écrans triaient par avancement, donc la
-    // liste se réordonnait PENDANT la saisie et on perdait sa place au milieu d'une séance.
-    const a = [
-      { exercise_name: 'Squat', target: 10, progress: [{ date: 'x', reps: 10 }] },
-      { exercise_name: 'Dips', target: 10, progress: [] },
-    ];
-    const b = [
-      { exercise_name: 'Squat', target: 10, progress: [] },
-      { exercise_name: 'Dips', target: 10, progress: [{ date: 'x', reps: 10 }] },
-    ];
-    expect(noms(a)).toEqual(noms(b));
-    expect(noms(a)).toEqual(['Dips', 'Squat']);
-  });
-
-  it('accents et nombres se rangent comme on les lit', () => {
-    // `localeCompare` en français : « Élévations » ne part pas à la fin de l'alphabet, et
-    // « Pompes 2 » passe avant « Pompes 10 ».
-    expect(noms([leg('Fentes'), leg('Élévations')])).toEqual(['Élévations', 'Fentes']);
-    expect(noms([leg('Pompes 10'), leg('Pompes 2')])).toEqual(['Pompes 2', 'Pompes 10']);
-  });
-});
-
-describe('📑 les exos FINIS passent en bas de liste', () => {
+describe('🗂️ l’ordre d’affichage des exos : PAR GROUPE, puis alphabétique (v0.1390)', () => {
   // Cible 4 séries → objectif à 4, palier MAXIMAL à 5 (`legTierMarks`).
-  const ex = (exercise_name: string, faites: number): ComboLeg => ({
-    slot: 'push',
+  const ex = (exercise_name: string, slot = 'push', faites = 0): ComboLeg => ({
+    slot,
     exercise_id: exercise_name,
     exercise_name,
     rep_weight: 1,
     target: 4,
     sets: Array.from({ length: faites }, () => set(10)),
   });
-  const noms = (x: readonly ComboLeg[]) => legsDoneLast(x).map((l) => l.exercise_name);
+  const noms = (x: readonly ComboLeg[]) => legsByGroup(x).map((l) => l.exercise_name);
 
-  it('⚠️ « FINI » = LE PALIER MAXIMAL, jamais l’objectif', () => {
-    // C'est LA décision de cette feature. La zone bonus jusqu'à 120 % est rendue visible
-    // exprès (v0.646/0.647) et une série en plus y vaut autant qu'une série normale :
-    // reléguer un exo dès 100 % éteindrait précisément les séries qu'on veut voir faire.
-    expect(legComplete(ex('Pompes', 4))).toBe(true); //  objectif atteint…
-    expect(legAllDone(ex('Pompes', 4))).toBe(false); // … mais il reste la zone bonus
-    expect(legAllDone(ex('Pompes', 5))).toBe(true); //   maximal franchi : plus rien à gagner
+  it('suit l’ordre des emplacements du 360, pas l’alphabet', () => {
+    const src = [
+      ex('Abdos', 'core'),
+      ex('Squat', 'squat'),
+      ex('Tractions', 'pull'),
+      ex('Pompes', 'push'),
+    ];
+    expect(noms(src)).toEqual(['Pompes', 'Tractions', 'Squat', 'Abdos']);
   });
 
-  it('un exo au maximal descend, quelle que soit sa place dans l’alphabet', () => {
-    // Abdos et Dips sont finis : ils descendent, même s'ils ouvrent l'alphabet.
-    const src = [ex('Abdos', 5), ex('Squat', 0), ex('Dips', 5), ex('Fentes', 2)];
-    expect(noms(src)).toEqual(['Fentes', 'Squat', 'Abdos', 'Dips']);
+  it('dans un groupe, l’alphabet départage (accents et nombres lus comme on les lit)', () => {
+    const src = [ex('Pompes 10'), ex('Élévations'), ex('Pompes 2'), ex('Dips')];
+    expect(noms(src)).toEqual(['Dips', 'Élévations', 'Pompes 2', 'Pompes 10']);
   });
 
-  it('l’ALPHABET reste la seule règle au sein de chaque groupe', () => {
-    // `legsDoneLast` APPELLE `legsByName` : en réécrire un second tri ici ferait deux ordres
-    // pour la même liste — le défaut que la v0.903 venait de fermer.
-    const src = [ex('Squat', 5), ex('Tractions', 0), ex('Abdos', 5), ex('Dips', 0)];
-    expect(noms(src)).toEqual(['Dips', 'Tractions', 'Abdos', 'Squat']);
+  it('un emplacement inconnu passe en dernier, sans rien perdre', () => {
+    const src = [ex('Mystère', 'zzz'), ex('Abdos', 'core')];
+    expect(noms(src)).toEqual(['Abdos', 'Mystère']);
   });
 
-  it('un exo ne bouge QU’UNE FOIS, au franchissement du maximal', () => {
-    // C'est ce qui rend acceptable de réordonner une liste rendue stable POUR sa stabilité :
-    // saisir des séries ne déplace rien tant qu'on n'a pas franchi le palier.
-    // ⚠️ « Abdos » ouvre l'alphabet : si on le mettait avec « Squat » (déjà 2e), son passage
-    // en bas serait INVISIBLE et le test passerait quoi qu'il arrive.
-    for (const n of [0, 1, 2, 3, 4]) {
-      expect(noms([ex('Abdos', n), ex('Squat', 0)])).toEqual(['Abdos', 'Squat']);
+  it('⚠️ L’ORDRE EST STABLE : un exo FINI reste à sa place', () => {
+    // Les filtres de zone isolent ce qui reste : on ne renvoie plus les exos finis en bas.
+    expect(legAllDone(ex('Pompes', 'push', 5))).toBe(true);
+    for (const n of [0, 2, 4, 5, 6]) {
+      expect(noms([ex('Squat', 'squat'), ex('Pompes', 'push', n)])).toEqual(['Pompes', 'Squat']);
     }
-    expect(noms([ex('Abdos', 5), ex('Squat', 0)])).toEqual(['Squat', 'Abdos']); // il descend
   });
 
-  it('ne touche PAS la source, et garde tous les exos', () => {
-    const src = [ex('Squat', 5), ex('Dips', 0)];
+  it('« FINI » = le palier MAXIMAL, jamais l’objectif (grisage)', () => {
+    expect(legComplete(ex('Pompes', 'push', 4))).toBe(true);
+    expect(legAllDone(ex('Pompes', 'push', 4))).toBe(false);
+    expect(legAllDone(ex('Pompes', 'push', 5))).toBe(true);
+  });
+
+  it('NE TOUCHE PAS la source (la séance indexe ses exos)', () => {
+    const src = [ex('Squat', 'squat'), ex('Pompes')];
     const copie = [...src];
-    expect(legsDoneLast(src)).toHaveLength(2);
+    expect(legsByGroup(src)).toHaveLength(2);
     expect(src).toEqual(copie);
   });
 });
