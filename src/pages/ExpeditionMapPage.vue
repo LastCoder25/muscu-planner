@@ -454,6 +454,8 @@
           @close="selected = null"
           @seal="doSeal"
         />
+        <!-- ⚔️ D'autres équipes y marchent déjà : on peut en envoyer une de plus. -->
+        <p v-if="marchingNote && !engagedTrip" class="sh-note">⚔️ {{ marchingNote }}</p>
         <!-- 🏅 L'ANCIENNETÉ du point (2026-09-30) : son cran, ce qu'il rapporte, ce qu'il attire. -->
         <p v-if="tierLine" class="ctl-line ctl-tier">
           <b>{{ tierLine.title }}</b> <span class="ctl-dim">· {{ tierLine.detail }}</span>
@@ -777,7 +779,6 @@
               Rappeler toute la garnison
             </button>
           </div>
-          <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur ce lieu.</p>
           <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">
             🏯 Attaque-la avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout
             le monde rentre après l’assaut. Abattue, elle offre {{ CONTROL_YIELD.citadel }} et monte
@@ -3828,6 +3829,23 @@ const veiledKey = computed(() =>
  *  (héros ou équipe). La fiche se réduit alors (demandé) : qui y est, quand il rentre, ce
  *  qu'il rapporte. ⚠️ Mêmes listes que les cibles DESSINÉES : un lieu non terrassé revenu
  *  sur la carte dès le rapport est de nouveau un lieu ordinaire, réattaquable. */
+/** ⚔️ ATTAQUER PLUSIEURS FOIS À LA FOIS (demandé) : combien d'équipes marchent déjà sur le
+ *  lieu choisi — il reste attaquable, la première qui le prend l'emporte, les suivantes
+ *  arrivent trop tard (`supersedeLate`). */
+const marchingNote = computed(() => {
+  const p = selected.value;
+  if (!p) return null;
+  const t = now.value;
+  const a = active.value;
+  const n =
+    char.partyList.filter((g) => !g.wingOf && g.poi.id === p.id && t < g.midAt).length +
+    (a && a.poi.id === p.id && t < a.midAt ? 1 : 0);
+  if (!n) return null;
+  return (
+    (n > 1 ? `${n} équipes y marchent déjà` : 'Une équipe y marche déjà') +
+    ' — tu peux en envoyer une autre : la première qui le prend l’emporte, les suivantes arrivent trop tard.'
+  );
+});
 const engagedTrip = computed(() => {
   const p = selected.value;
   if (!p) return null;

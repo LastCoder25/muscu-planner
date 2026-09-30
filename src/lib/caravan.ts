@@ -1099,7 +1099,6 @@ export function poiOffers(
       // 🏰 Il faut un point à prendre et au moins un champion pour l'occuper.
       (poi.type === 'control'
         ? poi.control?.owner === 'enemy' &&
-          !poi.control.assault &&
           // 🏯 Une citadelle encore cachée ne s'atteint pas.
           !(poi.control.kind === 'citadel' && poi.control.discoveredAt === undefined) &&
           // 🏯 La citadelle ne s'occupe pas : le héros seul peut y aller.

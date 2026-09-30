@@ -321,7 +321,9 @@ describe('🏰 qui peut partir, et comment', () => {
     expect(poiOffers(enemy, opts)).toMatchObject({ hero: false, party: true });
     expect(poiOffers(owned, opts)).toMatchObject({ hero: false, party: false });
     const marching = ctl(markAssault(mapAt(5), ID, true));
-    expect(poiOffers(marching, opts).party).toBe(false);
+    // ⚔️ Une équipe y marche déjà : on peut en envoyer une autre (la première qui le prend l'emporte).
+    expect(poiOffers(marching, opts).party).toBe(true);
+    expect(partySendBlocker(marching, 1, false, 20, 0.5)).toBeNull();
   });
   it('autant de champions qu’on veut, héros compris — au moins un champion pour occuper', () => {
     // Plus de plafond propre au point : celui du Panthéon seul.
