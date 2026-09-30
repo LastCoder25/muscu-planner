@@ -993,6 +993,19 @@ export function messageLoot(m: {
   return { item, more: Math.max(0, count - 1) };
 }
 
+/**
+ * 🏅 Le niveau dont un rapport affiche le RANG : la DIFFICULTÉ du lieu (gardes compris),
+ * exactement ce que la carte montrait avant l'envoi (`poiDifficultyLevel`). ⚠️ Jamais
+ * `m.level` seul : c'est le niveau brut des gardes — une mine « Or noir » sur la carte
+ * s'annonçait « Légendaire » dans son rapport. L'id du lieu se relit dans celui du
+ * message (`msg_<poi>_<départ>`), donc les rapports déjà déposés sont justes aussi.
+ */
+export function messageRankLevel(m: Pick<ExpeditionMessage, 'id' | 'poiType' | 'level'>): number {
+  const id = /^msg_(.+)_\d+$/.exec(m.id)?.[1];
+  if (!id || !m.poiType) return Math.max(1, m.level);
+  return poiDifficultyLevel({ id, type: m.poiType, level: m.level });
+}
+
 /** Construit le message de rapport d'une expédition (déposé à l'arrivée à l'objectif). */
 export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
   const o = exp.outcome;

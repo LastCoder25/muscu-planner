@@ -10,6 +10,7 @@ import {
   POI_EMO,
   haulPills,
   messageTitle,
+  messageRankLevel,
   type ExpeditionMessage,
   type PartyResult,
 } from './expedition';
@@ -93,7 +94,7 @@ export function messageCard(m: ExpeditionMessage, roster: readonly Adventurer[])
   const p = m.party ? partyReport(m.party, roster) : null;
   const rift = m.poiType === 'rift' || !!m.party?.rift;
   const loot = m.items?.length ? m.items : m.item ? [m.item] : [];
-  const rk = m.chest ? null : rankLabel(m.level);
+  const rk = m.chest ? null : rankLabel(messageRankLevel(m));
   return {
     id: m.id,
     rift,
