@@ -51,6 +51,7 @@ import {
   distNormAt,
   harvestGold,
   revealRadius,
+  recentDepartures,
   riftLevelFor,
   type ControlKind,
   type ControlState,
@@ -73,6 +74,10 @@ export const CONTROL = {
    *  sur 7 → autour d'1 jour, aucun → autour de 3. */
   retakeMinMs: 24 * 3600_000,
   retakeMaxMs: 72 * 3600_000,
+  /** 🗺️ « La carte est une mine de ressources : plus le joueur l'utilise, plus elle le
+   *  harcèle » (décision de l'utilisateur, 2026-09-30). Harcèlement plein à ce nombre de
+   *  départs sur 7 jours (3 par jour) ; aucun départ → le rythme le plus calme. */
+  harassRefDepartures: 21,
   /** Écart aléatoire autour du délai visé (± cette part), toujours borné à [min, max]. */
   retakeJitter: 0.25,
   /** Force de la troupe ennemie, en champions de référence : tirée à chaque attaque.
@@ -341,9 +346,12 @@ function enemyForce(
  *
  * - **L'ennemi est là dès le départ, caché dans le brouillard** : quatre citadelles, une par
  *   quart, chacune à une distance différente (`sites`). Chaque point est attaqué par la plus
- *   proche de lui (en angle). 🌫️ **Mais seulement une fois DÉCOUVERTE** (2026-09-30, « si je
- *   la vois, elle me voit ») : tant qu'elle est cachée, ses points restent en paix
- *   (`attackerHidden`, `gateAttacks`) — agrandir la carte ouvre un nouveau front.
+ *   proche de lui (en angle). 🌫️ **Cachée, elle attaque aussi, 2× moins souvent**
+ *   (`hiddenSlow` : on ne peut pas encore l'abattre). **Découverte, elle lance en plus des
+ *   RAIDS sur n'importe quel lieu tenu** (`citadelRaids`). Toutes ces cadences suivent
+ *   l'UTILISATION de la carte (`mapHarass`, départs des 7 derniers jours) : « la carte est une
+ *   mine de ressources, plus on l'utilise plus elle harcèle » (décision de l'utilisateur,
+ *   2026-09-30 — remplace « si je la vois, elle me voit »).
  * - **On les DÉCOUVRE en agrandissant la carte** (l'Avant-poste) : une citadelle se révèle
  *   quand le disque révélé l'atteint (`discoveredAt`, jamais repris). Cachée, elle ne se voit
  *   pas et ne s'attaque pas.
@@ -375,6 +383,17 @@ export const CITADEL = {
   truceMs: 72 * 3600_000,
   /** Palier −1 par semaine sans victoire. */
   decayMs: 7 * 24 * 3600_000,
+  /** 🌫️ Une citadelle CACHÉE attaque aussi les points de son secteur, mais 2× moins souvent :
+   *  on ne peut pas encore l'abattre pour s'offrir une trêve. */
+  hiddenSlow: 2,
+  /** ⚔️ Les raids d'une citadelle DÉCOUVERTE, sur n'importe quel lieu tenu : tous les 4 jours
+   *  quand on n'utilise pas la carte, chaque jour quand on l'utilise à fond (± 25 %). Plusieurs
+   *  citadelles découvertes = plusieurs raids, qui peuvent tomber en même temps. */
+  raidMaxMs: 96 * 3600_000,
+  raidMinMs: 24 * 3600_000,
+  /** Au plus ce nombre de raids rattrapés d'un coup après une absence (un lieu ne porte de
+   *  toute façon qu'une attaque à la fois). */
+  raidCatchUp: 8,
   /** 😡 Colère : +5 % d'armée par jour sans l'abattre, au plus 10 jours (+50 %). */
   ragePerDay: 0.05,
   rageMaxDays: 10,
@@ -399,6 +418,12 @@ export const isCitadelId = (id: string): boolean => CITADEL_IDS.includes(id);
 /** 🏯 Une citadelle découverte (donc visible et attaquable). */
 export const isCitadelFound = (p: Pick<Poi, 'control'> | null | undefined): boolean =>
   isCitadel(p) && p!.control!.discoveredAt !== undefined;
+
+/** 🗺️ Le harcèlement de la carte, de 0 (on n'y va jamais) à 1 (3 départs par jour sur la
+ *  semaine) : il règle le rythme des reprises ET des raids de citadelle. */
+export function mapHarass(map: Pick<ExpeditionMap, 'departures'>, now: number): number {
+  return Math.min(1, recentDepartures(map, now).length / CONTROL.harassRefDepartures);
+}
 
 /** 🏯 Le niveau d'Avant-poste qui fait découvrir la citadelle `i`. */
 export function citadelRevealLevel(i: number): number {
@@ -589,12 +614,13 @@ function syncCitadels(
       control: { ...c, size, ...(found !== undefined ? { discoveredAt: found } : {}) },
     };
   });
-  return gateAttacks(stampAnger(out), now);
+  const harass = mapHarass(map, now);
+  return citadelRaids(gateAttacks(stampAnger(out), now, harass), now, harass);
 }
 
-/** 🌫️ La citadelle qui attaque ce type de point est-elle encore CACHÉE ? (décision de
- *  l'utilisateur, 2026-09-30 : « si je la vois, elle me voit ») Sans citadelle sur la carte
- *  (carte d'avant les citadelles), on attaque comme avant. */
+/** 🌫️ La citadelle du secteur de ce point est-elle encore CACHÉE ? Elle l'attaque quand même,
+ *  2× moins souvent (`CITADEL.hiddenSlow`) — on ne peut pas encore l'abattre. Sans
+ *  citadelle sur la carte (carte d'avant les citadelles) : non. */
 export function attackerHidden(pois: readonly Poi[], kind: ControlKind): boolean {
   const id = citadelIdFor(pois, kind);
   if (!id) return false;
@@ -602,30 +628,74 @@ export function attackerHidden(pois: readonly Poi[], kind: ControlKind): boolean
   return !!cit && !isCitadelFound(cit);
 }
 
-/** 🌫️ Un point tenu dont la citadelle est cachée n'est PAS attaqué : son attaque prévue est
- *  retirée (aucune armée, aucune notification, aucune alerte). Découverte, la citadelle
- *  l'attaque au rythme habituel, à partir de maintenant (jamais pendant sa trêve).
- *  ⚠️ `attackAt` absent = aucune attaque : tous les lecteurs (tick, armée, push, alerte)
- *  savent déjà l'ignorer. N'écrit que ce qui change. */
-function gateAttacks(pois: Poi[], now: number): Poi[] {
+/** ⚔️ Tout point tenu a une attaque prévue. Celui qui n'en a pas (la règle « une citadelle
+ *  cachée n'attaque pas », v0.1388, est abandonnée le 2026-09-30) en reçoit une à partir de
+ *  maintenant, au rythme du harcèlement (jamais pendant une trêve). N'écrit que ce qui change. */
+function gateAttacks(pois: Poi[], now: number, harass: number): Poi[] {
   let out = pois;
   pois.forEach((p, k) => {
     const c = p.control;
-    if (!c || c.owner !== 'player' || c.kind === 'citadel') return;
+    if (!c || c.owner !== 'player' || c.kind === 'citadel' || c.attackAt !== undefined) return;
+    const id = citadelIdFor(pois, c.kind);
+    const truce = (id && pois.find((q) => q.id === id)?.control?.truceUntil) || 0;
     const hidden = attackerHidden(pois, c.kind);
-    let attackAt = c.attackAt;
-    if (hidden) attackAt = undefined;
-    else if (attackAt === undefined) {
-      const id = citadelIdFor(pois, c.kind);
-      const truce = (id && pois.find((q) => q.id === id)?.control?.truceUntil) || 0;
-      attackAt = Math.max(now + retakeDelayMs(p.id, now, c.activity ?? 0), truce);
-    }
-    if (attackAt === c.attackAt) return;
-    const next = { ...c };
-    if (attackAt === undefined) delete next.attackAt;
-    else next.attackAt = attackAt;
+    const attackAt = Math.max(now + retakeDelayMs(p.id, now, harass, hidden), truce);
     if (out === pois) out = [...pois];
-    out[k] = { ...p, control: next };
+    out[k] = { ...p, control: { ...c, attackAt } };
+  });
+  return out;
+}
+
+/** ⚔️ Le délai jusqu'au prochain raid d'une citadelle découverte. */
+export function raidDelayMs(id: string, from: number, harass: number): number {
+  const r = mulberry32((seedOf(`${id}:raid:${from}`) ^ 0x5ad1c3e7) >>> 0 || 1)();
+  const h = Math.min(1, Math.max(0, harass));
+  const { raidMinMs: lo, raidMaxMs: hi } = CITADEL;
+  const aim = hi - h * (hi - lo);
+  return Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * CONTROL.retakeJitter)));
+}
+
+/** ⚔️ LES RAIDS : chaque citadelle DÉCOUVERTE frappe, à son rythme, un lieu tenu tiré au
+ *  hasard n'importe où sur la carte — elle avance son attaque prévue (un lieu ne porte
+ *  qu'une attaque à la fois). Pendant sa trêve elle ne raide pas, et un lieu couvert par la
+ *  trêve de SA citadelle n'est pas visé (la trêve promet des jours sans reprise).
+ *  N'écrit que ce qui change. */
+export function citadelRaids(pois: Poi[], now: number, harass: number): Poi[] {
+  let out = pois;
+  CITADEL_IDS.forEach((cid) => {
+    const k = out.findIndex((p) => p.id === cid);
+    const cit = k < 0 ? null : out[k]!;
+    if (!cit || !isCitadelFound(cit)) return;
+    const cc = cit.control!;
+    const truce = cc.truceUntil ?? 0;
+    let raidAt = cc.raidAt ?? Math.max(now, truce) + raidDelayMs(cid, now, harass);
+    let n = 0;
+    while (raidAt <= now && n < CITADEL.raidCatchUp) {
+      n++;
+      if (raidAt >= truce) {
+        const targets = out.filter(
+          (p) =>
+            p.control?.owner === 'player' &&
+            p.control.kind !== 'citadel' &&
+            p.control.attackAt !== undefined &&
+            p.control.attackAt > raidAt &&
+            truceUntilFor({ pois: out } as ExpeditionMap, p.control.kind) <= raidAt,
+        );
+        if (targets.length) {
+          const r = mulberry32((seedOf(`${cid}:target:${raidAt}`) ^ 0x1f83d9ab) >>> 0 || 1)();
+          const t = targets[Math.floor(r * targets.length)]!;
+          const at = raidAt;
+          out = out.map((p) =>
+            p.id === t.id ? { ...p, control: { ...p.control!, attackAt: at } } : p,
+          );
+        }
+      }
+      raidAt = Math.max(raidAt, truce) + raidDelayMs(cid, raidAt, harass);
+    }
+    // Rattrapage borné : on repart de maintenant.
+    if (raidAt <= now) raidAt = now + raidDelayMs(cid, now, harass);
+    if (raidAt === cc.raidAt) return;
+    out = out.map((p) => (p.id === cid ? { ...p, control: { ...p.control!, raidAt } } : p));
   });
   return out;
 }
@@ -856,19 +926,21 @@ export function ensureControls(
   return { ...map, pois: all };
 }
 
-/** Délai avant la prochaine attaque (graine : le lieu et l'instant) : visé entre 3 jours
- *  (aucun jour actif sur 7) et 1 jour (7 sur 7), ± `retakeJitter`, borné à [1 j, 3 j].
- *  ⚠️ `activeDays7` est REQUIS : l'oublier ferait attaquer au rythme d'un inactif.
+/** Délai avant la prochaine attaque (graine : le lieu et l'instant) : visé entre 3 jours (on
+ *  n'utilise pas la carte) et 1 jour (harcèlement plein, `mapHarass`), ± `retakeJitter`,
+ *  borné à [1 j, 3 j] — le DOUBLE si la citadelle du secteur est cachée (`hiddenSlow`).
+ *  ⚠️ `harass` et `hidden` sont REQUIS.
  *  ⚠️ L'instant n'est JAMAIS annoncé au joueur (décision de l'utilisateur) : ni sur la fiche
  *  du point, ni par une notification de préavis — seule l'attaque elle-même se dit. Seule
  *  exception (2026-09-28) : `attackImminent`, qui prévient dans les `CONTROL.imminentMs`
  *  dernières heures, sans jamais donner l'heure. */
-export function retakeDelayMs(id: string, from: number, activeDays7: number): number {
+export function retakeDelayMs(id: string, from: number, harass: number, hidden: boolean): number {
   const r = mulberry32((seedOf(`${id}:atk:${from}`) ^ 0x2c1b3c6d) >>> 0 || 1)();
-  const act = Math.min(7, Math.max(0, activeDays7)) / 7;
+  const h = Math.min(1, Math.max(0, harass));
+  const slow = hidden ? CITADEL.hiddenSlow : 1;
   const { retakeMinMs: lo, retakeMaxMs: hi, retakeJitter: j } = CONTROL;
-  const aim = hi - act * (hi - lo);
-  return Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * j)));
+  const aim = hi - h * (hi - lo);
+  return slow * Math.min(hi, Math.max(lo, aim * (1 + (r * 2 - 1) * j)));
 }
 
 /** Remplace un point dans la carte. */
@@ -897,15 +969,11 @@ export function captureControl(
       garrison: garrison.slice(0, seatsOf(p.control!.kind)),
       since: at,
       collectedAt: at,
-      // 🏯 Jamais pendant la trêve d'une citadelle abattue ; 🌫️ jamais si elle est cachée.
-      ...(attackerHidden(map.pois, p.control!.kind)
-        ? {}
-        : {
-            attackAt: Math.max(
-              at + retakeDelayMs(id, at, activeDays7),
-              truceUntilFor(map, p.control!.kind),
-            ),
-          }),
+      // 🏯 Jamais pendant la trêve d'une citadelle abattue ; 🌫️ plus lent si elle est cachée.
+      attackAt: Math.max(
+        at + retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
+        truceUntilFor(map, p.control!.kind),
+      ),
       activity: activeDays7,
       assault: false,
       // 🏅 Repris : il repart des crans qui lui restaient (ceux que l'ennemi n'a pas usés).
@@ -1011,7 +1079,7 @@ export function holdControl(
       ...p.control!,
       // 🏯 Jamais pendant la trêve d'une citadelle abattue.
       attackAt: Math.max(
-        at + retakeDelayMs(id, at, activeDays7),
+        at + retakeDelayMs(id, at, mapHarass(map, at), attackerHidden(map.pois, p.control!.kind)),
         truceUntilFor(map, p.control!.kind),
       ),
       activity: activeDays7,
@@ -2196,14 +2264,26 @@ export function dueRetakes(map: ExpeditionMap | null, now: number): Poi[] {
       (p) =>
         p.control?.owner === 'player' &&
         p.control.attackAt !== undefined &&
-        p.control.attackAt <= now &&
-        // 🌫️ Une citadelle cachée n'attaque pas (le tick de carte retire aussi l'échéance).
-        !attackerHidden(map.pois, p.control.kind),
+        p.control.attackAt <= now,
     )
     .sort((a, b) => a.control!.attackAt! - b.control!.attackAt!);
 }
 
 /** Les points tenus (pour les notifications et l'affichage). */
+/** 🧭 D'où part une troupe : le point fixe posé à `origin` (un voyage ne garde que les
+ *  coordonnées de son départ), ou `null` = la base (pas d'`origin`, ou plus de point là). */
+export function tripOriginPoi(
+  pois: readonly Poi[] | null | undefined,
+  origin: { x: number; y: number } | undefined,
+): Poi | null {
+  if (!origin || !pois) return null;
+  return (
+    pois.find(
+      (p) => !!p.control && Math.abs(p.x - origin.x) < 0.5 && Math.abs(p.y - origin.y) < 0.5,
+    ) ?? null
+  );
+}
+
 export function heldControls(map: ExpeditionMap | null): Poi[] {
   return map ? map.pois.filter((p) => p.control?.owner === 'player') : [];
 }

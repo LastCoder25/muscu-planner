@@ -23,6 +23,13 @@ const CAMP = controlIdOf('training');
 const mapAt = (L: number) => ensureControls(createMap(3, 0, L, 1), 0, L, 100);
 const pt = (m: ReturnType<typeof mapAt>) => m.pois.find((p) => p.id === CAMP)!;
 const at = (m: ReturnType<typeof mapAt>, t: number) => settleReinforcements(m, t, 30);
+/** ⚔️ L’attaque (qui arrête la réserve) fixée à 24 h après la prise. */
+const attackIn24h = (m: ReturnType<typeof mapAt>) => ({
+  ...m,
+  pois: m.pois.map((p) =>
+    p.id === CAMP ? { ...p, control: { ...p.control!, attackAt: 24 * H } } : p,
+  ),
+});
 
 describe('🎯 camp d’entraînement : chaque champion a sa barre d’XP', () => {
   it('un renfort arrivé plus tard gagne moins, et part de zéro', () => {
@@ -73,8 +80,8 @@ describe('🎯 camp d’entraînement : chaque champion a sa barre d’XP', () =
     expect(trainingStockBy(legacy, 0, 30)).toEqual({ a0: 40, a1: 40 });
   });
 
-  it('chaque barre plafonne à 24 h, et le bout de ligne montre la plus avancée', () => {
-    let m = captureControl(mapAt(30), CAMP, ['a0'], 0, 7);
+  it('chaque barre s’arrête à l’heure de l’attaque, et le bout de ligne montre la plus avancée', () => {
+    let m = attackIn24h(captureControl(mapAt(30), CAMP, ['a0'], 0, 7));
     m = reinforceControl(m, CAMP, ['a1'], 12 * H);
     m = at(m, 12 * H);
     const p = pt(m);

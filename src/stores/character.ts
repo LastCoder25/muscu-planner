@@ -113,6 +113,7 @@ import {
   type ExpeditionOutcome,
   type Poi,
   restoreUnvanquished,
+  recordDeparture,
 } from '@/lib/expedition';
 import {
   buildingType,
@@ -322,6 +323,8 @@ import {
   trainingRoom,
   dueRetakes,
   retakeDelayMs,
+  mapHarass,
+  attackerHidden,
   ensureControls,
   holdControl,
   loseControl,
@@ -2287,7 +2290,11 @@ export const useCharacterStore = defineStore('character', () => {
     const baseMap =
       cur.expedition_map ??
       createMap(newSeed(now), now, level, buildingLevel(cur.buildings, 'outpost'));
-    const map: ExpeditionMap = { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) };
+    // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
+    const map: ExpeditionMap = recordDeparture(
+      { ...baseMap, pois: baseMap.pois.filter((p) => p.id !== poi.id) },
+      now,
+    );
     await persist(userId, { expedition: exp, expedition_map: map });
   }
   // À l'arrivée à l'objectif : dépose le rapport (une seule fois). Renvoie le message si nouveau.
@@ -3516,8 +3523,10 @@ export const useCharacterStore = defineStore('character', () => {
     // 🏰 Une sortie quitte la garnison de son point (ce qui est produit reste en réserve) :
     // le point produit moins et se défend moins bien tant qu'elle est dehors — mais sa place
     // lui est GARDÉE jusqu'à son retour (`sortieLeaves`).
-    const map =
+    const map1 =
       origin && map0 ? sortieLeaves(map0, origin.id, opts.escortIds, now, opts.playerLevel) : map0;
+    // 🗺️ Un départ de plus : la carte harcèle d'autant plus qu'on l'utilise.
+    const map = map1 ? recordDeparture(map1, now) : map1;
     await persist(userId, {
       expedition_map: map,
       ...(supplies.length ? { supplies: stockAfter } : {}),
@@ -3841,7 +3850,7 @@ export const useCharacterStore = defineStore('character', () => {
     // Réservés : jusqu'à leur retour prévu. Ils restent chez eux jusqu'à leur départ.
     const returnOf = new Map(plan.wings.flatMap((w) => w.members.map((id) => [id, w.returnAt])));
     await persist(userId, {
-      expedition_map: targetTaken(map, poi),
+      expedition_map: recordDeparture(targetTaken(map, poi)!, now),
       attacks: [...attackList.value, attack],
       ...(supplies.length ? { supplies: stockAfter } : {}),
       adventurers: advList.value.map((a) =>
@@ -4457,7 +4466,13 @@ export const useCharacterStore = defineStore('character', () => {
           settled,
           hit,
           at,
-          at + retakeDelayMs(p.id, at, activeDays7),
+          at +
+            retakeDelayMs(
+              p.id,
+              at,
+              mapHarass(settled, at),
+              attackerHidden(settled.pois, p.control.kind),
+            ),
         ).map;
       }
     }

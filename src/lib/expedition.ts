@@ -115,6 +115,9 @@ export interface ControlState {
   palier?: number;
   palierAt?: number;
   truceUntil?: number;
+  /** 🏯 Citadelle DÉCOUVERTE : l'instant de son prochain raid sur un lieu tenu, n'importe où
+   *  sur la carte (`citadelRaids`). */
+  raidAt?: number;
   /** 🏯 Citadelle : l'instant où l'Avant-poste l'a DÉCOUVERTE (jamais repris). Avant, elle
    *  reste cachée, ne s'attaque pas et ne s'énerve pas. */
   discoveredAt?: number;
@@ -660,6 +663,22 @@ export interface ExpeditionMap {
   /** 🐫 Les monstres EMBUSQUÉS autour d'une faille qui a débordé (v0.1009). Absent des
    *  cartes d'avant → aucune embuscade, aucune migration. */
   ambushes?: RiftAmbush[];
+  /** 🗺️ Les départs (héros et équipes) des 7 derniers jours : l'UTILISATION de la carte, qui
+   *  règle son harcèlement (`mapHarass`). Absent des cartes d'avant → 0, aucune migration. */
+  departures?: number[];
+}
+
+/** 🗺️ La fenêtre sur laquelle on compte les départs. */
+export const DEPARTURE_WINDOW_MS = 7 * 24 * 3600_000;
+
+/** 🗺️ Les départs encore dans la fenêtre. */
+export function recentDepartures(map: Pick<ExpeditionMap, 'departures'>, now: number): number[] {
+  return (map.departures ?? []).filter((t) => t > now - DEPARTURE_WINDOW_MS && t <= now);
+}
+
+/** 🗺️ Un départ de plus sur la carte (héros ou équipe), les vieux oubliés. */
+export function recordDeparture(map: ExpeditionMap, now: number): ExpeditionMap {
+  return { ...map, departures: [...recentDepartures(map, now), now].slice(-200) };
 }
 
 /** 🐫 Une embuscade laissée par une faille qui a débordé : là où elle était, jusqu'à
@@ -2348,6 +2367,8 @@ export function advanceWorld(
     // et différerait de la précédente (l'appelant compare par `JSON.stringify` pour décider
     // s'il persiste).
     ...(ambushes.length ? { ambushes } : {}),
+    // 🗺️ Les départs récents survivent (même règle : clé absente quand il n'y en a pas).
+    ...(recentDepartures(map, now).length ? { departures: recentDepartures(map, now) } : {}),
     // On écarte les POI expirés ET ceux qui ne tiennent plus dans la carte : une carte
     // sauvegardée avant que `distMax` ne soit borné par le littoral (v0.668) porte des
     // POI dessinés en pleine mer, et ils survivraient jusqu'à 48 h. On les périme donc

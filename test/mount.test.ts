@@ -757,6 +757,8 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ),
     ).toBeNull();
     expect(out).toContain('→ 1 h 20');
+    // 🧭 En haut à gauche, d'où part la troupe : la base 🏰 sans point de départ.
+    expect(out).toMatch(/class="tr-from"[^>]*>🏰</);
     expect(out).toContain('Léa'); // l'équipe du voyage touché
     expect(out).toContain('plus dans ton vivier'); // le champion renvoyé depuis
     // ⚠️ À l'ALLER le butin n'est pas montré : il révélerait l'issue d'un combat à venir.
@@ -773,6 +775,25 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (rc = h),
     );
     expect(rc).toContain('Faire demi-tour');
+    // 🧭 Partie d'un point fixe : l'encart montre SON emoji, plus la base.
+    const mine = {
+      id: 'ctl_mine',
+      type: 'control',
+      level: 5,
+      x: 1,
+      y: 1,
+      control: { kind: 'mine' },
+    };
+    let fromPt = '';
+    await mountIt(
+      TripsPanel,
+      { trips: [{ ...trip, from: mine }], focus: null, heroProfile: 'polyvalent' },
+      ROW,
+      undefined,
+      '/',
+      (h) => (fromPt = h),
+    );
+    expect(fromPt).toMatch(/class="tr-from"[^>]*>⛏️</);
     // ❓ Au RETOUR, ce qu'on ramène se touche et se lit, comme dans les rapports (demandé).
     let tip = '';
     await mountIt(

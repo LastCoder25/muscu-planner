@@ -13,6 +13,8 @@ import {
   loseControl,
   markAssault,
   retakeDelayMs,
+  mapHarass,
+  CITADEL,
   retakeForce,
   controlTravelMult,
   controlDetectBoost,
@@ -23,10 +25,18 @@ import {
   seatsOf,
   controlGoldPerHour,
   tierYieldMult,
+  tripOriginPoi,
 } from '@/lib/controlPoints';
 import { advAscensionReady, advXpToNext, grantAdvXp } from '@/lib/adventurers';
 import { rankStartLevel } from '@/lib/characterRank';
-import { EXPE, createMap, advanceWorld, revealRadius } from '@/lib/expedition';
+import {
+  EXPE,
+  createMap,
+  advanceWorld,
+  revealRadius,
+  recordDeparture,
+  recentDepartures,
+} from '@/lib/expedition';
 import { poiOffers, refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
 import { partyCapFor, partySendBlocker, partyHeroBlocker } from '@/lib/party';
 import { advUnavailableReason, type Adventurer } from '@/lib/adventurers';
@@ -36,6 +46,7 @@ import { campFoe } from '@/lib/camp';
 import { simulateCombat } from '@/lib/combat';
 
 const H = 3600_000;
+const D = 24 * H;
 const ID = controlIdOf('mine');
 const mapAt = (seed: number, L = 30) => ensureControls(createMap(seed, 0, L, 1), 0, L, 100);
 const ctl = (m: ReturnType<typeof mapAt>) => m.pois.find((p) => p.id === ID)!;
@@ -53,7 +64,9 @@ describe('🏰 un point de contrôle est FIXE', () => {
   it('ne se double pas, et la carte ne change pas quand rien ne manque', () => {
     const m = mapAt(7);
     expect(ensureControls(m, H, 30)).toBe(m);
-    expect(m.pois.filter((p) => p.type === 'control' && p.control?.kind !== 'citadel')).toHaveLength(CONTROL.kinds.length);
+    expect(
+      m.pois.filter((p) => p.type === 'control' && p.control?.kind !== 'citadel'),
+    ).toHaveLength(CONTROL.kinds.length);
   });
   it('survit au monde qui avance (hors quota, jamais expiré)', () => {
     let m = mapAt(9);
@@ -144,7 +157,10 @@ describe('🏰 les quatre points', () => {
     expect(controlDetectBoost(mapAt(11), 0)).toBe(0);
     expect(controlDetectBoost(null, 0)).toBe(0);
     expect(controlDetectBoost(held('tower').map, 0)).toBeCloseTo(CONTROL.towerDetect, 5);
-    expect(controlDetectBoost(held('tower', ['a0']).map, 0)).toBeCloseTo(CONTROL.towerDetect * 0.5, 5);
+    expect(controlDetectBoost(held('tower', ['a0']).map, 0)).toBeCloseTo(
+      CONTROL.towerDetect * 0.5,
+      5,
+    );
     const five = ['a0', 'a1', 'a2', 'a3', 'a4'];
     const par = (n: number) => controlDetectBoost(held('tower', five.slice(0, n)).map, 0);
     // Chaque présent de plus voit plus loin — jusqu'à la garnison entière.
@@ -164,21 +180,39 @@ describe('🏰 prise, production, reprise', () => {
     expect(p.control!.attackAt).toBeGreaterThanOrEqual(CONTROL.retakeMinMs);
     expect(p.control!.attackAt).toBeLessThanOrEqual(CONTROL.retakeMaxMs);
   });
-  it('les délais restent entre 1 et 3 jours, plus courts si le joueur est actif', () => {
-    const at = (a: number) => Array.from({ length: 300 }, (_, i) => retakeDelayMs(ID, i * 977, a));
+  it('les délais restent entre 1 et 3 jours, plus courts si le joueur utilise la carte', () => {
+    const at = (h: number, hidden = false) =>
+      Array.from({ length: 300 }, (_, i) => retakeDelayMs(ID, i * 977, h, hidden));
     const mean = (d: number[]) => d.reduce((x, y) => x + y, 0) / d.length;
-    for (const a of [0, 3, 7]) {
-      const d = at(a);
+    for (const h of [0, 0.5, 1]) {
+      const d = at(h);
       expect(Math.min(...d)).toBeGreaterThanOrEqual(CONTROL.retakeMinMs);
       expect(Math.max(...d)).toBeLessThanOrEqual(CONTROL.retakeMaxMs);
     }
-    // Très actif : autour d'un jour ; inactif : autour de trois.
-    expect(mean(at(7))).toBeLessThan(30 * H);
+    // Harcèlement plein : autour d'un jour ; carte délaissée : autour de trois.
+    expect(mean(at(1))).toBeLessThan(30 * H);
     expect(mean(at(0))).toBeGreaterThan(60 * H);
-    expect(mean(at(7))).toBeLessThan(mean(at(3)));
-    expect(mean(at(3))).toBeLessThan(mean(at(0)));
+    expect(mean(at(1))).toBeLessThan(mean(at(0.5)));
+    expect(mean(at(0.5))).toBeLessThan(mean(at(0)));
+    // 🌫️ Citadelle cachée : exactement le double.
+    expect(at(1, true)).toEqual(at(1).map((x) => x * CITADEL.hiddenSlow));
     // Et ce n'est pas un rendez-vous fixe : le tirage varie.
-    expect(new Set(at(7).map((x) => Math.round(x / H))).size).toBeGreaterThan(5);
+    expect(new Set(at(1).map((x) => Math.round(x / H))).size).toBeGreaterThan(5);
+  });
+  it('🗺️ le harcèlement suit les départs des 7 derniers jours', () => {
+    const m = mapAt(3);
+    expect(mapHarass(m, 10 * D)).toBe(0);
+    let x = m;
+    for (let i = 0; i < 7; i++) x = recordDeparture(x, 10 * D + i * H);
+    expect(mapHarass(x, 10 * D + 8 * H)).toBeCloseTo(7 / CONTROL.harassRefDepartures, 9);
+    for (let i = 0; i < 40; i++) x = recordDeparture(x, 10 * D + (10 + i) * H);
+    expect(mapHarass(x, 12 * D)).toBe(1);
+    // Au-delà de 7 jours, les départs s'oublient.
+    expect(mapHarass(x, 30 * D)).toBe(0);
+    // Et ils survivent à l'avancée du monde.
+    expect(advanceWorld(x, 12 * D, 30, 3).departures?.length).toBe(
+      recentDepartures(x, 12 * D).length,
+    );
   });
   it('produit de l’or, sans plafond de temps, arrêté à l’attaque, plus avec plus de monde', () => {
     const m = captureControl(mapAt(3), ID, ['a0', 'a1', 'a2'], 0, 7);
@@ -429,5 +463,27 @@ describe('🏰 un point se prend à son niveau (signalé : une tour « légendai
       const f = retakeForce({ ...g, control: { ...g.control!, attackAt: t * 7919 } }, 1);
       expect(f.size).toBeLessThanOrEqual(Math.max(...CONTROL.sizes));
     }
+  });
+});
+
+describe('🧭 tripOriginPoi — d’où part une troupe', () => {
+  const pt = {
+    id: 'ctl_mine',
+    type: 'control',
+    level: 5,
+    x: 40,
+    y: 60,
+    control: { kind: 'mine' },
+  } as unknown as Poi;
+  const camp = { id: 'c1', type: 'camp', level: 5, x: 10, y: 10 } as unknown as Poi;
+  it('sans origine : la base', () => {
+    expect(tripOriginPoi([pt], undefined)).toBeNull();
+  });
+  it('à la place d’un point fixe : ce point', () => {
+    expect(tripOriginPoi([camp, pt], { x: 40, y: 60 })).toBe(pt);
+  });
+  it('seuls les points fixes comptent, et plus de point là : la base', () => {
+    expect(tripOriginPoi([camp], { x: 10, y: 10 })).toBeNull();
+    expect(tripOriginPoi([pt], { x: 90, y: 90 })).toBeNull();
   });
 });
