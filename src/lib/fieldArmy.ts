@@ -46,8 +46,7 @@ import { BATTLE } from './siegeBattle';
 import {
   CONTROL,
   attackerLevel,
-  citadelIdOf,
-  citadelIndexOf,
+  citadelIdFor,
   retakeBoost,
   retakeForce,
 } from './controlPoints';
@@ -263,7 +262,7 @@ export function syncFieldArmies(
     if (p.type !== 'control') continue;
     // 🏯 Elle part de la citadelle qui attaque ce point.
     const cit = p.control
-      ? map.pois.find((q) => q.id === citadelIdOf(citadelIndexOf(p.control!.kind)))
+      ? map.pois.find((q) => q.id === citadelIdFor(map.pois, p.control!.kind))
       : undefined;
     const r = retakeArmyPoi(
       p,
