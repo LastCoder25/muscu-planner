@@ -21,21 +21,21 @@ import {
   type RuneBank,
   type StockSkill,
 } from '@/lib/runeBank';
-import { RUNE_TIERS, SKILLS, placeRuneOdds, skillsOfTier } from '@/lib/skillRunes';
+import { RUNE_TIERS, SKILLS, skillsOfTier } from '@/lib/skillRunes';
 
 const bank = (runes: number, skills: StockSkill[] = []): RuneBank => ({
   runes,
   skills,
   opened: skills.length,
+  comp: 2,
 });
 const sk = (uid: string, id: StockSkill['id'], level = 1): StockSkill => ({ uid, id, level });
 
 describe('table unique', () => {
-  it('somme 1, et vaut la table d’un lieu à ton rang', () => {
+  it('somme 1, et vaut la table de la spec (70 / 22 / 7 / 1)', () => {
     const sum = RUNE_TIERS.reduce((n, t) => n + RUNE_ODDS[t], 0);
     expect(sum).toBeCloseTo(1, 9);
-    const equal = placeRuneOdds({ place: 'camp', placeRankIndex: 3, playerRankIndex: 3 });
-    for (const t of RUNE_TIERS) expect(RUNE_ODDS[t]).toBeCloseTo(equal[t], 9);
+    expect(RUNE_ODDS).toEqual({ green: 0.7, blue: 0.22, violet: 0.07, gold: 0.01 });
   });
 
   it('l’ouverture suit la table (20 000 tirages)', () => {
@@ -209,8 +209,14 @@ describe('relecture et migration', () => {
         sk('b', 'pv', 0),
       ],
     });
-    expect(b).toEqual({ runes: 3, opened: 0, skills: [sk('a', 'crit', 5), sk('b', 'pv', 1)] });
-    expect(normalizeRuneBank(null)).toEqual(emptyBank());
+    expect(b).toEqual({
+      runes: 3,
+      opened: 0,
+      comp: 0,
+      skills: [sk('a', 'crit', 5), sk('b', 'pv', 1)],
+    });
+    // Sans version : pas encore basculé (c'est `migrateLegacyRunes` qui la pose).
+    expect(normalizeRuneBank(null)).toEqual({ ...emptyBank(), comp: 0 });
   });
 
   it('rembourse chaque niveau selon sa couleur, le stock coloré et la rune en attente', () => {

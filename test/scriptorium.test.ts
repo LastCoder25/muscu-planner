@@ -38,19 +38,18 @@ describe('📜 le Scriptorium', () => {
     return { n: runeStock(q, h * H), prog: runeProgress(q, h * H) };
   };
 
-  it('une rune en 24 h à trois copistes, 30 h à deux, 48 h à un seul', () => {
-    expect(CONTROL.runeHoursPerItem).toBe(24);
-    expect(runeHoursFor(3)).toBe(24);
-    expect(runeHoursFor(2)).toBe(30);
-    expect(runeHoursFor(1)).toBe(48);
+  it('une rune en 16 h à trois copistes, 20 h à deux, 32 h à un seul (bascule des runes, spec § 3)', () => {
+    expect(CONTROL.runeHoursPerItem).toBe(16);
+    expect(runeHoursFor(3)).toBe(16);
+    expect(runeHoursFor(2)).toBe(20);
+    expect(runeHoursFor(1)).toBe(32);
     expect(runeHoursFor(0)).toBeNull();
-    expect(at(['a', 'b', 'c'], 12)).toEqual({ n: 0, prog: 0.5 });
-    expect(at(['a', 'b', 'c'], 24).n).toBe(1);
-    expect(at(['a', 'b'], 29).n).toBe(0);
-    expect(at(['a', 'b'], 30).n).toBe(1);
-    // Un seul copiste : le rythme d'avant, inchangé.
-    expect(at(['a'], 24)).toEqual({ n: 0, prog: 0.5 });
-    expect(at(['a'], 48).n).toBe(1);
+    expect(at(['a', 'b', 'c'], 8)).toEqual({ n: 0, prog: 0.5 });
+    expect(at(['a', 'b', 'c'], 16).n).toBe(1);
+    expect(at(['a', 'b'], 19).n).toBe(0);
+    expect(at(['a', 'b'], 20).n).toBe(1);
+    expect(at(['a'], 16)).toEqual({ n: 0, prog: 0.5 });
+    expect(at(['a'], 32).n).toBe(1);
     expect(at([], 100).prog).toBe(0);
   });
 
@@ -59,36 +58,24 @@ describe('📜 le Scriptorium', () => {
     // plus à une seule en attente — tout ce qui a été copié arrive au retour.
     // 🏅 Chaque jour tenu à SON cran (+1 par 24 h, plafond 10 — 2026-09-30).
     const days = (n: number) =>
-      Array.from({ length: n }, (_, d) => tierYieldMult(Math.min(TIER.max, d))).reduce((x, y) => x + y, 0);
-    expect(at(['a', 'b', 'c'], 10 * 24).n).toBe(Math.floor(days(10)));
-    expect(at(['a'], 10 * 48).n).toBe(Math.floor(days(20) / 2));
+      Array.from({ length: n }, (_, d) => tierYieldMult(Math.min(TIER.max, d))).reduce(
+        (x, y) => x + y,
+        0,
+      );
+    const perDay = (k: number) => 24 / runeHoursFor(k)!;
+    expect(at(['a', 'b', 'c'], 10 * 24).n).toBe(Math.floor(days(10) * perDay(3) + 1e-9));
+    expect(at(['a'], 20 * 24).n).toBe(Math.floor(days(20) * perDay(1) + 1e-9));
   });
 
-  it('ramasser rend la rune, à la couleur que permet le rang du HÉROS (un point tenu est neutre)', () => {
-    const counts: Record<RuneTier, number> = { green: 0, blue: 0, violet: 0, gold: 0 };
-    let odds: Record<RuneTier, number> | null = null;
-    for (let seed = 1; seed <= 400; seed++) {
-      const m0 = held(seed);
-      const m = {
-        ...m0,
-        pois: m0.pois.map((q) =>
-          q.id === ID ? { ...q, control: { ...q.control!, attackAt: 1e15 } } : q,
-        ),
-      };
-      const c = collectControl(m, ID, CONTROL.runeHoursPerItem * H, 30);
-      expect(c.runes).toHaveLength(1);
-      counts[c.runes[0]!]++;
-      odds = placeRuneOdds({
-        place: 'control',
-        placeRankIndex: characterRank(30).rankIndex,
-        playerRankIndex: characterRank(30).rankIndex,
-      });
-      // Une couleur que CE rang ne donne jamais ne sort jamais (point tenu = rang du héros).
-      expect(odds[c.runes[0]!]).toBeGreaterThan(0);
-    }
-    // Les couleurs rares le restent : il y a plus de vertes que de dorées.
-    expect(counts.green).toBeGreaterThan(counts.gold);
-    expect(odds).not.toBeNull();
+  it('ramasser rend une rune MULTICOLORE (sa couleur se tire à l’ouverture)', () => {
+    const m0 = held();
+    const m = {
+      ...m0,
+      pois: m0.pois.map((q) =>
+        q.id === ID ? { ...q, control: { ...q.control!, attackAt: 1e15 } } : q,
+      ),
+    };
+    expect(collectControl(m, ID, CONTROL.runeHoursPerItem * H, 30).runes).toBe(1);
   });
 
   it('la récolte remet la copie à zéro, et un autre point ne rend jamais de rune', () => {
@@ -98,6 +85,6 @@ describe('📜 le Scriptorium', () => {
     const c = collectControl(mm, ID, CONTROL.runeHoursPerItem * H, 30);
     expect(runeStock(pt(c.map), CONTROL.runeHoursPerItem * H)).toBe(0);
     const mine = captureControl(mm, controlIdOf('mine'), ['z'], 0, 7);
-    expect(collectControl(mine, controlIdOf('mine'), 20 * H, 30).runes).toEqual([]);
+    expect(collectControl(mine, controlIdOf('mine'), 20 * H, 30).runes).toBe(0);
   });
 });

@@ -327,7 +327,7 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       keys: 3,
       gacha_tickets: 2,
       seals: undefined,
-      runes: { stock: { green: 1, blue: 2, violet: 0, gold: 0 } },
+      runes: { runes: 3, skills: [], opened: 0, comp: 2 },
     };
     let all = '';
     expect(
@@ -970,7 +970,11 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
   it('GuildPanel s’ouvre avec un vivier peuplé', async () => {
     const { default: GuildPanel } = await import('@/components/GuildPanel.vue');
     let out = '';
-    expect(await mountIt(GuildPanel, { open: true }, ROW, undefined, '/', (h) => (out = h))).toBe(
+    const row = {
+      ...ROW,
+      runes: { runes: 3, skills: [{ uid: 'sk1', id: 'pv', level: 1 }], opened: 1, comp: 2 },
+    };
+    expect(await mountIt(GuildPanel, { open: true }, row, undefined, '/', (h) => (out = h))).toBe(
       null,
     );
     // ⚠️ RÉÉCRIT (v0.958) : le compteur opposait le DÉPLOIEMENT au plafond (« 2/2 »),
@@ -979,9 +983,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     // le second nombre est DÉRIVÉ de `engageCap`, jamais une copie de sa formule.
     expect(out).toContain(String(ROW.adventurers.length));
     expect(out).toContain(`${engageCap(3)} engagés à la fois`);
-    // 🔮 Le stock de runes se voit AVANT d'ouvrir un champion : une pastille par couleur.
-    expect(out).toContain('Runes à poser');
-    expect(out.match(/class="rs-pill/g)?.length).toBe(4);
+    // 🪬 Le rappel des runes se voit AVANT d'ouvrir un champion (bascule des runes).
+    expect(out).toContain('3 runes à ouvrir');
+    expect(out).toContain('1 compétence');
     // 🏅 …et la rareté TIRÉE de chaque champion se LIT (v0.959) : elle ne vivait qu'en
     // teinte et en `title`, donc invisible sur un téléphone, qui n'a pas de survol.
     // ⚠️ ON LIT LA PASTILLE ELLE-MÊME, pas « le mot est quelque part dans la page » : une
@@ -2446,11 +2450,7 @@ describe('🪬 SkillRunesPanel', () => {
         SkillRunesPanel,
         {
           adv,
-          runes: {
-            stock: { green: 2, blue: 0, violet: 1, gold: 0 },
-            pending: { advId: 'c1', tier: 'green', drawn: 'care' },
-            comp: 1,
-          },
+          stock: 2,
         },
         undefined,
         undefined,
@@ -2460,10 +2460,36 @@ describe('🪬 SkillRunesPanel', () => {
     ).toBeNull();
     expect(out).toContain('Vitesse');
     expect(out).toContain('Nv 2');
-    expect(out).toContain('Remplacer');
-    expect(out).toContain('Garder les siennes');
-    // 🪨 Une pierre par couleur dans le stock (plus des ronds d'emoji).
-    for (const t of ['green', 'blue', 'violet', 'gold']) expect(out).toContain('rune-icon t-' + t);
+    // 🪬 Plus de pose ici : la fiche renvoie à la tuile Runes, avec le stock en attente.
+    expect(out).toContain('Runes du Panthéon');
+    expect(out).toContain('2 au stock');
+    expect(out).not.toContain('Garder les siennes');
+  }, 30_000);
+});
+
+describe('🪬 RuneBankSheet', () => {
+  it('ouvre, liste le stock par couleur et propose le lot à partir de 9 runes', async () => {
+    const { default: RuneBankSheet } = await import('@/components/RuneBankSheet.vue');
+    const row = {
+      ...ROW,
+      runes: {
+        runes: 12,
+        skills: [
+          { uid: 'sk1', id: 'speed', level: 1 },
+          { uid: 'sk2', id: 'crit', level: 2 },
+        ],
+        opened: 2,
+        comp: 2,
+      },
+    };
+    let out = '';
+    expect(
+      await mountIt(RuneBankSheet, { open: true }, row, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain('Compétences au stock · 2');
+    expect(out).toContain('×10');
+    // La plus rare en tête : la violette (Critique) avant la verte (Vitesse).
+    expect(out.indexOf('Nv 2')).toBeLessThan(out.indexOf('Nv 1'));
   }, 30_000);
 });
 
@@ -2795,7 +2821,7 @@ describe('🧺 GameFxOverlay — récolte', () => {
     const { useGameFx } = await import('@/composables/useGameFx');
     const fx = useGameFx();
     fx.queue.value = [];
-    fx.celebrateHarvest({ potion: 2 }, ['gold'], 'Scriptorium');
+    fx.celebrateHarvest({ potion: 2 }, 1, 'Scriptorium');
     let out = '';
     expect(
       await mountIt(GameFxOverlay, {}, undefined, undefined, '/', (h) => (out = h)),
@@ -2807,7 +2833,7 @@ describe('🧺 GameFxOverlay — récolte', () => {
     expect(out).toContain('+1 rune · +2 consommables');
     fx.queue.value = [];
     // Rien récolté : aucune animation.
-    fx.celebrateHarvest({}, [], 'Jardin');
+    fx.celebrateHarvest({}, 0, 'Jardin');
     expect(fx.queue.value.length).toBe(0);
   }, 30_000);
 });

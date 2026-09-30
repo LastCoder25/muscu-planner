@@ -34,7 +34,6 @@ import {
   wornGear,
   type AdvGear,
 } from './advGear';
-import { pickTier, placeRuneOdds, type RuneTier } from './skillRunes';
 import { characterRank, rankStartLevel } from './characterRank';
 import { campWinPct } from './camp';
 import { MILITIA, isMilitiaId, militiaUnits } from './militia';
@@ -131,11 +130,11 @@ export const CONTROL = {
    *  rune toutes les `runeHoursPerItem` heures À PLEIN — 3 copistes 24 h, 2 → 30 h, 1 → 48 h
    *  (le rythme d'avant, inchangé pour qui n'en poste qu'un). ⚠️ Les runes sont RARES : toutes
    *  sources confondues, un joueur régulier en gagne 0,27 à 0,87 par jour (spec des runes) ;
-   *  tenu plein en continu, le Scriptorium en ajoute 1 par jour (choix de l'utilisateur). La
-   *  couleur suit les chances d'un lieu À TON RANG (`placeRuneOdds`, cas `equal`) : tenu, le
-   *  point est neutre, son rang caché n'y entre pas. Sa
-   *  réserve tient UNE rune (une seule attend d'être ramassée), quel que soit l'effectif. */
-  runeHoursPerItem: 24,
+   *  tenu plein en continu, le Scriptorium en ajoute 1 par jour (choix de l'utilisateur).
+   *  🪬 Depuis la bascule des runes multicolores (2026-09-30, spec § 3) : 24 → 16 h, et il
+   *  recopie une rune MULTICOLORE (la couleur se tire à l'ouverture). Sa réserve tient UNE
+   *  rune (une seule attend d'être ramassée), quel que soit l'effectif. */
+  runeHoursPerItem: 16,
   /** ⛲ Source de mana (2026-09-29, demandé) : une garnison de 3 produit par jour la MOITIÉ du
    *  mana d'une faille refermée de ton niveau (`riftClearMana`), 5 personnes ×1,3. ⚠️ DÉRIVÉ du
    *  mana d'une faille, jamais écrit : si les failles bougent, la Source suit.
@@ -1498,10 +1497,10 @@ export function collectControl(
   xpBy: Record<string, number>;
   gearXp: Record<string, number>;
   supplies: SupplyStock;
-  runes: RuneTier[];
+  runes: number;
 } {
   const p = map.pois.find((x) => x.id === id);
-  const none = { map, gold: 0, mana: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: [] };
+  const none = { map, gold: 0, mana: 0, xpBy: {}, gearXp: {}, supplies: {}, runes: 0 };
   const c = p?.control;
   if (!p || !c || c.owner !== 'player' || c.collectedAt === undefined) return none;
   // 🎯⚒️ Le camp : chaque champion récolte SA réserve (et ses pièces le double), et garde la fraction
@@ -1540,22 +1539,8 @@ export function collectControl(
       supplies[s] = (supplies[s] ?? 0) + 1;
     }
   }
-  // 📜 La couleur de chaque rune recopiée : les chances d'une rune tombée sur un lieu À TON
-  // RANG (`placeRuneOdds`, ton rang des deux côtés — tenu, le point est neutre, son rang caché
-  // n'y entre pas). Graine : la CARTE, le point et la dernière
-  // récolte — sans la carte, tous les joueurs recevaient la même suite de couleurs.
-  const runes: RuneTier[] = [];
-  if (c.kind === 'scriptorium') {
-    const rng = mulberry32(
-      (seedOf(`${map.seed}:${id}:rune:${c.collectedAt}`) ^ 0x1b873593) >>> 0 || 1,
-    );
-    const odds = placeRuneOdds({
-      place: 'control',
-      placeRankIndex: characterRank(Math.max(1, playerLevel)).rankIndex,
-      playerRankIndex: characterRank(Math.max(1, playerLevel)).rankIndex,
-    });
-    for (let i = 0; i < whole; i++) runes.push(pickTier(rng, odds));
-  }
+  // 📜 Des runes MULTICOLORES : leur couleur se tire à l'ouverture (`runeBank.openRune`).
+  const runes = c.kind === 'scriptorium' ? whole : 0;
   const until = Math.min(now, c.attackAt ?? now);
   return {
     map: withControl(map, id, (q) => ({
@@ -2487,15 +2472,15 @@ export function controlLootMessage(
   p: Poi,
   at: number,
   supplies: SupplyStock,
-  runes: readonly RuneTier[],
+  runes: number,
 ): ExpeditionMessage | null {
   const nSup = Object.values(supplies).reduce((n, x) => n + (x ?? 0), 0);
-  if (!nSup && !runes.length) return null;
+  if (!nSup && !runes) return null;
   const kind = p.control?.kind;
   const label = kind ? CONTROL_LABEL[kind] : 'Place forte';
   const what = [
     nSup ? `${nSup} consommable${nSup > 1 ? 's' : ''}` : '',
-    runes.length ? `${runes.length} rune${runes.length > 1 ? 's' : ''}` : '',
+    runes ? `${runes} rune${runes > 1 ? 's' : ''}` : '',
   ]
     .filter(Boolean)
     .join(' et ');
@@ -2504,14 +2489,14 @@ export function controlLootMessage(
     title: `${kind ? CONTROL_EMO[kind] : '🏰'} ${label} : ${what}`,
     level: p.level,
     win: true,
-    text: runes.length
-      ? `Ta garnison a produit ${what}, rangé${nSup + runes.length > 1 ? 's' : ''} dans ton stock. Les runes se posent depuis la fiche d’un champion.`
+    text: runes
+      ? `Ta garnison a produit ${what}, rangé${nSup + runes > 1 ? 's' : ''} dans ton stock. Les runes s’ouvrent au Panthéon.`
       : `Ta garnison a produit ${what}, rangé${nSup > 1 ? 's' : ''} dans ton stock.`,
     gold: 0,
     energy: 0,
     key: 0,
     ...(nSup ? { supplies } : {}),
-    ...(runes.length ? { runes: [...runes] } : {}),
+    ...(runes ? { runes } : {}),
     resolvedAt: at,
     read: false,
   };

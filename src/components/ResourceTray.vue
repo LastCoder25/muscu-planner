@@ -57,7 +57,6 @@ const chips = computed<Chip[]>(() => {
   if (!row) return [];
   const sc = sealsSummary(row.seals ?? emptySeals(), 'champion');
   const sg = sealsSummary(row.seals ?? emptySeals(), 'gear');
-  const rs = row.runes.stock;
   return [
     {
       id: 'energy',
@@ -127,8 +126,8 @@ const chips = computed<Chip[]>(() => {
       id: 'runes',
       ico: '',
       cls: 'runes',
-      value: rs.green + rs.blue + rs.violet + rs.gold,
-      title: `Runes de compétence — 🟢 ${rs.green} · 🔵 ${rs.blue} · 🟣 ${rs.violet} · 🟠 ${rs.gold}`,
+      value: row.runes.runes,
+      title: `Runes multicolores à ouvrir au Panthéon — ${fr(row.runes.runes)} · compétences au stock : ${fr(row.runes.skills.length)}`,
       main: false,
     },
   ];

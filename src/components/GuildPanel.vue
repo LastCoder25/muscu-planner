@@ -103,47 +103,16 @@
               </button>
             </div>
           </div>
-          <!-- 🔮 LES RUNES EN STOCK, AVANT DE CHOISIR (demandé : « voir les runes qu'on a
-               avant de sélectionner un champion »). Elles se posent depuis la fiche d'un
-               champion ; sans ce rappel, il fallait en ouvrir une pour découvrir son stock.
-               Le rang minimal des couleurs rares est dit ici : c'est lui qui décide QUI
-               peut les recevoir. -->
-          <div v-if="roster.length" class="rune-stock">
-            <div class="rs-head">
-              <span class="rs-t font-display">🔮 Runes à poser</span>
-              <span class="rs-n">{{ runeTotal }}</span>
-            </div>
-            <div class="rs-row">
-              <span
-                v-for="t in RUNE_TIERS"
-                :key="t"
-                class="rs-pill"
-                :class="{ empty: !runeState.stock[t] }"
-                :style="{ '--tc': RUNE_COLOR[t] }"
-                :title="
-                  RUNE_INFO[t].minRank
-                    ? `${RUNE_INFO[t].label} — champion ${runeMinRank(t)} ou plus`
-                    : RUNE_INFO[t].label
-                "
-              >
-                <RuneIcon :tier="t" size="20px" />
-                <b class="font-display">{{ runeState.stock[t] }}</b>
-              </span>
-            </div>
-            <button
-              v-if="pendingRuneAdv"
-              type="button"
-              class="rs-pending"
-              @click="detailAdv = pendingRuneAdv"
-            >
-              Une rune attend ta décision sur <b>{{ pendingRuneAdv.name }}</b> ›
-            </button>
-            <div v-else class="rs-note">
-              {{
-                runeTotal
-                  ? `Touche un champion pour lui poser une rune. 🟣 dès le rang ${runeMinRank('violet')}, 🟠 dès le rang ${runeMinRank('gold')}.`
-                  : 'Aucune rune pour l’instant : elles tombent des lieux de la carte, des ascensions et de l’Éveil.'
-              }}
+          <!-- 🪬 LES RUNES, AVANT DE CHOISIR : elles s'ouvrent et se donnent depuis la tuile
+               Runes du Panthéon (bascule des runes multicolores, 2026-09-30). -->
+          <div
+            v-if="roster.length && (runeBank.runes || runeBank.skills.length)"
+            class="rune-stock"
+          >
+            <div class="rs-note">
+              🪬 {{ runeBank.runes }} rune{{ runeBank.runes > 1 ? 's' : '' }} à ouvrir ·
+              {{ runeBank.skills.length }} compétence{{ runeBank.skills.length > 1 ? 's' : '' }}
+              au stock — tuile Runes du Panthéon.
             </div>
           </div>
           <!-- ── Le vivier ── -->
@@ -676,10 +645,7 @@
       <SkillRunesPanel
         v-if="detailAdv.championId"
         :adv="detailAdv"
-        :runes="char.row?.runes ?? NO_RUNES"
-        :busy="busy"
-        @apply="(t: RuneTier) => doApplyRune(detailAdv!, t)"
-        @resolve="(i: number | null) => doResolveRune(detailAdv!, i)"
+        :stock="runeBank.skills.length"
       />
 
       <!-- ⚠️ LE PARCOURS est la vraie raison d'être de cette fiche : chaque promotion est
@@ -977,8 +943,7 @@ import { showAwakenInfo } from '@/composables/useAwakenInfo';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import SkillRunesPanel from '@/components/SkillRunesPanel.vue';
-import RuneIcon from '@/components/RuneIcon.vue';
-import { RUNE_COLOR, RUNE_INFO, RUNE_TIERS, type RuneState, type RuneTier } from '@/lib/skillRunes';
+import { emptyBank } from '@/lib/runeBank';
 import {
   ADV_STARS,
   advGradeBadge,
@@ -1769,39 +1734,8 @@ function confirmAscendGear() {
     });
   });
 }
-const NO_RUNES: RuneState = {
-  stock: { green: 0, blue: 0, violet: 0, gold: 0 },
-  pending: null,
-  comp: 0,
-};
-/** 🔮 Le stock affiché en tête du vivier, et le champion dont une rune attend une décision. */
-const runeState = computed(() => char.row?.runes ?? NO_RUNES);
-const runeTotal = computed(() => RUNE_TIERS.reduce((n, t) => n + runeState.value.stock[t], 0));
-const pendingRuneAdv = computed(() => {
-  const id = runeState.value.pending?.advId;
-  return id ? (roster.value.find((a) => a.id === id) ?? null) : null;
-});
-function runeMinRank(t: RuneTier): string {
-  return CHARACTER_RANKS[RUNE_INFO[t].minRank]?.name ?? '';
-}
-/** 🔮 Poser une rune : la fiche se rafraîchit, et on DIT ce qui est tombé. */
-function doApplyRune(a: Adventurer, tier: RuneTier) {
-  void pair(async (uid) => {
-    const r = await char.applyRune(uid, a.id, tier);
-    if (!r.ok) throw new Error(r.reason);
-    detailAdv.value = char.advList.find((x) => x.id === a.id) ?? null;
-    // 🔮 La pierre se brise dans la couleur de la compétence tirée (plus elle est rare, plus
-    // ça éclate) — une seule annonce, plus de notification en double.
-    const level = detailAdv.value?.skills?.find((s) => s.id === r.drawn)?.level ?? 1;
-    gameFx.celebrateRune(r.kind, r.drawn, a.name, level);
-  });
-}
-function doResolveRune(a: Adventurer, index: number | null) {
-  void pair(async (uid) => {
-    await char.resolveRune(uid, index);
-    detailAdv.value = char.advList.find((x) => x.id === a.id) ?? null;
-  });
-}
+/** 🪬 La banque de runes du joueur (rappel en tête du vivier, compteur de la fiche). */
+const runeBank = computed(() => char.row?.runes ?? emptyBank());
 function doAscend(a: Adventurer) {
   void pair(async (uid) => {
     const err = await char.ascendChampion(uid, a.id);
@@ -2359,58 +2293,10 @@ function leftOf(at: number): string {
   border: 1px solid var(--line);
   background: var(--surface);
 }
-.rs-head {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.rs-t {
-  font-size: 14px;
-}
-.rs-n {
-  color: var(--dim);
-  font-size: 13px;
-}
-.rs-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-.rs-pill {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 40px;
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--tc) 55%, var(--line));
-  background: color-mix(in srgb, var(--tc) 14%, var(--surface));
-  white-space: nowrap;
-}
-.rs-pill b {
-  font-size: 16px;
-}
-.rs-pill.empty {
-  opacity: 0.45;
-}
 .rs-note {
   margin-top: 8px;
   font-size: 12px;
   color: var(--dim);
-}
-.rs-pending {
-  margin-top: 8px;
-  width: 100%;
-  min-height: 44px;
-  border-radius: 10px;
-  border: 1px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
-  color: var(--text);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
 }
 .asc-banner {
   margin: 8px 0 12px;

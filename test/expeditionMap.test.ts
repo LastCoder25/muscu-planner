@@ -143,9 +143,7 @@ describe('POI de récolte', () => {
     expect(advanceWorld(vieille, t, 30, OUT, 'w').pois.some((p) => p.id === 'w')).toBe(true);
     // Et rien ne peut plus y être envoyé : ni le héros, ni un convoi, ni un groupe.
     const w = { ...m.pois[0]!, type: 'wreck' as const };
-    expect(
-      poiOffers(w, { heroAway: false, comptoirLevel: 9, advsAvailable: 3 }),
-    ).toEqual({
+    expect(poiOffers(w, { heroAway: false, comptoirLevel: 9, advsAvailable: 3 })).toEqual({
       hero: false,
       caravan: false,
       party: false,
@@ -915,7 +913,7 @@ describe('butin affiché — source unique des deux écrans', () => {
       tickets: 1,
       seals: { kind: 'gear', rank: 1, n: 1 },
       supplies: { potion: 1 },
-      runes: ['green'],
+      runes: 2,
     });
     expect(all.map((p) => p.name)).toEqual([
       'Or',
@@ -926,7 +924,11 @@ describe('butin affiché — source unique des deux écrans', () => {
       'Tickets d’invocation',
       'Sceaux d’objet',
       SUPPLIES.potion.name,
-      'Rune verte',
+      'Runes multicolores',
+    ]);
+    // ⚠️ Un rapport d'avant la bascule porte un TABLEAU de couleurs : une rune par entrée.
+    expect(haulPills({ runes: ['green', 'gold'] })).toEqual([
+      { emoji: '🪬', n: 2, name: 'Runes multicolores' },
     ]);
     expect(all.find((p) => p.emoji === SUPPLIES.potion.emoji)?.what).toBe(SUPPLIES.potion.what);
   });

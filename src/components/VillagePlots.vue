@@ -88,7 +88,8 @@
           <!-- 🛡️ LA MILICE : où ils sont, combien au plus, quand arrive le suivant. -->
           <div v-if="militia" class="pm-ready pm-mil">
             <span>
-              <span class="mil-inline"><MilitiaPortrait /></span> <b>{{ militia.home }}</b> à la base
+              <span class="mil-inline"><MilitiaPortrait /></span> <b>{{ militia.home }}</b> à la
+              base
               <span v-if="militia.away"> · {{ militia.away }} sur la carte</span>
             </span>
             <span class="pm-cap">
@@ -127,12 +128,7 @@
             >
               <span class="pp-lv">niv {{ r.level }}</span>
               <span v-if="r.bits" class="pp-bits">
-                <span
-                  v-for="b in r.bits"
-                  :key="b.text"
-                  class="pp-bit"
-                  >{{ b.text }}</span
-                >
+                <span v-for="b in r.bits" :key="b.text" class="pp-bit">{{ b.text }}</span>
               </span>
               <span v-else class="pp-tx">{{ r.text }}</span>
               <span v-if="r.level === selectedPlot.building.level" class="pp-tag">actuel</span>
@@ -140,12 +136,7 @@
             <div v-if="milestone" class="pm-prev-r step far">
               <span class="pp-lv">niv {{ milestone.level }}</span>
               <span v-if="milestone.bits" class="pp-bits">
-                <span
-                  v-for="b in milestone.bits"
-                  :key="b.text"
-                  class="pp-bit"
-                  >{{ b.text }}</span
-                >
+                <span v-for="b in milestone.bits" :key="b.text" class="pp-bit">{{ b.text }}</span>
               </span>
               <span v-else class="pp-tx">{{ milestone.text }}</span>
             </div>
@@ -180,6 +171,12 @@
                 >⬆️ {{ ascReady.gear }} pièce{{ ascReady.gear > 1 ? 's' : '' }} à monter de
                 rang</span
               >
+            </button>
+            <button type="button" class="pan-tile runes" @click="emit('open-runes')">
+              <span class="pan-emo"><RuneIcon size="48px" /></span>
+              <span class="pan-t font-display">Runes</span>
+              <span class="pan-s">{{ runeSummary }}</span>
+              <span v-if="runesToOpen" class="pan-asc runes">🪬 {{ runesToOpen }} à ouvrir</span>
             </button>
             <button type="button" class="pan-tile summon" @click="emit('open-summon')">
               <span class="pan-emo">🎰</span>
@@ -232,6 +229,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { useCharacterStore } from '@/stores/character';
+import RuneIcon from '@/components/RuneIcon.vue';
 import { useAuthStore } from '@/stores/auth';
 import { useGameFx } from '@/composables/useGameFx';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
@@ -276,6 +274,7 @@ const emit = defineEmits<{
   'update:slot': [number | null];
   'open-guild': [section?: 'champions' | 'gear'];
   'open-summon': [];
+  'open-runes': [];
 }>();
 const char = useCharacterStore();
 const auth = useAuthStore();
@@ -360,6 +359,14 @@ const ascReady = computed(() => {
     gold: char.row?.gold ?? 0,
   });
   return { champions: r.champions.size, gear: r.gear.size };
+});
+/** 🪬 Ce que la tuile Runes résume : le stock de compétences, et les runes à ouvrir. */
+const runesToOpen = computed(() => char.row?.runes.runes ?? 0);
+const runeSummary = computed(() => {
+  const n = char.row?.runes.skills.length ?? 0;
+  return n
+    ? `${n} compétence${n > 1 ? 's' : ''} au stock`
+    : 'Ouvre, fusionne, donne';
 });
 /** 🎰 Ce que la tuile Tirage résume : combien de tirages la réserve permet. */
 const summonSummary = computed(() => {
@@ -891,6 +898,18 @@ function collectAll() {
 }
 .pan-tile:active {
   transform: scale(0.99);
+}
+.pan-tile.runes {
+  border-color: color-mix(in srgb, #5aa9ff 50%, var(--line));
+  background: radial-gradient(
+    circle at 50% 30%,
+    color-mix(in srgb, #5aa9ff 16%, var(--surface)),
+    var(--bg)
+  );
+}
+.pan-asc.runes {
+  color: #d9b8ff;
+  background: color-mix(in srgb, #b57bff 20%, transparent);
 }
 .pan-tile.summon {
   border-color: color-mix(in srgb, #b57bff 55%, var(--line));

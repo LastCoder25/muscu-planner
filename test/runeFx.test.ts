@@ -27,22 +27,23 @@ describe('🔮 animation de rune posée', () => {
     expect(RUNE_TIERS.filter((t) => RUNE_FX_INTENSITY[t] >= 3)).toEqual(['gold']);
   });
 
-  it('dit ce qui s’est passé : compétence apprise, niveau gagné, ou place à faire', () => {
+  it('dit ce qui s’est passé : rune ouverte, compétence apprise, niveau gagné, remplacement', () => {
     const id = ofTier('violet');
     const k = SKILLS[id];
+    const open = runeApplyFx('open', id, '', 1);
+    expect(open.title).toBe(`${k.name} · Nv 1`);
+    expect(open.subtitle).toContain('stock');
     expect(runeApplyFx('new', id, 'Nyx', 1).title).toBe(`Nyx apprend ${k.name}`);
-    expect(runeApplyFx('stack', id, 'Nyx', 3).title).toBe(`${k.name} · Nv 3`);
-    const full = runeApplyFx('full', id, 'Nyx', 4);
-    expect(full.title).toBe(`${k.name} tirée`);
-    expect(full.subtitle).toContain('à toi de choisir');
+    expect(runeApplyFx('replace', id, 'Nyx', 1).title).toBe(`Nyx apprend ${k.name}`);
+    expect(runeApplyFx('stack', id, 'Nyx', 3).title).toBe(`Nyx : ${k.name} · Nv 3`);
   });
 
-  it('l’effet annoncé est celui du niveau atteint (nouvelle compétence = niveau 1)', () => {
+  it('l’effet annoncé est celui du niveau ATTEINT, y compris une compétence fusionnée neuve', () => {
     const id = ofTier('blue');
     const v3 = String(skillValue(id, 3)).replace('.', ',');
-    const v1 = String(skillValue(id, 1)).replace('.', ',');
     expect(runeApplyFx('stack', id, 'Nyx', 3).subtitle).toContain(v3);
-    expect(runeApplyFx('new', id, 'Nyx', 3).subtitle).toContain(v1);
+    // Fusionnée au stock jusqu'au niveau 3, elle entre à SON niveau chez le champion.
+    expect(runeApplyFx('new', id, 'Nyx', 3).subtitle).toContain(v3);
     expect(runeApplyFx('stack', id, 'Nyx', 3).subtitle).not.toContain('{v}');
   });
 });

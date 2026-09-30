@@ -198,25 +198,33 @@ import {
   advAwaken,
   awakenLevel,
   advChampion,
-  useRune,
-  settlePendingRune,
-  RUNE_USE_BLOCK_LABEL,
+  advChampionSlots,
   type Adventurer,
 } from '@/lib/adventurers';
+import { RUNE_PLACE_OK, normalizeChampSkills, type ChampSkill } from '@/lib/skillRunes';
 import {
-  RUNE_COMP_VERSION,
-  RUNE_PLACE_OK,
-  addRunes,
-  compensationRunes,
-  normalizeChampSkills,
-  normalizeRuneState,
-  rollAscensionRune,
-  rollAwakenRune,
-  rollPlaceRune,
-  type RuneState,
-  type RuneTier,
-  type SkillId,
-} from '@/lib/skillRunes';
+  AWAKEN_RUNE_COUNT,
+  FUSE_BLOCK_LABEL,
+  GIVE_BLOCK_LABEL,
+  OPEN_BLOCK_LABEL,
+  RUNE_BANK_VERSION,
+  addRuneCount,
+  ascensionRuneCount,
+  fuseBlocker,
+  fuseSkills,
+  giveBlocker,
+  giveKind,
+  giveSkill,
+  migrateLegacyRunes,
+  normalizeRuneBank,
+  openBlocker,
+  openRunes,
+  rollPlaceRunes,
+  runeCount,
+  type GiveKind,
+  type RuneBank,
+  type StockSkill,
+} from '@/lib/runeBank';
 import { caravanLegMin, partyAllies, type EscortKit, type PartyHero } from '@/lib/caravan';
 import {
   advGearRoles,
@@ -465,8 +473,9 @@ export interface CharacterRow {
   seals: Seals; // 🔱 sceaux d'ascension (migr. 0083)
   /** 🗓️ Lundi de la dernière semaine de quêtes récupérée (migr. 0093), ou null. */
   quest_week: string | null;
-  /** 🔮 Runes de compétence (migr. 0094) : stock, décision en attente, compensation. */
-  runes: RuneState;
+  /** 🪬 Runes multicolores (migr. 0094, remodelée à la bascule du 2026-09-30) : runes à
+   *  ouvrir, compétences au stock, compteur d'ouvertures, version de la bascule. */
+  runes: RuneBank;
   /** 🎒 Consommables d'expédition (migr. 0090) — gagnés en butin, emportés au départ. */
   supplies: SupplyStock;
   scrap: number; // 🔩 LEGACY (migr. 0060) : devise retirée (v0.998), convertie en or au chargement // journal d'énergie hors-sport horodaté (migr. 0057)
@@ -523,6 +532,12 @@ export const useCharacterStore = defineStore('character', () => {
   // Garde-fou : une colonne jsonb malformée (ex. talents={} au lieu de []) ne doit
   // JAMAIS faire planter la page (le code fait `for..of` sur les tableaux). On
   // normalise les types attendus au chargement.
+  /** 🪬 Runes rendues par la dernière bascule faite au chargement (annoncées par
+   *  `settleRuneBascule`). */
+  let runeRefund = 0;
+  const advRuneSkillsRaw = (a: Adventurer): ChampSkill[] =>
+    normalizeChampSkills((a as { skills?: unknown }).skills);
+
   function normalizeRow(r: CharacterRow | null): CharacterRow | null {
     if (!r) return r;
     const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
@@ -650,7 +665,32 @@ export const useCharacterStore = defineStore('character', () => {
     if (typeof r.gacha_tickets !== 'number') r.gacha_tickets = 0; // 🎟️ migr. 0082
     if (typeof r.gear_version !== 'number') r.gear_version = 0; // ⚙️ migr. 0088
     if (typeof r.quest_week !== 'string') r.quest_week = null; // 🗓️ migr. 0093
-    r.runes = normalizeRuneState(r.runes); // 🔮 migr. 0094
+    // 🪬 LA BASCULE DES RUNES MULTICOLORES (2026-09-30), une fois : les compétences des
+    // champions sont RETIRÉES et remboursées en runes (`REFUND_PER_LEVEL`), comme le stock
+    // coloré et la rune en attente. ⚠️ ICI, sur la ligne brute, pour que les runes et le vivier
+    // sans compétences voyagent dans la MÊME ligne en mémoire ; `loadMine` les persiste
+    // aussitôt, ensemble (`settleRuneBascule`).
+    const mig = migrateLegacyRunes(
+      r.runes,
+      r.adventurers.map((a) => {
+        const c = advChampion(a);
+        return {
+          skills: advRuneSkillsRaw(a),
+          grade: c ? c.grade : null,
+          ascended: a.ascended ?? 0,
+          awaken: c ? advAwaken(a) : 0,
+        };
+      }),
+    );
+    if (mig) {
+      r.runes = mig.bank;
+      r.adventurers = r.adventurers.map((a) => {
+        const rest: Record<string, unknown> = { ...a };
+        delete rest.skills;
+        return rest as unknown as Adventurer;
+      });
+      runeRefund = mig.refunded;
+    } else r.runes = normalizeRuneBank(r.runes);
     r.seals = normalizeSeals(r.seals); // 🔱 migr. 0083
     r.supplies = normalizeSupplies(r.supplies); // 🎒 migr. 0090
     if (r.voie === undefined) r.voie = null; // migr. 0055 (spécialisation)
@@ -723,8 +763,12 @@ export const useCharacterStore = defineStore('character', () => {
     // 🐾 Même principe pour le Chenil retiré : sa présence sur la ligne BRUTE est le marqueur.
     const rawBase = data?.base as BaseState | null | undefined;
     const kennelGold = rawBase && Array.isArray(rawBase.defenses) ? retireKennel(rawBase).gold : 0;
+    const rawRuneComp = Math.floor(Number((data?.runes as { comp?: unknown } | null)?.comp)) || 0;
     row.value = normalizeRow(data ?? null);
     loaded.value = true;
+    // 🪬 La bascule d'abord : tant qu'elle n'est pas écrite, toute écriture du vivier seul
+    // effacerait les compétences sans les rembourser.
+    if (row.value && rawRuneComp < RUNE_BANK_VERSION) await settleRuneBascule(uid);
     if (row.value && (legacy.goldRefund > 0 || legacyScrap > 0 || kennelGold > 0))
       await settleLegacy(uid, {
         pantheon: legacy.goldRefund,
@@ -734,7 +778,6 @@ export const useCharacterStore = defineStore('character', () => {
     if (row.value) await settleWipe(uid);
     if (row.value) await settleGachaReset(uid);
     if (row.value) await settleWelcomeTickets(uid);
-    if (row.value) await settleRuneCompensation(uid);
     return row.value;
   }
 
@@ -986,29 +1029,27 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /**
-   * 🎁 LA COMPENSATION DES RUNES (décision de l'utilisateur) : les champions d'avant les runes
-   * reçoivent une rune par rang d'ascension ouvert et par cran d'Éveil passé, AU STOCK.
-   * ⚠️ UNE fois : la version est écrite dans la MÊME requête que les runes, avec la condition
-   * dans le filtre (deux onglets ne compensent pas deux fois).
+   * 🪬 ÉCRIT LA BASCULE DES RUNES, faite en mémoire par `normalizeRow` : la banque (runes
+   * rendues, version) ET le vivier sans compétences, dans la MÊME requête. ⚠️ La condition
+   * vit dans la requête (`runes->>comp` sous la version) : deux onglets ne remboursent pas
+   * deux fois. Un échec laisse la base intacte ; on retentera au prochain chargement.
    */
-  async function settleRuneCompensation(userId: string) {
+  async function settleRuneBascule(userId: string) {
     const cur = row.value;
-    if (!cur || cur.runes.comp >= RUNE_COMP_VERSION) return;
-    const champs = (cur.adventurers ?? []).flatMap((a) => {
-      const c = advChampion(a);
-      return c
-        ? [{ id: a.id, grade: c.grade, ascended: a.ascended ?? 0, awaken: advAwaken(a) }]
-        : [];
-    });
-    const tiers = compensationRunes(champs);
-    const runes = { ...addRunes(cur.runes, tiers), comp: RUNE_COMP_VERSION };
+    if (!cur) return;
+    const refunded = runeRefund;
+    runeRefund = 0;
     let data: CharacterRow | null = null;
     try {
       const res = await supabase
         .from('characters')
-        .update({ runes, updated_at: new Date().toISOString() })
+        .update({
+          runes: cur.runes,
+          adventurers: cur.adventurers,
+          updated_at: new Date().toISOString(),
+        })
         .eq('user_id', userId)
-        .or(`runes->>comp.is.null,runes->>comp.lt.${RUNE_COMP_VERSION}`)
+        .or(`runes->>comp.is.null,runes->>comp.lt.${RUNE_BANK_VERSION}`)
         .select(COLS)
         .maybeSingle();
       if (res.error) return;
@@ -1016,62 +1057,76 @@ export const useCharacterStore = defineStore('character', () => {
     } catch {
       return;
     }
-    if (!data) return;
+    if (!data) {
+      // Un autre onglet l'a faite : on relit l'état écrit, sans rien annoncer.
+      await loadMine();
+      return;
+    }
     row.value = normalizeRow(data);
-    if (tiers.length)
+    if (refunded > 0)
       useGameFx().celebrate({
         kind: 'unlock',
         emoji: '🪬',
-        title: 'Les compétences deviennent des runes',
-        subtitle: `🪬 ${tiers.length} rune(s) offertes pour tes champions — pose-les depuis leur fiche`,
+        title: 'Les runes deviennent multicolores',
+        subtitle: `Les compétences de tes champions sont rendues : ${refunded} rune${refunded > 1 ? 's' : ''} à ouvrir au Panthéon`,
         rarity: 'legendary',
       });
   }
 
-  /** 🔮 POSE une rune sur un champion. Rend la RAISON d'un refus, sinon ce qui s'est passé.
-   *  ⚠️ Le stock, le champion et la décision en attente partent dans la MÊME écriture : une
-   *  rune dépensée sans compétence posée serait une rune perdue. */
-  async function applyRune(
+  /** 🪬 OUVRE une rune (ou un lot de dix pour neuf). Rend la RAISON d'un refus, sinon les
+   *  compétences sorties, dans l'ordre du tirage. ⚠️ Le tirage est DÉTERMINISTE (joueur +
+   *  numéro d'ouverture) et crédité AVANT toute animation. */
+  async function openRuneBatch(
     userId: string,
+    count: number,
+  ): Promise<{ ok: false; reason: string } | { ok: true; opened: StockSkill[] }> {
+    const cur = row.value;
+    if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
+    const block = openBlocker(cur.runes, count);
+    if (block) return { ok: false, reason: OPEN_BLOCK_LABEL[block] };
+    const out = openRunes(cur.runes, userId, count)!;
+    await persist(userId, { runes: out.bank });
+    return { ok: true, opened: out.opened };
+  }
+
+  /** 🪬 FUSIONNE deux exemplaires de la même compétence au stock. */
+  async function fuseRuneSkills(
+    userId: string,
+    uidA: string,
+    uidB: string,
+  ): Promise<string | null> {
+    const cur = row.value;
+    if (!cur) return 'ton personnage n’est pas chargé';
+    const block = fuseBlocker(cur.runes, uidA, uidB);
+    if (block) return FUSE_BLOCK_LABEL[block];
+    await persist(userId, { runes: fuseSkills(cur.runes, uidA, uidB)! });
+    return null;
+  }
+
+  /** 🪬 DONNE une compétence du stock à un champion. ⚠️ Le stock et le champion partent dans
+   *  la MÊME écriture : une compétence retirée du stock sans arriver chez lui serait perdue. */
+  async function giveRuneSkill(
+    userId: string,
+    skillUid: string,
     advId: string,
-    tier: RuneTier,
-  ): Promise<
-    { ok: false; reason: string } | { ok: true; kind: 'stack' | 'new' | 'full'; drawn: SkillId }
-  > {
+    replaceIndex: number | null = null,
+  ): Promise<{ ok: false; reason: string } | { ok: true; kind: GiveKind; level: number }> {
     const cur = row.value;
     if (!cur) return { ok: false, reason: 'ton personnage n’est pas chargé' };
     const advs = cur.adventurers ?? [];
     const adv = advs.find((a) => a.id === advId);
     if (!adv) return { ok: false, reason: 'champion introuvable' };
-    const r = useRune(adv, tier, cur.runes, Math.random);
-    if (r.kind === 'blocked') return { ok: false, reason: RUNE_USE_BLOCK_LABEL[r.block] };
+    const c = advChampionSlots(adv);
+    const block = giveBlocker(cur.runes, skillUid, c, replaceIndex);
+    if (block) return { ok: false, reason: GIVE_BLOCK_LABEL[block] };
+    const sk = cur.runes.skills.find((s) => s.uid === skillUid)!;
+    const kind = giveKind(c, sk.id);
+    const out = giveSkill(cur.runes, skillUid, c, replaceIndex)!;
     await persist(userId, {
-      runes: r.state,
-      adventurers: advs.map((a) => (a.id === advId ? r.adv : a)),
+      runes: out.bank,
+      adventurers: advs.map((a) => (a.id === advId ? { ...a, skills: out.skills } : a)),
     });
-    return { ok: true, kind: r.kind, drawn: r.drawn };
-  }
-
-  /** 🔮 La décision sur une rune en attente : remplacer la compétence `index`, ou garder
-   *  (`null` — la rune est perdue). */
-  async function resolveRune(userId: string, index: number | null): Promise<boolean> {
-    const cur = row.value;
-    const p = cur?.runes.pending;
-    if (!cur || !p) return false;
-    const advs = cur.adventurers ?? [];
-    const adv = advs.find((a) => a.id === p.advId);
-    // ⚠️ Un champion disparu depuis : la décision n'a plus d'objet, on la lève.
-    if (!adv) {
-      await persist(userId, { runes: { ...cur.runes, pending: null } });
-      return true;
-    }
-    const out = settlePendingRune(adv, cur.runes, index);
-    if (!out) return false;
-    await persist(userId, {
-      runes: out.state,
-      adventurers: advs.map((a) => (a.id === adv.id ? out.adv : a)),
-    });
-    return true;
+    return { ok: true, kind, level: out.skills.find((s) => s.id === sk.id)?.level ?? sk.level };
   }
 
   /** 🗓️ Récupère les tickets des paliers atteints (`earned`, au total de la semaine) moins ceux
@@ -1582,7 +1637,7 @@ export const useCharacterStore = defineStore('character', () => {
     let advs = cur.adventurers ?? [];
     let manaBack = 0;
     // 🔮 Chaque cran d'Éveil offre une rune, couleur selon la lettre et le cran.
-    const awakenRunes: RuneTier[] = [];
+    let awakenRunes = 0;
     const pieces: Omit<AdvGear, 'id'>[] = [];
     const results: LotItem[] = [];
     for (const r of lot.results) {
@@ -1594,7 +1649,7 @@ export const useCharacterStore = defineStore('character', () => {
         manaBack += g.manaBack;
         if (g.duplicate && !g.manaBack) {
           const step = awakenLevel(g.copies);
-          if (step > 0) awakenRunes.push(rollAwakenRune(Math.random, r.champion.grade, step));
+          if (step > 0) awakenRunes += AWAKEN_RUNE_COUNT[r.champion.grade];
         }
         results.push({ ...g, grade: r.grade, champion: r.champion, gear: null });
       } else {
@@ -1618,7 +1673,7 @@ export const useCharacterStore = defineStore('character', () => {
       // `welcomed` et la bienvenue se re-versait au chargement suivant (v0.1083).
       gacha: nextGacha(cur.gacha, lot.pity, cur.gacha.pulls + count),
       ...(pieces.length ? { adv_gear: withAdvGear(cur, pieces) } : {}),
-      ...(awakenRunes.length ? { runes: addRunes(cur.runes, awakenRunes) } : {}),
+      ...(awakenRunes ? { runes: addRuneCount(cur.runes, awakenRunes) } : {}),
     });
     return results;
   }
@@ -2567,7 +2622,7 @@ export const useCharacterStore = defineStore('character', () => {
         ...(m.seals && m.seals.n > 0
           ? { seals: addSeals(cur.seals, m.seals.kind, m.seals.rank, m.seals.n) }
           : {}),
-        ...(m.runes?.length ? { runes: addRunes(cur.runes, m.runes) } : {}),
+        ...(runeCount(m.runes) ? { runes: addRuneCount(cur.runes, runeCount(m.runes)) } : {}),
         ...partyPatch,
         inventory,
         // Ce message (et tout autre encaissement en cours) passe à `claimed: true`.
@@ -3121,10 +3176,9 @@ export const useCharacterStore = defineStore('character', () => {
     const up = ascendAdventurer(adv, pantheonLevel.value);
     // 💠 La récompense part dans la MÊME écriture que le coût : jamais l'un sans l'autre.
     const mana = ascensionMana(next);
-    // 🔮 Une rune GARANTIE, couleur selon le rang atteint.
-    const rune = rollAscensionRune(Math.random, next);
+    // 🪬 Des runes GARANTIES, plus nombreuses à mesure que le rang atteint est haut.
     await persist(userId, {
-      runes: addRunes(cur.runes, [rune]),
+      runes: addRuneCount(cur.runes, ascensionRuneCount(next)),
       gold: cur.gold - cost.gold,
       mana: cur.mana + mana,
       seals: addSeals(cur.seals, 'champion', next, -cost.seals),
@@ -3659,9 +3713,9 @@ export const useCharacterStore = defineStore('character', () => {
     // 🔮 Une rune de LIEU : seulement sur un lieu RÉUSSI, et seulement avec un champion (elles
     // servent aux champions). Tirée au départ sur son propre générateur, comme tout le voyage.
     // ⚠️ La maturité d'une faille se lit à l'ARRIVÉE : c'est là que le groupe y entre.
-    const placeRune =
+    const placeRunes =
       outcome.win && escort.length && RUNE_PLACE_OK[poi.type]
-        ? rollPlaceRune(mulberry32((seed ^ 0x6b43a9b5) >>> 0 || 1), {
+        ? rollPlaceRunes(mulberry32((seed ^ 0x6b43a9b5) >>> 0 || 1), {
             place: poi.type,
             placeRankIndex: characterRank(poiDifficultyLevel(poi)).rankIndex,
             playerRankIndex: characterRank(opts.playerLevel).rankIndex,
@@ -3670,7 +3724,7 @@ export const useCharacterStore = defineStore('character', () => {
         : null;
     const withSupplies = {
       ...outcome,
-      ...(placeRune ? { runes: [...(outcome.runes ?? []), placeRune] } : {}),
+      ...(placeRunes ? { runes: runeCount(outcome.runes) + placeRunes } : {}),
       ...(party ? { party } : {}),
       ...(party && healMult < 1 ? { party: { ...party, healMult } } : {}),
       // ⚠️ ADDITIONNÉ, jamais écrasé : les bêtes abattues laissent déjà leurs consommables (v0.1166).
@@ -4526,7 +4580,7 @@ export const useCharacterStore = defineStore('character', () => {
     const stock0 = cur.adv_gear?.stock ?? [];
     let gearStock = stock0;
     const msgs: ExpeditionMessage[] = [];
-    const runesIn: RuneTier[] = [];
+    let runesIn = 0;
     // 🔙 Les sorties en retour vers un point qui tombe rentrent à la base (`rerouteSorties`).
     let parties: ActiveParty[] = [...partyList.value];
     let partiesMoved = false;
@@ -4541,7 +4595,7 @@ export const useCharacterStore = defineStore('character', () => {
       map = h.map;
       advs = h.advs;
       gearStock = h.stock;
-      runesIn.push(...h.runes);
+      runesIn += h.runes;
       const escort = advs.filter((a) => ids.has(a.id));
       // 🛡️ Les miliciens postés combattent avec eux (ils n'apprennent rien).
       const militia = militiaUnits(p.control!.garrison, playerLevel);
@@ -4704,7 +4758,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...forged,
       ...(partiesMoved ? { parties } : {}),
       // 📜 Ce que le Scriptorium a recopié avant l'attaque est acquis, même s'il tombe.
-      ...(runesIn.length ? { runes: addRunes(cur.runes, runesIn) } : {}),
+      ...(runesIn ? { runes: addRuneCount(cur.runes, runesIn) } : {}),
       adventurers: roster,
     });
     x.play();
@@ -4730,7 +4784,7 @@ export const useCharacterStore = defineStore('character', () => {
     gold: number;
     mana: number;
     supplies: SupplyStock;
-    runes: RuneTier[];
+    runes: number;
   } {
     const p = map.pois.find((x) => x.id === id);
     const c = collectControl(map, id, at, heroLevel);
@@ -4797,7 +4851,7 @@ export const useCharacterStore = defineStore('character', () => {
     let gold = 0;
     let mana = 0;
     let supplies: SupplyStock = {};
-    const runes: RuneTier[] = [];
+    let runes = 0;
     const msgs: ExpeditionMessage[] = [];
     for (const p of points) {
       const h = harvestControlIn(map, advs, stock, p.id, now, playerLevel);
@@ -4808,7 +4862,7 @@ export const useCharacterStore = defineStore('character', () => {
       gold += h.gold;
       mana += h.mana;
       supplies = addSupplies(supplies, h.supplies);
-      runes.push(...h.runes);
+      runes += h.runes;
       const m = controlLootMessage(p, now, h.supplies, h.runes);
       if (m) msgs.push(m);
     }
@@ -4827,7 +4881,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(gold > 0 ? { gold: cur.gold + gold } : {}),
       ...(mana > 0 ? { mana: cur.mana + mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, supplies) } : {}),
-      ...(runes.length ? { runes: addRunes(cur.runes, runes) } : {}),
+      ...(runes ? { runes: addRuneCount(cur.runes, runes) } : {}),
       ...(gearNext !== stock0 ? { adv_gear: { ...(cur.adv_gear ?? {}), stock: gearNext } } : {}),
       ...(advs !== before ? { adventurers: advs } : {}),
       ...(msgs.length ? { messages: boxWith(cur, msgs, MESSAGES_CAP) } : {}),
@@ -4842,7 +4896,7 @@ export const useCharacterStore = defineStore('character', () => {
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<{ gold: number; mana: number; supplies: SupplyStock; runes: RuneTier[] } | null> {
+  ): Promise<{ gold: number; mana: number; supplies: SupplyStock; runes: number } | null> {
     await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map) return null;
@@ -4862,7 +4916,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(h.gold > 0 ? { gold: cur.gold + h.gold } : {}),
       ...(h.mana > 0 ? { mana: cur.mana + h.mana } : {}),
       ...(nSup ? { supplies: addSupplies(cur.supplies, h.supplies) } : {}),
-      ...(h.runes.length ? { runes: addRunes(cur.runes, h.runes) } : {}),
+      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes) } : {}),
       // ⚠️ `gearPatch` TOUJOURS : un champion au plafond ne bouge pas, ses pièces si — le
       // réserver au cas « vivier changé » (v0.1249) ne sauvegardait jamais leur XP.
       ...gearPatch,
@@ -4884,7 +4938,7 @@ export const useCharacterStore = defineStore('character', () => {
     id: string,
     now: number,
     playerLevel: number,
-  ): Promise<{ mana: number; supplies: SupplyStock; runes: RuneTier[] } | null> {
+  ): Promise<{ mana: number; supplies: SupplyStock; runes: number } | null> {
     await writesSettled();
     const cur = row.value;
     if (!cur?.expedition_map) return null;
@@ -4907,7 +4961,7 @@ export const useCharacterStore = defineStore('character', () => {
       ...(Object.keys(h.supplies).length
         ? { supplies: addSupplies(cur.supplies, h.supplies) }
         : {}),
-      ...(h.runes.length ? { runes: addRunes(cur.runes, h.runes) } : {}),
+      ...(h.runes ? { runes: addRuneCount(cur.runes, h.runes) } : {}),
       // 🗡️ Les pièces : le bonus du camp, puis ce que l'XP de leur porteur leur a appris.
       ...(() => {
         const next = trainWornGear(advList.value, h.advs, h.stock);
@@ -5395,8 +5449,9 @@ export const useCharacterStore = defineStore('character', () => {
     transferControlGarrison,
     settleGearRefonte,
     claimWeeklyQuests,
-    applyRune,
-    resolveRune,
+    openRuneBatch,
+    fuseRuneSkills,
+    giveRuneSkill,
     row,
     loaded,
     fetchMine,

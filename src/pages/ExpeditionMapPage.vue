@@ -1165,7 +1165,6 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useProgress } from '@/composables/useProgress';
 import { useGameFx } from '@/composables/useGameFx';
-import type { RuneTier } from '@/lib/skillRunes';
 import { BOOST_IDS, type BoostId, type SupplyStock } from '@/lib/supplies';
 import { useAdvXpFx } from '@/composables/useAdvXpFx';
 import { computeCharacter } from '@/lib/character';
@@ -2469,10 +2468,7 @@ const controlNote = computed(() => {
 const ctlBusy = ref(false);
 /** 🧺 L'animation de récolte d'une place forte. Une rune dit où la poser : c'est le seul
  *  moment où on la voit. */
-function celebrateHarvest(
-  p: Poi,
-  got: { mana?: number; supplies: SupplyStock; runes: RuneTier[] },
-) {
+function celebrateHarvest(p: Poi, got: { mana?: number; supplies: SupplyStock; runes: number }) {
   const kind = p.control?.kind;
   const where = kind ? CONTROL_LABEL[kind] : 'Place forte';
   // ⛲ Le mana a son bandeau discret (il ne se pose pas dans le panier des consommables).
@@ -2487,7 +2483,7 @@ function celebrateHarvest(
   gameFx.celebrateHarvest(
     got.supplies,
     got.runes,
-    got.runes.length ? `${where} · runes à poser depuis la fiche d’un champion` : where,
+    got.runes ? `${where} · runes à ouvrir au Panthéon` : where,
   );
 }
 async function recallCtl() {

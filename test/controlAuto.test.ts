@@ -54,17 +54,18 @@ describe('🏰 la production des lieux fixes est versée toute seule', () => {
 describe('📬 les rapports d’un lieu fixe', () => {
   const p = heldMap(['garden']).pois.find((q) => q.id === controlIdOf('garden'))!;
   it('un consommable ou une rune : un rapport déjà crédité (rien à récupérer)', () => {
-    const m = controlLootMessage(p, 5 * H, { ration: 2 }, [])!;
+    const m = controlLootMessage(p, 5 * H, { ration: 2 }, 0)!;
     expect(m.title).toContain('2 consommables');
     expect(m.supplies).toEqual({ ration: 2 });
     expect(m.claimed).toBeUndefined();
     expect(m.read).toBe(false);
-    const r = controlLootMessage(p, 5 * H, {}, ['green'])!;
+    const r = controlLootMessage(p, 5 * H, {}, 1)!;
     expect(r.title).toContain('1 rune');
-    expect(r.text).toMatch(/fiche d’un champion/);
+    expect(r.runes).toBe(1);
+    expect(r.text).toMatch(/Panthéon/);
   });
   it('rien produit : pas de rapport', () => {
-    expect(controlLootMessage(p, 5 * H, {}, [])).toBeNull();
+    expect(controlLootMessage(p, 5 * H, {}, 0)).toBeNull();
   });
 });
 

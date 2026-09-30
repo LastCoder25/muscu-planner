@@ -127,7 +127,7 @@
               :class="{ rune: !!p.rune }"
               :style="harvestStyle(i, p.color)"
             >
-              <RuneIcon v-if="p.rune" :tier="p.rune" size="40px" />
+              <RuneIcon v-if="p.rune" :tier="p.rune === 'multi' ? undefined : p.rune" size="40px" />
               <span v-else class="fx-hv-emo">{{ p.emoji }}</span>
               <span v-if="p.count > 1" class="fx-hv-n font-display">×{{ p.count }}</span>
             </span>

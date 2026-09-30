@@ -178,7 +178,7 @@ export function canUseRune(tier: RuneTier, championRankIndex: number): boolean {
  * ces compétences du tirage revient exactement à relancer jusqu'à en obtenir une autre.
  * `null` : tout le cran est au maximum chez ce champion, la rune ne peut pas lui être posée.
  */
-export function rollRuneSkill(
+function rollRuneSkill(
   rng: () => number,
   tier: RuneTier,
   skills: readonly ChampSkill[],
@@ -190,7 +190,7 @@ export function rollRuneSkill(
 }
 
 /** Ce que la compétence tirée fait au champion, avant toute décision du joueur. */
-export type RuneOutcome =
+type RuneOutcome =
   /** Il la portait déjà : +1 niveau, aucun emplacement pris. */
   | { kind: 'stack'; skills: ChampSkill[] }
   /** Nouvelle, et un emplacement est libre : elle s'installe au niveau 1. */
@@ -198,11 +198,7 @@ export type RuneOutcome =
   /** Nouvelle, et tous les emplacements sont pris : le joueur doit choisir (`replaceSkill`). */
   | { kind: 'full'; drawn: SkillId };
 
-export function applyRuneSkill(
-  skills: readonly ChampSkill[],
-  drawn: SkillId,
-  slots: number,
-): RuneOutcome {
+function applyRuneSkill(skills: readonly ChampSkill[], drawn: SkillId, slots: number): RuneOutcome {
   const i = skills.findIndex((s) => s.id === drawn);
   if (i >= 0) {
     const next = skills.map((s, k) =>
@@ -223,7 +219,7 @@ export function applyRuneSkill(
  * PERDUE (décision de l'utilisateur : refuser, c'est de l'optimisation — la rendre serait trop
  * facile). Dans les deux cas la rune est consommée.
  */
-export function replaceSkill(
+function replaceSkill(
   skills: readonly ChampSkill[],
   drawn: SkillId,
   replaceIndex: number | null,
@@ -280,37 +276,12 @@ const ASCENSION_ODDS: readonly Odds[] = [
   [0.05, 0.2, 0.45, 0.3], // 9 — Tout-puissant
 ];
 
-export function ascensionRuneOdds(rankIndex: number): Record<RuneTier, number> {
+function ascensionRuneOdds(rankIndex: number): Record<RuneTier, number> {
   return toOdds(ASCENSION_ODDS[Math.max(0, Math.min(ASCENSION_ODDS.length - 1, rankIndex))]!);
 }
 
-export function rollAscensionRune(rng: () => number, rankIndex: number): RuneTier {
+function rollAscensionRune(rng: () => number, rankIndex: number): RuneTier {
   return pickTier(rng, ascensionRuneOdds(rankIndex));
-}
-
-/**
- * ✨ ÉVEIL : une rune par cran, couleur tirée selon la LETTRE du champion et le CRAN atteint
- * (décision de l'utilisateur, option B + C). L'Éveil est la part « gacha » du système : c'est
- * la rareté du personnage et l'acharnement à le compléter qui paient, pas son niveau — déjà
- * récompensé par l'ascension. Au cran 1 et au cran 6, deux distributions ; entre les deux, on
- * INTERPOLE (une interpolation de distributions somme toujours à 1).
- */
-const AWAKEN_ODDS: Record<'A' | 'S' | 'X', { first: Odds; last: Odds }> = {
-  A: { first: [0.75, 0.22, 0.03, 0], last: [0.45, 0.35, 0.17, 0.03] },
-  S: { first: [0.5, 0.33, 0.14, 0.03], last: [0.2, 0.35, 0.32, 0.13] },
-  X: { first: [0.3, 0.35, 0.26, 0.09], last: [0.1, 0.3, 0.38, 0.22] },
-};
-/** Cran d'Éveil maximum lu par l'interpolation (`AWAKEN.max` côté champions). */
-const AWAKEN_LAST_STEP = 6;
-
-export function awakenRuneOdds(grade: 'A' | 'S' | 'X', step: number): Record<RuneTier, number> {
-  const { first, last } = AWAKEN_ODDS[grade];
-  const t = (Math.max(1, Math.min(AWAKEN_LAST_STEP, step)) - 1) / (AWAKEN_LAST_STEP - 1);
-  return toOdds(first.map((v, i) => v + (last[i]! - v) * t) as unknown as Odds);
-}
-
-export function rollAwakenRune(rng: () => number, grade: 'A' | 'S' | 'X', step: number): RuneTier {
-  return pickTier(rng, awakenRuneOdds(grade, step));
 }
 
 /** Les lieux de la carte qui peuvent lâcher une rune. ⚠️ EXHAUSTIF par construction : un
@@ -380,18 +351,11 @@ export function placeRuneChance(p: PlaceRuneInput): number {
   return Math.min(1, base * (p.place === 'rift' ? RUNE_PLACE.riftChanceMult : 1));
 }
 
-export function placeRuneOdds(p: PlaceRuneInput): Record<RuneTier, number> {
+function placeRuneOdds(p: PlaceRuneInput): Record<RuneTier, number> {
   const gap = placeGap(p.placeRankIndex, p.playerRankIndex);
   const mature =
     gap === 'above' && p.place === 'rift' && (p.maturity ?? 0) >= RUNE_PLACE.riftMatureAt;
   return toOdds(PLACE_ODDS[mature ? 'aboveMature' : gap]);
-}
-
-/** Un lieu RÉUSSI : `null` s'il ne lâche rien, sinon la couleur de la rune. ⚠️ Une mission
- *  ratée ne donne rien — c'est à l'appelant de ne pas appeler. */
-export function rollPlaceRune(rng: () => number, p: PlaceRuneInput): RuneTier | null {
-  if (rng() >= placeRuneChance(p)) return null;
-  return pickTier(rng, placeRuneOdds(p));
 }
 
 // ── ⚔️ CE QU'UNE COMPÉTENCE FAIT EN COMBAT (étape 3) ─────────────────────────────────────
@@ -511,49 +475,12 @@ export function referenceRuneBuild(rankIndex: number, slots: number, variant = 0
   return med.map((s) => ({ ...s }));
 }
 
-// ── 💾 L'ÉTAT DES RUNES D'UN JOUEUR (étape 4) ─────────────────────────────────────────────
+// ── 💾 LES COMPÉTENCES D'UN CHAMPION ────────────────────────────────────────────────────
 //
-// `characters.runes` (jsonb, migr. 0094). Le STOCK compte les runes non posées par couleur ;
-// `pending` garde une compétence TIRÉE qui attend la décision du joueur (tous les
-// emplacements pris, compétence nouvelle) — persistée, sinon un rechargement la relancerait.
+// L'état du joueur (runes multicolores, compétences au stock) vit dans `runeBank.ts` depuis
+// la bascule du 2026-09-30.
 
-/** Une rune tirée qui attend « remplacer ou garder ». */
-interface PendingRune {
-  advId: string;
-  tier: RuneTier;
-  drawn: SkillId;
-}
-
-export interface RuneState {
-  stock: Record<RuneTier, number>;
-  pending: PendingRune | null;
-  /** Version de la compensation versée aux champions d'avant les runes (0 = pas versée). */
-  comp: number;
-}
-
-/** Version courante de la compensation : on ne la verse qu'une fois. */
-export const RUNE_COMP_VERSION = 1;
-
-const isTier = (t: unknown): t is RuneTier => RUNE_TIERS.includes(t as RuneTier);
 const isSkill = (s: unknown): s is SkillId => typeof s === 'string' && s in SKILLS;
-
-/** Relecture DÉFENSIVE d'un JSONB : tout ce qui n'a pas la bonne forme est écarté. */
-export function normalizeRuneState(raw: unknown): RuneState {
-  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const st = (r.stock && typeof r.stock === 'object' ? r.stock : {}) as Record<string, unknown>;
-  const stock = { green: 0, blue: 0, violet: 0, gold: 0 };
-  for (const t of RUNE_TIERS) {
-    const n = Number(st[t]);
-    stock[t] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
-  }
-  const p = r.pending as Record<string, unknown> | null | undefined;
-  const pending =
-    p && typeof p.advId === 'string' && isTier(p.tier) && isSkill(p.drawn)
-      ? { advId: p.advId, tier: p.tier, drawn: p.drawn }
-      : null;
-  const comp = Number(r.comp);
-  return { stock, pending, comp: Number.isFinite(comp) ? comp : 0 };
-}
 
 /** Relecture défensive des compétences d'un champion : ids inconnus, doublons et niveaux
  *  hors bornes écartés ou ramenés dans [1, SKILL_MAX_LEVEL]. */
@@ -569,39 +496,6 @@ export function normalizeChampSkills(raw: unknown): ChampSkill[] {
       id: s.id,
       level: Math.max(1, Math.min(SKILL_MAX_LEVEL, Number.isFinite(lv) ? lv : 1)),
     });
-  }
-  return out;
-}
-
-/** Ajoute des runes au stock (rend un NOUVEL état). */
-export function addRunes(state: RuneState, tiers: readonly RuneTier[]): RuneState {
-  if (!tiers.length) return state;
-  const stock = { ...state.stock };
-  for (const t of tiers) stock[t] += 1;
-  return { ...state, stock };
-}
-
-/** Graine stable d'une chaîne (FNV-1a) — la compensation doit être la même à chaque essai. */
-function hashStr(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  return h >>> 0 || 1;
-}
-
-/**
- * 🎁 LA COMPENSATION des champions d'avant les runes (décision de l'utilisateur) : chacun
- * reçoit les runes qu'il aurait gagnées — une par rang d'ascension ouvert et une par cran
- * d'Éveil passé, aux MÊMES chances que les sources. Graine = l'id du champion : rejouer la
- * compensation donne exactement les mêmes couleurs. Elle va au STOCK, jamais posée d'office.
- */
-export function compensationRunes(
-  champs: readonly { id: string; grade: 'A' | 'S' | 'X'; ascended: number; awaken: number }[],
-): RuneTier[] {
-  const out: RuneTier[] = [];
-  for (const c of champs) {
-    const rng = mulberry32(hashStr(`runes:${c.id}`));
-    for (let r = 1; r <= c.ascended; r++) out.push(rollAscensionRune(rng, r));
-    for (let s = 1; s <= c.awaken; s++) out.push(rollAwakenRune(rng, c.grade, s));
   }
   return out;
 }

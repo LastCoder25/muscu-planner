@@ -1,7 +1,6 @@
 // 🧺 L'animation de récolte d'une place forte : ce qu'elle montre, dans quel ordre.
 import { describe, expect, it } from 'vitest';
 import { harvestPieces, harvestRarity, harvestTitle } from '@/lib/harvestFx';
-import { RUNE_COLOR } from '@/lib/skillRunes';
 import { SUPPLIES } from '@/lib/supplies';
 
 describe('🧺 harvestPieces', () => {
@@ -18,30 +17,26 @@ describe('🧺 harvestPieces', () => {
     ]);
     expect(p[1]!.emoji).toBe(SUPPLIES.potion.emoji);
   });
-  it('les runes après les consommables, regroupées, la plus rare en dernier', () => {
-    const p = harvestPieces({ potion: 1 }, ['gold', 'green', 'green']);
+  it('les runes (multicolores) après les consommables, en une pièce', () => {
+    const p = harvestPieces({ potion: 1 }, 3);
     expect(p.map((x) => [x.key, x.count])).toEqual([
       ['potion', 1],
-      ['rune:green', 2],
-      ['rune:gold', 1],
+      ['rune', 3],
     ]);
-    expect(p[2]!.rune).toBe('gold');
-    expect(p[2]!.color).toBe(RUNE_COLOR.gold);
+    expect(p[1]!.rune).toBe('multi');
+    // ⚠️ Un butin d'avant la bascule (tableau de couleurs) compte une rune par entrée.
+    expect(harvestPieces({}, ['gold', 'green'])[0]!.count).toBe(2);
   });
 });
 
 describe('🧺 éclat et titre', () => {
-  it('l’éclat suit la rune la plus rare', () => {
-    expect(harvestRarity(harvestPieces({ potion: 3 }, []))).toBe('rare');
-    expect(harvestRarity(harvestPieces({}, ['green', 'blue']))).toBe('rare');
-    expect(harvestRarity(harvestPieces({}, ['violet']))).toBe('epic');
-    expect(harvestRarity(harvestPieces({}, ['green', 'gold']))).toBe('legendary');
+  it('une rune (sa couleur est encore cachée) éclate plus qu’un panier de consommables', () => {
+    expect(harvestRarity(harvestPieces({ potion: 3 }, 0))).toBe('rare');
+    expect(harvestRarity(harvestPieces({}, 1))).toBe('epic');
   });
   it('le titre compte les runes et les consommables, accordés', () => {
     expect(harvestTitle(harvestPieces({ potion: 2, rations: 1 }, []))).toBe('+3 consommables');
-    expect(harvestTitle(harvestPieces({}, ['blue']))).toBe('+1 rune');
-    expect(harvestTitle(harvestPieces({ potion: 1 }, ['blue', 'gold']))).toBe(
-      '+2 runes · +1 consommable',
-    );
+    expect(harvestTitle(harvestPieces({}, 1))).toBe('+1 rune');
+    expect(harvestTitle(harvestPieces({ potion: 1 }, 2))).toBe('+2 runes · +1 consommable');
   });
 });

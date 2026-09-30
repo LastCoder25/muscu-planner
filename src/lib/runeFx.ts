@@ -14,8 +14,9 @@ export const RUNE_FX_INTENSITY: Record<RuneTier, number> = {
   gold: 3,
 };
 
-/** Ce qu'a donné la pose : une compétence neuve, un niveau de plus, ou plus de place. */
-export type RuneFxKind = 'new' | 'stack' | 'full';
+/** Ce qui s'est passé : une rune OUVERTE (la compétence va au stock), ou une compétence
+ *  DONNÉE à un champion — neuve, cumulée à celle qu'il portait, ou à la place d'une autre. */
+export type RuneFxKind = 'open' | 'new' | 'stack' | 'replace';
 
 export interface RuneFx {
   tier: RuneTier;
@@ -26,7 +27,8 @@ export interface RuneFx {
   subtitle: string;
 }
 
-/** La scène d'une rune posée. `level` = le niveau de la compétence APRÈS la pose. */
+/** La scène. `level` = le niveau de la compétence APRÈS l'opération (une compétence du stock
+ *  peut avoir été fusionnée : elle entre à SON niveau). `advName` est ignoré à l'ouverture. */
 export function runeApplyFx(
   kind: RuneFxKind,
   drawn: SkillId,
@@ -34,16 +36,15 @@ export function runeApplyFx(
   level: number,
 ): RuneFx {
   const k = SKILLS[drawn];
-  const lvl = kind === 'stack' ? level : 1;
+  const lvl = Math.max(1, level);
   const effect = k.what.replace('{v}', String(skillValue(drawn, lvl)).replace('.', ','));
   const title =
-    kind === 'stack'
+    kind === 'open'
       ? `${k.name} · Nv ${lvl}`
-      : kind === 'new'
-        ? `${advName} apprend ${k.name}`
-        : `${k.name} tirée`;
-  const subtitle =
-    kind === 'full' ? `${effect} · plus de place : à toi de choisir` : `${advName} · ${effect}`;
+      : kind === 'stack'
+        ? `${advName} : ${k.name} · Nv ${lvl}`
+        : `${advName} apprend ${k.name}`;
+  const subtitle = kind === 'open' ? `${effect} · rangée au stock` : `${effect}`;
   return {
     tier: k.tier,
     color: RUNE_COLOR[k.tier],

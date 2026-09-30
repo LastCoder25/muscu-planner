@@ -18,10 +18,13 @@ import {
   RUNE_TIERS,
   SKILLS,
   SKILL_MAX_LEVEL,
+  RUNE_PLACE,
   canUseRune,
   pickTier,
+  placeRuneChance,
   skillsOfTier,
   type ChampSkill,
+  type PlaceRuneInput,
   type RuneTier,
   type SkillId,
 } from './skillRunes';
@@ -74,9 +77,33 @@ export interface RuneBank {
   skills: StockSkill[];
   /** Nombre de runes déjà ouvertes : graine du tirage et source des `uid`. */
   opened: number;
+  /** Version de la bascule versée (`RUNE_BANK_VERSION`) : on ne rembourse qu'une fois. */
+  comp: number;
 }
 
-export const emptyBank = (): RuneBank => ({ runes: 0, skills: [], opened: 0 });
+/** Version courante du modèle : 2 = runes multicolores (1 = runes colorées, 0 = rien). */
+export const RUNE_BANK_VERSION = 2;
+
+export const emptyBank = (): RuneBank => ({
+  runes: 0,
+  skills: [],
+  opened: 0,
+  comp: RUNE_BANK_VERSION,
+});
+
+/** Ajoute `n` runes multicolores (rend un NOUVEL état). */
+export function addRuneCount(bank: RuneBank, n: number): RuneBank {
+  const k = Math.max(0, Math.floor(n));
+  return k ? { ...bank, runes: bank.runes + k } : bank;
+}
+
+/** Combien de runes porte un butin. ⚠️ Les rapports écrits AVANT la bascule portent un
+ *  TABLEAU de couleurs : chacune compte pour une rune multicolore. */
+export function runeCount(x: unknown): number {
+  if (Array.isArray(x)) return x.length;
+  const n = Math.floor(Number(x));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
 const isSkill = (s: unknown): s is SkillId => typeof s === 'string' && s in SKILLS;
 
@@ -98,7 +125,7 @@ export function normalizeRuneBank(raw: unknown): RuneBank {
       level: Math.max(1, Math.min(SKILL_MAX_LEVEL, int(s.level) || 1)),
     });
   }
-  return { runes: int(r.runes), skills, opened: int(r.opened) };
+  return { runes: int(r.runes), skills, opened: int(r.opened), comp: int(r.comp) };
 }
 
 // ── 🔓 OUVRIR ───────────────────────────────────────────────────────────────────────────
@@ -107,6 +134,11 @@ export function normalizeRuneBank(raw: unknown): RuneBank {
 export const RUNE_LOT = { size: 10, cost: 9 } as const;
 
 export type OpenBlock = 'none' | 'lot';
+
+export const OPEN_BLOCK_LABEL: Record<OpenBlock, string> = {
+  none: 'pas assez de runes',
+  lot: 'on ouvre une rune, ou un lot de dix',
+};
 
 /** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche d'ouvrir `count` compétences
  *  (1, ou `RUNE_LOT.size`). */
@@ -128,6 +160,7 @@ export function openRunes(
   const opened = Array.from({ length: count }, (_, i) => openRune(owner, bank.opened + i + 1));
   return {
     bank: {
+      ...bank,
       runes: bank.runes - cost,
       skills: [...bank.skills, ...opened],
       opened: bank.opened + count,
@@ -139,6 +172,13 @@ export function openRunes(
 // ── 🔗 FUSIONNER ────────────────────────────────────────────────────────────────────────
 
 export type FuseBlock = 'missing' | 'same' | 'different' | 'over';
+
+export const FUSE_BLOCK_LABEL: Record<FuseBlock, string> = {
+  missing: 'compétence introuvable',
+  same: 'choisis un autre exemplaire',
+  different: 'seuls deux exemplaires de la même compétence fusionnent',
+  over: `la fusion dépasserait le niveau ${SKILL_MAX_LEVEL}`,
+};
 
 /** ⚠️ SOURCE UNIQUE écran + store : ce qui empêche de fusionner deux exemplaires. Les niveaux
  *  s'ADDITIONNENT : une fusion qui dépasserait 5 est refusée, jamais écrêtée en silence. */
@@ -169,6 +209,13 @@ export function fuseSkills(bank: RuneBank, uidA: string, uidB: string): RuneBank
 export type GiveKind = 'new' | 'stack' | 'replace';
 
 export type GiveBlock = 'missing' | 'rank' | 'over' | 'full';
+
+export const GIVE_BLOCK_LABEL: Record<GiveBlock, string> = {
+  missing: 'introuvable',
+  rank: 'rang trop bas pour cette couleur',
+  over: `dépasserait le niveau ${SKILL_MAX_LEVEL}`,
+  full: 'choisis la compétence à remplacer',
+};
 
 export interface ChampionSlots {
   skills: readonly ChampSkill[];
@@ -246,6 +293,17 @@ export function placeRuneCount(p: {
   return p.riftMature ? 3 : 2;
 }
 
+/** Un lieu RÉUSSI : 0 s'il ne lâche rien (la chance `placeRuneChance`, inchangée), sinon
+ *  `placeRuneCount`. Une faille refermée mûre au-dessus de ton rang en rend 3. */
+export function rollPlaceRunes(rng: () => number, p: PlaceRuneInput): number {
+  if (rng() >= placeRuneChance(p)) return 0;
+  return placeRuneCount({
+    placeRankIndex: p.placeRankIndex,
+    playerRankIndex: p.playerRankIndex,
+    riftMature: p.place === 'rift' && (p.maturity ?? 0) >= RUNE_PLACE.riftMatureAt,
+  });
+}
+
 /** Une ascension vers le rang `rankIndex` (1 = Argent) : 1 rune jusqu'à l'Or noir, 2 de
  *  Légendaire à Divin, 3 au-delà. */
 export function ascensionRuneCount(rankIndex: number): number {
@@ -278,4 +336,57 @@ export function legacyRefund(
   for (const t of RUNE_TIERS) n += Math.max(0, Math.floor(stock[t] ?? 0)) * REFUND_PER_LEVEL[t];
   if (pendingTier) n += REFUND_PER_LEVEL[pendingTier];
   return n;
+}
+
+/** Ce que la bascule lit d'un champion : ses compétences et, pour un compte qui n'avait
+ *  jamais reçu la compensation des runes, sa lettre, ses rangs ouverts et ses crans d'Éveil. */
+export interface LegacyChampion {
+  skills: readonly ChampSkill[];
+  grade: 'A' | 'S' | 'X' | null;
+  ascended: number;
+  awaken: number;
+}
+
+/**
+ * 🔁 LA BASCULE, une fois : lit l'ancien état BRUT (`{ stock, pending, comp }`) et rend la
+ * nouvelle banque et ce qui a été remboursé. `null` : déjà basculé.
+ *
+ * - toutes les compétences des champions sont RETIRÉES (l'appelant les efface) ; chaque niveau
+ *   rend `REFUND_PER_LEVEL` de sa couleur ;
+ * - les runes colorées au stock et la rune `pending` suivent le même barème ;
+ * - ⚠️ un compte qui n'avait jamais reçu la compensation (`comp` 0) la reçoit ici, aux
+ *   QUANTITÉS du nouveau modèle (`ascensionRuneCount` par rang ouvert, `AWAKEN_RUNE_COUNT`
+ *   par cran) — sinon ses champions ascensionnés n'auraient jamais rien reçu.
+ */
+export function migrateLegacyRunes(
+  raw: unknown,
+  champs: readonly LegacyChampion[],
+): { bank: RuneBank; refunded: number } | null {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const comp = Math.floor(Number(r.comp)) || 0;
+  if (comp >= RUNE_BANK_VERSION) return null;
+  const st = (r.stock && typeof r.stock === 'object' ? r.stock : {}) as Record<string, unknown>;
+  const stock: Partial<Record<RuneTier, number>> = {};
+  for (const t of RUNE_TIERS) stock[t] = Math.max(0, Math.floor(Number(st[t]) || 0));
+  const p = r.pending as Record<string, unknown> | null | undefined;
+  const pendingTier =
+    p && typeof p.tier === 'string' && (RUNE_TIERS as readonly string[]).includes(p.tier)
+      ? (p.tier as RuneTier)
+      : null;
+  let refunded = legacyRefund(
+    champs.map((c) => c.skills),
+    stock,
+    pendingTier,
+  );
+  if (comp < 1)
+    for (const c of champs) {
+      if (!c.grade) continue;
+      for (let k = 1; k <= c.ascended; k++) refunded += ascensionRuneCount(k);
+      refunded += Math.max(0, c.awaken) * AWAKEN_RUNE_COUNT[c.grade];
+    }
+  const prev = normalizeRuneBank(raw);
+  return {
+    bank: { ...prev, runes: prev.runes + refunded, comp: RUNE_BANK_VERSION },
+    refunded,
+  };
 }

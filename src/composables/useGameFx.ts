@@ -107,7 +107,7 @@ export function useGameFx() {
    *  l'autre (l'or a déjà la sienne). */
   function celebrateHarvest(
     supplies: SupplyStock | undefined,
-    runes: readonly RuneTier[] | undefined,
+    runes: number | readonly RuneTier[] | undefined,
     subtitle: string,
   ): void {
     const pieces = harvestPieces(supplies, runes);

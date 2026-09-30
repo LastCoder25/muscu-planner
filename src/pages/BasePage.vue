@@ -472,9 +472,10 @@
              une probabilité qui sature les rendait invisibles. La PUISSANCE ne sature pas :
              c'est la part mesurée par ablation (`defenseBreakdown`), jamais recalculée. -->
           <p v-if="garrisonPart" class="f-champs">
-            ⚔️ Tes {{ guardAdvs.length }} champion{{ guardAdvs.length > 1 ? 's' : '' }}
-            présent{{ guardAdvs.length > 1 ? 's' : '' }} :
-            <b>+{{ fmtPow(garrisonPart.power) }}</b> de puissance
+            ⚔️ Tes {{ guardAdvs.length }} champion{{ guardAdvs.length > 1 ? 's' : '' }} présent{{
+              guardAdvs.length > 1 ? 's' : ''
+            }}
+            : <b>+{{ fmtPow(garrisonPart.power) }}</b> de puissance
           </p>
           <p v-if="forcesGap > 0" class="f-gap">
             🚪 Des tiens sont dehors : <b>−{{ fmtPow(forcesGap) }}</b> de puissance — au complet, tu
@@ -660,6 +661,7 @@
       @close="closeGuild"
     />
     <SummonPanel :open="summonOpen" @close="summonOpen = false" />
+    <RuneBankSheet :open="runesOpen" @close="runesOpen = false" />
 
     <!-- ⚠️ LA PAGE NE GARDE QUE CE QUI SE LIT D'UN COUP D'ŒIL. Espionnage, dernier
          siège et champ de bataille vivaient en panneaux empilés sous l'enceinte, loin
@@ -674,6 +676,7 @@
       :now="now"
       @open-guild="openGuild"
       @open-summon="summonOpen = true"
+      @open-runes="runesOpen = true"
     />
 
     <!-- Feuille d'une structure de défense, ouverte depuis le dessin. -->
@@ -958,6 +961,7 @@ import { useGamePanel } from '@/composables/useGamePanel';
 import { useChampionFocus } from '@/composables/useChampionFocus';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
+import RuneBankSheet from '@/components/RuneBankSheet.vue';
 import SummonPanel from '@/components/SummonPanel.vue';
 import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
@@ -1577,6 +1581,7 @@ const defSummary = computed(() => {
 });
 // ── 🎰 Tirage ──
 const summonOpen = ref(false);
+const runesOpen = ref(false); // 🪬 la feuille des runes multicolores
 /** Deux replis de la tuile Défense, mémorisés PAR APPAREIL — un réglage d’affichage n’a
  *  rien à faire en base. Même traitement que la carte des mondes (v0.745). */
 const partsOpen = ref(localStorage.getItem('muscu:base:parts') === '1');

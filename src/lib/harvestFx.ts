@@ -6,7 +6,8 @@
 // `recallControl`), jamais une estimation. Une animation n'annonce jamais un gain qui n'a pas
 // eu lieu.
 import { SUPPLIES, SUPPLY_IDS, type SupplyStock } from './supplies';
-import { RUNE_COLOR, RUNE_INFO, RUNE_TIERS, type RuneTier } from './skillRunes';
+import { RUNE_TIERS, type RuneTier } from './skillRunes';
+import { runeCount } from './runeBank';
 
 /** Une pièce qui sort du panier : un consommable (emoji) ou une rune (pierre dessinée). */
 export interface HaulPiece {
@@ -15,8 +16,9 @@ export interface HaulPiece {
   count: number;
   /** Consommable : son emoji. */
   emoji?: string;
-  /** Rune : sa couleur (la pierre est dessinée par `RuneIcon`). */
-  rune?: RuneTier;
+  /** Rune : sa couleur, ou `'multi'` pour une rune multicolore (la pierre est dessinée par
+   *  `RuneIcon`, aux quatre teintes quand elle est multicolore). */
+  rune?: RuneTier | 'multi';
   /** Le halo derrière la pièce. */
   color: string;
 }
@@ -29,7 +31,7 @@ const SUPPLY_HALO = '#e8d9b5';
  *  précieuse sort EN DERNIER, c'est elle qu'on attend. Une pièce par sorte, avec son nombre. */
 export function harvestPieces(
   supplies: SupplyStock | undefined,
-  runes: readonly RuneTier[] | undefined,
+  runes: number | readonly RuneTier[] | undefined,
 ): HaulPiece[] {
   const out: HaulPiece[] = [];
   for (const id of SUPPLY_IDS) {
@@ -43,24 +45,20 @@ export function harvestPieces(
         color: SUPPLY_HALO,
       });
   }
-  for (const t of RUNE_TIERS) {
-    const n = (runes ?? []).filter((r) => r === t).length;
-    if (n > 0)
-      out.push({
-        key: 'rune:' + t,
-        label: RUNE_INFO[t].label,
-        count: n,
-        rune: t,
-        color: RUNE_COLOR[t],
-      });
-  }
+  // 🪬 Des runes MULTICOLORES : leur couleur se révèle à l'ouverture, pas à la récolte.
+  const n = runeCount(runes);
+  if (n > 0)
+    out.push({ key: 'rune', label: 'Rune multicolore', count: n, rune: 'multi', color: '#c9a6ff' });
   return out;
 }
 
 /** L'éclat de l'animation : celui de la rune la plus rare, sinon le bleu d'une récolte
  *  ordinaire. Une rune dorée doit éclater plus fort qu'une ration. */
 export function harvestRarity(pieces: readonly HaulPiece[]): 'rare' | 'epic' | 'legendary' {
-  const best = pieces.reduce((m, p) => (p.rune ? Math.max(m, RUNE_TIERS.indexOf(p.rune)) : m), -1);
+  const best = pieces.reduce(
+    (m, p) => (p.rune ? Math.max(m, p.rune === 'multi' ? 2 : RUNE_TIERS.indexOf(p.rune)) : m),
+    -1,
+  );
   return best >= 3 ? 'legendary' : best >= 2 ? 'epic' : 'rare';
 }
 

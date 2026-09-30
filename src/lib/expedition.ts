@@ -6,7 +6,8 @@
 //
 // NB Date.now() n'est PAS utilisé ici : le `now` (ms epoch) est TOUJOURS passé par
 // l'appelant → fonctions pures, testables.
-import { RUNE_INFO, RUNE_TIERS, type RuneTier } from './skillRunes';
+import type { RuneTier } from './skillRunes';
+import { runeCount } from './runeBank';
 import type { RiftBossReplay, RiftBossStep, WarbandBattle } from './rift';
 import { characterRank, rankStartLevel, CHARACTER_RANKS } from './characterRank';
 import { mulberry32, seedOf, simulateCombat, type Combatant, type CombatEvent } from './combat';
@@ -739,8 +740,9 @@ export const routePerilous = (p: Pick<Poi, 'perilous' | 'riftPeril'>): boolean =
 
 export interface ExpeditionOutcome {
   win: boolean;
-  /** 🔮 Runes de compétence tombées sur le lieu (réussi, avec au moins un champion). */
-  runes?: RuneTier[];
+  /** 🪬 Runes multicolores tombées sur le lieu (réussi, avec au moins un champion).
+   *  ⚠️ Un TABLEAU de couleurs sur un voyage parti avant la bascule : lire `runeCount`. */
+  runes?: number | readonly RuneTier[];
   gold: number; // crédité au RETOUR
   energy: number; // ⚡ énergie de jeu (puits) → crédite login_energy
   summonStones: number; // 🔮 pierres d'invocation → coût des boss de palier
@@ -843,7 +845,7 @@ export interface ExpeditionMessage {
   mana?: number; // 💠 pierres de mana (mine résiduelle d'une faille)
   seals?: SealDrop; // 🔱 sceaux d'ascension (gardien d'une faille refermée)
   supplies?: SupplyStock; // 🎒 consommables trouvés (crédités à l'encaissement)
-  runes?: RuneTier[]; // 🔮 runes de compétence (créditées au stock à l'encaissement)
+  runes?: number | readonly RuneTier[]; // 🪬 runes multicolores (tableau = legacy, `runeCount`)
   tickets?: number; // 🎟️ tickets d'invocation (coffres gagnés par le sport, v0.992)
   itemName?: string; // legacy : nom seul (anciens messages) — repli d'affichage
   item?: Omit<Item, 'id'>; // objet gagné COMPLET (rareté/effet/niveau) → détail dans la boîte
@@ -981,7 +983,7 @@ export function haulPills(o: {
   tickets?: number;
   seals?: SealDrop;
   supplies?: SupplyStock;
-  runes?: readonly RuneTier[];
+  runes?: number | readonly RuneTier[];
 }): HaulPill[] {
   // 🎒 Les consommables à la suite : un par type, dans l'ordre du catalogue.
   const supplies = SUPPLY_IDS.filter((id) => (o.supplies?.[id] ?? 0) > 0).map(
@@ -1012,13 +1014,9 @@ export function haulPills(o: {
     .map((p): HaulPill => ({ emoji: p.emoji, n: p.n, name: p.name }))
     .concat(supplies)
     .concat(
-      RUNE_TIERS.map(
-        (t): HaulPill => ({
-          emoji: RUNE_INFO[t].emoji,
-          n: (o.runes ?? []).filter((x) => x === t).length,
-          name: RUNE_INFO[t].label,
-        }),
-      ).filter((p) => p.n > 0),
+      runeCount(o.runes) > 0
+        ? [{ emoji: '🪬', n: runeCount(o.runes), name: 'Runes multicolores' }]
+        : [],
     );
 }
 
@@ -1067,7 +1065,7 @@ export function buildMessage(exp: ActiveExpedition): ExpeditionMessage {
     ...(o.mana ? { mana: o.mana } : {}),
     ...(o.seals ? { seals: o.seals } : {}),
     ...(o.supplies && Object.keys(o.supplies).length ? { supplies: o.supplies } : {}),
-    ...(o.runes?.length ? { runes: o.runes } : {}),
+    ...(runeCount(o.runes) ? { runes: runeCount(o.runes) } : {}),
     ...(o.item ? { itemName: o.item.name, item: o.item } : {}),
     ...(o.items && o.items.length > 1 ? { itemCount: o.items.length } : {}),
     // Les objets vivent DANS le message : c'est lui qui sera encaissé, donc c'est lui
