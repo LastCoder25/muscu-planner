@@ -93,7 +93,7 @@ describe('🕹️ openPath — volet droit en cockpit, route plein écran sinon'
     expect(sfc).not.toContain('char.partyTick(');
     expect(sfc).not.toContain('char.expeSyncMap(');
     const adv = fs.readFileSync('src/pages/AventurePage.vue', 'utf8');
-    expect(adv).toContain('<ExpeditionMapPage v-if="mapView"');
+    expect(adv).toContain('<ExpeditionMapPage v-if="shownMap"');
     expect(adv).toContain('char.expeSyncMap(');
   });
 

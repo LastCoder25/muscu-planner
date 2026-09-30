@@ -136,7 +136,10 @@
         <button class="intro-ok" @click="dismissIntro">Compris, à l'aventure !</button>
       </div>
 
-      <div v-if="!mapView" class="seg">
+      <!-- 🔄 LE PLATEAU PIVOTE quand on passe de l'Aventure à la carte : `shownMap` suit
+           `mapView` avec un temps de retard, le temps que la tuile ait tourné de profil. -->
+      <div class="board" :class="flip">
+      <div v-if="!shownMap" class="seg">
         <button class="seg-b" :class="{ on: tab === 'hero' }" @click="tab = 'hero'">
           <q-icon name="person" size="18px" /> Héros
         </button>
@@ -158,7 +161,7 @@
            (familier à droite, badge talent en bas-gauche), ticket d06b6998. -->
       <!-- La carte, hébergée : le haut de page est celui de l'Aventure, et c'est l'Aventure qui
            fait tourner la boucle de mise à jour (une seule pour les deux). -->
-      <ExpeditionMapPage v-if="mapView" />
+      <ExpeditionMapPage v-if="shownMap" />
       <template v-else-if="tab === 'hero'">
         <template v-if="persoSub === 'perso'">
           <!-- PORTRAIT HÉROS : le perso au centre d'un cercle teinté par le RANG ; couronne
@@ -1656,6 +1659,7 @@
           @siege-seen="onSiegeSeen"
         />
       </template>
+      </div>
     </template>
 
     <!-- Modale : remplacer un objet équipé → sort de l'ancien au choix -->
@@ -3395,6 +3399,32 @@ watch(
   },
   { immediate: true },
 );
+/** 🔄 Ce que le plateau MONTRE : il suit `mapView` avec un temps de retard. La tuile
+ *  tourne de profil (mi-course, invisible), le contenu change, puis elle finit de tourner.
+ *  Vers la carte elle pivote de gauche à droite, au retour dans l'autre sens. Déclaré après
+ *  les deux `watch` de route : un `?view=map` à l'arrivée s'affiche sans animation. */
+const shownMap = ref(mapView.value);
+const flip = ref('');
+const FLIP_HALF_MS = 220;
+let flipToken = 0;
+watch(mapView, (v) => {
+  const token = ++flipToken;
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+    shownMap.value = v;
+    flip.value = '';
+    return;
+  }
+  const dir = v ? 'ltr' : 'rtl';
+  flip.value = `flip-out-${dir}`;
+  setTimeout(() => {
+    if (token !== flipToken) return;
+    shownMap.value = v;
+    flip.value = `flip-in-${dir}`;
+    setTimeout(() => {
+      if (token === flipToken) flip.value = '';
+    }, FLIP_HALF_MS);
+  }, FLIP_HALF_MS);
+});
 // Équipement : plus de sous-onglets. Sac / Loadouts ouvrent des modales
 // (les stats de combat « Force » vivent sur la fiche Héros).
 const bagOpen = ref(false);
@@ -7318,6 +7348,49 @@ onUnmounted(() => {
 }
 /* Icône AU-DESSUS du libellé, largeur qui suit le contenu : en ligne à parts
    égales, « Équipement » (le plus long) était coupé dès 344 px. */
+/* 🔄 Le plateau pivote sur son axe vertical (perspective dans le transform : aucun parent
+   à régler). Aller : 0 → 90° (tranche), le contenu change, −90° → 0. Au retour, l'inverse. */
+/* ⚠️ Pas de `will-change: transform` permanent : un transform crée un bloc conteneur
+   pour les `position: fixed` du dedans (voiles, CTA collants) — seulement le temps du pivot. */
+.board {
+  transform-origin: 50% 40%;
+}
+.board.flip-out-ltr {
+  animation: board-out-ltr 0.22s ease-in forwards;
+}
+.board.flip-in-ltr {
+  animation: board-in-ltr 0.22s ease-out;
+}
+.board.flip-out-rtl {
+  animation: board-out-rtl 0.22s ease-in forwards;
+}
+.board.flip-in-rtl {
+  animation: board-in-rtl 0.22s ease-out;
+}
+@keyframes board-out-ltr {
+  to {
+    transform: perspective(1400px) rotateY(90deg) scale(0.94);
+    filter: brightness(0.55);
+  }
+}
+@keyframes board-in-ltr {
+  from {
+    transform: perspective(1400px) rotateY(-90deg) scale(0.94);
+    filter: brightness(0.55);
+  }
+}
+@keyframes board-out-rtl {
+  to {
+    transform: perspective(1400px) rotateY(-90deg) scale(0.94);
+    filter: brightness(0.55);
+  }
+}
+@keyframes board-in-rtl {
+  from {
+    transform: perspective(1400px) rotateY(90deg) scale(0.94);
+    filter: brightness(0.55);
+  }
+}
 /* 🗺️ Aventure / Carte : bascule le bloc sous le haut de page. Deux grandes tuiles (mobile :
    cibles ≥ 44 px), l'active en accent — comme les onglets, un cran plus marquée : c'est le
    choix de premier niveau. */
