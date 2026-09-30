@@ -2493,6 +2493,84 @@ describe('🪬 RuneBankSheet', () => {
   }, 30_000);
 });
 
+describe('🪬 RuneReveal', () => {
+  const opened1 = [{ uid: 'o1', id: 'crit', level: 1 }];
+  const opened10 = [
+    'speed',
+    'care',
+    'crit',
+    'haul',
+    'pv',
+    'scout',
+    'speed',
+    'damage',
+    'care',
+    'haul',
+  ].map((id, i) => ({ uid: 'l' + i, id, level: 1 }));
+
+  it('à l’unité : la scène se monte (mur, alcôve, douze glyphes)', async () => {
+    const { default: RuneReveal } = await import('@/components/RuneReveal.vue');
+    let out = '';
+    expect(
+      await mountIt(
+        RuneReveal,
+        { opened: opened1, stock: opened1, canAgain: true, busy: false },
+        undefined,
+        undefined,
+        '/',
+        (h) => (out = h),
+      ),
+    ).toBeNull();
+    expect(out).toContain('rr-alcove');
+    expect(out.match(/class="rr-glyph[ "]/g)?.length).toBe(12);
+  }, 30_000);
+
+  it('prefers-reduced-motion : la compétence se lit tout de suite, lot compris', async () => {
+    const { default: RuneReveal } = await import('@/components/RuneReveal.vue');
+    const mm = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: true, media: q })) as typeof window.matchMedia;
+    let one = '';
+    let lot = '';
+    try {
+      expect(
+        await mountIt(
+          RuneReveal,
+          {
+            opened: opened1,
+            stock: [...opened1, { uid: 'x', id: 'crit', level: 2 }],
+            canAgain: true,
+            busy: false,
+          },
+          undefined,
+          undefined,
+          '/',
+          (h) => (one = h),
+        ),
+      ).toBeNull();
+      expect(
+        await mountIt(
+          RuneReveal,
+          { opened: opened10, stock: opened10, canAgain: false, busy: false },
+          undefined,
+          undefined,
+          '/',
+          (h) => (lot = h),
+        ),
+      ).toBeNull();
+    } finally {
+      window.matchMedia = mm;
+    }
+    expect(one).toContain('Critique');
+    expect(one).toContain('Rune violette');
+    expect(one).toContain('2 exemplaires au stock');
+    expect(one).toContain('Ouvrir encore');
+    // Le lot révèle ses dix alcôves et résume par couleur.
+    expect(lot.match(/rr-cell-emo/g)?.length).toBe(10);
+    expect(lot).toContain('rr-sum-pill');
+    expect(lot).not.toContain('Ouvrir encore');
+  }, 30_000);
+});
+
 describe('🪨 RuneIcon', () => {
   it('une pierre par couleur et la variante « toutes », sans dégradé partagé sur la page', async () => {
     const { default: RuneIcon } = await import('@/components/RuneIcon.vue');

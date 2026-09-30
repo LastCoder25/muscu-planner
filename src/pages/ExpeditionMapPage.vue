@@ -574,7 +574,7 @@
                 type="button"
                 class="slot-tile"
                 :aria-label="slot.label"
-                @click="goReinforce"
+                @click="openQuick"
               >
                 <span class="slot-plus">＋</span>
                 <span class="slot-name">{{ slot.label }}</span>
@@ -691,94 +691,6 @@
               <span v-if="defenseNow.late" class="ctl-dim">
                 · {{ defenseNow.late }} renfort{{ defenseNow.late > 1 ? 's' : '' }} arrivera trop
                 tard</span
-              >
-            </p>
-            <!-- ➕ RENFORT : une place est libre (ou vient de se libérer). Les renforts marchent,
-               puis rejoignent la garnison ; en route, ils ne produisent ni ne combattent. -->
-            <div ref="reinfAnchor" />
-            <template v-if="reinfOpen && controlFree > 0">
-              <p class="ctl-line ctl-reinf">
-                ➕
-                <b
-                  >{{ controlFree }} place{{ controlFree > 1 ? 's' : '' }} libre{{
-                    controlFree > 1 ? 's' : ''
-                  }}</b
-                >
-                — envoie un renfort
-                <span v-if="ctlReinfSel.length" class="ctl-dim">
-                  · arrivée dans {{ formatDurationMin(reinforceLegMin) }}</span
-                >
-              </p>
-              <div v-if="freeSorted.length" class="car-pick">
-                <AdvPickTile
-                  v-for="a in freeSorted"
-                  :key="a.id"
-                  :adv="a"
-                  :on="ctlReinfSel.includes(a.id)"
-                  :gain="reinfGain[a.id] ?? null"
-                  @toggle="toggleReinf(a.id)"
-                />
-              </div>
-              <p v-else class="ctl-line ctl-dim">Aucun champion disponible pour l’instant.</p>
-              <div v-if="ctlReinfSel.length" class="send-bar">
-                <button class="sh-send" :disabled="ctlBusy" @click="reinforceCtl">
-                  ➕ Envoyer {{ ctlReinfSel.length }} en renfort
-                </button>
-              </div>
-            </template>
-            <!-- 🛡️ DES MILICIENS (Caserne) : ils complètent la garnison jusqu'à 5, champions
-               compris. Ils font tourner le lieu, mais n'apprennent rien et meurent s'ils
-               tombent. -->
-            <template v-if="reinfOpen && (militiaBuilt || milHome > 0)">
-              <div class="mil-send">
-                <span class="mil-send-lab"
-                  ><span class="mil-inline"><MilitiaPortrait /></span> Miliciens
-                  <span class="ctl-dim"
-                    >· {{ milHome }} à la base · {{ militiaFreeSeats(liveControl) }} place{{
-                      militiaFreeSeats(liveControl) > 1 ? 's' : ''
-                    }}
-                    libre{{ militiaFreeSeats(liveControl) > 1 ? 's' : '' }}</span
-                  ></span
-                >
-              </div>
-              <!-- 🛡️ Une tuile par milicien de la base, comme les champions au-dessus (demandé :
-                 « voir les icônes des miliciens au lieu de saisir un chiffre »). Ils sont
-                 anonymes : toucher la N-ième en choisit N, la retoucher en retire une. Au-delà
-                 des places libres, la tuile est grisée et le dit. -->
-              <div v-if="milHome > 0" class="mil-pick">
-                <button
-                  v-for="i in milHome"
-                  :key="'mil' + i"
-                  type="button"
-                  class="mil-tile"
-                  :class="{ on: i <= milSend, off: i > milSendMax }"
-                  :disabled="i > milSendMax"
-                  :aria-pressed="i <= milSend"
-                  :title="
-                    i > milSendMax ? 'plus de place pour un milicien sur ce lieu' : MILITIA_NAME
-                  "
-                  @click="pickMilitia(i)"
-                >
-                  <span class="mil-tile-emo"><MilitiaPortrait /></span>
-                  <span class="mil-tile-n">{{ i }}</span>
-                </button>
-              </div>
-              <p v-else class="ctl-line ctl-dim">Aucun milicien à la base pour l’instant.</p>
-              <div v-if="milSend > 0" class="send-bar">
-                <button class="sh-send" :disabled="ctlBusy" @click="sendMilitia">
-                  <span class="mil-inline"><MilitiaPortrait /></span> Envoyer
-                  {{ milSend }} milicien{{ milSend > 1 ? 's' : '' }}
-                  ·
-                  {{ formatDurationMin(militiaLegMin) }}
-                </button>
-              </div>
-            </template>
-            <!-- 🎯 Le % AVEC le renfort choisi (champions ET miliciens), arrivée comprise. -->
-            <p v-if="defenseWithSel && defenseNow" class="ctl-line ctl-hold">
-              🛡️ Avec ce renfort : repousse environ <b>{{ defenseWithSel.pct }} %</b>
-              <span class="ctl-dim">(au lieu de {{ defenseNow.pct }} %)</span>
-              <span v-if="defenseWithSel.late > defenseNow.late" class="ctl-warn-inline">
-                · il arrivera trop tard</span
               >
             </p>
             <button
@@ -2020,88 +1932,27 @@ const garrisonSlots = computed(() =>
     label: i < controlFree.value ? 'Place libre' : 'Milicien seulement',
   })),
 );
-const reinfAnchor = ref<HTMLElement | null>(null);
-/** ➕ Les candidats au renfort (champions et miliciens disponibles) restent CACHÉS tant que le
- *  joueur n'a pas touché une case vide de la garnison (demandé) : la fiche d'un point tenu se
- *  lit d'abord comme ce qu'il produit et qui le tient, pas comme une liste de recrues. */
-const reinfOpen = ref(false);
-function goReinforce() {
-  reinfOpen.value = true;
-  void nextTick(() => reinfAnchor.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+/** ➕ Toucher une case vide ouvre le renfort direct (`QuickReinforceSheet`), le même que la
+ *  liste des places fortes : champions et miliciens de la base, et membres des AUTRES points
+ *  tenus (demandé : « comme partout ailleurs, pas seulement la base »). */
+function openQuick() {
+  if (livePoi.value) quickId.value = livePoi.value.id;
 }
-/** Les sélections de la fiche : qui ramener, qui envoyer en renfort. ⚠️ Déclarées AVANT le
- *  stepper de milice, dont le `watch` les lit dès le setup (zone morte temporelle sinon). */
+/** La sélection de la fiche : qui ramener. */
 const ctlRecallSel = ref<string[]>([]);
-const ctlReinfSel = ref<string[]>([]);
-/** 🛡️ Combien de miliciens partent en renfort (stepper), borné par leurs places à eux sur ce
- *  point (ce qui reste de la garnison de 5, champions compris) et par ceux de la base. */
+/** 🛡️ Les miliciens à la base (le renfort direct les propose). */
 const milHome = computed(() => char.row?.base?.militia?.home ?? 0);
 const militiaBuilt = computed(() => buildingLevel(char.row?.buildings ?? [], 'barracks') > 0);
-const milSend = ref(0);
-const milSendMax = computed(() =>
-  Math.max(0, Math.min(milHome.value, militiaFreeSeats(liveControl.value))),
-);
-/** Toucher la N-ième tuile en choisit N ; retoucher la dernière choisie en retire une. */
-function pickMilitia(i: number) {
-  milSend.value = i === milSend.value ? i - 1 : Math.min(i, milSendMax.value);
-}
-watch(milSendMax, (m) => {
-  if (milSend.value > m) milSend.value = m;
-});
-const militiaLegMin = computed(() => {
-  const p = livePoi.value;
-  return p ? caravanLegMin(p, [], 0, travelMult.value) : 0;
-});
-async function sendMilitia() {
-  const uid = auth.user?.id;
-  const p = livePoi.value;
-  if (!uid || !p || milSend.value <= 0 || ctlBusy.value) return;
-  ctlBusy.value = true;
-  try {
-    const n = milSend.value;
-    const why = await char.sendMilitiaToControl(uid, p.id, n, Date.now());
-    if (why) $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
-    else {
-      milSend.value = 0;
-      $q.notify({
-        type: 'positive',
-        message: `🛡️ ${n} milicien${n > 1 ? 's' : ''} en route — arrivée dans ${formatDurationMin(militiaLegMin.value)}`,
-      });
-    }
-  } finally {
-    ctlBusy.value = false;
-  }
-}
 watch(
   () => selected.value?.id,
   () => {
     ctlRecallSel.value = [];
-    ctlReinfSel.value = [];
-    milSend.value = 0;
-    reinfOpen.value = false;
   },
 );
 function toggleRecall(id: string) {
   const s = ctlRecallSel.value;
   ctlRecallSel.value = s.includes(id) ? s.filter((x) => x !== id) : [...s, id];
 }
-/** ⚠️ Jamais plus que les places libres : la tuile de trop ne répond pas. */
-function toggleReinf(id: string) {
-  const s = ctlReinfSel.value;
-  if (s.includes(id)) ctlReinfSel.value = s.filter((x) => x !== id);
-  else if (s.length < controlFree.value) ctlReinfSel.value = [...s, id];
-}
-/** Le trajet des renforts choisis — la MÊME règle que le store (`partyLegMin`). */
-const reinforceLegMin = computed(() => {
-  const p = livePoi.value;
-  const escort = char.advList.filter((a) => ctlReinfSel.value.includes(a.id));
-  if (!p || !escort.length) return 0;
-  return partyLegMin(p, escort, {
-    hero: false,
-    travelMult: travelMult.value,
-    gearSpeed: advGearRoles(escort, char.advGearStock).speed,
-  });
-});
 /** 🛡️ La tenue d'un point tenu À L'HEURE DE L'ATTAQUE, avec d'éventuels renforts `extra`
  *  (arrivée en ms) — `defendersAtAttack` puis `controlDefenseHold`, la règle de la bataille.
  *  ⚔️ Dès que l'armée de reprise est VISIBLE sur la carte, on juge contre ELLE (son rang, sa
@@ -2122,49 +1973,7 @@ function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
     : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
   return { pct: Math.round(hold * 100), count: present.length, late: late.length, vsArmy };
 }
-/** Les renforts `ids` (champions) partent ensemble : ils arrivent au pas du plus lent,
- *  comme au départ réel (`partyLegMin`). Les miliciens choisis suivent à leur pas. */
-function reinfExtra(p: Poi, ids: readonly string[]) {
-  const t = coarseNow.value;
-  const escort = char.advList.filter((a) => ids.includes(a.id));
-  const leg = escort.length
-    ? partyLegMin(p, escort, {
-        hero: false,
-        travelMult: travelMult.value,
-        gearSpeed: advGearRoles(escort, char.advGearStock).speed,
-      })
-    : 0;
-  return [
-    ...escort.map((a) => ({ id: a.id, at: t + leg * 60_000 })),
-    ...Array.from({ length: milSend.value }, (_, i) => ({
-      id: `${MILITIA_PREFIX}new${i}`,
-      at: t + militiaLegMin.value * 60_000,
-    })),
-  ];
-}
 const defenseNow = computed(() => defenseOf(livePoi.value));
-const defenseWithSel = computed(() => {
-  const p = livePoi.value;
-  if (!p || (!ctlReinfSel.value.length && milSend.value <= 0)) return null;
-  return defenseOf(p, reinfExtra(p, ctlReinfSel.value));
-});
-/** 🎯 Ce que chaque champion change à la tenue : coché, ce qu'on perdrait sans lui ; non
- *  coché, ce qu'on gagnerait en l'ajoutant (le langage de `AdvPickTile`). */
-const reinfGain = computed<Record<string, number>>(() => {
-  const p = livePoi.value;
-  if (!p || controlFree.value <= 0) return {};
-  const sel = ctlReinfSel.value;
-  const base = defenseOf(p, reinfExtra(p, sel))?.pct ?? 0;
-  const out: Record<string, number> = {};
-  for (const a of freeSorted.value) {
-    const on = sel.includes(a.id);
-    if (!on && sel.length >= controlFree.value) continue;
-    const other =
-      defenseOf(p, reinfExtra(p, on ? sel.filter((x) => x !== a.id) : [...sel, a.id]))?.pct ?? 0;
-    out[a.id] = on ? base - other : other - base;
-  }
-  return out;
-});
 /** 🛡️ La tenue d'un point si `remove` n'y étaient plus et `extra` arrivaient — la règle de
  *  `defenseOf`, sur une garnison retouchée (ce que fera l'échange). */
 function holdAfter(p: Poi, remove: readonly string[], extra: { id: string; at: number }[]) {
@@ -2435,19 +2244,6 @@ async function releaseCtl() {
     ctlBusy.value = false;
   }
   if (wholeGarrison) await recallCtl();
-}
-async function reinforceCtl() {
-  const uid = auth.user?.id;
-  const p = livePoi.value;
-  if (!uid || !p || !ctlReinfSel.value.length || ctlBusy.value) return;
-  ctlBusy.value = true;
-  try {
-    const why = await char.reinforceControlPoint(uid, p.id, ctlReinfSel.value, Date.now());
-    if (why) $q.notify({ type: 'warning', message: `Renfort impossible : ${why}` });
-    else ctlReinfSel.value = [];
-  } finally {
-    ctlBusy.value = false;
-  }
 }
 /** 🧺 La tuile de production du point tenu (`controlYieldCard`, la lib). */
 const yieldCard = computed(() =>
@@ -4652,12 +4448,6 @@ onUnmounted(() => {
 .ctl-hold {
   color: var(--d1, #7bc86c);
 }
-.ctl-warn-inline {
-  color: var(--d3, #ffb23f);
-}
-.ctl-reinf {
-  margin-top: 10px;
-}
 .ctl-back {
   color: var(--text);
   border-color: color-mix(in srgb, #b57bff 55%, var(--line));
@@ -4822,27 +4612,6 @@ onUnmounted(() => {
 .swap-delta.down {
   color: var(--d4);
 }
-.mil-send {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 8px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-}
-.mil-send-lab {
-  font-size: 13px;
-  min-width: 0;
-}
-.mil-pick {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  margin: 8px 0;
-}
 .mil-tile {
   position: relative;
   min-height: 48px;
@@ -4858,27 +4627,6 @@ onUnmounted(() => {
 .mil-tile.on {
   border-color: var(--accent);
   background: linear-gradient(180deg, rgba(255, 210, 63, 0.16), #1d1913 65%);
-}
-.mil-tile.off {
-  border-style: dashed;
-  opacity: 0.45;
-  cursor: default;
-}
-/* Le portrait du milicien au fil du texte, à la place de l'emoji 🛡️. */
-.mil-inline {
-  display: inline-flex;
-  vertical-align: -0.2em;
-}
-.mil-tile-emo {
-  font-size: 24px;
-  line-height: 1;
-}
-.mil-tile-n {
-  position: absolute;
-  top: 2px;
-  right: 5px;
-  font-size: 9px;
-  color: var(--dim);
 }
 .ei-rift {
   display: inline-block;

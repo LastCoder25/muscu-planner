@@ -124,9 +124,9 @@
           </button>
         </div>
         <p class="rb-note">
-          Une rune révèle une compétence : 🟢&nbsp;70&nbsp;% · 🔵&nbsp;22&nbsp;% ·
-          🟣&nbsp;7&nbsp;% · 🟠&nbsp;1&nbsp;%. Elles tombent des lieux de la carte, des
-          ascensions, de l’Éveil et du Scriptorium.
+          Une rune révèle une compétence : 🟢&nbsp;70&nbsp;% · 🔵&nbsp;22&nbsp;% · 🟣&nbsp;7&nbsp;%
+          · 🟠&nbsp;1&nbsp;%. Elles tombent des lieux de la carte, des ascensions, de l’Éveil et du
+          Scriptorium.
         </p>
 
         <template v-if="lastOpened.length">
@@ -161,6 +161,14 @@
       </template>
     </q-card>
   </q-dialog>
+  <RuneReveal
+    :opened="revealing"
+    :stock="bank.skills"
+    :can-again="!busy && !openBlocker(bank, lastCount)"
+    :busy="busy"
+    @close="revealing = null"
+    @again="doOpen(lastCount)"
+  />
 </template>
 
 <script setup lang="ts">
@@ -170,6 +178,7 @@ import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
 import { useGameFx } from '@/composables/useGameFx';
 import RuneIcon from '@/components/RuneIcon.vue';
+import RuneReveal from '@/components/RuneReveal.vue';
 import {
   RUNE_INFO,
   RUNE_TIERS,
@@ -208,6 +217,9 @@ const busy = ref(false);
 const selUid = ref<string | null>(null);
 const replaceFor = ref<Adventurer | null>(null);
 const lastOpened = ref<StockSkill[]>([]);
+/** Ce que l'écran d'ouverture met en scène (null = fermé), et la taille du dernier tirage. */
+const revealing = ref<StockSkill[] | null>(null);
+const lastCount = ref(1);
 
 const sel = computed(() => bank.value.skills.find((s) => s.uid === selUid.value) ?? null);
 // Une compétence donnée ou fusionnée quitte le stock : on revient à la liste.
@@ -313,17 +325,15 @@ async function run(fn: (uid: string) => Promise<void>) {
   }
 }
 
-/** Ouvre : le store a DÉJÀ tiré et crédité, l'animation ne fait que montrer. Au lot, la plus
- *  rare prend la scène ; les dix restent listées ci-dessous. */
+/** Ouvre : le store a DÉJÀ tiré et crédité, l'écran d'ouverture (`RuneReveal`) ne fait que
+ *  montrer — le mur, l'alcôve, les glyphes, l'éclat. Les ouvertes restent listées ci-dessous. */
 function doOpen(count: number) {
   void run(async (uid) => {
     const r = await char.openRuneBatch(uid, count);
     if (!r.ok) throw new Error(r.reason);
     lastOpened.value = r.opened;
-    const best = r.opened.reduce((m, s) =>
-      RUNE_TIERS.indexOf(SKILLS[s.id].tier) > RUNE_TIERS.indexOf(SKILLS[m.id].tier) ? s : m,
-    );
-    gameFx.celebrateRune('open', best.id, '', best.level);
+    lastCount.value = count;
+    revealing.value = r.opened;
   });
 }
 
