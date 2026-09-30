@@ -2788,6 +2788,10 @@ function crewLabel(members: readonly string[]): string {
  *  (`focusPoi` ne le retrouve plus). */
 const focusTrip = ref<string | null>(null);
 const focusPoi = computed(() => trips.value.find((t) => t.key === focusTrip.value)?.poi ?? null);
+/** Un seul affichage ouvert à la fois (demandé) : toucher un voyage referme la fiche d'un lieu. */
+watch(focusTrip, (k) => {
+  if (k) selected.value = null;
+});
 
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
@@ -2866,6 +2870,8 @@ const mapPanel = ref<MapPanel | null>(null);
 const tabsEl = ref<HTMLElement | null>(null);
 function toggleMapPanel(id: MapPanel) {
   mapPanel.value = mapPanel.value === id ? null : id;
+  // Un seul affichage ouvert à la fois : ouvrir un onglet referme la fiche d'un lieu.
+  if (mapPanel.value) selected.value = null;
   void nextTick(() => tabsEl.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
@@ -3328,6 +3334,9 @@ function selectPoi(p: Poi) {
   // ⚠️ On sélectionne MÊME si le héros est en expédition : un convoi part sans lui.
   // Ce qui est ouvert ou non se décide dans la feuille, via `poiOffers`.
   selected.value = p;
+  // Un seul affichage ouvert à la fois : le lieu referme l'onglet déplié et le voyage touché.
+  mapPanel.value = null;
+  focusTrip.value = null;
   // ⚠️ La carte occupe 62vh et la feuille vit SOUS elle, dans le flux : sur un téléphone
   // elle s'ouvre donc hors écran, et cliquer un lieu semble ne rien faire.
   void nextTick(() => sheetEl.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
