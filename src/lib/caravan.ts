@@ -1100,6 +1100,8 @@ export function poiOffers(
       (poi.type === 'control'
         ? poi.control?.owner === 'enemy' &&
           !poi.control.assault &&
+          // 🏯 Une citadelle encore cachée ne s'atteint pas.
+          !(poi.control.kind === 'citadel' && poi.control.discoveredAt === undefined) &&
           // 🏯 La citadelle ne s'occupe pas : le héros seul peut y aller.
           (opts.advsAvailable > 0 || (poi.control.kind === 'citadel' && !opts.heroAway))
         : !opts.heroAway || opts.advsAvailable > 0),

@@ -25,6 +25,7 @@ type GameFxKind =
   | 'harvest' // récolte d'une place forte : consommables et runes jaillissent d'un panier
   | 'rune' // rune posée sur un champion : la pierre se brise, la compétence en sort
   | 'rankup' // ascension d'un champion : le médaillon passe de la couleur d'un rang à l'autre
+  | 'citadel' // citadelle ennemie découverte : la brume s'écarte, la forteresse se dresse
   | 'generic';
 
 export interface GameFx {

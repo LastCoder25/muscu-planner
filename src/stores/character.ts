@@ -346,6 +346,8 @@ import {
   REINFORCE_BLOCK_LABEL,
   seatsOf,
   campXpFor,
+  newlyDiscoveredCitadels,
+  citadelDiscoveryFx,
 } from '@/lib/controlPoints';
 import {
   SORTIE_BLOCK_LABEL,
@@ -2194,6 +2196,7 @@ export const useCharacterStore = defineStore('character', () => {
         : createMap(newSeed(now), now, level, outpost),
       now,
       level,
+      outpost,
     );
     // ⚔️🗼 Les armées qui marchent sur la base ou sur un point fixe, VISIBLES dans le rayon de
     // détection de la Tour de guet (`fieldArmy.ts`).
@@ -2227,6 +2230,17 @@ export const useCharacterStore = defineStore('character', () => {
       ...(baseChanged ? { base } : {}),
       ...(ovfMsgs.length ? { messages: boxWith(cur, ovfMsgs, MESSAGES_CAP) } : {}),
     });
+    // 🏯 L'Avant-poste vient de découvrir une citadelle : elle sort du brouillard À L'ÉCRAN
+    // (demandé par l'utilisateur). Après l'écriture : la carte d'après porte la découverte, un
+    // tick suivant ne la rejoue donc pas.
+    const found = newlyDiscoveredCitadels(prev, map);
+    if (found.length)
+      useGameFx().celebrate({
+        kind: 'citadel',
+        emoji: '🏯',
+        ...citadelDiscoveryFx(map, found),
+        rarity: 'legendary',
+      });
   }
   // Envoie le héros (dépense l'or, retire le POI de la carte, calcule l'issue seedée).
   async function expeSend(userId: string, poi: Poi, hero: Combatant, now: number, level: number) {

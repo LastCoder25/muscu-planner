@@ -68,6 +68,39 @@
         </svg>
         <!-- TICKETS : distribués UN PAR UN en éventail, puis le total — on compte ce qu'on
              reçoit au lieu de lire un chiffre. -->
+        <!-- 🏯 CITADELLE DÉCOUVERTE : la brume s'écarte en deux, la forteresse ennemie se
+             dresse devant une lueur rouge, sa bannière claque. Dessinée : un emoji ne sort
+             pas du brouillard. -->
+        <svg
+          v-else-if="cur.kind === 'citadel'"
+          class="fx-cit"
+          viewBox="0 0 140 100"
+          aria-hidden="true"
+        >
+          <ellipse class="fx-cit-glow" cx="70" cy="64" rx="58" ry="34" />
+          <g class="fx-cit-keep">
+            <path
+              class="fx-cit-wall"
+              d="M28 92 V52 h6 v-5 h5 v5 h6 v-5 h5 v5 h6 V40 h5 v-6 h4 v6 h4 v-6 h4 v6 h4 v-6 h4 v6 h5 v12 h6 v-5 h5 v5 h6 v-5 h5 v5 h6 V92 Z"
+            />
+            <path class="fx-cit-gate" d="M62 92 V74 a8 8 0 0 1 16 0 V92 Z" />
+            <rect class="fx-cit-slit" x="68.5" y="46" width="3" height="8" rx="1" />
+            <rect class="fx-cit-slit" x="38" y="62" width="3" height="7" rx="1" />
+            <rect class="fx-cit-slit" x="99" y="62" width="3" height="7" rx="1" />
+            <line class="fx-cit-mast" x1="70" y1="34" x2="70" y2="14" />
+            <path class="fx-cit-flag" d="M70 14 L88 18 L70 23 Z" />
+          </g>
+          <g class="fx-cit-fog left">
+            <ellipse cx="30" cy="60" rx="38" ry="22" />
+            <ellipse cx="48" cy="82" rx="34" ry="16" />
+            <ellipse cx="40" cy="36" rx="30" ry="16" />
+          </g>
+          <g class="fx-cit-fog right">
+            <ellipse cx="110" cy="60" rx="38" ry="22" />
+            <ellipse cx="92" cy="82" rx="34" ry="16" />
+            <ellipse cx="100" cy="36" rx="30" ry="16" />
+          </g>
+        </svg>
         <div v-else-if="cur.kind === 'tickets'" class="fx-tickets" aria-hidden="true">
           <div class="fx-tk-grid" :style="{ '--cols': Math.min(5, ticketCount) }">
             <span
@@ -141,6 +174,11 @@ import { RUNE_COLOR } from '@/lib/skillRunes';
 const { queue, toasts, dismiss, dismissToast } = useGameFx();
 const cur = computed(() => queue.value[0] ?? null);
 
+/** 🏯 Le rouge de l'ennemi (celui de la bannière des citadelles sur la carte). */
+const CITADEL_FX_COLOR = '#ff5d45';
+/** Durée de la scène de citadelle avant que le titre ne se lise (brume qui s'écarte). */
+const CITADEL_SCENE_MS = 1500;
+
 const RARITY_COLOR: Record<string, string> = {
   common: '#9a8f7e',
   rare: '#4ec6d6',
@@ -172,9 +210,11 @@ const color = computed(() =>
     ? RUNE_COLOR[cur.value!.rune!]
     : rankFx.value
       ? rankFx.value.to.color
-      : cur.value?.rarity
-        ? (RARITY_COLOR[cur.value.rarity] ?? '#ffd23f')
-        : '#ffd23f',
+      : cur.value?.kind === 'citadel'
+        ? CITADEL_FX_COLOR
+        : cur.value?.rarity
+          ? (RARITY_COLOR[cur.value.rarity] ?? '#ffd23f')
+          : '#ffd23f',
 );
 
 const reduced =
@@ -236,7 +276,9 @@ watch(
             ? ASCENSION_SWAP_MS + 2600
             : fx.kind === 'rune'
               ? RUNE_SCENE_MS + 900
-              : 0;
+              : fx.kind === 'citadel'
+                ? CITADEL_SCENE_MS + 1400
+                : 0;
     const ms = reduced ? 1100 : 1600 + tier.value * 350 + deal;
     timer = setTimeout(dismiss, ms);
   },
@@ -827,6 +869,114 @@ onBeforeUnmount(() => {
 }
 .fx-fade-enter-active {
   transition: opacity 0.2s;
+}
+/* 🏯 CITADELLE : la brume part de chaque côté, la forteresse monte de la lueur. */
+.fx-cit {
+  width: 168px;
+  height: 120px;
+  display: block;
+  margin: 0 auto 6px;
+  overflow: visible;
+}
+.fx-cit-glow {
+  fill: var(--fx-color, #ff5d45);
+  opacity: 0;
+  filter: blur(8px);
+  animation: cit-glow 1.6s ease-out 0.3s both;
+}
+.fx-cit-keep {
+  transform-origin: 70px 92px;
+  animation: cit-rise 1.1s cubic-bezier(0.2, 1.3, 0.4, 1) 0.45s both;
+}
+.fx-cit-wall {
+  fill: #2a1e1a;
+  stroke: #6b3a2e;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+.fx-cit-gate {
+  fill: #120c0a;
+}
+.fx-cit-slit {
+  fill: var(--fx-color, #ff5d45);
+  animation: cit-eye 1.4s ease-in-out 1.3s infinite alternate;
+}
+.fx-cit-mast {
+  stroke: #6b3a2e;
+  stroke-width: 1.5;
+}
+.fx-cit-flag {
+  fill: var(--fx-color, #ff5d45);
+  transform-origin: 70px 18px;
+  animation: cit-flag 0.9s ease-in-out 1.2s infinite alternate;
+}
+.fx-cit-fog {
+  fill: #9a927f;
+  opacity: 0.92;
+}
+.fx-cit-fog.left {
+  animation: cit-fog-l 1.5s ease-in 0.15s both;
+}
+.fx-cit-fog.right {
+  animation: cit-fog-r 1.5s ease-in 0.15s both;
+}
+@keyframes cit-fog-l {
+  to {
+    transform: translateX(-70px);
+    opacity: 0;
+  }
+}
+@keyframes cit-fog-r {
+  to {
+    transform: translateX(70px);
+    opacity: 0;
+  }
+}
+@keyframes cit-rise {
+  0% {
+    transform: translateY(18px) scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes cit-glow {
+  0% {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0.3;
+  }
+}
+@keyframes cit-eye {
+  to {
+    opacity: 0.35;
+  }
+}
+@keyframes cit-flag {
+  to {
+    transform: scaleX(0.8) skewY(4deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* État FINAL direct : la brume est partie, la citadelle debout. */
+  .fx-cit-fog {
+    display: none;
+  }
+  .fx-cit-keep,
+  .fx-cit-slit,
+  .fx-cit-flag {
+    animation: none;
+  }
+  .fx-cit-glow {
+    animation: none;
+    opacity: 0.3;
+  }
 }
 .fx-fade-leave-active {
   transition: opacity 0.3s;

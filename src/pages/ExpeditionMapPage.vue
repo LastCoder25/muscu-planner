@@ -1408,7 +1408,13 @@ const fighter = computed<Combatant>(() =>
 );
 
 const active = computed(() => char.row?.expedition ?? null);
-const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
+// 🏯 Une citadelle encore cachée dans le brouillard ne se dessine pas (elle n'existe pas encore
+// pour le joueur : l'Avant-poste la découvre).
+const pois = computed<Poi[]>(() =>
+  (char.row?.expedition_map?.pois ?? []).filter(
+    (p) => !(p.control?.kind === 'citadel' && p.control.discoveredAt === undefined),
+  ),
+);
 // Fond de carte (terrain) déterministe pour le seed de la carte.
 const terrain = computed(() =>
   char.row?.expedition_map
