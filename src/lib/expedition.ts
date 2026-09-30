@@ -803,6 +803,16 @@ export function isClaimable(m: ExpeditionMessage, now: number): boolean {
   return m.claimed === false && now >= (m.claimAt ?? m.resolvedAt);
 }
 
+/** 📬 L'état d'un rapport à l'écran : `claim` (butin à prendre), `wait` (le groupe est encore
+ *  sur la route : le rapport est arrivé, pas le butin), `done` (déjà encaissé).
+ *  ⚠️ SOURCE UNIQUE des écrans (boîte de l'Aventure, rapport de la carte). La carte affichait
+ *  « Récupérer le butin » dès `claimed === false`, donc AVANT le retour : le clic tombait sur
+ *  `isClaimable` faux et ne faisait rien (signalé par l'utilisateur). */
+export function claimState(m: ExpeditionMessage, now: number): 'claim' | 'wait' | 'done' {
+  if (isClaimable(m, now)) return 'claim';
+  return m.claimed === false ? 'wait' : 'done';
+}
+
 /** Le butin s'encaisse-t-il TOUT SEUL ? Oui pour un rapport d'expédition (héros ou groupe)
  *  dès le retour en ville : on ne va plus le chercher dans la boîte 📬 (demandé par
  *  l'utilisateur). ⚠️ Pas les COFFRES (Défi 360, boss entre amis) : leur ouverture est un

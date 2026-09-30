@@ -1069,7 +1069,8 @@
         <div class="van-kicker">📬 Retour de mission</div>
         <MissionReportCard
           :card="messageCard(lastOutcome, char.advList)"
-          :state="lastPending ? 'claim' : 'none'"
+          :state="lastState === 'done' ? 'none' : lastState"
+          :wait-label="`retour dans ${formatDuration((lastOutcome.claimAt ?? lastOutcome.resolvedAt) - now)}`"
           :now="now"
           claim-label="🎁 Récupérer le butin"
           @claim="doClaim"
@@ -1198,6 +1199,7 @@ import {
   isRiftPoi,
   isWarbandPoi,
   isClaimable,
+  claimState,
   ruinsSealKind,
   haulPills,
   type HaulPill,
@@ -2793,7 +2795,11 @@ function openOvfReport() {
   collectOpen.value = true;
 }
 /** Le rapport ouvert attend-il d'être encaissé ? (sinon la modale n'est qu'un compte rendu) */
-const lastPending = computed(() => !!lastOutcome.value && lastOutcome.value.claimed === false);
+/** 📬 À prendre, encore sur la route, ou encaissé — la règle de la lib (`claimState`), la même
+ *  que la boîte de l'Aventure. */
+const lastState = computed(() =>
+  lastOutcome.value ? claimState(lastOutcome.value, now.value) : 'done',
+);
 /** 🎁 Un retour d'expédition est ENCAISSÉ TOUT SEUL (`expeAutoClaim`, dans `lifecycle`) : la
  *  modale s'ouvre alors en simple compte rendu de ce qui vient d'être crédité — dans les deux
  *  cas qui comptent : le héros rentre pendant qu'on regarde la carte, ou on arrive par la
