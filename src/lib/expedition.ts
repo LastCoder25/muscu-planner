@@ -77,7 +77,15 @@ export type PoiType =
   | 'control';
 
 /** 🏰 Ce que produit un point de contrôle tenu. Étape 1 : la mine d'or. */
-export type ControlKind = 'mine' | 'training' | 'garden' | 'tower' | 'scriptorium' | 'mana';
+export type ControlKind =
+  | 'mine'
+  | 'training'
+  | 'garden'
+  | 'tower'
+  | 'scriptorium'
+  | 'mana'
+  /** 🏯 La CITADELLE ennemie (2026-09-30) : jamais tenue, on l'abat — cf. `CITADEL`. */
+  | 'citadel';
 /** 🏰 Une garnison : 1 à 3 champions (décision de l'utilisateur). */
 export const CONTROL_MAX_GARRISON = 3;
 /**
@@ -101,6 +109,12 @@ export interface ControlState {
    *  DÉDUIT (`controlTier`, +1/24 h tenu, −1/24 h chez l'ennemi). Absents avant la règle. */
   tier?: number;
   tierAt?: number;
+  /** 🏯 Citadelle : son PALIER (+1 à chaque destruction, −1 à un échec ou par 7 jours sans
+   *  la battre, cf. `citadelPalier`), l'instant où il a été posé, et la TRÊVE qu'elle laisse
+   *  une fois abattue (aucune reprise de point fixe avant `truceUntil`). */
+  palier?: number;
+  palierAt?: number;
+  truceUntil?: number;
   /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
   attackAt?: number;
   /** Nombre de fois où l'ennemi l'a repris : entre dans les graines de re-tirage. */
@@ -199,6 +213,7 @@ export const CONTROL_KIND_LABEL: Record<ControlKind, string> = {
   tower: 'Tour de guet',
   scriptorium: 'Scriptorium',
   mana: 'Source de mana',
+  citadel: 'Citadelle ennemie',
 };
 export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   mine: '⛏️',
@@ -207,6 +222,7 @@ export const CONTROL_KIND_EMO: Record<ControlKind, string> = {
   tower: '🗼',
   scriptorium: '📜',
   mana: '⛲',
+  citadel: '🏯',
 };
 /** Le nom d'un lieu — celui de son type, ou, pour un point de contrôle, de ce qu'il est. */
 export function poiLabel(p: Pick<Poi, 'type' | 'control'> & { army?: FieldArmyTag }): string {

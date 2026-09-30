@@ -52,9 +52,10 @@
           class="ctl-flag"
           :class="p.control.owner"
         />
-        <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. -->
+        <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. La citadelle, elle,
+             montre son PALIER (« P3 »). -->
         <text v-if="tiers.get(p.id)" :x="p.x" :y="p.y + 9" class="ctl-tier" :class="p.control.owner">
-          🏅{{ tiers.get(p.id) }}
+          {{ p.control.kind === 'citadel' ? 'P' : '🏅' }}{{ tiers.get(p.id) }}
         </text>
         <!-- ⚔️ Bataille imminente : un petit avertissement au coin du fort, qui palpite. -->
         <g v-if="imminent.has(p.id)" class="ctl-alert">

@@ -245,7 +245,8 @@ export function partySendBlocker(
   // jamais — il rentre). Il faut donc au moins un champion pour l'occuper.
   if (poi.type === 'control') {
     if (poi.control?.owner !== 'enemy' || poi.control.assault) return 'controlHeld';
-    if (escortCount <= 0) return 'controlEmpty';
+    // 🏯 La citadelle ne se tient pas : le héros seul peut l'attaquer.
+    if (escortCount <= 0 && poi.control.kind !== 'citadel') return 'controlEmpty';
   }
   // 💎 Un filon : 1 à 3 CHAMPIONS, jamais le héros (décision de l'utilisateur).
   if (poi.type === 'vein') {
