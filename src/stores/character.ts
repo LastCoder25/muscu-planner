@@ -287,9 +287,19 @@ import {
   sealRift,
   supplyFx,
   takeSupplies,
+  BOOST_MIN,
+  type BoostId,
   type SupplyId,
   type SupplyStock,
 } from '@/lib/supplies';
+import {
+  attackBoostPlan,
+  boostAttack,
+  boostVoyage,
+  combinedSiblings,
+  voyageBoostPlan,
+  BOOST_BLOCK_LABEL,
+} from '@/lib/speedBoost';
 // ⚔️🕳️ Les DEUX résolutions d'une mission de groupe : un camp de faction, ou une incursion
 // dans une faille. La dispatch vit dans `sendParty`, le seul chemin qui envoie un groupe.
 import { resolveCamp } from '@/lib/camp';
@@ -4967,6 +4977,69 @@ export const useCharacterStore = defineStore('character', () => {
   }
 
   /**
+   * ⚡ BOOST DE VITESSE (2026-09-30, demandé) : un boost du stock avance l'étape en cours d'un
+   * voyage (`speedBoost.ts`). Une attaque combinée pas encore toute partie avance EN BLOC ;
+   * partie, ses groupes liés avancent ensemble à l'aller. Les champions suivent leur nouveau
+   * retour (`busyUntil`). Rend la RAISON d'un refus, `null` si c'est fait.
+   */
+  async function applySpeedBoost(
+    userId: string,
+    target: { kind: 'hero' } | { kind: 'party'; id: string } | { kind: 'attack'; id: string },
+    boostId: BoostId,
+    now: number,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    if (!cur) return 'personnage non chargé';
+    const stock = takeSupplies(cur.supplies, [boostId]);
+    if (!stock) return 'tu n’as plus ce boost';
+    const min = BOOST_MIN[boostId];
+    if (target.kind === 'attack') {
+      const a = attackList.value.find((x) => x.id === target.id);
+      if (!a) return 'ces groupes sont déjà tous partis';
+      const plan = attackBoostPlan(a, min, now);
+      if (typeof plan === 'string') return BOOST_BLOCK_LABEL[plan];
+      const { attack, moved } = boostAttack(a, plan.gainMs, now);
+      let advs = advList.value;
+      for (const m of moved) advs = rescheduleReturners(advs, m.members, m.from, m.to);
+      await persist(userId, {
+        supplies: stock,
+        attacks: attackList.value.map((x) => (x.id === a.id ? attack : x)),
+        ...(advs !== advList.value ? { adventurers: advs } : {}),
+      });
+      return null;
+    }
+    const v: ActiveExpedition | undefined =
+      target.kind === 'hero'
+        ? (cur.expedition ?? undefined)
+        : partyList.value.find((p) => p.id === target.id);
+    if (!v) return 'ce voyage est déjà terminé';
+    const plan = voyageBoostPlan(v, min, now);
+    if (typeof plan === 'string') return BOOST_BLOCK_LABEL[plan];
+    const all: ActiveExpedition[] = [
+      ...(cur.expedition ? [cur.expedition] : []),
+      ...partyList.value,
+    ];
+    const group = plan.phase === 'go' ? [v, ...combinedSiblings(v, all)] : [v];
+    let advs = advList.value;
+    let expedition = cur.expedition;
+    let parties = partyList.value;
+    for (const t of group) {
+      const nt = boostVoyage(t, plan);
+      advs = rescheduleReturners(advs, tripCrew(t), t.returnAt, nt.returnAt);
+      if (t === cur.expedition) expedition = nt;
+      else parties = parties.map((p) => (p === t ? (nt as ActiveParty) : p));
+    }
+    await persist(userId, {
+      supplies: stock,
+      ...(expedition !== cur.expedition ? { expedition } : {}),
+      ...(parties !== partyList.value ? { parties } : {}),
+      ...(advs !== advList.value ? { adventurers: advs } : {}),
+    });
+    return null;
+  }
+
+  /**
    * 🏰🧭 TRANSFERT d'un point fixe à un autre (2026-09-29, demandé) : des membres ARRIVÉS de
    * la garnison de `fromId` marchent vers `toId`, comme un renfort parti de la base — ils y
    * prennent leur place tout de suite, y arrivent à leur pas (champions au pas de leur équipe,
@@ -5173,6 +5246,7 @@ export const useCharacterStore = defineStore('character', () => {
     releaseControlChampions,
     reinforceControlPoint,
     recallTrip,
+    applySpeedBoost,
     sendMilitiaToControl,
     applyExpedition,
     equip,

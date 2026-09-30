@@ -30,7 +30,12 @@ export type SupplyId =
   | 'pierre'
   | 'lanterne'
   | 'cor'
-  | 'sceau';
+  | 'sceau'
+  | 'boost5'
+  | 'boost10'
+  | 'boost15'
+  | 'boost30'
+  | 'boost60';
 
 export interface SupplyDef {
   emoji: string;
@@ -53,7 +58,60 @@ export const SUPPLY_IDS: readonly SupplyId[] = [
   'bats',
   'lanterne',
   'sceau',
+  'boost5',
+  'boost10',
+  'boost15',
+  'boost30',
+  'boost60',
 ];
+
+/** ⚡ LES BOOSTS DE VITESSE (2026-09-30, demandé : « des boosts de vitesse d'expédition en
+ *  minutes, 5 min, 10 min, 15 min, 30 min, 1 h »). Ils ne partent PAS avec un voyage : on les
+ *  utilise sur un voyage EN COURS, et ils avancent son étape en cours (aller ou retour) —
+ *  cf. `speedBoost.ts`. Leur durée, en minutes. */
+export const BOOST_MIN = {
+  boost5: 5,
+  boost10: 10,
+  boost15: 15,
+  boost30: 30,
+  boost60: 60,
+} as const satisfies Partial<Record<SupplyId, number>>;
+export type BoostId = keyof typeof BOOST_MIN;
+export const BOOST_IDS = Object.keys(BOOST_MIN) as BoostId[];
+export const isBoostId = (id: string): id is BoostId => id in BOOST_MIN;
+
+/** Le POIDS de chaque consommable dans un tirage de butin. Les consommables d'avant valent 1
+ *  (ils restent équiprobables entre eux) ; plus un boost est long, plus il est rare. */
+export const SUPPLY_WEIGHT: Record<SupplyId, number> = {
+  rations: 1,
+  potion: 1,
+  pierre: 1,
+  trousse: 1,
+  fumigene: 1,
+  cor: 1,
+  carte: 1,
+  bats: 1,
+  lanterne: 1,
+  sceau: 1,
+  boost5: 1,
+  boost10: 0.7,
+  boost15: 0.5,
+  boost30: 0.25,
+  boost60: 0.1,
+};
+const WEIGHT_TOTAL = SUPPLY_IDS.reduce((t, id) => t + SUPPLY_WEIGHT[id], 0);
+
+/** Le consommable désigné par un tirage uniforme `r` ∈ [0, 1) — UN seul tirage, comme
+ *  avant : aucun autre tirage de la résolution n'est décalé. SOURCE UNIQUE de tous les
+ *  butins de consommable (voyage, camp, point fixe, récolte). */
+export function pickSupply(r: number): SupplyId {
+  let x = r * WEIGHT_TOTAL;
+  for (const id of SUPPLY_IDS) {
+    x -= SUPPLY_WEIGHT[id];
+    if (x < 0) return id;
+  }
+  return SUPPLY_IDS[SUPPLY_IDS.length - 1]!;
+}
 
 /** Les réglages, en un seul endroit. Premier calage : à ajuster à l'usage. */
 export const SUPPLY = {
@@ -149,7 +207,22 @@ export const SUPPLIES: Record<SupplyId, SupplyDef> = {
     what: 'Rend 24 h de répit à une faille : débordement repoussé, effectif rajeuni (une fois par faille)',
     voyage: false,
   },
+  boost5: boostDef(5),
+  boost10: boostDef(10),
+  boost15: boostDef(15),
+  boost30: boostDef(30),
+  boost60: boostDef(60),
 };
+
+function boostDef(min: number): SupplyDef {
+  const label = min >= 60 ? `${min / 60} h` : `${min} min`;
+  return {
+    emoji: '⚡',
+    name: `Boost de vitesse ${label}`,
+    what: `Sur un voyage en cours : son étape (aller ou retour) finit ${label} plus tôt`,
+    voyage: false,
+  };
+}
 
 function pct(x: number): string {
   return `${Math.round(x * 100)} %`;
@@ -298,17 +371,23 @@ export function supplyUselessWhy(id: SupplyId, t: SupplyTarget): string | null {
       return t.type === 'rift' ? null : 'seulement dans une faille';
     case 'sceau':
       return 'se pose sur une faille, depuis sa fiche';
+    case 'boost5':
+    case 'boost10':
+    case 'boost15':
+    case 'boost30':
+    case 'boost60':
+      return 's’utilise sur un voyage en cours';
   }
 }
 
-/** Butin d'un voyage : au plus UN consommable, n'importe lequel (« tout partout »).
+/** Butin d'un voyage : au plus UN consommable, n'importe lequel (« tout partout »), selon
+ *  son poids (`pickSupply`).
  *  ⚠️ Tiré sur la graine du voyage : déterministe, et sur un générateur à part pour ne
  *  décaler aucun autre tirage de la résolution. */
 export function rollSupplyDrop(seed: number): SupplyStock {
   const next = mulberry32((seed ^ 0x2f6b0a13) >>> 0 || 1);
   if (next() >= SUPPLY.dropChance) return {};
-  const id = SUPPLY_IDS[Math.floor(next() * SUPPLY_IDS.length)]!;
-  return { [id]: 1 };
+  return { [pickSupply(next())]: 1 };
 }
 
 /**

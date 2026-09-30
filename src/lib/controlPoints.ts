@@ -41,7 +41,7 @@ import { MILITIA, isMilitiaId, militiaUnits } from './militia';
 import type { SkirmishUnit } from './skirmish';
 import { trialXpBase } from './skirmish';
 import { riftClearMana } from './rift';
-import { SUPPLY_IDS, type SupplyStock } from './supplies';
+import { pickSupply, type SupplyStock } from './supplies';
 import {
   CAMP_FACTIONS,
   CONTROL_MAX_GARRISON,
@@ -849,7 +849,7 @@ export function collectControl(
   if (c.kind === 'garden') {
     const rng = mulberry32((seedOf(`${id}:${c.collectedAt}`) ^ 0x6a09e667) >>> 0 || 1);
     for (let i = 0; i < whole; i++) {
-      const s = SUPPLY_IDS[Math.floor(rng() * SUPPLY_IDS.length)]!;
+      const s = pickSupply(rng());
       supplies[s] = (supplies[s] ?? 0) + 1;
     }
   }
@@ -1057,9 +1057,7 @@ export function controlYieldCard(
             ? `consommable${whole > 1 ? 's' : ''} prêt${whole > 1 ? 's' : ''}`
             : 'du prochain consommable',
         pct: next,
-        gauge:
-          idle ??
-          (left ? `Prochain dans ${left}` : null),
+        gauge: idle ?? (left ? `Prochain dans ${left}` : null),
         rate: every ? `1 toutes les ${formatDuration(every * 3600_000)} · ${crew}` : crew,
         ready: whole > 0,
         full: false,

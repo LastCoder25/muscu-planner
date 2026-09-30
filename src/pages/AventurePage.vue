@@ -3316,6 +3316,7 @@ import { emptySeals, sealsSummary } from '@/lib/ascension';
 import {
   messageTitle,
   isClaimable,
+  claimState,
   keepMessages,
   MESSAGES_CAP,
   type ExpeditionMessage,
@@ -5884,8 +5885,7 @@ function announceClaim(done: NonNullable<Awaited<ReturnType<typeof char.expeClai
 /** L'état d'un rapport dans la boîte : à prendre, encore sur la route, ou encaissé
  *  (replié sur une ligne). `claimed === undefined` = déjà crédité (cf. `isClaimable`). */
 function msgState(m: ExpeditionMessage): 'claim' | 'wait' | 'done' {
-  if (isClaimable(m, expeNow.value)) return 'claim';
-  return m.claimed === false ? 'wait' : 'done';
+  return claimState(m, expeNow.value);
 }
 
 function fmtExpeMs(ms: number): string {
