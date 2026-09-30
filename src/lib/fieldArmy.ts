@@ -43,7 +43,14 @@ import {
   type RaidGroup,
 } from './raid';
 import { BATTLE } from './siegeBattle';
-import { CONTROL, attackerLevel, retakeBoost, retakeForce } from './controlPoints';
+import {
+  CONTROL,
+  attackerLevel,
+  citadelIdOf,
+  citadelIndexOf,
+  retakeBoost,
+  retakeForce,
+} from './controlPoints';
 import {
   campHurt,
   campLightHurt,
@@ -163,7 +170,11 @@ export function siegeArmyPoi(
 }
 
 /** 🏰 L'armée d'une REPRISE sur la carte, ou `null` tant qu'elle n'est pas entrée dans le
- *  rayon de détection. Elle marche sur son point depuis l'extérieur (dans l'axe ville → point). */
+ *  rayon de détection. 🏯 Elle part de SA CITADELLE (`origin`, 2026-09-30, demandé) et marche en
+ *  ligne droite sur le point ; on ne la voit que sur la part de ce trajet qui est dans le rayon
+ *  de détection. Sans citadelle connue, elle arrive dans l'axe ville → point (comme avant).
+ *  ⚠️ Le préavis ne peut que GRANDIR face à l'axe ville → point : le trajet visible va du bord
+ *  du cercle (à `vis` de la ville) jusqu'au point (à `d`), donc il mesure au moins `vis − d`. */
 export function retakeArmyPoi(
   p: Poi,
   mapSeed: number,
@@ -171,6 +182,8 @@ export function retakeArmyPoi(
   reach: number,
   now: number,
   playerLevel: number,
+  /** 🏯 D'où elle part : la citadelle qui attaque ce point. */
+  origin?: { x: number; y: number },
 ): Poi | null {
   const c = p.control;
   if (!c || c.owner !== 'player' || c.attackAt === undefined || now >= c.attackAt) return null;
@@ -179,13 +192,14 @@ export function retakeArmyPoi(
   if (d <= 0) return null;
   // Hors du rayon (`d ≥ vis`) la marche visible est ≤ 0 : `spawnedAt ≥ attackAt > now`, donc
   // elle n'apparaît jamais — c'est la règle « vue seulement dans le rayon », sans garde à part.
-  const march = vis - d;
-  const spawnedAt = c.attackAt - (march / FIELD_ARMY.speedPerHour) * H;
-  if (now < spawnedAt) return null;
-  const from = {
+  const axis = {
     x: EXPE.town.x + ((p.x - EXPE.town.x) / d) * vis,
     y: EXPE.town.y + ((p.y - EXPE.town.y) / d) * vis,
   };
+  const from = (d < vis && origin && entryPoint(origin, p, vis)) || axis;
+  const march = d < vis ? Math.hypot(p.x - from.x, p.y - from.y) : vis - d;
+  const spawnedAt = c.attackAt - (march / FIELD_ARMY.speedPerHour) * H;
+  if (now < spawnedAt) return null;
   const force = retakeForce(p, 1);
   const size = Math.max(FIELD_ARMY.minSize, force.size * (1 - (c.retakeCut ?? 0)));
   return marching(
@@ -199,6 +213,28 @@ export function retakeArmyPoi(
     { kind: 'retake', targetId: p.id, at: c.attackAt, faction: force.faction, size },
     now,
   );
+}
+
+/** 🏯 Où le trajet `from` → `to` ENTRE dans le cercle de rayon `r` autour de la ville : `from`
+ *  lui-même s'il y est déjà, `null` si le trajet ne le traverse pas. */
+export function entryPoint(
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  r: number,
+): { x: number; y: number } | null {
+  const fx = from.x - EXPE.town.x;
+  const fy = from.y - EXPE.town.y;
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const cc = fx * fx + fy * fy - r * r;
+  if (cc <= 0) return { x: from.x, y: from.y };
+  const a = dx * dx + dy * dy;
+  const b = 2 * (fx * dx + fy * dy);
+  const disc = b * b - 4 * a * cc;
+  if (a <= 0 || disc < 0) return null;
+  const t = (-b - Math.sqrt(disc)) / (2 * a);
+  if (t < 0 || t > 1) return null;
+  return { x: from.x + t * dx, y: from.y + t * dy };
 }
 
 /**
@@ -225,7 +261,19 @@ export function syncFieldArmies(
   }
   for (const p of map.pois) {
     if (p.type !== 'control') continue;
-    const r = retakeArmyPoi(p, map.seed, ctx.detectR, ctx.reach, ctx.now, ctx.playerLevel);
+    // 🏯 Elle part de la citadelle qui attaque ce point.
+    const cit = p.control
+      ? map.pois.find((q) => q.id === citadelIdOf(citadelIndexOf(p.control!.kind)))
+      : undefined;
+    const r = retakeArmyPoi(
+      p,
+      map.seed,
+      ctx.detectR,
+      ctx.reach,
+      ctx.now,
+      ctx.playerLevel,
+      cit ? { x: cit.x, y: cit.y } : undefined,
+    );
     if (r) want.push(r);
   }
   const old = map.pois.filter(isFieldArmyPoi);
