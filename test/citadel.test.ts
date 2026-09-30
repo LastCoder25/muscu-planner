@@ -1,8 +1,8 @@
-// 🏯 Les citadelles ennemies (2026-09-30, décisions de l'utilisateur) : quatre, une par quart,
-// loin de la ville ; chacune envoie les reprises sur les points de SON quart. Jamais tenues, on
-// les abat ; leur niveau suit le joueur, leur PALIER monte à chaque destruction et redescend à
-// un échec ou après 7 jours sans victoire ; les points tenus de leur quart les affaiblissent ;
-// abattue, une citadelle offre une trêve à son quart.
+// 🏯 Les citadelles ennemies (2026-09-30, décisions de l'utilisateur) : quatre, posées dès le
+// départ dans le brouillard à des distances différentes, découvertes par l'Avant-poste ; chacune
+// envoie les reprises sur les points les plus proches d'elle. Jamais tenues, on les abat ; leur
+// palier monte à chaque destruction et redescend à un échec ou après 7 jours ; découvertes et
+// laissées debout, elles s'énervent (+5 %/jour) ; abattues, elles offrent une trêve.
 import { describe, expect, it } from 'vitest';
 import {
   CITADEL,
@@ -10,7 +10,11 @@ import {
   captureControl,
   citadelIdFor,
   citadelIdOf,
-  nextCitadelLevel,
+  citadelRevealLevel,
+  citadelDiscoveryFx,
+  newlyDiscoveredCitadels,
+  rageMult,
+  retakeForce,
   citadelLabel,
   citadelPalier,
   citadelSize,
@@ -36,82 +40,129 @@ import { poiOffers } from '@/lib/caravan';
 
 const H = 3600_000;
 const D = 24 * H;
-const base = (L = 30): ExpeditionMap => ensureControls(createMap(5, 0, L, 1), 0, L);
+const base = (L = 30, outpost = 100): ExpeditionMap =>
+  ensureControls(createMap(5, 0, L, 1), 0, L, outpost);
 const cits = (m: ExpeditionMap) => m.pois.filter((p) => p.control?.kind === 'citadel');
 const byId = (m: ExpeditionMap, id: string) => m.pois.find((p) => p.id === id)!;
 /** La citadelle qui attaque la mine au niveau 30. */
 const MINE_CIT = citadelIdFor(base(30).pois, 'mine')!;
 const dist = (p: { x: number; y: number }) => Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y);
 
-describe('🏯 les citadelles apparaissent avec le niveau, de plus en plus loin', () => {
-  it('une au départ, puis une de plus aux niveaux 15, 30 et 50', () => {
-    for (const [L, n] of [
-      [1, 1],
-      [14, 1],
-      [15, 2],
-      [29, 2],
-      [30, 3],
-      [50, 4],
-      [90, 4],
-    ] as const)
-      expect(cits(base(L))).toHaveLength(n);
-  });
-  it('chacune plus loin que la précédente, toutes loin des points et hors du disque de départ', () => {
-    const m = base(60);
+describe('🏯 quatre citadelles dès le départ, découvertes par l’Avant-poste', () => {
+  it('toutes posées dès le niveau 1, à des distances différentes, loin des points', () => {
+    const m = base(1, 1);
+    expect(cits(m)).toHaveLength(4);
     const far = Math.max(
       ...m.pois.filter((p) => p.control && p.control.kind !== 'citadel').map(dist),
     );
     const ds = CITADEL.sites.map((_, i) => dist(byId(m, citadelIdOf(i))));
     for (let i = 1; i < ds.length; i++) expect(ds[i]!).toBeGreaterThan(ds[i - 1]! + 5);
     for (const d of ds) {
-      expect(d).toBeGreaterThan(far + 20);
+      expect(d).toBeGreaterThan(far + 10);
       expect(d).toBeGreaterThan(revealRadius(1));
     }
-    for (const c of cits(m)) {
-      expect(c.control!.owner).toBe('enemy');
-      expect(c.level).toBe(60);
-    }
-    expect(ensureControls(m, H, 60)).toBe(m);
+    for (const c of cits(m)) expect(c.control!.owner).toBe('enemy');
   });
-  it('cher en temps : plus loin que tout lieu ordinaire (distNorm > 1)', () => {
-    for (const c of cits(base(60))) expect(c.distNorm).toBeGreaterThan(1);
+  it('cachées tant que le disque révélé ne les atteint pas, puis découvertes une à une', () => {
+    const at = (L: number) =>
+      cits(base(30, L)).filter((c) => c.control!.discoveredAt !== undefined);
+    expect(at(1)).toHaveLength(0);
+    let prev = 0;
+    for (let i = 0; i < CITADEL.sites.length; i++) {
+      const L = citadelRevealLevel(i);
+      expect(L).toBeGreaterThan(prev);
+      prev = L;
+      expect(at(L)).toHaveLength(i + 1);
+      expect(at(L - 1)).toHaveLength(i);
+    }
+  });
+  it('une découverte ne se reperd pas', () => {
+    const again = ensureControls(base(30, 100), 5 * D, 30, 1);
+    for (const c of cits(again)) expect(c.control!.discoveredAt).toBe(0);
+    // …ni ne se re-date : la colère compte depuis la PREMIÈRE découverte.
+    for (const c of cits(ensureControls(base(30, 100), 5 * D, 30, 100)))
+      expect(c.control!.discoveredAt).toBe(0);
+  });
+  it('cachée, elle ne s’attaque pas', () => {
+    const p = byId(base(30, 1), citadelIdOf(0));
+    expect(partySendBlocker(p, 3, true, 3, 0.5)).toBe('citadelHidden');
+    expect(poiOffers(p, { heroAway: false, advsAvailable: 3, comptoirLevel: 0 }).party).toBe(false);
+  });
+  it('cher en temps : plus loin que tout point fixe, et de plus en plus loin', () => {
+    const m = base(60);
+    const far = Math.max(
+      ...m.pois.filter((p) => p.control && p.control.kind !== 'citadel').map((p) => p.distNorm),
+    );
+    const ds = CITADEL.sites.map((_, i) => byId(m, citadelIdOf(i)).distNorm);
+    expect(ds[0]!).toBeGreaterThan(far * 1.5);
+    for (let i = 1; i < ds.length; i++) expect(ds[i]!).toBeGreaterThan(ds[i - 1]!);
   });
   it('ne sont pas élaguées hors du disque révélé', () => {
-    let m = base(60);
+    let m = base(60, 1);
     for (let t = H; t <= 5 * D; t += 6 * H) m = advanceWorld(m, t, 60, 1);
     expect(cits(m)).toHaveLength(4);
   });
-  it('seule au départ, la première attaque tous les points', () => {
-    const m = base(1);
-    for (const k of CONTROL.kinds) expect(citadelIdFor(m.pois, k)).toBe(citadelIdOf(0));
-  });
-  it('à quatre, chaque point a sa citadelle, et toutes en attaquent au moins un', () => {
+  it('chaque point a sa citadelle, et toutes en attaquent au moins un', () => {
     const m = base(60);
     const all = CITADEL.sites.flatMap((_, i) => citadelTargets(m.pois, i));
     expect([...all].sort()).toEqual([...CONTROL.kinds].sort());
     CITADEL.sites.forEach((_, i) => expect(citadelTargets(m.pois, i).length).toBeGreaterThan(0));
   });
-  it('une citadelle d’un niveau pas encore atteint est retirée ; l’ancienne unique aussi', () => {
+  it('l’ancienne citadelle unique est retirée ; stable une fois à jour', () => {
     const m = base(60);
-    expect(cits(ensureControls(m, H, 20))).toHaveLength(2);
+    expect(ensureControls(m, 0, 60, 100)).toBe(m);
     const legacy = {
       ...m,
       pois: [...m.pois, { ...byId(m, citadelIdOf(0)), id: controlIdOf('citadel') }],
     };
     expect(
-      ensureControls(legacy, H, 60).pois.some((p) => p.id === controlIdOf('citadel')),
+      ensureControls(legacy, 0, 60, 100).pois.some((p) => p.id === controlIdOf('citadel')),
     ).toBe(false);
-  });
-  it('la prochaine apparition se lit', () => {
-    expect(nextCitadelLevel(1)).toBe(15);
-    expect(nextCitadelLevel(30)).toBe(50);
-    expect(nextCitadelLevel(50)).toBeNull();
   });
   it('personne n’y reste, sa troupe n’est pas « soignée »', () => {
     expect(seatsOf('citadel')).toBe(0);
     const c = byId(base(30), MINE_CIT);
     expect(c.control!.size).toBeGreaterThan(Math.max(...CONTROL.captureSizes));
     expect(campSpecOf(c)!.size).toBe(c.control!.size);
+  });
+});
+
+describe('😡 la colère : ses armées grossissent chaque jour où on ne l’abat pas', () => {
+  const mineAt = (m: ExpeditionMap) => byId(m, controlIdOf('mine')).control!;
+  it('+5 % par jour, plafonné à 10 jours', () => {
+    expect(rageMult(0, 0)).toBe(1);
+    expect(rageMult(0, D - 1)).toBe(1);
+    expect(rageMult(0, 3 * D)).toBeCloseTo(1 + 3 * CITADEL.ragePerDay, 9);
+    expect(rageMult(0, 40 * D)).toBeCloseTo(1 + CITADEL.rageMaxDays * CITADEL.ragePerDay, 9);
+    expect(rageMult(undefined, 40 * D)).toBe(1);
+  });
+  it('aucune colère tant qu’elle est cachée', () => {
+    expect(mineAt(base(30, 1)).angerSince).toBeUndefined();
+  });
+  it('découverte, la colère court depuis la découverte, portée par les points qu’elle attaque', () => {
+    const m = ensureControls(base(30, 1), 2 * D, 30, 100);
+    expect(mineAt(m).angerSince).toBe(2 * D);
+  });
+  it('l’abattre remet la colère à zéro à la fin de sa trêve', () => {
+    const m = razeCitadel(base(30), MINE_CIT, 4 * D);
+    expect(mineAt(m).angerSince).toBe(4 * D + CITADEL.truceMs);
+    const other = CONTROL.kinds.find((k) => citadelIdFor(m.pois, k) !== MINE_CIT)!;
+    expect(byId(m, controlIdOf(other)).control!.angerSince).toBe(0);
+  });
+  it('elle grossit vraiment la troupe de reprise, à l’heure de l’attaque', () => {
+    const p = byId(
+      captureControl(base(30), controlIdOf('mine'), ['a0'], 0, 7),
+      controlIdOf('mine'),
+    );
+    const calm = { ...p, control: { ...p.control!, attackAt: 5 * D, angerSince: undefined } };
+    const angry = { ...p, control: { ...p.control!, attackAt: 5 * D, angerSince: 0 } };
+    expect(retakeForce(angry, 1).size / retakeForce(calm, 1).size).toBeCloseTo(
+      rageMult(0, 5 * D),
+      9,
+    );
+  });
+  it('la fiche dit la colère', () => {
+    expect(citadelLabel(base(30), MINE_CIT, 3 * D)!.title).toMatch(/😡 \+15 %/);
   });
 });
 
@@ -126,6 +177,7 @@ describe('🏯 sa troupe', () => {
       captureControl(base(30), controlIdOf('mine'), ['a0'], H, 7),
       2 * H,
       30,
+      100,
     );
     expect(byId(m1, MINE_CIT).control!.size).toBeCloseTo(citadelSize(0, 1), 9);
     for (const c of cits(m1))
@@ -161,7 +213,7 @@ describe('🏯 le palier', () => {
     expect(citadelPalier(c, 2 * H + 7 * D - 1)).toBe(3);
     expect(citadelPalier(c, 2 * H + 7 * D)).toBe(2);
     expect(citadelPalier(c, 2 * H + 30 * D)).toBe(0);
-    expect(byId(ensureControls(m, 2 * H + 7 * D, 30), MINE_CIT).control!.size).toBeCloseTo(
+    expect(byId(ensureControls(m, 2 * H + 7 * D, 30, 100), MINE_CIT).control!.size).toBeCloseTo(
       citadelSize(2, 0),
       9,
     );
@@ -222,5 +274,28 @@ describe('🏯 on l’attaque en groupe, héros compris', () => {
     expect(l.detail).toMatch(/Mine fortifiée/);
     expect(l.detail).toMatch(/trêve/);
     expect(citadelLabel(base(30), MINE_CIT, H)!.detail).toMatch(/abats-la/);
+  });
+});
+
+describe('🏯 l’annonce de la découverte', () => {
+  it('annonce seulement ce qui vient de sortir du brouillard', () => {
+    const hidden = base(30, 1);
+    const L1 = citadelRevealLevel(0);
+    const one = ensureControls(hidden, D, 30, L1);
+    expect(newlyDiscoveredCitadels(hidden, one)).toEqual([citadelIdOf(0)]);
+    // Déjà découverte : plus rien à annoncer.
+    expect(newlyDiscoveredCitadels(one, ensureControls(one, 2 * D, 30, L1))).toEqual([]);
+    // Sans carte d'avant : rien.
+    expect(newlyDiscoveredCitadels(null, one)).toEqual([]);
+    // Plusieurs d'un coup.
+    const all = ensureControls(hidden, D, 30, 100);
+    expect(newlyDiscoveredCitadels(hidden, all)).toHaveLength(4);
+  });
+  it('dit ce qu’elle attaque', () => {
+    const m = ensureControls(base(30, 1), D, 30, 100);
+    const fx = citadelDiscoveryFx(m, [MINE_CIT]);
+    expect(fx.title).toBe('Citadelle découverte !');
+    expect(fx.subtitle).toMatch(/Mine fortifiée/);
+    expect(citadelDiscoveryFx(m, [citadelIdOf(0), citadelIdOf(1)]).title).toMatch(/^2 citadelles/);
   });
 });

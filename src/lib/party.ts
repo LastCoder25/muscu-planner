@@ -226,6 +226,7 @@ export type PartySendBlock =
   | 'hopeless'
   | 'controlEmpty'
   | 'controlHeld'
+  | 'citadelHidden'
   | 'veinHero'
   | 'veinFull';
 export function partySendBlocker(
@@ -245,6 +246,9 @@ export function partySendBlocker(
   // jamais — il rentre). Il faut donc au moins un champion pour l'occuper.
   if (poi.type === 'control') {
     if (poi.control?.owner !== 'enemy' || poi.control.assault) return 'controlHeld';
+    // 🏯 Cachée dans le brouillard : on ne l'atteint pas avant que l'Avant-poste la découvre.
+    if (poi.control.kind === 'citadel' && poi.control.discoveredAt === undefined)
+      return 'citadelHidden';
     // 🏯 La citadelle ne se tient pas : le héros seul peut l'attaquer.
     if (escortCount <= 0 && poi.control.kind !== 'citadel') return 'controlEmpty';
   }
@@ -271,6 +275,8 @@ export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
   empty: 'l’équipe est vide',
   tooMany: 'trop de champions pour ton Panthéon',
   controlEmpty: 'il faut au moins un champion pour occuper le point — le héros, lui, rentre',
+  citadelHidden:
+    'cette citadelle est encore cachée — agrandis ta carte (Avant-poste) pour l’atteindre',
   controlHeld: 'ce point n’est pas à prendre (déjà à toi, ou une équipe y marche)',
   veinHero: 'un filon s’extrait par les champions seuls — le héros n’y va pas',
   veinFull: 'un filon n’accueille que 3 champions',

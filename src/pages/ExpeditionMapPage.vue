@@ -778,6 +778,11 @@
             </button>
           </div>
           <p v-else-if="liveControl?.assault" class="sh-note">⚔️ Une équipe marche sur ce lieu.</p>
+          <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">
+            🏯 Attaque-la avec tes champions, le héros, ou le héros seul : on ne l’occupe pas, tout
+            le monde rentre après l’assaut. Abattue, elle offre {{ CONTROL_YIELD.citadel }} et monte
+            d’un palier ; un échec la fait redescendre.
+          </p>
           <p v-else-if="liveControl" class="sh-note">
             🏰 Prends-le avec 1 à 3 champions, sans le héros :
             {{ seatsOf(liveControl.kind) === 1 ? 'un seul y restera' : 'ils y resteront' }} en
@@ -1403,7 +1408,13 @@ const fighter = computed<Combatant>(() =>
 );
 
 const active = computed(() => char.row?.expedition ?? null);
-const pois = computed<Poi[]>(() => char.row?.expedition_map?.pois ?? []);
+// 🏯 Une citadelle encore cachée dans le brouillard ne se dessine pas (elle n'existe pas encore
+// pour le joueur : l'Avant-poste la découvre).
+const pois = computed<Poi[]>(() =>
+  (char.row?.expedition_map?.pois ?? []).filter(
+    (p) => !(p.control?.kind === 'citadel' && p.control.discoveredAt === undefined),
+  ),
+);
 // Fond de carte (terrain) déterministe pour le seed de la carte.
 const terrain = computed(() =>
   char.row?.expedition_map

@@ -2687,6 +2687,26 @@ describe('🧺 GameFxOverlay — récolte', () => {
   }, 30_000);
 });
 
+describe('🏯 GameFxOverlay — citadelle découverte', () => {
+  it('la brume s’écarte, la forteresse rouge se dresse, le titre se lit', async () => {
+    const { default: GameFxOverlay } = await import('@/components/GameFxOverlay.vue');
+    const { useGameFx } = await import('@/composables/useGameFx');
+    const fx = useGameFx();
+    fx.queue.value = [];
+    fx.celebrate({ kind: 'citadel', emoji: '🏯', title: 'Citadelle découverte !', subtitle: 'x' });
+    let out = '';
+    expect(
+      await mountIt(GameFxOverlay, {}, undefined, undefined, '/', (h) => (out = h)),
+    ).toBeNull();
+    expect(out).toContain('fx-cit-keep');
+    expect(out.match(/fx-cit-fog/g)?.length).toBe(2);
+    expect(out.toLowerCase()).toContain('#ff5d45');
+    expect(out).toContain('Citadelle découverte !');
+    expect(out).not.toContain('class="fx-emoji"');
+    fx.queue.value = [];
+  }, 30_000);
+});
+
 describe('🔮 GameFxOverlay — rune posée', () => {
   it('la pierre de la couleur de la compétence se brise, la compétence en sort', async () => {
     const { default: GameFxOverlay } = await import('@/components/GameFxOverlay.vue');

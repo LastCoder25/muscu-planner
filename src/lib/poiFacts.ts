@@ -32,6 +32,10 @@ export function controlReturnNote(
   champions: number,
   seats: number,
 ): string {
+  // 🏯 Un lieu sans place (la citadelle) ne se tient pas : tout le monde rentre, qu'il tombe
+  // ou non.
+  if (seats <= 0)
+    return `Retour : tout le monde en ${formatDurationMin(Math.max(lostMin, wonMin))}, qu'elle tombe ou non`;
   const extra = Math.max(0, champions - Math.max(0, seats));
   const who = [
     hero ? 'le héros' : '',
