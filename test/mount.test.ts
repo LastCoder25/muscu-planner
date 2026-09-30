@@ -316,6 +316,38 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await rendu(null)).not.toContain('ca-gain');
   }, 30_000);
 
+  // 💰 Le plateau de ressources, partagé par l'Aventure et la carte (demandé 2026-09-30).
+  it('ResourceTray affiche les ressources du personnage, et une partie seulement si demandé', async () => {
+    const { default: ResourceTray } = await import('@/components/ResourceTray.vue');
+    const row = {
+      ...ROW,
+      mana: 1234,
+      gold: 56789,
+      summon_stones: 7,
+      keys: 3,
+      gacha_tickets: 2,
+      seals: undefined,
+      runes: { stock: { green: 1, blue: 2, violet: 0, gold: 0 } },
+    };
+    let all = '';
+    expect(
+      await mountIt(ResourceTray, { energy: 420 }, row, undefined, '/', (h) => (all = h)),
+    ).toBeNull();
+    for (const ico of ['⚡', '💠', '🪙', '🔮', '🗝️', '🔱', '⚜️', '🎟️']) expect(all).toContain(ico);
+    let main = '';
+    await mountIt(
+      ResourceTray,
+      { energy: 420, part: 'main' },
+      row,
+      undefined,
+      '/',
+      (h) => (main = h),
+    );
+    expect(main).toContain('⚡');
+    expect(main).toContain('💠');
+    expect(main).not.toContain('🪙');
+  }, 30_000);
+
   // 🛡️ 2026-09-28 : les miliciens postés sur des places fortes / tous ceux qui existent.
   it('AvailabilityLine compte les miliciens postés sur le total', async () => {
     const { default: AvailabilityLine } = await import('@/components/AvailabilityLine.vue');
