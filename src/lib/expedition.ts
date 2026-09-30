@@ -115,6 +115,12 @@ export interface ControlState {
   palier?: number;
   palierAt?: number;
   truceUntil?: number;
+  /** 🏯 Citadelle : l'instant où l'Avant-poste l'a DÉCOUVERTE (jamais repris). Avant, elle
+   *  reste cachée, ne s'attaque pas et ne s'énerve pas. */
+  discoveredAt?: number;
+  /** 😡 Point attaqué par une citadelle : depuis quand elle s'énerve (sa découverte ou la fin de
+   *  sa dernière trêve). Absent : aucune colère. */
+  angerSince?: number;
   /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
   attackAt?: number;
   /** Nombre de fois où l'ennemi l'a repris : entre dans les graines de re-tirage. */
