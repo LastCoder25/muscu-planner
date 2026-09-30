@@ -1027,6 +1027,21 @@ describe('🎓 UN CHAMPION EN RETARD APPREND PLUS VITE — la prime de rattrapag
     );
   });
 
+  it('🎯 l’XP annoncée est pondérée par la chance de victoire (v1.1.1)', () => {
+    // Signalé : un champion seul contre une armée annonçait l'XP d'une victoire à 0 %.
+    const a = champ(10, 'a')[0]!;
+    const plein = missionXpPreview([a], [a.id], p, 100, false)[a.id]!;
+    expect(plein.win).toBeNull();
+    expect(plein.xp).toBe(plein.xpWin);
+    const perdu = missionXpPreview([a], [a.id], p, 100, false, () => 0)[a.id]!;
+    expect(perdu.xp).toBe(0);
+    expect(perdu.xpWin).toBe(plein.xpWin);
+    const moitie = missionXpPreview([a], [a.id], p, 100, false, () => 0.5)[a.id]!;
+    expect(moitie.xp).toBe(Math.round(plein.xpWin * 0.5));
+    // borné : une chance hors [0, 1] ne gonfle jamais l'annonce
+    expect(missionXpPreview([a], [a.id], p, 100, false, () => 2)[a.id]!.xp).toBe(plein.xpWin);
+  });
+
   it('⚠️ c’est bien CE calcul que la mission verse : le SOCLE est primé, pas les abattus', () => {
     const neuf = champ(1, 'neuf');
     const vieux = champ(poiDifficultyLevel(p), 'vieux');

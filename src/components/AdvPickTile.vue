@@ -44,7 +44,9 @@
          ne pouvait deviner. La prime de retard, elle, est une bonne nouvelle : en vert. -->
       <span v-if="(xp || gain != null) && !reason" class="ca-row">
         <span v-if="xp" class="ca-xp" :class="{ low: !xp.full }" :title="xpWhy">
-          +{{ xp.xp }} XP<b v-if="xp.catchUp > 1">×{{ fmtMult(xp.catchUp) }}</b>
+          {{ xp.win != null && xp.win < 1 ? '≈' : '' }}+{{ xp.xp }} XP<b v-if="xp.catchUp > 1"
+            >×{{ fmtMult(xp.catchUp) }}</b
+          >
         </span>
         <!-- 🎯 CE QU'IL APPORTE À LA RÉUSSITE, par rapport à l'équipe cochée (demandé) : coché,
              ce qu'on perdrait en le retirant ; non coché, ce qu'on gagnerait en l'ajoutant. -->
@@ -123,7 +125,11 @@ const xpWhy = computed(() => {
     parts.push(
       `Prime de retard ×${fmtMult(x.catchUp)} : un rang de retard double l'apprentissage.`,
     );
-  parts.push('Socle si la mission réussit ; les ennemis abattus s’y ajoutent.');
+  if (x.win != null && x.win < 1)
+    parts.push(
+      `Pondéré par la chance de victoire (${Math.round(x.win * 100)} %) : +${x.xpWin} XP s’il gagne. Une défaite ne paie que ce qu’elle entame.`,
+    );
+  else parts.push('Socle si la mission réussit ; les ennemis abattus s’y ajoutent.');
   return parts.join(' ');
 });
 const emit = defineEmits<{ toggle: [] }>();

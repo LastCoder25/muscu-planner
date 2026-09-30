@@ -1015,8 +1015,17 @@ export function missionXpFor(
  *  seule façon de comparer deux tuiles, et ça rend visible que s'ajouter DILUE le partage.
  */
 export interface MissionXpPreview {
-  /** Le socle qu'il touchera si la mission réussit (part des abattus en plus). */
+  /** L'XP ANNONCÉE : le socle d'une victoire PONDÉRÉ par la chance de victoire quand on la
+   *  connaît (`winOf`), sinon le socle d'une victoire.
+   *  ⚠️ v1.1.1 (signalé : un champion seul contre une armée annonçait l'XP d'une victoire alors
+   *  qu'il allait perdre, et une défaite ne paie que ce qu'elle entame) : annoncer la victoire
+   *  à 0 % de chances est un mensonge. On annonce l'espérance ; la part d'une défaite
+   *  (∝ ce qu'on entame, inconnue avant le combat) n'y est pas — elle reste un bonus. */
   xp: number;
+  /** Le socle si la mission RÉUSSIT : le plafond, dit dans l'info-bulle. */
+  xpWin: number;
+  /** La chance de victoire retenue (0..1) ; `null` = inconnue (alors `xp` = `xpWin`). */
+  win: number | null;
   /** Le lieu est-il à son niveau ou au-dessus ? En dessous, l'apprentissage chute en
    *  puissance 1,5 — c'est LA règle que personne ne pouvait deviner.
    *  ⚠️ Comparé à la DIFFICULTÉ, pas à `poi.level` : c'est elle que `missionXp` écrête, donc
@@ -1031,6 +1040,9 @@ export function missionXpPreview(
   poi: Poi,
   pantheonLevel: number,
   hero: boolean,
+  /** 🎯 La chance de victoire (0..1) de l'équipe AVEC ce champion (coché : l'équipe telle
+   *  quelle ; non coché : l'équipe + lui). `null`/absent = inconnue. */
+  winOf?: (id: string) => number | null,
 ): Record<string, MissionXpPreview> {
   const escort = advs.filter((a) => escortIds.includes(a.id));
   // ⚠️ L'XP de l'escorte est la MÊME pour tous ses membres : on l'évalue une fois, au lieu
@@ -1043,7 +1055,15 @@ export function missionXpPreview(
       ? (dejaLa[a.id] ?? 0)
       : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel, hero, null)[a.id] ?? 0);
     const L = advBankedLevel(a, pantheonLevel);
-    out[a.id] = { xp, full: d >= L, catchUp: catchUpMult(L, pantheonLevel) };
+    const w = winOf?.(a.id);
+    const win = typeof w === 'number' ? Math.max(0, Math.min(1, w)) : null;
+    out[a.id] = {
+      xp: win === null ? xp : Math.round(xp * win),
+      xpWin: xp,
+      win,
+      full: d >= L,
+      catchUp: catchUpMult(L, pantheonLevel),
+    };
   }
   return out;
 }

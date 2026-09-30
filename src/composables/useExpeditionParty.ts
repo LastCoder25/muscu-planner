@@ -668,6 +668,16 @@ export function useExpeditionParty(ctx: PartyCtx) {
           selected.value,
           char.pantheonLevel,
           !!partyHeroOn.value,
+          // 🎯 L'XP annoncée est PONDÉRÉE par la chance de victoire (signalé : un champion seul
+          // contre une armée annonçait l'XP d'une victoire). Coché : le 🎯 % de l'équipe ;
+          // non coché : ce % + ce qu'il apporterait (`partyGain`, les MÊMES nombres que les
+          // tuiles). Inconnu tant que le calcul par morceaux n'est pas arrivé.
+          (id) => {
+            const g = partyGain.value[id];
+            if (partyEscort.value.includes(id))
+              return partyWin.value === null ? null : partyWin.value / 100;
+            return g == null ? null : ((partyWin.value ?? 0) + g) / 100;
+          },
         )
       : {},
   );
