@@ -56,6 +56,17 @@ self.addEventListener('push', (event) => {
    pas encore — la notification ne faisait alors que ramener l'onglet au premier plan,
    sur l'écran où on l'avait laissé. On envoie l'URL à l'app (boot/pwa.ts), qui route
    EN PLACE par le routeur. Sans onglet ouvert, on en ouvre un directement sur l'URL. */
+
+/* ⚠️ L'app route en mode HASH (quasar.config : vueRouterMode 'hash'). Ouvrir une fenêtre
+   sur `/expedition-map?report=1` chargeait bien l'app, mais le routeur lit le FRAGMENT —
+   vide — et posait l'accueil : app fermée, taper une notification ne menait nulle part.
+   Les URL des messages restent des chemins de routeur (`boot/pwa.ts` les pousse tels
+   quels) ; seule l'ouverture d'une fenêtre neuve les convertit ici. */
+function appUrl(url) {
+  if (typeof url !== 'string' || !url.startsWith('/') || url.startsWith('/#')) return url || '/';
+  return url === '/' ? '/' : '/#' + url;
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
@@ -68,7 +79,7 @@ self.addEventListener('notificationclick', (event) => {
         c.postMessage({ type: 'navigate', url });
         return;
       }
-      await self.clients.openWindow(url);
+      await self.clients.openWindow(appUrl(url));
     })(),
   );
 });
