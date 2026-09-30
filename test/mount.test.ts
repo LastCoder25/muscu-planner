@@ -148,9 +148,41 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ),
     ).toBeNull();
     expect(out).toContain('Ta base');
-    expect(out).toContain('2 ailleurs');
+    expect(out).toContain('2 champions ailleurs');
+    // 🦸 Le héros vit DANS la grille des effectifs, en première tuile — plus au-dessus.
+    const grid = out.indexOf('class="bgs-pick"');
+    expect(grid).toBeGreaterThan(-1);
+    expect(out.indexOf('class="bgs-hero')).toBeGreaterThan(grid);
+    expect(out.indexOf('class="bgs-hero')).toBeLessThan(out.indexOf('class="car-adv'));
     expect(out).toContain('Envoyer en renfort');
     expect(out).toContain('Mine d’or');
+  });
+
+  // 🧝 Le héros est une tuile PARMI les effectifs : cochable, ou grisé AVEC sa raison.
+  it('HeroPickTile : coché, ou grisé avec la raison', async () => {
+    const { default: HeroPickTile } = await import('@/components/HeroPickTile.vue');
+    let on = '';
+    await mountIt(
+      HeroPickTile,
+      { on: true, block: null, sub: 'sans XP', gain: 12 },
+      undefined,
+      undefined,
+      '/',
+      (h) => (on = h),
+    );
+    expect(on).toContain('aria-pressed="true"');
+    expect(on).toContain('+12 %');
+    let off = '';
+    await mountIt(
+      HeroPickTile,
+      { on: false, block: 'à l’infirmerie', sub: 'sans XP' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (off = h),
+    );
+    expect(off).toContain('disabled');
+    expect(off).toContain('à l’infirmerie');
   });
 
   // 👥 v0.1108 : toucher un voyage montre son équipe en tuiles LECTURE SEULE — ni case

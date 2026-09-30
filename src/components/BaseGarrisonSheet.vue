@@ -8,12 +8,7 @@
        les montrer. -->
   <!-- `no-refocus` : à la fermeture, le focus ne revient pas sur la ville (il y laissait un
        cadre visible). -->
-  <q-dialog
-    :model-value="modelValue"
-    position="bottom"
-    no-refocus
-    @update:model-value="close"
-  >
+  <q-dialog :model-value="modelValue" position="bottom" no-refocus @update:model-value="close">
     <div class="bgs">
       <div class="bgs-head">
         <span class="bgs-title">🏠 Ta base</span>
@@ -25,21 +20,24 @@
         <button type="button" class="bgs-x" aria-label="Fermer" @click="close(false)">✕</button>
       </div>
 
-      <!-- 🦸 Le héros : son état. Il ne tient pas de lieu fixe (règle des points de contrôle),
-           il part depuis la fiche d'un lieu. -->
-      <div class="bgs-hero" :class="{ away: !heroHome }">
-        <span class="bgs-hero-emo" aria-hidden="true">🦸</span>
-        <span class="bgs-hero-main">
-          <b>Héros</b>
-          <span class="bgs-dim">{{ heroStatus }}</span>
-        </span>
-      </div>
-
       <p class="bgs-cap">
-        ⚔️ <b>Champions à la base</b>
-        <span v-if="away > 0"> · {{ away }} ailleurs (en route, postés, à l’infirmerie)</span>
+        ⚔️ <b>Effectifs à la base</b>
+        <span v-if="away > 0">
+          · {{ away }} champion{{ away > 1 ? 's' : '' }} ailleurs (en route, postés, à
+          l’infirmerie)</span
+        >
       </p>
-      <div v-if="champs.length" class="bgs-pick">
+      <div class="bgs-pick">
+        <!-- 🦸 Le héros, PARMI les effectifs (demandé : il vivait dans un bandeau à part, au-
+             dessus). Il ne se choisit pas : il ne tient jamais un lieu fixe (règle des points
+             de contrôle, « SANS le héros ») et part depuis la fiche d'un lieu. -->
+        <div class="bgs-hero" :class="{ away: !heroHome }">
+          <span class="bgs-hero-emo" aria-hidden="true">🦸</span>
+          <span class="bgs-hero-main">
+            <b>Héros</b>
+            <span class="bgs-dim">{{ heroStatus }}</span>
+          </span>
+        </div>
         <AdvPickTile
           v-for="a in champs"
           :key="a.id"
@@ -48,7 +46,7 @@
           @toggle="toggle(a.id)"
         />
       </div>
-      <p v-else class="bgs-dim">Aucun champion à la base pour l’instant.</p>
+      <p v-if="!champs.length" class="bgs-dim">Aucun champion à la base pour l’instant.</p>
 
       <template v-if="milHome > 0">
         <p class="bgs-cap">
@@ -227,22 +225,25 @@ const rows = computed(() =>
   font-size: 18px;
   cursor: pointer;
 }
+/* Même gabarit qu'une tuile de champion (`AdvPickTile`) : il se lit dans la même grille. */
 .bgs-hero {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 8px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 7px 8px;
   border-radius: 12px;
   border: 1.5px solid var(--d1);
-  background: var(--surface-2, var(--bg));
-  margin-bottom: 10px;
+  background: #1d1913;
 }
 .bgs-hero.away {
   border-color: var(--line);
   border-style: dashed;
 }
 .bgs-hero-emo {
-  font-size: 26px;
+  flex: none;
+  font-size: 40px;
   line-height: 1;
 }
 .bgs-hero-main {
