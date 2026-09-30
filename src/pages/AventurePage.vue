@@ -5715,11 +5715,14 @@ async function syncPush(force = false) {
       towerBoost: controlDetectBoost(char.row.expedition_map, now),
       activeDays7: activeDays7.value,
       playerLevel: c.value.level.level,
-      controls: heldControls(char.row.expedition_map ?? null).map((p) => ({
-        id: p.id,
-        attackAt: p.control!.attackAt ?? 0,
-        label: poiLabel(p),
-      })),
+      // 🌫️ Un point dont la citadelle est cachée n'a pas d'attaque prévue : rien à annoncer.
+      controls: heldControls(char.row.expedition_map ?? null)
+        .filter((p) => p.control!.attackAt !== undefined)
+        .map((p) => ({
+          id: p.id,
+          attackAt: p.control!.attackAt!,
+          label: poiLabel(p),
+        })),
       plunder: char.row.expedition_map
         ? nextPlunderSpawn(
             char.row.expedition_map,

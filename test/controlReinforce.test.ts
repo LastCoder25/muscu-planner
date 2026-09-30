@@ -28,7 +28,7 @@ const L = 30;
 const ctl = (m: ExpeditionMap) => m.pois.find((p) => p.id === ID)!;
 /** Tenu par `g` depuis 0, attaque repoussée très loin (on teste la production). */
 const held = (g: string[]) => {
-  const m = captureControl(ensureControls(createMap(3, 0, L, 1), 0, L), ID, g, 0, 7);
+  const m = captureControl(ensureControls(createMap(3, 0, L, 1), 0, L, 100), ID, g, 0, 7);
   return {
     ...m,
     pois: m.pois.map((p) =>

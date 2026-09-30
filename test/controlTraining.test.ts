@@ -20,7 +20,7 @@ import { createMap } from '@/lib/expedition';
 
 const H = 3600_000;
 const CAMP = controlIdOf('training');
-const mapAt = (L: number) => ensureControls(createMap(3, 0, L, 1), 0, L);
+const mapAt = (L: number) => ensureControls(createMap(3, 0, L, 1), 0, L, 100);
 const pt = (m: ReturnType<typeof mapAt>) => m.pois.find((p) => p.id === CAMP)!;
 const at = (m: ReturnType<typeof mapAt>, t: number) => settleReinforcements(m, t, 30);
 

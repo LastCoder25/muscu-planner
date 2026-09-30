@@ -341,7 +341,9 @@ function enemyForce(
  *
  * - **L'ennemi est là dès le départ, caché dans le brouillard** : quatre citadelles, une par
  *   quart, chacune à une distance différente (`sites`). Chaque point est attaqué par la plus
- *   proche de lui (en angle) : les reprises viennent de tout autour dès le niveau 1.
+ *   proche de lui (en angle). 🌫️ **Mais seulement une fois DÉCOUVERTE** (2026-09-30, « si je
+ *   la vois, elle me voit ») : tant qu'elle est cachée, ses points restent en paix
+ *   (`attackerHidden`, `gateAttacks`) — agrandir la carte ouvre un nouveau front.
  * - **On les DÉCOUVRE en agrandissant la carte** (l'Avant-poste) : une citadelle se révèle
  *   quand le disque révélé l'atteint (`discoveredAt`, jamais repris). Cachée, elle ne se voit
  *   pas et ne s'attaque pas.
@@ -587,7 +589,45 @@ function syncCitadels(
       control: { ...c, size, ...(found !== undefined ? { discoveredAt: found } : {}) },
     };
   });
-  return stampAnger(out);
+  return gateAttacks(stampAnger(out), now);
+}
+
+/** 🌫️ La citadelle qui attaque ce type de point est-elle encore CACHÉE ? (décision de
+ *  l'utilisateur, 2026-09-30 : « si je la vois, elle me voit ») Sans citadelle sur la carte
+ *  (carte d'avant les citadelles), on attaque comme avant. */
+export function attackerHidden(pois: readonly Poi[], kind: ControlKind): boolean {
+  const id = citadelIdFor(pois, kind);
+  if (!id) return false;
+  const cit = pois.find((p) => p.id === id);
+  return !!cit && !isCitadelFound(cit);
+}
+
+/** 🌫️ Un point tenu dont la citadelle est cachée n'est PAS attaqué : son attaque prévue est
+ *  retirée (aucune armée, aucune notification, aucune alerte). Découverte, la citadelle
+ *  l'attaque au rythme habituel, à partir de maintenant (jamais pendant sa trêve).
+ *  ⚠️ `attackAt` absent = aucune attaque : tous les lecteurs (tick, armée, push, alerte)
+ *  savent déjà l'ignorer. N'écrit que ce qui change. */
+function gateAttacks(pois: Poi[], now: number): Poi[] {
+  let out = pois;
+  pois.forEach((p, k) => {
+    const c = p.control;
+    if (!c || c.owner !== 'player' || c.kind === 'citadel') return;
+    const hidden = attackerHidden(pois, c.kind);
+    let attackAt = c.attackAt;
+    if (hidden) attackAt = undefined;
+    else if (attackAt === undefined) {
+      const id = citadelIdFor(pois, c.kind);
+      const truce = (id && pois.find((q) => q.id === id)?.control?.truceUntil) || 0;
+      attackAt = Math.max(now + retakeDelayMs(p.id, now, c.activity ?? 0), truce);
+    }
+    if (attackAt === c.attackAt) return;
+    const next = { ...c };
+    if (attackAt === undefined) delete next.attackAt;
+    else next.attackAt = attackAt;
+    if (out === pois) out = [...pois];
+    out[k] = { ...p, control: next };
+  });
+  return out;
 }
 
 /** 🏯 Abattue à `at` : palier +1 (à partir du palier effectif), trêve posée sur les points
@@ -857,11 +897,15 @@ export function captureControl(
       garrison: garrison.slice(0, seatsOf(p.control!.kind)),
       since: at,
       collectedAt: at,
-      // 🏯 Jamais pendant la trêve d'une citadelle abattue.
-      attackAt: Math.max(
-        at + retakeDelayMs(id, at, activeDays7),
-        truceUntilFor(map, p.control!.kind),
-      ),
+      // 🏯 Jamais pendant la trêve d'une citadelle abattue ; 🌫️ jamais si elle est cachée.
+      ...(attackerHidden(map.pois, p.control!.kind)
+        ? {}
+        : {
+            attackAt: Math.max(
+              at + retakeDelayMs(id, at, activeDays7),
+              truceUntilFor(map, p.control!.kind),
+            ),
+          }),
       activity: activeDays7,
       assault: false,
       // 🏅 Repris : il repart des crans qui lui restaient (ceux que l'ennemi n'a pas usés).
@@ -2152,7 +2196,9 @@ export function dueRetakes(map: ExpeditionMap | null, now: number): Poi[] {
       (p) =>
         p.control?.owner === 'player' &&
         p.control.attackAt !== undefined &&
-        p.control.attackAt <= now,
+        p.control.attackAt <= now &&
+        // 🌫️ Une citadelle cachée n'attaque pas (le tick de carte retire aussi l'échéance).
+        !attackerHidden(map.pois, p.control.kind),
     )
     .sort((a, b) => a.control!.attackAt! - b.control!.attackAt!);
 }
