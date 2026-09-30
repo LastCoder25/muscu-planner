@@ -11,6 +11,7 @@ import {
   gardenStock,
   runeHoursFor,
   runeProgress,
+  tierYieldMult,
 } from '@/lib/controlPoints';
 import { createMap, type ControlKind, type Poi } from '@/lib/expedition';
 import { formatDuration } from '@/lib/duration';
@@ -48,7 +49,8 @@ describe('🧺 la tuile de production', () => {
     const p = held('mine');
     const c = controlYieldCard(p, 30 * H, L)!;
     expect(c.value).toBe(
-      `+${Math.round(controlGoldPerHour(p, 3, L)).toLocaleString('fr-FR')} 🪙/h`,
+      // 🏅 À 30 h, le point tenu depuis 0 est au cran 1.
+      `+${Math.round(controlGoldPerHour(p, 3, L) * tierYieldMult(1)).toLocaleString('fr-FR')} 🪙/h`,
     );
     expect(c.what).toMatch(/directement/);
     expect(c.pct).toBeNull();

@@ -9,6 +9,7 @@ import {
   controlProgress,
   ensureControls,
   seatsOf,
+  tierYieldMult,
 } from '@/lib/controlPoints';
 import { EXPE, createMap, type Poi } from '@/lib/expedition';
 import { riftClearMana } from '@/lib/rift';
@@ -91,12 +92,13 @@ describe('⛲ la Source de mana', () => {
     // Sans reprise prévue d'ici là : la production s'arrête à l'heure de l'attaque.
     const p0 = pt(held(30, 3), SRC);
     const p = { ...p0, control: { ...p0.control!, attackAt: 9e15 } };
-    const at =(h: number) => Math.floor(controlManaPerHour(3, 30) * h + 1e-9);
-    expect(controlManaStock(p, 72 * H, 30)).toBe(at(72));
+    // 🏅 Chaque jour tenu à SON cran (+1 par 24 h, 2026-09-30).
+    const days = 24 * (tierYieldMult(0) + tierYieldMult(1) + tierYieldMult(2));
+    expect(controlManaStock(p, 72 * H, 30)).toBe(Math.floor(controlManaPerHour(3, 30) * days + 1e-9));
     expect(controlManaStock(p, 72 * H, 30)).toBeGreaterThan(controlManaStock(p, 24 * H, 30));
     // Plus de jauge de réserve (versé directement) : le bout de ligne dit le débit du jour.
     expect(controlProgress(p, 40 * H, 30)).toEqual({
-      text: `💠 +${Math.round(controlManaPerHour(3, 30) * 24)}/j`,
+      text: `💠 +${Math.round(controlManaPerHour(3, 30) * tierYieldMult(1) * 24)}/j`,
       pct: null,
     });
   });

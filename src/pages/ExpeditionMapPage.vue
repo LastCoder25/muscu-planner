@@ -218,6 +218,7 @@
             :veiled-key="veiledKey"
             :down-key="downKey"
             :imminent-key="imminentKey"
+            :tier-key="tierKey"
             :target="active && voyageTargetShown(active, now) ? active.poi : null"
             :target-down="heroTargetDown"
             :travel-targets="travelTargets"
@@ -461,6 +462,10 @@
           @close="selected = null"
           @seal="doSeal"
         />
+        <!-- 🏅 L'ANCIENNETÉ du point (2026-09-30) : son cran, ce qu'il rapporte, ce qu'il attire. -->
+        <p v-if="tierLine" class="ctl-line ctl-tier">
+          <b>{{ tierLine.title }}</b> <span class="ctl-dim">· {{ tierLine.detail }}</span>
+        </p>
         <!-- ⚔️ Déjà attaqué : plus rien à envoyer, la fiche s'arrête à ce qu'il rapporte. -->
         <template v-if="!engagedTrip">
           <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
@@ -1272,6 +1277,8 @@ import {
   controlRoster,
   controlTravelMult,
   controlYieldCard,
+  controlTier,
+  controlTierLabel,
   trainingCapLevel,
   seatsOf,
   attackImminent,
@@ -1888,6 +1895,17 @@ const liveControl = computed(() => {
   const id = selected.value?.id;
   return id ? (char.row?.expedition_map?.pois.find((p) => p.id === id)?.control ?? null) : null;
 });
+/** 🏅 Le cran du point sélectionné (ancienneté) : titre et détail, à la minute. */
+const tierLine = computed(() => controlTierLabel(liveControl.value ?? undefined, coarseNow.value));
+/** 🏅 Les crans des points de la carte, en CHAÎNE « id:cran » (le calque ne se redessine que si
+ *  un cran change). Seuls les crans > 0 sont dessinés. */
+const tierKey = computed(() =>
+  (char.row?.expedition_map?.pois ?? [])
+    .filter((p) => p.control)
+    .map((p) => `${p.id}:${controlTier(p.control, coarseNow.value)}`)
+    .filter((s) => !s.endsWith(':0'))
+    .join('|'),
+);
 const livePoi = computed(() =>
   selected.value
     ? (char.row?.expedition_map?.pois.find((p) => p.id === selected.value!.id) ?? null)
@@ -3722,7 +3740,7 @@ const travelTargets = stableBy(
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 // 🗼 Les tours de guet tenues raccourcissent les trajets APRÈS l'Avant-poste.
 const travelMult = computed(
-  () => travelTimeMult(char.row?.buildings ?? []) * controlTravelMult(char.row?.expedition_map),
+  () => travelTimeMult(char.row?.buildings ?? []) * controlTravelMult(char.row?.expedition_map, now.value),
 );
 const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
@@ -4416,6 +4434,9 @@ onUnmounted(() => {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, #b57bff 55%, var(--line));
   background: color-mix(in srgb, #b57bff 8%, var(--surface));
+}
+.ctl-tier b {
+  color: var(--accent);
 }
 .ctl-line {
   margin: 0 0 6px;

@@ -9,6 +9,8 @@ import {
   runeProgress,
   runeStock,
   seatsOf,
+  TIER,
+  tierYieldMult,
 } from '@/lib/controlPoints';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 import { placeRuneOdds, type RuneTier } from '@/lib/skillRunes';
@@ -55,8 +57,11 @@ describe('📜 le Scriptorium', () => {
   it('sans plafond : dix jours d’absence rendent dix jours de copie', () => {
     // ⚠️ 2026-09-29 (demandé : « supprime le plafond de 24 h ») : les runes ne s’arrêtent
     // plus à une seule en attente — tout ce qui a été copié arrive au retour.
-    expect(at(['a', 'b', 'c'], 10 * 24).n).toBe(10);
-    expect(at(['a'], 10 * 48).n).toBe(10);
+    // 🏅 Chaque jour tenu à SON cran (+1 par 24 h, plafond 10 — 2026-09-30).
+    const days = (n: number) =>
+      Array.from({ length: n }, (_, d) => tierYieldMult(Math.min(TIER.max, d))).reduce((x, y) => x + y, 0);
+    expect(at(['a', 'b', 'c'], 10 * 24).n).toBe(Math.floor(days(10)));
+    expect(at(['a'], 10 * 48).n).toBe(Math.floor(days(20) / 2));
   });
 
   it('ramasser rend la rune, à la couleur que permet le rang du HÉROS (un point tenu est neutre)', () => {

@@ -52,6 +52,10 @@
           class="ctl-flag"
           :class="p.control.owner"
         />
+        <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. -->
+        <text v-if="tiers.get(p.id)" :x="p.x" :y="p.y + 9" class="ctl-tier" :class="p.control.owner">
+          🏅{{ tiers.get(p.id) }}
+        </text>
         <!-- ⚔️ Bataille imminente : un petit avertissement au coin du fort, qui palpite. -->
         <g v-if="imminent.has(p.id)" class="ctl-alert">
           <circle :cx="p.x - 5.2" :cy="p.y - 5.2" r="2.9" />
@@ -171,6 +175,8 @@ const props = defineProps<{
   downKey?: string;
   /** Ids des points de contrôle sous attaque imminente, même forme que `dimmedKey`. */
   imminentKey: string;
+  /** 🏅 Les crans des points fixes, « id:cran » joints par « | » (seuls les crans > 0). */
+  tierKey?: string;
   /** La cible du héros en voyage. */
   target: Poi | null;
   /** Les cibles des équipes en route. */
@@ -185,6 +191,15 @@ const dimmed = computed(() => toSet(props.dimmedKey));
 const veiled = computed(() => toSet(props.veiledKey));
 const down = computed(() => toSet(props.downKey ?? ''));
 const imminent = computed(() => toSet(props.imminentKey));
+const tiers = computed(
+  () =>
+    new Map(
+      (props.tierKey ? props.tierKey.split('|') : []).map((s) => {
+        const i = s.lastIndexOf(':');
+        return [s.slice(0, i), Number(s.slice(i + 1))] as const;
+      }),
+    ),
+);
 /** 🏅 Le rang de chaque lieu, une fois par changement de carte (sinon une bisection par
  *  lecture, quatre lectures par lieu). Repli sur le calcul direct pour une cible de voyage,
  *  qui n'est plus sur la carte. */
@@ -296,6 +311,19 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 .poi-emo {
   font-size: 4px;
   text-anchor: middle;
+}
+.ctl-tier {
+  font-size: 3px;
+  font-weight: 800;
+  text-anchor: middle;
+  fill: var(--accent);
+  paint-order: stroke;
+  stroke: var(--bg);
+  stroke-width: 0.8px;
+  pointer-events: none;
+  &.enemy {
+    fill: var(--dim);
+  }
 }
 .poi-rank {
   font-size: 3.2px;
