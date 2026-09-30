@@ -23,8 +23,8 @@
     <template v-else>
       <p class="bb-lead">
         <template v-if="deficits">
-          <b>{{ deficits }}</b> groupe{{ deficits > 1 ? 's' : '' }} sous {{ LOW_PCT }} % de la
-          cible, même en tenant ce que tu as prévu.
+          <b>{{ deficits }}</b> groupe{{ deficits > 1 ? 's' : '' }} sous la cible, même en
+          tenant ce que tu as prévu : un challenge peut combler l’écart.
         </template>
         <template v-else>Tous tes groupes sont couverts par ce que tu fais et prévois.</template>
         Touche un groupe pour voir d’où viennent ses séries.
@@ -118,19 +118,19 @@ import { useProfileStore } from '@/stores/profile';
 import { useBalanceInput } from '@/composables/useBalanceInput';
 import {
   bodyBalance,
+  needsChallenge,
   balanceBarGeometry,
   muscleBreakdown,
   type BalancePeriod,
   type BalanceSource,
 } from '@/lib/bodyBalance';
-import { muscleColor, fmtSets, VOLUME_LOW } from '@/lib/volume';
+import { muscleColor, fmtSets } from '@/lib/volume';
 import { computeMuscleTargets } from '@/lib/programBuilder';
 
 const PERIODS: { key: BalancePeriod; label: string }[] = [
   { key: 'week', label: 'Semaine' },
   { key: 'weeks4', label: '4 sem.' },
 ];
-const LOW_PCT = Math.round(VOLUME_LOW * 100);
 const SOURCE_EMOJI: Record<BalanceSource, string> = {
   session: '🏋️',
   combo: '🎯',
@@ -179,7 +179,7 @@ const rows = computed(() => {
   return bodyBalance({ ...input.value, targets: computeMuscleTargets(profile) }, period.value).map(
     (r) => ({
       ...r,
-      act: r.state === 'low',
+      act: needsChallenge(r),
       bar: balanceBarGeometry(r.done, r.value, r.target),
     }),
   );
