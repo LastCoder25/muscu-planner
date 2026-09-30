@@ -2846,7 +2846,9 @@ const trips = computed(() => {
     });
   }
   // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.
-  return out.sort((x, y) => (ends.get(x.key) ?? 0) - (ends.get(y.key) ?? 0));
+  // ⏱️ `endsAt` porte l'heure à la tuile : `TripsPanel` y mêle les armées ennemies.
+  for (const t of out) t.endsAt = ends.get(t.key) ?? 0;
+  return out.sort((x, y) => (x.endsAt ?? 0) - (y.endsAt ?? 0));
 });
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {

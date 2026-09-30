@@ -828,6 +828,32 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(atk).toMatch(/class="tr-poi"[^>]*>⛏️</);
     expect(atk).toContain('🛡️ 82 %');
     expect(atk).toContain('width: 50%');
+    // ⏱️ Voyages et attaques mêlés dans l'ORDRE D'ARRIVÉE : l'armée qui frappe à 100 passe
+    // entre le voyage qui finit à 50 et celui qui finit à 200.
+    let mix = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [
+          { ...trip, key: 'late', title: 'VOYAGE-TARD', endsAt: 200 },
+          { ...trip, key: 'early', title: 'VOYAGE-TOT', endsAt: 50 },
+        ],
+        focus: null,
+        heroProfile: 'polyvalent',
+        attacks: [{ army, kind: 'retake', target: mine, inMs: 60_000, size: 2, faction: 'undead' }],
+        now: 40,
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (mix = h),
+    );
+    const iTot = mix.indexOf('VOYAGE-TOT');
+    const iAtk = mix.indexOf('trip attack');
+    const iTard = mix.indexOf('VOYAGE-TARD');
+    expect(iTot).toBeGreaterThan(-1);
+    expect(iTot).toBeLessThan(iAtk);
+    expect(iAtk).toBeLessThan(iTard);
     // ❓ Au RETOUR, ce qu'on ramène se touche et se lit, comme dans les rapports (demandé).
     let tip = '';
     await mountIt(
