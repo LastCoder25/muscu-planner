@@ -27,6 +27,7 @@ import {
   legMode,
   legRepRange,
   setOrigin,
+  setWork,
   type ComboChallenge,
   type ComboLeg,
 } from './combo';
@@ -197,7 +198,8 @@ function legItems(leg: ComboLeg, objective?: Objective | null): VolumeItem[] {
       name: o.exercise_name,
       primary: o.muscle_primary,
       sets: unit ? (s.reps || 0) / unit : 1,
-      reps: mode === 'time' ? 0 : s.reps || 0,
+      // Reps VRAIMENT faites (une série convertie à la bascule garde les siennes).
+      reps: mode === 'time' ? 0 : setWork(leg, s).reps || 0,
     };
   });
 }

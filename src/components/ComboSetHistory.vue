@@ -14,7 +14,7 @@
             {{ s.reps }} {{ unit }}<template v-if="s.weight"> · {{ s.weight }} kg</template>
             <span v-if="s.assisted" class="hist-asst">assisté</span>
             <!-- Série faite sur un autre exo, basculée ici par un changement d'exo. -->
-            <span v-if="s.origin" class="hist-origin">↪ {{ s.origin.exercise_name }}</span>
+            <span v-if="s.origin" class="hist-origin">↪ {{ setOriginLabel(leg!, s) }}</span>
           </span>
           <span class="hist-date">{{ fmtDay(s.date) }}</span>
         </div>
@@ -28,7 +28,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
-import { legMode, legSets, type ComboLeg } from '@/lib/combo';
+import { legMode, legSets, setOriginLabel, type ComboLeg } from '@/lib/combo';
 
 const props = defineProps<{ modelValue: boolean; leg: ComboLeg | null }>();
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>();

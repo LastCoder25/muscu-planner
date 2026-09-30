@@ -100,7 +100,7 @@ import { useMyBossDays } from '@/composables/useMyBossDays';
 import { groupBySource } from '@/lib/agendaGroups';
 import { localDayIso } from '@/lib/volume';
 import { challengeDayXp, challengeValueUnit } from '@/lib/challenges';
-import { legSets, legMode, setOrigin, type ComboSet } from '@/lib/combo';
+import { legSets, legMode, setOrigin, setWork, type ComboSet } from '@/lib/combo';
 import {
   sessionXp,
   otherSportXp,
@@ -314,7 +314,9 @@ const entries = computed<Entry[]>(() => {
         const k = setOrigin(leg, s).exercise_id + '|' + s.date;
         (byDay.get(k) ?? byDay.set(k, []).get(k)!).push(s);
       }
-      for (const daySets of byDay.values()) {
+      for (const found of byDay.values()) {
+        // Ce qui a VRAIMENT été fait : une série convertie à la bascule garde ses valeurs.
+        const daySets = found.map((s) => ({ ...s, ...setWork(leg, s) }));
         const date = daySets[0]!.date;
         const origin = setOrigin(leg, daySets[0]!);
         const [y, m, dd] = date.split('-').map(Number);
