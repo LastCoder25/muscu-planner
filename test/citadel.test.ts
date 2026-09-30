@@ -130,11 +130,50 @@ describe('🏯 quatre citadelles dès le départ, découvertes par l’Avant-pos
 describe('😡 la colère : ses armées grossissent chaque jour où on ne l’abat pas', () => {
   const mineAt = (m: ExpeditionMap) => byId(m, controlIdOf('mine')).control!;
   it('+5 % par jour, plafonné à 10 jours', () => {
-    expect(rageMult(0, 0)).toBe(1);
-    expect(rageMult(0, D - 1)).toBe(1);
-    expect(rageMult(0, 3 * D)).toBeCloseTo(1 + 3 * CITADEL.ragePerDay, 9);
-    expect(rageMult(0, 40 * D)).toBeCloseTo(1 + CITADEL.rageMaxDays * CITADEL.ragePerDay, 9);
-    expect(rageMult(undefined, 40 * D)).toBe(1);
+    expect(rageMult(0, 0, 7)).toBe(1);
+    expect(rageMult(0, D - 1, 7)).toBe(1);
+    expect(rageMult(0, 3 * D, 7)).toBeCloseTo(1 + 3 * CITADEL.ragePerDay, 9);
+    expect(rageMult(0, 40 * D, 7)).toBeCloseTo(1 + CITADEL.rageMaxDays * CITADEL.ragePerDay, 9);
+    expect(rageMult(undefined, 40 * D, 7)).toBe(1);
+  });
+  it('un joueur peu actif n’est pas harcelé comme un actif : la colère suit les jours actifs', () => {
+    expect(rageMult(0, 40 * D, 0)).toBe(1);
+    expect(rageMult(0, 40 * D, 1)).toBeCloseTo(
+      1 + (CITADEL.rageMaxDays * CITADEL.ragePerDay) / 7,
+      9,
+    );
+    const r = [0, 1, 2, 3, 4, 5, 6, 7].map((a) => rageMult(0, 40 * D, a));
+    for (let i = 1; i < r.length; i++) expect(r[i]!).toBeGreaterThan(r[i - 1]!);
+    expect(rageMult(0, 40 * D, 12)).toBe(rageMult(0, 40 * D, 7));
+  });
+  it('le point retient l’activité du moment où son attaque est programmée', () => {
+    const id = controlIdOf('mine');
+    const lazy = byId(captureControl(base(30), id, ['a0'], 0, 1), id);
+    const busy = byId(captureControl(base(30), id, ['a0'], 0, 7), id);
+    expect(lazy.control!.activity).toBe(1);
+    expect(
+      byId(holdControl(captureControl(base(30), id, ['a0'], 0, 7), id, H, 2), id).control!.activity,
+    ).toBe(2);
+    const at = (p: typeof lazy) => ({
+      ...p,
+      control: { ...p.control!, attackAt: 10 * D, angerSince: 0 },
+    });
+    expect(retakeForce(at(lazy), 1).size).toBeLessThan(retakeForce(at(busy), 1).size);
+  });
+  it('un point d’avant (sans activité notée) garde la colère pleine', () => {
+    const p = byId(
+      captureControl(base(30), controlIdOf('mine'), ['a0'], 0, 7),
+      controlIdOf('mine'),
+    );
+    const legacy = {
+      ...p,
+      control: { ...p.control!, activity: undefined, attackAt: 5 * D, angerSince: 0 },
+    };
+    const calm = { ...legacy, control: { ...legacy.control, angerSince: undefined } };
+    expect(retakeForce(legacy, 1).size / retakeForce(calm, 1).size).toBeCloseTo(
+      rageMult(0, 5 * D, 7),
+      9,
+    );
   });
   it('aucune colère tant qu’elle est cachée', () => {
     expect(mineAt(base(30, 1)).angerSince).toBeUndefined();
@@ -157,12 +196,13 @@ describe('😡 la colère : ses armées grossissent chaque jour où on ne l’ab
     const calm = { ...p, control: { ...p.control!, attackAt: 5 * D, angerSince: undefined } };
     const angry = { ...p, control: { ...p.control!, attackAt: 5 * D, angerSince: 0 } };
     expect(retakeForce(angry, 1).size / retakeForce(calm, 1).size).toBeCloseTo(
-      rageMult(0, 5 * D),
+      rageMult(0, 5 * D, 7),
       9,
     );
   });
   it('la fiche dit la colère', () => {
-    expect(citadelLabel(base(30), MINE_CIT, 3 * D)!.title).toMatch(/😡 \+15 %/);
+    expect(citadelLabel(base(30), MINE_CIT, 3 * D, 7)!.title).toMatch(/😡 \+15 %/);
+    expect(citadelLabel(base(30), MINE_CIT, 3 * D, 0)!.title).not.toMatch(/😡/);
   });
 });
 
@@ -269,11 +309,11 @@ describe('🏯 on l’attaque en groupe, héros compris', () => {
   });
   it('la fiche dit le palier, les points qu’elle attaque et la trêve', () => {
     const m = razeCitadel(base(30), MINE_CIT, 0);
-    const l = citadelLabel(m, MINE_CIT, H)!;
+    const l = citadelLabel(m, MINE_CIT, H, 7)!;
     expect(l.title).toBe('🏯 Palier 1');
     expect(l.detail).toMatch(/Mine fortifiée/);
     expect(l.detail).toMatch(/trêve/);
-    expect(citadelLabel(base(30), MINE_CIT, H)!.detail).toMatch(/abats-la/);
+    expect(citadelLabel(base(30), MINE_CIT, H, 7)!.detail).toMatch(/abats-la/);
   });
 });
 

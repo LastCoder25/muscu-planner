@@ -454,12 +454,23 @@ function rageSinceOf(c: ControlState): number | undefined {
   return Math.max(c.discoveredAt, c.truceUntil ?? 0);
 }
 
-/** 😡 Le multiplicateur d'armée d'une colère commencée à `since`, à l'instant `at`. */
-export function rageMult(since: number | undefined, at: number): number {
+/** 😡 Ce que la colère ajoute par jour, selon les jours actifs sur 7 : pleine à 7/7, nulle
+ *  à 0 — un joueur peu actif n'est pas harcelé comme un joueur actif (même règle que le délai
+ *  des reprises, `retakeDelayMs`). */
+export function rageRate(activeDays7: number): number {
+  return (CITADEL.ragePerDay * Math.min(7, Math.max(0, activeDays7))) / 7;
+}
+
+/** 😡 Le multiplicateur d'armée d'une colère commencée à `since`, à l'instant `at`.
+ *  ⚠️ `activeDays7` est REQUIS : l'oublier ferait s'énerver au rythme d'un joueur actif. */
+export function rageMult(since: number | undefined, at: number, activeDays7: number): number {
   if (since === undefined) return 1;
   const days = Math.floor(Math.max(0, at - since) / DAY_MS);
-  return 1 + CITADEL.ragePerDay * Math.min(CITADEL.rageMaxDays, days);
+  return 1 + rageRate(activeDays7) * Math.min(CITADEL.rageMaxDays, days);
 }
+
+/** 😡 L'activité notée sur un point à la programmation de son attaque (7 pour un point d'avant). */
+const activityOf = (c: ControlState | undefined): number => c?.activity ?? 7;
 
 /** 🏯 Combien de points qu'elle attaque le joueur tient. */
 function heldFor(pois: readonly Poi[], i: number): number {
@@ -687,6 +698,7 @@ export function citadelLabel(
   map: ExpeditionMap | null | undefined,
   id: string,
   now: number,
+  activeDays7: number,
 ): { title: string; detail: string } | null {
   const i = CITADEL_IDS.indexOf(id);
   const c = map?.pois.find((p) => p.id === id)?.control;
@@ -695,7 +707,7 @@ export function citadelLabel(
   const held = heldFor(map.pois, i);
   const truce = (c.truceUntil ?? 0) - now;
   const targets = citadelTargets(map.pois, i).map((k) => CONTROL_KIND_LABEL[k]);
-  const rage = Math.round((rageMult(rageSinceOf(c), now) - 1) * 100);
+  const rage = Math.round((rageMult(rageSinceOf(c), now, activeDays7) - 1) * 100);
   const weak = held
     ? ` · affaiblie de ${Math.round(CITADEL.perHeldPoint * held * 100)} % par tes points tenus`
     : '';
@@ -705,7 +717,7 @@ export function citadelLabel(
       (targets.length ? `elle attaque : ${targets.join(', ')}` : 'elle n’attaque aucun point') +
       (truce > 0
         ? ` · trêve encore ${formatDuration(truce)}`
-        : ` · ses armées grossissent de ${Math.round(CITADEL.ragePerDay * 100)} % par jour sans l’abattre (colère +${rage} %) · abats-la : 3 jours sans reprise sur ces points`) +
+        : ` · ses armées grossissent de ${Math.round(rageRate(activeDays7) * 1000) / 10} % par jour sans l’abattre (colère +${rage} %) · abats-la : 3 jours sans reprise sur ces points`) +
       weak +
       ' · un échec ou 7 jours sans la battre : palier −1.',
   };
@@ -850,6 +862,7 @@ export function captureControl(
         at + retakeDelayMs(id, at, activeDays7),
         truceUntilFor(map, p.control!.kind),
       ),
+      activity: activeDays7,
       assault: false,
       // 🏅 Repris : il repart des crans qui lui restaient (ceux que l'ennemi n'a pas usés).
       tier: controlTier(p.control, at),
@@ -957,6 +970,7 @@ export function holdControl(
         at + retakeDelayMs(id, at, activeDays7),
         truceUntilFor(map, p.control!.kind),
       ),
+      activity: activeDays7,
     },
   }));
 }
@@ -1013,7 +1027,11 @@ export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
   // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
   const threat =
     tierThreatMult(tierAtAttack(p.control)) *
-    rageMult(p.control?.angerSince, p.control?.attackAt ?? p.control?.angerSince ?? 0);
+    rageMult(
+      p.control?.angerSince,
+      p.control?.attackAt ?? p.control?.angerSince ?? 0,
+      activityOf(p.control),
+    );
   return garrisonHoldChance(p, allies, retakeBoost(p, allies) * threat);
 }
 
@@ -1072,7 +1090,11 @@ export function retakeForce(p: Poi, boost: number): Pick<ControlState, 'faction'
   // l'attaque (APRÈS le plafond de tenue, cf. `TIER`).
   const threat =
     tierThreatMult(tierAtAttack(p.control)) *
-    rageMult(p.control?.angerSince, p.control?.attackAt ?? p.control?.angerSince ?? 0);
+    rageMult(
+      p.control?.angerSince,
+      p.control?.attackAt ?? p.control?.angerSince ?? 0,
+      activityOf(p.control),
+    );
   return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * threat };
 }
 

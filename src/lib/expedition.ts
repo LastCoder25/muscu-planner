@@ -121,6 +121,9 @@ export interface ControlState {
   /** 😡 Point attaqué par une citadelle : depuis quand elle s'énerve (sa découverte ou la fin de
    *  sa dernière trêve). Absent : aucune colère. */
   angerSince?: number;
+  /** 😡 Jours actifs sur 7 du joueur quand la prochaine attaque a été programmée : la colère
+   *  monte d'autant moins vite qu'il s'entraîne peu. Absent (points d'avant) : 7. */
+  activity?: number;
   /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
   attackAt?: number;
   /** Nombre de fois où l'ennemi l'a repris : entre dans les graines de re-tirage. */
