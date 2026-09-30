@@ -219,6 +219,7 @@
             :down-key="downKey"
             :imminent-key="imminentKey"
             :tier-key="tierKey"
+            :garrison-key="garrisonKey"
             :target="active && voyageTargetShown(active, now) ? active.poi : null"
             :target-down="heroTargetDown"
             :travel-targets="travelTargets"
@@ -383,6 +384,7 @@
       :model-value="true"
       inline
       :rows="attacks"
+      :holds="attackHolds"
       @open="openAttack"
     />
     <ControlPointsSheet
@@ -1239,6 +1241,9 @@ import {
   departureRisk,
   heroDefends,
   guardUnits,
+  siegeHoldChance,
+  scoutClarity,
+  scoutLevel,
   ODDS_LABEL,
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -1260,6 +1265,7 @@ import {
   controlFreeSeats,
   militiaFreeSeats,
   controlRoster,
+  garrisonDots,
   controlTravelMult,
   controlYieldCard,
   controlTier,
@@ -1899,6 +1905,15 @@ const tierKey = computed(() =>
         `${p.id}:${p.control!.kind === 'citadel' ? citadelPalier(p.control, coarseNow.value) : controlTier(p.control, coarseNow.value)}`,
     )
     .filter((s) => !s.endsWith(':0'))
+    .join('|'),
+);
+/** ⚫ La garnison de chaque point tenu, en points sous le fort (`garrisonDots`), « id:lettres »
+ *  joints par « | » — une chaîne, pour ne re-dessiner les lieux que si elle change. Lue sur
+ *  la MÊME liste que « Places fortes » : les deux ne peuvent pas se contredire. */
+const garrisonKey = computed(() =>
+  ctlRoster.value
+    .map((r) => `${r.poi.id}:${garrisonDots(r)}`)
+    .filter((s) => !s.endsWith(':'))
     .join('|'),
 );
 const livePoi = computed(() =>
@@ -2896,6 +2911,42 @@ function toggleMapPanel(id: MapPanel) {
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
 const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
+/** 🛡️ Ce que TA défense actuelle tiendrait face à chaque armée de la liste (demandé : « le
+ *  % de défense de ces armées selon l'endroit qu'elles attaquent et la défense actuelle »).
+ *  ⚠️ Aucune règle nouvelle : un SIÈGE rejoue `siegeHoldChance` (le pronostic de la Base,
+ *  héros présent à l'heure de l'assaut compris), une REPRISE `defenseOf` (celui de la fiche
+ *  du point, défenseurs présents à l'heure de l'attaque). `null` = inconnu : un siège sans
+ *  renseignement de la Tour de guet n'annonce rien — même garde que la Base. Horloge
+ *  grossière, et calculé seulement quand la liste est dépliée (prop lue sous `v-if`). */
+const attackHolds = computed<Record<string, number | null>>(() => {
+  const out: Record<string, number | null> = {};
+  const b = base.value;
+  const raid = incoming.value;
+  for (const r of attacks.value) {
+    if (r.kind === 'retake') {
+      out[r.army.id] = r.target ? (defenseOf(r.target)?.pct ?? null) : null;
+      continue;
+    }
+    const known =
+      !!b &&
+      !!raid &&
+      r.army.army?.targetId === raid.id &&
+      scoutClarity(scoutLevel(b.defenses), raid.level, heroLevel.value, raid.seed) > 0;
+    out[r.army.id] =
+      known && b && raid
+        ? Math.round(
+            siegeHoldChance(
+              b.defenses,
+              heroLevel.value,
+              heroDefendsNow.value,
+              guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value, milHome.value),
+              raid,
+            ) * 100,
+          )
+        : null;
+  }
+  return out;
+});
 /** ⚔️ L'armée entourée d'une aura (touchée dans la liste) ; elle s'éteint si l'armée n'est
  *  plus sur la carte. */
 const focusArmy = ref<string | null>(null);
@@ -3735,7 +3786,9 @@ const travelTargets = stableBy(
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 // 🗼 Les tours de guet tenues raccourcissent les trajets APRÈS l'Avant-poste.
 const travelMult = computed(
-  () => travelTimeMult(char.row?.buildings ?? []) * controlTravelMult(char.row?.expedition_map, now.value),
+  () =>
+    travelTimeMult(char.row?.buildings ?? []) *
+    controlTravelMult(char.row?.expedition_map, now.value),
 );
 const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
