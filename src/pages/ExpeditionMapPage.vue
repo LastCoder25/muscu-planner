@@ -181,15 +181,6 @@
                duquel on parle. Posé aux coordonnées que porte le voyage — le lieu d'un convoi
                est retiré de la carte au départ, il doit se retrouver quand même. -->
           <circle v-if="focusPoi" :cx="focusPoi.x" :cy="focusPoi.y" r="8" class="trip-focus-halo" />
-          <!-- ⚔️ L'armée touchée dans la liste des attaques (demandé : « une aura pour la trouver
-               sur la carte ») : relue à chaque tick, elle suit l'armée qui marche. -->
-          <circle
-            v-if="focusArmyPoi"
-            :cx="focusArmyPoi.x"
-            :cy="focusArmyPoi.y"
-            r="9"
-            class="trip-focus-halo army-focus-halo"
-          />
 
           <!-- 🗺️ Les lieux (à prendre, cible du héros, cibles des équipes) : un composant à part
                pour ne pas se re-diffuser à chaque seconde (cf. `MapPoiLayer`). -->
@@ -202,7 +193,7 @@
             <circle :cx="a.tx" :cy="a.ty" :r="a.tr" class="army-target" />
           </g>
           <MapPoiLayer
-            :pois="mapPois"
+            :pois="placePois"
             :selected-id="selected?.id ?? null"
             :dimmed-key="dimmedKey"
             :veiled-key="veiledKey"
@@ -232,16 +223,6 @@
             />
             <circle :cx="v.at.x" :cy="v.at.y" r="3" class="van-mark" :class="v.kind" />
             <text :x="v.at.x" :y="v.at.y + 1.1" class="van-emo">{{ v.emo }}</text>
-          </g>
-
-          <!-- ⚔️ La bande qu'on intercepte marche VERS le point de rencontre pendant que le
-               groupe y court : on voit les deux colonnes converger, et le choc s'annonce là
-               où elles se croiseront. -->
-          <g v-for="b in shownBands" :key="'band' + b.id" class="band-march">
-            <line :x1="b.x" :y1="b.y" :x2="b.meetX" :y2="b.meetY" class="band-path" />
-            <circle :cx="b.meetX" :cy="b.meetY" r="6.5" class="clash-ring" />
-            <circle :cx="b.x" :cy="b.y" r="3.2" class="band-mark" />
-            <text :x="b.x" :y="b.y + 1.1" class="van-emo">{{ b.emo }}</text>
           </g>
 
           <g v-if="active && hero && !troopsHidden" :class="{ recallable: heroRecallable }">
@@ -320,6 +301,40 @@
               </text>
             </g>
           </g>
+
+          <!-- ⚔️ LES ARMÉES AU PREMIER PLAN (signalé : « les icônes des attaques passent sous les
+               bâtiments, celle en cours disparaît derrière la base ») : dessinées APRÈS la ville
+               et les lieux, pour qu'une armée arrivée au pied des murs reste visible et
+               cliquable. Même composant que les lieux, sans cibles de voyage. -->
+          <!-- ⚔️ L'armée touchée dans la liste des attaques (demandé : « une aura pour la trouver
+               sur la carte ») : relue à chaque tick, elle suit l'armée qui marche. -->
+          <circle
+            v-if="focusArmyPoi"
+            :cx="focusArmyPoi.x"
+            :cy="focusArmyPoi.y"
+            r="9"
+            class="trip-focus-halo army-focus-halo"
+          />
+          <!-- ⚔️ La bande qu'on intercepte marche VERS le point de rencontre pendant que le
+               groupe y court : on voit les deux colonnes converger, et le choc s'annonce là
+               où elles se croiseront. -->
+          <g v-for="b in shownBands" :key="'band' + b.id" class="band-march">
+            <line :x1="b.x" :y1="b.y" :x2="b.meetX" :y2="b.meetY" class="band-path" />
+            <circle :cx="b.meetX" :cy="b.meetY" r="6.5" class="clash-ring" />
+            <circle :cx="b.x" :cy="b.y" r="3.2" class="band-mark" />
+            <text :x="b.x" :y="b.y + 1.1" class="van-emo">{{ b.emo }}</text>
+          </g>
+          <MapPoiLayer
+            :pois="armyPois"
+            :selected-id="selected?.id ?? null"
+            :dimmed-key="dimmedKey"
+            :veiled-key="veiledKey"
+            :down-key="downKey"
+            :imminent-key="imminentKey"
+            :target="null"
+            :travel-targets="[]"
+            @select="selectPoi"
+          />
         </svg>
       </div>
 
@@ -1687,6 +1702,11 @@ const troopPoiIds = computed(() => new Set(travelersOnMap.value.map((v) => v.poi
 const mapPois = computed(() =>
   mapPoisFor(troopMode.value, shownPois.value, pois.value, troopPoiIds.value),
 );
+/** ⚔️ Les armées en campagne se dessinent au premier plan, au-dessus de la ville et des
+ *  lieux (cf. le second `MapPoiLayer`) ; les autres lieux restent dessous. */
+const isMarching = (p: Poi) => p.type === 'warband' || !!p.army;
+const placePois = computed(() => mapPois.value.filter((p) => !isMarching(p)));
+const armyPois = computed(() => mapPois.value.filter(isMarching));
 /** ⚔️🗼 Les trajectoires des armées en campagne visibles (filtres compris). */
 const armyPaths = computed(() =>
   mapPois.value.map(armyTrajectory).filter((a): a is ArmyPath => !!a),
