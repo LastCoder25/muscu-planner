@@ -440,7 +440,9 @@ export type RecallBlock = 'arrived' | 'turned' | 'combined';
 export type RecallTarget =
   | { kind: 'hero' }
   | { kind: 'party'; id: string }
-  | { kind: 'reinf'; pointId: string; ids: readonly string[] };
+  | { kind: 'reinf'; pointId: string; ids: readonly string[] }
+  /** 🏠🔙 Un retour vers la base d'un point fixe qui y retourne (`recallReturns`). */
+  | { kind: 'return'; pointId: string; ids: readonly string[] };
 
 export const RECALL_BLOCK_LABEL: Record<RecallBlock, string> = {
   arrived: 'elle est déjà arrivée',

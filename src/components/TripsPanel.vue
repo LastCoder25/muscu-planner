@@ -55,8 +55,9 @@
             >+{{ t.members.length - FACES_MAX }}</span
           >
         </span>
-        <span class="tr-poi">
-          <span v-if="isRiftPoi(t.poi)" class="tr-rift">
+        <span class="tr-poi" :title="t.toBase ? 'La base' : poiLabel(t.poi)">
+          <template v-if="t.toBase">🏰</template>
+          <span v-else-if="isRiftPoi(t.poi)" class="tr-rift">
             <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
           </span>
           <template v-else>{{ poiEmo(t.poi) }}</template>
@@ -182,6 +183,8 @@ export interface MapTrip {
   haul: HaulPill[];
   /** 🧭 D'où part la troupe : un point fixe, ou `null` = la base. */
   from: Poi | null;
+  /** 🏠 La troupe rentre à la BASE (un retour d'un point fixe) : l'objectif est 🏰. */
+  toBase?: boolean;
   /** 🛡️ Montrer les portraits des membres sous l'icône (tuiles de renfort). */
   faces?: boolean;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */

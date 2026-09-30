@@ -1129,6 +1129,7 @@ import RiftPortal from '@/components/RiftPortal.vue';
 import {
   POI_EMO,
   POI_LABEL,
+  poiLabel,
   type ExpeditionMessage,
   EXPE,
   travelPosition,
@@ -2484,6 +2485,7 @@ const returnsOnMap = computed(() =>
     sentAt: r.sentAt,
     returnAt: r.returnAt,
     arriveIn: r.returnAt - now.value,
+    turned: r.turnBack !== undefined,
   })),
 );
 /** ⚔️🧭 Les groupes d'une attaque combinée en préparation : chez eux tant qu'ils attendent
@@ -2556,13 +2558,25 @@ const travelersOnMap = computed(() => [
       ...(r.origin ? { homeName: 'Au point de départ' } : {}),
     } as RecallInfo,
   })),
+  // 🏠🔙 Un retour vers la base peut rebrousser chemin vers son point (`recallReturns`) —
+  // sauf s'il est lui-même un demi-tour.
   ...returnsOnMap.value.map((r) => ({
     ...r,
     emo: '🏠',
     kind: 'reinf' as const,
-    recall: undefined as RecallTarget | undefined,
-    recallLabel: '',
-    recallInfo: null as RecallInfo | null,
+    recall: r.turned ? undefined : { kind: 'return' as const, pointId: r.poi.id, ids: r.members },
+    recallLabel: `Le retour (${crewLabel(r.members)})`,
+    recallInfo: {
+      kind: 'return',
+      label: `Le retour (${crewLabel(r.members)})`,
+      emo: '🏠',
+      poi: r.poi,
+      hero: false,
+      members: r.members,
+      sentAt: r.sentAt,
+      arriveAt: r.returnAt,
+      homeName: `De retour sur ${poiLabel(r.poi)}`,
+    } as RecallInfo,
   })),
 ]);
 /** 🚶 Le filtre « Déplacements de troupes » : masqués, les voyages ne se dessinent plus sur la
@@ -2679,8 +2693,9 @@ const trips = computed(() => {
       pct: r.pct,
       back: true,
       withHero: false,
-      // 🏠 Un retour part du point qu'il quitte.
+      // 🏠 Un retour part du point qu'il quitte, et va à la BASE.
       from: r.poi,
+      toBase: true,
       members: r.members,
       haul: [],
       title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatDuration(r.arriveIn)}`,

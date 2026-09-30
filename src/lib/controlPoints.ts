@@ -2044,6 +2044,67 @@ export function canTurnBack(
   return r.from !== undefined && !r.turnAt && now < r.at;
 }
 
+/**
+ * 🔙 UN RETOUR VERS LA BASE REBROUSSE CHEMIN (2026-09-30, signalé : « quand je fais revenir une
+ * garnison, je n'ai pas de demi-tour »). Ceux ramenés d'un point et encore en route y
+ * retournent, en autant de temps qu'ils ont déjà marché : ils redeviennent des RENFORTS du
+ * point, partis de là où ils ont tourné (`turnAt`, donc pas de second demi-tour). Rend la
+ * raison d'un refus, ou la carte et l'arrivée de chacun.
+ * ⚠️ Seulement vers un point encore À NOUS et qui a la place de TOUS (champions ET miliciens :
+ * la garnison de 5) — un demi-tour partiel laisserait deviner qui est reparti. Un retour qui
+ * est lui-même un demi-tour (`turnBack`) ne rebrousse pas une seconde fois.
+ */
+export type ReturnRecallBlock = 'arrived' | 'turned' | 'notHeld' | 'full';
+export const RETURN_RECALL_LABEL: Record<ReturnRecallBlock, string> = {
+  arrived: 'ils sont déjà rentrés',
+  turned: 'ils ont déjà fait demi-tour',
+  notHeld: 'ce lieu n’est plus à toi',
+  full: 'plus assez de places sur ce lieu',
+};
+export function recallReturns(
+  map: ExpeditionMap,
+  pointId: string,
+  ids: readonly string[],
+  now: number,
+): { map: ExpeditionMap; back: { id: string; at: number }[] } | { block: ReturnRecallBlock } {
+  const p = map.pois.find((q) => q.id === pointId);
+  const c = p?.control;
+  const want = new Set(ids);
+  const list = (c?.returning ?? []).filter((r) => want.has(r.id) && now < r.at);
+  if (!p || !c || !list.length) return { block: 'arrived' };
+  if (list.some((r) => r.turnBack !== undefined)) return { block: 'turned' };
+  if (c.owner !== 'player') return { block: 'notHeld' };
+  const nMil = list.filter((r) => isMilitiaId(r.id)).length;
+  if (controlFreeSeats(c) < list.length - nMil || militiaFreeSeats(c) < list.length)
+    return { block: 'full' };
+  const town = EXPE.town;
+  const back = list.map((r) => {
+    const from = Math.min(now, r.from);
+    const done = now - from;
+    const f = Math.min(1, done / Math.max(1, r.at - from));
+    return {
+      id: r.id,
+      from: now,
+      at: now + done,
+      turnAt: { x: p.x + (town.x - p.x) * f, y: p.y + (town.y - p.y) * f },
+    };
+  });
+  const gone = new Set(back.map((b) => b.id));
+  return {
+    map: withControl(map, pointId, (q) => {
+      const returning = (q.control!.returning ?? []).filter((r) => !gone.has(r.id));
+      const ctl = {
+        ...q.control!,
+        reinforcing: [...(q.control!.reinforcing ?? []), ...back],
+      };
+      if (returning.length) ctl.returning = returning;
+      else delete ctl.returning;
+      return { ...q, control: ctl };
+    }),
+    back: back.map((b) => ({ id: b.id, at: b.at })),
+  };
+}
+
 /** 🏠 Des champions ou miliciens RAMENÉS d'un point partent vers la base : on les dessine
  *  sur la carte jusqu'à `at`. ⚠️ Ils doivent déjà être sortis de la garnison et des renforts
  *  (`releaseFromControl`) : ceci ne fait que noter le trajet. */

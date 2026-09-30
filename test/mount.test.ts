@@ -3095,6 +3095,47 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('1 h 00 plus tôt');
   }, 30_000);
 
+  it('🏠🔙 RecallSheet : un retour vers la base qui retourne sur son point', async () => {
+    const { default: RecallSheet } = await import('@/components/RecallSheet.vue');
+    const { recallPreview } = await import('@/lib/party');
+    let out = '';
+    await mountIt(
+      RecallSheet,
+      {
+        modelValue: true,
+        ask: {
+          kind: 'return',
+          label: 'Le retour (1 champion)',
+          emo: '🏠',
+          poi: {
+            id: 'p',
+            type: 'control',
+            level: 22,
+            x: 1,
+            y: 1,
+            distNorm: 0.5,
+            spawnedAt: 0,
+            expiresAt: 9e15,
+          },
+          hero: false,
+          homeName: 'De retour sur la mine',
+        },
+        preview: recallPreview({ sentAt: 0, arriveAt: 40 * 60_000 }, 10 * 60_000),
+        crew: [{ id: 'a', name: 'Orsène', emoji: '🗡️' }],
+        militia: 0,
+      },
+      undefined,
+      undefined,
+      '/',
+      (hh) => (out = hh),
+    );
+    expect(out).toContain('vers la base, depuis');
+    expect(out).toContain('rc-route rev');
+    expect(out).toContain('À la base dans 30 min');
+    expect(out).toContain('De retour sur la mine dans 10 min');
+    expect(out).toContain('reprennent leur poste');
+  }, 30_000);
+
   it('🧭⚔️ TripsPanel : voyages et attaques dans la même rangée, filtrables', async () => {
     const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     const army = {

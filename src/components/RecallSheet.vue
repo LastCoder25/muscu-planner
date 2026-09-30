@@ -10,7 +10,8 @@
         <div class="rc-htxt">
           <div class="rc-title">Faire demi-tour ?</div>
           <div class="rc-sub">
-            {{ ask.label }} · vers {{ POI_LABEL[ask.poi.type] }}
+            {{ ask.label }} · {{ back ? 'vers la base, depuis' : 'vers' }}
+            {{ POI_LABEL[ask.poi.type] }}
             <span class="rc-rank" :style="{ '--rk': rank.color }">{{ rank.name }}</span>
           </div>
         </div>
@@ -18,7 +19,7 @@
 
       <!-- 🗺️ Le chemin : ce qui est fait (plein), ce qui reste (pointillé), et là où l'on
            tournerait. Le marqueur se lit comme la troupe sur la carte. -->
-      <div class="rc-route" role="img" :aria-label="routeAria">
+      <div class="rc-route" :class="{ rev: back }" role="img" :aria-label="routeAria">
         <span class="rc-end">
           <span class="rc-end-ico">🏰</span>
           <small>Base</small>
@@ -60,8 +61,11 @@
         <button type="button" class="rc-tile go" @click="emit('update:modelValue', false)">
           <span class="t-ico">➡️</span>
           <b>Continuer</b>
-          <span class="t-line">Arrivée dans {{ fmt(preview.toGoMs) }}</span>
-          <span class="t-line dim">
+          <span class="t-line"
+            >{{ back ? 'À la base dans' : 'Arrivée dans' }} {{ fmt(preview.toGoMs) }}</span
+          >
+          <span v-if="back" class="t-line dim">Le lieu reste sans eux</span>
+          <span v-else class="t-line dim">
             {{
               preview.homeIfContinueMs === null
                 ? 'Reste sur le point'
@@ -81,13 +85,19 @@
       </div>
 
       <div class="rc-pills">
-        <span class="rc-pill">🚫 Lieu non atteint</span>
-        <span class="rc-pill">⚖️ Rien gagné, rien perdu</span>
-        <span class="rc-pill">{{
-          ask.kind === 'reinf'
-            ? '🛡️ Le point ne sera pas renforcé'
-            : '📍 Le lieu reste sur la carte'
-        }}</span>
+        <template v-if="back">
+          <span class="rc-pill">🏰 Pas rentrés à la base</span>
+          <span class="rc-pill">🛡️ Ils reprennent leur poste à l’arrivée</span>
+        </template>
+        <template v-else>
+          <span class="rc-pill">🚫 Lieu non atteint</span>
+          <span class="rc-pill">⚖️ Rien gagné, rien perdu</span>
+          <span class="rc-pill">{{
+            ask.kind === 'reinf'
+              ? '🛡️ Le point ne sera pas renforcé'
+              : '📍 Le lieu reste sur la carte'
+          }}</span>
+        </template>
       </div>
     </div>
   </q-dialog>
@@ -102,7 +112,8 @@ import { formatDuration } from '@/lib/duration';
 import type { RecallPreview } from '@/lib/party';
 
 export interface RecallAsk {
-  kind: 'hero' | 'party' | 'reinf';
+  /** `return` : un retour d'un point fixe vers la base, qui y retourne (chemin inversé). */
+  kind: 'hero' | 'party' | 'reinf' | 'return';
   label: string;
   emo: string;
   poi: Poi;
@@ -124,6 +135,8 @@ const emit = defineEmits<{ 'update:modelValue': [boolean]; confirm: [] }>();
 const rank = computed(() =>
   props.ask ? poiRank(props.ask.poi) : { color: 'var(--dim)', name: '' },
 );
+/** 🏠 Un retour vers la base : le chemin se lit du lieu vers la base. */
+const back = computed(() => props.ask?.kind === 'return');
 const pct = computed(() => `${Math.round((props.preview?.frac ?? 0) * 1000) / 10}%`);
 /** Ce que le demi-tour fait gagner sur le retour, si l'on continuait. */
 const saved = computed(() => {
@@ -133,7 +146,7 @@ const saved = computed(() => {
 const fmt = (ms: number) => formatDuration(Math.max(0, ms));
 const routeAria = computed(() =>
   props.preview
-    ? `Déjà ${fmt(props.preview.walkedMs)} de marche, encore ${fmt(props.preview.toGoMs)} jusqu’au lieu`
+    ? `Déjà ${fmt(props.preview.walkedMs)} de marche, encore ${fmt(props.preview.toGoMs)} ${props.ask?.kind === 'return' ? 'jusqu’à la base' : 'jusqu’au lieu'}`
     : '',
 );
 </script>
@@ -194,6 +207,10 @@ const routeAria = computed(() =>
 }
 
 /* 🗺️ Le chemin */
+/* 🏠 Un retour : le lieu à gauche, la base à droite — la barre se remplit depuis le lieu. */
+.rc-route.rev {
+  flex-direction: row-reverse;
+}
 .rc-route {
   display: flex;
   align-items: center;

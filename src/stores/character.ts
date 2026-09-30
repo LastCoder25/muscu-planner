@@ -367,6 +367,8 @@ import {
   freeAway,
   sendHomeFromControl,
   settleReturns,
+  recallReturns,
+  RETURN_RECALL_LABEL,
   settleReinforcements,
   boostControlTrip,
   turnBackLabel,
@@ -5201,6 +5203,17 @@ export const useCharacterStore = defineStore('character', () => {
     await writesSettled();
     const cur = row.value;
     if (!cur) return 'personnage non chargé';
+    if (target.kind === 'return') {
+      if (!cur.expedition_map) return 'la carte n’est pas chargée';
+      const r = recallReturns(cur.expedition_map, target.pointId, target.ids, now);
+      if ('block' in r) return `Demi-tour impossible : ${RETURN_RECALL_LABEL[r.block]}.`;
+      // 🏰 Les champions reprennent leur poste : occupés jusqu'à leur arrivée sur le point.
+      await persist(userId, {
+        expedition_map: r.map,
+        adventurers: turnedBack(r.back.map((b) => ({ ...b, to: target.pointId }))),
+      });
+      return null;
+    }
     if (target.kind === 'reinf') {
       if (!cur.expedition_map) return 'la carte n’est pas chargée';
       const r = recallReinforcements(cur.expedition_map, target.pointId, target.ids, now);
@@ -5506,7 +5519,8 @@ export const useCharacterStore = defineStore('character', () => {
         }
       }
       const byOrigin = new Map<string, string[]>();
-      for (const t of m.transfers) byOrigin.set(t.fromId, [...(byOrigin.get(t.fromId) ?? []), t.id]);
+      for (const t of m.transfers)
+        byOrigin.set(t.fromId, [...(byOrigin.get(t.fromId) ?? []), t.id]);
       for (const [fromId, ids] of byOrigin)
         await tryGroup(ids, (x) =>
           transferControlGarrison(userId, fromId, m.toId, x, at, playerLevel),
