@@ -310,13 +310,10 @@ import {
   retakeDelayMs,
   ensureControls,
   holdControl,
-  loseControl,
-  attackerLevel,
+  loseControl,
   markAssault,
   recallReinforcements,
-  canTurnBack,
-  retakeForce,
-  retakeBoost,
+  canTurnBack,
   campGear,
   reinforceBlocker,
   reinforceControl,
@@ -351,7 +348,7 @@ import {
   detectRadius,
   pendingFieldHits,
   resolveFieldArmy,
-  retakeRemaining,
+  retakeBattle,
   syncFieldArmies,
 } from '@/lib/fieldArmy';
 import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
@@ -4360,7 +4357,6 @@ export const useCharacterStore = defineStore('character', () => {
       const ids = new Set(p.control!.garrison);
       // 🎲 Les assaillants ont LEUR rang, tiré à chaque attaque ; s'ils l'emportent, le lieu
       // le garde (un point tenu, lui, est neutre : il produit au niveau du héros).
-      const foe = { ...p, level: attackerLevel(map.seed, p, playerLevel) };
       // ⛏️🎯🌿 Ce que le point a produit jusqu'à l'attaque part AVANT le combat, même s'il
       // est perdu : on ne punit pas l'absence en confisquant ce qui était déjà sorti.
       const h = harvestControlIn(map, advs, gearStock, p.id, at, playerLevel);
@@ -4374,12 +4370,14 @@ export const useCharacterStore = defineStore('character', () => {
       // 🎲 Suspense : face à une garnison qui tiendrait plus de `CONTROL.maxHold`, l'ennemi
       // envoie plus de monde — la MÊME règle que ce que l'écran annonce (`garrisonHold`).
       const kit = escortKitOf(cur);
-      const force0 = retakeForce(
-        foe,
-        retakeBoost(foe, [...partyAllies(escort, kit, null), ...militia]),
+      // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas. ⚠️ `retakeBattle`
+      // est aussi ce que l'écran annonce (`controlAttackHold`) : ils ne peuvent pas diverger.
+      const { foe, force } = retakeBattle(
+        map.seed,
+        p,
+        [...partyAllies(escort, kit, null), ...militia],
+        playerLevel,
       );
-      // ⚔️🗼 Ce que les attaques en rase campagne ont abattu n'arrive pas.
-      const force = { ...force0, size: force0.size * retakeRemaining(p) };
       const seed = (at ^ (foe.level * 2654435761)) >>> 0 || 1;
       const o =
         escort.length || militia.length

@@ -646,7 +646,8 @@
             🛡️ À l’attaque : <b>{{ defenseNow.count }}</b> défenseur{{
               defenseNow.count > 1 ? 's' : ''
             }}
-            · repousse environ <b>{{ defenseNow.pct }} %</b> des assauts
+            · repousse environ <b>{{ defenseNow.pct }} %</b>
+            {{ defenseNow.vsArmy ? 'face à l’armée en approche' : 'des assauts' }}
             <span v-if="defenseNow.late" class="ctl-dim">
               · {{ defenseNow.late }} renfort{{ defenseNow.late > 1 ? 's' : '' }} arrivera trop
               tard</span
@@ -1141,6 +1142,7 @@ import {
   FIELD_ARMY,
   activeAttacks,
   armyTrajectory,
+  controlAttackHold,
   fieldArmySpec,
   seenRadius,
   type ArmyPath,
@@ -2012,14 +2014,23 @@ const reinforceLegMin = computed(() => {
 });
 /** 🛡️ La tenue d'un point tenu À L'HEURE DE L'ATTAQUE, avec d'éventuels renforts `extra`
  *  (arrivée en ms) — `defendersAtAttack` puis `controlDefenseHold`, la règle de la bataille.
+ *  ⚔️ Dès que l'armée de reprise est VISIBLE sur la carte, on juge contre ELLE (son rang, sa
+ *  troupe, ce que les sorties en ont abattu — `controlAttackHold`, la bataille du store) ;
+ *  avant, contre l'ennemi le plus fort possible (`controlDefenseHold`, un plancher).
  *  ⚠️ Sur l'horloge GROSSIÈRE : une simulation par appel, pas une par seconde. */
 function defenseOf(p: Poi | null, extra: { id: string; at: number }[] = []) {
   const c = p?.control;
   if (!p || !c || c.owner !== 'player') return null;
   const at = knownAttackAt(p, coarseNow.value);
   const { present, late } = defendersAtAttack(c, at, extra);
-  const hold = controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
-  return { pct: Math.round(hold * 100), count: present.length, late: late.length };
+  const seed = char.row?.expedition_map?.seed;
+  const vsArmy =
+    seed !== undefined &&
+    pois.value.some((q) => q.army?.kind === 'retake' && q.army.targetId === p.id);
+  const hold = vsArmy
+    ? controlAttackHold(seed, p, present, char.advList, roadCtx.value, heroLevel.value)
+    : controlDefenseHold(p, present, char.advList, roadCtx.value, heroLevel.value);
+  return { pct: Math.round(hold * 100), count: present.length, late: late.length, vsArmy };
 }
 /** Les renforts `ids` (champions) partent ensemble : ils arrivent au pas du plus lent,
  *  comme au départ réel (`partyLegMin`). Les miliciens choisis suivent à leur pas. */
@@ -2916,6 +2927,7 @@ const quickHold = computed(() => {
   for (const s of quickSources.value) for (const m of s.members) trans[m.id] = gainOf(m.id, m.min);
   return {
     pct: base.pct,
+    vsArmy: base.vsArmy,
     mil: gainOf(`${MILITIA_PREFIX}new0`, quickMilitiaMin.value),
     champ,
     trans,

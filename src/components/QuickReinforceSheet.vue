@@ -23,7 +23,8 @@
       </p>
       <!-- 🛡️ La tenue À L'ATTAQUE, et ce que chaque renfort y ajoute (arrivée comprise). -->
       <p v-if="hold" class="qr-hold">
-        🛡️ Repousse aujourd’hui environ <b>{{ hold.pct }} %</b> des assauts
+        🛡️ Repousse aujourd’hui environ <b>{{ hold.pct }} %</b>
+        {{ hold.vsArmy ? 'face à l’armée en approche' : 'des assauts' }}
       </p>
       <!-- 🛡️ Le milicien d'abord : c'est le renfort qu'on a le plus souvent sous la main, et il
            ne prend la place d'aucun champion qui aurait mieux à faire ailleurs. -->
@@ -130,6 +131,8 @@ defineProps<{
   /** 🎯 La tenue à l'attaque (%) et ce que chaque renfort y ajoute, en points. */
   hold: {
     pct: number;
+    /** Jugée contre l'armée en approche (visible), pas contre le pire cas. */
+    vsArmy?: boolean;
     mil: number;
     champ: Record<string, number>;
     trans: Record<string, number>;

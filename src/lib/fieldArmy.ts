@@ -43,9 +43,19 @@ import {
   type RaidGroup,
 } from './raid';
 import { BATTLE } from './siegeBattle';
-import { attackerLevel, retakeForce } from './controlPoints';
-import { campHurt, campLightHurt, fightCampForce, forceHaul, type PartyInput } from './camp';
-import { missionXpFor } from './caravan';
+import { CONTROL, attackerLevel, retakeBoost, retakeForce } from './controlPoints';
+import {
+  campHurt,
+  campLightHurt,
+  campWinPct,
+  fightCampForce,
+  forceHaul,
+  type PartyInput,
+} from './camp';
+import { missionXpFor, partyAllies, type EscortKit } from './caravan';
+import { militiaUnits } from './militia';
+import type { Adventurer } from './adventurers';
+import type { SkirmishUnit } from './skirmish';
 import { RIFT, riftMana } from './rift';
 
 /** Force de l'armée d'un SIÈGE en rase campagne, en champions de référence. ⚠️ MESURÉE
@@ -484,6 +494,46 @@ export function armyTrajectory(p: Poi): ArmyPath | null {
 /** La part de la troupe de reprise qui arrive vraiment (ce que les chocs n'ont pas abattu). */
 export function retakeRemaining(p: Pick<Poi, 'control'>): number {
   return 1 - clamp01(p.control?.retakeCut ?? 0);
+}
+
+/**
+ * ⚔️ LA BATAILLE D'UNE REPRISE, telle qu'elle sera livrée : les assaillants à LEUR niveau
+ * (`attackerLevel`, tiré pour CETTE attaque), leur troupe grossie si la garnison tiendrait
+ * trop bien (`retakeBoost`), amputée de ce que les sorties ont abattu (`retakeRemaining`).
+ * ⚠️ SOURCE UNIQUE de la résolution (store) ET du % affiché : l'un ne peut pas annoncer
+ * un ennemi que l'autre ne combat pas.
+ */
+export function retakeBattle(
+  mapSeed: number,
+  p: Poi,
+  allies: readonly SkirmishUnit[],
+  playerLevel: number,
+): { foe: Poi; force: CampSpec } {
+  const foe = { ...p, level: attackerLevel(mapSeed, p, playerLevel) };
+  const f0 = retakeForce(foe, retakeBoost(foe, allies));
+  return { foe, force: { ...f0, size: f0.size * retakeRemaining(p) } };
+}
+
+/**
+ * 🎯 La part des assauts que ces défenseurs repousseront face à l'armée QUI ARRIVE
+ * (demandé : « le % doit prendre en compte la défense ET l'attaquant »). Rejoue la bataille
+ * de `retakeBattle` sur les graines de pronostic, jamais celle du vrai combat.
+ * ⚠️ À n'appeler que quand l'armée est VISIBLE : avant, sa force est un secret.
+ */
+export function controlAttackHold(
+  mapSeed: number,
+  p: Poi,
+  ids: readonly string[],
+  advs: readonly Adventurer[],
+  kit: EscortKit,
+  playerLevel: number,
+): number {
+  const set = new Set(ids);
+  const champs = advs.filter((a) => set.has(a.id));
+  const allies = [...partyAllies(champs, kit, null), ...militiaUnits([...ids], playerLevel)];
+  if (!allies.length) return 0;
+  const { foe, force } = retakeBattle(mapSeed, p, allies, playerLevel);
+  return campWinPct(foe, force, allies, CONTROL.holdSamples);
 }
 
 function clamp01(x: number): number {
