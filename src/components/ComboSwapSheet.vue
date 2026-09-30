@@ -44,6 +44,7 @@
             <q-icon v-else name="fitness_center" size="24px" />
           </div>
           <div class="sw-name">{{ l.exercise_name }}</div>
+          <div v-if="groupOf(l.slot)" class="sw-grp-tag">{{ groupOf(l.slot) }}</div>
           <div class="sw-sub">
             {{ legDone(l) }}/{{ l.target }} → {{ legDone(l) + doneCount }}/{{
               l.target + leg.target
@@ -80,6 +81,7 @@
             >
           </div>
           <div class="sw-name">{{ e.name }}</div>
+          <div v-if="groupOf(slotOf(e))" class="sw-grp-tag">{{ groupOf(slotOf(e)) }}</div>
         </button>
       </div>
     </q-card>
@@ -98,6 +100,7 @@ import {
   legDone,
   legMode,
   COMBO_TRANSFER_BLOCK_LABEL,
+  transferSlotFor,
   type ComboChallenge,
   type ComboLeg,
   type ComboNewExercise,
@@ -197,7 +200,6 @@ const fresh = computed(() => {
   const cc = c.value;
   const l = leg.value;
   if (!cc || !l) return [];
-  const slot = comboSlot(l.slot);
   const taken = new Set<string>();
   for (const ch of challenges.list)
     if (ch.status === 'active' && !isCardioChallengeRow(ch))
@@ -206,7 +208,6 @@ const fresh = computed(() => {
   return lib.value
     .filter(
       (e) =>
-        (slot ? slot.muscles.includes(e.muscle_primary ?? '') : true) &&
         !isTennisExercise(e) &&
         !taken.has(variantFamilyKey(e.id)) &&
         comboTransferBlocker(cc, l.exercise_id, { exercise: newExercise(e) }) === null,
@@ -216,6 +217,17 @@ const fresh = computed(() => {
 
 const hasAnim = (id: string) => !!exerciseFrames(id);
 const exImg = (id: string) => exerciseImage(id);
+
+/** Groupe d'un exo neuf dans le défi (celui où il serait posé). */
+function slotOf(e: { muscle_primary?: string | null }): string | undefined {
+  return leg.value ? (transferSlotFor(leg.value, e.muscle_primary) ?? undefined) : undefined;
+}
+/** Étiquette du groupe, seulement s'il diffère de celui de l'exo quitté (jambes). */
+function groupOf(slot: string | undefined): string | null {
+  if (!slot || !leg.value || slot === leg.value.slot) return null;
+  const g = comboSlot(slot);
+  return g ? `${g.emoji} ${g.label}` : null;
+}
 
 function close() {
   emit('update:modelValue', false);
@@ -238,6 +250,13 @@ function pick(to: ComboTransferTarget, name: string) {
     const d = cc.legs.find((x) => x.exercise_id === to.leg)!;
     msg += ` ${name} : ${legDone(d)}/${d.target} → ${legDone(d) + n}/${d.target + l.target}.`;
   }
+  // Squat ↔ Charnière : le volume change de muscle, on le dit avant de valider.
+  const toSlot =
+    'leg' in to ? cc.legs.find((x) => x.exercise_id === to.leg)?.slot : slotOf(to.exercise);
+  const fromG = comboSlot(l.slot);
+  const toG = toSlot ? comboSlot(toSlot) : undefined;
+  if (fromG && toG && fromG.key !== toG.key)
+    msg += ` Le volume passe du groupe ${fromG.label} (${fromG.muscles.join(', ')}) au groupe ${toG.label} (${toG.muscles.join(', ')}).`;
   msg += ` ${l.exercise_name} quitte le défi. On ne peut pas revenir en arrière.`;
   $q.dialog({
     title: `⇄ ${l.exercise_name} → ${name}`,
@@ -349,6 +368,10 @@ async function apply(id: string, fromId: string, to: ComboTransferTarget, name: 
   font-weight: 600;
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+.sw-grp-tag {
+  font-size: 11px;
+  color: var(--accent);
 }
 .sw-sub {
   font-size: 12px;

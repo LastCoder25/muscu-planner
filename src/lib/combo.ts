@@ -8,7 +8,7 @@ import { REP_XP, assistMult, XP_MULT, MUSCU_MIN_XP } from './athlete';
 // faites s'il a été commencé, comme pour les challenges »).
 import { stopPlan, type StopPlan } from './challenges';
 import { daysBetweenIso } from './loginStreak';
-import { comboSlot, variantFamilyKey } from '@/data/combo';
+import { comboSlot, swapSlotsOf, variantFamilyKey } from '@/data/combo';
 import type { Level, Objective, SportPractice } from './types';
 import type { ComboChestRecord } from './comboChest';
 import {
@@ -1568,15 +1568,20 @@ export const COMBO_TRANSFER_BLOCK_LABEL: Record<ComboTransferBlock, string> = {
   notActive: 'Le défi n’est plus en cours.',
   noLeg: 'Exo introuvable dans le défi.',
   sameLeg: 'C’est déjà cet exo.',
-  otherSlot: 'Seulement vers un exo du même groupe musculaire.',
+  otherSlot: 'Seulement vers un exo du même groupe musculaire (ou des jambes entre elles).',
   modeMismatch: 'Les deux exos ne se comptent pas pareil (séries, reps ou durée).',
   alreadyIn: 'Ce mouvement est déjà dans ton défi.',
 };
 
 /** L'exo neuf appartient-il au groupe de l'exo quitté ? */
-function inSameSlot(from: ComboLeg, muscle: string | null | undefined): boolean {
-  const slot = comboSlot(from.slot);
-  return slot ? slot.muscles.includes(muscle ?? '') : muscle === from.muscle_primary;
+/** L'emplacement où poser un exo neuf de ce muscle, parmi ceux vers lesquels l'exo quitté
+ *  peut basculer (son groupe, ou les jambes entre elles) — `null` si aucun. Un exo d'un
+ *  emplacement inconnu (360 ancien) ne bascule que vers le même muscle. */
+export function transferSlotFor(from: ComboLeg, muscle: string | null | undefined): string | null {
+  if (!comboSlot(from.slot)) return muscle === from.muscle_primary ? from.slot : null;
+  for (const key of swapSlotsOf(from.slot))
+    if (comboSlot(key)?.muscles.includes(muscle ?? '')) return key;
+  return null;
 }
 
 /** Pourquoi on ne peut pas basculer — `null` si c'est possible. Source unique de l'écran
@@ -1593,13 +1598,13 @@ export function comboTransferBlocker(
     if (to.leg === fromId) return 'sameLeg';
     const dest = c.legs.find((l) => l.exercise_id === to.leg);
     if (!dest) return 'noLeg';
-    if (dest.slot !== from.slot) return 'otherSlot';
+    if (!swapSlotsOf(from.slot).includes(dest.slot)) return 'otherSlot';
     if (legMode(dest) !== legMode(from)) return 'modeMismatch';
     return null;
   }
   const e = to.exercise;
   if (e.exercise_id === fromId) return 'sameLeg';
-  if (!inSameSlot(from, e.muscle_primary)) return 'otherSlot';
+  if (!transferSlotFor(from, e.muscle_primary)) return 'otherSlot';
   if (e.time !== (legMode(from) === 'time')) return 'modeMismatch';
   // Le même mouvement déjà présent AILLEURS dans le défi (l'exo quitté, lui, s'en va : on
   // peut passer des dips aux dips assistés).
@@ -1655,7 +1660,9 @@ export function transferComboLeg(
 
   const e = to.exercise;
   const fresh: ComboLeg = {
-    slot: from.slot,
+    // Le groupe de l'exo neuf, pas celui du quitté : des squats remplacés par un soulevé de
+    // terre roumain passent dans la Charnière.
+    slot: transferSlotFor(from, e.muscle_primary) ?? from.slot,
     exercise_id: e.exercise_id,
     exercise_name: e.exercise_name,
     muscle_primary: e.muscle_primary ?? null,

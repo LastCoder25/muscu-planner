@@ -262,3 +262,58 @@ describe('refus', () => {
     expect(() => transferComboLeg(c, 'ex_bench_barbell', { leg: 'ex_pullup' })).toThrow();
   });
 });
+
+describe('les jambes entre elles : Squat ↔ Charnière', () => {
+  const squats = leg({
+    slot: 'squat',
+    exercise_id: 'ex_squat_jump',
+    exercise_name: 'Squats sautés',
+    muscle_primary: 'quadriceps',
+    rep_weight: 1,
+    weight_kg: null,
+    sets: [{ date: D1, reps: 15 }],
+  });
+  const rdl = leg({
+    slot: 'hinge',
+    exercise_id: 'ex_romanian_deadlift',
+    exercise_name: 'Soulevé de terre roumain',
+    muscle_primary: 'ischio-jambiers',
+  });
+  const neuf: ComboNewExercise = {
+    ...pompes,
+    exercise_id: 'ex_deadlift',
+    exercise_name: 'Soulevé de terre',
+    muscle_primary: 'ischio-jambiers',
+    rep_weight: 1.6,
+  };
+
+  it('des squats peuvent passer sur un soulevé de terre roumain déjà présent', () => {
+    const c = combo([squats, rdl]);
+    expect(comboTransferBlocker(c, 'ex_squat_jump', { leg: 'ex_romanian_deadlift' })).toBeNull();
+    const legs = transferComboLeg(c, 'ex_squat_jump', { leg: 'ex_romanian_deadlift' });
+    expect(legs).toHaveLength(1);
+    expect(legs[0]!.slot).toBe('hinge');
+    expect(legs[0]!.target).toBe(12);
+  });
+
+  it('…ou sur un exo neuf de la Charnière, posé dans la Charnière', () => {
+    const c = combo([squats]);
+    expect(comboTransferBlocker(c, 'ex_squat_jump', { exercise: neuf })).toBeNull();
+    const [l] = transferComboLeg(c, 'ex_squat_jump', { exercise: neuf });
+    expect(l).toMatchObject({ slot: 'hinge', exercise_id: 'ex_deadlift' });
+    // La série faite en squats sautés reste une série de squats sautés.
+    expect(setOrigin(l!, legSets(l!)[0]!).muscle_primary).toBe('quadriceps');
+  });
+
+  it('et dans l’autre sens', () => {
+    const c = combo([rdl, squats]);
+    expect(comboTransferBlocker(c, 'ex_romanian_deadlift', { leg: 'ex_squat_jump' })).toBeNull();
+  });
+
+  it('le haut du corps reste fermé : ni Poussée ↔ Tirage, ni jambes ↔ Poussée', () => {
+    const c = combo([bench(), squats]);
+    expect(comboTransferBlocker(c, 'ex_bench_barbell', { leg: 'ex_squat_jump' })).toBe('otherSlot');
+    expect(comboTransferBlocker(c, 'ex_squat_jump', { leg: 'ex_bench_barbell' })).toBe('otherSlot');
+    expect(comboTransferBlocker(c, 'ex_squat_jump', { exercise: pompes })).toBe('otherSlot');
+  });
+});
