@@ -48,7 +48,7 @@ import {
   CONTROL_KIND_LABEL,
   EXPE,
   distNormAt,
-  harvestGold,
+  mineVeinGold,
   revealRadius,
   recentDepartures,
   riftLevelFor,
@@ -1233,12 +1233,28 @@ const towerCutOf = (c: ControlState, now: number): number =>
 const towerDetectOf = (c: ControlState, now: number): number =>
   CONTROL.towerDetect * shareOf(c.garrison.length) * tierYieldMult(controlTier(c, now));
 
+/**
+ * ⛏️ Le NIVEAU DE RÉCOMPENSE de la mine d'un lieu fixe, pour un héros de niveau `L` : continu,
+ * sans palier (2026-09-30, mesuré ; demandé : « fais au mieux »).
+ * ⚠️ AVANT, on passait par `harvestGold` sur une mine fictive portant l'id du lieu : sa
+ * « difficulté » venait de GARDES tirés sur cet id — des gardes que le lieu fixe n'a pas.
+ * D'où des paliers : aucun gain du niveau 10 au 20 ni du 85 au 100, et un débit qui valait de
+ * 25 % à 100 % du filon au niveau du héros, en dents de scie.
+ * La courbe reproduit la MÊME magnitude moyenne (le débit n'a pas été mesuré contre le puits
+ * d'or : on lisse, on ne le déplace pas) : le niveau du héros jusqu'à 10 (le plancher de début
+ * de partie, `EXPE.earlySpawnCapLevel`), puis une montée douce, puis `lateK × L − lateOff`.
+ */
+const MINE_LEVEL = { earlySlope: 0.2, lateK: 0.85, lateOff: 10 } as const;
+export function controlMineLevel(L: number): number {
+  const l = Math.max(1, L);
+  const cap = EXPE.earlySpawnCapLevel;
+  const early = Math.min(l, cap) + Math.max(0, l - cap) * MINE_LEVEL.earlySlope;
+  return Math.max(early, MINE_LEVEL.lateK * l - MINE_LEVEL.lateOff);
+}
+
 /** ⛏️ L'or produit par heure pour une garnison de `n` champions. */
-export function controlGoldPerHour(p: Pick<Poi, 'id'>, n: number, playerLevel: number): number {
-  const haul = harvestGold(
-    { id: p.id, type: 'mine', level: Math.max(1, playerLevel) },
-    playerLevel,
-  );
+export function controlGoldPerHour(_p: Pick<Poi, 'id'>, n: number, playerLevel: number): number {
+  const haul = mineVeinGold(controlMineLevel(playerLevel));
   return (haul * shareOf(n)) / CONTROL.mineHoursPerHaul;
 }
 

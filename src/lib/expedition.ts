@@ -3340,11 +3340,18 @@ export function harvestGold(
   playerLevel: number | undefined,
 ): number {
   if (poi.type === 'mine' || poi.type === 'plunder') {
-    const L = heroRewardLevel(poi, playerLevel);
-    const vein = goldCost('mine', L) * (1.3 + rewardTravelFactor(L)) * EXPE.rewardGoldMult;
+    const vein = mineVeinGold(heroRewardLevel(poi, playerLevel));
     return Math.round(vein * (poi.type === 'plunder' ? PLUNDER_GOLD_MULT : 1));
   }
   return 0;
+}
+
+/** ⛏️ L'or du filon d'une mine de NIVEAU DE RÉCOMPENSE `L`, non arrondi — la formule de
+ *  `harvestGold`, lue aussi par la mine d'un lieu fixe (`controlGoldPerHour`), qui n'a pas de
+ *  gardes donc pas de « difficulté » à traduire. */
+export function mineVeinGold(L: number): number {
+  const l = Math.max(1, L);
+  return goldCost('mine', l) * (1.3 + rewardTravelFactor(l)) * EXPE.rewardGoldMult;
 }
 
 /** 🏴‍☠️ Une caravane pillée rend autant d'or que PLUSIEURS mines de même rang : elle est rare
