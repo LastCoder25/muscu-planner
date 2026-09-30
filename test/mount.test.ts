@@ -794,6 +794,40 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (fromPt = h),
     );
     expect(fromPt).toMatch(/class="tr-from"[^>]*>⛏️</);
+    // ⚔️ Les attaques ennemies, à la suite des voyages, au MÊME format : le lieu attaqué en
+    // haut-droit (ici la mine reprise), la tenue, la marche en sous-lignage.
+    const army = {
+      id: 'wb',
+      type: 'warband',
+      level: 5,
+      x: 2,
+      y: 2,
+      spawnedAt: 0,
+      expiresAt: 9e15,
+      army: { kind: 'retake', targetId: 'ctl_mine', at: 100, faction: 'undead', size: 2 },
+    };
+    let atk = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [],
+        focus: null,
+        heroProfile: 'polyvalent',
+        attacks: [
+          { army, kind: 'retake', target: mine, inMs: 30 * 60_000, size: 2, faction: 'undead' },
+        ],
+        holds: { wb: 82 },
+        now: 50,
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (atk = h),
+    );
+    expect(atk).toMatch(/class="trip attack soon"/);
+    expect(atk).toMatch(/class="tr-poi"[^>]*>⛏️</);
+    expect(atk).toContain('🛡️ 82 %');
+    expect(atk).toContain('width: 50%');
     // ❓ Au RETOUR, ce qu'on ramène se touche et se lit, comme dans les rapports (demandé).
     let tip = '';
     await mountIt(
