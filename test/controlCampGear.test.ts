@@ -172,9 +172,11 @@ describe('🎯⚒️ le camp d’entraînement forme aussi l’équipement (la f
       expect(by.a1).toBe(40);
     });
 
-    it('chaque jauge plafonne à 24 h de présence', () => {
+    it('chaque jauge s’arrête à l’heure de l’attaque', () => {
       const m = captureControl(mapAt(30), CAMP, ['a0'], 0, 7);
-      const p = pt(m, CAMP);
+      // ⚔️ L’attaque (qui arrête la réserve) fixée à 24 h après la prise.
+      const p0 = pt(m, CAMP);
+      const p = { ...p0, control: { ...p0.control!, attackAt: 24 * H } };
       expect(trainingStockBy(p, 40 * H, 30).a0).toBeCloseTo(24 * trainingXpPerHour(30), 6);
     });
   });
