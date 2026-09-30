@@ -5790,6 +5790,16 @@ async function expeLifecycle() {
       // Un groupe en route a changé : l'échéance de son retour se réaligne.
       void syncPush(true);
     }
+    // 🎁 Au retour en ville, le butin s'encaisse tout seul (plus de « Récupérer » dans 📬).
+    for (const done of await char.expeAutoClaim(uid, Date.now())) announceClaim(done);
+    // ⚠️ `progress.ready` OBLIGATOIRE pour la suite : tout ce qui suit lit le NIVEAU du héros,
+    // qui vient de l'XP de fond, chargée en tâche de fond. Au montage (l'Aventure épinglée
+    // en cockpit s'ouvre avec l'app), ce tick partait AVANT : niveau 1 → la production des
+    // lieux fixes accumulée pendant l'absence était versée au tarif du niveau 1 (mine au
+    // niveau 30 : 40 🪙/h au lieu de ~4 000, et la réserve repartait de zéro), les reprises
+    // et les sièges se jouaient au niveau 1, et la carte se synchronisait au niveau 1.
+    // Ce qui précède ne lit pas le niveau : les voyages continuent pendant le chargement.
+    if (!progress.ready.value) return;
     // ⚔️🧭 Les départs des attaques combinées (avant les reprises : un groupe parti ne
     // défend plus son point).
     await attackStep(uid);
@@ -5806,8 +5816,6 @@ async function expeLifecycle() {
       });
       void syncPush(true);
     }
-    // 🎁 Au retour en ville, le butin s'encaisse tout seul (plus de « Récupérer » dans 📬).
-    for (const done of await char.expeAutoClaim(uid, Date.now())) announceClaim(done);
     await char.expeSyncMap(uid, Date.now(), c.value.level.level);
     await baseLifecycle();
   } finally {
