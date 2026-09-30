@@ -272,7 +272,7 @@ import {
   legDone,
   legComplete,
   legAllDone,
-  legsDoneLast,
+  legsByGroup,
   filterLegsByZone,
   type ComboLegFilter,
   legMode,
@@ -349,10 +349,11 @@ function segCount(l: ComboLeg): number {
   return Math.max(legTierMarks(l).max, legDone(l));
 }
 const legsAtMax = computed(() => c.value?.legs.filter(legAllDone).length ?? 0);
-// Ordre d'affichage : ALPHABÉTIQUE, les exos FINIS en bas (`legsDoneLast` — la MÊME règle
-// que l'onglet 🎯 ; avant la v0.903 chaque écran triait autrement, et un tri par avancement
-// réordonnait la liste PENDANT la saisie). « Fini » = palier MAXIMAL, pas l'objectif.
-const orderedLegs = computed(() => legsDoneLast(c.value?.legs ?? []));
+// Ordre d'affichage : par GROUPE MUSCULAIRE (l'ordre des emplacements du 360), puis
+// alphabétique dans un groupe (`legsByGroup` — la MÊME règle sur la fiche, l'onglet 🎯 et la
+// préparation de séance). Un exo fini reste à sa place, grisé : les filtres de zone servent à
+// isoler ce qui reste (v0.1390, remplace le renvoi en bas de liste de la v0.921).
+const orderedLegs = computed(() => legsByGroup(c.value?.legs ?? []));
 // 🔎 Toucher une barre d’avancement filtre les exos de sa zone — ne déplace rien.
 const legFilter = ref<ComboLegFilter>('all');
 const shownLegs = computed(() => filterLegsByZone(orderedLegs.value, legFilter.value));
@@ -796,7 +797,7 @@ onMounted(async () => {
 .leg.ok {
   border-color: var(--d1);
 }
-/* ✅ Exo FINI (palier maximal franchi) : il descend en bas de liste (`legsDoneLast`) et se
+/* ✅ Exo FINI (palier maximal franchi) : il reste à sa place et se
    grise — plus rien à y gagner. Déclaré APRÈS `.ok` : un exo au maximal est aussi complet,
    donc le vert « objectif atteint » ne doit pas continuer de l'appeler.
    ⚠️ L'opacité ne descend pas plus bas : ça reste du travail accompli, qu'on doit pouvoir
