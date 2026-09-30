@@ -11,6 +11,7 @@ import {
   heldControls,
   holdControl,
   loseControl,
+  withLastAttack,
   markAssault,
   retakeDelayMs,
   mapHarass,
@@ -36,6 +37,8 @@ import {
   revealRadius,
   recordDeparture,
   recentDepartures,
+  isClaimable,
+  type ExpeditionMessage,
 } from '@/lib/expedition';
 import { poiOffers, refAdvGear, refChampionAdv, escortGear, roadUnits } from '@/lib/caravan';
 import { partyCapFor, partySendBlocker, partyHeroBlocker } from '@/lib/party';
@@ -485,5 +488,28 @@ describe('🧭 tripOriginPoi — d’où part une troupe', () => {
   it('seuls les points fixes comptent, et plus de point là : la base', () => {
     expect(tripOriginPoi([camp], { x: 10, y: 10 })).toBeNull();
     expect(tripOriginPoi([pt], { x: 90, y: 90 })).toBeNull();
+  });
+});
+
+describe('📜 le rapport de la dernière attaque reste sur la fiche du lieu', () => {
+  it('gardé en copie encaissée, conservé quand on reprend le lieu', () => {
+    const msg = {
+      id: 'ctl_x',
+      title: '🏰 Mine fortifiée reprise par l’ennemi',
+      resolvedAt: 5 * H,
+      claimAt: 5 * H,
+      claimed: false,
+    } as unknown as ExpeditionMessage;
+    let m = captureControl(mapAt(3), ID, ['a0'], 0, 7);
+    m = loseControl(m, ID, 30, 5 * H);
+    m = withLastAttack(m, ID, msg);
+    const kept = ctl(m).control!.lastAttack!;
+    expect(kept.title).toBe(msg.title);
+    // ⚠️ Jamais réclamable : le vrai rapport, dans la boîte, est le seul qu'on encaisse.
+    expect(kept.claimed).toBe(true);
+    expect(isClaimable(kept, 6 * H)).toBe(false);
+    // Repris : la fiche garde le souvenir de la chute.
+    const back = captureControl(m, ID, ['a0'], 6 * H, 7);
+    expect(ctl(back).control!.lastAttack!.id).toBe('ctl_x');
   });
 });

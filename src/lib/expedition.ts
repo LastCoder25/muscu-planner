@@ -129,6 +129,10 @@ export interface ControlState {
   activity?: number;
   /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
   attackAt?: number;
+  /** 📜 Le rapport de la DERNIÈRE attaque ennemie sur ce lieu (repoussée ou non), gardé ici
+   *  pour la fiche : la boîte 📬 ne garde que 30 messages et le perd en moins d'un jour.
+   *  Une COPIE déjà encaissée (`claimed: true`) : elle se lit, elle ne se réclame pas. */
+  lastAttack?: ExpeditionMessage;
   /** Nombre de fois où l'ennemi l'a repris : entre dans les graines de re-tirage. */
   retakes: number;
   /** Une équipe marche dessus : on ne l'attaque pas deux fois. */

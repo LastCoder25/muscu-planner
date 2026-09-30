@@ -740,16 +740,20 @@ export function partyClaimRoster(
   // convois et que le siège. `null` = déjà écoulée, personne ne part à l'infirmerie.
   // 🩹 La trousse de soins emportée divise la convalescence (`healMult`, posé au départ).
   const fullMs = caravanHurtMs(escort, ctx.infirmaryLevel) * (party.healMult ?? 1);
-  const hurtUntil = sinceEvent(ctx.backAt, fullMs, ctx.now);
-  // 🩹 Victoire serrée : une convalescence COURTE (`LIGHT_HURT.msShare`), mêmes soigneurs.
-  const lightUntil = sinceEvent(ctx.backAt, fullMs * LIGHT_HURT.msShare, ctx.now);
   const hurt = new Set(party.hurt);
   const light = new Set((party.lightHurt ?? []).filter((id) => !hurt.has(id)));
   const adventurers = roster.map((a) => {
     const gain = party.xp[a.id];
     if (gain === undefined) return a;
     const up = ctx.xpGranted ? a : grantAdvXp(a, gain, ctx.pantheonLevel);
-    const until = hurt.has(a.id) ? hurtUntil : light.has(a.id) ? lightUntil : null;
+    // 🏠 L'infirmerie est À LA BASE : la convalescence ne court qu'une fois le champion
+    // RENTRÉ. Un blessé encore en route (retour d'une sortie par la base, groupe d'une
+    // attaque combinée qui rentre plus tard, garnison délogée qui marche) est occupé
+    // jusqu'à son arrivée (`busyUntil`) : c'est de là que part son temps de soin.
+    const home = Math.max(ctx.backAt, a.busyUntil ?? 0);
+    // 🩹 Victoire serrée : une convalescence COURTE (`LIGHT_HURT.msShare`), mêmes soigneurs.
+    const ms = hurt.has(a.id) ? fullMs : light.has(a.id) ? fullMs * LIGHT_HURT.msShare : null;
+    const until = ms === null ? null : sinceEvent(home, ms, ctx.now);
     return until ? { ...up, hurtUntil: Math.max(up.hurtUntil ?? 0, until) } : up;
   });
   return { adventurers, escort };

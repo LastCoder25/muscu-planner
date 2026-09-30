@@ -976,6 +976,26 @@ describe('🎁 partyClaimRoster — ce que l’encaissement change au vivier', (
     expect(r.adventurers[1]!.xp).not.toBe(roster[1]!.xp);
   });
 
+  // 🏠 L'INFIRMERIE EST À LA BASE (demandé par l'utilisateur) : un blessé encore en route
+  // (retour d'une sortie par la base, groupe d'une attaque combinée, garnison délogée qui
+  // marche) ne commence ses soins qu'à son ARRIVÉE, pas au retour du groupe.
+  it('🏠 un blessé encore en route ne commence ses soins qu’à son arrivée', () => {
+    const arrive = ctx.backAt + 3 * 3600_000;
+    const enRoute = roster.map((a) => (a.id === 'adv_1' ? { ...a, busyUntil: arrive } : a));
+    const r = partyClaimRoster(party(), enRoute, ctx);
+    expect(r.adventurers[1]!.hurtUntil).toBe(arrive + caravanHurtMs(esc, ctx.infirmaryLevel));
+    // Et même une convalescence déjà « écoulée » depuis le retour du groupe court encore.
+    const tard = { ...ctx, now: ctx.backAt + caravanHurtMs(esc, ctx.infirmaryLevel) + 1 };
+    expect(partyClaimRoster(party(), enRoute, tard).adventurers[1]!.hurtUntil).toBe(
+      arrive + caravanHurtMs(esc, ctx.infirmaryLevel),
+    );
+    // Rentré AVANT le groupe (busyUntil passé) : le retour du groupe reste la référence.
+    const tot = roster.map((a) => (a.id === 'adv_1' ? { ...a, busyUntil: ctx.backAt - 1 } : a));
+    expect(partyClaimRoster(party(), tot, ctx).adventurers[1]!.hurtUntil).toBe(
+      ctx.backAt + caravanHurtMs(esc, ctx.infirmaryLevel),
+    );
+  });
+
   it('⚠️ une convalescence plus longue (siège perdu) n’est jamais raccourcie', () => {
     const long = ctx.now + 100 * 3600_000;
     const alite = roster.map((a) => (a.id === 'adv_1' ? { ...a, hurtUntil: long } : a));

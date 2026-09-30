@@ -471,6 +471,12 @@
         <p v-if="tierLine" class="ctl-line ctl-tier">
           <b>{{ tierLine.title }}</b> <span class="ctl-dim">· {{ tierLine.detail }}</span>
         </p>
+        <!-- 📜 LA DERNIÈRE ATTAQUE (demandé) : gardée sur le lieu, car la boîte 📬 l'oublie en
+             moins d'un jour. Toucher la ligne rouvre le rapport complet (lecture seule). -->
+        <button v-if="lastAttack" type="button" class="ctl-last" @click="openLastAttack">
+          <span class="ctl-last-t">{{ lastAttack.title }}</span>
+          <span class="ctl-dim">· {{ lastAttackWhen }} · voir le rapport ›</span>
+        </button>
         <!-- ⚔️ Déjà attaqué : plus rien à envoyer, la fiche s'arrête à ce qu'il rapporte. -->
         <template v-if="!engagedTrip">
           <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
@@ -2907,6 +2913,17 @@ watch(focusTrip, (k) => {
 
 const collectOpen = ref(false);
 const lastOutcome = ref<ExpeditionMessage | null>(null);
+/** 📜 Le rapport de la dernière attaque du lieu sélectionné (lecture seule). */
+const lastAttack = computed(() => liveControl.value?.lastAttack ?? null);
+const lastAttackWhen = computed(() => {
+  const m = lastAttack.value;
+  return m ? `il y a ${formatDuration(Math.max(0, coarseNow.value - m.resolvedAt))}` : '';
+});
+function openLastAttack() {
+  if (!lastAttack.value) return;
+  lastOutcome.value = lastAttack.value;
+  collectOpen.value = true;
+}
 /** 🕳️ Rapport d'incursion à rejouer (cf. `RiftReplayDialog`). */
 const riftReplay = ref<PartyResult | null>(null);
 // ▶️ Il se lance aussi tout seul : à l'arrivée sur la faille, ou à la prochaine ouverture.
@@ -4536,6 +4553,27 @@ onUnmounted(() => {
   font-size: 12.5px;
   line-height: 1.4;
   overflow-wrap: anywhere;
+}
+/* 📜 La dernière attaque : une ligne qu'on touche pour rouvrir le rapport. */
+.ctl-last {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.ctl-last-t {
+  font-weight: 700;
 }
 .yield-card {
   margin: 0 0 12px;

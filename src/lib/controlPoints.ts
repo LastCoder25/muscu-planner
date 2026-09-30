@@ -1066,6 +1066,20 @@ export function loseControl(
   });
 }
 
+/** 📜 Garde sur le lieu le rapport de sa dernière attaque (repoussée ou non), pour sa fiche.
+ *  ⚠️ Une copie ENCAISSÉE : le vrai rapport vit dans la boîte, c'est lui qu'on encaisse — la
+ *  copie ne doit jamais pouvoir verser le butin une seconde fois. */
+export function withLastAttack(
+  map: ExpeditionMap,
+  id: string,
+  msg: ExpeditionMessage,
+): ExpeditionMap {
+  return withControl(map, id, (p) => ({
+    ...p,
+    control: { ...p.control!, lastAttack: { ...msg, claimed: true, read: true } },
+  }));
+}
+
 /** 🏰 Une attaque repoussée : la garnison reste, une nouvelle attaque se prépare. */
 export function holdControl(
   map: ExpeditionMap,

@@ -321,6 +321,7 @@ import {
   trainingRoom,
   dueRetakes,
   retakeDelayMs,
+  withLastAttack,
   mapHarass,
   attackerHidden,
   ensureControls,
@@ -4586,6 +4587,15 @@ export const useCharacterStore = defineStore('character', () => {
       map = held
         ? holdControl(map, p.id, at, activeDays7)
         : loseControl(map, p.id, playerLevel, at, { level: foe.level, faction: force.faction });
+      // 🏠 Délogée, la garnison RENTRE À PIED à la base (le trajet d'un rappel) : elle est en
+      // route jusqu'à son arrivée, et c'est là, à l'infirmerie, que ses soins commencent
+      // (`partyClaimRoster` part de `busyUntil`). Les miliciens engagés sont morts.
+      const walkers = held ? [] : escort.map((a) => a.id);
+      const home = walkers.length ? walkHome(cur, p.id, walkers, [], at) : null;
+      if (home) map = home.map(map);
+      // 📜 Le rapport reste lisible sur la fiche du lieu, même quand la boîte l'a oublié.
+      map = withLastAttack(map, p.id, msg);
+      const homeAt = new Map(walkers.map((id) => [id, home!.advAt]));
       // ⚔️🗼 L'armée est passée : ses pertes en campagne ne valent que pour elle.
       map = {
         ...map,
@@ -4601,7 +4611,7 @@ export const useCharacterStore = defineStore('character', () => {
       // ⚠️ Perdu : TOUS ceux postés ici sont libérés — la garnison ET les renforts encore en
       // route. Seule la garnison, qui a combattu, part à l'infirmerie ; les renforts restent
       // occupés jusqu'à leur retour (le chemin déjà parcouru, refait dans l'autre sens).
-      const backAt = new Map(back.map((r) => [r.id, r.at]));
+      const backAt = new Map([...back.map((r) => [r.id, r.at] as const), ...homeAt]);
       advs = advs.map((a) =>
         !held && a.posted === p.id
           ? {
@@ -4620,8 +4630,9 @@ export const useCharacterStore = defineStore('character', () => {
     // Les postés libérés ET l'XP : on repart de l'XP versée et on retire les postes perdus.
     const freed = new Set(advs.filter((a) => !a.posted).map((a) => a.id));
     roster = roster.map((a) => (freed.has(a.id) ? { ...a, posted: undefined } : a));
-    // 🤕 La garnison vaincue part à l'infirmerie TOUT DE SUITE (datée de l'attaque) :
-    // l'encaissement refera le même calcul, et `Math.max` le rend idempotent.
+    // 🤕 La garnison vaincue est blessée TOUT DE SUITE, mais ses soins ne courent qu'à son
+    // ARRIVÉE à la base (`busyUntil`, posé plus haut) : l'infirmerie est à la base.
+    // L'encaissement refera le même calcul, et `Math.max` le rend idempotent.
     for (const m of msgs)
       if (m.party && !m.win)
         roster = partyClaimRoster(m.party, roster, {
