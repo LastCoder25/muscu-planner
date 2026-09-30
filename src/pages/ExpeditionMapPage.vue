@@ -1311,6 +1311,7 @@ import {
   knownAttackAt,
   reinforcementsEnRoute,
   returnsEnRoute,
+  tripOriginPoi,
 } from '@/lib/controlPoints';
 import { characterRank } from '@/lib/characterRank';
 import { advGearRoles } from '@/lib/advGear';
@@ -2797,6 +2798,7 @@ const trips = computed(() => {
       pct: heroProg.value.overall * 100,
       back,
       withHero: true,
+      from: null,
       members: tripCrew(a),
       haul: expeHaul(a.outcome),
       legs: tripLegs(a, now.value),
@@ -2815,6 +2817,7 @@ const trips = computed(() => {
       pct: g.prog.overall * 100,
       back,
       withHero: g.hero,
+      from: tripOriginPoi(pois.value, g.origin),
       members: g.members,
       haul: g.haul,
       legs: g.legs,
@@ -2834,6 +2837,7 @@ const trips = computed(() => {
       pct: w.prog.overall * 100,
       back: false,
       withHero: w.hero,
+      from: tripOriginPoi(pois.value, w.origin),
       members: w.members,
       haul: [],
       legs: w.legs,
@@ -2854,6 +2858,7 @@ const trips = computed(() => {
       pct: r.prog.overall * 100,
       back: false,
       withHero: false,
+      from: tripOriginPoi(pois.value, r.origin),
       members: r.members,
       haul: [],
       title: `Renfort — ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${who} · arrivée dans ${formatDuration(r.arriveIn)}`,
@@ -2870,6 +2875,8 @@ const trips = computed(() => {
       pct: r.pct,
       back: true,
       withHero: false,
+      // 🏠 Un retour part du point qu'il quitte.
+      from: r.poi,
       members: r.members,
       haul: [],
       title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatDuration(r.arriveIn)}`,

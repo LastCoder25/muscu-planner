@@ -19,6 +19,11 @@
       :aria-pressed="focus === t.key"
       @click="emit('update:focus', focus === t.key ? null : t.key)"
     >
+      <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, miroir de l'objectif :
+           la base 🏰, ou le point fixe d'où elle est partie. -->
+      <span class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
+        t.from ? poiEmo(t.from) : '🏰'
+      }}</span>
       <span class="tr-who">{{ t.who }}</span>
       <span class="tr-poi">
         <span v-if="isRiftPoi(t.poi)" class="tr-rift">
@@ -120,6 +125,8 @@ export interface MapTrip {
   members: string[];
   /** Ce que le voyage ramènera (tiré au départ), montré au-dessus de l'équipe. */
   haul: HaulPill[];
+  /** 🧭 D'où part la troupe : un point fixe, ou `null` = la base. */
+  from: Poi | null;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
   legs?: { go: string | null; back: string; detail: string } | null;
 }
@@ -402,6 +409,25 @@ const crew = computed(() => {
   border-bottom: 1px solid;
   border-color: inherit;
   border-bottom-left-radius: 8px;
+  background: color-mix(in srgb, var(--surface-2, #2a241c) 70%, var(--surface));
+  pointer-events: none;
+}
+/* 🧭 La provenance, en encart haut-gauche : le miroir exact de l'objectif. */
+.tr-from {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 22px;
+  font-size: 13px;
+  line-height: 1;
+  border-right: 1px solid;
+  border-bottom: 1px solid;
+  border-color: inherit;
+  border-bottom-right-radius: 8px;
   background: color-mix(in srgb, var(--surface-2, #2a241c) 70%, var(--surface));
   pointer-events: none;
 }

@@ -23,6 +23,7 @@ import {
   seatsOf,
   controlGoldPerHour,
   tierYieldMult,
+  tripOriginPoi,
 } from '@/lib/controlPoints';
 import { advAscensionReady, advXpToNext, grantAdvXp } from '@/lib/adventurers';
 import { rankStartLevel } from '@/lib/characterRank';
@@ -53,7 +54,9 @@ describe('🏰 un point de contrôle est FIXE', () => {
   it('ne se double pas, et la carte ne change pas quand rien ne manque', () => {
     const m = mapAt(7);
     expect(ensureControls(m, H, 30)).toBe(m);
-    expect(m.pois.filter((p) => p.type === 'control' && p.control?.kind !== 'citadel')).toHaveLength(CONTROL.kinds.length);
+    expect(
+      m.pois.filter((p) => p.type === 'control' && p.control?.kind !== 'citadel'),
+    ).toHaveLength(CONTROL.kinds.length);
   });
   it('survit au monde qui avance (hors quota, jamais expiré)', () => {
     let m = mapAt(9);
@@ -144,7 +147,10 @@ describe('🏰 les quatre points', () => {
     expect(controlDetectBoost(mapAt(11), 0)).toBe(0);
     expect(controlDetectBoost(null, 0)).toBe(0);
     expect(controlDetectBoost(held('tower').map, 0)).toBeCloseTo(CONTROL.towerDetect, 5);
-    expect(controlDetectBoost(held('tower', ['a0']).map, 0)).toBeCloseTo(CONTROL.towerDetect * 0.5, 5);
+    expect(controlDetectBoost(held('tower', ['a0']).map, 0)).toBeCloseTo(
+      CONTROL.towerDetect * 0.5,
+      5,
+    );
     const five = ['a0', 'a1', 'a2', 'a3', 'a4'];
     const par = (n: number) => controlDetectBoost(held('tower', five.slice(0, n)).map, 0);
     // Chaque présent de plus voit plus loin — jusqu'à la garnison entière.
@@ -429,5 +435,27 @@ describe('🏰 un point se prend à son niveau (signalé : une tour « légendai
       const f = retakeForce({ ...g, control: { ...g.control!, attackAt: t * 7919 } }, 1);
       expect(f.size).toBeLessThanOrEqual(Math.max(...CONTROL.sizes));
     }
+  });
+});
+
+describe('🧭 tripOriginPoi — d’où part une troupe', () => {
+  const pt = {
+    id: 'ctl_mine',
+    type: 'control',
+    level: 5,
+    x: 40,
+    y: 60,
+    control: { kind: 'mine' },
+  } as unknown as Poi;
+  const camp = { id: 'c1', type: 'camp', level: 5, x: 10, y: 10 } as unknown as Poi;
+  it('sans origine : la base', () => {
+    expect(tripOriginPoi([pt], undefined)).toBeNull();
+  });
+  it('à la place d’un point fixe : ce point', () => {
+    expect(tripOriginPoi([camp, pt], { x: 40, y: 60 })).toBe(pt);
+  });
+  it('seuls les points fixes comptent, et plus de point là : la base', () => {
+    expect(tripOriginPoi([camp], { x: 10, y: 10 })).toBeNull();
+    expect(tripOriginPoi([pt], { x: 90, y: 90 })).toBeNull();
   });
 });

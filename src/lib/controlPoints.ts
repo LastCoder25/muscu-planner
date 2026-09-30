@@ -2204,6 +2204,20 @@ export function dueRetakes(map: ExpeditionMap | null, now: number): Poi[] {
 }
 
 /** Les points tenus (pour les notifications et l'affichage). */
+/** 🧭 D'où part une troupe : le point fixe posé à `origin` (un voyage ne garde que les
+ *  coordonnées de son départ), ou `null` = la base (pas d'`origin`, ou plus de point là). */
+export function tripOriginPoi(
+  pois: readonly Poi[] | null | undefined,
+  origin: { x: number; y: number } | undefined,
+): Poi | null {
+  if (!origin || !pois) return null;
+  return (
+    pois.find(
+      (p) => !!p.control && Math.abs(p.x - origin.x) < 0.5 && Math.abs(p.y - origin.y) < 0.5,
+    ) ?? null
+  );
+}
+
 export function heldControls(map: ExpeditionMap | null): Poi[] {
   return map ? map.pois.filter((p) => p.control?.owner === 'player') : [];
 }
