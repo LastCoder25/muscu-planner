@@ -14,7 +14,7 @@ import {
   seatsOf,
   sortieLeaves,
 } from '@/lib/controlPoints';
-import { rejoinHome, sortieAwayKeeper } from '@/lib/controlRoutes';
+import { rejoinHome, sortieAwayKeeper, syncAway } from '@/lib/controlRoutes';
 import { createMap, type ExpeditionMap } from '@/lib/expedition';
 
 const H = 3600_000;
@@ -103,5 +103,41 @@ describe('⚔️🏰 pruneAway : seule une place attendue reste gardée', () => 
     );
     expect(pruneAway(m, keeper)).toBe(m);
     expect(freeAway(m, MINE, ['zz'])).toBe(m);
+  });
+});
+
+describe('⚔️🏰 syncAway : une sortie partie avant la règle reprend sa place', () => {
+  const trip = (returnAt: number, crew: string[]) => ({
+    homeId: MINE,
+    returnAt,
+    crew,
+    outcome: { party: { escort: crew } },
+  });
+  const advs = (ids: string[], until: number) => ids.map((id) => ({ id, busyUntil: until }));
+  it('garnison vide, trois sortants en route : trois places gardées', () => {
+    const m = world(['a', 'b', 'c']);
+    const gone = { ...m, pois: m.pois.map((p) => (p.id === MINE ? { ...p, control: { ...p.control!, garrison: [] } } : p)) };
+    const out = syncAway(gone, [trip(9 * H, ['a', 'b', 'c'])], [], advs(['a', 'b', 'c'], 9 * H));
+    expect(ctl(out).away).toEqual(['a', 'b', 'c']);
+  });
+  it('jamais au-delà des places libres : on ne déloge personne', () => {
+    const f = full();
+    const m = world(f);
+    const out = syncAway(m, [trip(9 * H, ['x'])], [], advs(['x'], 9 * H));
+    expect(ctl(out).away).toBeUndefined();
+    expect(out).toBe(m);
+  });
+  it('déjà gardée ou déjà là : rien ne change (même carte)', () => {
+    const m = sortieLeaves(world(['a', 'b']), MINE, ['a'], H, L);
+    expect(syncAway(m, [trip(9 * H, ['a'])], [], advs(['a'], 9 * H))).toBe(m);
+  });
+  it('elle retire aussi les places que plus personne n’attend', () => {
+    const m = sortieLeaves(world(['a', 'b']), MINE, ['a'], H, L);
+    expect(ctl(syncAway(m, [], [], [{ id: 'a' }])).away).toBeUndefined();
+  });
+  it('un sortant qui ne rentre plus sur ce point n’en reçoit pas', () => {
+    const m = world(['b']);
+    const out = syncAway(m, [trip(9 * H, ['a'])], [], [{ id: 'a', busyUntil: 7 * H }]);
+    expect(ctl(out).away).toBeUndefined();
   });
 });

@@ -1842,8 +1842,13 @@ export function sortieLeaves(
   now: number,
   playerLevel: number,
 ): ExpeditionMap {
-  const m = releaseFromControl(map, id, ids, now, playerLevel);
-  return withControl(m, id, (p) => withAway(p, [...new Set([...(p.control!.away ?? []), ...ids])]));
+  return holdAway(releaseFromControl(map, id, ids, now, playerLevel), id, ids);
+}
+
+/** ⚔️🏰 Garde une place à ces sortants sur le point (sans toucher à la garnison). */
+export function holdAway(map: ExpeditionMap, id: string, ids: readonly string[]): ExpeditionMap {
+  if (!ids.length) return map;
+  return withControl(map, id, (p) => withAway(p, [...new Set([...(p.control!.away ?? []), ...ids])]));
 }
 
 /** ⚔️🏰 Rend les places gardées de ces sortants (retour, ou départ vers la base). Rend la
