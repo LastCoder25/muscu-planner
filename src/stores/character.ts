@@ -3499,7 +3499,10 @@ export const useCharacterStore = defineStore('character', () => {
         (a): a is Adventurer =>
           !!a &&
           (origin
-            ? a.posted === origin.id && (a.hurtUntil ?? 0) <= now && (a.busyUntil ?? 0) <= now
+            ? a.posted === origin.id &&
+              !plannedTransferIds(plannedList.value).has(a.id) &&
+              (a.hurtUntil ?? 0) <= now &&
+              (a.busyUntil ?? 0) <= now
             : advAvailable(a, now)),
       );
     if (escort.length !== opts.escortIds.length)
@@ -3839,7 +3842,10 @@ export const useCharacterStore = defineStore('character', () => {
           (a): a is Adventurer =>
             !!a &&
             (origin
-              ? a.posted === origin.id && (a.hurtUntil ?? 0) <= now && (a.busyUntil ?? 0) <= now
+              ? a.posted === origin.id &&
+                !plannedTransferIds(plannedList.value).has(a.id) &&
+                (a.hurtUntil ?? 0) <= now &&
+                (a.busyUntil ?? 0) <= now
               : advAvailable(a, now)),
         );
       if (escort.length !== w.escortIds.length) return 'un champion choisi n’est plus disponible';
@@ -5649,6 +5655,9 @@ export const useCharacterStore = defineStore('character', () => {
     }
     const block = swapBlocker(map, pointId, outId, incoming, fromId);
     if (block) return SWAP_BLOCK_LABEL[block];
+    // ⏳ Un membre attendu par un départ programmé ne s'échange pas (on annule d'abord).
+    const reserved = plannedTransferIds(plannedList.value);
+    if (reserved.has(outId) || reserved.has(incoming)) return 'un membre choisi est déjà programmé';
     const byId = new Map(advList.value.map((a) => [a.id, a]));
     const outAdv = isMilitiaId(outId) ? null : byId.get(outId);
     const inAdv = isMilitiaId(incoming) ? null : byId.get(incoming);

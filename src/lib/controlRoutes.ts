@@ -254,13 +254,21 @@ export function readyGarrisons<A extends { id: string; hurtUntil?: number; busyU
   map: ExpeditionMap | null | undefined,
   advs: readonly A[],
   now: number,
+  /** ⏳ Les membres réservés par un départ programmé (`plannedTransferIds`) : un retour ou un
+   *  transfert programmé les attend, ils ne sortent pas (signalé : « j'ai programmé un retour
+   *  mais le membre semble toujours disponible »). */
+  reserved: ReadonlySet<string>,
 ): Map<string, A[]> {
   const out = new Map<string, A[]>();
   for (const p of map?.pois ?? []) {
     if (p.control?.owner !== 'player') continue;
     const ids = new Set(garrisonChampionIds(map, p.id));
     const ready = advs.filter(
-      (a) => ids.has(a.id) && (a.hurtUntil ?? 0) <= now && (a.busyUntil ?? 0) <= now,
+      (a) =>
+        ids.has(a.id) &&
+        !reserved.has(a.id) &&
+        (a.hurtUntil ?? 0) <= now &&
+        (a.busyUntil ?? 0) <= now,
     );
     if (ready.length) out.set(p.id, ready);
   }
@@ -359,7 +367,11 @@ export function syncAway(
     const p = held(out, v.homeId);
     if (!p) continue;
     const c = p.control!;
-    const there = new Set([...c.garrison, ...(c.reinforcing ?? []).map((r) => r.id), ...(c.away ?? [])]);
+    const there = new Set([
+      ...c.garrison,
+      ...(c.reinforcing ?? []).map((r) => r.id),
+      ...(c.away ?? []),
+    ]);
     const miss = (v.crew ?? v.outcome.party?.escort ?? []).filter(
       (id) => !there.has(id) && keep(v.homeId!, id),
     );

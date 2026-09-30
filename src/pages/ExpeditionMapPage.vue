@@ -538,7 +538,11 @@
                 :key="m.adv.id"
                 :adv="m.adv"
                 :on="ctlRecallSel.includes(m.adv.id)"
-                :reason="m.arriveIn > 0 ? `🧭 en route · ${formatDuration(m.arriveIn)}` : null"
+                :reason="
+                  m.arriveIn > 0
+                    ? `🧭 en route · ${formatDuration(m.arriveIn)}`
+                    : (ctlReservedLabel.get(m.adv.id) ?? null)
+                "
                 :gain="occupantLoss[m.adv.id] ? -occupantLoss[m.adv.id]!.loss : null"
                 :gain-title="lossTitle(m.adv.id)"
                 @toggle="toggleRecall(m.adv.id)"
@@ -1764,7 +1768,12 @@ const riskHero = computed(() => {
 const freeAdvs = computed(() => char.advList.filter((a) => advAvailable(a, now.value)));
 /** 🏰 Les garnisons prêtes à sortir, point par point (grisage de la carte). */
 const readyGarrisonMap = computed(() =>
-  readyGarrisons(char.row?.expedition_map, char.advList, now.value),
+  readyGarrisons(
+    char.row?.expedition_map,
+    char.advList,
+    now.value,
+    plannedTransferIds(char.plannedList),
+  ),
 );
 /** ⚠️ Le MÊME vivier disponible, mais STABLE d'une seconde à l'autre : `freeAdvs` rend un
  *  nouveau tableau à chaque tick, et tout ce qui en dépend (pronostics de siège ~13 ms, % de
@@ -2049,7 +2058,23 @@ watch(
     ctlRecallDelay.value = 0;
   },
 );
+/** ⏳ Les membres du lieu attendus par un départ programmé (retour ou transfert) : leur tuile
+ *  le dit, et on ne peut plus les choisir (ils sont réservés, on annule d'abord). */
+const ctlReservedLabel = computed(() => {
+  const out = new Map<string, string>();
+  const here = livePoi.value?.id;
+  for (const m of char.plannedList) {
+    const at = new Date(m.departAt).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    if (m.recall && m.toId === here) for (const id of m.recall) out.set(id, `⏳ retour à ${at}`);
+    for (const t of m.transfers) if (t.fromId === here) out.set(t.id, `⏳ part à ${at}`);
+  }
+  return out;
+});
 function toggleRecall(id: string) {
+  if (ctlReservedLabel.value.has(id)) return;
   const s = ctlRecallSel.value;
   ctlRecallSel.value = s.includes(id) ? s.filter((x) => x !== id) : [...s, id];
 }
@@ -2195,11 +2220,14 @@ const swapCandidates = computed(() => {
   }
   // 🏰 Les autres points tenus : chaque membre arrivé.
   const byId = new Map(char.advList.map((a) => [a.id, a]));
+  // ⏳ Ceux qu'un départ programmé attend ne remplacent personne.
+  const reserved = plannedTransferIds(char.plannedList);
   for (const q of map.pois) {
     if (q.id === p.id || q.control?.owner !== 'player') continue;
     const label = CONTROL_LABEL[q.control.kind];
     const before = defenseOf(q)?.pct ?? 0;
     for (const id of q.control.garrison) {
+      if (reserved.has(id)) continue;
       const adv = isMilitiaId(id) ? null : (byId.get(id) ?? null);
       if (!isMilitiaId(id) && !adv) continue;
       const why = swapBlocker(map, p.id, out.id, id, q.id);
