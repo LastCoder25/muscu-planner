@@ -455,7 +455,11 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party).not.toHaveProperty('wages'); // les champions ne touchent aucun salaire
   });
 
-  it('SANS le héros, défaite : rien à ramener, et le socle d’XP tombe quand même', () => {
+  it('SANS le héros, défaite : rien à ramener, et l’XP ne paie que ce qui a été entamé (v0.1375)', () => {
+    // ⚠️ RÉÉCRIT, pas supprimé : il affirmait « le socle d'XP tombe quand même » — la règle
+    // exacte de l'abus (un champion niveau 5 perdant contre un camp niveau 40 sans rien
+    // abattre touchait le socle d'un lieu niveau 40). Le socle d'un échec suit désormais la
+    // part de l'ennemi entamée (`foeDealt`), et reste sous le socle d'échec plein.
     const inp = input({
       escort: team(1, 5),
       road: road(5, 1),
@@ -466,7 +470,9 @@ describe('⚔️ resolveCamp — un combat fondu, le groupe lu dans son journal'
     expect(o.party!.win).toBe(false);
     expect(o.gold + o.summonStones + o.key).toBe(0);
     expect(o.party).not.toHaveProperty('advGear'); // ⚠️ plus aucune pièce de champion (v0.1012)
-    expect(o.party!.xp['adv_0']!).toBeGreaterThanOrEqual(missionXp(inp.escort[0]!, inp.poi, o.win));
+    const plein = missionXpFor(inp.escort, inp.poi, false, {}, inp.pantheonLevel, false, null);
+    expect(o.party!.xp['adv_0']!).toBeLessThan(plein['adv_0']!);
+    expect(o.party!.xp['adv_0']!).toBeLessThan(missionXp(inp.escort[0]!, inp.poi, false));
   });
 
   it('⚠️ SANS le héros : JAMAIS de clé, et le butin est exactement ce que portaient les ennemis', () => {

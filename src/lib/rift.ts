@@ -30,7 +30,7 @@
  * FIGÉ à ce que l'âge dit ; il ne recroît qu'entre deux visites.
  */
 
-import { fuseUnits, skirmishXpShares, type SkirmishUnit } from './skirmish';
+import { dealtShare, fuseUnits, skirmishXpShares, type SkirmishUnit } from './skirmish';
 import {
   missionXpFor,
   partyAllies,
@@ -65,8 +65,10 @@ import {
 import {
   factionRoster,
   groupCombatant,
+  overflowCutFor,
   rollRaid,
   siegeAttackers,
+  type BaseState,
   type Raid,
   type RaidReport,
   type RaidFaction,
@@ -356,7 +358,18 @@ const RIFT_INTERCEPT = {
    *  action DÉFENSIVE de rattrapage, pas une source de butin. */
   pvTurns: 5,
   dmgPctPv: 0.09,
+  /** Plancher de la colonne amputée par des interceptions ratées : une bande entamée reste
+   *  une bande (même règle que `FIELD_ARMY.minSize`). */
+  minShare: 0.25,
 } as const;
+
+/** ⚔️🕳️ La bande avec sa part déjà abattue (lue sur le débordement de la base), sur une
+ *  COPIE — c'est ce qu'estimer et résoudre doivent affronter. Sans objet pour tout autre lieu. */
+export function withRiftCut<P extends Poi>(poi: P, base: BaseState | null | undefined): P {
+  if (poi.type !== 'warband' || poi.army) return poi;
+  const cut = overflowCutFor(base, poi.spawnedAt);
+  return cut > 0 ? { ...poi, riftCut: cut } : poi;
+}
 
 export const RIFT_RUN = {
   /** Vol de vie atténué — MÊME raison qu'au Labyrinthe (`LABY_RUN.lifesteal`) : à pleine
@@ -845,6 +858,25 @@ export function incursionBodies(rift: RiftLike, now: number): SkirmishUnit[] {
 /** Les corps tombés : les `killed` premiers, plus le gardien si la faille est refermée.
  *  ⚠️ L'ORDRE EST LE MÊME que celui du combat (`simulateIncursion` descend la rampe de
  *  profondeur dans l'ordre) — c'est ce qui rend « les `killed` premiers » exact. */
+/** ⚔️ La part de la faille réellement entamée par une incursion (0..1 ; 1 si refermée) :
+ *  chaque monstre affronté compte pour ce qu'on lui a retiré, pondéré par ses PV ; ceux
+ *  qu'on n'a pas atteints et le gardien encore debout comptent pour zéro. C'est la mesure de
+ *  l'XP d'un échec (`missionXpFor`). */
+export function incursionDealt(run: RiftRun, bodies: readonly SkirmishUnit[]): number {
+  if (run.cleared) return 1;
+  let hit = 0;
+  let all = 0;
+  bodies.forEach((b, i) => {
+    const w = Math.max(0, b.combatant.pv);
+    all += w;
+    // ⚠️ `foeTrail` ne contient jamais le gardien (cf. `RiftRun`) : il compte donc zéro
+    // tant qu'il est debout, sans garde à part.
+    const t = run.foeTrail[i];
+    if (t && t.maxPv > 0) hit += w * Math.max(0, Math.min(1, 1 - t.pv / t.maxPv));
+  });
+  return all > 0 ? hit / all : 0;
+}
+
 export function incursionFoesDown(run: RiftRun, bodies: readonly SkirmishUnit[]): string[] {
   const down = bodies
     .slice(0, Math.max(0, Math.min(run.killed, bodies.length - 1)))
@@ -898,7 +930,15 @@ export function resolveIncursion(input: IncursionInput): ExpeditionOutcome {
 
   const bodies = incursionBodies(poi, now);
   const shares = skirmishXpShares(escort, bodies, { foesDown: incursionFoesDown(run, bodies) });
-  const xp = missionXpFor(escort, poi, run.cleared, shares, input.pantheonLevel, !!hero);
+  const xp = missionXpFor(
+    escort,
+    poi,
+    run.cleared,
+    shares,
+    input.pantheonLevel,
+    !!hero,
+    incursionDealt(run, bodies),
+  );
 
   // ⚠️ MANA SEUL (2026-09-27, décision de l'utilisateur) : plus de sceaux, ils viennent
   // des ruines anciennes (`ruinsSeals`).
@@ -1029,10 +1069,13 @@ export function warbandArmy(poi: Poi, playerLevel: number): Raid {
  */
 function warbandFoe(poi: Poi): Combatant {
   const ref = fuseUnits(refEscortUnits(poi.level), 'Référence');
+  // ⚔️ Une colonne déjà amputée par des interceptions ratées (`riftCut`) : moins d'hommes,
+  // donc moins de PV ET moins de coups — la force d'un camp suit sa taille de même.
+  const left = Math.max(RIFT_INTERCEPT.minShare, 1 - Math.max(0, Math.min(1, poi.riftCut ?? 0)));
   return {
     name: 'Colonne en marche',
-    pv: Math.max(1, Math.round(Math.max(1, offenseOf(ref)) * RIFT_INTERCEPT.pvTurns)),
-    damage: Math.max(1, Math.round(survivalOf(ref) * 100 * RIFT_INTERCEPT.dmgPctPv)),
+    pv: Math.max(1, Math.round(Math.max(1, offenseOf(ref)) * RIFT_INTERCEPT.pvTurns * left)),
+    damage: Math.max(1, Math.round(survivalOf(ref) * 100 * RIFT_INTERCEPT.dmgPctPv * left)),
     crit: 0.08,
     dodge: 0.05,
     initiative: 12,
@@ -1066,9 +1109,7 @@ function warbandBodies(raid: Raid): SkirmishUnit[] {
  * Fermer la faille reste nettement plus payant que l'intercepter (un test le verrouille).
  */
 export function interceptionMana(raid: Raid, army: Combatant, run: CombatResult): number {
-  const reste = run.win ? 0 : (run.log[run.log.length - 1]?.monsterPv ?? army.pv);
-  const part = Math.max(0, Math.min(1, 1 - reste / Math.max(1, army.pv)));
-  return riftMana(RIFT.interceptManaFoes * part, raid.level);
+  return riftMana(RIFT.interceptManaFoes * dealtShare(run.log, army.pv, run.win), raid.level);
 }
 
 /** Un groupe de la bande, tel que le rejeu le montre : qui, combien, et s'il tire. */
@@ -1147,7 +1188,9 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
   // rien non plus quand le combattant fondu tombe.
   const foesDown = run.win ? bodies.map((b) => b.id) : [];
   const shares = skirmishXpShares(escort, bodies, { foesDown });
-  const xp = missionXpFor(escort, poi, run.win, shares, input.pantheonLevel, !!hero);
+  // ⚔️ Ce que le groupe a réellement entamé : paie l'XP d'un échec ET ampute la bande.
+  const part = dealtShare(run.log, army.pv, run.win);
+  const xp = missionXpFor(escort, poi, run.win, shares, input.pantheonLevel, !!hero, part);
 
   const mana = interceptionMana(raid, army, run);
   const effectif = raid.groups.reduce((s, g) => s + g.count, 0);
@@ -1158,9 +1201,12 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
     ...raid.groups.map(
       (g) => `${g.emoji} ${g.species} ×${g.count} (niv ${g.level})${g.champion ? ' 👑' : ''}`,
     ),
+    ...((poi.riftCut ?? 0) > 0
+      ? [`🩸 Colonne déjà amputée de ${Math.round((poi.riftCut ?? 0) * 100)} %.`]
+      : []),
     run.win
       ? `🏆 Bande rompue en ${run.rounds} tours.`
-      : `💀 Repli après ${run.rounds} tours — ils poursuivent leur route.`,
+      : `💀 Repli après ${run.rounds} tours — ils poursuivent leur route, amputés de ${Math.round(part * 100)} %.`,
   ];
   const party: PartyResult = {
     hero: !!hero,
@@ -1174,6 +1220,9 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
     xp,
     hurt: run.win ? [] : escort.map((a) => a.id),
     journal,
+    ...(!run.win && part > 0
+      ? { riftHit: { part, hitId: `${poi.id}@${seed}`, spawnedAt: poi.spawnedAt } }
+      : {}),
     battle: {
       maxPv: group.pv,
       armyPv: army.pv,
@@ -1202,7 +1251,9 @@ export function resolveInterception(input: InterceptionInput): ExpeditionOutcome
     returnMult: 1,
     text: run.win
       ? `⚔️ Bande dispersée — le prochain siège ne sera pas renforcé. ${tag}`
-      : `💀 La bande a tenu bon. Elle poursuit sa marche. ${tag}`,
+      : part > 0
+        ? `💀 La bande a tenu bon, amputée de ${Math.round(part * 100)} % — son renfort au siège fond d’autant. ${tag}`
+        : `💀 La bande a tenu bon, sans une égratignure. Elle poursuit sa marche. ${tag}`,
     party,
   };
 }

@@ -443,7 +443,7 @@ export function resolveCamp(input: PartyInput): ExpeditionOutcome {
     slain: g.slain,
     kills: g.kills,
     heroKills: g.heroKills,
-    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero),
+    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero, d.foeDealt),
     hurt: campHurt(d, escort),
     ...(input.militia?.length
       ? {

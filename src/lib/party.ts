@@ -207,6 +207,14 @@ export function denForce<S extends { size: number }>(
   return weight > spec.size ? { ...spec, size: weight } : spec;
 }
 
+/** ⚔️ UNE CIBLE QU'ON PEUT AFFAIBLIR sans la battre : une armée en marche — celle d'un siège
+ *  ou d'une reprise (`fieldCut`/`retakeCut`) comme la bande d'une faille
+ *  (`RiftOverflow.cut`). Ses pertes sont GARDÉES, donc l'attaquer à 0 % a encore un sens.
+ *  ⚠️ Une faille (incursion), un camp, un lieu gardé ne gardent rien d'un échec. */
+export function canWeaken(poi: Pick<Poi, 'type'>): boolean {
+  return poi.type === 'warband';
+}
+
 /** Pourquoi une ÉQUIPE ne peut pas partir — `null` s'il le peut.
  *  🧭 Plus de créneaux d'Avant-poste (limite retirée, demandé) : le NOMBRE d'équipes en
  *  parallèle n'est borné que par le vivier disponible. SOURCE UNIQUE : le store refuse avec cette règle, l'écran dit pourquoi. */
@@ -215,6 +223,7 @@ export type PartySendBlock =
   | 'tooLate'
   | 'empty'
   | 'tooMany'
+  | 'hopeless'
   | 'controlEmpty'
   | 'controlHeld'
   | 'veinHero'
@@ -224,6 +233,11 @@ export function partySendBlocker(
   escortCount: number,
   hero: boolean,
   cap: number,
+  /** 🎯 Chance de revenir vainqueur (`partyWinChance`, gardes seuls), `null` quand il n'y a
+   *  RIEN à combattre ou rien à simuler. ⚠️ REQUIS : un paramètre qu'on peut oublier finit
+   *  par l'être, et l'omettre rouvrirait en silence le départ perdu d'avance.
+   *  ⚠️ `null` ne vaut PAS zéro — le confondre interdirait la récolte. */
+  winChance: number | null,
 ): PartySendBlock | null {
   if (!PARTY_TARGETS.has(poi.type)) return 'notTarget';
   // 🏰 Un point de contrôle s'attaque avec AUTANT de champions qu'on veut, héros compris
@@ -241,12 +255,16 @@ export function partySendBlocker(
   if (!hero && escortCount <= 0) return 'empty';
   // 🗿 LE PLAFOND DU PANTHÉON (`engageCap`) : on n'engage que N champions à la fois.
   if (escortCount > partyCapFor(cap)) return 'tooMany';
-  // ⚠️ AUCUN refus sur le 🎯 % (« perdu d'avance », retiré à la demande de l'utilisateur) :
-  // on attaque aussi une armée en marche pour l'AFFAIBLIR, et un échec paie ce qu'il a
-  // abattu — un 0 % de victoire n'est donc pas un départ inutile. Le % informe, il ne refuse plus.
+  // 💀 PERDU D'AVANCE (rétabli en v0.1375, demandé par l'utilisateur) : aucune victoire sur
+  // tout l'échantillon de pronostic. ⚠️ SAUF contre une ARMÉE EN MARCHE (`canWeaken`) : là,
+  // un échec ampute durablement l'armée — c'est la raison d'y aller, même à 0 %. Partout
+  // ailleurs un départ condamné ne change rien au monde, et ne paie plus que ce qu'il a
+  // entamé (`missionXpFor`, `dealt`).
+  if (winChance !== null && winChance <= 0 && !canWeaken(poi)) return 'hopeless';
   return null;
 }
 export const PARTY_SEND_BLOCK_LABEL: Record<PartySendBlock, string> = {
+  hopeless: 'perdu d’avance — aucun d’eux n’en reviendrait vainqueur',
   tooLate: 'trop tard — l’armée atteindra sa cible avant ton équipe',
   notTarget: 'on n’envoie pas d’équipe sur ce lieu',
   empty: 'l’équipe est vide',
@@ -261,8 +279,9 @@ export function canSendParty(
   escortCount: number,
   hero: boolean,
   cap: number,
+  winChance: number | null,
 ): boolean {
-  return partySendBlocker(poi, escortCount, hero, cap) === null;
+  return partySendBlocker(poi, escortCount, hero, cap, winChance) === null;
 }
 
 /** Pourquoi le HÉROS ne peut pas rejoindre le groupe — `null` s'il le peut.

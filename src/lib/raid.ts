@@ -89,6 +89,25 @@ export interface RiftOverflow {
   level: number;
   /** Instant du débordement (ms epoch). */
   at: number;
+  /** ⚔️ La part de sa bande déjà abattue en rase campagne par des interceptions RATÉES
+   *  (`weakenOverflow`, 0..1). Elle ampute la colonne qu'on affronte ensuite et le
+   *  RENFORT du siège qu'elle rejoint (`overflowThreatMult`). Absente = intacte. */
+  cut?: number;
+  /** Les chocs déjà appliqués (jamais deux fois : ils sont rejoués à chaque tick). */
+  hits?: string[];
+}
+
+/**
+ * 🕳️ LE RENFORT QU'UNE ARMÉE DE FAILLE APPORTE AU SIÈGE, selon ce qu'il reste de sa bande :
+ * ×`RAID.riftThreat` intacte, ×1 entièrement abattue — linéaire entre les deux.
+ * ⚠️ SOURCE UNIQUE : le tirage du raid (`rollRaid`), la dispersion (`dispelOverflow`) et
+ * l'affaiblissement (`weakenOverflow`) le lisent tous, sinon disperser une armée amputée
+ * lui retirerait plus (ou moins) que ce qu'elle portait.
+ */
+export function overflowThreatMult(o: Pick<RiftOverflow, 'cut'> | null | undefined): number {
+  if (!o) return 1;
+  const left = 1 - Math.max(0, Math.min(1, o.cut ?? 0));
+  return 1 + (RAID.riftThreat - 1) * left;
 }
 
 /** Un groupe de l'armée : plusieurs individus de MÊME espèce et MÊME niveau. Une armée
@@ -1003,7 +1022,7 @@ export function rollRaid(
   // deviendrait STRICTEMENT MEILLEUR que fermer, l'inverse exact de ce qu'on construit.
   // La faille donne donc sa FACTION et son RENFORT ; l'effectif et les niveaux restent
   // calibrés sur le joueur, comme toute armée.
-  const threat = earlyThreatMult(L) * (overflow ? RAID.riftThreat : 1);
+  const threat = earlyThreatMult(L) * overflowThreatMult(overflow);
 
   // Niveaux de troupe : CENTRÉS sur le joueur (tirage triangulaire), triés croissant.
   const { lo, hi } = raidLevelWindow(L);
@@ -3299,7 +3318,10 @@ export function dispelOverflow(
   if (r?.overflow && r.detectedAt >= battleAt) {
     const raid: Raid = {
       ...r,
-      groups: r.groups.map((g) => ({ ...g, threat: (g.threat ?? 1) / RAID.riftThreat })),
+      groups: r.groups.map((g) => ({
+        ...g,
+        threat: (g.threat ?? 1) / overflowThreatMult(r.overflow),
+      })),
     };
     delete raid.overflow;
     b = { ...b, raid };
@@ -3308,6 +3330,57 @@ export function dispelOverflow(
     dispel = 'late';
   }
   return { base: b, dispel };
+}
+
+/**
+ * ⚔️ UNE INTERCEPTION RATÉE AMPUTE QUAND MÊME LA BANDE (demandé par l'utilisateur : « permets
+ * d'affaiblir aussi les armées de faille »). La part abattue (`part`, 0..1, relative à ce
+ * qu'il en restait) s'accumule sur le débordement, comme la part abattue d'une armée de
+ * campagne (`fieldCut`) : la colonne affrontée ensuite est plus petite, et le RENFORT du
+ * siège fond d'autant (`overflowThreatMult`).
+ *
+ * Mêmes règles que `dispelOverflow`, datées par l'HEURE DE LA BATAILLE : le marquage en
+ * attente s'ampute ; une armée déjà tirée ne s'ampute que si la Tour ne l'a vue qu'APRÈS la
+ * bataille (sinon elle garde la force annoncée). ⚠️ On n'ampute que le débordement de CETTE
+ * bande (`spawnedAt` = l'instant du débordement), jamais celui d'une autre faille.
+ * Idempotent (`hitId`) ; rend la MÊME référence si rien ne change.
+ */
+export function weakenOverflow(
+  base: BaseState,
+  hit: { part: number; hitId: string; spawnedAt: number },
+  battleAt: number,
+): BaseState {
+  const part = Math.max(0, Math.min(1, hit.part));
+  if (part <= 0) return base;
+  const cut = (o: RiftOverflow): RiftOverflow => ({
+    ...o,
+    cut: 1 - (1 - Math.max(0, Math.min(1, o.cut ?? 0))) * (1 - part),
+    hits: [...(o.hits ?? []), hit.hitId],
+  });
+  const fresh = (o: RiftOverflow | null | undefined): o is RiftOverflow =>
+    !!o && o.at === hit.spawnedAt && !(o.hits ?? []).includes(hit.hitId);
+  if (fresh(base.overflow)) return { ...base, overflow: cut(base.overflow) };
+  const r = base.raid;
+  if (r && fresh(r.overflow) && r.detectedAt >= battleAt) {
+    const next = cut(r.overflow);
+    const k = overflowThreatMult(next) / overflowThreatMult(r.overflow);
+    return {
+      ...base,
+      raid: {
+        ...r,
+        overflow: next,
+        groups: r.groups.map((g) => ({ ...g, threat: (g.threat ?? 1) * k })),
+      },
+    };
+  }
+  return base;
+}
+
+/** ⚔️ La part déjà abattue de la bande sortie à `spawnedAt` (0 si elle n'est plus suivie) :
+ *  ce qu'on retire à la colonne affrontée (`warbandFoe`). */
+export function overflowCutFor(base: BaseState | null | undefined, spawnedAt: number): number {
+  const o = [base?.overflow, base?.raid?.overflow].find((x) => x && x.at === spawnedAt);
+  return Math.max(0, Math.min(1, o?.cut ?? 0));
 }
 
 /** Ce qu'une interception gagnée a changé au siège (`dispelOverflow`). */

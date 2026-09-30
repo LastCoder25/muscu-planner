@@ -11,6 +11,7 @@ import { computed, ref, watch, type ComputedRef, type Ref } from 'vue';
 import { useQuasar } from 'quasar';
 import { useAuthStore } from '@/stores/auth';
 import { useCharacterStore } from '@/stores/character';
+import { withRiftCut } from '@/lib/rift';
 import {
   partyCapFor,
   partyHeroBlocker,
@@ -282,8 +283,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  ⚠️ HORLOGE GROSSIÈRE (`coarseNow`) : l'effectif d'une faille dépend de l'instant, et une
    *  incursion enchaîne jusqu'à 13 combats — à 40 échantillons par seconde, ce serait ~520
    *  combats rejoués à chaque tick pour un effectif qui bouge sur SEPT JOURS. */
+  /** ⚔️🕳️ La cible TELLE QU'ON L'AFFRONTERA : une bande de faille déjà amputée par des
+   *  interceptions ratées (`withRiftCut`) — la MÊME copie que le store résout. */
+  const aimed = computed(() =>
+    selected.value ? withRiftCut(selected.value, char.row?.base) : null,
+  );
   const partyWin = computed(() => {
-    const p = selected.value;
+    const p = aimed.value;
     if (!p || !partySize.value) return null;
     const w = partyWinChance(
       p,
@@ -370,7 +376,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   /** 💀 Le refus « perdu d'avance » : les GARDES seuls (la route coûte de la cargaison, elle
    *  ne rend pas un lieu imprenable) — le même nombre que le store. */
   const partyGuardWin = computed(() => {
-    const p = selected.value;
+    const p = aimed.value;
     if (!p || !partySize.value) return null;
     return partyWinChance(
       p,
@@ -599,7 +605,13 @@ export function useExpeditionParty(ctx: PartyCtx) {
       inc,
       {
         hero: heroNow,
-        guard: guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value, milHome.value),
+        guard: guardUnits(
+          heroLevel.value,
+          freeStable.value,
+          cap.value,
+          compCtx.value,
+          milHome.value,
+        ),
       },
       {
         hero: partyHeroOn.value ? null : heroNow,
@@ -622,6 +634,9 @@ export function useExpeditionParty(ctx: PartyCtx) {
             partyAdvs.value.length,
             partyHeroOn.value,
             cap.value,
+            // 💀 Le 🎯 % déjà affiché : un départ perdu d'avance est refusé (sauf contre une
+            // armée qu'on peut affaiblir) — le MÊME nombre que le store.
+            partyGuardWin.value,
           )
       : null,
   );
@@ -695,6 +710,7 @@ export function useExpeditionParty(ctx: PartyCtx) {
   const partySendLabel = computed(() => {
     if (!partySize.value) return 'Choisis ton groupe';
     // ⚠️ Le bouton DIT le refus, il ne se contente pas d'être gris.
+    if (partySendBlock.value === 'hopeless') return '💀 Perdu d’avance';
     if (partySendBlock.value === 'tooLate') return '⏱️ Trop tard';
     if (!teamOnly.value) return `🧺 Envoyer l’équipe (${partySize.value})`;
     return selectedRift.value

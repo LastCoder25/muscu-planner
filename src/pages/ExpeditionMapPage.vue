@@ -1030,7 +1030,13 @@
           </p>
           <!-- ⚠️ TOUS les refus sont dits aussi (signalé : « le bouton est grisé » sans
                raison). « Équipe vide » est déjà écrit sur le bouton (« Choisis ton groupe »). -->
-          <p v-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
+          <!-- 💀 ON DIT POURQUOI, ET LA PARADE : un bouton qui se grise en silence se lit
+               comme une panne. -->
+          <p v-if="partySendBlock === 'hopeless'" class="sh-risk">
+            💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
+            un lieu d’un rang plus bas.
+          </p>
+          <p v-else-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
             ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
           </p>
           <p v-if="combinedBlock" class="sh-risk">⚔️ {{ combinedBlock }}.</p>

@@ -291,7 +291,7 @@ export function resolveFieldArmy(input: Omit<PartyInput, 'spec'>): ExpeditionOut
     slain: g.slain,
     kills: g.kills,
     heroKills: g.heroKills,
-    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero),
+    xp: missionXpFor(escort, poi, d.win, g.shares, input.pantheonLevel, !!hero, d.foeDealt),
     hurt: campHurt(d, escort),
     lightHurt: campLightHurt(d, escort),
     journal: g.journal,

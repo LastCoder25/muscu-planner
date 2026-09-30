@@ -955,8 +955,28 @@ export function missionXpFor(
   pantheonLevel: number,
   /** Le héros est du voyage. ⚠️ REQUIS : l'oublier donnerait la prime à tort, en silence. */
   hero: boolean,
+  /**
+   * ⚔️ Sur une DÉFAITE, la part de l'ennemi réellement entamée (`dealtShare`, 0..1) : le
+   * socle d'un échec lui est PROPORTIONNEL. `null` = socle d'échec plein — réservé aux
+   * CONVOIS, qui ne sont pas des attaques (une embuscade perdue n'efface pas le trajet).
+   *
+   * ⚠️ POURQUOI (v0.1375, mesuré, demandé par l'utilisateur) : le socle d'un échec se
+   * calculait sur le NIVEAU DE LA CIBLE, sans plafond. Un champion de niveau 10 envoyé seul
+   * contre une bande de niveau 50 perdait à 100 %, n'abattait RIEN, et gagnait 968 XP —
+   * près de quatre niveaux par envoi, pour trois heures d'infirmerie. Une défaite payait
+   * plus qu'une victoire (trois champions niveau 30 : 23 XP pour un camp pris, 80 pour une
+   * bande perdue sans un mort). On apprend de ce qu'on fait : un échec qui n'a rien
+   * entamé n'apprend rien, un échec serré presque autant qu'une victoire.
+   * ⚠️ REQUIS : l'oublier sur une attaque rouvrirait l'abus en silence.
+   * ⚠️ Ignoré sur une victoire.
+   */
+  dealt: number | null,
 ): Record<string, number> {
   const split = missionXpSplit(escort.length) * (hero ? 1 : SOLO_XP_MULT);
+  // Défaite d'une ATTAQUE : le socle suit la part entamée, et peut valoir zéro (pas de
+  // plancher à 1 XP — sinon « rien entamé » rapporterait encore quelque chose).
+  const scaled = !won && typeof dealt === 'number';
+  const part = scaled ? Math.max(0, Math.min(1, dealt)) : 1;
   const mentor = mentorXpMult([...escort]);
   const xp: Record<string, number> = {};
   for (const a of escort) {
@@ -966,8 +986,10 @@ export function missionXpFor(
     // 🎓 Le Mentor porte sur TOUT ce que le membre gagne (socle ET abattus).
     xp[a.id] = Math.round(
       (Math.max(
-        1,
-        Math.round(missionXp({ ...a, level: L }, poi, won) * split * catchUpMult(L, pantheonLevel)),
+        scaled ? 0 : 1,
+        Math.round(
+          missionXp({ ...a, level: L }, poi, won) * split * catchUpMult(L, pantheonLevel) * part,
+        ),
       ) +
         Math.round(shares[a.id] ?? 0)) *
         mentor,
@@ -1013,13 +1035,13 @@ export function missionXpPreview(
   const escort = advs.filter((a) => escortIds.includes(a.id));
   // ⚠️ L'XP de l'escorte est la MÊME pour tous ses membres : on l'évalue une fois, au lieu
   //    d'une passe par champion (qui reboucle sur toute l'équipe et re-dérive la difficulté).
-  const dejaLa = missionXpFor(escort, poi, true, {}, pantheonLevel, hero);
+  const dejaLa = missionXpFor(escort, poi, true, {}, pantheonLevel, hero, null);
   const d = poiDifficultyLevel(poi);
   const out: Record<string, MissionXpPreview> = {};
   for (const a of advs) {
     const xp = escortIds.includes(a.id)
       ? (dejaLa[a.id] ?? 0)
-      : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel, hero)[a.id] ?? 0);
+      : (missionXpFor([...escort, a], poi, true, {}, pantheonLevel, hero, null)[a.id] ?? 0);
     const L = advBankedLevel(a, pantheonLevel);
     out[a.id] = { xp, full: d >= L, catchUp: catchUpMult(L, pantheonLevel) };
   }
@@ -1439,7 +1461,8 @@ export function resolveCaravan(
       summonStones: 0,
       keys: 0,
       mana: 0,
-      xp: missionXpFor(escort, poi, false, xpShare, pantheonLevel, false),
+      // Un convoi n'est pas une attaque : son échec garde le socle plein (`dealt` null).
+      xp: missionXpFor(escort, poi, false, xpShare, pantheonLevel, false, null),
       kills,
       hurt,
       lightHurt: lightHurt.filter((id) => !hurt.includes(id)),
@@ -1465,7 +1488,7 @@ export function resolveCaravan(
   const keyLuck = rng() < HARVEST.keyChance ? 1 : 0;
   // XP = le socle (plein si aucune embuscade perdue, réduit sinon) + la part des abattus.
   // Un convoi part toujours sans le héros.
-  const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel, false);
+  const xp = missionXpFor(escort, poi, !lost, xpShare, pantheonLevel, false, null);
 
   return {
     // ⚠️ Le plafond d'énergie s'applique APRÈS les multiplicateurs : « complément, jamais

@@ -333,6 +333,9 @@ export interface PartyResult {
   defense?: boolean;
   /** ⚔️🗼 Une attaque contre une ARMÉE EN CAMPAGNE (`fieldArmy.ts`) : ce qu'elle a abattu. */
   fieldHit?: FieldHit;
+  /** ⚔️🕳️ Une interception RATÉE contre une bande de faille : ce qu'elle a abattu (part de
+   *  la colonne restante), appliqué au débordement par `weakenOverflow`. */
+  riftHit?: { part: number; hitId: string; spawnedAt: number };
   /** 🏰 Ceux qui RESTENT en garnison si le point est pris (choisis à l'envoi) ; les autres
    *  rentrent. Absent = toute l'escorte (dans la limite des places du point). */
   stay?: string[];
@@ -584,6 +587,11 @@ export interface Poi {
    *  reprise de point fixe, repérée dans le rayon de détection, qu'on peut attaquer avant
    *  qu'elle n'arrive. Absent = bande de faille ordinaire. */
   army?: FieldArmyTag;
+  /** ⚔️🕳️ Bande de faille : la part déjà abattue par des interceptions ratées. ⚠️ JAMAIS
+   *  PERSISTÉE ICI — elle vit sur le débordement de la base (`RiftOverflow.cut`) ; les
+   *  appelants la posent sur une COPIE au moment d'estimer ou de résoudre
+   *  (`withRiftCut`, rift.ts). Absente = bande intacte. */
+  riftCut?: number;
   /** 🏰 Point de contrôle uniquement : son état (`controlPoints.ts`). */
   control?: ControlState;
   setId?: string; // 'lair' uniquement : set ciblé

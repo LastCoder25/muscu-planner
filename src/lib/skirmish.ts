@@ -80,6 +80,10 @@ export interface SkirmishResult {
   /** Part des PV du groupe qui RESTE à la fin du combat (0..1). Sert à reconnaître une
    *  victoire SERRÉE (`closeWinDown`). */
   endShare: number;
+  /** Part des PV de la TROUPE retirée pendant le combat (0..1 ; 1 sur une victoire). C'est la
+   *  mesure de l'XP d'une défaite (`missionXpFor`) : un échec qui n'a rien entamé n'apprend
+   *  rien, un échec serré presque autant qu'une victoire. */
+  foeDealt: number;
 }
 
 /**
@@ -110,6 +114,25 @@ export function closeWinDown(d: Pick<SkirmishResult, 'win' | 'down' | 'endShare'
 
 /** Le combat FONDU dont on lit le groupe. Générique : route, camp, tout ce qui se résout en
  *  un `simulateCombat` entre deux combattants agrégés. */
+/**
+ * ⚔️ LA PART DE L'ENNEMI RÉELLEMENT ENTAMÉE, lue sur le journal d'un combat : 1 − PV restants
+ * de l'adversaire ÷ ses PV max. Une victoire vaut 1 (l'adversaire est tombé).
+ *
+ * ⚠️ SOURCE UNIQUE de « combien j'ai fait mal » : l'XP d'une défaite (`missionXpFor`), le mana
+ * d'une interception ratée et l'affaiblissement d'une bande de faille la lisent tous — deux
+ * lectures du même journal finiraient par ne plus s'accorder.
+ */
+export function dealtShare(
+  log: readonly Pick<CombatEvent, 'monsterPv'>[],
+  foePv: number,
+  win: boolean,
+): number {
+  if (win) return 1;
+  if (foePv <= 0) return 0;
+  const left = log.at(-1)?.monsterPv ?? foePv;
+  return Math.max(0, Math.min(1, 1 - left / foePv));
+}
+
 export interface GroupFight {
   /** Journal du combat : `playerPv` / `monsterPv` APRÈS chaque événement. */
   log: readonly CombatEvent[];
@@ -283,6 +306,7 @@ export function deriveSkirmish(
       fight.allyPv > 0
         ? Math.max(0, (fight.log.at(-1)?.playerPv ?? fight.allyPv) / fight.allyPv)
         : 1,
+    foeDealt: dealtShare(fight.log, fight.foePv, fight.win),
   };
 }
 

@@ -250,7 +250,16 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     const party: PartyResult = {
       ...base,
       win: false,
-      xp: missionXpFor(escort, poi, false, g.shares, input.pantheonLevel, !!hero),
+      // ⚔️ Des gardes non abattus : une ATTAQUE ratée, payée au prorata de ce qu'elle a entamé.
+      xp: missionXpFor(
+        escort,
+        poi,
+        false,
+        g.shares,
+        input.pantheonLevel,
+        !!hero,
+        g.skirmish.foeDealt,
+      ),
       hurt: campHurt(g.skirmish, escort),
       journal: g.journal,
     };
@@ -298,7 +307,7 @@ function resolveHarvest(input: HarvestPartyInput): ExpeditionOutcome {
     const party: PartyResult = {
       ...base,
       win: true,
-      xp: missionXpFor(escort, poi, true, g.shares, input.pantheonLevel, !!hero),
+      xp: missionXpFor(escort, poi, true, g.shares, input.pantheonLevel, !!hero, 1),
       hurt: [],
       lightHurt: spec ? campLightHurt(g.skirmish, escort) : [],
       journal: [...g.journal, out.text],

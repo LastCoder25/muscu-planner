@@ -145,6 +145,7 @@ import {
   advanceBase,
   markOverflow,
   dispelOverflow,
+  weakenOverflow,
   applyRaidOutcome,
   raidIntervalMs,
   baseLeadMs,
@@ -266,6 +267,7 @@ import {
   RECALL_BLOCK_LABEL,
   type RecallTarget,
 } from '@/lib/party';
+import { FORECAST_SAMPLES, partyWinChance } from '@/lib/partyForecast';
 import { advsHomeAt, heroHomeAt, outingsOf } from '@/lib/siegePresence';
 import {
   heroOutInAttack,
@@ -320,10 +322,10 @@ import {
   retakeDelayMs,
   ensureControls,
   holdControl,
-  loseControl,
+  loseControl,
   markAssault,
   recallReinforcements,
-  canTurnBack,
+  canTurnBack,
   campGear,
   reinforceBlocker,
   reinforceControl,
@@ -361,7 +363,13 @@ import {
   retakeBattle,
   syncFieldArmies,
 } from '@/lib/fieldArmy';
-import { resolveIncursion, resolveInterception, riftOverflowOf, siegeMana } from '@/lib/rift';
+import {
+  resolveIncursion,
+  resolveInterception,
+  riftOverflowOf,
+  siegeMana,
+  withRiftCut,
+} from '@/lib/rift';
 import { overflowMessage } from '@/lib/overflowStage';
 import {
   GACHA,
@@ -3392,7 +3400,15 @@ export const useCharacterStore = defineStore('character', () => {
     const stockAfter = takeSupplies(cur.supplies, supplies);
     if (!stockAfter) return 'un consommable choisi n’est plus en stock';
     const road = { ...escortKitOf(cur), supplies };
-    const sendBlock = partySendBlocker(poi, escort.length, !!hero, engageCap(pantheonLevel.value));
+    const sendBlock = partySendBlocker(
+      poi,
+      escort.length,
+      !!hero,
+      engageCap(pantheonLevel.value),
+      // 💀 PERDU D'AVANCE : l'écran ne propose pas l'impossible, il ne peut pas le GARANTIR.
+      // ⚠️ La MÊME dispatch que la résolution, sur la MÊME cible (colonne déjà amputée).
+      partyWinChance(withRiftCut(poi, cur.base), escort, road, hero, now, FORECAST_SAMPLES, false),
+    );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     // 🧝 Avec le héros : la MÊME règle que l'écran lit pour dire POURQUOI il est grisé
     // (déjà parti, infirmerie, Avant-poste, or) — `partyHeroBlocker`, une seule définition.
@@ -3543,7 +3559,8 @@ export const useCharacterStore = defineStore('character', () => {
           })
         : isWarbandPoi(poi)
           ? resolveInterception({
-              poi,
+              // ⚔️🕳️ La colonne DÉJÀ amputée par les interceptions ratées (lue sur la base).
+              poi: withRiftCut(poi, row.value?.base),
               escort,
               road,
               hero,
@@ -3716,7 +3733,13 @@ export const useCharacterStore = defineStore('character', () => {
     if (!stockAfter) return 'un consommable choisi n’est plus en stock';
     const road = { ...escortKitOf(cur), supplies };
     // ⚠️ Le plafond du Panthéon porte sur l'attaque ENTIÈRE.
-    const sendBlock = partySendBlocker(poi, all.length, !!hero, engageCap(pantheonLevel.value));
+    const sendBlock = partySendBlocker(
+      poi,
+      all.length,
+      !!hero,
+      engageCap(pantheonLevel.value),
+      partyWinChance(withRiftCut(poi, cur.base), all, road, hero, now, FORECAST_SAMPLES, false),
+    );
     if (sendBlock) return PARTY_SEND_BLOCK_LABEL[sendBlock];
     const heroBlock = hero
       ? partyHeroBlocker({
@@ -4012,6 +4035,10 @@ export const useCharacterStore = defineStore('character', () => {
         const d = dispelOverflow(b, m.resolvedAt);
         b = d.base;
         if (d.dispel) said.set(m.id, d.dispel);
+      } else if (m.poiType === 'warband' && m.party?.riftHit) {
+        // ⚔️🕳️ Une interception RATÉE ampute quand même la bande : son renfort au siège fond
+        // d'autant, et la prochaine équipe affronte une colonne plus petite (idempotent).
+        b = weakenOverflow(b, m.party.riftHit, m.resolvedAt);
       }
     return {
       base: b === base ? null : b,
