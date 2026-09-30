@@ -8,7 +8,7 @@
   (la page le dessine, d'où le `v-model:focus`) ; la retoucher les éteint.
 -->
 <template>
-  <div v-if="trips.length" class="trips">
+  <div v-if="trips.length || attacks?.length" class="trips">
     <button
       v-for="t in trips"
       :key="t.key"
@@ -48,6 +48,30 @@
         <span class="tr-legs">↩ {{ t.legs.back }}</span>
       </template>
       <i class="tr-bar" :style="{ width: t.pct + '%' }" />
+    </button>
+    <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
+         haut-gauche (d'où vient la troupe), sa faction au centre, le LIEU ATTAQUÉ en haut-droit
+         (🏰 la base), le temps avant la frappe, la tenue de ta défense, et sa marche en
+         sous-lignage. Toucher la tuile ouvre l'armée sur la carte. -->
+    <button
+      v-for="r in attacks ?? []"
+      :key="'atk' + r.army.id"
+      type="button"
+      class="trip attack"
+      :class="{ soon: r.inMs < ATTACK_SOON_MS }"
+      :title="attackTitle(r)"
+      :aria-label="attackTitle(r)"
+      @click="emit('attack', r.army)"
+    >
+      <span class="tr-from">⚔️</span>
+      <span class="tr-who">{{ FACTION_EMOJI[r.faction] }}</span>
+      <span class="tr-poi">{{ r.target ? poiEmo(r.target) : '🏰' }}</span>
+      <span class="tr-time">{{ formatDuration(r.inMs) }}</span>
+      <span v-if="holdOf(r) !== null" class="tr-legs tr-hold" :class="siegeOdds(holdOf(r)! / 100)"
+        >🛡️ {{ holdOf(r) }} %</span
+      >
+      <span v-else-if="r.kind === 'siege'" class="tr-legs">🛡️ tenue ?</span>
+      <i class="tr-bar" :style="{ width: marchPct(r) + '%' }" />
     </button>
   </div>
 
@@ -121,6 +145,7 @@
 
 <script lang="ts">
 import type { HaulPill, Poi } from '@/lib/expedition';
+import type { ActiveAttack } from '@/lib/fieldArmy';
 /** Un voyage en cours, tel que la rangée le montre. */
 export interface MapTrip {
   key: string;
@@ -162,6 +187,7 @@ import { advTitle } from '@/lib/adventurers';
 import MilitiaPortrait from '@/components/MilitiaPortrait.vue';
 import HaulPills from '@/components/HaulPills.vue';
 import { formatDuration } from '@/lib/duration';
+import { FACTION_EMOJI, FACTION_LABEL, siegeOdds } from '@/lib/raid';
 import { BOOST_BLOCK_LABEL, type BoostBlock, type BoostChoice } from '@/lib/speedBoost';
 import type { BoostId } from '@/lib/supplies';
 
@@ -173,12 +199,45 @@ const props = defineProps<{
   recallable?: ReadonlySet<string>;
   /** ⚡ Les boosts pour le voyage touché (`boostChoices`), avec la clé de ce voyage. */
   boosts?: { key: string; plan: { block: BoostBlock } | { choices: BoostChoice[] } } | null;
+  /** ⚔️ Les armées ennemies en marche, en tuiles à la suite des voyages. */
+  attacks?: ActiveAttack[];
+  /** 🛡️ % de tenue de ta défense actuelle, par armée (`null` = inconnu). */
+  holds?: Record<string, number | null>;
+  /** Horloge (ms) pour l'avancement de leur marche. */
+  now?: number;
 }>();
 const emit = defineEmits<{
   'update:focus': [key: string | null];
   recall: [key: string];
   boost: [key: string, id: BoostId];
+  attack: [army: Poi];
 }>();
+
+/** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
+const ATTACK_SOON_MS = 3_600_000;
+const holdOf = (r: ActiveAttack): number | null => props.holds?.[r.army.id] ?? null;
+/** La marche de l'armée, de son apparition à sa frappe (0..100). */
+function marchPct(r: ActiveAttack): number {
+  const span = (r.army.army?.at ?? 0) - r.army.spawnedAt;
+  if (span <= 0 || props.now === undefined) return 0;
+  return Math.max(0, Math.min(100, ((props.now - r.army.spawnedAt) / span) * 100));
+}
+/** Le détail que la tuile n'a pas la place d'écrire (survol, lecteur d'écran). */
+function attackTitle(r: ActiveAttack): string {
+  const hold = holdOf(r);
+  const size = Math.round(r.size * 10) / 10;
+  return [
+    r.kind === 'siege'
+      ? 'Siège de ta base'
+      : `Reprise : ${r.target ? poiLabel(r.target) : 'un point fixe'}`,
+    `${poiRank(r.army).name} · ${FACTION_LABEL[r.faction]}`,
+    `≈ ${size.toLocaleString('fr-FR')} champion${r.size >= 2 ? 's' : ''}`,
+    `frappe dans ${formatDuration(r.inMs)}`,
+    hold !== null ? `ta défense repousse environ ${hold} %` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
 
 const boostLabel = (min: number) => (min >= 60 ? `${min / 60} h` : `${min} min`);
 /** ⚡ La page ne passe `boosts` que si on POSSÈDE un boost : sans stock, la section serait
@@ -527,6 +586,29 @@ const crew = computed(() => {
 }
 .trip.back .tr-bar {
   background: #7bc86c;
+}
+/* ⚔️ Une attaque ennemie : même tuile, en rouge (danger), fond teinté quand elle frappe bientôt. */
+.trip.attack {
+  border-color: color-mix(in srgb, var(--d4) 70%, transparent);
+}
+.trip.attack.soon {
+  border-color: var(--d4);
+  background: color-mix(in srgb, var(--d4) 12%, var(--surface));
+}
+.trip.attack.soon .tr-time {
+  color: var(--d4);
+}
+.trip.attack .tr-bar {
+  background: var(--d4);
+}
+.tr-hold.tenu {
+  color: var(--d1);
+}
+.tr-hold.serre {
+  color: var(--d3);
+}
+.tr-hold.perdu {
+  color: var(--d4);
 }
 /* 🔴 La tuile touchée : le même rouge que le halo posé sur son lieu, pour qu'on relie les deux. */
 .trip.focus {

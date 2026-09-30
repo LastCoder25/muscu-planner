@@ -418,7 +418,7 @@
     />
 
     <!-- 🧭 Les voyages en cours et l'équipe du voyage touché (cf. `TripsPanel`). -->
-    <p v-if="mapPanel === 'trips' && !trips.length" class="map-tab-empty">
+    <p v-if="mapPanel === 'trips' && !trips.length && !attacks.length" class="map-tab-empty">
       Aucune expédition en cours : touche un lieu de la carte pour envoyer une équipe.
     </p>
     <TripsPanel
@@ -428,8 +428,12 @@
       :hero-profile="character.profile"
       :recallable="recallableTrips"
       :boosts="focusBoosts"
+      :attacks="attacks"
+      :holds="attackHolds"
+      :now="coarseNow"
       @recall="recallTripByKey"
       @boost="boostTrip"
+      @attack="openAttack"
     />
 
     <!-- Panneau POI sélectionné -->
