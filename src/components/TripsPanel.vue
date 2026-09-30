@@ -8,71 +8,73 @@
   (la page le dessine, d'où le `v-model:focus`) ; la retoucher les éteint.
 -->
 <template>
-  <div v-if="trips.length || attacks?.length" class="trips">
-    <button
-      v-for="t in trips"
-      :key="t.key"
-      type="button"
-      class="trip"
-      :class="[t.kind, { back: t.back, focus: focus === t.key }]"
-      :title="t.title"
-      :aria-pressed="focus === t.key"
-      @click="emit('update:focus', focus === t.key ? null : t.key)"
-    >
-      <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, miroir de l'objectif :
+  <!-- ⏱️ VOYAGES ET ATTAQUES MÊLÉS, DANS L'ORDRE D'ARRIVÉE (demandé) : ce qui tombe le plus
+       tôt passe en tête, qu'il s'agisse d'un retour ou d'une frappe ennemie (`tiles`). -->
+  <div v-if="tiles.length" class="trips">
+    <template v-for="{ key, trip: t, attack: r } in tiles" :key="key">
+      <button
+        v-if="t"
+        type="button"
+        class="trip"
+        :class="[t.kind, { back: t.back, focus: focus === t.key }]"
+        :title="t.title"
+        :aria-pressed="focus === t.key"
+        @click="emit('update:focus', focus === t.key ? null : t.key)"
+      >
+        <!-- 🧭 D'OÙ VIENT LA TROUPE (demandé), en encart haut-gauche, miroir de l'objectif :
            la base 🏰, ou le point fixe d'où elle est partie. -->
-      <span class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
-        t.from ? poiEmo(t.from) : '🏰'
-      }}</span>
-      <span class="tr-who">{{ t.who }}</span>
-      <!-- 🛡️ QUI PART EN RENFORT (demandé) : leurs portraits sous l'icône, sur une ligne
+        <span class="tr-from" :title="t.from ? poiLabel(t.from) : 'La base'">{{
+          t.from ? poiEmo(t.from) : '🏰'
+        }}</span>
+        <span class="tr-who">{{ t.who }}</span>
+        <!-- 🛡️ QUI PART EN RENFORT (demandé) : leurs portraits sous l'icône, sur une ligne
            centrée — on voit d'un coup d'œil qui arrive sur le lieu. -->
-      <span v-if="t.faces" class="tr-faces">
-        <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
-          <MilitiaPortrait v-if="f.militia" />
-          <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
+        <span v-if="t.faces" class="tr-faces">
+          <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
+            <MilitiaPortrait v-if="f.militia" />
+            <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
+          </span>
+          <span v-if="t.members.length > FACES_MAX" class="tr-face-more"
+            >+{{ t.members.length - FACES_MAX }}</span
+          >
         </span>
-        <span v-if="t.members.length > FACES_MAX" class="tr-face-more"
-          >+{{ t.members.length - FACES_MAX }}</span
-        >
-      </span>
-      <span class="tr-poi">
-        <span v-if="isRiftPoi(t.poi)" class="tr-rift">
-          <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
+        <span class="tr-poi">
+          <span v-if="isRiftPoi(t.poi)" class="tr-rift">
+            <RiftPortal :color="poiRank(t.poi).color" :seed="seedOf(t.poi.id)" still />
+          </span>
+          <template v-else>{{ poiEmo(t.poi) }}</template>
         </span>
-        <template v-else>{{ poiEmo(t.poi) }}</template>
-      </span>
-      <span class="tr-time">{{ t.time }}</span>
-      <template v-if="t.legs">
-        <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
-        <span class="tr-legs">↩ {{ t.legs.back }}</span>
-      </template>
-      <i class="tr-bar" :style="{ width: t.pct + '%' }" />
-    </button>
-    <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
+        <span class="tr-time">{{ t.time }}</span>
+        <template v-if="t.legs">
+          <span v-if="t.legs.go" class="tr-legs">→ {{ t.legs.go }}</span>
+          <span class="tr-legs">↩ {{ t.legs.back }}</span>
+        </template>
+        <i class="tr-bar" :style="{ width: t.pct + '%' }" />
+      </button>
+      <!-- ⚔️ LES ATTAQUES ENNEMIES, AU MÊME FORMAT QUE LES VOYAGES (demandé) : l'armée ⚔️ en
          haut-gauche (d'où vient la troupe), sa faction au centre, le LIEU ATTAQUÉ en haut-droit
          (🏰 la base), le temps avant la frappe, la tenue de ta défense, et sa marche en
          sous-lignage. Toucher la tuile ouvre l'armée sur la carte. -->
-    <button
-      v-for="r in attacks ?? []"
-      :key="'atk' + r.army.id"
-      type="button"
-      class="trip attack"
-      :class="{ soon: r.inMs < ATTACK_SOON_MS }"
-      :title="attackTitle(r)"
-      :aria-label="attackTitle(r)"
-      @click="emit('attack', r.army)"
-    >
-      <span class="tr-from">⚔️</span>
-      <span class="tr-who">{{ FACTION_EMOJI[r.faction] }}</span>
-      <span class="tr-poi">{{ r.target ? poiEmo(r.target) : '🏰' }}</span>
-      <span class="tr-time">{{ formatDuration(r.inMs) }}</span>
-      <span v-if="holdOf(r) !== null" class="tr-legs tr-hold" :class="siegeOdds(holdOf(r)! / 100)"
-        >🛡️ {{ holdOf(r) }} %</span
+      <button
+        v-else-if="r"
+        type="button"
+        class="trip attack"
+        :class="{ soon: r.inMs < ATTACK_SOON_MS }"
+        :title="attackTitle(r)"
+        :aria-label="attackTitle(r)"
+        @click="emit('attack', r.army)"
       >
-      <span v-else-if="r.kind === 'siege'" class="tr-legs">🛡️ tenue ?</span>
-      <i class="tr-bar" :style="{ width: marchPct(r) + '%' }" />
-    </button>
+        <span class="tr-from">⚔️</span>
+        <span class="tr-who">{{ FACTION_EMOJI[r.faction] }}</span>
+        <span class="tr-poi">{{ r.target ? poiEmo(r.target) : '🏰' }}</span>
+        <span class="tr-time">{{ formatDuration(r.inMs) }}</span>
+        <span v-if="holdOf(r) !== null" class="tr-legs tr-hold" :class="siegeOdds(holdOf(r)! / 100)"
+          >🛡️ {{ holdOf(r) }} %</span
+        >
+        <span v-else-if="r.kind === 'siege'" class="tr-legs">🛡️ tenue ?</span>
+        <i class="tr-bar" :style="{ width: marchPct(r) + '%' }" />
+      </button>
+    </template>
   </div>
 
   <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
@@ -167,6 +169,8 @@ export interface MapTrip {
   faces?: boolean;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
   legs?: { go: string | null; back: string; detail: string } | null;
+  /** ⏱️ L'heure (ms) où se termine ce que la tuile décompte — l'ordre d'arrivée. */
+  endsAt?: number;
 }
 </script>
 
@@ -213,6 +217,21 @@ const emit = defineEmits<{
   attack: [army: Poi];
 }>();
 
+/** ⏱️ Une seule rangée, dans l'ordre d'arrivée : la fin d'un voyage (`endsAt`, ce que sa
+ *  tuile décompte) et l'heure de frappe d'une armée se comparent sur la même horloge. Tri
+ *  STABLE : à égalité, les voyages d'abord, dans l'ordre reçu. Un voyage sans heure connue
+ *  reste en tête, dans l'ordre reçu (il n'a rien à comparer). */
+const tiles = computed(() => {
+  const list: { key: string; at: number; trip?: MapTrip; attack?: ActiveAttack }[] = [
+    ...props.trips.map((t) => ({ key: t.key, at: t.endsAt ?? -Infinity, trip: t })),
+    ...(props.attacks ?? []).map((r) => ({
+      key: 'atk' + r.army.id,
+      at: r.army.army?.at ?? Infinity,
+      attack: r,
+    })),
+  ];
+  return list.sort((x, y) => x.at - y.at);
+});
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
 const ATTACK_SOON_MS = 3_600_000;
 const holdOf = (r: ActiveAttack): number | null => props.holds?.[r.army.id] ?? null;
