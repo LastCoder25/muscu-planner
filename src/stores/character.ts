@@ -346,6 +346,7 @@ import {
   sendHomeFromControl,
   settleReturns,
   settleReinforcements,
+  boostControlTrip,
   turnBackLabel,
   sortieHomeLabel,
   turnBackReinforcements,
@@ -5124,11 +5125,16 @@ export const useCharacterStore = defineStore('character', () => {
    * ⚡ BOOST DE VITESSE (2026-09-30, demandé) : un boost du stock avance l'étape en cours d'un
    * voyage (`speedBoost.ts`). Une attaque combinée pas encore toute partie avance EN BLOC ;
    * partie, ses groupes liés avancent ensemble à l'aller. Les champions suivent leur nouveau
-   * retour (`busyUntil`). Rend la RAISON d'un refus, `null` si c'est fait.
+   * retour (`busyUntil`). Un renfort en route ou un retour d'un point fixe (`reinf`/`return`)
+   * avance son échéance sur la carte. Rend la RAISON d'un refus, `null` si c'est fait.
    */
   async function applySpeedBoost(
     userId: string,
-    target: { kind: 'hero' } | { kind: 'party'; id: string } | { kind: 'attack'; id: string },
+    target:
+      | { kind: 'hero' }
+      | { kind: 'party'; id: string }
+      | { kind: 'attack'; id: string }
+      | { kind: 'reinf' | 'return'; pointId: string; members: readonly string[]; at: number },
     boostId: BoostId,
     now: number,
   ): Promise<string | null> {
@@ -5138,6 +5144,35 @@ export const useCharacterStore = defineStore('character', () => {
     const stock = takeSupplies(cur.supplies, [boostId]);
     if (!stock) return 'tu n’as plus ce boost';
     const min = BOOST_MIN[boostId];
+    if ('pointId' in target) {
+      // 🛡️🏠 Renfort en route / retour d'un point fixe : l'échéance vit sur la carte.
+      const map = cur.expedition_map;
+      const poi = map?.pois.find((p) => p.id === target.pointId);
+      const list = target.kind === 'reinf' ? poi?.control?.reinforcing : poi?.control?.returning;
+      const e = list?.find((r) => target.members.includes(r.id) && r.at === target.at);
+      if (!map || !poi || !e) return 'ce voyage est déjà terminé';
+      // Un renfort est un ALLER simple (arrivée = `at`) ; un retour part du point à `from`.
+      const plan = voyageBoostPlan(
+        { poi, midAt: target.kind === 'reinf' ? e.at : (e.from ?? now), returnAt: e.at },
+        min,
+        now,
+      );
+      if (typeof plan === 'string') return BOOST_BLOCK_LABEL[plan];
+      const advs = rescheduleReturners(advList.value, target.members, e.at, e.at - plan.gainMs);
+      await persist(userId, {
+        supplies: stock,
+        expedition_map: boostControlTrip(
+          map,
+          poi.id,
+          target.kind,
+          target.members,
+          e.at,
+          plan.gainMs,
+        ),
+        ...(advs !== advList.value ? { adventurers: advs } : {}),
+      });
+      return null;
+    }
     if (target.kind === 'attack') {
       const a = attackList.value.find((x) => x.id === target.id);
       if (!a) return 'ces groupes sont déjà tous partis';

@@ -2092,6 +2092,41 @@ export function returnsEnRoute(
   return [...out.values()];
 }
 
+/**
+ * ⚡ BOOST D'UN TRAJET DE POINT FIXE (2026-09-30, demandé : « les consommables de réduction du
+ * temps de trajet depuis les tuiles d'expédition »). Un renfort en route (`reinf`) arrive
+ * `gainMs` plus tôt ; un retour vers la base (`return`) rentre `gainMs` plus tôt. On ne touche
+ * que les entrées de CE convoi : ses `members`, avec l'échéance `at` qu'il affiche — deux
+ * envois vers le même point ne se confondent pas. Le départ (`from`) ne bouge pas : le tracé
+ * avance plus vite, comme pour un voyage ordinaire (`boostVoyage`). Même carte si rien ne
+ * correspond ou si le gain est nul.
+ */
+export function boostControlTrip(
+  map: ExpeditionMap,
+  pointId: string,
+  kind: 'reinf' | 'return',
+  members: readonly string[],
+  at: number,
+  gainMs: number,
+): ExpeditionMap {
+  if (gainMs <= 0) return map;
+  const who = new Set(members);
+  const hit = (r: { id: string; at: number }) => who.has(r.id) && r.at === at;
+  const c = map.pois.find((p) => p.id === pointId)?.control;
+  const list = kind === 'reinf' ? c?.reinforcing : c?.returning;
+  if (!list?.some(hit)) return map;
+  return withControl(map, pointId, (p) => {
+    const ctl = { ...p.control! };
+    if (kind === 'reinf')
+      ctl.reinforcing = (ctl.reinforcing ?? []).map((r) =>
+        hit(r) ? { ...r, at: r.at - gainMs } : r,
+      );
+    else
+      ctl.returning = (ctl.returning ?? []).map((r) => (hit(r) ? { ...r, at: r.at - gainMs } : r));
+    return { ...p, control: ctl };
+  });
+}
+
 /** 🏠 Les retours ARRIVÉS quittent la carte ; rend les miliciens rentrés (à remettre à la
  *  base). Rend la MÊME carte si personne n'est arrivé (le store n'écrit pas à vide). */
 export function settleReturns(

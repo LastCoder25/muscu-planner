@@ -2643,6 +2643,7 @@ const returnsOnMap = computed(() =>
     origin: undefined as { x: number; y: number } | undefined,
     at: drawnAt(r),
     pct: voyageProgress(r, now.value).overall * 100,
+    sentAt: r.sentAt,
     returnAt: r.returnAt,
     arriveIn: r.returnAt - now.value,
   })),
@@ -3241,13 +3242,38 @@ const recallableTrips = computed(
 );
 /** ⚡ LES BOOSTS DE VITESSE (demandé) : la cible d'une tuile de voyage — le héros, une équipe
  *  (`g` + id) ou une attaque combinée pas encore toute partie (`a` + id + `:` + groupe). */
-function boostTarget(
-  key: string,
-):
+function boostTarget(key: string):
   | { kind: 'hero'; v: ActiveExpedition }
   | { kind: 'party'; id: string; v: ActiveExpedition }
   | { kind: 'attack'; id: string; a: CombinedAttack }
+  | {
+      kind: 'reinf' | 'return';
+      pointId: string;
+      members: string[];
+      at: number;
+      v: Pick<ActiveExpedition, 'poi' | 'midAt' | 'returnAt'>;
+    }
   | null {
+  // 🛡️ Un renfort en route (`r…`) : aller simple, il arrive à `arriveAt`.
+  const r = reinforcementsOnMap.value.find((x) => x.id === key);
+  if (r)
+    return {
+      kind: 'reinf',
+      pointId: r.pointId,
+      members: r.members,
+      at: r.arriveAt,
+      v: { poi: r.poi, midAt: r.arriveAt, returnAt: r.arriveAt },
+    };
+  // 🏠 Un retour d'un point fixe (`h…`) : parti du point à `sentAt`, à la base à `returnAt`.
+  const h = returnsOnMap.value.find((x) => x.id === key);
+  if (h)
+    return {
+      kind: 'return',
+      pointId: h.poi.id,
+      members: h.members,
+      at: h.returnAt,
+      v: { poi: h.poi, midAt: h.sentAt, returnAt: h.returnAt },
+    };
   if (key === 'hero') {
     const v = char.row?.expedition;
     return v ? { kind: 'hero', v } : null;
@@ -3290,16 +3316,31 @@ function boostTrip(key: string, id: BoostId) {
     try {
       const why = await char.applySpeedBoost(
         uid,
-        t.kind === 'hero' ? { kind: 'hero' } : { kind: t.kind, id: t.id },
+        t.kind === 'hero'
+          ? { kind: 'hero' }
+          : 'pointId' in t
+            ? { kind: t.kind, pointId: t.pointId, members: t.members, at: t.at }
+            : { kind: t.kind, id: t.id },
         id,
         Date.now(),
       );
       if (why) $q.notify({ type: 'warning', message: why });
-      else
+      else {
+        // 🔁 La clé d'un renfort ou d'un retour porte son échéance : elle vient de changer.
+        // On garde la tuile ouverte en la retrouvant par ses membres.
+        if ('pointId' in t) {
+          const same = (m: readonly string[]) =>
+            m.length === t.members.length && m.every((x) => t.members.includes(x));
+          const next = trips.value.find(
+            (x) => x.key[0] === key[0] && x.poi.id === t.pointId && same(x.members),
+          );
+          if (next) focusTrip.value = next.key;
+        }
         $q.notify({
           type: 'positive',
           message: `⚡ ${formatDuration(choice.gainMs)} de gagnées.`,
         });
+      }
     } finally {
       boostBusy.value = false;
     }
