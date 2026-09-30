@@ -97,6 +97,10 @@ export interface ControlState {
   /** Pris à cet instant ; la production court depuis `collectedAt`. */
   since?: number;
   collectedAt?: number;
+  /** 🏅 Le cran posé au dernier changement de camp, et son instant : le cran courant s'en
+   *  DÉDUIT (`controlTier`, +1/24 h tenu, −1/24 h chez l'ennemi). Absents avant la règle. */
+  tier?: number;
+  tierAt?: number;
   /** Prochaine attaque ennemie (tirée entre 1 et 3 jours après la prise ou la défense). */
   attackAt?: number;
   /** Nombre de fois où l'ennemi l'a repris : entre dans les graines de re-tirage. */

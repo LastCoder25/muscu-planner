@@ -161,6 +161,117 @@ export const CONTROL = {
   imminentMs: 2 * 3_600_000,
 } as const;
 
+/**
+ * 🏅 LES CRANS D'UN POINT FIXE (2026-09-30, décisions de l'utilisateur) : l'ANCIENNETÉ.
+ *
+ * - Tenu : **+1 cran toutes les 24 h**, jusqu'à `TIER.max` (10).
+ * - Perdu (reprise ou abandon) : **−1 tout de suite**, puis **−1 toutes les 24 h** tant que
+ *   l'ennemi le tient. Repris par le joueur, il repart des crans qui lui restent.
+ * - Chaque cran : `yieldPerTier` de production en plus (or, mana, consommables, runes, XP du
+ *   camp, effets de la tour) ET `threatPerTier` de troupe ennemie en plus à la reprise — un
+ *   point riche est plus convoité (décision de l'utilisateur : « l'objectif sera d'intercepter
+ *   les armées pour tenir le plus longtemps possible »). La menace s'ajoute APRÈS le plafond de
+ *   90 % de tenue (`retakeBoost`) : un vieux point se garde en interceptant ses assaillants.
+ *   ⚠️ MESURÉ (garnison de 3 champions de référence, niveaux 12/30/60, 60 combats) : une
+ *   garnison forte, ramenée à ~89 %, tient ~75 % face à une troupe ×1,4 et ~72 % à ×1,5 ; une
+ *   garnison à niveau passe de ~63 % à ~48 % — une pente, pas un mur.
+ * ⚠️ Le cran se DÉDUIT du temps (`controlTier`) : l'état ne retient que la valeur posée au
+ * dernier changement de camp (`tier`) et son instant (`tierAt`). Un point tenu d'avant la règle
+ * (sans `tierAt`) compte depuis sa prise (`since`) : son ancienneté est reconnue.
+ */
+export const TIER = {
+  max: 10,
+  dayMs: 24 * 3600_000,
+  yieldPerTier: 0.05,
+  threatPerTier: 0.05,
+} as const;
+
+/** L'instant d'où le cran compte : `tierAt`, sinon la prise d'un point tenu d'avant la règle. */
+const tierRef = (c: ControlState): number | undefined =>
+  c.tierAt ?? (c.owner === 'player' ? c.since : undefined);
+
+/** 🏅 Le cran d'un point à `at`. */
+export function controlTier(c: ControlState | undefined, at: number): number {
+  if (!c) return 0;
+  const base = Math.max(0, Math.min(TIER.max, c.tier ?? 0));
+  const ref = tierRef(c);
+  if (ref === undefined) return base;
+  const days = Math.floor(Math.max(0, at - ref) / TIER.dayMs);
+  return c.owner === 'player' ? Math.min(TIER.max, base + days) : Math.max(0, base - days);
+}
+
+/** 🏅 Le multiplicateur de production d'un cran. */
+export const tierYieldMult = (tier: number): number => 1 + TIER.yieldPerTier * tier;
+/** 🏅 Le multiplicateur de la troupe de reprise d'un cran. */
+export const tierThreatMult = (tier: number): number => 1 + TIER.threatPerTier * tier;
+
+/** 🏅 Les HEURES pondérées par le cran entre `from` et `to` : ∫ `tierYieldMult` dt. Le cran
+ *  change en route (+1 par jour tenu) : on intègre jour par jour, sinon récolter tard paierait
+ *  tout le passé au cran d'aujourd'hui. */
+function tierHours(c: ControlState, from: number, to: number): number {
+  if (to <= from) return 0;
+  const ref = tierRef(c);
+  if (ref === undefined) return (tierYieldMult(controlTier(c, from)) * (to - from)) / 3600_000;
+  let acc = 0;
+  let t = from;
+  while (t < to) {
+    const tier = controlTier(c, t);
+    const k = Math.floor((t - ref) / TIER.dayMs);
+    const end = tier >= TIER.max ? to : Math.min(to, ref + (k + 1) * TIER.dayMs);
+    acc += tierYieldMult(tier) * (end - t);
+    t = end;
+  }
+  return acc / 3600_000;
+}
+
+/** 🏅 Le temps avant le prochain changement de cran (montée si tenu, baisse si ennemi) ;
+ *  `null` quand plus rien ne bouge (au plafond, ou à 0 chez l'ennemi). */
+export function nextTierInMs(c: ControlState | undefined, now: number): number | null {
+  if (!c) return null;
+  const tier = controlTier(c, now);
+  if (c.owner === 'player' ? tier >= TIER.max : tier <= 0) return null;
+  const ref = tierRef(c);
+  if (ref === undefined) return null;
+  const k = Math.floor(Math.max(0, now - ref) / TIER.dayMs);
+  return ref + (k + 1) * TIER.dayMs - now;
+}
+
+/** 🏅 Ce que la fiche d'un point dit de son cran : titre et détail. `null` pour un point ennemi
+ *  sans cran (rien à perdre, rien à dire). */
+export function controlTierLabel(
+  c: ControlState | undefined,
+  now: number,
+): { title: string; detail: string } | null {
+  if (!c) return null;
+  const tier = controlTier(c, now);
+  const next = nextTierInMs(c, now);
+  const pct = (x: number) => Math.round((x - 1) * 100);
+  if (c.owner === 'player') {
+    const gain = tier
+      ? `+${pct(tierYieldMult(tier))} % de production · assaillants +${pct(tierThreatMult(tier))} %`
+      : 'aucun bonus encore';
+    const up = next !== null ? ` · prochain cran dans ${formatDuration(next)}` : ' · au maximum';
+    return { title: `🏅 Cran ${tier}/${TIER.max}`, detail: gain + up };
+  }
+  if (tier <= 0) return null;
+  const down = next !== null ? ` · en perd un dans ${formatDuration(next)}` : '';
+  return {
+    title: `🏅 Cran ${tier}/${TIER.max}`,
+    detail: `reprends-le vite : il repart de là${down}`,
+  };
+}
+
+/** 🏅 La ligne du rapport de chute : le cran perdu. Vide si le point n'en avait pas. */
+export function tierLostLabel(tierBefore: number): string {
+  return tierBefore > 0
+    ? ` 🏅 Le lieu perd un cran (${tierBefore} → ${tierBefore - 1}) — reprends-le vite.`
+    : '';
+}
+
+/** 🏅 Le cran à la prochaine attaque : c'est lui qui dimensionne la troupe de reprise. */
+const tierAtAttack = (c: ControlState | undefined): number =>
+  c?.attackAt !== undefined ? controlTier(c, c.attackAt) : controlTier(c, 0);
+
 /** 🏰 Combien de champions un point garde en garnison (décision de l'utilisateur : le
  *  jardin n'en garde qu'UN — on choisit à l'envoi qui reste, les autres rentrent). */
 // ⚠️ 2026-09-28 (demandé : « les autres peuvent avoir jusqu'à 5 en garnison, champion et/ou
@@ -342,6 +453,9 @@ export function captureControl(
       collectedAt: at,
       attackAt: at + retakeDelayMs(id, at, activeDays7),
       assault: false,
+      // 🏅 Repris : il repart des crans qui lui restaient (ceux que l'ennemi n'a pas usés).
+      tier: controlTier(p.control, at),
+      tierAt: at,
     },
   }));
 }
@@ -416,6 +530,9 @@ export function loseControl(
       retakes,
       ...force,
       ...(won ? { faction: won.faction } : {}),
+      // 🏅 Perdu : −1 cran tout de suite, puis −1 toutes les 24 h chez l'ennemi.
+      tier: Math.max(0, controlTier(p.control, at) - 1),
+      tierAt: at,
       // 🏠 Ceux déjà sur le chemin du retour ne sont plus là : le lieu tombe sans eux, ils
       // finissent leur trajet (sinon un milicien en route vers la base disparaîtrait).
       // 🔙 Les renforts encore en route les rejoignent : ils font demi-tour.
@@ -488,7 +605,9 @@ export function retakeBoost(p: Poi, allies: readonly SkirmishUnit[]): number {
 
 /** 🛡️ Ce que l'écran annonce : la tenue réelle, renfort ennemi compris (donc ≤ `maxHold`). */
 export function garrisonHold(p: Poi, allies: readonly SkirmishUnit[]): number {
-  return garrisonHoldChance(p, allies, retakeBoost(p, allies));
+  // 🏅 La troupe grossit aussi avec le cran du point (`retakeForce`) : même règle ici.
+  const threat = tierThreatMult(tierAtAttack(p.control));
+  return garrisonHoldChance(p, allies, retakeBoost(p, allies) * threat);
 }
 
 /** ⏰ L'heure de l'attaque, telle que le joueur la CONNAÎT : seulement dans les dernières
@@ -542,11 +661,21 @@ export function retakeForce(p: Poi, boost: number): Pick<ControlState, 'faction'
   const seats = p.control
     ? Math.min(seatsOf(p.control.kind), CONTROL.maxGarrison)
     : CONTROL.maxGarrison;
-  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost };
+  // 🏅 Un vieux point est plus convoité : sa troupe grossit avec son cran à l'heure de
+  // l'attaque (APRÈS le plafond de tenue, cf. `TIER`).
+  const threat = tierThreatMult(tierAtAttack(p.control));
+  return { ...f, size: ((f.size * seats) / CONTROL.maxGarrison) * boost * threat };
 }
 
 const shareOf = (n: number) =>
   CONTROL.garrisonShare[Math.min(CONTROL.garrisonShare.length - 1, Math.max(0, n))] ?? 0;
+
+/** 🗼 La réduction de trajet et le bonus de détection d'une tour TENUE à `now` : selon son
+ *  effectif (`garrisonShare`) ET son cran (`tierYieldMult`). */
+const towerCutOf = (c: ControlState, now: number): number =>
+  CONTROL.towerCut * shareOf(c.garrison.length) * tierYieldMult(controlTier(c, now));
+const towerDetectOf = (c: ControlState, now: number): number =>
+  CONTROL.towerDetect * shareOf(c.garrison.length) * tierYieldMult(controlTier(c, now));
 
 /** ⛏️ L'or produit par heure pour une garnison de `n` champions. */
 export function controlGoldPerHour(p: Pick<Poi, 'id'>, n: number, playerLevel: number): number {
@@ -618,9 +747,9 @@ function stockUnits(p: Poi, now: number, playerLevel: number): number {
   const c = p.control;
   if (!c || c.owner !== 'player' || c.collectedAt === undefined) return 0;
   const until = Math.min(now, c.attackAt ?? now);
-  const ms = Math.max(0, until - c.collectedAt);
   const rate = unitsPerHour(p, c.garrison.length, playerLevel);
-  return (c.banked ?? 0) + (rate * ms) / 3600_000;
+  // 🏅 Chaque heure au cran QU'ELLE avait (`tierHours`).
+  return (c.banked ?? 0) + rate * tierHours(c, c.collectedAt, until);
 }
 
 /** 🎯 L'XP la plus haute qu'un champion attend au camp (avant plafond, cf. `trainingRoom`),
@@ -676,7 +805,8 @@ function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, 
   if (!c || !isPerChampKind(c.kind) || c.owner !== 'player' || c.collectedAt === undefined)
     return {};
   const until = Math.min(now, c.attackAt ?? now);
-  const ms = Math.max(0, until - c.collectedAt);
+  // 🏅 Chaque heure au cran qu'elle avait (`tierHours`).
+  const hours = tierHours(c, c.collectedAt, until);
   const rate = trainingXpPerHour(playerLevel);
   // Lieu d'avant `perXp` : la réserve commune valait pour chaque champion posté.
   const legacy = c.perXp === undefined ? (c.banked ?? 0) : 0;
@@ -685,7 +815,7 @@ function champStockBy(p: Poi, now: number, playerLevel: number): Record<string, 
     if (isMilitiaId(id)) continue;
     const b = out[id] ?? legacy;
     // ⚠️ Sans plafond de temps (2026-09-29) : c'est `trainingRoom` qui borne ce qu'il reçoit.
-    out[id] = b + (rate * ms) / 3600_000;
+    out[id] = b + rate * hours;
   }
   return out;
 }
@@ -761,11 +891,11 @@ export function gardenStock(p: Poi, now: number): number {
  * MULTIPLIE le trajet déjà réduit par l'Avant-poste (décision de l'utilisateur) — on ne
  * l'ajoute pas à sa réduction, sinon les deux se plafonneraient ensemble.
  */
-export function controlTravelMult(map: ExpeditionMap | null | undefined): number {
+export function controlTravelMult(map: ExpeditionMap | null | undefined, now: number): number {
   let m = 1;
   for (const p of map?.pois ?? [])
     if (p.control?.kind === 'tower' && p.control.owner === 'player')
-      m *= 1 - CONTROL.towerCut * shareOf(p.control.garrison.length);
+      m *= 1 - towerCutOf(p.control, now);
   return m;
 }
 
@@ -774,11 +904,11 @@ export function controlTravelMult(map: ExpeditionMap | null | undefined): number
  * additionné entre tours. Il allonge le préavis de la base (`baseLeadMs`), donc le moment où
  * un siège est repéré ET le rayon où les armées deviennent visibles sur la carte.
  */
-export function controlDetectBoost(map: ExpeditionMap | null | undefined): number {
+export function controlDetectBoost(map: ExpeditionMap | null | undefined, now: number): number {
   let b = 0;
   for (const p of map?.pois ?? [])
     if (p.control?.kind === 'tower' && p.control.owner === 'player')
-      b += CONTROL.towerDetect * shareOf(p.control.garrison.length);
+      b += towerDetectOf(p.control, now);
   return b;
 }
 
@@ -911,15 +1041,16 @@ export function controlProgress(p: Poi, now: number, playerLevel: number): Contr
   const c = p.control;
   if (!c || c.owner !== 'player') return null;
   if (c.kind === 'tower') {
-    const cut = CONTROL.towerCut * shareOf(c.garrison.length);
-    const det = CONTROL.towerDetect * shareOf(c.garrison.length);
+    const cut = towerCutOf(c, now);
+    const det = towerDetectOf(c, now);
     return {
       text: `🧭 −${Math.round(cut * 100)} % trajets · 👁️ +${Math.round(det * 100)} % détection`,
       pct: null,
     };
   }
   // 🎓⛏️⛲ Versé directement (2026-09-29) : on dit le débit, il n'y a plus de jauge.
-  const perH = unitsPerHour(p, c.garrison.length, playerLevel);
+  // 🏅 Le débit AU CRAN D'AUJOURD'HUI.
+  const perH = unitsPerHour(p, c.garrison.length, playerLevel) * tierYieldMult(controlTier(c, now));
   const per = (x: number) => Math.round(x).toLocaleString('fr-FR');
   if (isPerChampKind(c.kind)) return { text: `🎓 +${per(perH)} XP/h`, pct: null };
   if (c.kind === 'mine') return { text: `🪙 +${per(perH)}/h`, pct: null };
@@ -997,8 +1128,8 @@ export function controlYieldCard(
   const crew = `${n}/${seats} ${seats > 1 ? many : one}`;
   const idle = n > 0 ? null : `Aucun ${one} : la production est arrêtée.`;
   if (c.kind === 'tower') {
-    const cut = CONTROL.towerCut * shareOf(n);
-    const det = CONTROL.towerDetect * shareOf(n);
+    const cut = towerCutOf(c, now);
+    const det = towerDetectOf(c, now);
     return {
       emoji: '🧭',
       value: `−${Math.round(cut * 100)} %`,
@@ -1011,21 +1142,22 @@ export function controlYieldCard(
     };
   }
   // 🎓 Plus de réserve (2026-09-29) : l'XP arrive directement aux champions (`AUTO_COLLECT_MS`).
+  const tierMult = tierYieldMult(controlTier(c, now));
   if (isPerChampKind(c.kind)) {
-    const perH = trainingXpPerHour(playerLevel);
+    const perH = trainingXpPerHour(playerLevel) * tierMult;
     return {
       emoji: '🎓',
       value: `+${Math.round(perH).toLocaleString('fr-FR')} XP/h`,
       what: 'par champion, versée directement',
       pct: null,
       gauge: idle,
-      rate: `⚒️ +${Math.round(campGearXpPerHour(playerLevel))} XP/h par pièce portée · ${crew}`,
+      rate: `⚒️ +${Math.round(campGearXpPerHour(playerLevel) * tierMult)} XP/h par pièce portée · ${crew}`,
       ready: false,
       full: false,
     };
   }
   const units = stockUnits(p, now, playerLevel);
-  const rate = unitsPerHour(p, n, playerLevel);
+  const rate = unitsPerHour(p, n, playerLevel) * tierMult;
   switch (c.kind) {
     case 'mine':
     case 'mana': {
@@ -1048,7 +1180,7 @@ export function controlYieldCard(
       const whole = Math.floor(units + 1e-9);
       const next = Math.max(0, units - whole);
       const left = leftFor(1 - next, rate);
-      const every = gardenHoursFor(n);
+      const every = (gardenHoursFor(n) ?? 0) / tierMult || null;
       return {
         emoji: '🌿',
         value: whole > 0 ? `${whole} 🎒` : `${Math.round(next * 100)} %`,
@@ -1066,8 +1198,8 @@ export function controlYieldCard(
     case 'scriptorium': {
       const r = units >= 1 - 1e-9 ? 1 : units;
       const left = r < 1 ? leftFor(1 - r, rate) : null;
-      const every = runeHoursFor(n);
-      const best = runeHoursFor(seats);
+      const every = (runeHoursFor(n) ?? 0) / tierMult || null;
+      const best = (runeHoursFor(seats) ?? 0) / tierMult || null;
       return {
         emoji: '📜',
         value: r >= 1 ? 'Prête' : `${Math.round(r * 100)} %`,

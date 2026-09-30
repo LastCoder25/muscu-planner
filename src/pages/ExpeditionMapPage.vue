@@ -218,6 +218,7 @@
             :veiled-key="veiledKey"
             :down-key="downKey"
             :imminent-key="imminentKey"
+            :tier-key="tierKey"
             :target="active && voyageTargetShown(active, now) ? active.poi : null"
             :target-down="heroTargetDown"
             :travel-targets="travelTargets"
@@ -462,6 +463,10 @@
           @close="selected = null"
           @seal="doSeal"
         />
+        <!-- 🏅 L'ANCIENNETÉ du point (2026-09-30) : son cran, ce qu'il rapporte, ce qu'il attire. -->
+        <p v-if="tierLine" class="ctl-line ctl-tier">
+          <b>{{ tierLine.title }}</b> <span class="ctl-dim">· {{ tierLine.detail }}</span>
+        </p>
         <!-- ⚔️ Déjà attaqué : plus rien à envoyer, la fiche s'arrête à ce qu'il rapporte. -->
         <template v-if="!engagedTrip">
           <!-- 🏰 UN POINT DE CONTRÔLE TENU : sa garnison, ce qu'il produit, quand l'ennemi
@@ -844,40 +849,9 @@
                 </p>
               </div>
             </div>
+            <!-- 🧝 Le héros n'est plus ici : il est une tuile PARMI les effectifs, dans le groupe
+               de la base (demandé, `HeroPickTile`). Reste « tout le vivier ». -->
             <div class="party-top">
-              <button
-                type="button"
-                class="party-hero"
-                :class="{ on: partyHeroOn, off: !!partyHeroBlock }"
-                :disabled="!!partyHeroBlock"
-                :aria-pressed="partyHeroOn"
-                @click="partyHero = !partyHero"
-              >
-                <span class="ph-emo">🧝</span>
-                <span class="ph-main">
-                  <span class="ph-name">Ton héros</span>
-                  <span class="ph-sub">{{
-                    partyHeroBlock
-                      ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock]
-                      : originOptions.length
-                        ? 'part de la base · sans XP'
-                        : 'sans XP'
-                  }}</span>
-                  <span
-                    v-if="partyGain.hero != null"
-                    class="ph-gain"
-                    :class="{ zero: partyGain.hero === 0, neg: partyGain.hero < 0 }"
-                    :title="
-                      partyHeroOn
-                        ? 'Ce que l’équipe perdrait en réussite sans lui.'
-                        : 'Ce qu’il ajouterait en réussite à l’équipe cochée.'
-                    "
-                    >🎯 {{ partyGain.hero > 0 ? '+' : partyGain.hero < 0 ? '−' : ''
-                    }}{{ Math.abs(partyGain.hero) }} %</span
-                  >
-                </span>
-                <span class="ph-check">{{ partyHeroOn ? '✓' : '＋' }}</span>
-              </button>
               <button
                 v-if="char.advList.length"
                 class="car-auto"
@@ -936,6 +910,14 @@
                   <span class="pool-leg">à {{ formatDurationMin(g.legMin) }}</span>
                   <span class="pool-n">{{ g.advs.length }} 🗡️</span>
                 </div>
+                <HeroPickTile
+                  v-if="g.id === 'base'"
+                  :on="partyHeroOn"
+                  :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                  sub="part de la base · sans XP"
+                  :gain="partyGain.hero"
+                  @toggle="partyHero = !partyHero"
+                />
                 <AdvPickTile
                   v-for="a in g.advs"
                   :key="a.id"
@@ -957,7 +939,14 @@
                 />
               </template>
             </div>
-            <div v-else-if="char.advList.length" class="car-pick">
+            <div v-else class="car-pick">
+              <HeroPickTile
+                :on="partyHeroOn"
+                :block="partyHeroBlock ? PARTY_HERO_BLOCK_LABEL[partyHeroBlock] : null"
+                sub="sans XP"
+                :gain="partyGain.hero"
+                @toggle="partyHero = !partyHero"
+              />
               <AdvPickTile
                 v-for="a in partyPoolSorted"
                 :key="a.id"
@@ -1040,8 +1029,8 @@
             <!-- 💀 ON DIT POURQUOI, ET LA PARADE : un bouton qui se grise en silence se lit
                  comme une panne. -->
             <p v-if="partySendBlock === 'hopeless'" class="sh-risk">
-              💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou
-              vise un lieu d’un rang plus bas.
+              💀 {{ PARTY_SEND_BLOCK_LABEL.hopeless }}. Emmène plus de champions, monte-les, ou vise
+              un lieu d’un rang plus bas.
             </p>
             <p v-else-if="partySendBlock && partySendBlock !== 'empty'" class="sh-risk">
               ⛔ {{ PARTY_SEND_BLOCK_LABEL[partySendBlock] }}.
@@ -1155,6 +1144,7 @@ import { playerWithGear, fxRarity, gradeLabel, RARITY_RANK } from '@/lib/items';
 import MissionReportCard from '@/components/MissionReportCard.vue';
 import { messageCard } from '@/lib/missionCard';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import HeroPickTile from '@/components/HeroPickTile.vue';
 import RecallSheet, { type RecallAsk } from '@/components/RecallSheet.vue';
 import { FACTION_LOOT_LABEL, campBodyCount, campRewardLabel, forceLootPreview } from '@/lib/camp';
 import {
@@ -1276,6 +1266,8 @@ import {
   controlRoster,
   controlTravelMult,
   controlYieldCard,
+  controlTier,
+  controlTierLabel,
   trainingCapLevel,
   seatsOf,
   attackImminent,
@@ -1892,6 +1884,17 @@ const liveControl = computed(() => {
   const id = selected.value?.id;
   return id ? (char.row?.expedition_map?.pois.find((p) => p.id === id)?.control ?? null) : null;
 });
+/** 🏅 Le cran du point sélectionné (ancienneté) : titre et détail, à la minute. */
+const tierLine = computed(() => controlTierLabel(liveControl.value ?? undefined, coarseNow.value));
+/** 🏅 Les crans des points de la carte, en CHAÎNE « id:cran » (le calque ne se redessine que si
+ *  un cran change). Seuls les crans > 0 sont dessinés. */
+const tierKey = computed(() =>
+  (char.row?.expedition_map?.pois ?? [])
+    .filter((p) => p.control)
+    .map((p) => `${p.id}:${controlTier(p.control, coarseNow.value)}`)
+    .filter((s) => !s.endsWith(':0'))
+    .join('|'),
+);
 const livePoi = computed(() =>
   selected.value
     ? (char.row?.expedition_map?.pois.find((p) => p.id === selected.value!.id) ?? null)
@@ -3762,7 +3765,7 @@ const travelTargets = stableBy(
 const outpostBuilt = computed(() => expeditionsUnlocked(char.row?.buildings ?? []));
 // 🗼 Les tours de guet tenues raccourcissent les trajets APRÈS l'Avant-poste.
 const travelMult = computed(
-  () => travelTimeMult(char.row?.buildings ?? []) * controlTravelMult(char.row?.expedition_map),
+  () => travelTimeMult(char.row?.buildings ?? []) * controlTravelMult(char.row?.expedition_map, now.value),
 );
 const roundTripMin = (p: Poi) =>
   Math.round(travelOneWayMin(poiTravelLevel(p), p.distNorm) * 2 * travelMult.value);
@@ -4283,13 +4286,9 @@ onUnmounted(() => {
 }
 .party-top {
   display: flex;
+  justify-content: flex-end;
   gap: 6px;
   margin-bottom: 6px;
-}
-.party-top .party-hero {
-  flex: 1;
-  min-width: 0;
-  margin-bottom: 0;
 }
 .car-auto {
   flex: none;
@@ -4360,65 +4359,6 @@ onUnmounted(() => {
   font-size: 12.5px;
   cursor: pointer;
 }
-/* ⚔️ Le héros dans un groupe de camp : pleine largeur, 44 px, coché comme une tuile. */
-.party-hero {
-  width: 100%;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding: 6px 12px;
-  background: #1d1913;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-.party-hero.on {
-  border-color: var(--accent);
-  background: linear-gradient(90deg, rgba(255, 210, 63, 0.16), #1d1913 70%);
-}
-.party-hero.off {
-  cursor: default;
-  border-style: dashed;
-  opacity: 0.65;
-}
-.ph-emo {
-  font-size: 22px;
-}
-.ph-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-}
-.ph-name {
-  font-size: 13px;
-  font-weight: 700;
-}
-.ph-gain {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--d1, #7bc86c);
-}
-.ph-gain.zero {
-  color: var(--dim);
-  font-weight: 600;
-}
-.ph-gain.neg {
-  color: var(--d3, #ffb23f);
-}
-.ph-sub {
-  font-size: 11.5px;
-  color: var(--dim);
-}
-.ph-check {
-  font-size: 16px;
-  font-weight: 800;
-  color: var(--accent);
-}
 .sh-rules {
   margin: 4px 0 6px;
 }
@@ -4456,6 +4396,9 @@ onUnmounted(() => {
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, #b57bff 55%, var(--line));
   background: color-mix(in srgb, #b57bff 8%, var(--surface));
+}
+.ctl-tier b {
+  color: var(--accent);
 }
 .ctl-line {
   margin: 0 0 6px;

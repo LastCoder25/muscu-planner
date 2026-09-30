@@ -21,6 +21,8 @@ import {
   trainingRoom,
   trainingStock,
   seatsOf,
+  controlGoldPerHour,
+  tierYieldMult,
 } from '@/lib/controlPoints';
 import { advAscensionReady, advXpToNext, grantAdvXp } from '@/lib/adventurers';
 import { rankStartLevel } from '@/lib/characterRank';
@@ -127,29 +129,29 @@ describe('🏰 les quatre points', () => {
   });
   it('🗼 la tour tenue raccourcit les trajets (×0,8 à 3), sans rien à récolter', () => {
     const { map, id } = held('tower');
-    expect(controlTravelMult(mapAt(11))).toBe(1);
-    expect(controlTravelMult(map)).toBeCloseTo(0.8, 5);
-    expect(controlTravelMult(held('tower', ['a0']).map)).toBeCloseTo(0.9, 5);
+    expect(controlTravelMult(mapAt(11), 0)).toBe(1);
+    expect(controlTravelMult(map, 0)).toBeCloseTo(0.8, 5);
+    expect(controlTravelMult(held('tower', ['a0']).map, 0)).toBeCloseTo(0.9, 5);
     // Jusqu'à 5 : chaque présent de plus raccourcit encore les trajets.
     const five = ['a0', 'a1', 'a2', 'a3', 'a4'];
-    expect(controlTravelMult(held('tower', five).map)).toBeCloseTo(1 - 0.2 * 1.3, 5);
-    expect(controlTravelMult(held('tower', five.slice(0, 4)).map)).toBeLessThan(
-      controlTravelMult(map),
+    expect(controlTravelMult(held('tower', five).map, 0)).toBeCloseTo(1 - 0.2 * 1.3, 5);
+    expect(controlTravelMult(held('tower', five.slice(0, 4)).map, 0)).toBeLessThan(
+      controlTravelMult(map, 0),
     );
     expect(collectControl(map, id, 12 * H, 30).map).toBe(map);
   });
   it('🗼 la tour tenue allonge la détection de la base selon sa garnison', () => {
-    expect(controlDetectBoost(mapAt(11))).toBe(0);
-    expect(controlDetectBoost(null)).toBe(0);
-    expect(controlDetectBoost(held('tower').map)).toBeCloseTo(CONTROL.towerDetect, 5);
-    expect(controlDetectBoost(held('tower', ['a0']).map)).toBeCloseTo(CONTROL.towerDetect * 0.5, 5);
+    expect(controlDetectBoost(mapAt(11), 0)).toBe(0);
+    expect(controlDetectBoost(null, 0)).toBe(0);
+    expect(controlDetectBoost(held('tower').map, 0)).toBeCloseTo(CONTROL.towerDetect, 5);
+    expect(controlDetectBoost(held('tower', ['a0']).map, 0)).toBeCloseTo(CONTROL.towerDetect * 0.5, 5);
     const five = ['a0', 'a1', 'a2', 'a3', 'a4'];
-    const par = (n: number) => controlDetectBoost(held('tower', five.slice(0, n)).map);
+    const par = (n: number) => controlDetectBoost(held('tower', five.slice(0, n)).map, 0);
     // Chaque présent de plus voit plus loin — jusqu'à la garnison entière.
     for (let n = 2; n <= 5; n++) expect(par(n)).toBeGreaterThan(par(n - 1));
     expect(par(5)).toBeCloseTo(CONTROL.towerDetect * 1.3, 5);
     // Une autre sorte de point tenu ne voit rien de plus.
-    expect(controlDetectBoost(held('mine').map)).toBe(0);
+    expect(controlDetectBoost(held('mine').map, 0)).toBe(0);
   });
 });
 
@@ -184,8 +186,11 @@ describe('🏰 prise, production, reprise', () => {
     expect(controlStock(p, 0, 30)).toBe(0);
     const s6 = controlStock(p, 6 * H, 30);
     expect(s6).toBeGreaterThan(0);
-    // Sans plafond (2026-09-29) : 72 h rendent trois fois 24 h (à l'arrondi près).
-    expect(Math.abs(controlStock(p, 72 * H, 30) - 3 * controlStock(p, 24 * H, 30))).toBeLessThanOrEqual(3);
+    // Sans plafond (2026-09-29) : 72 h rendent 72 h de production — chaque jour à SON cran
+    // (🏅 +1 par 24 h tenues, 2026-09-30).
+    const perH = controlGoldPerHour(p, 3, 30);
+    const days = 24 * (tierYieldMult(0) + tierYieldMult(1) + tierYieldMult(2));
+    expect(Math.abs(controlStock(p, 72 * H, 30) - perH * days)).toBeLessThanOrEqual(1);
     const solo = { ...p, control: { ...p.control, garrison: ['a0'] } };
     expect(controlStock(solo, 6 * H, 30)).toBeLessThan(s6);
     // Jusqu'à 5 : chaque présent de plus rapporte, toujours moins que le précédent.

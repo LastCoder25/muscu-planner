@@ -323,6 +323,8 @@ import {
   ensureControls,
   holdControl,
   loseControl,
+  controlTier,
+  tierLostLabel,
   markAssault,
   recallReinforcements,
   canTurnBack,
@@ -2156,7 +2158,7 @@ export const useCharacterStore = defineStore('character', () => {
   ): number {
     const defenses = base?.defenses ?? [];
     return detectRadius(
-      baseLeadMs(scoutLevel(defenses), raidIntervalMs(knownActiveDays7), controlDetectBoost(map)),
+      baseLeadMs(scoutLevel(defenses), raidIntervalMs(knownActiveDays7), controlDetectBoost(map, Date.now())),
     );
   }
   /** ⚔️🗼 Les voyages dont l'issue est tirée (groupes, héros) : les chocs contre les armées en
@@ -2248,7 +2250,7 @@ export const useCharacterStore = defineStore('character', () => {
       poi,
       now,
       (now ^ (poi.level * 2654435761)) >>> 0 || 1,
-      travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+      travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now),
       level,
     );
     // 🎒 Un consommable peut tomber de TOUT voyage (« tout partout »), tiré sur sa graine.
@@ -2699,7 +2701,7 @@ export const useCharacterStore = defineStore('character', () => {
     knownActiveDays7 = ctx.activeDays7;
     const t = advanceBase(
       baseOf(cur, now),
-      { ...ctx, towerBoost: controlDetectBoost(cur.expedition_map) },
+      { ...ctx, towerBoost: controlDetectBoost(cur.expedition_map, now) },
       now,
     );
     // ⚔️🗼 LES CHOCS EN RASE CAMPAGNE PASSENT AVANT LE SIÈGE : une équipe qui a croisé l'armée
@@ -3430,7 +3432,7 @@ export const useCharacterStore = defineStore('character', () => {
     const legOf = (p: Poi) =>
       partyLegMin(p, escort, {
         hero: !!hero,
-        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now),
         gearSpeed: advGearRoles(escort, road.advGear).speed,
         supplies,
       });
@@ -3468,7 +3470,7 @@ export const useCharacterStore = defineStore('character', () => {
     const backLeg = (p: Poi) =>
       partyLegMin(p, back, {
         hero: !!hero,
-        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now),
         gearSpeed: advGearRoles(back, road.advGear).speed,
         supplies,
       });
@@ -3673,7 +3675,7 @@ export const useCharacterStore = defineStore('character', () => {
     const legOf = (p: Poi) =>
       partyLegMin(p, back, {
         hero,
-        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, Date.now()),
         gearSpeed: advGearRoles(back, road.advGear).speed,
         supplies,
       });
@@ -3751,7 +3753,7 @@ export const useCharacterStore = defineStore('character', () => {
       : null;
     if (heroBlock) return `héros : ${PARTY_HERO_BLOCK_LABEL[heroBlock]}`;
     // Le trajet de chaque groupe, à SON pas, depuis chez lui (Tour de guet comprise).
-    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map);
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map, now);
     const legs = groups.map((g) => {
       const withHero = !!hero && g.originId === null;
       const legOf = (p: Poi) =>
@@ -4212,7 +4214,7 @@ export const useCharacterStore = defineStore('character', () => {
     return (
       partyLegMin(p.poi, esc, {
         hero: false,
-        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+        travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, Date.now()),
         gearSpeed: advGearRoles(esc, escortKitOf(cur).advGear).speed,
       }) * 60_000
     );
@@ -4478,7 +4480,8 @@ export const useCharacterStore = defineStore('character', () => {
                 ? `${emo} L’ennemi a repris le lieu.${militiaLostLabel(o?.party?.militiaLost)}`
                 : `${emo} L’ennemi a repris le lieu, laissé sans défense.`) +
           turnBackLabel(back.length) +
-          sortieHomeLabel(rr?.n ?? 0),
+          sortieHomeLabel(rr?.n ?? 0) +
+          tierLostLabel(held ? 0 : controlTier(p.control, at)),
         ...(o?.party ? { party: { ...o.party, controlId: p.id, defense: true } } : {}),
       };
       msgs.push(msg);
@@ -4843,7 +4846,7 @@ export const useCharacterStore = defineStore('character', () => {
   ): { advAt: number; map: (m: ExpeditionMap) => ExpeditionMap } {
     const poi = cur.expedition_map?.pois.find((p) => p.id === id);
     if (!poi) return { advAt: now, map: (m) => m };
-    const mult = travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map);
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now);
     const escort = champs
       .map((x) => advList.value.find((a) => a.id === x))
       .filter((a): a is Adventurer => !!a);
@@ -4905,7 +4908,7 @@ export const useCharacterStore = defineStore('character', () => {
       poi,
       [],
       0,
-      travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+      travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now),
     );
     const at = now + leg * 60_000;
     await persist(userId, {
@@ -4937,7 +4940,7 @@ export const useCharacterStore = defineStore('character', () => {
     if (escort.length !== ids.length) return 'un champion choisi n’est plus disponible';
     const leg = partyLegMin(poi, escort, {
       hero: false,
-      travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map),
+      travelMult: travelTimeMult(cur.buildings) * controlTravelMult(cur.expedition_map, now),
       gearSpeed: advGearRoles(escort, escortKitOf(cur).advGear).speed,
     });
     const at = now + leg * 60_000;
@@ -5093,7 +5096,7 @@ export const useCharacterStore = defineStore('character', () => {
     const mil = ids.filter((x) => isMilitiaId(x));
     const champs = advList.value.filter((a) => ids.includes(a.id) && a.posted === fromId);
     if (champs.length + mil.length !== ids.length) return 'un membre choisi n’est plus là';
-    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map);
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map, now);
     const advAt = champs.length
       ? now +
         legFromSpot(to, from, (p) =>
@@ -5165,7 +5168,7 @@ export const useCharacterStore = defineStore('character', () => {
       return 'le membre remplacé n’est plus là';
     if (inAdv && (fromId ? inAdv.posted !== fromId : !advAvailable(inAdv, now)))
       return 'le remplaçant n’est plus disponible';
-    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map);
+    const mult = travelTimeMult(cur.buildings) * controlTravelMult(map, now);
     const legOf = (adv: Adventurer | null | undefined) => (p: Poi) =>
       adv
         ? partyLegMin(p, [adv], {

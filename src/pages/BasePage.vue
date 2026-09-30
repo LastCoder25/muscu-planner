@@ -1905,7 +1905,7 @@ const arriveIn = computed(() => (raid.value ? fmtDelay(raid.value.arrivesAt - no
  *  qu'une armée soit repérée. `nextRaidIn` (le compte à rebours vers l'assaut) a été
  *  retiré : il rendait gratuit ce que ce bâtiment fait payer. */
 const scoutLeadLabel = computed(() => {
-  const boost = controlDetectBoost(char.row?.expedition_map);
+  const boost = controlDetectBoost(char.row?.expedition_map, now.value);
   const ms = baseLeadMs(
     scoutLevel(defenses.value),
     raidIntervalMs(progress.activeDaysInLast(7)),
