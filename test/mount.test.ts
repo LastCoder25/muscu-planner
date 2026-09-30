@@ -2927,8 +2927,8 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('1 h 00 plus tôt');
   }, 30_000);
 
-  it('⚔️ AttacksSheet liste les armées en marche, et dit quand rien n’approche', async () => {
-    const { default: AttacksSheet } = await import('@/components/AttacksSheet.vue');
+  it('🧭⚔️ TripsPanel : voyages et attaques dans la même rangée, filtrables', async () => {
+    const { default: TripsPanel } = await import('@/components/TripsPanel.vue');
     const army = {
       id: 'a',
       type: 'warband',
@@ -2940,68 +2940,81 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       expiresAt: 9e15,
       army: { kind: 'siege', targetId: 'r', at: 1, faction: 'bandits', size: 3 },
     };
+    const atk = {
+      army,
+      kind: 'siege',
+      target: null,
+      inMs: 40 * 60_000,
+      size: 3,
+      faction: 'bandits',
+    };
     let out = '';
     await mountIt(
-      AttacksSheet,
-      {
-        modelValue: true,
-        rows: [
-          { army, kind: 'siege', target: null, inMs: 40 * 60_000, size: 3, faction: 'bandits' },
-        ],
-      },
+      TripsPanel,
+      { trips: [], focus: null, heroProfile: 'polyvalent', attacks: [atk], holds: { a: 82 } },
       undefined,
       undefined,
       '/',
       (h) => (out = h),
     );
-    expect(out).toContain('Siège de ta base');
-    // 🎯 Le lieu attaqué en encart haut-droit : la base pour un siège.
-    expect(out).toMatch(/class="ats-target"[^>]*>🏰</);
-    expect(out).toContain('40 min');
-    expect(out).toContain('soon');
-    // 🛡️ Sans pronostic (siège sans renseignement) : on le DIT, sans inventer de %.
-    expect(out).toContain('tenue ?');
-    let held = '';
+    // Le filtre est là, « Expéditions » grisé (vide), et « Tout » actif.
+    expect(out).toContain('tr-filter');
+    expect(out).toMatch(/class="trf trips"[^>]*disabled/);
+    expect(out).toMatch(/class="trf all on"/);
+    expect(out).toContain('trip attack soon');
+    expect(out).toContain('🛡️ 82 %');
+    // Filtrer sur les expéditions (vides) retombe sur « Tout » : la rangée ne se vide pas.
+    let fil = '';
     await mountIt(
-      AttacksSheet,
-      {
-        modelValue: true,
-        holds: { a: 82 },
-        rows: [
-          { army, kind: 'siege', target: null, inMs: 40 * 60_000, size: 3, faction: 'bandits' },
-        ],
-      },
+      TripsPanel,
+      { trips: [], focus: null, heroProfile: 'polyvalent', attacks: [atk] },
       undefined,
       undefined,
       '/',
-      (h) => (held = h),
+      (h) => (fil = h),
+      (host) => host.querySelector<HTMLElement>('.trf.attacks')?.click(),
     );
-    expect(held).toContain('🛡️ 82 %');
-    expect(held).toContain('ats-hold tenu');
-    expect(held).not.toContain('tenue ?');
-    let empty = '';
+    expect(fil).toMatch(/class="trf attacks on"/);
+    expect(fil).toContain('trip attack');
+    // Avec un voyage ET une armée, chaque filtre masque l'autre catégorie.
+    const trip = {
+      key: 'g1',
+      kind: 'van',
+      who: '⚔️',
+      poi: { ...army, id: 'p1', type: 'mine' },
+      time: '→ 1 h 20',
+      pct: 40,
+      back: false,
+      title: 'Groupe',
+      withHero: false,
+      members: [],
+      haul: [],
+    };
+    const both = { trips: [trip], focus: null, heroProfile: 'polyvalent', attacks: [atk] };
+    let onlyAtk = '';
     await mountIt(
-      AttacksSheet,
-      { modelValue: true, rows: [] },
-      undefined,
+      TripsPanel,
+      both,
+      ROW,
       undefined,
       '/',
-      (h) => (empty = h),
+      (h) => (onlyAtk = h),
+      (host) => host.querySelector<HTMLElement>('.trf.attacks')?.click(),
     );
-    expect(empty).toContain('Aucune armée repérée');
-    // Posée sous la carte (`inline`) : pas de dialogue, pas de bouton de fermeture.
-    let inl = '';
+    expect(onlyAtk).toContain('trip attack');
+    expect(onlyAtk).not.toContain('→ 1 h 20');
+    let onlyTrips = '';
     await mountIt(
-      AttacksSheet,
-      { modelValue: true, rows: [], inline: true },
-      undefined,
+      TripsPanel,
+      both,
+      ROW,
       undefined,
       '/',
-      (h) => (inl = h),
+      (h) => (onlyTrips = h),
+      (host) => host.querySelector<HTMLElement>('.trf.trips')?.click(),
     );
-    expect(inl).toContain('ats inline');
-    expect(inl).toContain('Aucune armée repérée');
-    expect(inl).not.toContain('Fermer');
+    expect(onlyTrips).toContain('→ 1 h 20');
+    expect(onlyTrips).not.toContain('trip attack');
   }, 30_000);
 });
 

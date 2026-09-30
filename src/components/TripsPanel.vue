@@ -10,8 +10,25 @@
 <template>
   <!-- ⏱️ VOYAGES ET ATTAQUES MÊLÉS, DANS L'ORDRE D'ARRIVÉE (demandé) : ce qui tombe le plus
        tôt passe en tête, qu'il s'agisse d'un retour ou d'une frappe ennemie (`tiles`). -->
+  <!-- 🧭⚔️ FILTRE (demandé) : voyages et armées ennemies partagent la rangée ; on choisit ce
+       qu'on regarde. Une catégorie vide est grisée, et un filtre qui se vide retombe sur
+       « Tout » (`effectiveTripFilter`). -->
+  <div v-if="tiles.length" class="tr-filter" role="group" aria-label="Filtrer">
+    <button
+      v-for="o in filterOpts"
+      :key="o.id"
+      type="button"
+      class="trf"
+      :class="[o.id, { on: shown === o.id }]"
+      :aria-pressed="shown === o.id"
+      :disabled="o.n === 0"
+      @click="filter = o.id"
+    >
+      {{ o.label }} <b v-if="o.id !== 'all'">{{ o.n }}</b>
+    </button>
+  </div>
   <div v-if="tiles.length" class="trips">
-    <template v-for="{ key, trip: t, attack: r } in tiles" :key="key">
+    <template v-for="{ key, trip: t, attack: r } in shownTiles" :key="key">
       <button
         v-if="t"
         type="button"
@@ -176,6 +193,7 @@ export interface MapTrip {
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
+import { effectiveTripFilter, type TripFilter } from '@/lib/tripFilter';
 import RiftPortal from '@/components/RiftPortal.vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
 import AventureAvatar from '@/components/AventureAvatar.vue';
@@ -232,6 +250,21 @@ const tiles = computed(() => {
   ];
   return list.sort((x, y) => x.at - y.at);
 });
+/** 🧭⚔️ Le filtre voyages / attaques (cf. `effectiveTripFilter`). */
+const filter = ref<TripFilter>('all');
+const shown = computed(() =>
+  effectiveTripFilter(filter.value, props.trips.length, props.attacks?.length ?? 0),
+);
+const filterOpts = computed<{ id: TripFilter; label: string; n: number }[]>(() => [
+  { id: 'all', label: 'Tout', n: tiles.value.length },
+  { id: 'trips', label: '🧭 Expéditions', n: props.trips.length },
+  { id: 'attacks', label: '⚔️ Attaques', n: props.attacks?.length ?? 0 },
+]);
+const shownTiles = computed(() =>
+  tiles.value.filter((x) =>
+    shown.value === 'trips' ? !!x.trip : shown.value === 'attacks' ? !!x.attack : true,
+  ),
+);
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
 const ATTACK_SOON_MS = 3_600_000;
 const holdOf = (r: ActiveAttack): number | null => props.holds?.[r.army.id] ?? null;
@@ -308,7 +341,7 @@ function facesOf(t: MapTrip) {
  *  champions qui sont dedans »). Un champion renvoyé depuis n'est plus dans le vivier : il est
  *  compté à part plutôt que de faire tomber l'écran. */
 const crew = computed(() => {
-  const t = props.trips.find((x) => x.key === props.focus);
+  const t = shown.value === 'attacks' ? undefined : props.trips.find((x) => x.key === props.focus);
   if (!t) return null;
   const byId = new Map(char.advList.map((a) => [a.id, a]));
   const advs = t.members.map((id) => byId.get(id)).filter((a): a is Adventurer => !!a);
@@ -336,6 +369,46 @@ const crew = computed(() => {
    la dernière ligne, incomplète, se CENTRE toute seule quel que soit le reste (1 ou 2) —
    laissée dans ses colonnes, elle se collait à gauche avec un trou, ce qui se lit comme un
    élément manquant plutôt que comme la fin de la liste. */
+.tr-filter {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 2px 2px 8px;
+}
+.trf {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  b {
+    margin-left: 2px;
+    color: var(--dim);
+  }
+  &.on {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 18%, var(--surface));
+    b {
+      color: var(--accent);
+    }
+  }
+  &.attacks.on {
+    border-color: var(--d4);
+    background: color-mix(in srgb, var(--d4) 18%, var(--surface));
+    b {
+      color: var(--d4);
+    }
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
 .trips {
   display: flex;
   flex-wrap: wrap;
