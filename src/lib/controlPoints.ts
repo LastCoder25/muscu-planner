@@ -302,7 +302,7 @@ const CONTROL_QUARTER: Record<ControlKind, number> = {
   scriptorium: 2.5,
   // ⛲ La place laissée libre par la Forge de campagne (2026-09-29), entre la mine et le camp.
   mana: 0.5,
-  // 🏯 Inutilisé : les quatre citadelles ont leurs propres quarts (`CITADEL.quarters`).
+  // 🏯 Inutilisé : les citadelles ont leurs propres angles (`CITADEL.sites`).
   citadel: 0,
 };
 
@@ -337,70 +337,94 @@ function enemyForce(
 
 /**
  * 🏯 LES CITADELLES ENNEMIES (2026-09-30, décisions de l'utilisateur) : l'endgame OFFENSIF des
- * points fixes. **Quatre, une par quart de carte, loin de la ville** : chacune envoie les
- * reprises sur les points de SON quart (demandé : « il en faudrait plus pour légitimer les
- * attaques qui viennent de tout autour »).
+ * points fixes. C'est d'elles que partent les reprises.
  *
+ * - **Elles apparaissent avec le niveau, de plus en plus loin** (demandé : « assez loin que ça
+ *   coûte cher d'y aller, à différentes distances, et en rajouter selon le niveau ») : une
+ *   première dès le départ, puis une de plus aux niveaux 15, 30 et 50 (`sites`), chacune plus
+ *   loin que la précédente. L'ennemi s'étend autour de la ville à mesure qu'on progresse.
+ * - **Chaque point est attaqué par la citadelle PRÉSENTE la plus proche de lui** (en angle) :
+ *   au début toutes les reprises viennent de la première ; à quatre, elles viennent de tout
+ *   autour.
  * - Jamais tenues : on en attaque une en groupe (héros compris, comme un camp) ; gagnée, elle
  *   est ABATTUE puis se reconstruit aussitôt, un PALIER plus haut.
- * - **Son niveau est toujours celui du joueur** : elle ne s'envole jamais toute seule, et elle
- *   monte avec le sport. Ce qui monte à chaque destruction, c'est son PALIER — sa troupe
- *   grossit (`perPalier`), et son butin avec (celui d'un camp, qui suit la taille).
- * - **Un échec, ou 7 jours sans la battre : palier −1.** Elle se règle donc d'elle-même sur ce
- *   que l'équipe du joueur sait battre : jamais bloqué, au pire on redescend d'un cran.
- * - **Tenir les points de son quart l'affaiblit** (`perHeldPoint` par point tenu).
- * - **L'abattre offre une TRÊVE à son quart** (`truceMs`) : aucune reprise des points de ce
- *   quart avant sa fin — de quoi y laisser monter les crans sans risque.
- * - **Loin** (`dist` : le bord de la carte de référence, hors du disque révélé au départ) :
- *   c'est de là que partent les armées, et l'atteindre est un raid (~4 h d'aller au niveau 30,
- *   avant l'Avant-poste). ⚠️ Exemptée de l'élagage « hors de la carte » (`advanceWorld`).
+ * - **Son niveau est toujours celui du joueur** : elle monte avec le sport. Ce qui monte à
+ *   chaque destruction, c'est son PALIER — sa troupe grossit (`perPalier`), et son butin avec
+ *   (celui d'un camp, qui suit la taille).
+ * - **Un échec, ou 7 jours sans la battre : palier −1.** Elle se règle d'elle-même sur ce que
+ *   l'équipe du joueur sait battre : jamais bloqué, au pire on redescend d'un cran.
+ * - **Tenir les points qu'elle attaque l'affaiblit** (`perHeldPoint` par point).
+ * - **L'abattre offre une TRÊVE à ces points** (`truceMs`) : aucune reprise avant sa fin.
+ * - **Loin, donc cher en temps** : aller de 4 h 30 (la première) à 7 h 30 (la quatrième) au
+ *   niveau 30, avant l'Avant-poste et la Tour de guet — un raid qui immobilise l'équipe.
+ *   ⚠️ Posées hors du disque révélé : exemptées de l'élagage « hors de la carte ».
  * ⚠️ MESURÉ (combat fondu, champions de référence nus, 60 combats) : un héros + 3 champions
  *   battent une troupe de 4 à 58-100 % (niveaux 12 à 90), de 5 à 13-98 %, de 6 à 0-65 %. Le
  *   palier 0 est donc à portée d'un groupe ordinaire ; les paliers hauts demandent plus de
  *   champions — l'échelle sans fin, bornée par le vivier et le Panthéon.
  */
 export const CITADEL = {
-  /** Sa troupe au palier 0, sans point tenu dans son quart, en champions de référence. */
+  /** Sa troupe au palier 0, sans point tenu, en champions de référence. */
   baseSize: 4,
   /** +15 % de troupe par palier. */
   perPalier: 0.15,
-  /** −10 % de troupe par point tenu DANS SON QUART (un quart en compte 1 ou 2). */
+  /** −10 % de troupe par point tenu parmi ceux qu'elle attaque. */
   perHeldPoint: 0.1,
   /** La trêve offerte en l'abattant : 3 jours (le délai le plus long d'une reprise). */
   truceMs: 72 * 3600_000,
   /** Palier −1 par semaine sans victoire. */
   decayMs: 7 * 24 * 3600_000,
-  /** Distance à la ville : le bord de la carte de référence (`EXPE.distMax`). */
-  dist: EXPE.distMax,
-  /** Les quatre citadelles, en quarts de tour (même repère que `CONTROL_QUARTER`) : chacune
-   *  entre deux points, un quart de quart après la mine, le camp, le jardin et la tour. */
-  quarters: [0.25, 1.25, 2.25, 3.25] as readonly number[],
+  /** Les citadelles, dans l'ordre où elles apparaissent : leur angle (en quarts de tour, même
+   *  repère que `CONTROL_QUARTER` — chacune entre deux points), leur distance à la ville (la
+   *  première au-delà du bord de la carte de référence, `EXPE.distMax` 64) et le niveau du
+   *  joueur qui la fait apparaître. La deuxième se pose EN FACE de la première, pour que les
+   *  attaques viennent vite des deux côtés. */
+  sites: [
+    { quarter: 0.25, dist: 70, level: 1 },
+    { quarter: 2.25, dist: 82, level: 15 },
+    { quarter: 1.25, dist: 94, level: 30 },
+    { quarter: 3.25, dist: 106, level: 50 },
+  ] as readonly { quarter: number; dist: number; level: number }[],
 } as const;
 
 export const citadelIdOf = (i: number): string => `ctl_citadel_${i}`;
-const CITADEL_IDS = CITADEL.quarters.map((_, i) => citadelIdOf(i));
+const CITADEL_IDS = CITADEL.sites.map((_, i) => citadelIdOf(i));
 export const isCitadel = (p: Pick<Poi, 'control'> | null | undefined): boolean =>
   p?.control?.kind === 'citadel';
 export const isCitadelId = (id: string): boolean => CITADEL_IDS.includes(id);
 
-/** 🏯 La citadelle qui attaque un point : celle dont le quart est le plus proche du sien. */
-export function citadelIndexOf(kind: ControlKind): number {
+/** 🏯 Les citadelles présentes sur la carte (leurs index dans `sites`). */
+function presentCitadels(pois: readonly Poi[]): number[] {
+  return CITADEL_IDS.flatMap((id, i) => (pois.some((p) => p.id === id) ? [i] : []));
+}
+
+/** 🏯 Parmi `present`, la citadelle la plus proche (en angle) d'un type de point ; `null`
+ *  s'il n'y en a aucune. */
+export function citadelIndexOf(kind: ControlKind, present: readonly number[]): number | null {
   const q = CONTROL_QUARTER[kind];
-  let best = 0;
+  let best: number | null = null;
   let bestD = Infinity;
-  CITADEL.quarters.forEach((c, i) => {
-    const d = Math.abs(((q - c + 6) % 4) - 2);
+  for (const i of present) {
+    const d = Math.abs(((q - CITADEL.sites[i]!.quarter + 6) % 4) - 2);
     if (d < bestD - 1e-9) {
       best = i;
       bestD = d;
     }
-  });
+  }
   return best;
 }
 
-/** 🏯 Les types de points qu'une citadelle attaque. */
-export const citadelTargets = (i: number): ControlKind[] =>
-  CONTROL.kinds.filter((k) => citadelIndexOf(k) === i);
+/** 🏯 L'id de la citadelle qui attaque ce type de point sur cette carte, ou `null`. */
+export function citadelIdFor(pois: readonly Poi[], kind: ControlKind): string | null {
+  const i = citadelIndexOf(kind, presentCitadels(pois));
+  return i === null ? null : citadelIdOf(i);
+}
+
+/** 🏯 Les types de points qu'une citadelle attaque sur cette carte. */
+export function citadelTargets(pois: readonly Poi[], i: number): ControlKind[] {
+  const present = presentCitadels(pois);
+  return CONTROL.kinds.filter((k) => citadelIndexOf(k, present) === i);
+}
 
 /** 🏯 Le palier EFFECTIF à `now` : celui posé, moins une semaine d'inactivité par cran. */
 export function citadelPalier(c: ControlState | undefined, now: number): number {
@@ -411,13 +435,14 @@ export function citadelPalier(c: ControlState | undefined, now: number): number 
   return Math.max(0, base - idle);
 }
 
-/** 🏯 Combien de points de SON quart le joueur tient. */
-function heldInQuarter(pois: readonly Poi[], i: number): number {
+/** 🏯 Combien de points qu'elle attaque le joueur tient. */
+function heldFor(pois: readonly Poi[], i: number): number {
+  const present = presentCitadels(pois);
   return pois.filter(
     (p) =>
       p.control?.owner === 'player' &&
       p.control.kind !== 'citadel' &&
-      citadelIndexOf(p.control.kind) === i,
+      citadelIndexOf(p.control.kind, present) === i,
   ).length;
 }
 
@@ -427,66 +452,61 @@ export function citadelSize(palier: number, held: number): number {
   return CITADEL.baseSize * (1 + CITADEL.perPalier * Math.max(0, palier)) * weak;
 }
 
-/** 🏯 La trêve en cours sur le quart d'un point (0 s'il n'y en a pas). */
+/** 🏯 La trêve en cours sur un point (celle de la citadelle qui l'attaque), 0 sinon. */
 export function truceUntilFor(map: ExpeditionMap | null | undefined, kind: ControlKind): number {
-  const id = citadelIdOf(citadelIndexOf(kind));
-  return map?.pois.find((p) => p.id === id)?.control?.truceUntil ?? 0;
+  const id = map ? citadelIdFor(map.pois, kind) : null;
+  return (id && map!.pois.find((p) => p.id === id)?.control?.truceUntil) || 0;
 }
 
-/** 🏯 Où se pose une citadelle : loin, dans son quart. */
-function citadelSpot(map: ExpeditionMap, i: number): Pick<Poi, 'x' | 'y' | 'distNorm'> {
-  return spotAt(map, CITADEL.quarters[i]!, CITADEL.dist);
-}
-
-/** 🏯 Les citadelles à jour : posées si elles manquent, sinon niveau (celui du joueur), place
- *  et troupe (palier, points tenus) rafraîchis. La citadelle unique d'avant (`ctl_citadel`,
- *  v0.1378) est retirée. Rend le MÊME tableau quand rien ne change. */
+/** 🏯 Les citadelles à jour : celles que le niveau du joueur a fait apparaître sont posées si
+ *  elles manquent, puis niveau (celui du joueur), place et troupe rafraîchis ; celles d'un niveau
+ *  pas encore atteint sont retirées (hors assaut), comme la citadelle unique d'avant
+ *  (`ctl_citadel`, v0.1378). Rend le MÊME tableau quand rien ne change. */
 function syncCitadels(pois: Poi[], map: ExpeditionMap, now: number, playerLevel: number): Poi[] {
   const level = Math.max(1, playerLevel);
-  let out = pois.some((p) => p.id === controlIdOf('citadel'))
-    ? pois.filter((p) => p.id !== controlIdOf('citadel'))
-    : pois;
-  CITADEL.quarters.forEach((_, i) => {
+  const unlocked = (i: number) => CITADEL.sites[i]!.level <= level;
+  const drop = (p: Poi) =>
+    p.id === controlIdOf('citadel') ||
+    (isCitadelId(p.id) && !unlocked(CITADEL_IDS.indexOf(p.id)) && !p.control?.assault);
+  let out = pois.some(drop) ? pois.filter((p) => !drop(p)) : pois;
+  // Posées d'abord, rafraîchies ensuite : les points tenus se répartissent sur TOUTES les
+  // citadelles présentes (`heldFor`).
+  CITADEL.sites.forEach((site, i) => {
     const id = citadelIdOf(i);
-    const held = heldInQuarter(out, i);
-    const spot = citadelSpot(map, i);
-    const k = out.findIndex((p) => p.id === id);
-    if (k < 0) {
-      out = [
-        ...out,
-        {
-          id,
-          type: 'control',
-          level,
-          travelLevel: level,
-          ...spot,
-          spawnedAt: now,
-          expiresAt: EXPE.lifespanMs.control,
-          control: {
-            kind: 'citadel',
-            owner: 'enemy',
-            garrison: [],
-            retakes: 0,
-            faction: enemyForce(`${map.seed}:${id}`, 0).faction,
-            size: citadelSize(0, held),
-            palier: 0,
-            palierAt: now,
-          },
+    if (!unlocked(i) || out.some((p) => p.id === id)) return;
+    out = [
+      ...out,
+      {
+        id,
+        type: 'control',
+        level,
+        travelLevel: level,
+        ...spotAt(map, site.quarter, site.dist),
+        spawnedAt: now,
+        expiresAt: EXPE.lifespanMs.control,
+        control: {
+          kind: 'citadel',
+          owner: 'enemy',
+          garrison: [],
+          retakes: 0,
+          faction: enemyForce(`${map.seed}:${id}`, 0).faction,
+          size: 0,
+          palier: 0,
+          palierAt: now,
         },
-      ];
-      return;
-    }
+      },
+    ];
+  });
+  CITADEL.sites.forEach((site, i) => {
+    const k = out.findIndex((p) => p.id === citadelIdOf(i));
+    if (k < 0) return;
     const p = out[k]!;
     const c = p.control!;
     // ⚠️ Pas pendant un assaut : la troupe affrontée est celle annoncée au départ.
     if (c.assault) return;
-    const size = citadelSize(citadelPalier(c, now), held);
-    if (
-      p.level === level &&
-      p.x === spot.x &&
-      p.y === spot.y &&
-      Math.abs(c.size - size) < 1e-9
-    )
+    const spot = spotAt(map, site.quarter, site.dist);
+    const size = citadelSize(citadelPalier(c, now), heldFor(out, i));
+    if (p.level === level && p.x === spot.x && p.y === spot.y && Math.abs(c.size - size) < 1e-9)
       return;
     out = [...out];
     out[k] = { ...p, ...spot, level, travelLevel: level, control: { ...c, size } };
@@ -494,13 +514,14 @@ function syncCitadels(pois: Poi[], map: ExpeditionMap, now: number, playerLevel:
   return out;
 }
 
-/** 🏯 Abattue à `at` : palier +1 (à partir du palier effectif), trêve posée sur son quart,
- *  nouvelle bannière ; les reprises des points tenus de ce quart sont repoussées après. */
+/** 🏯 Abattue à `at` : palier +1 (à partir du palier effectif), trêve posée sur les points
+ *  qu'elle attaque, nouvelle bannière ; leurs reprises prévues sont repoussées après la trêve. */
 export function razeCitadel(map: ExpeditionMap, id: string, at: number): ExpeditionMap {
   const i = CITADEL_IDS.indexOf(id);
   const cit = map.pois.find((p) => p.id === id);
   if (i < 0 || !cit?.control) return map;
   const c = cit.control;
+  const present = presentCitadels(map.pois);
   const truceUntil = at + CITADEL.truceMs;
   const retakes = c.retakes + 1;
   const palier = citadelPalier(c, at) + 1;
@@ -518,14 +539,14 @@ export function razeCitadel(map: ExpeditionMap, id: string, at: number): Expedit
             palier,
             palierAt: at,
             truceUntil,
-            size: citadelSize(palier, heldInQuarter(map.pois, i)),
+            size: citadelSize(palier, heldFor(map.pois, i)),
           },
         };
       const pc = p.control;
       if (
         pc?.owner !== 'player' ||
         pc.kind === 'citadel' ||
-        citadelIndexOf(pc.kind) !== i ||
+        citadelIndexOf(pc.kind, present) !== i ||
         pc.attackAt === undefined ||
         pc.attackAt >= truceUntil
       )
@@ -551,11 +572,17 @@ export function repelledAtCitadel(map: ExpeditionMap, id: string, at: number): E
           assault: false,
           palier,
           palierAt: at,
-          size: citadelSize(palier, heldInQuarter(map.pois, i)),
+          size: citadelSize(palier, heldFor(map.pois, i)),
         },
       };
     }),
   };
+}
+
+/** 🏯 La prochaine citadelle à apparaître et son niveau, ou `null` s'il n'y en a plus. */
+export function nextCitadelLevel(playerLevel: number): number | null {
+  const next = CITADEL.sites.find((s) => s.level > Math.max(1, playerLevel));
+  return next ? next.level : null;
 }
 
 /** 🏯 Ce que la fiche dit d'une citadelle : palier, points qu'elle attaque, trêve, et ce qui
@@ -569,18 +596,16 @@ export function citadelLabel(
   const c = map?.pois.find((p) => p.id === id)?.control;
   if (i < 0 || !c) return null;
   const palier = citadelPalier(c, now);
-  const held = heldInQuarter(map.pois, i);
+  const held = heldFor(map.pois, i);
   const truce = (c.truceUntil ?? 0) - now;
-  const targets = citadelTargets(i)
-    .map((k) => CONTROL_KIND_LABEL[k])
-    .join(', ');
+  const targets = citadelTargets(map.pois, i).map((k) => CONTROL_KIND_LABEL[k]);
   const weak = held
     ? ` · affaiblie de ${Math.round(CITADEL.perHeldPoint * held * 100)} % par tes points tenus`
     : '';
   return {
     title: `🏯 Palier ${palier}`,
     detail:
-      `elle attaque : ${targets}` +
+      (targets.length ? `elle attaque : ${targets.join(', ')}` : 'elle n’attaque aucun point') +
       (truce > 0
         ? ` · trêve encore ${formatDuration(truce)}`
         : ' · abats-la : 3 jours sans reprise sur ces points, butin plus gros à chaque palier') +

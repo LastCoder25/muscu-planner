@@ -5,8 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { entryPoint, retakeArmyPoi, syncFieldArmies } from '@/lib/fieldArmy';
 import {
   captureControl,
-  citadelIdOf,
-  citadelIndexOf,
+  citadelIdFor,
   controlIdOf,
   ensureControls,
 } from '@/lib/controlPoints';
@@ -88,7 +87,7 @@ describe('🏯 sur la carte, chaque reprise part de la citadelle de son quart', 
     const m0 = ensureControls(createMap(5, 0, 30, 1), 0, 30);
     const m1 = captureControl(m0, controlIdOf('mine'), ['a0'], 0, 7);
     const mine = m1.pois.find((q) => q.id === controlIdOf('mine'))!;
-    const cit = m1.pois.find((q) => q.id === citadelIdOf(citadelIndexOf('mine')))!;
+    const cit = m1.pois.find((q) => q.id === citadelIdFor(m1.pois, 'mine'))!;
     const now = mine.control!.attackAt! - 0.05 * H;
     const m2 = syncFieldArmies(m1, { raid: null, detectR: 200, reach: 200, now, playerLevel: 30 });
     const army = m2.pois.find((q) => q.army?.targetId === controlIdOf('mine'))!;
