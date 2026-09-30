@@ -2941,8 +2941,8 @@ describe('➕ renfort direct depuis une place libre (2026-09-29)', () => {
         '/',
         (h) => (out = h),
         (host) => {
-          host.querySelectorAll<HTMLElement>('.qr-when-b')[0]?.click();
-          host.querySelectorAll<HTMLElement>('.qr-delay .qr-step-b')[0]?.click();
+          host.querySelectorAll<HTMLElement>('.dd-when-b')[0]?.click();
+          host.querySelectorAll<HTMLElement>('.dd-delay .dd-step-b')[0]?.click();
           host.querySelector<HTMLElement>('.qr-plan-x')?.click();
         },
       ),

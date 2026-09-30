@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   PLAN_MAX_DELAY_MS,
   makePlannedMove,
+  makePlannedRecall,
   normalizePlanned,
   planDue,
   plannedChamps,
@@ -51,7 +52,10 @@ describe('⏳ renforts programmés', () => {
   });
 
   it('les réservations : miliciens, champions, membres d’autres lieux', () => {
-    const list = [makePlannedMove(sel, 'mine', 0, H), makePlannedMove({ ...sel, militia: 1 }, 'x', 0, H)];
+    const list = [
+      makePlannedMove(sel, 'mine', 0, H),
+      makePlannedMove({ ...sel, militia: 1 }, 'x', 0, H),
+    ];
     expect(plannedMilitia(list)).toBe(3);
     expect([...plannedChamps(list)].sort()).toEqual(['a', 'b']);
     expect(plannedTransferIds(list)).toEqual(new Set(['c', 'mil:3']));
@@ -74,7 +78,14 @@ describe('⏳ renforts programmés', () => {
   it('la relecture écarte le malformé et répare le partiel', () => {
     expect(normalizePlanned(null)).toEqual([]);
     const got = normalizePlanned([
-      { id: 'ok', toId: 't', departAt: 9, militia: '2', champs: ['a', 3], transfers: [{ fromId: 'f' }] },
+      {
+        id: 'ok',
+        toId: 't',
+        departAt: 9,
+        militia: '2',
+        champs: ['a', 3],
+        transfers: [{ fromId: 'f' }],
+      },
       { id: 'x', toId: 't' },
       { toId: 't', departAt: 1 },
       'rien',
@@ -82,5 +93,26 @@ describe('⏳ renforts programmés', () => {
     expect(got).toEqual<PlannedMove[]>([
       { id: 'ok', toId: 't', createdAt: 9, departAt: 9, champs: ['a'], militia: 2, transfers: [] },
     ]);
+  });
+});
+
+describe('🏠⏳ retour programmé (rappel d’une garnison)', () => {
+  const r = makePlannedRecall('ctl_mine', ['a', 'mil:1'], false, 1000, 2 * H);
+  it('part à l’heure dite, borné à 48 h', () => {
+    expect(r.departAt).toBe(1000 + 2 * H);
+    expect(makePlannedRecall('ctl_mine', ['a'], true, 0, 99 * H).departAt).toBe(PLAN_MAX_DELAY_MS);
+  });
+  it('réserve les membres ramenés, sans prendre de place ni sortir de la base', () => {
+    expect(plannedTransferIds([r])).toEqual(new Set(['a', 'mil:1']));
+    expect(plannedSeatsTo([r], 'ctl_mine')).toEqual({ champ: 0, total: 0 });
+    expect(plannedChamps([r]).size).toBe(0);
+    expect(plannedMilitia([r])).toBe(0);
+    expect(plannedOutings([r])).toEqual([]);
+    expect(plannedCount(r)).toBe(2);
+  });
+  it('survit à la relecture (JSONB), le rappel complet compris', () => {
+    const w = makePlannedRecall('ctl_mine', ['a'], true, 0, H);
+    expect(normalizePlanned(JSON.parse(JSON.stringify([r, w])))).toEqual([r, w]);
+    expect(normalizePlanned([{ ...r, recall: [3, 'a'] }])[0]!.recall).toEqual(['a']);
   });
 });

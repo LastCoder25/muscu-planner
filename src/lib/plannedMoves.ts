@@ -30,6 +30,12 @@ export interface PlannedMove {
   militia: number;
   /** Membres d'autres lieux tenus. */
   transfers: { fromId: string; id: string }[];
+  /** 🏠 UN RETOUR PROGRAMMÉ (2026-09-30, demandé : « quand je fais rappel depuis le lieu fixe,
+   *  il faut que je puisse le programmer ») : ces membres de la garnison de `toId` rentrent à
+   *  la base à `departAt`. Absent = un renfort. En attendant ils restent en poste. */
+  recall?: string[];
+  /** 🏠 Le rappel de TOUTE la garnison (la réserve est récoltée au départ). */
+  whole?: boolean;
 }
 
 /** On ne programme pas au-delà de ce délai : un départ si lointain ne veut plus rien dire
@@ -58,6 +64,10 @@ export function normalizePlanned(raw: unknown): PlannedMove[] {
                 !!t && typeof t.fromId === 'string' && typeof t.id === 'string',
             )
           : [],
+        ...(Array.isArray(o.recall)
+          ? { recall: o.recall.filter((x): x is string => typeof x === 'string') }
+          : {}),
+        ...(o.whole === true ? { whole: true } : {}),
       },
     ];
   });
@@ -82,6 +92,31 @@ export function makePlannedMove(
   };
 }
 
+/** 🏠 Un retour programmé : `ids` quittent la garnison de `pointId` dans `delayMs`. */
+export function makePlannedRecall(
+  pointId: string,
+  ids: readonly string[],
+  whole: boolean,
+  now: number,
+  delayMs: number,
+): PlannedMove {
+  const d = Math.max(0, Math.min(PLAN_MAX_DELAY_MS, Math.round(delayMs)));
+  return {
+    id: `plan_${now}_back_${pointId}`,
+    toId: pointId,
+    createdAt: now,
+    departAt: now + d,
+    champs: [],
+    militia: 0,
+    transfers: [],
+    recall: [...ids],
+    ...(whole ? { whole: true } : {}),
+  };
+}
+
+/** Est-ce un retour programmé (et non un renfort) ? */
+export const isPlannedRecall = (m: PlannedMove): boolean => !!m.recall;
+
 /** Les départs échus (le plus ancien d'abord) et ceux qui attendent encore. */
 export function planDue(
   list: readonly PlannedMove[],
@@ -99,9 +134,10 @@ export const plannedMilitia = (list: readonly PlannedMove[]): number =>
 export const plannedChamps = (list: readonly PlannedMove[]): Set<string> =>
   new Set(list.flatMap((m) => m.champs));
 
-/** Les membres d'autres lieux réservés (champions ou miliciens postés). */
+/** Les membres de lieux tenus réservés (champions ou miliciens postés) : ceux qu'un renfort
+ *  programmé transférera, et ceux qu'un retour programmé ramènera. */
 export const plannedTransferIds = (list: readonly PlannedMove[]): Set<string> =>
-  new Set(list.flatMap((m) => m.transfers.map((t) => t.id)));
+  new Set(list.flatMap((m) => [...m.transfers.map((t) => t.id), ...(m.recall ?? [])]));
 
 /** Les places qu'occupent, sur le lieu `toId`, les départs programmés vers lui. */
 export function plannedSeatsTo(
@@ -121,7 +157,7 @@ export function plannedSeatsTo(
 
 /** Le nombre de membres d'un départ programmé. */
 export const plannedCount = (m: PlannedMove): number =>
-  m.champs.length + m.militia + m.transfers.length;
+  m.champs.length + m.militia + m.transfers.length + (m.recall?.length ?? 0);
 
 /**
  * 🏰 La présence au siège : un champion de la base réservé est À LA MAISON jusqu'à son départ

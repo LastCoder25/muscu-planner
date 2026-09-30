@@ -592,11 +592,36 @@
                 <span class="slot-name">{{ slot.label }}</span>
               </button>
             </div>
+            <!-- ⏳ RETOURS PROGRAMMÉS (demandé : « quand je fais rappel depuis le lieu fixe, il
+               faut que je puisse le programmer ») : ils restent en poste jusqu'au départ. -->
+            <div v-for="m in ctlPlannedBack" :key="m.id" class="ctl-plan">
+              <span class="ctl-plan-main"
+                >⏳ <b>{{ m.count }}</b> retour{{ m.count > 1 ? 's' : '' }} programmé{{
+                  m.count > 1 ? 's' : ''
+                }}
+                · dans {{ m.departIn }} ({{ m.departAt }})</span
+              >
+              <button
+                type="button"
+                class="ctl-plan-x"
+                :disabled="ctlBusy"
+                @click="quickCancel(m.id)"
+              >
+                Annuler
+              </button>
+            </div>
+            <DepartDelayPicker
+              v-if="ctlRecallSel.length || controlMembersHere"
+              v-model="ctlRecallDelay"
+              label="Retour"
+              :max-delay-min="PLAN_MAX_DELAY_MS / 60_000"
+              :at="ctlRecallAt"
+            />
             <button
               v-if="ctlRecallSel.length"
               type="button"
               class="ctl-recall ctl-back"
-              :disabled="ctlBusy"
+              :disabled="ctlBusy || (ctlRecallDelay > 0 && !ctlSchedulable.length)"
               @click="releaseCtl"
             >
               {{ recallSelLabel }}
@@ -712,7 +737,11 @@
               :disabled="ctlBusy"
               @click="recallCtl"
             >
-              Rappeler toute la garnison
+              {{
+                ctlRecallDelay > 0
+                  ? `⏳ Programmer le retour de toute la garnison`
+                  : 'Rappeler toute la garnison'
+              }}
             </button>
           </div>
           <p v-else-if="liveControl?.kind === 'citadel'" class="sh-note">
@@ -1126,6 +1155,7 @@ import { buildingLevel, expeditionsUnlocked, travelTimeMult } from '@/lib/buildi
 import { talentEffects } from '@/lib/talents';
 import { simulateCombat, seedOf, type Combatant } from '@/lib/combat';
 import RiftPortal from '@/components/RiftPortal.vue';
+import DepartDelayPicker from '@/components/DepartDelayPicker.vue';
 import {
   POI_EMO,
   POI_LABEL,
@@ -1932,6 +1962,12 @@ const ctlMoving = computed(
 );
 /** Le bouton dit ce qu'il fera : ceux en route font DEMI-TOUR, les autres sont ramenés. */
 const recallSelLabel = computed(() => {
+  if (ctlRecallDelay.value > 0) {
+    const k = ctlSchedulable.value.length;
+    const skip = ctlRecallSel.value.length - k;
+    if (!k) return '⏳ Seuls les membres déjà sur le lieu se programment';
+    return `⏳ Programmer le retour de ${k} membre${k > 1 ? 's' : ''}${skip ? ` (${skip} en route ignoré${skip > 1 ? 's' : ''})` : ''}`;
+  }
   const moving = ctlMoving.value;
   const n = ctlRecallSel.value.length;
   const t = ctlRecallSel.value.filter((x) => moving.has(x)).length;
@@ -1970,6 +2006,39 @@ function openQuick() {
 }
 /** La sélection de la fiche : qui ramener. */
 const ctlRecallSel = ref<string[]>([]);
+/** ⏳ Dans combien de minutes ils rentrent (0 = tout de suite). */
+const ctlRecallDelay = ref(0);
+const ctlRecallAt = computed(() =>
+  ctlRecallDelay.value > 0
+    ? new Date(now.value + ctlRecallDelay.value * 60_000).toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null,
+);
+/** Ceux de la sélection qu'on peut programmer : déjà SUR le lieu (un renfort en route ne peut
+ *  que faire demi-tour, tout de suite) et pas déjà programmés. */
+const ctlSchedulable = computed(() => {
+  const here = new Set(liveControl.value?.garrison ?? []);
+  const reserved = plannedTransferIds(char.plannedList);
+  return ctlRecallSel.value.filter((x) => here.has(x) && !reserved.has(x));
+});
+/** Il y a quelqu'un sur le lieu à ramener (le choix du moment n'a de sens qu'alors). */
+const controlMembersHere = computed(() => (liveControl.value?.garrison.length ?? 0) > 0);
+/** ⏳ Les retours déjà programmés depuis ce lieu. */
+const ctlPlannedBack = computed(() =>
+  char.plannedList
+    .filter((m) => m.recall && m.toId === livePoi.value?.id)
+    .map((m) => ({
+      id: m.id,
+      count: plannedCount(m),
+      departIn: formatDuration(Math.max(0, m.departAt - now.value)),
+      departAt: new Date(m.departAt).toLocaleTimeString('fr-FR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    })),
+);
 /** 🛡️ Les miliciens à la base (le renfort direct les propose). */
 const milHome = computed(() => char.row?.base?.militia?.home ?? 0);
 const militiaBuilt = computed(() => buildingLevel(char.row?.buildings ?? [], 'barracks') > 0);
@@ -1977,6 +2046,7 @@ watch(
   () => selected.value?.id,
   () => {
     ctlRecallSel.value = [];
+    ctlRecallDelay.value = 0;
   },
 );
 function toggleRecall(id: string) {
@@ -2247,11 +2317,40 @@ async function transferCtl(toId: string) {
     ctlBusy.value = false;
   }
 }
+/** ⏳ Programme le retour : `whole` = toute la garnison. */
+async function scheduleCtlRecall(ids: readonly string[], whole: boolean) {
+  const uid = auth.user?.id;
+  const p = livePoi.value;
+  if (!uid || !p || ctlBusy.value) return;
+  const delay = ctlRecallDelay.value * 60_000;
+  ctlBusy.value = true;
+  try {
+    const why = await char.scheduleRecall(uid, p.id, ids, whole, delay, Date.now());
+    if (why) $q.notify({ type: 'warning', message: `Retour non programmé : ${why}.` });
+    else {
+      const n = whole ? (liveControl.value?.garrison.length ?? ids.length) : ids.length;
+      $q.notify({
+        type: 'positive',
+        message: `⏳ Retour de ${n} membre${n > 1 ? 's' : ''} programmé — départ dans ${formatDuration(delay)}`,
+      });
+      ctlRecallSel.value = [];
+      ctlRecallDelay.value = 0;
+    }
+  } finally {
+    ctlBusy.value = false;
+  }
+}
 async function releaseCtl() {
   const uid = auth.user?.id;
   const p = livePoi.value;
   const ids = ctlRecallSel.value;
   if (!uid || !p || !ids.length || ctlBusy.value) return;
+  if (ctlRecallDelay.value > 0) {
+    const k = ctlSchedulable.value;
+    if (k.length)
+      await scheduleCtlRecall(k, k.length === (liveControl.value?.garrison.length ?? -1));
+    return;
+  }
   // 🔙 Ceux encore EN ROUTE font demi-tour (le store les fait rebrousser chemin, en autant de
   // temps qu'ils ont marché) ; « tout rappeler » ne regarde que ceux déjà SUR le point.
   const moving = ctlMoving.value;
@@ -2316,6 +2415,10 @@ async function recallCtl() {
   const uid = auth.user?.id;
   const p = livePoi.value;
   if (!uid || !p || ctlBusy.value) return;
+  if (ctlRecallDelay.value > 0) {
+    await scheduleCtlRecall([], true);
+    return;
+  }
   const ok = await new Promise<boolean>((res) =>
     $q
       .dialog({
@@ -2965,7 +3068,7 @@ const quickDepartLabel = computed(() =>
 /** ⏳ Les départs déjà programmés vers ce lieu. */
 const quickPlanned = computed(() =>
   char.plannedList
-    .filter((m) => m.toId === quickId.value)
+    .filter((m) => !m.recall && m.toId === quickId.value)
     .map((m) => ({
       id: m.id,
       count: plannedCount(m),
@@ -4584,6 +4687,30 @@ onUnmounted(() => {
 .ctl-back {
   color: var(--text);
   border-color: color-mix(in srgb, #b57bff 55%, var(--line));
+}
+.ctl-plan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 6px 6px 6px 10px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 12px;
+  font-size: 12.5px;
+}
+.ctl-plan-main {
+  flex: 1;
+  min-width: 0;
+}
+.ctl-plan-x {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
 }
 .ctl-recall {
   width: 100%;

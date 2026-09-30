@@ -7,11 +7,7 @@
        la tenue AVEC la sélection se lit avant d'envoyer, puis un seul bouton envoie tout.
        ⚠️ Aucune règle ici — les places vivent dans `reinforceSelection`, la tenue dans la
        page, et le store refuse ce qui ne passe pas. -->
-  <q-dialog
-    :model-value="!!poi"
-    position="bottom"
-    @update:model-value="(v) => !v && emit('close')"
-  >
+  <q-dialog :model-value="!!poi" position="bottom" @update:model-value="(v) => !v && emit('close')">
     <div v-if="poi && poi.control" class="qr">
       <div class="qr-head">
         <span class="qr-title"
@@ -21,8 +17,8 @@
         <button type="button" class="qr-x" aria-label="Fermer" @click="emit('close')">✕</button>
       </div>
       <p class="qr-sub">
-        {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion · {{ milFree }} au total
-        · coche tes renforts, puis envoie-les ou programme leur départ
+        {{ champFree }} place{{ champFree > 1 ? 's' : '' }} de champion · {{ milFree }} au total ·
+        coche tes renforts, puis envoie-les ou programme leur départ
       </p>
       <!-- 🛡️ La tenue À L'ATTAQUE, et ce que la sélection y change (arrivées comprises). -->
       <p v-if="hold" class="qr-hold">
@@ -49,7 +45,9 @@
           <span class="qr-mil-name">{{ MILITIA_NAME }}s</span>
           <span class="qr-mil-sub"
             >{{ milHome }} à la base · 🧭 {{ formatDurationMin(militiaMin)
-            }}<template v-if="hold && canMil"> · 🎯 {{ sign(hold.mil) }} % le suivant</template></span
+            }}<template v-if="hold && canMil">
+              · 🎯 {{ sign(hold.mil) }} % le suivant</template
+            ></span
           >
         </span>
         <span class="qr-step">
@@ -115,8 +113,8 @@
                 ><ChampionPortrait v-if="m.adv" :champion-id="m.adv.championId">{{
                   advTitle(m.adv)?.emoji ?? '🧑'
                 }}</ChampionPortrait
-                ><MilitiaPortrait v-else /></span
-              >
+                ><MilitiaPortrait v-else
+              /></span>
               <span class="qr-mem-main">
                 <span class="qr-mem-name">{{ m.adv ? m.adv.name : MILITIA_NAME }}</span>
                 <span class="qr-mem-sub"
@@ -144,72 +142,12 @@
         </p>
         <!-- ⏳ LE DÉPART (demandé : « dans combien de temps, heures/minutes — si une attaque
              arrive dans 1 h 30 on les envoie dans 1 h 25 », ou tout de suite). -->
-        <div class="qr-when" role="group" aria-label="Départ">
-          <button
-            type="button"
-            class="qr-when-b"
-            :class="{ on: delayMin === 0 }"
-            :aria-pressed="delayMin === 0"
-            @click="emit('delay', 0)"
-          >
-            Maintenant
-          </button>
-          <button
-            type="button"
-            class="qr-when-b"
-            :class="{ on: delayMin > 0 }"
-            :aria-pressed="delayMin > 0"
-            @click="delayMin === 0 && emit('delay', 60)"
-          >
-            ⏳ Programmer
-          </button>
-        </div>
-        <div v-if="delayMin > 0" class="qr-delay">
-          <span class="qr-delay-lab">Départ dans</span>
-          <span class="qr-step">
-            <button
-              type="button"
-              class="qr-step-b"
-              aria-label="Une heure de moins"
-              :disabled="delayMin < 60 + 5"
-              @click="emit('delay', delayMin - 60)"
-            >
-              −
-            </button>
-            <b class="qr-step-n">{{ Math.floor(delayMin / 60) }} h</b>
-            <button
-              type="button"
-              class="qr-step-b"
-              aria-label="Une heure de plus"
-              :disabled="delayMin + 60 > maxDelayMin"
-              @click="emit('delay', delayMin + 60)"
-            >
-              ＋
-            </button>
-          </span>
-          <span class="qr-step">
-            <button
-              type="button"
-              class="qr-step-b"
-              aria-label="Cinq minutes de moins"
-              :disabled="delayMin <= 5"
-              @click="emit('delay', delayMin - 5)"
-            >
-              −
-            </button>
-            <b class="qr-step-n">{{ String(delayMin % 60).padStart(2, '0') }} min</b>
-            <button
-              type="button"
-              class="qr-step-b"
-              aria-label="Cinq minutes de plus"
-              :disabled="delayMin + 5 > maxDelayMin"
-              @click="emit('delay', delayMin + 5)"
-            >
-              ＋
-            </button>
-          </span>
-          <span v-if="departLabel" class="qr-delay-at">départ à {{ departLabel }}</span>
-        </div>
+        <DepartDelayPicker
+          :model-value="delayMin"
+          :max-delay-min="maxDelayMin"
+          :at="departLabel"
+          @update:model-value="emit('delay', $event)"
+        />
         <button type="button" class="qr-go" :disabled="busy" @click="emit('send')">
           <template v-if="delayMin > 0"
             >⏳ Programmer {{ count }} renfort{{ count > 1 ? 's' : '' }}</template
@@ -224,6 +162,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AdvPickTile from '@/components/AdvPickTile.vue';
+import DepartDelayPicker from '@/components/DepartDelayPicker.vue';
 import ChampionPortrait from '@/components/ChampionPortrait.vue';
 import { advTitle, type Adventurer } from '@/lib/adventurers';
 import { CONTROL_EMO, CONTROL_LABEL } from '@/lib/controlPoints';
@@ -543,42 +482,5 @@ const emit = defineEmits<{
   color: var(--text);
   font: inherit;
   cursor: pointer;
-}
-.qr-when {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-.qr-when-b {
-  min-height: 44px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: var(--surface-2, var(--bg));
-  color: var(--text);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-.qr-when-b.on {
-  border: 2px solid var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--surface-2, var(--bg)));
-}
-.qr-delay {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  margin-bottom: 8px;
-  font-size: 13px;
-}
-.qr-delay-lab {
-  width: 100%;
-  color: var(--dim);
-}
-.qr-delay-at {
-  width: 100%;
-  color: var(--dim);
-  font-size: 12px;
 }
 </style>

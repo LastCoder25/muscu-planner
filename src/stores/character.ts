@@ -3,6 +3,7 @@ import { comboChestMessageId, type ComboChestRecord } from '@/lib/comboChest';
 import { localDayIso } from '@/lib/localDay';
 import {
   makePlannedMove,
+  makePlannedRecall,
   normalizePlanned,
   planDue,
   plannedMilitia,
@@ -5450,6 +5451,37 @@ export const useCharacterStore = defineStore('character', () => {
     return null;
   }
 
+  /**
+   * 🏠⏳ PROGRAMME UN RETOUR (2026-09-30, demandé : « quand je fais rappel depuis le lieu fixe,
+   * il faut que je puisse le programmer »). `ids` (ou toute la garnison, `whole`) quittent le
+   * lieu dans `delayMs` ; d'ici là ils restent en poste — ils produisent et défendent — et
+   * sont réservés (ni transfert ni second programme). Rend la RAISON d'un refus, `null` si fait.
+   */
+  async function scheduleRecall(
+    userId: string,
+    pointId: string,
+    ids: readonly string[],
+    whole: boolean,
+    delayMs: number,
+    now: number,
+  ): Promise<string | null> {
+    await writesSettled();
+    const cur = row.value;
+    const c = cur?.expedition_map?.pois.find((p) => p.id === pointId)?.control;
+    if (!cur || !c) return 'la carte n’est pas chargée';
+    if (c.owner !== 'player') return 'ce lieu n’est plus à toi';
+    if (delayMs <= 0) return 'choisis dans combien de temps ils partent';
+    const list = whole ? [...c.garrison] : [...ids];
+    if (!list.length) return 'personne n’est choisi';
+    if (list.some((x) => !c.garrison.includes(x))) return 'un membre choisi n’est plus sur le lieu';
+    const reserved = plannedTransferIds(plannedList.value);
+    if (list.some((x) => reserved.has(x))) return 'un membre choisi est déjà programmé';
+    await persist(userId, {
+      planned_moves: [...plannedList.value, makePlannedRecall(pointId, list, whole, now, delayMs)],
+    });
+    return null;
+  }
+
   /** ⏳ Annule un renfort programmé : ses champions redeviennent libres. */
   async function cancelPlannedMove(userId: string, id: string): Promise<boolean> {
     await writesSettled();
@@ -5482,6 +5514,37 @@ export const useCharacterStore = defineStore('character', () => {
     const msgs: ExpeditionMessage[] = [];
     for (const m of due) {
       const at = m.departAt;
+      // 🏠 Un retour programmé : ceux encore sur le lieu rentrent, par le geste ordinaire
+      // (« tout rappeler » récolte la réserve ; sinon on ramène les choisis).
+      if (m.recall) {
+        const p = row.value?.expedition_map?.pois.find((q) => q.id === m.toId);
+        const c = p?.control;
+        const label = c ? CONTROL_LABEL[c.kind] : 'un lieu fixe';
+        const here = c?.owner === 'player' ? m.recall.filter((x) => c.garrison.includes(x)) : [];
+        const all = !!c && here.length > 0 && here.length === c.garrison.length;
+        if (here.length) {
+          if (m.whole || all) await recallControl(userId, m.toId, at, playerLevel);
+          else await releaseControlChampions(userId, m.toId, here, at, playerLevel);
+        }
+        const lost = m.recall.length - here.length;
+        const text = here.length
+          ? `${here.length} rentre${here.length > 1 ? 'nt' : ''} de ${label}${lost ? `, ${lost} n’y étai${lost > 1 ? 'ent' : 't'} plus` : ''}.`
+          : `personne à ramener de ${label} : le lieu a changé entre-temps.`;
+        out.push(`⏳ Retour programmé : ${text}`);
+        msgs.push({
+          id: `planned_${m.id}`,
+          title: `⏳ Retour programmé : ${label}`,
+          level: p?.level ?? 1,
+          win: here.length > 0,
+          text,
+          gold: 0,
+          energy: 0,
+          key: 0,
+          resolvedAt: at,
+          read: false,
+        });
+        continue;
+      }
       let sent = 0;
       const fails: string[] = [];
       const tryGroup = async (
@@ -5704,6 +5767,7 @@ export const useCharacterStore = defineStore('character', () => {
     plannedList,
     scheduleReinforcement,
     cancelPlannedMove,
+    scheduleRecall,
     plannedTick,
     recallTrip,
     applySpeedBoost,
