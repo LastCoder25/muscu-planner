@@ -37,6 +37,7 @@ import {
   type ExpeditionOutcome,
   type PartyResult,
   type Poi,
+  poiLabel,
   warbandAt,
 } from './expedition';
 import { FACTION_EMOJI, FACTION_LABEL } from './raid';
@@ -807,6 +808,33 @@ export interface PartyReport {
   members: PartyReportMember[];
   totalXp: number;
   journal: string[];
+}
+
+/**
+ * 🧭 LES DÉPARTS D'UN GROUPE, un par champion : ceux d'un point fixe portent son id et son
+ * nom, ceux de la base n'y figurent pas. Une attaque combinée passe un groupe par départ.
+ */
+export function partyOrigins(
+  groups: readonly {
+    ids: readonly string[];
+    origin: (Pick<Poi, 'id' | 'type' | 'control'> & Parameters<typeof poiLabel>[0]) | null;
+  }[],
+): Record<string, { id: string; label: string }> {
+  const out: Record<string, { id: string; label: string }> = {};
+  for (const g of groups) {
+    if (!g.origin) continue;
+    const at = { id: g.origin.id, label: poiLabel(g.origin) };
+    for (const id of g.ids) out[id] = at;
+  }
+  return out;
+}
+
+/** 🧭 Pose les départs sur le rapport du groupe (rien à faire sans rapport de groupe). */
+export function withOrigins(
+  o: ExpeditionOutcome,
+  from: Record<string, { id: string; label: string }>,
+): ExpeditionOutcome {
+  return o.party ? { ...o, party: { ...o.party, from } } : o;
 }
 
 /** 📜 Le rapport d'un groupe, lisible après coup dans la boîte 📬. ⚠️ Tout vient du
