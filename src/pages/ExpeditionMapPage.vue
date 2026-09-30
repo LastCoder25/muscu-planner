@@ -4812,11 +4812,14 @@ onUnmounted(() => {
   font-size: 12.5px;
   line-height: 1.4;
 }
+/* 🗺️ La carte prend TOUTE la largeur de l'écran (demandé) : elle déborde la gouttière de
+   16 px de l'Aventure qui l'héberge (`.adv-page`), sans bord ni coins sur les côtés.
+   ⚠️ Couplé à ce padding : s'il change, cette marge doit suivre. */
 .map-outer {
   position: relative;
-  margin: 0 8px;
-  border: 1px solid var(--line);
-  border-radius: 16px;
+  margin: 0 -16px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   overflow: hidden;
 }
 .map-scroll {

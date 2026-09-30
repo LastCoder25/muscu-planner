@@ -295,74 +295,6 @@
           </g>
         </g>
 
-        <!-- ── L'ACCÈS AUX EXPÉDITIONS (coin bas-gauche) ─────────────────────
-             Un panneau indicateur et TES champions en route vers lui : c'est d'ici qu'on
-             les envoie. ⚠️ HORS du groupe `v-once` de la porte : les médaillons suivent
-             le vivier (qui peut arriver après le premier rendu), un groupe figé les
-             aurait laissés vides pour toujours. -->
-        <g
-          class="hit camp"
-          role="button"
-          tabindex="0"
-          aria-label="Partir en expédition"
-          @click="openMap"
-          @keydown.enter="openMap"
-          @keydown.space.prevent="openMap"
-        >
-          <!-- Cible tactile élargie : les dessins se cliquent, mais un doigt vise mal. -->
-          <!-- ⚠️ Bornée pour rester HORS du rempart : son coin haut-droit doit être
-               au-delà de WALL_R + la demi-épaisseur du trait (72 + 4), sinon un clic près
-               du mur bas-gauche ouvrirait les expéditions. Mesuré : 77,7 > 76. -->
-          <rect x="4" y="164" width="52" height="34" class="gate-hit" />
-          <ellipse cx="36" cy="187" rx="31" ry="7.5" class="camp-ground" />
-          <!-- Le panneau : planche en flèche vers le dehors, boussole gravée. -->
-          <g class="sign">
-            <rect x="12.6" y="166" width="3.2" height="24" rx="0.8" class="sign-post" />
-            <path d="M2.5 170 L8 164 L26 164 L26 176 L8 176 Z" class="sign-board" />
-            <text x="16" y="172.6" class="sign-ico">🧭</text>
-          </g>
-          <defs>
-            <clipPath id="camp-disc" clipPathUnits="objectBoundingBox">
-              <circle cx="0.5" cy="0.5" r="0.5" />
-            </clipPath>
-          </defs>
-          <!-- Les champions en marche vers le panneau : les trois premiers de ton vivier
-               (disponibles d'abord), leur portrait dans un médaillon à la couleur de leur
-               rareté. Sans portrait, l'emoji de leur classe ; sans vivier, des silhouettes. -->
-          <g
-            v-for="(m, i) in expeParty"
-            :key="m.key"
-            class="march"
-            :class="{ ghost: !m.real }"
-            :style="{ '--rk': m.color, animationDelay: i * 0.22 + 's' }"
-          >
-            <ellipse
-              :cx="CAMP_SPOTS[i]!.x"
-              :cy="CAMP_SPOTS[i]!.y + 7.2"
-              rx="5"
-              ry="1.4"
-              class="march-shadow"
-            />
-            <circle :cx="CAMP_SPOTS[i]!.x" :cy="CAMP_SPOTS[i]!.y" r="6.4" class="march-bg" />
-            <image
-              v-if="m.src"
-              :href="m.src"
-              :x="CAMP_SPOTS[i]!.x - 6"
-              :y="CAMP_SPOTS[i]!.y - 6"
-              width="12"
-              height="12"
-              clip-path="url(#camp-disc)"
-              preserveAspectRatio="xMidYMid slice"
-            />
-            <text v-else :x="CAMP_SPOTS[i]!.x" :y="CAMP_SPOTS[i]!.y + 2.3" class="march-emo">
-              {{ m.emoji }}
-            </text>
-            <circle :cx="CAMP_SPOTS[i]!.x" :cy="CAMP_SPOTS[i]!.y" r="6.4" class="march-rim" />
-          </g>
-          <!-- Le libellé, comme au bord de la route : on sait où mène ce départ. -->
-          <text x="36" y="196.5" class="camp-label">Expéditions ›</text>
-        </g>
-
         <!-- ── LE SOL DE LA COUR ────────────────────────────────────────────
              Sans lui, les tuiles flottaient sur le même fond que l'extérieur : on ne
              voyait pas qu'on était DEDANS. La terre arrête le regard aux murs, et les
@@ -1027,9 +959,7 @@ import { useChampionFocus } from '@/composables/useChampionFocus';
 import VillagePlots from '@/components/VillagePlots.vue';
 import GuildPanel from '@/components/GuildPanel.vue';
 import SummonPanel from '@/components/SummonPanel.vue';
-import { advAvailable, advRarity, advTitle, engageCap } from '@/lib/adventurers';
-import { championPortrait } from '@/data/championPortraits';
-import { RANK_COLOR } from '@/lib/items';
+import { advAvailable, advTitle, engageCap } from '@/lib/adventurers';
 import SiegeStage from '@/components/SiegeStage.vue';
 import ReportDetail from '@/components/ReportDetail.vue';
 import { siegeDetail } from '@/lib/reportDetail';
@@ -1114,46 +1044,12 @@ const $q = useQuasar();
 const char = useCharacterStore();
 const auth = useAuthStore();
 const progress = useProgress();
-const { gameBack, openPath } = useGamePanel();
+const { gameBack } = useGamePanel();
 
 function back() {
   if (props.embedded) gameBack();
   else backOr(router, '/aventure');
 }
-/** Sortir de la base → la carte des expéditions. En cockpit, elle prend le volet droit ;
- *  sinon c'est une route plein écran. */
-/** Où se tiennent les trois champions du relais d'expédition : en file vers le panneau,
- *  le premier devant. ⚠️ Tous dans la cible tactile et loin du rempart. */
-const CAMP_SPOTS = [
-  { x: 32, y: 180 },
-  { x: 44, y: 181.5 },
-  { x: 55.5, y: 179.5 },
-] as const;
-
-/** Les champions dessinés au relais : les trois premiers du vivier, DISPONIBLES d'abord
- *  (ce sont eux qu'on peut envoyer). Complété de silhouettes s'il en manque. */
-const expeParty = computed(() => {
-  const now = coarseNow.value;
-  const sorted = [...char.advList].sort(
-    (a, b) => Number(advAvailable(b, now)) - Number(advAvailable(a, now)),
-  );
-  return CAMP_SPOTS.map((_, i) => {
-    const a = sorted[i];
-    if (!a) return { key: 'vide' + i, real: false, src: null, emoji: '🧑', color: '#6b5a40' };
-    return {
-      key: a.id,
-      real: true,
-      src: championPortrait(a.championId),
-      emoji: advTitle(a)?.emoji ?? '🧑',
-      color: RANK_COLOR[advRarity(a)],
-    };
-  });
-});
-
-function openMap() {
-  openPath(router, '/expedition-map', props.embedded);
-}
-
 // Horloge : tout l'état de la base est dérivé de timestamps (aucun cron, hors-ligne).
 const now = ref(Date.now());
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -1367,11 +1263,7 @@ const roadRuts = computed(() => {
  *  l'enceinte. Coordonnées arrondies au dixième : sur un viewBox de 200, au-delà c'est
  *  du bruit qui alourdit chaque attribut `d`. */
 const outsideWalls = (x: number, y: number) => Math.hypot(x - 100, y - 100) > EARTH_R - 3;
-// ⚠️ Le relais du coin bas-gauche compte aussi : sans lui, des touffes d'herbe pousseraient
-// au milieu de la caravane.
-const onCamp = (x: number, y: number) => x < 72 && y > 158;
-const onRoad = (x: number, y: number) =>
-  (y > WALL_BOTTOM && Math.abs(x - 100) < 18) || onCamp(x, y);
+const onRoad = (x: number, y: number) => y > WALL_BOTTOM && Math.abs(x - 100) < 18;
 const r1 = (n: number) => Math.round(n * 10) / 10;
 /** Sème `want` éléments par tirage-rejet dans le cadre (marge `pad`), hors enceinte et
  *  hors route. Une seule boucle pour les touffes et les taches. */
@@ -1404,8 +1296,8 @@ const patches = scatter(1717, 9, 10, (cx, cy, rng) => ({
   rx: r1(7 + rng() * 9),
   ry: r1(3 + rng() * 4),
 }));
-/** Quelques arbres hors les murs (le même conifère que sur la carte) — jamais sur le
- *  panneau « Expéditions » ni devant le corps de garde. */
+/** Quelques arbres hors les murs (le même conifère que sur la carte) — jamais devant la
+ *  porte ni devant le corps de garde. */
 const trees = scatter(
   9091,
   8,
@@ -2455,92 +2347,7 @@ function doHarvest() {
   stroke-dasharray: 3 3;
   stroke-linecap: round;
 }
-/* ── Le campement de départ (coin bas-gauche) ── */
-.camp-ground {
-  fill: #4b3c28;
-  opacity: 0.55;
-}
-.sign-post {
-  fill: #6b5a40;
-  stroke: #4a3d2b;
-  stroke-width: 0.6;
-}
-/* Le panneau doit se voir d'un coup d'œil sur la prairie : bois clair, liseré accent,
-   halo sombre dessous pour le détacher du vert, et une lueur qui respire. */
-.sign-board {
-  fill: #e2c386;
-  stroke: var(--accent, #ffd23f);
-  stroke-width: 1.1;
-  stroke-linejoin: round;
-  filter: drop-shadow(0 0 1.6px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 2.4px rgba(255, 210, 63, 0.55));
-  animation: signGlow 2.4s ease-in-out infinite;
-}
-@keyframes signGlow {
-  50% {
-    filter: drop-shadow(0 0 1.6px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 4px rgba(255, 210, 63, 0.9));
-  }
-}
-.sign-ico {
-  font-size: 8px;
-  text-anchor: middle;
-}
-.march {
-  animation: march 1.1s ease-in-out infinite alternate;
-}
-@keyframes march {
-  to {
-    transform: translateY(-1.1px);
-  }
-}
-.march.ghost {
-  opacity: 0.45;
-}
-.march-shadow {
-  fill: rgba(0, 0, 0, 0.35);
-}
-.march-bg {
-  fill: #221c14;
-}
-.march-emo {
-  font-size: 7px;
-  text-anchor: middle;
-}
-/* Liseré à la couleur de la rareté du champion — la même que partout ailleurs. */
-.march-rim {
-  fill: none;
-  stroke: var(--rk);
-  stroke-width: 1.3;
-}
-@media (prefers-reduced-motion: reduce) {
-  .march,
-  .sign-board {
-    animation: none;
-  }
-}
-/* Le libellé du relais, même rôle que celui au bord de la route : dire où mène ce départ. */
-.camp-label {
-  fill: var(--accent, #ffd23f);
-  font-family: var(--font-display, Oswald, sans-serif);
-  font-size: 7.5px;
-  font-weight: 700;
-  text-anchor: middle;
-  letter-spacing: 0.02em;
-}
-/* ⚠️ `:focus` et non seulement `:focus-visible` : au clic, certains navigateurs posent le
-   contour de focus (blanc) autour de la boîte ENTIÈRE du groupe. Le clavier garde son
-   retour, en accent sur la caravane (ci-dessous). */
-.hit.camp:focus {
-  outline: none;
-}
-.hit.camp:focus-visible .sign-board,
-.hit.camp:hover .sign-board {
-  stroke-width: 1.6;
-}
-
 /* ── La porte ── */
-.gate-hit {
-  fill: transparent; /* transparent SE clique ; `none` non */
-}
 .gate-pier {
   fill: #8a7856;
   stroke: #5a4c36;
