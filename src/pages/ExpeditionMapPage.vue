@@ -631,40 +631,58 @@
                trajet, et ce que devient l'autre point. Le remplacé part prendre la place du
                remplaçant (`swapGarrison`). -->
             <div v-if="swapOut && swapCandidates.length" class="swap">
-              <p class="car-cap">
-                ⇄ <b>ou remplacer {{ swapOut.name }}</b>
-                <span v-if="swapOut.loss" class="ctl-dim"
-                  >(apporte {{ swapOut.loss.loss }} % de tenue)</span
-                >
-                par :
-              </p>
-              <div class="swap-list">
-                <button
-                  v-for="r in swapCandidates"
-                  :key="r.key"
-                  type="button"
-                  class="swap-row"
-                  :disabled="!!r.why || ctlBusy"
-                  :title="r.why ?? ''"
-                  @click="swapCtl(r)"
-                >
-                  <span class="swap-who">
-                    <span class="swap-name">{{ r.adv ? '🗡️' : '🛡️' }} {{ r.name }}</span>
-                    <span class="swap-sub">{{
-                      r.why ?? `${r.where} · 🧭 ${formatDurationMin(r.min)}`
-                    }}</span>
-                    <span v-if="r.other" class="swap-sub"
-                      >là-bas : {{ r.other.before }} → {{ r.other.after }} %</span
+              <button
+                type="button"
+                class="swap-toggle"
+                :aria-expanded="swapOpen"
+                @click="swapOpen = !swapOpen"
+              >
+                <span class="swap-tt">
+                  ⇄ <b>Remplacer {{ swapOut.name }}</b>
+                  <span v-if="swapOut.loss" class="ctl-dim"
+                    >· apporte {{ swapOut.loss.loss }} % de tenue</span
+                  >
+                </span>
+                <span class="swap-count" :class="{ none: !swapAvail }">{{
+                  swapAvail ? `${swapAvail} dispo` : 'aucun'
+                }}</span>
+                <q-icon :name="swapOpen ? 'expand_less' : 'expand_more'" size="20px" />
+              </button>
+              <div v-if="swapOpen" class="swap-groups">
+                <div v-for="g in swapGroups" :key="g.key" class="swap-group">
+                  <p class="swap-ghead">
+                    <span>{{ g.key === SWAP_BASE_KEY ? '🏠 Base' : g.label }}</span>
+                    <span class="ctl-dim">{{ g.avail }}/{{ g.rows.length }} dispo</span>
+                  </p>
+                  <div class="swap-list">
+                    <button
+                      v-for="r in g.rows"
+                      :key="r.key"
+                      type="button"
+                      class="swap-row"
+                      :disabled="!!r.why || ctlBusy"
+                      :title="r.why ?? ''"
+                      @click="swapCtl(r)"
                     >
-                  </span>
-                  <span v-if="!r.why" class="swap-res">
-                    <b>{{ r.pct }} %</b>
-                    <span class="swap-delta" :class="{ up: r.delta > 0, down: r.delta < 0 }"
-                      >{{ r.delta > 0 ? '+' : r.delta < 0 ? '−' : '='
-                      }}{{ r.delta ? Math.abs(r.delta) : '' }}</span
-                    >
-                  </span>
-                </button>
+                      <span class="swap-who">
+                        <span class="swap-name">{{ r.adv ? '🗡️' : '🛡️' }} {{ r.name }}</span>
+                        <span class="swap-sub">{{
+                          r.why ?? `🧭 ${formatDurationMin(r.min)}`
+                        }}</span>
+                        <span v-if="r.other" class="swap-sub"
+                          >là-bas : {{ r.other.before }} → {{ r.other.after }} %</span
+                        >
+                      </span>
+                      <span v-if="!r.why" class="swap-res">
+                        <b>{{ r.pct }} %</b>
+                        <span class="swap-delta" :class="{ up: r.delta > 0, down: r.delta < 0 }"
+                          >{{ r.delta > 0 ? '+' : r.delta < 0 ? '−' : '='
+                          }}{{ r.delta ? Math.abs(r.delta) : '' }}</span
+                        >
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
             <!-- ⇄ TRANSFERT (2026-09-29, demandé) : la sélection part directement renforcer un
@@ -1203,6 +1221,7 @@ import TripsPanel, { type MapTrip } from '@/components/TripsPanel.vue';
 import ControlPointsSheet from '@/components/ControlPointsSheet.vue';
 import BaseGarrisonSheet from '@/components/BaseGarrisonSheet.vue';
 import QuickReinforceSheet from '@/components/QuickReinforceSheet.vue';
+import { groupSwapRows, SWAP_BASE_KEY } from '@/lib/swapGroups';
 import {
   PLAN_MAX_DELAY_MS,
   plannedCount,
@@ -2176,7 +2195,8 @@ const swapCandidates = computed(() => {
       a.id,
     );
   }
-  if (milHome.value > 0) {
+  // ⏳ Un milicien de la base réservé par un départ programmé ne remplace personne.
+  if (milHome.value - plannedMilitia(char.plannedList) > 0) {
     const why = swapBlocker(map, p.id, out.id, SWAP_MILITIA_FROM_BASE, null);
     push(
       {
@@ -2195,11 +2215,14 @@ const swapCandidates = computed(() => {
   }
   // 🏰 Les autres points tenus : chaque membre arrivé.
   const byId = new Map(char.advList.map((a) => [a.id, a]));
+  // ⏳ Ceux qu'un départ programmé attend ne remplacent personne.
+  const reserved = plannedTransferIds(char.plannedList);
   for (const q of map.pois) {
     if (q.id === p.id || q.control?.owner !== 'player') continue;
     const label = CONTROL_LABEL[q.control.kind];
     const before = defenseOf(q)?.pct ?? 0;
     for (const id of q.control.garrison) {
+      if (reserved.has(id)) continue;
       const adv = isMilitiaId(id) ? null : (byId.get(id) ?? null);
       if (!isMilitiaId(id) && !adv) continue;
       const why = swapBlocker(map, p.id, out.id, id, q.id);
@@ -2225,6 +2248,17 @@ const swapCandidates = computed(() => {
   }
   return rows.sort((a, b) => Number(!!a.why) - Number(!!b.why) || b.pct - a.pct);
 });
+/** ⇄ Les remplaçants rangés par lieu de départ (`groupSwapRows`). */
+const swapGroups = computed(() => groupSwapRows(swapCandidates.value));
+const swapAvail = computed(() => swapCandidates.value.filter((r) => !r.why).length);
+/** Le bloc « Remplacer » est replié : il se rouvre fermé à chaque membre choisi. */
+const swapOpen = ref(false);
+watch(
+  () => swapOut.value?.id,
+  () => {
+    swapOpen.value = false;
+  },
+);
 async function swapCtl(r: { inId: string; fromId: string | null; name: string; min: number }) {
   const uid = auth.user?.id;
   const p = livePoi.value;
@@ -4811,6 +4845,55 @@ onUnmounted(() => {
 /* ⇄ Les remplaçants : une ligne chacun, la tenue obtenue à droite. */
 .swap {
   margin: 8px 0;
+}
+.swap-toggle {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1.5px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.swap-tt {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.swap-count {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--d1) 18%, transparent);
+  color: var(--d1);
+}
+.swap-count.none {
+  background: var(--surface-2);
+  color: var(--dim);
+}
+.swap-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+.swap-ghead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0 2px 4px;
+  font-size: 12px;
+  font-weight: 700;
 }
 .swap-list {
   display: flex;

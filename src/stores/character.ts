@@ -5641,6 +5641,9 @@ export const useCharacterStore = defineStore('character', () => {
     let incoming = inId;
     let tookMil = false;
     if (!fromId && inId === SWAP_MILITIA_FROM_BASE) {
+      // ⏳ Les miliciens réservés par un départ programmé restent pour lui.
+      if (militia.home - plannedMilitia(plannedList.value) <= 0)
+        return 'pas de milicien libre à la base';
       const took = takeMilitia(militia, 1);
       if (!took) return 'pas de milicien à la base';
       militia = took.state;
