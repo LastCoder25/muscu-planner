@@ -148,7 +148,12 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       ),
     ).toBeNull();
     expect(out).toContain('Ta base');
-    expect(out).toContain('2 ailleurs');
+    expect(out).toContain('2 champions ailleurs');
+    // 🦸 Le héros vit DANS la grille des effectifs, en première tuile — plus au-dessus.
+    const grid = out.indexOf('class="bgs-pick"');
+    expect(grid).toBeGreaterThan(-1);
+    expect(out.indexOf('class="bgs-hero')).toBeGreaterThan(grid);
+    expect(out.indexOf('class="bgs-hero')).toBeLessThan(out.indexOf('class="car-adv'));
     expect(out).toContain('Envoyer en renfort');
     expect(out).toContain('Mine d’or');
   });
