@@ -1098,7 +1098,10 @@ export function poiOffers(
       PARTY_TARGETS.has(poi.type) &&
       // 🏰 Il faut un point à prendre et au moins un champion pour l'occuper.
       (poi.type === 'control'
-        ? poi.control?.owner === 'enemy' && !poi.control.assault && opts.advsAvailable > 0
+        ? poi.control?.owner === 'enemy' &&
+          !poi.control.assault &&
+          // 🏯 La citadelle ne s'occupe pas : le héros seul peut y aller.
+          (opts.advsAvailable > 0 || (poi.control.kind === 'citadel' && !opts.heroAway))
         : !opts.heroAway || opts.advsAvailable > 0),
   };
 }

@@ -53,7 +53,7 @@ describe('🏰 un point de contrôle est FIXE', () => {
   it('ne se double pas, et la carte ne change pas quand rien ne manque', () => {
     const m = mapAt(7);
     expect(ensureControls(m, H, 30)).toBe(m);
-    expect(m.pois.filter((p) => p.type === 'control')).toHaveLength(CONTROL.kinds.length);
+    expect(m.pois.filter((p) => p.type === 'control' && p.control?.kind !== 'citadel')).toHaveLength(CONTROL.kinds.length);
   });
   it('survit au monde qui avance (hors quota, jamais expiré)', () => {
     let m = mapAt(9);
@@ -70,7 +70,7 @@ describe('🏰 un point de contrôle est FIXE', () => {
 describe('🏰 les quatre points', () => {
   it('mine, camp d’entraînement, jardin, tour : un de chaque, bien écartés, tous visibles', () => {
     for (let s = 1; s <= 20; s++) {
-      const pts = mapAt(s * 977).pois.filter((p) => p.control);
+      const pts = mapAt(s * 977).pois.filter((p) => p.control && p.control.kind !== 'citadel');
       expect(pts.map((p) => p.control!.kind).sort()).toEqual([...CONTROL.kinds].sort());
       for (const p of pts)
         expect(Math.hypot(p.x - EXPE.town.x, p.y - EXPE.town.y)).toBeLessThanOrEqual(
@@ -387,7 +387,7 @@ describe('🏰 un point se prend à son niveau (signalé : une tour « légendai
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8])
       for (const lv of [3, 12, 30, 70]) {
         const m = mapAt(seed, lv);
-        for (const q of m.pois.filter((x) => x.control)) {
+        for (const q of m.pois.filter((x) => x.control && x.control.kind !== 'citadel')) {
           expect(q.level).toBeLessThanOrEqual(lv);
           expect(q.control!.size).toBeLessThanOrEqual(Math.max(...CONTROL.captureSizes));
         }
@@ -403,7 +403,7 @@ describe('🏰 un point se prend à son niveau (signalé : une tour « légendai
       ),
     };
     const healed = ensureControls(bad, 0, L);
-    for (const q of healed.pois.filter((x) => x.control)) {
+    for (const q of healed.pois.filter((x) => x.control && x.control.kind !== 'citadel')) {
       expect(q.level).toBeLessThanOrEqual(L);
       expect(q.control!.size).toBeLessThanOrEqual(Math.max(...CONTROL.captureSizes));
     }

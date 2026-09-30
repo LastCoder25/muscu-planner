@@ -425,6 +425,43 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(await render('c1')).toContain('ctl-alert');
     expect(await render('')).not.toContain('ctl-alert');
   }, 30_000);
+  it('⚫ MapPoiLayer dessine la garnison en points sous le fort', async () => {
+    const { default: MapPoiLayer } = await import('@/components/MapPoiLayer.vue');
+    const fort = {
+      ...MAP_POIS[0],
+      id: 'c1',
+      type: 'control',
+      control: { kind: 'mine', owner: 'player', garrison: ['a'], collectedAt: 0 },
+    } as unknown as (typeof MAP_POIS)[number];
+    const render = async (garrisonKey: string) => {
+      let out = '';
+      await mountIt(
+        MapPoiLayer,
+        {
+          pois: [fort],
+          selectedId: null,
+          dimmedKey: '',
+          veiledKey: '',
+          imminentKey: '',
+          garrisonKey,
+          target: null,
+          travelTargets: [],
+        },
+        ROW,
+        undefined,
+        '/',
+        (h) => (out = h),
+      );
+      return out;
+    };
+    const held = await render('c1:cmrff');
+    expect(held.match(/class="d-[cmrf]"/g)?.length).toBe(5);
+    expect(held).toContain('class="d-r"');
+    expect(held).not.toMatch(/ctl-dots[^"]*empty/);
+    // Personne ne tient le point : les places libres le disent en rouge.
+    expect(await render('c1:fff')).toMatch(/ctl-dots[^"]*empty/);
+    expect(await render('')).not.toContain('ctl-dots');
+  }, 30_000);
 
   it('🎚️ MapFilterBar montre une puce par rang et par type', async () => {
     const { default: MapFilterBar } = await import('@/components/MapFilterBar.vue');
@@ -2775,6 +2812,26 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     expect(out).toContain('Siège de ta base');
     expect(out).toContain('40 min');
     expect(out).toContain('soon');
+    // 🛡️ Sans pronostic (siège sans renseignement) : on le DIT, sans inventer de %.
+    expect(out).toContain('tenue ?');
+    let held = '';
+    await mountIt(
+      AttacksSheet,
+      {
+        modelValue: true,
+        holds: { a: 82 },
+        rows: [
+          { army, kind: 'siege', target: null, inMs: 40 * 60_000, size: 3, faction: 'bandits' },
+        ],
+      },
+      undefined,
+      undefined,
+      '/',
+      (h) => (held = h),
+    );
+    expect(held).toContain('tu tiens 82 %');
+    expect(held).toContain('hold tenu');
+    expect(held).not.toContain('tenue ?');
     let empty = '';
     await mountIt(
       AttacksSheet,

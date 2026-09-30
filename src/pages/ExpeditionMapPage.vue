@@ -219,6 +219,7 @@
             :down-key="downKey"
             :imminent-key="imminentKey"
             :tier-key="tierKey"
+            :garrison-key="garrisonKey"
             :target="active && voyageTargetShown(active, now) ? active.poi : null"
             :target-down="heroTargetDown"
             :travel-targets="travelTargets"
@@ -383,6 +384,7 @@
       :model-value="true"
       inline
       :rows="attacks"
+      :holds="attackHolds"
       @open="openAttack"
     />
     <ControlPointsSheet
@@ -1251,6 +1253,9 @@ import {
   departureRisk,
   heroDefends,
   guardUnits,
+  siegeHoldChance,
+  scoutClarity,
+  scoutLevel,
   ODDS_LABEL,
   FACTION_EMOJI,
   FACTION_LABEL,
@@ -1272,10 +1277,13 @@ import {
   controlFreeSeats,
   militiaFreeSeats,
   controlRoster,
+  garrisonDots,
   controlTravelMult,
   controlYieldCard,
   controlTier,
   controlTierLabel,
+  citadelLabel,
+  citadelPalier,
   trainingCapLevel,
   seatsOf,
   attackImminent,
@@ -1892,15 +1900,32 @@ const liveControl = computed(() => {
   const id = selected.value?.id;
   return id ? (char.row?.expedition_map?.pois.find((p) => p.id === id)?.control ?? null) : null;
 });
-/** 🏅 Le cran du point sélectionné (ancienneté) : titre et détail, à la minute. */
-const tierLine = computed(() => controlTierLabel(liveControl.value ?? undefined, coarseNow.value));
+/** 🏅 Le cran du point sélectionné (ancienneté) — ou, pour la citadelle, son palier et sa
+ *  trêve : titre et détail, à la minute. */
+const tierLine = computed(() =>
+  liveControl.value?.kind === 'citadel'
+    ? citadelLabel(char.row?.expedition_map, coarseNow.value)
+    : controlTierLabel(liveControl.value ?? undefined, coarseNow.value),
+);
 /** 🏅 Les crans des points de la carte, en CHAÎNE « id:cran » (le calque ne se redessine que si
  *  un cran change). Seuls les crans > 0 sont dessinés. */
 const tierKey = computed(() =>
   (char.row?.expedition_map?.pois ?? [])
     .filter((p) => p.control)
-    .map((p) => `${p.id}:${controlTier(p.control, coarseNow.value)}`)
+    .map(
+      (p) =>
+        `${p.id}:${p.control!.kind === 'citadel' ? citadelPalier(p.control, coarseNow.value) : controlTier(p.control, coarseNow.value)}`,
+    )
     .filter((s) => !s.endsWith(':0'))
+    .join('|'),
+);
+/** ⚫ La garnison de chaque point tenu, en points sous le fort (`garrisonDots`), « id:lettres »
+ *  joints par « | » — une chaîne, pour ne re-dessiner les lieux que si elle change. Lue sur
+ *  la MÊME liste que « Places fortes » : les deux ne peuvent pas se contredire. */
+const garrisonKey = computed(() =>
+  ctlRoster.value
+    .map((r) => `${r.poi.id}:${garrisonDots(r)}`)
+    .filter((s) => !s.endsWith(':'))
     .join('|'),
 );
 const livePoi = computed(() =>
@@ -2617,6 +2642,7 @@ const returnsOnMap = computed(() =>
     origin: undefined as { x: number; y: number } | undefined,
     at: drawnAt(r),
     pct: voyageProgress(r, now.value).overall * 100,
+    returnAt: r.returnAt,
     arriveIn: r.returnAt - now.value,
   })),
 );
@@ -2628,6 +2654,7 @@ const attacksOnMap = computed(() =>
     .map((w) => ({
       id: 'a' + w.key,
       poi: w.voyage.poi,
+      returnAt: w.voyage.returnAt,
       members: w.members,
       hero: w.hero,
       waiting: w.waiting && now.value < w.voyage.sentAt,
@@ -2714,14 +2741,17 @@ watch(mapPois, (list) => {
   if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
     selected.value = null;
 });
-/** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
- *  lirait comme plusieurs rangées collées. */
+/** Tout ce qui voyage, du retour le plus tôt au plus tard (demandé). Une seule liste, sinon la
+ *  rangée se lirait comme plusieurs rangées collées. `ends` = la fin du trajet de la tuile :
+ *  le retour en ville, ou l'arrivée pour un renfort (aller simple, il reste sur le point). */
 const trips = computed(() => {
   const out: MapTrip[] = [];
+  const ends = new Map<string, number>();
   const a = active.value;
   const h = hero.value;
   if (a && h) {
     const back = h.phase === 'return';
+    ends.set('hero', a.returnAt);
     out.push({
       key: 'hero',
       kind: 'hero',
@@ -2739,6 +2769,7 @@ const trips = computed(() => {
   }
   for (const g of partiesOnMap.value) {
     const back = g.at.phase === 'return';
+    ends.set('g' + g.id, g.returnAt);
     out.push({
       key: 'g' + g.id,
       kind: 'van',
@@ -2755,6 +2786,7 @@ const trips = computed(() => {
     });
   }
   for (const w of attacksOnMap.value) {
+    ends.set(w.id, w.returnAt);
     out.push({
       key: w.id,
       kind: 'van',
@@ -2776,6 +2808,7 @@ const trips = computed(() => {
   }
   for (const r of reinforcementsOnMap.value) {
     const who = crewLabel(r.members);
+    ends.set(r.id, r.arriveAt);
     out.push({
       key: r.id,
       kind: 'van',
@@ -2791,6 +2824,7 @@ const trips = computed(() => {
     });
   }
   for (const r of returnsOnMap.value) {
+    ends.set(r.id, r.returnAt);
     out.push({
       key: r.id,
       kind: 'van',
@@ -2805,7 +2839,8 @@ const trips = computed(() => {
       title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatDuration(r.arriveIn)}`,
     });
   }
-  return out;
+  // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.
+  return out.sort((x, y) => (ends.get(x.key) ?? 0) - (ends.get(y.key) ?? 0));
 });
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {
@@ -2912,6 +2947,48 @@ function toggleMapPanel(id: MapPanel) {
 /** ⚔️ Les attaques en cours. Horloge grossière : la liste ne change qu'à l'apparition ou
  *  l'arrivée d'une armée. */
 const attacks = computed(() => activeAttacks(pois.value, coarseNow.value));
+/** 🛡️ Ce que TA défense actuelle tiendrait face à chaque armée de la liste (demandé : « le
+ *  % de défense de ces armées selon l'endroit qu'elles attaquent et la défense actuelle »).
+ *  ⚠️ Aucune règle nouvelle : un SIÈGE rejoue `siegeHoldChance` (le pronostic de la Base,
+ *  héros présent à l'heure de l'assaut compris), une REPRISE `defenseOf` (celui de la fiche
+ *  du point, défenseurs présents à l'heure de l'attaque). `null` = inconnu : un siège sans
+ *  renseignement de la Tour de guet n'annonce rien — même garde que la Base. Horloge
+ *  grossière, et calculé seulement quand la liste est dépliée (prop lue sous `v-if`). */
+const attackHolds = computed<Record<string, number | null>>(() => {
+  const out: Record<string, number | null> = {};
+  const b = base.value;
+  const raid = incoming.value;
+  for (const r of attacks.value) {
+    if (r.kind === 'retake') {
+      out[r.army.id] = r.target ? (defenseOf(r.target)?.pct ?? null) : null;
+      continue;
+    }
+    const known =
+      !!b &&
+      !!raid &&
+      r.army.army?.targetId === raid.id &&
+      scoutClarity(scoutLevel(b.defenses), raid.level, heroLevel.value, raid.seed) > 0;
+    out[r.army.id] =
+      known && b && raid
+        ? Math.round(
+            siegeHoldChance(
+              b.defenses,
+              heroLevel.value,
+              heroDefendsNow.value,
+              guardUnits(
+                heroLevel.value,
+                freeStable.value,
+                cap.value,
+                compCtx.value,
+                milHome.value,
+              ),
+              raid,
+            ) * 100,
+          )
+        : null;
+  }
+  return out;
+});
 /** ⚔️ L'armée entourée d'une aura (touchée dans la liste) ; elle s'éteint si l'armée n'est
  *  plus sur la carte. */
 const focusArmy = ref<string | null>(null);
@@ -3790,7 +3867,9 @@ const POI_RESOURCE: Record<PoiType, (p: Poi) => string> = {
     p.control
       ? p.control.owner === 'player'
         ? `${CONTROL_YIELD[p.control.kind]} tant que tu le tiens`
-        : `à prendre · ${CONTROL_YIELD[p.control.kind]}`
+        : p.control.kind === 'citadel'
+          ? `à abattre · ${CONTROL_YIELD.citadel}`
+          : `à prendre · ${CONTROL_YIELD[p.control.kind]}`
       : '',
 };
 /** La ligne sous le nom : les ennemis (faction × nombre) et la ressource. */

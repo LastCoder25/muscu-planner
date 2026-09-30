@@ -52,9 +52,30 @@
           class="ctl-flag"
           :class="p.control.owner"
         />
-        <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. -->
-        <text v-if="tiers.get(p.id)" :x="p.x" :y="p.y + 9" class="ctl-tier" :class="p.control.owner">
-          🏅{{ tiers.get(p.id) }}
+        <!-- ⚫ SA GARNISON EN POINTS, sous le fort (demandé : « voir d'un coup d'œil ») : un
+             point par place — plein cyan un champion, plein clair un milicien, cerclé
+             d'accent un renfort en route, vide une place libre (rouge si personne ne tient
+             le point). -->
+        <g v-if="dots.get(p.id)" class="ctl-dots" :class="{ empty: !/[cm]/.test(dots.get(p.id)!) }">
+          <circle
+            v-for="(d, i) in dots.get(p.id)!"
+            :key="i"
+            :cx="p.x + (i - (dots.get(p.id)!.length - 1) / 2) * DOT_GAP"
+            :cy="p.y + 7.2"
+            :r="DOT_R"
+            :class="'d-' + d"
+          />
+        </g>
+        <!-- 🏅 Son CRAN (ancienneté), sous le fort — seulement s'il en a. La citadelle, elle,
+             montre son PALIER (« P3 »). -->
+        <text
+          v-if="tiers.get(p.id)"
+          :x="p.x"
+          :y="p.y + (dots.get(p.id) ? 11.6 : 9)"
+          class="ctl-tier"
+          :class="p.control.owner"
+        >
+          {{ p.control.kind === 'citadel' ? 'P' : '🏅' }}{{ tiers.get(p.id) }}
         </text>
         <!-- ⚔️ Bataille imminente : un petit avertissement au coin du fort, qui palpite. -->
         <g v-if="imminent.has(p.id)" class="ctl-alert">
@@ -177,6 +198,8 @@ const props = defineProps<{
   imminentKey: string;
   /** 🏅 Les crans des points fixes, « id:cran » joints par « | » (seuls les crans > 0). */
   tierKey?: string;
+  /** ⚫ La garnison des points tenus, « id:lettres » joints par « | » (`garrisonDots`). */
+  garrisonKey?: string;
   /** La cible du héros en voyage. */
   target: Poi | null;
   /** Les cibles des équipes en route. */
@@ -200,6 +223,18 @@ const tiers = computed(
       }),
     ),
 );
+const dots = computed(
+  () =>
+    new Map(
+      (props.garrisonKey ? props.garrisonKey.split('|') : []).map((s) => {
+        const i = s.lastIndexOf(':');
+        return [s.slice(0, i), s.slice(i + 1)] as const;
+      }),
+    ),
+);
+/** ⚫ Taille et écart des points de garnison (unités de carte) : 5 places tiennent sous le fort. */
+const DOT_R = 0.85;
+const DOT_GAP = 2.3;
 /** 🏅 Le rang de chaque lieu, une fois par changement de carte (sinon une bisection par
  *  lecture, quatre lectures par lieu). Repli sur le calcul direct pour une cible de voyage,
  *  qui n'est plus sur la carte. */
@@ -311,6 +346,33 @@ const rankOf = (p: Poi) => ranks.value.get(p.id) ?? poiRank(p);
 .poi-emo {
   font-size: 4px;
   text-anchor: middle;
+}
+/* ⚫ La garnison en points : un liseré sombre pour se lire sur la prairie comme sur la mer. */
+.ctl-dots {
+  pointer-events: none;
+}
+.ctl-dots circle {
+  stroke: var(--bg);
+  stroke-width: 0.35;
+}
+.ctl-dots .d-c {
+  fill: #5fd0ff; /* cyan : lisible sur prairie et mer, distinct du violet du fort */
+}
+.ctl-dots .d-m {
+  fill: var(--text);
+}
+.ctl-dots .d-r {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 0.45;
+}
+.ctl-dots .d-f {
+  fill: color-mix(in srgb, var(--bg) 70%, transparent);
+  stroke: var(--dim);
+  stroke-width: 0.35;
+}
+.ctl-dots.empty .d-f {
+  stroke: var(--d4, #ff6a45);
 }
 .ctl-tier {
   font-size: 3px;
