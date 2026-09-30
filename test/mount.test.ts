@@ -775,6 +775,26 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (rc = h),
     );
     expect(rc).toContain('Faire demi-tour');
+    // ⏳ Un départ PROGRAMMÉ : le filtre « Programmés » apparaît avec son compte, la tuile est
+    // en pointillés, et l'équipe propose de l'annuler.
+    let pl = '';
+    await mountIt(
+      TripsPanel,
+      {
+        trips: [trip, { ...trip, key: 'pplan_1', pending: true, cancelPlan: 'plan_1' }],
+        focus: 'pplan_1',
+        heroProfile: 'polyvalent',
+      },
+      ROW,
+      undefined,
+      '/',
+      (h) => (pl = h),
+    );
+    expect(pl).toMatch(/⏳ Programmés <b[^>]*>1</);
+    expect(pl).toMatch(/🧭 Expéditions <b[^>]*>1</);
+    expect(pl).toMatch(/class="trip van[^"]*pending/);
+    expect(pl).toContain('Annuler ce départ programmé');
+    expect(pl).toContain('Partira vers');
     // 🧭 Partie d'un point fixe : l'encart montre SON emoji, plus la base.
     const mine = {
       id: 'ctl_mine',

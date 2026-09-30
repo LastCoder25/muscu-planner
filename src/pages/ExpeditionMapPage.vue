@@ -454,6 +454,7 @@
       @recall="recallTripByKey"
       @boost="boostTrip"
       @attack="openAttack"
+      @cancel-plan="quickCancel"
     />
 
     <!-- Panneau POI sélectionné -->
@@ -2809,6 +2810,7 @@ const trips = computed(() => {
       key: w.id,
       kind: 'van',
       who: w.waiting ? '⏳' : '⚔️',
+      pending: w.waiting,
       poi: w.poi,
       time: w.waiting
         ? `⏳ ${formatDuration(w.departIn)}`
@@ -2860,6 +2862,54 @@ const trips = computed(() => {
       members: r.members,
       haul: [],
       title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatDuration(r.arriveIn)}`,
+    });
+  }
+  // ⏳ LES DÉPARTS PROGRAMMÉS (demandé : « un filtre pour les déplacements programmés en
+  // attente ») : renforts et retours qui n'ont pas encore quitté leur lieu. Leur tuile
+  // décompte le temps avant le DÉPART, et s'annule depuis l'équipe.
+  for (const m of char.plannedList) {
+    const poi = pois.value.find((p) => p.id === m.toId);
+    if (!poi) continue;
+    const key = 'p' + m.id;
+    const members = m.recall
+      ? [...m.recall]
+      : [
+          ...m.champs,
+          ...Array.from({ length: m.militia }, (_, i) => `${MILITIA_PREFIX}plan${i}`),
+          ...m.transfers.map((t) => t.id),
+        ];
+    // D'où partent-ils : le lieu quitté pour un retour ; pour un renfort, la base, sauf si
+    // tout le monde vient d'un même autre lieu tenu.
+    const froms = new Set(m.transfers.map((t) => t.fromId));
+    const fromId = m.recall
+      ? m.toId
+      : !m.champs.length && !m.militia && froms.size === 1
+        ? [...froms][0]
+        : null;
+    const at = new Date(m.departAt).toLocaleTimeString('fr-FR', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    const inMs = Math.max(0, m.departAt - now.value);
+    ends.set(key, m.departAt);
+    out.push({
+      key,
+      kind: 'van',
+      who: '⏳',
+      pending: true,
+      cancelPlan: m.id,
+      poi,
+      time: `⏳ ${formatDuration(inMs)}`,
+      pct: 0,
+      back: !!m.recall,
+      withHero: false,
+      from: fromId ? (pois.value.find((p) => p.id === fromId) ?? null) : null,
+      ...(m.recall ? { toBase: true } : {}),
+      members,
+      haul: [],
+      title: m.recall
+        ? `Retour programmé de ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`
+        : `Renfort programmé — ${POI_LABEL[poi.type]} niv ${poi.level} · ${crewLabel(members)} · part à ${at}`,
     });
   }
   // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.

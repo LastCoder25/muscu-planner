@@ -33,7 +33,7 @@
         v-if="t"
         type="button"
         class="trip"
-        :class="[t.kind, { back: t.back, focus: focus === t.key }]"
+        :class="[t.kind, { back: t.back, focus: focus === t.key, pending: t.pending }]"
         :title="t.title"
         :aria-pressed="focus === t.key"
         @click="emit('update:focus', focus === t.key ? null : t.key)"
@@ -98,7 +98,10 @@
 
   <!-- 👥 QUI EST DANS CE VOYAGE : toucher une tuile montre son équipe, sans rien toucher. -->
   <div v-if="crew" ref="crewEl" class="trip-crew">
-    <div class="tc-head">👥 En route vers {{ poiLabel(crew.poi) }} niv {{ crew.poi.level }}</div>
+    <div class="tc-head">
+      👥 {{ crew.pending ? 'Partira vers' : 'En route vers' }}
+      {{ crew.toBase ? 'la base' : `${poiLabel(crew.poi)} niv ${crew.poi.level}` }}
+    </div>
     <p v-if="crew.legs" class="tc-legs">⏱️ {{ crew.legs }}</p>
     <div v-if="crew.haul.length" class="tc-haul">
       <span class="tc-haul-lab">Ramène</span>
@@ -151,6 +154,15 @@
         </button>
       </div>
     </div>
+    <!-- ⏳ Un départ programmé s'annule depuis sa tuile : rien n'est encore parti. -->
+    <button
+      v-if="crew.cancelPlan"
+      type="button"
+      class="tc-recall"
+      @click="emit('cancelPlan', crew.cancelPlan)"
+    >
+      ✖ Annuler ce départ programmé
+    </button>
     <!-- 🔙 FAIRE DEMI-TOUR depuis la tuile (demandé) : même feuille que sur la carte, la page
          décide de ce qui peut rebrousser chemin (`recallable`). -->
     <button
@@ -190,6 +202,10 @@ export interface MapTrip {
   legs?: { go: string | null; back: string; detail: string } | null;
   /** ⏱️ L'heure (ms) où se termine ce que la tuile décompte — l'ordre d'arrivée. */
   endsAt?: number;
+  /** ⏳ Programmé, pas encore parti (filtre « Programmés »). */
+  pending?: boolean;
+  /** ⏳ Un départ programmé qu'on peut annuler : son id (`PlannedMove.id`). */
+  cancelPlan?: string;
 }
 </script>
 
@@ -235,6 +251,7 @@ const emit = defineEmits<{
   recall: [key: string];
   boost: [key: string, id: BoostId];
   attack: [army: Poi];
+  cancelPlan: [id: string];
 }>();
 
 /** ⏱️ Une seule rangée, dans l'ordre d'arrivée : la fin d'un voyage (`endsAt`, ce que sa
@@ -254,17 +271,29 @@ const tiles = computed(() => {
 });
 /** 🧭⚔️ Le filtre voyages / attaques (cf. `effectiveTripFilter`). */
 const filter = ref<TripFilter>('all');
+const nPlanned = computed(() => props.trips.filter((t) => t.pending).length);
 const shown = computed(() =>
-  effectiveTripFilter(filter.value, props.trips.length, props.attacks?.length ?? 0),
+  effectiveTripFilter(filter.value, {
+    trips: props.trips.length - nPlanned.value,
+    planned: nPlanned.value,
+    attacks: props.attacks?.length ?? 0,
+  }),
 );
 const filterOpts = computed<{ id: TripFilter; label: string; n: number }[]>(() => [
   { id: 'all', label: 'Tout', n: tiles.value.length },
-  { id: 'trips', label: '🧭 Expéditions', n: props.trips.length },
+  { id: 'trips', label: '🧭 Expéditions', n: props.trips.length - nPlanned.value },
+  { id: 'planned', label: '⏳ Programmés', n: nPlanned.value },
   { id: 'attacks', label: '⚔️ Attaques', n: props.attacks?.length ?? 0 },
 ]);
 const shownTiles = computed(() =>
   tiles.value.filter((x) =>
-    shown.value === 'trips' ? !!x.trip : shown.value === 'attacks' ? !!x.attack : true,
+    shown.value === 'trips'
+      ? !!x.trip && !x.trip.pending
+      : shown.value === 'planned'
+        ? !!x.trip?.pending
+        : shown.value === 'attacks'
+          ? !!x.attack
+          : true,
   ),
 );
 /** ⚔️ Moins d'une heure avant la frappe : la tuile passe au rouge (comme la liste des attaques). */
@@ -362,6 +391,9 @@ const crew = computed(() => {
     poi: t.poi,
     haul: t.back ? t.haul : [],
     legs: t.legs?.detail ?? null,
+    pending: !!t.pending,
+    toBase: !!t.toBase,
+    cancelPlan: t.cancelPlan ?? null,
   };
 });
 </script>
@@ -583,6 +615,10 @@ const crew = computed(() => {
 /* Au RETOUR la teinte change : on rentre, on ne va plus. */
 .trip.back {
   border-color: #7bc86c;
+}
+/* ⏳ Programmé, pas encore parti : contour en pointillés, comme un départ qui attend. */
+.trip.pending {
+  border-style: dashed;
 }
 .tr-who {
   font-size: 17px;
