@@ -44,9 +44,10 @@
           t.from ? poiEmo(t.from) : '🏰'
         }}</span>
         <span class="tr-who">{{ t.who }}</span>
-        <!-- 🛡️ QUI PART EN RENFORT (demandé) : leurs portraits sous l'icône, sur une ligne
-           centrée — on voit d'un coup d'œil qui arrive sur le lieu. -->
-        <span v-if="t.faces" class="tr-faces">
+        <!-- 👥 QUI VOYAGE (demandé, d'abord pour les renforts, puis pour toutes les
+           expéditions) : leurs portraits sous l'icône, sur une ligne centrée. Champions et
+           miliciens ; le héros, lui, est déjà l'icône 🧝 au-dessus. -->
+        <span v-if="t.members.length" class="tr-faces">
           <span v-for="f in facesOf(t)" :key="f.id" class="tr-face" :title="f.name">
             <MilitiaPortrait v-if="f.militia" />
             <ChampionPortrait v-else :champion-id="f.championId">{{ f.emoji }}</ChampionPortrait>
@@ -185,8 +186,6 @@ export interface MapTrip {
   from: Poi | null;
   /** 🏠 La troupe rentre à la BASE (un retour d'un point fixe) : l'objectif est 🏰. */
   toBase?: boolean;
-  /** 🛡️ Montrer les portraits des membres sous l'icône (tuiles de renfort). */
-  faces?: boolean;
   /** 🚶↩️ Aller restant et retour (`tripLegs`), `null` une fois rentré. */
   legs?: { go: string | null; back: string; detail: string } | null;
   /** ⏱️ L'heure (ms) où se termine ce que la tuile décompte — l'ordre d'arrivée. */

@@ -31,6 +31,7 @@ import {
 } from '@/lib/partyForecast';
 import { CONTROL_EMO, CONTROL_LABEL, garrisonHold, seatsOf } from '@/lib/controlPoints';
 import { legFromSpot, readyGarrisons } from '@/lib/controlRoutes';
+import { plannedTransferIds } from '@/lib/plannedMoves';
 import { COMBINED_BLOCK_LABEL, byReach, combinedBlocker, wingOriginId } from '@/lib/combinedAttack';
 import { SUPPLIES, SUPPLY_IDS, supplyUselessWhy, type SupplyId } from '@/lib/supplies';
 import { advGearRoles } from '@/lib/advGear';
@@ -126,7 +127,14 @@ export function useExpeditionParty(ctx: PartyCtx) {
    *  quelqu'un change d'état — même principe que `freeKey` de la page. « Prêt à sortir » est
    *  la règle de la lib (`readyGarrisons`), partagée avec le grisage de la carte. */
   const garrisonKey = computed(() =>
-    [...readyGarrisons(char.row?.expedition_map, char.advList, now.value)]
+    [
+      ...readyGarrisons(
+        char.row?.expedition_map,
+        char.advList,
+        now.value,
+        plannedTransferIds(char.plannedList),
+      ),
+    ]
       .map(([id, ready]) => `${id}=${ready.map((a) => a.id).join(',')}`)
       .join('|'),
   );

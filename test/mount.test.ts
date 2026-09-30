@@ -794,6 +794,9 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
       (h) => (fromPt = h),
     );
     expect(fromPt).toMatch(/class="tr-from"[^>]*>⛏️</);
+    // 👥 Une EXPÉDITION (pas seulement un renfort) montre les portraits de son équipe.
+    expect(fromPt).toContain('class="tr-faces"');
+    expect(fromPt).toMatch(/class="tr-face" title="Léa"/);
     // ⚔️ Les attaques ennemies, à la suite des voyages, au MÊME format : le lieu attaqué en
     // haut-droit (ici la mine reprise), la tenue, la marche en sous-lignage.
     const army = {
