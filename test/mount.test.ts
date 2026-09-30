@@ -158,6 +158,33 @@ describe('🚪 montage des écrans (erreurs de setup)', () => {
     expect(out).toContain('Mine d’or');
   });
 
+  // 🧝 Le héros est une tuile PARMI les effectifs : cochable, ou grisé AVEC sa raison.
+  it('HeroPickTile : coché, ou grisé avec la raison', async () => {
+    const { default: HeroPickTile } = await import('@/components/HeroPickTile.vue');
+    let on = '';
+    await mountIt(
+      HeroPickTile,
+      { on: true, block: null, sub: 'sans XP', gain: 12 },
+      undefined,
+      undefined,
+      '/',
+      (h) => (on = h),
+    );
+    expect(on).toContain('aria-pressed="true"');
+    expect(on).toContain('+12 %');
+    let off = '';
+    await mountIt(
+      HeroPickTile,
+      { on: false, block: 'à l’infirmerie', sub: 'sans XP' },
+      undefined,
+      undefined,
+      '/',
+      (h) => (off = h),
+    );
+    expect(off).toContain('disabled');
+    expect(off).toContain('à l’infirmerie');
+  });
+
   // 👥 v0.1108 : toucher un voyage montre son équipe en tuiles LECTURE SEULE — ni case
   // cochée, ni cible au clavier (elles ne proposent rien).
   it('AdvPickTile en lecture seule ne se présente pas comme un choix', async () => {
