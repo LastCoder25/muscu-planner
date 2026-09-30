@@ -2985,8 +2985,11 @@ describe('🔮 GameFxOverlay — rune posée', () => {
     );
     // Le filtre est là, « Expéditions » grisé (vide), et « Tout » actif.
     expect(out).toContain('tr-filter');
-    expect(out).toMatch(/class="trf trips"[^>]*disabled/);
-    expect(out).toMatch(/class="trf all on"/);
+    // ⚠️ Jamais la classe nue de la catégorie : `trips` est celle de la GRILLE des tuiles,
+    // dont le padding décentrait « Expéditions » dans sa pastille (signalé).
+    expect(out).not.toMatch(/class="trf (trips|attacks|all)/);
+    expect(out).toMatch(/class="trf trf-trips"[^>]*disabled/);
+    expect(out).toMatch(/class="trf trf-all on"/);
     expect(out).toContain('trip attack soon');
     expect(out).toContain('🛡️ 82 %');
     // Filtrer sur les expéditions (vides) retombe sur « Tout » : la rangée ne se vide pas.
@@ -2998,9 +3001,9 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (fil = h),
-      (host) => host.querySelector<HTMLElement>('.trf.attacks')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
     );
-    expect(fil).toMatch(/class="trf attacks on"/);
+    expect(fil).toMatch(/class="trf trf-attacks on"/);
     expect(fil).toContain('trip attack');
     // Avec un voyage ET une armée, chaque filtre masque l'autre catégorie.
     const trip = {
@@ -3025,7 +3028,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (onlyAtk = h),
-      (host) => host.querySelector<HTMLElement>('.trf.attacks')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-attacks')?.click(),
     );
     expect(onlyAtk).toContain('trip attack');
     expect(onlyAtk).not.toContain('→ 1 h 20');
@@ -3037,7 +3040,7 @@ describe('🔮 GameFxOverlay — rune posée', () => {
       undefined,
       '/',
       (h) => (onlyTrips = h),
-      (host) => host.querySelector<HTMLElement>('.trf.trips')?.click(),
+      (host) => host.querySelector<HTMLElement>('.trf.trf-trips')?.click(),
     );
     expect(onlyTrips).toContain('→ 1 h 20');
     expect(onlyTrips).not.toContain('trip attack');
