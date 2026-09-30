@@ -2606,6 +2606,7 @@ const returnsOnMap = computed(() =>
     origin: undefined as { x: number; y: number } | undefined,
     at: drawnAt(r),
     pct: voyageProgress(r, now.value).overall * 100,
+    returnAt: r.returnAt,
     arriveIn: r.returnAt - now.value,
   })),
 );
@@ -2617,6 +2618,7 @@ const attacksOnMap = computed(() =>
     .map((w) => ({
       id: 'a' + w.key,
       poi: w.voyage.poi,
+      returnAt: w.voyage.returnAt,
       members: w.members,
       hero: w.hero,
       waiting: w.waiting && now.value < w.voyage.sentAt,
@@ -2703,14 +2705,17 @@ watch(mapPois, (list) => {
   if (s && pois.value.some((p) => p.id === s.id) && !list.some((p) => p.id === s.id))
     selected.value = null;
 });
-/** Tout ce qui voyage : le héros puis les groupes. Une seule liste, sinon la rangée se
- *  lirait comme plusieurs rangées collées. */
+/** Tout ce qui voyage, du retour le plus tôt au plus tard (demandé). Une seule liste, sinon la
+ *  rangée se lirait comme plusieurs rangées collées. `ends` = la fin du trajet de la tuile :
+ *  le retour en ville, ou l'arrivée pour un renfort (aller simple, il reste sur le point). */
 const trips = computed(() => {
   const out: MapTrip[] = [];
+  const ends = new Map<string, number>();
   const a = active.value;
   const h = hero.value;
   if (a && h) {
     const back = h.phase === 'return';
+    ends.set('hero', a.returnAt);
     out.push({
       key: 'hero',
       kind: 'hero',
@@ -2728,6 +2733,7 @@ const trips = computed(() => {
   }
   for (const g of partiesOnMap.value) {
     const back = g.at.phase === 'return';
+    ends.set('g' + g.id, g.returnAt);
     out.push({
       key: 'g' + g.id,
       kind: 'van',
@@ -2744,6 +2750,7 @@ const trips = computed(() => {
     });
   }
   for (const w of attacksOnMap.value) {
+    ends.set(w.id, w.returnAt);
     out.push({
       key: w.id,
       kind: 'van',
@@ -2765,6 +2772,7 @@ const trips = computed(() => {
   }
   for (const r of reinforcementsOnMap.value) {
     const who = crewLabel(r.members);
+    ends.set(r.id, r.arriveAt);
     out.push({
       key: r.id,
       kind: 'van',
@@ -2780,6 +2788,7 @@ const trips = computed(() => {
     });
   }
   for (const r of returnsOnMap.value) {
+    ends.set(r.id, r.returnAt);
     out.push({
       key: r.id,
       kind: 'van',
@@ -2794,7 +2803,8 @@ const trips = computed(() => {
       title: `Retour de ${POI_LABEL[r.poi.type]} niv ${r.poi.level} · ${crewLabel(r.members)} · à la base dans ${formatDuration(r.arriveIn)}`,
     });
   }
-  return out;
+  // Tri stable : à égalité, l'ordre d'insertion (héros, groupes, attaques…) départage.
+  return out.sort((x, y) => (ends.get(x.key) ?? 0) - (ends.get(y.key) ?? 0));
 });
 /** « 2 champions + 1 milicien » : un milicien n'est pas un champion, on le dit. */
 function crewLabel(members: readonly string[]): string {
@@ -2929,7 +2939,13 @@ const attackHolds = computed<Record<string, number | null>>(() => {
               b.defenses,
               heroLevel.value,
               heroDefendsNow.value,
-              guardUnits(heroLevel.value, freeStable.value, cap.value, compCtx.value, milHome.value),
+              guardUnits(
+                heroLevel.value,
+                freeStable.value,
+                cap.value,
+                compCtx.value,
+                milHome.value,
+              ),
               raid,
             ) * 100,
           )
